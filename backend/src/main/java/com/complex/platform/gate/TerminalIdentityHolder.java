@@ -53,6 +53,20 @@ public final class TerminalIdentityHolder {
                 .orElse(claimedFallback);
     }
 
+    /**
+     * 第十八批 N 段第 122 条 122-R1（BSM:940、PGM:745）：操作留痕终端列取当前请求的可信终端；拦截器豁免的路径（一体机自助、
+     * 员工自助注册）取请求自报的 {@code X-Terminal-Type}；没有请求或没有终端信息时为空。超长截到列宽 64。
+     */
+    public static String auditTerminal() {
+        HttpServletRequest request = currentRequest();
+        String terminal = trustedTerminalType(request == null ? null : request.getHeader("X-Terminal-Type"));
+        if (terminal == null || terminal.isBlank()) {
+            return null;
+        }
+        terminal = terminal.trim();
+        return terminal.length() > 64 ? terminal.substring(0, 64) : terminal;
+    }
+
     private static HttpServletRequest currentRequest() {
         try {
             if (RequestContextHolder.getRequestAttributes() instanceof ServletRequestAttributes attrs) {

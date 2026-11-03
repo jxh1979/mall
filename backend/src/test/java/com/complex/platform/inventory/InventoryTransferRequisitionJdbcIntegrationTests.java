@@ -1,6 +1,6 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -337,6 +337,46 @@ class InventoryTransferRequisitionJdbcIntegrationTests {
                 .andExpect(status().isOk());
         mockMvc.perform(get(outbound).with(otherStore)).andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.detail_code").value("CROSS_MERCHANT_FORBIDDEN"));
+    }
+
+    /**
+     * 第十八批 N 段第 121 条 121-R1（BSM:1166「……可以入库贴码……」；BSM:1197「……出库须同时核验订单和物品码……」；
+     * BSM:1201「……买断时溯源码归属从原主体变更到接收主体，收货时扫码核对防调包。」；BSM:1212「……合格接收部分转移货权、计入门店库存……」）：
+     * 门店要货签收时，未登记的合格随货码按本行物品登记到门店，拒收码不登记；门店库管随后按码列出本店待出品订单并建交接链。
+     */
+    @Test
+    void supplyReceiptRegistersAcceptedTraceCodesToTheStoreSoItsKeeperCanShipThem() throws Exception {
+        jdbc.update("INSERT INTO role_permissions(role_id,permission_code) SELECT ?,permission_code FROM permissions"
+                + " WHERE permission_code='inventory.handover.scan'", "fs011_role_" + suffix);
+        String accepted = "FS121A" + suffix;
+        String rejected = "FS121B" + suffix;
+        String id = createSupply(2, 1000L, List.of(accepted, rejected));
+        walkToPendingReceipt(id);
+        step(store, id, "receive", receiptBody(line(id, 2, 1, 1, List.of(accepted))), "discrepancy");
+
+        assertThat(jdbc.queryForList("SELECT owner_type,owner_id,merchant_id,item_id,status FROM inventory_trace_codes WHERE trace_code=?", accepted))
+                .singleElement().satisfies(c -> assertThat(c).containsEntry("owner_type", "merchant").containsEntry("owner_id", merchant)
+                        .containsEntry("merchant_id", merchant).containsEntry("item_id", item).containsEntry("status", "registered"));
+        assertThat(count("SELECT count(*) FROM inventory_trace_codes WHERE trace_code=?", rejected)).isZero();
+
+        // 门店卖这瓶酒：本店一张含该物品按瓶出品、待出品明细的酒吧订单（夹具同 112-R4 一例）。
+        String order = "fs121_bo_" + suffix;
+        jdbc.update("INSERT INTO bar_tables (id, bar_id, merchant_id, table_code, table_name, table_type, status, created_at, updated_at)"
+                + " VALUES (?, ?, ?, 'K1', '卡座 K1', 'card_seat', 'available', now(), now())", "fs121_tbl_" + suffix, merchant, merchant);
+        jdbc.update("INSERT INTO bar_products (id, bar_id, merchant_id, product_name, product_type, price_cent, inventory_item_id, status,"
+                + " created_at, updated_at) VALUES (?, ?, ?, '要货测试酒水 整瓶', 'liquor', 88800, ?, 'active', now(), now())",
+                "fs121_bp_" + suffix, merchant, merchant, item);
+        jdbc.update("INSERT INTO bar_orders (id, bar_id, merchant_id, table_id, order_source, status, total_amount_cent, created_at, updated_at)"
+                + " VALUES (?, ?, ?, ?, 'staff', 'submitted', 88800, now(), now())", order, merchant, merchant, "fs121_tbl_" + suffix);
+        jdbc.update("INSERT INTO bar_order_items (id, order_id, product_id, product_name, quantity, unit_price_cent, amount_cent, delivery_status,"
+                + " created_at, updated_at) VALUES (?, ?, ?, '要货测试酒水 整瓶', 1, 88800, 88800, 'pending', now(), now())",
+                "fs121_boi_" + suffix, order, "fs121_bp_" + suffix);
+        mockMvc.perform(get("/api/v1/inventory/trace-codes/" + accepted + "/outbound-orders").with(store))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data[0].order_id").value(order));
+        mockMvc.perform(post("/api/v1/inventory/trace-handovers").with(store).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"idempotency_key\":\"" + key() + "\",\"trace_code\":\"" + accepted + "\",\"order_id\":\"" + order
+                                + "\",\"device_id\":\"fs121_dev_" + suffix + "\"}"))
+                .andExpect(status().isOk());
     }
 
     // 签收转移货权、计入门店库存并形成门店应付供货主体的货款（BSM L1212「门店签收」）：供货侧非商户账号不得代门店签收。

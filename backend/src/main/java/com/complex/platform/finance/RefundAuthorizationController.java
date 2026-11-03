@@ -27,11 +27,16 @@ public class RefundAuthorizationController {
 
     private final RefundAuthorizationConfigService service;
     private final AuthorizationService authorizationService;
+    private final com.complex.platform.evidence.AuditedOperationExecutor operations;
 
+    // 第十八批 N 段第 124 条 124-R4（PGM L738）：额度与规则写口任一步失败（权限、幂等键、校验）经 AuditedOperationExecutor.recordingFailure
+    // 落 OpenAPI 声明的 refund_authority.change_failed 再原样抛出；成功事件照旧由服务层写。
     public RefundAuthorizationController(
-            RefundAuthorizationConfigService service, AuthorizationService authorizationService) {
+            RefundAuthorizationConfigService service, AuthorizationService authorizationService,
+            com.complex.platform.evidence.AuditedOperationExecutor operations) {
         this.service = service;
         this.authorizationService = authorizationService;
+        this.operations = operations;
     }
 
     @GetMapping("/limits")
@@ -44,9 +49,13 @@ public class RefundAuthorizationController {
 
     @PostMapping("/limits")
     public ApiResponse<RefundAuthorityLimitRecord> upsertLimit(@RequestBody @jakarta.validation.Valid RefundAuthorityLimitRequest request) {
-        authorizationService.requirePermission(MANAGE_PERMISSION);
-        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
-        return ApiResponse.ok(service.upsertLimit(request));
+        String key = request == null ? null : request.idempotencyKey();
+        return ApiResponse.ok(operations.recordingFailure("refund_authority.change_failed", MANAGE_PERMISSION, "refund_authority_limit", null,
+                key, () -> {
+                    authorizationService.requirePermission(MANAGE_PERMISSION);
+                    requireIdempotencyKey(key);
+                    return service.upsertLimit(request);
+                }));
     }
 
     @GetMapping("/rules")
@@ -58,8 +67,12 @@ public class RefundAuthorizationController {
 
     @PostMapping("/rules")
     public ApiResponse<RefundAutoRuleRecord> upsertRule(@RequestBody @jakarta.validation.Valid RefundAutoRuleRequest request) {
-        authorizationService.requirePermission(MANAGE_PERMISSION);
-        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
-        return ApiResponse.ok(service.upsertRule(request));
+        String key = request == null ? null : request.idempotencyKey();
+        return ApiResponse.ok(operations.recordingFailure("refund_authority.change_failed", MANAGE_PERMISSION, "refund_auto_rule", null,
+                key, () -> {
+                    authorizationService.requirePermission(MANAGE_PERMISSION);
+                    requireIdempotencyKey(key);
+                    return service.upsertRule(request);
+                }));
     }
 }

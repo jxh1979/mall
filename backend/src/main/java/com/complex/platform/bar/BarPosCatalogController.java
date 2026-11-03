@@ -2,6 +2,8 @@ package com.complex.platform.bar;
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiResponse;
+import com.complex.platform.evidence.AuditEventService;
+import com.complex.platform.evidence.AuditedOperationExecutor;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
@@ -33,12 +35,19 @@ public class BarPosCatalogController {
     private final BarPosCatalogService service;
     private final BarPosImageStorage imageStorage;
     private final AuthorizationService authorizationService;
+    private final AuditedOperationExecutor operations;
+    private final AuditEventService audit;
 
+    // 第十八批 N 段第 124 条 124-R5（PGM L966「已拍板：所有有过程的业务动作都必须留痕……」、L738「访问被拒绝也要留痕……」）：写口任一步失败
+    // 经 AuditedOperationExecutor.recordingFailure 落 OpenAPI 声明的 x-audit-event-failure 再原样抛出；服务层原本不写成功事件的，
+    // 服务返回后在这里落声明的 x-audit-event-success。
     public BarPosCatalogController(BarPosCatalogService service, BarPosImageStorage imageStorage,
-            AuthorizationService authorizationService) {
+            AuthorizationService authorizationService, AuditedOperationExecutor operations, AuditEventService audit) {
         this.service = service;
         this.imageStorage = imageStorage;
         this.authorizationService = authorizationService;
+        this.operations = operations;
+        this.audit = audit;
     }
 
     // ---------- 分类 ----------
@@ -54,8 +63,13 @@ public class BarPosCatalogController {
     @PostMapping("/categories")
     public ApiResponse<BarProductCategoryRecord> saveCategory(
             @RequestBody(required = false) BarProductCategoryRequest request) {
-        authorizationService.requirePermission("bar.category.manage");
-        return ApiResponse.ok(service.saveCategory(request));
+        return ApiResponse.ok(operations.recordingFailure("bar.category.saved_failed", "bar.category.manage", "bar_product_category",
+                request == null || request.id() == null ? "new" : request.id(), null, () -> {
+                    authorizationService.requirePermission("bar.category.manage");
+                    BarProductCategoryRecord saved = service.saveCategory(request);
+                    audit.recordSuccess("bar.category.saved", "bar.category.manage", "bar_product_category", saved.id(), null, null, Map.of());
+                    return saved;
+                }));
     }
 
     @PostMapping("/categories/{id}/archive")
@@ -91,8 +105,14 @@ public class BarPosCatalogController {
     public ApiResponse<BarProductRecord> assignProductCategory(
             @PathVariable("product_id") String productId,
             @RequestBody(required = false) BarProductCategoryAssignRequest request) {
-        authorizationService.requirePermission("bar.product.manage");
-        return ApiResponse.ok(service.assignCategory(productId, request));
+        return ApiResponse.ok(operations.recordingFailure("bar.product.category_assigned_failed", "bar.product.manage", "bar_product",
+                productId, null, () -> {
+                    authorizationService.requirePermission("bar.product.manage");
+                    BarProductRecord saved = service.assignCategory(productId, request);
+                    audit.recordSuccess("bar.product.category_assigned", "bar.product.manage", "bar_product", productId, null, null,
+                            Map.of("category_id", request == null || request.categoryId() == null ? "" : request.categoryId()));
+                    return saved;
+                }));
     }
 
     @GetMapping("/products")
@@ -151,8 +171,13 @@ public class BarPosCatalogController {
     @PostMapping("/combos")
     public ApiResponse<BarComboRecord> saveCombo(
             @RequestBody(required = false) BarComboRequest request) {
-        authorizationService.requirePermission("bar.combo.manage");
-        return ApiResponse.ok(service.saveCombo(request));
+        return ApiResponse.ok(operations.recordingFailure("bar.combo.saved_failed", "bar.combo.manage", "bar_combo",
+                request == null || request.id() == null ? "new" : request.id(), null, () -> {
+                    authorizationService.requirePermission("bar.combo.manage");
+                    BarComboRecord saved = service.saveCombo(request);
+                    audit.recordSuccess("bar.combo.saved", "bar.combo.manage", "bar_combo", saved.id(), null, null, Map.of());
+                    return saved;
+                }));
     }
 
     @PostMapping("/combos/{id}/archive")
@@ -189,12 +214,17 @@ public class BarPosCatalogController {
     public ApiResponse<Map<String, String>> uploadImage(
             @RequestPart("file") MultipartFile file,
             @RequestParam(value = "product_id", required = false) String productId) {
-        authorizationService.requirePermission("bar.product.manage");
-        String imageUrl = imageStorage.store(file);
-        if (productId != null && !productId.isBlank()) {
-            service.setProductImage(productId, imageUrl);
-        }
-        return ApiResponse.ok(Map.of("imageUrl", imageUrl));
+        return ApiResponse.ok(operations.recordingFailure("bar.catalog.image_uploaded_failed", "bar.product.manage", "bar_catalog_image",
+                "new", null, () -> {
+                    authorizationService.requirePermission("bar.product.manage");
+                    String imageUrl = imageStorage.store(file);
+                    if (productId != null && !productId.isBlank()) {
+                        service.setProductImage(productId, imageUrl);
+                    }
+                    audit.recordSuccess("bar.catalog.image_uploaded", "bar.product.manage", "bar_catalog_image", imageUrl, null, null,
+                            Map.of("product_id", productId == null ? "" : productId));
+                    return Map.of("imageUrl", imageUrl);
+                }));
     }
 
     /** 回读图片（鉴权走既有 API 会话，不开公共静态目录）。 */

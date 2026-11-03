@@ -1,4 +1,4 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 package com.complex.platform.compliance;
 import static com.complex.platform.common.api.ApiRequests.requireIdempotencyKey;
 
@@ -15,6 +15,7 @@ import com.complex.platform.compliance.dto.ContractKeyDateRequest;
 import com.complex.platform.compliance.dto.WecomConversationSyncRequest;
 import com.complex.platform.compliance.dto.WecomRetentionPolicyRequest;
 import com.complex.platform.compliance.dto.WecomRiskHitReviewRequest;
+import com.complex.platform.evidence.AuditedOperationExecutor;
 import com.complex.platform.gate.TerminalSwitchGuard;
 import java.util.List;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -36,19 +37,24 @@ public class ComplianceController {
     private final AuthorizationService authorizationService;
     private final WecomWebhookSignatureVerifier wecomWebhookSignatureVerifier;
     private final TerminalSwitchGuard terminalSwitchGuard;
+    private final AuditedOperationExecutor operations;
 
+    // 第十八批 N 段第 124 条 124-R5（PGM L738「访问被拒绝也要留痕，便于排查是权限问题还是开关问题。」）：写口任一步失败（权限、范围、校验、
+    // 状态冲突）经 AuditedOperationExecutor.recordingFailure 落 OpenAPI 声明的 x-audit-event-failure 再原样抛出。
     public ComplianceController(
             ComplianceService service,
             WecomConversationService wecomConversationService,
             AuthorizationService authorizationService,
             WecomWebhookSignatureVerifier wecomWebhookSignatureVerifier,
-            TerminalSwitchGuard terminalSwitchGuard
+            TerminalSwitchGuard terminalSwitchGuard,
+            AuditedOperationExecutor operations
     ) {
         this.service = service;
         this.wecomConversationService = wecomConversationService;
         this.authorizationService = authorizationService;
         this.wecomWebhookSignatureVerifier = wecomWebhookSignatureVerifier;
         this.terminalSwitchGuard = terminalSwitchGuard;
+        this.operations = operations;
     }
 
     @GetMapping("/contract-key-dates")
@@ -177,14 +183,17 @@ public class ComplianceController {
             @RequestBody @jakarta.validation.Valid WecomRiskHitReviewRequest request
     ) {
         // 复核处置 reviewing/confirmed/dismissed：高敏操作，需 wecom.risk_hit.review。
-        authorizationService.requirePermission("wecom.risk_hit.review");
-        authorizationService.requirePlatformComplianceScope();
-        String reviewerId = authorizationService.currentActor().id();
-        return ApiResponse.ok(wecomConversationService.reviewRiskHit(
-                id,
-                request == null ? null : request.status(),
-                reviewerId,
-                request == null ? null : request.reviewNote()));
+        return ApiResponse.ok(operations.recordingFailure("wecom.risk_hit.review_failed", "wecom.risk_hit.review", "wecom_risk_hit", id,
+                null, () -> {
+                    authorizationService.requirePermission("wecom.risk_hit.review");
+                    authorizationService.requirePlatformComplianceScope();
+                    String reviewerId = authorizationService.currentActor().id();
+                    return wecomConversationService.reviewRiskHit(
+                            id,
+                            request == null ? null : request.status(),
+                            reviewerId,
+                            request == null ? null : request.reviewNote());
+                }));
     }
 
     @GetMapping("/wecom/retention-policies")

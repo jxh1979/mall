@@ -1,4 +1,4 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 package com.complex.platform.settlement;
 
 import static org.mockito.Mockito.doThrow;
@@ -126,6 +126,12 @@ class SettlementControllerPostBillTests {
         @Bean
         SettlementPostingService settlementPostingService() {
             return Mockito.mock(SettlementPostingService.class);
+        }
+
+        @Bean
+        com.complex.platform.evidence.AuditedOperationExecutor auditedOperationExecutor() {
+            return new com.complex.platform.evidence.AuditedOperationExecutor(null,
+                    Mockito.mock(com.complex.platform.evidence.AuditEventService.class));
         }
 
         @Bean

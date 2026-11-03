@@ -1,6 +1,6 @@
 package com.complex.platform.contract;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -129,6 +129,26 @@ class ContractParkingMonthlyJdbcIntegrationTests {
         ContractRecord c = contracts.findContractById(id).orElseThrow();
         assertThat(contracts.listMissingTerminationDocuments(c, YearMonth.from(c.effectiveDate())))
                 .contains(YearMonth.from(c.effectiveDate()) + ":parking_monthly");
+    }
+
+    /**
+     * 18N 第 124 条 124-R2b（台账 :4231「代码落 OpenAPI 声明的事件，OpenAPI 不改。」）：按真实入口生成单期租金账单落 OpenAPI 声明的
+     * contract.rent_billed；当期各费目账单（租金＋物业费）仍落 contract.fee_billed。
+     */
+    @Test
+    void rentBillAndPeriodBillsAuditUnderOpenApiDeclaredNames() throws Exception {
+        String id = contract("evt", "effective", "{\"baseRentCent\":100000,\"propertyFeeCent\":20000}");
+        mockMvc.perform(post("/api/v1/contracts/" + id + "/rent-bills").with(staff).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"period\":\"2026-11\",\"idempotency_key\":\"rb_" + UUID.randomUUID() + "\"}"))
+                .andExpect(status().isOk());
+        periodBills(id, "2026-12").andExpect(status().isOk());
+        assertThat(billEvents(id, "2026-11")).containsExactly("contract.rent_billed");
+        assertThat(billEvents(id, "2026-12")).hasSize(2).containsOnly("contract.fee_billed");
+    }
+
+    private List<String> billEvents(String id, String period) {
+        return jdbc.queryForList("SELECT e.event_name FROM audit_events e JOIN contract_rent_bills b ON b.id = e.business_id "
+                + "WHERE b.contract_id = ? AND b.period = ?", String.class, id, period);
     }
 
     private ResultActions periodBills(String id, String period) throws Exception {

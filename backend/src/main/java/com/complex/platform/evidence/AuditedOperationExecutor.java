@@ -155,6 +155,28 @@ public class AuditedOperationExecutor {
     }
 
     /**
+     * 第十八批 N 段第 124 条 124-R3（PGM L738「访问被拒绝也要留痕，便于排查是权限问题还是开关问题。」；先例 18I 第 90 条
+     * LeasingController.failureAudited）：控制器写口把权限、幂等键与服务调用一起放进 action，任一步失败（权限、范围、校验、状态冲突）
+     * 落 OpenAPI 声明的 x-audit-event-failure 再原样抛出；成功事件照旧由服务层写。失败事件是独立事务（recordFailure，XM-M031-B），
+     * 业务回滚也保留；写失败事件本身出错挂在原异常上、不顶掉原异常。放在本类、不放进 AuditEventService：自调用会绕过 REQUIRES_NEW。
+     * 请求体反序列化失败与 @Valid 注解校验在进入控制器方法之前就被框架拦下，本包装接不到。
+     */
+    public <T> T recordingFailure(String failureEvent, String permission, String businessType, String businessId,
+            String idempotencyKey, Supplier<T> action) {
+        try {
+            return action.get();
+        } catch (RuntimeException error) {
+            try {
+                auditEventService.recordFailure(failureEvent, permission, businessType, businessId, null, idempotencyKey,
+                        codeOf(error));
+            } catch (RuntimeException auditError) {
+                error.addSuppressed(auditError);
+            }
+            throw error;
+        }
+    }
+
+    /**
      * 追加一条不可改的操作明细留痕(who/when 由审计上下文自动填充),供对象级处置时间线回溯。
      * 复用 audit_events(只增不改),不另建历史表;由调用方在业务事务内调用,与业务写入同事务原子落库。
      */

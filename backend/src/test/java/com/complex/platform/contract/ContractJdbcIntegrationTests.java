@@ -1,6 +1,6 @@
 package com.complex.platform.contract;
 
-// 文件版本：V0.21
+// 文件版本：V0.22
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -749,6 +749,33 @@ class ContractJdbcIntegrationTests {
 
         assertThat(jdbcTemplate.queryForList("SELECT project_id FROM ar_ap_items WHERE source_type = 'turnover_rent' AND source_id = ?",
                 String.class, ruleId)).containsExactly(projectB);
+    }
+
+    /**
+     * 第十八批 N 段第 124 条 124-R3（PGM L738「访问被拒绝也要留痕，便于排查是权限问题还是开关问题。」；OpenAPI submitContract 的
+     * x-audit-event-failure）：按前端请求形状（蛇形键）对已提交审批的合同再提交，409 CONTRACT_NOT_DRAFTING，落 contract.submit_failed
+     * （独立事务、不随测试回滚，按本次幂等键查）。
+     */
+    @Test
+    void resubmittingSubmittedContractRecordsSubmitFailure() throws Exception {
+        String s = UUID.randomUUID().toString().substring(0, 8);
+        String contractId = "r3_ctr_" + s;
+        jdbcTemplate.update("""
+                INSERT INTO contracts (id, merchant_id, contract_subject_id, settlement_subject_id, effective_date, expiry_date,
+                    lifecycle_status, project_id, rent_terms, created_at, updated_at)
+                VALUES (?, ?, ?, ?, DATE '2098-01-01', DATE '2098-12-31', 'pending_confirmation', NULL,
+                    '{"baseRentCent":100000}'::jsonb, now(), now())""",
+                contractId, "r3_mch_" + s, "r3_subj_" + s, "r3_subj_" + s);
+
+        mockMvc.perform(post("/api/v1/contracts/" + contractId + "/submit").with(staffWith(s, "platform_admin", "contract.draft.manage"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"final_approver_id\":null,\"parallel_lines\":[],\"reason\":null,\"idempotency_key\":\"r3_sub_" + s + "\"}"))
+                .andExpect(status().isConflict());
+
+        assertThat(jdbcTemplate.queryForList("""
+                SELECT business_type || '|' || business_id || '|' || permission_code || '|' || (metadata->>'error_code')
+                  FROM audit_events WHERE event_name = 'contract.submit_failed' AND event_result = 'failure' AND idempotency_key = ?""",
+                String.class, "r3_sub_" + s)).containsExactly("contract|" + contractId + "|contract.draft.manage|CONTRACT_NOT_DRAFTING");
     }
 
     /** 给定账号类型的平台公司账号，经一个普通角色持有给定权限码（后台 Web 终端）。 */

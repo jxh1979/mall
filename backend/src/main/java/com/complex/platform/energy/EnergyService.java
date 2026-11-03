@@ -1,6 +1,6 @@
 package com.complex.platform.energy;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 import static com.complex.platform.common.Strings.requireText;
 import static com.complex.platform.common.Strings.trimToNull;
 import com.complex.platform.access.AuthorizationService;
@@ -53,7 +53,7 @@ public class EnergyService {
     }
     @Transactional public EnergyMeterRecord createMeter(EnergyMeterRequest r) {
         require(r); scope(requireText(r.projectId(),"project_id"),METER);
-        return write("energy.meter_saved",METER,r.idempotencyKey(),r,()->{
+        return write("energy.meter_saved","energy.meter_save_failed",METER,r.idempotencyKey(),r,()->{
             workflow.lockMeterGraph(r.projectId());
             String id=trimToNull(r.id())==null?"em_"+UUID.randomUUID():r.id().trim();
             if(repository.findMeterById(id).isPresent()) throw invalid("表计编号已存在");
@@ -64,7 +64,7 @@ public class EnergyService {
     }
     @Transactional public EnergyMeterRecord updateMeter(String id,EnergyMeterRequest r) {
         require(r);var before=scopedMeter(id,METER);
-        return write("energy.meter_saved",METER,r.idempotencyKey(),r,()->{
+        return write("energy.meter_saved","energy.meter_save_failed",METER,r.idempotencyKey(),r,()->{
             workflow.lockMeterGraph(before.projectId());workflow.lockMeter(id);var cur=loadMeter(id);
             String type=r.meterType()==null?cur.meterType():r.meterType();
             String gather=r.gatherObject()==null?cur.gatherObject():r.gatherObject();
@@ -324,7 +324,10 @@ public class EnergyService {
         catch(RuntimeException e){audit.recordFailure(event+"_failed",permission,type,id,null,null,e.getMessage());throw e;}
     }
     private <T> T write(String event,String permission,String key,Object request,Supplier<T> work,Class<T> type,java.util.function.Function<T,String> objectId){
-        try{return idempotency.execute(event,key,request,()->{T result=work.get();audit.recordSuccess(event,permission,"energy_meter",objectId.apply(result),null,key,Map.of());return result;},type);}catch(RuntimeException e){audit.recordFailure(event+"_failed",permission,"energy_meter","energy",null,key,e.getMessage());throw e;}
+        return write(event,event+"_failed",permission,key,request,work,type,objectId);
+    }
+    private <T> T write(String event,String failureEvent,String permission,String key,Object request,Supplier<T> work,Class<T> type,java.util.function.Function<T,String> objectId){
+        try{return idempotency.execute(event,key,request,()->{T result=work.get();audit.recordSuccess(event,permission,"energy_meter",objectId.apply(result),null,key,Map.of());return result;},type);}catch(RuntimeException e){audit.recordFailure(failureEvent,permission,"energy_meter","energy",null,key,e.getMessage());throw e;}
     }
     static String energyFeeSourceId(String merchant,String contract,String period){return "energy_fee_"+stable(merchant+"|"+contract+"|"+period);}
     private static String stable(String text){return UUID.nameUUIDFromBytes(text.getBytes(java.nio.charset.StandardCharsets.UTF_8)).toString().replace("-","");}

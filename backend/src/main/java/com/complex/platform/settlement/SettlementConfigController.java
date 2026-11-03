@@ -1,6 +1,6 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiResponse;
@@ -68,48 +68,78 @@ public class SettlementConfigController {
     }
 
     // ================= §2 写入面(落草案;settlement.config.manage + 平台域)=================
+    // 第十八批 N 段第 124 条 124-R4（PGM L738「访问被拒绝也要留痕，便于排查是权限问题还是开关问题。」）：落草案、转正、软删写口
+    // 一律经 auditFailure 落 OpenAPI 声明的 x-audit-event-failure（权限、范围、服务层校验失败均记）再原样抛出；成功事件照旧由服务层写。
 
     @PostMapping("/distribution-method")
     public ApiResponse<Void> saveDistributionMethod(@RequestBody DistributionMethodRequest request) {
-        writeService.saveDistributionMethod(request, requireManageActor());
+        auditFailure("settlement.config.ticket_distribution_configs.update_failed", "settlement.config.manage", "ticket_distribution_configs",
+                null, request == null ? null : request.idempotencyKey(), () -> {
+                    writeService.saveDistributionMethod(request, requireManageActor());
+                    return null;
+                });
         return ApiResponse.ok(null);
     }
 
     @PostMapping("/merchant-rate")
     public ApiResponse<Void> saveMerchantRate(@RequestBody MerchantRateRequest request) {
-        writeService.saveMerchantRate(request, requireManageActor());
+        auditFailure("settlement.config.ticket_distribution_merchant_rates.update_failed", "settlement.config.manage", "ticket_distribution_merchant_rates",
+                null, request == null ? null : request.idempotencyKey(), () -> {
+                    writeService.saveMerchantRate(request, requireManageActor());
+                    return null;
+                });
         return ApiResponse.ok(null);
     }
 
     @PostMapping("/comprehensive-service-fee")
     public ApiResponse<Void> saveComprehensiveServiceFee(@RequestBody ComprehensiveServiceFeeRequest request) {
-        writeService.saveComprehensiveServiceFee(request, requireManageActor());
+        auditFailure("settlement.config.comprehensive_service_fee_configs.update_failed", "settlement.config.manage", "comprehensive_service_fee_configs",
+                null, request == null ? null : request.idempotencyKey(), () -> {
+                    writeService.saveComprehensiveServiceFee(request, requireManageActor());
+                    return null;
+                });
         return ApiResponse.ok(null);
     }
 
     @PostMapping("/combo-discount")
     public ApiResponse<Void> saveComboDiscount(@RequestBody ComboDiscountRequest request) {
-        writeService.saveComboDiscount(request, requireManageActor());
+        auditFailure("settlement.config.ticket_combo_discount_configs.update_failed", "settlement.config.manage", "ticket_combo_discount_configs",
+                null, request == null ? null : request.idempotencyKey(), () -> {
+                    writeService.saveComboDiscount(request, requireManageActor());
+                    return null;
+                });
         return ApiResponse.ok(null);
     }
 
     @PostMapping("/channel-fee")
     public ApiResponse<Void> saveChannelFee(@RequestBody ChannelFeeRequest request) {
-        writeService.saveChannelFee(request, requireManageActor());
+        auditFailure("settlement.config.channel_fee_configs.update_failed", "settlement.config.manage", "channel_fee_configs",
+                null, request == null ? null : request.idempotencyKey(), () -> {
+                    writeService.saveChannelFee(request, requireManageActor());
+                    return null;
+                });
         return ApiResponse.ok(null);
     }
 
     /** V340(P0-D/CFG-01):卡座销售提成费率(项目 × 商户 × 角色档)落草案。 */
     @PostMapping("/commission-rate")
     public ApiResponse<Void> saveCommissionRate(@RequestBody CommissionRateRequest request) {
-        writeService.saveCommissionRate(request, requireManageActor());
+        auditFailure("settlement.config.bar_commission_rate_configs.update_failed", "settlement.config.manage", "bar_commission_rate_configs",
+                null, request == null ? null : request.idempotencyKey(), () -> {
+                    writeService.saveCommissionRate(request, requireManageActor());
+                    return null;
+                });
         return ApiResponse.ok(null);
     }
 
     /** V340(P0-D/CFG-01):积分累计率(项目 × 商户)落草案。 */
     @PostMapping("/points-accrual-rate")
     public ApiResponse<Void> savePointsAccrualRate(@RequestBody PointsAccrualRateRequest request) {
-        writeService.savePointsAccrualRate(request, requireManageActor());
+        auditFailure("settlement.config.points_accrual_rate_configs.update_failed", "settlement.config.manage", "points_accrual_rate_configs",
+                null, request == null ? null : request.idempotencyKey(), () -> {
+                    writeService.savePointsAccrualRate(request, requireManageActor());
+                    return null;
+                });
         return ApiResponse.ok(null);
     }
 
@@ -130,7 +160,11 @@ public class SettlementConfigController {
     /** S6(V373)：赠送权益预估成本预扣规则（项目 × 票种，两模式二选一）落草案。 */
     @PostMapping("/pass-gift-cost")
     public ApiResponse<Void> savePassGiftCost(@RequestBody PassGiftCostRequest request) {
-        writeService.savePassGiftCost(request, requireManageActor());
+        auditFailure("settlement.config.pass_gift_cost_configs.update_failed", "settlement.config.manage", "pass_gift_cost_configs",
+                null, request == null ? null : request.idempotencyKey(), () -> {
+                    writeService.savePassGiftCost(request, requireManageActor());
+                    return null;
+                });
         return ApiResponse.ok(null);
     }
 
@@ -141,7 +175,9 @@ public class SettlementConfigController {
     @PostMapping("/internal-price-item")
     public ApiResponse<String> saveInternalPriceItem(
             @RequestBody SettlementConfigWriteRequests.InternalPriceItemRequest request) {
-        return ApiResponse.ok(writeService.saveInternalPriceItem(request, requireManageActor()));
+        return ApiResponse.ok(auditFailure("settlement.config.internal_price_catalog.update_failed", "settlement.config.manage",
+                "internal_price_catalog", null, request == null ? null : request.idempotencyKey(),
+                () -> writeService.saveInternalPriceItem(request, requireManageActor())));
     }
 
     /**
@@ -170,7 +206,11 @@ public class SettlementConfigController {
 
     @PostMapping("/rank-tiers")
     public ApiResponse<Void> saveRankTiers(@RequestBody RankTiersRequest request) {
-        writeService.saveRankTiers(request, requireManageActor());
+        auditFailure("settlement.config.ticket_distribution_rank_tiers.update_failed", "settlement.config.manage", "ticket_distribution_rank_tiers",
+                null, request == null ? null : request.idempotencyKey(), () -> {
+                    writeService.saveRankTiers(request, requireManageActor());
+                    return null;
+                });
         return ApiResponse.ok(null);
     }
 
@@ -258,7 +298,11 @@ public class SettlementConfigController {
 
     @PostMapping("/revenue-stream-attribution")
     public ApiResponse<Void> saveRevenueStreamAttribution(@RequestBody RevenueStreamAttributionRequest request) {
-        writeService.saveRevenueStreamAttribution(request, requireManageActor());
+        auditFailure("settlement.config.revenue_stream_attribution.update_failed", "settlement.config.manage", "revenue_stream_attribution",
+                null, request == null ? null : request.idempotencyKey(), () -> {
+                    writeService.saveRevenueStreamAttribution(request, requireManageActor());
+                    return null;
+                });
         return ApiResponse.ok(null);
     }
 
@@ -268,7 +312,11 @@ public class SettlementConfigController {
     @PostMapping("/rank-tiers/activate")
     public ApiResponse<Void> activateRankTiers(@RequestBody(required = false) RankTiersActivateRequest request) {
         String projectId = request == null ? null : request.projectId();
-        writeService.activateRankTiers(projectId, requireManageActor());
+        auditFailure("settlement.config.draft.activate_failed", "settlement.config.manage", "ticket_distribution_rank_tiers",
+                projectId, null, () -> {
+                    writeService.activateRankTiers(projectId, requireManageActor());
+                    return null;
+                });
         return ApiResponse.ok(null);
     }
 
@@ -276,7 +324,11 @@ public class SettlementConfigController {
     @PostMapping("/{configType}/{id}/activate")
     public ApiResponse<Void> activateDraft(@PathVariable("configType") String configType,
                                            @PathVariable("id") String id) {
-        writeService.activateDraft(configType, id, requireManageActor());
+        auditFailure("settlement.config.draft.activate_failed", "settlement.config.manage", configType,
+                id, null, () -> {
+                    writeService.activateDraft(configType, id, requireManageActor());
+                    return null;
+                });
         return ApiResponse.ok(null);
     }
 
@@ -285,7 +337,11 @@ public class SettlementConfigController {
     public ApiResponse<Void> archiveConfig(@PathVariable("configType") String configType,
                                            @PathVariable("id") String id,
                                            @RequestBody ArchiveRequest request) {
-        writeService.archive(configType, id, request, requireManageActor());
+        auditFailure("settlement.config.archive_failed", "settlement.config.manage", configType,
+                id, request == null ? null : request.idempotencyKey(), () -> {
+                    writeService.archive(configType, id, request, requireManageActor());
+                    return null;
+                });
         return ApiResponse.ok(null);
     }
 
@@ -296,7 +352,11 @@ public class SettlementConfigController {
     @Deprecated
     @PostMapping("/attribution-rules/{id}/activate")
     public ApiResponse<Void> activateAttributionRuleDraft(@PathVariable("id") String id) {
-        writeService.activateDraft("attribution_rule", id, requireManageActor());
+        auditFailure("settlement.config.draft.activate_failed", "settlement.config.manage", "attribution_rule",
+                id, null, () -> {
+                    writeService.activateDraft("attribution_rule", id, requireManageActor());
+                    return null;
+                });
         return ApiResponse.ok(null);
     }
 

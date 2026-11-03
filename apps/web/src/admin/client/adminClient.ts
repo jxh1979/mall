@@ -1,7 +1,8 @@
-// 文件版本：V0.05
+// 文件版本：V0.06
 import { apiErrorFromResponse } from "../../shared/apiError";
 import { announceReplayed, beginWriteOperation } from "../../shared/operationKey";
 import type { DownloadedFile } from "../types";
+import { currentPosition, isSensitiveOperation, type GeoPosition } from "../security/geoGate";
 
 type JsonValue = null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue };
 
@@ -248,11 +249,15 @@ export class AdminApi {
     if (csrf) headers.set("x-xsrf-token", csrf);
   }
 
-  private buildInit(method: string, body: JsonBody | undefined): RequestInit {
+  private buildInit(method: string, body: JsonBody | undefined, position: GeoPosition | null = null): RequestInit {
     const headers = new Headers();
     // 3.19 二期：声明终端后后端按 terminal.enabled 逐请求强制（矩阵页关端/关模块=接口硬拒）。
     headers.set("x-terminal-type", this.terminalType);
     this.applyAuth(headers, method);
+    if (position) {
+      headers.set("x-geo-latitude", String(position.latitude));
+      headers.set("x-geo-longitude", String(position.longitude));
+    }
     // 令牌在 HttpOnly Cookie 里，浏览器自动携带（credentials:include 覆盖同源/跨源），JS 不再手动加 Authorization 头；商户手机应用除外（见 applyAuth）。
     const init: RequestInit = { method, headers, credentials: credentialsMode() };
     if (body) {
@@ -287,11 +292,14 @@ export class AdminApi {
     let response: Response;
     let text: string;
     try {
-      response = await fetch(`${this.apiBaseUrl}${path}`, this.buildInit(method, stableBody));
+      // 第 123 条 123-R3（BSM:1876「Web 端同样适用」）：现场动作闭集带上当下位置，不论终端（后端定位闸不按终端分支）；
+      // 取不到照常发出，由后端拒绝并给中文提示。
+      const position = isSensitiveOperation(method, path) ? await currentPosition() : null;
+      response = await fetch(`${this.apiBaseUrl}${path}`, this.buildInit(method, stableBody, position));
       if (response.status === 401 && !isAuthEndpoint) {
         // 先静默续期重放一次；刷新失败 / 重放仍 401 → 会话失效回登录页。
         if (await this.tryRefresh()) {
-          response = await fetch(`${this.apiBaseUrl}${path}`, this.buildInit(method, stableBody));
+          response = await fetch(`${this.apiBaseUrl}${path}`, this.buildInit(method, stableBody, position));
         }
         if (response.status === 401) this.notifySessionExpired();
       }

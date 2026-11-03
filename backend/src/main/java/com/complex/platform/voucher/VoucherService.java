@@ -1,6 +1,6 @@
 package com.complex.platform.voucher;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -9,11 +9,9 @@ import com.complex.platform.customer.CustomerRedemptionCatalogItemRecord;
 import com.complex.platform.evidence.AuditedOperation;
 import com.complex.platform.evidence.AuditedOperationExecutor;
 import com.complex.platform.finance.FinanceService;
-import com.complex.platform.gate.TerminalIdentityHolder;
 import com.complex.platform.inventory.InventoryService;
 import com.complex.platform.inventory.dto.StockMovementRequest;
-import com.complex.platform.terminal.TerminalDeviceRecord;
-import com.complex.platform.terminal.TerminalDeviceRepository;
+import com.complex.platform.terminal.TerminalDeviceService;
 import com.complex.platform.voucher.dto.VoucherDefinitionRequest;
 import com.complex.platform.voucher.dto.VoucherIssueRequest;
 import com.complex.platform.voucher.dto.VoucherRedeemRequest;
@@ -86,13 +84,17 @@ public class VoucherService implements VoucherIssuePort {
         this.ticketingRepository = ticketingRepository;
     }
 
-    // 第十八批 M 段 112-R1：核销留痕按设备号读设备台账记点位；未注入（单测）时不记点位。
-    private TerminalDeviceRepository terminalDeviceRepository;
+    // 第十八批 M 段 112-R1：核销留痕记可信终端、设备号与按设备台账读的点位（第十八批 N 段 120-R2 起与一体机售票、游乐状态看板共用取法）；未注入（单测）时不记。
+    private TerminalDeviceService terminalDeviceService;
 
     @Autowired(required = false)
-    void setTerminalDeviceRepository(TerminalDeviceRepository terminalDeviceRepository) {
-        this.terminalDeviceRepository = terminalDeviceRepository;
+    void setTerminalDeviceService(@Lazy TerminalDeviceService terminalDeviceService) {
+        this.terminalDeviceService = terminalDeviceService;
     }
+
+    // 第十八批 N 段第 123 条 123-R2：敏感操作定位闸（字段注入免改构造点；单测未注入即不查）。
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    com.complex.platform.gate.SensitiveLocationGuard locationGuard;
 
     @Autowired
     public VoucherService(
@@ -533,6 +535,9 @@ public class VoucherService implements VoucherIssuePort {
     public VoucherRedemptionEntryRecord redeem(VoucherRedeemRequest request) {
         authorizationService.requirePermission(REDEEM_PERM);
         requireRequest(request);
+        if (locationGuard != null) {
+            locationGuard.check("redeemVoucher", () -> redeemProject(request));
+        }
         return operations.executeWrite(
                 "redeemVoucher",
                 request.idempotencyKey(),
@@ -549,22 +554,10 @@ public class VoucherService implements VoucherIssuePort {
      * 可信终端的类型与设备号，及按该设备号读设备台账得到的绑定点位（时间即留痕时间）。有才记。
      */
     private Map<String, Object> redeemMetadata(VoucherRedeemRequest request) {
-        Map<String, Object> metadata = new HashMap<>();
+        Map<String, Object> metadata = terminalDeviceService == null ? new HashMap<>() : terminalDeviceService.terminalTraceMetadata();
         if (request.traceCodes() != null && !request.traceCodes().isEmpty()) {
             metadata.put("trace_codes", request.traceCodes());
         }
-        TerminalIdentityHolder.current().ifPresent(terminal -> {
-            if (terminal.terminalType() != null) {
-                metadata.put("terminal_type", terminal.terminalType());
-            }
-            if (terminal.deviceId() != null) {
-                metadata.put("device_id", terminal.deviceId());
-                if (terminalDeviceRepository != null) {
-                    terminalDeviceRepository.findByDeviceId(terminal.deviceId()).map(TerminalDeviceRecord::boundSpaceId)
-                            .ifPresent(point -> metadata.put("point_id", point));
-                }
-            }
-        });
         return metadata;
     }
 
@@ -590,6 +583,18 @@ public class VoucherService implements VoucherIssuePort {
                             VoucherStateMachine.redeemBlockReason(instance.status(), instance.expiresAt(), now));
                 },
                 saved -> ((VoucherRedeemPreviewRecord) saved).voucherInstanceId());
+    }
+
+    /** 第十八批 N 段第 123 条 123-R2：被核销券所属商户的项目（码已用、已过期也照查，重放不能绕过定位闸）；查不到为 null。 */
+    private String redeemProject(VoucherRedeemRequest request) {
+        String instanceId = blankToNull(request.voucherInstanceId());
+        String code = blankToNull(request.code());
+        Optional<VoucherInstanceRecord> instance = instanceId != null ? repository.findInstanceById(instanceId)
+                : code != null && code.startsWith(REDEEM_CODE_PREFIX)
+                ? repository.findInstanceIdByRedeemCodeHash(sha256Hex(code)).flatMap(repository::findInstanceById)
+                : Optional.empty();
+        return instance.flatMap(found -> repository.findDefinitionById(found.definitionId()))
+                .map(definition -> locationGuard.projectOfMerchant(definition.merchantId())).orElse(null);
     }
 
     private VoucherRedemptionEntryRecord redeemInternal(VoucherRedeemRequest request) {

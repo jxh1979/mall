@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.07
+// 文件版本：V0.08
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
 import com.complex.platform.common.crypto.PiiCipher;
@@ -196,7 +196,7 @@ class JdbcBarRepository implements BarRepository {
                     invitation_token, invitation_signature, invitation_capacity,
                     invitation_status, invitation_issued_at,
                     archived_at, archived_by, delete_status, delete_requested_by, delete_requested_at, delete_reason,
-                    deposit_channel, deposit_settled_at, latest_arrival_at
+                    deposit_channel, deposit_settled_at, latest_arrival_at, remark
                 )
                 VALUES (
                     :id, :bar_id, :merchant_id, :table_id, :customer_id, :reserved_at, :guest_count,
@@ -207,7 +207,7 @@ class JdbcBarRepository implements BarRepository {
                     :invitation_token, :invitation_signature, :invitation_capacity,
                     :invitation_status, :invitation_issued_at,
                     :archived_at, :archived_by, :delete_status, :delete_requested_by, :delete_requested_at, :delete_reason,
-                    :deposit_channel, :deposit_settled_at, :latest_arrival_at
+                    :deposit_channel, :deposit_settled_at, :latest_arrival_at, :remark
                 )
                 ON CONFLICT (id) DO UPDATE SET
                     bar_id = EXCLUDED.bar_id,
@@ -243,7 +243,8 @@ class JdbcBarRepository implements BarRepository {
                     delete_reason = EXCLUDED.delete_reason,
                     deposit_channel = EXCLUDED.deposit_channel,
                     deposit_settled_at = EXCLUDED.deposit_settled_at,
-                    latest_arrival_at = EXCLUDED.latest_arrival_at
+                    latest_arrival_at = EXCLUDED.latest_arrival_at,
+                    remark = EXCLUDED.remark
                 """, parameterSource.reservationParameters(reservation));
         return reservation;
     }

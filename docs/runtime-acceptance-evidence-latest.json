@@ -8,14 +8,14 @@
     "RUNTIME_EVIDENCE_BOUND_TO_SOURCE_FINGERPRINT",
     "RUNTIME_EVIDENCE_DOES_NOT_CLOSE_PRODUCTION_MANIFEST"
   ],
-  "generated_at": "2026-11-02T01:46:21.230Z",
+  "generated_at": "2026-11-03T17:32:29.944Z",
   "git": {
-    "head": "5741cf41bf299f3db2c48d9cdcacc60b8fb76fcb",
-    "head_short": "5741cf41",
-    "branch": "feature/business-code-batch33-20261101",
+    "head": "e0ec2efd8e73046dbda3c4ce4e39fb14f82571ee",
+    "head_short": "e0ec2efd",
+    "branch": "feature/business-code-batch34-20261101",
     "worktree_dirty": false,
-    "source_fingerprint": "932753dd6a2d45150f07d96c7fcaa8070bbe51a36147959c2b6cedec49fec390",
-    "source_fingerprint_file_count": 3215,
+    "source_fingerprint": "4d2f2650834dee38d195394ff7544e8f3d5c8640c59ca20fa0c77460a9de0ef3",
+    "source_fingerprint_file_count": 3241,
     "source_fingerprint_paths": [
       "backend/src/main",
       "backend/src/test",
@@ -50,17 +50,18 @@
   },
   "backend_surefire": {
     "path": "backend/target/surefire-reports",
-    "suites": 498,
-    "tests": 6216,
+    "suites": 510,
+    "tests": 6268,
     "failures": 0,
     "errors": 0,
     "skipped": 0,
-    "latest_mtime": "2026-11-02T01:43:44.699Z",
+    "latest_mtime": "2026-11-03T17:29:59.300Z",
     "passed": true
   },
   "web_unit_source": {
     "files": [
       "apps/web/src/admin/AdminApp.businessDay.test.tsx",
+      "apps/web/src/admin/AdminApp.geoGate.test.tsx",
       "apps/web/src/admin/AdminApp.merchantApp.test.tsx",
       "apps/web/src/admin/AdminApp.oneshot.test.tsx",
       "apps/web/src/admin/AdminApp.payroll.test.tsx",
@@ -70,6 +71,7 @@
       "apps/web/src/admin/AdminApp.unreadBills.test.tsx",
       "apps/web/src/admin/AdminApp.watermark.test.tsx",
       "apps/web/src/admin/adminRoutes.test.ts",
+      "apps/web/src/admin/client/adminClient.geo.test.ts",
       "apps/web/src/admin/client/adminClient.merchantApp.test.ts",
       "apps/web/src/admin/client/adminClient.payroll.test.ts",
       "apps/web/src/admin/client/adminClient.purchase.test.ts",
@@ -139,6 +141,7 @@
       "apps/web/src/admin/pages/BarTableSessionsPage.barb14.test.tsx",
       "apps/web/src/admin/pages/BarTableSessionsPage.clear.test.tsx",
       "apps/web/src/admin/pages/BarTableSessionsPage.guidedcreate.test.tsx",
+      "apps/web/src/admin/pages/BarTableSessionsPage.remark.test.tsx",
       "apps/web/src/admin/pages/BarTableSessionsPage.robustness.test.tsx",
       "apps/web/src/admin/pages/BarTableSessionsPage.rowdetail.test.tsx",
       "apps/web/src/admin/pages/BarTableSessionsPage.sales86.test.tsx",
@@ -246,6 +249,7 @@
       "apps/web/src/admin/pages/OccupancyAnalyticsPage.robustness.test.tsx",
       "apps/web/src/admin/pages/OccupancyAnalyticsPage.test.tsx",
       "apps/web/src/admin/pages/OperatingParamsPage.guidedcreate.test.tsx",
+      "apps/web/src/admin/pages/OperatingParamsPage.sensitiveRange.test.tsx",
       "apps/web/src/admin/pages/OpsReadinessPage.test.tsx",
       "apps/web/src/admin/pages/OrgHierarchyPage.test.tsx",
       "apps/web/src/admin/pages/OrganizationMerchantPage.test.tsx",
@@ -345,6 +349,7 @@
       "apps/web/src/admin/pages/VendorSubordinatesPage.test.tsx",
       "apps/web/src/admin/pages/VendorWorkOrdersPage.test.tsx",
       "apps/web/src/admin/pages/VenueBusinessHoursPage.test.tsx",
+      "apps/web/src/admin/pages/VoucherLedgerPage.geo.test.tsx",
       "apps/web/src/admin/pages/VoucherLedgerPage.guidedcreate.test.tsx",
       "apps/web/src/admin/pages/VoucherLedgerPage.oneshot.test.tsx",
       "apps/web/src/admin/pages/VoucherLedgerPage.tracecode.test.tsx",
@@ -361,8 +366,8 @@
       "apps/web/src/dealer/dealerPortalClient.test.ts",
       "apps/web/src/shared/ReplayedNotice.test.tsx"
     ],
-    "file_count": 300,
-    "test_count_from_source": 1521
+    "file_count": 305,
+    "test_count_from_source": 1536
   },
   "web_build": {
     "dist_index_exists": true,
@@ -383,15 +388,15 @@
     "asset_count": 168,
     "main_js_assets": [
       {
-        "path": "apps/web/dist/assets/main-5uOzZ8S9.js",
+        "path": "apps/web/dist/assets/main-DQcVoc82.js",
         "size_bytes": 4337,
-        "mtime": "2026-11-02T01:43:52.496Z"
+        "mtime": "2026-11-03T17:30:07.312Z"
       }
     ],
     "largest_asset": {
       "path": "apps/web/dist/assets/vendor-antd-CzvkKKQu.js",
       "size_bytes": 251112,
-      "mtime": "2026-11-02T01:43:52.499Z"
+      "mtime": "2026-11-03T17:30:07.315Z"
     },
     "no_main_bundle_warning_expected": true
   },

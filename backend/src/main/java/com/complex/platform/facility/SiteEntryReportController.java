@@ -1,6 +1,6 @@
 package com.complex.platform.facility;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static com.complex.platform.common.api.ApiRequests.requireIdempotencyKey;
 
@@ -9,6 +9,7 @@ import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.PhoneMask;
 import com.complex.platform.common.api.ApiResponse;
 import com.complex.platform.common.api.PageResponse;
+import com.complex.platform.evidence.AuditedOperationExecutor;
 import com.complex.platform.facility.dto.SiteEntryCompletionUploadRequest;
 import com.complex.platform.facility.dto.SiteEntryReportAcceptanceRequest;
 import com.complex.platform.facility.dto.SiteEntryReportRequest;
@@ -33,12 +34,16 @@ public class SiteEntryReportController {
     private final SiteEntryReportService service;
     private final AuthorizationService authorizationService;
     private final com.complex.platform.evidence.EvidenceEventService evidence;
+    private final AuditedOperationExecutor operations;
 
+    // 第十八批 N 段第 124 条 124-R3（PGM L738）：写口任一步失败（权限、校验、状态冲突）经 AuditedOperationExecutor.recordingFailure
+    // 落 OpenAPI 声明的 x-audit-event-failure 再原样抛出；成功事件照旧由服务层写。
     public SiteEntryReportController(SiteEntryReportService service, AuthorizationService authorizationService,
-            com.complex.platform.evidence.EvidenceEventService evidence) {
+            com.complex.platform.evidence.EvidenceEventService evidence, AuditedOperationExecutor operations) {
         this.service = service;
         this.authorizationService = authorizationService;
         this.evidence = evidence;
+        this.operations = operations;
     }
 
     @GetMapping
@@ -85,17 +90,25 @@ public class SiteEntryReportController {
 
     @PostMapping
     public ApiResponse<SiteEntryReportRecord> create(@RequestBody @jakarta.validation.Valid SiteEntryReportRequest request) {
-        authorizationService.requirePermission("facility.site_entry.create_assigned");
-        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
-        return ApiResponse.ok(maskPhoneForUnauthorized(service.create(request)));
+        String key = request == null ? null : request.idempotencyKey();
+        return ApiResponse.ok(operations.recordingFailure("facility.site_entry.create_failed", "facility.site_entry.create_assigned",
+                "facility_site_entry_report", "new", key, () -> {
+                    authorizationService.requirePermission("facility.site_entry.create_assigned");
+                    requireIdempotencyKey(key);
+                    return maskPhoneForUnauthorized(service.create(request));
+                }));
     }
 
     @PostMapping("/{report_id}/submit")
     public ApiResponse<SiteEntryReportRecord> submit(
             @PathVariable("report_id") String reportId, @RequestBody @jakarta.validation.Valid SiteEntryReportSubmitRequest request) {
-        authorizationService.requirePermission("facility.site_entry.submit_assigned");
-        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
-        return ApiResponse.ok(maskPhoneForUnauthorized(service.submit(reportId, request)));
+        String key = request == null ? null : request.idempotencyKey();
+        return ApiResponse.ok(operations.recordingFailure("facility.site_entry.submit_failed", "facility.site_entry.submit_assigned",
+                "facility_site_entry_report", reportId, key, () -> {
+                    authorizationService.requirePermission("facility.site_entry.submit_assigned");
+                    requireIdempotencyKey(key);
+                    return maskPhoneForUnauthorized(service.submit(reportId, request));
+                }));
     }
 
     @PostMapping("/{report_id}/completion")
@@ -109,9 +122,13 @@ public class SiteEntryReportController {
     @PostMapping("/{report_id}/review")
     public ApiResponse<SiteEntryReportRecord> review(
             @PathVariable("report_id") String reportId, @RequestBody @jakarta.validation.Valid SiteEntryReportReviewRequest request) {
-        authorizationService.requirePermission(REVIEW);
-        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
-        return ApiResponse.ok(maskPhoneForUnauthorized(service.review(reportId, request)));
+        String key = request == null ? null : request.idempotencyKey();
+        return ApiResponse.ok(operations.recordingFailure("facility.site_entry.review_failed", "facility.site_entry.review",
+                "facility_site_entry_report", reportId, key, () -> {
+                    authorizationService.requirePermission(REVIEW);
+                    requireIdempotencyKey(key);
+                    return maskPhoneForUnauthorized(service.review(reportId, request));
+                }));
     }
 
     @PostMapping("/{report_id}/accept")

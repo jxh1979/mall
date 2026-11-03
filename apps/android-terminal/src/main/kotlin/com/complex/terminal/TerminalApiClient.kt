@@ -1,6 +1,6 @@
 package com.complex.terminal
 
-// 文件版本：V0.11
+// 文件版本：V0.12
 
 import java.net.URI
 import java.net.URLEncoder
@@ -55,11 +55,16 @@ class TerminalApiClient(
   }
 
   var accessToken: String? = null
+  /** 第十八批 N 段第 120 条 120-R1 复核：授权员工那一段请求的令牌，只对发起它的线程有效（[asStaff] 设、还），常驻令牌 [accessToken] 不动。 */
+  val staffToken = ThreadLocal<String?>()
   var deviceId: String? = null
   var deviceSigner: ((ByteArray) -> String)? = null
   /** U01-001/U02-001：终端身份由绑定/登记的设备类型决定并只声明一次——应用在绑定成功后写入（staff_work_phone / tablet / kiosk）；
    *  员工私人手机通道固定声明 [STAFF_PRIVATE_PHONE]。未绑定时不发类型头（服务端缺头即拒，fail-close），不按路径改报、不自报 app。 */
   var terminalType: String? = null
+  /** 第十八批 N 段第 123 条 123-R4（BSM:1630）：现场动作那一刻取本机定位（纬度, 经度，WGS-84 十进制度），取不到返回 null；
+   *  只在现场动作闭集的 POST 上调用（[sensitiveLocationHeaders]），应用启动时接上设备定位。 */
+  var locationProvider: (() -> Pair<Double, Double>?)? = null
 
   fun registerDeviceSigningKey(id: String, publicKey: String, requestKey: String, terminalType: String): JsonObject =
     post("/api/v1/terminals/devices/${urlEncode(id)}/signing-key", mapOf("public_key" to publicKey, "idempotency_key" to requestKey), terminalType)
@@ -71,6 +76,22 @@ class TerminalApiClient(
 
   fun login(username: String, password: String): LoginResponse =
     post("/api/v1/auth/login", LoginRequest(username, password))
+
+  /** 第十八批 N 段第 120 条 120-R1：授权员工用完即登出（以该员工令牌发，见 [asStaff]）。 */
+  fun logout(sessionId: String): JsonObject =
+    post("/api/v1/auth/logout", LogoutRequest(UUID.randomUUID().toString(), sessionId))
+
+  /** 第十八批 N 段第 120 条 120-R1：一体机凭绑定时签发的设备令牌读本机配置（是否启用售票、所属商户）。 */
+  fun kioskConfig(deviceCode: String, deviceToken: String): KioskConfig {
+    val path = "/api/v1/terminals/kiosks/${urlEncode(deviceCode)}/config"
+    val builder = HttpRequest.newBuilder()
+      .uri(URI.create("$baseUrl$path"))
+      .timeout(Duration.ofSeconds(30))
+      .header("X-Device-Token", deviceToken)
+      .GET()
+    applyHeaders(builder, path, "GET", "")
+    return decode(path, client.send(builder.build(), HttpResponse.BodyHandlers.ofString()))
+  }
 
   fun bindDevice(request: BindDeviceRequest): DeviceBinding =
     post("/api/v1/terminals/devices/bind", request, request.terminalType)
@@ -121,6 +142,17 @@ class TerminalApiClient(
     val recordSeg = urlEncode(recordId)
     return post("/api/v1/amusement/maintenance-records/${recordSeg}/confirm-resume", request)
   }
+
+  /** 第十八批 N 段第 120 条 120-R6：检修屏选项目、设备、检修单位，主管确认屏列待确认的检修记录。 */
+  fun listAmusementProjects(): List<AmusementProject> = get<Page<AmusementProject>>("/api/v1/amusement/projects").items
+
+  fun listAmusementDevices(projectId: String): List<AmusementDevice> =
+    get<Page<AmusementDevice>>("/api/v1/amusement/projects/${urlEncode(projectId)}/devices").items
+
+  fun listInventorySuppliers(): List<InventorySupplier> = get<Page<InventorySupplier>>("/api/v1/inventory/suppliers").items
+
+  fun listAmusementMaintenanceRecords(): List<AmusementMaintenanceRecord> =
+    get<Page<AmusementMaintenanceRecord>>("/api/v1/amusement/maintenance-records").items
 
   // 酒吧一体机/平板：点酒下单
   fun createBarOrder(request: BarOrderRequest): BarOrderRecord =
@@ -277,6 +309,10 @@ class TerminalApiClient(
   /** HP-F01 我的接警：本人此刻当班可接的待接手告警与本人已接手未结的告警（只读，查看不等于接手）。 */
   fun listMyFacilityAlarms(): List<FacilityAlarmRecord> = get<FacilityAlarmPage>("/api/v1/facility/alarms/mine").items
 
+  /** 第十八批 N 段第 120 条 120-R5（BSM:991「查看游乐设施状态：开放、排队、容量、暂停、关闭、故障、维护或安全提醒。」）：一体机游乐设施状态看板（常驻会话即可看）。 */
+  fun amusementStatusBoard(): List<AmusementProjectStatus> =
+    get<AmusementProjectStatusPage>("/api/v1/amusement/projects/status-board").items
+
   /** HP-F01 明确接手（「已收到并接手」）：唯一改变接警状态的动作。 */
   fun takeOverFacilityAlarm(id: String, request: FacilityAlarmTakeOverRequest): FacilityAlarmRecord =
     post("/api/v1/facility/alarms/${urlEncode(id)}/take-over", request)
@@ -305,6 +341,36 @@ class TerminalApiClient(
 
   fun createBarReservation(request: BarReservationCreateRequest): BarReservationRecord =
     post("/api/v1/bar/reservations", request)
+
+  /** 第十八批 N 段第 120 条 120-R7：一体机现金 / POS 登记——票务订单建付款意向、确认收款，订台定金登记（见 [registerKioskPayment]）。 */
+  fun createTicketPayIntent(orderId: String, request: PaymentIntentRequest): PaymentIntentRecord =
+    post("/api/v1/ticketing/orders/${urlEncode(orderId)}/pay-intents", request)
+
+  fun confirmTicketPayment(orderId: String, request: ConfirmTicketPaymentRequest): JsonObject =
+    post("/api/v1/ticketing/orders/${urlEncode(orderId)}/confirm-payment", request)
+
+  fun payReservationDeposit(reservationId: String, request: BarReservationDepositPayRequest): BarReservationRecord =
+    post("/api/v1/bar/reservations/${urlEncode(reservationId)}/pay-deposit", request)
+
+  /**
+   * 第十八批 N 段第 120 条 120-R2：一体机辅助售票——票种目录（带所属酒吧时只列该酒吧单店票）、给客人手机号发绑定码、下单、出票、取消、
+   * 按客人手机号查订单（请求由调用方放在授权服务人员令牌下发，见 [asStaff]）。
+   */
+  fun listKioskTicketProducts(barId: String?): List<KioskTicketProduct> =
+    get<KioskTicketProductPage>("/api/v1/customer/ticket-products" + (barId?.takeIf { it.isNotBlank() }?.let { "?bar_id=${urlEncode(it)}" } ?: "")).items
+
+  fun requestKioskBindCode(phone: String): JsonObject = post("/api/v1/ticketing/kiosk-bind-codes", mapOf("phone" to phone))
+
+  fun createTicketOrder(request: KioskTicketOrderRequest): TicketOrderRow = post("/api/v1/ticketing/orders", request)
+
+  fun issueTicketOrder(orderId: String, request: TicketOrderActionRequest): JsonObject =
+    post("/api/v1/ticketing/orders/${urlEncode(orderId)}/issue", request)
+
+  fun cancelTicketOrder(orderId: String, request: TicketOrderActionRequest): TicketOrderRow =
+    post("/api/v1/ticketing/orders/${urlEncode(orderId)}/cancel", request)
+
+  fun listTicketOrdersByPhone(phone: String): List<TicketOrderRow> =
+    get<TicketOrderRowPage>("/api/v1/ticketing/orders?buyer_phone=${urlEncode(phone)}").items
 
   fun bindStaffDeviceCredential(request: StaffDeviceBindRequest): StaffDeviceCredentialRecord =
     post("/api/v1/staff/device-credentials", request, terminalType ?: STAFF_PRIVATE_PHONE)
@@ -425,13 +491,14 @@ class TerminalApiClient(
   fun applyHeaders(builder: HttpRequest.Builder, path: String, method: String, body: String, terminalTypeOverride: String? = null,
       bodyDigest: String? = null) {
     (terminalTypeOverride ?: terminalType)?.let { builder.header("X-Terminal-Type", it) }
+    sensitiveLocationHeaders(method, path, locationProvider).forEach { (name, value) -> builder.header(name, value) }
     val id = deviceId
     val signer = deviceSigner
     if (id != null && signer != null && path != "/api/v1/auth/login") {
       (if (bodyDigest != null) deviceRequestHeadersWithDigest(id, method, path, bodyDigest, signer)
         else deviceRequestHeaders(id, method, path, body, signer)).forEach { (name, value) -> builder.header(name, value) }
     }
-    accessToken?.takeIf { it.isNotBlank() }?.let { builder.header("authorization", "Bearer $it") }
+    (staffToken.get() ?: accessToken)?.takeIf { it.isNotBlank() }?.let { builder.header("authorization", "Bearer $it") }
   }
 
   inline fun <reified T> decode(path: String, response: HttpResponse<String>): T {
@@ -476,3 +543,15 @@ private data class MyWorkOrderPage(val items: List<MyWorkOrderRecord> = emptyLis
 
 @Serializable
 private data class MyMerchantWorkOrderPage(val items: List<MyMerchantWorkOrderRecord> = emptyList())
+
+@Serializable
+private data class AmusementProjectStatusPage(val items: List<AmusementProjectStatus> = emptyList())
+
+@Serializable
+private data class Page<T>(val items: List<T> = emptyList())
+
+@Serializable
+private data class KioskTicketProductPage(val items: List<KioskTicketProduct> = emptyList())
+
+@Serializable
+private data class TicketOrderRowPage(val items: List<TicketOrderRow> = emptyList())

@@ -1,4 +1,4 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 package com.complex.platform.ticketing;
 
 import static org.mockito.ArgumentMatchers.any;
@@ -611,7 +611,7 @@ class TicketingControllerTests {
     // ---------- XM-009（PGM-1.15.2.c2 / c3）：员工端订单列表与下单响应只出脱敏购票人手机号，不见明文 ----------
     @Test
     void listingTicketOrdersReturnsMaskedBuyerPhone() throws Exception {
-        when(service.listTicketOrders()).thenReturn(new PageResponse<>(List.of(sampleTicketOrder()), 1, 50, 1));
+        when(service.listTicketOrders(null)).thenReturn(new PageResponse<>(List.of(sampleTicketOrder()), 1, 50, 1));
 
         mockMvc.perform(get("/api/v1/ticketing/orders").with(user("ops").roles("P0_SMOKE")))
                 .andExpect(status().isOk())

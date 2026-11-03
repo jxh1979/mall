@@ -251,16 +251,25 @@ describe("M038-011 权限模板页复制/应用防连点", () => {
   it("应用模板发出的套用方式在契约闭集内：默认 append，勾选单次为 single_use（M001-F21）", async () => {
     vi.spyOn(window, "confirm").mockReturnValue(true);
     const { bodies, ok } = renderPending();
-    await waitFor(() => expect((screen.getByTestId("permission-template-apply") as HTMLButtonElement).disabled).toBe(false));
-    fireEvent.click(screen.getByTestId("permission-template-apply"));
-    await waitFor(() => expect(bodies).toHaveLength(1));
-    expect(JSON.parse(bodies[0]!).mode).toBe("append");
-    ok();
-    await waitFor(() => expect((screen.getByTestId("permission-template-apply") as HTMLButtonElement).disabled).toBe(false));
+    // 第 125 条：表单回填在被动 effect 里，等回填值出现（或复位）后再操作，否则补跑的 effect 会把勾选冲掉。
+    // 先等首次回填（模板名回填为「基础员工」）再勾「单次有效」。
+    await waitFor(() => {
+      expect((screen.getByTestId("permission-template-edit-name") as HTMLInputElement).value).toBe("基础员工");
+      expect((screen.getByTestId("permission-template-apply") as HTMLButtonElement).disabled).toBe(false);
+    }, { timeout: 5000 });
     fireEvent.click(screen.getByTestId("permission-template-edit-single-use"));
     fireEvent.click(screen.getByTestId("permission-template-apply"));
+    await waitFor(() => expect(bodies).toHaveLength(1));
+    expect(JSON.parse(bodies[0]!).mode).toBe("single_use");
+    ok();
+    // 应用后重读，回填 effect 按模板 tpl-1（非单次）把勾选复位；复位即说明重读后的回填已执行，再点第二笔。
+    await waitFor(() => {
+      expect((screen.getByTestId("permission-template-edit-single-use") as HTMLInputElement).checked).toBe(false);
+      expect((screen.getByTestId("permission-template-apply") as HTMLButtonElement).disabled).toBe(false);
+    }, { timeout: 5000 });
+    fireEvent.click(screen.getByTestId("permission-template-apply"));
     await waitFor(() => expect(bodies).toHaveLength(2));
-    expect(JSON.parse(bodies[1]!).mode).toBe("single_use");
+    expect(JSON.parse(bodies[1]!).mode).toBe("append");
     expect(bodies.map((body) => JSON.parse(body).mode).every((mode: string) => ["append", "merge", "single_use"].includes(mode))).toBe(true);
     ok();
   });

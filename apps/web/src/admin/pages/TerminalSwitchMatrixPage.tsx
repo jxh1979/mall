@@ -4,6 +4,7 @@ import { AdminPageHeader } from "../components/AdminPageHeader";
 import { useAdminResource } from "../hooks/useAdminResource";
 import type { AdminPageProps } from "../types";
 import { PermissionButton } from "../security/Can";
+import { TERMINAL_LABELS } from "../i18n/fieldLabels";
 
 // 3.19 终端十端开关统一矩阵（业务HTML「终端开关」节）：十类终端总开关 + 各能力开关按端分组，
 // 一页统管。关闭后运营可见可控；「接口拒绝业务动作 + 拉取失败兜底关闭」的逐请求后端强制为后续专项。
@@ -52,22 +53,6 @@ const TARGET_TYPE_LABELS: Record<string, string> = {
   module: "模块",
   version: "端版本",
   device: "设备",
-};
-
-const TERMINAL_LABELS: Record<string, string> = {
-  app: "客人 App",
-  miniapp: "小程序",
-  web: "Web 前端",
-  tablet: "工作人员平板",
-  staff_work_phone: "员工工作手机",
-  staff_private_phone: "员工私人手机",
-  merchant_portal: "商户门户",
-  merchant_app: "商户 App",
-  kiosk: "触摸屏一体机",
-  mobile_admin: "移动管理端",
-  dealer_portal: "独立经销商门户",
-  global: "全局能力",
-  integration: "第三方集成",
 };
 
 function toRows(data: unknown): SwitchRow[] {

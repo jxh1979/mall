@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 package com.complex.platform.security;
 
 import static com.complex.platform.common.api.ApiRequests.requireIdempotencyKey;
@@ -8,6 +8,7 @@ import com.complex.platform.common.Strings;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.ApiResponse;
 import com.complex.platform.common.idempotency.IdempotencyService;
+import com.complex.platform.evidence.AuditedOperationExecutor;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.util.List;
@@ -35,28 +36,36 @@ public class WatermarkController {
     private final WatermarkMarkService marks;
     private final IdempotencyService idempotency;
     private final AuthorizationService authorization;
+    private final AuditedOperationExecutor operations;
 
-    public WatermarkController(WatermarkMarkService marks, IdempotencyService idempotency, AuthorizationService authorization) {
+    // 第十八批 N 段第 124 条 124-R5（PGM L738「访问被拒绝也要留痕，便于排查是权限问题还是开关问题。」）：写口任一步失败（权限、范围、校验、
+    // 状态冲突）经 AuditedOperationExecutor.recordingFailure 落 OpenAPI 声明的 x-audit-event-failure 再原样抛出。
+    public WatermarkController(WatermarkMarkService marks, IdempotencyService idempotency, AuthorizationService authorization,
+            AuditedOperationExecutor operations) {
         this.marks = marks;
         this.idempotency = idempotency;
         this.authorization = authorization;
+        this.operations = operations;
     }
 
     @PostMapping("/page-views")
     public ApiResponse<WatermarkMarkService.Mark> pageView(@RequestBody PageViewRequest request) {
-        requireIdempotencyKey(request.idempotencyKey());
-        String pageId = Strings.requireText(request.pageId(), "page_id");
-        if (pageId.length() > 64) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "page_id is invalid");
-        }
-        List<WatermarkMarkService.ObjectRef> refs = request.objectRefs() == null ? List.of() : request.objectRefs();
-        for (WatermarkMarkService.ObjectRef ref : refs) {
-            Strings.requireText(ref.objectType(), "object_type");
-            Strings.requireText(ref.objectId(), "object_id");
-        }
-        return ApiResponse.ok(idempotency.execute("securityPageView", request.idempotencyKey(), request,
-                () -> marks.issue("page", pageId, null, Boolean.TRUE.equals(request.sensitive()), refs),
-                WatermarkMarkService.Mark.class));
+        return ApiResponse.ok(operations.recordingFailure("security.page_view.failed", null, "watermark_mark", "new",
+                request == null ? null : request.idempotencyKey(), () -> {
+                    requireIdempotencyKey(request.idempotencyKey());
+                    String pageId = Strings.requireText(request.pageId(), "page_id");
+                    if (pageId.length() > 64) {
+                        throw ApiException.badRequest("VALIDATION_FAILED", "page_id is invalid");
+                    }
+                    List<WatermarkMarkService.ObjectRef> refs = request.objectRefs() == null ? List.of() : request.objectRefs();
+                    for (WatermarkMarkService.ObjectRef ref : refs) {
+                        Strings.requireText(ref.objectType(), "object_type");
+                        Strings.requireText(ref.objectId(), "object_id");
+                    }
+                    return idempotency.execute("securityPageView", request.idempotencyKey(), request,
+                            () -> marks.issue("page", pageId, null, Boolean.TRUE.equals(request.sensitive()), refs),
+                            WatermarkMarkService.Mark.class);
+                }));
     }
 
     @PostMapping(value = "/watermarks/trace", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)

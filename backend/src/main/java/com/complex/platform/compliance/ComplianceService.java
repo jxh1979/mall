@@ -92,7 +92,7 @@ public class ComplianceService {
                 ? repository.findContractKeyDatesByMerchant(scope.get())
                 : repository.findAllContractKeyDates();
         auditEventService.recordSuccess(
-                "compliance.contract_key_date.viewed",
+                "compliance.contract_key_date.list",
                 "compliance.contract_key_date.view",
                 CONTRACT_DATE_TYPE,
                 "all",
@@ -123,7 +123,7 @@ public class ComplianceService {
                 ? repository.findExpiryItemsByMerchant(scope.get())
                 : repository.findAllExpiryItems();
         auditEventService.recordSuccess(
-                "compliance.expiry_item.viewed",
+                "compliance.expiry_item.list",
                 "compliance.expiry_item.view",
                 EXPIRY_ITEM_TYPE,
                 "all",
@@ -154,7 +154,7 @@ public class ComplianceService {
                 ? repository.findRemindersByMerchant(scope.get())
                 : repository.findAllReminders();
         auditEventService.recordSuccess(
-                "compliance.reminder.viewed",
+                "compliance.reminder.list",
                 "compliance.reminder.view",
                 "compliance_reminder",
                 "all",
@@ -309,7 +309,7 @@ public class ComplianceService {
     public int scanAllOn(LocalDate scanDate) {
         List<ComplianceReminderRecord> generated = generateReminders(
                 repository.findAllContractKeyDates(), repository.findAllExpiryItems(), scanDate, 30);
-        auditEventService.recordSuccess("compliance.reminder.scan_completed", "not_applicable", "compliance_reminder", "all",
+        auditEventService.recordSuccess("compliance.reminder.scan", "not_applicable", "compliance_reminder", "all",
                 requestId(), null, Map.of("generated_count", generated.size(), "scan_date", scanDate.toString(), "trigger", "scheduled"));
         return generated.size();
     }
@@ -443,7 +443,7 @@ public class ComplianceService {
                 now
         ));
         auditEventService.recordSuccess(
-                "compliance.contract_key_date.created",
+                "compliance.contract_key_date.create",
                 "compliance.contract_key_date.manage",
                 CONTRACT_DATE_TYPE,
                 record.id(),
@@ -480,7 +480,7 @@ public class ComplianceService {
                 null
         ));
         auditEventService.recordSuccess(
-                "compliance.expiry_item.created",
+                "compliance.expiry_item.create",
                 "compliance.expiry_item.manage",
                 EXPIRY_ITEM_TYPE,
                 record.id(),
@@ -504,7 +504,7 @@ public class ComplianceService {
                 scanDate,
                 defaultLookaheadDays);
         auditEventService.recordSuccess(
-                "compliance.reminder.scan_completed",
+                "compliance.reminder.scan",
                 "compliance.reminder.scan",
                 "compliance_reminder",
                 "all",

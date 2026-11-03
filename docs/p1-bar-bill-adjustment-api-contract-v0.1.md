@@ -1,4 +1,4 @@
-# P1 酒吧账单调整 API 契约 V0.1
+# P1 酒吧账单调整 API 契约 V0.11
 
 ## 1. 文档定位
 
@@ -88,7 +88,7 @@
 | 权限点 | `bar.bill.adjust` |
 | 风险等级 | high |
 | 审批标记 | 权限种子 `requires_approval=true`；调整记录 `approvalRequired=true` |
-| 成功审计事件 | `bar.bill.adjusted` |
+| 成功审计事件 | `bar.bill.adjust` |
 | 失败审计事件 | `bar.bill.adjust_failed` |
 | 业务类型 | `bar_bill_adjustment` |
 | 幂等约束 | 服务层幂等执行；数据库层用 `(bill_id, idempotency_key)` 唯一索引兜底 |

@@ -1,6 +1,6 @@
 package com.complex.platform.contract;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static com.complex.platform.common.api.ApiRequests.requireIdempotencyKey;
 
@@ -21,6 +21,7 @@ import com.complex.platform.contract.dto.ContractSubmitRequest;
 import com.complex.platform.contract.dto.DepositMonthsSettingRequest;
 import com.complex.platform.contract.dto.DepositRefundWaitSettingRequest;
 import com.complex.platform.contract.dto.SpaceExpiryColorRuleRequest;
+import com.complex.platform.evidence.AuditedOperationExecutor;
 import java.util.List;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -40,10 +41,14 @@ public class ContractController {
 
     private final ContractService service;
     private final AuthorizationService authorizationService;
+    private final AuditedOperationExecutor operations;
 
-    public ContractController(ContractService service, AuthorizationService authorizationService) {
+    // 第十八批 N 段第 124 条 124-R3（PGM L738）：写口任一步失败（权限、校验、状态冲突）经 AuditedOperationExecutor.recordingFailure
+    // 落 OpenAPI 声明的 x-audit-event-failure 再原样抛出；成功事件照旧由服务层写。
+    public ContractController(ContractService service, AuthorizationService authorizationService, AuditedOperationExecutor operations) {
         this.service = service;
         this.authorizationService = authorizationService;
+        this.operations = operations;
     }
 
     // ---- 起草 ----
@@ -57,16 +62,23 @@ public class ContractController {
 
     @PostMapping
     public ApiResponse<ContractRecord> createDraft(@RequestBody @jakarta.validation.Valid ContractDraftRequest request) {
-        authorizationService.requirePermission("contract.draft.manage");
-        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
-        return ApiResponse.ok(service.createDraft(request));
+        String key = request == null ? null : request.idempotencyKey();
+        return ApiResponse.ok(operations.recordingFailure("contract.draft_failed", "contract.draft.manage", "contract", "new", key, () -> {
+            authorizationService.requirePermission("contract.draft.manage");
+            requireIdempotencyKey(key);
+            return service.createDraft(request);
+        }));
     }
 
     @PostMapping("/{contract_id}/attachments")
     public ApiResponse<ContractRecord> addAttachments(
             @PathVariable("contract_id") String contractId, @RequestBody @jakarta.validation.Valid ContractAttachmentRequest request) {
-        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
-        return ApiResponse.ok(service.addAttachments(contractId, request));
+        String key = request == null ? null : request.idempotencyKey();
+        return ApiResponse.ok(operations.recordingFailure("contract.attachments_add_failed", "contract.draft.manage", "contract", contractId,
+                key, () -> {
+                    requireIdempotencyKey(key);
+                    return service.addAttachments(contractId, request);
+                }));
     }
 
     /**
@@ -85,17 +97,25 @@ public class ContractController {
     @PostMapping("/{contract_id}/submit")
     public ApiResponse<ContractRecord> submit(
             @PathVariable("contract_id") String contractId, @RequestBody @jakarta.validation.Valid ContractSubmitRequest request) {
-        authorizationService.requirePermission("contract.draft.manage");
-        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
-        return ApiResponse.ok(service.submit(contractId, request));
+        String key = request == null ? null : request.idempotencyKey();
+        return ApiResponse.ok(operations.recordingFailure("contract.submit_failed", "contract.draft.manage", "contract", contractId, key,
+                () -> {
+                    authorizationService.requirePermission("contract.draft.manage");
+                    requireIdempotencyKey(key);
+                    return service.submit(contractId, request);
+                }));
     }
 
     // ---- 生效 ----
     @PostMapping("/{contract_id}/activate")
     public ApiResponse<ContractRecord> activate(
             @PathVariable("contract_id") String contractId, @RequestBody @jakarta.validation.Valid ContractActivateRequest request) {
-        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
-        return ApiResponse.ok(service.activate(contractId, request));
+        String key = request == null ? null : request.idempotencyKey();
+        return ApiResponse.ok(operations.recordingFailure("contract.activate_failed", "contract.lifecycle.activate",
+                "contract", contractId, key, () -> {
+                    requireIdempotencyKey(key);
+                    return service.activate(contractId, request);
+                }));
     }
 
     // ---- 变更 ----
@@ -109,8 +129,12 @@ public class ContractController {
     @PostMapping("/{contract_id}/changes")
     public ApiResponse<ContractChangeRecord> raiseChange(
             @PathVariable("contract_id") String contractId, @RequestBody @jakarta.validation.Valid ContractChangeRequest request) {
-        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
-        return ApiResponse.ok(service.raiseChange(contractId, request));
+        String key = request == null ? null : request.idempotencyKey();
+        return ApiResponse.ok(operations.recordingFailure("contract.change_raise_failed", "contract.change.manage",
+                "contract", contractId, key, () -> {
+                    requireIdempotencyKey(key);
+                    return service.raiseChange(contractId, request);
+                }));
     }
 
     // ---- 超范围下单经营申请（#30）：拦下后可申请，按「变更」类模板走统一审批，通过则放行 ----
@@ -118,8 +142,12 @@ public class ContractController {
     public ApiResponse<ContractChangeRecord> requestScopeGrant(
             @PathVariable("contract_id") String contractId,
             @RequestBody @jakarta.validation.Valid ContractScopeRequestRequest request) {
-        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
-        return ApiResponse.ok(service.requestScopeGrant(contractId, request));
+        String key = request == null ? null : request.idempotencyKey();
+        return ApiResponse.ok(operations.recordingFailure("contract.scope_request_raise_failed", "contract.scope_request.raise",
+                "contract", contractId, key, () -> {
+                    requireIdempotencyKey(key);
+                    return service.requestScopeGrant(contractId, request);
+                }));
     }
 
     // ---- 变更子合同追溯（#31）：列某合同派生的变更子合同 ----
@@ -133,8 +161,12 @@ public class ContractController {
     @PostMapping("/{contract_id}/settle")
     public ApiResponse<ContractSettlementRecord> settle(
             @PathVariable("contract_id") String contractId, @RequestBody @jakarta.validation.Valid ContractSettleRequest request) {
-        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
-        return ApiResponse.ok(service.settle(contractId, request));
+        String key = request == null ? null : request.idempotencyKey();
+        return ApiResponse.ok(operations.recordingFailure("contract.settle_failed", "contract.settlement.manage",
+                "contract", contractId, key, () -> {
+                    requireIdempotencyKey(key);
+                    return service.settle(contractId, request);
+                }));
     }
 
     @GetMapping("/{contract_id}/settlements")
@@ -147,8 +179,12 @@ public class ContractController {
     @PostMapping("/settlements/{settlement_id}/resolve-dispute")
     public ApiResponse<ContractSettlementRecord> resolveDispute(
             @PathVariable("settlement_id") String settlementId, @RequestBody @jakarta.validation.Valid ContractResolveDisputeRequest request) {
-        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
-        return ApiResponse.ok(service.resolveDispute(settlementId, request));
+        String key = request == null ? null : request.idempotencyKey();
+        return ApiResponse.ok(operations.recordingFailure("contract.dispute_resolve_failed", "contract.settlement.dispute.resolve",
+                "contract_settlement", settlementId, key, () -> {
+                    requireIdempotencyKey(key);
+                    return service.resolveDispute(settlementId, request);
+                }));
     }
 
     // HP-C02（BSM L1352「审批全部通过后，系统按算好的结算清单自动落账，不再单设手动确认入口」）：原 POST /settlements/{id}/complete 手动结清入口已删除，
@@ -169,16 +205,24 @@ public class ContractController {
     @PostMapping("/{contract_id}/rent-bills")
     public ApiResponse<ContractRentBillRecord> generateRentBill(
             @PathVariable("contract_id") String contractId, @RequestBody @jakarta.validation.Valid ContractRentBillRequest request) {
-        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
-        return ApiResponse.ok(service.generateRentBill(contractId, request));
+        String key = request == null ? null : request.idempotencyKey();
+        return ApiResponse.ok(operations.recordingFailure("contract.rent_bill_failed", "finance.ar_ap.manage",
+                "contract", contractId, key, () -> {
+                    requireIdempotencyKey(key);
+                    return service.generateRentBill(contractId, request);
+                }));
     }
 
     /** 一期全费目挂账（租金+物业费+能源费）。 */
     @PostMapping("/{contract_id}/period-bills")
     public ApiResponse<List<ContractRentBillRecord>> generatePeriodBills(
             @PathVariable("contract_id") String contractId, @RequestBody @jakarta.validation.Valid ContractRentBillRequest request) {
-        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
-        return ApiResponse.ok(service.generatePeriodBills(contractId, request));
+        String key = request == null ? null : request.idempotencyKey();
+        return ApiResponse.ok(operations.recordingFailure("contract.period_bill_failed", "finance.ar_ap.manage",
+                "contract", contractId, key, () -> {
+                    requireIdempotencyKey(key);
+                    return service.generatePeriodBills(contractId, request);
+                }));
     }
 
     // ---- 配置：审批流程模板（V494：新建／到期终止／变更三类，按综合体可配；缺 contract_type 返回三类） ----
@@ -193,8 +237,12 @@ public class ContractController {
     @PostMapping("/approval-flow")
     public ApiResponse<ContractApprovalTemplateRecord> saveApprovalFlow(
             @RequestBody @jakarta.validation.Valid ContractApprovalFlowRequest request) {
-        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
-        return ApiResponse.ok(service.saveApprovalFlow(request));
+        String key = request == null ? null : request.idempotencyKey();
+        return ApiResponse.ok(operations.recordingFailure("contract.approval_flow_save_failed", "contract.approval.flow.manage",
+                "contract_approval_flow", "new", key, () -> {
+                    requireIdempotencyKey(key);
+                    return service.saveApprovalFlow(request);
+                }));
     }
 
     // ---- 配置：押金收取月数（HP-C03，BSM L1347「全平台统一可配……须同时配置上下限；下限不得低于三个月」；仅平台可改） ----
@@ -242,7 +290,11 @@ public class ContractController {
 
     @PostMapping("/expiry-color-rules")
     public ApiResponse<SpaceExpiryColorRuleRecord> saveColorRule(@RequestBody @jakarta.validation.Valid SpaceExpiryColorRuleRequest request) {
-        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
-        return ApiResponse.ok(service.saveColorRule(request));
+        String key = request == null ? null : request.idempotencyKey();
+        return ApiResponse.ok(operations.recordingFailure("contract.color_rule_save_failed", "contract.space.color.manage",
+                "space_expiry_color_rule", "new", key, () -> {
+                    requireIdempotencyKey(key);
+                    return service.saveColorRule(request);
+                }));
     }
 }

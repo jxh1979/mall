@@ -1,4 +1,4 @@
-# P1 酒吧卡座会话调整 API 契约 V0.1
+# P1 酒吧卡座会话调整 API 契约 V0.11
 
 > **[A2 修订 2026-07-28]** 与 MAIN `bar-business-operations-product-prd-v0.1.md` §7.3A / `DEC-SEAT-NO-RENEW-001` 对齐：
 > **产品不做「续卡/续时」**。下文原 `renew` 接口与字段整节废止，不得再作为实现/验收依据。
@@ -115,9 +115,9 @@
 
 | 操作 | 调整记录 | 审计事件 |
 |---|---|---|
-| 创建会话 | 不写调整记录 | `bar.table_session.created` |
-| 转卡 | `adjustment_type=transfer` | `bar.table.transferred` / `bar.table.transfer_failed` |
-| 合并 | `adjustment_type=merge` | `bar.table.merged` / `bar.table.merge_failed` |
+| 创建会话 | 不写调整记录 | `bar.table_session.create` |
+| 转卡 | `adjustment_type=transfer` | `bar.table.transferred` / `bar.table_session.transfer_failed` |
+| 合并 | `adjustment_type=merge` | `bar.table_session.merge` / `bar.table_session.merge_failed` |
 | ~~续卡~~ | ~~`adjustment_type=renew`~~ | **废止；禁止新发成功事件** |
 
 自动化验收以 160 机器为准：

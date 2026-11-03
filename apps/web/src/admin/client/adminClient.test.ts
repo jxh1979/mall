@@ -1181,8 +1181,8 @@ describe("AdminApi 同一次操作的请求编号", () => {
     [
       "游乐安全页维保复工",
       "/api/v1/amusement/maintenance-records/mr-1/confirm-resume",
-      { idempotencyKey: "amusement-maintenance-resume-1000", supervisorConfirmedBy: "staff_supervisor" },
-      { idempotencyKey: "amusement-maintenance-resume-2000", supervisorConfirmedBy: "staff_supervisor" },
+      { idempotencyKey: "amusement-maintenance-resume-1000" },
+      { idempotencyKey: "amusement-maintenance-resume-2000" },
     ],
     [
       "游乐安全页审批重开",

@@ -1,6 +1,6 @@
 package com.complex.platform.integration;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static com.complex.platform.integration.IntegrationValidation.*;
 import static com.complex.platform.common.Strings.trimToNull;
@@ -50,7 +50,7 @@ final class IntegrationOrderSyncService {
     }
 
     PageResponse<IntegrationOrderSyncRecord> listOrderSyncs() {
-        return executor.readPage(AuditedOperation.of("integration.order_sync.viewed", "integration.order_sync.view_failed",
+        return executor.readPage(AuditedOperation.of("integration.order_sync.viewed", "integration.order_sync.viewed_failed",
                 "integration.order_sync.view", "integration_order_sync"), repository::listOrderSyncs);
     }
 
@@ -61,8 +61,8 @@ final class IntegrationOrderSyncService {
                 request,
                 IntegrationOrderSyncRecord.class,
                 AuditedOperation.of(
-                        "integration.order_sync.recorded",
-                        "integration.order_sync.record_failed",
+                        "integration.order_sync.created",
+                        "integration.order_sync.create_failed",
                         "integration.order_sync.manage",
                         "integration_order_sync"),
                 () -> createOrderSyncOnce(request),
@@ -285,7 +285,7 @@ final class IntegrationOrderSyncService {
     }
 
     PageResponse<IntegrationTaskRecord> listRetryTasks() {
-        return executor.readPage(AuditedOperation.of("integration.retry_task.viewed", "integration.retry_task.view_failed",
+        return executor.readPage(AuditedOperation.of("integration.retry_task.viewed", "integration.retry_task.viewed_failed",
                 "integration.retry.view", "integration_retry_task"), repository::listRetryTasks);
     }
 
@@ -326,7 +326,7 @@ final class IntegrationOrderSyncService {
     }
 
     PageResponse<IntegrationTaskRecord> listCompensationTasks() {
-        return executor.readPage(AuditedOperation.of("integration.compensation_task.viewed", "integration.compensation_task.view_failed",
+        return executor.readPage(AuditedOperation.of("integration.compensation_task.viewed", "integration.compensation_task.viewed_failed",
                 "integration.compensation.view", "integration_compensation_task"), repository::listCompensationTasks);
     }
 

@@ -1,4 +1,4 @@
-// 文件版本：V0.03
+// 文件版本：V0.04
 package com.complex.platform.terminal;
 
 import static org.mockito.ArgumentMatchers.any;
@@ -256,15 +256,17 @@ class TerminalDeviceControllerTests {
                 "device_ticketing_1",
                 "ticketing",
                 true,
-                "project:p0",
-                Map.of("home", "ticketing"),
+                "point_p0",
+                "bar_1",
+                Map.of(),
                 Instant.parse("2026-06-14T00:00:00Z")
         ));
 
         mockMvc.perform(get("/api/v1/terminals/kiosks/device_ticketing_1/config")
                         .header("X-Device-Token", "token_ticketing_1"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.ticketing_enabled").value(true));
+                .andExpect(jsonPath("$.data.ticketing_enabled").value(true))
+                .andExpect(jsonPath("$.data.merchant_id").value("bar_1"));
 
         verify(service).getKioskConfig("device_ticketing_1", "token_ticketing_1");
         verifyNoInteractions(authorizationService);

@@ -42,6 +42,13 @@ public class AmusementController {
         return ApiResponse.ok(service.listProjects());
     }
 
+    /** 第十八批 N 段第 120 条 120-R5（BSM:991、BSM:1268）：游乐设施状态看板（一体机客人可看），与项目列表同权限。 */
+    @GetMapping("/projects/status-board")
+    public ApiResponse<PageResponse<AmusementProjectStatusRecord>> listProjectStatusBoard() {
+        authorizationService.requirePermission("amusement.session.view");
+        return ApiResponse.ok(service.listProjectStatusBoard());
+    }
+
     @PostMapping("/projects")
     public ApiResponse<AmusementProjectRecord> createProject(@RequestBody(required = false) @jakarta.validation.Valid AmusementProjectRequest request) {
         authorizationService.requirePermission("amusement.session.manage");

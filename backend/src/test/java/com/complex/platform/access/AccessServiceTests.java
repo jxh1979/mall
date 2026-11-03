@@ -1,6 +1,6 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.30
+// 文件版本：V0.31
 
 import com.complex.platform.support.InMemoryAuditEventRepository;
 import com.complex.platform.support.InMemoryIdempotencyRepository;
@@ -1325,7 +1325,9 @@ class AccessServiceTests {
     }
 
     private com.complex.platform.governance.review.SupervisorReviewController m002ChainController() {
-        return new com.complex.platform.governance.review.SupervisorReviewController(m002ReviewService, authorizationService, service);
+        return new com.complex.platform.governance.review.SupervisorReviewController(m002ReviewService, authorizationService, service,
+                new com.complex.platform.evidence.AuditedOperationExecutor(null,
+                        org.mockito.Mockito.mock(com.complex.platform.evidence.AuditEventService.class)));
     }
 
     private com.complex.platform.governance.review.SupervisorReviewApprovalRequest m002ChainDecision(String key, String decision) {

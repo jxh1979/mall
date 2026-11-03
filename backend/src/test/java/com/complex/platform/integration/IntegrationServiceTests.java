@@ -1,6 +1,6 @@
 package com.complex.platform.integration;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import com.complex.platform.support.InMemoryAuditEventRepository;
 import com.complex.platform.support.InMemoryIdempotencyRepository;
@@ -810,7 +810,7 @@ class IntegrationServiceTests {
         assertThat(auditEventRepository.events)
                 .extracting(AuditEvent::eventName)
                 .contains(
-                        "integration.order_sync.recorded",
+                        "integration.order_sync.created",
                         "integration.retry_task.created",
                         "integration.retry_task.run_now",
                         "integration.compensation_task.created",

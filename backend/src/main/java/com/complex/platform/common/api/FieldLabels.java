@@ -1,6 +1,6 @@
 package com.complex.platform.common.api;
 
-// 文件版本：V0.29
+// 文件版本：V0.30
 
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -792,6 +792,14 @@ public final class FieldLabels {
         p("score", "满意度");
         p("customer_feedback", "客人反馈");
         p("buyer_phone", "客人手机号");
+        // 第 123 条 123-R1 项目敏感操作授权范围（同前端 fieldLabels.ts）。
+        p("center_latitude", "中心纬度");
+        p("center_longitude", "中心经度");
+        p("radius_meters", "授权半径（米）");
+        p("min_radius_meters", "半径下限（米）");
+        p("max_radius_meters", "半径上限（米）");
+        // 第 124 条 124-R4 结算单人工过账留痕（同前端 fieldLabels.ts）。
+        p("posted_count", "过账笔数");
     }
 
     /** 字段键（snake 或 camel）→ 中文业务名；认不出返回 null。 */

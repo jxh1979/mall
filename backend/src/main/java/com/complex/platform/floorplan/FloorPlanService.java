@@ -1,5 +1,5 @@
 package com.complex.platform.floorplan;
-// 文件版本：V0.05
+// 文件版本：V0.06
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -125,7 +125,7 @@ public class FloorPlanService {
                 "saveFloorPlanShape:" + id,
                 request == null ? null : request.idempotencyKey(),
                 request,
-                "floor_plan.shape_save_failed",
+                "floor_plan.shape.save_failed",
                 "floor_plan.manage",
                 id,
                 () -> {
@@ -280,7 +280,7 @@ public class FloorPlanService {
                 now
         ));
         auditEventService.recordSuccess(
-                "floor_plan.shape_saved",
+                "floor_plan.shape.save",
                 "floor_plan.manage",
                 "floor_plan_shape",
                 record.id(),

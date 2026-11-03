@@ -1,6 +1,6 @@
 package com.complex.terminal
 
-// 文件版本：V0.11
+// 文件版本：V0.12
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -32,6 +32,13 @@ data class LoginResponse(
   val sessionId: String = "",
   val tokenType: String = "Bearer",
   val user: ApiUser = ApiUser(),
+)
+
+/** 第十八批 N 段第 120 条 120-R1：一体机上授权员工用完即登出（会话号取该员工的登录响应）。 */
+@Serializable
+data class LogoutRequest(
+  val idempotencyKey: String,
+  val sessionId: String,
 )
 
 @Serializable
@@ -77,6 +84,39 @@ data class DeviceBinding(
   val areaId: String? = null,
   val locationPointId: String? = null,
   val status: String = "",
+  /** 第十八批 N 段第 120 条 120-R1：一体机绑定时服务端签发的设备令牌（读本机配置用）；其他终端为空。 */
+  val deviceToken: String? = null,
+  val kioskMode: String? = null,
+)
+
+/**
+ * 第十八批 N 段第 120 条 120-R1（BSM:980「……其中只有启用售票能力的一体机，才允许授权服务人员在到店服务场景下辅助客人购票。」）：
+ * 一体机本机配置，服务端按设备台账给——售票型一体机且后台为本机开了售票开关才 [ticketingEnabled]；[merchantId]＝后台设备台账页设的所属商户。
+ */
+@Serializable
+data class KioskConfig(
+  val deviceId: String = "",
+  val kioskMode: String? = null,
+  val ticketingEnabled: Boolean = false,
+  val boundScope: String? = null,
+  val merchantId: String? = null,
+)
+
+/**
+ * 第十八批 N 段第 120 条 120-R5（BSM:991「查看游乐设施状态：开放、排队、容量、暂停、关闭、故障、维护或安全提醒。」）：游乐设施状态看板一行——
+ * 开放状态、容量、在玩人数、排队人数、维护中设备数、未结故障数、当前生效的安全提醒标题（服务端不给客人编号与排队号）。
+ */
+@Serializable
+data class AmusementProjectStatus(
+  val projectId: String = "",
+  val projectName: String? = null,
+  val openStatus: String? = null,
+  val capacity: Int = 0,
+  val occupiedCount: Int = 0,
+  val waitingCount: Int = 0,
+  val maintenanceDeviceCount: Int = 0,
+  val faultCount: Int = 0,
+  val safetyNotices: List<String> = emptyList(),
 )
 
 @Serializable
@@ -279,12 +319,23 @@ data class AmusementMaintenanceRecordRequest(
   val sourceTerminal: String? = null,
 )
 
+/** 第十八批 N 段第 120 条 120-R6：检修屏选项目、设备、检修单位（GET /api/v1/amusement/projects、/projects/{id}/devices、/api/v1/inventory/suppliers）。 */
+@Serializable
+data class AmusementProject(val id: String = "", val projectName: String? = null, val openStatus: String? = null)
+
+/** 120-R6：游乐设备（amusement_devices）；检修记录的设备填 [deviceCode]（桥接旧 device_id 字符串）。 */
+@Serializable
+data class AmusementDevice(val id: String = "", val deviceCode: String = "", val name: String? = null, val status: String? = null)
+
+/** 120-R6：供应商（检修单位作为供应商记录，BSM:992）。 */
+@Serializable
+data class InventorySupplier(val id: String = "", val supplierName: String? = null, val status: String? = null)
+
 // 游乐检修主管确认恢复 POST .../maintenance-records/{id}/confirm-resume
 // 注意：此处用 remark（非 operator_note）。
 @Serializable
 data class AmusementMaintenanceResumeRequest(
   val idempotencyKey: String,
-  val supervisorConfirmedBy: String? = null,
   val remark: String? = null,
 )
 
@@ -747,6 +798,8 @@ data class BarReservationCreateRequest(
   // ROOT-03-R19（BSM 第 1062 行「每一笔订台都必须填写最晚到店时间」）；操作员裁决第十三批第 7 条「员工代订必须录入客人手机号」。
   val latestArrivalAt: String,
   val customerPhone: String,
+  // 第十八批 N 段第 120 条 120-R3（BSM:987「……人数和订台备注……」）：订台备注（选填）。
+  val remark: String? = null,
 )
 
 @Serializable
@@ -754,6 +807,74 @@ data class BarReservationRecord(
   val id: String? = null,
   val status: String? = null,
   val depositStatus: String? = null,
+  // 120-R3：一体机订台的应付定金；登记定金后是否已保留台位（held）。
+  val depositAmountCent: Long? = null,
+  val holdStatus: String? = null,
+)
+
+/** 第十八批 N 段第 120 条 120-R7：票务订单确认收款 POST /api/v1/ticketing/orders/{order_id}/confirm-payment（POS 时 gateway_ref 可填 POS 单号）。 */
+@Serializable
+data class ConfirmTicketPaymentRequest(
+  val idempotencyKey: String,
+  val paymentIntentId: String,
+  val gatewayRef: String? = null,
+)
+
+/** 第十八批 N 段第 120 条 120-R7：订台定金登记 POST /api/v1/bar/reservations/{id}/pay-deposit。 */
+@Serializable
+data class BarReservationDepositPayRequest(
+  val idempotencyKey: String,
+  val channel: String,
+)
+
+/**
+ * 第十八批 N 段第 120 条 120-R2（BSM:986「启用售票能力的一体机可由授权服务人员登录后辅助客人购票和查询订单（门票为动态二维码，不提供取票功能；
+ * 客人用手机号短信验证绑定，在官方 App/小程序查看门票）……」）：一体机售票屏的票种（客人端票种目录一行：票名、平日/周末/节假日价、能否退、有效天数、使用范围）。
+ */
+@Serializable
+data class KioskTicketProduct(
+  val ticketTypeId: String = "",
+  val ticketName: String? = null,
+  val weekdayPriceCent: Long? = null,
+  val weekendPriceCent: Long? = null,
+  val holidayPriceCent: Long? = null,
+  val barId: String? = null,
+  val refundable: Boolean = false,
+  val validityDays: Int? = null,
+  val usageScope: String? = null,
+)
+
+/** 120-R2：一体机售票下单 POST /api/v1/ticketing/orders——一体机渠道，客人手机号与客人报的验证码，operator_note＝售票原因，单店票带所属酒吧。 */
+@Serializable
+data class KioskTicketOrderRequest(
+  val idempotencyKey: String,
+  val ticketTypeId: String,
+  val quantity: Int,
+  val buyerPhone: String,
+  val smsCode: String,
+  val operatorNote: String,
+  val barId: String? = null,
+  val salesChannel: String = "kiosk",
+)
+
+/** 120-R2：票务订单（员工端出参，购票手机号已掩码）。 */
+@Serializable
+data class TicketOrderRow(
+  val id: String = "",
+  val orderNo: String? = null,
+  val quantity: Int = 0,
+  val amountCent: Long = 0,
+  val buyerPhone: String? = null,
+  val payStatus: String? = null,
+  val issueStatus: String? = null,
+  val status: String? = null,
+)
+
+/** 120-R2：票务订单出票、取消 POST /api/v1/ticketing/orders/{order_id}/issue 与 /cancel（出票须填原因）。 */
+@Serializable
+data class TicketOrderActionRequest(
+  val idempotencyKey: String,
+  val reason: String? = null,
 )
 
 // ── BYOD 二期 E 批(2026-07-02 拍板):排班(主管双端)/考勤打卡(NFC/扫码,严格无宽限) ──

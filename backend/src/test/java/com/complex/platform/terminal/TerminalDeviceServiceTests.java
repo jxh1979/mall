@@ -1,6 +1,6 @@
 package com.complex.platform.terminal;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import com.complex.platform.support.InMemoryAuditEventRepository;
 import com.complex.platform.support.InMemoryIdempotencyRepository;
@@ -518,14 +518,6 @@ class TerminalDeviceServiceTests {
     @Test
     void kioskConfigUsesModeCapabilitySwitchAndValidDeviceToken() {
         saveBoundKiosk("device_ticketing_1", "ticketing", "valid-token");
-        deviceRepository.seedKioskConfig(new TerminalKioskConfigRecord(
-                "device_ticketing_1",
-                "ticketing",
-                true,
-                "project:p0",
-                Map.of("home", "ticketing"),
-                java.time.Instant.parse("2026-06-14T00:00:00Z")
-        ));
         service.updateCapabilitySwitch("switch_ticketing_1", new CapabilitySwitchRequest(
                 "switch-ticketing-on",
                 "ticketing on",
@@ -536,14 +528,6 @@ class TerminalDeviceServiceTests {
                 "device_ticketing_1"
         ));
         saveBoundKiosk("device_service_1", "service", "service-token");
-        deviceRepository.seedKioskConfig(new TerminalKioskConfigRecord(
-                "device_service_1",
-                "service",
-                true,
-                "project:p0",
-                Map.of("home", "service"),
-                java.time.Instant.parse("2026-06-14T00:00:00Z")
-        ));
 
         KioskConfigResponse ticketing = service.getKioskConfig("device_ticketing_1", "valid-token");
         KioskConfigResponse serviceOnly = service.getKioskConfig("device_service_1", "service-token");
@@ -558,6 +542,8 @@ class TerminalDeviceServiceTests {
         ));
 
         assertThat(ticketing.ticketingEnabled()).isTrue();
+        assertThat(ticketing.kioskMode()).isEqualTo("ticketing");
+        assertThat(ticketing.boundScope()).isEqualTo("project_p0");
         assertThat(serviceOnly.ticketingEnabled()).isFalse();
         assertThat(heartbeat.status()).isEqualTo("online");
         assertThat(deviceRepository.heartbeats.get("device_ticketing_1").appVersion()).isEqualTo("1.0.0");
@@ -569,14 +555,6 @@ class TerminalDeviceServiceTests {
     @Test
     void kioskConfigRejectsMissingAndWrongDeviceTokenWithAccessRejectedAudit() {
         saveBoundKiosk("device_ticketing_1", "ticketing", "valid-token");
-        deviceRepository.seedKioskConfig(new TerminalKioskConfigRecord(
-                "device_ticketing_1",
-                "ticketing",
-                true,
-                "project:p0",
-                Map.of(),
-                java.time.Instant.parse("2026-06-14T00:00:00Z")
-        ));
 
         assertThatThrownBy(() -> service.getKioskConfig("device_ticketing_1", null))
                 .isInstanceOf(ApiException.class)
@@ -614,10 +592,8 @@ class TerminalDeviceServiceTests {
 
     @Test
     void kioskTicketingWithoutSwitchRowIsDisabled() {
-        // PGM 第 742 行「开关缺行不得视为开启」：售票模式、配置里售票开着，但没有该设备的售票开关行 → 不开放售票。
+        // PGM 第 742 行「开关缺行不得视为开启」：售票型一体机，但没有该设备的售票开关行 → 不开放售票。
         saveBoundKiosk("device_ticketing_1", "ticketing", "valid-token");
-        deviceRepository.seedKioskConfig(new TerminalKioskConfigRecord(
-                "device_ticketing_1", "ticketing", true, "project:p0", Map.of(), java.time.Instant.parse("2026-06-14T00:00:00Z")));
 
         assertThat(service.getKioskConfig("device_ticketing_1", "valid-token").ticketingEnabled()).isFalse();
     }
@@ -625,14 +601,6 @@ class TerminalDeviceServiceTests {
     @Test
     void kioskHeartbeatRejectsWrongDeviceTokenWithAccessRejectedAudit() {
         saveBoundKiosk("device_ticketing_1", "ticketing", "valid-token");
-        deviceRepository.seedKioskConfig(new TerminalKioskConfigRecord(
-                "device_ticketing_1",
-                "ticketing",
-                true,
-                "project:p0",
-                Map.of(),
-                java.time.Instant.parse("2026-06-14T00:00:00Z")
-        ));
 
         assertThatThrownBy(() -> service.recordKioskHeartbeat("device_ticketing_1", "wrong-token", new KioskHeartbeatRequest(
                 "device_ticketing_1",
@@ -784,7 +752,6 @@ class TerminalDeviceServiceTests {
         private final Map<String, DeviceCredentialRecord> deviceCredentials = new LinkedHashMap<>();
         private final List<TerminalDeviceStatusEventRecord> statusEvents = new ArrayList<>();
         private final Map<String, TerminalCapabilitySwitchRecord> capabilitySwitches = new LinkedHashMap<>();
-        private final Map<String, TerminalKioskConfigRecord> kioskConfigs = new LinkedHashMap<>();
         private final Map<String, KioskHeartbeatRecord> heartbeats = new LinkedHashMap<>();
         private int deviceSaveCount;
 
@@ -896,16 +863,6 @@ class TerminalDeviceServiceTests {
         @Override
         public TerminalCapabilitySwitchRecord saveCapabilitySwitch(TerminalCapabilitySwitchRecord record) {
             capabilitySwitches.put(record.id(), record);
-            return record;
-        }
-
-        @Override
-        public java.util.Optional<TerminalKioskConfigRecord> findKioskConfigByDeviceId(String deviceId) {
-            return java.util.Optional.ofNullable(kioskConfigs.get(deviceId));
-        }
-
-        public TerminalKioskConfigRecord seedKioskConfig(TerminalKioskConfigRecord record) {
-            kioskConfigs.put(record.deviceId(), record);
             return record;
         }
 

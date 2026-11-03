@@ -2,6 +2,7 @@ package com.complex.platform.evidence;
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.LocalZone;
+import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.ApiResponse;
 import com.complex.platform.security.ExportFileService;
 import java.time.Instant;
@@ -59,10 +60,23 @@ public class AuditController implements ExportFileService.Source {
             @RequestParam(name = "from", required = false) String from,
             @RequestParam(name = "to", required = false) String to,
             @RequestParam(name = "limit", defaultValue = "1000") int limit) {
-        authorizationService.requirePermission("audit.operation_log.export");
-        // 第 23 条 23-R3（PGM:687）：只交出服务端生成的带密码、带暗纹的 PDF。
-        ExportFileService.Table table = operationEventsTable(businessType, businessId, actorId, eventName, from, to, limit);
-        return exportFiles.create("audit_operation_events", table.title(), table.filters(), table.columns(), table.rows()).response();
+        // 第十八批 N 段第 124 条 124-R6（PGM:683「审计人员查看或导出敏感信息（……完整操作记录导出）需先经审批并全程留痕。」、PGM:685
+        // 「导出须单独授权、逐次留痕」）：导出成功落 audit.operation_log.exported（business_id 导出文件编号），权限或取数失败落
+        // audit.operation_log.export_failed；写法同 FinanceService.exportArApItems。
+        try {
+            authorizationService.requirePermission("audit.operation_log.export");
+            // 第 23 条 23-R3（PGM:687）：只交出服务端生成的带密码、带暗纹的 PDF。
+            ExportFileService.Table table = operationEventsTable(businessType, businessId, actorId, eventName, from, to, limit);
+            ExportFileService.ExportFile file = exportFiles.create("audit_operation_events", table.title(), table.filters(), table.columns(),
+                    table.rows());
+            service.recordSuccess("audit.operation_log.exported", "audit.operation_log.export", "export_file", file.id(), null, null,
+                    Map.of("row_count", table.rows().size()));
+            return file.response();
+        } catch (RuntimeException error) {
+            service.recordFailure("audit.operation_log.export_failed", "audit.operation_log.export", "export_file", null, null, null,
+                    error instanceof ApiException api ? api.code() : error.getClass().getSimpleName());
+            throw error;
+        }
     }
 
     @Override

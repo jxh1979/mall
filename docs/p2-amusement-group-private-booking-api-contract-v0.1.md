@@ -1,4 +1,4 @@
-# P2-B 游乐团体/包场预订与容量锁定 API 契约 V0.1
+# P2-B 游乐团体/包场预订与容量锁定 API 契约 V0.11
 
 > **口径修订（2026-08-06 R10）：「场次容量」已废止**——BSM「容量控制」条 明确「**只按单个游乐项目的实时在玩人数控制容量，不再按场次/时段或点位/设备另设容量；排队人数不占用容量**」（DEC-R5-2026-08-04-04；R8 用户裁决 D-02）。本文原「场次容量」一律改称「**项目容量（实时在玩人数）**」；双阈值不变（运营容量软上限告警放行、安全容量硬上限阻断并自动停运）。仍按场次/时段或点位/设备维度罗列的页面、接口、组件与字段只作历史结构参考，容量口径一律以本条为准，相关字段待代码轮下线，期间不得据以新增受控维度。
 
@@ -100,10 +100,10 @@ P2-B 为游乐场次增加团体/包场预订和容量锁定能力。它原解�
 
 | 事件 | 触发时机 |
 | --- | --- |
-| `amusement.group_booking.created` | 创建预订 |
-| `amusement.group_booking.approved` | 审批并锁定容量 |
-| `amusement.group_booking.released` | 释放并归还容量 |
-| `amusement.group_booking.viewed` | 查看列表 |
+| `amusement_group_booking.created.success` | 创建预订 |
+| `amusement_group_booking.approved.success` | 审批并锁定容量 |
+| `amusement_group_booking.released.success` | 释放并归还容量 |
+| `amusement_group_booking.viewed.success` | 查看列表 |
 
 ## 9. 明确不进入本期
 

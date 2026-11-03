@@ -1,6 +1,6 @@
 package com.complex.platform.facility;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import com.complex.platform.access.AccessActor;
 import com.complex.platform.access.AuthorizationService;
@@ -106,7 +106,7 @@ public class SiteEntryReportService {
                 crewCount, requireText(r.contactName(), "contact_name"), requireText(r.contactPhone(), "contact_phone"),
                 actor.id(), "submitted", null, null, actor.id(), now, now, List.of(), null, null, null);
         repository.insert(rec);
-        audit("facility.site_entry_report_created", CREATE_PERM, rec.id(), r.idempotencyKey(),
+        audit("facility.site_entry.create_assigned", CREATE_PERM, rec.id(), r.idempotencyKey(),
                 Map.of("status", rec.status(), "project_id", rec.projectId()));
         return rec;
     }
@@ -123,7 +123,7 @@ public class SiteEntryReportService {
         requireStatus(cur, "approved", "只有审批通过的进场报备才能提交进场");
         SiteEntryReportRecord inProgress = withStatus(cur, "in_progress", null, null, Instant.now());
         repository.update(inProgress);
-        audit("facility.site_entry_report_submitted", SUBMIT_PERM, inProgress.id(), r.idempotencyKey(),
+        audit("facility.site_entry.submit_assigned", SUBMIT_PERM, inProgress.id(), r.idempotencyKey(),
                 metadata(inProgress, r.note()));
         return inProgress;
     }
@@ -185,7 +185,7 @@ public class SiteEntryReportService {
         SiteEntryReportRecord reviewed = withStatus(cur, nextStatus, trimToNull(r.reviewComment()),
                 cur.acceptanceComment(), Instant.now());
         repository.update(reviewed);
-        audit("facility.site_entry_report_reviewed", REVIEW_PERM, reviewed.id(), r.idempotencyKey(),
+        audit("facility.site_entry.review", REVIEW_PERM, reviewed.id(), r.idempotencyKey(),
                 Map.of("status", reviewed.status()));
         return reviewed;
     }

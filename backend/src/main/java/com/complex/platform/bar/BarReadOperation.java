@@ -1,13 +1,13 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import com.complex.platform.evidence.AuditedOperation;
 
 enum BarReadOperation implements AuditedOperation {
     LIST_ORDERS("bar.order.viewed", "bar.order.view_failed", "bar.order.view", "bar_order"),
     LIST_PRODUCTION_TICKETS("bar.production_ticket.viewed", "bar.production_ticket.viewed_failed", "bar.production_ticket.view", "bar_production_ticket"),
-    LIST_PRODUCTION_TICKET_EVENTS("bar.production_ticket_event.viewed", "bar.production_ticket_event.viewed_failed", "bar.production_ticket.view", "bar_production_ticket_event"),
+    LIST_PRODUCTION_TICKET_EVENTS("bar.production_ticket_event.list", "bar.production_ticket_event.list_failed", "bar.production_ticket.view", "bar_production_ticket_event"),
     LIST_PRODUCTS("bar.product.viewed", "bar.product.viewed_failed", "bar.order.create", "bar_product"),
     LIST_RESERVATIONS("bar.reservation.viewed", "bar.reservation.view_failed", "bar.reservation.view", "bar_reservation"),
     // 第十八批 C 段第 15 条：代订权限停用中的经手员工（店长复核用）。
@@ -15,8 +15,8 @@ enum BarReadOperation implements AuditedOperation {
     LIST_TABLES("bar.table.viewed", "bar.table.view_failed", "bar.table.view", "bar_table"),
     // BYOD 一期:空位视图凭 bar.reservation.create(能订位自然能看空位),不放大到桌位管理。
     LIST_TABLE_AVAILABILITY("bar.table_availability.viewed", "bar.table_availability.view_failed", "bar.reservation.create", "bar_table"),
-    LIST_TABLE_SESSIONS("bar.table_session.viewed", "bar.table_session.view_failed", "bar.table_session.view", "bar_table_session"),
-    LIST_BILL_OPERATIONS("bar.bill_operations.viewed", "bar.bill_operations.view_failed", "bar.bill.split_merge", "bar_bill_operation"),
+    LIST_TABLE_SESSIONS("bar.table_session.list", "bar.table_session.list_failed", "bar.table_session.view", "bar_table_session"),
+    LIST_BILL_OPERATIONS("bar.bill_operation.list", "bar.bill_operation.list_failed", "bar.bill.split_merge", "bar_bill_operation"),
     // 第十一批 TK-04-R5：账单端反查本单商户消费奖励（凭查看订单账单的 bar.order.view，限本商户）。
     LIST_BILL_REWARDS("bar.bill_rewards.viewed", "bar.bill_rewards.view_failed", "bar.order.view", "merchant_consumption_reward"),
     LIST_TABLES_WITHOUT_SPACE("bar.table_space_backlog.viewed", "bar.table_space_backlog.view_failed", "bar.table.manage", "bar_table"),

@@ -1,6 +1,6 @@
 package com.complex.platform.facility;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.containsInAnyOrder;
@@ -518,6 +518,35 @@ class FacilityWorkOrderDualConfirmationJdbcIntegrationTests {
         assertThat(jdbc.queryForObject("""
                 SELECT count(*) FROM audit_events WHERE event_name='facility.work_order_reassign_failed' AND idempotency_key=?
                 """, Integer.class, "rb_" + suffix)).isEqualTo(1);
+    }
+
+    /**
+     * 第十八批 N 段第 124 条 124-R3（PGM L738「访问被拒绝也要留痕，便于排查是权限问题还是开关问题。」；OpenAPI startFacilityWorkOrder、
+     * createFacilityInspectionTemplate 的 x-audit-event-failure）：按前端蛇形键对已关闭的工单「开始处理」400 INVALID_STATE，落
+     * facility.work_order_start_failed；不持 facility.inspection.manage 的员工新建巡检模板 403，落 facility.inspection_template_create_failed
+     * （权限拒绝也留痕）。失败事件独立事务、不随测试回滚，按本次幂等键查。
+     */
+    @Test
+    void writeEntryFailuresRecordDeclaredFailureEvents() throws Exception {
+        String closed = order(null, "closed", "platform");
+        call(admin, closed, "start", "{\"note\":\"现场处理\",\"idempotency_key\":\"r3s_" + suffix + "\"}")
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.detail_code").value("INVALID_STATE"));
+        assertThat(failureRows("facility.work_order_start_failed", "r3s_" + suffix))
+                .containsExactly("facility_work_order|" + closed + "|facility.work_order.manage|INVALID_STATE");
+
+        mockMvc.perform(post("/api/v1/facility/inspections/templates").with(repairer).contentType(MediaType.APPLICATION_JSON).content("""
+                {"name":"夜间安防巡检","inspection_type":"security","cycle_days":7,"abnormal_mode":"light",
+                 "checklist":[{"label":"现场照片"}],"active":true,"idempotency_key":"r3t_%s"}
+                """.formatted(suffix))).andExpect(status().isForbidden());
+        assertThat(failureRows("facility.inspection_template_create_failed", "r3t_" + suffix))
+                .containsExactly("facility_inspection_template|new|facility.inspection.manage|PERMISSION_DENIED");
+    }
+
+    private List<String> failureRows(String event, String idempotencyKey) {
+        return jdbc.queryForList("""
+                SELECT business_type || '|' || business_id || '|' || permission_code || '|' || (metadata->>'error_code')
+                  FROM audit_events WHERE event_name = ? AND event_result = 'failure' AND idempotency_key = ?""",
+                String.class, event, idempotencyKey);
     }
 
     /** 本事务在 facility_work_orders 上持有的行级锁（FOR UPDATE 取得 RowShareLock）。 */

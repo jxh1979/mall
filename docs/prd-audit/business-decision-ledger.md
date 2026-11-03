@@ -1,6 +1,6 @@
 # PRD 审计业务裁决台账
 
-文档版本：V0.68
+文档版本：V0.69
 状态：进行中
 迁移日期：2026-07-27
 当前事实源：三份立法 HTML 以既有冻结基线叠加 James 此前 M02 至 M08 的点名批准、全量审计 M001、M002 的逐项批准，以及本轮 2026-10-16 至 2026-10-17 业务 HTML 审计中 Q01 至 Q40 及子题实际明确批准且未被后续替代的裁决，和 2026-10-17 第二批 HTML 业务线推演审计（A–F 六线 64 条、停车章）的逐项批准，并叠加本轮 CG 70 项来源确认与 C01–C09、N01–N03 最终澄清及补全文稿中 F01、W01–W05 的整体修改批准（本文件末节）；本轮最终规则、未采纳或替代关系、现行版本与字节哈希见本文件末节。历史记录保留为各自当时事实，不恢复已被替代的建议。
@@ -3934,6 +3934,9 @@ HTML 的语义补齐与直接引用同步可在本批核验；70项中的业务�
 | 27 | **第 111 条 商户服务工单取消**（题面：「第 111 条：商户在商户专区提的服务工单（报修、保洁、投诉、其他服务请求），什么时候、由谁可以取消？枚举速查表的商户工单状态里有「已取消」，但 HTML 没写谁能取消；现在商户和员工都没有取消按钮，提错或重复的单只能照常派单处理再关单。」）—— 操作员选「两者都有」：派单前商户自己取消；派单后，重复提或误提的由客户关怀部填原因取消。 | 第 111 条，18M 实现。 |
 | 28 | **第 111 条 客诉周报怎么归到门店**（题面：「第 111 条客诉周报：BSM:1385 写「店内的报送该店主理人与店长，各公司的报送该公司最高负责人与平台最高负责人」。客人投诉某家店（比如某酒吧的服务）时，系统怎么知道是哪家店？现在客人在 App、小程序投诉只选综合体、不选门店；员工在后台新建的投诉单也不填门店；只有商户自己在商户专区提的投诉记在该商户名下。」）—— 操作员选「客人投诉时自选门店」：客人投诉时自己选涉及的门店（选填），客户关怀部可以更正；其余同上（「同上」指同题推荐项的后半句原文：「标了门店的客人投诉，加上该店自己在商户专区提的投诉，进该店周报；全部客诉按所在项目进各公司周报。」）。 | 第 111 条，18M 实现。 |
 | 29 | **第 117 条 商户报的单用料承担方有争议怎么挂起**（题面：「第 117 条：商户在商户专区报的单（比如报修本店门锁），物业用了库房配件、标商户承担，商户认为不该自己出。BSM:1380 写「承担方有争议的，工单挂起转上级判定，判定结果与依据留痕后才能结案」，但商户工单的状态里没有「已挂起」（物业工单有）。这种单怎么挂起？」）—— 操作员选「不加状态，停在原状态（推荐）」：有争议时单子停在原状态转上级判定，判定前不能转「已处理待关闭」、不能关闭；判定结果与依据留痕后照常往下走。 | 第 117 条，18M 实现。 |
+| 30 | **第 123 条 拿不到位置**（题面：「第 123 条（敏感操作查位置）：工作手机、平板、一体机或浏览器开了定位，但当下拿不到位置（室内没信号、设备没定位模块、电脑给不出位置）时，核销、收款、退款、放行怎么办？HTML 只写了「范围外一律拒绝」「网页端不开地理识别不能用」，没写拿不到位置的情况。」）—— 操作员选「按范围外处理（推荐）」：拒绝并留痕，只能查看；拿到位置后再办。 | 第 123 条，18N 实现。 |
+| 31 | **第 123 条 财务后台查不查位置**（题面：「第 123 条：HTML 把「管理后台」（财务：配置、查询、复核、对账）和「Web 前端」分两行写，围栏句只写在 Web 前端那行；财务中心全平台共享，人不一定在项目现场。财务中心在后台办的退款审批、退款拨付、原路退款登记、线下收款确认，要不要也查位置？」）—— 操作员选「只查现场动作（推荐）」：只查现场的核销、入场放行、收款、结账、订台定金、柜台退卡等；财务中心后台办理不查位置。 | 第 123 条，18N 实现。 |
+| 32 | **第 123 条 项目没配授权范围**（题面：「第 123 条：授权范围按项目在后台配置。某个项目还没配授权范围时，敏感操作怎么办？」）—— 操作员选「没配就不查位置（推荐）」：配好之前照常办理，配好后才按范围拦。 | 第 123 条，18N 实现。 |
 
 第一段转正前最低池额试算与取消结算环节超池待审批：既有缺口，列入待开发清单第 75 条、随 18C 做（ENUM L52、BSM L752）。
 
@@ -4565,3 +4568,189 @@ HTML 的语义补齐与直接引用同步可在本批核验；70项中的业务�
     - 后端：WorkPhoneVoucherRedeemJdbcTests、KioskEntitlementClaimJdbcTests，StaffAppFunctionsTests 加一条。
     - 安卓：VoucherRedeemApiTest、KioskClaimTest，TerminalApiClientHeadersTest 加两条，StaffAppFunctionsTest 加断言。
 - 18M 落地位置补记·第 114 条 114-R3 与本段运行验收证据、快照、终验文档刷新（无新裁决）：业务提交 5741cf41 之后，按第十八批裁决 25 重刷了运行验收证据：后端全量 6216 测，0 失败 0 错误；apps/web 构建通过；常规界面验收（接口全部 mock）实跑 40 条全过；真实后端界面验收未跑，runtime_ready=false。随后依次重生成闭环当前态快照、生产闭环缺口报告、界面验收报告；无上线指挥台也重生成了，内容不变。三份生成器没改。手改 docs/final-closed-loop-acceptance-audit-v0.1.md 与 docs/code-implementation-acceptance-audit-v0.1.md：前端单测源码计数改为 1521，后端全量与常规界面验收的数字、日期改为本次实跑值，写入 npm run verify:unit 实跑结果。verify:unit 第一次实跑时 apps/web 有 1 例失败（PermissionTemplatesPage.test.tsx，本段未改），单独重跑与整套重跑都过。6 个被核文件的行数和上段一样，没改。交付门禁于 2026-11-02 UTC 在工作树逐项实跑子项，NAS 两项现场探测未跑。external-dependency-gates、t3d-local-llm-ai-quality 已转通过，已从「交付总闸口」一行的仍红清单里去掉。仍红的有两项：一是 coding-host-protection，它写死主仓路径，在工作树口径下必红，属工具口径，不做；二是 final-closed-loop-audit，如实留 2 条红（integration-ready、business-acceptance-ready），原因是校验器要求终验把联调、业务验收写成「是」，而裁决 25 定了不跑真实后端界面验收、运行验收未就绪，终验写的是「否」。verify:delivery-gates 总链仍是红的。
+
+18N 落地位置补记（2026-11-03）：第十八批 N 段（batch34）按待开发清单第 120～125 条（含上表第 30～32 条，即第十八批裁决 30～32）实现；运行验收证据、终验文档在本段最后一个提交刷新；各条落地位置见下。本段追加时，原台账除文档版本 V0.68→V0.69 与裁决表新增第 30～32 行外，其他历史字节保持。
+
+- 18N 落地位置补记·控制席判定（2026-11-03）：① 第 123 条 123-R5（财务中心后台办理的退款审批、退款拨付、原路退款登记、线下收款确认查位置）按裁决 31 不做。② 第 124 条以核实修订稿逐侧对齐 OpenAPI 声明与代码实落名；其中 OpenAPI 成功名等于权限码的 18 个操作，照第 113 条先例由代码落声明名。
+- 18N 落地位置补记·第 120 条 120-R1（无新裁决）：一体机配置与心跳改按设备台账读。GET /api/v1/terminals/kiosks/{device_id}/config 与 POST /api/v1/terminals/kiosks/{device_id}/heartbeat 落在 TerminalDeviceService.getKioskConfig、recordKioskHeartbeat；requireBoundKioskDeviceCredential 改为返回已核过的设备行。kiosk_mode 取设备台账（绑定时所选）；ticketing_enabled 由新公共方法 TerminalDeviceService.kioskTicketingEnabled 判定——已绑定的一体机、kiosk_mode=ticketing、且有本机 terminal_type=kiosk、capability_code=ticketing、scope_id=设备号的开启开关行才为真，缺行即关；bound_scope 取绑定点位；响应新增 merchant_id（设备台账所属商户）；心跳不报模式时同取设备台账。无人写入的 terminal_kiosk_configs 读取已删（TerminalDeviceRepository.findKioskConfigByDeviceId、TerminalKioskConfigRecord），表不动、不加迁移。安卓员工端：TerminalModels.kt 的 DeviceBinding 收 device_token、kiosk_mode，新增 KioskConfig、LogoutRequest；两份 TerminalApiClient 加 kioskConfig（带 X-Device-Token）与 logout；共享核新文件 StaffSignIn.kt（asStaff：一段请求换成授权员工令牌，结束时含出错还回常驻令牌）；MainActivity.showKioskSetup 绑定时选服务型 / 售票型并存设备令牌；新增 showKioskHome（凭设备令牌读本机配置，读不到只留权益领取与重新登录）、staffSignInDialog / staffSignOut（授权员工当场登录、用完以其令牌登出，常驻员工会话不变）。依据 BSM:980「……其中只有启用售票能力的一体机，才允许授权服务人员在到店服务场景下辅助客人购票。」、BSM:1906「扫码查看和领取权益，也可做订台下单、吧台买酒下单、游乐设施状态查看、定期检修记录和主管确认；启用售票能力的一体机可由授权服务人员辅助到店购票和订单查询。」、BSM:986「……可由授权服务人员登录后辅助客人购票……」、BSM:990「……必须由授权员工记录……」、BSM:992「工程师可在授权后填写……」、PGM:742「开关默认取值：任何能力在后台没有显式开关配置行时一律默认关闭（opt-in）……」。
+- 第 120 条 120-R2（一体机辅助售票与订单查询）落地位置：
+  - 服务端售票闸：TicketOrderService.requireKioskSale。可信终端是一体机或 sales_channel=kiosk 时两者须同时成立，本机须为售票型且后台有本机售票开关行（TerminalDeviceService.ticketingKiosk），否则 403 KIOSK_TICKETING_DISABLED；售票原因 operator_note 必填；本机所属商户是酒吧时只卖该酒吧单店门票，否则 403 BAR_SCOPE_FORBIDDEN；以上判定在短信核验和扣库存之前。
+  - 下单留痕：TicketingService.kioskSaleMetadata，ticket_order.created 记 sale_reason、terminal_type、device_id、point_id。设备与点位的取法用 TerminalDeviceService.terminalTraceMetadata，与券核销 VoucherService.redeemMetadata、游乐状态看板共用。
+  - 订单查询：GET /api/v1/ticketing/orders 加 buyer_phone（TicketOrderService.listOrdersInScope、JdbcTicketingRepository.listTicketOrdersByBuyerPhone，按盲索引查、号码掩码）。
+  - 后台：TerminalDevicesPage「售票能力」列与按台开启/关闭，PUT /api/v1/terminals/capability-switches/tcs_kiosk_ticketing_<设备号>，原因必填。
+  - 安卓：MainActivity.showKioskTicketing、showKioskTicketSale、showKioskOrderLookup；两份 TerminalApiClient 加 listKioskTicketProducts、requestKioskBindCode、createTicketOrder、issueTicketOrder、cancelTicketOrder、listTicketOrdersByPhone。
+  依据：
+  - BSM:980「一体机不是普通展示屏……其中只有启用售票能力的一体机，才允许授权服务人员在到店服务场景下辅助客人购票。」
+  - BSM:986「启用售票能力的一体机可由授权服务人员登录后辅助客人购票和查询订单（门票为动态二维码，不提供取票功能；客人用手机号短信验证绑定，在官方 App/小程序查看门票）；在某个酒吧门口或前台售票时，只能售卖该酒吧的单店门票，不得售卖综合体通票。」
+  - BSM:999「连接票务权益，售票一体机按设备点位和员工权限过滤可售票种，并把购票、支付、出票和售票原因写入留痕。」
+  - BSM:1019「客人在本酒吧门口或前台补票时，授权服务人员只能通过启用售票能力的一体机售卖本酒吧单店门票，不能售卖综合体通票。」
+  - BSM:1947「……一体机必须绑定点位、限制可售票种，并记录服务人员、设备、点位、购票原因、支付和出票。」
+  - PGM:742「开关默认取值：任何能力在后台没有显式开关配置行时一律默认关闭（opt-in）……」
+  - DEC-R7-05「售票型触摸屏一体机能力补「订单查询」；门票为动态二维码，不提供取票功能」
+  本 rid 不涉及第十八批 N 段裁决 30～32，也没有新裁决。
+- 18N 落地位置补记·第 120 条 120-R3（一体机订台）
+  - 依据：
+    - BSM:987「支持订台下单：选择酒吧、日期、时段、卡座/桌台/吧台位、人数和订台备注；订台需要支付定金。」
+    - BSM:1023「订台订单必须记录定金、订台来源、销售人员或设备来源、到店和取消结果。」
+    - BSM:1058「……客人自助订台支付定金成功、或员工代订提交成功时，该台位即进入已预留。一个台位同一时刻只能存在一笔有效预留……」及同条「冲突时先支付定金者得」
+    - BSM:819「受限：暂停该客人的自助订台资格与员工为其代订的资格」
+    - BSM:1004「连接留痕与异常，一体机的下单、领取、状态检查和异常提示都要记录设备、点位和时间。」
+  - 落地位置：
+    - 服务端：BarService.createReservation 按可信终端（TerminalIdentityHolder）判一体机。BarEntryService.createReservation 的一体机分支：同样核对受限会员；台位已被占 409 BAR_TABLE_ALREADY_RESERVED；定金按本酒吧定金规则算（共用静态方法 BarEntryService.depositAmountCent，客人自助订台 CustomerService 同改用它），算出无定金可付 409 BAR_SELF_RESERVATION_UNAVAILABLE；deposit_status=pending、order_source/created_terminal=kiosk、device_id＝本机、sales_staff_id 为空；创建时不占台、不发员工代订知会。
+    - BarEntryService.payDeposit（POST /api/v1/bar/reservations/{id}/pay-deposit）：从未占过台的订台登记定金即调 holdOnDepositPaid 占台，抢不到的取消并登记原路待退（bar_deposit_rejection），留痕 bar.reservation_deposit_refund_on_conflict。
+    - 订台备注：bar_reservations.remark（V590），BarReservationRequest/BarReservationRecord.remark，后台 apps/web/src/admin/pages/BarTableSessionsPage.tsx 订台列表「订台备注」列。
+    - 安卓：apps/android-terminal/android-app/app/src/main/kotlin/com/complex/terminal/MainActivity.kt 的 showKioskReservation、showKioskReservationDeposit（一体机首页「订台」）；收定金走 kioskPayStep；KioskPayment.registerKioskPayment 返回登记后的订台记录。
+    - 契约：createBarReservation 的 description、x-failure-codes 与 remark 字段；listBarTableAvailability 的 x-terminal-allowed 加 kiosk；payBarReservationDeposit 的 description。
+  - 裁决：
+    - 没有新裁决号（核对阶段 blocked 为空）。
+    - 线上扫码付定金依赖第 41 条，不在本条。
+- 18N 落地位置补记·第 120 条 120-R4（无新裁决）：一体机吧台买酒。服务端 BarOrderService.createOrder 订单创建终端改取 TerminalIdentityHolder.trustedTerminalType（没有即 web；商户账号网页请求即 merchant_portal、平板 tablet），可信终端是一体机时订单来源 bar_orders.order_source 记 kiosk、其余仍记 staff，有可信设备号即记 bar_orders.device_id（createOrderInternal 加 deviceId 参数，扫码点单不记），点位按设备台账绑定点位得出；OpenAPI POST /api/v1/bar/orders、POST /api/v1/bar/orders/{order_id}/bill、GET /api/v1/bar/catalog/categories、/products、/combos 的 x-terminal-allowed 加 kiosk，createBarOrder 说明补来源与终端口径。安卓：共享核 KioskBarPurchase.kt（kioskBarCounters 取本机酒吧 table_type=bar_counter 的台位；placeKioskBarOrder 下单再由订单生成待支付账单），MainActivity 一体机首页「吧台买酒」→ showKioskBarPurchase（酒吧＝本机所属商户，未设置提示到后台设备台账页设置；一个吧台位自动选、多个让选、没有提示本酒吧未配置吧台位）→ showPosCatalog（与平板 POS 共用目录与购物车）→ submitKioskBarOrder → kioskPayStep（账单，授权员工登记现金/POS 结清，KioskPayment.kt 补结账必填的 payment_id，取本次登记幂等键）→「已付款，请到吧台取酒」；出品与扣吧台库存走既有吧台出品。测试 KioskBarOrderJdbcTests、KioskBarPurchaseApiTest。依据 BSM:988「支持吧台买酒下单：选择酒水、套餐、数量，生成待支付订单。」、BSM:1024「接收一体机产生的吧台买酒订单。」、BSM:1611「订单从哪里来，是官方 App/小程序、第三方、销售人员、一体机还是现场工作台。」、BSM:1004「连接留痕与异常，一体机的下单、领取、状态检查和异常提示都要记录设备、点位和时间。」、BSM:990「允许现场现金和 POS 机支付，但必须由授权员工记录到订单、账单、日结和对账里。」、BSM:1180「连接触摸屏一体机，一体机买酒或领取礼物后要回写库存消耗。」
+- 18N 落地位置补记·第 120 条 120-R5
+  - 依据：BSM:991「查看游乐设施状态：开放、排队、容量、暂停、关闭、故障、维护或安全提醒。」；BSM:1268「通过触摸屏一体机展示游乐设施开放、排队、容量、暂停、故障和维护状态。」；BSM:1002「连接游乐管理，展示游乐设施开放状态、容量和异常，并形成状态检查、定期检修和主管确认记录。」；BSM:1004「连接留痕与异常，一体机的下单、领取、状态检查和异常提示都要记录设备、点位和时间。」
+  - 裁决：没有新裁决号（核对阶段 blocked 为空）。
+  - 落地（服务端接口与取数）：
+    - 新只读接口 GET /api/v1/amusement/projects/status-board（AmusementController.listProjectStatusBoard → AmusementService.listProjectStatusBoard），与查询游乐项目同权限 amusement.session.view、同范围 visibleProjectRows。
+    - 每个项目一行 AmusementProjectStatusRecord：开放状态、容量、在玩人数（项目维容量快照，没有即 0）、排队人数、维护中设备数、未结故障数、当前生效的安全提示标题。不出客人编号与排队号。
+    - 排队人数取排队中（JdbcAmusementRepository.countWaitingQueueEntriesByProject）。
+    - 维护中设备数取 amusement_device_statuses 的 status=maintenance。
+    - 未结故障数取 amusement_incidents 里 incident_type=fault、状态为 created/processing/pending_external 的条数（countOpenFaultIncidentsByProject）。
+    - 安全提醒取 active 的 safety_notice、在有效期内、挂本项目的标题。
+    - OpenAPI 新增 listAmusementProjectStatusBoard，响应 schema 为 AmusementProjectStatus。
+  - 落地（状态检查记录）：读取留痕 amusement.status_board.viewed，metadata 记可信终端 terminal_type、设备号 device_id 与设备台账绑定点位 point_id，时间即留痕时间（TerminalDeviceService.terminalTraceMetadata）。失败记 amusement.status_board.view_failed。
+  - 落地（安卓一体机）：
+    - 一体机首页读到本机配置后出「游乐设施状态」（MainActivity.showKioskAmusementStatus），常驻会话即可看。每个项目一张卡：状态、在玩／容量、排队人数、维护设备数、故障数、安全提醒。
+    - 接口客户端 TerminalApiClient.amusementStatusBoard（共享核与 android-app 两份），模型 AmusementProjectStatus。
+  - 回归：
+    - AmusementStatusBoardJdbcTests.kioskStatusBoardShowsOpenQueueCapacityMaintenanceFaultAndSafetyNoticeAndRecordsDeviceAndPoint：真实绑定一体机，商户员工带一体机终端头与设备号请求，断言各计数，他商户项目不出现，无客人编号，留痕记设备与点位。改前 404。
+    - 安卓 KioskAmusementStatusApiTest.statusBoardGetsTheBoardAndReadsEachProjectRow。
+- 第 120 条 120-R6（一体机定期检修与主管确认）落地位置：
+  - 服务端 AmusementMaintenanceService.confirmMaintenanceResumeInternal：确认人取当前登录主管（AmusementMaintenanceResumeRequest 删 supervisor_confirmed_by，OpenAPI 同步去掉该属性与 required）；去掉「项目须处于检修中」硬前置（项目建成后没有任何路径把开放状态改成检修中，在营项目的检修此前确认不了），改为项目处于检修中才回到开放、在营项目不动，设备回到运行；检修须通过、不得重复确认照旧。
+  - 后台 AmusementSafetyPage：去掉手填「复工主管 id」。
+  - 安卓 TerminalWorkflow.submitAmusementMaintenance：来源终端取本机终端类型，检修单位与检修人员必填，每次提交新幂等键。
+  - 安卓 MainActivity.showMaintenance / showMaintenanceSubmit / showMaintenanceConfirm：一体机首页与工作手机首页共用；一体机上工程师、主管各自当场授权登录，项目、设备、检修单位从列表选，主管从待确认记录里选一条二次确认。
+  - GET /api/v1/amusement/projects/{id}/devices、GET /api/v1/inventory/suppliers 的 x-terminal-allowed 加 kiosk。
+  依据：BSM:992「工程师可在授权后填写游乐设施定期检修记录，检修单位作为供应商记录。」；BSM:993「检修完成后必须由主管确认，设施才能恢复营业。」；BSM:1269「工程师可在一体机上填写定期检修记录，记录检修单位、检修人员、结果和异常原因。」；BSM:1270「主管确认检修通过后，设施才能恢复营业。」；BSM:2017「已拍板：一体机游乐检修由工程师填写，检修单位作为供应商记录，主管确认后才能恢复营业。」
+  对应裁决：无新裁决（按 18N 核实结果 g120 的 plan 实现）。
+- 第 120 条 120-R7（一体机支付引导与现金 / POS 登记）：依据 BSM:989「支持支付引导：优先生成二维码让客人手机扫码支付，也可由工作人员辅助扫码付款码。」、BSM:990「允许现场现金和 POS 机支付，但必须由授权员工记录到订单、账单、日结和对账里。」、BSM:1003「连接支付和财务，一体机产生的订单必须进入日结、对账和经营看板。」。落地：安卓员工端一体机收款步骤 MainActivity.kioskPayStep 显示应付金额，写明「线上扫码支付待支付渠道开通，请由工作人员收取现金或 POS」，不放无效按钮。现金 / POS 由授权员工当场登录后登记，登记完即登出（售票流程传入已登录的服务人员时不登出），见共享核 KioskPayment.registerKioskPayment，经 StaffSignIn.asStaff 换用授权员工令牌，每次提交新幂等键。票务单走 POST /api/v1/ticketing/orders/{order_id}/pay-intents 与 confirm-payment，POS 单号记 gateway_ref，确认后订单不是已付即提示收款未受理。酒吧账单走 POST /api/v1/bar/bills/{bill_id}/settle，cashier_staff_id 记授权员工，POS 单号记 pos_transaction_no，OpenAPI 的 x-terminal-allowed 加 kiosk。订台走 POST /api/v1/bar/reservations/{id}/pay-deposit，只登记定金渠道与留痕。两份 TerminalApiClient 加 createTicketPayIntent、confirmTicketPayment、payReservationDeposit。生成二维码让客人扫码支付、工作人员扫客人付款码依赖 B 类第 41 条支付渠道对接，未做。无对应新裁决。
+- 18N 落地位置补记·第 121 条（121-R1 门店要货签收把合格随货码登记到门店，归属商户与物料随转）：
+  - 落地位置：InventoryTransferFlowService.receive 的逐码循环。合格码未登记的，先按本行物品登记到门店（saveTraceCode，status=registered）；再调 JdbcInventoryRepository.transferTraceCodeOwnership，把归属、归属商户、登记物料一起转为门店和本行物品；命中 0 行即 400 TRACE_OWNER_MISMATCH，不再有「码不存在就放行」。拒收与短少码不登记，仍归供货主体。删掉已无调用方的 updateTraceCodeOwnerIfExists。签收后门店库管可按码列出库订单（GET /api/v1/inventory/trace-codes/{id}/outbound-orders）并建交接链（POST /api/v1/inventory/trace-handovers）。
+  - 依据：BSM:1166「……可以入库贴码……」；BSM:1197「……出库须同时核验订单和物品码……」；BSM:1201「……买断时溯源码归属从原主体变更到接收主体，收货时扫码核对防调包。」；BSM:1212「……合格接收部分转移货权、计入门店库存……」。
+  - 裁决：没有专门裁决，裁决 30～32 不涉及本条。
+  - 回归：InventoryTransferRequisitionJdbcIntegrationTests.supplyReceiptRegistersAcceptedTraceCodesToTheStoreSoItsKeeperCanShipThem。
+  - 同步：OpenAPI receiveTransferOrder 描述、供应链 PRD §7.2（V0.36）、html-prd-coverage.csv BSM-0228。
+- 第 122 条（18N 落地位置补记）：
+  - 操作留痕按端记录由 122-R1 落。AuditEventService.record 的终端列不再写死 web，改取 TerminalIdentityHolder.auditTerminal()，即服务端派生的可信终端：客人会话端 app/miniapp、商户手机应用会话 merchant_app、登记设备类型、商户账号 merchant_portal、后台网页 web。一体机自助和员工自助注册端点取请求声明的终端；没有终端信息的（无请求的后台作业、不带终端头的第三方回调）记空；超长截到 64。没有迁移，接口不变。
+  - 后台审计页「终端」列与明细按终端中文名显示由 122-R2 落：TERMINAL_LABELS 移到 apps/web/src/admin/i18n/fieldLabels.ts 共用，AuditEventsPage 用它显示，空值显示「—」。
+  - 依据：BSM:940「同一账号允许在多台设备、多个端同时登录。收银、核销、收款、放行等现场动作，一律按执行该动作的设备绑定与该次登录会话定位到操作人并留痕……」；PGM:745「受控的十一类终端：客人手机应用、客人小程序、Web 前端（业务人员，客人无网页端）、工作人员平板、员工工作手机、员工私人手机、商户网页门户、商户手机应用、触摸屏一体机、移动管理端、独立经销商 Web 门户。……」。
+  - 没有对应的新裁决号（第十八批裁决 1～32 都不涉及本条）。
+  - 回归：WorkPhoneVoucherRedeemJdbcTests.auditTerminalRecordsServerDerivedTerminal、auditTerminalIsNullWithoutRequest；AuditEventsPage.test.tsx「终端列与明细按终端中文名显示」。
+- 18N 落地位置补记·第 123 条 123-R1（各项目敏感操作授权范围的后台配置）
+  - 依据：BSM:1630「授权范围按项目在后台配置（业务参数，按项目可配，须同时配置上下限）。」；决策台账 DEC-R8-97-23（同 BSM:1630）；第十八批裁决 32（操作员选「没配就不查位置（推荐）」：配好之前照常办理，配好后才按范围拦）。
+  - 改动：
+    - 迁移 V591__project_sensitive_operation_ranges.sql 建 project_sensitive_operation_ranges，每项目一行。字段：center_latitude、center_longitude 为 NUMERIC(10,7)，按 GPS 原始坐标 WGS-84 十进制度；radius_meters、min_radius_meters、max_radius_meters 单位米。CHECK 纬度 -90～90、经度 -180～180、0＜下限≤半径≤上限。HTML 未给出厂值，不插出厂回落行、不自拟上下限出厂数值（同 V499、V497 范式）。
+    - 同一迁移新增权限 platform.sensitive_operation_range.manage（platform、high、需审批），挂 role_platform_admin。
+    - 后端 governance 包 SensitiveOperationRangeController 提供 GET 和 PUT /api/v1/platform/projects/{project_id}/sensitive-operation-range，PUT 必带幂等键。
+    - SensitiveOperationRangeService：项目须在本权限可触及范围内（requireReachableProject，同 82b-R3），否则 403 CROSS_PROJECT_FORBIDDEN；项目不存在 404 PROJECT_NOT_FOUND；范围闸与字段校验在幂等之前；五项缺一或越界 400 VALIDATION_FAILED，并写明哪一项。
+    - 留痕：保存 platform.sensitive_operation_range.saved 和 save_failed，读 platform.sensitive_operation_range.viewed 和 view_failed，与 OpenAPI 声明一致。
+    - JdbcSensitiveOperationRangeRepository.find 供 123-R2 定位闸读。项目没有行即未配置，不按位置拦截（裁决 32）。
+    - 前端后台「经营参数」页（ADM-ANA-003）加「敏感操作授权范围（按项目）」区块：只按新权限显示，填项目编号查询，填圆心、半径与上下限保存，提示按 WGS-84 填写。路由门禁改为持 analytics.dashboard.view 或新权限任一即可进入；只持新权限时不读经营参数。
+    - OpenAPI 加 getProjectSensitiveOperationRange、saveProjectSensitiveOperationRange 与 schema SensitiveOperationRangeRecord，操作数 +2。
+    - FieldLabels.java 与 fieldLabels.ts 补 center_latitude、center_longitude、radius_meters、min_radius_meters、max_radius_meters 中文名。
+    - 页面矩阵 ADM-ANA-003 行补接口与权限码。
+    - platform-governance-prd-v0.1.md §12 已确认第 21 条实现现状记入变更记录（V0.79）。
+  - 回归：
+    - SensitiveOperationRangeJdbcIntegrationTests 三例：savedRangeReadsBack、incompleteOrOutOfBoundsRangeRejected、projectStaffCannotConfigureOtherProject。均为真实 PUT 和 GET，请求体用蛇形键，经真实角色授权链。
+    - OperatingParamsPage.sensitiveRange.test.tsx 三例：PUT 请求体蛇形键、只持新权限可进页、无新权限不显示区块。
+    - RED：后端 Status expected:<200>、<400>、<403> but was:<404>；前端 AssertionError: expected null not to be null。
+- 18N 落地位置补记·第 123 条 123-R2：后端敏感操作定位闸落在 backend/src/main/java/com/complex/platform/gate/SensitiveLocationGuard.java，接入现场动作闭集 12 个接口：
+  - 核销与入场放行：TicketingService.createVerification（createTicketVerification）、VoucherService.redeem（redeemVoucher）、AmusementService.createVerification（createAmusementVerification）、AmusementService.claimEntitlementSession（claimAmusementEntitlementSession）、BarService.checkInReservationGuest（checkInBarReservationGuest）、BarService.verifyReservationInvitationEntry（verifyBarReservationInvitationEntry）、ParkingReleaseService.record（recordParkingManualRelease）。
+  - 现场收款：ServiceOrderService.markPaid（markServiceOrderPaid）、BarService.settleBill（settleBarBill）、TicketingService.confirmTicketOrderPaymentOnSite（confirmTicketOrderPayment，TicketingController 改调此方法；第三方通票回流 TicketingChannelTicketIssueAdapter 仍直调原方法登记渠道收款，不查位置）、BarService.payReservationDeposit（payBarReservationDeposit）。
+  - 柜台退款：StoredValueService.counterRefund（counterRefundStoredValueAccount）。
+  做法：各服务在进入幂等执行之前按操作对象所属项目判定，重放不能绕过。位置取请求头 X-Geo-Latitude、X-Geo-Longitude（WGS-84 十进制度）；没带或解析不了返回 403 SENSITIVE_OPERATION_LOCATION_REQUIRED，到圆心距离超过授权半径返回 403 SENSITIVE_OPERATION_OUT_OF_RANGE。拒绝在独立事务里留痕 sensitive_operation.location_rejected（business_id 为 operationId，业务回滚不丢）。不按终端分支，通过时不存位置（平台治理 PRD §15.3）。OpenAPI 12 个操作已挂 GeoLatitude、GeoLongitude 参数与两个失败码。
+  依据：BSM:1630「核销、收款、退款、放行等敏感操作，操作设备定位落在该项目综合体授权范围之外时一律拒绝并留痕；绑定点位的工作手机、平板、一体机离开授权范围后同样只保留查看，不得执行上述操作。」；BSM:1876「Web 端同样适用」；DEC-R8-97-23、DEC-R8-97-R1-05。
+  对应裁决：
+  - 第十八批裁决 30（拿不到位置按范围外处理：拒绝并留痕，只能查看）。
+  - 裁决 31（只查现场动作；财务中心后台办理的退款审批、退款拨付、原路退款登记、线下收款确认不查位置，123-R5 不做）。
+  - 裁决 32（项目没配授权范围就不查位置，配好后才按范围拦；同 MerchantPercentParamRecord.java:18、ContractApprovalTemplateRecord.java:12-13「未配置不校验」先例）。
+  闭集口径：按 BSM:1630 字面四类（核销、收款、退款、放行）只取现场动作。以下不纳入：核销冲正、核销异常复核、退菜退酒、存取酒、订台到店登记、游乐离场、只登记待退的订台取消与票务退款申请、只读预览校验、创建支付意图、第三方回流。
+- 18N 落地位置补记·第 123 条 123-R3（BSM:1876「使用 Web 端必须打开地理识别，没有打开地理识别的无法正常使用。Web 端同样适用：核销、收款、退款、放行等敏感操作在授权位置范围之外一律拒绝并留痕。」；第十八批裁决 30、31）：
+  - 网页端整页准入：apps/web/src/admin/security/geoGate.ts 的 geolocationEnabled 加 apps/web/src/admin/AdminApp.tsx，只对 terminalType=web 生效，商户门户、商户手机应用不加。被拒时整页提示「使用网页端须打开地理识别：请在浏览器网站设置里允许“位置”，然后刷新本页」，不渲染菜单与页面，浏览器授权一变就重新判定，不轮询位置（平台治理 PRD §15.3）。
+  - 现场动作闭集 12 个 POST 接口带当下位置：apps/web/src/admin/client/adminClient.ts（isSensitiveOperation 加 currentPosition，与 123-R2 定位闸同一份清单），不论终端都带请求头 X-Geo-Latitude、X-Geo-Longitude；取不到照常发出，由后端按裁决 30 拒绝。
+  - 定位闸拒绝码 SENSITIVE_OPERATION_LOCATION_REQUIRED、SENSITIVE_OPERATION_OUT_OF_RANGE 原样显示后端中文提示：packages/customer-core/src/apiError.ts。
+  - e2e：playwright.config.ts 与 playwright.real-backend.config.ts 授予定位权限。
+- 第 123 条 123-R4（安卓工作手机、平板、一体机采集定位）：
+  - 共用闭集与位置头：apps/android-terminal/src/main/kotlin/com/complex/terminal/SensitiveOperationLocation.kt，两份客户端共用现场动作闭集 12 条（与后端 gate/SensitiveLocationGuard、网页端 geoGate.ts 同一份），只对 POST 生成请求头 X-Geo-Latitude、X-Geo-Longitude。
+  - 两份客户端接入：共享核心 TerminalApiClient.kt 的 applyHeaders、android-app TerminalApiClient.kt 的 open() 接 locationProvider。
+  - 取位置：android-app/app/src/main/kotlin/com/complex/terminal/DeviceLocator.kt，用系统 LocationManager，先 GPS 后网络，每种最多等 10 秒，取不到返回 null、请求照常发出。
+  - 申请权限：MainActivity.kt 在本机绑定为工作手机、平板、一体机后，以及重启恢复这三类绑定时，申请定位权限，并把 api.locationProvider 接上 DeviceLocator；AndroidManifest.xml 加 ACCESS_FINE_LOCATION、ACCESS_COARSE_LOCATION。
+  - 测试：SensitiveLocationHeadersTest。
+  - 依据：BSM:1630「工作手机、平板、一体机绑定点位后，系统自动知道“在哪”……绑定点位的工作手机、平板、一体机离开授权范围后同样只保留查看，不得执行上述操作。」
+  - 裁决：第十八批裁决 30（拿不到位置按范围外处理：端上照常提交，由后端拒绝并留痕）、裁决 31（只查现场动作 12 个接口）。
+- 18N 落地位置补记·第 124 条 124-R1（OpenAPI 声明的审计事件名改成代码实落名，代码不动；依据本台账 :4130 18G 82c-R4 先例「以代码和权威字典为准，只改契约」，以及 operation-traceability-and-terminal-switch-prd-v0.1.md:94「本文第 4.1 节"标准事件类型"是全系统**唯一权威事件字典**」）：docs/openapi/openapi-p0.yaml 与 .json 共改 7 个操作 9 处，yaml 与 json 同值。① runChannelAutoReconciliation 改为 integration.channel_reconciliation.completed / integration.channel_reconciliation.failed（字典 PRD:459、:460；代码 IntegrationOrderSyncService.java:387、:400）；② transferBarTableSession 成功名改为 bar.table.transferred（字典 PRD:335；原声明 bar.table_session.transfer 是本操作的 x-permission，属契约笔误；代码 BarWriteOperation.java:29）；③ decideBarOrderItemVoid 成功名改为 bar.order_item_void_decided（字典 PRD:457；代码 BarWriteOperation.java:43、BarOrderService.java:1410）；④ reviewWecomRiskHit 成功名改为 wecom.risk.hit_reviewed（字典 PRD:447；原声明 wecom.risk_hit.review 是权限码，见 v099 spec:291；代码 WecomConversationService.java:599）；⑤ detectMdmViolations 改为 device.policy_violation / device.policy_violation_failed（字典 PRD:416；与上报违规共用 MdmService 写点 :271-272、:323-324）；⑥ handleMdmViolation 成功名改为 mdm.violation.handled（字典 PRD:455；原声明 mdm.violation.handle 是权限码，见 v099 spec:325；代码 MdmService.java:386）；⑦ uploadEvidenceAttachment 失败名改为 evidence.attachment_upload_failed（共用写点 EvidenceEventService.java:139，另两个入口在 OpenAPI 里已声明此名）。transferBarTableSession、decideBarOrderItemVoid、reviewWecomRiskHit 的失败名分别由 124-R2a、124-R5 在代码侧落 OpenAPI 名，本段不改。本 rid 不改操作数，也没有改 info.version；本段操作数因 120-R5（+1）、123-R1（+2）为 1236，info.version 由收尾统一升为 V0.46。
+- 124-R2a（无新裁决；依据 PGM:899「平台治理层要保证每个重要动作能追溯。谁发起、谁销售、谁服务、谁第一个处理异常、为什么、谁审批、结果是什么，都要能查到。」；先例：本台账「18K 落地位置补记·第 94 条」「代码落 OpenAPI 声明的事件，OpenAPI 不改。」与「18M 落地位置补记·第 113 条」同法）
+  - 落地范围：游乐、酒吧、票务 32 个操作 47 侧的审计事件名改落 OpenAPI 声明名；OpenAPI、迁移不改，操作数不变。
+  - 游乐 AmusementBookingService：
+    - createQueueEntry → amusement.queue_entry.create / amusement.queue_entry.create_failed
+    - changeQueueEntryStatus → amusement.queue_entry.status_change / amusement.queue_entry.status_change_failed
+    - createReservation 成功 → amusement.reservation.create
+    - changeReservationStatus 成功 → amusement.reservation.status_change
+    - listGroupBookings、createGroupBooking、approveGroupBooking、releaseGroupBooking → amusement_group_booking.viewed / created / approved / released 各自的 .success / .failure
+  - 游乐 AmusementSafetyService：
+    - listSafetyNotices → amusement.safety_notice.list
+    - createSafetyNotice → amusement.safety_notice.create
+    - acknowledgeWaiver → amusement.waiver.acknowledge
+    - listIncidents → amusement.incident.list
+    - createIncident → amusement.incident.create
+    - addIncidentAction → amusement.incident.action
+    - closeIncident → amusement.incident.close
+  - 酒吧 BarWriteOperation：
+    - TRANSITION_PRODUCTION_TICKET → bar.production_ticket.transition
+    - CREATE_PRODUCT 失败 → bar.product.created_failed
+    - CREATE_TABLE_SESSION → bar.table_session.create
+    - TRANSFER_TABLE_SESSION 失败 → bar.table_session.transfer_failed（成功名 bar.table.transferred 不动，见 124-R1）
+    - MERGE_TABLE_SESSIONS → bar.table_session.merge / bar.table_session.merge_failed
+    - APPLY_BILL_ADJUSTMENT → bar.bill.adjust
+    - MERGE_BILLS → bar.bill.merge
+    - DECIDE_ORDER_ITEM_VOID 失败 → bar.order_item_void.decide_failed（成功名不动，见 124-R1）
+  - 酒吧 BarReadOperation：
+    - LIST_PRODUCTION_TICKET_EVENTS → bar.production_ticket_event.list / list_failed
+    - LIST_TABLE_SESSIONS → bar.table_session.list / list_failed
+    - LIST_BILL_OPERATIONS → bar.bill_operation.list / list_failed
+  - 票务 TicketingReadOperation：
+    - LIST_DYNAMIC_PRICING_RULES → ticket_dynamic_pricing.viewed.success / .failure
+    - LIST_TICKET_ORDERS 失败 → ticket_order.viewed_failed
+    - LIST_TICKET_REFUND_LINES → ticket.refund_line.list / list_failed
+  - 票务 TicketingWriteOperation：CREATE_DYNAMIC_PRICING_RULE、PUBLISH_DYNAMIC_PRICING_RULE、SIMULATE_DYNAMIC_PRICING → ticket_dynamic_pricing.created / published / simulated 各自的 .success / .failure
+  - 不改：酒吧薪资规则确认（POST /api/v1/bar/payroll-rules/{id}/confirm）。成功事件已由 BarPayrollRuleService.confirm 落 bar.payroll_rule.confirmed_merchant / bar.payroll_rule.confirmed_platform，失败事件由 BarPayrollController.call 落 bar.payroll_rule.confirm_failed，两侧都与声明一致。核对清单把控制器入参误当成了成功名。
+  - 同步：
+    - apps/web/src/admin/pages/DynamicPricingPage.tsx 的留痕提示换新名。
+    - 契约文档 p2-amusement-group-private-booking、p1-amusement-safety-waiver-incident、p1-amusement-reservation-queue-light、p1-bar-bill-adjustment、p1-bar-bill-split-merge、p1-bar-table-session、p2-ticket-dynamic-pricing 的留痕段换新名（V0.11）。
+  - 回归测试：
+    - AmusementIncidentCloseReplayJdbcIntegrationTests.creatingAndClosingAnIncidentRecordsTheDeclaredAuditEventNames：真实接口按前端蛇形键建事故、关事故，按 actor_id 断新名各 1 行、旧名 0 行。
+    - BarServiceTests.mergeTableSessionsRejectsCrossBarSessionWithDeclaredFailureEvent
+    - TicketingServiceTests.dynamicPricingFailuresAreAuditedWithDeclaredEventNames
+    - 既有游乐、酒吧、票务用例，以及 IdempotentReplayCompletedJdbcIntegrationTests、AdmissionReleaseBoundToRequestJdbcIntegrationTests、AdmissionReleaseOneShotJdbcIntegrationTests 的断言改新名。
+- 124-R2b（依据：台账 :4231 第 94 条「事件名按本台账「18I 落地位置补记·第 90 条」的先例：代码落 OpenAPI 声明的事件，OpenAPI 不改。」；:4400 第 113 条同法；PGM:899「平台治理层要保证每个重要动作能追溯。」）：其余 13 个包 42 个操作 62 侧由代码改落 OpenAPI 声明名，OpenAPI、迁移不改。落地位置：
+  - AnalyticsService.listBusinessMetricSnapshots → analytics_business_metric_snapshot.viewed.success / .viewed.failure；OperatingParamsService.upsertNotificationWindow → analytics.notification_windows.updated。
+  - ComplianceService 合同关键日期、到期事项、到期提醒的列表与新建 → compliance.*.list / .create；每日自动扫描与 HTTP 扫描两处 → compliance.reminder.scan。
+  - ContractService.settle → contract.settled；genFeeBill 加事件名参数，单期租金 rent-bills 落 contract.rent_billed，period-bills 各费目仍落 contract.fee_billed。
+  - CustomerService 积分流水、兑换目录、兑换记录、兑换 → customer.points.*，退出 → customer.logged_out；StoredValueService 储值结算入账 → customer.stored_value.settle（短信事件键 topup 不动）。
+  - EnergyService 加失败名重载，新建、修改表计失败 → energy.meter_save_failed，其余写口失败名不变。
+  - SiteEntryReportService 新建、提交、审批 → facility.site_entry.create_assigned / submit_assigned / review。
+  - FinanceService 押金动作、库存差异过账、对账差异、营业额租金 → finance.* 点分名；线下到账确认 → finance_payment.registered / register_failed。
+  - FloorPlanService → floor_plan.shape.save / save_failed。
+  - PlatformService 主体列表 → business_entity.viewed（主体绑定列表仍为 entity_binding.viewed）。
+  - IntegrationOrderSyncService 三个列表失败 → *.viewed_failed；回流记录 → integration.order_sync.created / create_failed。
+  - MerchantBillingService → merchant.billing.create / confirm / dispute.submit / dunning.record 及各 _failed。
+  - MerchantServiceService 列表、建单、派单、处理、关单 → merchant_service.<operationId>.succeeded / .failed（「我的工单」仍为 merchant_service.work_order.viewed）。
+  - SettlementConfigWriteService 下线归档 → settlement.config.archived（business_type 仍记表名）。
+  同步：后台 AuditTrailHint 四页；页面矩阵 ADM-FAC-002、ADM-STL-003 的 audit_events 两格；p1-merchant-service-work-order、p1-customer-points-redemption、p1-floor-plan-polygon、p1-integration-retry-compensation-reconciliation、p1-contract-compliance-expiry、p2-business-metric-snapshots、p1-merchant-billing-portal 七份接口契约的留痕段。
+  回归：MerchantServiceJdbcIntegrationTests.createAndListAuditUnderOpenApiDeclaredNames、ContractParkingMonthlyJdbcIntegrationTests.rentBillAndPeriodBillsAuditUnderOpenApiDeclaredNames、FinanceServiceTests.confirmOfflineFailureAuditsDeclaredRegisterFailedEvent、EnergyServiceTests.meterSaveFailureAuditsDeclaredFailureNameWhileReadingKeepsItsOwn，以及客户、分析、合规、平面图、回流、商户账单、商户工单单测改为断言新名。
+- 18N 落地位置补记·第 124 条 124-R3（合同与设施 34 个写入口补失败事件）：共用失败留痕包装落在 backend/src/main/java/com/complex/platform/evidence/AuditedOperationExecutor.java 的 recordingFailure(failureEvent, permission, businessType, businessId, idempotencyKey, action)，写法同 LeasingController.failureAudited：任一步失败调 AuditEventService.recordFailure（独立事务，业务回滚也保留），错误码取 ApiException.code，否则取类名；写失败事件本身出错时挂在原异常上，照抛原异常。R4、R5 复用此方法。ContractController 12 个写口、FacilityController 4 个、FacilityWorkOrderController 8 个、FacilityInspectionController 7 个、SiteEntryReportController 3 个，都把原有权限、幂等键与服务调用放进包装，失败时落 OpenAPI 声明的 x-audit-event-failure，权限码记 OpenAPI x-permission；新建类和无路径 id 的配置保存记 business_id=new，工单逾期标记记 all，其余记路径 id；成功事件仍由服务层写。依据：PGM L738「访问被拒绝也要留痕，便于排查是权限问题还是开关问题。」；PGM L966「已拍板：所有有过程的业务动作都必须留痕……」；先例本台账 18I 第 90 条（:4192，按 OpenAPI x-audit-event-failure 给写口补失败事件）。本条无新增操作员裁决。回归：ContractJdbcIntegrationTests.resubmittingSubmittedContractRecordsSubmitFailure、FacilityWorkOrderDualConfirmationJdbcIntegrationTests.writeEntryFailuresRecordDeclaredFailureEvents、AuditedOperationExecutorTests。
+- 18N 落地位置补记·第 124 条 124-R4（结算、财务、能耗写口补失败事件，结算单人工过账补成功与失败事件；依据 PGM:738「访问被拒绝也要留痕，便于排查是权限问题还是开关问题。」、PGM:966「已拍板：所有有过程的业务动作都必须留痕……」、PGM:899「平台治理层要保证每个重要动作能追溯。……」，先例本台账 18I 第 90 条（:4192，按 OpenAPI x-audit-event-failure 给写口补失败事件），事件名、权限码照 docs/openapi/openapi-p0.yaml 各操作 x-permission／x-audit-event-success／x-audit-event-failure，OpenAPI 不改，无新裁决）：①结算配置 backend/src/main/java/com/complex/platform/settlement/SettlementConfigController.java：distribution-method、merchant-rate、comprehensive-service-fee、combo-discount、channel-fee、commission-rate、points-accrual-rate、pass-gift-cost、internal-price-item、rank-tiers、revenue-stream-attribution 十一个落草案写口落 settlement.config.<表名>.update_failed；rank-tiers/activate、{configType}/{id}/activate、attribution-rules/{id}/activate 落 settlement.config.draft.activate_failed；{configType}/{id}/archive 落 settlement.config.archive_failed。均经本类既有 auditFailure，权限码 settlement.config.manage，business_type 记表名或 configType，requireManageActor 放进包内，权限与平台域拒绝也留痕。②开票清单 SettlementInvoiceController 的 POST /api/v1/settlement/invoice-items/generate、/{id}/status 经 AuditedOperationExecutor.recordingFailure（124-R3 落）落 settlement.invoice.generate_failed（business_type settlement_bill）、settlement.invoice.status_change_failed（business_type settlement_invoice_item）。③结算单人工过账 SettlementController.postBill（POST /api/v1/settlement/bills/{id}/post）：postBill 返回后落 settlement.bill.posted（business_type settlement_bill，business_id 结算单 id，metadata posted_count），任一步失败（权限、平台域、未确认单等）落 settlement.bill.post_failed；月结作业 SettlementMonthlyJob 自动过账直调 SettlementPostingService，不经此入口、不记。④退款授权配置 backend/src/main/java/com/complex/platform/finance/RefundAuthorizationController.java 的 POST /api/v1/finance/refund-authority/limits、/rules 落 refund_authority.change_failed（business_type 分别为 refund_authority_limit、refund_auto_rule）。⑤能源费结算 backend/src/main/java/com/complex/platform/energy/EnergyController.java 的 settleEnergyFee（/api/v1/energy/settlements/energy-fee 与 /settle-energy-fee 是同一个方法）落 energy.fee_settle_failed（business_type energy_fee，business_id 账期）。成功事件仍由服务层写；失败事件是独立事务，业务回滚也保留。回归 backend/src/test/java/com/complex/platform/settlement/SettlementWriteFailureAuditJdbcIntegrationTests.java。
+- 18N 落地位置补记·第 124 条 124-R5（客户、酒吧目录、分析配置、主管复核批准、可编辑版下载等 39 个写入口补事件；依据 PGM:966「已拍板：所有有过程的业务动作都必须留痕，酒水和可追责物品从库房到客人的全过程必须可追溯。……」、PGM:738「访问被拒绝也要留痕，便于排查是权限问题还是开关问题。」、PGM:899「平台治理层要保证每个重要动作能追溯。……」、PGM:685「……导出须单独授权、逐次留痕……」，docs/openapi/openapi-p0.yaml 各操作的 x-audit-event-success／x-audit-event-failure，先例本台账 18I 落地位置补记·第 90 条；无新裁决，OpenAPI 不改）：复用 124-R3 的 AuditedOperationExecutor.recordingFailure，各写口把权限判定、范围判定、幂等键与服务调用一起包进去，任一步失败按声明的失败事件独立事务落库后原样抛出；服务层原本不写成功事件的 9 侧，在控制器服务返回后按声明的成功事件落库。成功、失败两侧都补：backend/src/main/java/com/complex/platform/bar/BarPosCatalogController.java 分类保存 bar.category.saved／bar.category.saved_failed、套餐保存 bar.combo.saved／bar.combo.saved_failed、图片上传 bar.catalog.image_uploaded／bar.catalog.image_uploaded_failed、商品设分类 bar.product.category_assigned／bar.product.category_assigned_failed；bar/BarController.java 退酒原因码保存 bar.void_reason_code.saved／save_failed、下线 bar.void_reason_code.archived／archive_failed；customer/LoyaltyController.java 商户退款规则 stored_value.merchant_refund_rule_configured／merchant_refund_rule_failed、商户卡平台配置 stored_value.merchant_card_configured／merchant_card_config_failed（business_type merchant，business_id 记商户编号）；customer/MemberWalletController.java 发起充值 customer.stored_value.topup／customer.stored_value.topup_failed（business_id 记支付意向；发起充值不在幂等块内，同一请求重放会再记一条，不另处理）。只补失败：LoyaltyController 积分冻结与解冻 customer.points.freeze_failed／unfreeze_failed、等级评估 customer.level_evaluate_failed、储值冻结与解冻 stored_value.frozen_failed／unfrozen_failed、退卡 stored_value.refund_failed、柜台退款 stored_value.counter_refund_failed；customer/CustomerController.java 退出 customer.logout_failed、门票转赠撤回 ticket_transfer.revoke_failed；MemberWalletController 储值入账 customer.stored_value.settle_failed、券转赠撤回 voucher_transfer.revoke_failed；analytics/AnalyticsController.java 节假日录入与抓取 analytics.holiday_calendar.update_failed／fetch_failed、异常阈值 analytics.anomaly_config.update_failed、通知窗口 analytics.notification_windows.update_failed、AI 阈值 analytics.ai_thresholds.update_failed、营收归属规则 analytics.revenue_attribution_rule.update_failed、经营参数 operating_params.change_failed；access/staff/StaffController.java 销售岗 staff.profile.sales_position_change_failed；partner/PartnerController.java 新建机构 partner_org.update_failed、新建下属 partner_subordinate.create_failed、停用下属 partner_subordinate.disable_failed；security/ExportFileController.java 可编辑版申请 security.export.editable_request_failed、下载 security.export.editable_download_failed（同一次批准再下载被拒 EDITABLE_EXPORT_ALREADY_ISSUED 等，权限码记 security.export.editable_copy，business_id 记原导出文件编号）；security/WatermarkController.java 页面查看上报 security.page_view.failed；serviceorder/ServiceOrderController.java 保存收款码 service.payment_code.save_failed；governance/review/SupervisorReviewController.java 复核计算 governance.supervisor_review.evaluate_failed，批准整段（两支权限判定与幂等键）落 governance.supervisor_review.decide_failed（授权申请分支 AccessService 另落的 access.grant_request.review_failed 照写，该分支失败多一条操作级失败事件）；governance/PlatformController.java 场地营业时间 venue_business_hours.update_failed；compliance/ComplianceController.java 企微命中复核 wecom.risk_hit.review_failed。新建类 business_id 记 new，其余记路径编号。回归（真库、真实接口与授权链、按前端蛇形键）：BarCatalogWriteAuditJdbcIntegrationTests（新）、EditableExportJdbcIntegrationTests、MerchantCardExitNoticeJdbcIntegrationTests、StoredValueTopupReplayCompletedJdbcIntegrationTests、AnalyticsCrossProjectJdbcIntegrationTests。
+- 124-R6（查看视频证据、两个导出、出示收款码补写声明事件；依据 PGM:913「查看企业微信会话原文、查看视频证据和查看财务敏感信息。」、PGM:685「……导出须单独授权、逐次留痕……」、PGM:683「审计人员查看或导出敏感信息（资金流水、人脸与身份等个人信息、完整操作记录导出）需先经审批并全程留痕。」、BSM:1132「点单员代客下单、向客人出示收款码和点完成履约都是现场操作，一律在公司工作手机上办理，不在自己的私人手机上办。」、PGM:966「已拍板：所有有过程的业务动作都必须留痕……」；按 18N 核实后控制席判定，照 q124-rid-sides-rev.tsv 中 rid=R6 的 8 侧做，无新操作员裁决）：① 回读证据文件 GET /api/v1/evidence/attachments/{attachment_id}/file——EvidenceEventController.readAttachmentFile 经 AuditedOperationExecutor.readSingle 落 evidence.attachment_file_viewed（business_type evidence_attachment，business_id 附件编号）；权限、范围、找不到等失败落 evidence.attachment_file_view_failed；权限检查放进包内；视频分段请求每段各记一条。② 导出操作留痕 GET /api/v1/audit/operation-events/export——AuditController.exportOperationEvents 导出成功落 audit.operation_log.exported（business_type export_file，business_id 导出文件编号，metadata 记 row_count）；权限或取数失败落 audit.operation_log.export_failed；写法同 FinanceService.exportArApItems。③ 导出开票清单 GET /api/v1/settlement/invoice-items/export——SettlementInvoiceController.export 经 AuditedOperationExecutor.recordingFailure 落 settlement.invoice.export_failed，成功经 recordDetail 落 settlement.invoice.exported（记法同②）。④ 出示公司收款码 GET /api/v1/services/orders/{id}/payment-code——ServiceOrderService.orderPaymentCode 整段放进 withFailureAudit，失败落 service.payment_code.present_failed（权限码 service.order.create，business_type service_order，business_id 服务单编号）；返回前落 service.payment_code.presented（metadata 记 performer_user_id）；控制器公司终端检查照旧在前、不另记失败事件。OpenAPI 这四个操作的声明名原已如此、不改，迁移与前端也不改。回归：ExportFileJdbcIntegrationTests.readingAnEvidenceFileIsRecordedAndAFailedReadIsRecordedToo（真实登录链，按前端键名上传后回读，并覆盖找不到的情形）；auditAndLedgerExportsAreProtectedPdfsRecordingFiltersAndScope 与 invoiceListExportNeedsItsOwnSeparatelyGrantedPermissionAndTakesTheListFilters 补成功、失败断言；ServiceOrderJdbcIntegrationTests.v212ServiceOrderDirectPayLifecycle 补断言；新增 paymentCodeWithoutCompanyQrIsRejectedWithFailureAudit。
+- 124-R7（OpenAPI 把代码不写、本条也不补的查看类声明改为 not_applicable）：落地位置 docs/openapi/openapi-p0.yaml 与 openapi-p0.json，共 169 个操作 283 侧（168 个 GET，加 DELETE /api/v1/access/position-role-templates/{id}），其中成功侧 115 处、失败侧 168 处，逐侧清单见 q124-rid-sides-rev.tsv 的 rid=R7 行。只改代码没写的一侧，已写的一侧不动；代码、迁移、前端不改，本 rid 不改操作数（本段操作数因 120-R5（+1）、123-R1（+2）为 1236）。按包侧数：dealer 46、access 45、facility 33、customer 20、serviceorder 14、contract 14、analytics 12、amusement 11、settlement 10、bar 10、leasing 8、governance 8、compliance 7、finance 6、evidence 6、energy 6、ticketing 4、terminal 4、system 4、partner 4、merchantservice 4、floorplan 4、security 2、merchantbilling 1。依据：docs/p0-action-event-evidence-matrix-v0.1.md:122「OpenAPI 每个 operation 的 x-audit-event-success 和 x-audit-event-failure 必须进入事件中心。」；HTML 的必须留痕清单 PGM:902-913 中，涉及查看的只有企微会话原文、视频证据、财务敏感信息三类；PGM:685「经营报表同理：看板有权限就能看，但把数据导出带走是另一件事——导出须单独授权、逐次留痕」；审计期裁决 SINGLE-USE-READ-NOT-A-USE「打开页面、看列表不扣」。企微命中列表与经销订单到账、退款、溢缴的查看，已由 PGM:687 敏感页留痕（23-R5，security.sensitive_page.viewed）做到，代码不另记。DELETE 岗位角色模板一律 409 ARCHIVE_APPROVAL_REQUIRED，成功不可能发生。需要说明与第 90 条的区别：18I 第 90 条（本台账 :4192「六个列表查看与查看完整号码不另套壳（正常业务不失败／服务层已落）。」）当时对只缺失败侧的读接口没有改 OpenAPI；本条为达成第 124 条「声明与代码实落名一致」，把这类只缺失败侧的读接口声明也改为 not_applicable，处理与第 90 条不同。不涉及本段裁决 30～32。
+- 18N 落地位置补记·第 125 条（125-R1、125-R2、125-R3；测试维护，无 HTML 依据，无新裁决）：只改测试，业务代码不动。偶发红的原因是：页面在被动 effect 里补做「列表到达后默认选中首行」和「应用后按模板回填表单」，用例在 effect 落定前就点选或勾选，补跑的 effect 把选择或勾选改回。只改测试的等待写法，断言内容不变：`apps/web/src/admin/pages/PermissionTemplatesPage.test.tsx`（125-R1：先等首次回填出模板名「基础员工」，再勾「单次有效」应用；第二笔之前等重读后的回填把勾选复位；两笔改为先 single_use 后 append，契约闭集断言不变）；`apps/web/src/admin/pages/StoredWinePage.remedy.test.tsx`（125-R2：先等首行补存记录请求 GET /api/v1/inventory/saved-bottles/w-1/remedies 发出，再点已作废行 c-1）；`apps/web/src/admin/pages/MerchantWorkOrdersPage.test.tsx`（125-R3，同根扫描所得：102-R2 用例点 wo-p 改为没勾上就再点，直到勾上）。慢调度（performance.now 每次 +20ms）下，原步骤各跑 30 次分别红 8、11、4 次，改后步骤各跑 30 次均 0 红；3 个文件各连跑 10 次、apps/web 全量 vitest 连跑 6 次，这 3 个文件均 0 红。依据：待开发清单-2026-10-25.md:479「CI web-tests 必须对最新提交全绿（偶发红会让合并卡住）」；同根先例为本台账第 40 条 18D「偶发红是列表到达后默认选中、翻页复位、清空已选文件等被动 effect 未落定就点选，补跑的 effect 把选择改回；只改测试等待写法、断言不变」。
+- 18N 落地位置补记·复核修复（一体机授权员工会话、本机配置、定位闸提示与一体机售通票回归；第 120 条 120-R1、120-R2，第 123 条 123-R4；BSM:986「启用售票能力的一体机可由授权服务人员登录后辅助客人购票和查询订单……在某个酒吧门口或前台售票时，只能售卖该酒吧的单店门票，不得售卖综合体通票。」，BSM:1019「客人在本酒吧门口或前台补票时，授权服务人员只能通过启用售票能力的一体机售卖本酒吧单店门票，不能售卖综合体通票。」，BSM:1906「……启用售票能力的一体机可由授权服务人员辅助到店购票和订单查询。」，BSM:1630「……绑定点位的工作手机、平板、一体机离开授权范围后同样只保留查看，不得执行上述操作。」，第十八批裁决 30「拒绝并留痕，只能查看；拿到位置后再办。」）：不加迁移、不改接口与 OpenAPI。① 安卓共享核心 `apps/android-terminal/src/main/kotlin/com/complex/terminal/StaffSignIn.kt` 的 asStaff 改为只在调用线程上设授权员工令牌：两份 `TerminalApiClient.kt` 加 `staffToken`（ThreadLocal），发请求时先取它、没有才带常驻 `accessToken`；两段后台请求重叠（出票未返回又登出、售票屏读票种时结束售票）不再把常驻令牌换成授权员工令牌。② `android-app/.../MainActivity.kt` 记下辅助售票、检修当场登录的授权员工（kioskStaff），进一体机首页（结束售票、返回首页、系统返回键）即以其令牌登出；出票返回前「继续售票」「结束售票」不可点。③ 一体机首页每次进入都按设备台账重读本机配置（读到后只重绘），后台改所属商户、开关售票后回首页即生效。④ 接口错误话术 apiErrorText 由 MainActivity 移到共享核心新文件 `ApiErrorText.kt`，定位闸两个细码（SENSITIVE_OPERATION_LOCATION_REQUIRED、SENSITIVE_OPERATION_OUT_OF_RANGE）原样显示服务端中文原因，不再套「当前账号或设备无权操作」（核实稿 g123 123-R4 plan ④「被拒时照常走 friendly 显示后端中文提示」，同网页端 123-R3）。⑤ 后端只补测试 `KioskTicketSaleJdbcTests.barStaffCannotSellThePassOnATicketingKioskWithoutOwnerMerchant`：本机未设所属商户的售票型一体机上，酒吧 A 员工按一体机渠道卖综合体通票 403 `BAR_SCOPE_FORBIDDEN`、不建单不动库存，找回 120-R2 删掉的单测所覆盖的 `TicketOrderService.resolveOrderBarId` 分支（关掉该分支即红）。回归 `StaffSignInTest.overlappingStaffSectionsOnOtherThreadsNeverSwapTheResidentToken`、`SensitiveLocationHeadersTest.locationGateDenialShowsTheServerReasonInsteadOfNoPermission`。同步 `terminal-page-product-prd-v0.1.md` §11「一体机首页与授权员工登录」「辅助购票/订单查询」两行与变更日志、`apps/android-terminal/README.md`；本节 124-R1、124-R7 两段的操作数改为本段最终值（1236，info.version V0.46）。
+- 18N 落地位置补记·运行验收证据、快照、终验文档刷新（无新裁决）：业务提交 e0ec2efd 之后，按第十八批裁决 25 重刷了运行验收证据：后端全量 6268 测，0 失败 0 错误；apps/web 构建通过；常规界面验收（接口全部 mock）实跑 40 条全过；真实后端界面验收未跑，runtime_ready=false。随后依次重生成闭环当前态快照、生产闭环缺口报告、界面验收报告；无上线指挥台也重生成了，内容不变。生成器没改。手改 docs/final-closed-loop-acceptance-audit-v0.1.md 与 docs/code-implementation-acceptance-audit-v0.1.md：前端单测源码计数改为 1536；被核文件行数 TicketingService.java 改为 1221、BarService.java 改为 962、BarOrderService.java 改为 1749，其余 3 个没变；后端全量与常规界面验收的数字、日期改为本次实跑值；写入 npm run verify:unit 实跑结果，五个工作区全过。交付门禁于 2026-11-03 UTC 在工作树逐项实跑子项，NAS 两项现场探测未跑。仍红的有两项：一是 coding-host-protection，它写死主仓路径，在工作树口径下必红，属工具口径，不做；二是 final-closed-loop-audit，如实留 2 条红（integration-ready、business-acceptance-ready），原因是校验器要求终验把联调、业务验收写成「是」，而裁决 25 定了不跑真实后端界面验收、运行验收未就绪，终验写的是「否」。verify:delivery-gates 总链仍是红的。

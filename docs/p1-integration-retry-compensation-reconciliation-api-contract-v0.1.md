@@ -1,4 +1,4 @@
-# P1 第三方回流、重试、补偿和对账接口合同 V0.1
+# P1 第三方回流、重试、补偿和对账接口合同 V0.11
 
 ## 1. 范围
 
@@ -197,7 +197,7 @@
 
 | 事件 | 触发点 |
 | --- | --- |
-| `integration.order_sync.recorded` | 创建或更新回流记录 |
+| `integration.order_sync.created` | 创建或更新回流记录 |
 | `integration.retry_task.created` | 创建重试任务 |
 | `integration.retry_task.run_now` | 手动触发立即重试 |
 | `integration.compensation_task.created` | 创建补偿任务 |

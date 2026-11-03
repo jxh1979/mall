@@ -1,6 +1,6 @@
 package com.complex.platform.merchantbilling;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -125,7 +125,7 @@ public class MerchantBillingService {
                 request == null ? null : request.idempotencyKey(),
                 request,
                 MerchantBillRecord.class,
-                "merchant_billing.bill.create_failed",
+                "merchant.billing.create_failed",
                 "merchant.billing.manage",
                 "new",
                 () -> validateCreateRequest(request),
@@ -141,7 +141,7 @@ public class MerchantBillingService {
                 request == null ? null : request.idempotencyKey(),
                 request,
                 MerchantBillRecord.class,
-                "merchant_billing.bill.confirm_failed",
+                "merchant.billing.confirm_failed",
                 "merchant.billing.confirm",
                 billId,
                 () -> validateConfirmRequest(request),
@@ -157,7 +157,7 @@ public class MerchantBillingService {
                 request == null ? null : request.idempotencyKey(),
                 request,
                 MerchantBillDisputeRecord.class,
-                "merchant_billing.dispute.submit_failed",
+                "merchant.billing.dispute.submit_failed",
                 "merchant.billing.dispute.submit",
                 billId,
                 () -> validateDisputeRequest(request),
@@ -173,7 +173,7 @@ public class MerchantBillingService {
                 request == null ? null : request.idempotencyKey(),
                 request,
                 MerchantBillDunningRecord.class,
-                "merchant_billing.dunning.record_failed",
+                "merchant.billing.dunning.record_failed",
                 "merchant.billing.dunning.record",
                 billId,
                 () -> validateDunningRequest(request),
@@ -218,7 +218,7 @@ public class MerchantBillingService {
         );
         MerchantBillRecord saved = repository.saveBill(record);
         auditEventService.recordSuccess(
-                "merchant_billing.bill.created",
+                "merchant.billing.create",
                 "merchant.billing.manage",
                 BUSINESS_TYPE,
                 saved.id(),
@@ -237,7 +237,7 @@ public class MerchantBillingService {
         }
         MerchantBillRecord confirmed = repository.saveBill(existing.withStatus("confirmed", Instant.now()));
         auditEventService.recordSuccess(
-                "merchant_billing.bill.confirmed",
+                "merchant.billing.confirm",
                 "merchant.billing.confirm",
                 BUSINESS_TYPE,
                 confirmed.id(),
@@ -268,7 +268,7 @@ public class MerchantBillingService {
         ));
         repository.saveBill(existing.withStatus("disputed", now));
         auditEventService.recordSuccess(
-                "merchant_billing.dispute.submitted",
+                "merchant.billing.dispute.submit",
                 "merchant.billing.dispute.submit",
                 BUSINESS_TYPE,
                 existing.id(),
@@ -296,7 +296,7 @@ public class MerchantBillingService {
                 Instant.now()
         ));
         auditEventService.recordSuccess(
-                "merchant_billing.dunning.recorded",
+                "merchant.billing.dunning.record",
                 "merchant.billing.dunning.record",
                 BUSINESS_TYPE,
                 existing.id(),

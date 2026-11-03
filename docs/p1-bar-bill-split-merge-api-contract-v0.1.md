@@ -1,4 +1,4 @@
-# P1 酒吧账单拆单/合单接口契约 V0.1
+# P1 酒吧账单拆单/合单接口契约 V0.11
 
 ## 1. 范围
 
@@ -67,7 +67,7 @@
 | 动作 | 成功事件 | 失败事件 |
 | --- | --- | --- |
 | 拆单 | `bar.bill.split` | `bar.bill.split_failed` |
-| 合单 | `bar.bill.merged` | `bar.bill.merge_failed` |
+| 合单 | `bar.bill.merge` | `bar.bill.merge_failed` |
 
 ## 7. 验收
 

@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static com.complex.platform.common.api.ApiRequests.requireIdempotencyKey;
 
@@ -317,9 +317,10 @@ public class TicketingController {
     }
 
     @GetMapping("/ticketing/orders")
-    public ApiResponse<PageResponse<TicketOrderRecord>> listTicketOrders() {
+    public ApiResponse<PageResponse<TicketOrderRecord>> listTicketOrders(
+            @RequestParam(name = "buyer_phone", required = false) String buyerPhone) {
         authorizationService.requirePermission("ticket.order.read");
-        return ApiResponse.ok(maskBuyerPhones(service.listTicketOrders()));
+        return ApiResponse.ok(maskBuyerPhones(service.listTicketOrders(buyerPhone)));
     }
 
     @PostMapping("/ticketing/orders")
@@ -346,7 +347,7 @@ public class TicketingController {
     ) {
         authorizationService.requirePermission("finance.payment.register");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
-        return ApiResponse.ok(maskBuyerPhone(service.confirmTicketOrderPayment(orderId, request)));
+        return ApiResponse.ok(maskBuyerPhone(service.confirmTicketOrderPaymentOnSite(orderId, request)));
     }
 
     @PostMapping("/ticketing/orders/{order_id}/cancel")

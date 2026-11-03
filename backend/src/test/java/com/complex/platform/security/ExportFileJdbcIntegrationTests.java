@@ -1,9 +1,10 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 package com.complex.platform.security;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -36,6 +37,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.mock.web.MockHttpServletResponse;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
@@ -164,6 +166,9 @@ class ExportFileJdbcIntegrationTests {
         assertThat(auditRow.get("business_type")).isEqualTo("watermark_mark");
         assertThat(auditRow.get("lim")).isEqualTo("5");
         assertThat(auditRow.get("merchant_id")).isEqualTo(merchant);
+        // 第十八批 N 段第 124 条 124-R6（PGM:683、PGM:685「导出须单独授权、逐次留痕」）：每次导出落 audit.operation_log.exported，business_id 记导出文件编号。
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM audit_events WHERE event_name = 'audit.operation_log.exported' AND event_result = 'success'"
+                + " AND actor_id = ? AND business_id = ?", Integer.class, user("merchant"), auditRow.get("id"))).isEqualTo(1);
         try (PDDocument doc = Loader.loadPDF(audit.getContentAsByteArray(), myExportPassword(account, (String) auditRow.get("id")))) {
             assertThat(text(doc)).contains("操作留痕", "事件名称");
         }
@@ -191,6 +196,9 @@ class ExportFileJdbcIntegrationTests {
 
         mockMvc.perform(get(url).cookie(exporter.cookies()).header("X-Terminal-Type", "web"))
                 .andExpect(status().isForbidden()).andExpect(jsonPath("$.detail_code").value("PERMISSION_DENIED"));
+        // 第十八批 N 段第 124 条 124-R6（PGM:685）：没有导出授权被拒也落 settlement.invoice.export_failed。
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM audit_events WHERE event_name = 'settlement.invoice.export_failed' AND event_result = 'failure'"
+                + " AND actor_id = ? AND metadata->>'error_code' = 'PERMISSION_DENIED'", Integer.class, user("exporter"))).isEqualTo(1);
 
         singleUseGrant("exporter", "settlement.invoice.export");
         MockHttpServletResponse response = export(exporter, url);
@@ -202,9 +210,38 @@ class ExportFileJdbcIntegrationTests {
         assertThat(row.get("period_start")).isEqualTo("2026-05-01");
         assertThat(row.get("row_count")).isEqualTo(0);
         assertThat(consumed("exporter", "settlement.invoice.export")).isTrue();
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM audit_events WHERE event_name = 'settlement.invoice.exported' AND event_result = 'success'"
+                + " AND actor_id = ? AND business_id = ?", Integer.class, user("exporter"), row.get("id"))).isEqualTo(1);
         try (PDDocument doc = Loader.loadPDF(response.getContentAsByteArray(), myExportPassword(exporter, (String) row.get("id")))) {
             assertThat(text(doc)).contains("开票清单", "开票主体", "购方");
         }
+    }
+
+    /**
+     * 第十八批 N 段第 124 条 124-R6（PGM:913「查看企业微信会话原文、查看视频证据和查看财务敏感信息。」）：回读证据文件每次落
+     * evidence.attachment_file_viewed（business_id 附件编号），找不到等失败落 evidence.attachment_file_view_failed。走真实登录链，按前端键名上传。
+     */
+    @Test
+    void readingAnEvidenceFileIsRecordedAndAFailedReadIsRecordedToo() throws Exception {
+        role("evidence", false, "evidence.attachment.create", "evidence.timeline.view");
+        account("reviewer", project, merchant, "evidence");
+        Session reviewer = webLogin("reviewer");
+        String uploaded = mockMvc.perform(multipart("/api/v1/evidence/attachments/upload")
+                        .file(new MockMultipartFile("file", "b34-evidence.png", "image/png", new byte[] {1}))
+                        .param("business_type", "inventory_loss").param("attachment_role", "photo")
+                        .cookie(reviewer.cookies()).header("X-XSRF-TOKEN", reviewer.csrf().getValue()).header("X-Terminal-Type", "web"))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        String attachmentId = objectMapper.readTree(uploaded).at("/data/id").asText();
+
+        mockMvc.perform(get("/api/v1/evidence/attachments/" + attachmentId + "/file").cookie(reviewer.cookies()).header("X-Terminal-Type", "web"))
+                .andExpect(status().isOk());
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM audit_events WHERE event_name = 'evidence.attachment_file_viewed' AND event_result = 'success'"
+                + " AND actor_id = ? AND business_id = ?", Integer.class, user("reviewer"), attachmentId)).isEqualTo(1);
+
+        mockMvc.perform(get("/api/v1/evidence/attachments/att_missing_" + suffix + "/file").cookie(reviewer.cookies()).header("X-Terminal-Type", "web"))
+                .andExpect(status().isNotFound()).andExpect(jsonPath("$.detail_code").value("ATTACHMENT_NOT_FOUND"));
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM audit_events WHERE event_name = 'evidence.attachment_file_view_failed' AND event_result = 'failure'"
+                + " AND actor_id = ? AND metadata->>'error_code' = 'ATTACHMENT_NOT_FOUND'", Integer.class, user("reviewer"))).isEqualTo(1);
     }
 
     @Test

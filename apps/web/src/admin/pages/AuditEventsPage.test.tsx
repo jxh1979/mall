@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { AuditEventsPage } from "./AuditEventsPage";
@@ -154,6 +154,9 @@ describe("AuditEventsPage 操作日志反查（audit_events）", () => {
       businessType: "contract",
       businessId: "c1",
     },
+    { id: "a2", occurredAt: "2026-07-05T10:01:00Z", eventName: "voucher.redeemed", eventResult: "success", actorType: "staff", actorId: "u8", terminal: "staff_work_phone", businessType: "contract", businessId: "c1" },
+    { id: "a3", occurredAt: "2026-07-05T10:02:00Z", eventName: "contract.updated", eventResult: "success", actorType: "staff", actorId: "u7", terminal: "merchant_portal", businessType: "contract", businessId: "c1" },
+    { id: "a4", occurredAt: "2026-07-05T10:03:00Z", eventName: "contract.expired", eventResult: "success", actorType: "system", actorId: "job", terminal: null, businessType: "contract", businessId: "c1" },
   ];
 
   function renderWithFocus(api: AdminApiClient, focusObjectId?: string) {
@@ -186,6 +189,23 @@ describe("AuditEventsPage 操作日志反查（audit_events）", () => {
     // 呈现真操作留痕行（谁/做了什么/对象）。
     expect(screen.getByTestId("audit-events-operations-table").textContent).toContain("contract.activated");
     expect(screen.getByTestId("audit-events-operations-focus-banner").textContent).toContain("contract:c1");
+  });
+
+  // 第十八批 N 段第 122 条 122-R2（PGM:745「受控的十一类终端：……」）：终端列与明细按终端中文名显示，没有终端信息的显示「—」。
+  it("终端列与明细按终端中文名显示", async () => {
+    const api = makeApi();
+    (api.get as ReturnType<typeof vi.fn>).mockResolvedValue(OP_ROWS);
+    renderWithFocus(api, "contract:c1");
+    const terminalCell = (index: number) => screen.getByTestId(`audit-events-op-row-${index}`).children[5]?.textContent;
+    // 等两路被动加载（证据分页、操作日志）都落定再看、再点。
+    await waitFor(() => expect(terminalCell(3)).toBe("—"));
+    await waitFor(() => expect(api.getPaged).toHaveBeenCalled());
+    expect(terminalCell(0)).toBe("Web 前端");
+    expect(terminalCell(1)).toBe("员工工作手机");
+    expect(terminalCell(2)).toBe("商户门户");
+    fireEvent.click(screen.getByTestId("audit-events-op-row-1"));
+    await waitFor(() => expect(screen.getByTestId("row-detail-drawer")).toBeTruthy());
+    expect(within(screen.getByTestId("row-detail-drawer")).getByText("终端").nextElementSibling?.textContent).toBe("员工工作手机");
   });
 
   it("无对象反查时默认证据视图，可手动切到操作日志视图", async () => {

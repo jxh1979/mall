@@ -426,7 +426,7 @@ export function BusinessAnalyticsPage({ api, setActionResult, setGlobalError, na
     <section data-testid="business-analytics-page">
       <AdminPageHeader title={TEXT.title} description={TEXT.description} />
       <TechDetails><div className="admin-generic-evidence" data-testid="business-analytics-evidence">{TEXT.evidence}</div></TechDetails>
-      <AuditTrailHint event="analytics.business_metric_snapshot.viewed / analytics.review.locked" />
+      <AuditTrailHint event="analytics_business_metric_snapshot.viewed.success / analytics.review.locked" />
       <AdminDataState loading={loading} error={error} empty={false} onRetry={reload}>
         {snapshots.length === 0 ? <div className="admin-state admin-empty" data-testid="business-analytics-empty">{TEXT.empty}</div> : (
           <>

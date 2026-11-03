@@ -1,6 +1,6 @@
 package com.complex.platform.facility;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import static com.complex.platform.common.api.ApiRequests.requireIdempotencyKey;
 
@@ -8,6 +8,7 @@ import com.complex.platform.access.AccessActor;
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiResponse;
 import com.complex.platform.common.api.PageResponse;
+import com.complex.platform.evidence.AuditedOperationExecutor;
 import com.complex.platform.facility.dto.FacilityWorkOrderActionRequest;
 import com.complex.platform.facility.dto.FacilityWorkOrderAssignRequest;
 import com.complex.platform.facility.dto.FacilityWorkOrderConfirmerRequest;
@@ -32,10 +33,15 @@ public class FacilityWorkOrderController {
 
     private final FacilityWorkOrderService service;
     private final AuthorizationService authorizationService;
+    private final AuditedOperationExecutor operations;
 
-    public FacilityWorkOrderController(FacilityWorkOrderService service, AuthorizationService authorizationService) {
+    // 第十八批 N 段第 124 条 124-R3（PGM L738）：写口任一步失败（权限、校验、状态冲突）经 AuditedOperationExecutor.recordingFailure
+    // 落 OpenAPI 声明的 x-audit-event-failure 再原样抛出；成功事件照旧由服务层写。
+    public FacilityWorkOrderController(FacilityWorkOrderService service, AuthorizationService authorizationService,
+            AuditedOperationExecutor operations) {
         this.service = service;
         this.authorizationService = authorizationService;
+        this.operations = operations;
     }
 
     @GetMapping
@@ -84,9 +90,13 @@ public class FacilityWorkOrderController {
 
     @PostMapping
     public ApiResponse<FacilityWorkOrderRecord> create(@RequestBody @jakarta.validation.Valid FacilityWorkOrderRequest request) {
-        authorizationService.requirePermission(PERM);
-        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
-        return ApiResponse.ok(service.create(request));
+        String key = request == null ? null : request.idempotencyKey();
+        return ApiResponse.ok(operations.recordingFailure("facility.work_order_create_failed", "facility.work_order.manage",
+                "facility_work_order", "new", key, () -> {
+                    authorizationService.requirePermission(PERM);
+                    requireIdempotencyKey(key);
+                    return service.create(request);
+                }));
     }
 
     @PostMapping("/{work_order_id}/assign")
@@ -109,25 +119,37 @@ public class FacilityWorkOrderController {
     @PostMapping("/{work_order_id}/start")
     public ApiResponse<FacilityWorkOrderRecord> start(
             @PathVariable("work_order_id") String workOrderId, @RequestBody @jakarta.validation.Valid FacilityWorkOrderActionRequest request) {
-        requirePermission("facility.work_order.process_assigned");
-        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
-        return ApiResponse.ok(service.start(workOrderId, request));
+        String key = request == null ? null : request.idempotencyKey();
+        return ApiResponse.ok(operations.recordingFailure("facility.work_order_start_failed", "facility.work_order.manage",
+                "facility_work_order", workOrderId, key, () -> {
+                    requirePermission("facility.work_order.process_assigned");
+                    requireIdempotencyKey(key);
+                    return service.start(workOrderId, request);
+                }));
     }
 
     @PostMapping("/{work_order_id}/complete")
     public ApiResponse<FacilityWorkOrderRecord> complete(
             @PathVariable("work_order_id") String workOrderId, @RequestBody @jakarta.validation.Valid FacilityWorkOrderActionRequest request) {
-        requirePermission("facility.work_order.process_assigned");
-        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
-        return ApiResponse.ok(service.complete(workOrderId, request));
+        String key = request == null ? null : request.idempotencyKey();
+        return ApiResponse.ok(operations.recordingFailure("facility.work_order_complete_failed", "facility.work_order.manage",
+                "facility_work_order", workOrderId, key, () -> {
+                    requirePermission("facility.work_order.process_assigned");
+                    requireIdempotencyKey(key);
+                    return service.complete(workOrderId, request);
+                }));
     }
 
     @PostMapping("/{work_order_id}/accept")
     public ApiResponse<FacilityWorkOrderRecord> accept(
             @PathVariable("work_order_id") String workOrderId, @RequestBody @jakarta.validation.Valid FacilityWorkOrderActionRequest request) {
-        authorizationService.requirePermission(PERM);
-        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
-        return ApiResponse.ok(service.accept(workOrderId, request));
+        String key = request == null ? null : request.idempotencyKey();
+        return ApiResponse.ok(operations.recordingFailure("facility.work_order_accept_failed", "facility.work_order.manage",
+                "facility_work_order", workOrderId, key, () -> {
+                    authorizationService.requirePermission(PERM);
+                    requireIdempotencyKey(key);
+                    return service.accept(workOrderId, request);
+                }));
     }
 
     @PostMapping("/{work_order_id}/review")
@@ -159,17 +181,25 @@ public class FacilityWorkOrderController {
     @PostMapping("/{work_order_id}/suspend")
     public ApiResponse<FacilityWorkOrderRecord> suspend(
             @PathVariable("work_order_id") String workOrderId, @RequestBody @jakarta.validation.Valid FacilityWorkOrderActionRequest request) {
-        authorizationService.requirePermission(PERM);
-        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
-        return ApiResponse.ok(service.suspend(workOrderId, request));
+        String key = request == null ? null : request.idempotencyKey();
+        return ApiResponse.ok(operations.recordingFailure("facility.work_order_suspend_failed", "facility.work_order.manage",
+                "facility_work_order", workOrderId, key, () -> {
+                    authorizationService.requirePermission(PERM);
+                    requireIdempotencyKey(key);
+                    return service.suspend(workOrderId, request);
+                }));
     }
 
     @PostMapping("/{work_order_id}/resume")
     public ApiResponse<FacilityWorkOrderRecord> resume(
             @PathVariable("work_order_id") String workOrderId, @RequestBody @jakarta.validation.Valid FacilityWorkOrderActionRequest request) {
-        authorizationService.requirePermission(PERM);
-        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
-        return ApiResponse.ok(service.resume(workOrderId, request));
+        String key = request == null ? null : request.idempotencyKey();
+        return ApiResponse.ok(operations.recordingFailure("facility.work_order_resume_failed", "facility.work_order.manage",
+                "facility_work_order", workOrderId, key, () -> {
+                    authorizationService.requirePermission(PERM);
+                    requireIdempotencyKey(key);
+                    return service.resume(workOrderId, request);
+                }));
     }
 
     /** 第十八批 M 段第 117 条（BSM:1380）：工单用料面板——用料明细与合计、费用承担方、承担方争议记录、本项目平台库房余额行与经营商户下拉。 */
@@ -209,16 +239,23 @@ public class FacilityWorkOrderController {
     @PostMapping("/mark-overdue")
     public ApiResponse<Integer> markOverdue(
             @RequestParam(value = "idempotency_key", required = false) String idempotencyKey) {
-        authorizationService.requirePermission(PERM);
-        requireIdempotencyKey(idempotencyKey);
-        return ApiResponse.ok(service.markOverdue(idempotencyKey));
+        return ApiResponse.ok(operations.recordingFailure("facility.work_order_overdue_mark_failed", "facility.work_order.manage",
+                "facility_work_order", "all", idempotencyKey, () -> {
+                    authorizationService.requirePermission(PERM);
+                    requireIdempotencyKey(idempotencyKey);
+                    return service.markOverdue(idempotencyKey);
+                }));
     }
 
     @PostMapping("/policies")
     public ApiResponse<FacilityWorkOrderPolicyRecord> savePolicy(@RequestBody @jakarta.validation.Valid FacilityWorkOrderPolicyRequest request) {
-        authorizationService.requirePermission(PERM);
-        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
-        return ApiResponse.ok(service.savePolicy(request));
+        String key = request == null ? null : request.idempotencyKey();
+        return ApiResponse.ok(operations.recordingFailure("facility.work_order_policy_save_failed", "facility.work_order.manage",
+                "facility_work_order_policy", "new", key, () -> {
+                    authorizationService.requirePermission(PERM);
+                    requireIdempotencyKey(key);
+                    return service.savePolicy(request);
+                }));
     }
 
     private void requirePermission(String outsourcedPermission) {

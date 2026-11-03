@@ -1,4 +1,4 @@
-# P2-D 经营指标快照 API 契约 V0.1
+# P2-D 经营指标快照 API 契约 V0.11
 
 ## 1. 定位
 
@@ -71,5 +71,5 @@
 
 ## 6. 审计事件
 
-- 成功查看：`analytics.business_metric_snapshot.viewed`
-- 查看失败：`analytics.business_metric_snapshot.view_failed`
+- 成功查看：`analytics_business_metric_snapshot.viewed.success`
+- 查看失败：`analytics_business_metric_snapshot.viewed.failure`

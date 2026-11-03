@@ -8,6 +8,8 @@ import com.complex.platform.customer.dto.StoredValueFreezeRequest;
 import com.complex.platform.customer.dto.StoredValueMerchantCardConfigRequest;
 import com.complex.platform.customer.dto.StoredValueMerchantRefundRuleRequest;
 import com.complex.platform.customer.dto.StoredValueRefundRequest;
+import com.complex.platform.evidence.AuditEventService;
+import com.complex.platform.evidence.AuditedOperationExecutor;
 import java.time.Instant;
 import java.util.List;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -29,14 +31,21 @@ public class LoyaltyController {
     private final StoredValueService storedValueService;
     private final CustomerRepository repository;
     private final CustomerService customerService;
+    private final AuditedOperationExecutor operations;
+    private final AuditEventService audit;
 
+    // 第十八批 N 段第 124 条 124-R5（PGM L966「已拍板：所有有过程的业务动作都必须留痕……」、L738「访问被拒绝也要留痕……」）：写口任一步失败
+    // 经 AuditedOperationExecutor.recordingFailure 落 OpenAPI 声明的 x-audit-event-failure 再原样抛出；服务层原本不写成功事件的，
+    // 服务返回后在这里落声明的 x-audit-event-success。
     public LoyaltyController(LoyaltyService service,
                              StoredValueService storedValueService, CustomerRepository repository,
-                             CustomerService customerService) {
+                             CustomerService customerService, AuditedOperationExecutor operations, AuditEventService audit) {
         this.service = service;
         this.storedValueService = storedValueService;
         this.repository = repository;
         this.customerService = customerService;
+        this.operations = operations;
+        this.audit = audit;
     }
 
     /** 积分虚拟券核销领取(店员端):库存足则扣库存领实物,缺货则退回积分。 */
@@ -60,7 +69,9 @@ public class LoyaltyController {
             @PathVariable("customer_id") String customerId,
             @RequestBody(required = false) @jakarta.validation.Valid LoyaltyFreezeRequest request
     ) {
-        return ApiResponse.ok(service.freeze(customerId, request == null ? null : request.reason()));
+        return ApiResponse.ok(operations.recordingFailure("customer.points.freeze_failed", "customer.points.freeze", "customer_points",
+                customerId, request == null ? null : request.idempotencyKey(),
+                () -> service.freeze(customerId, request == null ? null : request.reason())));
     }
 
     @PostMapping("/points-accounts/{customer_id}/unfreeze")
@@ -68,14 +79,17 @@ public class LoyaltyController {
             @PathVariable("customer_id") String customerId,
             @RequestBody(required = false) @jakarta.validation.Valid LoyaltyFreezeRequest request
     ) {
-        return ApiResponse.ok(service.unfreeze(customerId, request == null ? null : request.reason()));
+        return ApiResponse.ok(operations.recordingFailure("customer.points.unfreeze_failed", "customer.points.freeze", "customer_points",
+                customerId, request == null ? null : request.idempotencyKey(),
+                () -> service.unfreeze(customerId, request == null ? null : request.reason())));
     }
 
     @PostMapping("/points-accounts/{customer_id}/evaluate-level")
     public ApiResponse<CustomerPointsAccountRecord> evaluateLevel(
             @PathVariable("customer_id") String customerId
     ) {
-        return ApiResponse.ok(service.evaluateLevel(customerId, Instant.now()));
+        return ApiResponse.ok(operations.recordingFailure("customer.level_evaluate_failed", "customer.loyalty.evaluate", "customer_points",
+                customerId, null, () -> service.evaluateLevel(customerId, Instant.now())));
     }
 
     // ---- 第2部分（V090）：储值账户冻结/解冻/退卡 ----
@@ -85,10 +99,11 @@ public class LoyaltyController {
             @PathVariable("customer_id") String customerId,
             @RequestBody(required = false) @jakarta.validation.Valid StoredValueFreezeRequest request
     ) {
-        return ApiResponse.ok(storedValueService.freeze(customerId,
-                request == null ? null : request.projectId(),
-                request == null ? null : request.merchantId(),
-                request == null ? null : request.reason()));
+        return ApiResponse.ok(operations.recordingFailure("stored_value.frozen_failed", "customer.stored_value.freeze",
+                "customer_stored_value", customerId, null, () -> storedValueService.freeze(customerId,
+                        request == null ? null : request.projectId(),
+                        request == null ? null : request.merchantId(),
+                        request == null ? null : request.reason())));
     }
 
     @PostMapping("/stored-value/{customer_id}/unfreeze")
@@ -96,10 +111,11 @@ public class LoyaltyController {
             @PathVariable("customer_id") String customerId,
             @RequestBody(required = false) @jakarta.validation.Valid StoredValueFreezeRequest request
     ) {
-        return ApiResponse.ok(storedValueService.unfreeze(customerId,
-                request == null ? null : request.projectId(),
-                request == null ? null : request.merchantId(),
-                request == null ? null : request.reason()));
+        return ApiResponse.ok(operations.recordingFailure("stored_value.unfrozen_failed", "customer.stored_value.freeze",
+                "customer_stored_value", customerId, null, () -> storedValueService.unfreeze(customerId,
+                        request == null ? null : request.projectId(),
+                        request == null ? null : request.merchantId(),
+                        request == null ? null : request.reason())));
     }
 
     @PostMapping("/stored-value/{customer_id}/refund")
@@ -107,9 +123,10 @@ public class LoyaltyController {
             @PathVariable("customer_id") String customerId,
             @RequestBody @jakarta.validation.Valid StoredValueRefundRequest request
     ) {
-        return ApiResponse.ok(storedValueService.refund(customerId, request.projectId(), request.merchantId(),
-                request.amountCent() == null ? 0L : request.amountCent(), request.reason(),
-                Boolean.TRUE.equals(request.closeAccount()), request.idempotencyKey()));
+        return ApiResponse.ok(operations.recordingFailure("stored_value.refund_failed", "customer.stored_value.refund",
+                "customer_stored_value", customerId, request.idempotencyKey(), () -> storedValueService.refund(customerId,
+                        request.projectId(), request.merchantId(), request.amountCent() == null ? 0L : request.amountCent(),
+                        request.reason(), Boolean.TRUE.equals(request.closeAccount()), request.idempotencyKey())));
     }
 
     /**
@@ -121,9 +138,11 @@ public class LoyaltyController {
             @PathVariable("customer_id") String customerId,
             @RequestBody @jakarta.validation.Valid StoredValueCounterRefundRequest request
     ) {
-        return ApiResponse.ok(storedValueService.counterRefund(customerId, request.projectId(), request.merchantId(),
-                request.amountCent() == null ? 0L : request.amountCent(), request.reason(),
-                Boolean.TRUE.equals(request.closeAccount()), request.redemptionVoucherNo(), request.idempotencyKey()));
+        return ApiResponse.ok(operations.recordingFailure("stored_value.counter_refund_failed", "customer.stored_value.refund",
+                "customer_stored_value", customerId, request.idempotencyKey(), () -> storedValueService.counterRefund(customerId,
+                        request.projectId(), request.merchantId(), request.amountCent() == null ? 0L : request.amountCent(),
+                        request.reason(), Boolean.TRUE.equals(request.closeAccount()), request.redemptionVoucherNo(),
+                        request.idempotencyKey())));
     }
 
     // ---- B1d⑤ phase3：商户级卡退款规则配置（发卡商户自设可否退/比例）----
@@ -132,10 +151,16 @@ public class LoyaltyController {
     public ApiResponse<StoredValueMerchantRefundRuleRecord> configureMerchantRefundRule(
             @RequestBody @jakarta.validation.Valid StoredValueMerchantRefundRuleRequest request
     ) {
-        return ApiResponse.ok(storedValueService.configureMerchantRefundRule(
-                request.merchantId(),
-                request.refundAllowed() == null || request.refundAllowed(),
-                request.refundRatioBps() == null ? 10000 : request.refundRatioBps()));
+        return ApiResponse.ok(operations.recordingFailure("stored_value.merchant_refund_rule_failed", "customer.stored_value.refund",
+                "merchant", request.merchantId(), null, () -> {
+                    StoredValueMerchantRefundRuleRecord saved = storedValueService.configureMerchantRefundRule(
+                            request.merchantId(),
+                            request.refundAllowed() == null || request.refundAllowed(),
+                            request.refundRatioBps() == null ? 10000 : request.refundRatioBps());
+                    audit.recordSuccess("stored_value.merchant_refund_rule_configured", "customer.stored_value.refund", "merchant",
+                            request.merchantId(), null, null, java.util.Map.of());
+                    return saved;
+                }));
     }
 
     @GetMapping("/stored-value/merchant-refund-rules/{merchant_id}")
@@ -151,11 +176,17 @@ public class LoyaltyController {
     public ApiResponse<StoredValueMerchantRefundRuleRecord> configureMerchantCard(
             @RequestBody @jakarta.validation.Valid StoredValueMerchantCardConfigRequest request
     ) {
-        return ApiResponse.ok(storedValueService.configureMerchantCard(
-                request.merchantId(),
-                Boolean.TRUE.equals(request.cardIssuanceEnabled()),
-                request.fundOwnership(),
-                request.consumeOrder()));
+        return ApiResponse.ok(operations.recordingFailure("stored_value.merchant_card_config_failed", "customer.stored_value.refund",
+                "merchant", request.merchantId(), null, () -> {
+                    StoredValueMerchantRefundRuleRecord saved = storedValueService.configureMerchantCard(
+                            request.merchantId(),
+                            Boolean.TRUE.equals(request.cardIssuanceEnabled()),
+                            request.fundOwnership(),
+                            request.consumeOrder());
+                    audit.recordSuccess("stored_value.merchant_card_configured", "customer.stored_value.refund", "merchant",
+                            request.merchantId(), null, null, java.util.Map.of());
+                    return saved;
+                }));
     }
 
     // 第十八批第 11 条：通用卡与商户级卡充值赠送比例改走奖励规则版本审批（POST /api/v1/loyalty/ticket-reward-configs，

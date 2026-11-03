@@ -99,6 +99,12 @@ const TERMINAL_STATUSES = new Set(["scrapped", "blocked", "archived"]);
 
 const REBIND_PERMISSIONS = ["terminal.device.lifecycle"];
 
+// 第十八批 N 段第 120 条 120-R2（BSM:980「……其中只有启用售票能力的一体机，才允许授权服务人员在到店服务场景下辅助客人购票。」；
+// PGM:742「……任何能力在后台没有显式开关配置行时一律默认关闭（opt-in），要启用必须有人显式打开……」）：售票型一体机在本页按台开启、关闭售票，
+// 写本机的设备级售票开关行（终端 kiosk、能力 ticketing、范围＝设备号），原因必填；没有本机的开关行即未开启。
+type SwitchRow = { terminalType: string; capabilityCode: string; scopeId: string; enabled: boolean };
+const kioskTicketingSwitchId = (deviceId: string) => `tcs_kiosk_ticketing_${deviceId}`;
+
 function toRows(data: unknown): DeviceRow[] {
   if (Array.isArray(data)) return data as DeviceRow[];
   const items = (data as { items?: DeviceRow[] } | null)?.items;
@@ -119,6 +125,7 @@ export function TerminalDevicesPage({ api, setActionResult, setGlobalError, effe
   const [xray, setXray] = React.useState(EMPTY_XRAY);
   const [reasons, setReasons] = React.useState<Record<string, string>>({});
   const [newStaff, setNewStaff] = React.useState<Record<string, string>>({});
+  const [ticketingOn, setTicketingOn] = React.useState<Set<string>>(new Set());
 
   const { loading, error, reload } = useAdminResource(
     async () => {
@@ -130,6 +137,16 @@ export function TerminalDevicesPage({ api, setActionResult, setGlobalError, effe
       } catch {
         // 无商户读权限时降级：表格仍展示商户 ID，改绑下拉为空但页面可用。
         setMerchants([]);
+      }
+      try {
+        const switchData = await api.get<unknown>("/api/v1/terminals/capability-switches");
+        const switches = Array.isArray(switchData) ? (switchData as SwitchRow[]) : ((switchData as { items?: SwitchRow[] } | null)?.items ?? []);
+        setTicketingOn(new Set(switches
+          .filter((row) => row.terminalType === "kiosk" && row.capabilityCode === "ticketing" && row.enabled)
+          .map((row) => row.scopeId)));
+      } catch {
+        // 无开关读权限时降级：台账照常可用，售票能力列按未开启显示。
+        setTicketingOn(new Set());
       }
     },
     { onError: setGlobalError, fallbackMessage: "终端设备台账读取失败" },
@@ -247,6 +264,28 @@ export function TerminalDevicesPage({ api, setActionResult, setGlobalError, effe
       await reload();
     } catch (actionError) {
       setGlobalError(actionError instanceof Error ? actionError.message : "设备状态登记失败");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function toggleKioskTicketing(row: DeviceRow, enabled: boolean) {
+    if (!hasReason(row)) return;
+    const id = kioskTicketingSwitchId(row.deviceId);
+    setSubmitting(true);
+    try {
+      await api.put(`/api/v1/terminals/capability-switches/${id}`, {
+        terminalType: "kiosk",
+        capabilityCode: "ticketing",
+        scopeId: row.deviceId,
+        enabled,
+        operatorNote: (reasons[row.id] ?? "").trim(),
+      });
+      setActionResult({ action: "terminal_switch_toggled", id, enabled });
+      setReasons((current) => ({ ...current, [row.id]: "" }));
+      await reload();
+    } catch (toggleError) {
+      setGlobalError(toggleError instanceof Error ? toggleError.message : "一体机售票开关切换失败");
     } finally {
       setSubmitting(false);
     }
@@ -402,7 +441,7 @@ export function TerminalDevicesPage({ api, setActionResult, setGlobalError, effe
     <section data-testid="terminal-devices-page">
       <AdminPageHeader
         title="终端设备"
-        description="终端设备台账与商户归属管理。核销发生在哪家商户，以核销设备绑定的商户为准：设备没绑商户时，赠饮、餐饮类权益在该设备上一律无法核销。设备挪店、商户退场时在本页改绑或解除归属，理由必填并全程留痕。入场三道环节设备（安检 X 光、人脸扫描、检票闸机）、扫码设备和其他现场设备在本页登记进台账；入场三道环节设备与其他现场设备在本页更换责任人，安检 X 光设备故障登记即开维修工单；扫码设备在本页归还、领用；工作手机、平板、一体机可在本页送修、报废，修好后回待领用。除入场三道环节设备外，设备可在本页挂失，找回后其他现场设备回在用、其余回待领用；在用工作手机班中丢失走换机。"
+        description="终端设备台账与商户归属管理。核销发生在哪家商户，以核销设备绑定的商户为准：设备没绑商户时，赠饮、餐饮类权益在该设备上一律无法核销。设备挪店、商户退场时在本页改绑或解除归属，理由必填并全程留痕。入场三道环节设备（安检 X 光、人脸扫描、检票闸机）、扫码设备和其他现场设备在本页登记进台账；入场三道环节设备与其他现场设备在本页更换责任人，安检 X 光设备故障登记即开维修工单；扫码设备在本页归还、领用；工作手机、平板、一体机可在本页送修、报废，修好后回待领用。售票型一体机在本页按台开启或关闭售票（原因必填），没开启的不能辅助售票。除入场三道环节设备外，设备可在本页挂失，找回后其他现场设备回在用、其余回待领用；在用工作手机班中丢失走换机。"
       />
       <div className="admin-form-row" data-testid="terminal-xray-register">
         <strong>登记设备进台账</strong>
@@ -472,6 +511,7 @@ export function TerminalDevicesPage({ api, setActionResult, setGlobalError, effe
                 <th>型号</th>
                 <th>状态</th>
                 <th>所属商户</th>
+                <th>售票能力</th>
                 <th>绑定点位</th>
                 <th>责任人</th>
                 <th>更新时间</th>
@@ -497,6 +537,26 @@ export function TerminalDevicesPage({ api, setActionResult, setGlobalError, effe
                         : row.merchantId
                         ? (merchantNames.get(row.merchantId) ?? row.merchantId)
                         : "未绑定（赠饮/餐饮权益不可核销）"}
+                    </td>
+                    <td data-testid={`terminal-kiosk-ticketing-${row.id}`}>
+                      {row.terminalType === "kiosk" && row.kioskMode === "ticketing" ? (
+                        <>
+                          {ticketingOn.has(row.deviceId) ? "已开启" : "未开启"}
+                          {TERMINAL_STATUSES.has(row.status) ? null : (
+                            <button
+                              type="button"
+                              className="admin-secondary-button"
+                              disabled={submitting}
+                              data-testid={`terminal-kiosk-ticketing-toggle-${row.id}`}
+                              onClick={() => void toggleKioskTicketing(row, !ticketingOn.has(row.deviceId))}
+                            >
+                              {ticketingOn.has(row.deviceId) ? "关闭售票" : "开启售票"}
+                            </button>
+                          )}
+                        </>
+                      ) : (
+                        "—"
+                      )}
                     </td>
                     <td>{row.boundSpaceId ?? row.locationPointId ?? "—"}</td>
                     <td data-testid={`terminal-device-holder-${row.id}`}>{row.staffId ?? "—"}</td>
@@ -555,7 +615,7 @@ export function TerminalDevicesPage({ api, setActionResult, setGlobalError, effe
                   </tr>
                   {editingId === row.id ? (
                     <tr data-testid={`terminal-device-rebind-form-${row.id}`}>
-                      <td colSpan={9}>
+                      <td colSpan={10}>
                         <div className="admin-form-row">
                           <label>
                             所属商户

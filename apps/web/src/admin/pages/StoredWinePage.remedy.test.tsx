@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 // FS-017（BSM L1072）：作废后对客补存/赔付——选中已作废行出现补存/赔付面板，选「赔付」填 120 元 → POST …/remedy 蛇形键 amount_cent=12000。
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -45,7 +45,9 @@ describe("StoredWinePage 补存/赔付（FS-017）", () => {
     vi.spyOn(window, "confirm").mockReturnValue(true);
     const api = makeApi();
     renderPage(api);
-    await waitFor(() => expect(screen.queryByTestId("stored-wine-select-c-1")).not.toBeNull());
+    // 第 125 条：本页单选框 checked 回落首行，首行勾上不能当就绪信号；要等首行补存记录请求发出（选中已落定到 w-1）再点 c-1，
+    // 否则补跑的选中 effect 会把选择改回 w-1、面板不出现。
+    await waitFor(() => expect(api.get).toHaveBeenCalledWith("/api/v1/inventory/saved-bottles/w-1/remedies"), { timeout: 5000 });
     expect(screen.queryByTestId("stored-wine-remedy-panel")).toBeNull();
     fireEvent.click(screen.getByTestId("stored-wine-select-c-1"));
     await waitFor(() => expect(screen.queryByTestId("stored-wine-remedy-panel")).not.toBeNull());

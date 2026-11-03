@@ -1,6 +1,6 @@
 package com.complex.platform.voucher;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import com.complex.platform.common.api.PageResponse;
 import java.time.Instant;
@@ -91,6 +91,11 @@ public interface VoucherRepository {
     }
 
     default Optional<ActiveRedeemCode> findActiveRedeemCode(String codeHash, Instant now) {
+        return Optional.empty();
+    }
+
+    /** 第十八批 N 段第 123 条 123-R2：按客人出示码的摘要找券编号（不论码是否已用、过期），供定位闸在幂等之前取项目。 */
+    default Optional<String> findInstanceIdByRedeemCodeHash(String codeHash) {
         return Optional.empty();
     }
 

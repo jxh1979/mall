@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.11
+// 文件版本：V0.12
 
 import com.complex.platform.support.InMemoryAuditEventRepository;
 import com.complex.platform.support.InMemoryIdempotencyRepository;
@@ -410,7 +410,7 @@ class FinanceServiceTests {
                 .contains(
                         "finance_daily_close.locked",
                         "payment.intent_created",
-                        "finance_offline_payment.confirmed",
+                        "finance_payment.registered",
                         "finance_refund.created"
                 );
     }
@@ -495,6 +495,23 @@ class FinanceServiceTests {
         assertThat(financeRepository.arApPaymentCount()).isEqualTo(before);
     }
 
+    /** 18N 第 124 条 124-R2b（台账 :4231）：线下到账确认失败落 OpenAPI 声明的 finance_payment.register_failed（旧名 finance_offline_payment.confirm_failed 不再落）。 */
+    @Test
+    void confirmOfflineFailureAuditsDeclaredRegisterFailedEvent() {
+        PaymentIntentRecord intent = service.createPaymentIntent(new PaymentIntentRequest(
+                "payment-intent-r2b", "create", List.of(), "ticket_order", "order_r2b", 30000L, "CNY", "mock"));
+        assertThatThrownBy(() -> service.confirmOfflinePayment(intent.id(), new OfflinePaymentConfirmRequest(
+                "offline-confirm-r2b", "confirm", List.of(), intent.id(), 29999L, "cash",
+                Instant.parse("2026-06-14T00:05:00Z"))))
+                .isInstanceOf(ApiException.class)
+                .extracting("code")
+                .isEqualTo("VALIDATION_FAILED");
+        assertThat(auditEventRepository.events)
+                .extracting(AuditEvent::eventName)
+                .contains("finance_payment.register_failed")
+                .doesNotContain("finance_offline_payment.confirm_failed");
+    }
+
     @Test
     void reconciliationReadModelsReturnPagesAndWriteAuditEvents() {
         financeRepository.saveReconciliationBatch(new ReconciliationBatchRecord(
@@ -574,7 +591,7 @@ class FinanceServiceTests {
         assertThat(diff.source()).isEqualTo("system");
         assertThat(diff.status()).isEqualTo("open");
         assertThat(auditEventRepository.events).extracting(AuditEvent::eventName)
-                .contains("finance_reconciliation.difference_created");
+                .contains("finance.reconciliation.difference_created", "finance_reconciliation.difference_hardened");
     }
 
     @Test

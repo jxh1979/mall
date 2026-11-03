@@ -89,7 +89,7 @@ class MerchantBillingServiceTests {
                 .containsExactly(0L, 168800L, "pending_collection");
         assertThat(auditEventRepository.events)
                 .extracting(AuditEvent::eventName)
-                .containsExactly("merchant_billing.bill.created");
+                .containsExactly("merchant.billing.create");
     }
 
     @Test
@@ -103,7 +103,7 @@ class MerchantBillingServiceTests {
         assertThat(second).isEqualTo(first);
         assertThat(merchantBillingRepository.billSaveCount).isEqualTo(1);
         assertThat(auditEventRepository.events)
-                .filteredOn(event -> "merchant_billing.bill.created".equals(event.eventName()))
+                .filteredOn(event -> "merchant.billing.create".equals(event.eventName()))
                 .hasSize(1);
     }
 
@@ -118,7 +118,7 @@ class MerchantBillingServiceTests {
 
         assertThat(auditEventRepository.events)
                 .extracting(AuditEvent::eventName)
-                .containsExactly("merchant_billing.bill.create_failed");
+                .containsExactly("merchant.billing.create_failed");
     }
 
     @Test
@@ -136,7 +136,7 @@ class MerchantBillingServiceTests {
         assertThat(confirmed.lines()).hasSize(2);
         assertThat(auditEventRepository.events)
                 .extracting(AuditEvent::eventName)
-                .contains("merchant_billing.bill.confirmed");
+                .contains("merchant.billing.confirm");
     }
 
     @Test

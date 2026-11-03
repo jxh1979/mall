@@ -1,6 +1,6 @@
 package com.complex.platform.amusement;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -1442,6 +1442,30 @@ class JdbcAmusementRepository implements AmusementRepository {
                  WHERE project_id IN (SELECT id FROM amusement_projects WHERE merchant_id = :merchant_id)
                  ORDER BY created_at DESC, id
                 """, Map.of("merchant_id", merchantId), rowMapper::mapQueueEntry);
+    }
+
+    @Override
+    public Map<String, Integer> countWaitingQueueEntriesByProject() {
+        return jdbcTemplate.query("""
+                SELECT project_id, count(*) AS waiting
+                  FROM amusement_queue_entries
+                 WHERE status = 'waiting'
+                 GROUP BY project_id
+                """, (rs, rowNum) -> Map.entry(rs.getString("project_id"), rs.getInt("waiting")))
+                .stream().collect(java.util.stream.Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+    }
+
+    @Override
+    public Map<String, Integer> countOpenFaultIncidentsByProject() {
+        return jdbcTemplate.query("""
+                SELECT amusement_project_id, count(*) AS faults
+                  FROM amusement_incidents
+                 WHERE incident_type = 'fault'
+                   AND status IN ('created', 'processing', 'pending_external')
+                   AND amusement_project_id IS NOT NULL
+                 GROUP BY amusement_project_id
+                """, (rs, rowNum) -> Map.entry(rs.getString("amusement_project_id"), rs.getInt("faults")))
+                .stream().collect(java.util.stream.Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
     }
 
     // AUD-013 真分页: 商户维经 project_id 子查询下推, nullable -> 平台全量; total 取 COUNT 真值。

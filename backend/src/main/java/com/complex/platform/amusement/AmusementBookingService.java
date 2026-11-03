@@ -1,6 +1,6 @@
 package com.complex.platform.amusement;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -64,8 +64,8 @@ final class AmusementBookingService {
                 request == null ? null : request.idempotencyKey(),
                 request,
                 AmusementQueueEntryRecord.class,
-                "amusement.queue.created",
-                "amusement.queue.create_failed",
+                "amusement.queue_entry.create",
+                "amusement.queue_entry.create_failed",
                 "amusement.queue.manage",
                 "amusement_queue_entry",
                 () -> createQueueEntryInternal(request)
@@ -79,8 +79,8 @@ final class AmusementBookingService {
                 request == null ? null : request.idempotencyKey(),
                 request,
                 AmusementQueueEntryRecord.class,
-                "amusement.queue.status_changed",
-                "amusement.queue.status_change_failed",
+                "amusement.queue_entry.status_change",
+                "amusement.queue_entry.status_change_failed",
                 "amusement.queue.manage",
                 "amusement_queue_entry",
                 () -> changeQueueEntryStatusInternal(id, request)
@@ -104,7 +104,7 @@ final class AmusementBookingService {
                 request == null ? null : request.idempotencyKey(),
                 request,
                 AmusementReservationRecord.class,
-                "amusement.reservation.created",
+                "amusement.reservation.create",
                 "amusement.reservation.create_failed",
                 "amusement.reservation.manage",
                 "amusement_reservation",
@@ -119,7 +119,7 @@ final class AmusementBookingService {
                 request == null ? null : request.idempotencyKey(),
                 request,
                 AmusementReservationRecord.class,
-                "amusement.reservation.status_changed",
+                "amusement.reservation.status_change",
                 "amusement.reservation.status_change_failed",
                 "amusement.reservation.manage",
                 "amusement_reservation",
@@ -130,8 +130,8 @@ final class AmusementBookingService {
     PageResponse<AmusementGroupBookingRecord> listGroupBookings(int page, int size) {
         String merchantId = authorizationService.currentMerchantScope().orElse(null);
         return readPage(
-                "amusement.group_booking.viewed",
-                "amusement.group_booking.view_failed",
+                "amusement_group_booking.viewed.success",
+                "amusement_group_booking.viewed.failure",
                 "amusement.group_booking.view",
                 "amusement_group_booking",
                 () -> repository.listGroupBookingsPaged(merchantId, page, size)
@@ -144,8 +144,8 @@ final class AmusementBookingService {
                 request == null ? null : request.idempotencyKey(),
                 request,
                 AmusementGroupBookingRecord.class,
-                "amusement.group_booking.created",
-                "amusement.group_booking.create_failed",
+                "amusement_group_booking.created.success",
+                "amusement_group_booking.created.failure",
                 "amusement.group_booking.manage",
                 "amusement_group_booking",
                 () -> createGroupBookingInternal(request)
@@ -159,8 +159,8 @@ final class AmusementBookingService {
                 request == null ? null : request.idempotencyKey(),
                 request,
                 AmusementGroupBookingRecord.class,
-                "amusement.group_booking.approved",
-                "amusement.group_booking.approve_failed",
+                "amusement_group_booking.approved.success",
+                "amusement_group_booking.approved.failure",
                 "amusement.group_booking.approve",
                 "amusement_group_booking",
                 () -> approveGroupBookingInternal(id, request)
@@ -174,8 +174,8 @@ final class AmusementBookingService {
                 request == null ? null : request.idempotencyKey(),
                 request,
                 AmusementGroupBookingRecord.class,
-                "amusement.group_booking.released",
-                "amusement.group_booking.release_failed",
+                "amusement_group_booking.released.success",
+                "amusement_group_booking.released.failure",
                 "amusement.group_booking.manage",
                 "amusement_group_booking",
                 () -> releaseGroupBookingInternal(id, request)

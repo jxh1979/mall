@@ -140,7 +140,7 @@ public class MerchantServiceService {
                     : repository.findWorkOrdersByMerchantProjects(projects, includeArchived, DEFAULT_PAGE_LIMIT);
         }
         auditEventService.recordSuccess(
-                "merchant_service.work_order.viewed",
+                "merchant_service.listMerchantServiceWorkOrders.succeeded",
                 "merchant.service_work_order.view",
                 BUSINESS_TYPE,
                 "all",
@@ -173,7 +173,7 @@ public class MerchantServiceService {
                 operationId,
                 request == null ? null : request.idempotencyKey(),
                 request,
-                "merchant_service.work_order.create_failed",
+                "merchant_service.createMerchantServiceWorkOrder.failed",
                 "merchant.service_work_order.create",
                 "new",
                 () -> validateCreateRequest(request),
@@ -188,7 +188,7 @@ public class MerchantServiceService {
                 "assignMerchantWorkOrder:" + workOrderId,
                 request == null ? null : request.idempotencyKey(),
                 request,
-                "merchant_service.work_order.assign_failed",
+                "merchant_service.assignMerchantServiceWorkOrder.failed",
                 "merchant.service_work_order.assign",
                 workOrderId,
                 () -> {
@@ -206,7 +206,7 @@ public class MerchantServiceService {
                 "addMerchantWorkOrderAction:" + workOrderId,
                 request == null ? null : request.idempotencyKey(),
                 request,
-                "merchant_service.work_order.action_failed",
+                "merchant_service.addMerchantServiceWorkOrderAction.failed",
                 "merchant.service_work_order.process",
                 workOrderId,
                 () -> {
@@ -224,7 +224,7 @@ public class MerchantServiceService {
                 "closeMerchantWorkOrder:" + workOrderId,
                 request == null ? null : request.idempotencyKey(),
                 request,
-                "merchant_service.work_order.close_failed",
+                "merchant_service.closeMerchantServiceWorkOrder.failed",
                 "merchant.service_work_order.close",
                 workOrderId,
                 () -> {
@@ -538,7 +538,7 @@ public class MerchantServiceService {
                 record.evidenceAttachmentIds()
         ));
         auditEventService.recordSuccess(
-                "merchant_service.work_order.created",
+                "merchant_service.createMerchantServiceWorkOrder.succeeded",
                 "merchant.service_work_order.create",
                 BUSINESS_TYPE,
                 record.id(),
@@ -574,7 +574,7 @@ public class MerchantServiceService {
                 evidenceIds(request.evidenceAttachmentIds())
         ));
         auditEventService.recordSuccess(
-                "merchant_service.work_order.assigned",
+                "merchant_service.assignMerchantServiceWorkOrder.succeeded",
                 "merchant.service_work_order.assign",
                 BUSINESS_TYPE,
                 assigned.id(),
@@ -620,7 +620,7 @@ public class MerchantServiceService {
         ));
         postMaterialReceivable(saved); // 117-R5：处理人完成即结束的关单
         auditEventService.recordSuccess(
-                "merchant_service.work_order.action_added",
+                "merchant_service.addMerchantServiceWorkOrderAction.succeeded",
                 "merchant.service_work_order.process",
                 BUSINESS_TYPE,
                 saved.id(),
@@ -666,7 +666,7 @@ public class MerchantServiceService {
                 evidenceIds(request.evidenceAttachmentIds())
         ));
         auditEventService.recordSuccess(
-                "merchant_service.work_order.closed",
+                "merchant_service.closeMerchantServiceWorkOrder.succeeded",
                 "merchant.service_work_order.close",
                 BUSINESS_TYPE,
                 closed.id(),

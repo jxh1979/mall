@@ -3,7 +3,6 @@ import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -16,9 +15,6 @@ import org.springframework.stereotype.Repository;
 
 @Repository
 class JdbcTerminalDeviceRepository implements TerminalDeviceRepository {
-
-    private static final TypeReference<Map<String, Object>> OBJECT_MAP_TYPE = new TypeReference<>() {
-    };
 
     private final NamedParameterJdbcTemplate jdbcTemplate;
     private final ObjectMapper objectMapper;
@@ -414,16 +410,6 @@ class JdbcTerminalDeviceRepository implements TerminalDeviceRepository {
     }
 
     @Override
-    public Optional<TerminalKioskConfigRecord> findKioskConfigByDeviceId(String deviceId) {
-        return jdbcTemplate.query("""
-                SELECT device_id, kiosk_mode, ticketing_enabled, bound_scope,
-                       config::text AS config, updated_at
-                  FROM terminal_kiosk_configs
-                 WHERE device_id = :device_id
-                """, Map.of("device_id", deviceId), this::mapKioskConfig).stream().findFirst();
-    }
-
-    @Override
     public KioskHeartbeatRecord saveKioskHeartbeat(KioskHeartbeatRecord record) {
         jdbcTemplate.update("""
                 INSERT INTO terminal_kiosk_heartbeats (
@@ -569,17 +555,6 @@ class JdbcTerminalDeviceRepository implements TerminalDeviceRepository {
         );
     }
 
-    private TerminalKioskConfigRecord mapKioskConfig(ResultSet resultSet, int rowNumber) throws SQLException {
-        return new TerminalKioskConfigRecord(
-                resultSet.getString("device_id"),
-                resultSet.getString("kiosk_mode"),
-                resultSet.getBoolean("ticketing_enabled"),
-                resultSet.getString("bound_scope"),
-                readObjectMap(resultSet.getString("config")),
-                nullableInstant(resultSet, "updated_at")
-        );
-    }
-
 
 
     private String writeJson(Object value) {
@@ -587,14 +562,6 @@ class JdbcTerminalDeviceRepository implements TerminalDeviceRepository {
             return objectMapper.writeValueAsString(value);
         } catch (JsonProcessingException exception) {
             throw new IllegalStateException("terminal JSON value is not serializable", exception);
-        }
-    }
-
-    private Map<String, Object> readObjectMap(String value) {
-        try {
-            return value == null ? Map.of() : objectMapper.readValue(value, OBJECT_MAP_TYPE);
-        } catch (JsonProcessingException exception) {
-            throw new IllegalStateException("terminal config JSON value is not readable", exception);
         }
     }
 }

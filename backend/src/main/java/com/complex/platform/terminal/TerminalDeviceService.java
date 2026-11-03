@@ -1,6 +1,6 @@
 package com.complex.platform.terminal;
 
-// 文件版本：V0.12
+// 文件版本：V0.13
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.access.AuthorizationService.ProjectReach;
@@ -995,21 +995,17 @@ public class TerminalDeviceService {
     public KioskConfigResponse getKioskConfig(String deviceId, String deviceToken) {
         String id = requireText(deviceId, "device_id");
         try {
-            requireBoundKioskDeviceCredential(id, deviceToken);
-            TerminalKioskConfigRecord config = repository.findKioskConfigByDeviceId(id)
-                    .orElseThrow(() -> ApiException.notFound("DEVICE_NOT_FOUND", "自助机设备不存在或已被删除"));
-            boolean ticketingEnabled = "ticketing".equals(config.kioskMode())
-                    && config.ticketingEnabled()
-                    && repository.findCapabilitySwitch("kiosk", "ticketing", id)
-                    .map(TerminalCapabilitySwitchRecord::enabled)
-                    .orElse(false); // PGM 第 742 行 opt-in：该设备没有售票开关行即不开放售票
+            // 第十八批 N 段第 120 条 120-R1：配置按设备台账读（绑定时选的一体机模式、绑定点位、后台设的所属商户），不读无人写入的配置表。
+            TerminalDeviceRecord device = requireBoundKioskDeviceCredential(id, deviceToken);
+            boolean ticketingEnabled = kioskTicketingEnabled(device);
             KioskConfigResponse response = new KioskConfigResponse(
-                    config.deviceId(),
-                    config.kioskMode(),
+                    device.deviceId(),
+                    device.kioskMode(),
                     ticketingEnabled,
-                    config.boundScope(),
-                    config.config(),
-                    config.updatedAt()
+                    device.boundSpaceId(),
+                    device.merchantId(),
+                    Map.of(),
+                    device.updatedAt()
             );
             auditEventService.recordSuccess(
                     "terminal.kiosk_config_viewed",
@@ -1018,7 +1014,7 @@ public class TerminalDeviceService {
                     id,
                     null,
                     null,
-                    Map.of("kiosk_mode", config.kioskMode(), "ticketing_enabled", ticketingEnabled)
+                    Map.of("kiosk_mode", device.kioskMode(), "ticketing_enabled", ticketingEnabled)
             );
             return response;
         } catch (RuntimeException exception) {
@@ -1039,7 +1035,7 @@ public class TerminalDeviceService {
     public KioskHeartbeatRecord recordKioskHeartbeat(String deviceId, String deviceToken, KioskHeartbeatRequest request) {
         String id = requireText(deviceId, "device_id");
         try {
-            requireBoundKioskDeviceCredential(id, deviceToken);
+            TerminalDeviceRecord device = requireBoundKioskDeviceCredential(id, deviceToken);
             KioskHeartbeatRequest actual = requireRequest(request);
             if (!id.equals(requireText(actual.deviceId(), "device_id"))) {
                 throw ApiException.badRequest("VALIDATION_FAILED", "路径与请求体中的设备编号不一致");
@@ -1051,9 +1047,7 @@ public class TerminalDeviceService {
             if (!KIOSK_STATUSES.contains(status)) {
                 throw ApiException.badRequest("VALIDATION_FAILED", "status is invalid");
             }
-            TerminalKioskConfigRecord config = repository.findKioskConfigByDeviceId(id)
-                    .orElseThrow(() -> ApiException.notFound("DEVICE_NOT_FOUND", "自助机设备不存在或已被删除"));
-            String kioskMode = trimToDefault(actual.kioskMode(), config.kioskMode());
+            String kioskMode = trimToDefault(actual.kioskMode(), device.kioskMode());
             Instant now = Instant.now();
             KioskHeartbeatRecord heartbeat = repository.saveKioskHeartbeat(new KioskHeartbeatRecord(
                     id,
@@ -1501,7 +1495,7 @@ public class TerminalDeviceService {
         return null;
     }
 
-    private void requireBoundKioskDeviceCredential(String deviceId, String deviceToken) {
+    private TerminalDeviceRecord requireBoundKioskDeviceCredential(String deviceId, String deviceToken) {
         String token = trimToNull(deviceToken);
         if (token == null) {
             throw ApiException.unauthorized("DEVICE_CREDENTIAL_REQUIRED", "缺少设备令牌（X-Device-Token）");
@@ -1516,6 +1510,44 @@ public class TerminalDeviceService {
         if (!"active".equals(credential.status()) || !constantTimeEquals(credential.tokenSha256(), sha256(token))) {
             throw ApiException.forbidden("DEVICE_CREDENTIAL_INVALID", "设备令牌无效");
         }
+        return device;
+    }
+
+    /**
+     * 第十八批 N 段第 120 条 120-R1（BSM:980「……其中只有启用售票能力的一体机，才允许授权服务人员在到店服务场景下辅助客人购票。」；
+     * PGM:742「开关默认取值：任何能力在后台没有显式开关配置行时一律默认关闭（opt-in）……」）：已绑定的售票型一体机，
+     * 且后台为本机开了售票开关行，才算启用售票；没有本机的开关行即不开放。
+     */
+    public boolean kioskTicketingEnabled(TerminalDeviceRecord device) {
+        return "kiosk".equals(device.terminalType()) && "bound".equals(device.status()) && "ticketing".equals(device.kioskMode())
+                && repository.findCapabilitySwitch("kiosk", "ticketing", device.deviceId())
+                .map(TerminalCapabilitySwitchRecord::enabled)
+                .orElse(false);
+    }
+
+    /** 第十八批 N 段第 120 条 120-R2：按设备号取已启用售票的一体机（口径同 {@link #kioskTicketingEnabled}）；没登记或没启用为空。 */
+    public java.util.Optional<TerminalDeviceRecord> ticketingKiosk(String deviceId) {
+        return repository.findByDeviceId(deviceId).filter(this::kioskTicketingEnabled);
+    }
+
+    /**
+     * 第十八批 N 段第 120 条 120-R5（BSM:1004「连接留痕与异常，一体机的下单、领取、状态检查和异常提示都要记录设备、点位和时间。」）：留痕用的当前可信终端——
+     * 终端类型 terminal_type、设备号 device_id，及按该设备号读设备台账得到的绑定点位 point_id（时间即留痕时间）；有才记，取法同券核销留痕。
+     * 返回可改的表，调用方可再加键。
+     */
+    public Map<String, Object> terminalTraceMetadata() {
+        Map<String, Object> metadata = new java.util.HashMap<>();
+        com.complex.platform.gate.TerminalIdentityHolder.current().ifPresent(terminal -> {
+            if (terminal.terminalType() != null) {
+                metadata.put("terminal_type", terminal.terminalType());
+            }
+            if (terminal.deviceId() != null) {
+                metadata.put("device_id", terminal.deviceId());
+                repository.findByDeviceId(terminal.deviceId()).map(TerminalDeviceRecord::boundSpaceId)
+                        .ifPresent(point -> metadata.put("point_id", point));
+            }
+        });
+        return metadata;
     }
 
     private String generateDeviceToken() {

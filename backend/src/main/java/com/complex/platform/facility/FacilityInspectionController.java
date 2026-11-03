@@ -6,6 +6,7 @@ import com.complex.platform.access.AccessActor;
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiResponse;
 import com.complex.platform.common.api.PageResponse;
+import com.complex.platform.evidence.AuditedOperationExecutor;
 import com.complex.platform.facility.dto.FacilityInspectionExceptionReportRequest;
 import com.complex.platform.facility.dto.FacilityInspectionRecheckConfirmRequest;
 import com.complex.platform.facility.dto.FacilityInspectionRecordSubmitRequest;
@@ -27,10 +28,15 @@ public class FacilityInspectionController {
 
     private final FacilityInspectionService service;
     private final AuthorizationService authorizationService;
+    private final AuditedOperationExecutor operations;
 
-    public FacilityInspectionController(FacilityInspectionService service, AuthorizationService authorizationService) {
+    // 第十八批 N 段第 124 条 124-R3（PGM L738）：写口任一步失败（权限、校验、状态冲突）经 AuditedOperationExecutor.recordingFailure
+    // 落 OpenAPI 声明的 x-audit-event-failure 再原样抛出；成功事件照旧由服务层写。
+    public FacilityInspectionController(FacilityInspectionService service, AuthorizationService authorizationService,
+            AuditedOperationExecutor operations) {
         this.service = service;
         this.authorizationService = authorizationService;
+        this.operations = operations;
     }
 
     @GetMapping("/templates")
@@ -42,9 +48,13 @@ public class FacilityInspectionController {
     @PostMapping("/templates")
     public ApiResponse<FacilityInspectionTemplateRecord> createTemplate(
             @RequestBody @jakarta.validation.Valid FacilityInspectionTemplateRequest request) {
-        authorizationService.requirePermission(PERM);
-        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
-        return ApiResponse.ok(service.createTemplate(request));
+        String key = request == null ? null : request.idempotencyKey();
+        return ApiResponse.ok(operations.recordingFailure("facility.inspection_template_create_failed", "facility.inspection.manage",
+                "facility_inspection_template", "new", key, () -> {
+                    authorizationService.requirePermission(PERM);
+                    requireIdempotencyKey(key);
+                    return service.createTemplate(request);
+                }));
     }
 
     @GetMapping("/tasks")
@@ -61,33 +71,49 @@ public class FacilityInspectionController {
 
     @PostMapping("/tasks")
     public ApiResponse<FacilityInspectionTaskRecord> createTask(@RequestBody @jakarta.validation.Valid FacilityInspectionTaskRequest request) {
-        authorizationService.requirePermission(PERM);
-        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
-        return ApiResponse.ok(service.createTask(request));
+        String key = request == null ? null : request.idempotencyKey();
+        return ApiResponse.ok(operations.recordingFailure("facility.inspection_task_create_failed", "facility.inspection.manage",
+                "facility_inspection_task", "new", key, () -> {
+                    authorizationService.requirePermission(PERM);
+                    requireIdempotencyKey(key);
+                    return service.createTask(request);
+                }));
     }
 
     @PostMapping("/tasks/{task_id}/start")
     public ApiResponse<FacilityInspectionTaskRecord> start(
             @PathVariable("task_id") String taskId, @RequestBody @jakarta.validation.Valid FacilityInspectionRecheckConfirmRequest request) {
-        requirePermission("facility.inspection.record_assigned");
-        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
-        return ApiResponse.ok(service.start(taskId, request));
+        String key = request == null ? null : request.idempotencyKey();
+        return ApiResponse.ok(operations.recordingFailure("facility.inspection_task_start_failed", "facility.inspection.manage",
+                "facility_inspection_task", taskId, key, () -> {
+                    requirePermission("facility.inspection.record_assigned");
+                    requireIdempotencyKey(key);
+                    return service.start(taskId, request);
+                }));
     }
 
     @PostMapping("/tasks/{task_id}/records")
     public ApiResponse<FacilityInspectionRecordRecord> submitRecord(
             @PathVariable("task_id") String taskId, @RequestBody @jakarta.validation.Valid FacilityInspectionRecordSubmitRequest request) {
-        requirePermission("facility.inspection.record_assigned");
-        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
-        return ApiResponse.ok(service.submitRecord(taskId, request));
+        String key = request == null ? null : request.idempotencyKey();
+        return ApiResponse.ok(operations.recordingFailure("facility.inspection_record_submit_failed", "facility.inspection.manage",
+                "facility_inspection_task", taskId, key, () -> {
+                    requirePermission("facility.inspection.record_assigned");
+                    requireIdempotencyKey(key);
+                    return service.submitRecord(taskId, request);
+                }));
     }
 
     @PostMapping("/tasks/{task_id}/report-exception")
     public ApiResponse<FacilityInspectionRecordRecord> reportException(
             @PathVariable("task_id") String taskId, @RequestBody @jakarta.validation.Valid FacilityInspectionExceptionReportRequest request) {
-        requirePermission("facility.inspection.report_exception_assigned");
-        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
-        return ApiResponse.ok(service.reportException(taskId, request));
+        String key = request == null ? null : request.idempotencyKey();
+        return ApiResponse.ok(operations.recordingFailure("facility.inspection_exception_report_failed", "facility.inspection.report_exception_assigned",
+                "facility_inspection_task", taskId, key, () -> {
+                    requirePermission("facility.inspection.report_exception_assigned");
+                    requireIdempotencyKey(key);
+                    return service.reportException(taskId, request);
+                }));
     }
 
     @GetMapping("/tasks/{task_id}/records")
@@ -99,17 +125,25 @@ public class FacilityInspectionController {
     @PostMapping("/tasks/{task_id}/recheck")
     public ApiResponse<FacilityInspectionTaskRecord> recheck(
             @PathVariable("task_id") String taskId, @RequestBody @jakarta.validation.Valid FacilityInspectionRecheckConfirmRequest request) {
-        authorizationService.requirePermission(PERM);
-        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
-        return ApiResponse.ok(service.recheck(taskId, request));
+        String key = request == null ? null : request.idempotencyKey();
+        return ApiResponse.ok(operations.recordingFailure("facility.inspection_task_recheck_failed", "facility.inspection.manage",
+                "facility_inspection_task", taskId, key, () -> {
+                    authorizationService.requirePermission(PERM);
+                    requireIdempotencyKey(key);
+                    return service.recheck(taskId, request);
+                }));
     }
 
     @PostMapping("/tasks/{task_id}/supervisor-confirm")
     public ApiResponse<FacilityInspectionTaskRecord> supervisorConfirm(
             @PathVariable("task_id") String taskId, @RequestBody @jakarta.validation.Valid FacilityInspectionRecheckConfirmRequest request) {
-        authorizationService.requirePermission(PERM);
-        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
-        return ApiResponse.ok(service.supervisorConfirm(taskId, request));
+        String key = request == null ? null : request.idempotencyKey();
+        return ApiResponse.ok(operations.recordingFailure("facility.inspection_task_close_failed", "facility.inspection.manage",
+                "facility_inspection_task", taskId, key, () -> {
+                    authorizationService.requirePermission(PERM);
+                    requireIdempotencyKey(key);
+                    return service.supervisorConfirm(taskId, request);
+                }));
     }
 
     private void requirePermission(String outsourcedPermission) {

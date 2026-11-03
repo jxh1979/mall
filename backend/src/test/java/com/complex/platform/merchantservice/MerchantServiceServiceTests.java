@@ -96,7 +96,7 @@ class MerchantServiceServiceTests {
 
         assertThat(auditEventRepository.events)
                 .extracting(AuditEvent::eventName)
-                .contains("merchant_service.work_order.create_failed");
+                .contains("merchant_service.createMerchantServiceWorkOrder.failed");
     }
 
     @Test
@@ -113,7 +113,7 @@ class MerchantServiceServiceTests {
         assertThat(repository.actions.getFirst().toStatus()).isEqualTo("created");
         assertThat(auditEventRepository.events)
                 .extracting(AuditEvent::eventName)
-                .contains("merchant_service.work_order.created");
+                .contains("merchant_service.createMerchantServiceWorkOrder.succeeded");
     }
 
     @Test
@@ -323,12 +323,12 @@ class MerchantServiceServiceTests {
 
     // ── §1.2 用例3：5 op 成功路径各落预期审计事件名 ──────────────────────────────
     //
-    // 真实事件名（grep MerchantServiceService）：
-    //   create → merchant_service.work_order.created
-    //   assign → merchant_service.work_order.assigned
-    //   addAction → merchant_service.work_order.action_added
-    //   close → merchant_service.work_order.closed
-    //   list → merchant_service.work_order.viewed
+    // 真实事件名（grep MerchantServiceService；18N 124-R2b 起与 OpenAPI 声明一致）：
+    //   create → merchant_service.createMerchantServiceWorkOrder.succeeded
+    //   assign → merchant_service.assignMerchantServiceWorkOrder.succeeded
+    //   addAction → merchant_service.addMerchantServiceWorkOrderAction.succeeded
+    //   close → merchant_service.closeMerchantServiceWorkOrder.succeeded
+    //   list → merchant_service.listMerchantServiceWorkOrders.succeeded
     @Test
     void eachWorkOrderOpEmitsSuccessAuditEventWithExpectedEventName() {
         MerchantWorkOrderRecord base = service.createWorkOrder(createRequest("wo-audit-create"));
@@ -344,11 +344,11 @@ class MerchantServiceServiceTests {
         assertThat(auditEventRepository.events)
                 .extracting(AuditEvent::eventName)
                 .contains(
-                        "merchant_service.work_order.created",
-                        "merchant_service.work_order.assigned",
-                        "merchant_service.work_order.action_added",
-                        "merchant_service.work_order.closed",
-                        "merchant_service.work_order.viewed"
+                        "merchant_service.createMerchantServiceWorkOrder.succeeded",
+                        "merchant_service.assignMerchantServiceWorkOrder.succeeded",
+                        "merchant_service.addMerchantServiceWorkOrderAction.succeeded",
+                        "merchant_service.closeMerchantServiceWorkOrder.succeeded",
+                        "merchant_service.listMerchantServiceWorkOrders.succeeded"
                 );
     }
 
@@ -362,7 +362,7 @@ class MerchantServiceServiceTests {
         assertThat(second).isEqualTo(first);
         assertThat(repository.saveCount).isEqualTo(1);
         assertThat(auditEventRepository.events)
-                .filteredOn(event -> "merchant_service.work_order.created".equals(event.eventName()))
+                .filteredOn(event -> "merchant_service.createMerchantServiceWorkOrder.succeeded".equals(event.eventName()))
                 .hasSize(1);
     }
 

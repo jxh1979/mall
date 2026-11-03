@@ -28,7 +28,7 @@ class FacilityControllerTests {
     void setUp() {
         service = mock(FacilityEquipmentService.class);
         authorizationService = mock(AuthorizationService.class);
-        controller = new FacilityController(service, authorizationService);
+        controller = new FacilityController(service, authorizationService, new com.complex.platform.evidence.AuditedOperationExecutor(null, mock(com.complex.platform.evidence.AuditEventService.class)));
         outsourced = new AccessActor("usr_vendor_a", "vendor-a", "outsourced_vendor", "proj_1", null, "active");
         when(authorizationService.currentActor()).thenReturn(outsourced);
         when(authorizationService.isOutsourcedVendor(outsourced)).thenReturn(true);

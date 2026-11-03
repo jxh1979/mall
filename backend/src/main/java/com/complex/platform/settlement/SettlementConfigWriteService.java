@@ -1,6 +1,6 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.07
+// 文件版本：V0.08
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.analytics.OperatingParamsService;
@@ -645,7 +645,7 @@ public class SettlementConfigWriteService {
         if (rows == 0) {
             throw ApiException.badRequest("CONFIG_NOT_ARCHIVABLE", "配置不存在或已下线,无法软删");
         }
-        audit("settlement.config." + table + ".archived", table, targetId, req.idempotencyKey(),
+        audit("settlement.config.archived", table, targetId, req.idempotencyKey(),
                 Map.of("config_type", type, "archive_reason", reason));
     }
 

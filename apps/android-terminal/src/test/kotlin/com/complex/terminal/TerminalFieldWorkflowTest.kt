@@ -1,12 +1,13 @@
 package com.complex.terminal
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
 import java.net.http.HttpResponse
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
@@ -93,32 +94,38 @@ class TerminalFieldWorkflowTest {
       paths += req.path
       when {
         req.path == "/api/v1/amusement/maintenance-records" -> {
-          assertTrue("\"source_terminal\":\"android_terminal\"" in req.body)
+          // 120-R6：来源终端取本机终端类型（服务端闭集内），检修单位必填。
+          assertTrue("\"source_terminal\":\"staff_work_phone\"" in req.body)
+          assertTrue("\"maintenance_vendor_id\":\"sup-1\"" in req.body)
+          assertTrue("\"engineer_name\":\"张工\"" in req.body)
           assertTrue("\"device_id\":\"ride-1\"" in req.body)
           okJson("""{"id":"mr-1","status":"pending_resume","device_id":"ride-1"}""")
         }
         req.path == "/api/v1/amusement/maintenance-records/mr-1/confirm-resume" -> {
-          assertTrue("\"supervisor_confirmed_by\"" in req.body)
+          // 120-R6：确认人由服务端取当前登录主管，请求不带。
+          assertFalse("\"supervisor_confirmed_by\"" in req.body)
           assertTrue("\"remark\":\"已检修\"" in req.body)
           okJson("""{"id":"mr-1","status":"resumed"}""")
         }
         else -> error("unexpected path ${req.path}")
       }
     }
+    api.terminalType = "staff_work_phone"
     val store = storeWithSessionAndBinding()
     val workflow = TerminalWorkflow(api, store)
 
     val submitted = workflow.submitAmusementMaintenance(
       projectId = "proj-1",
       deviceId = "ride-1",
-      result = "passed",
+      maintenanceVendorId = "sup-1",
+      engineerName = "张工",
+      result = "pass",
       exceptionNote = null,
     )
     assertEquals("mr-1", submitted.id)
 
     val resumed = workflow.confirmAmusementMaintenanceResume(
       recordId = submitted.id,
-      supervisorConfirmedBy = "supervisor-1",
       remark = "已检修",
     )
     assertEquals("resumed", resumed.status)

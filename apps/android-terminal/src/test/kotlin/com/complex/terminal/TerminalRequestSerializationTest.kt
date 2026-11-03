@@ -1,6 +1,6 @@
 package com.complex.terminal
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
@@ -138,12 +138,13 @@ class TerminalRequestSerializationTest {
           projectId = "proj_1",
           deviceId = "device_1",
           locationPointId = "point_1",
+          maintenanceVendorId = "sup_1",
           engineerId = "staff_1",
           engineerName = "李工",
           maintenanceAt = "2026-06-14T00:00:00Z",
-          result = "passed",
+          result = "pass",
           exceptionNote = null,
-          sourceTerminal = "android_terminal",
+          sourceTerminal = "kiosk",
         ),
       ),
     ).jsonObject
@@ -154,6 +155,7 @@ class TerminalRequestSerializationTest {
     assertTrue("engineer_id" in submit)
     assertTrue("maintenance_at" in submit)
     assertTrue("source_terminal" in submit)
+    assertTrue("maintenance_vendor_id" in submit)
     assertFalse("projectId" in submit)
     // explicitNulls=false 应省略 exception_note
     assertFalse("exception_note" in submit)
@@ -162,13 +164,13 @@ class TerminalRequestSerializationTest {
       api.json.encodeToString(
         AmusementMaintenanceResumeRequest(
           idempotencyKey = "android_amusement_resume_1",
-          supervisorConfirmedBy = "supervisor_1",
           remark = "确认恢复",
         ),
       ),
     ).jsonObject
     assertTrue("idempotency_key" in resume)
-    assertTrue("supervisor_confirmed_by" in resume)
+    // 120-R6：确认人由服务端取当前登录主管，确认体不带确认人。
+    assertFalse("supervisor_confirmed_by" in resume)
     // 后端确认恢复使用 remark，而非 operator_note
     assertTrue("remark" in resume)
     assertFalse("operator_note" in resume)

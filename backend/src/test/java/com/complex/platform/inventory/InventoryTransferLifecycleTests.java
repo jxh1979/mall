@@ -1,6 +1,6 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -73,20 +73,6 @@ class InventoryTransferLifecycleTests {
         });
         when(repository.traceCodeExists(anyString()))
                 .thenAnswer(inv -> traceOwners.containsKey(inv.<String>getArgument(0)));
-        when(repository.updateTraceCodeOwnerIfExists(anyString(), anyString(), anyString(), anyString(), any()))
-                .thenAnswer(inv -> {
-                    String code = inv.getArgument(0);
-                    String expectedFromOwner = inv.getArgument(1);
-                    String newOwnerId = inv.getArgument(3);
-                    if (!traceOwners.containsKey(code)) {
-                        return 0;
-                    }
-                    if (!Objects.equals(traceOwners.get(code), expectedFromOwner)) {
-                        return 0;
-                    }
-                    traceOwners.put(code, newOwnerId);
-                    return 1;
-                });
         // FS-019：保管主体 CAS——所有权须为 ownerId，只改保管人，所有权不动。
         when(repository.updateTraceCodeCustodianIfOwnedBy(anyString(), anyString(), anyString(), anyString(), any(), any()))
                 .thenAnswer(inv -> {
@@ -137,7 +123,7 @@ class InventoryTransferLifecycleTests {
         assertThat(custodians.get("TRACE-2")).isEqualTo("m_a");
         assertThat(traceOwners.get("TRACE-1")).isEqualTo("m_a");
         assertThat(traceOwners.get("TRACE-2")).isEqualTo("m_a");
-        verify(repository, never()).updateTraceCodeOwnerIfExists(anyString(), anyString(), anyString(), anyString(), any());
+        verify(repository, never()).transferTraceCodeOwnership(anyString(), anyString(), anyString(), anyString(), any(), any());
         verify(financeRepository, never()).updateArApItemLedger(any());
     }
 
@@ -169,7 +155,7 @@ class InventoryTransferLifecycleTests {
         assertThat(received.status()).isEqualTo("received");
         assertThat(traceOwners.get("TRACE-5")).isEqualTo("m_a");
         assertThat(custodians.get("TRACE-5")).isEqualTo("m_b");
-        verify(repository, never()).updateTraceCodeOwnerIfExists(anyString(), anyString(), anyString(), anyString(), any());
+        verify(repository, never()).transferTraceCodeOwnership(anyString(), anyString(), anyString(), anyString(), any(), any());
     }
 
     @Test

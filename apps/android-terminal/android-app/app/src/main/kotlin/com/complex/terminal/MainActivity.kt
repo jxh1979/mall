@@ -1,6 +1,6 @@
 package com.complex.terminal
 
-// 文件版本：V0.17
+// 文件版本：V0.18
 
 import android.app.Activity
 import android.content.Intent
@@ -24,8 +24,6 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import kotlin.concurrent.thread
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonPrimitive
 
 /**
  * 综合体 Android 终端：现场操作 UI。
@@ -48,6 +46,8 @@ import kotlinx.serialization.json.JsonPrimitive
 private const val FACE_SHOT_REQUEST = 0x7E06
 // 第 84 条 84-R2：交接补录选证据的回调请求码。
 private const val TRACE_EVIDENCE_REQUEST = 0x7E84
+// 第 123 条 123-R4：定位权限申请的请求码。
+private const val LOCATION_PERMISSION_REQUEST = 0x7E7B
 
 class MainActivity : Activity() {
 
@@ -58,9 +58,8 @@ class MainActivity : Activity() {
   private val workPhonePrefs: SharedPreferences by lazy { getSharedPreferences("work_phone", Context.MODE_PRIVATE) }
   // 第十八批 M 段第 112 条 112-R2：一体机模式绑定持久化（设备号、设备台账行、绑定点位），跨启动保留。
   private val kioskPrefs: SharedPreferences by lazy { getSharedPreferences("kiosk", Context.MODE_PRIVATE) }
-  // 当前桌台 + 购物车（本 Activity 会话态；下单成功清空）。
+  // 购物车（本 Activity 会话态；下单成功清空；平板 POS 与一体机吧台买酒共用）。
   private val posCart = LinkedHashMap<String, PosCartLine>()
-  private var posTable: BarTableAvailabilityRow? = null
   // 4.2 allowed hosts 生效：COMPLEX_API_ALLOWED_HOSTS 构建白名单在客户端入口强制校验。
   private val api: TerminalApiClient by lazy {
     TerminalApiClient(
@@ -70,6 +69,8 @@ class MainActivity : Activity() {
     ).apply {
       deviceId = workPhonePrefs.getString("device_id", null)
       deviceSigner = DeviceKeystore::sign
+      // 第 123 条 123-R4：现场动作闭集提交那一刻取一次本机定位随请求带上（工作手机、平板、一体机共用本客户端）。
+      locationProvider = DeviceLocator(this@MainActivity)::currentFix
     }
   }
   private val workflow: TerminalWorkflow by lazy { TerminalWorkflow(api, store) }
@@ -192,6 +193,7 @@ class MainActivity : Activity() {
     kioskPrefs.getString("device_id", null)?.takeIf { it.isNotBlank() }?.let { api.deviceId = it; api.terminalType = "kiosk" }
     // U01-007：私人手机在本人注册时已把 Keystore 公钥/指纹绑定为员工设备凭证，重启后按登记的指纹恢复私人手机身份（只声明一次）。
     getSharedPreferences("private_phone", MODE_PRIVATE).getString("device_id", null)?.takeIf { it.isNotBlank() }?.let { api.deviceId = it; api.terminalType = STAFF_PRIVATE_PHONE }
+    if (api.terminalType in setOf("staff_work_phone", "tablet", "kiosk")) requestLocationPermission()
     // U01-002：拔线接收器由常驻前台服务持有并在开机后重注册；本页只消费投递（进程被回收期间的拔线在下次登录后补记）。
     ChargingReceiptBridge.handler = { runOnUiThread { flushWorkPhoneReceipts() } }
     ChargingReceiptService.start(this)
@@ -346,6 +348,7 @@ class MainActivity : Activity() {
           ChargingReceiptBridge.clearAnchor(this)
           api.deviceId = d
           api.terminalType = "staff_work_phone"
+          requestLocationPermission()
           flushWorkPhoneReceipts()
           status.text = "绑定完成：${binding.deviceCode}（状态 ${deviceStatusZh(binding.status)}）"
           showHome()
@@ -366,8 +369,8 @@ class MainActivity : Activity() {
   // 屏 ③ 首页 / 功能入口
   // ---------------------------------------------------------------------------
   private fun showHome() {
-    // 第十八批 M 段第 112 条 112-R2：一体机首页只放权益领取与重新登录。
-    if (api.terminalType == "kiosk") { showKioskClaim(); return }
+    // 第十八批 N 段第 120 条 120-R1：一体机进一体机首页（按本机配置列一体机功能）。
+    if (api.terminalType == "kiosk") { showKioskHome(); return }
     val info = statusText(homeSummary())
     // 第十八批 M 段第 116 条：每个按钮配服务端功能码（与 StaffAppFunctions.ALL 同名），按下发的清单显示。
     fun entry(code: String, label: String, open: () -> Unit): View? = if (shows(code)) button(label) { open() } else null
@@ -626,27 +629,33 @@ class MainActivity : Activity() {
     setContentView(
       screen(
         title = if (kiosk) "一体机 · 权益领取" else "礼物 / 券核销",
-        children = listOf(status, code, scanButton, previewButton, traceCodes, scanTrace, claimButton,
-          if (kiosk) button("重新登录") { logoutAndRestart() } else backButton()),
-        root = kiosk,
+        children = listOf(status, code, scanButton, previewButton, traceCodes, scanTrace, claimButton, backButton()),
       ),
     )
   }
 
-  /** 112-R2：一体机模式入口——本机还没绑定为一体机时先绑定，之后进权益领取屏。 */
+  /** 112-R2：一体机模式入口——本机还没绑定为一体机时先绑定，之后进一体机首页（120-R1）。 */
   private fun showKioskEntry() {
     if (store.session == null) { showLogin(); return }
-    if (kioskPrefs.getString("device_id", null).isNullOrBlank()) showKioskSetup() else showKioskClaim()
+    if (kioskPrefs.getString("device_id", null).isNullOrBlank()) showKioskSetup() else showKioskHome()
   }
 
-  /** 112-R2：把本机绑定为一体机（服务模式、按空间绑定点位）并登记签名公钥；所属商户不在一体机上填（赠饮按设备所属商户判门店）。 */
+  /** 112-R2：把本机绑定为一体机（按空间绑定点位）并登记签名公钥；所属商户不在一体机上填（赠饮按设备所属商户判门店）。
+   *  120-R1（BSM:980「……其中只有启用售票能力的一体机，才允许授权服务人员在到店服务场景下辅助客人购票。」）：绑定时选一体机类型
+   *  （服务型 / 售票型），存下服务端签发的设备令牌（读本机配置用）与类型。 */
   private fun showKioskSetup() {
     val deviceId = editText("设备编号")
     val spaceId = editText("绑定点位")
-    val status = statusText("由设备管理员填写已登记的设备编号与点位。所属商户请管理员在后台设备台账页「所属商户」设置，未设置时赠饮领取会被拒绝。")
-    val bindButton = button("绑定并进入权益领取") {
+    val serviceType = android.widget.RadioButton(this).apply { text = "服务型"; id = View.generateViewId() }
+    val ticketingType = android.widget.RadioButton(this).apply { text = "售票型"; id = View.generateViewId() }
+    val kioskType = android.widget.RadioGroup(this).apply {
+      orientation = LinearLayout.HORIZONTAL; addView(serviceType); addView(ticketingType); check(serviceType.id)
+    }
+    val status = statusText("由设备管理员填写已登记的设备编号与点位，并选一体机类型。所属商户请管理员在后台设备台账页「所属商户」设置，未设置时赠饮领取会被拒绝；售票型一体机还须管理员在后台为本机开启售票。")
+    val bindButton = button("绑定并进入一体机首页") {
       val d = deviceId.text.toString().trim()
       val space = spaceId.text.toString().trim()
+      val mode = if (ticketingType.isChecked) "ticketing" else "service"
       if (d.isEmpty()) { status.text = "请输入设备编号"; return@button }
       if (space.isEmpty()) { status.text = "请输入绑定点位"; return@button }
       status.text = "正在绑定…"
@@ -658,7 +667,7 @@ class MainActivity : Activity() {
               terminalType = "kiosk",
               bindingScope = "space",
               boundSpaceId = space,
-              kioskMode = "service",
+              kioskMode = mode,
               deviceModel = android.os.Build.MODEL,
             ),
           )
@@ -666,15 +675,425 @@ class MainActivity : Activity() {
           binding
         },
         onSuccess = { binding ->
-          kioskPrefs.edit().putString("device_id", d).putString("binding_id", binding.id).putString("point_id", space).apply()
+          kioskPrefs.edit().putString("device_id", d).putString("binding_id", binding.id).putString("point_id", space)
+            .putString("device_token", binding.deviceToken).putString("kiosk_mode", mode).apply()
           api.deviceId = d
           api.terminalType = "kiosk"
-          showKioskClaim()
+          requestLocationPermission()
+          kioskConfig = null
+          showKioskHome()
         },
         onError = { status.text = "绑定失败：${friendly(it)}" },
       )
     }
-    setContentView(screen(title = "一体机 · 绑定", children = listOf(status, deviceId, spaceId, bindButton, backButton())))
+    setContentView(screen(title = "一体机 · 绑定",
+      children = listOf(status, deviceId, spaceId, fieldLabel("一体机类型"), kioskType, bindButton, backButton())))
+  }
+
+  // ---------------------------------------------------------------------------
+  // 第十八批 N 段第 120 条 120-R1（BSM:1906「扫码查看和领取权益，也可做订台下单、吧台买酒下单、游乐设施状态查看、定期检修记录和主管确认；
+  // 启用售票能力的一体机可由授权服务人员辅助到店购票和订单查询。」）：一体机首页——凭绑定时签发的设备令牌取本机配置（类型、是否启用售票、
+  // 所属商户），取到后按配置列一体机功能；取不到只留权益领取与重新登录。常驻员工会话不变，要授权员工的动作走 [staffSignInDialog]。
+  // ---------------------------------------------------------------------------
+  private var kioskConfig: KioskConfig? = null
+  /** 120-R1 复核：一体机上当场登录、整段办理的授权员工（辅助售票、检修）；回一体机首页（结束售票、返回首页、系统返回键）时以其令牌登出。 */
+  private var kioskStaff: LoginResponse? = null
+
+  /** 120-R1 复核：每次进一体机首页都按设备台账重读本机配置（后台改所属商户、开关售票后回首页即生效）；读到后只重绘（[reload] 为假）。 */
+  private fun showKioskHome(reload: Boolean = true) {
+    kioskStaff?.let { staffSignOut(it) }
+    val config = kioskConfig
+    val info = statusText(config?.let {
+      "本机：${it.deviceId}（${kioskModeZh(it.kioskMode)}）\n售票：${if (it.ticketingEnabled) "已启用" else "未启用"}\n所属商户：${it.merchantId ?: "未设置"}"
+    } ?: "正在读取本机配置…")
+    val view = screen(
+      title = "一体机首页",
+      children = listOfNotNull(info, button("权益领取") { showKioskClaim() },
+        config?.let { button("订台") { showKioskReservation() } },
+        config?.let { button("吧台买酒") { showKioskBarPurchase() } },
+        config?.let { button("游乐设施状态") { showKioskAmusementStatus() } },
+        config?.let { button("游乐检修 / 主管确认") { showMaintenance() } },
+        config?.takeIf { it.ticketingEnabled }?.let { button("辅助售票与订单查询") { showKioskTicketing() } },
+        button("重新登录") { logoutAndRestart() }),
+      root = true,
+    )
+    setContentView(view)
+    if (!reload) return
+    val device = kioskPrefs.getString("device_id", null)
+    val token = kioskPrefs.getString("device_token", null)
+    if (device.isNullOrBlank() || token.isNullOrBlank()) { info.text = "本机配置读取失败：本机未完成一体机绑定"; return }
+    runBackground(
+      action = { api.kioskConfig(device, token) },
+      onSuccess = { kioskConfig = it; if (view.isAttachedToWindow) showKioskHome(reload = false) },
+      onError = { info.text = "本机配置读取失败：${friendly(it)}" },
+    )
+  }
+
+  /**
+   * 第十八批 N 段第 120 条 120-R5（BSM:991「查看游乐设施状态：开放、排队、容量、暂停、关闭、故障、维护或安全提醒。」；BSM:1268「通过触摸屏一体机展示
+   * 游乐设施开放、排队、容量、暂停、故障和维护状态。」）：一体机游乐设施状态屏，常驻会话即可看（客人可看）。每个项目一张卡：状态、在玩/容量、排队人数、
+   * 维护设备数、故障数、安全提醒；服务端读取即留状态检查痕（设备、点位、时间）。
+   */
+  private fun showKioskAmusementStatus() {
+    val status = statusText("正在读取游乐设施状态…")
+    val list = rowsContainer()
+    val refresh = {
+      status.text = "正在读取游乐设施状态…"
+      runBackground(
+        action = { api.amusementStatusBoard() },
+        onSuccess = { rows ->
+          status.text = if (rows.isEmpty()) "暂无游乐设施" else "游乐设施 ${rows.size} 个"
+          list.removeAllViews()
+          rows.forEach { row ->
+            list.addView(statusText(amusementStatusCard(row)).apply {
+              layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+                .apply { topMargin = dp(8) }
+            })
+          }
+        },
+        onError = { status.text = "读取失败：${friendly(it)}" },
+      )
+    }
+    refresh()
+    setContentView(screen(title = "游乐设施状态", children = listOf(status, list, button("刷新") { refresh() }, backButton())))
+  }
+
+  /** 120-R5：一张项目卡的文字。 */
+  private fun amusementStatusCard(row: AmusementProjectStatus): String = buildString {
+    append("${row.projectName ?: row.projectId}　${amusementOpenStatusZh(row.openStatus)}")
+    append("\n在玩 ${row.occupiedCount} / 容量 ${row.capacity}　排队 ${row.waitingCount} 人")
+    append("\n维护设备 ${row.maintenanceDeviceCount} 台　故障 ${row.faultCount} 起")
+    if (row.safetyNotices.isNotEmpty()) append("\n安全提醒：${row.safetyNotices.joinToString("；")}")
+  }
+
+  /** 游乐项目开放状态->中文（amusement_projects.open_status）。 */
+  private fun amusementOpenStatusZh(raw: String?): String = when (raw) {
+    "open" -> "开放"; "paused" -> "暂停"; "closed" -> "关闭"; "maintenance" -> "维护"
+    else -> raw ?: "-"
+  }
+
+  /**
+   * 第十八批 N 段第 120 条 120-R3（BSM:987「支持订台下单：选择酒吧、日期、时段、卡座/桌台/吧台位、人数和订台备注；订台需要支付定金。」；
+   * BSM:1058「……客人自助订台支付定金成功……该台位即进入已预留……冲突时先支付定金者得……」）：一体机订台屏，常驻会话即可下（客人可自助）。
+   * 先选酒吧再选台位（已订的置灰），填到店时间、最晚到店时间、人数、客人手机号、订台备注下单；服务端按一体机来源记定金待付，
+   * 收定金走 [kioskPayStep]（授权员工登记现金 / POS），登记后才保留台位。
+   */
+  private fun showKioskReservation() {
+    val status = statusText("正在读取可订台位…")
+    val bars = rowsContainer()
+    val tables = rowsContainer()
+    var rows: List<BarTableAvailabilityRow> = emptyList()
+    var picked: BarTableAvailabilityRow? = null
+    val time = editText("到店时间（如 2026-11-03T20:00:00+08:00）")
+    val latest = editText("最晚到店时间（如 2026-11-03T22:00:00+08:00）")
+    val guests = editText("人数").apply { inputType = InputType.TYPE_CLASS_NUMBER }
+    val phone = editText("客人手机号").apply { inputType = InputType.TYPE_CLASS_PHONE }
+    val remark = editText("订台备注（选填）")
+    fun showTables(barId: String) {
+      picked = null
+      val list = rows.filter { it.barId == barId }
+      fillSelectableRows(tables, list.map { r ->
+        "${r.tableCode ?: r.id} ${r.tableName ?: ""} ${tableTypeZh(r.tableType)}　可坐 ${r.capacity ?: 0} 人　低消 ¥${yuan(r.minConsumptionCent)}" +
+          (if (r.reserved == true) "　已订" else "") to { picked = r; status.text = "已选台位：${r.tableCode ?: r.id}" }
+      }, "该酒吧暂无台位")
+      list.forEachIndexed { i, r -> if (r.reserved == true) tables.getChildAt(i)?.apply { isEnabled = false; alpha = 0.4f } }
+      status.text = "请选台位（已订的不可选）"
+    }
+    val submit = button("提交订台") {
+      val table = picked ?: run { status.text = "请先选酒吧和台位"; return@button }
+      val at = time.text.toString().trim()
+      val la = latest.text.toString().trim()
+      val g = guests.text.toString().trim().toIntOrNull()
+      val ph = phone.text.toString().trim()
+      if (at.isEmpty() || la.isEmpty() || ph.isEmpty() || g == null || g <= 0) {
+        status.text = "请填全到店时间、最晚到店时间、人数和客人手机号"
+        return@button
+      }
+      status.text = "正在提交订台…"
+      runBackground(
+        action = {
+          api.createBarReservation(BarReservationCreateRequest(idempotencyKey = java.util.UUID.randomUUID().toString(),
+            barId = table.barId ?: "", tableId = table.id ?: "", reservationTime = at, guestCount = g, latestArrivalAt = la,
+            customerPhone = ph, remark = remark.text.toString().trim().ifEmpty { null }))
+        },
+        onSuccess = { showKioskReservationDeposit(it) },
+        onError = { status.text = "订台失败：${friendly(it)}" },
+      )
+    }
+    setContentView(screen(title = "订台", children = listOf(status, fieldLabel("选择酒吧"), bars, fieldLabel("选择台位"), tables,
+      time, latest, guests, phone, remark, submit, backButton())))
+    runBackground(
+      action = { api.listBarTableAvailability() },
+      onSuccess = { all ->
+        rows = all
+        val barIds = all.mapNotNull { it.barId }.distinct()
+        status.text = if (barIds.isEmpty()) "暂无可订台位" else "请选酒吧"
+        fillSelectableRows(bars, barIds.map { b -> "酒吧 $b" to { showTables(b) } }, "暂无可订台位")
+      },
+      onError = { status.text = "台位读取失败：${friendly(it)}" },
+    )
+  }
+
+  /** 120-R3：订台已提交——显示订台号与应付定金，收定金走 [kioskPayStep]，登记后显示台位是否已保留。 */
+  private fun showKioskReservationDeposit(reservation: BarReservationRecord) {
+    val id = reservation.id ?: "-"
+    val amount = reservation.depositAmountCent ?: 0L
+    setContentView(screen(title = "订台已提交", children = listOf(
+      statusText("订台号：$id\n应付定金：¥${yuan(amount)}\n付定金后才为您保留台位"),
+      button("付定金") {
+        kioskPayStep("订台 $id 定金", amount, KioskPayTarget.Reservation(id), null) { paid ->
+          val result = if (paid?.holdStatus == "held") "台位已保留" else "该台位已被先付定金者预订，定金将原路退回"
+          setContentView(screen(title = "订台结果", children = listOf(statusText("订台号：$id\n$result"), backButton())))
+        }
+      },
+      backButton())))
+  }
+
+  /**
+   * 第十八批 N 段第 120 条 120-R4（BSM:988「支持吧台买酒下单：选择酒水、套餐、数量，生成待支付订单。」；BSM:1024「接收一体机产生的吧台买酒订单。」；
+   * BSM:990「允许现场现金和 POS 机支付，但必须由授权员工记录到订单、账单、日结和对账里。」）：一体机吧台买酒，常驻会话即可下（客人可自助）。
+   * 酒吧＝本机所属商户，台位＝该酒吧的吧台位（一个自动选、多个让选）；目录与购物车同平板 POS（[showPosCatalog]），下单后生成待支付账单，
+   * 收款走 [kioskPayStep]（账单），登记后提示到吧台取酒（出品与扣吧台库存由吧台办理）。
+   */
+  private fun showKioskBarPurchase() {
+    val bar = kioskConfig?.merchantId ?: run {
+      setContentView(screen(title = "吧台买酒", children = listOf(
+        statusText("本机未设置所属商户，请管理员在后台设备台账页设置本机所属商户"), backButton())))
+      return
+    }
+    posCart.clear()
+    val status = statusText("正在读取吧台位…")
+    val tables = rowsContainer()
+    setContentView(screen(title = "吧台买酒", children = listOf(status, tables, backButton())))
+    runBackground(
+      action = { kioskBarCounters(api.listBarTableAvailability(), bar) },
+      onSuccess = { counters ->
+        when (counters.size) {
+          0 -> status.text = "本酒吧未配置吧台位"
+          1 -> showPosCatalog(bar, counters.first(), kiosk = true)
+          else -> {
+            status.text = "请选吧台位"
+            fillSelectableRows(tables, counters.map { t ->
+              (t.tableName ?: t.tableCode ?: t.id ?: "吧台位") to { showPosCatalog(bar, t, kiosk = true) }
+            }, "本酒吧未配置吧台位")
+          }
+        }
+      },
+      onError = { status.text = "吧台位读取失败：${friendly(it)}" },
+    )
+  }
+
+  /** 一体机类型->中文（terminal_devices.kiosk_mode）。 */
+  private fun kioskModeZh(raw: String?): String = when (raw) {
+    "ticketing" -> "售票型"; "service" -> "服务型"
+    else -> raw ?: "-"
+  }
+
+  /**
+   * 120-R1（BSM:986「……可由授权服务人员登录后辅助客人购票……」；BSM:990「……必须由授权员工记录……」；BSM:992「工程师可在授权后填写……」）：
+   * 一体机上的授权员工登录——常驻员工会话不动，授权员工输账号密码取自己的令牌交给调用方在 [asStaff] 里用，用完 [staffSignOut]。
+   */
+  private fun staffSignInDialog(title: String, onSignedIn: (LoginResponse) -> Unit) {
+    val username = editText("授权员工账号 / 登录名")
+    val password = editText("密码").apply { inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD }
+    val form = LinearLayout(this).apply {
+      orientation = LinearLayout.VERTICAL; setPadding(dp(16), dp(8), dp(16), 0); addView(username); addView(password)
+    }
+    android.app.AlertDialog.Builder(this)
+      .setTitle(title)
+      .setView(form)
+      .setPositiveButton("登录") { _, _ ->
+        val u = username.text.toString().trim()
+        val p = password.text.toString()
+        if (u.isEmpty() || p.isEmpty()) {
+          android.widget.Toast.makeText(this, "请输入授权员工账号和密码", android.widget.Toast.LENGTH_SHORT).show()
+          return@setPositiveButton
+        }
+        runBackground(
+          action = { api.login(u, p) },
+          onSuccess = onSignedIn,
+          onError = { android.widget.Toast.makeText(this, "授权员工登录失败：${friendly(it)}", android.widget.Toast.LENGTH_LONG).show() },
+        )
+      }
+      .setNegativeButton("取消", null)
+      .show()
+  }
+
+  /** 120-R1：授权员工用完即以自己的令牌登出，常驻会话不动。 */
+  private fun staffSignOut(signIn: LoginResponse) {
+    if (kioskStaff === signIn) kioskStaff = null
+    runBackground(action = { api.asStaff(signIn.accessToken) { api.logout(signIn.sessionId) } }, onSuccess = { }, onError = { })
+  }
+
+  /**
+   * 第十八批 N 段第 120 条 120-R7（BSM:989「支持支付引导：优先生成二维码让客人手机扫码支付，也可由工作人员辅助扫码付款码。」；
+   * BSM:990「允许现场现金和 POS 机支付，但必须由授权员工记录到订单、账单、日结和对账里。」）：一体机收款步骤——显示应付金额；
+   * 线上扫码支付待支付渠道开通（第 41 条），只写明、不放按钮；现金 / POS 由授权员工登记（[registerKioskPayment]）。
+   * [signedIn] 为空时先请授权员工当场登录、登记完即登出；售票流程传入已登录的服务人员，由售票流程结束时登出。
+   */
+  private fun kioskPayStep(title: String, amountCent: Long, target: KioskPayTarget, signedIn: LoginResponse?,
+      onPaid: (BarReservationRecord?) -> Unit) {
+    val amount = "¥${"%.2f".format(amountCent / 100.0)}"
+    val status = statusText("应付金额：$amount\n线上扫码支付待支付渠道开通，请由工作人员收取现金或 POS")
+    val cash = android.widget.RadioButton(this).apply { text = "现金"; id = View.generateViewId() }
+    val pos = android.widget.RadioButton(this).apply { text = "POS"; id = View.generateViewId() }
+    val channel = android.widget.RadioGroup(this).apply {
+      orientation = LinearLayout.HORIZONTAL; addView(cash); addView(pos); check(cash.id)
+    }
+    val posNo = editText("POS 单号（POS 收款时可填）")
+    val register = button("工作人员登记现金 / POS") {
+      val ch = if (pos.isChecked) "pos" else "cash"
+      val no = posNo.text.toString().trim().ifEmpty { null }
+      fun submit(staff: LoginResponse, signOut: Boolean) {
+        status.text = "正在登记收款…"
+        runBackground(
+          action = { api.registerKioskPayment(target, amountCent, ch, staff, no, signOut) },
+          onSuccess = { onPaid(it) },
+          onError = { status.text = "登记失败：${friendly(it)}" },
+        )
+      }
+      confirmThen(title, "确认已收取 $amount（${if (ch == "pos") "POS" else "现金"}）？登记即确认收款完成，不可撤销。") {
+        if (signedIn != null) submit(signedIn, false) else staffSignInDialog("授权员工登记收款") { submit(it, true) }
+      }
+    }
+    setContentView(screen(title = title, children = listOf(status, fieldLabel("收款方式"), channel, posNo, register, backButton())))
+  }
+
+  // ---------------------------------------------------------------------------
+  // 第十八批 N 段第 120 条 120-R2（BSM:986「启用售票能力的一体机可由授权服务人员登录后辅助客人购票和查询订单（门票为动态二维码，不提供取票功能；
+  // 客人用手机号短信验证绑定，在官方 App/小程序查看门票）；在某个酒吧门口或前台售票时，只能售卖该酒吧的单店门票，不得售卖综合体通票。」；
+  // BSM:1947「……一体机必须绑定点位、限制可售票种，并记录服务人员、设备、点位、购票原因、支付和出票。」；DEC-R7-05「售票型触摸屏一体机能力补「订单查询」」）：
+  // 辅助售票与订单查询——授权服务人员当场登录，整段请求带其令牌（[asStaff]），「结束售票」或回一体机首页即登出。票种按本机所属酒吧列（服务端再按本机与员工范围拦），
+  // 选票种与数量、录客人手机号发验证码、填客人报的验证码与售票原因下单，收款走 [kioskPayStep]，收款后出票；不显示票码、不提供取票。
+  // ---------------------------------------------------------------------------
+  private fun showKioskTicketing() = staffSignInDialog("授权服务人员登录") { kioskStaff = it; showKioskTicketSale(it) }
+
+  private fun endKioskTicketing(staff: LoginResponse) {
+    staffSignOut(staff)
+    showKioskHome()
+  }
+
+  private fun showKioskTicketSale(staff: LoginResponse) {
+    val status = statusText("正在读取可售票种…")
+    val products = rowsContainer()
+    var picked: KioskTicketProduct? = null
+    val quantity = editText("购票数量").apply { inputType = InputType.TYPE_CLASS_NUMBER; setText("1") }
+    val phone = editText("客人手机号").apply { inputType = InputType.TYPE_CLASS_PHONE }
+    val smsCode = editText("客人收到的验证码").apply { inputType = InputType.TYPE_CLASS_NUMBER }
+    val reason = editText("售票原因（必填）")
+    val sendCode = button("发送验证码") {
+      val p = phone.text.toString().trim()
+      if (p.isEmpty()) { status.text = "请输入客人手机号"; return@button }
+      runBackground(
+        action = { api.asStaff(staff.accessToken) { api.requestKioskBindCode(p) } },
+        onSuccess = { status.text = "验证码已发送到客人手机，请客人报出验证码" },
+        onError = { status.text = "验证码发送失败：${friendly(it)}" },
+      )
+    }
+    val order = button("下单") {
+      val product = picked ?: run { status.text = "请先选票种"; return@button }
+      val count = quantity.text.toString().trim().toIntOrNull()?.takeIf { it > 0 } ?: run { status.text = "请输入购票数量"; return@button }
+      val p = phone.text.toString().trim()
+      val code = smsCode.text.toString().trim()
+      val r = reason.text.toString().trim()
+      if (p.isEmpty() || code.isEmpty()) { status.text = "请输入客人手机号和客人收到的验证码"; return@button }
+      if (r.isEmpty()) { status.text = "请填写售票原因"; return@button }
+      status.text = "正在下单…"
+      runBackground(
+        action = {
+          api.asStaff(staff.accessToken) {
+            api.createTicketOrder(KioskTicketOrderRequest(java.util.UUID.randomUUID().toString(), product.ticketTypeId, count, p, code, r, product.barId))
+          }
+        },
+        onSuccess = { kioskTicketPay(staff, it) },
+        onError = { status.text = "下单失败：${friendly(it)}" },
+      )
+    }
+    setContentView(screen(title = "辅助售票", children = listOf(status, products, fieldLabel("购票数量"), quantity, phone, sendCode, smsCode, reason,
+      order, button("订单查询") { showKioskOrderLookup(staff) }, button("结束售票") { endKioskTicketing(staff) })))
+    runBackground(
+      action = { api.asStaff(staff.accessToken) { api.listKioskTicketProducts(kioskConfig?.merchantId) } },
+      onSuccess = { rows ->
+        status.text = if (rows.isEmpty()) "暂无可售票种" else "请选票种（门票为动态二维码，客人在官方 App/小程序查看，不提供取票）"
+        fillSelectableRows(products, rows.map { row -> kioskTicketProductText(row) to { picked = row; status.text = "已选：${row.ticketName ?: row.ticketTypeId}" } },
+          "暂无可售票种")
+      },
+      onError = { status.text = "票种读取失败：${friendly(it)}" },
+    )
+  }
+
+  /** 120-R2：票种一行——票名、平日/周末/节假日价、能否退、有效天数、使用范围。 */
+  private fun kioskTicketProductText(row: KioskTicketProduct): String = buildString {
+    append(row.ticketName ?: row.ticketTypeId)
+    append("\n平日 ¥${yuan(row.weekdayPriceCent)}　周末 ¥${yuan(row.weekendPriceCent)}　节假日 ¥${yuan(row.holidayPriceCent)}")
+    append("\n${if (row.refundable) "可退" else "不可退"}　有效 ${row.validityDays ?: "-"} 天　使用范围：${row.usageScope ?: "-"}")
+  }
+
+  /** 120-R2：下单后收款（[kioskPayStep]，服务人员已登录、不再二次登录），收款后出票。 */
+  private fun kioskTicketPay(staff: LoginResponse, order: TicketOrderRow) =
+    kioskPayStep("票务订单 ${order.orderNo ?: order.id}", order.amountCent, KioskPayTarget.TicketOrder(order.id), staff) {
+      kioskTicketIssue(staff, order)
+    }
+
+  private fun kioskTicketIssue(staff: LoginResponse, order: TicketOrderRow) {
+    val status = statusText("收款已登记，正在出票…")
+    // 120-R1 复核：出票返回前「继续售票」「结束售票」不可点，出票请求还在路上时不登出。
+    val next = listOf(button("继续售票") { showKioskTicketSale(staff) }, button("结束售票") { endKioskTicketing(staff) })
+      .onEach { it.isEnabled = false }
+    setContentView(screen(title = "出票", children = listOf(status) + next))
+    runBackground(
+      action = {
+        api.asStaff(staff.accessToken) {
+          api.issueTicketOrder(order.id, TicketOrderActionRequest(java.util.UUID.randomUUID().toString(), "一体机辅助售票出票"))
+        }
+      },
+      onSuccess = { status.text = "已出票，请客人用该手机号登录官方 App/小程序查看门票"; next.forEach { it.isEnabled = true } },
+      onError = { status.text = "出票失败：${friendly(it)}"; next.forEach { it.isEnabled = true } },
+    )
+  }
+
+  /** 120-R2（DEC-R7-05）：订单查询——按客人手机号列订单（号码掩码），待支付的选中后可继续收款或取消。 */
+  private fun showKioskOrderLookup(staff: LoginResponse) {
+    val status = statusText("输入客人手机号查订单")
+    val phone = editText("客人手机号").apply { inputType = InputType.TYPE_CLASS_PHONE }
+    val orders = rowsContainer()
+    var picked: TicketOrderRow? = null
+    fun search() {
+      val p = phone.text.toString().trim()
+      if (p.isEmpty()) { status.text = "请输入客人手机号"; return }
+      picked = null
+      runBackground(
+        action = { api.asStaff(staff.accessToken) { api.listTicketOrdersByPhone(p) } },
+        onSuccess = { rows ->
+          status.text = if (rows.isEmpty()) "该手机号没有订单" else "共 ${rows.size} 张订单，待支付的可选中后继续收款或取消"
+          fillSelectableRows(orders, rows.map { row -> kioskOrderText(row) to { picked = row } }, "该手机号没有订单")
+        },
+        onError = { status.text = "查询失败：${friendly(it)}" },
+      )
+    }
+    fun unpaid(): TicketOrderRow? = picked?.takeIf { it.payStatus == "unpaid" && it.status != "cancelled" }
+      ?: run { status.text = "请先选中一张待支付的订单"; null }
+    val cancel = button("取消订单") {
+      val order = unpaid() ?: return@button
+      confirmThen("取消订单", "确认取消订单 ${order.orderNo ?: order.id}？取消后不能再收款出票。") {
+        runBackground(
+          action = { api.asStaff(staff.accessToken) { api.cancelTicketOrder(order.id, TicketOrderActionRequest(java.util.UUID.randomUUID().toString())) } },
+          onSuccess = { status.text = "订单已取消"; search() },
+          onError = { status.text = "取消失败：${friendly(it)}" },
+        )
+      }
+    }
+    setContentView(screen(title = "订单查询", children = listOf(status, phone, button("查询") { search() }, orders,
+      button("继续收款") { unpaid()?.let { kioskTicketPay(staff, it) } }, cancel,
+      button("返回售票") { showKioskTicketSale(staff) }, button("结束售票") { endKioskTicketing(staff) })))
+  }
+
+  /** 120-R2：订单一行——订单号、张数、金额、掩码手机号、支付状态、出票状态（中文）。 */
+  private fun kioskOrderText(row: TicketOrderRow): String {
+    val pay = when (row.payStatus) { "unpaid" -> "待支付"; "paid" -> "已支付"; else -> row.payStatus ?: "-" }
+    val issue = when (row.issueStatus) { "issued" -> "已出票"; "not_issued" -> "未出票"; else -> row.issueStatus ?: "-" }
+    return "订单 ${row.orderNo ?: row.id}　${row.quantity} 张　¥${yuan(row.amountCent)}　${row.buyerPhone ?: ""}\n" +
+      "支付：$pay　出票：$issue${if (row.status == "cancelled") "（已取消）" else ""}"
   }
 
   // ---------------------------------------------------------------------------
@@ -802,60 +1221,124 @@ class MainActivity : Activity() {
   // ---------------------------------------------------------------------------
   // 屏 ⑦ 游乐检修提交 + 主管确认恢复
   // submitAmusementMaintenance -> confirmAmusementMaintenanceResume
+  // 第十八批 N 段第 120 条 120-R6（BSM:992「工程师可在授权后填写游乐设施定期检修记录，检修单位作为供应商记录。」；BSM:993「检修完成后必须由
+  // 主管确认，设施才能恢复营业。」；BSM:1269「工程师可在一体机上填写定期检修记录，记录检修单位、检修人员、结果和异常原因。」；BSM:1270）：
+  // 一体机上工程师、主管各自当场授权登录（[staffSignInDialog]，提交或离开即登出），工作手机直接用本人会话；项目、设备、检修单位从列表选，
+  // 主管从待确认的检修记录里选一条二次确认，确认人由服务端取当前登录主管。
   // ---------------------------------------------------------------------------
   private fun showMaintenance() {
-    val projectId = editText("项目")
-    val deviceId = editText("设备")
-    val resultValues = listOf("pass", "fail")
-    val result = enumSpinner(listOf("通过", "失败"))
-    val note = editText("异常说明（可选）")
-    val recordId = editText("检修记录（确认恢复时填）")
-    val status = statusText("先提交检修记录，主管再确认恢复运营")
+    val kiosk = api.terminalType == "kiosk"
+    fun enter(title: String, next: (LoginResponse?) -> Unit) = if (kiosk) staffSignInDialog(title) { kioskStaff = it; next(it) } else next(null)
+    setContentView(screen(title = "游乐检修 / 主管确认", children = listOf(
+      statusText(if (kiosk) "工程师填写检修、主管确认恢复营业，各自当场授权登录" else "先提交检修记录，主管再确认恢复营业"),
+      button("工程师填写检修") { enter("工程师授权登录") { showMaintenanceSubmit(it) } },
+      button("主管确认恢复营业") { enter("主管授权登录") { showMaintenanceConfirm(it) } },
+      backButton(),
+    )))
+  }
 
-    val submitButton = button("提交检修记录") {
-      val pid = projectId.text.toString().trim()
-      val did = deviceId.text.toString().trim()
-      if (pid.isEmpty() || did.isEmpty()) { status.text = "请填写项目与设备"; return@button }
+  /** 120-R6：一体机上这段请求带授权员工令牌（[asStaff]）；工作手机（[staff] 为空）用本人会话。 */
+  private fun <T> asMaintainer(staff: LoginResponse?, block: () -> T): T =
+    if (staff == null) block() else api.asStaff(staff.accessToken, block)
+
+  /** 120-R6：做完或离开检修屏，一体机上的授权员工即登出（工作手机不动）。 */
+  private fun leaveMaintenance(staff: LoginResponse?, message: String? = null) {
+    staff?.let { staffSignOut(it) }
+    message?.let { android.widget.Toast.makeText(this, it, android.widget.Toast.LENGTH_LONG).show() }
+    showMaintenance()
+  }
+
+  private fun showMaintenanceSubmit(staff: LoginResponse?) {
+    var projectId: String? = null
+    var deviceCode: String? = null
+    var vendorId: String? = null
+    val status = statusText("正在读取游乐项目与检修单位…")
+    val projects = rowsContainer()
+    val devices = rowsContainer()
+    val vendors = rowsContainer()
+    val engineerName = editText("检修人员")
+    val result = enumSpinner(listOf("通过", "不通过"))
+    val note = editText("异常原因（不通过必填）")
+    runBackground(
+      action = { asMaintainer(staff) { api.listAmusementProjects() to api.listInventorySuppliers().filter { it.status == "active" } } },
+      onSuccess = { (projectRows, vendorRows) ->
+        status.text = "请选择项目、设备与检修单位"
+        fillSelectableRows(projects, projectRows.map { p ->
+          (p.projectName ?: p.id) to {
+            projectId = p.id
+            deviceCode = null
+            runBackground(
+              action = { asMaintainer(staff) { api.listAmusementDevices(p.id) } },
+              onSuccess = { rows ->
+                fillSelectableRows(devices, rows.map { d -> "${d.name ?: d.deviceCode}（${d.deviceCode}）" to { deviceCode = d.deviceCode } }, "该项目没有登记设备")
+              },
+              onError = { status.text = "设备读取失败：${friendly(it)}" },
+            )
+          }
+        }, "暂无游乐项目")
+        fillSelectableRows(vendors, vendorRows.map { v -> (v.supplierName ?: v.id) to { vendorId = v.id } }, "暂无启用的检修单位")
+      },
+      onError = { status.text = "读取失败：${friendly(it)}" },
+    )
+    val submit = button("提交检修记录") {
+      val pid = projectId
+      val did = deviceCode
+      val vid = vendorId
+      val name = engineerName.text.toString().trim()
+      val pass = result.selectedItemPosition == 0
+      val reason = note.text.toString().trim().ifEmpty { null }
+      if (pid == null || did == null || vid == null) { status.text = "请选择项目、设备与检修单位"; return@button }
+      if (name.isEmpty()) { status.text = "请填写检修人员"; return@button }
+      if (!pass && reason == null) { status.text = "检修不通过须填写异常原因"; return@button }
       status.text = "正在提交…"
       runBackground(
         action = {
-          workflow.submitAmusementMaintenance(
-            projectId = pid,
-            deviceId = did,
-            result = resultValues.getOrElse(result.selectedItemPosition) { "pass" },
-            exceptionNote = note.text.toString().trim().ifEmpty { null },
-          )
+          asMaintainer(staff) {
+            workflow.submitAmusementMaintenance(
+              projectId = pid, deviceId = did, maintenanceVendorId = vid, engineerName = name,
+              result = if (pass) "pass" else "fail", exceptionNote = reason,
+              engineerId = staff?.user?.id, locationPointId = staff?.let { kioskPrefs.getString("point_id", null) },
+            )
+          }
         },
         onSuccess = { rec ->
-          recordId.setText(rec.id)
-          status.text = "检修记录已提交：${rec.id}（状态 ${maintStatusZh(rec.status)}）\n请主管确认恢复运营。"
+          val done = "检修记录已提交（${maintStatusZh(rec.status)}）" + if (pass) "，请主管确认恢复营业" else ""
+          leaveMaintenance(staff, done)
         },
         onError = { status.text = "提交失败：${friendly(it)}" },
       )
     }
+    setContentView(screen(title = "工程师填写检修", children = listOf(status, fieldLabel("项目"), projects, fieldLabel("设备"), devices,
+      fieldLabel("检修单位"), vendors, engineerName, fieldLabel("检修结果"), result, note, submit,
+      button("返回") { leaveMaintenance(staff) })))
+  }
 
-    val confirmButton = button("主管确认恢复运营") {
-      val rid = recordId.text.toString().trim()
-      if (rid.isEmpty()) { status.text = "请输入检修记录"; return@button }
-      confirmThen(
-        title = "主管确认恢复运营",
-        message = "将对检修记录 $rid 确认恢复运营。\n确认后设备立即对客开放，责任落在确认主管，不可撤销。\n请确认检修已完成且设备安全。",
-      ) {
-        status.text = "正在确认…"
-        runBackground(
-          action = { workflow.confirmAmusementMaintenanceResume(rid) },
-          onSuccess = { rec -> status.text = "已确认恢复：${rec.id}（状态 ${maintStatusZh(rec.status)}）" },
-          onError = { status.text = "确认失败：${friendly(it)}" },
-        )
-      }
-    }
-
-    setContentView(
-      screen(
-        title = "游乐检修 / 主管确认",
-        children = listOf(status, projectId, deviceId, fieldLabel("检修结论"), result, note, submitButton, recordId, confirmButton, backButton()),
-      ),
+  private fun showMaintenanceConfirm(staff: LoginResponse?) {
+    val status = statusText("正在读取待主管确认的检修记录…")
+    val records = rowsContainer()
+    runBackground(
+      action = { asMaintainer(staff) { api.listAmusementMaintenanceRecords().filter { it.status == "pending_confirm" } } },
+      onSuccess = { rows ->
+        status.text = "选一条检修记录确认恢复营业"
+        fillSelectableRows(records, rows.map { r ->
+          "项目 ${r.projectId ?: "-"}　设备 ${r.deviceId ?: "-"}\n检修人员 ${r.engineerName ?: "-"}　${r.maintenanceAt?.let { traceTime(it) } ?: ""}" to {
+            confirmThen(
+              title = "主管确认恢复营业",
+              message = "确认后设施立即恢复营业，责任落在确认主管，不可撤销。\n请确认检修已完成且设施安全。",
+            ) {
+              status.text = "正在确认…"
+              runBackground(
+                action = { asMaintainer(staff) { workflow.confirmAmusementMaintenanceResume(r.id) } },
+                onSuccess = { rec -> leaveMaintenance(staff, "已确认恢复营业（${maintStatusZh(rec.status)}）") },
+                onError = { status.text = "确认失败：${friendly(it)}" },
+              )
+            }
+          }
+        }, "没有待主管确认的检修记录")
+      },
+      onError = { status.text = "读取失败：${friendly(it)}" },
     )
+    setContentView(screen(title = "主管确认恢复营业", children = listOf(status, records, button("返回") { leaveMaintenance(staff) })))
   }
 
   // ---------------------------------------------------------------------------
@@ -945,6 +1428,7 @@ class MainActivity : Activity() {
     ChargingReceiptBridge.clearAnchor(this)
     store.clearSensitiveData()
     api.accessToken = null
+    kioskConfig = null
     showLogin()
   }
 
@@ -1146,6 +1630,17 @@ class MainActivity : Activity() {
   // ---------------------------------------------------------------------------
 
   /** 后台线程执行网络业务，回到 UI 线程回调。 */
+  /** 第十八批 N 段第 123 条 123-R4（BSM:1630「工作手机、平板、一体机绑定点位后，系统自动知道“在哪”」）：本机绑定为工作手机、平板或一体机后
+   *  申请定位权限，核销、收款、退款、放行那一刻取一次位置随请求带上（[DeviceLocator]）；取不到时，所属项目已配授权范围的由服务端拒绝、
+   *  只能查看（第十八批裁决 30）。工作手机由企业管控统一打开定位权限，不在本端。 */
+  private fun requestLocationPermission() {
+    val fine = android.Manifest.permission.ACCESS_FINE_LOCATION
+    val coarse = android.Manifest.permission.ACCESS_COARSE_LOCATION
+    if (listOf(fine, coarse).none { checkSelfPermission(it) == android.content.pm.PackageManager.PERMISSION_GRANTED }) {
+      requestPermissions(arrayOf(fine, coarse), LOCATION_PERMISSION_REQUEST)
+    }
+  }
+
   private fun <T> runBackground(action: () -> T, onSuccess: (T) -> Unit, onError: (Throwable) -> Unit) {
     thread {
       val outcome = runCatching(action)
@@ -1192,26 +1687,6 @@ class MainActivity : Activity() {
     } ?: "操作失败"
     else -> error.message ?: error.javaClass.simpleName
     }
-  }
-
-  /** 接口错误转业务话术：解析响应体 {code, detail_code, message}；状态码+路径保留在末尾括号里供报障。 */
-  private fun apiErrorText(error: ApiException): String {
-    val body = runCatching {
-      api.json.parseToJsonElement(error.responseBody) as? JsonObject
-    }.getOrNull()
-    fun field(key: String): String? = (body?.get(key) as? JsonPrimitive)?.content
-    val code = field("detail_code") ?: field("code")
-    val message = field("message")
-    val text = when {
-      error.statusCode == 401 || code == "UNAUTHORIZED" -> "请重新登录"
-      error.statusCode == 403 || code == "FORBIDDEN" -> "当前账号或设备无权操作"
-      code == "VALIDATION_FAILED" || error.statusCode == 400 || error.statusCode == 422 ->
-        "提交内容有误" + (message?.let { "：$it" } ?: "")
-      error.statusCode == 404 || code == "NOT_FOUND" -> "数据不存在"
-      error.statusCode >= 500 -> "服务暂时不可用，请稍后重试"
-      else -> message ?: "操作失败"
-    }
-    return "$text（${error.statusCode} ${error.path}）"
   }
 
   // ---------- 视图工厂（纯 Android Views，无 AndroidX/Compose） ----------
@@ -2129,6 +2604,7 @@ class MainActivity : Activity() {
           posPrefs.edit().putString("bar_id", bar).putString("device_id", dev).apply()
           api.deviceId = dev
           api.terminalType = "tablet"
+          requestLocationPermission()
           posBarId = bar
           status.text = "绑定完成：${binding.deviceCode}（${deviceStatusZh(binding.status)}）"
           showPosTables()
@@ -2191,9 +2667,8 @@ class MainActivity : Activity() {
             setBackgroundColor(Color.parseColor(if (occupied) "#fff3e0" else "#e6f6ea"))
             isClickable = true
             setOnClickListener {
-              posTable = t
               posCart.clear()
-              showPosCatalog()
+              showPosCatalog(bar, t)
             }
           }
           row!!.addView(tile, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginStart = if (i % 2 == 1) dp(8) else 0 })
@@ -2203,17 +2678,17 @@ class MainActivity : Activity() {
     )
   }
 
-  /** ③④ 分类目录 + SKU/套餐卡片 + 购物车。分类横向切换，卡片图片异步鉴权加载。 */
-  private fun showPosCatalog() {
-    val bar = posBarId ?: return
-    val table = posTable
+  /** ③④ 分类目录 + SKU/套餐卡片 + 购物车。分类横向切换，卡片图片异步鉴权加载。
+   *  120-R4：一体机吧台买酒（[kiosk]）共用本屏，酒吧与吧台位由调用方传入，下单走 [submitKioskBarOrder]。 */
+  private fun showPosCatalog(bar: String, table: BarTableAvailabilityRow?, kiosk: Boolean = false) {
     val tableLabel = table?.tableName ?: table?.tableCode ?: table?.id ?: "-"
-    val status = statusText("桌台 $tableLabel · 选择商品加入本桌订单")
+    val status = statusText(if (kiosk) "吧台位 $tableLabel · 选择酒水、套餐和数量加入购物车" else "桌台 $tableLabel · 选择商品加入本桌订单")
     val tabs = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
     val tabScroll = android.widget.HorizontalScrollView(this).apply { addView(tabs) }
     val cardsContainer = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
     val cartSummary = statusText("购物车：空")
-    val submitButton = button("下单（挂本桌）") { submitPosOrder(status) }
+    val submitButton = if (kiosk) button("下单") { submitKioskBarOrder(bar, table, status) }
+      else button("下单（挂本桌）") { submitPosOrder(bar, table, status) }
 
     fun refreshCart() {
       if (posCart.isEmpty()) { cartSummary.text = "购物车：空"; return }
@@ -2330,29 +2805,52 @@ class MainActivity : Activity() {
 
     setContentView(
       screen(
-        title = "平板 POS · 点单",
+        title = if (kiosk) "吧台买酒" else "平板 POS · 点单",
         children = listOf(status, tabScroll, cardsContainer, cartSummary, submitButton,
           button("清空购物车") { posCart.clear(); refreshCart() },
-          button("返回选桌") { showPosTables() }),
+          if (kiosk) button("返回一体机首页") { showKioskHome() } else button("返回选桌") { showPosTables() }),
       ),
     )
   }
 
   /** ⑤ 下单：购物车 → items（SKU=product_id、套餐=combo_id）→ createBarOrder 挂当前桌。 */
-  private fun submitPosOrder(status: TextView) {
-    val bar = posBarId ?: return
-    val table = posTable
+  private fun submitPosOrder(bar: String, table: BarTableAvailabilityRow?, status: TextView) {
     if (posCart.isEmpty()) { status.text = "购物车为空，请先加入商品"; return }
-    val items: List<Map<String, String>> = posCart.values.filter { it.qty > 0 }.map { line ->
-      if (line.comboId != null) mapOf("combo_id" to line.comboId, "quantity" to line.qty.toString())
-      else mapOf("product_id" to (line.productId ?: ""), "quantity" to line.qty.toString())
-    }
+    val items = posCartItems()
     status.text = "正在下单…"
     runBackground(
       action = { workflow.createBarOrder(barId = bar, items = items, tableId = table?.id) },
       onSuccess = { order ->
         posCart.clear()
         showPosCheckout(order)
+      },
+      onError = { status.text = "下单失败：${friendly(it)}" },
+    )
+  }
+
+  /** 购物车 → 下单 items（SKU=product_id、套餐=combo_id）。 */
+  private fun posCartItems(): List<Map<String, String>> = posCart.values.filter { it.qty > 0 }.map { line ->
+    if (line.comboId != null) mapOf("combo_id" to line.comboId, "quantity" to line.qty.toString())
+    else mapOf("product_id" to (line.productId ?: ""), "quantity" to line.qty.toString())
+  }
+
+  /**
+   * 120-R4：一体机吧台买酒下单——购物车在本机酒吧吧台位下单并生成待支付账单（[placeKioskBarOrder]），显示待支付金额后收款走 [kioskPayStep]（账单），
+   * 登记后提示到吧台取酒。
+   */
+  private fun submitKioskBarOrder(bar: String, table: BarTableAvailabilityRow?, status: TextView) {
+    val tableId = table?.id ?: return
+    if (posCart.isEmpty()) { status.text = "购物车为空，请先加入酒水或套餐"; return }
+    val items = posCartItems()
+    status.text = "正在下单…"
+    runBackground(
+      action = { api.placeKioskBarOrder(bar, tableId, items) },
+      onSuccess = { bill ->
+        posCart.clear()
+        kioskPayStep("吧台买酒 账单 ${bill.billNo ?: bill.id}", bill.payableAmountCent - bill.paidAmountCent, KioskPayTarget.BarBill(bill.id), null) {
+          setContentView(screen(title = "吧台买酒", children = listOf(statusText("已付款，请到吧台取酒"),
+            button("返回一体机首页") { showKioskHome() })))
+        }
       },
       onError = { status.text = "下单失败：${friendly(it)}" },
     )

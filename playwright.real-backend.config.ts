@@ -1,4 +1,4 @@
-// 版本：V0.01
+// 版本：V0.02
 import { defineConfig, devices } from "@playwright/test";
 
 if (process.env.REAL_BACKEND_E2E !== "1") {
@@ -29,6 +29,9 @@ export default defineConfig({
     baseURL: webBaseUrl,
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
+    // 第 123 条 123-R3：网页端须打开地理识别（BSM:1876）；e2e 库没配敏感操作授权范围，任意坐标都能通过。
+    permissions: ["geolocation"],
+    geolocation: { latitude: 31.2304, longitude: 121.4737 },
   },
   webServer: {
     command: `npm --workspace apps/web run dev -- --host 127.0.0.1 --port ${webPort} --strictPort`,

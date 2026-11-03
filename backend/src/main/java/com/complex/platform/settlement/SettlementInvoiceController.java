@@ -37,12 +37,16 @@ public class SettlementInvoiceController implements ExportFileService.Source {
     private final SettlementInvoiceService service;
     private final AuthorizationService authorizationService;
     private final ExportFileService exportFiles;
+    private final com.complex.platform.evidence.AuditedOperationExecutor operations;
 
+    // 第十八批 N 段第 124 条 124-R4（PGM L738）：生成、流转写口任一步失败经 AuditedOperationExecutor.recordingFailure 落 OpenAPI 声明的
+    // x-audit-event-failure 再原样抛出；成功事件照旧由服务层写。
     public SettlementInvoiceController(SettlementInvoiceService service, AuthorizationService authorizationService,
-            ExportFileService exportFiles) {
+            ExportFileService exportFiles, com.complex.platform.evidence.AuditedOperationExecutor operations) {
         this.service = service;
         this.authorizationService = authorizationService;
         this.exportFiles = exportFiles;
+        this.operations = operations;
     }
 
     /** 开票清单分页列表(可按项目/结算月/开票主体/开票状态筛)。 */
@@ -72,9 +76,16 @@ public class SettlementInvoiceController implements ExportFileService.Source {
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate periodStart,
             @RequestParam(name = "subjectEntityId", required = false) String subjectEntityId,
             @RequestParam(name = "status", required = false) String status) {
-        authorizationService.requirePermission(PERM_EXPORT);
-        ExportFileService.Table table = invoiceTable(blankToNull(projectId), periodStart, blankToNull(subjectEntityId), blankToNull(status));
-        return exportFiles.create("settlement_invoice_items", table.title(), table.filters(), table.columns(), table.rows()).response();
+        // 第十八批 N 段第 124 条 124-R6（PGM:685「导出须单独授权、逐次留痕」）：导出成功落 settlement.invoice.exported（business_id 导出文件编号），
+        // 权限或取数失败落 settlement.invoice.export_failed。
+        return operations.recordingFailure("settlement.invoice.export_failed", PERM_EXPORT, "export_file", null, null, () -> {
+            authorizationService.requirePermission(PERM_EXPORT);
+            ExportFileService.Table table = invoiceTable(blankToNull(projectId), periodStart, blankToNull(subjectEntityId), blankToNull(status));
+            ExportFileService.ExportFile file = exportFiles.create("settlement_invoice_items", table.title(), table.filters(), table.columns(),
+                    table.rows());
+            operations.recordDetail("settlement.invoice.exported", PERM_EXPORT, "export_file", file.id(), Map.of("row_count", table.rows().size()));
+            return file.response();
+        });
     }
 
     @Override
@@ -175,16 +186,21 @@ public class SettlementInvoiceController implements ExportFileService.Source {
     /** 按结算单生成/补齐开票清单(幂等;可开额 = 应开 − 已开,≤0 不生成)。返回本次新增条目数。 */
     @PostMapping("/generate")
     public ApiResponse<Integer> generate(@RequestParam(name = "billId") String billId) {
-        return ApiResponse.ok(service.generateForBill(billId, requireManageActor()));
+        return ApiResponse.ok(operations.recordingFailure("settlement.invoice.generate_failed", PERM_MANAGE, "settlement_bill", billId,
+                null, () -> service.generateForBill(billId, requireManageActor())));
     }
 
     /** 流转开票状态(登记第三方开票结果 / 红冲 / 作废);本系统不发起开票。 */
     @PostMapping("/{id}/status")
     public ApiResponse<Void> changeStatus(@PathVariable("id") String itemId,
             @RequestBody StatusChangeRequest request) {
-        String actorId = requireManageActor();
-        service.changeStatus(itemId, request == null ? null : request.status(),
-                request == null ? null : request.invoiceNo(), request == null ? null : request.remark(), actorId);
+        operations.recordingFailure("settlement.invoice.status_change_failed", PERM_MANAGE, "settlement_invoice_item", itemId, null,
+                () -> {
+                    String actorId = requireManageActor();
+                    service.changeStatus(itemId, request == null ? null : request.status(),
+                            request == null ? null : request.invoiceNo(), request == null ? null : request.remark(), actorId);
+                    return null;
+                });
         return ApiResponse.ok(null);
     }
 

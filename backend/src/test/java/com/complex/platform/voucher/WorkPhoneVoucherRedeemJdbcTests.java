@@ -1,6 +1,6 @@
 package com.complex.platform.voucher;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -9,6 +9,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.complex.platform.customer.CustomerRepository;
+import com.complex.platform.evidence.AuditEventService;
 import com.complex.platform.support.CustomerTicketPaymentFixture;
 import com.complex.platform.support.StaffRequestFixture;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -27,6 +28,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.test.web.servlet.request.RequestPostProcessor;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.context.request.RequestContextHolder;
 
 /**
  * 第十八批 M 段第 112 条 112-R1（BSM:947「工作手机扫描权益二维码，核销赠饮、礼物或其他领取资格。」；BSM:931「……扫码核销放行），
@@ -47,6 +49,7 @@ class WorkPhoneVoucherRedeemJdbcTests {
     @Autowired private JdbcTemplate jdbc;
     @Autowired private ObjectMapper json;
     @Autowired private CustomerRepository customers;
+    @Autowired private AuditEventService auditEvents;
 
     private CustomerTicketPaymentFixture f;
     private String s;
@@ -85,7 +88,7 @@ class WorkPhoneVoucherRedeemJdbcTests {
         for (String tag : List.of("TRC-A2", "TRC-A3")) {
             mockMvc.perform(post("/api/v1/inventory/trace-codes").with(keeper)
                             .contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(Map.of(
-                                    "idempotency_key", "wpv-reg-" + UUID.randomUUID(), "item_id", item, "trace_code", code(tag)))))
+                                    "idempotency_key", "wpv-reg-" + code(tag), "item_id", item, "trace_code", code(tag)))))
                     .andExpect(status().isOk());
         }
     }
@@ -131,7 +134,56 @@ class WorkPhoneVoucherRedeemJdbcTests {
                 .andExpect(jsonPath("$.detail_code").value("VOUCHER_REDEEM_CODE_EXPIRED"));
     }
 
+    /**
+     * 第十八批 N 段第 122 条 122-R1（BSM:940「……收银、核销、收款、放行等现场动作，一律按执行该动作的设备绑定与该次登录会话定位到操作人并留痕……」；
+     * PGM:745「受控的十一类终端……」）：留痕终端列记服务端派生的可信终端，不再一律写 web。各请求按真实端形状走真实入口与授权链。
+     */
+    @Test
+    void auditTerminalRecordsServerDerivedTerminal() throws Exception {
+        String voucher = goodsVoucher(1);
+        String code = redeemCode(voucher);
+        // 客人小程序会话取码 → miniapp。
+        assertThat(terminalOf("voucher.redeem_code_issued", "business_id", voucher)).isEqualTo("miniapp");
+        // 工作手机查券、核销 → staff_work_phone。
+        preview(cashier, code).andExpect(status().isOk());
+        assertThat(terminalOf("voucher.redeem_previewed", "business_id", voucher)).isEqualTo("staff_work_phone");
+        String key = "wpv-term-" + s;
+        mockMvc.perform(post("/api/v1/vouchers/redemptions").with(cashier)
+                        .contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(Map.of(
+                                "idempotency_key", key, "code", code, "trace_codes", List.of(code("TRC-A2"))))))
+                .andExpect(status().isOk());
+        assertThat(terminalOf("voucher.redeemed", "idempotency_key", key)).isEqualTo("staff_work_phone");
+        // 商户员工账号在后台网页（带 web 头）登记随货码 → merchant_portal。
+        assertThat(terminalOf("inventory.trace_code.registered", "idempotency_key", "wpv-reg-" + code("TRC-A2")))
+                .isEqualTo("merchant_portal");
+        // 无商户的平台员工账号在后台网页代登记 → web。
+        RequestPostProcessor platform = new StaffRequestFixture(jdbc).staff("usr_wpv_plat_" + s, "platform_admin", null, null,
+                "inventory.trace_code.register");
+        String platformKey = "wpv-plat-" + s;
+        mockMvc.perform(post("/api/v1/inventory/trace-codes").with(platform)
+                        .contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(Map.of(
+                                "idempotency_key", platformKey, "item_id", item, "merchant_id", f.merchantId,
+                                "trace_code", code("TRC-P1")))))
+                .andExpect(status().isOk());
+        assertThat(terminalOf("inventory.trace_code.registered", "idempotency_key", platformKey)).isEqualTo("web");
+    }
+
+    /** 122-R1：没有请求（后台作业）也就没有终端信息，终端列记空，不兜底写 web。 */
+    @Test
+    void auditTerminalIsNullWithoutRequest() {
+        RequestContextHolder.resetRequestAttributes();
+        String businessId = "wpv_no_req_" + s;
+        auditEvents.recordSuccess("voucher.redeemed", "customer.voucher.redeem", "voucher", businessId, null, null, Map.of());
+        assertThat(jdbc.queryForList("SELECT terminal FROM audit_events WHERE business_id = ?", String.class, businessId))
+                .containsExactly((String) null);
+    }
+
     // ---------- helpers ----------
+
+    private String terminalOf(String eventName, String column, String value) {
+        return jdbc.queryForObject("SELECT terminal FROM audit_events WHERE event_name = ? AND " + column + " = ?",
+                String.class, eventName, value);
+    }
 
     /** 员工手机真实形状：工作手机终端头＋登记设备号（不签名，默认 grace）。 */
     private RequestPostProcessor workPhone(RequestPostProcessor staff) {

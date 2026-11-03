@@ -1,11 +1,12 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import com.complex.platform.common.api.ApiResponse;
 import com.complex.platform.common.api.PageResponse;
 import com.complex.platform.customer.dto.StoredValueSettleRequest;
 import com.complex.platform.customer.dto.StoredValueTopupRequest;
+import com.complex.platform.evidence.AuditEventService;
 import com.complex.platform.evidence.AuditedOperation;
 import com.complex.platform.evidence.AuditedOperationExecutor;
 import com.complex.platform.finance.PaymentIntentRecord;
@@ -50,14 +51,19 @@ public class MemberWalletController {
     // 在本客人入口判、早于 @GuardedAction 切面与幂等；储值充值、入账、储值付票另按该动作的模块能力码（与 @GuardedAction 同码）
     // 在同一综合体判（PGM 第 736 行按模块开关）。StoredValueService、VoucherService 等共用方法不动。
     private final CustomerProjectSwitch projectSwitch;
+    private final AuditEventService audit;
 
+    // 第十八批 N 段第 124 条 124-R5（PGM L966「已拍板：所有有过程的业务动作都必须留痕……」、L738「访问被拒绝也要留痕……」）：写口任一步失败
+    // 经 AuditedOperationExecutor.recordingFailure 落 OpenAPI 声明的 x-audit-event-failure 再原样抛出；服务层原本不写成功事件的，
+    // 服务返回后在这里落声明的 x-audit-event-success。
     public MemberWalletController(CustomerService customerService, StoredValueService storedValueService,
                                   LoyaltyService loyaltyService,
                                   CustomerRepository repository,
                                   VoucherService voucherService,
                                   VoucherTransferService voucherTransferService,
                                   AuditedOperationExecutor operations,
-                                  CustomerProjectSwitch projectSwitch) {
+                                  CustomerProjectSwitch projectSwitch,
+                                  AuditEventService audit) {
         this.customerService = customerService;
         this.storedValueService = storedValueService;
         this.loyaltyService = loyaltyService;
@@ -66,6 +72,7 @@ public class MemberWalletController {
         this.voucherTransferService = voucherTransferService;
         this.operations = operations;
         this.projectSwitch = projectSwitch;
+        this.audit = audit;
     }
 
     // ---- 储值 ----
@@ -99,10 +106,17 @@ public class MemberWalletController {
             @RequestHeader(name = "Authorization", required = false) String authorization,
             @Valid @RequestBody StoredValueTopupRequest request
     ) {
-        String customerId = customerService.resolveCustomerId(token(customerToken, authorization));
-        projectSwitch.card(request.projectId(), request.merchantId(), "customer.stored_value.topup");
-        return ApiResponse.ok(storedValueService.topup(customerId, request.projectId(), request.merchantId(),
-                request.amountCent() == null ? 0L : request.amountCent(), request.channel(), request.idempotencyKey()));
+        // 成功落 customer.stored_value.topup（business_id 支付意向）：发起充值不在幂等块内，同一请求重放会再记一条（不另处理）。
+        return ApiResponse.ok(operations.recordingFailure("customer.stored_value.topup_failed", "customer.stored_value.topup",
+                "payment_intent", "new", request.idempotencyKey(), () -> {
+                    String customerId = customerService.resolveCustomerId(token(customerToken, authorization));
+                    projectSwitch.card(request.projectId(), request.merchantId(), "customer.stored_value.topup");
+                    PaymentIntentRecord intent = storedValueService.topup(customerId, request.projectId(), request.merchantId(),
+                            request.amountCent() == null ? 0L : request.amountCent(), request.channel(), request.idempotencyKey());
+                    audit.recordSuccess("customer.stored_value.topup", "customer.stored_value.topup", "payment_intent", intent.id(),
+                            null, request.idempotencyKey(), java.util.Map.of());
+                    return intent;
+                }));
     }
 
     @PostMapping("/stored-value/settle")
@@ -111,10 +125,13 @@ public class MemberWalletController {
             @RequestHeader(name = "Authorization", required = false) String authorization,
             @Valid @RequestBody StoredValueSettleRequest request
     ) {
-        String customerId = customerService.resolveCustomerId(token(customerToken, authorization));
-        // 按充值时服务端绑定的卡范围判；settleTopupFromGateway 作业不经此入口。
-        projectSwitch.topupIntent(request.paymentIntentId(), customerId, "customer.stored_value.topup");
-        return ApiResponse.ok(storedValueService.settleTopup(customerId, request.projectId(), request.merchantId(), request.paymentIntentId()));
+        return ApiResponse.ok(operations.recordingFailure("customer.stored_value.settle_failed", "customer.stored_value.topup",
+                "payment_intent", request.paymentIntentId(), null, () -> {
+                    String customerId = customerService.resolveCustomerId(token(customerToken, authorization));
+                    // 按充值时服务端绑定的卡范围判；settleTopupFromGateway 作业不经此入口。
+                    projectSwitch.topupIntent(request.paymentIntentId(), customerId, "customer.stored_value.topup");
+                    return storedValueService.settleTopup(customerId, request.projectId(), request.merchantId(), request.paymentIntentId());
+                }));
     }
 
     @GetMapping("/stored-value/account")
@@ -249,9 +266,12 @@ public class MemberWalletController {
             @RequestHeader(name = "Authorization", required = false) String authorization,
             @PathVariable("transfer_id") String transferId
     ) {
-        CustomerRecord customer = customerService.requireCustomerRecord(token(customerToken, authorization));
-        projectSwitch.voucherTransfer(transferId);
-        return ApiResponse.ok(voucherTransferService.revoke(customer.id(), transferId));
+        return ApiResponse.ok(operations.recordingFailure("voucher_transfer.revoke_failed", "not_applicable", "voucher_transfer",
+                transferId, null, () -> {
+                    CustomerRecord customer = customerService.requireCustomerRecord(token(customerToken, authorization));
+                    projectSwitch.voucherTransfer(transferId);
+                    return voucherTransferService.revoke(customer.id(), transferId);
+                }));
     }
 
     // 领取预览（凭领取码，不算领取）。

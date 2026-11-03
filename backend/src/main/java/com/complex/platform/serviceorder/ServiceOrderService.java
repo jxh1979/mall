@@ -1,6 +1,6 @@
 package com.complex.platform.serviceorder;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -40,6 +40,9 @@ public class ServiceOrderService {
     // 第十一批 TK-04-a：收款时识别会员、完成履约时生成商户消费待确认积分与成长值（字段注入免改构造点；单测未注入即不生成）。
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     com.complex.platform.customer.MerchantConsumptionRewardService merchantRewards;
+    // 第十八批 N 段第 123 条 123-R2：敏感操作定位闸（字段注入免改构造点；单测未注入即不查）。
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    com.complex.platform.gate.SensitiveLocationGuard locationGuard;
 
     public ServiceOrderService(JdbcServiceOrderRepository repository, AuditEventService auditEventService,
             AuthorizationService authorizationService,
@@ -384,6 +387,9 @@ public class ServiceOrderService {
             authorizationService.requirePermission("service.order.create");
             var reach = authorizationService.projectReach(authorizationService.currentActor(), "service.order.create");
             requirePerformerInScope(reach, require(id).performerUserId());
+            if (locationGuard != null) {
+                locationGuard.check("markServiceOrderPaid", () -> businessDayResolver.projectOfMerchant(require(id).barId()));
+            }
             return idempotencyService.execute("markServiceOrderPaid:" + id,
                     request == null ? null : request.idempotencyKey(), request,
                     () -> doMarkPaid(id, request, reach), ServiceOrderRecord.class);
@@ -575,19 +581,27 @@ public class ServiceOrderService {
         return saved;
     }
 
-    /** H批:向客人出示**公司统一收款码**(代收;个人码流程已废弃)。 */
+    /**
+     * H批:向客人出示**公司统一收款码**(代收;个人码流程已废弃)。
+     * 第十八批 N 段第 124 条 124-R6（BSM:1132「点单员代客下单、向客人出示收款码和点完成履约都是现场操作……」；PGM:966「所有有过程的业务动作都必须留痕」）：
+     * 出示成功落 service.payment_code.presented（business_id 服务单编号），权限、范围、未配置收款码等失败落 service.payment_code.present_failed。
+     */
     public Map<String, String> orderPaymentCode(String id) {
-        authorizationService.requirePermission("service.order.create");
-        var reach = authorizationService.projectReach(authorizationService.currentActor(), "service.order.create");
-        ServiceOrderRecord order = require(id);
-        requirePerformerInScope(reach, order.performerUserId());
-        String qr = repository.companyPayQr();
-        if (qr.isBlank()) {
-            throw ApiException.badRequest("COMPANY_PAY_QR_NOT_CONFIGURED",
-                    "公司收款码未配置，请先在服务支付配置中设置");
-        }
-        return Map.of("performer_user_id", order.performerUserId(), "qr_content", qr,
-                "price_cent", String.valueOf(order.priceCent()));
+        return withFailureAudit("service.payment_code.present_failed", "service.order.create", "service_order", id, null, () -> {
+            authorizationService.requirePermission("service.order.create");
+            var reach = authorizationService.projectReach(authorizationService.currentActor(), "service.order.create");
+            ServiceOrderRecord order = require(id);
+            requirePerformerInScope(reach, order.performerUserId());
+            String qr = repository.companyPayQr();
+            if (qr.isBlank()) {
+                throw ApiException.badRequest("COMPANY_PAY_QR_NOT_CONFIGURED",
+                        "公司收款码未配置，请先在服务支付配置中设置");
+            }
+            auditEventService.recordSuccess("service.payment_code.presented", "service.order.create", "service_order", order.id(), null, null,
+                    Map.of("performer_user_id", order.performerUserId()));
+            return Map.of("performer_user_id", order.performerUserId(), "qr_content", qr,
+                    "price_cent", String.valueOf(order.priceCent()));
+        });
     }
 
     /** H批:公司统一收款码配置(经营配置;财务对账基准)。 */

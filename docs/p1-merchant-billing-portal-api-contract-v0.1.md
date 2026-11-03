@@ -1,4 +1,4 @@
-# P1 商户账单门户 API 合同 V0.1
+# P1 商户账单门户 API 合同 V0.11
 
 ## 1. 定位与边界
 
@@ -190,10 +190,10 @@ P1 后台先使用员工权限体系保护接口；真实商户登录态接入�
 ## 5. 留痕与异常
 
 - 查询账单写入 `merchant_billing.bill.viewed` 审计事件。
-- 创建账单写入 `merchant_billing.bill.created`。
-- 确认账单写入 `merchant_billing.bill.confirmed`。
-- 提交异议写入 `merchant_billing.dispute.submitted`。
-- 记录催缴写入 `merchant_billing.dunning.recorded`。
+- 创建账单写入 `merchant.billing.create`。
+- 确认账单写入 `merchant.billing.confirm`。
+- 提交异议写入 `merchant.billing.dispute.submit`。
+- 记录催缴写入 `merchant.billing.dunning.record`。
 - 校验失败写入对应 `*_failed` 审计事件。
 
 错误码：

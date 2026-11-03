@@ -1,4 +1,4 @@
-# P1 游乐预约/排队轻闭环接口契约 V0.1
+# P1 游乐预约/排队轻闭环接口契约 V0.11
 
 ## 1. 范围
 
@@ -67,10 +67,10 @@
 
 | 动作 | 成功事件 | 失败事件 |
 | --- | --- | --- |
-| 创建预约 | `amusement.reservation.created` | `amusement.reservation.create_failed` |
-| 预约状态变更 | `amusement.reservation.status_changed` | `amusement.reservation.status_change_failed` |
-| 加入排队 | `amusement.queue.created` | `amusement.queue.create_failed` |
-| 排队状态变更 | `amusement.queue.status_changed` | `amusement.queue.status_change_failed` |
+| 创建预约 | `amusement.reservation.create` | `amusement.reservation.create_failed` |
+| 预约状态变更 | `amusement.reservation.status_change` | `amusement.reservation.status_change_failed` |
+| 加入排队 | `amusement.queue_entry.create` | `amusement.queue_entry.create_failed` |
+| 排队状态变更 | `amusement.queue_entry.status_change` | `amusement.queue_entry.status_change_failed` |
 
 ## 6. 验收
 

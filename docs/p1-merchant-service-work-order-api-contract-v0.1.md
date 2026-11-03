@@ -1,4 +1,4 @@
-# P1 商户服务工单 API 契约 V0.11
+# P1 商户服务工单 API 契约 V0.12
 
 文档类型：Implementation / API Contract
 
@@ -112,11 +112,11 @@
 
 | 动作 | 成功事件 | 失败事件 |
 |---|---|---|
-| 查询 | `merchant_service.work_order.viewed` | 暂不单列 |
-| 创建 | `merchant_service.work_order.created` | `merchant_service.work_order.create_failed` |
-| 派单 | `merchant_service.work_order.assigned` | `merchant_service.work_order.assign_failed` |
-| 处理 | `merchant_service.work_order.action_added` | `merchant_service.work_order.action_failed` |
-| 关闭 | `merchant_service.work_order.closed` | `merchant_service.work_order.close_failed` |
+| 查询 | `merchant_service.listMerchantServiceWorkOrders.succeeded`（「我的工单」仍为 `merchant_service.work_order.viewed`） | 暂不单列 |
+| 创建 | `merchant_service.createMerchantServiceWorkOrder.succeeded` | `merchant_service.createMerchantServiceWorkOrder.failed` |
+| 派单 | `merchant_service.assignMerchantServiceWorkOrder.succeeded` | `merchant_service.assignMerchantServiceWorkOrder.failed` |
+| 处理 | `merchant_service.addMerchantServiceWorkOrderAction.succeeded` | `merchant_service.addMerchantServiceWorkOrderAction.failed` |
+| 关闭 | `merchant_service.closeMerchantServiceWorkOrder.succeeded` | `merchant_service.closeMerchantServiceWorkOrder.failed` |
 | 取消 | `merchant_service.work_order.cancelled` | `merchant_service.work_order.cancel_failed` |
 | 登记用料 | `merchant_service.work_order.material_issued` | `merchant_service.work_order.material_issue_failed` |
 | 标明费用承担方 | `merchant_service.work_order.cost_bearer_marked` | `merchant_service.work_order.cost_bearer_mark_failed` |
@@ -236,10 +236,10 @@
 
 | 动作 | 端点（§3） | 后端落地 |
 |---|---|---|
-| 创建 | `POST .../work-orders` | 校验 §6 必填/枚举 → 生成 `work_order_no`、`status=created` → 写主表 + `created` 动作 → 发 `merchant_service.work_order.created` |
-| 派单 | `POST .../{id}/assign` | 校验非终态 → 写 `owner_department`/`owner_user_id`/`assigned_at`、`status=assigned` → 写 `assigned` 动作 → 发 `merchant_service.work_order.assigned` |
-| 处理 | `POST .../{id}/actions` | 校验 `target_status` 合法迁移 → 流转到 `processing`/`pending_merchant`/`resolved`（`resolved` 回写 `resolved_at`）→ 写 `action` 动作 → 发 `merchant_service.work_order.action_added` |
-| 关闭 | `POST .../{id}/close` | 校验有 `resolution`、满意度 1-5 → `status=closed`、写 `closed_at` → 写 `closed` 动作 → 发 `merchant_service.work_order.closed` |
+| 创建 | `POST .../work-orders` | 校验 §6 必填/枚举 → 生成 `work_order_no`、`status=created` → 写主表 + `created` 动作 → 发 `merchant_service.createMerchantServiceWorkOrder.succeeded` |
+| 派单 | `POST .../{id}/assign` | 校验非终态 → 写 `owner_department`/`owner_user_id`/`assigned_at`、`status=assigned` → 写 `assigned` 动作 → 发 `merchant_service.assignMerchantServiceWorkOrder.succeeded` |
+| 处理 | `POST .../{id}/actions` | 校验 `target_status` 合法迁移 → 流转到 `processing`/`pending_merchant`/`resolved`（`resolved` 回写 `resolved_at`）→ 写 `action` 动作 → 发 `merchant_service.addMerchantServiceWorkOrderAction.succeeded` |
+| 关闭 | `POST .../{id}/close` | 校验有 `resolution`、满意度 1-5 → `status=closed`、写 `closed_at` → 写 `closed` 动作 → 发 `merchant_service.closeMerchantServiceWorkOrder.succeeded` |
 | 查询 | `GET .../work-orders` | 列表查询，按商户/状态/责任人/SLA 过滤 |
 
 SLA 落地：创建/派单时按 `priority` 与业务配置写 `due_at`；处理/关闭或后台定时任务比对 `now > due_at` 且未到终态时置 `sla_breached=true`、`sla_breached_at=now`，并可发失败链事件提示升级（升级本身仍按 §1「不包含 SLA 自动升级」留 P1+，本期仅打标）。

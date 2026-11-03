@@ -159,8 +159,9 @@ final class AmusementMaintenanceService {
             String recordId,
             AmusementMaintenanceResumeRequest request
     ) {
-        AmusementMaintenanceResumeRequest actual = requireRequest(request);
-        String supervisorId = requireText(actual.supervisorConfirmedBy(), "supervisor_confirmed_by");
+        requireRequest(request);
+        // 第十八批 N 段第 120 条 120-R6（BSM:993「检修完成后必须由主管确认，设施才能恢复营业。」）：确认人取当前登录主管。
+        String supervisorId = authorizationService.currentActor().id();
         AmusementMaintenanceRecord existing = findRecord(recordId);
         checkProjectOwnership(existing.projectId());
         if ("confirmed".equals(existing.status())) {
@@ -172,12 +173,9 @@ final class AmusementMaintenanceService {
         }
         AmusementProjectRecord project = repository.findProjectById(existing.projectId())
                 .orElseThrow(() -> ApiException.notFound("PROJECT_NOT_FOUND", "游乐项目不存在或已被删除"));
-        // 硬约束（5.1.1）：当前项目必须处于 maintenance，才允许 maintenance → open。
-        if (!"maintenance".equals(project.openStatus())) {
-            throw ApiException.conflict("PROJECT_NOT_IN_MAINTENANCE", "该游乐项目不在维保中");
-        }
-        if (!repository.updateProjectOpenStatus(project.id(), "maintenance", "open")) {
-            throw ApiException.conflict("PROJECT_NOT_IN_MAINTENANCE", "该游乐项目不在维保中");
+        // 120-R6：项目处于检修中才 maintenance → open，在营项目不动（与巡检 reopenProjectIfBlocked 同口径）。
+        if ("maintenance".equals(project.openStatus())) {
+            repository.updateProjectOpenStatus(project.id(), "maintenance", "open");
         }
         Instant now = Instant.now();
         // 接线:复工 → 设备恢复运行状态。

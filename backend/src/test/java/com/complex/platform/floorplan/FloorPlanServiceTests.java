@@ -1,5 +1,5 @@
 package com.complex.platform.floorplan;
-// 文件版本：V0.06
+// 文件版本：V0.07
 
 import com.complex.platform.support.InMemoryAuditEventRepository;
 import com.complex.platform.support.InMemoryIdempotencyRepository;
@@ -131,7 +131,7 @@ class FloorPlanServiceTests {
         assertThat(repository.findShapesByFloorPlanId(floorPlan.id())).hasSize(1);
         assertThat(auditEventRepository.events)
                 .extracting(AuditEvent::eventName)
-                .contains("floor_plan.shape_saved");
+                .contains("floor_plan.shape.save");
     }
 
     @Test

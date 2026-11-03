@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import com.complex.platform.evidence.AuditedOperation;
 
@@ -10,8 +10,8 @@ enum BarWriteOperation implements AuditedOperation {
     CREATE_ORDER_BILL("bar.bill.created", "bar.bill.created_failed", "bar.order.create", "bar_bill"),
     DELIVER_ORDER("bar.order_delivered", "bar.order_deliver_failed", "bar.order.create", "bar_order"),
     ADD_ORDER_ITEM("bar.order_item.created", "bar.order_item.created_failed", "bar.order.create", "bar_order_item"),
-    TRANSITION_PRODUCTION_TICKET("bar.production_ticket.transitioned", "bar.production_ticket.transition_failed", "bar.production_ticket.manage", "bar_production_ticket"),
-    CREATE_PRODUCT("bar.product.created", "bar.product.create_failed", "bar.order.create", "bar_product"),
+    TRANSITION_PRODUCTION_TICKET("bar.production_ticket.transition", "bar.production_ticket.transition_failed", "bar.production_ticket.manage", "bar_production_ticket"),
+    CREATE_PRODUCT("bar.product.created", "bar.product.created_failed", "bar.order.create", "bar_product"),
     CREATE_RESERVATION("bar.reservation.created", "bar.reservation.create_failed", "bar.reservation.create", "bar_reservation"),
     PAY_RESERVATION_DEPOSIT("bar.reservation_deposit_paid", "bar.reservation_deposit_pay_failed", "bar.reservation.manage", "bar_reservation"),
     // 第十批 TK-24-R1：到店只留痕、定金不再抵扣（原 bar.reservation_deposit_deducted 事件停用）。
@@ -25,9 +25,9 @@ enum BarWriteOperation implements AuditedOperation {
     OPEN_TABLE("bar.table.opened", "bar.table.open_failed", "bar.table.open_close", "bar_table"),
     // 第十批 TK-27-R2：清台登记恢复空闲（BSM L1058）。
     CLEAR_TABLE("bar.table.cleared", "bar.table.clear_failed", "bar.table.open_close", "bar_table"),
-    CREATE_TABLE_SESSION("bar.table_session.created", "bar.table_session.create_failed", "bar.table_session.create", "bar_table_session"),
-    TRANSFER_TABLE_SESSION("bar.table.transferred", "bar.table.transfer_failed", "bar.table_session.transfer", "bar_table_session_adjustment"),
-    MERGE_TABLE_SESSIONS("bar.table.merged", "bar.table.merge_failed", "bar.table_session.merge", "bar_table_session_adjustment"),
+    CREATE_TABLE_SESSION("bar.table_session.create", "bar.table_session.create_failed", "bar.table_session.create", "bar_table_session"),
+    TRANSFER_TABLE_SESSION("bar.table.transferred", "bar.table_session.transfer_failed", "bar.table_session.transfer", "bar_table_session_adjustment"),
+    MERGE_TABLE_SESSIONS("bar.table_session.merge", "bar.table_session.merge_failed", "bar.table_session.merge", "bar_table_session_adjustment"),
     // 第十批 TK-27-R3：拆台（BSM L1079）。
     SPLIT_TABLE_SESSIONS("bar.table.split", "bar.table.split_failed", "bar.table_session.split", "bar_table_session_adjustment"),
     // 第十八批 K 段 95-R2（BSM 第 1021 行「来源与销售人员的事后改派须店长复核并留痕」）。
@@ -35,12 +35,12 @@ enum BarWriteOperation implements AuditedOperation {
             "bar.table_session.attribution_reassign", "bar_table_session"),
     CREATE_BILL_PAY_INTENT("payment.intent_created", "payment.intent_failed", "finance.payment_intent.create", "finance_payment_intent"),
     SETTLE_BILL("bar.bill.settled", "bar.bill.settle_failed", "finance.payment.register", "bar_bill"),
-    APPLY_BILL_ADJUSTMENT("bar.bill.adjusted", "bar.bill.adjust_failed", "bar.bill.adjust", "bar_bill_adjustment"),
+    APPLY_BILL_ADJUSTMENT("bar.bill.adjust", "bar.bill.adjust_failed", "bar.bill.adjust", "bar_bill_adjustment"),
     SPLIT_BILL("bar.bill.split", "bar.bill.split_failed", "bar.bill.split_merge", "bar_bill_operation"),
-    MERGE_BILLS("bar.bill.merged", "bar.bill.merge_failed", "bar.bill.split_merge", "bar_bill_operation"),
+    MERGE_BILLS("bar.bill.merge", "bar.bill.merge_failed", "bar.bill.split_merge", "bar_bill_operation"),
     CALCULATE_COMMISSION("bar.table_commission.calculated", "bar.table_commission.calculate_failed", "bar.table_commission.calculate", "bar_commission_calculation"),
     VOID_ORDER_ITEM("bar.order_item_voided", "bar.order_item_void_failed", "bar.order_item.void", "bar_order_item"),
-    DECIDE_ORDER_ITEM_VOID("bar.order_item_void_decided", "bar.order_item_void_decide_failed", "bar.order_item.void", "bar_order_item_void"),
+    DECIDE_ORDER_ITEM_VOID("bar.order_item_void_decided", "bar.order_item_void.decide_failed", "bar.order_item.void", "bar_order_item_void"),
     REOPEN_BILL("bar.bill_reopened", "bar.bill_reopen_failed", "bar.bill.reopen", "bar_bill"),
     // 第十六批第 16 条：客人争议员工登记置异常（沿用账单调整权限）／主管二选一处置（ENUM「异常状态的统一出口」）。
     RAISE_BILL_ANOMALY("bar.bill_anomaly_raised", "bar.bill_anomaly_raise_failed", "bar.bill.adjust", "bar_bill"),

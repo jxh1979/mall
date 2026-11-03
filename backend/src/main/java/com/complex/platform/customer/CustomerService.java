@@ -1,6 +1,6 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.12
+// 文件版本：V0.13
 
 import com.complex.platform.bar.BarDepositRuleRecord;
 import com.complex.platform.bar.BarRepository;
@@ -11,7 +11,6 @@ import com.complex.platform.bar.BarTableRecord;
 import com.complex.platform.customer.dto.CustomerBarInvitationConfirmRequest;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.PageResponse;
-import com.complex.platform.common.money.MoneyRounding;
 import com.complex.platform.evidence.AuditedOperation;
 import com.complex.platform.evidence.AuditedOperationExecutor;
 import com.complex.platform.customer.dto.CustomerBarReservationRequest;
@@ -617,8 +616,8 @@ public class CustomerService implements com.complex.platform.ticketing.KioskBuye
     public PageResponse<CustomerPointsLedgerRecord> listPointsLedger(String customerToken) {
         CustomerRecord customer = requireCustomer(customerToken);
         return readPage(
-                "customer.points_ledger_viewed",
-                "customer.points_ledger_view_failed",
+                "customer.points.ledger_viewed",
+                "customer.points.ledger_view_failed",
                 "not_applicable",
                 "customer_points_ledger",
                 () -> repository.listPointsLedgerByCustomerId(customer.id())
@@ -669,8 +668,8 @@ public class CustomerService implements com.complex.platform.ticketing.KioskBuye
     public PageResponse<CustomerRedemptionCatalogItemRecord> listRedemptionItems(String customerToken) {
         requireCustomer(customerToken);
         return readPage(
-                "customer.points_redemption_items_viewed",
-                "customer.points_redemption_items_view_failed",
+                "customer.points.redemption_items_viewed",
+                "customer.points.redemption_items_view_failed",
                 "not_applicable",
                 "customer_points_redemption_item",
                 () -> repository.listActiveRedemptionCatalogItems(clock.instant())
@@ -680,8 +679,8 @@ public class CustomerService implements com.complex.platform.ticketing.KioskBuye
     public PageResponse<CustomerPointsRedemptionRecord> listRedemptions(String customerToken) {
         CustomerRecord customer = requireCustomer(customerToken);
         return readPage(
-                "customer.points_redemptions_viewed",
-                "customer.points_redemptions_view_failed",
+                "customer.points.redemptions_viewed",
+                "customer.points.redemptions_view_failed",
                 "not_applicable",
                 "customer_points_redemption",
                 () -> repository.listPointsRedemptionsByCustomerId(customer.id())
@@ -705,8 +704,8 @@ public class CustomerService implements com.complex.platform.ticketing.KioskBuye
                 key,
                 actual,
                 CustomerPointsRedemptionRecord.class,
-                "customer.points_redeemed",
-                "customer.points_redeem_failed",
+                "customer.points.redeem",
+                "customer.points.redeem_failed",
                 "not_applicable",
                 "customer_points_redemption",
                 () -> {
@@ -932,7 +931,7 @@ public class CustomerService implements com.complex.platform.ticketing.KioskBuye
                 () -> repository.listBarReservationOptions().stream()
                         .map(option -> {
                             BarDepositRuleRecord rule = resolveDepositRule(option.barId(), option.tableType());
-                            return option.withDepositAmountCent(rule == null ? 0L : computeDepositAmount(rule, option.minConsumptionCent()));
+                            return option.withDepositAmountCent(rule == null ? 0L : com.complex.platform.bar.BarEntryService.depositAmountCent(rule, option.minConsumptionCent()));
                         })
                         .toList()
         );
@@ -988,7 +987,7 @@ public class CustomerService implements com.complex.platform.ticketing.KioskBuye
                     // table_type 优先于 bar；比例模式按卡座低消 minConsumptionCent × ratioBps/10000，定金待支付（pending）。
                     // BSM 第 1062 行「客人自助订台必须支付定金」：本酒吧未配定金规则（或算出无定金可付）时客人自助订台不可用，员工代订不受影响。
                     BarDepositRuleRecord rule = resolveDepositRule(barId, table.tableType());
-                    long depositAmountCent = rule == null ? 0L : computeDepositAmount(rule, table.minConsumptionCent());
+                    long depositAmountCent = rule == null ? 0L : com.complex.platform.bar.BarEntryService.depositAmountCent(rule, table.minConsumptionCent());
                     if (depositAmountCent <= 0L) {
                         throw ApiException.conflict("BAR_SELF_RESERVATION_UNAVAILABLE", "该酒吧暂未开放自助订台");
                     }
@@ -1195,19 +1194,6 @@ public class CustomerService implements com.complex.platform.ticketing.KioskBuye
         return barScoped;
     }
 
-    /** P0#3：fixed=固定额；min_consumption_ratio=卡座低消 × ratioBps/10000（对齐 BarEntryService）。 */
-    private long computeDepositAmount(BarDepositRuleRecord rule, long minConsumptionCent) {
-        if ("fixed".equals(rule.mode())) {
-            return rule.fixedAmountCent() == null ? 0L : Math.max(0L, rule.fixedAmountCent());
-        }
-        if ("min_consumption_ratio".equals(rule.mode())) {
-            int ratioBps = rule.ratioBps() == null ? 0 : rule.ratioBps();
-            // R-7:定金按低消比例取额四舍五入到分(旧整除截断,定金恒少收)。
-            return Math.max(0L, MoneyRounding.bpsOf(minConsumptionCent, ratioBps));
-        }
-        return 0L;
-    }
-
     /** 解析客人 token → customerId（鉴权失败抛 401）。供储值/付费会员/积分转赠等客人端动作复用。 */
     public String resolveCustomerId(String customerToken) {
         return requireCustomer(customerToken).id();
@@ -1246,7 +1232,7 @@ public class CustomerService implements com.complex.platform.ticketing.KioskBuye
         }
         int revoked = repository.revokeSessionByToken(token);
         if (revoked > 0) {
-            auditEventService.recordSuccess("customer.auth.logout", "public", "customer",
+            auditEventService.recordSuccess("customer.logged_out", "public", "customer",
                     null, null, null, Map.of());
         }
     }

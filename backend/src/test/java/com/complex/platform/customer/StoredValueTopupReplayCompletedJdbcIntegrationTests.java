@@ -1,6 +1,6 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -131,6 +131,19 @@ class StoredValueTopupReplayCompletedJdbcIntegrationTests {
                 .andExpect(jsonPath("$.detail_code").value("IDEMPOTENCY_CONFLICT"))
                 .andExpect(jsonPath("$.replayed").doesNotExist());
         assertThat(intents()).isEqualTo(2);
+    }
+
+    // 第十八批 N 段第 124 条 124-R5（PGM L966「已拍板：所有有过程的业务动作都必须留痕……」；OpenAPI customerStoredValueTopup 的
+    // x-audit-event-success）：客人发起一次充值，按本次幂等键落一条 customer.stored_value.topup，business_id 是返回的支付意向
+    @Test
+    void aTopupRecordsTheDeclaredSuccessEventOnce() throws Exception {
+        String key = "r5-topup-" + suffix;
+        String intent = intentId(customerWrite("/api/v1/customer/stored-value/topup", key, topupJson(key, 5000L))
+                .andExpect(status().isOk()));
+        assertThat(jdbcTemplate.queryForList("""
+                SELECT business_type || '|' || business_id || '|' || permission_code FROM audit_events
+                 WHERE event_name = 'customer.stored_value.topup' AND event_result = 'success' AND idempotency_key = ?""",
+                String.class, key)).containsExactly("payment_intent|" + intent + "|customer.stored_value.topup");
     }
 
     // 充值入账：同一支付意向再次入账返回第一次的充值流水并提示已完成，余额只加一次；每次入账请求用新的请求编号（客人端现状）

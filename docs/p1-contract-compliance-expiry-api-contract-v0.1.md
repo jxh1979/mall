@@ -1,4 +1,4 @@
-# P1 合同关键日期与证照到期 API 合同 V0.1
+# P1 合同关键日期与证照到期 API 合同 V0.11
 
 ## 1. 定位与边界
 
@@ -135,7 +135,7 @@ AI 辅助识别只作为后续输入来源保留：可记录 `source_type=ai_sug
 - 证照/资质/保险在「有效期止减该证照类型的预警提前月数」当日及以后、有效期止当日及以前生成 `upcoming`（预警提前月数按类型配置，未配置按出厂 3 个月；不再用条目上的 `reminder_days` 与请求的 `default_lookahead_days`，后者只对合同关键日期生效）；`block_operation` 或 `supervisor_approval` 给出阻断或审批建议。
 - 宽限期已批准、扫描日在宽限截止日（含）以内的证照，每个扫描日另生成一条 `grace`（`due_date`＝扫描日，`blocking_suggested=false`）。
 - 提醒 `message` 为中文：「{名称}将于{日期}到期」「{名称}已于{日期}到期」「{名称}宽限期至{日期}，到期仍未更新将阻断」。
-- 每日 08:00（北京时间）系统自动对全平台执行同一套扫描（prod 开启 `compliance.reminder.scheduled.enabled`），留痕 `compliance.reminder.scan_completed`。
+- 每日 08:00（北京时间）系统自动对全平台执行同一套扫描（prod 开启 `compliance.reminder.scheduled.enabled`），留痕 `compliance.reminder.scan`。
 - 同一 `idempotency_key` 重放返回同一扫描结果，不重复生成。
 
 ### 3.7 按证照类型配置宽限期与预警提前量（第十八批 E 段第 22 条，PGM:531）
@@ -158,12 +158,12 @@ AI 辅助识别只作为后续输入来源保留：可记录 `source_type=ai_sug
 
 ## 4. 留痕
 
-- 合同关键日期创建：`compliance.contract_key_date.created`
-- 合同关键日期查询：`compliance.contract_key_date.viewed`
-- 到期事项创建：`compliance.expiry_item.created`
-- 到期事项查询：`compliance.expiry_item.viewed`
-- 到期提醒扫描：`compliance.reminder.scan_completed`
-- 到期提醒查询：`compliance.reminder.viewed`
+- 合同关键日期创建：`compliance.contract_key_date.create`
+- 合同关键日期查询：`compliance.contract_key_date.list`
+- 到期事项创建：`compliance.expiry_item.create`
+- 到期事项查询：`compliance.expiry_item.list`
+- 到期提醒扫描：`compliance.reminder.scan`
+- 到期提醒查询：`compliance.reminder.list`
 - 按证照类型配置：`compliance.item_type_config.saved`
 - 宽限期申请：`compliance.grace.submitted`；最高权限审批结果回写：`compliance.grace.decided`
 - 证照续期登记：`compliance.expiry_item.renewed`（记原有效期止与新有效期止）

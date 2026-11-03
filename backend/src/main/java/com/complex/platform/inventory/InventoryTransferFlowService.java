@@ -1,6 +1,6 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.07
+// 文件版本：V0.08
 
 import static com.complex.platform.common.Strings.requireText;
 import static com.complex.platform.common.Strings.trimToNull;
@@ -248,7 +248,7 @@ public class InventoryTransferFlowService {
 
     /**
      * 待签收 → 已完成（各行合格数＝发货数）或差异处理中。合格部分：溯源码转到门店、入门店库存、按锁定单价形成一笔货款应付；
-     * 拒收与短少的码仍归供货主体。差异的退回、损失、补发与货款调整见差异处理。
+     * 未登记的合格码按本行物品登记到门店。拒收与短少的码仍归供货主体。差异的退回、损失、补发与货款调整见差异处理。
      */
     InventoryTransferOrderRecord receive(InventoryTransferOrderRecord current, ReceiveTransferRequest r) {
         InventoryTransferOrderRecord o = lockOpen(current.id());
@@ -297,8 +297,13 @@ public class InventoryTransferFlowService {
             ReceiveTransferLineRequest in = byLine.get(line.id());
             int accepted = count(in.acceptedQuantity());
             for (String code : codes(in)) {
-                int affected = repository.updateTraceCodeOwnerIfExists(code, o.fromOwnerId(), o.toOwnerType(), o.toOwnerId(), now);
-                if (affected == 0 && repository.traceCodeExists(code)) {
+                // 第十八批 N 段第 121 条 121-R1（BSM:1166「……可以入库贴码……」；BSM:1201「……买断时溯源码归属从原主体变更到接收主体……」）：
+                // 门店签收即入库贴码，未登记的合格码按本行物品登记到门店；归属商户与登记物料随转为门店和本行物品，CAS 未命中即归属第三方。
+                if (!repository.traceCodeExists(code)) {
+                    repository.saveTraceCode(new InventoryTraceCodeRecord("trace_code_" + Hashing.idempotencyCode("transfer:" + code), code,
+                            line.itemId(), null, o.toOwnerId(), "registered", null, null, actor, now, now));
+                }
+                if (repository.transferTraceCodeOwnership(code, o.fromOwnerId(), o.toOwnerType(), o.toOwnerId(), line.itemId(), now) == 0) {
                     throw ApiException.badRequest("TRACE_OWNER_MISMATCH", "溯源码属于其他主体，不能签收：" + code);
                 }
                 repository.saveTraceOwnershipHistory(new InventoryTraceOwnershipHistoryRecord(receiptNo + "_h" + (seq++), code,

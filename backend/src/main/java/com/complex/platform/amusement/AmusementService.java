@@ -1,6 +1,6 @@
 package com.complex.platform.amusement;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -47,6 +47,9 @@ public class AmusementService {
     com.complex.platform.ticketing.ParkWideFaultSalesGate parkWideFaultSalesGate;
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     com.complex.platform.ticketing.BarMerchantDirectory merchantDirectory;
+    /** 第十八批 N 段第 120 条 120-R5：状态看板读取留痕记可信终端、设备号与绑定点位。字段注入免改构造点；单测（无 Spring）为 null 则不记。 */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    com.complex.platform.terminal.TerminalDeviceService terminalDeviceService;
 
     private final AmusementRepository repository;
     private final IdempotencyService idempotencyService;
@@ -129,6 +132,49 @@ public class AmusementService {
                 "amusement_project",
                 () -> visibleProjectRows(repository.listProjects(), AmusementProjectRecord::id, "amusement.session.view")
         );
+    }
+
+    /**
+     * 第十八批 N 段第 120 条 120-R5（BSM:991「查看游乐设施状态：开放、排队、容量、暂停、关闭、故障、维护或安全提醒。」；BSM:1268「通过触摸屏一体机展示
+     * 游乐设施开放、排队、容量、暂停、故障和维护状态。」；BSM:1002「……展示游乐设施开放状态、容量和异常，并形成状态检查……记录。」；BSM:1004「……一体机的下单、
+     * 领取、状态检查和异常提示都要记录设备、点位和时间。」）：游乐设施状态看板，与项目列表同权限同范围。每行在玩人数取项目维容量快照（没有即 0），排队人数取
+     * 排队中，维护设备数取设备状态为维护，故障数取未结（已登记、处理中、待外部）的故障事件，安全提醒取当前生效的安全提示标题；不出客人编号与排队号。
+     * 读取留痕即状态检查记录：记可信终端类型、设备号与绑定点位（时间即留痕时间）。
+     */
+    public PageResponse<AmusementProjectStatusRecord> listProjectStatusBoard() {
+        Map<String, Object> metadata = terminalDeviceService == null ? new java.util.HashMap<>() : terminalDeviceService.terminalTraceMetadata();
+        try {
+            List<AmusementProjectRecord> projects = visibleProjectRows(repository.listProjects(), AmusementProjectRecord::id, "amusement.session.view");
+            Map<String, Integer> occupied = new java.util.HashMap<>();
+            repository.listCapacitySnapshots(authorizationService.currentActor().merchantId()).stream()
+                    .filter(row -> "project".equals(row.dimension()))
+                    .forEach(row -> occupied.put(row.projectId(), row.occupiedCount()));
+            Map<String, Integer> waiting = repository.countWaitingQueueEntriesByProject();
+            Map<String, Integer> faults = repository.countOpenFaultIncidentsByProject();
+            Map<String, Long> maintenance = repository.listDeviceStatuses().stream()
+                    .filter(row -> "maintenance".equals(row.status()))
+                    .collect(java.util.stream.Collectors.groupingBy(AmusementDeviceStatusRecord::projectId, java.util.stream.Collectors.counting()));
+            Instant now = Instant.now();
+            Map<String, List<String>> notices = safetyRepository.findAllSafetyNotices().stream()
+                    .filter(n -> "active".equals(n.status()) && "safety_notice".equals(n.noticeType()) && n.amusementProjectId() != null
+                            && (n.effectiveFrom() == null || !n.effectiveFrom().isAfter(now))
+                            && (n.effectiveTo() == null || n.effectiveTo().isAfter(now)))
+                    .collect(java.util.stream.Collectors.groupingBy(AmusementSafetyNoticeRecord::amusementProjectId,
+                            java.util.stream.Collectors.mapping(AmusementSafetyNoticeRecord::title, java.util.stream.Collectors.toList())));
+            List<AmusementProjectStatusRecord> rows = projects.stream().map(project -> new AmusementProjectStatusRecord(
+                    project.id(), project.projectName(), project.openStatus(), project.capacity(),
+                    occupied.getOrDefault(project.id(), 0), waiting.getOrDefault(project.id(), 0),
+                    maintenance.getOrDefault(project.id(), 0L).intValue(), faults.getOrDefault(project.id(), 0),
+                    notices.getOrDefault(project.id(), List.of()))).toList();
+            metadata.put("count", rows.size());
+            auditEventService.recordSuccess("amusement.status_board.viewed", "amusement.session.view", "amusement_project", "all",
+                    null, null, metadata);
+            return new PageResponse<>(rows, DEFAULT_PAGE, DEFAULT_PAGE_SIZE, rows.size());
+        } catch (RuntimeException exception) {
+            auditEventService.recordFailure("amusement.status_board.view_failed", "amusement.session.view", "amusement_project", "all",
+                    null, null, codeOf(exception));
+            throw exception;
+        }
     }
 
     @com.complex.platform.gate.GuardedAction(capability = "amusement.session.manage")
@@ -747,6 +793,11 @@ public class AmusementService {
     @Transactional
     public EntitlementSessionRecord claimEntitlementSession(String id, ClaimEntitlementSessionRequest request) {
         String sessionId = requireText(id, "id");
+        if (locationGuard != null) {
+            locationGuard.check("claimAmusementEntitlementSession", () -> repository.findEntitlementSessionById(sessionId)
+                    .map(session -> session.projectId() != null ? amusementBusinessDayService.complexId(session.projectId())
+                            : locationGuard.projectOfMerchant(session.merchantId())).orElse(null));
+        }
         return executeWrite(
                 "claimEntitlementSession:" + sessionId,
                 request == null ? null : request.idempotencyKey(),
@@ -1029,6 +1080,10 @@ public class AmusementService {
             VerificationRequest actual = requireRequest(request);
             sessionLifecycle.requireVerificationScope(requireText(textFromMap(actual.businessContext(),
                     "session_id", "sessionId"), "session_id"), "amusement.verification.execute");
+        }
+        if (locationGuard != null) {
+            locationGuard.check("createAmusementVerification", () -> amusementBusinessDayService.complexId(textFromMap(
+                    requireRequest(request).businessContext(), "project_id", "projectId", "business_id", "businessId")));
         }
         return executeWrite(
                 "createAmusementVerification",
@@ -1746,6 +1801,10 @@ public class AmusementService {
 
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     AmusementSessionLifecycleService sessionLifecycle;
+
+    // 第十八批 N 段第 123 条 123-R2：敏感操作定位闸（字段注入免改构造点；单测未注入即不查）。
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    com.complex.platform.gate.SensitiveLocationGuard locationGuard;
 
     /**
      * 营业日结束自动清零（非场次型）：对每个项目，把上一营业日结束时刻之前最后变动的并发快照（项目维 / 点位设备维）清零；

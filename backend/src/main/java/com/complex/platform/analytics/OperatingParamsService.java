@@ -22,7 +22,7 @@ import static com.complex.platform.common.Strings.requireText;
  * {@code operating_params.changed}。幂等：repository 按 project_id ON CONFLICT DO UPDATE。</p>
  */
 @Service
-// 文件版本：V0.02
+// 文件版本：V0.03
 public class OperatingParamsService {
 
     private final AnalyticsRepository repository;
@@ -113,7 +113,7 @@ public class OperatingParamsService {
         AnalyticsRecords.NotificationWindow saved = repository.upsertNotificationWindow(
                 key, days, actual.description(), null, Instant.now(clock));
         auditEventService.recordSuccess(
-                "analytics.notification_window.updated", "platform.notification_window.manage",
+                "analytics.notification_windows.updated", "platform.notification_window.manage",
                 "notification_windows", key, null, actual.idempotencyKey(),
                 java.util.Map.of("window_key", key, "days", days));
         return saved;

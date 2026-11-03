@@ -18,7 +18,7 @@ import java.util.Optional;
 import org.junit.jupiter.api.Test;
 
 /** 能耗服务回归：异常原始事实、缺失起点阻断、公区不挂账、独表实际费用。 */
-// 文件版本：V0.02
+// 文件版本：V0.03
 class EnergyServiceTests {
 
     @Test
@@ -62,7 +62,8 @@ class EnergyServiceTests {
     private final com.complex.platform.evidence.EvidenceEventRepository evidence=mock(com.complex.platform.evidence.EvidenceEventRepository.class);
     private final com.complex.platform.evidence.EvidenceAttachmentValidator files=mock(com.complex.platform.evidence.EvidenceAttachmentValidator.class);
     private final com.complex.platform.governance.review.SupervisorReviewService reviews=mock(com.complex.platform.governance.review.SupervisorReviewService.class);
-    private final EnergyService service=new EnergyService(repo,workflow,mock(AuditEventService.class),authorization,idempotency,evidence,files,reviews);
+    private final AuditEventService audit=mock(AuditEventService.class);
+    private final EnergyService service=new EnergyService(repo,workflow,audit,authorization,idempotency,evidence,files,reviews);
     @org.junit.jupiter.api.BeforeEach void configure() {
         when(authorization.currentActor()).thenReturn(new com.complex.platform.access.AccessActor("usr_reader","读数员","staff","proj_1",null,"active"));
         when(authorization.canReachProject(any(),anyString(),any())).thenReturn(true);
@@ -70,6 +71,33 @@ class EnergyServiceTests {
         when(workflow.effectiveValue(any())).thenAnswer(call->((EnergyMeterReadingRecord)call.getArgument(0)).readingValue());
         when(workflow.effectiveConsumption(any())).thenAnswer(call->((EnergyMeterReadingRecord)call.getArgument(0)).consumption());
         when(evidence.findAttachmentById(startsWith("photo_"))).thenAnswer(call->{String id=call.getArgument(0);return Optional.of(new com.complex.platform.evidence.EvidenceAttachmentRecord(id,"表底.png","image/png",1L,"energy_meter",id.substring(6),"reading","valid","valid","uploaded",null,Instant.now(),Instant.now(),null));});
+    }
+
+    /**
+     * 18N 第 124 条 124-R2b（台账 :4231「代码落 OpenAPI 声明的事件，OpenAPI 不改。」）：新建、修改表计失败落 OpenAPI 声明的
+     * energy.meter_save_failed；人工抄表失败仍落 energy.reading_recorded_failed。
+     */
+    @Test
+    void meterSaveFailureAuditsDeclaredFailureNameWhileReadingKeepsItsOwn() {
+        repo.saveMeter(meter("mtr_dup", "electricity", null, "merchant", "mch_1", "remote"));
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.createMeter(new com.complex.platform.energy.dto.EnergyMeterRequest(
+                "mtr_dup", "重复表", "electricity", null, "merchant", null, "mch_1", "proj_1", "remote", true, "k_meter_dup")))
+                .isInstanceOf(com.complex.platform.common.api.ApiException.class);
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.updateMeter("mtr_dup", new com.complex.platform.energy.dto.EnergyMeterRequest(
+                null, null, "water", null, null, null, null, null, null, null, "k_meter_type")))
+                .isInstanceOf(com.complex.platform.common.api.ApiException.class);
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.recordReading(new EnergyReadingRecordRequest(
+                "k_remote", "mtr_dup", "2026-06", bd("100"), null, "remote", "usr_reader", Instant.parse("2026-06-15T00:00:00Z"),
+                List.of("photo_mtr_dup"), "补充核表")))
+                .isInstanceOf(com.complex.platform.common.api.ApiException.class);
+
+        verify(audit).recordFailure(eq("energy.meter_save_failed"), eq("energy.meter.manage"), eq("energy_meter"), eq("energy"),
+                isNull(), eq("k_meter_dup"), anyString());
+        verify(audit).recordFailure(eq("energy.meter_save_failed"), eq("energy.meter.manage"), eq("energy_meter"), eq("energy"),
+                isNull(), eq("k_meter_type"), anyString());
+        verify(audit).recordFailure(eq("energy.reading_recorded_failed"), eq("energy.reading.manage"), eq("energy_meter"), eq("energy"),
+                isNull(), eq("k_remote"), anyString());
+        verify(audit, never()).recordFailure(eq("energy.meter_saved_failed"), any(), any(), any(), any(), any(), any());
     }
 
     @Test

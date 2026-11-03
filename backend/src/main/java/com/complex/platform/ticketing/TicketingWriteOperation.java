@@ -1,13 +1,13 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import com.complex.platform.evidence.AuditedOperation;
 
 enum TicketingWriteOperation implements AuditedOperation {
-    CREATE_DYNAMIC_PRICING_RULE("ticket_dynamic_pricing.changed", "ticket_dynamic_pricing.change_failed", "ticket.dynamic_pricing.manage", "ticket_dynamic_pricing_rule"),
-    PUBLISH_DYNAMIC_PRICING_RULE("ticket_dynamic_pricing.published", "ticket_dynamic_pricing.publish_failed", "ticket.dynamic_pricing.publish", "ticket_dynamic_pricing_rule"),
-    SIMULATE_DYNAMIC_PRICING("ticket_dynamic_pricing.simulated", "ticket_dynamic_pricing.simulate_failed", "ticket.dynamic_pricing.simulate", "ticket_dynamic_pricing_simulation"),
+    CREATE_DYNAMIC_PRICING_RULE("ticket_dynamic_pricing.created.success", "ticket_dynamic_pricing.created.failure", "ticket.dynamic_pricing.manage", "ticket_dynamic_pricing_rule"),
+    PUBLISH_DYNAMIC_PRICING_RULE("ticket_dynamic_pricing.published.success", "ticket_dynamic_pricing.published.failure", "ticket.dynamic_pricing.publish", "ticket_dynamic_pricing_rule"),
+    SIMULATE_DYNAMIC_PRICING("ticket_dynamic_pricing.simulated.success", "ticket_dynamic_pricing.simulated.failure", "ticket.dynamic_pricing.simulate", "ticket_dynamic_pricing_simulation"),
     CREATE_TICKET_TYPE("ticket_product.changed", "ticket_product.change_failed", "ticket.product.manage", "ticket_type"),
     CREATE_TICKET_PRICE_RULE("ticket_price_variant.changed", "ticket_price_variant.change_failed", "ticket.price_variant.manage", "ticket_price_rule"),
     ARCHIVE_TICKET_TYPE("ticket_product.archived", "ticket_product.archive_failed", "ticket.product.manage", "ticket_type"),

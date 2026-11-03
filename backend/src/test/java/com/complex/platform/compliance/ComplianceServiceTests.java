@@ -96,7 +96,7 @@ class ComplianceServiceTests {
         assertThat(created.humanConfirmed()).isTrue();
         assertThat(auditEventRepository.events)
                 .extracting(AuditEvent::eventName)
-                .contains("compliance.contract_key_date.created");
+                .contains("compliance.contract_key_date.create");
     }
 
     @Test
@@ -148,7 +148,7 @@ class ComplianceServiceTests {
                 });
         assertThat(auditEventRepository.events)
                 .extracting(AuditEvent::eventName)
-                .contains("compliance.reminder.scan_completed");
+                .contains("compliance.reminder.scan");
     }
 
     @Test
