@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.08
+// 文件版本：V0.09
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
 import com.complex.platform.common.crypto.PiiCipher;
@@ -320,6 +320,13 @@ class JdbcBarRepository implements BarRepository {
     public void markReservationNoShow(String reservationId, Instant at) {
         jdbcTemplate.update("UPDATE bar_reservations SET no_show_at = :at WHERE id = :id",
                 Map.of("id", reservationId, "at", java.sql.Timestamp.from(at)));
+    }
+
+    // 第十八批 O 段第 126 条 126-R2：单列更新——saveReservation 的 upsert 列表不含 deposit_collector_staff_id，后续保存不会覆盖。
+    @Override
+    public void markReservationDepositCollector(String reservationId, String staffUserId) {
+        jdbcTemplate.update("UPDATE bar_reservations SET deposit_collector_staff_id = :staff WHERE id = :id",
+                Map.of("id", reservationId, "staff", staffUserId));
     }
 
     @Override
@@ -1371,8 +1378,20 @@ class JdbcBarRepository implements BarRepository {
                    AND s.reversed = FALSE
                    AND s.settled_at >= :from_ts AND s.settled_at < :to_ts""" + merchantFilter,
                 new HashMap<>(params.getValues()));
-        long cash = ((Number) row.get("cash_cent")).longValue();
-        long pos = ((Number) row.get("pos_cent")).longValue();
+        // 第十八批 O 段第 126 条 126-R2（BSM:1081「……班结按本班次汇总各支付方式应收（现金/扫码/POS/退款/小费）……」）：
+        // 本吧台 + 本收银员登记 + deposit_paid_at 落窗口的订台定金按渠道计入现金/POS（抢台失败被取消的也计，钱已进钱箱）。
+        Map<String, Object> deposit = jdbcTemplate.queryForMap("""
+                SELECT
+                  COALESCE(SUM(CASE WHEN r.deposit_channel = 'cash' THEN r.deposit_amount_cent ELSE 0 END), 0) AS cash_cent,
+                  COALESCE(SUM(CASE WHEN r.deposit_channel = 'pos' THEN r.deposit_amount_cent ELSE 0 END), 0) AS pos_cent
+                  FROM bar_reservations r
+                 WHERE r.bar_id = :bar_id
+                   AND r.deposit_collector_staff_id = :cashier_user_id
+                   AND r.deposit_paid_at >= :from_ts AND r.deposit_paid_at < :to_ts"""
+                        + (merchantScope.isPresent() ? " AND r.merchant_id = :merchant_id" : ""),
+                new HashMap<>(params.getValues()));
+        long cash = ((Number) row.get("cash_cent")).longValue() + ((Number) deposit.get("cash_cent")).longValue();
+        long pos = ((Number) row.get("pos_cent")).longValue() + ((Number) deposit.get("pos_cent")).longValue();
         long online = ((Number) row.get("online_cent")).longValue();
         // 退款：本吧台 + refunded_at 落窗口的 refund 调整额，净额扣减 refund_reversal（延期项④：
         // 退菜退酒审批驳回的退款冲销，加回应付并冲正退款台账，故经营日退款净额须相应抵减，不重复计入退款额）。

@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import com.complex.platform.common.api.PageResponse;
 import com.complex.platform.evidence.AuditedOperationExecutor;
@@ -68,9 +68,6 @@ public class TicketingOperationExecutor {
         if (value instanceof TicketTransferResponse response) return response.id();
         if (value instanceof IssuedTicketResponse response && !response.issuedEntitlements().isEmpty()) {
             return response.issuedEntitlements().getFirst().entitlementCode();
-        }
-        if (value instanceof SyncTasksResponse response && !response.results().isEmpty()) {
-            return response.results().getFirst().clientTaskId();
         }
         if (value instanceof TicketPriceRuleRecord record) return record.id();
         if (value instanceof TicketOrderRecord record) return record.id();

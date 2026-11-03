@@ -1,4 +1,4 @@
-# 通票权益结算重构 PRD V1.09
+# 通票权益结算重构 PRD V1.10
 
 > **状态**：受三个最高业务解释权 HTML 约束的现行 PRD（2026-08-01 同步）。
 > **解释权边界**：三个业务 HTML 是最终业务口径；本文、财务底稿、术语表、实现规格、数据库和代码均只能作为产品细化、测算资料或当前实现证据，不得覆盖 HTML。本文新增而 HTML 尚未记载的业务规则，在用户批准并写入相应 HTML 前不生效。**三份 HTML 之间若出现冲突，按确认时间线判定：凡经用户确认过的内容，确认时间越晚的优先级越高，后确认的覆盖先确认的（以决策台账记录的裁决时间为准）；无法确定确认时间先后的，仍须逐项重新裁决**（2026-08-05 R7 补，依据 DIFF-A-051、PGM「解释权声明」条）。
@@ -428,7 +428,7 @@ P（本票固化可分配池）
   - **内部结算价统一解析器** `InternalSettlementPriceResolver`:全平台只此一处解析(提供方商品内部结算价 → 模板签约内部结算价 → 未解析)。**预扣(S6)与兑付(bar 域)共用同一结果**——兑付价由票务侧解析后随 `ticket.gift_verified` 事件下发,bar 域不再自查;冲正按原核销**当时固化的价**逐分对冲,不重查目录。
   - **`resolveSettlementPrice` 改 fail-closed**:提供方兑付类权益(赠饮 / 实物 / 配了专属商户的餐饮零售)取不到内部结算价即抛 `ENTITLEMENT_PRICE_UNRESOLVED` 拒绝核销,**不再回退票面价**(HTML §5.0c ④「各业态价格与内部结算价两者不可混用」)。入场 / 游乐等非成本口径权益零变更。价 = 0 合法(商户让利型),NULL 才是「没配价」。
   - **平台自营吧不再豁免**:自营吧同样必须有内部结算价(否则成本口径出黑洞),只是无商户对手方 → 不挂应付、在兑付留痕上记明「成本归平台、无对手方」。
-  - **K16 跨提供方核销守卫**:「A 酒吧的赠酒只能在 A 酒吧核销」落为**业务不变量**——核销上下文取核销设备绑定的商户(`terminal_devices.merchant_id`),与提供方不一致即 409 `ENTITLEMENT_PROVIDER_MISMATCH`;**与角色无关**(平台管理员同样受约束),**离线同步旁路走同一入口**同样拦得住。设备未绑商户 → `VERIFY_DEVICE_MERCHANT_UNRESOLVED` 拒绝(说不清在哪家核的,就不记这笔账)。
+  - **K16 跨提供方核销守卫**:「A 酒吧的赠酒只能在 A 酒吧核销」落为**业务不变量**——核销上下文取核销设备绑定的商户(`terminal_devices.merchant_id`),与提供方不一致即 409 `ENTITLEMENT_PROVIDER_MISMATCH`;**与角色无关**(平台管理员同样受约束)。设备未绑商户 → `VERIFY_DEVICE_MERCHANT_UNRESOLVED` 拒绝(说不清在哪家核的,就不记这笔账)。
   - **归属怎么配(2026-08-01 写入面补齐)**:后台「终端设备」页(**ADM-TER-002** `/admin/terminals/devices`)是这条归属的唯一业务写入面——设备台账列出每台设备的所属商户,改绑/解除走 `PUT /api/v1/terminals/devices/{id}/merchant`(权限 `terminal.device.lifecycle`,高危仅平台管理员):**理由必填留痕**(审计明细带改绑前后商户 + append-only 状态事件),目标商户须**存在且未归档**,终态设备(报废/封禁)拒改,解除归属前二次确认明示「该设备上赠饮/餐饮类权益将无法核销」。设备登记(`POST /terminals/devices/bind`)可携 `merchant_id` 一步到位;归还后复领用**不传商户时保留既有归属**(不再被 upsert 抹回未绑)。
   - **K17 每吧至少一杯发布校验**:票种发布时,若这张票**已经配了赠酒**,则它覆盖的**每家酒吧**(有入场类权益且商户业态为酒吧)都必须至少有 1 杯,否则 409 `PASS_BAR_GIFT_COVERAGE_INSUFFICIENT` 并点名缺哪家。不含任何赠酒的普通门票不受此约束。酒吧集合按票种实际绑定动态算,不写死家数。
   - **票面赠酒清单**:`GET /api/v1/ticketing/ticket-types/{id}/gift-coverage`(权限 `ticket.product.view`)返回按酒吧分组的赠品与杯数,**与 K17 发布校验取同一份数据**;后台组合配置页同屏展示,即票面写明的内容。
@@ -1003,6 +1003,7 @@ P（本票固化可分配池）
 
 | 日期 | Finding | 变更 | 权威依据 | 实现边界 |
 |---|---|---|---|---|
+| 2026-11-03 | 第十八批 O 段第 129 条 | V1.10：§5.3 K16 跨提供方核销守卫删去「离线同步旁路走同一入口同样拦得住」（终端离线同步通道已下线） | BSM:800「……核销必须在线、不做离线核销。……」 | 只改文档 |
 | 2026-10-28 | 第十八批第 24 条 | V1.09：§「高价值判定阈值」待改造缺口关闭，改为落地记录——全平台一行、上下限同配、调整进最高权限审批（批准生效、驳回下线）、通用复核转正对该类型 403、不可下线；总控页新增「高价值判定」页签 | ENUM:164、BSM:1196、docs/decisions/2026-10-18-cg-pending-decisions.md 第 2 条 | V566；`SettlementConfigWriteService.saveHighValueThreshold/highValueThresholdDecided/activateDraft`、`JdbcHighValueThresholdRepository`、`SupervisorReviewService` 策略 `settlement_high_value_threshold`；后台 `SettlementConfigPage`「高价值判定」、`ApprovalChainPage` |
 | 2026-10-28 | 第 75 条 | V1.08：§5.0 事前试算闸按现行 ENUM:52 同步「费率最高的支付通路、门票综合服务费足额计取」，「历史实现登记」改为落地记录（转正试算闸、公式五项、短期经营激励申请—审批—转正—重审、结算期超池特批链路下线、超出部分由娱乐平台公司承担）；§5.1 边界①与落地记录同步；§9 权限点与 S9 期限列改作短期经营激励口径；§5.0 落地记录补「激励到期」条（整版回到此前方案） | ENUM:52、BSM:752、DEC-R3-2026-08-04-13、DEC-P1A-09、18C 核对后操作员裁决补充第 12、13 条 | `PassPoolTrialService`、`DistributionSchemeService.activate/submitIncentive/decideIncentive`、`SettlementPostingService.postBill`、V562；激励到期：`effectiveVersionId`、`notifyAffectedBars`、`PassPoolTrialService.trial` 同口径，`overview` 的 `incentive_expired`，通告写明到期日，到期后重审 409 `INCENTIVE_EXPIRED` |
 | 2026-10-27 | 18B 复核后裁决第 11 条 | V1.07：§5.3「三规则的依据分级」登记改为「2026-10-27 操作员裁决下线，已落地」——差额处理规则只剩 `platform_absorb`，结转下期／回补当期可分配池下线；§5.1 落地记录删无快照兼容口径，未分配池余额只放无第二段参与者的余额 | 操作员 2026-10-27 选「对，下线两个选项（推荐）」；ENUM L52「预扣数与日后实付数的差额也留在娱乐平台公司」「该票从无第二段参与者时……余额单列为未分配池余额并归娱乐平台公司」 | V557；`SettlementConfigWriteService.savePassGiftCost`、`TicketDistributionSettlementService`（`compute`、`settleGiftVariance`）、`JdbcSettlementBillRepository`；后台「结算配置中心 · 赠送权益预估成本」「结算审阅 · 月度结算单」 |

@@ -261,45 +261,6 @@ class GiftRedemptionEndToEndTests {
     }
 
     /**
-     * S5 K16：离线同步旁路走同一入口，同样拦得住（不能靠离线补单绕过跨吧核销）。
-     * CG-05 后离线同步不再整批抛错：规则不允许的尝试落 rejected 记录、任务结果同态，权益次数不动。
-     */
-    @Test
-    @Transactional(propagation = Propagation.NOT_SUPPORTED)
-    void giftRedeemedAtAnotherBarIsAlsoRejectedOnOfflineSyncPath() {
-        String suffix = Long.toString(System.nanoTime());
-        String providerBar = "bar_a_off_" + suffix;
-        String otherBar = "bar_b_off_" + suffix;
-        seedBarTable(providerBar);
-        String itemId = "item_off_" + suffix;
-        seedStockItem(itemId, 5);
-        String productId = "barprod_off_" + suffix;
-        seedBarProduct(productId, providerBar, itemId, 4200L);
-        String otherBarDevice = seedDeviceForBar(otherBar);
-        String deviceCode = jdbcTemplate.queryForObject(
-                "SELECT device_code FROM terminal_devices WHERE id = ?", String.class, otherBarDevice);
-        String code = "gift-code-k16off-" + suffix;
-        seedGiftEntitlement(code, providerBar, 1, productId);
-
-        TransactionTemplate tx = new TransactionTemplate(transactionManager);
-        SyncTasksResponse response = tx.execute(status -> verificationService.syncTerminalTasks(
-                new com.complex.platform.ticketing.dto.TerminalSyncTasksRequest(
-                        "idem-k16-" + suffix, null, java.util.List.of(), deviceCode, "staff_1",
-                        java.util.List.of(new com.complex.platform.ticketing.dto.TerminalSyncTaskItemRequest(
-                                "task-k16-" + suffix, "offline_verification", "2026-06-18T10:00:00Z",
-                                Map.of("entitlementCode", code, "pointId", otherBar))))));
-        assertThat(response.results()).hasSize(1);
-        assertThat(response.results().get(0).status()).isEqualTo("rejected");
-        assertThat(response.results().get(0).reason()).isEqualTo("entitlement_provider_mismatch");
-        assertThat(jdbcTemplate.queryForMap(
-                "SELECT status, result_reason FROM ticket_verifications WHERE id = ?", response.results().get(0).verificationId()))
-                .containsEntry("status", "rejected").containsEntry("result_reason", "entitlement_provider_mismatch");
-
-        assertThat(jdbcTemplate.queryForObject(
-                "SELECT used_times FROM issued_entitlements WHERE id = ?", Integer.class, "ent_" + code)).isZero();
-    }
-
-    /**
      * K16 归属跟着改绑走：设备绑在提供方 A 吧时核销放行；把设备改绑到 B 吧后，
      * 同一台设备再核 A 吧的赠饮被拒（ENTITLEMENT_PROVIDER_MISMATCH）——
      * 商户归属写入面（PUT /terminals/devices/{id}/merchant）改的就是 K16 的核销上下文。

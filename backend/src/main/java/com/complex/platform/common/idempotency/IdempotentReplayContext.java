@@ -1,6 +1,6 @@
 package com.complex.platform.common.idempotency;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import com.complex.platform.common.api.ApiException;
 
@@ -24,7 +24,7 @@ import com.complex.platform.common.api.ApiException;
  * 幂等层返回的是本请求自己请求编号第一次的结果、本请求没有经幂等层执行过动作时记为已重放（{@link #markReplayed} / {@link #replayed}）：
  * {@code ApiResponse.ok} 据此提示已完成；请求事务切面据此把本请求新用掉的单次来源随请求事务回滚（不算用掉）。
  *
- * <p>M723-F08（第 656 行「操作被拒绝或失败的不算用掉」）：在线核销以正常返回报告失败（过刷新窗口、签名失配；终端离线同步不标记）时由服务层记为
+ * <p>M723-F08（第 656 行「操作被拒绝或失败的不算用掉」）：在线核销以正常返回报告失败（过刷新窗口、签名失配）时由服务层记为
  * {@link #markBusinessFailed 业务失败}；请求事务切面据此把本请求新用掉的单次来源撤回（失败留痕与幂等记录照常提交）。
  * 撤回要知道来源号与权限码，{@link #markConsumed(String, String, String, String)} 另记一份（{@link #consumedSourceCodes}）。
  *
@@ -138,7 +138,7 @@ public final class IdempotentReplayContext {
     }
 
     /**
-     * M723-F08：业务以正常返回报告失败时由服务层调用（现只有在线核销过刷新窗口、签名失配一处调用；终端离线同步不标记）；请求事务切面据此把本请求新用掉的单次来源撤回。
+     * M723-F08：业务以正常返回报告失败时由服务层调用（现只有在线核销过刷新窗口、签名失配一处调用）；请求事务切面据此把本请求新用掉的单次来源撤回。
      * 不在控制器调用里（没有请求上下文）时无操作。
      */
     public static void markBusinessFailed() {

@@ -484,7 +484,6 @@ terminal_device_status_events,inherited,terminal/device id,terminal/device id ->
 terminal_devices,direct,venue_id,venue_id column on terminal_devices,ready for project/merchant scoped query enforcement,V0.07,covered
 terminal_kiosk_configs,inherited,terminal/device id,terminal/device id -> venue/project deployment scope,must join through scope path before multi-complex rollout,V0.07,covered
 terminal_kiosk_heartbeats,inherited,terminal/device id,terminal/device id -> venue/project deployment scope,must join through scope path before multi-complex rollout,V0.07,covered
-terminal_sync_tasks,inherited,terminal/device id,terminal/device id -> venue/project deployment scope,must join through scope path before multi-complex rollout,V0.07,covered
 ticket_combo_discount_configs,direct,project_id,project_id column on ticket_combo_discount_configs,ready for project/merchant scoped query enforcement,V0.07,covered
 ticket_credential_presenters,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",V0.07,covered
 ticket_credentials,inherited,order_id/entitlement_id,order_id/entitlement_id -> ticket_orders/issued_entitlements -> ticket_type/project scope,must join through scope path before multi-complex rollout,V0.07,covered

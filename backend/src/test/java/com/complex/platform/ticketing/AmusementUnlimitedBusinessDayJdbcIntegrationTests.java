@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.*;
 import com.complex.platform.amusement.*;
@@ -282,38 +282,11 @@ class AmusementUnlimitedBusinessDayJdbcIntegrationTests {
                 String.class,entitlement)).isEqualTo("active");
     }
 
-    @Test void offlineAmusementAttemptCannotWriteARejectionIntoAnotherComplexTicket() {
-        seed(2);
-        String other=AmusementBusinessDayTestFixture.complex(jdbc);
-        String actor=AmusementBusinessDayTestFixture.actor(jdbc,other,
-                List.of("verification.execute","terminal.device.bind"));
-        AmusementBusinessDayTestFixture.authenticate(actor,other);
-        assertThatThrownBy(()->tickets.syncTerminalTasks(new com.complex.platform.ticketing.dto.TerminalSyncTasksRequest(
-                "cross_offline_"+key,null,null,device,actor,
-                List.of(new com.complex.platform.ticketing.dto.TerminalSyncTaskItemRequest(
-                    "cross_task_"+key,"offline_verification",Instant.now().toString(),
-                    Map.of("entitlementCode",code,"pointId","ud_gate_"+key))))))
-                .isInstanceOfSatisfying(com.complex.platform.common.api.ApiException.class,
-                    error->assertThat(error.code()).isEqualTo("FORBIDDEN"));
-        assertThat(used()).isZero();
-        assertThat(jdbc.queryForObject("SELECT count(*) FROM ticket_verifications WHERE entitlement_id=?",Integer.class,entitlement)).isZero();
-        assertThat(jdbc.queryForObject("SELECT count(*) FROM amusement_verifications WHERE entitlement_id=?",Integer.class,entitlement)).isZero();
-        assertThat(jdbc.queryForObject("SELECT COALESCE(SUM(occupied_count),0) FROM amusement_capacity_snapshot WHERE project_id=?",Integer.class,ride)).isZero();
-        assertThat(jdbc.queryForObject("SELECT count(*) FROM ticket_use_rewards WHERE order_id=?",Integer.class,"ud_order_"+key)).isZero();
-    }
-
-    @Test void missingOriginalTicketComplexCannotCreateAnOnlineOrOfflineResult() {
+    @Test void missingOriginalTicketComplexCannotCreateAnOnlineResult() {
         seed(2);
         jdbc.update("UPDATE ticket_orders SET project_id=NULL WHERE id=?","ud_order_"+key);
         assertThatThrownBy(()->tickets.createVerification(new VerificationRequest("no_origin_"+key,"entitlement_code",
                 code,device,"ud_gate_"+key,Map.of())))
-                .isInstanceOfSatisfying(com.complex.platform.common.api.ApiException.class,
-                    error->assertThat(error.code()).isEqualTo("TICKET_PROJECT_REQUIRED"));
-        assertThatThrownBy(()->tickets.syncTerminalTasks(new com.complex.platform.ticketing.dto.TerminalSyncTasksRequest(
-                "no_origin_sync_"+key,null,null,device,"gate",
-                List.of(new com.complex.platform.ticketing.dto.TerminalSyncTaskItemRequest(
-                    "no_origin_task_"+key,"offline_verification",Instant.now().toString(),
-                    Map.of("entitlementCode",code,"pointId","ud_gate_"+key))))))
                 .isInstanceOfSatisfying(com.complex.platform.common.api.ApiException.class,
                     error->assertThat(error.code()).isEqualTo("TICKET_PROJECT_REQUIRED"));
         assertThat(used()).isZero();

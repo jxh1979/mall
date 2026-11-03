@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "综合体管理系统 P0 API 契约",
-    "version": "V0.46",
+    "version": "V0.47",
     "description": "P0 首批编码前置契约。本文采用 JSON-compatible YAML，便于与 openapi-p0.json 保持一致。正式后端以 Java 21 + Spring Boot 4.x + springdoc-openapi 输出运行时 OpenAPI，并与本契约比对。"
   },
   "servers": [
@@ -1000,7 +1000,8 @@
         "x-terminal-allowed": [
           "kiosk",
           "web",
-          "mobile_admin"
+          "mobile_admin",
+          "staff_work_phone"
         ],
         "x-idempotency-required": false,
         "x-audit-event-success": "amusement.maintenance.viewed",
@@ -1030,7 +1031,8 @@
         "x-terminal-allowed": [
           "kiosk",
           "web",
-          "mobile_admin"
+          "mobile_admin",
+          "staff_work_phone"
         ],
         "x-idempotency-required": true,
         "x-audit-event-success": "amusement.maintenance_recorded",
@@ -1110,7 +1112,8 @@
         "x-terminal-allowed": [
           "kiosk",
           "web",
-          "mobile_admin"
+          "mobile_admin",
+          "staff_work_phone"
         ],
         "x-idempotency-required": true,
         "x-audit-event-success": "amusement.project.resumed",
@@ -1390,7 +1393,6 @@
         "x-permission": "amusement.queue.manage",
         "x-data-scope": "project-amusement",
         "x-terminal-allowed": [
-          "tablet",
           "staff_work_phone"
         ],
         "x-idempotency-required": true,
@@ -1500,7 +1502,6 @@
         "x-permission": "amusement.reservation.manage",
         "x-data-scope": "project-amusement",
         "x-terminal-allowed": [
-          "tablet",
           "staff_work_phone"
         ],
         "x-idempotency-required": true,
@@ -1998,8 +1999,7 @@
         "x-permission": "amusement.verification.view",
         "x-data-scope": "project-amusement",
         "x-terminal-allowed": [
-          "web",
-          "tablet"
+          "web"
         ],
         "x-idempotency-required": false,
         "x-audit-event-success": "amusement.verification.viewed",
@@ -3079,7 +3079,8 @@
           "merchant_app",
           "staff_work_phone",
           "tablet",
-          "kiosk"
+          "kiosk",
+          "dealer_portal"
         ],
         "x-idempotency-required": false,
         "x-audit-event-success": "auth.login.succeeded",
@@ -3122,7 +3123,8 @@
           "merchant_app",
           "staff_work_phone",
           "tablet",
-          "kiosk"
+          "kiosk",
+          "dealer_portal"
         ],
         "x-idempotency-required": false,
         "x-audit-event-success": "auth.logout",
@@ -3236,7 +3238,8 @@
         "x-data-scope": "project-bar-table",
         "x-terminal-allowed": [
           "tablet",
-          "web"
+          "web",
+          "staff_work_phone"
         ],
         "x-idempotency-required": true,
         "x-audit-event-success": "payment.intent_created",
@@ -3292,7 +3295,8 @@
         "x-terminal-allowed": [
           "tablet",
           "web",
-          "kiosk"
+          "kiosk",
+          "staff_work_phone"
         ],
         "x-idempotency-required": true,
         "x-audit-event-success": "bar.bill.settled",
@@ -3327,7 +3331,7 @@
           }
         },
         "x-auth-context": "staff-token",
-        "description": "第十八批 N 段第 123 条 123-R2（BSM:1630「核销、收款、退款、放行等敏感操作，操作设备定位落在该项目综合体授权范围之外时一律拒绝并留痕」；BSM:1876「Web 端同样适用」）：本操作属敏感操作定位闸的现场动作闭集（第十八批裁决 31）。操作对象所属项目已配授权范围（123-R1）时须带请求头 X-Geo-Latitude、X-Geo-Longitude（设备当下定位，WGS-84 十进制度）：没带或解析不了按范围外处理（裁决 30）返回 403 SENSITIVE_OPERATION_LOCATION_REQUIRED，到圆心距离超过授权半径返回 403 SENSITIVE_OPERATION_OUT_OF_RANGE，拒绝在独立事务里留痕 sensitive_operation.location_rejected（business_id 为本 operationId，业务回滚不丢）；项目没配授权范围不查位置（裁决 32）；判定在幂等之前，重放不能绕过；通过时不存位置。"
+        "description": "第十八批 N 段第 123 条 123-R2（BSM:1630「核销、收款、退款、放行等敏感操作，操作设备定位落在该项目综合体授权范围之外时一律拒绝并留痕」；BSM:1876「Web 端同样适用」）：本操作属敏感操作定位闸的现场动作闭集（第十八批裁决 31）。操作对象所属项目已配授权范围（123-R1）时须带请求头 X-Geo-Latitude、X-Geo-Longitude（设备当下定位，WGS-84 十进制度）：没带或解析不了按范围外处理（裁决 30）返回 403 SENSITIVE_OPERATION_LOCATION_REQUIRED，到圆心距离超过授权半径返回 403 SENSITIVE_OPERATION_OUT_OF_RANGE，拒绝在独立事务里留痕 sensitive_operation.location_rejected（business_id 为本 operationId，业务回滚不丢）；项目没配授权范围不查位置（裁决 32）；判定在幂等之前，重放不能绕过；通过时不存位置。第十八批 O 段第 127 条 127-R3：收款人（cashier_staff_id，各支付渠道）取执行结账的那一次登录会话的操作人，不收请求填写，交班对账按它归入收银员（BSM 第 940、1066、1081 行）。"
       }
     },
     "/api/v1/bar/orders": {
@@ -3346,7 +3350,8 @@
         "x-terminal-allowed": [
           "tablet",
           "web",
-          "kiosk"
+          "kiosk",
+          "staff_work_phone"
         ],
         "x-idempotency-required": true,
         "x-audit-event-success": "bar.order_created",
@@ -3379,8 +3384,7 @@
         "x-permission": "bar.order.view",
         "x-data-scope": "project-bar-table",
         "x-terminal-allowed": [
-          "web",
-          "tablet"
+          "web"
         ],
         "x-idempotency-required": false,
         "x-audit-event-success": "bar.order.viewed",
@@ -3412,7 +3416,8 @@
         "x-data-scope": "project",
         "x-terminal-allowed": [
           "web",
-          "kiosk"
+          "kiosk",
+          "tablet"
         ],
         "x-idempotency-required": true,
         "x-audit-event-success": "bar.bill.created",
@@ -3457,8 +3462,8 @@
         "x-permission": "bar.order.create",
         "x-data-scope": "project-bar-table",
         "x-terminal-allowed": [
-          "tablet",
-          "staff_work_phone"
+          "staff_work_phone",
+          "web"
         ],
         "x-idempotency-required": true,
         "x-audit-event-success": "bar.order_delivered",
@@ -3582,7 +3587,6 @@
         "x-data-scope": "project",
         "x-terminal-allowed": [
           "web",
-          "tablet",
           "kiosk"
         ],
         "x-idempotency-required": false,
@@ -3650,11 +3654,11 @@
         "x-data-scope": "project-bar",
         "x-terminal-allowed": [
           "web",
-          "tablet",
           "miniapp",
           "app",
           "kiosk",
-          "staff_private_phone"
+          "staff_private_phone",
+          "staff_work_phone"
         ],
         "x-idempotency-required": true,
         "x-audit-event-success": "bar.reservation.created",
@@ -3680,7 +3684,7 @@
           }
         },
         "x-auth-context": "staff-token",
-        "description": "员工代客订台。latest_arrival_at 必填（BSM 第 1062 行）；customer_phone 必填（操作员裁决第十三批第 7 条「员工代订必须录入客人手机号；查到会员且受限就拒绝，查不到会员的照常代订」，受限 403 CUSTOMER_RESTRICTED，手机号核对后去掉空格与横线加密留存，只作订台短信收件人、不回显）；去掉空格与横线后须为 11 位手机号，否则 400 VALIDATION_FAILED。提交成功即占台；ROOT-03-R19（ENUM 第 100 行「一个台位同一时刻只能存在一笔有效预留（排他锁，不是展示标记）……冲突时先支付定金者得；员工代订不得覆盖已付定金的自助订单；两笔员工代订相撞先提交者得」）：台位已被有效预留占着或已开台、待清台、停用时 409 BAR_TABLE_ALREADY_RESERVED。整笔不落库。第十四批 OBS-13-03（BSM 第 1596 行「订台成功确认（员工代订的同时向客人知会代订人与订台内容）」）：提交成功即给录入的手机号发订台成功确认短信，并知会代订人（员工档案姓名）。第十八批 C 段第 15 条：员工代订一律免收定金（BSM L1062「员工代客订台不收定金……没有支付动作的，支付时间就空着」），deposit_status=staff_waived（免收（员工代订），ENUM L103）、deposit_amount_cent=0、无付款意向，不看定金规则；经手员工＝salesperson_user_id，不填即本人代订；经手员工的代订权限因本自然月爽约率超过本酒吧上限已停用（BSM L1468）时 403 BAR_STAFF_BOOKING_SUSPENDED，整笔不落库。超过最晚到店时间未到店、由系统自动释放的员工代订记一笔爽约到经手员工名下（no_show_at），客人自助订台不记。第十八批 N 段第 120 条 120-R3（BSM:987「支持订台下单：选择酒吧、日期、时段、卡座/桌台/吧台位、人数和订台备注；订台需要支付定金。」；BSM:1023「订台订单必须记录定金、订台来源、销售人员或设备来源、到店和取消结果。」）：可信终端是一体机时按一体机订台——同样核对受限会员（403 CUSTOMER_RESTRICTED）并留存客人手机号，台位已被有效预留占着或已开台、待清台、停用时 409 BAR_TABLE_ALREADY_RESERVED；定金按本酒吧定金规则算（与客人自助订台同一公式），算出无定金可付时 409 BAR_SELF_RESERVATION_UNAVAILABLE；deposit_status=pending、order_source=kiosk、created_terminal=kiosk、device_id＝本机设备号、sales_staff_id 为空（不记销售，超时释放只没收已付定金、不记爽约），创建时不占台、不发员工代订知会，登记定金（pay-deposit）时才占台。remark 订台备注（选填）两种来源都落库，随订台记录返回。",
+        "description": "员工代客订台。latest_arrival_at 必填（BSM 第 1062 行）；customer_phone 必填（操作员裁决第十三批第 7 条「员工代订必须录入客人手机号；查到会员且受限就拒绝，查不到会员的照常代订」，受限 403 CUSTOMER_RESTRICTED，手机号核对后去掉空格与横线加密留存，只作订台短信收件人、不回显）；去掉空格与横线后须为 11 位手机号，否则 400 VALIDATION_FAILED。提交成功即占台；ROOT-03-R19（ENUM 第 100 行「一个台位同一时刻只能存在一笔有效预留（排他锁，不是展示标记）……冲突时先支付定金者得；员工代订不得覆盖已付定金的自助订单；两笔员工代订相撞先提交者得」）：台位已被有效预留占着或已开台、待清台、停用时 409 BAR_TABLE_ALREADY_RESERVED。整笔不落库。第十四批 OBS-13-03（BSM 第 1596 行「订台成功确认（员工代订的同时向客人知会代订人与订台内容）」）：提交成功即给录入的手机号发订台成功确认短信，并知会代订人（员工档案姓名）。第十八批 C 段第 15 条：员工代订一律免收定金（BSM L1062「员工代客订台不收定金……没有支付动作的，支付时间就空着」），deposit_status=staff_waived（免收（员工代订），ENUM L103）、deposit_amount_cent=0、无付款意向，不看定金规则；经手员工＝salesperson_user_id，不填即本人代订；经手员工的代订权限因本自然月爽约率超过本酒吧上限已停用（BSM L1468）时 403 BAR_STAFF_BOOKING_SUSPENDED，整笔不落库。超过最晚到店时间未到店、由系统自动释放的员工代订记一笔爽约到经手员工名下（no_show_at），客人自助订台不记。第十八批 N 段第 120 条 120-R3（BSM:987「支持订台下单：选择酒吧、日期、时段、卡座/桌台/吧台位、人数和订台备注；订台需要支付定金。」；BSM:1023「订台订单必须记录定金、订台来源、销售人员或设备来源、到店和取消结果。」）：可信终端是一体机时按一体机订台——同样核对受限会员（403 CUSTOMER_RESTRICTED）并留存客人手机号，台位已被有效预留占着或已开台、待清台、停用时 409 BAR_TABLE_ALREADY_RESERVED；定金按本酒吧定金规则算（与客人自助订台同一公式），算出无定金可付时 409 BAR_SELF_RESERVATION_UNAVAILABLE；deposit_status=pending、order_source=kiosk、created_terminal=kiosk、device_id＝本机设备号、sales_staff_id 为空（不记销售，超时释放只没收已付定金、不记爽约），创建时不占台、不发员工代订知会，登记定金（pay-deposit）时才占台。remark 订台备注（选填）两种来源都落库，随订台记录返回。第十八批 O 段第 128 条：员工代订的 created_terminal 取请求的可信终端（没有即 web；员工私人手机 staff_private_phone、商户账号网页 merchant_portal），同 createBarOrder（BSM 第 1023、1611 行，PGM 第 745 行）。",
         "x-failure-codes": [
           "BAR_TABLE_ALREADY_RESERVED",
           "CUSTOMER_RESTRICTED",
@@ -3697,8 +3701,7 @@
         "x-permission": "bar.reservation.view",
         "x-data-scope": "project-bar-table",
         "x-terminal-allowed": [
-          "web",
-          "tablet"
+          "web"
         ],
         "x-idempotency-required": false,
         "x-audit-event-success": "bar.reservation.viewed",
@@ -3728,7 +3731,8 @@
         "x-permission": "bar.table.guest_checkin",
         "x-data-scope": "project-bar",
         "x-terminal-allowed": [
-          "staff_work_phone"
+          "staff_work_phone",
+          "web"
         ],
         "x-idempotency-required": true,
         "x-audit-event-success": "bar.table_guest.checked_in",
@@ -3780,8 +3784,7 @@
         "x-permission": "bar.reservation.invitation.manage",
         "x-data-scope": "project-bar",
         "x-terminal-allowed": [
-          "web",
-          "tablet"
+          "web"
         ],
         "x-idempotency-required": true,
         "x-audit-event-success": "bar.reservation_invitation_issued",
@@ -3834,8 +3837,7 @@
         "x-permission": "bar.reservation.view",
         "x-data-scope": "project-bar",
         "x-terminal-allowed": [
-          "web",
-          "tablet"
+          "web"
         ],
         "x-idempotency-required": false,
         "x-audit-event-success": "not_applicable",
@@ -3872,8 +3874,7 @@
         "x-permission": "bar.reservation.invitation.manage",
         "x-data-scope": "project-bar",
         "x-terminal-allowed": [
-          "web",
-          "tablet"
+          "web"
         ],
         "x-idempotency-required": true,
         "x-audit-event-success": "bar.reservation_invitation_revoked",
@@ -3927,7 +3928,8 @@
         "x-permission": "bar.table.guest_checkin",
         "x-data-scope": "project-bar",
         "x-terminal-allowed": [
-          "staff_work_phone"
+          "staff_work_phone",
+          "web"
         ],
         "x-idempotency-required": true,
         "x-audit-event-success": "bar.reservation_invitation_entered",
@@ -3982,8 +3984,7 @@
         "x-permission": "bar.table.view",
         "x-data-scope": "project-bar",
         "x-terminal-allowed": [
-          "web",
-          "tablet"
+          "web"
         ],
         "x-idempotency-required": false,
         "x-audit-event-success": "bar.table.viewed",
@@ -4046,7 +4047,6 @@
         "x-permission": "bar.table.open_close",
         "x-data-scope": "project-bar",
         "x-terminal-allowed": [
-          "tablet",
           "web"
         ],
         "x-idempotency-required": true,
@@ -4086,7 +4086,6 @@
         "x-permission": "bar.table.open_close",
         "x-data-scope": "project-bar",
         "x-terminal-allowed": [
-          "tablet",
           "web"
         ],
         "x-idempotency-required": true,
@@ -5131,8 +5130,7 @@
         "x-data-scope": "project-object",
         "x-terminal-allowed": [
           "web",
-          "staff_work_phone",
-          "tablet"
+          "staff_work_phone"
         ],
         "x-idempotency-required": true,
         "x-audit-event-success": "evidence.upload_intent_created",
@@ -5169,8 +5167,7 @@
         "x-data-scope": "project-object",
         "x-terminal-allowed": [
           "web",
-          "staff_work_phone",
-          "tablet"
+          "staff_work_phone"
         ],
         "x-idempotency-required": true,
         "x-audit-event-success": "evidence.attachment_bound",
@@ -5213,8 +5210,7 @@
         "x-data-scope": "project-object",
         "x-terminal-allowed": [
           "web",
-          "staff_work_phone",
-          "tablet"
+          "staff_work_phone"
         ],
         "x-idempotency-required": true,
         "x-audit-event-success": "evidence.attachment_completed",
@@ -5284,8 +5280,8 @@
         "x-data-scope": "project-device",
         "x-terminal-allowed": [
           "staff_work_phone",
-          "tablet",
-          "kiosk"
+          "kiosk",
+          "web"
         ],
         "x-idempotency-required": true,
         "x-audit-event-success": "evidence.events_reported",
@@ -5601,7 +5597,6 @@
         "x-data-scope": "project-order",
         "x-terminal-allowed": [
           "web",
-          "tablet",
           "kiosk",
           "miniapp",
           "app"
@@ -8182,7 +8177,6 @@
         "x-data-scope": "project-merchant",
         "x-terminal-allowed": [
           "staff_work_phone",
-          "tablet",
           "web",
           "mobile_admin"
         ],
@@ -8319,7 +8313,6 @@
         "x-data-scope": "project-merchant",
         "x-terminal-allowed": [
           "staff_work_phone",
-          "tablet",
           "web",
           "mobile_admin"
         ],
@@ -8396,7 +8389,6 @@
         "x-data-scope": "project-merchant",
         "x-terminal-allowed": [
           "staff_work_phone",
-          "tablet",
           "web",
           "mobile_admin"
         ],
@@ -8474,7 +8466,6 @@
         "x-data-scope": "project-merchant",
         "x-terminal-allowed": [
           "staff_work_phone",
-          "tablet",
           "web",
           "mobile_admin"
         ],
@@ -8607,7 +8598,6 @@
         "x-data-scope": "project-bar-customer",
         "x-terminal-allowed": [
           "web",
-          "tablet",
           "staff_work_phone"
         ],
         "x-idempotency-required": false,
@@ -8636,7 +8626,6 @@
         "x-permission": "bar.saved_bottle.manage",
         "x-data-scope": "project-bar-customer",
         "x-terminal-allowed": [
-          "tablet",
           "web"
         ],
         "x-idempotency-required": true,
@@ -8673,8 +8662,8 @@
         "x-permission": "bar.saved_bottle.manage",
         "x-data-scope": "project-bar-customer",
         "x-terminal-allowed": [
-          "tablet",
-          "staff_work_phone"
+          "staff_work_phone",
+          "web"
         ],
         "x-idempotency-required": true,
         "x-audit-event-success": "bar.saved_bottle_picked_up",
@@ -8717,7 +8706,6 @@
         "x-data-scope": "project-bar-customer",
         "x-terminal-allowed": [
           "web",
-          "tablet",
           "staff_work_phone"
         ],
         "x-idempotency-required": false,
@@ -8755,7 +8743,6 @@
         "x-data-scope": "project-bar-customer",
         "x-terminal-allowed": [
           "web",
-          "tablet",
           "staff_work_phone"
         ],
         "x-idempotency-required": true,
@@ -8802,7 +8789,6 @@
         "x-data-scope": "project-bar-customer",
         "x-terminal-allowed": [
           "web",
-          "tablet",
           "staff_work_phone"
         ],
         "x-idempotency-required": true,
@@ -8849,7 +8835,6 @@
         "x-data-scope": "project-bar-customer",
         "x-terminal-allowed": [
           "web",
-          "tablet",
           "staff_work_phone"
         ],
         "x-idempotency-required": true,
@@ -8896,7 +8881,6 @@
         "x-data-scope": "project-bar-customer",
         "x-terminal-allowed": [
           "web",
-          "tablet",
           "staff_work_phone"
         ],
         "x-idempotency-required": true,
@@ -8943,7 +8927,6 @@
         "x-data-scope": "project-bar-customer",
         "x-terminal-allowed": [
           "web",
-          "tablet",
           "staff_work_phone"
         ],
         "x-idempotency-required": true,
@@ -8990,7 +8973,6 @@
         "x-data-scope": "project-bar-customer",
         "x-terminal-allowed": [
           "web",
-          "tablet",
           "staff_work_phone"
         ],
         "x-idempotency-required": true,
@@ -9037,7 +9019,6 @@
         "x-data-scope": "project-bar-customer",
         "x-terminal-allowed": [
           "web",
-          "tablet",
           "staff_work_phone"
         ],
         "x-idempotency-required": true,
@@ -9082,7 +9063,6 @@
         "x-data-scope": "project-bar-customer",
         "x-terminal-allowed": [
           "web",
-          "tablet",
           "staff_work_phone"
         ],
         "x-idempotency-required": false,
@@ -9123,7 +9103,6 @@
         "x-data-scope": "project-bar-customer",
         "x-terminal-allowed": [
           "web",
-          "tablet",
           "staff_work_phone"
         ],
         "x-idempotency-required": true,
@@ -9172,7 +9151,6 @@
         "x-permission": "bar.saved_bottle.manage",
         "x-data-scope": "project-bar-customer",
         "x-terminal-allowed": [
-          "tablet",
           "web",
           "staff_work_phone"
         ],
@@ -9280,7 +9258,6 @@
         "x-data-scope": "project-warehouse-bar",
         "x-terminal-allowed": [
           "web",
-          "tablet",
           "mobile_admin"
         ],
         "x-idempotency-required": false,
@@ -9316,7 +9293,6 @@
         "x-data-scope": "project-warehouse-bar",
         "x-terminal-allowed": [
           "web",
-          "tablet",
           "mobile_admin"
         ],
         "x-idempotency-required": true,
@@ -9517,8 +9493,7 @@
         "x-data-scope": "project-warehouse",
         "x-terminal-allowed": [
           "web",
-          "staff_work_phone",
-          "tablet"
+          "staff_work_phone"
         ],
         "x-idempotency-required": true,
         "x-audit-event-success": "inventory.outbound_verified",
@@ -9555,8 +9530,7 @@
         "x-data-scope": "project-warehouse",
         "x-terminal-allowed": [
           "web",
-          "staff_work_phone",
-          "tablet"
+          "staff_work_phone"
         ],
         "x-idempotency-required": false,
         "x-audit-event-success": "inventory.stock_movement.viewed",
@@ -11342,7 +11316,8 @@
         "x-data-scope": "project",
         "x-terminal-allowed": [
           "web",
-          "kiosk"
+          "kiosk",
+          "staff_work_phone"
         ],
         "x-idempotency-required": false,
         "x-audit-event-success": "inventory.supplier_viewed",
@@ -11406,8 +11381,7 @@
         "x-permission": "inventory.handover.scan",
         "x-data-scope": "project-warehouse-bar",
         "x-terminal-allowed": [
-          "staff_work_phone",
-          "tablet"
+          "staff_work_phone"
         ],
         "x-idempotency-required": true,
         "x-audit-event-success": "operation_handover.created",
@@ -11450,7 +11424,6 @@
         "x-data-scope": "project-warehouse-bar",
         "x-terminal-allowed": [
           "staff_work_phone",
-          "tablet",
           "web",
           "mobile_admin"
         ],
@@ -11737,7 +11710,6 @@
         "x-data-scope": "project-warehouse-bar",
         "x-terminal-allowed": [
           "staff_work_phone",
-          "tablet",
           "web",
           "mobile_admin"
         ],
@@ -11800,7 +11772,6 @@
         "x-data-scope": "project-warehouse-bar",
         "x-terminal-allowed": [
           "staff_work_phone",
-          "tablet",
           "web",
           "mobile_admin"
         ],
@@ -14619,7 +14590,7 @@
         ],
         "operationId": "listStaffAppFunctions",
         "summary": "员工 App 本端可用功能（按设备类型下发）",
-        "description": "第十八批 M 段第 116 条（PGM:747「同一个员工 App，装在公司设备和员工自有手机上能用的功能不一样：能做什么由后台按设备类型统一下发，员工自有手机只开放低风险功能（公告、我的工单、帮客人订位、查看考勤、请假、查自己薪资等）。」）：按服务端可信终端返回员工 App 功能码。员工私人手机只返回低风险、可离场办理的功能（staff_device、inbox、notices、my_work_orders、bar_reservation、my_shifts、my_payroll、attendance_month、leave、my_service_income、shift_manage、my_profile），服务端对私人手机只放行这些功能的接口，其余一律 403 TERMINAL_NOT_ALLOWED 并留痕 terminal.access_rejected（reason=private_phone_function_not_allowed）；工作手机、平板与其他终端返回全部功能。与 capability-switches/effective 同口径，任何已登录主体可读、不设权限码。",
+        "description": "第十八批 M 段第 116 条（PGM:747「同一个员工 App，装在公司设备和员工自有手机上能用的功能不一样：能做什么由后台按设备类型统一下发，员工自有手机只开放低风险功能（公告、我的工单、帮客人订位、查看考勤、请假、查自己薪资等）。」）：按服务端可信终端返回员工 App 功能码。员工私人手机只返回低风险、可离场办理的功能（staff_device、inbox、notices、my_work_orders、bar_reservation、my_shifts、my_payroll、attendance_month、leave、my_service_income、shift_manage、my_profile），服务端对私人手机只放行这些功能的接口，其余一律 403 TERMINAL_NOT_ALLOWED 并留痕 terminal.access_rejected（reason=private_phone_function_not_allowed）；第十八批 O 段第 130 条（BSM:1901「只做酒吧点酒下单，绑定酒吧和卡座，校验最低消费，支持扫码支付。」；PGM:634「平板只负责酒吧点酒下单。」）：平板只返回 bar_order、tablet_pos，服务端对平板只放行这两项功能的接口（另含取本清单、设备绑定与登记签名公钥），其余一律 403 TERMINAL_NOT_ALLOWED 并留痕 terminal.access_rejected（reason=tablet_function_not_allowed）；工作手机与其他终端返回全部功能。与 capability-switches/effective 同口径，任何已登录主体可读、不设权限码。",
         "x-permission": "not_applicable",
         "x-data-scope": "platform",
         "x-terminal-allowed": [
@@ -14934,7 +14905,6 @@
         "x-data-scope": "project",
         "x-terminal-allowed": [
           "staff_work_phone",
-          "tablet",
           "kiosk",
           "web"
         ],
@@ -15090,79 +15060,6 @@
           }
         },
         "x-auth-context": "device-credential"
-      }
-    },
-    "/api/v1/terminals/offline-entitlements": {
-      "get": {
-        "tags": [
-          "terminals"
-        ],
-        "operationId": "getTerminalOfflineEntitlements",
-        "summary": "获取终端离线权益",
-        "description": "用于获取终端离线权益。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。",
-        "x-permission": "terminal.device.bind",
-        "x-data-scope": "project",
-        "x-terminal-allowed": [
-          "staff_work_phone",
-          "tablet",
-          "kiosk"
-        ],
-        "x-idempotency-required": false,
-        "x-audit-event-success": "terminal.offline_entitlements.viewed",
-        "x-audit-event-failure": "terminal.offline_entitlements.viewed_failed",
-        "responses": {
-          "200": {
-            "$ref": "#/components/responses/Page"
-          },
-          "403": {
-            "$ref": "#/components/responses/Error"
-          },
-          "500": {
-            "$ref": "#/components/responses/Error"
-          }
-        },
-        "x-auth-context": "staff-token"
-      }
-    },
-    "/api/v1/terminals/sync-tasks": {
-      "post": {
-        "tags": [
-          "terminals"
-        ],
-        "operationId": "syncTerminalTasks",
-        "summary": "同步终端任务",
-        "description": "用于同步终端任务。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。 核销记录状态闭集（CG-05，ENUM「核销记录状态」）：success（成功）、rejected（拒绝：规则不允许）、failed（失败：设备或网络原因）、reversed（已冲正）、anomaly（异常：已成功扣次但现场未放行或实际交付有争议时提起的异常复核，见 POST /api/v1/ticketing/verifications/{id}/anomaly 与 POST /api/v1/ticketing/verification-anomalies/{id}/resolve）；不设预检通过态、不提供人工放行（manual_overridden 仅历史行保留）。 离线同步的核销尝试：规则不允许的结果落 rejected 记录、设备/网络/凭证技术原因落 failed，任务结果同态（status/reason），同批其他任务照常处理。",
-        "x-permission": "terminal.device.bind",
-        "x-data-scope": "project",
-        "x-terminal-allowed": [
-          "staff_work_phone",
-          "tablet",
-          "kiosk"
-        ],
-        "x-idempotency-required": true,
-        "x-audit-event-success": "terminal.sync_task.accepted",
-        "x-audit-event-failure": "terminal.sync_task.accepted_failed",
-        "responses": {
-          "200": {
-            "$ref": "#/components/responses/Success"
-          },
-          "400": {
-            "$ref": "#/components/responses/Error"
-          },
-          "403": {
-            "$ref": "#/components/responses/Error"
-          },
-          "409": {
-            "$ref": "#/components/responses/Error"
-          },
-          "500": {
-            "$ref": "#/components/responses/Error"
-          }
-        },
-        "x-auth-context": "staff-token",
-        "requestBody": {
-          "$ref": "#/components/requestBodies/TerminalSyncTasksRequest"
-        }
       }
     },
     "/api/v1/ticketing/dynamic-pricing-rules": {
@@ -16537,7 +16434,6 @@
         "x-terminal-allowed": [
           "web",
           "staff_work_phone",
-          "tablet",
           "kiosk"
         ],
         "x-idempotency-required": false,
@@ -16773,7 +16669,8 @@
         "x-data-scope": "project-point",
         "x-terminal-allowed": [
           "staff_work_phone",
-          "kiosk"
+          "kiosk",
+          "web"
         ],
         "x-idempotency-required": true,
         "x-audit-event-success": "verification.previewed",
@@ -17221,8 +17118,8 @@
           "finance"
         ],
         "operationId": "listDailyCloseSummaries",
-        "summary": "查询日结六源汇总",
-        "description": "返回日结锁定时按官方售票/渠道售票/酒吧/游乐/供应链成本/第三方回流六源聚合的金额、退款、计数；商户角色仅见自身 scope。",
+        "summary": "查询日结七源汇总",
+        "description": "返回日结锁定时按官方售票/渠道售票/酒吧/游乐/供应链成本/第三方回流/订台定金七源聚合的金额、退款、计数；商户角色仅见自身 scope。订台定金（bar_deposit）：按各酒吧营业日窗取当日到账的订台定金（各渠道，含一体机由授权员工登记的现金/POS），退款为当日实际退回成功的定金；定金不计入酒吧源。",
         "x-permission": "finance.daily_close.manage",
         "x-data-scope": "project-entity",
         "x-terminal-allowed": [
@@ -17366,7 +17263,6 @@
         "x-terminal-allowed": [
           "web",
           "kiosk",
-          "tablet",
           "mobile_admin"
         ],
         "x-idempotency-required": true,
@@ -17406,7 +17302,7 @@
           "SENSITIVE_OPERATION_LOCATION_REQUIRED",
           "SENSITIVE_OPERATION_OUT_OF_RANGE"
         ],
-        "description": "第十八批 N 段第 123 条 123-R2（BSM:1630「核销、收款、退款、放行等敏感操作，操作设备定位落在该项目综合体授权范围之外时一律拒绝并留痕」；BSM:1876「Web 端同样适用」）：本操作属敏感操作定位闸的现场动作闭集（第十八批裁决 31）。操作对象所属项目已配授权范围（123-R1）时须带请求头 X-Geo-Latitude、X-Geo-Longitude（设备当下定位，WGS-84 十进制度）：没带或解析不了按范围外处理（裁决 30）返回 403 SENSITIVE_OPERATION_LOCATION_REQUIRED，到圆心距离超过授权半径返回 403 SENSITIVE_OPERATION_OUT_OF_RANGE，拒绝在独立事务里留痕 sensitive_operation.location_rejected（business_id 为本 operationId，业务回滚不丢）；项目没配授权范围不查位置（裁决 32）；判定在幂等之前，重放不能绕过；通过时不存位置。第十八批 N 段第 120 条 120-R3（BSM:1058「……客人自助订台支付定金成功……该台位即进入已预留……冲突时先支付定金者得……」）：从未占过台的订台（一体机订台、客人自助订台）登记定金即占台；台位已被先付定金者占着或已开台、待清台、停用时本订台取消、不占台，已收定金按登记的渠道记原路待退并留痕 bar.reservation_deposit_refund_on_conflict，返回 200 与取消后的订台记录（status=cancelled）。"
+        "description": "第十八批 N 段第 123 条 123-R2（BSM:1630「核销、收款、退款、放行等敏感操作，操作设备定位落在该项目综合体授权范围之外时一律拒绝并留痕」；BSM:1876「Web 端同样适用」）：本操作属敏感操作定位闸的现场动作闭集（第十八批裁决 31）。操作对象所属项目已配授权范围（123-R1）时须带请求头 X-Geo-Latitude、X-Geo-Longitude（设备当下定位，WGS-84 十进制度）：没带或解析不了按范围外处理（裁决 30）返回 403 SENSITIVE_OPERATION_LOCATION_REQUIRED，到圆心距离超过授权半径返回 403 SENSITIVE_OPERATION_OUT_OF_RANGE，拒绝在独立事务里留痕 sensitive_operation.location_rejected（business_id 为本 operationId，业务回滚不丢）；项目没配授权范围不查位置（裁决 32）；判定在幂等之前，重放不能绕过；通过时不存位置。第十八批 N 段第 120 条 120-R3（BSM:1058「……客人自助订台支付定金成功……该台位即进入已预留……冲突时先支付定金者得……」）：从未占过台的订台（一体机订台、客人自助订台）登记定金即占台；台位已被先付定金者占着或已开台、待清台、停用时本订台取消、不占台，已收定金按登记的渠道记原路待退并留痕 bar.reservation_deposit_refund_on_conflict，返回 200 与取消后的订台记录（status=cancelled）。第十八批 O 段第 126 条 126-R2（BSM:1029「现场必须允许现金和 POS 机支付，但要进入账单、日结、员工责任链和财务对账。」）：登记员工记为定金收款人（bar_reservations.deposit_collector_staff_id），交班对账按其把本笔定金按渠道计入现金或 POS 应收。"
       }
     },
     "/api/v1/bar/reservations/{id}/checkin": {
@@ -17421,7 +17317,6 @@
         "x-terminal-allowed": [
           "web",
           "kiosk",
-          "tablet",
           "mobile_admin"
         ],
         "x-idempotency-required": true,
@@ -17466,7 +17361,6 @@
         "x-terminal-allowed": [
           "web",
           "kiosk",
-          "tablet",
           "mobile_admin"
         ],
         "x-idempotency-required": true,
@@ -17610,7 +17504,6 @@
         "x-terminal-allowed": [
           "web",
           "kiosk",
-          "tablet",
           "mobile_admin"
         ],
         "x-idempotency-required": true,
@@ -17647,7 +17540,6 @@
         "x-data-scope": "project-merchant",
         "x-terminal-allowed": [
           "staff_work_phone",
-          "tablet",
           "web",
           "mobile_admin"
         ],
@@ -17795,7 +17687,6 @@
         "x-data-scope": "project-merchant",
         "x-terminal-allowed": [
           "staff_work_phone",
-          "tablet",
           "web",
           "mobile_admin"
         ],
@@ -17947,7 +17838,6 @@
         "x-data-scope": "project-warehouse-bar",
         "x-terminal-allowed": [
           "staff_work_phone",
-          "tablet",
           "web",
           "mobile_admin"
         ],
@@ -18021,7 +17911,6 @@
         "x-data-scope": "project-warehouse-bar",
         "x-terminal-allowed": [
           "staff_work_phone",
-          "tablet",
           "web",
           "mobile_admin"
         ],
@@ -18599,7 +18488,8 @@
         "x-terminal-allowed": [
           "staff_private_phone",
           "web",
-          "mobile_admin"
+          "mobile_admin",
+          "staff_work_phone"
         ],
         "x-idempotency-required": false,
         "x-audit-event-success": "staff.notice.viewed",
@@ -18633,7 +18523,8 @@
         "x-data-scope": "project",
         "x-terminal-allowed": [
           "staff_private_phone",
-          "web"
+          "web",
+          "staff_work_phone"
         ],
         "x-idempotency-required": true,
         "x-audit-event-success": "staff.notice_acknowledged",
@@ -20311,7 +20202,6 @@
         "x-permission": "bar.order_item.void",
         "x-data-scope": "project-bar-table",
         "x-terminal-allowed": [
-          "tablet",
           "web"
         ],
         "x-idempotency-required": true,
@@ -20356,7 +20246,6 @@
         "x-permission": "bar.bill.reopen",
         "x-data-scope": "project-bar-table",
         "x-terminal-allowed": [
-          "tablet",
           "web"
         ],
         "x-idempotency-required": true,
@@ -20551,7 +20440,6 @@
         "x-permission": "bar.bill.tip",
         "x-data-scope": "project-bar-table",
         "x-terminal-allowed": [
-          "tablet",
           "web"
         ],
         "x-idempotency-required": true,
@@ -20593,7 +20481,6 @@
         "x-permission": "bar.product.sold_out",
         "x-data-scope": "project-bar-table",
         "x-terminal-allowed": [
-          "tablet",
           "web"
         ],
         "x-idempotency-required": true,
@@ -21085,7 +20972,8 @@
         "x-data-scope": "project-amusement",
         "x-terminal-allowed": [
           "web",
-          "kiosk"
+          "kiosk",
+          "staff_work_phone"
         ],
         "x-idempotency-required": false,
         "x-audit-event-success": "amusement.device.viewed",
@@ -21316,7 +21204,6 @@
         "x-permission": "bar.shift.manage",
         "x-data-scope": "project-bar-table",
         "x-terminal-allowed": [
-          "tablet",
           "web"
         ],
         "x-idempotency-required": false,
@@ -21346,7 +21233,6 @@
         "x-permission": "bar.shift.manage",
         "x-data-scope": "project-bar-table",
         "x-terminal-allowed": [
-          "tablet",
           "web"
         ],
         "x-idempotency-required": true,
@@ -21378,11 +21264,11 @@
           "bar"
         ],
         "operationId": "closeBarShift",
+        "description": "第十八批 O 段第 126 条 126-R2（BSM:1081「收银员开班记备用金，班结按本班次汇总各支付方式应收（现金/扫码/POS/退款/小费），录入实点现金算长短款差异。」）：现金、POS 应收另含本班次时段内该收银员登记的订台定金（pay-deposit 的登记员工），按定金渠道计入现金或 POS。",
         "summary": "班结对账",
         "x-permission": "bar.shift.close",
         "x-data-scope": "project-bar-table",
         "x-terminal-allowed": [
-          "tablet",
           "web"
         ],
         "x-idempotency-required": true,
@@ -23087,7 +22973,6 @@
         "x-permission": "bar.table_session.view",
         "x-data-scope": "project-bar-table",
         "x-terminal-allowed": [
-          "tablet",
           "web"
         ],
         "x-idempotency-required": false,
@@ -23116,7 +23001,6 @@
         "x-permission": "bar.table_session.create",
         "x-data-scope": "project-bar-table",
         "x-terminal-allowed": [
-          "tablet",
           "web"
         ],
         "x-idempotency-required": true,
@@ -23230,7 +23114,6 @@
         "x-permission": "bar.table_session.merge",
         "x-data-scope": "project-bar-table",
         "x-terminal-allowed": [
-          "tablet",
           "web"
         ],
         "x-idempotency-required": true,
@@ -23336,7 +23219,6 @@
         "x-permission": "bar.table_session.split",
         "x-data-scope": "project-bar-table",
         "x-terminal-allowed": [
-          "tablet",
           "web"
         ],
         "x-idempotency-required": true,
@@ -23475,7 +23357,6 @@
         "x-permission": "bar.table_session.transfer",
         "x-data-scope": "project-bar-table",
         "x-terminal-allowed": [
-          "tablet",
           "web"
         ],
         "x-idempotency-required": true,
@@ -23776,7 +23657,6 @@
         "x-permission": "bar.bill.split_merge",
         "x-data-scope": "project-bar-table",
         "x-terminal-allowed": [
-          "tablet",
           "web"
         ],
         "x-idempotency-required": false,
@@ -23819,7 +23699,6 @@
         "x-permission": "bar.order.view",
         "x-data-scope": "project-bar-table",
         "x-terminal-allowed": [
-          "tablet",
           "web"
         ],
         "x-idempotency-required": false,
@@ -23861,7 +23740,6 @@
         "x-permission": "bar.bill.adjust",
         "x-data-scope": "project-bar-table",
         "x-terminal-allowed": [
-          "tablet",
           "web"
         ],
         "x-idempotency-required": true,
@@ -23970,7 +23848,6 @@
         "x-permission": "bar.bill.split_merge",
         "x-data-scope": "project-bar-table",
         "x-terminal-allowed": [
-          "tablet",
           "web"
         ],
         "x-idempotency-required": true,
@@ -24067,7 +23944,6 @@
         "x-permission": "bar.bill.split_merge",
         "x-data-scope": "project-bar-table",
         "x-terminal-allowed": [
-          "tablet",
           "web"
         ],
         "x-idempotency-required": true,
@@ -24166,7 +24042,6 @@
         "x-permission": "bar.order_item.void",
         "x-data-scope": "project-bar-table",
         "x-terminal-allowed": [
-          "tablet",
           "web"
         ],
         "x-idempotency-required": true,
@@ -24249,7 +24124,6 @@
         "x-permission": "bar.production_ticket.view",
         "x-data-scope": "project-bar-table",
         "x-terminal-allowed": [
-          "tablet",
           "web"
         ],
         "x-idempotency-required": false,
@@ -24291,7 +24165,6 @@
         "x-permission": "bar.production_ticket.manage",
         "x-data-scope": "project-bar-table",
         "x-terminal-allowed": [
-          "tablet",
           "web"
         ],
         "x-idempotency-required": true,
@@ -24394,7 +24267,6 @@
         "x-permission": "amusement.queue.manage",
         "x-data-scope": "project-amusement",
         "x-terminal-allowed": [
-          "tablet",
           "staff_work_phone"
         ],
         "x-idempotency-required": true,
@@ -24481,7 +24353,6 @@
         "x-permission": "amusement.reservation.manage",
         "x-data-scope": "project-amusement",
         "x-terminal-allowed": [
-          "tablet",
           "staff_work_phone"
         ],
         "x-idempotency-required": true,
@@ -24568,7 +24439,6 @@
         "x-permission": "amusement.incident.view",
         "x-data-scope": "project-amusement",
         "x-terminal-allowed": [
-          "tablet",
           "staff_work_phone"
         ],
         "x-idempotency-required": false,
@@ -24596,7 +24466,6 @@
         "x-permission": "amusement.incident.create",
         "x-data-scope": "project-amusement",
         "x-terminal-allowed": [
-          "tablet",
           "staff_work_phone"
         ],
         "x-idempotency-required": true,
@@ -24721,7 +24590,6 @@
         "x-permission": "amusement.incident.process",
         "x-data-scope": "project-amusement",
         "x-terminal-allowed": [
-          "tablet",
           "staff_work_phone"
         ],
         "x-idempotency-required": true,
@@ -24813,7 +24681,6 @@
         "x-permission": "amusement.incident.close",
         "x-data-scope": "project-amusement",
         "x-terminal-allowed": [
-          "tablet",
           "staff_work_phone"
         ],
         "x-idempotency-required": true,
@@ -24905,7 +24772,6 @@
         "x-permission": "amusement.safety_notice.view",
         "x-data-scope": "project-amusement",
         "x-terminal-allowed": [
-          "tablet",
           "staff_work_phone"
         ],
         "x-idempotency-required": false,
@@ -24933,7 +24799,6 @@
         "x-permission": "amusement.safety_notice.manage",
         "x-data-scope": "project-amusement",
         "x-terminal-allowed": [
-          "tablet",
           "staff_work_phone"
         ],
         "x-idempotency-required": true,
@@ -25053,7 +24918,6 @@
         "x-permission": "amusement.waiver.acknowledge",
         "x-data-scope": "project-amusement",
         "x-terminal-allowed": [
-          "tablet",
           "staff_work_phone"
         ],
         "x-idempotency-required": true,
@@ -26749,7 +26613,6 @@
         "x-permission": "bar.saved_bottle.manage",
         "x-data-scope": "project-bar-table",
         "x-terminal-allowed": [
-          "tablet",
           "web"
         ],
         "x-idempotency-required": true,
@@ -26852,7 +26715,6 @@
         "x-permission": "bar.saved_bottle.manage",
         "x-data-scope": "project-bar-customer",
         "x-terminal-allowed": [
-          "tablet",
           "web"
         ],
         "x-idempotency-required": true,
@@ -26906,7 +26768,6 @@
         "x-permission": "bar.saved_bottle.manage",
         "x-data-scope": "project-bar-customer",
         "x-terminal-allowed": [
-          "tablet",
           "web"
         ],
         "x-idempotency-required": false,
@@ -26948,7 +26809,6 @@
         "x-permission": "inventory.high_value.review",
         "x-data-scope": "project-bar-customer",
         "x-terminal-allowed": [
-          "tablet",
           "web"
         ],
         "x-idempotency-required": true,
@@ -27002,7 +26862,6 @@
         "x-permission": "bar.saved_bottle.manage",
         "x-data-scope": "project-bar-customer",
         "x-terminal-allowed": [
-          "tablet",
           "web"
         ],
         "x-idempotency-required": true,
@@ -27056,7 +26915,6 @@
         "x-permission": "bar.saved_bottle.manage",
         "x-data-scope": "project-bar-customer",
         "x-terminal-allowed": [
-          "tablet",
           "web"
         ],
         "x-idempotency-required": true,
@@ -27110,7 +26968,6 @@
         "x-permission": "bar.saved_bottle.manage",
         "x-data-scope": "project-bar-customer",
         "x-terminal-allowed": [
-          "tablet",
           "web"
         ],
         "x-idempotency-required": true,
@@ -27164,7 +27021,6 @@
         "x-permission": "bar.saved_bottle.manage",
         "x-data-scope": "project-bar-customer",
         "x-terminal-allowed": [
-          "tablet",
           "web"
         ],
         "x-idempotency-required": true,
@@ -27218,7 +27074,6 @@
         "x-permission": "bar.saved_bottle.manage",
         "x-data-scope": "project-bar-customer",
         "x-terminal-allowed": [
-          "tablet",
           "web"
         ],
         "x-idempotency-required": true,
@@ -27261,7 +27116,6 @@
         "x-permission": "bar.saved_bottle.manage",
         "x-data-scope": "project-bar-customer",
         "x-terminal-allowed": [
-          "tablet",
           "web"
         ],
         "x-idempotency-required": true,
@@ -27304,7 +27158,6 @@
         "x-permission": "bar.saved_bottle.manage",
         "x-data-scope": "project-bar-customer",
         "x-terminal-allowed": [
-          "tablet",
           "web"
         ],
         "x-idempotency-required": false,
@@ -30343,7 +30196,6 @@
         "x-data-scope": "project-bar",
         "x-terminal-allowed": [
           "staff_work_phone",
-          "tablet",
           "web"
         ],
         "x-idempotency-required": true,
@@ -31292,8 +31144,7 @@
         "x-permission": "bar.order.create",
         "x-data-scope": "project-bar-table",
         "x-terminal-allowed": [
-          "miniapp",
-          "tablet"
+          "miniapp"
         ],
         "x-idempotency-required": true,
         "x-audit-event-success": "bar.scan_order_created",
@@ -31772,7 +31623,6 @@
           "miniapp",
           "mobile_admin",
           "staff_work_phone",
-          "tablet",
           "web"
         ],
         "x-idempotency-required": false,
@@ -31871,7 +31721,6 @@
           "miniapp",
           "mobile_admin",
           "staff_work_phone",
-          "tablet",
           "web"
         ],
         "x-idempotency-required": true,
@@ -35151,7 +35000,8 @@
         "x-data-scope": "platform",
         "x-terminal-allowed": [
           "web",
-          "staff_private_phone"
+          "staff_private_phone",
+          "staff_work_phone"
         ],
         "x-idempotency-required": true,
         "x-audit-event-success": "facility.work_order_reviewed",
@@ -35209,7 +35059,8 @@
         "x-data-scope": "platform",
         "x-terminal-allowed": [
           "web",
-          "staff_private_phone"
+          "staff_private_phone",
+          "staff_work_phone"
         ],
         "x-idempotency-required": true,
         "x-audit-event-success": "facility.work_order_rework_requested",
@@ -37951,7 +37802,7 @@
         "x-auth-context": "staff-token",
         "operationId": "queryAuditOperationEvents",
         "summary": "跨对象查询操作留痕",
-        "description": "审计只读角色按业务对象/操作人/事件名/时间范围跨对象查询 audit_events 操作日志（与 evidence/events 对象时间线互补，解决跨对象批量查询入口）。terminal 记该操作所在的端，取服务端派生的可信终端（客人会话端、商户手机应用会话、登记设备类型、商户账号为 merchant_portal、后台网页为 web）；一体机自助与员工自助注册端点取请求声明的终端；没有终端信息的为空（BSM 第 940 行、PGM 第 745 行）。",
+        "description": "审计只读角色按业务对象/操作人/事件名/时间范围跨对象查询 audit_events 操作日志（与 evidence/events 对象时间线互补，解决跨对象批量查询入口）。terminal 记该操作所在的端，取服务端派生的可信终端（客人会话端、商户手机应用会话、登记设备类型、商户账号为 merchant_portal、后台网页为 web）；一体机自助与员工自助注册端点取请求声明的终端；没有终端信息的为空（BSM 第 940 行、PGM 第 745 行）。metadata 另记 login_session_id（执行该动作的那一次员工登录会话编号）与 operator_device_id（执行设备：员工手机、平板、一体机为请求设备号，商户手机应用为会话设备编号，后台网页为浏览器设备编号），没有的不记（BSM 第 940 行、DEC-R8-97-19）。",
         "parameters": [
           {
             "name": "business_type",
@@ -39004,7 +38855,8 @@
         "x-permission": "not_applicable",
         "x-data-scope": "self",
         "x-terminal-allowed": [
-          "miniapp"
+          "miniapp",
+          "app"
         ],
         "x-idempotency-required": false,
         "x-audit-event-success": "customer.account.deregistered",
@@ -39047,7 +38899,8 @@
         "x-permission": "not_applicable",
         "x-data-scope": "self",
         "x-terminal-allowed": [
-          "miniapp"
+          "miniapp",
+          "app"
         ],
         "x-idempotency-required": false,
         "x-audit-event-success": "customer.account.deregister_previewed",
@@ -40923,7 +40776,8 @@
         "x-data-scope": "platform",
         "x-terminal-allowed": [
           "staff_private_phone",
-          "web"
+          "web",
+          "staff_work_phone"
         ],
         "x-idempotency-required": false,
         "x-audit-event-success": "not_applicable",
@@ -40956,7 +40810,8 @@
           "staff_private_phone",
           "web",
           "tablet",
-          "kiosk"
+          "kiosk",
+          "staff_work_phone"
         ],
         "x-idempotency-required": false,
         "x-audit-event-success": "bar.table_availability.viewed",
@@ -40987,7 +40842,8 @@
         "x-data-scope": "platform",
         "x-terminal-allowed": [
           "web",
-          "staff_private_phone"
+          "staff_private_phone",
+          "staff_work_phone"
         ],
         "x-idempotency-required": true,
         "x-audit-event-success": "staff.shift.submitted",
@@ -41439,7 +41295,8 @@
         "x-data-scope": "platform",
         "x-terminal-allowed": [
           "staff_private_phone",
-          "web"
+          "web",
+          "staff_work_phone"
         ],
         "x-idempotency-required": false,
         "x-audit-event-success": "not_applicable",
@@ -42476,7 +42333,6 @@
           "miniapp",
           "mobile_admin",
           "staff_work_phone",
-          "tablet",
           "web"
         ],
         "x-idempotency-required": false,
@@ -42607,7 +42463,6 @@
           "mobile_admin",
           "staff_private_phone",
           "staff_work_phone",
-          "tablet",
           "web"
         ],
         "x-idempotency-required": false,
@@ -42711,7 +42566,8 @@
         "x-data-scope": "platform",
         "x-terminal-allowed": [
           "staff_private_phone",
-          "web"
+          "web",
+          "staff_work_phone"
         ],
         "x-idempotency-required": true,
         "x-audit-event-success": "staff.leave.submitted",
@@ -42837,7 +42693,8 @@
         "x-data-scope": "platform",
         "x-terminal-allowed": [
           "staff_private_phone",
-          "web"
+          "web",
+          "staff_work_phone"
         ],
         "x-idempotency-required": false,
         "x-audit-event-success": "not_applicable",
@@ -42950,7 +42807,8 @@
         "x-data-scope": "platform",
         "x-terminal-allowed": [
           "staff_private_phone",
-          "web"
+          "web",
+          "staff_work_phone"
         ],
         "x-idempotency-required": true,
         "x-audit-event-success": "staff.leave.revoke_requested",
@@ -43107,7 +42965,8 @@
         "x-data-scope": "platform",
         "x-terminal-allowed": [
           "staff_private_phone",
-          "web"
+          "web",
+          "staff_work_phone"
         ],
         "x-idempotency-required": false,
         "x-audit-event-success": "not_applicable",
@@ -43206,8 +43065,8 @@
         "x-data-scope": "platform",
         "x-terminal-allowed": [
           "web",
-          "tablet",
-          "app"
+          "app",
+          "staff_work_phone"
         ],
         "x-idempotency-required": false,
         "x-audit-event-success": "not_applicable",
@@ -43631,7 +43490,6 @@
         "x-terminal-allowed": [
           "staff_work_phone",
           "web",
-          "tablet",
           "app"
         ],
         "x-idempotency-required": true,
@@ -43769,7 +43627,8 @@
         "x-data-scope": "platform",
         "x-terminal-allowed": [
           "staff_private_phone",
-          "web"
+          "web",
+          "staff_work_phone"
         ],
         "x-idempotency-required": false,
         "x-audit-event-success": "not_applicable",
@@ -43798,7 +43657,8 @@
         "x-permission": "service.order.perform",
         "x-data-scope": "platform",
         "x-terminal-allowed": [
-          "web"
+          "web",
+          "staff_work_phone"
         ],
         "x-idempotency-required": true,
         "x-audit-event-success": "service.order.accepted",
@@ -44011,7 +43871,6 @@
         "x-terminal-allowed": [
           "staff_work_phone",
           "web",
-          "tablet",
           "app"
         ],
         "x-idempotency-required": false,
@@ -44057,7 +43916,8 @@
         "x-data-scope": "platform",
         "x-terminal-allowed": [
           "staff_private_phone",
-          "web"
+          "web",
+          "staff_work_phone"
         ],
         "x-idempotency-required": false,
         "x-audit-event-success": "not_applicable",
@@ -44108,8 +43968,7 @@
         "x-data-scope": "platform",
         "x-terminal-allowed": [
           "staff_work_phone",
-          "web",
-          "tablet"
+          "web"
         ],
         "x-idempotency-required": true,
         "x-audit-event-success": "service.order.paid",
@@ -44192,8 +44051,7 @@
         "x-permission": "service.order.create",
         "x-data-scope": "platform",
         "x-terminal-allowed": [
-          "web",
-          "tablet"
+          "web"
         ],
         "x-idempotency-required": false,
         "x-audit-event-success": "not_applicable",
@@ -44524,8 +44382,7 @@
         "x-permission": "bar.product.manage",
         "x-data-scope": "project",
         "x-terminal-allowed": [
-          "web",
-          "tablet"
+          "web"
         ],
         "x-idempotency-required": false,
         "x-audit-event-success": "bar.catalog.image_uploaded",
@@ -51443,8 +51300,7 @@
         "x-data-scope": "project-warehouse",
         "x-terminal-allowed": [
           "web",
-          "staff_work_phone",
-          "tablet"
+          "staff_work_phone"
         ],
         "x-idempotency-required": false,
         "x-audit-event-success": "inventory.cost_ledger.viewed",
@@ -51475,8 +51331,7 @@
         "x-data-scope": "project-warehouse",
         "x-terminal-allowed": [
           "web",
-          "staff_work_phone",
-          "tablet"
+          "staff_work_phone"
         ],
         "x-idempotency-required": false,
         "x-audit-event-success": "inventory.cost_summary.viewed",
@@ -55691,7 +55546,6 @@
         "x-permission": "bar.order_item.void",
         "x-data-scope": "project-bar-table",
         "x-terminal-allowed": [
-          "tablet",
           "web"
         ],
         "x-audit-event-success": "bar.order_item_void.viewed",
@@ -55906,8 +55760,7 @@
         "x-permission": "bar.order_item.void",
         "x-data-scope": "project",
         "x-terminal-allowed": [
-          "web",
-          "tablet"
+          "web"
         ],
         "x-idempotency-required": false,
         "x-audit-event-success": "not_applicable",
@@ -55951,8 +55804,7 @@
         "x-permission": "bar.order_item.void_decide",
         "x-data-scope": "project",
         "x-terminal-allowed": [
-          "web",
-          "tablet"
+          "web"
         ],
         "x-idempotency-required": true,
         "x-audit-event-success": "bar.void_reason_code.saved",
@@ -56017,8 +55869,7 @@
         "x-permission": "bar.order_item.void_decide",
         "x-data-scope": "project",
         "x-terminal-allowed": [
-          "web",
-          "tablet"
+          "web"
         ],
         "x-idempotency-required": true,
         "x-audit-event-success": "bar.void_reason_code.archived",
@@ -56302,7 +56153,6 @@
         "x-data-scope": "merchant",
         "x-terminal-allowed": [
           "web",
-          "tablet",
           "staff_work_phone"
         ],
         "x-idempotency-required": false,
@@ -56384,8 +56234,7 @@
         "x-permission": "evidence.timeline.view",
         "x-data-scope": "merchant",
         "x-terminal-allowed": [
-          "web",
-          "tablet"
+          "web"
         ],
         "x-idempotency-required": false,
         "x-audit-event-success": "evidence.attachment_file_viewed",
@@ -64366,7 +64215,6 @@
           "miniapp",
           "mobile_admin",
           "staff_work_phone",
-          "tablet",
           "web"
         ],
         "x-idempotency-required": false,
@@ -64483,7 +64331,6 @@
           "miniapp",
           "mobile_admin",
           "staff_work_phone",
-          "tablet",
           "web"
         ],
         "x-idempotency-required": true,
@@ -64605,7 +64452,6 @@
           "miniapp",
           "mobile_admin",
           "staff_work_phone",
-          "tablet",
           "web"
         ],
         "x-idempotency-required": false,
@@ -64708,7 +64554,6 @@
           "miniapp",
           "mobile_admin",
           "staff_work_phone",
-          "tablet",
           "web"
         ],
         "x-idempotency-required": true,
@@ -64806,7 +64651,6 @@
           "miniapp",
           "mobile_admin",
           "staff_work_phone",
-          "tablet",
           "web"
         ],
         "x-idempotency-required": true,
@@ -64914,7 +64758,6 @@
           "miniapp",
           "mobile_admin",
           "staff_work_phone",
-          "tablet",
           "web"
         ],
         "x-idempotency-required": false,
@@ -65026,7 +64869,6 @@
           "miniapp",
           "mobile_admin",
           "staff_work_phone",
-          "tablet",
           "web"
         ],
         "x-idempotency-required": true,
@@ -65124,7 +64966,6 @@
           "miniapp",
           "mobile_admin",
           "staff_work_phone",
-          "tablet",
           "web"
         ],
         "x-idempotency-required": true,
@@ -66867,7 +66708,6 @@
           "miniapp",
           "mobile_admin",
           "staff_work_phone",
-          "tablet",
           "web"
         ],
         "x-idempotency-required": false,
@@ -66980,7 +66820,6 @@
           "miniapp",
           "mobile_admin",
           "staff_work_phone",
-          "tablet",
           "web"
         ],
         "x-idempotency-required": false,
@@ -67090,7 +66929,6 @@
           "miniapp",
           "mobile_admin",
           "staff_work_phone",
-          "tablet",
           "web"
         ],
         "x-idempotency-required": true,
@@ -67202,7 +67040,6 @@
           "miniapp",
           "mobile_admin",
           "staff_work_phone",
-          "tablet",
           "web"
         ],
         "x-idempotency-required": false,
@@ -67315,7 +67152,6 @@
           "miniapp",
           "mobile_admin",
           "staff_work_phone",
-          "tablet",
           "web"
         ],
         "x-idempotency-required": false,
@@ -67425,7 +67261,6 @@
           "miniapp",
           "mobile_admin",
           "staff_work_phone",
-          "tablet",
           "web"
         ],
         "x-idempotency-required": true,
@@ -67537,7 +67372,6 @@
           "miniapp",
           "mobile_admin",
           "staff_work_phone",
-          "tablet",
           "web"
         ],
         "x-idempotency-required": false,
@@ -67650,7 +67484,6 @@
           "miniapp",
           "mobile_admin",
           "staff_work_phone",
-          "tablet",
           "web"
         ],
         "x-idempotency-required": true,
@@ -67773,7 +67606,6 @@
           "miniapp",
           "mobile_admin",
           "staff_work_phone",
-          "tablet",
           "web"
         ],
         "x-idempotency-required": false,
@@ -67889,7 +67721,6 @@
           "miniapp",
           "mobile_admin",
           "staff_work_phone",
-          "tablet",
           "web"
         ],
         "x-idempotency-required": false,
@@ -68005,7 +67836,6 @@
           "miniapp",
           "mobile_admin",
           "staff_work_phone",
-          "tablet",
           "web"
         ],
         "x-idempotency-required": false,
@@ -68163,7 +67993,6 @@
         "x-auth-context": "staff-token",
         "x-terminal-allowed": [
           "staff_work_phone",
-          "tablet",
           "web",
           "mobile_admin"
         ],
@@ -68243,7 +68072,6 @@
         "x-auth-context": "staff-token",
         "x-terminal-allowed": [
           "staff_work_phone",
-          "tablet",
           "web",
           "mobile_admin"
         ],
@@ -68317,7 +68145,6 @@
         "x-auth-context": "staff-token",
         "x-terminal-allowed": [
           "staff_work_phone",
-          "tablet",
           "web",
           "mobile_admin"
         ],
@@ -68391,7 +68218,6 @@
         "x-auth-context": "staff-token",
         "x-terminal-allowed": [
           "staff_work_phone",
-          "tablet",
           "web",
           "mobile_admin"
         ],
@@ -68474,7 +68300,6 @@
         "x-auth-context": "staff-token",
         "x-terminal-allowed": [
           "staff_work_phone",
-          "tablet",
           "web",
           "mobile_admin"
         ],
@@ -68559,7 +68384,6 @@
         "x-auth-context": "staff-token",
         "x-terminal-allowed": [
           "staff_work_phone",
-          "tablet",
           "web",
           "mobile_admin"
         ],
@@ -68644,7 +68468,6 @@
         "x-auth-context": "staff-token",
         "x-terminal-allowed": [
           "staff_work_phone",
-          "tablet",
           "web",
           "mobile_admin"
         ],
@@ -68733,7 +68556,6 @@
         "x-auth-context": "staff-token",
         "x-terminal-allowed": [
           "staff_work_phone",
-          "tablet",
           "web",
           "mobile_admin"
         ],
@@ -68818,7 +68640,6 @@
         "x-auth-context": "staff-token",
         "x-terminal-allowed": [
           "staff_work_phone",
-          "tablet",
           "web",
           "mobile_admin"
         ],
@@ -68903,7 +68724,6 @@
         "x-auth-context": "staff-token",
         "x-terminal-allowed": [
           "staff_work_phone",
-          "tablet",
           "web",
           "mobile_admin"
         ],
@@ -68988,7 +68808,6 @@
         "x-auth-context": "staff-token",
         "x-terminal-allowed": [
           "staff_work_phone",
-          "tablet",
           "web",
           "mobile_admin"
         ],
@@ -69090,7 +68909,6 @@
         "x-auth-context": "staff-token",
         "x-terminal-allowed": [
           "staff_work_phone",
-          "tablet",
           "web",
           "mobile_admin"
         ],
@@ -69175,7 +68993,6 @@
         "x-auth-context": "staff-token",
         "x-terminal-allowed": [
           "staff_work_phone",
-          "tablet",
           "web",
           "mobile_admin"
         ],
@@ -69260,7 +69077,6 @@
         "x-auth-context": "staff-token",
         "x-terminal-allowed": [
           "staff_work_phone",
-          "tablet",
           "web",
           "mobile_admin"
         ],
@@ -69279,8 +69095,7 @@
         "x-permission": "amusement.verification.view",
         "x-data-scope": "project-amusement",
         "x-terminal-allowed": [
-          "web",
-          "tablet"
+          "web"
         ],
         "x-idempotency-required": false,
         "x-audit-event-success": "amusement.verification.viewed",
@@ -69346,7 +69161,6 @@
           "miniapp",
           "mobile_admin",
           "staff_work_phone",
-          "tablet",
           "web"
         ],
         "x-idempotency-required": false,
@@ -69446,7 +69260,6 @@
           "miniapp",
           "mobile_admin",
           "staff_work_phone",
-          "tablet",
           "web"
         ],
         "x-idempotency-required": true,
@@ -69544,7 +69357,6 @@
           "miniapp",
           "mobile_admin",
           "staff_work_phone",
-          "tablet",
           "web"
         ],
         "x-idempotency-required": true,
@@ -69653,7 +69465,6 @@
           "miniapp",
           "mobile_admin",
           "staff_work_phone",
-          "tablet",
           "web"
         ],
         "x-idempotency-required": false,
@@ -69753,7 +69564,6 @@
           "miniapp",
           "mobile_admin",
           "staff_work_phone",
-          "tablet",
           "web"
         ],
         "x-idempotency-required": true,
@@ -69851,7 +69661,6 @@
           "miniapp",
           "mobile_admin",
           "staff_work_phone",
-          "tablet",
           "web"
         ],
         "x-idempotency-required": true,
@@ -69960,7 +69769,6 @@
           "miniapp",
           "mobile_admin",
           "staff_work_phone",
-          "tablet",
           "web"
         ],
         "x-idempotency-required": false,
@@ -70069,7 +69877,6 @@
           "miniapp",
           "mobile_admin",
           "staff_work_phone",
-          "tablet",
           "web"
         ],
         "x-idempotency-required": true,
@@ -70167,7 +69974,6 @@
           "miniapp",
           "mobile_admin",
           "staff_work_phone",
-          "tablet",
           "web"
         ],
         "x-idempotency-required": true,
@@ -70276,7 +70082,6 @@
           "miniapp",
           "mobile_admin",
           "staff_work_phone",
-          "tablet",
           "web"
         ],
         "x-idempotency-required": false,
@@ -70394,7 +70199,6 @@
           "miniapp",
           "mobile_admin",
           "staff_work_phone",
-          "tablet",
           "web"
         ],
         "x-idempotency-required": true,
@@ -70492,7 +70296,6 @@
           "miniapp",
           "mobile_admin",
           "staff_work_phone",
-          "tablet",
           "web"
         ],
         "x-idempotency-required": true,
@@ -70601,7 +70404,6 @@
           "miniapp",
           "mobile_admin",
           "staff_work_phone",
-          "tablet",
           "web"
         ],
         "x-idempotency-required": false,
@@ -70710,7 +70512,6 @@
           "miniapp",
           "mobile_admin",
           "staff_work_phone",
-          "tablet",
           "web"
         ],
         "x-idempotency-required": true,
@@ -70809,7 +70610,6 @@
           "mobile_admin",
           "staff_private_phone",
           "staff_work_phone",
-          "tablet",
           "web"
         ],
         "x-idempotency-required": false,
@@ -70912,7 +70712,6 @@
           "mobile_admin",
           "staff_private_phone",
           "staff_work_phone",
-          "tablet",
           "web"
         ],
         "x-idempotency-required": true,
@@ -71021,7 +70820,6 @@
           "miniapp",
           "mobile_admin",
           "staff_work_phone",
-          "tablet",
           "web"
         ],
         "x-idempotency-required": false,
@@ -71134,7 +70932,6 @@
           "miniapp",
           "mobile_admin",
           "staff_work_phone",
-          "tablet",
           "web"
         ],
         "x-idempotency-required": true,
@@ -71232,7 +71029,6 @@
           "miniapp",
           "mobile_admin",
           "staff_work_phone",
-          "tablet",
           "web"
         ],
         "x-idempotency-required": true,
@@ -71330,7 +71126,6 @@
           "miniapp",
           "mobile_admin",
           "staff_work_phone",
-          "tablet",
           "web"
         ],
         "x-idempotency-required": false,
@@ -71430,7 +71225,6 @@
           "mobile_admin",
           "staff_private_phone",
           "staff_work_phone",
-          "tablet",
           "web"
         ],
         "x-idempotency-required": false,
@@ -71529,7 +71323,6 @@
           "miniapp",
           "mobile_admin",
           "staff_work_phone",
-          "tablet",
           "web"
         ],
         "x-idempotency-required": true,
@@ -71588,7 +71381,6 @@
           "miniapp",
           "mobile_admin",
           "staff_work_phone",
-          "tablet",
           "web"
         ],
         "x-auth-context": "staff-token",
@@ -71685,7 +71477,6 @@
           "miniapp",
           "mobile_admin",
           "staff_work_phone",
-          "tablet",
           "web"
         ],
         "x-auth-context": "staff-token",
@@ -71794,7 +71585,6 @@
           "miniapp",
           "mobile_admin",
           "staff_work_phone",
-          "tablet",
           "web"
         ],
         "x-auth-context": "staff-token",
@@ -71903,7 +71693,6 @@
           "miniapp",
           "mobile_admin",
           "staff_work_phone",
-          "tablet",
           "web"
         ],
         "x-auth-context": "staff-token",
@@ -72004,8 +71793,7 @@
         "x-permission": "bar.payroll.view",
         "x-data-scope": "project-merchant",
         "x-terminal-allowed": [
-          "web",
-          "tablet"
+          "web"
         ],
         "x-idempotency-required": false,
         "parameters": [
@@ -72080,8 +71868,7 @@
         "x-permission": "bar.payroll.manage",
         "x-data-scope": "project-merchant",
         "x-terminal-allowed": [
-          "web",
-          "tablet"
+          "web"
         ],
         "x-idempotency-required": true,
         "parameters": [],
@@ -72148,8 +71935,7 @@
         "x-permission": "bar.payroll.manage",
         "x-data-scope": "project-merchant",
         "x-terminal-allowed": [
-          "web",
-          "tablet"
+          "web"
         ],
         "x-idempotency-required": true,
         "parameters": [
@@ -72228,8 +72014,7 @@
         "x-permission": "bar.payroll.manage",
         "x-data-scope": "project-merchant",
         "x-terminal-allowed": [
-          "web",
-          "tablet"
+          "web"
         ],
         "x-idempotency-required": true,
         "parameters": [
@@ -72305,8 +72090,7 @@
         "x-permission": "bar.payroll.view",
         "x-data-scope": "project-merchant",
         "x-terminal-allowed": [
-          "web",
-          "tablet"
+          "web"
         ],
         "x-idempotency-required": false,
         "parameters": [
@@ -72392,8 +72176,7 @@
         "x-permission": "bar.payroll.manage",
         "x-data-scope": "project-merchant",
         "x-terminal-allowed": [
-          "web",
-          "tablet"
+          "web"
         ],
         "x-idempotency-required": true,
         "parameters": [],
@@ -72463,8 +72246,7 @@
         "x-permission": "bar.payroll.view",
         "x-data-scope": "project-merchant",
         "x-terminal-allowed": [
-          "web",
-          "tablet"
+          "web"
         ],
         "x-idempotency-required": false,
         "parameters": [
@@ -72533,8 +72315,7 @@
         "x-permission": "bar.table_session.transfer",
         "x-data-scope": "project-merchant",
         "x-terminal-allowed": [
-          "web",
-          "tablet"
+          "web"
         ],
         "x-idempotency-required": true,
         "parameters": [
@@ -72731,8 +72512,7 @@
         "x-permission": "bar.table.open_close",
         "x-data-scope": "project-merchant",
         "x-terminal-allowed": [
-          "web",
-          "tablet"
+          "web"
         ],
         "x-idempotency-required": true,
         "parameters": [
@@ -72811,8 +72591,7 @@
         "x-permission": "bar.bill.refund",
         "x-data-scope": "project-merchant",
         "x-terminal-allowed": [
-          "web",
-          "tablet"
+          "web"
         ],
         "x-idempotency-required": false,
         "parameters": [
@@ -78606,16 +78385,6 @@
           "application/json": {
             "schema": {
               "$ref": "#/components/schemas/DeviceReturnRequest"
-            }
-          }
-        }
-      },
-      "TerminalSyncTasksRequest": {
-        "required": true,
-        "content": {
-          "application/json": {
-            "schema": {
-              "$ref": "#/components/schemas/TerminalSyncTasksRequest"
             }
           }
         }
@@ -86364,7 +86133,6 @@
                 "tablet_pos",
                 "kiosk_claim",
                 "amusement_maintenance",
-                "sync_tasks",
                 "staff_device",
                 "ticket_reverse",
                 "inbox",
@@ -86385,95 +86153,6 @@
                 "my_profile"
               ]
             }
-          }
-        }
-      },
-      "TerminalSyncTaskItem": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": [
-          "client_task_id",
-          "task_type",
-          "occurred_at",
-          "payload"
-        ],
-        "properties": {
-          "client_task_id": {
-            "type": "string",
-            "maxLength": 128,
-            "description": "终端task物品.client_task_id 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。"
-          },
-          "task_type": {
-            "type": "string",
-            "enum": [
-              "offline_verification",
-              "manual_supplement",
-              "device_event",
-              "handover"
-            ],
-            "description": "终端task物品.task_type 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。"
-          },
-          "occurred_at": {
-            "type": "string",
-            "maxLength": 64,
-            "description": "终端task物品.occurred_at 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。"
-          },
-          "payload": {
-            "type": "object",
-            "additionalProperties": {
-              "type": "string"
-            },
-            "description": "终端task物品.payload 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。"
-          }
-        },
-        "description": "终端task物品请求体。字段必须与 OpenAPI、后端 DTO、前端请求、Android 请求和供应商 mock 保持一致。"
-      },
-      "TerminalSyncTasksRequest": {
-        "type": "object",
-        "description": "终端任务请求体。字段必须与 OpenAPI、后端 DTO、前端请求、Android 请求和供应商 mock 保持一致。",
-        "additionalProperties": false,
-        "required": [
-          "device_code",
-          "tasks"
-        ],
-        "properties": {
-          "idempotency_key": {
-            "type": "string",
-            "maxLength": 128,
-            "description": "终端任务.idempotency_key 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。"
-          },
-          "operator_note": {
-            "type": "string",
-            "maxLength": 1000,
-            "description": "终端任务.operator_note 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。"
-          },
-          "evidence_attachment_ids": {
-            "type": "array",
-            "items": {
-              "type": "string",
-              "maxLength": 64
-            },
-            "maxItems": 50,
-            "description": "终端任务.evidence_attachment_ids 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。"
-          },
-          "device_code": {
-            "type": "string",
-            "maxLength": 128,
-            "description": "终端任务.device_code 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。"
-          },
-          "staff_id": {
-            "type": "string",
-            "maxLength": 64,
-            "description": "终端任务.staff_id 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。"
-          },
-          "tasks": {
-            "type": "array",
-            "minItems": 1,
-            "maxItems": 200,
-            "items": {
-              "$ref": "#/components/schemas/TerminalSyncTaskItem"
-            },
-            "description": "终端任务.tasks 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。"
           }
         }
       },

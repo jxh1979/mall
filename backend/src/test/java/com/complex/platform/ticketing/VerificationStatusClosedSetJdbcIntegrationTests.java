@@ -1,18 +1,15 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.complex.platform.support.TestSecurityActors;
-import com.complex.platform.ticketing.dto.TerminalSyncTaskItemRequest;
-import com.complex.platform.ticketing.dto.TerminalSyncTasksRequest;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -30,8 +27,7 @@ import org.springframework.transaction.annotation.Transactional;
  * CG-05 核销记录状态闭集（ENUM「核销记录状态」：「成功、拒绝（规则不允许）、失败（设备或网络原因）、已冲正、异常，共五态，不设「预检通过」态……
  * 系统不提供人工放行」）：规则不允许 → rejected；设备、网络、凭证技术原因 → failed；库 CHECK 接受 anomaly、拒绝其他值。
  *
- * <p>真实 Flyway 迁移库，{@code @Transactional} 回滚；走终端离线同步正路 {@code TicketingService.syncTerminalTasks}，
- * 追 {@code ticket_verifications.status / result_reason} 与 {@code terminal_sync_tasks.status}。
+ * <p>真实 Flyway 迁移库，{@code @Transactional} 回滚；验库 CHECK {@code chk_ticket_verifications_status}。
  */
 @SpringBootTest(properties = {
         "spring.datasource.url=${SETTLE_TEST_DB_URL:jdbc:postgresql://127.0.0.1:5432/complex_test}",
@@ -41,7 +37,6 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional
 class VerificationStatusClosedSetJdbcIntegrationTests {
 
-    @Autowired private TicketingService ticketingService;
     @Autowired private TicketingRepository repository;
     @Autowired private JdbcTemplate jdbcTemplate;
     @Autowired private PlatformTransactionManager transactionManager;
@@ -88,51 +83,6 @@ class VerificationStatusClosedSetJdbcIntegrationTests {
     @AfterEach
     void tearDown() {
         TestSecurityActors.clear();
-    }
-
-    /** 规则不允许（次数用尽）：离线同步的核销落 rejected 记录，任务结果 rejected，权益不被消费；同批其他任务照常成功。 */
-    @Test
-    void ruleRejectionIsRecordedAsRejectedAndBatchContinues() {
-        SyncTasksResponse response = ticketingService.syncTerminalTasks(new TerminalSyncTasksRequest(
-                "cg05-sync-" + suffix, null, null, deviceCode, "staff_" + suffix, List.of(
-                        new TerminalSyncTaskItemRequest("task-used-" + suffix, "offline_verification", "2026-10-17T10:00:00Z",
-                                Map.of("entitlementCode", usedUpCode, "pointId", "point_cg05_" + suffix)),
-                        new TerminalSyncTaskItemRequest("task-ok-" + suffix, "offline_verification", "2026-10-17T10:01:00Z",
-                                Map.of("entitlementCode", activeCode, "pointId", "point_cg05_" + suffix)))));
-        assertThat(response.results()).hasSize(2);
-        SyncTaskResult rejected = response.results().get(0);
-        assertThat(rejected.status()).isEqualTo("rejected");
-        assertThat(rejected.reason()).isEqualTo("entitlement_used_up");
-        assertThat(rejected.verificationId()).isNotBlank();
-        Map<String, Object> row = jdbcTemplate.queryForMap("SELECT status, result_reason, source_type, client_task_id, device_id"
-                + " FROM ticket_verifications WHERE id = ?", rejected.verificationId());
-        assertThat(row.get("status")).isEqualTo("rejected");
-        assertThat(row.get("result_reason")).isEqualTo("entitlement_used_up");
-        assertThat(row.get("source_type")).isEqualTo("android_terminal_offline");
-        assertThat(row.get("client_task_id")).isEqualTo("task-used-" + suffix);
-        assertThat(row.get("device_id")).isEqualTo(deviceCode);
-        assertThat(jdbcTemplate.queryForMap("SELECT used_times FROM issued_entitlements WHERE id = ?", usedUpId))
-                .containsEntry("used_times", 1);
-        assertThat(jdbcTemplate.queryForMap("SELECT status, reason FROM terminal_sync_tasks WHERE device_code = ? AND client_task_id = ?",
-                deviceCode, "task-used-" + suffix)).containsEntry("status", "rejected").containsEntry("reason", "entitlement_used_up");
-        assertThat(response.results().get(1).status()).isEqualTo("accepted");
-        assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM ticket_verifications WHERE entitlement_id = ? AND status = 'success'",
-                Integer.class, activeId)).isEqualTo(1);
-    }
-
-    /** 设备 / 网络 / 凭证技术原因（凭证不存在）：任务结果 failed（无法定位权益则不落核销记录）。 */
-    @Test
-    void technicalFailureIsRecordedAsFailed() {
-        SyncTasksResponse response = ticketingService.syncTerminalTasks(new TerminalSyncTasksRequest(
-                "cg05-sync-tech-" + suffix, null, null, deviceCode, "staff_" + suffix, List.of(
-                        new TerminalSyncTaskItemRequest("task-cred-" + suffix, "offline_verification", "2026-10-17T10:00:00Z",
-                                Map.of("entitlementCode", "cred_missing_" + suffix, "pointId", "point_cg05_" + suffix)))));
-        SyncTaskResult failed = response.results().get(0);
-        assertThat(failed.status()).isEqualTo("failed");
-        assertThat(failed.reason()).isEqualTo("credential_not_found");
-        assertThat(failed.verificationId()).isNull();
-        assertThat(jdbcTemplate.queryForMap("SELECT status FROM terminal_sync_tasks WHERE device_code = ? AND client_task_id = ?",
-                deviceCode, "task-cred-" + suffix)).containsEntry("status", "failed");
     }
 
     /** 库 CHECK：接受 anomaly；拒绝闭集之外的值（如 pending_review / exception）。 */

@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.07
+// 文件版本：V0.08
 
 import com.complex.platform.common.api.ApiException;
 
@@ -13,7 +13,6 @@ import com.complex.platform.ticketing.dto.EntitlementTemplateArchiveRequest;
 import com.complex.platform.ticketing.dto.EntitlementTemplateDeleteRequest;
 import com.complex.platform.ticketing.dto.EntitlementTemplateDeleteApprovalRequest;
 import com.complex.platform.ticketing.dto.StatusChangeRequest;
-import com.complex.platform.ticketing.dto.TerminalSyncTasksRequest;
 import com.complex.platform.ticketing.dto.TicketIssueRequest;
 import com.complex.platform.ticketing.dto.TicketOrderRequest;
 import com.complex.platform.ticketing.dto.QrRefreshConfigRequest;
@@ -38,7 +37,6 @@ public class TicketingService {
     private final TicketRefundService refundService;
     private final TicketVerificationService verificationService;
     private final TicketCredentialService credentialService;
-    private final TicketOfflinePackageService offlinePackageService;
     private final TicketingOperationExecutor operations;
     // P1 越权修复：核销/权益列表按调用者商户范围过滤（记录含 merchant_id）。可为 null=兼容既有测试构造（不过滤）。
     private final AuthorizationService authorizationService;
@@ -64,7 +62,6 @@ public class TicketingService {
             TicketRefundService refundService,
             TicketVerificationService verificationService,
             TicketCredentialService credentialService,
-            TicketOfflinePackageService offlinePackageService,
             TicketingOperationExecutor operations,
             AuthorizationService authorizationService,
             TicketTransferService transferService
@@ -76,7 +73,6 @@ public class TicketingService {
         this.refundService = refundService;
         this.verificationService = verificationService;
         this.credentialService = credentialService;
-        this.offlinePackageService = offlinePackageService;
         this.operations = operations;
         this.authorizationService = authorizationService;
         this.transferService = transferService;
@@ -1106,10 +1102,6 @@ public class TicketingService {
         );
     }
 
-    public OfflinePackageResponse getOfflineEntitlements(String merchantId, String venueId, int limit) {
-        return offlinePackageService.getOfflineEntitlements(merchantId, venueId, limit);
-    }
-
     @Transactional
     public VerificationPreviewResponse previewVerification(VerificationRequest request) {
         verificationService.requireAmusementRequestScope(request);
@@ -1203,19 +1195,6 @@ public class TicketingService {
         return operations.readPage(
                 TicketingReadOperation.LIST_VERIFICATIONS,
                 () -> filterByMerchantScope(repository.listVerifications(), VerificationRecord::merchantId)
-        );
-    }
-
-    @com.complex.platform.gate.GuardedAction(capability = "terminal.device.bind")
-    @Transactional
-    public SyncTasksResponse syncTerminalTasks(TerminalSyncTasksRequest request) {
-        return operations.executeWrite(
-                "syncTerminalTasks",
-                request == null ? null : request.idempotencyKey(),
-                request,
-                SyncTasksResponse.class,
-                TicketingWriteOperation.SYNC_TERMINAL_TASKS,
-                () -> verificationService.syncTerminalTasks(request)
         );
     }
 }

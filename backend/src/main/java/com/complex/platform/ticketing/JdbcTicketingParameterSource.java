@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -174,22 +174,6 @@ final class JdbcTicketingParameterSource {
                 .addValue("amusement_verification_id", verification.amusementVerificationId());
     }
 
-    MapSqlParameterSource terminalSyncTaskParameters(TerminalSyncTaskRecord task) {
-        return new MapSqlParameterSource()
-                .addValue("id", task.id())
-                .addValue("device_code", task.deviceCode())
-                .addValue("staff_id", task.staffId())
-                .addValue("client_task_id", task.clientTaskId())
-                .addValue("task_type", task.taskType())
-                .addValue("status", task.status())
-                .addValue("reason", task.reason())
-                .addValue("verification_id", task.verificationId())
-                .addValue("verification_no", task.verificationNo())
-                .addValue("occurred_at", task.occurredAt())
-                .addValue("payload", writeJson(sanitizedSyncPayload(task.payload())))
-                .addValue("created_at", timestampWithTimeZone(task.createdAt()));
-    }
-
     MapSqlParameterSource priceRuleParameters(TicketPriceRuleRecord rule) {
         return new MapSqlParameterSource()
                 .addValue("id", rule.id())
@@ -339,10 +323,6 @@ final class JdbcTicketingParameterSource {
             return sha256(credential.credentialToken());
         }
         return credential.credentialHash();
-    }
-
-    private Map<String, String> sanitizedSyncPayload(Map<String, String> payload) {
-        return TerminalSyncPayloadSanitizer.sanitize(payload, this::sha256);
     }
 
     String credentialTokenHash(String value) {

@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -132,13 +132,25 @@ class KioskBarReservationJdbcTests {
         assertThat(jdbc.queryForObject("SELECT count(*) FROM bar_reservations WHERE table_id = ?", Integer.class, table)).isZero();
     }
 
+    /** 第十八批 O 段第 128 条 128-R1（BSM:1023、BSM:1611、PGM:745）：商户员工账号在后台网页代订，创建终端记商户网页门户。 */
     @Test
     void staffBookingOffKioskStaysWaivedSoldBySelfAndHeldOnSubmit() throws Exception {
         String booking = CustomerTicketPaymentFixture.read(reserve(staff, "staff", table, phone(4), "员工代订备注")
                 .andExpect(status().isOk()), "$.data.id");
-        assertThat(row(booking)).containsEntry("order_source", "staff").containsEntry("created_terminal", "web")
+        assertThat(row(booking)).containsEntry("order_source", "staff").containsEntry("created_terminal", "merchant_portal")
                 .containsEntry("sales_staff_id", staffId).containsEntry("deposit_status", "staff_waived")
                 .containsEntry("hold_status", "held").containsEntry("remark", "员工代订备注");
+    }
+
+    /** 第十八批 O 段第 128 条 128-R1：无商户归属的平台管理员在网页代订，创建终端仍记 web。 */
+    @Test
+    void platformStaffBookingOnWebKeepsWebTerminal() throws Exception {
+        String platformStaff = "usr_kbr_plat_" + s;
+        RequestPostProcessor web = new StaffRequestFixture(jdbc).staff(platformStaff, "platform_admin", f.projectId, null, "bar.reservation.create");
+        String booking = CustomerTicketPaymentFixture.read(reserve(web, "platform", table, phone(6), null)
+                .andExpect(status().isOk()), "$.data.id");
+        assertThat(row(booking)).containsEntry("order_source", "staff").containsEntry("created_terminal", "web")
+                .containsEntry("sales_staff_id", platformStaff);
     }
 
     @Test

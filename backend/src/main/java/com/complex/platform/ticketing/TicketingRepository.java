@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.08
+// 文件版本：V0.09
 
 import java.util.List;
 import java.util.Map;
@@ -224,8 +224,6 @@ public interface TicketingRepository {
 
     IssuedEntitlementRecord updateIssuedEntitlement(IssuedEntitlementRecord entitlement);
 
-    List<OfflineEntitlementResponse> listOfflineEntitlements(String merchantId, String venueId, int limit);
-
     VerificationRecord saveVerification(VerificationRecord verification);
 
     /**
@@ -236,15 +234,6 @@ public interface TicketingRepository {
      */
     default boolean terminalDeviceExists(String deviceId) {
         return true;
-    }
-
-    /**
-     * 离线同步重放核销:sync 请求携带的是设备 device_code(≠ 设备 PK id),须解析成 terminal_devices.id
-     * 才能落 ticket_verifications.device_id(FK)。返回真 id;查不到则 empty(调用方抛 DEVICE_NOT_REGISTERED)。
-     * default 恒等:测试双子/无设备表场景直接回传入参(配合 terminalDeviceExists 默认放行,保持既有单测行为)。
-     */
-    default Optional<String> resolveTerminalDeviceId(String deviceCodeOrId) {
-        return Optional.ofNullable(deviceCodeOrId);
     }
 
     /** 批3:第三方券配置 upsert。default no-op 兼容测试双子。 */
@@ -292,10 +281,6 @@ public interface TicketingRepository {
 
     /** 退款单台账（后台“待确认拨付”看板的数据源）：按创建时间倒序。 */
     List<TicketRefundRecord> listTicketRefunds();
-
-    Optional<TerminalSyncTaskRecord> findTerminalSyncTask(String deviceCode, String clientTaskId);
-
-    TerminalSyncTaskRecord saveTerminalSyncTask(TerminalSyncTaskRecord task);
 
     TicketPriceRuleRecord savePriceRule(TicketPriceRuleRecord rule);
 

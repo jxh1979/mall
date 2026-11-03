@@ -1,6 +1,6 @@
 package com.complex.platform.gate;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -23,7 +23,7 @@ class StaffAppFunctionsTests {
                 {"POST", "/api/v1/facility/work-orders/w1/review"},
                 {"GET", "/api/v1/merchant-service/work-orders/assigned-to-me"},
                 {"POST", "/api/v1/staff/lockers/scan-token"}}) {
-            assertThat(StaffAppFunctions.privatePhoneAllows(call[0], call[1])).as(call[0] + " " + call[1]).isTrue();
+            assertThat(StaffAppFunctions.allows("staff_private_phone", call[0], call[1])).as(call[0] + " " + call[1]).isTrue();
         }
     }
 
@@ -38,7 +38,7 @@ class StaffAppFunctionsTests {
                 {"GET", "/api/v1/services/payment-code/mine"},
                 {"POST", "/api/v1/vouchers/redemptions/preview"},
                 {"POST", "/api/v1/vouchers/redemptions"}}) {
-            assertThat(StaffAppFunctions.privatePhoneAllows(call[0], call[1])).as(call[0] + " " + call[1]).isFalse();
+            assertThat(StaffAppFunctions.allows("staff_private_phone", call[0], call[1])).as(call[0] + " " + call[1]).isFalse();
         }
     }
 
@@ -50,6 +50,39 @@ class StaffAppFunctionsTests {
     void voucherRedeemAndKioskClaimAreCompanyDeviceFunctions() {
         assertThat(StaffAppFunctions.ALL).contains("voucher_redeem", "kiosk_claim");
         assertThat(StaffAppFunctions.functionsFor("staff_private_phone")).doesNotContain("voucher_redeem", "kiosk_claim");
+    }
+
+    /** 第十八批 O 段第 129 条（BSM:800「核销必须在线、不做离线核销」）：离线同步通道已下线，功能清单不再有「同步待提交任务」。 */
+    @Test
+    void offlineSyncIsNoLongerAStaffAppFunction() {
+        assertThat(StaffAppFunctions.ALL).doesNotContain("sync_tasks");
+    }
+
+    /**
+     * 第十八批 O 段第 130 条（BSM:1901「只做酒吧点酒下单，绑定酒吧和卡座，校验最低消费，支持扫码支付。」；PGM:634「平板只负责酒吧点酒下单。」）：
+     * 平板只给酒吧点酒下单与平板点单 POS，另放行取本清单、首次绑定本店与登记签名公钥。
+     */
+    @Test
+    void tabletOnlyGetsBarOrderingAndPayment() {
+        assertThat(StaffAppFunctions.functionsFor("tablet")).containsExactly("bar_order", "tablet_pos");
+        for (String[] call : new String[][] {
+                {"GET", "/api/v1/bar/catalog/images/a.png"},
+                {"POST", "/api/v1/bar/orders"},
+                {"POST", "/api/v1/bar/orders/o1/bill"},
+                {"POST", "/api/v1/bar/bills/b1/pay-intents"},
+                {"POST", "/api/v1/bar/bills/b1/settle"},
+                {"POST", "/api/v1/terminals/devices/bind"},
+                {"GET", "/api/v1/terminals/staff-app-functions"}}) {
+            assertThat(StaffAppFunctions.allows("tablet", call[0], call[1])).as(call[0] + " " + call[1]).isTrue();
+        }
+        for (String[] call : new String[][] {
+                {"POST", "/api/v1/inventory/saved-bottles"},
+                {"POST", "/api/v1/ticketing/verifications"},
+                {"GET", "/api/v1/bar/reservations"},
+                {"POST", "/api/v1/services/orders"}}) {
+            assertThat(StaffAppFunctions.allows("tablet", call[0], call[1])).as(call[0] + " " + call[1]).isFalse();
+        }
+        assertThat(StaffAppFunctions.allows("staff_work_phone", "POST", "/api/v1/ticketing/verifications")).isTrue();
     }
 
     @Test

@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.groups.Tuple.tuple;
@@ -39,7 +39,8 @@ class TicketingJdbcIntegrationTests {
         assertThat(regclass("ticket_type_entitlements")).isEqualTo("ticket_type_entitlements");
         assertThat(regclass("issued_entitlements")).isEqualTo("issued_entitlements");
         assertThat(regclass("ticket_verifications")).isEqualTo("ticket_verifications");
-        assertThat(regclass("terminal_sync_tasks")).isEqualTo("terminal_sync_tasks");
+        // 第十八批 O 段第 129 条（BSM:800「核销必须在线、不做离线核销」）：离线核销同步任务表随通道一并删除（V593）。
+        assertThat(regclass("terminal_sync_tasks")).isNull();
         assertThat(regclass("ticket_price_rules")).isEqualTo("ticket_price_rules");
         assertThat(regclass("ticket_orders")).isEqualTo("ticket_orders");
         assertThat(regclass("ticket_credentials")).isEqualTo("ticket_credentials");
@@ -137,7 +138,7 @@ class TicketingJdbcIntegrationTests {
     }
 
     @Test
-    void persistIssuedEntitlementVerificationAndTerminalSyncTask() {
+    void persistIssuedEntitlementAndVerification() {
         Instant now = Instant.parse("2099-06-14T00:00:00Z");
         repository.saveTicketType(new TicketTypeRecord(
                 "ticket_type_jdbc_issue",
@@ -228,20 +229,6 @@ class TicketingJdbcIntegrationTests {
                 null
         ,
         null));
-        repository.saveTerminalSyncTask(new TerminalSyncTaskRecord(
-                "sync_jdbc",
-                "P0-ANDROID-JDBC",
-                "staff_jdbc",
-                "client_task_jdbc",
-                "offline_verification",
-                "accepted",
-                null,
-                "ver_jdbc",
-                "V20260614000001",
-                "2026-06-14T00:00:00Z",
-                Map.of("entitlementCode", "P0-JDBC", "credentialPayload", "cred_terminal_jdbc"),
-                now
-        ));
 
         assertThat(repository.listTicketTypeEntitlements("ticket_type_jdbc_issue"))
                 .extracting(TicketTypeEntitlementRecord::id, TicketTypeEntitlementRecord::entitlementTemplateId)
@@ -250,9 +237,6 @@ class TicketingJdbcIntegrationTests {
                 .get()
                 .extracting(IssuedEntitlementRecord::orderId, IssuedEntitlementRecord::usedTimes)
                 .containsExactly("order_jdbc", 0);
-        assertThat(repository.listOfflineEntitlements("mch_jdbc", "venue_jdbc", 20))
-                .extracting(OfflineEntitlementResponse::entitlementCode, OfflineEntitlementResponse::totalTimes)
-                .contains(tuple("P0-JDBC", 2));
         assertThat(repository.listVerifications())
                 .extracting(VerificationRecord::verificationNo, VerificationRecord::status)
                 .contains(tuple("V20260614000001", "success"));
@@ -267,11 +251,6 @@ class TicketingJdbcIntegrationTests {
                     assertThat(v.windowValid()).isTrue();
                     assertThat(v.signatureValid()).isNull();
                 });
-        TerminalSyncTaskRecord syncTask = repository.findTerminalSyncTask("P0-ANDROID-JDBC", "client_task_jdbc")
-                .orElseThrow();
-        assertThat(syncTask.verificationNo()).isEqualTo("V20260614000001");
-        assertThat(syncTask.payload().get("credentialPayload")).isEqualTo("sha256:" + sha256("cred_terminal_jdbc"));
-        assertThat(syncTask.payload().values()).doesNotContain("cred_terminal_jdbc");
     }
 
     // R5 T5：ticket_verifications.status CHECK 收口——非法状态被拒，manual_overridden/reversed 合法。

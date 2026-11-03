@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.08
+// 文件版本：V0.09
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.PageResponse;
@@ -347,19 +347,20 @@ public class BarService {
     /**
      * 第十八批 N 段第 120 条 120-R3（BSM:987「支持订台下单……订台需要支付定金。」；BSM:1023「订台订单必须记录定金、订台来源、销售人员或设备来源……」）：
      * 可信终端是一体机时按一体机来源订台（定金待付、设备来源、付定金才占台，见 BarEntryService.createReservation），其余照旧按员工代订。
+     * 第十八批 O 段第 128 条（BSM:1023、BSM:1611、PGM:745）：创建终端取当前请求的可信终端（没有即 web），与 BarOrderService.createOrder 同口径。
      */
     @com.complex.platform.gate.GuardedAction(capability = "bar.reservation.create")
     @Transactional
     public BarReservationRecord createReservation(BarReservationRequest request) {
-        boolean kiosk = com.complex.platform.gate.TerminalIdentityHolder.current()
-                .map(terminal -> "kiosk".equals(terminal.terminalType())).orElse(false);
+        String terminal = com.complex.platform.gate.TerminalIdentityHolder.trustedTerminalType("web");
+        boolean kiosk = "kiosk".equals(terminal);
         return operations.executeWrite(
                 "createBarReservation",
                 request == null ? null : request.idempotencyKey(),
                 request,
                 BarReservationRecord.class,
                 BarWriteOperation.CREATE_RESERVATION,
-                () -> entryService.createReservation(request, null, kiosk ? "kiosk" : "staff", kiosk ? "kiosk" : "web")
+                () -> entryService.createReservation(request, null, kiosk ? "kiosk" : "staff", terminal)
         );
     }
 

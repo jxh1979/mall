@@ -1,4 +1,4 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 import fs from "node:fs";
 import path from "node:path";
 
@@ -265,7 +265,7 @@ Given 文档中仍保留 \`/api/admin/*\`、\`/api/mobile/*\`、\`/api/integrati
 | 权限码只在 OpenAPI 出现，不在人工权限矩阵正文出现 | 以本文第 3 节为准，并在下一次权限矩阵维护时同步 |
 | 事件名只在 OpenAPI 出现，不在人工事件矩阵正文出现 | 以本文第 4 节为准，事件中心必须照常落库 |
 | 客人端、设备端、Webhook 使用 \`not_applicable\` | 不得误建员工权限点，必须按 \`x-auth-context\` 校验身份 |
-| 售票型与非售票型一体机能力混用 | 按 \`kiosk_mode\`、设备绑定、能力开关和 \`x-terminal-allowed\` 拒绝 |
+| 售票型与非售票型一体机能力混用 | 按 \`kiosk_mode\`、设备绑定和能力开关拒绝（服务端按可信终端判，一体机售票只认启用售票的一体机）；\`x-terminal-allowed\` 是契约声明，列出可调用该接口的终端，运行时不逐接口按它拦 |
 | 旧路径表格与 OpenAPI 冲突 | 旧路径表格只作为历史能力名，正式实现以 OpenAPI 和本文为准 |
 
 版本说明：本文档版本与 \`docs/openapi/openapi-p0.json\` 的 \`info.version\` 同步，契约变更即版本递增；不另维护变更记录表（历史见 OpenAPI 与 git 记录）。

@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.06
+// 文件版本：V0.07
 
 import com.complex.platform.finance.PaymentIntentRecord;
 import java.util.List;
@@ -54,6 +54,10 @@ public interface BarRepository {
 
     /** 超时释放的员工代订记一笔爽约到经手员工名下（只写爽约时刻，不进订台记录）。内存桩默认无操作。 */
     default void markReservationNoShow(String reservationId, java.time.Instant at) {
+    }
+
+    /** 第十八批 O 段第 126 条 126-R2：员工登记定金（pay-deposit）记登记员工，班结按其归入现金/POS 应收。内存桩默认无操作。 */
+    default void markReservationDepositCollector(String reservationId, String staffUserId) {
     }
 
     /** 该酒吧员工代订爽约率上限（%）；未配置为空＝不自动停用。内存桩默认未配置。 */

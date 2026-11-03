@@ -1,6 +1,6 @@
 package com.complex.terminal
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import java.util.UUID
 
@@ -45,21 +45,6 @@ class TerminalWorkflow(
       ),
     )
     return binding
-  }
-
-  fun refreshOfflinePackage(merchantId: String?, venueId: String?): OfflinePackageResponse {
-    requireOnline()
-    val response = api.offlineEntitlements(merchantId, venueId)
-    store.replaceOfflinePackage(response.entitlements)
-    store.addEvent(
-      TerminalEvent(
-        eventType = "terminal.offline_package.loaded",
-        summary = "终端加载离线权益包",
-        payload = mapOf("count" to response.entitlements.size.toString()),
-        occurredAt = nowIso(),
-      ),
-    )
-    return response
   }
 
   fun previewOnline(entitlementCode: String): PreviewResponse {
@@ -109,90 +94,6 @@ class TerminalWorkflow(
     return response
   }
 
-  fun verifyOffline(entitlementCode: String): LocalTask {
-    val entitlement = requireNotNull(store.findEntitlement(entitlementCode)) {
-      "offline entitlement package does not contain $entitlementCode"
-    }
-    require(entitlement.status == "active") { "offline entitlement is not active" }
-    require(store.remainingTimes(entitlementCode) > 0) { "offline entitlement has no remaining times" }
-
-    store.markLocalUse(entitlementCode)
-    val task = LocalTask(
-      clientTaskId = newClientTaskId("offline-verification"),
-      taskType = "offline_verification",
-      payload = mapOf(
-        "entitlementCode" to entitlementCode,
-        "entitlementId" to entitlement.id,
-        "pointId" to (store.binding?.locationPointId ?: ""),
-        "mode" to "offline",
-      ),
-      occurredAt = nowIso(),
-      originStaffId = store.session?.staffId,
-      originDeviceCode = store.binding?.deviceCode,
-    )
-    store.enqueue(task)
-    store.addEvent(
-      TerminalEvent(
-        eventType = "terminal.verification.offline_queued",
-        summary = "终端离线核销进入待同步",
-        payload = mapOf("entitlementCode" to entitlementCode, "clientTaskId" to task.clientTaskId),
-        occurredAt = nowIso(),
-      ),
-    )
-    return task
-  }
-
-  fun addManualSupplement(reason: String, note: String): LocalTask {
-    val task = LocalTask(
-      clientTaskId = newClientTaskId("manual-supplement"),
-      taskType = "manual_supplement",
-      payload = mapOf("reason" to reason, "note" to note),
-      occurredAt = nowIso(),
-      originStaffId = store.session?.staffId,
-      originDeviceCode = store.binding?.deviceCode,
-    )
-    store.enqueue(task)
-    store.addEvent(
-      TerminalEvent(
-        eventType = "terminal.manual_supplement.queued",
-        summary = "终端人工补录进入待同步",
-        payload = mapOf("clientTaskId" to task.clientTaskId, "reason" to reason),
-        occurredAt = nowIso(),
-      ),
-    )
-    return task
-  }
-
-  fun syncPendingTasks(): SyncTasksResponse {
-    requireOnline()
-    val binding = requireNotNull(store.binding) { "device binding is missing" }
-    val currentStaffId = requireNotNull(store.session?.staffId) { "terminal session is missing" }
-    // 归属校验:只上送「原操作员=当前登录员工」的待同步任务。换人(clearSensitiveData 保留
-    // PENDING)后,上一员工遗留的任务归属不符即不上送,绝不冒充新员工身份补登;这些任务
-    // 保持 PENDING,待原员工重登后自行同步(或由主管交接处理)。
-    val mine = store.pendingTasks().filter { it.originStaffId == currentStaffId }
-    if (mine.isEmpty()) return SyncTasksResponse(results = emptyList(), syncedAt = nowIso())
-
-    val response = api.syncTasks(
-      SyncTasksRequest(
-        idempotencyKey = newClientTaskId("sync-tasks"),
-        operatorNote = "Android terminal pending task sync",
-        deviceCode = binding.deviceCode,
-        staffId = currentStaffId,
-        tasks = mine.map {
-          SyncTaskRequest(
-            clientTaskId = it.clientTaskId,
-            taskType = it.taskType,
-            occurredAt = it.occurredAt,
-            payload = it.payload,
-          )
-        },
-      ),
-    )
-    store.markSynced(response.results)
-    return response
-  }
-
   fun reportDeviceEvents(): EventBatchResponse {
     requireOnline()
     val binding = requireNotNull(store.binding) { "device binding is missing" }
@@ -218,28 +119,9 @@ class TerminalWorkflow(
   fun returnDevice(reason: String? = null): ReturnDecision {
     requireOnline()
     val binding = requireNotNull(store.binding) { "device binding is missing" }
-    val pendingTaskCount = store.pendingTaskCount()
-    if (pendingTaskCount > 0) {
-      return try {
-        api.returnDevice(
-          DeviceReturnRequest(
-            idempotencyKey = returnIdempotencyKey(binding.deviceCode, reason, pending = true),
-            deviceCode = binding.deviceCode,
-            staffId = store.session?.staffId,
-            hasPendingTasks = true,
-            reason = reason,
-          ),
-        )
-        ReturnDecision(ReturnStatus.BLOCKED_PENDING_TASKS, pendingTaskCount, "unexpected_remote_return")
-      } catch (error: ApiException) {
-        if (error.statusCode != 409) throw error
-        ReturnDecision(ReturnStatus.BLOCKED_PENDING_TASKS, pendingTaskCount, "RETURN_BLOCKED_PENDING_TASKS")
-      }
-    }
-
     val returned = api.returnDevice(
       DeviceReturnRequest(
-        idempotencyKey = returnIdempotencyKey(binding.deviceCode, reason, pending = false),
+        idempotencyKey = returnIdempotencyKey(binding.deviceCode, reason),
         deviceCode = binding.deviceCode,
         staffId = store.session?.staffId,
         hasPendingTasks = false,
@@ -247,11 +129,11 @@ class TerminalWorkflow(
       ),
     )
     store.clearSensitiveData()
-    return ReturnDecision(ReturnStatus.RETURNED, pendingTaskCount, returned.status)
+    return ReturnDecision(ReturnStatus.RETURNED, returned.status)
   }
 
   // -------------------------------------------------------------------------
-  // 游乐入口核销：工作手机在线核销游乐权益；失败/离线时进入待同步队列。
+  // 游乐入口核销：工作手机在线核销游乐权益；失败或断网只提示，不入队（BSM:800「核销必须在线、不做离线核销」）。
   // -------------------------------------------------------------------------
   fun amusementVerifyOnline(entitlementCode: String, sessionId: String? = null): AmusementVerificationRecord {
     requireOnline()
@@ -280,34 +162,6 @@ class TerminalWorkflow(
       ),
     )
     return record
-  }
-
-  // 游乐离线核销：进入待同步队列（复用 offline_verification 同步通道）。
-  fun amusementVerifyOffline(entitlementCode: String, sessionId: String? = null): LocalTask {
-    val task = LocalTask(
-      clientTaskId = newClientTaskId("amusement-offline-verification"),
-      taskType = "offline_verification",
-      payload = buildMap {
-        put("entitlementCode", entitlementCode)
-        put("pointId", store.binding?.locationPointId ?: "")
-        put("scenario", "amusement_entry")
-        put("mode", "offline")
-        if (sessionId != null) put("sessionId", sessionId)
-      },
-      occurredAt = nowIso(),
-      originStaffId = store.session?.staffId,
-      originDeviceCode = store.binding?.deviceCode,
-    )
-    store.enqueue(task)
-    store.addEvent(
-      TerminalEvent(
-        eventType = "terminal.amusement.verification.offline_queued",
-        summary = "游乐离线核销进入待同步",
-        payload = mapOf("entitlementCode" to entitlementCode, "clientTaskId" to task.clientTaskId),
-        occurredAt = nowIso(),
-      ),
-    )
-    return task
   }
 
   // -------------------------------------------------------------------------
@@ -598,9 +452,9 @@ class TerminalWorkflow(
       copy(idempotencyKey = stableIdempotencyKey("bind", deviceId, boundSpaceId ?: bindingScope))
     }
 
-  private fun returnIdempotencyKey(deviceCode: String, reason: String?, pending: Boolean): String =
+  private fun returnIdempotencyKey(deviceCode: String, reason: String?): String =
     stableIdempotencyKey(
-      if (pending) "return-blocked" else "return-unbind-compatible",
+      "return-unbind-compatible",
       deviceCode,
       reason ?: "no_reason",
     )

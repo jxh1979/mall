@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -45,6 +45,7 @@ import org.springframework.transaction.annotation.Transactional;
  * 第十八批第 1 条真库回归：ENUM:187「营业日从当日上午 10:00 起算……按每个项目、每家酒吧可配……日结批次……一律以开台或下单时点所属的
  * 营业日为准」；BSM:1682「酒吧仍按每家酒吧配置」。跨酒吧汇总逐家按各自营业日窗取数，开台营业日由服务端按该酒吧营业日确定
  * （请求体按前端 adminClient 蛇形键、不带 business_date）。已批准版本直接落库以固定窗口，审批链见 BarBusinessDayJdbcIntegrationTests。
+ * 第十八批 O 段第 126 条 126-R1：日结订台定金源（bar_deposit）同酒吧源逐家按各自营业日窗取数。
  */
 @SpringBootTest(properties = {
         "spring.datasource.url=${SETTLE_TEST_DB_URL:jdbc:postgresql://127.0.0.1:5432/complex_test}",
@@ -92,6 +93,19 @@ class BarBusinessDayWindowsJdbcIntegrationTests {
         assertThat(barSource(close(D, merchant(a)))).containsExactly(10_000L, 1L);
         assertThat(barSource(close(D, merchant(b)))).containsExactly(0L, 0L);
         assertThat(barSource(close(D.minusDays(1), merchant(b)))).containsExactly(20_000L, 1L);
+    }
+
+    /** 订台定金源同酒吧源：两家酒吧北京 11:00 各到账一笔定金，无版本的 A（出厂 10:00）归 D，已批准 12:00 的 B 归 D−1。 */
+    @Test
+    void dailyCloseBarDepositSourceUsesEachBarsOwnBusinessDay() {
+        String a = bar("depa", null);
+        String b = bar("depb", 12);
+        paidDeposit(a, 20_000L, BEIJING_ELEVEN);
+        paidDeposit(b, 30_000L, BEIJING_ELEVEN);
+        TestSecurityActors.asPlatformAdmin();
+        assertThat(depositSource(close(D, merchant(a)))).containsExactly(20_000L, 1L);
+        assertThat(depositSource(close(D, merchant(b)))).containsExactly(0L, 0L);
+        assertThat(depositSource(close(D.minusDays(1), merchant(b)))).containsExactly(30_000L, 1L);
     }
 
     /** B 在北京 11:00 有一张异常账单：只拦 B 的 D−1，不拦 D。 */
@@ -225,6 +239,15 @@ class BarBusinessDayWindowsJdbcIntegrationTests {
         return bill;
     }
 
+    /** 一笔在 at 由一体机登记到账的订台定金。 */
+    private void paidDeposit(String bar, long amountCent, Instant at) {
+        jdbc.update("INSERT INTO bar_reservations (id, bar_id, merchant_id, table_id, reserved_at, guest_count, deposit_amount_cent,"
+                + " deposit_status, deposit_channel, deposit_paid_at, order_source, status, created_at, updated_at)"
+                + " VALUES (?,?,?,?,?,2,?,'paid','cash',?,'kiosk','reserved',?,?)",
+                "bbw_res_" + suffix + "_" + seq.incrementAndGet(), bar, merchant(bar), table(bar), Timestamp.from(at), amountCent,
+                Timestamp.from(at), Timestamp.from(at), Timestamp.from(at));
+    }
+
     private DailyCloseRequest dailyClose(LocalDate day, String merchantId) {
         return new DailyCloseRequest("bbw-close-" + suffix + "-" + seq.incrementAndGet(), "日结", List.of(), day, "merchant",
                 merchantId, false);
@@ -237,6 +260,12 @@ class BarBusinessDayWindowsJdbcIntegrationTests {
     private List<Long> barSource(String dailyCloseId) {
         return jdbc.queryForObject("SELECT amount_cent, order_count FROM finance_daily_close_summaries WHERE daily_close_id=? AND source_stream='bar'",
                 (rs, n) -> List.of(rs.getLong(1), rs.getLong(2)), dailyCloseId);
+    }
+
+    /** 订台定金源（金额、笔数）；没有该源的汇总行时为空。 */
+    private List<Long> depositSource(String dailyCloseId) {
+        return jdbc.query("SELECT amount_cent, order_count FROM finance_daily_close_summaries WHERE daily_close_id=? AND source_stream='bar_deposit'",
+                (rs, n) -> List.of(rs.getLong(1), rs.getLong(2)), dailyCloseId).stream().flatMap(List::stream).toList();
     }
 
     /** 酒吧员工（商户范围＝该酒吧）。 */

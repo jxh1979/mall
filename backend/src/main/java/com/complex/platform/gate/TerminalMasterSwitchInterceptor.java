@@ -1,6 +1,6 @@
 package com.complex.platform.gate;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import com.complex.platform.common.api.ApiException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -36,6 +36,10 @@ import org.springframework.web.util.UrlPathHelper;
  * <p>第十八批 M 段第 116 条（PGM:747「……员工自有手机只开放低风险功能……」；PGM:744；PGM:738「访问被拒绝也要留痕……」）：可信终端是员工私人手机时，
  * 只放行 {@link StaffAppFunctions} 私人手机清单内的接口，读写都判；清单外的先留痕 {@code private_phone_function_not_allowed} 再 403 TERMINAL_NOT_ALLOWED。
  * 豁免前缀照旧先放行。
+ *
+ * <p>第十八批 O 段第 130 条（BSM:1901「只做酒吧点酒下单，绑定酒吧和卡座，校验最低消费，支持扫码支付。」；PGM:634「平板只负责酒吧点酒下单。」；
+ * PGM:747「……能做什么由后台按设备类型统一下发……」）：可信终端是平板时同样只放行 {@link StaffAppFunctions} 平板清单内的接口，读写都判；
+ * 清单外的先留痕 {@code tablet_function_not_allowed} 再 403 TERMINAL_NOT_ALLOWED。
  */
 @Component
 public class TerminalMasterSwitchInterceptor implements HandlerInterceptor {
@@ -91,10 +95,14 @@ public class TerminalMasterSwitchInterceptor implements HandlerInterceptor {
             }
             return true;
         }
-        if (DeviceCredentialVerifier.STAFF_PRIVATE_PHONE.equals(terminalType) && !StaffAppFunctions.privatePhoneAllows(
-                request.getMethod(), UrlPathHelper.defaultInstance.getPathWithinApplication(request))) {
-            guard.auditRejection(terminalType, null, "private_phone_function_not_allowed", null, null);
-            throw ApiException.forbidden("TERMINAL_NOT_ALLOWED", "员工自有手机只开放低风险功能，此操作请在公司工作手机上办理");
+        if (!StaffAppFunctions.allows(terminalType, request.getMethod(),
+                UrlPathHelper.defaultInstance.getPathWithinApplication(request))) {
+            boolean phone = DeviceCredentialVerifier.STAFF_PRIVATE_PHONE.equals(terminalType);
+            guard.auditRejection(terminalType, null,
+                    phone ? "private_phone_function_not_allowed" : "tablet_function_not_allowed", null, null);
+            throw ApiException.forbidden("TERMINAL_NOT_ALLOWED", phone
+                    ? "员工自有手机只开放低风险功能，此操作请在公司工作手机上办理"
+                    : "平板只做酒吧点酒下单和支付，此操作请在公司工作手机或后台网页办理");
         }
         // 关/读取失败 → guard 抛 TERMINAL_DISABLED（DispatcherServlet 内，GlobalExceptionHandler 统一 403 JSON）。
         // 总开关 AND 语义:global 行关闭即硬拒,不被模块/设备行覆盖(商户专区活证据揭出的缺陷)。

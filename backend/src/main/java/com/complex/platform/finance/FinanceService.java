@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.33
+// 文件版本：V0.34
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -88,9 +88,9 @@ public class FinanceService implements TerminationSettlementPort {
     private static final Set<String> OFFLINE_PAYMENT_METHODS = Set.of("cash", "bank_transfer", "pos", "other");
     // 第四轮裁决第 3 条：退租结算押金抵扣销账的收款方式（财务结算 PRD L945 押金动作「抵扣（offset）」；同 dividend_offset 范式）。
     private static final String DEPOSIT_OFFSET_METHOD = "deposit_offset";
-    // R5 T7：六源（与 finance_daily_close_summaries.chk_fdcs_source 一致）。
+    // R5 T7：七源（与 finance_daily_close_summaries.chk_fdcs_source 一致；第十八批 O 段第 126 条 126-R1 加订台定金 bar_deposit）。
     private static final List<String> DAILY_CLOSE_SOURCES = List.of(
-            "official_ticket", "channel_ticket", "bar", "amusement", "supply_cost", "thirdparty_reflow");
+            "official_ticket", "channel_ticket", "bar", "amusement", "supply_cost", "thirdparty_reflow", "bar_deposit");
     private static final Set<String> ADJUSTMENT_DECISIONS = Set.of("approve", "reject");
     // P0#7 / R6-D07：对账差异四类枚举（与 V105 chk_frd_difference_type 一致）。
     private static final Set<String> DIFFERENCE_TYPES = Set.of("amount", "count", "status", "missing");
@@ -1857,7 +1857,7 @@ public class FinanceService implements TerminationSettlementPort {
                 now
         ));
 
-        // R5 T7：六源汇总写入 finance_daily_close_summaries（口径见 r5-aggregation-metrics-draft §1.2，待财务复核）。
+        // R5 T7：七源汇总写入 finance_daily_close_summaries（口径见 r5-aggregation-metrics-draft §1.2，待财务复核）。
         summarizeDailyClose(dailyCloseId, businessDate, now, scopeType, scopeId, dayFrom, dayTo, barFrom, barTo, barWindows);
 
         // R5 T7：把当日属于本 scope 的 ar_ap_items 打上 locked_day_close_id（merchant 角色仅锁本商户行）。
@@ -1868,14 +1868,14 @@ public class FinanceService implements TerminationSettlementPort {
     }
 
     /**
-     * 六源汇总聚合（official_ticket / channel_ticket / bar / amusement / supply_cost / thirdparty_reflow），
+     * 七源汇总聚合（official_ticket / channel_ticket / bar / amusement / supply_cost / thirdparty_reflow / bar_deposit），
      * 每源一行写入 finance_daily_close_summaries。聚合公式按聚合草案保守取值，口径未定处见草案 §四"待财务复核"。
      */
     private void summarizeDailyClose(String dailyCloseId, LocalDate businessDate, Instant now,
                                     String scopeType, String scopeId, Instant from, Instant to,
                                     Instant barFrom, Instant barTo, Map<String, Instant[]> barWindows) {
         // 时间戳类源表统一用 [from, to) 分桶（日结所属综合体的营业日窗）；official_ticket 主金额以 visit_date 为营业日；
-        // 酒吧源逐家按各自营业日窗（barWindows 之外的酒吧按出厂窗 [barFrom, barTo)）。
+        // 酒吧源与订台定金源逐家按各自营业日窗（barWindows 之外的酒吧按出厂窗 [barFrom, barTo)）。
         for (String source : DAILY_CLOSE_SOURCES) {
             FinanceRepository.DailyCloseSourceTotals totals = switch (source) {
                 case "official_ticket" -> repository.aggregateOfficialTicket(businessDate, from, to, scopeType, scopeId);
@@ -1884,6 +1884,7 @@ public class FinanceService implements TerminationSettlementPort {
                 case "amusement" -> repository.aggregateAmusement(businessDate, from, to, scopeType, scopeId);
                 case "supply_cost" -> repository.aggregateSupplyCost(businessDate, from, to, scopeType, scopeId);
                 case "thirdparty_reflow" -> repository.aggregateThirdpartyReflow(businessDate, from, to, scopeType, scopeId);
+                case "bar_deposit" -> repository.aggregateBarDeposit(businessDate, barFrom, barTo, scopeType, scopeId, barWindows);
                 default -> FinanceRepository.DailyCloseSourceTotals.empty();
             };
             repository.saveDailyCloseSummary(new DailyCloseSummaryRecord(

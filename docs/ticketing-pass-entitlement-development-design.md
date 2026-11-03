@@ -1,10 +1,10 @@
-# 票务通票、权益、核销与结算开发设计 V0.11
+# 票务通票、权益、核销与结算开发设计 V0.12
 
 > **核销口径**：核销记录只有成功／拒绝（规则不允许）／失败（设备或网络原因）／已冲正／待复核／异常六态。检票环节内部扫码即核销，不设先校验、后确认的两次操作，也不设中间态；系统不提供人工放行。
 
 > **口径修订（2026-08-06 R10）：「场次容量」已废止**——BSM「容量控制」条 明确「**只按单个游乐项目的实时在玩人数控制容量，不再按场次/时段或点位/设备另设容量；排队人数不占用容量**」（DEC-R5-2026-08-04-04；R8 用户裁决 D-02）。本文原「场次容量」一律改称「**项目容量（实时在玩人数）**」；双阈值不变（运营容量软上限告警放行、安全容量硬上限阻断并自动停运）。仍按场次/时段或点位/设备维度罗列的页面、接口、组件与字段只作历史结构参考，容量口径一律以本条为准，相关字段待代码轮下线，期间不得据以新增受控维度。
 
-> 版本：V0.11 ｜ 最后更新：2026-08-30 ｜ 覆盖迁移基线：见各小节迁移号（当前仓库最新 V385）｜ 状态：现行
+> 版本：V0.12 ｜ 最后更新：2026-11-03 ｜ 覆盖迁移基线：见各小节迁移号（当前仓库最新 V385）｜ 状态：现行
 > 新功能承接见 docs/v099-v124-feature-implementation-and-acceptance-spec-v0.1.md
 > <!-- 文档goalP3(2026-06-20)：补版本/日期/覆盖迁移头，未改正文 -->
 
@@ -227,11 +227,11 @@ erDiagram
 | `reversed` | 已冲正 | 已撤销原核销 |
 | `anomaly` | 异常 | 进入「异常」后按 ENUM「异常状态的统一出口」由主管处置（更正后恢复 / 作废并冲正）；进入条件待 HTML 补句后另开 PR（CG-05） |
 
-> **CG-05（2026-10-17，迁移 V449）已落地**：`ticket_verifications.status` CHECK 收口为 `success / rejected / failed / reversed / anomaly`（`manual_overridden` 仅历史行保留）。`TicketVerificationService` 以 `RULE_REJECTION_CODES`（规则不允许 → rejected）与 `TECHNICAL_FAILURE_CODES`（设备/网络/凭证 → failed）归类错误码；终端离线同步中的核销尝试据此落记录并把任务结果置同态，同批其他任务照常处理；在线核销的过窗口 / 签名失配落 failed，规则拒绝仍抛错不落记录。ENUM 现文为五态，上表 `pending_review`（待复核）已不在 HTML 中，去留待裁决。
+> **CG-05（2026-10-17，迁移 V449）已落地**：`ticket_verifications.status` CHECK 收口为 `success / rejected / failed / reversed / anomaly`（`manual_overridden` 仅历史行保留）。`TicketVerificationService` 以 `RULE_REJECTION_CODES`（规则不允许 → rejected）与 `TECHNICAL_FAILURE_CODES`（设备/网络/凭证 → failed）归类错误码；在线核销的过窗口 / 签名失配落 failed，规则拒绝仍抛错不落记录。ENUM 现文为五态，上表 `pending_review`（待复核）已不在 HTML 中，去留待裁决。
 
 `pending_review` 必须在按项目配置且同时配置上下限的复核时限内处置，出厂默认沿用异常首响时限：特急 15 分钟、紧急 30 分钟、其余 60 分钟；超时自动逐级升级并保留原记录、原时间、原责任人与每次升级留痕，升级不改变核销结论。逐级升级到最高一级仍超时的，转 `exception` 并进入票务异常队列，不得自动通过、不得自动作废。
 
-> **当前实现缺口**：V067 的 `ticket_verifications.status` 仍约束为 `success/failed/rejected/reversed/manual_overridden`，缺 `pending_review/exception` 且保留 HTML 禁止的人工放行态；Java 仍暴露核销 `preview`、`manual-override`，终端同步 `offline_verification` 仍调用核销。须移除或禁用预检、人工放行和离线核销入口，并迁移数据库值域到上述六态；这些现行代码不得反向定义业务流程。
+> **当前实现缺口**：V067 的 `ticket_verifications.status` 仍约束为 `success/failed/rejected/reversed/manual_overridden`，缺 `pending_review/exception` 且保留 HTML 禁止的人工放行态；Java 仍暴露核销 `preview`、`manual-override`；终端同步 `offline_verification` 入口已于第十八批 O 段第 129 条删除。须移除或禁用预检、人工放行和离线核销入口，并迁移数据库值域到上述六态；这些现行代码不得反向定义业务流程。
 
 ### 4.6 退款状态
 
@@ -1366,6 +1366,7 @@ com.complex.ticketing
 
 | 日期 | 类型 | 位置 | 内容 | 原因/依据 |
 |---|---|---|---|---|
+| 2026-11-03 | 改 | §4.5/全文版本 | 版本升至 V0.12；第十八批 O 段第 129 条同步：CG-05 已落地说明删去终端离线同步落记录一句，当前实现缺口注明终端同步 `offline_verification` 入口已删除 | BSM:800「……核销必须在线、不做离线核销。……」 |
 | 2026-08-30 | 改 | 文首/§5.3/§5.5–§5.7/全文版本 | 版本升至 V0.11；同步页内版本横幅；结算交易改为追加不可变事实；退款守卫改为目标实现并对齐现行错误码 | M03 Grok Build FULL3 修复切片复审 |
 | 2026-08-30 | 改 | §4.2/§4.5/全文版本 | 版本升至 V0.10；如实登记支付时限、整单退款守卫、核销状态值域及预检/人工放行/离线核销入口的现行实现缺口 | M03 Grok Build 最终全文交叉审计 |
 | 2026-08-30 | 改 | §5.5/全文版本 | 版本升至 V0.09；第三方餐饮零售券核销成功后改为写 `settlement_transactions`，不在核销阶段生成待结算明细 | M03 Grok Build 修复切片审计 |

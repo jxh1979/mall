@@ -1,6 +1,6 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.08
+// 文件版本：V0.09
 
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.ApiResponse;
@@ -67,7 +67,7 @@ import org.springframework.web.context.request.ServletRequestAttributes;
  * 改回掩码：消耗不算，明文也不给（操作员 2026-10-03：敏感明文「算用掉，看一次扣一次」）。
  *
  * <p>M723-F08（第 656 行「操作被拒绝或失败的不算用掉」；操作员 2026-10-03「只有真正核销、真正执行的那一次才扣」）：在线核销以正常返回
- * 报告失败（过刷新窗口、签名失配，响应形状不变；终端离线同步不标记）时服务层把本请求记为业务失败（{@link IdempotentReplayContext#businessFailed}）；
+ * 报告失败（过刷新窗口、签名失配，响应形状不变）时服务层把本请求记为业务失败（{@link IdempotentReplayContext#businessFailed}）；
  * 处理方法返回后，若不是上面的重放回滚、而本请求在权限核验处新用掉了单次来源，就在同一请求事务里把这次消耗撤回
  * （{@link AuthorizationService#releaseRequestConsumption}：来源改回未消耗、追加撤回留痕），结果照常返回、事务正常提交——
  * 失败核销记录与幂等记录保留，同一请求编号重复提交由幂等层返回第一次的失败结果。

@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.09
+// 文件版本：V0.10
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.List;
@@ -569,40 +569,11 @@ class JdbcTicketingRepository implements TicketingRepository {
     }
 
     @Override
-    public List<OfflineEntitlementResponse> listOfflineEntitlements(String merchantId, String venueId, int limit) {
-        return jdbcTemplate.query("""
-                SELECT id, ticket_type_id, order_id, entitlement_template_id, entitlement_code,
-                       entitlement_type, merchant_id, venue_id, point_id, total_times, used_times,
-                       value_amount_cent, status, valid_from, valid_to, created_at, updated_at, num_people,
-                       allocated_revenue_cent, entitlement_kind, agreement_price_cent, consumption_window, exclusive_merchant_id,
-                       parent_ticket_id, slot_index, bar_id, component_full_price_cent, compensation_item_id
-                  FROM issued_entitlements
-                 WHERE status = 'active'
-                   AND (merchant_id = :merchant_id OR :merchant_id IS NULL)
-                   AND (venue_id = :venue_id OR :venue_id IS NULL)
-                 ORDER BY updated_at DESC, id
-                 LIMIT :limit
-                """, new MapSqlParameterSource()
-                .addValue("merchant_id", merchantId, java.sql.Types.VARCHAR)
-                .addValue("venue_id", venueId, java.sql.Types.VARCHAR)
-                .addValue("limit", limit), (resultSet, rowNumber) ->
-                TicketEntitlementMapper.toOfflineEntitlementResponse(rowMapper.mapIssuedEntitlement(resultSet, rowNumber)));
-    }
-
-    @Override
     public boolean terminalDeviceExists(String deviceId) {
         Boolean exists = jdbcTemplate.queryForObject(
                 "SELECT EXISTS(SELECT 1 FROM terminal_devices WHERE id = :id)",
                 Map.of("id", deviceId), Boolean.class);
         return Boolean.TRUE.equals(exists);
-    }
-
-    @Override
-    public Optional<String> resolveTerminalDeviceId(String deviceCodeOrId) {
-        // 离线同步传的是 device_code(≠ PK id);兼收 id(既有内部调用/旧集成用例直接传 id)。两列均唯一。
-        return jdbcTemplate.queryForList(
-                "SELECT id FROM terminal_devices WHERE id = :c OR device_code = :c LIMIT 1",
-                Map.of("c", deviceCodeOrId), String.class).stream().findFirst();
     }
 
     @Override
@@ -821,37 +792,6 @@ class JdbcTicketingRepository implements TicketingRepository {
                 .addValue("id", refundId)
                 .addValue("approved_by", approvedBy)
                 .addValue("approved_at", approvedAt.atOffset(java.time.ZoneOffset.UTC)));
-    }
-
-    @Override
-    public Optional<TerminalSyncTaskRecord> findTerminalSyncTask(String deviceCode, String clientTaskId) {
-        return jdbcTemplate.query("""
-                SELECT id, device_code, staff_id, client_task_id, task_type, status, reason,
-                       verification_id, verification_no, occurred_at, payload::text AS payload, created_at
-                  FROM terminal_sync_tasks
-                 WHERE device_code = :device_code
-                   AND client_task_id = :client_task_id
-                """, Map.of(
-                "device_code", deviceCode,
-                "client_task_id", clientTaskId
-        ), rowMapper::mapTerminalSyncTask).stream().findFirst();
-    }
-
-    @Override
-    public TerminalSyncTaskRecord saveTerminalSyncTask(TerminalSyncTaskRecord task) {
-        jdbcTemplate.update("""
-                INSERT INTO terminal_sync_tasks (
-                    id, device_code, staff_id, client_task_id, task_type, status, reason,
-                    verification_id, verification_no, occurred_at, payload, created_at
-                )
-                VALUES (
-                    :id, :device_code, :staff_id, :client_task_id, :task_type, :status, :reason,
-                    :verification_id, :verification_no, :occurred_at, CAST(:payload AS jsonb), :created_at
-                )
-                ON CONFLICT (device_code, client_task_id) DO UPDATE SET
-                    status = terminal_sync_tasks.status
-                """, parameterSource.terminalSyncTaskParameters(task));
-        return task;
     }
 
     @Override
