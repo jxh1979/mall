@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.08
+// 文件版本：V0.09
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.List;
@@ -1114,6 +1114,15 @@ class JdbcTicketingRepository implements TicketingRepository {
                     OR bar_id = :merchant_id
                  ORDER BY created_at DESC, id
                 """, Map.of("merchant_id", merchantId), rowMapper::mapTicketOrder);
+    }
+
+    @Override
+    public List<TicketOrderRecord> listTicketOrdersByBuyerPhone(String phone, String merchantScope) {
+        // 第十八批 N 段第 120 条 120-R2：按购票手机号盲索引查；有商户范围时同 listTicketOrdersByMerchant 口径（受理商户或归属酒吧）。
+        MapSqlParameterSource params = new MapSqlParameterSource("hash", blindIndex.hash(phone)).addValue("merchant_id", merchantScope);
+        return jdbcTemplate.query(JdbcTicketingSql.ticketOrderSelect() + " WHERE buyer_phone_hash = :hash"
+                + (merchantScope == null ? "" : " AND (merchant_id = :merchant_id OR bar_id = :merchant_id)")
+                + " ORDER BY created_at DESC, id", params, rowMapper::mapTicketOrder);
     }
 
     @Override

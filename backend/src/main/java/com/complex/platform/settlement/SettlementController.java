@@ -26,12 +26,14 @@ public class SettlementController {
     private final SettlementQueryService service;
     private final SettlementPostingService postingService;
     private final AuthorizationService authorizationService;
+    private final com.complex.platform.evidence.AuditedOperationExecutor operations;
 
     public SettlementController(SettlementQueryService service, SettlementPostingService postingService,
-                                AuthorizationService authorizationService) {
+                                AuthorizationService authorizationService, com.complex.platform.evidence.AuditedOperationExecutor operations) {
         this.service = service;
         this.postingService = postingService;
         this.authorizationService = authorizationService;
+        this.operations = operations;
     }
 
     @GetMapping("/transactions")
@@ -59,11 +61,19 @@ public class SettlementController {
     /**
      * 过账网关(②):把某 confirmed 结算单的各酒吧分账挂 finance 应付台账。仅 confirmed 单(draft/settled 由 postBill 拒);
      * 幂等(重复过账不重复挂);返回本次过账明细笔数。高敏权限 settlement.bill.post + 平台域。
+     * 第十八批 N 段第 124 条 124-R4（PGM L966「所有有过程的业务动作都必须留痕」、PGM L738）：人工过账成功落 settlement.bill.posted
+     * （business_id 结算单 id，记本次过账笔数），任一步失败（权限、范围、未确认单）落 settlement.bill.post_failed；月结作业自动过账不经此入口。
      */
     @PostMapping("/bills/{id}/post")
     public ApiResponse<Integer> postBill(@PathVariable("id") String billId) {
-        authorizationService.requirePermission("settlement.bill.post");
-        authorizationService.requirePlatformScope();
-        return ApiResponse.ok(postingService.postBill(billId));
+        return ApiResponse.ok(operations.recordingFailure("settlement.bill.post_failed", "settlement.bill.post", "settlement_bill", billId,
+                null, () -> {
+                    authorizationService.requirePermission("settlement.bill.post");
+                    authorizationService.requirePlatformScope();
+                    int posted = postingService.postBill(billId);
+                    operations.recordDetail("settlement.bill.posted", "settlement.bill.post", "settlement_bill", billId,
+                            java.util.Map.of("posted_count", posted));
+                    return posted;
+                }));
     }
 }

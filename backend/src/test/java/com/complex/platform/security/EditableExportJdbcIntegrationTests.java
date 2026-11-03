@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 package com.complex.platform.security;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -130,6 +130,17 @@ class EditableExportJdbcIntegrationTests {
         // 非最高权限账号批不了
         approve(webLogin("approver"), reviewId).andExpect(status().isForbidden());
         assertThat(reviewStatus(reviewId)).isEqualTo("pending_review");
+        // 第十八批 N 段第 124 条 124-R5（PGM L738「访问被拒绝也要留痕，便于排查是权限问题还是开关问题。」；OpenAPI approveSupervisorReview 的
+        // x-audit-event-failure）：没有主管复核审批权限的人按前端蛇形键批准 403，按本次幂等键落 governance.supervisor_review.decide_failed
+        String deniedKey = "b28ed-ap-denied-" + suffix;
+        approve(webLogin("other"), reviewId, deniedKey).andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.detail_code").value("PERMISSION_DENIED"));
+        assertThat(jdbc.queryForList("""
+                SELECT business_type || '|' || business_id || '|' || permission_code || '|' || (metadata->>'error_code')
+                  FROM audit_events WHERE event_name = 'governance.supervisor_review.decide_failed' AND event_result = 'failure'
+                   AND idempotency_key = ?""", String.class, deniedKey))
+                .containsExactly("supervisor_review|" + reviewId + "|governance.supervisor_review.approve|PERMISSION_DENIED");
+        assertThat(reviewStatus(reviewId)).isEqualTo("pending_review");
         // 最高权限经真实审批接口批准
         approve(masterLogin(), reviewId).andExpect(status().isOk());
         assertThat(reviewStatus(reviewId)).isEqualTo("approved");
@@ -167,6 +178,14 @@ class EditableExportJdbcIntegrationTests {
         editableCopy(exporter, source, reviewId).andExpect(status().isConflict())
                 .andExpect(jsonPath("$.detail_code").value("EDITABLE_EXPORT_ALREADY_ISSUED"));
         assertThat(exportCount()).isEqualTo(before + 1);
+        // 124-R5（PGM L685「导出须单独授权、逐次留痕」；OpenAPI downloadEditableExportCopy 的 x-audit-event-failure）：批准前与同一次批准再下载被拒
+        // 都落 security.export.editable_download_failed（business_id 原导出文件编号，错误码同响应）
+        assertThat(jdbc.queryForList("""
+                SELECT permission_code || '|' || (metadata->>'error_code') FROM audit_events
+                 WHERE event_name = 'security.export.editable_download_failed' AND event_result = 'failure' AND business_type = 'export_file'
+                   AND business_id = ?""", String.class, source))
+                .containsExactlyInAnyOrder("security.export.editable_copy|EDITABLE_EXPORT_NOT_APPROVED",
+                        "security.export.editable_copy|EDITABLE_EXPORT_ALREADY_ISSUED");
         // 可编辑版本身不再申请可编辑版
         requestEditable(exporter, (String) row.get("id"), "再加工", "某某").andExpect(status().isConflict())
                 .andExpect(jsonPath("$.detail_code").value("EXPORT_ALREADY_EDITABLE"));
@@ -264,13 +283,17 @@ class EditableExportJdbcIntegrationTests {
     }
 
     private ResultActions approve(Session session, String reviewId) throws Exception {
+        return approve(session, reviewId, "b28ed-ap-" + UUID.randomUUID());
+    }
+
+    private ResultActions approve(Session session, String reviewId, String idempotencyKey) throws Exception {
         return mockMvc.perform(post("/api/v1/platform/supervisor-review/" + reviewId + "/approve")
                 .cookie(session.cookies())
                 .header("X-XSRF-TOKEN", session.csrf().getValue())
                 .header("X-Terminal-Type", "web")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(Map.of("decision", "approved", "comment", "用途与接收方已核实",
-                        "idempotency_key", "b28ed-ap-" + UUID.randomUUID()))));
+                        "idempotency_key", idempotencyKey))));
     }
 
     /** 「我的导出」里该文件的一行。 */

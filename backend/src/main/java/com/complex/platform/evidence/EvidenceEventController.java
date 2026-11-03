@@ -26,15 +26,18 @@ public class EvidenceEventController {
     private final EvidenceEventService service;
     private final TraceabilityService traceabilityService;
     private final AuthorizationService authorizationService;
+    private final AuditedOperationExecutor operations;
 
     public EvidenceEventController(
             EvidenceEventService service,
             TraceabilityService traceabilityService,
-            AuthorizationService authorizationService
+            AuthorizationService authorizationService,
+            AuditedOperationExecutor operations
     ) {
         this.service = service;
         this.traceabilityService = traceabilityService;
         this.authorizationService = authorizationService;
+        this.operations = operations;
     }
 
     @PostMapping("/events")
@@ -69,17 +72,25 @@ public class EvidenceEventController {
         return ApiResponse.ok(service.uploadAttachment(file, businessType, businessId, attachmentRole));
     }
 
-    /** 回读证据文件（主管复核要看得见照片/视频，否则「双证据」只是两串 id）。 */
+    /**
+     * 回读证据文件（主管复核要看得见照片/视频，否则「双证据」只是两串 id）。
+     * 第十八批 N 段第 124 条 124-R6（PGM:913「查看企业微信会话原文、查看视频证据和查看财务敏感信息。」）：每次回读落
+     * evidence.attachment_file_viewed（business_id 附件编号），权限、范围、找不到等失败落 evidence.attachment_file_view_failed；
+     * 视频带 Range 的分段请求每段各记一条。
+     */
     @GetMapping("/attachments/{attachment_id}/file")
     public org.springframework.http.ResponseEntity<org.springframework.core.io.Resource> readAttachmentFile(
             @PathVariable("attachment_id") String attachmentId
     ) {
-        authorizationService.requirePermission("evidence.timeline.view");
-        java.nio.file.Path path = service.resolveAttachmentFile(attachmentId);
-        return org.springframework.http.ResponseEntity.ok()
-                .contentType(org.springframework.http.MediaType.parseMediaType(
-                        service.attachmentContentType(attachmentId)))
-                .body(new org.springframework.core.io.FileSystemResource(path));
+        return operations.readSingle(AuditedOperation.of("evidence.attachment_file_viewed", "evidence.attachment_file_view_failed",
+                "evidence.timeline.view", "evidence_attachment"), () -> {
+            authorizationService.requirePermission("evidence.timeline.view");
+            java.nio.file.Path path = service.resolveAttachmentFile(attachmentId);
+            return org.springframework.http.ResponseEntity.ok()
+                    .contentType(org.springframework.http.MediaType.parseMediaType(
+                            service.attachmentContentType(attachmentId)))
+                    .<org.springframework.core.io.Resource>body(new org.springframework.core.io.FileSystemResource(path));
+        }, file -> attachmentId);
     }
 
     @PostMapping("/attachments/upload-intents")

@@ -1,6 +1,6 @@
 package com.complex.platform.access.staff;
 
-// 文件版本：V0.11
+// 文件版本：V0.12
 import static com.complex.platform.common.api.ApiRequests.requireIdempotencyKey;
 
 import com.complex.platform.access.staff.dto.EmployeeNoticeAcknowledgeRequest;
@@ -12,6 +12,7 @@ import com.complex.platform.access.staff.dto.StaffRegistrationRequest;
 import com.complex.platform.access.staff.dto.StaffRegistrationReviewRequest;
 import com.complex.platform.common.api.ApiResponse;
 import com.complex.platform.common.api.PageResponse;
+import com.complex.platform.evidence.AuditedOperationExecutor;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -33,8 +34,13 @@ public class StaffController {
     @org.springframework.beans.factory.annotation.Autowired
     private StaffLockerService lockers;
 
-    public StaffController(StaffService service) {
+    private final AuditedOperationExecutor operations;
+
+    // 第十八批 N 段第 124 条 124-R5（PGM L738「访问被拒绝也要留痕，便于排查是权限问题还是开关问题。」）：写口任一步失败（权限、范围、校验、
+    // 状态冲突）经 AuditedOperationExecutor.recordingFailure 落 OpenAPI 声明的 x-audit-event-failure 再原样抛出。
+    public StaffController(StaffService service, AuditedOperationExecutor operations) {
         this.service = service;
+        this.operations = operations;
     }
 
     /** U05-006：员工本人会话申请柜机扫码凭证；格口事件改由柜机端 /api/v1/terminals/kiosks/{device_id}/locker-events 单端上报。 */
@@ -105,7 +111,8 @@ public class StaffController {
     public ApiResponse<StaffProfileRecord> setSalesPosition(
             @PathVariable String id,
             @RequestBody(required = false) com.complex.platform.access.staff.dto.StaffSalesPositionRequest request) {
-        return ApiResponse.ok(service.setSalesPosition(id, request).maskedPersonalInfo());
+        return ApiResponse.ok(operations.recordingFailure("staff.profile.sales_position_change_failed", "staff.profile.review",
+                "staff_profile", id, null, () -> service.setSalesPosition(id, request).maskedPersonalInfo()));
     }
 
     @PostMapping("/profiles/{id}/delete-request")

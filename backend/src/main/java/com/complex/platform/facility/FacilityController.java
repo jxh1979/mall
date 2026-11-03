@@ -1,6 +1,6 @@
 package com.complex.platform.facility;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static com.complex.platform.common.api.ApiRequests.requireIdempotencyKey;
 
@@ -8,6 +8,7 @@ import com.complex.platform.access.AccessActor;
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiResponse;
 import com.complex.platform.common.api.PageResponse;
+import com.complex.platform.evidence.AuditedOperationExecutor;
 import com.complex.platform.facility.dto.FacilityEquipmentRequest;
 import com.complex.platform.facility.dto.FacilityEquipmentStatusRequest;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -27,10 +28,15 @@ public class FacilityController {
 
     private final FacilityEquipmentService service;
     private final AuthorizationService authorizationService;
+    private final AuditedOperationExecutor operations;
 
-    public FacilityController(FacilityEquipmentService service, AuthorizationService authorizationService) {
+    // 第十八批 N 段第 124 条 124-R3（PGM L738）：写口任一步失败（权限、校验、状态冲突）经 AuditedOperationExecutor.recordingFailure
+    // 落 OpenAPI 声明的 x-audit-event-failure 再原样抛出；成功事件照旧由服务层写。
+    public FacilityController(FacilityEquipmentService service, AuthorizationService authorizationService,
+            AuditedOperationExecutor operations) {
         this.service = service;
         this.authorizationService = authorizationService;
+        this.operations = operations;
     }
 
     @GetMapping
@@ -78,23 +84,35 @@ public class FacilityController {
 
     @PostMapping
     public ApiResponse<FacilityEquipmentRecord> create(@RequestBody @jakarta.validation.Valid FacilityEquipmentRequest request) {
-        authorizationService.requirePermission(PERM);
-        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
-        return ApiResponse.ok(service.create(request));
+        String key = request == null ? null : request.idempotencyKey();
+        return ApiResponse.ok(operations.recordingFailure("facility.equipment_create_failed", "facility.equipment.manage",
+                "facility_equipment", "new", key, () -> {
+                    authorizationService.requirePermission(PERM);
+                    requireIdempotencyKey(key);
+                    return service.create(request);
+                }));
     }
 
     @PostMapping("/{equipment_id}")
     public ApiResponse<FacilityEquipmentRecord> update(
             @PathVariable("equipment_id") String equipmentId, @RequestBody @jakarta.validation.Valid FacilityEquipmentRequest request) {
-        authorizationService.requirePermission(PERM);
-        return ApiResponse.ok(service.update(equipmentId, request));
+        String key = request == null ? null : request.idempotencyKey();
+        return ApiResponse.ok(operations.recordingFailure("facility.equipment_update_failed", "facility.equipment.manage",
+                "facility_equipment", equipmentId, key, () -> {
+                    authorizationService.requirePermission(PERM);
+                    return service.update(equipmentId, request);
+                }));
     }
 
     @PostMapping("/{equipment_id}/status")
     public ApiResponse<FacilityEquipmentRecord> changeStatus(
             @PathVariable("equipment_id") String equipmentId, @RequestBody @jakarta.validation.Valid FacilityEquipmentStatusRequest request) {
-        authorizationService.requirePermission(PERM);
-        return ApiResponse.ok(service.changeStatus(equipmentId, request));
+        String key = request == null ? null : request.idempotencyKey();
+        return ApiResponse.ok(operations.recordingFailure("facility.equipment_status_change_failed", "facility.equipment.manage",
+                "facility_equipment", equipmentId, key, () -> {
+                    authorizationService.requirePermission(PERM);
+                    return service.changeStatus(equipmentId, request);
+                }));
     }
 
     @PostMapping("/{equipment_id}/maintenance-done")
@@ -102,8 +120,11 @@ public class FacilityController {
             @PathVariable("equipment_id") String equipmentId,
             @RequestParam(value = "idempotency_key", required = false) String idempotencyKey,
             @RequestParam(value = "maintenance_type", required = false) String maintenanceType) {
-        authorizationService.requirePermission(PERM);
-        return ApiResponse.ok(service.recordMaintenanceDone(equipmentId, maintenanceType, idempotencyKey));
+        return ApiResponse.ok(operations.recordingFailure("facility.equipment_maintain_failed", "facility.equipment.manage",
+                "facility_equipment", equipmentId, idempotencyKey, () -> {
+                    authorizationService.requirePermission(PERM);
+                    return service.recordMaintenanceDone(equipmentId, maintenanceType, idempotencyKey);
+                }));
     }
 
     private void requireReadPermission() {

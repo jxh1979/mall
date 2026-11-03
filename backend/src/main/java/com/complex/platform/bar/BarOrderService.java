@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.10
+// 文件版本：V0.11
 
 import static com.complex.platform.bar.BarValidation.*;
 
@@ -184,16 +184,25 @@ public class BarOrderService {
         return saved;
     }
 
+    /**
+     * 第十八批 N 段第 120 条 120-R4（BSM:1611「订单从哪里来，是官方 App/小程序、第三方、销售人员、一体机还是现场工作台。」；BSM:1004「……一体机的下单、领取、
+     * 状态检查和异常提示都要记录设备、点位和时间。」；BSM:1024「接收一体机产生的吧台买酒订单。」）：创建终端取当前请求的可信终端（没有即 web），一体机下的单
+     * 订单来源记 kiosk、其余记 staff；有可信设备号即记 device_id（点位按设备台账的绑定点位得出）。
+     */
     BarOrderRecord createOrder(BarOrderRequest request) {
-        return createOrderInternal(request, "staff", "web", null, null);
+        String terminal = com.complex.platform.gate.TerminalIdentityHolder.trustedTerminalType("web");
+        String deviceId = com.complex.platform.gate.TerminalIdentityHolder.current()
+                .map(com.complex.platform.gate.TerminalIdentityHolder.VerifiedTerminal::deviceId).orElse(null);
+        return createOrderInternal(request, "kiosk".equals(terminal) ? "kiosk" : "staff", terminal, deviceId, null, null);
     }
 
     /**
      * @param merchantIdOverride 非空时强制为订单商户（扫码点单取自会话，权威；员工常规下单传 null=按调用者 scope）。
      * @param customerIdOverride 非空时强制为下单客人（客人扫码自助下单=本人；传 null=取自预订客人）。
+     * @param deviceId 下单设备号（可空；120-R4 员工下单取可信设备号，扫码点单不记）。
      */
     private BarOrderRecord createOrderInternal(BarOrderRequest request, String orderSource, String createdTerminal,
-            String merchantIdOverride, String customerIdOverride) {
+            String deviceId, String merchantIdOverride, String customerIdOverride) {
         BarOrderRequest actual = requireRequest(request);
         String barId = requireText(actual.barId(), "bar_id");
         String merchantId = merchantIdOverride != null
@@ -294,7 +303,7 @@ public class BarOrderService {
                 total,
                 CURRENCY_CNY,
                 createdTerminal,
-                null,
+                deviceId,
                 session == null ? null : session.salesStaffId(),
                 now,
                 now
@@ -531,7 +540,7 @@ public class BarOrderService {
                 actual.serviceUserIds(),
                 actual.paymentMode());
         // merchant 取自会话（权威，修员工 scope 兜底 + 支持客人无 scope）；customerId 客人路径=本人。
-        return createOrderInternal(derived, orderSource, createdTerminal, session.merchantId(), customerIdOverride);
+        return createOrderInternal(derived, orderSource, createdTerminal, null, session.merchantId(), customerIdOverride);
     }
 
     BarOrderItemRecord addOrderItem(String orderId, BarOrderRequest request) {

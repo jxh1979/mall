@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.32
+// 文件版本：V0.33
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -718,14 +718,14 @@ public class FinanceService implements TerminationSettlementPort {
     ) {
         String pathPaymentId = requireText(paymentId, "payment_id");
         if (request != null && trimToNull(request.arApItemId()) != null)
-            requireArApBeforeReplay(request.arApItemId(), "finance.payment.register", "finance_offline_payment.confirm_failed", request.idempotencyKey());
+            requireArApBeforeReplay(request.arApItemId(), "finance.payment.register", "finance_payment.register_failed", request.idempotencyKey());
         return executeWrite(
                 "confirmOfflinePayment:" + pathPaymentId,
                 request == null ? null : request.idempotencyKey(),
                 request,
                 OfflinePaymentConfirmationRecord.class,
-                "finance_offline_payment.confirmed",
-                "finance_offline_payment.confirm_failed",
+                "finance_payment.registered",
+                "finance_payment.register_failed",
                 "finance.payment.register",
                 "finance_offline_payment_confirmation",
                 () -> confirmOffline(pathPaymentId, request)
@@ -788,8 +788,8 @@ public class FinanceService implements TerminationSettlementPort {
                 request == null ? null : request.idempotencyKey(),
                 request,
                 ReconciliationDifferenceRecord.class,
-                "finance_reconciliation.difference_created",
-                "finance_reconciliation.difference_create_failed",
+                "finance.reconciliation.difference_created",
+                "finance.reconciliation.difference_create_failed",
                 "finance.reconciliation.difference.create",
                 "finance_reconciliation_difference",
                 () -> createDifference(request));
@@ -844,7 +844,7 @@ public class FinanceService implements TerminationSettlementPort {
                 status,
                 now));
 
-        // 留痕：executeWrite 已写 finance_reconciliation.difference_created（操作级）。
+        // 留痕：executeWrite 已写 finance.reconciliation.difference_created（操作级）。
         // 这里额外写一条带取数明细（expected/actual/source/status）的强制化留痕，便于审计平台侧系统取数来源，
         // 与 summarizeDailyClose 额外发 finance.daily_close_summarized 的做法一致；复用既有 recordSuccess 不改签名。
         auditEventService.recordSuccess(
@@ -924,8 +924,8 @@ public class FinanceService implements TerminationSettlementPort {
                 request == null ? null : request.idempotencyKey(),
                 request,
                 ArApItemRecord.class,
-                "finance_inventory_variance.posted",
-                "finance_inventory_variance.post_failed",
+                "finance.inventory_variance.posted",
+                "finance.inventory_variance.post_failed",
                 "finance.inventory_variance.post",
                 "ar_ap_item",
                 () -> postInventoryVarianceInternal(request));
@@ -945,8 +945,8 @@ public class FinanceService implements TerminationSettlementPort {
                 request == null ? null : request.idempotencyKey(),
                 request,
                 ArApItemRecord.class,
-                "finance_turnover_rent.billed",
-                "finance_turnover_rent.bill_failed",
+                "finance.turnover_rent.billed",
+                "finance.turnover_rent.bill_failed",
                 "finance.turnover_rent.bill",
                 "ar_ap_item",
                 () -> billTurnoverRentInternal(request));
@@ -985,8 +985,8 @@ public class FinanceService implements TerminationSettlementPort {
                 request == null ? null : request.idempotencyKey(),
                 request,
                 DepositLedgerRecord.class,
-                "finance_deposit.action_recorded",
-                "finance_deposit.action_failed",
+                "finance.deposit.action_recorded",
+                "finance.deposit.action_failed",
                 "finance.deposit.manage",
                 "deposit_ledger",
                 () -> recordDepositActionInternal(request));

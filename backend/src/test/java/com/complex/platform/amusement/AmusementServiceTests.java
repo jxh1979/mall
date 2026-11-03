@@ -1,6 +1,6 @@
 package com.complex.platform.amusement;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import com.complex.platform.support.InMemoryAuditEventRepository;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -1622,10 +1622,10 @@ class AmusementServiceTests {
         assertThat(auditEventRepository.events)
                 .extracting(AuditEvent::eventName)
                 .contains(
-                        "amusement.reservation.created",
-                        "amusement.reservation.status_changed",
-                        "amusement.queue.created",
-                        "amusement.queue.status_changed"
+                        "amusement.reservation.create",
+                        "amusement.reservation.status_change",
+                        "amusement.queue_entry.create",
+                        "amusement.queue_entry.status_change"
                 );
     }
 
@@ -1740,9 +1740,9 @@ class AmusementServiceTests {
         assertThat(auditEventRepository.events)
                 .extracting(AuditEvent::eventName)
                 .contains(
-                        "amusement.group_booking.created",
-                        "amusement.group_booking.approved",
-                        "amusement.group_booking.released"
+                        "amusement_group_booking.created.success",
+                        "amusement_group_booking.approved.success",
+                        "amusement_group_booking.released.success"
                 );
     }
 
@@ -1793,6 +1793,10 @@ class AmusementServiceTests {
                 .isInstanceOf(ApiException.class)
                 .extracting("code")
                 .isEqualTo("GROUP_BOOKING_NOT_APPROVED");
+        // 第十八批 N 段 124-R2a：审批、释放失败落 OpenAPI 声明名
+        assertThat(auditEventRepository.events)
+                .extracting(AuditEvent::eventName)
+                .contains("amusement_group_booking.approved.failure", "amusement_group_booking.released.failure");
         assertThat(amusementRepository.findSessionById(session.id()))
                 .get()
                 .extracting(AmusementSessionRecord::lockedCapacity)
@@ -1887,7 +1891,7 @@ class AmusementServiceTests {
 
         assertThatThrownBy(() -> service.confirmMaintenanceResume(
                         record.id(),
-                        new AmusementMaintenanceResumeRequest("maint-fail-confirm", "supervisor_1", "尝试恢复")
+                        new AmusementMaintenanceResumeRequest("maint-fail-confirm", "尝试恢复")
                 ))
                 .isInstanceOf(ApiException.class)
                 .extracting("code")
@@ -1902,8 +1906,9 @@ class AmusementServiceTests {
                 .contains("amusement.maintenance_resume_failed");
     }
 
+    /** 第十八批 N 段第 120 条 120-R6：在营项目的检修也能由主管确认（设备恢复运行），项目开放状态不动。 */
     @Test
-    void confirmResumeRejectsWhenProjectNotInMaintenance() {
+    void confirmResumeOfInServiceProjectSucceedsAndLeavesProjectOpen() {
         AmusementSafetyTemplateRecord template = createTemplate("maint-open");
         AmusementProjectRecord project = createProject("maint-open", template.id(), "open", 2);
 
@@ -1921,13 +1926,12 @@ class AmusementServiceTests {
                 "kiosk"
         ));
 
-        assertThatThrownBy(() -> service.confirmMaintenanceResume(
-                        record.id(),
-                        new AmusementMaintenanceResumeRequest("maint-open-confirm", "supervisor_1", "恢复")
-                ))
-                .isInstanceOf(ApiException.class)
-                .extracting("code")
-                .isEqualTo("PROJECT_NOT_IN_MAINTENANCE");
+        AmusementMaintenanceRecord confirmed = service.confirmMaintenanceResume(
+                record.id(),
+                new AmusementMaintenanceResumeRequest("maint-open-confirm", "恢复")
+        );
+
+        assertThat(confirmed.status()).isEqualTo("confirmed");
 
         assertThat(amusementRepository.findProjectById(project.id()))
                 .get().extracting(AmusementProjectRecord::openStatus).isEqualTo("open");
@@ -1954,11 +1958,12 @@ class AmusementServiceTests {
 
         AmusementMaintenanceRecord confirmed = service.confirmMaintenanceResume(
                 record.id(),
-                new AmusementMaintenanceResumeRequest("maint-resume-confirm", "supervisor_1", "检修合格恢复")
+                new AmusementMaintenanceResumeRequest("maint-resume-confirm", "检修合格恢复")
         );
 
         assertThat(confirmed.status()).isEqualTo("confirmed");
-        assertThat(confirmed.supervisorConfirmedBy()).isEqualTo("supervisor_1");
+        // 120-R6：确认人取当前登录主管（本类以平台管理员 usr_admin 登录）。
+        assertThat(confirmed.supervisorConfirmedBy()).isEqualTo("usr_admin");
         assertThat(confirmed.confirmedAt()).isNotNull();
         assertThat(confirmed.resumeBusinessAt()).isNotNull();
         // 联动 open_status：maintenance → open。

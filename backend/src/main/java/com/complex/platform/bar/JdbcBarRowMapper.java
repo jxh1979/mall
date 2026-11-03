@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 
@@ -92,7 +92,8 @@ final class JdbcBarRowMapper {
                 resultSet.getString("deposit_channel"),
                 nullableInstant(resultSet, "deposit_settled_at"),
                 nullableInstant(resultSet, "latest_arrival_at"),
-                resultSet.getString("hold_status")
+                resultSet.getString("hold_status"),
+                resultSet.getString("remark")
         );
     }
 

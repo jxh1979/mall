@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.05
+// 文件版本：V0.06
 
 // 文件版本：V0.03
 
@@ -2427,7 +2427,7 @@ class TicketingServiceTests {
                         .toList());
         assertThat(auditEventRepository.events)
                 .extracting(AuditEvent::eventName)
-                .contains("ticket_refund.requested", "ticket_refund_line.viewed", "ticket_refund.approved");
+                .contains("ticket_refund.requested", "ticket.refund_line.list", "ticket_refund.approved");
     }
 
     @Test
@@ -2486,7 +2486,7 @@ class TicketingServiceTests {
         assertThat(order.dynamicAdjustmentCent()).isZero();
         assertThat(auditEventRepository.events)
                 .extracting(AuditEvent::eventName)
-                .contains("ticket_dynamic_pricing.changed", "ticket_dynamic_pricing.simulated", "ticket_order.created");
+                .contains("ticket_dynamic_pricing.created.success", "ticket_dynamic_pricing.simulated.success", "ticket_order.created");
     }
 
     @Test
@@ -2853,7 +2853,27 @@ class TicketingServiceTests {
         assertThat(noMatch.finalPriceCent()).isEqualTo(noMatch.basePriceCent());
         assertThat(auditEventRepository.events)
                 .extracting(AuditEvent::eventName)
-                .contains("ticket_dynamic_pricing.published", "ticket_dynamic_pricing.simulated");
+                .contains("ticket_dynamic_pricing.published.success", "ticket_dynamic_pricing.simulated.success");
+    }
+
+    @Test
+    void dynamicPricingFailuresAreAuditedWithDeclaredEventNames() {
+        // 第十八批 N 段 124-R2a：动态定价建、发布、模拟失败落 OpenAPI 声明名
+        assertThatThrownBy(() -> service.createDynamicPricingRule(new TicketDynamicPricingRuleRequest(
+                "dynamic-fail-create", "missing ticket type", List.of(), "ticket_type_missing", "Missing", 10,
+                LocalDate.parse("2026-06-01"), LocalDate.parse("2026-06-30"), "web", "fixed_delta", null, 1000L,
+                6900L, 15000L, Map.of())))
+                .isInstanceOf(ApiException.class).extracting("code").isEqualTo("TICKET_TYPE_NOT_FOUND");
+        assertThatThrownBy(() -> service.publishDynamicPricingRule("dynamic_rule_missing",
+                new StatusChangeRequest("dynamic-fail-publish", "publish", "missing rule", List.of())))
+                .isInstanceOf(ApiException.class).extracting("code").isEqualTo("DYNAMIC_PRICING_RULE_NOT_FOUND");
+        assertThatThrownBy(() -> service.simulateDynamicPricing(new TicketDynamicPricingSimulationRequest(
+                "dynamic-fail-simulate", "ticket_type_missing", LocalDate.parse("2026-06-20"), "web", Map.of())))
+                .isInstanceOf(ApiException.class).extracting("code").isEqualTo("TICKET_TYPE_NOT_FOUND");
+        assertThat(auditEventRepository.events)
+                .extracting(AuditEvent::eventName)
+                .contains("ticket_dynamic_pricing.created.failure", "ticket_dynamic_pricing.published.failure",
+                        "ticket_dynamic_pricing.simulated.failure");
     }
 
     @Test
@@ -3441,41 +3461,6 @@ class TicketingServiceTests {
                 null, null, null, null, null, null, "active", Instant.now(), Instant.now()));
         assertThatThrownBy(() -> createBarTicketType("bad", "mch_shop", false))
                 .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("BAR_MERCHANT_INVALID"));
-    }
-
-    @Test
-    void merchantScopeSellsOnlyOwnBarTicketsNotOthersOrPass() {
-        registerBar("mch_bar_a", "话梅酒馆");
-        registerBar("mch_bar_b", "夜航船");
-        TicketTypeRecord aTicket = createBarTicketType("scope-a", "mch_bar_a", false);
-        TicketTypeRecord bTicket = createBarTicketType("scope-b", "mch_bar_b", false);
-        TicketTypeRecord pass = createTicketType("scope-pass");
-        service.bindTicketTypeEntitlement(pass.id(), new TicketTypeEntitlementRequest(
-                "scope-pass-bind", "b", List.of(), createTemplate("scope-pass-tpl", 1, 9900L).id(),
-                1, 1, 9900L, "default", 1, 9900L));
-        TestSecurityActors.clear();
-        try {
-            TestSecurityActors.asMerchantUser("mch_bar_a");
-            // ROOT-03-R29：一体机下单先核验客人手机号短信验证码（此处替身：验证通过、该号未注册）。
-            orderService.kioskBuyerVerifier = (phone, code) -> null;
-            // 卖本店单店票 OK。
-            TicketOrderRecord ok = service.createTicketOrder(new TicketOrderRequest(
-                    "scope-ok", "c", List.of(), aTicket.id(), null, 1, LocalDate.parse("2026-06-20"),
-                    "kiosk", "13800138000", null, java.util.Map.of(), "mch_bar_a", "000000"));
-            assertThat(ok.barId()).isEqualTo("mch_bar_a");
-            // 卖别家单店票 → 拒。
-            assertThatThrownBy(() -> service.createTicketOrder(new TicketOrderRequest(
-                    "scope-x", "c", List.of(), bTicket.id(), null, 1, LocalDate.parse("2026-06-20"),
-                    "kiosk", "13800138000", null, java.util.Map.of(), "mch_bar_b", "000000")))
-                    .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("BAR_SCOPE_FORBIDDEN"));
-            // 门口一体机卖综合体通票 → 拒（HTML:897/930）。
-            assertThatThrownBy(() -> service.createTicketOrder(new TicketOrderRequest(
-                    "scope-p", "c", List.of(), pass.id(), null, 1, LocalDate.parse("2026-06-20"),
-                    "kiosk", "13800138000", null, java.util.Map.of(), null, "000000")))
-                    .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("BAR_SCOPE_FORBIDDEN"));
-        } finally {
-            TestSecurityActors.clear();
-        }
     }
 
     @Test

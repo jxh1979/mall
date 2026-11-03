@@ -1,4 +1,4 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 package com.complex.platform.serviceorder;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -85,6 +85,9 @@ class ServiceOrderJdbcIntegrationTests {
 
         assertThat(service.orderPaymentCode(order.id()).get("qr_content"))
                 .isEqualTo("https://qr.alipay.com/company_account");
+        // 第十八批 N 段第 124 条 124-R6（BSM:1132「点单员代客下单、向客人出示收款码和点完成履约都是现场操作……」；PGM:966）：出示收款码落 service.payment_code.presented。
+        assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM audit_events WHERE event_name='service.payment_code.presented'"
+                + " AND event_result='success' AND business_id=? AND metadata->>'performer_user_id'='usr_admin'", Integer.class, order.id())).isEqualTo(1);
 
         // 未收款不可完成(公司账户收款前置)。
         assertThatThrownBy(() -> service.complete(order.id(),
@@ -260,6 +263,21 @@ class ServiceOrderJdbcIntegrationTests {
         assertThat(jdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM audit_events WHERE event_name='service.order.pay_confirm_failed' AND event_result='failure'",
                 Integer.class)).isGreaterThanOrEqualTo(1);
+    }
+
+    /** 第十八批 N 段第 124 条 124-R6：公司收款码未配置时出示被拒（COMPANY_PAY_QR_NOT_CONFIGURED）并落 service.payment_code.present_failed。 */
+    @Test
+    void paymentCodeWithoutCompanyQrIsRejectedWithFailureAudit() {
+        ServiceCatalogItemRecord item = service.upsertCatalogItem(
+                new com.complex.platform.serviceorder.dto.ServiceCatalogItemRequest(key(), null, "点歌", 10000L, 10, true, "none", 0L));
+        ServiceOrderRecord order = service.createOrder(new com.complex.platform.serviceorder.dto.ServiceOrderCreateRequest(
+                key(), item.id(), "usr_admin", null, null, null));
+        jdbcTemplate.update("UPDATE service_pay_config SET qr_content = '' WHERE id = 'default'");
+        assertThatThrownBy(() -> service.orderPaymentCode(order.id()))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("COMPANY_PAY_QR_NOT_CONFIGURED"));
+        assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM audit_events WHERE event_name='service.payment_code.present_failed'"
+                + " AND event_result='failure' AND business_id=? AND metadata->>'error_code'='COMPANY_PAY_QR_NOT_CONFIGURED'",
+                Integer.class, order.id())).isEqualTo(1);
     }
 
     /** TK-23-R1(前端真实形状):{price_cent:10000, mgmt_fee_mode:'fixed', mgmt_fee_value:10001} → 400 VALIDATION_FAILED

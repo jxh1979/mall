@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 package com.complex.platform.finance;
 
 import static org.mockito.ArgumentMatchers.any;
@@ -185,6 +185,12 @@ class RefundAuthorizationControllerTests {
         @Bean
         AuthorizationService authorizationService() {
             return Mockito.mock(AuthorizationService.class);
+        }
+
+        @Bean
+        com.complex.platform.evidence.AuditedOperationExecutor auditedOperationExecutor() {
+            return new com.complex.platform.evidence.AuditedOperationExecutor(null,
+                    Mockito.mock(com.complex.platform.evidence.AuditEventService.class));
         }
 
         @Bean

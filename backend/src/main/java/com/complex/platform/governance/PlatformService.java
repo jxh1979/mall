@@ -1,5 +1,5 @@
 package com.complex.platform.governance;
-// 文件版本：V0.17
+// 文件版本：V0.18
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -97,7 +97,7 @@ public class PlatformService {
                 project -> repository.listBusinessEntitiesPaged(project, page, size),
                 projects -> repository.listBusinessEntitiesPaged(projects, page, size));
         auditEventService.recordSuccess(
-                "entity_binding.viewed",
+                "business_entity.viewed",
                 "entity.binding.view",
                 "business_entity",
                 "all",

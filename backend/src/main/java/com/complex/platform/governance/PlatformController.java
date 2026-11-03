@@ -1,5 +1,5 @@
 package com.complex.platform.governance;
-// 文件版本：V0.07
+// 文件版本：V0.08
 import static com.complex.platform.common.api.ApiRequests.requireIdempotencyKey;
 
 import com.complex.platform.access.AuthorizationService;
@@ -8,6 +8,7 @@ import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.ApiResponse;
 import com.complex.platform.common.api.PageResponse;
 import com.complex.platform.common.idempotency.IdempotentReplayContext;
+import com.complex.platform.evidence.AuditedOperationExecutor;
 import com.complex.platform.governance.dto.BusinessEntityBindingRequest;
 import com.complex.platform.governance.dto.BusinessEntityRequest;
 import com.complex.platform.governance.dto.MerchantProfileRequest;
@@ -32,12 +33,16 @@ public class PlatformController {
     private final AuthorizationService authorizationService;
     // D1：场地营业时间配置（V226 建表后一直无界面，场次划分全靠它）。
     private final VenueBusinessHoursService venueBusinessHoursService;
+    private final AuditedOperationExecutor operations;
 
+    // 第十八批 N 段第 124 条 124-R5（PGM L738「访问被拒绝也要留痕，便于排查是权限问题还是开关问题。」）：写口任一步失败（权限、范围、校验、
+    // 状态冲突）经 AuditedOperationExecutor.recordingFailure 落 OpenAPI 声明的 x-audit-event-failure 再原样抛出。
     public PlatformController(PlatformService service, AuthorizationService authorizationService,
-                              VenueBusinessHoursService venueBusinessHoursService) {
+                              VenueBusinessHoursService venueBusinessHoursService, AuditedOperationExecutor operations) {
         this.service = service;
         this.authorizationService = authorizationService;
         this.venueBusinessHoursService = venueBusinessHoursService;
+        this.operations = operations;
     }
 
     @GetMapping("/business-entities")
@@ -293,10 +298,14 @@ public class PlatformController {
     @PostMapping("/venue-business-hours")
     public ApiResponse<VenueBusinessHoursRecord> saveVenueBusinessHours(
             @RequestBody @jakarta.validation.Valid com.complex.platform.governance.dto.VenueBusinessHoursRequest request) {
-        authorizationService.requirePermission("governance.space.manage");
-        authorizationService.requirePlatformScope();
-        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
-        return ApiResponse.ok(venueBusinessHoursService.save(request));
+        String key = request == null ? null : request.idempotencyKey();
+        return ApiResponse.ok(operations.recordingFailure("venue_business_hours.update_failed", "governance.space.manage",
+                "venue_business_hours", "new", key, () -> {
+                    authorizationService.requirePermission("governance.space.manage");
+                    authorizationService.requirePlatformScope();
+                    requireIdempotencyKey(key);
+                    return venueBusinessHoursService.save(request);
+                }));
     }
 
     @GetMapping("/business-entity-bindings")

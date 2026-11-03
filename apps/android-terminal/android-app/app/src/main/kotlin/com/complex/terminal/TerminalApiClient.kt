@@ -1,6 +1,6 @@
 package com.complex.terminal
 
-// 文件版本：V0.12
+// 文件版本：V0.13
 
 import java.io.BufferedReader
 import java.net.HttpURLConnection
@@ -63,11 +63,16 @@ class TerminalApiClient(
   }
 
   var accessToken: String? = null
+  /** 第十八批 N 段第 120 条 120-R1 复核：授权员工那一段请求的令牌，只对发起它的线程有效（[asStaff] 设、还），常驻令牌 [accessToken] 不动。 */
+  val staffToken = ThreadLocal<String?>()
   var deviceId: String? = null
   var deviceSigner: ((ByteArray) -> String)? = null
   /** U01-001：终端身份由本机绑定类型决定并只声明一次（工作手机/平板）；未绑定不发类型头（服务端 fail-close）。
    *  第十八批 M 段第 108 条：未绑定时其他请求不发类型头；绑定、登记签名公钥、私人手机凭证绑定三条按所绑类型声明（同自助注册两条路径的显式声明）。 */
   var terminalType: String? = null
+  /** 第十八批 N 段第 123 条 123-R4（BSM:1630）：现场动作那一刻取本机定位（纬度, 经度，WGS-84 十进制度），取不到返回 null；
+   *  只在现场动作闭集的 POST 上调用（[sensitiveLocationHeaders]），MainActivity 接上 [DeviceLocator]。 */
+  var locationProvider: (() -> Pair<Double, Double>?)? = null
 
   fun registerDeviceSigningKey(id: String, publicKey: String, requestKey: String, terminalType: String): JsonObject =
     post("/api/v1/terminals/devices/${urlEncode(id)}/signing-key", mapOf("public_key" to publicKey, "idempotency_key" to requestKey), terminalType)
@@ -75,8 +80,24 @@ class TerminalApiClient(
   fun login(username: String, password: String): LoginResponse =
     post("/api/v1/auth/login", LoginRequest(username, password))
 
+  /** 第十八批 N 段第 120 条 120-R1：授权员工用完即登出（以该员工令牌发，见 [asStaff]）。 */
+  fun logout(sessionId: String): JsonObject =
+    post("/api/v1/auth/logout", LogoutRequest(UUID.randomUUID().toString(), sessionId))
+
+  /** 第十八批 N 段第 120 条 120-R1：一体机凭绑定时签发的设备令牌读本机配置（是否启用售票、所属商户）。 */
+  fun kioskConfig(deviceCode: String, deviceToken: String): KioskConfig {
+    val path = "/api/v1/terminals/kiosks/${urlEncode(deviceCode)}/config"
+    val connection = open(path, "GET")
+    connection.setRequestProperty("X-Device-Token", deviceToken)
+    return send(path, connection, body = null)
+  }
+
   /** 第十八批 M 段第 116 条：本端可用的员工 App 功能（服务端按可信终端下发）。 */
   fun staffAppFunctions(): StaffAppFunctionsResponse = get("/api/v1/terminals/staff-app-functions")
+
+  /** 第十八批 N 段第 120 条 120-R5（BSM:991「查看游乐设施状态：开放、排队、容量、暂停、关闭、故障、维护或安全提醒。」）：一体机游乐设施状态看板（常驻会话即可看）。 */
+  fun amusementStatusBoard(): List<AmusementProjectStatus> =
+    get<Page<AmusementProjectStatus>>("/api/v1/amusement/projects/status-board").items
 
   /** 第 23 条 23-R6：员工手机在线屏打开即发暗纹码并留痕（与后台、商户专区同一接口；走设备签名，设备号由服务端按验签结果取登记设备号）。 */
   fun postPageView(request: PageViewRequest): PageViewMark =
@@ -290,6 +311,36 @@ class TerminalApiClient(
   fun createBarReservation(request: BarReservationCreateRequest): BarReservationRecord =
     post("/api/v1/bar/reservations", request)
 
+  /** 第十八批 N 段第 120 条 120-R7：一体机现金 / POS 登记——票务订单建付款意向、确认收款，订台定金登记（见 [registerKioskPayment]）。 */
+  fun createTicketPayIntent(orderId: String, request: PaymentIntentRequest): PaymentIntentRecord =
+    post("/api/v1/ticketing/orders/${urlEncode(orderId)}/pay-intents", request)
+
+  fun confirmTicketPayment(orderId: String, request: ConfirmTicketPaymentRequest): JsonObject =
+    post("/api/v1/ticketing/orders/${urlEncode(orderId)}/confirm-payment", request)
+
+  fun payReservationDeposit(reservationId: String, request: BarReservationDepositPayRequest): BarReservationRecord =
+    post("/api/v1/bar/reservations/${urlEncode(reservationId)}/pay-deposit", request)
+
+  /**
+   * 第十八批 N 段第 120 条 120-R2：一体机辅助售票——票种目录（带所属酒吧时只列该酒吧单店票）、给客人手机号发绑定码、下单、出票、取消、
+   * 按客人手机号查订单（请求由调用方放在授权服务人员令牌下发，见 [asStaff]）。
+   */
+  fun listKioskTicketProducts(barId: String?): List<KioskTicketProduct> =
+    get<Page<KioskTicketProduct>>("/api/v1/customer/ticket-products" + (barId?.takeIf { it.isNotBlank() }?.let { "?bar_id=${urlEncode(it)}" } ?: "")).items
+
+  fun requestKioskBindCode(phone: String): JsonObject = post("/api/v1/ticketing/kiosk-bind-codes", mapOf("phone" to phone))
+
+  fun createTicketOrder(request: KioskTicketOrderRequest): TicketOrderRow = post("/api/v1/ticketing/orders", request)
+
+  fun issueTicketOrder(orderId: String, request: TicketOrderActionRequest): JsonObject =
+    post("/api/v1/ticketing/orders/${urlEncode(orderId)}/issue", request)
+
+  fun cancelTicketOrder(orderId: String, request: TicketOrderActionRequest): TicketOrderRow =
+    post("/api/v1/ticketing/orders/${urlEncode(orderId)}/cancel", request)
+
+  fun listTicketOrdersByPhone(phone: String): List<TicketOrderRow> =
+    get<Page<TicketOrderRow>>("/api/v1/ticketing/orders?buyer_phone=${urlEncode(phone)}").items
+
   fun amusementVerify(request: VerificationRequest): AmusementVerificationRecord =
     post("/api/v1/amusement/verifications", request)
 
@@ -301,6 +352,17 @@ class TerminalApiClient(
     request: AmusementMaintenanceResumeRequest,
   ): AmusementMaintenanceRecord =
     post("/api/v1/amusement/maintenance-records/${urlEncode(recordId)}/confirm-resume", request)
+
+  /** 第十八批 N 段第 120 条 120-R6：检修屏选项目、设备、检修单位，主管确认屏列待确认的检修记录。 */
+  fun listAmusementProjects(): List<AmusementProject> = get<Page<AmusementProject>>("/api/v1/amusement/projects").items
+
+  fun listAmusementDevices(projectId: String): List<AmusementDevice> =
+    get<Page<AmusementDevice>>("/api/v1/amusement/projects/${urlEncode(projectId)}/devices").items
+
+  fun listInventorySuppliers(): List<InventorySupplier> = get<Page<InventorySupplier>>("/api/v1/inventory/suppliers").items
+
+  fun listAmusementMaintenanceRecords(): List<AmusementMaintenanceRecord> =
+    get<Page<AmusementMaintenanceRecord>>("/api/v1/amusement/maintenance-records").items
 
   fun createBarOrder(request: BarOrderRequest): BarOrderRecord =
     post("/api/v1/bar/orders", request)
@@ -404,7 +466,8 @@ class TerminalApiClient(
     connection.readTimeout = readTimeoutMs
     // 3.19 二期：声明终端类型，接受 terminal.enabled 总开关逐请求后端强制（矩阵页关端=接口硬拒）。
     (terminalTypeOverride ?: terminalType)?.let { connection.setRequestProperty("X-Terminal-Type", it) }
-    accessToken?.takeIf { it.isNotBlank() }?.let { connection.setRequestProperty("authorization", "Bearer $it") }
+    sensitiveLocationHeaders(method, path, locationProvider).forEach { (name, value) -> connection.setRequestProperty(name, value) }
+    (staffToken.get() ?: accessToken)?.takeIf { it.isNotBlank() }?.let { connection.setRequestProperty("authorization", "Bearer $it") }
     return connection
   }
 

@@ -5,6 +5,7 @@ import static com.complex.platform.common.api.ApiRequests.requireIdempotencyKey;
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiResponse;
 import com.complex.platform.common.api.PageResponse;
+import com.complex.platform.evidence.AuditedOperationExecutor;
 import com.complex.platform.partner.dto.ExternalPartnerOrgRequest;
 import com.complex.platform.partner.dto.PartnerSubordinateRequest;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -22,12 +23,16 @@ public class PartnerController {
     private final PartnerService service;
     private final AuthorizationService authorizationService;
     private final PartnerSubordinateCompletionService completionService;
+    private final AuditedOperationExecutor operations;
 
+    // 第十八批 N 段第 124 条 124-R5（PGM L738「访问被拒绝也要留痕，便于排查是权限问题还是开关问题。」）：写口任一步失败（权限、范围、校验、
+    // 状态冲突）经 AuditedOperationExecutor.recordingFailure 落 OpenAPI 声明的 x-audit-event-failure 再原样抛出。
     public PartnerController(PartnerService service, AuthorizationService authorizationService,
-            PartnerSubordinateCompletionService completionService) {
+            PartnerSubordinateCompletionService completionService, AuditedOperationExecutor operations) {
         this.service = service;
         this.authorizationService = authorizationService;
         this.completionService = completionService;
+        this.operations = operations;
     }
 
     @GetMapping("/orgs")
@@ -39,8 +44,11 @@ public class PartnerController {
     @PostMapping("/orgs")
     public ApiResponse<ExternalPartnerOrgRecord> createOrg(
             @RequestBody @jakarta.validation.Valid ExternalPartnerOrgRequest request) {
-        authorizationService.requirePermission("partner.org.manage");
-        return ApiResponse.ok(service.createPartnerOrg(request));
+        return ApiResponse.ok(operations.recordingFailure("partner_org.update_failed", "partner.org.manage", "partner_org", "new",
+                request == null ? null : request.idempotencyKey(), () -> {
+                    authorizationService.requirePermission("partner.org.manage");
+                    return service.createPartnerOrg(request);
+                }));
     }
 
     /** AUD-033：平台把既有后台账号绑到外部协作机构（外包模块按机构过滤的前置）。 */
@@ -81,13 +89,19 @@ public class PartnerController {
     @PostMapping("/subordinates")
     public ApiResponse<PartnerSubordinateRecord> createSubordinate(
             @RequestBody @jakarta.validation.Valid PartnerSubordinateRequest request) {
-        authorizationService.requirePermission("partner.subordinate.manage");
-        return ApiResponse.ok(service.createSubordinate(request));
+        return ApiResponse.ok(operations.recordingFailure("partner_subordinate.create_failed", "partner.subordinate.manage", "access_user",
+                "new", request == null ? null : request.idempotencyKey(), () -> {
+                    authorizationService.requirePermission("partner.subordinate.manage");
+                    return service.createSubordinate(request);
+                }));
     }
 
     @PostMapping("/subordinates/{user_id}/disable")
     public ApiResponse<PartnerSubordinateRecord> disableSubordinate(@PathVariable("user_id") String userId) {
-        authorizationService.requirePermission("partner.subordinate.manage");
-        return ApiResponse.ok(service.disableSubordinate(userId));
+        return ApiResponse.ok(operations.recordingFailure("partner_subordinate.disable_failed", "partner.subordinate.manage", "access_user",
+                userId, null, () -> {
+                    authorizationService.requirePermission("partner.subordinate.manage");
+                    return service.disableSubordinate(userId);
+                }));
     }
 }

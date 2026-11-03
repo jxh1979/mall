@@ -1,4 +1,4 @@
-// 版本：V0.02
+// 版本：V0.03
 import { defineConfig, devices } from "@playwright/test";
 
 // 后台与经销商门户在 apps/web（5173）上验收；客人端在客人专用构建 apps/customer-app（5174）上验收
@@ -16,6 +16,9 @@ export default defineConfig({
   use: {
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
+    // 第 123 条 123-R3：网页端须打开地理识别（BSM:1876）；e2e 库没配敏感操作授权范围，任意坐标都能通过。
+    permissions: ["geolocation"],
+    geolocation: { latitude: 31.2304, longitude: 121.4737 },
   },
   webServer: [
     {

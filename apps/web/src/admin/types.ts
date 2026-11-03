@@ -1,4 +1,4 @@
-// 文件版本：V0.19
+// 文件版本：V0.20
 export type AdminUser = {
   id: string;
   username: string;
@@ -314,6 +314,8 @@ export type BarReservationRow = {
   reservedAt?: string;
   createdAt?: string;
   salesStaffId?: string;
+  // 第十八批 N 段第 120 条 120-R3（BSM:987「……人数和订台备注……」）：订台备注。
+  remark?: string;
 };
 
 /** 第十八批 C 段第 15 条：员工代订权限停用记录（GET /api/v1/bar/staff-booking-suspensions）。 */

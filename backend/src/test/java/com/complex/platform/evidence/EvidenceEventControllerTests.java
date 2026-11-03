@@ -1,4 +1,4 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 package com.complex.platform.evidence;
 
 import static org.mockito.ArgumentMatchers.any;
@@ -330,6 +330,11 @@ class EvidenceEventControllerTests {
         @Bean
         TraceabilityService traceabilityService() {
             return Mockito.mock(TraceabilityService.class);
+        }
+
+        @Bean
+        AuditedOperationExecutor auditedOperationExecutor() {
+            return new AuditedOperationExecutor(null, Mockito.mock(AuditEventService.class));
         }
 
         @Bean

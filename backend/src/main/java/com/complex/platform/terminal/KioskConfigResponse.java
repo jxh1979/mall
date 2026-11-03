@@ -8,6 +8,7 @@ public record KioskConfigResponse(
         String kioskMode,
         boolean ticketingEnabled,
         String boundScope,
+        String merchantId,
         Map<String, Object> config,
         Instant updatedAt
 ) {

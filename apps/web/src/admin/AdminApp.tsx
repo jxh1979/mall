@@ -1,4 +1,4 @@
-// 文件版本：V0.17
+// 文件版本：V0.18
 import React from "react";
 import { ConfigProvider, theme } from "antd";
 import zhCN from "antd/es/locale/zh_CN";
@@ -15,6 +15,7 @@ import { MerchantUnreadBillsReminder } from "./components/MerchantUnreadBillsRem
 import { PageWatermark } from "./components/PageWatermark";
 import { PermissionGate, hasPermissions } from "./security/PermissionGate";
 import { hiddenGroupKeys, type DisabledSwitchRow } from "./security/terminalGate";
+import { geolocationEnabled } from "./security/geoGate";
 import type { AdminPageProps, AdminRoute, AdminUser, EffectivePermissions, EffectivePermissionsState, ViewedRow } from "./types";
 
 // antd 组件（日期选择器等）中文化；dayjs 同步切中文（周一开头/中文月份）。
@@ -517,6 +518,30 @@ export default function AdminApp() {
     return instance;
   }, [user]);
 
+  // 第 123 条 123-R3（BSM:1876「使用 Web 端必须打开地理识别，没有打开地理识别的无法正常使用。」）：只对网页端（web）整页准入，
+  // 商户门户与商户手机应用是商户侧页面、不加；浏览器里改了位置授权就重新判定。不轮询位置（平台治理 PRD §15.3）。
+  const geoRequired = !!user && api.terminalType === "web";
+  const [geoEnabled, setGeoEnabled] = React.useState<boolean | null>(null);
+  React.useEffect(() => {
+    if (!geoRequired) return;
+    let cancelled = false;
+    let status: PermissionStatus | undefined;
+    const check = () => void geolocationEnabled().then((enabled) => {
+      if (!cancelled) setGeoEnabled(enabled);
+    });
+    check();
+    void navigator.permissions?.query({ name: "geolocation" }).then((current) => {
+      if (cancelled) return;
+      status = current;
+      status.onchange = check;
+    }, () => undefined);
+    return () => {
+      cancelled = true;
+      if (status) status.onchange = null;
+    };
+  }, [geoRequired]);
+  const geoBlocked = geoRequired && geoEnabled === false;
+
   React.useEffect(() => {
     const onPopState = () => {
       setRoute(activeRouteFromLocation());
@@ -639,7 +664,8 @@ export default function AdminApp() {
     if (target.pageId === "ADM-INV-003" && hasPermissions(effectivePermissions, ["inventory.supply_contract.manage"])) return ["inventory.supply_contract.manage"];
     // 营业日配置页综合体与酒吧两套共用（ENUM:187 按每个项目、每家酒吧可配）：持有其中一个查看码即可进入，都没有照旧拒绝。
     // 第十八批第 24 条：高价值复核页门店主管与财务共用，持主管复核码或财务应收应付管理码任一即可进入。
-    if (target.pageId === "ADM-AMU-008" || target.pageId === "ADM-INV-004") {
+    // 第 123 条 123-R1：经营参数页另放敏感操作授权范围区块，持看板查看码或授权范围配置码任一即可进入。
+    if (target.pageId === "ADM-AMU-008" || target.pageId === "ADM-INV-004" || target.pageId === "ADM-ANA-003") {
       const held = target.requiredPermissions.find((code) => hasPermissions(effectivePermissions, [code]));
       return held ? [held] : target.requiredPermissions;
     }
@@ -655,7 +681,7 @@ export default function AdminApp() {
   const [watermarkCode, setWatermarkCode] = React.useState<string | null>(null);
   const [openedPageId, setOpenedPageId] = React.useState<string | null>(null);
   const sensitivePage = SENSITIVE_PAGE_IDS.has(route.pageId);
-  const routeOpen = !!user && routeAllowedHere(route)
+  const routeOpen = !!user && !geoBlocked && routeAllowedHere(route)
     && hasPermissions(routePermissionState(route), routePermissions(route));
   React.useEffect(() => {
     if (!user) {
@@ -819,6 +845,10 @@ export default function AdminApp() {
           <button type="submit" data-testid="login-submit" disabled={loading}>{loading ? "登录中" : "登录"}</button>
         </form>
       </div>
+    </main>
+  ) : geoBlocked ? (
+    <main className="admin-auth-shell" data-testid="geo-required">
+      <div className="admin-denied" role="alert">使用网页端须打开地理识别：请在浏览器网站设置里允许“位置”，然后刷新本页</div>
     </main>
   ) : (
     <div className="admin-shell" data-testid="admin-shell">

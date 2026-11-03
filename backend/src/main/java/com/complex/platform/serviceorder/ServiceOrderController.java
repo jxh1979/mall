@@ -1,10 +1,11 @@
 package com.complex.platform.serviceorder;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.ApiResponse;
 import com.complex.platform.common.api.PageResponse;
+import com.complex.platform.evidence.AuditedOperationExecutor;
 import java.util.Map;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -19,9 +20,13 @@ import org.springframework.web.bind.annotation.RestController;
 public class ServiceOrderController {
 
     private final ServiceOrderService service;
+    private final AuditedOperationExecutor operations;
 
-    public ServiceOrderController(ServiceOrderService service) {
+    // 第十八批 N 段第 124 条 124-R5（PGM L738「访问被拒绝也要留痕，便于排查是权限问题还是开关问题。」）：写口任一步失败（权限、范围、校验、
+    // 状态冲突）经 AuditedOperationExecutor.recordingFailure 落 OpenAPI 声明的 x-audit-event-failure 再原样抛出。
+    public ServiceOrderController(ServiceOrderService service, AuditedOperationExecutor operations) {
         this.service = service;
+        this.operations = operations;
     }
 
     private void requireIdempotencyKey(String key) {
@@ -113,8 +118,12 @@ public class ServiceOrderController {
     @PostMapping("/payment-code")
     public ApiResponse<Map<String, String>> setMyPaymentCode(
             @RequestBody @jakarta.validation.Valid com.complex.platform.serviceorder.dto.StaffPaymentCodeRequest request) {
-        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
-        service.setMyPaymentCode(request);
+        String key = request == null ? null : request.idempotencyKey();
+        operations.recordingFailure("service.payment_code.save_failed", "service.order.perform", "staff_payment_code", "new", key, () -> {
+            requireIdempotencyKey(key);
+            service.setMyPaymentCode(request);
+            return null;
+        });
         return ApiResponse.ok(Map.of("status", "saved"));
     }
 

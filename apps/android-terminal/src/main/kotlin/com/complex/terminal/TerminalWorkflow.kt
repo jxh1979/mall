@@ -1,6 +1,6 @@
 package com.complex.terminal
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import java.util.UUID
 
@@ -312,29 +312,34 @@ class TerminalWorkflow(
 
   // -------------------------------------------------------------------------
   // 游乐检修：提交检修记录 -> 主管确认恢复运营。
+  // 第十八批 N 段第 120 条 120-R6（BSM:992「工程师可在授权后填写游乐设施定期检修记录，检修单位作为供应商记录。」；BSM:993）：
+  // 来源终端取本机终端类型（kiosk、staff_work_phone 都在服务端闭集内），检修单位、检修人员必填；定期检修同一设备会反复提交，
+  // 每次提交新幂等键（服务端检修记录号由幂等键派生，固定键会把上一次的记录覆盖）；确认人由服务端取当前登录主管。
   // -------------------------------------------------------------------------
   fun submitAmusementMaintenance(
     projectId: String,
     deviceId: String,
+    maintenanceVendorId: String,
+    engineerName: String,
     result: String,
     exceptionNote: String? = null,
     engineerId: String? = null,
-    engineerName: String? = null,
     locationPointId: String? = null,
   ): AmusementMaintenanceRecord {
     requireOnline()
     val record = api.submitAmusementMaintenance(
       AmusementMaintenanceRecordRequest(
-        idempotencyKey = stableIdempotencyKey("amusement-maintenance", projectId, deviceId, result),
+        idempotencyKey = UUID.randomUUID().toString(),
         projectId = projectId,
         deviceId = deviceId,
         locationPointId = locationPointId ?: store.binding?.locationPointId,
+        maintenanceVendorId = maintenanceVendorId,
         engineerId = engineerId ?: store.session?.staffId,
         engineerName = engineerName,
         maintenanceAt = nowIso(),
         result = result,
         exceptionNote = exceptionNote,
-        sourceTerminal = "android_terminal",
+        sourceTerminal = api.terminalType,
       ),
     )
     store.addEvent(
@@ -350,7 +355,6 @@ class TerminalWorkflow(
 
   fun confirmAmusementMaintenanceResume(
     recordId: String,
-    supervisorConfirmedBy: String? = null,
     remark: String? = null,
   ): AmusementMaintenanceRecord {
     requireOnline()
@@ -358,7 +362,6 @@ class TerminalWorkflow(
       recordId,
       AmusementMaintenanceResumeRequest(
         idempotencyKey = stableIdempotencyKey("amusement-maintenance-resume", recordId),
-        supervisorConfirmedBy = supervisorConfirmedBy ?: store.session?.staffId,
         remark = remark,
       ),
     )

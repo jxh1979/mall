@@ -102,7 +102,7 @@ class AmusementSafetyServiceTests {
         assertThat(repository.noticeSaveCount).isEqualTo(1);
         assertThat(auditEventRepository.events)
                 .extracting(AuditEvent::eventName)
-                .contains("amusement.safety_notice.created");
+                .contains("amusement.safety_notice.create");
     }
 
     @Test
@@ -127,7 +127,7 @@ class AmusementSafetyServiceTests {
         assertThat(repository.acknowledgementSaveCount).isEqualTo(1);
         assertThat(auditEventRepository.events)
                 .extracting(AuditEvent::eventName)
-                .contains("amusement.waiver.acknowledged");
+                .contains("amusement.waiver.acknowledge");
     }
 
     @Test
@@ -153,7 +153,7 @@ class AmusementSafetyServiceTests {
         assertThat(repository.actions.getFirst().actionType()).isEqualTo("created");
         assertThat(auditEventRepository.events)
                 .extracting(AuditEvent::eventName)
-                .contains("amusement.incident.created");
+                .contains("amusement.incident.create");
     }
 
     @Test
@@ -163,7 +163,7 @@ class AmusementSafetyServiceTests {
         service.createIncident(incidentRequest("incident-autopause")); // severity=high, projectId=prj_1
         assertThat(repository.projectOpenStatus.get("prj_1")).isEqualTo("paused");
         assertThat(auditEventRepository.events)
-                .filteredOn(e -> "amusement.incident.created".equals(e.eventName()))
+                .filteredOn(e -> "amusement.incident.create".equals(e.eventName()))
                 .isNotEmpty();
     }
 

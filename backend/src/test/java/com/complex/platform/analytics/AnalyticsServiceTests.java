@@ -1,6 +1,6 @@
 package com.complex.platform.analytics;
 
-// 文件版本：V0.06
+// 文件版本：V0.07
 
 import com.complex.platform.support.InMemoryIdempotencyRepository;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -120,7 +120,7 @@ class AnalyticsServiceTests {
                         "analytics.ai_quality_task.viewed",
                         "analytics.customer_intent.viewed",
                         "analytics.dashboard_viewed",
-                        "analytics.business_metric_snapshot.viewed",
+                        "analytics_business_metric_snapshot.viewed.success",
                         "analytics.merchant_health.viewed",
                         "analytics.merchant_summary.viewed",
                         "analytics.metric_anomaly.viewed",
@@ -1421,7 +1421,8 @@ class AnalyticsServiceTests {
         var exportFiles = mock(com.complex.platform.security.ExportFileService.class);
         when(exportFiles.create(any(), any(), any(), any(), any()))
                 .thenReturn(new com.complex.platform.security.ExportFileService.ExportFile("exp_test", "月度经营对比.pdf", new byte[0]));
-        return new AnalyticsController(service, authorizationService, mock(OperatingParamsService.class), exportFiles);
+        return new AnalyticsController(service, authorizationService, mock(OperatingParamsService.class), exportFiles,
+                new com.complex.platform.evidence.AuditedOperationExecutor(null, mock(com.complex.platform.evidence.AuditEventService.class)));
     }
 
     /** 归属 org_a 的账号经给定角色持有各角色所列的权限码，并以其身份登录。 */

@@ -1,6 +1,6 @@
 package com.complex.platform.energy;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static com.complex.platform.common.api.ApiRequests.requireIdempotencyKey;
 
@@ -30,10 +30,15 @@ public class EnergyController {
 
     private final EnergyService service;
     private final AuthorizationService authorizationService;
+    private final com.complex.platform.evidence.AuditedOperationExecutor operations;
 
-    public EnergyController(EnergyService service, AuthorizationService authorizationService) {
+    // 第十八批 N 段第 124 条 124-R4（PGM L738）：能源费结算任一步失败（权限、幂等键、账期与出账校验）经 AuditedOperationExecutor.recordingFailure
+    // 落 OpenAPI 声明的 energy.fee_settle_failed 再原样抛出；成功事件照旧由服务层写。
+    public EnergyController(EnergyService service, AuthorizationService authorizationService,
+            com.complex.platform.evidence.AuditedOperationExecutor operations) {
         this.service = service;
         this.authorizationService = authorizationService;
+        this.operations = operations;
     }
 
     @GetMapping("/meters")
@@ -85,8 +90,12 @@ public class EnergyController {
 
     @PostMapping({"/settlements/energy-fee", "/settle-energy-fee"})
     public ApiResponse<List<EnergyFeeSettlementRecord>> settleEnergyFee(@RequestBody @jakarta.validation.Valid EnergySettleRequest request) {
-        authorizationService.requirePermission(READING_PERM);
-        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
-        return ApiResponse.ok(service.settleEnergyFee(request.period(), request.idempotencyKey()));
+        String key = request == null ? null : request.idempotencyKey();
+        return ApiResponse.ok(operations.recordingFailure("energy.fee_settle_failed", READING_PERM, "energy_fee",
+                request == null ? null : request.period(), key, () -> {
+                    authorizationService.requirePermission(READING_PERM);
+                    requireIdempotencyKey(key);
+                    return service.settleEnergyFee(request.period(), key);
+                }));
     }
 }

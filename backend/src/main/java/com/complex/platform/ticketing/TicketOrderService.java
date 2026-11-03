@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.09
+// 文件版本：V0.10
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -57,6 +57,11 @@ public class TicketOrderService {
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     @org.springframework.context.annotation.Lazy
     KioskBuyerVerifier kioskBuyerVerifier;
+
+    // 第十八批 N 段第 120 条 120-R2：一体机售票闸按设备台账判本机是否启用售票、所属哪家商户（@Lazy 断开构造环）。未注入即不能一体机售票（fail-closed）。
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    @org.springframework.context.annotation.Lazy
+    com.complex.platform.terminal.TerminalDeviceService terminalDeviceService;
 
     private final TicketingRepository repository;
     private final TicketPricingService pricingService;
@@ -145,6 +150,7 @@ public class TicketOrderService {
         String buyerCustomerId = trimToNull(actual.customerId());
         String buyerPhone = trimToNull(actual.buyerPhone());
         String requestedChannel = trimToNull(actual.salesChannel());
+        requireKioskSale(actual, requestedChannel);
         if ("kiosk".equals(requestedChannel)) {
             // ROOT-03-R29（BSM 第 986 行「客人用手机号短信验证绑定，在官方 App/小程序查看门票」）：一体机辅助购票必录客人手机号并当场核验，
             // 核验在任何扣库存之前；已注册会员直接归本人，未注册的注册时再按手机号归集。
@@ -255,8 +261,13 @@ public class TicketOrderService {
     }
 
     // 行级隔离（V135）：订单列表按调用方 scope 过滤——平台（scope 空）看全部，商户仅看自身受理的订单。
-    List<TicketOrderRecord> listOrdersInScope() {
+    // 第十八批 N 段第 120 条 120-R2（DEC-R7-05「售票型触摸屏一体机能力补「订单查询」」）：带购票手机号时只列该号的订单（去空格横线后按盲索引查，范围口径不变）。
+    List<TicketOrderRecord> listOrdersInScope(String buyerPhone) {
         String scope = resolveMerchantId();
+        String phone = buyerPhone == null ? null : trimToNull(buyerPhone.replaceAll("[\\s-]", ""));
+        if (phone != null) {
+            return repository.listTicketOrdersByBuyerPhone(phone, scope);
+        }
         return scope == null ? repository.listTicketOrders() : repository.listTicketOrdersByMerchant(scope);
     }
 
@@ -907,6 +918,40 @@ public class TicketOrderService {
             }
         }
         return full;
+    }
+
+    /**
+     * 第十八批 N 段第 120 条 120-R2（BSM:980「……其中只有启用售票能力的一体机，才允许授权服务人员在到店服务场景下辅助客人购票。」；BSM:986「……在某个酒吧门口或
+     * 前台售票时，只能售卖该酒吧的单店门票，不得售卖综合体通票。」；BSM:1947「……一体机必须绑定点位、限制可售票种，并记录服务人员、设备、点位、购票原因、支付和出票。」）：
+     * 可信终端是一体机或自报一体机渠道时两者须同时成立（一体机上只能按一体机渠道下单，别的终端不得报一体机渠道），且本机已启用售票（售票型、后台开了本机售票开关）；
+     * 须填售票原因；本机所属商户是酒吧时只卖该酒吧的单店门票，没有所属商户或不是酒吧时只按员工范围（resolveOrderBarId）。放在短信核验与扣库存之前，拒单不动库存。
+     */
+    private void requireKioskSale(TicketOrderRequest request, String requestedChannel) {
+        java.util.Optional<com.complex.platform.gate.TerminalIdentityHolder.VerifiedTerminal> terminal =
+                com.complex.platform.gate.TerminalIdentityHolder.current();
+        boolean kioskTerminal = terminal.map(t -> "kiosk".equals(t.terminalType())).orElse(false);
+        boolean kioskChannel = "kiosk".equals(requestedChannel);
+        if (!kioskTerminal && !kioskChannel) {
+            return;
+        }
+        String deviceId = terminal.map(com.complex.platform.gate.TerminalIdentityHolder.VerifiedTerminal::deviceId).orElse(null);
+        com.complex.platform.terminal.TerminalDeviceRecord device = kioskTerminal && kioskChannel && deviceId != null && terminalDeviceService != null
+                ? terminalDeviceService.ticketingKiosk(deviceId).orElse(null) : null;
+        if (device == null) {
+            throw ApiException.forbidden("KIOSK_TICKETING_DISABLED", "只有启用售票能力的一体机才能辅助售票");
+        }
+        if (trimToNull(request.operatorNote()) == null) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "一体机售票须填写售票原因");
+        }
+        String deviceMerchant = trimToNull(device.merchantId());
+        boolean barKiosk = deviceMerchant != null && barDirectory != null && barDirectory.findMerchant(deviceMerchant)
+                .map(merchant -> "bar".equals(merchant.merchantType())).orElse(false);
+        if (barKiosk) {
+            TicketTypeRecord ticketType = repository.findTicketTypeById(requireText(request.ticketTypeId(), "ticket_type_id")).orElse(null);
+            if (ticketType != null && !deviceMerchant.equals(trimToNull(ticketType.barId()))) {
+                throw ApiException.forbidden("BAR_SCOPE_FORBIDDEN", "本一体机只能售卖本酒吧单店门票");
+            }
+        }
     }
 
     /**

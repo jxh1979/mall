@@ -1,4 +1,4 @@
-// 文件版本：V0.14
+// 文件版本：V0.15
 import type { AdminAccountForm, AdminNavGroup, AdminRoute, PermissionDefinitionRow } from "./types";
 
 export const adminRoutes: AdminRoute[] = [
@@ -109,7 +109,7 @@ export const adminRoutes: AdminRoute[] = [
   { pageId: "ADM-STF-003", label: "税表与专业认定", module: "人事", group: "ops", route: "/admin/staff/tax-brackets", requiredPermissions: ["staff.payroll.manage", "staff.tax_bracket.manage"] },
   { pageId: "ADM-STF-004", label: "员工档案", module: "人事", group: "ops", route: "/admin/staff/profiles", requiredPermissions: ["staff.profile.view"] },
   { pageId: "ADM-SVC-001", label: "服务点单", module: "服务", group: "ops", route: "/admin/services/orders", requiredPermissions: ["service.catalog.manage"] },
-  { pageId: "ADM-ANA-003", label: "经营参数", module: "分析", group: "overview", route: "/admin/analytics/operating-params", requiredPermissions: ["analytics.dashboard.view"] },
+  { pageId: "ADM-ANA-003", label: "经营参数", module: "分析", group: "overview", route: "/admin/analytics/operating-params", requiredPermissions: ["analytics.dashboard.view", "platform.sensitive_operation_range.manage"] },
   { pageId: "ADM-ANA-010", label: "AI阈值", module: "分析", group: "overview", route: "/admin/analytics/ai-thresholds", requiredPermissions: ["analytics.dashboard.view"] },
   { pageId: "ADM-ANA-011", label: "提醒与留存天数配置", module: "分析", group: "overview", route: "/admin/analytics/notification-windows", requiredPermissions: ["analytics.dashboard.view"] },
   { pageId: "ADM-MER-003", label: "我的账单", module: "商户专区", group: "merchant", route: "/admin/merchant-zone/bills", requiredPermissions: ["merchant.billing.view"], accountForms: ["merchant"] },

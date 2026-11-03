@@ -139,7 +139,7 @@ public class AuditEventService {
                 actorType,
                 actorId,
                 authContext,
-                "web",
+                com.complex.platform.gate.TerminalIdentityHolder.auditTerminal(),
                 permissionCode,
                 businessType,
                 businessId,

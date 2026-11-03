@@ -1,5 +1,5 @@
 package com.complex.platform.governance;
-// 文件版本：V0.06
+// 文件版本：V0.07
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -454,7 +454,8 @@ class PlatformControllerTests {
         when(repository.markSingleUsePermissionConsumed(eq("phone_once_grant"), any(), eq("phone_once"), any()))
                 .thenAnswer(call -> consumed.compareAndSet(false, true));
         var authorization = new AuthorizationService(repository);
-        var controller = new PlatformController(service, authorization, Mockito.mock(VenueBusinessHoursService.class));
+        var controller = new PlatformController(service, authorization, Mockito.mock(VenueBusinessHoursService.class),
+                new com.complex.platform.evidence.AuditedOperationExecutor(null, Mockito.mock(com.complex.platform.evidence.AuditEventService.class)));
         var merchant = new MerchantRecord("mch_once", "商户", "other", null, null, null,
                 "甲", "18800000011", null, null, null, null, "乙", "18800000013",
                 null, null, "active", Instant.EPOCH, Instant.EPOCH).withProject("project_a"); // 18E 19-R3：明文按行所属项目判
@@ -511,6 +512,11 @@ class PlatformControllerTests {
 
     @TestConfiguration
     static class TestBeans {
+        // 第十八批 N 段第 124 条 124-R5：控制器写口经 AuditedOperationExecutor.recordingFailure 落失败事件，切片里给真执行器（留痕服务为桩）
+        @Bean
+        com.complex.platform.evidence.AuditedOperationExecutor auditedOperationExecutor() {
+            return new com.complex.platform.evidence.AuditedOperationExecutor(null, Mockito.mock(com.complex.platform.evidence.AuditEventService.class));
+        }
         @Bean
         PlatformService platformService() {
             return Mockito.mock(PlatformService.class);

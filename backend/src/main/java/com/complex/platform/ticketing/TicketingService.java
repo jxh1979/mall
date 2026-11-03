@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.06
+// 文件版本：V0.07
 
 import com.complex.platform.common.api.ApiException;
 
@@ -47,6 +47,13 @@ public class TicketingService {
     // TK-05-R2/R3 通票安全例外（字段注入免改既有构造点；生产恒注入）。
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     TicketSafetyExceptionService safetyExceptionService;
+    // 第十八批 N 段第 123 条 123-R2：敏感操作定位闸（字段注入免改构造点；单测未注入即不查）。
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    com.complex.platform.gate.SensitiveLocationGuard locationGuard;
+    // 第十八批 N 段第 120 条 120-R2：一体机售票下单留痕记终端、设备与点位（字段注入免改构造点；单测未注入即不记）。
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    @org.springframework.context.annotation.Lazy
+    com.complex.platform.terminal.TerminalDeviceService terminalDeviceService;
 
     @org.springframework.beans.factory.annotation.Autowired
     public TicketingService(
@@ -501,8 +508,26 @@ public class TicketingService {
                 request,
                 TicketOrderRecord.class,
                 TicketingWriteOperation.CREATE_TICKET_ORDER,
-                () -> orderService.createOrder(request)
+                () -> orderService.createOrder(request),
+                kioskSaleMetadata(request)
         );
+    }
+
+    /**
+     * 第十八批 N 段第 120 条 120-R2（BSM:999「……并把购票、支付、出票和售票原因写入留痕。」；BSM:1947「……记录服务人员、设备、点位、购票原因、支付和出票。」）：
+     * 一体机售票的下单留痕记售票原因与可信终端、设备号、绑定点位（服务人员＝留痕操作人；付款、出票留痕沿用各自事件）；其他渠道不记。执行前组好。
+     */
+    private java.util.Map<String, Object> kioskSaleMetadata(TicketOrderRequest request) {
+        if (request == null || !"kiosk".equals(com.complex.platform.common.Strings.trimToNull(request.salesChannel()))
+                || terminalDeviceService == null) {
+            return java.util.Map.of();
+        }
+        java.util.Map<String, Object> metadata = terminalDeviceService.terminalTraceMetadata();
+        String reason = com.complex.platform.common.Strings.trimToNull(request.operatorNote());
+        if (reason != null) {
+            metadata.put("sale_reason", reason);
+        }
+        return metadata;
     }
 
     /**
@@ -566,6 +591,20 @@ public class TicketingService {
                 TicketingWriteOperation.CREATE_TICKET_ORDER_PAY_INTENT,
                 () -> orderService.createPaymentIntent(id, request)
         );
+    }
+
+    /**
+     * 第十八批 N 段第 123 条 123-R2（BSM:1630）：现场确认票款（控制器入口）先过敏感操作定位闸再走原方法。第三方通票回流
+     * （TicketingChannelTicketIssueAdapter）直接调原方法登记渠道收款：客人已在渠道付讫、没有本系统的操作设备，不查位置。
+     */
+    @com.complex.platform.gate.GuardedAction(capability = "finance.payment.register")
+    @Transactional
+    public TicketOrderRecord confirmTicketOrderPaymentOnSite(String orderId, ConfirmTicketOrderPaymentRequest request) {
+        if (locationGuard != null) {
+            locationGuard.check("confirmTicketOrderPayment",
+                    () -> repository.findTicketOrderById(orderId).map(TicketOrderRecord::projectId).orElse(null));
+        }
+        return confirmTicketOrderPayment(orderId, request);
     }
 
     @com.complex.platform.gate.GuardedAction(capability = "finance.payment.register")
@@ -738,11 +777,12 @@ public class TicketingService {
         );
     }
 
-    public PageResponse<TicketOrderRecord> listTicketOrders() {
+    public PageResponse<TicketOrderRecord> listTicketOrders(String buyerPhone) {
         // 行级隔离（V135）：按调用方 scope 过滤——平台看全部、商户仅见自身受理订单（堵 ticket.order.read 下放后的跨租户泄露）。
+        // 第十八批 N 段 120-R2：带购票手机号时只列该号订单（一体机订单查询）。
         return operations.readPage(
                 TicketingReadOperation.LIST_TICKET_ORDERS,
-                orderService::listOrdersInScope
+                () -> orderService.listOrdersInScope(buyerPhone)
         );
     }
 
@@ -1089,6 +1129,9 @@ public class TicketingService {
     @Transactional
     public VerificationResponse createVerification(VerificationRequest request) {
         verificationService.requireAmusementRequestScope(request);
+        if (locationGuard != null) {
+            locationGuard.check("createTicketVerification", () -> verificationService.requestProjectId(request));
+        }
         VerificationResponse result = operations.executeWrite(
                 "createTicketVerification",
                 request == null ? null : request.idempotencyKey(),

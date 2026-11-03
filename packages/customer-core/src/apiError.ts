@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 // 两端（后台 adminClient / 客人端 customerClient）共用的接口错误翻译层。
 // 目标：err.message 一律是中文业务话术（62 页现有 err.message 渲染点自动受益），
 // 技术信息（path/status/request_id/原始报文）收进 err.detail，由 UI 折叠展示供报障。
@@ -189,6 +189,10 @@ function translate(
   }
 
   if (status === 401 || code === "UNAUTHORIZED") return "登录已过期，请重新登录";
+  // 第十八批 N 段第 123 条 123-R3：定位闸拒绝原样显示后端中文提示（未取得定位、不在授权范围内），不套「无权」。
+  if ((detailCode === "SENSITIVE_OPERATION_LOCATION_REQUIRED" || detailCode === "SENSITIVE_OPERATION_OUT_OF_RANGE") && hasChinese(backendMessage)) {
+    return backendMessage as string;
+  }
   if (status === 403 || code === "FORBIDDEN") return "当前账号无权进行此操作";
   if (status === 404 || code === "NOT_FOUND") return "数据不存在或已被删除";
 

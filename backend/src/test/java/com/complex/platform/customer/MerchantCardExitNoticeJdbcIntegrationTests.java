@@ -1,7 +1,8 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.contains;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -121,6 +122,14 @@ class MerchantCardExitNoticeJdbcIntegrationTests {
     void merchantCardFundModeOnlyMerchantPrepaid() throws Exception {
         cardConfig("platform_collect").andExpect(status().isBadRequest()).andExpect(jsonPath("$.detail_code").value("VALIDATION_FAILED"));
         cardConfig("merchant_prepaid").andExpect(status().isOk()).andExpect(jsonPath("$.data.fund_ownership").value("merchant_prepaid"));
+        // 第十八批 N 段第 124 条 124-R5（PGM L966「已拍板：所有有过程的业务动作都必须留痕……」、L738；OpenAPI configureStoredValueMerchantCard 的
+        // x-audit-event-success / failure）：被拒的一次落 stored_value.merchant_card_config_failed，成功的一次落 stored_value.merchant_card_configured
+        assertThat(jdbc.queryForList("""
+                SELECT event_name || '|' || event_result || '|' || permission_code || '|' || coalesce(metadata->>'error_code', '')
+                  FROM audit_events WHERE event_name LIKE 'stored_value.merchant_card_%' AND business_type = 'merchant' AND business_id = ?""",
+                String.class, shopId)).containsExactlyInAnyOrder(
+                "stored_value.merchant_card_config_failed|failure|customer.stored_value.refund|VALIDATION_FAILED",
+                "stored_value.merchant_card_configured|success|customer.stored_value.refund|");
     }
 
     // ---------- helpers ----------

@@ -1,4 +1,4 @@
-// 文件版本：V0.09
+// 文件版本：V0.10
 import React from "react";
 import { QRCodeSVG } from "qrcode.react";
 import { BarServiceResponsibilityPanel } from "./BarServiceResponsibilityPanel";
@@ -639,9 +639,9 @@ export function BarTableSessionsPage({ api, setActionResult, setGlobalError, eff
         ) : (
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="bar-reservations-table">
-            <thead><tr><th>选择</th><th>预定号</th><th>卡座</th><th>人数</th><th>定金状态</th><th>状态</th><th>详情</th></tr></thead>
+            <thead><tr><th>选择</th><th>预定号</th><th>卡座</th><th>人数</th><th>订台备注</th><th>定金状态</th><th>状态</th><th>详情</th></tr></thead>
             <tbody>{reservations.length === 0 ? (
-              <tr><td colSpan={7} className="admin-muted-action">暂无订台预定</td></tr>
+              <tr><td colSpan={8} className="admin-muted-action">暂无订台预定</td></tr>
             ) : pagedReservations.pageRows.map((row) => (
               <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`bar-reservation-row-${row.id}`}
                 onClick={() => openReservationDetail(row)}
@@ -650,6 +650,7 @@ export function BarTableSessionsPage({ api, setActionResult, setGlobalError, eff
                 <td>{row.id}</td>
                 <td>{row.tableId ?? "-"}</td>
                 <td>{row.guestCount ?? "-"}</td>
+                <td>{row.remark ?? "-"}</td>
                 <td>{formatBusinessStatus(row.depositStatus)}</td>
                 <td>{formatBusinessStatus(row.status)}</td>
               <td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看订台预定详情" onClick={(event) => { event.stopPropagation(); openReservationDetail(row); }}>查看详情</button></td></tr>

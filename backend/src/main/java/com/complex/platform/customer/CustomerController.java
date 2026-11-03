@@ -1,6 +1,6 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.07
+// 文件版本：V0.08
 import static com.complex.platform.common.api.ApiRequests.requireIdempotencyKey;
 
 import com.complex.platform.bar.BarReservationInvitationMemberRecord;
@@ -16,6 +16,7 @@ import com.complex.platform.customer.dto.CustomerConsentRequest;
 import com.complex.platform.customer.dto.CustomerPhoneLoginRequest;
 import com.complex.platform.customer.dto.CustomerPointsRedemptionRequest;
 import com.complex.platform.customer.dto.CustomerTicketOrderRequest;
+import com.complex.platform.evidence.AuditedOperationExecutor;
 import com.complex.platform.ticketing.TicketCredentialResponse;
 import com.complex.platform.ticketing.TicketOrderRecord;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -38,10 +39,14 @@ public class CustomerController {
     // 生产环境强制会话 cookie Secure：即便 request.isSecure() 因反代配置误判为 http，
     // prod 也钉死 secure=true（dev/local 保持依赖 isSecure，便于本地 http 调试）。
     private final boolean forceSecureCookie;
+    private final AuditedOperationExecutor operations;
 
+    // 第十八批 N 段第 124 条 124-R5（PGM L738「访问被拒绝也要留痕，便于排查是权限问题还是开关问题。」）：写口任一步失败（权限、范围、校验、
+    // 状态冲突）经 AuditedOperationExecutor.recordingFailure 落 OpenAPI 声明的 x-audit-event-failure 再原样抛出。
     public CustomerController(CustomerService service, org.springframework.core.env.Environment environment,
-            org.springframework.beans.factory.ObjectProvider<CustomerTerms> terms) {
+            org.springframework.beans.factory.ObjectProvider<CustomerTerms> terms, AuditedOperationExecutor operations) {
         this.service = service;
+        this.operations = operations;
         this.terms = terms.getIfAvailable();
         this.forceSecureCookie = environment.acceptsProfiles(org.springframework.core.env.Profiles.of("prod"));
     }
@@ -92,7 +97,10 @@ public class CustomerController {
             jakarta.servlet.http.HttpServletResponse httpResponse) {
         // 头 token（App/小程序）或 cookie（web，经 CustomerSessionCookieFilter 桥接为 X-Customer-Token）都撤销服务端会话，
         // 令泄漏/复制的 token 在登出后立即失效，而非仅靠客户端丢弃本地凭证。
-        service.logout(resolveCustomerToken(customerToken, authorization));
+        operations.recordingFailure("customer.logout_failed", "public", "customer", null, null, () -> {
+            service.logout(resolveCustomerToken(customerToken, authorization));
+            return null;
+        });
         httpResponse.addHeader("Set-Cookie", sessionCookie("", 0, forceSecureCookie || httpRequest.isSecure()));
         return ApiResponse.ok(null);
     }
@@ -413,8 +421,8 @@ public class CustomerController {
             @RequestHeader(name = "Authorization", required = false) String authorization,
             @PathVariable("transfer_id") String transferId
     ) {
-        return ApiResponse.ok(service.revokeTicketTransfer(
-                requireCustomerToken(customerToken, authorization), transferId));
+        return ApiResponse.ok(operations.recordingFailure("ticket_transfer.revoke_failed", "not_applicable", "ticket_transfer",
+                transferId, null, () -> service.revokeTicketTransfer(requireCustomerToken(customerToken, authorization), transferId)));
     }
 
     @GetMapping("/ticket-transfers/preview")

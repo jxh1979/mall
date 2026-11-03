@@ -1,4 +1,4 @@
-// 文件版本：V0.03
+// 文件版本：V0.04
 package com.complex.platform.analytics;
 
 import static org.mockito.ArgumentMatchers.any;
@@ -426,6 +426,11 @@ class AnalyticsControllerTests {
 
     @TestConfiguration
     static class TestBeans {
+        // 第十八批 N 段第 124 条 124-R5：控制器写口经 AuditedOperationExecutor.recordingFailure 落失败事件，切片里给真执行器（留痕服务为桩）
+        @Bean
+        com.complex.platform.evidence.AuditedOperationExecutor auditedOperationExecutor() {
+            return new com.complex.platform.evidence.AuditedOperationExecutor(null, Mockito.mock(com.complex.platform.evidence.AuditEventService.class));
+        }
         @Bean
         AnalyticsService analyticsService() {
             return Mockito.mock(AnalyticsService.class);

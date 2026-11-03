@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: 综合体管理系统 P0 API 契约
-  version: V0.45
+  version: V0.46
   description: P0 首批编码前置契约。本文采用 JSON-compatible YAML，便于与 openapi-p0.json 保持一致。正式后端以 Java 21 + Spring Boot 4.x +
     springdoc-openapi 输出运行时 OpenAPI，并与本契约比对。
 servers:
@@ -124,7 +124,7 @@ paths:
         - web
       x-idempotency-required: false
       x-audit-event-success: permission_template.viewed
-      x-audit-event-failure: permission_template.view_failed
+      x-audit-event-failure: not_applicable
       responses:
         "200":
           $ref: "#/components/responses/Page"
@@ -271,7 +271,7 @@ paths:
         - web
       x-idempotency-required: false
       x-audit-event-success: permission.viewed
-      x-audit-event-failure: permission.view_failed
+      x-audit-event-failure: not_applicable
       responses:
         "200":
           $ref: "#/components/responses/Page"
@@ -292,7 +292,7 @@ paths:
         - web
       x-idempotency-required: false
       x-audit-event-success: role.viewed
-      x-audit-event-failure: role.view_failed
+      x-audit-event-failure: not_applicable
       responses:
         "200":
           $ref: "#/components/responses/Page"
@@ -339,7 +339,7 @@ paths:
         - web
       x-idempotency-required: false
       x-audit-event-success: access.role_project_options.viewed
-      x-audit-event-failure: access.role_project_options.view_failed
+      x-audit-event-failure: not_applicable
       x-auth-context: staff-token
       description: M736。建角色时逐个勾选可查看项目用的候选清单：项目、城市项目公司、在用的域主管公司三类各自成条，每条含 id（编号）、name（名称）、kind（类别，取
         project、project_company、management_company）。具备 access.role.manage 的人看到全部候选，不按本人所属项目收窄（能配置角色的人都可以设置这一项）。
@@ -362,7 +362,7 @@ paths:
         - web
       x-idempotency-required: false
       x-audit-event-success: role.viewable_projects.viewed
-      x-audit-event-failure: role.viewable_projects.view_failed
+      x-audit-event-failure: not_applicable
       x-auth-context: staff-token
       description: M736。返回 role_id、view_all_projects、viewable_project_ids、pending_removal_ids（减少在待审的条目，"*"
         指可以查看全部项目）、pending_reapprovals（还没重新审批的持有人：user_id、username、viewable_ids、reapproval_pending）。项目角色须在操作人可触及的项目内，平台角色只有平台管理员可读，否则
@@ -492,7 +492,7 @@ paths:
         - web
       x-idempotency-required: false
       x-audit-event-success: access.user.viewed
-      x-audit-event-failure: access.user.viewed_failed
+      x-audit-event-failure: not_applicable
       responses:
         "200":
           $ref: "#/components/responses/Page"
@@ -832,6 +832,43 @@ paths:
         "400":
           $ref: "#/components/responses/Error"
         "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
+  /api/v1/amusement/projects/status-board:
+    get:
+      tags:
+        - amusement
+      operationId: listAmusementProjectStatusBoard
+      summary: 查看游乐设施状态看板
+      description: "第十八批 N 段第 120 条 120-R5（BSM 第 991 行「查看游乐设施状态：开放、排队、容量、暂停、关闭、故障、维护或安全提醒。」；BSM 第 1268 行「通过触摸屏一体机展示游乐设施开放、排队、容量、暂停、故障和维护状态。」；BSM 第 1004 行「……一体机的下单、领取、状态检查和异常提示都要记录设备、点位和时间。」）：一体机游乐设施状态屏读本接口，与查询游乐项目同权限、同范围。每个项目一行：开放状态 open_status、容量 capacity、在玩人数 occupied_count（项目维容量快照，没有即 0）、排队人数 waiting_count（排队中）、维护中设备数 maintenance_device_count、未结故障数 fault_count（故障事件已登记、处理中、待外部）、当前生效的安全提醒标题 safety_notices；不含客人编号与排队号。读取留痕 amusement.status_board.viewed 的 metadata 记可信终端 terminal_type、设备号 device_id 与该设备在设备台账上的绑定点位 point_id（有才记），即状态检查记录。"
+      x-permission: amusement.session.view
+      x-data-scope: project-amusement
+      x-terminal-allowed:
+        - web
+        - kiosk
+      x-idempotency-required: false
+      x-audit-event-success: amusement.status_board.viewed
+      x-audit-event-failure: amusement.status_board.view_failed
+      responses:
+        "200":
+          description: 统一分页响应；items 为 AmusementProjectStatus。
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/PageResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          items:
+                            type: array
+                            items:
+                              $ref: "#/components/schemas/AmusementProjectStatus"
+        "403":
           $ref: "#/components/responses/Error"
         "500":
           $ref: "#/components/responses/Error"
@@ -1319,6 +1356,7 @@ paths:
         整体占用该项目的实时在玩人数容量→留痕。多人票余量不足 N 时整单拒绝并回补权益。（原「占用场次/点位设备/项目安全三维容量」「任一受控维度余量不足」已废止（DEC-R5-2026-08-04-04 / R8 用户裁决
         D-02），待代码轮下线，不得新增调用。现行只按单个项目的实时在玩人数控制容量，排队人数不占用容量——BSM「容量控制」条。）失败码：TICKET_NOT_FOUND(权益不存在/凭证失效)、ENTITLEMENT_EXPIRED(不在有效期)、ENTITLEMENT_USED(非active或剩余次数为0)、ENTITLEMENT_NOT_AMUSEMENT(非游乐类权益)、ENTITLEMENT_NOT_FOR_PROJECT(权益未绑定本项目)、SESSION_CAPACITY_EXHAUSTED(项目容量（实时在玩人数）耗尽，已消费权益回补；原称「场次容量耗尽」，已废止（DEC-R5-2026-08-04-04
         / R8 用户裁决 D-02），待代码轮下线，不得新增调用。机读错误码不变)、PROJECT_NOT_OPEN/SESSION_NOT_OPEN/SAFETY_BLOCKED。项目无绑定配置时回退按游乐类放行。达硬上限（安全容量）阻断并由系统自动停运（项目 paused，记 auto_paused_reason=hard_capacity，停运与 over_capacity 异常在独立事务落库，不随被拒核销回滚）；出场释放使项目实时在玩人数回落到硬上限以下后，由系统自动恢复开放（paused→open，留痕 amusement.project.auto_reopened，triggered_by=system）；高危事故停运与人工状态不自动恢复——BSM「容量分两道」条。
+        第十八批 N 段第 123 条 123-R2（BSM:1630「核销、收款、退款、放行等敏感操作，操作设备定位落在该项目综合体授权范围之外时一律拒绝并留痕」；BSM:1876「Web 端同样适用」）：本操作属敏感操作定位闸的现场动作闭集（第十八批裁决 31）。操作对象所属项目已配授权范围（123-R1）时须带请求头 X-Geo-Latitude、X-Geo-Longitude（设备当下定位，WGS-84 十进制度）：没带或解析不了按范围外处理（裁决 30）返回 403 SENSITIVE_OPERATION_LOCATION_REQUIRED，到圆心距离超过授权半径返回 403 SENSITIVE_OPERATION_OUT_OF_RANGE，拒绝在独立事务里留痕 sensitive_operation.location_rejected（business_id 为本 operationId，业务回滚不丢）；项目没配授权范围不查位置（裁决 32）；判定在幂等之前，重放不能绕过；通过时不存位置。
       x-permission: amusement.verification.execute
       x-failure-codes:
         - TICKET_NOT_FOUND
@@ -1328,12 +1366,17 @@ paths:
         - ENTITLEMENT_NOT_FOR_PROJECT
         - SESSION_CAPACITY_EXHAUSTED
         - SAFETY_INSPECTION_EXPIRED
+        - SENSITIVE_OPERATION_LOCATION_REQUIRED
+        - SENSITIVE_OPERATION_OUT_OF_RANGE
       x-data-scope: project-amusement-point
       x-terminal-allowed:
         - staff_work_phone
       x-idempotency-required: true
       x-audit-event-success: amusement.verification_succeeded
       x-audit-event-failure: amusement.verification_failed
+      parameters:
+        - $ref: "#/components/parameters/GeoLatitude"
+        - $ref: "#/components/parameters/GeoLongitude"
       requestBody:
         $ref: "#/components/requestBodies/Verification"
       responses:
@@ -2315,6 +2358,7 @@ paths:
         - bar
         - finance
       operationId: settleBarBill
+      description: "第十八批 N 段第 123 条 123-R2（BSM:1630「核销、收款、退款、放行等敏感操作，操作设备定位落在该项目综合体授权范围之外时一律拒绝并留痕」；BSM:1876「Web 端同样适用」）：本操作属敏感操作定位闸的现场动作闭集（第十八批裁决 31）。操作对象所属项目已配授权范围（123-R1）时须带请求头 X-Geo-Latitude、X-Geo-Longitude（设备当下定位，WGS-84 十进制度）：没带或解析不了按范围外处理（裁决 30）返回 403 SENSITIVE_OPERATION_LOCATION_REQUIRED，到圆心距离超过授权半径返回 403 SENSITIVE_OPERATION_OUT_OF_RANGE，拒绝在独立事务里留痕 sensitive_operation.location_rejected（business_id 为本 operationId，业务回滚不丢）；项目没配授权范围不查位置（裁决 32）；判定在幂等之前，重放不能绕过；通过时不存位置。"
       summary: 账单结清（可带一张本商户折扣券：核销并原子抵扣应付，一次结账一张）
       x-failure-codes:
         - VOUCHER_NOT_FOUND
@@ -2325,17 +2369,22 @@ paths:
         - VOUCHER_EXPIRED
         - VOUCHER_REVOKED
         - MEMBER_NOT_FOUND
+        - SENSITIVE_OPERATION_LOCATION_REQUIRED
+        - SENSITIVE_OPERATION_OUT_OF_RANGE
       x-permission: finance.payment.register
       x-data-scope: project-bar-table
       x-terminal-allowed:
         - tablet
         - web
+        - kiosk
       x-idempotency-required: true
       x-audit-event-success: bar.bill.settled
       x-audit-event-failure: bar.bill.settle_failed
       parameters:
         - $ref: "#/components/parameters/BillId"
           description: undefined 参数；必须按 OpenAPI 类型、枚举和必填规则校验。
+        - $ref: "#/components/parameters/GeoLatitude"
+        - $ref: "#/components/parameters/GeoLongitude"
       requestBody:
         $ref: "#/components/requestBodies/BarBillSettleRequest"
       responses:
@@ -2356,12 +2405,13 @@ paths:
       x-failure-codes:
         - CONTRACT_SCOPE_VIOLATION
       summary: 点单
-      description: 订单销售取该台位当前开台会话的销售归属，不由请求指定、不取下单人（第十八批 I 段第 86 条，BSM 第 1070 行「只归帮该客人预订的那个人」）；没有开台会话（吧台直点）的订单无销售。
+      description: 订单销售取该台位当前开台会话的销售归属，不由请求指定、不取下单人（第十八批 I 段第 86 条，BSM 第 1070 行「只归帮该客人预订的那个人」）；没有开台会话（吧台直点）的订单无销售。第十八批 N 段第 120 条 120-R4（BSM:1611「订单从哪里来，是官方 App/小程序、第三方、销售人员、一体机还是现场工作台。」；BSM:1004「……一体机的下单、领取、状态检查和异常提示都要记录设备、点位和时间。」）：订单创建终端 created_terminal 取请求的可信终端（没有即 web），可信终端是一体机时订单来源 order_source 记 kiosk（其余 staff），有可信设备号即记 device_id；一体机吧台买酒按本机酒吧的吧台位下单（吧台位不建出品票），再经 POST /api/v1/bar/orders/{order_id}/bill 生成待支付账单。
       x-permission: bar.order.create
       x-data-scope: project-bar-table
       x-terminal-allowed:
         - tablet
         - web
+        - kiosk
       x-idempotency-required: true
       x-audit-event-success: bar.order_created
       x-audit-event-failure: bar.order_create_failed
@@ -2410,6 +2460,7 @@ paths:
       x-data-scope: project
       x-terminal-allowed:
         - web
+        - kiosk
       x-idempotency-required: true
       x-audit-event-success: bar.bill.created
       x-audit-event-failure: bar.bill.created_failed
@@ -2600,11 +2651,12 @@ paths:
         "500":
           $ref: "#/components/responses/Error"
       x-auth-context: staff-token
-      description: 员工代客订台。latest_arrival_at 必填（BSM 第 1062 行）；customer_phone 必填（操作员裁决第十三批第 7 条「员工代订必须录入客人手机号；查到会员且受限就拒绝，查不到会员的照常代订」，受限 403 CUSTOMER_RESTRICTED，手机号核对后去掉空格与横线加密留存，只作订台短信收件人、不回显）；去掉空格与横线后须为 11 位手机号，否则 400 VALIDATION_FAILED。提交成功即占台；ROOT-03-R19（ENUM 第 100 行「一个台位同一时刻只能存在一笔有效预留（排他锁，不是展示标记）……冲突时先支付定金者得；员工代订不得覆盖已付定金的自助订单；两笔员工代订相撞先提交者得」）：台位已被有效预留占着或已开台、待清台、停用时 409 BAR_TABLE_ALREADY_RESERVED。整笔不落库。第十四批 OBS-13-03（BSM 第 1596 行「订台成功确认（员工代订的同时向客人知会代订人与订台内容）」）：提交成功即给录入的手机号发订台成功确认短信，并知会代订人（员工档案姓名）。第十八批 C 段第 15 条：员工代订一律免收定金（BSM L1062「员工代客订台不收定金……没有支付动作的，支付时间就空着」），deposit_status=staff_waived（免收（员工代订），ENUM L103）、deposit_amount_cent=0、无付款意向，不看定金规则；经手员工＝salesperson_user_id，不填即本人代订；经手员工的代订权限因本自然月爽约率超过本酒吧上限已停用（BSM L1468）时 403 BAR_STAFF_BOOKING_SUSPENDED，整笔不落库。超过最晚到店时间未到店、由系统自动释放的员工代订记一笔爽约到经手员工名下（no_show_at），客人自助订台不记。
+      description: 员工代客订台。latest_arrival_at 必填（BSM 第 1062 行）；customer_phone 必填（操作员裁决第十三批第 7 条「员工代订必须录入客人手机号；查到会员且受限就拒绝，查不到会员的照常代订」，受限 403 CUSTOMER_RESTRICTED，手机号核对后去掉空格与横线加密留存，只作订台短信收件人、不回显）；去掉空格与横线后须为 11 位手机号，否则 400 VALIDATION_FAILED。提交成功即占台；ROOT-03-R19（ENUM 第 100 行「一个台位同一时刻只能存在一笔有效预留（排他锁，不是展示标记）……冲突时先支付定金者得；员工代订不得覆盖已付定金的自助订单；两笔员工代订相撞先提交者得」）：台位已被有效预留占着或已开台、待清台、停用时 409 BAR_TABLE_ALREADY_RESERVED。整笔不落库。第十四批 OBS-13-03（BSM 第 1596 行「订台成功确认（员工代订的同时向客人知会代订人与订台内容）」）：提交成功即给录入的手机号发订台成功确认短信，并知会代订人（员工档案姓名）。第十八批 C 段第 15 条：员工代订一律免收定金（BSM L1062「员工代客订台不收定金……没有支付动作的，支付时间就空着」），deposit_status=staff_waived（免收（员工代订），ENUM L103）、deposit_amount_cent=0、无付款意向，不看定金规则；经手员工＝salesperson_user_id，不填即本人代订；经手员工的代订权限因本自然月爽约率超过本酒吧上限已停用（BSM L1468）时 403 BAR_STAFF_BOOKING_SUSPENDED，整笔不落库。超过最晚到店时间未到店、由系统自动释放的员工代订记一笔爽约到经手员工名下（no_show_at），客人自助订台不记。第十八批 N 段第 120 条 120-R3（BSM:987「支持订台下单：选择酒吧、日期、时段、卡座/桌台/吧台位、人数和订台备注；订台需要支付定金。」；BSM:1023「订台订单必须记录定金、订台来源、销售人员或设备来源、到店和取消结果。」）：可信终端是一体机时按一体机订台——同样核对受限会员（403 CUSTOMER_RESTRICTED）并留存客人手机号，台位已被有效预留占着或已开台、待清台、停用时 409 BAR_TABLE_ALREADY_RESERVED；定金按本酒吧定金规则算（与客人自助订台同一公式），算出无定金可付时 409 BAR_SELF_RESERVATION_UNAVAILABLE；deposit_status=pending、order_source=kiosk、created_terminal=kiosk、device_id＝本机设备号、sales_staff_id 为空（不记销售，超时释放只没收已付定金、不记爽约），创建时不占台、不发员工代订知会，登记定金（pay-deposit）时才占台。remark 订台备注（选填）两种来源都落库，随订台记录返回。
       x-failure-codes:
         - BAR_TABLE_ALREADY_RESERVED
         - CUSTOMER_RESTRICTED
         - BAR_STAFF_BOOKING_SUSPENDED
+        - BAR_SELF_RESERVATION_UNAVAILABLE
     get:
       tags:
         - bar
@@ -2632,6 +2684,7 @@ paths:
       tags:
         - bar
       operationId: checkInBarReservationGuest
+      description: "第十八批 N 段第 123 条 123-R2（BSM:1630「核销、收款、退款、放行等敏感操作，操作设备定位落在该项目综合体授权范围之外时一律拒绝并留痕」；BSM:1876「Web 端同样适用」）：本操作属敏感操作定位闸的现场动作闭集（第十八批裁决 31）。操作对象所属项目已配授权范围（123-R1）时须带请求头 X-Geo-Latitude、X-Geo-Longitude（设备当下定位，WGS-84 十进制度）：没带或解析不了按范围外处理（裁决 30）返回 403 SENSITIVE_OPERATION_LOCATION_REQUIRED，到圆心距离超过授权半径返回 403 SENSITIVE_OPERATION_OUT_OF_RANGE，拒绝在独立事务里留痕 sensitive_operation.location_rejected（business_id 为本 operationId，业务回滚不丢）；项目没配授权范围不查位置（裁决 32）；判定在幂等之前，重放不能绕过；通过时不存位置。"
       summary: 卡座免通票入场名额核销
       x-permission: bar.table.guest_checkin
       x-data-scope: project-bar
@@ -2640,9 +2693,14 @@ paths:
       x-idempotency-required: true
       x-audit-event-success: bar.table_guest.checked_in
       x-audit-event-failure: bar.table_guest.rejected
+      x-failure-codes:
+        - SENSITIVE_OPERATION_LOCATION_REQUIRED
+        - SENSITIVE_OPERATION_OUT_OF_RANGE
       parameters:
         - $ref: "#/components/parameters/Id"
           description: undefined 参数；必须按 OpenAPI 类型、枚举和必填规则校验。
+        - $ref: "#/components/parameters/GeoLatitude"
+        - $ref: "#/components/parameters/GeoLongitude"
       requestBody:
         $ref: "#/components/requestBodies/Verification"
       responses:
@@ -2703,8 +2761,8 @@ paths:
         - web
         - tablet
       x-idempotency-required: false
-      x-audit-event-success: bar.reservation_invitation_viewed
-      x-audit-event-failure: bar.reservation_invitation_view_failed
+      x-audit-event-success: not_applicable
+      x-audit-event-failure: not_applicable
       parameters:
         - $ref: "#/components/parameters/Id"
       responses:
@@ -2768,6 +2826,8 @@ paths:
       x-audit-event-failure: bar.reservation_invitation_entry_failed
       parameters:
         - $ref: "#/components/parameters/Id"
+        - $ref: "#/components/parameters/GeoLatitude"
+        - $ref: "#/components/parameters/GeoLongitude"
       requestBody:
         $ref: "#/components/requestBodies/Verification"
       responses:
@@ -2781,10 +2841,13 @@ paths:
           $ref: "#/components/responses/Error"
       x-auth-context: staff-token
       description: 门口邀请函入场核验。ROOT-03 clients-R6（BSM 第 870 行「到店出示本人的动态入场码入场」、第 1036 行「邀请函二维码……本身不作为入场凭证」）：credential_payload 必须是被邀请人本人在 App/小程序取的动态入场码（未过期、本订台），客人号/手机号明文与过期码一律 409 BAR_INVITATION_ENTRY_CODE_INVALID；已入场重复核验返回原记录。
+        第十八批 N 段第 123 条 123-R2（BSM:1630「核销、收款、退款、放行等敏感操作，操作设备定位落在该项目综合体授权范围之外时一律拒绝并留痕」；BSM:1876「Web 端同样适用」）：本操作属敏感操作定位闸的现场动作闭集（第十八批裁决 31）。操作对象所属项目已配授权范围（123-R1）时须带请求头 X-Geo-Latitude、X-Geo-Longitude（设备当下定位，WGS-84 十进制度）：没带或解析不了按范围外处理（裁决 30）返回 403 SENSITIVE_OPERATION_LOCATION_REQUIRED，到圆心距离超过授权半径返回 403 SENSITIVE_OPERATION_OUT_OF_RANGE，拒绝在独立事务里留痕 sensitive_operation.location_rejected（business_id 为本 operationId，业务回滚不丢）；项目没配授权范围不查位置（裁决 32）；判定在幂等之前，重放不能绕过；通过时不存位置。
       x-failure-codes:
         - BAR_INVITATION_ENTRY_CODE_INVALID
         - BAR_INVITATION_MEMBER_NOT_CONFIRMED
         - BAR_INVITATION_CAPACITY_EXHAUSTED
+        - SENSITIVE_OPERATION_LOCATION_REQUIRED
+        - SENSITIVE_OPERATION_OUT_OF_RANGE
   /api/v1/bar/tables:
     get:
       tags:
@@ -3096,8 +3159,8 @@ paths:
         - app
         - kiosk
       x-idempotency-required: false
-      x-audit-event-success: customer.session_viewed
-      x-audit-event-failure: customer.session_view_failed
+      x-audit-event-success: not_applicable
+      x-audit-event-failure: not_applicable
       x-auth-context: customer-token
       responses:
         "200":
@@ -3271,8 +3334,8 @@ paths:
         - miniapp
         - app
       x-idempotency-required: false
-      x-audit-event-success: customer.bar_invitation.viewed
-      x-audit-event-failure: customer.bar_invitation.view_failed
+      x-audit-event-success: not_applicable
+      x-audit-event-failure: not_applicable
       parameters:
         - name: reservation_id
           in: path
@@ -4480,7 +4543,7 @@ paths:
         - web
       x-idempotency-required: false
       x-audit-event-success: floor_plan.viewed
-      x-audit-event-failure: floor_plan.view_failed
+      x-audit-event-failure: not_applicable
       responses:
         "200":
           $ref: "#/components/responses/Success"
@@ -4533,7 +4596,7 @@ paths:
         - web
       x-idempotency-required: false
       x-audit-event-success: floor_plan.import_viewed
-      x-audit-event-failure: floor_plan.import_view_failed
+      x-audit-event-failure: not_applicable
       responses:
         "200":
           $ref: "#/components/responses/Success"
@@ -4602,7 +4665,7 @@ paths:
         - web
       x-idempotency-required: false
       x-audit-event-success: floor_plan.import_candidate_viewed
-      x-audit-event-failure: floor_plan.import_candidate_view_failed
+      x-audit-event-failure: not_applicable
       responses:
         "200":
           $ref: "#/components/responses/Success"
@@ -4686,7 +4749,7 @@ paths:
         - web
       x-idempotency-required: false
       x-audit-event-success: floor_plan.shape_viewed
-      x-audit-event-failure: floor_plan.shape_view_failed
+      x-audit-event-failure: not_applicable
       responses:
         "200":
           $ref: "#/components/responses/Success"
@@ -8005,7 +8068,7 @@ paths:
         - "inventory"
       operationId: "receiveTransferOrder"
       summary: "调拨收货／门店要货签收"
-      description: "FS-011（BSM L1212「签收分别记录实收、合格接收、拒收和短少数量；合格接收部分转移货权、计入门店库存，并按已锁定内部结算价形成货款」；台账 §25）：门店要货（supply）仅在待签收（pending_receipt）签收，lines 须逐行覆盖本单每一行：实收 arrived_quantity＝合格 accepted_quantity＋拒收 rejected_quantity 且不超过发货数，短少＝发货数－实收由服务算出并留存；有随货溯源码的行 accepted_trace_codes 逐件扫码（个数＝合格数、只能是本行的码，否则 400 TRACE_CODE_MISMATCH），合格码归属转到门店，拒收与短少码仍归供货主体；合格数量计入 warehouse_id/location_id（须为本门店在用仓库，400 TRANSFER_RECEIVE_WAREHOUSE_INVALID）并写调拨流水（movement_type=transfer，business_type=inventory_transfer；第十八批第 18 条 BSM:1201「平台级供货主体（如中央餐饮）向商户送货（调拨）」）；按合格数量×明细锁定单价形成一笔门店应付供货主体的应付（source_type=inventory_transfer，来源记录回指要货单），出库时不挂账；各行合格数都等于发货数→已完成（completed），否则→差异处理中（discrepancy）。签收只由门店本商户（to_owner_id）账号办理（平台管理员除外），他商户 403 CROSS_MERCHANT_FORBIDDEN、供货侧非商户账号 403 STORE_RECEIPT_ONLY；非待签收 409 TRANSFER_ORDER_NOT_PENDING_RECEIPT。借调单仍为已发货→已收货、须扫齐随货溯源码；借调买断在收货时按货款形成应付（不再于发货时挂账）；第十八批第 18 条（BSM:1201「「调」是买断，成交时所有权转移给接收方」）：买断收货须由接收方（to_owner_id）本商户账号办理（平台管理员除外，否则 403 STORE_RECEIPT_ONLY），带 warehouse_id（接收方在用仓库，否则 400 TRANSFER_RECEIVE_WAREHOUSE_INVALID，盘点冻结 409）、location_id 与逐行 lines[].item_id（接收方本商户物品；缺行、不存在或不属接收方 400 VALIDATION_FAILED），全部数量入该库位并写调拨流水（transfer，单价＝明细锁定内部结算价）。第十八批 M 段第 112 条（BSM 第 1201 行「买断时溯源码归属从原主体变更到接收主体」）：买断收货时随货溯源码的归属商户与登记物料随转为接收方及其逐行所选物品。FS-019（BSM L1201「借用期间保管人变更为借入方并在溯源码上登记」「借出方始终是这批货的所有权人」）：借用型（lending/borrow）收货只改溯源码当前保管主体（custodian）与在借单（lending_order_id）并记保管台账，所有权不动；买断型才翻转所有权。第十八批 M 段第 119 条（BSM:1936「……库房、库位……都要先在基础管理中定义清楚。」）：门店要货签收与借调买断收货的 location_id 须为该仓库下已建档的库位，否则 400 TRANSFER_RECEIVE_WAREHOUSE_INVALID。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现。"
+      description: "FS-011（BSM L1212「签收分别记录实收、合格接收、拒收和短少数量；合格接收部分转移货权、计入门店库存，并按已锁定内部结算价形成货款」；台账 §25）：门店要货（supply）仅在待签收（pending_receipt）签收，lines 须逐行覆盖本单每一行：实收 arrived_quantity＝合格 accepted_quantity＋拒收 rejected_quantity 且不超过发货数，短少＝发货数－实收由服务算出并留存；有随货溯源码的行 accepted_trace_codes 逐件扫码（个数＝合格数、只能是本行的码，否则 400 TRACE_CODE_MISMATCH），合格码归属转到门店（合格码未登记的，按本行物品登记到门店；已登记的，归属商户与登记物料随转为门店和本行物品；第十八批 N 段第 121 条，BSM 第 1166、1197、1201 行），拒收与短少码仍归供货主体；合格数量计入 warehouse_id/location_id（须为本门店在用仓库，400 TRANSFER_RECEIVE_WAREHOUSE_INVALID）并写调拨流水（movement_type=transfer，business_type=inventory_transfer；第十八批第 18 条 BSM:1201「平台级供货主体（如中央餐饮）向商户送货（调拨）」）；按合格数量×明细锁定单价形成一笔门店应付供货主体的应付（source_type=inventory_transfer，来源记录回指要货单），出库时不挂账；各行合格数都等于发货数→已完成（completed），否则→差异处理中（discrepancy）。签收只由门店本商户（to_owner_id）账号办理（平台管理员除外），他商户 403 CROSS_MERCHANT_FORBIDDEN、供货侧非商户账号 403 STORE_RECEIPT_ONLY；非待签收 409 TRANSFER_ORDER_NOT_PENDING_RECEIPT。借调单仍为已发货→已收货、须扫齐随货溯源码；借调买断在收货时按货款形成应付（不再于发货时挂账）；第十八批第 18 条（BSM:1201「「调」是买断，成交时所有权转移给接收方」）：买断收货须由接收方（to_owner_id）本商户账号办理（平台管理员除外，否则 403 STORE_RECEIPT_ONLY），带 warehouse_id（接收方在用仓库，否则 400 TRANSFER_RECEIVE_WAREHOUSE_INVALID，盘点冻结 409）、location_id 与逐行 lines[].item_id（接收方本商户物品；缺行、不存在或不属接收方 400 VALIDATION_FAILED），全部数量入该库位并写调拨流水（transfer，单价＝明细锁定内部结算价）。第十八批 M 段第 112 条（BSM 第 1201 行「买断时溯源码归属从原主体变更到接收主体」）：买断收货时随货溯源码的归属商户与登记物料随转为接收方及其逐行所选物品。FS-019（BSM L1201「借用期间保管人变更为借入方并在溯源码上登记」「借出方始终是这批货的所有权人」）：借用型（lending/borrow）收货只改溯源码当前保管主体（custodian）与在借单（lending_order_id）并记保管台账，所有权不动；买断型才翻转所有权。第十八批 M 段第 119 条（BSM:1936「……库房、库位……都要先在基础管理中定义清楚。」）：门店要货签收与借调买断收货的 location_id 须为该仓库下已建档的库位，否则 400 TRANSFER_RECEIVE_WAREHOUSE_INVALID。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现。"
       x-permission: "inventory.transfer_order.manage"
       x-data-scope: "project"
       x-terminal-allowed:
@@ -8694,6 +8757,7 @@ paths:
       x-data-scope: project
       x-terminal-allowed:
         - web
+        - kiosk
       x-idempotency-required: false
       x-audit-event-success: inventory.supplier_viewed
       x-audit-event-failure: inventory.supplier_view_failed
@@ -9120,7 +9184,7 @@ paths:
         - merchant_app
       x-idempotency-required: false
       x-audit-event-success: merchant_service.listMerchantServiceWorkOrders.succeeded
-      x-audit-event-failure: merchant_service.listMerchantServiceWorkOrders.failed
+      x-audit-event-failure: not_applicable
       responses:
         "200":
           $ref: "#/components/responses/Page"
@@ -9174,7 +9238,7 @@ paths:
         - staff_work_phone
       x-idempotency-required: false
       x-audit-event-success: merchant_service.work_order.viewed
-      x-audit-event-failure: merchant_service.work_order.view_failed
+      x-audit-event-failure: not_applicable
       responses:
         "200":
           $ref: "#/components/responses/Page"
@@ -9195,8 +9259,8 @@ paths:
       x-terminal-allowed:
         - web
       x-idempotency-required: false
-      x-audit-event-success: merchant_service.listMerchantServiceWorkOrderPolicies.succeeded
-      x-audit-event-failure: merchant_service.listMerchantServiceWorkOrderPolicies.failed
+      x-audit-event-success: not_applicable
+      x-audit-event-failure: not_applicable
       x-auth-context: staff-token
       responses:
         "200":
@@ -10021,7 +10085,7 @@ paths:
         - web
       x-idempotency-required: false
       x-audit-event-success: business_entity.viewed
-      x-audit-event-failure: business_entity.view_failed
+      x-audit-event-failure: not_applicable
       responses:
         "200":
           $ref: "#/components/responses/Page"
@@ -10146,7 +10210,7 @@ paths:
         - merchant_app
       x-idempotency-required: false
       x-audit-event-success: merchant.viewed
-      x-audit-event-failure: merchant.view_failed
+      x-audit-event-failure: not_applicable
       responses:
         "200":
           $ref: "#/components/responses/Page"
@@ -10226,7 +10290,7 @@ paths:
         - web
       x-idempotency-required: false
       x-audit-event-success: merchant.viewed
-      x-audit-event-failure: merchant.view_failed
+      x-audit-event-failure: not_applicable
       parameters:
         - $ref: "#/components/parameters/MerchantId"
       responses:
@@ -10561,7 +10625,7 @@ paths:
         - web
       x-idempotency-required: false
       x-audit-event-success: project.viewed
-      x-audit-event-failure: project.view_failed
+      x-audit-event-failure: not_applicable
       responses:
         "200":
           $ref: "#/components/responses/Page"
@@ -10595,6 +10659,128 @@ paths:
           $ref: "#/components/responses/Error"
       x-auth-context: staff-token
       description: 用于创建项目。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
+  /api/v1/platform/projects/{project_id}/sensitive-operation-range:
+    get:
+      tags:
+        - platform
+      operationId: getProjectSensitiveOperationRange
+      summary: 查询项目敏感操作授权范围
+      description: 第 123 条 123-R1（BSM:1630「授权范围按项目在后台配置（业务参数，按项目可配，须同时配置上下限）。」）：读该项目的敏感操作授权范围（圆心为 GPS 原始坐标 WGS-84 十进制度，半径单位米）；未配置时除 project_id 外皆为空，未配置的项目不按位置拦截（第十八批裁决 32）。项目须在 platform.sensitive_operation_range.manage 可触及范围内（含可跨项目角色勾选的项目），不在范围内 403 CROSS_PROJECT_FORBIDDEN；项目不存在 404 PROJECT_NOT_FOUND。
+      x-permission: platform.sensitive_operation_range.manage
+      x-data-scope: project
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: platform.sensitive_operation_range.viewed
+      x-audit-event-failure: platform.sensitive_operation_range.view_failed
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          description: 综合体项目编号。
+          schema:
+            type: string
+            maxLength: 64
+      responses:
+        "200":
+          description: 成功；data 为该项目的授权范围
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/SensitiveOperationRangeRecord"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
+    put:
+      tags:
+        - platform
+      operationId: saveProjectSensitiveOperationRange
+      summary: 配置项目敏感操作授权范围(圆心、半径与上下限同配)
+      description: 第 123 条 123-R1（BSM:1630「授权范围按项目在后台配置（业务参数，按项目可配，须同时配置上下限）。」）：配置该项目的敏感操作授权范围。center_latitude、center_longitude、radius_meters、min_radius_meters、max_radius_meters 五项必填（HTML 未给出厂值，首次配置就须同时填写上下限），纬度在 -90 到 90、经度在 -180 到 180、0＜min_radius_meters≤radius_meters≤max_radius_meters，否则 400 VALIDATION_FAILED 并写明哪一项；坐标按 GPS 原始坐标（WGS-84）填写。范围闸在幂等之前。项目须在 platform.sensitive_operation_range.manage 可触及范围内（含可跨项目角色勾选的项目），不在范围内 403 CROSS_PROJECT_FORBIDDEN；项目不存在 404 PROJECT_NOT_FOUND。
+      x-permission: platform.sensitive_operation_range.manage
+      x-data-scope: project
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: platform.sensitive_operation_range.saved
+      x-audit-event-failure: platform.sensitive_operation_range.save_failed
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          description: 综合体项目编号。
+          schema:
+            type: string
+            maxLength: 64
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - idempotency_key
+                - center_latitude
+                - center_longitude
+                - radius_meters
+                - min_radius_meters
+                - max_radius_meters
+              properties:
+                idempotency_key:
+                  type: string
+                  description: 操作幂等键；重复提交必须返回同一处理结果，避免重复写入。
+                  maxLength: 128
+                center_latitude:
+                  type: number
+                  description: 中心纬度（GPS 原始坐标 WGS-84，十进制度）。
+                  minimum: -90
+                  maximum: 90
+                center_longitude:
+                  type: number
+                  description: 中心经度（GPS 原始坐标 WGS-84，十进制度）。
+                  minimum: -180
+                  maximum: 180
+                radius_meters:
+                  type: integer
+                  description: 授权半径（米），须在 min_radius_meters 与 max_radius_meters 闭区间内。
+                  minimum: 1
+                min_radius_meters:
+                  type: integer
+                  description: 半径下限（米），大于 0，与授权半径、半径上限同时配置。
+                  minimum: 1
+                max_radius_meters:
+                  type: integer
+                  description: 半径上限（米），与授权半径、半径下限同时配置。
+                  minimum: 1
+      responses:
+        "200":
+          description: 成功；data 为该项目的授权范围
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/SensitiveOperationRangeRecord"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
   /api/v1/platform/spaces:
     get:
       tags:
@@ -10610,7 +10796,7 @@ paths:
         - merchant_app
       x-idempotency-required: false
       x-audit-event-success: space.viewed
-      x-audit-event-failure: space.view_failed
+      x-audit-event-failure: not_applicable
       responses:
         "200":
           $ref: "#/components/responses/Page"
@@ -10657,7 +10843,7 @@ paths:
         - web
       x-idempotency-required: false
       x-audit-event-success: venue_business_hours.viewed
-      x-audit-event-failure: venue_business_hours.view_failed
+      x-audit-event-failure: not_applicable
       responses:
         "200":
           $ref: "#/components/responses/Page"
@@ -10704,8 +10890,8 @@ paths:
         - web
         - mobile_admin
       x-idempotency-required: false
-      x-audit-event-success: system.health_checked
-      x-audit-event-failure: system.health_check_failed
+      x-audit-event-success: not_applicable
+      x-audit-event-failure: not_applicable
       responses:
         "200":
           $ref: "#/components/responses/Success"
@@ -10726,8 +10912,8 @@ paths:
         - web
         - mobile_admin
       x-idempotency-required: false
-      x-audit-event-success: system.version_viewed
-      x-audit-event-failure: system.version_view_failed
+      x-audit-event-success: not_applicable
+      x-audit-event-failure: not_applicable
       responses:
         "200":
           $ref: "#/components/responses/Success"
@@ -10889,8 +11075,8 @@ paths:
         - merchant_app
         - mobile_admin
       x-idempotency-required: false
-      x-audit-event-success: terminal_switch.effective_viewed
-      x-audit-event-failure: terminal_switch.effective_view_failed
+      x-audit-event-success: not_applicable
+      x-audit-event-failure: not_applicable
       x-auth-context: staff-token
       parameters:
         - name: X-Terminal-Type
@@ -10921,8 +11107,8 @@ paths:
         - "staff_private_phone"
         - "tablet"
       x-idempotency-required: false
-      x-audit-event-success: "terminal.staff_app_functions_viewed"
-      x-audit-event-failure: "terminal.staff_app_functions_view_failed"
+      x-audit-event-success: "not_applicable"
+      x-audit-event-failure: "not_applicable"
       x-auth-context: "staff-token"
       parameters:
         - name: "X-Terminal-Type"
@@ -11187,6 +11373,7 @@ paths:
         - terminals
       operationId: getKioskConfig
       summary: 一体机配置，含售票型与非售票型模式
+      description: 第十八批 N 段第 120 条 120-R1：一体机凭绑定时签发的设备令牌（X-Device-Token）读本机配置，按设备台账返回 kiosk_mode（绑定时选的一体机模式，ticketing 售票型、service 服务型）、ticketing_enabled（售票型一体机且后台有为本机开启的售票开关行才为真，没有本机的开关行即关，PGM:742）、bound_scope（绑定点位）、merchant_id（后台设备台账页设置的所属商户，未设置为空）。
       security:
         - DeviceCredential: []
       x-permission: not_applicable
@@ -11639,11 +11826,12 @@ paths:
         - ticketing
       operationId: listTicketOrders
       summary: 查询票务订单
-      description: 用于查询票务订单。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。 响应订单含可空 project_id 项目快照；未知项目不能借操作人范围猜定。
+      description: 用于查询票务订单。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。 响应订单含可空 project_id 项目快照；未知项目不能借操作人范围猜定。 第十八批 N 段 120-R2（DEC-R7-05「售票型触摸屏一体机能力补「订单查询」」；BSM:986「启用售票能力的一体机可由授权服务人员登录后辅助客人购票和查询订单……」）：可带 buyer_phone 只列该购票手机号的订单（去空格、横线后按盲索引精确匹配，数据范围口径不变），出参购票手机号照旧掩码；售票一体机上授权服务人员按客人手机号查订单用。
       x-permission: ticket.order.read
       x-data-scope: project
       x-terminal-allowed:
         - web
+        - kiosk
       x-idempotency-required: false
       x-audit-event-success: ticket_order.viewed
       x-audit-event-failure: ticket_order.viewed_failed
@@ -11655,6 +11843,14 @@ paths:
         "500":
           $ref: "#/components/responses/Error"
       x-auth-context: staff-token
+      parameters:
+        - name: buyer_phone
+          in: query
+          required: false
+          description: 购票手机号（可含空格、横线）；带上只列该号的订单。
+          schema:
+            type: string
+            maxLength: 32
     post:
       tags:
         - ticketing
@@ -11662,6 +11858,7 @@ paths:
       x-failure-codes:
         - CONTRACT_SCOPE_VIOLATION
         - PARK_WIDE_FAULT_SALES_SUSPENDED
+        - KIOSK_TICKETING_DISABLED
       summary: 创建票务订单（含一体机辅助售票）
       x-permission: ticket.order.create
       x-data-scope: project-channel
@@ -11682,6 +11879,8 @@ paths:
           $ref: "#/components/responses/Error"
         "401":
           $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
         "409":
           $ref: "#/components/responses/Error"
         "429":
@@ -11689,7 +11888,7 @@ paths:
         "500":
           $ref: "#/components/responses/Error"
       x-auth-context: staff-token
-      description: Create a ticket order. If a published dynamic pricing rule matches ticket_type_id, visit_date, sales_channel and dynamic_pricing_context, the order amount is adjusted and price trace fields are persisted. Draft rules only participate in simulation. 当 sales_channel=kiosk 时，仅用于授权服务人员在售票一体机上辅助到店客人购票；服务端必须按设备绑定点位过滤可售票种，酒吧门口/前台只能售卖本酒吧单店门票，不得售卖综合体通票。 CG-08a（ENUM「全园故障与补偿通票」）：所属综合体全园故障状态生效中（含待第二岗位确认解除阶段）时，含任一游乐类权益（entitlement_type 以 amusement 开头）的票种——纯游乐门票与含游乐权益的通票——下单返回 409 PARK_WIDE_FAULT_SALES_SUSPENDED（置于库存扣减前，拒单零副作用）；酒吧票、演出票等不含游乐权益的票种不受影响；解除确认后恢复。 订单保存 project_id 项目快照，按原票种商户和权益点位确定，冲突时不能用操作人项目覆盖；含游乐权益而项目不明时拒绝售票。普通订单更新不改变原项目。 ROOT-03-R29（BSM 第 986 行「客人用手机号短信验证绑定，在官方 App/小程序查看门票」）：sales_channel=kiosk 必填 buyer_phone 与 sms_code（先经 POST /api/v1/ticketing/kiosk-bind-codes 发码），缺失 400 VALIDATION_FAILED、验证码不对 401 CUSTOMER_OTP_INVALID，核验在扣库存之前；该手机号已注册会员的订单直接归本人，未注册的注册时按手机号归集。第三方渠道回流订单（sales_channel 为渠道码）的购票手机号已是会员的直接归本人。
+      description: Create a ticket order. If a published dynamic pricing rule matches ticket_type_id, visit_date, sales_channel and dynamic_pricing_context, the order amount is adjusted and price trace fields are persisted. Draft rules only participate in simulation. 当 sales_channel=kiosk 时，仅用于授权服务人员在售票一体机上辅助到店客人购票；服务端必须按设备绑定点位过滤可售票种，酒吧门口/前台只能售卖本酒吧单店门票，不得售卖综合体通票。 CG-08a（ENUM「全园故障与补偿通票」）：所属综合体全园故障状态生效中（含待第二岗位确认解除阶段）时，含任一游乐类权益（entitlement_type 以 amusement 开头）的票种——纯游乐门票与含游乐权益的通票——下单返回 409 PARK_WIDE_FAULT_SALES_SUSPENDED（置于库存扣减前，拒单零副作用）；酒吧票、演出票等不含游乐权益的票种不受影响；解除确认后恢复。 订单保存 project_id 项目快照，按原票种商户和权益点位确定，冲突时不能用操作人项目覆盖；含游乐权益而项目不明时拒绝售票。普通订单更新不改变原项目。 ROOT-03-R29（BSM 第 986 行「客人用手机号短信验证绑定，在官方 App/小程序查看门票」）：sales_channel=kiosk 必填 buyer_phone 与 sms_code（先经 POST /api/v1/ticketing/kiosk-bind-codes 发码），缺失 400 VALIDATION_FAILED、验证码不对 401 CUSTOMER_OTP_INVALID，核验在扣库存之前；该手机号已注册会员的订单直接归本人，未注册的注册时按手机号归集。第三方渠道回流订单（sales_channel 为渠道码）的购票手机号已是会员的直接归本人。 第十八批 N 段 120-R2（BSM:980「……其中只有启用售票能力的一体机，才允许授权服务人员在到店服务场景下辅助客人购票。」；BSM:999；BSM:1947）：可信终端是一体机或 sales_channel=kiosk 时两者须同时成立，且本机是已启用售票的售票型一体机（设备台账 kiosk_mode=ticketing，后台为本机开了 terminal_type=kiosk、capability_code=ticketing、scope_id=设备号的开关行），否则 403 KIOSK_TICKETING_DISABLED；须填 operator_note（售票原因），缺失 400 VALIDATION_FAILED；本机所属商户是酒吧时只能售卖该酒吧单店门票，综合体通票或他店单店票 403 BAR_SCOPE_FORBIDDEN；以上判定在短信核验与扣库存之前。一体机售票的 ticket_order.created 留痕 metadata 记 sale_reason（售票原因）、terminal_type、device_id、point_id（设备绑定点位）。
   /api/v1/ticketing/orders/{order_id}/issue:
     post:
       tags:
@@ -12006,8 +12205,8 @@ paths:
       x-terminal-allowed:
         - web
       x-idempotency-required: false
-      x-audit-event-success: ticket.qr_refresh_config.viewed
-      x-audit-event-failure: ticket.qr_refresh_config.view_failed
+      x-audit-event-success: not_applicable
+      x-audit-event-failure: not_applicable
       responses:
         "200":
           $ref: "#/components/responses/Success"
@@ -12224,7 +12423,7 @@ paths:
         - ticketing
       operationId: createTicketVerification
       summary: 正式核销
-      description: "核销记录状态闭集（CG-05，ENUM「核销记录状态」）：success（成功）、rejected（拒绝：规则不允许）、failed（失败：设备或网络原因）、reversed（已冲正）、anomaly（异常：已成功扣次但现场未放行或实际交付有争议时提起的异常复核，见 POST /api/v1/ticketing/verifications/{id}/anomaly 与 POST /api/v1/ticketing/verification-anomalies/{id}/resolve）；不设预检通过态、不提供人工放行（manual_overridden 仅历史行保留）。 在线核销：过刷新窗口 / 签名失配以正常响应返回 status=failed（window_expired / signature_invalid）；规则不允许仍以错误响应返回、不落记录。"
+      description: "核销记录状态闭集（CG-05，ENUM「核销记录状态」）：success（成功）、rejected（拒绝：规则不允许）、failed（失败：设备或网络原因）、reversed（已冲正）、anomaly（异常：已成功扣次但现场未放行或实际交付有争议时提起的异常复核，见 POST /api/v1/ticketing/verifications/{id}/anomaly 与 POST /api/v1/ticketing/verification-anomalies/{id}/resolve）；不设预检通过态、不提供人工放行（manual_overridden 仅历史行保留）。 在线核销：过刷新窗口 / 签名失配以正常响应返回 status=failed（window_expired / signature_invalid）；规则不允许仍以错误响应返回、不落记录。第十八批 N 段第 123 条 123-R2（BSM:1630「核销、收款、退款、放行等敏感操作，操作设备定位落在该项目综合体授权范围之外时一律拒绝并留痕」；BSM:1876「Web 端同样适用」）：本操作属敏感操作定位闸的现场动作闭集（第十八批裁决 31）。操作对象所属项目已配授权范围（123-R1）时须带请求头 X-Geo-Latitude、X-Geo-Longitude（设备当下定位，WGS-84 十进制度）：没带或解析不了按范围外处理（裁决 30）返回 403 SENSITIVE_OPERATION_LOCATION_REQUIRED，到圆心距离超过授权半径返回 403 SENSITIVE_OPERATION_OUT_OF_RANGE，拒绝在独立事务里留痕 sensitive_operation.location_rejected（business_id 为本 operationId，业务回滚不丢）；项目没配授权范围不查位置（裁决 32）；判定在幂等之前，重放不能绕过；通过时不存位置。"
       x-permission: verification.execute
       x-data-scope: project-point
       x-terminal-allowed:
@@ -12233,6 +12432,12 @@ paths:
       x-idempotency-required: true
       x-audit-event-success: verification.succeeded
       x-audit-event-failure: verification.failed
+      x-failure-codes:
+        - SENSITIVE_OPERATION_LOCATION_REQUIRED
+        - SENSITIVE_OPERATION_OUT_OF_RANGE
+      parameters:
+        - $ref: "#/components/parameters/GeoLatitude"
+        - $ref: "#/components/parameters/GeoLongitude"
       requestBody:
         $ref: "#/components/requestBodies/Verification"
       responses:
@@ -12460,7 +12665,7 @@ paths:
         - merchant_app
       x-idempotency-required: false
       x-audit-event-success: merchant_billing.bill.viewed
-      x-audit-event-failure: merchant_billing.bill.view_failed
+      x-audit-event-failure: not_applicable
       responses:
         "200":
           $ref: "#/components/responses/Page"
@@ -12564,7 +12769,7 @@ paths:
         - web
       x-idempotency-required: false
       x-audit-event-success: governance.supervisor_review.policies_viewed
-      x-audit-event-failure: governance.supervisor_review.policies_view_failed
+      x-audit-event-failure: not_applicable
       responses:
         "200":
           $ref: "#/components/responses/Page"
@@ -12650,7 +12855,7 @@ paths:
         - web
       x-idempotency-required: false
       x-audit-event-success: access.staff_level.viewed
-      x-audit-event-failure: access.staff_level.viewed_failed
+      x-audit-event-failure: not_applicable
       responses:
         "200":
           $ref: "#/components/responses/Page"
@@ -12673,8 +12878,8 @@ paths:
         - web
         - mobile_admin
       x-idempotency-required: false
-      x-audit-event-success: access.effective_permission.viewed
-      x-audit-event-failure: access.effective_permission.viewed_failed
+      x-audit-event-success: not_applicable
+      x-audit-event-failure: not_applicable
       responses:
         "200":
           $ref: "#/components/responses/Success"
@@ -12696,8 +12901,8 @@ paths:
         - web
         - mobile_admin
       x-idempotency-required: false
-      x-audit-event-success: access.effective_permission.viewed
-      x-audit-event-failure: access.effective_permission.viewed_failed
+      x-audit-event-success: not_applicable
+      x-audit-event-failure: not_applicable
       responses:
         "200":
           $ref: "#/components/responses/Success"
@@ -12853,6 +13058,7 @@ paths:
       tags:
         - bar
       operationId: payBarReservationDeposit
+      description: "第十八批 N 段第 123 条 123-R2（BSM:1630「核销、收款、退款、放行等敏感操作，操作设备定位落在该项目综合体授权范围之外时一律拒绝并留痕」；BSM:1876「Web 端同样适用」）：本操作属敏感操作定位闸的现场动作闭集（第十八批裁决 31）。操作对象所属项目已配授权范围（123-R1）时须带请求头 X-Geo-Latitude、X-Geo-Longitude（设备当下定位，WGS-84 十进制度）：没带或解析不了按范围外处理（裁决 30）返回 403 SENSITIVE_OPERATION_LOCATION_REQUIRED，到圆心距离超过授权半径返回 403 SENSITIVE_OPERATION_OUT_OF_RANGE，拒绝在独立事务里留痕 sensitive_operation.location_rejected（business_id 为本 operationId，业务回滚不丢）；项目没配授权范围不查位置（裁决 32）；判定在幂等之前，重放不能绕过；通过时不存位置。第十八批 N 段第 120 条 120-R3（BSM:1058「……客人自助订台支付定金成功……该台位即进入已预留……冲突时先支付定金者得……」）：从未占过台的订台（一体机订台、客人自助订台）登记定金即占台；台位已被先付定金者占着或已开台、待清台、停用时本订台取消、不占台，已收定金按登记的渠道记原路待退并留痕 bar.reservation_deposit_refund_on_conflict，返回 200 与取消后的订台记录（status=cancelled）。"
       summary: 订台定金支付
       x-permission: bar.reservation.manage
       x-data-scope: project-bar
@@ -12864,9 +13070,14 @@ paths:
       x-idempotency-required: true
       x-audit-event-success: bar.reservation_deposit_paid
       x-audit-event-failure: bar.reservation_deposit_pay_failed
+      x-failure-codes:
+        - SENSITIVE_OPERATION_LOCATION_REQUIRED
+        - SENSITIVE_OPERATION_OUT_OF_RANGE
       parameters:
         - $ref: "#/components/parameters/Id"
           description: 订台预约唯一标识；必须按 OpenAPI 类型和必填规则校验。
+        - $ref: "#/components/parameters/GeoLatitude"
+        - $ref: "#/components/parameters/GeoLongitude"
       requestBody:
         $ref: "#/components/requestBodies/BarReservationDepositActionRequest"
       responses:
@@ -13552,7 +13763,7 @@ paths:
         - mobile_admin
       x-idempotency-required: false
       x-audit-event-success: staff.profile.viewed
-      x-audit-event-failure: staff.profile.view_failed
+      x-audit-event-failure: not_applicable
       responses:
         "200":
           $ref: "#/components/responses/Page"
@@ -13760,7 +13971,7 @@ paths:
         - mobile_admin
       x-idempotency-required: false
       x-audit-event-success: staff.notice.viewed
-      x-audit-event-failure: staff.notice.view_failed
+      x-audit-event-failure: not_applicable
       responses:
         "200":
           $ref: "#/components/responses/Page"
@@ -14273,8 +14484,8 @@ paths:
       x-terminal-allowed:
         - web
       x-idempotency-required: false
-      x-audit-event-success: customer.member_levels_viewed
-      x-audit-event-failure: customer.member_levels_view_failed
+      x-audit-event-success: not_applicable
+      x-audit-event-failure: not_applicable
       responses:
         "200":
           $ref: "#/components/responses/Page"
@@ -14766,8 +14977,8 @@ paths:
         - miniapp
         - app
       x-idempotency-required: false
-      x-audit-event-success: customer.stored_value_account_viewed
-      x-audit-event-failure: customer.stored_value_account_viewed_failed
+      x-audit-event-success: not_applicable
+      x-audit-event-failure: not_applicable
       parameters:
         - name: project_id
           in: query
@@ -14804,8 +15015,8 @@ paths:
         - miniapp
         - app
       x-idempotency-required: false
-      x-audit-event-success: customer.stored_value_accounts_viewed
-      x-audit-event-failure: customer.stored_value_accounts_viewed_failed
+      x-audit-event-success: not_applicable
+      x-audit-event-failure: not_applicable
       responses:
         "200":
           $ref: "#/components/responses/Page"
@@ -16275,6 +16486,7 @@ paths:
       x-data-scope: project-amusement
       x-terminal-allowed:
         - web
+        - kiosk
       x-idempotency-required: false
       x-audit-event-success: amusement.device.viewed
       x-audit-event-failure: amusement.device.view_failed
@@ -16658,8 +16870,8 @@ paths:
         - web
         - mobile_admin
       x-idempotency-required: false
-      x-audit-event-success: exception.alert_viewed
-      x-audit-event-failure: exception.alert_view_failed
+      x-audit-event-success: not_applicable
+      x-audit-event-failure: not_applicable
       parameters:
         - name: alert_id
           in: path
@@ -17507,8 +17719,8 @@ paths:
       x-terminal-allowed:
         - web
       x-idempotency-required: true
-      x-audit-event-success: integration.channel_reconciliation.executed
-      x-audit-event-failure: integration.channel_reconciliation.execute_failed
+      x-audit-event-success: integration.channel_reconciliation.completed
+      x-audit-event-failure: integration.channel_reconciliation.failed
       requestBody:
         required: true
         content:
@@ -18023,7 +18235,7 @@ paths:
         - tablet
         - web
       x-idempotency-required: true
-      x-audit-event-success: bar.table_session.transfer
+      x-audit-event-success: bar.table.transferred
       x-audit-event-failure: bar.table_session.transfer_failed
       parameters:
         - name: session_id
@@ -18524,7 +18736,7 @@ paths:
         - tablet
         - web
       x-idempotency-required: true
-      x-audit-event-success: bar.order_item_void.decide
+      x-audit-event-success: bar.order_item_void_decided
       x-audit-event-failure: bar.order_item_void.decide_failed
       parameters:
         - name: void_id
@@ -18813,7 +19025,7 @@ paths:
         - staff_work_phone
       x-idempotency-required: false
       x-audit-event-success: amusement.incident.list
-      x-audit-event-failure: amusement.incident.list_failed
+      x-audit-event-failure: not_applicable
       responses:
         "200":
           $ref: "#/components/responses/Page"
@@ -19060,7 +19272,7 @@ paths:
         - staff_work_phone
       x-idempotency-required: false
       x-audit-event-success: amusement.safety_notice.list
-      x-audit-event-failure: amusement.safety_notice.list_failed
+      x-audit-event-failure: not_applicable
       responses:
         "200":
           $ref: "#/components/responses/Page"
@@ -19272,7 +19484,7 @@ paths:
         - web
       x-idempotency-required: false
       x-audit-event-success: amusement.park_fault.viewed
-      x-audit-event-failure: amusement.park_fault.view_failed
+      x-audit-event-failure: not_applicable
       parameters:
         - name: project_id
           in: query
@@ -19563,8 +19775,8 @@ paths:
       x-terminal-allowed:
         - web
       x-idempotency-required: false
-      x-audit-event-success: amusement.park_fault.viewed
-      x-audit-event-failure: amusement.park_fault.view_failed
+      x-audit-event-success: not_applicable
+      x-audit-event-failure: not_applicable
       parameters:
         - name: fault_id
           in: path
@@ -19598,8 +19810,8 @@ paths:
       x-terminal-allowed:
         - web
       x-idempotency-required: false
-      x-audit-event-success: amusement.fault_compensation.viewed
-      x-audit-event-failure: amusement.fault_compensation.view_failed
+      x-audit-event-success: not_applicable
+      x-audit-event-failure: not_applicable
       parameters:
         - name: project_id
           in: path
@@ -19700,7 +19912,7 @@ paths:
         - web
       x-idempotency-required: false
       x-audit-event-success: amusement.fault_compensation.viewed
-      x-audit-event-failure: amusement.fault_compensation.view_failed
+      x-audit-event-failure: not_applicable
       parameters:
         - name: fault_id
           in: path
@@ -19864,8 +20076,8 @@ paths:
       x-terminal-allowed:
         - web
       x-idempotency-required: false
-      x-audit-event-success: amusement.fault_compensation.viewed
-      x-audit-event-failure: amusement.fault_compensation.view_failed
+      x-audit-event-success: not_applicable
+      x-audit-event-failure: not_applicable
       parameters:
         - name: batch_id
           in: path
@@ -19899,7 +20111,7 @@ paths:
         - web
       x-idempotency-required: false
       x-audit-event-success: amusement.fault_compensation.viewed
-      x-audit-event-failure: amusement.fault_compensation.view_failed
+      x-audit-event-failure: not_applicable
       parameters:
         - name: event_type
           in: query
@@ -20473,7 +20685,7 @@ paths:
         - web
       x-idempotency-required: false
       x-audit-event-success: compliance.contract_key_date.list
-      x-audit-event-failure: compliance.contract_key_date.list_failed
+      x-audit-event-failure: not_applicable
       responses:
         "200":
           $ref: "#/components/responses/Page"
@@ -20580,7 +20792,7 @@ paths:
         - web
       x-idempotency-required: false
       x-audit-event-success: compliance.expiry_item.list
-      x-audit-event-failure: compliance.expiry_item.list_failed
+      x-audit-event-failure: not_applicable
       responses:
         "200":
           $ref: "#/components/responses/Page"
@@ -20707,7 +20919,7 @@ paths:
         - web
       x-idempotency-required: false
       x-audit-event-success: compliance.reminder.list
-      x-audit-event-failure: compliance.reminder.list_failed
+      x-audit-event-failure: not_applicable
       responses:
         "200":
           $ref: "#/components/responses/Page"
@@ -20780,8 +20992,8 @@ paths:
       x-terminal-allowed:
         - web
       x-idempotency-required: false
-      x-audit-event-success: compliance.item_type_config.list
-      x-audit-event-failure: compliance.item_type_config.list_failed
+      x-audit-event-success: not_applicable
+      x-audit-event-failure: not_applicable
       responses:
         "200":
           $ref: "#/components/responses/Success"
@@ -20994,8 +21206,8 @@ paths:
       x-terminal-allowed:
         - web
       x-idempotency-required: false
-      x-audit-event-success: wecom.risk_hit.list
-      x-audit-event-failure: wecom.risk_hit.list_failed
+      x-audit-event-success: not_applicable
+      x-audit-event-failure: not_applicable
       parameters:
         - name: status
           in: query
@@ -21030,7 +21242,7 @@ paths:
       x-terminal-allowed:
         - web
       x-idempotency-required: false
-      x-audit-event-success: wecom.risk_hit.review
+      x-audit-event-success: wecom.risk.hit_reviewed
       x-audit-event-failure: wecom.risk_hit.review_failed
       parameters:
         - name: id
@@ -21612,8 +21824,8 @@ paths:
         - web
         - mobile_admin
       x-idempotency-required: true
-      x-audit-event-success: mdm.violation.detect
-      x-audit-event-failure: mdm.violation.detect_failed
+      x-audit-event-success: device.policy_violation
+      x-audit-event-failure: device.policy_violation_failed
       requestBody:
         required: true
         content:
@@ -21677,7 +21889,7 @@ paths:
       x-terminal-allowed:
         - web
       x-idempotency-required: true
-      x-audit-event-success: mdm.violation.handle
+      x-audit-event-success: mdm.violation.handled
       x-audit-event-failure: mdm.violation.handle_failed
       parameters:
         - name: id
@@ -22529,6 +22741,7 @@ paths:
       tags:
         - amusement
       operationId: claimAmusementEntitlementSession
+      description: "第十八批 N 段第 123 条 123-R2（BSM:1630「核销、收款、退款、放行等敏感操作，操作设备定位落在该项目综合体授权范围之外时一律拒绝并留痕」；BSM:1876「Web 端同样适用」）：本操作属敏感操作定位闸的现场动作闭集（第十八批裁决 31）。操作对象所属项目已配授权范围（123-R1）时须带请求头 X-Geo-Latitude、X-Geo-Longitude（设备当下定位，WGS-84 十进制度）：没带或解析不了按范围外处理（裁决 30）返回 403 SENSITIVE_OPERATION_LOCATION_REQUIRED，到圆心距离超过授权半径返回 403 SENSITIVE_OPERATION_OUT_OF_RANGE，拒绝在独立事务里留痕 sensitive_operation.location_rejected（business_id 为本 operationId，业务回滚不丢）；项目没配授权范围不查位置（裁决 32）；判定在幂等之前，重放不能绕过；通过时不存位置。"
       summary: 一体机领取核销权益会话（防错领 + 会话时效）
       x-permission: amusement.entitlement_session.claim
       x-data-scope: merchant
@@ -22538,10 +22751,15 @@ paths:
       x-idempotency-required: true
       x-audit-event-success: amusement.entitlement_session.claimed
       x-audit-event-failure: amusement.entitlement_session.claim_failed
+      x-failure-codes:
+        - SENSITIVE_OPERATION_LOCATION_REQUIRED
+        - SENSITIVE_OPERATION_OUT_OF_RANGE
       x-auth-context: staff-token
       parameters:
         - $ref: "#/components/parameters/Id"
           description: 路径参数（会话 id 或 session_code）；必须按 OpenAPI 类型、枚举和必填规则校验。
+        - $ref: "#/components/parameters/GeoLatitude"
+        - $ref: "#/components/parameters/GeoLongitude"
       requestBody:
         $ref: "#/components/requestBodies/ClaimEntitlementSessionRequest"
       responses:
@@ -22570,8 +22788,8 @@ paths:
       x-terminal-allowed:
         - web
       x-idempotency-required: false
-      x-audit-event-success: evidence.traceability_auto_capture_rate_viewed
-      x-audit-event-failure: evidence.traceability_auto_capture_rate_view_failed
+      x-audit-event-success: not_applicable
+      x-audit-event-failure: not_applicable
       parameters:
         - name: threshold_percent
           in: query
@@ -22792,6 +23010,9 @@ paths:
       x-idempotency-required: true
       x-audit-event-success: ticket_order.payment_confirmed
       x-audit-event-failure: ticket_order.payment_confirm_failed
+      x-failure-codes:
+        - SENSITIVE_OPERATION_LOCATION_REQUIRED
+        - SENSITIVE_OPERATION_OUT_OF_RANGE
       x-auth-context: staff-token
       parameters:
         - name: order_id
@@ -22801,6 +23022,8 @@ paths:
             type: string
             maxLength: 64
           description: 票务订单 id（路径参数，必填）。
+        - $ref: "#/components/parameters/GeoLatitude"
+        - $ref: "#/components/parameters/GeoLongitude"
       requestBody:
         $ref: "#/components/requestBodies/ConfirmTicketOrderPaymentRequest"
       responses:
@@ -22817,6 +23040,7 @@ paths:
         "500":
           $ref: "#/components/responses/Error"
       description: 故障停售后才确认的未受理付款保留真实已收款事实，取消且不出票，每笔收款创建唯一原路待退款；故障前已受理成功单的重复通知保持原结果。已拒收订单的另一笔迟到款即使在故障解除后到达，也分别登记待退，不重复释放库存。
+        第十八批 N 段第 123 条 123-R2（BSM:1630「核销、收款、退款、放行等敏感操作，操作设备定位落在该项目综合体授权范围之外时一律拒绝并留痕」；BSM:1876「Web 端同样适用」）：本操作属敏感操作定位闸的现场动作闭集（第十八批裁决 31）。操作对象所属项目已配授权范围（123-R1）时须带请求头 X-Geo-Latitude、X-Geo-Longitude（设备当下定位，WGS-84 十进制度）：没带或解析不了按范围外处理（裁决 30）返回 403 SENSITIVE_OPERATION_LOCATION_REQUIRED，到圆心距离超过授权半径返回 403 SENSITIVE_OPERATION_OUT_OF_RANGE，拒绝在独立事务里留痕 sensitive_operation.location_rejected（business_id 为本 operationId，业务回滚不丢）；项目没配授权范围不查位置（裁决 32）；判定在幂等之前，重放不能绕过；通过时不存位置。
   /api/v1/ticketing/orders/{order_id}/cancel:
     post:
       tags:
@@ -22888,8 +23112,8 @@ paths:
       x-terminal-allowed:
         - web
       x-idempotency-required: false
-      x-audit-event-success: finance_property_fee.rate_viewed
-      x-audit-event-failure: finance_property_fee.rate_view_failed
+      x-audit-event-success: not_applicable
+      x-audit-event-failure: not_applicable
       parameters:
         - name: project_id
           in: query
@@ -23182,8 +23406,8 @@ paths:
       x-terminal-allowed:
         - web
       x-idempotency-required: false
-      x-audit-event-success: refund_authority_limit.viewed
-      x-audit-event-failure: refund_authority_limit.view_failed
+      x-audit-event-success: not_applicable
+      x-audit-event-failure: not_applicable
       parameters:
         - name: project_id
           in: query
@@ -23234,8 +23458,8 @@ paths:
       x-terminal-allowed:
         - web
       x-idempotency-required: false
-      x-audit-event-success: refund_auto_rule.viewed
-      x-audit-event-failure: refund_auto_rule.view_failed
+      x-audit-event-success: not_applicable
+      x-audit-event-failure: not_applicable
       parameters:
         - name: project_id
           in: query
@@ -23585,8 +23809,8 @@ paths:
       x-terminal-allowed:
         - web
       x-idempotency-required: false
-      x-audit-event-success: analytics.operating_params.viewed
-      x-audit-event-failure: analytics.operating_params.view_failed
+      x-audit-event-success: not_applicable
+      x-audit-event-failure: not_applicable
       responses:
         "200":
           $ref: "#/components/responses/Page"
@@ -23779,8 +24003,8 @@ paths:
       x-terminal-allowed:
         - web
       x-idempotency-required: false
-      x-audit-event-success: analytics.ai_thresholds.viewed
-      x-audit-event-failure: analytics.ai_thresholds.view_failed
+      x-audit-event-success: not_applicable
+      x-audit-event-failure: not_applicable
       responses:
         "200":
           $ref: "#/components/responses/Page"
@@ -23838,8 +24062,8 @@ paths:
       x-terminal-allowed:
         - web
       x-idempotency-required: false
-      x-audit-event-success: analytics.notification_windows.viewed
-      x-audit-event-failure: analytics.notification_windows.view_failed
+      x-audit-event-success: not_applicable
+      x-audit-event-failure: not_applicable
       responses:
         "200":
           $ref: "#/components/responses/Page"
@@ -23899,8 +24123,8 @@ paths:
       x-terminal-allowed:
         - web
       x-idempotency-required: false
-      x-audit-event-success: analytics.revenue_attribution_rule.viewed
-      x-audit-event-failure: analytics.revenue_attribution_rule.view_failed
+      x-audit-event-success: not_applicable
+      x-audit-event-failure: not_applicable
       responses:
         "200":
           $ref: "#/components/responses/Page"
@@ -23973,7 +24197,7 @@ paths:
         - web
       x-idempotency-required: false
       x-audit-event-success: leasing.lead.viewed
-      x-audit-event-failure: leasing.lead.view_failed
+      x-audit-event-failure: not_applicable
       x-auth-context: staff-token
       responses:
         "200":
@@ -24023,8 +24247,8 @@ paths:
       x-terminal-allowed:
         - web
       x-idempotency-required: false
-      x-audit-event-success: leasing.lead.viewed
-      x-audit-event-failure: leasing.lead.view_failed
+      x-audit-event-success: not_applicable
+      x-audit-event-failure: not_applicable
       x-auth-context: staff-token
       responses:
         "200":
@@ -24157,7 +24381,7 @@ paths:
         - web
       x-idempotency-required: false
       x-audit-event-success: leasing.intent.viewed
-      x-audit-event-failure: leasing.intent.view_failed
+      x-audit-event-failure: not_applicable
       x-auth-context: staff-token
       responses:
         "200":
@@ -24284,7 +24508,7 @@ paths:
         - web
       x-idempotency-required: false
       x-audit-event-success: leasing.brand.viewed
-      x-audit-event-failure: leasing.brand.view_failed
+      x-audit-event-failure: not_applicable
       x-auth-context: staff-token
       responses:
         "200":
@@ -24373,7 +24597,7 @@ paths:
         - web
       x-idempotency-required: false
       x-audit-event-success: leasing.blacklist_exception.viewed
-      x-audit-event-failure: leasing.blacklist_exception.view_failed
+      x-audit-event-failure: not_applicable
       x-auth-context: staff-token
       responses:
         "200":
@@ -24427,8 +24651,8 @@ paths:
       x-terminal-allowed:
         - web
       x-idempotency-required: false
-      x-audit-event-success: leasing.follow_up.viewed
-      x-audit-event-failure: leasing.follow_up.view_failed
+      x-audit-event-success: not_applicable
+      x-audit-event-failure: not_applicable
       x-auth-context: staff-token
       parameters:
         - name: ref_type
@@ -24494,8 +24718,8 @@ paths:
       x-terminal-allowed:
         - web
       x-idempotency-required: false
-      x-audit-event-success: contract.viewed
-      x-audit-event-failure: contract.view_failed
+      x-audit-event-success: not_applicable
+      x-audit-event-failure: not_applicable
       x-auth-context: staff-token
       responses:
         "200":
@@ -24621,8 +24845,8 @@ paths:
       x-terminal-allowed:
         - web
       x-idempotency-required: false
-      x-audit-event-success: contract.changes_viewed
-      x-audit-event-failure: contract.changes_view_failed
+      x-audit-event-success: not_applicable
+      x-audit-event-failure: not_applicable
       x-auth-context: staff-token
       parameters:
         - name: contract_id
@@ -24778,8 +25002,8 @@ paths:
       x-terminal-allowed:
         - web
       x-idempotency-required: false
-      x-audit-event-success: contract.amendments_viewed
-      x-audit-event-failure: contract.amendments_view_failed
+      x-audit-event-success: not_applicable
+      x-audit-event-failure: not_applicable
       x-auth-context: staff-token
       description: 列某合同派生的变更子合同(rent_terms.parentContractId 指向它;经营位置/面积变更子合同链)。第十八批 G 段 82b-R3：合同所属项目须在本入口权限码可触及范围内（含可跨项目角色勾选的项目；平台管理员不限），合同未带项目或不在范围内 403 CROSS_PROJECT_FORBIDDEN（在幂等执行与行锁之前判）。
       parameters:
@@ -24847,8 +25071,8 @@ paths:
       x-terminal-allowed:
         - web
       x-idempotency-required: false
-      x-audit-event-success: contract.settlements_viewed
-      x-audit-event-failure: contract.settlements_view_failed
+      x-audit-event-success: not_applicable
+      x-audit-event-failure: not_applicable
       x-auth-context: staff-token
       parameters:
         - name: contract_id
@@ -24914,8 +25138,8 @@ paths:
       x-terminal-allowed:
         - web
       x-idempotency-required: false
-      x-audit-event-success: contract.approval_flow_viewed
-      x-audit-event-failure: contract.approval_flow_view_failed
+      x-audit-event-success: not_applicable
+      x-audit-event-failure: not_applicable
       x-auth-context: staff-token
       parameters:
         - name: project_id
@@ -25110,8 +25334,8 @@ paths:
       x-terminal-allowed:
         - web
       x-idempotency-required: false
-      x-audit-event-success: contract.color_rules_viewed
-      x-audit-event-failure: contract.color_rules_view_failed
+      x-audit-event-success: not_applicable
+      x-audit-event-failure: not_applicable
       x-auth-context: staff-token
       parameters:
         - name: project_id
@@ -25174,8 +25398,8 @@ paths:
       x-terminal-allowed:
         - web
       x-idempotency-required: false
-      x-audit-event-success: contract.space_rental_viewed
-      x-audit-event-failure: contract.space_rental_view_failed
+      x-audit-event-success: not_applicable
+      x-audit-event-failure: not_applicable
       x-auth-context: staff-token
       parameters:
         - name: project_id
@@ -25403,8 +25627,8 @@ paths:
       x-terminal-allowed:
         - web
       x-idempotency-required: false
-      x-audit-event-success: facility.equipment.viewed
-      x-audit-event-failure: facility.equipment.view_failed
+      x-audit-event-success: not_applicable
+      x-audit-event-failure: not_applicable
       x-auth-context: staff-token
       responses:
         "200":
@@ -25458,8 +25682,8 @@ paths:
       x-terminal-allowed:
         - web
       x-idempotency-required: false
-      x-audit-event-success: facility.equipment.maintenance_due_viewed
-      x-audit-event-failure: facility.equipment.maintenance_due_view_failed
+      x-audit-event-success: not_applicable
+      x-audit-event-failure: not_applicable
       x-auth-context: staff-token
       responses:
         "200":
@@ -25660,7 +25884,7 @@ paths:
         - web
       x-idempotency-required: false
       x-audit-event-success: facility.equipment_scraps_viewed
-      x-audit-event-failure: facility.equipment_scraps_view_failed
+      x-audit-event-failure: not_applicable
       x-auth-context: staff-token
       responses:
         "200":
@@ -25766,8 +25990,8 @@ paths:
       x-terminal-allowed:
         - web
       x-idempotency-required: false
-      x-audit-event-success: facility.work_order.viewed
-      x-audit-event-failure: facility.work_order.view_failed
+      x-audit-event-success: not_applicable
+      x-audit-event-failure: not_applicable
       x-auth-context: staff-token
       responses:
         "200":
@@ -25821,8 +26045,8 @@ paths:
       x-terminal-allowed:
         - web
       x-idempotency-required: false
-      x-audit-event-success: facility.work_order.overdue_viewed
-      x-audit-event-failure: facility.work_order.overdue_view_failed
+      x-audit-event-success: not_applicable
+      x-audit-event-failure: not_applicable
       x-auth-context: staff-token
       responses:
         "200":
@@ -25845,8 +26069,8 @@ paths:
       x-terminal-allowed:
         - web
       x-idempotency-required: false
-      x-audit-event-success: facility.work_order.viewed
-      x-audit-event-failure: facility.work_order.view_failed
+      x-audit-event-success: not_applicable
+      x-audit-event-failure: not_applicable
       x-auth-context: staff-token
       parameters:
         - name: work_order_id
@@ -26535,8 +26759,8 @@ paths:
       x-terminal-allowed:
         - web
       x-idempotency-required: false
-      x-audit-event-success: facility.alarm.viewed
-      x-audit-event-failure: facility.alarm.view_failed
+      x-audit-event-success: not_applicable
+      x-audit-event-failure: not_applicable
       x-auth-context: staff-token
       responses:
         "200":
@@ -26560,8 +26784,8 @@ paths:
         - web
         - staff_work_phone
       x-idempotency-required: false
-      x-audit-event-success: facility.alarm_mine.viewed
-      x-audit-event-failure: facility.alarm_mine.view_failed
+      x-audit-event-success: not_applicable
+      x-audit-event-failure: not_applicable
       x-auth-context: staff-token
       responses:
         "200":
@@ -26625,8 +26849,8 @@ paths:
       x-terminal-allowed:
         - web
       x-idempotency-required: false
-      x-audit-event-success: facility.alarm_duty.viewed
-      x-audit-event-failure: facility.alarm_duty.view_failed
+      x-audit-event-success: not_applicable
+      x-audit-event-failure: not_applicable
       x-auth-context: staff-token
       parameters:
         - name: project_id
@@ -26768,8 +26992,8 @@ paths:
       x-terminal-allowed:
         - web
       x-idempotency-required: false
-      x-audit-event-success: facility.fault_rule.viewed
-      x-audit-event-failure: facility.fault_rule.view_failed
+      x-audit-event-success: not_applicable
+      x-audit-event-failure: not_applicable
       x-auth-context: staff-token
       parameters:
         - name: project_id
@@ -26911,8 +27135,8 @@ paths:
       x-terminal-allowed:
         - web
       x-idempotency-required: false
-      x-audit-event-success: facility.inspection_template.viewed
-      x-audit-event-failure: facility.inspection_template.view_failed
+      x-audit-event-success: not_applicable
+      x-audit-event-failure: not_applicable
       x-auth-context: staff-token
       responses:
         "200":
@@ -26966,8 +27190,8 @@ paths:
       x-terminal-allowed:
         - web
       x-idempotency-required: false
-      x-audit-event-success: facility.inspection_task.viewed
-      x-audit-event-failure: facility.inspection_task.view_failed
+      x-audit-event-success: not_applicable
+      x-audit-event-failure: not_applicable
       x-auth-context: staff-token
       responses:
         "200":
@@ -27021,8 +27245,8 @@ paths:
       x-terminal-allowed:
         - web
       x-idempotency-required: false
-      x-audit-event-success: facility.inspection_task.viewed
-      x-audit-event-failure: facility.inspection_task.view_failed
+      x-audit-event-success: not_applicable
+      x-audit-event-failure: not_applicable
       x-auth-context: staff-token
       parameters:
         - name: task_id
@@ -27095,8 +27319,8 @@ paths:
       x-terminal-allowed:
         - web
       x-idempotency-required: false
-      x-audit-event-success: facility.inspection_record.viewed
-      x-audit-event-failure: facility.inspection_record.view_failed
+      x-audit-event-success: not_applicable
+      x-audit-event-failure: not_applicable
       x-auth-context: staff-token
       parameters:
         - name: task_id
@@ -27245,8 +27469,8 @@ paths:
       x-terminal-allowed:
         - web
       x-idempotency-required: false
-      x-audit-event-success: energy.meter.viewed
-      x-audit-event-failure: energy.meter.view_failed
+      x-audit-event-success: not_applicable
+      x-audit-event-failure: not_applicable
       x-auth-context: staff-token
       responses:
         "200":
@@ -27342,8 +27566,8 @@ paths:
       x-terminal-allowed:
         - web
       x-idempotency-required: false
-      x-audit-event-success: energy.reading.viewed
-      x-audit-event-failure: energy.reading.view_failed
+      x-audit-event-success: not_applicable
+      x-audit-event-failure: not_applicable
       x-auth-context: staff-token
       parameters:
         - name: period
@@ -27447,8 +27671,8 @@ paths:
       x-terminal-allowed:
         - web
       x-idempotency-required: false
-      x-audit-event-success: energy.meter_difference.viewed
-      x-audit-event-failure: energy.meter_difference.view_failed
+      x-audit-event-success: not_applicable
+      x-audit-event-failure: not_applicable
       x-auth-context: staff-token
       parameters:
         - name: meter_id
@@ -27648,7 +27872,7 @@ paths:
         - web
       x-idempotency-required: false
       x-audit-event-success: access.position_role_template.viewed
-      x-audit-event-failure: access.position_role_template.view_failed
+      x-audit-event-failure: not_applicable
       x-auth-context: staff-token
       responses:
         "200":
@@ -27738,8 +27962,8 @@ paths:
       x-terminal-allowed:
         - web
       x-idempotency-required: false
-      x-audit-event-success: access.position_role_template.deleted
-      x-audit-event-failure: access.position_role_template.delete_failed
+      x-audit-event-success: not_applicable
+      x-audit-event-failure: not_applicable
       x-auth-context: staff-token
       parameters:
         - name: id
@@ -27816,7 +28040,7 @@ paths:
         - web
       x-idempotency-required: false
       x-audit-event-success: access.grant_request.viewed
-      x-audit-event-failure: access.grant_request.view_failed
+      x-audit-event-failure: not_applicable
       x-auth-context: staff-token
       parameters:
         - name: window_days
@@ -27923,8 +28147,8 @@ paths:
       x-terminal-allowed:
         - web
       x-idempotency-required: false
-      x-audit-event-success: access.grant_request.summary_viewed
-      x-audit-event-failure: access.grant_request.summary_view_failed
+      x-audit-event-success: not_applicable
+      x-audit-event-failure: not_applicable
       x-auth-context: staff-token
       parameters:
         - name: window_days
@@ -28008,8 +28232,8 @@ paths:
       x-terminal-allowed:
         - web
       x-idempotency-required: false
-      x-audit-event-success: stored_value.merchant_refund_rule_viewed
-      x-audit-event-failure: stored_value.merchant_refund_rule_view_failed
+      x-audit-event-success: not_applicable
+      x-audit-event-failure: not_applicable
       parameters:
         - name: merchant_id
           in: path
@@ -28074,12 +28298,12 @@ paths:
       x-terminal-allowed:
         - web
       x-idempotency-required: false
-      x-audit-event-success: audit.operation_log.viewed
-      x-audit-event-failure: audit.operation_log.view_failed
+      x-audit-event-success: not_applicable
+      x-audit-event-failure: not_applicable
       x-auth-context: staff-token
       operationId: queryAuditOperationEvents
       summary: 跨对象查询操作留痕
-      description: 审计只读角色按业务对象/操作人/事件名/时间范围跨对象查询 audit_events 操作日志（与 evidence/events 对象时间线互补，解决跨对象批量查询入口）。
+      description: 审计只读角色按业务对象/操作人/事件名/时间范围跨对象查询 audit_events 操作日志（与 evidence/events 对象时间线互补，解决跨对象批量查询入口）。terminal 记该操作所在的端，取服务端派生的可信终端（客人会话端、商户手机应用会话、登记设备类型、商户账号为 merchant_portal、后台网页为 web）；一体机自助与员工自助注册端点取请求声明的终端；没有终端信息的为空（BSM 第 940 行、PGM 第 745 行）。
       parameters:
         - name: business_type
           in: query
@@ -28235,7 +28459,7 @@ paths:
         - web
       x-idempotency-required: false
       x-audit-event-success: space_type.viewed
-      x-audit-event-failure: space_type.view_failed
+      x-audit-event-failure: not_applicable
       x-auth-context: staff-token
       responses:
         "200":
@@ -28281,7 +28505,7 @@ paths:
         - web
       x-idempotency-required: false
       x-audit-event-success: partner_org.viewed
-      x-audit-event-failure: partner_org.view_failed
+      x-audit-event-failure: not_applicable
       x-auth-context: staff-token
       operationId: listPartnerOrgs
       summary: 外部协作机构列表
@@ -28334,7 +28558,7 @@ paths:
         - web
       x-idempotency-required: false
       x-audit-event-success: partner_subordinate.viewed
-      x-audit-event-failure: partner_subordinate.view_failed
+      x-audit-event-failure: not_applicable
       x-auth-context: staff-token
       operationId: listPartnerSubordinates
       summary: 本机构下属账号列表
@@ -29547,8 +29771,8 @@ paths:
       x-terminal-allowed:
         - web
       x-idempotency-required: false
-      x-audit-event-success: facility.site_entry.viewed
-      x-audit-event-failure: facility.site_entry.view_failed
+      x-audit-event-success: not_applicable
+      x-audit-event-failure: not_applicable
       responses:
         "200":
           $ref: "#/components/responses/Page"
@@ -29610,8 +29834,8 @@ paths:
       x-terminal-allowed:
         - web
       x-idempotency-required: false
-      x-audit-event-success: facility.site_entry.viewed
-      x-audit-event-failure: facility.site_entry.view_failed
+      x-audit-event-success: not_applicable
+      x-audit-event-failure: not_applicable
       responses:
         "200":
           $ref: "#/components/responses/Success"
@@ -29890,8 +30114,8 @@ paths:
       x-terminal-allowed:
         - web
       x-idempotency-required: false
-      x-audit-event-success: partner_subordinate_completion.viewed
-      x-audit-event-failure: partner_subordinate_completion.view_failed
+      x-audit-event-success: not_applicable
+      x-audit-event-failure: not_applicable
       responses:
         "200":
           $ref: "#/components/responses/Page"
@@ -30604,8 +30828,8 @@ paths:
       x-terminal-allowed:
         - web
       x-idempotency-required: false
-      x-audit-event-success: analytics.anomaly_config.viewed
-      x-audit-event-failure: analytics.anomaly_config.view_failed
+      x-audit-event-success: not_applicable
+      x-audit-event-failure: not_applicable
       responses:
         "200":
           $ref: "#/components/responses/Success"
@@ -30678,8 +30902,8 @@ paths:
       x-terminal-allowed:
         - web
       x-idempotency-required: false
-      x-audit-event-success: analytics.holiday_calendar.viewed
-      x-audit-event-failure: analytics.holiday_calendar.view_failed
+      x-audit-event-success: not_applicable
+      x-audit-event-failure: not_applicable
       parameters:
         - name: year
           in: query
@@ -30846,8 +31070,8 @@ paths:
         - staff_private_phone
         - web
       x-idempotency-required: false
-      x-audit-event-success: facility.work_order_assigned_list.viewed
-      x-audit-event-failure: facility.work_order_assigned_list.view_failed
+      x-audit-event-success: not_applicable
+      x-audit-event-failure: not_applicable
       responses:
         "200":
           $ref: "#/components/responses/Page"
@@ -30869,6 +31093,7 @@ paths:
         - staff_private_phone
         - web
         - tablet
+        - kiosk
       x-idempotency-required: false
       x-audit-event-success: bar.table_availability.viewed
       x-audit-event-failure: bar.table_availability.view_failed
@@ -31009,8 +31234,8 @@ paths:
       x-terminal-allowed:
         - web
       x-idempotency-required: false
-      x-audit-event-success: staff.shift.viewed
-      x-audit-event-failure: staff.shift.view_failed
+      x-audit-event-success: not_applicable
+      x-audit-event-failure: not_applicable
       parameters:
         - name: date
           in: query
@@ -31238,8 +31463,8 @@ paths:
         - staff_private_phone
         - web
       x-idempotency-required: false
-      x-audit-event-success: staff.shift_mine.viewed
-      x-audit-event-failure: staff.shift_mine.view_failed
+      x-audit-event-success: not_applicable
+      x-audit-event-failure: not_applicable
       responses:
         "200":
           description: 返回员工有效排班及夜班项目。
@@ -31387,8 +31612,8 @@ paths:
       x-terminal-allowed:
         - web
       x-idempotency-required: false
-      x-audit-event-success: staff.attendance_mine.viewed
-      x-audit-event-failure: staff.attendance_mine.view_failed
+      x-audit-event-success: not_applicable
+      x-audit-event-failure: not_applicable
       responses:
         "200":
           $ref: "#/components/responses/Page"
@@ -31409,8 +31634,8 @@ paths:
       x-terminal-allowed:
         - web
       x-idempotency-required: false
-      x-audit-event-success: staff.attendance.viewed
-      x-audit-event-failure: staff.attendance.view_failed
+      x-audit-event-success: not_applicable
+      x-audit-event-failure: not_applicable
       parameters:
         - name: date
           in: query
@@ -31560,7 +31785,7 @@ paths:
         - staff_work_phone
       x-idempotency-required: false
       x-audit-event-success: staff.payroll.adjustment_appeals_viewed
-      x-audit-event-failure: staff.payroll.adjustment_appeals_view_failed
+      x-audit-event-failure: not_applicable
       parameters:
         - name: user_id
           in: query
@@ -31824,7 +32049,7 @@ paths:
         - mobile_admin
       x-idempotency-required: false
       x-audit-event-success: staff.dispatch.viewed
-      x-audit-event-failure: staff.dispatch.view_failed
+      x-audit-event-failure: not_applicable
       parameters:
         - name: user_id
           in: query
@@ -31968,7 +32193,7 @@ paths:
         - web
       x-idempotency-required: false
       x-audit-event-success: staff.commission_settlement.viewed
-      x-audit-event-failure: staff.commission_settlement.view_failed
+      x-audit-event-failure: not_applicable
       parameters:
         - name: month
           in: query
@@ -32007,8 +32232,8 @@ paths:
         - tablet
         - web
       x-idempotency-required: false
-      x-audit-event-success: staff.payroll.viewed
-      x-audit-event-failure: staff.payroll.view_failed
+      x-audit-event-success: not_applicable
+      x-audit-event-failure: not_applicable
       parameters:
         - name: month
           in: query
@@ -32103,8 +32328,8 @@ paths:
         - tablet
         - web
       x-idempotency-required: false
-      x-audit-event-success: staff.payroll_mine.viewed
-      x-audit-event-failure: staff.payroll_mine.view_failed
+      x-audit-event-success: not_applicable
+      x-audit-event-failure: not_applicable
       parameters:
         - name: month
           in: query
@@ -32237,8 +32462,8 @@ paths:
       x-terminal-allowed:
         - web
       x-idempotency-required: false
-      x-audit-event-success: staff.leave.viewed
-      x-audit-event-failure: staff.leave.view_failed
+      x-audit-event-success: not_applicable
+      x-audit-event-failure: not_applicable
       parameters:
         - name: status
           in: query
@@ -32269,8 +32494,8 @@ paths:
         - staff_private_phone
         - web
       x-idempotency-required: false
-      x-audit-event-success: staff.leave_mine.viewed
-      x-audit-event-failure: staff.leave_mine.view_failed
+      x-audit-event-success: not_applicable
+      x-audit-event-failure: not_applicable
       responses:
         "200":
           $ref: "#/components/responses/Page"
@@ -32463,8 +32688,8 @@ paths:
         - staff_private_phone
         - web
       x-idempotency-required: false
-      x-audit-event-success: staff.attendance_month.viewed
-      x-audit-event-failure: staff.attendance_month.view_failed
+      x-audit-event-success: not_applicable
+      x-audit-event-failure: not_applicable
       parameters:
         - name: month
           in: query
@@ -32537,8 +32762,8 @@ paths:
         - tablet
         - app
       x-idempotency-required: false
-      x-audit-event-success: service.catalog.viewed
-      x-audit-event-failure: service.catalog.view_failed
+      x-audit-event-success: not_applicable
+      x-audit-event-failure: not_applicable
       responses:
         "200":
           $ref: "#/components/responses/Page"
@@ -32757,8 +32982,8 @@ paths:
       x-terminal-allowed:
         - web
       x-idempotency-required: false
-      x-audit-event-success: service.catalog.viewed
-      x-audit-event-failure: service.catalog.view_failed
+      x-audit-event-success: not_applicable
+      x-audit-event-failure: not_applicable
       responses:
         "200":
           $ref: "#/components/responses/Page"
@@ -32821,8 +33046,8 @@ paths:
       x-terminal-allowed:
         - web
       x-idempotency-required: false
-      x-audit-event-success: service.payment_code.viewed
-      x-audit-event-failure: service.payment_code.view_failed
+      x-audit-event-success: not_applicable
+      x-audit-event-failure: not_applicable
       responses:
         "200":
           $ref: "#/components/responses/Success"
@@ -32908,8 +33133,8 @@ paths:
       x-terminal-allowed:
         - web
       x-idempotency-required: false
-      x-audit-event-success: service.order.listed
-      x-audit-event-failure: service.order.list_failed
+      x-audit-event-success: not_applicable
+      x-audit-event-failure: not_applicable
       parameters:
         - name: date
           in: query
@@ -32947,8 +33172,8 @@ paths:
         - staff_private_phone
         - web
       x-idempotency-required: false
-      x-audit-event-success: service.order.mine_viewed
-      x-audit-event-failure: service.order.mine_view_failed
+      x-audit-event-success: not_applicable
+      x-audit-event-failure: not_applicable
       responses:
         "200":
           $ref: "#/components/responses/Page"
@@ -33151,8 +33376,8 @@ paths:
         - staff_private_phone
         - web
       x-idempotency-required: false
-      x-audit-event-success: service.order.stats_viewed
-      x-audit-event-failure: service.order.stats_view_failed
+      x-audit-event-success: not_applicable
+      x-audit-event-failure: not_applicable
       parameters:
         - name: month
           in: query
@@ -33178,9 +33403,12 @@ paths:
       operationId: markServiceOrderPaid
       x-failure-codes:
         - MEMBER_NOT_FOUND
+        - SENSITIVE_OPERATION_LOCATION_REQUIRED
+        - SENSITIVE_OPERATION_OUT_OF_RANGE
       summary: 确认收款到公司账户(服务员现场)
       description: H批(2026-07-02 最终拍板,公司代收):客人扫公司统一收款码支付,服务员目视支付 成功页确认;钱进公司账户,财务可对账——解决个人收款码无支付回调的确认盲区; 未确认收款不可完成履约。
         18E：履约人员工档案的项目须在 service.order.create 可触及的项目内（持可跨项目角色的含该角色可查看的项目），否则 403（CROSS_PROJECT_FORBIDDEN），在进入幂等之前判。
+        第十八批 N 段第 123 条 123-R2（BSM:1630「核销、收款、退款、放行等敏感操作，操作设备定位落在该项目综合体授权范围之外时一律拒绝并留痕」；BSM:1876「Web 端同样适用」）：本操作属敏感操作定位闸的现场动作闭集（第十八批裁决 31）。操作对象所属项目已配授权范围（123-R1）时须带请求头 X-Geo-Latitude、X-Geo-Longitude（设备当下定位，WGS-84 十进制度）：没带或解析不了按范围外处理（裁决 30）返回 403 SENSITIVE_OPERATION_LOCATION_REQUIRED，到圆心距离超过授权半径返回 403 SENSITIVE_OPERATION_OUT_OF_RANGE，拒绝在独立事务里留痕 sensitive_operation.location_rejected（business_id 为本 operationId，业务回滚不丢）；项目没配授权范围不查位置（裁决 32）；判定在幂等之前，重放不能绕过；通过时不存位置。
       x-permission: service.order.create
       x-data-scope: platform
       x-terminal-allowed:
@@ -33197,6 +33425,8 @@ paths:
           schema:
             type: string
             maxLength: 64
+        - $ref: "#/components/parameters/GeoLatitude"
+        - $ref: "#/components/parameters/GeoLongitude"
       requestBody:
         required: true
         content:
@@ -33243,8 +33473,8 @@ paths:
         - web
         - tablet
       x-idempotency-required: false
-      x-audit-event-success: service.pay_config.viewed
-      x-audit-event-failure: service.pay_config.view_failed
+      x-audit-event-success: not_applicable
+      x-audit-event-failure: not_applicable
       responses:
         "200":
           $ref: "#/components/responses/Success"
@@ -33307,9 +33537,10 @@ paths:
       x-terminal-allowed:
         - web
         - tablet
+        - kiosk
       x-idempotency-required: false
-      x-audit-event-success: bar.category.viewed
-      x-audit-event-failure: bar.category.viewed_failed
+      x-audit-event-success: not_applicable
+      x-audit-event-failure: not_applicable
       responses:
         "200":
           $ref: "#/components/responses/Success"
@@ -33394,9 +33625,10 @@ paths:
       x-terminal-allowed:
         - web
         - tablet
+        - kiosk
       x-idempotency-required: false
-      x-audit-event-success: bar.product.viewed
-      x-audit-event-failure: bar.product.viewed_failed
+      x-audit-event-success: not_applicable
+      x-audit-event-failure: not_applicable
       parameters:
         - name: bar_id
           in: query
@@ -33428,9 +33660,10 @@ paths:
       x-terminal-allowed:
         - web
         - tablet
+        - kiosk
       x-idempotency-required: false
-      x-audit-event-success: bar.combo.viewed
-      x-audit-event-failure: bar.combo.viewed_failed
+      x-audit-event-success: not_applicable
+      x-audit-event-failure: not_applicable
       responses:
         "200":
           $ref: "#/components/responses/Success"
@@ -33860,8 +34093,8 @@ paths:
         - miniapp
         - app
       x-idempotency-required: false
-      x-audit-event-success: customer.ticket_transfer_preview_viewed
-      x-audit-event-failure: customer.ticket_transfer_preview_view_failed
+      x-audit-event-success: not_applicable
+      x-audit-event-failure: not_applicable
       parameters:
         - name: claim_code
           in: query
@@ -33955,6 +34188,7 @@ paths:
       operationId: counterRefundStoredValueAccount
       summary: 会员储值到店柜台退款（商户预收卡唯一可达退款路径）
       description: CG-06a：同线上退款口径——只退未消费的本金（超过即 409 STORED_VALUE_PRINCIPAL_INSUFFICIENT），赠送金不退现，销户时赠送金作废留痕。
+        第十八批 N 段第 123 条 123-R2（BSM:1630「核销、收款、退款、放行等敏感操作，操作设备定位落在该项目综合体授权范围之外时一律拒绝并留痕」；BSM:1876「Web 端同样适用」）：本操作属敏感操作定位闸的现场动作闭集（第十八批裁决 31）。操作对象所属项目已配授权范围（123-R1）时须带请求头 X-Geo-Latitude、X-Geo-Longitude（设备当下定位，WGS-84 十进制度）：没带或解析不了按范围外处理（裁决 30）返回 403 SENSITIVE_OPERATION_LOCATION_REQUIRED，到圆心距离超过授权半径返回 403 SENSITIVE_OPERATION_OUT_OF_RANGE，拒绝在独立事务里留痕 sensitive_operation.location_rejected（business_id 为本 operationId，业务回滚不丢）；项目没配授权范围不查位置（裁决 32）；判定在幂等之前，重放不能绕过；通过时不存位置。
       x-permission: customer.stored_value.refund
       x-data-scope: project
       x-terminal-allowed:
@@ -33962,6 +34196,9 @@ paths:
       x-idempotency-required: true
       x-audit-event-success: stored_value.counter_refund
       x-audit-event-failure: stored_value.counter_refund_failed
+      x-failure-codes:
+        - SENSITIVE_OPERATION_LOCATION_REQUIRED
+        - SENSITIVE_OPERATION_OUT_OF_RANGE
       parameters:
         - name: customer_id
           in: path
@@ -33969,6 +34206,8 @@ paths:
           schema:
             type: string
           description: 会员ID
+        - $ref: "#/components/parameters/GeoLatitude"
+        - $ref: "#/components/parameters/GeoLongitude"
       requestBody:
         $ref: "#/components/requestBodies/StoredValueCounterRefundRequest"
       responses:
@@ -34075,7 +34314,7 @@ paths:
         - web
       x-idempotency-required: false
       x-audit-event-success: dealer.viewed
-      x-audit-event-failure: dealer.view_failed
+      x-audit-event-failure: not_applicable
       responses:
         '200':
           $ref: '#/components/responses/Page'
@@ -34382,8 +34621,8 @@ paths:
       x-terminal-allowed:
         - web
       x-idempotency-required: false
-      x-audit-event-success: dealer.contract_viewed
-      x-audit-event-failure: dealer.contract_view_failed
+      x-audit-event-success: not_applicable
+      x-audit-event-failure: not_applicable
       parameters:
         - name: id
           in: path
@@ -34547,8 +34786,8 @@ paths:
       x-terminal-allowed:
         - web
       x-idempotency-required: false
-      x-audit-event-success: dealer.price_catalog_viewed
-      x-audit-event-failure: dealer.price_catalog_view_failed
+      x-audit-event-success: not_applicable
+      x-audit-event-failure: not_applicable
       parameters:
         - name: id
           in: path
@@ -34667,7 +34906,7 @@ paths:
         - web
       x-idempotency-required: false
       x-audit-event-success: dealer.external_stock.viewed
-      x-audit-event-failure: dealer.external_stock.view_failed
+      x-audit-event-failure: not_applicable
       parameters:
         - name: id
           in: path
@@ -34698,8 +34937,8 @@ paths:
       x-terminal-allowed:
         - web
       x-idempotency-required: false
-      x-audit-event-success: dealer.price_catalog_line_viewed
-      x-audit-event-failure: dealer.price_catalog_line_view_failed
+      x-audit-event-success: not_applicable
+      x-audit-event-failure: not_applicable
       parameters:
         - name: id
           in: path
@@ -34845,8 +35084,8 @@ paths:
       x-terminal-allowed:
         - web
       x-idempotency-required: false
-      x-audit-event-success: dealer.inquiry_viewed
-      x-audit-event-failure: dealer.inquiry_view_failed
+      x-audit-event-success: not_applicable
+      x-audit-event-failure: not_applicable
       parameters:
         - name: id
           in: path
@@ -35260,7 +35499,7 @@ paths:
         - web
       x-idempotency-required: false
       x-audit-event-success: dealer.order.viewed
-      x-audit-event-failure: dealer.order.view_failed
+      x-audit-event-failure: not_applicable
       parameters:
         - name: id
           in: path
@@ -35379,8 +35618,8 @@ paths:
       x-terminal-allowed:
         - web
       x-idempotency-required: false
-      x-audit-event-success: dealer.order.overpayment_viewed
-      x-audit-event-failure: dealer.order.overpayment_view_failed
+      x-audit-event-success: not_applicable
+      x-audit-event-failure: not_applicable
       parameters:
         - name: id
           in: path
@@ -35425,8 +35664,8 @@ paths:
       x-terminal-allowed:
         - web
       x-idempotency-required: false
-      x-audit-event-success: dealer.order.viewed
-      x-audit-event-failure: dealer.order.view_failed
+      x-audit-event-success: not_applicable
+      x-audit-event-failure: not_applicable
       parameters:
         - name: id
           in: path
@@ -35457,8 +35696,8 @@ paths:
       x-terminal-allowed:
         - web
       x-idempotency-required: false
-      x-audit-event-success: dealer.order.viewed
-      x-audit-event-failure: dealer.order.view_failed
+      x-audit-event-success: not_applicable
+      x-audit-event-failure: not_applicable
       parameters:
         - name: id
           in: path
@@ -35604,8 +35843,8 @@ paths:
       x-terminal-allowed:
         - web
       x-idempotency-required: false
-      x-audit-event-success: dealer.order.viewed
-      x-audit-event-failure: dealer.order.view_failed
+      x-audit-event-success: not_applicable
+      x-audit-event-failure: not_applicable
       parameters:
         - name: id
           in: path
@@ -36149,8 +36388,8 @@ paths:
       x-terminal-allowed:
         - web
       x-idempotency-required: false
-      x-audit-event-success: dealer.order.viewed
-      x-audit-event-failure: dealer.order.view_failed
+      x-audit-event-success: not_applicable
+      x-audit-event-failure: not_applicable
       parameters:
         - name: id
           in: path
@@ -36418,8 +36657,8 @@ paths:
       x-terminal-allowed:
         - web
       x-idempotency-required: false
-      x-audit-event-success: dealer.return.viewed
-      x-audit-event-failure: dealer.return.view_failed
+      x-audit-event-success: not_applicable
+      x-audit-event-failure: not_applicable
       parameters:
         - name: id
           in: path
@@ -36595,8 +36834,8 @@ paths:
       x-terminal-allowed:
         - web
       x-idempotency-required: false
-      x-audit-event-success: dealer.return.viewed
-      x-audit-event-failure: dealer.return.view_failed
+      x-audit-event-success: not_applicable
+      x-audit-event-failure: not_applicable
       parameters:
         - name: id
           in: path
@@ -36627,8 +36866,8 @@ paths:
       x-terminal-allowed:
         - web
       x-idempotency-required: false
-      x-audit-event-success: dealer.return.viewed
-      x-audit-event-failure: dealer.return.view_failed
+      x-audit-event-success: not_applicable
+      x-audit-event-failure: not_applicable
       parameters:
         - name: id
           in: path
@@ -37327,8 +37566,8 @@ paths:
       x-terminal-allowed:
         - web
       x-idempotency-required: false
-      x-audit-event-success: dealer.invoice.viewed
-      x-audit-event-failure: dealer.invoice.view_failed
+      x-audit-event-success: not_applicable
+      x-audit-event-failure: not_applicable
       parameters:
         - name: id
           in: path
@@ -37666,7 +37905,7 @@ paths:
       x-terminal-allowed:
         - dealer_portal
       x-idempotency-required: false
-      x-audit-event-success: dealer.portal.viewed
+      x-audit-event-success: not_applicable
       x-audit-event-failure: dealer.portal.access_rejected
       responses:
         '200':
@@ -37751,8 +37990,8 @@ paths:
       x-terminal-allowed:
         - dealer_portal
       x-idempotency-required: false
-      x-audit-event-success: dealer.contract.viewed
-      x-audit-event-failure: dealer.contract.view_failed
+      x-audit-event-success: not_applicable
+      x-audit-event-failure: not_applicable
       responses:
         '200':
           $ref: '#/components/responses/Page'
@@ -37778,7 +38017,7 @@ paths:
         - dealer_portal
       x-idempotency-required: false
       x-audit-event-success: dealer.external_stock.viewed
-      x-audit-event-failure: dealer.external_stock.view_failed
+      x-audit-event-failure: not_applicable
       parameters:
         - name: id
           in: path
@@ -37811,8 +38050,8 @@ paths:
       x-terminal-allowed:
         - dealer_portal
       x-idempotency-required: false
-      x-audit-event-success: dealer.inquiry.viewed
-      x-audit-event-failure: dealer.inquiry.view_failed
+      x-audit-event-success: not_applicable
+      x-audit-event-failure: not_applicable
       responses:
         '200':
           $ref: '#/components/responses/Page'
@@ -37904,7 +38143,7 @@ paths:
         - dealer_portal
       x-idempotency-required: false
       x-audit-event-success: dealer.order.viewed
-      x-audit-event-failure: dealer.order.view_failed
+      x-audit-event-failure: not_applicable
       responses:
         '200':
           $ref: '#/components/responses/Page'
@@ -38008,8 +38247,8 @@ paths:
       x-terminal-allowed:
         - dealer_portal
       x-idempotency-required: false
-      x-audit-event-success: dealer.order.viewed
-      x-audit-event-failure: dealer.order.view_failed
+      x-audit-event-success: not_applicable
+      x-audit-event-failure: not_applicable
       parameters:
         - name: id
           in: path
@@ -38042,8 +38281,8 @@ paths:
       x-terminal-allowed:
         - dealer_portal
       x-idempotency-required: false
-      x-audit-event-success: dealer.order.viewed
-      x-audit-event-failure: dealer.order.view_failed
+      x-audit-event-success: not_applicable
+      x-audit-event-failure: not_applicable
       parameters:
         - name: id
           in: path
@@ -38128,8 +38367,8 @@ paths:
       x-terminal-allowed:
         - dealer_portal
       x-idempotency-required: false
-      x-audit-event-success: dealer.order.viewed
-      x-audit-event-failure: dealer.order.view_failed
+      x-audit-event-success: not_applicable
+      x-audit-event-failure: not_applicable
       parameters:
         - name: id
           in: path
@@ -38316,8 +38555,8 @@ paths:
       x-terminal-allowed:
         - dealer_portal
       x-idempotency-required: false
-      x-audit-event-success: dealer.return.viewed
-      x-audit-event-failure: dealer.return.view_failed
+      x-audit-event-success: not_applicable
+      x-audit-event-failure: not_applicable
       parameters:
         - name: id
           in: path
@@ -38491,8 +38730,8 @@ paths:
       x-terminal-allowed:
         - web
       x-idempotency-required: false
-      x-audit-event-success: dealer.portal_account.viewed
-      x-audit-event-failure: dealer.portal_account.view_failed
+      x-audit-event-success: not_applicable
+      x-audit-event-failure: not_applicable
       parameters:
         - name: id
           in: path
@@ -39559,6 +39798,11 @@ paths:
         - TRACE_CODE_INCOMPLETE
         - TRACE_CODE_NOT_FOUND
         - TRACE_CODE_MISMATCH
+        - SENSITIVE_OPERATION_LOCATION_REQUIRED
+        - SENSITIVE_OPERATION_OUT_OF_RANGE
+      parameters:
+        - $ref: "#/components/parameters/GeoLatitude"
+        - $ref: "#/components/parameters/GeoLongitude"
       requestBody:
         $ref: "#/components/requestBodies/VoucherRedeemRequest"
       responses:
@@ -39574,7 +39818,7 @@ paths:
           $ref: "#/components/responses/Error"
         "500":
           $ref: "#/components/responses/Error"
-      description: " ROOT-03-R32＝clients-R41（BSM 第 585 行「客人出示的门票核销码、权益核销码……都不是一张固定的图，而是每隔一段时间自动更新的动态码……截图、转发出去的旧码过了有效期就作废，验不过……权益转赠一经完成，原持有人手里的码立即全部作废」）：code 只认客人出示的未过期动态码（vrc_ 前缀，签发对象须仍是当前持有人；过期、已换新码或转赠后 409 VOUCHER_REDEEM_CODE_EXPIRED），固定券码一律 409 VOUCHER_DYNAMIC_CODE_REQUIRED；按 voucher_instance_id 定位的员工台账路径不变。核销成功同事务把该动态码置已用。有在途转赠照常核销，核销成功即作废在途转赠（void_reason=holder_redeemed；操作员裁决第十三批第 9 条「和门票一致不冻结（推荐）：发起转赠后原持有人仍可自用或改转他人，先成功的动作为准，其余自动作废」）。第十八批 L 段 103-R1（BSM 第 1197 行「酒水/礼品/高价值物料贴平台唯一二维码，出库须同时核验订单和物品码」）：店内实物券须带 trace_codes 逐件核验物品码——去空白去重后个数须等于每张券件数（400 TRACE_CODE_INCOMPLETE），每个码须已登记（404 TRACE_CODE_NOT_FOUND）、属本商户（403 CROSS_MERCHANT_FORBIDDEN）、登记的是本券货品（400 TRACE_CODE_MISMATCH），核验不过券与库存都不动；物品码随 voucher.redeemed 审计事件留存。第十八批 M 段 112-R1（BSM 第 947 行「工作手机扫描权益二维码，核销赠饮、礼物或其他领取资格。」；BSM 第 1004 行「……领取……都要记录设备、点位和时间。」）：工作手机与一体机（112-R2）也调本端点，核销成功留痕 voucher.redeemed 的 metadata 另记可信终端 terminal_type、设备号 device_id 与该设备在设备台账上的绑定点位 point_id（有才记）。"
+      description: " ROOT-03-R32＝clients-R41（BSM 第 585 行「客人出示的门票核销码、权益核销码……都不是一张固定的图，而是每隔一段时间自动更新的动态码……截图、转发出去的旧码过了有效期就作废，验不过……权益转赠一经完成，原持有人手里的码立即全部作废」）：code 只认客人出示的未过期动态码（vrc_ 前缀，签发对象须仍是当前持有人；过期、已换新码或转赠后 409 VOUCHER_REDEEM_CODE_EXPIRED），固定券码一律 409 VOUCHER_DYNAMIC_CODE_REQUIRED；按 voucher_instance_id 定位的员工台账路径不变。核销成功同事务把该动态码置已用。有在途转赠照常核销，核销成功即作废在途转赠（void_reason=holder_redeemed；操作员裁决第十三批第 9 条「和门票一致不冻结（推荐）：发起转赠后原持有人仍可自用或改转他人，先成功的动作为准，其余自动作废」）。第十八批 L 段 103-R1（BSM 第 1197 行「酒水/礼品/高价值物料贴平台唯一二维码，出库须同时核验订单和物品码」）：店内实物券须带 trace_codes 逐件核验物品码——去空白去重后个数须等于每张券件数（400 TRACE_CODE_INCOMPLETE），每个码须已登记（404 TRACE_CODE_NOT_FOUND）、属本商户（403 CROSS_MERCHANT_FORBIDDEN）、登记的是本券货品（400 TRACE_CODE_MISMATCH），核验不过券与库存都不动；物品码随 voucher.redeemed 审计事件留存。第十八批 M 段 112-R1（BSM 第 947 行「工作手机扫描权益二维码，核销赠饮、礼物或其他领取资格。」；BSM 第 1004 行「……领取……都要记录设备、点位和时间。」）：工作手机与一体机（112-R2）也调本端点，核销成功留痕 voucher.redeemed 的 metadata 另记可信终端 terminal_type、设备号 device_id 与该设备在设备台账上的绑定点位 point_id（有才记）。第十八批 N 段第 123 条 123-R2（BSM:1630「核销、收款、退款、放行等敏感操作，操作设备定位落在该项目综合体授权范围之外时一律拒绝并留痕」；BSM:1876「Web 端同样适用」）：本操作属敏感操作定位闸的现场动作闭集（第十八批裁决 31）。操作对象所属项目已配授权范围（123-R1）时须带请求头 X-Geo-Latitude、X-Geo-Longitude（设备当下定位，WGS-84 十进制度）：没带或解析不了按范围外处理（裁决 30）返回 403 SENSITIVE_OPERATION_LOCATION_REQUIRED，到圆心距离超过授权半径返回 403 SENSITIVE_OPERATION_OUT_OF_RANGE，拒绝在独立事务里留痕 sensitive_operation.location_rejected（business_id 为本 operationId，业务回滚不丢）；项目没配授权范围不查位置（裁决 32）；判定在幂等之前，重放不能绕过；通过时不存位置。"
   /api/v1/vouchers/redemptions/preview:
     post:
       tags:
@@ -39816,8 +40060,8 @@ paths:
         - miniapp
         - app
       x-idempotency-required: false
-      x-audit-event-success: customer.voucher_transfer_preview_viewed
-      x-audit-event-failure: customer.voucher_transfer_preview_view_failed
+      x-audit-event-success: not_applicable
+      x-audit-event-failure: not_applicable
       parameters:
         - name: claim_code
           in: query
@@ -39851,8 +40095,8 @@ paths:
         - miniapp
         - app
       x-idempotency-required: false
-      x-audit-event-success: customer.voucher_transfer_incoming_viewed
-      x-audit-event-failure: customer.voucher_transfer_incoming_view_failed
+      x-audit-event-success: not_applicable
+      x-audit-event-failure: not_applicable
       responses:
         "200":
           $ref: "#/components/responses/Page"
@@ -39873,8 +40117,8 @@ paths:
         - miniapp
         - app
       x-idempotency-required: false
-      x-audit-event-success: customer.voucher_transfer_outgoing_viewed
-      x-audit-event-failure: customer.voucher_transfer_outgoing_view_failed
+      x-audit-event-success: not_applicable
+      x-audit-event-failure: not_applicable
       responses:
         "200":
           $ref: "#/components/responses/Page"
@@ -40537,8 +40781,8 @@ paths:
       x-data-scope: platform
       x-terminal-allowed:
         - web
-      x-audit-event-success: settlement.config.overview.viewed
-      x-audit-event-failure: settlement.config.overview.view_failed
+      x-audit-event-success: not_applicable
+      x-audit-event-failure: not_applicable
       responses:
         "200":
           $ref: "#/components/responses/Success"
@@ -41073,8 +41317,8 @@ paths:
       x-data-scope: platform
       x-terminal-allowed:
         - web
-      x-audit-event-success: settlement.config.distribution_scheme.viewed
-      x-audit-event-failure: settlement.config.distribution_scheme.view_failed
+      x-audit-event-success: not_applicable
+      x-audit-event-failure: not_applicable
       responses:
         "200":
           $ref: "#/components/responses/Success"
@@ -41711,8 +41955,8 @@ paths:
         - web
         - tablet
       x-idempotency-required: false
-      x-audit-event-success: bar.void_reason_code.viewed
-      x-audit-event-failure: bar.void_reason_code.view_failed
+      x-audit-event-success: not_applicable
+      x-audit-event-failure: not_applicable
       x-auth-context: staff-token
       parameters:
         - name: include_inactive
@@ -42011,7 +42255,7 @@ paths:
         - staff_work_phone
       x-idempotency-required: false
       x-audit-event-success: evidence.attachment_uploaded
-      x-audit-event-failure: evidence.attachment_uploaded_failed
+      x-audit-event-failure: evidence.attachment_upload_failed
       x-auth-context: staff-token
       parameters:
         - name: business_type
@@ -42099,8 +42343,8 @@ paths:
       x-terminal-allowed:
         - web
       x-idempotency-required: false
-      x-audit-event-success: settlement.invoice.list
-      x-audit-event-failure: settlement.invoice.list_failed
+      x-audit-event-success: not_applicable
+      x-audit-event-failure: not_applicable
       parameters:
         - name: projectId
           in: query
@@ -42162,8 +42406,8 @@ paths:
       x-terminal-allowed:
         - web
       x-idempotency-required: false
-      x-audit-event-success: settlement.invoice.summary
-      x-audit-event-failure: settlement.invoice.summary_failed
+      x-audit-event-success: not_applicable
+      x-audit-event-failure: not_applicable
       parameters:
         - name: projectId
           in: query
@@ -42355,8 +42599,8 @@ paths:
       x-terminal-allowed:
         - web
       x-idempotency-required: false
-      x-audit-event-success: ticket_product.viewed
-      x-audit-event-failure: ticket_product.view_failed
+      x-audit-event-success: not_applicable
+      x-audit-event-failure: not_applicable
       parameters:
         - $ref: "#/components/parameters/Id"
           description: undefined 参数；必须按 OpenAPI 类型、枚举和必填规则校验。
@@ -42735,8 +42979,8 @@ paths:
       x-data-scope: platform
       x-terminal-allowed:
         - web
-      x-audit-event-success: settlement.config.internal_price_catalog.viewed
-      x-audit-event-failure: settlement.config.internal_price_catalog.view_failed
+      x-audit-event-success: not_applicable
+      x-audit-event-failure: not_applicable
       parameters:
         - name: merchant_id
           in: query
@@ -42908,7 +43152,7 @@ paths:
         - staff_private_phone
       x-idempotency-required: false
       x-audit-event-success: staff.registration_companies_viewed
-      x-audit-event-failure: staff.registration_companies_view_failed
+      x-audit-event-failure: not_applicable
       responses:
         "200":
           $ref: "#/components/responses/Success"
@@ -43097,7 +43341,7 @@ paths:
         - staff_work_phone
       x-idempotency-required: false
       x-audit-event-success: staff.shift.visibility_viewed
-      x-audit-event-failure: staff.shift.visibility_view_failed
+      x-audit-event-failure: not_applicable
       responses:
         "200":
           $ref: "#/components/responses/Success"
@@ -43189,7 +43433,7 @@ paths:
         - staff_work_phone
       x-idempotency-required: false
       x-audit-event-success: staff.payroll.penalty_cap_viewed
-      x-audit-event-failure: staff.payroll.penalty_cap_view_failed
+      x-audit-event-failure: not_applicable
       responses:
         "200":
           $ref: "#/components/responses/Success"
@@ -43304,7 +43548,7 @@ paths:
         - staff_work_phone
       x-idempotency-required: false
       x-audit-event-success: staff.shift.history_viewed
-      x-audit-event-failure: staff.shift.history_view_failed
+      x-audit-event-failure: not_applicable
       responses:
         "200":
           $ref: "#/components/responses/Success"
@@ -43573,7 +43817,7 @@ paths:
         - staff_work_phone
       x-idempotency-required: false
       x-audit-event-success: staff.shift.covers_viewed
-      x-audit-event-failure: staff.shift.covers_view_failed
+      x-audit-event-failure: not_applicable
       parameters:
         - name: id
           in: path
@@ -54507,6 +54751,7 @@ paths:
       operationId: recordParkingManualRelease
       summary: 当班保安登记人工放行
       description: BSM「停车场」L1438「识别失败、道闸故障、客人对缴费有争议时，由当班保安人工核对后放行，人工放行必须记录原因、操作人、车牌和时间，进留痕与异常；免费放行和减免须经物业主管审批」：操作人取登录人、时间取服务器时刻，须此刻当班（排班或顶班，否则 409 PARKING_GUARD_NOT_ON_DUTY）；同事务进统一异常队列（source_domain=parking，alert_type=parking.manual_release）。waive_type=free／reduction 时进统一审批（最终审批人须经角色持有 parking.release.approve），审批结论回写 approved／rejected；待批或已批的免费／减免覆盖该次出场欠费时不判逃费，驳回后补判。
+        第十八批 N 段第 123 条 123-R2（BSM:1630「核销、收款、退款、放行等敏感操作，操作设备定位落在该项目综合体授权范围之外时一律拒绝并留痕」；BSM:1876「Web 端同样适用」）：本操作属敏感操作定位闸的现场动作闭集（第十八批裁决 31）。操作对象所属项目已配授权范围（123-R1）时须带请求头 X-Geo-Latitude、X-Geo-Longitude（设备当下定位，WGS-84 十进制度）：没带或解析不了按范围外处理（裁决 30）返回 403 SENSITIVE_OPERATION_LOCATION_REQUIRED，到圆心距离超过授权半径返回 403 SENSITIVE_OPERATION_OUT_OF_RANGE，拒绝在独立事务里留痕 sensitive_operation.location_rejected（business_id 为本 operationId，业务回滚不丢）；项目没配授权范围不查位置（裁决 32）；判定在幂等之前，重放不能绕过；通过时不存位置。
       x-permission: parking.release.record
       x-data-scope: project
       x-terminal-allowed:
@@ -54514,6 +54759,12 @@ paths:
       x-idempotency-required: true
       x-audit-event-success: parking.manual_release_recorded
       x-audit-event-failure: parking.manual_release_record_failed
+      x-failure-codes:
+        - SENSITIVE_OPERATION_LOCATION_REQUIRED
+        - SENSITIVE_OPERATION_OUT_OF_RANGE
+      parameters:
+        - $ref: "#/components/parameters/GeoLatitude"
+        - $ref: "#/components/parameters/GeoLongitude"
       requestBody:
         required: true
         content:
@@ -55336,8 +55587,8 @@ paths:
         - merchant_portal
         - merchant_app
       x-idempotency-required: false
-      x-audit-event-success: security.my_exports.viewed
-      x-audit-event-failure: security.my_exports.view_failed
+      x-audit-event-success: not_applicable
+      x-audit-event-failure: not_applicable
       parameters:
         - name: page
           in: query
@@ -55724,6 +55975,24 @@ components:
         type: string
         maxLength: 64
       description: ProjectId 路径参数；必须引用当前数据范围内存在且归属本商户的游乐项目。
+    GeoLatitude:
+      name: X-Geo-Latitude
+      in: header
+      required: false
+      schema:
+        type: number
+        minimum: -90
+        maximum: 90
+      description: "第十八批 N 段第 123 条 123-R2：操作设备当下定位的纬度（WGS-84 十进制度）。操作对象所属项目已配敏感操作授权范围时必带，没带或解析不了按范围外处理（403 SENSITIVE_OPERATION_LOCATION_REQUIRED）。"
+    GeoLongitude:
+      name: X-Geo-Longitude
+      in: header
+      required: false
+      schema:
+        type: number
+        minimum: -180
+        maximum: 180
+      description: "第十八批 N 段第 123 条 123-R2：操作设备当下定位的经度（WGS-84 十进制度）。操作对象所属项目已配敏感操作授权范围时必带，没带或解析不了按范围外处理（403 SENSITIVE_OPERATION_LOCATION_REQUIRED）。"
   requestBodies:
     StatusChange:
       required: true
@@ -56268,7 +56537,6 @@ components:
             $ref: "#/components/schemas/AmusementMaintenanceResumeRequest"
           example:
             idempotency_key: amu_maint_resume_20260618_000001
-            supervisor_confirmed_by: staff_supervisor_01
             remark: 检修合格，确认恢复营业
     OfflinePaymentConfirmRequest:
       required: true
@@ -60117,6 +60385,9 @@ components:
           maxLength: 20
           pattern: ^\+?[0-9]{6,20}$
           description: 客人手机号（操作员裁决第十三批第 7 条，必填）：查到会员且受限就拒绝（403 CUSTOMER_RESTRICTED），查不到会员的照常代订；只用于核对，不落库。
+        remark:
+          type: string
+          description: 订台备注（选填，BSM:987「……人数和订台备注……」）；落库并随订台记录返回。
     OpenBarTableRequest:
       type: object
       description: 请求载荷 `OpenBarTableRequest`；字段、必填项和枚举用于生成 DTO、校验和契约测试。
@@ -61304,19 +61575,13 @@ components:
           maxLength: 32
     AmusementMaintenanceResumeRequest:
       type: object
-      description: 请求载荷 `AmusementMaintenanceResumeRequest`；主管确认恢复营业，result=pass 方可调用，触发 maintenance→open（设计 §5.1.1/§8.7.1）。
+      description: 请求载荷 `AmusementMaintenanceResumeRequest`；主管确认恢复营业，result=pass 方可调用，项目处于检修中（maintenance）时触发 maintenance→open、在营项目不动（设计 §5.1.1/§8.7.1）。确认人以当前登录主管为准，请求不收确认人（第十八批 N 段 120-R6）。
       additionalProperties: false
-      required:
-        - supervisor_confirmed_by
       properties:
         idempotency_key:
           type: string
           description: 操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。
           maxLength: 128
-        supervisor_confirmed_by:
-          type: string
-          description: 主管确认人 ID（确认恢复营业的主管）。
-          maxLength: 64
         remark:
           type: string
           description: 操作备注；用于解释主管确认判断，进入审计留痕。
@@ -75546,6 +75811,51 @@ components:
           type: string
           format: date-time
       additionalProperties: false
+    AmusementProjectStatus:
+      type: object
+      description: 第十八批 N 段第 120 条 120-R5 游乐设施状态看板一行（客人可看，不含客人编号与排队号）。
+      required:
+        - project_id
+        - project_name
+        - open_status
+        - capacity
+        - occupied_count
+        - waiting_count
+        - maintenance_device_count
+        - fault_count
+        - safety_notices
+      properties:
+        project_id:
+          type: string
+        project_name:
+          type: string
+        open_status:
+          type: string
+          enum:
+            - open
+            - paused
+            - closed
+            - maintenance
+        capacity:
+          type: integer
+          minimum: 0
+        occupied_count:
+          type: integer
+          minimum: 0
+        waiting_count:
+          type: integer
+          minimum: 0
+        maintenance_device_count:
+          type: integer
+          minimum: 0
+        fault_count:
+          type: integer
+          minimum: 0
+        safety_notices:
+          type: array
+          items:
+            type: string
+      additionalProperties: false
     PurchaseReturnFact:
       type: object
       properties:
@@ -77773,6 +78083,41 @@ components:
         - remaining_tip_cent
         - sources
         - prior_lines
+    SensitiveOperationRangeRecord:
+      type: object
+      additionalProperties: false
+      properties:
+        project_id:
+          type: string
+          description: 综合体项目编号
+          maxLength: 64
+        center_latitude:
+          type:
+            - number
+            - "null"
+          description: 中心纬度（WGS-84，十进制度）；未配置为空
+        center_longitude:
+          type:
+            - number
+            - "null"
+          description: 中心经度（WGS-84，十进制度）；未配置为空
+        radius_meters:
+          type:
+            - integer
+            - "null"
+          description: 授权半径（米）；未配置为空
+        min_radius_meters:
+          type:
+            - integer
+            - "null"
+          description: 半径下限（米）；未配置为空
+        max_radius_meters:
+          type:
+            - integer
+            - "null"
+          description: 半径上限（米）；未配置为空
+      required:
+        - project_id
 x-contract-rules:
   permissionExtension: "`x-permission` 仅表达员工/系统权限码或 public/authenticated/not_applicable 三类通用状态"
   authContextExtension: "`x-auth-context` 表达 customer-token/device-credential/open-app-credential/webhook-signature 等鉴权上下文"

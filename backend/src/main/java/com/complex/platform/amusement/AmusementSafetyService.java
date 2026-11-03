@@ -67,7 +67,7 @@ public class AmusementSafetyService {
                 ? repository.findSafetyNoticesByMerchant(scope.get())
                 : repository.findAllSafetyNotices();
         auditEventService.recordSuccess(
-                "amusement.safety_notice.viewed",
+                "amusement.safety_notice.list",
                 "amusement.safety_notice.view",
                 "amusement_safety_notice",
                 "all",
@@ -121,7 +121,7 @@ public class AmusementSafetyService {
                 ? repository.findIncidentsByMerchant(scope.get())
                 : repository.findAllIncidents();
         auditEventService.recordSuccess(
-                "amusement.incident.viewed",
+                "amusement.incident.list",
                 "amusement.incident.view",
                 "amusement_incident",
                 "all",
@@ -209,7 +209,7 @@ public class AmusementSafetyService {
                 authorizationService.currentMerchantScope().orElse(null)
         ));
         auditEventService.recordSuccess(
-                "amusement.safety_notice.created",
+                "amusement.safety_notice.create",
                 "amusement.safety_notice.manage",
                 "amusement_safety_notice",
                 record.id(),
@@ -245,7 +245,7 @@ public class AmusementSafetyService {
                 )
         );
         auditEventService.recordSuccess(
-                "amusement.waiver.acknowledged",
+                "amusement.waiver.acknowledge",
                 "amusement.waiver.acknowledge",
                 "amusement_waiver_acknowledgement",
                 record.id(),
@@ -304,7 +304,7 @@ public class AmusementSafetyService {
             }
         }
         auditEventService.recordSuccess(
-                "amusement.incident.created",
+                "amusement.incident.create",
                 "amusement.incident.create",
                 "amusement_incident",
                 record.id(),
@@ -382,7 +382,7 @@ public class AmusementSafetyService {
                 evidenceIds(request.evidenceAttachmentIds())
         ));
         auditEventService.recordSuccess(
-                "amusement.incident.action_added",
+                "amusement.incident.action",
                 "amusement.incident.process",
                 "amusement_incident",
                 saved.id(),
@@ -411,7 +411,7 @@ public class AmusementSafetyService {
                 evidenceIds(request.evidenceAttachmentIds())
         ));
         auditEventService.recordSuccess(
-                "amusement.incident.closed",
+                "amusement.incident.close",
                 "amusement.incident.close",
                 "amusement_incident",
                 closed.id(),

@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -33,6 +33,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.test.web.servlet.MockMvc;
@@ -127,7 +128,7 @@ class CustomerTicketChannelLinkJdbcIntegrationTests {
 
     @Test
     void kioskOrderWithoutSmsCodeRejected() throws Exception {
-        RequestPostProcessor cashier = staff("usr_r29_kiosk_" + f.suffix, "ticket.order.create");
+        RequestPostProcessor cashier = atTicketingKiosk(staff("usr_r29_kiosk_" + f.suffix, "ticket.order.create"));
         kioskOrder(cashier, f.phone, null).andExpect(status().isBadRequest());
         kioskOrder(cashier, f.phone, "999999").andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.detail_code").value("CUSTOMER_OTP_INVALID"));
@@ -137,7 +138,7 @@ class CustomerTicketChannelLinkJdbcIntegrationTests {
 
     @Test
     void kioskOrderBindsAfterVerification() throws Exception {
-        RequestPostProcessor cashier = staff("usr_r29_kiosk_" + f.suffix, "ticket.order.create");
+        RequestPostProcessor cashier = atTicketingKiosk(staff("usr_r29_kiosk_" + f.suffix, "ticket.order.create"));
         mockMvc.perform(post("/api/v1/ticketing/kiosk-bind-codes").with(cashier).contentType(MediaType.APPLICATION_JSON)
                         .content(JSON.writeValueAsString(Map.of("phone", f.phone))))
                 .andExpect(status().isOk())
@@ -203,11 +204,29 @@ class CustomerTicketChannelLinkJdbcIntegrationTests {
         body.put("visit_date", LocalDate.now().toString());
         body.put("sales_channel", "kiosk");
         body.put("buyer_phone", phone);
+        body.put("operator_note", "客人到店补票");
         if (smsCode != null) {
             body.put("sms_code", smsCode);
         }
         return mockMvc.perform(post("/api/v1/ticketing/orders").with(cashier).contentType(MediaType.APPLICATION_JSON)
                 .content(JSON.writeValueAsString(body)));
+    }
+
+    /** 第十八批 N 段 120-R2：一体机售票须在本机启用售票的售票型一体机上（一体机终端头＋登记设备号）。 */
+    private RequestPostProcessor atTicketingKiosk(RequestPostProcessor who) {
+        String device = "dev_r29_kiosk_" + f.suffix;
+        jdbc.update("INSERT INTO terminal_devices (id, device_id, device_code, terminal_type, binding_scope, kiosk_mode, status, created_at,"
+                + " updated_at) VALUES (?, ?, ?, 'kiosk', 'venue', 'ticketing', 'bound', now(), now()) ON CONFLICT DO NOTHING", device, device, device);
+        jdbc.update("INSERT INTO terminal_capability_switches (id, terminal_type, capability_code, scope_type, scope_id, enabled, reason,"
+                + " created_at, updated_at) VALUES (?, 'kiosk', 'ticketing', 'device', ?, TRUE, '开启本机售票', now(), now()) ON CONFLICT DO NOTHING",
+                "tcs_kiosk_ticketing_" + device, device);
+        return request -> {
+            MockHttpServletRequest r = who.postProcessRequest(request);
+            r.removeHeader("X-Terminal-Type");
+            r.addHeader("X-Terminal-Type", "kiosk");
+            r.addHeader("X-Device-Id", device);
+            return r;
+        };
     }
 
     private String register(String phone) throws Exception {

@@ -21,6 +21,7 @@ import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.ApiResponse;
 import com.complex.platform.common.api.PageResponse;
 import com.complex.platform.evidence.AuditEvent;
+import com.complex.platform.evidence.AuditedOperationExecutor;
 import java.util.List;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -37,13 +38,18 @@ public class AnalyticsController implements com.complex.platform.security.Export
     private final AuthorizationService authorizationService;
     private final OperatingParamsService operatingParamsService;
     private final com.complex.platform.security.ExportFileService exportFiles;
+    private final AuditedOperationExecutor operations;
 
+    // 第十八批 N 段第 124 条 124-R5（PGM L738「访问被拒绝也要留痕，便于排查是权限问题还是开关问题。」）：写口任一步失败（权限、范围、校验、
+    // 状态冲突）经 AuditedOperationExecutor.recordingFailure 落 OpenAPI 声明的 x-audit-event-failure 再原样抛出。
     public AnalyticsController(AnalyticsService service, AuthorizationService authorizationService,
-            OperatingParamsService operatingParamsService, com.complex.platform.security.ExportFileService exportFiles) {
+            OperatingParamsService operatingParamsService, com.complex.platform.security.ExportFileService exportFiles,
+            AuditedOperationExecutor operations) {
         this.service = service;
         this.authorizationService = authorizationService;
         this.operatingParamsService = operatingParamsService;
         this.exportFiles = exportFiles;
+        this.operations = operations;
     }
 
     /** M737 全平台口径：商户、外包照旧由 requirePlatformScope 拒绝；其余须是平台管理员或经勾了「可以查看全部项目」的角色持有该码。 */
@@ -341,19 +347,27 @@ public class AnalyticsController implements com.complex.platform.security.Export
     @PostMapping("/holiday-calendar")
     public ApiResponse<AnalyticsRecords.HolidayPeriod> upsertHolidayPeriod(
             @RequestBody @jakarta.validation.Valid HolidayPeriodRequest request) {
-        authorizationService.requirePermission("analytics.operating_params.manage");
-        authorizationService.requirePlatformScope();
-        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
-        return ApiResponse.ok(operatingParamsService.upsertHolidayPeriod(request));
+        String key = request == null ? null : request.idempotencyKey();
+        return ApiResponse.ok(operations.recordingFailure("analytics.holiday_calendar.update_failed", "analytics.operating_params.manage", "holiday_calendar", "new", key,
+                () -> {
+                    authorizationService.requirePermission("analytics.operating_params.manage");
+                    authorizationService.requirePlatformScope();
+                    requireIdempotencyKey(key);
+                    return operatingParamsService.upsertHolidayPeriod(request);
+                }));
     }
 
     @PostMapping("/holiday-calendar/fetch")
     public ApiResponse<java.util.Map<String, Object>> fetchHolidayCalendar(
             @RequestBody @jakarta.validation.Valid HolidayFetchRequest request) {
-        authorizationService.requirePermission("analytics.operating_params.manage");
-        authorizationService.requirePlatformScope();
-        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
-        return ApiResponse.ok(operatingParamsService.fetchHolidayCalendar(request));
+        String key = request == null ? null : request.idempotencyKey();
+        return ApiResponse.ok(operations.recordingFailure("analytics.holiday_calendar.fetch_failed", "analytics.operating_params.manage", "holiday_calendar", "new", key,
+                () -> {
+                    authorizationService.requirePermission("analytics.operating_params.manage");
+                    authorizationService.requirePlatformScope();
+                    requireIdempotencyKey(key);
+                    return operatingParamsService.fetchHolidayCalendar(request);
+                }));
     }
 
     @GetMapping("/holiday-comparison")
@@ -375,10 +389,14 @@ public class AnalyticsController implements com.complex.platform.security.Export
     @PostMapping("/anomaly-config")
     public ApiResponse<AnalyticsRecords.AnomalyConfig> updateAnomalyConfig(
             @RequestBody @jakarta.validation.Valid AnomalyConfigRequest request) {
-        authorizationService.requirePermission("analytics.operating_params.manage");
-        authorizationService.requirePlatformScope();
-        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
-        return ApiResponse.ok(operatingParamsService.updateAnomalyConfig(request));
+        String key = request == null ? null : request.idempotencyKey();
+        return ApiResponse.ok(operations.recordingFailure("analytics.anomaly_config.update_failed", "analytics.operating_params.manage", "analytics_anomaly_config", "default", key,
+                () -> {
+                    authorizationService.requirePermission("analytics.operating_params.manage");
+                    authorizationService.requirePlatformScope();
+                    requireIdempotencyKey(key);
+                    return operatingParamsService.updateAnomalyConfig(request);
+                }));
     }
 
     @GetMapping("/notification-windows")
@@ -391,10 +409,14 @@ public class AnalyticsController implements com.complex.platform.security.Export
     @PostMapping("/notification-windows")
     public ApiResponse<AnalyticsRecords.NotificationWindow> upsertNotificationWindow(
             @RequestBody @jakarta.validation.Valid NotificationWindowRequest request) {
-        authorizationService.requirePermission("platform.notification_window.manage");
-        authorizationService.requirePlatformScope();
-        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
-        return ApiResponse.ok(operatingParamsService.upsertNotificationWindow(request));
+        String key = request == null ? null : request.idempotencyKey();
+        return ApiResponse.ok(operations.recordingFailure("analytics.notification_windows.update_failed", "platform.notification_window.manage", "notification_windows", "new", key,
+                () -> {
+                    authorizationService.requirePermission("platform.notification_window.manage");
+                    authorizationService.requirePlatformScope();
+                    requireIdempotencyKey(key);
+                    return operatingParamsService.upsertNotificationWindow(request);
+                }));
     }
 
     @GetMapping("/ai-thresholds")
@@ -407,10 +429,14 @@ public class AnalyticsController implements com.complex.platform.security.Export
     @PostMapping("/ai-thresholds")
     public ApiResponse<AnalyticsRecords.AiThresholds> updateAiThresholds(
             @RequestBody @jakarta.validation.Valid AiThresholdsRequest request) {
-        authorizationService.requirePermission("analytics.operating_params.manage");
-        authorizationService.requirePlatformScope();
-        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
-        return ApiResponse.ok(operatingParamsService.updateAiThresholds(request));
+        String key = request == null ? null : request.idempotencyKey();
+        return ApiResponse.ok(operations.recordingFailure("analytics.ai_thresholds.update_failed", "analytics.operating_params.manage", "analytics_ai_thresholds", "default", key,
+                () -> {
+                    authorizationService.requirePermission("analytics.operating_params.manage");
+                    authorizationService.requirePlatformScope();
+                    requireIdempotencyKey(key);
+                    return operatingParamsService.updateAiThresholds(request);
+                }));
     }
 
     @GetMapping("/revenue-attribution-rules")
@@ -423,11 +449,14 @@ public class AnalyticsController implements com.complex.platform.security.Export
     @PostMapping("/revenue-attribution-rules")
     public ApiResponse<AnalyticsRecords.MerchantRevenueAttributionRule> upsertRevenueAttributionRule(
             @RequestBody @jakarta.validation.Valid RevenueAttributionRuleRequest request) {
-        authorizationService.requirePermission("analytics.operating_params.manage");
-        authorizationService.requirePlatformScope();
-        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
-        return ApiResponse.ok(operatingParamsService.upsertRevenueAttributionRule(
-                request, authorizationService.currentActor().id()));
+        String key = request == null ? null : request.idempotencyKey();
+        return ApiResponse.ok(operations.recordingFailure("analytics.revenue_attribution_rule.update_failed",
+                "analytics.operating_params.manage", "merchant_revenue_attribution_rules", "new", key, () -> {
+                    authorizationService.requirePermission("analytics.operating_params.manage");
+                    authorizationService.requirePlatformScope();
+                    requireIdempotencyKey(key);
+                    return operatingParamsService.upsertRevenueAttributionRule(request, authorizationService.currentActor().id());
+                }));
     }
 
     @GetMapping("/operating-params")
@@ -441,10 +470,14 @@ public class AnalyticsController implements com.complex.platform.security.Export
     @PostMapping("/operating-params")
     public ApiResponse<OperatingParamsRecord> upsertOperatingParams(
             @RequestBody(required = false) @jakarta.validation.Valid OperatingParamsRequest request) {
-        authorizationService.requirePermission("analytics.operating_params.manage");
-        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
-        authorizationService.requirePlatformScope();
-        return ApiResponse.ok(operatingParamsService.upsertOperatingParams(request));
+        String key = request == null ? null : request.idempotencyKey();
+        return ApiResponse.ok(operations.recordingFailure("operating_params.change_failed", "analytics.operating_params.manage",
+                "complex_operating_params", "new", key, () -> {
+                    authorizationService.requirePermission("analytics.operating_params.manage");
+                    requireIdempotencyKey(key);
+                    authorizationService.requirePlatformScope();
+                    return operatingParamsService.upsertOperatingParams(request);
+                }));
     }
 
     @GetMapping("/business-metric-snapshots")

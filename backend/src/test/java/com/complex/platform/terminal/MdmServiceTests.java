@@ -515,11 +515,6 @@ class MdmServiceTests {
         }
 
         @Override
-        public Optional<TerminalKioskConfigRecord> findKioskConfigByDeviceId(String deviceId) {
-            return Optional.empty();
-        }
-
-        @Override
         public KioskHeartbeatRecord saveKioskHeartbeat(KioskHeartbeatRecord record) {
             throw new UnsupportedOperationException();
         }

@@ -1,6 +1,6 @@
 package com.complex.platform.analytics;
 
-// 文件版本：V0.09
+// 文件版本：V0.10
 
 import com.complex.platform.analytics.AnalyticsRecords.AiQualityResultRecord;
 import com.complex.platform.analytics.AnalyticsRecords.AiQualityTaskRecord;
@@ -1090,8 +1090,8 @@ public class AnalyticsService {
     public PageResponse<BusinessMetricSnapshotRecord> listBusinessMetricSnapshots(
             com.complex.platform.access.AuthorizationService.ProjectReach reach) {
         return readPage(
-                "analytics.business_metric_snapshot.viewed",
-                "analytics.business_metric_snapshot.view_failed",
+                "analytics_business_metric_snapshot.viewed.success",
+                "analytics_business_metric_snapshot.viewed.failure",
                 "analytics.dashboard.view",
                 "analytics_business_metric_snapshot",
                 () -> {

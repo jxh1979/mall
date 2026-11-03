@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.07
+// 文件版本：V0.08
 
 import java.util.List;
 import java.util.Map;
@@ -338,6 +338,13 @@ public interface TicketingRepository {
 
     // 行级隔离（V135）：按下单受理商户过滤订单列表（商户 scope 仅见自身，平台 scope 走 listTicketOrders 看全部）。
     List<TicketOrderRecord> listTicketOrdersByMerchant(String merchantId);
+
+    // 第十八批 N 段第 120 条 120-R2：按购票手机号查订单（一体机订单查询）；merchantScope 非空时同 listTicketOrdersByMerchant 口径。
+    default List<TicketOrderRecord> listTicketOrdersByBuyerPhone(String phone, String merchantScope) {
+        return (merchantScope == null ? listTicketOrders() : listTicketOrdersByMerchant(merchantScope)).stream()
+                .filter(order -> phone.equals(order.buyerPhone()))
+                .toList();
+    }
 
     TicketPaymentIntentRecord saveTicketPaymentIntent(TicketPaymentIntentRecord intent);
 

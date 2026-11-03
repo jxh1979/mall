@@ -1,12 +1,14 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.06
+// 文件版本：V0.07
 import static com.complex.platform.common.api.ApiRequests.requireIdempotencyKey;
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.ApiResponse;
 import com.complex.platform.common.api.PageResponse;
+import com.complex.platform.evidence.AuditEventService;
+import com.complex.platform.evidence.AuditedOperationExecutor;
 import com.complex.platform.finance.PaymentIntentRecord;
 import com.complex.platform.finance.dto.PaymentIntentRequest;
 import com.complex.platform.ticketing.dto.VerificationRequest;
@@ -28,14 +30,20 @@ public class BarController {
     private final AuthorizationService authorizationService;
     /** V351 退酒原因码字典（后台可增删改；下拉数据源）。单测未注入=null，端点报不可用。 */
     private final BarVoidReasonCodeDirectory voidReasonCodeDirectory;
+    private final AuditedOperationExecutor operations;
+    private final AuditEventService audit;
 
     public BarController(
             BarService service,
             BarEntitlementRedemptionService entitlementRedemptionService,
             AuthorizationService authorizationService
     ) {
-        this(service, entitlementRedemptionService, authorizationService, null);
+        this(service, entitlementRedemptionService, authorizationService, null, null, null);
     }
+
+    // 第十八批 N 段第 124 条 124-R5（PGM L966「已拍板：所有有过程的业务动作都必须留痕……」、L738「访问被拒绝也要留痕……」）：写口任一步失败
+    // 经 AuditedOperationExecutor.recordingFailure 落 OpenAPI 声明的 x-audit-event-failure 再原样抛出；服务层原本不写成功事件的，
+    // 服务返回后在这里落声明的 x-audit-event-success。
 
     @org.springframework.beans.factory.annotation.Autowired
     public BarController(
@@ -43,12 +51,16 @@ public class BarController {
             BarEntitlementRedemptionService entitlementRedemptionService,
             AuthorizationService authorizationService,
             @org.springframework.beans.factory.annotation.Autowired(required = false)
-            BarVoidReasonCodeDirectory voidReasonCodeDirectory
+            BarVoidReasonCodeDirectory voidReasonCodeDirectory,
+            AuditedOperationExecutor operations,
+            AuditEventService audit
     ) {
         this.service = service;
         this.entitlementRedemptionService = entitlementRedemptionService;
         this.authorizationService = authorizationService;
         this.voidReasonCodeDirectory = voidReasonCodeDirectory;
+        this.operations = operations;
+        this.audit = audit;
     }
 
     // ==================== V351 退酒原因码字典（出厂八条，后台可增删改）====================
@@ -69,12 +81,19 @@ public class BarController {
     public ApiResponse<BarVoidReasonCodeRecord> saveVoidReasonCode(
             @RequestBody(required = false) BarVoidReasonCodeRequest request
     ) {
-        authorizationService.requirePermission("bar.order_item.void_decide");
-        BarVoidReasonCodeRequest actual = requireVoidReasonCodeRequest(request);
-        requireIdempotencyKey(actual.idempotencyKey());
-        return ApiResponse.ok(requireVoidReasonCodeDirectory().saveReasonCode(
-                actual.code(), actual.labelZh(), actual.sortOrder(),
-                authorizationService.currentActor().id()));
+        String key = request == null ? null : request.idempotencyKey();
+        return ApiResponse.ok(operations.recordingFailure("bar.void_reason_code.save_failed", "bar.order_item.void_decide",
+                "bar_void_reason_code", request == null || request.code() == null ? "new" : request.code(), key, () -> {
+                    authorizationService.requirePermission("bar.order_item.void_decide");
+                    BarVoidReasonCodeRequest actual = requireVoidReasonCodeRequest(request);
+                    requireIdempotencyKey(actual.idempotencyKey());
+                    BarVoidReasonCodeRecord saved = requireVoidReasonCodeDirectory().saveReasonCode(
+                            actual.code(), actual.labelZh(), actual.sortOrder(),
+                            authorizationService.currentActor().id());
+                    audit.recordSuccess("bar.void_reason_code.saved", "bar.order_item.void_decide", "bar_void_reason_code", saved.code(),
+                            null, key, java.util.Map.of());
+                    return saved;
+                }));
     }
 
     /** 下线一条原因码（软删铁律：置 inactive + 必填理由，历史退酒单仍引用得到）。 */
@@ -83,11 +102,18 @@ public class BarController {
             @PathVariable("code") String code,
             @RequestBody(required = false) BarVoidReasonCodeRequest request
     ) {
-        authorizationService.requirePermission("bar.order_item.void_decide");
-        BarVoidReasonCodeRequest actual = requireVoidReasonCodeRequest(request);
-        requireIdempotencyKey(actual.idempotencyKey());
-        return ApiResponse.ok(requireVoidReasonCodeDirectory().archiveReasonCode(
-                code, actual.archiveReason(), authorizationService.currentActor().id()));
+        String key = request == null ? null : request.idempotencyKey();
+        return ApiResponse.ok(operations.recordingFailure("bar.void_reason_code.archive_failed", "bar.order_item.void_decide",
+                "bar_void_reason_code", code, key, () -> {
+                    authorizationService.requirePermission("bar.order_item.void_decide");
+                    BarVoidReasonCodeRequest actual = requireVoidReasonCodeRequest(request);
+                    requireIdempotencyKey(actual.idempotencyKey());
+                    BarVoidReasonCodeRecord archived = requireVoidReasonCodeDirectory().archiveReasonCode(
+                            code, actual.archiveReason(), authorizationService.currentActor().id());
+                    audit.recordSuccess("bar.void_reason_code.archived", "bar.order_item.void_decide", "bar_void_reason_code", code,
+                            null, key, java.util.Map.of("archive_reason", actual.archiveReason() == null ? "" : actual.archiveReason()));
+                    return archived;
+                }));
     }
 
     private BarVoidReasonCodeDirectory requireVoidReasonCodeDirectory() {

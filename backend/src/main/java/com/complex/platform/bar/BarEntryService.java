@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import static com.complex.platform.bar.BarValidation.*;
 
@@ -52,6 +52,10 @@ public class BarEntryService {
      * 供 BSM 第 1596 行订台短信（员工代订没有会员编号，这是唯一收件人来源；第十四批 OBS-13-03）。
      * 第十八批 C 段第 15 条（BSM 第 1062 行「员工代客订台不收定金……没有支付动作的，支付时间就空着」；ENUM 第 103 行「免收（员工代订）」）：
      * 员工代订一律免收定金，不看定金规则。
+     * 第十八批 N 段第 120 条 120-R3（BSM:987「支持订台下单……人数和订台备注；订台需要支付定金。」；BSM:1023「订台订单必须记录定金、订台来源、销售人员或设备来源、
+     * 到店和取消结果。」；BSM:1058「……客人自助订台支付定金成功……该台位即进入已预留……冲突时先支付定金者得……」）：orderSource＝kiosk（一体机订台）时同样核对
+     * 受限会员并留存客人手机号，台位已被占 409；定金按本酒吧定金规则算（与客人自助订台同一公式），算出无定金可付时 409 BAR_SELF_RESERVATION_UNAVAILABLE；
+     * 定金待付、没有销售人员、记设备来源，创建时不占台、不发员工代订知会，付定金时才占台（payDeposit）。订台备注两种来源都落库。
      */
     BarReservationRecord createReservation(BarReservationRequest request, String customerId, String orderSource, String terminal) {
         BarReservationRequest actual = requireRequest(request);
@@ -70,14 +74,28 @@ public class BarEntryService {
         if (merchantId != null && !merchantId.equals(table.merchantId())) {
             throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN", "该台位属于其他商户");
         }
-        // 第十八批 C 段第 15 条（BSM 第 1468 行「业绩记名人与销售提成归属人始终是同一人——都是帮该客人预订的那个人；代录订台等经手操作只留痕」）：
-        // 经手员工＝填写的销售员，不填即本人代订；其代订权限因爽约率超限停用中的，整笔不落库，须店长复核恢复。
-        String salesStaffId = trimToNull(actual.salespersonUserId());
-        if (salesStaffId == null) {
-            salesStaffId = authorizationService.currentActor().id();
-        }
-        if (repository.hasActiveStaffBookingSuspension(barId, salesStaffId)) {
-            throw ApiException.forbidden("BAR_STAFF_BOOKING_SUSPENDED", "经手员工的代订权限因爽约率超限已停用，须店长复核恢复");
+        boolean kiosk = "kiosk".equals(orderSource);
+        String salesStaffId = null;
+        long depositAmountCent = 0L;
+        if (kiosk) {
+            if (!repository.isTableReservable(table.id())) {
+                throw tableAlreadyReserved();
+            }
+            BarDepositRuleRecord rule = resolveDepositRuleByBar(barId, table.tableType());
+            depositAmountCent = rule == null ? 0L : depositAmountCent(rule, table.minConsumptionCent());
+            if (depositAmountCent <= 0L) {
+                throw ApiException.conflict("BAR_SELF_RESERVATION_UNAVAILABLE", "该酒吧暂未开放一体机订台");
+            }
+        } else {
+            // 第十八批 C 段第 15 条（BSM 第 1468 行「业绩记名人与销售提成归属人始终是同一人——都是帮该客人预订的那个人；代录订台等经手操作只留痕」）：
+            // 经手员工＝填写的销售员，不填即本人代订；其代订权限因爽约率超限停用中的，整笔不落库，须店长复核恢复。
+            salesStaffId = trimToNull(actual.salespersonUserId());
+            if (salesStaffId == null) {
+                salesStaffId = authorizationService.currentActor().id();
+            }
+            if (repository.hasActiveStaffBookingSuspension(barId, salesStaffId)) {
+                throw ApiException.forbidden("BAR_STAFF_BOOKING_SUSPENDED", "经手员工的代订权限因爽约率超限已停用，须店长复核恢复");
+            }
         }
         Instant now = Instant.now();
         String reservationId = "reservation_" + slug(actual.idempotencyKey());
@@ -90,13 +108,14 @@ public class BarEntryService {
                 requireInstant(actual.reservationTime(), "reservation_time"),
                 nonNegative(actual.guestCount(), "guest_count"),
                 table.allowedPassFreeGuestCount(),
-                0L,
-                "staff_waived",
+                depositAmountCent,
+                kiosk ? "pending" : "staff_waived",
                 trimToDefault(orderSource, "staff"),
                 salesStaffId,
                 "reserved",
                 trimToDefault(terminal, "web"),
-                null,
+                kiosk ? com.complex.platform.gate.TerminalIdentityHolder.current()
+                        .map(com.complex.platform.gate.TerminalIdentityHolder.VerifiedTerminal::deviceId).orElse(null) : null,
                 safeList(actual.evidenceAttachmentIds()),
                 now,
                 now,
@@ -104,13 +123,13 @@ public class BarEntryService {
                 null,
                 null,
                 null
-        ).withLatestArrivalAt(latestArrivalAt));
-        if (!repository.holdTable(saved.id(), saved.tableId())) {
+        ).withLatestArrivalAt(latestArrivalAt).withRemark(trimToNull(actual.remark())));
+        if (!kiosk && !repository.holdTable(saved.id(), saved.tableId())) {
             throw tableAlreadyReserved();
         }
         // 与 CustomerService.requireStaffBookable 同一规范化（去空格与横线后 11 位）。
         repository.saveReservationCustomerPhone(saved.id(), customerPhone.replaceAll("[\\s-]", ""));
-        if (notifier != null) {
+        if (!kiosk && notifier != null) {
             notifier.notifyStaffBooked(saved);
         }
         return repository.findReservationById(saved.id()).orElse(saved);
@@ -176,6 +195,12 @@ public class BarEntryService {
                 "bar_reservation", saved.id(), null, actual.idempotencyKey(),
                 Map.of("deposit_amount_cent", saved.depositAmountCent(),
                         "channel", String.valueOf(actual.channel())));
+        // 第十八批 N 段第 120 条 120-R3（BSM:1058「……客人自助订台支付定金成功……该台位即进入已预留……冲突时先支付定金者得……」）：
+        // 从未占过台的订台（一体机订台、客人自助订台）登记定金即占台，抢不到的取消并登记原路待退（holdOnDepositPaid）。
+        if (saved.holdStatus() == null) {
+            holdOnDepositPaid(saved, null);
+            return repository.findReservationById(saved.id()).orElse(saved);
+        }
         return saved;
     }
 
@@ -333,6 +358,21 @@ public class BarEntryService {
         return reservation.depositIntentId() == null ? null
                 : financeService.findPaymentIntent(reservation.depositIntentId())
                         .map(com.complex.platform.finance.PaymentIntentRecord::gatewayRef).orElse(null);
+    }
+
+    /**
+     * 按定金规则算定金（客人自助订台与一体机订台共用）：fixed＝固定额；min_consumption_ratio＝台位低消 × ratioBps/10000，
+     * 四舍五入到分（R-7）。
+     */
+    public static long depositAmountCent(BarDepositRuleRecord rule, long minConsumptionCent) {
+        if ("fixed".equals(rule.mode())) {
+            return rule.fixedAmountCent() == null ? 0L : Math.max(0L, rule.fixedAmountCent());
+        }
+        if ("min_consumption_ratio".equals(rule.mode())) {
+            int ratioBps = rule.ratioBps() == null ? 0 : rule.ratioBps();
+            return Math.max(0L, com.complex.platform.common.money.MoneyRounding.bpsOf(minConsumptionCent, ratioBps));
+        }
+        return 0L;
     }
 
     private BarDepositRuleRecord resolveDepositRuleByBar(String barId, String tableType) {

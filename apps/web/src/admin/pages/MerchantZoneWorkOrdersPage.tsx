@@ -221,7 +221,7 @@ export function MerchantZoneWorkOrdersPage({ api, setActionResult, setGlobalErro
   return (
     <section data-testid="merchant-zone-work-orders-page">
       <AdminPageHeader title={TEXT.title} description={TEXT.description} />
-      <AuditTrailHint event="merchant_service.work_order.viewed / merchant_service.work_order.created / merchant_service.work_order.merchant_confirmed / merchant_service.work_order.cancelled" />
+      <AuditTrailHint event="merchant_service.listMerchantServiceWorkOrders.succeeded / merchant_service.createMerchantServiceWorkOrder.succeeded / merchant_service.work_order.merchant_confirmed / merchant_service.work_order.cancelled" />
       <div className="admin-form-row" data-testid="merchant-zone-work-order-form">
         <PermissionButton
           permissionsState={effectivePermissions}

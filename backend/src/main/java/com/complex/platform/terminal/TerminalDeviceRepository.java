@@ -117,7 +117,5 @@ public interface TerminalDeviceRepository {
 
     TerminalCapabilitySwitchRecord saveCapabilitySwitch(TerminalCapabilitySwitchRecord record);
 
-    Optional<TerminalKioskConfigRecord> findKioskConfigByDeviceId(String deviceId);
-
     KioskHeartbeatRecord saveKioskHeartbeat(KioskHeartbeatRecord record);
 }

@@ -1,4 +1,4 @@
-# P1 游乐安全告知、电子免责与事故工单 API 契约 V0.1
+# P1 游乐安全告知、电子免责与事故工单 API 契约 V0.11
 
 文档类型：Implementation / API Contract
 
@@ -112,13 +112,13 @@
 
 | 动作 | 成功事件 | 失败事件 |
 |---|---|---|
-| 查询安全告知 | `amusement.safety_notice.viewed` | 暂不单列 |
-| 创建安全告知 | `amusement.safety_notice.created` | `amusement.safety_notice.create_failed` |
-| 电子免责确认 | `amusement.waiver.acknowledged` | `amusement.waiver.acknowledge_failed` |
-| 查询事故 | `amusement.incident.viewed` | 暂不单列 |
-| 创建事故 | `amusement.incident.created` | `amusement.incident.create_failed` |
-| 处理事故 | `amusement.incident.action_added` | `amusement.incident.action_failed` |
-| 关闭事故 | `amusement.incident.closed` | `amusement.incident.close_failed` |
+| 查询安全告知 | `amusement.safety_notice.list` | 暂不单列 |
+| 创建安全告知 | `amusement.safety_notice.create` | `amusement.safety_notice.create_failed` |
+| 电子免责确认 | `amusement.waiver.acknowledge` | `amusement.waiver.acknowledge_failed` |
+| 查询事故 | `amusement.incident.list` | 暂不单列 |
+| 创建事故 | `amusement.incident.create` | `amusement.incident.create_failed` |
+| 处理事故 | `amusement.incident.action` | `amusement.incident.action_failed` |
+| 关闭事故 | `amusement.incident.close` | `amusement.incident.close_failed` |
 
 ## 6. 错误处理矩阵
 

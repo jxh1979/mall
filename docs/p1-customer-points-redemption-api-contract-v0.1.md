@@ -1,4 +1,4 @@
-# P1 客人积分明细与积分兑换 API 契约 V0.1
+# P1 客人积分明细与积分兑换 API 契约 V0.11
 
 文档类型：Implementation / API Contract
 
@@ -61,11 +61,11 @@
 
 | Event | 触发 |
 |---|---|
-| `customer.points_ledger_viewed` | 查询积分流水成功 |
-| `customer.points_redemption_items_viewed` | 查询可兑换目录成功 |
-| `customer.points_redeemed` | 兑换成功 |
-| `customer.points_redeem_failed` | 兑换失败 |
-| `customer.points_redemptions_viewed` | 查询兑换记录成功 |
+| `customer.points.ledger_viewed` | 查询积分流水成功 |
+| `customer.points.redemption_items_viewed` | 查询可兑换目录成功 |
+| `customer.points.redeem` | 兑换成功 |
+| `customer.points.redeem_failed` | 兑换失败 |
+| `customer.points.redemptions_viewed` | 查询兑换记录成功 |
 
 ## 6. Anti-Patterns
 

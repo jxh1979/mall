@@ -1,6 +1,6 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.06
+// 文件版本：V0.07
 
 import com.complex.platform.support.InMemoryAuditEventRepository;
 import com.complex.platform.support.InMemoryIdempotencyRepository;
@@ -674,7 +674,7 @@ class CustomerServiceTests {
         assertThat(catalog.items()).extracting(CustomerRedemptionCatalogItemRecord::id).containsExactly("gift_active");
         assertThat(auditEventRepository.events)
                 .extracting(AuditEvent::eventName)
-                .contains("customer.points_ledger_viewed", "customer.points_redemption_items_viewed");
+                .contains("customer.points.ledger_viewed", "customer.points.redemption_items_viewed");
     }
 
     @Test
@@ -736,7 +736,7 @@ class CustomerServiceTests {
         verify(inventoryService, never()).createTypedStockMovement(any(), any(StockMovementRequest.class));
         assertThat(auditEventRepository.events)
                 .extracting(AuditEvent::eventName)
-                .contains("customer.points_redeemed");
+                .contains("customer.points.redeem");
     }
 
     @Test
@@ -785,6 +785,9 @@ class CustomerServiceTests {
         verify(inventoryService, never()).createTypedStockMovement(any(), any(StockMovementRequest.class));
         // 余额不足被挡下时也不得发券。
         assertThat(voucherIssuePort.issued).isEmpty();
+        // 18N 124-R2b：兑换失败落 OpenAPI 声明的 customer.points.redeem_failed。
+        assertThat(auditEventRepository.events).extracting(AuditEvent::eventName)
+                .contains("customer.points.redeem_failed").doesNotContain("customer.points_redeem_failed");
     }
 
     @Test

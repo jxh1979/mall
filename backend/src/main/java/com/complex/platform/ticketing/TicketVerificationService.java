@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.06
+// 文件版本：V0.07
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.amusement.AmusementEntryRequest;
@@ -893,13 +893,23 @@ public class TicketVerificationService {
 
     /** 外层幂等也须复核当前来源范围；只读凭证原件，不重做其时效或已消费判定。 */
     void requireAmusementRequestScope(VerificationRequest request) {
+        requestEntitlement(request).filter(this::isAmusementEntitlement).ifPresent(this::requireAmusementSourceScope);
+    }
+
+    /** 第十八批 N 段第 123 条 123-R2：核销请求所指权益的订单综合体，供定位闸在幂等之前取项目；查不到为 null。 */
+    String requestProjectId(VerificationRequest request) {
+        return requestEntitlement(request).map(IssuedEntitlementRecord::orderId).flatMap(repository::findTicketOrderById)
+                .map(TicketOrderRecord::projectId).orElse(null);
+    }
+
+    /** 只读凭证原件找权益，不判时效或已消费。 */
+    private Optional<IssuedEntitlementRecord> requestEntitlement(VerificationRequest request) {
         String payload=trimToNull(request==null?null:request.credentialPayload());
-        if(payload==null) return;
-        Optional<IssuedEntitlementRecord> entitlement=payload.startsWith("cred_")
+        if(payload==null) return Optional.empty();
+        return payload.startsWith("cred_")
                 ? repository.findTicketCredentialByToken(payload)
                     .flatMap(credential->repository.findIssuedEntitlementById(credential.entitlementId()))
                 : repository.findIssuedEntitlementByCode(payload);
-        entitlement.filter(this::isAmusementEntitlement).ifPresent(this::requireAmusementSourceScope);
     }
 
     /** 冲正重放只核原成功入场的实时范围，不要求原件仍处于未冲正状态。 */

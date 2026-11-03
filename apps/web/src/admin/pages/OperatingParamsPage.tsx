@@ -1,4 +1,4 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { CnDatePicker } from "../components/CnDatePicker";
@@ -20,6 +20,11 @@ type OperatingParamsRow = {
 const MANAGE = ["analytics.operating_params.manage"];
 // 营业日配置页的两个查看码，持有其中一个即可打开（同 AdminApp 路由门禁）。
 const BUSINESS_DAY_VIEW = ["amusement.business_day.view", "bar.business_day.view"];
+// 第 123 条 123-R1（BSM:1630「授权范围按项目在后台配置（业务参数，按项目可配，须同时配置上下限）。」）：只按本码显示授权范围区块。
+const RANGE_MANAGE = ["platform.sensitive_operation_range.manage"];
+const EMPTY_RANGE = { projectId: "", centerLatitude: "", centerLongitude: "", radiusMeters: "", minRadiusMeters: "", maxRadiusMeters: "" };
+type SensitiveRange = { projectId: string; centerLatitude?: number | null; centerLongitude?: number | null; radiusMeters?: number | null;
+  minRadiusMeters?: number | null; maxRadiusMeters?: number | null };
 
 /**
  * 综合体经营参数配置页（ADM-ANA-003，T4.2 坪效）：平台管理员维护可经营面积——
@@ -43,9 +48,14 @@ export function OperatingParamsPage({ api, setActionResult, setGlobalError, effe
   const [paramsError, setParamsError] = React.useState("");
   const [paramsSubmitting, setParamsSubmitting] = React.useState(false);
   const heldBusinessDayCode = BUSINESS_DAY_VIEW.find((code) => hasPermissions(effectivePermissions, [code]));
+  const canManageRange = hasPermissions(effectivePermissions, RANGE_MANAGE);
+  const [range, setRange] = React.useState(EMPTY_RANGE);
+  const [rangeCurrent, setRangeCurrent] = React.useState("");
 
   const { loading, error, reload } = useAdminResource(
     async () => {
+      // 只持授权范围配置码打开本页（路由门禁任一码）时不读经营参数，免得报无权。
+      if (!hasPermissions(effectivePermissions, ["analytics.dashboard.view"])) return;
       const [items, anomalyCfg, holidayRows] = await Promise.all([
         api.get<OperatingParamsRow[]>("/api/v1/analytics/operating-params"),
         api.get<{ surgePct?: number | string; highPct?: number | string; enabled?: boolean }>("/api/v1/analytics/anomaly-config"),
@@ -118,6 +128,52 @@ export function OperatingParamsPage({ api, setActionResult, setGlobalError, effe
     setHolidayName(""); setHolidayYear(""); setHolidayStart(""); setHolidayEnd("");
     reload();
   }
+
+  function rangePath() {
+    return `/api/v1/platform/projects/${encodeURIComponent(range.projectId.trim())}/sensitive-operation-range`;
+  }
+
+  function showRange(saved: SensitiveRange) {
+    const text = (value: number | null | undefined) => (value == null ? "" : String(value));
+    setRange({ projectId: saved.projectId, centerLatitude: text(saved.centerLatitude), centerLongitude: text(saved.centerLongitude),
+      radiusMeters: text(saved.radiusMeters), minRadiusMeters: text(saved.minRadiusMeters), maxRadiusMeters: text(saved.maxRadiusMeters) });
+    setRangeCurrent(saved.radiusMeters == null ? "未配置（配好之前不按位置拦截）"
+      : `已配置：圆心 ${saved.centerLatitude}, ${saved.centerLongitude}，半径 ${saved.radiusMeters} 米（下限 ${saved.minRadiusMeters}，上限 ${saved.maxRadiusMeters}）`);
+  }
+
+  async function queryRange() {
+    if (!range.projectId.trim()) {
+      setGlobalError("请填写项目编号");
+      return;
+    }
+    try {
+      showRange(await api.get<SensitiveRange>(rangePath()));
+    } catch (actionError) {
+      setGlobalError(actionError instanceof Error ? actionError.message : "授权范围读取失败");
+    }
+  }
+
+  async function saveRange() {
+    if (!range.projectId.trim()) {
+      setGlobalError("请填写项目编号");
+      return;
+    }
+    const num = (value: string) => (value.trim() === "" ? null : Number(value));
+    try {
+      const saved = await api.put<SensitiveRange>(rangePath(), {
+        centerLatitude: num(range.centerLatitude), centerLongitude: num(range.centerLongitude), radiusMeters: num(range.radiusMeters),
+        minRadiusMeters: num(range.minRadiusMeters), maxRadiusMeters: num(range.maxRadiusMeters),
+      });
+      setActionResult({ action: "sensitive_operation_range_saved", projectId: saved.projectId, radiusMeters: saved.radiusMeters });
+      showRange(saved);
+    } catch (actionError) {
+      setGlobalError(actionError instanceof Error ? actionError.message : "授权范围保存失败");
+    }
+  }
+
+  const rangeField = (key: keyof typeof EMPTY_RANGE, label: string, testId: string) => (
+    <label>{label}<input data-testid={testId} value={range[key]} onChange={(event) => setRange({ ...range, [key]: event.target.value })} /></label>
+  );
 
   async function fetchHolidays() {
     if (!fetchUrl.trim()) {
@@ -233,6 +289,23 @@ export function OperatingParamsPage({ api, setActionResult, setGlobalError, effe
           <span className="admin-muted-action">抓取失败不影响既有日历;内网不通外网时用手动录入。</span>
         </div>
       </AdminDataState>
+      {canManageRange ? (
+        <>
+          <h3>敏感操作授权范围（按项目）</h3>
+          <div className="admin-form-grid" data-testid="sensitive-range-editor">
+            {rangeField("projectId", "项目编号", "sensitive-range-project")}
+            <button type="button" data-testid="sensitive-range-query" onClick={() => void queryRange()}>查询</button>
+            {rangeField("centerLatitude", "中心纬度", "sensitive-range-latitude")}
+            {rangeField("centerLongitude", "中心经度", "sensitive-range-longitude")}
+            {rangeField("radiusMeters", "授权半径（米）", "sensitive-range-radius")}
+            {rangeField("minRadiusMeters", "半径下限（米）", "sensitive-range-min")}
+            {rangeField("maxRadiusMeters", "半径上限（米）", "sensitive-range-max")}
+            <button type="button" data-testid="sensitive-range-save" onClick={() => void saveRange()}>保存授权范围</button>
+            <span className="admin-muted-action">坐标按 GPS 原始坐标（WGS-84）填写；授权半径与半径上下限须同时填写。</span>
+            <span className="admin-muted-action" data-testid="sensitive-range-current">{rangeCurrent || "填写项目编号后查询当前配置"}</span>
+          </div>
+        </>
+      ) : null}
     </section>
   );
 }

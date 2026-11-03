@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import React from "react";
 import { formatActionResult } from "../components/ActionResultView";
 import { TechDetails } from "../components/TechDetails";
@@ -9,6 +9,7 @@ import { useServerPagedRows } from "../hooks/useServerPagedRows";
 import { TablePager } from "../components/TablePager";
 import type { AdminPageProps, AuditEventRow, AuditOperationEventRow } from "../types";
 import { formatBusinessStatus } from "../i18n/statusLabels";
+import { TERMINAL_LABELS } from "../i18n/fieldLabels";
 import type { PagedResult } from "../client/adminClient";
 import { PermissionButton } from "../security/Can";
 import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowDetailDrawer";
@@ -16,6 +17,9 @@ import { firstSubmitTime, forgetSubmitTime } from "../../shared/operationKey";
 
 const PAGE_SIZE = 10;
 const OPERATION_LIMIT = 200;
+
+// 第十八批 N 段第 122 条 122-R2（PGM:745）：终端列按终端中文名显示；没有终端信息的显示「—」。
+const terminalLabel = (terminal?: string | null) => (terminal ? (TERMINAL_LABELS[terminal] ?? terminal) : "—");
 
 const TEXT = {
   title: "审计事件",
@@ -315,7 +319,7 @@ export function AuditEventsPage({ api, user, setActionResult, setGlobalError, ef
         { label: TEXT.opsActorCol, value: `${formatBusinessStatus(row.actorType)} / ${row.actorId ?? "-"}` },
         { label: TEXT.opsBusinessType, value: formatBusinessStatus(row.businessType) },
         { label: TEXT.opsBusinessId, value: row.businessId ?? "-" },
-        { label: TEXT.opsTerminal, value: formatBusinessStatus(row.terminal) },
+        { label: TEXT.opsTerminal, value: terminalLabel(row.terminal) },
         { label: TEXT.opsPermission, value: row.permissionCode ?? "-" },
         { label: TEXT.opsRequestId, value: row.requestId ?? "-" },
         { label: TEXT.category, value: formatBusinessStatus(row.eventCategory) },
@@ -363,7 +367,7 @@ export function AuditEventsPage({ api, user, setActionResult, setGlobalError, ef
                     <td>{row.actorId ?? "-"}</td>
                     <td>{formatBusinessStatus(row.businessType)}</td>
                     <td>{row.businessId ?? "-"}</td>
-                    <td>{formatBusinessStatus(row.terminal)}</td>
+                    <td>{terminalLabel(row.terminal)}</td>
                     <td>{cnDate(row.occurredAt)}</td>
                   <td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看操作日志详情" onClick={(event) => { event.stopPropagation(); openOperationDetail(row); }}>查看详情</button></td></tr>
                 ))}</tbody>

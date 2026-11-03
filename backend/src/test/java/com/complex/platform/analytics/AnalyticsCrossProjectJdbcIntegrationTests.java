@@ -1,6 +1,6 @@
 package com.complex.platform.analytics;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -493,6 +493,26 @@ class AnalyticsCrossProjectJdbcIntegrationTests {
                 VALUES (?, ?, 'receivable', ?, 'contract_rent', ?, ?, 0, ?, 'CNY', DATE '2098-07-31', '2098-07', 'pending_collection',
                         now(), now(), ?, ?)
                 """, id, id, merchantId, id, cent, cent, merchantId, projectId);
+    }
+
+    /**
+     * 第十八批 N 段第 124 条 124-R5（PGM L738「访问被拒绝也要留痕，便于排查是权限问题还是开关问题。」；OpenAPI upsertHolidayPeriod 的
+     * x-audit-event-failure）：经营参数页按前端蛇形键录入节假日，结束日期早于开始日期 400（服务层判，已进控制器方法体），落
+     * analytics.holiday_calendar.update_failed（独立事务、不随测试回滚，按本次幂等键查）。
+     */
+    @Test
+    void holidayPeriodEndingBeforeItStartsRecordsUpdateFailure() throws Exception {
+        String key = "r5hol-" + suffix;
+        mockMvc.perform(post("/api/v1/analytics/holiday-calendar").with(platformAdmin("analytics.operating_params.manage"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"holiday_name\":\"国庆节\",\"holiday_year\":2026,\"start_date\":\"2026-10-07\","
+                                + "\"end_date\":\"2026-10-01\",\"idempotency_key\":\"" + key + "\"}"))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.detail_code").value("VALIDATION_FAILED"));
+        assertThat(jdbcTemplate.queryForList("""
+                SELECT business_type || '|' || business_id || '|' || permission_code || '|' || (metadata->>'error_code')
+                  FROM audit_events WHERE event_name = 'analytics.holiday_calendar.update_failed' AND event_result = 'failure'
+                   AND idempotency_key = ?""", String.class, key))
+                .containsExactly("holiday_calendar|new|analytics.operating_params.manage|VALIDATION_FAILED");
     }
 
     private String userId(String tag) {

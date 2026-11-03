@@ -306,7 +306,7 @@ class MerchantServiceJdbcIntegrationTests {
         assertThat(row.get("status")).isEqualTo("created");
         assertThat(row.get("owner_user_id")).isNull();
         List<String> events = jdbcTemplate.queryForList("SELECT event_name FROM audit_events WHERE business_id = ?", String.class, id);
-        assertThat(events).contains("merchant_service.work_order.assign_failed").doesNotContain("merchant_service.work_order.assigned");
+        assertThat(events).contains("merchant_service.assignMerchantServiceWorkOrder.failed").doesNotContain("merchant_service.assignMerchantServiceWorkOrder.succeeded");
 
         assign(dispatcherB, id, user("pa")).andExpect(status().isOk()).andExpect(jsonPath("$.data.status").value("assigned"));
 
@@ -350,7 +350,7 @@ class MerchantServiceJdbcIntegrationTests {
             assertThat(row.get("owner_user_id")).isNull();
         }
         assertThat(jdbcTemplate.queryForList("SELECT event_name FROM audit_events WHERE business_id = ?", String.class, id))
-                .contains("merchant_service.work_order.assign_failed").doesNotContain("merchant_service.work_order.assigned");
+                .contains("merchant_service.assignMerchantServiceWorkOrder.failed").doesNotContain("merchant_service.assignMerchantServiceWorkOrder.succeeded");
 
         assign(dispatcherB, id, user("pa")).andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.status").value("assigned"))
@@ -412,7 +412,7 @@ class MerchantServiceJdbcIntegrationTests {
         close(closer, id, "").andExpect(status().isBadRequest()).andExpect(jsonPath("$.detail_code").value("VALIDATION_FAILED"));
         assertThat(jdbcTemplate.queryForObject("SELECT status FROM merchant_service_work_orders WHERE id = ?", String.class, id)).isEqualTo("resolved");
         assertThat(jdbcTemplate.queryForList("SELECT event_name FROM audit_events WHERE business_id = ?", String.class, id))
-                .contains("merchant_service.work_order.close_failed");
+                .contains("merchant_service.closeMerchantServiceWorkOrder.failed");
 
         close(closer, id, ",\"close_reason\":\"商户多次联系未回复，按既有规则关闭\"").andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.status").value("closed"));
@@ -623,6 +623,31 @@ class MerchantServiceJdbcIntegrationTests {
                 {"reason":"已关闭归档"}
                 """)).andExpect(status().isOk());
         assignedToMe(processorA).andExpect(status().isOk()).andExpect(jsonPath("$.data.items").isEmpty());
+    }
+
+    /**
+     * 18N 第 124 条 124-R2b（台账 :4231「代码落 OpenAPI 声明的事件，OpenAPI 不改。」）：按商户专区提单的蛇形键建单、后台列表、员工手机「我的工单」，
+     * 建单落 merchant_service.createMerchantServiceWorkOrder.succeeded、后台列表落 merchant_service.listMerchantServiceWorkOrders.succeeded
+     * （OpenAPI 声明名），「我的工单」仍落 merchant_service.work_order.viewed；旧名不再落。
+     */
+    @Test
+    void createAndListAuditUnderOpenApiDeclaredNames() throws Exception {
+        seedOperatingMerchant();
+        createAsMerchant("repair", "high", "");
+        listIds(dispatcherA);
+        assignedToMe(processorA).andExpect(status().isOk());
+
+        assertThat(auditCount("m", "merchant_service.createMerchantServiceWorkOrder.succeeded")).isEqualTo(1);
+        assertThat(auditCount("m", "merchant_service.work_order.created")).isZero();
+        assertThat(auditCount("a", "merchant_service.listMerchantServiceWorkOrders.succeeded")).isEqualTo(1);
+        assertThat(auditCount("a", "merchant_service.work_order.viewed")).isZero();
+        assertThat(auditCount("pa", "merchant_service.work_order.viewed")).isEqualTo(1);
+        assertThat(auditCount("pa", "merchant_service.listMerchantServiceWorkOrders.succeeded")).isZero();
+    }
+
+    private int auditCount(String tag, String event) {
+        return jdbcTemplate.queryForObject("SELECT count(*) FROM audit_events WHERE actor_id = ? AND event_name = ?",
+                Integer.class, user(tag), event);
     }
 
     /** 照员工手机「我的工单」（TerminalApiClient.listMyMerchantWorkOrders）的请求。 */

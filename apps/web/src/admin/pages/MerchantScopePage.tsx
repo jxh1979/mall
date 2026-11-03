@@ -1,4 +1,4 @@
-// 文件版本：V0.03
+// 文件版本：V0.04
 import React from "react";
 import { TechDetails } from "../components/TechDetails";
 import { AdminDataState } from "../components/AdminDataState";
@@ -185,7 +185,7 @@ export function MerchantScopePage({ api, user, setGlobalError }: AdminPageProps)
     <section data-testid="merchant-scope-page">
       <AdminPageHeader title={TEXT.title} description={TEXT.description} />
       <TechDetails><div className="admin-generic-evidence" data-testid="merchant-scope-evidence">{TEXT.evidence}</div></TechDetails>
-      <AuditTrailHint event="merchant_service.work_order.viewed / merchant_billing.bill.viewed" />
+      <AuditTrailHint event="merchant_service.listMerchantServiceWorkOrders.succeeded / merchant_billing.bill.viewed" />
       <AdminDataState loading={loading} error={error} empty={false} onRetry={reload}>
         {!hasRows ? <div className="admin-state admin-empty" data-testid="merchant-scope-empty">{TEXT.empty}</div> : kpiFocus ? (
           <>

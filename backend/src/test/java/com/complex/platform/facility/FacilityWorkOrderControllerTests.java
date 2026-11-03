@@ -1,6 +1,6 @@
 package com.complex.platform.facility;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
@@ -35,7 +35,7 @@ class FacilityWorkOrderControllerTests {
     void setUp() {
         service = mock(FacilityWorkOrderService.class);
         authorizationService = mock(AuthorizationService.class);
-        controller = new FacilityWorkOrderController(service, authorizationService);
+        controller = new FacilityWorkOrderController(service, authorizationService, new com.complex.platform.evidence.AuditedOperationExecutor(null, mock(com.complex.platform.evidence.AuditEventService.class)));
         outsourced = new AccessActor("usr_vendor_a", "vendor-a", "outsourced_vendor", "org_1", null, "active");
         when(authorizationService.currentActor()).thenReturn(outsourced);
         when(authorizationService.isOutsourcedVendor(outsourced)).thenReturn(true);

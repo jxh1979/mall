@@ -1,6 +1,6 @@
 package com.complex.platform.parking;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static com.complex.platform.common.Strings.requireText;
 import static com.complex.platform.common.Strings.trimToNull;
@@ -57,6 +57,9 @@ public class ParkingReleaseService {
     private final SupervisorReviewService reviews;
     private final JdbcStaffRepository staff;
     private final BusinessDayResolver businessDays;
+    // 第十八批 N 段第 123 条 123-R2：敏感操作定位闸（字段注入免改构造点；单测未注入即不查）。
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    com.complex.platform.gate.SensitiveLocationGuard locationGuard;
 
     public ParkingReleaseService(JdbcTemplate jdbc, AuthorizationService auth, IdempotencyService idempotency,
             AuditEventService audit, ParkingService parking, ParkingVendorService vendor, RiskAlertService alerts,
@@ -85,6 +88,9 @@ public class ParkingReleaseService {
                 throw ApiException.badRequest("VALIDATION_FAILED", "请填写人工放行登记");
             }
             String project = parking.reachableProject(requireText(r.projectId(), "project_id"), RECORD);
+            if (locationGuard != null) {
+                locationGuard.check("recordParkingManualRelease", () -> project);
+            }
             return idempotency.execute("parkingManualRelease:" + project, key, r, () -> {
                 String plate = ParkingService.plate(r.plateNo());
                 String releaseReason = requireText(r.releaseReason(), "release_reason");

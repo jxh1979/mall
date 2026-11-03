@@ -1,4 +1,4 @@
-# P1 商场平面图图片与多边形坐标 API 契约 V0.2
+# P1 商场平面图图片与多边形坐标 API 契约 V0.21
 
 文档类型：Implementation / API Contract
 
@@ -76,7 +76,7 @@
 | 查询平面图 | `floor_plan.viewed` | 暂不单列 |
 | 创建平面图 | `floor_plan.created` | `floor_plan.create_failed` |
 | 查询标注 | `floor_plan.shape_viewed` | 暂不单列 |
-| 保存标注 | `floor_plan.shape_saved` | `floor_plan.shape_save_failed` |
+| 保存标注 | `floor_plan.shape.save` | `floor_plan.shape.save_failed` |
 
 ## 6. 错误处理矩阵
 

@@ -265,7 +265,13 @@ describe("MerchantWorkOrdersPage 第 102 条 派单负责人与关单", () => {
     const target = screen.getByTestId("merchant-work-order-target-status") as HTMLSelectElement;
     expect(Array.from(target.options).map((option) => option.textContent)).toEqual(expect.arrayContaining(["待商户确认", "已处理待关闭"]));
 
-    fireEvent.click(screen.getByTestId("merchant-work-order-select-wo-p"));
+    // 第 125 条：列表到达后默认选中首行在被动 effect 里，本页单选框 checked 又回落首行、没有按选中发的请求可等；
+    // effect 没落定就点 wo-p 会被补跑的 effect 改回 wo-c，所以没勾上就再点一次，直到 wo-p 勾上（点已勾上的单选不触发 onChange、不多发请求）。
+    await waitFor(() => {
+      const woP = screen.getByTestId("merchant-work-order-select-wo-p") as HTMLInputElement;
+      if (!woP.checked) fireEvent.click(woP);
+      expect(woP.checked).toBe(true);
+    });
     fireEvent.click(screen.getByTestId("merchant-work-order-close"));
     await waitFor(() => expect(screen.getByTestId("merchant-work-order-error").textContent).toContain("投诉工单由客户关怀部关闭须填写关闭缘由。"));
     expect(posts(fetchMock, "/wo-p/close")).toHaveLength(0);

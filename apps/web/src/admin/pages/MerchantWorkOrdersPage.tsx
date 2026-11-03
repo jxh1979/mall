@@ -355,7 +355,7 @@ export function MerchantWorkOrdersPage({ api, setActionResult, setGlobalError, e
     <section data-testid="merchant-work-orders-page">
       <AdminPageHeader title={TEXT.title} description={TEXT.description} />
       <TechDetails><div className="admin-generic-evidence" data-testid="merchant-work-orders-evidence">{TEXT.evidence}</div></TechDetails>
-      <AuditTrailHint event="merchant_service.work_order.viewed / assigned / action_added / closed / cancelled / work_order_close_method_saved / complaint.loop_confirmed" />
+      <AuditTrailHint event="merchant_service.listMerchantServiceWorkOrders.succeeded / assignMerchantServiceWorkOrder.succeeded / addMerchantServiceWorkOrderAction.succeeded / closeMerchantServiceWorkOrder.succeeded / work_order.cancelled / work_order_close_method_saved / complaint.loop_confirmed" />
       <AdminDataState loading={loading} error={error} empty={rows.length === 0} onRetry={reload}>
         {kpiFocus ? (
         <div className="admin-state" data-testid="merchant-work-orders-kpi-focus-banner">

@@ -1,6 +1,6 @@
 package com.complex.platform.common.idempotency;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -595,7 +595,7 @@ class IdempotentReplayCompletedJdbcIntegrationTests {
     private Integer published(String idempotencyKey) {
         return jdbcTemplate.queryForObject("""
                 SELECT count(*) FROM audit_events
-                 WHERE event_name = 'ticket_dynamic_pricing.published' AND event_result = 'success' AND idempotency_key = ?
+                 WHERE event_name = 'ticket_dynamic_pricing.published.success' AND event_result = 'success' AND idempotency_key = ?
                 """, Integer.class, idempotencyKey);
     }
 

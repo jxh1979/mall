@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.12
+// 文件版本：V0.13
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
@@ -322,6 +322,8 @@ class BarServiceTests {
         assertThat(table.merchantId()).isNull();
         BarTableSessionRecord session = createSession("platform-open", table.id(), "bar_1", null);
         assertThat(session.merchantId()).isEqualTo("__platform__");
+        // 第十八批 N 段 124-R2a：开台落 OpenAPI 声明名
+        assertThat(auditEventRepository.events).extracting(AuditEvent::eventName).contains("bar.table_session.create");
     }
 
     @Test
@@ -425,6 +427,7 @@ class BarServiceTests {
                 3800L, null, null, "active", null, null, false, null, null, null, 1500L, null, null, null)))
                 .isInstanceOf(ApiException.class)
                 .extracting("code").isEqualTo("BAR_INTERNAL_PRICE_CATALOG_ONLY");
+        assertThat(auditEventRepository.events).extracting(AuditEvent::eventName).contains("bar.product.created_failed");
 
         BarProductRecord noPrice = service.createProduct(new BarProductRequest(
                 "product-no-internal", "create", List.of(), "bar_1", "House Beer", "beer",
@@ -1888,7 +1891,7 @@ class BarServiceTests {
                 );
         assertThat(auditEventRepository.events)
                 .extracting(AuditEvent::eventName)
-                .contains("bar.production_ticket.transitioned");
+                .contains("bar.production_ticket.transition", "bar.production_ticket_event.list");
     }
 
     @Test
@@ -2260,7 +2263,7 @@ class BarServiceTests {
         assertThat(barRepository.billAdjustments).hasSize(1);
         assertThat(auditEventRepository.events)
                 .extracting(AuditEvent::eventName)
-                .contains("bar.bill.adjusted");
+                .contains("bar.bill.adjust");
     }
 
     @Test
@@ -2634,7 +2637,7 @@ class BarServiceTests {
                 .containsExactly("merge");
         assertThat(auditEventRepository.events)
                 .extracting(AuditEvent::eventName)
-                .contains("bar.bill.merged");
+                .contains("bar.bill.merge");
     }
 
     @Test
@@ -2792,7 +2795,7 @@ class BarServiceTests {
         assertThat(barRepository.findTableById(targetTable.id())).get().extracting(BarTableRecord::status).isEqualTo("active");
         assertThat(auditEventRepository.events)
                 .extracting(AuditEvent::eventName)
-                .contains("bar.table.transfer_failed");
+                .contains("bar.table_session.transfer_failed");
     }
 
     @Test
@@ -2834,7 +2837,7 @@ class BarServiceTests {
                 .containsExactly("merged", primary.id());
         assertThat(auditEventRepository.events)
                 .extracting(AuditEvent::eventName)
-                .contains("bar.table.merged");
+                .contains("bar.table_session.merge");
     }
 
     @Test
@@ -2876,6 +2879,25 @@ class BarServiceTests {
 
         assertThat(bill.depositDeductAmountCent()).isZero();
         assertThat(bill.payableAmountCent()).isEqualTo(30000L);
+    }
+
+    @Test
+    void mergeTableSessionsRejectsCrossBarSessionWithDeclaredFailureEvent() {
+        // 第十八批 N 段 124-R2a：并台失败落 OpenAPI 声明名 bar.table_session.merge_failed
+        BarTableRecord primaryTable = createTable("primary-merge-cross", "bar_1", "active", 50000L);
+        BarTableRecord otherTable = createTable("other-merge-cross", "bar_2", "active", 60000L);
+        BarTableSessionRecord primary = createSession("primary-merge-cross", primaryTable.id(), "bar_1", "merchant_1");
+        BarTableSessionRecord other = createSession("other-merge-cross", otherTable.id(), "bar_2", "merchant_1");
+
+        assertThatThrownBy(() -> service.mergeTableSessions(primary.id(), new BarTableMergeRequest(
+                "merge-cross-bar", "cross bar should fail", List.of(), other.id(), "cross bar should fail",
+                "supervisor_1", primary.sessionVersion(), other.sessionVersion())))
+                .isInstanceOf(ApiException.class)
+                .extracting("code")
+                .isEqualTo("BAR_SCOPE_MISMATCH");
+        assertThat(auditEventRepository.events)
+                .extracting(AuditEvent::eventName)
+                .contains("bar.table_session.merge_failed");
     }
 
     @Test

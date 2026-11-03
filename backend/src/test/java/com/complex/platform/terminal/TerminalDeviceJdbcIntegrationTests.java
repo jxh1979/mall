@@ -153,7 +153,7 @@ class TerminalDeviceJdbcIntegrationTests {
     }
 
     @Test
-    void capabilitySwitchKioskConfigAndHeartbeatPersistFormalFields() {
+    void capabilitySwitchAndHeartbeatPersistFormalFields() {
         Instant now = Instant.parse("2026-06-14T07:00:00Z");
         repository.saveCapabilitySwitch(new TerminalCapabilitySwitchRecord(
                 "switch_jdbc",
@@ -166,10 +166,6 @@ class TerminalDeviceJdbcIntegrationTests {
                 now,
                 now
         ));
-        jdbcTemplate.update("""
-                INSERT INTO terminal_kiosk_configs (device_id, kiosk_mode, ticketing_enabled, bound_scope, config, updated_at)
-                VALUES ('device_kiosk_jdbc', 'ticketing', true, 'project:p0', '{"home": "ticketing"}'::jsonb, '2026-06-14T07:00:00Z')
-                """);
         repository.saveKioskHeartbeat(new KioskHeartbeatRecord(
                 "device_kiosk_jdbc",
                 "online",
@@ -183,12 +179,6 @@ class TerminalDeviceJdbcIntegrationTests {
         assertThat(repository.listCapabilitySwitches())
                 .extracting(TerminalCapabilitySwitchRecord::id, TerminalCapabilitySwitchRecord::enabled)
                 .contains(tuple("switch_jdbc", true));
-        assertThat(repository.findKioskConfigByDeviceId("device_kiosk_jdbc"))
-                .get()
-                .satisfies(config -> {
-                    assertThat(config.kioskMode()).isEqualTo("ticketing");
-                    assertThat(config.config()).containsEntry("home", "ticketing");
-                });
         assertThat(kioskHeartbeatRows())
                 .contains(tuple("device_kiosk_jdbc", "online", "1.0.0"));
     }

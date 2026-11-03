@@ -1,4 +1,4 @@
-// 文件版本：V0.04
+// 文件版本：V0.05
 // 第 63 条（PGM:623「建设备台账，记录编号、型号、点位、责任人和状态」；BSM:800「仅记设备状态、故障事件与维修工单留痕」）：
 // 后台登记安检 X 光设备、登记故障（即开维修工单）、修复完成、报废。
 // 第 82 条 82c-R1（PGM:618 综合体入场三道环节设备）：人脸扫描设备、检票闸机与 X 光设备共用登记入口 /devices/entry-devices（带 terminalType）。
@@ -9,6 +9,8 @@
 // 其他现场设备与入场设备一样更换责任人，两者都可挂商户、挂失。
 // 第 96 条 96-R2（ENUM:241「待归还」；第十八批裁决 23「停岗离职转待归还」）：待归还的设备行在本页办归还（回待领用）或挂失，不给送修、报废。
 // 96-R3（ENUM:241「归档」；第十八批裁决 24「报废后可归档」）：已报废的设备行填原因归档；已归档的设备只显示、没有任何操作。
+// 第十八批 N 段 120-R2（BSM:980「……只有启用售票能力的一体机，才允许授权服务人员……辅助客人购票。」；PGM:742「……要启用必须有人显式打开……」）：
+// 售票型一体机行显示本机售票是否开启，填原因按台开启或关闭（PUT 本机的设备级售票开关行）；服务型一体机不给开关。
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -300,5 +302,51 @@ describe("TerminalDevicesPage 设备待归还、归档（第 96 条）", () => {
     renderPage(makeApi(vi.fn().mockResolvedValue({}), [TABLET_ARCHIVED]));
     await waitFor(() => expect(screen.queryByTestId("terminal-device-row-dev_ar")?.textContent ?? "").toContain("已归档"));
     expect(screen.getByTestId("terminal-device-row-dev_ar").querySelectorAll("button")).toHaveLength(0);
+  });
+});
+
+describe("TerminalDevicesPage 一体机售票能力（第十八批 N 段 120-R2）", () => {
+  const KIOSK_ON = { ...PHONE_RETURNED, id: "dev_k_1", deviceId: "KS-1", deviceCode: "KS-1", terminalType: "kiosk", kioskMode: "ticketing", status: "bound" };
+  const KIOSK_OFF = { ...KIOSK_ON, id: "dev_k_2", deviceId: "KS-2", deviceCode: "KS-2" };
+  const KIOSK_SERVICE = { ...KIOSK_ON, id: "dev_k_3", deviceId: "KS-3", deviceCode: "KS-3", kioskMode: "service" };
+
+  function kioskApi(put: ReturnType<typeof vi.fn>): AdminApiClient {
+    const get = vi.fn((path: string) => Promise.resolve(
+      path === "/api/v1/terminals/devices" ? { items: [KIOSK_ON, KIOSK_OFF, KIOSK_SERVICE] }
+        : path === "/api/v1/terminals/capability-switches"
+          ? { items: [{ id: "tcs_kiosk_ticketing_KS-1", terminalType: "kiosk", capabilityCode: "ticketing", scopeType: "device", scopeId: "KS-1", enabled: true }] }
+          : []));
+    return { get, getPaged: vi.fn(), post: vi.fn(), put, patch: vi.fn(), delete: vi.fn() } as unknown as AdminApiClient;
+  }
+
+  it("售票型一体机显示是否开启售票，服务型不给开关；填原因关闭已开启的一台，PUT 本机售票开关行", async () => {
+    const put = vi.fn().mockResolvedValue({});
+    const props = renderPage(kioskApi(put));
+    await waitFor(() => expect(screen.queryByTestId("terminal-kiosk-ticketing-dev_k_1")?.textContent ?? "").toContain("已开启"));
+    expect(screen.getByTestId("terminal-kiosk-ticketing-dev_k_2").textContent).toContain("未开启");
+    expect(screen.getByTestId("terminal-kiosk-ticketing-toggle-dev_k_1").textContent).toBe("关闭售票");
+    expect(screen.getByTestId("terminal-kiosk-ticketing-toggle-dev_k_2").textContent).toBe("开启售票");
+    expect(screen.queryByTestId("terminal-kiosk-ticketing-toggle-dev_k_3")).toBeNull();
+    fireEvent.change(screen.getByTestId("terminal-xray-reason-dev_k_1"), { target: { value: "门口补票点撤销" } });
+    fireEvent.click(screen.getByTestId("terminal-kiosk-ticketing-toggle-dev_k_1"));
+    await waitFor(() => expect(put).toHaveBeenCalledWith("/api/v1/terminals/capability-switches/tcs_kiosk_ticketing_KS-1", {
+      terminalType: "kiosk", capabilityCode: "ticketing", scopeId: "KS-1", enabled: false, operatorNote: "门口补票点撤销",
+    }));
+    await waitFor(() => expect(props.setActionResult).toHaveBeenCalledWith(
+      { action: "terminal_switch_toggled", id: "tcs_kiosk_ticketing_KS-1", enabled: false }));
+  });
+
+  it("没开启的一台填原因开启售票；不填原因提示必填、不发请求", async () => {
+    const put = vi.fn().mockResolvedValue({});
+    const props = renderPage(kioskApi(put));
+    await waitFor(() => expect(screen.queryByTestId("terminal-kiosk-ticketing-dev_k_1")?.textContent ?? "").toContain("已开启"));
+    fireEvent.click(screen.getByTestId("terminal-kiosk-ticketing-toggle-dev_k_2"));
+    expect(props.setGlobalError).toHaveBeenCalledWith("请填写原因（留痕必填）");
+    expect(put).not.toHaveBeenCalled();
+    fireEvent.change(screen.getByTestId("terminal-xray-reason-dev_k_2"), { target: { value: "酒吧门口补票点开售" } });
+    fireEvent.click(screen.getByTestId("terminal-kiosk-ticketing-toggle-dev_k_2"));
+    await waitFor(() => expect(put).toHaveBeenCalledWith("/api/v1/terminals/capability-switches/tcs_kiosk_ticketing_KS-2", {
+      terminalType: "kiosk", capabilityCode: "ticketing", scopeId: "KS-2", enabled: true, operatorNote: "酒吧门口补票点开售",
+    }));
   });
 });

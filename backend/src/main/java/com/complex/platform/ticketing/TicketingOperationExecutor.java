@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import com.complex.platform.common.api.PageResponse;
 import com.complex.platform.evidence.AuditedOperationExecutor;
@@ -30,6 +30,19 @@ public class TicketingOperationExecutor {
             TicketingWriteOperation operation,
             Supplier<T> action
     ) {
+        return executeWrite(operationId, idempotencyKey, request, responseType, operation, action, Map.of());
+    }
+
+    /** 第十八批 N 段第 120 条 120-R2：成功留痕带业务元数据（一体机售票的售票原因、终端、设备与点位）。 */
+    <T> T executeWrite(
+            String operationId,
+            String idempotencyKey,
+            Object request,
+            Class<T> responseType,
+            TicketingWriteOperation operation,
+            Supplier<T> action,
+            Map<String, Object> successMetadata
+    ) {
         return operations.executeWrite(
                 operationId,
                 idempotencyKey,
@@ -38,7 +51,7 @@ public class TicketingOperationExecutor {
                 operation,
                 action,
                 this::businessId,
-                Map.of()
+                successMetadata
         );
     }
 

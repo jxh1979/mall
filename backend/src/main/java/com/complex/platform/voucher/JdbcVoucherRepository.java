@@ -1,6 +1,6 @@
 package com.complex.platform.voucher;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
@@ -433,6 +433,12 @@ class JdbcVoucherRepository implements VoucherRepository {
                  WHERE code_hash = :hash AND status = 'active' AND expires_at > :now
                 """, new MapSqlParameterSource().addValue("hash", codeHash).addValue("now", timestampWithTimeZone(now)),
                 (rs, n) -> new ActiveRedeemCode(rs.getString("voucher_instance_id"), rs.getString("customer_id"))).stream().findFirst();
+    }
+
+    @Override
+    public Optional<String> findInstanceIdByRedeemCodeHash(String codeHash) {
+        return jdbcTemplate.queryForList("SELECT voucher_instance_id FROM voucher_redeem_codes WHERE code_hash = :hash",
+                new MapSqlParameterSource("hash", codeHash), String.class).stream().findFirst();
     }
 
     @Override

@@ -1,6 +1,6 @@
 package com.complex.platform.amusement;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import java.time.Instant;
 import java.util.List;
@@ -300,6 +300,16 @@ public interface AmusementRepository {
     List<AmusementQueueEntryRecord> listQueueEntries();
 
     List<AmusementQueueEntryRecord> listQueueEntriesByMerchant(String merchantId);
+
+    /** 第十八批 N 段第 120 条 120-R5：各游乐项目排队中（waiting）的人数（游乐设施状态看板）。default 空兼容内存双子。 */
+    default java.util.Map<String, Integer> countWaitingQueueEntriesByProject() {
+        return java.util.Map.of();
+    }
+
+    /** 第十八批 N 段第 120 条 120-R5：各游乐项目未结（已登记、处理中、待外部）的故障事件数（游乐设施状态看板）。default 空兼容内存双子。 */
+    default java.util.Map<String, Integer> countOpenFaultIncidentsByProject() {
+        return java.util.Map.of();
+    }
 
     com.complex.platform.common.api.PageResponse<AmusementQueueEntryRecord> listQueueEntriesPaged(
             String merchantId, int page, int size);

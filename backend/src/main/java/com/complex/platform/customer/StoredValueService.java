@@ -1,6 +1,6 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.17
+// 文件版本：V0.18
 
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.idempotency.IdempotentReplayContext;
@@ -48,7 +48,7 @@ import com.complex.platform.common.Strings;
 public class StoredValueService {
 
     private static final Logger log = LoggerFactory.getLogger(StoredValueService.class);
-    private static final String EVENT_TOPUP = "stored_value.topup";
+    private static final String EVENT_TOPUP = "customer.stored_value.settle";
     private static final String EVENT_CONSUME = "stored_value.consume";
     private static final String EVENT_REFUND = "stored_value.refund";
     private static final String EVENT_COUNTER_REFUND = "stored_value.counter_refund";
@@ -98,6 +98,9 @@ public class StoredValueService {
     // 第十八批第 3 条：票务订单储值笔固化通路费（ENUM L86 充值时已产生，取本次消费的批次分摊额）；单测未注入则不写。
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     private com.complex.platform.settlement.RouteFeeShares routeFeeShares;
+    // 第十八批 N 段第 123 条 123-R2：敏感操作定位闸（字段注入免改构造点；单测未注入即不查）。
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    com.complex.platform.gate.SensitiveLocationGuard locationGuard;
 
     // B1d⑤ 商户卡充值资金归属默认值（开关，可后台/配置覆盖；默认商户预收）。
     @Value("${stored-value.merchant-card.fund-ownership:merchant_prepaid}")
@@ -807,6 +810,9 @@ public class StoredValueService {
         // 柜台退款独立幂等命名空间：同一客户端键在线上/柜台两条路径各自幂等，互不重放（复核 Important 项）。
         String namespacedKey = idempotencyKey == null || idempotencyKey.isBlank()
                 ? idempotencyKey : COUNTER_REFUND_KEY_PREFIX + idempotencyKey;
+        if (locationGuard != null) {
+            locationGuard.check("counterRefundStoredValueAccount", () -> projectId);
+        }
         return doRefund(customerId, projectId, merchantId, amountCent, reason, closeAccount,
                 namespacedKey, true, voucher);
     }

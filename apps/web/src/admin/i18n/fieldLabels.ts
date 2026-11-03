@@ -1,4 +1,4 @@
-// 文件版本：V0.15
+// 文件版本：V0.16
 // OBS-14-02 后台结果区字段中文名字典（PGM「全局原则 · 界面全中文（所有终端零英文）」）。
 // 键用后端 JSON 的蛇形写法；结果区查表时蛇形与驼峰同查（orderId / order_id 都命中 order_id）。
 // 与后端字段中文名表 FieldLabels.java（common.api 包）同键同名：前段按后端原样抄录，后端改名这里跟着改（门禁会比对）。
@@ -1703,6 +1703,11 @@ export const FIELD_LABELS: Record<string, string> = {
   observed_at: "观测时间",
   observed_value: "观测值",
   occupied_count: "当前在场人数",
+  // 第十八批 N 段第 120 条 120-R5 游乐设施状态看板。
+  waiting_count: "排队人数",
+  maintenance_device_count: "维护中设备数",
+  fault_count: "未结故障数",
+  safety_notices: "安全提醒",
   offset_receivable_cent: "抵扣应收",
   ok: "成功",
   old_final_value: "旧表终值",
@@ -2642,6 +2647,8 @@ export const FIELD_LABELS: Record<string, string> = {
   consignment_sale_id: "代销售出记录",
   consignment_sale_basis: "代销售出依据",
   sale_basis: "售出依据",
+  // 第十八批 N 段 120-R2：一体机售票下单留痕的售票原因
+  sale_reason: "售票原因",
   sold_at: "售出时间",
   payables: "应付款",
   payable_id: "应付款",
@@ -2754,6 +2761,14 @@ export const FIELD_LABELS: Record<string, string> = {
   event_key: "事件",
   completed_count: "已完成数",
   reference_income_cent: "参考收入",
+  // 第 123 条 123-R1 项目敏感操作授权范围（同后端 FieldLabels.java）。
+  center_latitude: "中心纬度",
+  center_longitude: "中心经度",
+  radius_meters: "授权半径（米）",
+  min_radius_meters: "半径下限（米）",
+  max_radius_meters: "半径上限（米）",
+  // 第 124 条 124-R4 结算单人工过账留痕（同后端 FieldLabels.java）。
+  posted_count: "过账笔数",
 };
 
 // 结果对象里页面自定的取值（action 动作码、status 状态码）→ 中文；STATUS_LABELS 已有的码不重复列。
@@ -2831,6 +2846,7 @@ export const VALUE_LABELS: Record<string, string> = {
   contract_flow_saved: "合同流程已保存",
   contract_deposit_months_saved: "押金月数已保存",
   contract_deposit_refund_wait_saved: "押金退还等待期已保存",
+  sensitive_operation_range_saved: "敏感操作授权范围已保存",
   contract_color_rule_added: "合同颜色规则已添加",
   stored_value_exit_notice_policy_saved: "储值退出公示规则已保存",
   ticket_expiry_reminder_policy_saved: "门票到期提醒规则已保存",
@@ -3302,4 +3318,21 @@ export const KEY_VALUE_LABELS: Record<string, Record<string, string>> = {
   // 第十八批 L 段 102-R3（第十八批裁决 26）：报修、其他服务请求的关单方式（同 MerchantWorkOrdersPage CLOSE_METHOD_LABELS）。
   close_method: { handler: "处理人完成即结束", staff_acceptance: "员工验收后关闭", merchant_confirm: "须商户确认" },
   currency: { CNY: "人民币" },
+};
+
+// 终端码 → 中文名（PGM:745 受控的十一类终端）：终端开关矩阵与审计页「终端」列共用（第十八批 N 段第 122 条 122-R2）。
+export const TERMINAL_LABELS: Record<string, string> = {
+  app: "客人 App",
+  miniapp: "小程序",
+  web: "Web 前端",
+  tablet: "工作人员平板",
+  staff_work_phone: "员工工作手机",
+  staff_private_phone: "员工私人手机",
+  merchant_portal: "商户门户",
+  merchant_app: "商户 App",
+  kiosk: "触摸屏一体机",
+  mobile_admin: "移动管理端",
+  dealer_portal: "独立经销商门户",
+  global: "全局能力",
+  integration: "第三方集成",
 };

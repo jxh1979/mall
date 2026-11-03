@@ -367,6 +367,7 @@ position_role_templates,direct,organization_id,organization_id column on positio
 production_readiness_check_blockers,inherited,owner/blocker code,owner/blocker code -> production evidence scope,must join through scope path before multi-complex rollout,V0.07,covered
 production_readiness_checks,inherited,owner/blocker code,owner/blocker code -> production evidence scope,must join through scope path before multi-complex rollout,V0.07,covered
 production_readiness_items,inherited,owner/blocker code,owner/blocker code -> production evidence scope,must join through scope path before multi-complex rollout,V0.07,covered
+project_sensitive_operation_ranges,direct,project_id,project_id column on project_sensitive_operation_ranges,ready for project/merchant scoped query enforcement,V0.07,covered
 projects,direct,merchant_id,merchant_id column on projects,ready for project/merchant scoped query enforcement,V0.07,covered
 property_fee_bills,direct,project_id,project_id column on property_fee_bills,ready for project/merchant scoped query enforcement,V0.07,covered
 property_fee_rates,direct,project_id,project_id column on property_fee_rates,ready for project/merchant scoped query enforcement,V0.07,covered

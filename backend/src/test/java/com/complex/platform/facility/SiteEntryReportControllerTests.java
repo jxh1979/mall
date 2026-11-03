@@ -1,6 +1,6 @@
 package com.complex.platform.facility;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -35,7 +35,8 @@ class SiteEntryReportControllerTests {
     void setUp() {
         service = mock(SiteEntryReportService.class);
         authorizationService = mock(AuthorizationService.class);
-        controller = new SiteEntryReportController(service, authorizationService, mock(com.complex.platform.evidence.EvidenceEventService.class));
+        controller = new SiteEntryReportController(service, authorizationService, mock(com.complex.platform.evidence.EvidenceEventService.class),
+                new com.complex.platform.evidence.AuditedOperationExecutor(null, mock(com.complex.platform.evidence.AuditEventService.class)));
         outsourced = new AccessActor("usr_vendor_a", "vendor-a", "outsourced_vendor", "proj_1", null, "active");
         when(authorizationService.currentActor()).thenReturn(outsourced);
         when(authorizationService.isOutsourcedVendor(outsourced)).thenReturn(true);

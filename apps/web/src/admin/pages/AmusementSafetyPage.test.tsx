@@ -148,3 +148,38 @@ describe("AmusementSafetyPage 行明细抽屉", () => {
     await waitFor(() => expect(screen.queryByTestId("row-detail-drawer")).toBeNull());
   });
 });
+
+// 第十八批 N 段第 120 条 120-R6（BSM:993「检修完成后必须由主管确认，设施才能恢复营业。」）：确认人取当前登录主管，页面不再让人手填确认主管。
+describe("AmusementSafetyPage 定期检修主管确认", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    window.history.replaceState({}, "", "/admin/amusement/safety");
+  });
+
+  it("确认复工不填确认主管、请求只带提交编号", async () => {
+    const fetchMock = vi.fn().mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (init?.method === "POST") {
+        return Promise.resolve(new Response(JSON.stringify({ success: true, code: "OK", message: "success", data: { id: "mr-1", status: "confirmed" } }), { status: 200, headers: { "content-type": "application/json" } }));
+      }
+      if (url.includes("/amusement/maintenance-records")) {
+        return Promise.resolve(envelope([{ id: "mr-1", project_id: "amuse-1", device_id: "ride-1", result: "pass", status: "pending_confirm" }]));
+      }
+      if (url.includes("/amusement/safety-inspections")) return Promise.resolve(envelope(ROWS));
+      return Promise.resolve(envelope([]));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    render(<AmusementSafetyPage api={new AdminApi("test-token")} user={{ id: "u1", username: "admin", accountType: "platform_admin" }}
+      setActionResult={vi.fn()} setGlobalError={vi.fn()} effectivePermissions={ADMIN_PERMS} />);
+    await waitFor(() => expect(screen.getByTestId("amusement-maintenance-resume-mr-1")).toBeTruthy());
+    await waitFor(() => expect(screen.getByTestId("amusement-safety-table")).toBeTruthy());
+    expect(screen.queryByLabelText("复工主管id")).toBeNull();
+
+    fireEvent.click(screen.getByTestId("amusement-maintenance-resume-mr-1"));
+
+    await waitFor(() => expect(fetchMock.mock.calls.some(([, init]) => (init as RequestInit | undefined)?.method === "POST")).toBe(true));
+    const [url, init] = fetchMock.mock.calls.find(([, i]) => (i as RequestInit | undefined)?.method === "POST")!;
+    expect(String(url)).toContain("/api/v1/amusement/maintenance-records/mr-1/confirm-resume");
+    expect(Object.keys(JSON.parse(String((init as RequestInit).body)))).toEqual(["idempotency_key"]);
+  });
+});

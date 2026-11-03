@@ -1,6 +1,6 @@
 package com.complex.platform.contract;
 
-// 文件版本：V0.27
+// 文件版本：V0.28
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.LocalZone;
@@ -933,7 +933,7 @@ public class ContractService implements com.complex.platform.finance.Termination
         ContractSettlementRecord settlement = repository.saveSettlement(new ContractSettlementRecord(
                 settlementId, contractId, trigger, status, items, dispute, null, null,
                 contract.projectId(), now, now, null, null, null, null, reviewId));
-        auditEventService.recordSuccess("contract.settle_opened", "contract.settlement.manage", "contract_settlement",
+        auditEventService.recordSuccess("contract.settled", "contract.settlement.manage", "contract_settlement",
                 settlement.id(), null, actual.idempotencyKey(), Map.of("trigger", trigger, "status", status));
         return settlement;
     }
@@ -1422,7 +1422,7 @@ public class ContractService implements com.complex.platform.finance.Termination
             return null;   // 免租期 / 生效前 / 收租方式组合后仍为 0：无应收
         }
         return genFeeBill(c, period, "rent", rent.amountCent(), rent.ruleId(),
-                dueDateOf(period), actual.idempotencyKey());
+                dueDateOf(period), actual.idempotencyKey(), "contract.rent_billed");
     }
 
     /**
@@ -1456,19 +1456,19 @@ public class ContractService implements com.complex.platform.finance.Termination
             long baseRent = ContractRentMath.periodAmountCent(rt, c.effectiveDate(), period);
             com.complex.platform.finance.FinanceService.PeriodTurnoverRent rent =
                     resolveBillingRent(c, rt, period, baseRent);
-            ContractRentBillRecord rb = genFeeBill(c, period, "rent", rent.amountCent(), rent.ruleId(), dueDate, idemKey);
+            ContractRentBillRecord rb = genFeeBill(c, period, "rent", rent.amountCent(), rent.ruleId(), dueDate, idemKey, "contract.fee_billed");
             if (rb != null) {
                 out.add(rb);
             }
         }
         long property = numLong(rt.get("propertyFeeCent"));
-        ContractRentBillRecord pb = genFeeBill(c, period, "property_fee", property, null, dueDate, idemKey);
+        ContractRentBillRecord pb = genFeeBill(c, period, "property_fee", property, null, dueDate, idemKey, "contract.fee_billed");
         if (pb != null) {
             out.add(pb);
         }
         // HP-P01（BSM L1437「商户月租车位按合同约定、按月出账，账单类型为「车位月租」」）：合同约定车位月租（分/月）逐期出账，0 不出。
         ContractRentBillRecord parking = genFeeBill(c, period, "parking_monthly", numLong(rt.get("parkingMonthlyCent")), null,
-                dueDate, idemKey);
+                dueDate, idemKey, "contract.fee_billed");
         if (parking != null) {
             out.add(parking);
         }
@@ -1479,14 +1479,14 @@ public class ContractService implements com.complex.platform.finance.Termination
 
     /** 单费目挂账：金额≤0 或已挂账则跳过返 null；否则建 ar_ap_items 应收 + contract_rent_bills。 */
     private ContractRentBillRecord genFeeBill(ContractRecord c, String period, String feeType, long amountCent,
-            String turnoverRuleId, LocalDate dueDate, String idemKey) {
+            String turnoverRuleId, LocalDate dueDate, String idemKey, String event) {
         if (amountCent <= 0 || rentBillExistsInChain(c, period, feeType)) {
             return null;
         }
         ContractRentBillRecord bill = repository.insertRentBill(new ContractRentBillRecord(
                 "crb_" + UUID.randomUUID(), c.id(), c.merchantId(), c.projectId(), period, feeType, amountCent,
                 "arap_" + feeType + "_" + UUID.randomUUID(), Instant.now(), turnoverRuleId), dueDate);
-        auditEventService.recordSuccess("contract.fee_billed", "finance.ar_ap.manage", "contract_rent_bill",
+        auditEventService.recordSuccess(event, "finance.ar_ap.manage", "contract_rent_bill",
                 bill.id(), null, idemKey, Map.of("period", period, "fee_type", feeType, "amount_cent", amountCent));
         return bill;
     }

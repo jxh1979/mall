@@ -1,6 +1,6 @@
 package com.complex.platform.amusement;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -58,6 +58,7 @@ import org.springframework.test.web.servlet.ResultActions;
 class AmusementIncidentCloseReplayJdbcIntegrationTests {
 
     private static final String CLOSE = "amusement.incident.close";
+    private static final String CREATE = "amusement.incident.create";
     private static final String ACTION = "amusement.incident_close";
 
     @Autowired
@@ -76,6 +77,7 @@ class AmusementIncidentCloseReplayJdbcIntegrationTests {
     private final String userId = "usr_f11_" + suffix;
     private final String merchantId = "mch_f11_" + suffix;
     private final String incidentId = "ami_f11_" + suffix;
+    private String createdIncidentId;
 
     @BeforeEach
     void seed() {
@@ -86,7 +88,7 @@ class AmusementIncidentCloseReplayJdbcIntegrationTests {
                 """, Integer.class, ACTION)).as("V099 种子准入策略：事故关闭超空间拦截").isEqualTo(1);
         Instant now = Instant.now();
         accessRepository.createUser(new AccessUser(userId, userId, "staff", "org", merchantId, "active", now));
-        accessRepository.createTemporaryGrant(new TemporaryGrant(UUID.randomUUID().toString(), userId, List.of(CLOSE),
+        accessRepository.createTemporaryGrant(new TemporaryGrant(UUID.randomUUID().toString(), userId, List.of(CLOSE, CREATE),
                 now.minusSeconds(3600), now.plusSeconds(86_400), false, false, "active", "M724-F11 事故关闭重提回归",
                 "seed-admin", now, null, null));
         // 本商户的一条待处理事故；所挂游乐项目不存在，准入闸解析不到空间
@@ -119,6 +121,9 @@ class AmusementIncidentCloseReplayJdbcIntegrationTests {
         SecurityContextHolder.clearContext();
         // 处置记录随事故级联删除
         jdbcTemplate.update("DELETE FROM amusement_incidents WHERE id = ?", incidentId);
+        if (createdIncidentId != null) {
+            jdbcTemplate.update("DELETE FROM amusement_incidents WHERE id = ?", createdIncidentId);
+        }
         jdbcTemplate.update("DELETE FROM temporary_permission_grants WHERE subject_id = ?", userId);
         jdbcTemplate.update("DELETE FROM access_users WHERE id = ?", userId);
         jdbcTemplate.update("DELETE FROM idempotency_records WHERE idempotency_key LIKE ?", "f11-%" + suffix);
@@ -172,15 +177,43 @@ class AmusementIncidentCloseReplayJdbcIntegrationTests {
         assertThat(closedEvents()).isEqualTo(1);
     }
 
+    /**
+     * 第十八批 N 段 124-R2a（决策台账「18K 落地位置补记·第 94 条」「代码落 OpenAPI 声明的事件，OpenAPI 不改。」）：
+     * 按前端蛇形键经真实接口建事故、再关闭，留痕落 OpenAPI 声明名 amusement.incident.create / amusement.incident.close，旧名不再落。
+     */
+    @Test
+    void creatingAndClosingAnIncidentRecordsTheDeclaredAuditEventNames() throws Exception {
+        String created = body(send("/api/v1/amusement/incidents", """
+                {"idempotency_key": "f11-create-%s", "project_id": "prj_f11_%s", "severity": "low",
+                 "title": "124-R2a 回归事故", "description": "事件名对齐回归", "reported_by_user_id": "%s",
+                 "reported_channel": "staff_app"}
+                """.formatted(suffix, suffix, userId))
+                .andExpect(status().isOk()));
+        createdIncidentId = data(created).get("id").asText();
+        blockedThenApproved(createdIncidentId, "f11-create-block-" + suffix, "已处置");
+        close(createdIncidentId, closeJson("f11-create-close-" + suffix, "已处置"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("closed"));
+
+        assertThat(successEvents("amusement.incident.create")).isEqualTo(1);
+        assertThat(successEvents("amusement.incident.close")).isEqualTo(1);
+        assertThat(successEvents("amusement.incident.created")).isZero();
+        assertThat(successEvents("amusement.incident.closed")).isZero();
+    }
+
     /** 本人以给定处置结论发起一次被拦截的关闭（409 生成待审复核单），再把这张复核单置为已批准，返回其单号。 */
     private String blockedThenApproved(String key, String resolution) throws Exception {
-        String response = body(close(closeJson(key, resolution))
+        return blockedThenApproved(incidentId, key, resolution);
+    }
+
+    private String blockedThenApproved(String id, String key, String resolution) throws Exception {
+        String response = body(close(id, closeJson(key, resolution))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.detail_code").value("ADMISSION_BLOCKED")));
         List<String> pending = jdbcTemplate.queryForList("""
                 SELECT review_id FROM supervisor_review_decisions
                  WHERE action_type = ? AND object_id = ? AND initiated_by = ? AND review_status = 'pending_review'
-                """, String.class, ACTION, incidentId, userId).stream().filter(response::contains).toList();
+                """, String.class, ACTION, id, userId).stream().filter(response::contains).toList();
         assertThat(pending).hasSize(1);
         jdbcTemplate.update("""
                 UPDATE supervisor_review_decisions
@@ -191,7 +224,15 @@ class AmusementIncidentCloseReplayJdbcIntegrationTests {
     }
 
     private ResultActions close(String body) throws Exception {
-        return mockMvc.perform(post("/api/v1/amusement/incidents/" + incidentId + "/close")
+        return close(incidentId, body);
+    }
+
+    private ResultActions close(String id, String body) throws Exception {
+        return send("/api/v1/amusement/incidents/" + id + "/close", body);
+    }
+
+    private ResultActions send(String path, String body) throws Exception {
+        return mockMvc.perform(post(path)
                 .with(request -> {
                     request.addHeader("X-Terminal-Type", "web");
                     return authentication(new UsernamePasswordAuthenticationToken(
@@ -228,8 +269,15 @@ class AmusementIncidentCloseReplayJdbcIntegrationTests {
     private Integer closedEvents() {
         return jdbcTemplate.queryForObject("""
                 SELECT count(*) FROM audit_events
-                 WHERE event_name = 'amusement.incident.closed' AND event_result = 'success' AND business_id = ?
+                 WHERE event_name = 'amusement.incident.close' AND event_result = 'success' AND business_id = ?
                 """, Integer.class, incidentId);
+    }
+
+    // 本人名下某事件名的成功留痕条数
+    private Integer successEvents(String eventName) {
+        return jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM audit_events WHERE actor_id = ? AND event_name = ? AND event_result = 'success'",
+                Integer.class, userId, eventName);
     }
 
     // 这条事故关闭动作名下的复核单总数（待审、已批准、已放行都算）

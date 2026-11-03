@@ -1,6 +1,9 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
   <uses-permission android:name="android.permission.INTERNET" />
   <uses-permission android:name="android.permission.CAMERA" />
+  <!-- 第十八批 N 段第 123 条 123-R4（BSM:1630）：核销、收款、退款、放行那一刻取一次本机定位，交服务端按项目授权范围判定 -->
+  <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+  <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
   <uses-permission android:name="android.permission.NFC" />
   <!-- U01-002：拔线考勤监听由前台服务常驻，开机后重注册 -->
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />

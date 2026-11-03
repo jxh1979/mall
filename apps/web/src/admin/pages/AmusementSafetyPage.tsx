@@ -113,7 +113,6 @@ export function AmusementSafetyPage({ api, setActionResult, setGlobalError, effe
   const [createForm, setCreateForm] = React.useState({ projectId: "", deviceId: "", templateId: "", overallResult: "pass" });
   const [maintRows, setMaintRows] = React.useState<Array<{ id: string; projectId?: string; deviceId?: string; result?: string; status?: string }>>([]);
   const [maintForm, setMaintForm] = React.useState({ projectId: "", deviceId: "", vendorId: "", engineerName: "", result: "pass", exceptionNote: "" });
-  const [resumeSupervisor, setResumeSupervisor] = React.useState("");
   const [rectifyNote, setRectifyNote] = React.useState("已更换防护垫并上传照片");
   // 行明细抽屉：整行可点 → 该巡检完整字段（结果/状态中文·时间中文·引用可溯源）。
   const [detail, setDetail] = React.useState<{ title: string; fields: RowDetailField[] } | null>(null);
@@ -233,12 +232,9 @@ export function AmusementSafetyPage({ api, setActionResult, setGlobalError, effe
     if (ok) reload();
   }
 
+  // 第十八批 N 段第 120 条 120-R6（BSM:993「检修完成后必须由主管确认，设施才能恢复营业。」）：确认人取当前登录主管，不再手填。
   async function confirmResume(id: string) {
-    if (!resumeSupervisor.trim()) {
-      setGlobalError("确认复工需填写主管 id。");
-      return;
-    }
-    const request = { idempotencyKey: nextKey("amusement-maintenance-resume"), supervisorConfirmedBy: resumeSupervisor.trim() };
+    const request = { idempotencyKey: nextKey("amusement-maintenance-resume") };
     const ok = await runAction("amusement_maintenance_resumed", request, () => api.post(`/api/v1/amusement/maintenance-records/${id}/confirm-resume`, request));
     if (ok) reload();
   }
@@ -464,9 +460,6 @@ export function AmusementSafetyPage({ api, setActionResult, setGlobalError, effe
               </select>
               {maintForm.result === "fail" ? (<input aria-label="异常说明" placeholder="异常说明" value={maintForm.exceptionNote} onChange={(e) => setMaintForm({ ...maintForm, exceptionNote: e.target.value })} />) : null}
               <PermissionButton permissionsState={effectivePermissions} permissions={["amusement.maintenance.submit"]} data-testid="amusement-maintenance-submit" onClick={() => void submitMaintenance()}>提交检修</PermissionButton>
-            </div>
-            <div className="admin-inline-form">
-              <input aria-label="复工主管id" placeholder="确认复工主管 id" value={resumeSupervisor} onChange={(e) => setResumeSupervisor(e.target.value)} />
             </div>
             {formError ? <div data-testid="amusement-safety-error" className="admin-inline-error">{formError}</div> : null}
 

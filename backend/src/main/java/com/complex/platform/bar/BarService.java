@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.07
+// 文件版本：V0.08
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.PageResponse;
@@ -29,6 +29,9 @@ public class BarService {
     // 控制器切片测试的上下文没有该组件，同 BarTableSessionService 的可选字段注入）。
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     BarSessionSalesBackfillTarget salesAttribution;
+    // 第十八批 N 段第 123 条 123-R2：敏感操作定位闸（字段注入免改构造点；单测未注入即不查）。
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    com.complex.platform.gate.SensitiveLocationGuard locationGuard;
 
     public BarService(
             BarRepository repository,
@@ -341,16 +344,22 @@ public class BarService {
         return new BarCatalogDeleteDecision(reservationId, "approved", true);
     }
 
+    /**
+     * 第十八批 N 段第 120 条 120-R3（BSM:987「支持订台下单……订台需要支付定金。」；BSM:1023「订台订单必须记录定金、订台来源、销售人员或设备来源……」）：
+     * 可信终端是一体机时按一体机来源订台（定金待付、设备来源、付定金才占台，见 BarEntryService.createReservation），其余照旧按员工代订。
+     */
     @com.complex.platform.gate.GuardedAction(capability = "bar.reservation.create")
     @Transactional
     public BarReservationRecord createReservation(BarReservationRequest request) {
+        boolean kiosk = com.complex.platform.gate.TerminalIdentityHolder.current()
+                .map(terminal -> "kiosk".equals(terminal.terminalType())).orElse(false);
         return operations.executeWrite(
                 "createBarReservation",
                 request == null ? null : request.idempotencyKey(),
                 request,
                 BarReservationRecord.class,
                 BarWriteOperation.CREATE_RESERVATION,
-                () -> entryService.createReservation(request, null, "staff", "web")
+                () -> entryService.createReservation(request, null, kiosk ? "kiosk" : "staff", kiosk ? "kiosk" : "web")
         );
     }
 
@@ -394,10 +403,19 @@ public class BarService {
         );
     }
 
+    /** 第十八批 N 段第 123 条 123-R2：订台所属酒吧所在项目过敏感操作定位闸（查不到订台交给业务原有的报错）。 */
+    private void checkReservationLocation(String operationCode, String reservationId) {
+        if (locationGuard != null) {
+            locationGuard.check(operationCode, () -> repository.findReservationById(reservationId).map(BarReservationRecord::barId)
+                    .map(locationGuard::projectOfMerchant).orElse(null));
+        }
+    }
+
     @com.complex.platform.gate.GuardedAction(capability = "bar.reservation.manage")
     @Transactional
     public BarReservationRecord payReservationDeposit(String reservationId, BarReservationDepositActionRequest request) {
         String id = operations.requireText(reservationId, "reservation_id");
+        checkReservationLocation("payBarReservationDeposit", id);
         return operations.executeWrite(
                 "payBarReservationDeposit:" + id,
                 request == null ? null : request.idempotencyKey(),
@@ -467,6 +485,7 @@ public class BarService {
     @Transactional
     public BarTableGuestCheckinRecord checkInReservationGuest(String reservationId, VerificationRequest request) {
         String id = operations.requireText(reservationId, "reservation_id");
+        checkReservationLocation("checkInBarReservationGuest", id);
         return operations.executeWrite(
                 "checkInBarReservationGuest:" + id,
                 request == null ? null : request.idempotencyKey(),
@@ -510,6 +529,7 @@ public class BarService {
     @Transactional
     public BarReservationInvitationMemberRecord verifyReservationInvitationEntry(String reservationId, VerificationRequest request) {
         String id = operations.requireText(reservationId, "reservation_id");
+        checkReservationLocation("verifyBarReservationInvitationEntry", id);
         return operations.executeWrite(
                 "verifyBarReservationInvitationEntry:" + id,
                 request == null ? null : request.idempotencyKey(),
@@ -716,6 +736,10 @@ public class BarService {
     @Transactional
     public BarBillRecord settleBill(String billId, BarBillSettleRequest request) {
         String id = operations.requireText(billId, "bill_id");
+        if (locationGuard != null) {
+            locationGuard.check("settleBarBill", () -> repository.findBillById(id).map(BarBillRecord::barId)
+                    .map(locationGuard::projectOfMerchant).orElse(null));
+        }
         return operations.executeWrite(
                 "settleBarBill:" + id,
                 request == null ? null : request.idempotencyKey(),

@@ -221,7 +221,7 @@ export function DynamicPricingPage({ api, setActionResult, setGlobalError, effec
     <section data-testid="dynamic-pricing-page">
       <AdminPageHeader title={TEXT.title} description={TEXT.description} />
       <TechDetails><div className="admin-generic-evidence" data-testid="dynamic-pricing-evidence">{TEXT.evidence}</div></TechDetails>
-      <AuditTrailHint event="ticket_dynamic_pricing.viewed / created / simulated / published" />
+      <AuditTrailHint event="ticket_dynamic_pricing.viewed.success / created.success / simulated.success / published.success" />
       <AdminDataState loading={loading} error={error} empty={rules.length === 0} onRetry={reloadResource}>
         {kpiFocus ? (
           <div className="admin-state" data-testid="dynamic-pricing-kpi-focus-banner">

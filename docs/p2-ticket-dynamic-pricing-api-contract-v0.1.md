@@ -1,4 +1,4 @@
-# P2-C 票务动态定价规则容器 API 契约 V0.1
+# P2-C 票务动态定价规则容器 API 契约 V0.11
 
 ## 1. 定位
 
@@ -147,9 +147,9 @@
 
 | 事件 | 触发时机 |
 | --- | --- |
-| `ticket_dynamic_pricing.changed` | 创建或维护规则草稿 |
-| `ticket_dynamic_pricing.published` | 发布规则 |
-| `ticket_dynamic_pricing.simulated` | 执行模拟 |
+| `ticket_dynamic_pricing.created.success` | 创建或维护规则草稿 |
+| `ticket_dynamic_pricing.published.success` | 发布规则 |
+| `ticket_dynamic_pricing.simulated.success` | 执行模拟 |
 
 ## 7. 明确不进入本期
 

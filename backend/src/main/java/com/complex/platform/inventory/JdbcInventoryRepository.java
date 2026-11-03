@@ -1,6 +1,6 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.17
+// 文件版本：V0.18
 
 import com.complex.platform.common.crypto.PiiCipher;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -2972,15 +2972,6 @@ class JdbcInventoryRepository implements InventoryRepository {
                 SELECT EXISTS(SELECT 1 FROM inventory_trace_codes WHERE trace_code = :tc)
                 """, new MapSqlParameterSource().addValue("tc", traceCode), Boolean.class);
         return Boolean.TRUE.equals(e);
-    }
-
-    @Override
-    public int updateTraceCodeOwnerIfExists(String traceCode, String fromOwnerId, String ownerType, String ownerId, Instant now) {
-        return jdbcTemplate.update("""
-                UPDATE inventory_trace_codes SET owner_type = :ot, owner_id = :oid, updated_at = :now
-                 WHERE trace_code = :tc AND (owner_id = :fromId OR owner_id IS NULL)
-                """, new MapSqlParameterSource().addValue("ot", ownerType).addValue("oid", ownerId)
-                .addValue("now", offset(now)).addValue("tc", traceCode).addValue("fromId", fromOwnerId));
     }
 
     @Override

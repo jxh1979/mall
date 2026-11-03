@@ -1,4 +1,4 @@
-// 文件版本：V0.05
+// 文件版本：V0.06
 package com.complex.platform.bar;
 
 import static org.mockito.ArgumentMatchers.any;
@@ -605,6 +605,16 @@ class BarControllerTests {
 
     @TestConfiguration
     static class TestBeans {
+        // 第十八批 N 段第 124 条 124-R5：退酒原因码写口经 AuditedOperationExecutor.recordingFailure 落失败事件、成功后落成功事件，切片里给桩
+        @Bean
+        com.complex.platform.evidence.AuditEventService auditEventService() {
+            return Mockito.mock(com.complex.platform.evidence.AuditEventService.class);
+        }
+
+        @Bean
+        com.complex.platform.evidence.AuditedOperationExecutor auditedOperationExecutor(com.complex.platform.evidence.AuditEventService audit) {
+            return new com.complex.platform.evidence.AuditedOperationExecutor(null, audit);
+        }
         @Bean
         BarService barService() {
             return Mockito.mock(BarService.class);
