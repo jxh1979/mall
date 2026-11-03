@@ -8,14 +8,14 @@
     "RUNTIME_EVIDENCE_BOUND_TO_SOURCE_FINGERPRINT",
     "RUNTIME_EVIDENCE_DOES_NOT_CLOSE_PRODUCTION_MANIFEST"
   ],
-  "generated_at": "2026-11-03T17:32:29.944Z",
+  "generated_at": "2026-11-03T22:40:37.035Z",
   "git": {
-    "head": "e0ec2efd8e73046dbda3c4ce4e39fb14f82571ee",
-    "head_short": "e0ec2efd",
-    "branch": "feature/business-code-batch34-20261101",
+    "head": "44b7cc6d9ecdb41e5ce8a0ed5699e2414e2c2932",
+    "head_short": "44b7cc6d",
+    "branch": "feature/business-code-batch35-20261103",
     "worktree_dirty": false,
-    "source_fingerprint": "4d2f2650834dee38d195394ff7544e8f3d5c8640c59ca20fa0c77460a9de0ef3",
-    "source_fingerprint_file_count": 3241,
+    "source_fingerprint": "91426934d0957d7f0e452bb116d0e65f510d9a3aaf5b05b22ac833a63719a76b",
+    "source_fingerprint_file_count": 3237,
     "source_fingerprint_paths": [
       "backend/src/main",
       "backend/src/test",
@@ -50,12 +50,12 @@
   },
   "backend_surefire": {
     "path": "backend/target/surefire-reports",
-    "suites": 510,
-    "tests": 6268,
+    "suites": 511,
+    "tests": 6270,
     "failures": 0,
     "errors": 0,
     "skipped": 0,
-    "latest_mtime": "2026-11-03T17:29:59.300Z",
+    "latest_mtime": "2026-11-03T22:37:01.998Z",
     "passed": true
   },
   "web_unit_source": {
@@ -125,6 +125,7 @@
       "apps/web/src/admin/pages/BarCommissionsPage.metricdetail.test.tsx",
       "apps/web/src/admin/pages/BarCommissionsPage.rowdetail.test.tsx",
       "apps/web/src/admin/pages/BarOrdersPage.anomaly.test.tsx",
+      "apps/web/src/admin/pages/BarOrdersPage.cashier.test.tsx",
       "apps/web/src/admin/pages/BarOrdersPage.deliver.test.tsx",
       "apps/web/src/admin/pages/BarOrdersPage.kpi.test.tsx",
       "apps/web/src/admin/pages/BarOrdersPage.member.test.tsx",
@@ -366,8 +367,8 @@
       "apps/web/src/dealer/dealerPortalClient.test.ts",
       "apps/web/src/shared/ReplayedNotice.test.tsx"
     ],
-    "file_count": 305,
-    "test_count_from_source": 1536
+    "file_count": 306,
+    "test_count_from_source": 1537
   },
   "web_build": {
     "dist_index_exists": true,
@@ -388,15 +389,15 @@
     "asset_count": 168,
     "main_js_assets": [
       {
-        "path": "apps/web/dist/assets/main-DQcVoc82.js",
+        "path": "apps/web/dist/assets/main-BZP2yHJL.js",
         "size_bytes": 4337,
-        "mtime": "2026-11-03T17:30:07.312Z"
+        "mtime": "2026-11-03T22:37:10.052Z"
       }
     ],
     "largest_asset": {
       "path": "apps/web/dist/assets/vendor-antd-CzvkKKQu.js",
       "size_bytes": 251112,
-      "mtime": "2026-11-03T17:30:07.315Z"
+      "mtime": "2026-11-03T22:37:10.055Z"
     },
     "no_main_bundle_warning_expected": true
   },
