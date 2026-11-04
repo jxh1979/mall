@@ -1,6 +1,6 @@
 package com.complex.terminal
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
@@ -139,11 +139,17 @@ class TerminalFieldWorkflowTest {
           okJson("""{"id":"order-1","bar_id":"bar-1","status":"open","total_amount_cent":9900}""")
         }
         "/api/v1/bar/bills/bill-1/pay-intents" -> {
+          // 第十八批 P 段第 137 条 137-R1：扫码结账先按账单剩余应收建支付意图。
+          assertTrue("\"business_order_type\":\"bar_bill\"" in req.body)
+          assertTrue("\"business_order_id\":\"bill-1\"" in req.body)
           assertTrue("\"amount_cent\":9900" in req.body)
           assertTrue("\"channel\":\"wechat\"" in req.body)
           okJson("""{"id":"intent-1","amount_cent":9900,"status":"created"}""")
         }
         "/api/v1/bar/bills/bill-1/settle" -> {
+          // 137-R1：结账带支付意图编号 payment_id（服务端必填，BarBillingService.settleBill）。
+          assertTrue("\"payment_id\":\"intent-1\"" in req.body)
+          assertTrue("\"payment_channel\":\"wechat\"" in req.body)
           assertTrue("\"settlement_amount_cent\":9900" in req.body)
           okJson("""{"id":"bill-1","payment_status":"paid","settlement_status":"settled"}""")
         }
@@ -160,10 +166,7 @@ class TerminalFieldWorkflowTest {
     )
     assertEquals("order-1", order.id)
 
-    val intent = workflow.createBarPaymentIntent(billId = "bill-1", amountCent = 9900, channel = "wechat")
-    assertEquals("created", intent.status)
-
-    val bill = workflow.settleBarBill(billId = "bill-1", settlementAmountCent = 9900, paymentChannel = "wechat")
+    val bill = workflow.settleBarBillByScan(BarBillRecord(id = "bill-1", payableAmountCent = 9900), "wechat")
     assertEquals("settled", bill.settlementStatus)
     assertEquals(
       listOf(
@@ -173,6 +176,55 @@ class TerminalFieldWorkflowTest {
       ),
       paths,
     )
+  }
+
+  @Test
+  fun barScanSettlementUsesRemainingDueIncludingTip() {
+    // 137-R1：意图与结账金额＝应付 + 小费 − 已付（与服务端支付意向金额校验同式，BarBillingService.createBillPayIntent）。
+    val bodies = mutableMapOf<String, String>()
+    val api = newApi { req ->
+      bodies[req.path] = req.body
+      when (req.path) {
+        "/api/v1/bar/bills/bill-2/pay-intents" -> okJson("""{"id":"intent-2","amount_cent":10500,"status":"created"}""")
+        "/api/v1/bar/bills/bill-2/settle" -> okJson("""{"id":"bill-2","payment_status":"paid","settlement_status":"settled"}""")
+        else -> error("unexpected path ${req.path}")
+      }
+    }
+    val workflow = TerminalWorkflow(api, storeWithSessionAndBinding())
+
+    workflow.settleBarBillByScan(
+      BarBillRecord(id = "bill-2", payableAmountCent = 12000, paidAmountCent = 2000, tipAmountCent = 500), "alipay")
+
+    assertTrue("\"amount_cent\":10500" in bodies["/api/v1/bar/bills/bill-2/pay-intents"].orEmpty())
+    val settle = bodies["/api/v1/bar/bills/bill-2/settle"].orEmpty()
+    assertTrue("\"settlement_amount_cent\":10500" in settle)
+    assertTrue("\"payment_id\":\"intent-2\"" in settle)
+  }
+
+  @Test
+  fun barScanSettlementOfZeroDueSettlesWithoutPaymentIntent() {
+    // 137-R1 复核修正（BSM:1064「……以该笔留款抵付的部分不重复收款、不重复确认收入。」）：留款抵完、剩余应收为 0 的账单不建支付意图
+    // （服务端 amount_cent 须大于 0），结账带本次幂等键作 payment_id、settlement_amount_cent=0，由服务端关单（先例 120-R4 KioskPayment）。
+    val bodies = mutableMapOf<String, String>()
+    val api = newApi { req ->
+      bodies[req.path] = req.body
+      when (req.path) {
+        "/api/v1/bar/bills/bill-0/pay-intents" ->
+          StubResponse(400, """{"detail_code":"VALIDATION_FAILED","message":"amount_cent 必须大于 0"}""")
+        "/api/v1/bar/bills/bill-0/settle" -> okJson("""{"id":"bill-0","payment_status":"paid","settlement_status":"settled"}""")
+        else -> error("unexpected path ${req.path}")
+      }
+    }
+    val workflow = TerminalWorkflow(api, storeWithSessionAndBinding())
+
+    runCatching { workflow.settleBarBillByScan(BarBillRecord(id = "bill-0", payableAmountCent = 0), "wechat") }
+
+    assertFalse("/api/v1/bar/bills/bill-0/pay-intents" in bodies)
+    val settle = bodies["/api/v1/bar/bills/bill-0/settle"].orEmpty()
+    assertTrue("\"settlement_amount_cent\":0" in settle)
+    val key = Regex("\"idempotency_key\":\"([^\"]+)\"").find(settle)?.groupValues?.get(1)
+    assertNotNull(key)
+    assertTrue("\"payment_id\":\"$key\"" in settle)
   }
 
   @Test

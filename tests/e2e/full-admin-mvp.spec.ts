@@ -1,4 +1,4 @@
-// 文件版本：V0.04
+// 文件版本：V0.05
 import { expect, test } from "@playwright/test";
 import { installMockApi } from "./support/mock-api";
 
@@ -112,19 +112,11 @@ test.describe("full admin MVP acceptance", () => {
     await expect(page.getByTestId("admin-action-result")).toContainText("票务规则已发布");
   });
 
-  test("ADM-MVP-04 bar table session blocks over-limit check-in and records valid check-in", async ({ page }) => {
+  test("ADM-MVP-04 bar table session transfer and merge", async ({ page }) => {
     await installMockApi(page);
     await adminLogin(page, "/admin/bar/table-sessions");
 
     await expect(page.getByTestId("admin-page-title")).toContainText("卡座与订台");
-    await page.getByTestId("bar-checkin-count").fill("7");
-    await page.getByTestId("bar-checkin-submit").click();
-    await expect(page.getByTestId("bar-checkin-error")).toContainText("人数超限");
-
-    await page.getByTestId("bar-checkin-count").fill("4");
-    await page.getByTestId("bar-checkin-submit").click();
-    await expect(page.getByTestId("admin-action-result")).toContainText("状态：已入座");
-
     await page.getByTestId("bar-session-select-session-1").check();
     await page.getByTestId("bar-transfer-target-table").fill("table-2");
     await page.getByTestId("bar-transfer-target-staff").fill("staff-2");

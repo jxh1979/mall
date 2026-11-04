@@ -123,6 +123,9 @@ class SessionEntryPassJdbcIntegrationTests {
                 .isInstanceOf(ApiException.class)
                 .hasMessageContaining("入场凭证已失效");
         assertThat(usedTimes(code)).isEqualTo(0);  // 未消耗
+        // 134-R1（CG 裁决第 46 项）：规则拒绝落一条 rejected 核销记录；本场次入场行随业务事务回滚，只剩旧场次那条。
+        assertThat(outcomes(code)).containsExactly("rejected/entry_pass_past_session_void");
+        assertThat(entryRecordCount(code)).isEqualTo(1);
     }
 
     @Test
@@ -138,6 +141,7 @@ class SessionEntryPassJdbcIntegrationTests {
                 .isInstanceOf(ApiException.class)
                 .hasMessageContaining("营业场次");
         assertThat(usedTimes(code)).isEqualTo(0);
+        assertThat(outcomes(code)).containsExactly("rejected/venue_not_in_session");
     }
 
     @Test
@@ -171,6 +175,12 @@ class SessionEntryPassJdbcIntegrationTests {
     private int entryRecordCount(String code) {
         return jdbcTemplate.queryForObject(
                 "SELECT COUNT(1) FROM entitlement_entry_records WHERE entitlement_id = ?", Integer.class, "ent_" + code);
+    }
+
+    private List<String> outcomes(String code) {
+        return jdbcTemplate.queryForList(
+                "SELECT status || '/' || coalesce(result_reason, '') FROM ticket_verifications WHERE entitlement_id = ? ORDER BY created_at",
+                String.class, "ent_" + code);
     }
 
     private int successCount(String code) {

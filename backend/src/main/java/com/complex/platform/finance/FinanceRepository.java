@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.12
+// 文件版本：V0.13
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -87,6 +87,14 @@ public interface FinanceRepository {
      * default 返回 0 兼容既有测试双子。
      */
     default long aggregateMerchantReflowTurnover(String merchantId, Instant fromInclusive, Instant toExclusive) {
+        return 0L;
+    }
+
+    /**
+     * 第十八批 P 段第 131 条：该商户以没收时点（deposit_settled_at）落在 [from, to) 内没收的订台定金合计（分）。
+     * default 返回 0 兼容既有测试双子。
+     */
+    default long sumForfeitedBarDepositCent(String merchantId, Instant fromInclusive, Instant toExclusive) {
         return 0L;
     }
 
@@ -421,6 +429,15 @@ public interface FinanceRepository {
 
     /** 列出某日结批次的六源汇总。 */
     List<DailyCloseSummaryRecord> listDailyCloseSummaries(String dailyCloseId);
+
+    /**
+     * 第十八批 P 段第 133 条 133-R2：日结批次按营业日倒序分页。merchantId 非空只看该商户的 merchant、bar 范围；
+     * projectIds 非空只看这些项目的 project、ticketing、amusement 范围与项目下商户的 merchant、bar 范围，空集合没有可见记录；
+     * 两者都为 null＝平台全量。default 返回空页兼容既有测试双子。
+     */
+    default PageResponse<DailyCloseRecord> listDailyCloses(String merchantId, java.util.Set<String> projectIds, int page, int size) {
+        return new PageResponse<>(List.of(), page, size, 0L);
+    }
 
     /**
      * 把 business_date 当日、且属于本次 scope 的 ar_ap_items 打上 locked_day_close_id。

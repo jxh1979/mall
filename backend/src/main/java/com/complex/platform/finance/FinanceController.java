@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 import static com.complex.platform.common.api.ApiRequests.requireIdempotencyKey;
 
 import com.complex.platform.access.AuthorizationService;
@@ -108,6 +108,15 @@ public class FinanceController implements com.complex.platform.security.ExportFi
     public ApiResponse<PageResponse<DailyCloseSummaryRecord>> listDailyCloseSummaries(@PathVariable String id) {
         authorizationService.requirePermission("finance.daily_close.manage");
         return ApiResponse.ok(service.listDailyCloseSummaries(id));
+    }
+
+    /** 第十八批 P 段第 133 条 133-R2（BSM:1848「财务看退款、差异、日结和结算依据。」）：日结批次列表，与汇总查询同一个码。 */
+    @GetMapping("/daily-closes")
+    public ApiResponse<PageResponse<DailyCloseRecord>> listDailyCloses(
+            @RequestParam(name = "page", defaultValue = "1") int page,
+            @RequestParam(name = "size", defaultValue = "20") int size) {
+        authorizationService.requirePermission("finance.daily_close.manage");
+        return ApiResponse.ok(service.listDailyCloses(page, size));
     }
 
     @PostMapping("/ar-ap-adjustments")

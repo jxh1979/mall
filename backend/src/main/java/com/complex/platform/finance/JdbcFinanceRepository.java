@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.15
+// 文件版本：V0.16
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
@@ -837,6 +837,33 @@ class JdbcFinanceRepository implements FinanceRepository {
     }
 
     @Override
+    public com.complex.platform.common.api.PageResponse<DailyCloseRecord> listDailyCloses(
+            String merchantId, java.util.Set<String> projectIds, int page, int size) {
+        int safePage = page < 1 ? 1 : page;
+        int safeSize = size < 1 ? 20 : Math.min(size, 200);
+        if (projectIds != null && projectIds.isEmpty())
+            return new com.complex.platform.common.api.PageResponse<>(List.of(), safePage, safeSize, 0L);
+        // 同一个筛选谓词用于行和总数：商户只到本商户的 merchant、bar 范围；项目集合到项目范围与项目下商户。
+        MapSqlParameterSource params = new MapSqlParameterSource()
+                .addValue("merchant_id", merchantId, java.sql.Types.VARCHAR)
+                .addValue("project_ids", projectIds);
+        String where = " WHERE (:merchant_id IS NULL OR (scope_type IN ('merchant', 'bar') AND scope_id = :merchant_id))"
+                + (projectIds == null ? "" : """
+                   AND ((scope_type IN ('project', 'ticketing', 'amusement') AND scope_id IN (:project_ids))
+                        OR (scope_type IN ('merchant', 'bar') AND scope_id IN (SELECT id FROM merchants WHERE project_id IN (:project_ids))))
+                """);
+        Long total = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM finance_daily_closes" + where, params, Long.class);
+        params.addValue("limit", safeSize).addValue("offset", (long) (safePage - 1) * safeSize);
+        List<DailyCloseRecord> items = jdbcTemplate.query("""
+                SELECT id, business_date, scope_type, scope_id, force_close, status, locked_at, created_at
+                  FROM finance_daily_closes""" + where + """
+                 ORDER BY business_date DESC, created_at DESC, id
+                 LIMIT :limit OFFSET :offset
+                """, params, this::mapDailyClose);
+        return new com.complex.platform.common.api.PageResponse<>(items, safePage, safeSize, total == null ? 0L : total);
+    }
+
+    @Override
     public int lockArApItemsForDailyClose(String dailyCloseId, LocalDate businessDate, String merchantId) {
         // 经营日范围：以 due_date 当日（AR/AP 业务日）锁定本批次台账。merchantId 非空时仅锁本商户行（隔离）。
         MapSqlParameterSource params = new MapSqlParameterSource()
@@ -1408,6 +1435,23 @@ class JdbcFinanceRepository implements FinanceRepository {
                 .addValue("from_inclusive", timestampWithTimeZone(fromInclusive))
                 .addValue("to_exclusive", timestampWithTimeZone(toExclusive)), Long.class);
         return netTurnover == null ? 0L : Math.max(0L, netTurnover);
+    }
+
+    @Override
+    public long sumForfeitedBarDepositCent(String merchantId, Instant fromInclusive, Instant toExclusive) {
+        // deposit_settlement='forfeited' 只由三条没收路径写（店员按爽约或超出免费时限取消、超时释放、关台未达低消），且必为已付定金。
+        Long forfeited = jdbcTemplate.queryForObject("""
+                SELECT COALESCE(SUM(deposit_amount_cent), 0)
+                  FROM bar_reservations
+                 WHERE merchant_id = :merchant_id
+                   AND deposit_settlement = 'forfeited'
+                   AND deposit_settled_at >= :from_inclusive
+                   AND deposit_settled_at < :to_exclusive
+                """, new MapSqlParameterSource()
+                .addValue("merchant_id", merchantId)
+                .addValue("from_inclusive", timestampWithTimeZone(fromInclusive))
+                .addValue("to_exclusive", timestampWithTimeZone(toExclusive)), Long.class);
+        return forfeited == null ? 0L : forfeited;
     }
 
     @Override

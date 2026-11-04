@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.groups.Tuple.tuple;
@@ -12,6 +12,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.complex.platform.access.AccessActor;
 import com.complex.platform.common.BusinessDayResolver;
+import com.complex.platform.support.StaffRequestFixture;
 import com.jayway.jsonpath.JsonPath;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -455,6 +456,77 @@ class FinanceJdbcIntegrationTests {
                 .andExpect(jsonPath("$.data.items[?(@.source_stream == 'thirdparty_reflow')].order_count").value(2))
                 .andExpect(jsonPath("$.data.items[?(@.source_stream == 'channel_ticket')].amount_cent").value(25000))
                 .andExpect(jsonPath("$.data.items[?(@.source_stream == 'official_ticket')].amount_cent").value(10000));
+    }
+
+    // ─── 第十八批 P 段第 133 条 133-R2：日结列表读接口 ─────────────────────
+    @Test
+    void dailyCloseListShowsLockedClosesWithinReachNewestBusinessDateFirst() throws Exception {
+        // BSM:1848「财务看退款、差异、日结和结算依据。」、BSM:1682「按营业日生成日结批次。」：已生成的日结批次按营业日倒序列出、离开页面后能找回；
+        // 范围同查看类列表（20-R3）：商户账号只看本商户，项目员工只看可触及项目的项目范围日结与这些项目下商户的日结。前端真实请求形状（蛇形键）。
+        String s = java.util.UUID.randomUUID().toString().replace("-", "").substring(0, 10);
+        String p1 = "project_dcl1_" + s;
+        String p2 = "project_dcl2_" + s;
+        String barA = "bar_dcl_a_" + s;
+        String barB = "bar_dcl_b_" + s;
+        for (String project : List.of(p1, p2)) {
+            jdbcTemplate.update("INSERT INTO projects (id, venue_type, name, status, created_at, updated_at)"
+                    + " VALUES (?, 'complex', '日结列表测试综合体', 'active', now(), now())", project);
+        }
+        jdbcTemplate.update("INSERT INTO merchants (id, merchant_name, merchant_type, status, created_at, updated_at, project_id)"
+                + " VALUES (?, '日结列表酒吧甲', 'bar', 'active', now(), now(), ?)", barA, p1);
+        jdbcTemplate.update("INSERT INTO merchants (id, merchant_name, merchant_type, status, created_at, updated_at, project_id)"
+                + " VALUES (?, '日结列表酒吧乙', 'bar', 'active', now(), now(), ?)", barB, p2);
+        StaffRequestFixture staffs = new StaffRequestFixture(jdbcTemplate);
+        RequestPostProcessor finance = staffs.staff("usr_dcl_fin_" + s, "platform_admin", p1, null,
+                "finance.daily_close.lock", "finance.daily_close.manage");
+        String closeA = lockDailyClose(finance, "dcl-a-" + s, "2998-03-01", "bar", barA);
+        String closeB = lockDailyClose(finance, "dcl-b-" + s, "2998-03-02", "bar", barB);
+
+        String body = mockMvc.perform(get("/api/v1/finance/daily-closes?page=1&size=20").with(finance))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        List<String> ids = JsonPath.read(body, "$.data.items[*].id");
+        assertThat(ids.stream().filter(id -> id.equals(closeA) || id.equals(closeB)).toList()).containsExactly(closeB, closeA);
+        String rowA = "$.data.items[?(@.id == '" + closeA + "')]";
+        assertThat(JsonPath.<List<Object>>read(body, rowA + ".business_date")).containsExactly("2998-03-01");
+        assertThat(JsonPath.<List<Object>>read(body, rowA + ".scope_type")).containsExactly("bar");
+        assertThat(JsonPath.<List<Object>>read(body, rowA + ".scope_id")).containsExactly(barA);
+        assertThat(JsonPath.<List<Object>>read(body, rowA + ".status")).containsExactly("locked");
+        assertThat(JsonPath.<List<Object>>read(body, rowA + ".locked_at")).hasSize(1).doesNotContainNull();
+        mockMvc.perform(get("/api/v1/finance/daily-closes/" + closeA + "/summaries").with(finance))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items.length()").value(7));
+
+        String closeP1 = lockDailyClose(finance, "dcl-p1-" + s, "2998-03-03", "project", p1);
+        List<String> ours = List.of(closeA, closeB, closeP1);
+        RequestPostProcessor merchantA = staffs.staff("usr_dcl_mch_" + s, "staff", p1, barA, "finance.daily_close.manage");
+        assertThat(listedDailyCloses(merchantA, ours)).containsExactly(closeA);
+        RequestPostProcessor projectStaff = staffs.staff("usr_dcl_p1_" + s, "staff", p1, null, "finance.daily_close.manage");
+        assertThat(listedDailyCloses(projectStaff, ours)).containsExactly(closeP1, closeA);
+        RequestPostProcessor lockOnly = staffs.staff("usr_dcl_lock_" + s, "staff", p1, null, "finance.daily_close.lock");
+        mockMvc.perform(get("/api/v1/finance/daily-closes?page=1&size=20").with(lockOnly))
+                .andExpect(status().isForbidden());
+    }
+
+    /** 后台日结锁定的真实请求形状（蛇形键），返回日结 ID。 */
+    private String lockDailyClose(RequestPostProcessor who, String key, String businessDate, String scopeType, String scopeId)
+            throws Exception {
+        String body = mockMvc.perform(post("/api/v1/finance/daily-closes").with(who)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"idempotency_key\":\"" + key + "\",\"operator_note\":\"日结\",\"business_date\":\""
+                                + businessDate + "\",\"scope_type\":\"" + scopeType + "\",\"scope_id\":\"" + scopeId + "\"}"))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        return JsonPath.read(body, "$.data.id");
+    }
+
+    /** 该账号在日结列表第一页看到的、属于本例的日结 ID（按列表顺序）。 */
+    private List<String> listedDailyCloses(RequestPostProcessor who, List<String> ours) throws Exception {
+        String body = mockMvc.perform(get("/api/v1/finance/daily-closes?page=1&size=20").with(who))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        List<String> ids = JsonPath.read(body, "$.data.items[*].id");
+        return ids.stream().filter(ours::contains).toList();
     }
 
     /** 两家已归属商户的餐饮/零售已入账回流（10000＋5000），另四条不该入第三方回流源：映射缺失、团购票、退款、失败。 */

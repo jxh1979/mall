@@ -1,6 +1,6 @@
 package com.complex.platform.access.staff;
 
-// 文件版本：V0.29
+// 文件版本：V0.30
 
 import com.complex.platform.access.AccessActor;
 import com.complex.platform.access.AccessRepository;
@@ -1202,33 +1202,6 @@ public class StaffService {
         var actor = authorizationService.currentActor();
         return repository.findProfileByUserId(actor.id())
                 .orElseThrow(() -> ApiException.notFound("PROFILE_NOT_FOUND", "本账号暂无员工档案"));
-    }
-
-    /** Wave1②:员工改本人有限字段(当前仅姓名);token 派生本人,不信请求体 userId。 */
-    public StaffProfileRecord updateMyProfile(
-            com.complex.platform.access.staff.dto.StaffProfileSelfUpdateRequest request) {
-        authorizationService.requirePermission("staff.profile.self");
-        String name = trimToNull(request == null ? null : request.name());
-        if (name == null || name.length() > 128) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "必须填写名称（不超过 128 字）");
-        }
-        var actor = authorizationService.currentActor();
-        StaffProfileRecord current = repository.findProfileByUserId(actor.id())
-                .orElseThrow(() -> ApiException.notFound("PROFILE_NOT_FOUND", "本账号暂无员工档案"));
-        Instant now = Instant.now();
-        StaffProfileRecord updated = new StaffProfileRecord(
-                current.id(), current.projectId(), current.merchantId(), current.userId(), name,
-                current.phone(), current.idDoc(), current.staffLevelId(), current.registrationStatus(),
-                current.approvedBy(), current.approvedAt(), current.rejectReason(), current.status(),
-                current.createdAt(), now, current.archivedAt(), current.archivedBy(), current.deleteStatus(),
-                current.deleteRequestedBy(), current.deleteRequestedAt(), current.deleteReason(),
-                // V349：员工自助只能改姓名，销售岗原样带过——员工不能自己把自己设成销售岗给自己提档提成。
-                current.salesPosition(), current.employmentStatus(), current.companyId(), current.registrationSource());
-        StaffProfileRecord saved = repository.saveProfile(updated);
-        auditEventService.recordSuccess("staff.profile.self_updated", "staff.profile.self",
-                "staff_profile", saved.id(), null, request.idempotencyKey(),
-                java.util.Map.of("field", "name"));
-        return saved;
     }
 
     /** 平台角色 → null（见全量）；商户角色 → merchantId（仅见本户）。 */

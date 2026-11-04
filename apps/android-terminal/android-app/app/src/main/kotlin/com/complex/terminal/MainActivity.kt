@@ -1,6 +1,6 @@
 package com.complex.terminal
 
-// 文件版本：V0.19
+// 文件版本：V0.20
 
 import android.app.Activity
 import android.content.Intent
@@ -1124,7 +1124,7 @@ class MainActivity : Activity() {
 
   // ---------------------------------------------------------------------------
   // 屏 ⑥ 酒吧点酒下单 + 支付引导
-  // createBarOrder -> 账单支付意图（pay-intent，引导扫码支付）-> 结算 settle
+  // createBarOrder -> showPosCheckout：生成账单 -> 支付意图（引导扫码支付）-> 带意图编号结算（18P 137-R1）
   // ---------------------------------------------------------------------------
   private fun showBarOrder() {
     val barId = editText("酒吧")
@@ -1147,15 +1147,7 @@ class MainActivity : Activity() {
             tableId = tableId.text.toString().trim().ifEmpty { null },
           )
         },
-        onSuccess = { o ->
-          status.text = buildString {
-            append("下单成功：订单 ").append(o.id).append('\n')
-            append("状态：").append(o.status).append("，合计 ")
-            append("%.2f".format(o.totalAmountCent / 100.0)).append(" 元\n")
-            append("下一步：用账单号创建支付意图（引导扫码支付）后结算。")
-          }
-          showBarPayment(o)
-        },
+        onSuccess = { o -> showPosCheckout(o) },
         onError = { status.text = "下单失败：${friendly(it)}" },
       )
     }
@@ -1164,51 +1156,6 @@ class MainActivity : Activity() {
       screen(
         title = "酒吧点酒下单",
         children = listOf(status, barId, tableId, skuId, quantity, orderButton, backButton()),
-      ),
-    )
-  }
-
-  // 酒吧支付引导：创建支付意图（生成支付二维码由后端返回 channel/status，UI 展示引导）+ 结算。
-  private fun showBarPayment(order: BarOrderRecord) {
-    val billId = editText("账单（下单后生成）")
-    // 金额防误：结算金额=订单金额，只读展示，杜绝手滑改小。
-    val cents = order.totalAmountCent
-    val amount = statusField(cents)
-    // 渠道防误：自由文本改为 wechat/alipay 单选，默认微信。
-    val (channel, selectedChannel) = channelPicker()
-    val status = statusText("订单 ${order.id}\n创建支付意图后引导顾客扫码支付，再结算账单。")
-
-    val intentButton = button("创建支付意图（引导扫码）") {
-      val bill = billId.text.toString().trim()
-      if (bill.isEmpty()) { status.text = "请输入账单"; return@button }
-      status.text = "正在创建支付意图…"
-      runBackground(
-        action = { workflow.createBarPaymentIntent(bill, cents, selectedChannel()) },
-        onSuccess = { intent ->
-          status.text = buildString {
-            append("支付意图：").append(intent.id).append("（").append(intent.status).append("）\n")
-            append("渠道：").append(intent.channel ?: "-").append("\n")
-            append("请引导顾客按渠道二维码/收银台完成支付，支付成功后点击结算。")
-          }
-        },
-        onError = { status.text = "创建支付意图失败：${friendly(it)}" },
-      )
-    }
-
-    val settleButton = button("结算账单") {
-      val bill = billId.text.toString().trim()
-      if (bill.isEmpty()) { status.text = "请输入账单"; return@button }
-      settleAction(
-        status, bill, cents, selectedChannel(),
-        title = "结算账单",
-        messageTail = "结算账单 $bill。\n结算即确认收款完成、账单关闭，不可撤销。\n请确认客人已完成支付。",
-      )
-    }
-
-    setContentView(
-      screen(
-        title = "酒吧账单支付 / 结算",
-        children = listOf(status, billId, amount, channel, intentButton, settleButton, backButton()),
       ),
     )
   }
@@ -2839,25 +2786,25 @@ class MainActivity : Activity() {
     )
   }
 
-  /** ⑥ 按桌结账：由订单生成账单 → 展示应收（只读）→ 选渠道 → 结算。 */
+  /** ⑥ 按桌结账（平板 POS 与「酒吧点酒下单 / 支付」共用）：由订单生成账单 → 展示账单剩余应收（只读）→ 选渠道 → 建支付意图并带意图编号结算（18P 137-R1）。 */
   private fun showPosCheckout(order: BarOrderRecord) {
-    val cents = order.totalAmountCent
-    val status = statusText("订单 ${order.id} 已生成，合计 ¥${"%.2f".format(cents / 100.0)}\n正在生成账单…")
+    val status = statusText("订单 ${order.id} 已提交\n正在生成账单…")
+    val amount = statusText("应收金额：账单生成后显示")
     val (channel, selectedChannel) = channelPicker()
-    var billId: String? = null
+    var bill: BarBillRecord? = null
     val settleButton = button("整桌结算") {
-      val bill = billId
-      if (bill == null) { status.text = "账单尚未生成，请稍候或返回重试"; return@button }
+      val b = bill
+      if (b == null) { status.text = "账单尚未生成，请稍候或返回重试"; return@button }
       settleAction(
-        status, bill, cents, selectedChannel(),
+        status, b, selectedChannel(),
         title = "整桌结算",
-        messageTail = "结算本桌账单 $bill。\n结算即确认收款完成、账单关闭，不可撤销。",
+        messageTail = "结算本桌账单 ${b.id}。\n结算即确认收款完成、账单关闭，不可撤销。",
       )
     }
     setContentView(
       screen(
         title = "平板 POS · 结账",
-        children = listOf(status, statusField(cents), channel, settleButton,
+        children = listOf(status, amount, channel, settleButton,
           button("返回选桌") { showPosTables() }, backButton()),
       ),
     )
@@ -2865,17 +2812,18 @@ class MainActivity : Activity() {
     runBackground(
       action = { workflow.createBarOrderBill(order.id) },
       onSuccess = { b ->
-        billId = b.id
-        status.text = "订单 ${order.id}\n账单 ${b.id} 已生成，应收 ¥${"%.2f".format(cents / 100.0)}\n引导顾客扫码支付后点「整桌结算」。"
+        bill = b
+        status.text = "订单 ${order.id}\n账单 ${b.id} 已生成，应收 ¥${"%.2f".format(b.remainingDueCent / 100.0)}\n引导顾客扫码支付后点「整桌结算」。"
+        amount.text = dueText(b.remainingDueCent)
       },
       onError = { status.text = "生成账单失败：${friendly(it)}（可返回选桌重试）" },
     )
   }
 
-  private fun statusField(cents: Long): TextView =
-    statusText("应收金额：¥${"%.2f".format(cents / 100.0)}（按订单金额结算，不可修改）")
+  private fun dueText(cents: Long): String =
+    "应收金额：¥${"%.2f".format(cents / 100.0)}（按账单应收结算，不可修改）"
 
-  /** 支付渠道单选（微信/支付宝，默认微信）：返回控件与取值函数（酒吧支付/POS 结账共用）。 */
+  /** 支付渠道单选（微信/支付宝，默认微信）：返回控件与取值函数（按桌结账屏用）。 */
   private fun channelPicker(): Pair<android.widget.RadioGroup, () -> String> {
     val wechatRadio = android.widget.RadioButton(this).apply { text = "微信 wechat"; id = View.generateViewId() }
     val alipayRadio = android.widget.RadioButton(this).apply { text = "支付宝 alipay"; id = View.generateViewId() }
@@ -2885,15 +2833,15 @@ class MainActivity : Activity() {
     return group to { if (alipayRadio.isChecked) "alipay" else "wechat" }
   }
 
-  /** 结算动作（酒吧支付/POS 结账共用）：二次确认（金额+渠道回显+屏内差异尾句）→ settleBarBill → 状态回显。 */
-  private fun settleAction(status: TextView, bill: String, cents: Long, ch: String, title: String, messageTail: String) {
+  /** 结算动作（按桌结账屏用）：二次确认（账单剩余应收+渠道回显+屏内差异尾句）→ settleBarBillByScan（建支付意图、带意图编号结算）→ 状态回显。 */
+  private fun settleAction(status: TextView, bill: BarBillRecord, ch: String, title: String, messageTail: String) {
     confirmThen(
       title = title,
-      message = "将按 ¥${"%.2f".format(cents / 100.0)}（渠道 $ch）$messageTail",
+      message = "将按 ¥${"%.2f".format(bill.remainingDueCent / 100.0)}（渠道 $ch）$messageTail",
     ) {
       status.text = "正在结算…"
       runBackground(
-        action = { workflow.settleBarBill(bill, cents, ch) },
+        action = { workflow.settleBarBillByScan(bill, ch) },
         onSuccess = { b ->
           status.text = "结算完成：账单 ${b.id}\n支付状态：${statusZh(b.paymentStatus)}，结算状态：${statusZh(b.settlementStatus)}"
         },
@@ -3144,42 +3092,28 @@ class MainActivity : Activity() {
     }.trimEnd()
   }
 
-  /** ②员工自助:我的资料——只读身份 + 有限字段(姓名)自助编辑。手机/证件仅存不可逆哈希不回显。 */
+  /** ②员工自助:我的资料——只读(BSM:1458 本人基础资料「可查看」;18P 136-R3 删自改姓名)。手机、证件只显示脱敏。 */
   private fun showMyProfile() {
     val session = store.session
     val identity = statusText(
       "账号: ${session?.username ?: "-"}\n工号(用户id): ${session?.staffId ?: "-"}",
     )
     val status = statusText("正在拉取本人档案…")
-    val nameInput = editText("姓名")
-    val saveButton = button("保存姓名") {
-      val nm = nameInput.text.toString().trim()
-      if (nm.isEmpty()) { status.text = "姓名不能为空"; return@button }
-      runBackground(
-        action = {
-          api.updateMyStaffProfile(StaffProfileSelfUpdateRequest(
-            idempotencyKey = "profile_${System.currentTimeMillis()}", name = nm))
-        },
-        onSuccess = { p -> status.text = "已保存：${p.name ?: nm}" },
-        onError = { status.text = "保存失败：${friendly(it)}" },
-      )
-    }
     runBackground(
       action = { api.myStaffProfile() },
       onSuccess = { p ->
-        nameInput.setText(p.name ?: "")
         val reg = when (p.registrationStatus) {
           "approved" -> "已入职"; "submitted" -> "审核中"
           "rejected" -> "已驳回"; "suspended" -> "已停用"
           else -> p.registrationStatus ?: "-"
         }
-        status.text = "档案状态: $reg / ${staffStatusZh(p.status)}(手机、证件加密存放，界面只显示脱敏)"
+        status.text = "姓名: ${p.name ?: "-"}\n档案状态: $reg / ${staffStatusZh(p.status)}(手机、证件加密存放，界面只显示脱敏)"
       },
       onError = { status.text = "拉取失败：${friendly(it)}(本账号可能无员工档案)" },
     )
     setContentView(screen(
       title = "我的资料",
-      children = listOf(identity, status, nameInput, saveButton, backButton()),
+      children = listOf(identity, status, backButton()),
     ))
   }
 

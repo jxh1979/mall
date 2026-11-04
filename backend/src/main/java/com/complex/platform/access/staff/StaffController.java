@@ -1,6 +1,6 @@
 package com.complex.platform.access.staff;
 
-// 文件版本：V0.12
+// 文件版本：V0.13
 import static com.complex.platform.common.api.ApiRequests.requireIdempotencyKey;
 
 import com.complex.platform.access.staff.dto.EmployeeNoticeAcknowledgeRequest;
@@ -445,17 +445,10 @@ public class StaffController {
         return ApiResponse.ok(service.acknowledge(id, request));
     }
 
-    // ── BYOD 二期 Wave1(2026-07-19 拍板):本人档案自助 + 工资条提成明细 ──
+    // ── 员工自助：本人档案（只读，BSM:1458「可查看本人……基础资料」；18P 136-R3 删自改姓名写口）+ 工资条提成明细 ──
     @GetMapping("/profiles/mine")
     public ApiResponse<StaffProfileRecord> myProfile() {
         return ApiResponse.ok(service.getMyProfile().maskedPersonalInfo());
-    }
-
-    @PostMapping("/profiles/mine")
-    public ApiResponse<StaffProfileRecord> updateMyProfile(
-            @RequestBody @jakarta.validation.Valid com.complex.platform.access.staff.dto.StaffProfileSelfUpdateRequest request) {
-        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
-        return ApiResponse.ok(service.updateMyProfile(request).maskedPersonalInfo());
     }
 
     @GetMapping("/payroll/mine/commissions")

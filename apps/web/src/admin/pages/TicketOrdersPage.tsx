@@ -1,4 +1,4 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 import React from "react";
 import { TechDetails } from "../components/TechDetails";
 import { AdminDataState } from "../components/AdminDataState";
@@ -99,6 +99,40 @@ const TEXT = {
 const ANOMALY_RESOLUTION_LABELS = {
   restored: TEXT.resolveRestored,
   voided_reversed: TEXT.resolveVoided,
+};
+
+// 第十八批 P 段 134-R3（PGM:287 所有终端零英文）：核销记录 result_reason 机器码 → 中文。
+// 规则拒绝码（TicketVerificationService.RULE_REJECTION_CODES 小写）取后端该码抛出处的提示原文；冲正、异常原因是员工录入原话，原样显示。
+const VERIFICATION_RESULT_REASON_LABELS: Record<string, string> = {
+  entitlement_not_active: "该权益未生效",
+  entitlement_not_yet_valid: "该权益尚未到生效时间",
+  entitlement_expired: "该权益已过期",
+  entitlement_used_up: "该权益剩余次数已用完",
+  entitlement_used: "该权益剩余次数已用完且当前营业日没有有效激活",
+  ticket_instance_refund_in_progress: "该票已被冻结（退款中、已退款或转赠中），不能核销",
+  multi_person_cross_session_forbidden: "多人票各人份额必须在同一场次内核销，不能跨场次/日期",
+  entitlement_provider_mismatch: "该权益只能在发放它的商户核销",
+  entitlement_not_amusement: "该权益不是游乐类权益",
+  entitlement_not_for_project: "该权益未绑定到此游乐项目",
+  amusement_project_unresolved: "游乐项目无法定位",
+  amusement_business_day_required: "必须使用真实综合体当前批准的营业日窗口",
+  park_wide_fault_verification_suspended: "全园故障期间暂停游乐入场核销",
+  project_not_open: "该游乐项目未开放",
+  safety_blocked: "安全闸未放行，游乐核销被拦截",
+  session_not_open: "该场次未开放",
+  session_capacity_exhausted: "项目在场人数已达硬安全容量",
+  session_project_mismatch: "场次不属于该游乐项目",
+  venue_not_in_session: "场馆当前不在营业场次内",
+  entry_pass_past_session_void: "入场凭证已失效：已在上一场次入场",
+  amusement_no_open_session: "当前时间没有开放中的游乐场次",
+  multi_use_face_consent_required: "一人多次票首次入场须客人同意留存人脸，未同意不能入场（票仍未核销）",
+  multi_use_face_capture_required: "一人多次票入场须现场拍摄人脸（照片缺失或格式不正确）",
+  multi_use_holder_mismatch: "与该票留存的使用人人脸不一致，不能核销",
+  window_expired: "动态码已过刷新窗口",
+  signature_invalid: "核销凭证签名无效",
+  session_reentry: "本场次再次入场，不扣次",
+  day_replay: "当天已激活，再次入场不扣次",
+  amusement_verified: "游乐入场核销",
 };
 
 // KPI \u805a\u7126\u89c6\u56fe\uff08\u7167 OrganizationMerchantPage \u6837\u677f\uff09\uff1a\u70b9 KPI \u6570\u5b57=\u5e26 ?kpi= \u53c2\u6570\u91cd\u8fdb\u672c\u9875\uff0c\u53ea\u6e32\u67d3\u8ba2\u5355\u8868\u5e76\u6309\u5b50\u96c6\u8fc7\u6ee4\u3002
@@ -512,8 +546,9 @@ export function TicketOrdersPage({ api, setActionResult, setGlobalError, effecti
                     {pagedVerifications.pageRows.map((row) => (
                       <tr key={row.id} data-testid={`ticket-verification-row-${row.id}`}>
                         <td>{row.verificationNo ?? row.id}</td>
-                        <td>{formatBusinessStatus(row.status)}</td>
-                        <td>{row.resultReason ?? "—"}</td>
+                        {/* ENUM:43 核销记录状态「拒绝（规则不允许）」；全局 rejected→已驳回 是审批口径，不改。 */}
+                        <td>{row.status === "rejected" ? "拒绝" : formatBusinessStatus(row.status)}</td>
+                        <td>{VERIFICATION_RESULT_REASON_LABELS[row.resultReason ?? ""] ?? row.resultReason ?? "—"}</td>
                         <td>{cnDate(row.createdAt)}</td>
                         <td>{anomalyCell(row)}</td>
                       </tr>

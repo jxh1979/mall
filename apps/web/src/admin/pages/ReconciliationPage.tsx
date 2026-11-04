@@ -12,6 +12,7 @@ import type { AdminPageProps, ReconciliationBatchRow, ReconciliationDifferenceRo
 import { TraceLink } from "../components/TraceLink";
 import { formatBusinessStatus } from "../i18n/statusLabels";
 import { RowDetailDrawer, type RowDetailField } from "../components/RowDetailDrawer";
+import { FinanceDailyClosePanel } from "./FinanceDailyClosePanel";
 
 const RESOLVE_PERM = ["finance.reconciliation.resolve"];
 
@@ -66,7 +67,7 @@ function formatAmount(value: unknown) {
   return new Intl.NumberFormat("zh-CN", { style: "currency", currency: "CNY" }).format(amountValue(value) / 100);
 }
 
-export function ReconciliationPage({ api, setActionResult, setGlobalError, effectivePermissions, navigateTo }: AdminPageProps) {
+export function ReconciliationPage({ api, user, setActionResult, setGlobalError, effectivePermissions, navigateTo }: AdminPageProps) {
   const [batches, setBatches] = React.useState<ReconciliationBatchRow[]>([]);
   const [differences, setDifferences] = React.useState<ReconciliationDifferenceRow[]>([]);
   const { selectedId, setSelectedId, selected } = useSelectedRow(differences);
@@ -286,6 +287,8 @@ export function ReconciliationPage({ api, setActionResult, setGlobalError, effec
           </>
         )}
       </AdminDataState>
+      {/* 第十八批 P 段第 133 条 133-R3（ENUM:188 对账口径含「按日结」）：日结区块放在 AdminDataState 之外——没有第三方对账批次和差异时（只收现金、POS 的酒吧正常就是这样）仍要能查与锁日结；KPI 聚焦视图只放被点那张承载表。 */}
+      {kpiFocus ? null : <FinanceDailyClosePanel api={api} user={user} effectivePermissions={effectivePermissions} setGlobalError={setGlobalError} />}
       <RowDetailDrawer open={detail !== null} title={detail?.title ?? ""} fields={detail?.fields ?? []} onClose={() => setDetail(null)} />
     </section>
   );

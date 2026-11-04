@@ -222,7 +222,7 @@ class GiftRedemptionEndToEndTests {
 
     /**
      * S5 K16：A 吧的赠酒拿到 B 吧核销 → 拒。与角色无关（本用例用平台管理员，权限层本来放行）。
-     * 「只拒不改钱」：被拒后权益未消费、核销记录/结算流水/往来项一条都不落。
+     * 「只拒不改钱」：被拒后权益未消费、结算流水/往来项一条都不落；核销只留一条拒绝记录（134-R1，CG 裁决第 46 项）。
      */
     @Test
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
@@ -246,12 +246,12 @@ class GiftRedemptionEndToEndTests {
                 .isInstanceOfSatisfying(com.complex.platform.common.api.ApiException.class,
                         e -> assertThat(e.code()).isEqualTo("ENTITLEMENT_PROVIDER_MISMATCH"));
 
-        // 只拒不改钱：权益未消费、核销记录/结算流水/往来项都没有。
+        // 只拒不改钱：权益未消费、结算流水/往来项都没有；核销没有成功记录，只有一条拒绝记录。
         assertThat(jdbcTemplate.queryForObject(
                 "SELECT used_times FROM issued_entitlements WHERE id = ?", Integer.class, "ent_" + code)).isZero();
-        assertThat(jdbcTemplate.queryForObject(
-                "SELECT count(*) FROM ticket_verifications WHERE entitlement_id = ?", Integer.class, "ent_" + code))
-                .isZero();
+        assertThat(jdbcTemplate.queryForList(
+                "SELECT status || '/' || coalesce(result_reason, '') FROM ticket_verifications WHERE entitlement_id = ?",
+                String.class, "ent_" + code)).containsExactly("rejected/entitlement_provider_mismatch");
         assertThat(jdbcTemplate.queryForObject(
                 "SELECT count(*) FROM settlement_transactions WHERE entitlement_id = ?", Integer.class, "ent_" + code))
                 .isZero();

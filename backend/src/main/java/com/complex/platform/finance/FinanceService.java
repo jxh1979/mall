@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.34
+// 文件版本：V0.35
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -674,7 +674,10 @@ public class FinanceService implements TerminationSettlementPort {
         }
         // AUD-059：商户卡充值(stored_value_topup_merchant)不是平台经营收入——商户预收模式钱归商户、平台代收模式为平台预收负债，
         // 二者都不得计入平台内部核算收入。此处跳过；平台代收的消费结算由 recordStoredValueMerchantPayable 逐笔挂应付商户。
-        if ("stored_value_topup_merchant".equals(type)) {
+        // 第十八批 P 段第 132 条：订台定金(bar_reservation_deposit)同样跳过——BSM:1062 与 DEC-R3-2026-08-04-04「定金直接进该卡座所属的酒吧商户」，
+        // 决策台账 §16「顶层平台公司不直接取得酒吧消费收入」，ENUM:103 达标原路退回、付款时不是收入；商户侧以订台行进日结订台定金源，
+        // 没收后按第 131 条计入该商户营业额与抽成基数。
+        if ("stored_value_topup_merchant".equals(type) || "bar_reservation_deposit".equals(type)) {
             return;
         }
         String key = slug(intentId);
@@ -935,7 +938,7 @@ public class FinanceService implements TerminationSettlementPort {
 
     /**
      * 营业额抽成计费引擎：按抽成规则 × 回流营业额生成应收 ar_ap_items(source_type='turnover_rent')。
-     * rent = clamp(turnover × rateBps / 10000, minAmountCent, maxAmountCent)；turnover 由回流营业额只读取数。
+     * rent = clamp(turnover × rateBps / 10000, minAmountCent, maxAmountCent)；turnover 由回流营业额只读取数，酒吧商户另加本账期没收的订台定金。
      */
     @com.complex.platform.gate.GuardedAction(capability = "finance.turnover_rent.bill", admissionAction = "finance.turnover_rent_bill", objectType = "ar_ap_item")
     @Transactional
@@ -1389,6 +1392,25 @@ public class FinanceService implements TerminationSettlementPort {
                     }
                     return repository.listDailyCloseSummaries(id);
                 });
+    }
+
+    /**
+     * 第十八批 P 段第 133 条 133-R2（BSM:1848「财务看退款、差异、日结和结算依据。」、BSM:1682「按营业日生成日结批次。」）：
+     * 日结批次按营业日倒序分页。范围同查看类列表（{@link #readProjects}）：平台管理员看全部，商户账号只看本商户，其余按可触及项目。
+     */
+    public PageResponse<DailyCloseRecord> listDailyCloses(int page, int size) {
+        return operations.readPageResult(
+                AuditedOperation.of(
+                        "finance.daily_close.viewed", "finance.daily_close.view_failed",
+                        "finance.daily_close.manage", "finance_daily_close"),
+                () -> {
+                    authorizationService.requirePermission("finance.daily_close.manage");
+                    var actor = authorizationService.currentActor();
+                    var reach = authorizationService.projectReach(actor, "finance.daily_close.manage");
+                    String merchant = reach.platformAdmin() ? null : trimToNull(actor.merchantId());
+                    return repository.listDailyCloses(merchant, readProjects(reach, merchant), page, size);
+                }
+        );
     }
 
     @com.complex.platform.gate.GuardedAction(capability = "finance.locked_backfill.request")
@@ -2758,6 +2780,14 @@ public class FinanceService implements TerminationSettlementPort {
         Instant from = businessDayResolver.start(project, null, periodStart);
         Instant to = businessDayResolver.end(project, null, periodEnd);
         long turnover = repository.aggregateMerchantReflowTurnover(rule.merchantId(), from, to);
+        // 第十八批 P 段第 131 条（ENUM:103、BSM:1062「因爽约、超时取消或到店未达最低消费而没收的定金，按爽约发生当日所属的营业日归属账期」，
+        // 没收的定金「全额归该卡座所属的酒吧商户，作为空置补偿计入该商户营业额与营业额抽成基数」；BSM:1682「酒吧仍按每家酒吧配置」）：
+        // 酒吧商户另计本账期没收的订台定金，以没收时点按该酒吧营业日归期。
+        String bar = businessDayResolver.barOfMerchant(rule.merchantId());
+        if (bar != null) {
+            turnover = Math.addExact(turnover, repository.sumForfeitedBarDepositCent(rule.merchantId(),
+                    businessDayResolver.start(null, bar, periodStart), businessDayResolver.end(null, bar, periodEnd)));
+        }
         List<TurnoverRentRuleTierRecord> tiers = repository.listTurnoverRentRuleTiers(rule.id());
         return tiers.isEmpty()
                 ? clampRent(turnover, rule.rateBps(), rule.minAmountCent(), rule.maxAmountCent())

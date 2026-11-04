@@ -1,6 +1,6 @@
 package com.complex.platform.access.staff;
 
-// 文件版本：V0.12
+// 文件版本：V0.13
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -965,7 +965,7 @@ class StaffJdbcIntegrationTests {
     }
 
     @org.junit.jupiter.api.Test
-    void wave1MyProfileSelfViewAndNameEditTokenDerivedOnly() {
+    void wave1MyProfileSelfViewTokenDerivedOnly() {
         authenticateAsPlatformAdmin();  // usr_admin
         jdbcTemplate.update("DELETE FROM staff_profiles WHERE user_id = 'usr_admin'");
         // 无档案 → not found。
@@ -973,17 +973,6 @@ class StaffJdbcIntegrationTests {
 
         seedProfile("prj_self", "usr_admin");
         assertThat(service.getMyProfile().name()).isEqualTo("scoped");
-
-        // 有限字段自助改名(身份按 token 派生,请求体无 userId → 无法越权改他人)。
-        com.complex.platform.access.staff.StaffProfileRecord updated = service.updateMyProfile(
-                new com.complex.platform.access.staff.dto.StaffProfileSelfUpdateRequest(key(), "张三"));
-        assertThat(updated.name()).isEqualTo("张三");
-        assertThat(service.getMyProfile().name()).isEqualTo("张三");
-
-        // 空名拒绝。
-        assertThatThrownBy(() -> service.updateMyProfile(
-                new com.complex.platform.access.staff.dto.StaffProfileSelfUpdateRequest(key(), "  ")))
-                .isInstanceOf(ApiException.class);
 
         jdbcTemplate.update("DELETE FROM staff_profiles WHERE user_id = 'usr_admin'");
     }

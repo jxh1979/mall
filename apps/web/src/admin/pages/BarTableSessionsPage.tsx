@@ -1,4 +1,4 @@
-// 文件版本：V0.10
+// 文件版本：V0.11
 import React from "react";
 import { QRCodeSVG } from "qrcode.react";
 import { BarServiceResponsibilityPanel } from "./BarServiceResponsibilityPanel";
@@ -70,7 +70,6 @@ export function BarTableSessionsPage({ api, setActionResult, setGlobalError, eff
   const canRestoreStaffBooking = hasPermissions(effectivePermissions, [BAR_STAFF_BOOKING_RESTORE_PERMISSION]);
   const { setSelectedId, selected: selectedReservation } = useSelectedRow(reservations);
   const [selectedSessionId, setSelectedSessionId] = React.useState("");
-  const [guestCount, setGuestCount] = React.useState("1");
   // dev 假值预填已去掉：目标卡座/目标会话必须由操作人显式填写，防误转误合。
   const [targetTableId, setTargetTableId] = React.useState("");
   const [targetServiceStaffId, setTargetServiceStaffId] = React.useState("");
@@ -178,16 +177,6 @@ export function BarTableSessionsPage({ api, setActionResult, setGlobalError, eff
     return false;
   }
 
-  function validateCheckIn() {
-    if (!selectedReservation?.id) return fail("请先在预定列表中选择要登记入场的订台。");
-    const limit = selectedTable?.guestLimit ?? selectedTable?.capacity ?? 0;
-    const count = Number(guestCount);
-    if (!Number.isFinite(count) || count <= 0) return fail("入场人数必须大于 0。");
-    if (limit > 0 && count > limit) return fail(`人数超限：当前卡座最多允许 ${limit} 人。`);
-    setBarError("");
-    return true;
-  }
-
   function validateSessionAction(kind: SessionActionKind) {
     if (!selectedSession?.id) return fail("请先选择要操作的开台会话。");
     if (!actionReason.trim()) return fail("转卡、合并、拆台必须填写原因。");
@@ -206,28 +195,6 @@ export function BarTableSessionsPage({ api, setActionResult, setGlobalError, eff
     }
     setBarError("");
     return true;
-  }
-
-  async function checkInGuest() {
-    if (!validateCheckIn() || !selectedReservation?.id) return;
-    const count = Number(guestCount);
-    setSubmitting(true);
-    setGlobalError(null);
-    try {
-      const result = await api.post(`/api/v1/bar/reservations/${encodeURIComponent(selectedReservation.id)}/check-in-guest`, {
-        guestCount: count,
-        barId: selectedReservation.barId ?? selectedTable?.barId ?? "bar-main",
-      });
-      setActionResult({ action: "bar_check_in", status: "checked_in", reservationId: selectedReservation.id, result });
-      await reload();
-    } catch (actionError) {
-      const message = actionError instanceof Error ? actionError.message : "入场登记失败";
-      setBarError(message);
-      setGlobalError(message);
-      setActionResult({ action: "bar_check_in", status: "failed", message });
-    } finally {
-      setSubmitting(false);
-    }
   }
 
   async function runSessionAction(kind: SessionActionKind) {
@@ -567,18 +534,7 @@ export function BarTableSessionsPage({ api, setActionResult, setGlobalError, eff
 
       <AdminDataState loading={loading} error={error} empty={tables.length === 0 && reservations.length === 0 && sessions.length === 0} onRetry={reload}>
         <div className="admin-form-row">
-          <label>入场人数（人）<input data-testid="bar-checkin-count" type="number" min={1} value={guestCount} onChange={(event) => setGuestCount(event.target.value)} placeholder="入场人数" /></label>
-          <HighRiskConfirm
-            label="登记入场"
-            impact="将对选中订台登记客人入场并落库，受卡座人数上限约束。"
-            disabled={submitting}
-            precheck={validateCheckIn}
-            onConfirm={() => void checkInGuest()}
-            permissionsState={effectivePermissions}
-            permissions={[BAR_CHECKIN_PERMISSION]}
-            irreversible={false}
-            data-testid="bar-checkin-submit"
-          />
+          {/* 第十八批 P 段第 135 条：删按人数「登记入场」，卡座免通票入场只走下方门口入场核验本人动态入场码（BSM:1036「到店出示本人的动态入场码核验入场」、ENUM:36「不存在免核销入场的情形」）。 */}
           <label>转/合/拆原因<input data-testid="bar-session-reason" value={actionReason} onChange={(event) => setActionReason(event.target.value)} placeholder="必填，留痕用" /></label>
           <label>目标卡座<input data-testid="bar-transfer-target-table" value={targetTableId} onChange={(event) => setTargetTableId(event.target.value)} placeholder="转入的卡座 ID" /></label>
           <label>目标卡座当班接手人<input data-testid="bar-transfer-target-staff" aria-label="目标卡座当班接手人" value={targetServiceStaffId} onChange={event => setTargetServiceStaffId(event.target.value)} placeholder="真实接手员工账号" /></label>
