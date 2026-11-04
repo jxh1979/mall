@@ -1,4 +1,4 @@
-# P0 OpenAPI Operation 验收矩阵 V0.47
+# P0 OpenAPI Operation 验收矩阵 V0.48
 
 ## 1. 文档定位
 
@@ -17,7 +17,7 @@
 
 ## 3. Operation 清单
 
-> 当前 `docs/openapi/openapi-p0.json` 共 1234 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
+> 当前 `docs/openapi/openapi-p0.json` 共 1238 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
 
 | 标签 | 方法 | 路径 | operationId | 摘要 | 请求体 | 权限 | 认证上下文 | 数据范围 | 终端/设备能力/调用通道 | 幂等 | 成功事件 | 失败事件 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -101,7 +101,7 @@
 | bar | `POST` | `/api/v1/bar/bills/{bill_id}/settle` | `settleBarBill` | 账单结清（可带一张本商户折扣券：核销并原子抵扣应付，一次结账一张） | `BarBillSettleRequest` | `finance.payment.register` | `staff-token` | `project-bar-table` | tablet, web, kiosk, staff_work_phone | 是 | `bar.bill.settled` | `bar.bill.settle_failed` |
 | bar | `GET` | `/api/v1/bar/orders` | `listBarOrders` | 查询酒吧订单 | `-` | `bar.order.view` | `staff-token` | `project-bar-table` | web | 否 | `bar.order.viewed` | `bar.order.view_failed` |
 | bar | `POST` | `/api/v1/bar/orders` | `createBarOrder` | 点单 | `BarOrderRequest` | `bar.order.create` | `staff-token` | `project-bar-table` | tablet, web, kiosk, staff_work_phone | 是 | `bar.order_created` | `bar.order_create_failed` |
-| bar | `POST` | `/api/v1/bar/orders/{order_id}/bill` | `createBarOrderBill` | 创建酒吧订单账单 | `BarOrderBillCreateRequest` | `bar.order.create` | `staff-token` | `project` | web, kiosk, tablet | 是 | `bar.bill.created` | `bar.bill.created_failed` |
+| bar | `POST` | `/api/v1/bar/orders/{order_id}/bill` | `createBarOrderBill` | 创建酒吧订单账单 | `BarOrderBillCreateRequest` | `bar.order.create` | `staff-token` | `project` | web, kiosk, tablet, staff_work_phone | 是 | `bar.bill.created` | `bar.bill.created_failed` |
 | bar | `POST` | `/api/v1/bar/orders/{order_id}/deliver` | `deliverBarOrder` | 出酒或送达确认 | `BarOrderDeliveryRequest` | `bar.order.create` | `staff-token` | `project-bar-table` | staff_work_phone, web | 是 | `bar.order_delivered` | `bar.order_deliver_failed` |
 | bar | `POST` | `/api/v1/bar/orders/{order_id}/items` | `addBarOrderItem` | 新增酒吧订单物品 | `BarOrderRequest` | `bar.order.create` | `staff-token` | `project` | web | 是 | `bar.order_item.created` | `bar.order_item.created_failed` |
 | bar | `GET` | `/api/v1/bar/production-tickets` | `listBarProductionTickets` | 查询酒吧出品票据 | `-` | `bar.order.create` | `staff-token` | `project` | web | 否 | `bar.production_ticket.viewed` | `bar.production_ticket.viewed_failed` |
@@ -150,6 +150,7 @@
 | finance | `POST` | `/api/v1/finance/ar-ap-items` | `createArApItem` | 手工新增应收应付台账项 | `ArApItemRequest` | `finance.ar_ap.manage` | `staff-token` | `project-entity` | web | 是 | `finance_ar_ap.created` | `finance_ar_ap.create_failed` |
 | finance | `GET` | `/api/v1/finance/ar-ap-items/{id}/payments` | `listArApPayments` | 读取所选台账原收付款流水 | `-` | `finance.ar_ap.view` | `staff-token` | `project-order` | web | 否 | `ar_ap_payment.listed` | `ar_ap_payment.list_failed` |
 | finance | `POST` | `/api/v1/finance/ar-ap-items/{id}/payments` | `createArApPayment` | 应收应付收付款登记 | `ArApPaymentRequest` | `finance.payment.register` | `staff-token` | `project-entity` | web | 是 | `finance_payment.registered` | `finance_payment.register_failed` |
+| finance | `GET` | `/api/v1/finance/daily-closes` | `listDailyCloses` | 查询日结批次 | `-` | `finance.daily_close.manage` | `staff-token` | `project-entity` | web | 否 | `finance.daily_close.viewed` | `finance.daily_close.view_failed` |
 | finance | `POST` | `/api/v1/finance/daily-closes` | `createDailyClose` | 日结锁定 | `DailyCloseRequest` | `finance.daily_close.lock` | `staff-token` | `project-entity` | web | 是 | `finance_daily_close.locked` | `finance_daily_close.lock_failed` |
 | finance | `POST` | `/api/v1/finance/payment-intents` | `createPaymentIntent` | 创建聚合支付意图 | `PaymentIntentRequest` | `finance.payment_intent.create` | `staff-token` | `project-order` | web, kiosk, miniapp, app | 是 | `payment.intent_created` | `payment.intent_failed` |
 | finance | `POST` | `/api/v1/finance/payments/{payment_id}/confirm-offline` | `confirmOfflinePayment` | 现金或 POS 线下收款确认 | `OfflinePaymentConfirmRequest` | `finance.payment.register` | `staff-token` | `project-order` | web | 是 | `finance_payment.registered` | `finance_payment.register_failed` |
@@ -389,6 +390,7 @@
 | access | `POST` | `/api/v1/staff/registrations` | `submitStaffRegistration` | 商户代员工提交注册 | `StaffRegistrationRequest` | `staff.profile.submit` | `staff-token` | `project` | web, merchant_app, merchant_portal, staff_work_phone | 是 | `staff.registered` | `staff.register_failed` |
 | access | `POST` | `/api/v1/staff/registrations/{id}/review` | `reviewStaffRegistration` | 审批员工注册 | `StaffRegistrationReviewRequest` | `staff.profile.review` | `staff-token` | `project` | web, mobile_admin | 是 | `staff.approved` | `staff.review_failed` |
 | access | `GET` | `/api/v1/staff/profiles` | `listStaffProfiles` | 查询员工档案 | `-` | `staff.profile.view` | `staff-token` | `project` | web, mobile_admin | 否 | `staff.profile.viewed` | `not_applicable` |
+| staff | `GET` | `/api/v1/staff/profiles/mine` | `getMyStaffProfile` | 查看本人员工档案(员工手机) | `-` | `staff.profile.self` | `staff-token` | `self` | staff_private_phone, staff_work_phone | 否 | `not_applicable` | `not_applicable` |
 | access | `POST` | `/api/v1/staff/profiles/{id}/sales-position` | `setStaffSalesPosition` | 设置员工销售岗标识 | `StaffSalesPositionRequest` | `staff.profile.review` | `staff-token` | `project` | web, mobile_admin | 否 | `staff.profile.sales_position_changed` | `staff.profile.sales_position_change_failed` |
 | access | `POST` | `/api/v1/staff/device-credentials` | `bindStaffDeviceCredential` | 绑定/换机申请员工设备凭证 | `StaffDeviceBindRequest` | `staff.device.bind` | `staff-token` | `project` | staff_private_phone, web | 是 | `staff_device.bound` | `staff_device.bind_failed` |
 | access | `POST` | `/api/v1/staff/device-credentials/{id}/approve-rebind` | `approveStaffDeviceRebind` | 审批换机生效 | `StaffDeviceRebindDecisionRequest` | `staff.device.review` | `staff-token` | `project` | web, mobile_admin | 是 | `staff_device.rebound` | `staff_device.rebind_failed` |
@@ -810,6 +812,7 @@
 | staff | `GET` | `/api/v1/staff/commission-settlements` | `listStaffCommissionSettlements` | 查询提成月结拨付记录（按月） | `-` | `staff.payroll.manage` | `staff-token` | `platform` | web | 否 | `staff.commission_settlement.viewed` | `not_applicable` |
 | staff | `GET` | `/api/v1/staff/payroll` | `listStaffPayroll` | 全员薪资单(人事,按月) | `-` | `staff.payroll.manage` | `staff-token` | `project` | app, dealer_portal, kiosk, merchant_app, merchant_portal, miniapp, mobile_admin, staff_work_phone, web | 否 | `not_applicable` | `not_applicable` |
 | staff | `GET` | `/api/v1/staff/payroll/mine` | `listMyStaffPayroll` | 我的薪资(员工手机;仅已月结月份) | `-` | `staff.payroll.view_mine` | `staff-token` | `self` | app, dealer_portal, kiosk, merchant_app, merchant_portal, miniapp, mobile_admin, staff_private_phone, staff_work_phone, web | 否 | `not_applicable` | `not_applicable` |
+| staff | `GET` | `/api/v1/staff/payroll/mine/commissions` | `listMyStaffPayrollCommissions` | 我的提成明细(员工手机) | `-` | `staff.payroll.view_mine` | `staff-token` | `self` | staff_private_phone, staff_work_phone | 否 | `not_applicable` | `not_applicable` |
 | staff | `GET` | `/api/v1/staff/leaves` | `listStaffLeaves` | 查请假(主管/后台,按状态) | `-` | `staff.shift.manage` | `staff-token` | `platform` | web | 否 | `not_applicable` | `not_applicable` |
 | staff | `POST` | `/api/v1/staff/leaves` | `submitStaffLeave` | 提交请假(员工手机) | `object` | `staff.leave.submit` | `staff-token` | `platform` | staff_private_phone, web, staff_work_phone | 是 | `staff.leave.submitted` | `staff.leave.submit_failed` |
 | staff | `GET` | `/api/v1/staff/leaves/mine` | `listMyStaffLeaves` | 我的请假(员工手机) | `-` | `staff.leave.submit` | `staff-token` | `platform` | staff_private_phone, web, staff_work_phone | 否 | `not_applicable` | `not_applicable` |
@@ -842,6 +845,7 @@
 | bar | `GET` | `/api/v1/bar/catalog/combos` | `listBarCombos` | 查询酒吧套餐 | `-` | `bar.combo.view` | `staff-token` | `project` | web, tablet, kiosk | 否 | `not_applicable` | `not_applicable` |
 | bar | `POST` | `/api/v1/bar/catalog/combos` | `saveBarCombo` | 新增或修改酒吧套餐 | `BarComboRequest` | `bar.combo.manage` | `staff-token` | `project` | web | 否 | `bar.combo.saved` | `bar.combo.saved_failed` |
 | bar | `POST` | `/api/v1/bar/catalog/images` | `uploadBarCatalogImage` | 上传酒吧商品/套餐图片 | `object` | `bar.product.manage` | `staff-token` | `project` | web | 否 | `bar.catalog.image_uploaded` | `bar.catalog.image_uploaded_failed` |
+| bar | `GET` | `/api/v1/bar/catalog/images/{name}` | `getBarCatalogImage` | 回读酒吧商品/套餐图片 | `-` | `bar.product.view` | `staff-token` | `project` | tablet, kiosk | 否 | `not_applicable` | `not_applicable` |
 | ticketing | `POST` | `/api/v1/ticketing/refunds/{refund_id}/reject` | `rejectTicketRefund` | 退款驳回 | `StatusChangeRequest` | `ticket.refund.approve` | `staff-token` | `project-order` | web | 是 | `ticket_refund.rejected` | `ticket_refund.reject_failed` |
 | customer | `GET` | `/api/v1/customer/my-tickets` | `listMyTickets` | 我的票(持有人视角:自购未转+受赠,含转赠中标记) | `-` | `not_applicable` | `customer-token` | `customer` | miniapp, app | 否 | `customer.my_tickets_viewed` | `customer.my_tickets_view_failed` |
 | customer | `GET` | `/api/v1/customer/my-saved-bottles` | `listMyCustomerSavedBottles` | 我的存酒（本人名下全部存酒与到期日，跨店汇总，每条标明所属酒吧） | `-` | `not_applicable` | `customer-token` | `customer` | miniapp, app | 否 | `customer.my_saved_bottles_viewed` | `customer.my_saved_bottles_view_failed` |

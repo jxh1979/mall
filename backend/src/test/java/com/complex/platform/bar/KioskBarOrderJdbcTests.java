@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -215,7 +215,61 @@ class KioskBarOrderJdbcTests {
                 .andExpect(jsonPath("$.data.system_pos_cent").value(10_000));
     }
 
+    /**
+     * 第十八批 P 段第 133 条 133-R1（BSM:1081「收银员开班记备用金，班结按本班次汇总各支付方式应收（现金/扫码/POS/退款/小费），录入实点现金算长短款差异。
+     * 收银不应出现差额，出现任何金额的差额一律进复核、定位责任，不设容差」；DEC-R4-2026-08-04-26）：按后台「收银交班对账」区块的真实请求形状
+     * （收银员取登录人、不带容差，蛇形键）开班，网页现金结账（同网页现形状，金额留空按剩余应收结清），班结差 1 分也进复核；再开一班实点正好不进复核。
+     */
+    @Test
+    void backOfficeShiftPanelOpensWithoutThresholdAndAnyCashDifferenceNeedsReview() throws Exception {
+        jdbc.update("INSERT INTO contracts(id,merchant_id,contract_subject_id,settlement_subject_id,effective_date,expiry_date,"
+                + "lifecycle_status,allowed_business_scope,created_at,updated_at) VALUES(?,?,?,?,current_date-1,current_date+365,"
+                + "'effective','[\"bar\"]'::jsonb,now(),now())", "kbo_ct_" + s, bar, bar, bar);
+        String first = openFromPanel("kbo-panel-open1-" + s);
+        String order = data(order(webCashier, "panelcash").andExpect(status().isOk())).path("id").asText();
+        String billId = data(mockMvc.perform(post("/api/v1/bar/orders/" + order + "/bill").with(webCashier)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json.writeValueAsString(Map.of("idempotency_key", "kbo-panelbill-" + s))))
+                .andExpect(status().isOk())).path("id").asText();
+        String key = "kbo-panelsettle-" + s;
+        mockMvc.perform(post("/api/v1/bar/bills/" + billId + "/settle").with(webCashier).contentType(MediaType.APPLICATION_JSON)
+                        .content(json.writeValueAsString(Map.of("idempotency_key", key, "payment_id", key,
+                                "payment_channel", "cash", "operator_note", "按本次真实收款凭据登记，多渠道累计足额后完成账单"))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.settlement_status").value("settled"));
+        closeFromPanel(first, "kbo-panel-close1-" + s, 29_999)
+                .andExpect(jsonPath("$.data.system_cash_cent").value(10_000))
+                .andExpect(jsonPath("$.data.cash_diff_cent").value(-1))
+                .andExpect(jsonPath("$.data.needs_review").value(true));
+
+        String second = openFromPanel("kbo-panel-open2-" + s);
+        closeFromPanel(second, "kbo-panel-close2-" + s, 20_000)
+                .andExpect(jsonPath("$.data.cash_diff_cent").value(0))
+                .andExpect(jsonPath("$.data.needs_review").value(false));
+    }
+
     // ---------- helpers ----------
+
+    /** 后台「收银交班对账」区块的开班请求：收银员取登录人，不带 cash_diff_threshold_cent。 */
+    private String openFromPanel(String key) throws Exception {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("idempotency_key", key);
+        body.put("bar_id", bar);
+        body.put("cashier_user_id", webCashierId);
+        body.put("opening_cash_cent", 20_000);
+        body.put("note", "早班");
+        return data(mockMvc.perform(post("/api/v1/bar/shifts/open").with(webCashier).contentType(MediaType.APPLICATION_JSON)
+                        .content(json.writeValueAsString(body)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("open"))).path("id").asText();
+    }
+
+    /** 后台「收银交班对账」区块的班结请求：只带实点现金（接班人、备注选填未填）。 */
+    private ResultActions closeFromPanel(String shift, String key, long declaredCashCent) throws Exception {
+        return mockMvc.perform(post("/api/v1/bar/shifts/" + shift + "/close").with(webCashier).contentType(MediaType.APPLICATION_JSON)
+                        .content(json.writeValueAsString(Map.of("idempotency_key", key, "declared_cash_cent", declaredCashCent))))
+                .andExpect(status().isOk());
+    }
 
     /** 一体机真实形状：一体机终端头＋登记设备号（不签名，默认 grace）。 */
     private RequestPostProcessor kiosk(RequestPostProcessor who) {

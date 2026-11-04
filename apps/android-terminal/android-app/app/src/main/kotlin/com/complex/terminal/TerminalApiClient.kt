@@ -1,6 +1,6 @@
 package com.complex.terminal
 
-// 文件版本：V0.14
+// 文件版本：V0.15
 
 import java.io.BufferedReader
 import java.net.HttpURLConnection
@@ -187,7 +187,7 @@ class TerminalApiClient(
   fun attendanceMonthView(month: String): List<AttendanceDayRow> =
     get("/api/v1/staff/attendance/month-view?month=$month")
 
-  // ── BYOD 二期 Wave1:工资条提成明细 + 本人资料自助(只返本人;身份按 token 派生) ──
+  // ── BYOD 二期 Wave1:工资条提成明细 + 本人资料只读(只返本人;身份按 token 派生) ──
 
   /** 本人某月提成明细(酒水/卡座 + 服务点单),与工资条 commissionCent 对账。 */
   fun listMyPayrollCommissions(month: String): List<StaffCommissionLineRow> =
@@ -195,10 +195,6 @@ class TerminalApiClient(
 
   /** 本人档案(姓名/状态)。 */
   fun myStaffProfile(): StaffProfileRecord = get("/api/v1/staff/profiles/mine")
-
-  /** 改本人有限字段(姓名)。 */
-  fun updateMyStaffProfile(request: StaffProfileSelfUpdateRequest): StaffProfileRecord =
-    post("/api/v1/staff/profiles/mine", request)
 
   // ── BYOD 二期 E 批:排班/考勤 ──
 
@@ -285,7 +281,7 @@ class TerminalApiClient(
 
   /** 鉴权回读目录图片（带 Bearer，返回原始字节供 UI 解码为 Bitmap）。 */
   fun catalogImageBytes(imageUrl: String): ByteArray {
-    val path = if (imageUrl.startsWith("/")) imageUrl else "/$imageUrl"
+    val path = barCatalogImagePath(imageUrl)
     val connection = open(path, "GET")
     return try {
       val status = connection.responseCode

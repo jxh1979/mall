@@ -1,4 +1,4 @@
-// 文件版本：V0.03
+// 文件版本：V0.04
 package com.complex.platform.finance;
 
 import static org.mockito.ArgumentMatchers.any;
@@ -269,6 +269,18 @@ class FinanceControllerTests {
                 .andExpect(jsonPath("$.data.status").value("locked"));
 
         verify(authorizationService).requirePermission("finance.daily_close.lock");
+    }
+
+    @Test
+    void dailyCloseListUsesDailyCloseManagePermission() throws Exception {
+        // 第十八批 P 段第 133 条 133-R2：日结列表与汇总查询同一个码 finance.daily_close.manage。
+        when(service.listDailyCloses(1, 20)).thenReturn(new PageResponse<>(List.of(), 1, 20, 0L));
+
+        mockMvc.perform(get("/api/v1/finance/daily-closes")
+                        .with(user("finance").roles("P0_SMOKE")))
+                .andExpect(status().isOk());
+
+        verify(authorizationService).requirePermission("finance.daily_close.manage");
     }
 
     @Test

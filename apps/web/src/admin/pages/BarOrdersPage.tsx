@@ -1,6 +1,7 @@
-// 文件版本：V0.09
+// 文件版本：V0.10
 import React from "react";
 import { BarRefundBreakdownPanel } from "./BarRefundBreakdownPanel";
+import { BarShiftPanel } from "./BarShiftPanel";
 import { TechDetails } from "../components/TechDetails";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
@@ -150,7 +151,7 @@ function deliveryLabel(item: BarOrderItemRow) {
   return "未上菜";
 }
 
-export function BarOrdersPage({ api, setActionResult, setGlobalError, effectivePermissions, navigateTo, reportViewedObjects }: AdminPageProps) {
+export function BarOrdersPage({ api, user, setActionResult, setGlobalError, effectivePermissions, navigateTo, reportViewedObjects }: AdminPageProps) {
   const [orders, setOrders] = React.useState<BarOrderRow[]>([]);
   // 第 23 条 23-R5：敏感页这一次看到的对象（PGM:687「哪个客人、哪个商户、哪些单据」）。
   React.useEffect(() => reportViewedObjects?.("bar_order", orders), [orders, reportViewedObjects]);
@@ -549,6 +550,8 @@ export function BarOrdersPage({ api, setActionResult, setGlobalError, effectiveP
       <AdminPageHeader title={TEXT.title} description={TEXT.description} />
       <TechDetails><div className="admin-generic-evidence" data-testid="bar-orders-evidence">{TEXT.evidence}</div></TechDetails>
       <AuditTrailHint event="bar.order.read / bar.order.bill / bar.order.deliver / bar.bill.settle" />
+      {/* 第十八批 P 段第 133 条 133-R1：收银交班对账区块放在订单列表的读取／空态之外——当日第一张单之前就要能开班。 */}
+      <BarShiftPanel api={api} user={user} effectivePermissions={effectivePermissions} setActionResult={setActionResult} setGlobalError={setGlobalError} />
       <AdminDataState loading={loading} error={error} empty={orders.length === 0} onRetry={reload}>
         {kpiFocus ? (
           <div className="admin-state" data-testid="bar-orders-kpi-focus-banner">

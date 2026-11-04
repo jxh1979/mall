@@ -156,3 +156,27 @@ describe("ReconciliationPage 行明细抽屉（整行可点·零英文）", () =
     expect(screen.queryByTestId("row-detail-drawer")).toBeNull();
   });
 });
+
+// 第十八批 P 段第 133 条 133-R3（ENUM:188「对账口径：按订单、按核销、按合同、按渠道、按日结」）：
+// 没有第三方对账批次和差异时页面显示「暂无数据」，日结区块仍渲染；KPI 聚焦视图只放被点那张承载表，不渲染日结区块。
+describe("ReconciliationPage 日结区块", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    window.history.replaceState({}, "", "/admin/finance/reconciliation");
+  });
+
+  it("对账批次与差异都为空时显示暂无数据，日结区块仍渲染", async () => {
+    const api = makeApi(vi.fn().mockResolvedValue([]));
+    api.getPaged = vi.fn().mockResolvedValue({ items: [{ id: "dc1", businessDate: "2026-11-02", scopeType: "bar", scopeId: "bar_a", status: "locked" }], total: 1, page: 1, size: 20 });
+    renderPage(api);
+    await waitFor(() => expect(screen.getByTestId("admin-empty").textContent).toContain("暂无数据"));
+    await waitFor(() => expect(screen.queryByTestId("daily-close-row-dc1")).not.toBeNull());
+  });
+
+  it("KPI 聚焦视图不渲染日结区块", async () => {
+    window.history.replaceState({}, "", "/admin/finance/reconciliation?kpi=batches");
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("reconciliation-kpi-focus-banner")).toBeTruthy());
+    expect(screen.queryByTestId("finance-daily-close-panel")).toBeNull();
+  });
+});

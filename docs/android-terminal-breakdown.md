@@ -1,6 +1,6 @@
 # 安卓端专项拆分：员工工作手机、酒吧点酒平板、触摸屏一体机
 
-文件版本：V0.02
+文件版本：V0.03
 
 > 2026-07-04 逻辑一致性修订：现场核销统一二维码扫码——作废"读取外部客人腕带/卡片/标签的 NFC 核销"。改动处：§1 定位（适合扫码/可接设备）、§设备领用（领用确认）、§3.1 二维码核销表 NFC核销行、§设备领用流程、§能力矩阵 NFC读取、§任务清单 NFC预留接口、§技术栈 NFC。硬件"NFC 读卡器"标不再采购。（注：私人手机身份绑定 §2.1.1 早已改 Keystore 设备公钥/指纹凭证，属另一类 NFC，与本次无关，保持不动）
 
@@ -159,12 +159,12 @@ PIPL 合规要求（私人手机 App 个人信息处理，回填合规文档 C4�
 |---|---|---|
 | 工资条自查 | 仅本人已定格单可见，同月普通月结、离职结清、补发单全部列出。按原件显示逐项计薪、公式内已扣事假与另扣事假、实际日期工时及加班、专业核定个税、原单补差和待处理项。应发净额与实际已付分开，补差金额待核实不显示0元；工时周期或酒吧分配未结继续显示原因。提成明细仍按原来源归类 | `GET /api/v1/staff/payroll/mine?month=`；`GET /api/v1/staff/payroll/mine/statements/{id}`；`GET /api/v1/staff/payroll/mine/commissions?month=`，仅 `staff.payroll.view_mine` 的当前本人 |
 | 本人绩效扣分与申诉 | 显示本人的扣分规则、分值、事由及审批状态；已批准且未冲回记录可提申诉，沿直属共三级与自动人力线复核。申诉冲回保留原记录，已发工资另按原单实际影响生成补差，不伪改原付款 | `GET /api/v1/staff/payroll/mine/performance-adjustments?month=`；`POST /api/v1/staff/payroll/performance-adjustments/{id}/appeals`，客户端只提交事由，不传员工身份或扣分金额 |
-| 我的资料（个人信息） | 只读身份（账号/工号）+ 有限字段（姓名）自助编辑；手机/证件仅存不可逆哈希，不回显、不在自助编辑范围 | N `GET /api/v1/staff/profiles/mine`、`POST /api/v1/staff/profiles/mine`（权限 `staff.profile.self`，V321） |
+| 我的资料（个人信息） | 只读：账号/工号、姓名、档案状态；手机号脱敏、证件号不显示；不提供自助编辑（BSM:1458 员工自助对基础资料只写「可查看」） | N `GET /api/v1/staff/profiles/mine`（权限 `staff.profile.self`，V321） |
 | 考勤/排班自查 | 本人考勤月视图（六态逐日）、最近打卡、未来 7 天排班 | R `GET /api/v1/staff/attendance/month-view`、`/attendance/mine`、`/shifts/mine` |
 | 请假/调休申请 | 事假/病假/调休/年假，走既有主管审批链 | R `POST /api/v1/staff/leaves`、`GET /api/v1/staff/leaves/mine` |
 | 待办与消息中心 | 端侧聚合本人相关消息：请假审批结果 + 派给本人的工单 + 近期排班 + 公司公告；Wave1 只读，处理仍在各自入口。四路来源逐路容错，任一失败不拖垮整屏 | R 端侧聚合 `/staff/leaves/mine`、`/facility/work-orders/assigned-to-me`、`/staff/shifts/mine`、`/staff/notices`（不新增聚合端点：读类端侧合并，避免为读做后端扇出） |
 
-> 迁移：V321 仅新增 `staff.profile.self` 权限（授 role_platform_admin，沿用 V211/V217 员工自助权限约定）；提成明细复用 `staff.payroll.view_mine`，无新增表/迁移。防越权：`getMyProfile`/`updateMyProfile`/`listMyCommissions`/既有 `*/mine` 均以 `authorizationService.currentActor().id()` 限定本人，绝不读请求体身份。
+> 迁移：V321 仅新增 `staff.profile.self` 权限（授 role_platform_admin，沿用 V211/V217 员工自助权限约定）；提成明细复用 `staff.payroll.view_mine`，无新增表/迁移。防越权：`getMyProfile`/`listMyCommissions`/既有 `*/mine` 均以 `authorizationService.currentActor().id()` 限定本人，绝不读请求体身份。
 
 ### 4.3 员工工作手机票务/权益核销
 
@@ -557,3 +557,4 @@ PIPL 合规要求（私人手机 App 个人信息处理，回填合规文档 C4�
 | 2026-07-04 逻辑一致性修订 | 改 | §1/§3.1/§设备领用/§能力矩阵/§任务清单/§技术栈 | 现场核销统一二维码扫码：作废"读取外部客人腕带/卡片/标签的 NFC 核销"及 NFC 领用/预留接口；硬件 NFC 读卡器标不再采购 | 用户 2026-07-04 决定：现场核销统一二维码扫码，免采购 NFC 读卡器，客人凭证统一二维码（私人手机身份 Keystore 凭证与本次无关，保持不动） |
 | 2026-07-19 | 修 | §2.1.1/§3(角色) | 补链：后台审批通过生成账号/角色/权限——实际为新员工分配"员工自助"角色 `role_staff_self`（后端 V322）；此前缺此分配致真实员工工作手机自助端点（班次/考勤/请假/薪资/通知）一律 403，仅平台管理员可用 | 既有缺口修复；对齐§4.3「审批」承诺 |
 | 2026-10-29 | 增 | §8.2 | 新增「页面暗纹与敏感屏留痕」：员工手机在线屏打开即上报并叠暗纹；三块敏感屏打开与看到的单据留痕、输入框禁选禁复制 | 待开发清单第 23 条 23-R6；PGM:687、PGM:686、PGM:745 |
+| 2026-11-03 | 改 | §4.2.1 | 「我的资料」改为只读：删员工自改姓名写口（后端 `POST /api/v1/staff/profiles/mine`、安卓「保存姓名」），只留 `GET /api/v1/staff/profiles/mine` 读本人档案 | 待开发清单第 136 条 136-R3；BSM:1458 员工自助对基础资料只写「可查看」，BSM:1464 自助写入口只列注册、请假、申诉；所称 2026-07-19 拍板无裁决原文，照决策台账 18O 控制席判定先例按 HTML 字面收窄 |

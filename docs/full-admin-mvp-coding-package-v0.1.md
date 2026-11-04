@@ -38,7 +38,7 @@
 | ADM-ACC-001 | 员工账号 | `/admin/access/users` | `GET/POST /api/v1/access/users`、角色/权限读取 `GET /api/v1/access/roles`、`GET /api/v1/access/permissions` | 列表、新增、禁用/状态展示、角色分配入口 |
 | ADM-ACC-002 | 权限模板 | `/admin/access/permission-templates` | `GET/POST /api/v1/access/permission-templates`、`POST /copy`、`POST /apply`、临时授权路径 | 模板复制、编辑、临时模板、单次有效提示 |
 | ADM-TKT-001 | 票务策略 | `/admin/ticketing/policies` | `GET/POST /api/v1/ticketing/ticket-types`、`POST /publish`、entitlements、动态定价只显示入口 | 基础价配置、票种发布、固定/派生互斥校验 |
-| ADM-BAR-001 | 卡座与订台 | `/admin/bar/table-sessions` | `GET/POST /api/v1/bar/tables`、`GET/POST /api/v1/bar/reservations`、`POST /check-in-guest`、订单摘要 | 卡座列表、预订、入场人数、转卡/合并操作入口和拦截（无续卡） |
+| ADM-BAR-001 | 卡座与订台 | `/admin/bar/table-sessions` | `GET/POST /api/v1/bar/tables`、`GET/POST /api/v1/bar/reservations`、`POST /invitation/entry-verify`、订单摘要 | 卡座列表、预订、门口入场核验、转卡/合并操作入口和拦截（无续卡） |
 | ADM-FIN-001 | 应收应付台账 | `/admin/finance/ar-ap-ledger` | `GET/POST /api/v1/finance/ar-ap-items`、`POST /api/v1/finance/ar-ap-items/{id}/payments` | 台账列表、生成、部分核销、调整原因、导出留痕入口 |
 | ADM-INT-001 | 供应商适配器 | `/admin/integrations/adapters` | `GET/POST/PATCH /api/v1/integration/provider-adapters`、`/mark-production-ready`、`/test-mock` | 适配器配置、凭证引用、字段映射摘要、mock 测试 |
 | ADM-OPS-001 | 生产 blocker 与证据 | `/admin/ops/readiness` | `GET/PATCH /api/v1/ops/production-readiness/items`、`GET /checks` | 证据登记、状态更新、Runbook/证据引用、过期提醒 |
@@ -169,13 +169,13 @@
 任务：
 
 1. 新增 `BarTableSessionsPage.tsx`。
-2. 接入 tables、reservations、check-in-guest、orders 摘要。
+2. 接入 tables、reservations、invitation/entry-verify、orders 摘要。
 3. 实现卡座状态、预订、入场人数、跨酒吧校验展示。
 4. 转卡、合并首批可作为有权限按钮和弹窗流程；若后端接口未齐，必须以禁用状态说明缺口，不得假成功。
 
 验收：
 
-- Given 卡座允许 6 人，When 第 7 人登记入场，Then 页面拒绝并显示人数超限。
+- Given 客人出示本人动态入场码，When 门口入场核验，Then 页面把入场码送 invitation/entry-verify 核验，页面不提供按人数登记入场。
 - Given 卡座属于酒吧 X，When 尝试登记酒吧 Y 入场，Then 页面拒绝并记录越权尝试提示。
 - Given 卡座存在未结账订单，When 点击转卡，Then 弹窗要求先结账或主管审批。
 

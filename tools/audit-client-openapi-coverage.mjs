@@ -1,4 +1,4 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -14,6 +14,8 @@ const scanFiles = [
   // ROOT-03-R1：三端共用的客人接口路径。
   'packages/customer-core/src/service.ts',
   'apps/android-terminal/android-app/app/src/main/kotlin/com/complex/terminal/MainActivity.kt',
+  // 18P 136-R1：APK 实际编译的安卓客户端（android-app/app/build.gradle.kts 排除共享核同名文件、改用本工程这一份）。
+  'apps/android-terminal/android-app/app/src/main/kotlin/com/complex/terminal/TerminalApiClient.kt',
   'apps/android-terminal/src/main/kotlin/com/complex/terminal/P0Fixture.kt',
   'apps/android-terminal/src/main/kotlin/com/complex/terminal/TerminalApiClient.kt',
 ];

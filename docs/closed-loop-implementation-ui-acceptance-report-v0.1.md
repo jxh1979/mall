@@ -11,7 +11,7 @@
 - VISUAL_REGRESSION_BASELINES_TRACKED
 - NO_STALE_UI_ACCEPTANCE_COUNTS
 
-更新时间：2026-11-03T22:40:37.035Z
+更新时间：2026-11-04T18:30:43.179Z
 执行位置：192.168.88.160，`/home/james/complex-management`
 
 ## 1. 本轮闭环结论
@@ -23,8 +23,8 @@
 | 需求矩阵完整实现 | 88/97 | `docs/closed-loop-current-state-snapshot-latest.json` |
 | 完整后台 MVP | 9/9 | `docs/full-admin-mvp-requirements-code-matrix-v0.1.csv` |
 | 完整后台非首批 | 22/22 | `docs/full-admin-remaining-requirements-code-matrix-v0.1.csv` |
-| 后端测试 | 6270 | `backend/target/surefire-reports` |
-| Web 单元测试定义 | 1537 | `apps/web/src/**/*.test.*` |
+| 后端测试 | 6287 | `backend/target/surefire-reports` |
+| Web 单元测试定义 | 1552 | `apps/web/src/**/*.test.*` |
 | Playwright 常规 UI | 47 | `playwright-report/index.html` |
 | Playwright 真实后端 UI | 3（报告缺失，未跑） | `playwright-report-real-backend/index.html` |
 | 视觉回归截图基线 | 4 | `tests/e2e/**/*-snapshots/*.png` |
@@ -37,7 +37,7 @@
 
 | 项目 | 当前值 |
 |---|---:|
-| main JS | apps/web/dist/assets/main-BZP2yHJL.js，4337 bytes |
+| main JS | apps/web/dist/assets/main-XhYR5zSY.js，4337 bytes |
 | largest asset | apps/web/dist/assets/vendor-antd-CzvkKKQu.js，251112 bytes |
 | main bundle warning | 不预期出现 |
 | dist index | 存在 |
@@ -59,7 +59,7 @@
 | 常规 UI | ADM-MVP-01 login, overview route and eight MVP navigation entries | tests/e2e/full-admin-mvp.spec.ts |
 | 常规 UI | ADM-MVP-02 account and permission template workflows are actionable | tests/e2e/full-admin-mvp.spec.ts |
 | 常规 UI | ADM-MVP-03 ticketing policy validates weekday/weekend/holiday base price before publish | tests/e2e/full-admin-mvp.spec.ts |
-| 常规 UI | ADM-MVP-04 bar table session blocks over-limit check-in and records valid check-in | tests/e2e/full-admin-mvp.spec.ts |
+| 常规 UI | ADM-MVP-04 bar table session transfer and merge | tests/e2e/full-admin-mvp.spec.ts |
 | 常规 UI | ADM-MVP-05 finance ledger requires adjustment reason and supports partial payment | tests/e2e/full-admin-mvp.spec.ts |
 | 常规 UI | ADM-MVP-06 integration adapter requires provider code, type and mode and supports mock test | tests/e2e/full-admin-mvp.spec.ts |
 | 常规 UI | ADM-MVP-07 ops readiness cannot verify blocker without evidence ref | tests/e2e/full-admin-mvp.spec.ts |

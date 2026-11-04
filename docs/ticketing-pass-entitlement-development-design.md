@@ -1,10 +1,10 @@
-# 票务通票、权益、核销与结算开发设计 V0.12
+# 票务通票、权益、核销与结算开发设计 V0.13
 
 > **核销口径**：核销记录只有成功／拒绝（规则不允许）／失败（设备或网络原因）／已冲正／待复核／异常六态。检票环节内部扫码即核销，不设先校验、后确认的两次操作，也不设中间态；系统不提供人工放行。
 
 > **口径修订（2026-08-06 R10）：「场次容量」已废止**——BSM「容量控制」条 明确「**只按单个游乐项目的实时在玩人数控制容量，不再按场次/时段或点位/设备另设容量；排队人数不占用容量**」（DEC-R5-2026-08-04-04；R8 用户裁决 D-02）。本文原「场次容量」一律改称「**项目容量（实时在玩人数）**」；双阈值不变（运营容量软上限告警放行、安全容量硬上限阻断并自动停运）。仍按场次/时段或点位/设备维度罗列的页面、接口、组件与字段只作历史结构参考，容量口径一律以本条为准，相关字段待代码轮下线，期间不得据以新增受控维度。
 
-> 版本：V0.12 ｜ 最后更新：2026-11-03 ｜ 覆盖迁移基线：见各小节迁移号（当前仓库最新 V385）｜ 状态：现行
+> 版本：V0.13 ｜ 最后更新：2026-11-03 ｜ 覆盖迁移基线：见各小节迁移号（当前仓库最新 V385）｜ 状态：现行
 > 新功能承接见 docs/v099-v124-feature-implementation-and-acceptance-spec-v0.1.md
 > <!-- 文档goalP3(2026-06-20)：补版本/日期/覆盖迁移头，未改正文 -->
 
@@ -227,7 +227,7 @@ erDiagram
 | `reversed` | 已冲正 | 已撤销原核销 |
 | `anomaly` | 异常 | 进入「异常」后按 ENUM「异常状态的统一出口」由主管处置（更正后恢复 / 作废并冲正）；进入条件待 HTML 补句后另开 PR（CG-05） |
 
-> **CG-05（2026-10-17，迁移 V449）已落地**：`ticket_verifications.status` CHECK 收口为 `success / rejected / failed / reversed / anomaly`（`manual_overridden` 仅历史行保留）。`TicketVerificationService` 以 `RULE_REJECTION_CODES`（规则不允许 → rejected）与 `TECHNICAL_FAILURE_CODES`（设备/网络/凭证 → failed）归类错误码；在线核销的过窗口 / 签名失配落 failed，规则拒绝仍抛错不落记录。ENUM 现文为五态，上表 `pending_review`（待复核）已不在 HTML 中，去留待裁决。
+> **CG-05（2026-10-17，迁移 V449）已落地**：`ticket_verifications.status` CHECK 收口为 `success / rejected / failed / reversed / anomaly`（`manual_overridden` 仅历史行保留）。`TicketVerificationService` 以 `RULE_REJECTION_CODES`（规则不允许 → rejected）与 `TECHNICAL_FAILURE_CODES`（设备/网络/凭证 → failed）归类错误码；在线核销的过窗口 / 签名失配落 failed；在线规则拒绝仍以错误响应返回，业务事务结束后另起事务落一条 rejected 记录（result_reason 为错误码小写，不扣次、不落结算价；第十八批 P 段第 134 条，CG 裁决第 46 项），`RULE_REJECTION_CODES` 补 `VENUE_NOT_IN_SESSION`、`ENTRY_PASS_PAST_SESSION_VOID`、`AMUSEMENT_NO_OPEN_SESSION`；参数校验、鉴权、越权等未归类错误不落核销记录（CG 裁决第 48 项）。ENUM 现文为五态，上表 `pending_review`（待复核）已不在 HTML 中，去留待裁决。
 
 `pending_review` 必须在按项目配置且同时配置上下限的复核时限内处置，出厂默认沿用异常首响时限：特急 15 分钟、紧急 30 分钟、其余 60 分钟；超时自动逐级升级并保留原记录、原时间、原责任人与每次升级留痕，升级不改变核销结论。逐级升级到最高一级仍超时的，转 `exception` 并进入票务异常队列，不得自动通过、不得自动作废。
 
@@ -1366,6 +1366,7 @@ com.complex.ticketing
 
 | 日期 | 类型 | 位置 | 内容 | 原因/依据 |
 |---|---|---|---|---|
+| 2026-11-03 | 改 | §4.5/全文版本 | 版本升至 V0.13；第十八批 P 段第 134 条同步：CG-05 已落地说明改为在线规则拒绝落 rejected 记录（业务回滚后另起事务写入、不扣次），规则拒绝码补 `VENUE_NOT_IN_SESSION`、`ENTRY_PASS_PAST_SESSION_VOID`、`AMUSEMENT_NO_OPEN_SESSION` | docs/decisions/2026-10-18-cg-pending-decisions.md 第 46 项「正常在线核销的业务规则拒绝也记录为rejected并留痕；既有在线核销原则不变。」 |
 | 2026-11-03 | 改 | §4.5/全文版本 | 版本升至 V0.12；第十八批 O 段第 129 条同步：CG-05 已落地说明删去终端离线同步落记录一句，当前实现缺口注明终端同步 `offline_verification` 入口已删除 | BSM:800「……核销必须在线、不做离线核销。……」 |
 | 2026-08-30 | 改 | 文首/§5.3/§5.5–§5.7/全文版本 | 版本升至 V0.11；同步页内版本横幅；结算交易改为追加不可变事实；退款守卫改为目标实现并对齐现行错误码 | M03 Grok Build FULL3 修复切片复审 |
 | 2026-08-30 | 改 | §4.2/§4.5/全文版本 | 版本升至 V0.10；如实登记支付时限、整单退款守卫、核销状态值域及预检/人工放行/离线核销入口的现行实现缺口 | M03 Grok Build 最终全文交叉审计 |

@@ -1,6 +1,6 @@
 package com.complex.terminal
 
-// 文件版本：V0.05
+// 文件版本：V0.06
 
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
@@ -283,6 +283,12 @@ class TerminalRequestSerializationTest {
     // 冲正使用 reason 字段，而非 operator_note
     assertTrue("reason" in body)
     assertFalse("operator_note" in body)
+  }
+
+  @Test
+  fun catalogImagePathUsesImageReadEndpoint() {
+    // 18P 136-R2：平板点单 POS 与一体机吧台买酒按 image_url 回读商品图，走 GET /api/v1/bar/catalog/images/{name}。
+    assertEquals("/api/v1/bar/catalog/images/abc.jpg", barCatalogImagePath("bar-images/abc.jpg"))
   }
 
   @Test

@@ -1,4 +1,4 @@
-// 文件版本：V0.16
+// 文件版本：V0.17
 // OBS-14-02 后台结果区字段中文名字典（PGM「全局原则 · 界面全中文（所有终端零英文）」）。
 // 键用后端 JSON 的蛇形写法；结果区查表时蛇形与驼峰同查（orderId / order_id 都命中 order_id）。
 // 与后端字段中文名表 FieldLabels.java（common.api 包）同键同名：前段按后端原样抄录，后端改名这里跟着改（门禁会比对）。
@@ -2814,7 +2814,6 @@ export const VALUE_LABELS: Record<string, string> = {
   bar_categories_delete_rejected: "分类删除已驳回",
   bar_order_item_void_approved: "订单明细作废已批准",
   bar_order_item_void_rejected: "订单明细作废已驳回",
-  bar_check_in: "订台到店入座",
   bar_table_clear: "桌台清台",
   bar_table_create: "新建桌台",
   bar_reservation_create: "新建订台",
@@ -3273,7 +3272,9 @@ export const KEY_VALUE_LABELS: Record<string, Record<string, string>> = {
   event_category: { audit: "审计", governance: "治理", ticketing: "票务" },
   disposition: { acknowledge: "标记已阅", false_positive: "标记误报", escalate: "转告警" },
   category: { bar: "酒吧", ticketing: "门票销售", amusement: "游乐", catering: "餐饮", retail: "零售", service: "服务", entertainment: "娱乐", spirit: "烈酒", wine: "葡萄酒", beer: "啤酒", cocktail: "鸡尾酒", soft_drink: "软饮", mixer: "调饮", tea: "茶饮", snack: "小吃" },
-  scope_type: { archived_bar_products: "已存档的酒吧商品", archived_entitlement_templates: "已存档的通票权益模板", archived_merchants: "已存档的商户档案", archived_ticket_types: "已存档的票种", archived_ticket_price_rules: "已存档的票价规则", archived_bar_product_categories: "已存档的酒吧商品分类", archived_bar_combos: "已存档的酒吧套餐" },
+  scope_type: { archived_bar_products: "已存档的酒吧商品", archived_entitlement_templates: "已存档的通票权益模板", archived_merchants: "已存档的商户档案", archived_ticket_types: "已存档的票种", archived_ticket_price_rules: "已存档的票价规则", archived_bar_product_categories: "已存档的酒吧商品分类", archived_bar_combos: "已存档的酒吧套餐", project: "项目", merchant: "商户", bar: "酒吧", ticketing: "票务", amusement: "游乐" },
+  // 第十八批 P 段第 133 条 133-R3：日结范围类型（上一行末五项）与日结七源（名称取自 OpenAPI listDailyCloseSummaries 描述）。
+  source_stream: { official_ticket: "官方售票", channel_ticket: "渠道售票", bar: "酒吧", amusement: "游乐", supply_cost: "供应链成本", thirdparty_reflow: "第三方回流", bar_deposit: "订台定金" },
   period_type: { quarterly: "按季度", monthly: "按月", semiannual: "按半年", annual: "按年" },
   reserve_release_mode: { manual: "手动释放", next_period: "下期返还", fixed_delay: "固定延后若干期", annual: "年度末清算" },
   kind: { official: "正式单", preview: "月度预览", app: "预装软件", site: "网站白名单" },

@@ -1,6 +1,6 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.when;
@@ -157,6 +157,9 @@ class CustomerPaymentJdbcIntegrationTests {
                 .isEqualTo("succeeded");
         assertThat(jdbc.queryForObject("SELECT count(*) FROM audit_events WHERE event_name = 'customer.payment_confirmed'"
                 + " AND business_id = ?", Integer.class, intentId)).isEqualTo(2);
+        // 第十八批 P 段第 132 条对照：门票线上付仍记一行平台自营内部核算收入。
+        assertThat(jdbc.queryForList("SELECT counterparty_id FROM ar_ap_items WHERE direction = 'internal_accounting'"
+                + " AND source_type = 'ticket_order' AND source_id = ?", String.class, orderId)).containsExactly("platform_self");
     }
 
     @Test
@@ -183,5 +186,41 @@ class CustomerPaymentJdbcIntegrationTests {
                 .andExpect(jsonPath("$.data.deposit_status").value("paid"));
         assertThat(jdbc.queryForMap("SELECT deposit_status, deposit_channel FROM bar_reservations WHERE id = ?", reservationId))
                 .containsEntry("deposit_status", "paid").containsEntry("deposit_channel", "wechat");
+    }
+
+    /**
+     * 第十八批 P 段第 132 条（BSM:1062「客人自助订台必须支付定金，定金直接进该卡座所属的酒吧商户」；DEC-R3-2026-08-04-04）：
+     * 客人线上付的订台定金收款主体是该酒吧商户（商户直收），到账确认不记平台自营内部核算收入。
+     */
+    @Test
+    void onlineDepositToBarMerchantIsNotPlatformInternalAccountingRevenue() throws Exception {
+        Instant now = Instant.now();
+        String barId = "bar_p132_" + f.suffix;
+        String tableId = "table_p132_" + f.suffix;
+        String reservationId = "reservation_p132_" + f.suffix;
+        jdbc.update("INSERT INTO merchants (id, merchant_name, merchant_type, status, created_at, updated_at, project_id)"
+                + " VALUES (?, '定金入账测试酒吧', 'bar', 'active', now(), now(), ?)", barId, f.projectId);
+        jdbc.update("INSERT INTO bar_tables (id, bar_id, merchant_id, table_code, table_name, table_type, capacity,"
+                + " allowed_pass_free_guest_count, min_consumption_cent, currency, status, created_at, updated_at)"
+                + " VALUES (?, ?, ?, 'T-P132', '卡座', 'card_seat', 6, 2, 50000, 'CNY', 'active', now(), now())",
+                tableId, barId, barId);
+        customers.saveCustomerBarReservation(new BarReservationRecord(reservationId, barId, barId, tableId, f.customerId,
+                now.plusSeconds(7200), 2, 2, 20_000L, "pending", "miniapp", null, "reserved", "miniapp", null, List.of(), now, now,
+                null));
+        String intentId = CustomerTicketPaymentFixture.read(f.customerPost(
+                        "/api/v1/customer/bar-reservations/" + reservationId + "/deposit-payments",
+                        Map.of("idempotency_key", "p132-dep-" + f.suffix, "channel", "wechat", "amount_cent", 1))
+                .andExpect(status().isOk()), "$.data.payment_intent_id");
+        f.markPaid(intentId);
+        f.customerPost("/api/v1/customer/bar-reservations/" + reservationId + "/deposit-payments/" + intentId + "/confirm",
+                        Map.of("idempotency_key", "p132-dep-confirm-" + f.suffix))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.deposit_status").value("paid"));
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM ar_ap_items WHERE direction = 'internal_accounting'"
+                + " AND source_type = 'bar_reservation_deposit' AND source_id = ?", Integer.class, reservationId)).isZero();
+        assertThat(jdbc.queryForObject("SELECT status FROM finance_payment_intents WHERE id = ?", String.class, intentId))
+                .isEqualTo("succeeded");
+        assertThat(f.initiatedFor(intentId).payeeMerchantId()).isEqualTo(barId);
+        assertThat(f.initiatedFor(intentId).fundMode()).isEqualTo("merchant_prepaid");
     }
 }

@@ -30,7 +30,7 @@ function makeApi(metricDetailFails = false): AdminApiClient {
       if (url.includes("/reconciliation/batches")) return [{ id: "batch-1", batchNo: "B-1", amount: 1000, status: "open", providerCode: "wechat" }];
       return [];
     }),
-    getPaged: vi.fn(),
+    getPaged: vi.fn().mockResolvedValue({ items: [], total: 0, page: 1, size: 20 }),
     post: vi.fn(),
     put: vi.fn(),
     patch: vi.fn(),

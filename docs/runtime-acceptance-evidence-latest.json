@@ -8,14 +8,14 @@
     "RUNTIME_EVIDENCE_BOUND_TO_SOURCE_FINGERPRINT",
     "RUNTIME_EVIDENCE_DOES_NOT_CLOSE_PRODUCTION_MANIFEST"
   ],
-  "generated_at": "2026-11-03T22:40:37.035Z",
+  "generated_at": "2026-11-04T18:30:43.179Z",
   "git": {
-    "head": "44b7cc6d9ecdb41e5ce8a0ed5699e2414e2c2932",
-    "head_short": "44b7cc6d",
-    "branch": "feature/business-code-batch35-20261103",
+    "head": "85fe7a414a8829593f0ea34c930b21ed4f037e08",
+    "head_short": "85fe7a41",
+    "branch": "feature/business-code-batch36-20261103",
     "worktree_dirty": false,
-    "source_fingerprint": "91426934d0957d7f0e452bb116d0e65f510d9a3aaf5b05b22ac833a63719a76b",
-    "source_fingerprint_file_count": 3237,
+    "source_fingerprint": "29f9db5566b1bb81e8a7e84133d1598e162ad3bc04c4b3b0292239e8e5f71067",
+    "source_fingerprint_file_count": 3243,
     "source_fingerprint_paths": [
       "backend/src/main",
       "backend/src/test",
@@ -50,12 +50,12 @@
   },
   "backend_surefire": {
     "path": "backend/target/surefire-reports",
-    "suites": 511,
-    "tests": 6270,
+    "suites": 513,
+    "tests": 6287,
     "failures": 0,
     "errors": 0,
     "skipped": 0,
-    "latest_mtime": "2026-11-03T22:37:01.998Z",
+    "latest_mtime": "2026-11-04T18:28:32.173Z",
     "passed": true
   },
   "web_unit_source": {
@@ -138,6 +138,7 @@
       "apps/web/src/admin/pages/BarProductsPage.rowdetail.test.tsx",
       "apps/web/src/admin/pages/BarProductsPage.test.tsx",
       "apps/web/src/admin/pages/BarRefundBreakdownPanel.test.tsx",
+      "apps/web/src/admin/pages/BarShiftPanel.test.tsx",
       "apps/web/src/admin/pages/BarTableSessionsPage.backfill.test.tsx",
       "apps/web/src/admin/pages/BarTableSessionsPage.barb14.test.tsx",
       "apps/web/src/admin/pages/BarTableSessionsPage.clear.test.tsx",
@@ -191,6 +192,7 @@
       "apps/web/src/admin/pages/FacilityWorkbenchPage.scrap.test.tsx",
       "apps/web/src/admin/pages/FinanceArApLedgerPage.metricdetail.test.tsx",
       "apps/web/src/admin/pages/FinanceArApLedgerPage.test.tsx",
+      "apps/web/src/admin/pages/FinanceDailyClosePanel.test.tsx",
       "apps/web/src/admin/pages/FinanceDividendsPage.guidedcreate.test.tsx",
       "apps/web/src/admin/pages/FinanceDividendsPage.legal.test.tsx",
       "apps/web/src/admin/pages/FinanceDividendsPage.oneshot.test.tsx",
@@ -333,6 +335,7 @@
       "apps/web/src/admin/pages/TicketOrdersPage.multiuseface.test.tsx",
       "apps/web/src/admin/pages/TicketOrdersPage.payout.test.tsx",
       "apps/web/src/admin/pages/TicketOrdersPage.refundcases.test.tsx",
+      "apps/web/src/admin/pages/TicketOrdersPage.verifications.test.tsx",
       "apps/web/src/admin/pages/TicketPointsBillingPage.test.tsx",
       "apps/web/src/admin/pages/TicketRewardConfigPage.test.tsx",
       "apps/web/src/admin/pages/TicketingPoliciesPage.combo.test.tsx",
@@ -367,8 +370,8 @@
       "apps/web/src/dealer/dealerPortalClient.test.ts",
       "apps/web/src/shared/ReplayedNotice.test.tsx"
     ],
-    "file_count": 306,
-    "test_count_from_source": 1537
+    "file_count": 309,
+    "test_count_from_source": 1552
   },
   "web_build": {
     "dist_index_exists": true,
@@ -389,15 +392,15 @@
     "asset_count": 168,
     "main_js_assets": [
       {
-        "path": "apps/web/dist/assets/main-BZP2yHJL.js",
+        "path": "apps/web/dist/assets/main-XhYR5zSY.js",
         "size_bytes": 4337,
-        "mtime": "2026-11-03T22:37:10.052Z"
+        "mtime": "2026-11-04T18:28:40.328Z"
       }
     ],
     "largest_asset": {
       "path": "apps/web/dist/assets/vendor-antd-CzvkKKQu.js",
       "size_bytes": 251112,
-      "mtime": "2026-11-03T22:37:10.055Z"
+      "mtime": "2026-11-04T18:28:40.331Z"
     },
     "no_main_bundle_warning_expected": true
   },

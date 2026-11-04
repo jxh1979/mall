@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { BarOrdersPage } from "./BarOrdersPage";
@@ -40,5 +40,29 @@ describe("酒吧结账收款人取登录人", () => {
     await waitFor(() => expect(post).toHaveBeenCalledWith("/api/v1/bar/bills/bill-1/settle",
       expect.objectContaining({ paymentChannel: "cash", paymentId: "cash-1" })));
     expect(post.mock.calls[0]?.[1]).not.toHaveProperty("cashierStaffId");
+  });
+
+  // 第十八批 P 段第 133 条 133-R1（BSM:1081「收银员开班记备用金」）：订单列表为空时页面显示「暂无数据」，收银交班区块仍在、能开班。
+  it("订单列表为空时收银交班区块仍渲染并能开班", async () => {
+    const post = vi.fn().mockResolvedValue({ id: "shift-1", status: "open" });
+    const api = {
+      get: vi.fn(async (url: string) => (url === "/api/v1/platform/merchants"
+        ? [{ id: "bar_a", merchantName: "一号酒吧", merchantType: "bar" }]
+        : [])),
+      getPaged: vi.fn().mockResolvedValue({ items: [], total: 0, page: 1, size: 10 }),
+      post, put: vi.fn(), patch: vi.fn(), delete: vi.fn(),
+    } as unknown as AdminApiClient;
+    render(<BarOrdersPage api={api} user={{ id: "u1", username: "admin", accountType: "platform_admin" }}
+      setActionResult={vi.fn()} setGlobalError={vi.fn()}
+      effectivePermissions={{ status: "ready", value: { wildcard: true, grants: [], denies: [] } }} />);
+
+    await waitFor(() => expect(screen.getByTestId("admin-empty").textContent).toContain("暂无数据"));
+    await waitFor(() => expect(screen.queryByTestId("bar-shift-panel")).not.toBeNull());
+    await waitFor(() => expect((screen.getByTestId("bar-shift-open-bar") as HTMLSelectElement).value).toBe("bar_a"));
+    fireEvent.change(screen.getByLabelText("备用金"), { target: { value: "200" } });
+    await waitFor(() => expect((screen.getByLabelText("备用金") as HTMLInputElement).value).toBe("200"));
+    fireEvent.click(screen.getByTestId("bar-shift-open-submit"));
+    await waitFor(() => expect(post).toHaveBeenCalledWith("/api/v1/bar/shifts/open",
+      expect.objectContaining({ barId: "bar_a", cashierUserId: "u1", openingCashCent: 20000 })));
   });
 });

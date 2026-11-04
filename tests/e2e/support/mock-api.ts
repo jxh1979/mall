@@ -1,4 +1,4 @@
-// 文件版本：V0.11
+// 文件版本：V0.12
 import type { Page, Route } from "@playwright/test";
 
 type ApiData = Record<string, unknown> | Array<Record<string, unknown>> | null;
@@ -786,7 +786,6 @@ async function handleWrite(route: Route, pathname: string, state: MockState, opt
   if (/^\/api\/v1\/bar\/orders\/[^/]+\/deliver$/.test(pathname)) return json(route, { id: pathname.split("/").at(-2), status: "delivered" });
   if (/^\/api\/v1\/bar\/bills\/[^/]+\/commissions\/calculate$/.test(pathname)) return json(route, { id: "commission-1", billId: pathname.split("/").at(-3), salesRate: 0.15, nonSalesRate: 0.1, includeTicketAmount: false, status: "calculated" });
   if (/^\/api\/v1\/bar\/bills\/[^/]+\/settle$/.test(pathname)) return json(route, { id: "bill-bar-1", status: "paid", paidAmount: 3000, totalAmount: 3000 });
-  if (/^\/api\/v1\/bar\/reservations\/[^/]+\/check-in-guest$/.test(pathname)) return json(route, { id: "checkin-1", status: "checked_in", guestCount: bodyValue(body, "guestCount", "guest_count") });
   if (pathname === "/api/v1/inventory/stock-movements") return json(route, { id: "move-1", status: "success", from_location_id: bodyValue(body, "from_location_id"), to_location_id: bodyValue(body, "to_location_id"), items: bodyValue(body, "items"), trace_code: bodyValue(body, "trace_code") });
   if (pathname === "/api/v1/inventory/items") return json(route, { id: "item-created", itemCode: "NEW", itemName: "New Item", status: "active" });
   if (pathname === "/api/v1/inventory/saved-bottles") return json(route, { id: "saved-1", savedNo: "SAVED-1", customerName: "Guest", status: "stored" });

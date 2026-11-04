@@ -1,7 +1,9 @@
 package com.complex.terminal
 
-// 文件版本：V0.13
+// 文件版本：V0.14
 
+import java.net.URLEncoder
+import java.nio.charset.StandardCharsets
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
@@ -382,12 +384,16 @@ data class BarBillRecord(
   val reservationId: String? = null,
   val payableAmountCent: Long = 0,
   val paidAmountCent: Long = 0,
+  val tipAmountCent: Long = 0,
   val currency: String? = null,
   val paymentStatus: String? = null,
   val settlementStatus: String? = null,
   val createdAt: String? = null,
   val updatedAt: String? = null,
 )
+
+/** 账单剩余应收＝应付 + 小费 − 已付（与服务端支付意向金额校验同式，BarBillingService.createBillPayIntent；18P 137-R1）。 */
+val BarBillRecord.remainingDueCent: Long get() = payableAmountCent + tipAmountCent - paidAmountCent
 
 // ---------------------------------------------------------------------------
 // 员工设备凭证 POST /api/v1/staff/device-credentials
@@ -702,6 +708,10 @@ data class BarCombo(
   val items: List<BarComboItem> = emptyList(),
 )
 
+/** 18P 136-R2（BSM:958「进入带商品图片的分类菜单……」）：商品/套餐 image_url「bar-images/<文件名>」→ 图片回读接口 GET /api/v1/bar/catalog/images/{name}。 */
+fun barCatalogImagePath(imageUrl: String): String =
+  "/api/v1/bar/catalog/images/${URLEncoder.encode(imageUrl.substringAfterLast('/'), StandardCharsets.UTF_8.name())}"
+
 // 由订单生成账单 POST /api/v1/bar/orders/{order_id}/bill（按桌整单结账前置步）。
 @Serializable
 data class BarOrderBillCreateRequest(
@@ -958,7 +968,7 @@ data class AttendanceDayRow(
   val shiftEndAt: String? = null,
 )
 
-// ── BYOD 二期 Wave1(2026-07-19 拍板):工资条提成明细 + 本人资料自助 ──
+// ── BYOD 二期 Wave1:工资条提成明细 ──
 
 @Serializable
 data class StaffCommissionLineRow(
@@ -967,12 +977,6 @@ data class StaffCommissionLineRow(
   val amountCent: Long? = null,
   val note: String? = null,
   val createdAt: String? = null,
-)
-
-@Serializable
-data class StaffProfileSelfUpdateRequest(
-  val idempotencyKey: String,
-  val name: String,
 )
 
 // ── G批(2026-07-02 六口径拍板):服务点单——目录/代客下单指定履约人/公司收款码/履约流转 ──

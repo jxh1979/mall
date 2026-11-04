@@ -1,6 +1,6 @@
 package com.complex.terminal
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import java.util.UUID
 
@@ -314,11 +314,26 @@ class TerminalWorkflow(
     return intent
   }
 
+  /**
+   * 第十八批 P 段第 137 条 137-R1（BSM:945「平板生成支付二维码给客人手机扫码，或扫描客人手机付款码。」；BSM:1028「支付优先使用线上支付……」）：
+   * 平板与工作手机扫码结账——按账单剩余应收建支付意图，结账带意图编号 payment_id（现金 / POS 没有线上付款意向，取本次登记的幂等键，见 KioskPayment）。
+   */
+  fun settleBarBillByScan(bill: BarBillRecord, channel: String): BarBillRecord {
+    val amount = bill.remainingDueCent
+    if (amount <= 0) {
+      // 复核修正（BSM:1064「……以该笔留款抵付的部分不重复收款、不重复确认收入。」）：留款抵完、剩余应收为 0 不建支付意图（服务端金额须大于 0），
+      // 没有线上付款意向，取本次结账幂等键作 payment_id，由服务端「剩余应收≤0 即关单」分支结清。
+      return settleBarBill(bill.id, 0, channel, paymentId = stableIdempotencyKey("bar-settle", bill.id, "0"))
+    }
+    val intent = createBarPaymentIntent(bill.id, amount, channel)
+    return settleBarBill(bill.id, amount, channel, paymentId = intent.id)
+  }
+
   fun settleBarBill(
     billId: String,
     settlementAmountCent: Long,
     paymentChannel: String,
-    paymentId: String? = null,
+    paymentId: String,
     posTransactionNo: String? = null,
   ): BarBillRecord {
     requireOnline()

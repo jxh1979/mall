@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -107,6 +107,28 @@ describe("BarTableSessionsPage 第十三批 B 段订台与扫码点单", () => {
     await waitFor(() => expect(posts).toHaveLength(1), { timeout: 5000 });
     expect(posts[0]!.url).toContain("/api/v1/bar/reservations/rsv-1/invitation/entry-verify");
     expect(posts[0]!.body.credential_payload).toBe("bie.invm_1.1999999999.abcd.sig");
+  });
+
+  it("第 135 条：页面不再提供按人数登记入场，卡座免通票入场只走门口核验本人动态入场码", async () => {
+    // 依据 BSM:1036「到店出示本人的动态入场码核验入场」、ENUM:36「不存在免核销入场的情形」。
+    const posts: { url: string; body: Record<string, unknown> }[] = [];
+    renderPage(posts);
+    await waitFor(() => expect(screen.getByTestId("bar-reservation-select-rsv-1")).toBeTruthy(), { timeout: 5000 });
+    await waitFor(() => {
+      expect((screen.getByTestId("bar-new-reservation-bar") as HTMLSelectElement).value).toBe("bar-1");
+      expect((screen.getByTestId("bar-new-session-bar") as HTMLSelectElement).value).toBe("bar-1");
+    }, { timeout: 5000 });
+    fireEvent.click(screen.getByTestId("bar-reservation-select-rsv-1"));
+    expect(screen.queryByTestId("bar-checkin-count")).toBeNull();
+    expect(screen.queryByTestId("bar-checkin-submit")).toBeNull();
+    fireEvent.change(screen.getByTestId("bar-invitation-member"), { target: { value: "bie.invm_1.1999999999.abcd.sig" } });
+    fireEvent.click(screen.getByTestId("bar-invitation-entry"));
+    await waitFor(() => expect(posts).toHaveLength(1), { timeout: 5000 });
+    expect(posts[0]!.url).toContain("/api/v1/bar/reservations/rsv-1/invitation/entry-verify");
+    expect(posts[0]!.body.credential_payload).toBe("bie.invm_1.1999999999.abcd.sig");
+    expect(posts[0]!.body.point_id).toBe("bar-1");
+    expect((posts[0]!.body.business_context as Record<string, unknown>).bar_id).toBe("bar-1");
+    expect(posts.some((post) => post.url.includes("check-in-guest"))).toBe(false);
   });
 
   it("建台可选散台；散台行可显示固定桌台码", async () => {

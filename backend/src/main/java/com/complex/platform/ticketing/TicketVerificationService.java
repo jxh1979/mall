@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.08
+// 文件版本：V0.09
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.amusement.AmusementEntryRequest;
@@ -20,6 +20,11 @@ import java.util.Optional;
 import java.util.UUID;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
+import org.springframework.transaction.support.TransactionTemplate;
 import static com.complex.platform.common.Strings.trimToNull;
 import static com.complex.platform.common.Strings.requireText;
 
@@ -74,8 +79,14 @@ public class TicketVerificationService {
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     TicketFacePhotoService facePhotoService;
 
+    // 第十八批 P 段 134-R1：在线规则拒绝的 rejected 核销记录在业务事务结束后另起事务写（同 AmusementService 硬超容留痕）。
+    // 字段注入免改构造点；内存仓单测（无 Spring）为 null 则就地写。
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    PlatformTransactionManager transactionManager;
+
     // CG-05 核销记录状态闭集（ENUM「核销记录状态」：成功、拒绝（规则不允许）、失败（设备或网络原因）、已冲正、异常）。
     // 落记录的非成功结果按 result_reason 归类：规则不允许 → rejected；设备 / 网络 / 凭证技术原因 → failed。
+    // 第十八批 P 段 134-R1（CG 裁决第 46 项）：在线规则拒绝由 createVerification 落 rejected；未归类的按 CG 裁决第 48 项不落核销记录。
     // 「异常」（anomaly）只由主管核实前的异常复核提起写入（TK-14，见 raiseVerificationAnomaly），核销链不写。manual_overridden 历史保留、不再写入。
     static final String STATUS_SUCCESS = "success";
     static final String STATUS_REJECTED = "rejected";
@@ -88,6 +99,8 @@ public class TicketVerificationService {
             "ENTITLEMENT_PROVIDER_MISMATCH", "ENTITLEMENT_NOT_AMUSEMENT", "ENTITLEMENT_NOT_FOR_PROJECT",
             "AMUSEMENT_PROJECT_UNRESOLVED", "AMUSEMENT_BUSINESS_DAY_REQUIRED",
             "PARK_WIDE_FAULT_VERIFICATION_SUSPENDED", "PROJECT_NOT_OPEN", "SAFETY_BLOCKED", "SESSION_NOT_OPEN", "SESSION_CAPACITY_EXHAUSTED", "SESSION_PROJECT_MISMATCH",
+            // 134-R1：场馆不在营业场次、已在上一场次入场（ENUM:46 场次结束时未核销的权益即行终结）、当前没有开放中的游乐场次。
+            "VENUE_NOT_IN_SESSION", "ENTRY_PASS_PAST_SESSION_VOID", "AMUSEMENT_NO_OPEN_SESSION",
             // TK-06 一人多次票留脸 / 核对同一使用人。
             "MULTI_USE_FACE_CONSENT_REQUIRED", "MULTI_USE_FACE_CAPTURE_REQUIRED", "MULTI_USE_HOLDER_MISMATCH");
     /** 设备、网络、凭证技术原因（签名无效、窗口过期、凭证不存在/已用、设备未登记/未纳管、归属无法解析）→ failed。 */
@@ -96,7 +109,7 @@ public class TicketVerificationService {
             "DEVICE_BLOCKED", "DEVICE_NOT_FOUND", "VERIFY_DEVICE_MERCHANT_UNRESOLVED", "ENTITLEMENT_PROVIDER_UNRESOLVED",
             "PROJECT_NOT_FOUND", "TICKET_NOT_FOUND");
 
-    /** 错误码 → 记录状态；未归类（如越权、参数错误）返回 null，调用方维持原异常（PR 待裁决单列）。 */
+    /** 错误码 → 记录状态；未归类（如越权、参数错误）返回 null，按 CG 裁决第 48 项不落核销记录、维持原异常。 */
     static String outcomeStatusForCode(String code) {
         if (code == null) {
             return null;
@@ -251,7 +264,15 @@ public class TicketVerificationService {
     }
 
     VerificationResponse createVerification(VerificationRequest request) {
-        VerificationResponse response = verifyEntitlement(request, "android_terminal_online", null);
+        VerificationResponse response;
+        try {
+            response = verifyEntitlement(request, "android_terminal_online", null);
+        } catch (ApiException error) {
+            // 134-R1（CG 裁决第 46 项「正常在线核销的业务规则拒绝也记录为rejected并留痕」）：响应、状态码、错误码不变，
+            // 请求事务照旧整体回滚（不扣次、单次授权不扣），另落一条 rejected 核销记录。
+            recordRuleRejection(request, error);
+            throw error;
+        }
         if ("failed".equals(response.status())) {
             // M723-F08（第 656 行「操作被拒绝或失败的不算用掉」）：在线核销以正常返回报告失败（过刷新窗口、签名失配，
             // verifyEntitlement 里落 failed 核销记录的两支），本次请求记为业务失败，请求事务切面据此撤回这次请求新用掉的
@@ -259,6 +280,62 @@ public class TicketVerificationService {
             IdempotentReplayContext.markBusinessFailed();
         }
         return response;
+    }
+
+    /**
+     * 134-R1：规则拒绝（outcomeStatusForCode 为 rejected）落一条 rejected 核销记录；技术失败、未归类的鉴权/越权/校验错误
+     * （CG 裁决第 48 项）与配置缺失不落。不扣次、不落结算价，不发积分、结算、赠饮事件。
+     * 记录在拒绝当下组好，等业务事务结束放开权益行锁后另起事务写：游乐分流对该权益行持 FOR UPDATE，当场另起事务插入时
+     * 外键要对同一行取 KEY SHARE 锁，会与外层互等。写法同 AmusementService 硬超容留痕。
+     */
+    private void recordRuleRejection(VerificationRequest request, ApiException error) {
+        if (!STATUS_REJECTED.equals(outcomeStatusForCode(error.code()))) {
+            return;
+        }
+        IssuedEntitlementRecord entitlement = requestEntitlement(request).orElse(null);
+        if (entitlement == null) {
+            return;
+        }
+        String payload = request.credentialPayload();
+        VerificationRecord rejected = new VerificationRecord(
+                "ver_" + UUID.randomUUID().toString().replace("-", ""),
+                "V" + System.currentTimeMillis() + UUID.randomUUID().toString().substring(0, 4).toUpperCase(Locale.ROOT),
+                entitlement.id(),
+                entitlement.entitlementCode(),
+                request.credentialType(),
+                // 同 verificationPayload 口径：动态码只存散列，权益码存原文。
+                payload.startsWith("cred_") ? "sha256:" + hash(payload) : payload,
+                request.deviceId(),
+                request.pointId(),
+                STATUS_REJECTED,
+                error.code().toLowerCase(Locale.ROOT),
+                "android_terminal_online",
+                null,
+                Instant.now(),
+                null,
+                null,
+                entitlement.merchantId(),
+                null,
+                null,
+                entitlement.numPeople(),
+                null,
+                null,
+                null,
+                null);
+        if (transactionManager == null) {
+            repository.saveVerification(rejected);
+            return;
+        }
+        TransactionTemplate durable = new TransactionTemplate(transactionManager);
+        durable.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+        Runnable persist = () -> durable.executeWithoutResult(status -> repository.saveVerification(rejected));
+        if (TransactionSynchronizationManager.isActualTransactionActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override public void afterCompletion(int status) { persist.run(); }
+            });
+        } else {
+            persist.run();
+        }
     }
 
     /**

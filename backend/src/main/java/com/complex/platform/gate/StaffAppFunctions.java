@@ -1,6 +1,6 @@
 package com.complex.platform.gate;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import java.util.List;
 import java.util.Map;
@@ -56,8 +56,8 @@ public final class StaffAppFunctions {
             // BSM:1500 只看；接单、完成履约在工作手机上办（BSM:1132）。
             Map.entry("my_service_income", List.of("GET /api/v1/services/orders/assigned-to-me",
                     "GET /api/v1/services/orders/my-stats")),
-            // BSM:1458 基础资料。
-            Map.entry("my_profile", List.of("GET /api/v1/staff/profiles/mine", "POST /api/v1/staff/profiles/mine")));
+            // BSM:1458 基础资料「可查看」（18P 136-R3：只读）。
+            Map.entry("my_profile", List.of("GET /api/v1/staff/profiles/mine")));
 
     /** 公共两条（不对应首页按钮）：取本清单；进办公区扫码寄存私人手机（BSM:939）。 */
     private static final List<String> PRIVATE_PHONE_COMMON = List.of(
@@ -65,7 +65,7 @@ public final class StaffAppFunctions {
 
     static final String TABLET = "tablet";
 
-    /** 平板清单（第 130 条）：功能码 → 该功能调用的接口（按安卓 showBarOrder/showBarPayment 与平板点单 POS 的实际调用）。 */
+    /** 平板清单（第 130 条）：功能码 → 该功能调用的接口（按安卓 showBarOrder/showPosCheckout 与平板点单 POS 的实际调用）。 */
     private static final Map<String, List<String>> TABLET_FUNCTIONS = Map.of(
             "bar_order", List.of("POST /api/v1/bar/orders", "POST /api/v1/bar/bills/*/pay-intents", "POST /api/v1/bar/bills/*/settle"),
             "tablet_pos", List.of("GET /api/v1/bar/tables/availability", "GET /api/v1/bar/catalog/categories",

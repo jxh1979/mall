@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: 综合体管理系统 P0 API 契约
-  version: V0.47
+  version: V0.48
   description: P0 首批编码前置契约。本文采用 JSON-compatible YAML，便于与 openapi-p0.json 保持一致。正式后端以 Java 21 + Spring Boot 4.x +
     springdoc-openapi 输出运行时 OpenAPI，并与本契约比对。
 servers:
@@ -2466,6 +2466,7 @@ paths:
         - web
         - kiosk
         - tablet
+        - staff_work_phone
       x-idempotency-required: true
       x-audit-event-success: bar.bill.created
       x-audit-event-failure: bar.bill.created_failed
@@ -3998,6 +3999,45 @@ paths:
             description: 当前数据范围内的单据编号。
             maxLength: 64
   /api/v1/finance/daily-closes:
+    get:
+      tags:
+        - finance
+      operationId: listDailyCloses
+      summary: 查询日结批次
+      description: 第十八批 P 段第 133 条 133-R2：按营业日倒序分页列出已生成的日结批次（营业日、范围类型、范围编号、状态、锁定时间），汇总用 listDailyCloseSummaries 按批次 id 查。范围同查看类列表：平台管理员看全部；商户账号只看本商户的 merchant、bar 范围日结；其余按 finance.daily_close.manage 可触及的项目看 project、ticketing、amusement 范围日结与这些项目下商户的 merchant、bar 范围日结。
+      x-permission: finance.daily_close.manage
+      x-data-scope: project-entity
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: finance.daily_close.viewed
+      x-audit-event-failure: finance.daily_close.view_failed
+      parameters:
+        - name: page
+          in: query
+          required: false
+          description: 页码，从 1 起。
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: size
+          in: query
+          required: false
+          description: 每页条数 1～200。
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 20
+      responses:
+        "200":
+          $ref: "#/components/responses/Page"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
     post:
       tags:
         - finance
@@ -12329,7 +12369,7 @@ paths:
         - ticketing
       operationId: createTicketVerification
       summary: 正式核销
-      description: "核销记录状态闭集（CG-05，ENUM「核销记录状态」）：success（成功）、rejected（拒绝：规则不允许）、failed（失败：设备或网络原因）、reversed（已冲正）、anomaly（异常：已成功扣次但现场未放行或实际交付有争议时提起的异常复核，见 POST /api/v1/ticketing/verifications/{id}/anomaly 与 POST /api/v1/ticketing/verification-anomalies/{id}/resolve）；不设预检通过态、不提供人工放行（manual_overridden 仅历史行保留）。 在线核销：过刷新窗口 / 签名失配以正常响应返回 status=failed（window_expired / signature_invalid）；规则不允许仍以错误响应返回、不落记录。第十八批 N 段第 123 条 123-R2（BSM:1630「核销、收款、退款、放行等敏感操作，操作设备定位落在该项目综合体授权范围之外时一律拒绝并留痕」；BSM:1876「Web 端同样适用」）：本操作属敏感操作定位闸的现场动作闭集（第十八批裁决 31）。操作对象所属项目已配授权范围（123-R1）时须带请求头 X-Geo-Latitude、X-Geo-Longitude（设备当下定位，WGS-84 十进制度）：没带或解析不了按范围外处理（裁决 30）返回 403 SENSITIVE_OPERATION_LOCATION_REQUIRED，到圆心距离超过授权半径返回 403 SENSITIVE_OPERATION_OUT_OF_RANGE，拒绝在独立事务里留痕 sensitive_operation.location_rejected（business_id 为本 operationId，业务回滚不丢）；项目没配授权范围不查位置（裁决 32）；判定在幂等之前，重放不能绕过；通过时不存位置。"
+      description: "核销记录状态闭集（CG-05，ENUM「核销记录状态」）：success（成功）、rejected（拒绝：规则不允许）、failed（失败：设备或网络原因）、reversed（已冲正）、anomaly（异常：已成功扣次但现场未放行或实际交付有争议时提起的异常复核，见 POST /api/v1/ticketing/verifications/{id}/anomaly 与 POST /api/v1/ticketing/verification-anomalies/{id}/resolve）；不设预检通过态、不提供人工放行（manual_overridden 仅历史行保留）。 在线核销：过刷新窗口 / 签名失配以正常响应返回 status=failed（window_expired / signature_invalid）；规则不允许仍以错误响应返回（响应不变），业务事务结束后另起事务落一条 status=rejected 记录（result_reason 为错误码小写；不扣次、不落结算价）；参数校验、鉴权、越权、定位闸等未进入有效检票的错误不落核销记录（CG 裁决第46、48项）。第十八批 N 段第 123 条 123-R2（BSM:1630「核销、收款、退款、放行等敏感操作，操作设备定位落在该项目综合体授权范围之外时一律拒绝并留痕」；BSM:1876「Web 端同样适用」）：本操作属敏感操作定位闸的现场动作闭集（第十八批裁决 31）。操作对象所属项目已配授权范围（123-R1）时须带请求头 X-Geo-Latitude、X-Geo-Longitude（设备当下定位，WGS-84 十进制度）：没带或解析不了按范围外处理（裁决 30）返回 403 SENSITIVE_OPERATION_LOCATION_REQUIRED，到圆心距离超过授权半径返回 403 SENSITIVE_OPERATION_OUT_OF_RANGE，拒绝在独立事务里留痕 sensitive_operation.location_rejected（business_id 为本 operationId，业务回滚不丢）；项目没配授权范围不查位置（裁决 32）；判定在幂等之前，重放不能绕过；通过时不存位置。"
       x-permission: verification.execute
       x-data-scope: project-point
       x-terminal-allowed:
@@ -13672,6 +13712,31 @@ paths:
         "500":
           $ref: "#/components/responses/Error"
       x-auth-context: staff-token
+  /api/v1/staff/profiles/mine:
+    get:
+      tags:
+        - staff
+      operationId: getMyStaffProfile
+      summary: 查看本人员工档案(员工手机)
+      description: 员工自助只读查看本人（且仅本人）基础资料，身份按登录会话派生；data 为本人员工档案（含 name、registration_status、status 等，手机号 phone 脱敏、证件号 id_doc 显示 ******）。本账号暂无员工档案时 404 PROFILE_NOT_FOUND。
+      x-permission: staff.profile.self
+      x-data-scope: self
+      x-auth-context: staff-token
+      x-terminal-allowed:
+        - staff_private_phone
+        - staff_work_phone
+      x-idempotency-required: false
+      x-audit-event-success: not_applicable
+      x-audit-event-failure: not_applicable
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
   /api/v1/staff/profiles/{id}/sales-position:
     post:
       tags:
@@ -32262,6 +32327,38 @@ paths:
         "500":
           $ref: "#/components/responses/Error"
       x-auth-context: staff-token
+  /api/v1/staff/payroll/mine/commissions:
+    get:
+      tags:
+        - staff
+      operationId: listMyStaffPayrollCommissions
+      summary: 我的提成明细(员工手机)
+      description: 返回 PageResponse，items 为本人该月提成行，字段 source_type、source_id、amount_cent（分）、note、created_at；酒水/卡座提成 source_type 为 bar_table，按营业日定月。身份按登录会话派生，只返回本人。month 不是 YYYY-MM 时 400 VALIDATION_FAILED。
+      x-permission: staff.payroll.view_mine
+      x-data-scope: self
+      x-auth-context: staff-token
+      x-terminal-allowed:
+        - staff_private_phone
+        - staff_work_phone
+      x-idempotency-required: false
+      x-audit-event-success: not_applicable
+      x-audit-event-failure: not_applicable
+      parameters:
+        - name: month
+          in: query
+          required: true
+          schema:
+            type: string
+            pattern: ^\d{4}-\d{2}$
+      responses:
+        "200":
+          $ref: "#/components/responses/Page"
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
   /api/v1/staff/leaves:
     post:
       tags:
@@ -33621,6 +33718,54 @@ paths:
                   format: binary
               required:
                 - file
+  /api/v1/bar/catalog/images/{name}:
+    get:
+      tags:
+        - bar
+      operationId: getBarCatalogImage
+      summary: 回读酒吧商品/套餐图片
+      description: 图形化点单 POS（平板、一体机吧台买酒）按商品或套餐 image_url 回读图片文件，鉴权走员工会话、不开公共静态目录。name 取 image_url「bar-images/」之后的文件名；文件名不合法 400 VALIDATION_FAILED，文件不存在 404 IMAGE_NOT_FOUND。
+      x-permission: bar.product.view
+      x-data-scope: project
+      x-auth-context: staff-token
+      x-terminal-allowed:
+        - tablet
+        - kiosk
+      x-idempotency-required: false
+      x-audit-event-success: not_applicable
+      x-audit-event-failure: not_applicable
+      parameters:
+        - name: name
+          in: path
+          required: true
+          description: 图片文件名，取 image_url「bar-images/」之后的部分
+          schema:
+            type: string
+            maxLength: 64
+      responses:
+        "200":
+          description: 图片文件字节，Content-Type 按文件扩展名。
+          content:
+            image/jpeg:
+              schema:
+                type: string
+                format: binary
+            image/png:
+              schema:
+                type: string
+                format: binary
+            image/webp:
+              schema:
+                type: string
+                format: binary
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
   /api/v1/ticketing/refunds/{refund_id}/reject:
     post:
       tags:

@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -120,6 +120,10 @@ class MultiUseTicketFaceBindingJdbcIntegrationTests {
         assertThat(TicketVerificationService.outcomeStatusForCode("MULTI_USE_FACE_CONSENT_REQUIRED")).isEqualTo("rejected");
         assertThat(TicketVerificationService.outcomeStatusForCode("MULTI_USE_FACE_CAPTURE_REQUIRED")).isEqualTo("rejected");
         assertThat(TicketVerificationService.outcomeStatusForCode("MULTI_USE_HOLDER_MISMATCH")).isEqualTo("rejected");
+        // 134-R1：场馆不在营业场次、已在上一场次入场、当前没有开放中的游乐场次，都是规则不允许。
+        assertThat(TicketVerificationService.outcomeStatusForCode("VENUE_NOT_IN_SESSION")).isEqualTo("rejected");
+        assertThat(TicketVerificationService.outcomeStatusForCode("ENTRY_PASS_PAST_SESSION_VOID")).isEqualTo("rejected");
+        assertThat(TicketVerificationService.outcomeStatusForCode("AMUSEMENT_NO_OPEN_SESSION")).isEqualTo("rejected");
     }
 
     // R2 RED：同意 + 拍照 → 核销成功扣一次；同事务落同意（版本、时间、范围）与加密人脸，绑定父票实例。

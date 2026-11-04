@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.05
+// 文件版本：V0.06
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -205,6 +205,62 @@ class SingleUseGrantPreviewThenVerifyJdbcIntegrationTests {
         assertThat(verificationOutcomes()).hasSize(3);
         assertThat(verificationOutcomes().get(2)).startsWith("success/");
         assertThat(usedTimes()).isEqualTo(1);
+    }
+
+    // 第十八批 P 段第 134 条 134-R1（CG 裁决第 46 项「正常在线核销的业务规则拒绝也记录为rejected并留痕」；ENUM:43「普通规则拒绝仍记
+    // 「拒绝」」）：只持单次「执行核销」授权的本商户员工按蛇形键核销一张已过期的权益——409 ENTITLEMENT_EXPIRED，落一条
+    // rejected/entitlement_expired 核销记录（在线来源、本商户、无结算价、一人），不扣次、无结算流水、授权未用掉，失败审计照旧；
+    // 权益恢复有效后换新请求编号核销成功、恰好用掉一次。修复前拒绝不落核销记录，第一处核销记录断言即红。
+    @Test
+    void aRuleRejectedOnlineVerificationLeavesARejectedRecordAndDoesNotUseUpTheGrant() throws Exception {
+        seedDevice();
+        seedEntitlement();
+        jdbcTemplate.update("UPDATE issued_entitlements SET valid_to = now() - interval '1 hour' WHERE id = ?", "ent_" + code);
+        staffWithSingleUseGrant(VERIFY);
+
+        String rejectedKey = "m723pv-r134-expired-" + suffix;
+        mockMvc.perform(post("/api/v1/ticketing/verifications").with(session())
+                        .contentType(MediaType.APPLICATION_JSON).content(verifyJson(rejectedKey)))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.detail_code").value("ENTITLEMENT_EXPIRED"));
+        assertThat(verificationOutcomes()).containsExactly("rejected/entitlement_expired");
+        assertThat(jdbcTemplate.queryForList("""
+                SELECT source_type || '/' || merchant_id || '/' || coalesce(settlement_price_cent::text, 'null') || '/' || verified_people
+                  FROM ticket_verifications WHERE entitlement_id = ?
+                """, String.class, "ent_" + code)).containsExactly("android_terminal_online/" + MERCHANT + "/null/1");
+        assertThat(usedTimes()).isZero();
+        assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM settlement_transactions WHERE entitlement_id = ?",
+                Integer.class, "ent_" + code)).isZero();
+        assertUnconsumed();
+        assertThat(jdbcTemplate.queryForList("""
+                SELECT event_name || '/' || (metadata ->> 'error_code') FROM audit_events
+                 WHERE idempotency_key = ? AND event_result = 'failure'
+                """, String.class, rejectedKey)).contains("verification.failed/ENTITLEMENT_EXPIRED");
+
+        jdbcTemplate.update("UPDATE issued_entitlements SET valid_to = now() + interval '10 days' WHERE id = ?", "ent_" + code);
+        mockMvc.perform(post("/api/v1/ticketing/verifications").with(session())
+                        .contentType(MediaType.APPLICATION_JSON).content(verifyJson("m723pv-r134-verify-" + suffix)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("success"));
+        assertThat(verificationOutcomes()).containsExactly("rejected/entitlement_expired", "success/");
+        assertConsumedOnce();
+    }
+
+    // 134-R1（CG 裁决第 48 项「未进入有效检票的参数校验、鉴权等错误不额外生成票务核销记录」）：权益属别家商户，本商户员工核销
+    // 403 CROSS_MERCHANT_FORBIDDEN，不落任何核销记录。
+    @Test
+    void aCrossMerchantRejectionLeavesNoVerificationRecord() throws Exception {
+        seedDevice();
+        seedEntitlement();
+        jdbcTemplate.update("UPDATE issued_entitlements SET merchant_id = 'merchant_b' WHERE id = ?", "ent_" + code);
+        staffWithSingleUseGrant(VERIFY);
+
+        mockMvc.perform(post("/api/v1/ticketing/verifications").with(session())
+                        .contentType(MediaType.APPLICATION_JSON).content(verifyJson("m723pv-r134-xm-" + suffix)))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.detail_code").value("CROSS_MERCHANT_FORBIDDEN"));
+        assertThat(verificationOutcomes()).isEmpty();
+        assertThat(usedTimes()).isZero();
     }
 
     // 第十八批 O 段第 129 条（BSM:800「核销必须在线、不做离线核销」；BSM:891「二维码原始值不存在手机本地，只在线核验」）：
