@@ -91,10 +91,10 @@
   "architecture_line_counts": {
     "apps/web/src/main.tsx": 50,
     "backend/src/main/java/com/complex/platform/ticketing/TicketingService.java": 1200,
-    "backend/src/main/java/com/complex/platform/bar/BarService.java": 963,
+    "backend/src/main/java/com/complex/platform/bar/BarService.java": 934,
     "backend/src/main/java/com/complex/platform/bar/BarOrderService.java": 1749,
     "backend/src/main/java/com/complex/platform/bar/BarBillingService.java": 1018,
-    "backend/src/main/java/com/complex/platform/bar/BarTableSessionService.java": 726
+    "backend/src/main/java/com/complex/platform/bar/BarTableSessionService.java": 724
   },
   "gates": {
     "semgrep": {
@@ -128,10 +128,10 @@
       "reason": "current live mount check failed, and historical passed evidence cannot prove current automount or production recovery readiness"
     },
     "runtime_acceptance": {
-      "backend_tests": 6287,
+      "backend_tests": 6311,
       "backend_failures": 0,
       "backend_errors": 0,
-      "web_unit_tests": 1552,
+      "web_unit_tests": 1557,
       "ui_tests": 47,
       "real_backend_ui_tests": 3,
       "last_run_passed": true,
