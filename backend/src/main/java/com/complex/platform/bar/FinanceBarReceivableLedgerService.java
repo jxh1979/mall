@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import com.complex.platform.finance.ArApItemRecord;
 import com.complex.platform.finance.FinanceService;
@@ -47,6 +47,11 @@ class FinanceBarReceivableLedgerService implements BarReceivableLedgerService {
     @Override
     public boolean isBusinessDayLocked(LocalDate businessDate) {
         return financeService.isBusinessDayLocked(businessDate);
+    }
+
+    @Override
+    public void postShiftOverageIncome(String shiftId, String barId, long amountCent) {
+        financeService.postBarShiftOverageIncome(shiftId, barId, amountCent);
     }
 
     @Override

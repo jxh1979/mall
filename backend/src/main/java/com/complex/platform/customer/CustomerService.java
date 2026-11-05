@@ -1,6 +1,6 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.13
+// 文件版本：V0.14
 
 import com.complex.platform.bar.BarDepositRuleRecord;
 import com.complex.platform.bar.BarRepository;
@@ -1061,6 +1061,20 @@ public class CustomerService implements com.complex.platform.ticketing.KioskBuye
                     BarReservationInvitationMemberRecord existing = members.stream()
                             .filter(member -> memberIdentifier.equals(member.memberIdentifier()))
                             .findFirst().orElse(null);
+                    // 第十八批 R 段第 152 条 152-R2（第十八批裁决 34「销售可以通过微信等发送邀请函，客户点击后确定自己是订台人还是参与者」；
+                    // BSM:870「开卡人（订下这个卡座的人）与被邀请人（接受邀请占用名额的人）」；ENUM:105 一人一个名额、绑定本人的动态入场码）：
+                    // 员工代订、一体机订台没挂客人账号，选「我是订台人」即把订台归到本人名下，签发时的开卡人占位行改成本人（占位行本来就占一个名额，不另占）。
+                    if (Boolean.TRUE.equals(actual.asHolder())) {
+                        if (trimToNull(reservation.customerId()) != null) {
+                            throw ApiException.conflict("BAR_INVITATION_HOLDER_TAKEN", "这张订台已有订台人，请选「我是参与者」接受");
+                        }
+                        if (existing != null) {
+                            throw ApiException.conflict("BAR_INVITATION_ALREADY_ACCEPTED", "你已作为参与者接受该邀请");
+                        }
+                        barRepository.claimReservationHolder(reservation.id(), customer.id());
+                        return barRepository.listInvitationMembers(reservation.id()).stream()
+                                .filter(BarReservationInvitationMemberRecord::isHolder).findFirst().orElseThrow();
+                    }
                     if (existing != null && !"revoked".equals(existing.status())) {
                         return existing; // 幂等：同一朋友重复确认返回原记录，不重复占名额
                     }

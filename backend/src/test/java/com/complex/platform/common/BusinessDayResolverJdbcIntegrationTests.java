@@ -1,6 +1,6 @@
 package com.complex.platform.common;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -110,6 +110,27 @@ class BusinessDayResolverJdbcIntegrationTests {
         assertThat(resolver.projectOfMerchant(retail)).isEqualTo(project);
     }
 
+    /**
+     * 第十八批 R 段 143-R2（ENUM:190「由各域主管公司的财务岗在该营业日闭店之后完成核对并逐类标记」；BSM:1682「出厂默认起点为上午 10:00、
+     * 闭店为次日 07:00」）：营业日的闭店时刻＝营业日次日的闭店整点，取该营业日起点所在的版本——酒吧按该酒吧已批准版本（闭店 05:00），
+     * 版本生效前按出厂 07:00；综合体按综合体已批准版本（闭店 06:00）。
+     */
+    @Test
+    void closeAtUsesTheCloseHourOfTheVersionInForceAtTheBusinessDayStart() {
+        String bar = bar("c");
+        barVersion(bar, 10, 5, EFFECTIVE);
+        assertThat(resolver.closeAt(null, bar, LocalDate.parse("2096-05-12")).toInstant()).isEqualTo(Instant.parse("2096-05-12T21:00:00Z"));
+        assertThat(resolver.closeAt(null, bar, LocalDate.parse("2096-05-08")).toInstant()).isEqualTo(Instant.parse("2096-05-08T23:00:00Z"));
+        jdbc.update("""
+                INSERT INTO amusement_business_day_configs(id,project_id,version,zone_id,cutoff_hour,min_cutoff_hour,max_cutoff_hour,
+                  close_hour,min_close_hour,max_close_hour,effective_at,status,reason,created_by,created_at,decided_by,decided_at)
+                VALUES(?,?,'V0.01','Asia/Shanghai',10,0,23,6,0,23,?,'approved','测试已批准版本','bdr_requester',?,'usr_master',?)
+                """, "abd_bdc_" + suffix, project, Timestamp.from(EFFECTIVE),
+                Timestamp.from(EFFECTIVE.minusSeconds(7200)), Timestamp.from(EFFECTIVE.minusSeconds(3600)));
+        assertThat(resolver.closeAt(project, null, LocalDate.parse("2096-05-12")).toInstant()).isEqualTo(Instant.parse("2096-05-12T22:00:00Z"));
+        assertThat(resolver.closeAt(project, null, LocalDate.parse("2096-05-08")).toInstant()).isEqualTo(Instant.parse("2096-05-08T23:00:00Z"));
+    }
+
     private String bar(String tag) {
         String bar = "bdr_bar_" + tag + "_" + suffix;
         jdbc.update("INSERT INTO merchants(id,merchant_name,merchant_type,project_id,status,created_at,updated_at) VALUES(?,?,'bar',?,'active',now(),now())",
@@ -118,11 +139,15 @@ class BusinessDayResolverJdbcIntegrationTests {
     }
 
     private void barVersion(String bar, int cutoffHour, Instant effectiveAt) {
+        barVersion(bar, cutoffHour, 7, effectiveAt);
+    }
+
+    private void barVersion(String bar, int cutoffHour, int closeHour, Instant effectiveAt) {
         jdbc.update("""
                 INSERT INTO bar_business_day_configs(id,bar_id,project_id,version,cutoff_hour,min_cutoff_hour,max_cutoff_hour,
                   close_hour,min_close_hour,max_close_hour,effective_at,status,reason,created_by,created_at,decided_by,decided_at)
-                VALUES(?,?,?,'V0.01',?,0,23,7,0,23,?,'approved','测试已批准版本','bdr_requester',?,'usr_master',?)
-                """, "bbd_" + bar, bar, project, cutoffHour, Timestamp.from(effectiveAt),
+                VALUES(?,?,?,'V0.01',?,0,23,?,0,23,?,'approved','测试已批准版本','bdr_requester',?,'usr_master',?)
+                """, "bbd_" + bar, bar, project, cutoffHour, closeHour, Timestamp.from(effectiveAt),
                 Timestamp.from(effectiveAt.minusSeconds(7200)), Timestamp.from(effectiveAt.minusSeconds(3600)));
     }
 }

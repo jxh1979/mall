@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.ticketing.TicketingRepository;
@@ -26,9 +26,13 @@ public class BarCustomerInvitationService {
             String depositStatus, String status, String invitationStatus) {
     }
 
-    /** 扫邀请函二维码后的预览：酒吧、卡座、可进人数与剩余名额，不占名额。 */
+    /**
+     * 扫邀请函二维码后的预览：酒吧、卡座、可进人数与剩余名额，不占名额。
+     * 第十八批 R 段第 152 条 152-R2（第十八批裁决 34「客户点击后确定自己是订台人还是参与者」）：holderClaimable＝这张订台还没有订台人
+     * （员工代订、一体机订台尚未被认领），客人可选「我是订台人」；客人自助订台本来就有开卡人，恒为 false。
+     */
     public record InvitationPreview(String reservationId, String barId, String barName, String tableId, String tableName,
-            Instant reservedAt, int capacity, int remaining) {
+            Instant reservedAt, int capacity, int remaining, boolean holderClaimable) {
     }
 
     /** 本人动态入场码（明文只出现在本响应，不落库）。 */
@@ -78,7 +82,8 @@ public class BarCustomerInvitationService {
         int seats = reservation.invitationCapacity();
         return new InvitationPreview(reservation.id(), reservation.barId(), (String) names.get("merchant_name"),
                 reservation.tableId(), (String) names.get("table_name"), reservation.reservedAt(), seats,
-                (int) Math.max(seats - occupied, 0));
+                (int) Math.max(seats - occupied, 0),
+                com.complex.platform.common.Strings.trimToNull(reservation.customerId()) == null);
     }
 
     /**

@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.10
+// 文件版本：V0.11
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.PageResponse;
@@ -901,7 +901,18 @@ public class BarService {
     public PageResponse<BarShiftRecord> listShifts() {
         return operations.readPage(
                 BarReadOperation.LIST_SHIFTS,
-                () -> repository.listShifts(authorizationService.currentMerchantScope())
+                () -> {
+                    // 第十八批 R 段第 142 条 142-R3：只持日结管理码、不持交班管理码的项目侧账号按该码可触及的项目列各酒吧班次；
+                    // 商户账号、平台管理员与持交班管理码的读法不改。
+                    var actor = authorizationService.currentActor();
+                    if (!authorizationService.isPlatformAdmin(actor)
+                            && authorizationService.currentMerchantIdQuietly().isEmpty()
+                            && !authorizationService.currentActorHasPermission("bar.shift.manage")) {
+                        return repository.listShiftsInProjects(authorizationService
+                                .projectReach(actor, BarShiftService.FINANCE_REVIEW).organizationIds());
+                    }
+                    return repository.listShifts(authorizationService.currentMerchantScope());
+                }
         );
     }
 
@@ -929,6 +940,70 @@ public class BarService {
                 BarShiftRecord.class,
                 BarWriteOperation.CLOSE_SHIFT,
                 () -> shiftService.closeShift(id, request)
+        );
+    }
+
+    /** 第十八批 R 段第 142 条 142-R4：加入同一钱箱；商户闸在幂等之前（BarShiftService.requireShiftBar）。 */
+    @com.complex.platform.gate.GuardedAction(capability = "bar.shift.manage")
+    @Transactional
+    public BarShiftRecord joinShift(String shiftId, BarShiftActionRequest request) {
+        String id = operations.requireText(shiftId, "shift_id");
+        shiftService.requireShiftBar(id);
+        return operations.executeWrite(
+                "joinBarShift:" + id,
+                request == null ? null : request.idempotencyKey(),
+                request,
+                BarShiftRecord.class,
+                BarWriteOperation.JOIN_SHIFT,
+                () -> shiftService.joinShift(id, request)
+        );
+    }
+
+    /** 第十八批 R 段第 142 条 142-R1：财务复核平账；范围闸在幂等之前（BarShiftService.requireFinanceScope）。 */
+    @com.complex.platform.gate.GuardedAction(capability = "finance.daily_close.manage")
+    @Transactional
+    public BarShiftRecord resolveShift(String shiftId, BarShiftResolveRequest request) {
+        String id = operations.requireText(shiftId, "shift_id");
+        shiftService.requireFinanceScope(id);
+        return operations.executeWrite(
+                "resolveBarShift:" + id,
+                request == null ? null : request.idempotencyKey(),
+                request,
+                BarShiftRecord.class,
+                BarWriteOperation.RESOLVE_SHIFT,
+                () -> shiftService.resolveShift(id, request)
+        );
+    }
+
+    /** 第十八批 R 段第 142 条 142-R2：交班单签字；身份闸在幂等之前（BarShiftService.requireSigner）。 */
+    @com.complex.platform.gate.GuardedAction(capability = "bar.shift.manage")
+    @Transactional
+    public BarShiftRecord signShift(String shiftId, BarShiftActionRequest request) {
+        String id = operations.requireText(shiftId, "shift_id");
+        shiftService.requireSigner(id);
+        return operations.executeWrite(
+                "signBarShift:" + id,
+                request == null ? null : request.idempotencyKey(),
+                request,
+                BarShiftRecord.class,
+                BarWriteOperation.SIGN_SHIFT,
+                () -> shiftService.signShift(id, request)
+        );
+    }
+
+    /** 第十八批 R 段第 142 条 142-R2：财务见证归档；范围闸同复核平账、在幂等之前（BarShiftService.requireFinanceScope）。 */
+    @com.complex.platform.gate.GuardedAction(capability = "finance.daily_close.manage")
+    @Transactional
+    public BarShiftRecord witnessShift(String shiftId, BarShiftActionRequest request) {
+        String id = operations.requireText(shiftId, "shift_id");
+        shiftService.requireFinanceScope(id);
+        return operations.executeWrite(
+                "witnessBarShift:" + id,
+                request == null ? null : request.idempotencyKey(),
+                request,
+                BarShiftRecord.class,
+                BarWriteOperation.WITNESS_SHIFT,
+                () -> shiftService.witnessShift(id, request)
         );
     }
 }

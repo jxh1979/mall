@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.36
+// 文件版本：V0.37
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -15,6 +15,7 @@ import com.complex.platform.finance.dto.ArApItemRequest;
 import com.complex.platform.finance.dto.ArApPaymentRequest;
 import com.complex.platform.finance.dto.PropertyFeeBillRequest;
 import com.complex.platform.finance.dto.PropertyFeeRateRequest;
+import com.complex.platform.finance.dto.DailyCloseActionRequest;
 import com.complex.platform.finance.dto.DailyCloseRequest;
 import com.complex.platform.finance.dto.DepositActionRequest;
 import com.complex.platform.finance.dto.InventoryVariancePostRequest;
@@ -85,6 +86,15 @@ public class FinanceService implements TerminationSettlementPort {
     private static final Set<String> REFUND_DIRECTIONS = Set.of("original", "cash", "third_party", "mixed");
     private static final String DEFAULT_REFUND_DIRECTION = "original";
     private static final Set<String> DAILY_CLOSE_SCOPES = Set.of("project", "merchant", "bar", "ticketing", "amusement");
+    /** 第十八批 R 段 143-R2：日结五类最终标记的数据类别与 ENUM:190 原词（按原句顺序）；143-R3 逾期待办同用（FinanceFinalMarkOverdueService）。 */
+    static final Map<String, String> FINAL_MARK_CATEGORIES = new java.util.LinkedHashMap<>();
+    static {
+        FINAL_MARK_CATEGORIES.put("orders_verifications", "当日订单与核销记录");
+        FINAL_MARK_CATEGORIES.put("refunds_reversals", "当日退款与冲正记录");
+        FINAL_MARK_CATEGORIES.put("production_handover", "当日出品与物品交接记录");
+        FINAL_MARK_CATEGORIES.put("attendance", "当日考勤记录");
+        FINAL_MARK_CATEGORIES.put("anomaly_resolutions", "当日异常处置记录");
+    }
     private static final Set<String> OFFLINE_PAYMENT_METHODS = Set.of("cash", "bank_transfer", "pos", "other");
     // 第四轮裁决第 3 条：退租结算押金抵扣销账的收款方式（财务结算 PRD L945 押金动作「抵扣（offset）」；同 dividend_offset 范式）。
     private static final String DEPOSIT_OFFSET_METHOD = "deposit_offset";
@@ -134,6 +144,8 @@ public class FinanceService implements TerminationSettlementPort {
             Map.entry("ticket_distribution_recovery", "通票分账追收"),
             // 第十八批 M 段第 117 条（ENUM:256、BSM:1380）：商户承担的工单用料费应收。
             Map.entry("work_order_material", "工单用料费（商户承担）"),
+            // 第十八批 R 段第 142 条 142-R1（BSM:1081「长款当期计入该商户营业外收入并单独留痕可查」）。
+            Map.entry("bar_shift_overage", "收银长款（营业外收入）"),
             // HP-P01（BSM L1437 账单类型「车位月租」；L1445「停车费收入归城市项目公司」）：合同车位月租应收、客人停车费内部核算。
             Map.entry("contract_parking_monthly", "车位月租"),
             Map.entry("parking_fee", "停车费"),
@@ -334,6 +346,11 @@ public class FinanceService implements TerminationSettlementPort {
     }
 
     public PageResponse<ArApItemRecord> listArApItems(String keyword, int page, int size) {
+        return listArApItems(keyword, null, page, size);
+    }
+
+    /** 第十八批 R 段 143-R4：lockedDayCloseId 非空时只列被该日结锁定的台账（日结页面「本日结锁定的台账」），范围同上。 */
+    public PageResponse<ArApItemRecord> listArApItems(String keyword, String lockedDayCloseId, int page, int size) {
         // 服务端真分页:租户 scope(currentMerchantScope)决定 merchant_id 谓词,keyword 跨 单号/方向/状态 服务端筛选。
         return operations.readPageResult(
                 AuditedOperation.of(
@@ -345,7 +362,8 @@ public class FinanceService implements TerminationSettlementPort {
                     var reach = authorizationService.projectReach(actor, "finance.ar_ap.view");
                     String merchant = reach.platformAdmin() ? null : trimToNull(actor.merchantId());
                     return repository.listArApItemsForProjects(merchant,
-                            readProjects(reach, merchant), keyword, page, size, payrollVisibleItems(FinancePayrollService.VIEW));
+                            readProjects(reach, merchant), keyword, page, size, payrollVisibleItems(FinancePayrollService.VIEW),
+                            trimToNull(lockedDayCloseId));
                 }
         );
     }
@@ -381,7 +399,7 @@ public class FinanceService implements TerminationSettlementPort {
         List<ArApItemRecord> items = new java.util.ArrayList<>();
         for (int page=1;;page++) {
             var result = repository.listArApItemsForProjects(merchant,
-                    projects, null, page, 200, payrollVisibleItems(payrollPermission));
+                    projects, null, page, 200, payrollVisibleItems(payrollPermission), null);
             items.addAll(result.items());
             if (result.items().isEmpty() || items.size() >= result.total()) break;
         }
@@ -518,11 +536,72 @@ public class FinanceService implements TerminationSettlementPort {
                 businessDate, authorizationService.currentMerchantScope().orElse(null));
     }
 
+    /**
+     * 第十八批 R 段第 143 条 143-R1（ENUM:190「待生成、待确认、有差异、已确认、已锁定、已归档」；BSM:1682「按营业日生成日结批次。」）：
+     * 生成日结＝待确认，防同日同范围重复并按七源汇总；日结闸在确认与锁定时拦（{@link #requireDailyCloseGates}），台账在锁定时才打锁。
+     * 范围闸在幂等之前（{@link #requireDailyCloseScope}）。
+     */
     @com.complex.platform.gate.GuardedAction(capability = "finance.daily_close.lock")
     @Transactional
     public DailyCloseRecord createDailyClose(DailyCloseRequest request) {
+        DailyCloseRequest actual = requireRequest(request);
+        requireDailyCloseScope(requireEnum(actual.scopeType(), DAILY_CLOSE_SCOPES, "scope_type"),
+                requireText(actual.scopeId(), "scope_id"), "finance.daily_close.lock");
         return executeWrite(
                 "createDailyClose",
+                actual.idempotencyKey(),
+                actual,
+                DailyCloseRecord.class,
+                "finance_daily_close.generated",
+                "finance_daily_close.generate_failed",
+                "finance.daily_close.lock",
+                "finance_daily_close",
+                () -> generateDailyClose(actual)
+        );
+    }
+
+    /**
+     * 143-R1 确认日结（PGM:664「单店层面的财务工作——日结确认与锁定……由该酒吧对应的财务 BP 负责」）：只收待确认；跑日结闸；
+     * 按当前数据重算七源汇总；记确认时间。
+     */
+    @com.complex.platform.gate.GuardedAction(capability = "finance.daily_close.lock")
+    @Transactional
+    public DailyCloseRecord confirmDailyClose(String dailyCloseId, DailyCloseActionRequest request) {
+        DailyCloseRecord dailyClose = requireDailyCloseInScope(dailyCloseId, "finance.daily_close.lock");
+        return executeWrite(
+                "confirmDailyClose:" + dailyClose.id(),
+                request == null ? null : request.idempotencyKey(),
+                request,
+                DailyCloseRecord.class,
+                "finance_daily_close.confirmed",
+                "finance_daily_close.confirm_failed",
+                "finance.daily_close.lock",
+                "finance_daily_close",
+                () -> {
+                    if (!"pending_confirm".equals(dailyClose.status())) {
+                        throw ApiException.conflict("DAILY_CLOSE_NOT_PENDING", "该日结当前状态不能确认");
+                    }
+                    DailyCloseWindow w = requireDailyCloseGates(dailyClose);
+                    Instant now = Instant.now();
+                    summarizeDailyClose(dailyClose.id(), dailyClose.businessDate(), now, dailyClose.scopeType(), dailyClose.scopeId(),
+                            w.dayFrom(), w.dayTo(), w.barFrom(), w.barTo(), w.barWindows());
+                    return repository.saveDailyClose(new DailyCloseRecord(dailyClose.id(), dailyClose.businessDate(),
+                            dailyClose.scopeType(), dailyClose.scopeId(), dailyClose.forceClose(), "confirmed",
+                            dailyClose.lockedAt(), dailyClose.createdAt(), now, dailyClose.archivedAt(),
+                            dailyClose.finalMarkCategories()));
+                });
+    }
+
+    /**
+     * 143-R1 锁定日结（BSM:2023「日结锁定后不能直接补录影响金额，必须上级审批通过后补录。」）：只收已确认；再跑一遍日结闸
+     * （确认与锁定两处都拦）；记锁定时间，并给当日台账打锁。
+     */
+    @com.complex.platform.gate.GuardedAction(capability = "finance.daily_close.lock")
+    @Transactional
+    public DailyCloseRecord lockDailyClose(String dailyCloseId, DailyCloseActionRequest request) {
+        DailyCloseRecord dailyClose = requireDailyCloseInScope(dailyCloseId, "finance.daily_close.lock");
+        return executeWrite(
+                "lockDailyClose:" + dailyClose.id(),
                 request == null ? null : request.idempotencyKey(),
                 request,
                 DailyCloseRecord.class,
@@ -530,8 +609,95 @@ public class FinanceService implements TerminationSettlementPort {
                 "finance_daily_close.lock_failed",
                 "finance.daily_close.lock",
                 "finance_daily_close",
-                () -> lockDailyClose(request)
-        );
+                () -> {
+                    if (!"confirmed".equals(dailyClose.status())) {
+                        throw ApiException.conflict("DAILY_CLOSE_NOT_CONFIRMED", "该日结当前状态不能锁定");
+                    }
+                    requireDailyCloseGates(dailyClose);
+                    Instant now = Instant.now();
+                    DailyCloseRecord locked = repository.saveDailyClose(new DailyCloseRecord(dailyClose.id(),
+                            dailyClose.businessDate(), dailyClose.scopeType(), dailyClose.scopeId(), dailyClose.forceClose(),
+                            "locked", now, dailyClose.createdAt(), dailyClose.confirmedAt(), dailyClose.archivedAt(),
+                            dailyClose.finalMarkCategories()));
+                    // R5 T7：把当日属于本 scope 的 ar_ap_items 打上 locked_day_close_id。第十八批 R 段 143-R7（ENUM:190「在原营业日的日结锁定表单上
+                    // 关联显示该笔补录的金额与情况」；PGM:664 单店日结由该酒吧对应的财务 BP 负责）：merchant、bar 范围只锁该日结商户（scope_id，
+                    // 与 dailyCloseProject 同把它当商户）的台账，平台侧财务锁某家酒吧的日结不再把别家当日台账锁到这一张上；
+                    // project、ticketing、amusement 范围照旧按操作人商户范围（商户角色仅锁本商户行；第 161 条另做）。
+                    String lockMerchant = "merchant".equals(dailyClose.scopeType()) || "bar".equals(dailyClose.scopeType())
+                            ? dailyClose.scopeId() : authorizationService.currentMerchantScope().orElse(null);
+                    repository.lockArApItemsForDailyClose(dailyClose.id(), dailyClose.businessDate(), lockMerchant);
+                    return locked;
+                });
+    }
+
+    /**
+     * 第十八批 R 段第 143 条 143-R2（ENUM:190「需要逐类标记为最终的数据集有五类：……由各域主管公司的财务岗在该营业日闭店之后完成核对并逐类标记」
+     * 「标记后不可撤销，事后发现错误只能走冲正，不得改回未最终。」）：待确认的日结按类标记为最终——闭店之后才能标（闭店时刻按日结所属综合体，
+     * 酒吧按该酒吧，{@link com.complex.platform.common.BusinessDayResolver#closeAt}），每类只标一次，不提供撤销或修改；标记人由统一留痕记录。
+     */
+    @com.complex.platform.gate.GuardedAction(capability = "finance.daily_close.lock")
+    @Transactional
+    public DailyCloseRecord markDailyCloseFinal(String dailyCloseId, DailyCloseActionRequest request) {
+        DailyCloseRecord dailyClose = requireDailyCloseInScope(dailyCloseId, "finance.daily_close.lock");
+        return executeWrite(
+                "markDailyCloseFinal:" + dailyClose.id(),
+                request == null ? null : request.idempotencyKey(),
+                request,
+                DailyCloseRecord.class,
+                "finance_daily_close.final_marked",
+                "finance_daily_close.final_mark_failed",
+                "finance.daily_close.lock",
+                "finance_daily_close",
+                () -> {
+                    String category = requireEnum(request == null ? null : request.category(), FINAL_MARK_CATEGORIES.keySet(),
+                            "category");
+                    if (!"pending_confirm".equals(dailyClose.status())) {
+                        throw ApiException.conflict("DAILY_CLOSE_NOT_PENDING", "该日结当前状态不能标记为最终");
+                    }
+                    String scopeType = dailyClose.scopeType();
+                    String scopeId = dailyClose.scopeId();
+                    String bar = "bar".equals(scopeType) ? scopeId
+                            : "merchant".equals(scopeType) ? businessDayResolver.barOfMerchant(scopeId) : null;
+                    Instant now = Instant.now();
+                    if (now.isBefore(businessDayResolver.closeAt(dailyCloseProject(scopeType, scopeId), bar,
+                            dailyClose.businessDate()).toInstant())) {
+                        throw ApiException.conflict("FINAL_MARK_BEFORE_CLOSE", "该营业日尚未闭店，闭店之后才能标记");
+                    }
+                    if (dailyClose.finalMarkCategories().contains(category)) {
+                        throw ApiException.conflict("FINAL_MARK_EXISTS", "该类数据已标记为最终，不可撤销");
+                    }
+                    repository.saveDailyCloseFinalMark(dailyClose.id(), category, now);
+                    return withShiftDifference(repository.findDailyCloseById(dailyClose.id()).orElseThrow());
+                });
+    }
+
+    /**
+     * 第十八批 R 段第 143 条 143-R5（第十八批裁决 33「锁定后，由该店持日结锁定权限的财务 BP 点「归档」；归档后只读可查，
+     * 锁定后补录照常走上级审批。与设备「报废后可归档」同一办法。」；ENUM:190「……已锁定、已归档」）：只收已锁定，记归档时间；
+     * 不动七源汇总与台账锁（归档日照样拦直接改账，补录照常走审批）。已归档为终态，确认、锁定、标记、归档对它都按状态拒。
+     */
+    @com.complex.platform.gate.GuardedAction(capability = "finance.daily_close.lock")
+    @Transactional
+    public DailyCloseRecord archiveDailyClose(String dailyCloseId, DailyCloseActionRequest request) {
+        DailyCloseRecord dailyClose = requireDailyCloseInScope(dailyCloseId, "finance.daily_close.lock");
+        return executeWrite(
+                "archiveDailyClose:" + dailyClose.id(),
+                request == null ? null : request.idempotencyKey(),
+                request,
+                DailyCloseRecord.class,
+                "finance_daily_close.archived",
+                "finance_daily_close.archive_failed",
+                "finance.daily_close.lock",
+                "finance_daily_close",
+                () -> {
+                    if (!"locked".equals(dailyClose.status())) {
+                        throw ApiException.conflict("DAILY_CLOSE_NOT_LOCKED", "只有已锁定的日结可以归档");
+                    }
+                    return repository.saveDailyClose(new DailyCloseRecord(dailyClose.id(), dailyClose.businessDate(),
+                            dailyClose.scopeType(), dailyClose.scopeId(), dailyClose.forceClose(), "archived",
+                            dailyClose.lockedAt(), dailyClose.createdAt(), dailyClose.confirmedAt(), Instant.now(),
+                            dailyClose.finalMarkCategories()));
+                });
     }
 
     @com.complex.platform.gate.GuardedAction(capability = "finance.payment_intent.create")
@@ -1382,25 +1548,37 @@ public class FinanceService implements TerminationSettlementPort {
                 "finance.daily_close.manage",
                 "finance_daily_close_summary",
                 () -> {
-                    DailyCloseRecord dailyClose = repository.findDailyCloseById(id)
-                            .orElseThrow(() -> ApiException.notFound("DAILY_CLOSE_NOT_FOUND", "日结记录不存在或已被删除"));
-                    // 隔离：商户角色只能看自身 scope 的日结汇总。
-                    Optional<String> scope = authorizationService.currentMerchantScope();
-                    if (scope.isPresent()
-                            && "merchant".equals(dailyClose.scopeType())
-                            && !scope.get().equals(dailyClose.scopeId())) {
-                        throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN",
-                                "无权查看其他商户的日结记录");
-                    }
+                    // 第十八批 R 段 143-R1：与日结写入同一范围闸（商户账号只看本商户的日结，其余按可触及项目）。
+                    requireDailyCloseInScope(id, "finance.daily_close.manage");
                     return repository.listDailyCloseSummaries(id);
+                });
+    }
+
+    /**
+     * 第十八批 R 段第 143 条 143-R4（ENUM:190「日结锁定后的补录须上级审批，且不改动已锁定的日结金额：补录金额归入当期，并在补录记录上标明其所属的
+     * 原营业日；同时在原营业日的日结锁定表单上关联显示该笔补录的金额与情况，两边互相可查。」；财务 PRD §5.4 日结页面直接展示补录人、补录原因、
+     * 批准人含时间）：按日结号查挂在该日结上的锁定后补录，范围同按日结号查汇总。
+     */
+    public PageResponse<ArApAdjustmentRecord> listDailyCloseAdjustments(String dailyCloseId) {
+        String id = requireText(dailyCloseId, "daily_close_id");
+        return readPage(
+                "finance.daily_close_adjustment.viewed",
+                "finance.daily_close_adjustment.view_failed",
+                "finance.daily_close.manage",
+                "ar_ap_adjustment",
+                () -> {
+                    requireDailyCloseInScope(id, "finance.daily_close.manage");
+                    return repository.listAdjustmentsByDailyClose(id);
                 });
     }
 
     /**
      * 第十八批 P 段第 133 条 133-R2（BSM:1848「财务看退款、差异、日结和结算依据。」、BSM:1682「按营业日生成日结批次。」）：
      * 日结批次按营业日倒序分页。范围同查看类列表（{@link #readProjects}）：平台管理员看全部，商户账号只看本商户，其余按可触及项目。
+     * 第十八批 R 段 143-R1：可再按营业日、范围类型、范围编号过滤，页面据此在查不到时显示「待生成」（不入库）。
+     * 143-R6：待确认的行有差异时返回 has_difference（{@link #withShiftDifference}）。
      */
-    public PageResponse<DailyCloseRecord> listDailyCloses(int page, int size) {
+    public PageResponse<DailyCloseRecord> listDailyCloses(LocalDate businessDate, String scopeType, String scopeId, int page, int size) {
         return operations.readPageResult(
                 AuditedOperation.of(
                         "finance.daily_close.viewed", "finance.daily_close.view_failed",
@@ -1410,7 +1588,11 @@ public class FinanceService implements TerminationSettlementPort {
                     var actor = authorizationService.currentActor();
                     var reach = authorizationService.projectReach(actor, "finance.daily_close.manage");
                     String merchant = reach.platformAdmin() ? null : trimToNull(actor.merchantId());
-                    return repository.listDailyCloses(merchant, readProjects(reach, merchant), page, size);
+                    PageResponse<DailyCloseRecord> result = repository.listDailyCloses(merchant, readProjects(reach, merchant),
+                            businessDate, trimToNull(scopeType), trimToNull(scopeId), page, size);
+                    // ponytail: 143-R6 待确认的行逐行查班次（每页不超过 200 行），慢了再改成一条 SQL。
+                    return new PageResponse<>(result.items().stream().map(this::withShiftDifference).toList(),
+                            result.page(), result.pageSize(), result.total());
                 }
         );
     }
@@ -1477,7 +1659,10 @@ public class FinanceService implements TerminationSettlementPort {
                 null,
                 reason,
                 now,
-                null));
+                null,
+                item.itemNo(),
+                // 143-R4（ENUM:190「在补录记录上标明其所属的原营业日」）：锁定该台账的日结的营业日。
+                repository.findDailyCloseById(lockedDayCloseId).map(DailyCloseRecord::businessDate).orElse(null)));
     }
 
     private ArApAdjustmentRecord decideAdjustment(String adjustmentId, boolean approve) {
@@ -1551,7 +1736,9 @@ public class FinanceService implements TerminationSettlementPort {
                 approver,
                 adjustment.reason(),
                 adjustment.createdAt(),
-                now));
+                now,
+                adjustment.itemNo(),
+                adjustment.originalBusinessDate()));
     }
 
     /**
@@ -1840,24 +2027,94 @@ public class FinanceService implements TerminationSettlementPort {
         return "merchant".equals(scopeType) || "bar".equals(scopeType) ? businessDayResolver.projectOfMerchant(scopeId) : scopeId;
     }
 
-    private DailyCloseRecord lockDailyClose(DailyCloseRequest request) {
-        DailyCloseRequest actual = requireRequest(request);
+    /**
+     * 143-R1 日结范围闸（PGM:664「单店层面的财务工作——日结确认与锁定……由该酒吧对应的财务 BP 负责」；PGM:659「所有业务数据默认按项目隔离，
+     * 普通岗位没有跨项目查看权」）：写法同 {@link #requireArApScope}——商户账号只认本商户的 merchant、bar 范围；其余账号按该码可触及的项目
+     * 覆盖日结所属综合体（{@link #dailyCloseProject}）。
+     */
+    private void requireDailyCloseScope(String scopeType, String scopeId, String permission) {
+        authorizationService.requirePermission(permission);
+        var actor = authorizationService.currentActor();
+        var reach = authorizationService.projectReach(actor, permission);
+        if (!reach.platformAdmin() && trimToNull(actor.merchantId()) != null) {
+            if (!("merchant".equals(scopeType) || "bar".equals(scopeType)) || !actor.merchantId().equals(scopeId)) {
+                throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN", "无权操作其他商户的日结");
+            }
+            return;
+        }
+        if (!reach.covers(dailyCloseProject(scopeType, scopeId))) {
+            throw ApiException.forbidden("CROSS_PROJECT_FORBIDDEN", "无权操作其他项目的日结");
+        }
+    }
+
+    /** 143-R1：按日结号办理或查看前先取日结（无则 404）再过范围闸；在幂等之前调。 */
+    private DailyCloseRecord requireDailyCloseInScope(String dailyCloseId, String permission) {
+        DailyCloseRecord dailyClose = repository.findDailyCloseById(requireText(dailyCloseId, "daily_close_id"))
+                .orElseThrow(() -> ApiException.notFound("DAILY_CLOSE_NOT_FOUND", "日结记录不存在或已被删除"));
+        requireDailyCloseScope(dailyClose.scopeType(), dailyClose.scopeId(), permission);
+        return dailyClose;
+    }
+
+    private DailyCloseRecord generateDailyClose(DailyCloseRequest actual) {
         LocalDate businessDate = requireDate(actual.businessDate(), "business_date");
         String scopeType = requireEnum(actual.scopeType(), DAILY_CLOSE_SCOPES, "scope_type");
         String scopeId = requireText(actual.scopeId(), "scope_id");
 
-        // P1 fix: prevent duplicate locks for the same date + scope using different keys
+        // P1 fix: prevent duplicate closes for the same date + scope using different keys
         if (repository.dailyCloseExists(businessDate, scopeType, scopeId)) {
             throw ApiException.conflict("DAILY_CLOSE_EXISTS",
-                    "该营业日已完成日结锁定：日期 " + businessDate + "，范围 " + scopeType + "/" + scopeId);
+                    "该营业日该范围已生成日结：日期 " + businessDate + "，范围 " + scopeType + "/" + scopeId);
         }
-        // 第十八批第 1 条（ENUM:187 按每个项目、每家酒吧可配）：非酒吧来源用日结所属综合体的窗口，酒吧来源逐家用各自窗口。
+        Instant now = Instant.now();
+        String dailyCloseId = "daily_close_" + slug(actual.idempotencyKey());
+        DailyCloseRecord saved = repository.saveDailyClose(new DailyCloseRecord(
+                dailyCloseId,
+                businessDate,
+                scopeType,
+                scopeId,
+                actual.forceClose() != null && actual.forceClose(),
+                "pending_confirm",
+                null,
+                now,
+                null,
+                null,
+                List.of()
+        ));
+        // R5 T7：七源汇总写入 finance_daily_close_summaries（口径见 r5-aggregation-metrics-draft §1.2，待财务复核）。
+        DailyCloseWindow w = dailyCloseWindow(businessDate, scopeType, scopeId);
+        summarizeDailyClose(dailyCloseId, businessDate, now, scopeType, scopeId,
+                w.dayFrom(), w.dayTo(), w.barFrom(), w.barTo(), w.barWindows());
+        return saved;
+    }
+
+    /** 日结窗口：非酒吧来源用日结所属综合体的窗口 [dayFrom, dayTo)，酒吧来源逐家用 barWindows（其余酒吧出厂窗 [barFrom, barTo)）。 */
+    private record DailyCloseWindow(Instant dayFrom, Instant dayTo, Instant barFrom, Instant barTo, Map<String, Instant[]> barWindows) {
+    }
+
+    /** 第十八批第 1 条（ENUM:187 按每个项目、每家酒吧可配）：非酒吧来源用日结所属综合体的窗口，酒吧来源逐家用各自窗口。 */
+    private DailyCloseWindow dailyCloseWindow(LocalDate businessDate, String scopeType, String scopeId) {
         String dayProject = dailyCloseProject(scopeType, scopeId);
-        Instant dayFrom = businessDayResolver.start(dayProject, null, businessDate);
-        Instant dayTo = businessDayResolver.end(dayProject, null, businessDate);
-        Instant barFrom = businessDayResolver.start(null, null, businessDate);
-        Instant barTo = businessDayResolver.end(null, null, businessDate);
-        Map<String, Instant[]> barWindows = businessDayResolver.barWindows(businessDate);
+        return new DailyCloseWindow(businessDayResolver.start(dayProject, null, businessDate),
+                businessDayResolver.end(dayProject, null, businessDate),
+                businessDayResolver.start(null, null, businessDate), businessDayResolver.end(null, null, businessDate),
+                businessDayResolver.barWindows(businessDate));
+    }
+
+    /**
+     * 第十八批 R 段 143-R1：日结确认与锁定共用的闸，两处都拦（ENUM:190「所属数据未标记为最终之前，日结不得确认、不得锁定」；
+     * ENUM:221「异常单据未处置完毕，所属日结不得确认锁定」）。现挂票务核销异常、酒吧账单异常、未结清酒吧账单三道；
+     * 142-R2「营业日班次未交接完成不得日结」与 143-R2 五类最终标记也挂在这里——按 dailyClose 的营业日（businessDate）、
+     * 范围（scopeType/scopeId）与本方法算出的窗口 w 取数。返回该窗口，确认时用它重算七源汇总。
+     */
+    private DailyCloseWindow requireDailyCloseGates(DailyCloseRecord dailyClose) {
+        String scopeType = dailyClose.scopeType();
+        String scopeId = dailyClose.scopeId();
+        DailyCloseWindow w = dailyCloseWindow(dailyClose.businessDate(), scopeType, scopeId);
+        Instant dayFrom = w.dayFrom();
+        Instant dayTo = w.dayTo();
+        Instant barFrom = w.barFrom();
+        Instant barTo = w.barTo();
+        Map<String, Instant[]> barWindows = w.barWindows();
         // TK-14（ENUM「异常状态的统一出口」：异常单据未处置完毕，所属日结不得确认锁定）：票务核销异常待主管处置时拒锁。
         if (repository.openTicketVerificationAnomalyExists(dayFrom, dayTo, scopeType, scopeId)) {
             throw ApiException.conflict("DAY_CLOSE_ANOMALY_PENDING",
@@ -1875,27 +2132,37 @@ public class FinanceService implements TerminationSettlementPort {
             throw ApiException.conflict("DAY_CLOSE_UNSETTLED_BILL",
                     "该营业日有未结清的酒吧账单，结清后才能日结：账单号 " + String.join("、", unsettledBills));
         }
-        Instant now = Instant.now();
-        String dailyCloseId = "daily_close_" + slug(actual.idempotencyKey());
-        DailyCloseRecord saved = repository.saveDailyClose(new DailyCloseRecord(
-                dailyCloseId,
-                businessDate,
-                scopeType,
-                scopeId,
-                actual.forceClose() != null && actual.forceClose(),
-                "locked",
-                now,
-                now
-        ));
+        // 第十八批 R 段第 142 条 142-R2（ENUM:190「日结的确认与锁定：由当班收银员完成现金清点与盘收银，接班人与其对接完成交接，并由财务跟班跟进交接完成」；
+        // BSM:1081「当班收银员与接班人双方确认签字……财务跟班见证后归档」）：开班落在该营业日、财务尚未见证归档的收银班次存在时拒确认、拒锁定。
+        if (repository.unfinishedBarShiftExists(barFrom, barTo, scopeType, scopeId, barWindows)) {
+            throw ApiException.conflict("DAY_CLOSE_SHIFT_PENDING",
+                    "该营业日有收银班次未完成交接（未班结、未平账、未签字或财务未见证）");
+        }
+        // 第十八批 R 段 143-R2（ENUM:190「所属数据未标记为最终之前，日结不得确认、不得锁定。」）：五类数据须逐类标记为最终，原文列出缺的类别。
+        List<String> notFinal = FINAL_MARK_CATEGORIES.entrySet().stream()
+                .filter(e -> !dailyClose.finalMarkCategories().contains(e.getKey())).map(Map.Entry::getValue).toList();
+        if (!notFinal.isEmpty()) {
+            throw ApiException.conflict("DAY_CLOSE_NOT_FINAL",
+                    "以下数据尚未标记为最终，日结不得确认、不得锁定：" + String.join("、", notFinal));
+        }
+        return w;
+    }
 
-        // R5 T7：七源汇总写入 finance_daily_close_summaries（口径见 r5-aggregation-metrics-draft §1.2，待财务复核）。
-        summarizeDailyClose(dailyCloseId, businessDate, now, scopeType, scopeId, dayFrom, dayTo, barFrom, barTo, barWindows);
-
-        // R5 T7：把当日属于本 scope 的 ar_ap_items 打上 locked_day_close_id（merchant 角色仅锁本商户行）。
-        Optional<String> merchantScope = authorizationService.currentMerchantScope();
-        repository.lockArApItemsForDailyClose(dailyCloseId, businessDate, merchantScope.orElse(null));
-
-        return saved;
+    /**
+     * 第十八批 R 段第 143 条 143-R6（ENUM:190「待生成、待确认、有差异、已确认、已锁定、已归档」；ENUM:115「有差异待复核」；
+     * BSM:1081「出现任何金额的差额一律进复核、定位责任，不设容差」）：库内待确认的日结，本营业日本范围还有有差异待复核的收银班次
+     * （窗口与范围同 {@link #requireDailyCloseGates} 的班次交接闸）时返回 has_difference，只改返回值、不入库；平账后回到待确认。
+     * 有差异的日结确认必被班次交接闸（DAY_CLOSE_SHIFT_PENDING）拦，五类标记照常。
+     */
+    private DailyCloseRecord withShiftDifference(DailyCloseRecord d) {
+        if (!"pending_confirm".equals(d.status())) {
+            return d;
+        }
+        DailyCloseWindow w = dailyCloseWindow(d.businessDate(), d.scopeType(), d.scopeId());
+        return repository.unbalancedBarShiftExists(w.barFrom(), w.barTo(), d.scopeType(), d.scopeId(), w.barWindows())
+                ? new DailyCloseRecord(d.id(), d.businessDate(), d.scopeType(), d.scopeId(), d.forceClose(), "has_difference",
+                        d.lockedAt(), d.createdAt(), d.confirmedAt(), d.archivedAt(), d.finalMarkCategories())
+                : d;
     }
 
     /**
@@ -2626,6 +2893,17 @@ public class FinanceService implements TerminationSettlementPort {
                 workOrderId, merchantId, null, null, projectId);
         notifyMerchantAmount(merchantId, "work_order_material", amountCent, reason, today(), projectId, saved.id());
         return saved;
+    }
+
+    /**
+     * 第十八批 R 段第 142 条 142-R1（BSM:1081「长款当期计入该商户营业外收入并单独留痕可查，不得留存钱箱、不得用于冲抵其他班次的短款」）：
+     * 财务复核平账的收银长款记该酒吧内部核算台账（source_type=bar_shift_overage，来源与幂等键＝班次，往来方与归属商户＝该酒吧，
+     * 归酒吧所属项目）；内部核算登记即确认，落账日为该酒吧当前营业日即当期。
+     */
+    @Transactional
+    public ArApItemRecord postBarShiftOverageIncome(String shiftId, String barId, long amountCent) {
+        return persistDerivedArApItem("internal_accounting", barId, "bar_shift_overage", shiftId, amountCent, shiftId, barId,
+                null, null, businessDayResolver.projectOfMerchant(barId));
     }
 
     /** FS-017（BSM L1072「该娱乐平台公司可经审批先垫付并向原门店追收」）：对原门店挂追收应收，经统一回写点 settleArApItem 收回。 */

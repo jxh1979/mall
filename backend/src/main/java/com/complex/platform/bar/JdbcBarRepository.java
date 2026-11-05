@@ -1,9 +1,10 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.10
+// 文件版本：V0.11
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
 import com.complex.platform.common.crypto.PiiCipher;
+import com.complex.platform.common.jdbc.JdbcTimestamps;
 import com.complex.platform.finance.PaymentIntentRecord;
 import com.complex.platform.inventory.InventoryRepository;
 import com.complex.platform.inventory.StockMovementRecord;
@@ -307,6 +308,16 @@ class JdbcBarRepository implements BarRepository {
     public void saveReservationCustomerPhone(String reservationId, String phone) {
         jdbcTemplate.update("UPDATE bar_reservations SET customer_phone = :customer_phone WHERE id = :id",
                 new MapSqlParameterSource().addValue("id", reservationId).addValue("customer_phone", piiCipher.encrypt(phone)));
+    }
+
+    // 第十八批 R 段第 152 条 152-R2：成员表按 (reservation_id, member_identifier) 冲突更新，占位行改成客人身份须单写 UPDATE；member_identifier 一并改成本人，
+    // 客人再按参与者确认命中原行、吊销后重签按 customer_id 找到已有开卡人行。调用方已持订台行锁（FOR UPDATE）。
+    @Override
+    public void claimReservationHolder(String reservationId, String customerId) {
+        Map<String, Object> params = Map.of("id", reservationId, "cid", customerId);
+        jdbcTemplate.update("UPDATE bar_reservations SET customer_id = :cid, updated_at = now() WHERE id = :id AND customer_id IS NULL", params);
+        jdbcTemplate.update("UPDATE bar_reservation_invitation_members SET member_identifier = :cid, member_customer_id = :cid, updated_at = now()"
+                + " WHERE reservation_id = :id AND is_holder AND member_customer_id IS NULL", params);
     }
 
     @Override
@@ -1283,15 +1294,17 @@ class JdbcBarRepository implements BarRepository {
 
     @Override
     public Optional<BarShiftRecord> findShiftById(String id) {
-        return jdbcTemplate.query("SELECT * FROM bar_shifts WHERE id = :id",
-                Map.of("id", id), rowMapper::mapShift).stream().findFirst();
+        return withMembers(jdbcTemplate.query("SELECT * FROM bar_shifts WHERE id = :id",
+                Map.of("id", id), rowMapper::mapShift)).stream().findFirst();
     }
 
     @Override
     public Optional<BarShiftRecord> findOpenShift(String barId, String cashierUserId) {
         return jdbcTemplate.query("""
                 SELECT * FROM bar_shifts
-                 WHERE bar_id = :bar_id AND cashier_user_id = :cashier_user_id AND status = 'open'
+                 WHERE bar_id = :bar_id AND status = 'open'
+                   AND (cashier_user_id = :cashier_user_id OR EXISTS (SELECT 1 FROM bar_shift_members m
+                        WHERE m.shift_id = bar_shifts.id AND m.user_id = :cashier_user_id))
                  ORDER BY opened_at DESC
                  LIMIT 1
                 """, Map.of("bar_id", barId, "cashier_user_id", cashierUserId), rowMapper::mapShift)
@@ -1301,11 +1314,101 @@ class JdbcBarRepository implements BarRepository {
     @Override
     public List<BarShiftRecord> listShifts(Optional<String> merchantScope) {
         if (merchantScope.isPresent()) {
-            return jdbcTemplate.query("""
+            return withMembers(jdbcTemplate.query("""
                     SELECT * FROM bar_shifts WHERE merchant_id = :merchant_id ORDER BY opened_at DESC, id
-                    """, Map.of("merchant_id", merchantScope.get()), rowMapper::mapShift);
+                    """, Map.of("merchant_id", merchantScope.get()), rowMapper::mapShift));
         }
-        return jdbcTemplate.query("SELECT * FROM bar_shifts ORDER BY opened_at DESC, id", Map.of(), rowMapper::mapShift);
+        return withMembers(jdbcTemplate.query("SELECT * FROM bar_shifts ORDER BY opened_at DESC, id", Map.of(), rowMapper::mapShift));
+    }
+
+    @Override
+    public List<BarShiftRecord> listShiftsInProjects(java.util.Set<String> projectIds) {
+        if (projectIds.isEmpty()) {
+            return List.of();
+        }
+        return withMembers(jdbcTemplate.query("""
+                SELECT s.* FROM bar_shifts s JOIN merchants m ON m.id = s.bar_id
+                 WHERE m.project_id IN (:projects)
+                 ORDER BY s.opened_at DESC, s.id
+                """, Map.of("projects", projectIds), rowMapper::mapShift));
+    }
+
+    @Override
+    public int resolveShift(String shiftId, String resolvedByUserId, Instant resolvedAt, String overageCause,
+            String responsibleUserId) {
+        return jdbcTemplate.update("""
+                UPDATE bar_shifts
+                   SET needs_review = FALSE, resolved_by_user_id = :resolved_by_user_id, resolved_at = :resolved_at,
+                       overage_cause = :overage_cause, responsible_user_id = :responsible_user_id, updated_at = :resolved_at
+                 WHERE id = :id AND status = 'closed' AND needs_review = TRUE
+                """, new MapSqlParameterSource()
+                .addValue("id", shiftId)
+                .addValue("resolved_by_user_id", resolvedByUserId)
+                .addValue("resolved_at", timestampWithTimeZone(resolvedAt))
+                .addValue("overage_cause", overageCause, java.sql.Types.VARCHAR)
+                .addValue("responsible_user_id", responsibleUserId, java.sql.Types.VARCHAR));
+    }
+
+    @Override
+    public int signShift(String shiftId, boolean successor, Instant signedAt) {
+        String column = successor ? "successor_signed_at" : "cashier_signed_at";
+        return jdbcTemplate.update("""
+                UPDATE bar_shifts SET %1$s = :signed_at, updated_at = :signed_at
+                 WHERE id = :id AND status = 'closed' AND needs_review = FALSE AND %1$s IS NULL
+                """.formatted(column), new MapSqlParameterSource()
+                .addValue("id", shiftId)
+                .addValue("signed_at", timestampWithTimeZone(signedAt)));
+    }
+
+    @Override
+    public int witnessShift(String shiftId, String witnessedByUserId, Instant witnessedAt) {
+        return jdbcTemplate.update("""
+                UPDATE bar_shifts
+                   SET witnessed_by_user_id = :witnessed_by_user_id, witnessed_at = :witnessed_at, updated_at = :witnessed_at,
+                       successor_signed_at = CASE WHEN handover_to_user_id IS NULL THEN :witnessed_at ELSE successor_signed_at END
+                 WHERE id = :id AND status = 'closed' AND needs_review = FALSE AND witnessed_at IS NULL
+                   AND cashier_signed_at IS NOT NULL AND (handover_to_user_id IS NULL OR successor_signed_at IS NOT NULL)
+                """, new MapSqlParameterSource()
+                .addValue("id", shiftId)
+                .addValue("witnessed_by_user_id", witnessedByUserId)
+                .addValue("witnessed_at", timestampWithTimeZone(witnessedAt)));
+    }
+
+    @Override
+    public int addShiftMember(String shiftId, String userId, Instant joinedAt) {
+        return jdbcTemplate.update("""
+                INSERT INTO bar_shift_members (shift_id, user_id, joined_at) VALUES (:shift_id, :user_id, :joined_at)
+                """, new MapSqlParameterSource()
+                .addValue("shift_id", shiftId)
+                .addValue("user_id", userId)
+                .addValue("joined_at", timestampWithTimeZone(joinedAt)));
+    }
+
+    @Override
+    public int signShiftMember(String shiftId, String userId, Instant signedAt) {
+        return jdbcTemplate.update("""
+                UPDATE bar_shift_members SET signed_at = :signed_at
+                 WHERE shift_id = :shift_id AND user_id = :user_id AND signed_at IS NULL
+                """, new MapSqlParameterSource()
+                .addValue("shift_id", shiftId)
+                .addValue("user_id", userId)
+                .addValue("signed_at", timestampWithTimeZone(signedAt)));
+    }
+
+    /** 第十八批 R 段第 142 条 142-R4：给班次带上同一钱箱成员（一次查回）。 */
+    private List<BarShiftRecord> withMembers(List<BarShiftRecord> shifts) {
+        if (shifts.isEmpty()) {
+            return shifts;
+        }
+        Map<String, List<BarShiftRecord.Member>> byShift = jdbcTemplate.query("""
+                SELECT shift_id, user_id, joined_at, signed_at FROM bar_shift_members
+                 WHERE shift_id IN (:ids) ORDER BY joined_at, user_id
+                """, Map.of("ids", shifts.stream().map(BarShiftRecord::id).toList()),
+                (rs, i) -> Map.entry(rs.getString("shift_id"), new BarShiftRecord.Member(rs.getString("user_id"),
+                        JdbcTimestamps.nullableInstant(rs, "joined_at"), JdbcTimestamps.nullableInstant(rs, "signed_at"))))
+                .stream().collect(java.util.stream.Collectors.groupingBy(Map.Entry::getKey,
+                        java.util.stream.Collectors.mapping(Map.Entry::getValue, java.util.stream.Collectors.toList())));
+        return shifts.stream().map(s -> s.withMembers(byShift.getOrDefault(s.id(), List.of()))).toList();
     }
 
     // P2 多综合体 project_id scoped 读通道：按真实 project_id 列做行级隔离（AC-ISO-1，§4）。既有查询不变。
@@ -1317,6 +1420,7 @@ class JdbcBarRepository implements BarRepository {
 
     @Override
     public BarShiftReconciliationSnapshot aggregateShiftReconciliation(
+            String shiftId,
             String barId,
             String cashierUserId,
             Instant from,
@@ -1324,6 +1428,7 @@ class JdbcBarRepository implements BarRepository {
             Optional<String> merchantScope
     ) {
         MapSqlParameterSource params = new MapSqlParameterSource()
+                .addValue("shift_id", shiftId)
                 .addValue("bar_id", barId)
                 .addValue("cashier_user_id", cashierUserId)
                 .addValue("from_ts", timestampWithTimeZone(from))
@@ -1331,6 +1436,8 @@ class JdbcBarRepository implements BarRepository {
                 .addValue("merchant_id", merchantScope.orElse(null));
         String merchantFilter = merchantScope.isPresent() ? " AND b.merchant_id = :merchant_id" : "";
         // 各支付方式应收：本吧台 + 本收银员 + settled_at 落窗口的结算流水，按 settle_channel 归并。
+        // 第十八批 R 段第 142 条 142-R4（BSM:1081「多人共同使用同一钱箱时，由整个当班组共同补足」）：结算、定金、小费三段的收款人都是
+        // 开班人或本钱箱成员，成员只计加入时点之后的收款（加入前在别的班收的不重算）。
         Map<String, Object> row = jdbcTemplate.queryForMap("""
                 SELECT
                   COALESCE(SUM(CASE WHEN s.settle_channel = 'cash' THEN s.settlement_amount_cent ELSE 0 END), 0) AS cash_cent,
@@ -1340,7 +1447,8 @@ class JdbcBarRepository implements BarRepository {
                   FROM bar_bill_settlements s
                   JOIN bar_bills b ON b.id = s.bill_id
                  WHERE b.bar_id = :bar_id
-                   AND s.cashier_staff_id = :cashier_user_id
+                   AND (s.cashier_staff_id = :cashier_user_id OR EXISTS (SELECT 1 FROM bar_shift_members m
+                       WHERE m.shift_id = :shift_id AND m.user_id = s.cashier_staff_id AND s.settled_at >= m.joined_at))
                    AND s.reversed = FALSE
                    AND s.settled_at >= :from_ts AND s.settled_at < :to_ts""" + merchantFilter,
                 new HashMap<>(params.getValues()));
@@ -1352,7 +1460,8 @@ class JdbcBarRepository implements BarRepository {
                   COALESCE(SUM(CASE WHEN r.deposit_channel = 'pos' THEN r.deposit_amount_cent ELSE 0 END), 0) AS pos_cent
                   FROM bar_reservations r
                  WHERE r.bar_id = :bar_id
-                   AND r.deposit_collector_staff_id = :cashier_user_id
+                   AND (r.deposit_collector_staff_id = :cashier_user_id OR EXISTS (SELECT 1 FROM bar_shift_members m
+                       WHERE m.shift_id = :shift_id AND m.user_id = r.deposit_collector_staff_id AND r.deposit_paid_at >= m.joined_at))
                    AND r.deposit_paid_at >= :from_ts AND r.deposit_paid_at < :to_ts"""
                         + (merchantScope.isPresent() ? " AND r.merchant_id = :merchant_id" : ""),
                 new HashMap<>(params.getValues()));
@@ -1381,7 +1490,8 @@ class JdbcBarRepository implements BarRepository {
                    AND EXISTS (
                        SELECT 1 FROM bar_bill_settlements s
                         WHERE s.bill_id = b.id
-                          AND s.cashier_staff_id = :cashier_user_id
+                          AND (s.cashier_staff_id = :cashier_user_id OR EXISTS (SELECT 1 FROM bar_shift_members m
+                              WHERE m.shift_id = :shift_id AND m.user_id = s.cashier_staff_id AND s.settled_at >= m.joined_at))
                           AND s.reversed = FALSE
                           AND s.settled_at >= :from_ts AND s.settled_at < :to_ts
                    )""" + merchantFilter,

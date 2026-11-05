@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 import static com.complex.platform.common.api.ApiRequests.requireIdempotencyKey;
 
 import com.complex.platform.access.AuthorizationService;
@@ -11,6 +11,7 @@ import com.complex.platform.finance.dto.ArApAdjustmentDecisionRequest;
 import com.complex.platform.finance.dto.ArApAdjustmentRequest;
 import com.complex.platform.finance.dto.ArApItemRequest;
 import com.complex.platform.finance.dto.ArApPaymentRequest;
+import com.complex.platform.finance.dto.DailyCloseActionRequest;
 import com.complex.platform.finance.dto.DailyCloseRequest;
 import com.complex.platform.finance.dto.DepositActionRequest;
 import com.complex.platform.finance.dto.InventoryVariancePostRequest;
@@ -54,10 +55,12 @@ public class FinanceController implements com.complex.platform.security.ExportFi
     @GetMapping("/ar-ap-items")
     public ApiResponse<PageResponse<ArApItemRecord>> listArApItems(
             @RequestParam(name = "keyword", required = false) String keyword,
+            // 第十八批 R 段 143-R4：可选只列被该日结锁定的台账。
+            @RequestParam(name = "locked_day_close_id", required = false) String lockedDayCloseId,
             @RequestParam(name = "page", defaultValue = "1") int page,
             @RequestParam(name = "size", defaultValue = "20") int size) {
         authorizationService.requirePermission("finance.ar_ap.view");
-        return ApiResponse.ok(service.listArApItems(keyword, page, size));
+        return ApiResponse.ok(service.listArApItems(keyword, lockedDayCloseId, page, size));
     }
 
     @GetMapping("/ar-ap-items/export")
@@ -104,19 +107,82 @@ public class FinanceController implements com.complex.platform.security.ExportFi
         return ApiResponse.ok(service.createDailyClose(request));
     }
 
+    /** 第十八批 R 段第 143 条 143-R1（ENUM:190「待生成、待确认、有差异、已确认、已锁定、已归档」）：确认日结，与生成、锁定同一个码。 */
+    @PostMapping("/daily-closes/{id}/confirm")
+    public ApiResponse<DailyCloseRecord> confirmDailyClose(
+            @PathVariable String id,
+            @RequestBody @jakarta.validation.Valid DailyCloseActionRequest request
+    ) {
+        authorizationService.requirePermission("finance.daily_close.lock");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.confirmDailyClose(id, request));
+    }
+
+    /** 143-R1：锁定已确认的日结（BSM:2023「日结锁定后不能直接补录影响金额，必须上级审批通过后补录。」）。 */
+    @PostMapping("/daily-closes/{id}/lock")
+    public ApiResponse<DailyCloseRecord> lockDailyClose(
+            @PathVariable String id,
+            @RequestBody @jakarta.validation.Valid DailyCloseActionRequest request
+    ) {
+        authorizationService.requirePermission("finance.daily_close.lock");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.lockDailyClose(id, request));
+    }
+
+    /** 143-R2 五类最终标记（ENUM:190「由各域主管公司的财务岗在该营业日闭店之后完成核对并逐类标记」）：与生成、确认、锁定同一个码。 */
+    @PostMapping("/daily-closes/{id}/final-marks")
+    public ApiResponse<DailyCloseRecord> markDailyCloseFinal(
+            @PathVariable String id,
+            @RequestBody @jakarta.validation.Valid DailyCloseActionRequest request
+    ) {
+        authorizationService.requirePermission("finance.daily_close.lock");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.markDailyCloseFinal(id, request));
+    }
+
+    /**
+     * 143-R5 归档已锁定的日结（第十八批裁决 33「锁定后，由该店持日结锁定权限的财务 BP 点「归档」；归档后只读可查，锁定后补录照常走上级审批。」）：
+     * 与生成、确认、锁定同一个码。
+     */
+    @PostMapping("/daily-closes/{id}/archive")
+    public ApiResponse<DailyCloseRecord> archiveDailyClose(
+            @PathVariable String id,
+            @RequestBody @jakarta.validation.Valid DailyCloseActionRequest request
+    ) {
+        authorizationService.requirePermission("finance.daily_close.lock");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.archiveDailyClose(id, request));
+    }
+
     @GetMapping("/daily-closes/{id}/summaries")
     public ApiResponse<PageResponse<DailyCloseSummaryRecord>> listDailyCloseSummaries(@PathVariable String id) {
         authorizationService.requirePermission("finance.daily_close.manage");
         return ApiResponse.ok(service.listDailyCloseSummaries(id));
     }
 
+    /**
+     * 第十八批 R 段第 143 条 143-R4（ENUM:190「……同时在原营业日的日结锁定表单上关联显示该笔补录的金额与情况，两边互相可查。」）：
+     * 按日结号查锁定后补录，与汇总查询同一个码。
+     */
+    @GetMapping("/daily-closes/{id}/adjustments")
+    public ApiResponse<PageResponse<ArApAdjustmentRecord>> listDailyCloseAdjustments(@PathVariable String id) {
+        authorizationService.requirePermission("finance.daily_close.manage");
+        return ApiResponse.ok(service.listDailyCloseAdjustments(id));
+    }
+
     /** 第十八批 P 段第 133 条 133-R2（BSM:1848「财务看退款、差异、日结和结算依据。」）：日结批次列表，与汇总查询同一个码。 */
     @GetMapping("/daily-closes")
     public ApiResponse<PageResponse<DailyCloseRecord>> listDailyCloses(
+            // 第十八批 R 段 143-R1：可选按营业日与范围过滤，查不到即「待生成」。
+            @RequestParam(name = "business_date", required = false)
+            @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE)
+            java.time.LocalDate businessDate,
+            @RequestParam(name = "scope_type", required = false) String scopeType,
+            @RequestParam(name = "scope_id", required = false) String scopeId,
             @RequestParam(name = "page", defaultValue = "1") int page,
             @RequestParam(name = "size", defaultValue = "20") int size) {
         authorizationService.requirePermission("finance.daily_close.manage");
-        return ApiResponse.ok(service.listDailyCloses(page, size));
+        return ApiResponse.ok(service.listDailyCloses(businessDate, scopeType, scopeId, page, size));
     }
 
     @PostMapping("/ar-ap-adjustments")

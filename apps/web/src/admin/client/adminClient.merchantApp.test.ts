@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import { waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -160,6 +160,21 @@ describe("AdminApi 商户手机应用令牌模式", () => {
       expect((fetchMock.mock.calls[index]![1] as RequestInit).credentials).toBe("include");
     }
     expect(headersOf(fetchMock, 1).get("x-xsrf-token")).toBe("csrf-abc");
+  });
+});
+
+// 第十八批 R 段 152-R4：后台复制给客人的邀请链接主机＝后台主机（发行打包客人链接主机取 public_host）；
+// 商户手机应用的页面不在后台主机上，按接口基址 VITE_API_BASE_URL 取主机。
+describe("customerLinkHost 客人链接主机", () => {
+  afterEach(() => vi.unstubAllEnvs());
+
+  it("配了 VITE_API_BASE_URL 时取其主机，未配时取当前页面主机", async () => {
+    const client = await loadClient();
+    expect(client.customerLinkHost).toBeTypeOf("function");
+    vi.stubEnv("VITE_API_BASE_URL", "https://192.168.88.160/");
+    expect(client.customerLinkHost()).toBe("192.168.88.160");
+    vi.stubEnv("VITE_API_BASE_URL", "");
+    expect(client.customerLinkHost()).toBe(window.location.host);
   });
 });
 

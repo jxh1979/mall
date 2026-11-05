@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.06
+// 文件版本：V0.07
 
 import com.complex.platform.evidence.AuditedOperation;
 
@@ -47,6 +47,13 @@ enum BarWriteOperation implements AuditedOperation {
     ADD_BILL_TIP("bar.bill_tip_added", "bar.bill_tip_failed", "bar.bill.tip", "bar_bill"),
     OPEN_SHIFT("bar.shift_opened", "bar.shift_open_failed", "bar.shift.manage", "bar_shift"),
     CLOSE_SHIFT("bar.shift_closed", "bar.shift_close_failed", "bar.shift.close", "bar_shift"),
+    // 第十八批 R 段第 142 条 142-R1：财务复核平账（BSM:1081、PGM:664）。
+    RESOLVE_SHIFT("bar.shift_resolved", "bar.shift_resolve_failed", "finance.daily_close.manage", "bar_shift"),
+    // 第十八批 R 段第 142 条 142-R2：交班单签字、财务见证归档（BSM:1081）。
+    SIGN_SHIFT("bar.shift_signed", "bar.shift_sign_failed", "bar.shift.manage", "bar_shift"),
+    WITNESS_SHIFT("bar.shift_witnessed", "bar.shift_witness_failed", "finance.daily_close.manage", "bar_shift"),
+    // 第十八批 R 段第 142 条 142-R4：加入同一钱箱（BSM:1081「多人共同使用同一钱箱时，由整个当班组共同补足」）。
+    JOIN_SHIFT("bar.shift_joined", "bar.shift_join_failed", "bar.shift.manage", "bar_shift"),
     REDEEM_DRINK_ENTITLEMENT("bar.entitlement_redeemed", "bar.entitlement_redeem_failed", "bar.entitlement.redeem", "bar_gift_redemption"),
     ISSUE_INVITATION("bar.reservation_invitation_issued", "bar.reservation_invitation_issue_failed", "bar.reservation.invitation.manage", "bar_reservation"),
     REVOKE_INVITATION("bar.reservation_invitation_revoked", "bar.reservation_invitation_revoke_failed", "bar.reservation.invitation.manage", "bar_reservation"),

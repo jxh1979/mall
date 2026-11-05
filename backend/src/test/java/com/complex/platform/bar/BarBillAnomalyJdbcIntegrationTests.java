@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -19,7 +19,9 @@ import com.complex.platform.customer.CustomerStoredValueAccountRecord;
 import com.complex.platform.customer.TicketRewardConfig;
 import com.complex.platform.finance.FinanceRepository;
 import com.complex.platform.finance.FinanceService;
+import com.complex.platform.finance.dto.DailyCloseActionRequest;
 import com.complex.platform.finance.dto.DailyCloseRequest;
+import com.complex.platform.support.DailyCloseFixture;
 import com.complex.platform.support.TestSecurityActors;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.math.BigDecimal;
@@ -175,23 +177,42 @@ class BarBillAnomalyJdbcIntegrationTests {
                 .andExpect(jsonPath("$.data.paid_amount_cent").value(10000));
     }
 
-    /** ENUM L221「异常单据未处置完毕，所属日结不得确认锁定」：结账落在该营业日的账单处于异常时日结锁定被拒；主管处置后可锁。 */
+    /**
+     * ENUM L221「异常单据未处置完毕，所属日结不得确认锁定」：结账落在该营业日的账单处于异常时日结确认与锁定都被拒（第十八批 R 段 143-R1：
+     * 生成照常）；主管处置后可确认、可锁。
+     */
     @Test
-    void lockDailyCloseRefusedWhileBarBillAbnormal() throws Exception {
+    void confirmAndLockDailyCloseRefusedWhileBarBillAbnormal() throws Exception {
         LocalDate day = LocalDate.parse("2014-06-12");
         Instant at = businessDays.start(null, null, day).plusSeconds(3600);
         String bill = settledBillAt(at);
         call(cashier, bill + "/anomaly", "{\"reason\":\"客人称多收一瓶\",\"idempotency_key\":\"rd_%s\"}")
                 .andExpect(status().isOk()).andExpect(jsonPath("$.data.payment_status").value("abnormal"));
 
-        TestSecurityActors.asPlatformAdmin();
-        assertThatThrownBy(() -> finance.createDailyClose(dailyClose(day)))
+        DailyCloseFixture.asFinanceAdmin(jdbc, "usr_dc_fin_" + suffix);
+        String close = finance.createDailyClose(dailyClose(day)).id();
+        DailyCloseFixture.markAllFinal(financeRepository, close);
+        assertThatThrownBy(() -> finance.confirmDailyClose(close, closeAction()))
                 .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("DAY_CLOSE_ANOMALY_PENDING"));
         SecurityContextHolder.clearContext();
         call(supervisor, bill + "/anomaly/resolve", "{\"resolution\":\"restored\",\"reason\":\"核实无误\",\"idempotency_key\":\"rdr_%s\"}")
                 .andExpect(status().isOk()).andExpect(jsonPath("$.data.payment_status").value("paid"));
-        TestSecurityActors.asPlatformAdmin();
-        assertThat(finance.createDailyClose(dailyClose(day)).status()).isEqualTo("locked");
+        DailyCloseFixture.asFinanceAdmin(jdbc, "usr_dc_fin_" + suffix);
+        assertThat(finance.confirmDailyClose(close, closeAction()).status()).isEqualTo("confirmed");
+
+        // 确认之后又出一张异常账单：锁定同样被拒，处置后可锁（确认与锁定两处都拦）。
+        String late = settledBillAt(at.plusSeconds(600));
+        SecurityContextHolder.clearContext();
+        call(cashier, late + "/anomaly", "{\"reason\":\"客人称少找零\",\"idempotency_key\":\"rdl_%s\"}")
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.payment_status").value("abnormal"));
+        DailyCloseFixture.asFinanceAdmin(jdbc, "usr_dc_fin_" + suffix);
+        assertThatThrownBy(() -> finance.lockDailyClose(close, closeAction()))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("DAY_CLOSE_ANOMALY_PENDING"));
+        SecurityContextHolder.clearContext();
+        call(supervisor, late + "/anomaly/resolve", "{\"resolution\":\"restored\",\"reason\":\"核实无误\",\"idempotency_key\":\"rdlr_%s\"}")
+                .andExpect(status().isOk());
+        DailyCloseFixture.asFinanceAdmin(jdbc, "usr_dc_fin_" + suffix);
+        assertThat(finance.lockDailyClose(close, closeAction()).status()).isEqualTo("locked");
     }
 
     /** 与反结同一做法：结账营业日已锁定日结的，「作废并冲正」被拒（须走补录调整流程），账单仍在异常，「更正后恢复」不受影响。 */
@@ -199,8 +220,8 @@ class BarBillAnomalyJdbcIntegrationTests {
     void voidReverseRefusedAfterSettleDayLocked() throws Exception {
         LocalDate day = LocalDate.parse("2014-06-13");
         String bill = settledBillAt(Instant.parse("2014-06-13T12:00:00Z"));
-        TestSecurityActors.asPlatformAdmin();
-        assertThat(finance.createDailyClose(dailyClose(day)).status()).isEqualTo("locked");
+        DailyCloseFixture.asFinanceAdmin(jdbc, "usr_dc_fin_" + suffix);
+        assertThat(DailyCloseFixture.lock(finance, financeRepository, dailyClose(day)).status()).isEqualTo("locked");
         SecurityContextHolder.clearContext();
 
         call(cashier, bill + "/anomaly", "{\"reason\":\"次日客人来电称记错卡座\",\"idempotency_key\":\"rl_%s\"}")
@@ -408,8 +429,8 @@ class BarBillAnomalyJdbcIntegrationTests {
         jdbc.update("UPDATE bar_bills SET payable_amount_cent=20000 WHERE id=?", bill);
         jdbc.update("INSERT INTO ar_ap_payments(id,ar_ap_item_id,amount_cent,payment_method,payment_time,created_at)"
                 + " VALUES(?,?,10000,'bank_transfer',?,now())", "bba_pay_" + suffix, payable, Timestamp.from(refundedAt));
-        TestSecurityActors.asPlatformAdmin();
-        assertThat(finance.createDailyClose(dailyClose(refundDay)).status()).isEqualTo("locked");
+        DailyCloseFixture.asFinanceAdmin(jdbc, "usr_dc_fin_" + suffix);
+        assertThat(DailyCloseFixture.lock(finance, financeRepository, dailyClose(refundDay)).status()).isEqualTo("locked");
         SecurityContextHolder.clearContext();
         assertThat(net(settleDay)).isEqualTo(30_000L);
         assertThat(net(refundDay)).isEqualTo(-10_000L);
@@ -516,6 +537,10 @@ class BarBillAnomalyJdbcIntegrationTests {
         bars.saveBillSettlement(new BarBillSettlementRecord("settle_bba_" + bill, bill, "pos", null, "POS-" + bill,
                 30000L, merchant, at));
         return bill;
+    }
+
+    private DailyCloseActionRequest closeAction() {
+        return new DailyCloseActionRequest("bba-close-action-" + suffix + "-" + seq.incrementAndGet(), null);
     }
 
     private DailyCloseRequest dailyClose(LocalDate day) {

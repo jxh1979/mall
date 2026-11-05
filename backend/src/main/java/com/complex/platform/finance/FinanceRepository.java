@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.14
+// 文件版本：V0.15
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -232,12 +232,13 @@ public interface FinanceRepository {
     /** 项目集合与商户范围取交集；null 仅供平台全量，空集合没有可见记录。JDBC 下推相同筛选和总数。 */
     default PageResponse<ArApItemRecord> listArApItemsForProjects(
             String merchantId, java.util.Set<String> projectIds, String keyword, int page, int size) {
-        return listArApItemsForProjects(merchantId,projectIds,keyword,page,size,null);
+        return listArApItemsForProjects(merchantId,projectIds,keyword,page,size,null,null);
     }
 
     default PageResponse<ArApItemRecord> listArApItemsForProjects(
             String merchantId, java.util.Set<String> projectIds, String keyword, int page, int size,
-            java.util.Set<String> payrollItemIds) {
+            java.util.Set<String> payrollItemIds, String lockedDayCloseId) {
+        // 第十八批 R 段 143-R4：lockedDayCloseId 只在 Jdbc 下推（内存替身的台账记录不带锁列，不按它筛）。
         java.util.List<ArApItemRecord> all = merchantId == null
                 ? listArApItems() : listArApItemsByMerchant(merchantId);
         String kw = keyword == null ? "" : keyword.trim().toLowerCase();
@@ -374,6 +375,26 @@ public interface FinanceRepository {
         return List.of();
     }
 
+    /**
+     * 第十八批 R 段第 142 条 142-R2（ENUM:190「由当班收银员完成现金清点与盘收银，接班人与其对接完成交接，并由财务跟班跟进交接完成」；
+     * BSM:1081「财务跟班见证后归档」）：开班落在该营业日（酒吧逐家按各自营业日窗）、财务尚未见证归档的收银班次（含开班中、未平账、未签字）
+     * 是否存在。范围口径同酒吧账单异常：merchant 范围只看本酒吧，其余平台口径。default 无库替身视为没有；Jdbc 覆写。
+     */
+    default boolean unfinishedBarShiftExists(Instant from, Instant to, String scopeType, String scopeId,
+            java.util.Map<String, Instant[]> barWindows) {
+        return false;
+    }
+
+    /**
+     * 第十八批 R 段第 143 条 143-R6（ENUM:115「有差异待复核」；BSM:1081「出现任何金额的差额一律进复核、定位责任，不设容差」）：
+     * 开班落在该营业日、有差异待复核（142-R1：已班结且 needs_review）的收银班次是否存在；窗口与范围同 {@link #unfinishedBarShiftExists}。
+     * default 无库替身视为没有；Jdbc 覆写。
+     */
+    default boolean unbalancedBarShiftExists(Instant from, Instant to, String scopeType, String scopeId,
+            java.util.Map<String, Instant[]> barWindows) {
+        return false;
+    }
+
     PaymentIntentRecord savePaymentIntent(PaymentIntentRecord paymentIntent);
 
     /** 按 id 查支付意图（储值充值/会员开通绑支付意图：入账前校验支付意图存在且已成功）。 */
@@ -462,6 +483,11 @@ public interface FinanceRepository {
     /** 返回 finance_daily_closes 单条（含 status），用于锁定/汇总查询。 */
     Optional<DailyCloseRecord> findDailyCloseById(String id);
 
+    /** 第十八批 R 段 143-R2：给日结记一类数据的最终标记（每类一行；不可撤销，不提供删改）。default 抛错，测试双子按需实现。 */
+    default void saveDailyCloseFinalMark(String dailyCloseId, String category, Instant markedAt) {
+        throw new UnsupportedOperationException("日结仓储未实现五类最终标记");
+    }
+
     /** 写入一条六源汇总（幂等 ON CONFLICT(daily_close_id, source_stream)）。 */
     DailyCloseSummaryRecord saveDailyCloseSummary(DailyCloseSummaryRecord summary);
 
@@ -471,9 +497,11 @@ public interface FinanceRepository {
     /**
      * 第十八批 P 段第 133 条 133-R2：日结批次按营业日倒序分页。merchantId 非空只看该商户的 merchant、bar 范围；
      * projectIds 非空只看这些项目的 project、ticketing、amusement 范围与项目下商户的 merchant、bar 范围，空集合没有可见记录；
-     * 两者都为 null＝平台全量。default 返回空页兼容既有测试双子。
+     * 两者都为 null＝平台全量。第十八批 R 段 143-R1：businessDate、scopeType、scopeId 非空时再按营业日与范围过滤（页面查「待生成」）。
+     * default 返回空页兼容既有测试双子。
      */
-    default PageResponse<DailyCloseRecord> listDailyCloses(String merchantId, java.util.Set<String> projectIds, int page, int size) {
+    default PageResponse<DailyCloseRecord> listDailyCloses(String merchantId, java.util.Set<String> projectIds,
+            LocalDate businessDate, String scopeType, String scopeId, int page, int size) {
         return new PageResponse<>(List.of(), page, size, 0L);
     }
 
@@ -573,6 +601,14 @@ public interface FinanceRepository {
     Optional<ArApAdjustmentRecord> findArApAdjustmentByIdForUpdate(String id);
 
     ArApAdjustmentRecord updateArApAdjustment(ArApAdjustmentRecord adjustment);
+
+    /**
+     * 第十八批 R 段第 143 条 143-R4（ENUM:190「……在原营业日的日结锁定表单上关联显示该笔补录的金额与情况，两边互相可查」）：
+     * 挂在该日结上的锁定后补录（locked_day_close_id），按申请时间倒序。default 返回空兼容既有测试双子。
+     */
+    default List<ArApAdjustmentRecord> listAdjustmentsByDailyClose(String dailyCloseId) {
+        return List.of();
+    }
 
     /** 六源聚合结果（金额分 / 退款分 / 计数）。 */
     record DailyCloseSourceTotals(long amountCent, long refundCent, int orderCount) {

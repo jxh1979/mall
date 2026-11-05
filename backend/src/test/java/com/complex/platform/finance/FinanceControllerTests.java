@@ -1,4 +1,4 @@
-// 文件版本：V0.04
+// 文件版本：V0.05
 package com.complex.platform.finance;
 
 import static org.mockito.ArgumentMatchers.any;
@@ -158,7 +158,7 @@ class FinanceControllerTests {
 
     @Test
     void listArApItemsUsesOpenApiViewPermissionAndPageShape() throws Exception {
-        when(service.listArApItems(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyInt(), org.mockito.ArgumentMatchers.anyInt())).thenReturn(new PageResponse<>(List.of(arApItem()), 1, 50, 1));
+        when(service.listArApItems(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyInt(), org.mockito.ArgumentMatchers.anyInt())).thenReturn(new PageResponse<>(List.of(arApItem()), 1, 50, 1));
 
         mockMvc.perform(get("/api/v1/finance/ar-ap-items")
                         .with(user("finance").roles("P0_SMOKE")))
@@ -248,9 +248,12 @@ class FinanceControllerTests {
                 "project",
                 "project_1",
                 false,
-                "locked",
+                "pending_confirm",
+                null,
                 Instant.parse("2026-06-14T23:59:00Z"),
-                Instant.parse("2026-06-14T23:59:00Z")
+                null,
+                null,
+                List.of()
         ));
 
         mockMvc.perform(post("/api/v1/finance/daily-closes")
@@ -266,15 +269,40 @@ class FinanceControllerTests {
                                 }
                                 """))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.status").value("locked"));
+                .andExpect(jsonPath("$.data.status").value("pending_confirm"));
 
         verify(authorizationService).requirePermission("finance.daily_close.lock");
+    }
+
+    /** 第十八批 R 段 143-R1：确认、锁定与生成同一个码 finance.daily_close.lock，请求体只带幂等键；143-R5 归档同（第十八批裁决 33）。 */
+    @Test
+    void dailyCloseConfirmAndLockUseDailyCloseLockPermission() throws Exception {
+        when(service.confirmDailyClose(org.mockito.ArgumentMatchers.eq("daily_close_1"),
+                any(com.complex.platform.finance.dto.DailyCloseActionRequest.class))).thenReturn(null);
+        when(service.lockDailyClose(org.mockito.ArgumentMatchers.eq("daily_close_1"),
+                any(com.complex.platform.finance.dto.DailyCloseActionRequest.class))).thenReturn(null);
+        when(service.archiveDailyClose(org.mockito.ArgumentMatchers.eq("daily_close_1"),
+                any(com.complex.platform.finance.dto.DailyCloseActionRequest.class))).thenReturn(null);
+        for (String action : List.of("confirm", "lock", "archive")) {
+            mockMvc.perform(post("/api/v1/finance/daily-closes/daily_close_1/" + action)
+                            .with(user("finance").roles("P0_SMOKE"))
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"idempotency_key\": \"daily-close-" + action + "\"}"))
+                    .andExpect(status().isOk());
+        }
+        verify(service).confirmDailyClose(org.mockito.ArgumentMatchers.eq("daily_close_1"),
+                any(com.complex.platform.finance.dto.DailyCloseActionRequest.class));
+        verify(service).lockDailyClose(org.mockito.ArgumentMatchers.eq("daily_close_1"),
+                any(com.complex.platform.finance.dto.DailyCloseActionRequest.class));
+        verify(service).archiveDailyClose(org.mockito.ArgumentMatchers.eq("daily_close_1"),
+                any(com.complex.platform.finance.dto.DailyCloseActionRequest.class));
+        org.mockito.Mockito.verify(authorizationService, org.mockito.Mockito.times(3)).requirePermission("finance.daily_close.lock");
     }
 
     @Test
     void dailyCloseListUsesDailyCloseManagePermission() throws Exception {
         // 第十八批 P 段第 133 条 133-R2：日结列表与汇总查询同一个码 finance.daily_close.manage。
-        when(service.listDailyCloses(1, 20)).thenReturn(new PageResponse<>(List.of(), 1, 20, 0L));
+        when(service.listDailyCloses(null, null, null, 1, 20)).thenReturn(new PageResponse<>(List.of(), 1, 20, 0L));
 
         mockMvc.perform(get("/api/v1/finance/daily-closes")
                         .with(user("finance").roles("P0_SMOKE")))

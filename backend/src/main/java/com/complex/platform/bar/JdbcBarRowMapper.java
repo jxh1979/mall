@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.05
+// 文件版本：V0.06
 
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 
@@ -175,7 +175,16 @@ final class JdbcBarRowMapper {
                 resultSet.getString("opened_by_user_id"),
                 resultSet.getString("closed_by_user_id"),
                 nullableInstant(resultSet, "created_at"),
-                nullableInstant(resultSet, "updated_at"));
+                nullableInstant(resultSet, "updated_at"),
+                resultSet.getString("resolved_by_user_id"),
+                nullableInstant(resultSet, "resolved_at"),
+                resultSet.getString("overage_cause"),
+                nullableInstant(resultSet, "cashier_signed_at"),
+                nullableInstant(resultSet, "successor_signed_at"),
+                resultSet.getString("witnessed_by_user_id"),
+                nullableInstant(resultSet, "witnessed_at"),
+                resultSet.getString("responsible_user_id"),
+                java.util.List.of());
     }
 
     BarProductRecord mapProduct(ResultSet resultSet, int rowNumber) throws SQLException {

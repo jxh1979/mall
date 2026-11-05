@@ -1,9 +1,10 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.13
+// 文件版本：V0.14
 
 import com.complex.platform.support.InMemoryAuditEventRepository;
 import com.complex.platform.support.InMemoryIdempotencyRepository;
+import com.complex.platform.support.DailyCloseFixture;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.groups.Tuple.tuple;
@@ -24,6 +25,7 @@ import com.complex.platform.evidence.AuditEventService;
 import com.complex.platform.evidence.AuditedOperationExecutor;
 import com.complex.platform.finance.dto.ArApItemRequest;
 import com.complex.platform.finance.dto.ArApPaymentRequest;
+import com.complex.platform.finance.dto.DailyCloseActionRequest;
 import com.complex.platform.finance.dto.DailyCloseRequest;
 import com.complex.platform.finance.dto.OfflinePaymentConfirmRequest;
 import com.complex.platform.finance.dto.PaymentIntentRequest;
@@ -365,7 +367,7 @@ class FinanceServiceTests {
         ArApPaymentResponse paymentResp = service.registerArApPayment(item.id(), paymentRequest("pay-for-refund-audit", 128800L));
         String paymentId = paymentResp.payment().id();
 
-        service.createDailyClose(new DailyCloseRequest(
+        DailyCloseFixture.lock(service, financeRepository, new DailyCloseRequest(
                 "daily-close-audit",
                 "lock",
                 List.of(),
@@ -408,6 +410,8 @@ class FinanceServiceTests {
         assertThat(auditEventRepository.events)
                 .extracting(AuditEvent::eventName)
                 .contains(
+                        "finance_daily_close.generated",
+                        "finance_daily_close.confirmed",
                         "finance_daily_close.locked",
                         "payment.intent_created",
                         "finance_payment.registered",
@@ -1116,6 +1120,43 @@ class FinanceServiceTests {
         assertThat(second).isEqualTo(first);
     }
 
+    /**
+     * 第十八批 R 段第 143 条 143-R1（ENUM:190「待生成、待确认、有差异、已确认、已锁定、已归档」）：生成为待确认、不锁台账；
+     * 确认按当前数据重算七源汇总；锁定后才锁当日台账；不在可办状态的确认、锁定 409。
+     */
+    @Test
+    void dailyCloseGenerateConfirmLockRecomputesSummariesAndLocksItemsOnlyAtLock() {
+        ArApItemRecord item = service.createArApItem(itemRequest("arap-three-steps", "receivable", 128800L));
+        financeRepository.barTotals = new FinanceRepository.DailyCloseSourceTotals(300000L, 0L, 8);
+        DailyCloseRecord generated = service.createDailyClose(new DailyCloseRequest(
+                "daily-close-three-steps", "生成", List.of(), LocalDate.parse("2026-06-30"), "project", "project_three", false));
+        assertThat(generated.status()).isEqualTo("pending_confirm");
+        assertThat(generated.lockedAt()).isNull();
+        assertThat(financeRepository.findArApItemLockedDayCloseId(item.id())).isEmpty();
+        assertThatThrownBy(() -> service.lockDailyClose(generated.id(), new DailyCloseActionRequest("three-lock-early", null)))
+                .isInstanceOf(ApiException.class).extracting("code").isEqualTo("DAILY_CLOSE_NOT_CONFIRMED");
+
+        financeRepository.barTotals = new FinanceRepository.DailyCloseSourceTotals(450000L, 0L, 11);
+        DailyCloseFixture.markAllFinal(financeRepository, generated.id());
+        DailyCloseRecord confirmed = service.confirmDailyClose(generated.id(), new DailyCloseActionRequest("three-confirm", null));
+        assertThat(confirmed.status()).isEqualTo("confirmed");
+        assertThat(confirmed.confirmedAt()).isNotNull();
+        assertThat(service.listDailyCloseSummaries(generated.id()).items())
+                .filteredOn(s -> "bar".equals(s.sourceStream()))
+                .extracting(DailyCloseSummaryRecord::amountCent, DailyCloseSummaryRecord::orderCount)
+                .containsExactly(tuple(450000L, 11));
+        assertThat(financeRepository.findArApItemLockedDayCloseId(item.id())).isEmpty();
+        assertThatThrownBy(() -> service.confirmDailyClose(generated.id(), new DailyCloseActionRequest("three-confirm-again", null)))
+                .isInstanceOf(ApiException.class).extracting("code").isEqualTo("DAILY_CLOSE_NOT_PENDING");
+
+        DailyCloseRecord locked = service.lockDailyClose(generated.id(), new DailyCloseActionRequest("three-lock", null));
+        assertThat(locked.status()).isEqualTo("locked");
+        assertThat(locked.lockedAt()).isNotNull();
+        assertThat(financeRepository.findArApItemLockedDayCloseId(item.id())).contains(generated.id());
+        assertThat(auditEventRepository.events).extracting(AuditEvent::eventName)
+                .contains("finance_daily_close.generated", "finance_daily_close.confirmed", "finance_daily_close.locked");
+    }
+
     // ─── P1 merchant scope isolation tests ───────────────────────────────────
 
     @Test
@@ -1227,7 +1268,7 @@ class FinanceServiceTests {
         // 同经营日(due_date=2026-06-30) 的台账应被打 locked_day_close_id。
         ArApItemRecord item = service.createArApItem(itemRequest("arap-to-lock", "receivable", 128800L));
 
-        DailyCloseRecord close = service.createDailyClose(new DailyCloseRequest(
+        DailyCloseRecord close = DailyCloseFixture.lock(service, financeRepository, new DailyCloseRequest(
                 "daily-close-t7-very-long-request-12345678901234567890",
                 "lock",
                 List.of(),
@@ -1284,7 +1325,7 @@ class FinanceServiceTests {
     @Test
     void lockedItemRejectsDirectPaymentWithDayCloseLocked() {
         ArApItemRecord item = service.createArApItem(itemRequest("arap-locked-pay", "receivable", 128800L));
-        service.createDailyClose(new DailyCloseRequest(
+        DailyCloseFixture.lock(service, financeRepository, new DailyCloseRequest(
                 "daily-close-lock-pay", "lock", List.of(),
                 LocalDate.parse("2026-06-30"), "project", "project_lp", false));
 
@@ -1296,7 +1337,7 @@ class FinanceServiceTests {
 
     @Test
     void createItemOnLockedBusinessDateRejected() {
-        service.createDailyClose(new DailyCloseRequest(
+        DailyCloseFixture.lock(service, financeRepository, new DailyCloseRequest(
                 "daily-close-lock-create", "lock", List.of(),
                 LocalDate.parse("2026-06-30"), "project", "project_lc", false));
 
@@ -1310,7 +1351,7 @@ class FinanceServiceTests {
     void longOriginalItemKeepsDistinctBackfillRequestsAndPersistedAmounts() {
         ArApItemRecord item = service.createArApItem(itemRequest(
                 "long-original-1234567890123456789012345678901234567890", "receivable", 100000L));
-        service.createDailyClose(new DailyCloseRequest("long-backfill-close", "lock", List.of(),
+        DailyCloseFixture.lock(service, financeRepository, new DailyCloseRequest("long-backfill-close", "lock", List.of(),
                 LocalDate.parse("2026-06-30"), "project", "project_bf", false));
         ArApAdjustmentRecord first = service.requestAdjustment(new com.complex.platform.finance.dto.ArApAdjustmentRequest(
                 "first-adjustment", "补录一", List.of(), item.id(), 1000L, "原件一"));
@@ -1325,7 +1366,7 @@ class FinanceServiceTests {
     void backfillApprovalAppliesAmountChangeAndRejectDoesNot() {
         stubActor("staff_finance_1");
         ArApItemRecord item = service.createArApItem(itemRequest("arap-backfill", "receivable", 100000L));
-        service.createDailyClose(new DailyCloseRequest(
+        DailyCloseFixture.lock(service, financeRepository, new DailyCloseRequest(
                 "daily-close-backfill", "lock", List.of(),
                 LocalDate.parse("2026-06-30"), "project", "project_bf", false));
 
@@ -1383,7 +1424,7 @@ class FinanceServiceTests {
     void backfillApprovalNotifiesSettlementProgressWithRestatedRow() {
         stubActor("staff_finance_cb");
         ArApItemRecord item = service.createArApItem(itemRequest("arap-backfill-cb", "receivable", 100000L));
-        service.createDailyClose(new DailyCloseRequest(
+        DailyCloseFixture.lock(service, financeRepository, new DailyCloseRequest(
                 "daily-close-backfill-cb", "lock", List.of(),
                 LocalDate.parse("2026-06-30"), "project", "project_cb", false));
         ArApAdjustmentRecord requested = service.requestAdjustment(new com.complex.platform.finance.dto.ArApAdjustmentRequest(
@@ -1400,7 +1441,7 @@ class FinanceServiceTests {
     void backfillSelfDecisionForbiddenBySeparationOfDuties() {
         stubActor("staff_finance_self");
         ArApItemRecord item = service.createArApItem(itemRequest("arap-backfill-sod", "receivable", 100000L));
-        service.createDailyClose(new DailyCloseRequest(
+        DailyCloseFixture.lock(service, financeRepository, new DailyCloseRequest(
                 "daily-close-backfill-sod", "lock", List.of(),
                 LocalDate.parse("2026-06-30"), "project", "project_sod", false));
         ArApAdjustmentRecord requested = service.requestAdjustment(new com.complex.platform.finance.dto.ArApAdjustmentRequest(
@@ -1423,7 +1464,7 @@ class FinanceServiceTests {
     void backfillRejectDoesNotChangeLedger() {
         stubActor("staff_finance_2");
         ArApItemRecord item = service.createArApItem(itemRequest("arap-backfill-rej", "receivable", 100000L));
-        service.createDailyClose(new DailyCloseRequest(
+        DailyCloseFixture.lock(service, financeRepository, new DailyCloseRequest(
                 "daily-close-backfill-rej", "lock", List.of(),
                 LocalDate.parse("2026-06-30"), "project", "project_bfr", false));
 
@@ -2409,6 +2450,15 @@ class FinanceServiceTests {
         @Override
         public Optional<DailyCloseRecord> findDailyCloseById(String id) {
             return Optional.ofNullable(dailyCloses.get(id));
+        }
+
+        @Override
+        public void saveDailyCloseFinalMark(String dailyCloseId, String category, java.time.Instant markedAt) {
+            DailyCloseRecord dc = dailyCloses.get(dailyCloseId);
+            List<String> marks = new java.util.ArrayList<>(dc.finalMarkCategories());
+            marks.add(category);
+            dailyCloses.put(dailyCloseId, new DailyCloseRecord(dc.id(), dc.businessDate(), dc.scopeType(), dc.scopeId(),
+                    dc.forceClose(), dc.status(), dc.lockedAt(), dc.createdAt(), dc.confirmedAt(), dc.archivedAt(), List.copyOf(marks)));
         }
 
         @Override

@@ -89,6 +89,7 @@ bar_reservation_invitation_members,single_complex_default,P0_SINGLE_COMPLEX,sing
 bar_reservations,direct,merchant_id,merchant_id column on bar_reservations,ready for project/merchant scoped query enforcement,V0.07,covered
 bar_scan_order_payments,direct,merchant_id,merchant_id column on bar_scan_order_payments,ready for project/merchant scoped query enforcement,V0.07,covered
 bar_service_responsibilities,direct,project_id,project_id column on bar_service_responsibilities,ready for project/merchant scoped query enforcement,V0.07,covered
+bar_shift_members,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",V0.07,covered
 bar_shifts,direct,project_id,project_id column on bar_shifts,ready for project/merchant scoped query enforcement,V0.07,covered
 bar_staff_booking_suspensions,direct,merchant_id,merchant_id column on bar_staff_booking_suspensions,ready for project/merchant scoped query enforcement,V0.07,covered
 bar_table_guest_checkins,inherited,reservation/table linkage,reservation_id/table_id -> bar_reservations/bar_tables -> venue/project scope,must join through scope path before multi-complex rollout,V0.07,covered
@@ -217,6 +218,7 @@ facility_inspection_tasks,direct,project_id,project_id column on facility_inspec
 facility_inspection_templates,direct,project_id,project_id column on facility_inspection_templates,ready for project/merchant scoped query enforcement,V0.07,covered
 facility_work_order_policy,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",V0.07,covered
 facility_work_orders,direct,project_id,project_id column on facility_work_orders,ready for project/merchant scoped query enforcement,V0.07,covered
+finance_daily_close_final_marks,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",V0.07,covered
 finance_daily_close_summaries,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",V0.07,covered
 finance_daily_closes,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",V0.07,covered
 finance_offline_payment_confirmations,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",V0.07,covered

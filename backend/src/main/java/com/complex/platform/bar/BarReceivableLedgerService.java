@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import java.time.LocalDate;
 import java.util.List;
@@ -78,6 +78,13 @@ interface BarReceivableLedgerService {
     }
 
     String createPayableForGiftSettlement(String verificationId, String merchantId, long internalPriceCent);
+
+    /**
+     * 第十八批 R 段第 142 条 142-R1（BSM:1081「长款当期计入该商户营业外收入并单独留痕可查」）：复核平账的收银长款记该酒吧内部核算台账
+     * （source_type='bar_shift_overage'、source_id＝班次）。default no-op 供内存测试双子兼容。
+     */
+    default void postShiftOverageIncome(String shiftId, String barId, long amountCent) {
+    }
 
     /**
      * 赠饮核销冲正 → 冲销该结算应付：过一条 direction='receivable'、source_type='pass_drink_settlement'、

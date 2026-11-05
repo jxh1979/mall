@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -16,7 +16,9 @@ import com.complex.platform.analytics.AnalyticsRepository;
 import com.complex.platform.common.LocalZone;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.finance.FinanceService;
+import com.complex.platform.finance.dto.DailyCloseActionRequest;
 import com.complex.platform.finance.dto.DailyCloseRequest;
+import com.complex.platform.support.DailyCloseFixture;
 import com.complex.platform.support.TestSecurityActors;
 import java.math.BigDecimal;
 import java.sql.Timestamp;
@@ -64,6 +66,7 @@ class BarBusinessDayWindowsJdbcIntegrationTests {
     @Autowired private JdbcTemplate jdbc;
     @Autowired private JdbcBarRepository bars;
     @Autowired private FinanceService finance;
+    @Autowired private com.complex.platform.finance.FinanceRepository financeRepository;
     @Autowired private BarReceivableLedgerService ledger;
     @Autowired private AnalyticsRepository analytics;
 
@@ -89,7 +92,7 @@ class BarBusinessDayWindowsJdbcIntegrationTests {
         String b = bar("b", 12);
         settledBill(a, 10_000L, BEIJING_ELEVEN);
         settledBill(b, 20_000L, BEIJING_ELEVEN);
-        TestSecurityActors.asPlatformAdmin();
+        DailyCloseFixture.asFinanceAdmin(jdbc, "usr_dc_fin_" + suffix);
         assertThat(barSource(close(D, merchant(a)))).containsExactly(10_000L, 1L);
         assertThat(barSource(close(D, merchant(b)))).containsExactly(0L, 0L);
         assertThat(barSource(close(D.minusDays(1), merchant(b)))).containsExactly(20_000L, 1L);
@@ -102,7 +105,7 @@ class BarBusinessDayWindowsJdbcIntegrationTests {
         String b = bar("depb", 12);
         paidDeposit(a, 20_000L, BEIJING_ELEVEN);
         paidDeposit(b, 30_000L, BEIJING_ELEVEN);
-        TestSecurityActors.asPlatformAdmin();
+        DailyCloseFixture.asFinanceAdmin(jdbc, "usr_dc_fin_" + suffix);
         assertThat(depositSource(close(D, merchant(a)))).containsExactly(20_000L, 1L);
         assertThat(depositSource(close(D, merchant(b)))).containsExactly(0L, 0L);
         assertThat(depositSource(close(D.minusDays(1), merchant(b)))).containsExactly(30_000L, 1L);
@@ -114,9 +117,12 @@ class BarBusinessDayWindowsJdbcIntegrationTests {
         String b = bar("b", 12);
         String bill = settledBill(b, 20_000L, BEIJING_ELEVEN);
         jdbc.update("UPDATE bar_bills SET payment_status='abnormal', abnormal_prior_status='paid' WHERE id=?", bill);
-        TestSecurityActors.asPlatformAdmin();
-        assertThat(catchThrowable(() -> finance.createDailyClose(dailyClose(D, merchant(b))))).isNull();
-        assertThatThrownBy(() -> finance.createDailyClose(dailyClose(D.minusDays(1), merchant(b))))
+        DailyCloseFixture.asFinanceAdmin(jdbc, "usr_dc_fin_" + suffix);
+        // 第十八批 R 段 143-R1：异常账单闸在确认时拦（生成照常）。
+        String onD = close(D, merchant(b));
+        String onEarlier = close(D.minusDays(1), merchant(b));
+        assertThat(catchThrowable(() -> confirm(onD))).isNull();
+        assertThatThrownBy(() -> confirm(onEarlier))
                 .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("DAY_CLOSE_ANOMALY_PENDING"));
     }
 
@@ -147,8 +153,8 @@ class BarBusinessDayWindowsJdbcIntegrationTests {
         LocalDate expected = barDayNow(local);
         assertThat(finance.recordStoredValueMerchantPayable(bar, "bbw_svtxn_" + suffix, 1_200L, "bbw_svk_" + suffix).dueDate())
                 .isEqualTo(expected);
-        TestSecurityActors.asPlatformAdmin();
-        close(expected, merchant(bar));
+        DailyCloseFixture.asFinanceAdmin(jdbc, "usr_dc_fin_" + suffix);
+        DailyCloseFixture.lock(finance, financeRepository, dailyClose(expected, merchant(bar)));
         assertThatThrownBy(() -> finance.recordStoredValueMerchantPayable(bar, "bbw_svtxn2_" + suffix, 1_200L, "bbw_svk2_" + suffix))
                 .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("DAY_CLOSE_LOCKED"));
     }
@@ -162,7 +168,7 @@ class BarBusinessDayWindowsJdbcIntegrationTests {
         LocalDate expected = barDayNow(local);
         String bill = settledBill(bar, 9_000L, Instant.now());
         BarBillRecord record = bars.findBillById(bill).orElseThrow();
-        TestSecurityActors.asPlatformAdmin();
+        DailyCloseFixture.asFinanceAdmin(jdbc, "usr_dc_fin_" + suffix);
         String item = ledger.createReceivableForOnAccountBill(record, bars.findOrderById(record.orderId()).orElseThrow(),
                 "bbw-oa-" + suffix, "挂账", List.of());
         assertThat(jdbc.queryForMap("SELECT due_date::text AS due, accounting_period FROM ar_ap_items WHERE id=?", item))
@@ -255,6 +261,11 @@ class BarBusinessDayWindowsJdbcIntegrationTests {
 
     private String close(LocalDate day, String merchantId) {
         return finance.createDailyClose(dailyClose(day, merchantId)).id();
+    }
+
+    private void confirm(String dailyCloseId) {
+        DailyCloseFixture.markAllFinal(financeRepository, dailyCloseId);
+        finance.confirmDailyClose(dailyCloseId, new DailyCloseActionRequest("bbw-confirm-" + suffix + "-" + seq.incrementAndGet(), null));
     }
 
     private List<Long> barSource(String dailyCloseId) {

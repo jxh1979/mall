@@ -1,4 +1,4 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -167,6 +167,21 @@ describe("CustomerApi requests", () => {
     expect(rows).toEqual([{ amusementProjectId: "ap-1", projectName: "旋转木马", openStatus: "open",
       sessions: [{ sessionId: "s-1", startTime: "2026-10-25T12:00:00Z", endTime: "2026-10-25T13:00:00Z", capacity: 20, usedCapacity: 5,
         status: "scheduled" }] }]);
+  });
+
+  // 第十八批 R 段第 152 条 152-R3（第十八批裁决 34「客户点击后确定自己是订台人还是参与者」）：接受邀请函带上所选身份，请求体蛇形 as_holder。
+  it("confirmBarInvitation：选「我是订台人」请求体带 as_holder:true，不带第二参按参与者 as_holder:false", async () => {
+    const transport = transportMock().mockResolvedValue(ok({ id: "m-1", reservation_id: "r-1", is_holder: true, status: "confirmed" }));
+    const service = makeService(transport, "tok");
+    const code = { invitationToken: "inv_abc", invitationSignature: "sig123", tableId: "t-a", capacity: 6 };
+
+    await service.confirmBarInvitation(code, true);
+    await service.confirmBarInvitation(code);
+
+    expect(sentAt(transport, 0).url).toBe("https://api.example.test/api/v1/customer/bar-invitations/confirm");
+    expect(JSON.parse(sentAt(transport, 0).body!)).toMatchObject({ invitation_token: "inv_abc", invitation_signature: "sig123", table_id: "t-a",
+      capacity: 6, as_holder: true });
+    expect(JSON.parse(sentAt(transport, 1).body!)).toMatchObject({ invitation_token: "inv_abc", as_holder: false });
   });
 
   it("logout carries the session token so the server revokes it", async () => {

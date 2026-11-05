@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.17
+// 文件版本：V0.18
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
@@ -164,13 +164,13 @@ class JdbcFinanceRepository implements FinanceRepository {
     @Override
     public com.complex.platform.common.api.PageResponse<ArApItemRecord> listArApItemsForProjects(
             String merchantId, java.util.Set<String> projectIds, String keyword, int page, int size) {
-        return listArApItemsForProjects(merchantId,projectIds,keyword,page,size,null);
+        return listArApItemsForProjects(merchantId,projectIds,keyword,page,size,null,null);
     }
 
     @Override
     public com.complex.platform.common.api.PageResponse<ArApItemRecord> listArApItemsForProjects(
             String merchantId, java.util.Set<String> projectIds, String keyword, int page, int size,
-            java.util.Set<String> payrollItemIds) {
+            java.util.Set<String> payrollItemIds, String lockedDayCloseId) {
         int safePage = page < 1 ? 1 : page;
         int safeSize = size < 1 ? 20 : Math.min(size, 200);
         String trimmed = keyword == null ? "" : keyword.trim();
@@ -180,11 +180,14 @@ class JdbcFinanceRepository implements FinanceRepository {
         MapSqlParameterSource params = new MapSqlParameterSource()
                 .addValue("merchant_id", merchantId, java.sql.Types.VARCHAR)
                 .addValue("project_ids", projectIds)
-                .addValue("kw", trimmed.isEmpty() ? null : "%" + trimmed + "%", java.sql.Types.VARCHAR);
+                .addValue("kw", trimmed.isEmpty() ? null : "%" + trimmed + "%", java.sql.Types.VARCHAR)
+                .addValue("locked_day_close_id", lockedDayCloseId);
         String where = """
                  WHERE (:merchant_id IS NULL OR merchant_id = :merchant_id)
                    AND (:kw IS NULL OR item_no ILIKE :kw OR direction ILIKE :kw OR status ILIKE :kw OR source_type ILIKE :kw)
-                """ + (projectIds == null ? "" : " AND project_id IN (:project_ids)");
+                """ + (projectIds == null ? "" : " AND project_id IN (:project_ids)")
+                // 第十八批 R 段 143-R4：按锁定该台账的日结过滤（日结页面「本日结锁定的台账」）。
+                + (lockedDayCloseId == null ? "" : " AND locked_day_close_id = :locked_day_close_id");
         if (payrollItemIds != null) {
             if (payrollItemIds.isEmpty()) where += " AND source_type <> 'staff_payroll'";
             else {
@@ -364,10 +367,11 @@ class JdbcFinanceRepository implements FinanceRepository {
     public DailyCloseRecord saveDailyClose(DailyCloseRecord dailyClose) {
         jdbcTemplate.update("""
                 INSERT INTO finance_daily_closes (
-                    id, business_date, scope_type, scope_id, force_close, status, locked_at, created_at
+                    id, business_date, scope_type, scope_id, force_close, status, locked_at, created_at, confirmed_at, archived_at
                 )
                 VALUES (
-                    :id, :business_date, :scope_type, :scope_id, :force_close, :status, :locked_at, :created_at
+                    :id, :business_date, :scope_type, :scope_id, :force_close, :status, :locked_at, :created_at,
+                    :confirmed_at, :archived_at
                 )
                 ON CONFLICT (id) DO UPDATE SET
                     business_date = EXCLUDED.business_date,
@@ -375,7 +379,9 @@ class JdbcFinanceRepository implements FinanceRepository {
                     scope_id = EXCLUDED.scope_id,
                     force_close = EXCLUDED.force_close,
                     status = EXCLUDED.status,
-                    locked_at = EXCLUDED.locked_at
+                    locked_at = EXCLUDED.locked_at,
+                    confirmed_at = EXCLUDED.confirmed_at,
+                    archived_at = EXCLUDED.archived_at
                 """, dailyCloseParameters(dailyClose));
         return dailyClose;
     }
@@ -445,6 +451,38 @@ class JdbcFinanceRepository implements FinanceRepository {
                  ORDER BY b.created_at, b.bill_no
                  LIMIT 10
                 """.formatted(barWindowPredicate("b.created_at", "b.bar_id", barWindows, params)), params, String.class);
+    }
+
+    @Override
+    public boolean unfinishedBarShiftExists(Instant from, Instant to, String scopeType, String scopeId,
+            Map<String, Instant[]> barWindows) {
+        return barShiftExists("s.witnessed_at IS NULL", from, to, scopeType, scopeId, barWindows);
+    }
+
+    /** 第十八批 R 段 143-R6：有差异待复核＝已班结且 needs_review（142-R1，V595 文件头）。 */
+    @Override
+    public boolean unbalancedBarShiftExists(Instant from, Instant to, String scopeType, String scopeId,
+            Map<String, Instant[]> barWindows) {
+        return barShiftExists("s.status = 'closed' AND s.needs_review = TRUE", from, to, scopeType, scopeId, barWindows);
+    }
+
+    /** 开班落在该营业日（酒吧逐家按各自营业日窗）且满足 condition 的收银班次；merchant 范围只看本酒吧，其余平台口径。 */
+    private boolean barShiftExists(String condition, Instant from, Instant to, String scopeType, String scopeId,
+            Map<String, Instant[]> barWindows) {
+        boolean merchantScope = isMerchantScope(scopeType);
+        MapSqlParameterSource params = new MapSqlParameterSource()
+                .addValue("from", from.atOffset(java.time.ZoneOffset.UTC))
+                .addValue("to", to.atOffset(java.time.ZoneOffset.UTC))
+                .addValue("merchant_scope", merchantScope)
+                .addValue("merchant_id", merchantScope ? scopeId : null);
+        return Boolean.TRUE.equals(jdbcTemplate.queryForObject("""
+                SELECT EXISTS (
+                    SELECT 1
+                      FROM bar_shifts s
+                     WHERE %s
+                       AND (:merchant_scope = FALSE OR s.bar_id = :merchant_id)
+                       AND %s)
+                """.formatted(condition, barWindowPredicate("s.opened_at", "s.bar_id", barWindows, params)), params, Boolean.class));
     }
 
     /**
@@ -819,10 +857,25 @@ class JdbcFinanceRepository implements FinanceRepository {
     @Override
     public Optional<DailyCloseRecord> findDailyCloseById(String id) {
         return jdbcTemplate.query("""
-                SELECT id, business_date, scope_type, scope_id, force_close, status, locked_at, created_at
+                SELECT id, business_date, scope_type, scope_id, force_close, status, locked_at, created_at, confirmed_at, archived_at,
+                       (SELECT string_agg(m.category, ',' ORDER BY m.marked_at, m.category)
+                          FROM finance_daily_close_final_marks m
+                         WHERE m.daily_close_id = finance_daily_closes.id) AS final_mark_categories
                   FROM finance_daily_closes
                  WHERE id = :id
                 """, Map.of("id", id), this::mapDailyClose).stream().findFirst();
+    }
+
+    /** 第十八批 R 段 143-R2：五类最终标记一类一行（主键日结＋类别）。 */
+    @Override
+    public void saveDailyCloseFinalMark(String dailyCloseId, String category, Instant markedAt) {
+        jdbcTemplate.update("""
+                INSERT INTO finance_daily_close_final_marks (daily_close_id, category, marked_at)
+                VALUES (:daily_close_id, :category, :marked_at)
+                """, new MapSqlParameterSource()
+                .addValue("daily_close_id", dailyCloseId)
+                .addValue("category", category)
+                .addValue("marked_at", timestampWithTimeZone(markedAt)));
     }
 
     @Override
@@ -861,7 +914,8 @@ class JdbcFinanceRepository implements FinanceRepository {
 
     @Override
     public com.complex.platform.common.api.PageResponse<DailyCloseRecord> listDailyCloses(
-            String merchantId, java.util.Set<String> projectIds, int page, int size) {
+            String merchantId, java.util.Set<String> projectIds, LocalDate businessDate, String scopeType, String scopeId,
+            int page, int size) {
         int safePage = page < 1 ? 1 : page;
         int safeSize = size < 1 ? 20 : Math.min(size, 200);
         if (projectIds != null && projectIds.isEmpty())
@@ -869,8 +923,15 @@ class JdbcFinanceRepository implements FinanceRepository {
         // 同一个筛选谓词用于行和总数：商户只到本商户的 merchant、bar 范围；项目集合到项目范围与项目下商户。
         MapSqlParameterSource params = new MapSqlParameterSource()
                 .addValue("merchant_id", merchantId, java.sql.Types.VARCHAR)
-                .addValue("project_ids", projectIds);
+                .addValue("project_ids", projectIds)
+                .addValue("business_date", businessDate)
+                .addValue("scope_type", scopeType)
+                .addValue("scope_id", scopeId);
+        // 第十八批 R 段 143-R1：营业日、范围类型、范围编号非空时再按它们过滤（页面查「待生成」）。
         String where = " WHERE (:merchant_id IS NULL OR (scope_type IN ('merchant', 'bar') AND scope_id = :merchant_id))"
+                + (businessDate == null ? "" : " AND business_date = :business_date")
+                + (scopeType == null ? "" : " AND scope_type = :scope_type")
+                + (scopeId == null ? "" : " AND scope_id = :scope_id")
                 + (projectIds == null ? "" : """
                    AND ((scope_type IN ('project', 'ticketing', 'amusement') AND scope_id IN (:project_ids))
                         OR (scope_type IN ('merchant', 'bar') AND scope_id IN (SELECT id FROM merchants WHERE project_id IN (:project_ids))))
@@ -878,7 +939,10 @@ class JdbcFinanceRepository implements FinanceRepository {
         Long total = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM finance_daily_closes" + where, params, Long.class);
         params.addValue("limit", safeSize).addValue("offset", (long) (safePage - 1) * safeSize);
         List<DailyCloseRecord> items = jdbcTemplate.query("""
-                SELECT id, business_date, scope_type, scope_id, force_close, status, locked_at, created_at
+                SELECT id, business_date, scope_type, scope_id, force_close, status, locked_at, created_at, confirmed_at, archived_at,
+                       (SELECT string_agg(m.category, ',' ORDER BY m.marked_at, m.category)
+                          FROM finance_daily_close_final_marks m
+                         WHERE m.daily_close_id = finance_daily_closes.id) AS final_mark_categories
                   FROM finance_daily_closes""" + where + """
                  ORDER BY business_date DESC, created_at DESC, id
                  LIMIT :limit OFFSET :offset
@@ -923,6 +987,7 @@ class JdbcFinanceRepository implements FinanceRepository {
         // merchantId 非空（商户 scope 调用方）：仅本商户封账（scope_type='merchant' AND scope_id=:merchant_id）拦截，
         //   他商户封账不冻结本商户写入；
         // merchantId 为空（平台口径调用方）：该经营日任一 locked 日结即拦截（平台口径写入受所有封账约束）。
+        // 第十八批 R 段 143-R5（第十八批裁决 33「归档后只读可查，锁定后补录照常走上级审批。」）：已归档的日结同样封账。
         MapSqlParameterSource params = new MapSqlParameterSource()
                 .addValue("business_date", businessDate)
                 // merchantId 可为 null(平台口径):必须带 SQL 类型,否则 PG 无法推断 :merchant_id IS NULL 的参数类型直接 500。
@@ -931,7 +996,7 @@ class JdbcFinanceRepository implements FinanceRepository {
                 SELECT COUNT(*)
                   FROM finance_daily_closes
                  WHERE business_date = :business_date
-                   AND status = 'locked'
+                   AND status IN ('locked', 'archived')
                    AND (:merchant_id IS NULL
                         OR (scope_type = 'merchant' AND scope_id = :merchant_id))
                 """, params, Integer.class);
@@ -1748,15 +1813,29 @@ class JdbcFinanceRepository implements FinanceRepository {
         return adjustment;
     }
 
+    /** 第十八批 R 段 143-R4：补录记录连同台账单号与原营业日（锁定该台账的日结的营业日）一并取。 */
+    private static final String ADJUSTMENT_SELECT = """
+            SELECT a.id, a.ar_ap_item_id, a.locked_day_close_id, a.adjustment_amount_cent,
+                   a.approval_status, a.requested_by, a.approved_by, a.reason, a.created_at, a.decided_at,
+                   (SELECT i.item_no FROM ar_ap_items i WHERE i.id = a.ar_ap_item_id) AS item_no,
+                   (SELECT d.business_date FROM finance_daily_closes d WHERE d.id = a.locked_day_close_id) AS original_business_date
+              FROM ar_ap_adjustments a
+            """;
+
     @Override
     public Optional<ArApAdjustmentRecord> findArApAdjustmentByIdForUpdate(String id) {
-        return jdbcTemplate.query("""
-                SELECT id, ar_ap_item_id, locked_day_close_id, adjustment_amount_cent,
-                       approval_status, requested_by, approved_by, reason, created_at, decided_at
-                  FROM ar_ap_adjustments
-                 WHERE id = :id
-                   FOR UPDATE
+        return jdbcTemplate.query(ADJUSTMENT_SELECT + """
+                 WHERE a.id = :id
+                   FOR UPDATE OF a
                 """, Map.of("id", id), this::mapAdjustment).stream().findFirst();
+    }
+
+    @Override
+    public List<ArApAdjustmentRecord> listAdjustmentsByDailyClose(String dailyCloseId) {
+        return jdbcTemplate.query(ADJUSTMENT_SELECT + """
+                 WHERE a.locked_day_close_id = :daily_close_id
+                 ORDER BY a.created_at DESC, a.id
+                """, Map.of("daily_close_id", dailyCloseId), this::mapAdjustment);
     }
 
     @Override
@@ -1794,7 +1873,14 @@ class JdbcFinanceRepository implements FinanceRepository {
                 resultSet.getBoolean("force_close"),
                 resultSet.getString("status"),
                 nullableInstant(resultSet, "locked_at"),
-                nullableInstant(resultSet, "created_at"));
+                nullableInstant(resultSet, "created_at"),
+                nullableInstant(resultSet, "confirmed_at"),
+                nullableInstant(resultSet, "archived_at"),
+                finalMarkCategories(resultSet.getString("final_mark_categories")));
+    }
+
+    private static List<String> finalMarkCategories(String joined) {
+        return joined == null ? List.of() : List.of(joined.split(","));
     }
 
     private DailyCloseSummaryRecord mapDailyCloseSummary(ResultSet resultSet, int rowNumber) throws SQLException {
@@ -1819,7 +1905,9 @@ class JdbcFinanceRepository implements FinanceRepository {
                 resultSet.getString("approved_by"),
                 resultSet.getString("reason"),
                 nullableInstant(resultSet, "created_at"),
-                nullableInstant(resultSet, "decided_at"));
+                nullableInstant(resultSet, "decided_at"),
+                resultSet.getString("item_no"),
+                resultSet.getObject("original_business_date", java.time.LocalDate.class));
     }
 
     private MapSqlParameterSource arApItemParameters(ArApItemRecord item) {
@@ -1875,7 +1963,9 @@ class JdbcFinanceRepository implements FinanceRepository {
                 .addValue("force_close", dailyClose.forceClose())
                 .addValue("status", dailyClose.status())
                 .addValue("locked_at", timestampWithTimeZone(dailyClose.lockedAt()))
-                .addValue("created_at", timestampWithTimeZone(dailyClose.createdAt()));
+                .addValue("created_at", timestampWithTimeZone(dailyClose.createdAt()))
+                .addValue("confirmed_at", timestampWithTimeZone(dailyClose.confirmedAt()))
+                .addValue("archived_at", timestampWithTimeZone(dailyClose.archivedAt()));
     }
 
     private MapSqlParameterSource paymentIntentParameters(PaymentIntentRecord paymentIntent) {

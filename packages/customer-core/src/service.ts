@@ -1,4 +1,4 @@
-// 文件版本：V0.11
+// 文件版本：V0.12
 // 客人端业务服务层（三端共用）：封装客人用到的真实端点（客人接口 customer 前缀等），接口以 docs/openapi/openapi-p0.yaml 为准。
 // 请求经注入的 CustomerApi 发出（各端自带 transport），本文件不依赖浏览器。
 
@@ -266,8 +266,9 @@ export class CustomerService {
   }
 
   // ③a 订卡邀请函：朋友确认接受（两步之第一步，占一个名额）。ROOT-03-R25：二维码载荷的防伪标记、卡座、可进人数一并回传核验。
-  confirmBarInvitation(payload: BarInvitationCode): Promise<BarInvitationMember> {
-    return this.api.post<BarInvitationMember>("/api/v1/customer/bar-invitations/confirm", payload);
+  // 第十八批 R 段第 152 条 152-R3（第十八批裁决 34「客户点击后确定自己是订台人还是参与者」）：asHolder＝选「我是订台人」（仅预览 holderClaimable 时可选），缺省按参与者。
+  confirmBarInvitation(payload: BarInvitationCode, asHolder = false): Promise<BarInvitationMember> {
+    return this.api.post<BarInvitationMember>("/api/v1/customer/bar-invitations/confirm", { ...payload, asHolder });
   }
 
   // clients-R6 我的订台（本人订台列表，由此进入邀请函）。

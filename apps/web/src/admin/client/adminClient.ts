@@ -1,4 +1,4 @@
-// 文件版本：V0.06
+// 文件版本：V0.07
 import { apiErrorFromResponse } from "../../shared/apiError";
 import { announceReplayed, beginWriteOperation } from "../../shared/operationKey";
 import type { DownloadedFile } from "../types";
@@ -14,6 +14,13 @@ function getApiBaseUrl(): string {
   // 令牌迁 HttpOnly Cookie 后必须同源（否则跨源 XHR 不带 Cookie）：dev（vite 3000）走同源，
   // 由 vite server.proxy 的 /api → 后端转发；prod 由 nginx 同源转发 /api。VITE_API_BASE_URL 显式跨源覆盖需自配 CORS。
   return "";
+}
+
+/** 第十八批 R 段 152-R4：后台复制给客人的深链主机。后台主机即客人链接主机（发行打包客人链接主机取 public_host）；
+ * 商户手机应用的页面不在后台主机上，取接口基址 VITE_API_BASE_URL 的主机。 */
+export function customerLinkHost(): string {
+  const base = getApiBaseUrl();
+  return base ? new URL(base).host : window.location.host;
 }
 
 function isPlainObject(value: unknown): value is Record<string, JsonValue> {

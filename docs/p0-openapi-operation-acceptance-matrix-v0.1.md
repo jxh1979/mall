@@ -1,4 +1,4 @@
-# P0 OpenAPI Operation 验收矩阵 V0.49
+# P0 OpenAPI Operation 验收矩阵 V0.50
 
 ## 1. 文档定位
 
@@ -17,7 +17,7 @@
 
 ## 3. Operation 清单
 
-> 当前 `docs/openapi/openapi-p0.json` 共 1236 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
+> 当前 `docs/openapi/openapi-p0.json` 共 1245 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
 
 | 标签 | 方法 | 路径 | operationId | 摘要 | 请求体 | 权限 | 认证上下文 | 数据范围 | 终端/设备能力/调用通道 | 幂等 | 成功事件 | 失败事件 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -150,7 +150,7 @@
 | finance | `GET` | `/api/v1/finance/ar-ap-items/{id}/payments` | `listArApPayments` | 读取所选台账原收付款流水 | `-` | `finance.ar_ap.view` | `staff-token` | `project-order` | web | 否 | `ar_ap_payment.listed` | `ar_ap_payment.list_failed` |
 | finance | `POST` | `/api/v1/finance/ar-ap-items/{id}/payments` | `createArApPayment` | 应收应付收付款登记 | `ArApPaymentRequest` | `finance.payment.register` | `staff-token` | `project-entity` | web | 是 | `finance_payment.registered` | `finance_payment.register_failed` |
 | finance | `GET` | `/api/v1/finance/daily-closes` | `listDailyCloses` | 查询日结批次 | `-` | `finance.daily_close.manage` | `staff-token` | `project-entity` | web | 否 | `finance.daily_close.viewed` | `finance.daily_close.view_failed` |
-| finance | `POST` | `/api/v1/finance/daily-closes` | `createDailyClose` | 日结锁定 | `DailyCloseRequest` | `finance.daily_close.lock` | `staff-token` | `project-entity` | web | 是 | `finance_daily_close.locked` | `finance_daily_close.lock_failed` |
+| finance | `POST` | `/api/v1/finance/daily-closes` | `createDailyClose` | 生成日结 | `DailyCloseRequest` | `finance.daily_close.lock` | `staff-token` | `project-entity` | web | 是 | `finance_daily_close.generated` | `finance_daily_close.generate_failed` |
 | finance | `POST` | `/api/v1/finance/payment-intents` | `createPaymentIntent` | 创建聚合支付意图 | `PaymentIntentRequest` | `finance.payment_intent.create` | `staff-token` | `project-order` | web, kiosk, miniapp, app | 是 | `payment.intent_created` | `payment.intent_failed` |
 | finance | `POST` | `/api/v1/finance/payments/{payment_id}/confirm-offline` | `confirmOfflinePayment` | 现金或 POS 线下收款确认 | `OfflinePaymentConfirmRequest` | `finance.payment.register` | `staff-token` | `project-order` | web | 是 | `finance_payment.registered` | `finance_payment.register_failed` |
 | finance | `GET` | `/api/v1/finance/reconciliation/batches` | `listReconciliationBatches` | 查询对账批次 | `-` | `finance.reconciliation.view` | `staff-token` | `project` | web | 否 | `finance.reconciliation_batch.viewed` | `finance.reconciliation_batch.viewed_failed` |
@@ -369,7 +369,12 @@
 | access | `GET` | `/api/v1/access/effective-permissions` | `getEffectivePermissions` | 查询当前账号有效权限集 | `-` | `authenticated` | `staff-token` | `self` | web, mobile_admin | 否 | `not_applicable` | `not_applicable` |
 | access | `GET` | `/api/v1/access/users/{id}/effective-permissions` | `getUserEffectivePermissions` | 查询指定账号有效权限集 | `-` | `access.user.view` | `staff-token` | `project` | web, mobile_admin | 否 | `not_applicable` | `not_applicable` |
 | access | `PUT` | `/api/v1/access/users/{id}/staff-level` | `assignStaffLevel` | 分配员工职级与薪资 | `StaffLevelAssignmentRequest` | `access.staff_level.manage` | `staff-token` | `project` | web | 是 | `access.staff_level.assigned` | `access.staff_level.assign_failed` |
+| finance | `POST` | `/api/v1/finance/daily-closes/{id}/confirm` | `confirmDailyClose` | 确认日结 | `DailyCloseActionRequest` | `finance.daily_close.lock` | `staff-token` | `project-entity` | web | 是 | `finance_daily_close.confirmed` | `finance_daily_close.confirm_failed` |
+| finance | `POST` | `/api/v1/finance/daily-closes/{id}/lock` | `lockDailyClose` | 锁定日结 | `DailyCloseActionRequest` | `finance.daily_close.lock` | `staff-token` | `project-entity` | web | 是 | `finance_daily_close.locked` | `finance_daily_close.lock_failed` |
+| finance | `POST` | `/api/v1/finance/daily-closes/{id}/final-marks` | `markDailyCloseFinal` | 五类数据最终标记 | `DailyCloseActionRequest` | `finance.daily_close.lock` | `staff-token` | `project-entity` | web | 是 | `finance_daily_close.final_marked` | `finance_daily_close.final_mark_failed` |
+| finance | `POST` | `/api/v1/finance/daily-closes/{id}/archive` | `archiveDailyClose` | 归档日结 | `DailyCloseActionRequest` | `finance.daily_close.lock` | `staff-token` | `project-entity` | web | 是 | `finance_daily_close.archived` | `finance_daily_close.archive_failed` |
 | finance | `GET` | `/api/v1/finance/daily-closes/{id}/summaries` | `listDailyCloseSummaries` | 查询日结七源汇总 | `-` | `finance.daily_close.manage` | `staff-token` | `project-entity` | web, mobile_admin | 否 | `finance.daily_close_summary.viewed` | `finance.daily_close_summary.view_failed` |
+| finance | `GET` | `/api/v1/finance/daily-closes/{id}/adjustments` | `listDailyCloseAdjustments` | 查询日结的锁定后补录 | `-` | `finance.daily_close.manage` | `staff-token` | `project-entity` | web | 否 | `finance.daily_close_adjustment.viewed` | `finance.daily_close_adjustment.view_failed` |
 | finance | `POST` | `/api/v1/finance/ar-ap-adjustments` | `requestArApAdjustment` | 锁定后补录审批申请 | `ArApAdjustmentRequest` | `finance.locked_backfill.request` | `staff-token` | `project-entity` | web, mobile_admin | 是 | `finance.locked_backfill_requested` | `finance.locked_backfill_request_failed` |
 | finance | `POST` | `/api/v1/finance/ar-ap-adjustments/{id}/approve` | `approveArApAdjustment` | 锁定后补录审批决定 | `ArApAdjustmentDecisionRequest` | `finance.locked_backfill.approve` | `staff-token` | `project-entity` | web, mobile_admin | 是 | `finance.locked_backfill_approved` | `finance.locked_backfill_decision_failed` |
 | bar | `POST` | `/api/v1/bar/reservations/{id}/pay-deposit` | `payBarReservationDeposit` | 订台定金支付 | `BarReservationDepositActionRequest` | `bar.reservation.manage` | `staff-token` | `project-bar` | web, kiosk, mobile_admin | 是 | `bar.reservation_deposit_paid` | `bar.reservation_deposit_pay_failed` |
@@ -453,6 +458,10 @@
 | bar | `GET` | `/api/v1/bar/shifts` | `listBarShifts` | 查询收银班次 | `-` | `bar.shift.manage` | `staff-token` | `project-bar-table` | web | 否 | `bar.shift.viewed` | `bar.shift.view_failed` |
 | bar | `POST` | `/api/v1/bar/shifts/open` | `openBarShift` | 开班 | `BarShiftOpenRequest` | `bar.shift.manage` | `staff-token` | `project-bar-table` | web | 是 | `bar.shift_opened` | `bar.shift_open_failed` |
 | bar | `POST` | `/api/v1/bar/shifts/{shift_id}/close` | `closeBarShift` | 班结对账 | `BarShiftCloseRequest` | `bar.shift.close` | `staff-token` | `project-bar-table` | web | 是 | `bar.shift_closed` | `bar.shift_close_failed` |
+| bar | `POST` | `/api/v1/bar/shifts/{shift_id}/join` | `joinBarShift` | 加入本钱箱 | `BarShiftActionRequest` | `bar.shift.manage` | `staff-token` | `project-bar-table` | web | 是 | `bar.shift_joined` | `bar.shift_join_failed` |
+| bar | `POST` | `/api/v1/bar/shifts/{shift_id}/resolve` | `resolveBarShift` | 交班复核平账 | `BarShiftResolveRequest` | `finance.daily_close.manage` | `staff-token` | `project-bar-table` | web | 是 | `bar.shift_resolved` | `bar.shift_resolve_failed` |
+| bar | `POST` | `/api/v1/bar/shifts/{shift_id}/sign` | `signBarShift` | 交班单签字 | `BarShiftActionRequest` | `bar.shift.manage` | `staff-token` | `project-bar-table` | web | 是 | `bar.shift_signed` | `bar.shift_sign_failed` |
+| bar | `POST` | `/api/v1/bar/shifts/{shift_id}/witness` | `witnessBarShift` | 交班见证归档 | `BarShiftActionRequest` | `finance.daily_close.manage` | `staff-token` | `project-bar-table` | web | 是 | `bar.shift_witnessed` | `bar.shift_witness_failed` |
 | evidence | `GET` | `/api/v1/evidence/risk-alerts` | `searchRiskAlerts` | 查询风险预警列表 | `-` | `risk_alert.view` | `staff-token` | `platform` | web, mobile_admin | 否 | `exception.alerts_viewed` | `exception.alerts_view_failed` |
 | evidence | `POST` | `/api/v1/evidence/risk-alerts` | `reportRiskAlert` | 上报统一风险预警 | `object` | `risk_alert.report` | `staff-token` | `platform` | web, mobile_admin | 是 | `exception.reported` | `exception.report_failed` |
 | evidence | `GET` | `/api/v1/evidence/risk-alerts/{alert_id}` | `getRiskAlertDetail` | 查询风险预警详情 | `-` | `risk_alert.view` | `staff-token` | `platform` | web, mobile_admin | 否 | `not_applicable` | `not_applicable` |
