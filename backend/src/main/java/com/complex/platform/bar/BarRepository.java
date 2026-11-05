@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.10
+// 文件版本：V0.11
 
 import com.complex.platform.finance.PaymentIntentRecord;
 import java.util.List;
@@ -192,6 +192,39 @@ public interface BarRepository {
 
     /** 第十八批 S 段第 167 条 167-R1：锁台组根会话行（JDBC：SELECT … FOR UPDATE），序列化台组内的名额校验。内存桩默认无操作。 */
     default void lockTableSession(String sessionId) {
+    }
+
+    // ── 第十八批 T 段第 167 条 167-R3a：并台期间新发出的邀请及其成员，首次拆台前分配到某一张原台（BSM:1079）。内存桩默认空实现 ──
+    /** 签发时记本次邀请是否在并台期间发出，并清空上次的原台分配。 */
+    default void setInvitationMergeState(String reservationId, boolean pending) {
+    }
+
+    /** 这些会话所属订台中，并台期间发出、尚未分配原台的邀请（订台 ID）。 */
+    default List<String> listMergePendingInvitationReservationIds(List<String> sessionIds) {
+        return List.of();
+    }
+
+    /** 这些会话所属订台中，由并台期间发出的邀请形成、尚未分配原台、未移出的被邀请人（成员 ID，不含开卡人）。 */
+    default List<String> listMergePendingInvitationMembers(List<String> sessionIds) {
+        return List.of();
+    }
+
+    /** 拆台时把邀请分配到某一张原台会话。 */
+    default void assignInvitationSession(String reservationId, String sessionId) {
+    }
+
+    /** 拆台时把成员分配到某一张原台会话（只改所属原台，不改成员状态）。 */
+    default void assignInvitationMemberSession(String memberId, String sessionId) {
+    }
+
+    /** 邀请已分配到的原台会话；未分配为空。 */
+    default Optional<String> findInvitationAssignedSessionId(String reservationId) {
+        return Optional.empty();
+    }
+
+    /** 成员所属原台会话（拆台时分配，或接受时继承邀请的分配）；为空＝按订台所在会话计。 */
+    default Optional<String> findInvitationMemberAssignedSessionId(String memberId) {
+        return Optional.empty();
     }
 
     BarProductRecord saveProduct(BarProductRecord product);
@@ -438,6 +471,11 @@ public interface BarRepository {
     /** 复核 money B2：一笔账单级退款调整中商品部分的金额（有薪资退款分项按 goods 分项合计，无分项＝全额）。默认＝全额。 */
     default long refundGoodsCent(String adjustmentId, long amountCent) {
         return amountCent;
+    }
+
+    /** 18T 复核修复⑤：酒吧（bar_id 的商户）归属给定项目的订单（同 listShiftsInProjects）；集合为空返回空。 */
+    default List<BarOrderRecord> listOrdersInProjects(java.util.Set<String> projectIds) {
+        return List.of();
     }
 
     /** 订单落单时锁定的开台会话（JDBC：bar_order_service_sources.order_id）。默认空=无会话归属。 */

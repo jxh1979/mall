@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.07
+// 文件版本：V0.08
 
 import com.complex.platform.evidence.AuditedOperation;
 
@@ -43,6 +43,18 @@ enum BarWriteOperation implements AuditedOperation {
     // 第十六批第 16 条：客人争议员工登记置异常（沿用账单调整权限）／主管二选一处置（ENUM「异常状态的统一出口」）。
     RAISE_BILL_ANOMALY("bar.bill_anomaly_raised", "bar.bill_anomaly_raise_failed", "bar.bill.adjust", "bar_bill"),
     RESOLVE_BILL_ANOMALY("bar.bill_anomaly_resolved", "bar.bill_anomaly_resolve_failed", "bar.bill.anomaly.resolve", "bar_bill"),
+    // 第十八批 T 段第 157 条 157-R2：收银员挂起包厢未付款订单（BSM:1106；第十八批裁决 37 只限包厢）。
+    SUSPEND_ORDER("bar.order_suspended", "bar.order_suspend_failed", "bar.bill.hang", "bar_order_suspension"),
+    // 157-R3：经理确认挂起订单无法收款转坏账（BSM:1109）、财务核销结案（BSM:1111）。
+    CONFIRM_SUSPENSION_BAD_DEBT("bar.order_suspension_bad_debt", "bar.order_suspension_bad_debt_failed", "bar.bill.hang_cancel",
+            "bar_order_suspension"),
+    WRITE_OFF_SUSPENSION("bar.order_suspension_written_off", "bar.order_suspension_write_off_failed", "finance.ar_ap.manage",
+            "bar_order_suspension"),
+    // 157-R6：收银员发起取消挂起订单、经理审批取消（BSM:1107、BSM:1108；PGM:699）。
+    REQUEST_SUSPENSION_CANCEL("bar.order_suspension_cancel_requested", "bar.order_suspension_cancel_request_failed", "bar.bill.hang",
+            "bar_order_suspension"),
+    DECIDE_SUSPENSION_CANCEL("bar.order_suspension_cancel_decided", "bar.order_suspension_cancel_decide_failed", "bar.bill.hang_cancel",
+            "bar_order_suspension"),
     MARK_PRODUCT_SOLD_OUT("bar.product_sold_out", "bar.product_sold_out_failed", "bar.product.sold_out", "bar_product"),
     ADD_BILL_TIP("bar.bill_tip_added", "bar.bill_tip_failed", "bar.bill.tip", "bar_bill"),
     OPEN_SHIFT("bar.shift_opened", "bar.shift_open_failed", "bar.shift.manage", "bar_shift"),

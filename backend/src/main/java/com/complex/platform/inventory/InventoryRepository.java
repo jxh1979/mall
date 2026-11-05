@@ -1,6 +1,6 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.14
+// 文件版本：V0.15
 
 import java.time.Instant;
 import java.util.List;
@@ -130,6 +130,11 @@ public interface InventoryRepository {
     default InventoryCostSummaryRecord sumOutboundCost(
             String merchantId, String projectId, String periodStart, String periodEnd, Instant from, Instant to) {
         return new InventoryCostSummaryRecord(merchantId, periodStart, periodEnd, 0L, 0L, 0L);
+    }
+
+    /** 第十八批 T 段 157-R8（第十八批裁决 38「收入与出库成本都不进分红净利润」）：[from, to) 内谓词同 sumOutboundCost、出自经理已确认坏账的酒吧订单的出库成本合计。 */
+    default long sumBadDebtBarOrderOutboundCost(String merchantId, Instant from, Instant to) {
+        return 0L;
     }
 
     /** 第十八批 K 段 97-R3：[from, to) 内出品的吧台售卖消耗按酒吧、销售形式、套餐、酒吧商品汇总；merchantId、projectId 为空即不限。 */

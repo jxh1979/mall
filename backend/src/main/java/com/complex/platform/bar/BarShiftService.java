@@ -41,6 +41,9 @@ public class BarShiftService {
     private final BusinessDayResolver businessDays;
     private final BarReceivableLedgerService receivableLedger;
     private final AccessRepository access;
+    // 第十八批 T 段第 157 条 157-R2：挂起订单交班闸（字段注入免改构造点；单测未注入即不查）。
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    BarOrderSuspensionService suspensions;
 
     public BarShiftService(
             BarRepository repository,
@@ -131,6 +134,8 @@ public class BarShiftService {
         if (handoverToUserId != null && access.findUserById(handoverToUserId).isEmpty()) {
             throw ApiException.badRequest("VALIDATION_FAILED", "handover_to_user_id：接班人账号不存在");
         }
+        // 第十八批 T 段第 157 条 157-R2（BSM:1106「未结清订单阻止交班和日结」）：本班次挂起未结清的订单挡交班。
+        if (suspensions != null) suspensions.requireNoUnsettledInShift(shift.id());
         long declaredCash = nonNegative(actual.declaredCashCent(), "declared_cash_cent");
         Instant now = Instant.now();
         // 按班次时间窗口 [openedAt, now) 聚合系统应收（各支付方式 / 退款 / 小费）。只读，不改账单。

@@ -1,4 +1,4 @@
-// 文件版本：V0.20
+// 文件版本：V0.21
 // OBS-14-02 后台结果区字段中文名字典（PGM「全局原则 · 界面全中文（所有终端零英文）」）。
 // 键用后端 JSON 的蛇形写法；结果区查表时蛇形与驼峰同查（orderId / order_id 都命中 order_id）。
 // 与后端字段中文名表 FieldLabels.java（common.api 包）同键同名：前段按后端原样抄录，后端改名这里跟着改（门禁会比对）。
@@ -703,6 +703,42 @@ export const FIELD_LABELS: Record<string, string> = {
   abnormal_mode: "异常模式",
   abnormal_reason: "异常原因",
   abnormal_prior_status: "进入异常前的状态",
+  // 第十八批 T 段第 157 条 157-R2：正式挂起订单（BSM:1106）。
+  suspended_by: "挂起人",
+  suspension_status: "挂起状态",
+  suspension_amount_cent: "挂起金额",
+  unpaid_close_escalated_at: "关台未付清待办升级时间",
+  // 第十八批 T 段第 157 条 157-R3：挂起订单转坏账与核销结案（BSM:1109～1111）。
+  suspension: "挂起记录",
+  bad_debt_reason: "无法收款原因",
+  bad_debt_confirmed_by: "确认坏账人",
+  bad_debt_confirmed_at: "确认坏账时间",
+  // 157-R4：高价值挂起订单转坏账待复核的复核单。
+  bad_debt_review_id: "转坏账高价值复核单",
+  unpaid_price_cent: "未收售价",
+  inventory_cost_cent: "库存成本",
+  compensation_lines: "赔偿登记",
+  written_off_by: "核销结案人",
+  written_off_at: "核销结案时间",
+  // 第十八批 T 段第 157 条 157-R7：挂起订单风险看板（BSM:1113「挂起金额、账龄、责任人和未结清数量」）。
+  orders: "订单",
+  unpaid_cent: "未收金额",
+  age_minutes: "账龄（分钟）",
+  // 18T 复核修复④：看板责任人按出品时主责服务员逐人列出（每项 user_id、username）。
+  responsible_users: "责任人",
+  unsettled_count: "未结清数量",
+  unsettled_amount_cent: "未结清金额",
+  oldest_unsettled_age_minutes: "最长账龄（分钟）",
+  // 第十八批 T 段第 157 条 157-R6：挂起订单经理审批取消与取消后迟到到账。
+  order_item_ids: "订单明细",
+  cancel_item_ids: "取消的明细",
+  cancel_reason_code: "取消原因码",
+  cancel_evidence_attachment_ids: "取消证据附件",
+  cancel_requested_at: "取消发起时间",
+  cancel_decided_by: "取消审批人",
+  cancel_decided_at: "取消审批时间",
+  cancel_decision_reason: "取消审批意见",
+  refund_ar_ap_item_id: "原路退款应付台账项",
   acceptance_comment: "验收意见",
   accepted_amount_cent: "确认金额",
   accepted_at: "确认时间",
@@ -3168,6 +3204,17 @@ export const VALUE_LABELS: Record<string, string> = {
   bar_bill_settled: "酒吧账单已结账",
   bar_bill_anomaly_raised: "酒吧账单争议已登记",
   bar_bill_anomaly_resolved: "酒吧账单异常已处置",
+  // 第十八批 T 段第 157 条 157-R2：挂起动作与挂起七态中账单状态表里没有的四个（BSM:1105）。
+  bar_order_suspended: "包厢订单已挂起",
+  bar_order_suspension_bad_debt: "挂起订单已转坏账",
+  bar_order_suspension_written_off: "坏账订单已核销结案",
+  bar_suspended_orders_export: "挂起订单风险看板已导出",
+  bar_order_suspension_cancel_requested: "挂起订单取消已发起",
+  bar_order_suspension_cancel_decided: "挂起订单取消已审批",
+  hanging_unpaid: "已挂起待付款",
+  cancel_pending_approval: "取消审批中",
+  bad_debt_processing: "坏账损耗处理中",
+  written_off_closed: "已核销结案",
   bar_order_item_void_requested: "订单明细作废已申请",
   customer_restricted: "客人已受限",
   customer_restriction_lifted: "客人受限已解除",
@@ -3325,6 +3372,8 @@ export const KEY_VALUE_LABELS: Record<string, Record<string, string>> = {
   settlement_mode: { none: "不结算", internal_price: "内部结算价挂应付" },
   movement_type: { outbound: "出库", redeem_consume: "积分兑换消耗", gift_claim_consume: "礼物领取消耗" },
   table_type: { card_seat: "卡座", bar_counter: "吧台位", vip: "贵宾包坐", loose_table: "散台" },
+  // 第十八批 T 段第 157 条 157-R2（BSM:1105「已挂起待付款、已结清、取消审批中、已取消、待退款、坏账损耗处理中、已核销结案」）。
+  suspension_status: { hanging_unpaid: "已挂起待付款", settled: "已结清", cancel_pending_approval: "取消审批中", cancelled: "已取消", pending_refund: "待退款", bad_debt_processing: "坏账损耗处理中", written_off_closed: "已核销结案" },
   // 第十八批 L 段 105-R1（ENUM:160「库房分类｜总库、酒吧库、吧台库存、消耗品库、礼品库、存酒区」）。
   // 第十八批 M 段第 117 条（BSM:1380 公区设施与楼宇主体设备的用料由物业承担；商户自有设施、以及因商户责任导致损坏的用料由该商户承担）。
   cost_bearer: { property: "物业承担", merchant: "商户承担" },

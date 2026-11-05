@@ -1,4 +1,4 @@
-// 文件版本：V0.22
+// 文件版本：V0.23
 export type AdminUser = {
   id: string;
   username: string;
@@ -386,6 +386,29 @@ export type BarOrderRow = {
   bills?: BarBillRow[];
   // 第十批 TK-26-R2（BSM L1025「分别标注已上菜与未上菜」）：后端 BarOrderView.items，后台按明细勾选送达。
   items?: BarOrderItemRow[];
+  // 第十八批 T 段第 157 条 157-R2：后端 BarOrderView 台位类型（vip＝包厢，只有包厢能挂起）与本单挂起状态、挂起金额（分）。
+  tableType?: string;
+  suspensionStatus?: string;
+  suspensionAmountCent?: number;
+  // 第十八批 T 段第 157 条 157-R3：本单挂起记录全文（转坏账后带未收售价、库存成本与赔偿登记，责任人为空＝门店损耗）。
+  suspension?: {
+    id: string;
+    status: string;
+    badDebtReason?: string;
+    // 157-R4：高价值转坏账待复核的库存高价值复核单（批准后保留，驳回清空）。
+    badDebtReviewId?: string;
+    badDebtConfirmedAt?: string;
+    unpaidPriceCent?: number;
+    inventoryCostCent?: number;
+    compensationLines?: { orderItemId: string; responsibleUserId?: string | null; costCent: number }[];
+    writtenOffAt?: string;
+    // 157-R6：取消申请所列明细与原因、经理审批时间（批准后等高价值退品审批时仍为取消审批中）。
+    cancelItemIds?: string[];
+    cancelReason?: string;
+    cancelDecidedAt?: string;
+  };
+  // 第十八批 T 段第 157 条 157-R5 ⑥：本单关台未付清待办的升级时间（未升级为空）；已升级的转坏账按钮对能进本页的用户放开，由后端按排班鉴权。
+  unpaidCloseEscalatedAt?: string;
 };
 
 /** 酒吧订单明细（后端 BarOrderItemRecord）：deliveryStatus pending=未上菜 / delivered=已上菜 / voided=已撤单。 */

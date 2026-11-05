@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -58,6 +58,7 @@ class BarSalesAttributionJdbcTests {
     @Autowired private JdbcTemplate jdbc;
     @Autowired private BarRepository bars;
     @Autowired private BarCommissionRateConfigPort rates;
+    @Autowired private com.fasterxml.jackson.databind.ObjectMapper json;
 
     private final String suffix = UUID.randomUUID().toString().substring(0, 8);
     private final String project = "prj_bsa_" + suffix;
@@ -81,7 +82,8 @@ class BarSalesAttributionJdbcTests {
         String staffPermissions = "'bar.reservation.create','bar.table_session.create','bar.table_session.view','bar.order.create',"
                 + "'bar.table_commission.calculate','bar.payroll.view','bar.table_session.transfer'";
         String staffRole = role("st", staffPermissions);
-        String managerRole = role("mg", staffPermissions + ",'bar.table_session.attribution_reassign','bar.table_session.merge'");
+        String managerRole = role("mg", staffPermissions + ",'bar.table_session.attribution_reassign','bar.table_session.merge',"
+                + "'bar.bill.hang','bar.bill.hang_cancel'");
         salesA = account("a", staffRole);
         clerkB = account("b", staffRole);
         managerM = account("m", managerRole);
@@ -221,6 +223,37 @@ class BarSalesAttributionJdbcTests {
         assertThat(jdbc.queryForMap("SELECT metadata->>'sales_staff_id_before' AS before, metadata->>'sales_staff_id_after' AS after, "
                 + "metadata->>'guest_source_after' AS source FROM audit_events WHERE event_name='bar.table_session.attribution_reassigned' AND business_id=?", session))
                 .containsEntry("before", user("a")).containsEntry("after", user("c")).containsEntry("source", "marketing");
+    }
+
+    /**
+     * 第十八批 T 段第 157 条 157-R3（BSM:1111「转坏账核销的订单不产生销售提成……已核销结案后又收回的款项按收回时点单独入账，不追溯重开提成」）：
+     * 包厢直接到店、现场补选销售 B 开台点单开单计提后，收银挂起、经理确认无法收款：提成即作废；店长再改派营销带客 C 也不重算（仍作废）；再计提 409 BAR_BILL_BAD_DEBT。
+     */
+    @Test
+    void badDebtVoidsCommissionAndReassignKeepsItVoid() throws Exception {
+        jdbc.update("""
+                INSERT INTO bar_payroll_rules(id, rule_kind, project_id, merchant_id, effective_from, version, rule_json, reason, status,
+                    platform_company_id, created_by)
+                VALUES (?, 'charge', ?, NULL, ?, 'V0.01', ?::jsonb, '服务费 0', 'approved', ?, 'usr_bsa')
+                """, "bpr_bsa_" + suffix, project, java.sql.Date.valueOf(LocalDate.now().minusDays(1)),
+                json.writeValueAsString(new BarPayrollRequests.RuleValues(0, 0, 2000, null, null, null, List.of())), company);
+        String table = table("vip");
+        String session = JsonPath.read(open(clerkB, table, null, user("b"), null).andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8), "$.data.id");
+        String orderId = JsonPath.read(order(clerkB, table).andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8), "$.data.id");
+        String bill = JsonPath.read(bill(clerkB, orderId).andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8), "$.data.id");
+        commission(clerkB, bill).andExpect(status().isOk());
+        mockMvc.perform(post("/api/v1/bar/orders/" + orderId + "/suspend").with(managerM).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"idempotency_key\":\"bsa-h-" + suffix + "\",\"reason\":\"客人稍后付款\"}")).andExpect(status().isOk());
+        mockMvc.perform(post("/api/v1/bar/orders/" + orderId + "/suspension/bad-debt").with(managerM).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"idempotency_key\":\"bsa-bd-" + suffix + "\",\"reason\":\"客人失联，确认无法收回\"}")).andExpect(status().isOk());
+        assertThat(jdbc.queryForObject("SELECT status FROM bar_commission_calculations WHERE bill_id=?", String.class, bill)).isEqualTo("void");
+
+        reassign(managerM, session, "marketing", user("c")).andExpect(status().isOk());
+        assertThat(jdbc.queryForObject("SELECT status FROM bar_commission_calculations WHERE bill_id=?", String.class, bill)).isEqualTo("void");
+        commission(clerkB, bill).andExpect(status().isConflict()).andExpect(jsonPath("$.detail_code").value("BAR_BILL_BAD_DEBT"));
     }
 
     /** 不持改派权限的员工 B 按同一请求改派：403，库内归属不变。 */

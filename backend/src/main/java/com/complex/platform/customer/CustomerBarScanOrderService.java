@@ -1,6 +1,6 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import static com.complex.platform.common.Strings.requireText;
 
@@ -254,6 +254,8 @@ public class CustomerBarScanOrderService {
         if (amount <= 0) {
             throw ApiException.badRequest("VALIDATION_FAILED", "下单金额必须大于 0");
         }
+        // 第十八批 T 段 157-R1（BSM:1064、ENUM:117 最低消费是下单的前置条件）：收款前按成单同一口径判，不满足不建支付单，免得收了钱才拒单。
+        barOrders.requireMinSpendReached(session.id(), session.tableId(), amount);
         String id = "bso_" + UUID.randomUUID().toString().replace("-", "");
         // 第十八批 Q 段第 139 条（决策台账 §17「客人仍向酒吧全额付款，酒吧确认对客收入」；§16「客人在酒吧发生的点酒、套餐、二次消费、额外酒水等收入，
         // 归实际销售并经营该酒吧的法律主体」「顶层平台公司不直接取得酒吧消费收入」）：收款主体＝该散台会话所属的酒吧商户、商户直收，与订台定金同一资金归属契约。

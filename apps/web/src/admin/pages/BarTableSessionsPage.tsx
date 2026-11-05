@@ -1,4 +1,4 @@
-// 文件版本：V0.14
+// 文件版本：V0.15
 import React from "react";
 import { QRCodeSVG } from "qrcode.react";
 import { buildCustomerLink } from "@complex/customer-core/links";
@@ -27,11 +27,11 @@ const BAR_MERGE_PERMISSION = "bar.table_session.merge";
 const BAR_SPLIT_PERMISSION = "bar.table_session.split";
 type SessionActionKind = "transfer" | "merge" | "split";
 
-/** 人工订单归属文本：每行「订单ID=会话ID」，空行忽略。 */
-function parseOrderAssignments(text: string): { orderId: string; sessionId: string }[] {
+/** 拆台人工归属文本：每行「ID=会话ID」，空行忽略（订单、邀请、成员三框共用）。 */
+function parseIdAssignments(text: string): { id: string; sessionId: string }[] {
   return text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean).map((line) => {
-    const [orderId = "", sessionId = ""] = line.split("=").map((part) => part.trim());
-    return { orderId, sessionId };
+    const [id = "", sessionId = ""] = line.split("=").map((part) => part.trim());
+    return { id, sessionId };
   });
 }
 const BAR_INVITATION_PERMISSION = "bar.reservation.invitation.manage";
@@ -75,6 +75,9 @@ export function BarTableSessionsPage({ api, setActionResult, setGlobalError, eff
   const [splitMode, setSplitMode] = React.useState<"last_merge" | "single" | "all">("last_merge");
   const [splitSessionId, setSplitSessionId] = React.useState("");
   const [splitAssignments, setSplitAssignments] = React.useState("");
+  // 第十八批 T 段第 167 条 167-R3b（BSM:1079）：并台期间新发出的邀请及其已接受、已入场成员首次拆台前的原台分配。
+  const [splitInvitationAssignments, setSplitInvitationAssignments] = React.useState("");
+  const [splitMemberAssignments, setSplitMemberAssignments] = React.useState("");
   const [actionReason, setActionReason] = React.useState("主管审批通过");
   const [invitationMemberId, setInvitationMemberId] = React.useState("");
   const [invitationCopyNotice, setInvitationCopyNotice] = React.useState<{ link: string; text: string } | null>(null);
@@ -188,7 +191,9 @@ export function BarTableSessionsPage({ api, setActionResult, setGlobalError, eff
     }
     if (kind === "split") {
       if (splitMode === "single" && !splitSessionId.trim()) return fail("任选一台拆出时请填写要拆出的原台会话 ID。");
-      if (parseOrderAssignments(splitAssignments).some((row) => !row.orderId || !row.sessionId)) return fail("订单归属每行须为「订单ID=会话ID」。");
+      if (parseIdAssignments(splitAssignments).some((row) => !row.id || !row.sessionId)) return fail("订单归属每行须为「订单ID=会话ID」。");
+      if (parseIdAssignments(splitInvitationAssignments).some((row) => !row.id || !row.sessionId)) return fail("邀请归属每行须为「订台ID=会话ID」。");
+      if (parseIdAssignments(splitMemberAssignments).some((row) => !row.id || !row.sessionId)) return fail("成员归属每行须为「成员ID=会话ID」。");
     }
     setBarError("");
     return true;
@@ -203,7 +208,13 @@ export function BarTableSessionsPage({ api, setActionResult, setGlobalError, eff
         ? { targetTableId: targetTableId.trim(), targetServiceStaffId: targetServiceStaffId.trim(), reason: actionReason.trim(), requestedByUserId: "admin-web", sessionVersion: selectedSession.sessionVersion ?? 1 }
         : kind === "merge"
           ? { mergedSessionId: mergedSessionId.trim(), reason: actionReason.trim(), requestedByUserId: "admin-web", primarySessionVersion: selectedSession.sessionVersion ?? 1, mergedSessionVersion: 1 }
-          : { mode: splitMode, splitSessionId: splitMode === "single" ? splitSessionId.trim() : undefined, orderAssignments: parseOrderAssignments(splitAssignments), reason: actionReason.trim(), requestedByUserId: "admin-web", primarySessionVersion: selectedSession.sessionVersion ?? 1 };
+          : {
+              mode: splitMode, splitSessionId: splitMode === "single" ? splitSessionId.trim() : undefined,
+              orderAssignments: parseIdAssignments(splitAssignments).map(({ id, sessionId }) => ({ orderId: id, sessionId })),
+              invitationAssignments: parseIdAssignments(splitInvitationAssignments).map(({ id, sessionId }) => ({ reservationId: id, sessionId })),
+              memberAssignments: parseIdAssignments(splitMemberAssignments).map(({ id, sessionId }) => ({ memberId: id, sessionId })),
+              reason: actionReason.trim(), requestedByUserId: "admin-web", primarySessionVersion: selectedSession.sessionVersion ?? 1,
+            };
       const result = await api.post(`/api/v1/bar/table-sessions/${encodeURIComponent(selectedSession.id)}/${kind}`, body);
       setActionResult({ action: `bar_table_session_${kind}`, status: kind === "transfer" ? "transferred" : kind === "merge" ? "merged" : "split", sessionId: selectedSession.id, result });
       await reload();
@@ -566,7 +577,9 @@ export function BarTableSessionsPage({ api, setActionResult, setGlobalError, eff
           </label>
           {splitMode === "single" ? <label>拆出的原台会话<input data-testid="bar-split-session" value={splitSessionId} onChange={(event) => setSplitSessionId(event.target.value)} placeholder="要单独拆出的原台会话 ID" /></label> : null}
           <label>订单归属（每行 订单ID=会话ID）<textarea data-testid="bar-split-assignments" value={splitAssignments} onChange={(event) => setSplitAssignments(event.target.value)} placeholder="并台期间无法自动确认归属的订单，须先人工明确归属" rows={2} /></label>
-          <p>并台前及并台期间已发生的每笔消费按实际订单归属重新汇总到拆出的原台或剩余合并台；无法确认归属的订单须先在此明确，未完成前不得拆台。拆出的原台恢复其并入前的低消，低消不足不阻断。</p>
+          <label>邀请归属（每行 订台ID=会话ID）<textarea data-testid="bar-split-invitation-assignments" value={splitInvitationAssignments} onChange={(event) => setSplitInvitationAssignments(event.target.value)} rows={2} /></label>
+          <label>成员归属（每行 成员ID=会话ID）<textarea data-testid="bar-split-member-assignments" value={splitMemberAssignments} onChange={(event) => setSplitMemberAssignments(event.target.value)} rows={2} /></label>
+          <p>并台前及并台期间已发生的每笔消费按实际订单归属重新汇总到拆出的原台或剩余合并台；无法确认归属的订单须先在此明确，未完成前不得拆台。拆出的原台恢复其并入前的低消，低消不足不阻断。并台期间新发出的邀请及其已接受、已入场成员，首次拆台前须在此逐一分配到当前合并台的某一张原台（开卡人不用分），未分配完不得拆台。</p>
           <HighRiskConfirm label="拆台" impact="将把选中合并台组按所选方式拆开，拆出台位保持已开台、各自独立计账，并按各结果台组重判定金。" disabled={submitting} precheck={() => validateSessionAction("split")} onConfirm={() => void runSessionAction("split")} permissionsState={effectivePermissions} permissions={[BAR_SPLIT_PERMISSION]} data-testid="bar-split-submit" />
         </div>
         {barError ? <div data-testid="bar-checkin-error" className="admin-inline-error">{barError}</div> : null}

@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.12
+// 文件版本：V0.13
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
 import com.complex.platform.common.crypto.PiiCipher;
@@ -441,20 +441,29 @@ class JdbcBarRepository implements BarRepository {
 
     @Override
     public BarReservationInvitationMemberRecord saveInvitationMember(BarReservationInvitationMemberRecord member) {
+        // 第十八批 T 段第 167 条 167-R3a：新接受的成员从邀请继承「并台期间发出、尚未分配」标记与已分配的原台；被移出后重新接受同样重取，
+        // 入场、移出等其他更新不动这两列。
         jdbcTemplate.update("""
                 INSERT INTO bar_reservation_invitation_members (
                     id, reservation_id, bar_id, member_identifier, member_customer_id,
-                    is_holder, status, confirmed_at, entered_at, device_id, created_at, updated_at
+                    is_holder, status, confirmed_at, entered_at, device_id, created_at, updated_at,
+                    merge_pending, assigned_session_id
                 )
                 VALUES (
                     :id, :reservation_id, :bar_id, :member_identifier, :member_customer_id,
-                    :is_holder, :status, :confirmed_at, :entered_at, :device_id, :created_at, :updated_at
+                    :is_holder, :status, :confirmed_at, :entered_at, :device_id, :created_at, :updated_at,
+                    (SELECT invitation_merge_pending AND invitation_assigned_session_id IS NULL FROM bar_reservations WHERE id = :reservation_id),
+                    (SELECT invitation_assigned_session_id FROM bar_reservations WHERE id = :reservation_id)
                 )
                 ON CONFLICT (reservation_id, member_identifier) DO UPDATE SET
                     status = EXCLUDED.status,
                     entered_at = EXCLUDED.entered_at,
                     device_id = EXCLUDED.device_id,
-                    updated_at = EXCLUDED.updated_at
+                    updated_at = EXCLUDED.updated_at,
+                    merge_pending = CASE WHEN bar_reservation_invitation_members.status = 'revoked'
+                        THEN EXCLUDED.merge_pending ELSE bar_reservation_invitation_members.merge_pending END,
+                    assigned_session_id = CASE WHEN bar_reservation_invitation_members.status = 'revoked'
+                        THEN EXCLUDED.assigned_session_id ELSE bar_reservation_invitation_members.assigned_session_id END
                 """, parameterSource.invitationMemberParameters(member));
         return member;
     }
@@ -487,7 +496,9 @@ class JdbcBarRepository implements BarRepository {
                 SELECT *
                   FROM bar_reservation_invitation_members
                  WHERE status <> 'revoked'
-                   AND reservation_id IN (SELECT reservation_id FROM bar_table_sessions WHERE id IN (:ids))
+                   AND (assigned_session_id IN (:ids)
+                        OR (assigned_session_id IS NULL
+                            AND reservation_id IN (SELECT reservation_id FROM bar_table_sessions WHERE id IN (:ids))))
                  ORDER BY is_holder DESC, confirmed_at, id
                 """, Map.of("ids", sessionIds), rowMapper::mapInvitationMember);
     }
@@ -496,6 +507,60 @@ class JdbcBarRepository implements BarRepository {
     public void lockTableSession(String sessionId) {
         jdbcTemplate.query("SELECT id FROM bar_table_sessions WHERE id = :id FOR UPDATE", Map.of("id", sessionId),
                 (rs, rowNum) -> rs.getString("id"));
+    }
+
+    // 第十八批 T 段第 167 条 167-R3a：并台期间新发出的邀请及其成员的原台分配（V603）。
+    @Override
+    public void setInvitationMergeState(String reservationId, boolean pending) {
+        jdbcTemplate.update("""
+                UPDATE bar_reservations SET invitation_merge_pending = :pending, invitation_assigned_session_id = NULL WHERE id = :id
+                """, Map.of("id", reservationId, "pending", pending));
+    }
+
+    @Override
+    public List<String> listMergePendingInvitationReservationIds(List<String> sessionIds) {
+        return jdbcTemplate.queryForList("""
+                SELECT id
+                  FROM bar_reservations
+                 WHERE invitation_merge_pending AND invitation_assigned_session_id IS NULL
+                   AND id IN (SELECT reservation_id FROM bar_table_sessions WHERE id IN (:ids))
+                 ORDER BY id
+                """, Map.of("ids", sessionIds), String.class);
+    }
+
+    @Override
+    public List<String> listMergePendingInvitationMembers(List<String> sessionIds) {
+        return jdbcTemplate.queryForList("""
+                SELECT id
+                  FROM bar_reservation_invitation_members
+                 WHERE merge_pending AND assigned_session_id IS NULL AND status <> 'revoked' AND NOT is_holder
+                   AND reservation_id IN (SELECT reservation_id FROM bar_table_sessions WHERE id IN (:ids))
+                 ORDER BY confirmed_at, id
+                """, Map.of("ids", sessionIds), String.class);
+    }
+
+    @Override
+    public void assignInvitationSession(String reservationId, String sessionId) {
+        jdbcTemplate.update("UPDATE bar_reservations SET invitation_assigned_session_id = :session_id WHERE id = :id",
+                Map.of("id", reservationId, "session_id", sessionId));
+    }
+
+    @Override
+    public void assignInvitationMemberSession(String memberId, String sessionId) {
+        jdbcTemplate.update("UPDATE bar_reservation_invitation_members SET assigned_session_id = :session_id, updated_at = now() WHERE id = :id",
+                Map.of("id", memberId, "session_id", sessionId));
+    }
+
+    @Override
+    public Optional<String> findInvitationAssignedSessionId(String reservationId) {
+        return jdbcTemplate.queryForList("SELECT invitation_assigned_session_id FROM bar_reservations WHERE id = :id",
+                Map.of("id", reservationId), String.class).stream().filter(java.util.Objects::nonNull).findFirst();
+    }
+
+    @Override
+    public Optional<String> findInvitationMemberAssignedSessionId(String memberId) {
+        return jdbcTemplate.queryForList("SELECT assigned_session_id FROM bar_reservation_invitation_members WHERE id = :id",
+                Map.of("id", memberId), String.class).stream().filter(java.util.Objects::nonNull).findFirst();
     }
 
     @Override
@@ -726,6 +791,21 @@ class JdbcBarRepository implements BarRepository {
                  WHERE merchant_id = :merchant_id
                  ORDER BY created_at DESC, id
                 """, Map.of("merchant_id", merchantScope.get()), rowMapper::mapOrder);
+    }
+
+    @Override
+    public List<BarOrderRecord> listOrdersInProjects(java.util.Set<String> projectIds) {
+        if (projectIds.isEmpty()) {
+            return List.of();
+        }
+        return jdbcTemplate.query("""
+                SELECT o.id, o.bar_id, o.merchant_id, o.table_id, o.reservation_id, o.customer_id, o.order_source,
+                       o.status, o.total_amount_cent, o.currency, o.created_terminal, o.device_id,
+                       o.sales_staff_id, o.created_at, o.updated_at, o.order_type, o.paid_at
+                  FROM bar_orders o JOIN merchants m ON m.id = o.bar_id
+                 WHERE m.project_id IN (:projects)
+                 ORDER BY o.created_at DESC, o.id
+                """, Map.of("projects", projectIds), rowMapper::mapOrder);
     }
 
     @Override

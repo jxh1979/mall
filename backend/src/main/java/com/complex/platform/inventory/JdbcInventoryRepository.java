@@ -1,6 +1,6 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.18
+// 文件版本：V0.19
 
 import com.complex.platform.common.crypto.PiiCipher;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -675,6 +675,29 @@ class JdbcInventoryRepository implements InventoryRepository {
                         rs.getLong("total_cost"),
                         rs.getLong("movement_count"),
                         rs.getLong("no_basis_count"))).getFirst();
+    }
+
+    // 第十八批 T 段 157-R8（第十八批裁决 38）：谓词同 sumOutboundCost，另限酒吧出品流水（business_type=bar_order）且该订单挂起已经经理确认坏账。
+    @Override
+    public long sumBadDebtBarOrderOutboundCost(String merchantId, Instant from, Instant to) {
+        MapSqlParameterSource params = new MapSqlParameterSource()
+                .addValue("merchant_id", merchantId)
+                .addValue("from", OffsetDateTime.ofInstant(from, ZoneOffset.UTC))
+                .addValue("to", OffsetDateTime.ofInstant(to, ZoneOffset.UTC));
+        Long total = jdbcTemplate.queryForObject("""
+                SELECT COALESCE(SUM(m.total_cost_cent), 0)
+                  FROM inventory_stock_movements m
+                 WHERE m.source_location_id IS NOT NULL
+                   AND m.target_location_id IS NULL
+                   AND m.movement_type <> 'lend_out'
+                   AND m.merchant_id = :merchant_id
+                   AND m.created_at >= :from
+                   AND m.created_at < :to
+                   AND m.business_type = 'bar_order'
+                   AND EXISTS (SELECT 1 FROM bar_order_suspensions s
+                                WHERE s.order_id = m.business_id AND s.bad_debt_confirmed_at IS NOT NULL)
+                """, params, Long.class);
+        return total == null ? 0L : total;
     }
 
     // 第十八批 K 段 97-R3（BSM:1168、BSM:1065、BSM:1068）：酒吧＝商户（V267，同 findBarProjectId）。只计售卖的酒水：赠送明细与小吃不计；

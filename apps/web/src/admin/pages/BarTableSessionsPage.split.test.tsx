@@ -1,4 +1,4 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { BarTableSessionsPage } from "./BarTableSessionsPage";
@@ -44,6 +44,29 @@ describe("卡座会话拆台", () => {
         orderAssignments: [{ orderId: "ord-9", sessionId: "session-2" }, { orderId: "ord-10", sessionId: "session-1" }],
       })));
     await waitFor(() => expect(props.setActionResult).toHaveBeenCalledWith(expect.objectContaining({ action: "bar_table_session_split", status: "split" })));
+  });
+
+  // 第十八批 T 段第 167 条 167-R3b（BSM:1079「并台期间新发出的邀请，以及由这些邀请形成的已接受成员、已入场成员，在首次拆台前由授权人员
+  // 逐一分配到当前合并台所包含的某一张原台并留痕」；ENUM:114 同句）：拆台表单的邀请归属、成员归属随拆台请求提交。
+  it("按邀请归属与成员归属提交拆台请求，格式不对不发请求", async () => {
+    const { post } = mount();
+
+    await waitFor(() => expect(screen.queryByTestId("bar-split-member-assignments")).not.toBeNull());
+    await waitFor(() => expect(screen.queryByTestId("bar-session-select-session-1")).not.toBeNull());
+    fireEvent.click(screen.getByTestId("bar-session-select-session-1"));
+    fireEvent.change(screen.getByTestId("bar-split-invitation-assignments"), { target: { value: "rsv-1=session-2" } });
+    fireEvent.change(screen.getByTestId("bar-split-member-assignments"), { target: { value: "invm-1=session-1\ninvm-2" } });
+    fireEvent.click(screen.getByTestId("bar-split-submit"));
+    expect(screen.getByTestId("bar-checkin-error").textContent).toContain("成员归属每行须为「成员ID=会话ID」");
+    expect(post).not.toHaveBeenCalled();
+
+    fireEvent.change(screen.getByTestId("bar-split-member-assignments"), { target: { value: "invm-1=session-1\n\ninvm-2 = session-2" } });
+    fireEvent.click(screen.getByTestId("bar-split-submit"));
+    await waitFor(() => expect(post).toHaveBeenCalledWith("/api/v1/bar/table-sessions/session-1/split",
+      expect.objectContaining({
+        invitationAssignments: [{ reservationId: "rsv-1", sessionId: "session-2" }],
+        memberAssignments: [{ memberId: "invm-1", sessionId: "session-1" }, { memberId: "invm-2", sessionId: "session-2" }],
+      })));
   });
 
   // 第十八批 K 段第 98 条（BSM L1079「平台不提供续卡、续时类产品。」，裁决 XM-M725-O）：会话操作区不再有续卡入口。

@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static com.complex.platform.common.Strings.requireText;
 
@@ -43,6 +43,9 @@ class BarSessionSalesBackfillTarget implements ManualBackfillTarget {
     private final BarRepository bars;
     private final BarBillingService billing;
     private final AuditEventService audit;
+    // 第十八批 T 段第 157 条 157-R3：已确认坏账的账单改派不重算提成（字段注入免改构造点；单测未注入即不查）。
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    BarOrderSuspensionService suspensions;
 
     BarSessionSalesBackfillTarget(BarPayrollSupport p, BarRepository bars, BarBillingService billing, AuditEventService audit) {
         this.p = p;
@@ -164,7 +167,8 @@ class BarSessionSalesBackfillTarget implements ManualBackfillTarget {
             p.jdbc.update("UPDATE bar_bills SET sales_staff_id=?, sales_role_type=?, updated_at=now() WHERE id=?", sales, roleType, bill.id());
             List<Map<String, Object>> commissions = p.jdbc.queryForList(
                     "SELECT id, commission_base_cent FROM bar_commission_calculations WHERE bill_id=?", bill.id());
-            if (commissions.isEmpty()) {
+            // 第十八批 T 段第 157 条 157-R3（BSM:1111「转坏账核销的订单不产生销售提成」）：所属订单已确认坏账的账单提成保持作废、不按新归属重算。
+            if (commissions.isEmpty() || suspensions != null && suspensions.badDebtConfirmed(bill)) {
                 continue;
             }
             p.jdbc.update("""

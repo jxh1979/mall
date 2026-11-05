@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.09
+// 文件版本：V0.10
 import static com.complex.platform.common.api.ApiRequests.requireIdempotencyKey;
 
 import com.complex.platform.access.AuthorizationService;
@@ -333,6 +333,61 @@ public class BarController {
         authorizationService.requirePermission("bar.bill.anomaly.resolve");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.resolveBillAnomaly(billId, request));
+    }
+
+    /** 第十八批 T 段第 157 条 157-R2（BSM:1106「收银员可以直接挂起……必须填写原因」；第十八批裁决 37「只有包厢能挂起」）：挂起包厢未付款订单。 */
+    @PostMapping("/orders/{order_id}/suspend")
+    public ApiResponse<BarOrderSuspensionService.Suspension> suspendOrder(
+            @PathVariable("order_id") String orderId,
+            @RequestBody(required = false) @jakarta.validation.Valid BarOrderSuspensionService.SuspendRequest request
+    ) {
+        authorizationService.requirePermission("bar.bill.hang");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.suspendOrder(orderId, request));
+    }
+
+    /** 第十八批 T 段第 157 条 157-R3（BSM:1109「经理确认最终无法收款后转为坏账损耗处理中」）：经理确认挂起订单无法收款（转坏账）。 */
+    @PostMapping("/orders/{order_id}/suspension/bad-debt")
+    public ApiResponse<BarOrderSuspensionService.Suspension> confirmOrderSuspensionBadDebt(
+            @PathVariable("order_id") String orderId,
+            @RequestBody(required = false) @jakarta.validation.Valid BarOrderSuspensionService.BadDebtRequest request
+    ) {
+        // 157-R5：鉴权移到服务层——持 bar.bill.hang_cancel，或关台未付清待办升级后的店长（bar.bill.hang_escalation）与本项目夜班值班经理。
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.confirmSuspensionBadDebt(orderId, request));
+    }
+
+    /** 第十八批 T 段第 157 条 157-R3（BSM:1111「财务确认……均完成后，订单转为已核销结案」）：财务确认坏账订单核销结案。 */
+    @PostMapping("/orders/{order_id}/suspension/write-off")
+    public ApiResponse<BarOrderSuspensionService.Suspension> writeOffOrderSuspension(
+            @PathVariable("order_id") String orderId,
+            @RequestBody(required = false) @jakarta.validation.Valid BarOrderSuspensionService.WriteOffRequest request
+    ) {
+        authorizationService.requirePermission("finance.ar_ap.manage");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.writeOffSuspension(orderId, request));
+    }
+
+    /** 第十八批 T 段第 157 条 157-R6（BSM:1107「已出品挂起订单取消须经理审批」）：收银员对挂起订单发起取消（勾选可回库的已出品明细）。 */
+    @PostMapping("/orders/{order_id}/suspension/cancel")
+    public ApiResponse<BarOrderSuspensionService.Suspension> requestOrderSuspensionCancel(
+            @PathVariable("order_id") String orderId,
+            @RequestBody(required = false) @jakarta.validation.Valid BarOrderSuspensionService.CancelRequest request
+    ) {
+        authorizationService.requirePermission("bar.bill.hang");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.requestSuspensionCancel(orderId, request));
+    }
+
+    /** 157-R6（PGM:699「经理审批取消」；BSM:1108「取消审批生效与付款成功只能有一项先完成，先完成者生效」）：经理批准或驳回挂起订单取消。 */
+    @PostMapping("/orders/{order_id}/suspension/cancel-decision")
+    public ApiResponse<BarOrderSuspensionService.Suspension> decideOrderSuspensionCancel(
+            @PathVariable("order_id") String orderId,
+            @RequestBody(required = false) @jakarta.validation.Valid BarOrderSuspensionService.CancelDecisionRequest request
+    ) {
+        authorizationService.requirePermission("bar.bill.hang_cancel");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.decideSuspensionCancel(orderId, request));
     }
 
     @PostMapping("/bills/{bill_id}/tip")

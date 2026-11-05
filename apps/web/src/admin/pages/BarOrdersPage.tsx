@@ -1,7 +1,8 @@
-// 文件版本：V0.10
+// 文件版本：V0.11
 import React from "react";
 import { BarRefundBreakdownPanel } from "./BarRefundBreakdownPanel";
 import { BarShiftPanel } from "./BarShiftPanel";
+import { BarSuspendedOrdersBoard } from "./BarSuspendedOrdersBoard";
 import { TechDetails } from "../components/TechDetails";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
@@ -13,10 +14,12 @@ import type { AdminPageProps, BarBillRow, BarOrderItemRow, BarOrderItemVoidRow, 
 import { commissionRateLabel, isSalesOrder, latestBill, salesRoleLabel } from "./barSalesRole";
 import { formatBusinessStatus } from "../i18n/statusLabels";
 import { PermissionButton } from "../security/Can";
+import { ApiError } from "../../shared/apiError";
 import { TraceLink } from "../components/TraceLink";
 import { usePagedRows, TablePager } from "../components/TablePager";
 import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowDetailDrawer";
 import { MetricDetailLink, useMetricKpiValue } from "../components/MetricDetailEntry";
+import { KEY_VALUE_LABELS } from "../i18n/fieldLabels";
 
 const TEXT = {
   ordered: "\u5df2\u70b9\u5355",
@@ -145,6 +148,29 @@ function voidLabel(map: Record<string, string>, value: string | undefined) {
 function isUndelivered(item: BarOrderItemRow) {
   return item.deliveryStatus !== "delivered" && item.deliveryStatus !== "voided";
 }
+// 第十八批 T 段第 157 条 157-R2（第十八批裁决 37「只有包厢能挂起」；BSM:1106 收银员挂起须填原因）：包厢订单有未结清账单且未挂起时才可挂起。
+function canSuspend(order: BarOrderRow | undefined) {
+  return order?.tableType === "vip" && !order.suspensionStatus
+    && (order.bills ?? []).some((bill) => bill.status === "unpaid" || bill.status === "partial_paid");
+}
+function suspensionLabel(order: BarOrderRow) {
+  if (!order.suspensionStatus) return "—";
+  return `${KEY_VALUE_LABELS.suspension_status?.[order.suspensionStatus] ?? order.suspensionStatus} · ${formatAmount(order.suspensionAmountCent)}`;
+}
+
+// 157-R5 ⑥：转坏账被拒（403）时显示后端中文原因（夜班值班经理此刻是否在班由后端按排班判），不套通用「无权」文案。
+function backendForbiddenReason(error: unknown) {
+  if (error instanceof ApiError && error.detail.status === 403) {
+    try {
+      const message = (JSON.parse(error.detail.raw ?? "") as { message?: unknown }).message;
+      if (typeof message === "string" && message) return new Error(message);
+    } catch {
+      // 非 JSON 照通用文案。
+    }
+  }
+  return error;
+}
+
 function deliveryLabel(item: BarOrderItemRow) {
   if (item.deliveryStatus === "delivered") return "已上菜";
   if (item.deliveryStatus === "voided") return "已撤单";
@@ -196,8 +222,22 @@ export function BarOrdersPage({ api, user, setActionResult, setGlobalError, effe
   const [deliverSkip, setDeliverSkip] = React.useState<{ orderId: string; ids: string[] }>({ orderId: "", ids: [] });
   // 第十六批第 16 条：客人账单争议登记与主管处置共用一个原因输入。
   const [anomalyReason, setAnomalyReason] = React.useState("");
+  const [suspendReason, setSuspendReason] = React.useState("");
+  const [badDebtReason, setBadDebtReason] = React.useState("");
+  // 第十八批 T 段第 157 条 157-R4：转坏账含高价值已出品商品时的现场照片、视频（上传后拿回附件 ID）。
+  const [badDebtEvidence, setBadDebtEvidence] = React.useState<{ id: string; fileName: string; video: boolean }[]>([]);
+  // 第十八批 T 段第 157 条 157-R6：挂起订单发起取消（勾选可回库的已出品明细、原因、原因码与证据）与经理审批意见。
+  const [cancelItemIds, setCancelItemIds] = React.useState<string[]>([]);
+  const [cancelReason, setCancelReason] = React.useState("");
+  const [cancelReasonCode, setCancelReasonCode] = React.useState("");
+  const [cancelEvidence, setCancelEvidence] = React.useState<{ id: string; fileName: string; video: boolean }[]>([]);
+  const [cancelDecisionReason, setCancelDecisionReason] = React.useState("");
   const selectedBill = firstBill(selectedOrder);
   const orderItems: BarOrderItemRow[] = selectedOrder?.items ?? [];
+  const cancelableItems = orderItems.filter((item) => item.deliveryStatus === "delivered");
+  // 157-R5 ⑥：关台未付清待办已升级的单不要求权限码（被升级的店长、夜班值班经理等能进本页的用户都可点，由后端按 bar.bill.hang_escalation 或夜班值班经理排班鉴权）；
+  // 未升级的只认 bar.bill.hang_cancel（18T 复核修复③：与后端 requireBadDebtAuthority 一致，BSM:1109「经理未及时确认时，任务升级给店长或夜班值班经理」）。
+  const badDebtPermissions = selectedOrder?.unpaidCloseEscalatedAt ? [] : ["bar.bill.hang_cancel"];
   const skippedItemIds = deliverSkip.orderId === (selectedOrder?.id ?? "") ? deliverSkip.ids : [];
   const isDeliverChecked = (item: BarOrderItemRow) => isUndelivered(item) && !skippedItemIds.includes(item.id);
 
@@ -414,6 +454,55 @@ export function BarOrdersPage({ api, user, setActionResult, setGlobalError, effe
       { reason: anomalyReason.trim() }));
   }
 
+  async function suspendOrder() {
+    if (!suspendReason.trim()) {
+      setFormError("挂起须填写原因，进入审计留痕。");
+      return;
+    }
+    await runOrderAction("bar_order_suspended", () => api.post(`/api/v1/bar/orders/${selectedOrder!.id}/suspend`,
+      { reason: suspendReason.trim() }));
+  }
+
+  // 第十八批 T 段第 157 条 157-R3（BSM:1109「经理确认最终无法收款后转为坏账损耗处理中」；BSM:1111「财务确认……均完成后，订单转为已核销结案」）。
+  async function confirmBadDebt() {
+    if (!badDebtReason.trim()) {
+      setFormError("确认无法收款须填写原因，进入审计留痕。");
+      return;
+    }
+    // 157-R4（BSM:1112「达到既有高价值标准的商品仍执行原证据和审批要求」）：上传了才带照片、视频两栏；是否高价值由后端判，命中即转主管复核。
+    const photos = badDebtEvidence.filter((e) => !e.video).map((e) => e.id);
+    const videos = badDebtEvidence.filter((e) => e.video).map((e) => e.id);
+    await runOrderAction("bar_order_suspension_bad_debt", () => api.post(`/api/v1/bar/orders/${selectedOrder!.id}/suspension/bad-debt`,
+      { reason: badDebtReason.trim(), photoAttachmentIds: photos.length ? photos : undefined, videoAttachmentIds: videos.length ? videos : undefined })
+      .catch((error: unknown) => { throw backendForbiddenReason(error); }));
+  }
+
+  async function writeOffSuspension() {
+    await runOrderAction("bar_order_suspension_written_off", () => api.post(`/api/v1/bar/orders/${selectedOrder!.id}/suspension/write-off`, {}));
+  }
+
+  // 第十八批 T 段第 157 条 157-R6（BSM:1107「已出品挂起订单取消须经理审批。能回库的商品继续执行既有退菜、退酒和高价值退品证据审批链」；BSM:1109「不可回库的
+  // 已出品商品不得走普通取消」）：只能勾选本单已出品的明细，所列即认定能回库的；是否高价值由后端判，命中须原因码与证据。
+  async function requestSuspensionCancel() {
+    const picked = cancelItemIds.filter((id) => cancelableItems.some((item) => item.id === id));
+    if (picked.length === 0) {
+      setFormError("请勾选要取消的已出品、能回库的商品；不可回库的走确认无法收款（转坏账）。");
+      return;
+    }
+    if (!cancelReason.trim()) {
+      setFormError("发起取消须填写原因，进入审计留痕。");
+      return;
+    }
+    await runOrderAction("bar_order_suspension_cancel_requested", () => api.post(`/api/v1/bar/orders/${selectedOrder!.id}/suspension/cancel`,
+      { orderItemIds: picked, reason: cancelReason.trim(), reasonCode: cancelReasonCode || undefined, evidenceAttachmentIds: cancelEvidence.map((e) => e.id) }));
+  }
+
+  // 157-R6（PGM:699「经理审批取消」；BSM:1108「取消审批生效与付款成功只能有一项先完成，先完成者生效」）。
+  async function decideSuspensionCancel(decision: "approve" | "reject") {
+    await runOrderAction("bar_order_suspension_cancel_decided", () => api.post(`/api/v1/bar/orders/${selectedOrder!.id}/suspension/cancel-decision`,
+      { decision, reason: cancelDecisionReason.trim() || undefined }));
+  }
+
   async function resolveBillAnomaly(resolution: keyof typeof ANOMALY_RESOLUTION_LABEL) {
     await runOrderAction("bar_bill_anomaly_resolved", () => api.post(`/api/v1/bar/bills/${selectedBill!.id}/anomaly/resolve`,
       { resolution, reason: anomalyReason.trim() }));
@@ -452,23 +541,24 @@ export function BarOrdersPage({ api, user, setActionResult, setGlobalError, effe
   }
 
   /** 现场拍的照片/视频直接上传，拿回真实附件 ID —— 不再让店员手打附件 ID。 */
-  async function uploadEvidenceFiles(files: FileList | null) {
+  async function uploadEvidenceFiles(files: FileList | null, businessType = "bar_order_item_void",
+    onUploaded: (rows: { id: string; fileName: string; video: boolean }[]) => void = (rows) => setVoidEvidence((prev) => [...prev, ...rows])) {
     if (!files || files.length === 0) return;
     setUploading(true);
     setFormError("");
     try {
-      const uploaded: { id: string; fileName: string }[] = [];
+      const uploaded: { id: string; fileName: string; video: boolean }[] = [];
       for (const file of Array.from(files)) {
         const form = new FormData();
         form.append("file", file);
-        form.append("business_type", "bar_order_item_void");
+        form.append("business_type", businessType);
         form.append("attachment_role", file.type.startsWith("video") ? "video" : "photo");
         if (!api.postForm) throw new Error("当前客户端不支持文件上传。");
         const saved = await api.postForm<{ id: string; fileName?: string }>(
           "/api/v1/evidence/attachments/upload", form);
-        uploaded.push({ id: saved.id, fileName: saved.fileName ?? file.name });
+        uploaded.push({ id: saved.id, fileName: saved.fileName ?? file.name, video: file.type.startsWith("video") });
       }
-      setVoidEvidence((prev) => [...prev, ...uploaded]);
+      onUploaded(uploaded);
     } catch (uploadError) {
       const message = uploadError instanceof Error ? uploadError.message : "证据上传失败。";
       setFormError(message);
@@ -552,6 +642,8 @@ export function BarOrdersPage({ api, user, setActionResult, setGlobalError, effe
       <AuditTrailHint event="bar.order.read / bar.order.bill / bar.order.deliver / bar.bill.settle" />
       {/* 第十八批 P 段第 133 条 133-R1：收银交班对账区块放在订单列表的读取／空态之外——当日第一张单之前就要能开班。 */}
       <BarShiftPanel api={api} user={user} effectivePermissions={effectivePermissions} setActionResult={setActionResult} setGlobalError={setGlobalError} />
+      {/* 第十八批 T 段第 157 条 157-R7：挂起订单风险看板（BSM:1113），同样放在订单列表的读取／空态之外。 */}
+      <BarSuspendedOrdersBoard api={api} effectivePermissions={effectivePermissions} setActionResult={setActionResult} setGlobalError={setGlobalError} />
       <AdminDataState loading={loading} error={error} empty={orders.length === 0} onRetry={reload}>
         {kpiFocus ? (
           <div className="admin-state" data-testid="bar-orders-kpi-focus-banner">
@@ -648,6 +740,77 @@ export function BarOrdersPage({ api, user, setActionResult, setGlobalError, effe
             <PermissionButton permissionsState={effectivePermissions} permissions={["bar.bill.adjust"]} data-testid="bar-bill-anomaly-raise" disabled={busyAction !== "" || selectedBill?.status === "void"} onClick={() => void raiseBillAnomaly()}>登记争议（置为异常）</PermissionButton>
           )}
         </div>
+        {canSuspend(selectedOrder) ? (
+          <div className="admin-form-row" data-testid="bar-order-suspend-form">
+            <span>包厢订单挂起：须填写原因；挂起后必须在本营业日结清，未结清的阻止交班和日结。</span>
+            <label>挂起原因<input aria-label="挂起原因" data-testid="bar-order-suspend-reason" value={suspendReason} onChange={(e) => setSuspendReason(e.target.value)} placeholder="例如：客人稍后付款" /></label>
+            <PermissionButton permissionsState={effectivePermissions} permissions={["bar.bill.hang"]} data-testid="bar-order-suspend" disabled={busyAction !== ""} onClick={() => void suspendOrder()}>挂起包厢未付款订单</PermissionButton>
+          </div>
+        ) : null}
+        {selectedOrder?.suspensionStatus === "hanging_unpaid" && selectedOrder.suspension?.badDebtReviewId ? (
+          <p className="admin-muted-action" data-testid="bar-order-bad-debt-review-pending">转坏账已提交高价值复核（复核单 {selectedOrder.suspension.badDebtReviewId}）：主管在「高价值复核」页批准后才转坏账损耗处理中，驳回后可重新发起；复核前仍阻止交班、日结与关台。</p>
+        ) : null}
+        {selectedOrder?.suspensionStatus === "hanging_unpaid" && !selectedOrder.suspension?.badDebtReviewId ? (
+          <div className="admin-form-row" data-testid="bar-order-bad-debt-form">
+            <span>经理确认最终无法收款：转为坏账损耗处理中，解除该订单对交班、日结与关台的阻断，并固化未收售价、库存成本与赔偿登记（赔偿只登记，不扣工资、绩效或提成）。</span>
+            <label>无法收款原因<input aria-label="无法收款原因" data-testid="bar-order-bad-debt-reason" value={badDebtReason} onChange={(e) => setBadDebtReason(e.target.value)} placeholder="例如：客人失联，确认无法收回" /></label>
+            <label>高价值商品现场照片与视频<input type="file" multiple accept="image/*,video/*" data-testid="bar-order-bad-debt-evidence-upload" disabled={uploading} onChange={(e) => void uploadEvidenceFiles(e.target.files, "bar_order_bad_debt", (rows) => setBadDebtEvidence((prev) => [...prev, ...rows]))} /></label>
+            <span data-testid="bar-order-bad-debt-evidence-list">{badDebtEvidence.length === 0 ? "本单含高价值已出品商品时须同时上传照片和视频，提交后转主管复核，批准才转坏账。" : `已上传证据：${badDebtEvidence.map((e) => e.fileName).join("、")}`}</span>
+            <PermissionButton permissionsState={effectivePermissions} permissions={badDebtPermissions} data-testid="bar-order-bad-debt" disabled={busyAction !== ""} onClick={() => void confirmBadDebt()}>确认无法收款（转坏账）</PermissionButton>
+          </div>
+        ) : null}
+        {selectedOrder?.suspensionStatus === "hanging_unpaid" && !selectedOrder.suspension?.badDebtReviewId ? (
+          <div className="admin-form-row" data-testid="bar-order-suspension-cancel-form">
+            <span>发起取消：勾选能回库的已出品商品（不可回库的不能取消，走确认无法收款），须经理审批；含高价值商品须选退酒原因并上传照片和视频，经理批准后仍走退菜退酒审批。</span>
+            {cancelableItems.map((item) => (
+              <label key={item.id}><input type="checkbox" data-testid={`bar-order-suspension-cancel-item-${item.id}`} checked={cancelItemIds.includes(item.id)} onChange={(e) => {
+                const checked = e.target.checked;
+                setCancelItemIds((prev) => checked ? [...prev, item.id] : prev.filter((id) => id !== item.id));
+              }} />{item.productName ?? item.id}</label>
+            ))}
+            <label>取消原因<input aria-label="取消原因" data-testid="bar-order-suspension-cancel-reason" value={cancelReason} onChange={(e) => setCancelReason(e.target.value)} placeholder="例如：客人整瓶未开，退回" /></label>
+            <label>退酒原因
+              <select data-testid="bar-order-suspension-cancel-reason-code" value={cancelReasonCode} onChange={(e) => setCancelReasonCode(e.target.value)}>
+                <option value="">请选择（含高价值商品必选）</option>
+                {reasonCodes.map((row) => <option key={row.code} value={row.code}>{row.labelZh}</option>)}
+              </select>
+            </label>
+            <label>证据照片/视频<input type="file" multiple accept="image/*,video/*" data-testid="bar-order-suspension-cancel-evidence-upload" disabled={uploading} onChange={(e) => void uploadEvidenceFiles(e.target.files, "bar_order_item_void", (rows) => setCancelEvidence((prev) => [...prev, ...rows]))} /></label>
+            <span data-testid="bar-order-suspension-cancel-evidence-list">{cancelEvidence.length === 0 ? "尚未上传证据（含高价值商品必须上传照片和视频）。" : `已上传证据：${cancelEvidence.map((e) => e.fileName).join("、")}`}</span>
+            <PermissionButton permissionsState={effectivePermissions} permissions={["bar.bill.hang"]} data-testid="bar-order-suspension-cancel" disabled={busyAction !== ""} onClick={() => void requestSuspensionCancel()}>发起取消（经理审批）</PermissionButton>
+          </div>
+        ) : null}
+        {selectedOrder?.suspensionStatus === "cancel_pending_approval" && selectedOrder.suspension?.cancelDecidedAt ? (
+          <p className="admin-muted-action" data-testid="bar-order-suspension-cancel-waiting">经理已批准取消，所列高价值商品正等主管在退菜退酒待审队列里审批：批准才回库并转已取消，驳回回到已挂起待付款；期间付款结清的以付款为准。</p>
+        ) : null}
+        {selectedOrder?.suspensionStatus === "cancel_pending_approval" && !selectedOrder.suspension?.cancelDecidedAt ? (
+          <div className="admin-form-row" data-testid="bar-order-suspension-cancel-decision-form">
+            <span>取消审批：{(selectedOrder.suspension?.cancelItemIds ?? []).map((id) => orderItems.find((item) => item.id === id)?.productName ?? id).join("、")} · 原因 {selectedOrder.suspension?.cancelReason ?? "—"}。批准后能回库的商品回库并冲减账单（高价值的仍等退菜退酒审批），整单取消即作废账单与未完成付款；付款先结清的以付款为准。</span>
+            <label>审批意见<input aria-label="审批意见" data-testid="bar-order-suspension-cancel-decision-reason" value={cancelDecisionReason} onChange={(e) => setCancelDecisionReason(e.target.value)} placeholder="选填" /></label>
+            <PermissionButton permissionsState={effectivePermissions} permissions={["bar.bill.hang_cancel"]} data-testid="bar-order-suspension-cancel-approve" disabled={busyAction !== ""} onClick={() => void decideSuspensionCancel("approve")}>批准取消</PermissionButton>
+            <PermissionButton permissionsState={effectivePermissions} permissions={["bar.bill.hang_cancel"]} data-testid="bar-order-suspension-cancel-reject" disabled={busyAction !== ""} onClick={() => void decideSuspensionCancel("reject")}>驳回取消</PermissionButton>
+          </div>
+        ) : null}
+        {selectedOrder?.suspension?.badDebtConfirmedAt ? (
+          <div data-testid="bar-order-bad-debt-detail">
+            <p>坏账登记：未收售价 {formatAmount(selectedOrder.suspension.unpaidPriceCent)} · 库存成本 {formatAmount(selectedOrder.suspension.inventoryCostCent)} · 原因 {selectedOrder.suspension.badDebtReason ?? "—"}</p>
+            <div className="admin-table-scroll">
+              <table className="admin-table">
+                <thead><tr><th>出品明细</th><th>责任人</th><th>赔偿登记成本</th></tr></thead>
+                <tbody>{(selectedOrder.suspension.compensationLines ?? []).map((line) => (
+                  <tr key={line.orderItemId}>
+                    <td>{orderItems.find((item) => item.id === line.orderItemId)?.productName ?? line.orderItemId}</td>
+                    <td>{line.responsibleUserId ?? "门店损耗"}</td>
+                    <td>{formatAmount(line.costCent)}</td>
+                  </tr>
+                ))}</tbody>
+              </table>
+            </div>
+            {selectedOrder.suspension.status === "bad_debt_processing" ? (
+              <PermissionButton permissionsState={effectivePermissions} permissions={["finance.ar_ap.manage"]} data-testid="bar-order-write-off" disabled={busyAction !== ""} onClick={() => void writeOffSuspension()}>财务确认核销结案</PermissionButton>
+            ) : null}
+          </div>
+        ) : null}
         {formError ? <div data-testid="bar-orders-error" className="admin-inline-error">{formError}</div> : null}
         </>
         )}
@@ -656,7 +819,7 @@ export function BarOrdersPage({ api, user, setActionResult, setGlobalError, effe
           <table className="admin-table" data-testid="bar-orders-table">
             <thead>
               <tr>
-                <th>{TEXT.select}</th><th>{TEXT.orderNo}</th><th>{TEXT.table}</th><th>{TEXT.orderStatus}</th><th>{TEXT.billStatus}</th><th>{TEXT.amount}</th><th>{TEXT.commissionBasis}</th><th>{TEXT.createdAt}</th><th>{TEXT.paidAt}</th>
+                <th>{TEXT.select}</th><th>{TEXT.orderNo}</th><th>{TEXT.table}</th><th>{TEXT.orderStatus}</th><th>{TEXT.billStatus}</th><th>{TEXT.amount}</th><th>{TEXT.commissionBasis}</th><th>{TEXT.createdAt}</th><th>{TEXT.paidAt}</th><th>挂起状态</th>
               <th>详情</th></tr>
             </thead>
             <tbody>
@@ -675,6 +838,7 @@ export function BarOrdersPage({ api, user, setActionResult, setGlobalError, effe
                     <td>{salesRoleLabel(order)} · {commissionRateLabel(order)}</td>
                     <td>{cnDate(order.createdAt)}</td>
                     <td data-testid={`bar-order-paid-at-${order.id}`}>{cnDate(bill?.paidAt ?? order.paidAt)}</td>
+                    <td data-testid={`bar-order-suspension-${order.id}`}>{suspensionLabel(order)}</td>
                   <td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看订单详情" onClick={(event) => { event.stopPropagation(); openOrderDetail(order); }}>查看详情</button></td></tr>
                 );
               })}

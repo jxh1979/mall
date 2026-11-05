@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.13
+// 文件版本：V0.14
 
 import static com.complex.platform.bar.BarBillRecords.*;
 import static com.complex.platform.bar.BarValidation.*;
@@ -68,6 +68,9 @@ public class BarBillingService {
     // 第十八批第 1 条（ENUM:187）：结账营业日按该酒吧的营业日判锁。null 不会出现（默认无库出厂口径，Spring 注入实例）。
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     com.complex.platform.common.BusinessDayResolver businessDays = new com.complex.platform.common.BusinessDayResolver();
+    // 第十八批 T 段第 157 条 157-R2：挂起订单结清联动、合单改指（字段注入免改构造点；单测未注入即不联动）。
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    BarOrderSuspensionService suspensions;
 
     public BarBillingService(
             BarRepository repository,
@@ -211,6 +214,10 @@ public class BarBillingService {
         BarBillRecord bill = repository.findBillByIdForUpdate(billId)
                 .orElseThrow(() -> ApiException.notFound("BAR_BILL_NOT_FOUND", "账单不存在或已被删除"));
         checkMerchantOwnership(bill.merchantId());
+        // 第十八批 T 段第 157 条 157-R6⑤（BSM:1108「取消后迟到到账进入待退款」）：挂起已取消的订单账单已作废，此后收到的款照常登记、原路待退。
+        if (suspensions != null && suspensions.cancelledFor(bill)) {
+            return settleLatePayment(bill, actual);
+        }
         requireNotAbnormalOrVoid(bill);
         if ("settled".equals(bill.settlementStatus())) {
             throw ApiException.conflict("BAR_BILL_ALREADY_SETTLED", "账单已结账，请勿重复操作");
@@ -306,6 +313,7 @@ public class BarBillingService {
                                 o.deviceId(), o.salesStaffId(), o.createdAt(), o.updatedAt(), o.orderType(), closeNow)));
             }
             if (merchantRewards != null) merchantRewards.tryCreateForBarBill(bill.id());
+            if (suspensions != null) suspensions.onBillSettled(closedBill);
             return closedBill;
         }
         long settlementAmount = actual.settlementAmountCent() == null
@@ -387,11 +395,34 @@ public class BarBillingService {
                             o.orderSource(), o.status(), o.totalAmountCent(), o.currency(), o.createdTerminal(),
                             o.deviceId(), o.salesStaffId(), o.createdAt(), o.updatedAt(), o.orderType(), now)));
         }
+        // 第十八批 T 段第 157 条 157-R2：本单账单全部结清即挂起置已结清（同一事务）。
+        if (suspensions != null) suspensions.onBillSettled(settledBill);
         // 第十一批 TK-04-R3（BSM L823「仅完成支付都不视为……履约完成」）：结清时若出品已全部送达才生成，否则待最后一项送达。
         if ("settled".equals(settledBill.settlementStatus()) && merchantRewards != null) {
             merchantRewards.tryCreateForBarBill(bill.id());
         }
         return settledBill;
+    }
+
+    /**
+     * 第十八批 T 段第 157 条 157-R6⑤（BSM:1108「取消后迟到到账进入待退款，不得恢复订单或继续出品」；DEC-R8-94-37「迟到到账须进入待退款并按原支付路径退款」）：
+     * 挂起订单取消生效后又到账的款，照常落该笔收款流水（渠道、POS 流水号与收款人同正常结账，到账金额必填），同一事务按作废并冲正同一口径
+     * （{@link BarReceivableLedgerService#createRefundPayable}，后收的先退）挂原路退款应付，该笔流水置冲正；账单不改（仍作废）、不进营业额与分红；挂起置待退款。
+     */
+    private BarBillRecord settleLatePayment(BarBillRecord bill, BarBillSettleRequest actual) {
+        requireText(actual.paymentId(), "payment_id");
+        long amount = positive(actual.settlementAmountCent(), "settlement_amount_cent");
+        String channel = PaymentChannelPolicy.requireSettlementChannel(actual.paymentChannel(), "aggregate_pay");
+        String posNo = "pos".equals(channel) ? requireText(actual.posTransactionNo(), "pos_transaction_no") : null;
+        String settlementId = "settle_" + slug(actual.idempotencyKey());
+        repository.saveBillSettlement(new BarBillSettlementRecord(settlementId, bill.id(), channel, authorizationService.currentActor().id(),
+                posNo, amount, bill.merchantId(), Instant.now()));
+        BarOrderRecord order = repository.findOrderById(bill.orderId())
+                .orElseThrow(() -> ApiException.notFound("BAR_ORDER_NOT_FOUND", "酒吧订单不存在或已被删除"));
+        String refund = receivableLedgerService.createRefundPayable(bill, order, settlementId, amount, actual.idempotencyKey(),
+                "挂起订单取消后迟到到账原路退回", List.of());
+        suspensions.onLatePayment(bill, settlementId, amount, refund);
+        return repository.findBillById(bill.id()).orElseThrow();
     }
 
     /**
@@ -701,6 +732,7 @@ public class BarBillingService {
         if (payrollSources != null) payrollSources.recordMerge(primary.id(), secondary.id());
         repository.saveBill(updatedPrimary);
         repository.saveBill(mergedSecondary);
+        if (suspensions != null) suspensions.onBillsMerged(primary.id(), secondary.id());
         return repository.saveBillOperation(new BarBillOperationRecord(
                 "bill_operation_" + billSlug(primary.id() + ":merge:" + secondary.id() + ":" + key),
                 "merge",
@@ -732,6 +764,11 @@ public class BarBillingService {
         // （作废时已有的提成同一事务置 void，见 BarBillAnomalyService）。
         if ("void".equals(bill.paymentStatus())) {
             throw ApiException.conflict("BAR_BILL_VOIDED", "账单已作废");
+        }
+        // 第十八批 T 段第 157 条 157-R3（BSM:1111「转坏账核销的订单不产生销售提成……已核销结案后又收回的款项按收回时点单独入账，不追溯重开提成」）：
+        // 所属订单已确认坏账的账单不计提（转坏账时已有的提成同一事务置 void，见 BarOrderSuspensionService），结案后收回结清也不重开。
+        if (suspensions != null && suspensions.badDebtConfirmed(bill)) {
+            throw ApiException.conflict("BAR_BILL_BAD_DEBT", "该账单所属订单已确认坏账，不产生销售提成");
         }
         // 2c-2 提成防重：同一账单已计提则返回已有（幂等），不重复建提成台账与 finance 应付，杜绝多幂等键刷提成。
         java.util.Optional<BarCommissionCalculationRecord> existingCommission = repository.findCommissionByBillId(bill.id());

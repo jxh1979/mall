@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import static com.complex.platform.bar.BarValidation.requireRequest;
 import static com.complex.platform.bar.BarValidation.requireText;
@@ -55,6 +55,9 @@ public class BarBillAnomalyService {
     // 第十八批第 1 条（ENUM:187）：已锁原行的冲正行记该酒吧当前营业日。
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     com.complex.platform.common.BusinessDayResolver businessDays = new com.complex.platform.common.BusinessDayResolver();
+    // 第十八批 T 段第 157 条 157-R2：作废并冲正不绕过挂起（字段注入免改构造点；单测未注入即不查）。
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    BarOrderSuspensionService suspensions;
 
     public BarBillAnomalyService(JdbcTemplate jdbc, BarRepository repository, AuthorizationService authorizationService,
             BarBillRefundStatusService refundStatus, BarBillingService billing, FinanceRepository finance) {
@@ -98,34 +101,44 @@ public class BarBillAnomalyService {
                      WHERE id = ?""", bill.id());
             refundStatus.refresh(bill.id());
         } else {
-            billing.requireSettleDayUnlocked(bill);
-            long onAccountCollected = jdbc.queryForObject("""
-                    SELECT COALESCE(sum(paid_amount_cent), 0) FROM ar_ap_items
-                     WHERE direction = 'receivable' AND source_type = 'bar_bill' AND source_id = ? AND origin_item_id IS NULL""",
-                    Long.class, bill.id());
-            long refunded = billing.refundCollectedOnVoid(bill, actual.reason(), onAccountCollected);
-            reverseOnAccountReceivable(bill.id());
-            reverseDispatchedCommissionTransfers(bill.id());
-            jdbc.update("""
-                    UPDATE bar_bills SET payment_status = 'void', settlement_status = 'void', abnormal_prior_status = NULL,
-                           updated_at = now()
-                     WHERE id = ?""", bill.id());
-            reverseUnrefundedCollections(bill.id(), refunded);
-            // BSM L1064「以该笔留款抵付的部分不重复收款、不重复确认收入」：本单低消留款含在实收里已随作废退回，不再作台组抵用额；
-            // 本单抵用过的台组留款不再算已用、回到台组余额（同退品驳回把留款置 reversed）。
-            jdbc.update("""
-                    UPDATE bar_bill_adjustments SET status = 'reversed'
-                     WHERE bill_id = ? AND status = 'applied' AND adjustment_type IN ('min_spend_retained', 'min_spend_retained_applied')""",
-                    bill.id());
-            jdbc.update("UPDATE bar_commission_calculations SET status = 'void' WHERE bill_id = ?", bill.id());
-            // 工资单不再挂待定：此前工资单记下的该单提成待定当即结清（原单不再显示，之后的工资单也不再按历史待定展开）。
-            jdbc.update("""
-                    UPDATE staff_payroll_pending_sources SET status = 'resolved', resolved_at = clock_timestamp()
-                     WHERE source_type = 'BAR_COMMISSION_PENDING' AND status = 'pending'
-                       AND source_id IN (SELECT id FROM bar_commission_calculations WHERE bill_id = ?)""", bill.id());
-            billing.reconcileRewards(bill.id());
+            // 第十八批 T 段第 157 条 157-R2（BSM:1107「已出品挂起订单取消须经理审批」；BSM:1109「不可回库的已出品商品不得走普通取消」）。
+            if (suspensions != null) suspensions.requireNotSuspended(bill);
+            voidAndReverse(bill, actual.reason());
         }
         return repository.findBillById(bill.id()).orElseThrow();
+    }
+
+    /**
+     * 作废并冲正（异常处置「作废并冲正」与第十八批 T 段第 157 条 157-R6 挂起订单取消生效共用；调用方已锁账单）：BSM:1108「取消生效时作废未完成付款」
+     * 同此口径——已收原路待退、挂账应收冲正、已拨付提成追加应收冲回、账单作废、未退收款冲正、低消留款冲正、提成作废并结清工资单待定、积分成长值冲回。
+     */
+    void voidAndReverse(BarBillRecord bill, String reason) {
+        billing.requireSettleDayUnlocked(bill);
+        long onAccountCollected = jdbc.queryForObject("""
+                SELECT COALESCE(sum(paid_amount_cent), 0) FROM ar_ap_items
+                 WHERE direction = 'receivable' AND source_type = 'bar_bill' AND source_id = ? AND origin_item_id IS NULL""",
+                Long.class, bill.id());
+        long refunded = billing.refundCollectedOnVoid(bill, reason, onAccountCollected);
+        reverseOnAccountReceivable(bill.id());
+        reverseDispatchedCommissionTransfers(bill.id());
+        jdbc.update("""
+                UPDATE bar_bills SET payment_status = 'void', settlement_status = 'void', abnormal_prior_status = NULL,
+                       updated_at = now()
+                 WHERE id = ?""", bill.id());
+        reverseUnrefundedCollections(bill.id(), refunded);
+        // BSM L1064「以该笔留款抵付的部分不重复收款、不重复确认收入」：本单低消留款含在实收里已随作废退回，不再作台组抵用额；
+        // 本单抵用过的台组留款不再算已用、回到台组余额（同退品驳回把留款置 reversed）。
+        jdbc.update("""
+                UPDATE bar_bill_adjustments SET status = 'reversed'
+                 WHERE bill_id = ? AND status = 'applied' AND adjustment_type IN ('min_spend_retained', 'min_spend_retained_applied')""",
+                bill.id());
+        jdbc.update("UPDATE bar_commission_calculations SET status = 'void' WHERE bill_id = ?", bill.id());
+        // 工资单不再挂待定：此前工资单记下的该单提成待定当即结清（原单不再显示，之后的工资单也不再按历史待定展开）。
+        jdbc.update("""
+                UPDATE staff_payroll_pending_sources SET status = 'resolved', resolved_at = clock_timestamp()
+                 WHERE source_type = 'BAR_COMMISSION_PENDING' AND status = 'pending'
+                   AND source_id IN (SELECT id FROM bar_commission_calculations WHERE bill_id = ?)""", bill.id());
+        billing.reconcileRewards(bill.id());
     }
 
     /**

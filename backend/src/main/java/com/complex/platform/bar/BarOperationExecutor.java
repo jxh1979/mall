@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import com.complex.platform.common.api.PageResponse;
 import com.complex.platform.evidence.AuditedOperationExecutor;
@@ -52,6 +52,14 @@ public class BarOperationExecutor {
                 this::businessId, metadata);
     }
 
+    /** 第十八批 T 段第 157 条 157-R2：成功留痕明细由业务动作执行时填入 detail（挂起时才算出的金额、责任人与班次）。 */
+    <T> T executeWriteFilling(String operationId, String idempotencyKey, Object request, Class<T> responseType,
+            BarWriteOperation operation, Map<String, Object> detail, Supplier<T> action) {
+        detail.put("operation_id", operationId);
+        return operations.executeWrite(operationId, idempotencyKey, request, responseType, operation, action,
+                this::businessId, detail);
+    }
+
     /** 只审计留痕、不套幂等键的写。用于目录删除生命周期(request/approve):
      *  物理删除不可逆须可追溯(谁申请/为何/谁批准),但删除审批无客户端幂等键;
      *  状态机天然防重放(删后重放 404、驳回后重放 400),故豁免幂等。 */
@@ -86,6 +94,7 @@ public class BarOperationExecutor {
         if (value instanceof BarComboRecord record) return record.id();
         if (value instanceof BarCatalogDeleteDecision record) return record.id();
         if (value instanceof BarStaffBookingSuspensionRecord record) return record.id();
+        if (value instanceof BarOrderSuspensionService.Suspension record) return record.id();
         return null;
     }
 }

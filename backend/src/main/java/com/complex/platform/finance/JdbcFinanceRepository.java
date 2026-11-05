@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.19
+// 文件版本：V0.20
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
@@ -455,11 +455,15 @@ class JdbcFinanceRepository implements FinanceRepository {
                 .addValue("to", to.atOffset(java.time.ZoneOffset.UTC))
                 .addValue("merchant_scope", merchantScope)
                 .addValue("merchant_id", merchantScope ? scopeId : null);
+        // 第十八批 T 段第 157 条 157-R3（BSM:1109「经理确认最终无法收款后转为坏账损耗处理中并解除该订单对交班、日结的阻断」）：
+        // 所属订单（或合单后改指本账单）挂起已转坏账、已核销结案的不算未结清。
         return jdbcTemplate.queryForList("""
                 SELECT b.bill_no
                   FROM bar_bills b
                  WHERE b.settlement_status NOT IN ('settled', 'merged', 'void')
                    AND (:merchant_scope = FALSE OR b.merchant_id = :merchant_id)
+                   AND NOT EXISTS (SELECT 1 FROM bar_order_suspensions os WHERE (os.order_id = b.order_id OR os.bill_id = b.id)
+                                      AND os.status IN ('bad_debt_processing', 'written_off_closed'))
                    AND %s
                  ORDER BY b.created_at, b.bill_no
                  LIMIT 10

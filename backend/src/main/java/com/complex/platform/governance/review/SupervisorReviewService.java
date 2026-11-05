@@ -1,6 +1,6 @@
 package com.complex.platform.governance.review;
 
-// 文件版本：V0.29
+// 文件版本：V0.30
 
 import com.complex.platform.access.AccessActor;
 import com.complex.platform.access.AuthorizationService;
@@ -941,6 +941,14 @@ public class SupervisorReviewService {
                 || type.equals("dealer.delivery_resolution") || type.equals("inventory.quarantine_disposition") || type.endsWith(".money")
                 || List.of("bill_waiver", "refund", "ar_ap_adjustment", "bar.bill_waiver",
                 "ticketing.refund_approve", "ticketing.verification_reverse").contains(type);
+    }
+
+    /**
+     * 第十八批 T 段第 157 条 157-R5（PGM:529「涉钱审批出厂默认 1 个工作日」；第十八批裁决 37「超时按通用时限升级」）：涉钱审批通用时限的到期时刻，
+     * 工作日口径同 {@link #addWorkingDays}。
+     */
+    public Instant moneyApprovalDeadline(Instant from) {
+        return addWorkingDays(from, MONEY_DEADLINE_WORKING_DAYS);
     }
 
     // 第十六批第 29 条（PGM L529「出厂默认 3 个工作日，涉钱审批出厂默认 1 个工作日」）：逐日先看已审批的工作日历
