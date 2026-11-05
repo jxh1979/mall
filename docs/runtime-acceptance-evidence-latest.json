@@ -8,14 +8,14 @@
     "RUNTIME_EVIDENCE_BOUND_TO_SOURCE_FINGERPRINT",
     "RUNTIME_EVIDENCE_DOES_NOT_CLOSE_PRODUCTION_MANIFEST"
   ],
-  "generated_at": "2026-11-05T10:04:23.490Z",
+  "generated_at": "2026-11-05T17:02:52.517Z",
   "git": {
-    "head": "6801c1f2ea5f916f91721a26c3237625237d18d5",
-    "head_short": "6801c1f2",
-    "branch": "feature/business-code-batch39-20261105",
+    "head": "46d9c3a66953afcc7f7572483978f741d01fda32",
+    "head_short": "46d9c3a6",
+    "branch": "feature/business-code-batch40-20261105",
     "worktree_dirty": false,
-    "source_fingerprint": "c7070ad7f4b76db28fde4d11375100027ea5d30704c2ff021d4d9ff09237d4ce",
-    "source_fingerprint_file_count": 3270,
+    "source_fingerprint": "6d95b05d30644bda1b9e47f1be1f8220a80e7810fbfa32d73150821dada93464",
+    "source_fingerprint_file_count": 3292,
     "source_fingerprint_paths": [
       "backend/src/main",
       "backend/src/test",
@@ -50,12 +50,12 @@
   },
   "backend_surefire": {
     "path": "backend/target/surefire-reports",
-    "suites": 527,
-    "tests": 6381,
+    "suites": 534,
+    "tests": 6421,
     "failures": 0,
     "errors": 0,
     "skipped": 0,
-    "latest_mtime": "2026-11-05T10:02:07.377Z",
+    "latest_mtime": "2026-11-05T17:00:33.972Z",
     "passed": true
   },
   "web_unit_source": {
@@ -125,6 +125,7 @@
       "apps/web/src/admin/pages/BarCommissionsPage.metricdetail.test.tsx",
       "apps/web/src/admin/pages/BarCommissionsPage.rowdetail.test.tsx",
       "apps/web/src/admin/pages/BarOrdersPage.anomaly.test.tsx",
+      "apps/web/src/admin/pages/BarOrdersPage.badDebt.test.tsx",
       "apps/web/src/admin/pages/BarOrdersPage.cashier.test.tsx",
       "apps/web/src/admin/pages/BarOrdersPage.deliver.test.tsx",
       "apps/web/src/admin/pages/BarOrdersPage.kpi.test.tsx",
@@ -132,6 +133,9 @@
       "apps/web/src/admin/pages/BarOrdersPage.metricdetail.test.tsx",
       "apps/web/src/admin/pages/BarOrdersPage.rewards.test.tsx",
       "apps/web/src/admin/pages/BarOrdersPage.rowdetail.test.tsx",
+      "apps/web/src/admin/pages/BarOrdersPage.suspension.test.tsx",
+      "apps/web/src/admin/pages/BarOrdersPage.suspensionBoard.test.tsx",
+      "apps/web/src/admin/pages/BarOrdersPage.suspensionCancel.test.tsx",
       "apps/web/src/admin/pages/BarOrdersPage.voucher.test.tsx",
       "apps/web/src/admin/pages/BarPayrollPage.test.tsx",
       "apps/web/src/admin/pages/BarProductsPage.guidedcreate.test.tsx",
@@ -372,8 +376,8 @@
       "apps/web/src/dealer/dealerPortalClient.test.ts",
       "apps/web/src/shared/ReplayedNotice.test.tsx"
     ],
-    "file_count": 311,
-    "test_count_from_source": 1592
+    "file_count": 315,
+    "test_count_from_source": 1612
   },
   "web_build": {
     "dist_index_exists": true,
@@ -394,15 +398,15 @@
     "asset_count": 169,
     "main_js_assets": [
       {
-        "path": "apps/web/dist/assets/main-B_g3T5ry.js",
+        "path": "apps/web/dist/assets/main-CUk9FJlq.js",
         "size_bytes": 4337,
-        "mtime": "2026-11-05T10:02:15.680Z"
+        "mtime": "2026-11-05T17:00:42.113Z"
       }
     ],
     "largest_asset": {
       "path": "apps/web/dist/assets/vendor-antd-CzvkKKQu.js",
       "size_bytes": 251112,
-      "mtime": "2026-11-05T10:02:15.683Z"
+      "mtime": "2026-11-05T17:00:42.115Z"
     },
     "no_main_bundle_warning_expected": true
   },
