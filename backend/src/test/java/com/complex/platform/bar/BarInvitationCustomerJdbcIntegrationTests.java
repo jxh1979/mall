@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -15,6 +15,8 @@ import com.complex.platform.customer.CustomerRepository;
 import com.complex.platform.customer.CustomerSessionRecord;
 import com.complex.platform.support.CustomerTicketPaymentFixture;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.jayway.jsonpath.JsonPath;
+import java.nio.charset.StandardCharsets;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.LinkedHashMap;
@@ -416,6 +418,47 @@ class BarInvitationCustomerJdbcIntegrationTests {
         String looseId = CustomerTicketPaymentFixture.read(created, "$.data.id");
         assertThat(jdbc.queryForObject("SELECT table_type FROM bar_tables WHERE id = ?", String.class, looseId))
                 .isEqualTo("loose_table");
+    }
+
+    // ── 第十八批 U 段第 170 条 170-R1（决策台账:4139「以代码和权威字典为准，只改契约」）：契约 CustomerBarReservationRequest.table_type
+    // 须等于订台选项接口对该台位返回的 table_type（示例 vip_sofa 改 vip）──
+
+    /** 客人先取订台选项，再按选项回带的 table_id、table_type 下单（蛇形键）：200；table_type 改成旧示例值 vip_sofa：404 BAR_TABLE_NOT_FOUND。 */
+    @Test
+    void customerReservationTableTypeMustEqualOptionValue() throws Exception {
+        String vipId = "table_inv_vip_" + suffix;
+        jdbc.update("INSERT INTO bar_tables (id, bar_id, table_code, table_name, table_type, capacity, allowed_pass_free_guest_count,"
+                + " min_consumption_cent, currency, status, created_at, updated_at)"
+                + " VALUES (?, ?, ?, '贵宾包坐', 'vip', 6, 6, 80000, 'CNY', 'active', now(), now())", vipId, barId, "T-VIP-" + suffix);
+        jdbc.update("INSERT INTO bar_deposit_rules (id, bar_id, scope_type, scope_id, mode, fixed_amount_cent, cancel_free_before_minutes,"
+                + " enabled, created_at, updated_at) VALUES (?, ?, 'bar', ?, 'fixed', 20000, 0, TRUE, now(), now())",
+                "bar_dep_rule_inv_" + suffix, barId, barId);
+        String options = mockMvc.perform(get("/api/v1/customer/bar-reservation-options").header("X-Terminal-Type", "miniapp")
+                        .header("X-Customer-Token", friendToken))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+        List<String> types = JsonPath.read(options, "$.data.items[?(@.table_id == '" + vipId + "')].table_type");
+        assertThat(types).containsExactly("vip");
+
+        customerReserve(vipId, "vip_sofa", "inv-resv-sofa-" + suffix)
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.detail_code").value("BAR_TABLE_NOT_FOUND"));
+        customerReserve(vipId, types.get(0), "inv-resv-vip-" + suffix)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.table_id").value(vipId));
+    }
+
+    private ResultActions customerReserve(String table, String tableType, String key) throws Exception {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("idempotency_key", key);
+        body.put("bar_id", barId);
+        body.put("table_id", table);
+        body.put("table_type", tableType);
+        body.put("reservation_time", Instant.now().plusSeconds(3600).toString());
+        body.put("latest_arrival_at", Instant.now().plusSeconds(7200).toString());
+        body.put("guest_count", 2);
+        return mockMvc.perform(post("/api/v1/customer/bar-reservations").header("X-Terminal-Type", "miniapp")
+                .header("X-Customer-Token", friendToken).header("Idempotency-Key", key)
+                .contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(body)));
     }
 
     private int auditCount(String event) {

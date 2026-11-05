@@ -2,6 +2,8 @@ package com.complex.platform.finance;
 
 import com.complex.platform.common.money.MoneyRounding;
 import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -48,5 +50,44 @@ public final class TurnoverRentMath {
             rent = minAmountCent;
         }
         return rent;
+    }
+
+    /** 第十八批 U 段第 155 条 155-R1（DEC-R8-54「超额累进下逐段拆分」）：一笔销售落在某档的那一段（费率、金额）。 */
+    public record Segment(int rateBps, long amountCent) {
+    }
+
+    /**
+     * 155-R1（财务 PRD:904「按其在当月累计中的位置逐段拆分」）：当月累计 [before, before+amount) 与各档区间的交集，按档升序。
+     * 规则没有阶梯行时由调用方传一档（upperBoundCent=null、费率＝规则费率）。
+     */
+    public static List<Segment> segments(long before, long amount, List<TurnoverRentRuleTierRecord> tiers) {
+        long end = Math.addExact(before, amount);
+        List<Segment> out = new ArrayList<>();
+        long lower = 0L;
+        for (TurnoverRentRuleTierRecord tier : tiers) {
+            long upper = tier.upperBoundCent() == null ? Long.MAX_VALUE : tier.upperBoundCent();
+            long seg = Math.min(end, upper) - Math.max(before, lower);
+            if (seg > 0) {
+                out.add(new Segment(tier.rateBps(), seg));
+            }
+            if (end <= upper) {
+                break;
+            }
+            lower = upper;
+        }
+        return List.copyOf(out);
+    }
+
+    /**
+     * 155-R1（ENUM:257「冲正金额一律按该笔款项在其原账期实际计费时所适用的档位与费率原额冲回」）：该笔各段按原费率的精确抽成 × 退款 ÷ 该笔净额，
+     * 部分退款按退款占该笔销售的比例；精确累加、末尾只舍入一次到分。
+     */
+    public static long reversalCent(long refundCent, long netCent, List<Segment> segments) {
+        BigDecimal exact = BigDecimal.ZERO;
+        for (Segment segment : segments) {
+            exact = exact.add(MoneyRounding.exactBps(segment.amountCent(), segment.rateBps()));
+        }
+        return MoneyRounding.toCent(exact.multiply(BigDecimal.valueOf(refundCent))
+                .divide(BigDecimal.valueOf(netCent), 12, RoundingMode.HALF_UP));
     }
 }

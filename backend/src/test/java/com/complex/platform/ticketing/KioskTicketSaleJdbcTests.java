@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -109,6 +109,8 @@ class KioskTicketSaleJdbcTests {
         ResultActions created = order(atKiosk, key, ticketA, barA, "kiosk", f.phone, "客人在酒吧门口补票").andExpect(status().isOk());
         String orderId = CustomerTicketPaymentFixture.read(created, "$.data.id");
         long amount = Long.parseLong(CustomerTicketPaymentFixture.read(created, "$.data.amount_cent"));
+        // 170-R2（契约 TicketOrderRequest.bar_id 按代码声明）：单店票带所属酒吧下单，订单记下该酒吧。
+        assertThat(jdbc.queryForObject("SELECT bar_id FROM ticket_orders WHERE id = ?", String.class, orderId)).isEqualTo(barA);
         assertThat(jdbc.queryForMap("SELECT metadata->>'sale_reason' AS sale_reason, metadata->>'device_id' AS device_id,"
                         + " metadata->>'point_id' AS point_id, metadata->>'terminal_type' AS terminal_type, actor_id FROM audit_events"
                         + " WHERE event_name = 'ticket_order.created' AND idempotency_key = ?", key))

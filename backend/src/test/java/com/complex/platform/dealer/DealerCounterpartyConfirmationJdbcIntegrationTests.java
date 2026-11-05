@@ -1,6 +1,6 @@
 package com.complex.platform.dealer;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.hasItem;
@@ -295,6 +295,20 @@ class DealerCounterpartyConfirmationJdbcIntegrationTests {
                         """.formatted(key(), paymentId, Instant.now().minusSeconds(60), proof)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.related_object_id").value(paymentId));
+    }
+
+    /** 第十八批 U 段第 170 条 170-R4 ③：合同条款入口读退回运费承担方与首程运费是否退回，按蛇形键提交后落合同。 */
+    @Test
+    void contractTermsPersistReturnFreightBearerAndFirstLegRefundability() throws Exception {
+        call(sales, "/api/v1/dealers/contracts/" + contractId + "/terms", """
+                "credit_term":true,"first_payment_ratio_bps":3000,"first_payment_deadline_days":3,"balance_due_days":30,
+                "freight_cent":1000,"free_shipping_threshold_cent":50000,"freight_bearer":"dealer",
+                "return_freight_bearer":"dealer","first_leg_freight_refundable":true,"contract_signed_at":"%s",
+                "first_payment_anchor":"payment_notified","balance_due_anchor":"signed"
+                """.formatted(Instant.now().truncatedTo(ChronoUnit.MICROS)))
+                .andExpect(status().isOk());
+        assertThat(jdbc.queryForMap("SELECT return_freight_bearer, first_leg_freight_refundable FROM dealer_contracts WHERE id=?", contractId))
+                .containsEntry("return_freight_bearer", "dealer").containsEntry("first_leg_freight_refundable", true);
     }
 
     // ── helpers ──

@@ -1,15 +1,17 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.complex.platform.customer.CustomerRepository;
 import com.complex.platform.finance.gateway.PaymentGatewayRouter;
 import com.complex.platform.support.CustomerTicketPaymentFixture;
+import com.complex.platform.support.StaffRequestFixture;
 import com.jayway.jsonpath.JsonPath;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
@@ -21,9 +23,11 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.request.RequestPostProcessor;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
@@ -146,6 +150,20 @@ class CustomerTicketPricingEligibilityJdbcIntegrationTests {
         List<String> basis = JsonPath.read(body, "$.data.items[?(@.ticket_type_id == '" + f.ticketTypeId + "')].my_price_basis");
         assertThat(prices).containsExactly(3500);
         assertThat(basis).containsExactly("新人价");
+    }
+
+    @Test
+    void adminCreatesMemberPriceRuleThroughEntry() throws Exception {
+        // 170-R2（契约 TicketPriceRuleRequest.variant_type 补 member）：后台按 TicketingPoliciesPage.createRule 的蛇形键建会员价规则。
+        RequestPostProcessor manager = new StaffRequestFixture(jdbc).staff("usr_b14_rule_" + f.suffix, "staff", f.projectId, null,
+                "ticket.price_variant.manage");
+        String id = CustomerTicketPaymentFixture.read(mockMvc.perform(post("/api/v1/ticketing/price-rules").with(manager)
+                        .contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(Map.of(
+                                "idempotency_key", "b14-rule-member-" + f.suffix, "ticket_type_id", f.ticketTypeId,
+                                "variant_type", "member", "price_mode", "derive_from_calendar_price", "discount_rate", 80))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.variant_type").value("member")), "$.data.id");
+        assertThat(jdbc.queryForObject("SELECT variant_type FROM ticket_price_rules WHERE id = ?", String.class, id)).isEqualTo("member");
     }
 
     private String rule(String variant, int discount) {

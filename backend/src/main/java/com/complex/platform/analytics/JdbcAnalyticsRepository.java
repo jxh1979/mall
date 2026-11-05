@@ -1,5 +1,5 @@
 package com.complex.platform.analytics;
-// 文件版本：V0.10
+// 文件版本：V0.11
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
 import com.complex.platform.contract.SpaceRentalDerivationSql;
@@ -1594,7 +1594,7 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
         //   按 accounting_period=:period（YYYY-MM，两类租金同期键，与分红挂接同口径）归期，仅已归属商户（merchant_id NOT NULL）。
         // 分母=营业额：integration_order_syncs 第三方回流，status='synced'、sync_type∈(order,refund) 实收净额
         //   （口径①含税毛额 ②扣退款；voucher_verification 通票核销不进抽成基数，排除），
-        //   经营日窗口 [期首, 次月首) 按业务日切派生（与营业额抽成计费引擎 aggregateMerchantReflowTurnover 同窗）。
+        //   经营日窗口 [期首, 次月首) 按业务日切派生（与营业额抽成计费引擎 listMerchantReflowTurnoverRows 同窗）。
         //   商户级净额 GREATEST(…,0) 钳 0（负营业额无业务意义，同抽成口径）。
         // NULL merchant_id 的回流营业额=未归属：不进任何商户/业态，只汇入平台级分母（口径③⑧，诚实标注，绝不塞给某商户）。
         java.time.YearMonth ym = java.time.YearMonth.parse(period);

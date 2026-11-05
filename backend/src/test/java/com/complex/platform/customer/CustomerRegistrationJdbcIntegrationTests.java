@@ -1,6 +1,6 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -246,6 +246,29 @@ class CustomerRegistrationJdbcIntegrationTests {
                 .andExpect(status().isOk());
         assertThat(jdbc.queryForObject("SELECT sales_channel FROM ticket_orders WHERE ticket_type_id = ?", String.class, ticketTypeId))
                 .isEqualTo("app");
+    }
+
+    /**
+     * 170-R5 ②：CustomerController 取 Idempotency-Key 头或请求体 idempotency_key（二者取先非空）；
+     * 只在请求体带键、不带头，重复提交返回同一条同意记录。
+     */
+    @Test
+    void consentIdempotencyKeyInBodyOnlyReplaysSameRecord() throws Exception {
+        String token = registeredToken("app");
+        String body = JSON.writeValueAsString(Map.of("idempotency_key", "r5_consent_" + suffix,
+                "consent_type", "marketing", "accepted", true, "version", "v1"));
+        String first = text(mockMvc.perform(post("/api/v1/customer/consents").header("X-Terminal-Type", "app")
+                        .header("X-Customer-Token", token).contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isOk()), "/data/id");
+        String second = text(mockMvc.perform(post("/api/v1/customer/consents").header("X-Terminal-Type", "app")
+                        .header("X-Customer-Token", token).contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isOk()), "/data/id");
+        assertThat(second).isEqualTo(first);
+        assertThat(jdbc.queryForObject("""
+                SELECT count(*) FROM customer_consents
+                 WHERE consent_type = 'marketing'
+                   AND customer_id = (SELECT customer_id FROM customer_consents WHERE id = ?)""", Integer.class, first))
+                .isEqualTo(1);
     }
 
     @Test

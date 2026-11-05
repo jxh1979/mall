@@ -1,4 +1,4 @@
-// 文件版本：V0.08
+// 文件版本：V0.09
 package com.complex.platform.inventory;
 
 import static org.mockito.ArgumentMatchers.any;
@@ -454,7 +454,7 @@ class InventoryControllerTests {
         }
         if (path.endsWith("manual-pickup-policy")) {
             return """
-                    {"idempotency_key":"mpp-1","project_id":"project_1","orders_within_1m":2,"orders_within_3m":3,"orders_total":5,"min_orders":1,"max_orders":10,"reason":"首次配置"}
+                    {"idempotency_key":"mpp-1","project_id":"project_1","orders_within1m":2,"orders_within3m":3,"orders_total":5,"min_orders":1,"max_orders":10,"reason":"首次配置"}
                     """;
         }
         if (path.endsWith("reminder-policy")) {

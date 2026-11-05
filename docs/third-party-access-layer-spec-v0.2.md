@@ -36,7 +36,7 @@
 
 | 环节 | 规范 |
 |---|---|
-| 字段对齐 | 原始 payload 字段经 `request_mapping`/`response_mapping` 映射占位（见集成开发设计 §14.3）映射到标准订单（外部单号、金额分、支付/退款状态、营业日）/标准券核销（券码、核销状态、核销时间）模型；映射失败的 payload 仍保留原始留痕（`parse_status = failed`），进异常复核 |
+| 字段对齐 | 原始 payload 字段经 `request_mapping`/`response_mapping` 映射占位（见集成开发设计 §14.3）映射到标准订单（外部单号、金额分、支付/退款状态、营业日）/标准券核销（券码、核销状态、核销时间）模型；映射失败的 payload 仍保留原始留痕（`parse_status = failed`），进异常复核；实现现状（2026-11-05 第十八批 U 段第 155 条 155-R3）：标准退款模型带所退原订单的外部单号 `original_external_business_id`（餐饮、零售退款必填，营业额抽成跨期冲正据此找原订单原账期快照），真实报文到该字段的映射待资料到位 |
 | 幂等 | 映射前先按幂等键去重（订单：`open_app_id + (channel) + external_(channel_)order_id + order_status`；退款：`+ external_(channel_)refund_id`；券核销：`+ external_voucher_code + verification_seq`），重复回调返回首次结果不重复落标准模型 |
 | 签名校验 | webhook 入站必须验签（HMAC + 时间戳 + nonce 防重放，复用开放平台动态鉴权）后才进入 mapPayload；验签失败拒绝并写调用审计，不落标准模型 |
 | 金额口径 | 标准模型金额一律整数分（per 统一口径基准 D1），映射时完成单位归一 |

@@ -1,11 +1,18 @@
 package com.complex.platform.governance;
-// 文件版本：V0.11
+// 文件版本：V0.12
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.groups.Tuple.tuple;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.complex.platform.access.AccessActor;
+import com.jayway.jsonpath.JsonPath;
 import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
@@ -13,8 +20,15 @@ import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.ResultActions;
+import org.springframework.test.web.servlet.request.RequestPostProcessor;
 import org.springframework.transaction.annotation.Transactional;
 
 @SpringBootTest(properties = {
@@ -22,6 +36,7 @@ import org.springframework.transaction.annotation.Transactional;
         "spring.datasource.username=complex",
         "spring.datasource.password=${COMPLEX_DATABASE_PASSWORD:complex_dev_pwd}"
 })
+@AutoConfigureMockMvc
 @Transactional
 class PlatformJdbcIntegrationTests {
 
@@ -32,6 +47,7 @@ class PlatformJdbcIntegrationTests {
     private JdbcTemplate jdbcTemplate;
     @Autowired private PlatformService platformService;
     @Autowired private org.springframework.transaction.PlatformTransactionManager transactionManager;
+    @Autowired private MockMvc mockMvc;
 
 
     @Test
@@ -769,6 +785,94 @@ class PlatformJdbcIntegrationTests {
         assertThat(jdbcTemplate.update(insert, "role_m010_b", "店长（M010探针）", "org_m010_b")).isEqualTo(1);
         assertThatThrownBy(() -> jdbcTemplate.update(insert, "role_m010_a2", "店长（M010探针）", "org_m010_a"))
                 .isInstanceOf(org.springframework.dao.DuplicateKeyException.class);
+    }
+
+    // ── 第十八批 U 段第 170 条 170-R3（OpenAPI 与代码一致；决策台账 82c-R4「以代码和权威字典为准，只改契约」）────────────────
+    // 平台管理员按前端蛇形键、经真实接口与授权链建经营主体、项目、商户、空间：按代码取值（契约改后的枚举与补声明字段）建档成功并落库；
+    // 按旧契约取值（entity_role=operation、项目 status=disabled、cooperation_form=fixed_rent）被拒。
+    @Test
+    void platformAdminCreatesMasterDataWithCodeValuesAndOldContractValuesAreRejected() throws Exception {
+        String s = String.valueOf(System.nanoTime() % 1_000_000_000L);
+        String project = "prj_170r3_" + s;
+        jdbcTemplate.update("INSERT INTO projects (id, venue_type, name, status, created_at, updated_at) "
+                + "VALUES (?, 'complex', '第170条项目', 'active', now(), now())", project);
+        RequestPostProcessor admin = platformAdmin("usr_170r3_" + s);
+
+        String entity = dataId(send(admin, "/api/v1/platform/business-entities", """
+                {"idempotency_key":"be-170r3-%s","entity_name":"城市项目公司%s","entity_role":"project_company",
+                 "status":"pending_admission","project_id":"%s"}""".formatted(s, s, project)));
+        assertThat(jdbcTemplate.queryForObject("SELECT entity_role || '/' || status FROM business_entities WHERE id = ?",
+                String.class, entity)).isEqualTo("project_company/pending_admission");
+        assertThat(jdbcTemplate.queryForList("SELECT project_id FROM business_entity_projects WHERE business_entity_id = ?",
+                String.class, entity)).containsExactly(project);
+        rejected(send(admin, "/api/v1/platform/business-entities", """
+                {"idempotency_key":"be-170r3-old-%s","entity_name":"运营主体%s","entity_role":"operation","project_id":"%s"}"""
+                .formatted(s, s, project)), "VALIDATION_FAILED");
+
+        String newProject = dataId(send(admin, "/api/v1/platform/projects", """
+                {"idempotency_key":"prj-170r3-%s","name":"待启用项目%s","venue_type":"complex","status":"pending_activation",
+                 "owner_person":"王负责"}""".formatted(s, s)));
+        assertThat(jdbcTemplate.queryForObject("SELECT status || '/' || owner_person FROM projects WHERE id = ?",
+                String.class, newProject)).isEqualTo("pending_activation/王负责");
+        rejected(send(admin, "/api/v1/platform/projects", """
+                {"idempotency_key":"prj-170r3-old-%s","name":"停用项目%s","venue_type":"complex","status":"disabled"}"""
+                .formatted(s, s)), "VALIDATION_FAILED");
+
+        String merchant = dataId(send(admin, "/api/v1/platform/merchants", """
+                {"idempotency_key":"mch-170r3-%s","merchant_name":"演出传媒%s","merchant_type":"media","cooperation_form":"lease",
+                 "project_id":"%s"}""".formatted(s, s, project)));
+        assertThat(jdbcTemplate.queryForObject("SELECT merchant_type || '/' || cooperation_form FROM merchants WHERE id = ?",
+                String.class, merchant)).isEqualTo("media/lease");
+        rejected(send(admin, "/api/v1/platform/merchants", """
+                {"idempotency_key":"mch-170r3-old-%s","merchant_name":"固定租金商户%s","merchant_type":"retail",
+                 "cooperation_form":"fixed_rent","project_id":"%s"}""".formatted(s, s, project)), "MERCHANT_COOPERATION_FORM_INVALID");
+
+        String spaceType = jdbcTemplate.queryForObject(
+                "SELECT type_code FROM space_type_dictionary WHERE status = 'active' ORDER BY sort_order, type_code LIMIT 1", String.class);
+        String space = dataId(send(admin, "/api/v1/platform/spaces", """
+                {"idempotency_key":"sp-170r3-%s","space_name":"不可用铺位%s","space_type":"%s","project_id":"%s",
+                 "merchant_id":"%s","status":"unavailable"}""".formatted(s, s, spaceType, project, merchant)));
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT project_id || '/' || merchant_id || '/' || space_type || '/' || status FROM spaces WHERE id = ?",
+                String.class, space)).isEqualTo(project + "/" + merchant + "/" + spaceType + "/unavailable");
+    }
+
+    /**
+     * 平台管理员账号，经一个普通角色逐项持有四个建档码（种子角色 role_platform_admin 里的高危条目不算逐项授权，见
+     * AuthorizationService.isExplicitOrDailyGrant）；后台 Web 终端＋生产过滤器放入的 AccessActor 主体。
+     */
+    private RequestPostProcessor platformAdmin(String userId) {
+        jdbcTemplate.update("INSERT INTO access_users (id, username, account_type, organization_id, merchant_id, status, created_at) "
+                + "VALUES (?, ?, 'platform_admin', 'org', NULL, 'active', now())", userId, userId);
+        String role = "role_" + userId;
+        jdbcTemplate.update("INSERT INTO roles (id, role_name, description, data_scope, status, created_at) "
+                + "VALUES (?, ?, '第170条回归', 'project', 'active', now())", role, "第170条建档角色" + userId.replaceAll("\\D", ""));
+        for (String code : List.of("entity.binding.manage", "governance.project.manage", "merchant.profile.manage",
+                "governance.space.manage")) {
+            jdbcTemplate.update("INSERT INTO role_permissions (role_id, permission_code) VALUES (?, ?)", role, code);
+        }
+        jdbcTemplate.update("INSERT INTO user_roles (user_id, role_id) VALUES (?, ?)", userId, role);
+        AccessActor actor = new AccessActor(userId, userId, "platform_admin", "org", null, "active");
+        return request -> {
+            request.addHeader("X-Terminal-Type", "web");
+            return authentication(new UsernamePasswordAuthenticationToken(actor, null,
+                    List.of(new SimpleGrantedAuthority("ROLE_P0_STAFF")))).postProcessRequest(request);
+        };
+    }
+
+    private ResultActions send(RequestPostProcessor session, String url, String body) throws Exception {
+        return mockMvc.perform(post(url).with(session).contentType(MediaType.APPLICATION_JSON).content(body));
+    }
+
+    private static String dataId(ResultActions result) throws Exception {
+        var response = result.andReturn().getResponse();
+        String body = response.getContentAsString(StandardCharsets.UTF_8);
+        assertThat(response.getStatus()).as(body).isEqualTo(200);
+        return JsonPath.read(body, "$.data.id");
+    }
+
+    private static void rejected(ResultActions result, String code) throws Exception {
+        result.andExpect(status().isBadRequest()).andExpect(jsonPath("$.detail_code").value(code));
     }
 
     private List<String> platformAdminPermissionCodes() {

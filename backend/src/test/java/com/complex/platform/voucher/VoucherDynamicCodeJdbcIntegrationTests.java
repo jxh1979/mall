@@ -1,6 +1,6 @@
 package com.complex.platform.voucher;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -220,6 +220,27 @@ class VoucherDynamicCodeJdbcIntegrationTests {
                 .andExpect(jsonPath("$.data.items[?(@.id == '" + voucher + "')].points_refunded")
                         .value(org.hamcrest.Matchers.contains(org.hamcrest.Matchers.nullValue())))
                 .andExpect(jsonPath("$.data.items[?(@.id == '" + voucher + "')].transferable").value(org.hamcrest.Matchers.contains(false)));
+    }
+
+    @Test
+    void definitionCreatedThroughAdminEntryKeepsTransferableFalse() throws Exception {
+        // 170-R2（契约 VoucherDefinitionRequest.transferable 按代码声明，V313 不填按可转赠）：后台建券定义按网页真实形状（蛇形键）。
+        RequestPostProcessor manager = staffs.staff("usr_vdc_mgr_" + f.suffix, "staff", f.projectId, f.merchantId, "customer.voucher.manage");
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("idempotency_key", "vdc-def-" + f.suffix);
+        body.put("name", "不可转赠满减券");
+        body.put("voucher_kind", "merchant_discount");
+        body.put("redeem_method", "in_store_staff");
+        body.put("settlement_mode", "none");
+        body.put("merchant_id", f.merchantId);
+        body.put("face_value_cent", 2000);
+        body.put("valid_days", 30);
+        body.put("transferable", false);
+        String id = read(mockMvc.perform(post("/api/v1/vouchers/definitions").with(manager)
+                        .contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(body)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.transferable").value(false)), "$.data.id");
+        assertThat(jdbc.queryForObject("SELECT transferable FROM voucher_definitions WHERE id = ?", Boolean.class, id)).isFalse();
     }
 
     // ---------- helpers ----------

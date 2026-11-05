@@ -1,6 +1,6 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -41,9 +41,11 @@ class TurnoverRentRuleEffectiveDateJdbcIntegrationTests {
 
         assertThat(effectiveFrom("rent_effective_change")).isEqualTo(LocalDate.parse("2026-07-01"));
         assertThat(financeService.computePeriodTurnoverRentSnapshot(MERCHANT, CONTRACT, "2026-06"))
-                .isEqualTo(new FinanceService.PeriodTurnoverRent("rent_effective_initial", 10000));
+                .extracting(FinanceService.PeriodTurnoverRent::ruleId, FinanceService.PeriodTurnoverRent::amountCent)
+                .containsExactly("rent_effective_initial", 10000L);
         assertThat(financeService.computePeriodTurnoverRentSnapshot(MERCHANT, CONTRACT, "2026-07"))
-                .isEqualTo(new FinanceService.PeriodTurnoverRent("rent_effective_change", 20000));
+                .extracting(FinanceService.PeriodTurnoverRent::ruleId, FinanceService.PeriodTurnoverRent::amountCent)
+                .containsExactly("rent_effective_change", 20000L);
         assertThat(effectiveFrom("rent_effective_initial")).isEqualTo(LocalDate.parse("2026-01-01"));
     }
 

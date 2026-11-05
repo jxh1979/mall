@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.16
+// 文件版本：V0.17
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -83,47 +83,83 @@ public interface FinanceRepository {
     }
 
     /**
-     * 回流营业额取数：只读 integration_order_syncs，聚合该商户在 [from, to) 经营日窗口的餐饮、零售回流 order 减 refund 金额（分）。
+     * 回流营业额取数：只读 integration_order_syncs，该商户在 [from, to) 经营日窗口的餐饮、零售回流 order 与 refund，逐笔（155-R3）。
      * 第十八批 Q 段第 138 条 138-R2：渠道售出的门票回流已本地出票、计入门票；单店门票票款按 BSM:1347 不进抽成基数，通票不是商户成交。
-     * default 返回 0 兼容既有测试双子。
+     * default 返回空兼容既有测试双子。
      */
-    default long aggregateMerchantReflowTurnover(String merchantId, Instant fromInclusive, Instant toExclusive) {
-        return 0L;
+    default List<TurnoverSourceRow> listMerchantReflowTurnoverRows(String merchantId, Instant fromInclusive, Instant toExclusive) {
+        return List.of();
     }
 
     /**
-     * 第十八批 P 段第 131 条：该商户以没收时点（deposit_settled_at）落在 [from, to) 内没收的订台定金合计（分）。
-     * default 返回 0 兼容既有测试双子。
+     * 第十八批 U 段第 155 条 155-R1（DEC-R8-54「实现须为每笔计入抽成基数的销售保存其原账期与所适用档位费率」）：营业额抽成基数的逐笔来源行。
+     * kind：bar_bill 酒吧整单已确认商品实收（at＝结清时点）；bar_goods_refund 已退成的商品分项（金额取负，originId＝所退账单，
+     * originAt＝所退账单收款完成时点）；bar_withheld_fee 月结服务费扣留（id＝账单号|营业日，带营业日，at 由调用方按营业日起点补）；
+     * bar_deposit_forfeited 没收的订台定金（at＝没收时点）；service_order 已完成的服务点单（at＝下单时点）。
+     * 155-R3：reflow_order 餐饮、零售回流订单（at＝落库时点）；reflow_refund 回流退款（金额取负，originId、originAt＝本系统所退原订单回流行及其落库时点，
+     * 查不到为空）；voucher_settlement 券结算付款（at＝付款时点）。
      */
-    default long sumForfeitedBarDepositCent(String merchantId, Instant fromInclusive, Instant toExclusive) {
-        return 0L;
+    record TurnoverSourceRow(String kind, String id, Instant at, LocalDate businessDate, long amountCent, String originId, Instant originAt) {
+        TurnoverSourceRow withAt(Instant time) {
+            return new TurnoverSourceRow(kind, id, time, businessDate, amountCent, originId, originAt);
+        }
+
+        TurnoverSourceRow plus(long cent) {
+            return new TurnoverSourceRow(kind, id, at, businessDate, Math.addExact(amountCent, cent), originId, originAt);
+        }
+    }
+
+    /** 155-R1：一笔销售在原账期当月累计中的位置所适用的档位费率分段（合计＝netAmountCent）。 */
+    record TurnoverSaleSnapshot(String kind, String id, long netAmountCent, List<TurnoverRentMath.Segment> segments) {
+    }
+
+    /** 155-R1：已落库的快照及原月是否按保底收租（第十八批裁决 36）。 */
+    record BilledTurnoverSale(TurnoverSaleSnapshot sale, boolean billedByMinimum) {
     }
 
     /**
-     * 第十八批 Q 段第 138 条 138-R1：酒吧商户的平台内酒吧收入（分）＝[from, to) 内结清的整单已确认商品收入（折后实收减服务费、小费分项）
-     * ＋[firstDay, dayAfterLast) 营业日的月结服务费扣留数−[from, to) 内已退成的商品分项；来源未定抛 409 BAR_REVENUE_PENDING。
-     * default 返回 0 兼容既有测试双子。
+     * 第十八批 P 段第 131 条：该商户以没收时点（deposit_settled_at）落在 [from, to) 内没收的订台定金，逐笔（155-R1）。
+     * default 返回空兼容既有测试双子。
      */
-    default long sumBarPlatformTurnoverCent(String merchantId, Instant fromInclusive, Instant toExclusive,
+    default List<TurnoverSourceRow> listForfeitedBarDepositRows(String merchantId, Instant fromInclusive, Instant toExclusive) {
+        return List.of();
+    }
+
+    /**
+     * 第十八批 Q 段第 138 条 138-R1：酒吧商户的平台内酒吧收入＝[from, to) 内结清的整单已确认商品收入（折后实收减服务费、小费分项）
+     * ＋[firstDay, dayAfterLast) 营业日的月结服务费扣留数−[from, to) 内已退成的商品分项，逐行返回（155-R1）；来源未定抛 409 BAR_REVENUE_PENDING。
+     * default 返回空兼容既有测试双子。
+     */
+    default List<TurnoverSourceRow> listBarPlatformTurnoverRows(String merchantId, Instant fromInclusive, Instant toExclusive,
             LocalDate firstDay, LocalDate dayAfterLast) {
-        return 0L;
+        return List.of();
     }
 
     /**
-     * 第十八批 Q 段第 138 条 138-R3：非酒吧商户已完成结算的券结算金额（分）＝该商户为对手方的 partner_voucher 应付
-     * （统一券 internal_price 核销、通票合作方券 internal_purchased 核销）在 [from, to) 内的实际付款合计。
-     * default 返回 0 兼容既有测试双子。
+     * 第十八批 Q 段第 138 条 138-R3：非酒吧商户已完成结算的券结算金额＝该商户为对手方的 partner_voucher 应付
+     * （统一券 internal_price 核销、通票合作方券 internal_purchased 核销）在 [from, to) 内的实际付款，逐笔（155-R3）。
+     * default 返回空兼容既有测试双子。
      */
-    default long sumSettledVoucherSettlementCent(String merchantId, Instant fromInclusive, Instant toExclusive) {
-        return 0L;
+    default List<TurnoverSourceRow> listSettledVoucherSettlementRows(String merchantId, Instant fromInclusive, Instant toExclusive) {
+        return List.of();
     }
 
     /**
-     * 第十八批 Q 段第 138 条 138-R4：酒吧商户已完成的服务点单（点舞等）售价全额（分），按下单时点在 [from, to) 归期。
-     * default 返回 0 兼容既有测试双子。
+     * 第十八批 Q 段第 138 条 138-R4：酒吧商户已完成的服务点单（点舞等）售价全额，按下单时点在 [from, to) 归期，逐笔（155-R1）。
+     * default 返回空兼容既有测试双子。
      */
-    default long sumCompletedServiceOrderCent(String merchantId, Instant fromInclusive, Instant toExclusive) {
-        return 0L;
+    default List<TurnoverSourceRow> listCompletedServiceOrderRows(String merchantId, Instant fromInclusive, Instant toExclusive) {
+        return List.of();
+    }
+
+    /** 155-R1：按 (来源类型, 来源 id) 取原账期快照。default 返回空兼容既有测试双子。 */
+    default Optional<BilledTurnoverSale> findTurnoverSaleSnapshot(String kind, String id) {
+        return Optional.empty();
+    }
+
+    /** 155-R1：写本期逐笔快照（同一笔已有快照的不覆盖），billedByMinimum＝本期按保底收租。default 空操作兼容既有测试双子。 */
+    default void insertTurnoverSaleSnapshots(String merchantId, String period, List<TurnoverSaleSnapshot> snapshots,
+            boolean billedByMinimum) {
     }
 
     /** 写一条保证金台账。default 空实现兼容既有测试双子。 */

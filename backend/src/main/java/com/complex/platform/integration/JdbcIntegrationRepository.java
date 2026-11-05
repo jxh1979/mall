@@ -1,5 +1,5 @@
 package com.complex.platform.integration;
-// 文件版本：V0.03
+// 文件版本：V0.04
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -215,12 +215,12 @@ class JdbcIntegrationRepository implements IntegrationRepository {
                 INSERT INTO integration_order_syncs (
                     id, provider_code, business_type, sync_type, external_business_id,
                     status, amount_cent, currency, channel, external_channel_order_id,
-                    merchant_id, provider_payload_json, created_at, updated_at
+                    merchant_id, provider_payload_json, created_at, updated_at, original_external_business_id
                 )
                 VALUES (
                     :id, :provider_code, :business_type, :sync_type, :external_business_id,
                     :status, :amount_cent, :currency, :channel, :external_channel_order_id,
-                    :merchant_id, CAST(:provider_payload_json AS jsonb), :created_at, :updated_at
+                    :merchant_id, CAST(:provider_payload_json AS jsonb), :created_at, :updated_at, :original_external_business_id
                 )
                 ON CONFLICT (provider_code, business_type, sync_type, external_business_id) DO UPDATE SET
                     status = EXCLUDED.status,
@@ -229,6 +229,7 @@ class JdbcIntegrationRepository implements IntegrationRepository {
                     channel = EXCLUDED.channel,
                     external_channel_order_id = EXCLUDED.external_channel_order_id,
                     merchant_id = EXCLUDED.merchant_id,
+                    original_external_business_id = EXCLUDED.original_external_business_id,
                     provider_payload_json = EXCLUDED.provider_payload_json,
                     updated_at = EXCLUDED.updated_at
                 RETURNING created_at
@@ -249,7 +250,7 @@ class JdbcIntegrationRepository implements IntegrationRepository {
         return jdbcTemplate.query("""
                 SELECT id, provider_code, business_type, sync_type, external_business_id,
                        status, amount_cent, currency, channel, external_channel_order_id,
-                       merchant_id, provider_payload_json, created_at, updated_at
+                       merchant_id, provider_payload_json, created_at, updated_at, original_external_business_id
                   FROM integration_order_syncs
                  ORDER BY created_at DESC, id
                  LIMIT 200
@@ -266,7 +267,7 @@ class JdbcIntegrationRepository implements IntegrationRepository {
         return jdbcTemplate.query("""
                 SELECT id, provider_code, business_type, sync_type, external_business_id,
                        status, amount_cent, currency, channel, external_channel_order_id,
-                       merchant_id, provider_payload_json, created_at, updated_at
+                       merchant_id, provider_payload_json, created_at, updated_at, original_external_business_id
                   FROM integration_order_syncs
                  WHERE provider_code = :provider_code
                    AND business_type = :business_type
@@ -477,7 +478,7 @@ class JdbcIntegrationRepository implements IntegrationRepository {
         return jdbcTemplate.query("""
                 SELECT id, provider_code, business_type, sync_type, external_business_id,
                        status, amount_cent, currency, channel, external_channel_order_id,
-                       merchant_id, provider_payload_json, created_at, updated_at
+                       merchant_id, provider_payload_json, created_at, updated_at, original_external_business_id
                   FROM integration_order_syncs
                  WHERE business_type = 'ticket'
                    AND provider_payload_json->>'local_ticket_order_id' = :local_order_id
@@ -491,7 +492,7 @@ class JdbcIntegrationRepository implements IntegrationRepository {
         return jdbcTemplate.query("""
                 SELECT id, provider_code, business_type, sync_type, external_business_id,
                        status, amount_cent, currency, channel, external_channel_order_id,
-                       merchant_id, provider_payload_json, created_at, updated_at
+                       merchant_id, provider_payload_json, created_at, updated_at, original_external_business_id
                   FROM integration_order_syncs
                  WHERE merchant_id IS NULL
                    AND sync_type = 'order'
@@ -856,6 +857,7 @@ class JdbcIntegrationRepository implements IntegrationRepository {
                 .addValue("channel", record.channel())
                 .addValue("external_channel_order_id", record.externalChannelOrderId())
                 .addValue("merchant_id", record.merchantId())
+                .addValue("original_external_business_id", record.originalExternalBusinessId())
                 .addValue("provider_payload_json", writeJson(record.providerPayload()))
                 .addValue("created_at", timestampWithTimeZone(record.createdAt()))
                 .addValue("updated_at", timestampWithTimeZone(record.updatedAt()));

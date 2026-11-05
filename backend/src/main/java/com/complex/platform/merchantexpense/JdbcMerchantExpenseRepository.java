@@ -243,6 +243,8 @@ class JdbcMerchantExpenseRepository implements MerchantExpenseRepository {
      * FinanceService.billTurnoverRent，V299 起 accounting_period=期间起始月；历史行无期间标记不挂接）。
      * expense_type 同归 rent_allocation；id 前缀 mex_arn_（8+64≤120）；(source,source_ref) 部分唯一索引幂等；
      * 漂移报告 listAutoDrift 按 id 前缀走 ar_ap_items 分支，自动覆盖本源。
+     * 第十八批 U 段第 155 条 155-R2（BSM:1692「台账只追加、更正走红字冲销，不回改历史」）：营业额抽成冲正应付
+     * （payable，source_type=turnover_rent_reversal）按其账期挂负额红字租金分录，分红基数随之少扣。
      */
     @Override
     public int attachContractRent(String period, String operatorUserId, Instant now) {
@@ -256,11 +258,13 @@ class JdbcMerchantExpenseRepository implements MerchantExpenseRepository {
                     id, merchant_id, period, expense_type, amount_cent, source, source_ref,
                     note, operator_user_id, created_at
                 )
-                SELECT 'mex_arn_' || i.id, i.merchant_id, :period, 'rent_allocation', i.amount_cent, 'auto_rent',
-                       i.id, '租金自动挂接（应收单 ' || i.item_no || '）', :operator, :created_at
+                SELECT 'mex_arn_' || i.id, i.merchant_id, :period, 'rent_allocation',
+                       CASE WHEN i.direction = 'payable' THEN -i.amount_cent ELSE i.amount_cent END, 'auto_rent', i.id,
+                       CASE WHEN i.direction = 'payable' THEN '营业额抽成冲正自动挂接（应付单 ' ELSE '租金自动挂接（应收单 ' END
+                           || i.item_no || '）', :operator, :created_at
                   FROM ar_ap_items i
-                 WHERE i.direction = 'receivable'
-                   AND i.source_type IN ('contract_rent', 'turnover_rent')
+                 WHERE ((i.direction = 'receivable' AND i.source_type IN ('contract_rent', 'turnover_rent'))
+                        OR (i.direction = 'payable' AND i.source_type = 'turnover_rent_reversal'))
                    AND i.accounting_period = :period
                    AND i.merchant_id IS NOT NULL
                    AND i.amount_cent <> 0"""
@@ -272,14 +276,14 @@ class JdbcMerchantExpenseRepository implements MerchantExpenseRepository {
      * 金额漂移报告：上游（ar_ap_items 锁定后补录审批可原地改 amount_cent）改账后，快照式挂接不自动追改。
      * 本查询对该期每个 auto 挂接行，算台账净额 = 原行 + 指向它的红字冲销行合计，与上游当前金额比对，
      * 不等则列入清单（处置 SOP：红字冲销旧行 + 手工录入修正额）。上游表按行 id 前缀区分
-     * （mex_ap_=property_fee_bills，其余=ar_ap_items）。
+     * （mex_ap_=property_fee_bills，其余=ar_ap_items；ar_ap_items 应付按负额比，同 attachContractRent 的红字分录，155-R2）。
      */
     @Override
     public List<MerchantExpenseDriftRecord> listAutoDrift(String period) {
         return jdbcTemplate.query("""
                 SELECT base.id AS entry_id, base.merchant_id, base.source, base.source_ref,
                        base.net_cent,
-                       COALESCE(CASE WHEN base.id LIKE 'mex\\_ap\\_%' THEN pb.amount_cent ELSE ar.amount_cent END, 0)
+                       COALESCE(CASE WHEN base.id LIKE 'mex\\_ap\\_%' THEN pb.amount_cent ELSE CASE WHEN ar.direction = 'payable' THEN -ar.amount_cent ELSE ar.amount_cent END END, 0)
                            AS upstream_cent
                   FROM (
                         SELECT e.id, e.merchant_id, e.source, e.source_ref,
@@ -294,7 +298,7 @@ class JdbcMerchantExpenseRepository implements MerchantExpenseRepository {
                   LEFT JOIN ar_ap_items ar ON ar.id = base.source_ref
                   LEFT JOIN property_fee_bills pb ON pb.id = base.source_ref
                  WHERE base.net_cent <> COALESCE(
-                        CASE WHEN base.id LIKE 'mex\\_ap\\_%' THEN pb.amount_cent ELSE ar.amount_cent END, 0)
+                        CASE WHEN base.id LIKE 'mex\\_ap\\_%' THEN pb.amount_cent ELSE CASE WHEN ar.direction = 'payable' THEN -ar.amount_cent ELSE ar.amount_cent END END, 0)
                  ORDER BY base.id
                 """,
                 new MapSqlParameterSource("period", period),

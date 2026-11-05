@@ -1,6 +1,6 @@
 package com.complex.platform.contract;
 
-// 文件版本：V0.29
+// 文件版本：V0.30
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.LocalZone;
@@ -1520,6 +1520,15 @@ public class ContractService implements com.complex.platform.finance.Termination
             case "sum" -> baseRent + turnover.amountCent();
             default -> throw ApiException.badRequest("VALIDATION_FAILED", "合同收租方式不正确");
         };
+        // 第十八批 U 段第 155 条 155-R1（第十八批裁决 36「原月按保底收租的，该月销售跨月退款不冲回；原月按抽成额收租的，照档位费率冲回」）：本期按保底收租＝
+        // 规则保底生效，或取高合同抽成额严格小于月租（抽成额恰好等于月租、叠加合同照收抽成的都算按抽成额收租）；随本期逐笔快照写下，
+        // 本期跨期退款冲正同一事务挂应付（本期没有销售、只有冲正时也落）。
+        if (turnover.calc() != null) {
+            boolean billedByMinimum = turnover.calc().ruleMinApplied()
+                    || ("higher_of".equals(mode) && turnover.amountCent() < baseRent);
+            turnoverRentPort.postTurnoverRentLedger(c.merchantId(), c.projectId(), period, turnover.calc(), billedByMinimum,
+                    dueDateOf(period));
+        }
         return new com.complex.platform.finance.FinanceService.PeriodTurnoverRent(turnover.ruleId(), amount);
     }
 

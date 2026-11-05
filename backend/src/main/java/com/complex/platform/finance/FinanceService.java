@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.38
+// 文件版本：V0.39
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -77,7 +77,9 @@ public class FinanceService implements TerminationSettlementPort {
             // 第十批 TK-24-R3：订台定金达标原路退回的应付退款项（BSM L1062「达标时，各笔定金分别原路退回」）。
             "bar_deposit_refund",
             // FS-021-R1：通票分账负额明细（向商户追回）单独挂追收应收，不与应付轧差（BSM L755）。
-            "ticket_distribution_recovery");
+            "ticket_distribution_recovery",
+            // 第十八批 U 段第 155 条 155-R1（ENUM:257「在退款发生的当期生成冲正」）：跨期退款按原账期档位费率冲回的营业额抽成，挂商户应付。
+            "turnover_rent_reversal");
     // P1#13 库存差异原因（与 V108 chk_inventory_variance_reason 一致）。
     private static final Set<String> INVENTORY_VARIANCE_REASONS = Set.of("damage", "shortage", "overage", "supplier_fault");
     // P1#14 保证金四动作（与 V110 chk_deposit_ledger_action 一致）。
@@ -143,6 +145,8 @@ public class FinanceService implements TerminationSettlementPort {
             Map.entry("saved_bottle_remedy_recovery", "存酒退出承接垫付追收"),
             Map.entry("single_bar_service_fee", "单店门票综合服务费"),
             Map.entry("ticket_distribution_recovery", "通票分账追收"),
+            // 第十八批 U 段第 155 条 155-R1（PGM:287「界面全中文（所有终端零英文）」）。
+            Map.entry("turnover_rent_reversal", "营业额抽成冲正"),
             // 第十八批 M 段第 117 条（ENUM:256、BSM:1380）：商户承担的工单用料费应收。
             Map.entry("work_order_material", "工单用料费（商户承担）"),
             // 第十八批 R 段第 142 条 142-R1（BSM:1081「长款当期计入该商户营业外收入并单独留痕可查」）。
@@ -3053,15 +3057,61 @@ public class FinanceService implements TerminationSettlementPort {
         }
         TurnoverRentRuleRecord rule = requirePeriodTurnoverRentRule(
                 contractId, merchantId, month.atDay(1), month.atEndOfMonth());
-        return new PeriodTurnoverRent(rule.id(),
-                calculateTurnoverRent(rule, month.atDay(1), month.atEndOfMonth()));
+        TurnoverCalc calc = calculateTurnoverRent(rule, month.atDay(1), month.atEndOfMonth());
+        return new PeriodTurnoverRent(rule.id(), calc.rent(), calc);
     }
 
     public long computePeriodTurnoverRent(String merchantId, String contractId, String period) {
         return computePeriodTurnoverRentSnapshot(merchantId, contractId, period).amountCent();
     }
 
-    public record PeriodTurnoverRent(String ruleId, long amountCent) {
+    /** 第十八批 U 段第 155 条 155-R1：calc＝本期抽成明细，出账时经 postTurnoverRentLedger 同事务落地；只组合月租的构造 calc 为空。 */
+    public record PeriodTurnoverRent(String ruleId, long amountCent, TurnoverCalc calc) {
+        public PeriodTurnoverRent(String ruleId, long amountCent) {
+            this(ruleId, amountCent, null);
+        }
+    }
+
+    /**
+     * 155-R1：rent＝本期抽成（含规则保底）；ruleMinApplied＝规则保底生效（不含保底的抽成额严格小于保底）；snapshots＝本期逐笔销售快照；
+     * reversals＝本期退成的跨期退款按原账期档位费率的冲回额。
+     */
+    public record TurnoverCalc(long rent, boolean ruleMinApplied, List<FinanceRepository.TurnoverSaleSnapshot> snapshots,
+            List<TurnoverReversal> reversals) {
+    }
+
+    /** 155-R1：一笔跨期退款（退款单）按原账期档位费率的冲回额。 */
+    public record TurnoverReversal(String refundId, long amountCent) {
+    }
+
+    /**
+     * 第十八批 U 段第 155 条 155-R1（ENUM:257「在退款发生的当期生成冲正，不回改历史月份……多笔退款逐笔分别冲正，不合并折算。」；DEC-R8-54；
+     * 第十八批裁决 36）：出账同一事务里写本期逐笔快照（带本期是否按保底收租），跨期退款冲回额逐笔挂应付（payable，对手方与 merchant_id＝商户，
+     * source_type=turnover_rent_reversal，source_id＝退款单，归本期），一笔退款只一行、重出不重挂。调用方先授权（同 computePeriodTurnoverRentSnapshot）。
+     */
+    public void postTurnoverRentLedger(String merchantId, String projectId, String period, TurnoverCalc calc,
+            boolean billedByMinimum, LocalDate dueDate) {
+        repository.insertTurnoverSaleSnapshots(merchantId, period, calc.snapshots(), billedByMinimum);
+        for (TurnoverReversal reversal : calc.reversals()) {
+            if (reversal.amountCent() > 0
+                    && !repository.existsArApItemBySource("payable", "turnover_rent_reversal", reversal.refundId())) {
+                persistDerivedArApItem("payable", merchantId, "turnover_rent_reversal", reversal.refundId(), reversal.amountCent(),
+                        turnoverReversalKey(reversal.refundId()), merchantId, period, dueDate, projectId);
+            }
+        }
+    }
+
+    /**
+     * 冲正应付的幂等键＝退款单号的定长摘要（SHA-256 十六进制前 17 位）：台账 id 由 slug 截到 40 字符，整单号拼进去时同一酒吧的退款单号
+     * （bill_adjustment_…）只剩首位，多笔冲正会撞同一 id 互相覆盖（ENUM:257「多笔退款逐笔分别冲正」落不住）。
+     */
+    private static String turnoverReversalKey(String refundId) {
+        try {
+            return java.util.HexFormat.of().formatHex(java.security.MessageDigest.getInstance("SHA-256")
+                    .digest(refundId.getBytes(java.nio.charset.StandardCharsets.UTF_8))).substring(0, 17);
+        } catch (java.security.NoSuchAlgorithmException e) {
+            throw new IllegalStateException("turnover reversal key hashing unavailable", e);
+        }
     }
 
     private TurnoverRentRuleRecord requirePeriodTurnoverRentRule(
@@ -3075,39 +3125,134 @@ public class FinanceService implements TerminationSettlementPort {
         return rules.getFirst();
     }
 
-    private long calculateTurnoverRent(TurnoverRentRuleRecord rule, LocalDate periodStart, LocalDate periodEnd) {
+    private TurnoverCalc calculateTurnoverRent(TurnoverRentRuleRecord rule, LocalDate periodStart, LocalDate periodEnd) {
         // 第十八批 Q 段第 140 条（BSM:1682「酒吧仍按每家酒吧配置」）：一次算窗口，酒吧商户的全部来源按该酒吧营业日窗，
         // 其他商户按所属综合体（同 DividendService 三来源同窗）。
         String bar = businessDayResolver.barOfMerchant(rule.merchantId());
         String project = bar == null ? businessDayResolver.projectOfMerchant(rule.merchantId()) : null;
         Instant from = businessDayResolver.start(project, bar, periodStart);
         Instant to = businessDayResolver.end(project, bar, periodEnd);
-        long turnover = repository.aggregateMerchantReflowTurnover(rule.merchantId(), from, to);
+        List<TurnoverRentRuleTierRecord> tiers = repository.listTurnoverRentRuleTiers(rule.id());
+        // 第十八批 U 段第 155 条 155-R3（ENUM:257「不论收款走平台还是走商户自有渠道、不论线上线下均计入」；BSM:1330「餐饮和零售商户的 POS 结果回流到平台」）：
+        // 餐饮、零售回流订单与退款逐笔取（退款带所退原订单），与其他来源统一按时点累计定位。
+        List<FinanceRepository.TurnoverSourceRow> rows = new java.util.ArrayList<>();
+        List<FinanceRepository.TurnoverSourceRow> refunds = new java.util.ArrayList<>();
+        for (FinanceRepository.TurnoverSourceRow row : repository.listMerchantReflowTurnoverRows(rule.merchantId(), from, to)) {
+            ("reflow_refund".equals(row.kind()) ? refunds : rows).add(row);
+        }
         // 第十八批 P 段第 131 条（ENUM:103、BSM:1062「因爽约、超时取消或到店未达最低消费而没收的定金，按爽约发生当日所属的营业日归属账期」，
         // 没收的定金「全额归该卡座所属的酒吧商户，作为空置补偿计入该商户营业额与营业额抽成基数」；BSM:1682「酒吧仍按每家酒吧配置」）：
         // 酒吧商户另计本账期没收的订台定金，以没收时点按该酒吧营业日归期。
         // 第十八批 Q 段第 138 条 138-R1（BSM:1347「不论收款走平台还是走商户自有渠道均计入」「减去当期已成功的退款金额」；BSM:1076「月结定格的扣留部分，
         // 扣留金额计入该商户营业额、抽成基数」；BSM:1111「挂起订单在结清前不计入……结清后按实际结清金额计入，归属结清所在营业日」；ENUM:257「营业额抽成账单
         // 在该账期的薪资月结完成、该账期月结定格时确定的服务费应发数与扣留数定数之后出账」）：酒吧商户再计平台内酒吧收入——整单已确认商品实收（按结清时点）
-        // ＋月结服务费扣留−已退成商品分项，来源未定 409 BAR_REVENUE_PENDING。合计为负按 0 计，与回流钳 0 同口径。
+        // ＋月结服务费扣留−已退成商品分项，来源未定 409 BAR_REVENUE_PENDING。合计为负按 0 计。
         if (bar != null) {
-            turnover = Math.addExact(turnover, repository.sumForfeitedBarDepositCent(rule.merchantId(), from, to));
-            turnover = Math.addExact(turnover, repository.sumBarPlatformTurnoverCent(rule.merchantId(), from, to,
-                    periodStart, periodEnd.plusDays(1)));
+            rows.addAll(repository.listForfeitedBarDepositRows(rule.merchantId(), from, to));
             // 第十八批 Q 段第 138 条 138-R4（BSM:1122「所有服务费由公司统一收款……全额进公司账」；BSM:1714「点舞等专项服务的收款主体为该服务发生地所属的
             // 酒吧商户」；决策台账 §17「客人仍向酒吧全额付款，酒吧确认对客收入」）：再计该酒吧已完成的服务点单全额，以下单时点按该酒吧营业日窗归期。
-            turnover = Math.addExact(turnover, repository.sumCompletedServiceOrderCent(rule.merchantId(), from, to));
+            rows.addAll(repository.listCompletedServiceOrderRows(rule.merchantId(), from, to));
+            for (FinanceRepository.TurnoverSourceRow row : repository.listBarPlatformTurnoverRows(rule.merchantId(), from, to,
+                    periodStart, periodEnd.plusDays(1))) {
+                if ("bar_withheld_fee".equals(row.kind())) {
+                    rows.add(row.withAt(businessDayResolver.start(null, bar, row.businessDate())));
+                } else {
+                    ("bar_goods_refund".equals(row.kind()) ? refunds : rows).add(row);
+                }
+            }
         } else {
             // 第十八批 Q 段第 138 条 138-R3（ENUM:257「未计收服务费的商户（餐饮、零售等），其通票或券核销划归本商户并已完成结算的部分计入」；
             // DEC-R8-98-06「券核销结算金额＝平台按内部结算价付给核销商户的钱，对未计收服务费的商户按既有裁决计入其营业额」）：非酒吧商户再计
             // 按内部结算价已付讫的券与通票合作方券结算金额，以付款时点按所属综合体营业日归期；酒吧是计收门票综合服务费的商户（ENUM:57），不计。
-            turnover = Math.addExact(turnover, repository.sumSettledVoucherSettlementCent(rule.merchantId(), from, to));
+            // 155-R3：券结算逐笔只参与当月累计定位，不记快照。
+            rows.addAll(repository.listSettledVoucherSettlementRows(rule.merchantId(), from, to));
         }
+        // 第十八批 U 段第 155 条 155-R1、155-R3（ENUM:257「减去当期已成功的退款金额」「在退款发生的当期生成冲正，不回改历史月份」）：所退那笔在本窗内的
+        // 同期退款从那笔里减；所退那笔在本窗之前的是跨期退款，不进本期基数，按原账期快照逐笔冲正；回流退款在本系统查不到原订单的不计。
+        List<FinanceRepository.TurnoverSourceRow> crossPeriod = new java.util.ArrayList<>();
+        for (FinanceRepository.TurnoverSourceRow refund : refunds) {
+            if (refund.originId() == null) {
+                continue;
+            }
+            if (refund.originAt() != null && refund.originAt().isBefore(from)) {
+                crossPeriod.add(refund);
+                continue;
+            }
+            int sale = -1;
+            for (int i = 0; i < rows.size(); i++) {
+                if (saleKindOf(refund.kind()).equals(rows.get(i).kind()) && rows.get(i).id().equals(refund.originId())) {
+                    sale = i;
+                }
+            }
+            if (sale < 0) {
+                rows.add(refund);
+            } else {
+                rows.set(sale, rows.get(sale).plus(refund.amountCent()));
+            }
+        }
+        // 155-R1、155-R3（DEC-R8-54「超额累进下逐段拆分」；财务 PRD:904「按其在当月累计中的位置逐段拆分」）：全部来源按 (时点, 类型, id) 累计，
+        // 净额为正的每张酒吧整单、每笔回流订单记一条快照；规则没有阶梯行时按规则费率一档。
+        rows.sort(java.util.Comparator.comparing(FinanceRepository.TurnoverSourceRow::at)
+                .thenComparing(FinanceRepository.TurnoverSourceRow::kind)
+                .thenComparing(FinanceRepository.TurnoverSourceRow::id));
+        List<TurnoverRentRuleTierRecord> segmentTiers = tiers.isEmpty()
+                ? List.of(new TurnoverRentRuleTierRecord(null, rule.id(), 1, null, rule.rateBps()))
+                : tiers;
+        long turnover = 0L;
+        List<FinanceRepository.TurnoverSaleSnapshot> snapshots = new java.util.ArrayList<>();
+        for (FinanceRepository.TurnoverSourceRow row : rows) {
+            if (("bar_bill".equals(row.kind()) || "reflow_order".equals(row.kind())) && row.amountCent() > 0) {
+                snapshots.add(new FinanceRepository.TurnoverSaleSnapshot(row.kind(), row.id(), row.amountCent(),
+                        TurnoverRentMath.segments(turnover, row.amountCent(), segmentTiers)));
+            }
+            turnover = Math.addExact(turnover, row.amountCent());
+        }
+        List<TurnoverReversal> reversals = reverseCrossPeriodRefunds(rule, crossPeriod);
         turnover = Math.max(0L, turnover);
-        List<TurnoverRentRuleTierRecord> tiers = repository.listTurnoverRentRuleTiers(rule.id());
-        return tiers.isEmpty()
+        long rent = tiers.isEmpty()
                 ? clampRent(turnover, rule.rateBps(), rule.minAmountCent(), rule.maxAmountCent())
                 : TurnoverRentMath.tieredRent(turnover, tiers, rule.minAmountCent());
+        // 155-R1（第十八批裁决 36）：规则保底生效＝不含保底的抽成额严格小于保底，与 tieredRent、clampRent 的「rent < minAmountCent」同口径。
+        long withoutMinimum = tiers.isEmpty()
+                ? clampRent(turnover, rule.rateBps(), null, rule.maxAmountCent())
+                : TurnoverRentMath.tieredRent(turnover, tiers, null);
+        boolean ruleMinApplied = rule.minAmountCent() != null && withoutMinimum < rule.minAmountCent();
+        // ENUM:257「“保底与抽成取高”按自然月逐月比较、不跨月合并」：冲正不并入本期抽成与保底比较。
+        return new TurnoverCalc(rent, ruleMinApplied, List.copyOf(snapshots), reversals);
+    }
+
+    /**
+     * 155-R1 跨期退款逐笔处理（一笔退款单一条）。所退那笔有原账期快照的：原月按保底收租的不冲回（第十八批裁决 36「原月按保底收租的，该月销售跨月退款
+     * 不冲回」），否则按原档位费率原额冲回（「原月按抽成额收租的，照档位费率冲回」；ENUM:257「原账期已定格的账单与档位不因冲正而重算」，不以原月超出保底的
+     * 差额为限）。没有快照而原账期有抽成规则的，原账期抽成还没出，409 先出原账期（不拦则冲回静默丢失）；原账期没有抽成规则的，原月没按抽成计费，不冲回。
+     */
+    private List<TurnoverReversal> reverseCrossPeriodRefunds(TurnoverRentRuleRecord rule,
+            List<FinanceRepository.TurnoverSourceRow> refunds) {
+        List<TurnoverReversal> reversals = new java.util.ArrayList<>();
+        for (FinanceRepository.TurnoverSourceRow refund : refunds) {
+            Optional<FinanceRepository.BilledTurnoverSale> billed = repository.findTurnoverSaleSnapshot(saleKindOf(refund.kind()), refund.originId());
+            if (billed.isPresent()) {
+                FinanceRepository.TurnoverSaleSnapshot sale = billed.get().sale();
+                if (!billed.get().billedByMinimum()) {
+                    reversals.add(new TurnoverReversal(refund.id(),
+                            TurnoverRentMath.reversalCent(-refund.amountCent(), sale.netAmountCent(), sale.segments())));
+                }
+                continue;
+            }
+            java.time.YearMonth origin = java.time.YearMonth.from(
+                    businessDayResolver.merchantBusinessDate(null, rule.merchantId(), refund.originAt()));
+            if (!repository.findTurnoverRentRulesForPeriod(rule.contractId(), rule.merchantId(),
+                    origin.atDay(1), origin.atEndOfMonth()).isEmpty()) {
+                throw ApiException.conflict("TURNOVER_RENT_ORIGIN_UNBILLED",
+                        "退款所属原账期 " + origin + " 的营业额抽成尚未出账，请先出原账期");
+            }
+        }
+        return List.copyOf(reversals);
+    }
+
+    /** 155-R1、155-R3：退款行所退那笔销售的来源类型（回流退款退回流订单，酒吧商品退款退酒吧整单）。 */
+    private static String saleKindOf(String refundKind) {
+        return "reflow_refund".equals(refundKind) ? "reflow_order" : "bar_bill";
     }
 
     /**
@@ -3331,10 +3476,15 @@ public class FinanceService implements TerminationSettlementPort {
             throw ApiException.conflict("TURNOVER_RENT_RULE_PERIOD_MISMATCH",
                     "指定的抽成规则不是该账期应采用的版本");
         }
-        long rent = calculateTurnoverRent(periodRule, periodStart, periodEnd);
+        TurnoverCalc calc = calculateTurnoverRent(periodRule, periodStart, periodEnd);
+        long rent = calc.rent();
         if (rent <= 0) {
             throw ApiException.badRequest("TURNOVER_RENT_ZERO", "计算出的营业额抽成为 0，无需生成账单");
         }
+        String period = java.time.YearMonth.from(periodStart).toString();
+        String projectId = repository.findContractProjectId(rule.contractId());
+        // 第十八批 U 段第 155 条 155-R1：同一事务写本期逐笔快照、挂跨期退款冲正；本入口只出抽成应收、不读合同收租方式，原月是否按保底只看规则保底。
+        postTurnoverRentLedger(rule.merchantId(), projectId, period, calc, calc.ruleMinApplied(), dueDate);
         // 营业额抽成应收：counterparty=商户。V299 起落 accounting_period=期间起始月——
         // 租金自动挂接（费用台账→分红基数）按 accounting_period 归期；历史行无期间标记不挂接（如实边界）。
         // 18F 第 80 条（PGM:413；裁决 M737-iter4 说明（三）「跨项目经营商户的金额按项目拆分」）：应收带合同所属项目。
@@ -3346,9 +3496,9 @@ public class FinanceService implements TerminationSettlementPort {
                 rent,
                 actual.idempotencyKey(),
                 rule.merchantId(),
-                java.time.YearMonth.from(periodStart).toString(),
+                period,
                 null,
-                repository.findContractProjectId(rule.contractId()));
+                projectId);
     }
 
     /**
@@ -3517,9 +3667,11 @@ public class FinanceService implements TerminationSettlementPort {
         long unpaidAmountCent = internalAccounting ? 0L : amountCent;
         String status = internalAccounting ? "settled"
                 : ("receivable".equals(direction) ? "pending_collection" : "pending_payment");
+        // item_no 取完整 slug（≤40，ARAP＋毫秒＋-＋slug 不超 varchar(128)）：只取前 12 字符时同前缀的派生台账（如 turnover_rent 与
+        // turnover_rent_reversal）在同一毫秒写两条即撞 ar_ap_items_item_no_key。
         ArApItemRecord item = new ArApItemRecord(
                 id,
-                "ARAP" + now.toEpochMilli() + "-" + slug.substring(0, Math.min(12, slug.length())),
+                "ARAP" + now.toEpochMilli() + "-" + slug,
                 direction,
                 counterpartyId,
                 sourceType,

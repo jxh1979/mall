@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: 综合体管理系统 P0 API 契约
-  version: V0.52
+  version: V0.53
   description: P0 首批编码前置契约。本文采用 JSON-compatible YAML，便于与 openapi-p0.json 保持一致。正式后端以 Java 21 + Spring Boot 4.x +
     springdoc-openapi 输出运行时 OpenAPI，并与本契约比对。
 servers:
@@ -5219,10 +5219,18 @@ paths:
                   type: string
                   description: 外部渠道订单号。
                   maxLength: 255
+                merchant_id:
+                  type: string
+                  description: 回流行所属商户 ID：源 B 对账文件回流行自带商户号直落（查无此商户的置未归属）；为空则按 provider_payload 的渠道门店号（external_store_id 或 store_id）查渠道门店映射认定，未命中留未归属。
+                  maxLength: 64
                 provider_payload:
                   type: object
                   additionalProperties: true
                   description: 渠道原始载荷。
+                original_external_business_id:
+                  type: string
+                  description: 退款所退原订单的外部单号（同渠道、同业务类型原订单的 external_business_id），餐饮、零售退款必填，缺失返回 400 VALIDATION_FAILED；营业额抽成跨期退款按该原订单原账期的档位与费率冲回。
+                  maxLength: 128
       responses:
         "200":
           $ref: "#/components/responses/Success"
@@ -6713,7 +6721,7 @@ paths:
         - "bar"
       operationId: "configureSavedBottleManualPickupPolicy"
       summary: "配置人工例外取酒消费历史条件（按项目；最高权限本人办理并留痕；须同时配置上下限）"
-      description: "BSM L1073 ②「申请手机号在本项目内满足后台配置的任一消费历史条件（安全阈值，按项目可配，调整须最高权限审批并留痕……须同时配置上下限）」：orders_within_1m / orders_within_3m / orders_total 与 min_orders / max_orders 须同时填写，下限 ≥ 1、各条件值在上下限内，否则 400 VALIDATION_FAILED；非最高权限本人 403 MASTER_APPROVAL_REQUIRED（范式同设施设备删除审批）；落 saved_bottle_manual_pickup_policy 并留痕 updated_by/updated_at。未单独配置的项目按 project_id=global 出厂行核对（出厂默认近 1 个月 2 笔、近 3 个月 3 笔、历史累计 5 笔，上下限留空，首次改参时与条件值同填；V548）。"
+      description: "BSM L1073 ②「申请手机号在本项目内满足后台配置的任一消费历史条件（安全阈值，按项目可配，调整须最高权限审批并留痕……须同时配置上下限）」：orders_within1m / orders_within3m / orders_total 与 min_orders / max_orders 须同时填写，下限 ≥ 1、各条件值在上下限内，否则 400 VALIDATION_FAILED；非最高权限本人 403 MASTER_APPROVAL_REQUIRED（范式同设施设备删除审批）；落 saved_bottle_manual_pickup_policy 并留痕 updated_by/updated_at。未单独配置的项目按 project_id=global 出厂行核对（出厂默认近 1 个月 2 笔、近 3 个月 3 笔、历史累计 5 笔，上下限留空，首次改参时与条件值同填；V548）。"
       x-permission: "bar.saved_bottle.manual_pickup_policy.manage"
       x-data-scope: "project"
       x-terminal-allowed:
@@ -8750,7 +8758,7 @@ paths:
           $ref: "#/components/responses/Error"
       x-auth-context: staff-token
       requestBody:
-        $ref: "#/components/requestBodies/StockMovementRequest"
+        $ref: "#/components/requestBodies/StockDamageAdjustmentRequest"
   /api/v1/inventory/stock-movements/loss:
     post:
       tags:
@@ -8782,7 +8790,7 @@ paths:
           $ref: "#/components/responses/Error"
       x-auth-context: staff-token
       requestBody:
-        $ref: "#/components/requestBodies/StockMovementRequest"
+        $ref: "#/components/requestBodies/StockDamageAdjustmentRequest"
   /api/v1/inventory/stock-movements/waste:
     post:
       tags:
@@ -8814,7 +8822,7 @@ paths:
           $ref: "#/components/responses/Error"
       x-auth-context: staff-token
       requestBody:
-        $ref: "#/components/requestBodies/StockMovementRequest"
+        $ref: "#/components/requestBodies/StockDamageAdjustmentRequest"
   /api/v1/inventory/suppliers:
     get:
       tags:
@@ -18069,7 +18077,7 @@ paths:
         - finance
       operationId: billTurnoverRent
       summary: 营业额抽成计费生成应收
-      description: 第十八批 Q 段第 138 条：抽成基数＝该商户本账期回流营业额（只计餐饮、零售的第三方回流，退款相抵）；非酒吧商户另计已付讫的券与通票合作方券内部结算价结算金额（partner_voucher 应付的实际付款，按付款时点归期）；酒吧商户另计平台内成交——整单已确认的商品实收（折后实收，不含券抵扣、服务费与小费分项，按结清时点）＋月结定格的服务费扣留数−已退成的商品分项＋没收的订台定金＋已完成的服务点单全额，各来源按该酒吧营业日窗取数（第 140 条），合计为负按 0 计。服务费尚未月结定格或酒吧收入来源分项未齐时 409 BAR_REVENUE_PENDING，不出账（ENUM:257 账单一次出准、不使用预估数）。
+      description: 第十八批 Q 段第 138 条：抽成基数＝该商户本账期回流营业额（只计餐饮、零售的第三方回流，同期退款相抵，跨期退款另挂冲正）；非酒吧商户另计已付讫的券与通票合作方券内部结算价结算金额（partner_voucher 应付的实际付款，按付款时点归期）；酒吧商户另计平台内成交——整单已确认的商品实收（折后实收，不含券抵扣、服务费与小费分项，按结清时点）＋月结定格的服务费扣留数−已退成的商品分项＋没收的订台定金＋已完成的服务点单全额，各来源按该酒吧营业日窗取数（第 140 条），合计为负按 0 计。服务费尚未月结定格或酒吧收入来源分项未齐时 409 BAR_REVENUE_PENDING，不出账（ENUM:257 账单一次出准、不使用预估数）。 第十八批 U 段第 155 条 155-R1：出账同一事务按酒吧整单逐笔记下该笔在当月累计中所适用的档位费率与本期是否按保底收租（规则保底生效）；所退账单在之前账期结清的商品退款为跨期退款，不进本期抽成基数，原月按保底收租的不冲回，原月按抽成额收租的按原档位费率原额逐笔挂营业额抽成冲正应付（source_type=turnover_rent_reversal，归本期，重出不重挂）；所退原账期的抽成尚未出账时 409 TURNOVER_RENT_ORIGIN_UNBILLED，不出账。 第十八批 U 段第 155 条 155-R3 起，餐饮、零售第三方回流订单同口径——净额大于 0 的回流订单逐笔记快照；同期回流退款从原订单里减；跨期回流退款按原订单快照逐笔冲正（原月按保底收租的不冲回），原账期未出账同样 409 TURNOVER_RENT_ORIGIN_UNBILLED；查不到本系统原订单的回流退款不计。
       x-auth-context: staff-token
       x-permission: finance.turnover_rent.bill
       x-data-scope: platform
@@ -26113,7 +26121,7 @@ paths:
       x-auth-context: staff-token
       description: 生效合同按 ContractRentMath 算该期租金应收 → 联动
         ar_ap_items(receivable/pending_collection)+contract_rent_bills,幂等(合同,期,租金)。免租/生效前无应收。 涉及抽成时锁定该账期实际采用的
-        turnover_rule_id；规则缺失、重叠或月内切换不能唯一覆盖完整账期时待处理，不按当前最新规则替算。第十八批 G 段 82b-R3：合同所属项目须在本入口权限码可触及范围内（含可跨项目角色勾选的项目；平台管理员不限），合同未带项目或不在范围内 403 CROSS_PROJECT_FORBIDDEN（在幂等执行与行锁之前判）。第十八批 Q 段第 138 条：涉及抽成的账期，酒吧商户服务费尚未月结定格或酒吧收入来源分项未齐时 409 BAR_REVENUE_PENDING，本次不出账。第十八批 Q 段第 138 条复核修正：已到期合同可对到期日所在月及以前的账期出账（营业额抽成类合同的最后一期在到期、该期月结定格后出），到期日所在月之后的账期与其他非生效状态 409 CONTRACT_NOT_EFFECTIVE；保底与抽成取高、保底加抽成叠加合同变更或续租终审前的账期按当时月租（rent_terms.priorRentTerms）出账。
+        turnover_rule_id；规则缺失、重叠或月内切换不能唯一覆盖完整账期时待处理，不按当前最新规则替算。第十八批 G 段 82b-R3：合同所属项目须在本入口权限码可触及范围内（含可跨项目角色勾选的项目；平台管理员不限），合同未带项目或不在范围内 403 CROSS_PROJECT_FORBIDDEN（在幂等执行与行锁之前判）。第十八批 Q 段第 138 条：涉及抽成的账期，酒吧商户服务费尚未月结定格或酒吧收入来源分项未齐时 409 BAR_REVENUE_PENDING，本次不出账。第十八批 Q 段第 138 条复核修正：已到期合同可对到期日所在月及以前的账期出账（营业额抽成类合同的最后一期在到期、该期月结定格后出），到期日所在月之后的账期与其他非生效状态 409 CONTRACT_NOT_EFFECTIVE；保底与抽成取高、保底加抽成叠加合同变更或续租终审前的账期按当时月租（rent_terms.priorRentTerms）出账。 第十八批 U 段第 155 条 155-R1：涉及抽成的账期，出账同一事务按酒吧整单逐笔记下该笔在当月累计中所适用的档位费率与本期是否按保底收租（规则保底生效，或取高合同抽成额低于月租）；所退账单在之前账期结清的商品退款为跨期退款，不进本期抽成基数，原月按保底收租的不冲回，原月按抽成额收租的按原档位费率原额逐笔挂营业额抽成冲正应付（source_type=turnover_rent_reversal，归本期；本期没有销售、只有冲正时也挂，重出不重挂）；所退原账期的抽成尚未出账时 409 TURNOVER_RENT_ORIGIN_UNBILLED，本次不出账。 第十八批 U 段第 155 条 155-R3 起，餐饮、零售第三方回流订单同口径——净额大于 0 的回流订单逐笔记快照；同期回流退款从原订单里减；跨期回流退款按原订单快照逐笔冲正（原月按保底收租的不冲回），原账期未出账同样 409 TURNOVER_RENT_ORIGIN_UNBILLED；查不到本系统原订单的回流退款不计。
       parameters:
         - name: contract_id
           in: path
@@ -26266,7 +26274,7 @@ paths:
       x-audit-event-failure: contract.period_bill_failed
       x-auth-context: staff-token
       description: 一期生成 租金(ContractRentMath)+物业费(rent_terms.propertyFeeCent)+能源费(基非none取 rent_terms.energyFeeCent)
-        应收;各费目幂等;0/免租跳过。 涉及抽成时锁定该账期实际采用的 turnover_rule_id；规则缺失、重叠或月内切换不能唯一覆盖完整账期时待处理，不按当前最新规则替算。第十八批 G 段 82b-R3：合同所属项目须在本入口权限码可触及范围内（含可跨项目角色勾选的项目；平台管理员不限），合同未带项目或不在范围内 403 CROSS_PROJECT_FORBIDDEN（在幂等执行与行锁之前判）。第十八批 Q 段第 138 条：涉及抽成的账期，酒吧商户服务费尚未月结定格或酒吧收入来源分项未齐时 409 BAR_REVENUE_PENDING，本次不出账。第十八批 Q 段第 138 条复核修正：已到期合同可对到期日所在月及以前的账期出账（营业额抽成类合同的最后一期在到期、该期月结定格后出），到期日所在月之后的账期与其他非生效状态 409 CONTRACT_NOT_EFFECTIVE；保底与抽成取高、保底加抽成叠加合同变更或续租终审前的账期按当时月租（rent_terms.priorRentTerms）出账。
+        应收;各费目幂等;0/免租跳过。 涉及抽成时锁定该账期实际采用的 turnover_rule_id；规则缺失、重叠或月内切换不能唯一覆盖完整账期时待处理，不按当前最新规则替算。第十八批 G 段 82b-R3：合同所属项目须在本入口权限码可触及范围内（含可跨项目角色勾选的项目；平台管理员不限），合同未带项目或不在范围内 403 CROSS_PROJECT_FORBIDDEN（在幂等执行与行锁之前判）。第十八批 Q 段第 138 条：涉及抽成的账期，酒吧商户服务费尚未月结定格或酒吧收入来源分项未齐时 409 BAR_REVENUE_PENDING，本次不出账。第十八批 Q 段第 138 条复核修正：已到期合同可对到期日所在月及以前的账期出账（营业额抽成类合同的最后一期在到期、该期月结定格后出），到期日所在月之后的账期与其他非生效状态 409 CONTRACT_NOT_EFFECTIVE；保底与抽成取高、保底加抽成叠加合同变更或续租终审前的账期按当时月租（rent_terms.priorRentTerms）出账。 第十八批 U 段第 155 条 155-R1：涉及抽成的账期，出账同一事务按酒吧整单逐笔记下该笔在当月累计中所适用的档位费率与本期是否按保底收租（规则保底生效，或取高合同抽成额低于月租）；所退账单在之前账期结清的商品退款为跨期退款，不进本期抽成基数，原月按保底收租的不冲回，原月按抽成额收租的按原档位费率原额逐笔挂营业额抽成冲正应付（source_type=turnover_rent_reversal，归本期；本期没有销售、只有冲正时也挂，重出不重挂）；所退原账期的抽成尚未出账时 409 TURNOVER_RENT_ORIGIN_UNBILLED，本次不出账。 第十八批 U 段第 155 条 155-R3 起，餐饮、零售第三方回流订单同口径——净额大于 0 的回流订单逐笔记快照；同期回流退款从原订单里减；跨期回流退款按原订单快照逐笔冲正（原月按保底收租的不冲回），原账期未出账同样 409 TURNOVER_RENT_ORIGIN_UNBILLED；查不到本系统原订单的回流退款不计。
       parameters:
         - name: contract_id
           in: path
@@ -30926,7 +30934,7 @@ paths:
         - merchant-portal
       operationId: getMerchantPortalFeeStatement
       summary: 商户专区·费用总表与当期综合账单(本商户)
-      description: 18E 第 21 条(BSM「商户专区须设一张费用总表，列明平台向本商户收取的全部费用名目、计费基数、承担方与本期金额……系统须向商户出具一张综合账单，把当期各名目的费用汇总列示，使其一次看清全部应付」)。只读、不新建收费。fee_items 列 ENUM 账单类型十二项加门票综合服务费、停车抵免成本共十四个名目(fee_name、billing_basis 抄 HTML 原句、bearer＝本商户名称、本期金额 amount_cent;会员系统服务费、违规罚款没有出账路径,amount_cent 为 null,其余名目当期无出账为 0);bill.lines 把当期各名目汇总(金额/已付/未付,另列名目目录外的本商户应收,名目用台账来源中文名),bill.total_amount_cent/paid_amount_cent/unpaid_amount_cent 为合计,金额一律用分。本期＝计费自然月 month(YYYY-MM,缺省取北京时间当月)——按内部应付计划计费月、物业费计费单期、台账账期、到期日所在月依次取,一律取冲正链最早那张原行的(冲正行、重述行沿 origin_item_id 追到原行),冲正与重述随原行同月计入净额。取数＝应收应付台账中往来对方为本商户的应收(积分发行费按 merchant_id),以及门票综合服务费计费月付清后退票所挂的应退(按所属计费月从该名目扣除,金额、已付、未付都按净额,未付可为负),contract_rent 按所属合同收租方式归固定租金/每平米租金/营业额抽成租金。有付款时点固化的普通内部结算往来(通票分账追收、单店门票综合服务费及其应退、补偿履约追收、停车抵免成本)到出账日、在商户专区可查看后才列入，与门票分账列表、异议截止日同一时刻(BSM L1597/L1673)。无商户归属 403 MERCHANT_SCOPE_REQUIRED;month 非法 400 VALIDATION_FAILED。商户账号读到即记该月所列台账行已读(首页未读账单提醒，第 92 条)。
+      description: 18E 第 21 条(BSM「商户专区须设一张费用总表，列明平台向本商户收取的全部费用名目、计费基数、承担方与本期金额……系统须向商户出具一张综合账单，把当期各名目的费用汇总列示，使其一次看清全部应付」)。只读、不新建收费。fee_items 列 ENUM 账单类型十二项加门票综合服务费、停车抵免成本共十四个名目(fee_name、billing_basis 抄 HTML 原句、bearer＝本商户名称、本期金额 amount_cent;会员系统服务费、违规罚款没有出账路径,amount_cent 为 null,其余名目当期无出账为 0);bill.lines 把当期各名目汇总(金额/已付/未付,另列名目目录外的本商户应收,名目用台账来源中文名),bill.total_amount_cent/paid_amount_cent/unpaid_amount_cent 为合计,金额一律用分。本期＝计费自然月 month(YYYY-MM,缺省取北京时间当月)——按内部应付计划计费月、物业费计费单期、台账账期、到期日所在月依次取,一律取冲正链最早那张原行的(冲正行、重述行沿 origin_item_id 追到原行),冲正与重述随原行同月计入净额。取数＝应收应付台账中往来对方为本商户的应收(积分发行费按 merchant_id),以及门票综合服务费计费月付清后退票所挂的应退(按所属计费月从该名目扣除,金额、已付、未付都按净额,未付可为负)，以及营业额抽成冲正应付(source_type=turnover_rent_reversal，按其账期即退款当期从营业额抽成租金名目净额扣除),contract_rent 按所属合同收租方式归固定租金/每平米租金/营业额抽成租金。有付款时点固化的普通内部结算往来(通票分账追收、单店门票综合服务费及其应退、补偿履约追收、停车抵免成本)到出账日、在商户专区可查看后才列入，与门票分账列表、异议截止日同一时刻(BSM L1597/L1673)。无商户归属 403 MERCHANT_SCOPE_REQUIRED;month 非法 400 VALIDATION_FAILED。商户账号读到即记该月所列台账行已读(首页未读账单提醒，第 92 条)。
       x-permission: merchant.billing.view
       x-data-scope: merchant
       x-terminal-allowed:
@@ -34393,7 +34401,7 @@ paths:
         - bar
       operationId: saveBarCombo
       summary: 新增或修改酒吧套餐
-      description: 从既有 SKU 组合套餐、定整体售价与内部结算价（含内部结算价，敏感）。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
+      description: 从既有 SKU 组合套餐、定整体售价；内部结算价不在此录入，取所挂内部结算 SKU 目录条目（catalog_item_code）的当前生效价（内部结算价只在目录维护，敏感）。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
       x-permission: bar.combo.manage
       x-data-scope: project
       x-terminal-allowed:
@@ -36191,6 +36199,15 @@ paths:
                   enum:
                     - dealer
                     - sales_entity
+                return_freight_bearer:
+                  type: string
+                  description: 非质量问题退货的退回运费承担方：dealer 经销商／sales_entity 销售主体；不填沿用合同现值。
+                  enum:
+                    - dealer
+                    - sales_entity
+                first_leg_freight_refundable:
+                  type: boolean
+                  description: 退货时首程运费是否退回；不填沿用合同现值。
                 contract_signed_at:
                   type:
                     - string
@@ -38031,10 +38048,6 @@ paths:
                   type: string
                   description: 同一请求重试必须复用幂等键
                   maxLength: 128
-                invoice_no:
-                  type: string
-                  description: 重开发票号（可留空）
-                  maxLength: 80
               required:
                 - idempotency_key
       responses:
@@ -54749,6 +54762,10 @@ paths:
                   type: string
                   format: date-time
                   description: 以通话录音为凭证时必填：录音起始时间。
+                final_approver_id:
+                  type: string
+                  maxLength: 64
+                  description: 指定的最终审批人（选填，不填即发起人直接上级）。
       responses:
         "200":
           $ref: "#/components/responses/Success"
@@ -55681,7 +55698,7 @@ paths:
       x-terminal-allowed:
         - app
         - miniapp
-      x-idempotency-required: true
+      x-idempotency-required: false
       x-audit-event-success: parking.payment_paid
       x-audit-event-failure: parking.payment_confirm_failed
       parameters:
@@ -55692,20 +55709,6 @@ paths:
           schema:
             type: string
             maxLength: 64
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              additionalProperties: false
-              required:
-                - idempotency_key
-              properties:
-                idempotency_key:
-                  type: string
-                  maxLength: 128
-                  description: 操作幂等键；重复提交返回第一次的结果。
       responses:
         "200":
           $ref: "#/components/responses/Success"
@@ -56979,7 +56982,7 @@ components:
           example:
             bar_id: bar_a
             table_id: table_a_vip_01
-            table_type: vip_sofa
+            table_type: vip
             reservation_time: "2026-06-20T21:00:00+08:00"
             guest_count: 6
             contact_phone: "13800138000"
@@ -57062,6 +57065,12 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/StockMovementRequest"
+    StockDamageAdjustmentRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/StockDamageAdjustmentRequest"
     SavedBottleRequest:
       required: true
       content:
@@ -59237,6 +59246,7 @@ components:
             - retail
             - catering
             - amusement
+            - media
             - other
           maxLength: 64
         business_entity_id:
@@ -59262,12 +59272,13 @@ components:
           pattern: ^\+?[0-9]{6,20}$
         status:
           type: string
-          description: "`status` 状态字段；状态流转必须符合所属业务对象规则并留痕。"
+          description: 商户状态：pending_admission 待准入／active 正常／suspended 暂停／terminated 终止／blacklisted 黑名单；不填按 active（原为终止的商户不填保持终止）；归档只经存档操作，不能在这里设置；直接改为 terminated 返回 409 MERCHANT_EXIT_REQUIRES_BUFFER（须经退出缓冲流程）；其他取值返回 400 VALIDATION_FAILED。
           enum:
-            - draft
+            - pending_admission
             - active
             - suspended
-            - archived
+            - terminated
+            - blacklisted
           maxLength: 64
         mall_block_code:
           type: string
@@ -59303,12 +59314,13 @@ components:
           minimum: 0
         cooperation_form:
           type: string
-          description: 合作形式；例如固定租金、流水分成、固定租金加分成或联营。
+          description: 合作方式：self_operated 自营／lease 租赁／joint_operation 联营／managed_operation 代运营／service_provider 服务商接入／other 其他；可空，表示尚未确定；不在闭集内返回 400 MERCHANT_COOPERATION_FORM_INVALID。
           enum:
-            - fixed_rent
-            - revenue_share
-            - fixed_rent_plus_commission
+            - self_operated
+            - lease
             - joint_operation
+            - managed_operation
+            - service_provider
             - other
           maxLength: 64
         supervising_company_id:
@@ -59330,6 +59342,7 @@ components:
       required:
         - space_name
         - space_type
+        - project_id
       properties:
         idempotency_key:
           type: string
@@ -59346,23 +59359,21 @@ components:
             type: string
             maxLength: 64
           maxItems: 50
+        project_id:
+          type: string
+          description: 所属项目（必填）；须是已存在的项目（否则 404 PROJECT_NOT_FOUND），且在 governance.space.manage 可触及范围内（平台管理员不限），否则 403 PROJECT_SCOPE_MISMATCH。
+          maxLength: 64
+        merchant_id:
+          type: string
+          description: 所属商户（可空）；须是未存档且未经审批删除的商户，否则 400 MERCHANT_ARCHIVED。
+          maxLength: 64
         space_name:
           type: string
           description: 名称字段；用于后台展示、检索和审计记录，保存前必须去除首尾空白。
           maxLength: 120
         space_type:
           type: string
-          description: 分类或动作编码；必须使用后端枚举、配置字典或 OpenAPI 已声明取值。
-          enum:
-            - mall
-            - floor
-            - zone
-            - shop
-            - booth
-            - bar_table
-            - facility
-            - parking
-            - other
+          description: 空间类型编码，须是空间类型字典（GET /api/v1/platform/space-types）中状态为启用的 type_code，否则 400 VALIDATION_FAILED；字典由后台维护。
           maxLength: 64
         parent_space_id:
           type: string
@@ -59383,6 +59394,13 @@ components:
           description: SpaceRequest.area_square_meter 字段；必须按本 schema 的类型、必填项、枚举、长度、单位和对应 PRD 规则校验。
           minimum: 0
           maximum: 999999999999
+        status:
+          type: string
+          description: 空间状态：active 可用／unavailable 不可用；不填按 active；其他取值返回 400 VALIDATION_FAILED。
+          enum:
+            - active
+            - unavailable
+          maxLength: 64
     ContractDraftRequest:
       type: object
       description: 请求载荷 ContractDraftRequest（V162 起草合同）。
@@ -59566,14 +59584,11 @@ components:
           maxLength: 120
         entity_role:
           type: string
-          description: BusinessEntityRequest.entity_role 字段；必须按本 schema 的类型、必填项、枚举、长度、单位和对应 PRD 规则校验。
+          description: 主体角色（必填）：platform 顶层平台／project_company 城市项目公司／management_company 域主管公司；其他取值返回 400 VALIDATION_FAILED。
           enum:
-            - operation
-            - contract
-            - settlement
-            - invoice
-            - payment
-            - other
+            - platform
+            - project_company
+            - management_company
           maxLength: 255
         unified_social_credit_code:
           type: string
@@ -59585,16 +59600,21 @@ components:
           maxLength: 255
         bank_account_ref:
           type: string
-          description: 数量字段；必须为非负数，并受对应业务容量、库存或分页规则约束。
+          description: 银行账户引用（可空，文本），原样记入主体主数据。
           maxLength: 2048
         status:
           type: string
-          description: "`status` 状态字段；状态流转必须符合所属业务对象规则并留痕。"
+          description: 主体状态：pending_admission 待准入／active 正常／suspended 暂停／terminated 终止／blacklisted 黑名单；不填按 active；归档只经存档操作，不能在这里设置；其他取值返回 400 VALIDATION_FAILED。
           enum:
-            - draft
+            - pending_admission
             - active
             - suspended
-            - archived
+            - terminated
+            - blacklisted
+          maxLength: 64
+        project_id:
+          type: string
+          description: 所属项目（新建主体落地并关联的项目）。平台管理员必填且须是已存在的项目（不存在返回 404 PROJECT_NOT_FOUND）；最高权限可指定已存在的项目；其余账号不填取当前项目，所填项目须在 entity.binding.manage 可触及范围内，否则 403 PROJECT_SCOPE_MISMATCH。
           maxLength: 64
     BusinessEntityBindingRequest:
       type: object
@@ -60404,12 +60424,13 @@ components:
           maxLength: 64
         variant_type:
           type: string
-          description: 派生票类型；用于多人票、新人票、学生票、渠道价等。
+          description: 派生票类型；用于多人票、新人票、学生票、渠道价与 member 会员价。
           enum:
             - group
             - new_customer
             - student
             - channel
+            - member
           maxLength: 64
         price_mode:
           type: string
@@ -60512,6 +60533,10 @@ components:
           type: object
           description: Optional matching context for published dynamic pricing rules. Missing context only matches rules without conditions.
           additionalProperties: true
+        bar_id:
+          type: string
+          description: 所属酒吧：单店票必填且须等于票种所属酒吧，不填返回 400 BAR_ID_REQUIRED，不一致返回 400 BAR_TICKET_MISMATCH；通票须为空，带了返回 400 BAR_ID_NOT_ALLOWED。
+          maxLength: 64
         sms_code:
           type: string
           maxLength: 16
@@ -60521,15 +60546,16 @@ components:
       description: 请求载荷 `TicketIssueRequest`；字段、必填项和枚举用于生成 DTO、校验和契约测试。
       additionalProperties: false
       required:
-        - order_id
+        - idempotency_key
+        - reason
       properties:
         idempotency_key:
           type: string
           description: 操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。
           maxLength: 128
-        operator_note:
+        reason:
           type: string
-          description: 操作备注；用于解释人工处理、异常处理或审批判断，进入审计留痕。
+          description: 出票原因（必填）；缺失返回 400 VALIDATION_FAILED。
           maxLength: 1000
         evidence_attachment_ids:
           type: array
@@ -60538,25 +60564,6 @@ components:
             type: string
             maxLength: 64
           maxItems: 50
-        order_id:
-          type: string
-          description: 订单唯一标识；必须引用当前数据范围内存在且允许访问的记录。
-          maxLength: 64
-        issue_mode:
-          type: string
-          description: 分类或动作编码；必须使用后端枚举、配置字典或 OpenAPI 已声明取值。
-          enum:
-            - after_payment
-            - manual
-            - replacement
-          maxLength: 64
-        credential_types:
-          type: array
-          description: 分类或动作编码；必须使用后端枚举、配置字典或 OpenAPI 已声明取值。
-          items:
-            type: string
-            maxLength: 64
-          maxItems: 200
     RefundRequest:
       type: object
       description: 请求载荷 `RefundRequest`；字段、必填项和枚举用于生成 DTO、校验和契约测试。
@@ -60596,7 +60603,7 @@ components:
           maxLength: 1000
         refund_channel:
           type: string
-          description: 金额字段，单位为分；必须为非负整数，所有展示层再转换为元。
+          description: 退款渠道（可空，不填记为 original 原路）；记入退款单。审批通过后按订单各笔原收款渠道退回（储值原路退回储值），没有可分收款记录的剩余金额按本值发打款待办。
           maxLength: 2048
         entitlement_ids:
           type: array
@@ -60822,6 +60829,10 @@ components:
         - consent_type
         - accepted
       properties:
+        idempotency_key:
+          type: string
+          description: 操作幂等键（与 Idempotency-Key 头同值，二者至少其一）；重复提交返回第一次的结果。
+          maxLength: 128
         consent_type:
           type: string
           description: 分类或动作编码；必须使用后端枚举、配置字典或 OpenAPI 已声明取值。
@@ -60853,6 +60864,10 @@ components:
         - quantity
         - visit_date
       properties:
+        idempotency_key:
+          type: string
+          description: 操作幂等键（与 Idempotency-Key 头同值，二者至少其一）；重复提交返回第一次的结果。
+          maxLength: 128
         ticket_type_id:
           type: string
           description: 票务唯一标识；必须引用当前数据范围内存在且允许访问的记录。
@@ -60941,7 +60956,7 @@ components:
           maxLength: 64
         table_type:
           type: string
-          description: 分类或动作编码；必须使用后端枚举、配置字典或 OpenAPI 已声明取值。
+          description: 须等于订台选项接口（listCustomerBarReservationOptions）对该台位返回的 table_type，不符返回 404 BAR_TABLE_NOT_FOUND。
           maxLength: 64
         reservation_time:
           type: string
@@ -61012,11 +61027,9 @@ components:
           minimum: 0
         status:
           type: string
-          description: "`status` 状态字段；状态流转必须符合所属业务对象规则并留痕。"
+          description: 新建台位状态，只能为 active（空闲），不填按 active。
           enum:
             - active
-            - paused
-            - archived
           maxLength: 64
     BarReservationRequest:
       type: object
@@ -61066,12 +61079,6 @@ components:
           type: string
           description: 销售归属员工 ID；卡座销售提成按岗位快照计算。
           maxLength: 64
-        commission_rate:
-          type: number
-          description: 提成比例；销售人员卡座消费额 15%，非销售人员 10%。
-          minimum: 0
-          maximum: 100
-          multipleOf: 0.01
         latest_arrival_at:
           type: string
           format: date-time
@@ -61174,7 +61181,7 @@ components:
           maxItems: 200
         payment_mode:
           type: string
-          description: 金额字段，单位为分；必须为非负整数，所有展示层再转换为元。
+          description: 下单时选择的支付方式（可空）：scan_qr 扫码、pay_code 付款码、offline 线下、on_account 挂账。下单不按它处理，实际收款渠道在结账时按 payment_channel 确定。
           enum:
             - scan_qr
             - pay_code
@@ -61443,9 +61450,8 @@ components:
           maxItems: 50
         source_type:
           type: string
-          description: 分类或动作编码；必须使用后端枚举、配置字典或 OpenAPI 已声明取值。
+          description: 入库来源类型；采购入库须走采购申请收货流程，传 purchase、procurement、purchase_request、purchase_inbound 返回 400 STOCK_IN_PURCHASE_BYPASS_FORBIDDEN。
           enum:
-            - purchase
             - return
             - adjustment
             - initial
@@ -61506,6 +61512,55 @@ components:
           type: string
           description: StockMovementRequest.trace_code 字段；必须按本 schema 的类型、必填项、枚举、长度、单位和对应 PRD 规则校验。
           maxLength: 128
+        photo_attachment_ids:
+          type: array
+          description: 照片证据 ID 列表；movement_type 为 damage/loss/waste 且命中高价值时需照片+视频双证据各非空。
+          items:
+            type: string
+            maxLength: 64
+          maxItems: 50
+        video_attachment_ids:
+          type: array
+          description: 视频证据 ID 列表；movement_type 为 damage/loss/waste 且命中高价值时需照片+视频双证据各非空。
+          items:
+            type: string
+            maxLength: 64
+          maxItems: 50
+    StockDamageAdjustmentRequest:
+      type: object
+      description: 请求载荷 `StockDamageAdjustmentRequest`（报损族 damage/loss/waste 转库存调整）：只取以下字段，operator_note 记为调整原因，from_location_id 作每一行明细的库位。
+      additionalProperties: false
+      required:
+        - idempotency_key
+        - operator_note
+        - from_location_id
+        - items
+      properties:
+        idempotency_key:
+          type: string
+          description: 操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。
+          maxLength: 128
+        operator_note:
+          type: string
+          description: 报损原因（必填，记为调整原因）。
+          maxLength: 1000
+        evidence_attachment_ids:
+          type: array
+          description: 证据附件 ID 列表；用于绑定图片、合同、审批、支付凭证或异常说明。
+          items:
+            type: string
+            maxLength: 64
+          maxItems: 50
+        from_location_id:
+          type: string
+          description: 报损来源库位 ID（必填）；作为每一行明细的库位。
+          maxLength: 64
+        items:
+          type: array
+          description: StockMovementRequest 明细列表；每一项必须按对应明细 schema 校验类型、数量、金额、状态和数据范围。
+          items:
+            type: object
+          maxItems: 200
         photo_attachment_ids:
           type: array
           description: 照片证据 ID 列表；movement_type 为 damage/loss/waste 且命中高价值时需照片+视频双证据各非空。
@@ -61800,8 +61855,8 @@ components:
       additionalProperties: false
       required:
         - "project_id"
-        - "orders_within_1m"
-        - "orders_within_3m"
+        - "orders_within1m"
+        - "orders_within3m"
         - "orders_total"
         - "min_orders"
         - "max_orders"
@@ -61814,11 +61869,11 @@ components:
           type: "string"
           description: "项目 id（条件按项目配置）。"
           maxLength: 64
-        orders_within_1m:
+        orders_within1m:
           type: "integer"
           description: "近 1 个月内至少 N 笔有效卡座消费订单（出厂默认 2）。"
           minimum: 1
-        orders_within_3m:
+        orders_within3m:
           type: "integer"
           description: "近 3 个月内至少 N 笔有效卡座消费订单（出厂默认 3）。"
           minimum: 1
@@ -62071,13 +62126,13 @@ components:
           maxItems: 50
         adjustment_type:
           type: string
-          description: 分类或动作编码；必须使用后端枚举、配置字典或 OpenAPI 已声明取值。
+          description: 调整类型；loss、damage、waste 属报损族，count_correction 属盘点差异；其他取值返回 400 INVALID_ADJUSTMENT_TYPE。
           enum:
-            - loss
             - gain
+            - loss
             - damage
-            - audit
-            - correction
+            - waste
+            - count_correction
           maxLength: 64
         items:
           type: array
@@ -62156,6 +62211,10 @@ components:
         eligibility_rule:
           type: object
           description: AmusementProjectRequest.eligibility_rule 字段；必须按本 schema 的类型、必填项、枚举、长度、单位和对应 PRD 规则校验。
+        location_point_id:
+          type: string
+          description: 项目入口点位 ID（可空）。
+          maxLength: 64
     AmusementSessionRequest:
       type: object
       description: 请求载荷 `AmusementSessionRequest`；字段、必填项和枚举用于生成 DTO、校验和契约测试。
@@ -62466,7 +62525,7 @@ components:
           maximum: 999999999999
         payment_method:
           type: string
-          description: 金额字段，单位为分；必须为非负整数，所有展示层再转换为元。
+          description: 线下收款方式：cash 现金／bank_transfer 银行转账／pos POS／other 其他；其他取值返回 400 VALIDATION_FAILED；原样记入确认记录。
           enum:
             - cash
             - bank_transfer
@@ -62477,6 +62536,10 @@ components:
           type: string
           description: "`confirmed_at` 时间字段；使用 ISO 8601 格式。"
           format: date-time
+        ar_ap_item_id:
+          type: string
+          description: 所结算的应收应付台账项 ID（可空）；提供时同一事务回写该台账项（登记一笔收付款并更新已收、未收与状态），不提供时只确认平台收款。
+          maxLength: 64
     ArApItemRequest:
       type: object
       description: 请求载荷 `ArApItemRequest`；字段、必填项和枚举用于生成 DTO、校验和契约测试。
@@ -62538,8 +62601,8 @@ components:
           format: date
         accounting_period:
           type: string
-          description: 数量字段；必须为非负数，并受对应业务容量、库存或分页规则约束。
-          maxLength: 255
+          description: 会计期间（可空，文本，最长 32），原样记入台账项。
+          maxLength: 32
     ArApPaymentRequest:
       type: object
       description: 请求载荷 `ArApPaymentRequest`；字段、必填项和枚举用于生成 DTO、校验和契约测试。
@@ -62570,7 +62633,7 @@ components:
           maximum: 999999999999
         payment_method:
           type: string
-          description: 金额字段，单位为分；必须为非负整数，所有展示层再转换为元。
+          description: 收付方式编码（必填），原样记为本笔收付款的收付方式；日后在本笔款项上退款时，以它作为原收款渠道。
           maxLength: 255
         payment_time:
           type: string
@@ -62580,6 +62643,10 @@ components:
           type: string
           description: ArApPaymentRequest.bank_flow_ref 字段；必须按本 schema 的类型、必填项、枚举、长度、单位和对应 PRD 规则校验。
           maxLength: 2048
+        device_id:
+          type: string
+          description: 操作设备 ID（可空）：现场工作机收付款时携带，走设备纳管门控；后台登记不填。
+          maxLength: 64
     DailyCloseRequest:
       type: object
       description: 请求载荷 `DailyCloseRequest`；字段、必填项和枚举用于生成 DTO、校验和契约测试。
@@ -62646,10 +62713,15 @@ components:
       description: 请求载荷 `EvidenceAttachmentUploadIntentRequest`；字段、必填项和枚举用于生成 DTO、校验和契约测试。
       additionalProperties: false
       required:
+        - idempotency_key
         - file_name
         - content_type
         - business_type
       properties:
+        idempotency_key:
+          type: string
+          description: 操作幂等键；重复提交返回第一次的结果。
+          maxLength: 128
         file_name:
           type: string
           description: 名称字段；用于后台展示、检索和审计记录，保存前必须去除首尾空白。
@@ -62676,9 +62748,14 @@ components:
       description: 请求载荷 `EvidenceAttachmentCompleteRequest`；字段、必填项和枚举用于生成 DTO、校验和契约测试。
       additionalProperties: false
       required:
+        - idempotency_key
         - object_key
         - checksum
       properties:
+        idempotency_key:
+          type: string
+          description: 操作幂等键；重复提交返回第一次的结果。
+          maxLength: 128
         object_key:
           type: string
           description: EvidenceAttachmentCompleteRequest.object_key 字段；必须按本 schema 的类型、必填项、枚举、长度、单位和对应 PRD 规则校验。
@@ -62697,9 +62774,14 @@ components:
       description: 请求载荷 `EvidenceAttachmentBindRequest`；字段、必填项和枚举用于生成 DTO、校验和契约测试。
       additionalProperties: false
       required:
+        - idempotency_key
         - business_type
         - business_id
       properties:
+        idempotency_key:
+          type: string
+          description: 操作幂等键；重复提交返回第一次的结果。
+          maxLength: 128
         business_type:
           type: string
           description: 分类或动作编码；必须使用后端枚举、配置字典或 OpenAPI 已声明取值。
@@ -63105,6 +63187,7 @@ components:
       description: 酒吧商品请求体。字段必须与 OpenAPI、后端 DTO、前端请求、Android 请求和供应商 mock 保持一致。
       additionalProperties: false
       required:
+        - bar_id
         - product_name
         - category
         - price_cent
@@ -63124,6 +63207,10 @@ components:
             maxLength: 64
           maxItems: 50
           description: 酒吧商品.evidence_attachment_ids 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。
+        bar_id:
+          type: string
+          maxLength: 64
+          description: 所属酒吧 ID（必填，缺失返回 400 VALIDATION_FAILED）。
         product_name:
           type: string
           maxLength: 128
@@ -63137,15 +63224,6 @@ components:
           minimum: 0
           maximum: 999999999999
           description: 酒吧商品.price_cent 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。
-        cost_cent:
-          type: integer
-          minimum: 0
-          maximum: 999999999999
-          description: 酒吧商品.cost_cent 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。
-        sku_code:
-          type: string
-          maxLength: 64
-          description: 酒吧商品.sku_code 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。
         status:
           type: string
           enum:
@@ -63167,6 +63245,26 @@ components:
           type: integer
           minimum: 0
           description: 酒吧商品.standard_pour_volume 字段：按杯每杯标准出酒量（毫升），填了即按杯商品；需扣库存的按杯商品出品按标准出酒量连同损耗按容量扣减，所挂库存物料须已登记规格容量 spec_volume_ml（第十八批 I 段第 76 条，BSM:1065、ENUM:79）。
+        pour_volume_unit:
+          type: string
+          maxLength: 16
+          description: 标准出酒量的单位（可空，原样保存，如 ml）。
+        loss_threshold:
+          type: integer
+          minimum: 0
+          description: 损耗阈值（可空=不判）：吧台配有出酒量采集设备时，按杯出品的超标损耗量超过此值即记 inventory.loss_exception 留痕核查。
+        category_id:
+          type: string
+          maxLength: 64
+          description: 商品分类 ID（可空=未分类）；分类不存在返回 404 BAR_CATEGORY_NOT_FOUND，已存档或待删除的分类返回 409 BAR_CATEGORY_NOT_ASSIGNABLE。
+        image_url:
+          type: string
+          maxLength: 1024
+          description: 商品图片相对路径（可空，本地存储）。
+        catalog_item_code:
+          type: string
+          maxLength: 80
+          description: 内部结算 SKU 目录条目编码（可空）；商品内部结算价取该条目当前生效价，内部结算价只在目录维护（请求直接带 internal_settlement_price_cent 返回 400 BAR_INTERNAL_PRICE_CATALOG_ONLY）。带此字段须持 bar.internal_settlement_price.view，否则 403 BAR_INTERNAL_PRICE_FORBIDDEN；条目不存在返回 400 CATALOG_ITEM_NOT_FOUND；条目绑定商户须等于本商品所属酒吧 bar_id，否则 400 CATALOG_ITEM_MERCHANT_MISMATCH。
     InventoryItemRequest:
       type: object
       description: 库存物品请求体。字段必须与 OpenAPI、后端 DTO、前端请求、Android 请求和供应商 mock 保持一致。
@@ -63383,15 +63481,14 @@ components:
           type: string
           maxLength: 64
           description: 权益模板.point_id 字段（可选）；权益归属点位，为空表示不限定。
-        agreement_price_cent:
-          type: integer
-          minimum: 0
-          maximum: 999999999999
-          description: 权益模板.agreement_price_cent 字段（可选）；虚拟/餐饮权益内部结算价（分），核销按此价结算归商户；为空回退面值。
         exclusive_merchant_id:
           type: string
           maxLength: 64
           description: 权益模板.exclusive_merchant_id 字段（可选）；专属商户不分摊——非空则核销收入全额归该商户；餐饮填餐厅商户。
+        catalog_item_code:
+          type: string
+          maxLength: 80
+          description: 内部结算 SKU 目录条目编码（可空）；虚拟权益的内部结算价按该条目取，内部结算价只在目录维护。条目不存在返回 400 CATALOG_ITEM_NOT_FOUND；条目绑定商户须等于本模板 merchant_id（提供方商户），否则 400 CATALOG_ITEM_MERCHANT_MISMATCH。
     TicketTypeEntitlementRequest:
       type: object
       description: 票类型权益请求体。字段必须与 OpenAPI、后端 DTO、前端请求、Android 请求和供应商 mock 保持一致。
@@ -63448,6 +63545,12 @@ components:
           minimum: 0
           maximum: 999999999999
           description: 票类型权益.component_price_cent 字段（可选）；该权益分项标准单价/手动单价，组合票按各分项单价比例拆分订单实付到各业态。
+        cost_bearer:
+          type: string
+          enum:
+            - platform_funded
+            - merchant_concession
+          description: 成本承担方：platform_funded 平台出资型／merchant_concession 商户让利型。赠送类权益（component_price_cent 为 0 或不填、且由提供方兑付）必填，漏标返回 400 TICKET_COST_BEARER_REQUIRED；非赠送类可空；其他取值返回 400 VALIDATION_FAILED。
     ProjectRequest:
       type: object
       description: 项目请求体。字段必须与 OpenAPI、后端 DTO、前端请求、Android 请求和供应商 mock 保持一致。
@@ -63505,13 +63608,25 @@ components:
           maximum: 100000
         status:
           type: string
-          description: 项目.status 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。
+          description: 项目状态：draft 草稿／pending_activation 待启用／active 已启用／suspended 暂停／terminated 终止／archived 归档；不填按 active；其他取值返回 400 VALIDATION_FAILED。
           enum:
             - draft
+            - pending_activation
             - active
-            - disabled
+            - suspended
+            - terminated
             - archived
           maxLength: 64
+        owner_person:
+          type: string
+          description: 项目负责人（可空），原样记入项目档案。
+          maxLength: 120
+        address:
+          type: string
+          description: 项目地址（可空），原样记入项目档案。
+        business_scope:
+          type: string
+          description: 经营范围（可空），原样记入项目档案。
     BusinessReviewLockRequest:
       type: object
       description: 经营复盘锁定请求体。project_id 不在请求体（由 token scope 派生），字段须与后端 DTO、前端请求保持一致。
@@ -64103,9 +64218,9 @@ components:
           type: string
           enum:
             - low
-            - normal
+            - medium
             - high
-            - urgent
+            - critical
           maxLength: 64
           description: Processing priority.
         title:
@@ -65852,7 +65967,6 @@ components:
       additionalProperties: false
       required:
         - device_code
-        - device_name
       properties:
         idempotency_key:
           type: string
@@ -65873,9 +65987,9 @@ components:
           type: string
           description: 游乐设备编码；同一游乐项目内唯一，作为容量配置 device_id 与巡检对象引用键。
           maxLength: 64
-        device_name:
+        name:
           type: string
-          description: 游乐设备名称；面向运营展示。
+          description: 游乐设备名称（可空）；面向运营展示。
           maxLength: 128
         location_point_id:
           type: string
@@ -65883,14 +65997,16 @@ components:
           maxLength: 128
         status:
           type: string
-          description: 设备状态；省略默认 active。停用后不参与容量校验与核销放行。
+          description: 设备状态：active 在役／inactive 停用／maintenance 检修／retired 退役；省略按 active；其他取值返回 400 VALIDATION_FAILED。
           enum:
             - active
+            - inactive
             - maintenance
-            - disabled
-        enabled:
-          type: boolean
-          description: 是否启用（省略默认 true）；原「停用后该设备不再参与三维容量校验与核销放行」——三维容量已废止（DEC-R5-2026-08-04-04 / R8 用户裁决 D-02），待代码轮下线，不得新增调用。
+            - retired
+        safety_check_interval_hours:
+          type: integer
+          minimum: 1
+          description: 设备级安全检查周期（小时，可空）；为空沿用项目级缺省周期；小于 1 返回 400 VALIDATION_FAILED。
     BarTableSpaceAssignmentRequest:
       type: object
       description: "请求载荷 `BarTableSpaceAssignmentRequest`（处理清单 #8 空间指派/回填）；设 bar_tables.space_id。录入后 AdmissionGuard over_space
@@ -66179,8 +66295,8 @@ components:
           description: 是否启用该策略（省略默认 true）；停用后退化为仅硬上限阻断、无软上限告警。
     RegisterTraceCodeRequest:
       type: object
-      description: 请求载荷 `RegisterTraceCodeRequest`（V128/REQ-39 溯源码贴码登记，入库）；status=registered，merchant_id
-        强制取自认证上下文不由请求体传入。trace_code 可空（缺省服务端生成），重复 trace_code 唯一冲突拒绝。平台账号（无商户范围）登记按物料归属商户（第十八批 L 段 103-R2）。
+      description: 请求载荷 `RegisterTraceCodeRequest`（V128/REQ-39 溯源码贴码登记，入库）；status=registered，商户账号的 merchant_id
+        强制取自认证上下文。trace_code 可空（缺省服务端生成），重复 trace_code 唯一冲突拒绝。平台账号（无商户范围）登记按请求 merchant_id，不填按物料归属商户（第十八批 L 段 103-R2）。
       additionalProperties: false
       required:
         - item_id
@@ -66201,6 +66317,10 @@ components:
           type: string
           description: 码值（可空，缺省服务端按幂等键稳定生成；唯一）。
           maxLength: 128
+        merchant_id:
+          type: string
+          description: 归属商户 ID（可空）：平台管理员代登记时指定，不填按物料归属商户；商户账号所填被忽略，按本账号商户登记。
+          maxLength: 64
     PrintTraceCodeRequest:
       type: object
       description: 请求载荷 `PrintTraceCodeRequest`（V128/REQ-39 溯源码出库打印）；status registered→printed，记 printed_at，条件 UPDATE 防重复打印（非
@@ -66602,7 +66722,7 @@ components:
           maxItems: 200
         payment_mode:
           type: string
-          description: 金额字段，单位为分；必须为非负整数，所有展示层再转换为元。
+          description: 下单时选择的支付方式（可空）：scan_qr 扫码、pay_code 付款码、offline 线下、on_account 挂账。下单不按它处理，实际收款渠道在结账时按 payment_channel 确定。
           enum:
             - scan_qr
             - pay_code
@@ -67045,7 +67165,7 @@ components:
           maxLength: 128
         change_type:
           type: string
-          description: 变更类型(无转租)。
+          description: 变更类型（无转租）；location_change 经营位置变更。
           enum:
             - renewal
             - move_out
@@ -67053,6 +67173,7 @@ components:
             - rent_change
             - business_scope_change
             - early_termination
+            - location_change
         payload:
           type: object
           description: 变更载荷(改对应条款细节)；move_out/early_termination 必填 move_out_date(退租日 yyyy-MM-dd，缺失或不可解析 400 VALIDATION_FAILED，归一存为 moveOutDate；齐单核对、缺单判定、欠费口径截止于退租日所在月)；area_change/location_change 必填 deposit_deadline(押金补退办理期限 yyyy-MM-dd)，非每平米计租必填 base_rent_cent(变更后月租，分，大于 0)，location_change 可给 space_ids(新铺位)；拒收手工 new_deposit_cent(400 VALIDATION_FAILED)，目标押金＝原合同快照押金月数×变更后月租，原合同快照缺押金月数 409 CONTRACT_DEPOSIT_MONTHS_MISSING(HP-C03)；子合同租金递增以变更后月租为基数、自变更终审当日起重新计期(rent_terms.increaseFrom)。renewal 必填 new_expiry_date(续租后到期日 yyyy-MM-dd，须晚于现到期日)与 deposit_deadline，每平米计租合同必填 per_sqm_rent_cent(续租后每平米单价，分，大于 0)、否则必填 base_rent_cent(续租后月租，分，大于 0)，缺项 400 VALIDATION_FAILED；终审通过即同一合同延期：延长到期日、换月租、重固化快照(押金月数沿用原合同快照)、回生效、自原到期月起按续租后条款补排延长期账单(已出账期间不重复)，租金递增以续租后月租为基数、自原到期日次日起重新计期(rent_terms.increaseFrom)；延长期铺位已被别的生效合同占用 409 CONTRACT_SPACE_CONFLICT、按原合同押金月数×续租后月租登记押金差额(应收/应退，到期日＝办理期限)；驳回不改条款。纯提成合同(rent_terms.rentBillingMode=turnover_only，没有月租)押金为约定金额：面积/位置变更与续租不要求 deposit_deadline 与变更/续租后月租，不按公式重算押金、不登记押金差额。rent_change 非纯提成合同必填调整后月租：每平米计租合同 per_sqm_rent_cent(调整后每平米单价，分，大于 0；终审按合同铺位面积算月租)、否则 base_rent_cent(调整后月租，分，大于 0)，缺项 400 VALIDATION_FAILED；终审通过即作废本合同(及变更链)自终审当月起整笔未收的预排租金应收(留痕；日结锁定的照常作废，冲正行不继承锁、业务日期取作废当日，该期重排应收同记作废当日)，按调整后月租在同一合同重排剩余租期(已部分收款的账期不作废、不重排；物业费不动)，租金递增以调整后月租为基数、自终审当日起重新计期(rent_terms.increaseFrom)；营业额抽成类合同(rent_terms.rentBillingMode 为 turnover_only/higher_of/sum)不预排、不重排租金，该期租金在账期月结定格后经 period-bills/rent-bills 出账(第十八批 Q 段 138-R5)；保底与抽成取高/保底加抽成叠加合同续租、租金调整、面积/位置变更终审时把原月租条款连同适用末月记入 rent_terms.priorRentTerms，终审前的账期(续租为原到期月及以前，租金调整、面积/位置变更为终审当月以前，子合同沿用父合同月租)事后出账仍按原月租。rent_change/business_scope_change 载荷不得带变更链系统键(parent_contract_id/amendment_type/increase_from/deposit_adjustment/scope_grants，驼峰同)，400 VALIDATION_FAILED。终审应用时合同已非生效中(同一合同另一面积/位置变更或退租已先终审)：退租/提前终止以外的变更 409 CONTRACT_NOT_EFFECTIVE，终审整笔回滚、由审批人驳回。
@@ -68508,6 +68629,10 @@ components:
           type: string
           description: 申请原因。
           maxLength: 1000
+        final_approver_id:
+          type: string
+          description: 指定的主线最终审批人（可选）；不填时按档位沿直接上级链生成复核链。
+          maxLength: 64
     AccessGrantReviewRequest:
       type: object
       description: 授权申请复核请求。
@@ -68747,11 +68872,10 @@ components:
           minimum: 0
           maximum: 999999999999
           description: 套餐整体售价（分）。
-        internal_settlement_price_cent:
-          type: integer
-          minimum: 0
-          maximum: 999999999999
-          description: 套餐内部结算价（分，可空）；平台↔酒吧成本结算价基。
+        catalog_item_code:
+          type: string
+          maxLength: 80
+          description: 内部结算 SKU 目录条目编码（可空）；套餐内部结算价取该条目当前生效价，内部结算价只在目录维护（请求直接带 internal_settlement_price_cent 返回 400 BAR_INTERNAL_PRICE_CATALOG_ONLY）。更新时留空表示保留原引用；挂引用或换引用须持 bar.internal_settlement_price.view，否则 403 BAR_INTERNAL_PRICE_FORBIDDEN；条目不存在返回 400 CATALOG_ITEM_NOT_FOUND；条目绑定商户须等于本套餐所属酒吧，否则 400 CATALOG_ITEM_MERCHANT_MISMATCH。
         image_url:
           type: string
           maxLength: 1024
@@ -68943,6 +69067,47 @@ components:
           type: integer
           minimum: 1
           description: 固定延后释放的周期数（默认 1；仅 reserve_release_mode=fixed_delay 生效，季度方案 N×3 月 / 月度方案 N 月）。
+        principal_type:
+          type: string
+          enum:
+            - individual
+            - company
+          description: 主理人类型：individual 个人（代扣股息红利个税）／company 公司（不代扣、全额发放）；新建不填按 individual，修改时不填不改现值；其他取值返回 400 VALIDATION_FAILED。
+        custom_deductions:
+          type: array
+          description: 自定义扣除项：新建按请求整表落地（不填为无）；修改时提供了才整表替换，不填不改现值。
+          items:
+            type: object
+            required:
+              - name
+            properties:
+              name:
+                type: string
+                description: 扣除项名称（必填）。
+              source_type:
+                type: string
+                enum:
+                  - fixed
+                  - ratio
+                description: 取数方式：fixed 固定额（用 amount_cent）／ratio 比例（用 ratio_bps 与 ratio_basis）；不填按 fixed。
+              amount_cent:
+                type: integer
+                minimum: 0
+                description: 固定扣除额（分，不填按 0）。
+              ratio_bps:
+                type: integer
+                minimum: 0
+                maximum: 10000
+                description: 扣除比例（万分比，不填按 0）。
+              ratio_basis:
+                type: string
+                enum:
+                  - net_profit
+                  - revenue
+                description: 比例基数：net_profit 净利润／revenue 收入；不填按 net_profit。
+              enabled:
+                type: boolean
+                description: 是否启用（不填按 true）。
     DividendComputeRequest:
       type: object
       description: 请求载荷 `DividendComputeRequest`（期间分红作业触发）：kind=official 正式单（period_label 须匹配方案周期类型）或 preview
@@ -69019,8 +69184,7 @@ components:
           maxLength: 1000
     VoucherDefinitionRequest:
       type: object
-      description: 请求载荷
-        `VoucherDefinitionRequest`（新建券定义）：商户折扣券须带面额与归属商户；店内实物券须带货品/库位/件数；结算口径选内部结算时须带内部结算价与结算商户。外部伙伴券不在统一台账建定义（配置在通票权益模板，V282）。
+      description: 请求载荷 `VoucherDefinitionRequest`（新建券定义）：商户折扣券须带面额与归属商户；店内实物券须带货品/库位/件数；结算口径选内部结算时须引用内部结算 SKU 目录条目与结算商户。外部伙伴券不在统一台账建定义（配置在通票权益模板，V282）。
       additionalProperties: false
       required:
         - idempotency_key
@@ -69074,10 +69238,10 @@ components:
         stock_quantity:
           type: integer
           description: 每张券兑付件数（大于 0；仅 in_store_goods）。
-        internal_price_cent:
-          type: integer
-          format: int64
-          description: 内部结算价（分，大于 0；仅 settlement_mode=internal_price）。
+        catalog_item_code:
+          type: string
+          maxLength: 80
+          description: 内部结算 SKU 目录条目编码；settlement_mode=internal_price 时必填（缺失返回 400 VALIDATION_FAILED），条目须存在（否则 400 CATALOG_ITEM_NOT_FOUND）、绑定商户须等于 merchant_id（否则 400 CATALOG_ITEM_MERCHANT_MISMATCH）、须已复核转正（否则 400 CATALOG_ITEM_NOT_EFFECTIVE）且生效价大于 0（否则 400 VALIDATION_FAILED），核销按该条目的内部结算价给商户挂应付；其他结算口径不得填，填了返回 400 VALIDATION_FAILED。
         valid_days:
           type: integer
           description: 自发放日起有效天数（大于 0）；空＝不按天数。
@@ -69085,6 +69249,9 @@ components:
           type: string
           format: date-time
           description: 固定截止时刻；与 valid_days 并存取更早；空＝不设固定截止。
+        transferable:
+          type: boolean
+          description: 券种是否允许客人间转赠；不填按可转赠（true），false 时该券种发出的券不可转赠。
     VoucherIssueRequest:
       type: object
       description: 请求载荷 `VoucherIssueRequest`（营销赠发）：按券定义给客人发放 quantity 张券实例（来源记 marketing_grant）。
