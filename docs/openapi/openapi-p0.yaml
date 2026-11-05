@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: 综合体管理系统 P0 API 契约
-  version: V0.49
+  version: V0.50
   description: P0 首批编码前置契约。本文采用 JSON-compatible YAML，便于与 openapi-p0.json 保持一致。正式后端以 Java 21 + Spring Boot 4.x +
     springdoc-openapi 输出运行时 OpenAPI，并与本契约比对。
 servers:
@@ -3268,6 +3268,9 @@ paths:
                   type: integer
                   minimum: 0
                   description: 邀请函二维码里的可进人数。
+                as_holder:
+                  type: boolean
+                  description: 选「我是订台人」时为 true，仅订台尚无订台人（员工代订、一体机订台未被认领）时可选；缺省或 false＝按参与者接受。
       responses:
         "200":
           $ref: "#/components/responses/Success"
@@ -3282,11 +3285,13 @@ paths:
         "500":
           $ref: "#/components/responses/Error"
       x-auth-context: customer-token
-      description: 被邀请人确认接受订卡邀请函，占一个名额（同一人重复确认返回原成员）。ROOT-03-R25（BSM 第 1036 行「邀请函二维码带防伪标记，被复制或篡改卡座、可进人数即无法接受」）：二维码载荷的 invitation_signature、table_id、capacity 一并回传，须与签发时一致且防伪标记核验通过，否则 409 BAR_INVITATION_SIGNATURE_INVALID、不占名额。名额已满 409 BAR_INVITATION_CAPACITY_EXHAUSTED。被开卡人移出的人再次接受＝沿用原记录重新占名额（BSM 第 870 行「名额释放后可再邀请他人」），名额已满同样 409；订台已取消（邀请函随之吊销）409 BAR_INVITATION_NOT_ACTIVE。 PGM 第 744 行「前端隐藏只是辅助，后端接口必须独立校验」：按综合体的客人端终端开关以邀请函所属订台的酒吧综合体在服务端判（不取客户端自报的 X-Project-Id，先于幂等），该综合体客人端已关→403 TERMINAL_DISABLED，不占名额。
+      description: 被邀请人确认接受订卡邀请函，占一个名额（同一人重复确认返回原成员）。ROOT-03-R25（BSM 第 1036 行「邀请函二维码带防伪标记，被复制或篡改卡座、可进人数即无法接受」）：二维码载荷的 invitation_signature、table_id、capacity 一并回传，须与签发时一致且防伪标记核验通过，否则 409 BAR_INVITATION_SIGNATURE_INVALID、不占名额。名额已满 409 BAR_INVITATION_CAPACITY_EXHAUSTED。被开卡人移出的人再次接受＝沿用原记录重新占名额（BSM 第 870 行「名额释放后可再邀请他人」），名额已满同样 409；订台已取消（邀请函随之吊销）409 BAR_INVITATION_NOT_ACTIVE。 PGM 第 744 行「前端隐藏只是辅助，后端接口必须独立校验」：按综合体的客人端终端开关以邀请函所属订台的酒吧综合体在服务端判（不取客户端自报的 X-Project-Id，先于幂等），该综合体客人端已关→403 TERMINAL_DISABLED，不占名额。 第十八批 R 段第 152 条 152-R2（第十八批裁决 34「销售可以通过微信等发送邀请函，客户点击后确定自己是订台人还是参与者」）：as_holder 为 true＝选「我是订台人」，订台尚无订台人（员工代订、一体机订台未被认领）时订台归到本人名下、签发时的开卡人占位成员改成本人（不另占名额），返回 is_holder 为 true 的成员；已有订台人 409 BAR_INVITATION_HOLDER_TAKEN，本人已作为参与者接受 409 BAR_INVITATION_ALREADY_ACCEPTED。as_holder 缺省或 false 按参与者接受。
       x-failure-codes:
         - BAR_INVITATION_SIGNATURE_INVALID
         - BAR_INVITATION_CAPACITY_EXHAUSTED
         - BAR_INVITATION_NOT_ACTIVE
+        - BAR_INVITATION_HOLDER_TAKEN
+        - BAR_INVITATION_ALREADY_ACCEPTED
   /api/v1/customer/bar-invitations/{reservation_id}:
     get:
       tags:
@@ -3326,7 +3331,7 @@ paths:
         - bar
       operationId: previewCustomerBarInvitation
       summary: 扫邀请函二维码预览
-      description: ROOT-03 clients-R6：被邀请人扫开卡人转发的邀请函二维码后预览酒吧、卡座、可进人数与剩余名额，不占名额；防伪标记、卡座或可进人数被篡改 409 BAR_INVITATION_SIGNATURE_INVALID（BSM 第 1036 行）。 PGM 第 744 行「前端隐藏只是辅助，后端接口必须独立校验」：按综合体的客人端终端开关以邀请函所属订台的酒吧综合体在服务端判（不取客户端自报的 X-Project-Id），该综合体客人端已关→403 TERMINAL_DISABLED。
+      description: ROOT-03 clients-R6：被邀请人扫开卡人转发的邀请函二维码后预览酒吧、卡座、可进人数与剩余名额，不占名额；防伪标记、卡座或可进人数被篡改 409 BAR_INVITATION_SIGNATURE_INVALID（BSM 第 1036 行）。 PGM 第 744 行「前端隐藏只是辅助，后端接口必须独立校验」：按综合体的客人端终端开关以邀请函所属订台的酒吧综合体在服务端判（不取客户端自报的 X-Project-Id），该综合体客人端已关→403 TERMINAL_DISABLED。 第十八批 R 段第 152 条 152-R2：返回 holder_claimable——这张订台还没有订台人（员工代订、一体机订台未被认领），客人可选「我是订台人」；客人自助订台恒为 false。
       x-permission: not_applicable
       x-data-scope: self
       x-terminal-allowed:
@@ -3861,6 +3866,14 @@ paths:
       x-idempotency-required: false
       x-audit-event-success: finance_ar_ap.viewed
       x-audit-event-failure: finance_ar_ap.view_failed
+      parameters:
+        - name: locked_day_close_id
+          in: query
+          required: false
+          description: 第十八批 R 段 143-R4：只列被该日结锁定的台账（ar_ap_items.locked_day_close_id），供日结页面「本日结锁定的台账」；范围条件不变。
+          schema:
+            type: string
+            maxLength: 64
       responses:
         "200":
           $ref: "#/components/responses/Page"
@@ -3869,7 +3882,7 @@ paths:
         "500":
           $ref: "#/components/responses/Error"
       x-auth-context: staff-token
-      description: 按 finance.ar_ap.view 获批的项目范围查询；项目公司财务无需绑定商户，商户人员仍同时受商户范围限制。分页结果与 total 使用相同范围条件，普通人员不可读取缺少项目归属的台账。 18E（20-R3）：商户账号只按商户过滤，看得到各经营项目里本商户的数据（写入口仍只到本人项目）。
+      description: 按 finance.ar_ap.view 获批的项目范围查询；项目公司财务无需绑定商户，商户人员仍同时受商户范围限制。分页结果与 total 使用相同范围条件，普通人员不可读取缺少项目归属的台账。 18E（20-R3）：商户账号只按商户过滤，看得到各经营项目里本商户的数据（写入口仍只到本人项目）。 第十八批 R 段第 143 条 143-R4：可选查询参数 locked_day_close_id 只列被该日结锁定的台账（日结页面「本日结锁定的台账」），范围与分页条件不变。
     post:
       tags:
         - finance
@@ -3970,7 +3983,7 @@ paths:
         - finance
       operationId: listDailyCloses
       summary: 查询日结批次
-      description: 第十八批 P 段第 133 条 133-R2：按营业日倒序分页列出已生成的日结批次（营业日、范围类型、范围编号、状态、锁定时间），汇总用 listDailyCloseSummaries 按批次 id 查。范围同查看类列表：平台管理员看全部；商户账号只看本商户的 merchant、bar 范围日结；其余按 finance.daily_close.manage 可触及的项目看 project、ticketing、amusement 范围日结与这些项目下商户的 merchant、bar 范围日结。
+      description: 第十八批 P 段第 133 条 133-R2：按营业日倒序分页列出已生成的日结批次（营业日、范围类型、范围编号、状态、确认时间、锁定时间、归档时间），汇总用 listDailyCloseSummaries 按批次 id 查。范围同查看类列表：平台管理员看全部；商户账号只看本商户的 merchant、bar 范围日结；其余按 finance.daily_close.manage 可触及的项目看 project、ticketing、amusement 范围日结与这些项目下商户的 merchant、bar 范围日结。第十八批 R 段第 143 条 143-R1（ENUM:190「待生成、待确认、有差异、已确认、已锁定、已归档」）：status 取值 pending_confirm（待确认）、has_difference（有差异）、confirmed（已确认）、locked（已锁定）、archived（已归档）；143-R6（ENUM:115「有差异待复核」；BSM:1081「出现任何金额的差额一律进复核、定位责任，不设容差」）：库内待确认的日结，开班落在该营业日（酒吧逐家按各自营业日窗）、有差异待复核（已班结且 needs_review）的收银班次存在时返回 has_difference（只改返回值、不入库；merchant 范围只看本酒吧，其余平台口径，同 confirmDailyClose 的 DAY_CLOSE_SHIFT_PENDING 闸），该班次复核平账后回到 pending_confirm；有差异的日结照常可 markDailyCloseFinal，confirmDailyClose 必被 DAY_CLOSE_SHIFT_PENDING 拦；可选按 business_date、scope_type、scope_id 过滤，某营业日某范围查不到日结即页面显示的「待生成」（不入库）。143-R2：每行带 final_mark_categories（已标记为最终的数据类别，见 markDailyCloseFinal）。
       x-permission: finance.daily_close.manage
       x-data-scope: project-entity
       x-terminal-allowed:
@@ -3979,6 +3992,33 @@ paths:
       x-audit-event-success: finance.daily_close.viewed
       x-audit-event-failure: finance.daily_close.view_failed
       parameters:
+        - name: business_date
+          in: query
+          required: false
+          description: 第十八批 R 段 143-R1：按营业日（YYYY-MM-DD）过滤；与 scope_type、scope_id 一起查某营业日某范围的日结，查不到即「待生成」。
+          schema:
+            type: string
+            format: date
+        - name: scope_type
+          in: query
+          required: false
+          description: 按范围类型过滤。
+          schema:
+            type: string
+            enum:
+              - project
+              - merchant
+              - bar
+              - ticketing
+              - amusement
+            maxLength: 64
+        - name: scope_id
+          in: query
+          required: false
+          description: 按范围编号过滤。
+          schema:
+            type: string
+            maxLength: 64
         - name: page
           in: query
           required: false
@@ -4008,15 +4048,15 @@ paths:
       tags:
         - finance
       operationId: createDailyClose
-      summary: 日结锁定
-      description: 日结锁定。TK-14（ENUM「异常状态的统一出口」：异常单据未处置完毕，所属日结不得确认锁定）：原核销落在该营业日、仍待主管处置的票务核销异常存在时 409 DAY_CLOSE_ANOMALY_PENDING（merchant 范围只看本商户）。第十六批第 16 条同一规则接酒吧账单：开单或收款落在该营业日、仍处于异常（abnormal）待主管处置的酒吧账单存在时同样 409 DAY_CLOSE_ANOMALY_PENDING（merchant 范围只看本商户）。第十八批 Q 段第 144 条（BSM:1106「未结清订单阻止交班和日结」）：开单落在该营业日、仍未结清（结清、被合单、主管作废并冲正之外）的酒吧账单存在时 409 DAY_CLOSE_UNSETTLED_BILL，原文列出账单号（merchant 范围只看本商户）。
+      summary: 生成日结
+      description: 第十八批 R 段第 143 条 143-R1（ENUM:190「待生成、待确认、有差异、已确认、已锁定、已归档」；BSM:1682「按营业日生成日结批次。」）：生成日结，status 为 pending_confirm（待确认）、locked_at 为空，并按七源汇总当日金额、退款与笔数；同日同范围已生成 409 DAILY_CLOSE_EXISTS。生成时不拦日结闸、不给台账打锁，闸在 confirmDailyClose、lockDailyClose 时拦，台账在 lockDailyClose 时打锁。范围：商户账号只能办本商户的 merchant、bar 范围日结，否则 403 CROSS_MERCHANT_FORBIDDEN；其余账号按 finance.daily_close.lock 可触及的项目覆盖日结所属综合体（merchant、bar 范围取该商户所属项目），否则 403 CROSS_PROJECT_FORBIDDEN。
       x-permission: finance.daily_close.lock
       x-data-scope: project-entity
       x-terminal-allowed:
         - web
       x-idempotency-required: true
-      x-audit-event-success: finance_daily_close.locked
-      x-audit-event-failure: finance_daily_close.lock_failed
+      x-audit-event-success: finance_daily_close.generated
+      x-audit-event-failure: finance_daily_close.generate_failed
       requestBody:
         $ref: "#/components/requestBodies/DailyCloseRequest"
       responses:
@@ -12868,13 +12908,145 @@ paths:
         "500":
           $ref: "#/components/responses/Error"
       x-auth-context: staff-token
+  /api/v1/finance/daily-closes/{id}/confirm:
+    post:
+      tags:
+        - finance
+      operationId: confirmDailyClose
+      summary: 确认日结
+      description: 第十八批 R 段第 143 条 143-R1（ENUM:190「待生成、待确认、有差异、已确认、已锁定、已归档」；PGM:664「单店层面的财务工作——日结确认与锁定……由该酒吧对应的财务 BP 负责」）：确认日结，按当前数据重算七源汇总并记确认时间 confirmed_at。只收 pending_confirm（待确认），否则 409 DAILY_CLOSE_NOT_PENDING；日结不存在 404 DAILY_CLOSE_NOT_FOUND。日结闸（确认与锁定两处都拦）：TK-14（ENUM「异常状态的统一出口」：异常单据未处置完毕，所属日结不得确认锁定）：原核销落在该营业日、仍待主管处置的票务核销异常存在时 409 DAY_CLOSE_ANOMALY_PENDING（merchant 范围只看本商户）。第十六批第 16 条同一规则接酒吧账单：开单或收款落在该营业日、仍处于异常（abnormal）待主管处置的酒吧账单存在时同样 409 DAY_CLOSE_ANOMALY_PENDING（merchant 范围只看本商户）。第十八批 Q 段第 144 条（BSM:1106「未结清订单阻止交班和日结」）：开单落在该营业日、仍未结清（结清、被合单、主管作废并冲正之外）的酒吧账单存在时 409 DAY_CLOSE_UNSETTLED_BILL，原文列出账单号（merchant 范围只看本商户）。第十八批 R 段第 142 条 142-R2（ENUM:190「由当班收银员完成现金清点与盘收银，接班人与其对接完成交接，并由财务跟班跟进交接完成」）：开班落在该营业日（酒吧逐家按各自营业日窗）、财务尚未见证归档（未班结、未平账、未签字或未见证）的收银班次存在时 409 DAY_CLOSE_SHIFT_PENDING（merchant 范围只看本酒吧）。第十八批 R 段 143-R2（ENUM:190「所属数据未标记为最终之前，日结不得确认、不得锁定。」）：五类数据未全部标记为最终（见 markDailyCloseFinal）时 409 DAY_CLOSE_NOT_FINAL，原文列出缺的类别。范围：商户账号只能办本商户的 merchant、bar 范围日结，否则 403 CROSS_MERCHANT_FORBIDDEN；其余账号按 finance.daily_close.lock 可触及的项目覆盖日结所属综合体（merchant、bar 范围取该商户所属项目），否则 403 CROSS_PROJECT_FORBIDDEN。
+      x-permission: finance.daily_close.lock
+      x-data-scope: project-entity
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: finance_daily_close.confirmed
+      x-audit-event-failure: finance_daily_close.confirm_failed
+      parameters:
+        - $ref: "#/components/parameters/Id"
+          description: 日结批次 id；必须按 OpenAPI 类型、枚举和必填规则校验。
+      requestBody:
+        $ref: "#/components/requestBodies/DailyCloseActionRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
+  /api/v1/finance/daily-closes/{id}/lock:
+    post:
+      tags:
+        - finance
+      operationId: lockDailyClose
+      summary: 锁定日结
+      description: 第十八批 R 段第 143 条 143-R1（BSM:2023「已拍板：日结锁定后不能直接补录影响金额，必须上级审批通过后补录。」）：锁定日结，记锁定时间 locked_at，并给该营业日到期的台账打锁（锁定后直接改账 409 DAY_CLOSE_LOCKED，须走锁定后补录审批）。143-R7：merchant、bar 范围只锁该日结商户的台账；project、ticketing、amusement 范围按操作人商户范围。只收 confirmed（已确认），否则 409 DAILY_CLOSE_NOT_CONFIRMED；日结不存在 404 DAILY_CLOSE_NOT_FOUND。日结闸（确认与锁定两处都拦）：TK-14（ENUM「异常状态的统一出口」：异常单据未处置完毕，所属日结不得确认锁定）：原核销落在该营业日、仍待主管处置的票务核销异常存在时 409 DAY_CLOSE_ANOMALY_PENDING（merchant 范围只看本商户）。第十六批第 16 条同一规则接酒吧账单：开单或收款落在该营业日、仍处于异常（abnormal）待主管处置的酒吧账单存在时同样 409 DAY_CLOSE_ANOMALY_PENDING（merchant 范围只看本商户）。第十八批 Q 段第 144 条（BSM:1106「未结清订单阻止交班和日结」）：开单落在该营业日、仍未结清（结清、被合单、主管作废并冲正之外）的酒吧账单存在时 409 DAY_CLOSE_UNSETTLED_BILL，原文列出账单号（merchant 范围只看本商户）。第十八批 R 段第 142 条 142-R2（ENUM:190「由当班收银员完成现金清点与盘收银，接班人与其对接完成交接，并由财务跟班跟进交接完成」）：开班落在该营业日（酒吧逐家按各自营业日窗）、财务尚未见证归档（未班结、未平账、未签字或未见证）的收银班次存在时 409 DAY_CLOSE_SHIFT_PENDING（merchant 范围只看本酒吧）。第十八批 R 段 143-R2（ENUM:190「所属数据未标记为最终之前，日结不得确认、不得锁定。」）：五类数据未全部标记为最终（见 markDailyCloseFinal）时 409 DAY_CLOSE_NOT_FINAL，原文列出缺的类别。范围：商户账号只能办本商户的 merchant、bar 范围日结，否则 403 CROSS_MERCHANT_FORBIDDEN；其余账号按 finance.daily_close.lock 可触及的项目覆盖日结所属综合体（merchant、bar 范围取该商户所属项目），否则 403 CROSS_PROJECT_FORBIDDEN。
+      x-permission: finance.daily_close.lock
+      x-data-scope: project-entity
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: finance_daily_close.locked
+      x-audit-event-failure: finance_daily_close.lock_failed
+      parameters:
+        - $ref: "#/components/parameters/Id"
+          description: 日结批次 id；必须按 OpenAPI 类型、枚举和必填规则校验。
+      requestBody:
+        $ref: "#/components/requestBodies/DailyCloseActionRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
+  /api/v1/finance/daily-closes/{id}/final-marks:
+    post:
+      tags:
+        - finance
+      operationId: markDailyCloseFinal
+      summary: 五类数据最终标记
+      description: 第十八批 R 段第 143 条 143-R2（ENUM:190「需要逐类标记为最终的数据集有五类：当日订单与核销记录、当日退款与冲正记录、当日出品与物品交接记录、当日考勤记录、当日异常处置记录。由各域主管公司的财务岗在该营业日闭店之后完成核对并逐类标记」「标记后不可撤销，事后发现错误只能走冲正，不得改回未最终。」）：把待确认日结的一类数据标记为最终，返回该日结（final_mark_categories 为已标记为最终的类别；status 同 listDailyCloses，有差异时为 has_difference）。category 必填，取 orders_verifications（当日订单与核销记录）、refunds_reversals（当日退款与冲正记录）、production_handover（当日出品与物品交接记录）、attendance（当日考勤记录）、anomaly_resolutions（当日异常处置记录），否则 400 VALIDATION_FAILED。只收 pending_confirm（待确认；列表显示为 has_difference 的库内仍是待确认，照常可标），否则 409 DAILY_CLOSE_NOT_PENDING；该营业日尚未闭店 409 FINAL_MARK_BEFORE_CLOSE（闭店时刻＝营业日次日的闭店时点，取该营业日起点所在的营业日版本，酒吧按该酒吧、其余按日结所属综合体，出厂为次日 07:00）；该类已标记 409 FINAL_MARK_EXISTS（不可撤销，不提供撤销或修改接口）；日结不存在 404 DAILY_CLOSE_NOT_FOUND。五类未全部标记时 confirmDailyClose、lockDailyClose 409 DAY_CLOSE_NOT_FINAL。范围：商户账号只能办本商户的 merchant、bar 范围日结，否则 403 CROSS_MERCHANT_FORBIDDEN；其余账号按 finance.daily_close.lock 可触及的项目覆盖日结所属综合体（merchant、bar 范围取该商户所属项目），否则 403 CROSS_PROJECT_FORBIDDEN。
+      x-permission: finance.daily_close.lock
+      x-data-scope: project-entity
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: finance_daily_close.final_marked
+      x-audit-event-failure: finance_daily_close.final_mark_failed
+      parameters:
+        - $ref: "#/components/parameters/Id"
+          description: 日结批次 id；必须按 OpenAPI 类型、枚举和必填规则校验。
+      requestBody:
+        $ref: "#/components/requestBodies/DailyCloseActionRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
+  /api/v1/finance/daily-closes/{id}/archive:
+    post:
+      tags:
+        - finance
+      operationId: archiveDailyClose
+      summary: 归档日结
+      description: 第十八批 R 段第 143 条 143-R5（第十八批裁决 33「锁定后，由该店持日结锁定权限的财务 BP 点「归档」；归档后只读可查，锁定后补录照常走上级审批。与设备「报废后可归档」同一办法。」；ENUM:190「……已锁定、已归档」）：归档已锁定的日结，记归档时间 archived_at，返回该日结。不动七源汇总与台账锁：归档日照样拦直接改账（409 DAY_CLOSE_LOCKED），被它锁定的台账照常走锁定后补录审批（requestArApAdjustment、approveArApAdjustment）；日结列表与七源汇总照常可查。只收 locked（已锁定），否则 409 DAILY_CLOSE_NOT_LOCKED「只有已锁定的日结可以归档」；已归档为终态，再确认、锁定、标记、归档都按状态 409；日结不存在 404 DAILY_CLOSE_NOT_FOUND。范围：商户账号只能办本商户的 merchant、bar 范围日结，否则 403 CROSS_MERCHANT_FORBIDDEN；其余账号按 finance.daily_close.lock 可触及的项目覆盖日结所属综合体（merchant、bar 范围取该商户所属项目），否则 403 CROSS_PROJECT_FORBIDDEN。
+      x-permission: finance.daily_close.lock
+      x-data-scope: project-entity
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: finance_daily_close.archived
+      x-audit-event-failure: finance_daily_close.archive_failed
+      parameters:
+        - $ref: "#/components/parameters/Id"
+          description: 日结批次 id；必须按 OpenAPI 类型、枚举和必填规则校验。
+      requestBody:
+        $ref: "#/components/requestBodies/DailyCloseActionRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
   /api/v1/finance/daily-closes/{id}/summaries:
     get:
       tags:
         - finance
       operationId: listDailyCloseSummaries
       summary: 查询日结七源汇总
-      description: 返回日结锁定时按官方售票/渠道售票/酒吧/游乐/供应链成本/第三方回流/订台定金七源聚合的金额、退款、计数；商户角色仅见自身 scope。订台定金（bar_deposit）：按各酒吧营业日窗取当日到账的订台定金（各渠道，含一体机由授权员工登记的现金/POS），退款为当日实际退回成功的定金；定金不计入酒吧源。
+      description: 返回日结生成时（确认时按当前数据重算）按官方售票/渠道售票/酒吧/游乐/供应链成本/第三方回流/订台定金七源聚合的金额、退款、计数。第十八批 R 段 143-R1：范围同日结写入——商户账号只看本商户的 merchant、bar 范围日结（否则 403 CROSS_MERCHANT_FORBIDDEN），其余按 finance.daily_close.manage 可触及的项目覆盖日结所属综合体（否则 403 CROSS_PROJECT_FORBIDDEN）。订台定金（bar_deposit）：按各酒吧营业日窗取当日到账的订台定金（各渠道，含一体机由授权员工登记的现金/POS），退款为当日实际退回成功的定金；定金不计入酒吧源。
       x-permission: finance.daily_close.manage
       x-data-scope: project-entity
       x-terminal-allowed:
@@ -12896,13 +13068,40 @@ paths:
         "500":
           $ref: "#/components/responses/Error"
       x-auth-context: staff-token
+  /api/v1/finance/daily-closes/{id}/adjustments:
+    get:
+      tags:
+        - finance
+      operationId: listDailyCloseAdjustments
+      summary: 查询日结的锁定后补录
+      description: 第十八批 R 段第 143 条 143-R4（ENUM:190「日结锁定后的补录须上级审批，且不改动已锁定的日结金额：补录金额归入当期，并在补录记录上标明其所属的原营业日；同时在原营业日的日结锁定表单上关联显示该笔补录的金额与情况，两边互相可查。」；财务 PRD §5.4 日结页面直接展示补录人、补录原因、批准人含时间）：按日结号列出挂在该日结上的锁定后补录（locked_day_close_id 为该日结），按申请时间倒序；每条带 item_no（台账单号）、adjustment_amount_cent（调整额，分，可为负）、reason（补录原因）、requested_by（补录人）、created_at（申请时间）、approval_status（pending、approved、rejected）、approved_by（批准人）、decided_at（批准时间）、original_business_date（原营业日，即该日结的营业日）。范围同 listDailyCloseSummaries：商户账号只看本商户的 merchant、bar 范围日结（否则 403 CROSS_MERCHANT_FORBIDDEN），其余按 finance.daily_close.manage 可触及的项目覆盖日结所属综合体（否则 403 CROSS_PROJECT_FORBIDDEN）；日结不存在 404 DAILY_CLOSE_NOT_FOUND。
+      x-permission: finance.daily_close.manage
+      x-data-scope: project-entity
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: finance.daily_close_adjustment.viewed
+      x-audit-event-failure: finance.daily_close_adjustment.view_failed
+      parameters:
+        - $ref: "#/components/parameters/Id"
+          description: 日结批次 id；必须按 OpenAPI 类型、枚举和必填规则校验。
+      responses:
+        "200":
+          $ref: "#/components/responses/Page"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
   /api/v1/finance/ar-ap-adjustments:
     post:
       tags:
         - finance
       operationId: requestArApAdjustment
       summary: 锁定后补录审批申请
-      description: 对已锁定日结的应收应付台账发起补录申请（pending），由上级审批通过后才真正写入金额变动。
+      description: 对已锁定日结的应收应付台账发起补录申请（pending），由上级审批通过后才真正写入金额变动。第十八批 R 段 143-R4：返回的补录记录带 item_no（台账单号）与 original_business_date（原营业日，即锁定该台账的日结的营业日，ENUM:190「在补录记录上标明其所属的原营业日」）；按日结号可查（listDailyCloseAdjustments）。
       x-permission: finance.locked_backfill.request
       x-data-scope: project-entity
       x-terminal-allowed:
@@ -12933,7 +13132,7 @@ paths:
         - finance
       operationId: approveArApAdjustment
       summary: 锁定后补录审批决定
-      description: 上级对补录申请做出 approve/reject 决定；approve 才把金额变动入账并留痕，reject 不改账。
+      description: 上级对补录申请做出 approve/reject 决定；approve 才把金额变动入账并留痕，reject 不改账。第十八批 R 段 143-R4：返回的补录记录带 item_no（台账单号）与 original_business_date（原营业日）。
       x-permission: finance.locked_backfill.approve
       x-data-scope: project-entity
       x-terminal-allowed:
@@ -16574,7 +16773,11 @@ paths:
         - bar
       operationId: listBarShifts
       summary: 查询收银班次
+      description: 第十八批 R 段第 142 条 142-R3（BSM:1848「财务看退款、差异、日结和结算依据。」；PGM:664「单店层面的财务工作——日结确认与锁定、商户费用账单出账、差异认定……由该酒吧对应的财务 BP 负责」）：持 bar.shift.manage 或 finance.daily_close.manage 任一可列，两码都不持 403。持 bar.shift.manage 的读法不变；只持 finance.daily_close.manage 的账号（后台「财务 → 对账差异」页收银交班复核区块）商户账号只看本商户，其余按该码可触及的项目列班次所在酒吧归属这些项目的班次。
       x-permission: bar.shift.manage
+      x-permissions-any-of:
+        - bar.shift.manage
+        - finance.daily_close.manage
       x-data-scope: project-bar-table
       x-terminal-allowed:
         - web
@@ -16619,7 +16822,7 @@ paths:
       tags:
         - bar
       operationId: closeBarShift
-      description: "第十八批 O 段第 126 条 126-R2（BSM:1081「收银员开班记备用金，班结按本班次汇总各支付方式应收（现金/扫码/POS/退款/小费），录入实点现金算长短款差异。」）：现金、POS 应收另含本班次时段内该收银员登记的订台定金（pay-deposit 的登记员工），按定金渠道计入现金或 POS。"
+      description: "第十八批 O 段第 126 条 126-R2（BSM:1081「收银员开班记备用金，班结按本班次汇总各支付方式应收（现金/扫码/POS/退款/小费），录入实点现金算长短款差异。」）：现金、POS 应收另含本班次时段内该收银员登记的订台定金（pay-deposit 的登记员工），按定金渠道计入现金或 POS。第十八批 R 段第 142 条 142-R2：填了接班人 handover_to_user_id 须是已有账号，否则 400 VALIDATION_FAILED。 第十八批 R 段第 142 条 142-R4：应收另含加入本钱箱的成员在加入时点之后的收款；接班人不能是本钱箱成员（409 BAR_SHIFT_HANDOVER_TO_SELF）。"
       summary: 班结对账
       x-permission: bar.shift.close
       x-data-scope: project-bar-table
@@ -16638,6 +16841,138 @@ paths:
         "200":
           $ref: "#/components/responses/Success"
         "400":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/bar/shifts/{shift_id}/join:
+    post:
+      tags:
+        - bar
+      operationId: joinBarShift
+      description: "第十八批 R 段第 142 条 142-R4（BSM:1081「单人当班或能够明确定位到具体收银员时，由该收银员补足；多人共同使用同一钱箱时，由整个当班组共同补足。」「班结按本班次汇总各支付方式应收」；BSM:1489、ENUM:283「多人共同使用同一钱箱时由整个当班组共同补足」）：登录人加入本酒吧他人开班中的钱箱（同一钱箱多人当班），记加入人（当前登录人）与加入时点；加入之后其收款（结账收款、订台定金、小费）并入本班次应收，班结后各成员在交班单上签本人一栏。闸在幂等之前：商户账号加入别的酒吧的班次 403 CROSS_MERCHANT_FORBIDDEN；班次不存在 404 BAR_SHIFT_NOT_FOUND。班次不在开班中 409 BAR_SHIFT_NOT_OPEN；登录人在本酒吧已有开班中班次或已是开班中班次的成员（含本班次开班人）409 BAR_SHIFT_ALREADY_OPEN。"
+      summary: 加入本钱箱
+      x-permission: bar.shift.manage
+      x-data-scope: project-bar-table
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: bar.shift_joined
+      x-audit-event-failure: bar.shift_join_failed
+      x-auth-context: staff-token
+      parameters:
+        - $ref: "#/components/parameters/ShiftId"
+          description: 班次 ID；必须按 OpenAPI 类型、枚举和必填规则校验。
+      requestBody:
+        $ref: "#/components/requestBodies/BarShiftActionRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/bar/shifts/{shift_id}/resolve:
+    post:
+      tags:
+        - bar
+      operationId: resolveBarShift
+      description: "第十八批 R 段第 142 条 142-R1（BSM:1081「出现任何金额的差额一律进复核、定位责任」「短款补足即为处理完毕，不另计处罚扣款。长款同样必须登记，并由财务调取视频录像查明差额产生的原因；长款当期计入该商户营业外收入并单独留痕可查」；ENUM:115「有差异待复核、已平账」；PGM:664「差异认定……由该酒吧对应的财务 BP 负责」）：财务复核平账有差额的已班结班次，办理后 needs_review=false 即已平账，记复核人 resolved_by_user_id（当前登录人）与复核时点 resolved_at。短款办理即确认已由责任人当场足额补足，不收金额、不写台账、不生成扣款；长款 overage_cause（录像查明的原因）必填（缺 400 VALIDATION_FAILED），并记该酒吧营业外收入一行内部核算台账（source_type=bar_shift_overage，来源＝班次，往来方与归属商户＝该酒吧，归该酒吧所属项目，落账日为该酒吧当前营业日；该营业日已锁定日结 409 DAY_CLOSE_LOCKED）。闸在幂等之前：按班次的酒吧取所属综合体，入口权限码不可触及该综合体或商户账号不是本酒吧 403 CROSS_PROJECT_FORBIDDEN；班次不存在 404 BAR_SHIFT_NOT_FOUND；未班结、无差额或已平账 409 BAR_SHIFT_NOT_PENDING_REVIEW。 第十八批 R 段第 142 条 142-R4：有成员（同一钱箱多人当班）的班次短款可带 responsible_user_id（须是本班次开班人或成员，否则 400 VALIDATION_FAILED）即记该人为责任人，不带即当班组共同补足；无成员或长款不读。"
+      summary: 交班复核平账
+      x-permission: finance.daily_close.manage
+      x-data-scope: project-bar-table
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: bar.shift_resolved
+      x-audit-event-failure: bar.shift_resolve_failed
+      x-auth-context: staff-token
+      parameters:
+        - $ref: "#/components/parameters/ShiftId"
+          description: 班次 ID；必须按 OpenAPI 类型、枚举和必填规则校验。
+      requestBody:
+        $ref: "#/components/requestBodies/BarShiftResolveRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/bar/shifts/{shift_id}/sign:
+    post:
+      tags:
+        - bar
+      operationId: signBarShift
+      description: "第十八批 R 段第 142 条 142-R2（BSM:1081「不补足不能结账交班」「班结汇总生成交班单（纸质或电子皆可），当班收银员与接班人双方确认签字（电子确认同效；营业日最后一班没有接班人的，由财务跟班代替接班人确认签字），财务跟班见证后归档」）：交班单签字。登录人是本班次当班收银员即签 cashier_signed_at，是接班人（handover_to_user_id）即签 successor_signed_at。闸在幂等之前：登录人既不是当班收银员也不是接班人 403 BAR_SHIFT_SIGNER_MISMATCH；班次不存在 404 BAR_SHIFT_NOT_FOUND。未班结或有差额未平账 409 BAR_SHIFT_NOT_BALANCED；本人一栏已签 409 BAR_SHIFT_ALREADY_SIGNED。 第十八批 R 段第 142 条 142-R4：加入本钱箱的成员同样各签本人一栏（members[].signed_at）。"
+      summary: 交班单签字
+      x-permission: bar.shift.manage
+      x-data-scope: project-bar-table
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: bar.shift_signed
+      x-audit-event-failure: bar.shift_sign_failed
+      x-auth-context: staff-token
+      parameters:
+        - $ref: "#/components/parameters/ShiftId"
+          description: 班次 ID；必须按 OpenAPI 类型、枚举和必填规则校验。
+      requestBody:
+        $ref: "#/components/requestBodies/BarShiftActionRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/bar/shifts/{shift_id}/witness:
+    post:
+      tags:
+        - bar
+      operationId: witnessBarShift
+      description: "第十八批 R 段第 142 条 142-R2（BSM:1081「当班收银员与接班人双方确认签字（电子确认同效；营业日最后一班没有接班人的，由财务跟班代替接班人确认签字），财务跟班见证后归档」；ENUM:190「由当班收银员完成现金清点与盘收银，接班人与其对接完成交接，并由财务跟班跟进交接完成」）：财务见证归档，记见证人 witnessed_by_user_id（当前登录人）与见证时点 witnessed_at；没有接班人（营业日最后一班）的，同一动作由见证财务代接班人签字（successor_signed_at＝witnessed_at）。闸在幂等之前（同复核平账）：按班次的酒吧取所属综合体，入口权限码不可触及该综合体或商户账号不是本酒吧 403 CROSS_PROJECT_FORBIDDEN；班次不存在 404 BAR_SHIFT_NOT_FOUND。未班结或有差额未平账 409 BAR_SHIFT_NOT_BALANCED；当班收银员未签、或有接班人而接班人未签 409 BAR_SHIFT_NOT_SIGNED；已见证 409 BAR_SHIFT_ALREADY_WITNESSED。营业日有未见证归档的班次时该营业日日结不得确认、锁定（409 DAY_CLOSE_SHIFT_PENDING）。 第十八批 R 段第 142 条 142-R4：加入本钱箱的成员也须都已签字，否则 409 BAR_SHIFT_NOT_SIGNED。"
+      summary: 交班见证归档
+      x-permission: finance.daily_close.manage
+      x-data-scope: project-bar-table
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: bar.shift_witnessed
+      x-audit-event-failure: bar.shift_witness_failed
+      x-auth-context: staff-token
+      parameters:
+        - $ref: "#/components/parameters/ShiftId"
+          description: 班次 ID；必须按 OpenAPI 类型、枚举和必填规则校验。
+      requestBody:
+        $ref: "#/components/requestBodies/BarShiftActionRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
           $ref: "#/components/responses/Error"
         "409":
           $ref: "#/components/responses/Error"
@@ -56429,6 +56764,12 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/DailyCloseRequest"
+    DailyCloseActionRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/DailyCloseActionRequest"
     EvidenceAttachmentUploadIntentRequest:
       required: true
       content:
@@ -57009,6 +57350,18 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/BarShiftCloseRequest"
+    BarShiftResolveRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/BarShiftResolveRequest"
+    BarShiftActionRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/BarShiftActionRequest"
     CreateStocktakeRequest:
       required: true
       content:
@@ -61788,6 +62141,27 @@ components:
         force_close:
           type: boolean
           description: DailyCloseRequest.force_close 字段；必须按本 schema 的类型、必填项、枚举、长度、单位和对应 PRD 规则校验。
+    DailyCloseActionRequest:
+      type: object
+      description: 请求载荷 `DailyCloseActionRequest`（第十八批 R 段第 143 条）：按日结号办理的确认、锁定、五类最终标记等动作共用，带幂等键，五类最终标记另带 category；不收备注。
+      additionalProperties: false
+      required:
+        - idempotency_key
+      properties:
+        idempotency_key:
+          type: string
+          description: 操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。
+          maxLength: 128
+        category:
+          type: string
+          description: 五类最终标记的数据类别（143-R2，ENUM:190 五类：当日订单与核销记录、当日退款与冲正记录、当日出品与物品交接记录、当日考勤记录、当日异常处置记录），只在五类最终标记时必填；确认、锁定不用。
+          enum:
+            - orders_verifications
+            - refunds_reversals
+            - production_handover
+            - attendance
+            - anomaly_resolutions
+          maxLength: 40
     EvidenceAttachmentUploadIntentRequest:
       type: object
       description: 请求载荷 `EvidenceAttachmentUploadIntentRequest`；字段、必填项和枚举用于生成 DTO、校验和契约测试。
@@ -65143,12 +65517,38 @@ components:
           maximum: 999999999999
         handover_to_user_id:
           type: string
-          description: 交接下一班收银员用户 ID（可空）。
+          description: 交接下一班收银员用户 ID（可空；填了须是已有账号，接班人在交班单上签字，第十八批 R 段 142-R2）。
           maxLength: 64
         note:
           type: string
           description: 班结备注；进入审计留痕。
           maxLength: 1000
+    BarShiftResolveRequest:
+      type: object
+      description: 请求载荷 `BarShiftResolveRequest`（第十八批 R 段第 142 条 142-R1 交班复核平账）；短款不收金额（办理即确认已当场足额补足），长款须填 overage_cause（录像查明的原因）。第十八批 R 段第 142 条 142-R4：有成员的班次短款可带 responsible_user_id 定位责任人，不带即当班组共同补足。
+      additionalProperties: false
+      properties:
+        idempotency_key:
+          type: string
+          description: 操作幂等键；重复提交时必须返回同一处理结果，避免重复平账或重复入账。
+          maxLength: 128
+        overage_cause:
+          type: string
+          description: 长款原因（财务调取视频录像查明）；长款必填，短款不读。
+          maxLength: 1000
+        responsible_user_id:
+          type: string
+          description: 短款责任人（须是本班次开班人或加入本钱箱的成员）；只在有成员的班次短款时读，不带即当班组共同补足。
+          maxLength: 64
+    BarShiftActionRequest:
+      type: object
+      description: 请求载荷 `BarShiftActionRequest`（第十八批 R 段第 142 条 142-R2 交班单签字、财务见证归档，142-R4 加入本钱箱）；只带幂等键，签字人、见证人与加入人取当前登录人。
+      additionalProperties: false
+      properties:
+        idempotency_key:
+          type: string
+          description: 操作幂等键；重复提交时必须返回同一处理结果，避免重复签字或重复见证。
+          maxLength: 128
     CreateStocktakeRequest:
       type: object
       description: 请求载荷 `CreateStocktakeRequest`（V108 盘点单建单）；建盘点单 status=counting，merchant_id 强制取自认证上下文不由请求体传入。

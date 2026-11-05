@@ -1,4 +1,4 @@
-// 文件版本：V0.07
+// 文件版本：V0.08
 // 客人端响应类型（对齐后端 customer 域 record，camelCase 化后口径）
 
 export type TicketProduct = {
@@ -202,6 +202,8 @@ export type BarInvitationPreview = {
   reservedAt: string | null;
   capacity: number;
   remaining: number;
+  // 第十八批 R 段第 152 条（第十八批裁决 34「客户点击后确定自己是订台人还是参与者」）：这张订台还没有订台人（员工代订、一体机订台尚未被认领），可选「我是订台人」。
+  holderClaimable: boolean;
 };
 
 // clients-R6 本人动态入场码（明文只在内存里，按服务端有效期显示）。

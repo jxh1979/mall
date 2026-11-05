@@ -178,5 +178,15 @@ describe("ReconciliationPage 日结区块", () => {
     renderPage();
     await waitFor(() => expect(screen.getByTestId("reconciliation-kpi-focus-banner")).toBeTruthy());
     expect(screen.queryByTestId("finance-daily-close-panel")).toBeNull();
+    expect(screen.queryByTestId("bar-shift-panel")).toBeNull();
+  });
+
+  // 第十八批 R 段第 142 条 142-R3（BSM:1848「财务看退款、差异、日结和结算依据。」）：收银交班复核区块同在对账批次与差异之外。
+  it("对账批次与差异都为空时收银交班复核区块仍渲染", async () => {
+    const api = makeApi(vi.fn().mockImplementation((path: string) => Promise.resolve(path === "/api/v1/bar/shifts"
+      ? [{ id: "s1", barId: "bar_a", cashierUserId: "u2", status: "closed", cashDiffCent: -100, needsReview: true }] : [])));
+    renderPage(api);
+    await waitFor(() => expect(screen.getByTestId("admin-empty").textContent).toContain("暂无数据"));
+    await waitFor(() => expect(screen.queryByTestId("bar-shift-resolve-s1")).not.toBeNull());
   });
 });

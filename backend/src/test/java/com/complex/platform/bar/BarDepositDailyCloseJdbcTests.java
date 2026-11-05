@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static org.hamcrest.Matchers.allOf;
 import static org.hamcrest.Matchers.containsString;
@@ -55,6 +55,7 @@ class BarDepositDailyCloseJdbcTests {
     @Autowired private CustomerRepository customers;
     @Autowired private BusinessDayResolver days;
     @Autowired private JdbcBarRepository bars;
+    @Autowired private com.complex.platform.finance.FinanceRepository financeRepository;
 
     private CustomerTicketPaymentFixture f;
     private String s;
@@ -132,8 +133,8 @@ class BarDepositDailyCloseJdbcTests {
 
     /**
      * 第十八批 Q 段第 144 条 144-R1（BSM:1106「未结清订单阻止交班和日结」；PGM:931「未结清时阻止交班和日结」；BSM:1103「必须在本营业日结清」）：
-     * 本酒吧当营业日开出的账单未结清时日结锁定被拒、原文列出账单号；收一部分款仍拒；被合单的副单、主管「作废并冲正」后的账单与同日另一酒吧的
-     * 未结账单不挡本酒吧 merchant 范围的日结；结清后可锁。合单、结账、争议处置与日结都按后台真实请求形状（蛇形键）。
+     * 本酒吧当营业日开出的账单未结清时日结确认被拒（第十八批 R 段 143-R1：闸挪到确认与锁定，生成照常）、原文列出账单号；收一部分款仍拒；
+     * 被合单的副单、主管「作废并冲正」后的账单与同日另一酒吧的未结账单不挡本酒吧 merchant 范围的日结；结清后可确认。合单、结账、争议处置与日结都按后台真实请求形状（蛇形键）。
      */
     @Test
     void unsettledBarBillBlocksDailyCloseUntilSettled() throws Exception {
@@ -150,7 +151,9 @@ class BarDepositDailyCloseJdbcTests {
         bill(other, "other");
         LocalDate day = days.businessDate(null, bar, Instant.now());
 
-        lock(day, "u1").andExpect(status().isConflict())
+        String close = CustomerTicketPaymentFixture.read(generate(day, "main").andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("pending_confirm")), "$.data.id");
+        confirm(close, "u1").andExpect(status().isConflict())
                 .andExpect(jsonPath("$.detail_code").value("DAY_CLOSE_UNSETTLED_BILL"))
                 .andExpect(jsonPath("$.message").value(allOf(containsString(billNo("open")), containsString(billNo("merged")),
                         containsString(billNo("voided")), not(containsString(billNo("other"))))));
@@ -165,7 +168,7 @@ class BarDepositDailyCloseJdbcTests {
         billAction(cashier, open, "settle", Map.of("idempotency_key", "bdc-settle1-" + s, "payment_id", "bdc-pay1-" + s,
                 "payment_channel", "aggregate_pay", "settlement_amount_cent", 10_000))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.data.payment_status").value("partial_paid"));
-        lock(day, "u2").andExpect(status().isConflict())
+        confirm(close, "u2").andExpect(status().isConflict())
                 .andExpect(jsonPath("$.detail_code").value("DAY_CLOSE_UNSETTLED_BILL"))
                 .andExpect(jsonPath("$.message").value(allOf(containsString(billNo("open")), not(containsString(billNo("merged"))),
                         not(containsString(billNo("voided"))))));
@@ -173,7 +176,8 @@ class BarDepositDailyCloseJdbcTests {
         billAction(cashier, open, "settle", Map.of("idempotency_key", "bdc-settle2-" + s, "payment_id", "bdc-pay2-" + s,
                 "payment_channel", "aggregate_pay"))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.data.settlement_status").value("settled"));
-        lock(day, "ok").andExpect(status().isOk()).andExpect(jsonPath("$.data.status").value("locked"));
+        com.complex.platform.support.DailyCloseFixture.markAllFinal(financeRepository, close);
+        confirm(close, "ok").andExpect(status().isOk()).andExpect(jsonPath("$.data.status").value("confirmed"));
     }
 
     // ---------- helpers ----------
@@ -196,12 +200,19 @@ class BarDepositDailyCloseJdbcTests {
         return days.businessDate(null, bar, paidAt.toInstant());
     }
 
-    /** 平台管理员按后台真实请求锁本酒吧商户该营业日日结，返回日结 ID。 */
+    /** 平台管理员按后台真实请求生成本酒吧商户该营业日日结（生成即按七源汇总），返回日结 ID。 */
     private String close(LocalDate businessDate) throws Exception {
-        return CustomerTicketPaymentFixture.read(lock(businessDate, "main").andExpect(status().isOk()), "$.data.id");
+        return CustomerTicketPaymentFixture.read(generate(businessDate, "main").andExpect(status().isOk()), "$.data.id");
     }
 
-    private ResultActions lock(LocalDate businessDate, String tag) throws Exception {
+    /** 第十八批 R 段 143-R1：确认日结的真实请求形状（只带幂等键）。 */
+    private ResultActions confirm(String dailyCloseId, String tag) throws Exception {
+        return mockMvc.perform(post("/api/v1/finance/daily-closes/" + dailyCloseId + "/confirm").with(admin)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(json.writeValueAsString(Map.of("idempotency_key", "bdc-confirm-" + tag + "-" + s))));
+    }
+
+    private ResultActions generate(LocalDate businessDate, String tag) throws Exception {
         return mockMvc.perform(post("/api/v1/finance/daily-closes").with(admin)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(json.writeValueAsString(Map.of("idempotency_key", "bdc-close-" + tag + "-" + s, "operator_note", "日结",

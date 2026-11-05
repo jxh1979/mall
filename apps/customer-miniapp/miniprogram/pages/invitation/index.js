@@ -1,8 +1,10 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 // 接受订卡邀请（BSM「朋友在 App/小程序确认接受后占一个名额，该名额自动关联到接受人本人的动态入场码，到店出示本人的动态入场码入场」；BSM「邀请函二维码
 // 只用于转发与接受，本身不作为入场凭证（邀请函二维码带防伪标记，被复制或篡改卡座、可进人数即无法接受）」）：开卡人分享的卡片、客人链接入口或扫邀请函
 // 二维码带四项码载荷进来，先预览（不占名额），点「确认接受」才占名额；接受后出示本人动态入场码（components/dynamic-code，kind=entry）。
 // 扫码只认本综合体的邀请函链接（core parseCustomerLink 白名单）。须登录（名额关联到接受人本人）。
+// 第十八批 R 段第 152 条 152-R3（第十八批裁决 34「销售可以通过微信等发送邀请函，客户点击后确定自己是订台人还是参与者」）：员工代订、一体机订台还没有订台人时
+// （预览 holderClaimable），给「我是订台人」（acceptHolder）「我是参与者」（accept）两个选项。
 const api = require('../../lib/api')
 const config = require('../../config')
 const core = require('../../core/index')
@@ -65,10 +67,16 @@ Component({
       this.code = codeOf(link.params)
       this.preview()
     },
-    async accept() {
+    accept() {
+      return this.confirmAs(false)
+    },
+    acceptHolder() {
+      return this.confirmAs(true)
+    },
+    async confirmAs(asHolder) {
       this.setData({ busy: true, error: '' })
       try {
-        const member = await api.service('bar').confirmBarInvitation(this.code)
+        const member = await api.service('bar').confirmBarInvitation(this.code, asHolder)
         this.setData({ member, reservationId: member.reservationId || this.data.preview.reservationId })
       } catch (err) {
         this.setData({ error: err.message || '接受邀请失败' })

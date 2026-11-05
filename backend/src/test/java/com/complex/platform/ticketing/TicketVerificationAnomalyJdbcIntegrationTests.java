@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -13,7 +13,9 @@ import com.complex.platform.access.AccessActor;
 import com.complex.platform.common.BusinessDayResolver;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.finance.FinanceService;
+import com.complex.platform.finance.dto.DailyCloseActionRequest;
 import com.complex.platform.finance.dto.DailyCloseRequest;
+import com.complex.platform.support.DailyCloseFixture;
 import com.complex.platform.support.TestSecurityActors;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.sql.Timestamp;
@@ -62,6 +64,7 @@ class TicketVerificationAnomalyJdbcIntegrationTests {
     @Autowired private MockMvc mockMvc;
     @Autowired private JdbcTemplate jdbc;
     @Autowired private FinanceService financeService;
+    @Autowired private com.complex.platform.finance.FinanceRepository financeRepository;
     @Autowired private BusinessDayResolver businessDayResolver;
 
     private final String suffix = UUID.randomUUID().toString().replace("-", "").substring(0, 10);
@@ -268,9 +271,9 @@ class TicketVerificationAnomalyJdbcIntegrationTests {
         assertThat(usedTimes()).isEqualTo(1);
     }
 
-    // R3 RED：原核销落在该营业日、异常待处置 → 日结不得锁定；处置成 restored 后可锁。
+    // R3 RED：原核销落在该营业日、异常待处置 → 日结不得确认（第十八批 R 段 143-R1：闸挪到确认与锁定，生成照常）；处置成 restored 后可确认。
     @Test
-    void lockDailyCloseRefusedWhileTicketVerificationAnomalyOpen() throws Exception {
+    void confirmDailyCloseRefusedWhileTicketVerificationAnomalyOpen() throws Exception {
         String original = verification("success", businessDayResolver.start(null, null, BUSINESS_DATE).plusSeconds(3600));
         // 直接落一条待处置异常（提起入口另有用例），只验日结闸。
         String anomalyId = "ver_tk14_anomaly_" + suffix;
@@ -280,16 +283,22 @@ class TicketVerificationAnomalyJdbcIntegrationTests {
                 + " 'verification_anomaly', now(), ?, 1, ?)", anomalyId, "V" + anomalyId, entitlementId, "TK14-" + suffix, deviceId,
                 merchant, original);
 
-        TestSecurityActors.asPlatformAdmin();
-        assertThatThrownBy(() -> financeService.createDailyClose(dailyClose()))
+        DailyCloseFixture.asFinanceAdmin(jdbc, "usr_dc_fin_" + suffix);
+        String close = financeService.createDailyClose(dailyClose()).id();
+        DailyCloseFixture.markAllFinal(financeRepository, close);
+        assertThatThrownBy(() -> financeService.confirmDailyClose(close, closeAction()))
                 .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("DAY_CLOSE_ANOMALY_PENDING"));
-        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM finance_daily_closes WHERE business_date = ? AND scope_id = ?",
-                Integer.class, BUSINESS_DATE, merchant)).isZero();
+        assertThat(jdbc.queryForObject("SELECT status FROM finance_daily_closes WHERE id = ?", String.class, close))
+                .isEqualTo("pending_confirm");
 
         SecurityContextHolder.clearContext();
         resolve(anomalyId, "restored", "核实已放行").andExpect(status().isOk());
-        TestSecurityActors.asPlatformAdmin();
-        assertThat(financeService.createDailyClose(dailyClose()).status()).isEqualTo("locked");
+        DailyCloseFixture.asFinanceAdmin(jdbc, "usr_dc_fin_" + suffix);
+        assertThat(financeService.confirmDailyClose(close, closeAction()).status()).isEqualTo("confirmed");
+    }
+
+    private DailyCloseActionRequest closeAction() {
+        return new DailyCloseActionRequest("tk14-close-action-" + suffix + "-" + (++seq), null);
     }
 
     private DailyCloseRequest dailyClose() {

@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.15
+// 文件版本：V0.16
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
@@ -157,6 +157,9 @@ class BarServiceTests {
                         new AccessRepository.PermissionEffect("usr_admin", "bar.order_item.void_decide", AccessRepository.Effect.GRANT,
                                 AccessRepository.Source.ROLE, "explicit_void_review", null, null, false, false)));
         authorizationService = new AuthorizationService(accessRepository);
+        // 第十八批 R 段第 142 条 142-R2：班结填的接班人须是已有账号（交接给 cashier_2 的用例）。
+        when(accessRepository.findUserById("cashier_2")).thenReturn(Optional.of(
+                new com.complex.platform.access.AccessUser("cashier_2", "cashier_2", "staff", null, null, "active", Instant.now())));
         AuditEventService auditEventService = new AuditEventService(auditEventRepository);
         IdempotencyService idempotencyService = new IdempotencyService(new InMemoryIdempotencyRepository(), new ObjectMapper());
         AuditedOperationExecutor operations = new AuditedOperationExecutor(idempotencyService, auditEventService);
@@ -231,7 +234,8 @@ class BarServiceTests {
                 barRepository,
                 new BarOperationExecutor(operations),
                 billingService,
-                new BarShiftService(barRepository, authorizationService, auditEventService),
+                new BarShiftService(barRepository, authorizationService, auditEventService,
+                        new com.complex.platform.common.BusinessDayResolver(), receivableLedgerService, accessRepository),
                 tableSessionService,
                 barOrderService,
                 entryService,
@@ -4372,7 +4376,7 @@ class BarServiceTests {
         BarShiftRecord shift = barRepository.saveShift(new BarShiftRecord(
                 "bar_shift_other", null, "merchant_b", "bar_1", "cashier_x", "open",
                 Instant.now(), null, 0L, null, 0L, 0L, 0L, 0L, 0L, null, false,
-                null, null, "opener", null, Instant.now(), Instant.now()));
+                null, null, "opener", null, Instant.now(), Instant.now(), null, null, null, null, null, null, null, null, List.of()));
         assertThatThrownBy(() -> service.closeShift(shift.id(),
                 new BarShiftCloseRequest("close-x", 0L, null, null)))
                 .isInstanceOf(ApiException.class)
@@ -4385,11 +4389,11 @@ class BarServiceTests {
         barRepository.saveShift(new BarShiftRecord(
                 "bar_shift_a", null, "merchant_a", "bar_1", "c1", "open",
                 Instant.now(), null, 0L, null, 0L, 0L, 0L, 0L, 0L, null, false,
-                null, null, "opener", null, Instant.now(), Instant.now()));
+                null, null, "opener", null, Instant.now(), Instant.now(), null, null, null, null, null, null, null, null, List.of()));
         barRepository.saveShift(new BarShiftRecord(
                 "bar_shift_b", null, "merchant_b", "bar_1", "c2", "open",
                 Instant.now(), null, 0L, null, 0L, 0L, 0L, 0L, 0L, null, false,
-                null, null, "opener", null, Instant.now(), Instant.now()));
+                null, null, "opener", null, Instant.now(), Instant.now(), null, null, null, null, null, null, null, null, List.of()));
 
         TestSecurityActors.asMerchantUser("merchant_a");
         assertThat(service.listShifts().items())
@@ -4970,6 +4974,7 @@ class BarServiceTests {
 
         @Override
         public BarShiftReconciliationSnapshot aggregateShiftReconciliation(
+                String shiftId,
                 String barId,
                 String cashierUserId,
                 Instant from,

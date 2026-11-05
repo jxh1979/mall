@@ -1,4 +1,4 @@
-<!-- 文件版本：V0.01 -->
+<!-- 文件版本：V0.02 -->
 <view class="page">
   <view wx:if="{{!loggedIn}}" id="login-required" class="card">
     <view>接受订卡邀请需要先登录（名额关联到你本人的动态入场码）</view>
@@ -8,15 +8,23 @@
   <block wx:else>
     <view wx:if="{{error}}" id="invitation-error" class="alert error">{{error}}</view>
     <block wx:if="{{member}}">
-      <view id="invitation-accepted" class="alert success">已接受邀请，名额已为你保留。到店出示下方本人的动态入场码入场。</view>
+      <view wx:if="{{member.isHolder && preview.holderClaimable}}" id="invitation-accepted" class="alert success">你已成为这张订台的订台人。可在「我的订台」查看名单、转发邀请函；到店出示下方本人的动态入场码入场。</view>
+      <view wx:else id="invitation-accepted" class="alert success">已接受邀请，名额已为你保留。到店出示下方本人的动态入场码入场。</view>
       <dynamic-code id="entry-code" kind="entry" target-id="{{reservationId}}" title="我的动态入场码" />
     </block>
     <view wx:elif="{{preview}}" id="invitation-preview" class="card">
       <view class="section-title">订卡邀请函</view>
       <view>{{preview.title}}</view>
       <view class="hint">{{preview.line}}</view>
-      <view class="hint">确认接受即占用一个名额，凭本人的动态入场码免通票进入这家酒吧。</view>
-      <button id="invitation-accept" type="primary" loading="{{busy}}" disabled="{{busy}}" bindtap="accept">确认接受</button>
+      <block wx:if="{{preview.holderClaimable}}">
+        <view class="hint">这张订台还没有订台人：订台的客人本人请选「我是订台人」，订台归到你名下，可在「我的订台」查看名单、转发邀请函；朋友请选「我是参与者」，占一个名额。</view>
+        <button id="invitation-accept-holder" type="primary" loading="{{busy}}" disabled="{{busy}}" bindtap="acceptHolder">我是订台人</button>
+        <button id="invitation-accept" loading="{{busy}}" disabled="{{busy}}" bindtap="accept">我是参与者</button>
+      </block>
+      <block wx:else>
+        <view class="hint">确认接受即占用一个名额，凭本人的动态入场码免通票进入这家酒吧。</view>
+        <button id="invitation-accept" type="primary" loading="{{busy}}" disabled="{{busy}}" bindtap="accept">确认接受</button>
+      </block>
     </view>
     <view wx:elif="{{!busy}}" class="hint">打开朋友分享的订卡邀请，或扫朋友出示的邀请函二维码。</view>
     <button wx:if="{{!member}}" id="invitation-scan" disabled="{{busy}}" bindtap="scanInvitation">扫邀请函二维码</button>

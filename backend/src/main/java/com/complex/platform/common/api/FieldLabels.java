@@ -1,6 +1,6 @@
 package com.complex.platform.common.api;
 
-// 文件版本：V0.31
+// 文件版本：V0.32
 
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -303,6 +303,14 @@ public final class FieldLabels {
         p("additional_service_fee_cent", "追加服务费");
         p("opening_cash_cent", "备用金");
         p("declared_cash_cent", "申报现金金额");
+        // 第十八批 R 段第 142 条 142-R1：财务复核平账的长款原因（BSM:1081「由财务调取视频录像查明差额产生的原因」）。
+        p("overage_cause", "长款原因（录像查明）");
+        // 第十八批 R 段第 142 条 142-R4：复核平账带的短款责任人不是本班次当班收银员时报错的字段键（与前端 fieldLabels.ts 同名）。
+        p("responsible_user_id", "责任人");
+        // 第十八批 R 段第 142 条 142-R2：班结填的接班人账号不存在时报错的字段键（与前端 fieldLabels.ts 同名）。
+        p("handover_to_user_id", "交接给");
+        // 第十八批 R 段第 152 条 152-R2：邀请函扫码预览返回的「订台尚无订台人、可选「我是订台人」」（第十八批裁决 34）。
+        p("holder_claimable", "可认领为订台人");
         p("daily_close_id", "日结单号");
         p("handover_id", "交接单号");
 

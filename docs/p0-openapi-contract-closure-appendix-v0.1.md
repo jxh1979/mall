@@ -1,4 +1,4 @@
-# P0 OpenAPI 权限、事件、任务追溯收口附录 V0.49
+# P0 OpenAPI 权限、事件、任务追溯收口附录 V0.50
 
 ## 1. 文档定位
 
@@ -14,11 +14,11 @@
 
 | 检查项 | 当前结果 | 执行结论 |
 |---|---:|---|
-| OpenAPI operation 数 | 1236 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
+| OpenAPI operation 数 | 1245 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
 | OpenAPI 权限/通用权限状态数 | 420 | 人工权限矩阵正文未覆盖 319 项；缺口以本文第 3 节补齐 |
-| OpenAPI 成功/失败事件数 | 2472 | 人工事件矩阵正文未覆盖 2427 项；完整事件字典以本文第 4 节为准 |
-| operation 级任务追溯 | 1236 | 人工任务映射正文未逐项覆盖 1230 个 operation；逐 operation 映射以本文第 5 节为准 |
-| 写接口数量 | 737 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
+| OpenAPI 成功/失败事件数 | 2490 | 人工事件矩阵正文未覆盖 2441 项；完整事件字典以本文第 4 节为准 |
+| operation 级任务追溯 | 1245 | 人工任务映射正文未逐项覆盖 1239 个 operation；逐 operation 映射以本文第 5 节为准 |
+| 写接口数量 | 745 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
 
 ## 3. 权限码与认证上下文补充表
 
@@ -140,7 +140,7 @@
 | `bar.saved_bottle.renewal_policy.manage` | staff-token | project | 1 | configureSavedBottleRenewalPolicy | OpenAPI 补充，以本附录为准 |
 | `bar.saved_bottle.renewal.review` | staff-token | project-bar-customer | 1 | reviewSavedBottleRenewal | OpenAPI 补充，以本附录为准 |
 | `bar.shift.close` | staff-token | project-bar-table | 1 | closeBarShift | OpenAPI 补充，以本附录为准 |
-| `bar.shift.manage` | staff-token | project-bar-table | 2 | listBarShifts, openBarShift | OpenAPI 补充，以本附录为准 |
+| `bar.shift.manage` | staff-token | project-bar-table | 4 | listBarShifts, openBarShift, joinBarShift, signBarShift | OpenAPI 补充，以本附录为准 |
 | `bar.staff_booking.restore` | staff-token | project-bar | 2 | listBarStaffBookingSuspensions, restoreBarStaffBookingSuspension | OpenAPI 补充，以本附录为准 |
 | `bar.table_commission.calculate` | staff-token | project-bar | 1 | calculateBarTableCommission | 已在权限矩阵正文出现 |
 | `bar.table_session.attribution_reassign` | staff-token | project-bar-table | 1 | reassignBarTableSessionAttribution | OpenAPI 补充，以本附录为准 |
@@ -243,8 +243,8 @@
 | `finance.ar_ap.export` | staff-token | project-entity | 1 | exportArApItems | OpenAPI 补充，以本附录为准 |
 | `finance.ar_ap.manage` | staff-token | platform, project, project-entity, project-merchant | 8 | createArApItem, reviewTransferDisposition, generateContractRentBill, generateContractPeriodBills, recordFacilityEquipmentScrapFinance, allocatePurchasePrepayment, reviewPurchaseReturnFinance, postPurchasePrepaymentResolution | 已在权限矩阵正文出现 |
 | `finance.ar_ap.view` | staff-token | platform, project-entity, project-merchant, project-order | 7 | listArApItems, listArApPayments, getInternalPayableExecution, listFinanceRefunds, listArOverdueDebtors, getFinanceRefund, queryFinanceRefund | 已在权限矩阵正文出现 |
-| `finance.daily_close.lock` | staff-token | project-entity | 1 | createDailyClose | 已在权限矩阵正文出现 |
-| `finance.daily_close.manage` | staff-token | project-entity | 2 | listDailyCloses, listDailyCloseSummaries | OpenAPI 补充，以本附录为准 |
+| `finance.daily_close.lock` | staff-token | project-entity | 5 | createDailyClose, confirmDailyClose, lockDailyClose, markDailyCloseFinal, archiveDailyClose | 已在权限矩阵正文出现 |
+| `finance.daily_close.manage` | staff-token | project-bar-table, project-entity | 5 | listDailyCloses, listDailyCloseSummaries, listDailyCloseAdjustments, resolveBarShift, witnessBarShift | OpenAPI 补充，以本附录为准 |
 | `finance.deposit.manage` | staff-token | platform | 1 | recordDepositAction | OpenAPI 补充，以本附录为准 |
 | `finance.dividend.manage` | staff-token | platform | 9 | createDividendPlan, updateDividendPlan, computeDividendStatements, confirmDividendLegalAmount, submitDividendStatement, approveDividendStatement, rejectDividendStatement, markDividendStatementPaid, releaseDividendReserve | OpenAPI 补充，以本附录为准 |
 | `finance.dividend.view` | staff-token | merchant | 4 | listDividendPlans, listDividendStatements, getDividendStatement, listDividendReserveReleases | OpenAPI 补充，以本附录为准 |
@@ -901,8 +901,16 @@
 | `bar.service.read_failed` | failure | `listBarServiceResponsibilities` | `GET` | `/api/v1/bar/table-sessions/{id}/service-responsibilities` | BAR-酒吧经营 | `bar.payroll.view` | 接口级事件，以本附录为准 |
 | `bar.shift_close_failed` | failure | `closeBarShift` | `POST` | `/api/v1/bar/shifts/{shift_id}/close` | BAR-酒吧经营 | `bar.shift.close` | 接口级事件，以本附录为准 |
 | `bar.shift_closed` | success | `closeBarShift` | `POST` | `/api/v1/bar/shifts/{shift_id}/close` | BAR-酒吧经营 | `bar.shift.close` | 接口级事件，以本附录为准 |
+| `bar.shift_join_failed` | failure | `joinBarShift` | `POST` | `/api/v1/bar/shifts/{shift_id}/join` | BAR-酒吧经营 | `bar.shift.manage` | 接口级事件，以本附录为准 |
+| `bar.shift_joined` | success | `joinBarShift` | `POST` | `/api/v1/bar/shifts/{shift_id}/join` | BAR-酒吧经营 | `bar.shift.manage` | 接口级事件，以本附录为准 |
 | `bar.shift_open_failed` | failure | `openBarShift` | `POST` | `/api/v1/bar/shifts/open` | BAR-酒吧经营 | `bar.shift.manage` | 接口级事件，以本附录为准 |
 | `bar.shift_opened` | success | `openBarShift` | `POST` | `/api/v1/bar/shifts/open` | BAR-酒吧经营 | `bar.shift.manage` | 接口级事件，以本附录为准 |
+| `bar.shift_resolve_failed` | failure | `resolveBarShift` | `POST` | `/api/v1/bar/shifts/{shift_id}/resolve` | BAR-酒吧经营 | `finance.daily_close.manage` | 接口级事件，以本附录为准 |
+| `bar.shift_resolved` | success | `resolveBarShift` | `POST` | `/api/v1/bar/shifts/{shift_id}/resolve` | BAR-酒吧经营 | `finance.daily_close.manage` | 接口级事件，以本附录为准 |
+| `bar.shift_sign_failed` | failure | `signBarShift` | `POST` | `/api/v1/bar/shifts/{shift_id}/sign` | BAR-酒吧经营 | `bar.shift.manage` | 接口级事件，以本附录为准 |
+| `bar.shift_signed` | success | `signBarShift` | `POST` | `/api/v1/bar/shifts/{shift_id}/sign` | BAR-酒吧经营 | `bar.shift.manage` | 接口级事件，以本附录为准 |
+| `bar.shift_witness_failed` | failure | `witnessBarShift` | `POST` | `/api/v1/bar/shifts/{shift_id}/witness` | BAR-酒吧经营 | `finance.daily_close.manage` | 接口级事件，以本附录为准 |
+| `bar.shift_witnessed` | success | `witnessBarShift` | `POST` | `/api/v1/bar/shifts/{shift_id}/witness` | BAR-酒吧经营 | `finance.daily_close.manage` | 接口级事件，以本附录为准 |
 | `bar.shift.view_failed` | failure | `listBarShifts` | `GET` | `/api/v1/bar/shifts` | BAR-酒吧经营 | `bar.shift.manage` | 接口级事件，以本附录为准 |
 | `bar.shift.viewed` | success | `listBarShifts` | `GET` | `/api/v1/bar/shifts` | BAR-酒吧经营 | `bar.shift.manage` | 接口级事件，以本附录为准 |
 | `bar.staff_booking_restore_failed` | failure | `restoreBarStaffBookingSuspension` | `POST` | `/api/v1/bar/staff-booking-suspensions/{id}/restore` | BAR-酒吧经营 | `bar.staff_booking.restore` | 接口级事件，以本附录为准 |
@@ -1461,8 +1469,16 @@
 | `finance_ar_ap.exported` | success | `exportArApItems` | `GET` | `/api/v1/finance/ar-ap-items/export` | FIN-财务台账 | `finance.ar_ap.export` | 接口级事件，以本附录为准 |
 | `finance_ar_ap.view_failed` | failure | `listArApItems` | `GET` | `/api/v1/finance/ar-ap-items` | FIN-财务台账 | `finance.ar_ap.view` | 接口级事件，以本附录为准 |
 | `finance_ar_ap.viewed` | success | `listArApItems` | `GET` | `/api/v1/finance/ar-ap-items` | FIN-财务台账 | `finance.ar_ap.view` | 接口级事件，以本附录为准 |
-| `finance_daily_close.lock_failed` | failure | `createDailyClose` | `POST` | `/api/v1/finance/daily-closes` | FIN-财务台账 | `finance.daily_close.lock` | 接口级事件，以本附录为准 |
-| `finance_daily_close.locked` | success | `createDailyClose` | `POST` | `/api/v1/finance/daily-closes` | FIN-财务台账 | `finance.daily_close.lock` | 已在事件矩阵正文出现 |
+| `finance_daily_close.archive_failed` | failure | `archiveDailyClose` | `POST` | `/api/v1/finance/daily-closes/{id}/archive` | FIN-财务台账 | `finance.daily_close.lock` | 接口级事件，以本附录为准 |
+| `finance_daily_close.archived` | success | `archiveDailyClose` | `POST` | `/api/v1/finance/daily-closes/{id}/archive` | FIN-财务台账 | `finance.daily_close.lock` | 已在事件矩阵正文出现 |
+| `finance_daily_close.confirm_failed` | failure | `confirmDailyClose` | `POST` | `/api/v1/finance/daily-closes/{id}/confirm` | FIN-财务台账 | `finance.daily_close.lock` | 接口级事件，以本附录为准 |
+| `finance_daily_close.confirmed` | success | `confirmDailyClose` | `POST` | `/api/v1/finance/daily-closes/{id}/confirm` | FIN-财务台账 | `finance.daily_close.lock` | 已在事件矩阵正文出现 |
+| `finance_daily_close.final_mark_failed` | failure | `markDailyCloseFinal` | `POST` | `/api/v1/finance/daily-closes/{id}/final-marks` | FIN-财务台账 | `finance.daily_close.lock` | 接口级事件，以本附录为准 |
+| `finance_daily_close.final_marked` | success | `markDailyCloseFinal` | `POST` | `/api/v1/finance/daily-closes/{id}/final-marks` | FIN-财务台账 | `finance.daily_close.lock` | 已在事件矩阵正文出现 |
+| `finance_daily_close.generate_failed` | failure | `createDailyClose` | `POST` | `/api/v1/finance/daily-closes` | FIN-财务台账 | `finance.daily_close.lock` | 接口级事件，以本附录为准 |
+| `finance_daily_close.generated` | success | `createDailyClose` | `POST` | `/api/v1/finance/daily-closes` | FIN-财务台账 | `finance.daily_close.lock` | 已在事件矩阵正文出现 |
+| `finance_daily_close.lock_failed` | failure | `lockDailyClose` | `POST` | `/api/v1/finance/daily-closes/{id}/lock` | FIN-财务台账 | `finance.daily_close.lock` | 接口级事件，以本附录为准 |
+| `finance_daily_close.locked` | success | `lockDailyClose` | `POST` | `/api/v1/finance/daily-closes/{id}/lock` | FIN-财务台账 | `finance.daily_close.lock` | 已在事件矩阵正文出现 |
 | `finance_payment.register_failed` | failure | `confirmOfflinePayment` | `POST` | `/api/v1/finance/payments/{payment_id}/confirm-offline` | FIN-财务台账 | `finance.payment.register` | 接口级事件，以本附录为准 |
 | `finance_payment.register_failed` | failure | `createArApPayment` | `POST` | `/api/v1/finance/ar-ap-items/{id}/payments` | FIN-财务台账 | `finance.payment.register` | 接口级事件，以本附录为准 |
 | `finance_payment.registered` | success | `confirmOfflinePayment` | `POST` | `/api/v1/finance/payments/{payment_id}/confirm-offline` | FIN-财务台账 | `finance.payment.register` | 已在事件矩阵正文出现 |
@@ -1487,6 +1503,8 @@
 | `finance_refund.retry_failed` | failure | `retryFinanceRefund` | `POST` | `/api/v1/finance/refunds/{refund_id}/retry` | FIN-财务台账 | `finance.refund.create` | 接口级事件，以本附录为准 |
 | `finance_refund.view_failed` | failure | `getFinanceRefund` | `GET` | `/api/v1/finance/refunds/{refund_id}` | FIN-财务台账 | `finance.ar_ap.view` | 接口级事件，以本附录为准 |
 | `finance_refund.viewed` | success | `getFinanceRefund` | `GET` | `/api/v1/finance/refunds/{refund_id}` | FIN-财务台账 | `finance.ar_ap.view` | 接口级事件，以本附录为准 |
+| `finance.daily_close_adjustment.view_failed` | failure | `listDailyCloseAdjustments` | `GET` | `/api/v1/finance/daily-closes/{id}/adjustments` | FIN-财务台账 | `finance.daily_close.manage` | 接口级事件，以本附录为准 |
+| `finance.daily_close_adjustment.viewed` | success | `listDailyCloseAdjustments` | `GET` | `/api/v1/finance/daily-closes/{id}/adjustments` | FIN-财务台账 | `finance.daily_close.manage` | 接口级事件，以本附录为准 |
 | `finance.daily_close_summary.view_failed` | failure | `listDailyCloseSummaries` | `GET` | `/api/v1/finance/daily-closes/{id}/summaries` | FIN-财务台账 | `finance.daily_close.manage` | 接口级事件，以本附录为准 |
 | `finance.daily_close_summary.viewed` | success | `listDailyCloseSummaries` | `GET` | `/api/v1/finance/daily-closes/{id}/summaries` | FIN-财务台账 | `finance.daily_close.manage` | 接口级事件，以本附录为准 |
 | `finance.daily_close.view_failed` | failure | `listDailyCloses` | `GET` | `/api/v1/finance/daily-closes` | FIN-财务台账 | `finance.daily_close.manage` | 接口级事件，以本附录为准 |
@@ -3140,6 +3158,7 @@
 | BAR-酒吧经营 | `getBarReservationInvitation` | `GET` | `/api/v1/bar/reservations/{id}/invitation` | 查询订卡邀请函 | `bar.reservation.view` | `not_applicable` / `not_applicable` | web | operation 级补充 |
 | BAR-酒吧经营 | `handoverBarServiceResponsibility` | `POST` | `/api/v1/bar/table-sessions/{id}/service-handover` | 登记真实服务交接 | `bar.table_session.transfer` | `bar.service.handover` / `bar.service.handover_failed` | web | operation 级补充 |
 | BAR-酒吧经营 | `issueBarReservationInvitation` | `POST` | `/api/v1/bar/reservations/{id}/invitation` | 签发订卡邀请函 | `bar.reservation.invitation.manage` | `bar.reservation_invitation_issued` / `bar.reservation_invitation_issue_failed` | web | operation 级补充 |
+| BAR-酒吧经营 | `joinBarShift` | `POST` | `/api/v1/bar/shifts/{shift_id}/join` | 加入本钱箱 | `bar.shift.manage` | `bar.shift_joined` / `bar.shift_join_failed` | web | operation 级补充 |
 | BAR-酒吧经营 | `listBarBillMerchantRewards` | `GET` | `/api/v1/bar/bills/{bill_id}/rewards` | 查询酒水账单产生的商户消费积分与成长值 | `bar.order.view` | `bar.bill_rewards.viewed` / `bar.bill_rewards.view_failed` | web | operation 级补充 |
 | BAR-酒吧经营 | `listBarBillOperations` | `GET` | `/api/v1/bar/bills/{bill_id}/operations` | 查询酒水账单拆并操作记录 | `bar.bill.split_merge` | `bar.bill_operation.list` / `bar.bill_operation.list_failed` | web | operation 级补充 |
 | BAR-酒吧经营 | `listBarBusinessDayConfigs` | `GET` | `/api/v1/bar-business-day-configs` | 查看授权酒吧的营业日配置目录与版本 | `bar.business_day.view` | `bar.business_day.viewed` / `bar.business_day.view_failed` | app, dealer_portal, kiosk, merchant_app, merchant_portal, miniapp, mobile_admin, staff_work_phone, web | operation 级补充 |
@@ -3176,6 +3195,7 @@
 | BAR-酒吧经营 | `redeemBarDrinkEntitlement` | `POST` | `/api/v1/bar/entitlement-redemptions/drink` | 酒水权益兑换承接 | `bar.entitlement.redeem` | `bar.entitlement_redeemed` / `bar.entitlement_redeem_failed` | staff_work_phone, web | operation 级补充 |
 | BAR-酒吧经营 | `reopenBarBill` | `POST` | `/api/v1/bar/bills/{bill_id}/reopen` | 账单反结 | `bar.bill.reopen` | `bar.bill_reopened` / `bar.bill_reopen_failed` | web | operation 级补充 |
 | BAR-酒吧经营 | `resolveBarBillAnomaly` | `POST` | `/api/v1/bar/bills/{bill_id}/anomaly/resolve` | 主管处置异常账单 | `bar.bill.anomaly.resolve` | `bar.bill_anomaly_resolved` / `bar.bill_anomaly_resolve_failed` | web | operation 级补充 |
+| BAR-酒吧经营 | `resolveBarShift` | `POST` | `/api/v1/bar/shifts/{shift_id}/resolve` | 交班复核平账 | `finance.daily_close.manage` | `bar.shift_resolved` / `bar.shift_resolve_failed` | web | operation 级补充 |
 | BAR-酒吧经营 | `restoreBarStaffBookingSuspension` | `POST` | `/api/v1/bar/staff-booking-suspensions/{id}/restore` | 店长复核恢复员工代订权限 | `bar.staff_booking.restore` | `bar.staff_booking_restored` / `bar.staff_booking_restore_failed` | web | operation 级补充 |
 | BAR-酒吧经营 | `revokeBarReservationInvitation` | `POST` | `/api/v1/bar/reservations/{id}/invitation/revoke` | 吊销订卡邀请函 | `bar.reservation.invitation.manage` | `bar.reservation_invitation_revoked` / `bar.reservation_invitation_revoke_failed` | web | operation 级补充 |
 | BAR-酒吧经营 | `saveBarArrivalReminderPolicy` | `PUT` | `/api/v1/bar/arrival-reminder-policies/{project_id}` | 配置最晚到店时间前提醒提前分钟数及上下限（按项目） | `bar.reservation.manage` | `bar.arrival_reminder_policy_updated` / `bar.arrival_reminder_policy_update_failed` | web | operation 级补充 |
@@ -3183,6 +3203,7 @@
 | BAR-酒吧经营 | `saveBarProductCategory` | `POST` | `/api/v1/bar/catalog/categories` | 新增或修改酒吧商品分类 | `bar.category.manage` | `bar.category.saved` / `bar.category.saved_failed` | web | operation 级补充 |
 | BAR-酒吧经营 | `saveBarVoidReasonCode` | `POST` | `/api/v1/bar/void-reason-codes` | 新增或修改退酒原因 | `bar.order_item.void_decide` | `bar.void_reason_code.saved` / `bar.void_reason_code.save_failed` | web | operation 级补充 |
 | BAR-酒吧经营 | `settleBarBill` | `POST` | `/api/v1/bar/bills/{bill_id}/settle` | 账单结清（可带一张本商户折扣券：核销并原子抵扣应付，一次结账一张） | `finance.payment.register` | `bar.bill.settled` / `bar.bill.settle_failed` | tablet, web, kiosk, staff_work_phone | operation 级补充 |
+| BAR-酒吧经营 | `signBarShift` | `POST` | `/api/v1/bar/shifts/{shift_id}/sign` | 交班单签字 | `bar.shift.manage` | `bar.shift_signed` / `bar.shift_sign_failed` | web | operation 级补充 |
 | BAR-酒吧经营 | `splitBarBill` | `POST` | `/api/v1/bar/bills/{bill_id}/split` | 拆分酒水账单 | `bar.bill.split_merge` | `bar.bill.split` / `bar.bill.split_failed` | web | operation 级补充 |
 | BAR-酒吧经营 | `splitBarTableSession` | `POST` | `/api/v1/bar/table-sessions/{session_id}/split` | 拆分酒水台位会话（拆台） | `bar.table_session.split` | `bar.table.split` / `bar.table.split_failed` | web | operation 级补充 |
 | BAR-酒吧经营 | `submitBarBusinessDayConfig` | `POST` | `/api/v1/bar-business-day-configs` | 提交酒吧营业日最高权限审批 | `bar.business_day.manage` | `bar.business_day.submit_completed` / `bar.business_day.submit_failed` | app, dealer_portal, kiosk, merchant_app, merchant_portal, miniapp, mobile_admin, staff_work_phone, web | operation 级补充 |
@@ -3194,6 +3215,7 @@
 | BAR-酒吧经营 | `uploadBarCatalogImage` | `POST` | `/api/v1/bar/catalog/images` | 上传酒吧商品/套餐图片 | `bar.product.manage` | `bar.catalog.image_uploaded` / `bar.catalog.image_uploaded_failed` | web | operation 级补充 |
 | BAR-酒吧经营 | `verifyBarReservationInvitationEntry` | `POST` | `/api/v1/bar/reservations/{id}/invitation/entry-verify` | 订卡邀请函入场核验 | `bar.table.guest_checkin` | `bar.reservation_invitation_entered` / `bar.reservation_invitation_entry_failed` | staff_work_phone, web | operation 级补充 |
 | BAR-酒吧经营 | `voidBarOrderItem` | `POST` | `/api/v1/bar/orders/{order_id}/void-item` | 退菜退酒 | `bar.order_item.void` | `bar.order_item_voided` / `bar.order_item_void_failed` | web | operation 级补充 |
+| BAR-酒吧经营 | `witnessBarShift` | `POST` | `/api/v1/bar/shifts/{shift_id}/witness` | 交班见证归档 | `finance.daily_close.manage` | `bar.shift_witnessed` / `bar.shift_witness_failed` | web | operation 级补充 |
 | CUS-客人端 | `applyCustomerStudentCertification` | `POST` | `/api/v1/customer/student-certifications` | 客人申请学生认证 | `not_applicable` | `customer.student_cert.applied` / `customer.student_cert.apply_failed` | app, miniapp | operation 级补充 |
 | CUS-客人端 | `approveCustomerBlacklistRequest` | `POST` | `/api/v1/customer-blacklist-requests/{request_id}/approve` | 批准黑名单申请的当前这一级（夜班值班经理批准 → 娱乐平台负责人终审，终审通过即执行） | `customer.blacklist.approve` | `customer.blacklist.approved` / `customer.blacklist.approve_failed` | web | operation 级补充 |
 | CUS-客人端 | `approveStudentCertification` | `POST` | `/api/v1/student-certifications/{certification_id}/approve` | 学生认证审核通过 | `ticket.student_cert.review` | `customer.student_cert.approved` / `customer.student_cert.approve_failed` | web | operation 级补充 |
@@ -3354,17 +3376,19 @@
 | EVD-事件证据 | `uploadEvidenceAttachment` | `POST` | `/api/v1/evidence/attachments/upload` | 上传证据照片/视频 | `evidence.attachment.create` | `evidence.attachment_uploaded` / `evidence.attachment_upload_failed` | web, staff_work_phone | operation 级补充 |
 | FIN-财务台账 | `approveArApAdjustment` | `POST` | `/api/v1/finance/ar-ap-adjustments/{id}/approve` | 锁定后补录审批决定 | `finance.locked_backfill.approve` | `finance.locked_backfill_approved` / `finance.locked_backfill_decision_failed` | web, mobile_admin | operation 级补充 |
 | FIN-财务台账 | `approveDividendStatement` | `POST` | `/api/v1/finance/dividends/statements/{id}/approve` | 审批通过：pending_review → approved；净发放额>0 时给主理人挂应付（source_type=dividend_payout，一单一挂）；提交人不得审批自己提交的单 | `finance.dividend.manage` | `dividend.approved` / `dividend.approve_failed` | web | operation 级补充 |
+| FIN-财务台账 | `archiveDailyClose` | `POST` | `/api/v1/finance/daily-closes/{id}/archive` | 归档日结 | `finance.daily_close.lock` | `finance_daily_close.archived` / `finance_daily_close.archive_failed` | web | operation 级补充 |
 | FIN-财务台账 | `billPropertyFee` | `POST` | `/api/v1/finance/property-fee/bills` | 物业费按期计费（每平米固定单价 × 面积，不退不补） | `finance.property_fee.manage` | `finance_property_fee.billed` / `finance_property_fee.bill_failed` | web | operation 级补充 |
 | FIN-财务台账 | `billTurnoverRent` | `POST` | `/api/v1/finance/turnover-rent/bills` | 营业额抽成计费生成应收 | `finance.turnover_rent.bill` | `finance.turnover_rent.billed` / `finance.turnover_rent.bill_failed` | web | operation 级补充 |
 | FIN-财务台账 | `closeFinanceReconciliationDifference` | `POST` | `/api/v1/finance/reconciliation/differences/{difference_id}/close` | 正式关闭对账差异 | `finance.reconciliation.resolve` | `finance.reconciliation.difference_closed` / `finance.reconciliation.difference_close_failed` | web | operation 级补充 |
 | FIN-财务台账 | `computeDividendStatements` | `POST` | `/api/v1/finance/dividends/statements/compute` | 期间分红作业：对每个生效中方案出计算单（净利润=收入−成本−费用；幂等可重跑，草稿/预览/驳回作废重算，进入审批流跳过） | `finance.dividend.manage` | `dividend.computed` / `dividend.compute_failed` | web | operation 级补充 |
+| FIN-财务台账 | `confirmDailyClose` | `POST` | `/api/v1/finance/daily-closes/{id}/confirm` | 确认日结 | `finance.daily_close.lock` | `finance_daily_close.confirmed` / `finance_daily_close.confirm_failed` | web | operation 级补充 |
 | FIN-财务台账 | `confirmDividendLegalAmount` | `POST` | `/api/v1/finance/dividends/statements/{id}/legal-confirmation` | 财务登记依法可分配金额（仅正式草稿/已驳回单；本次分配取经营口径与核定额较小者并重算） | `finance.dividend.manage` | `dividend.legal_confirmed` / `dividend.legal_confirm_failed` | web | operation 级补充 |
 | FIN-财务台账 | `confirmFinanceRefundResult` | `POST` | `/api/v1/finance/refunds/{refund_id}/confirm` | 另一人核实已有执行记录的实际退款结果 | `finance.refund.create` | `finance_refund.confirmed` / `finance_refund.confirm_failed` | web | operation 级补充 |
 | FIN-财务台账 | `confirmOfflinePayment` | `POST` | `/api/v1/finance/payments/{payment_id}/confirm-offline` | 现金或 POS 线下收款确认 | `finance.payment.register` | `finance_payment.registered` / `finance_payment.register_failed` | web | operation 级补充 |
 | FIN-财务台账 | `confirmPayrollBankPaymentResult` | `POST` | `/api/v1/finance/payroll/payment-attempts/{id}/result` | 核实工资银行付款实际结果 | `finance.payroll.payment.register` | `finance.payroll.result` / `finance.payroll.payment_failed` | app, dealer_portal, kiosk, merchant_app, merchant_portal, miniapp, mobile_admin, staff_work_phone, web | operation 级补充 |
 | FIN-财务台账 | `createArApItem` | `POST` | `/api/v1/finance/ar-ap-items` | 手工新增应收应付台账项 | `finance.ar_ap.manage` | `finance_ar_ap.created` / `finance_ar_ap.create_failed` | web | operation 级补充 |
 | FIN-财务台账 | `createArApPayment` | `POST` | `/api/v1/finance/ar-ap-items/{id}/payments` | 应收应付收付款登记 | `finance.payment.register` | `finance_payment.registered` / `finance_payment.register_failed` | web | operation 级补充 |
-| FIN-财务台账 | `createDailyClose` | `POST` | `/api/v1/finance/daily-closes` | 日结锁定 | `finance.daily_close.lock` | `finance_daily_close.locked` / `finance_daily_close.lock_failed` | web | operation 级补充 |
+| FIN-财务台账 | `createDailyClose` | `POST` | `/api/v1/finance/daily-closes` | 生成日结 | `finance.daily_close.lock` | `finance_daily_close.generated` / `finance_daily_close.generate_failed` | web | operation 级补充 |
 | FIN-财务台账 | `createDividendPlan` | `POST` | `/api/v1/finance/dividends/plans` | 新建分红方案（比例/税率/周期/基数构成全可配，80/20 仅默认值） | `finance.dividend.manage` | `dividend.plan_created` / `dividend.plan_create_failed` | web | operation 级补充 |
 | FIN-财务台账 | `createFinanceReconciliationDifference` | `POST` | `/api/v1/finance/reconciliation/differences` | 创建对账差异 | `finance.reconciliation.difference.create` | `finance.reconciliation.difference_created` / `finance.reconciliation.difference_create_failed` | web | operation 级补充 |
 | FIN-财务台账 | `createFinanceRefund` | `POST` | `/api/v1/finance/refunds` | 创建财务退款记录 | `finance.refund.create` | `finance_refund.created` / `finance_refund.create_failed` | web | operation 级补充 |
@@ -3380,6 +3404,7 @@
 | FIN-财务台账 | `initiateInternalPayment` | `POST` | `/api/v1/finance/internal-payables/{ar_ap_item_id}/payment-attempts` | 登记内部应付已发起付款(银行在途) | `finance.payment.register` | `finance.internal_payment.initiated` / `finance.internal_payment.initiate_failed` | web | operation 级补充 |
 | FIN-财务台账 | `listArApItems` | `GET` | `/api/v1/finance/ar-ap-items` | 查询应收应付台账 | `finance.ar_ap.view` | `finance_ar_ap.viewed` / `finance_ar_ap.view_failed` | web | operation 级补充 |
 | FIN-财务台账 | `listArApPayments` | `GET` | `/api/v1/finance/ar-ap-items/{id}/payments` | 读取所选台账原收付款流水 | `finance.ar_ap.view` | `ar_ap_payment.listed` / `ar_ap_payment.list_failed` | web | operation 级补充 |
+| FIN-财务台账 | `listDailyCloseAdjustments` | `GET` | `/api/v1/finance/daily-closes/{id}/adjustments` | 查询日结的锁定后补录 | `finance.daily_close.manage` | `finance.daily_close_adjustment.viewed` / `finance.daily_close_adjustment.view_failed` | web | operation 级补充 |
 | FIN-财务台账 | `listDailyCloses` | `GET` | `/api/v1/finance/daily-closes` | 查询日结批次 | `finance.daily_close.manage` | `finance.daily_close.viewed` / `finance.daily_close.view_failed` | web | operation 级补充 |
 | FIN-财务台账 | `listDailyCloseSummaries` | `GET` | `/api/v1/finance/daily-closes/{id}/summaries` | 查询日结七源汇总 | `finance.daily_close.manage` | `finance.daily_close_summary.viewed` / `finance.daily_close_summary.view_failed` | web, mobile_admin | operation 级补充 |
 | FIN-财务台账 | `listDividendPlans` | `GET` | `/api/v1/finance/dividends/plans` | 分红方案列表（商户 scope 账号只见本商户） | `finance.dividend.view` | `dividend.plans_listed` / `dividend.plans_list_failed` | web, merchant_portal, merchant_app | operation 级补充 |
@@ -3393,6 +3418,8 @@
 | FIN-财务台账 | `listReconciliationDifferences` | `GET` | `/api/v1/finance/reconciliation/differences` | 对账差异 | `finance.reconciliation.view` | `finance_reconciliation.difference_found` / `finance_reconciliation.view_failed` | web | operation 级补充 |
 | FIN-财务台账 | `listRefundAuthorityLimits` | `GET` | `/api/v1/finance/refund-authority/limits` | 查询退款自助额度配置 | `refund.authority.view` | `not_applicable` / `not_applicable` | web | operation 级补充 |
 | FIN-财务台账 | `listRefundAutoRules` | `GET` | `/api/v1/finance/refund-authority/rules` | 查询退款自动放行规则配置 | `refund.authority.view` | `not_applicable` / `not_applicable` | web | operation 级补充 |
+| FIN-财务台账 | `lockDailyClose` | `POST` | `/api/v1/finance/daily-closes/{id}/lock` | 锁定日结 | `finance.daily_close.lock` | `finance_daily_close.locked` / `finance_daily_close.lock_failed` | web | operation 级补充 |
+| FIN-财务台账 | `markDailyCloseFinal` | `POST` | `/api/v1/finance/daily-closes/{id}/final-marks` | 五类数据最终标记 | `finance.daily_close.lock` | `finance_daily_close.final_marked` / `finance_daily_close.final_mark_failed` | web | operation 级补充 |
 | FIN-财务台账 | `markDividendStatementPaid` | `POST` | `/api/v1/finance/dividends/statements/{id}/mark-paid` | 标记发放：approved → paid（实际打款走应收应付台账既有付款确认流程） | `finance.dividend.manage` | `dividend.paid_marked` / `dividend.mark_paid_failed` | web | operation 级补充 |
 | FIN-财务台账 | `postInventoryVariance` | `POST` | `/api/v1/finance/inventory-variances/post` | 库存差异复核入账为 AR/AP | `finance.inventory_variance.post` | `finance.inventory_variance.posted` / `finance.inventory_variance.post_failed` | web | operation 级补充 |
 | FIN-财务台账 | `postponeInternalPaymentForFunds` | `POST` | `/api/v1/finance/internal-payables/{ar_ap_item_id}/funds-insufficient` | 资金不足顺延至下一个付账日 | `finance.payment.register` | `finance.internal_payment.postponed` / `finance.internal_payment.postpone_failed` | web | operation 级补充 |

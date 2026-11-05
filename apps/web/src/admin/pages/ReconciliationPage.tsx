@@ -13,6 +13,7 @@ import { TraceLink } from "../components/TraceLink";
 import { formatBusinessStatus } from "../i18n/statusLabels";
 import { RowDetailDrawer, type RowDetailField } from "../components/RowDetailDrawer";
 import { FinanceDailyClosePanel } from "./FinanceDailyClosePanel";
+import { BarShiftPanel } from "./BarShiftPanel";
 
 const RESOLVE_PERM = ["finance.reconciliation.resolve"];
 
@@ -289,6 +290,8 @@ export function ReconciliationPage({ api, user, setActionResult, setGlobalError,
       </AdminDataState>
       {/* 第十八批 P 段第 133 条 133-R3（ENUM:188 对账口径含「按日结」）：日结区块放在 AdminDataState 之外——没有第三方对账批次和差异时（只收现金、POS 的酒吧正常就是这样）仍要能查与锁日结；KPI 聚焦视图只放被点那张承载表。 */}
       {kpiFocus ? null : <FinanceDailyClosePanel api={api} user={user} effectivePermissions={effectivePermissions} setGlobalError={setGlobalError} />}
+      {/* 第十八批 R 段第 142 条 142-R3（BSM:1848「财务看退款、差异、日结和结算依据。」；PGM:664「差异认定……由该酒吧对应的财务 BP 负责」）：收银交班复核平账与见证归档区块，同在 AdminDataState 之外、KPI 聚焦视图不放。 */}
+      {kpiFocus ? null : <BarShiftPanel reviewOnly api={api} user={user} effectivePermissions={effectivePermissions} setActionResult={setActionResult} setGlobalError={setGlobalError} />}
       <RowDetailDrawer open={detail !== null} title={detail?.title ?? ""} fields={detail?.fields ?? []} onClose={() => setDetail(null)} />
     </section>
   );

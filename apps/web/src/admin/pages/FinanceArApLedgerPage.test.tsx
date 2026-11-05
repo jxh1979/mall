@@ -1,4 +1,4 @@
-// 文件版本：V0.06
+// 文件版本：V0.07
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
@@ -141,6 +141,19 @@ describe("FinanceArApLedgerPage 补偿应付已付追收", () => {
     await waitFor(() => expect(screen.queryByTestId("finance-ledger-row-ar-cpr")).not.toBeNull());
     fireEvent.click(screen.getByTestId("finance-ledger-row-ar-cpr"));
     await waitFor(() => expect(screen.queryByText("补偿应付已付追收")).not.toBeNull());
+  });
+});
+
+// 第十八批 R 段第 142 条 142-R1（BSM:1081「长款当期计入该商户营业外收入并单独留痕可查」）：长款复核平账写的内部核算台账显中文来源。
+describe("FinanceArApLedgerPage 收银长款", () => {
+  it("台账详情展示来源类型中文标签（收银长款（营业外收入））", async () => {
+    const rows: FinanceLedgerRow[] = [
+      { id: "ia-ov", itemNo: "ARAP-OV-1", direction: "internal_accounting", status: "settled", amountCent: 100, unpaidAmountCent: 0, dueDate: "2026-11-04", sourceType: "bar_shift_overage" },
+    ];
+    renderPage(makeApi(vi.fn().mockResolvedValue({ items: rows, total: 1, page: 1, size: 10 })));
+    await waitFor(() => expect(screen.queryByTestId("finance-ledger-row-ia-ov")).not.toBeNull());
+    fireEvent.click(screen.getByTestId("finance-ledger-row-ia-ov"));
+    await waitFor(() => expect(screen.queryByText("收银长款（营业外收入）")).not.toBeNull());
   });
 });
 

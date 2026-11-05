@@ -23,22 +23,25 @@ import org.springframework.stereotype.Component;
  * 出厂起点 10:00。酒吧没有自己的版本时也是出厂 10:00，不借所在综合体的版本。时区取综合体已批准版本的所在地时区，
  * 没有版本取 {@link LocalZone}。版本只从 effective_at 起生效（营业日配置的变更只影响未来），某营业日跨版本切换时
  * 窗口取各段之并（切换处首尾相接）；起点调晚、生效时点又落在当日新旧起点之间的，起用顺延到当日新起点（一个时刻只属于
- * 一个营业日）。闭店时点（07:00 起至起点前为非营业时段）仍归正在进行的营业日，只供页面展示。
+ * 一个营业日）。闭店时点（07:00 起至起点前为非营业时段）仍归正在进行的营业日；闭店时刻另供日结五类最终标记判「闭店之后」
+ * （{@link #closeAt}，第十八批 R 段 143-R2）。
  *
  * <p>游乐核销与场次不经本类：无已批准版本时拒绝，见 AmusementBusinessDayService。
  */
 @Component
-// 文件版本：V0.02
+// 文件版本：V0.03
 public class BusinessDayResolver {
 
     /** 出厂起点：上午 10:00。 */
     public static final int FACTORY_CUTOFF_HOUR = 10;
+    /** 出厂闭店：次日 07:00（BSM:1682「出厂默认起点为上午 10:00、闭店为次日 07:00」）。 */
+    public static final int FACTORY_CLOSE_HOUR = 7;
     static final long CACHE_TTL_MS = 60_000;
 
-    private record Segment(Instant from, int cutoffHour, ZoneId zone) {}
+    private record Segment(Instant from, int cutoffHour, int closeHour, ZoneId zone) {}
     private record Timeline(List<Segment> segments, long loadedAt) {}
 
-    private static final List<Segment> FACTORY = List.of(new Segment(null, FACTORY_CUTOFF_HOUR, LocalZone.ID));
+    private static final List<Segment> FACTORY = List.of(new Segment(null, FACTORY_CUTOFF_HOUR, FACTORY_CLOSE_HOUR, LocalZone.ID));
 
     private final ObjectProvider<NamedParameterJdbcTemplate> jdbcTemplate;
     private final Map<String, Timeline> cache = new ConcurrentHashMap<>();
@@ -68,6 +71,16 @@ public class BusinessDayResolver {
     /** 营业日结束时刻（不含）。 */
     public Instant end(String projectId, String barId, LocalDate businessDate) {
         return window(segments(projectId, barId), businessDate)[1];
+    }
+
+    /**
+     * 第十八批 R 段 143-R2（ENUM:190「由各域主管公司的财务岗在该营业日闭店之后完成核对并逐类标记」；BSM:1682「出厂默认起点为上午 10:00、
+     * 闭店为次日 07:00」）：营业日的闭店时刻＝营业日次日的闭店整点，闭店时点与时区取该营业日起点所在的版本（酒吧按该酒吧，否则按综合体）。
+     */
+    public java.time.ZonedDateTime closeAt(String projectId, String barId, LocalDate businessDate) {
+        List<Segment> segments = segments(projectId, barId);
+        Segment segment = segmentAt(segments, window(segments, businessDate)[0]);
+        return businessDate.plusDays(1).atTime(segment.closeHour(), 0).atZone(segment.zone());
     }
 
     /** 酒吧＝业态为酒吧的商户（V267），酒吧 id 即商户 id：该商户是酒吧时返回它，否则 null（按综合体营业日）。 */
@@ -251,18 +264,18 @@ public class BusinessDayResolver {
                      WHERE m.id = :id AND c.status = 'approved' AND c.effective_at <= now()
                      ORDER BY c.effective_at DESC LIMIT 1
                     """, Map.of("id", barId), String.class).stream().findFirst().map(ZoneId::of).orElse(LocalZone.ID);
-            segments.add(new Segment(null, FACTORY_CUTOFF_HOUR, zone));
+            segments.add(new Segment(null, FACTORY_CUTOFF_HOUR, FACTORY_CLOSE_HOUR, zone));
             segments.addAll(template.query("""
-                    SELECT effective_at, cutoff_hour FROM bar_business_day_configs
+                    SELECT effective_at, cutoff_hour, close_hour FROM bar_business_day_configs
                      WHERE bar_id = :id AND status = 'approved' ORDER BY effective_at
-                    """, Map.of("id", barId), (rs, n) -> new Segment(rs.getTimestamp(1).toInstant(), rs.getInt(2), zone)));
+                    """, Map.of("id", barId), (rs, n) -> new Segment(rs.getTimestamp(1).toInstant(), rs.getInt(2), rs.getInt(3), zone)));
         } else {
             segments.add(FACTORY.getFirst());
             segments.addAll(template.query("""
-                    SELECT effective_at, cutoff_hour, zone_id FROM amusement_business_day_configs
+                    SELECT effective_at, cutoff_hour, zone_id, close_hour FROM amusement_business_day_configs
                      WHERE project_id = :id AND status = 'approved' ORDER BY effective_at
                     """, Map.of("id", projectId), (rs, n) -> new Segment(rs.getTimestamp(1).toInstant(), rs.getInt(2),
-                    ZoneId.of(rs.getString(3)))));
+                    rs.getInt(4), ZoneId.of(rs.getString(3)))));
         }
         List<Segment> loaded = joined(segments);
         cache.put(key, new Timeline(loaded, now));
@@ -281,7 +294,7 @@ public class BusinessDayResolver {
                     from = newStart;
                 }
             }
-            out.add(new Segment(from, segment.cutoffHour(), segment.zone()));
+            out.add(new Segment(from, segment.cutoffHour(), segment.closeHour(), segment.zone()));
         }
         return List.copyOf(out);
     }

@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 // 订台、我的订台与邀请函、接受邀请（BSM「官方 App 和小程序都可以订台，订台需要支付定金；订台页面须写明该卡座适用的最低消费金额与服务费比例」；
 // BSM「客人自助订台必须支付定金……每一笔订台都必须填写最晚到店时间」；BSM「订卡客人可在 App/小程序查看自己的订卡邀请函二维码（注明酒吧、卡座、
 // 可进人数），转发给朋友；朋友在 App/小程序确认接受后占一个名额……可把尚未入场的被邀请人移出邀请函」；第十三批裁决第 4 条「酒吧员工确认后签发」）：
@@ -201,6 +201,7 @@ test("invitationAcceptPreviewThenConfirm", async () => {
   const { requests } = installWx({
     "GET /api/v1/customer/bar-invitations/preview": ok({
       reservation_id: "r1", bar_id: "bar-1", bar_name: "蓝调酒吧", table_id: "T1", table_name: "A1 卡座", reserved_at: "2026-10-25T13:00:00Z", capacity: 6, remaining: 3,
+      holder_claimable: false,
     }),
     "POST /api/v1/customer/bar-invitations/confirm": ok({ id: "m5", reservation_id: "r1", bar_id: "bar-1", is_holder: false, status: "confirmed" }),
     "GET /api/v1/customer/bar-invitations/r1/entry-code": entryCode,
@@ -213,12 +214,56 @@ test("invitationAcceptPreviewThenConfirm", async () => {
   expect(requests.some((r) => r.key.endsWith("/confirm"))).toBe(false);
   expect(text(q(page, "#invitation-preview"))).toContain("蓝调酒吧 · A1 卡座 · 可进 6 人");
   expect(text(q(page, "#invitation-preview"))).toContain("剩余 3 个名额");
+  // 订台已有订台人：只有「确认接受」，只能作参与者。
+  expect(q(page, "#invitation-accept-holder")).toBeNull();
+  expect(text(q(page, "#invitation-accept"))).toContain("确认接受");
   fire(page, ["#invitation-accept"], "tap");
   await flush();
   expect(requests.find((r) => r.key === "POST /api/v1/customer/bar-invitations/confirm")?.body)
     .toMatchObject({ invitation_token: "INV:TOK1", invitation_signature: "SIG1", table_id: "T1", capacity: 6 });
   expect(text(q(page, "#invitation-accepted"))).toContain("已接受邀请");
   expect(q(page, "#entry-code", "#qr-image")).not.toBeNull();
+});
+
+// 第十八批 R 段第 152 条 152-R3（第十八批裁决 34「销售可以通过微信等发送邀请函，客户点击后确定自己是订台人还是参与者」；BSM「邀请函上的人分两种身份：
+// 开卡人（订下这个卡座的人）与被邀请人（接受邀请占用名额的人）」）：员工代订、一体机订台还没有订台人，打开邀请给「我是订台人／我是参与者」。
+test("invitationHolderClaimableOffersHolderOrParticipant", async () => {
+  const preview = ok({
+    reservation_id: "r1", bar_id: "bar-1", bar_name: "蓝调酒吧", table_id: "T1", table_name: "A1 卡座", reserved_at: "2026-10-25T13:00:00Z", capacity: 6, remaining: 5,
+    holder_claimable: true,
+  });
+  const query = { token: "INVTOK1", sig: "SIG1", table_id: "T1", capacity: "6" };
+  const holder = installWx({
+    "GET /api/v1/customer/bar-invitations/preview": preview,
+    "POST /api/v1/customer/bar-invitations/confirm": ok({ id: "m0", reservation_id: "r1", bar_id: "bar-1", is_holder: true, status: "confirmed" }),
+    "GET /api/v1/customer/bar-invitations/r1/entry-code": entryCode,
+  }, TOKEN);
+  const page = mount("pages/invitation/index", { query });
+  await flush();
+  expect(text(q(page, "#invitation-preview"))).toContain("这张订台还没有订台人");
+  expect(text(q(page, "#invitation-accept-holder"))).toContain("我是订台人");
+  expect(text(q(page, "#invitation-accept"))).toContain("我是参与者");
+  fire(page, ["#invitation-accept-holder"], "tap");
+  await flush();
+  expect(holder.requests.find((r) => r.key === "POST /api/v1/customer/bar-invitations/confirm")?.body)
+    .toMatchObject({ invitation_token: "INVTOK1", invitation_signature: "SIG1", table_id: "T1", capacity: 6, as_holder: true });
+  expect(text(q(page, "#invitation-accepted"))).toContain("你已成为这张订台的订台人");
+  expect(text(q(page, "#invitation-accepted"))).toContain("可在「我的订台」查看名单、转发邀请函");
+  expect(q(page, "#entry-code", "#qr-image")).not.toBeNull();
+
+  freshModules();
+  const friend = installWx({
+    "GET /api/v1/customer/bar-invitations/preview": preview,
+    "POST /api/v1/customer/bar-invitations/confirm": ok({ id: "m5", reservation_id: "r1", bar_id: "bar-1", is_holder: false, status: "confirmed" }),
+    "GET /api/v1/customer/bar-invitations/r1/entry-code": entryCode,
+  }, TOKEN);
+  const other = mount("pages/invitation/index", { query });
+  await flush();
+  fire(other, ["#invitation-accept"], "tap");
+  await flush();
+  expect(friend.requests.find((r) => r.key === "POST /api/v1/customer/bar-invitations/confirm")?.body).toMatchObject({ invitation_token: "INVTOK1", as_holder: false });
+  expect(text(q(other, "#invitation-accepted"))).toContain("已接受邀请");
+  expect(text(q(other, "#invitation-accepted"))).not.toContain("订台人");
 });
 
 test("invitationScanAcceptsOnlyInvitationLinksAndNeedsLogin", async () => {

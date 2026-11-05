@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.08
+// 文件版本：V0.09
 
 import com.complex.platform.finance.PaymentIntentRecord;
 import java.util.List;
@@ -43,6 +43,10 @@ public interface BarRepository {
 
     /** OBS-13-03-R1：员工代订录入的客人手机号加密留存（只供订台短信，不进订台记录、不回显）。内存桩默认不存。 */
     default void saveReservationCustomerPhone(String reservationId, String phone) {
+    }
+
+    /** 第十八批 R 段第 152 条 152-R2：客人打开邀请函选「我是订台人」，尚无订台人的订台归到本人名下、开卡人占位行改成本人。内存桩默认不改。 */
+    default void claimReservationHolder(String reservationId, String customerId) {
     }
 
     /** OBS-13-03-R1：员工代订留存的客人手机号（解密后）。内存桩默认没有。 */
@@ -333,7 +337,7 @@ public interface BarRepository {
         return Optional.empty();
     }
 
-    /** 同一吧台同一收银员当前未关闭的班次（防重复开班）。 */
+    /** 同一吧台同一收银员当前未关闭的班次（防重复开班）；第十八批 R 段第 142 条 142-R4：该收银员是开班中班次成员的也算。 */
     default Optional<BarShiftRecord> findOpenShift(String barId, String cashierUserId) {
         return Optional.empty();
     }
@@ -342,11 +346,18 @@ public interface BarRepository {
         return List.of();
     }
 
+    /** 第十八批 R 段第 142 条 142-R3：酒吧（bar_id 的商户）归属给定项目的班次；集合为空返回空。 */
+    default List<BarShiftRecord> listShiftsInProjects(java.util.Set<String> projectIds) {
+        return List.of();
+    }
+
     /**
      * 班结时按班次时间窗口 [from, to) 聚合本吧台（可选本收银员）的系统应收：
      * 各支付方式结算流水 / 退款（refunded_at 落窗口）/ 小费（结算账单 tip）。只读聚合，不改账单。
+     * 第十八批 R 段第 142 条 142-R4：收款人含本班次（shiftId）钱箱成员，只计其加入时点之后的收款。
      */
     default BarShiftReconciliationSnapshot aggregateShiftReconciliation(
+            String shiftId,
             String barId,
             String cashierUserId,
             java.time.Instant from,
@@ -354,6 +365,32 @@ public interface BarRepository {
             Optional<String> merchantScope
     ) {
         return BarShiftReconciliationSnapshot.empty();
+    }
+
+    /** 第十八批 R 段第 142 条 142-R1：财务复核平账（已班结且待复核 → needs_review=FALSE，记复核人、时点与长款原因），返回改到的行数。 */
+    default int resolveShift(String shiftId, String resolvedByUserId, java.time.Instant resolvedAt, String overageCause,
+            String responsibleUserId) {
+        return 0;
+    }
+
+    /** 第十八批 R 段第 142 条 142-R2：交班单签字（successor＝接班人一栏，否则收银员一栏），只签已班结、已平账且该栏未签的班次，返回改到的行数。 */
+    default int signShift(String shiftId, boolean successor, java.time.Instant signedAt) {
+        return 0;
+    }
+
+    /** 第十八批 R 段第 142 条 142-R2：财务见证归档（没有接班人的同刻代签接班人一栏），只收已平账、双方已签、未见证的班次，返回改到的行数。 */
+    default int witnessShift(String shiftId, String witnessedByUserId, java.time.Instant witnessedAt) {
+        return 0;
+    }
+
+    /** 第十八批 R 段第 142 条 142-R4：登记加入本钱箱的当班收银员，返回写入的行数。 */
+    default int addShiftMember(String shiftId, String userId, java.time.Instant joinedAt) {
+        return 0;
+    }
+
+    /** 第十八批 R 段第 142 条 142-R4：本钱箱成员在交班单上签本人一栏（该栏未签才写），返回改到的行数。 */
+    default int signShiftMember(String shiftId, String userId, java.time.Instant signedAt) {
+        return 0;
     }
 
     /** V271 存档理由定向写入(reason 非空=存档,null=取消存档清空)。 */

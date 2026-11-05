@@ -1,6 +1,8 @@
-// 文件版本：V0.12
+// 文件版本：V0.13
 import React from "react";
 import { QRCodeSVG } from "qrcode.react";
+import { buildCustomerLink } from "@complex/customer-core/links";
+import { customerLinkHost } from "../client/adminClient";
 import { BarServiceResponsibilityPanel } from "./BarServiceResponsibilityPanel";
 import { BarSalesBackfillPanel, guestSourceLabel } from "./BarSessionBackfill";
 import { AdminDataState } from "../components/AdminDataState";
@@ -80,6 +82,7 @@ export function BarTableSessionsPage({ api, setActionResult, setGlobalError, eff
   const [splitAssignments, setSplitAssignments] = React.useState("");
   const [actionReason, setActionReason] = React.useState("主管审批通过");
   const [invitationMemberId, setInvitationMemberId] = React.useState("");
+  const [invitationCopyNotice, setInvitationCopyNotice] = React.useState<{ link: string; text: string } | null>(null);
   const [barError, setBarError] = React.useState("");
   const [submitting, setSubmitting] = React.useState(false);
   // 引导式流程 phase-5：新建卡座收起为主按钮 + 分步引导弹窗（订台/开台/转合拆等操作流不动）。
@@ -429,6 +432,25 @@ export function BarTableSessionsPage({ api, setActionResult, setGlobalError, eff
     }
   }
 
+  // 第十八批 R 段 152-R4（裁决 34「销售可以通过微信等发送邀请函」）：已签发的订台生成客人深链（与客人 App 开卡人转发同一格式）。
+  const invitationLink = selectedReservation?.invitationStatus === "active"
+    ? buildCustomerLink(customerLinkHost(), "invitation", {
+        token: selectedReservation.invitationToken ?? "",
+        sig: selectedReservation.invitationSignature ?? "",
+        table_id: selectedReservation.tableId ?? "",
+        capacity: String(selectedReservation.invitationCapacity ?? ""),
+      })
+    : null;
+
+  async function copyInvitationLink(link: string) {
+    try {
+      await navigator.clipboard.writeText(link);
+      setInvitationCopyNotice({ link, text: "已复制，可通过微信等发给订台客人" });
+    } catch {
+      setInvitationCopyNotice({ link, text: "复制失败，请手动选中上方链接复制" });
+    }
+  }
+
   const pagedSessions = usePagedRows(sessions, 10);
   const pagedReservations = usePagedRows(reservations, 10);
 
@@ -553,13 +575,24 @@ export function BarTableSessionsPage({ api, setActionResult, setGlobalError, eff
         {barError ? <div data-testid="bar-checkin-error" className="admin-inline-error">{barError}</div> : null}
 
         <h3>订卡邀请函</h3>
-        <p className="admin-muted-action">客人自助订卡后，由酒吧员工在此确认订台并签发邀请函（开卡人在 App/小程序转发给朋友，朋友确认接受后占名额）；门口核验被邀请人出示的本人动态入场码，总人数受卡座可进人数约束。</p>
+        <p className="admin-muted-action">客人自助订卡、员工代订或一体机订台后，由酒吧员工在此确认并签发；员工代订与一体机订台签发后复制邀请链接（或出示二维码），由销售通过微信等发给订台客人，客人打开后选「我是订台人」（订台归到名下，成为开卡人）或「我是参与者」（占一个名额）；门口核验本人动态入场码。</p>
         <div className="admin-form-row">
           <HighRiskConfirm label="确认并签发" impact="确认选中订台有效并签发订卡邀请函，开卡人可在 App/小程序查看并转发给朋友占用入场名额。" disabled={submitting} precheck={() => requireSelectedReservation()} onConfirm={() => void runInvitationAction("issue")} permissionsState={effectivePermissions} permissions={[BAR_INVITATION_PERMISSION]} irreversible={false} data-testid="bar-invitation-issue" />
           <HighRiskConfirm label="吊销邀请函" impact="将吊销选中订台的邀请函，已转发链接立即失效、未入场的朋友名额被收回。" disabled={submitting} precheck={() => requireSelectedReservation()} onConfirm={() => void runInvitationAction("revoke")} permissionsState={effectivePermissions} permissions={[BAR_INVITATION_PERMISSION]} data-testid="bar-invitation-revoke" />
           <input data-testid="bar-invitation-member" aria-label="本人动态入场码" value={invitationMemberId} onChange={(event) => setInvitationMemberId(event.target.value)} placeholder="请出示本人动态入场码（扫码或粘贴）" />
           <PermissionButton permissionsState={effectivePermissions} permissions={[BAR_CHECKIN_PERMISSION]} disabled={submitting} onClick={() => void runInvitationAction("entry")} data-testid="bar-invitation-entry">门口入场核验</PermissionButton>
         </div>
+        {invitationLink ? (
+          <div className="admin-state" data-testid="bar-invitation-share">
+            <p>{tables.find((table) => table.id === selectedReservation?.tableId)?.tableName ?? selectedReservation?.tableId} · 可进 {selectedReservation?.invitationCapacity} 人</p>
+            <QRCodeSVG value={invitationLink} size={180} level="M" title="订卡邀请函二维码" />
+            <p data-testid="bar-invitation-link">{invitationLink}</p>
+            <button type="button" data-testid="bar-invitation-copy" onClick={() => void copyInvitationLink(invitationLink)}>复制邀请链接</button>
+            {invitationCopyNotice?.link === invitationLink ? <span className="admin-muted-action">{invitationCopyNotice.text}</span> : null}
+          </div>
+        ) : (
+          <p className="admin-muted-action">签发后可在此复制邀请链接</p>
+        )}
 
         <h3>开台会话</h3>
         <div className="admin-table-scroll">

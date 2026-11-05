@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.08
+// 文件版本：V0.09
 import static com.complex.platform.common.api.ApiRequests.requireIdempotencyKey;
 
 import com.complex.platform.access.AuthorizationService;
@@ -347,7 +347,11 @@ public class BarController {
 
     @GetMapping("/shifts")
     public ApiResponse<PageResponse<BarShiftRecord>> listShifts() {
-        authorizationService.requirePermission("bar.shift.manage");
+        // 第十八批 R 段第 142 条 142-R3（BSM:1848「财务看退款、差异、日结和结算依据。」；PGM:664「差异认定……由该酒吧对应的财务 BP 负责」）：
+        // 持交班管理码照旧；否则须持日结管理码（对账页收银交班复核区块，服务层按该码可触及的项目列）。
+        if (!authorizationService.currentActorHasPermission("bar.shift.manage")) {
+            authorizationService.requirePermission(BarShiftService.FINANCE_REVIEW);
+        }
         return ApiResponse.ok(service.listShifts());
     }
 
@@ -366,6 +370,50 @@ public class BarController {
         authorizationService.requirePermission("bar.shift.close");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.closeShift(shiftId, request));
+    }
+
+    // 第十八批 R 段第 142 条 142-R4：加入同一钱箱（多人共同使用同一钱箱当班，加入后其收款并入本班次）。
+    @PostMapping("/shifts/{shift_id}/join")
+    public ApiResponse<BarShiftRecord> joinShift(
+            @PathVariable("shift_id") String shiftId,
+            @RequestBody(required = false) @jakarta.validation.Valid BarShiftActionRequest request
+    ) {
+        authorizationService.requirePermission("bar.shift.manage");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.joinShift(shiftId, request));
+    }
+
+    // 第十八批 R 段第 142 条 142-R1：财务复核平账（短款确认已当场补足、长款登记原因并计该商户营业外收入）。
+    @PostMapping("/shifts/{shift_id}/resolve")
+    public ApiResponse<BarShiftRecord> resolveShift(
+            @PathVariable("shift_id") String shiftId,
+            @RequestBody(required = false) @jakarta.validation.Valid BarShiftResolveRequest request
+    ) {
+        authorizationService.requirePermission("finance.daily_close.manage");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.resolveShift(shiftId, request));
+    }
+
+    // 第十八批 R 段第 142 条 142-R2：交班单签字（当班收银员与接班人各签本人一栏）。
+    @PostMapping("/shifts/{shift_id}/sign")
+    public ApiResponse<BarShiftRecord> signShift(
+            @PathVariable("shift_id") String shiftId,
+            @RequestBody(required = false) @jakarta.validation.Valid BarShiftActionRequest request
+    ) {
+        authorizationService.requirePermission("bar.shift.manage");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.signShift(shiftId, request));
+    }
+
+    // 第十八批 R 段第 142 条 142-R2：财务见证归档（最后一班由见证财务代接班人签字）。
+    @PostMapping("/shifts/{shift_id}/witness")
+    public ApiResponse<BarShiftRecord> witnessShift(
+            @PathVariable("shift_id") String shiftId,
+            @RequestBody(required = false) @jakarta.validation.Valid BarShiftActionRequest request
+    ) {
+        authorizationService.requirePermission("finance.daily_close.manage");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.witnessShift(shiftId, request));
     }
 
     @PostMapping("/products/{product_id}/sold-out")

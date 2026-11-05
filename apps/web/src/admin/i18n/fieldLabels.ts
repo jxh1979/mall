@@ -1,4 +1,4 @@
-// 文件版本：V0.18
+// 文件版本：V0.19
 // OBS-14-02 后台结果区字段中文名字典（PGM「全局原则 · 界面全中文（所有终端零英文）」）。
 // 键用后端 JSON 的蛇形写法；结果区查表时蛇形与驼峰同查（orderId / order_id 都命中 order_id）。
 // 与后端字段中文名表 FieldLabels.java（common.api 包）同键同名：前段按后端原样抄录，后端改名这里跟着改（门禁会比对）。
@@ -218,7 +218,20 @@ export const FIELD_LABELS: Record<string, string> = {
   additional_service_fee_cent: "追加服务费",
   opening_cash_cent: "备用金",
   declared_cash_cent: "申报现金金额",
+  overage_cause: "长款原因（录像查明）",
+  resolved_by_user_id: "复核人",
+  // 第十八批 R 段第 142 条 142-R3：交班单签字与见证归档（BSM:1081「当班收银员与接班人双方确认签字……财务跟班见证后归档」）。
+  cashier_signed_at: "收银员签字时间",
+  successor_signed_at: "接班人签字时间",
+  witnessed_by_user_id: "见证财务",
+  witnessed_at: "见证归档时间",
+  // 第十八批 R 段第 142 条 142-R4：同一钱箱成员的加入时点（BSM:1081「多人共同使用同一钱箱时，由整个当班组共同补足」）。
+  joined_at: "加入时间",
+  // 第十八批 R 段第 152 条 152-R2：邀请函扫码预览返回的「订台尚无订台人、可选「我是订台人」」（第十八批裁决 34）。
+  holder_claimable: "可认领为订台人",
   daily_close_id: "日结单号",
+  // 第十八批 R 段第 143 条 143-R2：日结已标记为最终的数据类别（ENUM:190 五类）。
+  final_mark_categories: "已标记为最终的数据类别",
   handover_id: "交接单号",
   ticket_id: "票券",
   ticket_name: "票种名称",
@@ -1560,6 +1573,8 @@ export const FIELD_LABELS: Record<string, string> = {
   locked_by: "锁定人",
   locked_capacity: "锁定容量",
   locked_day_close_id: "锁定的日结单",
+  // 第十八批 R 段第 143 条 143-R4：补录记录所属的原营业日（ENUM:190「在补录记录上标明其所属的原营业日」）。
+  original_business_date: "原营业日",
   locked_merchants: "锁定商户",
   logged_out_at: "登出时间",
   loss_amount_cent: "损失金额",
@@ -3276,6 +3291,10 @@ export const KEY_VALUE_LABELS: Record<string, Record<string, string>> = {
   scope_type: { archived_bar_products: "已存档的酒吧商品", archived_entitlement_templates: "已存档的通票权益模板", archived_merchants: "已存档的商户档案", archived_ticket_types: "已存档的票种", archived_ticket_price_rules: "已存档的票价规则", archived_bar_product_categories: "已存档的酒吧商品分类", archived_bar_combos: "已存档的酒吧套餐", project: "项目", merchant: "商户", bar: "酒吧", ticketing: "票务", amusement: "游乐" },
   // 第十八批 P 段第 133 条 133-R3：日结范围类型（上一行末五项）与日结七源（名称取自 OpenAPI listDailyCloseSummaries 描述）。
   source_stream: { official_ticket: "官方售票", channel_ticket: "渠道售票", bar: "酒吧", amusement: "游乐", supply_cost: "供应链成本", thirdparty_reflow: "第三方回流", bar_deposit: "订台定金" },
+  // 第十八批 R 段第 143 条 143-R1：日结状态，与 ENUM:190「待生成、待确认、有差异、已确认、已锁定、已归档」同字（待生成按查不到日结显示，不入库）。
+  daily_close_status: { pending_confirm: "待确认", has_difference: "有差异", confirmed: "已确认", locked: "已锁定", archived: "已归档" },
+  // 第十八批 R 段第 143 条 143-R2：日结五类最终标记的数据类别，与 ENUM:190「当日订单与核销记录、当日退款与冲正记录、当日出品与物品交接记录、当日考勤记录、当日异常处置记录」同字。
+  final_mark_category: { orders_verifications: "当日订单与核销记录", refunds_reversals: "当日退款与冲正记录", production_handover: "当日出品与物品交接记录", attendance: "当日考勤记录", anomaly_resolutions: "当日异常处置记录" },
   period_type: { quarterly: "按季度", monthly: "按月", semiannual: "按半年", annual: "按年" },
   reserve_release_mode: { manual: "手动释放", next_period: "下期返还", fixed_delay: "固定延后若干期", annual: "年度末清算" },
   kind: { official: "正式单", preview: "月度预览", app: "预装软件", site: "网站白名单" },

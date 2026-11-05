@@ -1,4 +1,4 @@
-// 文件版本：V0.21
+// 文件版本：V0.22
 export type AdminUser = {
   id: string;
   username: string;
@@ -315,6 +315,11 @@ export type BarReservationRow = {
   salesStaffId?: string;
   // 第十八批 N 段第 120 条 120-R3（BSM:987「……人数和订台备注……」）：订台备注。
   remark?: string;
+  // 第十八批 R 段 152-R4（裁决 34「销售可以通过微信等发送邀请函」）：签发后的邀请函令牌、防伪签名、可进人数与状态（none/active/revoked）。
+  invitationToken?: string | null;
+  invitationSignature?: string | null;
+  invitationCapacity?: number | null;
+  invitationStatus?: string | null;
 };
 
 /** 第十八批 C 段第 15 条：员工代订权限停用记录（GET /api/v1/bar/staff-booking-suspensions）。 */

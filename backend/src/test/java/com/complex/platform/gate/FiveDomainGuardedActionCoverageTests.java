@@ -48,6 +48,13 @@ class FiveDomainGuardedActionCoverageTests {
         return Stream.of(
                 // finance
                 Arguments.of(FinanceService.class, "createDailyClose", "finance.daily_close.lock"),
+                // 第十八批 R 段 143-R1：确认、锁定日结与生成同一能力码。
+                Arguments.of(FinanceService.class, "confirmDailyClose", "finance.daily_close.lock"),
+                Arguments.of(FinanceService.class, "lockDailyClose", "finance.daily_close.lock"),
+                // 143-R2：五类最终标记与生成、确认、锁定同一能力码。
+                Arguments.of(FinanceService.class, "markDailyCloseFinal", "finance.daily_close.lock"),
+                // 143-R5：归档已锁定的日结与生成、确认、锁定同一能力码（第十八批裁决 33「由该店持日结锁定权限的财务 BP 点「归档」」）。
+                Arguments.of(FinanceService.class, "archiveDailyClose", "finance.daily_close.lock"),
                 Arguments.of(FinanceService.class, "createRefund", "finance.refund.create"),
                 // bar
                 Arguments.of(BarService.class, "createOrder", "bar.order.create"),

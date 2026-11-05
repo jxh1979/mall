@@ -1,6 +1,6 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.05
+// 文件版本：V0.06
 
 import static org.assertj.core.api.Assertions.*;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -51,6 +51,7 @@ class PurchaseInboundPayableJdbcIntegrationTests {
  @Autowired PurchaseRequestService purchases;
  @Autowired SupplyContractService contracts;
  @Autowired FinanceService financeService;
+ @Autowired com.complex.platform.finance.FinanceRepository financeRepository;
  @Autowired SupervisorReviewService reviews;
  @Autowired EvidenceEventService evidence;
  @Autowired JdbcTemplate jdbc;
@@ -870,7 +871,7 @@ class PurchaseInboundPayableJdbcIntegrationTests {
 
  void lockPayable(String id){
   act(finance);LocalDate due=jdbc.queryForObject("SELECT due_date FROM ar_ap_items WHERE id=?",LocalDate.class,id);
-  financeService.createDailyClose(new DailyCloseRequest(key(),"核实本商户日结",List.of(),due,"merchant",merchant,false));
+  com.complex.platform.support.DailyCloseFixture.lock(financeService,financeRepository,new DailyCloseRequest(key(),"核实本商户日结",List.of(),due,"merchant",merchant,false));
   assertThat(string("SELECT locked_day_close_id FROM ar_ap_items WHERE id=?",id)).isNotNull();
  }
  String backfill(String id,long change){
