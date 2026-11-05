@@ -9,7 +9,7 @@ import java.time.Instant;
  * <p>一个班次 = 一个收银员在一个吧台的一段收银时间窗口 [openedAt, closedAt)。开班记备用金；
  * 班结按窗口聚合 bar_bill_settlements 各支付方式（cash/pos/online）、退款、小费 → 系统应收快照，
  * 录入实点现金 declaredCash → 现金差异 cashDiff = declaredCash - (openingCash + systemCash)，
- * 差异绝对值超阈值 → needsReview 进复核。系统应收只读聚合，不改账单、不二次过账（与日结口径不重复扣）。
+ * 差额不为 0 即 needsReview 进复核（不设容差）。系统应收只读聚合，不改账单、不二次过账（与日结口径不重复扣）。
  */
 public record BarShiftRecord(
         String id,
@@ -28,7 +28,6 @@ public record BarShiftRecord(
         long systemRefundCent,
         long systemTipCent,
         Long cashDiffCent,
-        long cashDiffThresholdCent,
         boolean needsReview,
         String handoverToUserId,
         String note,

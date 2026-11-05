@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -30,6 +30,7 @@ import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.test.web.servlet.request.RequestPostProcessor;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
@@ -38,6 +39,7 @@ import org.springframework.transaction.annotation.Transactional;
  * BSM:1004「……领取……都要记录设备、点位和时间。」）：管理员把设备绑定为一体机（服务模式、按空间绑点位）并在设备台账设所属商户，
  * 登录员工在一体机上扫券码查券、逐件扫物品码领取，扫门票赠饮权益码看总次数与已用次数后领取；券领取留痕记一体机设备号、终端与点位，
  * 赠饮出 0 元赠饮单并扣吧台库存（礼物领取消耗）。请求按一体机真实形状（一体机终端头、登记设备号、蛇形键）走真实入口与真实授权链。
+ * 第十八批 Q 段第 148 条：赠饮须先核同票同人份这家酒吧的入场，未先核入场即核赠饮拒绝并留一条拒绝记录。
  */
 @SpringBootTest(properties = {
         "spring.datasource.url=${SETTLE_TEST_DB_URL:jdbc:postgresql://127.0.0.1:5432/complex_test}",
@@ -72,8 +74,9 @@ class KioskEntitlementClaimJdbcTests {
         kioskDevice = "kec-kiosk-" + s;
         jdbc.update("INSERT INTO merchants (id, merchant_name, merchant_type, status, created_at, updated_at, project_id)"
                 + " VALUES (?, '一体机酒吧', 'bar', 'active', now(), now(), ?)", bar, f.projectId);
+        // 一体机点位是公共区域（不进可租面积口径）：148-R1 用例不开测试事务，点位行会提交留库。
         jdbc.update("INSERT INTO spaces (id, project_id, space_name, space_type, status, created_at, updated_at)"
-                + " VALUES (?, ?, '一体机点位', 'shop', 'active', now(), now())", space, f.projectId);
+                + " VALUES (?, ?, '一体机点位', 'public_area', 'active', now(), now())", space, f.projectId);
         StaffRequestFixture staffs = new StaffRequestFixture(jdbc);
         admin = staffs.staff("usr_kec_admin_" + s, "platform_admin", f.projectId, null,
                 "terminal.device.bind", "terminal.device.lifecycle");
@@ -130,6 +133,11 @@ class KioskEntitlementClaimJdbcTests {
                 .andExpect(jsonPath("$.data.allowed").value(true))
                 .andExpect(jsonPath("$.data.entitlement.total_times").value(1))
                 .andExpect(jsonPath("$.data.entitlement.used_times").value(0));
+        // 第十八批 Q 段第 148 条（ENUM:55「客人须先核销这家酒吧的入场权益、再核销这家酒吧的酒水（赠饮）权益」）：先核同票同人份这家酒吧的入场。
+        mockMvc.perform(post("/api/v1/ticketing/verifications").with(staff)
+                        .contentType(MediaType.APPLICATION_JSON).content(verification("kec-entry-ver-" + s, "kec-entry-" + s, deviceRow)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("success"));
         String verificationId = CustomerTicketPaymentFixture.read(mockMvc.perform(post("/api/v1/ticketing/verifications").with(staff)
                         .contentType(MediaType.APPLICATION_JSON).content(verification("kec-ver-" + s, gift, deviceRow)))
                 .andExpect(status().isOk())
@@ -144,7 +152,55 @@ class KioskEntitlementClaimJdbcTests {
                 Integer.class, "kec_drink_" + s)).isEqualTo(1);
     }
 
+    // 第十八批 Q 段第 148 条 148-R1（ENUM:55「同一酒吧商户，客人须先核销这家酒吧的入场权益、再核销这家酒吧的酒水（赠饮）权益，不能跳过入场
+    // 直接核酒水；未先核入场即核酒水一律拒绝。」；BSM:1031「没先核入场就来核酒水的，系统一律拒绝。」；CG 裁决第 46 项「正常在线核销的业务规则
+    // 拒绝也记录为rejected并留痕」）：一体机员工按蛇形键先扫赠饮——409 BAR_ENTRY_NOT_VERIFIED，该赠饮只落一条 rejected/bar_entry_not_verified，
+    // 不扣次、不出 0 元赠饮单、吧台库存不动；核过同票同人份这家酒吧的入场后再扫赠饮成功，出 0 元单并扣 1 杯。
+    // 不开测试事务：拒绝记录在请求事务结束后另起事务写，提交后才看得见。修复前先扫赠饮即成功，第一处 409 断言即红。
+    @Test
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    void giftDrinkBeforeThisBarsEntryIsRejectedAndSucceedsAfterTheEntry() throws Exception {
+        String deviceRow = CustomerTicketPaymentFixture.read(mockMvc.perform(post("/api/v1/terminals/devices/bind").with(admin)
+                        .contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(Map.of(
+                                "idempotency_key", "kec-q148-bind-" + s, "device_id", kioskDevice, "terminal_type", "kiosk",
+                                "binding_scope", "space", "bound_space_id", space, "kiosk_mode", "service"))))
+                .andExpect(status().isOk()), "$.data.id");
+        mockMvc.perform(put("/api/v1/terminals/devices/" + deviceRow + "/merchant").with(admin)
+                        .contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(Map.of(
+                                "idempotency_key", "kec-q148-merchant-" + s, "merchant_id", bar, "reason", "一体机所属酒吧"))))
+                .andExpect(status().isOk());
+        String gift = seedGiftDrink();
+
+        mockMvc.perform(post("/api/v1/ticketing/verifications").with(staff)
+                        .contentType(MediaType.APPLICATION_JSON).content(verification("kec-q148-gift-first-" + s, gift, deviceRow)))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.detail_code").value("BAR_ENTRY_NOT_VERIFIED"));
+        assertThat(jdbc.queryForList("SELECT status || '/' || coalesce(result_reason, '') FROM ticket_verifications WHERE entitlement_id = ?",
+                String.class, "ent_" + gift)).containsExactly("rejected/bar_entry_not_verified");
+        assertThat(jdbc.queryForObject("SELECT used_times FROM issued_entitlements WHERE id = ?", Integer.class, "ent_" + gift)).isZero();
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM bar_gift_redemptions WHERE entitlement_id = ?", Integer.class, "ent_" + gift))
+                .isZero();
+        assertThat(drinkStock()).isEqualTo(5);
+
+        mockMvc.perform(post("/api/v1/ticketing/verifications").with(staff)
+                        .contentType(MediaType.APPLICATION_JSON).content(verification("kec-q148-entry-" + s, "kec-entry-" + s, deviceRow)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("success"));
+        String verificationId = CustomerTicketPaymentFixture.read(mockMvc.perform(post("/api/v1/ticketing/verifications").with(staff)
+                        .contentType(MediaType.APPLICATION_JSON).content(verification("kec-q148-gift-" + s, gift, deviceRow)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("success")), "$.data.id");
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM bar_gift_redemptions WHERE verification_id = ?", Integer.class, verificationId))
+                .isEqualTo(1);
+        assertThat(drinkStock()).isEqualTo(4);
+    }
+
     // ---------- helpers ----------
+
+    private int drinkStock() {
+        return jdbc.queryForObject("SELECT available_quantity FROM inventory_stock_balances WHERE item_id = ? AND location_id = 'default'",
+                Integer.class, "kec_drink_" + s);
+    }
 
     /** 一体机真实形状：一体机终端头＋登记设备号（不签名，默认 grace）。 */
     private RequestPostProcessor kiosk(RequestPostProcessor who) {
@@ -220,11 +276,24 @@ class KioskEntitlementClaimJdbcTests {
         ticketingRepository.saveTicketOrder(new TicketOrderRecord(
                 "order_" + code, "ON-" + code, "cust_" + code, typeId, null, 1,
                 LocalDate.now(), "web", null, 0L, null, 0L, 0L, "CNY", "paid", "issued", "created", now, now, null, null, null));
+        // 第十八批 Q 段第 148 条：赠饮与这家酒吧的入场同属一张票的 1 号人份（发放时每张权益都带父票与人份序号）。
+        String parent = "ti_" + code;
+        jdbc.update("INSERT INTO ticket_instances (id, ticket_no, order_id, ticket_type_id, seq_in_order, num_people, total_times,"
+                + " status, created_at, updated_at) VALUES (?, ?, ?, ?, 1, 1, 1, 'active', now(), now())",
+                parent, "T-" + code, "order_" + code, typeId);
         ticketingRepository.saveIssuedEntitlement(new IssuedEntitlementRecord(
                 "ent_" + code, code, typeId, "order_" + code, templateId, "gift_drink",
                 bar, null, bar, 1, 0, 0L, "active",
                 now.minusSeconds(60), now.plusSeconds(3600), now, now, 1, null,
-                null, null, null, null, null, 0, null, null));
+                null, null, null, null, parent, 1, null, null));
+        String entry = "kec-entry-" + s;
+        jdbc.update("INSERT INTO entitlement_templates (id, name, entitlement_type, default_total_times, default_value_cent, status,"
+                + " created_at, updated_at) VALUES (?, '酒吧入场', 'admission', 1, 0, 'active', now(), now())", "et_" + entry);
+        ticketingRepository.saveIssuedEntitlement(new IssuedEntitlementRecord(
+                "ent_" + entry, entry, typeId, "order_" + code, "et_" + entry, "admission",
+                bar, null, bar, 1, 0, 0L, "active",
+                now.minusSeconds(60), now.plusSeconds(3600), now, now, 1, null,
+                null, null, null, null, parent, 1, null, null));
         return code;
     }
 }

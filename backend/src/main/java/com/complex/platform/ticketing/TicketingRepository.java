@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.09
+// 文件版本：V0.10
 
 import java.util.List;
 import java.util.Map;
@@ -252,6 +252,12 @@ public interface TicketingRepository {
     default Optional<PartnerVoucherRedemptionRecord> findPartnerVoucherRedemptionByExternalRef(String partnerId, String externalRef) {
         return Optional.empty();
     }
+
+    /**
+     * 第十八批 Q 段 148-R1（ENUM:55）：父票 parentTicketId 第 slotIndex 号人份在这家酒吧（权益 bar_id，为空取 merchant_id）的入场类权益
+     * （entry / admission）自 since 起有核销成功记录。父票为空返回 false。
+     */
+    boolean hasVerifiedBarEntrySince(String parentTicketId, int slotIndex, String providerMerchantId, java.time.Instant since);
 
     List<VerificationRecord> listVerifications();
 

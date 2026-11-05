@@ -17,6 +17,7 @@ import java.time.Instant;
 import java.util.Map;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.context.ApplicationEventPublisher;
 
 /**
@@ -65,9 +66,13 @@ class TicketVerificationMdmGateTests {
                 .extracting("code")
                 .isEqualTo("DEVICE_NOT_MANAGED");
 
-        // 被门控拦截：不消费权益（不调 atomicUseEntitlement），不落核销记录。
+        // 被门控拦截：不消费权益（不调 atomicUseEntitlement）。第十八批 Q 段 145-R1（ENUM:43「明确的设备或网络失败仍记「失败」」）：
+        // 落恰好一条 failed/device_not_managed 核销记录（无事务管理器，就地写）。
         verify(repository, never()).atomicUseEntitlement(any(), any());
-        verify(repository, never()).saveVerification(any());
+        ArgumentCaptor<VerificationRecord> saved = ArgumentCaptor.forClass(VerificationRecord.class);
+        verify(repository).saveVerification(saved.capture());
+        assertThat(saved.getValue().status()).isEqualTo("failed");
+        assertThat(saved.getValue().resultReason()).isEqualTo("device_not_managed");
     }
 
     @Test

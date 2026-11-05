@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import com.complex.platform.common.crypto.SigningSecretGuard;
 import java.nio.charset.StandardCharsets;
@@ -81,7 +81,9 @@ public class BarInvitationTokenSigner {
     }
 
     // ── ROOT-03 clients-R6 被邀请人本人动态入场码（BSM 第 870 行「该名额自动关联到接受人本人的动态入场码，到店出示本人的动态入场码入场」；
-    // BSM 第 585 行出示给人验证的码按全场统一间隔自动更新）。码＝bie.成员号.到期秒.随机串.签名，签名绑定成员、订台与到期时刻；不落库。
+    // BSM 第 585 行出示给人验证的码按全场统一间隔自动更新）。码＝bie.订台号.成员号.到期秒.随机串.签名，签名绑定成员、订台与到期时刻；不落库。
+    // 第十八批 Q 段第 150 条（BSM:552「进场之后，工作手机扫客人二维码核销各酒吧入场」、BSM:1036「到店出示本人的动态入场码核验入场」）：
+    // 码里带订台号，工作手机扫码就知道送哪张订台核验；订台号由 slug 生成只含 [a-z0-9_]、成员号以 invm_ 开头，都不含点号。
 
     private static final String ENTRY_CODE_PREFIX = "bie";
 
@@ -91,27 +93,27 @@ public class BarInvitationTokenSigner {
         new java.security.SecureRandom().nextBytes(random);
         String nonce = HexFormat.of().formatHex(random);
         long expires = expiresAt.getEpochSecond();
-        return String.join(".", ENTRY_CODE_PREFIX, memberId, Long.toString(expires), nonce,
+        return String.join(".", ENTRY_CODE_PREFIX, reservationId, memberId, Long.toString(expires), nonce,
                 sign(entryCanonical(memberId, reservationId, expires, nonce)));
     }
 
-    /** 核验动态入场码：格式对、签名对（绑本订台）、未过期才返回成员号；否则空。 */
+    /** 核验动态入场码：格式对、码中订台号与本订台一致、签名对（绑本订台）、未过期才返回成员号；否则空。 */
     java.util.Optional<String> verifyEntryCode(String code, String reservationId, java.time.Instant now) {
         String[] parts = code == null ? new String[0] : code.trim().split("\\.", -1);
-        if (parts.length != 5 || !ENTRY_CODE_PREFIX.equals(parts[0])) {
+        if (parts.length != 6 || !ENTRY_CODE_PREFIX.equals(parts[0]) || !parts[1].equals(reservationId)) {
             return java.util.Optional.empty();
         }
         long expires;
         try {
-            expires = Long.parseLong(parts[2]);
+            expires = Long.parseLong(parts[3]);
         } catch (NumberFormatException malformed) {
             return java.util.Optional.empty();
         }
-        if (!matches(entryCanonical(parts[1], reservationId, expires, parts[3]), parts[4])
+        if (!matches(entryCanonical(parts[2], reservationId, expires, parts[4]), parts[5])
                 || now.getEpochSecond() >= expires) {
             return java.util.Optional.empty();
         }
-        return java.util.Optional.of(parts[1]);
+        return java.util.Optional.of(parts[2]);
     }
 
     private static String entryCanonical(String memberId, String reservationId, long expiresEpochSecond, String nonce) {

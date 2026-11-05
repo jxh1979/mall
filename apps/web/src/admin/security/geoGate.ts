@@ -1,17 +1,16 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 // 第十八批 N 段第 123 条 123-R3（BSM:1876「使用 Web 端必须打开地理识别，没有打开地理识别的无法正常使用。Web 端同样适用：
 // 核销、收款、退款、放行等敏感操作在授权位置范围之外一律拒绝并留痕。」）：网页端地理识别准入，现场动作取当下位置。
 // 只在动作那一刻取一次位置，不轮询、不做轨迹（平台治理 PRD §15.3）。
 
 export type GeoPosition = { latitude: number; longitude: number };
 
-// 与后端定位闸（SensitiveLocationGuard）同一份现场动作闭集 12 条（第十八批裁决 31：财务中心后台办理不查位置），只认 POST。
+// 与后端定位闸（SensitiveLocationGuard）同一份现场动作闭集 11 条（第十八批裁决 31：财务中心后台办理不查位置；第十八批 Q 段第 151 条删去按人数登记的 check-in-guest），只认 POST。
 const SENSITIVE_OPERATION_PATHS = [
   /^\/api\/v1\/ticketing\/verifications$/,
   /^\/api\/v1\/vouchers\/redemptions$/,
   /^\/api\/v1\/amusement\/verifications$/,
   /^\/api\/v1\/amusement\/entitlement-sessions\/[^/]+\/claim$/,
-  /^\/api\/v1\/bar\/reservations\/[^/]+\/check-in-guest$/,
   /^\/api\/v1\/bar\/reservations\/[^/]+\/invitation\/entry-verify$/,
   /^\/api\/v1\/parking\/manual-releases$/,
   /^\/api\/v1\/services\/orders\/[^/]+\/mark-paid$/,

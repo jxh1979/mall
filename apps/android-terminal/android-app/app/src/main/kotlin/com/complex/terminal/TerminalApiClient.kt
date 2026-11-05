@@ -1,6 +1,6 @@
 package com.complex.terminal
 
-// 文件版本：V0.15
+// 文件版本：V0.16
 
 import java.io.BufferedReader
 import java.net.HttpURLConnection
@@ -111,6 +111,10 @@ class TerminalApiClient(
 
   fun verify(request: VerificationRequest): VerificationResponse =
     post("/api/v1/ticketing/verifications", request)
+
+  /** 第十八批 Q 段第 150 条 150-R2：工作手机按入场码中的订台号核邀请函成员入场（路径在现场动作闭集里，自动带定位头）。 */
+  fun verifyInvitationEntry(reservationId: String, request: VerificationRequest): BarInvitationEntryRecord =
+    post("/api/v1/bar/reservations/${urlEncode(reservationId)}/invitation/entry-verify", request)
 
   fun reportEvents(request: EventBatchRequest): EventBatchResponse =
     post("/api/v1/evidence/events", request)
@@ -324,9 +328,6 @@ class TerminalApiClient(
 
   fun listTicketOrdersByPhone(phone: String): List<TicketOrderRow> =
     get<Page<TicketOrderRow>>("/api/v1/ticketing/orders?buyer_phone=${urlEncode(phone)}").items
-
-  fun amusementVerify(request: VerificationRequest): AmusementVerificationRecord =
-    post("/api/v1/amusement/verifications", request)
 
   fun submitAmusementMaintenance(request: AmusementMaintenanceRecordRequest): AmusementMaintenanceRecord =
     post("/api/v1/amusement/maintenance-records", request)

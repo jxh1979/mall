@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -176,6 +176,27 @@ class BarScanOrderCustomerJdbcIntegrationTests {
         assertThat(jdbc.queryForObject("SELECT status FROM bar_scan_order_payments WHERE id = ?", String.class, scanOrderId))
                 .isEqualTo("paid");
         assertThat(barOrders(looseTable)).isEqualTo(1);
+        assertCollectedByBarMerchant(scanOrderId, intentId);
+    }
+
+    /**
+     * 第十八批 Q 段第 139 条 139-R1（决策台账 §17「客人仍向酒吧全额付款，酒吧确认对客收入」；§16「客人在酒吧发生的点酒、套餐、二次消费、额外酒水等收入，
+     * 归实际销售并经营该酒吧的法律主体」「顶层平台公司不直接取得酒吧消费收入」）：扫码点单线上付按该酒吧商户收款（商户直收），不记平台自营内部核算收入；
+     * 酒吧侧以该账单的聚合支付收款计入。
+     */
+    @Test
+    void scanOrderPaymentCollectedByBarMerchantNotPlatformRevenue() throws Exception {
+        ResultActions created = scanOrder(null, List.of(Map.of("product_id", beer, "quantity", 2))).andExpect(status().isOk());
+        String scanOrderId = CustomerTicketPaymentFixture.read(created, "$.data.scan_order_id");
+        String intentId = CustomerTicketPaymentFixture.read(created, "$.data.payment_intent_id");
+        f.markPaid(intentId);
+        String orderId = CustomerTicketPaymentFixture.read(confirm(scanOrderId).andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("paid")), "$.data.bar_order_id");
+        assertCollectedByBarMerchant(scanOrderId, intentId);
+        assertThat(jdbc.queryForMap("SELECT s.settle_channel, s.merchant_id, s.settlement_amount_cent FROM bar_bill_settlements s"
+                + " JOIN bar_bills b ON b.id = s.bill_id WHERE b.order_id = ?", orderId))
+                .containsEntry("settle_channel", "aggregate_pay").containsEntry("merchant_id", merchant)
+                .containsEntry("settlement_amount_cent", 7600L);
     }
 
     @Test
@@ -282,6 +303,14 @@ class BarScanOrderCustomerJdbcIntegrationTests {
     }
 
     // ---------- helpers ----------
+
+    /** 139-R1：付款单收款主体＝该酒吧商户、商户直收；不写平台自营内部核算收入行。 */
+    private void assertCollectedByBarMerchant(String scanOrderId, String intentId) {
+        assertThat(f.initiatedFor(intentId).payeeMerchantId()).isEqualTo(merchant);
+        assertThat(f.initiatedFor(intentId).fundMode()).isEqualTo("merchant_prepaid");
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM ar_ap_items WHERE direction = 'internal_accounting'"
+                + " AND source_type = 'bar_scan_order' AND source_id = ?", Integer.class, scanOrderId)).isZero();
+    }
 
     private String table(String tag, String type, String tableStatus) {
         String id = "table_scan_" + tag + "_" + f.suffix;

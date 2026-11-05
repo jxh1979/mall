@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.06
+// 文件版本：V0.07
 
 import static com.complex.platform.bar.BarValidation.*;
 
@@ -450,93 +450,6 @@ public class BarEntryService {
         return reservation;
     }
 
-    BarReservationEntryAllowanceVerificationRecord verifyGuestEntryAllowance(String reservationId, VerificationRequest request) {
-        return evaluateGuestEntryAllowance(reservationId, request, false);
-    }
-
-    BarTableGuestCheckinRecord checkInGuest(String reservationId, VerificationRequest request) {
-        BarReservationEntryAllowanceVerificationRecord allowance = evaluateGuestEntryAllowance(reservationId, request, true);
-        if (!allowance.allowed()) {
-            throwDeniedAllowance(allowance.reasonCode());
-        }
-        Instant now = Instant.now();
-        return repository.saveGuestCheckin(new BarTableGuestCheckinRecord(
-                "checkin_" + slug(requireRequest(request).idempotencyKey()),
-                allowance.reservationId(),
-                allowance.barId(),
-                allowance.tableId(),
-                allowance.guestIdentifier(),
-                "accepted",
-                allowance.checkedInCount() + 1,
-                allowance.deviceId(),
-                allowance.staffId(),
-                allowance.evidenceAttachmentIds(),
-                now
-        ));
-    }
-
-    private BarReservationEntryAllowanceVerificationRecord evaluateGuestEntryAllowance(
-            String reservationId,
-            VerificationRequest request,
-            boolean lockReservation
-    ) {
-        VerificationRequest actual = requireRequest(request);
-        BarReservationRecord reservation = (lockReservation
-                ? repository.findReservationByIdForUpdate(reservationId)
-                : repository.findReservationById(reservationId))
-                .orElseThrow(() -> ApiException.notFound("BAR_RESERVATION_NOT_FOUND", "订台记录不存在或已被删除"));
-        // 2c-4 越权修复：入场核验子链（verify/check-in-guest）此前绕过 requireReservation，仅信客户端 bar_id，
-        // 可枚举他商户 reservationId 跨商户核销入场、耗尽其免费名额。补与 requireReservation 一致的归属校验。
-        authorizationService.currentMerchantScope().ifPresent(scope -> {
-            if (!scope.equals(reservation.merchantId())) {
-                throw ApiException.forbidden(
-                        "CROSS_MERCHANT_FORBIDDEN", "无权操作其他商户的订台记录");
-            }
-        });
-        Map<String, Object> context = actual.businessContext() == null ? Map.of() : actual.businessContext();
-        String verificationBarId = trimToDefault(textFromMap(context, "bar_id", "barId"), actual.pointId());
-        int checkedIn = repository.countGuestCheckins(reservation.id());
-        int allowedGuests = Math.max(0, reservation.allowedPassFreeGuestCount());
-        int remaining = Math.max(allowedGuests - checkedIn, 0);
-        String reason = "allowed";
-        boolean allowed = true;
-        if ("cancelled".equals(reservation.status())) {
-            allowed = false;
-            reason = "BAR_RESERVATION_NOT_CHECKINABLE";
-        } else if (!reservation.barId().equals(verificationBarId)) {
-            allowed = false;
-            reason = "BAR_SCOPE_MISMATCH";
-        } else if (checkedIn >= allowedGuests) {
-            allowed = false;
-            reason = "FREE_GUEST_QUOTA_EXHAUSTED";
-        }
-        return new BarReservationEntryAllowanceVerificationRecord(
-                "entry_allowance_" + slug(actual.idempotencyKey()),
-                reservation.id(),
-                reservation.barId(),
-                reservation.tableId(),
-                requireText(actual.credentialPayload(), "credential_payload"),
-                allowed,
-                reason,
-                checkedIn,
-                allowedGuests,
-                remaining,
-                trimToNull(actual.deviceId()),
-                trimToNull(textFromMap(context, "staff_id", "staffId")),
-                safeList(listFromMap(context, "evidence_attachment_ids", "evidenceAttachmentIds")),
-                Instant.now()
-        );
-    }
-
-    private void throwDeniedAllowance(String reasonCode) {
-        switch (reasonCode) {
-            case "BAR_RESERVATION_NOT_CHECKINABLE" -> throw ApiException.conflict(reasonCode, "该订台已取消");
-            case "BAR_SCOPE_MISMATCH" -> throw ApiException.conflict(reasonCode, "卡座免入仅限预订的酒吧使用");
-            case "FREE_GUEST_QUOTA_EXHAUSTED" -> throw ApiException.conflict(reasonCode, "卡座免入客人名额已用完");
-            default -> throw ApiException.conflict(reasonCode, "不允许卡座免入");
-        }
-    }
-
     // ── V155 订卡邀请函（扩展卡座预订）─────────────────────────────────────────
     // 两步语义：confirm（朋友在客人端确认，占名额，见 CustomerService）→ entered（到店扫码核验入场，下方）。
     // 「已确认 + 已入场」总人数 ≤ 邀请函 capacity（卡座可进人数）；持函（已确认成员）免通票即可进定卡吧。
@@ -611,7 +524,7 @@ public class BarEntryService {
     BarReservationInvitationMemberRecord verifyInvitationEntry(String reservationId, VerificationRequest request) {
         VerificationRequest actual = requireRequest(request);
         BarReservationRecord reservation = requireReservation(reservationId);
-        // T1.1 并发超员修复：按预订行 FOR UPDATE 加锁（仿 evaluateGuestEntryAllowance 既有范式，入场流程在上层事务内），
+        // T1.1 并发超员修复：按预订行 FOR UPDATE 加锁（入场流程在上层事务内），
         // 序列化并发入场核验，防超员入场（与确认路径一致的防御纵深；逻辑上 entered⊆confirmed≤capacity）。
         reservation = repository.findReservationByIdForUpdate(reservation.id())
                 .orElseThrow(() -> ApiException.notFound("BAR_RESERVATION_NOT_FOUND", "订台记录不存在或已被删除"));

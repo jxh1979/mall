@@ -76,7 +76,7 @@
 | 权益发放数 | verify.issued | count | issued_entitlements |
 | 核销数 | verify.done | count(status=success) | ticket_verifications+amusement_verifications |
 | 核销率 | verify.rate | 核销数 / 发放数 | 派生 |
-| 拒绝数 | verify.rejected | count(status=rejected/failed) | ticket_verifications |
+| 拒绝数 | verify.rejected | count(status=rejected)（ENUM:43 拒绝与失败分列，失败不计入拒绝数） | ticket_verifications |
 | 人工放行数（**已废止·见文首口径**，该指标停用） | verify.manual_override（停用） | count | amusement_manual_overrides +（票务 manual_overridden 状态，见 backlog C1）|
 
 ### 2.4 会员

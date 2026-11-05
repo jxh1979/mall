@@ -38,14 +38,19 @@ describe("BarTableSessionsPage 引导式新建卡座", () => {
     fireEvent.click(screen.getByTestId("bar-new-table-open"));
     // 步骤1 卡座信息（barId 从下拉自动选中第一个 bar-main；tableName 需填）
     await waitFor(() => expect((screen.getByTestId("bar-new-table-bar") as HTMLSelectElement).value).toBe("bar-main"));
+    // 第十八批 Q 段 151-R2：只录可进人数一个数（BSM:1036「已确认与已入场总人数不超过卡座可进人数」；ENUM:105「成员确认接受即占用该卡座的免通票入场名额」）。
+    expect(screen.getByTestId("bar-new-table-capacity")).toBeTruthy();
+    expect(screen.queryByTestId("bar-new-table-free")).toBeNull();
     fireEvent.change(screen.getByTestId("bar-new-table-name"), { target: { value: "VIP-01" } });
     fireEvent.change(screen.getByTestId("bar-new-table-spend"), { target: { value: "500" } });
     fireEvent.click(screen.getByTestId("bar-new-table-guided-next"));
-    // 确认步 → 提交
+    // 确认步 → 提交（确认页也不再列「免通票入场人数」）
+    await waitFor(() => expect(screen.getByTestId("bar-new-table-submit")).toBeTruthy());
+    expect(screen.getByTestId("bar-new-table-guided").textContent).not.toContain("免通票入场人数");
     fireEvent.click(screen.getByTestId("bar-new-table-submit"));
     await waitFor(() => expect(post.mock.calls.some((c) => c[0] === "/api/v1/bar/tables")).toBe(true));
     const call = post.mock.calls.find((c) => c[0] === "/api/v1/bar/tables");
-    expect(call?.[1]).toMatchObject({ barId: "bar-main", tableName: "VIP-01", capacity: 4, allowedFreeEntryCount: 0, minimumSpendCent: 50000 });
+    expect(call?.[1]).toEqual({ barId: "bar-main", tableName: "VIP-01", tableType: "card_seat", capacity: 4, minimumSpendCent: 50000 });
     // 成功后弹窗关闭
     await waitFor(() => expect(screen.queryByTestId("bar-new-table-guided")).toBeNull());
   });

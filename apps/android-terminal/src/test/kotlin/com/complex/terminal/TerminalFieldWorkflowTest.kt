@@ -1,6 +1,6 @@
 package com.complex.terminal
 
-// 文件版本：V0.05
+// 文件版本：V0.06
 
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
@@ -10,6 +10,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
@@ -39,39 +40,43 @@ class TerminalFieldWorkflowTest {
     return store
   }
 
+  // 第十八批 Q 段第 146 条 146-R1（BSM:552「工作手机扫客人二维码核销各酒吧入场、赠饮、游乐等场内权益」；BSM:766「票里的游乐权益到项目入口核销。」）：
+  // 游乐核销走票务核销入口，项目由入口点位或设备定位、场次取当前开放场次，端上不传项目与场次。
   @Test
   fun amusementVerifyOnlineSendsTicketingContractAndRecordsEvent() {
     val captured = mutableListOf<StubHttpClient.Captured>()
     val api = newApi { req ->
       captured += req
-      assertEquals("/api/v1/amusement/verifications", req.path)
-      assertTrue("\"credential_payload\":\"E-AMUSE-1\"" in req.body)
-      assertTrue("\"point_id\":\"point-1\"" in req.body)
-      assertTrue("\"idempotency_key\"" in req.body)
-      assertTrue("\"session_id\":\"sess-9\"" in req.body)
-      okJson("""{"id":"amv-1","verification_result":"success","session_id":"sess-9"}""")
+      assertEquals("/api/v1/ticketing/verifications", req.path)
+      okJson("""{"id":"ver-1","verification_no":"V-1","status":"success"}""")
     }
     val store = storeWithSessionAndBinding()
     val workflow = TerminalWorkflow(api, store)
 
-    val record = workflow.amusementVerifyOnline("E-AMUSE-1", sessionId = "sess-9")
+    val response = workflow.amusementVerifyOnline("E-AMUSE-1")
 
-    assertEquals("amv-1", record.id)
-    assertEquals("success", record.verificationResult)
-    assertEquals(1, captured.size)
-    assertTrue(store.pendingEvents().any { it.eventType == "terminal.amusement.verification.online" })
+    val body = captured.single().body
+    assertTrue("\"credential_payload\":\"E-AMUSE-1\"" in body, body)
+    assertTrue("\"point_id\":\"point-1\"" in body, body)
+    assertTrue("\"idempotency_key\"" in body, body)
+    assertTrue("\"scenario\":\"amusement_entry\"" in body, body)
+    assertFalse("project_id" in body, body)
+    assertFalse("session_id" in body, body)
+    assertEquals("success", response.status)
+    assertTrue(store.pendingEvents().any { it.eventType == "terminal.amusement.verification.online" && it.payload["result"] == "success" })
   }
 
   @Test
   fun amusementVerifyOnlineSurfacesBackendFailureResponse() {
-    val api = newApi { okJson("""{"id":"amv-2","verification_result":"failed","failure_reason":"expired"}""") }
-    val store = storeWithSessionAndBinding()
-    val workflow = TerminalWorkflow(api, store)
+    val api = newApi { req ->
+      assertEquals("/api/v1/ticketing/verifications", req.path)
+      StubResponse(409, """{"code":"CONFLICT","detail_code":"ENTITLEMENT_EXPIRED","message":"权益已过期"}""")
+    }
+    val workflow = TerminalWorkflow(api, storeWithSessionAndBinding())
 
-    val record = workflow.amusementVerifyOnline("E-EXPIRED")
+    val error = assertFailsWith<ApiException> { workflow.amusementVerifyOnline("E-EXPIRED") }
 
-    assertEquals("failed", record.verificationResult)
-    assertEquals("expired", record.failureReason)
+    assertEquals(409, error.statusCode)
   }
 
   @Test
@@ -199,6 +204,8 @@ class TerminalFieldWorkflowTest {
     val settle = bodies["/api/v1/bar/bills/bill-2/settle"].orEmpty()
     assertTrue("\"settlement_amount_cent\":10500" in settle)
     assertTrue("\"payment_id\":\"intent-2\"" in settle)
+    // 第十八批 Q 段第 153 条 153-R2（BSM:940「……一律按执行该动作的设备绑定与该次登录会话定位到操作人并留痕」）：收款人由服务端按本员工会话定，结账体不发 cashier_staff_id（本工作流带登录会话 staff-1）。
+    assertFalse("cashier_staff_id" in settle)
   }
 
   @Test
@@ -361,6 +368,47 @@ class TerminalFieldWorkflowTest {
 
     assertTrue("face_capture" !in captured.single().body)
     assertTrue("face_consent_accepted" !in captured.single().body)
+  }
+
+  // 第十八批 Q 段第 149 条 149-R1（ENUM:43「检票环节内部为一次动作：扫码即核销，不设先预检、后确认的两次操作，也不设「预检通过」中间态。」；DEC-R6-08）：
+  // 核销屏扫码后在同一次动作里只读本票人脸处置（TK-06），读失败按不需要人脸处理，结果以核销为准。
+  @Test
+  fun faceBindingForReadsFaceDispositionAndTreatsFailureAsNone() {
+    val captured = mutableListOf<StubHttpClient.Captured>()
+    var reply: HttpResponse<String> = okJson("""{"allowed":true,"reason":"ok","face_binding":"capture"}""")
+    val workflow = TerminalWorkflow(newApi { req -> captured += req; reply }, storeWithSessionAndBinding())
+
+    assertEquals("capture", workflow.faceBindingFor("E-MULTI-1"))
+    reply = okJson("""{"allowed":true,"reason":"ok"}""")
+    assertNull(workflow.faceBindingFor("E-SINGLE-1"))
+    reply = StubResponse(409, """{"code":"CONFLICT","detail_code":"ENTITLEMENT_EXPIRED","message":"权益已过期"}""")
+    assertNull(workflow.faceBindingFor("E-EXPIRED"))
+
+    assertEquals(List(3) { "/api/v1/ticketing/verifications/preview" }, captured.map { it.path })
+    val body = captured.first().body
+    listOf("\"credential_payload\":\"E-MULTI-1\"", "\"device_id\":\"device-1\"", "\"point_id\":\"point-1\"", "\"idempotency_key\"")
+      .forEach { assertTrue(it in body, body) }
+  }
+
+  // 149-R1：核销屏一次动作的顺序——先只读人脸处置，为空即提交核销，核销不带人脸。
+  @Test
+  fun ticketScreenVerifiesRightAfterReadingNoFaceDisposition() {
+    val captured = mutableListOf<StubHttpClient.Captured>()
+    val api = newApi { req ->
+      captured += req
+      when (req.path) {
+        "/api/v1/ticketing/verifications/preview" -> okJson("""{"allowed":true,"reason":"ok"}""")
+        "/api/v1/ticketing/verifications" -> okJson("""{"id":"ver-11","verification_no":"V-11","status":"success"}""")
+        else -> error("unexpected path ${req.path}")
+      }
+    }
+    val workflow = TerminalWorkflow(api, storeWithSessionAndBinding())
+
+    val response = if (workflow.faceBindingFor("E-SINGLE-2") == null) workflow.verifyOnline("E-SINGLE-2") else null
+
+    assertEquals(listOf("/api/v1/ticketing/verifications/preview", "/api/v1/ticketing/verifications"), captured.map { it.path })
+    assertTrue("face_capture" !in captured.last().body, captured.last().body)
+    assertEquals("success", response?.status)
   }
 
   private fun okJson(body: String): HttpResponse<String> = StubResponse(200, body)

@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.16
+// 文件版本：V0.17
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
@@ -32,6 +32,9 @@ class JdbcFinanceRepository implements FinanceRepository {
 
     private final NamedParameterJdbcTemplate jdbcTemplate;
     private final ObjectMapper objectMapper;
+    // 第十八批 Q 段第 138 条 138-R1：BarRevenueSourceService→BarPayrollAllocationService 依赖 FinanceRepository，直接注入会成环，按需取。
+    @org.springframework.beans.factory.annotation.Autowired
+    private org.springframework.beans.factory.ObjectProvider<com.complex.platform.bar.BarRevenueSourceService> barRevenueSources;
 
     JdbcFinanceRepository(NamedParameterJdbcTemplate jdbcTemplate, ObjectMapper objectMapper) {
         this.jdbcTemplate = jdbcTemplate;
@@ -422,6 +425,26 @@ class JdbcFinanceRepository implements FinanceRepository {
                                         WHERE s.bill_id = b.id AND %s)))
                 """.formatted(barWindowPredicate("b.created_at", "b.bar_id", barWindows, params),
                 barWindowPredicate("s.settled_at", "b.bar_id", barWindows, params)), params, Boolean.class));
+    }
+
+    @Override
+    public List<String> unsettledBarBillNos(Instant from, Instant to, String scopeType, String scopeId,
+            Map<String, Instant[]> barWindows) {
+        boolean merchantScope = isMerchantScope(scopeType);
+        MapSqlParameterSource params = new MapSqlParameterSource()
+                .addValue("from", from.atOffset(java.time.ZoneOffset.UTC))
+                .addValue("to", to.atOffset(java.time.ZoneOffset.UTC))
+                .addValue("merchant_scope", merchantScope)
+                .addValue("merchant_id", merchantScope ? scopeId : null);
+        return jdbcTemplate.queryForList("""
+                SELECT b.bill_no
+                  FROM bar_bills b
+                 WHERE b.settlement_status NOT IN ('settled', 'merged', 'void')
+                   AND (:merchant_scope = FALSE OR b.merchant_id = :merchant_id)
+                   AND %s
+                 ORDER BY b.created_at, b.bill_no
+                 LIMIT 10
+                """.formatted(barWindowPredicate("b.created_at", "b.bar_id", barWindows, params)), params, String.class);
     }
 
     /**
@@ -1417,6 +1440,9 @@ class JdbcFinanceRepository implements FinanceRepository {
         //      退款超出订单时钳到 0（负营业额无业务意义，不作为抽成基数）；
         //   仅计已归属该商户（merchant_id = :merchant_id）且 status='synced' 的 [from, to) 经营日窗口行；
         //   merchant_id IS NULL（未归属）行不计入任何商户——只进平台级租售比，绝不静默塞给某商户。
+        //   第十八批 Q 段第 138 条 138-R2（BSM:1347「凡已计收过门票综合服务费的部分——包括通票或券核销划归本商户的部分，以及单店门票的票款——
+        //   一律不再计入抽成基数」；BSM:1330「餐饮和零售商户的 POS 结果回流到平台」）：只计餐饮、零售回流（order、refund 同限），与日结第三方源、
+        //   看板 THIRDPARTY_REVENUE_WHERE 同谓词；渠道售出的门票回流（business_type='ticket'）已本地出票、计入门票，不进抽成基数。
         Long netTurnover = jdbcTemplate.queryForObject("""
                 SELECT COALESCE(SUM(
                          CASE sync_type
@@ -1428,6 +1454,7 @@ class JdbcFinanceRepository implements FinanceRepository {
                  WHERE merchant_id = :merchant_id
                    AND status = 'synced'
                    AND sync_type IN ('order', 'refund')
+                   AND business_type IN ('catering', 'retail')
                    AND created_at >= :from_inclusive
                    AND created_at < :to_exclusive
                 """, new MapSqlParameterSource()
@@ -1452,6 +1479,75 @@ class JdbcFinanceRepository implements FinanceRepository {
                 .addValue("from_inclusive", timestampWithTimeZone(fromInclusive))
                 .addValue("to_exclusive", timestampWithTimeZone(toExclusive)), Long.class);
         return forfeited == null ? 0L : forfeited;
+    }
+
+    @Override
+    public long sumBarPlatformTurnoverCent(String merchantId, Instant fromInclusive, Instant toExclusive,
+            LocalDate firstDay, LocalDate dayAfterLast) {
+        // 口径同分红酒吧收入（JdbcDividendRepository.sumBarRevenueCent/sumBarRefundCent）：goodsRevenueCent 已是折后实收，不含券抵扣、服务费与小费分项
+        // （BSM:1070、BSM:1077），含补低消与储值付款；整单待付清的结清前不计（BSM:1111）；其余来源未定、服务费未月结定格一律不出账
+        // （ENUM:257「账单一次出准，不使用预估数」）。
+        com.complex.platform.bar.BarRevenueSourceService sources = barRevenueSources.getObject();
+        long amount = 0L;
+        for (var row : sources.completedCollections(merchantId, fromInclusive, toExclusive)) {
+            if (row.goodsRevenueCent() != null) {
+                amount = Math.addExact(amount, row.goodsRevenueCent());
+            } else if (!"payment_pending".equals(row.status())) {
+                throw ApiException.conflict("BAR_REVENUE_PENDING", "酒吧收入来源尚待核实（整单分项未齐），暂不能出营业额抽成账单");
+            }
+        }
+        for (var row : sources.withheldServiceFees(merchantId, firstDay, dayAfterLast)) {
+            if (row.amountCent() == null) {
+                throw ApiException.conflict("BAR_REVENUE_PENDING", "服务费尚未月结定格，暂不能出营业额抽成账单");
+            }
+            amount = Math.addExact(amount, row.amountCent());
+        }
+        for (var row : sources.completedGoodsRefunds(merchantId, fromInclusive, toExclusive)) {
+            if (row.amountCent() == null) {
+                throw ApiException.conflict("BAR_REVENUE_PENDING", "实际退款分项尚待核实，暂不能出营业额抽成账单");
+            }
+            amount = Math.subtractExact(amount, row.amountCent());
+        }
+        return amount;
+    }
+
+    @Override
+    public long sumSettledVoucherSettlementCent(String merchantId, Instant fromInclusive, Instant toExclusive) {
+        // 「已完成结算」取实际付款，按付款时点归期（ENUM:257 账单一次出准、不在下期补差：未付讫的部分到付讫当期再计）。
+        // 统一券 internal_price 核销（VoucherService）与通票合作方券 internal_purchased 核销（PartnerVoucherService）都给结算对象挂
+        // source_type='partner_voucher' 应付；partner_kind=external_partner 的对手方是外部伙伴 id，按商户 id 过滤自然不计。
+        Long settled = jdbcTemplate.queryForObject("""
+                SELECT COALESCE(SUM(p.amount_cent), 0)
+                  FROM ar_ap_payments p
+                  JOIN ar_ap_items i ON i.id = p.ar_ap_item_id
+                 WHERE i.direction = 'payable'
+                   AND i.source_type = 'partner_voucher'
+                   AND i.counterparty_id = :merchant_id
+                   AND p.payment_time >= :from_inclusive
+                   AND p.payment_time < :to_exclusive
+                """, new MapSqlParameterSource()
+                .addValue("merchant_id", merchantId)
+                .addValue("from_inclusive", timestampWithTimeZone(fromInclusive))
+                .addValue("to_exclusive", timestampWithTimeZone(toExclusive)), Long.class);
+        return settled == null ? 0L : settled;
+    }
+
+    @Override
+    public long sumCompletedServiceOrderCent(String merchantId, Instant fromInclusive, Instant toExclusive) {
+        // BSM:1122「全额进公司账……分给服务人员的部分，是入账之后按薪资/提成/成本名录列支的支出」：计售价 price_cent 全额，不扣服务提供人份额；
+        // 只计已完成的单（ENUM:290 服务完成后不可退），已取消的已原路退款、不计；created_at 即下单时点（BSM:1347「按开台或下单时点所属的营业日归属账期」）。
+        Long total = jdbcTemplate.queryForObject("""
+                SELECT COALESCE(SUM(price_cent), 0)
+                  FROM service_orders
+                 WHERE bar_id = :merchant_id
+                   AND status = 'completed'
+                   AND created_at >= :from_inclusive
+                   AND created_at < :to_exclusive
+                """, new MapSqlParameterSource()
+                .addValue("merchant_id", merchantId)
+                .addValue("from_inclusive", timestampWithTimeZone(fromInclusive))
+                .addValue("to_exclusive", timestampWithTimeZone(toExclusive)), Long.class);
+        return total == null ? 0L : total;
     }
 
     @Override

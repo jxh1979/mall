@@ -117,6 +117,38 @@ describe("BusinessAnalyticsPage 分组列英文枚举业务化", () => {
     await waitFor(() => expect(screen.queryByTestId("business-analytics-table")?.textContent).toContain("商户分项目:m-1|pj-1"));
     expect(screen.getByTestId("business-analytics-table").textContent).not.toContain("merchant_project");
   });
+
+  it("第 147 条：核销拒绝数快照 verify.rejected 显示为「核销拒绝数」，不直出指标码", async () => {
+    const get = vi.fn().mockImplementation((path: string) => {
+      if (path.includes("/analytics/review-locks")) return Promise.resolve([]);
+      if (path.includes("/analytics/business-metric-snapshots")) {
+        return Promise.resolve([
+          { snapshotId: "s4", metricKey: "verify.rejected", domain: "ticketing", businessDate: "2026-07-01", actualValue: 3, baselineValue: 0, varianceRate: 0, trendDirection: "flat", segmentType: "platform" },
+        ]);
+      }
+      if (path.includes("/analytics/traffic-hourly")) return Promise.resolve({ buckets: [] });
+      return Promise.resolve([]);
+    });
+    renderPage(makeApi(get));
+    await waitFor(() => expect(screen.queryByTestId("business-analytics-table")?.textContent).toContain("核销拒绝数"));
+    expect(screen.getByTestId("business-analytics-table").textContent).not.toContain("verify.rejected");
+  });
+
+  it("第 147 条 147-R2：权益发放数快照 verify.issued 显示为「权益发放数」，不直出指标码", async () => {
+    const get = vi.fn().mockImplementation((path: string) => {
+      if (path.includes("/analytics/review-locks")) return Promise.resolve([]);
+      if (path.includes("/analytics/business-metric-snapshots")) {
+        return Promise.resolve([
+          { snapshotId: "s5", metricKey: "verify.issued", domain: "ticketing", businessDate: "2026-07-01", actualValue: 5, baselineValue: 0, varianceRate: 0, trendDirection: "flat", segmentType: "platform" },
+        ]);
+      }
+      if (path.includes("/analytics/traffic-hourly")) return Promise.resolve({ buckets: [] });
+      return Promise.resolve([]);
+    });
+    renderPage(makeApi(get));
+    await waitFor(() => expect(screen.queryByTestId("business-analytics-table")?.textContent).toContain("权益发放数"));
+    expect(screen.getByTestId("business-analytics-table").textContent).not.toContain("verify.issued");
+  });
 });
 
 describe("BusinessAnalyticsPage 行明细抽屉（整行可点·域/趋势/风险/状态中文）", () => {

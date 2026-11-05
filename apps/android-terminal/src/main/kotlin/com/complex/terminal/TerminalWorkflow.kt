@@ -1,6 +1,6 @@
 package com.complex.terminal
 
-// 文件版本：V0.05
+// 文件版本：V0.06
 
 import java.util.UUID
 
@@ -61,6 +61,10 @@ class TerminalWorkflow(
     )
   }
 
+  // 第十八批 Q 段第 149 条 149-R1：扫码即核销（ENUM:43「检票环节内部为一次动作：扫码即核销，不设先预检、后确认的两次操作，也不设「预检通过」中间态。」；DEC-R6-08）。
+  // 这里只读本票人脸处置（TK-06 capture / match），不是员工的一次操作；读失败按不需要人脸处理，结果以核销为准。
+  fun faceBindingFor(code: String): String? = runCatching { previewOnline(code).faceBinding }.getOrNull()
+
   fun verifyOnline(
     entitlementCode: String,
     faceCapture: String? = null,
@@ -92,6 +96,27 @@ class TerminalWorkflow(
       ),
     )
     return response
+  }
+
+  // 第十八批 Q 段第 150 条 150-R2（BSM:552「进场之后，工作手机扫客人二维码核销各酒吧入场、赠饮、游乐等场内权益……」；
+  // ENUM:36「卡座免通票入场名额只授予所预定卡座对应的那一家酒吧的入场资格……」）：
+  // 扫到邀请函成员入场码，按码中订台号送订台入场核验，酒吧取本机所属商户（酒吧即商户）；服务端已留痕，不另记本地事件。
+  fun invitationEntryVerifyOnline(code: String): BarInvitationEntryRecord {
+    requireOnline()
+    requireNotNull(store.session) { "terminal session is missing" }
+    val binding = requireNotNull(store.binding) { "device binding is missing" }
+    val reservationId = checkNotNull(invitationEntryReservationId(code)) { "不是邀请函入场码" }
+    val barId = checkNotNull(binding.merchantId?.takeIf { it.isNotBlank() }) { "本机未设置所属酒吧，不能核邀请函入场" }
+    return api.verifyInvitationEntry(
+      reservationId,
+      VerificationRequest(
+        idempotencyKey = newClientTaskId("invitation-entry"),
+        credentialPayload = code,
+        deviceId = binding.id,
+        pointId = binding.locationPointId ?: binding.deviceCode,
+        businessContext = mapOf("bar_id" to barId),
+      ),
+    )
   }
 
   fun reportDeviceEvents(): EventBatchResponse {
@@ -134,34 +159,34 @@ class TerminalWorkflow(
 
   // -------------------------------------------------------------------------
   // 游乐入口核销：工作手机在线核销游乐权益；失败或断网只提示，不入队（BSM:800「核销必须在线、不做离线核销」）。
+  // 第十八批 Q 段第 146 条 146-R1（BSM:552「工作手机扫客人二维码核销各酒吧入场、赠饮、游乐等场内权益」；BSM:766「票里的游乐权益到项目入口核销。」）：
+  // 走票务核销入口，项目由入口点位或设备定位、场次取当前开放场次，端上不传项目与场次；scenario 只作留痕，服务端不读。
   // -------------------------------------------------------------------------
-  fun amusementVerifyOnline(entitlementCode: String, sessionId: String? = null): AmusementVerificationRecord {
+  fun amusementVerifyOnline(entitlementCode: String): VerificationResponse {
     requireOnline()
     val session = requireNotNull(store.session) { "terminal session is missing" }
     val binding = requireNotNull(store.binding) { "device binding is missing" }
-    val businessContext = buildMap {
-      put("scenario", "amusement_entry")
-      put("staff_id", session.staffId)
-      if (sessionId != null) put("session_id", sessionId)
-    }
-    val record = api.amusementVerify(
+    val response = api.verify(
       VerificationRequest(
         idempotencyKey = newClientTaskId("amusement-verification"),
         credentialPayload = entitlementCode,
         deviceId = binding.id,
         pointId = binding.locationPointId ?: binding.deviceCode,
-        businessContext = businessContext,
+        businessContext = mapOf(
+          "scenario" to "amusement_entry",
+          "staff_id" to session.staffId,
+        ),
       ),
     )
     store.addEvent(
       TerminalEvent(
         eventType = "terminal.amusement.verification.online",
         summary = "游乐入口在线核销完成",
-        payload = mapOf("entitlementCode" to entitlementCode, "result" to record.verificationResult),
+        payload = mapOf("entitlementCode" to entitlementCode, "result" to response.status),
         occurredAt = nowIso(),
       ),
     )
-    return record
+    return response
   }
 
   // -------------------------------------------------------------------------
@@ -345,7 +370,6 @@ class TerminalWorkflow(
         paymentId = paymentId,
         settlementAmountCent = settlementAmountCent,
         paymentChannel = paymentChannel,
-        cashierStaffId = store.session?.staffId,
         posTransactionNo = posTransactionNo,
       ),
     )

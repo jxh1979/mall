@@ -1,4 +1,4 @@
-// 文件版本：V0.03
+// 文件版本：V0.04
 // fix/ui-pages 经营指标码 → 业务指标名（展示层翻译，接口仍用原码）。
 // 未知码原样返回，新增指标逐步补此表。
 const METRIC_LABELS: Record<string, string> = {
@@ -17,6 +17,8 @@ const METRIC_LABELS: Record<string, string> = {
   "traffic.amusement": "游乐客流",
   "verify.done": "票务核销",
   "verify.redemption_rate": "核销率",
+  "verify.rejected": "核销拒绝数",
+  "verify.issued": "权益发放数",
   // 会员
   "member.new": "新增会员",
   "member.checked_in": "会员签到",

@@ -67,6 +67,8 @@ describe("BarTableSessionsPage 行明细抽屉 + 零英文", () => {
     expect(drawer.textContent).toContain("预定时间");
     expect(drawer.textContent).toContain("2026年7月5日");
     expect(drawer.textContent).not.toContain("confirmed");
+    // 第十八批 Q 段 151-R2：订台明细不再显示第二个「免通票入场人数」。
+    expect(drawer.textContent).not.toContain("免通票入场人数");
   });
 
   it("点卡座行 → 抽屉含卡座状态（中文）", async () => {

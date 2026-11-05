@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.06
+// 文件版本：V0.07
 
 import static com.complex.platform.bar.BarValidation.*;
 
@@ -49,11 +49,9 @@ public class BarTableSessionService {
         String merchantId = authorizationService.currentMerchantScope().orElse(null);
         Instant now = Instant.now();
         String slug = slug(actual.idempotencyKey());
-        int allowedFreeGuests = nonNegative(actual.allowedFreeEntryCount(), "allowed_free_entry_count");
-        // 可进人数（容量）独立于免票入场人数：未填时沿用免票人数口径（向后兼容），填了就按填的落库。
-        int capacity = actual.capacity() == null
-                ? allowedFreeGuests
-                : nonNegative(actual.capacity(), "capacity");
+        // 第十八批 Q 段 151-R2：只录可进人数一个数，免通票入场名额就是它（BSM:1036「已确认与已入场总人数不超过卡座可进人数。」；
+        // ENUM:105「成员确认接受即占用该卡座的免通票入场名额」），allowed_pass_free_guest_count 列写同一个数。
+        int capacity = nonNegative(actual.capacity(), "capacity");
         long minimumSpend = nonNegative(actual.minimumSpendCent(), "minimum_spend_cent");
         return repository.saveTable(new BarTableRecord(
                 "table_" + slug,
@@ -63,7 +61,7 @@ public class BarTableSessionService {
                 requireText(actual.tableName(), "table_name"),
                 trimToDefault(actual.tableType(), "card_seat"),
                 capacity,
-                allowedFreeGuests,
+                capacity,
                 minimumSpend,
                 CURRENCY_CNY,
                 trimToDefault(actual.status(), "active"),

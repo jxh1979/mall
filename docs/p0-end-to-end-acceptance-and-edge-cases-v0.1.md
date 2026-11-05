@@ -1,4 +1,4 @@
-# P0 端到端验收标准与边界用例 V0.1
+# P0 端到端验收标准与边界用例 V0.11
 
 > **口径修订（2026-08-06 R10）：「场次容量」已废止**——BSM「容量控制」条 明确「**只按单个游乐项目的实时在玩人数控制容量，不再按场次/时段或点位/设备另设容量；排队人数不占用容量**」（DEC-R5-2026-08-04-04；R8 用户裁决 D-02）。本文原「场次容量」一律改称「**项目容量（实时在玩人数）**」；双阈值不变（运营容量软上限告警放行、安全容量硬上限阻断并自动停运）。仍按场次/时段或点位/设备维度罗列的页面、接口、组件与字段只作历史结构参考，容量口径一律以本条为准，相关字段待代码轮下线，期间不得据以新增受控维度。
 
@@ -85,11 +85,11 @@ And 该免通票入场权益不得抵扣最低消费。
 
 ### AC-BAR-02A 卡座入场名额并发与幂等
 
-Given 某卡座预约剩余免通票入场名额为 1  
-When 两台设备几乎同时提交入场名额核销  
-Then 系统只能成功扣占 1 人名额并写入 `bar.table_guest.checked_in`  
-And 另一笔必须拒绝并写入 `bar.table_guest.rejected`  
-And 同一 `idempotency_key` 重试必须返回第一次处理结果，不得重复扣占。
+Given 某卡座邀请函的一位已确认成员持本人动态入场码
+When 两台设备几乎同时为该成员提交门口入场核验（`POST /api/v1/bar/reservations/{id}/invitation/entry-verify`）
+Then 系统按订台加锁串行处理，只记一次入场并写入 `bar.reservation_invitation_entered`
+And 另一笔返回同一条入场记录，不重复占用名额
+And 入场码无效或已过期的核验必须拒绝并写入 `bar.reservation_invitation_entry_failed`。
 
 ### AC-BAR-03 最低消费
 
@@ -465,7 +465,7 @@ And 租金、物业费和能源费账单必须进入应收应付台账；争议�
 | AC-TKT-02 | 动态二维码核销 | `POST /api/v1/ticketing/verifications/preview` / `previewTicketVerification`；`POST /api/v1/ticketing/verifications` / `createTicketVerification` | 预览和正式核销均校验票、权益、签名、有效期、终端和幂等；失败必须有 `verification.failed` |
 | AC-TKT-02A | 售票型一体机辅助购票 | `GET /api/v1/terminals/kiosks/{device_id}/config` / `getKioskConfig`；`POST /api/v1/ticketing/orders` / `createTicketOrder`；`POST /api/v1/ticketing/orders/{order_id}/pay-intents` / `createTicketOrderPayIntent`；`POST /api/v1/ticketing/orders/{order_id}/issue` / `issueTicket` | 只有 `kiosk_mode=ticketing` 且授权服务人员登录后可售票；酒吧门口/前台只售卖本酒吧单店门票；支付成功后才出票和发权益 |
 | AC-TKT-03 | 退款与权益冲正 | `POST /api/v1/ticketing/refunds` / `requestTicketRefund`；`POST /api/v1/ticketing/refunds/{refund_id}/approve` / `approveTicketRefund`；`POST /api/v1/finance/refunds` / `createFinanceRefund` | 已核销权益不得删除，只能退款、撤销、冲正并留痕 |
-| AC-BAR-02 | 卡座免通票入场名额 | `POST /api/v1/bar/reservations/{id}/check-in-guest` / `checkInBarReservationGuest` | 只能进入预定卡座所在酒吧；不得超过人数额度；不得抵扣最低消费 |
+| AC-BAR-02 | 卡座免通票入场名额 | `POST /api/v1/bar/reservations/{id}/invitation/entry-verify` / `verifyBarReservationInvitationEntry` | 凭本人动态入场码核验；只能进入预定卡座所在酒吧；已确认与已入场不超过卡座可进人数；不得抵扣最低消费 |
 | AC-BAR-04 | 酒吧年龄/人脸核验 | `POST /api/v1/bar/age-verifications` / `createBarAgeVerification` | 第三方或等效设备未通过时不得生产放行；人工复核只能走异常留痕 |
 | AC-BAR-05 | 卡座销售提成 | `POST /api/v1/bar/bills/{bill_id}/commissions/calculate` / `calculateBarTableCommission` | 销售人员 15%、非销售人员 10%；提成基数排除通票、权益、赠酒、退款、免单和不可计提调整 |
 | AC-INV-01 | 高价值酒水库存扣减 | `POST /api/v1/inventory/stock-movements` / `createStockMovement`；`POST /api/v1/inventory/stock-movements/{movement_type}` / `createTypedStockMovement` | 高价值酒水不得离线扣减；失败必须阻断日结或进入补偿 |

@@ -1,4 +1,4 @@
-# 全链路操作留痕与终端开关 PRD V0.11
+# 全链路操作留痕与终端开关 PRD V0.12
 
 > **口径修订（2026-08-06 R10）：票务「核销预检」两步流已废止**——ENUM「核销记录状态」条 明确核销记录状态**共六态**（成功／拒绝（规则不允许）／失败（设备或网络原因）／已冲正／待复核／异常）、「**不设「预检通过」态**」，且「**检票环节内部为一次动作：扫码即核销，不设先预检、后确认的两次操作**」（DEC-R6-08 / 第三轮用户裁决 UD-11）。本文原有的 `preview_passed` 状态、`verification.previewed` 事件、`/verifications/preview` 预检端点与「预检 → 确认」两步核销流程**一律废止**，废止处就地标注；已实现的端点、事件与取值待代码轮下线，期间不得新增调用、不得新写入。**限定**：本条只针对票务核销域的预检；酒吧年龄/人脸核验预检、运行配置预检、分红预检等其他域的「预检」不受影响。
 
@@ -353,8 +353,8 @@ flowchart TD
 | `bar.age_verification.passed` | compliance | 年龄/人脸核验通过：核验对象、最小必要结果、供应商流水、有效窗口、点位 |
 | `bar.age_verification.rejected` | compliance | 年龄/人脸核验拒绝：拒绝原因、最小必要结果、供应商流水、点位 |
 | `bar.age_verification.blocked` | compliance | 生产未配置供应商/设备、超时或合规阻断：阻断原因、点位、设备、员工 |
-| `bar.table_guest.checked_in` | service | 卡座预约入场名额核销成功：reservation_id、bar_venue_id、table_id、入场人数、剩余额度、设备、员工、idempotency_key |
-| `bar.table_guest.rejected` | service | 卡座预约入场名额核销拒绝：reservation_id、bar_venue_id、拒绝原因、已用额度、剩余额度、设备、员工 |
+| `bar.reservation_invitation_entered` | service | 卡座邀请函成员凭本人动态入场码门口入场核验成功：reservation_id、member_id、设备、员工、idempotency_key |
+| `bar.reservation_invitation_entry_failed` | service | 卡座邀请函门口入场核验失败：reservation_id、错误码（入场码无效或已过期、成员未确认、非预订酒吧等）、设备、员工 |
 
 #### 4.1.3 票务/核销/退款域事件（event_category=ticket；依据 annotation-1，对齐 data-risk §7.1 与 ticketing §9）
 

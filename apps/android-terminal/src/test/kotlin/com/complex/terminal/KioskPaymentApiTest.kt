@@ -1,6 +1,6 @@
 package com.complex.terminal
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import com.sun.net.httpserver.HttpServer
 import java.net.InetSocketAddress
@@ -65,7 +65,9 @@ class KioskPaymentApiTest {
     assertEquals(listOf("/api/v1/bar/bills/bill_1/settle"), requests.map { it.path })
     assertEquals("Bearer staff_tok", requests.single().authorization)
     assertBody(requests.single().body, "\"idempotency_key\":", "\"settlement_amount_cent\":12800", "\"payment_channel\":\"pos\"",
-      "\"cashier_staff_id\":\"usr_cashier\"", "\"pos_transaction_no\":\"POS-0001\"")
+      "\"payment_id\":", "\"pos_transaction_no\":\"POS-0001\"")
+    // 第十八批 Q 段第 153 条 153-R2（BSM:940「……一律按执行该动作的设备绑定与该次登录会话定位到操作人并留痕」）：收款人由服务端按本员工会话定，结账体不发 cashier_staff_id。
+    assertTrue(!requests.single().body.contains("cashier_staff_id"), "不发 cashier_staff_id：${requests.single().body}")
     assertEquals("resident", api.accessToken)
   }
 

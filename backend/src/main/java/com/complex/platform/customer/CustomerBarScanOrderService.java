@@ -1,6 +1,6 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import static com.complex.platform.common.Strings.requireText;
 
@@ -159,7 +159,9 @@ public class CustomerBarScanOrderService {
         if (!"pending".equals(row.get("status"))) {
             return view(row, null);
         }
-        PaymentIntentRecord paid = finance.confirmOnlinePaymentIntent((String) row.get("payment_intent_id"), null, null);
+        // 第十八批 Q 段第 139 条：按发起时同一对（该酒吧商户、商户直收）核对渠道回执。
+        PaymentIntentRecord paid = finance.confirmOnlinePaymentIntent((String) row.get("payment_intent_id"), (String) row.get("merchant_id"),
+                "merchant_prepaid");
         String sessionId = (String) row.get("session_id");
         boolean sessionOpen = bars.findTableSessionById(sessionId).map(s -> "open".equals(s.status())).orElse(false);
         Timestamp now = Timestamp.from(Instant.now());
@@ -253,8 +255,10 @@ public class CustomerBarScanOrderService {
             throw ApiException.badRequest("VALIDATION_FAILED", "下单金额必须大于 0");
         }
         String id = "bso_" + UUID.randomUUID().toString().replace("-", "");
+        // 第十八批 Q 段第 139 条（决策台账 §17「客人仍向酒吧全额付款，酒吧确认对客收入」；§16「客人在酒吧发生的点酒、套餐、二次消费、额外酒水等收入，
+        // 归实际销售并经营该酒吧的法律主体」「顶层平台公司不直接取得酒吧消费收入」）：收款主体＝该散台会话所属的酒吧商户、商户直收，与订台定金同一资金归属契约。
         PaymentIntentRecord intent = finance.createPaymentIntent(new PaymentIntentRequest(id, null, List.of(), ORDER_TYPE, id,
-                amount, "CNY", channel));
+                amount, "CNY", channel, null, session.merchantId(), "merchant_prepaid"));
         Timestamp now = Timestamp.from(Instant.now());
         jdbc.update("""
                 INSERT INTO bar_scan_order_payments (id, bar_id, merchant_id, table_id, session_id, customer_id, items, amount_cent,

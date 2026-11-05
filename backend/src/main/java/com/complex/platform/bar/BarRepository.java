@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.07
+// 文件版本：V0.08
 
 import com.complex.platform.finance.PaymentIntentRecord;
 import java.util.List;
@@ -153,10 +153,6 @@ public interface BarRepository {
     default List<BarDepositRuleRecord> listDepositRules(String barId) {
         return List.of();
     }
-
-    int countGuestCheckins(String reservationId);
-
-    BarTableGuestCheckinRecord saveGuestCheckin(BarTableGuestCheckinRecord checkin);
 
     // ── V155 订卡邀请函（默认空实现，JDBC + 邀请函测试桩覆盖；其它内存桩无需改动）─────────────
     /** 按邀请函 token 反查预订（confirm/entry 校验入口）；未签发/不存在返回空。 */

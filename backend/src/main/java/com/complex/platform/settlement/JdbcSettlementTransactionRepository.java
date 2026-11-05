@@ -1,6 +1,6 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.05
+// 文件版本：V0.06
 
 import java.sql.Timestamp;
 import java.time.Instant;
@@ -430,24 +430,34 @@ public class JdbcSettlementTransactionRepository {
      * 遗留行承载的历史交由其自身，不重建、不双计。判别用 verification_id IS NULL(新行必带 verification_id)，无需 cutover 时间。
      */
     // FS-012：补偿补发权益的核销不进普通核销结算事实（在线消费者跳过），补建同样排除，不把它补回原票分账。
+    // 第十八批 Q 段 154-R2（BSM:1689「通票权益核销后才按所属域的已生效规则与实际提供方结算；未核销不产生提供方结算」）：
+    //   只取在线会发结算事件的成功核销——TicketVerificationService 普通扣次（result_reason 空）与游乐入场（amusement_verified）；
+    //   放行不消耗的场次重入（session_reentry）与当天重入（day_replay）不发事件，补建也不补。k 按该权益这些核销（含已有结算行的）
+    //   时序编号，等于在线消费者用的 used_times。
+    // ponytail: 每次对全部成功核销开窗编号；量大到拖慢夜间任务时，先筛出有缺行的权益再编号。
     public java.util.List<MissingSettledFact> findMissingVerificationSettlementFacts(int limit) {
         return jdbcTemplate.query("""
+                WITH consumed AS (
+                    SELECT v.id, v.entitlement_id, v.created_at, v.settlement_price_cent,
+                           ROW_NUMBER() OVER (PARTITION BY v.entitlement_id ORDER BY v.created_at, v.id) AS k
+                      FROM ticket_verifications v
+                     WHERE v.status = 'success'
+                       AND (v.result_reason IS NULL OR v.result_reason = 'amusement_verified')
+                )
                 SELECT v.id AS verification_id, v.entitlement_id, v.created_at,
                        e.order_id, e.ticket_type_id, e.entitlement_type, e.merchant_id,
                        e.total_times, e.num_people, e.allocated_revenue_cent, e.valid_to, e.exclusive_merchant_id,
-                       v.settlement_price_cent, e.component_full_price_cent,
-                       ROW_NUMBER() OVER (PARTITION BY v.entitlement_id ORDER BY v.created_at, v.id) AS k
-                  FROM ticket_verifications v
+                       v.settlement_price_cent, e.component_full_price_cent, v.k
+                  FROM consumed v
                   JOIN issued_entitlements e ON e.id = v.entitlement_id
-                 WHERE v.status = 'success'
-                   AND e.compensation_item_id IS NULL
+                 WHERE e.compensation_item_id IS NULL
                    AND NOT EXISTS (SELECT 1 FROM settlement_transactions s WHERE s.transaction_no = 'ST-VS-' || v.id)
                    AND NOT EXISTS (SELECT 1 FROM ticket_verifications r WHERE r.entitlement_id = v.entitlement_id AND r.status = 'reversed')
                    AND NOT EXISTS (SELECT 1 FROM settlement_transactions leg
                                     WHERE leg.entitlement_id = v.entitlement_id
                                       AND leg.transaction_type = 'verification_settled'
                                       AND leg.verification_id IS NULL)
-                 ORDER BY v.entitlement_id, k
+                 ORDER BY v.entitlement_id, v.k
                  LIMIT :limit
                 """, new MapSqlParameterSource().addValue("limit", limit), (rs, i) -> new MissingSettledFact(
                         rs.getString("verification_id"), rs.getString("entitlement_id"),

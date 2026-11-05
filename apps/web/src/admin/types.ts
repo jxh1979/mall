@@ -1,4 +1,4 @@
-// 文件版本：V0.20
+// 文件版本：V0.21
 export type AdminUser = {
   id: string;
   username: string;
@@ -308,7 +308,6 @@ export type BarReservationRow = {
   tableId?: string;
   customerId?: string;
   guestCount?: number;
-  allowedPassFreeGuestCount?: number;
   depositStatus?: string;
   status?: string;
   reservedAt?: string;

@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: 综合体管理系统 P0 API 契约
-  version: V0.48
+  version: V0.49
   description: P0 首批编码前置契约。本文采用 JSON-compatible YAML，便于与 openapi-p0.json 保持一致。正式后端以 Java 21 + Spring Boot 4.x +
     springdoc-openapi 输出运行时 OpenAPI，并与本契约比对。
 servers:
@@ -2683,41 +2683,6 @@ paths:
           $ref: "#/components/responses/Error"
       x-auth-context: staff-token
       description: 用于查询酒吧预约。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
-  /api/v1/bar/reservations/{id}/check-in-guest:
-    post:
-      tags:
-        - bar
-      operationId: checkInBarReservationGuest
-      description: "第十八批 N 段第 123 条 123-R2（BSM:1630「核销、收款、退款、放行等敏感操作，操作设备定位落在该项目综合体授权范围之外时一律拒绝并留痕」；BSM:1876「Web 端同样适用」）：本操作属敏感操作定位闸的现场动作闭集（第十八批裁决 31）。操作对象所属项目已配授权范围（123-R1）时须带请求头 X-Geo-Latitude、X-Geo-Longitude（设备当下定位，WGS-84 十进制度）：没带或解析不了按范围外处理（裁决 30）返回 403 SENSITIVE_OPERATION_LOCATION_REQUIRED，到圆心距离超过授权半径返回 403 SENSITIVE_OPERATION_OUT_OF_RANGE，拒绝在独立事务里留痕 sensitive_operation.location_rejected（business_id 为本 operationId，业务回滚不丢）；项目没配授权范围不查位置（裁决 32）；判定在幂等之前，重放不能绕过；通过时不存位置。"
-      summary: 卡座免通票入场名额核销
-      x-permission: bar.table.guest_checkin
-      x-data-scope: project-bar
-      x-terminal-allowed:
-        - staff_work_phone
-        - web
-      x-idempotency-required: true
-      x-audit-event-success: bar.table_guest.checked_in
-      x-audit-event-failure: bar.table_guest.rejected
-      x-failure-codes:
-        - SENSITIVE_OPERATION_LOCATION_REQUIRED
-        - SENSITIVE_OPERATION_OUT_OF_RANGE
-      parameters:
-        - $ref: "#/components/parameters/Id"
-          description: undefined 参数；必须按 OpenAPI 类型、枚举和必填规则校验。
-        - $ref: "#/components/parameters/GeoLatitude"
-        - $ref: "#/components/parameters/GeoLongitude"
-      requestBody:
-        $ref: "#/components/requestBodies/Verification"
-      responses:
-        "200":
-          $ref: "#/components/responses/Success"
-        "400":
-          $ref: "#/components/responses/Error"
-        "409":
-          $ref: "#/components/responses/Error"
-        "500":
-          $ref: "#/components/responses/Error"
-      x-auth-context: staff-token
   /api/v1/bar/reservations/{id}/invitation:
     post:
       tags:
@@ -2845,6 +2810,7 @@ paths:
       x-auth-context: staff-token
       description: 门口邀请函入场核验。ROOT-03 clients-R6（BSM 第 870 行「到店出示本人的动态入场码入场」、第 1036 行「邀请函二维码……本身不作为入场凭证」）：credential_payload 必须是被邀请人本人在 App/小程序取的动态入场码（未过期、本订台），客人号/手机号明文与过期码一律 409 BAR_INVITATION_ENTRY_CODE_INVALID；已入场重复核验返回原记录。
         第十八批 N 段第 123 条 123-R2（BSM:1630「核销、收款、退款、放行等敏感操作，操作设备定位落在该项目综合体授权范围之外时一律拒绝并留痕」；BSM:1876「Web 端同样适用」）：本操作属敏感操作定位闸的现场动作闭集（第十八批裁决 31）。操作对象所属项目已配授权范围（123-R1）时须带请求头 X-Geo-Latitude、X-Geo-Longitude（设备当下定位，WGS-84 十进制度）：没带或解析不了按范围外处理（裁决 30）返回 403 SENSITIVE_OPERATION_LOCATION_REQUIRED，到圆心距离超过授权半径返回 403 SENSITIVE_OPERATION_OUT_OF_RANGE，拒绝在独立事务里留痕 sensitive_operation.location_rejected（business_id 为本 operationId，业务回滚不丢）；项目没配授权范围不查位置（裁决 32）；判定在幂等之前，重放不能绕过；通过时不存位置。
+        第十八批 Q 段第 150 条 150-R1（BSM:552「进场之后，工作手机扫客人二维码核销各酒吧入场」；BSM:1036「到店出示本人的动态入场码核验入场」）：入场码格式 bie.订台号.成员号.到期秒.随机串.签名；工作手机按码中订台号调用本接口，码中订台号与路径不符同样 409 BAR_INVITATION_ENTRY_CODE_INVALID。
       x-failure-codes:
         - BAR_INVITATION_ENTRY_CODE_INVALID
         - BAR_INVITATION_MEMBER_NOT_CONFIRMED
@@ -4043,7 +4009,7 @@ paths:
         - finance
       operationId: createDailyClose
       summary: 日结锁定
-      description: 日结锁定。TK-14（ENUM「异常状态的统一出口」：异常单据未处置完毕，所属日结不得确认锁定）：原核销落在该营业日、仍待主管处置的票务核销异常存在时 409 DAY_CLOSE_ANOMALY_PENDING（merchant 范围只看本商户）。第十六批第 16 条同一规则接酒吧账单：开单或收款落在该营业日、仍处于异常（abnormal）待主管处置的酒吧账单存在时同样 409 DAY_CLOSE_ANOMALY_PENDING（merchant 范围只看本商户）。
+      description: 日结锁定。TK-14（ENUM「异常状态的统一出口」：异常单据未处置完毕，所属日结不得确认锁定）：原核销落在该营业日、仍待主管处置的票务核销异常存在时 409 DAY_CLOSE_ANOMALY_PENDING（merchant 范围只看本商户）。第十六批第 16 条同一规则接酒吧账单：开单或收款落在该营业日、仍处于异常（abnormal）待主管处置的酒吧账单存在时同样 409 DAY_CLOSE_ANOMALY_PENDING（merchant 范围只看本商户）。第十八批 Q 段第 144 条（BSM:1106「未结清订单阻止交班和日结」）：开单落在该营业日、仍未结清（结清、被合单、主管作废并冲正之外）的酒吧账单存在时 409 DAY_CLOSE_UNSETTLED_BILL，原文列出账单号（merchant 范围只看本商户）。
       x-permission: finance.daily_close.lock
       x-data-scope: project-entity
       x-terminal-allowed:
@@ -12369,7 +12335,7 @@ paths:
         - ticketing
       operationId: createTicketVerification
       summary: 正式核销
-      description: "核销记录状态闭集（CG-05，ENUM「核销记录状态」）：success（成功）、rejected（拒绝：规则不允许）、failed（失败：设备或网络原因）、reversed（已冲正）、anomaly（异常：已成功扣次但现场未放行或实际交付有争议时提起的异常复核，见 POST /api/v1/ticketing/verifications/{id}/anomaly 与 POST /api/v1/ticketing/verification-anomalies/{id}/resolve）；不设预检通过态、不提供人工放行（manual_overridden 仅历史行保留）。 在线核销：过刷新窗口 / 签名失配以正常响应返回 status=failed（window_expired / signature_invalid）；规则不允许仍以错误响应返回（响应不变），业务事务结束后另起事务落一条 status=rejected 记录（result_reason 为错误码小写；不扣次、不落结算价）；参数校验、鉴权、越权、定位闸等未进入有效检票的错误不落核销记录（CG 裁决第46、48项）。第十八批 N 段第 123 条 123-R2（BSM:1630「核销、收款、退款、放行等敏感操作，操作设备定位落在该项目综合体授权范围之外时一律拒绝并留痕」；BSM:1876「Web 端同样适用」）：本操作属敏感操作定位闸的现场动作闭集（第十八批裁决 31）。操作对象所属项目已配授权范围（123-R1）时须带请求头 X-Geo-Latitude、X-Geo-Longitude（设备当下定位，WGS-84 十进制度）：没带或解析不了按范围外处理（裁决 30）返回 403 SENSITIVE_OPERATION_LOCATION_REQUIRED，到圆心距离超过授权半径返回 403 SENSITIVE_OPERATION_OUT_OF_RANGE，拒绝在独立事务里留痕 sensitive_operation.location_rejected（business_id 为本 operationId，业务回滚不丢）；项目没配授权范围不查位置（裁决 32）；判定在幂等之前，重放不能绕过；通过时不存位置。"
+      description: "核销记录状态闭集（CG-05，ENUM「核销记录状态」）：success（成功）、rejected（拒绝：规则不允许）、failed（失败：设备或网络原因）、reversed（已冲正）、anomaly（异常：已成功扣次但现场未放行或实际交付有争议时提起的异常复核，见 POST /api/v1/ticketing/verifications/{id}/anomaly 与 POST /api/v1/ticketing/verification-anomalies/{id}/resolve）；不设预检通过态、不提供人工放行（manual_overridden 仅历史行保留）。 在线核销：过刷新窗口 / 签名失配以正常响应返回 status=failed（window_expired / signature_invalid）；规则不允许仍以错误响应返回（响应不变），业务事务结束后另起事务落一条 status=rejected 记录（result_reason 为错误码小写；不扣次、不落结算价）；设备或凭证技术原因抛错（设备封禁或未纳管、核销设备未绑定商户、凭证已用或已作废等）同样以错误响应返回，业务事务结束后另起事务落一条 status=failed 记录；设备未登记不落；参数校验、鉴权、越权、定位闸等未进入有效检票的错误不落核销记录（CG 裁决第46、48项）。第十八批 Q 段第 148 条 148-R1（ENUM:55「未先核入场即核酒水一律拒绝」）：酒水（赠饮）权益须本营业日内已核销同票同人份这家酒吧的入场权益，否则 409 BAR_ENTRY_NOT_VERIFIED（规则拒绝，落 rejected）。第十八批 N 段第 123 条 123-R2（BSM:1630「核销、收款、退款、放行等敏感操作，操作设备定位落在该项目综合体授权范围之外时一律拒绝并留痕」；BSM:1876「Web 端同样适用」）：本操作属敏感操作定位闸的现场动作闭集（第十八批裁决 31）。操作对象所属项目已配授权范围（123-R1）时须带请求头 X-Geo-Latitude、X-Geo-Longitude（设备当下定位，WGS-84 十进制度）：没带或解析不了按范围外处理（裁决 30）返回 403 SENSITIVE_OPERATION_LOCATION_REQUIRED，到圆心距离超过授权半径返回 403 SENSITIVE_OPERATION_OUT_OF_RANGE，拒绝在独立事务里留痕 sensitive_operation.location_rejected（business_id 为本 operationId，业务回滚不丢）；项目没配授权范围不查位置（裁决 32）；判定在幂等之前，重放不能绕过；通过时不存位置。"
       x-permission: verification.execute
       x-data-scope: project-point
       x-terminal-allowed:
@@ -17318,6 +17284,7 @@ paths:
         - finance
       operationId: billTurnoverRent
       summary: 营业额抽成计费生成应收
+      description: 第十八批 Q 段第 138 条：抽成基数＝该商户本账期回流营业额（只计餐饮、零售的第三方回流，退款相抵）；非酒吧商户另计已付讫的券与通票合作方券内部结算价结算金额（partner_voucher 应付的实际付款，按付款时点归期）；酒吧商户另计平台内成交——整单已确认的商品实收（折后实收，不含券抵扣、服务费与小费分项，按结清时点）＋月结定格的服务费扣留数−已退成的商品分项＋没收的订台定金＋已完成的服务点单全额，各来源按该酒吧营业日窗取数（第 140 条），合计为负按 0 计。服务费尚未月结定格或酒吧收入来源分项未齐时 409 BAR_REVENUE_PENDING，不出账（ENUM:257 账单一次出准、不使用预估数）。
       x-auth-context: staff-token
       x-permission: finance.turnover_rent.bill
       x-data-scope: platform
@@ -22800,49 +22767,6 @@ paths:
           $ref: "#/components/responses/Error"
         "500":
           $ref: "#/components/responses/Error"
-  /api/v1/bar/reservations/{id}/entry-allowance/verify:
-    post:
-      tags:
-        - bar
-      operationId: verifyBarReservationEntryAllowance
-      summary: 卡座免通票入场名额校验
-      x-permission: bar.table.guest_checkin
-      x-data-scope: project-bar
-      x-terminal-allowed:
-        - staff_work_phone
-        - kiosk
-      x-idempotency-required: true
-      x-audit-event-success: bar.table_guest.entry_allowance_verified
-      x-audit-event-failure: bar.table_guest.entry_allowance_verify_failed
-      parameters:
-        - $ref: "#/components/parameters/Id"
-          description: undefined 参数；必须按 OpenAPI 类型、枚举和必填规则校验。
-      requestBody:
-        $ref: "#/components/requestBodies/Verification"
-      responses:
-        "200":
-          description: 校验结果；allowed=false 表示业务拒绝且不消耗名额。
-          content:
-            application/json:
-              schema:
-                allOf:
-                  - $ref: "#/components/schemas/SuccessResponse"
-                  - type: object
-                    properties:
-                      data:
-                        $ref: "#/components/schemas/BarReservationEntryAllowanceVerificationRecord"
-        "400":
-          $ref: "#/components/responses/Error"
-        "403":
-          $ref: "#/components/responses/Error"
-        "404":
-          $ref: "#/components/responses/Error"
-        "409":
-          $ref: "#/components/responses/Error"
-        "500":
-          $ref: "#/components/responses/Error"
-      x-auth-context: staff-token
-      description: 用于卡座预约入场名额预校验：不生成票务权益、不抵扣最低消费、不消耗名额；正式放行仍调用 check-in-guest，并在事务中锁定 reservation 防并发超额。
   /api/v1/finance/ar-ap-items/export:
     get:
       tags:
@@ -25371,7 +25295,7 @@ paths:
       x-auth-context: staff-token
       description: 生效合同按 ContractRentMath 算该期租金应收 → 联动
         ar_ap_items(receivable/pending_collection)+contract_rent_bills,幂等(合同,期,租金)。免租/生效前无应收。 涉及抽成时锁定该账期实际采用的
-        turnover_rule_id；规则缺失、重叠或月内切换不能唯一覆盖完整账期时待处理，不按当前最新规则替算。第十八批 G 段 82b-R3：合同所属项目须在本入口权限码可触及范围内（含可跨项目角色勾选的项目；平台管理员不限），合同未带项目或不在范围内 403 CROSS_PROJECT_FORBIDDEN（在幂等执行与行锁之前判）。
+        turnover_rule_id；规则缺失、重叠或月内切换不能唯一覆盖完整账期时待处理，不按当前最新规则替算。第十八批 G 段 82b-R3：合同所属项目须在本入口权限码可触及范围内（含可跨项目角色勾选的项目；平台管理员不限），合同未带项目或不在范围内 403 CROSS_PROJECT_FORBIDDEN（在幂等执行与行锁之前判）。第十八批 Q 段第 138 条：涉及抽成的账期，酒吧商户服务费尚未月结定格或酒吧收入来源分项未齐时 409 BAR_REVENUE_PENDING，本次不出账。第十八批 Q 段第 138 条复核修正：已到期合同可对到期日所在月及以前的账期出账（营业额抽成类合同的最后一期在到期、该期月结定格后出），到期日所在月之后的账期与其他非生效状态 409 CONTRACT_NOT_EFFECTIVE；保底与抽成取高、保底加抽成叠加合同变更或续租终审前的账期按当时月租（rent_terms.priorRentTerms）出账。
       parameters:
         - name: contract_id
           in: path
@@ -25524,7 +25448,7 @@ paths:
       x-audit-event-failure: contract.period_bill_failed
       x-auth-context: staff-token
       description: 一期生成 租金(ContractRentMath)+物业费(rent_terms.propertyFeeCent)+能源费(基非none取 rent_terms.energyFeeCent)
-        应收;各费目幂等;0/免租跳过。 涉及抽成时锁定该账期实际采用的 turnover_rule_id；规则缺失、重叠或月内切换不能唯一覆盖完整账期时待处理，不按当前最新规则替算。第十八批 G 段 82b-R3：合同所属项目须在本入口权限码可触及范围内（含可跨项目角色勾选的项目；平台管理员不限），合同未带项目或不在范围内 403 CROSS_PROJECT_FORBIDDEN（在幂等执行与行锁之前判）。
+        应收;各费目幂等;0/免租跳过。 涉及抽成时锁定该账期实际采用的 turnover_rule_id；规则缺失、重叠或月内切换不能唯一覆盖完整账期时待处理，不按当前最新规则替算。第十八批 G 段 82b-R3：合同所属项目须在本入口权限码可触及范围内（含可跨项目角色勾选的项目；平台管理员不限），合同未带项目或不在范围内 403 CROSS_PROJECT_FORBIDDEN（在幂等执行与行锁之前判）。第十八批 Q 段第 138 条：涉及抽成的账期，酒吧商户服务费尚未月结定格或酒吧收入来源分项未齐时 409 BAR_REVENUE_PENDING，本次不出账。第十八批 Q 段第 138 条复核修正：已到期合同可对到期日所在月及以前的账期出账（营业额抽成类合同的最后一期在到期、该期月结定格后出），到期日所在月之后的账期与其他非生效状态 409 CONTRACT_NOT_EFFECTIVE；保底与抽成取高、保底加抽成叠加合同变更或续租终审前的账期按当时月租（rent_terms.priorRentTerms）出账。
       parameters:
         - name: contract_id
           in: path
@@ -60208,7 +60132,6 @@ components:
       required:
         - bar_id
         - table_name
-        - allowed_free_entry_count
       properties:
         idempotency_key:
           type: string
@@ -60246,11 +60169,10 @@ components:
           description: 最低消费金额，单位分；不能用通票或票务权益抵扣。
           minimum: 0
           maximum: 999999999999
-        allowed_free_entry_count:
+        capacity:
           type: integer
-          description: 卡座允许免通票进入本酒吧的人数；只对预定卡座所在酒吧生效。
+          description: 卡座可进人数，签发邀请函时作为名额快照（BSM:1036）
           minimum: 0
-          maximum: 999999
         status:
           type: string
           description: "`status` 状态字段；状态流转必须符合所属业务对象规则并留痕。"
@@ -60525,6 +60447,18 @@ components:
           type: string
           description: 会员号即客人注册手机号（选填）；收银现场录入用于识别本单会员累计积分与成长值，走客人查询专门通道留痕；查无会员返回 MEMBER_NOT_FOUND，不代建会员。
           maxLength: 32
+        pos_transaction_no:
+          type: string
+          description: POS 交易流水号；payment_channel=pos 时由收银录入，记入本笔结算流水与 payment.pos_received 留痕，供对账（BSM 第 1066 行「POS（记流水号+收款人）」）。
+          maxLength: 128
+        phone:
+          type: string
+          description: 储值支付的付款客人手机号；payment_channel=stored_value 时与 sms_code 一并核验付款客人。
+          maxLength: 32
+        sms_code:
+          type: string
+          description: 储值支付短信验证码；先调 POST /api/v1/bar/bills/{bill_id}/stored-value/sms 发到 phone，payment_channel=stored_value 时核验，验证不过整笔结账不成立。
+          maxLength: 16
     CommissionCalculateRequest:
       type: object
       description: 请求载荷 `CommissionCalculateRequest`；字段、必填项和枚举用于生成 DTO、校验和契约测试。
@@ -65158,7 +65092,7 @@ components:
     BarShiftOpenRequest:
       type: object
       description: 请求载荷 `BarShiftOpenRequest`（V095 开班）；记录吧台、收银员、备用金（opening_cash_cent，可缺省
-        0）、现金差异复核阈值（cash_diff_threshold_cent，默认 0=任何差异即复核）；同一吧台同一收银员仅允许一个 open 班次。
+        0）；出现任何金额的差额即进复核（不设容差）；同一吧台同一收银员仅允许一个 open 班次。
       additionalProperties: false
       required:
         - bar_id
@@ -65185,11 +65119,6 @@ components:
           description: 备用金，单位分；不得使用浮点数。
           minimum: 0
           maximum: 999999999999
-        cash_diff_threshold_cent:
-          type: integer
-          description: 现金差异复核阈值，单位分；差异绝对值超此值进复核（默认 0）。
-          minimum: 0
-          maximum: 999999999999
         note:
           type: string
           description: 开班备注；进入审计留痕。
@@ -65198,7 +65127,7 @@ components:
       type: object
       description: 请求载荷 `BarShiftCloseRequest`（V095 班结对账）；录入实点现金
         declared_cash_cent，可选交接下一班收银员（handover_to_user_id）。系统应收（各支付方式/退款/小费）按班次时间窗口聚合，无需客户端传入；现金差异 = 实点 -（备用金 +
-        系统现金应收），超阈值进复核。
+        系统现金应收），差额不为 0 即进复核。
       additionalProperties: false
       required:
         - declared_cash_cent
@@ -65503,78 +65432,6 @@ components:
           items:
             type: string
             maxLength: 64
-    BarReservationEntryAllowanceVerificationRecord:
-      type: object
-      required:
-        - id
-        - reservation_id
-        - bar_id
-        - table_id
-        - guest_identifier
-        - allowed
-        - reason_code
-        - checked_in_count
-        - allowed_guest_count
-        - remaining_guest_count
-        - verified_at
-      properties:
-        id:
-          type: string
-          description: 幂等校验记录 ID，不消耗卡座免通票入场名额。
-        reservation_id:
-          type: string
-          description: 订台/卡座预约 ID。
-        bar_id:
-          type: string
-          description: 预约所属酒吧；免通票入场仅限该酒吧。
-        table_id:
-          type: string
-          description: 预约绑定的卡座/桌台。
-        guest_identifier:
-          type: string
-          description: 本次校验的客人凭据摘要或业务凭据。
-        allowed:
-          type: boolean
-          description: 是否允许作为卡座免通票名额进入。false 不消耗名额。
-        reason_code:
-          type: string
-          enum:
-            - allowed
-            - BAR_RESERVATION_NOT_CHECKINABLE
-            - BAR_SCOPE_MISMATCH
-            - FREE_GUEST_QUOTA_EXHAUSTED
-          description: 拒绝原因或 allowed；用于工作手机/闸机展示和留痕。
-        checked_in_count:
-          type: integer
-          minimum: 0
-          description: 该预约已消耗的免通票入场人数。
-        allowed_guest_count:
-          type: integer
-          minimum: 0
-          description: 该预约配置的免通票入场名额。
-        remaining_guest_count:
-          type: integer
-          minimum: 0
-          description: 校验时剩余名额；最终核销仍以 check-in 接口事务锁为准。
-        device_id:
-          type: string
-          nullable: true
-          description: 工作手机/闸机/一体机设备 ID。
-        staff_id:
-          type: string
-          nullable: true
-          description: 操作员工 ID。
-        evidence_attachment_ids:
-          type: array
-          items:
-            type: string
-          description: 校验相关证据附件 ID。
-        verified_at:
-          type: string
-          format: date-time
-          description: 校验时间。
-      additionalProperties: false
-      description: 酒吧预约entryallowance核销record请求体。字段必须与 OpenAPI、后端 DTO、前端请求、Android 请求和供应商 mock 保持一致。
     ConfirmTicketOrderPaymentRequest:
       type: object
       description: 请求载荷 `ConfirmTicketOrderPaymentRequest`（2a-2 票务支付回写闭环）；payment_intent_id
@@ -66315,7 +66172,7 @@ components:
             - early_termination
         payload:
           type: object
-          description: 变更载荷(改对应条款细节)；move_out/early_termination 必填 move_out_date(退租日 yyyy-MM-dd，缺失或不可解析 400 VALIDATION_FAILED，归一存为 moveOutDate；齐单核对、缺单判定、欠费口径截止于退租日所在月)；area_change/location_change 必填 deposit_deadline(押金补退办理期限 yyyy-MM-dd)，非每平米计租必填 base_rent_cent(变更后月租，分，大于 0)，location_change 可给 space_ids(新铺位)；拒收手工 new_deposit_cent(400 VALIDATION_FAILED)，目标押金＝原合同快照押金月数×变更后月租，原合同快照缺押金月数 409 CONTRACT_DEPOSIT_MONTHS_MISSING(HP-C03)；子合同租金递增以变更后月租为基数、自变更终审当日起重新计期(rent_terms.increaseFrom)。renewal 必填 new_expiry_date(续租后到期日 yyyy-MM-dd，须晚于现到期日)与 deposit_deadline，每平米计租合同必填 per_sqm_rent_cent(续租后每平米单价，分，大于 0)、否则必填 base_rent_cent(续租后月租，分，大于 0)，缺项 400 VALIDATION_FAILED；终审通过即同一合同延期：延长到期日、换月租、重固化快照(押金月数沿用原合同快照)、回生效、自原到期月起按续租后条款补排延长期账单(已出账期间不重复)，租金递增以续租后月租为基数、自原到期日次日起重新计期(rent_terms.increaseFrom)；延长期铺位已被别的生效合同占用 409 CONTRACT_SPACE_CONFLICT、按原合同押金月数×续租后月租登记押金差额(应收/应退，到期日＝办理期限)；驳回不改条款。纯提成合同(rent_terms.rentBillingMode=turnover_only，没有月租)押金为约定金额：面积/位置变更与续租不要求 deposit_deadline 与变更/续租后月租，不按公式重算押金、不登记押金差额。rent_change 非纯提成合同必填调整后月租：每平米计租合同 per_sqm_rent_cent(调整后每平米单价，分，大于 0；终审按合同铺位面积算月租)、否则 base_rent_cent(调整后月租，分，大于 0)，缺项 400 VALIDATION_FAILED；终审通过即作废本合同(及变更链)自终审当月起整笔未收的预排租金应收(留痕；日结锁定的照常作废，冲正行不继承锁、业务日期取作废当日，该期重排应收同记作废当日)，按调整后月租在同一合同重排剩余租期(已部分收款的账期不作废、不重排；物业费不动)，租金递增以调整后月租为基数、自终审当日起重新计期(rent_terms.increaseFrom)；纯提成合同不重排租金。rent_change/business_scope_change 载荷不得带变更链系统键(parent_contract_id/amendment_type/increase_from/deposit_adjustment/scope_grants，驼峰同)，400 VALIDATION_FAILED。终审应用时合同已非生效中(同一合同另一面积/位置变更或退租已先终审)：退租/提前终止以外的变更 409 CONTRACT_NOT_EFFECTIVE，终审整笔回滚、由审批人驳回。
+          description: 变更载荷(改对应条款细节)；move_out/early_termination 必填 move_out_date(退租日 yyyy-MM-dd，缺失或不可解析 400 VALIDATION_FAILED，归一存为 moveOutDate；齐单核对、缺单判定、欠费口径截止于退租日所在月)；area_change/location_change 必填 deposit_deadline(押金补退办理期限 yyyy-MM-dd)，非每平米计租必填 base_rent_cent(变更后月租，分，大于 0)，location_change 可给 space_ids(新铺位)；拒收手工 new_deposit_cent(400 VALIDATION_FAILED)，目标押金＝原合同快照押金月数×变更后月租，原合同快照缺押金月数 409 CONTRACT_DEPOSIT_MONTHS_MISSING(HP-C03)；子合同租金递增以变更后月租为基数、自变更终审当日起重新计期(rent_terms.increaseFrom)。renewal 必填 new_expiry_date(续租后到期日 yyyy-MM-dd，须晚于现到期日)与 deposit_deadline，每平米计租合同必填 per_sqm_rent_cent(续租后每平米单价，分，大于 0)、否则必填 base_rent_cent(续租后月租，分，大于 0)，缺项 400 VALIDATION_FAILED；终审通过即同一合同延期：延长到期日、换月租、重固化快照(押金月数沿用原合同快照)、回生效、自原到期月起按续租后条款补排延长期账单(已出账期间不重复)，租金递增以续租后月租为基数、自原到期日次日起重新计期(rent_terms.increaseFrom)；延长期铺位已被别的生效合同占用 409 CONTRACT_SPACE_CONFLICT、按原合同押金月数×续租后月租登记押金差额(应收/应退，到期日＝办理期限)；驳回不改条款。纯提成合同(rent_terms.rentBillingMode=turnover_only，没有月租)押金为约定金额：面积/位置变更与续租不要求 deposit_deadline 与变更/续租后月租，不按公式重算押金、不登记押金差额。rent_change 非纯提成合同必填调整后月租：每平米计租合同 per_sqm_rent_cent(调整后每平米单价，分，大于 0；终审按合同铺位面积算月租)、否则 base_rent_cent(调整后月租，分，大于 0)，缺项 400 VALIDATION_FAILED；终审通过即作废本合同(及变更链)自终审当月起整笔未收的预排租金应收(留痕；日结锁定的照常作废，冲正行不继承锁、业务日期取作废当日，该期重排应收同记作废当日)，按调整后月租在同一合同重排剩余租期(已部分收款的账期不作废、不重排；物业费不动)，租金递增以调整后月租为基数、自终审当日起重新计期(rent_terms.increaseFrom)；营业额抽成类合同(rent_terms.rentBillingMode 为 turnover_only/higher_of/sum)不预排、不重排租金，该期租金在账期月结定格后经 period-bills/rent-bills 出账(第十八批 Q 段 138-R5)；保底与抽成取高/保底加抽成叠加合同续租、租金调整、面积/位置变更终审时把原月租条款连同适用末月记入 rent_terms.priorRentTerms，终审前的账期(续租为原到期月及以前，租金调整、面积/位置变更为终审当月以前，子合同沿用父合同月租)事后出账仍按原月租。rent_change/business_scope_change 载荷不得带变更链系统键(parent_contract_id/amendment_type/increase_from/deposit_adjustment/scope_grants，驼峰同)，400 VALIDATION_FAILED。终审应用时合同已非生效中(同一合同另一面积/位置变更或退租已先终审)：退租/提前终止以外的变更 409 CONTRACT_NOT_EFFECTIVE，终审整笔回滚、由审批人驳回。
           additionalProperties: true
         final_approver_id:
           type: string

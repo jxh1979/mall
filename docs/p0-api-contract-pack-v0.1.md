@@ -305,7 +305,7 @@
 |---|---|---|---|
 | `GET/POST` | `/api/v1/bar/tables` | 桌台/卡座管理 | `bar.table.view` / `bar.table.manage` |
 | `POST` | `/api/v1/bar/reservations` | 订台/卡座预订 | `bar.reservation.create` |
-| `POST` | `/api/v1/bar/reservations/{id}/check-in-guest` | 卡座免通票入场名额核销 | `bar.table.guest_checkin` |
+| `POST` | `/api/v1/bar/reservations/{id}/invitation/entry-verify` | 卡座邀请函门口入场核验（本人动态入场码） | `bar.table.guest_checkin` |
 | `POST` | `/api/v1/bar/age-verifications` | 年龄/人脸核验 | `bar.entry.age_verify` |
 | `POST` | `/api/v1/bar/tables/{table_id}/open` | 开台 | `bar.table.open_close` |
 | `POST` | `/api/v1/bar/orders` | 点单 | `bar.order.create` |

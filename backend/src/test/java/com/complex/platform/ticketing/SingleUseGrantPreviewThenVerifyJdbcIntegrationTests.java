@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.06
+// 文件版本：V0.07
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -45,6 +45,7 @@ import org.springframework.test.web.servlet.request.RequestPostProcessor;
  * M723-F08（第 656 行「操作被拒绝或失败的不算用掉」）：以正常返回报告失败的核销（过刷新窗口、签名失配）不算用掉——失败核销记录保留、
  * 来源仍未消耗，同一请求编号重复提交返回第一次的失败结果，随后有效票码核销成功恰好消耗一次。
  * 第十八批 O 段第 129 条：离线核销同步与离线权益包两接口已下线（404），同一票码只能在线核销。
+ * 第十八批 Q 段第 145 条：在线核销以错误响应返回的设备、凭证技术失败落一条 failed 核销记录，不扣次、不算用掉；跨商户的已用码先被归属校验拦下、不落记录。
  *
  * <p>不开测试事务（消耗要真实提交才看得见）。权益使用普通单次酒水，专门验证一次性授权；游乐营业日由专用真实库用例覆盖。
  * 消耗日志与审计事件只追加不删，按后缀隔离留在库里。
@@ -257,6 +258,75 @@ class SingleUseGrantPreviewThenVerifyJdbcIntegrationTests {
 
         mockMvc.perform(post("/api/v1/ticketing/verifications").with(session())
                         .contentType(MediaType.APPLICATION_JSON).content(verifyJson("m723pv-r134-xm-" + suffix)))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.detail_code").value("CROSS_MERCHANT_FORBIDDEN"));
+        assertThat(verificationOutcomes()).isEmpty();
+        assertThat(usedTimes()).isZero();
+    }
+
+    // 第十八批 Q 段第 145 条 145-R1（ENUM:43「……明确的设备或网络失败仍记「失败」，不得一律改为异常。」；BSM:742「现场核销时判断是否可用，
+    // 并记录核销结果。」）：只持单次「执行核销」授权的本商户员工按蛇形键在没设所属商户的设备上核销本商户赠饮——409
+    // VERIFY_DEVICE_MERCHANT_UNRESOLVED，落一条 failed/verify_device_merchant_unresolved 核销记录（在线来源、无结算价），不扣次、
+    // 授权未用掉，失败审计照旧。修复前设备原因的失败不落核销记录，第一处核销记录断言即红。
+    @Test
+    void aDeviceFailureOnlineVerificationLeavesAFailedRecordAndDoesNotUseUpTheGrant() throws Exception {
+        seedDevice();
+        seedEntitlement();
+        jdbcTemplate.update("UPDATE issued_entitlements SET entitlement_type = 'gift_drink' WHERE id = ?", "ent_" + code);
+        staffWithSingleUseGrant(VERIFY);
+
+        String failedKey = "m723pv-q145-device-" + suffix;
+        mockMvc.perform(post("/api/v1/ticketing/verifications").with(session())
+                        .contentType(MediaType.APPLICATION_JSON).content(verifyJson(failedKey)))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.detail_code").value("VERIFY_DEVICE_MERCHANT_UNRESOLVED"));
+        assertThat(verificationOutcomes()).containsExactly("failed/verify_device_merchant_unresolved");
+        assertThat(jdbcTemplate.queryForList("""
+                SELECT source_type || '/' || coalesce(settlement_price_cent::text, 'null')
+                  FROM ticket_verifications WHERE entitlement_id = ?
+                """, String.class, "ent_" + code)).containsExactly("android_terminal_online/null");
+        assertThat(usedTimes()).isZero();
+        assertUnconsumed();
+        assertThat(jdbcTemplate.queryForList("""
+                SELECT event_name || '/' || (metadata ->> 'error_code') FROM audit_events
+                 WHERE idempotency_key = ? AND event_result = 'failure'
+                """, String.class, failedKey)).contains("verification.failed/VERIFY_DEVICE_MERCHANT_UNRESOLVED");
+    }
+
+    // 145-R1：凭证技术原因——动态码已用（同码二扫）：409 CREDENTIAL_EXPIRED，落一条 failed/credential_expired，不扣次、授权未用掉。
+    // 只提交一次：本类员工只持单次授权，成功后的第二次请求先被 403 PERMISSION_DENIED 拦下，到不了凭证判定。
+    @Test
+    void anAlreadyUsedDynamicCodeLeavesAFailedRecordAndDoesNotUseUpTheGrant() throws Exception {
+        seedDevice();
+        seedEntitlement();
+        String usedToken = "cred_q145_used_" + suffix;
+        seedCredential("tcred_used_" + code, usedToken, Instant.now(), "not-checked-consumed");
+        jdbcTemplate.update("UPDATE ticket_credentials SET status = 'consumed' WHERE id = ?", "tcred_used_" + code);
+        staffWithSingleUseGrant(VERIFY);
+
+        mockMvc.perform(post("/api/v1/ticketing/verifications").with(session())
+                        .contentType(MediaType.APPLICATION_JSON).content(verifyJson("m723pv-q145-used-" + suffix, usedToken)))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.detail_code").value("CREDENTIAL_EXPIRED"));
+        assertThat(verificationOutcomes()).containsExactly("failed/credential_expired");
+        assertThat(usedTimes()).isZero();
+        assertUnconsumed();
+    }
+
+    // 145-R1（CG 裁决第 48 项「未进入有效检票的参数校验、鉴权等错误不额外生成票务核销记录」）：别家商户的已用动态码先过商户归属校验，
+    // 403 CROSS_MERCHANT_FORBIDDEN，不落任何核销记录。修复前已用判定在归属校验之前，返回 409 CREDENTIAL_EXPIRED 即红。
+    @Test
+    void anAlreadyUsedDynamicCodeOfAnotherMerchantIsRefusedByScopeAndLeavesNoRecord() throws Exception {
+        seedDevice();
+        seedEntitlement();
+        jdbcTemplate.update("UPDATE issued_entitlements SET merchant_id = 'merchant_b' WHERE id = ?", "ent_" + code);
+        String usedToken = "cred_q145_xm_" + suffix;
+        seedCredential("tcred_xm_" + code, usedToken, Instant.now(), "not-checked-consumed");
+        jdbcTemplate.update("UPDATE ticket_credentials SET status = 'consumed' WHERE id = ?", "tcred_xm_" + code);
+        staffWithSingleUseGrant(VERIFY);
+
+        mockMvc.perform(post("/api/v1/ticketing/verifications").with(session())
+                        .contentType(MediaType.APPLICATION_JSON).content(verifyJson("m723pv-q145-xm-" + suffix, usedToken)))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.detail_code").value("CROSS_MERCHANT_FORBIDDEN"));
         assertThat(verificationOutcomes()).isEmpty();

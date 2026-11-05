@@ -1,6 +1,6 @@
 package com.complex.platform.contract;
 
-// 文件版本：V0.24
+// 文件版本：V0.25
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
@@ -2185,12 +2185,13 @@ class ContractServiceTests {
     }
 
     /**
-     * 「保底与抽成取高」合同（BSM L1347「模式含：保底与抽成取高、固定比例、阶梯比例、保底加抽成叠加」）面积变更终审重排（第四轮裁决第 2 条「按子合同新月租和
-     * 重新计期的递增重排剩余租期」）：抽成规则按合同 id 精确匹配、只挂在父合同（子合同 id 终审时才派生，没有它的规则）→ 子合同出账沿变更链取父合同该期规则，
-     * 终审不因 TURNOVER_RENT_RULE_PERIOD_UNRESOLVED 整笔回滚；子合同自变更月起重排租金＝max(新月租 150000, 当期抽成 0)，账单固化父合同规则 id。
+     * 第十八批 Q 段第 138 条 138-R5（ENUM:257「营业额抽成账单在该账期的薪资月结完成、该账期月结定格时确定的服务费应发数与扣留数定数之后出账，账单一次出准，
+     * 不使用预估数、不在下期补差」）：「保底与抽成取高」合同（BSM L1347「模式含：保底与抽成取高、固定比例、阶梯比例、保底加抽成叠加」）生效与面积变更终审
+     * 都不预排租金、不调抽成计算，只排物业费（第四轮裁决第 2 条：变更月起作废父链未收物业费、子合同重排剩余租期）；子合同按期出账时，抽成规则按合同 id
+     * 精确匹配、只挂在父合同（子合同 id 终审时才派生，没有它的规则）→ 沿变更链取父合同该期规则，租金＝max(新月租 150000, 当期抽成 0)，账单固化父合同规则 id。
      */
     @Test
-    void higherOfAmendmentRebillsChildRentWithParentTurnoverRule() {
+    void higherOfContractIsNotPrebilledAndChildPeriodBillUsesParentTurnoverRule() {
         com.complex.platform.finance.FinanceService turnover = mock(com.complex.platform.finance.FinanceService.class);
         when(turnover.computePeriodTurnoverRentSnapshot(any(), any(), any())).thenAnswer(inv -> {
             boolean child = repo.findContractById(inv.getArgument(1))
@@ -2202,22 +2203,73 @@ class ContractServiceTests {
         });
         ContractService svc = new ContractService(repo, audit, authz, null, null, null, turnover, terminationPort, null, reviews);
         YearMonth now = YearMonth.now(LocalZone.ID);
-        ContractRecord parent = activatedSixMonthsAgo(svc, "k_rbh", Map.of("rentBillingMode", "higher_of", "baseRentCent", 100000),
-                null, "sp_hof");
-        org.mockito.Mockito.clearInvocations(turnover);
+        ContractRecord parent = activatedSixMonthsAgo(svc, "k_rbh",
+                Map.of("rentBillingMode", "higher_of", "baseRentCent", 100000, "propertyFeeCent", 20000), null, "sp_hof");
+        assertThat(bills(parent.id(), "rent", false)).isEmpty();
+        assertThat(bills(parent.id(), "property_fee", false)).hasSize(37);
         ContractChangeRecord area = svc.raiseChange(parent.id(), change("k_rbh_ch", "area_change",
                 Map.of("areaSqm", 150, "baseRentCent", 150000, "depositDeadline", now.atEndOfMonth().toString())));
         assertThatCode(() -> svc.onReviewDecided(decision(repo.findChangeById(area.id()).orElseThrow().reviewId(), "approved",
                 "contract.change", "contract_change", area.id()))).doesNotThrowAnyException();
 
         ContractRecord child = repo.listChildContracts(parent.id()).get(0);
-        Map<String, Long> childRent = bills(child.id(), "rent", false);
-        assertThat(childRent).hasSize(31).containsKey(now.toString()).containsKey(now.plusMonths(30).toString());
-        assertThat(childRent.values()).containsOnly(150000L);
-        assertThat(repo.rentBills.stream().filter(b -> b.contractId().equals(child.id())).map(ContractRentBillRecord::turnoverRuleId))
-                .containsOnly("trr_parent");
-        assertThat(bills(parent.id(), "rent", true)).hasSize(31);
+        assertThat(bills(child.id(), "rent", false)).isEmpty();
+        assertThat(bills(parent.id(), "property_fee", true)).hasSize(31);
+        assertThat(bills(child.id(), "property_fee", false)).hasSize(31).containsEntry(now.toString(), 20000L);
+        verify(turnover, never()).computePeriodTurnoverRentSnapshot(any(), any(), any());
+
+        svc.generatePeriodBills(child.id(), new ContractRentBillRequest("k_rbh_bill", now.toString()));
+        assertThat(bills(child.id(), "rent", false)).containsOnlyKeys(now.toString()).containsEntry(now.toString(), 150000L);
+        assertThat(repo.rentBills.stream().filter(b -> b.contractId().equals(child.id()) && b.feeType().equals("rent"))
+                .map(ContractRentBillRecord::turnoverRuleId)).containsOnly("trr_parent");
         verify(turnover).computePeriodTurnoverRentSnapshot(eq("mch_1"), eq(parent.id()), eq(now.toString()));
+    }
+
+    /**
+     * 第十八批 Q 段第 138 条 138-R5 复核修正（决策台账第七批合同裁决第 4 条所引 ENUM L255「续租审批未完成期间按原合同继续出账」，第 10 条「续租/变更录入的月租就是
+     * 新的基数……从续租/变更生效日起重新计期」，第 16 条「作废父合同自变更生效月起……按子合同新月租和重新计期的递增重排剩余租期」，第 20 条「作废自生效月起……按调整后
+     * 月租重排剩余租期」）：保底与抽成取高合同（月租 100000，当期抽成 0）不预排租金，变更或续租终审后才按期出账的账期取该账期实际适用的月租——续租（150000）后原到期月
+     * 仍 100000、延长期首月 150000；租金调整（150000）后终审上月仍 100000、终审当月 150000；面积变更（150000）后子合同出终审上月沿用父合同月租 100000、终审当月 150000。
+     */
+    @Test
+    void higherOfPeriodBilledAfterRenewalRentChangeOrAmendmentUsesTheRentInForceForThatPeriod() {
+        com.complex.platform.finance.FinanceService turnover = mock(com.complex.platform.finance.FinanceService.class);
+        when(turnover.computePeriodTurnoverRentSnapshot(any(), any(), any()))
+                .thenReturn(new com.complex.platform.finance.FinanceService.PeriodTurnoverRent("trr_hof", 0L));
+        ContractService svc = new ContractService(repo, audit, authz, null, null, null, turnover, terminationPort, null, reviews);
+        YearMonth now = YearMonth.now(LocalZone.ID);
+        Map<String, Object> terms = Map.of("rentBillingMode", "higher_of", "baseRentCent", 100000);
+
+        ContractRecord renewing = activatedSixMonthsAgo(svc, "k_hof_rn", terms, null, "sp_hof_rn");
+        YearMonth oldEnd = now.plusMonths(30);
+        ContractChangeRecord rn = svc.raiseChange(renewing.id(), change("k_hof_rn_ch", "renewal", Map.of("baseRentCent", 150000,
+                "newExpiryDate", now.plusMonths(42).atEndOfMonth().toString(), "depositDeadline", now.atEndOfMonth().toString())));
+        svc.onReviewDecided(decision(repo.findChangeById(rn.id()).orElseThrow().reviewId(), "approved", "contract.change",
+                "contract_change", rn.id()));
+        svc.generatePeriodBills(renewing.id(), new ContractRentBillRequest("k_hof_rn_b1", oldEnd.toString()));
+        svc.generatePeriodBills(renewing.id(), new ContractRentBillRequest("k_hof_rn_b2", oldEnd.plusMonths(1).toString()));
+
+        ContractRecord adjusting = activatedSixMonthsAgo(svc, "k_hof_rc", terms, null, "sp_hof_rc");
+        ContractChangeRecord rc = svc.raiseChange(adjusting.id(), change("k_hof_rc_ch", "rent_change", Map.of("baseRentCent", 150000)));
+        svc.onReviewDecided(decision(repo.findChangeById(rc.id()).orElseThrow().reviewId(), "approved", "contract.change",
+                "contract_change", rc.id()));
+        svc.generatePeriodBills(adjusting.id(), new ContractRentBillRequest("k_hof_rc_b1", now.minusMonths(1).toString()));
+        svc.generatePeriodBills(adjusting.id(), new ContractRentBillRequest("k_hof_rc_b2", now.toString()));
+
+        ContractRecord parent = activatedSixMonthsAgo(svc, "k_hof_ac", terms, null, "sp_hof_ac");
+        ContractChangeRecord ac = svc.raiseChange(parent.id(), change("k_hof_ac_ch", "area_change",
+                Map.of("areaSqm", 150, "baseRentCent", 150000, "depositDeadline", now.atEndOfMonth().toString())));
+        svc.onReviewDecided(decision(repo.findChangeById(ac.id()).orElseThrow().reviewId(), "approved", "contract.change",
+                "contract_change", ac.id()));
+        ContractRecord child = repo.listChildContracts(parent.id()).get(0);
+        svc.generatePeriodBills(child.id(), new ContractRentBillRequest("k_hof_ac_b1", now.minusMonths(1).toString()));
+        svc.generatePeriodBills(child.id(), new ContractRentBillRequest("k_hof_ac_b2", now.toString()));
+
+        assertThat(List.of(bills(renewing.id(), "rent", false), bills(adjusting.id(), "rent", false), bills(child.id(), "rent", false)))
+                .containsExactly(
+                        Map.of(oldEnd.toString(), 100000L, oldEnd.plusMonths(1).toString(), 150000L),
+                        Map.of(now.minusMonths(1).toString(), 100000L, now.toString(), 150000L),
+                        Map.of(now.minusMonths(1).toString(), 100000L, now.toString(), 150000L));
     }
 
     // ============ 第五轮裁决第 2 条：租金调整生效时重排剩余租期 ============

@@ -1,6 +1,6 @@
 package com.complex.platform.analytics;
 
-// 文件版本：V0.07
+// 文件版本：V0.08
 
 import com.complex.platform.analytics.AnalyticsRecords.AiQualityResultRecord;
 import com.complex.platform.analytics.AnalyticsRecords.AiQualityTaskRecord;
@@ -403,6 +403,14 @@ public interface AnalyticsRepository {
     Map<String, BigDecimal> countTicketVerificationSuccessByMerchant(LocalDate businessDate);
 
     /**
+     * 第十八批 Q 段 147-R1（BSM:1820「核销：……拒绝数。」；ENUM:43 拒绝＝规则不允许，失败＝设备或网络原因，两态分列）：
+     * count ticket_verifications(status='rejected')——拒绝数，不含失败；与核销数同窗、同 merchant 维度。default 空供测试替身。
+     */
+    default Map<String, BigDecimal> countTicketVerificationRejectedByMerchant(LocalDate businessDate) {
+        return Map.of();
+    }
+
+    /**
      * T4.3 分时段客流：成功核销按经营日窗口内 created_at 的小时（0~23）分桶计数。
      * 平台口径（scope 空）合并 ticket_verifications + amusement_verifications；
      * 商户口径仅本商户 ticket_verifications（amusement_verifications 无 merchant_id，不并入）。
@@ -461,6 +469,10 @@ public interface AnalyticsRepository {
     }
 
     default Map<String, BigDecimal> countTicketVerificationSuccessByMerchantProject(LocalDate businessDate) {
+        return Map.of();
+    }
+
+    default Map<String, BigDecimal> countTicketVerificationRejectedByMerchantProject(LocalDate businessDate) {
         return Map.of();
     }
 

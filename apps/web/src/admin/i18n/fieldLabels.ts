@@ -1,4 +1,4 @@
-// 文件版本：V0.17
+// 文件版本：V0.18
 // OBS-14-02 后台结果区字段中文名字典（PGM「全局原则 · 界面全中文（所有终端零英文）」）。
 // 键用后端 JSON 的蛇形写法；结果区查表时蛇形与驼峰同查（orderId / order_id 都命中 order_id）。
 // 与后端字段中文名表 FieldLabels.java（common.api 包）同键同名：前段按后端原样抄录，后端改名这里跟着改（门禁会比对）。
@@ -218,7 +218,6 @@ export const FIELD_LABELS: Record<string, string> = {
   additional_service_fee_cent: "追加服务费",
   opening_cash_cent: "备用金",
   declared_cash_cent: "申报现金金额",
-  cash_diff_threshold_cent: "现金差额阈值",
   daily_close_id: "日结单号",
   handover_id: "交接单号",
   ticket_id: "票券",
@@ -2727,6 +2726,8 @@ export const FIELD_LABELS: Record<string, string> = {
   rent_bills: "租金账单",
   per_sqm_rent_cent: "每平方米月租",
   target_deposit_cent: "目标押金",
+  prior_rent_terms: "变更前月租条款",
+  through_period: "适用至账期",
   delta_cent: "差额",
   contract_terms_version: "合同条款版本",
   basis_type: "依据类型",

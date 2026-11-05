@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -209,6 +209,11 @@ class KioskBarOrderJdbcTests {
                 .andExpect(jsonPath("$.data.settlement_status").value("settled"));
         assertThat(jdbc.queryForObject("SELECT cashier_staff_id FROM bar_bill_settlements WHERE bill_id = ?", String.class, billId))
                 .isEqualTo(webCashierId);
+        // 第十八批 Q 段第 153 条 153-R1（BSM:1066「POS（记流水号+收款人）」）：契约补声明的 pos_transaction_no 确被服务端读取，落结算流水与收款留痕。
+        assertThat(jdbc.queryForObject("SELECT pos_transaction_no FROM bar_bill_settlements WHERE bill_id = ?", String.class, billId))
+                .isEqualTo("POS-" + s);
+        assertThat(jdbc.queryForObject("SELECT metadata->>'pos_transaction_no' FROM audit_events WHERE event_name = 'payment.pos_received'"
+                + " AND business_id = ?", String.class, billId)).isEqualTo("POS-" + s);
         mockMvc.perform(post("/api/v1/bar/shifts/" + shift + "/close").with(webCashier).contentType(MediaType.APPLICATION_JSON)
                         .content(json.writeValueAsString(Map.of("idempotency_key", "kbo-shiftclose-" + s, "declared_cash_cent", 0))))
                 .andExpect(status().isOk())
@@ -219,6 +224,7 @@ class KioskBarOrderJdbcTests {
      * 第十八批 P 段第 133 条 133-R1（BSM:1081「收银员开班记备用金，班结按本班次汇总各支付方式应收（现金/扫码/POS/退款/小费），录入实点现金算长短款差异。
      * 收银不应出现差额，出现任何金额的差额一律进复核、定位责任，不设容差」；DEC-R4-2026-08-04-26）：按后台「收银交班对账」区块的真实请求形状
      * （收银员取登录人、不带容差，蛇形键）开班，网页现金结账（同网页现形状，金额留空按剩余应收结清），班结差 1 分也进复核；再开一班实点正好不进复核。
+     * 第十八批 Q 段第 141 条 141-R1：开班不再收容差字段，班次返回体也没有 cash_diff_threshold_cent。
      */
     @Test
     void backOfficeShiftPanelOpensWithoutThresholdAndAnyCashDifferenceNeedsReview() throws Exception {
@@ -250,7 +256,7 @@ class KioskBarOrderJdbcTests {
 
     // ---------- helpers ----------
 
-    /** 后台「收银交班对账」区块的开班请求：收银员取登录人，不带 cash_diff_threshold_cent。 */
+    /** 后台「收银交班对账」区块的开班请求：收银员取登录人；开班不设容差（141-R1），返回体没有 cash_diff_threshold_cent。 */
     private String openFromPanel(String key) throws Exception {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("idempotency_key", key);
@@ -261,7 +267,8 @@ class KioskBarOrderJdbcTests {
         return data(mockMvc.perform(post("/api/v1/bar/shifts/open").with(webCashier).contentType(MediaType.APPLICATION_JSON)
                         .content(json.writeValueAsString(body)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.status").value("open"))).path("id").asText();
+                .andExpect(jsonPath("$.data.status").value("open"))
+                .andExpect(jsonPath("$.data.cash_diff_threshold_cent").doesNotExist())).path("id").asText();
     }
 
     /** 后台「收银交班对账」区块的班结请求：只带实点现金（接班人、备注选填未填）。 */

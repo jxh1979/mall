@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.09
+// 文件版本：V0.10
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.amusement.AmusementEntryRequest;
@@ -84,9 +84,15 @@ public class TicketVerificationService {
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     PlatformTransactionManager transactionManager;
 
+    // 第十八批 Q 段 148-R1（BSM:780「「当天」「每天」一律按营业日计算……酒吧仍按每家酒吧配置」）：核赠饮前按这家酒吧的营业日判已核入场。
+    // 字段注入免改构造点；内存仓单测（无 Spring）取出厂起点。
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    com.complex.platform.common.BusinessDayResolver businessDays = new com.complex.platform.common.BusinessDayResolver();
+
     // CG-05 核销记录状态闭集（ENUM「核销记录状态」：成功、拒绝（规则不允许）、失败（设备或网络原因）、已冲正、异常）。
     // 落记录的非成功结果按 result_reason 归类：规则不允许 → rejected；设备 / 网络 / 凭证技术原因 → failed。
-    // 第十八批 P 段 134-R1（CG 裁决第 46 项）：在线规则拒绝由 createVerification 落 rejected；未归类的按 CG 裁决第 48 项不落核销记录。
+    // 第十八批 P 段 134-R1（CG 裁决第 46 项）：在线规则拒绝由 createVerification 落 rejected；第十八批 Q 段 145-R1（ENUM:43）：在线抛错的
+    // 技术失败同样由 createVerification 落 failed（设备未登记除外）；未归类的按 CG 裁决第 48 项不落核销记录。
     // 「异常」（anomaly）只由主管核实前的异常复核提起写入（TK-14，见 raiseVerificationAnomaly），核销链不写。manual_overridden 历史保留、不再写入。
     static final String STATUS_SUCCESS = "success";
     static final String STATUS_REJECTED = "rejected";
@@ -102,8 +108,10 @@ public class TicketVerificationService {
             // 134-R1：场馆不在营业场次、已在上一场次入场（ENUM:46 场次结束时未核销的权益即行终结）、当前没有开放中的游乐场次。
             "VENUE_NOT_IN_SESSION", "ENTRY_PASS_PAST_SESSION_VOID", "AMUSEMENT_NO_OPEN_SESSION",
             // TK-06 一人多次票留脸 / 核对同一使用人。
-            "MULTI_USE_FACE_CONSENT_REQUIRED", "MULTI_USE_FACE_CAPTURE_REQUIRED", "MULTI_USE_HOLDER_MISMATCH");
-    /** 设备、网络、凭证技术原因（签名无效、窗口过期、凭证不存在/已用、设备未登记/未纳管、归属无法解析）→ failed。 */
+            "MULTI_USE_FACE_CONSENT_REQUIRED", "MULTI_USE_FACE_CAPTURE_REQUIRED", "MULTI_USE_HOLDER_MISMATCH",
+            // 148-R1（ENUM:55「未先核入场即核酒水一律拒绝」）：未先核这家酒吧的入场即核酒水（赠饮）。
+            "BAR_ENTRY_NOT_VERIFIED");
+    /** 设备、网络、凭证技术原因（签名无效、窗口过期、凭证不存在/已用、设备未登记/未纳管、归属无法解析）→ failed；在线抛错的同样由 createVerification 落 failed（设备未登记除外，145-R1）。 */
     static final Set<String> TECHNICAL_FAILURE_CODES = Set.of(
             "CREDENTIAL_NOT_FOUND", "CREDENTIAL_EXPIRED", "ENTITLEMENT_NOT_FOUND", "DEVICE_NOT_REGISTERED", "DEVICE_NOT_MANAGED",
             "DEVICE_BLOCKED", "DEVICE_NOT_FOUND", "VERIFY_DEVICE_MERCHANT_UNRESOLVED", "ENTITLEMENT_PROVIDER_UNRESOLVED",
@@ -269,7 +277,7 @@ public class TicketVerificationService {
             response = verifyEntitlement(request, "android_terminal_online", null);
         } catch (ApiException error) {
             // 134-R1（CG 裁决第 46 项「正常在线核销的业务规则拒绝也记录为rejected并留痕」）：响应、状态码、错误码不变，
-            // 请求事务照旧整体回滚（不扣次、单次授权不扣），另落一条 rejected 核销记录。
+            // 请求事务照旧整体回滚（不扣次、单次授权不扣），另落一条 rejected 核销记录；145-R1（ENUM:43）：技术失败同样另落 failed。
             recordRuleRejection(request, error);
             throw error;
         }
@@ -283,13 +291,16 @@ public class TicketVerificationService {
     }
 
     /**
-     * 134-R1：规则拒绝（outcomeStatusForCode 为 rejected）落一条 rejected 核销记录；技术失败、未归类的鉴权/越权/校验错误
-     * （CG 裁决第 48 项）与配置缺失不落。不扣次、不落结算价，不发积分、结算、赠饮事件。
+     * 134-R1：规则拒绝（outcomeStatusForCode 为 rejected）落一条 rejected 核销记录；145-R1（ENUM:43「明确的设备或网络失败仍记「失败」」）：
+     * 在线抛错的技术失败（outcomeStatusForCode 为 failed）同样落一条 failed 核销记录，设备未登记除外（设备不在 terminal_devices，
+     * 写入必违反设备外键）；查不到权益的不落；未归类的鉴权/越权/校验错误（CG 裁决第 48 项）与配置缺失不落。
+     * 不扣次、不落结算价，不发积分、结算、赠饮事件。
      * 记录在拒绝当下组好，等业务事务结束放开权益行锁后另起事务写：游乐分流对该权益行持 FOR UPDATE，当场另起事务插入时
      * 外键要对同一行取 KEY SHARE 锁，会与外层互等。写法同 AmusementService 硬超容留痕。
      */
     private void recordRuleRejection(VerificationRequest request, ApiException error) {
-        if (!STATUS_REJECTED.equals(outcomeStatusForCode(error.code()))) {
+        String status = outcomeStatusForCode(error.code());
+        if (status == null || "DEVICE_NOT_REGISTERED".equals(error.code())) {
             return;
         }
         IssuedEntitlementRecord entitlement = requestEntitlement(request).orElse(null);
@@ -297,7 +308,7 @@ public class TicketVerificationService {
             return;
         }
         String payload = request.credentialPayload();
-        VerificationRecord rejected = new VerificationRecord(
+        VerificationRecord outcome = new VerificationRecord(
                 "ver_" + UUID.randomUUID().toString().replace("-", ""),
                 "V" + System.currentTimeMillis() + UUID.randomUUID().toString().substring(0, 4).toUpperCase(Locale.ROOT),
                 entitlement.id(),
@@ -307,7 +318,7 @@ public class TicketVerificationService {
                 payload.startsWith("cred_") ? "sha256:" + hash(payload) : payload,
                 request.deviceId(),
                 request.pointId(),
-                STATUS_REJECTED,
+                status,
                 error.code().toLowerCase(Locale.ROOT),
                 "android_terminal_online",
                 null,
@@ -323,12 +334,12 @@ public class TicketVerificationService {
                 null,
                 null);
         if (transactionManager == null) {
-            repository.saveVerification(rejected);
+            repository.saveVerification(outcome);
             return;
         }
         TransactionTemplate durable = new TransactionTemplate(transactionManager);
         durable.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
-        Runnable persist = () -> durable.executeWithoutResult(status -> repository.saveVerification(rejected));
+        Runnable persist = () -> durable.executeWithoutResult(tx -> repository.saveVerification(outcome));
         if (TransactionSynchronizationManager.isActualTransactionActive()) {
             TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
                 @Override public void afterCompletion(int status) { persist.run(); }
@@ -609,12 +620,13 @@ public class TicketVerificationService {
             requireManagedDeviceForVerification(request);
             return verifyAmusementEntitlement(request, sourceType, Instant.now());
         }
-        if (credential != null && !"active".equals(credential.status())) {
-            throw ApiException.conflict("CREDENTIAL_EXPIRED", "核销凭证已过期，请刷新后重试");
-        }
         // P0-2 越权修复：在线核销主链此前未做商户归属校验，A 商户核销端可凭票号/权益码核销 B 商户客人的票
         // （跨租户烧票 IDOR）。消费权益前按调用者商户范围校验归属（与 refresh/reverse 同范式；平台 scope 放行）。
         enforceMerchantScope(entitlement.merchantId());
+        // 145-R1：凭证已用或已作废放在归属校验之后，落 failed 的记录都已过商户归属校验；跨商户扫到已用码报越权、不落记录（CG 裁决第 48 项）。
+        if (credential != null && !"active".equals(credential.status())) {
+            throw ApiException.conflict("CREDENTIAL_EXPIRED", "核销凭证已过期，请刷新后重试");
+        }
         // S5 K16：业务不变量——赠送权益只能在提供它的那家商户核销。读快拒，置于消费权益/落任何记录之前。
         enforceProviderMerchantMatch(entitlement, request);
         Instant now = Instant.now();
@@ -705,6 +717,10 @@ public class TicketVerificationService {
         // AUD-066 多人票同场次核销守卫（用户口径）：同一父票的各人份额必须在同一场次内核销——
         // 同场次内不同人可不同时间分别入场，但不能跨场次/日期。单人票/无父票不约束。
         enforceMultiPersonSameSession(entitlement, now);
+        // 148-R1：赠饮须这家酒吧本营业日内已核同票同人份的入场；置于人脸与扣次之前，被拒不扣次、不发赠饮与结算事件。
+        if (GIFT_DRINK_ENTITLEMENT_TYPE.equals(entitlement.entitlementType())) {
+            requireBarEntryVerified(entitlement, now);
+        }
         // TK-06：一人多次票（供应商可用时）——未绑定须同意 + 拍照，已绑定按留存人脸比对；不合规 → 拒、不扣次。
         //   置于场次 / 当天入场记录写入之前，被拒不留任何副作用。
         TicketFacePhotoService.PendingFace pendingFace = facePhotoService == null ? null
@@ -999,8 +1015,10 @@ public class TicketVerificationService {
             throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN","无权操作其他商户的权益");
     }
 
+    // 第十八批 Q 段 154-R1（BSM:1689「通票权益核销后才按所属域的已生效规则与实际提供方结算」）：前缀＋SHA-256 前 32 位共 40 字符，
+    // 拼「st_vs_」后的结算流水编号（settlement_transactions.id VARCHAR(64)）不超长。
     private String ticketIdForAmusement(String admissionId) {
-        return "ver_amu_"+hash(admissionId).substring(0,56);
+        return "ver_amu_"+hash(admissionId).substring(0,32);
     }
 
 
@@ -1177,6 +1195,19 @@ public class TicketVerificationService {
      */
     private static String providerMerchantId(IssuedEntitlementRecord entitlement) {
         return entitlement.barId() != null ? entitlement.barId() : entitlement.merchantId();
+    }
+
+    /**
+     * 第十八批 Q 段 148-R1（ENUM:55「同一酒吧商户，客人须先核销这家酒吧的入场权益、再核销这家酒吧的酒水（赠饮）权益，不能跳过入场直接核酒水；
+     * 未先核入场即核酒水一律拒绝。……在 A 店核销入场不影响在 B、C 店另行核销各自的入场权益。」；BSM:780「……仅限当场消耗……酒吧仍按每家酒吧配置」）：
+     * 同一张票、同一人份、这家酒吧（提供方商户）的入场权益须在这家酒吧本营业日内核销成功；已冲正的不算。
+     */
+    private void requireBarEntryVerified(IssuedEntitlementRecord entitlement, Instant now) {
+        String provider = providerMerchantId(entitlement);
+        Instant since = businessDays.start(null, provider, businessDays.businessDate(null, provider, now));
+        if (!repository.hasVerifiedBarEntrySince(entitlement.parentTicketId(), entitlement.slotIndex(), provider, since)) {
+            throw ApiException.conflict("BAR_ENTRY_NOT_VERIFIED", "须先核销这家酒吧的入场权益，再核销酒水（赠饮）权益");
+        }
     }
 
     /**

@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import com.complex.platform.common.api.PageResponse;
 import com.complex.platform.evidence.AuditedOperationExecutor;
@@ -70,8 +70,6 @@ public class BarOperationExecutor {
         if (value instanceof BarTableSessionAdjustmentRecord record) return record.id();
         if (value instanceof BarReservationRecord record) return record.id();
         if (value instanceof BarDepositRuleRecord record) return record.id();
-        if (value instanceof BarReservationEntryAllowanceVerificationRecord record) return record.reservationId();
-        if (value instanceof BarTableGuestCheckinRecord record) return record.id();
         if (value instanceof BarProductRecord record) return record.id();
         if (value instanceof BarOrderRecord record) return record.id();
         if (value instanceof BarOrderItemRecord record) return record.id();

@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.07
+// 文件版本：V0.08
 import static com.complex.platform.common.api.ApiRequests.requireIdempotencyKey;
 
 import com.complex.platform.access.AuthorizationService;
@@ -538,26 +538,6 @@ public class BarController {
         authorizationService.requirePermission("bar.deposit_rule.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.createDepositRule(request));
-    }
-
-    @PostMapping("/reservations/{id}/check-in-guest")
-    public ApiResponse<BarTableGuestCheckinRecord> checkInReservationGuest(
-            @PathVariable String id,
-            @RequestBody(required = false) @jakarta.validation.Valid VerificationRequest request
-    ) {
-        authorizationService.requirePermission("bar.table.guest_checkin");
-        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
-        return ApiResponse.ok(service.checkInReservationGuest(id, request));
-    }
-
-    @PostMapping("/reservations/{id}/entry-allowance/verify")
-    public ApiResponse<BarReservationEntryAllowanceVerificationRecord> verifyReservationEntryAllowance(
-            @PathVariable String id,
-            @RequestBody(required = false) @jakarta.validation.Valid VerificationRequest request
-    ) {
-        authorizationService.requirePermission("bar.table.guest_checkin");
-        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
-        return ApiResponse.ok(service.verifyReservationEntryAllowance(id, request));
     }
 
     @PostMapping("/reservations/{id}/invitation")
