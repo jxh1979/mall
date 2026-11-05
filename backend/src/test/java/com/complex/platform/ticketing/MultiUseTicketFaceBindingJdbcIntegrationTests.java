@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -126,6 +126,8 @@ class MultiUseTicketFaceBindingJdbcIntegrationTests {
         assertThat(TicketVerificationService.outcomeStatusForCode("AMUSEMENT_NO_OPEN_SESSION")).isEqualTo("rejected");
         // 第十八批 Q 段 148-R1（ENUM:55「未先核入场即核酒水一律拒绝」）：规则不允许。
         assertThat(TicketVerificationService.outcomeStatusForCode("BAR_ENTRY_NOT_VERIFIED")).isEqualTo("rejected");
+        // 第十八批 S 段 165-R1（BSM:800「后续场次的附带权益也不得提前到当前场次使用」）：本场这家酒吧的赠饮已按单次份用完，规则不允许。
+        assertThat(TicketVerificationService.outcomeStatusForCode("GIFT_DRINK_SESSION_SHARE_USED_UP")).isEqualTo("rejected");
     }
 
     // R2 RED：同意 + 拍照 → 核销成功扣一次；同事务落同意（版本、时间、范围）与加密人脸，绑定父票实例。

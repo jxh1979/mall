@@ -1,4 +1,4 @@
-// 文件版本：V0.13
+// 文件版本：V0.14
 import React from "react";
 import { QRCodeSVG } from "qrcode.react";
 import { buildCustomerLink } from "@complex/customer-core/links";
@@ -53,11 +53,6 @@ function localDateTimeToUtc(value: string) {
 /** 裁决第十三批第 7 条员工代订核对受限：员工录入的客人手机号去掉空格与横线（与后端同口径）。 */
 function normalizedPhone(value: string) {
   return value.replace(/[\s-]/g, "");
-}
-
-/** ROOT-03-R7：散台固定桌台码（扫了打开点单页，BSM 第 585 行「保持固定即可」），客人端按 t 定位桌台。 */
-function looseTableQrValue(tableId: string) {
-  return `table?t=${encodeURIComponent(tableId)}`;
 }
 
 export function BarTableSessionsPage({ api, setActionResult, setGlobalError, effectivePermissions, focusObjectId, reportViewedObjects }: AdminPageProps) {
@@ -441,6 +436,8 @@ export function BarTableSessionsPage({ api, setActionResult, setGlobalError, eff
         capacity: String(selectedReservation.invitationCapacity ?? ""),
       })
     : null;
+  // 第十八批 S 段 174-R1：散台固定桌台码就是客人深链（BSM:585「保持固定即可」、BSM:1025「客人扫描桌台二维码即可自助点单」）。
+  const tableQrLink = qrTableId ? buildCustomerLink(customerLinkHost(), "table", { table_id: qrTableId }) : null;
 
   async function copyInvitationLink(link: string) {
     try {
@@ -656,11 +653,11 @@ export function BarTableSessionsPage({ api, setActionResult, setGlobalError, eff
                 {row.tableType === "loose_table" ? <button type="button" className="admin-row-detail-btn" data-testid={`bar-table-qr-${row.id}`} onClick={(event) => { event.stopPropagation(); setQrTableId(qrTableId === row.id ? "" : row.id); }}>桌台二维码</button> : null}</td></tr>)}</tbody>
           </table>
         </div>
-        {qrTableId ? (
+        {tableQrLink ? (
           <div className="admin-state" data-testid="bar-table-qr-panel">
             <p>散台固定桌台码（打印贴在桌上，码不变；客人扫码进入本桌点单页，须服务员先开台）</p>
-            <QRCodeSVG value={looseTableQrValue(qrTableId)} size={180} level="M" />
-            <p data-testid="bar-table-qr-value">{looseTableQrValue(qrTableId)}</p>
+            <QRCodeSVG value={tableQrLink} size={180} level="M" />
+            <p data-testid="bar-table-qr-value">{tableQrLink}</p>
           </div>
         ) : null}
       </AdminDataState>

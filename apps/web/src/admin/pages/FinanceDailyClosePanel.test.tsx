@@ -1,4 +1,4 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { FinanceDailyClosePanel } from "./FinanceDailyClosePanel";
@@ -110,6 +110,14 @@ describe("日结区块", () => {
     expect(post.mock.calls[0]?.[1]).not.toHaveProperty("forceClose");
     await waitFor(() => expect(get).toHaveBeenCalledWith("/api/v1/finance/daily-closes/dc-new/summaries"));
     await waitFor(() => expect(getPaged.mock.calls.filter(([url]) => url === "/api/v1/finance/daily-closes?page=1&size=20")).toHaveLength(2));
+  });
+
+  // 第十八批 S 段第 161 条 161-R3（第十八批裁决 35「酒吧逐店逐日查；游乐等按综合体逐日查」）：票务、游乐不再单独出日结。
+  it("平台侧账号范围类型只有项目、商户、酒吧", async () => {
+    setup();
+    await waitFor(() => expect(screen.queryByTestId("daily-close-row-dc1")).not.toBeNull());
+    const options = [...(screen.getByTestId("daily-close-scope-type") as HTMLSelectElement).options].map((o) => o.textContent);
+    expect(options).toEqual(["项目", "商户", "酒吧"]);
   });
 
   it("所选营业日与范围已生成日结时显示其当前状态", async () => {

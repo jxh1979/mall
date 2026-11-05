@@ -1,6 +1,6 @@
 package com.complex.platform.integration;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import com.complex.platform.finance.dto.PaymentIntentRequest;
 import com.complex.platform.ticketing.TicketOrderRecord;
@@ -16,7 +16,8 @@ import java.util.Optional;
 import org.springframework.stereotype.Component;
 
 /**
- * 批6 {@link ChannelTicketIssuePort} 实现：第三方通票回流走既有出票主链（不另造出票路径）。
+ * 批6 {@link ChannelTicketIssuePort} 实现：第三方渠道门票回流走既有出票主链（不另造出票路径）。
+ * 172-R1：单店票按票种所属酒吧下单（BSM:749「经第三方渠道售出也不改变该归属」），通票不带酒吧。
  *
  * <p>四步全链（每步各自幂等，键由 idempotencyBase 派生，重复回流全链重放同一结果）：
  * <ol>
@@ -65,7 +66,8 @@ public class TicketingChannelTicketIssueAdapter implements ChannelTicketIssuePor
                 command.salesChannel(),
                 command.buyerPhone(),
                 null,
-                Map.of()
+                Map.of(),
+                orderService.ticketTypeBarId(command.ticketTypeId())
         ));
         TicketPaymentIntentRecord intent = ticketingService.createTicketOrderPayIntent(order.id(),
                 new PaymentIntentRequest(

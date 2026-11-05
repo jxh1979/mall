@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.10
+// 文件版本：V0.11
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.amusement.AmusementEntryRequest;
@@ -110,7 +110,9 @@ public class TicketVerificationService {
             // TK-06 一人多次票留脸 / 核对同一使用人。
             "MULTI_USE_FACE_CONSENT_REQUIRED", "MULTI_USE_FACE_CAPTURE_REQUIRED", "MULTI_USE_HOLDER_MISMATCH",
             // 148-R1（ENUM:55「未先核入场即核酒水一律拒绝」）：未先核这家酒吧的入场即核酒水（赠饮）。
-            "BAR_ENTRY_NOT_VERIFIED");
+            "BAR_ENTRY_NOT_VERIFIED",
+            // 第十八批 S 段 165-R1（BSM:800「后续场次的附带权益也不得提前到当前场次使用」）：本场这家酒吧的赠饮已按单次份用完。
+            "GIFT_DRINK_SESSION_SHARE_USED_UP");
     /** 设备、网络、凭证技术原因（签名无效、窗口过期、凭证不存在/已用、设备未登记/未纳管、归属无法解析）→ failed；在线抛错的同样由 createVerification 落 failed（设备未登记除外，145-R1）。 */
     static final Set<String> TECHNICAL_FAILURE_CODES = Set.of(
             "CREDENTIAL_NOT_FOUND", "CREDENTIAL_EXPIRED", "ENTITLEMENT_NOT_FOUND", "DEVICE_NOT_REGISTERED", "DEVICE_NOT_MANAGED",
@@ -717,7 +719,7 @@ public class TicketVerificationService {
         // AUD-066 多人票同场次核销守卫（用户口径）：同一父票的各人份额必须在同一场次内核销——
         // 同场次内不同人可不同时间分别入场，但不能跨场次/日期。单人票/无父票不约束。
         enforceMultiPersonSameSession(entitlement, now);
-        // 148-R1：赠饮须这家酒吧本营业日内已核同票同人份的入场；置于人脸与扣次之前，被拒不扣次、不发赠饮与结算事件。
+        // 148-R1：赠饮须这家酒吧本营业日内已核同票同人份的入场；165-R1：本营业日内只能核本场一份。置于人脸与扣次之前，被拒不扣次、不发赠饮与结算事件。
         if (GIFT_DRINK_ENTITLEMENT_TYPE.equals(entitlement.entitlementType())) {
             requireBarEntryVerified(entitlement, now);
         }
@@ -1201,12 +1203,24 @@ public class TicketVerificationService {
      * 第十八批 Q 段 148-R1（ENUM:55「同一酒吧商户，客人须先核销这家酒吧的入场权益、再核销这家酒吧的酒水（赠饮）权益，不能跳过入场直接核酒水；
      * 未先核入场即核酒水一律拒绝。……在 A 店核销入场不影响在 B、C 店另行核销各自的入场权益。」；BSM:780「……仅限当场消耗……酒吧仍按每家酒吧配置」）：
      * 同一张票、同一人份、这家酒吧（提供方商户）的入场权益须在这家酒吧本营业日内核销成功；已冲正的不算。
+     * 第十八批 S 段 165-R1（BSM:800「该窗口内票面附带的各项权益（酒水、各酒吧入场等）按完整一份配足、完整可用，但仅限当场消耗……
+     * 后续场次的附带权益也不得提前到当前场次使用。」）：「当场」同上＝这家酒吧本营业日；「一份」按 TK-10 单次份口径（PRD §8.3.3：
+     * 多次票按这家酒吧入场次数折算、至少 1，与 AmusementFaultCompensationService 完整补发同式；补偿补发行本身就是一个次份，取它的全部次数）。
+     * 本营业日内该赠饮核销成功（已冲正的不算）已达一份即拒绝。
      */
     private void requireBarEntryVerified(IssuedEntitlementRecord entitlement, Instant now) {
         String provider = providerMerchantId(entitlement);
         Instant since = businessDays.start(null, provider, businessDays.businessDate(null, provider, now));
         if (!repository.hasVerifiedBarEntrySince(entitlement.parentTicketId(), entitlement.slotIndex(), provider, since)) {
             throw ApiException.conflict("BAR_ENTRY_NOT_VERIFIED", "须先核销这家酒吧的入场权益，再核销酒水（赠饮）权益");
+        }
+        int share = entitlement.totalTimes();
+        if (entitlement.compensationItemId() == null) {
+            int entries = repository.maxBarEntryTotalTimes(entitlement.parentTicketId(), entitlement.slotIndex(), provider);
+            share = entries <= 1 ? entitlement.totalTimes() : Math.max(1, entitlement.totalTimes() / entries);
+        }
+        if (repository.countSuccessfulVerificationsSince(entitlement.id(), since) >= share) {
+            throw ApiException.conflict("GIFT_DRINK_SESSION_SHARE_USED_UP", "本场次这家酒吧的酒水（赠饮）已按票面一份用完，之后场次的份额不能提前使用");
         }
     }
 
@@ -1276,6 +1290,13 @@ public class TicketVerificationService {
     private Long resolveSettlementPrice(IssuedEntitlementRecord entitlement) {
         if (InternalSettlementPriceResolver.providerRedeemed(
                 entitlement.entitlementType(), entitlement.entitlementKind(), entitlement.exclusiveMerchantId())) {
+            // 第十八批 S 段 156-R1（BSM:751「商户让利的零元免费权益不结算」，BSM:1689 同义）：专属直付的餐饮、零售权益
+            //   成本承担方为商户让利型 → 结算价 0、不查目录（不结算就不需要内部结算价，未配目录价也不拒核销）。
+            //   赠饮没有专属商户，商户让利由 BarGiftConsumer 不挂应付，不走这里。
+            if (entitlement.exclusiveMerchantId() != null
+                    && TicketTypeEntitlementRecord.COST_BEARER_MERCHANT_CONCESSION.equals(costBearer(entitlement))) {
+                return 0L;
+            }
             // 批10/E:两支取价统一收口目录——商品支经商品的目录引用,餐饮/零售支经模板的目录引用;
             // 核销时固化的即「当时的目录生效价」(改价转正只影响此后核销,已核销流水一分不动)。
             EntitlementTemplateRecord template = repository
@@ -1305,7 +1326,9 @@ public class TicketVerificationService {
         if (deviceId == null) {
             return;
         }
-        mdmService.requireManagedForHighRiskAction(deviceId, VERIFY_ACTION_TYPE);
+        // 第十八批 S 段第 166 条：核销请求带的是设备台账行 id（terminal_devices.id），纳管状态按设备号（device_id 列）记，先换成设备号再查。
+        mdmService.requireManagedForHighRiskAction(
+                repository.findTerminalDeviceCode(deviceId).orElse(deviceId), VERIFY_ACTION_TYPE);
     }
 
     private IssuedEntitlementRecord entitlementByCredential(VerificationRequest request) {

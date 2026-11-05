@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.09
+// 文件版本：V0.10
 
 import com.complex.platform.finance.PaymentIntentRecord;
 import java.util.List;
@@ -60,8 +60,11 @@ public interface BarRepository {
     default void markReservationNoShow(String reservationId, java.time.Instant at) {
     }
 
-    /** 第十八批 O 段第 126 条 126-R2：员工登记定金（pay-deposit）记登记员工，班结按其归入现金/POS 应收。内存桩默认无操作。 */
-    default void markReservationDepositCollector(String reservationId, String staffUserId) {
+    /**
+     * 第十八批 O 段第 126 条 126-R2：员工登记定金（pay-deposit）记登记员工，班结按其归入现金/POS 应收；
+     * 第十八批 S 段第 169 条 169-R2：同时记 POS 流水号（非 POS 为空）。内存桩默认无操作。
+     */
+    default void markReservationDepositCollector(String reservationId, String staffUserId, String posTransactionNo) {
     }
 
     /** 该酒吧员工代订爽约率上限（%）；未配置为空＝不自动停用。内存桩默认未配置。 */
@@ -172,6 +175,23 @@ public interface BarRepository {
     /** 列邀请函成员（含持函人），供容量计数与门口核验。 */
     default List<BarReservationInvitationMemberRecord> listInvitationMembers(String reservationId) {
         return List.of();
+    }
+
+    /**
+     * 第十八批 S 段第 167 条 167-R1：订台当前所在的开台会话（open / merged / merged_transferred，取最近开台的一条）；没开台为空。
+     * 内存桩默认空＝按签发时的可进人数与本订台成员计名额。
+     */
+    default Optional<String> findLiveSessionIdByReservation(String reservationId) {
+        return Optional.empty();
+    }
+
+    /** 第十八批 S 段第 167 条 167-R1：这些会话所属各订台未移出的邀请函成员（台组名额计数）。内存桩默认空。 */
+    default List<BarReservationInvitationMemberRecord> listInvitationMembersBySessions(List<String> sessionIds) {
+        return List.of();
+    }
+
+    /** 第十八批 S 段第 167 条 167-R1：锁台组根会话行（JDBC：SELECT … FOR UPDATE），序列化台组内的名额校验。内存桩默认无操作。 */
+    default void lockTableSession(String sessionId) {
     }
 
     BarProductRecord saveProduct(BarProductRecord product);

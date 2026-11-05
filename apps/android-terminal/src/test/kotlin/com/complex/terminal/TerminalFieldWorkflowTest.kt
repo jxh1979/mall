@@ -1,6 +1,6 @@
 package com.complex.terminal
 
-// 文件版本：V0.06
+// 文件版本：V0.07
 
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
@@ -409,6 +409,31 @@ class TerminalFieldWorkflowTest {
     assertEquals(listOf("/api/v1/ticketing/verifications/preview", "/api/v1/ticketing/verifications"), captured.map { it.path })
     assertTrue("face_capture" !in captured.last().body, captured.last().body)
     assertEquals("success", response?.status)
+  }
+
+  // 第十八批 S 段第 164 条 164-R1（PGM:287「展示给用户的一切文字，包括菜单、页面标题、字段名、状态、枚举取值、按钮、提示、报错……必须全部为中文，不得出现任何英文」）：
+  // 核销屏、领取屏把核销应答的原因码显示成中文。
+  @Test
+  fun verifyOnlineResultReasonShowsChinese() {
+    val api = newApi { req ->
+      assertEquals("/api/v1/ticketing/verifications", req.path)
+      okJson("""{"id":"ver-1","verification_no":"V-1","status":"success","result_reason":"session_reentry"}""")
+    }
+
+    val response = TerminalWorkflow(api, storeWithSessionAndBinding()).verifyOnline("E-1")
+
+    assertEquals("本场次再次入场，不扣次", verificationReasonZh(response.resultReason))
+  }
+
+  // 164-R1：核销接口会回的五个原因码都有中文、不含英文；首次核销成功（空）与其它码不显示原码。
+  @Test
+  fun verificationReasonZhCoversAllReasonsWithoutEnglish() {
+    listOf("window_expired", "signature_invalid", "session_reentry", "day_replay", "amusement_verified").forEach {
+      val zh = verificationReasonZh(it)
+      assertTrue(zh.isNotEmpty() && !Regex("[A-Za-z]").containsMatchIn(zh), "$it -> $zh")
+    }
+    assertEquals("", verificationReasonZh(null))
+    assertEquals("", verificationReasonZh("unknown_reason"))
   }
 
   private fun okJson(body: String): HttpResponse<String> = StubResponse(200, body)

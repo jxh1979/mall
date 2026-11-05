@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.11
+// 文件版本：V0.12
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.List;
@@ -593,6 +593,34 @@ class JdbcTicketingRepository implements TicketingRepository {
                 .addValue("slot", slotIndex)
                 .addValue("provider", providerMerchantId)
                 .addValue("since", since.atOffset(java.time.ZoneOffset.UTC)), Boolean.class));
+    }
+
+    @Override
+    public int maxBarEntryTotalTimes(String parentTicketId, int slotIndex, String providerMerchantId) {
+        // 165-R1：入场类型与 hasVerifiedBarEntrySince 同；补偿补发行（compensation_item_id 非空）不算原票的入场次数。
+        Integer max = jdbcTemplate.queryForObject("""
+                SELECT COALESCE(MAX(total_times), 0) FROM issued_entitlements
+                 WHERE parent_ticket_id = :parent AND slot_index = :slot
+                   AND entitlement_type IN ('entry', 'admission')
+                   AND COALESCE(bar_id, merchant_id) = :provider
+                   AND compensation_item_id IS NULL
+                """, new MapSqlParameterSource()
+                .addValue("parent", parentTicketId)
+                .addValue("slot", slotIndex)
+                .addValue("provider", providerMerchantId), Integer.class);
+        return max == null ? 0 : max;
+    }
+
+    @Override
+    public int countSuccessfulVerificationsSince(String entitlementId, java.time.Instant since) {
+        // 165-R1：冲正把原行改成 reversed，自然不计。
+        Integer count = jdbcTemplate.queryForObject("""
+                SELECT COUNT(*) FROM ticket_verifications
+                 WHERE entitlement_id = :id AND status = 'success' AND created_at >= :since
+                """, new MapSqlParameterSource()
+                .addValue("id", entitlementId)
+                .addValue("since", since.atOffset(java.time.ZoneOffset.UTC)), Integer.class);
+        return count == null ? 0 : count;
     }
 
     @Override
@@ -1260,6 +1288,12 @@ class JdbcTicketingRepository implements TicketingRepository {
         return jdbcTemplate.queryForList(
                 "SELECT merchant_id FROM terminal_devices WHERE id = :id AND merchant_id IS NOT NULL",
                 Map.of("id", deviceId == null ? "" : deviceId), String.class).stream().findFirst();
+    }
+
+    @Override
+    public Optional<String> findTerminalDeviceCode(String id) {
+        return jdbcTemplate.queryForList("SELECT device_id FROM terminal_devices WHERE id = :id",
+                Map.of("id", id), String.class).stream().findFirst();
     }
 
     @Override

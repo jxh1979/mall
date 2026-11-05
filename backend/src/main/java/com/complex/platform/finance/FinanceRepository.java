@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.15
+// 文件版本：V0.16
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -344,7 +344,8 @@ public interface FinanceRepository {
     /**
      * TK-14（ENUM「异常状态的统一出口」：异常单据未处置完毕，所属日结不得确认锁定）：原核销落在该营业日窗口 [from, to)、
      * 仍待主管处置的票务核销异常是否存在。范围口径同 {@link #aggregateOfficialTicket(LocalDate, Instant, Instant, String, String)}：
-     * merchant 范围只看本商户，其余平台口径。default 无库替身视为没有；Jdbc 覆写。
+     * merchant、bar 范围只看本商户；project 范围只看原核销所属订单属该综合体、核销商户不是酒吧的（第十八批 S 段第 161 条 161-R2）；
+     * 其余平台口径。default 无库替身视为没有；Jdbc 覆写。
      */
     default boolean openTicketVerificationAnomalyExists(Instant from, Instant to, String scopeType, String scopeId) {
         return false;
@@ -352,7 +353,8 @@ public interface FinanceRepository {
 
     /**
      * 第十六批第 16 条（ENUM「异常状态的统一出口」：异常单据未处置完毕，所属日结不得确认锁定）：开单或收款落在该营业日窗口 [from, to)、
-     * 仍处于异常（payment_status='abnormal'）的酒吧账单是否存在。范围口径同票务核销异常：merchant 范围只看本商户，其余平台口径。
+     * 仍处于异常（payment_status='abnormal'）的酒吧账单是否存在。范围口径：merchant、bar 范围只看本商户，
+     * project 范围不命中（酒吧逐店另出日结，161-R2），其余平台口径。
      * default 无库替身视为没有；Jdbc 覆写。
      */
     default boolean openBarBillAnomalyExists(Instant from, Instant to, String scopeType, String scopeId) {
@@ -367,7 +369,7 @@ public interface FinanceRepository {
 
     /**
      * 第十八批 Q 段第 144 条（BSM:1106「未结清订单阻止交班和日结」）：开单落在该营业日（酒吧逐家按各自营业日窗）、仍未结清的酒吧账单号
-     * （settlement_status 不是 settled、merged、void，与关台闸同口径），最多 10 张。范围口径同酒吧账单异常：merchant 范围只看本商户，其余平台口径。
+     * （settlement_status 不是 settled、merged、void，与关台闸同口径），最多 10 张。范围口径同酒吧账单异常：merchant、bar 范围只看本商户，project 范围不命中，其余平台口径。
      * default 无库替身视为没有；Jdbc 覆写。
      */
     default List<String> unsettledBarBillNos(Instant from, Instant to, String scopeType, String scopeId,
@@ -378,7 +380,7 @@ public interface FinanceRepository {
     /**
      * 第十八批 R 段第 142 条 142-R2（ENUM:190「由当班收银员完成现金清点与盘收银，接班人与其对接完成交接，并由财务跟班跟进交接完成」；
      * BSM:1081「财务跟班见证后归档」）：开班落在该营业日（酒吧逐家按各自营业日窗）、财务尚未见证归档的收银班次（含开班中、未平账、未签字）
-     * 是否存在。范围口径同酒吧账单异常：merchant 范围只看本酒吧，其余平台口径。default 无库替身视为没有；Jdbc 覆写。
+     * 是否存在。范围口径同酒吧账单异常：merchant、bar 范围只看本酒吧，project 范围不命中，其余平台口径。default 无库替身视为没有；Jdbc 覆写。
      */
     default boolean unfinishedBarShiftExists(Instant from, Instant to, String scopeType, String scopeId,
             java.util.Map<String, Instant[]> barWindows) {
@@ -392,6 +394,20 @@ public interface FinanceRepository {
      */
     default boolean unbalancedBarShiftExists(Instant from, Instant to, String scopeType, String scopeId,
             java.util.Map<String, Instant[]> barWindows) {
+        return false;
+    }
+
+    /**
+     * 第十八批 S 段第 158 条 158-R1（ENUM:191「差异未关闭期间，高价值差异所涉营业日的日结不得确认锁定」「以该笔差异所涉金额与「高价值判定」条所配的
+     * 同一金额阈值比较，高于阈值即高价值……阈值未配置一律按高价值处理」）：该营业日有没有未关闭的高价值对账差异。财务差异按所属批次的营业日、
+     * status 不是 closed；第三方差异按所属批次对账期间覆盖该营业日（ENUM:187、BSM:1729 按营业日、按日对账）、status 不是 resolved、matched
+     * （DEC-R4-2026-08-04-43 已删「已忽略」，ignored 不是关闭出口）；金额大于 thresholdCent 即高价值，thresholdCent 为 null 一律按高价值。
+     * 范围口径同其余几道日结闸：merchant、bar 范围只看本商户（财务批次范围为该商户、第三方差异的回流门店为该商户）；project 范围只看该综合体
+     * （财务批次范围为该综合体或其非酒吧商户、第三方差异的回流门店属该综合体且不是酒吧，161-R2）；其余平台口径。
+     * default 无库替身视为没有；Jdbc 覆写。
+     */
+    default boolean openHighValueReconciliationDifferenceExists(LocalDate businessDate, String scopeType, String scopeId,
+            Long thresholdCent) {
         return false;
     }
 
@@ -496,7 +512,7 @@ public interface FinanceRepository {
 
     /**
      * 第十八批 P 段第 133 条 133-R2：日结批次按营业日倒序分页。merchantId 非空只看该商户的 merchant、bar 范围；
-     * projectIds 非空只看这些项目的 project、ticketing、amusement 范围与项目下商户的 merchant、bar 范围，空集合没有可见记录；
+     * projectIds 非空只看这些项目的 project 范围与项目下商户的 merchant、bar 范围，空集合没有可见记录；
      * 两者都为 null＝平台全量。第十八批 R 段 143-R1：businessDate、scopeType、scopeId 非空时再按营业日与范围过滤（页面查「待生成」）。
      * default 返回空页兼容既有测试双子。
      */
@@ -511,6 +527,15 @@ public interface FinanceRepository {
      */
     int lockArApItemsForDailyClose(String dailyCloseId, LocalDate businessDate, String merchantId);
 
+    /**
+     * 第十八批 S 段第 161 条 161-R2（第十八批裁决 35「酒吧逐店逐日查；游乐等按综合体逐日查」）：综合体（project 范围）日结锁定时，给 business_date
+     * 到期、未锁、属该综合体（台账项目，空则取商户所属项目）且商户不是酒吧的台账打锁（酒吧逐店另出日结）。返回打标行数。
+     * default 无库替身沿用不分范围打锁；Jdbc 覆写。
+     */
+    default int lockProjectArApItemsForDailyClose(String dailyCloseId, LocalDate businessDate, String projectId) {
+        return lockArApItemsForDailyClose(dailyCloseId, businessDate, null);
+    }
+
     /** 查目标台账项当前的 locked_day_close_id（empty=未锁定），用于硬拦截。 */
     Optional<String> findArApItemLockedDayCloseId(String arApItemId);
 
@@ -524,11 +549,24 @@ public interface FinanceRepository {
      *   <li>{@code merchantId == null}（平台口径调用方）：该经营日任一 locked 日结即拦截
      *       （平台口径写入受所有封账约束，与平台锁定 locks-all 语义一致）。</li>
      *   <li>{@code merchantId != null}（商户 scope 调用方）：仅当存在
-     *       {@code scope_type='merchant' AND scope_id=:merchant_id} 的 locked 日结才拦截，
-     *       即只受本商户封账约束，他商户封账不冻结本商户写入。</li>
+     *       {@code scope_type IN ('merchant','bar') AND scope_id=:merchant_id} 的 locked 日结才拦截，
+     *       即只受本商户封账约束，他商户封账不冻结本商户写入（第十八批 S 段第 161 条 161-R1：bar 范围同 merchant 范围，
+     *       scope_id 即该酒吧商户）。</li>
      * </ul>
+     * 第十八批 S 段第 161 条 161-R2 起 Jdbc 实现同 {@link #lockedDailyCloseExistsForDate(LocalDate, String, String)} 传空项目
+     * （非酒吧商户另受其所属综合体的项目范围日结约束）。
      */
     boolean lockedDailyCloseExistsForDate(LocalDate businessDate, String merchantId);
+
+    /**
+     * 第十八批 S 段第 161 条 161-R2（第十八批裁决 35「酒吧逐店逐日查；游乐等按综合体逐日查」；BSM:1682 综合体与酒吧各配一套营业日；
+     * ENUM:190「日结锁定后的补录须上级审批，且不改动已锁定的日结金额」）：带台账项目判封账——商户是酒吧按上一方法的商户口径（161-R1）；
+     * 否则能定综合体（projectId，空则取商户所属项目）的，该综合体项目范围日结已锁定或已归档即拦（商户自身的商户范围日结照旧也算）；
+     * 商户与项目都定不出的照旧任一封账即拦。default 无库替身退回上一方法；Jdbc 覆写。
+     */
+    default boolean lockedDailyCloseExistsForDate(LocalDate businessDate, String merchantId, String projectId) {
+        return lockedDailyCloseExistsForDate(businessDate, merchantId);
+    }
 
     /**
      * 六源汇总聚合：按经营日窗口 [fromInclusive, toExclusive) 聚合源表，得到 amount/refund/count。
@@ -548,8 +586,8 @@ public interface FinanceRepository {
     DailyCloseSourceTotals aggregateThirdpartyReflow(LocalDate businessDate, Instant fromInclusive, Instant toExclusive);
 
     // ── P2-A：六源汇总必须按 scope 取数(与 lockArApItemsForDailyClose 口径对齐) ──
-    // scopeType/scopeId 决定源表谓词:merchant scope 只归本商户,无 merchant 维的源(游乐/供应链/第三方)归零;
-    // project scope 只归本综合体;其余 scopeType(bar/ticketing/amusement) 不额外切片(平台口径)。
+    // scopeType/scopeId 决定源表谓词:merchant、bar scope 只归本商户(161-R1),无 merchant 维的源(游乐/供应链/第三方)归零;
+    // project scope 只归本综合体除酒吧外的业务(161-R2:酒吧两源归零);161-R3 起不再有 ticketing、amusement 范围。
     // default 委托无 scope 版=平台全量,生产 Jdbc @Override 下推真谓词。
     default DailyCloseSourceTotals aggregateOfficialTicket(
             LocalDate businessDate, Instant from, Instant to, String scopeType, String scopeId) {

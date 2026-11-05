@@ -1,6 +1,6 @@
 package com.complex.platform.common.api;
 
-// 文件版本：V0.32
+// 文件版本：V0.33
 
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -240,6 +240,7 @@ public final class FieldLabels {
         p("business_type", "业务类型");
         p("business_date", "业务日期");
         p("payment_id", "支付单号");
+        p("pos_transaction_no", "POS 流水号");
         p("payment_intent_id", "支付意向单");
         p("payment_method", "支付方式");
         p("sales_channel", "销售渠道");

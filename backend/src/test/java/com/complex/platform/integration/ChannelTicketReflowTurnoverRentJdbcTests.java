@@ -1,6 +1,6 @@
 package com.complex.platform.integration;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -111,6 +111,8 @@ class ChannelTicketReflowTurnoverRentJdbcTests {
                 .andExpect(jsonPath("$.data.status").value("synced"))
                 .andExpect(jsonPath("$.data.merchant_id").value(bar))
                 .andExpect(jsonPath("$.data.provider_payload.local_ticket_order_id").isNotEmpty());
+        assertThat(jdbc.queryForList("SELECT bar_id FROM ticket_orders WHERE ticket_type_id = ?", String.class, ticketType))
+                .as("172-R1 回归：通票回流照旧不挂酒吧").containsExactly((String) null);
 
         YearMonth month = YearMonth.from(days.businessDate(null, bar, Instant.now()));
         assertThat(finance.computePeriodTurnoverRent(bar, contract, month.toString()))

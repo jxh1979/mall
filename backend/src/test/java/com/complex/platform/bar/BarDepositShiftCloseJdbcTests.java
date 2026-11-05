@@ -1,8 +1,9 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.containsString;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -88,14 +89,19 @@ class BarDepositShiftCloseJdbcTests {
                 .andExpect(status().isOk());
     }
 
-    /** 本班次收银员在一体机上登记一笔现金、一笔 POS 定金：交班现金、POS 应收各计 200 元，实点 200 元现金平账不进复核。 */
+    /**
+     * 本班次收银员在一体机上登记一笔现金、一笔 POS 定金：交班现金、POS 应收各计 200 元，实点 200 元现金平账不进复核。
+     * 第十八批 S 段第 169 条 169-R2（BSM:1066「POS（记流水号+收款人）」）：POS 定金带 pos_transaction_no 登记，流水号记入
+     * bar_reservations.deposit_pos_transaction_no，班结 POS 栏照旧计入。
+     */
     @Test
     void cashAndPosDepositsCollectedByCashierCountInHisShiftClose() throws Exception {
         String shift = openShift();
         String cash = kioskReservation("cash", table("a"), phone(1));
         payDeposit(cashier, cash, "cash").andExpect(status().isOk());
         String pos = kioskReservation("pos", table("b"), phone(2));
-        payDeposit(cashier, pos, "pos").andExpect(status().isOk());
+        payDeposit(cashier, pos, Map.of("idempotency_key", "bds-pay-" + pos, "channel", "pos", "pos_transaction_no", "POS-d1"))
+                .andExpect(status().isOk());
 
         closeShift(shift, 20_000).andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.system_cash_cent").value(20000))
@@ -104,6 +110,24 @@ class BarDepositShiftCloseJdbcTests {
                 .andExpect(jsonPath("$.data.needs_review").value(false));
         assertThat(collector(cash)).isEqualTo(cashierId);
         assertThat(collector(pos)).isEqualTo(cashierId);
+        assertThat(jdbc.queryForObject("SELECT deposit_pos_transaction_no FROM bar_reservations WHERE id = ?", String.class, pos))
+                .isEqualTo("POS-d1");
+    }
+
+    /**
+     * 第十八批 S 段第 169 条 169-R2（BSM:1066「POS（记流水号+收款人）」）：一体机按 POS 登记定金、蛇形键请求不带流水号，
+     * 400 VALIDATION_FAILED（提示含「POS 流水号」），整笔不登记、定金仍待付。
+     * （另起一例：失败请求让测试事务只回滚，同一例里随后的交班准入求值会被保守拦截。）
+     */
+    @Test
+    void posDepositWithoutTransactionNoIsRejectedAndStaysPending() throws Exception {
+        String pos = kioskReservation("posnono", table("f"), phone(7));
+        payDeposit(cashier, pos, Map.of("idempotency_key", "bds-paynono-" + s, "channel", "pos"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.detail_code").value("VALIDATION_FAILED"))
+                .andExpect(jsonPath("$.message").value(containsString("POS 流水号")));
+        assertThat(jdbc.queryForObject("SELECT deposit_status FROM bar_reservations WHERE id = ?", String.class, pos))
+                .isEqualTo("pending");
     }
 
     /** 开班前登记的、别的员工登记的定金不进本班；抢台失败被取消的那笔现金定金钱已进钱箱，仍计入。 */
@@ -164,9 +188,12 @@ class BarDepositShiftCloseJdbcTests {
 
     /** 一体机收款步骤：授权员工登记定金（cash|pos）。 */
     private ResultActions payDeposit(RequestPostProcessor who, String reservationId, String channel) throws Exception {
+        return payDeposit(who, reservationId, Map.of("idempotency_key", "bds-pay-" + reservationId, "channel", channel));
+    }
+
+    private ResultActions payDeposit(RequestPostProcessor who, String reservationId, Map<String, Object> body) throws Exception {
         return mockMvc.perform(post("/api/v1/bar/reservations/" + reservationId + "/pay-deposit").with(kiosk(who))
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(json.writeValueAsString(Map.of("idempotency_key", "bds-pay-" + reservationId, "channel", channel))));
+                .contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(body)));
     }
 
     /** 一体机真实形状：一体机终端头＋登记设备号（不签名，默认 grace）。 */

@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.10
+// 文件版本：V0.11
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -997,6 +997,11 @@ public class TicketOrderService {
     public void requirePaymentOpen(TicketOrderRecord order) {
         if ("cancelled".equals(order.status())) throw ApiException.conflict("ORDER_CANCELLED", "票务订单已取消");
         requireAmusementSalesOpen(order.ticketTypeId(), resolveOriginalOrderProjectId(order));
+    }
+
+    /** 172-R1（BSM:749「单店酒吧门票……经第三方渠道售出也不改变该归属」）：票种所属酒吧（通票为 null），供渠道回流出票带上。 */
+    public String ticketTypeBarId(String ticketTypeId) {
+        return repository.findTicketTypeById(ticketTypeId).map(TicketTypeRecord::barId).orElse(null);
     }
 
     public boolean amusementSalesSuspended(String ticketTypeId, String orderBarId) {

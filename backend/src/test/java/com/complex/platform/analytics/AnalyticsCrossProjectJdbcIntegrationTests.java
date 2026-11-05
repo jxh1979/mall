@@ -1,6 +1,6 @@
 package com.complex.platform.analytics;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -458,8 +458,8 @@ class AnalyticsCrossProjectJdbcIntegrationTests {
     /** 一笔待审的锁账后补录（应收挂在给定项目、已锁账），返回补录编号。 */
     private String lockedBackfill(String tag, String projectId, java.time.Instant at) {
         String s = tag + "_" + suffix;
-        jdbcTemplate.update("INSERT INTO finance_daily_closes (id, business_date, scope_type, scope_id, force_close, status, locked_at, created_at) "
-                + "VALUES (?, DATE '2098-03-10', 'project', ?, FALSE, 'locked', now(), now())", "close_" + s, projectId);
+        jdbcTemplate.update("INSERT INTO finance_daily_closes (id, business_date, scope_type, scope_id, status, locked_at, created_at) "
+                + "VALUES (?, DATE '2098-03-10', 'project', ?, 'locked', now(), now())", "close_" + s, projectId);
         jdbcTemplate.update("""
                 INSERT INTO ar_ap_items (id, item_no, direction, counterparty_id, source_type, source_id, amount_cent, paid_amount_cent,
                         unpaid_amount_cent, currency, due_date, status, created_at, updated_at, project_id, locked_day_close_id)

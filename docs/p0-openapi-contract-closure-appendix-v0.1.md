@@ -1,4 +1,4 @@
-# P0 OpenAPI 权限、事件、任务追溯收口附录 V0.50
+# P0 OpenAPI 权限、事件、任务追溯收口附录 V0.51
 
 ## 1. 文档定位
 
@@ -14,11 +14,11 @@
 
 | 检查项 | 当前结果 | 执行结论 |
 |---|---:|---|
-| OpenAPI operation 数 | 1245 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
+| OpenAPI operation 数 | 1246 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
 | OpenAPI 权限/通用权限状态数 | 420 | 人工权限矩阵正文未覆盖 319 项；缺口以本文第 3 节补齐 |
-| OpenAPI 成功/失败事件数 | 2490 | 人工事件矩阵正文未覆盖 2441 项；完整事件字典以本文第 4 节为准 |
-| operation 级任务追溯 | 1245 | 人工任务映射正文未逐项覆盖 1239 个 operation；逐 operation 映射以本文第 5 节为准 |
-| 写接口数量 | 745 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
+| OpenAPI 成功/失败事件数 | 2492 | 人工事件矩阵正文未覆盖 2443 项；完整事件字典以本文第 4 节为准 |
+| operation 级任务追溯 | 1246 | 人工任务映射正文未逐项覆盖 1240 个 operation；逐 operation 映射以本文第 5 节为准 |
+| 写接口数量 | 746 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
 
 ## 3. 权限码与认证上下文补充表
 
@@ -254,7 +254,7 @@
 | `finance.merchant_expense.manage` | staff-token | merchant, platform | 3 | createMerchantExpenseEntry, reverseMerchantExpenseEntry, syncMerchantExpenseAuto | OpenAPI 补充，以本附录为准 |
 | `finance.merchant_expense.view` | staff-token | merchant | 3 | listMerchantExpenses, summarizeMerchantExpenses, listMerchantExpensePeriodLocks | OpenAPI 补充，以本附录为准 |
 | `finance.payment_intent.create` | staff-token | project-bar-table, project-order | 3 | createBarBillPayIntent, createPaymentIntent, createTicketOrderPayIntent | 已在权限矩阵正文出现 |
-| `finance.payment.register` | staff-token | platform, project-bar-table, project-entity, project-merchant, project-order | 7 | settleBarBill, createArApPayment, confirmOfflinePayment, initiateInternalPayment, recordInternalPaymentFailure, postponeInternalPaymentForFunds, confirmTicketOrderPayment | 已在权限矩阵正文出现 |
+| `finance.payment.register` | staff-token | platform, project-bar-table, project-entity, project-merchant, project-order | 8 | settleBarBill, requestBarBillStoredValueSmsCode, createArApPayment, confirmOfflinePayment, initiateInternalPayment, recordInternalPaymentFailure, postponeInternalPaymentForFunds, confirmTicketOrderPayment | 已在权限矩阵正文出现 |
 | `finance.payroll.payment.register` | staff-token | project-entity | 3 | preparePayrollBankPayment, submitPayrollBankPaymentFact, confirmPayrollBankPaymentResult | OpenAPI 补充，以本附录为准 |
 | `finance.payroll.view` | staff-token | project-entity | 1 | getPayrollBankPaymentContext | OpenAPI 补充，以本附录为准 |
 | `finance.points_recovery.view` | staff-token | project-merchant | 1 | getPointsRecoveryDetail | OpenAPI 补充，以本附录为准 |
@@ -1076,9 +1076,11 @@
 | `customer.order_tickets_viewed` | success | `listCustomerOrderTickets` | `GET` | `/api/v1/customer/orders/{order_id}/tickets` | CUS/TIC-客人购票 | `not_applicable` | 接口级事件，以本附录为准 |
 | `customer.orders_view_failed` | failure | `listCustomerOrders` | `GET` | `/api/v1/customer/orders` | CUS-客人端 | `not_applicable` | 接口级事件，以本附录为准 |
 | `customer.orders_viewed` | success | `listCustomerOrders` | `GET` | `/api/v1/customer/orders` | CUS-客人端 | `not_applicable` | 接口级事件，以本附录为准 |
+| `customer.otp_request_failed` | failure | `requestBarBillStoredValueSmsCode` | `POST` | `/api/v1/bar/bills/{bill_id}/stored-value/sms` | BAR-酒吧经营 | `finance.payment.register` | 接口级事件，以本附录为准 |
 | `customer.otp_request_failed` | failure | `requestCustomerLoginSmsCode` | `POST` | `/api/v1/customer/auth/sms-codes` | CUS-客人端 | `public` | 接口级事件，以本附录为准 |
 | `customer.otp_request_failed` | failure | `requestCustomerStoredValueSmsCode` | `POST` | `/api/v1/customer/stored-value/sms` | CUS-客人端 | `not_applicable` | 接口级事件，以本附录为准 |
 | `customer.otp_request_failed` | failure | `requestKioskBindCode` | `POST` | `/api/v1/ticketing/kiosk-bind-codes` | TIC-票务权益 | `ticket.order.create` | 接口级事件，以本附录为准 |
+| `customer.otp_requested` | success | `requestBarBillStoredValueSmsCode` | `POST` | `/api/v1/bar/bills/{bill_id}/stored-value/sms` | BAR-酒吧经营 | `finance.payment.register` | 接口级事件，以本附录为准 |
 | `customer.otp_requested` | success | `requestCustomerLoginSmsCode` | `POST` | `/api/v1/customer/auth/sms-codes` | CUS-客人端 | `public` | 接口级事件，以本附录为准 |
 | `customer.otp_requested` | success | `requestCustomerStoredValueSmsCode` | `POST` | `/api/v1/customer/stored-value/sms` | CUS-客人端 | `not_applicable` | 接口级事件，以本附录为准 |
 | `customer.otp_requested` | success | `requestKioskBindCode` | `POST` | `/api/v1/ticketing/kiosk-bind-codes` | TIC-票务权益 | `ticket.order.create` | 接口级事件，以本附录为准 |
@@ -3194,6 +3196,7 @@
 | BAR-酒吧经营 | `reassignBarTableSessionAttribution` | `POST` | `/api/v1/bar/table-sessions/{session_id}/attribution-reassign` | 改派开台客人来源与销售人员（店长办理） | `bar.table_session.attribution_reassign` | `bar.table_session.attribution_reassigned` / `bar.table_session.attribution_reassign_failed` | web | operation 级补充 |
 | BAR-酒吧经营 | `redeemBarDrinkEntitlement` | `POST` | `/api/v1/bar/entitlement-redemptions/drink` | 酒水权益兑换承接 | `bar.entitlement.redeem` | `bar.entitlement_redeemed` / `bar.entitlement_redeem_failed` | staff_work_phone, web | operation 级补充 |
 | BAR-酒吧经营 | `reopenBarBill` | `POST` | `/api/v1/bar/bills/{bill_id}/reopen` | 账单反结 | `bar.bill.reopen` | `bar.bill_reopened` / `bar.bill_reopen_failed` | web | operation 级补充 |
+| BAR-酒吧经营 | `requestBarBillStoredValueSmsCode` | `POST` | `/api/v1/bar/bills/{bill_id}/stored-value/sms` | 酒吧账单储值付款短信验证码 | `finance.payment.register` | `customer.otp_requested` / `customer.otp_request_failed` | web | operation 级补充 |
 | BAR-酒吧经营 | `resolveBarBillAnomaly` | `POST` | `/api/v1/bar/bills/{bill_id}/anomaly/resolve` | 主管处置异常账单 | `bar.bill.anomaly.resolve` | `bar.bill_anomaly_resolved` / `bar.bill_anomaly_resolve_failed` | web | operation 级补充 |
 | BAR-酒吧经营 | `resolveBarShift` | `POST` | `/api/v1/bar/shifts/{shift_id}/resolve` | 交班复核平账 | `finance.daily_close.manage` | `bar.shift_resolved` / `bar.shift_resolve_failed` | web | operation 级补充 |
 | BAR-酒吧经营 | `restoreBarStaffBookingSuspension` | `POST` | `/api/v1/bar/staff-booking-suspensions/{id}/restore` | 店长复核恢复员工代订权限 | `bar.staff_booking.restore` | `bar.staff_booking_restored` / `bar.staff_booking_restore_failed` | web | operation 级补充 |

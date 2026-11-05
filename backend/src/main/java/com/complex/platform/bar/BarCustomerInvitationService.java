@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.ticketing.TicketingRepository;
@@ -39,6 +39,16 @@ public class BarCustomerInvitationService {
     public record EntryCode(String reservationId, String memberId, String code, Instant expiresAt, int refreshIntervalSeconds) {
     }
 
+    /**
+     * 第十八批 S 段第 167 条 167-R1：订卡邀请函名额按当前台位或合并台组计（见 BarInvitationQuota）。
+     * capacity＝可邀请人数，occupied＝已接受未入场＋已入场，entered＝已入场。
+     */
+    public record InvitationQuota(int capacity, int occupied, int entered) {
+        public int remaining() {
+            return Math.max(capacity - occupied, 0);
+        }
+    }
+
     private final BarRepository repository;
     private final BarInvitationTokenSigner signer;
     private final JdbcTemplate jdbc;
@@ -74,15 +84,22 @@ public class BarCustomerInvitationService {
             throw ApiException.conflict("BAR_INVITATION_NOT_ACTIVE", "卡座邀请已失效");
         }
         requireGenuine(reservation, signature, tableId, capacity);
+        // 第十八批 S 段第 167 条 167-R1（BSM:1079「转台……可邀请人数和最低消费额均按目标台规则执行」「合并后的可邀请人数……按两侧所包含全部原台的
+        // 对应数值相加计算」）：卡座名取会话当前台位（整体转台前旧链的会话取台组根会话的台位），名额与剩余按台组计；tableId 仍回签发值。
+        String shownTableId = repository.findLiveSessionIdByReservation(reservation.id())
+                .flatMap(repository::findTableSessionById)
+                .map(session -> "merged_transferred".equals(session.status())
+                        ? repository.findTableSessionById(BarMinSpend.rootSessionId(repository, session.id()))
+                                .map(BarTableSessionRecord::tableId).orElse(session.tableId())
+                        : session.tableId())
+                .orElse(reservation.tableId());
         Map<String, Object> names = jdbc.queryForMap("""
                 SELECT t.table_name, m.merchant_name FROM bar_tables t LEFT JOIN merchants m ON m.id = t.bar_id WHERE t.id = ?
-                """, reservation.tableId());
-        long occupied = repository.listInvitationMembers(reservation.id()).stream()
-                .filter(member -> !"revoked".equals(member.status())).count();
-        int seats = reservation.invitationCapacity();
+                """, shownTableId);
+        InvitationQuota quota = quota(reservation);
         return new InvitationPreview(reservation.id(), reservation.barId(), (String) names.get("merchant_name"),
-                reservation.tableId(), (String) names.get("table_name"), reservation.reservedAt(), seats,
-                (int) Math.max(seats - occupied, 0),
+                reservation.tableId(), (String) names.get("table_name"), reservation.reservedAt(), quota.capacity(),
+                quota.remaining(),
                 com.complex.platform.common.Strings.trimToNull(reservation.customerId()) == null);
     }
 
@@ -96,6 +113,16 @@ public class BarCustomerInvitationService {
                         reservation.invitationToken()), signature)) {
             throw ApiException.conflict("BAR_INVITATION_SIGNATURE_INVALID", "邀请函已被复制或篡改，无法接受");
         }
+    }
+
+    /** 第十八批 S 段第 167 条 167-R1：订台所在台组的名额与已占人数（只读）。 */
+    public InvitationQuota quota(BarReservationRecord reservation) {
+        return BarInvitationQuota.of(repository, reservation, false);
+    }
+
+    /** 第十八批 S 段第 167 条 167-R1：同上，有会话时先锁台组根会话行（调用方提供事务、且已锁订台行）。 */
+    public InvitationQuota lockQuota(BarReservationRecord reservation) {
+        return BarInvitationQuota.of(repository, reservation, true);
     }
 
     /** 开卡人移出尚未入场的被邀请人，名额随即释放；已入场的不可移出。调用方提供事务与留痕。 */

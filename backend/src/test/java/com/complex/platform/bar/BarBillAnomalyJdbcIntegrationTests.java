@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -545,7 +545,7 @@ class BarBillAnomalyJdbcIntegrationTests {
 
     private DailyCloseRequest dailyClose(LocalDate day) {
         return new DailyCloseRequest("bba-close-" + suffix + "-" + seq.incrementAndGet(), "日结", List.of(), day, "merchant",
-                merchant, false);
+                merchant);
     }
 
     private ResultActions call(RequestPostProcessor who, String path, String body) throws Exception {

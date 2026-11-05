@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.containsString;
@@ -239,8 +239,7 @@ class BarShiftHandoverJdbcTests {
         String id = CustomerTicketPaymentFixture.read(mockMvc.perform(post("/api/v1/finance/daily-closes").with(finance)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(json.writeValueAsString(Map.of("idempotency_key", "bsh-close-day-" + s, "operator_note", "日结",
-                                "business_date", day.toString(), "scope_type", "merchant", "scope_id", bar,
-                                "force_close", false))))
+                                "business_date", day.toString(), "scope_type", "merchant", "scope_id", bar))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.status").value("pending_confirm")), "$.data.id");
         DailyCloseFixture.markAllFinal(financeRepository, id);

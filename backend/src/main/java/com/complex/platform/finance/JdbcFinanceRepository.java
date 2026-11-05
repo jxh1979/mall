@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.18
+// 文件版本：V0.19
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
@@ -367,17 +367,16 @@ class JdbcFinanceRepository implements FinanceRepository {
     public DailyCloseRecord saveDailyClose(DailyCloseRecord dailyClose) {
         jdbcTemplate.update("""
                 INSERT INTO finance_daily_closes (
-                    id, business_date, scope_type, scope_id, force_close, status, locked_at, created_at, confirmed_at, archived_at
+                    id, business_date, scope_type, scope_id, status, locked_at, created_at, confirmed_at, archived_at
                 )
                 VALUES (
-                    :id, :business_date, :scope_type, :scope_id, :force_close, :status, :locked_at, :created_at,
+                    :id, :business_date, :scope_type, :scope_id, :status, :locked_at, :created_at,
                     :confirmed_at, :archived_at
                 )
                 ON CONFLICT (id) DO UPDATE SET
                     business_date = EXCLUDED.business_date,
                     scope_type = EXCLUDED.scope_type,
                     scope_id = EXCLUDED.scope_id,
-                    force_close = EXCLUDED.force_close,
                     status = EXCLUDED.status,
                     locked_at = EXCLUDED.locked_at,
                     confirmed_at = EXCLUDED.confirmed_at,
@@ -389,6 +388,8 @@ class JdbcFinanceRepository implements FinanceRepository {
     @Override
     public boolean openTicketVerificationAnomalyExists(Instant from, Instant to, String scopeType, String scopeId) {
         boolean merchantScope = isMerchantScope(scopeType);
+        // 第十八批 S 段第 161 条 161-R2：project 范围只看原核销所属订单属该综合体、核销商户不是酒吧的（单店酒吧门票随酒吧日结）。
+        boolean projectScope = "project".equals(scopeType);
         return Boolean.TRUE.equals(jdbcTemplate.queryForObject("""
                 SELECT EXISTS (
                     SELECT 1
@@ -398,12 +399,18 @@ class JdbcFinanceRepository implements FinanceRepository {
                        AND a.anomaly_resolution IS NULL
                        AND o.created_at >= :from
                        AND o.created_at < :to
-                       AND (:merchant_scope = FALSE OR o.merchant_id = :merchant_id))
+                       AND (:merchant_scope = FALSE OR o.merchant_id = :merchant_id)
+                       AND (:project_scope = FALSE
+                            OR (EXISTS (SELECT 1 FROM issued_entitlements e JOIN ticket_orders t ON t.id = e.order_id
+                                         WHERE e.id = o.entitlement_id AND t.project_id = :project_id)
+                                AND NOT EXISTS (SELECT 1 FROM merchants m WHERE m.id = o.merchant_id AND m.merchant_type = 'bar'))))
                 """, new MapSqlParameterSource()
                 .addValue("from", from.atOffset(java.time.ZoneOffset.UTC))
                 .addValue("to", to.atOffset(java.time.ZoneOffset.UTC))
                 .addValue("merchant_scope", merchantScope)
-                .addValue("merchant_id", merchantScope ? scopeId : null), Boolean.class));
+                .addValue("merchant_id", merchantScope ? scopeId : null)
+                .addValue("project_scope", projectScope)
+                .addValue("project_id", projectScope ? scopeId : null), Boolean.class));
     }
 
     @Override
@@ -414,6 +421,9 @@ class JdbcFinanceRepository implements FinanceRepository {
     @Override
     public boolean openBarBillAnomalyExists(Instant from, Instant to, String scopeType, String scopeId,
             Map<String, Instant[]> barWindows) {
+        if ("project".equals(scopeType)) {
+            return false;  // 第十八批 S 段第 161 条 161-R2：酒吧单据只属酒吧日结（酒吧逐店另出），综合体日结不看
+        }
         boolean merchantScope = isMerchantScope(scopeType);
         MapSqlParameterSource params = new MapSqlParameterSource()
                 .addValue("from", from.atOffset(java.time.ZoneOffset.UTC))
@@ -436,6 +446,9 @@ class JdbcFinanceRepository implements FinanceRepository {
     @Override
     public List<String> unsettledBarBillNos(Instant from, Instant to, String scopeType, String scopeId,
             Map<String, Instant[]> barWindows) {
+        if ("project".equals(scopeType)) {
+            return List.of();  // 161-R2：同酒吧账单异常，综合体日结不看
+        }
         boolean merchantScope = isMerchantScope(scopeType);
         MapSqlParameterSource params = new MapSqlParameterSource()
                 .addValue("from", from.atOffset(java.time.ZoneOffset.UTC))
@@ -466,9 +479,63 @@ class JdbcFinanceRepository implements FinanceRepository {
         return barShiftExists("s.status = 'closed' AND s.needs_review = TRUE", from, to, scopeType, scopeId, barWindows);
     }
 
-    /** 开班落在该营业日（酒吧逐家按各自营业日窗）且满足 condition 的收银班次；merchant 范围只看本酒吧，其余平台口径。 */
+    /** 第十八批 S 段第 158 条 158-R1：未关闭的高价值对账差异（财务差异＋第三方差异），口径见接口。 */
+    @Override
+    public boolean openHighValueReconciliationDifferenceExists(java.time.LocalDate businessDate, String scopeType, String scopeId,
+            Long thresholdCent) {
+        boolean merchantScope = isMerchantScope(scopeType);
+        // 第十八批 S 段第 161 条 161-R2：project 范围＝该综合体除酒吧外的业务——财务批次范围为该综合体或其非酒吧商户，第三方差异的回流门店属该综合体且不是酒吧。
+        boolean projectScope = "project".equals(scopeType);
+        return Boolean.TRUE.equals(jdbcTemplate.queryForObject("""
+                SELECT EXISTS (
+                    SELECT 1
+                      FROM finance_reconciliation_differences d
+                      JOIN finance_reconciliation_batches b ON b.id = d.batch_id
+                     WHERE d.status <> 'closed'
+                       AND b.business_date = :business_date
+                       AND (:threshold IS NULL OR d.amount_cent > :threshold)
+                       AND (:merchant_scope = FALSE OR (b.scope_type IN ('merchant', 'bar') AND b.scope_id = :merchant_id))
+                       AND (:project_scope = FALSE OR (b.scope_type = 'project' AND b.scope_id = :project_id)
+                            OR (b.scope_type = 'merchant' AND EXISTS (SELECT 1 FROM merchants m WHERE m.id = b.scope_id
+                                AND m.project_id = :project_id AND m.merchant_type <> 'bar')))
+                    UNION ALL
+                    SELECT 1
+                      FROM integration_reconciliation_differences d
+                      JOIN integration_reconciliation_batches b ON b.id = d.batch_id
+                     WHERE d.status NOT IN ('resolved', 'matched')
+                       AND :business_date BETWEEN b.period_start AND b.period_end
+                       AND (:threshold IS NULL OR d.difference_amount_cent > :threshold)
+                       AND (:merchant_scope = FALSE OR EXISTS (
+                            SELECT 1
+                              FROM integration_order_syncs s
+                             WHERE s.provider_code = d.provider_code
+                               AND s.business_type = d.business_type
+                               AND s.external_business_id = d.external_business_id
+                               AND s.merchant_id = :merchant_id))
+                       AND (:project_scope = FALSE OR EXISTS (
+                            SELECT 1
+                              FROM integration_order_syncs s
+                              JOIN merchants m ON m.id = s.merchant_id
+                             WHERE s.provider_code = d.provider_code
+                               AND s.business_type = d.business_type
+                               AND s.external_business_id = d.external_business_id
+                               AND m.project_id = :project_id
+                               AND m.merchant_type <> 'bar')))
+                """, new MapSqlParameterSource()
+                .addValue("business_date", businessDate)
+                .addValue("threshold", thresholdCent, java.sql.Types.BIGINT)
+                .addValue("merchant_scope", merchantScope)
+                .addValue("merchant_id", merchantScope ? scopeId : null, java.sql.Types.VARCHAR)
+                .addValue("project_scope", projectScope)
+                .addValue("project_id", projectScope ? scopeId : null, java.sql.Types.VARCHAR), Boolean.class));
+    }
+
+    /** 开班落在该营业日（酒吧逐家按各自营业日窗）且满足 condition 的收银班次；merchant、bar 范围只看本酒吧，project 范围不看，其余平台口径。 */
     private boolean barShiftExists(String condition, Instant from, Instant to, String scopeType, String scopeId,
             Map<String, Instant[]> barWindows) {
+        if ("project".equals(scopeType)) {
+            return false;  // 第十八批 S 段第 161 条 161-R2：酒吧单据只属酒吧日结（酒吧逐店另出），综合体日结不看
+        }
         boolean merchantScope = isMerchantScope(scopeType);
         MapSqlParameterSource params = new MapSqlParameterSource()
                 .addValue("from", from.atOffset(java.time.ZoneOffset.UTC))
@@ -857,7 +924,7 @@ class JdbcFinanceRepository implements FinanceRepository {
     @Override
     public Optional<DailyCloseRecord> findDailyCloseById(String id) {
         return jdbcTemplate.query("""
-                SELECT id, business_date, scope_type, scope_id, force_close, status, locked_at, created_at, confirmed_at, archived_at,
+                SELECT id, business_date, scope_type, scope_id, status, locked_at, created_at, confirmed_at, archived_at,
                        (SELECT string_agg(m.category, ',' ORDER BY m.marked_at, m.category)
                           FROM finance_daily_close_final_marks m
                          WHERE m.daily_close_id = finance_daily_closes.id) AS final_mark_categories
@@ -933,13 +1000,13 @@ class JdbcFinanceRepository implements FinanceRepository {
                 + (scopeType == null ? "" : " AND scope_type = :scope_type")
                 + (scopeId == null ? "" : " AND scope_id = :scope_id")
                 + (projectIds == null ? "" : """
-                   AND ((scope_type IN ('project', 'ticketing', 'amusement') AND scope_id IN (:project_ids))
+                   AND ((scope_type = 'project' AND scope_id IN (:project_ids))
                         OR (scope_type IN ('merchant', 'bar') AND scope_id IN (SELECT id FROM merchants WHERE project_id IN (:project_ids))))
                 """);
         Long total = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM finance_daily_closes" + where, params, Long.class);
         params.addValue("limit", safeSize).addValue("offset", (long) (safePage - 1) * safeSize);
         List<DailyCloseRecord> items = jdbcTemplate.query("""
-                SELECT id, business_date, scope_type, scope_id, force_close, status, locked_at, created_at, confirmed_at, archived_at,
+                SELECT id, business_date, scope_type, scope_id, status, locked_at, created_at, confirmed_at, archived_at,
                        (SELECT string_agg(m.category, ',' ORDER BY m.marked_at, m.category)
                           FROM finance_daily_close_final_marks m
                          WHERE m.daily_close_id = finance_daily_closes.id) AS final_mark_categories
@@ -967,6 +1034,22 @@ class JdbcFinanceRepository implements FinanceRepository {
                 """, params);
     }
 
+    /** 第十八批 S 段第 161 条 161-R2：综合体日结打锁，口径见接口（派生台账多数 project_id 为空，用商户所属综合体补）。 */
+    @Override
+    public int lockProjectArApItemsForDailyClose(String dailyCloseId, LocalDate businessDate, String projectId) {
+        return jdbcTemplate.update("""
+                UPDATE ar_ap_items a
+                   SET locked_day_close_id = :daily_close_id
+                 WHERE a.due_date = :business_date
+                   AND a.locked_day_close_id IS NULL
+                   AND COALESCE(a.project_id, (SELECT m.project_id FROM merchants m WHERE m.id = a.merchant_id)) = :project_id
+                   AND NOT EXISTS (SELECT 1 FROM merchants m WHERE m.id = a.merchant_id AND m.merchant_type = 'bar')
+                """, new MapSqlParameterSource()
+                .addValue("daily_close_id", dailyCloseId)
+                .addValue("business_date", businessDate)
+                .addValue("project_id", projectId));
+    }
+
     @Override
     public Optional<String> findArApItemLockedDayCloseId(String arApItemId) {
         List<String> rows = jdbcTemplate.query("""
@@ -983,22 +1066,37 @@ class JdbcFinanceRepository implements FinanceRepository {
 
     @Override
     public boolean lockedDailyCloseExistsForDate(LocalDate businessDate, String merchantId) {
+        return lockedDailyCloseExistsForDate(businessDate, merchantId, null);
+    }
+
+    @Override
+    public boolean lockedDailyCloseExistsForDate(LocalDate businessDate, String merchantId, String projectId) {
         // F-OPS-09：商户级日结锁。与 lockArApItemsForDailyClose 同口径——
-        // merchantId 非空（商户 scope 调用方）：仅本商户封账（scope_type='merchant' AND scope_id=:merchant_id）拦截，
-        //   他商户封账不冻结本商户写入；
+        // merchantId 非空（商户 scope 调用方）：仅本商户封账（scope_type 为 merchant 或 bar 且 scope_id=:merchant_id）拦截，
+        //   他商户封账不冻结本商户写入；第十八批 S 段第 161 条 161-R1（ENUM:190「日结锁定后的补录须上级审批，且不改动已锁定的日结金额」；
+        //   PGM:664 单店日结由该酒吧对应的财务 BP 负责）：bar 范围与 merchant 范围同把 scope_id 当该酒吧商户（同 143-R7 打锁），
+        //   平台侧财务锁某家酒吧 bar 范围的日结同样冻结该酒吧商户当日的写入；
         // merchantId 为空（平台口径调用方）：该经营日任一 locked 日结即拦截（平台口径写入受所有封账约束）。
         // 第十八批 R 段 143-R5（第十八批裁决 33「归档后只读可查，锁定后补录照常走上级审批。」）：已归档的日结同样封账。
+        // 第十八批 S 段第 161 条 161-R2（第十八批裁决 35「酒吧逐店逐日查；游乐等按综合体逐日查」）：商户不是酒吧、能定综合体（projectId，
+        //   空则取商户所属项目）的，另受该综合体项目范围日结约束；只有商户与项目都定不出时才受任一封账约束。
         MapSqlParameterSource params = new MapSqlParameterSource()
                 .addValue("business_date", businessDate)
                 // merchantId 可为 null(平台口径):必须带 SQL 类型,否则 PG 无法推断 :merchant_id IS NULL 的参数类型直接 500。
-                .addValue("merchant_id", merchantId, java.sql.Types.VARCHAR);
+                .addValue("merchant_id", merchantId, java.sql.Types.VARCHAR)
+                .addValue("project_id", projectId, java.sql.Types.VARCHAR);
         Integer count = jdbcTemplate.queryForObject("""
                 SELECT COUNT(*)
-                  FROM finance_daily_closes
-                 WHERE business_date = :business_date
-                   AND status IN ('locked', 'archived')
-                   AND (:merchant_id IS NULL
-                        OR (scope_type = 'merchant' AND scope_id = :merchant_id))
+                  FROM finance_daily_closes d
+                  CROSS JOIN (SELECT COALESCE(CAST(:project_id AS VARCHAR), m.project_id) AS project_id,
+                                     COALESCE(m.merchant_type = 'bar', FALSE) AS is_bar
+                                FROM (SELECT 1) one
+                                LEFT JOIN merchants m ON m.id = :merchant_id) u
+                 WHERE d.business_date = :business_date
+                   AND d.status IN ('locked', 'archived')
+                   AND ((d.scope_type IN ('merchant', 'bar') AND d.scope_id = :merchant_id)
+                        OR (u.project_id IS NULL AND CAST(:merchant_id AS VARCHAR) IS NULL)
+                        OR (NOT u.is_bar AND d.scope_type = 'project' AND d.scope_id = u.project_id))
                 """, params, Integer.class);
         return count != null && count > 0;
     }
@@ -1107,22 +1205,40 @@ class JdbcFinanceRepository implements FinanceRepository {
     }
 
     // ── P2-A：六源汇总按 scope 取数(与 lockArApItemsForDailyClose 口径对齐)──────────
-    // 口径:仅 scopeType='merchant' 时按 merchant 维切片(源表有 merchant_id 才能归属,无则归零);
-    //       其余 scopeType(project/bar/ticketing/amusement)与既有锁定口径一致=平台全量(委托无 scope 版)。
-    // 无 merchant 维的源(amusement/supply_cost/thirdparty_reflow)在 merchant scope 下归零,不再渗入全平台。
+    // 口径:scopeType 为 merchant 或 bar 时按 merchant 维切片(源表有 merchant_id 才能归属,无则归零);
+    //       第十八批 S 段第 161 条 161-R1:bar 范围与 merchant 范围同把 scope_id 当该酒吧商户(同 dailyCloseProject、143-R7 打锁),
+    //       七源汇总与日结各闸(票务核销异常、酒吧账单异常、未结清账单、班次交接、有差异、对账差异)都只取该酒吧;
+    //       第十八批 S 段第 161 条 161-R2:project 范围＝该综合体除酒吧外的业务(第十八批裁决 35),酒吧与订台定金两源归零,门票按售票项目快照、
+    //       游乐按游乐项目所属商户、供应链按流水项目(空取商户所属)、第三方回流按回流门店所属综合体,日结闸里只属酒吧的三道不看;
+    //       第十八批 S 段第 161 条 161-R3:日结范围只有 project、merchant、bar,不再有 ticketing、amusement 范围。
+    //       第十八批 S 段第 161 条复核：merchant、bar 范围门票按受理商户或绑定酒吧取该酒吧（客人自助、渠道回流的单店票受理商户为空，BSM:749），
+    //       供应链按流水商户取该酒吧。
+    // 无 merchant 维的源(amusement/thirdparty_reflow)在 merchant scope 下归零,不再渗入全平台。
     private static final DailyCloseSourceTotals ZERO = DailyCloseSourceTotals.empty();
 
     private boolean isMerchantScope(String scopeType) {
-        return "merchant".equals(scopeType);
+        return "merchant".equals(scopeType) || "bar".equals(scopeType);
+    }
+
+    /**
+     * 门票单按范围归属：merchant、bar 范围归本商户，受理商户或绑定酒吧（V288）为本酒吧的都算（客人自助、渠道回流的单店票受理商户为空，
+     * BSM:749 归该酒吧）；161-R2 project 范围取售票项目快照（V463）为该综合体、且售票商户与绑定酒吧都不是酒吧的单（单店酒吧门票随酒吧日结）。
+     */
+    private static String ticketOrderInScope(String alias, String scopeType) {
+        return "project".equals(scopeType)
+                ? alias + ".project_id = :scope_id AND NOT EXISTS (SELECT 1 FROM merchants bm WHERE bm.id IN (" + alias
+                        + ".merchant_id, " + alias + ".bar_id) AND bm.merchant_type = 'bar')"
+                : "(" + alias + ".merchant_id = :merchant_id OR " + alias + ".bar_id = :merchant_id)";
     }
 
     private DailyCloseSourceTotals aggregateTotalsScoped(
-            String sql, LocalDate businessDate, Instant from, Instant to, String merchantId) {
+            String sql, LocalDate businessDate, Instant from, Instant to, String scopeId) {
         MapSqlParameterSource params = new MapSqlParameterSource()
                 .addValue("business_date", businessDate)
                 .addValue("from", timestampWithTimeZone(from))
                 .addValue("to", timestampWithTimeZone(to))
-                .addValue("merchant_id", merchantId, java.sql.Types.VARCHAR);
+                .addValue("merchant_id", scopeId, java.sql.Types.VARCHAR)
+                .addValue("scope_id", scopeId, java.sql.Types.VARCHAR);  // 161-R2：project 范围的 SQL 用 :scope_id
         return jdbcTemplate.query(sql, params, (rs) -> {
             if (!rs.next()) {
                 return DailyCloseSourceTotals.empty();
@@ -1135,7 +1251,7 @@ class JdbcFinanceRepository implements FinanceRepository {
     @Override
     public DailyCloseSourceTotals aggregateOfficialTicket(
             LocalDate businessDate, Instant from, Instant to, String scopeType, String scopeId) {
-        if (!isMerchantScope(scopeType)) {
+        if (!isMerchantScope(scopeType) && !"project".equals(scopeType)) {
             return aggregateOfficialTicket(businessDate, from, to);
         }
         // ticket_orders 有 merchant_id:merchant scope 仅归本商户;退款按本商户订单归集。
@@ -1145,7 +1261,7 @@ class JdbcFinanceRepository implements FinanceRepository {
                           FROM ticket_refunds r
                           JOIN ticket_orders ro ON ro.id = r.target_id
                          WHERE ro.sales_channel IN %1$s
-                           AND ro.merchant_id = :merchant_id
+                           AND %2$s
                            AND r.status = 'success'
                            AND r.succeeded_at >= :from
                            AND r.succeeded_at < :to) AS refund_cent,
@@ -1154,14 +1270,15 @@ class JdbcFinanceRepository implements FinanceRepository {
                  WHERE o.pay_status = 'paid'
                    AND o.sales_channel IN %1$s
                    AND o.visit_date = :business_date
-                   AND o.merchant_id = :merchant_id
-                """.formatted(SELF_SALES_CHANNELS), businessDate, from, to, scopeId);
+                   AND %3$s
+                """.formatted(SELF_SALES_CHANNELS, ticketOrderInScope("ro", scopeType), ticketOrderInScope("o", scopeType)),
+                businessDate, from, to, scopeId);
     }
 
     @Override
     public DailyCloseSourceTotals aggregateChannelTicket(
             LocalDate businessDate, Instant from, Instant to, String scopeType, String scopeId) {
-        if (!isMerchantScope(scopeType)) {
+        if (!isMerchantScope(scopeType) && !"project".equals(scopeType)) {
             return aggregateChannelTicket(businessDate, from, to);
         }
         return aggregateTotalsScoped("""
@@ -1170,7 +1287,7 @@ class JdbcFinanceRepository implements FinanceRepository {
                           FROM ticket_refunds r
                           JOIN ticket_orders ro ON ro.id = r.target_id
                          WHERE ro.sales_channel NOT IN %1$s
-                           AND ro.merchant_id = :merchant_id
+                           AND %2$s
                            AND r.status = 'success'
                            AND r.succeeded_at >= :from
                            AND r.succeeded_at < :to) AS refund_cent,
@@ -1179,8 +1296,9 @@ class JdbcFinanceRepository implements FinanceRepository {
                  WHERE o.pay_status = 'paid'
                    AND o.sales_channel NOT IN %1$s
                    AND o.visit_date = :business_date
-                   AND o.merchant_id = :merchant_id
-                """.formatted(SELF_SALES_CHANNELS), businessDate, from, to, scopeId);
+                   AND %3$s
+                """.formatted(SELF_SALES_CHANNELS, ticketOrderInScope("ro", scopeType), ticketOrderInScope("o", scopeType)),
+                businessDate, from, to, scopeId);
     }
 
     @Override
@@ -1197,6 +1315,9 @@ class JdbcFinanceRepository implements FinanceRepository {
         //   落所属酒吧营业日窗合计为 refund_cent；免单 waiver 不计入（结账前已减应付，避免重复冲减）。
         // merchant scope 仅归本商户结算；退款按账单是否有本商户结算流水归属（EXISTS），不按流水逐行连接——
         //   账单有多笔收款流水（多渠道收款、作废留存已退部分）时退款不重复计（第十七批⑤）。其余 scope 平台全量。
+        if ("project".equals(scopeType)) {
+            return ZERO;  // 161-R2：酒吧逐店另出日结，综合体日结不含酒吧源
+        }
         String merchantId = isMerchantScope(scopeType) ? scopeId : null;
         MapSqlParameterSource params = new MapSqlParameterSource()
                 .addValue("business_date", businessDate)
@@ -1240,6 +1361,9 @@ class JdbcFinanceRepository implements FinanceRepository {
         //   （各渠道；到账时点只在员工登记或线上到账时写，免收与待付为空、天然不计）。退款：已原路退回（refunded / refunded_on_threshold，
         //   deposit_settled_at 只在实际退款成功时写）以 deposit_settled_at 落窗合计。merchant scope 仅归本商户订台，其余 scope 平台全量。
         //   定金不抵扣消费、不计入酒吧源。
+        if ("project".equals(scopeType)) {
+            return ZERO;  // 161-R2：订台定金归酒吧，综合体日结不含
+        }
         String merchantId = isMerchantScope(scopeType) ? scopeId : null;
         MapSqlParameterSource params = new MapSqlParameterSource()
                 .addValue("from", timestampWithTimeZone(from))
@@ -1273,20 +1397,76 @@ class JdbcFinanceRepository implements FinanceRepository {
     public DailyCloseSourceTotals aggregateAmusement(
             LocalDate businessDate, Instant from, Instant to, String scopeType, String scopeId) {
         // amusement_verifications 无 merchant 维:merchant scope 归零(不属于任一商户);其余 scope 平台全量。
+        if ("project".equals(scopeType)) {
+            // 161-R2：游乐项目所属商户（V049 amusement_projects.merchant_id）属该综合体的成功核销。
+            return aggregateTotalsScoped("""
+                    SELECT 0 AS amount_cent,
+                           0 AS refund_cent,
+                           COUNT(*) AS order_count
+                      FROM amusement_verifications v
+                      JOIN amusement_projects ap ON ap.id = v.project_id
+                      JOIN merchants m ON m.id = ap.merchant_id
+                     WHERE v.verification_result = 'success'
+                       AND v.created_at >= :from
+                       AND v.created_at < :to
+                       AND m.project_id = :scope_id
+                    """, businessDate, from, to, scopeId);
+        }
         return isMerchantScope(scopeType) ? ZERO : aggregateAmusement(businessDate, from, to);
     }
 
     @Override
     public DailyCloseSourceTotals aggregateSupplyCost(
             LocalDate businessDate, Instant from, Instant to, String scopeType, String scopeId) {
-        // inventory_stock_movements 无 merchant 维:merchant scope 归零;其余 scope 平台全量。
-        return isMerchantScope(scopeType) ? ZERO : aggregateSupplyCost(businessDate, from, to);
+        // inventory_stock_movements 有 merchant_id（V046）:merchant、bar scope 按流水商户取本酒吧;其余 scope 平台全量。
+        if (isMerchantScope(scopeType)) {
+            return aggregateTotalsScoped("""
+                    SELECT 0 AS amount_cent,
+                           0 AS refund_cent,
+                           COUNT(*) AS order_count
+                      FROM inventory_stock_movements s
+                     WHERE s.created_at >= :from
+                       AND s.created_at < :to
+                       AND s.merchant_id = :merchant_id
+                    """, businessDate, from, to, scopeId);
+        }
+        if ("project".equals(scopeType)) {
+            // 161-R2：流水项目（V244，空取商户所属）为该综合体、商户不是酒吧的出入库流水。
+            return aggregateTotalsScoped("""
+                    SELECT 0 AS amount_cent,
+                           0 AS refund_cent,
+                           COUNT(*) AS order_count
+                      FROM inventory_stock_movements s
+                      LEFT JOIN merchants m ON m.id = s.merchant_id
+                     WHERE s.created_at >= :from
+                       AND s.created_at < :to
+                       AND COALESCE(s.project_id, m.project_id) = :scope_id
+                       AND m.merchant_type IS DISTINCT FROM 'bar'
+                    """, businessDate, from, to, scopeId);
+        }
+        return aggregateSupplyCost(businessDate, from, to);
     }
 
     @Override
     public DailyCloseSourceTotals aggregateThirdpartyReflow(
             LocalDate businessDate, Instant from, Instant to, String scopeType, String scopeId) {
         // integration_order_syncs 无 merchant 维:merchant scope 归零;其余 scope 平台全量。
+        if ("project".equals(scopeType)) {
+            // 161-R2：回流门店（V334 integration_order_syncs.merchant_id）所属综合体为该综合体的已入账餐饮、零售回流（谓词同无 scope 版）。
+            return aggregateTotalsScoped("""
+                    SELECT COALESCE(SUM(s.amount_cent), 0) AS amount_cent,
+                           0 AS refund_cent,
+                           COUNT(*) AS order_count
+                      FROM integration_order_syncs s
+                      JOIN merchants m ON m.id = s.merchant_id
+                     WHERE s.sync_type = 'order'
+                       AND s.status = 'synced'
+                       AND s.business_type IN ('catering', 'retail')
+                       AND s.created_at >= :from
+                       AND s.created_at < :to
+                       AND m.project_id = :scope_id
+                    """, businessDate, from, to, scopeId);
+        }
         return isMerchantScope(scopeType) ? ZERO : aggregateThirdpartyReflow(businessDate, from, to);
     }
 
@@ -1870,7 +2050,6 @@ class JdbcFinanceRepository implements FinanceRepository {
                 resultSet.getObject("business_date", java.time.LocalDate.class),
                 resultSet.getString("scope_type"),
                 resultSet.getString("scope_id"),
-                resultSet.getBoolean("force_close"),
                 resultSet.getString("status"),
                 nullableInstant(resultSet, "locked_at"),
                 nullableInstant(resultSet, "created_at"),
@@ -1960,7 +2139,6 @@ class JdbcFinanceRepository implements FinanceRepository {
                 .addValue("business_date", dailyClose.businessDate())
                 .addValue("scope_type", dailyClose.scopeType())
                 .addValue("scope_id", dailyClose.scopeId())
-                .addValue("force_close", dailyClose.forceClose())
                 .addValue("status", dailyClose.status())
                 .addValue("locked_at", timestampWithTimeZone(dailyClose.lockedAt()))
                 .addValue("created_at", timestampWithTimeZone(dailyClose.createdAt()))

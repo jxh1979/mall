@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import { render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
@@ -38,7 +38,7 @@ function makeApi(metricDetailFails = false): AdminApiClient {
       }
       return OVERVIEW;
     }),
-    getPaged: vi.fn(),
+    getPaged: vi.fn().mockResolvedValue({ items: [], total: 0, page: 1, size: 200 }),
     post: vi.fn(),
     put: vi.fn(),
     patch: vi.fn(),

@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -190,8 +190,8 @@ class MerchantAmountNoticeFinanceJdbcIntegrationTests {
     /** 已锁账的往来（本类不包事务：锁账日用固定旧日期 1999-12-31，不把今天锁住而影响其他用例在今天记账）。 */
     private String lockedItem(String counterparty, String merchantColumn) {
         jdbc.update("""
-                INSERT INTO finance_daily_closes(id,business_date,scope_type,scope_id,force_close,status,locked_at,created_at)
-                VALUES(?,DATE '1999-12-31','merchant',?,FALSE,'locked',now(),now()) ON CONFLICT (business_date,scope_type,scope_id) DO NOTHING
+                INSERT INTO finance_daily_closes(id,business_date,scope_type,scope_id,status,locked_at,created_at)
+                VALUES(?,DATE '1999-12-31','merchant',?,'locked',now(),now()) ON CONFLICT (business_date,scope_type,scope_id) DO NOTHING
                 """, "mamt_close_" + UUID.randomUUID().toString().substring(0, 12), counterparty);
         String close = jdbc.queryForObject(
                 "SELECT id FROM finance_daily_closes WHERE business_date=DATE '1999-12-31' AND scope_type='merchant' AND scope_id=?",

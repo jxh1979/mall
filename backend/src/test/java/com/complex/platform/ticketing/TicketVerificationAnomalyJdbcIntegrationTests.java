@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -302,7 +302,7 @@ class TicketVerificationAnomalyJdbcIntegrationTests {
     }
 
     private DailyCloseRequest dailyClose() {
-        return new DailyCloseRequest("tk14-close-" + suffix + "-" + (++seq), "日结", List.of(), BUSINESS_DATE, "merchant", merchant, false);
+        return new DailyCloseRequest("tk14-close-" + suffix + "-" + (++seq), "日结", List.of(), BUSINESS_DATE, "merchant", merchant);
     }
 
     private ResultActions raise(String verificationId, String reason) throws Exception {

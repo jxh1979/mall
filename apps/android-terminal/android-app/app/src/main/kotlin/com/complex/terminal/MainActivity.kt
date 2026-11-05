@@ -1,6 +1,6 @@
 package com.complex.terminal
 
-// 文件版本：V0.21
+// 文件版本：V0.22
 
 import android.app.Activity
 import android.content.Intent
@@ -449,7 +449,9 @@ class MainActivity : Activity() {
 
     fun showResult(r: VerificationResponse) {
       faceCapture = null
-      status.text = "核销结果：${verifyStatusZh(r.status)}\n核销号：${r.verificationNo}\n${r.resultReason ?: ""}"
+      // 164-R1（PGM:287）：原因显示中文，没有中文原因时不出这一行。
+      status.text = listOf("核销结果：${verifyStatusZh(r.status)}", "核销号：${r.verificationNo}", verificationReasonZh(r.resultReason))
+        .filter { it.isNotEmpty() }.joinToString("\n")
     }
 
     fun verifyWithFace(code: String, capture: String) {
@@ -627,7 +629,7 @@ class MainActivity : Activity() {
                 e.validTo?.let { append("\n有效期至：").append(it) }
                 append("\n状态：").append(statusZh(e.status))
               }
-              append('\n').append(if (r.allowed) "可领取" else "不可领取：${r.reason.ifBlank { "-" }}")
+              append('\n').append(if (r.allowed) "可领取" else "不可领取")
             }
           },
           onError = { status.text = "查询失败：${friendly(it)}" },
@@ -655,7 +657,7 @@ class MainActivity : Activity() {
           action = { api.verify(kioskEntitlementRequest(c, device, point, java.util.UUID.randomUUID().toString(), store.session?.staffId)) },
           onSuccess = { r ->
             checked = null
-            status.text = if (r.status == "success") "领取完成" else "不可领取：${verifyStatusZh(r.status)} ${r.resultReason ?: ""}"
+            status.text = if (r.status == "success") "领取完成" else "不可领取：${verifyStatusZh(r.status)} ${verificationReasonZh(r.resultReason)}"
           },
           onError = { status.text = "领取失败：${friendly(it)}" },
         )
@@ -965,6 +967,7 @@ class MainActivity : Activity() {
    * BSM:990「允许现场现金和 POS 机支付，但必须由授权员工记录到订单、账单、日结和对账里。」）：一体机收款步骤——显示应付金额；
    * 线上扫码支付待支付渠道开通（第 41 条），只写明、不放按钮；现金 / POS 由授权员工登记（[registerKioskPayment]）。
    * [signedIn] 为空时先请授权员工当场登录、登记完即登出；售票流程传入已登录的服务人员，由售票流程结束时登出。
+   * 第十八批 S 段第 169 条（BSM:1066「POS（记流水号+收款人）」）：酒吧账单（169-R1）与订台定金（169-R2）POS 收款必填 POS 流水号，没填不进员工登录与提交；票务订单仍可不填。
    */
   private fun kioskPayStep(title: String, amountCent: Long, target: KioskPayTarget, signedIn: LoginResponse?,
       onPaid: (BarReservationRecord?) -> Unit) {
@@ -975,10 +978,15 @@ class MainActivity : Activity() {
     val channel = android.widget.RadioGroup(this).apply {
       orientation = LinearLayout.HORIZONTAL; addView(cash); addView(pos); check(cash.id)
     }
-    val posNo = editText("POS 单号（POS 收款时可填）")
+    val posRequired = target !is KioskPayTarget.TicketOrder
+    val posNo = editText(if (posRequired) "POS 流水号（POS 收款必填）" else "POS 单号（POS 收款时可填）")
     val register = button("工作人员登记现金 / POS") {
       val ch = if (pos.isChecked) "pos" else "cash"
       val no = posNo.text.toString().trim().ifEmpty { null }
+      if (posRequired && ch == "pos" && no == null) {
+        status.text = "POS 收款须填写 POS 流水号"
+        return@button
+      }
       fun submit(staff: LoginResponse, signOut: Boolean) {
         status.text = "正在登记收款…"
         runBackground(

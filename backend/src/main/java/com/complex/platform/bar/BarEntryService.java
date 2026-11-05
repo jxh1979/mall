@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.07
+// 文件版本：V0.08
 
 import static com.complex.platform.bar.BarValidation.*;
 
@@ -186,18 +186,23 @@ public class BarEntryService {
             throw ApiException.conflict("BAR_DEPOSIT_NOT_PAYABLE",
                     "只有待支付状态的订金才能支付");
         }
+        // 第十八批 S 段第 169 条 169-R2（BSM:1066「POS（记流水号+收款人）」；BSM:1029「……要进入账单、日结、员工责任链和财务对账。」）：
+        // POS 登记定金必填流水号，缺了整笔不登记（400）。
+        String posNo = "pos".equals(trimToNull(actual.channel()))
+                ? requireText(actual.posTransactionNo(), "pos_transaction_no") : null;
         Instant now = Instant.now();
         // 第十批 TK-24（BSM L1062「每笔定金保留原订台单、原付款人、付款渠道和金额」）：支付渠道落库，达标退回按此原路。
         BarReservationRecord updated = reservation.withDepositState("paid", reservation.depositSettlement(),
                 trimToNull(actual.channel()), now, null, now);
         BarReservationRecord saved = repository.saveReservation(updated);
         // 第十八批 O 段第 126 条 126-R2（BSM:1029「……要进入账单、日结、员工责任链和财务对账。」）：登记员工记为定金收款人，
-        // 班结按其归入现金/POS 应收（一体机上即授权员工，与账单 cashier_staff_id 同口径）。
-        repository.markReservationDepositCollector(saved.id(), authorizationService.currentActor().id());
+        // 班结按其归入现金/POS 应收（一体机上即授权员工，与账单 cashier_staff_id 同口径）；169-R2 同时记 POS 流水号。
+        repository.markReservationDepositCollector(saved.id(), authorizationService.currentActor().id(), posNo);
+        Map<String, Object> metadata = new java.util.LinkedHashMap<>(Map.of("deposit_amount_cent", saved.depositAmountCent(),
+                "channel", String.valueOf(actual.channel())));
+        if (posNo != null) metadata.put("pos_transaction_no", posNo);
         auditEventService.recordSuccess("bar.reservation_deposit_paid", "bar.reservation.manage",
-                "bar_reservation", saved.id(), null, actual.idempotencyKey(),
-                Map.of("deposit_amount_cent", saved.depositAmountCent(),
-                        "channel", String.valueOf(actual.channel())));
+                "bar_reservation", saved.id(), null, actual.idempotencyKey(), metadata);
         // 第十八批 N 段第 120 条 120-R3（BSM:1058「……客人自助订台支付定金成功……该台位即进入已预留……冲突时先支付定金者得……」）：
         // 从未占过台的订台（一体机订台、客人自助订台）登记定金即占台，抢不到的取消并登记原路待退（holdOnDepositPaid）。
         if (saved.holdStatus() == null) {
@@ -561,9 +566,10 @@ public class BarEntryService {
         if ("entered".equals(member.status())) {
             return member; // 幂等：已入场重复扫码返回原记录
         }
-        int capacity = reservation.invitationCapacity() == null ? 0 : reservation.invitationCapacity();
-        long enteredCount = members.stream().filter(item -> "entered".equals(item.status())).count();
-        if (enteredCount >= capacity) {
+        // 第十八批 S 段第 167 条 167-R1（BSM:1079；ENUM:114；BSM:1036「已确认与已入场总人数不超过卡座可进人数」）：
+        // 已入场人数与名额按当前台位或合并台组计，先锁台组根会话行。
+        BarCustomerInvitationService.InvitationQuota quota = BarInvitationQuota.of(repository, reservation, true);
+        if (quota.entered() >= quota.capacity()) {
             throw ApiException.conflict("BAR_INVITATION_CAPACITY_EXHAUSTED", "卡座名额已满");
         }
         Instant now = Instant.now();
@@ -583,11 +589,12 @@ public class BarEntryService {
         int confirmed = (int) members.stream().filter(member -> !"revoked".equals(member.status())).count();
         int entered = (int) members.stream().filter(member -> "entered".equals(member.status())).count();
         int capacity = reservation.invitationCapacity() == null ? 0 : reservation.invitationCapacity();
+        // 第十八批 S 段第 167 条 167-R1：剩余名额按当前台位或合并台组计；capacity、table_id 仍为签发值（后台拼二维码、防伪核验用）。
         return new BarReservationInvitationRecord(
                 reservation.id(), reservation.barId(), reservation.tableId(),
                 reservation.invitationToken(), reservation.invitationSignature(), capacity,
                 reservation.invitationStatus(), reservation.invitationIssuedAt(),
-                confirmed, entered, Math.max(capacity - confirmed, 0), members);
+                confirmed, entered, BarInvitationQuota.of(repository, reservation, false).remaining(), members);
     }
 
     private BarReservationRecord withInvitation(

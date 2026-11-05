@@ -1,4 +1,4 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 import React from "react";
 import type { AdminPageProps } from "../types";
 import { BarVenueSelect } from "../components/BarVenueSelect";
@@ -24,6 +24,8 @@ import { hasPermissions } from "../security/PermissionGate";
 // 143-R4（ENUM:190「日结锁定后的补录须上级审批，且不改动已锁定的日结金额：补录金额归入当期，并在补录记录上标明其所属的原营业日；同时在原营业日的
 // 日结锁定表单上关联显示该笔补录的金额与情况，两边互相可查。」；财务 PRD §5.4 日结页面直接展示补录人、补录原因、批准人含时间）：展开已锁定、已归档的行
 // 列出「本日结锁定的台账」（逐行申请补录，二次确认文案为 BSM:2023 原句）与「锁定后补录」（待审批的可批准、驳回）。
+// 第十八批 S 段第 161 条 161-R3（第十八批裁决 35「酒吧逐店逐日查；游乐等按综合体逐日查」）：票务、游乐由综合体的项目范围日结覆盖，
+// 不再单独出日结，平台侧范围类型只有项目、商户、酒吧。
 type LockedItem = { id: string; itemNo?: string; direction?: string; amountCent?: number; dueDate?: string };
 type Adjustment = { id: string; itemNo?: string; adjustmentAmountCent?: number; reason?: string; requestedBy?: string; createdAt?: string;
   approvalStatus?: string; approvedBy?: string | null; decidedAt?: string | null; originalBusinessDate?: string | null };
@@ -32,7 +34,7 @@ type Summary = { id: string; sourceStream?: string; amountCent?: number; refundC
 type Props = Pick<AdminPageProps, "api" | "user" | "effectivePermissions" | "setGlobalError">;
 
 const PAGE_SIZE = 20;
-const PLATFORM_SCOPES = ["project", "merchant", "bar", "ticketing", "amusement"];
+const PLATFORM_SCOPES = ["project", "merchant", "bar"];
 const MERCHANT_SCOPES = ["merchant", "bar"];
 const LOCK_IMPACT = "日结锁定后不能直接补录影响金额，必须上级审批通过后补录。";
 const ARCHIVE_IMPACT = "归档后只读可查，锁定后补录照常走上级审批。";

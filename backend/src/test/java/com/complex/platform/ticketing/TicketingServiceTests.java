@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.08
+// 文件版本：V0.09
 
 // 文件版本：V0.03
 
@@ -4165,6 +4165,25 @@ class TicketingServiceTests {
                         && providerMerchantId.equals(e.barId() != null ? e.barId() : e.merchantId())
                         && "success".equals(v.status()) && !v.createdAt().isBefore(since);
             });
+        }
+
+        @Override
+        public int maxBarEntryTotalTimes(String parentTicketId, int slotIndex, String providerMerchantId) {
+            // 165-R1：与 JdbcTicketingRepository 同口径（同票同人份、这家酒吧的入场类权益、补偿补发行除外，取最大总次数）。
+            return issuedEntitlements.values().stream()
+                    .filter(e -> parentTicketId.equals(e.parentTicketId()) && e.slotIndex() == slotIndex
+                            && java.util.Set.of("entry", "admission").contains(e.entitlementType())
+                            && providerMerchantId.equals(e.barId() != null ? e.barId() : e.merchantId())
+                            && e.compensationItemId() == null)
+                    .mapToInt(IssuedEntitlementRecord::totalTimes).max().orElse(0);
+        }
+
+        @Override
+        public int countSuccessfulVerificationsSince(String entitlementId, java.time.Instant since) {
+            return (int) verifications.values().stream()
+                    .filter(v -> entitlementId.equals(v.entitlementId()) && "success".equals(v.status())
+                            && !v.createdAt().isBefore(since))
+                    .count();
         }
 
         @Override

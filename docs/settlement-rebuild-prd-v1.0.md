@@ -1,4 +1,4 @@
-# 通票权益结算重构 PRD V1.10
+# 通票权益结算重构 PRD V1.11
 
 > **状态**：受三个最高业务解释权 HTML 约束的现行 PRD（2026-08-01 同步）。
 > **解释权边界**：三个业务 HTML 是最终业务口径；本文、财务底稿、术语表、实现规格、数据库和代码均只能作为产品细化、测算资料或当前实现证据，不得覆盖 HTML。本文新增而 HTML 尚未记载的业务规则，在用户批准并写入相应 HTML 前不生效。**三份 HTML 之间若出现冲突，按确认时间线判定：凡经用户确认过的内容，确认时间越晚的优先级越高，后确认的覆盖先确认的（以决策台账记录的裁决时间为准）；无法确定确认时间先后的，仍须逐项重新裁决**（2026-08-05 R7 补，依据 DIFF-A-051、PGM「解释权声明」条）。
@@ -549,6 +549,8 @@ P（本票固化可分配池）
 > **实装现状(2026-08-01 终态)**:成本承担方已落 **`ticket_type_entitlements.cost_bearer`**(S6/V372,票种绑定级,`platform_funded` 平台出资型 / `merchant_concession` 商户让利型)——让利型**不进 G 预扣**、兑付**不挂商户应付**(冲正侧由「原应付存在性守卫」对称保护);S5 起 0 = 让利型合法价、NULL = 没配价拒绝核销(fail-closed,不再回退票面价)。
 > ✅ **「必须显式标明」强校验已落地(2026-08-01 用户拍板,V376)**:`cost_bearer` **必填、无默认**(V376 撤 DEFAULT/撤 NOT NULL,NULL=未标)。**赠送类权益**(各业态价格 0 且提供方兑付类,谓词与 S5 `providerRedeemed` 同源:赠饮/实物/专属直付)漏标 → 绑定面拒保存、发布闸 `requireCostBearers` 兜底拒发布(`TICKET_COST_BEARER_REQUIRED`,中文点名是哪条权益没标);非赠送类(入场/付费组成)无成本承担概念,允许 NULL 不误伤。前端(组合配置酒水/餐饮行、通票组装绑定表单)同步改必选下拉(平台出资型/商户让利型),漏选前置拦。原「缺省 `platform_funded`」口径作废——运营漏标让利型赠品时平台不再默默按出资型多付成本。
 
+> **实现现状（第十八批 S 段第 156 条 156-R1，2026-11-05；BSM 第 751 行「商户让利的零元免费权益不结算；域主管公司出资的免费权益按锁定内部结算价核销后结算，未核销不结算。」，BSM 第 1689 行「商户让利的零元权益不结算，域主管公司出资的零元权益按锁定内部结算价核销后结算。」）**：专属直付的餐饮、零售权益（组合通票「餐饮」行建的模板，带 `exclusive_merchant_id`）在票种绑定上标为商户让利型 `merchant_concession` 时，核销结算价记 0、不查内部结算 SKU 目录（`TicketVerificationService.resolveSettlementPrice`），结算事实 `verified_amount_cent` 为 0，月结该商户专属直付不因这笔产生应付；这类权益不挂目录条目也能核销，不再报 `ENTITLEMENT_PRICE_UNRESOLVED`。平台出资型照旧按目录生效价核销后直付；赠饮不变（`BarGiftConsumer` 对商户让利型不挂应付）。
+
 ---
 
 ## 7. 各票种结算规则
@@ -1003,6 +1005,7 @@ P（本票固化可分配池）
 
 | 日期 | Finding | 变更 | 权威依据 | 实现边界 |
 |---|---|---|---|---|
+| 2026-11-05 | 第十八批 S 段第 156 条 156-R1 | V1.11：§6.6 补实现现状——专属直付的餐饮、零售权益标为商户让利型的，核销结算价记 0、不查目录、不产生应付，未挂目录条目也能核销；平台出资型与赠饮不变 | BSM 第 751 行「商户让利的零元免费权益不结算；域主管公司出资的免费权益按锁定内部结算价核销后结算，未核销不结算。」，BSM 第 1689 行「商户让利的零元权益不结算，域主管公司出资的零元权益按锁定内部结算价核销后结算。」 | 只改核销时结算价判定，下游结算消费、月结与过账不改；无迁移、无接口与字段变化 |
 | 2026-11-03 | 第十八批 O 段第 129 条 | V1.10：§5.3 K16 跨提供方核销守卫删去「离线同步旁路走同一入口同样拦得住」（终端离线同步通道已下线） | BSM:800「……核销必须在线、不做离线核销。……」 | 只改文档 |
 | 2026-10-28 | 第十八批第 24 条 | V1.09：§「高价值判定阈值」待改造缺口关闭，改为落地记录——全平台一行、上下限同配、调整进最高权限审批（批准生效、驳回下线）、通用复核转正对该类型 403、不可下线；总控页新增「高价值判定」页签 | ENUM:164、BSM:1196、docs/decisions/2026-10-18-cg-pending-decisions.md 第 2 条 | V566；`SettlementConfigWriteService.saveHighValueThreshold/highValueThresholdDecided/activateDraft`、`JdbcHighValueThresholdRepository`、`SupervisorReviewService` 策略 `settlement_high_value_threshold`；后台 `SettlementConfigPage`「高价值判定」、`ApprovalChainPage` |
 | 2026-10-28 | 第 75 条 | V1.08：§5.0 事前试算闸按现行 ENUM:52 同步「费率最高的支付通路、门票综合服务费足额计取」，「历史实现登记」改为落地记录（转正试算闸、公式五项、短期经营激励申请—审批—转正—重审、结算期超池特批链路下线、超出部分由娱乐平台公司承担）；§5.1 边界①与落地记录同步；§9 权限点与 S9 期限列改作短期经营激励口径；§5.0 落地记录补「激励到期」条（整版回到此前方案） | ENUM:52、BSM:752、DEC-R3-2026-08-04-13、DEC-P1A-09、18C 核对后操作员裁决补充第 12、13 条 | `PassPoolTrialService`、`DistributionSchemeService.activate/submitIncentive/decideIncentive`、`SettlementPostingService.postBill`、V562；激励到期：`effectiveVersionId`、`notifyAffectedBars`、`PassPoolTrialService.trial` 同口径，`overview` 的 `incentive_expired`，通告写明到期日，到期后重审 409 `INCENTIVE_EXPIRED` |

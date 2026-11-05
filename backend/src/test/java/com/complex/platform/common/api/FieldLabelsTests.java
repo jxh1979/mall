@@ -1,6 +1,6 @@
 package com.complex.platform.common.api;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
@@ -38,6 +38,12 @@ class FieldLabelsTests {
     @Test
     void methodKeyIsNotLabelledAsPaymentOnly() {
         assertThat(FieldLabels.translate("method is required")).isEqualTo("方式未填写");
+    }
+
+    /** 第十八批 S 段第 169 条 169-R1（BSM:1066「POS（记流水号+收款人）」）：酒吧账单 POS 结账缺流水号的报错显示中文名。 */
+    @Test
+    void posTransactionNoKeyIsChinese() {
+        assertThat(FieldLabels.translate("pos_transaction_no is required")).isEqualTo("POS 流水号未填写");
     }
 
     @Test

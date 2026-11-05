@@ -1,6 +1,6 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.14
+// 文件版本：V0.15
 
 import com.complex.platform.bar.BarDepositRuleRecord;
 import com.complex.platform.bar.BarRepository;
@@ -1078,9 +1078,11 @@ public class CustomerService implements com.complex.platform.ticketing.KioskBuye
                     if (existing != null && !"revoked".equals(existing.status())) {
                         return existing; // 幂等：同一朋友重复确认返回原记录，不重复占名额
                     }
-                    int capacity = reservation.invitationCapacity() == null ? 0 : reservation.invitationCapacity();
-                    long confirmed = members.stream().filter(member -> !"revoked".equals(member.status())).count();
-                    if (confirmed >= capacity) {
+                    // 第十八批 S 段第 167 条 167-R1（BSM:1079「转台……可邀请人数……均按目标台规则执行」「合并后的可邀请人数……按两侧所包含全部原台的
+                    // 对应数值相加计算」「已有的已接受成员和已入场成员一并进入新的合并台」；BSM:1036「已确认与已入场总人数不超过卡座可进人数」）：
+                    // 名额按当前台位或合并台组计，先锁台组根会话行；防伪核验仍按签发时的卡座与可进人数，原二维码继续有效。
+                    com.complex.platform.bar.BarCustomerInvitationService.InvitationQuota quota = barInvitations.lockQuota(reservation);
+                    if (quota.occupied() >= quota.capacity()) {
                         throw ApiException.conflict("BAR_INVITATION_CAPACITY_EXHAUSTED", "卡座名额已满");
                     }
                     Instant now = Instant.now();
@@ -1114,11 +1116,12 @@ public class CustomerService implements com.complex.platform.ticketing.KioskBuye
         int confirmed = (int) members.stream().filter(member -> !"revoked".equals(member.status())).count();
         int entered = (int) members.stream().filter(member -> "entered".equals(member.status())).count();
         int capacity = reservation.invitationCapacity() == null ? 0 : reservation.invitationCapacity();
+        // 第十八批 S 段第 167 条 167-R1：剩余名额按当前台位或合并台组计；capacity、table_id 仍为签发值（客人端拼二维码、防伪核验用）。
         return new BarReservationInvitationRecord(
                 reservation.id(), reservation.barId(), reservation.tableId(),
                 reservation.invitationToken(), reservation.invitationSignature(), capacity,
                 reservation.invitationStatus(), reservation.invitationIssuedAt(),
-                confirmed, entered, Math.max(capacity - confirmed, 0), members);
+                confirmed, entered, barInvitations.quota(reservation).remaining(), members);
     }
 
     /** ROOT-03 clients-R6（BSM 第 870 行）：我的订台——本人订台列表，App/小程序「我的订台」由此进入邀请函。 */

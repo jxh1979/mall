@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.10
+// 文件版本：V0.11
 
 import java.util.List;
 import java.util.Map;
@@ -173,6 +173,11 @@ public interface TicketingRepository {
         return Optional.empty();
     }
 
+    /** 第十八批 S 段第 166 条：设备台账行 id（terminal_devices.id）对应的设备号（device_id 列，纳管状态按它记）。default 空＝调用方沿用原值。 */
+    default Optional<String> findTerminalDeviceCode(String id) {
+        return Optional.empty();
+    }
+
     /**
      * S5：该票种绑定的权益 + 各自提供方商户（含商户业态）。K17 发布校验与票面按吧分组投影共用一份数据。
      * default 返回空列表兼容既有测试假实现。
@@ -258,6 +263,15 @@ public interface TicketingRepository {
      * （entry / admission）自 since 起有核销成功记录。父票为空返回 false。
      */
     boolean hasVerifiedBarEntrySince(String parentTicketId, int slotIndex, String providerMerchantId, java.time.Instant since);
+
+    /**
+     * 第十八批 S 段 165-R1：父票 parentTicketId 第 slotIndex 号人份在这家酒吧（权益 bar_id，为空取 merchant_id）的入场类权益
+     * （entry / admission，补偿补发行除外）的最大总次数；没有返回 0。赠饮单次份＝赠饮总次数 ÷ 它（TK-10 口径，至少 1）。
+     */
+    int maxBarEntryTotalTimes(String parentTicketId, int slotIndex, String providerMerchantId);
+
+    /** 第十八批 S 段 165-R1：该权益自 since 起核销成功（status='success'，已冲正的不算）的记录数。 */
+    int countSuccessfulVerificationsSince(String entitlementId, java.time.Instant since);
 
     List<VerificationRecord> listVerifications();
 

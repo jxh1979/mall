@@ -1,8 +1,9 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.containsString;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -221,6 +222,29 @@ class KioskBarOrderJdbcTests {
     }
 
     /**
+     * 第十八批 S 段第 169 条 169-R1（BSM:1066「POS（记流水号+收款人）」；ENUM:107 同句）：后台网页按现形状 POS 结账（蛇形键）不带流水号，
+     * 服务端拒绝（400 VALIDATION_FAILED，提示「POS 流水号未填写」），不落结算流水，账单仍未结。
+     */
+    @Test
+    void backOfficeWebPosSettlementWithoutTransactionNoIsRejectedAndBillStaysUnsettled() throws Exception {
+        String order = data(order(webCashier, "posnono").andExpect(status().isOk())).path("id").asText();
+        String billId = data(mockMvc.perform(post("/api/v1/bar/orders/" + order + "/bill").with(webCashier)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json.writeValueAsString(Map.of("idempotency_key", "kbo-posnonobill-" + s))))
+                .andExpect(status().isOk())).path("id").asText();
+        String key = "kbo-posnono-" + s;
+        mockMvc.perform(post("/api/v1/bar/bills/" + billId + "/settle").with(webCashier).contentType(MediaType.APPLICATION_JSON)
+                        .content(json.writeValueAsString(Map.of("idempotency_key", key, "payment_id", key,
+                                "settlement_amount_cent", 10_000, "payment_channel", "pos"))))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.detail_code").value("VALIDATION_FAILED"))
+                .andExpect(jsonPath("$.message").value(containsString("POS 流水号")));
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM bar_bill_settlements WHERE bill_id = ?", Integer.class, billId)).isZero();
+        assertThat(jdbc.queryForMap("SELECT payment_status, settlement_status FROM bar_bills WHERE id = ?", billId))
+                .containsEntry("payment_status", "unpaid").containsEntry("settlement_status", "unsettled");
+    }
+
+    /**
      * 第十八批 P 段第 133 条 133-R1（BSM:1081「收银员开班记备用金，班结按本班次汇总各支付方式应收（现金/扫码/POS/退款/小费），录入实点现金算长短款差异。
      * 收银不应出现差额，出现任何金额的差额一律进复核、定位责任，不设容差」；DEC-R4-2026-08-04-26）：按后台「收银交班对账」区块的真实请求形状
      * （收银员取登录人、不带容差，蛇形键）开班，网页现金结账（同网页现形状，金额留空按剩余应收结清），班结差 1 分也进复核；再开一班实点正好不进复核。
@@ -252,6 +276,40 @@ class KioskBarOrderJdbcTests {
         closeFromPanel(second, "kbo-panel-close2-" + s, 20_000)
                 .andExpect(jsonPath("$.data.cash_diff_cent").value(0))
                 .andExpect(jsonPath("$.data.needs_review").value(false));
+    }
+
+    /**
+     * 第十八批 S 段第 171 条 171-R1（BSM:1066「储值卡（通用卡先扣本金后扣赠送金且不可配置……）」；BSM:1563「验证码……（用于新人判定、注册登录和关键操作验证）」）：
+     * 契约补声明的 POST /api/v1/bar/bills/{bill_id}/stored-value/sms 按网页收银员真实请求（蛇形键 phone）走真实入口与真实授权链——
+     * phone 被读取并按会员核对（非会员 401 CUSTOMER_OTP_INVALID），缺 phone 400 VALIDATION_FAILED，已结账 409 BAR_BILL_ALREADY_SETTLED。
+     */
+    @Test
+    void webCashierStoredValueSmsReadsPhoneAndRejectsMissingPhoneAndSettledBill() throws Exception {
+        String order = data(order(webCashier, "svsms").andExpect(status().isOk())).path("id").asText();
+        String billId = data(mockMvc.perform(post("/api/v1/bar/orders/" + order + "/bill").with(webCashier)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json.writeValueAsString(Map.of("idempotency_key", "kbo-svbill-" + s))))
+                .andExpect(status().isOk())).path("id").asText();
+        String sms = "/api/v1/bar/bills/" + billId + "/stored-value/sms";
+        String stranger = "198" + String.format("%08d", Math.floorMod(s.hashCode(), 100_000_000));
+        mockMvc.perform(post(sms).with(webCashier).contentType(MediaType.APPLICATION_JSON)
+                        .content(json.writeValueAsString(Map.of("phone", stranger))))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.detail_code").value("CUSTOMER_OTP_INVALID"));
+        mockMvc.perform(post(sms).with(webCashier).contentType(MediaType.APPLICATION_JSON).content("{}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.detail_code").value("VALIDATION_FAILED"));
+
+        String key = "kbo-svsettle-" + s;
+        mockMvc.perform(post("/api/v1/bar/bills/" + billId + "/settle").with(webCashier).contentType(MediaType.APPLICATION_JSON)
+                        .content(json.writeValueAsString(Map.of("idempotency_key", key, "payment_id", key,
+                                "settlement_amount_cent", 10_000, "payment_channel", "cash"))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.settlement_status").value("settled"));
+        mockMvc.perform(post(sms).with(webCashier).contentType(MediaType.APPLICATION_JSON)
+                        .content(json.writeValueAsString(Map.of("phone", stranger))))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.detail_code").value("BAR_BILL_ALREADY_SETTLED"));
     }
 
     // ---------- helpers ----------

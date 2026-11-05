@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -395,6 +395,27 @@ class BarInvitationCustomerJdbcIntegrationTests {
                         .content(json.writeValueAsString(Map.of("idempotency_key", "inv-issue6-" + suffix))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.capacity").value(6));
+    }
+
+    // ── 第十八批 S 段第 168 条 168-R1：契约 BarTableRequest.table_type 取值与代码一致（card_seat、vip、bar_counter、loose_table；
+    // BSM 第 1058 行「桌台/卡座/吧台位」、第 1025 行「扫码点单只适用于散台」）──
+
+    /** 按后台「新建卡座」真实请求（蛇形键）用契约取值 loose_table 建散台：200，库里 table_type 原样为 loose_table。 */
+    @Test
+    void createTableWithContractLooseTableTypePersistsLooseTable() throws Exception {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("idempotency_key", "inv-loose-" + suffix);
+        body.put("bar_id", barId);
+        body.put("table_name", "散台一号");
+        body.put("table_type", "loose_table");
+        body.put("capacity", 4);
+        body.put("minimum_spend_cent", 0);
+        ResultActions created = mockMvc.perform(post("/api/v1/bar/tables").with(platformAdmin())
+                        .contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(body)))
+                .andExpect(status().isOk());
+        String looseId = CustomerTicketPaymentFixture.read(created, "$.data.id");
+        assertThat(jdbc.queryForObject("SELECT table_type FROM bar_tables WHERE id = ?", String.class, looseId))
+                .isEqualTo("loose_table");
     }
 
     private int auditCount(String event) {

@@ -1,4 +1,4 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 import { render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -15,6 +15,8 @@ const VERIFICATIONS = [
   { id: "v-rev", verificationNo: "V-REV", status: "reversed", resultReason: "客人误扫，现场确认冲正" },
   // 第十八批 Q 段 148-R1（ENUM:55「未先核入场即核酒水一律拒绝」）：未先核这家酒吧入场即核赠饮落 rejected。
   { id: "v-bar", verificationNo: "V-BAR", status: "rejected", resultReason: "bar_entry_not_verified" },
+  // 第十八批 S 段 165-R1（BSM:800「后续场次的附带权益也不得提前到当前场次使用」）：本场这家酒吧的赠饮已按单次份用完落 rejected。
+  { id: "v-share", verificationNo: "V-SHARE", status: "rejected", resultReason: "gift_drink_session_share_used_up" },
 ];
 
 function perms(grants: string[]): EffectivePermissionsState {
@@ -83,5 +85,14 @@ describe("TicketOrdersPage 核销表中文显示（134-R3）", () => {
     const barEntry = cells("v-bar");
     expect(barEntry[1]).toBe("拒绝");
     expect(barEntry[2]).toBe("须先核销这家酒吧的入场权益，再核销酒水（赠饮）权益");
+  });
+
+  it("165-R1：本场这家酒吧的赠饮已按一份用完的拒绝行，状态为「拒绝」、结果说明为中文", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.queryByTestId("ticket-verification-row-v-share")).not.toBeNull());
+
+    const share = cells("v-share");
+    expect(share[1]).toBe("拒绝");
+    expect(share[2]).toBe("本场次这家酒吧的酒水（赠饮）已按票面一份用完，之后场次的份额不能提前使用");
   });
 });

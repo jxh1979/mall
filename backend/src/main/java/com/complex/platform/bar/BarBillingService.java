@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.12
+// 文件版本：V0.13
 
 import static com.complex.platform.bar.BarBillRecords.*;
 import static com.complex.platform.bar.BarValidation.*;
@@ -320,6 +320,8 @@ public class BarBillingService {
         Instant now = Instant.now();
         // A2/A3：结算渠道（统一词表，与 finance 对账归并）+ 现金/POS 收款留痕 + D4 权威事件。
         String channel = PaymentChannelPolicy.requireSettlementChannel(actual.paymentChannel(), "aggregate_pay");
+        // 第十八批 S 段第 169 条 169-R1（BSM:1066「POS（记流水号+收款人）」；ENUM:107 同句）：POS 收款必填流水号，缺了整笔不结账（400）。
+        String posNo = "pos".equals(channel) ? requireText(actual.posTransactionNo(), "pos_transaction_no") : null;
         if ("cash".equals(channel) && bill.tipAmountCent() > 0) {
             if (payrollSources == null) throw ApiException.conflict("BAR_CASH_TIP_DIRECT_TO_STAFF", "现金小费直接交给服务人员，不进入公司代收");
             payrollSources.validateCashCollection(bill, settlementAmount);
@@ -349,7 +351,7 @@ public class BarBillingService {
                 bill.id(),
                 channel,
                 cashier,
-                trimToNull(actual.posTransactionNo()),
+                posNo,
                 settlementAmount,
                 bill.merchantId(),
                 now
@@ -361,8 +363,7 @@ public class BarBillingService {
         } else if ("pos".equals(channel)) {
             auditEventService.recordSuccess("payment.pos_received", "bar.bill.settle", "bar_bill",
                     bill.id(), null, actual.idempotencyKey(),
-                    Map.of("amount_cent", settlementAmount, "pos_transaction_no",
-                            String.valueOf(actual.posTransactionNo())));
+                    Map.of("amount_cent", settlementAmount, "pos_transaction_no", posNo));
         }
         // AUD-009：paidAmount=历史已付+本次；状态按累计后金额判定。
         long newPaid = existingPaid + settlementAmount;
