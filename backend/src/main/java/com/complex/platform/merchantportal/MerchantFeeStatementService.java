@@ -1,6 +1,6 @@
 package com.complex.platform.merchantportal;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.LocalZone;
@@ -23,7 +23,7 @@ import org.springframework.stereotype.Service;
  * 金额只取应收应付台账里已出账的应收；有付款时点固化的普通内部结算往来到出账日（visible_at，与门票分账、异议截止日同一时刻；BSM:1597、BSM:1673、DEC-R8-55）才列入。
  * 本期＝计费自然月（BSM:1673「自然月计费」、BSM:1688）：内部应付计划的计费月 → 物业费计费单的期 →
  * 台账账期 → 到期日所在月，一律取冲正链最早那张原行的（冲正行、重述行沿 origin_item_id 一直追到原行），冲正与重述跟原行同月、计入净额；
- * 门票综合服务费付清后退票只挂的应退（payable）按所属计费月（single_bar_service_fee_adjustments → 计费月）从该名目净额扣除（BSM:755）。本商户＝往来对方是本商户（积分发行费往来对方是销售主体，按 merchant_id）；
+ * 门票综合服务费付清后退票只挂的应退（payable）按所属计费月（single_bar_service_fee_adjustments → 计费月）从该名目净额扣除（BSM:755）；营业额抽成冲正应付（turnover_rent_reversal，第十八批 U 段第 155 条 155-R2）按其账期即退款当期从营业额抽成租金净额扣除（ENUM:257「在退款发生的当期生成冲正」）。本商户＝往来对方是本商户（积分发行费往来对方是销售主体，按 merchant_id）；
  * merchant_id 只是账本归属，派驻提成拨付等别人欠的款不算本商户应付。商户范围 fail-closed：无商户归属 403 MERCHANT_SCOPE_REQUIRED。
  */
 @Service
@@ -79,6 +79,8 @@ public class MerchantFeeStatementService {
     /** 台账来源 → 名目；contract_rent 按所属合同收租方式归名（见 rentFeeName）。合同域已不出 contract_energy_fee（ContractService），不映射。 */
     private static final Map<String, String> SOURCE_FEE_NAMES = Map.ofEntries(
             Map.entry("turnover_rent", TURNOVER_RENT),
+            // 第十八批 U 段第 155 条 155-R2（BSM:1323「把当期各名目的费用汇总列示」）：营业额抽成冲正应付归退款当期，从该名目净额扣除。
+            Map.entry("turnover_rent_reversal", TURNOVER_RENT),
             Map.entry("contract_property_fee", "物业费"), Map.entry("property_fee", "物业费"),
             Map.entry("energy_fee", "能源费"),
             Map.entry("ticket_points_issuance", "积分发行费"),
@@ -115,7 +117,7 @@ public class MerchantFeeStatementService {
               LEFT JOIN property_fee_bills pfb ON pfb.ar_ap_item_id = o.id
               LEFT JOIN contract_rent_bills crb ON a.source_type = 'contract_rent' AND crb.ar_ap_item_id = o.id
               LEFT JOIN contracts c ON c.id = crb.contract_id
-             WHERE (a.direction = 'receivable' OR sba.refund_due_item_id IS NOT NULL)
+             WHERE (a.direction = 'receivable' OR sba.refund_due_item_id IS NOT NULL OR a.source_type = 'turnover_rent_reversal')
                AND (ips.ar_ap_item_id IS NULL OR ips.visible_at <= now())
             """;
 

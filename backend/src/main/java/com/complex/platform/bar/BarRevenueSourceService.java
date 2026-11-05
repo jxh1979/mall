@@ -1,5 +1,5 @@
 package com.complex.platform.bar;
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import java.sql.Timestamp;
 import java.time.*;
@@ -17,7 +17,12 @@ public class BarRevenueSourceService {
             Long goodsRevenueCent,long serviceFeeCent,long tipCent,String status,List<String> unresolvedSources) {}
     public record WithheldRevenue(String sourceBillId,String merchantId,String projectId,LocalDate businessDate,String runId,
             Long amountCent,String status,List<String> unresolvedSources) {}
-    public record GoodsRefund(String adjustmentId,String billId,String merchantId,Instant completedAt,Long amountCent,String status) {}
+    /** billCompletedAt：所退账单收款完成时点（未冲正收款流水的最后结清时点，同 completedCollections），第十八批 U 段第 155 条 155-R1 判跨期退款用。 */
+    public record GoodsRefund(String adjustmentId,String billId,String merchantId,Instant completedAt,Long amountCent,String status,Instant billCompletedAt) {
+        public GoodsRefund(String adjustmentId,String billId,String merchantId,Instant completedAt,Long amountCent,String status) {
+            this(adjustmentId,billId,merchantId,completedAt,amountCent,status,null);
+        }
+    }
 
     public List<CollectionRevenue> completedCollections(String merchantId,Instant from,Instant to) {
         Objects.requireNonNull(merchantId,"merchantId");
@@ -99,7 +104,7 @@ public class BarRevenueSourceService {
         // 已退成同 BarPayrollRefundService#refunded（第十六批 TK-04-b「退回储值卡的部分即时成功」）：未挂应付的（全额回卡）按退款时点；
         // 挂了应付的（金额只是非储值部分）按付款合计达到应付本身金额、取最后一笔付款时点，部分回卡的混合退款取两者较晚的。
         return jdbc.query("""
-            SELECT * FROM (SELECT a.id,a.bill_id,a.amount_cent,
+            SELECT * FROM (SELECT a.id,a.bill_id,a.amount_cent,bs.completed_at bill_completed_at,
                 CASE WHEN a.ar_ap_item_id IS NULL THEN a.refunded_at
                   WHEN p.amount>=i.amount_cent THEN CASE WHEN i.amount_cent<a.amount_cent THEN GREATEST(a.refunded_at,p.completed_at) ELSE p.completed_at END
                 END completed_at,
@@ -108,11 +113,13 @@ public class BarRevenueSourceService {
               FROM bar_bill_adjustments a JOIN bar_bills b ON b.id=a.bill_id LEFT JOIN ar_ap_items i ON i.id=a.ar_ap_item_id
               LEFT JOIN LATERAL (SELECT sum(amount_cent) amount,max(payment_time) completed_at FROM ar_ap_payments
                 WHERE ar_ap_item_id=a.ar_ap_item_id) p ON true
+              LEFT JOIN LATERAL (SELECT max(settled_at) completed_at FROM bar_bill_settlements WHERE bill_id=a.bill_id AND NOT reversed) bs ON true
               WHERE a.adjustment_type='refund' AND b.merchant_id=?) x
             WHERE completed_at>=? AND completed_at<?
             ORDER BY completed_at,id
             """,(rs,n)->new GoodsRefund(rs.getString("id"),rs.getString("bill_id"),merchantId,rs.getTimestamp("completed_at").toInstant(),
                 rs.getLong("line_cent")==rs.getLong("amount_cent")?rs.getLong("goods_cent"):null,
-                rs.getLong("line_cent")==rs.getLong("amount_cent")?"confirmed":"pending"),merchantId,Timestamp.from(from),Timestamp.from(to));
+                rs.getLong("line_cent")==rs.getLong("amount_cent")?"confirmed":"pending",
+                rs.getTimestamp("bill_completed_at")==null?null:rs.getTimestamp("bill_completed_at").toInstant()),merchantId,Timestamp.from(from),Timestamp.from(to));
     }
 }

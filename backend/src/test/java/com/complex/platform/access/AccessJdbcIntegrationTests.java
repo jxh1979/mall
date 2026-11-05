@@ -1,6 +1,6 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -1184,6 +1184,35 @@ class AccessJdbcIntegrationTests {
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.detail_code").value("GRANT_REQUIRES_APPROVAL"));
         assertThat(denyOrigins(master, f.code())).containsExactly("explicit");
+    }
+
+    // 第十八批 U 段第 170 条 170-R3（PGM:528「发起单据时只需指定该事项的最终审批人，系统按组织层级自动补全从发起人到该最终审批人之间的全部
+    // 直接上级节点」；OpenAPI 与代码一致）：平台管理员按前端蛇形键经 POST /grant-requests 提交员工单独授予申请并带 final_approver_id——
+    // 组织层级 发起人 → boss → mid → top，高危授予档位只到上两级（boss、mid），指定 top 后复核链补全到 top 为止。
+    @Test
+    void grantRequestFinalApproverIdEndsTheReviewChainAtTheNamedApprover() throws Exception {
+        M002Fixture f = m002ApprovalFixture();
+        String mid = "usr_m002_mid_" + f.suffix();
+        String top = "usr_m002_top_" + f.suffix();
+        repository.createUser(new AccessUser(mid, mid, "staff", "org", null, "active", Instant.now()));
+        repository.createUser(new AccessUser(top, top, "staff", "org", null, "active", Instant.now()));
+        jdbcTemplate.update("INSERT INTO org_hierarchy (user_id, superior_id, line_code, updated_by) VALUES (?, ?, 'main', ?)",
+                f.boss(), mid, f.admin());
+        jdbcTemplate.update("INSERT INTO org_hierarchy (user_id, superior_id, line_code, updated_by) VALUES (?, ?, 'main', ?)",
+                mid, top, f.admin());
+
+        mockMvc.perform(post("/api/v1/access/grant-requests")
+                        .with(m002Session(new AccessActor(f.admin(), f.admin(), "platform_admin", "org", null, "active")))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(("{\"idempotency_key\": \"r170-grant-%s\", \"request_type\": \"user_permission_grant\", "
+                                + "\"target_user_id\": \"%s\", \"permission_codes\": [\"%s\"], \"reason\": \"单独授予\", "
+                                + "\"final_approver_id\": \"%s\"}").formatted(f.suffix(), f.target(), f.code(), top)))
+                .andExpect(status().isOk());
+        String reviewId = jdbcTemplate.queryForObject(
+                "SELECT review_id FROM access_grant_requests WHERE target_user_id = ? AND request_type = 'user_permission_grant'",
+                String.class, f.target());
+        assertThat(jdbcTemplate.queryForList("SELECT approver_id FROM supervisor_review_nodes WHERE review_id = ? ORDER BY seq",
+                String.class, reviewId)).containsExactly(f.boss(), mid, top);
     }
 
     // 后台 Web 终端（grace 模式下自报 web 的写请求留痕放行）+ 生产过滤器放入的 AccessActor 主体。

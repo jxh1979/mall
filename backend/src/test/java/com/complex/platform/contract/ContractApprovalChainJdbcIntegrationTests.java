@@ -1,10 +1,14 @@
 package com.complex.platform.contract;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.complex.platform.access.AccessActor;
 import com.complex.platform.common.api.ApiException;
@@ -33,9 +37,14 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.request.RequestPostProcessor;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
@@ -51,6 +60,7 @@ import org.springframework.transaction.annotation.Transactional;
         "spring.datasource.username=complex",
         "spring.datasource.password=${COMPLEX_DATABASE_PASSWORD:complex_dev_pwd}"
 })
+@AutoConfigureMockMvc
 @Transactional
 class ContractApprovalChainJdbcIntegrationTests {
 
@@ -61,6 +71,7 @@ class ContractApprovalChainJdbcIntegrationTests {
     @Autowired private ContractRepository repository;
     @Autowired private SupervisorReviewService reviews;
     @Autowired private JdbcTemplate jdbc;
+    @Autowired private MockMvc mockMvc;
     @Autowired private ContractExpiryJob expiryJob;
     @Autowired private FinanceService financeService;
     @Autowired private com.complex.platform.analytics.AnalyticsRepository analytics;
@@ -631,6 +642,30 @@ class ContractApprovalChainJdbcIntegrationTests {
                 Integer.class, child.id())).isZero();
     }
 
+    /**
+     * 第十八批 U 段第 170 条 170-R3（OpenAPI 与代码一致；ContractChangeRequest.change_type 补 location_change，网页合同工作台「经营位置变更」在发）：
+     * 起草人按前端请求形状（蛇形键）经真实接口发起经营位置变更，指定主线最终审批人与三条平行线最终审批人 → 200，变更单落库为 location_change、待审。
+     */
+    @Test
+    void locationChangeIsRaisedThroughTheEndpointWithFrontendSnakeCaseBody() throws Exception {
+        java.time.YearMonth now = java.time.YearMonth.now(com.complex.platform.common.LocalZone.ID);
+        ContractRecord contract = draft("c170");
+        jdbc.update("UPDATE contracts SET lifecycle_status = 'effective', snapshot = CAST(? AS jsonb) WHERE id = ?",
+                "{\"depositMonths\": 3}", contract.id());
+        String lines = LINE_CODES.stream()
+                .map(code -> "{\"line_code\":\"" + code + "\",\"final_approver_id\":\"" + lineFinal.get(code) + "\"}")
+                .collect(java.util.stream.Collectors.joining(","));
+        mockMvc.perform(post("/api/v1/contracts/" + contract.id() + "/changes").with(webSession(drafter))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"idempotency_key\":\"" + key("lc_c170") + "\",\"change_type\":\"location_change\","
+                                + "\"payload\":{\"base_rent_cent\":120000,\"deposit_deadline\":\"" + now.plusMonths(1).atDay(1) + "\"},"
+                                + "\"final_approver_id\":\"" + gm + "\",\"parallel_lines\":[" + lines + "],\"reason\":\"经营位置变更\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.change_type").value("location_change"));
+        assertThat(jdbc.queryForList("SELECT change_type || '/' || approval_status FROM contract_changes WHERE contract_id = ?",
+                String.class, contract.id())).containsExactly("location_change/pending");
+    }
+
     /** 前置态：该酒吧卡座一张未结账单带服务费分项（营业日 businessDate），尚无月结。 */
     private void serviceFeeAwaitingMonthClose(String merchant, LocalDate businessDate) {
         String table = key("bt_c138");
@@ -806,6 +841,16 @@ class ContractApprovalChainJdbcIntegrationTests {
 
     private void superior(String userId, String superiorId) {
         jdbc.update("INSERT INTO org_hierarchy (user_id, superior_id) VALUES (?, ?)", userId, superiorId);
+    }
+
+    /** 后台 Web 终端＋生产过滤器放入的 AccessActor 主体（与 actAs 同一组身份字段）。 */
+    private RequestPostProcessor webSession(String userId) {
+        AccessActor actor = new AccessActor(userId, userId, "platform_admin", projectId, null, "active");
+        return request -> {
+            request.addHeader("X-Terminal-Type", "web");
+            return authentication(new UsernamePasswordAuthenticationToken(actor, null,
+                    List.of(new SimpleGrantedAuthority("ROLE_P0_STAFF")))).postProcessRequest(request);
+        };
     }
 
     private void actAs(String userId) {

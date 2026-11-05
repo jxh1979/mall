@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -26,6 +26,7 @@ import org.springframework.test.util.ReflectionTestUtils;
  * 第十八批 Q 段第 138 条 138-R1（BSM:1070「商户营业额与营业额抽成基数按打折后的实收金额计」；BSM:1076「月结定格的扣留部分，扣留金额计入该商户营业额、
  * 抽成基数」；BSM:1347「减去当期已成功的退款金额」；BSM:1111「挂起订单在结清前不计入……营业额抽成基数」；ENUM:257「……服务费应发数与扣留数定数之后出账，
  * 账单一次出准，不使用预估数」）：酒吧平台内营业额＝已确认整单商品收入＋月结扣留−已退成商品分项；待付清的整单跳过，来源未定一律 409。
+ * 第十八批 U 段第 155 条 155-R1（DEC-R8-54「为每笔计入抽成基数的销售保存其原账期与所适用档位费率」）：改为逐行返回，各行合计口径不变。
  */
 class BarPlatformTurnoverSumTests {
 
@@ -53,7 +54,8 @@ class BarPlatformTurnoverSumTests {
 
     @Test
     void confirmedGoodsPlusWithheldMinusRefundedGoods() {
-        assertThat(repository.sumBarPlatformTurnoverCent("bar", from, to, first, after)).isEqualTo(7900L);
+        assertThat(repository.listBarPlatformTurnoverRows("bar", from, to, first, after).stream()
+                .mapToLong(FinanceRepository.TurnoverSourceRow::amountCent).sum()).isEqualTo(7900L);
     }
 
     @Test
@@ -78,7 +80,7 @@ class BarPlatformTurnoverSumTests {
     }
 
     private void assertPending() {
-        assertThatThrownBy(() -> repository.sumBarPlatformTurnoverCent("bar", from, to, first, after))
+        assertThatThrownBy(() -> repository.listBarPlatformTurnoverRows("bar", from, to, first, after))
                 .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("BAR_REVENUE_PENDING"))
                 .hasMessageContaining("暂不能出营业额抽成账单");
     }

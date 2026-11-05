@@ -1,6 +1,6 @@
 package com.complex.platform.integration;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import com.complex.platform.common.api.ApiException;
 import java.util.List;
@@ -110,6 +110,11 @@ final class IntegrationValidation {
         requireEnum(SYNC_TYPES, request.syncType(), "sync_type");
         requireText(request.externalBusinessId(), "external_business_id");
         requireEnum(SYNC_STATUSES, request.status(), "status");
+        // 第十八批 U 段第 155 条 155-R3（ENUM:257「冲正金额一律按该笔款项在其原账期实际计费时所适用的档位与费率原额冲回」）：餐饮、零售退款须带所退
+        // 原订单的外部单号，营业额抽成跨期退款按原订单的原账期快照冲回；门票退款不进抽成基数（138-R2），不要求。
+        if ("refund".equals(request.syncType()) && ("catering".equals(request.businessType()) || "retail".equals(request.businessType()))) {
+            requireText(request.originalExternalBusinessId(), "original_external_business_id");
+        }
         currency(request.currency());
         channel(request.channel());
     }

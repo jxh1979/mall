@@ -46,10 +46,11 @@ const requestBodyExamples = {
   CustomerBarReservationRequest: {
     bar_id: "bar_a",
     table_id: "table_a_vip_01",
-    table_type: "vip_sofa",
+    table_type: "vip",
     reservation_time: "2026-06-20T21:00:00+08:00",
     guest_count: 6,
-    contact_phone: "13800138000"
+    contact_phone: "13800138000",
+    latest_arrival_at: "2026-06-20T23:00:00+08:00"
   },
   BarOrderRequest: {
     idempotency_key: "bar_order_20260612_000001",

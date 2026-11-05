@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -32,6 +32,7 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.test.web.servlet.request.RequestPostProcessor;
 
 /**
@@ -148,26 +149,47 @@ class MerchantConcessionDiningSettlementJdbcIntegrationTests {
         assertThat(settledAmount(concession)).isEqualTo(0L);
     }
 
+    @Test
+    void giftBindingWithoutCostBearerRejectedAndMerchantConcessionStored() throws Exception {
+        // 170-R2（契约 TicketTypeEntitlementRequest.cost_bearer 按代码声明）：赠送类权益不带 cost_bearer 拒绝，带了照存。
+        String templateId = template("让利餐厅 · 餐饮（成本承担方）", catalogCode, "cb");
+        bind(templateId, null).andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.detail_code").value("TICKET_COST_BEARER_REQUIRED"));
+        bind(templateId, "merchant_concession").andExpect(status().isOk());
+        assertThat(jdbc.queryForObject("SELECT cost_bearer FROM ticket_type_entitlements WHERE ticket_type_id = ? AND entitlement_template_id = ?",
+                String.class, typeId, templateId)).isEqualTo("merchant_concession");
+    }
+
     /** 按 TicketingPoliciesPage.createAndBind 餐饮行的请求形状建模板并绑到通票（纯赠送，票面原价 0）。 */
     private String createAndBind(String name, String catalog, String costBearer) throws Exception {
+        String templateId = template(name, catalog, costBearer);
+        bind(templateId, costBearer).andExpect(status().isOk());
+        return templateId;
+    }
+
+    private String template(String name, String catalog, String tag) throws Exception {
         String body = mockMvc.perform(post("/api/v1/ticketing/entitlement-templates").with(session(admin, "platform_admin", "org_1", null))
                         .contentType(MediaType.APPLICATION_JSON).content("""
                                 {"idempotency_key": "c156-tpl-%s-%s", "name": "%s", "entitlement_type": "dining",
                                  "default_total_times": 1, "default_value_cent": 0, "status": "active", "merchant_id": "%s",
                                  "catalog_item_code": %s, "exclusive_merchant_id": "%s", "bar_item_ref": null}
-                                """.formatted(costBearer, UUID.randomUUID(), name, restaurant,
+                                """.formatted(tag, UUID.randomUUID(), name, restaurant,
                                 catalog == null ? "null" : "\"" + catalog + "\"", restaurant)))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
         String templateId = new ObjectMapper().readTree(body).path("data").path("id").asText();
         templateIds.add(templateId);
-        mockMvc.perform(post("/api/v1/ticketing/ticket-types/" + typeId + "/entitlements").with(session(admin, "platform_admin", "org_1", null))
-                        .contentType(MediaType.APPLICATION_JSON).content("""
-                                {"idempotency_key": "c156-bind-%s", "entitlement_template_id": "%s", "quantity": 1,
-                                 "total_times": 1, "num_people": 1, "component_price_cent": 0, "cost_bearer": "%s"}
-                                """.formatted(UUID.randomUUID(), templateId, costBearer)))
-                .andExpect(status().isOk());
         return templateId;
+    }
+
+    /** costBearer 为 null 时请求体不带 cost_bearer。 */
+    private ResultActions bind(String templateId, String costBearer) throws Exception {
+        return mockMvc.perform(post("/api/v1/ticketing/ticket-types/" + typeId + "/entitlements").with(session(admin, "platform_admin", "org_1", null))
+                .contentType(MediaType.APPLICATION_JSON).content("""
+                        {"idempotency_key": "c156-bind-%s", "entitlement_template_id": "%s", "quantity": 1,
+                         "total_times": 1, "num_people": 1, "component_price_cent": 0%s}
+                        """.formatted(UUID.randomUUID(), templateId,
+                        costBearer == null ? "" : ", \"cost_bearer\": \"" + costBearer + "\"")));
     }
 
     /** 售出该通票后发到客人手上的餐饮权益（专属该餐厅、纯赠送）。 */

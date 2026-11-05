@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.15
+// 文件版本：V0.16
 
 import com.complex.platform.support.InMemoryAuditEventRepository;
 import com.complex.platform.support.InMemoryIdempotencyRepository;
@@ -2186,6 +2186,25 @@ class FinanceServiceTests {
         assertThat(recovered.getFirst().sourceType()).isEqualTo("saved_bottle_remedy_recovery");
     }
 
+    /**
+     * 第十八批 U 段第 155 条 155-R1：出账同一事务里逐笔挂两笔营业额抽成冲正应付（ENUM:257「多笔退款逐笔分别冲正」），
+     * 两条台账编号「-」之后的部分不得相同（ar_ap_items.item_no 唯一；同一毫秒写两条即撞 DUPLICATE_KEY）。
+     */
+    @Test
+    void turnoverRentReversalsPostedTogetherGetDistinctItemNumbers() {
+        service.postTurnoverRentLedger("merchant_trv", null, "2026-08",
+                new FinanceService.TurnoverCalc(0L, false, List.of(), List.of(
+                        new FinanceService.TurnoverReversal("refund_trv_1", 400L),
+                        new FinanceService.TurnoverReversal("refund_trv_2", 200L))),
+                false, LocalDate.parse("2026-09-10"));
+
+        assertThat(financeRepository.listArApItems())
+                .filteredOn(item -> "turnover_rent_reversal".equals(item.sourceType()))
+                .extracting(item -> item.itemNo().substring(item.itemNo().indexOf('-') + 1))
+                .hasSize(2)
+                .doesNotHaveDuplicates();
+    }
+
     private ArApPaymentRequest paymentRequest(String idempotencyKey, long amountCent) {
         return new ArApPaymentRequest(
                 idempotencyKey,
@@ -2629,9 +2648,12 @@ class FinanceServiceTests {
             return List.copyOf(turnoverRentRuleTiers.getOrDefault(ruleId, List.of()));
         }
 
+        // 第十八批 U 段第 155 条 155-R3：回流取数改逐笔，双子按商户给一笔落在窗口起点的回流订单。
         @Override
-        public long aggregateMerchantReflowTurnover(String merchantId, Instant fromInclusive, Instant toExclusive) {
-            return reflowTurnoverByMerchant.getOrDefault(merchantId, 0L);
+        public List<TurnoverSourceRow> listMerchantReflowTurnoverRows(String merchantId, Instant fromInclusive, Instant toExclusive) {
+            Long cent = reflowTurnoverByMerchant.get(merchantId);
+            return cent == null ? List.of()
+                    : List.of(new TurnoverSourceRow("reflow_order", "reflow_" + merchantId, fromInclusive, null, cent, null, null));
         }
 
         @Override

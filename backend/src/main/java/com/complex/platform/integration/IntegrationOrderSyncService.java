@@ -1,6 +1,6 @@
 package com.complex.platform.integration;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import static com.complex.platform.integration.IntegrationValidation.*;
 import static com.complex.platform.common.Strings.trimToNull;
@@ -676,7 +676,8 @@ final class IntegrationOrderSyncService {
                 resolveMerchantId(request, providerPayload, channel),
                 Map.copyOf(providerPayload),
                 now,
-                now
+                now,
+                request.originalExternalBusinessId()
         );
         return repository.saveOrderSync(record);
     }

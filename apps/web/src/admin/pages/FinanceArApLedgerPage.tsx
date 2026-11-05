@@ -1,4 +1,4 @@
-// 文件版本：V0.12
+// 文件版本：V0.13
 import React from "react";
 import { FinancePayrollPaymentPanel } from "./FinancePayrollPaymentPanel";
 import { FinanceRefundPanel } from "./FinanceRefundPanel";
@@ -44,6 +44,7 @@ const SOURCE_TYPE_LABELS: Record<string, string> = {
   contract_parking_monthly: "车位月租", parking_fee: "停车费",   // HP-P01：合同车位月租应收；客人停车费（内部核算，归城市项目公司）
   parking_credit_cost: "停车抵免成本",   // HP-P01：城市项目公司对承担商户的停车消费抵免成本普通内部结算应收（按月）
   bar_shift_overage: "收银长款（营业外收入）",   // 第十八批 R 段 142-R1：长款复核平账计该酒吧营业外收入（内部核算），与后端 AR_AP_SOURCE_TYPE_LABELS 同名
+  turnover_rent_reversal: "营业额抽成冲正",   // 第十八批 U 段第 155 条 155-R2：跨期退款按原账期档位费率冲回的营业额抽成，挂商户应付；与后端 AR_AP_SOURCE_TYPE_LABELS 同名
 };
 function sourceTypeLabel(v?: string): string {
   return v ? (SOURCE_TYPE_LABELS[v] ?? v) : "—";

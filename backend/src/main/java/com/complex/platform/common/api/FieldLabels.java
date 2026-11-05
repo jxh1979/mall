@@ -1,6 +1,6 @@
 package com.complex.platform.common.api;
 
-// 文件版本：V0.34
+// 文件版本：V0.35
 
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -606,6 +606,8 @@ public final class FieldLabels {
         // ── 对接 / 第三方 / 任务 ────────────────────────────────────
         p("channel", "渠道");
         p("external_business_id", "外部单号");
+        // 第十八批 U 段第 155 条 155-R3（PGM:287「界面全中文（所有终端零英文）」）：回流退款所退原订单。
+        p("original_external_business_id", "原订单外部单号");
         p("external_store_id", "外部门店号");
         p("external_product_id", "外部商品号");
         p("external_conversation_id", "外部会话号");

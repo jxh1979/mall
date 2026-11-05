@@ -2,6 +2,12 @@ package com.complex.platform.evidence;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.groups.Tuple.tuple;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+import com.complex.platform.access.AccessActor;
 
 import java.time.Instant;
 import java.util.List;
@@ -10,7 +16,13 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.request.RequestPostProcessor;
 import org.springframework.transaction.annotation.Transactional;
 
 @SpringBootTest(properties = {
@@ -18,6 +30,7 @@ import org.springframework.transaction.annotation.Transactional;
         "spring.datasource.username=complex",
         "spring.datasource.password=${COMPLEX_DATABASE_PASSWORD:complex_dev_pwd}"
 })
+@AutoConfigureMockMvc
 @Transactional
 class EvidenceEventJdbcIntegrationTests {
 
@@ -29,6 +42,9 @@ class EvidenceEventJdbcIntegrationTests {
 
     @Autowired
     private JdbcAuditEventRepository auditRepository;
+
+    @Autowired
+    private MockMvc mockMvc;
 
     @BeforeEach
     void resetEvidenceEventTables() {
@@ -199,6 +215,41 @@ class EvidenceEventJdbcIntegrationTests {
         assertThat(repository.listTimeline("contract", "ctr_jdbc", null))
                 .extracting(EvidenceTimelineItem::itemType)
                 .contains("evidence_event", "attachment", "review");
+    }
+
+    /**
+     * 170-R5 ①：上传意向由 EvidenceEventController 用 requireIdempotencyKey 读请求体 idempotency_key，
+     * 缺了 400 VALIDATION_FAILED（契约 EvidenceAttachmentUploadIntentRequest 据此列为必填）。平台管理员走真实授权链、蛇形键。
+     */
+    @Test
+    void uploadIntentRequiresIdempotencyKeyInBody() throws Exception {
+        RequestPostProcessor admin = platformAdmin("u_r5_evidence_admin");
+        String body = """
+                {"file_name":"合同.pdf","content_type":"application/pdf","file_size":1024,
+                 "business_type":"contract","business_id":"ctr_r5"%s}""";
+        mockMvc.perform(post("/api/v1/evidence/attachments/upload-intents").with(admin)
+                        .contentType(MediaType.APPLICATION_JSON).content(body.formatted("")))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.detail_code").value("VALIDATION_FAILED"));
+        mockMvc.perform(post("/api/v1/evidence/attachments/upload-intents").with(admin)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body.formatted(",\"idempotency_key\":\"r5-intent-" + System.nanoTime() + "\"")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("pending"))
+                .andExpect(jsonPath("$.data.business_id").value("ctr_r5"));
+    }
+
+    /** 平台管理员账号（种子角色 role_platform_admin）；后台 Web 终端＋生产过滤器放入的 AccessActor 主体。 */
+    private RequestPostProcessor platformAdmin(String userId) {
+        jdbcTemplate.update("INSERT INTO access_users (id, username, account_type, organization_id, merchant_id, status, created_at) "
+                + "VALUES (?, ?, 'platform_admin', 'org', NULL, 'active', now())", userId, userId);
+        jdbcTemplate.update("INSERT INTO user_roles (user_id, role_id) VALUES (?, 'role_platform_admin')", userId);
+        AccessActor actor = new AccessActor(userId, userId, "platform_admin", "org", null, "active");
+        return request -> {
+            request.addHeader("X-Terminal-Type", "web");
+            return authentication(new UsernamePasswordAuthenticationToken(actor, null,
+                    List.of(new SimpleGrantedAuthority("ROLE_P0_STAFF")))).postProcessRequest(request);
+        };
     }
 
     private String regclass(String tableName) {

@@ -1,10 +1,11 @@
 package com.complex.platform.amusement;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.complex.platform.support.StaffRequestFixture;
@@ -135,6 +136,28 @@ class AmusementStatusBoardJdbcTests {
                         + " metadata->>'point_id' AS point_id FROM audit_events WHERE event_name = 'amusement.status_board.viewed'"
                         + " AND actor_id = ? ORDER BY occurred_at DESC LIMIT 1", "usr_asb_staff_" + s))
                 .containsEntry("device_id", kioskDevice).containsEntry("terminal_type", "kiosk").containsEntry("point_id", space);
+    }
+
+    @Test
+    void deviceCreatedWithCodeStatusAndIntervalWhileContractLegacyDisabledRejected() throws Exception {
+        // 170-R2（契约 AmusementDeviceRequest 按代码收的字段与 DEVICE_STATUSES 对齐）：后台建档按蛇形键 device_code、name、status、
+        // safety_check_interval_hours；status=inactive 照存，旧契约的 disabled 不在代码取值里，拒绝。
+        RequestPostProcessor manager = new StaffRequestFixture(jdbc).staff("usr_asb_dev_" + s, "staff", complex, merchant,
+                "amusement.device.manage");
+        mockMvc.perform(post("/api/v1/amusement/projects/" + p + "/devices").with(manager).contentType(MediaType.APPLICATION_JSON)
+                        .content(json.writeValueAsString(Map.of("idempotency_key", "asb-dev-" + s, "device_code", "carousel-1",
+                                "name", "木马一号", "status", "inactive", "safety_check_interval_hours", 12))))
+                .andExpect(status().isOk());
+        assertThat(jdbc.queryForMap("SELECT name, status, safety_check_interval_hours FROM amusement_devices"
+                        + " WHERE project_id = ? AND device_code = 'carousel-1'", p))
+                .containsEntry("name", "木马一号").containsEntry("status", "inactive").containsEntry("safety_check_interval_hours", 12);
+        mockMvc.perform(post("/api/v1/amusement/projects/" + p + "/devices").with(manager).contentType(MediaType.APPLICATION_JSON)
+                        .content(json.writeValueAsString(Map.of("idempotency_key", "asb-dev-off-" + s, "device_code", "carousel-2",
+                                "name", "木马二号", "status", "disabled"))))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.detail_code").value("VALIDATION_FAILED"));
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM amusement_devices WHERE project_id = ? AND device_code = 'carousel-2'",
+                Integer.class, p)).isZero();
     }
 
     /** 一体机真实形状：一体机终端头＋登记设备号（不签名，默认 grace）。 */

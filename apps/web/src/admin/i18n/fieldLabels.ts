@@ -1,4 +1,4 @@
-// 文件版本：V0.21
+// 文件版本：V0.22
 // OBS-14-02 后台结果区字段中文名字典（PGM「全局原则 · 界面全中文（所有终端零英文）」）。
 // 键用后端 JSON 的蛇形写法；结果区查表时蛇形与驼峰同查（orderId / order_id 都命中 order_id）。
 // 与后端字段中文名表 FieldLabels.java（common.api 包）同键同名：前段按后端原样抄录，后端改名这里跟着改（门禁会比对）。
@@ -515,6 +515,8 @@ export const FIELD_LABELS: Record<string, string> = {
   target_stage: "目标阶段",
   channel: "渠道",
   external_business_id: "外部单号",
+  // 第十八批 U 段第 155 条 155-R3：回流退款所退原订单。
+  original_external_business_id: "原订单外部单号",
   external_store_id: "外部门店号",
   external_product_id: "外部商品号",
   external_conversation_id: "外部会话号",

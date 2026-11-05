@@ -1,4 +1,4 @@
-// 文件版本：V0.07
+// 文件版本：V0.08
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
@@ -154,6 +154,19 @@ describe("FinanceArApLedgerPage 收银长款", () => {
     await waitFor(() => expect(screen.queryByTestId("finance-ledger-row-ia-ov")).not.toBeNull());
     fireEvent.click(screen.getByTestId("finance-ledger-row-ia-ov"));
     await waitFor(() => expect(screen.queryByText("收银长款（营业外收入）")).not.toBeNull());
+  });
+});
+
+// 第十八批 U 段第 155 条 155-R2（PGM:287「界面全中文（所有终端零英文）」）：跨期退款按原账期档位费率冲回的营业额抽成冲正应付，台账显中文来源。
+describe("FinanceArApLedgerPage 营业额抽成冲正", () => {
+  it("台账详情展示来源类型中文标签（营业额抽成冲正）", async () => {
+    const rows: FinanceLedgerRow[] = [
+      { id: "ap-trr", itemNo: "ARAP-TRR-1", direction: "payable", status: "open", amountCent: 400, unpaidAmountCent: 400, dueDate: "2026-09-10", sourceType: "turnover_rent_reversal" },
+    ];
+    renderPage(makeApi(vi.fn().mockResolvedValue({ items: rows, total: 1, page: 1, size: 10 })));
+    await waitFor(() => expect(screen.queryByTestId("finance-ledger-row-ap-trr")).not.toBeNull());
+    fireEvent.click(screen.getByTestId("finance-ledger-row-ap-trr"));
+    await waitFor(() => expect(screen.queryByText("营业额抽成冲正")).not.toBeNull());
   });
 });
 

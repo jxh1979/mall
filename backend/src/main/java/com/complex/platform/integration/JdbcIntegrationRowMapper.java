@@ -117,7 +117,8 @@ final class JdbcIntegrationRowMapper {
                 resultSet.getString("merchant_id"),
                 readMap(resultSet.getString("provider_payload_json")),
                 instant(resultSet, "created_at"),
-                instant(resultSet, "updated_at")
+                instant(resultSet, "updated_at"),
+                resultSet.getString("original_external_business_id")
         );
     }
 

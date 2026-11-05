@@ -645,6 +645,18 @@ class MerchantServiceJdbcIntegrationTests {
         assertThat(auditCount("pa", "merchant_service.listMerchantServiceWorkOrders.succeeded")).isZero();
     }
 
+    /** 第十八批 U 段第 170 条 170-R3（OpenAPI 与代码一致）：商户专区按提单页蛇形键提单，priority=medium 落库；旧契约取值 normal 400 VALIDATION_FAILED。 */
+    @Test
+    void merchantZoneWorkOrderPriorityFollowsCodeValues() throws Exception {
+        seedOperatingMerchant();
+        String id = createAsMerchant("repair", "medium", "");
+        assertThat(jdbcTemplate.queryForObject("SELECT priority FROM merchant_service_work_orders WHERE id = ?", String.class, id))
+                .isEqualTo("medium");
+        postAsMerchant("repair", "normal", "")
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.detail_code").value("VALIDATION_FAILED"));
+    }
+
     private int auditCount(String tag, String event) {
         return jdbcTemplate.queryForObject("SELECT count(*) FROM audit_events WHERE actor_id = ? AND event_name = ?",
                 Integer.class, user(tag), event);

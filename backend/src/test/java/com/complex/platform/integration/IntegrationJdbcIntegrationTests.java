@@ -1,6 +1,6 @@
 package com.complex.platform.integration;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
@@ -412,7 +412,10 @@ class IntegrationJdbcIntegrationTests {
         seedMerchant("mch_turn_b");
         saveOrder("os_a_o1", "mch_turn_a", "order", "synced", 100000L, base);
         saveOrder("os_a_o2", "mch_turn_a", "order", "synced", 50000L, base.plusSeconds(3600));
-        saveOrder("os_a_r1", "mch_turn_a", "refund", "synced", 30000L, base.plusSeconds(7200));
+        // 第十八批 U 段第 155 条 155-R3：餐饮回流退款带所退原订单的外部单号（同窗原订单 os_a_o1）。
+        repository.saveOrderSync(new IntegrationOrderSyncRecord(
+                "os_a_r1", "mock-provider", "catering", "refund", "ext-os_a_r1", "synced", 30000L, "CNY",
+                "meituan", null, "mch_turn_a", Map.of(), base.plusSeconds(7200), base.plusSeconds(7200), "ext-os_a_o1"));
         saveOrder("os_a_pending", "mch_turn_a", "order", "received", 99999L, base);
         saveOrder("os_b_o1", "mch_turn_b", "order", "synced", 88888L, base);
         saveOrder("os_null_o1", null, "order", "synced", 77777L, base);
@@ -423,9 +426,13 @@ class IntegrationJdbcIntegrationTests {
 
         Instant from = Instant.parse("2026-05-01T00:00:00Z");
         Instant to = Instant.parse("2026-06-01T00:00:00Z");
-        assertThat(financeRepository.aggregateMerchantReflowTurnover("mch_turn_a", from, to)).isEqualTo(120000L);
-        assertThat(financeRepository.aggregateMerchantReflowTurnover("mch_turn_a",
-                Instant.parse("2026-06-01T00:00:00Z"), Instant.parse("2026-07-01T00:00:00Z"))).isEqualTo(0L);
+        // 155-R3：逐笔取数，退款行金额取负并带同窗原订单回流行，合计仍相抵出 120000。
+        List<FinanceRepository.TurnoverSourceRow> rows = financeRepository.listMerchantReflowTurnoverRows("mch_turn_a", from, to);
+        assertThat(rows.stream().mapToLong(FinanceRepository.TurnoverSourceRow::amountCent).sum()).isEqualTo(120000L);
+        assertThat(rows).filteredOn(row -> "reflow_refund".equals(row.kind()))
+                .extracting(FinanceRepository.TurnoverSourceRow::originId).containsExactly("os_a_o1");
+        assertThat(financeRepository.listMerchantReflowTurnoverRows("mch_turn_a",
+                Instant.parse("2026-06-01T00:00:00Z"), Instant.parse("2026-07-01T00:00:00Z"))).isEmpty();
         assertThat(repository.listUnattributedOrderSyncs())
                 .extracting(IntegrationOrderSyncRecord::id).contains("os_null_o1")
                 .doesNotContain("os_a_o1");

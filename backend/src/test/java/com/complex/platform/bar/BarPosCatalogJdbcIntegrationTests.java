@@ -2,13 +2,27 @@ package com.complex.platform.bar;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.complex.platform.access.AccessActor;
+import com.complex.platform.support.CustomerTicketPaymentFixture;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.Instant;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.http.MediaType;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.request.RequestPostProcessor;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
@@ -20,8 +34,15 @@ import org.springframework.transaction.annotation.Transactional;
         "spring.datasource.username=complex",
         "spring.datasource.password=${COMPLEX_DATABASE_PASSWORD:complex_dev_pwd}"
 })
+@AutoConfigureMockMvc
 @Transactional
 class BarPosCatalogJdbcIntegrationTests {
+
+    @Autowired
+    private MockMvc mockMvc;
+
+    @Autowired
+    private ObjectMapper json;
 
     @Autowired
     private JdbcBarPosCatalogRepository catalog;
@@ -584,5 +605,68 @@ class BarPosCatalogJdbcIntegrationTests {
         org.assertj.core.api.Assertions.assertThat(referencing)
                 .as("引用 bar_products(id) 的外键表集合须与 countProductReferences 显式清单一致;新增引用表请同步 JdbcBarPosCatalogRepository.countProductReferences")
                 .containsExactlyInAnyOrder("bar_order_items", "bar_combo_items");
+    }
+
+    // ── 第十八批 U 段第 170 条 170-R1（决策台账:4139「以代码和权威字典为准，只改契约」）：契约 BarProductRequest 补声明代码在读的
+    // bar_id（必填）与 catalog_item_code 等；BarComboRequest 删 internal_settlement_price_cent、补 catalog_item_code（V380 起内部结算价只在目录维护）──
+
+    /** 后台「新建商品」真实请求（蛇形键）带 bar_id 与内部结算 SKU 目录条目编码：200，库里 bar_products.catalog_item_code 等于所带的值。 */
+    @Test
+    void createProductViaHttpWithCatalogItemCodePersistsReference() throws Exception {
+        String suffix = String.valueOf(System.nanoTime());
+        String bar = "bar_r170_" + suffix;
+        String code = "sku_r170_" + suffix;
+        jdbcTemplate.update("INSERT INTO merchants (id, merchant_name, merchant_type, status, created_at, updated_at)"
+                + " VALUES (?, ?, 'bar', 'active', now(), now())", bar, "目录引用酒吧" + suffix);
+        jdbcTemplate.update("INSERT INTO internal_price_catalog (id, item_code, merchant_id, category, item_name, price_cent, status, is_draft,"
+                + " updated_by, created_at, updated_at) VALUES (?, ?, ?, 'bar', '目录威士忌', 3000, 'active', FALSE, 'seed_r170', now(), now())",
+                "ipc_r170_" + suffix, code, bar);
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("idempotency_key", "r170-product-" + suffix);
+        body.put("bar_id", bar);
+        body.put("product_name", "目录威士忌");
+        body.put("category", "spirit");
+        body.put("price_cent", 8800);
+        body.put("catalog_item_code", code);
+        String id = CustomerTicketPaymentFixture.read(mockMvc.perform(post("/api/v1/bar/products").with(barManager(suffix))
+                        .contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(body)))
+                .andExpect(status().isOk()), "$.data.id");
+        assertThat(jdbcTemplate.queryForObject("SELECT catalog_item_code FROM bar_products WHERE id = ?", String.class, id))
+                .isEqualTo(code);
+    }
+
+    /** 套餐真实请求（蛇形键）直填 internal_settlement_price_cent：400 BAR_INTERNAL_PRICE_CATALOG_ONLY。 */
+    @Test
+    void saveComboViaHttpWithInternalPriceRejected() throws Exception {
+        String suffix = String.valueOf(System.nanoTime());
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("bar_id", "bar_r170c_" + suffix);
+        body.put("combo_name", "直填内部价套餐");
+        body.put("price_cent", 9900);
+        body.put("internal_settlement_price_cent", 3000);
+        body.put("items", List.of(Map.of("product_id", "product_r170c_" + suffix, "quantity", 1)));
+        mockMvc.perform(post("/api/v1/bar/catalog/combos").with(barManager(suffix))
+                        .contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(body)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.detail_code").value("BAR_INTERNAL_PRICE_CATALOG_ONLY"));
+    }
+
+    /** 平台员工（真实授权链：access_users＋角色→商品、套餐与内部结算价查看权限码；平台视角不限商户）。 */
+    private RequestPostProcessor barManager(String suffix) {
+        String userId = "usr_bar_r170_" + suffix;
+        jdbcTemplate.update("INSERT INTO access_users (id, username, account_type, organization_id, merchant_id, status, created_at)"
+                + " VALUES (?, ?, 'platform_admin', NULL, NULL, 'active', now())", userId, userId);
+        String role = "role_" + userId;
+        jdbcTemplate.update("INSERT INTO roles (id, role_name, description, data_scope, status, created_at)"
+                + " VALUES (?, ?, '酒吧目录回归', 'platform', 'active', now())", role, role);
+        for (String code : List.of("bar.product.manage", "bar.combo.manage", "bar.internal_settlement_price.view")) {
+            jdbcTemplate.update("INSERT INTO role_permissions (role_id, permission_code) VALUES (?, ?)", role, code);
+        }
+        jdbcTemplate.update("INSERT INTO user_roles (user_id, role_id) VALUES (?, ?)", userId, role);
+        AccessActor actor = new AccessActor(userId, userId, "platform_admin", null, null, "active");
+        return request -> {
+            request.addHeader("X-Terminal-Type", "web");
+            return authentication(new UsernamePasswordAuthenticationToken(actor, "token", List.of())).postProcessRequest(request);
+        };
     }
 }

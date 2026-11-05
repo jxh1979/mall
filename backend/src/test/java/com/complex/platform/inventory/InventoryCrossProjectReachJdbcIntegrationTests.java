@@ -1,14 +1,16 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.complex.platform.access.AccessActor;
+import com.complex.platform.auth.SessionIssuer;
 import com.complex.platform.evidence.EvidenceEventService;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -39,6 +41,8 @@ import org.springframework.transaction.annotation.Transactional;
  *
  * <p>夹具随测试事务回滚：商户 m 主项目 A、经营项目 B（merchant_projects），B 门店库房与库存行记 B；B 门店员工报损、盘点录差异，
  * m 挂在主项目 A 的主管复核。修复前补写的流水记 A，盘盈纠账还把 B 的库存行改记成 A。</p>
+ *
+ * <p>第十八批 U 段第 170 条 170-R4 借用同一夹具，按蛇形键走真实入口核对契约改写所依据的代码事实：人工例外取酒条件字段名、库存调整类型闭集、通用入库拒收采购来源。</p>
  */
 @SpringBootTest(properties = {
         "spring.datasource.url=${SETTLE_TEST_DB_URL:jdbc:postgresql://127.0.0.1:5432/complex_test}",
@@ -131,6 +135,45 @@ class InventoryCrossProjectReachJdbcIntegrationTests {
                 String.class, item)).isEqualTo(projectB);
     }
 
+    // 第十八批 U 段第 170 条 170-R4 ⑥：契约字段名对齐全局蛇形命名实际读取的 orders_within1m、orders_within3m（最高权限本人）；
+    // 按旧名 orders_within_1m 发的值不被读，判空返回 400 VALIDATION_FAILED。
+    @Test
+    void manualPickupPolicyReadsConditionKeysWithoutUnderscoreBeforeDigit() throws Exception {
+        String body = "{\"idempotency_key\":\"%s\",\"project_id\":\"" + projectA + "\",\"%s\":2,\"%s\":3,"
+                + "\"orders_total\":5,\"min_orders\":1,\"max_orders\":10,\"reason\":\"首次配置\"}";
+        mockMvc.perform(put("/api/v1/inventory/saved-bottles/manual-pickup-policy").with(master()).contentType(MediaType.APPLICATION_JSON)
+                        .content(body.formatted(UUID.randomUUID(), "orders_within1m", "orders_within3m")))
+                .andExpect(status().isOk());
+        assertThat(jdbc.queryForMap("SELECT orders_within_1m, orders_within_3m FROM saved_bottle_manual_pickup_policy WHERE project_id=?", projectA))
+                .containsEntry("orders_within_1m", 2).containsEntry("orders_within_3m", 3);
+
+        mockMvc.perform(put("/api/v1/inventory/saved-bottles/manual-pickup-policy").with(master()).contentType(MediaType.APPLICATION_JSON)
+                        .content(body.formatted(UUID.randomUUID(), "orders_within_1m", "orders_within_3m")))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.detail_code").value("VALIDATION_FAILED"));
+    }
+
+    // 170-R4 ⑩：库存调整类型按代码闭集 gain/loss/damage/waste/count_correction，契约旧值 audit 被拒。
+    @Test
+    void stockAdjustmentRejectsAdjustmentTypeOutsideCodeSet() throws Exception {
+        RequestPostProcessor keeper = staff("adj", projectB, "'inventory.stock.adjust'");
+        call(keeper, "/api/v1/inventory/stock-adjustments",
+                "{\"idempotency_key\":\"" + UUID.randomUUID() + "\",\"adjustment_type\":\"audit\",\"reason\":\"盘点\",\"items\":[{\"item_id\":\""
+                        + item + "\",\"location_id\":\"" + warehouseB + "\",\"quantity\":1}]}")
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.detail_code").value("INVALID_ADJUSTMENT_TYPE"));
+    }
+
+    // 170-R4 ⑪：通用入库不收采购来源（须走采购申请收货），期初来源照常入库。
+    @Test
+    void stockInRejectsPurchaseSourceAndAcceptsInitial() throws Exception {
+        RequestPostProcessor keeper = staff("in", projectB, "'inventory.stock.move'");
+        String body = "{\"idempotency_key\":\"%s\",\"source_type\":\"%s\",\"warehouse_id\":\"" + warehouseB
+                + "\",\"items\":[{\"item_id\":\"" + item + "\",\"quantity\":1}]}";
+        call(keeper, "/api/v1/inventory/stock-in", body.formatted(UUID.randomUUID(), "purchase"))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.detail_code").value("STOCK_IN_PURCHASE_BYPASS_FORBIDDEN"));
+        call(keeper, "/api/v1/inventory/stock-in", body.formatted(UUID.randomUUID(), "initial"))
+                .andExpect(status().isOk());
+    }
+
     // ── 夹具 ─────────────────────────────────────────────────────────────────────────
 
     /** 采购到货流水（与 PurchaseRequestService.receive 写入的行同形）：高价值判定只看最近一次实际到货价。 */
@@ -150,6 +193,17 @@ class InventoryCrossProjectReachJdbcIntegrationTests {
         jdbc.update("INSERT INTO user_roles(user_id,role_id) VALUES(?,?)", userId, role);
         jdbc.update("INSERT INTO staff_level_assignments(user_id,staff_level_id,organization_id) VALUES(?,'lvl_m3_upper',?)", userId, project);
         AccessActor actor = new AccessActor(userId, userId, "staff", project, merchant, "active");
+        return request -> {
+            request.addHeader("X-Terminal-Type", "web");
+            return authentication(new UsernamePasswordAuthenticationToken(actor, null,
+                    List.of(new SimpleGrantedAuthority("ROLE_P0_STAFF")))).postProcessRequest(request);
+        };
+    }
+
+    /** 最高权限本人的后台 Web 会话。 */
+    private RequestPostProcessor master() {
+        AccessActor actor = new AccessActor(SessionIssuer.MASTER_USER_ID, SessionIssuer.MASTER_USERNAME, SessionIssuer.MASTER_ACCOUNT_TYPE,
+                projectA, null, "active");
         return request -> {
             request.addHeader("X-Terminal-Type", "web");
             return authentication(new UsernamePasswordAuthenticationToken(actor, null,

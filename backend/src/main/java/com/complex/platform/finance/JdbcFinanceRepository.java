@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.20
+// 文件版本：V0.21
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
@@ -1680,44 +1680,51 @@ class JdbcFinanceRepository implements FinanceRepository {
     }
 
     @Override
-    public long aggregateMerchantReflowTurnover(String merchantId, Instant fromInclusive, Instant toExclusive) {
+    public List<TurnoverSourceRow> listMerchantReflowTurnoverRows(String merchantId, Instant fromInclusive, Instant toExclusive) {
         // V334 起 integration_order_syncs.merchant_id 已落（源A渠道门店映射 / 源B对账文件直落）。
         // 抽成基数口径（2026-07-21 用户拍板）：
         //   ① 含税毛额 —— amount_cent 按第三方回传原样落库（无税额拆分、无优惠/赠送 per-order 明细，
         //      诚实边界：现回传口径即为该渠道结算金额；无折扣明细可再扣，不臆造）；
-        //   ② 扣退款 —— 实收 = SUM(order.amount_cent) − SUM(refund.amount_cent)，同商户同窗口相抵；
-        //      退款超出订单时钳到 0（负营业额无业务意义，不作为抽成基数）；
+        //   ② 扣退款 —— 逐笔返回，退款行金额取负。第十八批 U 段第 155 条 155-R3（ENUM:257「冲正金额一律按该笔款项在其原账期实际计费时所适用的
+        //      档位与费率原额冲回」）：退款带所退原订单的外部单号（original_external_business_id），同渠道、同业务类型、同商户的已同步原订单回流行
+        //      作 originId、originAt，由计费引擎同期从原订单里减、跨期按原订单快照冲正；
         //   仅计已归属该商户（merchant_id = :merchant_id）且 status='synced' 的 [from, to) 经营日窗口行；
         //   merchant_id IS NULL（未归属）行不计入任何商户——只进平台级租售比，绝不静默塞给某商户。
         //   第十八批 Q 段第 138 条 138-R2（BSM:1347「凡已计收过门票综合服务费的部分——包括通票或券核销划归本商户的部分，以及单店门票的票款——
         //   一律不再计入抽成基数」；BSM:1330「餐饮和零售商户的 POS 结果回流到平台」）：只计餐饮、零售回流（order、refund 同限），与日结第三方源、
         //   看板 THIRDPARTY_REVENUE_WHERE 同谓词；渠道售出的门票回流（business_type='ticket'）已本地出票、计入门票，不进抽成基数。
-        Long netTurnover = jdbcTemplate.queryForObject("""
-                SELECT COALESCE(SUM(
-                         CASE sync_type
-                             WHEN 'order'  THEN amount_cent
-                             WHEN 'refund' THEN -amount_cent
-                             ELSE 0
-                         END), 0)
-                  FROM integration_order_syncs
-                 WHERE merchant_id = :merchant_id
-                   AND status = 'synced'
-                   AND sync_type IN ('order', 'refund')
-                   AND business_type IN ('catering', 'retail')
-                   AND created_at >= :from_inclusive
-                   AND created_at < :to_exclusive
+        return jdbcTemplate.query("""
+                SELECT o.id, o.sync_type, o.amount_cent, o.created_at, origin.id AS origin_id, origin.created_at AS origin_at
+                  FROM integration_order_syncs o
+                  LEFT JOIN integration_order_syncs origin
+                    ON o.sync_type = 'refund'
+                   AND origin.provider_code = o.provider_code
+                   AND origin.business_type = o.business_type
+                   AND origin.sync_type = 'order'
+                   AND origin.external_business_id = o.original_external_business_id
+                   AND origin.merchant_id = o.merchant_id
+                   AND origin.status = 'synced'
+                 WHERE o.merchant_id = :merchant_id
+                   AND o.status = 'synced'
+                   AND o.sync_type IN ('order', 'refund')
+                   AND o.business_type IN ('catering', 'retail')
+                   AND o.created_at >= :from_inclusive
+                   AND o.created_at < :to_exclusive
                 """, new MapSqlParameterSource()
                 .addValue("merchant_id", merchantId)
                 .addValue("from_inclusive", timestampWithTimeZone(fromInclusive))
-                .addValue("to_exclusive", timestampWithTimeZone(toExclusive)), Long.class);
-        return netTurnover == null ? 0L : Math.max(0L, netTurnover);
+                .addValue("to_exclusive", timestampWithTimeZone(toExclusive)), (rs, n) -> "refund".equals(rs.getString("sync_type"))
+                ? new TurnoverSourceRow("reflow_refund", rs.getString("id"), rs.getTimestamp("created_at").toInstant(), null,
+                        Math.negateExact(rs.getLong("amount_cent")), rs.getString("origin_id"), nullableInstant(rs, "origin_at"))
+                : new TurnoverSourceRow("reflow_order", rs.getString("id"), rs.getTimestamp("created_at").toInstant(), null,
+                        rs.getLong("amount_cent"), null, null));
     }
 
     @Override
-    public long sumForfeitedBarDepositCent(String merchantId, Instant fromInclusive, Instant toExclusive) {
+    public List<TurnoverSourceRow> listForfeitedBarDepositRows(String merchantId, Instant fromInclusive, Instant toExclusive) {
         // deposit_settlement='forfeited' 只由三条没收路径写（店员按爽约或超出免费时限取消、超时释放、关台未达低消），且必为已付定金。
-        Long forfeited = jdbcTemplate.queryForObject("""
-                SELECT COALESCE(SUM(deposit_amount_cent), 0)
+        return jdbcTemplate.query("""
+                SELECT id, deposit_amount_cent, deposit_settled_at
                   FROM bar_reservations
                  WHERE merchant_id = :merchant_id
                    AND deposit_settlement = 'forfeited'
@@ -1726,21 +1733,21 @@ class JdbcFinanceRepository implements FinanceRepository {
                 """, new MapSqlParameterSource()
                 .addValue("merchant_id", merchantId)
                 .addValue("from_inclusive", timestampWithTimeZone(fromInclusive))
-                .addValue("to_exclusive", timestampWithTimeZone(toExclusive)), Long.class);
-        return forfeited == null ? 0L : forfeited;
+                .addValue("to_exclusive", timestampWithTimeZone(toExclusive)), (rs, n) -> new TurnoverSourceRow("bar_deposit_forfeited",
+                rs.getString("id"), rs.getTimestamp("deposit_settled_at").toInstant(), null, rs.getLong("deposit_amount_cent"), null, null));
     }
 
     @Override
-    public long sumBarPlatformTurnoverCent(String merchantId, Instant fromInclusive, Instant toExclusive,
+    public List<TurnoverSourceRow> listBarPlatformTurnoverRows(String merchantId, Instant fromInclusive, Instant toExclusive,
             LocalDate firstDay, LocalDate dayAfterLast) {
         // 口径同分红酒吧收入（JdbcDividendRepository.sumBarRevenueCent/sumBarRefundCent）：goodsRevenueCent 已是折后实收，不含券抵扣、服务费与小费分项
         // （BSM:1070、BSM:1077），含补低消与储值付款；整单待付清的结清前不计（BSM:1111）；其余来源未定、服务费未月结定格一律不出账
         // （ENUM:257「账单一次出准，不使用预估数」）。
         com.complex.platform.bar.BarRevenueSourceService sources = barRevenueSources.getObject();
-        long amount = 0L;
+        List<TurnoverSourceRow> rows = new java.util.ArrayList<>();
         for (var row : sources.completedCollections(merchantId, fromInclusive, toExclusive)) {
             if (row.goodsRevenueCent() != null) {
-                amount = Math.addExact(amount, row.goodsRevenueCent());
+                rows.add(new TurnoverSourceRow("bar_bill", row.billId(), row.completedAt(), null, row.goodsRevenueCent(), null, null));
             } else if (!"payment_pending".equals(row.status())) {
                 throw ApiException.conflict("BAR_REVENUE_PENDING", "酒吧收入来源尚待核实（整单分项未齐），暂不能出营业额抽成账单");
             }
@@ -1749,24 +1756,26 @@ class JdbcFinanceRepository implements FinanceRepository {
             if (row.amountCent() == null) {
                 throw ApiException.conflict("BAR_REVENUE_PENDING", "服务费尚未月结定格，暂不能出营业额抽成账单");
             }
-            amount = Math.addExact(amount, row.amountCent());
+            rows.add(new TurnoverSourceRow("bar_withheld_fee", row.sourceBillId() + "|" + row.businessDate(), null, row.businessDate(),
+                    row.amountCent(), null, null));
         }
         for (var row : sources.completedGoodsRefunds(merchantId, fromInclusive, toExclusive)) {
             if (row.amountCent() == null) {
                 throw ApiException.conflict("BAR_REVENUE_PENDING", "实际退款分项尚待核实，暂不能出营业额抽成账单");
             }
-            amount = Math.subtractExact(amount, row.amountCent());
+            rows.add(new TurnoverSourceRow("bar_goods_refund", row.adjustmentId(), row.completedAt(), null, Math.negateExact(row.amountCent()),
+                    row.billId(), row.billCompletedAt()));
         }
-        return amount;
+        return rows;
     }
 
     @Override
-    public long sumSettledVoucherSettlementCent(String merchantId, Instant fromInclusive, Instant toExclusive) {
+    public List<TurnoverSourceRow> listSettledVoucherSettlementRows(String merchantId, Instant fromInclusive, Instant toExclusive) {
         // 「已完成结算」取实际付款，按付款时点归期（ENUM:257 账单一次出准、不在下期补差：未付讫的部分到付讫当期再计）。
         // 统一券 internal_price 核销（VoucherService）与通票合作方券 internal_purchased 核销（PartnerVoucherService）都给结算对象挂
         // source_type='partner_voucher' 应付；partner_kind=external_partner 的对手方是外部伙伴 id，按商户 id 过滤自然不计。
-        Long settled = jdbcTemplate.queryForObject("""
-                SELECT COALESCE(SUM(p.amount_cent), 0)
+        return jdbcTemplate.query("""
+                SELECT p.id, p.amount_cent, p.payment_time
                   FROM ar_ap_payments p
                   JOIN ar_ap_items i ON i.id = p.ar_ap_item_id
                  WHERE i.direction = 'payable'
@@ -1777,16 +1786,16 @@ class JdbcFinanceRepository implements FinanceRepository {
                 """, new MapSqlParameterSource()
                 .addValue("merchant_id", merchantId)
                 .addValue("from_inclusive", timestampWithTimeZone(fromInclusive))
-                .addValue("to_exclusive", timestampWithTimeZone(toExclusive)), Long.class);
-        return settled == null ? 0L : settled;
+                .addValue("to_exclusive", timestampWithTimeZone(toExclusive)), (rs, n) -> new TurnoverSourceRow("voucher_settlement",
+                rs.getString("id"), rs.getTimestamp("payment_time").toInstant(), null, rs.getLong("amount_cent"), null, null));
     }
 
     @Override
-    public long sumCompletedServiceOrderCent(String merchantId, Instant fromInclusive, Instant toExclusive) {
+    public List<TurnoverSourceRow> listCompletedServiceOrderRows(String merchantId, Instant fromInclusive, Instant toExclusive) {
         // BSM:1122「全额进公司账……分给服务人员的部分，是入账之后按薪资/提成/成本名录列支的支出」：计售价 price_cent 全额，不扣服务提供人份额；
         // 只计已完成的单（ENUM:290 服务完成后不可退），已取消的已原路退款、不计；created_at 即下单时点（BSM:1347「按开台或下单时点所属的营业日归属账期」）。
-        Long total = jdbcTemplate.queryForObject("""
-                SELECT COALESCE(SUM(price_cent), 0)
+        return jdbcTemplate.query("""
+                SELECT id, price_cent, created_at
                   FROM service_orders
                  WHERE bar_id = :merchant_id
                    AND status = 'completed'
@@ -1795,8 +1804,52 @@ class JdbcFinanceRepository implements FinanceRepository {
                 """, new MapSqlParameterSource()
                 .addValue("merchant_id", merchantId)
                 .addValue("from_inclusive", timestampWithTimeZone(fromInclusive))
-                .addValue("to_exclusive", timestampWithTimeZone(toExclusive)), Long.class);
-        return total == null ? 0L : total;
+                .addValue("to_exclusive", timestampWithTimeZone(toExclusive)), (rs, n) -> new TurnoverSourceRow("service_order",
+                rs.getString("id"), rs.getTimestamp("created_at").toInstant(), null, rs.getLong("price_cent"), null, null));
+    }
+
+    @Override
+    public Optional<BilledTurnoverSale> findTurnoverSaleSnapshot(String kind, String id) {
+        return jdbcTemplate.query("""
+                SELECT net_amount_cent, segments::text AS segments, billed_by_minimum
+                  FROM turnover_rent_sale_snapshots
+                 WHERE source_kind = :source_kind AND source_id = :source_id
+                """, new MapSqlParameterSource().addValue("source_kind", kind).addValue("source_id", id),
+                (rs, n) -> new BilledTurnoverSale(new TurnoverSaleSnapshot(kind, id, rs.getLong("net_amount_cent"),
+                        readSegments(rs.getString("segments"))), rs.getBoolean("billed_by_minimum"))).stream().findFirst();
+    }
+
+    @Override
+    public void insertTurnoverSaleSnapshots(String merchantId, String period, List<TurnoverSaleSnapshot> snapshots,
+            boolean billedByMinimum) {
+        for (TurnoverSaleSnapshot snapshot : snapshots) {
+            jdbcTemplate.update("""
+                    INSERT INTO turnover_rent_sale_snapshots
+                        (source_kind, source_id, merchant_id, period, net_amount_cent, segments, billed_by_minimum)
+                    VALUES (:source_kind, :source_id, :merchant_id, :period, :net_amount_cent, CAST(:segments AS jsonb), :billed_by_minimum)
+                    ON CONFLICT DO NOTHING
+                    """, new MapSqlParameterSource()
+                    .addValue("source_kind", snapshot.kind())
+                    .addValue("source_id", snapshot.id())
+                    .addValue("merchant_id", merchantId)
+                    .addValue("period", period)
+                    .addValue("net_amount_cent", snapshot.netAmountCent())
+                    .addValue("segments", writeJson(snapshot.segments().stream()
+                            .map(segment -> Map.of("rate_bps", segment.rateBps(), "amount_cent", segment.amountCent())).toList()))
+                    .addValue("billed_by_minimum", billedByMinimum));
+        }
+    }
+
+    private List<TurnoverRentMath.Segment> readSegments(String json) {
+        try {
+            List<TurnoverRentMath.Segment> segments = new java.util.ArrayList<>();
+            for (var node : objectMapper.readTree(json)) {
+                segments.add(new TurnoverRentMath.Segment(node.path("rate_bps").asInt(), node.path("amount_cent").asLong()));
+            }
+            return segments;
+        } catch (JsonProcessingException e) {
+            throw new IllegalStateException("营业额抽成快照无法读取", e);
+        }
     }
 
     @Override

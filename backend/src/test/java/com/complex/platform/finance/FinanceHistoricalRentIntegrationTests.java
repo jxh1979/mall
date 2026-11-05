@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.06
+// 文件版本：V0.07
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -152,7 +152,8 @@ class FinanceHistoricalRentIntegrationTests {
 
         assertThat(service.computePeriodTurnoverRentSnapshot(
                 "rent_history_merchant", "rent_history_contract", "2026-08"))
-                .isEqualTo(new FinanceService.PeriodTurnoverRent("rent_history_replacement", 20000));
+                .extracting(FinanceService.PeriodTurnoverRent::ruleId, FinanceService.PeriodTurnoverRent::amountCent)
+                .containsExactly("rent_history_replacement", 20000L);
     }
 
     @Test
@@ -167,10 +168,12 @@ class FinanceHistoricalRentIntegrationTests {
 
         assertThat(service.computePeriodTurnoverRentSnapshot(
                 "rent_history_merchant", "rent_history_contract", "2026-08"))
-                .isEqualTo(new FinanceService.PeriodTurnoverRent("rent_history_replacement", 20000));
+                .extracting(FinanceService.PeriodTurnoverRent::ruleId, FinanceService.PeriodTurnoverRent::amountCent)
+                .containsExactly("rent_history_replacement", 20000L);
         assertThat(service.computePeriodTurnoverRentSnapshot(
                 "rent_history_merchant", "rent_history_contract", "2026-09"))
-                .isEqualTo(new FinanceService.PeriodTurnoverRent("rent_history_later", 30000));
+                .extracting(FinanceService.PeriodTurnoverRent::ruleId, FinanceService.PeriodTurnoverRent::amountCent)
+                .containsExactly("rent_history_later", 30000L);
     }
 
     @Test
