@@ -1,4 +1,4 @@
-// 文件版本：V0.04
+// 文件版本：V0.05
 import React from "react";
 import { TechDetails } from "../components/TechDetails";
 import { AdminDataState } from "../components/AdminDataState";
@@ -130,6 +130,7 @@ const VERIFICATION_RESULT_REASON_LABELS: Record<string, string> = {
   multi_use_face_capture_required: "一人多次票入场须现场拍摄人脸（照片缺失或格式不正确）",
   multi_use_holder_mismatch: "与该票留存的使用人人脸不一致，不能核销",
   bar_entry_not_verified: "须先核销这家酒吧的入场权益，再核销酒水（赠饮）权益",
+  gift_drink_session_share_used_up: "本场次这家酒吧的酒水（赠饮）已按票面一份用完，之后场次的份额不能提前使用",
   window_expired: "动态码已过刷新窗口",
   signature_invalid: "核销凭证签名无效",
   device_blocked: "设备已被封禁或挂失",

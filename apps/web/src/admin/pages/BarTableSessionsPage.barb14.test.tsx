@@ -1,7 +1,8 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { parseCustomerLink } from "@complex/customer-core/links";
 import { BarTableSessionsPage } from "./BarTableSessionsPage";
 import { AdminApi } from "../client/adminClient";
 import type { AdminPageProps, EffectivePermissionsState } from "../types";
@@ -136,7 +137,10 @@ describe("BarTableSessionsPage 第十三批 B 段订台与扫码点单", () => {
     await waitFor(() => expect(screen.queryByTestId("bar-table-qr-t-loose")).not.toBeNull(), { timeout: 3000 });
     expect(screen.queryByTestId("bar-table-qr-t-1")).toBeNull();
     fireEvent.click(screen.getByTestId("bar-table-qr-t-loose"));
-    expect(screen.getByTestId("bar-table-qr-value").textContent).toBe("table?t=t-loose");
+    // 第十八批 S 段 174-R1（BSM:1025「开台后客人扫描桌台二维码即可自助点单」）：桌台码就是客人深链，客人端按 table 路由认得出。
+    const qrValue = screen.getByTestId("bar-table-qr-value").textContent ?? "";
+    expect(qrValue).toBe(`https://${window.location.host}/c/table?table_id=t-loose`);
+    expect(parseCustomerLink(qrValue, window.location.host)).toEqual({ route: "table", params: { table_id: "t-loose" } });
 
     fireEvent.click(screen.getByTestId("bar-new-table-open"));
     await waitFor(() => expect(screen.getByTestId("bar-new-table-type")).toBeTruthy());

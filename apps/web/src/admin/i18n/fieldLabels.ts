@@ -1,4 +1,4 @@
-// 文件版本：V0.19
+// 文件版本：V0.20
 // OBS-14-02 后台结果区字段中文名字典（PGM「全局原则 · 界面全中文（所有终端零英文）」）。
 // 键用后端 JSON 的蛇形写法；结果区查表时蛇形与驼峰同查（orderId / order_id 都命中 order_id）。
 // 与后端字段中文名表 FieldLabels.java（common.api 包）同键同名：前段按后端原样抄录，后端改名这里跟着改（门禁会比对）。
@@ -163,6 +163,7 @@ export const FIELD_LABELS: Record<string, string> = {
   business_type: "业务类型",
   business_date: "业务日期",
   payment_id: "支付单号",
+  pos_transaction_no: "POS 流水号",
   payment_intent_id: "支付意向单",
   payment_method: "支付方式",
   sales_channel: "销售渠道",
@@ -1365,7 +1366,6 @@ export const FIELD_LABELS: Record<string, string> = {
   flagged_for_review: "已标记复核",
   flat_deduction_cent: "定额扣减",
   floor: "楼层",
-  force_close: "强制关闭",
   format: "格式",
   forwarded_by: "转交人",
   free_minutes: "免费时长（分钟）",

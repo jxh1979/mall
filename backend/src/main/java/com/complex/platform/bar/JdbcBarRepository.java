@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.11
+// 文件版本：V0.12
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
 import com.complex.platform.common.crypto.PiiCipher;
@@ -333,11 +333,13 @@ class JdbcBarRepository implements BarRepository {
                 Map.of("id", reservationId, "at", java.sql.Timestamp.from(at)));
     }
 
-    // 第十八批 O 段第 126 条 126-R2：单列更新——saveReservation 的 upsert 列表不含 deposit_collector_staff_id，后续保存不会覆盖。
+    // 第十八批 O 段第 126 条 126-R2：单独更新——saveReservation 的 upsert 列表不含 deposit_collector_staff_id、
+    // deposit_pos_transaction_no（第十八批 S 段 169-R2），后续保存不会覆盖。
     @Override
-    public void markReservationDepositCollector(String reservationId, String staffUserId) {
-        jdbcTemplate.update("UPDATE bar_reservations SET deposit_collector_staff_id = :staff WHERE id = :id",
-                Map.of("id", reservationId, "staff", staffUserId));
+    public void markReservationDepositCollector(String reservationId, String staffUserId, String posTransactionNo) {
+        jdbcTemplate.update("UPDATE bar_reservations SET deposit_collector_staff_id = :staff, deposit_pos_transaction_no = :pos WHERE id = :id",
+                new MapSqlParameterSource("id", reservationId).addValue("staff", staffUserId)
+                        .addValue("pos", posTransactionNo, java.sql.Types.VARCHAR));
     }
 
     @Override
@@ -465,6 +467,35 @@ class JdbcBarRepository implements BarRepository {
                  WHERE reservation_id = :reservation_id
                  ORDER BY is_holder DESC, confirmed_at, id
                 """, Map.of("reservation_id", reservationId), rowMapper::mapInvitationMember);
+    }
+
+    // 第十八批 S 段第 167 条 167-R1：台组名额原语（BarInvitationQuota）。
+    @Override
+    public Optional<String> findLiveSessionIdByReservation(String reservationId) {
+        return jdbcTemplate.query("""
+                SELECT id
+                  FROM bar_table_sessions
+                 WHERE reservation_id = :id AND status IN ('open', 'merged', 'merged_transferred')
+                 ORDER BY opened_at DESC
+                 LIMIT 1
+                """, Map.of("id", reservationId), (rs, rowNum) -> rs.getString("id")).stream().findFirst();
+    }
+
+    @Override
+    public List<BarReservationInvitationMemberRecord> listInvitationMembersBySessions(List<String> sessionIds) {
+        return jdbcTemplate.query("""
+                SELECT *
+                  FROM bar_reservation_invitation_members
+                 WHERE status <> 'revoked'
+                   AND reservation_id IN (SELECT reservation_id FROM bar_table_sessions WHERE id IN (:ids))
+                 ORDER BY is_holder DESC, confirmed_at, id
+                """, Map.of("ids", sessionIds), rowMapper::mapInvitationMember);
+    }
+
+    @Override
+    public void lockTableSession(String sessionId) {
+        jdbcTemplate.query("SELECT id FROM bar_table_sessions WHERE id = :id FOR UPDATE", Map.of("id", sessionId),
+                (rs, rowNum) -> rs.getString("id"));
     }
 
     @Override

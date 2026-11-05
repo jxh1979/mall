@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "综合体管理系统 P0 API 契约",
-    "version": "V0.50",
+    "version": "V0.51",
     "description": "P0 首批编码前置契约。本文采用 JSON-compatible YAML，便于与 openapi-p0.json 保持一致。正式后端以 Java 21 + Spring Boot 4.x + springdoc-openapi 输出运行时 OpenAPI，并与本契约比对。"
   },
   "servers": [
@@ -3334,6 +3334,90 @@
         "description": "第十八批 N 段第 123 条 123-R2（BSM:1630「核销、收款、退款、放行等敏感操作，操作设备定位落在该项目综合体授权范围之外时一律拒绝并留痕」；BSM:1876「Web 端同样适用」）：本操作属敏感操作定位闸的现场动作闭集（第十八批裁决 31）。操作对象所属项目已配授权范围（123-R1）时须带请求头 X-Geo-Latitude、X-Geo-Longitude（设备当下定位，WGS-84 十进制度）：没带或解析不了按范围外处理（裁决 30）返回 403 SENSITIVE_OPERATION_LOCATION_REQUIRED，到圆心距离超过授权半径返回 403 SENSITIVE_OPERATION_OUT_OF_RANGE，拒绝在独立事务里留痕 sensitive_operation.location_rejected（business_id 为本 operationId，业务回滚不丢）；项目没配授权范围不查位置（裁决 32）；判定在幂等之前，重放不能绕过；通过时不存位置。第十八批 O 段第 127 条 127-R3：收款人（cashier_staff_id，各支付渠道）取执行结账的那一次登录会话的操作人，不收请求填写，交班对账按它归入收银员（BSM 第 940、1066、1081 行）。"
       }
     },
+    "/api/v1/bar/bills/{bill_id}/stored-value/sms": {
+      "post": {
+        "tags": [
+          "bar",
+          "finance"
+        ],
+        "operationId": "requestBarBillStoredValueSmsCode",
+        "summary": "酒吧账单储值付款短信验证码",
+        "description": "第十八批 S 段第 171 条 171-R1（BSM:1066「储值卡（通用卡先扣本金后扣赠送金且不可配置……）」；BSM:1563「验证码下发与送达结果、失败原因（用于新人判定、注册登录和关键操作验证）」）：收银为本账单的储值付款，给付款客人手机号发验证码（customer.stored_value.consume 场景）。手机号须是已注册会员，不是会员 401 CUSTOMER_OTP_INVALID，账号已封禁或已注销 403 CUSTOMER_BLACKLISTED / CUSTOMER_DEREGISTERED；账单所挂订单有客人时须是该客人的登记手机号，不一致 403 STORED_VALUE_CUSTOMER_MISMATCH；按手机号限频，超限 429 CUSTOMER_OTP_RATE_LIMITED；账单不存在 404 BAR_BILL_NOT_FOUND，他商户 403 CROSS_MERCHANT_FORBIDDEN，已结账 409 BAR_BILL_ALREADY_SETTLED；短信服务未配置 409 CUSTOMER_OTP_PROVIDER_UNAVAILABLE，不假成功；下发失败 409 CUSTOMER_OTP_SEND_FAILED。验证码随结账（payment_channel=stored_value 时的 phone、sms_code）核验。成功返回 message。",
+        "x-failure-codes": [
+          "CUSTOMER_OTP_INVALID",
+          "CUSTOMER_BLACKLISTED",
+          "CUSTOMER_DEREGISTERED",
+          "STORED_VALUE_CUSTOMER_MISMATCH",
+          "CUSTOMER_OTP_RATE_LIMITED",
+          "BAR_BILL_NOT_FOUND",
+          "CROSS_MERCHANT_FORBIDDEN",
+          "BAR_BILL_ALREADY_SETTLED",
+          "CUSTOMER_OTP_PROVIDER_UNAVAILABLE",
+          "CUSTOMER_OTP_SEND_FAILED"
+        ],
+        "x-permission": "finance.payment.register",
+        "x-data-scope": "project-bar-table",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "customer.otp_requested",
+        "x-audit-event-failure": "customer.otp_request_failed",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/BillId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "phone"
+                ],
+                "properties": {
+                  "phone": {
+                    "type": "string",
+                    "maxLength": 20,
+                    "description": "付款客人登记手机号。"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "429": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
+    },
     "/api/v1/bar/orders": {
       "post": {
         "tags": [
@@ -3911,7 +3995,7 @@
           }
         },
         "x-auth-context": "staff-token",
-        "description": "门口邀请函入场核验。ROOT-03 clients-R6（BSM 第 870 行「到店出示本人的动态入场码入场」、第 1036 行「邀请函二维码……本身不作为入场凭证」）：credential_payload 必须是被邀请人本人在 App/小程序取的动态入场码（未过期、本订台），客人号/手机号明文与过期码一律 409 BAR_INVITATION_ENTRY_CODE_INVALID；已入场重复核验返回原记录。 第十八批 N 段第 123 条 123-R2（BSM:1630「核销、收款、退款、放行等敏感操作，操作设备定位落在该项目综合体授权范围之外时一律拒绝并留痕」；BSM:1876「Web 端同样适用」）：本操作属敏感操作定位闸的现场动作闭集（第十八批裁决 31）。操作对象所属项目已配授权范围（123-R1）时须带请求头 X-Geo-Latitude、X-Geo-Longitude（设备当下定位，WGS-84 十进制度）：没带或解析不了按范围外处理（裁决 30）返回 403 SENSITIVE_OPERATION_LOCATION_REQUIRED，到圆心距离超过授权半径返回 403 SENSITIVE_OPERATION_OUT_OF_RANGE，拒绝在独立事务里留痕 sensitive_operation.location_rejected（business_id 为本 operationId，业务回滚不丢）；项目没配授权范围不查位置（裁决 32）；判定在幂等之前，重放不能绕过；通过时不存位置。 第十八批 Q 段第 150 条 150-R1（BSM:552「进场之后，工作手机扫客人二维码核销各酒吧入场」；BSM:1036「到店出示本人的动态入场码核验入场」）：入场码格式 bie.订台号.成员号.到期秒.随机串.签名；工作手机按码中订台号调用本接口，码中订台号与路径不符同样 409 BAR_INVITATION_ENTRY_CODE_INVALID。",
+        "description": "门口邀请函入场核验。ROOT-03 clients-R6（BSM 第 870 行「到店出示本人的动态入场码入场」、第 1036 行「邀请函二维码……本身不作为入场凭证」）：credential_payload 必须是被邀请人本人在 App/小程序取的动态入场码（未过期、本订台），客人号/手机号明文与过期码一律 409 BAR_INVITATION_ENTRY_CODE_INVALID；已入场重复核验返回原记录。 第十八批 N 段第 123 条 123-R2（BSM:1630「核销、收款、退款、放行等敏感操作，操作设备定位落在该项目综合体授权范围之外时一律拒绝并留痕」；BSM:1876「Web 端同样适用」）：本操作属敏感操作定位闸的现场动作闭集（第十八批裁决 31）。操作对象所属项目已配授权范围（123-R1）时须带请求头 X-Geo-Latitude、X-Geo-Longitude（设备当下定位，WGS-84 十进制度）：没带或解析不了按范围外处理（裁决 30）返回 403 SENSITIVE_OPERATION_LOCATION_REQUIRED，到圆心距离超过授权半径返回 403 SENSITIVE_OPERATION_OUT_OF_RANGE，拒绝在独立事务里留痕 sensitive_operation.location_rejected（business_id 为本 operationId，业务回滚不丢）；项目没配授权范围不查位置（裁决 32）；判定在幂等之前，重放不能绕过；通过时不存位置。 第十八批 Q 段第 150 条 150-R1（BSM:552「进场之后，工作手机扫客人二维码核销各酒吧入场」；BSM:1036「到店出示本人的动态入场码核验入场」）：入场码格式 bie.订台号.成员号.到期秒.随机串.签名；工作手机按码中订台号调用本接口，码中订台号与路径不符同样 409 BAR_INVITATION_ENTRY_CODE_INVALID。 第十八批 S 段第 167 条 167-R1：名额按当前台位或合并台组计——订台已开台的，台组内已入场人数达到台组可邀请人数时 409 BAR_INVITATION_CAPACITY_EXHAUSTED；尚未开台的仍按签发时的可进人数计。",
         "x-failure-codes": [
           "BAR_INVITATION_ENTRY_CODE_INVALID",
           "BAR_INVITATION_MEMBER_NOT_CONFIRMED",
@@ -4558,7 +4642,7 @@
           }
         },
         "x-auth-context": "customer-token",
-        "description": "被邀请人确认接受订卡邀请函，占一个名额（同一人重复确认返回原成员）。ROOT-03-R25（BSM 第 1036 行「邀请函二维码带防伪标记，被复制或篡改卡座、可进人数即无法接受」）：二维码载荷的 invitation_signature、table_id、capacity 一并回传，须与签发时一致且防伪标记核验通过，否则 409 BAR_INVITATION_SIGNATURE_INVALID、不占名额。名额已满 409 BAR_INVITATION_CAPACITY_EXHAUSTED。被开卡人移出的人再次接受＝沿用原记录重新占名额（BSM 第 870 行「名额释放后可再邀请他人」），名额已满同样 409；订台已取消（邀请函随之吊销）409 BAR_INVITATION_NOT_ACTIVE。 PGM 第 744 行「前端隐藏只是辅助，后端接口必须独立校验」：按综合体的客人端终端开关以邀请函所属订台的酒吧综合体在服务端判（不取客户端自报的 X-Project-Id，先于幂等），该综合体客人端已关→403 TERMINAL_DISABLED，不占名额。 第十八批 R 段第 152 条 152-R2（第十八批裁决 34「销售可以通过微信等发送邀请函，客户点击后确定自己是订台人还是参与者」）：as_holder 为 true＝选「我是订台人」，订台尚无订台人（员工代订、一体机订台未被认领）时订台归到本人名下、签发时的开卡人占位成员改成本人（不另占名额），返回 is_holder 为 true 的成员；已有订台人 409 BAR_INVITATION_HOLDER_TAKEN，本人已作为参与者接受 409 BAR_INVITATION_ALREADY_ACCEPTED。as_holder 缺省或 false 按参与者接受。",
+        "description": "被邀请人确认接受订卡邀请函，占一个名额（同一人重复确认返回原成员）。ROOT-03-R25（BSM 第 1036 行「邀请函二维码带防伪标记，被复制或篡改卡座、可进人数即无法接受」）：二维码载荷的 invitation_signature、table_id、capacity 一并回传，须与签发时一致且防伪标记核验通过，否则 409 BAR_INVITATION_SIGNATURE_INVALID、不占名额。名额已满 409 BAR_INVITATION_CAPACITY_EXHAUSTED。被开卡人移出的人再次接受＝沿用原记录重新占名额（BSM 第 870 行「名额释放后可再邀请他人」），名额已满同样 409；订台已取消（邀请函随之吊销）409 BAR_INVITATION_NOT_ACTIVE。 PGM 第 744 行「前端隐藏只是辅助，后端接口必须独立校验」：按综合体的客人端终端开关以邀请函所属订台的酒吧综合体在服务端判（不取客户端自报的 X-Project-Id，先于幂等），该综合体客人端已关→403 TERMINAL_DISABLED，不占名额。 第十八批 R 段第 152 条 152-R2（第十八批裁决 34「销售可以通过微信等发送邀请函，客户点击后确定自己是订台人还是参与者」）：as_holder 为 true＝选「我是订台人」，订台尚无订台人（员工代订、一体机订台未被认领）时订台归到本人名下、签发时的开卡人占位成员改成本人（不另占名额），返回 is_holder 为 true 的成员；已有订台人 409 BAR_INVITATION_HOLDER_TAKEN，本人已作为参与者接受 409 BAR_INVITATION_ALREADY_ACCEPTED。as_holder 缺省或 false 按参与者接受。 第十八批 S 段第 167 条 167-R1（BSM:1079「转台……可邀请人数和最低消费额均按目标台规则执行」「合并后的可邀请人数……按两侧所包含全部原台的对应数值相加计算」；BSM:1036「已确认与已入场总人数不超过卡座可进人数」）：名额按当前台位或合并台组计——订台已开台的，按会话所在台组的可邀请人数（转台后为目标台的值，并台后为各原台之和）与台组内各订台已接受未入场、已入场成员合计判名额已满；尚未开台的仍按签发时的可进人数与本订台成员计。防伪核验仍按签发时的卡座与可进人数，原二维码继续有效。",
         "x-failure-codes": [
           "BAR_INVITATION_SIGNATURE_INVALID",
           "BAR_INVITATION_CAPACITY_EXHAUSTED",
@@ -4621,7 +4705,7 @@
         ],
         "operationId": "previewCustomerBarInvitation",
         "summary": "扫邀请函二维码预览",
-        "description": "ROOT-03 clients-R6：被邀请人扫开卡人转发的邀请函二维码后预览酒吧、卡座、可进人数与剩余名额，不占名额；防伪标记、卡座或可进人数被篡改 409 BAR_INVITATION_SIGNATURE_INVALID（BSM 第 1036 行）。 PGM 第 744 行「前端隐藏只是辅助，后端接口必须独立校验」：按综合体的客人端终端开关以邀请函所属订台的酒吧综合体在服务端判（不取客户端自报的 X-Project-Id），该综合体客人端已关→403 TERMINAL_DISABLED。 第十八批 R 段第 152 条 152-R2：返回 holder_claimable——这张订台还没有订台人（员工代订、一体机订台未被认领），客人可选「我是订台人」；客人自助订台恒为 false。",
+        "description": "ROOT-03 clients-R6：被邀请人扫开卡人转发的邀请函二维码后预览酒吧、卡座、可进人数与剩余名额，不占名额；防伪标记、卡座或可进人数被篡改 409 BAR_INVITATION_SIGNATURE_INVALID（BSM 第 1036 行）。 PGM 第 744 行「前端隐藏只是辅助，后端接口必须独立校验」：按综合体的客人端终端开关以邀请函所属订台的酒吧综合体在服务端判（不取客户端自报的 X-Project-Id），该综合体客人端已关→403 TERMINAL_DISABLED。 第十八批 R 段第 152 条 152-R2：返回 holder_claimable——这张订台还没有订台人（员工代订、一体机订台未被认领），客人可选「我是订台人」；客人自助订台恒为 false。 第十八批 S 段第 167 条 167-R1：名额按当前台位或合并台组计——capacity 与 remaining 为台组可邀请人数与剩余名额（尚未开台的仍按签发时的可进人数与本订台成员计）；table_name 为会话当前台位，table_id 仍为签发时的卡座。",
         "x-permission": "not_applicable",
         "x-data-scope": "self",
         "x-terminal-allowed": [
@@ -5523,7 +5607,7 @@
         ],
         "operationId": "listDailyCloses",
         "summary": "查询日结批次",
-        "description": "第十八批 P 段第 133 条 133-R2：按营业日倒序分页列出已生成的日结批次（营业日、范围类型、范围编号、状态、确认时间、锁定时间、归档时间），汇总用 listDailyCloseSummaries 按批次 id 查。范围同查看类列表：平台管理员看全部；商户账号只看本商户的 merchant、bar 范围日结；其余按 finance.daily_close.manage 可触及的项目看 project、ticketing、amusement 范围日结与这些项目下商户的 merchant、bar 范围日结。第十八批 R 段第 143 条 143-R1（ENUM:190「待生成、待确认、有差异、已确认、已锁定、已归档」）：status 取值 pending_confirm（待确认）、has_difference（有差异）、confirmed（已确认）、locked（已锁定）、archived（已归档）；143-R6（ENUM:115「有差异待复核」；BSM:1081「出现任何金额的差额一律进复核、定位责任，不设容差」）：库内待确认的日结，开班落在该营业日（酒吧逐家按各自营业日窗）、有差异待复核（已班结且 needs_review）的收银班次存在时返回 has_difference（只改返回值、不入库；merchant 范围只看本酒吧，其余平台口径，同 confirmDailyClose 的 DAY_CLOSE_SHIFT_PENDING 闸），该班次复核平账后回到 pending_confirm；有差异的日结照常可 markDailyCloseFinal，confirmDailyClose 必被 DAY_CLOSE_SHIFT_PENDING 拦；可选按 business_date、scope_type、scope_id 过滤，某营业日某范围查不到日结即页面显示的「待生成」（不入库）。143-R2：每行带 final_mark_categories（已标记为最终的数据类别，见 markDailyCloseFinal）。",
+        "description": "第十八批 P 段第 133 条 133-R2：按营业日倒序分页列出已生成的日结批次（营业日、范围类型、范围编号、状态、确认时间、锁定时间、归档时间），汇总用 listDailyCloseSummaries 按批次 id 查。范围同查看类列表：平台管理员看全部；商户账号只看本商户的 merchant、bar 范围日结；其余按 finance.daily_close.manage 可触及的项目看 project 范围日结与这些项目下商户的 merchant、bar 范围日结。第十八批 R 段第 143 条 143-R1（ENUM:190「待生成、待确认、有差异、已确认、已锁定、已归档」）：status 取值 pending_confirm（待确认）、has_difference（有差异）、confirmed（已确认）、locked（已锁定）、archived（已归档）；143-R6（ENUM:115「有差异待复核」；BSM:1081「出现任何金额的差额一律进复核、定位责任，不设容差」）：库内待确认的日结，开班落在该营业日（酒吧逐家按各自营业日窗）、有差异待复核（已班结且 needs_review）的收银班次存在时返回 has_difference（只改返回值、不入库；merchant、bar 范围只看本酒吧，project 范围不看收银班次（第十八批 S 段第 161 条 161-R2：酒吧逐店另出日结），同 confirmDailyClose 的 DAY_CLOSE_SHIFT_PENDING 闸），该班次复核平账后回到 pending_confirm；第十八批 S 段第 158 条 158-R1（ENUM:191「差异未关闭期间，高价值差异所涉营业日的日结不得确认锁定」）：该营业日有未关闭的高价值对账差异（口径同 confirmDailyClose 的 DAY_CLOSE_DIFFERENCE_PENDING 闸）时同样返回 has_difference，差异关闭后回到 pending_confirm；有差异的日结照常可 markDailyCloseFinal，confirmDailyClose 必被 DAY_CLOSE_SHIFT_PENDING 或 DAY_CLOSE_DIFFERENCE_PENDING 拦；可选按 business_date、scope_type、scope_id 过滤，某营业日某范围查不到日结即页面显示的「待生成」（不入库）。143-R2：每行带 final_mark_categories（已标记为最终的数据类别，见 markDailyCloseFinal）。",
         "x-permission": "finance.daily_close.manage",
         "x-data-scope": "project-entity",
         "x-terminal-allowed": [
@@ -5553,9 +5637,7 @@
               "enum": [
                 "project",
                 "merchant",
-                "bar",
-                "ticketing",
-                "amusement"
+                "bar"
               ],
               "maxLength": 64
             }
@@ -5613,7 +5695,7 @@
         ],
         "operationId": "createDailyClose",
         "summary": "生成日结",
-        "description": "第十八批 R 段第 143 条 143-R1（ENUM:190「待生成、待确认、有差异、已确认、已锁定、已归档」；BSM:1682「按营业日生成日结批次。」）：生成日结，status 为 pending_confirm（待确认）、locked_at 为空，并按七源汇总当日金额、退款与笔数；同日同范围已生成 409 DAILY_CLOSE_EXISTS。生成时不拦日结闸、不给台账打锁，闸在 confirmDailyClose、lockDailyClose 时拦，台账在 lockDailyClose 时打锁。范围：商户账号只能办本商户的 merchant、bar 范围日结，否则 403 CROSS_MERCHANT_FORBIDDEN；其余账号按 finance.daily_close.lock 可触及的项目覆盖日结所属综合体（merchant、bar 范围取该商户所属项目），否则 403 CROSS_PROJECT_FORBIDDEN。",
+        "description": "第十八批 R 段第 143 条 143-R1（ENUM:190「待生成、待确认、有差异、已确认、已锁定、已归档」；BSM:1682「按营业日生成日结批次。」）：生成日结，status 为 pending_confirm（待确认）、locked_at 为空，并按七源汇总当日金额、退款与笔数；同日同范围已生成 409 DAILY_CLOSE_EXISTS。生成时不拦日结闸、不给台账打锁，闸在 confirmDailyClose、lockDailyClose 时拦，台账在 lockDailyClose 时打锁。第十八批 S 段第 161 条 161-R3（第十八批裁决 35「酒吧逐店逐日查；游乐等按综合体逐日查」）：scope_type 只收 project、merchant、bar，票务、游乐由综合体的 project 范围日结覆盖、不再单独出日结，传 ticketing、amusement 拒 400 VALIDATION_FAILED。范围：商户账号只能办本商户的 merchant、bar 范围日结，否则 403 CROSS_MERCHANT_FORBIDDEN；其余账号按 finance.daily_close.lock 可触及的项目覆盖日结所属综合体（merchant、bar 范围取该商户所属项目），否则 403 CROSS_PROJECT_FORBIDDEN。",
         "x-permission": "finance.daily_close.lock",
         "x-data-scope": "project-entity",
         "x-terminal-allowed": [
@@ -16432,7 +16514,7 @@
         ],
         "operationId": "createTicketVerification",
         "summary": "正式核销",
-        "description": "核销记录状态闭集（CG-05，ENUM「核销记录状态」）：success（成功）、rejected（拒绝：规则不允许）、failed（失败：设备或网络原因）、reversed（已冲正）、anomaly（异常：已成功扣次但现场未放行或实际交付有争议时提起的异常复核，见 POST /api/v1/ticketing/verifications/{id}/anomaly 与 POST /api/v1/ticketing/verification-anomalies/{id}/resolve）；不设预检通过态、不提供人工放行（manual_overridden 仅历史行保留）。 在线核销：过刷新窗口 / 签名失配以正常响应返回 status=failed（window_expired / signature_invalid）；规则不允许仍以错误响应返回（响应不变），业务事务结束后另起事务落一条 status=rejected 记录（result_reason 为错误码小写；不扣次、不落结算价）；设备或凭证技术原因抛错（设备封禁或未纳管、核销设备未绑定商户、凭证已用或已作废等）同样以错误响应返回，业务事务结束后另起事务落一条 status=failed 记录；设备未登记不落；参数校验、鉴权、越权、定位闸等未进入有效检票的错误不落核销记录（CG 裁决第46、48项）。第十八批 Q 段第 148 条 148-R1（ENUM:55「未先核入场即核酒水一律拒绝」）：酒水（赠饮）权益须本营业日内已核销同票同人份这家酒吧的入场权益，否则 409 BAR_ENTRY_NOT_VERIFIED（规则拒绝，落 rejected）。第十八批 N 段第 123 条 123-R2（BSM:1630「核销、收款、退款、放行等敏感操作，操作设备定位落在该项目综合体授权范围之外时一律拒绝并留痕」；BSM:1876「Web 端同样适用」）：本操作属敏感操作定位闸的现场动作闭集（第十八批裁决 31）。操作对象所属项目已配授权范围（123-R1）时须带请求头 X-Geo-Latitude、X-Geo-Longitude（设备当下定位，WGS-84 十进制度）：没带或解析不了按范围外处理（裁决 30）返回 403 SENSITIVE_OPERATION_LOCATION_REQUIRED，到圆心距离超过授权半径返回 403 SENSITIVE_OPERATION_OUT_OF_RANGE，拒绝在独立事务里留痕 sensitive_operation.location_rejected（business_id 为本 operationId，业务回滚不丢）；项目没配授权范围不查位置（裁决 32）；判定在幂等之前，重放不能绕过；通过时不存位置。",
+        "description": "核销记录状态闭集（CG-05，ENUM「核销记录状态」）：success（成功）、rejected（拒绝：规则不允许）、failed（失败：设备或网络原因）、reversed（已冲正）、anomaly（异常：已成功扣次但现场未放行或实际交付有争议时提起的异常复核，见 POST /api/v1/ticketing/verifications/{id}/anomaly 与 POST /api/v1/ticketing/verification-anomalies/{id}/resolve）；不设预检通过态、不提供人工放行（manual_overridden 仅历史行保留）。 在线核销：过刷新窗口 / 签名失配以正常响应返回 status=failed（window_expired / signature_invalid）；规则不允许仍以错误响应返回（响应不变），业务事务结束后另起事务落一条 status=rejected 记录（result_reason 为错误码小写；不扣次、不落结算价）；设备或凭证技术原因抛错（设备封禁或未纳管、核销设备未绑定商户、凭证已用或已作废等）同样以错误响应返回，业务事务结束后另起事务落一条 status=failed 记录；设备未登记不落；参数校验、鉴权、越权、定位闸等未进入有效检票的错误不落核销记录（CG 裁决第46、48项）。第十八批 Q 段第 148 条 148-R1（ENUM:55「未先核入场即核酒水一律拒绝」）：酒水（赠饮）权益须本营业日内已核销同票同人份这家酒吧的入场权益，否则 409 BAR_ENTRY_NOT_VERIFIED（规则拒绝，落 rejected）。第十八批 S 段第 165 条 165-R1（BSM:800「后续场次的附带权益也不得提前到当前场次使用」）：多次票的酒水（赠饮）权益每场次（这家酒吧本营业日）只能核本场一份（赠饮总次数÷同票同人份这家酒吧入场次数，至少 1；补偿补发行按其全部次数），超出 409 GIFT_DRINK_SESSION_SHARE_USED_UP（规则拒绝，落 rejected）。第十八批 N 段第 123 条 123-R2（BSM:1630「核销、收款、退款、放行等敏感操作，操作设备定位落在该项目综合体授权范围之外时一律拒绝并留痕」；BSM:1876「Web 端同样适用」）：本操作属敏感操作定位闸的现场动作闭集（第十八批裁决 31）。操作对象所属项目已配授权范围（123-R1）时须带请求头 X-Geo-Latitude、X-Geo-Longitude（设备当下定位，WGS-84 十进制度）：没带或解析不了按范围外处理（裁决 30）返回 403 SENSITIVE_OPERATION_LOCATION_REQUIRED，到圆心距离超过授权半径返回 403 SENSITIVE_OPERATION_OUT_OF_RANGE，拒绝在独立事务里留痕 sensitive_operation.location_rejected（business_id 为本 operationId，业务回滚不丢）；项目没配授权范围不查位置（裁决 32）；判定在幂等之前，重放不能绕过；通过时不存位置。",
         "x-permission": "verification.execute",
         "x-data-scope": "project-point",
         "x-terminal-allowed": [
@@ -17175,7 +17257,7 @@
         ],
         "operationId": "confirmDailyClose",
         "summary": "确认日结",
-        "description": "第十八批 R 段第 143 条 143-R1（ENUM:190「待生成、待确认、有差异、已确认、已锁定、已归档」；PGM:664「单店层面的财务工作——日结确认与锁定……由该酒吧对应的财务 BP 负责」）：确认日结，按当前数据重算七源汇总并记确认时间 confirmed_at。只收 pending_confirm（待确认），否则 409 DAILY_CLOSE_NOT_PENDING；日结不存在 404 DAILY_CLOSE_NOT_FOUND。日结闸（确认与锁定两处都拦）：TK-14（ENUM「异常状态的统一出口」：异常单据未处置完毕，所属日结不得确认锁定）：原核销落在该营业日、仍待主管处置的票务核销异常存在时 409 DAY_CLOSE_ANOMALY_PENDING（merchant 范围只看本商户）。第十六批第 16 条同一规则接酒吧账单：开单或收款落在该营业日、仍处于异常（abnormal）待主管处置的酒吧账单存在时同样 409 DAY_CLOSE_ANOMALY_PENDING（merchant 范围只看本商户）。第十八批 Q 段第 144 条（BSM:1106「未结清订单阻止交班和日结」）：开单落在该营业日、仍未结清（结清、被合单、主管作废并冲正之外）的酒吧账单存在时 409 DAY_CLOSE_UNSETTLED_BILL，原文列出账单号（merchant 范围只看本商户）。第十八批 R 段第 142 条 142-R2（ENUM:190「由当班收银员完成现金清点与盘收银，接班人与其对接完成交接，并由财务跟班跟进交接完成」）：开班落在该营业日（酒吧逐家按各自营业日窗）、财务尚未见证归档（未班结、未平账、未签字或未见证）的收银班次存在时 409 DAY_CLOSE_SHIFT_PENDING（merchant 范围只看本酒吧）。第十八批 R 段 143-R2（ENUM:190「所属数据未标记为最终之前，日结不得确认、不得锁定。」）：五类数据未全部标记为最终（见 markDailyCloseFinal）时 409 DAY_CLOSE_NOT_FINAL，原文列出缺的类别。范围：商户账号只能办本商户的 merchant、bar 范围日结，否则 403 CROSS_MERCHANT_FORBIDDEN；其余账号按 finance.daily_close.lock 可触及的项目覆盖日结所属综合体（merchant、bar 范围取该商户所属项目），否则 403 CROSS_PROJECT_FORBIDDEN。",
+        "description": "第十八批 R 段第 143 条 143-R1（ENUM:190「待生成、待确认、有差异、已确认、已锁定、已归档」；PGM:664「单店层面的财务工作——日结确认与锁定……由该酒吧对应的财务 BP 负责」）：确认日结，按当前数据重算七源汇总并记确认时间 confirmed_at。只收 pending_confirm（待确认），否则 409 DAILY_CLOSE_NOT_PENDING；日结不存在 404 DAILY_CLOSE_NOT_FOUND。日结闸（确认与锁定两处都拦）：TK-14（ENUM「异常状态的统一出口」：异常单据未处置完毕，所属日结不得确认锁定）：原核销落在该营业日、仍待主管处置的票务核销异常存在时 409 DAY_CLOSE_ANOMALY_PENDING（merchant、bar 范围只看本商户）。第十六批第 16 条同一规则接酒吧账单：开单或收款落在该营业日、仍处于异常（abnormal）待主管处置的酒吧账单存在时同样 409 DAY_CLOSE_ANOMALY_PENDING（merchant、bar 范围只看本商户）。第十八批 Q 段第 144 条（BSM:1106「未结清订单阻止交班和日结」）：开单落在该营业日、仍未结清（结清、被合单、主管作废并冲正之外）的酒吧账单存在时 409 DAY_CLOSE_UNSETTLED_BILL，原文列出账单号（merchant、bar 范围只看本商户）。第十八批 R 段第 142 条 142-R2（ENUM:190「由当班收银员完成现金清点与盘收银，接班人与其对接完成交接，并由财务跟班跟进交接完成」）：开班落在该营业日（酒吧逐家按各自营业日窗）、财务尚未见证归档（未班结、未平账、未签字或未见证）的收银班次存在时 409 DAY_CLOSE_SHIFT_PENDING（merchant、bar 范围只看本酒吧）。第十八批 R 段 143-R2（ENUM:190「所属数据未标记为最终之前，日结不得确认、不得锁定。」）：五类数据未全部标记为最终（见 markDailyCloseFinal）时 409 DAY_CLOSE_NOT_FINAL，原文列出缺的类别。第十八批 S 段第 158 条 158-R1（ENUM:191「差异未关闭期间，高价值差异所涉营业日的日结不得确认锁定」「以该笔差异所涉金额与「高价值判定」条所配的同一金额阈值比较，高于阈值即高价值，其余为低价值；阈值未配置一律按高价值处理。」）：该营业日有未关闭的高价值对账差异时 409 DAY_CLOSE_DIFFERENCE_PENDING——财务对账差异按所属批次营业日、status 不是 closed 即未关闭；第三方对账差异按所属批次对账期间覆盖该营业日、status 不是 resolved 或 matched 即未关闭（ignored 也算未关闭）；差异金额大于全平台高价值阈值（等于不算）即高价值，阈值未配置一律按高价值；merchant、bar 范围只看本商户（财务批次范围为该商户、第三方差异的回流门店为该商户）。第十八批 S 段第 161 条 161-R2（第十八批裁决 35「酒吧逐店逐日查；游乐等按综合体逐日查」）：project 范围＝该综合体除酒吧外的业务——酒吧账单异常、未结清酒吧账单、收银班次三道闸不看（酒吧逐店另出日结）；票务核销异常只看原核销所属订单属该综合体、核销商户不是酒吧的；对账差异只看范围为该综合体或其非酒吧商户的财务对账批次，与回流门店属该综合体、不是酒吧的第三方差异。范围：商户账号只能办本商户的 merchant、bar 范围日结，否则 403 CROSS_MERCHANT_FORBIDDEN；其余账号按 finance.daily_close.lock 可触及的项目覆盖日结所属综合体（merchant、bar 范围取该商户所属项目），否则 403 CROSS_PROJECT_FORBIDDEN。",
         "x-permission": "finance.daily_close.lock",
         "x-data-scope": "project-entity",
         "x-terminal-allowed": [
@@ -17223,7 +17305,7 @@
         ],
         "operationId": "lockDailyClose",
         "summary": "锁定日结",
-        "description": "第十八批 R 段第 143 条 143-R1（BSM:2023「已拍板：日结锁定后不能直接补录影响金额，必须上级审批通过后补录。」）：锁定日结，记锁定时间 locked_at，并给该营业日到期的台账打锁（锁定后直接改账 409 DAY_CLOSE_LOCKED，须走锁定后补录审批）。143-R7：merchant、bar 范围只锁该日结商户的台账；project、ticketing、amusement 范围按操作人商户范围。只收 confirmed（已确认），否则 409 DAILY_CLOSE_NOT_CONFIRMED；日结不存在 404 DAILY_CLOSE_NOT_FOUND。日结闸（确认与锁定两处都拦）：TK-14（ENUM「异常状态的统一出口」：异常单据未处置完毕，所属日结不得确认锁定）：原核销落在该营业日、仍待主管处置的票务核销异常存在时 409 DAY_CLOSE_ANOMALY_PENDING（merchant 范围只看本商户）。第十六批第 16 条同一规则接酒吧账单：开单或收款落在该营业日、仍处于异常（abnormal）待主管处置的酒吧账单存在时同样 409 DAY_CLOSE_ANOMALY_PENDING（merchant 范围只看本商户）。第十八批 Q 段第 144 条（BSM:1106「未结清订单阻止交班和日结」）：开单落在该营业日、仍未结清（结清、被合单、主管作废并冲正之外）的酒吧账单存在时 409 DAY_CLOSE_UNSETTLED_BILL，原文列出账单号（merchant 范围只看本商户）。第十八批 R 段第 142 条 142-R2（ENUM:190「由当班收银员完成现金清点与盘收银，接班人与其对接完成交接，并由财务跟班跟进交接完成」）：开班落在该营业日（酒吧逐家按各自营业日窗）、财务尚未见证归档（未班结、未平账、未签字或未见证）的收银班次存在时 409 DAY_CLOSE_SHIFT_PENDING（merchant 范围只看本酒吧）。第十八批 R 段 143-R2（ENUM:190「所属数据未标记为最终之前，日结不得确认、不得锁定。」）：五类数据未全部标记为最终（见 markDailyCloseFinal）时 409 DAY_CLOSE_NOT_FINAL，原文列出缺的类别。范围：商户账号只能办本商户的 merchant、bar 范围日结，否则 403 CROSS_MERCHANT_FORBIDDEN；其余账号按 finance.daily_close.lock 可触及的项目覆盖日结所属综合体（merchant、bar 范围取该商户所属项目），否则 403 CROSS_PROJECT_FORBIDDEN。",
+        "description": "第十八批 R 段第 143 条 143-R1（BSM:2023「已拍板：日结锁定后不能直接补录影响金额，必须上级审批通过后补录。」）：锁定日结，记锁定时间 locked_at，并给该营业日到期的台账打锁（锁定后直接改账 409 DAY_CLOSE_LOCKED，须走锁定后补录审批；161-R2：综合体的 project 范围日结锁定或归档后，该综合体非酒吧商户与该综合体台账按营业日判封账的写入同样 409 DAY_CLOSE_LOCKED）。143-R7：merchant、bar 范围只锁该日结商户的台账；161-R2：project 范围只锁属该综合体（台账项目，空则取商户所属项目）且商户不是酒吧的台账。只收 confirmed（已确认），否则 409 DAILY_CLOSE_NOT_CONFIRMED；日结不存在 404 DAILY_CLOSE_NOT_FOUND。日结闸（确认与锁定两处都拦）：TK-14（ENUM「异常状态的统一出口」：异常单据未处置完毕，所属日结不得确认锁定）：原核销落在该营业日、仍待主管处置的票务核销异常存在时 409 DAY_CLOSE_ANOMALY_PENDING（merchant、bar 范围只看本商户）。第十六批第 16 条同一规则接酒吧账单：开单或收款落在该营业日、仍处于异常（abnormal）待主管处置的酒吧账单存在时同样 409 DAY_CLOSE_ANOMALY_PENDING（merchant、bar 范围只看本商户）。第十八批 Q 段第 144 条（BSM:1106「未结清订单阻止交班和日结」）：开单落在该营业日、仍未结清（结清、被合单、主管作废并冲正之外）的酒吧账单存在时 409 DAY_CLOSE_UNSETTLED_BILL，原文列出账单号（merchant、bar 范围只看本商户）。第十八批 R 段第 142 条 142-R2（ENUM:190「由当班收银员完成现金清点与盘收银，接班人与其对接完成交接，并由财务跟班跟进交接完成」）：开班落在该营业日（酒吧逐家按各自营业日窗）、财务尚未见证归档（未班结、未平账、未签字或未见证）的收银班次存在时 409 DAY_CLOSE_SHIFT_PENDING（merchant、bar 范围只看本酒吧）。第十八批 R 段 143-R2（ENUM:190「所属数据未标记为最终之前，日结不得确认、不得锁定。」）：五类数据未全部标记为最终（见 markDailyCloseFinal）时 409 DAY_CLOSE_NOT_FINAL，原文列出缺的类别。第十八批 S 段第 158 条 158-R1（ENUM:191「差异未关闭期间，高价值差异所涉营业日的日结不得确认锁定」「以该笔差异所涉金额与「高价值判定」条所配的同一金额阈值比较，高于阈值即高价值，其余为低价值；阈值未配置一律按高价值处理。」）：该营业日有未关闭的高价值对账差异时 409 DAY_CLOSE_DIFFERENCE_PENDING——财务对账差异按所属批次营业日、status 不是 closed 即未关闭；第三方对账差异按所属批次对账期间覆盖该营业日、status 不是 resolved 或 matched 即未关闭（ignored 也算未关闭）；差异金额大于全平台高价值阈值（等于不算）即高价值，阈值未配置一律按高价值；merchant、bar 范围只看本商户（财务批次范围为该商户、第三方差异的回流门店为该商户）。第十八批 S 段第 161 条 161-R2（第十八批裁决 35「酒吧逐店逐日查；游乐等按综合体逐日查」）：project 范围＝该综合体除酒吧外的业务——酒吧账单异常、未结清酒吧账单、收银班次三道闸不看（酒吧逐店另出日结）；票务核销异常只看原核销所属订单属该综合体、核销商户不是酒吧的；对账差异只看范围为该综合体或其非酒吧商户的财务对账批次，与回流门店属该综合体、不是酒吧的第三方差异。范围：商户账号只能办本商户的 merchant、bar 范围日结，否则 403 CROSS_MERCHANT_FORBIDDEN；其余账号按 finance.daily_close.lock 可触及的项目覆盖日结所属综合体（merchant、bar 范围取该商户所属项目），否则 403 CROSS_PROJECT_FORBIDDEN。",
         "x-permission": "finance.daily_close.lock",
         "x-data-scope": "project-entity",
         "x-terminal-allowed": [
@@ -17271,7 +17353,7 @@
         ],
         "operationId": "markDailyCloseFinal",
         "summary": "五类数据最终标记",
-        "description": "第十八批 R 段第 143 条 143-R2（ENUM:190「需要逐类标记为最终的数据集有五类：当日订单与核销记录、当日退款与冲正记录、当日出品与物品交接记录、当日考勤记录、当日异常处置记录。由各域主管公司的财务岗在该营业日闭店之后完成核对并逐类标记」「标记后不可撤销，事后发现错误只能走冲正，不得改回未最终。」）：把待确认日结的一类数据标记为最终，返回该日结（final_mark_categories 为已标记为最终的类别；status 同 listDailyCloses，有差异时为 has_difference）。category 必填，取 orders_verifications（当日订单与核销记录）、refunds_reversals（当日退款与冲正记录）、production_handover（当日出品与物品交接记录）、attendance（当日考勤记录）、anomaly_resolutions（当日异常处置记录），否则 400 VALIDATION_FAILED。只收 pending_confirm（待确认；列表显示为 has_difference 的库内仍是待确认，照常可标），否则 409 DAILY_CLOSE_NOT_PENDING；该营业日尚未闭店 409 FINAL_MARK_BEFORE_CLOSE（闭店时刻＝营业日次日的闭店时点，取该营业日起点所在的营业日版本，酒吧按该酒吧、其余按日结所属综合体，出厂为次日 07:00）；该类已标记 409 FINAL_MARK_EXISTS（不可撤销，不提供撤销或修改接口）；日结不存在 404 DAILY_CLOSE_NOT_FOUND。五类未全部标记时 confirmDailyClose、lockDailyClose 409 DAY_CLOSE_NOT_FINAL。范围：商户账号只能办本商户的 merchant、bar 范围日结，否则 403 CROSS_MERCHANT_FORBIDDEN；其余账号按 finance.daily_close.lock 可触及的项目覆盖日结所属综合体（merchant、bar 范围取该商户所属项目），否则 403 CROSS_PROJECT_FORBIDDEN。",
+        "description": "第十八批 R 段第 143 条 143-R2（ENUM:190「需要逐类标记为最终的数据集有五类：当日订单与核销记录、当日退款与冲正记录、当日出品与物品交接记录、当日考勤记录、当日异常处置记录。由各域主管公司的财务岗在该营业日闭店之后完成核对并逐类标记」「标记后不可撤销，事后发现错误只能走冲正，不得改回未最终。」）：把待确认日结的一类数据标记为最终，返回该日结（final_mark_categories 为已标记为最终的类别；status 同 listDailyCloses，有差异（有差异待复核的收银班次或未关闭的高价值对账差异，158-R1）时为 has_difference）。category 必填，取 orders_verifications（当日订单与核销记录）、refunds_reversals（当日退款与冲正记录）、production_handover（当日出品与物品交接记录）、attendance（当日考勤记录）、anomaly_resolutions（当日异常处置记录），否则 400 VALIDATION_FAILED。只收 pending_confirm（待确认；列表显示为 has_difference 的库内仍是待确认，照常可标），否则 409 DAILY_CLOSE_NOT_PENDING；该营业日尚未闭店 409 FINAL_MARK_BEFORE_CLOSE（闭店时刻＝营业日次日的闭店时点，取该营业日起点所在的营业日版本，酒吧按该酒吧、其余按日结所属综合体，出厂为次日 07:00）；该类已标记 409 FINAL_MARK_EXISTS（不可撤销，不提供撤销或修改接口）；日结不存在 404 DAILY_CLOSE_NOT_FOUND。五类未全部标记时 confirmDailyClose、lockDailyClose 409 DAY_CLOSE_NOT_FINAL。范围：商户账号只能办本商户的 merchant、bar 范围日结，否则 403 CROSS_MERCHANT_FORBIDDEN；其余账号按 finance.daily_close.lock 可触及的项目覆盖日结所属综合体（merchant、bar 范围取该商户所属项目），否则 403 CROSS_PROJECT_FORBIDDEN。",
         "x-permission": "finance.daily_close.lock",
         "x-data-scope": "project-entity",
         "x-terminal-allowed": [
@@ -17489,7 +17571,7 @@
         ],
         "operationId": "approveArApAdjustment",
         "summary": "锁定后补录审批决定",
-        "description": "上级对补录申请做出 approve/reject 决定；approve 才把金额变动入账并留痕，reject 不改账。第十八批 R 段 143-R4：返回的补录记录带 item_no（台账单号）与 original_business_date（原营业日）。",
+        "description": "上级对补录申请做出 approve/reject 决定；approve 才把金额变动入账并留痕，reject 不改账。第十八批 R 段 143-R4：返回的补录记录带 item_no（台账单号）与 original_business_date（原营业日）。第十八批 S 段 160-R1：approve 追加的冲正行与重述行沿用原行到期日（缴费期限不变）；经营看板的合同应收与净收入按批准当日计补录差额，不改写原营业日（ENUM:190「补录金额归入当期」）。",
         "x-permission": "finance.locked_backfill.approve",
         "x-data-scope": "project-entity",
         "x-terminal-allowed": [
@@ -17589,7 +17671,7 @@
           "SENSITIVE_OPERATION_LOCATION_REQUIRED",
           "SENSITIVE_OPERATION_OUT_OF_RANGE"
         ],
-        "description": "第十八批 N 段第 123 条 123-R2（BSM:1630「核销、收款、退款、放行等敏感操作，操作设备定位落在该项目综合体授权范围之外时一律拒绝并留痕」；BSM:1876「Web 端同样适用」）：本操作属敏感操作定位闸的现场动作闭集（第十八批裁决 31）。操作对象所属项目已配授权范围（123-R1）时须带请求头 X-Geo-Latitude、X-Geo-Longitude（设备当下定位，WGS-84 十进制度）：没带或解析不了按范围外处理（裁决 30）返回 403 SENSITIVE_OPERATION_LOCATION_REQUIRED，到圆心距离超过授权半径返回 403 SENSITIVE_OPERATION_OUT_OF_RANGE，拒绝在独立事务里留痕 sensitive_operation.location_rejected（business_id 为本 operationId，业务回滚不丢）；项目没配授权范围不查位置（裁决 32）；判定在幂等之前，重放不能绕过；通过时不存位置。第十八批 N 段第 120 条 120-R3（BSM:1058「……客人自助订台支付定金成功……该台位即进入已预留……冲突时先支付定金者得……」）：从未占过台的订台（一体机订台、客人自助订台）登记定金即占台；台位已被先付定金者占着或已开台、待清台、停用时本订台取消、不占台，已收定金按登记的渠道记原路待退并留痕 bar.reservation_deposit_refund_on_conflict，返回 200 与取消后的订台记录（status=cancelled）。第十八批 O 段第 126 条 126-R2（BSM:1029「现场必须允许现金和 POS 机支付，但要进入账单、日结、员工责任链和财务对账。」）：登记员工记为定金收款人（bar_reservations.deposit_collector_staff_id），交班对账按其把本笔定金按渠道计入现金或 POS 应收。"
+        "description": "第十八批 N 段第 123 条 123-R2（BSM:1630「核销、收款、退款、放行等敏感操作，操作设备定位落在该项目综合体授权范围之外时一律拒绝并留痕」；BSM:1876「Web 端同样适用」）：本操作属敏感操作定位闸的现场动作闭集（第十八批裁决 31）。操作对象所属项目已配授权范围（123-R1）时须带请求头 X-Geo-Latitude、X-Geo-Longitude（设备当下定位，WGS-84 十进制度）：没带或解析不了按范围外处理（裁决 30）返回 403 SENSITIVE_OPERATION_LOCATION_REQUIRED，到圆心距离超过授权半径返回 403 SENSITIVE_OPERATION_OUT_OF_RANGE，拒绝在独立事务里留痕 sensitive_operation.location_rejected（business_id 为本 operationId，业务回滚不丢）；项目没配授权范围不查位置（裁决 32）；判定在幂等之前，重放不能绕过；通过时不存位置。第十八批 N 段第 120 条 120-R3（BSM:1058「……客人自助订台支付定金成功……该台位即进入已预留……冲突时先支付定金者得……」）：从未占过台的订台（一体机订台、客人自助订台）登记定金即占台；台位已被先付定金者占着或已开台、待清台、停用时本订台取消、不占台，已收定金按登记的渠道记原路待退并留痕 bar.reservation_deposit_refund_on_conflict，返回 200 与取消后的订台记录（status=cancelled）。第十八批 O 段第 126 条 126-R2（BSM:1029「现场必须允许现金和 POS 机支付，但要进入账单、日结、员工责任链和财务对账。」）：登记员工记为定金收款人（bar_reservations.deposit_collector_staff_id），交班对账按其把本笔定金按渠道计入现金或 POS 应收。第十八批 S 段第 169 条 169-R2（BSM:1066「POS（记流水号+收款人）」）：channel=pos 时必填 pos_transaction_no，缺失 400 VALIDATION_FAILED、整笔不登记；流水号记入 bar_reservations.deposit_pos_transaction_no。"
       }
     },
     "/api/v1/bar/reservations/{id}/checkin": {
@@ -23733,7 +23815,7 @@
         ],
         "operationId": "splitBarTableSession",
         "summary": "拆分酒水台位会话（拆台）",
-        "description": "第十批 TK-27-R3 拆台（BSM L1079）：mode=last_merge 按最近一次并台记录拆回该次并台前的两侧台组、single 任选一张原台单独拆出（压缩只剩一侧的空层级）、all 一次把全部原台同时拆开；并台期间无法确认归属的订单须由 order_assignments 人工明确归属并留痕，否则 409 BAR_SPLIT_ORDER_ATTRIBUTION_REQUIRED；整体转台前的旧并台组不得再拆出（409 BAR_SPLIT_HISTORICAL_CHAIN）；拆出会话恢复开台、台位保持已开台、各结果台组按各自最低消费进度重判定金，低消不足不阻断；整笔一次性成功或整体失败。",
+        "description": "第十批 TK-27-R3 拆台（BSM L1079）：mode=last_merge 按最近一次并台记录拆回该次并台前的两侧台组、single 任选一张原台单独拆出（压缩只剩一侧的空层级）、all 一次把全部原台同时拆开；并台期间无法确认归属的订单须由 order_assignments 人工明确归属并留痕，否则 409 BAR_SPLIT_ORDER_ATTRIBUTION_REQUIRED；整体转台前的旧并台组不得再拆出（409 BAR_SPLIT_HISTORICAL_CHAIN）；拆出会话恢复开台、台位保持已开台、各结果台组按各自最低消费进度重判定金，低消不足不阻断；整笔一次性成功或整体失败。 第十八批 S 段第 167 条 167-R2（BSM:1079「分别按本次拆台后形成的每个独立原台或合并台组的可邀请人数，校验其“已接受但尚未入场成员数＋已入场成员数”；任一拆分结果超额即阻断拆台，系统不得自动移出成员或释放名额」；ENUM:114 同句）：重新挂接后逐个结果台组（剩余主台组与各拆出台组）按其可邀请人数校验台组内各订台已接受未入场与已入场成员合计，任一超额 409 BAR_SPLIT_INVITATION_OVER_CAPACITY、整体不拆，须由开卡人先移出未入场的被邀请人；拆台调整记录快照加记 invite_results（各结果台组的 session_id、table_id、invite_capacity、invite_occupied）。",
         "x-auth-context": "staff-token",
         "x-permission": "bar.table_session.split",
         "x-data-scope": "project-bar-table",
@@ -23871,7 +23953,7 @@
         ],
         "operationId": "transferBarTableSession",
         "summary": "转台（台位会话转移）",
-        "description": "ROOT-03-R19：转入台位正被有效预留占着时 409 BAR_TABLE_ALREADY_RESERVED（不能把别人订着的台转给在座客人）。",
+        "description": "ROOT-03-R19：转入台位正被有效预留占着时 409 BAR_TABLE_ALREADY_RESERVED（不能把别人订着的台转给在座客人）。 第十八批 S 段第 167 条 167-R1（BSM:1079「按目标台可邀请人数校验“已接受但尚未入场成员数＋已入场成员数”。超额即阻断转台，只能由开卡人先明确移出足够的未入场成员」「单台转台与合并台组转台同样适用」；ENUM:114 同句）：本台组（含整体转台前旧链）各订台已接受未入场与已入场成员合计超过目标台可邀请人数时 409 BAR_TRANSFER_INVITATION_OVER_CAPACITY，整笔不转，须由开卡人先在 App/小程序移出未入场的被邀请人；转台、并台调整记录的快照加记 invite_capacity_before、invite_capacity_after、invite_occupied（操作前后可邀请人数与已占人数）。",
         "x-auth-context": "staff-token",
         "x-permission": "bar.table_session.transfer",
         "x-data-scope": "project-bar-table",
@@ -83980,11 +84062,12 @@
           },
           "table_type": {
             "type": "string",
-            "description": "分类或动作编码；必须使用后端枚举、配置字典或 OpenAPI 已声明取值。",
+            "description": "台位类型：card_seat 卡座、vip VIP 包坐、bar_counter 吧台位、loose_table 散台（扫码点单）；不填按 card_seat",
             "enum": [
-              "booth",
-              "table",
-              "bar_counter"
+              "card_seat",
+              "vip",
+              "bar_counter",
+              "loose_table"
             ],
             "maxLength": 64
           },
@@ -84350,7 +84433,7 @@
           },
           "pos_transaction_no": {
             "type": "string",
-            "description": "POS 交易流水号；payment_channel=pos 时由收银录入，记入本笔结算流水与 payment.pos_received 留痕，供对账（BSM 第 1066 行「POS（记流水号+收款人）」）。",
+            "description": "POS 交易流水号；payment_channel=pos 时必填，缺失 400 VALIDATION_FAILED；由收银录入，记入本笔结算流水与 payment.pos_received 留痕，供对账（BSM 第 1066 行「POS（记流水号+收款人）」）。",
             "maxLength": 128
           },
           "phone": {
@@ -85900,9 +85983,7 @@
             "enum": [
               "project",
               "merchant",
-              "bar",
-              "ticketing",
-              "amusement"
+              "bar"
             ],
             "maxLength": 64
           },
@@ -85910,10 +85991,6 @@
             "type": "string",
             "description": "业务对象唯一标识；必须引用当前数据范围内存在且允许访问的记录。",
             "maxLength": 64
-          },
-          "force_close": {
-            "type": "boolean",
-            "description": "DailyCloseRequest.force_close 字段；必须按本 schema 的类型、必填项、枚举、长度、单位和对应 PRD 规则校验。"
           }
         }
       },
@@ -88677,6 +88754,11 @@
               "bank_transfer",
               "other"
             ]
+          },
+          "pos_transaction_no": {
+            "type": "string",
+            "description": "POS 交易流水号；pay-deposit 登记定金 channel=pos 时必填，缺失 400 VALIDATION_FAILED、整笔不登记；记入订台（bar_reservations.deposit_pos_transaction_no）与 bar.reservation_deposit_paid 留痕，供对账（BSM 第 1066 行「POS（记流水号+收款人）」）。",
+            "maxLength": 128
           }
         }
       },

@@ -1,6 +1,6 @@
 package com.complex.platform.amusement;
 
-// 文件版本：V0.08
+// 文件版本：V0.09
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -499,6 +499,29 @@ class ParkWideFaultCompensationJdbcIntegrationTests {
                 ordinary.id())).isEqualTo(1);
         assertThat(settlementTransactions.findMissingVerificationSettlementFacts(Integer.MAX_VALUE))
                 .noneMatch(fact -> compensation.id().equals(fact.verificationId()));
+    }
+
+    /**
+     * 第十八批 S 段第 165 条 165-R1（BSM:800「该窗口内票面附带的各项权益（酒水、各酒吧入场等）按完整一份配足、完整可用，但仅限当场消耗」；
+     * ENUM:148「另补一次完整票面权益」）：补偿补发的赠饮行本身就是一个次份（TK-10 已按单次份折算次数），同一场能核满它的全部次数，
+     * 不再按原票这家酒吧的入场次数折算。原票这家酒吧入场 3 次、票面赠饮 2 杯：补发行 2 杯，同一营业日两杯都能核。
+     */
+    @Test
+    void compensationGiftDrinkRowIsOneFullShareUsableWithinOneSession() {
+        addGiftDrinkBinding(800L);
+        jdbcTemplate.update("UPDATE ticket_type_entitlements SET total_times = 2 WHERE id = ?", "bind_tpl_cg08b_gift_" + suffix);
+        Instant now = Instant.now();
+        entitlement("e", "tpl_cg08b_admission_" + suffix, "admission", 3, 0, now.minus(2, ChronoUnit.DAYS),
+                now.plus(5, ChronoUnit.DAYS), "tkt_cg08b_" + suffix, 1);
+        String itemId = issueFullReissue();
+        String gift = compensationEntitlement(itemId, "gift_drink");
+        assertThat(jdbcTemplate.queryForObject("SELECT total_times FROM issued_entitlements WHERE id = ?", Integer.class, gift))
+                .isEqualTo(2);
+        markEntryVerified(compensationEntitlement(itemId, "admission"));
+        assertThat(verify("s165-comp-g1-" + suffix, gift).status()).isEqualTo("success");
+        assertThat(verify("s165-comp-g2-" + suffix, gift).status()).isEqualTo("success");
+        assertThat(jdbcTemplate.queryForObject("SELECT used_times FROM issued_entitlements WHERE id = ?", Integer.class, gift))
+                .isEqualTo(2);
     }
 
     /** FS-012-R3：补偿赠饮照常出 0 元赠饮单，但不再挂「平台→酒吧」赠饮应付，改由承担主体对酒吧挂补偿应付。 */

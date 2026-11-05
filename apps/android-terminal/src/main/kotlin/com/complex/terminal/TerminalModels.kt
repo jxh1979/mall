@@ -1,6 +1,6 @@
 package com.complex.terminal
 
-// 文件版本：V0.15
+// 文件版本：V0.16
 
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
@@ -167,6 +167,19 @@ data class VerificationResponse(
   val status: String = "",
   val resultReason: String? = null,
 )
+
+/**
+ * 第十八批 S 段第 164 条 164-R1（PGM:287「展示给用户的一切文字，包括菜单、页面标题、字段名、状态、枚举取值、按钮、提示、报错……必须全部为中文，不得出现任何英文」）：
+ * 核销应答的原因码（result_reason）转中文，中文同后台「门票订单」页核销原因；首次核销成功为空，空与其它码返回空串、不显示原码。
+ */
+fun verificationReasonZh(reason: String?): String = when (reason) {
+  "window_expired" -> "动态码已过刷新窗口"
+  "signature_invalid" -> "核销凭证签名无效"
+  "session_reentry" -> "本场次再次入场，不扣次"
+  "day_replay" -> "当天已激活，再次入场不扣次"
+  "amusement_verified" -> "游乐入场核销"
+  else -> ""
+}
 
 /**
  * 第十八批 Q 段第 150 条 150-R2（BSM:552「进场之后，工作手机扫客人二维码核销各酒吧入场、赠饮、游乐等场内权益……」；BSM:1036「……到店出示本人的动态入场码核验入场……」）：
@@ -766,11 +779,15 @@ data class ConfirmTicketPaymentRequest(
   val gatewayRef: String? = null,
 )
 
-/** 第十八批 N 段第 120 条 120-R7：订台定金登记 POST /api/v1/bar/reservations/{id}/pay-deposit。 */
+/**
+ * 第十八批 N 段第 120 条 120-R7：订台定金登记 POST /api/v1/bar/reservations/{id}/pay-deposit。
+ * 第十八批 S 段第 169 条 169-R2（BSM:1066「POS（记流水号+收款人）」）：POS 时带 POS 流水号（服务端必填）。
+ */
 @Serializable
 data class BarReservationDepositPayRequest(
   val idempotencyKey: String,
   val channel: String,
+  val posTransactionNo: String? = null,
 )
 
 /**

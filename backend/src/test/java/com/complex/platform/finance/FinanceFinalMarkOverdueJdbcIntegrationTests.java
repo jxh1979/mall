@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -164,8 +164,8 @@ class FinanceFinalMarkOverdueJdbcIntegrationTests {
     }
 
     private void dailyClose(String id, LocalDate businessDate, String scopeType, String scopeId, List<String> marked) {
-        jdbc.update("INSERT INTO finance_daily_closes (id, business_date, scope_type, scope_id, force_close, status, created_at) "
-                + "VALUES (?, ?, ?, ?, false, 'pending_confirm', now())", id, businessDate, scopeType, scopeId);
+        jdbc.update("INSERT INTO finance_daily_closes (id, business_date, scope_type, scope_id, status, created_at) "
+                + "VALUES (?, ?, ?, ?, 'pending_confirm', now())", id, businessDate, scopeType, scopeId);
         for (String category : marked) {
             jdbc.update("INSERT INTO finance_daily_close_final_marks (daily_close_id, category, marked_at) VALUES (?, ?, now())", id, category);
         }

@@ -1,4 +1,4 @@
-// 文件版本：V0.05
+// 文件版本：V0.06
 package com.complex.platform.finance;
 
 import static org.mockito.ArgumentMatchers.any;
@@ -247,7 +247,6 @@ class FinanceControllerTests {
                 LocalDate.parse("2026-06-14"),
                 "project",
                 "project_1",
-                false,
                 "pending_confirm",
                 null,
                 Instant.parse("2026-06-14T23:59:00Z"),
@@ -264,8 +263,7 @@ class FinanceControllerTests {
                                   "idempotency_key": "daily-close-1",
                                   "business_date": "2026-06-14",
                                   "scope_type": "project",
-                                  "scope_id": "project_1",
-                                  "force_close": false
+                                  "scope_id": "project_1"
                                 }
                                 """))
                 .andExpect(status().isOk())

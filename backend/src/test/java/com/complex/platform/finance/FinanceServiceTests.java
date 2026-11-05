@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.14
+// 文件版本：V0.15
 
 import com.complex.platform.support.InMemoryAuditEventRepository;
 import com.complex.platform.support.InMemoryIdempotencyRepository;
@@ -373,8 +373,7 @@ class FinanceServiceTests {
                 List.of(),
                 LocalDate.parse("2026-06-14"),
                 "project",
-                "project_audit_1",
-                false
+                "project_audit_1"
         ));
         PaymentIntentRecord auditIntent = service.createPaymentIntent(new PaymentIntentRequest(
                 "payment-intent-audit",
@@ -1084,8 +1083,7 @@ class FinanceServiceTests {
                 List.of(),
                 LocalDate.parse("2026-06-15"),
                 "project",
-                "proj_dup_test",
-                false
+                "proj_dup_test"
         ));
 
         assertThatThrownBy(() -> service.createDailyClose(new DailyCloseRequest(
@@ -1094,8 +1092,7 @@ class FinanceServiceTests {
                 List.of(),
                 LocalDate.parse("2026-06-15"),
                 "project",
-                "proj_dup_test",
-                false
+                "proj_dup_test"
         )))
                 .isInstanceOf(ApiException.class)
                 .extracting("code")
@@ -1110,8 +1107,7 @@ class FinanceServiceTests {
                 List.of(),
                 LocalDate.parse("2026-06-16"),
                 "bar",
-                "bar_idem_test",
-                false
+                "bar_idem_test"
         );
 
         DailyCloseRecord first = service.createDailyClose(request);
@@ -1129,7 +1125,7 @@ class FinanceServiceTests {
         ArApItemRecord item = service.createArApItem(itemRequest("arap-three-steps", "receivable", 128800L));
         financeRepository.barTotals = new FinanceRepository.DailyCloseSourceTotals(300000L, 0L, 8);
         DailyCloseRecord generated = service.createDailyClose(new DailyCloseRequest(
-                "daily-close-three-steps", "生成", List.of(), LocalDate.parse("2026-06-30"), "project", "project_three", false));
+                "daily-close-three-steps", "生成", List.of(), LocalDate.parse("2026-06-30"), "project", "project_three"));
         assertThat(generated.status()).isEqualTo("pending_confirm");
         assertThat(generated.lockedAt()).isNull();
         assertThat(financeRepository.findArApItemLockedDayCloseId(item.id())).isEmpty();
@@ -1274,8 +1270,7 @@ class FinanceServiceTests {
                 List.of(),
                 LocalDate.parse("2026-06-30"),
                 "project",
-                "project_t7",
-                false));
+                "project_t7"));
 
         PageResponse<DailyCloseSummaryRecord> summaries = service.listDailyCloseSummaries(close.id());
         assertThat(summaries.items()).extracting(DailyCloseSummaryRecord::id).doesNotHaveDuplicates();
@@ -1301,7 +1296,7 @@ class FinanceServiceTests {
 
         DailyCloseRecord close = service.createDailyClose(new DailyCloseRequest(
                 "daily-close-net", "lock", List.of(),
-                LocalDate.parse("2026-06-30"), "project", "project_net", false));
+                LocalDate.parse("2026-06-30"), "project", "project_net"));
 
         List<DailyCloseSummaryRecord> rows = service.listDailyCloseSummaries(close.id()).items();
         // 第三方回流单列存在，且金额单列 120000，refund 不混入 net。
@@ -1327,7 +1322,7 @@ class FinanceServiceTests {
         ArApItemRecord item = service.createArApItem(itemRequest("arap-locked-pay", "receivable", 128800L));
         DailyCloseFixture.lock(service, financeRepository, new DailyCloseRequest(
                 "daily-close-lock-pay", "lock", List.of(),
-                LocalDate.parse("2026-06-30"), "project", "project_lp", false));
+                LocalDate.parse("2026-06-30"), "project", "project_lp"));
 
         assertThatThrownBy(() -> service.registerArApPayment(item.id(), paymentRequest("pay-blocked", 1000L)))
                 .isInstanceOf(ApiException.class)
@@ -1339,7 +1334,7 @@ class FinanceServiceTests {
     void createItemOnLockedBusinessDateRejected() {
         DailyCloseFixture.lock(service, financeRepository, new DailyCloseRequest(
                 "daily-close-lock-create", "lock", List.of(),
-                LocalDate.parse("2026-06-30"), "project", "project_lc", false));
+                LocalDate.parse("2026-06-30"), "project", "project_lc"));
 
         assertThatThrownBy(() -> service.createArApItem(itemRequest("arap-after-lock", "receivable", 1000L)))
                 .isInstanceOf(ApiException.class)
@@ -1352,7 +1347,7 @@ class FinanceServiceTests {
         ArApItemRecord item = service.createArApItem(itemRequest(
                 "long-original-1234567890123456789012345678901234567890", "receivable", 100000L));
         DailyCloseFixture.lock(service, financeRepository, new DailyCloseRequest("long-backfill-close", "lock", List.of(),
-                LocalDate.parse("2026-06-30"), "project", "project_bf", false));
+                LocalDate.parse("2026-06-30"), "project", "project_bf"));
         ArApAdjustmentRecord first = service.requestAdjustment(new com.complex.platform.finance.dto.ArApAdjustmentRequest(
                 "first-adjustment", "补录一", List.of(), item.id(), 1000L, "原件一"));
         ArApAdjustmentRecord second = service.requestAdjustment(new com.complex.platform.finance.dto.ArApAdjustmentRequest(
@@ -1368,7 +1363,7 @@ class FinanceServiceTests {
         ArApItemRecord item = service.createArApItem(itemRequest("arap-backfill", "receivable", 100000L));
         DailyCloseFixture.lock(service, financeRepository, new DailyCloseRequest(
                 "daily-close-backfill", "lock", List.of(),
-                LocalDate.parse("2026-06-30"), "project", "project_bf", false));
+                LocalDate.parse("2026-06-30"), "project", "project_bf"));
 
         // 申请补录 +5000。
         ArApAdjustmentRecord requested = service.requestAdjustment(new com.complex.platform.finance.dto.ArApAdjustmentRequest(
@@ -1426,7 +1421,7 @@ class FinanceServiceTests {
         ArApItemRecord item = service.createArApItem(itemRequest("arap-backfill-cb", "receivable", 100000L));
         DailyCloseFixture.lock(service, financeRepository, new DailyCloseRequest(
                 "daily-close-backfill-cb", "lock", List.of(),
-                LocalDate.parse("2026-06-30"), "project", "project_cb", false));
+                LocalDate.parse("2026-06-30"), "project", "project_cb"));
         ArApAdjustmentRecord requested = service.requestAdjustment(new com.complex.platform.finance.dto.ArApAdjustmentRequest(
                 "adj-req-cb", "backfill", List.of(), item.id(), -40000L, "异议成立调减"));
         stubActor("staff_finance_cb_reviewer");
@@ -1443,7 +1438,7 @@ class FinanceServiceTests {
         ArApItemRecord item = service.createArApItem(itemRequest("arap-backfill-sod", "receivable", 100000L));
         DailyCloseFixture.lock(service, financeRepository, new DailyCloseRequest(
                 "daily-close-backfill-sod", "lock", List.of(),
-                LocalDate.parse("2026-06-30"), "project", "project_sod", false));
+                LocalDate.parse("2026-06-30"), "project", "project_sod"));
         ArApAdjustmentRecord requested = service.requestAdjustment(new com.complex.platform.finance.dto.ArApAdjustmentRequest(
                 "adj-req-sod", "backfill", List.of(), item.id(), 5000L, "self decision attempt"));
 
@@ -1466,7 +1461,7 @@ class FinanceServiceTests {
         ArApItemRecord item = service.createArApItem(itemRequest("arap-backfill-rej", "receivable", 100000L));
         DailyCloseFixture.lock(service, financeRepository, new DailyCloseRequest(
                 "daily-close-backfill-rej", "lock", List.of(),
-                LocalDate.parse("2026-06-30"), "project", "project_bfr", false));
+                LocalDate.parse("2026-06-30"), "project", "project_bfr"));
 
         ArApAdjustmentRecord requested = service.requestAdjustment(new com.complex.platform.finance.dto.ArApAdjustmentRequest(
                 "adj-req-2", "backfill", List.of(), item.id(), 7000L, "disputed"));
@@ -2074,7 +2069,7 @@ class FinanceServiceTests {
 
         DailyCloseRecord close = service.createDailyClose(new DailyCloseRequest(
                 "daily-close-two-src", "lock", List.of(),
-                LocalDate.parse("2026-06-25"), "project", "project_two_src", false));
+                LocalDate.parse("2026-06-25"), "project", "project_two_src"));
 
         List<DailyCloseSummaryRecord> rows = service.listDailyCloseSummaries(close.id()).items();
         assertThat(rows).filteredOn(s -> "channel_ticket".equals(s.sourceStream()))
@@ -2458,7 +2453,7 @@ class FinanceServiceTests {
             List<String> marks = new java.util.ArrayList<>(dc.finalMarkCategories());
             marks.add(category);
             dailyCloses.put(dailyCloseId, new DailyCloseRecord(dc.id(), dc.businessDate(), dc.scopeType(), dc.scopeId(),
-                    dc.forceClose(), dc.status(), dc.lockedAt(), dc.createdAt(), dc.confirmedAt(), dc.archivedAt(), List.copyOf(marks)));
+                    dc.status(), dc.lockedAt(), dc.createdAt(), dc.confirmedAt(), dc.archivedAt(), List.copyOf(marks)));
         }
 
         @Override
@@ -2496,11 +2491,11 @@ class FinanceServiceTests {
         @Override
         public boolean lockedDailyCloseExistsForDate(LocalDate businessDate, String merchantId) {
             // F-OPS-09：镜像 JdbcFinanceRepository 商户级口径——
-            // merchantId 为空看任一 locked 日结；非空仅看 scope_type='merchant' AND scope_id=merchantId。
+            // merchantId 为空看任一 locked 日结；非空仅看 scope_type 为 merchant 或 bar（161-R1）且 scope_id=merchantId。
             return dailyCloses.values().stream()
                     .filter(dc -> businessDate.equals(dc.businessDate()) && "locked".equals(dc.status()))
                     .anyMatch(dc -> merchantId == null
-                            || ("merchant".equals(dc.scopeType()) && merchantId.equals(dc.scopeId())));
+                            || (("merchant".equals(dc.scopeType()) || "bar".equals(dc.scopeType())) && merchantId.equals(dc.scopeId())));
         }
 
         @Override

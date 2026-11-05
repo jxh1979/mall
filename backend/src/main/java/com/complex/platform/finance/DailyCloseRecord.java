@@ -9,7 +9,6 @@ public record DailyCloseRecord(
         LocalDate businessDate,
         String scopeType,
         String scopeId,
-        boolean forceClose,
         String status,
         Instant lockedAt,
         Instant createdAt,

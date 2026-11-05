@@ -9,7 +9,6 @@ public record DailyCloseRequest(
         List<String> evidenceAttachmentIds,
         LocalDate businessDate,
         String scopeType,
-        String scopeId,
-        Boolean forceClose
+        String scopeId
 ) {
 }

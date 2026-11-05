@@ -1,6 +1,6 @@
 package com.complex.terminal
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import com.sun.net.httpserver.HttpServer
 import java.net.InetSocketAddress
@@ -78,7 +78,17 @@ class KioskPaymentApiTest {
     assertEquals(listOf("/api/v1/bar/reservations/resv_1/pay-deposit", "/api/v1/auth/logout"), requests.map { it.path })
     assertTrue(requests.all { it.authorization == "Bearer staff_tok" }, requests.toString())
     assertBody(requests[0].body, "\"idempotency_key\":", "\"channel\":\"cash\"")
+    assertTrue(!requests[0].body.contains("pos_transaction_no"), "现金不带 POS 流水号：${requests[0].body}")
     assertEquals("resident", api.accessToken)
+  }
+
+  /** 第十八批 S 段第 169 条 169-R2（BSM:1066「POS（记流水号+收款人）」）：订台定金 POS 登记带上 POS 流水号。 */
+  @Test
+  fun reservationDepositPosSendsTheTransactionNo() = withServer { api, requests ->
+    api.registerKioskPayment(KioskPayTarget.Reservation("resv_1"), 20000, "pos", staff, posNo = "POS-0003", signOut = true)
+
+    assertEquals("/api/v1/bar/reservations/resv_1/pay-deposit", requests[0].path)
+    assertBody(requests[0].body, "\"channel\":\"pos\"", "\"pos_transaction_no\":\"POS-0003\"")
   }
 
   @Test

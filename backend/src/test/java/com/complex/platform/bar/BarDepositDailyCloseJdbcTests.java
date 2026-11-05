@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import static org.hamcrest.Matchers.allOf;
 import static org.hamcrest.Matchers.containsString;
@@ -216,8 +216,7 @@ class BarDepositDailyCloseJdbcTests {
         return mockMvc.perform(post("/api/v1/finance/daily-closes").with(admin)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(json.writeValueAsString(Map.of("idempotency_key", "bdc-close-" + tag + "-" + s, "operator_note", "日结",
-                        "business_date", businessDate.toString(), "scope_type", "merchant", "scope_id", bar,
-                        "force_close", false))));
+                        "business_date", businessDate.toString(), "scope_type", "merchant", "scope_id", bar))));
     }
 
     /** 前置态：该酒吧此刻开出的一张 30000 待结账单（已下单、已出账、未收款）。 */

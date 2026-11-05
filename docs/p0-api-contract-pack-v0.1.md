@@ -312,6 +312,7 @@
 | `POST` | `/api/v1/bar/orders/{order_id}/deliver` | 出酒/送达确认 | `bar.order.create` |
 | `POST` | `/api/v1/bar/bills/{bill_id}/pay-intents` | 账单支付意图 | `finance.payment_intent.create` |
 | `POST` | `/api/v1/bar/bills/{bill_id}/settle` | 账单结清 | `finance.payment.register` |
+| `POST` | `/api/v1/bar/bills/{bill_id}/stored-value/sms` | 账单储值付款发验证码 | `finance.payment.register` |
 | `POST` | `/api/v1/bar/bills/{bill_id}/commissions/calculate` | 卡座销售提成计算 | `bar.table_commission.calculate` |
 
 ### 8.8 供应链、库存、追踪码和存酒

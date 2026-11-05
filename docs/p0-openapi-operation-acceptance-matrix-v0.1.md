@@ -1,4 +1,4 @@
-# P0 OpenAPI Operation 验收矩阵 V0.50
+# P0 OpenAPI Operation 验收矩阵 V0.51
 
 ## 1. 文档定位
 
@@ -17,7 +17,7 @@
 
 ## 3. Operation 清单
 
-> 当前 `docs/openapi/openapi-p0.json` 共 1245 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
+> 当前 `docs/openapi/openapi-p0.json` 共 1246 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
 
 | 标签 | 方法 | 路径 | operationId | 摘要 | 请求体 | 权限 | 认证上下文 | 数据范围 | 终端/设备能力/调用通道 | 幂等 | 成功事件 | 失败事件 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -99,6 +99,7 @@
 | bar | `POST` | `/api/v1/bar/bills/{bill_id}/commissions/calculate` | `calculateBarTableCommission` | 卡座销售提成计算 | `CommissionCalculateRequest` | `bar.table_commission.calculate` | `staff-token` | `project-bar` | web | 是 | `bar.table_commission.calculated` | `bar.table_commission.calculate_failed` |
 | bar | `POST` | `/api/v1/bar/bills/{bill_id}/pay-intents` | `createBarBillPayIntent` | 酒吧账单支付意图 | `PaymentIntentRequest` | `finance.payment_intent.create` | `staff-token` | `project-bar-table` | tablet, web, staff_work_phone | 是 | `payment.intent_created` | `payment.intent_failed` |
 | bar | `POST` | `/api/v1/bar/bills/{bill_id}/settle` | `settleBarBill` | 账单结清（可带一张本商户折扣券：核销并原子抵扣应付，一次结账一张） | `BarBillSettleRequest` | `finance.payment.register` | `staff-token` | `project-bar-table` | tablet, web, kiosk, staff_work_phone | 是 | `bar.bill.settled` | `bar.bill.settle_failed` |
+| bar | `POST` | `/api/v1/bar/bills/{bill_id}/stored-value/sms` | `requestBarBillStoredValueSmsCode` | 酒吧账单储值付款短信验证码 | `object` | `finance.payment.register` | `staff-token` | `project-bar-table` | web | 否 | `customer.otp_requested` | `customer.otp_request_failed` |
 | bar | `GET` | `/api/v1/bar/orders` | `listBarOrders` | 查询酒吧订单 | `-` | `bar.order.view` | `staff-token` | `project-bar-table` | web | 否 | `bar.order.viewed` | `bar.order.view_failed` |
 | bar | `POST` | `/api/v1/bar/orders` | `createBarOrder` | 点单 | `BarOrderRequest` | `bar.order.create` | `staff-token` | `project-bar-table` | tablet, web, kiosk, staff_work_phone | 是 | `bar.order_created` | `bar.order_create_failed` |
 | bar | `POST` | `/api/v1/bar/orders/{order_id}/bill` | `createBarOrderBill` | 创建酒吧订单账单 | `BarOrderBillCreateRequest` | `bar.order.create` | `staff-token` | `project` | web, kiosk, tablet, staff_work_phone | 是 | `bar.bill.created` | `bar.bill.created_failed` |

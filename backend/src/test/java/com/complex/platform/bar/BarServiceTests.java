@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.16
+// 文件版本：V0.17
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
@@ -4119,7 +4119,7 @@ class BarServiceTests {
 
         // re-settle after reopen succeeds
         BarBillRecord resettled = service.settleBill(bill.id(), new BarBillSettleRequest(
-                "settle-reopen-flow-2", "resettle", List.of(), "pay_reopen_flow_2", null, "pos"));
+                "settle-reopen-flow-2", "resettle", List.of(), "pay_reopen_flow_2", null, "pos", null, "POS-reopen-2"));
         assertThat(resettled.settlementStatus()).isEqualTo("settled");
     }
 
@@ -4189,7 +4189,7 @@ class BarServiceTests {
 
         // 同单组合支付未足额不完成，渠道只记录本次实收，无须手工分商品和小费。
         BarBillRecord first = service.settleBill(bill.id(), new BarBillSettleRequest(
-                "settle-tip-first", "settle", List.of(), "pay_tip_first", payable, "pos"));
+                "settle-tip-first", "settle", List.of(), "pay_tip_first", payable, "pos", null, "POS-tip-first"));
         assertThat(first.settlementStatus()).isEqualTo("partial_settled");
         assertThat(first.paymentStatus()).isEqualTo("partial_paid");
         BarBillRecord settled = service.settleBill(bill.id(), new BarBillSettleRequest(

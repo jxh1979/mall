@@ -1,4 +1,4 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { CnDatePicker } from "../components/CnDatePicker";
@@ -6,7 +6,9 @@ import { AdminPageHeader } from "../components/AdminPageHeader";
 import { MetricDetailLink, useMetricKpiValue } from "../components/MetricDetailEntry";
 import { MiniBars } from "../components/MiniChart";
 import { useAdminResource } from "../hooks/useAdminResource";
+import { KEY_VALUE_LABELS } from "../i18n/fieldLabels";
 import { formatBusinessStatus } from "../i18n/statusLabels";
+import { hasPermissions } from "../security/PermissionGate";
 import type { AdminPageProps, OverviewPayload } from "../types";
 
 function metricValue(data: OverviewPayload | null, metricCode: string): number | null {
@@ -32,7 +34,7 @@ const VOLUME_BARS: Array<{ code: string; label: string }> = [
   { code: "risk.pending_review", label: "待复核" },
 ];
 
-export function OverviewPage({ api, setGlobalError, navigateTo }: AdminPageProps) {
+export function OverviewPage({ api, setGlobalError, navigateTo, effectivePermissions }: AdminPageProps) {
   const [data, setData] = React.useState<OverviewPayload | null>(null);
   const [dateFrom, setDateFrom] = React.useState("");
   const [dateTo, setDateTo] = React.useState("");
@@ -88,6 +90,24 @@ export function OverviewPage({ api, setGlobalError, navigateTo }: AdminPageProps
     : (data?.metrics?.["supply.received"]?.dimension?.groups as Array<Record<string, unknown>> | undefined)) ?? [];
   const backfillValue = metricValue(data, "risk.manual_backfill");
   const backfillStatusCounts = (data?.metrics?.["risk.manual_backfill"]?.dimension?.statusCounts ?? {}) as Record<string, unknown>;
+  // 第十八批 S 段第 173 条 173-R1（BSM:1824「财务：日结状态、对账差异、结算待确认。」；BSM:1747「待生成、待确认、有差异、已确认、已锁定、已归档」）：
+  // 看板所看营业日、查看人可见范围内各日结按状态计数，复用日结列表接口（范围与「有差异」由后端算）；一笔都没有即「待生成」（同 143-R1）。
+  // 状态不能相加，不进指标目录、不写快照。持 finance.daily_close.manage 才请求与显示；失败显示「—」。
+  // ponytail: 每日日结按范围一行，200 行够用，超了再分页。
+  const canSeeDailyClose = hasPermissions(effectivePermissions, ["finance.daily_close.manage"]);
+  const [dailyCloseStatuses, setDailyCloseStatuses] = React.useState<string[] | null>(null);
+  React.useEffect(() => {
+    setDailyCloseStatuses(null);
+    if (!canSeeDailyClose || !asOfDay) return;
+    let cancelled = false;
+    api
+      .getPaged<{ status?: string }>(`/api/v1/finance/daily-closes?business_date=${asOfDay}&page=1&size=200`)
+      .then((page) => { if (!cancelled) setDailyCloseStatuses(page.items.map((row) => row.status ?? "")); })
+      .catch(() => undefined);
+    return () => { cancelled = true; };
+  }, [api, canSeeDailyClose, asOfDay]);
+  const dailyCloseDisplay = dailyCloseStatuses === null ? "—" : dailyCloseStatuses.length === 0 ? "待生成"
+    : Object.entries(KEY_VALUE_LABELS.daily_close_status ?? {}).map(([code, label]) => `${label} ${dailyCloseStatuses.filter((status) => status === code).length}`).join(" · ");
 
   const revenueValues = REVENUE_BARS.map((item) =>
     (item.code === "revenue.ticket" ? ticketDisplay : item.code === "revenue.bar" ? barDisplay : metricValue(data, item.code)) ?? 0);
@@ -127,6 +147,7 @@ export function OverviewPage({ api, setGlobalError, navigateTo }: AdminPageProps
             return <span key={String(group.itemId ?? index)} style={{ display: "block" }}>{`${String(group.itemName ?? "")} ${Number(group.acceptedQuantity ?? 0)}${unit}`}{rejected > 0 ? `（拒收 ${rejected}${unit}）` : null}</span>;
           })}</button><small>按商品及单位分列合格接收，不同单位不相加，查看采购单{receivedKpi.status === "ready" ? <> · <MetricDetailLink navigateTo={navigateTo} metric="supply.received" from={asOfDay} to={asOfDay} testid="overview-metric-detail-received" /></> : null}</small></div>
           <div className="admin-kpi-card admin-kpi-card--clickable" data-testid="overview-kpi-backfill"><span>补录数量</span><button type="button" className="admin-kpi-value" data-testid="overview-kpi-backfill-value" onClick={() => navigateTo?.("ADM-GOV-006")}>{backfillValue === null ? "—" : String(backfillValue)}</button><small data-testid="overview-kpi-backfill-status">{BACKFILL_STATUSES.map((status) => `${formatBusinessStatus(status)} ${Number(backfillStatusCounts[status] ?? 0)}`).join(" · ")}</small><small>提交即计一笔（锁账后补录、领取时刻补证），查看主管复核{backfillKpi.status === "ready" ? <> · <MetricDetailLink navigateTo={navigateTo} metric="risk.manual_backfill" from={asOfDay} to={asOfDay} testid="overview-metric-detail-backfill" /></> : null}</small></div>
+          {canSeeDailyClose ? <div className="admin-kpi-card admin-kpi-card--clickable" data-testid="overview-kpi-dayclose"><span>日结状态</span><button type="button" className="admin-kpi-value" style={{ fontSize: 14, whiteSpace: "normal" }} data-testid="overview-kpi-dayclose-value" onClick={() => navigateTo?.("ADM-FIN-002")}>{dailyCloseDisplay}</button><small>所看营业日各范围日结，查不到即待生成，查看对账差异页日结区块</small></div> : null}
         </div>
         {hasRevenue || hasVolume ? (
           <div className="admin-chart-panel" data-testid="overview-charts">

@@ -1,5 +1,5 @@
 package com.complex.platform.analytics;
-// 文件版本：V0.09
+// 文件版本：V0.10
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
 import com.complex.platform.contract.SpaceRentalDerivationSql;
@@ -704,14 +704,25 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
     public Map<String, BigDecimal> sumContractRentReceivableByMerchant(LocalDate businessDate, String windowDomain) {
         // P1-C：合同租金/物业/能源/车位月租应收按 due_date 当日（期首）逐期确认收入，并入商户行级 revenue.net 租金分量（车位月租照旧是合同账单，第十二批裁决补充第 7 条）。
         // 用 amount_cent（已挂账应收，权责发生制确认），与酒吧/售票的现金口径合并入 net（任务要求接 ar_ap receivable）。
+        // 第十八批 S 段第 160 条 160-R1（ENUM:190「且不改动已锁定的日结金额：补录金额归入当期」；第七批裁决 19「金额归入当期、不改原日结金额」）：
+        // 锁定后补录批准追加的冲正行与重述行（只有它们带 adjustment_id）沿用原行到期日（缴费期限不变），收入按批准当日（所在地日期）计补录差额，
+        // 不改写原到期日；合同变更作废的冲正行不带 adjustment_id，仍按到期日。
         return keyTotals("""
                 SELECT merchant_id, COALESCE(SUM(amount_cent), 0) AS total
                   FROM ar_ap_items
                  WHERE direction = 'receivable'
                    AND source_type IN ('contract_rent', 'contract_property_fee', 'contract_energy_fee', 'contract_parking_monthly')
-                   AND due_date = :business_date
+                   AND ((adjustment_id IS NULL AND due_date = :business_date)
+                        OR (adjustment_id IS NOT NULL AND created_at >= :day_start AND created_at < :day_end))
                  GROUP BY merchant_id
-                """, new MapSqlParameterSource("business_date", businessDate));
+                """, contractRevenueDay(businessDate));
+    }
+
+    /** 160-R1：合同应收归日参数——到期日，及锁定后补录派生行按批准时刻所落的所在地日历日窗（同 FinanceService.today()）。 */
+    private static MapSqlParameterSource contractRevenueDay(LocalDate businessDate) {
+        return new MapSqlParameterSource("business_date", businessDate)
+                .addValue("day_start", timestampWithTimeZone(businessDate.atStartOfDay(com.complex.platform.common.LocalZone.ID).toInstant()))
+                .addValue("day_end", timestampWithTimeZone(businessDate.plusDays(1).atStartOfDay(com.complex.platform.common.LocalZone.ID).toInstant()));
     }
 
 
@@ -909,9 +920,10 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
                   FROM ar_ap_items
                  WHERE direction = 'receivable'
                    AND source_type IN ('contract_rent', 'contract_property_fee', 'contract_energy_fee', 'contract_parking_monthly')
-                   AND due_date = :business_date
+                   AND ((adjustment_id IS NULL AND due_date = :business_date)
+                        OR (adjustment_id IS NOT NULL AND created_at >= :day_start AND created_at < :day_end))
                  GROUP BY 1
-                """, new MapSqlParameterSource("business_date", businessDate));
+                """, contractRevenueDay(businessDate));
     }
 
     @Override

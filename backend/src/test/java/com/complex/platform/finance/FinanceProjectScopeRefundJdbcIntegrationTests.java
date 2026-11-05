@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -210,8 +210,8 @@ class FinanceProjectScopeRefundJdbcIntegrationTests {
     private String lockedReceivable(String projectId, String merchantId) {
         String close = "psr_close_" + UUID.randomUUID().toString().substring(0, 12);
         jdbc.update("""
-                INSERT INTO finance_daily_closes(id,business_date,scope_type,scope_id,force_close,status,locked_at,created_at)
-                VALUES(?,current_date,'merchant',?,FALSE,'locked',now(),now())
+                INSERT INTO finance_daily_closes(id,business_date,scope_type,scope_id,status,locked_at,created_at)
+                VALUES(?,current_date,'merchant',?,'locked',now(),now())
                 """, close, merchantId);
         String item = "psr_lock_" + UUID.randomUUID().toString().substring(0, 12);
         jdbc.update("""

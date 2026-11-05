@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.07
+// 文件版本：V0.08
 
 import static com.complex.platform.bar.BarValidation.*;
 
@@ -230,6 +230,17 @@ public class BarTableSessionService {
             throw ApiException.conflict("BAR_TABLE_NOT_TRANSFERABLE", "转入台位未启用");
         }
         requireNotHeldByOther(targetTable.id(), null);
+        // 第十八批 S 段第 167 条 167-R1（BSM:1079「按目标台可邀请人数校验“已接受但尚未入场成员数＋已入场成员数”。超额即阻断转台，
+        // 只能由开卡人先明确移出足够的未入场成员」「单台转台与合并台组转台同样适用」；ENUM:114 同句）：先锁台组根会话行，
+        // 台组（含整体转台前旧链）各订台的成员合计超过目标台可邀请人数即 409，整笔不转。
+        repository.lockTableSession(session.id());
+        int inviteOccupied = BarInvitationQuota.members(repository, session.id()).size();
+        int inviteAfter = targetTable.allowedPassFreeGuestCount();
+        if (inviteOccupied > inviteAfter) {
+            throw ApiException.conflict("BAR_TRANSFER_INVITATION_OVER_CAPACITY", "已接受未入场与已入场共 " + inviteOccupied
+                    + " 人，超过目标台可邀请人数 " + inviteAfter + " 人，须由开卡人先在 App/小程序移出未入场的被邀请人后再转台");
+        }
+        int inviteBefore = BarInvitationQuota.capacity(repository, session.id());
         // 第十批 TK-24-R2（BSM L1079「合并台组整体转台到目标台后……原台及原并台关系不再参加之后的……数值计算」
         // 「原台已经发生的消费金额随台结转」；DEC-R8-95）：转台前记下当前并台链与合计阈值；转台后旧链子会话改
         // merged_transferred（只保留消费与留款、不再参与阈值、并台与拆台），目标台成为新的独立起点。
@@ -279,7 +290,7 @@ public class BarTableSessionService {
                 targetTable.minConsumptionCent() > session.minConsumptionSnapshotCent(),
                 actual.idempotencyKey(),
                 safeList(actual.evidenceAttachmentIds()),
-                transferSnapshot(session, updated, oldChain)
+                withInviteCapacity(transferSnapshot(session, updated, oldChain), inviteBefore, inviteAfter, inviteOccupied)
         ));
     }
 
@@ -305,6 +316,12 @@ public class BarTableSessionService {
         // 合并前先各取两侧台组阈值（并台后 family 已含被并侧，不能再分开取）。
         long thresholdBefore = BarMinSpend.thresholdCent(repository, primary.id());
         long thresholdAfter = thresholdBefore + BarMinSpend.thresholdCent(repository, merged.id());
+        // 第十八批 S 段第 167 条 167-R1（BSM:1079「合并后的可邀请人数……按两侧所包含全部原台的对应数值相加计算」「记录内容包括……操作前后可邀请人数」）：
+        // 并台本身不校验名额（两侧各自不超额，相加也不超），只留痕前后可邀请人数与已占人数。
+        int inviteBefore = BarInvitationQuota.capacity(repository, primary.id());
+        int inviteAfter = inviteBefore + BarInvitationQuota.capacity(repository, merged.id());
+        int inviteOccupied = BarInvitationQuota.members(repository, primary.id()).size()
+                + BarInvitationQuota.members(repository, merged.id()).size();
         Instant now = Instant.now();
         // 2c-5：两个 session 均走 DB 级乐观锁 CAS，防并发合台重复占用。
         BarTableSessionRecord updatedPrimary = sessionWithNextVersion(primary, now);
@@ -336,7 +353,7 @@ public class BarTableSessionService {
                 false,
                 actual.idempotencyKey(),
                 safeList(actual.evidenceAttachmentIds()),
-                sessionSnapshot(primary, updatedPrimary)
+                withInviteCapacity(sessionSnapshot(primary, updatedPrimary), inviteBefore, inviteAfter, inviteOccupied)
         ));
     }
 
@@ -357,6 +374,8 @@ public class BarTableSessionService {
         BarTableSplitRequest actual = requireRequest(request);
         BarTableSessionRecord primary = requireOpenTableSession(primarySessionId);
         checkMerchantOwnership(primary.merchantId());
+        // 第十八批 S 段第 167 条 167-R2：先锁主会话（台组根）行，与台组内的邀请接受、入场名额校验串行。
+        repository.lockTableSession(primary.id());
         requireSessionVersion(primary, actual.primarySessionVersion());
         String mode = trimToDefault(actual.mode(), "last_merge");
         if (!List.of("last_merge", "single", "all").contains(mode)) {
@@ -451,6 +470,24 @@ public class BarTableSessionService {
             }
             restored.add(reopened);
         }
+        // 第十八批 S 段第 167 条 167-R2（BSM:1079「分别按本次拆台后形成的每个独立原台或合并台组的可邀请人数，校验其“已接受但尚未入场成员数＋
+        // 已入场成员数”；任一拆分结果超额即阻断拆台，系统不得自动移出成员或释放名额」「一次全部拆开必须先完成……逐台名额校验，再一次性成功或
+        // 整体失败，不得部分拆开」；ENUM:114 同句）：重新挂接后逐个结果台组（剩余主台组与各拆出台组）计名额与已占（成员按其订台所属会话归原台），
+        // 任一超额即 409，整笔（含订单归属）在 BarService.splitTableSessions 的事务内回滚。
+        List<BarTableSessionRecord> results = new ArrayList<>(restored);
+        results.addFirst(updatedPrimary);
+        List<String> inviteResults = new ArrayList<>();
+        for (BarTableSessionRecord result : results) {
+            int capacity = BarInvitationQuota.capacity(repository, result.id());
+            int occupied = BarInvitationQuota.members(repository, result.id()).size();
+            if (occupied > capacity) {
+                throw ApiException.conflict("BAR_SPLIT_INVITATION_OVER_CAPACITY", "拆台后台位 "
+                        + repository.findTableById(result.tableId()).orElseThrow().tableName() + " 已接受未入场与已入场共 " + occupied
+                        + " 人，超过可邀请人数 " + capacity + " 人，须由开卡人先移出未入场的被邀请人");
+            }
+            inviteResults.add("{\"session_id\":\"" + jsonText(result.id()) + "\",\"table_id\":\"" + jsonText(result.tableId())
+                    + "\",\"invite_capacity\":" + capacity + ",\"invite_occupied\":" + occupied + "}");
+        }
         if (serviceResponsibilities != null) serviceResponsibilities.recordSplit(restored, now, "split:" + key);
         // 定金随结果台组重判（BSM L1062）；低消不足不阻断。
         if (depositSettlements != null) {
@@ -475,7 +512,7 @@ public class BarTableSessionService {
                 false,
                 key,
                 safeList(actual.evidenceAttachmentIds()),
-                splitSnapshot(primary, updatedPrimary, mode, roots, familySessions, assignments)
+                splitSnapshot(primary, updatedPrimary, mode, roots, familySessions, assignments, inviteResults)
         ));
     }
 
@@ -502,9 +539,9 @@ public class BarTableSessionService {
                 sourceSessionId, session.sessionVersion() + 1, session.createdAt(), now);
     }
 
-    /** 拆台快照：拆前并台树、拆台方式、拆出会话与人工订单归属（只读留痕）。 */
+    /** 拆台快照：拆前并台树、拆台方式、拆出会话与人工订单归属；167-R2 加记各结果台组的可邀请人数与已占人数（只读留痕）。 */
     private String splitSnapshot(BarTableSessionRecord before, BarTableSessionRecord after, String mode, List<String> roots,
-            List<BarTableSessionRecord> familySessions, Map<String, String> assignments) {
+            List<BarTableSessionRecord> familySessions, Map<String, String> assignments, List<String> inviteResults) {
         String base = sessionSnapshot(before, after);
         String tree = familySessions.stream()
                 .map(s -> "{\"id\":\"" + jsonText(s.id()) + "\",\"source_session_id\":"
@@ -515,7 +552,8 @@ public class BarTableSessionService {
                 .map(e -> "{\"order_id\":\"" + jsonText(e.getKey()) + "\",\"session_id\":\"" + jsonText(e.getValue()) + "\"}")
                 .reduce((a, b) -> a + "," + b).orElse("");
         return base.substring(0, base.length() - 1) + ",\"mode\":\"" + jsonText(mode) + "\",\"split_session_ids\":[" + rootList
-                + "],\"tree_before\":[" + tree + "],\"order_assignments\":[" + orders + "]}";
+                + "],\"tree_before\":[" + tree + "],\"order_assignments\":[" + orders + "],\"invite_results\":["
+                + String.join(",", inviteResults) + "]}";
     }
 
     private BarTableSessionRecord requireOpenTableSession(String sessionId) {
@@ -658,6 +696,12 @@ public class BarTableSessionService {
         String base = sessionSnapshot(before, after);
         String chain = oldChain.stream().map(id -> "\"" + jsonText(id) + "\"").reduce((a, b) -> a + "," + b).orElse("");
         return base.substring(0, base.length() - 1) + ",\"transferred_chain\":[" + chain + "]}";
+    }
+
+    /** 第十八批 S 段第 167 条 167-R1（BSM:1079「记录内容包括……操作前后可邀请人数……邀请与成员归属」）：快照追加前后可邀请人数与已占人数。 */
+    private static String withInviteCapacity(String snapshot, int before, int after, int occupied) {
+        return snapshot.substring(0, snapshot.length() - 1) + ",\"invite_capacity_before\":" + before
+                + ",\"invite_capacity_after\":" + after + ",\"invite_occupied\":" + occupied + "}";
     }
 
     private BarTableSessionAdjustmentRecord newAdjustment(

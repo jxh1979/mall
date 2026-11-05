@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -256,7 +256,7 @@ class BarBusinessDayWindowsJdbcIntegrationTests {
 
     private DailyCloseRequest dailyClose(LocalDate day, String merchantId) {
         return new DailyCloseRequest("bbw-close-" + suffix + "-" + seq.incrementAndGet(), "日结", List.of(), day, "merchant",
-                merchantId, false);
+                merchantId);
     }
 
     private String close(LocalDate day, String merchantId) {

@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.05
+// 文件版本：V0.06
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.groups.Tuple.tuple;
@@ -53,6 +53,9 @@ class FinanceJdbcIntegrationTests {
     @Autowired
     private com.complex.platform.bar.BarRepository bars;
 
+    @Autowired
+    private FinanceService finance;
+
     @Test
     void dailyCloseLockChecksAcceptNullMerchantScope() {
         // 2026-07-02 现网500根因:平台口径(merchant scope=null)时 :merchant_id 参数无 SQL 类型,
@@ -64,7 +67,7 @@ class FinanceJdbcIntegrationTests {
                 Integer.class, date);
         // 使用真实日结外键，允许其他提交型集成测试已在同日留下收款记录。
         repository.saveDailyClose(new DailyCloseRecord("dc_mz_null_scope", date, "project",
-                "project_jdbc", false, "locked", Instant.now(), Instant.now(), Instant.now(), null, List.of()));
+                "project_jdbc", "locked", Instant.now(), Instant.now(), Instant.now(), null, List.of()));
         assertThat(repository.lockArApItemsForDailyClose("dc_mz_null_scope", date, null)).isEqualTo(pendingItems);
     }
 
@@ -444,14 +447,24 @@ class FinanceJdbcIntegrationTests {
         String prefix = "obs1307e_" + java.util.UUID.randomUUID().toString().substring(0, 8);
         seedReflowRows(prefix, inDay);
         seedSelfAndChannelTickets(prefix, prefix + "_mch_a", date, inDay);
+        // 第十八批 S 段第 161 条 161-R2：项目范围日结只汇总该综合体的业务，本例的商户与门票都挂在该综合体下。
+        String project = "project_" + prefix;
+        insertProject(project);
+        jdbcTemplate.update("UPDATE merchants SET project_id = ? WHERE id IN (?, ?)", project, prefix + "_mch_a", prefix + "_mch_b");
+        jdbcTemplate.update("UPDATE ticket_orders SET project_id = ? WHERE id IN (?, ?, ?)", project,
+                prefix + "_miniapp", prefix + "_meituan", prefix + "_douyin");
         RequestPostProcessor finance = financeActor("usr_" + prefix);
         String body = mockMvc.perform(post("/api/v1/finance/daily-closes").with(finance)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"idempotency_key\":\"" + prefix + "\",\"operator_note\":\"日结\","
                                 + "\"business_date\":\"2097-06-26\",\"scope_type\":\"project\","
-                                + "\"scope_id\":\"project_" + prefix + "\",\"force_close\":false}"))
+                                + "\"scope_id\":\"project_" + prefix + "\"}"))
                 .andExpect(status().isOk())
+                // 第十八批 S 段第 163 条 163-R1：HTML 与裁决都没有强制日结，返回体不再带 force_close，表上已删列（V598）。
+                .andExpect(jsonPath("$.data.force_close").doesNotExist())
                 .andReturn().getResponse().getContentAsString();
+        assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = current_schema()"
+                + " AND table_name = 'finance_daily_closes' AND column_name = 'force_close'", Integer.class)).isZero();
         String dailyCloseId = JsonPath.read(body, "$.data.id");
         mockMvc.perform(get("/api/v1/finance/daily-closes/" + dailyCloseId + "/summaries").with(finance))
                 .andExpect(status().isOk())
@@ -660,6 +673,295 @@ class FinanceJdbcIntegrationTests {
         assertThat(lockedDayClose(itemB)).isNull();
         String closeB = lockDailyClose(financeBp, "dcm-b-" + s, day.toString(), "bar", barB);
         assertThat(lockedDayClose(itemB)).isEqualTo(closeB);
+    }
+
+    // ─── 第十八批 S 段第 161 条 161-R1：酒吧范围日结＝该酒吧 ─────────────────────
+    /**
+     * ENUM:190「日结锁定后的补录须上级审批，且不改动已锁定的日结金额」；PGM:664「单店层面的财务工作——日结确认与锁定……由该酒吧对应的财务 BP 负责」：
+     * 平台侧财务 BP 锁了 A 酒吧 bar 范围的日结后，A 的商户主管对 A 当日已结账单「作废并冲正」被拒 409 DAY_CLOSE_LOCKED（须走补录调整），
+     * 账单仍在异常、收款流水不冲正；B 酒吧商户主管同日作废并冲正照常。真实请求形状（蛇形键）。
+     */
+    @Test
+    void barScopeLockedDailyCloseFreezesOnlyThatBarsWrites() throws Exception {
+        String s = suffix();
+        String project = "project_dbl_" + s;
+        String barA = "bar_dbl_a_" + s;
+        String barB = "bar_dbl_b_" + s;
+        insertProject(project);
+        insertBar(barA, project);
+        insertBar(barB, project);
+        LocalDate day = farDay(s);
+        Instant inDay = businessDayResolver.start(null, barA, day).plusSeconds(3600);
+        String billA = settledBill(barA, "la" + s, 30_000L, inDay);
+        String billB = settledBill(barB, "lb" + s, 20_000L, inDay);
+        StaffRequestFixture staffs = new StaffRequestFixture(jdbcTemplate);
+        RequestPostProcessor financeBp = staffs.staff("usr_dbl_bp_" + s, "staff", project, null,
+                "finance.daily_close.lock", "finance.daily_close.manage");
+        RequestPostProcessor supervisorA = staffs.staff("usr_dbl_a_" + s, "staff", project, barA,
+                "bar.bill.adjust", "bar.bill.anomaly.resolve");
+        RequestPostProcessor supervisorB = staffs.staff("usr_dbl_b_" + s, "staff", project, barB,
+                "bar.bill.adjust", "bar.bill.anomaly.resolve");
+
+        lockDailyClose(financeBp, "dbl-a-" + s, day.toString(), "bar", barA);
+        billAction(supervisorB, billB, "anomaly", "{\"reason\":\"客人称整单记错卡座\",\"idempotency_key\":\"dbl-xb-" + s + "\"}")
+                .andExpect(status().isOk());
+        billAction(supervisorB, billB, "anomaly/resolve", "{\"resolution\":\"voided_reversed\",\"reason\":\"作废重开\","
+                + "\"idempotency_key\":\"dbl-vb-" + s + "\"}")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.payment_status").value("void"));
+        billAction(supervisorA, billA, "anomaly", "{\"reason\":\"客人称整单记错卡座\",\"idempotency_key\":\"dbl-xa-" + s + "\"}")
+                .andExpect(status().isOk());
+        billAction(supervisorA, billA, "anomaly/resolve", "{\"resolution\":\"voided_reversed\",\"reason\":\"作废重开\","
+                + "\"idempotency_key\":\"dbl-va-" + s + "\"}")
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.detail_code").value("DAY_CLOSE_LOCKED"));
+        assertThat(jdbcTemplate.queryForObject("SELECT payment_status FROM bar_bills WHERE id = ?", String.class, billA))
+                .isEqualTo("abnormal");
+        assertThat(jdbcTemplate.queryForObject("SELECT reversed FROM bar_bill_settlements WHERE bill_id = ?", Boolean.class, billA))
+                .isFalse();
+    }
+
+    /** 161-R1：A 酒吧 bar 范围日结的七源汇总，酒吧源只含 A 的结算，不含同日 B 酒吧的。真实请求形状（蛇形键）。 */
+    @Test
+    void barScopeDailyCloseSummarySumsOnlyThatBar() throws Exception {
+        String s = suffix();
+        String project = "project_dbm_" + s;
+        String barA = "bar_dbm_a_" + s;
+        String barB = "bar_dbm_b_" + s;
+        insertProject(project);
+        insertBar(barA, project);
+        insertBar(barB, project);
+        LocalDate day = farDay(s);
+        Instant inDay = businessDayResolver.start(null, barA, day).plusSeconds(3600);
+        settledBill(barA, "ma" + s, 30_000L, inDay);
+        settledBill(barB, "mb" + s, 20_000L, inDay);
+        RequestPostProcessor financeBp = new StaffRequestFixture(jdbcTemplate).staff("usr_dbm_bp_" + s, "staff", project, null,
+                "finance.daily_close.lock", "finance.daily_close.manage");
+
+        String closeA = JsonPath.read(generate(financeBp, "dbm-a-" + s, day, "bar", barA).andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString(), "$.data.id");
+        mockMvc.perform(get("/api/v1/finance/daily-closes/" + closeA + "/summaries").with(financeBp))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items[?(@.source_stream == 'bar')].amount_cent").value(30000))
+                .andExpect(jsonPath("$.data.items[?(@.source_stream == 'bar')].order_count").value(1));
+    }
+
+    /**
+     * 161-R1（ENUM:221「异常单据未处置完毕，所属日结不得确认锁定」；PGM:664 单店日结由该酒吧对应的财务 BP 负责）：A 酒吧 bar 范围日结的各道闸
+     * 只看 A——B 酒吧同一营业日有待处置的账单异常、未结清的账单、有差异待复核且财务未见证的收银班次时，A 的日结列表仍为待确认、五类标齐后确认照常；
+     * B 自己的 bar 范围日结显示有差异。真实请求形状（蛇形键）。
+     */
+    @Test
+    void barScopeDailyCloseGatesLookOnlyAtThatBar() throws Exception {
+        String s = suffix();
+        String project = "project_dbg_" + s;
+        String barA = "bar_dbg_a_" + s;
+        String barB = "bar_dbg_b_" + s;
+        insertProject(project);
+        insertBar(barA, project);
+        insertBar(barB, project);
+        LocalDate day = farDay(s);
+        Instant inDay = businessDayResolver.start(null, barB, day).plusSeconds(3600);
+        abnormalBill(barB, "g" + s, inDay);
+        unbalancedShift(barB, project, "g" + s, inDay);
+        RequestPostProcessor financeBp = new StaffRequestFixture(jdbcTemplate).staff("usr_dbg_bp_" + s, "staff", project, null,
+                "finance.daily_close.lock", "finance.daily_close.manage");
+        String closeA = JsonPath.read(generate(financeBp, "dbg-a-" + s, day, "bar", barA).andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString(), "$.data.id");
+        generate(financeBp, "dbg-b-" + s, day, "bar", barB).andExpect(status().isOk());
+        com.complex.platform.support.DailyCloseFixture.markAllFinal(repository, closeA);
+
+        mockMvc.perform(get("/api/v1/finance/daily-closes?business_date=" + day + "&scope_type=bar&scope_id=" + barA
+                        + "&page=1&size=20").with(financeBp))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items[0].status").value("pending_confirm"));
+        mockMvc.perform(get("/api/v1/finance/daily-closes?business_date=" + day + "&scope_type=bar&scope_id=" + barB
+                        + "&page=1&size=20").with(financeBp))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items[0].status").value("has_difference"));
+        closeAction(financeBp, closeA, "confirm", "dbg-cf-" + s).andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("confirmed"));
+    }
+
+    // ─── 第十八批 S 段第 161 条 161-R2：综合体（项目范围）日结＝该综合体除酒吧外的业务 ─────────────────────
+    /**
+     * 第十八批裁决 35「酒吧逐店逐日查；游乐等按综合体逐日查」；ENUM:221「异常单据未处置完毕，所属日结不得确认锁定」；PGM:664 单店日结由该酒吧对应的财务 BP 负责：
+     * 平台侧财务 BP（无商户归属）对综合体 P 生成、确认、锁定项目范围日结都成功；P 下酒吧当日有待处置异常且未结清的账单、有差异待复核的收银班次，
+     * 不影响 P 的日结（列表仍为待确认、确认照常）；锁定只锁 P 的非酒吧当日台账（含台账项目为空、商户属 P 的），P 下酒吧的与综合体 Q 的当日台账不锁。
+     * 真实请求形状（蛇形键）。
+     */
+    @Test
+    void projectScopeDailyCloseLocksOnlyThatComplexNonBarItems() throws Exception {
+        String s = suffix();
+        String p = "project_dpl_p_" + s;
+        String q = "project_dpl_q_" + s;
+        String bar = "bar_dpl_" + s;
+        String shopP = "mch_dpl_p_" + s;
+        String shopQ = "mch_dpl_q_" + s;
+        insertProject(p);
+        insertProject(q);
+        insertBar(bar, p);
+        insertShop(shopP, p);
+        insertShop(shopQ, q);
+        LocalDate day = farDay(s);
+        Instant inDay = businessDayResolver.start(null, bar, day).plusSeconds(3600);
+        abnormalBill(bar, "pl" + s, inDay);
+        unbalancedShift(bar, p, "pl" + s, inDay);
+        String itemP = dueItem("arap_dpl_p_" + s, shopP, p, day);
+        String itemShop = dueItem("arap_dpl_m_" + s, shopP, null, day);
+        String itemBar = dueItem("arap_dpl_b_" + s, bar, p, day);
+        String itemQ = dueItem("arap_dpl_q_" + s, shopQ, q, day);
+        RequestPostProcessor financeBp = new StaffRequestFixture(jdbcTemplate).staff("usr_dpl_bp_" + s, "staff", p, null,
+                "finance.daily_close.lock", "finance.daily_close.manage");
+
+        String close = JsonPath.read(generate(financeBp, "dpl-" + s, day, "project", p).andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString(), "$.data.id");
+        com.complex.platform.support.DailyCloseFixture.markAllFinal(repository, close);
+        mockMvc.perform(get("/api/v1/finance/daily-closes?business_date=" + day + "&scope_type=project&scope_id=" + p
+                        + "&page=1&size=20").with(financeBp))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items[0].status").value("pending_confirm"));
+        closeAction(financeBp, close, "confirm", "dpl-cf-" + s).andExpect(status().isOk());
+        closeAction(financeBp, close, "lock", "dpl-lk-" + s).andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("locked"));
+        assertThat(lockedDayClose(itemP)).isEqualTo(close);
+        assertThat(lockedDayClose(itemShop)).isEqualTo(close);
+        assertThat(lockedDayClose(itemBar)).isNull();
+        assertThat(lockedDayClose(itemQ)).isNull();
+    }
+
+    /**
+     * 161-R2：综合体 P 项目范围日结的七源汇总——酒吧源记 0（酒吧逐店另出日结）；官方售票源只含 P 的非酒吧门票，不含综合体 Q 的单与 P 下单店酒吧门票。
+     * 真实请求形状（蛇形键）。
+     */
+    @Test
+    void projectScopeDailyCloseSummaryCountsOnlyThatComplexNonBarSources() throws Exception {
+        String s = suffix();
+        String p = "project_dps_p_" + s;
+        String q = "project_dps_q_" + s;
+        String bar = "bar_dps_" + s;
+        String shopP = "mch_dps_p_" + s;
+        String shopQ = "mch_dps_q_" + s;
+        insertProject(p);
+        insertProject(q);
+        insertBar(bar, p);
+        insertShop(shopP, p);
+        insertShop(shopQ, q);
+        LocalDate day = farDay(s);
+        settledBill(bar, "ps" + s, 30_000L, businessDayResolver.start(null, bar, day).plusSeconds(3600));
+        projectTicket("tko_dps_p_" + s, shopP, p, null, 10_000L, day);
+        projectTicket("tko_dps_q_" + s, shopQ, q, null, 20_000L, day);
+        projectTicket("tko_dps_b_" + s, bar, p, bar, 5_000L, day);
+        RequestPostProcessor financeBp = new StaffRequestFixture(jdbcTemplate).staff("usr_dps_bp_" + s, "staff", p, null,
+                "finance.daily_close.lock", "finance.daily_close.manage");
+
+        String close = JsonPath.read(generate(financeBp, "dps-" + s, day, "project", p).andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString(), "$.data.id");
+        mockMvc.perform(get("/api/v1/finance/daily-closes/" + close + "/summaries").with(financeBp))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items[?(@.source_stream == 'official_ticket')].amount_cent").value(10000))
+                .andExpect(jsonPath("$.data.items[?(@.source_stream == 'official_ticket')].order_count").value(1))
+                .andExpect(jsonPath("$.data.items[?(@.source_stream == 'bar')].amount_cent").value(0))
+                .andExpect(jsonPath("$.data.items[?(@.source_stream == 'bar')].order_count").value(0));
+    }
+
+    /**
+     * 第十八批 S 段第 161 条复核（BSM:749「单店酒吧门票由销售该票的酒吧商户承担，娱乐平台公司统一代收票款不改变该归属，经第三方渠道售出也不改变该归属。」；
+     * BSM:737「客人可在自己手机上的综合体官方小程序或 App 自助购买该酒吧单店门票。」）：客人小程序自助买、渠道回流的 B 酒吧单店门票
+     * （下单时无商户范围，受理商户为空、绑定酒吧＝B）及其退款计入 B 的 bar 范围日结官方、渠道售票源，B 当日出入库流水计入供应链源；
+     * 综合体 P 的项目范围日结都不含。真实请求形状（蛇形键）。
+     */
+    @Test
+    void barScopeDailyCloseCountsCustomerAndChannelSingleBarTicketsAndBarStockMovements() throws Exception {
+        String s = suffix();
+        String p = "project_dbt_" + s;
+        String bar = "bar_dbt_" + s;
+        insertProject(p);
+        insertBar(bar, p);
+        LocalDate day = farDay(s);
+        Instant inDay = businessDayResolver.start(p, null, day).plusSeconds(3600);
+        projectTicket("tko_dbt_c_" + s, null, p, bar, 8_000L, day);
+        insertTicketRefundForOrder("tkr_dbt_c_" + s, "tko_dbt_c_" + s, null, 1_000L, inDay, "success");
+        insertTicketOrder("tko_dbt_m_" + s, seedTicketType(), null, 6_000L, day, "meituan");
+        jdbcTemplate.update("UPDATE ticket_orders SET project_id = ?, bar_id = ? WHERE id = ?", p, bar, "tko_dbt_m_" + s);
+        String item = "item_dbt_" + s;
+        jdbcTemplate.update("INSERT INTO inventory_items (id, item_name, item_type, unit, status, merchant_id, created_at, updated_at)"
+                + " VALUES (?, '日结测试酒水', '酒类', '瓶', 'active', ?, now(), now())", item, bar);
+        jdbcTemplate.update("INSERT INTO inventory_stock_movements (id, movement_type, item_id, source_location_id, quantity, business_type,"
+                + " status, created_at, merchant_id, project_id) VALUES (?, 'outbound', ?, ?, 1, 'bar_order', 'completed', ?, ?, ?)",
+                "ism_dbt_" + s, item, "loc_dbt_" + s, java.sql.Timestamp.from(inDay), bar, p);
+        RequestPostProcessor financeBp = new StaffRequestFixture(jdbcTemplate).staff("usr_dbt_bp_" + s, "staff", p, null,
+                "finance.daily_close.lock", "finance.daily_close.manage");
+
+        String barClose = JsonPath.read(generate(financeBp, "dbt-b-" + s, day, "bar", bar).andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString(), "$.data.id");
+        mockMvc.perform(get("/api/v1/finance/daily-closes/" + barClose + "/summaries").with(financeBp))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items[?(@.source_stream == 'official_ticket')].amount_cent").value(8000))
+                .andExpect(jsonPath("$.data.items[?(@.source_stream == 'official_ticket')].refund_cent").value(1000))
+                .andExpect(jsonPath("$.data.items[?(@.source_stream == 'official_ticket')].order_count").value(1))
+                .andExpect(jsonPath("$.data.items[?(@.source_stream == 'channel_ticket')].amount_cent").value(6000))
+                .andExpect(jsonPath("$.data.items[?(@.source_stream == 'channel_ticket')].order_count").value(1))
+                .andExpect(jsonPath("$.data.items[?(@.source_stream == 'supply_cost')].order_count").value(1));
+        String projectClose = JsonPath.read(generate(financeBp, "dbt-p-" + s, day, "project", p).andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString(), "$.data.id");
+        mockMvc.perform(get("/api/v1/finance/daily-closes/" + projectClose + "/summaries").with(financeBp))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items[?(@.source_stream == 'official_ticket')].amount_cent").value(0))
+                .andExpect(jsonPath("$.data.items[?(@.source_stream == 'official_ticket')].refund_cent").value(0))
+                .andExpect(jsonPath("$.data.items[?(@.source_stream == 'channel_ticket')].amount_cent").value(0))
+                .andExpect(jsonPath("$.data.items[?(@.source_stream == 'supply_cost')].order_count").value(0));
+    }
+
+    /**
+     * 161-R2（ENUM:190「日结锁定后的补录须上级审批，且不改动已锁定的日结金额」）：平台侧财务 BP 锁了综合体 P 当日的项目范围日结后，
+     * P 下非酒吧商户按营业日落账的派生写入（工单结案商户承担用料费应收）拒 409 DAY_CLOSE_LOCKED；同日 P 下酒吧（收银长款内部核算）与综合体 Q 的商户照常落账。
+     */
+    @Test
+    void projectScopeLockedDailyCloseFreezesOnlyThatComplexNonBarWrites() throws Exception {
+        String s = suffix();
+        String p = "project_dpw_p_" + s;
+        String q = "project_dpw_q_" + s;
+        String bar = "bar_dpw_" + s;
+        String shopP = "mch_dpw_p_" + s;
+        String shopQ = "mch_dpw_q_" + s;
+        insertProject(p);
+        insertProject(q);
+        insertBar(bar, p);
+        insertShop(shopP, p);
+        insertShop(shopQ, q);
+        RequestPostProcessor financeBp = new StaffRequestFixture(jdbcTemplate).staff("usr_dpw_bp_" + s, "staff", p, null,
+                "finance.daily_close.lock", "finance.daily_close.manage");
+        LocalDate today = businessDayResolver.businessDate(p, null, Instant.now());
+
+        lockDailyClose(financeBp, "dpw-" + s, today.toString(), "project", p);
+        org.assertj.core.api.Assertions.assertThatThrownBy(
+                        () -> finance.postWorkOrderMaterial("wo_dpw_p_" + s, "工单用料", shopP, p, 1_000L))
+                .isInstanceOfSatisfying(com.complex.platform.common.api.ApiException.class,
+                        e -> assertThat(e.code()).isEqualTo("DAY_CLOSE_LOCKED"));
+        assertThat(finance.postWorkOrderMaterial("wo_dpw_q_" + s, "工单用料", shopQ, q, 1_000L).id()).isNotNull();
+        assertThat(finance.postBarShiftOverageIncome("shift_dpw_" + s, bar, 100L).id()).isNotNull();
+    }
+
+    /**
+     * 第十八批 S 段第 161 条 161-R3（第十八批裁决 35「酒吧逐店逐日查；游乐等按综合体逐日查」；BSM:1682「同一综合体的游乐业务统一一套营业日，
+     * 不按单个游乐项目或设备分别配置」）：票务、游乐不再单独出日结（综合体的项目范围日结已含票务与游乐），平台侧财务 BP 生成 ticketing、amusement
+     * 范围日结拒 400 VALIDATION_FAILED、不入库。真实请求形状（蛇形键）。
+     */
+    @Test
+    void ticketingAndAmusementDailyCloseScopesRefused() throws Exception {
+        String s = suffix();
+        String p = "project_dta_" + s;
+        insertProject(p);
+        RequestPostProcessor financeBp = new StaffRequestFixture(jdbcTemplate).staff("usr_dta_bp_" + s, "staff", p, null,
+                "finance.daily_close.lock", "finance.daily_close.manage");
+        LocalDate day = farDay(s);
+        for (String scope : List.of("ticketing", "amusement")) {
+            generate(financeBp, "dta-" + scope + "-" + s, day, scope, p).andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.detail_code").value("VALIDATION_FAILED"));
+        }
+        assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM finance_daily_closes WHERE scope_id = ?", Integer.class, p))
+                .isZero();
     }
 
     // ─── 第十八批 R 段第 143 条 143-R2：五类最终标记 ─────────────────────
@@ -949,6 +1251,18 @@ class FinanceJdbcIntegrationTests {
                 + " VALUES (?, '日结三步测试酒吧', 'bar', 'active', now(), now(), ?)", id, project);
     }
 
+    /** 161-R2：该综合体下的非酒吧商户（餐饮）。 */
+    private void insertShop(String id, String project) {
+        jdbcTemplate.update("INSERT INTO merchants (id, merchant_name, merchant_type, status, created_at, updated_at, project_id)"
+                + " VALUES (?, '日结综合体测试餐饮', 'catering', 'active', now(), now(), ?)", id, project);
+    }
+
+    /** 161-R2：带售票项目快照（V463）与绑定酒吧的自营小程序已付门票单。 */
+    private void projectTicket(String id, String merchant, String project, String bar, long amountCent, LocalDate visitDate) {
+        insertTicketOrder(id, seedTicketType(), merchant, amountCent, visitDate, "miniapp");
+        jdbcTemplate.update("UPDATE ticket_orders SET project_id = ?, bar_id = ? WHERE id = ?", project, bar, id);
+    }
+
     /** 该商户在该营业日到期的一笔应收（未锁）。 */
     private String dueItem(String id, String merchant, String project, LocalDate day) {
         Instant now = Instant.now();
@@ -1011,6 +1325,42 @@ class FinanceJdbcIntegrationTests {
     private void resolveBill(String billId) {
         jdbcTemplate.update("UPDATE bar_bills SET payment_status = 'paid', abnormal_prior_status = NULL, settlement_status = 'settled'"
                 + " WHERE id = ?", billId);
+    }
+
+    /** 161-R1：该酒吧在该时刻开出并以 POS 结清的一张账单。 */
+    private String settledBill(String bar, String tag, long amountCent, Instant at) {
+        String table = "table_dbs_" + tag;
+        jdbcTemplate.update("INSERT INTO bar_tables (id, bar_id, merchant_id, table_code, table_name, table_type, capacity,"
+                + " allowed_pass_free_guest_count, min_consumption_cent, currency, status, created_at, updated_at)"
+                + " VALUES (?, ?, ?, ?, '卡座', 'card_seat', 6, 2, 0, 'CNY', 'active', now(), now())",
+                table, bar, bar, "S-" + tag.toUpperCase());
+        String order = "ord_dbs_" + tag;
+        String bill = "bill_dbs_" + tag;
+        bars.saveOrder(new com.complex.platform.bar.BarOrderRecord(order, bar, bar, table, null, null, "staff", "billed", amountCent,
+                "CNY", "web", null, null, at, at));
+        bars.saveBill(new com.complex.platform.bar.BarBillRecord(bill, "BILL-DBS-" + tag.toUpperCase(), order, bar, bar, table, null,
+                amountCent, 0L, 0L, amountCent, amountCent, "CNY", "paid", "settled", null, null, at, at));
+        bars.saveBillSettlement(new com.complex.platform.bar.BarBillSettlementRecord("settle_dbs_" + tag, bill, "pos", null,
+                "POS-" + tag, amountCent, bar, at));
+        return bill;
+    }
+
+    /** 161-R1：酒吧账单登记争议、主管处置的真实请求形状（蛇形键）。 */
+    private org.springframework.test.web.servlet.ResultActions billAction(RequestPostProcessor who, String billId, String action,
+            String body) throws Exception {
+        return mockMvc.perform(post("/api/v1/bar/bills/" + billId + "/" + action).with(who)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(body));
+    }
+
+    /** 161-R1：该酒吧在该时刻开班、已班结有差额待复核（needs_review）、财务未见证的收银班次。 */
+    private void unbalancedShift(String bar, String project, String tag, Instant openedAt) {
+        String cashier = "usr_shift_" + tag;
+        jdbcTemplate.update("INSERT INTO bar_shifts (id, project_id, merchant_id, bar_id, cashier_user_id, status, opened_at, closed_at,"
+                + " declared_cash_cent, cash_diff_cent, needs_review, opened_by_user_id, closed_by_user_id, created_at, updated_at)"
+                + " VALUES (?, ?, ?, ?, ?, 'closed', ?, ?, 19900, -100, TRUE, ?, ?, now(), now())",
+                "shift_dbg_" + tag, project, bar, bar, cashier, java.sql.Timestamp.from(openedAt),
+                java.sql.Timestamp.from(openedAt.plusSeconds(3600)), cashier, cashier);
     }
 
     /** 后台日结生成 → 确认 → 锁定的真实请求形状（蛇形键，第十八批 R 段 143-R1；五类最终标记直插，143-R2），返回日结 ID。 */
