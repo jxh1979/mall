@@ -1,4 +1,4 @@
-// 文件版本：V0.19
+// 文件版本：V0.20
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { CnDatePicker } from "../components/CnDatePicker";
@@ -734,6 +734,8 @@ export function ContractWorkbenchPage({ api, user, setActionResult, setGlobalErr
                         acts.push({ key: "settle", label: "退租开账", permissions: SETTLE, onClick: () => void settle(row), testId: `contract-settle-${row.id}` });
                       }
                       if (row.lifecycleStatus === "expired") {
+                        // 第十八批 Q 段第 138 条复核修正：营业额抽成类合同的最后一期在到期、该期月结定格后出，已到期合同仍可排到期日所在月及以前的账期。
+                        acts.push({ key: "period-bills", label: "排租金AR", permissions: RENT_AR, onClick: () => void generatePeriodBills(row), testId: `contract-period-bills-${row.id}` });
                         // 到期合同经带确认的结算入口落押金退还（选「到期」类型），堵住到期押金悬空。
                         acts.push({ key: "settle", label: "结算开账", permissions: SETTLE, onClick: () => void settle(row, "expiry"), testId: `contract-settle-${row.id}` });
                       }

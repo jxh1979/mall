@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.07
+// 文件版本：V0.08
 
 // 文件版本：V0.03
 
@@ -4153,6 +4153,18 @@ class TicketingServiceTests {
         @Override
         public List<VerificationRecord> listVerifications() {
             return new ArrayList<>(verifications.values());
+        }
+
+        @Override
+        public boolean hasVerifiedBarEntrySince(String parentTicketId, int slotIndex, String providerMerchantId, java.time.Instant since) {
+            // 148-R1：与 JdbcTicketingRepository 同口径（同票同人份、这家酒吧的入场类权益、核销成功、自 since 起）。
+            return parentTicketId != null && verifications.values().stream().anyMatch(v -> {
+                IssuedEntitlementRecord e = issuedEntitlements.get(v.entitlementId());
+                return e != null && parentTicketId.equals(e.parentTicketId()) && e.slotIndex() == slotIndex
+                        && java.util.Set.of("entry", "admission").contains(e.entitlementType())
+                        && providerMerchantId.equals(e.barId() != null ? e.barId() : e.merchantId())
+                        && "success".equals(v.status()) && !v.createdAt().isBefore(since);
+            });
         }
 
         @Override

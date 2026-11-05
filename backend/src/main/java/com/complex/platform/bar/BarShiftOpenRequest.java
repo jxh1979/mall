@@ -9,7 +9,6 @@ public record BarShiftOpenRequest(
         String cashierUserId,
         String projectId,
         Long openingCashCent,
-        Long cashDiffThresholdCent,
         String note
 ) {
 }

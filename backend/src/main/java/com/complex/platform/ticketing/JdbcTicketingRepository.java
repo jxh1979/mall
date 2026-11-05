@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.10
+// 文件版本：V0.11
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.List;
@@ -574,6 +574,25 @@ class JdbcTicketingRepository implements TicketingRepository {
                 "SELECT EXISTS(SELECT 1 FROM terminal_devices WHERE id = :id)",
                 Map.of("id", deviceId), Boolean.class);
         return Boolean.TRUE.equals(exists);
+    }
+
+    @Override
+    public boolean hasVerifiedBarEntrySince(String parentTicketId, int slotIndex, String providerMerchantId, java.time.Instant since) {
+        if (parentTicketId == null) {
+            return false;
+        }
+        // 148-R1：入场类型同 TicketCatalogService.ENTRY_ENTITLEMENT_TYPES；status='success' 自然排除已冲正的入场（冲正把原行改成 reversed）。
+        return Boolean.TRUE.equals(jdbcTemplate.queryForObject("""
+                SELECT EXISTS(SELECT 1 FROM ticket_verifications v JOIN issued_entitlements e ON e.id = v.entitlement_id
+                               WHERE e.parent_ticket_id = :parent AND e.slot_index = :slot
+                                 AND e.entitlement_type IN ('entry', 'admission')
+                                 AND COALESCE(e.bar_id, e.merchant_id) = :provider
+                                 AND v.status = 'success' AND v.created_at >= :since)
+                """, new MapSqlParameterSource()
+                .addValue("parent", parentTicketId)
+                .addValue("slot", slotIndex)
+                .addValue("provider", providerMerchantId)
+                .addValue("since", since.atOffset(java.time.ZoneOffset.UTC)), Boolean.class));
     }
 
     @Override

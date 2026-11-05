@@ -1,4 +1,4 @@
-# P0 操作权限矩阵 V0.11
+# P0 操作权限矩阵 V0.12
 
 > **口径修订（2026-08-06 R10）：「场次容量」已废止**——BSM「容量控制」条 明确「**只按单个游乐项目的实时在玩人数控制容量，不再按场次/时段或点位/设备另设容量；排队人数不占用容量**」（DEC-R5-2026-08-04-04；R8 用户裁决 D-02）。本文原「场次容量」一律改称「**项目容量（实时在玩人数）**」；双阈值不变（运营容量软上限告警放行、安全容量硬上限阻断并自动停运）。仍按场次/时段或点位/设备维度罗列的页面、接口、组件与字段只作历史结构参考，容量口径一律以本条为准，相关字段待代码轮下线，期间不得据以新增受控维度。
 
@@ -63,7 +63,7 @@
 | 人工放行（**已废止·见文首口径**） | `verification.manual_override`（停用，写入口已下线） | — | — | — | `verification.manual_overridden`（停用） | 该动作不再提供，任何岗位、任何权限都不得放行不满足规则的核销 |
 | 酒吧入场年龄核验 | `bar.entry.age_verify` | 酒吧门口员工、现场主管 | 高 | 否 | `bar.age_verification.requested` / `bar.age_verification.passed` / `bar.age_verification.rejected` / `bar.age_verification.blocked` | 酒吧售酒/入场合规前置 |
 | 酒吧人脸核验结果写入 | `bar.entry.face_result.write` | 第三方人脸服务适配器、授权设备 | 高 | 系统准入 | `bar.age_verification.passed` / `bar.age_verification.rejected` / `bar.age_verification.blocked` | 供应商确定前仅保留接口和模拟数据；生产未配置不得标记通过 |
-| 卡座预订入场人数核销 | `bar.table.guest_checkin` | 酒吧门口员工、现场主管 | 中 | 否 | `bar.table_guest.checked_in` / `bar.table_guest.rejected` | 只允许进入预定卡座所在酒吧；需幂等和并发额度锁 |
+| 卡座邀请函门口入场核验（本人动态入场码） | `bar.table.guest_checkin` | 酒吧门口员工、现场主管 | 中 | 否 | `bar.reservation_invitation_entered` / `bar.reservation_invitation_entry_failed` | 只允许进入预定卡座所在酒吧；凭邀请函成员本人动态入场码核验（`POST /api/v1/bar/reservations/{id}/invitation/entry-verify`），已入场不超过卡座可进人数；按订台加锁，同一成员重复扫码返回原入场记录 |
 | 卡座销售归属登记 | `bar.table_sales.attribute` | 销售人员、授权服务员、运营主管 | 中 | 变更需复核 | `order.sales_attributed` | 销售人员岗位提成率 15%，非销售人员 10%；仅针对卡座消费额，不含通票 |
 | 卡座提成查看/复核 | `bar.table_commission.view` / `bar.table_commission.review` | 财务、运营主管、HR/薪酬授权人 | 高 | 是 | `bar.table_commission.calculated` / `bar.table_commission.adjusted` | 普通销售人员只能看本人提成摘要，不得改提成基数 |
 | 开台/关台 | `bar.table.open_close` | 酒吧服务员、吧台、主管 | 中 | 否 | `bar.table.opened` / `bar.table.cleared` | P0 基础酒吧闭环 |
@@ -235,7 +235,7 @@
 | 卡座/桌台维护 | `bar.table.manage` | 中/可配置 | 可用（影响人数、低消、终端绑定） |
 | 订台（卡座预订）创建 | `bar.reservation.create` | 中/否 | 可用 |
 | 订台记录查看 | `bar.reservation.view` | 低/否 | 可用 |
-| 卡座预订入场人数核销 | `bar.table.guest_checkin` | 中/否 | 可用（仅本酒吧预定卡座，需幂等与并发额度锁） |
+| 卡座邀请函门口入场核验（本人动态入场码） | `bar.table.guest_checkin` | 中/否 | 可用（仅本酒吧预定卡座，按订台加锁，同一成员重复扫码返回原入场记录） |
 | 开台/关台 | `bar.table.open_close` | 中/否 | 可用 |
 | 点酒/出酒 | `bar.order.create` | 中/否 | 可用 |
 | 酒吧订单查看 | `bar.order.view` | 低/否 | 可用（按本酒吧/卡座范围） |

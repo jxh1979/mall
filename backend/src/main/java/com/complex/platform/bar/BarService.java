@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.09
+// 文件版本：V0.10
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.PageResponse;
@@ -465,35 +465,6 @@ public class BarService {
                 BarDepositRuleRecord.class,
                 BarWriteOperation.CREATE_DEPOSIT_RULE,
                 () -> entryService.createDepositRule(request)
-        );
-    }
-
-    @com.complex.platform.gate.GuardedAction(capability = "bar.table.guest_checkin")
-    @Transactional
-    public BarReservationEntryAllowanceVerificationRecord verifyReservationEntryAllowance(String reservationId, VerificationRequest request) {
-        String id = operations.requireText(reservationId, "reservation_id");
-        return operations.executeWrite(
-                "verifyBarReservationEntryAllowance:" + id,
-                request == null ? null : request.idempotencyKey(),
-                request,
-                BarReservationEntryAllowanceVerificationRecord.class,
-                BarWriteOperation.VERIFY_RESERVATION_ENTRY_ALLOWANCE,
-                () -> entryService.verifyGuestEntryAllowance(id, request)
-        );
-    }
-
-    @com.complex.platform.gate.GuardedAction(capability = "bar.table.guest_checkin")
-    @Transactional
-    public BarTableGuestCheckinRecord checkInReservationGuest(String reservationId, VerificationRequest request) {
-        String id = operations.requireText(reservationId, "reservation_id");
-        checkReservationLocation("checkInBarReservationGuest", id);
-        return operations.executeWrite(
-                "checkInBarReservationGuest:" + id,
-                request == null ? null : request.idempotencyKey(),
-                request,
-                BarTableGuestCheckinRecord.class,
-                BarWriteOperation.CHECK_IN_RESERVATION_GUEST,
-                () -> entryService.checkInGuest(id, request)
         );
     }
 

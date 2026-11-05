@@ -1,6 +1,6 @@
 package com.complex.platform.integration;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
@@ -416,6 +416,10 @@ class IntegrationJdbcIntegrationTests {
         saveOrder("os_a_pending", "mch_turn_a", "order", "received", 99999L, base);
         saveOrder("os_b_o1", "mch_turn_b", "order", "synced", 88888L, base);
         saveOrder("os_null_o1", null, "order", "synced", 77777L, base);
+        // 第十八批 Q 段第 138 条 138-R2（BSM:1347「单店门票的票款——一律不再计入抽成基数」）：渠道售出的门票回流（已本地出票）不计。
+        repository.saveOrderSync(new IntegrationOrderSyncRecord(
+                "os_a_ticket", "mock-provider", "ticket", "order", "ext-os_a_ticket", "synced", 50000L, "CNY",
+                "meituan", null, "mch_turn_a", Map.of(), base, base));
 
         Instant from = Instant.parse("2026-05-01T00:00:00Z");
         Instant to = Instant.parse("2026-06-01T00:00:00Z");

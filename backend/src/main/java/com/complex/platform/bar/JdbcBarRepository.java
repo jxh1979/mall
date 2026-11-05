@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.09
+// 文件版本：V0.10
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
 import com.complex.platform.common.crypto.PiiCipher;
@@ -551,39 +551,6 @@ class JdbcBarRepository implements BarRepository {
                  WHERE id = :id
                  FOR UPDATE
                 """, Map.of("id", id), rowMapper::mapReservation).stream().findFirst();
-    }
-
-    @Override
-    public int countGuestCheckins(String reservationId) {
-        Integer count = jdbcTemplate.queryForObject("""
-                SELECT COUNT(*)::int
-                  FROM bar_table_guest_checkins
-                 WHERE reservation_id = :reservation_id
-                """, Map.of("reservation_id", reservationId), Integer.class);
-        return count == null ? 0 : count;
-    }
-
-    @Override
-    public BarTableGuestCheckinRecord saveGuestCheckin(BarTableGuestCheckinRecord checkin) {
-        jdbcTemplate.update("""
-                INSERT INTO bar_table_guest_checkins (
-                    id, reservation_id, bar_id, table_id, guest_identifier,
-                    verification_result, checked_in_count_after, device_id, staff_id,
-                    evidence_attachment_ids, created_at
-                )
-                VALUES (
-                    :id, :reservation_id, :bar_id, :table_id, :guest_identifier,
-                    :verification_result, :checked_in_count_after, :device_id, :staff_id,
-                    CAST(:evidence_attachment_ids AS jsonb), :created_at
-                )
-                ON CONFLICT (id) DO UPDATE SET
-                    verification_result = EXCLUDED.verification_result,
-                    checked_in_count_after = EXCLUDED.checked_in_count_after,
-                    device_id = EXCLUDED.device_id,
-                    staff_id = EXCLUDED.staff_id,
-                    evidence_attachment_ids = EXCLUDED.evidence_attachment_ids
-                """, parameterSource.checkinParameters(checkin));
-        return checkin;
     }
 
     @Override
@@ -1285,14 +1252,14 @@ class JdbcBarRepository implements BarRepository {
                     id, project_id, merchant_id, bar_id, cashier_user_id, status,
                     opened_at, closed_at, opening_cash_cent, declared_cash_cent,
                     system_cash_cent, system_pos_cent, system_online_cent, system_refund_cent, system_tip_cent,
-                    cash_diff_cent, cash_diff_threshold_cent, needs_review, handover_to_user_id, note,
+                    cash_diff_cent, needs_review, handover_to_user_id, note,
                     opened_by_user_id, closed_by_user_id, created_at, updated_at
                 )
                 VALUES (
                     :id, :project_id, :merchant_id, :bar_id, :cashier_user_id, :status,
                     :opened_at, :closed_at, :opening_cash_cent, :declared_cash_cent,
                     :system_cash_cent, :system_pos_cent, :system_online_cent, :system_refund_cent, :system_tip_cent,
-                    :cash_diff_cent, :cash_diff_threshold_cent, :needs_review, :handover_to_user_id, :note,
+                    :cash_diff_cent, :needs_review, :handover_to_user_id, :note,
                     :opened_by_user_id, :closed_by_user_id, :created_at, :updated_at
                 )
                 ON CONFLICT (id) DO UPDATE SET
@@ -1305,7 +1272,6 @@ class JdbcBarRepository implements BarRepository {
                     system_refund_cent = EXCLUDED.system_refund_cent,
                     system_tip_cent = EXCLUDED.system_tip_cent,
                     cash_diff_cent = EXCLUDED.cash_diff_cent,
-                    cash_diff_threshold_cent = EXCLUDED.cash_diff_threshold_cent,
                     needs_review = EXCLUDED.needs_review,
                     handover_to_user_id = EXCLUDED.handover_to_user_id,
                     note = EXCLUDED.note,

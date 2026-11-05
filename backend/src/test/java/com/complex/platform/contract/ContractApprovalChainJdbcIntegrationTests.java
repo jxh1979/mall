@@ -1,6 +1,6 @@
 package com.complex.platform.contract;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
@@ -597,6 +597,62 @@ class ContractApprovalChainJdbcIntegrationTests {
         ContractSettlementRecord settlement = repository.listSettlementsByContract(contract.id()).get(0);
         contractService.checkSettlementDocuments(settlement.id(), new ContractResolveDisputeRequest(key("dct_" + tag), null));
         return change;
+    }
+
+    /**
+     * 第十八批 Q 段第 138 条 138-R1 与 138-R5 同批回归（ENUM:257「营业额抽成账单在该账期的薪资月结完成、该账期月结定格时确定的服务费应发数与扣留数定数之后出账，
+     * 账单一次出准，不使用预估数」）：酒吧商户「保底与抽成取高」生效合同，在当月卡座服务费尚未月结（此时抽成取数报 409 BAR_REVENUE_PENDING）时发起面积变更
+     * 并全链终审 → 终审成功、父合同置已变更，子合同不预排租金；终审不因抽成来源未定整笔回滚。
+     */
+    @Test
+    void higherOfBarAreaChangeApprovesWhileServiceFeeAwaitsMonthClose() {
+        java.time.YearMonth now = java.time.YearMonth.now(com.complex.platform.common.LocalZone.ID);
+        String merchant = "mch_hpc01_" + suffix;
+        jdbc.update("INSERT INTO merchants(id,merchant_name,merchant_type,project_id,status,created_at,updated_at)"
+                + " VALUES(?,'审批链酒吧','bar',?,'active',now(),now())", merchant, projectId);
+        ContractRecord contract = draft("c138");
+        jdbc.update("UPDATE contracts SET lifecycle_status = 'effective', snapshot = CAST(? AS jsonb), rent_terms = CAST(? AS jsonb) WHERE id = ?",
+                "{\"depositMonths\": 3}", "{\"rentBillingMode\":\"higher_of\",\"baseRentCent\":100000}", contract.id());
+        jdbc.update("""
+                INSERT INTO turnover_rent_rules
+                    (id, contract_id, merchant_id, rule_name, rate_bps, min_amount_cent, effective_from, effective_to, status, is_draft)
+                VALUES (?, ?, ?, '审批链酒吧抽成规则', 1000, 0, DATE '2020-01-01', NULL, 'active', FALSE)
+                """, key("trr_c138"), contract.id(), merchant);
+        serviceFeeAwaitingMonthClose(merchant, now.atDay(1));
+
+        ContractChangeRecord area = contractService.raiseChange(contract.id(), new ContractChangeRequest(key("ac_c138"), "area_change",
+                Map.of("base_rent_cent", 150000, "deposit_deadline", now.plusMonths(1).atDay(1).toString()), gm,
+                LINE_CODES.stream().map(this::line).toList(), "面积变更"));
+        assertThatCode(() -> approveAll(area.reviewId())).doesNotThrowAnyException();
+
+        assertThat(contractStatus(contract.id())).isEqualTo("amended");
+        ContractRecord child = repository.listChildContracts(contract.id()).get(0);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM contract_rent_bills WHERE contract_id = ? AND fee_type = 'rent'",
+                Integer.class, child.id())).isZero();
+    }
+
+    /** 前置态：该酒吧卡座一张未结账单带服务费分项（营业日 businessDate），尚无月结。 */
+    private void serviceFeeAwaitingMonthClose(String merchant, LocalDate businessDate) {
+        String table = key("bt_c138");
+        String session = key("bs_c138");
+        String order = key("bo_c138");
+        String bill = key("bb_c138");
+        jdbc.update("INSERT INTO bar_tables(id,bar_id,merchant_id,table_code,table_name,table_type,capacity,allowed_pass_free_guest_count,"
+                + "min_consumption_cent,currency,status,created_at,updated_at) VALUES(?,?,?,?,'审批链卡座','card_seat',4,0,0,'CNY','active',now(),now())",
+                table, merchant, merchant, table);
+        jdbc.update("INSERT INTO bar_table_sessions(id,bar_id,merchant_id,business_date,table_id,service_staff_id,status,opened_at,closed_at,"
+                + "created_at,updated_at) VALUES(?,?,?,?,?,?,'closed',now(),now(),now(),now())",
+                session, merchant, merchant, java.sql.Date.valueOf(businessDate), table, drafter);
+        jdbc.update("INSERT INTO bar_orders(id,bar_id,merchant_id,table_id,order_source,status,total_amount_cent,currency,created_at,updated_at)"
+                + " VALUES(?,?,?,?,'staff','created',20000,'CNY',now(),now())", order, merchant, merchant, table);
+        jdbc.update("INSERT INTO bar_bills(id,bill_no,order_id,bar_id,merchant_id,table_id,subtotal_amount_cent,discount_amount_cent,"
+                + "deposit_deduct_amount_cent,payable_amount_cent,paid_amount_cent,currency,payment_status,settlement_status,tip_amount_cent,"
+                + "created_at,updated_at) VALUES(?,?,?,?,?,?,20000,0,0,22000,0,'CNY','unpaid','unsettled',0,now(),now())",
+                bill, bill, order, merchant, merchant, table);
+        jdbc.update("INSERT INTO bar_payroll_bill_components(id,source_bill_id,session_id,source_table_id,project_id,merchant_id,business_date,"
+                + "component_type,amount_cent,original_base_cent,source_event_id,source_snapshot,collection_bill_id)"
+                + " VALUES(?,?,?,?,?,?,?,'service_fee',2000,20000,?,'[]'::jsonb,?)",
+                key("bpc_c138"), bill, session, table, projectId, merchant, java.sql.Date.valueOf(businessDate), key("bpe_c138"), bill);
     }
 
     private void approveAll(String reviewId) {

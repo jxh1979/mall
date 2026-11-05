@@ -1,5 +1,5 @@
 package com.complex.platform.analytics;
-// 文件版本：V0.06
+// 文件版本：V0.07
 import org.springframework.beans.factory.annotation.Value;
 
 import com.complex.platform.analytics.AnalyticsRecords.MetricSnapshotKey;
@@ -47,6 +47,8 @@ public class DashboardAggregationJob {
     static final String TRAFFIC_AMUSEMENT = "traffic.amusement"; // 客流
     static final String VERIFY_DONE = "verify.done";            // 核销
     static final String REDEMPTION_RATE = "verify.redemption_rate"; // 核销·券核销率（派生：核销数/发放数）
+    static final String VERIFY_REJECTED = "verify.rejected";    // 核销·拒绝数（BSM:1820；ENUM:43 拒绝＝规则不允许，不含失败）
+    static final String VERIFY_ISSUED = "verify.issued";        // 核销·权益发放数（BSM:1820）
     static final String MEMBER_NEW = "member.new";              // 会员
     static final String SUPPLY_BALANCE = "supply.balance";      // 供应链
     static final String SUPPLY_LOW_STOCK = "supply.low_stock";  // 供应链·缺货预警
@@ -247,15 +249,21 @@ public class DashboardAggregationJob {
         // 核销：ticket_verifications 有 merchant_id → 平台 + 商户口径。
         Map<String, BigDecimal> verifyDoneByMerchant = repository.countTicketVerificationSuccessByMerchant(businessDate);
         upsertByMerchant(VERIFY_DONE, "ticketing", businessDate, verifyDoneByMerchant, now, platformTotals);
+        upsertByMerchant(VERIFY_REJECTED, "ticketing", businessDate,
+                repository.countTicketVerificationRejectedByMerchant(businessDate), now, platformTotals);
 
         // 清单#18：券核销率（派生）= 核销数/发放数。发放数取 issued_entitlements 当日发放（同 merchant 维度）。
         // 比率指标（0~1，BigDecimal 保留 4 位小数）；分母为 0（当日无发放）按"不伪造"置 0，不产生除零。
         Map<String, BigDecimal> issuedByMerchant = repository.countTicketIssuedByMerchant(businessDate);
+        upsertByMerchant(VERIFY_ISSUED, "ticketing", businessDate, issuedByMerchant, now, platformTotals);
         upsertRedemptionRate(businessDate, verifyDoneByMerchant, issuedByMerchant, now, platformTotals);
         // 18F 第 80 条：核销数与券核销率另出商户分项目段（核销率按同一公式逐「商户|项目」键算）。
         Map<String, BigDecimal> verifyDoneByMerchantProject = repository.countTicketVerificationSuccessByMerchantProject(businessDate);
         Map<String, BigDecimal> issuedByMerchantProject = repository.countTicketIssuedByMerchantProject(businessDate);
         upsertByMerchantProject(VERIFY_DONE, "ticketing", businessDate, verifyDoneByMerchantProject, now);
+        upsertByMerchantProject(VERIFY_REJECTED, "ticketing", businessDate,
+                repository.countTicketVerificationRejectedByMerchantProject(businessDate), now);
+        upsertByMerchantProject(VERIFY_ISSUED, "ticketing", businessDate, issuedByMerchantProject, now);
         java.util.Set<String> redemptionKeys = new java.util.LinkedHashSet<>(verifyDoneByMerchantProject.keySet());
         redemptionKeys.addAll(issuedByMerchantProject.keySet());
         Map<String, BigDecimal> redemptionByMerchantProject = new java.util.LinkedHashMap<>();

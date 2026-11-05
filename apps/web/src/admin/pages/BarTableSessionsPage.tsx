@@ -1,4 +1,4 @@
-// 文件版本：V0.11
+// 文件版本：V0.12
 import React from "react";
 import { QRCodeSVG } from "qrcode.react";
 import { BarServiceResponsibilityPanel } from "./BarServiceResponsibilityPanel";
@@ -86,7 +86,7 @@ export function BarTableSessionsPage({ api, setActionResult, setGlobalError, eff
   const [tableCreateOpen, setTableCreateOpen] = React.useState(false);
   const [tableCreateError, setTableCreateError] = React.useState("");
   // 从零起单三表单：新建卡座 / 新建订台（代客）/ 开台。全站零英文，受权限按钮约束。
-  const [newTable, setNewTable] = React.useState({ barId: "", tableName: "", tableType: "card_seat", capacity: "4", allowedFreeEntryCount: "0", minimumSpendYuan: "0" });
+  const [newTable, setNewTable] = React.useState({ barId: "", tableName: "", tableType: "card_seat", capacity: "4", minimumSpendYuan: "0" });
   const [newReservation, setNewReservation] = React.useState({ barId: "", tableId: "", guestCount: "2", salespersonUserId: "", customerPhone: "", latestArrivalAt: "" });
   const [qrTableId, setQrTableId] = React.useState("");
   const [newSession, setNewSession] = React.useState({ barId: "", tableId: "", reservationId: "", guestCount: "2", salesStaffId: "", serviceStaffId: "" });
@@ -123,7 +123,6 @@ export function BarTableSessionsPage({ api, setActionResult, setGlobalError, eff
         { label: "所属酒吧", value: row.barId ?? "—" },
         { label: "客户", value: row.customerId ?? "—" },
         { label: "人数", value: row.guestCount ?? "—" },
-        { label: "免通票入场人数", value: row.allowedPassFreeGuestCount ?? "—" },
         { label: "定金状态", value: formatBusinessStatus(row.depositStatus) },
         { label: "状态", value: formatBusinessStatus(row.status) },
         { label: "预定时间", value: cnDate(row.reservedAt) },
@@ -239,15 +238,13 @@ export function BarTableSessionsPage({ api, setActionResult, setGlobalError, eff
     }
   }
 
-  // 新建卡座：可进人数（容量）独立于免通票入场人数；低消按元填、后端按分存。
+  // 新建卡座：只录可进人数一个数，即邀请函名额（第十八批 Q 段 151-R2，BSM:1036、ENUM:105）；低消按元填、后端按分存。
   // 返回中文错误文案则校验不过，null=放行（供弹窗步内校验 + 提交双保险共用）。
   function newTableValidationMessage(): string | null {
     if (!newTable.barId.trim()) return "新建卡座请填写所属酒吧。";
     if (!newTable.tableName.trim()) return "新建卡座请填写卡座名称。";
     const cap = Number(newTable.capacity);
     if (!Number.isFinite(cap) || cap <= 0) return "可进人数必须大于 0。";
-    const free = Number(newTable.allowedFreeEntryCount);
-    if (!Number.isFinite(free) || free < 0) return "免通票入场人数不能为负。";
     const spend = Number(newTable.minimumSpendYuan);
     if (!Number.isFinite(spend) || spend < 0) return "低消金额不能为负。";
     return null;
@@ -267,7 +264,6 @@ export function BarTableSessionsPage({ api, setActionResult, setGlobalError, eff
         tableName: newTable.tableName.trim(),
         tableType: newTable.tableType,
         capacity: Number(newTable.capacity),
-        allowedFreeEntryCount: Number(newTable.allowedFreeEntryCount),
         minimumSpendCent: Math.round(Number(newTable.minimumSpendYuan) * 100),
       });
       setActionResult({ action: "bar_table_create", status: "created", result });
@@ -451,7 +447,7 @@ export function BarTableSessionsPage({ api, setActionResult, setGlobalError, eff
       <h3>从零起单</h3>
       <div className="admin-form-row" data-testid="bar-create-table-form">
         <PermissionButton permissionsState={effectivePermissions} permissions={[BAR_TABLE_MANAGE_PERMISSION]} disabled={submitting} onClick={() => { setTableCreateError(""); setTableCreateOpen(true); }} data-testid="bar-new-table-open">＋ 新建卡座</PermissionButton>
-        <span className="admin-muted-action">卡座为配置主数据：可进人数独立于免通票入场人数，低消按元填。</span>
+        <span className="admin-muted-action">卡座为配置主数据：填可进人数，低消按元填。</span>
       </div>
       <GuidedFlowModal
         open={tableCreateOpen}
@@ -489,12 +485,11 @@ export function BarTableSessionsPage({ api, setActionResult, setGlobalError, eff
           },
           {
             title: "容量与低消",
-            description: "填写可进人数、免通票入场人数与低消金额。",
+            description: "填写可进人数与低消金额。",
             validate: () => newTableValidationMessage(),
             content: (
               <>
                 <label>可进人数<input data-testid="bar-new-table-capacity" type="number" min={1} value={newTable.capacity} onChange={(event) => setNewTable((p) => ({ ...p, capacity: event.target.value }))} placeholder="容量" /></label>
-                <label>免通票入场人数<input data-testid="bar-new-table-free" type="number" min={0} value={newTable.allowedFreeEntryCount} onChange={(event) => setNewTable((p) => ({ ...p, allowedFreeEntryCount: event.target.value }))} placeholder="免票人数" /></label>
                 <label>低消（元）<input data-testid="bar-new-table-spend" type="number" min={0} value={newTable.minimumSpendYuan} onChange={(event) => setNewTable((p) => ({ ...p, minimumSpendYuan: event.target.value }))} placeholder="低消" /></label>
               </>
             ),
@@ -505,7 +500,6 @@ export function BarTableSessionsPage({ api, setActionResult, setGlobalError, eff
           { label: "卡座名称", value: newTable.tableName.trim() || "未填写" },
           { label: "桌台类型", value: newTable.tableType === "bar_counter" ? "吧台位（不走出品流转）" : newTable.tableType === "vip" ? "VIP 包坐" : newTable.tableType === "loose_table" ? "散台（扫码点单）" : "卡座" },
           { label: "可进人数", value: newTable.capacity.trim() || "未填写" },
-          { label: "免通票入场人数", value: newTable.allowedFreeEntryCount.trim() || "0" },
           { label: "低消（元）", value: newTable.minimumSpendYuan.trim() || "0" },
         ]}
       />

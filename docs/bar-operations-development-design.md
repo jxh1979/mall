@@ -1,6 +1,6 @@
 # 酒吧经营：桌台、点单、库存、存酒开发设计
 
-> 版本：V0.11 ｜ 最后更新：2026-11-01 ｜ 当前迁移最高：V385 ｜ 状态：现行
+> 版本：V0.12 ｜ 最后更新：2026-11-04 ｜ 当前迁移最高：V385 ｜ 状态：现行
 >
 > 权限边界：三份业务 HTML 定义业务目标；本设计只承接实现与差距，代码不能反向覆盖 HTML。下文表结构、API、事件和状态若未在“当前实现”中明确为已落地，均按目标设计理解。
 
@@ -346,10 +346,7 @@ P0 规则：
 
 并发与幂等要求：
 
-1. `/api/v1/bar/reservations/{id}/entry-allowance/verify` 请求必须携带 `idempotencyKey`、`reservation_id`、`bar_venue_id`、`device_id`、`staff_id`、本次入场人数；如能识别具体客人，还应携带不可逆哈希后的 `entry_guest_identifier_hash`。
-2. 服务端必须以预约入场额度为准做事务校验，可采用行锁（如 `SELECT ... FOR UPDATE`）或乐观锁版本号，已提交的 `bar_table_guest_checkins` 才计入已用额度。
-3. 同一 `reservation_id + idempotencyKey` 重试必须返回第一次处理结果，不得重复扣占名额；同一可识别客人不得在同一预约下重复免通票入场。
-4. 成功写入 `bar.table_guest.checked_in`，拒绝写入 `bar.table_guest.rejected`，两者都要记录剩余额度、拒绝原因、设备、员工和点位。
+1. 第十八批 Q 段第 151 条 151-R1：按人数登记的 `check-in-guest` 与名额预校验 `entry-allowance/verify` 两个接口已删除；卡座免通票入场只走 `POST /api/v1/bar/reservations/{id}/invitation/entry-verify`，凭本人动态入场码核验，按预订行加锁，已入场不超过邀请函可进人数，同一成员重复核验返回原记录（见 §6.3a 订卡邀请函「入场核验」条）。
 
 #### 5.2.4 正式挂起未付款订单
 
@@ -1168,7 +1165,6 @@ id, created_at, updated_at, deleted_at, created_by, updated_by, status, remark
 | 方法 | 路径 | 说明 | 权限 |
 |---|---|---|---|
 | `POST` | `/api/v1/bar/entitlement-redemptions/drink` | 酒水权益兑换承接 | `bar.entitlement.redeem` |
-| `POST` | `/api/v1/bar/reservations/{id}/entry-allowance/verify` | 卡座预约入场名额校验，必须幂等并处理并发额度锁 | `bar.reservation.entry_verify` |
 | `GET` | `/api/v1/bar/entitlement-redemptions` | 查询酒吧权益兑换记录 | `bar.entitlement.read` |
 
 说明：
@@ -1632,6 +1628,7 @@ P0 完成时必须能演示：
 
 | 日期 | 类型 | 位置 | 内容 | 原因/依据 |
 |---|---|---|---|---|
+| 2026-11-04 | 改 | 卡座免通票入场「并发与幂等要求」段、§7.8 接口表 | 版本升 V0.12；第十八批 Q 段第 151 条 151-R1：删掉按人数登记 `check-in-guest` 与名额预校验 `entry-allowance/verify` 两个接口，并发与幂等要求段改指门口入场核验 `invitation/entry-verify`，§7.8 删去 `entry-allowance/verify` 行 | BSM:1036「到店出示本人的动态入场码核验入场——邀请函二维码只用于转发与接受，本身不作为入场凭证……已确认与已入场总人数不超过卡座可进人数。」；ENUM:105「成员确认接受即占用该卡座的免通票入场名额」；ENUM:43「系统不提供人工放行」 |
 | 2026-11-01 | 改 | §7.8 赠饮/兑换核销扣库存段、待决表「酒水兑换权益是否自动生成 0 元点单」行 | 版本升 V0.11；第十八批 M 段第 112 条 112-R3：赠饮出品扣吧台库存与冲正记礼物领取消耗 `gift_claim_consume`（`BarGiftConsumer`） | BSM:1194、BSM:1179、BSM:1049 |
 | 2026-10-29 | 改 | 现状差距表「出酒损耗」行、§16 导语与 §16.4 现状句 | 版本升 V0.10；第十八批 I 段第 76 条（V575）按杯按标准出酒量（按容量）扣减库存已落地，三处现状句同步；损耗率转核查工单仍未落地 | BSM L1065、L1168、L1068、L1049；ENUM L79、L106 |
 | 2026-10-28 | 改 | §16.4 现状句 | V0.09 同版续记；第十八批第 17 条同口径覆盖通票赠饮出品：按杯赠饮商品在未配采集设备的吧台出酒记一行 0 元赠送明细与标准损耗 | BSM L1065；ENUM L106；第十八批裁决 4 |

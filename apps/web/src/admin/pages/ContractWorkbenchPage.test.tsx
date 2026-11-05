@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -1059,5 +1059,25 @@ describe("ContractWorkbenchPage 草稿编辑补录租金条款（第四轮裁决
     await waitFor(() => expect(screen.queryByTestId("contract-submit-contract-bbbb2222")).not.toBeNull());
     fireEvent.click(screen.getByTestId("contract-submit-contract-bbbb2222"));
     await waitFor(() => expect(props.setGlobalError).toHaveBeenCalledWith(expect.stringContaining("请先在草稿上补录月租")));
+  });
+});
+
+describe("ContractWorkbenchPage 第十八批 Q 段第 138 条复核修正：已到期合同排租金AR", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  // ENUM「营业额抽成模式」条「营业额抽成账单在该账期的薪资月结完成、该账期月结定格时确定的服务费应发数与扣留数定数之后出账」：营业额抽成类合同的最后一期在到期后才出，
+  // 已到期合同行保留「排租金AR」（后端放行到期日所在月及以前的账期）。
+  it("已到期合同行仍有「排租金AR」，未选账期点击即提示先选账期", async () => {
+    const setGlobalError = vi.fn();
+    const props = baseProps({ setGlobalError });
+    const expired = [{ ...CONTRACTS[0], id: "contract-gggg7777", lifecycle_status: "expired" }];
+    vi.stubGlobal("fetch", vi.fn().mockImplementation((input: RequestInfo | URL) =>
+      Promise.resolve(envelope(String(input).endsWith("/api/v1/contracts") ? expired : []))));
+    render(<ContractWorkbenchPage {...props} />);
+    await waitFor(() => expect(screen.queryByTestId("contract-actions-contract-gggg7777")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("contract-actions-contract-gggg7777"));
+    await waitFor(() => expect(screen.queryByTestId("contract-period-bills-contract-gggg7777")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("contract-period-bills-contract-gggg7777"));
+    await waitFor(() => expect(setGlobalError).toHaveBeenCalledWith("排租金AR需先选账期（年-月）"));
   });
 });

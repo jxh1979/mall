@@ -1,6 +1,6 @@
 package com.complex.terminal
 
-// 文件版本：V0.06
+// 文件版本：V0.07
 
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
@@ -208,7 +208,6 @@ class TerminalRequestSerializationTest {
           paymentId = "pay_1",
           settlementAmountCent = 9900,
           paymentChannel = "wechat",
-          cashierStaffId = "staff_1",
           posTransactionNo = "pos_1",
         ),
       ),
@@ -217,7 +216,8 @@ class TerminalRequestSerializationTest {
     assertTrue("payment_id" in settle)
     assertTrue("settlement_amount_cent" in settle)
     assertTrue("payment_channel" in settle)
-    assertTrue("cashier_staff_id" in settle)
+    // 第十八批 Q 段第 153 条 153-R2（BSM:940「……一律按执行该动作的设备绑定与该次登录会话定位到操作人并留痕」）：收款人由服务端按本员工会话定，结账体不发 cashier_staff_id。
+    assertFalse("cashier_staff_id" in settle)
     assertTrue("pos_transaction_no" in settle)
 
     val intent = api.json.parseToJsonElement(

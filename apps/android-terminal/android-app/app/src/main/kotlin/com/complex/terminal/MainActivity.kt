@@ -1,6 +1,6 @@
 package com.complex.terminal
 
-// 文件版本：V0.20
+// 文件版本：V0.21
 
 import android.app.Activity
 import android.content.Intent
@@ -29,8 +29,8 @@ import kotlin.concurrent.thread
  * 综合体 Android 终端：现场操作 UI。
  *
  * 本 Activity 仅负责界面与线程编排；所有业务逻辑直接调用已实现的端侧业务层：
- *   - [TerminalApiClient]：HTTP 契约（login / bindDevice / preview / verify /
- *     amusementVerify / createBarOrder / pay-intent / settle / submitMaintenance /
+ *   - [TerminalApiClient]：HTTP 契约（login / bindDevice / preview / verify（门票与游乐核销共用）/
+ *     createBarOrder / pay-intent / settle / submitMaintenance /
  *     confirmResume / 设备凭证 / 冲正 …）。
  *   - [TerminalWorkflow]：组合上述调用 + 本地 [InMemoryLocalStore]（会话/绑定/事件）。
  *
@@ -430,83 +430,123 @@ class MainActivity : Activity() {
   }
 
   // ---------------------------------------------------------------------------
-  // 屏 ④ 门票/权益核销 -> preview -> verify
-  // 扫码读取 credential（ZXing 相机），无相机时手动输入兜底。
+  // 屏 ④ 门票/权益核销 -> 扫码即核销（verify）
+  // 第十八批 Q 段第 149 条 149-R1（ENUM:43「检票环节内部为一次动作：扫码即核销，不设先预检、后确认的两次操作，也不设「预检通过」中间态。」；DEC-R6-08）：
+  // 扫码即提交，同一次动作里先只读本票人脸处置（faceBindingFor）：不需要人脸即直接核销；需要时现场勾同意、拍照，拍完即提交。
+  // 无相机时手动输入后点「核销」兜底。
   // ---------------------------------------------------------------------------
   private fun showTicketVerify() {
     val credential = editText("核销凭证（扫码或手动输入）")
-    val status = statusText("先预检再核销")
-    val scanButton = button("扫码读取凭证") { launchScan(credential) }
-    // TK-06：预检给出 capture（首次留脸，须客人单独同意 + 拍照）或 match（按留存人脸比对，须拍照）；为空则不涉及人脸。
+    val status = statusText("扫码即核销")
+    // TK-06：capture（首次留脸，须客人单独同意 + 拍照）或 match（按留存人脸比对，须拍照）；为空则不涉及人脸。faceCode＝读到该处置的那个码。
+    var faceCode: String? = null
     var faceBinding: String? = null
     var faceCapture: String? = null
     val faceConsent = android.widget.CheckBox(this).apply {
       text = "客人已阅读并同意：本票为一人多次票，首次入场留存人脸，仅用于核对后续各次是否同一使用人；加密保存，该票用完或到期后删除"
       visibility = View.GONE
     }
-    val faceButton = button("为入场客人拍照") {
-      launchFaceShot { bitmap ->
-        if (bitmap == null) {
-          status.text = "未拍到照片，请重拍"
-        } else {
-          faceCapture = jpegBase64(bitmap)
-          status.text = "已拍照，可核销"
-        }
-      }
-    }.apply { visibility = View.GONE }
 
-    val previewButton = button("预检") {
-      val code = credential.text.toString().trim()
-      if (code.isEmpty()) { status.text = "请输入核销凭证"; return@button }
-      requireBindingOr(status) {
-        status.text = "正在预检…"
-        runBackground(
-          action = { workflow.previewOnline(code) },
-          onSuccess = { r ->
-            faceBinding = r.faceBinding
-            faceCapture = null
-            faceConsent.isChecked = false
-            faceConsent.visibility = if (faceBinding == "capture") View.VISIBLE else View.GONE
-            faceButton.visibility = if (faceBinding != null) View.VISIBLE else View.GONE
-            val faceHint = when (faceBinding) {
-              "capture" -> "\n一人多次票首次入场：须客人同意留存人脸并拍照；不同意不能入场（票仍未核销）"
-              "match" -> "\n一人多次票：须为入场客人拍照，由系统比对是否同一使用人"
-              else -> ""
-            }
-            status.text = (if (r.allowed) "预检通过：可核销（${r.reason.ifBlank { "allowed" }}）"
-            else "预检不通过：${r.reason.ifBlank { "denied" }}") + faceHint
-          },
-          onError = { status.text = "预检失败：${friendly(it)}" },
-        )
-      }
+    fun showResult(r: VerificationResponse) {
+      faceCapture = null
+      status.text = "核销结果：${verifyStatusZh(r.status)}\n核销号：${r.verificationNo}\n${r.resultReason ?: ""}"
     }
 
-    val verifyButton = button("核销") {
-      val code = credential.text.toString().trim()
-      if (code.isEmpty()) { status.text = "请输入核销凭证"; return@button }
-      if (faceBinding == "capture" && !faceConsent.isChecked) {
-        status.text = "客人未同意留存人脸，不能首次入场（票仍未核销）"; return@button
-      }
-      if (faceBinding != null && faceCapture == null) { status.text = "请先为入场客人拍照"; return@button }
-      val capture = faceCapture
+    fun verifyWithFace(code: String, capture: String) {
       val consent = if (faceBinding == "capture") true else null
       requireBindingOr(status) {
         status.text = "正在核销…"
         runBackground(
           action = { workflow.verifyOnline(code, capture, consent) },
-          onSuccess = { r ->
-            faceCapture = null
-            status.text = "核销结果：${verifyStatusZh(r.status)}\n核销号：${r.verificationNo}\n${r.resultReason ?: ""}"
+          onSuccess = { showResult(it) },
+          onError = { status.text = "核销失败：${friendly(it)}" },
+        )
+      }
+    }
+
+    // TK-06 裁决2「不同意就不能首次入场：票仍是未核销状态」：capture 时未勾同意不拍、不提交。
+    fun consentMissing(): Boolean {
+      if (faceBinding != "capture" || faceConsent.isChecked) return false
+      status.text = "客人未同意留存人脸，不能首次入场（票仍未核销）"
+      return true
+    }
+
+    // 拍到照片即提交。
+    val faceButton = button("为入场客人拍照") {
+      val code = faceCode ?: return@button
+      if (consentMissing()) return@button
+      launchFaceShot { bitmap ->
+        if (bitmap == null) {
+          status.text = "未拍到照片，请重拍"
+        } else {
+          val shot = jpegBase64(bitmap)
+          faceCapture = shot
+          verifyWithFace(code, shot)
+        }
+      }
+    }.apply { visibility = View.GONE }
+
+    fun submit(raw: String) {
+      val code = raw.trim()
+      if (code.isEmpty()) { status.text = "请输入核销凭证"; return }
+      faceCode = null
+      faceBinding = null
+      faceCapture = null
+      faceConsent.isChecked = false
+      faceConsent.visibility = View.GONE
+      faceButton.visibility = View.GONE
+      // 第十八批 Q 段第 150 条 150-R2（BSM:552「进场之后，工作手机扫客人二维码核销各酒吧入场……」）：邀请函成员入场码在读人脸处置之前分流，
+      // 按码中订台号送订台入场核验，同样扫码即核销（ENUM:43）。
+      if (invitationEntryReservationId(code) != null) {
+        requireBindingOr(status) {
+          status.text = "正在核验入场…"
+          runBackground(
+            action = { workflow.invitationEntryVerifyOnline(code) },
+            onSuccess = { status.text = "邀请函入场核验通过：已入场" },
+            onError = { status.text = "邀请函入场核验失败：${friendly(it)}" },
+          )
+        }
+        return
+      }
+      requireBindingOr(status) {
+        status.text = "正在核销…"
+        runBackground(
+          // 同一次动作：先只读人脸处置，不需要人脸就直接核销。
+          action = { workflow.faceBindingFor(code).let { binding -> binding to (if (binding == null) workflow.verifyOnline(code) else null) } },
+          onSuccess = { (binding, r) ->
+            if (r != null) {
+              showResult(r)
+            } else {
+              faceCode = code
+              faceBinding = binding
+              faceConsent.visibility = if (binding == "capture") View.VISIBLE else View.GONE
+              faceButton.visibility = View.VISIBLE
+              status.text = if (binding == "capture") "一人多次票首次入场：须客人同意留存人脸并拍照；不同意不能入场（票仍未核销）"
+              else "一人多次票：须为入场客人拍照，由系统比对是否同一使用人"
+            }
           },
           onError = { status.text = "核销失败：${friendly(it)}" },
         )
       }
     }
 
+    // 给了 onResult 时扫码结果只交回调、不回填输入框（launchScan），这里回填后直接提交。
+    val scanButton = button("扫码核销") { launchScan(credential) { code -> credential.setText(code); submit(code) } }
+    // 手输兜底；本码已读到人脸处置且已拍照（如上次提交失败）时直接重提，否则按一次动作重走。
+    val verifyButton = button("核销") {
+      val code = credential.text.toString().trim()
+      val capture = faceCapture
+      if (code == faceCode && capture != null) {
+        if (!consentMissing()) verifyWithFace(code, capture)
+      } else {
+        submit(code)
+      }
+    }
+
     setContentView(
       screen(
         title = "门票 / 权益核销",
-        children = listOf(status, credential, scanButton, previewButton, faceConsent, faceButton, verifyButton, backButton()),
+        children = listOf(status, credential, scanButton, faceConsent, faceButton, verifyButton, backButton()),
       ),
     )
   }
@@ -1092,32 +1132,36 @@ class MainActivity : Activity() {
   }
 
   // ---------------------------------------------------------------------------
-  // 屏 ⑤ 游乐核销 -> amusementVerifyOnline
+  // 屏 ⑤ 游乐核销 -> amusementVerifyOnline（走票务核销入口 verify）
+  // 第十八批 Q 段第 146 条 146-R1（BSM:552「工作手机扫客人二维码核销各酒吧入场、赠饮、游乐等场内权益」；BSM:766「票里的游乐权益到项目入口核销。」）：
+  // 项目由入口点位或设备定位、场次取当前开放场次，员工不选项目与场次；扫码即提交，手输后点「游乐核销」兜底。
   // ---------------------------------------------------------------------------
   private fun showAmusementVerify() {
     val credential = editText("游乐凭证（扫码或手动输入）")
-    val sessionId = editText("场次（可选）")
     val status = statusText("游乐入口在线核销")
 
-    val verifyButton = button("游乐核销") {
-      val code = credential.text.toString().trim()
-      if (code.isEmpty()) { status.text = "请输入游乐凭证"; return@button }
+    fun submit(raw: String) {
+      val code = raw.trim()
+      if (code.isEmpty()) { status.text = "请输入游乐凭证"; return }
       requireBindingOr(status) {
         status.text = "正在核销…"
         runBackground(
-          action = { workflow.amusementVerifyOnline(code, sessionId.text.toString().trim().ifEmpty { null }) },
-          onSuccess = { r ->
-            status.text = "核销结果：${r.verificationResult}\n记录：${r.id}\n${r.failureReason ?: ""}"
-          },
+          action = { workflow.amusementVerifyOnline(code) },
+          // PGM:287：只显示中文状态与核销号，不显示 result_reason 机器码。
+          onSuccess = { r -> status.text = "核销结果：${verifyStatusZh(r.status)}\n核销号：${r.verificationNo}" },
           onError = { status.text = "游乐核销失败：${friendly(it)}" },
         )
       }
     }
 
+    // 给了 onResult 时扫码结果只交回调、不回填输入框（launchScan），这里回填后直接提交。
+    val scanButton = button("扫码核销") { launchScan(credential) { code -> credential.setText(code); submit(code) } }
+    val verifyButton = button("游乐核销") { submit(credential.text.toString()) }
+
     setContentView(
       screen(
         title = "游乐核销",
-        children = listOf(status, credential, sessionId, verifyButton, backButton()),
+        children = listOf(status, credential, scanButton, verifyButton, backButton()),
       ),
     )
   }

@@ -1,6 +1,6 @@
 package com.complex.platform.common.api;
 
-// 文件版本：V0.30
+// 文件版本：V0.31
 
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -303,7 +303,6 @@ public final class FieldLabels {
         p("additional_service_fee_cent", "追加服务费");
         p("opening_cash_cent", "备用金");
         p("declared_cash_cent", "申报现金金额");
-        p("cash_diff_threshold_cent", "现金差额阈值");
         p("daily_close_id", "日结单号");
         p("handover_id", "交接单号");
 

@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.35
+// 文件版本：V0.36
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -677,7 +677,9 @@ public class FinanceService implements TerminationSettlementPort {
         // 第十八批 P 段第 132 条：订台定金(bar_reservation_deposit)同样跳过——BSM:1062 与 DEC-R3-2026-08-04-04「定金直接进该卡座所属的酒吧商户」，
         // 决策台账 §16「顶层平台公司不直接取得酒吧消费收入」，ENUM:103 达标原路退回、付款时不是收入；商户侧以订台行进日结订台定金源，
         // 没收后按第 131 条计入该商户营业额与抽成基数。
-        if ("stored_value_topup_merchant".equals(type) || "bar_reservation_deposit".equals(type)) {
+        // 第十八批 Q 段第 139 条：客人扫码点单线上付(bar_scan_order)同样跳过——决策台账 §17「客人仍向酒吧全额付款，酒吧确认对客收入」，
+        // §16「顶层平台公司不直接取得酒吧消费收入」；酒吧消费收入归该酒吧商户，以成单时账单的 aggregate_pay 收款计入酒吧收入。
+        if ("stored_value_topup_merchant".equals(type) || "bar_reservation_deposit".equals(type) || "bar_scan_order".equals(type)) {
             return;
         }
         String key = slug(intentId);
@@ -1866,6 +1868,13 @@ public class FinanceService implements TerminationSettlementPort {
             throw ApiException.conflict("DAY_CLOSE_ANOMALY_PENDING",
                     "该营业日有待主管处置的酒吧账单异常，处置完毕后才能确认日结锁定");
         }
+        // 第十八批 Q 段第 144 条（BSM:1106「未结清订单阻止交班和日结」；PGM:931「未结清时阻止交班和日结」）：开单落在该营业日、仍未结清的
+        // 酒吧账单拒锁；与关台闸同口径——结清、被合单、主管「作废并冲正」之外都算未结清。
+        List<String> unsettledBills = repository.unsettledBarBillNos(barFrom, barTo, scopeType, scopeId, barWindows);
+        if (!unsettledBills.isEmpty()) {
+            throw ApiException.conflict("DAY_CLOSE_UNSETTLED_BILL",
+                    "该营业日有未结清的酒吧账单，结清后才能日结：账单号 " + String.join("、", unsettledBills));
+        }
         Instant now = Instant.now();
         String dailyCloseId = "daily_close_" + slug(actual.idempotencyKey());
         DailyCloseRecord saved = repository.saveDailyClose(new DailyCloseRecord(
@@ -2776,18 +2785,34 @@ public class FinanceService implements TerminationSettlementPort {
     }
 
     private long calculateTurnoverRent(TurnoverRentRuleRecord rule, LocalDate periodStart, LocalDate periodEnd) {
-        String project = businessDayResolver.projectOfMerchant(rule.merchantId());
-        Instant from = businessDayResolver.start(project, null, periodStart);
-        Instant to = businessDayResolver.end(project, null, periodEnd);
+        // 第十八批 Q 段第 140 条（BSM:1682「酒吧仍按每家酒吧配置」）：一次算窗口，酒吧商户的全部来源按该酒吧营业日窗，
+        // 其他商户按所属综合体（同 DividendService 三来源同窗）。
+        String bar = businessDayResolver.barOfMerchant(rule.merchantId());
+        String project = bar == null ? businessDayResolver.projectOfMerchant(rule.merchantId()) : null;
+        Instant from = businessDayResolver.start(project, bar, periodStart);
+        Instant to = businessDayResolver.end(project, bar, periodEnd);
         long turnover = repository.aggregateMerchantReflowTurnover(rule.merchantId(), from, to);
         // 第十八批 P 段第 131 条（ENUM:103、BSM:1062「因爽约、超时取消或到店未达最低消费而没收的定金，按爽约发生当日所属的营业日归属账期」，
         // 没收的定金「全额归该卡座所属的酒吧商户，作为空置补偿计入该商户营业额与营业额抽成基数」；BSM:1682「酒吧仍按每家酒吧配置」）：
         // 酒吧商户另计本账期没收的订台定金，以没收时点按该酒吧营业日归期。
-        String bar = businessDayResolver.barOfMerchant(rule.merchantId());
+        // 第十八批 Q 段第 138 条 138-R1（BSM:1347「不论收款走平台还是走商户自有渠道均计入」「减去当期已成功的退款金额」；BSM:1076「月结定格的扣留部分，
+        // 扣留金额计入该商户营业额、抽成基数」；BSM:1111「挂起订单在结清前不计入……结清后按实际结清金额计入，归属结清所在营业日」；ENUM:257「营业额抽成账单
+        // 在该账期的薪资月结完成、该账期月结定格时确定的服务费应发数与扣留数定数之后出账」）：酒吧商户再计平台内酒吧收入——整单已确认商品实收（按结清时点）
+        // ＋月结服务费扣留−已退成商品分项，来源未定 409 BAR_REVENUE_PENDING。合计为负按 0 计，与回流钳 0 同口径。
         if (bar != null) {
-            turnover = Math.addExact(turnover, repository.sumForfeitedBarDepositCent(rule.merchantId(),
-                    businessDayResolver.start(null, bar, periodStart), businessDayResolver.end(null, bar, periodEnd)));
+            turnover = Math.addExact(turnover, repository.sumForfeitedBarDepositCent(rule.merchantId(), from, to));
+            turnover = Math.addExact(turnover, repository.sumBarPlatformTurnoverCent(rule.merchantId(), from, to,
+                    periodStart, periodEnd.plusDays(1)));
+            // 第十八批 Q 段第 138 条 138-R4（BSM:1122「所有服务费由公司统一收款……全额进公司账」；BSM:1714「点舞等专项服务的收款主体为该服务发生地所属的
+            // 酒吧商户」；决策台账 §17「客人仍向酒吧全额付款，酒吧确认对客收入」）：再计该酒吧已完成的服务点单全额，以下单时点按该酒吧营业日窗归期。
+            turnover = Math.addExact(turnover, repository.sumCompletedServiceOrderCent(rule.merchantId(), from, to));
+        } else {
+            // 第十八批 Q 段第 138 条 138-R3（ENUM:257「未计收服务费的商户（餐饮、零售等），其通票或券核销划归本商户并已完成结算的部分计入」；
+            // DEC-R8-98-06「券核销结算金额＝平台按内部结算价付给核销商户的钱，对未计收服务费的商户按既有裁决计入其营业额」）：非酒吧商户再计
+            // 按内部结算价已付讫的券与通票合作方券结算金额，以付款时点按所属综合体营业日归期；酒吧是计收门票综合服务费的商户（ENUM:57），不计。
+            turnover = Math.addExact(turnover, repository.sumSettledVoucherSettlementCent(rule.merchantId(), from, to));
         }
+        turnover = Math.max(0L, turnover);
         List<TurnoverRentRuleTierRecord> tiers = repository.listTurnoverRentRuleTiers(rule.id());
         return tiers.isEmpty()
                 ? clampRent(turnover, rule.rateBps(), rule.minAmountCent(), rule.maxAmountCent())

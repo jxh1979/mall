@@ -1,6 +1,6 @@
 package com.complex.platform.gate;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import com.complex.platform.common.BusinessDayResolver;
 import com.complex.platform.common.api.ApiException;
@@ -19,7 +19,7 @@ import org.springframework.web.context.request.ServletRequestAttributes;
  * 一律拒绝并留痕；绑定点位的工作手机、平板、一体机离开授权范围后同样只保留查看，不得执行上述操作。」；BSM:1876「Web 端同样适用」。
  *
  * <ul>
- *   <li>只接现场动作闭集 12 个接口（第十八批裁决 31：财务中心后台办理不查位置），各服务在进入幂等执行之前调用，重放不能绕过；</li>
+ *   <li>只接现场动作闭集 11 个接口（第十八批裁决 31：财务中心后台办理不查位置；第十八批 Q 段第 151 条删去按人数登记的 check-in-guest），各服务在进入幂等执行之前调用，重放不能绕过；</li>
  *   <li>项目没配授权范围不查位置（裁决 32）；对象查不到（项目为空或取项目时抛业务异常）跳过本闸，交给业务原有的报错；</li>
  *   <li>位置取请求头 X-Geo-Latitude、X-Geo-Longitude（十进制度，WGS-84）；没有或解析不了按范围外处理（裁决 30），
  *       403 SENSITIVE_OPERATION_LOCATION_REQUIRED；到圆心距离大于授权半径 403 SENSITIVE_OPERATION_OUT_OF_RANGE；</li>

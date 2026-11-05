@@ -1,4 +1,4 @@
-# P0 OpenAPI Operation 验收矩阵 V0.48
+# P0 OpenAPI Operation 验收矩阵 V0.49
 
 ## 1. 文档定位
 
@@ -17,7 +17,7 @@
 
 ## 3. Operation 清单
 
-> 当前 `docs/openapi/openapi-p0.json` 共 1238 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
+> 当前 `docs/openapi/openapi-p0.json` 共 1236 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
 
 | 标签 | 方法 | 路径 | operationId | 摘要 | 请求体 | 权限 | 认证上下文 | 数据范围 | 终端/设备能力/调用通道 | 幂等 | 成功事件 | 失败事件 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -109,7 +109,6 @@
 | bar | `POST` | `/api/v1/bar/products` | `createBarProduct` | 创建酒吧商品 | `BarProductRequest` | `bar.product.manage` | `staff-token` | `project` | web | 是 | `bar.product.created` | `bar.product.created_failed` |
 | bar | `GET` | `/api/v1/bar/reservations` | `listBarReservations` | 查询酒吧预约 | `-` | `bar.reservation.view` | `staff-token` | `project-bar-table` | web | 否 | `bar.reservation.viewed` | `bar.reservation.view_failed` |
 | bar | `POST` | `/api/v1/bar/reservations` | `createBarReservation` | 订台或卡座预订 | `BarReservationRequest` | `bar.reservation.create` | `staff-token` | `project-bar` | web, miniapp, app, kiosk, staff_private_phone, staff_work_phone | 是 | `bar.reservation.created` | `bar.reservation.create_failed` |
-| bar | `POST` | `/api/v1/bar/reservations/{id}/check-in-guest` | `checkInBarReservationGuest` | 卡座免通票入场名额核销 | `VerificationRequest` | `bar.table.guest_checkin` | `staff-token` | `project-bar` | staff_work_phone, web | 是 | `bar.table_guest.checked_in` | `bar.table_guest.rejected` |
 | bar | `GET` | `/api/v1/bar/reservations/{id}/invitation` | `getBarReservationInvitation` | 查询订卡邀请函 | `-` | `bar.reservation.view` | `staff-token` | `project-bar` | web | 否 | `not_applicable` | `not_applicable` |
 | bar | `POST` | `/api/v1/bar/reservations/{id}/invitation` | `issueBarReservationInvitation` | 签发订卡邀请函 | `object` | `bar.reservation.invitation.manage` | `staff-token` | `project-bar` | web | 是 | `bar.reservation_invitation_issued` | `bar.reservation_invitation_issue_failed` |
 | bar | `POST` | `/api/v1/bar/reservations/{id}/invitation/revoke` | `revokeBarReservationInvitation` | 吊销订卡邀请函 | `object` | `bar.reservation.invitation.manage` | `staff-token` | `project-bar` | web | 是 | `bar.reservation_invitation_revoked` | `bar.reservation_invitation_revoke_failed` |
@@ -581,7 +580,6 @@
 | evidence | `GET` | `/api/v1/evidence/traceability/auto-capture-rate` | `getTraceabilityAutoCaptureRate` | 查询业务流程追溯自动采集率 | `-` | `evidence.timeline.view` | `staff-token` | `project-object` | web | 否 | `not_applicable` | `not_applicable` |
 | bar | `GET` | `/api/v1/bar/entitlement-redemptions` | `listBarEntitlementRedemptions` | 查询酒吧酒水权益兑换台账 | `-` | `bar.entitlement.read` | `staff-token` | `project-bar` | web | 否 | `bar.entitlement_redemption.viewed` | `bar.entitlement_redemption.view_failed` |
 | bar | `POST` | `/api/v1/bar/entitlement-redemptions/drink` | `redeemBarDrinkEntitlement` | 酒水权益兑换承接 | `BarEntitlementDrinkRedemptionRequest` | `bar.entitlement.redeem` | `staff-token` | `project-bar` | staff_work_phone, web | 是 | `bar.entitlement_redeemed` | `bar.entitlement_redeem_failed` |
-| bar | `POST` | `/api/v1/bar/reservations/{id}/entry-allowance/verify` | `verifyBarReservationEntryAllowance` | 卡座免通票入场名额校验 | `VerificationRequest` | `bar.table.guest_checkin` | `staff-token` | `project-bar` | staff_work_phone, kiosk | 是 | `bar.table_guest.entry_allowance_verified` | `bar.table_guest.entry_allowance_verify_failed` |
 | finance | `GET` | `/api/v1/finance/ar-ap-items/export` | `exportArApItems` | 导出应收应付台账快照 | `-` | `finance.ar_ap.export` | `staff-token` | `project-entity` | web | 否 | `finance_ar_ap.exported` | `finance_ar_ap.export_failed` |
 | integration | `POST` | `/api/v1/integration/polling-checks` | `recordIntegrationPollingCheck` | 登记第三方定时轮询校验快照 | `object` | `integration.retry.manage` | `staff-token` | `platform` | web | 是 | `integration.polling_check.recorded` | `integration.polling_check.record_failed` |
 | ticketing | `POST` | `/api/v1/ticketing/orders/{order_id}/confirm-payment` | `confirmTicketOrderPayment` | 确认票务订单支付成功（回写 paid） | `ConfirmTicketOrderPaymentRequest` | `finance.payment.register` | `staff-token` | `platform` | web, kiosk | 是 | `ticket_order.payment_confirmed` | `ticket_order.payment_confirm_failed` |

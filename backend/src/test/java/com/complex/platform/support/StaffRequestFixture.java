@@ -1,6 +1,6 @@
 package com.complex.platform.support;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 
@@ -30,8 +30,9 @@ public final class StaffRequestFixture {
             String... permissions) {
         if (created.add(userId)) {
             String role = "role_" + userId;
+            // 角色名起中文（PGM「界面全中文」）：不开测试事务的用例（如 KioskEntitlementClaimJdbcTests 148-R1）会把角色提交留库。
             jdbc.update("INSERT INTO roles (id, role_name, description, data_scope, status, created_at)"
-                    + " VALUES (?, ?, 'B14 券与展示组回归', 'project', 'active', now())", role, role);
+                    + " VALUES (?, ?, 'B14 券与展示组回归', 'project', 'active', now())", role, "后台账号回归角色" + System.nanoTime());
             for (String code : permissions) {
                 jdbc.update("INSERT INTO role_permissions (role_id, permission_code) VALUES (?, ?)", role, code);
             }

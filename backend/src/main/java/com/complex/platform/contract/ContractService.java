@@ -1,6 +1,6 @@
 package com.complex.platform.contract;
 
-// 文件版本：V0.28
+// 文件版本：V0.29
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.LocalZone;
@@ -88,6 +88,9 @@ public class ContractService implements com.complex.platform.finance.Termination
     private static final Set<String> CHAIN_RESERVED_KEYS = Set.of("parentContractId", "amendmentType", "increaseFrom", "depositAdjustment",
             "scopeGrants");
     private static final String MOVE_OUT_DATE_KEY = "moveOutDate";
+    /** 138-R5 复核修正：保底取高、叠加合同变更或续租终审前的月租条款段（{throughPeriod, ContractRentMath 读的键}），见 withPriorRent。 */
+    private static final String PRIOR_RENT_KEY = "priorRentTerms";
+    private static final List<String> RENT_MATH_KEYS = List.of("baseRentCent", "freeRentMonths", "increase", "increaseFrom");
     /**
      * 落账前（在办）态＝待结算＋争议挂起两态：同一合同同一时刻只有一张在办退租结算单（BSM L1352「同一份合同的退租结算只算一次、不重复出账」）；
      * 只有落账前的单可被驳回作废、可终审落账。第三轮控制席约定：落账后的「押金抵扣中」「欠费追缴中」是已落账状态，不在此列。
@@ -677,7 +680,7 @@ public class ContractService implements com.complex.platform.finance.Termination
                 contract.attachmentIds(), "effective", projectId, null, null,
                 contract.renewedFromContractId(), contract.createdAt(), Instant.now(), contract.reviewId());
         ContractRecord effective = repository.saveContract(withSnapshot(frozen, buildSnapshot(frozen, depositMonths)));
-        // P1-A 收入闭环：生效即按整租期逐期幂等排租金/物业/能源 AR（base+递增−免租，免租/0 跳过）。
+        // P1-A 收入闭环：生效即按整租期逐期幂等排租金/物业/能源 AR（base+递增−免租，免租/0 跳过）；营业额抽成类收租方式不预排租金（138-R5，见 scheduleTermBills）。
         // ponytail: 整租期一次性预排 vs @Scheduled 逐期挂账——选预排：确定可测 + 幂等（genFeeBill 查重，重复生效不重挂），
         //   且每期账单各带自身 due_date（期首），看板按 due_date 逐期确认收入，不在生效日堆叠整租期。
         //   若改 @Scheduled 累积巨量空跑作业，反更重；catch-up 仍可手工调 period-bills 端点（P1-B 按钮）。
@@ -696,12 +699,16 @@ public class ContractService implements com.complex.platform.finance.Termination
      * 自 from 月起至到期月逐期幂等挂账各费目；返回新挂账条数。生效自动调用（from＝生效月，整租期）；HP-C03-4 续租终审调用（from＝原到期月，补排延长期，
      * 已出账期间由 billPeriodFees 去重跳过）；第四轮裁决第 2 条面积/位置变更子合同生效调用（from＝变更生效月，重排剩余租期；纯提成合同 withRent=false 只排物业费）；
      * 第五轮裁决第 2 条租金调整终审调用（from＝终审当月，同一合同按调整后月租重排剩余租期，被作废账单不再算已出账）。
+     * 第十八批 Q 段第 138 条 138-R5（ENUM:257「营业额抽成账单在该账期的薪资月结完成、该账期月结定格时确定的服务费应发数与扣留数定数之后出账，账单一次出准，
+     * 不使用预估数、不在下期补差」）：只有固定租金合同预排租金；营业额抽成类收租方式（纯提成、保底与抽成取高、保底加抽成叠加）只预排物业费、车位月租，
+     * 租金由财务在该账期月结定格后经按期出账（generatePeriodBills）或单期租金挂账（generateRentBill）一次出准。
      */
     private int scheduleTermBills(ContractRecord c, YearMonth from, String idemPrefix, boolean withRent) {
         YearMonth end = YearMonth.from(c.expiryDate());
+        boolean rent = withRent && isFixedRent(c.rentTerms());
         int count = 0;
         for (YearMonth ym = from; !ym.isAfter(end); ym = ym.plusMonths(1)) {
-            count += billPeriodFees(c, ym.toString(), idemPrefix + ":" + ym, withRent).size();
+            count += billPeriodFees(c, ym.toString(), idemPrefix + ":" + ym, rent).size();
         }
         return count;
     }
@@ -1409,13 +1416,13 @@ public class ContractService implements com.complex.platform.finance.Termination
             throw ApiException.badRequest("VALIDATION_FAILED", "账期格式不正确，应为 YYYY-MM");
         }
         ContractRecord c = requireContractInReach(contractId, "finance.ar_ap.manage");
-        if (!"effective".equals(c.lifecycleStatus())) {
-            throw ApiException.conflict("CONTRACT_NOT_EFFECTIVE", "只有生效中的合同才能生成租金账单");
+        if (!billableForPeriod(c, period)) {
+            throw ApiException.conflict("CONTRACT_NOT_EFFECTIVE", "只有生效中的合同才能生成租金账单（已到期合同可出到期日所在月及以前的账期）");
         }
         if (rentBillExistsInChain(c, period, "rent")) {
             throw ApiException.conflict("CONTRACT_RENT_ALREADY_BILLED", "该账期的租金已生成账单：" + period);
         }
-        long baseRent = ContractRentMath.periodAmountCent(c.rentTerms(), c.effectiveDate(), period);
+        long baseRent = ContractRentMath.periodAmountCent(rentTermsFor(c.rentTerms(), period), c.effectiveDate(), period);
         com.complex.platform.finance.FinanceService.PeriodTurnoverRent rent =
                 resolveBillingRent(c, c.rentTerms() == null ? Map.of() : c.rentTerms(), period, baseRent);
         if (rent.amountCent() <= 0) {
@@ -1438,8 +1445,8 @@ public class ContractService implements com.complex.platform.finance.Termination
             throw ApiException.badRequest("VALIDATION_FAILED", "账期格式不正确，应为 YYYY-MM");
         }
         ContractRecord c = requireContractInReach(contractId, "finance.ar_ap.manage");
-        if (!"effective".equals(c.lifecycleStatus())) {
-            throw ApiException.conflict("CONTRACT_NOT_EFFECTIVE", "只有生效中的合同才能生成账单");
+        if (!billableForPeriod(c, period)) {
+            throw ApiException.conflict("CONTRACT_NOT_EFFECTIVE", "只有生效中的合同才能生成账单（已到期合同可出到期日所在月及以前的账期）");
         }
         return billPeriodFees(c, period, actual.idempotencyKey(), true);
     }
@@ -1453,7 +1460,7 @@ public class ContractService implements com.complex.platform.finance.Termination
         LocalDate dueDate = dueDateOf(period);
         List<ContractRentBillRecord> out = new ArrayList<>();
         if (withRent && !rentBillExistsInChain(c, period, "rent")) {
-            long baseRent = ContractRentMath.periodAmountCent(rt, c.effectiveDate(), period);
+            long baseRent = ContractRentMath.periodAmountCent(rentTermsFor(rt, period), c.effectiveDate(), period);
             com.complex.platform.finance.FinanceService.PeriodTurnoverRent rent =
                     resolveBillingRent(c, rt, period, baseRent);
             ContractRentBillRecord rb = genFeeBill(c, period, "rent", rent.amountCent(), rent.ruleId(), dueDate, idemKey, "contract.fee_billed");
@@ -1499,10 +1506,10 @@ public class ContractService implements com.complex.platform.finance.Termination
     /** 按合同收租方式组合月租和提成；使用提成的账单同时锁定本期规则。 */
     private com.complex.platform.finance.FinanceService.PeriodTurnoverRent resolveBillingRent(
             ContractRecord c, Map<String, Object> rt, String period, long baseRent) {
-        String mode = strVal(rt.get("rentBillingMode"));
-        if (mode == null || "fixed_only".equals(mode)) {
+        if (isFixedRent(rt)) {
             return new com.complex.platform.finance.FinanceService.PeriodTurnoverRent(null, baseRent);
         }
+        String mode = strVal(rt.get("rentBillingMode"));
         if (turnoverRentPort == null) {
             throw ApiException.conflict("TURNOVER_RENT_UNAVAILABLE", "抽成租金计算服务不可用，暂不能出账");
         }
@@ -1697,6 +1704,7 @@ public class ContractService implements com.complex.platform.finance.Termination
                 if (rebillRent) {
                     newTerms.put("increaseFrom", rentEffective.toString());
                     newTerms = new HashMap<>(resolvePerSqmBaseRent(newTerms, repository.listContractSpaceIds(contract.id())));
+                    newTerms = withPriorRent(newTerms, contract.rentTerms(), YearMonth.from(rentEffective).minusMonths(1));
                 }
                 updated = repository.saveContract(new ContractRecord(contract.id(), contract.merchantId(),
                         contract.contractSubjectId(), contract.operationSubjectId(), contract.settlementSubjectId(),
@@ -1796,6 +1804,7 @@ public class ContractService implements com.complex.platform.finance.Termination
         // 第三轮裁决第 3 条：变更录入的月租即新基数，原递增条款的周期与比例沿用、自变更生效日（终审当日）起重新计期（ContractRentMath 读 increaseFrom）。
         LocalDate changeEffective = LocalDate.now(LocalZone.ID);
         childTerms.put("increaseFrom", changeEffective.toString());
+        childTerms = withPriorRent(childTerms, parent.rentTerms(), YearMonth.from(changeEffective).minusMonths(1));
         // 第三轮裁决第 1 条：纯提成合同押金沿用原合同约定金额，不按公式重算、不登记差额。
         boolean agreedDeposit = isTurnoverOnly(parent.rentTerms());
         Integer months = agreedDeposit ? null : requireDepositMonths(parent);
@@ -1867,6 +1876,7 @@ public class ContractService implements com.complex.platform.finance.Termination
                 terms.put("baseRentCent", payload.get("baseRentCent"));
             }
         }
+        terms = withPriorRent(terms, contract.rentTerms(), YearMonth.from(contract.expiryDate()));
         Long target = agreedDeposit ? contract.depositCent() : Long.valueOf(depositFor(terms, months));
         Map<String, Object> adj = agreedDeposit ? null : registerDepositDelta(contract, contract.id(), change.id(), target,
                 strVal(payload.get("depositDeadline")));
@@ -1934,6 +1944,66 @@ public class ContractService implements com.complex.platform.finance.Termination
     /** 第三轮裁决第 1 条「纯提成合同（固定比例、阶梯比例，没有月租）」：收租方式纯提成（rent_terms.rentBillingMode=turnover_only，出账只按营业额提成）。 */
     private boolean isTurnoverOnly(Map<String, Object> rentTerms) {
         return rentTerms != null && "turnover_only".equals(strVal(rentTerms.get("rentBillingMode")));
+    }
+
+    /** 收租方式为空或 fixed_only 即固定租金（出账只按月租）；其余 turnover_only／higher_of／sum 为营业额抽成类，138-R5 起不预排租金。 */
+    private boolean isFixedRent(Map<String, Object> rentTerms) {
+        String mode = rentTerms == null ? null : strVal(rentTerms.get("rentBillingMode"));
+        return mode == null || "fixed_only".equals(mode);
+    }
+
+    /**
+     * 第十八批 Q 段第 138 条 138-R5 复核修正（ENUM:257 营业额抽成账单在该账期月结定格之后出账；ENUM:252「退租对应期间的全部相关单据收齐并核对完成后，才允许退租结算
+     * 最后审批通过」；第七批合同裁决第 2 条「合同到期走到期日所在月」）：营业额抽成类合同的最后一期只能在到期、月结定格后出，这时到期作业已把合同转为已到期——
+     * 已到期合同放行到期日所在月及以前的账期出账，其余非生效状态照旧 409。
+     */
+    private static boolean billableForPeriod(ContractRecord c, String period) {
+        return "effective".equals(c.lifecycleStatus()) || ("expired".equals(c.lifecycleStatus())
+                && !YearMonth.parse(period).isAfter(YearMonth.from(c.expiryDate())));
+    }
+
+    /**
+     * 第十八批 Q 段第 138 条 138-R5 复核修正（第七批合同裁决第 4 条所引 ENUM L255「续租审批未完成期间按原合同继续出账」；第 10 条「从续租/变更生效日起重新计期」；
+     * 第 16 条「作废父合同自变更生效月起……按子合同新月租和重新计期的递增重排剩余租期」；第 20 条「作废自生效月起……按调整后月租重排剩余租期」）：
+     * 保底取高、叠加合同不预排租金，续租、租金调整、面积/位置变更终审换月租前，把原月租条款（ContractRentMath 读的键）
+     * 连同适用末月 through 记进 rent_terms.priorRentTerms（按末月升序），through 及以前的账期出账仍按原月租；已记的段末月不早于 through 的截到 through、其后的段不再适用。
+     */
+    private Map<String, Object> withPriorRent(Map<String, Object> newTerms, Map<String, Object> oldTerms, YearMonth through) {
+        if (oldTerms == null || isFixedRent(oldTerms) || isTurnoverOnly(oldTerms)) {
+            return newTerms;   // 固定租金合同变更前各期已预排；纯提成合同没有月租
+        }
+        String end = through.toString();
+        List<Map<String, Object>> segments = new ArrayList<>();
+        Map<String, Object> out = new HashMap<>(newTerms);
+        out.put(PRIOR_RENT_KEY, segments);
+        for (Map<String, Object> seg : priorRentSegments(oldTerms)) {
+            Map<String, Object> kept = new LinkedHashMap<>(seg);
+            segments.add(kept);
+            if (end.compareTo(String.valueOf(seg.get("throughPeriod"))) <= 0) {
+                kept.put("throughPeriod", end);   // 原月租还没轮到就被这次终审取代
+                return out;
+            }
+        }
+        Map<String, Object> current = new LinkedHashMap<>();
+        current.put("throughPeriod", end);
+        RENT_MATH_KEYS.stream().filter(oldTerms::containsKey).forEach(k -> current.put(k, oldTerms.get(k)));
+        segments.add(current);
+        return out;
+    }
+
+    /** 该账期实际适用的月租条款：priorRentTerms 中第一段末月不早于该期的，否则为当前条款。 */
+    private static Map<String, Object> rentTermsFor(Map<String, Object> rentTerms, String period) {
+        for (Map<String, Object> seg : priorRentSegments(rentTerms)) {
+            if (period.compareTo(String.valueOf(seg.get("throughPeriod"))) <= 0) {
+                return seg;
+            }
+        }
+        return rentTerms;
+    }
+
+    @SuppressWarnings("unchecked")
+    private static List<Map<String, Object>> priorRentSegments(Map<String, Object> rentTerms) {
+        return rentTerms != null && rentTerms.get(PRIOR_RENT_KEY) instanceof List<?> l ? (List<Map<String, Object>>) l : List.of();
     }
 
     private boolean isPerSqm(Map<String, Object> rentTerms) {

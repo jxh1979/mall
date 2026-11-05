@@ -54,6 +54,9 @@ class GiftRedemptionEndToEndTests {
     @Autowired
     private PlatformTransactionManager transactionManager;
 
+    @Autowired
+    private com.complex.platform.common.BusinessDayResolver businessDays;
+
     @BeforeEach
     void authenticate() {
         // 生产中核销/冲正必有已认证主体；P0-2 后在线核销主链会按调用者商户范围校验归属。
@@ -313,6 +316,97 @@ class GiftRedemptionEndToEndTests {
                 Integer.class, deviceId)).isEqualTo(1);
     }
 
+    // 第十八批 Q 段第 148 条 148-R1（ENUM:55「……一张通票覆盖几家酒吧，就为每一家各发一份独立的入场权益与赠酒权益，一家一份、互不占用；
+    // 在 A 店核销入场不影响在 B、C 店另行核销各自的入场权益。」；BSM:780「……该窗口内票面附带的各项权益按完整一份配足、仅限当场消耗……
+    // 「当天」「每天」一律按营业日计算……酒吧仍按每家酒吧配置」）：两人通票覆盖 A、B 两家酒吧，A 店核了 1 号人份的 A 店入场。
+    // B 店核 1 号人份的 B 店赠饮、A 店核 2 号人份的 A 店赠饮都拒；1 号人份的 A 店入场记录挪到 A 店本营业日起点之前，A 店赠饮拒；
+    // 挪回后冲正这次入场，A 店赠饮仍拒。拒绝都是 BAR_ENTRY_NOT_VERIFIED、不扣次。修复前 B 店赠饮即核销成功，第一处断言即红。
+    @Test
+    void giftDrinkNeedsThisBarsEntryOfTheSameSlotInThisBarsBusinessDay() {
+        String suffix = Long.toString(System.nanoTime());
+        String barA = "bar_q148a_" + suffix;
+        String barB = "bar_q148b_" + suffix;
+        for (String bar : List.of(barA, barB)) {
+            seedBarTable(bar);
+            seedStockItem("item_" + bar, 5);
+            seedBarProduct("barprod_" + bar, bar, "item_" + bar, 4200L);
+        }
+        String deviceA = seedDeviceForBar(barA);
+        String deviceB = seedDeviceForBar(barB);
+        String code = "q148-" + suffix;
+        String typeId = "tt_" + code;
+        jdbcTemplate.update("""
+                INSERT INTO ticket_types (id, ticket_name, base_calendar_price_mode, stock_required, status, created_at, updated_at)
+                VALUES (?, '两吧通票', 'fixed', FALSE, 'active', now(), now())
+                """, typeId);
+        Instant now = Instant.now();
+        ticketingRepository.saveTicketOrder(new TicketOrderRecord(
+                "order_" + code, "ON-" + code, "cust_" + code, typeId, null, 2,
+                java.time.LocalDate.now(), "web", null, 0L, null, 0L, 0L, "CNY", "paid", "issued", "created", now, now, null, null, null));
+        String parent = seedParentTicket(code, typeId, 2);
+        String entryA1 = seedSlotEntitlement("q148-ea1-" + suffix, typeId, "order_" + code, parent, 1, barA, "admission", null);
+        String giftA1 = seedSlotEntitlement("q148-ga1-" + suffix, typeId, "order_" + code, parent, 1, barA, "gift_drink", "barprod_" + barA);
+        String giftA2 = seedSlotEntitlement("q148-ga2-" + suffix, typeId, "order_" + code, parent, 2, barA, "gift_drink", "barprod_" + barA);
+        String giftB1 = seedSlotEntitlement("q148-gb1-" + suffix, typeId, "order_" + code, parent, 1, barB, "gift_drink", "barprod_" + barB);
+
+        String entry = verificationService.createVerification(new VerificationRequest(
+                "req-q148-ea1-" + suffix, "qr", entryA1, deviceA, barA, Map.of())).id();
+        assertBarEntryNotVerified(giftB1, deviceB, barB);
+        assertBarEntryNotVerified(giftA2, deviceA, barA);
+        Instant start = businessDays.start(null, barA, businessDays.businessDate(null, barA, Instant.now()));
+        jdbcTemplate.update("UPDATE ticket_verifications SET created_at = ? WHERE id = ?", java.sql.Timestamp.from(start.minusSeconds(60)), entry);
+        assertBarEntryNotVerified(giftA1, deviceA, barA);
+        jdbcTemplate.update("UPDATE ticket_verifications SET created_at = ? WHERE id = ?", java.sql.Timestamp.from(Instant.now()), entry);
+        verificationService.reverseVerification(entry, "误核入场", "staff_q148");
+        assertBarEntryNotVerified(giftA1, deviceA, barA);
+        assertThat(jdbcTemplate.queryForList("SELECT used_times FROM issued_entitlements WHERE id IN (?, ?, ?)", Integer.class,
+                "ent_" + giftA1, "ent_" + giftA2, "ent_" + giftB1)).containsExactly(0, 0, 0);
+    }
+
+    private void assertBarEntryNotVerified(String giftCode, String deviceId, String barId) {
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> verificationService.createVerification(new VerificationRequest(
+                        "req-" + giftCode + "-" + System.nanoTime(), "qr", giftCode, deviceId, barId, Map.of())))
+                .isInstanceOfSatisfying(com.complex.platform.common.api.ApiException.class,
+                        e -> assertThat(e.code()).isEqualTo("BAR_ENTRY_NOT_VERIFIED"));
+    }
+
+    /** 148-R1：父票（numPeople 人份），挂在 order_{code}、票种 typeId 下。 */
+    private String seedParentTicket(String code, String typeId, int numPeople) {
+        String parent = "ti_" + code;
+        jdbcTemplate.update("""
+                INSERT INTO ticket_instances (id, ticket_no, order_id, ticket_type_id, seq_in_order, num_people, total_times,
+                    status, created_at, updated_at)
+                VALUES (?, ?, ?, ?, 1, ?, 1, 'active', now(), now())
+                """, parent, "T-" + code, "order_" + code, typeId, numPeople);
+        return parent;
+    }
+
+    /** 148-R1：父票 parent 第 slot 号人份在 barId 这家酒吧的一份权益（入场 admission 或赠饮 gift_drink，各一次）。 */
+    private String seedSlotEntitlement(String code, String typeId, String orderId, String parent, int slot, String barId,
+                                       String type, String barItemRef) {
+        jdbcTemplate.update("""
+                INSERT INTO entitlement_templates (id, name, entitlement_type, default_total_times,
+                    default_value_cent, status, bar_item_ref, created_at, updated_at)
+                VALUES (?, ?, ?, 1, 0, 'active', ?, now(), now())
+                """, "et_" + code, "admission".equals(type) ? "酒吧入场" : "赠饮", type, barItemRef);
+        Instant now = Instant.now();
+        ticketingRepository.saveIssuedEntitlement(new IssuedEntitlementRecord(
+                "ent_" + code, code, typeId, orderId, "et_" + code, type,
+                barId, null, barId, 1, 0, 0L, "active",
+                now.minusSeconds(60), now.plusSeconds(3600), now, now, 1, null,
+                null, null, null, null, parent, slot, null, null));
+        return code;
+    }
+
+    /** 148-R1：入场权益已核——直接落一条核销成功记录（设备 device_t15）。 */
+    private void markEntryVerified(String entryCode, String barId) {
+        jdbcTemplate.update("""
+                INSERT INTO ticket_verifications (id, verification_no, entitlement_id, entitlement_code, credential_type,
+                    credential_payload, device_id, point_id, status, source_type, created_at, merchant_id, verified_people)
+                VALUES (?, ?, ?, ?, 'qr', ?, 'device_t15', ?, 'success', 'android_terminal_online', now(), ?, 1)
+                """, "ver_" + entryCode, "V-" + entryCode, "ent_" + entryCode, entryCode, entryCode, barId, barId);
+    }
+
     private void seedGiftEntitlementForMerchant(String code, String barId, String merchantId) {
         Instant now = Instant.now();
         java.sql.Timestamp ts = java.sql.Timestamp.from(now);
@@ -436,6 +530,7 @@ class GiftRedemptionEndToEndTests {
         ticketingRepository.saveTicketOrder(new TicketOrderRecord(
                 "order_" + code, "ON-" + code, "cust_" + code, typeId, null, totalTimes,
                 java.time.LocalDate.parse("2026-06-18"), "web", null, 0L, null, 0L, 0L, "CNY", "paid", "issued", "created", now, now, null, null, null));
+        String parent = seedParentTicket(code, typeId, 1);
         ticketingRepository.saveIssuedEntitlement(new IssuedEntitlementRecord(
                 "ent_" + code,        // id
                 code,                 // entitlementCode
@@ -456,6 +551,8 @@ class GiftRedemptionEndToEndTests {
                 now,                  // updatedAt
                 1,                    // numPeople
                 null,
-                null, null, null, null, null, 0, null, null));               // allocatedRevenueCent
+                null, null, null, null, parent, 1, null, null));             // allocatedRevenueCent；148-R1：父票 1 号人份
+        // 第十八批 Q 段第 148 条（ENUM:55「客人须先核销这家酒吧的入场权益、再核销这家酒吧的酒水（赠饮）权益」）：同票同人份这家酒吧的入场已核。
+        markEntryVerified(seedSlotEntitlement("en-" + code, typeId, "order_" + code, parent, 1, barId, "admission", null), barId);
     }
 }

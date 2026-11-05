@@ -1,4 +1,4 @@
-// 文件版本：V0.06
+// 文件版本：V0.07
 package com.complex.platform.bar;
 
 import static org.mockito.ArgumentMatchers.any;
@@ -82,8 +82,6 @@ class BarControllerTests {
         when(service.createProduct(any(BarProductRequest.class))).thenReturn(product(false));
         when(service.listReservations(false)).thenReturn(new PageResponse<>(List.of(reservation()), 1, 50, 1));
         when(service.createReservation(any(BarReservationRequest.class))).thenReturn(reservation());
-        when(service.checkInReservationGuest(eq("reservation_1"), any(VerificationRequest.class))).thenReturn(checkin());
-        when(service.verifyReservationEntryAllowance(eq("reservation_1"), any(VerificationRequest.class))).thenReturn(entryAllowance());
         when(service.listTables()).thenReturn(new PageResponse<>(List.of(table()), 1, 50, 1));
         when(service.createTable(any(BarTableRequest.class))).thenReturn(table());
         when(service.openTable(eq("table_1"), any(OpenBarTableRequest.class))).thenReturn(openedTable());
@@ -118,8 +116,6 @@ class BarControllerTests {
             "POST,/api/v1/bar/products,bar.product.manage",
             "GET,/api/v1/bar/reservations,bar.reservation.view",
             "POST,/api/v1/bar/reservations,bar.reservation.create",
-            "POST,/api/v1/bar/reservations/reservation_1/check-in-guest,bar.table.guest_checkin",
-            "POST,/api/v1/bar/reservations/reservation_1/entry-allowance/verify,bar.table.guest_checkin",
             "POST,/api/v1/bar/reservations/reservation_1/invitation,bar.reservation.invitation.manage",
             "GET,/api/v1/bar/reservations/reservation_1/invitation,bar.reservation.view",
             "POST,/api/v1/bar/reservations/reservation_1/invitation/revoke,bar.reservation.invitation.manage",
@@ -166,8 +162,6 @@ class BarControllerTests {
             "/api/v1/bar/production-tickets/ticket_1/transition",
             "/api/v1/bar/products",
             "/api/v1/bar/reservations",
-            "/api/v1/bar/reservations/reservation_1/check-in-guest",
-            "/api/v1/bar/reservations/reservation_1/entry-allowance/verify",
             "/api/v1/bar/reservations/reservation_1/invitation",
             "/api/v1/bar/reservations/reservation_1/invitation/revoke",
             "/api/v1/bar/reservations/reservation_1/invitation/entry-verify",
@@ -326,7 +320,7 @@ class BarControllerTests {
                     "bar_id":"bar_1","merchant_id":"merchant_1","business_date":"2026-06-20","table_id":"table_1","customer_id":"customer_1","guest_count":2,"sales_staff_id":"staff_sales","service_staff_id":"staff_service","opened_by_user_id":"supervisor_1"}
                     """;
         }
-        if (path.contains("age-verifications") || path.contains("check-in-guest")) {
+        if (path.contains("age-verifications")) {
             return "{" + idempotency + """
                     "credential_type":"manual","credential_payload":"guest_1","device_id":"dev_1","point_id":"bar_1","business_context":{"bar_id":"bar_1"}}
                     """;
@@ -389,7 +383,7 @@ class BarControllerTests {
         }
         if (path.contains("tables")) {
             return "{" + idempotency + """
-                    "bar_id":"bar_1","table_name":"A1","table_type":"card_seat","minimum_spend_cent":50000,"allowed_free_entry_count":2,"status":"active"}
+                    "bar_id":"bar_1","table_name":"A1","table_type":"card_seat","minimum_spend_cent":50000,"capacity":2,"status":"active"}
                     """;
         }
         return "{" + idempotency + """
@@ -429,14 +423,6 @@ class BarControllerTests {
     private BarReservationRecord reservation() {
         Instant now = Instant.parse("2026-06-14T00:00:00Z");
         return new BarReservationRecord("reservation_1", "bar_1", null, "table_1", "customer_1", now, 2, 2, 0L, "not_required", "staff", "staff_sales", "reserved", "web", null, List.of(), now, now, null);
-    }
-
-    private BarTableGuestCheckinRecord checkin() {
-        return new BarTableGuestCheckinRecord("checkin_1", "reservation_1", "bar_1", "table_1", "guest_1", "accepted", 1, "dev_1", null, List.of(), Instant.parse("2026-06-14T00:00:00Z"));
-    }
-
-    private BarReservationEntryAllowanceVerificationRecord entryAllowance() {
-        return new BarReservationEntryAllowanceVerificationRecord("verify_1", "reservation_1", "bar_1", "table_1", "guest_1", true, "allowed", 0, 2, 2, "dev_1", null, List.of(), Instant.parse("2026-06-14T00:00:00Z"));
     }
 
 

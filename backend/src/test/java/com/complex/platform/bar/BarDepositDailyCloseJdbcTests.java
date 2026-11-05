@@ -1,7 +1,10 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
+import static org.hamcrest.Matchers.allOf;
+import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.not;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -51,6 +54,7 @@ class BarDepositDailyCloseJdbcTests {
     @Autowired private ObjectMapper json;
     @Autowired private CustomerRepository customers;
     @Autowired private BusinessDayResolver days;
+    @Autowired private JdbcBarRepository bars;
 
     private CustomerTicketPaymentFixture f;
     private String s;
@@ -126,6 +130,52 @@ class BarDepositDailyCloseJdbcTests {
                 .andExpect(jsonPath("$.data.items[?(@.source_stream == 'bar_deposit')].refund_cent").value(20000));
     }
 
+    /**
+     * 第十八批 Q 段第 144 条 144-R1（BSM:1106「未结清订单阻止交班和日结」；PGM:931「未结清时阻止交班和日结」；BSM:1103「必须在本营业日结清」）：
+     * 本酒吧当营业日开出的账单未结清时日结锁定被拒、原文列出账单号；收一部分款仍拒；被合单的副单、主管「作废并冲正」后的账单与同日另一酒吧的
+     * 未结账单不挡本酒吧 merchant 范围的日结；结清后可锁。合单、结账、争议处置与日结都按后台真实请求形状（蛇形键）。
+     */
+    @Test
+    void unsettledBarBillBlocksDailyCloseUntilSettled() throws Exception {
+        StaffRequestFixture staffs = new StaffRequestFixture(jdbc);
+        RequestPostProcessor cashier = staffs.staff("usr_bdc_cashier_" + s, "staff", f.projectId, bar,
+                "finance.payment.register", "bar.bill.split_merge", "bar.bill.adjust");
+        RequestPostProcessor supervisor = staffs.staff("usr_bdc_sup_" + s, "staff", f.projectId, bar, "bar.bill.anomaly.resolve");
+        String other = "bar_bdc_other_" + s;
+        jdbc.update("INSERT INTO merchants (id, merchant_name, merchant_type, status, created_at, updated_at, project_id)"
+                + " VALUES (?, '未结账单另一酒吧', 'bar', 'active', now(), now(), ?)", other, f.projectId);
+        String open = bill(bar, "open");
+        String merged = bill(bar, "merged");
+        String voided = bill(bar, "voided");
+        bill(other, "other");
+        LocalDate day = days.businessDate(null, bar, Instant.now());
+
+        lock(day, "u1").andExpect(status().isConflict())
+                .andExpect(jsonPath("$.detail_code").value("DAY_CLOSE_UNSETTLED_BILL"))
+                .andExpect(jsonPath("$.message").value(allOf(containsString(billNo("open")), containsString(billNo("merged")),
+                        containsString(billNo("voided")), not(containsString(billNo("other"))))));
+
+        billAction(cashier, open, "merge", Map.of("idempotency_key", "bdc-merge-" + s, "merged_bill_id", merged,
+                "reason", "两张单合并结账")).andExpect(status().isOk());
+        billAction(cashier, voided, "anomaly", Map.of("idempotency_key", "bdc-anomaly-" + s, "reason", "客人称整单不是本桌消费"))
+                .andExpect(status().isOk());
+        billAction(supervisor, voided, "anomaly/resolve", Map.of("idempotency_key", "bdc-void-" + s,
+                "resolution", "voided_reversed", "reason", "核实整单录错，作废并冲正"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.settlement_status").value("void"));
+        billAction(cashier, open, "settle", Map.of("idempotency_key", "bdc-settle1-" + s, "payment_id", "bdc-pay1-" + s,
+                "payment_channel", "aggregate_pay", "settlement_amount_cent", 10_000))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.payment_status").value("partial_paid"));
+        lock(day, "u2").andExpect(status().isConflict())
+                .andExpect(jsonPath("$.detail_code").value("DAY_CLOSE_UNSETTLED_BILL"))
+                .andExpect(jsonPath("$.message").value(allOf(containsString(billNo("open")), not(containsString(billNo("merged"))),
+                        not(containsString(billNo("voided"))))));
+
+        billAction(cashier, open, "settle", Map.of("idempotency_key", "bdc-settle2-" + s, "payment_id", "bdc-pay2-" + s,
+                "payment_channel", "aggregate_pay"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.settlement_status").value("settled"));
+        lock(day, "ok").andExpect(status().isOk()).andExpect(jsonPath("$.data.status").value("locked"));
+    }
+
     // ---------- helpers ----------
 
     /** 一体机订台后，授权员工在一体机上登记定金（真实请求形状）。 */
@@ -148,12 +198,38 @@ class BarDepositDailyCloseJdbcTests {
 
     /** 平台管理员按后台真实请求锁本酒吧商户该营业日日结，返回日结 ID。 */
     private String close(LocalDate businessDate) throws Exception {
-        return CustomerTicketPaymentFixture.read(mockMvc.perform(post("/api/v1/finance/daily-closes").with(admin)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(json.writeValueAsString(Map.of("idempotency_key", "bdc-close-" + s, "operator_note", "日结",
-                                "business_date", businessDate.toString(), "scope_type", "merchant", "scope_id", bar,
-                                "force_close", false))))
-                .andExpect(status().isOk()), "$.data.id");
+        return CustomerTicketPaymentFixture.read(lock(businessDate, "main").andExpect(status().isOk()), "$.data.id");
+    }
+
+    private ResultActions lock(LocalDate businessDate, String tag) throws Exception {
+        return mockMvc.perform(post("/api/v1/finance/daily-closes").with(admin)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(json.writeValueAsString(Map.of("idempotency_key", "bdc-close-" + tag + "-" + s, "operator_note", "日结",
+                        "business_date", businessDate.toString(), "scope_type", "merchant", "scope_id", bar,
+                        "force_close", false))));
+    }
+
+    /** 前置态：该酒吧此刻开出的一张 30000 待结账单（已下单、已出账、未收款）。 */
+    private String bill(String barId, String tag) {
+        String table = table(barId, tag);
+        String order = "ord_bdc_" + tag + "_" + s;
+        String bill = "bill_bdc_" + tag + "_" + s;
+        Instant now = Instant.now();
+        bars.saveOrder(new BarOrderRecord(order, barId, barId, table, null, null, "staff", "billed", 30_000L, "CNY", "web",
+                null, null, now, now));
+        bars.saveBill(new BarBillRecord(bill, billNo(tag), order, barId, barId, table, null,
+                30_000L, 0L, 0L, 30_000L, 0L, "CNY", "unpaid", "unsettled", null, null, now, now));
+        return bill;
+    }
+
+    private String billNo(String tag) {
+        return "BILL-BDC-" + tag.toUpperCase() + "-" + s;
+    }
+
+    /** 收银台账单操作（合单、结账、争议、处置）的真实请求形状。 */
+    private ResultActions billAction(RequestPostProcessor who, String billId, String action, Map<String, Object> body) throws Exception {
+        return mockMvc.perform(post("/api/v1/bar/bills/" + billId + "/" + action).with(who)
+                .contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(body)));
     }
 
     private ResultActions summaries(String dailyCloseId) throws Exception {

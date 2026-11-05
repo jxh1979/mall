@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -252,11 +252,29 @@ class BarGiftPourStandardLossJdbcIntegrationTests {
         ticketingRepository.saveTicketOrder(new TicketOrderRecord(
                 "order_" + code, "ON-" + code, "cust_" + code, typeId, null, 1,
                 LocalDate.parse("2026-06-18"), "web", null, 0L, null, 0L, 0L, "CNY", "paid", "issued", "created", now, now, null, null, null));
+        // 第十八批 Q 段第 148 条（ENUM:55「客人须先核销这家酒吧的入场权益、再核销这家酒吧的酒水（赠饮）权益」）：赠饮与本吧入场同属父票
+        // 1 号人份，入场已核（直接落一条核销成功记录）。
+        String parent = "ti_" + code;
+        jdbc.update("INSERT INTO ticket_instances (id, ticket_no, order_id, ticket_type_id, seq_in_order, num_people, total_times,"
+                + " status, created_at, updated_at) VALUES (?, ?, ?, ?, 1, 1, 1, 'active', now(), now())",
+                parent, "T-" + code, "order_" + code, typeId);
         ticketingRepository.saveIssuedEntitlement(new IssuedEntitlementRecord(
                 "ent_" + code, code, typeId, "order_" + code, templateId, "gift_drink",
                 bar, null, bar, 1, 0, 0L, "active",
                 now.minusSeconds(60), now.plusSeconds(3600), now, now, 1, null,
-                null, null, null, null, null, 0, null, null));
+                null, null, null, null, parent, 1, null, null));
+        String entry = "en-" + code;
+        jdbc.update("INSERT INTO entitlement_templates (id, name, entitlement_type, default_total_times, default_value_cent, status,"
+                + " created_at, updated_at) VALUES (?, '酒吧入场', 'admission', 1, 0, 'active', now(), now())", "et_" + entry);
+        ticketingRepository.saveIssuedEntitlement(new IssuedEntitlementRecord(
+                "ent_" + entry, entry, typeId, "order_" + code, "et_" + entry, "admission",
+                bar, null, bar, 1, 1, 0L, "active",
+                now.minusSeconds(60), now.plusSeconds(3600), now, now, 1, null,
+                null, null, null, null, parent, 1, null, null));
+        jdbc.update("INSERT INTO ticket_verifications (id, verification_no, entitlement_id, entitlement_code, credential_type,"
+                + " credential_payload, device_id, point_id, status, source_type, created_at, merchant_id, verified_people)"
+                + " VALUES (?, ?, ?, ?, 'qr', ?, ?, ?, 'success', 'android_terminal_online', now(), ?, 1)",
+                "ver_" + entry, "V-" + entry, "ent_" + entry, entry, entry, device, bar, bar);
     }
 
     /** 本吧员工（商户账号）：执行核销。 */

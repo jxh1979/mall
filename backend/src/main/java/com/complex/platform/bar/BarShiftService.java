@@ -21,7 +21,7 @@ import org.springframework.stereotype.Service;
  * 班结 closeShift：按班次时间窗口 [openedAt, now) 聚合本收银员 / 吧台已结账单的各支付方式
  * （cash/pos/online）、退款（refunded_at 落窗口）、小费（结算账单 tip，代收）→ 系统应收快照；
  * 录入实点现金 declaredCash → 现金差异 cashDiff = declaredCash - (openingCash + systemCash)；
- * 差异绝对值超阈值 → needsReview 进复核；交接下一班。
+ * 差额不为 0 即进复核（needsReview，不设容差）；交接下一班。
  *
  * <p>与日结(T7)协同：班结是日内交接（按收银员/吧台），日结是经营日整体汇总；班结只读聚合
  * bar_bill_settlements，不改账单、不二次过账，二者口径不重复扣。班结明细可供日结/对账下钻。
@@ -48,9 +48,6 @@ public class BarShiftService {
         String barId = requireText(actual.barId(), "bar_id");
         String cashierUserId = requireText(actual.cashierUserId(), "cashier_user_id");
         long openingCash = actual.openingCashCent() == null ? 0L : nonNegative(actual.openingCashCent(), "opening_cash_cent");
-        long threshold = actual.cashDiffThresholdCent() == null
-                ? 0L
-                : nonNegative(actual.cashDiffThresholdCent(), "cash_diff_threshold_cent");
         // 防重复开班：同一吧台同一收银员仅允许一个 open 班次。
         if (repository.findOpenShift(barId, cashierUserId).isPresent()) {
             throw ApiException.conflict("BAR_SHIFT_ALREADY_OPEN",
@@ -72,7 +69,6 @@ public class BarShiftService {
                 null,
                 0L, 0L, 0L, 0L, 0L,
                 null,
-                threshold,
                 false,
                 null,
                 trimToNull(actual.note()),
@@ -116,8 +112,8 @@ public class BarShiftService {
                 authorizationService.currentMerchantScope());
         // 现金差异 = 实点现金 - (备用金 + 系统现金应收)。0 平账；正长款；负短款。
         long cashDiff = declaredCash - (shift.openingCashCent() + snapshot.systemCashCent());
-        // 差异绝对值超阈值 → 进复核。
-        boolean needsReview = Math.abs(cashDiff) > shift.cashDiffThresholdCent();
+        // 第十八批 Q 段第 141 条 141-R1（BSM:1081「出现任何金额的差额一律进复核、定位责任，不设容差」；DEC-R4-2026-08-04-26）：差额不为 0 即进复核。
+        boolean needsReview = cashDiff != 0;
         String actor = authorizationService.currentActor().id();
         BarShiftRecord closed = new BarShiftRecord(
                 shift.id(),
@@ -136,7 +132,6 @@ public class BarShiftService {
                 snapshot.systemRefundCent(),
                 snapshot.systemTipCent(),
                 cashDiff,
-                shift.cashDiffThresholdCent(),
                 needsReview,
                 handoverToUserId,
                 trimToNull(actual.note()) == null ? shift.note() : trimToNull(actual.note()),

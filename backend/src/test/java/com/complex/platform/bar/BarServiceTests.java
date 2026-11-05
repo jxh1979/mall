@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.14
+// 文件版本：V0.15
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
@@ -293,25 +293,6 @@ class BarServiceTests {
         assertThatThrownBy(() -> service.applyBillAdjustment(bill.id(), new BarBillAdjustmentRequest(
                 "bill-adjust-refund-fc", "refund no engine", List.of(), "refund", 30000L, "no engine", "finance_1")))
                 .isInstanceOf(ApiException.class).extracting("code").isEqualTo("REFUND_AUTHORIZATION_UNAVAILABLE");
-    }
-
-    @Test
-    void createTableLandsIndependentCapacitySeparateFromFreeEntryCount() {
-        // 可进人数（容量）与免票入场人数解耦：显式传 capacity=8、免票=2，两者各自落库、互不相等。
-        BarTableRecord table = service.createTable(new BarTableRequest(
-                "cap-independent", "create", List.of(), "bar_1", "容量测试桌", "card_seat",
-                50000L, 2, 8, "active"));
-        assertThat(table.capacity()).isEqualTo(8);
-        assertThat(table.allowedPassFreeGuestCount()).isEqualTo(2);
-    }
-
-    @Test
-    void createTableWithoutCapacityFallsBackToFreeEntryCount() {
-        // 未传 capacity（旧签名/前端不填）时沿用免票人数口径，保持向后兼容。
-        BarTableRecord table = service.createTable(new BarTableRequest(
-                "cap-fallback", "create", List.of(), "bar_1", "回退桌", "card_seat", 50000L, 5, "active"));
-        assertThat(table.capacity()).isEqualTo(5);
-        assertThat(table.allowedPassFreeGuestCount()).isEqualTo(5);
     }
 
     @Test
@@ -753,88 +734,6 @@ class BarServiceTests {
     // Existing tests — preserved intact with updated assertions
     // ─────────────────────────────────────────────────────────────────────────
 
-    @Test
-    void verifyReservationEntryAllowanceDoesNotConsumeQuotaAndReportsRemaining() {
-        BarReservationRecord reservation = createReservation("reservation-verify", "bar_1", 1);
-
-        BarReservationEntryAllowanceVerificationRecord verified = service.verifyReservationEntryAllowance(
-                reservation.id(),
-                verification("verify-1", "guest_1", "bar_1")
-        );
-
-        assertThat(verified.allowed()).isTrue();
-        assertThat(verified.reasonCode()).isEqualTo("allowed");
-        assertThat(verified.checkedInCount()).isZero();
-        assertThat(verified.remainingGuestCount()).isEqualTo(1);
-        assertThat(barRepository.guestCheckins).isEmpty();
-        assertThat(barRepository.lockedReservations).isEmpty();
-    }
-
-    @Test
-    void verifyReservationEntryAllowanceRejectsWrongBarCancelledAndExhaustedWithoutConsuming() {
-        BarReservationRecord reservation = createReservation("reservation-denied", "bar_1", 1);
-
-        BarReservationEntryAllowanceVerificationRecord wrongBar = service.verifyReservationEntryAllowance(
-                reservation.id(),
-                verification("verify-wrong-bar", "guest_1", "bar_2")
-        );
-        assertThat(wrongBar.allowed()).isFalse();
-        assertThat(wrongBar.reasonCode()).isEqualTo("BAR_SCOPE_MISMATCH");
-
-        service.checkInReservationGuest(reservation.id(), verification("checkin-quota", "guest_1", "bar_1"));
-        BarReservationEntryAllowanceVerificationRecord exhausted = service.verifyReservationEntryAllowance(
-                reservation.id(),
-                verification("verify-exhausted", "guest_2", "bar_1")
-        );
-        assertThat(exhausted.allowed()).isFalse();
-        assertThat(exhausted.reasonCode()).isEqualTo("FREE_GUEST_QUOTA_EXHAUSTED");
-        assertThat(exhausted.remainingGuestCount()).isZero();
-
-        BarReservationRecord cancelled = barRepository.saveReservation(new BarReservationRecord(
-                "reservation_cancelled", "bar_1", null, "table_1", "customer_1", Instant.now(),
-                1, 1, 0L, "not_required", "staff", null, "cancelled", "web", null,
-                List.of(), Instant.now(), Instant.now(), null));
-        BarReservationEntryAllowanceVerificationRecord cancelledResult = service.verifyReservationEntryAllowance(
-                cancelled.id(),
-                verification("verify-cancelled", "guest_3", "bar_1")
-        );
-        assertThat(cancelledResult.allowed()).isFalse();
-        assertThat(cancelledResult.reasonCode()).isEqualTo("BAR_RESERVATION_NOT_CHECKINABLE");
-        assertThat(barRepository.guestCheckins).hasSize(1);
-    }
-
-    @Test
-    void checkInLocksReservationBeforeConsumingFreeGuestQuota() {
-        BarReservationRecord reservation = createReservation("reservation-lock", "bar_1", 1);
-
-        service.checkInReservationGuest(reservation.id(), verification("checkin-lock", "guest_1", "bar_1"));
-
-        assertThat(barRepository.lockedReservations).contains(reservation.id());
-    }
-
-    @Test
-    void checkInConsumesOnlyReservationFreeGuestQuotaAndRejectsExhaustion() {
-        BarReservationRecord reservation = createReservation("reservation-quota", "bar_1", 1);
-
-        BarTableGuestCheckinRecord first = service.checkInReservationGuest(
-                reservation.id(),
-                verification("checkin-1", "guest_1", "bar_1")
-        );
-
-        assertThat(first.checkedInCountAfter()).isEqualTo(1);
-        assertThatThrownBy(() -> service.checkInReservationGuest(
-                reservation.id(),
-                verification("checkin-2", "guest_2", "bar_1")
-        ))
-                .isInstanceOf(ApiException.class)
-                .extracting("code")
-                .isEqualTo("FREE_GUEST_QUOTA_EXHAUSTED");
-        assertThat(barRepository.guestCheckins).hasSize(1);
-        assertThat(auditEventRepository.events)
-                .extracting(AuditEvent::eventName)
-                .contains("bar.table_guest.checked_in", "bar.table_guest.rejected");
-    }
-
     // ─────────────────────────────────────────────────────────────────────────
     // R5 T16 — 订台定金闭环
     // ─────────────────────────────────────────────────────────────────────────
@@ -950,21 +849,6 @@ class BarServiceTests {
                 r.invitationCapacity(), r.invitationStatus(), r.invitationIssuedAt(), r.archivedAt(), r.archivedBy(), r.deleteStatus(),
                 r.deleteRequestedBy(), r.deleteRequestedAt(), r.deleteReason(), r.depositChannel(), r.depositSettledAt(),
                 r.latestArrivalAt(), r.holdStatus()));
-    }
-
-    @Test
-    void checkInRejectsGuestWhenVerificationBarDiffersFromReservationBar() {
-        BarReservationRecord reservation = createReservation("reservation-scope", "bar_1", 2);
-
-        assertThatThrownBy(() -> service.checkInReservationGuest(
-                reservation.id(),
-                verification("checkin-cross-bar", "guest_1", "bar_2")
-        ))
-                .isInstanceOf(ApiException.class)
-                .extracting("code")
-                .isEqualTo("BAR_SCOPE_MISMATCH");
-
-        assertThat(barRepository.guestCheckins).isEmpty();
     }
 
     @Test
@@ -4357,7 +4241,7 @@ class BarServiceTests {
     @Test
     void closeShiftAggregatesSettlementsByChannelRefundAndTipIntoSystemReceivable() {
         BarShiftRecord shift = service.openShift(new BarShiftOpenRequest(
-                "open-1", "bar_1", "cashier_1", null, 50_000L, 0L, null));
+                "open-1", "bar_1", "cashier_1", null, 50_000L, null));
 
         // 三笔不同支付方式结算 + 一笔小费账单，均归属 cashier_1（第十八批 O 段第 127 条 127-R3：收款人取结账登录人，以 cashier_1 身份结账）。
         BarBillRecord cashBill = billForOrder("agg-cash", "staff_sales");
@@ -4400,7 +4284,7 @@ class BarServiceTests {
     @Test
     void closeShiftComputesCashDiffAgainstDeclaredCashAndOpeningFloat() {
         BarShiftRecord shift = service.openShift(new BarShiftOpenRequest(
-                "open-diff", "bar_1", "cashier_diff", null, 20_000L, 0L, null));
+                "open-diff", "bar_1", "cashier_diff", null, 20_000L, null));
         BarBillRecord cashBill = billForOrder("diff-cash", "staff_sales");
         settleAs("cashier_diff", cashBill.id(), new BarBillSettleRequest(
                 "s-diff", null, List.of(), "pay_diff", cashBill.payableAmountCent(),
@@ -4419,7 +4303,7 @@ class BarServiceTests {
     @Test
     void closeShiftBalancesWhenDeclaredCashMatchesSystemAndDoesNotNeedReview() {
         BarShiftRecord shift = service.openShift(new BarShiftOpenRequest(
-                "open-bal", "bar_1", "cashier_bal", null, 10_000L, 500L, null));
+                "open-bal", "bar_1", "cashier_bal", null, 10_000L, null));
         BarBillRecord cashBill = billForOrder("bal-cash", "staff_sales");
         settleAs("cashier_bal", cashBill.id(), new BarBillSettleRequest(
                 "s-bal", null, List.of(), "pay_bal", cashBill.payableAmountCent(),
@@ -4436,7 +4320,7 @@ class BarServiceTests {
     void closeShiftRejectsHandoverToOutgoingCashierSelf() {
         // F-OPS-06：现金钱箱交接必须移交他人；交接给本班收银员自己 = 伪交接规避对账责任，拒绝。
         BarShiftRecord shift = service.openShift(new BarShiftOpenRequest(
-                "open-self", "bar_1", "cashier_self", null, 0L, 0L, null));
+                "open-self", "bar_1", "cashier_self", null, 0L, null));
         assertThatThrownBy(() -> service.closeShift(shift.id(), new BarShiftCloseRequest(
                 "close-self", 0L, "cashier_self", null)))
                 .isInstanceOfSatisfying(ApiException.class, exception ->
@@ -4446,7 +4330,7 @@ class BarServiceTests {
     @Test
     void closeShiftAggregatesRefundWithinWindow() {
         BarShiftRecord shift = service.openShift(new BarShiftOpenRequest(
-                "open-refund", "bar_1", "cashier_refund", null, 0L, 0L, null));
+                "open-refund", "bar_1", "cashier_refund", null, 0L, null));
         BarBillRecord bill = billForOrder("refund-bill", "staff_sales");
         settleAs("cashier_refund", bill.id(), new BarBillSettleRequest(
                 "s-refund", null, List.of(), "pay_refund", bill.payableAmountCent(),
@@ -4462,9 +4346,9 @@ class BarServiceTests {
 
     @Test
     void openShiftRejectsDuplicateOpenShiftForSameCashierAndBar() {
-        service.openShift(new BarShiftOpenRequest("open-dup-1", "bar_1", "cashier_dup", null, 0L, 0L, null));
+        service.openShift(new BarShiftOpenRequest("open-dup-1", "bar_1", "cashier_dup", null, 0L, null));
         assertThatThrownBy(() -> service.openShift(
-                new BarShiftOpenRequest("open-dup-2", "bar_1", "cashier_dup", null, 0L, 0L, null)))
+                new BarShiftOpenRequest("open-dup-2", "bar_1", "cashier_dup", null, 0L, null)))
                 .isInstanceOf(ApiException.class)
                 .extracting("code")
                 .isEqualTo("BAR_SHIFT_ALREADY_OPEN");
@@ -4473,7 +4357,7 @@ class BarServiceTests {
     @Test
     void closeShiftRejectsAlreadyClosedShift() {
         BarShiftRecord shift = service.openShift(new BarShiftOpenRequest(
-                "open-closed", "bar_1", "cashier_closed", null, 0L, 0L, null));
+                "open-closed", "bar_1", "cashier_closed", null, 0L, null));
         service.closeShift(shift.id(), new BarShiftCloseRequest("close-once", 0L, null, null));
         assertThatThrownBy(() -> service.closeShift(shift.id(),
                 new BarShiftCloseRequest("close-twice", 0L, null, null)))
@@ -4487,7 +4371,7 @@ class BarServiceTests {
         TestSecurityActors.asMerchantUser("merchant_a");
         BarShiftRecord shift = barRepository.saveShift(new BarShiftRecord(
                 "bar_shift_other", null, "merchant_b", "bar_1", "cashier_x", "open",
-                Instant.now(), null, 0L, null, 0L, 0L, 0L, 0L, 0L, null, 0L, false,
+                Instant.now(), null, 0L, null, 0L, 0L, 0L, 0L, 0L, null, false,
                 null, null, "opener", null, Instant.now(), Instant.now()));
         assertThatThrownBy(() -> service.closeShift(shift.id(),
                 new BarShiftCloseRequest("close-x", 0L, null, null)))
@@ -4500,11 +4384,11 @@ class BarServiceTests {
     void listShiftsReturnsOnlyCurrentMerchantRecordsWhenScopedToMerchant() {
         barRepository.saveShift(new BarShiftRecord(
                 "bar_shift_a", null, "merchant_a", "bar_1", "c1", "open",
-                Instant.now(), null, 0L, null, 0L, 0L, 0L, 0L, 0L, null, 0L, false,
+                Instant.now(), null, 0L, null, 0L, 0L, 0L, 0L, 0L, null, false,
                 null, null, "opener", null, Instant.now(), Instant.now()));
         barRepository.saveShift(new BarShiftRecord(
                 "bar_shift_b", null, "merchant_b", "bar_1", "c2", "open",
-                Instant.now(), null, 0L, null, 0L, 0L, 0L, 0L, 0L, null, 0L, false,
+                Instant.now(), null, 0L, null, 0L, 0L, 0L, 0L, 0L, null, false,
                 null, null, "opener", null, Instant.now(), Instant.now()));
 
         TestSecurityActors.asMerchantUser("merchant_a");
@@ -4677,7 +4561,6 @@ class BarServiceTests {
         private final List<BarBillOperationRecord> billOperations = new ArrayList<>();
         private final Map<String, BarTableSessionRecord> tableSessions = new LinkedHashMap<>();
         private final List<BarTableSessionAdjustmentRecord> tableSessionAdjustments = new ArrayList<>();
-        private final List<BarTableGuestCheckinRecord> guestCheckins = new ArrayList<>();
         private final List<String> lockedReservations = new ArrayList<>();
         private final List<BarProductionTicketRecord> productionTickets = new ArrayList<>();
         private final List<BarProductionTicketEventRecord> productionTicketEvents = new ArrayList<>();
@@ -4785,19 +4668,6 @@ class BarServiceTests {
                     .filter(r -> r.enabled() && barId.equals(r.barId()))
                     .sorted((a, b) -> b.scopeType().compareTo(a.scopeType()))
                     .toList();
-        }
-
-        @Override
-        public int countGuestCheckins(String reservationId) {
-            return (int) guestCheckins.stream()
-                    .filter(checkin -> reservationId.equals(checkin.reservationId()))
-                    .count();
-        }
-
-        @Override
-        public BarTableGuestCheckinRecord saveGuestCheckin(BarTableGuestCheckinRecord checkin) {
-            guestCheckins.add(checkin);
-            return checkin;
         }
 
         private final Map<String, BarReservationInvitationMemberRecord> invitationMembers = new LinkedHashMap<>();

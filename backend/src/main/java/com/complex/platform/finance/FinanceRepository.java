@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.13
+// 文件版本：V0.14
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -83,7 +83,8 @@ public interface FinanceRepository {
     }
 
     /**
-     * 回流营业额取数：只读 integration_order_syncs，聚合该商户在 [from, to) 经营日窗口的回流 order 金额（分）。
+     * 回流营业额取数：只读 integration_order_syncs，聚合该商户在 [from, to) 经营日窗口的餐饮、零售回流 order 减 refund 金额（分）。
+     * 第十八批 Q 段第 138 条 138-R2：渠道售出的门票回流已本地出票、计入门票；单店门票票款按 BSM:1347 不进抽成基数，通票不是商户成交。
      * default 返回 0 兼容既有测试双子。
      */
     default long aggregateMerchantReflowTurnover(String merchantId, Instant fromInclusive, Instant toExclusive) {
@@ -95,6 +96,33 @@ public interface FinanceRepository {
      * default 返回 0 兼容既有测试双子。
      */
     default long sumForfeitedBarDepositCent(String merchantId, Instant fromInclusive, Instant toExclusive) {
+        return 0L;
+    }
+
+    /**
+     * 第十八批 Q 段第 138 条 138-R1：酒吧商户的平台内酒吧收入（分）＝[from, to) 内结清的整单已确认商品收入（折后实收减服务费、小费分项）
+     * ＋[firstDay, dayAfterLast) 营业日的月结服务费扣留数−[from, to) 内已退成的商品分项；来源未定抛 409 BAR_REVENUE_PENDING。
+     * default 返回 0 兼容既有测试双子。
+     */
+    default long sumBarPlatformTurnoverCent(String merchantId, Instant fromInclusive, Instant toExclusive,
+            LocalDate firstDay, LocalDate dayAfterLast) {
+        return 0L;
+    }
+
+    /**
+     * 第十八批 Q 段第 138 条 138-R3：非酒吧商户已完成结算的券结算金额（分）＝该商户为对手方的 partner_voucher 应付
+     * （统一券 internal_price 核销、通票合作方券 internal_purchased 核销）在 [from, to) 内的实际付款合计。
+     * default 返回 0 兼容既有测试双子。
+     */
+    default long sumSettledVoucherSettlementCent(String merchantId, Instant fromInclusive, Instant toExclusive) {
+        return 0L;
+    }
+
+    /**
+     * 第十八批 Q 段第 138 条 138-R4：酒吧商户已完成的服务点单（点舞等）售价全额（分），按下单时点在 [from, to) 归期。
+     * default 返回 0 兼容既有测试双子。
+     */
+    default long sumCompletedServiceOrderCent(String merchantId, Instant fromInclusive, Instant toExclusive) {
         return 0L;
     }
 
@@ -334,6 +362,16 @@ public interface FinanceRepository {
     default boolean openBarBillAnomalyExists(Instant from, Instant to, String scopeType, String scopeId,
             java.util.Map<String, Instant[]> barWindows) {
         return openBarBillAnomalyExists(from, to, scopeType, scopeId);
+    }
+
+    /**
+     * 第十八批 Q 段第 144 条（BSM:1106「未结清订单阻止交班和日结」）：开单落在该营业日（酒吧逐家按各自营业日窗）、仍未结清的酒吧账单号
+     * （settlement_status 不是 settled、merged、void，与关台闸同口径），最多 10 张。范围口径同酒吧账单异常：merchant 范围只看本商户，其余平台口径。
+     * default 无库替身视为没有；Jdbc 覆写。
+     */
+    default List<String> unsettledBarBillNos(Instant from, Instant to, String scopeType, String scopeId,
+            java.util.Map<String, Instant[]> barWindows) {
+        return List.of();
     }
 
     PaymentIntentRecord savePaymentIntent(PaymentIntentRecord paymentIntent);

@@ -1,4 +1,4 @@
-# P0 操作事件与证据留痕矩阵 V0.1
+# P0 操作事件与证据留痕矩阵 V0.11
 
 > **口径修订（2026-08-06 R10）：「人工放行」已废止**——ENUM「核销记录状态」条 明确「**系统不提供人工放行：核销要么成功、要么拒绝或失败，任何岗位、任何权限都不能以人工方式让一笔不满足规则的核销通过**」（DEC-CFG-2026-08-03-12 / DEC-R6-08）。本文原有的「人工放行」取值、端点、按钮、指标、权限点与复核类型**一律废止**，废止处就地标注「原含『人工放行』，已废止·见文首口径」；已实现的端点、权限点与状态取值待代码轮下线，期间不得新增调用、不得新写入。**注意**：合同或基础定义违规被卡住后「由更高级审核放行」的准入场景仍然存在，那是准入阻断的升级放行，与核销域无关，不得回读为「可以人工放行一笔核销」。
 
@@ -56,7 +56,7 @@
 | 人工放行（**已废止·见文首口径**） | `verification.manual_overridden`（停用，待代码轮下线） | 该动作不再提供 | — | — |
 | 酒吧年龄核验 | `bar.age_verification.requested` / `bar.age_verification.passed` / `bar.age_verification.rejected` / `bar.age_verification.blocked` | 核验结果、方式、最小必要证明 | 酒吧门口员工/第三方 | 合规抽检 |
 | 酒吧人脸核验 | `bar.age_verification.passed` / `bar.age_verification.rejected` / `bar.age_verification.blocked` | 第三方结果流水、活体/比对结果摘要 | 第三方适配器 | 供应商准入后启用 |
-| 卡座客人入场 | `bar.table_guest.checked_in` / `bar.table_guest.rejected` | 预订卡座、人数额度、入场人次、幂等键、剩余额度 | 酒吧门口员工 | 超额拒绝，并发只允许成功扣占一次 |
+| 卡座客人入场 | `bar.reservation_invitation_entered` / `bar.reservation_invitation_entry_failed` | 订台、邀请函成员、本人动态入场码核验结果、核验设备、幂等键；失败记错误码 | 酒吧门口员工 | 凭本人动态入场码核验；入场码无效、过期或成员未确认即拒绝，按订台加锁，同一成员重复扫码返回原入场记录 |
 | 卡座销售归属 | `order.sales_attributed` | 订台/账单、销售人员、岗位快照、来源、变更原因 | 销售人员/运营主管 | 变更需复核 |
 | 卡座提成计算 | `bar.table_commission.calculated` / `bar.table_commission.adjusted` | 卡座账单、可计提消费额、排除金额、提成率、提成金额、复核人 | 财务/运营 | 日结后调整只能冲正 |
 | 通票赠酒领取 | `bar.gift_redeemed` | 权益记录、领取人、吧台员工 | 吧台 | 平台承担成本 |

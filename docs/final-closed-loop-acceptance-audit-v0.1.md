@@ -78,24 +78,24 @@
 |---|---:|---|
 | `apps/web/src/main.tsx` | 50 行 | Web 入口薄层 |
 | `backend/src/main/java/com/complex/platform/ticketing/TicketingService.java` | 1200 行 | 票务 facade |
-| `backend/src/main/java/com/complex/platform/bar/BarService.java` | 963 行 | 酒吧 facade |
+| `backend/src/main/java/com/complex/platform/bar/BarService.java` | 934 行 | 酒吧 facade |
 | `backend/src/main/java/com/complex/platform/bar/BarOrderService.java` | 1749 行 | 酒吧订单/出品子服务 |
 | `backend/src/main/java/com/complex/platform/bar/BarBillingService.java` | 1018 行 | 酒吧账单编排子服务 |
 | `backend/src/main/java/com/complex/platform/bar/BarBillRecords.java` | 174 行 | 酒吧账单记录/审计快照辅助 |
-| `backend/src/main/java/com/complex/platform/bar/BarTableSessionService.java` | 726 行 | 酒吧卡座/会话子服务 |
+| `backend/src/main/java/com/complex/platform/bar/BarTableSessionService.java` | 724 行 | 酒吧卡座/会话子服务 |
 
 ## 7. 最新验证证据
 
 | 验证项 | 结果 |
 |---|---|
 | Web typecheck | 通过：`npm run typecheck --workspace apps/web`，2026-06-17 03:52 UTC 复跑通过 |
-| Web 单元测试 | 通过：1552 个前端单元测试(源码定义计数)；2026-11-04 18:31 UTC 在工作树实跑 `npm run verify:unit`，五个工作区全过（apps/web 309 个文件 1663 例，customer-core 73 例，customer-app 128 例，customer-miniapp 83 例，merchant-app 4 例） |
+| Web 单元测试 | 通过：1557 个前端单元测试(源码定义计数)；2026-11-05 00:06 UTC 在工作树实跑 `npm run verify:unit`，五个工作区全过（apps/web 309 个文件 1668 例，customer-core 73 例，customer-app 128 例，customer-miniapp 83 例，merchant-app 4 例） |
 | Web build | 通过，主包约 108.02 kB，无主包过大 warning，2026-06-17 03:52 UTC 复跑通过 |
-| UI 自动化 | 通过：47 条 Playwright 用例（源码定义计数），常规界面验收（接口全部 mock）实跑 40 条全过（2026-11-04 18:30 UTC，`VITE_API_PROXY_TARGET=http://127.0.0.1:9 npm run verify:ui`）；ADM-TKT-002 专用页规则草稿/仿真/发布路径、ADM-TKT-003 专用页订单/出票/核销预览路径、ADM-BAR-002 专用页账单/出品/结算路径与 ADM-BAR-003 专用页存酒领取核销路径与 ADM-BAR-004 专用页销售提成计算路径与 ADM-INV-001 专用页库存移动登记路径与 ADM-FIN-002 专用页对账人工复核路径、ADM-MER-001 专用页商户工单创建/派单/处理/关闭路径与 ADM-AMU-003 专用页安全巡检创建/提交/整改/复检/重开审批路径与 ADM-GOV-006 专用页主管复核评估/审批放行路径与 ADM-GOV-004 专用页合同草稿归档/审批通过路径与 ADM-RISK-001 专用页风控预警创建/处理路径与 ADM-INT-002 专用页四类事件展示、立即重试、补偿处理和轮询校验路径、ADM-EVD-001 专用页搜索筛选、详情、错误态和导出自身留痕路径、ADM-ANA-001 专用页三接口聚合、业务域筛选、空/错状态和复盘锁定路径、ADM-MER-002 专用页授权工单/账单、商户范围过滤、确认留痕和越权拦截路径、ADM-GOV-003 专用页主体绑定查看、原因校验和变更提交路径已纳入 `tests/e2e/full-admin-remaining.spec.ts`；完整后台桌面/移动端视觉回归已纳入 `tests/e2e/full-admin-visual.spec.ts`，覆盖 4 张截图基线 |
+| UI 自动化 | 通过：47 条 Playwright 用例（源码定义计数），常规界面验收（接口全部 mock）实跑 40 条全过（2026-11-05 00:05 UTC，`VITE_API_PROXY_TARGET=http://127.0.0.1:9 npm run verify:ui`）；ADM-TKT-002 专用页规则草稿/仿真/发布路径、ADM-TKT-003 专用页订单/出票/核销预览路径、ADM-BAR-002 专用页账单/出品/结算路径与 ADM-BAR-003 专用页存酒领取核销路径与 ADM-BAR-004 专用页销售提成计算路径与 ADM-INV-001 专用页库存移动登记路径与 ADM-FIN-002 专用页对账人工复核路径、ADM-MER-001 专用页商户工单创建/派单/处理/关闭路径与 ADM-AMU-003 专用页安全巡检创建/提交/整改/复检/重开审批路径与 ADM-GOV-006 专用页主管复核评估/审批放行路径与 ADM-GOV-004 专用页合同草稿归档/审批通过路径与 ADM-RISK-001 专用页风控预警创建/处理路径与 ADM-INT-002 专用页四类事件展示、立即重试、补偿处理和轮询校验路径、ADM-EVD-001 专用页搜索筛选、详情、错误态和导出自身留痕路径、ADM-ANA-001 专用页三接口聚合、业务域筛选、空/错状态和复盘锁定路径、ADM-MER-002 专用页授权工单/账单、商户范围过滤、确认留痕和越权拦截路径、ADM-GOV-003 专用页主体绑定查看、原因校验和变更提交路径已纳入 `tests/e2e/full-admin-remaining.spec.ts`；完整后台桌面/移动端视觉回归已纳入 `tests/e2e/full-admin-visual.spec.ts`，覆盖 4 张截图基线 |
 | 商户服务后端专项 | 通过：`mvn -q -Dtest=MerchantServiceControllerTests,MerchantServiceServiceTests,MerchantServiceJdbcIntegrationTests test` |
 | 酒吧后端专项 | 通过：`mvn -q -Dtest=BarServiceTests test` 与 `mvn -q -Dtest=BarJdbcIntegrationTests test`；覆盖重复出品拒绝、跨订单订单项拒绝、部分数量出品拒绝、出品照片证据保留和库存不二次扣减 |
-| 后端完整测试 | 通过：6287 个测试，0 失败，0 错误（2026-11-04 18:28 UTC，把工作树镜像到 160 上的一次性目录、连一次性测试库跑后端全量 `~/audit-tmp/b36_test.sh --fresh`，surefire 报告拷回工作树 `backend/target/surefire-reports`）；最新运行态证据由 `docs/runtime-acceptance-evidence-latest.json` 记录 |
-| 交付总闸口 | 未通过：`npm run verify:delivery-gates`；2026-11-04 18:31 UTC 在工作树逐项跑子项（总链遇红即停），仍红：`verify:coding-host-protection`（写死主仓路径；用 `COMPLEX_EXPECTED_CODING_REPO_ROOT` 指向工作树复跑仍红在基线文档与证据里的 canonical_repo_root）、`verify:final-closed-loop-audit`（只剩 integration-ready、business-acceptance-ready 两条就绪结论校验，运行验收未就绪）；`verify:nas-current-state-drift`、`verify:nas-diagnostics` 的现场探测未跑；其余子项通过 |
+| 后端完整测试 | 通过：6311 个测试，0 失败，0 错误（2026-11-05 00:03 UTC，把工作树镜像到 160 上的一次性目录、连一次性测试库跑后端全量 `~/audit-tmp/b37_test.sh --fresh`，surefire 报告拷回工作树 `backend/target/surefire-reports`）；最新运行态证据由 `docs/runtime-acceptance-evidence-latest.json` 记录 |
+| 交付总闸口 | 未通过：`npm run verify:delivery-gates`；2026-11-05 00:06 UTC 在工作树逐项跑子项（总链遇红即停），仍红：`verify:coding-host-protection`（写死主仓路径；用 `COMPLEX_EXPECTED_CODING_REPO_ROOT` 指向工作树复跑仍红在基线文档与证据里的 canonical_repo_root）、`verify:final-closed-loop-audit`（只剩 integration-ready、business-acceptance-ready 两条就绪结论校验，运行验收未就绪）；`verify:nas-current-state-drift`、`verify:nas-diagnostics` 的现场探测未跑；其余子项通过 |
 | OpenAPI/客户端契约 | 通过：`verify:p0-contract`、client routes、client OpenAPI、payload policy 均在交付闸口内通过 |
 | Semgrep | 通过：results=0，errors=0，paths_scanned=1984，scan_ref=security-scans/semgrep-20260703-delivery-gates-clean；3 条 detect-non-literal-regexp(隔离工具+e2e导航助手,硬编码正则输入)已 nosemgrep 抑制，openapi 大契约/keyvault heredoc 脚本/_archive 经 .semgrepignore 排除,清扫后无发现。 |
 | Git 交接洁净度 | 通过：本轮新增 Semgrep 证据和最终审计文档已纳入交接；`git diff --cached --check` 已复跑通过，当前无未跟踪文件残留 |

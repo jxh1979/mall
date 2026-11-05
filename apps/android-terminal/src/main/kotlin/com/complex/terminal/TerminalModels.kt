@@ -1,6 +1,6 @@
 package com.complex.terminal
 
-// 文件版本：V0.14
+// 文件版本：V0.15
 
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
@@ -168,6 +168,22 @@ data class VerificationResponse(
   val resultReason: String? = null,
 )
 
+/**
+ * 第十八批 Q 段第 150 条 150-R2（BSM:552「进场之后，工作手机扫客人二维码核销各酒吧入场、赠饮、游乐等场内权益……」；BSM:1036「……到店出示本人的动态入场码核验入场……」）：
+ * 邀请函成员本人动态入场码＝bie.订台号.成员号.到期秒.随机串.签名（150-R1）；是这种码就返回码中订台号，否则 null。
+ */
+fun invitationEntryReservationId(code: String): String? =
+  code.trim().split(".").takeIf { it.size == 6 && it[0] == "bie" }?.get(1)
+
+/** 第十八批 Q 段第 150 条 150-R2：订台邀请函入场核验 POST /api/v1/bar/reservations/{id}/invitation/entry-verify 的应答（成员记录，其余字段忽略）。 */
+@Serializable
+data class BarInvitationEntryRecord(
+  val id: String = "",
+  val reservationId: String = "",
+  val status: String = "",
+  val enteredAt: String? = null,
+)
+
 @Serializable
 data class TerminalEvent(
   @SerialName("event_type")
@@ -221,25 +237,6 @@ enum class ReturnStatus {
 data class ReturnDecision(
   val status: ReturnStatus,
   val remoteStatus: String? = null,
-)
-
-// ---------------------------------------------------------------------------
-// 游乐核销 POST /api/v1/amusement/verifications
-// 复用 ticketing 的 VerificationRequest 契约（idempotency_key/credential_type/
-// credential_payload/device_id/point_id/business_context）。
-// 响应为 AmusementVerificationRecord。
-// ---------------------------------------------------------------------------
-@Serializable
-data class AmusementVerificationRecord(
-  val id: String = "",
-  val projectId: String? = null,
-  val sessionId: String? = null,
-  val deviceId: String? = null,
-  val staffId: String? = null,
-  val verificationResult: String = "",
-  val failureReason: String? = null,
-  val evidenceAttachmentIds: List<String> = emptyList(),
-  val createdAt: String? = null,
 )
 
 // ---------------------------------------------------------------------------
@@ -362,6 +359,7 @@ data class PaymentIntentRecord(
 )
 
 // 酒吧账单结算 POST /api/v1/bar/bills/{bill_id}/settle
+// 第十八批 Q 段第 153 条 153-R2：收款人由服务端按登录会话定（BSM:940），不发 cashier_staff_id。
 @Serializable
 data class BarBillSettleRequest(
   val idempotencyKey: String,
@@ -370,7 +368,6 @@ data class BarBillSettleRequest(
   val paymentId: String? = null,
   val settlementAmountCent: Long? = null,
   val paymentChannel: String? = null,
-  val cashierStaffId: String? = null,
   val posTransactionNo: String? = null,
 )
 

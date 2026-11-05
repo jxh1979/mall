@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -199,6 +199,68 @@ class BarInvitationCustomerJdbcIntegrationTests {
                 .andExpect(jsonPath("$.detail_code").value("BAR_INVITATION_ENTRY_CODE_INVALID"));
     }
 
+    // ── 第十八批 Q 段第 150 条 150-R1：动态入场码带订台号（BSM:552「进场之后，工作手机扫客人二维码核销各酒吧入场、赠饮、游乐等场内权益」；
+    // BSM:1036「到店出示本人的动态入场码核验入场」；ENUM:43「扫码即核销，不设先预检、后确认的两次操作」）──
+
+    /** 客人取到的动态入场码第 2 段就是订台号：工作手机只凭扫到的码拼出核验路径，按蛇形键送入场核验即入场。 */
+    @Test
+    void entryCodeCarriesReservationIdSoScannerRoutesVerify() throws Exception {
+        String memberId = CustomerTicketPaymentFixture.read(confirm(friendToken, 3, signature).andExpect(status().isOk()), "$.data.id");
+        String code = CustomerTicketPaymentFixture.read(mockMvc.perform(get("/api/v1/customer/bar-invitations/" + reservationId + "/entry-code")
+                        .header("X-Terminal-Type", "miniapp").header("X-Customer-Token", friendToken))
+                .andExpect(status().isOk()), "$.data.code");
+        String[] parts = code.split("\\.", -1);
+        assertThat(parts[1]).isEqualTo(reservationId);
+        assertThat(parts).hasSize(6);
+        scanVerify(parts[1], code)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.id").value(memberId))
+                .andExpect(jsonPath("$.data.status").value("entered"));
+    }
+
+    /** 同一酒吧另一张订台：把第一张订台的入场码送到第二张订台的路径，码中订台号对不上即拒，不放行入场。 */
+    @Test
+    void entryCodeOfOneReservationRejectedOnAnotherReservationOfSameBar() throws Exception {
+        confirm(friendToken, 3, signature).andExpect(status().isOk());
+        String code = CustomerTicketPaymentFixture.read(mockMvc.perform(get("/api/v1/customer/bar-invitations/" + reservationId + "/entry-code")
+                        .header("X-Terminal-Type", "miniapp").header("X-Customer-Token", friendToken))
+                .andExpect(status().isOk()), "$.data.code");
+        String otherTableId = "table_inv2_" + suffix;
+        String otherReservationId = "reservation_inv2_" + suffix;
+        jdbc.update("INSERT INTO bar_tables (id, bar_id, table_code, table_name, table_type, capacity, allowed_pass_free_guest_count,"
+                + " min_consumption_cent, currency, status, created_at, updated_at)"
+                + " VALUES (?, ?, ?, '二号卡座', 'card_seat', 3, 3, 50000, 'CNY', 'active', now(), now())",
+                otherTableId, barId, "T-INV2-" + suffix);
+        Timestamp now = Timestamp.from(Instant.now());
+        jdbc.update("INSERT INTO bar_reservations (id, bar_id, table_id, customer_id, reserved_at, guest_count, allowed_pass_free_guest_count,"
+                + " deposit_amount_cent, deposit_status, deposit_channel, order_source, status, created_terminal, created_at, updated_at,"
+                + " latest_arrival_at, hold_status)"
+                + " VALUES (?, ?, ?, ?, ?, 3, 3, 20000, 'paid', 'wechat', 'miniapp', 'reserved', 'miniapp', ?, ?, ?, 'held')",
+                otherReservationId, barId, otherTableId, friendId, Timestamp.from(Instant.now().plusSeconds(3600)), now, now,
+                Timestamp.from(Instant.now().plusSeconds(7200)));
+        mockMvc.perform(post("/api/v1/bar/reservations/" + otherReservationId + "/invitation").with(platformAdmin())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json.writeValueAsString(Map.of("idempotency_key", "inv-issue2-" + suffix))))
+                .andExpect(status().isOk());
+        scanVerify(otherReservationId, code)
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.detail_code").value("BAR_INVITATION_ENTRY_CODE_INVALID"));
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM bar_reservation_invitation_members WHERE reservation_id IN (?, ?)"
+                + " AND status = 'entered'", Integer.class, reservationId, otherReservationId)).isZero();
+    }
+
+    /** 工作手机扫码入场核验的请求形状（蛇形键；带本机设备号与点位，酒吧取本机所属商户）。 */
+    private ResultActions scanVerify(String pathReservationId, String code) throws Exception {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("idempotency_key", "inv-scan-" + UUID.randomUUID());
+        body.put("credential_payload", code);
+        body.put("device_id", "dev_inv_" + suffix);
+        body.put("point_id", "pt_inv_" + suffix);
+        body.put("business_context", Map.of("bar_id", barId));
+        return mockMvc.perform(post("/api/v1/bar/reservations/" + pathReservationId + "/invitation/entry-verify").with(platformAdmin())
+                .contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(body)));
+    }
+
     @Test
     void cancelledReservationRevokesInvitationForAcceptAndEntry() throws Exception {
         confirm(friendToken, 3, signature).andExpect(status().isOk());
@@ -272,6 +334,69 @@ class BarInvitationCustomerJdbcIntegrationTests {
         }
     }
 
+    // ── 第十八批 Q 段第 151 条 151-R1：按人数登记卡座免入的两个接口已删除（BSM:1036「到店出示本人的动态入场码核验入场——邀请函二维码只用于转发与接受，
+    // 本身不作为入场凭证……已确认与已入场总人数不超过卡座可进人数。」；ENUM:105「成员确认接受即占用该卡座的免通票入场名额」；ENUM:43「系统不提供人工放行」）──
+
+    /** 按蛇形键请求原按人数登记（check-in-guest）与名额预校验（entry-allowance/verify）：路由已不存在（404）、不落登记行；门口只剩凭本人动态入场码的 entry-verify。 */
+    @Test
+    void headcountCheckInEndpointsAreGoneAndEntryCodeVerifyRemains() throws Exception {
+        for (String path : List.of("/check-in-guest", "/entry-allowance/verify")) {
+            Map<String, Object> body = new LinkedHashMap<>();
+            body.put("idempotency_key", "inv-headcount-" + UUID.randomUUID());
+            body.put("credential_payload", friendId);
+            body.put("business_context", Map.of("bar_id", barId));
+            mockMvc.perform(post("/api/v1/bar/reservations/" + reservationId + path).with(platformAdmin())
+                            .contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(body)))
+                    .andExpect(status().isNotFound());
+        }
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM bar_table_guest_checkins WHERE reservation_id = ?", Integer.class, reservationId))
+                .isZero();
+        String memberId = CustomerTicketPaymentFixture.read(confirm(friendToken, 3, signature).andExpect(status().isOk()), "$.data.id");
+        ResultActions code = mockMvc.perform(get("/api/v1/customer/bar-invitations/" + reservationId + "/entry-code")
+                        .header("X-Terminal-Type", "miniapp").header("X-Customer-Token", friendToken))
+                .andExpect(status().isOk());
+        entryVerify(CustomerTicketPaymentFixture.read(code, "$.data.code"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.id").value(memberId))
+                .andExpect(jsonPath("$.data.status").value("entered"));
+    }
+
+    // ── 第十八批 Q 段第 151 条 151-R2：新建卡座只录可进人数一个数，免通票入场名额就是它（BSM:1036「对订台签发邀请函二维码（注明酒吧、卡座、可进人数）……
+    // 已确认与已入场总人数不超过卡座可进人数。」；ENUM:105「成员确认接受即占用该卡座的免通票入场名额」）──
+
+    /** 按后台「新建卡座」真实请求（蛇形键、不带 allowed_free_entry_count）建卡座：免通票入场名额列写同一个可进人数；随后订台签发，邀请函名额＝该数。 */
+    @Test
+    void createTableWithCapacityOnlyWritesSameFreeEntryQuotaAndInvitationUsesIt() throws Exception {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("idempotency_key", "inv-table6-" + suffix);
+        body.put("bar_id", barId);
+        body.put("table_name", "六人卡座");
+        body.put("table_type", "card_seat");
+        body.put("capacity", 6);
+        body.put("minimum_spend_cent", 0);
+        ResultActions created = mockMvc.perform(post("/api/v1/bar/tables").with(platformAdmin())
+                        .contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(body)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.capacity").value(6))
+                .andExpect(jsonPath("$.data.allowed_pass_free_guest_count").value(6));
+        String sixTableId = CustomerTicketPaymentFixture.read(created, "$.data.id");
+        assertThat(jdbc.queryForObject("SELECT allowed_pass_free_guest_count FROM bar_tables WHERE id = ?", Integer.class, sixTableId))
+                .isEqualTo(6);
+        String sixReservationId = "reservation_inv6_" + suffix;
+        Timestamp now = Timestamp.from(Instant.now());
+        jdbc.update("INSERT INTO bar_reservations (id, bar_id, table_id, customer_id, reserved_at, guest_count, allowed_pass_free_guest_count,"
+                + " deposit_amount_cent, deposit_status, deposit_channel, order_source, status, created_terminal, created_at, updated_at,"
+                + " latest_arrival_at, hold_status)"
+                + " VALUES (?, ?, ?, ?, ?, 6, 6, 20000, 'paid', 'wechat', 'miniapp', 'reserved', 'miniapp', ?, ?, ?, 'held')",
+                sixReservationId, barId, sixTableId, friendId, Timestamp.from(Instant.now().plusSeconds(3600)), now, now,
+                Timestamp.from(Instant.now().plusSeconds(7200)));
+        mockMvc.perform(post("/api/v1/bar/reservations/" + sixReservationId + "/invitation").with(platformAdmin())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json.writeValueAsString(Map.of("idempotency_key", "inv-issue6-" + suffix))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.capacity").value(6));
+    }
+
     private int auditCount(String event) {
         return jdbc.queryForObject("SELECT count(*) FROM audit_events WHERE event_name = ?", Integer.class, event);
     }
@@ -340,7 +465,7 @@ class BarInvitationCustomerJdbcIntegrationTests {
             jdbc.update("INSERT INTO roles (id, role_name, description, data_scope, status, created_at)"
                     + " VALUES (?, ?, '订台回归', 'platform', 'active', now())", role, role);
             for (String code : List.of("bar.reservation.create", "bar.reservation.manage", "bar.reservation.view",
-                    "bar.reservation.invitation.manage", "bar.table.guest_checkin")) {
+                    "bar.reservation.invitation.manage", "bar.table.guest_checkin", "bar.table.manage")) {
                 jdbc.update("INSERT INTO role_permissions (role_id, permission_code) VALUES (?, ?)", role, code);
             }
             jdbc.update("INSERT INTO user_roles (user_id, role_id) VALUES (?, ?)", userId, role);

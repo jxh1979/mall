@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
@@ -108,21 +108,6 @@ final class JdbcBarParameterSource {
                 .addValue("updated_at", timestampWithTimeZone(rule.updatedAt()));
     }
 
-    MapSqlParameterSource checkinParameters(BarTableGuestCheckinRecord checkin) {
-        return new MapSqlParameterSource()
-                .addValue("id", checkin.id())
-                .addValue("reservation_id", checkin.reservationId())
-                .addValue("bar_id", checkin.barId())
-                .addValue("table_id", checkin.tableId())
-                .addValue("guest_identifier", checkin.guestIdentifier())
-                .addValue("verification_result", checkin.verificationResult())
-                .addValue("checked_in_count_after", checkin.checkedInCountAfter())
-                .addValue("device_id", checkin.deviceId())
-                .addValue("staff_id", checkin.staffId())
-                .addValue("evidence_attachment_ids", writeJson(checkin.evidenceAttachmentIds()))
-                .addValue("created_at", timestampWithTimeZone(checkin.createdAt()));
-    }
-
     MapSqlParameterSource productParameters(BarProductRecord product) {
         return new MapSqlParameterSource()
                 .addValue("id", product.id())
@@ -200,7 +185,6 @@ final class JdbcBarParameterSource {
                 .addValue("system_refund_cent", shift.systemRefundCent())
                 .addValue("system_tip_cent", shift.systemTipCent())
                 .addValue("cash_diff_cent", shift.cashDiffCent())
-                .addValue("cash_diff_threshold_cent", shift.cashDiffThresholdCent())
                 .addValue("needs_review", shift.needsReview())
                 .addValue("handover_to_user_id", shift.handoverToUserId())
                 .addValue("note", shift.note())

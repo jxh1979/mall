@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 
@@ -169,7 +169,6 @@ final class JdbcBarRowMapper {
                 resultSet.getLong("system_refund_cent"),
                 resultSet.getLong("system_tip_cent"),
                 cashDiff,
-                resultSet.getLong("cash_diff_threshold_cent"),
                 resultSet.getBoolean("needs_review"),
                 resultSet.getString("handover_to_user_id"),
                 resultSet.getString("note"),

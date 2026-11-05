@@ -1,6 +1,6 @@
 package com.complex.platform.amusement;
 
-// 文件版本：V0.07
+// 文件版本：V0.08
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -428,6 +428,7 @@ class ParkWideFaultCompensationJdbcIntegrationTests {
         VerificationResponse drink = verify("fs012-drink-" + suffix, compensationEntitlement(itemId, "bar_drink"));
         assertThat(verify("fs012-drink-" + suffix, compensationEntitlement(itemId, "bar_drink")).id()).isEqualTo(drink.id());
         String giftVersion = promote(giftItemCode, 900L);
+        markEntryVerified(compensationEntitlement(itemId, "admission"));
         VerificationResponse gift = verify("fs012-gift-" + suffix, compensationEntitlement(itemId, "gift_drink"));
         promote(drinkItemCode, 1500L);
 
@@ -505,6 +506,7 @@ class ParkWideFaultCompensationJdbcIntegrationTests {
     void compensationGiftDrinkPostsNoPassDrinkPayable() {
         addGiftDrinkBinding(800L);
         String itemId = issueFullReissue();
+        markEntryVerified(compensationEntitlement(itemId, "admission"));
         VerificationResponse gift = verify("fs012-gift-only-" + suffix, compensationEntitlement(itemId, "gift_drink"));
         assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM ar_ap_items WHERE source_type = 'pass_drink_settlement'"
                 + " AND source_id = ?", Integer.class, gift.id())).isZero();
@@ -802,6 +804,18 @@ class ParkWideFaultCompensationJdbcIntegrationTests {
                 String.class, itemId, type);
     }
 
+    /**
+     * 第十八批 Q 段第 148 条（ENUM:55「客人须先核销这家酒吧的入场权益、再核销这家酒吧的酒水（赠饮）权益」）：补发的这家酒吧入场已核——
+     * 直接落一条核销成功记录（不经核销服务，不产生补偿履约）。
+     */
+    private void markEntryVerified(String entitlementId) {
+        jdbcTemplate.update("INSERT INTO ticket_verifications (id, verification_no, entitlement_id, entitlement_code, credential_type,"
+                + " credential_payload, device_id, point_id, status, source_type, created_at, merchant_id, verified_people)"
+                + " SELECT 'ver_' || id, 'V-' || id, id, entitlement_code, 'qr', entitlement_code, ?, ?, 'success',"
+                + " 'android_terminal_online', now(), merchant_id, 1 FROM issued_entitlements WHERE id = ?",
+                deviceCode, "point_cg08b_" + suffix, entitlementId);
+    }
+
     private VerificationResponse verify(String key, String entitlementId) {
         String code = jdbcTemplate.queryForObject("SELECT entitlement_code FROM issued_entitlements WHERE id = ?", String.class, entitlementId);
         return ticketingService.createVerification(new VerificationRequest(key, "qr", code, deviceCode, "point_cg08b_" + suffix, Map.of()));
@@ -847,6 +861,8 @@ class ParkWideFaultCompensationJdbcIntegrationTests {
                 null, null, null, productId, now, now, "physical", null, "per_use", null));
         ticketingRepository.saveTicketTypeEntitlement(new TicketTypeEntitlementRecord("bind_" + id, ticketTypeId, id, 1, 1,
                 0L, "default", 1, 0L, now, now));
+        // 148-R1：票面有这家酒吧的赠饮就有这家酒吧的入场（TicketCatalogService.requireBarGiftCoverage），完整补发时一并补。
+        template("admission", 0L);
         return code;
     }
 

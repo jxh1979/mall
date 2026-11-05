@@ -1,10 +1,10 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AdminApi } from "./adminClient";
 
 // 第十八批 N 段第 123 条 123-R3（BSM:1876「Web 端同样适用：核销、收款、退款、放行等敏感操作在授权位置范围之外一律拒绝并留痕。」）：
-// 现场动作闭集（与后端定位闸同一份 12 条）带上当下位置，不论终端；预览、读取与其他写请求一律不带。
+// 现场动作闭集（与后端定位闸同一份 11 条）带上当下位置，不论终端；预览、读取与其他写请求一律不带。
 
 function stubFetch() {
   const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) =>
@@ -28,12 +28,12 @@ describe("AdminApi 敏感操作带位置（第 123 条 123-R3）", () => {
     vi.unstubAllGlobals();
   });
 
-  it("核销、订台入场登记带上 x-geo-latitude 与 x-geo-longitude", async () => {
+  it("核销、邀请函入场核验带上 x-geo-latitude 与 x-geo-longitude", async () => {
     const fetchMock = stubFetch();
     const api = new AdminApi();
 
     await api.post("/api/v1/vouchers/redemptions", { voucherInstanceId: "vi-1" });
-    await api.post("/api/v1/bar/reservations/r-1/check-in-guest", { guestCount: 2, barId: "bar-1" });
+    await api.post("/api/v1/bar/reservations/r-1/invitation/entry-verify", { credentialPayload: "bie.x" });
 
     expect(geoHeaders(fetchMock, 0)).toEqual(["31.1", "121.5"]);
     expect(geoHeaders(fetchMock, 1)).toEqual(["31.1", "121.5"]);

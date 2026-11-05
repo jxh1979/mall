@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.05
+// 文件版本：V0.06
 
 import com.complex.platform.evidence.AuditedOperation;
 
@@ -18,8 +18,6 @@ enum BarWriteOperation implements AuditedOperation {
     CHECK_IN_RESERVATION_DEPOSIT("bar.reservation_checked_in", "bar.reservation_checkin_failed", "bar.reservation.manage", "bar_reservation"),
     CANCEL_RESERVATION("bar.reservation.cancelled", "bar.reservation.cancel_failed", "bar.reservation.manage", "bar_reservation"),
     CREATE_DEPOSIT_RULE("bar.deposit_rule.created", "bar.deposit_rule.create_failed", "bar.deposit_rule.manage", "bar_deposit_rule"),
-    VERIFY_RESERVATION_ENTRY_ALLOWANCE("bar.table_guest.entry_allowance_verified", "bar.table_guest.entry_allowance_verify_failed", "bar.table.guest_checkin", "bar_reservation"),
-    CHECK_IN_RESERVATION_GUEST("bar.table_guest.checked_in", "bar.table_guest.rejected", "bar.table.guest_checkin", "bar_table_guest_checkin"),
     CREATE_TABLE("bar.table.changed", "bar.table.change_failed", "bar.table.manage", "bar_table"),
     ASSIGN_TABLE_SPACE("bar.table_space.assigned", "bar.table_space.assign_failed", "bar.table.manage", "bar_table"),
     OPEN_TABLE("bar.table.opened", "bar.table.open_failed", "bar.table.open_close", "bar_table"),

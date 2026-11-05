@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.05
+// 文件版本：V0.06
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -214,7 +214,7 @@ class BarJdbcIntegrationTests {
     }
 
     @Test
-    void saveAndListFlowsPersistReservationOrderBillCommissionAndGuestCheckinRows() {
+    void saveAndListFlowsPersistReservationOrderBillAndCommissionRows() {
         Instant now = Instant.parse("2026-06-14T00:00:00Z");
         repository.saveTable(new BarTableRecord(
                 "table_jdbc",
@@ -251,19 +251,6 @@ class BarJdbcIntegrationTests {
                 now,
                 now,
                 null
-        ));
-        repository.saveGuestCheckin(new BarTableGuestCheckinRecord(
-                "checkin_jdbc",
-                "reservation_jdbc",
-                "bar_jdbc",
-                "table_jdbc",
-                "guest_1",
-                "accepted",
-                1,
-                "device_1",
-                "staff_1",
-                List.of("att_checkin"),
-                now
         ));
         repository.saveProduct(new BarProductRecord(
                 "product_jdbc",
@@ -404,7 +391,6 @@ class BarJdbcIntegrationTests {
         assertThat(repository.listReservations(Optional.empty()))
                 .extracting(BarReservationRecord::id, BarReservationRecord::depositAmountCent, BarReservationRecord::salesStaffId)
                 .contains(tuple("reservation_jdbc", 10000L, "staff_sales"));
-        assertThat(repository.countGuestCheckins("reservation_jdbc")).isEqualTo(1);
         assertThat(repository.listOrderItems("order_jdbc"))
                 .extracting(BarOrderItemRecord::quantity, BarOrderItemRecord::amountCent, BarOrderItemRecord::deliveryStatus)
                 .contains(tuple(1, 128800L, "pending"));

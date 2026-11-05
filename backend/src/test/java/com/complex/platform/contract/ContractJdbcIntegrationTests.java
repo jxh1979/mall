@@ -1,6 +1,6 @@
 package com.complex.platform.contract;
 
-// 文件版本：V0.22
+// 文件版本：V0.23
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -776,6 +776,127 @@ class ContractJdbcIntegrationTests {
                 SELECT business_type || '|' || business_id || '|' || permission_code || '|' || (metadata->>'error_code')
                   FROM audit_events WHERE event_name = 'contract.submit_failed' AND event_result = 'failure' AND idempotency_key = ?""",
                 String.class, "r3_sub_" + s)).containsExactly("contract|" + contractId + "|contract.draft.manage|CONTRACT_NOT_DRAFTING");
+    }
+
+    /**
+     * 第十八批 Q 段第 138 条 138-R5（ENUM:257「营业额抽成账单在该账期的薪资月结完成、该账期月结定格时确定的服务费应发数与扣留数定数之后出账，账单一次出准，
+     * 不使用预估数、不在下期补差」「“保底与抽成取高”按自然月逐月比较、不跨月合并」）：保底与抽成取高合同（月租 100000、物业费 20000，抽成规则 10%）
+     * 按前端请求形状（蛇形键）生效 → 只预排三期物业费、不预排租金；该商户 2098-02 餐饮回流营业额 2000000 → 账期后按期出账（period-bills）出该期租金
+     * max(100000, 200000)=200000，账单固化抽成规则 id。
+     */
+    @Test
+    void higherOfContractRentIsNotPrebilledAndPeriodBillTakesTheHigherOfTurnover() throws Exception {
+        String s = UUID.randomUUID().toString().substring(0, 8);
+        String project = "r5_prj_" + s;
+        String space = "r5_sp_" + s;
+        String merchant = "r5_mch_" + s;
+        String contractId = "r5_ctr_" + s;
+        String ruleId = "r5_rule_" + s;
+        jdbcTemplate.update("INSERT INTO projects(id,venue_type,name,status,created_at,updated_at) VALUES(?,'complex','第138条预排项目','active',now(),now())",
+                project);
+        jdbcTemplate.update("INSERT INTO merchants(id,merchant_name,merchant_type,project_id,status,created_at,updated_at) "
+                + "VALUES(?,'第138条餐饮商户','catering',?,'active',now(),now())", merchant, project);
+        jdbcTemplate.update("INSERT INTO spaces (id, project_id, space_name, space_type, floor_no, area_square_meter, status, created_at, updated_at) "
+                + "VALUES (?, ?, ?, 'shop', '1F', 88.0, 'active', now(), now())", space, project, space);
+        jdbcTemplate.update("""
+                INSERT INTO contracts (id, merchant_id, contract_subject_id, settlement_subject_id, effective_date, expiry_date,
+                    lifecycle_status, project_id, rent_terms, created_at, updated_at)
+                VALUES (?, ?, ?, ?, DATE '2098-01-01', DATE '2098-03-31', 'pending_effective', ?,
+                    '{"rentBillingMode":"higher_of","baseRentCent":100000,"propertyFeeCent":20000}'::jsonb, now(), now())""",
+                contractId, merchant, "r5_subj_" + s, "r5_subj_" + s, project);
+        jdbcTemplate.update("""
+                INSERT INTO turnover_rent_rules
+                    (id, contract_id, merchant_id, rule_name, rate_bps, min_amount_cent, effective_from, effective_to, status, is_draft)
+                VALUES (?, ?, ?, '第138条抽成规则', 1000, 0, DATE '2098-01-01', NULL, 'active', FALSE)
+                """, ruleId, contractId, merchant);
+        RequestPostProcessor admin = staffWith(s, "platform_admin", "contract.lifecycle.activate", "finance.ar_ap.manage");
+
+        mockMvc.perform(post("/api/v1/contracts/" + contractId + "/activate").with(admin)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"idempotency_key\":\"r5_act_" + s + "\",\"space_ids\":[\"" + space + "\"]}"))
+                .andExpect(status().isOk());
+        assertThat(jdbcTemplate.queryForList(
+                "SELECT fee_type || ':' || period FROM contract_rent_bills WHERE contract_id = ? ORDER BY 1", String.class, contractId))
+                .containsExactly("property_fee:2098-01", "property_fee:2098-02", "property_fee:2098-03");
+
+        java.sql.Timestamp landed = java.sql.Timestamp.from(Instant.parse("2098-02-15T04:00:00Z"));
+        jdbcTemplate.update("""
+                INSERT INTO integration_order_syncs (id, provider_code, business_type, sync_type, external_business_id,
+                    status, amount_cent, currency, merchant_id, created_at, updated_at)
+                VALUES (?, 'pos_r5', 'catering', 'order', ?, 'synced', 2000000, 'CNY', ?, ?, ?)
+                """, "ios_r5_" + s, "ext_r5_" + s, merchant, landed, landed);
+        mockMvc.perform(post("/api/v1/contracts/" + contractId + "/period-bills").with(admin)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"idempotency_key\":\"r5_bill_" + s + "\",\"period\":\"2098-02\"}"))
+                .andExpect(status().isOk());
+        assertThat(jdbcTemplate.queryForList(
+                "SELECT period || ':' || amount_cent || ':' || turnover_rule_id FROM contract_rent_bills WHERE contract_id = ? AND fee_type = 'rent'",
+                String.class, contractId))
+                .containsExactly("2098-02:200000:" + ruleId);
+    }
+
+    /**
+     * 第十八批 Q 段第 138 条 138-R5 复核修正（ENUM:257「营业额抽成账单在该账期的薪资月结完成、该账期月结定格时确定的服务费应发数与扣留数定数之后出账，账单一次出准，
+     * 不使用预估数、不在下期补差」；ENUM:252「退租对应期间的全部相关单据收齐并核对完成后，才允许退租结算最后审批通过；缺单时保持待处理」；决策台账第七批合同裁决
+     * 第 2 条「合同到期走到期日所在月」）：保底与抽成取高合同（2098-01～2098-03，月租 100000）按前端请求形状生效、按期出 1、2 月租金；到期作业把合同转为已到期后，
+     * 到期月 2098-03 的租金仍经 period-bills 出账，到期结算齐单核对不再缺「2098-03:rent」；到期日所在月之后的账期仍 409 CONTRACT_NOT_EFFECTIVE。
+     */
+    @Test
+    void expiredHigherOfContractStillBillsItsExpiryMonthSoExpirySettlementDocumentsComplete() throws Exception {
+        String s = UUID.randomUUID().toString().substring(0, 8);
+        String project = "r5x_prj_" + s;
+        String space = "r5x_sp_" + s;
+        String merchant = "r5x_mch_" + s;
+        String contractId = "r5x_ctr_" + s;
+        jdbcTemplate.update("INSERT INTO projects(id,venue_type,name,status,created_at,updated_at) VALUES(?,'complex','第138条到期项目','active',now(),now())",
+                project);
+        jdbcTemplate.update("INSERT INTO merchants(id,merchant_name,merchant_type,project_id,status,created_at,updated_at) "
+                + "VALUES(?,'第138条到期餐饮商户','catering',?,'active',now(),now())", merchant, project);
+        jdbcTemplate.update("INSERT INTO spaces (id, project_id, space_name, space_type, floor_no, area_square_meter, status, created_at, updated_at) "
+                + "VALUES (?, ?, ?, 'shop', '1F', 88.0, 'active', now(), now())", space, project, space);
+        jdbcTemplate.update("""
+                INSERT INTO contracts (id, merchant_id, contract_subject_id, settlement_subject_id, effective_date, expiry_date,
+                    lifecycle_status, project_id, rent_terms, created_at, updated_at)
+                VALUES (?, ?, ?, ?, DATE '2098-01-01', DATE '2098-03-31', 'pending_effective', ?,
+                    '{"rentBillingMode":"higher_of","baseRentCent":100000}'::jsonb, now(), now())""",
+                contractId, merchant, "r5x_subj_" + s, "r5x_subj_" + s, project);
+        jdbcTemplate.update("""
+                INSERT INTO turnover_rent_rules
+                    (id, contract_id, merchant_id, rule_name, rate_bps, min_amount_cent, effective_from, effective_to, status, is_draft)
+                VALUES (?, ?, ?, '第138条到期抽成规则', 1000, 0, DATE '2098-01-01', NULL, 'active', FALSE)
+                """, "r5x_rule_" + s, contractId, merchant);
+        RequestPostProcessor admin = staffWith(s, "platform_admin", "contract.lifecycle.activate", "finance.ar_ap.manage");
+        mockMvc.perform(post("/api/v1/contracts/" + contractId + "/activate").with(admin)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"idempotency_key\":\"r5x_act_" + s + "\",\"space_ids\":[\"" + space + "\"]}"))
+                .andExpect(status().isOk());
+        for (String period : List.of("2098-01", "2098-02")) {
+            mockMvc.perform(post("/api/v1/contracts/" + contractId + "/period-bills").with(admin)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"idempotency_key\":\"r5x_bill_" + period + "_" + s + "\",\"period\":\"" + period + "\"}"))
+                    .andExpect(status().isOk());
+        }
+
+        expiryJob.runOnce(LocalDate.parse("2098-04-01"));
+        assertThat(jdbcTemplate.queryForObject("SELECT lifecycle_status FROM contracts WHERE id = ?", String.class, contractId))
+                .isEqualTo("expired");
+        assertThat(repository.listMissingTerminationDocuments(repository.findContractById(contractId).orElseThrow(), YearMonth.parse("2098-03")))
+                .containsExactly("2098-03:rent");
+        mockMvc.perform(post("/api/v1/contracts/" + contractId + "/period-bills").with(admin)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"idempotency_key\":\"r5x_bill_2098-03_" + s + "\",\"period\":\"2098-03\"}"))
+                .andExpect(status().isOk());
+        assertThat(jdbcTemplate.queryForList(
+                "SELECT period || ':' || amount_cent FROM contract_rent_bills WHERE contract_id = ? AND fee_type = 'rent' ORDER BY period",
+                String.class, contractId))
+                .containsExactly("2098-01:100000", "2098-02:100000", "2098-03:100000");
+        assertThat(repository.listMissingTerminationDocuments(repository.findContractById(contractId).orElseThrow(), YearMonth.parse("2098-03")))
+                .isEmpty();
+        mockMvc.perform(post("/api/v1/contracts/" + contractId + "/period-bills").with(admin)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"idempotency_key\":\"r5x_bill_2098-04_" + s + "\",\"period\":\"2098-04\"}"))
+                .andExpect(status().isConflict())
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath("$.detail_code").value("CONTRACT_NOT_EFFECTIVE"));
     }
 
     /** 给定账号类型的平台公司账号，经一个普通角色持有给定权限码（后台 Web 终端）。 */

@@ -1,4 +1,4 @@
-// 文件版本：V0.03
+// 文件版本：V0.04
 import React from "react";
 import { TechDetails } from "../components/TechDetails";
 import { AdminDataState } from "../components/AdminDataState";
@@ -103,6 +103,7 @@ const ANOMALY_RESOLUTION_LABELS = {
 
 // 第十八批 P 段 134-R3（PGM:287 所有终端零英文）：核销记录 result_reason 机器码 → 中文。
 // 规则拒绝码（TicketVerificationService.RULE_REJECTION_CODES 小写）取后端该码抛出处的提示原文；冲正、异常原因是员工录入原话，原样显示。
+// 第十八批 Q 段 145-R1：正常业务能落库的技术失败码同样取抛出处原文（device_not_managed 原文含 MDM，改写为中文）。
 const VERIFICATION_RESULT_REASON_LABELS: Record<string, string> = {
   entitlement_not_active: "该权益未生效",
   entitlement_not_yet_valid: "该权益尚未到生效时间",
@@ -128,8 +129,13 @@ const VERIFICATION_RESULT_REASON_LABELS: Record<string, string> = {
   multi_use_face_consent_required: "一人多次票首次入场须客人同意留存人脸，未同意不能入场（票仍未核销）",
   multi_use_face_capture_required: "一人多次票入场须现场拍摄人脸（照片缺失或格式不正确）",
   multi_use_holder_mismatch: "与该票留存的使用人人脸不一致，不能核销",
+  bar_entry_not_verified: "须先核销这家酒吧的入场权益，再核销酒水（赠饮）权益",
   window_expired: "动态码已过刷新窗口",
   signature_invalid: "核销凭证签名无效",
+  device_blocked: "设备已被封禁或挂失",
+  device_not_managed: "设备未纳入设备管理",
+  verify_device_merchant_unresolved: "核销设备未绑定商户，无法判定本次核销发生在哪家门店",
+  credential_expired: "核销凭证已过期，请刷新后重试",
   session_reentry: "本场次再次入场，不扣次",
   day_replay: "当天已激活，再次入场不扣次",
   amusement_verified: "游乐入场核销",

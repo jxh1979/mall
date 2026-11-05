@@ -1,5 +1,5 @@
 package com.complex.platform.analytics;
-// 文件版本：V0.08
+// 文件版本：V0.09
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
 import com.complex.platform.contract.SpaceRentalDerivationSql;
@@ -733,6 +733,19 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
     }
 
     @Override
+    public Map<String, BigDecimal> countTicketVerificationRejectedByMerchant(LocalDate businessDate) {
+        // 147-R1：与核销数同窗同维度，只数规则拒绝（ENUM:43 失败另列，不计入）。
+        return keyTotals("""
+                SELECT merchant_id, COUNT(*) AS total
+                  FROM ticket_verifications
+                 WHERE status = 'rejected'
+                   AND created_at >= :start
+                   AND created_at < :end
+                 GROUP BY merchant_id
+                """, dayRange("ticketing", businessDate));
+    }
+
+    @Override
     public Map<Integer, Long> hourlyTrafficCounts(LocalDate businessDate, Optional<String> merchantScope) {
         // T4.3：按经营日窗口对成功核销 created_at 分小时桶。
         // ponytail: 按 UTC 小时分桶（确定、与窗口同源）；若要本地时段口径，改 AT TIME ZONE '业务时区'。
@@ -909,6 +922,20 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
                   JOIN issued_entitlements ie ON ie.id = v.entitlement_id
                   JOIN ticket_orders o ON o.id = ie.order_id
                  WHERE v.status = 'success'
+                   AND v.created_at >= :start
+                   AND v.created_at < :end
+                 GROUP BY 1
+                """, dayRange("ticketing", businessDate));
+    }
+
+    @Override
+    public Map<String, BigDecimal> countTicketVerificationRejectedByMerchantProject(LocalDate businessDate) {
+        return keyTotals("""
+                SELECT v.merchant_id || '|' || o.project_id, COUNT(*) AS total
+                  FROM ticket_verifications v
+                  JOIN issued_entitlements ie ON ie.id = v.entitlement_id
+                  JOIN ticket_orders o ON o.id = ie.order_id
+                 WHERE v.status = 'rejected'
                    AND v.created_at >= :start
                    AND v.created_at < :end
                  GROUP BY 1
