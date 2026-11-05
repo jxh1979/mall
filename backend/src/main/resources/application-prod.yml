@@ -1,4 +1,4 @@
-# 文件版本：V0.10
+# 文件版本：V0.11
 server:
   address: ${COMPLEX_API_HOST:127.0.0.1}
 
@@ -66,6 +66,7 @@ bar.reservation-timeout.scheduled.enabled: true
 # 同 AUD-033 先例 prod 开启;两作业均为薄 @Scheduled 包装,业务规则在服务层,默认间隔 60s / 300s):
 amusement.concurrent-reset.scheduled.enabled: true           # 场次结束自动清空该场次与项目并发维、营业日结束自动清零在玩人数(留痕 amusement_concurrent_reset_log)
 dealer.order.deadline.scheduled.enabled: true                # E-13 首付款截止未达门槛自动取消并释放预留、已收款进既有退款审批;尾款逾期标记与暂停账期订单
+bar.unpaid-close-escalation.scheduled.enabled: true          # 第 157 条 157-R5 包厢关台未付清待办到期（涉钱审批通用时限）仍未处理的升级给店长与本项目夜班值班经理(只升级一次,默认 60s 一轮)
 bar.pending-clear-alert.scheduled.enabled: true              # TK-27 待清台超时提醒本酒吧此刻有排班且持 bar.table.open_close 的员工(每台位每次待清台只发一次,默认 60s 一轮)
 facility.work-order-escalation.scheduled.enabled: true       # 第 77 条 BSM「按响应时限和处理时限统计时效，超时自动升级通知主管」:物业工单响应/处理超时各升级一次并通知可触及该单项目的物业主管(设备告警的接警响应按告警条,默认 60s 一轮)
 facility.alarm-escalation.scheduled.enabled: true            # HP-F01 设备告警超时只在当班范围升级、换班未结告警须下一班明确接手(BSM「楼宇运营」告警条,默认 60s 一轮)

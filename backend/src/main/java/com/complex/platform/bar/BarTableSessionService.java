@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.08
+// 文件版本：V0.09
 
 import static com.complex.platform.bar.BarValidation.*;
 
@@ -366,6 +366,8 @@ public class BarTableSessionService {
      *       single：任选一张原台单独拆出，其直接子节点改指其父＝压缩只剩一侧的空层级；all：一次把全部原台同时拆开。</li>
      *   <li>只允许拆 status='merged' 的节点；整体转台前的旧链（merged_transferred）拒绝（「后续拆台只处理该次转台之后新形成的并台关系」）。</li>
      *   <li>并台期间在台组台位上产生、但没有会话归属的订单，须由 order_assignments 人工明确归属并留痕，否则不得拆台。</li>
+     *   <li>第十八批 T 段第 167 条 167-R3a：并台期间新发出、尚未分配的邀请及其已接受、已入场成员（开卡人除外），须由 invitation_assignments、
+     *       member_assignments 逐一分配到当前合并台的某一张原台并留痕，否则不得拆台；分配过的不再要求。</li>
      *   <li>拆出会话恢复 open、脱离来源树、台位保持已开台；阈值/进度由台组动态求和自然重算（拆出台恢复其并入前冻结的低消快照）；
      *       各结果台组各判一次定金；低消不足不阻断。</li>
      * </ul>
@@ -418,14 +420,10 @@ public class BarTableSessionService {
                 .map(repository::findTableSessionById).flatMap(Optional::stream).toList();
         Instant since = familySessions.stream().map(BarTableSessionRecord::openedAt).min(Comparator.naturalOrder())
                 .orElse(primary.openedAt());
-        Map<String, String> assignments = new LinkedHashMap<>();
-        for (Map<String, Object> assignment : safeAssignments(actual.orderAssignments())) {
-            String sessionId = requireItemText(assignment, "session_id", "sessionId");
-            if (!family.contains(sessionId)) {
-                throw ApiException.badRequest("VALIDATION_FAILED", "订单归属的会话不在当前合并台组内：" + sessionId);
-            }
-            assignments.put(requireItemText(assignment, "order_id", "orderId"), sessionId);
-        }
+        Map<String, String> assignments = parseAssignments(actual.orderAssignments(), "order_id", "orderId", family, "订单");
+        Map<String, String> invitationAssignments =
+                parseAssignments(actual.invitationAssignments(), "reservation_id", "reservationId", family, "邀请");
+        Map<String, String> memberAssignments = parseAssignments(actual.memberAssignments(), "member_id", "memberId", family, "成员");
         List<BarOrderRecord> orphans = repository.listOrdersWithoutSession(
                 familySessions.stream().map(BarTableSessionRecord::tableId).toList(), since);
         List<String> missing = orphans.stream().map(BarOrderRecord::id).filter(id -> !assignments.containsKey(id)).toList();
@@ -433,14 +431,43 @@ public class BarTableSessionService {
             throw ApiException.conflict("BAR_SPLIT_ORDER_ATTRIBUTION_REQUIRED",
                     "以下订单无法确认归属，须先人工明确归属并留痕后才能拆台：" + String.join("、", missing));
         }
+        // 第十八批 T 段第 167 条 167-R3a（BSM:1079「并台期间新发出的邀请，以及由这些邀请形成的已接受成员、已入场成员，在首次拆台前由授权人员逐一
+        // 分配到当前合并台所包含的某一张原台并留痕；已入场成员只调整所属原台，不得被移出，已占名额不得释放」「一次全部拆开必须先完成全部邀请、成员……
+        // 归属分配及逐台名额校验，再一次性成功或整体失败」；ENUM:114 同句）：台组（含整体转台前旧链）各订台中并台期间发出、尚未分配的邀请及其成员
+        // （开卡人除外）须在本次拆台请求里逐一分配，缺一即 409；分配写在名额校验之前，超额时随事务整笔回滚。
+        List<String> chain = repository.familySessionIds(primary.id(), true);
+        List<String> pendingInvitations = repository.listMergePendingInvitationReservationIds(chain);
+        List<String> pendingMembers = repository.listMergePendingInvitationMembers(chain);
+        List<String> unassigned = new ArrayList<>();
+        List<String> unassignedInvitations = pendingInvitations.stream().filter(id -> !invitationAssignments.containsKey(id)).toList();
+        List<String> unassignedMembers = pendingMembers.stream().filter(id -> !memberAssignments.containsKey(id)).toList();
+        if (!unassignedInvitations.isEmpty()) {
+            unassigned.add("邀请（订台）" + String.join("、", unassignedInvitations));
+        }
+        if (!unassignedMembers.isEmpty()) {
+            unassigned.add("成员" + String.join("、", unassignedMembers));
+        }
+        if (!unassigned.isEmpty()) {
+            throw ApiException.conflict("BAR_SPLIT_INVITATION_ASSIGNMENT_REQUIRED",
+                    "以下并台期间新发出的邀请及其已接受、已入场成员，须先由授权人员逐一分配到当前合并台的某一张原台后才能拆台："
+                            + String.join("；", unassigned));
+        }
         String key = requireText(actual.idempotencyKey(), "idempotency_key");
         for (BarOrderRecord orphan : orphans) {
             String sessionId = assignments.get(orphan.id());
             repository.saveOrderServiceSource(orphan.id(), sessionId);
-            if (auditEvents != null) {
-                auditEvents.recordSuccess("bar.table_session.order_attributed", "bar.table_session.split", "bar_order",
-                        orphan.id(), null, key, Map.of("session_id", sessionId, "split_session_id", primary.id()));
-            }
+            recordAttributed("bar.table_session.order_attributed", "bar_order", orphan.id(), key, sessionId, primary.id());
+        }
+        for (String reservationId : pendingInvitations) {
+            String sessionId = invitationAssignments.get(reservationId);
+            repository.assignInvitationSession(reservationId, sessionId);
+            recordAttributed("bar.table_session.invitation_assigned", "bar_reservation", reservationId, key, sessionId, primary.id());
+        }
+        for (String memberId : pendingMembers) {
+            String sessionId = memberAssignments.get(memberId);
+            repository.assignInvitationMemberSession(memberId, sessionId);
+            recordAttributed("bar.table_session.member_assigned", "bar_reservation_invitation_member", memberId, key, sessionId,
+                    primary.id());
         }
 
         long thresholdBefore = BarMinSpend.thresholdCent(repository, primary.id());
@@ -512,7 +539,8 @@ public class BarTableSessionService {
                 false,
                 key,
                 safeList(actual.evidenceAttachmentIds()),
-                splitSnapshot(primary, updatedPrimary, mode, roots, familySessions, assignments, inviteResults)
+                splitSnapshot(primary, updatedPrimary, mode, roots, familySessions, assignments, invitationAssignments,
+                        memberAssignments, inviteResults)
         ));
     }
 
@@ -528,6 +556,29 @@ public class BarTableSessionService {
         return assignments == null ? List.of() : assignments;
     }
 
+    /** 拆台请求里的人工归属 [{idKey, session_id}]：会话须在当前合并台组内，否则 400；请求里多出的条目忽略（只写待归属项）。 */
+    private static Map<String, String> parseAssignments(List<Map<String, Object>> items, String idKey, String camelKey,
+            List<String> family, String label) {
+        Map<String, String> parsed = new LinkedHashMap<>();
+        for (Map<String, Object> item : safeAssignments(items)) {
+            String sessionId = requireItemText(item, "session_id", "sessionId");
+            if (!family.contains(sessionId)) {
+                throw ApiException.badRequest("VALIDATION_FAILED", label + "归属的会话不在当前合并台组内：" + sessionId);
+            }
+            parsed.put(requireItemText(item, idKey, camelKey), sessionId);
+        }
+        return parsed;
+    }
+
+    /** 拆台人工归属逐条留痕（订单、邀请、成员）。 */
+    private void recordAttributed(String event, String businessType, String businessId, String key, String sessionId,
+            String primarySessionId) {
+        if (auditEvents != null) {
+            auditEvents.recordSuccess(event, "bar.table_session.split", businessType, businessId, null, key,
+                    Map.of("session_id", sessionId, "split_session_id", primarySessionId));
+        }
+    }
+
     /** 拆出：status 回 open、脱离来源树（source=null）、closed_at 清空；压缩层级：只改 source 指向。 */
     private BarTableSessionRecord sessionRelinked(BarTableSessionRecord session, String sourceSessionId, Instant now) {
         boolean reopen = sourceSessionId == null;
@@ -539,21 +590,30 @@ public class BarTableSessionService {
                 sourceSessionId, session.sessionVersion() + 1, session.createdAt(), now);
     }
 
-    /** 拆台快照：拆前并台树、拆台方式、拆出会话与人工订单归属；167-R2 加记各结果台组的可邀请人数与已占人数（只读留痕）。 */
+    /**
+     * 拆台快照：拆前并台树、拆台方式、拆出会话与人工订单归属；167-R2 加记各结果台组的可邀请人数与已占人数（只读留痕）；
+     * 167-R3a 加记邀请与成员的原台分配。
+     */
     private String splitSnapshot(BarTableSessionRecord before, BarTableSessionRecord after, String mode, List<String> roots,
-            List<BarTableSessionRecord> familySessions, Map<String, String> assignments, List<String> inviteResults) {
+            List<BarTableSessionRecord> familySessions, Map<String, String> assignments, Map<String, String> invitationAssignments,
+            Map<String, String> memberAssignments, List<String> inviteResults) {
         String base = sessionSnapshot(before, after);
         String tree = familySessions.stream()
                 .map(s -> "{\"id\":\"" + jsonText(s.id()) + "\",\"source_session_id\":"
                         + (s.sourceSessionId() == null ? "null" : "\"" + jsonText(s.sourceSessionId()) + "\"") + "}")
                 .reduce((a, b) -> a + "," + b).orElse("");
         String rootList = roots.stream().map(id -> "\"" + jsonText(id) + "\"").reduce((a, b) -> a + "," + b).orElse("");
-        String orders = assignments.entrySet().stream()
-                .map(e -> "{\"order_id\":\"" + jsonText(e.getKey()) + "\",\"session_id\":\"" + jsonText(e.getValue()) + "\"}")
-                .reduce((a, b) -> a + "," + b).orElse("");
         return base.substring(0, base.length() - 1) + ",\"mode\":\"" + jsonText(mode) + "\",\"split_session_ids\":[" + rootList
-                + "],\"tree_before\":[" + tree + "],\"order_assignments\":[" + orders + "],\"invite_results\":["
+                + "],\"tree_before\":[" + tree + "],\"order_assignments\":[" + pairs(assignments, "order_id")
+                + "],\"invitation_assignments\":[" + pairs(invitationAssignments, "reservation_id")
+                + "],\"member_assignments\":[" + pairs(memberAssignments, "member_id") + "],\"invite_results\":["
                 + String.join(",", inviteResults) + "]}";
+    }
+
+    private static String pairs(Map<String, String> assignments, String idKey) {
+        return assignments.entrySet().stream()
+                .map(e -> "{\"" + idKey + "\":\"" + jsonText(e.getKey()) + "\",\"session_id\":\"" + jsonText(e.getValue()) + "\"}")
+                .reduce((a, b) -> a + "," + b).orElse("");
     }
 
     private BarTableSessionRecord requireOpenTableSession(String sessionId) {

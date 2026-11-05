@@ -1,6 +1,6 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.05
+// 文件版本：V0.06
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -57,9 +57,15 @@ public class InventoryHighValueReviewService {
      * 同赔付方案审批（{@link InventoryService#approveSavedBottleRemedy}）：角色各核权限码、审批人不得是发起人、两道不得同一人。
      */
     static final String SUBJECT_SAVED_BOTTLE_STOCK_DISPOSAL = "saved_bottle_stock_disposal";
+    /**
+     * 第十八批 T 段第 157 条 157-R4（BSM:1112「达到既有高价值标准的商品仍执行原证据和审批要求。」）：高价值挂起订单转坏账，subject 为酒吧订单；
+     * 批准由 {@link BarOrderBadDebtReviewPort} 转坏账损耗处理中，驳回撤回待复核标记。
+     */
+    public static final String SUBJECT_BAR_ORDER_BAD_DEBT = "bar_order_bad_debt";
     private static final String REVIEW_PERMISSION = "inventory.high_value.review";
     private static final Set<String> SUBJECT_TYPES =
-            Set.of(SUBJECT_SAVED_BOTTLE_VOID, SUBJECT_DAMAGE_REPORT, SUBJECT_STOCK_VARIANCE, SUBJECT_SAVED_BOTTLE_STOCK_DISPOSAL);
+            Set.of(SUBJECT_SAVED_BOTTLE_VOID, SUBJECT_DAMAGE_REPORT, SUBJECT_STOCK_VARIANCE, SUBJECT_SAVED_BOTTLE_STOCK_DISPOSAL,
+                    SUBJECT_BAR_ORDER_BAD_DEBT);
     private static final Set<String> ADJUSTMENT_SUBJECTS =
             Set.of(SUBJECT_DAMAGE_REPORT, SUBJECT_STOCK_VARIANCE, SUBJECT_SAVED_BOTTLE_STOCK_DISPOSAL);
     private static final Set<String> DECISIONS = Set.of("approved", "rejected");
@@ -73,6 +79,8 @@ public class InventoryHighValueReviewService {
      * 生产由 InventoryService 构造时透传 Spring bean。
      */
     private final com.complex.platform.evidence.EvidenceAttachmentValidator evidenceAttachmentValidator;
+    /** 157-R4：高价值挂起订单转坏账复核的生效端口（酒吧域实现），由 InventoryService 交给本域内手建的实例。 */
+    BarOrderBadDebtReviewPort barOrderBadDebtPort;
 
     public InventoryHighValueReviewService(
             InventoryRepository repository,
@@ -129,7 +137,8 @@ public class InventoryHighValueReviewService {
      * @param videoAttachmentIds 视频证据 id（必须非空）
      * @return 建好的 pending 复核单
      */
-    InventoryHighValueReviewRecord createPending(
+    // 157-R4：酒吧挂起订单转坏账（bar 包）跨包建单，故公开。
+    public InventoryHighValueReviewRecord createPending(
             String idempotencySeed,
             String subjectType,
             String subjectId,
@@ -325,6 +334,7 @@ public class InventoryHighValueReviewService {
      *   <li>{@code saved_bottle_void} → 存酒由中间态 {@code disputed_frozen} 置 {@code cancelled}；</li>
      *   <li>{@code damage_report}/{@code stock_variance} → 调整单由 {@code pending_review} 真正扣减库存并置
      *       {@code completed}（即此前未即时扣减的报损/盘点差异，approve 时才落库存变更）。</li>
+     *   <li>{@code bar_order_bad_debt}（157-R4）→ 酒吧挂起订单转坏账损耗处理中（端口回调，同一事务）。</li>
      * </ul>
      */
     private void applyDecisionEffect(InventoryHighValueReviewRecord resolved) {
@@ -388,6 +398,8 @@ public class InventoryHighValueReviewService {
                     adjustment.merchantId()
             ), bookProject);
             repository.saveStockAdjustment(withAdjustmentStatus(adjustment, "completed"));
+        } else if (SUBJECT_BAR_ORDER_BAD_DEBT.equals(resolved.subjectType())) {
+            barOrderBadDebtPort.approved(resolved.subjectId(), resolved.id(), resolved.reviewerUserId());
         }
     }
 
@@ -396,6 +408,8 @@ public class InventoryHighValueReviewService {
         if (ADJUSTMENT_SUBJECTS.contains(resolved.subjectType())) {
             StockAdjustmentRecord adjustment = loadAdjustmentPending(resolved.subjectId());
             repository.saveStockAdjustment(withAdjustmentStatus(adjustment, "rejected"));
+        } else if (SUBJECT_BAR_ORDER_BAD_DEBT.equals(resolved.subjectType())) {
+            barOrderBadDebtPort.rejected(resolved.subjectId(), resolved.id(), resolved.reviewerUserId());
         }
     }
 

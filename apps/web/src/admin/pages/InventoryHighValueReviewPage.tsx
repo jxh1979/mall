@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import React from "react";
 import { withBase } from "../../basePath";
 import { formatBusinessStatus } from "../i18n/statusLabels";
@@ -45,6 +45,8 @@ const SUBJECT_LABELS: Record<string, string> = {
   stock_variance: "高价值盘点差异",
   saved_bottle_void: "高价值存酒作废",
   saved_bottle_stock_disposal: "存酒库房存货处置",
+  // 第十八批 T 段第 157 条 157-R4（BSM:1112「达到既有高价值标准的商品仍执行原证据和审批要求」）：复核对象为酒吧订单。
+  bar_order_bad_debt: "高价值挂起订单转坏账",
 };
 const ERROR_LABELS: Record<string, string> = {
   HIGH_VALUE_REVIEW_SELF_APPROVAL: "审批人不得是发起人。",
@@ -54,6 +56,7 @@ const ERROR_LABELS: Record<string, string> = {
 };
 
 function subjectText(row: ReviewRow): string {
+  if (row.subjectType === "bar_order_bad_debt") return `挂起订单 ${row.subjectId}`;
   const s = row.subjectSummary;
   if (!s) return row.subjectId;
   const head = row.subjectType === "saved_bottle_void" ? `存酒 ${s.savedBottleId ?? row.subjectId} · ` : "";

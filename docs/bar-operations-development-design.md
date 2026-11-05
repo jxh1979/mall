@@ -1,6 +1,6 @@
 # 酒吧经营：桌台、点单、库存、存酒开发设计
 
-> 版本：V0.12 ｜ 最后更新：2026-11-04 ｜ 当前迁移最高：V385 ｜ 状态：现行
+> 版本：V0.13 ｜ 最后更新：2026-11-05 ｜ 当前迁移最高：V385 ｜ 状态：现行
 >
 > 权限边界：三份业务 HTML 定义业务目标；本设计只承接实现与差距，代码不能反向覆盖 HTML。下文表结构、API、事件和状态若未在“当前实现”中明确为已落地，均按目标设计理解。
 
@@ -350,9 +350,9 @@ P0 规则：
 
 #### 5.2.4 正式挂起未付款订单
 
-1. 正式挂起订单是已正式下单、已出品并已扣库存但尚未付款的订单，采用 `hanging_unpaid/settled/cancel_pending_approval/cancelled/pending_refund/bad_debt_processing/written_off_closed` 七态，依次对应已挂起待付款、已结清、取消审批中、已取消、待退款、坏账损耗处理中、已核销结案；英码只作机读映射，不新增业务态。
+1. 正式挂起订单是已正式下单、已出品并已扣库存但尚未付款的订单，采用 `hanging_unpaid/settled/cancel_pending_approval/cancelled/pending_refund/bad_debt_processing/written_off_closed` 七态，依次对应已挂起待付款、已结清、取消审批中、已取消、待退款、坏账损耗处理中、已核销结案；英码只作机读映射，不新增业务态。（第十八批 T 段第 157 条 157-R2：落在订单级挂起表 `bar_order_suspensions`（迁移 V600），账单六态不动；只有包厢能挂起，第十八批裁决 37。）
 2. 收银员可直接挂起且不设额度，但必须记录原因、金额、桌台、责任人和完整日志；未结清时阻止交班和日结。
-3. 取消须经理审批；可回库商品继续执行退菜、退酒及高价值退品审批链。取消审批与付款成功互斥；取消后迟到到账进入待退款。
+3. 取消须经理审批；可回库商品继续执行退菜、退酒及高价值退品审批链。取消审批与付款成功互斥；取消后迟到到账进入待退款。（第十八批 T 段第 157 条 157-R6：取消申请与审批落在 `bar_order_suspensions` 的取消列（迁移 V602），批准逐项调用既有退菜退酒，整单取消复用异常处置「作废并冲正」，迟到到账挂原路退款应付。）
 4. 不可回库商品最终确认无法收款后进入坏账损耗处理；财务确认未收售价、库存成本和赔偿记录完成后转为已核销结案。员工赔偿规则在法务审查完成前只登记，不自动扣工资、绩效或提成。
 5. 挂起订单结清前不计入商户营业额、营业额抽成、销售提成或分红净利润；结清后按实际结清金额计入结清所在营业日。转坏账核销不产生销售提成且不计入分红净利润；核销结案后收回的款项按收回时点单独入账，不追溯重开提成。
 
@@ -742,8 +742,8 @@ id, created_at, updated_at, deleted_at, created_by, updated_by, status, remark
 | `refunded_amount` | bigint | 已退金额，单位分；承载部分退款/已退款态金额，与 `bar_bill_payments.status=refunded` 协同 |
 | `currency` | varchar | 币种，默认 `CNY`；金额一律整数分（基准 D1） |
 | `business_status`（目标，当前缺列） | varchar | **业务账单 6 态**：`unpaid`(待结)/`partial_paid`(部分支付)/`settled`(已结)/`partial_refunded`(部分退款)/`refunded`(已退款)/`abnormal`(异常)；CHECK 取值与 §4.4 逐项对应，不得用 `status` 顶替 |
-| `formal_hanging_status`（目标） | varchar | 正式未付款订单七态：`hanging_unpaid`（已挂起待付款）/`settled`（已结清）/`cancel_pending_approval`（取消审批中）/`cancelled`（已取消）/`pending_refund`（待退款）/`bad_debt_processing`（坏账损耗处理中）/`written_off_closed`（已核销结案）；英码只作机读映射 |
-| `formal_hanging_reason`（目标） | text | 挂起原因；正式挂起必须记录金额、桌台、责任人和完整日志 |
+| `formal_hanging_status`（不落本表） | — | 正式未付款订单七态已落订单级挂起表 `bar_order_suspensions.status`（迁移 V600，第十八批 T 段 157-R2）：`hanging_unpaid`（已挂起待付款）/`settled`（已结清）/`cancel_pending_approval`（取消审批中）/`cancelled`（已取消）/`pending_refund`（待退款）/`bad_debt_processing`（坏账损耗处理中）/`written_off_closed`（已核销结案）；英码只作机读映射 |
+| `formal_hanging_reason`（不落本表） | — | 挂起原因已落 `bar_order_suspensions.reason`，同表记金额、桌台、责任人、挂起人、挂起时间与班次，每次状态变更写审计 |
 | `status` | varchar | **记录级状态**（非业务态）：`active`(有效)/`void`(已删除/作废)；配合软删除/审计字段 |
 | `closed_at` | timestamptz | 结账时间 |
 
@@ -1100,9 +1100,11 @@ id, created_at, updated_at, deleted_at, created_by, updated_by, status, remark
 | `POST` | `/api/v1/bar/bills/{id}/pay` | 支付结果记录；门店统一支持客人扫码、扫客人付款码、现金、POS、储值卡 | `bar.bill.pay` |
 | `POST` | `/api/v1/bar/bills/{id}/split` | 未支付未结算账单按金额拆单 | `bar.bill.split` |
 | `POST` | `/api/v1/bar/bills/{id}/merge` | 合入同一酒吧另一张未支付未结算账单；不等同并台 | `bar.bill.merge` |
-| `POST` | `/api/v1/bar/bills/{id}/formal-hang` | 正式挂起未付款订单；正式下单即出品并扣库存 | `bar.bill.hang` |
-| `POST` | `/api/v1/bar/bills/{id}/formal-hang/cancel` | 经理审批取消正式挂起订单 | `bar.bill.hang_cancel` |
-| `POST` | `/api/v1/bar/bills/{id}/formal-hang/write-off` | 完成财务核销与赔偿后结案 | `bar.bill.write_off` |
+| `POST` | `/api/v1/bar/orders/{order_id}/suspend` | 正式挂起包厢未付款订单（只限包厢，第十八批裁决 37）；正式下单即出品并扣库存 | `bar.bill.hang` |
+| `POST` | `/api/v1/bar/orders/{order_id}/suspension/cancel` | 收银员对挂起订单勾选可回库的已出品明细发起取消（第十八批 T 段 157-R6） | `bar.bill.hang` |
+| `POST` | `/api/v1/bar/orders/{order_id}/suspension/cancel-decision` | 经理审批取消正式挂起订单：批准逐项走既有退菜退酒，整单取消即作废并冲正（第十八批 T 段 157-R6） | `bar.bill.hang_cancel` |
+| `POST` | `/api/v1/bar/orders/{order_id}/suspension/bad-debt` | 经理确认挂起订单无法收款，转坏账损耗处理中并固化未收售价、库存成本与赔偿登记（第十八批 T 段 157-R3） | `bar.bill.hang_cancel` |
+| `POST` | `/api/v1/bar/orders/{order_id}/suspension/write-off` | 坏账订单财务核销结案（第十八批 T 段 157-R3） | `finance.ar_ap.manage` |
 | `POST` | `/api/v1/bar/bills/{id}/void` | 作废账单 | `bar.bill.void` |
 
 付款前的优惠券候选接口必须返回“本单实付最低”的单张券，同额选最早到期；客人可在付款前更换或取消。开始付款必须在同一事务边界预留券并锁定订单金额，支付成功与券核销同时生效；任一失败或超时均释放预留且两边都不生效。
@@ -1243,9 +1245,15 @@ id, created_at, updated_at, deleted_at, created_by, updated_by, status, remark
 | `payment.cash_received` | 现金进账 | 账单、金额、收款人、设备、点位 |
 | `payment.pos_received` | POS（银行卡）进账 | 账单、金额、POS 流水号、收款人 |
 | `bar.bill_voided` | 作废账单 | 原因、审批人 |
-| `bar.bill_formally_hung` | 正式挂起未付款订单 | 原因、金额、桌台、责任人、库存扣减结果 |
-| `bar.bill_hang_cancelled` | 正式挂起订单经经理审批取消 | 审批人、可回库与不可回库处理、待退款结果 |
-| `bar.bill_written_off` | 坏账完成财务核销与赔偿后结案 | 未收售价、库存成本、赔偿记录、核销人 |
+| `bar.order_suspended` | 正式挂起包厢未付款订单 | 账单号、金额、桌台、责任人、原因、班次 |
+| `bar.order_suspension_settled` | 挂起订单账单全部结清 | 订单、结清的账单 |
+| `bar.order_suspension_cancel_requested` | 收银员发起取消挂起订单 | 所列明细、原因、原因码 |
+| `bar.order_suspension_cancel_decided` | 经理批准或驳回挂起订单取消；重判回到已挂起待付款 | 审批结论、意见 |
+| `bar.order_suspension_cancelled` | 挂起订单取消生效（账单作废并冲正、待支付的支付意向作废） | 订单、审批经理 |
+| `bar.order_suspension_late_payment` | 挂起订单取消后迟到到账转待退款 | 账单、收款流水、金额、退款应付 |
+| `bar.order_suspension_bad_debt` | 经理确认挂起订单无法收款转坏账 | 原因、未收售价、库存成本、赔偿汇总 |
+| `bar.order_suspension_bad_debt_review_rejected` | 含高价值商品的转坏账经主管复核驳回，挂起回到已挂起待付款、可重新发起（第十八批 T 段 157-R4） | 订单、复核单、复核人 |
+| `bar.order_suspension_written_off` | 坏账完成财务核销与赔偿后结案 | 未收售价、库存成本、赔偿汇总、核销人 |
 | `exception.first_handled` | 异常第一处理人留痕 | 异常对象、首响人、处理动作、时间 |
 
 > 修订说明（2026-06-07）：依基准 D4 把 `bar.order.delivered` 改为权威命名 `bar.order_delivered`；现金/POS 进账用 `payment.cash_received`/`payment.pos_received`（finding bar-3、D4），禁止使用不存在的 `payment.success`；异常首响用 `exception.first_handled`。

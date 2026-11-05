@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.11
+// 文件版本：V0.12
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.PageResponse;
@@ -58,7 +58,14 @@ public class BarService {
         return operations.readPage(
                 BarReadOperation.LIST_ORDERS,
                 () -> {
-                    List<BarOrderRecord> orders = repository.listOrders(authorizationService.currentMerchantScope());
+                    // 18T 复核修复⑤（照 142-R3 listShifts）：非平台管理员、无商户号的项目侧账号（如项目财务）按订单列表入口码可触及的项目列订单，
+                    // 与同页挂起订单风险看板的项目口径一致；商户账号、平台管理员读法不改。
+                    var actor = authorizationService.currentActor();
+                    List<BarOrderRecord> orders = !authorizationService.isPlatformAdmin(actor)
+                            && authorizationService.currentMerchantIdQuietly().isEmpty()
+                            ? repository.listOrdersInProjects(authorizationService
+                                    .projectReach(actor, BarReadOperation.LIST_ORDERS.permissionCode()).organizationIds())
+                            : repository.listOrders(authorizationService.currentMerchantScope());
                     if (orders.isEmpty()) {
                         return List.of();
                     }
@@ -85,9 +92,18 @@ public class BarService {
                                                         commission == null ? null : commission.commissionAmountCent());
                                             },
                                             Collectors.toList())));
+                    // 第十八批 T 段第 157 条 157-R2：带出台位类型（只有包厢能挂起）与本单挂起状态、金额。
+                    Map<String, BarOrderSuspensionService.Suspension> suspended = suspensions == null ? Map.of()
+                            : suspensions.byOrderIds(orders.stream().map(BarOrderRecord::id).toList());
+                    Map<String, java.time.Instant> escalated = suspensions == null ? Map.of()
+                            : suspensions.unpaidCloseEscalatedAt(orders.stream().map(BarOrderRecord::id).toList());
+                    Map<String, String> tableTypes = new java.util.HashMap<>();
                     return orders.stream()
                             .map(order -> BarOrderView.of(order, billsByOrder.getOrDefault(order.id(), List.of()),
-                                    repository.listOrderItems(order.id())))
+                                    repository.listOrderItems(order.id()),
+                                    order.tableId() == null ? null : tableTypes.computeIfAbsent(order.tableId(),
+                                            table -> repository.findTableById(table).map(BarTableRecord::tableType).orElse(null)),
+                                    suspended.get(order.id()), escalated.get(order.id())))
                             .toList();
                 }
         );
@@ -852,6 +868,117 @@ public class BarService {
                 Map.of("resolution", String.valueOf(request == null ? null : request.resolution()),
                         "reason", String.valueOf(request == null ? null : request.reason())),
                 () -> anomalyService.resolve(id, request)
+        );
+    }
+
+    // 第十八批 T 段第 157 条 157-R2：字段注入免改构造点（单测未注入＝挂起端点不可用、订单列表不带挂起状态）。
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    BarOrderSuspensionService suspensions;
+
+    // 157-R5：转坏账鉴权含关台未付清待办升级后的店长与夜班值班经理（字段注入免改构造点）。
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    BarUnpaidCloseTodoService unpaidCloseTodos;
+
+    /** 第十八批 T 段第 157 条 157-R2：收银员挂起包厢未付款订单；商户闸在幂等之前；成功留痕带账单号、金额、桌台、责任人、原因与班次。 */
+    @com.complex.platform.gate.GuardedAction(capability = "bar.bill.hang")
+    @Transactional
+    public BarOrderSuspensionService.Suspension suspendOrder(String orderId, BarOrderSuspensionService.SuspendRequest request) {
+        String id = operations.requireText(orderId, "order_id");
+        suspensions.requireOrderScope(id);
+        Map<String, Object> detail = new java.util.LinkedHashMap<>();
+        return operations.executeWriteFilling(
+                "suspendBarOrder:" + id,
+                request == null ? null : request.idempotencyKey(),
+                request,
+                BarOrderSuspensionService.Suspension.class,
+                BarWriteOperation.SUSPEND_ORDER,
+                detail,
+                () -> suspensions.suspend(id, request, detail)
+        );
+    }
+
+    /**
+     * 第十八批 T 段第 157 条 157-R3（BSM:1109「经理确认最终无法收款后转为坏账损耗处理中并解除该订单对交班、日结的阻断」）：经理确认挂起订单无法收款；
+     * 商户闸在幂等之前；成功留痕带原因、未收售价、库存成本与赔偿汇总。
+     */
+    @com.complex.platform.gate.GuardedAction(capability = "bar.bill.hang_cancel")
+    @Transactional
+    public BarOrderSuspensionService.Suspension confirmSuspensionBadDebt(String orderId, BarOrderSuspensionService.BadDebtRequest request) {
+        String id = operations.requireText(orderId, "order_id");
+        unpaidCloseTodos.requireBadDebtAuthority(id);
+        Map<String, Object> detail = new java.util.LinkedHashMap<>();
+        return operations.executeWriteFilling(
+                "confirmBarOrderBadDebt:" + id,
+                request == null ? null : request.idempotencyKey(),
+                request,
+                BarOrderSuspensionService.Suspension.class,
+                BarWriteOperation.CONFIRM_SUSPENSION_BAD_DEBT,
+                detail,
+                () -> suspensions.confirmBadDebt(id, request, detail)
+        );
+    }
+
+    /**
+     * 第十八批 T 段第 157 条 157-R3（BSM:1111「财务确认未收售价、库存成本和赔偿记录均完成后，订单转为已核销结案」）：财务核销结案；
+     * 综合体范围闸在幂等之前；成功留痕带未收售价、库存成本与赔偿汇总。
+     */
+    @com.complex.platform.gate.GuardedAction(capability = "finance.ar_ap.manage")
+    @Transactional
+    public BarOrderSuspensionService.Suspension writeOffSuspension(String orderId, BarOrderSuspensionService.WriteOffRequest request) {
+        String id = operations.requireText(orderId, "order_id");
+        suspensions.requireWriteOffScope(id);
+        Map<String, Object> detail = new java.util.LinkedHashMap<>();
+        return operations.executeWriteFilling(
+                "writeOffBarOrderSuspension:" + id,
+                request == null ? null : request.idempotencyKey(),
+                request,
+                BarOrderSuspensionService.Suspension.class,
+                BarWriteOperation.WRITE_OFF_SUSPENSION,
+                detail,
+                () -> suspensions.writeOff(id, request, detail)
+        );
+    }
+
+    /**
+     * 第十八批 T 段第 157 条 157-R6（BSM:1107「已出品挂起订单取消须经理审批。能回库的商品继续执行既有退菜、退酒和高价值退品证据审批链」）：收银员对已挂起待付款的
+     * 包厢订单勾选可回库的已出品明细发起取消；商户闸在幂等之前；成功留痕带所列明细、原因与原因码。
+     */
+    @com.complex.platform.gate.GuardedAction(capability = "bar.bill.hang")
+    @Transactional
+    public BarOrderSuspensionService.Suspension requestSuspensionCancel(String orderId, BarOrderSuspensionService.CancelRequest request) {
+        String id = operations.requireText(orderId, "order_id");
+        suspensions.requireOrderScope(id);
+        Map<String, Object> detail = new java.util.LinkedHashMap<>();
+        return operations.executeWriteFilling(
+                "requestBarOrderSuspensionCancel:" + id,
+                request == null ? null : request.idempotencyKey(),
+                request,
+                BarOrderSuspensionService.Suspension.class,
+                BarWriteOperation.REQUEST_SUSPENSION_CANCEL,
+                detail,
+                () -> suspensions.requestCancel(id, request, detail)
+        );
+    }
+
+    /**
+     * 157-R6（PGM:699「经理审批取消」；BSM:1108「取消审批生效与付款成功只能有一项先完成，先完成者生效」）：经理批准或驳回挂起订单取消；商户闸在幂等之前；
+     * 成功留痕带审批结论与意见。
+     */
+    @com.complex.platform.gate.GuardedAction(capability = "bar.bill.hang_cancel")
+    @Transactional
+    public BarOrderSuspensionService.Suspension decideSuspensionCancel(String orderId,
+            BarOrderSuspensionService.CancelDecisionRequest request) {
+        String id = operations.requireText(orderId, "order_id");
+        suspensions.requireOrderScope(id);
+        Map<String, Object> detail = new java.util.LinkedHashMap<>();
+        return operations.executeWriteFilling(
+                "decideBarOrderSuspensionCancel:" + id,
+                request == null ? null : request.idempotencyKey(),
+                request,
+                BarOrderSuspensionService.Suspension.class,
+                BarWriteOperation.DECIDE_SUSPENSION_CANCEL,
+                detail,
+                () -> suspensions.decideCancel(id, request, detail)
         );
     }
 

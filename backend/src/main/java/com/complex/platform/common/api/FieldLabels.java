@@ -1,6 +1,6 @@
 package com.complex.platform.common.api;
 
-// 文件版本：V0.33
+// 文件版本：V0.34
 
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -577,6 +577,11 @@ public final class FieldLabels {
         // 第十八批 F 段第 14 条：人工补录（原因、责任人、凭证、录音起始）与补录参数（时限、录音提前量，值与上下限同配）。
         p("responsible_staff_id", "责任人");
         p("evidence_attachment_ids", "证据附件");
+        // 第十八批 T 段第 157 条 157-R4：高价值挂起订单转坏账的照片、视频双证据。
+        p("photo_attachment_ids", "照片附件");
+        p("video_attachment_ids", "视频附件");
+        // 第十八批 T 段第 157 条 157-R6：挂起订单发起取消所列的已出品明细。
+        p("order_item_ids", "订单明细");
         p("recording_started_at", "录音起始时间");
         p("window_min_days", "补录时限下限（天）");
         p("window_max_days", "补录时限上限（天）");

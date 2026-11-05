@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import java.util.List;
 import java.util.Optional;
@@ -13,6 +13,9 @@ import java.util.Optional;
  *
  * <p>名额＝当前有效并台链各会话的可邀请人数快照之和（整体转台前的旧链不参与）；已占＝链内（含整体转台前旧链）各订台未移出的成员。
  * 订台还没开台、没有会话时照旧按签发时的可进人数与本订台成员计。
+ *
+ * <p>第十八批 T 段第 167 条 167-R3a：拆台时分配过原台的邀请与成员，按所分配原台的台组计（BSM:1079「分配完成后，分别按本次拆台后形成的
+ * 每个独立原台或合并台组的可邀请人数，校验……」）。
  */
 final class BarInvitationQuota {
 
@@ -22,8 +25,25 @@ final class BarInvitationQuota {
     /** 订台所在台组的名额与已占人数；lockRoot＝有会话时先锁台组根会话行，序列化同一台组内各订台的接受与入场。 */
     static BarCustomerInvitationService.InvitationQuota of(BarRepository repository, BarReservationRecord reservation,
             boolean lockRoot) {
-        Optional<String> root = repository.findLiveSessionIdByReservation(reservation.id())
-                .map(sessionId -> BarMinSpend.rootSessionId(repository, sessionId));
+        return quota(repository, reservation, anchorSessionId(repository, reservation), lockRoot);
+    }
+
+    /** 167-R3a：门口入场按该成员所属原台的台组计（同一份邀请的成员可能分到不同原台）；成员没分配过即按订台所在会话。 */
+    static BarCustomerInvitationService.InvitationQuota ofMember(BarRepository repository, BarReservationRecord reservation,
+            String memberId, boolean lockRoot) {
+        return quota(repository, reservation, repository.findInvitationMemberAssignedSessionId(memberId)
+                .or(() -> repository.findLiveSessionIdByReservation(reservation.id())), lockRoot);
+    }
+
+    /** 167-R3a：邀请的锚会话＝拆台时分配到的原台，没分配过即订台当前所在的开台会话；没开台为空。 */
+    static Optional<String> anchorSessionId(BarRepository repository, BarReservationRecord reservation) {
+        return repository.findInvitationAssignedSessionId(reservation.id())
+                .or(() -> repository.findLiveSessionIdByReservation(reservation.id()));
+    }
+
+    private static BarCustomerInvitationService.InvitationQuota quota(BarRepository repository, BarReservationRecord reservation,
+            Optional<String> anchor, boolean lockRoot) {
+        Optional<String> root = anchor.map(sessionId -> BarMinSpend.rootSessionId(repository, sessionId));
         if (root.isEmpty()) {
             return quota(reservation.invitationCapacity() == null ? 0 : reservation.invitationCapacity(),
                     repository.listInvitationMembers(reservation.id()).stream()

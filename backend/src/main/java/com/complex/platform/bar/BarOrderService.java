@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.11
+// 文件版本：V0.12
 
 import static com.complex.platform.bar.BarValidation.*;
 
@@ -46,6 +46,11 @@ public class BarOrderService {
     // 第十六批第 16 条：已结账单退品退款成功后置部分退款／已退款（单测未注入即不改状态）。
     @Autowired(required = false)
     BarBillRefundStatusService refundStatus;
+    // 第十八批 T 段第 157 条 157-R6：挂起取消后不得加菜、出品，挂起中已出品的不能经退菜退酒单独退，退菜退酒审批后重判挂起取消
+    // （字段注入 + @Lazy 断环；单测未注入即不判）。
+    @Autowired(required = false)
+    @org.springframework.context.annotation.Lazy
+    BarOrderSuspensionService suspensions;
 
     private final BarRepository repository;
     private final AuthorizationService authorizationService;
@@ -291,6 +296,8 @@ public class BarOrderService {
         // 无开台会话（吧台直点）即无销售。下单人留痕见 BarService 写操作审计的操作人。
         BarTableSessionRecord session = serviceResponsibilities == null ? null
                 : serviceResponsibilities.currentSession(table.id(), barId).orElse(null);
+        // 第十八批 T 段 157-R1：最低消费是下单的前置条件（落库前判，不满足整单不落）。
+        requireMinSpendReached(session == null ? null : session.id(), table.id(), total);
         BarOrderRecord order = repository.saveOrder(new BarOrderRecord(
                 orderId,
                 barId,
@@ -548,6 +555,7 @@ public class BarOrderService {
         BarOrderRecord order = repository.findOrderById(orderId)
                 .orElseThrow(() -> ApiException.notFound("BAR_ORDER_NOT_FOUND", "酒吧订单不存在或已被删除"));
         checkMerchantOwnership(order.merchantId());
+        requireSuspensionNotCancelled(order.id());
         // 合同经营范围拦截（加菜同口径）：明细保存在循环内，先预查全部品类过合同范围，越界整批拒、零落库。
         // ponytail: 商品查两次（预查+落库），加菜明细通常个位数，可接受；要省这一次就得重排保存结构。
         if (contractScopeGuard != null) {
@@ -618,6 +626,8 @@ public class BarOrderService {
         BarOrderRecord order = repository.findOrderById(orderId)
                 .orElseThrow(() -> ApiException.notFound("BAR_ORDER_NOT_FOUND", "酒吧订单不存在或已被删除"));
         checkMerchantOwnership(order.merchantId());
+        requirePaidBeforeDelivery(order);
+        requireSuspensionNotCancelled(order.id());
         String actorId = authorizationService.currentActor().id();
         Instant now = Instant.now();
         List<String> deliveryEvidenceAttachmentIds = mergedDeliveryEvidenceAttachmentIds(actual);
@@ -708,6 +718,44 @@ public class BarOrderService {
                 actorId, List.of(), order.salesStaffId(), null, null, null, null,
                 actorId, null, null, null, null, null, "completed"));
         return deliveredOrder;
+    }
+
+    /**
+     * 第十八批 T 段第 157 条 157-R1（第十八批裁决 37「散台、卡座下单必须当场付款、不能挂起」；PGM:931「正式挂起订单是已下单、已出品、已扣库存的
+     * 未付款订单」；BSM:1025「酒水必须先完成付款才能出品上台」）：散台、卡座本单账单（并单、作废的除外）全部结清才能出品，没有账单、挂账或只付了一部分
+     * 都不行。包厢（操作员原话「包厢要求服务人员在客人离开前必须完成收款」）与吧台位（裁决未涉及）不加闸。
+     */
+    private void requirePaidBeforeDelivery(BarOrderRecord order) {
+        String tableType = repository.findTableById(order.tableId()).map(BarTableRecord::tableType).orElse(null);
+        if (!"loose_table".equals(tableType) && !"card_seat".equals(tableType)) {
+            return;
+        }
+        List<BarBillRecord> bills = repository.listBillsByOrderIds(List.of(order.id())).stream()
+                .filter(bill -> !"merged".equals(bill.settlementStatus()) && !"void".equals(bill.settlementStatus()))
+                .toList();
+        if (bills.isEmpty() || bills.stream().anyMatch(bill -> !"settled".equals(bill.settlementStatus()))) {
+            throw ApiException.conflict("BAR_ORDER_PAYMENT_REQUIRED", "散台、卡座须下单当场付款，本单账单付清后才能出品");
+        }
+    }
+
+    /**
+     * 第十八批 T 段第 157 条 157-R1（BSM:1064、ENUM:117「最低消费是下单的前置条件：客人在该台位下单时，本次下单后的累计消费金额必须达到该台位适用的
+     * 最低消费，未达到的不允许提交订单。」；控制席补：对所有台位生效）：口径同结账闸（BarBillingService.settleBill）——有开台会话按台组阈值与累计进度，
+     * 无会话按台位低消对本单金额。addCent＝本次下单（尚未落库）的对客金额。
+     */
+    public void requireMinSpendReached(String sessionId, String tableId, long addCent) {
+        long threshold;
+        long consumed;
+        if (sessionId != null) {
+            threshold = BarMinSpend.thresholdCent(repository, sessionId);
+            consumed = BarMinSpend.consumedCent(repository, sessionId) + addCent;
+        } else {
+            threshold = repository.findTableById(tableId).map(BarTableRecord::minConsumptionCent).orElse(0L);
+            consumed = addCent;
+        }
+        if (threshold > 0 && consumed < threshold) {
+            throw ApiException.conflict("BAR_MIN_CONSUMPTION_NOT_MET", "本次下单后累计消费未达到该台位最低消费，不能下单");
+        }
     }
 
     /** 按杯 pour cost 解析结果：落库的实际出酒量与损耗量。 */
@@ -1031,6 +1079,14 @@ public class BarOrderService {
     //   审批通过前不扣库存、不改账单金额、不标 voided，因而也不进分账；低价值/未出品维持即时生效。
     // ========================================================================
     BarOrderItemVoidRecord voidOrderItem(String orderId, BarOrderItemVoidRequest request) {
+        return voidOrderItem(orderId, request, null);
+    }
+
+    /**
+     * 第十八批 T 段第 157 条 157-R6：requesterId 非空＝挂起订单经理批准取消时的内部调用（BSM:1107「能回库的商品继续执行既有退菜、退酒和高价值退品证据审批链」），
+     * 以取消发起人为申请人、不经下面的挂起闸；为空＝退菜退酒公开入口，申请人为当前登录人。
+     */
+    BarOrderItemVoidRecord voidOrderItem(String orderId, BarOrderItemVoidRequest request, String requesterId) {
         BarOrderItemVoidRequest actual = requireRequest(request);
         BarOrderRecord order = repository.findOrderById(requireText(orderId, "order_id"))
                 .orElseThrow(() -> ApiException.notFound("BAR_ORDER_NOT_FOUND", "酒吧订单不存在或已被删除"));
@@ -1047,9 +1103,16 @@ public class BarOrderService {
         // 「同一明细重复发起高价值申请」——两笔 pending 各自被批 = 双倍退款 + 双倍回库。此处补守卫。
         requireNoPendingVoid(order.id(), item.id());
         String reason = requireText(actual.reason(), "reason");
-        String actorId = authorizationService.currentActor().id();
+        String actorId = requesterId != null ? requesterId : authorizationService.currentActor().id();
         String idempotencyKey = requireText(actual.idempotencyKey(), "idempotency_key");
         boolean wasDelivered = "delivered".equals(item.deliveryStatus());
+        // 157-R6⑦（BSM:1107「已出品挂起订单取消须经理审批」）：挂起未结清的订单，已出品明细逐项退掉即等于未经经理审批取消。
+        if (requesterId == null && wasDelivered && suspensions != null) {
+            String suspension = suspensions.statusOf(order.id());
+            if ("hanging_unpaid".equals(suspension) || "cancel_pending_approval".equals(suspension)) {
+                throw ApiException.conflict("BAR_ORDER_SUSPENDED_USE_CANCEL", "挂起订单已出品的商品不能直接退，请走经理审批取消或确认坏账");
+            }
+        }
         boolean returnToStock = wasDelivered && Boolean.TRUE.equals(actual.returnToStock());
         Instant now = Instant.now();
         String billId = trimToNull(actual.billId());
@@ -1196,6 +1259,40 @@ public class BarOrderService {
         if (pendingExists) {
             throw ApiException.conflict("BAR_ORDER_ITEM_VOID_PENDING_EXISTS",
                     "该明细已有待审批的退菜退酒申请，不能重复发起");
+        }
+    }
+
+    /**
+     * 第十八批 T 段第 157 条 157-R6②：挂起订单发起取消时逐项预检（纯校验）——属本单、未作废、已出品（未出品的直接退菜）、无待决退菜；原因码与附件同退品口径
+     * （传了就校验）；已出品高价值项须双证据（同已出品退酒，BSM:1107「经理审批不能替代既有高价值审批链」）。
+     */
+    void requireSuspensionCancelItem(BarOrderRecord order, String orderItemId, String reasonCode, List<String> evidenceAttachmentIds) {
+        BarOrderItemRecord item = repository.findOrderItemById(orderItemId)
+                .orElseThrow(() -> ApiException.notFound("BAR_ORDER_ITEM_NOT_FOUND", "订单明细不存在或已被删除"));
+        if (!order.id().equals(item.orderId())) {
+            throw ApiException.conflict("BAR_ORDER_ITEM_SCOPE_MISMATCH", "该明细不属于此订单");
+        }
+        if (item.voided()) {
+            throw ApiException.conflict("BAR_ORDER_ITEM_ALREADY_VOIDED", "该明细已作废，请勿重复操作");
+        }
+        if (!"delivered".equals(item.deliveryStatus())) {
+            throw ApiException.conflict("BAR_SUSPENSION_CANCEL_ITEM_NOT_DELIVERED", "只能勾选已出品的商品；未出品的直接退菜");
+        }
+        requireNoPendingVoid(order.id(), item.id());
+        requireKnownVoidReasonCode(reasonCode);
+        if (evidenceAttachmentValidator != null) {
+            evidenceAttachmentValidator.requireExisting(evidenceAttachmentIds, "evidence_attachment_ids");
+        }
+        if (decideVoidHighValue(item, order.merchantId()).highValue()) {
+            requireVoidDualEvidence(reasonCode, evidenceAttachmentIds);
+        }
+    }
+
+    /** 157-R6⑥（BSM:1108「取消后迟到到账进入待退款，不得恢复订单或继续出品」）：挂起已取消或已待退款的订单不能再加菜、出品。 */
+    private void requireSuspensionNotCancelled(String orderId) {
+        String status = suspensions == null ? null : suspensions.statusOf(orderId);
+        if ("cancelled".equals(status) || "pending_refund".equals(status)) {
+            throw ApiException.conflict("BAR_ORDER_SUSPENSION_CANCELLED", "该挂起订单已取消，不得恢复订单或继续出品");
         }
     }
 
@@ -1414,6 +1511,8 @@ public class BarOrderService {
         if (saved.billId() != null && merchantRewards != null) merchantRewards.reconcileBarBill(saved.billId());
         // 第十六批第 16 条（ENUM L101）：退品审批结束后按已成功退款额回写账单部分退款／已退款。
         if (saved.billId() != null && refundStatus != null) refundStatus.refresh(saved.billId());
+        // 第十八批 T 段第 157 条 157-R6：经理已批准取消、等这条高价值退品审批的挂起订单，审批决定后重判（已取消或回到已挂起待付款）。
+        if (suspensions != null) suspensions.recheckCancel(saved.orderId());
 
         auditEventService.recordSuccess(
                 "bar.order_item_void_decided",

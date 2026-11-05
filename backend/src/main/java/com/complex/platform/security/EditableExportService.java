@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 package com.complex.platform.security;
 
 import static com.complex.platform.common.Strings.requireText;
@@ -38,7 +38,9 @@ public class EditableExportService {
             "analytics_monthly_report", "月度经营对比",
             "finance_ar_ap_ledger", "应收应付台账",
             "audit_operation_events", "操作留痕",
-            "settlement_invoice_items", "开票清单");
+            "settlement_invoice_items", "开票清单",
+            // 第十八批 T 段第 157 条 157-R7：挂起订单风险看板导出。
+            "bar_suspended_orders", "挂起订单风险看板");
 
     /** 申请请求体：用途、接收方、幂等键。 */
     public record EditableCopyRequest(String purpose, String recipient, String idempotencyKey) {

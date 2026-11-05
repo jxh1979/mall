@@ -1,8 +1,11 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.allOf;
+import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.not;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -19,6 +22,7 @@ import java.sql.Timestamp;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -50,6 +54,10 @@ import org.springframework.transaction.annotation.Transactional;
  * 成员和已入场成员一并进入新的合并台」「记录内容包括……操作前后可邀请人数……邀请与成员归属」；ENUM:114 同句；BSM:1036「已确认与已入场总人数不超过卡座可进人数」。
  * 167-R2 拆台：BSM:1079「分别按本次拆台后形成的每个独立原台或合并台组的可邀请人数，校验其“已接受但尚未入场成员数＋已入场成员数”；任一拆分结果超额即
  * 阻断拆台，系统不得自动移出成员或释放名额」「一次全部拆开必须先完成……逐台名额校验，再一次性成功或整体失败，不得部分拆开」。
+ * 167-R3a 并台期间新发出的邀请：BSM:1079「并台期间新发出的邀请，以及由这些邀请形成的已接受成员、已入场成员，在首次拆台前由授权人员逐一分配到
+ * 当前合并台所包含的某一张原台并留痕；已入场成员只调整所属原台，不得被移出，已占名额不得释放。分配完成后，分别按本次拆台后形成的每个独立原台或
+ * 合并台组的可邀请人数，校验……」「一次全部拆开必须先完成全部邀请、成员……归属分配及逐台名额校验，再一次性成功或整体失败」；ENUM:114 同句。
+ * 在并台之前签发的邀请（上面 (e)、(f)）不要求分配。
  */
 @SpringBootTest(properties = {
         "spring.datasource.url=${SETTLE_TEST_DB_URL:jdbc:postgresql://127.0.0.1:5432/complex_test}",
@@ -229,10 +237,190 @@ class BarInvitationTableMoveJdbcIntegrationTests {
         }
     }
 
+    /**
+     * 167-R3a (g) 4 人卡座订台开台后并入 6 人台散客主会话，并台后才签发邀请、甲乙接受：首次拆台不带分配即 409
+     * BAR_SPLIT_INVITATION_ASSIGNMENT_REQUIRED（列出订台与甲乙、不列开卡人），并台关系不变；带上邀请与成员分配后 200，逐条留痕，
+     * 拆台快照记分配与各结果台名额；拆后丙接受归所分配的原台，预览按该原台计；再并台再拆不再要求分配。
+     */
+    @Test
+    void mergeTimeInvitationMustBeAssignedBeforeFirstSplit() throws Exception {
+        Seated seated = seatWithoutInvitation(4);
+        String walkIn = open(table(6), null);
+        merge(walkIn, seated.sessionId()).andExpect(status().isOk());
+        Seated invited = issue(seated);
+        confirm(invited, "a").andExpect(status().isOk());
+        confirm(invited, "b").andExpect(status().isOk());
+        String a = memberId(invited, "a");
+        String b = memberId(invited, "b");
+        String holder = jdbc.queryForObject("SELECT id FROM bar_reservation_invitation_members WHERE reservation_id = ? AND is_holder",
+                String.class, invited.reservationId());
+        assertThat(jdbc.queryForObject("SELECT invitation_merge_pending FROM bar_reservations WHERE id = ?", Boolean.class,
+                invited.reservationId())).isTrue();
+        assertThat(assignment(a)).containsEntry("merge_pending", true);
+        assertThat(assignment(b)).containsEntry("merge_pending", true);
+        assertThat(assignment(holder)).containsEntry("merge_pending", false);
+        split(walkIn, "single", seated.sessionId())
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.detail_code").value("BAR_SPLIT_INVITATION_ASSIGNMENT_REQUIRED"))
+                .andExpect(jsonPath("$.message").value(allOf(containsString(invited.reservationId()), containsString(a),
+                        containsString(b), not(containsString(holder)))));
+        assertThat(link(seated.sessionId())).containsEntry("status", "merged").containsEntry("source_session_id", walkIn);
+
+        String key = "itm-split-" + seq.incrementAndGet() + "-" + suffix;
+        List<Map<String, Object>> invitations = List.of(Map.of("reservation_id", invited.reservationId(), "session_id", walkIn));
+        List<Map<String, Object>> members = List.of(Map.of("member_id", a, "session_id", walkIn),
+                Map.of("member_id", b, "session_id", seated.sessionId()));
+        split(key, walkIn, "single", seated.sessionId(), invitations, members).andExpect(status().isOk());
+        assertThat(assignment(a)).containsEntry("assigned_session_id", walkIn);
+        assertThat(assignment(b)).containsEntry("assigned_session_id", seated.sessionId());
+        assertThat(jdbc.queryForObject("SELECT invitation_assigned_session_id FROM bar_reservations WHERE id = ?", String.class,
+                invited.reservationId())).isEqualTo(walkIn);
+        assertThat(audits("bar.table_session.member_assigned", key)).isEqualTo(2);
+        assertThat(audits("bar.table_session.invitation_assigned", key)).isEqualTo(1);
+        assertThat(jdbc.queryForList("SELECT r->>'session_id' AS session_id, r->>'invite_capacity' AS capacity, r->>'invite_occupied' AS occupied"
+                        + " FROM bar_table_session_adjustments a, jsonb_array_elements(a.snapshot_json->'invite_results') r"
+                        + " WHERE a.idempotency_key = ?", key))
+                .containsExactlyInAnyOrder(
+                        Map.of("session_id", walkIn, "capacity", "6", "occupied", "1"),
+                        Map.of("session_id", seated.sessionId(), "capacity", "4", "occupied", "2"));
+        assertThat(jdbc.queryForList("SELECT r->>'member_id' AS member_id, r->>'session_id' AS session_id"
+                + " FROM bar_table_session_adjustments a, jsonb_array_elements(a.snapshot_json->'member_assignments') r"
+                + " WHERE a.idempotency_key = ?", key)).containsExactlyInAnyOrderElementsOf(members);
+        assertThat(jdbc.queryForList("SELECT r->>'reservation_id' AS reservation_id, r->>'session_id' AS session_id"
+                + " FROM bar_table_session_adjustments a, jsonb_array_elements(a.snapshot_json->'invitation_assignments') r"
+                + " WHERE a.idempotency_key = ?", key)).containsExactlyInAnyOrderElementsOf(invitations);
+
+        confirm(invited, "c").andExpect(status().isOk());
+        assertThat(assignment(memberId(invited, "c"))).containsEntry("assigned_session_id", walkIn).containsEntry("merge_pending", false);
+        preview(invited, "d")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.capacity").value(6))
+                .andExpect(jsonPath("$.data.remaining").value(4))
+                .andExpect(jsonPath("$.data.table_name").value("6人卡座"))
+                .andExpect(jsonPath("$.data.table_id").value(seated.tableId()));
+        merge(walkIn, seated.sessionId()).andExpect(status().isOk());
+        split(walkIn, "single", seated.sessionId()).andExpect(status().isOk());
+    }
+
+    /**
+     * 167-R3a (h) 4 人卡座订台开台后并入 2 人台散客主会话，并台后签发、甲乙丙接受、甲乙入场；拆出卡座时甲乙分到 2 人台、丙分到卡座：200，
+     * 甲乙仍是已入场、只调所属原台；丙随后入场按其所属原台（卡座台组已入场 0）计名额放行，不按邀请所分配的 2 人台（已入场 2）误挡。
+     */
+    @Test
+    void enteredMembersOnlyReassignedAndEntryCountsByMemberTable() throws Exception {
+        Seated seated = seatWithoutInvitation(4);
+        String twoSeat = open(table(2), null);
+        merge(twoSeat, seated.sessionId()).andExpect(status().isOk());
+        Seated invited = issue(seated);
+        for (String tag : List.of("a", "b", "c")) {
+            confirm(invited, tag).andExpect(status().isOk());
+        }
+        enter(invited, "a").andExpect(status().isOk());
+        enter(invited, "b").andExpect(status().isOk());
+        split("itm-split-" + seq.incrementAndGet() + "-" + suffix, twoSeat, "single", seated.sessionId(),
+                List.of(Map.of("reservation_id", invited.reservationId(), "session_id", twoSeat)),
+                List.of(Map.of("member_id", memberId(invited, "a"), "session_id", twoSeat),
+                        Map.of("member_id", memberId(invited, "b"), "session_id", twoSeat),
+                        Map.of("member_id", memberId(invited, "c"), "session_id", seated.sessionId())))
+                .andExpect(status().isOk());
+        for (String tag : List.of("a", "b")) {
+            assertThat(assignment(memberId(invited, tag))).containsEntry("status", "entered").containsEntry("assigned_session_id", twoSeat);
+        }
+        enter(invited, "c").andExpect(status().isOk()).andExpect(jsonPath("$.data.status").value("entered"));
+    }
+
+    /**
+     * 167-R3a (i) 并台后签发、甲乙丙丁接受，拆台把邀请与四人全分到 4 人卡座（开卡人＋4＝5 人）：409 BAR_SPLIT_INVITATION_OVER_CAPACITY，
+     * 分配与留痕随整笔回滚、卡座仍在合并台；改为两人分到 6 人台再拆 200。不开测试事务，才验得到拆台事务整笔回滚。
+     */
+    @Test
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    void splitOverQuotaAfterAssignmentRollsBackAssignments() throws Exception {
+        Seated seated = seatWithoutInvitation(4);
+        String walkIn = open(table(6), null);
+        merge(walkIn, seated.sessionId()).andExpect(status().isOk());
+        Seated invited = issue(seated);
+        List<String> ids = new ArrayList<>();
+        for (String tag : List.of("a", "b", "c", "d")) {
+            confirm(invited, tag).andExpect(status().isOk());
+            ids.add(memberId(invited, tag));
+        }
+        List<Map<String, Object>> invitations = List.of(Map.of("reservation_id", invited.reservationId(), "session_id", seated.sessionId()));
+        String key = "itm-split-" + seq.incrementAndGet() + "-" + suffix;
+        split(key, walkIn, "single", seated.sessionId(), invitations,
+                ids.stream().map(id -> Map.<String, Object>of("member_id", id, "session_id", seated.sessionId())).toList())
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.detail_code").value("BAR_SPLIT_INVITATION_OVER_CAPACITY"));
+        for (String id : ids) {
+            assertThat(assignment(id)).containsEntry("assigned_session_id", null);
+        }
+        assertThat(jdbc.queryForObject("SELECT invitation_assigned_session_id FROM bar_reservations WHERE id = ?", String.class,
+                invited.reservationId())).isNull();
+        assertThat(audits("bar.table_session.member_assigned", key)).isZero();
+        assertThat(audits("bar.table_session.invitation_assigned", key)).isZero();
+        assertThat(link(seated.sessionId())).containsEntry("status", "merged").containsEntry("source_session_id", walkIn);
+        split("itm-split-" + seq.incrementAndGet() + "-" + suffix, walkIn, "single", seated.sessionId(), invitations,
+                List.of(Map.of("member_id", ids.get(0), "session_id", walkIn), Map.of("member_id", ids.get(1), "session_id", walkIn),
+                        Map.of("member_id", ids.get(2), "session_id", seated.sessionId()),
+                        Map.of("member_id", ids.get(3), "session_id", seated.sessionId())))
+                .andExpect(status().isOk());
+    }
+
+    /**
+     * 167-R3a (j) 一次全部拆开：6 人台散客主会话先后并入 4 人卡座订台与 2 人台散客会话，之后签发、甲接受；分配到合并台以外的会话即 400，
+     * 不带分配即 409 BAR_SPLIT_INVITATION_ASSIGNMENT_REQUIRED、两张原台都不拆开；带齐邀请与甲的分配后 200。
+     */
+    @Test
+    void splitAllRequiresAssignmentsBeforeSplittingAnyTable() throws Exception {
+        Seated seated = seatWithoutInvitation(4);
+        String walkIn = open(table(6), null);
+        String twoSeat = open(table(2), null);
+        merge(walkIn, seated.sessionId()).andExpect(status().isOk());
+        merge(walkIn, twoSeat).andExpect(status().isOk());
+        Seated invited = issue(seated);
+        confirm(invited, "a").andExpect(status().isOk());
+        String a = memberId(invited, "a");
+        String elsewhere = open(table(2), null);
+        split("itm-split-" + seq.incrementAndGet() + "-" + suffix, walkIn, "all", null,
+                List.of(Map.of("reservation_id", invited.reservationId(), "session_id", elsewhere)),
+                List.of(Map.of("member_id", a, "session_id", walkIn)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.detail_code").value("VALIDATION_FAILED"));
+        split(walkIn, "all", null)
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.detail_code").value("BAR_SPLIT_INVITATION_ASSIGNMENT_REQUIRED"));
+        for (String child : List.of(seated.sessionId(), twoSeat)) {
+            assertThat(link(child)).containsEntry("status", "merged").containsEntry("source_session_id", walkIn);
+        }
+        split("itm-split-" + seq.incrementAndGet() + "-" + suffix, walkIn, "all", null,
+                List.of(Map.of("reservation_id", invited.reservationId(), "session_id", walkIn)),
+                List.of(Map.of("member_id", a, "session_id", walkIn)))
+                .andExpect(status().isOk());
+        for (String child : List.of(seated.sessionId(), twoSeat)) {
+            assertThat(link(child)).containsEntry("status", "open").containsEntry("source_session_id", null);
+        }
+    }
+
     // ── 夹具 ─────────────────────────────────────────────────────────────────────────────────────
 
     /** 开卡人 h 在小程序自助订 capacity 人卡座，员工签发邀请函，朋友们按原二维码接受，再带订台开台。 */
     private Seated seat(int capacity, String... friends) throws Exception {
+        Seated booked = issue(reserve(capacity));
+        for (String tag : friends) {
+            confirm(booked, tag).andExpect(status().isOk());
+        }
+        return new Seated(booked.reservationId(), open(booked.tableId(), booked.reservationId()), booked.tableId(), booked.token(),
+                booked.signature(), capacity);
+    }
+
+    /** 167-R3a：开卡人 h 在小程序自助订 capacity 人卡座，员工先不签发，带订台开台。 */
+    private Seated seatWithoutInvitation(int capacity) throws Exception {
+        Seated booked = reserve(capacity);
+        return new Seated(booked.reservationId(), open(booked.tableId(), booked.reservationId()), booked.tableId(), null, null, capacity);
+    }
+
+    /** 开卡人 h 在小程序自助订 capacity 人卡座（未签发、未开台）。 */
+    private Seated reserve(int capacity) {
         String table = table(capacity);
         String reservation = "rsv_itm_" + suffix + "_" + seq.incrementAndGet();
         jdbc.update("INSERT INTO bar_reservations(id,bar_id,merchant_id,table_id,customer_id,reserved_at,guest_count,allowed_pass_free_guest_count,"
@@ -240,16 +428,18 @@ class BarInvitationTableMoveJdbcIntegrationTests {
                 + " VALUES(?,?,?,?,?,?,2,?,0,'not_required','miniapp','reserved','miniapp',now(),now(),?)",
                 reservation, merchant, merchant, table, customer("h"), Timestamp.from(Instant.now().plus(Duration.ofMinutes(30))), capacity,
                 Timestamp.from(Instant.now().plus(Duration.ofHours(2))));
-        ResultActions issued = mockMvc.perform(post("/api/v1/bar/reservations/" + reservation + "/invitation").with(clerk)
+        return new Seated(reservation, null, table, null, null, capacity);
+    }
+
+    /** 员工在后台「卡座与订台」页签发邀请函，带回二维码口令与防伪标记。 */
+    private Seated issue(Seated seated) throws Exception {
+        ResultActions issued = mockMvc.perform(post("/api/v1/bar/reservations/" + seated.reservationId() + "/invitation").with(clerk)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(json.writeValueAsString(Map.of("idempotency_key", "itm-issue-" + reservation))))
+                        .content(json.writeValueAsString(Map.of("idempotency_key", "itm-issue-" + seated.reservationId()))))
                 .andExpect(status().isOk());
-        Seated booked = new Seated(reservation, null, table, CustomerTicketPaymentFixture.read(issued, "$.data.invitation_token"),
-                CustomerTicketPaymentFixture.read(issued, "$.data.invitation_signature"), capacity);
-        for (String tag : friends) {
-            confirm(booked, tag).andExpect(status().isOk());
-        }
-        return new Seated(reservation, open(table, reservation), table, booked.token(), booked.signature(), capacity);
+        return new Seated(seated.reservationId(), seated.sessionId(), seated.tableId(),
+                CustomerTicketPaymentFixture.read(issued, "$.data.invitation_token"),
+                CustomerTicketPaymentFixture.read(issued, "$.data.invitation_signature"), seated.capacity());
     }
 
     private String open(String table, String reservation) throws Exception {
@@ -292,13 +482,25 @@ class BarInvitationTableMoveJdbcIntegrationTests {
 
     /** 后台「卡座与订台」页拆台请求（BarTableSessionsPage 拆台表单的请求形状）。 */
     private ResultActions split(String primary, String mode, String splitSession) throws Exception {
+        return split("itm-split-" + seq.incrementAndGet() + "-" + suffix, primary, mode, splitSession, null, null);
+    }
+
+    /** 167-R3a：拆台请求另带邀请归属 [{reservation_id, session_id}] 与成员归属 [{member_id, session_id}]。 */
+    private ResultActions split(String key, String primary, String mode, String splitSession,
+            List<Map<String, Object>> invitationAssignments, List<Map<String, Object>> memberAssignments) throws Exception {
         Map<String, Object> body = new LinkedHashMap<>();
-        body.put("idempotency_key", "itm-split-" + seq.incrementAndGet() + "-" + suffix);
+        body.put("idempotency_key", key);
         body.put("mode", mode);
         if (splitSession != null) {
             body.put("split_session_id", splitSession);
         }
         body.put("order_assignments", List.of());
+        if (invitationAssignments != null) {
+            body.put("invitation_assignments", invitationAssignments);
+        }
+        if (memberAssignments != null) {
+            body.put("member_assignments", memberAssignments);
+        }
         body.put("reason", "客人分开坐");
         body.put("requested_by_user_id", "admin-web");
         body.put("primary_session_version", version(primary));
@@ -308,6 +510,22 @@ class BarInvitationTableMoveJdbcIntegrationTests {
 
     private Map<String, Object> link(String session) {
         return jdbc.queryForMap("SELECT status, source_session_id FROM bar_table_sessions WHERE id = ?", session);
+    }
+
+    /** 167-R3a：成员的状态、待分配标记与所属原台。 */
+    private Map<String, Object> assignment(String memberId) {
+        return jdbc.queryForMap("SELECT status, merge_pending, assigned_session_id FROM bar_reservation_invitation_members WHERE id = ?",
+                memberId);
+    }
+
+    private int audits(String event, String key) {
+        return jdbc.queryForObject("SELECT count(*) FROM audit_events WHERE event_name = ? AND idempotency_key = ?", Integer.class,
+                event, key);
+    }
+
+    private String memberId(Seated seated, String tag) {
+        return jdbc.queryForObject("SELECT id FROM bar_reservation_invitation_members WHERE reservation_id = ? AND member_customer_id = ?",
+                String.class, seated.reservationId(), customer(tag));
     }
 
     /** 客人按原二维码载荷接受（小程序请求形状）。 */
@@ -334,8 +552,7 @@ class BarInvitationTableMoveJdbcIntegrationTests {
 
     /** 开卡人 h 在小程序移出某位未入场的被邀请人。 */
     private ResultActions remove(Seated seated, String tag) throws Exception {
-        String memberId = jdbc.queryForObject("SELECT id FROM bar_reservation_invitation_members WHERE reservation_id = ? AND member_customer_id = ?",
-                String.class, seated.reservationId(), customer(tag));
+        String memberId = memberId(seated, tag);
         String key = "itm-remove-" + UUID.randomUUID();
         return mockMvc.perform(post("/api/v1/customer/bar-invitations/" + seated.reservationId() + "/members/" + memberId + "/remove")
                 .header("X-Terminal-Type", "miniapp").header("X-Customer-Token", token("h")).header("Idempotency-Key", key)

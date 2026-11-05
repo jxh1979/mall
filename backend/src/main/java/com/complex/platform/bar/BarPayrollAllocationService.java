@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.05
+// 文件版本：V0.06
 
 import static com.complex.platform.bar.BarPayrollSupport.*;
 import static com.complex.platform.bar.BarPayrollRequests.*;
@@ -154,14 +154,16 @@ public class BarPayrollAllocationService {
             var rows=p.jdbc.queryForList("""
                 SELECT b.id,b.settlement_status,b.payable_amount_cent,b.tip_amount_cent,b.paid_amount_cent,
                   COALESCE((SELECT sum(s.settlement_amount_cent) FROM bar_bill_settlements s WHERE s.bill_id=b.id AND NOT s.reversed),0) receipt_cent,
-                  COALESCE((SELECT sum(a.amount_cent) FROM bar_bill_adjustments a WHERE a.bill_id=b.id AND a.adjustment_type='refund'),0) refund_cent
+                  COALESCE((SELECT sum(a.amount_cent) FROM bar_bill_adjustments a WHERE a.bill_id=b.id AND a.adjustment_type='refund'),0) refund_cent,
+                  %s bad_debt
                 FROM bar_bills b WHERE b.id=?
-                """,id);
+                """.formatted(BAD_DEBT_UNSETTLED),id);
             if(rows.size()!=1)throw conflict("BAR_PAYROLL_COLLECTION_REQUIRED","收款账单不存在");
             var row=rows.getFirst();
             // 第十七批（操作员裁决补充第 1 条「作废时系统自动把已收款项登记为原路待退（走现有退款链）」）：收款账单经「作废并冲正」后，
             // 其收进的小费、服务费分项按全额退款处理（下方分项额不计该账单所收部分、也不再扣它作废前的退款），不以尚未完成收款挂待结。
-            if("void".equals(row.get("settlement_status"))){collectionFacts.add(row);continue;}
+            // 第十八批 T 段第 157 条 157-R3：所属订单挂起已确认坏账且未结清的收款账单同作废处理（钱没收到，不以待收款把该场次分配永久挂住）。
+            if("void".equals(row.get("settlement_status")) || Boolean.TRUE.equals(row.get("bad_debt"))){collectionFacts.add(row);continue;}
             long due=Math.addExact(number(row,"payable_amount_cent")+number(row,"tip_amount_cent"),number(row,"refund_cent"));
             if(!"settled".equals(row.get("settlement_status")) || number(row,"paid_amount_cent")<due || number(row,"receipt_cent")<due)
                 throw conflict("BAR_PAYROLL_NOT_COLLECTED","原收款账单尚未完成真实收款");
@@ -251,8 +253,11 @@ public class BarPayrollAllocationService {
     /** 第十七批：已作废收款账单收进的该分项（作废即全额退回，同退款链冲减分项；其作废前的退款见 BarPayrollRefundService#refunded 不再重复扣）。 */
     private long voidedCollected(String bill,String type) {
         return p.jdbc.queryForObject("SELECT COALESCE(sum(c.amount_cent),0) FROM bar_payroll_bill_components c JOIN bar_bills b ON b.id=c.collection_bill_id"
-            +" WHERE c.source_bill_id=? AND c.component_type=? AND b.settlement_status='void'",Long.class,bill,type);
+            +" WHERE c.source_bill_id=? AND c.component_type=? AND (b.settlement_status='void' OR "+BAD_DEBT_UNSETTLED+")",Long.class,bill,type);
     }
+    /** 第十八批 T 段第 157 条 157-R3：账单 b 所属订单（或合单后改指它）挂起已确认坏账且仍未结清（BSM:1109、BSM:1111）。 */
+    private static final String BAD_DEBT_UNSETTLED="(b.settlement_status NOT IN ('settled','merged','void') AND EXISTS(SELECT 1 FROM bar_order_suspensions os"
+        +" WHERE (os.order_id=b.order_id OR os.bill_id=b.id) AND os.bad_debt_confirmed_at IS NOT NULL))";
     private String mergedCrewSnapshots(List<Component> components) {
         Map<String,com.fasterxml.jackson.databind.JsonNode> people=new TreeMap<>();
         try {

@@ -1,6 +1,6 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.18
+// 文件版本：V0.19
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.LocalZone;
@@ -230,6 +230,12 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
         this.stockMovementService = new InventoryStockMovementService(
                 repository, idempotencyService, auditEventService, authorizationService,
                 highValueReviewService, this.highValueDecisionService);
+    }
+
+    /** 第十八批 T 段第 157 条 157-R4：高价值挂起订单转坏账复核的生效端口（酒吧域实现），交给本域内手建的复核服务。 */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    void setBarOrderBadDebtReviewPort(BarOrderBadDebtReviewPort port) {
+        highValueReviewService.barOrderBadDebtPort = port;
     }
 
     public PageResponse<InventoryItemRecord> listInventoryItems() {

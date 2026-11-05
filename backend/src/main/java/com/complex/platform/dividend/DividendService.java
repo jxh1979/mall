@@ -1,5 +1,5 @@
 package com.complex.platform.dividend;
-// 文件版本：V0.06
+// 文件版本：V0.07
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.BusinessDayResolver;
@@ -44,7 +44,7 @@ import static com.complex.platform.common.Strings.requireText;
  *
  * <p>算式（整数分，恒等式由 V299 DB CHECK 硬保证）：
  * 期间收入（复用 revenue.net 商户行级谓词区间版：酒吧实收−酒吧退款 + 已确认月度分账单的已核销门票结算额（FS-015），计入域可配）
- * − 期间销货成本（V296 sumOutboundCost 同谓词，可配开关）
+ * − 期间销货成本（V296 sumOutboundCost 同谓词，可配开关；经理已确认坏账的酒吧订单出库成本另列冲回不计，第十八批裁决 38）
  * − 期间费用（V297 费用归集台账净额，计入类别可配）
  * = 净利润 → 本次分配 = min(经营口径可分配额, 财务登记的依法可分配金额)（FS-014，正式单未登记不得提交/审批）
  * → 按方案比例劈分（余数归主理人） → 主理人应得 → 代扣股息红利个税（税率可配，默认 20%，
@@ -475,13 +475,19 @@ public class DividendService {
         if (plan.includeInventoryCost()) {
             InventoryCostSummaryRecord costSummary = inventoryRepository.sumOutboundCost(
                     merchantId, null, period.start().toString(), period.end().toString(), from, to);
-            cost = costSummary.outboundTotalCostCent();
             noCostBasisCount = costSummary.noCostBasisCount();
-            addLine(lines, statementId, merchantId, seq, "cost_inventory", -cost,
+            addLine(lines, statementId, merchantId, seq, "cost_inventory", -costSummary.outboundTotalCostCent(),
                     "销货成本（V296 移动加权出库成本汇总）" + window
                             + (noCostBasisCount > 0
                                     ? "；无成本基准出库 " + noCostBasisCount + " 笔，成本合计或有低估" : ""),
                     now);
+            // 第十八批裁决 38「收入与出库成本都不进分红净利润」（BSM:1111）：经理已确认坏账的酒吧订单出库成本另列一行冲回。
+            long badDebtCost = inventoryRepository.sumBadDebtBarOrderOutboundCost(merchantId, from, to);
+            if (badDebtCost > 0) {
+                addLine(lines, statementId, merchantId, seq, "cost_inventory", badDebtCost,
+                        "坏账订单出库成本不计入（第十八批裁决 38「收入与出库成本都不进分红净利润」）" + window, now);
+            }
+            cost = costSummary.outboundTotalCostCent() - badDebtCost;
         }
 
         long expense = 0L;

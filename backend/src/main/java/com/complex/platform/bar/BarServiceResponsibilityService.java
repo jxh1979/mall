@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.05
+// 文件版本：V0.06
 
 import static com.complex.platform.bar.BarPayrollSupport.*;
 import static com.complex.platform.common.Strings.requireText;
@@ -23,6 +23,12 @@ public class BarServiceResponsibilityService {
             BarDepositSettlementService deposits) {
         this.p=p;this.bars=bars;this.idem=idem;this.audit=audit;this.deposits=deposits;
     }
+    // 第十八批 T 段第 157 条 157-R3：坏账放行（字段注入免改构造点；单测未注入即不放行）。
+    @org.springframework.beans.factory.annotation.Autowired(required=false)
+    BarOrderSuspensionService suspensions;
+    // 157-R5：包厢关台未付清待办（字段注入免改构造点；单测未注入即只拦不发）。
+    @org.springframework.beans.factory.annotation.Autowired(required=false)
+    BarUnpaidCloseTodoService unpaidCloseTodos;
     void recordOpened(BarTableSessionRecord session) {
         if(session.serviceStaffId()==null)return;
         open(session,session.serviceStaffId(),session.openedAt(),"open:"+session.id(),"开台确认责任人");
@@ -128,7 +134,8 @@ public class BarServiceResponsibilityService {
     /**
      * 关台（第十批 TK-27-R1，BSM L1058「关台指账单全部结清……结束本次开台，由当班服务员或收银执行；除上述情形外，账单未结清
      * （含挂起未结清）不得关台」；DEC-R8-97-R1-03）：台组（含整体转台前旧链）全部账单须 settled 或 merged，挂账 receivable 亦拒；
-     * 通过后未达标定金没收（BSM L1062）。坏账例外：酒吧域尚无坏账状态（ENUM L135 挂单坏账条目未落地），落地后在同一门槛加白名单。
+     * 通过后未达标定金没收（BSM L1062）。坏账例外（第十八批 T 段第 157 条 157-R3，BSM:1109「经理确认最终无法收款后转为坏账损耗处理中并解除该订单
+     * 对交班、日结的阻断」）：所属订单挂起已确认坏账的账单不算未结清。
      * 执行权限按「开台/关台」码 bar.table.open_close（V013）。
      */
     @Transactional
@@ -148,9 +155,19 @@ public class BarServiceResponsibilityService {
                 bars.listOrdersWithoutSession(groupTables.stream().map(BarTableSessionRecord::tableId).distinct().toList(),since)
                     .forEach(o->orderIds.add(o.id())));
             // 第十六批第 16 条：主管「作废并冲正」后的账单（void）不算未结清。
-            var unsettled=bars.listBillsByOrderIds(orderIds).stream()
-                .filter(b->!List.of("settled","merged","void").contains(b.settlementStatus())).map(BarBillRecord::billNo).toList();
-            if(!unsettled.isEmpty())throw conflict("BAR_TABLE_SESSION_BILL_UNSETTLED","账单未结清，不得关台："+String.join("、",unsettled));
+            var unsettledBills=bars.listBillsByOrderIds(orderIds).stream()
+                .filter(b->!List.of("settled","merged","void").contains(b.settlementStatus()))
+                .filter(b->suspensions==null || !suspensions.badDebtConfirmed(b)).toList();
+            var unsettled=unsettledBills.stream().map(BarBillRecord::billNo).toList();
+            if(!unsettled.isEmpty()) {
+                // 157-R5（第十八批裁决 37「包厢关台时没付清就发经理待办」）：关台照拦（BSM:1058）；包厢先在独立事务登记待办、通知当班经理，再抛原 409。
+                var vip=bars.findTableById(current.tableId()).filter(t->"vip".equals(t.tableType())).orElse(null);
+                if(vip!=null && unpaidCloseTodos!=null) {
+                    unpaidCloseTodos.notifyAtClose(sessionId,vip,unsettledBills);
+                    throw conflict("BAR_TABLE_SESSION_BILL_UNSETTLED","账单未结清，不得关台："+String.join("、",unsettled)+"；已通知当班经理确认能否收回");
+                }
+                throw conflict("BAR_TABLE_SESSION_BILL_UNSETTLED","账单未结清，不得关台："+String.join("、",unsettled));
+            }
             var ids=family(sessionId);
             Instant now=Instant.now();
             for(String id:ids) {

@@ -62,6 +62,7 @@ bar_arrival_reminder_policies,direct,project_id,project_id column on bar_arrival
 bar_bill_adjustments,inherited,bill/order linkage,bill/order linkage -> bar_orders -> venue/project scope,must join through scope path before multi-complex rollout,V0.07,covered
 bar_bill_operations,inherited,bill/order linkage,bill/order linkage -> bar_orders -> venue/project scope,must join through scope path before multi-complex rollout,V0.07,covered
 bar_bill_settlements,direct,merchant_id,merchant_id column on bar_bill_settlements,ready for project/merchant scoped query enforcement,V0.07,covered
+bar_bill_unpaid_close_todos,direct,project_id,project_id column on bar_bill_unpaid_close_todos,ready for project/merchant scoped query enforcement,V0.07,covered
 bar_bills,direct,merchant_id,merchant_id column on bar_bills,ready for project/merchant scoped query enforcement,V0.07,covered
 bar_business_day_configs,direct,project_id,project_id column on bar_business_day_configs,ready for project/merchant scoped query enforcement,V0.07,covered
 bar_combo_items,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",V0.07,covered
@@ -74,6 +75,7 @@ bar_gift_redemptions,direct,merchant_id,merchant_id column on bar_gift_redemptio
 bar_order_item_voids,direct,merchant_id,merchant_id column on bar_order_item_voids,ready for project/merchant scoped query enforcement,V0.07,covered
 bar_order_items,inherited,order_id,order_id -> bar_orders -> table_id/bar_id -> venue/project scope,must join through scope path before multi-complex rollout,V0.07,covered
 bar_order_service_sources,direct,project_id,project_id column on bar_order_service_sources,ready for project/merchant scoped query enforcement,V0.07,covered
+bar_order_suspensions,direct,project_id,project_id column on bar_order_suspensions,ready for project/merchant scoped query enforcement,V0.07,covered
 bar_orders,direct,merchant_id,merchant_id column on bar_orders,ready for project/merchant scoped query enforcement,V0.07,covered
 bar_payroll_allocations,direct,project_id,project_id column on bar_payroll_allocations,ready for project/merchant scoped query enforcement,V0.07,covered
 bar_payroll_bill_components,direct,project_id,project_id column on bar_payroll_bill_components,ready for project/merchant scoped query enforcement,V0.07,covered

@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.ticketing.TicketingRepository;
@@ -86,7 +86,8 @@ public class BarCustomerInvitationService {
         requireGenuine(reservation, signature, tableId, capacity);
         // 第十八批 S 段第 167 条 167-R1（BSM:1079「转台……可邀请人数和最低消费额均按目标台规则执行」「合并后的可邀请人数……按两侧所包含全部原台的
         // 对应数值相加计算」）：卡座名取会话当前台位（整体转台前旧链的会话取台组根会话的台位），名额与剩余按台组计；tableId 仍回签发值。
-        String shownTableId = repository.findLiveSessionIdByReservation(reservation.id())
+        // 第十八批 T 段第 167 条 167-R3a：拆台时分配过原台的邀请，按所分配的原台取台位与台组。
+        String shownTableId = BarInvitationQuota.anchorSessionId(repository, reservation)
                 .flatMap(repository::findTableSessionById)
                 .map(session -> "merged_transferred".equals(session.status())
                         ? repository.findTableSessionById(BarMinSpend.rootSessionId(repository, session.id()))

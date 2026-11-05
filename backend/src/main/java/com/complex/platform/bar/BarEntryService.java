@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.08
+// 文件版本：V0.09
 
 import static com.complex.platform.bar.BarValidation.*;
 
@@ -494,6 +494,12 @@ public class BarEntryService {
                     reservation.id(), reservation.barId(), holderId, trimToNull(reservation.customerId()),
                     true, "confirmed", now, null, null, now, now));
         }
+        // 第十八批 T 段第 167 条 167-R3a（BSM:1079「并台期间新发出的邀请……在首次拆台前由授权人员逐一分配到当前合并台所包含的某一张原台并留痕」）：
+        // 签发时订台所在台组正处于并台即记标记；放在开卡人占位行之后，开卡人不列入分配；吊销后再签发＝新邀请，同时清空上次的原台分配。
+        boolean inMerge = repository.findLiveSessionIdByReservation(reservation.id())
+                .map(sessionId -> repository.familySessionIds(BarMinSpend.rootSessionId(repository, sessionId), false).size() > 1)
+                .orElse(false);
+        repository.setInvitationMergeState(reservation.id(), inMerge);
         auditEventService.recordSuccess("bar.reservation_invitation_issued", "bar.reservation.invitation.manage",
                 "bar_reservation", reservation.id(), null, actual.idempotencyKey(),
                 Map.of("invitation_capacity", capacity));
@@ -567,8 +573,9 @@ public class BarEntryService {
             return member; // 幂等：已入场重复扫码返回原记录
         }
         // 第十八批 S 段第 167 条 167-R1（BSM:1079；ENUM:114；BSM:1036「已确认与已入场总人数不超过卡座可进人数」）：
-        // 已入场人数与名额按当前台位或合并台组计，先锁台组根会话行。
-        BarCustomerInvitationService.InvitationQuota quota = BarInvitationQuota.of(repository, reservation, true);
+        // 已入场人数与名额按当前台位或合并台组计，先锁台组根会话行。第十八批 T 段第 167 条 167-R3a：按该成员所属原台的台组计
+        // （拆台时同一份邀请的成员可能分到不同原台）。
+        BarCustomerInvitationService.InvitationQuota quota = BarInvitationQuota.ofMember(repository, reservation, member.id(), true);
         if (quota.entered() >= quota.capacity()) {
             throw ApiException.conflict("BAR_INVITATION_CAPACITY_EXHAUSTED", "卡座名额已满");
         }

@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import React from "react";
 import { saveDownloadedFile } from "../client/adminClient";
 import { AdminDataState } from "../components/AdminDataState";
@@ -45,6 +45,7 @@ export const EXPORT_TYPE_LABELS: Record<string, string> = {
   finance_ar_ap_ledger: "应收应付台账",
   audit_operation_events: "操作留痕",
   settlement_invoice_items: "开票清单",
+  bar_suspended_orders: "挂起订单风险看板",
 };
 
 /** 筛选条件与取数范围：键按字段中文名，空值为「不限」。 */

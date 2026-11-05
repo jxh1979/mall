@@ -56,7 +56,7 @@ scope 类型（与盘点 CSV 的 `scope_type` 对齐）：
 
 <!-- DATA_ISOLATION_SPEC_AUTO_START -->
 ### 3A. 自动迁移隔离基线（由 `npm run docs:data-isolation-spec` 生成）
-> 事实源：`backend/src/main/resources/db/migration`。当前解析到最新迁移 **V599**，发现 **267** 张含 scope 字段的表。不要手工修改本区块；新增迁移后运行 `npm run docs:data-isolation-spec`，提交前运行 `npm run verify:data-isolation-spec`。
+> 事实源：`backend/src/main/resources/db/migration`。当前解析到最新迁移 **V603**，发现 **269** 张含 scope 字段的表。不要手工修改本区块；新增迁移后运行 `npm run docs:data-isolation-spec`，提交前运行 `npm run verify:data-isolation-spec`。
 | 表 | scope 字段 | scope 类型 | 首次出现迁移 | 证据文件 |
 |---|---|---|---|---|
 | `access_grant_requests` | `merchant_id` + `project_id` | direct | V170 | `V170__access_grant_requests.sql` |
@@ -98,6 +98,7 @@ scope 类型（与盘点 CSV 的 `scope_type` 对齐）：
 | `audit_events` | `merchant_id` | direct | V045 | `V045__evidence_security_isolation.sql` |
 | `bar_arrival_reminder_policies` | `project_id` | direct | V545 | `V545__bar_reservation_sms_and_arrival_reminder.sql` |
 | `bar_bill_settlements` | `merchant_id` | direct | V062 | `V062__bar_bill_settlement_channel.sql` |
+| `bar_bill_unpaid_close_todos` | `merchant_id` + `project_id` | direct | V601 | `V601__bar_bill_unpaid_close_todos.sql` |
 | `bar_bills` | `merchant_id` | direct | V047 | `V047__bar_security_merchant_isolation.sql` |
 | `bar_business_day_configs` | `project_id` | direct | V553 | `V553__business_day_complex_close_and_bar_versions.sql` |
 | `bar_combos` | `merchant_id` | direct | V257 | `V257__bar_combo.sql` |
@@ -107,6 +108,7 @@ scope 类型（与盘点 CSV 的 `scope_type` 对齐）：
 | `bar_gift_redemptions` | `merchant_id` | direct | V072 | `V072__bar_gift_redemption.sql` |
 | `bar_order_item_voids` | `merchant_id` | direct | V091 | `V091__bar_pos_depth.sql` |
 | `bar_order_service_sources` | `merchant_id` + `project_id` | direct | V489 | `V489__bar_payroll_allocation_sources.sql` |
+| `bar_order_suspensions` | `merchant_id` + `project_id` | direct | V600 | `V600__bar_order_suspensions.sql` |
 | `bar_orders` | `merchant_id` | direct | V047 | `V047__bar_security_merchant_isolation.sql` |
 | `bar_payroll_allocations` | `merchant_id` + `project_id` | direct | V489 | `V489__bar_payroll_allocation_sources.sql` |
 | `bar_payroll_bill_components` | `merchant_id` + `project_id` | direct | V489 | `V489__bar_payroll_allocation_sources.sql` |

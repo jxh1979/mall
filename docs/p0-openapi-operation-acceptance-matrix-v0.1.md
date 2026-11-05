@@ -1,4 +1,4 @@
-# P0 OpenAPI Operation 验收矩阵 V0.51
+# P0 OpenAPI Operation 验收矩阵 V0.52
 
 ## 1. 文档定位
 
@@ -17,7 +17,7 @@
 
 ## 3. Operation 清单
 
-> 当前 `docs/openapi/openapi-p0.json` 共 1246 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
+> 当前 `docs/openapi/openapi-p0.json` 共 1253 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
 
 | 标签 | 方法 | 路径 | operationId | 摘要 | 请求体 | 权限 | 认证上下文 | 数据范围 | 终端/设备能力/调用通道 | 幂等 | 成功事件 | 失败事件 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -434,6 +434,13 @@
 | customer | `POST` | `/api/v1/loyalty/stored-value/{customer_id}/freeze` | `freezeStoredValueAccount` | 冻结会员储值账户（后台） | `StoredValueFreezeRequest` | `customer.stored_value.freeze` | `staff-token` | `project` | web | 否 | `stored_value.frozen` | `stored_value.frozen_failed` |
 | customer | `POST` | `/api/v1/loyalty/stored-value/{customer_id}/unfreeze` | `unfreezeStoredValueAccount` | 解冻会员储值账户（后台） | `StoredValueFreezeRequest` | `customer.stored_value.freeze` | `staff-token` | `project` | web | 否 | `stored_value.unfrozen` | `stored_value.unfrozen_failed` |
 | customer | `POST` | `/api/v1/loyalty/stored-value/{customer_id}/refund` | `refundStoredValueAccount` | 会员储值退卡/退余额（后台） | `StoredValueRefundRequest` | `customer.stored_value.refund` | `staff-token` | `project` | web | 否 | `stored_value.refund` | `stored_value.refund_failed` |
+| bar | `POST` | `/api/v1/bar/orders/{order_id}/suspend` | `suspendBarOrder` | 挂起包厢未付款订单 | `object` | `bar.bill.hang` | `staff-token` | `project-bar-table` | web | 是 | `bar.order_suspended` | `bar.order_suspend_failed` |
+| bar | `POST` | `/api/v1/bar/orders/{order_id}/suspension/bad-debt` | `confirmBarOrderSuspensionBadDebt` | 经理确认挂起订单无法收款（转坏账） | `object` | `bar.bill.hang_cancel` | `staff-token` | `project-bar-table` | web | 是 | `bar.order_suspension_bad_debt` | `bar.order_suspension_bad_debt_failed` |
+| bar | `POST` | `/api/v1/bar/orders/{order_id}/suspension/write-off` | `writeOffBarOrderSuspension` | 财务确认坏账订单核销结案 | `object` | `finance.ar_ap.manage` | `staff-token` | `project-bar-table` | web | 是 | `bar.order_suspension_written_off` | `bar.order_suspension_write_off_failed` |
+| bar | `POST` | `/api/v1/bar/orders/{order_id}/suspension/cancel` | `requestBarOrderSuspensionCancel` | 收银员发起取消挂起订单 | `object` | `bar.bill.hang` | `staff-token` | `project-bar-table` | web | 是 | `bar.order_suspension_cancel_requested` | `bar.order_suspension_cancel_request_failed` |
+| bar | `POST` | `/api/v1/bar/orders/{order_id}/suspension/cancel-decision` | `decideBarOrderSuspensionCancel` | 经理审批取消挂起订单 | `object` | `bar.bill.hang_cancel` | `staff-token` | `project-bar-table` | web | 是 | `bar.order_suspension_cancel_decided` | `bar.order_suspension_cancel_decide_failed` |
+| bar | `GET` | `/api/v1/bar/suspended-orders` | `listBarSuspendedOrders` | 挂起订单风险看板 | `-` | `bar.order.view` | `staff-token` | `project-bar-table` | web | 否 | `bar.order_suspension.viewed` | `bar.order_suspension.view_failed` |
+| bar | `GET` | `/api/v1/bar/suspended-orders/export` | `exportBarSuspendedOrders` | 导出挂起订单风险看板（敏感） | `-` | `audit.operation_log.export` | `staff-token` | `project-bar-table` | web | 否 | `bar.order_suspension.exported` | `bar.order_suspension.export_failed` |
 | bar | `POST` | `/api/v1/bar/orders/{order_id}/void-item` | `voidBarOrderItem` | 退菜退酒 | `BarOrderItemVoidRequest` | `bar.order_item.void` | `staff-token` | `project-bar-table` | web | 是 | `bar.order_item_voided` | `bar.order_item_void_failed` |
 | bar | `POST` | `/api/v1/bar/bills/{bill_id}/reopen` | `reopenBarBill` | 账单反结 | `BarBillReopenRequest` | `bar.bill.reopen` | `staff-token` | `project-bar-table` | web | 是 | `bar.bill_reopened` | `bar.bill_reopen_failed` |
 | bar | `POST` | `/api/v1/bar/bills/{bill_id}/anomaly` | `raiseBarBillAnomaly` | 登记账单争议（置异常） | `object` | `bar.bill.adjust` | `staff-token` | `project-bar-table` | web | 是 | `bar.bill_anomaly_raised` | `bar.bill_anomaly_raise_failed` |

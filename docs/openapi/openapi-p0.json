@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "综合体管理系统 P0 API 契约",
-    "version": "V0.51",
+    "version": "V0.52",
     "description": "P0 首批编码前置契约。本文采用 JSON-compatible YAML，便于与 openapi-p0.json 保持一致。正式后端以 Java 21 + Spring Boot 4.x + springdoc-openapi 输出运行时 OpenAPI，并与本契约比对。"
   },
   "servers": [
@@ -3191,7 +3191,7 @@
         ],
         "operationId": "calculateBarTableCommission",
         "summary": "卡座销售提成计算",
-        "description": "第十七批（操作员裁决补充第 1 条「作废时……冲回已发积分、成长值和提成（工资单不再挂待定）」）：账单已作废（payment_status=void，含异常处置「作废并冲正」）的不再计提成，返回 409 BAR_BILL_VOIDED；同一账单已计提的返回已有提成、不重复计提。账单没有销售归属（自来客等）的不产生销售提成，返回 409 BAR_COMMISSION_NO_SALES、不落提成行（第十八批 I 段第 86 条，BSM 第 1070 行「自来客不产生销售提成」）。",
+        "description": "第十七批（操作员裁决补充第 1 条「作废时……冲回已发积分、成长值和提成（工资单不再挂待定）」）：账单已作废（payment_status=void，含异常处置「作废并冲正」）的不再计提成，返回 409 BAR_BILL_VOIDED；同一账单已计提的返回已有提成、不重复计提。账单没有销售归属（自来客等）的不产生销售提成，返回 409 BAR_COMMISSION_NO_SALES、不落提成行（第十八批 I 段第 86 条，BSM 第 1070 行「自来客不产生销售提成」）。第十八批 T 段第 157 条 157-R3（BSM:1111「转坏账核销的订单不产生销售提成……不追溯重开提成」）：账单所属订单（或合单后改指本账单）挂起已确认坏账的 409 BAR_BILL_BAD_DEBT，核销结案后收回结清也不重开。",
         "x-permission": "bar.table_commission.calculate",
         "x-data-scope": "project-bar",
         "x-terminal-allowed": [
@@ -3331,7 +3331,7 @@
           }
         },
         "x-auth-context": "staff-token",
-        "description": "第十八批 N 段第 123 条 123-R2（BSM:1630「核销、收款、退款、放行等敏感操作，操作设备定位落在该项目综合体授权范围之外时一律拒绝并留痕」；BSM:1876「Web 端同样适用」）：本操作属敏感操作定位闸的现场动作闭集（第十八批裁决 31）。操作对象所属项目已配授权范围（123-R1）时须带请求头 X-Geo-Latitude、X-Geo-Longitude（设备当下定位，WGS-84 十进制度）：没带或解析不了按范围外处理（裁决 30）返回 403 SENSITIVE_OPERATION_LOCATION_REQUIRED，到圆心距离超过授权半径返回 403 SENSITIVE_OPERATION_OUT_OF_RANGE，拒绝在独立事务里留痕 sensitive_operation.location_rejected（business_id 为本 operationId，业务回滚不丢）；项目没配授权范围不查位置（裁决 32）；判定在幂等之前，重放不能绕过；通过时不存位置。第十八批 O 段第 127 条 127-R3：收款人（cashier_staff_id，各支付渠道）取执行结账的那一次登录会话的操作人，不收请求填写，交班对账按它归入收银员（BSM 第 940、1066、1081 行）。"
+        "description": "第十八批 N 段第 123 条 123-R2（BSM:1630「核销、收款、退款、放行等敏感操作，操作设备定位落在该项目综合体授权范围之外时一律拒绝并留痕」；BSM:1876「Web 端同样适用」）：本操作属敏感操作定位闸的现场动作闭集（第十八批裁决 31）。操作对象所属项目已配授权范围（123-R1）时须带请求头 X-Geo-Latitude、X-Geo-Longitude（设备当下定位，WGS-84 十进制度）：没带或解析不了按范围外处理（裁决 30）返回 403 SENSITIVE_OPERATION_LOCATION_REQUIRED，到圆心距离超过授权半径返回 403 SENSITIVE_OPERATION_OUT_OF_RANGE，拒绝在独立事务里留痕 sensitive_operation.location_rejected（business_id 为本 operationId，业务回滚不丢）；项目没配授权范围不查位置（裁决 32）；判定在幂等之前，重放不能绕过；通过时不存位置。第十八批 O 段第 127 条 127-R3：收款人（cashier_staff_id，各支付渠道）取执行结账的那一次登录会话的操作人，不收请求填写，交班对账按它归入收银员（BSM 第 940、1066、1081 行）。第十八批 T 段第 157 条 157-R2：本次结账使挂起订单的账单（本单除并单、作废外的全部账单，含合单后改指本账单的挂起）全部结清时，同一事务内挂起置已结清（settled）并写审计 bar.order_suspension_settled；应付为 0 的关单同样联动。第十八批 T 段第 157 条 157-R6（BSM:1108「取消后迟到到账进入待退款，不得恢复订单或继续出品」；DEC-R8-94-37「迟到到账须进入待退款并按原支付路径退款」）：账单所属订单的挂起已取消（cancelled）或已待退款（pending_refund）时为迟到到账——不判低消与账单状态，照常落该笔收款流水（payment_channel、POS 必填 pos_transaction_no、收款人同正常结账；settlement_amount_cent 必填且大于 0，否则 400 VALIDATION_FAILED），同一事务按作废并冲正同一口径（后收的先退、储值部分回原卡，其余挂一笔退款应付，source_id 为该笔收款流水编号）原路待退并把该笔流水置冲正；账单不改（仍作废）、不进营业额与分红；挂起置待退款（pending_refund），记 refund_ar_ap_item_id，审计 bar.order_suspension_late_payment；返回仍作废的账单。"
       }
     },
     "/api/v1/bar/bills/{bill_id}/stored-value/sms": {
@@ -3428,7 +3428,7 @@
           "CONTRACT_SCOPE_VIOLATION"
         ],
         "summary": "点单",
-        "description": "订单销售取该台位当前开台会话的销售归属，不由请求指定、不取下单人（第十八批 I 段第 86 条，BSM 第 1070 行「只归帮该客人预订的那个人」）；没有开台会话（吧台直点）的订单无销售。第十八批 N 段第 120 条 120-R4（BSM:1611「订单从哪里来，是官方 App/小程序、第三方、销售人员、一体机还是现场工作台。」；BSM:1004「……一体机的下单、领取、状态检查和异常提示都要记录设备、点位和时间。」）：订单创建终端 created_terminal 取请求的可信终端（没有即 web），可信终端是一体机时订单来源 order_source 记 kiosk（其余 staff），有可信设备号即记 device_id；一体机吧台买酒按本机酒吧的吧台位下单（吧台位不建出品票），再经 POST /api/v1/bar/orders/{order_id}/bill 生成待支付账单。",
+        "description": "订单销售取该台位当前开台会话的销售归属，不由请求指定、不取下单人（第十八批 I 段第 86 条，BSM 第 1070 行「只归帮该客人预订的那个人」）；没有开台会话（吧台直点）的订单无销售。第十八批 N 段第 120 条 120-R4（BSM:1611「订单从哪里来，是官方 App/小程序、第三方、销售人员、一体机还是现场工作台。」；BSM:1004「……一体机的下单、领取、状态检查和异常提示都要记录设备、点位和时间。」）：订单创建终端 created_terminal 取请求的可信终端（没有即 web），可信终端是一体机时订单来源 order_source 记 kiosk（其余 staff），有可信设备号即记 device_id；一体机吧台买酒按本机酒吧的吧台位下单（吧台位不建出品票），再经 POST /api/v1/bar/orders/{order_id}/bill 生成待支付账单。第十八批 T 段第 157 条 157-R1（BSM:1064、ENUM:117「最低消费是下单的前置条件：客人在该台位下单时，本次下单后的累计消费金额必须达到该台位适用的最低消费，未达到的不允许提交订单。」）：凡该台位适用的最低消费大于 0（不论台位类型），有开台会话按台组阈值与累计进度、无会话按台位低消对本单金额判，本次下单后累计未达到即 409 BAR_MIN_CONSUMPTION_NOT_MET，整单不落；散台、卡座须下单当场付款（第十八批裁决 37），本单账单付清后才能出品（见 POST /api/v1/bar/orders/{order_id}/deliver）。",
         "x-permission": "bar.order.create",
         "x-data-scope": "project-bar-table",
         "x-terminal-allowed": [
@@ -3485,7 +3485,7 @@
           }
         },
         "x-auth-context": "staff-token",
-        "description": "用于查询酒吧订单。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。"
+        "description": "用于查询酒吧订单。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。第十八批 T 段第 157 条 157-R2：每单另带 table_type（台位类型，vip＝包厢，只有包厢能挂起）、suspension_status（挂起状态英码 hanging_unpaid/settled/cancel_pending_approval/cancelled/pending_refund/bad_debt_processing/written_off_closed，未挂起为空）与 suspension_amount_cent（挂起金额，分；未挂起为空）。第十八批 T 段第 157 条 157-R3：另带 suspension（本单挂起记录全文，未挂起为空；确认坏账后带 bad_debt_reason、bad_debt_confirmed_by、bad_debt_confirmed_at、unpaid_price_cent、inventory_cost_cent、compensation_lines〔每项 order_item_id、responsible_user_id（空＝门店损耗）、cost_cent〕，核销结案后带 written_off_by、written_off_at）。第十八批 T 段第 157 条 157-R6：suspension 另带取消申请与经理审批 cancel_item_ids、cancel_reason、cancel_reason_code、cancel_evidence_attachment_ids、cancel_requested_by、cancel_requested_at、cancel_decided_by、cancel_decided_at、cancel_decision_reason，取消后迟到到账带 refund_ar_ap_item_id（原路退款应付台账项）。第十八批 T 段第 157 条 157-R5：另带 unpaid_close_escalated_at（本单账单或挂起改指的主单关台未付清待办的升级时间，未升级为空；已升级的，被升级的店长与此刻在班的夜班值班经理也可确认坏账）。18T 复核修复⑤（照 142-R3 班次列表）：非平台管理员、无商户号的项目侧账号（如项目财务）按 bar.order.view 可触及的项目列订单，与挂起订单风险看板的项目口径一致；商户账号只看本商户、平台管理员看全部，读法不改。"
       }
     },
     "/api/v1/bar/orders/{order_id}/bill": {
@@ -3543,7 +3543,7 @@
         ],
         "operationId": "deliverBarOrder",
         "summary": "出酒或送达确认",
-        "description": "按明细登记送达：delivered_items 只含本次实际送达的未撤单明细；非撤单明细全部送达后整单与出品票据才置已送达，部分明细送达不置整单已送达、出品票据只追加 partial_deliver 事件（BSM L1025 分别标注已上菜与未上菜；ENUM L112）。第十八批 C 段第 17 条（BSM L1065 / ENUM L106；第十八批裁决 4）：按杯出品项按出酒吧台（该商品扣库库存行所挂吧台库存）有无出酒量采集设备二分——配有设备的缺 actual_pour_volume 拒单 400 POUR_VOLUME_REQUIRED，超出标准出酒量×杯数记损耗；未配设备的按标准出酒量配酒，actual_pour_volume 记标准×杯数（不取请求量），loss_volume 记标准损耗＝标准出酒量×杯数×本酒吧损耗率阈值（未配置按出厂 5%，四舍五入、至少 1）。已删除全局 bar.pour-cost.strict-mode 开关。第十八批 I 段第 76 条（BSM L1065「按杯按标准出酒量扣库存、超出记损耗」；BSM L1168）：按杯且需扣库存的出品项按容量扣库存，扣减量＝标准出酒量×杯数＋损耗（配设备为实采超出标准的部分，实采少于标准仍按标准扣；未配设备为标准损耗），先用该库存行已开瓶余量、不够再开新瓶（瓶数与可用各减开瓶数），整瓶不够开 409 STOCK_INSUFFICIENT；库存流水记开瓶数（只动余量的为 0）、出酒量 volume_ml 与损耗量 loss_volume_ml（毫升）。按瓶商品仍按件数扣。",
+        "description": "按明细登记送达：delivered_items 只含本次实际送达的未撤单明细；非撤单明细全部送达后整单与出品票据才置已送达，部分明细送达不置整单已送达、出品票据只追加 partial_deliver 事件（BSM L1025 分别标注已上菜与未上菜；ENUM L112）。第十八批 C 段第 17 条（BSM L1065 / ENUM L106；第十八批裁决 4）：按杯出品项按出酒吧台（该商品扣库库存行所挂吧台库存）有无出酒量采集设备二分——配有设备的缺 actual_pour_volume 拒单 400 POUR_VOLUME_REQUIRED，超出标准出酒量×杯数记损耗；未配设备的按标准出酒量配酒，actual_pour_volume 记标准×杯数（不取请求量），loss_volume 记标准损耗＝标准出酒量×杯数×本酒吧损耗率阈值（未配置按出厂 5%，四舍五入、至少 1）。已删除全局 bar.pour-cost.strict-mode 开关。第十八批 I 段第 76 条（BSM L1065「按杯按标准出酒量扣库存、超出记损耗」；BSM L1168）：按杯且需扣库存的出品项按容量扣库存，扣减量＝标准出酒量×杯数＋损耗（配设备为实采超出标准的部分，实采少于标准仍按标准扣；未配设备为标准损耗），先用该库存行已开瓶余量、不够再开新瓶（瓶数与可用各减开瓶数），整瓶不够开 409 STOCK_INSUFFICIENT；库存流水记开瓶数（只动余量的为 0）、出酒量 volume_ml 与损耗量 loss_volume_ml（毫升）。按瓶商品仍按件数扣。第十八批 T 段第 157 条 157-R1（第十八批裁决 37「散台、卡座下单必须当场付款、不能挂起」；BSM:1025「酒水必须先完成付款才能出品上台」）：散台、卡座订单须本单账单（并单、作废的除外）全部结清才能出品，没有账单、挂账或只付了一部分 409 BAR_ORDER_PAYMENT_REQUIRED，不扣库存；包厢与吧台位不受此限。第十八批 T 段第 157 条 157-R6（BSM:1108「取消后迟到到账进入待退款，不得恢复订单或继续出品」）：订单的挂起已取消或已待退款时 409 BAR_ORDER_SUSPENSION_CANCELLED，不扣库存。",
         "x-permission": "bar.order.create",
         "x-data-scope": "project-bar-table",
         "x-terminal-allowed": [
@@ -3592,7 +3592,7 @@
           "CONTRACT_SCOPE_VIOLATION"
         ],
         "summary": "新增酒吧订单物品",
-        "description": "用于新增酒吧订单物品。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。",
+        "description": "用于新增酒吧订单物品。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。第十八批 T 段第 157 条 157-R6（BSM:1108「取消后迟到到账进入待退款，不得恢复订单或继续出品」）：订单的挂起已取消或已待退款时 409 BAR_ORDER_SUSPENSION_CANCELLED。",
         "x-permission": "bar.order.create",
         "x-data-scope": "project",
         "x-terminal-allowed": [
@@ -3995,7 +3995,7 @@
           }
         },
         "x-auth-context": "staff-token",
-        "description": "门口邀请函入场核验。ROOT-03 clients-R6（BSM 第 870 行「到店出示本人的动态入场码入场」、第 1036 行「邀请函二维码……本身不作为入场凭证」）：credential_payload 必须是被邀请人本人在 App/小程序取的动态入场码（未过期、本订台），客人号/手机号明文与过期码一律 409 BAR_INVITATION_ENTRY_CODE_INVALID；已入场重复核验返回原记录。 第十八批 N 段第 123 条 123-R2（BSM:1630「核销、收款、退款、放行等敏感操作，操作设备定位落在该项目综合体授权范围之外时一律拒绝并留痕」；BSM:1876「Web 端同样适用」）：本操作属敏感操作定位闸的现场动作闭集（第十八批裁决 31）。操作对象所属项目已配授权范围（123-R1）时须带请求头 X-Geo-Latitude、X-Geo-Longitude（设备当下定位，WGS-84 十进制度）：没带或解析不了按范围外处理（裁决 30）返回 403 SENSITIVE_OPERATION_LOCATION_REQUIRED，到圆心距离超过授权半径返回 403 SENSITIVE_OPERATION_OUT_OF_RANGE，拒绝在独立事务里留痕 sensitive_operation.location_rejected（business_id 为本 operationId，业务回滚不丢）；项目没配授权范围不查位置（裁决 32）；判定在幂等之前，重放不能绕过；通过时不存位置。 第十八批 Q 段第 150 条 150-R1（BSM:552「进场之后，工作手机扫客人二维码核销各酒吧入场」；BSM:1036「到店出示本人的动态入场码核验入场」）：入场码格式 bie.订台号.成员号.到期秒.随机串.签名；工作手机按码中订台号调用本接口，码中订台号与路径不符同样 409 BAR_INVITATION_ENTRY_CODE_INVALID。 第十八批 S 段第 167 条 167-R1：名额按当前台位或合并台组计——订台已开台的，台组内已入场人数达到台组可邀请人数时 409 BAR_INVITATION_CAPACITY_EXHAUSTED；尚未开台的仍按签发时的可进人数计。",
+        "description": "门口邀请函入场核验。ROOT-03 clients-R6（BSM 第 870 行「到店出示本人的动态入场码入场」、第 1036 行「邀请函二维码……本身不作为入场凭证」）：credential_payload 必须是被邀请人本人在 App/小程序取的动态入场码（未过期、本订台），客人号/手机号明文与过期码一律 409 BAR_INVITATION_ENTRY_CODE_INVALID；已入场重复核验返回原记录。 第十八批 N 段第 123 条 123-R2（BSM:1630「核销、收款、退款、放行等敏感操作，操作设备定位落在该项目综合体授权范围之外时一律拒绝并留痕」；BSM:1876「Web 端同样适用」）：本操作属敏感操作定位闸的现场动作闭集（第十八批裁决 31）。操作对象所属项目已配授权范围（123-R1）时须带请求头 X-Geo-Latitude、X-Geo-Longitude（设备当下定位，WGS-84 十进制度）：没带或解析不了按范围外处理（裁决 30）返回 403 SENSITIVE_OPERATION_LOCATION_REQUIRED，到圆心距离超过授权半径返回 403 SENSITIVE_OPERATION_OUT_OF_RANGE，拒绝在独立事务里留痕 sensitive_operation.location_rejected（business_id 为本 operationId，业务回滚不丢）；项目没配授权范围不查位置（裁决 32）；判定在幂等之前，重放不能绕过；通过时不存位置。 第十八批 Q 段第 150 条 150-R1（BSM:552「进场之后，工作手机扫客人二维码核销各酒吧入场」；BSM:1036「到店出示本人的动态入场码核验入场」）：入场码格式 bie.订台号.成员号.到期秒.随机串.签名；工作手机按码中订台号调用本接口，码中订台号与路径不符同样 409 BAR_INVITATION_ENTRY_CODE_INVALID。 第十八批 S 段第 167 条 167-R1：名额按当前台位或合并台组计——订台已开台的，台组内已入场人数达到台组可邀请人数时 409 BAR_INVITATION_CAPACITY_EXHAUSTED；尚未开台的仍按签发时的可进人数计。 第十八批 T 段第 167 条 167-R3a：入场名额按该成员所属原台的台组计——拆台时分配过原台的成员按所分配原台，没分配过的按订台所在会话。",
         "x-failure-codes": [
           "BAR_INVITATION_ENTRY_CODE_INVALID",
           "BAR_INVITATION_MEMBER_NOT_CONFIRMED",
@@ -4642,7 +4642,7 @@
           }
         },
         "x-auth-context": "customer-token",
-        "description": "被邀请人确认接受订卡邀请函，占一个名额（同一人重复确认返回原成员）。ROOT-03-R25（BSM 第 1036 行「邀请函二维码带防伪标记，被复制或篡改卡座、可进人数即无法接受」）：二维码载荷的 invitation_signature、table_id、capacity 一并回传，须与签发时一致且防伪标记核验通过，否则 409 BAR_INVITATION_SIGNATURE_INVALID、不占名额。名额已满 409 BAR_INVITATION_CAPACITY_EXHAUSTED。被开卡人移出的人再次接受＝沿用原记录重新占名额（BSM 第 870 行「名额释放后可再邀请他人」），名额已满同样 409；订台已取消（邀请函随之吊销）409 BAR_INVITATION_NOT_ACTIVE。 PGM 第 744 行「前端隐藏只是辅助，后端接口必须独立校验」：按综合体的客人端终端开关以邀请函所属订台的酒吧综合体在服务端判（不取客户端自报的 X-Project-Id，先于幂等），该综合体客人端已关→403 TERMINAL_DISABLED，不占名额。 第十八批 R 段第 152 条 152-R2（第十八批裁决 34「销售可以通过微信等发送邀请函，客户点击后确定自己是订台人还是参与者」）：as_holder 为 true＝选「我是订台人」，订台尚无订台人（员工代订、一体机订台未被认领）时订台归到本人名下、签发时的开卡人占位成员改成本人（不另占名额），返回 is_holder 为 true 的成员；已有订台人 409 BAR_INVITATION_HOLDER_TAKEN，本人已作为参与者接受 409 BAR_INVITATION_ALREADY_ACCEPTED。as_holder 缺省或 false 按参与者接受。 第十八批 S 段第 167 条 167-R1（BSM:1079「转台……可邀请人数和最低消费额均按目标台规则执行」「合并后的可邀请人数……按两侧所包含全部原台的对应数值相加计算」；BSM:1036「已确认与已入场总人数不超过卡座可进人数」）：名额按当前台位或合并台组计——订台已开台的，按会话所在台组的可邀请人数（转台后为目标台的值，并台后为各原台之和）与台组内各订台已接受未入场、已入场成员合计判名额已满；尚未开台的仍按签发时的可进人数与本订台成员计。防伪核验仍按签发时的卡座与可进人数，原二维码继续有效。",
+        "description": "被邀请人确认接受订卡邀请函，占一个名额（同一人重复确认返回原成员）。ROOT-03-R25（BSM 第 1036 行「邀请函二维码带防伪标记，被复制或篡改卡座、可进人数即无法接受」）：二维码载荷的 invitation_signature、table_id、capacity 一并回传，须与签发时一致且防伪标记核验通过，否则 409 BAR_INVITATION_SIGNATURE_INVALID、不占名额。名额已满 409 BAR_INVITATION_CAPACITY_EXHAUSTED。被开卡人移出的人再次接受＝沿用原记录重新占名额（BSM 第 870 行「名额释放后可再邀请他人」），名额已满同样 409；订台已取消（邀请函随之吊销）409 BAR_INVITATION_NOT_ACTIVE。 PGM 第 744 行「前端隐藏只是辅助，后端接口必须独立校验」：按综合体的客人端终端开关以邀请函所属订台的酒吧综合体在服务端判（不取客户端自报的 X-Project-Id，先于幂等），该综合体客人端已关→403 TERMINAL_DISABLED，不占名额。 第十八批 R 段第 152 条 152-R2（第十八批裁决 34「销售可以通过微信等发送邀请函，客户点击后确定自己是订台人还是参与者」）：as_holder 为 true＝选「我是订台人」，订台尚无订台人（员工代订、一体机订台未被认领）时订台归到本人名下、签发时的开卡人占位成员改成本人（不另占名额），返回 is_holder 为 true 的成员；已有订台人 409 BAR_INVITATION_HOLDER_TAKEN，本人已作为参与者接受 409 BAR_INVITATION_ALREADY_ACCEPTED。as_holder 缺省或 false 按参与者接受。 第十八批 S 段第 167 条 167-R1（BSM:1079「转台……可邀请人数和最低消费额均按目标台规则执行」「合并后的可邀请人数……按两侧所包含全部原台的对应数值相加计算」；BSM:1036「已确认与已入场总人数不超过卡座可进人数」）：名额按当前台位或合并台组计——订台已开台的，按会话所在台组的可邀请人数（转台后为目标台的值，并台后为各原台之和）与台组内各订台已接受未入场、已入场成员合计判名额已满；尚未开台的仍按签发时的可进人数与本订台成员计。防伪核验仍按签发时的卡座与可进人数，原二维码继续有效。 第十八批 T 段第 167 条 167-R3a：拆台时分配过原台的邀请，名额按所分配原台的台组计，新接受的成员同样归该原台。",
         "x-failure-codes": [
           "BAR_INVITATION_SIGNATURE_INVALID",
           "BAR_INVITATION_CAPACITY_EXHAUSTED",
@@ -4705,7 +4705,7 @@
         ],
         "operationId": "previewCustomerBarInvitation",
         "summary": "扫邀请函二维码预览",
-        "description": "ROOT-03 clients-R6：被邀请人扫开卡人转发的邀请函二维码后预览酒吧、卡座、可进人数与剩余名额，不占名额；防伪标记、卡座或可进人数被篡改 409 BAR_INVITATION_SIGNATURE_INVALID（BSM 第 1036 行）。 PGM 第 744 行「前端隐藏只是辅助，后端接口必须独立校验」：按综合体的客人端终端开关以邀请函所属订台的酒吧综合体在服务端判（不取客户端自报的 X-Project-Id），该综合体客人端已关→403 TERMINAL_DISABLED。 第十八批 R 段第 152 条 152-R2：返回 holder_claimable——这张订台还没有订台人（员工代订、一体机订台未被认领），客人可选「我是订台人」；客人自助订台恒为 false。 第十八批 S 段第 167 条 167-R1：名额按当前台位或合并台组计——capacity 与 remaining 为台组可邀请人数与剩余名额（尚未开台的仍按签发时的可进人数与本订台成员计）；table_name 为会话当前台位，table_id 仍为签发时的卡座。",
+        "description": "ROOT-03 clients-R6：被邀请人扫开卡人转发的邀请函二维码后预览酒吧、卡座、可进人数与剩余名额，不占名额；防伪标记、卡座或可进人数被篡改 409 BAR_INVITATION_SIGNATURE_INVALID（BSM 第 1036 行）。 PGM 第 744 行「前端隐藏只是辅助，后端接口必须独立校验」：按综合体的客人端终端开关以邀请函所属订台的酒吧综合体在服务端判（不取客户端自报的 X-Project-Id），该综合体客人端已关→403 TERMINAL_DISABLED。 第十八批 R 段第 152 条 152-R2：返回 holder_claimable——这张订台还没有订台人（员工代订、一体机订台未被认领），客人可选「我是订台人」；客人自助订台恒为 false。 第十八批 S 段第 167 条 167-R1：名额按当前台位或合并台组计——capacity 与 remaining 为台组可邀请人数与剩余名额（尚未开台的仍按签发时的可进人数与本订台成员计）；table_name 为会话当前台位，table_id 仍为签发时的卡座。 第十八批 T 段第 167 条 167-R3a：拆台时分配过原台的邀请，capacity、remaining 与 table_name 按所分配原台的台组与台位计。",
         "x-permission": "not_applicable",
         "x-data-scope": "self",
         "x-terminal-allowed": [
@@ -9426,7 +9426,7 @@
         ],
         "operationId": "reviewHighValue",
         "summary": "复核高价值动作(approve生效/reject回滚)；存酒库房存货处置须门店主管与财务两道审批",
-        "description": "OBS-13-02（BSM L1072「转库存之后的报废、赠送、内部使用等处置必须走审批并保留操作记录」；操作员裁决补充第十四批第 4 条门店主管与财务审批，同赔付方案审批）：subject_type=saved_bottle_stock_disposal 的复核单须带 role——supervisor 核 inventory.high_value.review（门店主管）、finance 核 finance.ar_ap.manage（财务）；审批人不得是发起人（409 HIGH_VALUE_REVIEW_SELF_APPROVAL），两道不得同一人（409 HIGH_VALUE_REVIEW_SAME_APPROVER）；只批一道时仍为 pending，两道都批才 approved 并扣库存、写同类型流水，任一道驳回即 rejected 不扣。其余复核对象不读 role、只认 inventory.high_value.review（持财务码 403）。第十八批第 24 条 24-R3（PGM:529「申请人与直接受益人不得审批与自己相关的申请」）：报损、盘点差异、存酒作废复核单的审批人同样不得是发起人（409 HIGH_VALUE_REVIEW_SELF_APPROVAL）。",
+        "description": "OBS-13-02（BSM L1072「转库存之后的报废、赠送、内部使用等处置必须走审批并保留操作记录」；操作员裁决补充第十四批第 4 条门店主管与财务审批，同赔付方案审批）：subject_type=saved_bottle_stock_disposal 的复核单须带 role——supervisor 核 inventory.high_value.review（门店主管）、finance 核 finance.ar_ap.manage（财务）；审批人不得是发起人（409 HIGH_VALUE_REVIEW_SELF_APPROVAL），两道不得同一人（409 HIGH_VALUE_REVIEW_SAME_APPROVER）；只批一道时仍为 pending，两道都批才 approved 并扣库存、写同类型流水，任一道驳回即 rejected 不扣。其余复核对象不读 role、只认 inventory.high_value.review（持财务码 403）。第十八批第 24 条 24-R3（PGM:529「申请人与直接受益人不得审批与自己相关的申请」）：报损、盘点差异、存酒作废复核单的审批人同样不得是发起人（409 HIGH_VALUE_REVIEW_SELF_APPROVAL）。第十八批 T 段第 157 条 157-R4（BSM:1112「达到既有高价值标准的商品仍执行原证据和审批要求。」）：subject_type=bar_order_bad_debt（subject_id 为酒吧订单）的复核单由经理确认挂起订单无法收款时本单含高价值已出品商品而建，只认 inventory.high_value.review、审批人不得是发起人；approved 即在本事务内把该订单挂起转坏账损耗处理中（发起经理为确认人，固化同 POST /api/v1/bar/orders/{order_id}/suspension/bad-debt，审计 bar.order_suspension_bad_debt 带 bad_debt_review_id 与 reviewer_user_id），挂起已不在待本复核的已挂起待付款时 409 BAR_ORDER_NOT_HANGING_UNPAID、复核不生效；rejected 即清空该挂起的 bad_debt_review_id 与 bad_debt_reason，挂起保持已挂起待付款、可重新发起，审计 bar.order_suspension_bad_debt_review_rejected。",
         "x-permission": "inventory.high_value.review",
         "x-data-scope": "project-warehouse-bar",
         "x-terminal-allowed": [
@@ -17257,7 +17257,7 @@
         ],
         "operationId": "confirmDailyClose",
         "summary": "确认日结",
-        "description": "第十八批 R 段第 143 条 143-R1（ENUM:190「待生成、待确认、有差异、已确认、已锁定、已归档」；PGM:664「单店层面的财务工作——日结确认与锁定……由该酒吧对应的财务 BP 负责」）：确认日结，按当前数据重算七源汇总并记确认时间 confirmed_at。只收 pending_confirm（待确认），否则 409 DAILY_CLOSE_NOT_PENDING；日结不存在 404 DAILY_CLOSE_NOT_FOUND。日结闸（确认与锁定两处都拦）：TK-14（ENUM「异常状态的统一出口」：异常单据未处置完毕，所属日结不得确认锁定）：原核销落在该营业日、仍待主管处置的票务核销异常存在时 409 DAY_CLOSE_ANOMALY_PENDING（merchant、bar 范围只看本商户）。第十六批第 16 条同一规则接酒吧账单：开单或收款落在该营业日、仍处于异常（abnormal）待主管处置的酒吧账单存在时同样 409 DAY_CLOSE_ANOMALY_PENDING（merchant、bar 范围只看本商户）。第十八批 Q 段第 144 条（BSM:1106「未结清订单阻止交班和日结」）：开单落在该营业日、仍未结清（结清、被合单、主管作废并冲正之外）的酒吧账单存在时 409 DAY_CLOSE_UNSETTLED_BILL，原文列出账单号（merchant、bar 范围只看本商户）。第十八批 R 段第 142 条 142-R2（ENUM:190「由当班收银员完成现金清点与盘收银，接班人与其对接完成交接，并由财务跟班跟进交接完成」）：开班落在该营业日（酒吧逐家按各自营业日窗）、财务尚未见证归档（未班结、未平账、未签字或未见证）的收银班次存在时 409 DAY_CLOSE_SHIFT_PENDING（merchant、bar 范围只看本酒吧）。第十八批 R 段 143-R2（ENUM:190「所属数据未标记为最终之前，日结不得确认、不得锁定。」）：五类数据未全部标记为最终（见 markDailyCloseFinal）时 409 DAY_CLOSE_NOT_FINAL，原文列出缺的类别。第十八批 S 段第 158 条 158-R1（ENUM:191「差异未关闭期间，高价值差异所涉营业日的日结不得确认锁定」「以该笔差异所涉金额与「高价值判定」条所配的同一金额阈值比较，高于阈值即高价值，其余为低价值；阈值未配置一律按高价值处理。」）：该营业日有未关闭的高价值对账差异时 409 DAY_CLOSE_DIFFERENCE_PENDING——财务对账差异按所属批次营业日、status 不是 closed 即未关闭；第三方对账差异按所属批次对账期间覆盖该营业日、status 不是 resolved 或 matched 即未关闭（ignored 也算未关闭）；差异金额大于全平台高价值阈值（等于不算）即高价值，阈值未配置一律按高价值；merchant、bar 范围只看本商户（财务批次范围为该商户、第三方差异的回流门店为该商户）。第十八批 S 段第 161 条 161-R2（第十八批裁决 35「酒吧逐店逐日查；游乐等按综合体逐日查」）：project 范围＝该综合体除酒吧外的业务——酒吧账单异常、未结清酒吧账单、收银班次三道闸不看（酒吧逐店另出日结）；票务核销异常只看原核销所属订单属该综合体、核销商户不是酒吧的；对账差异只看范围为该综合体或其非酒吧商户的财务对账批次，与回流门店属该综合体、不是酒吧的第三方差异。范围：商户账号只能办本商户的 merchant、bar 范围日结，否则 403 CROSS_MERCHANT_FORBIDDEN；其余账号按 finance.daily_close.lock 可触及的项目覆盖日结所属综合体（merchant、bar 范围取该商户所属项目），否则 403 CROSS_PROJECT_FORBIDDEN。",
+        "description": "第十八批 R 段第 143 条 143-R1（ENUM:190「待生成、待确认、有差异、已确认、已锁定、已归档」；PGM:664「单店层面的财务工作——日结确认与锁定……由该酒吧对应的财务 BP 负责」）：确认日结，按当前数据重算七源汇总并记确认时间 confirmed_at。只收 pending_confirm（待确认），否则 409 DAILY_CLOSE_NOT_PENDING；日结不存在 404 DAILY_CLOSE_NOT_FOUND。日结闸（确认与锁定两处都拦）：TK-14（ENUM「异常状态的统一出口」：异常单据未处置完毕，所属日结不得确认锁定）：原核销落在该营业日、仍待主管处置的票务核销异常存在时 409 DAY_CLOSE_ANOMALY_PENDING（merchant、bar 范围只看本商户）。第十六批第 16 条同一规则接酒吧账单：开单或收款落在该营业日、仍处于异常（abnormal）待主管处置的酒吧账单存在时同样 409 DAY_CLOSE_ANOMALY_PENDING（merchant、bar 范围只看本商户）。第十八批 Q 段第 144 条（BSM:1106「未结清订单阻止交班和日结」）：开单落在该营业日、仍未结清（结清、被合单、主管作废并冲正之外）的酒吧账单存在时 409 DAY_CLOSE_UNSETTLED_BILL，原文列出账单号（merchant、bar 范围只看本商户）。第十八批 R 段第 142 条 142-R2（ENUM:190「由当班收银员完成现金清点与盘收银，接班人与其对接完成交接，并由财务跟班跟进交接完成」）：开班落在该营业日（酒吧逐家按各自营业日窗）、财务尚未见证归档（未班结、未平账、未签字或未见证）的收银班次存在时 409 DAY_CLOSE_SHIFT_PENDING（merchant、bar 范围只看本酒吧）。第十八批 R 段 143-R2（ENUM:190「所属数据未标记为最终之前，日结不得确认、不得锁定。」）：五类数据未全部标记为最终（见 markDailyCloseFinal）时 409 DAY_CLOSE_NOT_FINAL，原文列出缺的类别。第十八批 S 段第 158 条 158-R1（ENUM:191「差异未关闭期间，高价值差异所涉营业日的日结不得确认锁定」「以该笔差异所涉金额与「高价值判定」条所配的同一金额阈值比较，高于阈值即高价值，其余为低价值；阈值未配置一律按高价值处理。」）：该营业日有未关闭的高价值对账差异时 409 DAY_CLOSE_DIFFERENCE_PENDING——财务对账差异按所属批次营业日、status 不是 closed 即未关闭；第三方对账差异按所属批次对账期间覆盖该营业日、status 不是 resolved 或 matched 即未关闭（ignored 也算未关闭）；差异金额大于全平台高价值阈值（等于不算）即高价值，阈值未配置一律按高价值；merchant、bar 范围只看本商户（财务批次范围为该商户、第三方差异的回流门店为该商户）。第十八批 S 段第 161 条 161-R2（第十八批裁决 35「酒吧逐店逐日查；游乐等按综合体逐日查」）：project 范围＝该综合体除酒吧外的业务——酒吧账单异常、未结清酒吧账单、收银班次三道闸不看（酒吧逐店另出日结）；票务核销异常只看原核销所属订单属该综合体、核销商户不是酒吧的；对账差异只看范围为该综合体或其非酒吧商户的财务对账批次，与回流门店属该综合体、不是酒吧的第三方差异。范围：商户账号只能办本商户的 merchant、bar 范围日结，否则 403 CROSS_MERCHANT_FORBIDDEN；其余账号按 finance.daily_close.lock 可触及的项目覆盖日结所属综合体（merchant、bar 范围取该商户所属项目），否则 403 CROSS_PROJECT_FORBIDDEN。第十八批 T 段第 157 条 157-R3（BSM:1109「经理确认最终无法收款后转为坏账损耗处理中并解除该订单对交班、日结的阻断」）：所属订单（或合单后改指本账单）挂起已转坏账损耗处理中、已核销结案的酒吧账单不算未结清。",
         "x-permission": "finance.daily_close.lock",
         "x-data-scope": "project-entity",
         "x-terminal-allowed": [
@@ -17305,7 +17305,7 @@
         ],
         "operationId": "lockDailyClose",
         "summary": "锁定日结",
-        "description": "第十八批 R 段第 143 条 143-R1（BSM:2023「已拍板：日结锁定后不能直接补录影响金额，必须上级审批通过后补录。」）：锁定日结，记锁定时间 locked_at，并给该营业日到期的台账打锁（锁定后直接改账 409 DAY_CLOSE_LOCKED，须走锁定后补录审批；161-R2：综合体的 project 范围日结锁定或归档后，该综合体非酒吧商户与该综合体台账按营业日判封账的写入同样 409 DAY_CLOSE_LOCKED）。143-R7：merchant、bar 范围只锁该日结商户的台账；161-R2：project 范围只锁属该综合体（台账项目，空则取商户所属项目）且商户不是酒吧的台账。只收 confirmed（已确认），否则 409 DAILY_CLOSE_NOT_CONFIRMED；日结不存在 404 DAILY_CLOSE_NOT_FOUND。日结闸（确认与锁定两处都拦）：TK-14（ENUM「异常状态的统一出口」：异常单据未处置完毕，所属日结不得确认锁定）：原核销落在该营业日、仍待主管处置的票务核销异常存在时 409 DAY_CLOSE_ANOMALY_PENDING（merchant、bar 范围只看本商户）。第十六批第 16 条同一规则接酒吧账单：开单或收款落在该营业日、仍处于异常（abnormal）待主管处置的酒吧账单存在时同样 409 DAY_CLOSE_ANOMALY_PENDING（merchant、bar 范围只看本商户）。第十八批 Q 段第 144 条（BSM:1106「未结清订单阻止交班和日结」）：开单落在该营业日、仍未结清（结清、被合单、主管作废并冲正之外）的酒吧账单存在时 409 DAY_CLOSE_UNSETTLED_BILL，原文列出账单号（merchant、bar 范围只看本商户）。第十八批 R 段第 142 条 142-R2（ENUM:190「由当班收银员完成现金清点与盘收银，接班人与其对接完成交接，并由财务跟班跟进交接完成」）：开班落在该营业日（酒吧逐家按各自营业日窗）、财务尚未见证归档（未班结、未平账、未签字或未见证）的收银班次存在时 409 DAY_CLOSE_SHIFT_PENDING（merchant、bar 范围只看本酒吧）。第十八批 R 段 143-R2（ENUM:190「所属数据未标记为最终之前，日结不得确认、不得锁定。」）：五类数据未全部标记为最终（见 markDailyCloseFinal）时 409 DAY_CLOSE_NOT_FINAL，原文列出缺的类别。第十八批 S 段第 158 条 158-R1（ENUM:191「差异未关闭期间，高价值差异所涉营业日的日结不得确认锁定」「以该笔差异所涉金额与「高价值判定」条所配的同一金额阈值比较，高于阈值即高价值，其余为低价值；阈值未配置一律按高价值处理。」）：该营业日有未关闭的高价值对账差异时 409 DAY_CLOSE_DIFFERENCE_PENDING——财务对账差异按所属批次营业日、status 不是 closed 即未关闭；第三方对账差异按所属批次对账期间覆盖该营业日、status 不是 resolved 或 matched 即未关闭（ignored 也算未关闭）；差异金额大于全平台高价值阈值（等于不算）即高价值，阈值未配置一律按高价值；merchant、bar 范围只看本商户（财务批次范围为该商户、第三方差异的回流门店为该商户）。第十八批 S 段第 161 条 161-R2（第十八批裁决 35「酒吧逐店逐日查；游乐等按综合体逐日查」）：project 范围＝该综合体除酒吧外的业务——酒吧账单异常、未结清酒吧账单、收银班次三道闸不看（酒吧逐店另出日结）；票务核销异常只看原核销所属订单属该综合体、核销商户不是酒吧的；对账差异只看范围为该综合体或其非酒吧商户的财务对账批次，与回流门店属该综合体、不是酒吧的第三方差异。范围：商户账号只能办本商户的 merchant、bar 范围日结，否则 403 CROSS_MERCHANT_FORBIDDEN；其余账号按 finance.daily_close.lock 可触及的项目覆盖日结所属综合体（merchant、bar 范围取该商户所属项目），否则 403 CROSS_PROJECT_FORBIDDEN。",
+        "description": "第十八批 R 段第 143 条 143-R1（BSM:2023「已拍板：日结锁定后不能直接补录影响金额，必须上级审批通过后补录。」）：锁定日结，记锁定时间 locked_at，并给该营业日到期的台账打锁（锁定后直接改账 409 DAY_CLOSE_LOCKED，须走锁定后补录审批；161-R2：综合体的 project 范围日结锁定或归档后，该综合体非酒吧商户与该综合体台账按营业日判封账的写入同样 409 DAY_CLOSE_LOCKED）。143-R7：merchant、bar 范围只锁该日结商户的台账；161-R2：project 范围只锁属该综合体（台账项目，空则取商户所属项目）且商户不是酒吧的台账。只收 confirmed（已确认），否则 409 DAILY_CLOSE_NOT_CONFIRMED；日结不存在 404 DAILY_CLOSE_NOT_FOUND。日结闸（确认与锁定两处都拦）：TK-14（ENUM「异常状态的统一出口」：异常单据未处置完毕，所属日结不得确认锁定）：原核销落在该营业日、仍待主管处置的票务核销异常存在时 409 DAY_CLOSE_ANOMALY_PENDING（merchant、bar 范围只看本商户）。第十六批第 16 条同一规则接酒吧账单：开单或收款落在该营业日、仍处于异常（abnormal）待主管处置的酒吧账单存在时同样 409 DAY_CLOSE_ANOMALY_PENDING（merchant、bar 范围只看本商户）。第十八批 Q 段第 144 条（BSM:1106「未结清订单阻止交班和日结」）：开单落在该营业日、仍未结清（结清、被合单、主管作废并冲正之外）的酒吧账单存在时 409 DAY_CLOSE_UNSETTLED_BILL，原文列出账单号（merchant、bar 范围只看本商户）。第十八批 R 段第 142 条 142-R2（ENUM:190「由当班收银员完成现金清点与盘收银，接班人与其对接完成交接，并由财务跟班跟进交接完成」）：开班落在该营业日（酒吧逐家按各自营业日窗）、财务尚未见证归档（未班结、未平账、未签字或未见证）的收银班次存在时 409 DAY_CLOSE_SHIFT_PENDING（merchant、bar 范围只看本酒吧）。第十八批 R 段 143-R2（ENUM:190「所属数据未标记为最终之前，日结不得确认、不得锁定。」）：五类数据未全部标记为最终（见 markDailyCloseFinal）时 409 DAY_CLOSE_NOT_FINAL，原文列出缺的类别。第十八批 S 段第 158 条 158-R1（ENUM:191「差异未关闭期间，高价值差异所涉营业日的日结不得确认锁定」「以该笔差异所涉金额与「高价值判定」条所配的同一金额阈值比较，高于阈值即高价值，其余为低价值；阈值未配置一律按高价值处理。」）：该营业日有未关闭的高价值对账差异时 409 DAY_CLOSE_DIFFERENCE_PENDING——财务对账差异按所属批次营业日、status 不是 closed 即未关闭；第三方对账差异按所属批次对账期间覆盖该营业日、status 不是 resolved 或 matched 即未关闭（ignored 也算未关闭）；差异金额大于全平台高价值阈值（等于不算）即高价值，阈值未配置一律按高价值；merchant、bar 范围只看本商户（财务批次范围为该商户、第三方差异的回流门店为该商户）。第十八批 S 段第 161 条 161-R2（第十八批裁决 35「酒吧逐店逐日查；游乐等按综合体逐日查」）：project 范围＝该综合体除酒吧外的业务——酒吧账单异常、未结清酒吧账单、收银班次三道闸不看（酒吧逐店另出日结）；票务核销异常只看原核销所属订单属该综合体、核销商户不是酒吧的；对账差异只看范围为该综合体或其非酒吧商户的财务对账批次，与回流门店属该综合体、不是酒吧的第三方差异。范围：商户账号只能办本商户的 merchant、bar 范围日结，否则 403 CROSS_MERCHANT_FORBIDDEN；其余账号按 finance.daily_close.lock 可触及的项目覆盖日结所属综合体（merchant、bar 范围取该商户所属项目），否则 403 CROSS_PROJECT_FORBIDDEN。第十八批 T 段第 157 条 157-R3（BSM:1109）：所属订单（或合单后改指本账单）挂起已转坏账损耗处理中、已核销结案的酒吧账单不算未结清。",
         "x-permission": "finance.daily_close.lock",
         "x-data-scope": "project-entity",
         "x-terminal-allowed": [
@@ -20595,6 +20595,560 @@
         "x-auth-context": "staff-token"
       }
     },
+    "/api/v1/bar/orders/{order_id}/suspend": {
+      "post": {
+        "tags": [
+          "bar"
+        ],
+        "operationId": "suspendBarOrder",
+        "summary": "挂起包厢未付款订单",
+        "description": "第十八批 T 段第 157 条 157-R2（第十八批裁决 37 选项原文「散台、卡座下单必须当场付款、不能挂起」，追问题面「只有包厢（系统里叫「贵宾包座」）可以挂起」；BSM:1106「收银员可以直接挂起，不设单笔金额和当班累计金额上限；必须填写原因并记录金额、桌台、责任人、操作时间和完整日志。未结清订单阻止交班和日结。」；PGM:699「全部动作强制留痕」）：收银员挂起包厢未付款订单，建订单级挂起记录（status=hanging_unpaid，已挂起待付款；账单六态不动，DEC-R8-98-07），不设金额上限。返回挂起记录：amount_cent＝挂起时本单未结清账单（并单、作废的除外）应付＋小费－实收之和；bill_id＝其中最早的一张；responsible_user_id＝本单开台会话此刻的主责服务员（没有为空＝门店）；shift_id＝挂起人此刻在本酒吧的开班班次（含加入的同一钱箱，没有为空）；suspended_by、suspended_at＝挂起人与挂起时间。成功审计 bar.order_suspended 带账单号、金额、桌台、责任人、原因与班次。之后本单账单全部结清即置已结清（见 POST /api/v1/bar/bills/{bill_id}/settle）；本班次挂起未结清的订单挡交班（见 POST /api/v1/bar/shifts/{shift_id}/close），日结由未结清账单闸覆盖；挂起中的账单不能经异常处置作废并冲正（见 POST /api/v1/bar/bills/{bill_id}/anomaly/resolve）。台位不是包厢（散台、卡座、吧台位）409 BAR_ORDER_SUSPEND_VIP_ONLY；本单已有挂起记录 409 BAR_ORDER_ALREADY_SUSPENDED；本单没有未结清账单 409 BAR_ORDER_NO_UNSETTLED_BILL；账单在异常中 409 BAR_BILL_ABNORMAL；reason 为空 400 VALIDATION_FAILED；订单不存在 404 BAR_ORDER_NOT_FOUND；跨商户 403 CROSS_MERCHANT_FORBIDDEN（在幂等之前判，不占幂等键）；同一幂等键重放返回第一次结果。",
+        "x-permission": "bar.bill.hang",
+        "x-data-scope": "project-bar-table",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "bar.order_suspended",
+        "x-audit-event-failure": "bar.order_suspend_failed",
+        "x-auth-context": "staff-token",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/OrderId",
+            "description": "酒吧订单 ID。"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "idempotency_key",
+                  "reason"
+                ],
+                "properties": {
+                  "idempotency_key": {
+                    "type": "string",
+                    "description": "幂等键；同一挂起重试必须复用。",
+                    "maxLength": 128
+                  },
+                  "reason": {
+                    "type": "string",
+                    "description": "挂起原因；必填，随挂起记录与成功审计留痕。",
+                    "maxLength": 1000
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/bar/orders/{order_id}/suspension/bad-debt": {
+      "post": {
+        "tags": [
+          "bar"
+        ],
+        "operationId": "confirmBarOrderSuspensionBadDebt",
+        "summary": "经理确认挂起订单无法收款（转坏账）",
+        "description": "第十八批 T 段第 157 条 157-R3（BSM:1109「经理确认最终无法收款后转为坏账损耗处理中并解除该订单对交班、日结的阻断」；BSM:1110「服务员责任以商品出品时该桌绑定的主责服务员为准……出品时没有主责服务员的记为门店损耗」；BSM:1111「转坏账核销的订单不产生销售提成」「不确认销售收入，也不计入商户营业额或营业额抽成基数」；BSM:1112「审查通过前只登记」；第十八批裁决 38「收入与出库成本都不进分红净利润」）：经理确认挂起订单最终无法收款。只限已挂起待付款（hanging_unpaid）的订单，转坏账损耗处理中（bad_debt_processing），同一事务内固化 unpaid_price_cent（本单未结清账单应付＋小费－实收，含合单后改指的主单）、inventory_cost_cent（库存成本＝compensation_lines 各行 cost_cent 之和，只含未作废的已出品明细，已回库、已作废明细的出库成本不算；18T 复核修复①）与 compensation_lines（逐个未作废已出品明细：order_item_id；responsible_user_id＝该明细出品时刻本单开台会话的主责服务员，没有为空＝门店损耗；cost_cent＝该明细出品流水成本），记 bad_debt_reason、bad_debt_confirmed_by、bad_debt_confirmed_at；本单账单已有的销售提成置作废、工资单为其挂的待定结清；赔偿只登记，不扣工资、绩效或提成。之后该订单账单不再挡交班、日结与关台，不再计提成（POST /api/v1/bar/bills/{bill_id}/commissions/calculate 409 BAR_BILL_BAD_DEBT），未结清时不进营业额抽成与分红的酒吧收入。返回挂起记录全文。成功审计 bar.order_suspension_bad_debt 带原因、未收售价、库存成本与赔偿汇总。本单没有挂起或挂起不在已挂起待付款 409 BAR_ORDER_NOT_HANGING_UNPAID；reason 为空 400 VALIDATION_FAILED；订单不存在 404 BAR_ORDER_NOT_FOUND；跨商户 403 CROSS_MERCHANT_FORBIDDEN（在幂等之前判，不占幂等键）；同一幂等键重放返回第一次结果。157-R4（BSM:1112「达到既有高价值标准的商品仍执行原证据和审批要求。」；ENUM:219、PGM:920 高价值报损主管复核；BSM:1109「在转入该状态前继续阻断」）：本单未作废已出品明细任一项达高价值（全平台统一判定，同已出品退酒：最近一次实际到货价不低于阈值、手工标记、阈值未配置或到货价未知）时，须带 photo_attachment_ids 与 video_attachment_ids（已上传的照片与视频附件），缺任一 400 HIGH_VALUE_EVIDENCE_REQUIRED，附件不存在或类型不符 400 EVIDENCE_ATTACHMENT_NOT_FOUND、EVIDENCE_ATTACHMENT_KIND_MISMATCH；不直接转坏账，改建库存高价值复核单（subject_type=bar_order_bad_debt，subject_id 为本订单），挂起保持已挂起待付款（继续挡交班、日结与关台），返回的挂起记录带 bad_debt_review_id 与 bad_debt_reason，成功审计同名事件带 bad_debt_review_id 与 high_value_item_count；复核人经 POST /api/v1/inventory/high-value-reviews/{id}/review 批准才转坏账（发起经理为确认人），驳回即清空 bad_debt_review_id 与 bad_debt_reason、可重新发起。已有待复核的复核单时再发起 409 BAR_ORDER_BAD_DEBT_REVIEW_PENDING。不含高价值已出品商品的照旧直接转坏账，两字段不读。157-R5（第十八批裁决 37 超时升级；BSM:1109「经理未及时确认时，任务升级给店长或夜班值班经理」）：除持 bar.bill.hang_cancel（本商户）外，本单账单（或挂起改指的主单）的关台未付清待办已升级的，持 bar.bill.hang_escalation 的本商户员工（店长）或本项目此刻在班的夜班值班经理（按已发布排班与顶班关系）也可办理；都不满足 403 PERMISSION_DENIED。",
+        "x-permission": "bar.bill.hang_cancel",
+        "x-data-scope": "project-bar-table",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "bar.order_suspension_bad_debt",
+        "x-audit-event-failure": "bar.order_suspension_bad_debt_failed",
+        "x-auth-context": "staff-token",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/OrderId",
+            "description": "酒吧订单 ID。"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "idempotency_key",
+                  "reason"
+                ],
+                "properties": {
+                  "idempotency_key": {
+                    "type": "string",
+                    "description": "幂等键；同一操作重试必须复用。",
+                    "maxLength": 128
+                  },
+                  "reason": {
+                    "type": "string",
+                    "description": "无法收款原因；必填，随坏账记录与成功审计留痕。",
+                    "maxLength": 1000
+                  },
+                  "photo_attachment_ids": {
+                    "type": "array",
+                    "description": "照片证据附件 ID（先经 POST /api/v1/evidence/attachments/upload 上传）；本单含高价值已出品商品时必填，至少一个。",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "video_attachment_ids": {
+                    "type": "array",
+                    "description": "视频证据附件 ID（先经 POST /api/v1/evidence/attachments/upload 上传）；本单含高价值已出品商品时必填，至少一个。",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/bar/orders/{order_id}/suspension/write-off": {
+      "post": {
+        "tags": [
+          "bar"
+        ],
+        "operationId": "writeOffBarOrderSuspension",
+        "summary": "财务确认坏账订单核销结案",
+        "description": "第十八批 T 段第 157 条 157-R3（BSM:1111「财务确认未收售价、库存成本和赔偿记录均完成后，订单转为已核销结案」「已核销结案后又收回的款项按收回时点单独入账，不追溯重开提成」；PGM:933「完成财务核销与赔偿记录后转已核销结案」）：财务确认坏账订单核销结案。只限坏账损耗处理中（bad_debt_processing）的订单，转已核销结案（written_off_closed），记 written_off_by、written_off_at；返回挂起记录全文。成功审计 bar.order_suspension_written_off 带未收售价、库存成本与赔偿汇总。结案后又收回的款项照常结账（POST /api/v1/bar/bills/{bill_id}/settle），结清后按结清时点计入营业额抽成与分红的酒吧收入，提成不重开。订单不在坏账损耗处理中 409 BAR_ORDER_NOT_BAD_DEBT；订单不存在 404 BAR_ORDER_NOT_FOUND；订单台位所在综合体不在本人核销权限可触及的范围内 403 CROSS_PROJECT_FORBIDDEN（在幂等之前判，不占幂等键）；同一幂等键重放返回第一次结果。",
+        "x-permission": "finance.ar_ap.manage",
+        "x-data-scope": "project-bar-table",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "bar.order_suspension_written_off",
+        "x-audit-event-failure": "bar.order_suspension_write_off_failed",
+        "x-auth-context": "staff-token",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/OrderId",
+            "description": "酒吧订单 ID。"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "idempotency_key"
+                ],
+                "properties": {
+                  "idempotency_key": {
+                    "type": "string",
+                    "description": "幂等键；同一操作重试必须复用。",
+                    "maxLength": 128
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/bar/orders/{order_id}/suspension/cancel": {
+      "post": {
+        "tags": [
+          "bar"
+        ],
+        "operationId": "requestBarOrderSuspensionCancel",
+        "summary": "收银员发起取消挂起订单",
+        "description": "第十八批 T 段第 157 条 157-R6（BSM:1107「已出品挂起订单取消须经理审批。能回库的商品继续执行既有退菜、退酒和高价值退品证据审批链，并同步记录退菜、库存回补和审计流水；经理审批不能替代既有高价值审批链。」；BSM:1109「不可回库的已出品商品不得走普通取消」；PGM:699「经理审批取消」）：收银员对已挂起待付款（hanging_unpaid）的订单发起取消，转取消审批中（cancel_pending_approval）。order_item_ids 为本单已出品、未作废、没有待审退菜退酒的明细（所列即认定能回库的商品；不可回库的不能列，走 POST /api/v1/bar/orders/{order_id}/suspension/bad-debt 确认坏账）；reason 必填；reason_code 选填，须为退菜退酒原因码字典的生效码；evidence_attachment_ids 须为已上传的证据附件；所列含高价值已出品商品（全平台统一判定，同已出品退酒）时 reason_code 与 evidence_attachment_ids 都不可空（400 BAR_VOID_EVIDENCE_REQUIRED），经理批准后该项仍走既有高价值退品先审后行（审批时须同时有照片和视频）。不因已有部分收款拒绝（取消生效时已收部分原路待退）。返回挂起记录全文（带 cancel_item_ids、cancel_reason、cancel_reason_code、cancel_evidence_attachment_ids、cancel_requested_by、cancel_requested_at）。成功审计 bar.order_suspension_cancel_requested 带所列明细、原因与原因码。挂起不在已挂起待付款 409 BAR_ORDER_NOT_HANGING_UNPAID；明细不属本单 409 BAR_ORDER_ITEM_SCOPE_MISMATCH、已作废 409 BAR_ORDER_ITEM_ALREADY_VOIDED、未出品 409 BAR_SUSPENSION_CANCEL_ITEM_NOT_DELIVERED、已有待审退菜退酒 409 BAR_ORDER_ITEM_VOID_PENDING_EXISTS；原因码不在字典 400 BAR_VOID_REASON_CODE_UNKNOWN；附件不存在 400 EVIDENCE_ATTACHMENT_NOT_FOUND；order_item_ids 或 reason 为空 400 VALIDATION_FAILED；订单或明细不存在 404 BAR_ORDER_NOT_FOUND、BAR_ORDER_ITEM_NOT_FOUND；跨商户 403 CROSS_MERCHANT_FORBIDDEN（在幂等之前判，不占幂等键）；同一幂等键重放返回第一次结果。",
+        "x-permission": "bar.bill.hang",
+        "x-data-scope": "project-bar-table",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "bar.order_suspension_cancel_requested",
+        "x-audit-event-failure": "bar.order_suspension_cancel_request_failed",
+        "x-auth-context": "staff-token",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/OrderId",
+            "description": "酒吧订单 ID。"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "idempotency_key",
+                  "order_item_ids",
+                  "reason"
+                ],
+                "properties": {
+                  "idempotency_key": {
+                    "type": "string",
+                    "description": "幂等键；同一操作重试必须复用。",
+                    "maxLength": 128
+                  },
+                  "order_item_ids": {
+                    "type": "array",
+                    "minItems": 1,
+                    "description": "要取消的本单已出品、可回库的明细 ID（不可回库的不能列，走确认坏账）；至少一项。",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "reason": {
+                    "type": "string",
+                    "description": "取消原因；必填，随取消申请、退菜退酒单与成功审计留痕。",
+                    "maxLength": 1000
+                  },
+                  "reason_code": {
+                    "type": "string",
+                    "description": "退菜退酒原因码（字典生效码）；选填，所列含高价值已出品商品时必填。",
+                    "maxLength": 64
+                  },
+                  "evidence_attachment_ids": {
+                    "type": "array",
+                    "description": "证据附件 ID（先经 POST /api/v1/evidence/attachments/upload 上传）；所列含高价值已出品商品时必填，经理批准后的高价值退品审批须同时有照片和视频。",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/bar/orders/{order_id}/suspension/cancel-decision": {
+      "post": {
+        "tags": [
+          "bar"
+        ],
+        "operationId": "decideBarOrderSuspensionCancel",
+        "summary": "经理审批取消挂起订单",
+        "description": "第十八批 T 段第 157 条 157-R6（PGM:699「经理审批取消」；BSM:1107「经理审批不能替代既有高价值审批链」；BSM:1108「取消审批生效与付款成功只能有一项先完成，先完成者生效；取消生效时作废未完成付款；取消后迟到到账进入待退款，不得恢复订单或继续出品。」）：经理批准（decision=approve）或驳回（decision=reject）挂起订单的取消，reason 为审批意见（选填），记 cancel_decided_by、cancel_decided_at、cancel_decision_reason。驳回即回到已挂起待付款。批准即对所列每项以取消发起人为申请人、带发起时的原因、原因码与证据走既有退菜退酒（回库、冲减本单账单）：低价值的即时回库并冲减账单，该退菜退酒单由本次审批经理记为审批人置已批准；高价值的进既有先审后行、等 POST /api/v1/bar/order-item-voids/{void_id}/decision 审批（经理批准不替代）。随后重判：所列仍有待审的高价值退品保持取消审批中；本单已无未作废明细即转已取消（cancelled）——本单未结清账单在同一事务内作废并冲正（已收原路待退、收款流水冲正、提成作废、低消留款冲正、积分成长值冲回，同异常处置作废并冲正），这些账单待支付（created）的支付意向置 cancelled，审计 bar.order_suspension_cancelled；否则回到已挂起待付款（审计 bar.order_suspension_cancel_decided）。之后该订单加菜与出品 409 BAR_ORDER_SUSPENSION_CANCELLED，迟到到账见 POST /api/v1/bar/bills/{bill_id}/settle。返回挂起记录全文。成功审计 bar.order_suspension_cancel_decided 带审批结论与意见。挂起不在取消审批中或已由经理审批过（含付款已先结清、挂起已置已结清）409 BAR_SUSPENSION_NOT_CANCEL_PENDING；审批人是取消发起人 409 BAR_SUSPENSION_CANCEL_SELF_APPROVAL；decision 不是 approve 或 reject 400 VALIDATION_FAILED；订单不存在 404 BAR_ORDER_NOT_FOUND；跨商户 403 CROSS_MERCHANT_FORBIDDEN（在幂等之前判，不占幂等键）；同一幂等键重放返回第一次结果。",
+        "x-permission": "bar.bill.hang_cancel",
+        "x-data-scope": "project-bar-table",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "bar.order_suspension_cancel_decided",
+        "x-audit-event-failure": "bar.order_suspension_cancel_decide_failed",
+        "x-auth-context": "staff-token",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/OrderId",
+            "description": "酒吧订单 ID。"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "idempotency_key",
+                  "decision"
+                ],
+                "properties": {
+                  "idempotency_key": {
+                    "type": "string",
+                    "description": "幂等键；同一操作重试必须复用。",
+                    "maxLength": 128
+                  },
+                  "decision": {
+                    "type": "string",
+                    "enum": [
+                      "approve",
+                      "reject"
+                    ],
+                    "description": "审批结论：approve 批准、reject 驳回。"
+                  },
+                  "reason": {
+                    "type": "string",
+                    "description": "审批意见；选填，随挂起记录与成功审计留痕。",
+                    "maxLength": 1000
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/bar/suspended-orders": {
+      "get": {
+        "tags": [
+          "bar"
+        ],
+        "operationId": "listBarSuspendedOrders",
+        "summary": "挂起订单风险看板",
+        "description": "第十八批 T 段第 157 条 157-R7（BSM:1113「不设额度时，风险看板和审计导出必须持续展示挂起金额、账龄、责任人和未结清数量。」；BSM:1840「看板按权限看，但把数据导出带走须单独授权并留痕（见平台治理地图）。」）：按范围列正式挂起订单，不设任何额度。范围：商户账号只看本酒吧；平台管理员看全部；其余按 bar.order.view 可触及的项目。可按 status（挂起七态英码）、bar_id 筛选，page、size 分页（size 上限 100），按挂起时间倒序。返回 summary（unsettled_count 未结清数量、unsettled_amount_cent 未结清订单未收金额合计、oldest_unsettled_age_minutes 未结清订单最长账龄〔分钟〕；未结清＝hanging_unpaid、cancel_pending_approval、bad_debt_processing，按范围与 bar_id 计，不受 status 筛选与分页影响）、orders（每行 order_id、bill_no、bar_id、bar_name、table_id、table_name、status、amount_cent 挂起金额、unpaid_cent 本单未结清账单应付＋小费－实收、suspended_at 挂起时间、age_minutes 账龄〔分钟；未结清的到此刻，其余到进入该状态的时点〕、responsible_users 责任人〔18T 复核修复④（BSM:1110）：本单未作废已出品明细逐项取其出品时刻本单开台会话的主责服务员，与 compensation_lines 同一口径，多人全列，每项 user_id、username；user_id 为空＝该明细出品时没有主责服务员、记门店损耗；尚无已出品明细为空数组〕、suspended_by 挂起人）、page、size、total。成功审计 bar.order_suspension.viewed，失败 bar.order_suspension.view_failed。无 bar.order.view 403。",
+        "x-permission": "bar.order.view",
+        "x-data-scope": "project-bar-table",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "bar.order_suspension.viewed",
+        "x-audit-event-failure": "bar.order_suspension.view_failed",
+        "x-auth-context": "staff-token",
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "description": "按挂起状态筛选（只筛列表，不影响 summary）。",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "hanging_unpaid",
+                "settled",
+                "cancel_pending_approval",
+                "cancelled",
+                "pending_refund",
+                "bad_debt_processing",
+                "written_off_closed"
+              ]
+            }
+          },
+          {
+            "name": "bar_id",
+            "in": "query",
+            "required": false,
+            "description": "按酒吧筛选（商户账号只在本酒吧内筛）。",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "description": "页码，从 1 起。",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1
+            }
+          },
+          {
+            "name": "size",
+            "in": "query",
+            "required": false,
+            "description": "每页条数（上限 100）。",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/bar/suspended-orders/export": {
+      "get": {
+        "tags": [
+          "bar"
+        ],
+        "operationId": "exportBarSuspendedOrders",
+        "summary": "导出挂起订单风险看板（敏感）",
+        "description": "第十八批 T 段第 157 条 157-R7（BSM:1113「不设额度时，风险看板和审计导出必须持续展示挂起金额、账龄、责任人和未结清数量。」；BSM:1840「看板按权限看，但把数据导出带走须单独授权并留痕（见平台治理地图）。」）：导出须单独授权，复用审计导出码 audit.operation_log.export（标 requires_approval，单次授权导一次扣一次）。范围与 status、bar_id 筛选同 GET /api/v1/bar/suspended-orders，不分页、导出范围内全部行；标题带未结清数量与未收金额。列：账单号、酒吧、桌台、状态（中文）、挂起金额（元）、未收金额（元）、挂起时间（北京时间）、账龄、责任人（同看板 responsible_users：出品时主责服务员逐人列出，取不到的为门店损耗，尚无已出品明细的留空）、挂起人。第 23 条 23-R3（PGM:687）：只交出服务端生成的 PDF，打开密码按导出人账号、导出时刻、导出所用设备编号与接入网络统一算法生成，导出人在 GET /api/v1/security/my-exports 查看；不可复制、不可编辑，每页平铺暗纹；每次导出落导出记录 export_files（export_type=bar_suspended_orders，filters 记 status、bar_id 与取数范围 merchant_id 或 project_ids）。成功审计 bar.order_suspension.exported（business_id 导出文件编号），权限或取数失败 bar.order_suspension.export_failed。没有导出权限 403；没有已登记的设备编号 409 DEVICE_NOT_REGISTERED（请重新登录）。可编辑版按第 23 条 23-R4 另行申请，重取按 bar.order.view 与申请人当前范围。",
+        "x-permission": "audit.operation_log.export",
+        "x-data-scope": "project-bar-table",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "bar.order_suspension.exported",
+        "x-audit-event-failure": "bar.order_suspension.export_failed",
+        "x-auth-context": "staff-token",
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "description": "按挂起状态筛选（标题的未结清数量与金额不受影响）。",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "hanging_unpaid",
+                "settled",
+                "cancel_pending_approval",
+                "cancelled",
+                "pending_refund",
+                "bad_debt_processing",
+                "written_off_closed"
+              ]
+            }
+          },
+          {
+            "name": "bar_id",
+            "in": "query",
+            "required": false,
+            "description": "按酒吧筛选（商户账号只在本酒吧内筛）。",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "带打开密码（AES-256）、不可复制不可编辑、每页平铺暗纹的 PDF 文件（Content-Disposition 附件名带 UTF-8 中文）；打开密码到「我的导出」查看。",
+            "content": {
+              "application/pdf": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
     "/api/v1/bar/orders/{order_id}/void-item": {
       "post": {
         "tags": [
@@ -20602,6 +21156,7 @@
         ],
         "operationId": "voidBarOrderItem",
         "summary": "退菜退酒",
+        "description": "第十八批 T 段第 157 条 157-R6（BSM:1107「已出品挂起订单取消须经理审批」；BSM:1109「不可回库的已出品商品不得走普通取消」）：订单挂起为已挂起待付款或取消审批中时，已出品明细不能经本接口退（409 BAR_ORDER_SUSPENDED_USE_CANCEL），须走 POST /api/v1/bar/orders/{order_id}/suspension/cancel 经理审批取消或确认坏账；未出品明细照旧。",
         "x-permission": "bar.order_item.void",
         "x-data-scope": "project-bar-table",
         "x-terminal-allowed": [
@@ -20759,7 +21314,7 @@
         ],
         "operationId": "resolveBarBillAnomaly",
         "summary": "主管处置异常账单",
-        "description": "第十六批第 16 条（ENUM「异常状态的统一出口」：主管在系统内选择「更正后恢复」或「作废并冲正」两种方式之一处置，填写原因并留痕；恢复后回到进入异常之前的那个状态）：restored——payment_status 回到进入异常前的状态，已结账单再按已成功退款额重算部分退款／已退款；voided_reversed——账单 payment_status 与 settlement_status 置 void（已作废），已登记的收款流水按反结同一做法冲正（reversed，不再计入营收与对账），作废后收款返回 409 BAR_BILL_VOIDED，关台不再把它算作未结清。第十七批（操作员裁决补充第 1 条「全部自动冲回」）voided_reversed 同一事务内：实收减已成功登记退款的部分按收款倒序逐笔原路待退——储值部分当场回原卡，其余渠道合并挂一笔退款应付（direction=payable、source_type=refund、source_id=账单 ID）由财务实付结清，不另记账单退款调整；本单商户消费积分与成长值按有效消费为 0 全额冲回（待确认积分取消，已可用的扣回、不足挂待追回，成长值冲回后按当前滚动成长值重新定级）；本单销售提成置 void，工资单不再挂「酒吧账单尚未确认结算」（此前工资单记下的该项待定当即结清），已计入定格工资的在原期补发中以负额冲回；派驻／营销人员的该单提成已随提成月结拨付所属主体的，向所属主体追加一笔应收（direction=receivable、source_type=dispatch_commission_transfer、source_id=提成 ID）冲回，原月结不改；作废后计提成返回 409 BAR_BILL_VOIDED。本单低消留款（min_spend_retained）与留款抵用（min_spend_retained_applied）置 reversed：留款含在实收里随作废退回、不再作台组抵用额，本单占用的台组留款回到台组余额。同一幂等键重放返回第一次结果、不重复退款。作废前已办过退款的只冲正未退部分的收款：收款流水整体置 reversed 后，被已退额（按退款原路同序、后收的先退）占用的部分按原收款时点、渠道另记一笔不冲正的留存流水，已退款仍在退款营业日冲减，作废账单在日结、分红与经营分析各期合计为 0；挂账账单（on_account）冲销挂账挂出的应收（追加一行 origin_item_id 回指原行、未收金额取反、status=reversed），原行之后登记收款 409 AR_AP_ITEM_REVERSED，原行已由财务收回的部分并入退款应付原路待退；本单收进的小费、服务费分项按全额退款处理，酒吧报酬月结出负额分配冲回；未退部分的退款应付实付结清后停车消费抵免同样重核。voided_reversed 与反结同一做法：结账营业日已锁定日结的 409 DAY_CLOSE_LOCKED（走补录调整流程），账单仍在异常；账单不在异常 409 BAR_BILL_NOT_ABNORMAL；账单不存在 404 BAR_BILL_NOT_FOUND；跨商户 403 CROSS_MERCHANT_FORBIDDEN；resolution、reason 必填，随成功审计留痕。",
+        "description": "第十六批第 16 条（ENUM「异常状态的统一出口」：主管在系统内选择「更正后恢复」或「作废并冲正」两种方式之一处置，填写原因并留痕；恢复后回到进入异常之前的那个状态）：restored——payment_status 回到进入异常前的状态，已结账单再按已成功退款额重算部分退款／已退款；voided_reversed——账单 payment_status 与 settlement_status 置 void（已作废），已登记的收款流水按反结同一做法冲正（reversed，不再计入营收与对账），作废后收款返回 409 BAR_BILL_VOIDED，关台不再把它算作未结清。第十七批（操作员裁决补充第 1 条「全部自动冲回」）voided_reversed 同一事务内：实收减已成功登记退款的部分按收款倒序逐笔原路待退——储值部分当场回原卡，其余渠道合并挂一笔退款应付（direction=payable、source_type=refund、source_id=账单 ID）由财务实付结清，不另记账单退款调整；本单商户消费积分与成长值按有效消费为 0 全额冲回（待确认积分取消，已可用的扣回、不足挂待追回，成长值冲回后按当前滚动成长值重新定级）；本单销售提成置 void，工资单不再挂「酒吧账单尚未确认结算」（此前工资单记下的该项待定当即结清），已计入定格工资的在原期补发中以负额冲回；派驻／营销人员的该单提成已随提成月结拨付所属主体的，向所属主体追加一笔应收（direction=receivable、source_type=dispatch_commission_transfer、source_id=提成 ID）冲回，原月结不改；作废后计提成返回 409 BAR_BILL_VOIDED。本单低消留款（min_spend_retained）与留款抵用（min_spend_retained_applied）置 reversed：留款含在实收里随作废退回、不再作台组抵用额，本单占用的台组留款回到台组余额。同一幂等键重放返回第一次结果、不重复退款。作废前已办过退款的只冲正未退部分的收款：收款流水整体置 reversed 后，被已退额（按退款原路同序、后收的先退）占用的部分按原收款时点、渠道另记一笔不冲正的留存流水，已退款仍在退款营业日冲减，作废账单在日结、分红与经营分析各期合计为 0；挂账账单（on_account）冲销挂账挂出的应收（追加一行 origin_item_id 回指原行、未收金额取反、status=reversed），原行之后登记收款 409 AR_AP_ITEM_REVERSED，原行已由财务收回的部分并入退款应付原路待退；本单收进的小费、服务费分项按全额退款处理，酒吧报酬月结出负额分配冲回；未退部分的退款应付实付结清后停车消费抵免同样重核。voided_reversed 与反结同一做法：结账营业日已锁定日结的 409 DAY_CLOSE_LOCKED（走补录调整流程），账单仍在异常；账单不在异常 409 BAR_BILL_NOT_ABNORMAL；账单不存在 404 BAR_BILL_NOT_FOUND；跨商户 403 CROSS_MERCHANT_FORBIDDEN；resolution、reason 必填，随成功审计留痕。第十八批 T 段第 157 条 157-R2（BSM:1107「已出品挂起订单取消须经理审批」；BSM:1109「不可回库的已出品商品不得走普通取消」）：账单所属订单挂起未结清（已挂起待付款、取消审批中，含合单后改指本账单的挂起）时 voided_reversed 返回 409 BAR_ORDER_SUSPENDED_USE_CANCEL（须走经理审批取消或确认坏账），账单仍在异常；restored 不受影响。",
         "x-permission": "bar.bill.anomaly.resolve",
         "x-data-scope": "project-bar-table",
         "x-terminal-allowed": [
@@ -21672,7 +22227,7 @@
           "bar"
         ],
         "operationId": "closeBarShift",
-        "description": "第十八批 O 段第 126 条 126-R2（BSM:1081「收银员开班记备用金，班结按本班次汇总各支付方式应收（现金/扫码/POS/退款/小费），录入实点现金算长短款差异。」）：现金、POS 应收另含本班次时段内该收银员登记的订台定金（pay-deposit 的登记员工），按定金渠道计入现金或 POS。第十八批 R 段第 142 条 142-R2：填了接班人 handover_to_user_id 须是已有账号，否则 400 VALIDATION_FAILED。 第十八批 R 段第 142 条 142-R4：应收另含加入本钱箱的成员在加入时点之后的收款；接班人不能是本钱箱成员（409 BAR_SHIFT_HANDOVER_TO_SELF）。",
+        "description": "第十八批 O 段第 126 条 126-R2（BSM:1081「收银员开班记备用金，班结按本班次汇总各支付方式应收（现金/扫码/POS/退款/小费），录入实点现金算长短款差异。」）：现金、POS 应收另含本班次时段内该收银员登记的订台定金（pay-deposit 的登记员工），按定金渠道计入现金或 POS。第十八批 R 段第 142 条 142-R2：填了接班人 handover_to_user_id 须是已有账号，否则 400 VALIDATION_FAILED。 第十八批 R 段第 142 条 142-R4：应收另含加入本钱箱的成员在加入时点之后的收款；接班人不能是本钱箱成员（409 BAR_SHIFT_HANDOVER_TO_SELF）。第十八批 T 段第 157 条 157-R2（BSM:1106「未结清订单阻止交班和日结」）：本班次（挂起人挂起时所在的开班班次，含加入本钱箱的成员挂起的）有挂起未结清（已挂起待付款、取消审批中）的订单即 409 BAR_SHIFT_SUSPENDED_ORDER_UNSETTLED，提示列出账单号；未挂起的包厢未付账单不挡交班。",
         "summary": "班结对账",
         "x-permission": "bar.shift.close",
         "x-data-scope": "project-bar-table",
@@ -23815,7 +24370,7 @@
         ],
         "operationId": "splitBarTableSession",
         "summary": "拆分酒水台位会话（拆台）",
-        "description": "第十批 TK-27-R3 拆台（BSM L1079）：mode=last_merge 按最近一次并台记录拆回该次并台前的两侧台组、single 任选一张原台单独拆出（压缩只剩一侧的空层级）、all 一次把全部原台同时拆开；并台期间无法确认归属的订单须由 order_assignments 人工明确归属并留痕，否则 409 BAR_SPLIT_ORDER_ATTRIBUTION_REQUIRED；整体转台前的旧并台组不得再拆出（409 BAR_SPLIT_HISTORICAL_CHAIN）；拆出会话恢复开台、台位保持已开台、各结果台组按各自最低消费进度重判定金，低消不足不阻断；整笔一次性成功或整体失败。 第十八批 S 段第 167 条 167-R2（BSM:1079「分别按本次拆台后形成的每个独立原台或合并台组的可邀请人数，校验其“已接受但尚未入场成员数＋已入场成员数”；任一拆分结果超额即阻断拆台，系统不得自动移出成员或释放名额」；ENUM:114 同句）：重新挂接后逐个结果台组（剩余主台组与各拆出台组）按其可邀请人数校验台组内各订台已接受未入场与已入场成员合计，任一超额 409 BAR_SPLIT_INVITATION_OVER_CAPACITY、整体不拆，须由开卡人先移出未入场的被邀请人；拆台调整记录快照加记 invite_results（各结果台组的 session_id、table_id、invite_capacity、invite_occupied）。",
+        "description": "第十批 TK-27-R3 拆台（BSM L1079）：mode=last_merge 按最近一次并台记录拆回该次并台前的两侧台组、single 任选一张原台单独拆出（压缩只剩一侧的空层级）、all 一次把全部原台同时拆开；并台期间无法确认归属的订单须由 order_assignments 人工明确归属并留痕，否则 409 BAR_SPLIT_ORDER_ATTRIBUTION_REQUIRED；整体转台前的旧并台组不得再拆出（409 BAR_SPLIT_HISTORICAL_CHAIN）；拆出会话恢复开台、台位保持已开台、各结果台组按各自最低消费进度重判定金，低消不足不阻断；整笔一次性成功或整体失败。 第十八批 S 段第 167 条 167-R2（BSM:1079「分别按本次拆台后形成的每个独立原台或合并台组的可邀请人数，校验其“已接受但尚未入场成员数＋已入场成员数”；任一拆分结果超额即阻断拆台，系统不得自动移出成员或释放名额」；ENUM:114 同句）：重新挂接后逐个结果台组（剩余主台组与各拆出台组）按其可邀请人数校验台组内各订台已接受未入场与已入场成员合计，任一超额 409 BAR_SPLIT_INVITATION_OVER_CAPACITY、整体不拆，须由开卡人先移出未入场的被邀请人；拆台调整记录快照加记 invite_results（各结果台组的 session_id、table_id、invite_capacity、invite_occupied）。 第十八批 T 段第 167 条 167-R3a（BSM:1079「并台期间新发出的邀请，以及由这些邀请形成的已接受成员、已入场成员，在首次拆台前由授权人员逐一分配到当前合并台所包含的某一张原台并留痕；已入场成员只调整所属原台，不得被移出，已占名额不得释放」「一次全部拆开必须先完成全部邀请、成员……归属分配及逐台名额校验，再一次性成功或整体失败」；ENUM:114 同句）：台组（含整体转台前旧链）各订台中并台期间新发出、尚未分配的邀请及其已接受、已入场成员（开卡人除外），须在本请求的 invitation_assignments、member_assignments 里逐一分配到当前合并台的某一张原台，缺一即 409 BAR_SPLIT_INVITATION_ASSIGNMENT_REQUIRED（消息列出待分配的订台 ID 与成员 ID）、整体不拆；分配的会话不在当前合并台组内 400 VALIDATION_FAILED；分配过的不再要求，在并台之前签发的邀请及其成员不需分配（按订台所在会话归原台）；分配写在逐台名额校验之前，名额按分配后的原台计，超额时分配随整笔回滚；每条分配记审计 bar.table_session.invitation_assigned（对象 bar_reservation）或 bar.table_session.member_assigned（对象 bar_reservation_invitation_member）；拆台调整记录快照加记 invitation_assignments（reservation_id、session_id）与 member_assignments（member_id、session_id）。",
         "x-auth-context": "staff-token",
         "x-permission": "bar.table_session.split",
         "x-data-scope": "project-bar-table",
@@ -23895,6 +24450,50 @@
                       ],
                       "properties": {
                         "order_id": {
+                          "type": "string",
+                          "maxLength": 64
+                        },
+                        "session_id": {
+                          "type": "string",
+                          "maxLength": 64
+                        }
+                      }
+                    }
+                  },
+                  "invitation_assignments": {
+                    "type": "array",
+                    "description": "第十八批 T 段第 167 条 167-R3a：并台期间新发出、尚未分配的邀请（按订台）分配到当前合并台的某一张原台会话；首次拆台前须逐一分配。",
+                    "items": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "reservation_id",
+                        "session_id"
+                      ],
+                      "properties": {
+                        "reservation_id": {
+                          "type": "string",
+                          "maxLength": 64
+                        },
+                        "session_id": {
+                          "type": "string",
+                          "maxLength": 64
+                        }
+                      }
+                    }
+                  },
+                  "member_assignments": {
+                    "type": "array",
+                    "description": "第十八批 T 段第 167 条 167-R3a：由并台期间新发出的邀请形成、尚未分配的已接受与已入场成员（开卡人除外）分配到当前合并台的某一张原台会话；已入场成员只调整所属原台。",
+                    "items": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "member_id",
+                        "session_id"
+                      ],
+                      "properties": {
+                        "member_id": {
                           "type": "string",
                           "maxLength": 64
                         },
@@ -24445,6 +25044,7 @@
         ],
         "operationId": "mergeBarBill",
         "summary": "合并酒水账单",
+        "description": "第十八批 T 段第 157 条 157-R2：副单所属订单的挂起改指主单（挂起记录 bill_id 改为主单），主单结清时该挂起同样置已结清。",
         "x-auth-context": "staff-token",
         "x-permission": "bar.bill.split_merge",
         "x-data-scope": "project-bar-table",
@@ -24638,7 +25238,7 @@
         ],
         "operationId": "decideBarOrderItemVoid",
         "summary": "退菜退酒审批决策（通过/驳回）",
-        "description": "第十八批第 24 条 24-R3（PGM:529「申请人与直接受益人不得审批与自己相关的申请，转发不构成例外」）：审批人不得是退品申请人，同一人持申请与审批两码也不得自批（409 BAR_ORDER_ITEM_VOID_SELF_APPROVAL）。",
+        "description": "第十八批第 24 条 24-R3（PGM:529「申请人与直接受益人不得审批与自己相关的申请，转发不构成例外」）：审批人不得是退品申请人，同一人持申请与审批两码也不得自批（409 BAR_ORDER_ITEM_VOID_SELF_APPROVAL）。第十八批 T 段第 157 条 157-R6（BSM:1107「经理审批不能替代既有高价值审批链」）：经理已批准取消、等本条高价值退品审批的挂起订单，审批决定后在同一事务内重判——本单已无未作废明细即转已取消（账单作废并冲正、待支付的支付意向作废，审计 bar.order_suspension_cancelled），驳回或只列了部分明细即回到已挂起待付款（审计 bar.order_suspension_cancel_decided）。",
         "x-auth-context": "staff-token",
         "x-permission": "bar.order_item.void",
         "x-data-scope": "project-bar-table",
@@ -31673,7 +32273,7 @@
           "CONTRACT_SCOPE_VIOLATION"
         ],
         "summary": "扫码点单（绑桌台会话）",
-        "description": "订单销售取该台位当前开台会话的销售归属，不由请求指定、不取下单人（第十八批 I 段第 86 条，BSM 第 1070 行「只归帮该客人预订的那个人」）；没有开台会话（吧台直点）的订单无销售。",
+        "description": "订单销售取该台位当前开台会话的销售归属，不由请求指定、不取下单人（第十八批 I 段第 86 条，BSM 第 1070 行「只归帮该客人预订的那个人」）；没有开台会话（吧台直点）的订单无销售。第十八批 T 段第 157 条 157-R1：同 POST /api/v1/bar/orders，下单即按台组判最低消费（BSM:1064、ENUM:117），本次下单后累计未达到 409 BAR_MIN_CONSUMPTION_NOT_MET；散台订单本单账单付清后才能出品。",
         "x-permission": "bar.order.create",
         "x-data-scope": "project-bar-table",
         "x-terminal-allowed": [
@@ -31780,7 +32380,7 @@
         ],
         "operationId": "createCustomerBarScanOrder",
         "summary": "扫码点单下单（即时付款）",
-        "description": "ROOT-03 clients-R7：BSM 第 1025 行「扫码点单只适用于散台，卡座不开放扫码点单。散台也须服务员先开台才能扫码点单……下单时即时付款、付款成功订单才成立，不挂账」；ENUM 第 129 行「非会员可以浏览、点单和付款」——匿名可用，带有效客人会话时记会员本人。非散台 409 BAR_SCAN_ORDER_TABLE_NOT_ALLOWED，未开台 409 BAR_TABLE_NOT_OPENED。按商品现价计价，只落待付单与在线付款单，返回 {scan_order_id, table_id, amount_cent, status=pending, payment_intent_id, channel, gateway_status, payment_url, launch}，此时不成单、不出品；付款成功确认后才成单。ROOT-03-R24（BSM 第 1069 行）：任一行带 is_gift=true 400 BAR_SCAN_ORDER_GIFT_NOT_ALLOWED。沽清 409 PRODUCT_SOLD_OUT；扫码点单开关关时 409 BAR_SCAN_ORDER_DISABLED；支付渠道未启用时 gateway_status 为 RESERVED/NOT_CONFIGURED、不带拉起参数，客户端显示「支付暂不可用」、不成单。 PGM 第 744 行「前端隐藏只是辅助，后端接口必须独立校验」：匿名可调、终端类型自报，按综合体的客人端终端开关以台位所属酒吧的综合体在服务端判（不取客户端自报的 X-Project-Id，先于幂等），该综合体客人端已关→403 TERMINAL_DISABLED，不建待付单。",
+        "description": "ROOT-03 clients-R7：BSM 第 1025 行「扫码点单只适用于散台，卡座不开放扫码点单。散台也须服务员先开台才能扫码点单……下单时即时付款、付款成功订单才成立，不挂账」；ENUM 第 129 行「非会员可以浏览、点单和付款」——匿名可用，带有效客人会话时记会员本人。非散台 409 BAR_SCAN_ORDER_TABLE_NOT_ALLOWED，未开台 409 BAR_TABLE_NOT_OPENED。按商品现价计价，只落待付单与在线付款单，返回 {scan_order_id, table_id, amount_cent, status=pending, payment_intent_id, channel, gateway_status, payment_url, launch}，此时不成单、不出品；付款成功确认后才成单。ROOT-03-R24（BSM 第 1069 行）：任一行带 is_gift=true 400 BAR_SCAN_ORDER_GIFT_NOT_ALLOWED。沽清 409 PRODUCT_SOLD_OUT；扫码点单开关关时 409 BAR_SCAN_ORDER_DISABLED；支付渠道未启用时 gateway_status 为 RESERVED/NOT_CONFIGURED、不带拉起参数，客户端显示「支付暂不可用」、不成单。 PGM 第 744 行「前端隐藏只是辅助，后端接口必须独立校验」：匿名可调、终端类型自报，按综合体的客人端终端开关以台位所属酒吧的综合体在服务端判（不取客户端自报的 X-Project-Id，先于幂等），该综合体客人端已关→403 TERMINAL_DISABLED，不建待付单。第十八批 T 段第 157 条 157-R1（BSM:1064、ENUM:117「最低消费是下单的前置条件」）：建付款单前按该桌当前开台会话的台组低消判，本次下单后累计未达到即 409 BAR_MIN_CONSUMPTION_NOT_MET，不建待付单与付款单；付款后成单时再判一次，被拒走原路待退。",
         "x-idempotency-required": true,
         "x-audit-event-success": "customer.bar_scan_order.created",
         "x-audit-event-failure": "customer.bar_scan_order.create_failed",
@@ -73154,7 +73754,7 @@
         ],
         "operationId": "closeBarServiceResponsibility",
         "summary": "实际服务完成后关闭责任区间",
-        "description": "关台（BSM L1058）：台组（含整体转台前旧链）全部账单须已结清或已并入主账单，否则 409 BAR_TABLE_SESSION_BILL_UNSETTLED（挂账亦拒）；通过后主会话关闭、台位进入待清台、未达最低消费的已付定金没收。",
+        "description": "关台（BSM L1058）：台组（含整体转台前旧链）全部账单须已结清或已并入主账单，否则 409 BAR_TABLE_SESSION_BILL_UNSETTLED（挂账亦拒）；通过后主会话关闭、台位进入待清台、未达最低消费的已付定金没收。第十八批 T 段第 157 条 157-R3（BSM:1058 坏账出口；BSM:1109「解除该订单对交班、日结的阻断」）：所属订单（或合单后改指本账单）挂起已确认坏账的账单不算未结清。第十八批 T 段第 157 条 157-R5（第十八批裁决 37「包厢关台时没付清就发经理待办，超时按通用时限升级」；BSM:1058「账单未结清（含挂起未结清）不得关台」照旧）：本次关台会话台位为包厢（vip）且被未结清账单拦下时，照旧 409 BAR_TABLE_SESSION_BILL_UNSETTLED、台位仍开台，提示末尾加「已通知当班经理确认能否收回」；同时在独立事务内（关台回滚不丢）为每张未结清账单登记一条关台未付清待办（bar_bill_unpaid_close_todos，已登记的不重登、期限不改；期限＝涉钱审批通用时限 1 个工作日），给本酒吧此刻有排班、持 bar.bill.hang_cancel、有员工档案的员工各发一条员工系统通知「包厢客人离开未付清：请确认能否收回」（正文列包厢、账单号、未付金额、是否已挂起及挂起原因与责任人、处理期限；同一批账单每人只发一次），审计 bar.bill_unpaid_close_notified；没有当班经理也照样登记起算。散台、卡座、吧台位只拦不发。到期仍未付清且未转坏账的由升级作业通知本酒吧持 bar.bill.hang_escalation 的在用员工（店长）与本项目此刻在班的夜班值班经理（含顶班人），只升级一次，审计 bar.bill_unpaid_close_escalated；不默认转坏账。",
         "x-auth-context": "staff-token",
         "x-permission": "bar.table.open_close",
         "x-data-scope": "project-merchant",

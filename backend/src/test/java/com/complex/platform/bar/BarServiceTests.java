@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.17
+// 文件版本：V0.18
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
@@ -316,7 +316,7 @@ class BarServiceTests {
         // 扫码点单（绑桌台会话 + 继承入场闸）：开启功能标志后，扫开台会话二维码下单 → 单据绑会话桌台、来源 app/miniapp、
         // 不重复核龄（继承场馆入场闸结论）；bar/桌台取自会话（扫码定位），客户端只传 items。
         BarTableRecord table = service.createTable(new BarTableRequest(
-                "scan-table", "create", List.of(), "bar_1", "VIP 扫码", "card_seat", 50000L, 4, "active"));
+                "scan-table", "create", List.of(), "bar_1", "VIP 扫码", "card_seat", 0L, 4, "active"));
         BarProductRecord product = service.createProduct(new BarProductRequest(
                 "scan-product", "create product", List.of(), "bar_1", "精酿", "beer",
                 3800L, null, null, "active", null, null, false, null, null, null, null, null, null, null));
@@ -386,8 +386,9 @@ class BarServiceTests {
 
     @Test
     void settleBillRejectsWhenBelowTableMinimumConsumption() {
-        // 2c-1 低消硬阻断：桌低消 50000（createReservation helper 内建），消费仅 10000 → 结算被拒。
-        BarReservationRecord reservation = createReservation("mincon", "bar_1", 2);
+        // 2c-1 低消硬阻断：消费仅 10000，结账时台位低消 50000 → 结算被拒。第十八批 T 段 157-R1 起下单即判低消，
+        // 这里下单时台位不设低消、开出账单后再把低消调到 50000，考结账闸本身。
+        BarReservationRecord reservation = createReservation("mincon", "bar_1", 2, "card_seat", 0L);
         BarProductRecord product = service.createProduct(new BarProductRequest(
                 "product-mincon", "create product", List.of(), "bar_1", "Soda", "spirit",
                 10000L, null, null, "active", null, null, false, null, null, null, null, null, null, null));
@@ -396,6 +397,7 @@ class BarServiceTests {
                 List.of(Map.of("product_id", product.id(), "quantity", 1)), List.of(), "offline"));
         BarBillRecord bill = service.createOrderBill(order.id(), new BarOrderBillCreateRequest(
                 "bill-mincon", "create bill", List.of(), "offline", false, 0));
+        setTableMinConsumption(reservation.tableId(), 50000L);
 
         assertThatThrownBy(() -> service.settleBill(bill.id(), new BarBillSettleRequest(
                 "settle-mincon", "settle", List.of(), "pay_m", bill.payableAmountCent(), "aggregate_pay")))
@@ -554,7 +556,7 @@ class BarServiceTests {
     @Test
     void deliverOrderRejectsCrossMerchantAccessWithForbiddenError() {
         TestSecurityActors.asMerchantUser("merchant_a");
-        BarReservationRecord reservation = createReservation("cross-merchant-deliver", "bar_1", 2);
+        BarReservationRecord reservation = createReservation("cross-merchant-deliver", "bar_1", 2, "vip", 0L);
         BarProductRecord product = service.createProduct(new BarProductRequest(
                 "product-cross-deliver", "create", List.of(), "bar_1", "Gin", "spirit", 8800L,
                 null, null, "active", null, null, false
@@ -625,7 +627,7 @@ class BarServiceTests {
         try {
             TestSecurityActors.asMerchantUser("merchant_a");
             BarTableRecord table = service.createTable(new BarTableRequest(
-                    "table-scope", "create", List.of(), "bar_1", "范围桌", "card_seat", 50000L, 2, "active"));
+                    "table-scope", "create", List.of(), "bar_1", "范围桌", "card_seat", 0L, 2, "active"));
             BarProductRecord spirit = service.createProduct(new BarProductRequest(
                     "product-scope-spirit", "create", List.of(), "bar_1", "金酒", "spirit", 8800L,
                     null, null, "active", null, null, false, null, null, null, null, null, null, null));
@@ -670,7 +672,7 @@ class BarServiceTests {
         try {
             TestSecurityActors.asMerchantUser("merchant_a");
             BarTableRecord table = service.createTable(new BarTableRequest(
-                    "table-scope-fb", "create", List.of(), "bar_1", "回退桌", "card_seat", 50000L, 2, "active"));
+                    "table-scope-fb", "create", List.of(), "bar_1", "回退桌", "card_seat", 0L, 2, "active"));
             BarProductRecord beer = service.createProduct(new BarProductRequest(
                     "product-scope-fb-beer", "create", List.of(), "bar_1", "精酿", "beer", 3800L,
                     null, null, "active", null, null, false, null, null, null, null, null, null, null));
@@ -1232,7 +1234,7 @@ class BarServiceTests {
 
     @Test
     void deliveryRejectsStockManagedProductWhenInventoryIsInsufficientAndKeepsItemUndelivered() {
-        BarReservationRecord reservation = createReservation("reservation-stock", "bar_1", 2);
+        BarReservationRecord reservation = createReservation("reservation-stock", "bar_1", 2, "vip", 50000L);
         BarProductRecord product = service.createProduct(new BarProductRequest(
                 "product-stock",
                 "create product",
@@ -1281,7 +1283,7 @@ class BarServiceTests {
 
     @Test
     void deliveryRejectsAlreadyDeliveredOrderItemAndDoesNotDeductStockAgain() {
-        BarReservationRecord reservation = createReservation("reservation-stock-repeat", "bar_1", 2);
+        BarReservationRecord reservation = createReservation("reservation-stock-repeat", "bar_1", 2, "vip", 50000L);
         BarProductRecord product = service.createProduct(new BarProductRequest(
                 "product-stock-repeat",
                 "create product",
@@ -1350,8 +1352,8 @@ class BarServiceTests {
 
     @Test
     void deliveryRejectsOrderItemFromAnotherOrderAndKeepsBothOrdersPending() {
-        BarReservationRecord firstReservation = createReservation("reservation-scope-1", "bar_1", 2);
-        BarReservationRecord secondReservation = createReservation("reservation-scope-2", "bar_1", 2);
+        BarReservationRecord firstReservation = createReservation("reservation-scope-1", "bar_1", 2, "vip", 0L);
+        BarReservationRecord secondReservation = createReservation("reservation-scope-2", "bar_1", 2, "vip", 0L);
         BarProductRecord product = service.createProduct(new BarProductRequest(
                 "product-scope",
                 "create product",
@@ -1418,7 +1420,7 @@ class BarServiceTests {
 
     @Test
     void deliveryPersistsEvidenceAndPhotoAttachmentsOnTicketEventAndStockMovement() {
-        BarReservationRecord reservation = createReservation("reservation-delivery-evidence", "bar_1", 2);
+        BarReservationRecord reservation = createReservation("reservation-delivery-evidence", "bar_1", 2, "vip", 50000L);
         BarProductRecord product = service.createProduct(new BarProductRequest(
                 "product-delivery-evidence",
                 "create product",
@@ -1475,7 +1477,7 @@ class BarServiceTests {
 
     @Test
     void deliveryWithExcessPourRecordsLossAndEmitsLossExceptionWhenOverThreshold() {
-        BarReservationRecord reservation = createReservation("reservation-pour-loss", "bar_1", 2);
+        BarReservationRecord reservation = createReservation("reservation-pour-loss", "bar_1", 2, "vip", 50000L);
         // 标准 30ml/杯，损耗阈值 10ml；按杯销售配置（REQ-22）。第十八批 C 段第 17 条：出酒吧台配有采集设备，按设备实际量计损耗。
         equippedCounterStock("inventory_whisky_loss");
         BarProductRecord product = service.createProduct(new BarProductRequest(
@@ -1505,7 +1507,7 @@ class BarServiceTests {
     @Test
     void deliveryRejectsByGlassAtCounterWithPourDeviceWhenActualPourVolumeMissing() {
         // 第十八批 C 段第 17 条（BSM 第 1065 行「配有出酒量采集设备的吧台，实际出酒量必须由设备采集」）：缺实际出酒量 → 拒单。
-        BarReservationRecord reservation = createReservation("reservation-pour-required", "bar_1", 2);
+        BarReservationRecord reservation = createReservation("reservation-pour-required", "bar_1", 2, "vip", 50000L);
         equippedCounterStock("inventory_whisky_required");
         BarProductRecord product = service.createProduct(new BarProductRequest(
                 "product-pour-required", "create", List.of(), "bar_1", "Whisky", "spirit", 128800L, null, null,
@@ -1538,7 +1540,7 @@ class BarServiceTests {
     void deliveryByGlassAtCounterWithoutPourDeviceUsesStandardVolumeAndStandardLoss() {
         // 第十八批 C 段第 17 条（BSM 第 1065 行「未配备采集设备的吧台，必须按标准出酒量配酒，也按该标准计算扣减与标准损耗，不得按零损耗记账」；
         // 第十八批裁决 4「标准损耗＝标准出酒量×本酒吧损耗率阈值」，未配置按出厂 5%）：吧台未配设备、不传实际出酒量照常出品。
-        BarReservationRecord reservation = createReservation("reservation-pour-standard", "bar_1", 2);
+        BarReservationRecord reservation = createReservation("reservation-pour-standard", "bar_1", 2, "vip", 50000L);
         BarProductRecord product = service.createProduct(new BarProductRequest(
                 "product-pour-standard", "create", List.of(), "bar_1", "Whisky", "spirit", 128800L, null, null,
                 "active", null, null, false, 30, "ml", 10, null, null, null, null));
@@ -1562,7 +1564,7 @@ class BarServiceTests {
     @Test
     void deliveryNonByGlassProductWithoutPourVolumeIsAllowed() {
         // 非按杯产品（未配置 standard_pour_volume）：缺 actual_pour_volume 不拦截，保持既有行为。
-        BarReservationRecord reservation = createReservation("reservation-non-by-glass", "bar_1", 2);
+        BarReservationRecord reservation = createReservation("reservation-non-by-glass", "bar_1", 2, "vip", 0L);
         BarProductRecord product = service.createProduct(new BarProductRequest(
                 "product-non-by-glass", "create", List.of(), "bar_1", "Bottle Beer", "beer", 2800L, null, null,
                 "active", null, null, false, null, null, null, null, null, null, null));
@@ -1583,7 +1585,7 @@ class BarServiceTests {
 
     @Test
     void deliveryRejectsPartialQuantityAndKeepsOrderInventoryAndTicketPending() {
-        BarReservationRecord reservation = createReservation("reservation-partial-delivery", "bar_1", 2);
+        BarReservationRecord reservation = createReservation("reservation-partial-delivery", "bar_1", 2, "vip", 50000L);
         BarProductRecord product = service.createProduct(new BarProductRequest(
                 "product-partial-delivery",
                 "create product",
@@ -1695,7 +1697,7 @@ class BarServiceTests {
 
     @Test
     void productionTicketTransitionsThroughAcceptedPreparingAndReadyWithEventTrace() {
-        BarReservationRecord reservation = createReservation("reservation-production-flow", "bar_1", 2);
+        BarReservationRecord reservation = createReservation("reservation-production-flow", "bar_1", 2, "vip", 0L);
         BarProductRecord product = service.createProduct(new BarProductRequest(
                 "product-production-flow",
                 "create product",
@@ -1784,7 +1786,7 @@ class BarServiceTests {
 
     @Test
     void productionTicketExceptionTransitionUsesDbAllowedActionType() {
-        BarReservationRecord reservation = createReservation("reservation-production-exception", "bar_1", 2);
+        BarReservationRecord reservation = createReservation("reservation-production-exception", "bar_1", 2, "vip", 0L);
         BarProductRecord product = service.createProduct(new BarProductRequest(
                 "product-production-exception",
                 "create product",
@@ -1835,7 +1837,7 @@ class BarServiceTests {
 
     @Test
     void productionTicketRejectsInvalidTransitionAndKeepsStatusUnchanged() {
-        BarReservationRecord reservation = createReservation("reservation-production-invalid", "bar_1", 2);
+        BarReservationRecord reservation = createReservation("reservation-production-invalid", "bar_1", 2, "vip", 0L);
         BarProductRecord product = service.createProduct(new BarProductRequest(
                 "product-production-invalid",
                 "create product",
@@ -1888,7 +1890,7 @@ class BarServiceTests {
 
     @Test
     void deliveryMarksProductionTicketDeliveredWithoutOverwritingCancelledTicket() {
-        BarReservationRecord reservation = createReservation("reservation-production-delivery", "bar_1", 2);
+        BarReservationRecord reservation = createReservation("reservation-production-delivery", "bar_1", 2, "vip", 50000L);
         BarProductRecord product = service.createProduct(new BarProductRequest(
                 "product-production-delivery",
                 "create product",
@@ -1942,7 +1944,7 @@ class BarServiceTests {
 
     @Test
     void partialDeliveryKeepsOrderAndTicketUndelivered() {
-        BarReservationRecord reservation = createReservation("reservation-partial", "bar_1", 2);
+        BarReservationRecord reservation = createReservation("reservation-partial", "bar_1", 2, "vip", 0L);
         BarProductRecord beer = product("partial-beer", "bar_1", 3000L);
         BarProductRecord wine = product("partial-wine", "bar_1", 8000L);
         BarOrderRecord order = service.createOrder(new BarOrderRequest(
@@ -1967,7 +1969,7 @@ class BarServiceTests {
 
     @Test
     void deliveryCompletesOnlyWhenAllNonVoidedItemsDelivered() {
-        BarReservationRecord reservation = createReservation("reservation-allvoid", "bar_1", 2);
+        BarReservationRecord reservation = createReservation("reservation-allvoid", "bar_1", 2, "vip", 0L);
         BarProductRecord beer = product("allvoid-beer", "bar_1", 3000L);
         BarProductRecord wine = product("allvoid-wine", "bar_1", 8000L);
         BarProductRecord gin = product("allvoid-gin", "bar_1", 9000L);
@@ -2001,7 +2003,7 @@ class BarServiceTests {
     @Test
     void closedSessionStillAllowsDeliveringRemainingItems() {
         // BSM L1058「关台、清台及新客开台不自动完成原接待会话的未送达商品……原责任人仍须按实际送达……处理并留痕」。
-        BarReservationRecord reservation = createReservation("reservation-closed-deliver", "bar_1", 2);
+        BarReservationRecord reservation = createReservation("reservation-closed-deliver", "bar_1", 2, "vip", 0L);
         BarTableSessionRecord session = openSession("closed-deliver", reservation.tableId(), "bar_1", reservation.id());
         BarProductRecord beer = product("closed-beer", "bar_1", 3000L);
         BarProductRecord wine = product("closed-wine", "bar_1", 8000L);
@@ -2761,6 +2763,7 @@ class BarServiceTests {
         BarReservationRecord reservation = reservationWithFixedDeposit("nodeduct", 20000L, 30);
         service.payReservationDeposit(reservation.id(),
                 new BarReservationDepositActionRequest("pay-nodeduct", "pay", List.of(), "aggregate_pay"));
+        setTableMinConsumption(reservation.tableId(), 0L);
         BarProductRecord product = product("nodeduct", "bar_nodeduct", 30000L);
         BarOrderRecord order = order("nodeduct", "bar_nodeduct", reservation.tableId(), reservation.id(), product, 1);
         BarBillRecord bill = bill("nodeduct", order.id());
@@ -2813,6 +2816,7 @@ class BarServiceTests {
         BarTableRecord t = createTable("gt-t", "bar_1", "active", 80000L);
         BarTableSessionRecord primary = createSession("gt-a", a.id(), "bar_1", "merchant_1");
         BarTableSessionRecord secondary = createSession("gt-b", b.id(), "bar_1", "merchant_1");
+        setTableMinConsumption(a.id(), 0L);
         BarProductRecord product = product("gt", "bar_1", 30000L);
         order("gt-a", "bar_1", a.id(), null, product, 1);
         order("gt-b", "bar_1", b.id(), null, product, 2);
@@ -2838,6 +2842,7 @@ class BarServiceTests {
         service.payReservationDeposit(reservation.id(),
                 new BarReservationDepositActionRequest("pay-dep1", "pay", List.of(), "aggregate_pay"));
         BarTableSessionRecord session = openSession("dep1", reservation.tableId(), "bar_dep1", reservation.id());
+        setTableMinConsumption(reservation.tableId(), 0L);
         BarProductRecord product = product("dep1", "bar_dep1", 60000L);
 
         order("dep1-first", "bar_dep1", reservation.tableId(), reservation.id(), product, 1);
@@ -2882,6 +2887,8 @@ class BarServiceTests {
         service.payReservationDeposit(b.id(), new BarReservationDepositActionRequest("pay-depb", "pay", List.of(), "cash"));
         BarTableSessionRecord sessionA = openSession("depa", a.tableId(), "bar_depa", a.id());
         BarTableSessionRecord sessionB = openSession("depb", tableB.id(), "bar_depa", b.id());
+        setTableMinConsumption(a.tableId(), 0L);
+        setTableMinConsumption(tableB.id(), 0L);
         BarProductRecord product = product("depab", "bar_depa", 50000L);
 
         order("depa-1", "bar_depa", a.tableId(), a.id(), product, 2);   // A 100000 ≥ 100000 → A 退
@@ -2905,6 +2912,7 @@ class BarServiceTests {
         service.payReservationDeposit(reservation.id(),
                 new BarReservationDepositActionRequest("pay-depc", "pay", List.of(), "aggregate_pay"));
         BarTableSessionRecord session = openSession("depc", reservation.tableId(), "bar_depc", reservation.id());
+        setTableMinConsumption(reservation.tableId(), 0L);
         order("depc-1", "bar_depc", reservation.tableId(), reservation.id(), product("depc", "bar_depc", 30000L), 1);
 
         depositSettlements.forfeitAtClose(session.id());
@@ -3001,6 +3009,7 @@ class BarServiceTests {
         // BSM L1064「继续点其他产品时，以该笔留款抵付的部分不重复收款」：留款 400 后再点 300 → 应付 0、余额 100；再点 200 → 抵 100、应付 100。
         BarTableRecord table = createTable("ret4", "bar_1", "active", 100000L);
         BarTableSessionRecord session = createSession("ret4", table.id(), "bar_1", "merchant_1");
+        setTableMinConsumption(table.id(), 0L);
         BarProductRecord big = product("ret4-big", "bar_1", 60000L);
         BarProductRecord small = product("ret4-small", "bar_1", 40000L);
         BarOrderRecord order = service.createOrder(new BarOrderRequest(
@@ -3034,6 +3043,7 @@ class BarServiceTests {
         // Q28「不重复收款、收入或奖励」：抵用账单提成基数 = subtotal − 已抵用留款。
         BarTableRecord table = createTable("ret5", "bar_1", "active", 100000L);
         createSession("ret5", table.id(), "bar_1", "merchant_1");
+        setTableMinConsumption(table.id(), 0L);
         BarProductRecord big = product("ret5-big", "bar_1", 60000L);
         BarProductRecord small = product("ret5-small", "bar_1", 40000L);
         BarOrderRecord order = service.createOrder(new BarOrderRequest(
@@ -3228,7 +3238,7 @@ class BarServiceTests {
 
     private BarTableSplitRequest split(String key, BarTableSessionRecord primary, String mode, String splitSessionId,
             List<Map<String, Object>> orderAssignments) {
-        return new BarTableSplitRequest("split-" + key, "split", List.of(), mode, splitSessionId, orderAssignments,
+        return new BarTableSplitRequest("split-" + key, "split", List.of(), mode, splitSessionId, orderAssignments, null, null,
                 "客人分开结账", "supervisor_1",
                 barRepository.findTableSessionById(primary.id()).orElseThrow().sessionVersion());
     }
@@ -3309,6 +3319,7 @@ class BarServiceTests {
         BarTableRecord tableB = createTable("split-attr-b", "bar_1", "active", 60000L);
         BarTableSessionRecord a = createSession("split-attr-a", tableA.id(), "bar_1", "merchant_1");
         BarTableSessionRecord b = createSession("split-attr-b", tableB.id(), "bar_1", "merchant_1");
+        setTableMinConsumption(tableB.id(), 0L);
         merge("split-attr", a, b);
         BarReservationRecord reservationB = service.createReservation(new BarReservationRequest(
                 "resv-split-attr-b", "create reservation", List.of(), "bar_1", tableB.id(),
@@ -3395,6 +3406,17 @@ class BarServiceTests {
         ));
     }
 
+    /**
+     * 第十八批 T 段 157-R1：下单闸按「有开台会话按台组、无会话按台位」判最低消费（BSM:1064、ENUM:117）。本类没有接开台会话服务
+     * （BarOrderService.serviceResponsibilities 为空），下单闸只能走无会话的台位口径逐单判；考台组阈值、进度、定金、留款的用例开台后
+     * 用它把台位低消改掉，台组阈值仍取开台时的会话低消快照。
+     */
+    private void setTableMinConsumption(String tableId, long minConsumptionCent) {
+        BarTableRecord t = barRepository.findTableById(tableId).orElseThrow();
+        barRepository.saveTable(new BarTableRecord(t.id(), t.barId(), t.merchantId(), t.tableCode(), t.tableName(), t.tableType(),
+                t.capacity(), t.allowedPassFreeGuestCount(), minConsumptionCent, t.currency(), t.status(), t.createdAt(), Instant.now()));
+    }
+
     private BarTableSessionRecord createSession(String key, String tableId, String barId, String merchantId) {
         return service.createTableSession(new BarTableSessionRequest(
                 "session-" + key,
@@ -3418,7 +3440,7 @@ class BarServiceTests {
 
     @Test
     void voidPendingOrderItemCancelsLineWithoutStockMovement() {
-        BarReservationRecord reservation = createReservation("void-pending", "bar_1", 2);
+        BarReservationRecord reservation = createReservation("void-pending", "bar_1", 2, "vip", 0L);
         BarProductRecord product = service.createProduct(new BarProductRequest(
                 "product-void-pending", "create product", List.of(), "bar_1", "Beer", "beer",
                 3000L, null, null, "active", null, null, false, null, null, null, null, null, null, null));
@@ -3441,7 +3463,7 @@ class BarServiceTests {
 
     @Test
     void voidDeliveredOrderItemReturnsStockAndDeductsBill() {
-        BarReservationRecord reservation = createReservation("void-return", "bar_1", 2);
+        BarReservationRecord reservation = createReservation("void-return", "bar_1", 2, "vip", 50000L);
         BarProductRecord product = service.createProduct(new BarProductRequest(
                 "product-void-return", "create product", List.of(), "bar_1", "Champagne", "spirit",
                 100000L, null, null, "active", "inventory_void_return", "bar_1", true, null, null, null, null, null, null, null));
@@ -3479,7 +3501,7 @@ class BarServiceTests {
 
     @Test
     void voidAlreadyVoidedOrderItemIsRejected() {
-        BarReservationRecord reservation = createReservation("void-twice", "bar_1", 2);
+        BarReservationRecord reservation = createReservation("void-twice", "bar_1", 2, "vip", 0L);
         BarProductRecord product = service.createProduct(new BarProductRequest(
                 "product-void-twice", "create product", List.of(), "bar_1", "Beer", "beer",
                 3000L, null, null, "active", null, null, false, null, null, null, null, null, null, null));
@@ -3500,7 +3522,7 @@ class BarServiceTests {
 
     @Test
     void voidApprovalDecisionWritesBackApprovedStatusToVoidLedger() {
-        BarReservationRecord reservation = createReservation("void-approve", "bar_1", 2);
+        BarReservationRecord reservation = createReservation("void-approve", "bar_1", 2, "vip", 0L);
         BarProductRecord product = service.createProduct(new BarProductRequest(
                 "product-void-approve", "create product", List.of(), "bar_1", "Beer", "beer",
                 3000L, null, null, "active", null, null, false, null, null, null, null, null, null, null));
@@ -3530,7 +3552,7 @@ class BarServiceTests {
 
     @Test
     void voidRejectionDecisionWritesBackRejectedStatusToVoidLedger() {
-        BarReservationRecord reservation = createReservation("void-reject", "bar_1", 2);
+        BarReservationRecord reservation = createReservation("void-reject", "bar_1", 2, "vip", 0L);
         BarProductRecord product = service.createProduct(new BarProductRequest(
                 "product-void-reject", "create product", List.of(), "bar_1", "Beer", "beer",
                 3000L, null, null, "active", null, null, false, null, null, null, null, null, null, null));
@@ -3567,7 +3589,7 @@ class BarServiceTests {
 
     @Test
     void voidRejectionReversesStockAndBillBackToPreVoidState() {
-        BarReservationRecord reservation = createReservation("void-rej-reverse", "bar_1", 2);
+        BarReservationRecord reservation = createReservation("void-rej-reverse", "bar_1", 2, "vip", 50000L);
         BarProductRecord product = service.createProduct(new BarProductRequest(
                 "product-void-rej-reverse", "create product", List.of(), "bar_1", "Champagne", "spirit",
                 100000L, null, null, "active", "inventory_void_rej_reverse", "bar_1", true, null, null, null, null, null, null, null));
@@ -3617,7 +3639,7 @@ class BarServiceTests {
 
     @Test
     void voidApprovalKeepsAppliedSideEffectsWithoutReversal() {
-        BarReservationRecord reservation = createReservation("void-appr-keep", "bar_1", 2);
+        BarReservationRecord reservation = createReservation("void-appr-keep", "bar_1", 2, "vip", 50000L);
         BarProductRecord product = service.createProduct(new BarProductRequest(
                 "product-void-appr-keep", "create product", List.of(), "bar_1", "Champagne", "spirit",
                 100000L, null, null, "active", "inventory_void_appr_keep", "bar_1", true, null, null, null, null, null, null, null));
@@ -3657,7 +3679,7 @@ class BarServiceTests {
 
     @Test
     void voidRejectionReversalIsIdempotentBecauseSecondDecisionIsBlocked() {
-        BarReservationRecord reservation = createReservation("void-rej-idem", "bar_1", 2);
+        BarReservationRecord reservation = createReservation("void-rej-idem", "bar_1", 2, "vip", 50000L);
         BarProductRecord product = service.createProduct(new BarProductRequest(
                 "product-void-rej-idem", "create product", List.of(), "bar_1", "Champagne", "spirit",
                 100000L, null, null, "active", "inventory_void_rej_idem", "bar_1", true, null, null, null, null, null, null, null));
@@ -3706,7 +3728,7 @@ class BarServiceTests {
     void voidRejectionDeductsStockOnlyOnceForUnsettledWaiverReversalBranch() {
         // 未结账单 void 驳回：库存回补→驳回重新扣减（waiver_reversal 加回应付）。
         // 红线：行锁 + status==pending 守卫使第二次 reject 被拒，库存只扣一次，waiver_reversal 仅一条。
-        BarReservationRecord reservation = createReservation("void-rej-once", "bar_1", 2);
+        BarReservationRecord reservation = createReservation("void-rej-once", "bar_1", 2, "vip", 50000L);
         BarProductRecord product = service.createProduct(new BarProductRequest(
                 "product-void-rej-once", "create product", List.of(), "bar_1", "Champagne", "spirit",
                 100000L, null, null, "active", "inventory_void_rej_once", "bar_1", true, null, null, null, null, null, null, null));
@@ -3761,7 +3783,7 @@ class BarServiceTests {
 
     /** 造一笔「已出品 + 已出账单」的高价值明细（单价 3000 元 × 2 = 6000 元 > 默认阈值 5000 元）。 */
     private HighValueVoidFixture highValueDeliveredItem(String key, long unitPriceCent, int quantity) {
-        BarReservationRecord reservation = createReservation(key, "bar_1", 2);
+        BarReservationRecord reservation = createReservation(key, "bar_1", 2, "vip", 50000L);
         BarProductRecord product = service.createProduct(new BarProductRequest(
                 "product-" + key, "create product", List.of(), "bar_1", "Vintage Champagne", "wine",
                 unitPriceCent, null, null, "active", "inventory_" + key, "bar_1", true, null, null, null, null, null, null, null));
@@ -4212,14 +4234,19 @@ class BarServiceTests {
     }
 
     private BarReservationRecord createReservation(String key, String barId, int allowedFreeGuests) {
+        return createReservation(key, barId, allowedFreeGuests, "card_seat", 50000L);
+    }
+
+    private BarReservationRecord createReservation(String key, String barId, int allowedFreeGuests, String tableType,
+            long minConsumptionCent) {
         BarTableRecord table = service.createTable(new BarTableRequest(
                 "table-" + key,
                 "create table",
                 List.of(),
                 barId,
                 "VIP " + key,
-                "card_seat",
-                50000L,
+                tableType,
+                minConsumptionCent,
                 allowedFreeGuests,
                 "active"
         ));

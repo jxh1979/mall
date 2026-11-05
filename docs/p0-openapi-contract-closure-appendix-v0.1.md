@@ -1,4 +1,4 @@
-# P0 OpenAPI 权限、事件、任务追溯收口附录 V0.51
+# P0 OpenAPI 权限、事件、任务追溯收口附录 V0.52
 
 ## 1. 文档定位
 
@@ -14,11 +14,11 @@
 
 | 检查项 | 当前结果 | 执行结论 |
 |---|---:|---|
-| OpenAPI operation 数 | 1246 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
-| OpenAPI 权限/通用权限状态数 | 420 | 人工权限矩阵正文未覆盖 319 项；缺口以本文第 3 节补齐 |
-| OpenAPI 成功/失败事件数 | 2492 | 人工事件矩阵正文未覆盖 2443 项；完整事件字典以本文第 4 节为准 |
-| operation 级任务追溯 | 1246 | 人工任务映射正文未逐项覆盖 1240 个 operation；逐 operation 映射以本文第 5 节为准 |
-| 写接口数量 | 746 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
+| OpenAPI operation 数 | 1253 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
+| OpenAPI 权限/通用权限状态数 | 422 | 人工权限矩阵正文未覆盖 321 项；缺口以本文第 3 节补齐 |
+| OpenAPI 成功/失败事件数 | 2506 | 人工事件矩阵正文未覆盖 2457 项；完整事件字典以本文第 4 节为准 |
+| operation 级任务追溯 | 1253 | 人工任务映射正文未逐项覆盖 1247 个 operation；逐 operation 映射以本文第 5 节为准 |
+| 写接口数量 | 751 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
 
 ## 3. 权限码与认证上下文补充表
 
@@ -98,11 +98,13 @@
 | `analytics.review.lock` | staff-token | project | 2 | listReviewLocks, createReviewLock | OpenAPI 补充，以本附录为准 |
 | `analytics.risk_alert.manage` | staff-token | project | 3 | generateLocalLlmAiQualitySuggestion, createRiskAlert, resolveRiskAlert | 已在权限矩阵正文出现 |
 | `analytics.risk_alert.view` | staff-token | project | 8 | listAiQualityResults, listAiQualityTasks, listCustomerIntents, listMetricAnomalies, listMetricAnomalyTimeline, listRiskAlerts, listRiskRules, listStaffServiceScores | 已在权限矩阵正文出现 |
-| `audit.operation_log.export` | staff-token | platform | 1 | exportAuditOperationEvents | OpenAPI 补充，以本附录为准 |
+| `audit.operation_log.export` | staff-token | platform, project-bar-table | 2 | exportBarSuspendedOrders, exportAuditOperationEvents | OpenAPI 补充，以本附录为准 |
 | `audit.operation_log.view` | staff-token | platform | 1 | queryAuditOperationEvents | OpenAPI 补充，以本附录为准 |
 | `authenticated` | staff-token | current-session, merchant, self | 8 | logout, refreshToken, getEffectivePermissions, listManualBackfills, recordPageView, listMyExports, requestEditableExportCopy, downloadEditableExportCopy | 已在权限矩阵正文出现 |
 | `bar.bill.adjust` | staff-token | project-bar-table | 2 | raiseBarBillAnomaly, adjustBarBill | OpenAPI 补充，以本附录为准 |
 | `bar.bill.anomaly.resolve` | staff-token | project-bar-table | 1 | resolveBarBillAnomaly | OpenAPI 补充，以本附录为准 |
+| `bar.bill.hang` | staff-token | project-bar-table | 2 | suspendBarOrder, requestBarOrderSuspensionCancel | OpenAPI 补充，以本附录为准 |
+| `bar.bill.hang_cancel` | staff-token | project-bar-table | 2 | confirmBarOrderSuspensionBadDebt, decideBarOrderSuspensionCancel | OpenAPI 补充，以本附录为准 |
 | `bar.bill.refund` | staff-token | project-merchant | 1 | getBarBillRefundContext | OpenAPI 补充，以本附录为准 |
 | `bar.bill.reopen` | staff-token | project-bar-table | 1 | reopenBarBill | OpenAPI 补充，以本附录为准 |
 | `bar.bill.split_merge` | staff-token | project-bar-table | 3 | listBarBillOperations, mergeBarBill, splitBarBill | OpenAPI 补充，以本附录为准 |
@@ -119,7 +121,7 @@
 | `bar.order_item.void` | staff-token | project, project-bar-table | 4 | voidBarOrderItem, decideBarOrderItemVoid, listBarOrderItemVoids, listBarVoidReasonCodes | OpenAPI 补充，以本附录为准 |
 | `bar.order_item.void_decide` | staff-token | project | 2 | saveBarVoidReasonCode, archiveBarVoidReasonCode | OpenAPI 补充，以本附录为准 |
 | `bar.order.create` | staff-token | project, project-bar-table | 6 | createBarOrder, createBarOrderBill, deliverBarOrder, addBarOrderItem, listBarProductionTickets, placeBarScanOrder | 已在权限矩阵正文出现 |
-| `bar.order.view` | staff-token | project-bar-table | 2 | listBarOrders, listBarBillMerchantRewards | 已在权限矩阵正文出现 |
+| `bar.order.view` | staff-token | project-bar-table | 3 | listBarOrders, listBarSuspendedOrders, listBarBillMerchantRewards | 已在权限矩阵正文出现 |
 | `bar.payroll.manage` | staff-token | project-merchant | 4 | draftBarPayrollRule, confirmBarPayrollRule, submitBarPayrollRule, closeBarPayrollMonth | OpenAPI 补充，以本附录为准 |
 | `bar.payroll.view` | staff-token | project-merchant | 3 | listBarPayrollRules, listBarPayrollRuns, listBarServiceResponsibilities | OpenAPI 补充，以本附录为准 |
 | `bar.product.manage` | staff-token | project | 3 | createBarProduct, assignBarProductCategory, uploadBarCatalogImage | OpenAPI 补充，以本附录为准 |
@@ -241,7 +243,7 @@
 | `facility.work_order.manage` | staff-token | platform | 26 | getComplaintFollowup, classifyComplaint, confirmComplaintLoop, listFacilityWorkOrders, createFacilityWorkOrder, listFacilityOverdueWorkOrders, getFacilityWorkOrder, assignFacilityWorkOrder, reassignFacilityWorkOrder, startFacilityWorkOrder, completeFacilityWorkOrder, acceptFacilityWorkOrder ... | OpenAPI 补充，以本附录为准 |
 | `facility.work_order.view_assigned` | staff-token | platform | 1 | listWorkOrdersAssignedToMe | OpenAPI 补充，以本附录为准 |
 | `finance.ar_ap.export` | staff-token | project-entity | 1 | exportArApItems | OpenAPI 补充，以本附录为准 |
-| `finance.ar_ap.manage` | staff-token | platform, project, project-entity, project-merchant | 8 | createArApItem, reviewTransferDisposition, generateContractRentBill, generateContractPeriodBills, recordFacilityEquipmentScrapFinance, allocatePurchasePrepayment, reviewPurchaseReturnFinance, postPurchasePrepaymentResolution | 已在权限矩阵正文出现 |
+| `finance.ar_ap.manage` | staff-token | platform, project, project-bar-table, project-entity, project-merchant | 9 | createArApItem, reviewTransferDisposition, writeOffBarOrderSuspension, generateContractRentBill, generateContractPeriodBills, recordFacilityEquipmentScrapFinance, allocatePurchasePrepayment, reviewPurchaseReturnFinance, postPurchasePrepaymentResolution | 已在权限矩阵正文出现 |
 | `finance.ar_ap.view` | staff-token | platform, project-entity, project-merchant, project-order | 7 | listArApItems, listArApPayments, getInternalPayableExecution, listFinanceRefunds, listArOverdueDebtors, getFinanceRefund, queryFinanceRefund | 已在权限矩阵正文出现 |
 | `finance.daily_close.lock` | staff-token | project-entity | 5 | createDailyClose, confirmDailyClose, lockDailyClose, markDailyCloseFinal, archiveDailyClose | 已在权限矩阵正文出现 |
 | `finance.daily_close.manage` | staff-token | project-bar-table, project-entity | 5 | listDailyCloses, listDailyCloseSummaries, listDailyCloseAdjustments, resolveBarShift, witnessBarShift | OpenAPI 补充，以本附录为准 |
@@ -781,6 +783,20 @@
 | `bar.order_item_voided` | success | `voidBarOrderItem` | `POST` | `/api/v1/bar/orders/{order_id}/void-item` | BAR-酒吧经营 | `bar.order_item.void` | 接口级事件，以本附录为准 |
 | `bar.order_item.created` | success | `addBarOrderItem` | `POST` | `/api/v1/bar/orders/{order_id}/items` | BAR-酒吧经营 | `bar.order.create` | 接口级事件，以本附录为准 |
 | `bar.order_item.created_failed` | failure | `addBarOrderItem` | `POST` | `/api/v1/bar/orders/{order_id}/items` | BAR-酒吧经营 | `bar.order.create` | 接口级事件，以本附录为准 |
+| `bar.order_suspend_failed` | failure | `suspendBarOrder` | `POST` | `/api/v1/bar/orders/{order_id}/suspend` | BAR-酒吧经营 | `bar.bill.hang` | 接口级事件，以本附录为准 |
+| `bar.order_suspended` | success | `suspendBarOrder` | `POST` | `/api/v1/bar/orders/{order_id}/suspend` | BAR-酒吧经营 | `bar.bill.hang` | 接口级事件，以本附录为准 |
+| `bar.order_suspension_bad_debt` | success | `confirmBarOrderSuspensionBadDebt` | `POST` | `/api/v1/bar/orders/{order_id}/suspension/bad-debt` | BAR-酒吧经营 | `bar.bill.hang_cancel` | 接口级事件，以本附录为准 |
+| `bar.order_suspension_bad_debt_failed` | failure | `confirmBarOrderSuspensionBadDebt` | `POST` | `/api/v1/bar/orders/{order_id}/suspension/bad-debt` | BAR-酒吧经营 | `bar.bill.hang_cancel` | 接口级事件，以本附录为准 |
+| `bar.order_suspension_cancel_decide_failed` | failure | `decideBarOrderSuspensionCancel` | `POST` | `/api/v1/bar/orders/{order_id}/suspension/cancel-decision` | BAR-酒吧经营 | `bar.bill.hang_cancel` | 接口级事件，以本附录为准 |
+| `bar.order_suspension_cancel_decided` | success | `decideBarOrderSuspensionCancel` | `POST` | `/api/v1/bar/orders/{order_id}/suspension/cancel-decision` | BAR-酒吧经营 | `bar.bill.hang_cancel` | 接口级事件，以本附录为准 |
+| `bar.order_suspension_cancel_request_failed` | failure | `requestBarOrderSuspensionCancel` | `POST` | `/api/v1/bar/orders/{order_id}/suspension/cancel` | BAR-酒吧经营 | `bar.bill.hang` | 接口级事件，以本附录为准 |
+| `bar.order_suspension_cancel_requested` | success | `requestBarOrderSuspensionCancel` | `POST` | `/api/v1/bar/orders/{order_id}/suspension/cancel` | BAR-酒吧经营 | `bar.bill.hang` | 接口级事件，以本附录为准 |
+| `bar.order_suspension_write_off_failed` | failure | `writeOffBarOrderSuspension` | `POST` | `/api/v1/bar/orders/{order_id}/suspension/write-off` | BAR-酒吧经营 | `finance.ar_ap.manage` | 接口级事件，以本附录为准 |
+| `bar.order_suspension_written_off` | success | `writeOffBarOrderSuspension` | `POST` | `/api/v1/bar/orders/{order_id}/suspension/write-off` | BAR-酒吧经营 | `finance.ar_ap.manage` | 接口级事件，以本附录为准 |
+| `bar.order_suspension.export_failed` | failure | `exportBarSuspendedOrders` | `GET` | `/api/v1/bar/suspended-orders/export` | BAR-酒吧经营 | `audit.operation_log.export` | 接口级事件，以本附录为准 |
+| `bar.order_suspension.exported` | success | `exportBarSuspendedOrders` | `GET` | `/api/v1/bar/suspended-orders/export` | BAR-酒吧经营 | `audit.operation_log.export` | 接口级事件，以本附录为准 |
+| `bar.order_suspension.view_failed` | failure | `listBarSuspendedOrders` | `GET` | `/api/v1/bar/suspended-orders` | BAR-酒吧经营 | `bar.order.view` | 接口级事件，以本附录为准 |
+| `bar.order_suspension.viewed` | success | `listBarSuspendedOrders` | `GET` | `/api/v1/bar/suspended-orders` | BAR-酒吧经营 | `bar.order.view` | 接口级事件，以本附录为准 |
 | `bar.order.view_failed` | failure | `listBarOrders` | `GET` | `/api/v1/bar/orders` | BAR-酒吧经营 | `bar.order.view` | 接口级事件，以本附录为准 |
 | `bar.order.viewed` | success | `listBarOrders` | `GET` | `/api/v1/bar/orders` | BAR-酒吧经营 | `bar.order.view` | 接口级事件，以本附录为准 |
 | `bar.payroll_rule.confirm_failed` | failure | `confirmBarPayrollRule` | `POST` | `/api/v1/bar/payroll-rules/{id}/confirm` | BAR-酒吧经营 | `bar.payroll.manage` | 接口级事件，以本附录为准 |
@@ -3142,6 +3158,7 @@
 | BAR-酒吧经营 | `closeBarPayrollMonth` | `POST` | `/api/v1/bar/payroll-runs/close` | 按实际来源生成不可变月结及差额 | `bar.payroll.manage` | `bar.payroll.month_processed` / `bar.payroll.month_processed_failed` | web | operation 级补充 |
 | BAR-酒吧经营 | `closeBarServiceResponsibility` | `POST` | `/api/v1/bar/table-sessions/{id}/service-close` | 实际服务完成后关闭责任区间 | `bar.table.open_close` | `bar.service.closed` / `bar.service.closed_failed` | web | operation 级补充 |
 | BAR-酒吧经营 | `closeBarShift` | `POST` | `/api/v1/bar/shifts/{shift_id}/close` | 班结对账 | `bar.shift.close` | `bar.shift_closed` / `bar.shift_close_failed` | web | operation 级补充 |
+| BAR-酒吧经营 | `confirmBarOrderSuspensionBadDebt` | `POST` | `/api/v1/bar/orders/{order_id}/suspension/bad-debt` | 经理确认挂起订单无法收款（转坏账） | `bar.bill.hang_cancel` | `bar.order_suspension_bad_debt` / `bar.order_suspension_bad_debt_failed` | web | operation 级补充 |
 | BAR-酒吧经营 | `confirmBarPayrollRule` | `POST` | `/api/v1/bar/payroll-rules/{id}/confirm` | 双方分别本人确认约定 | `bar.payroll.manage` | `bar.payroll_rule.confirmed_merchant` / `bar.payroll_rule.confirm_failed` | web | operation 级补充 |
 | BAR-酒吧经营 | `createBarBillPayIntent` | `POST` | `/api/v1/bar/bills/{bill_id}/pay-intents` | 酒吧账单支付意图 | `finance.payment_intent.create` | `payment.intent_created` / `payment.intent_failed` | tablet, web, staff_work_phone | operation 级补充 |
 | BAR-酒吧经营 | `createBarDepositRule` | `POST` | `/api/v1/bar/deposit-rules` | 创建订台定金规则（固定额/按低消比例） | `bar.deposit_rule.manage` | `bar.deposit_rule.created` / `bar.deposit_rule.create_failed` | web, kiosk, mobile_admin | operation 级补充 |
@@ -3152,8 +3169,10 @@
 | BAR-酒吧经营 | `createBarTable` | `POST` | `/api/v1/bar/tables` | 创建桌台或卡座 | `bar.table.manage` | `bar.table.changed` / `bar.table.change_failed` | web | operation 级补充 |
 | BAR-酒吧经营 | `createBarTableSession` | `POST` | `/api/v1/bar/table-sessions` | 创建酒水台位会话（开台） | `bar.table_session.create` | `bar.table_session.create` / `bar.table_session.create_failed` | web | operation 级补充 |
 | BAR-酒吧经营 | `decideBarOrderItemVoid` | `POST` | `/api/v1/bar/order-item-voids/{void_id}/decision` | 退菜退酒审批决策（通过/驳回） | `bar.order_item.void` | `bar.order_item_void_decided` / `bar.order_item_void.decide_failed` | web | operation 级补充 |
+| BAR-酒吧经营 | `decideBarOrderSuspensionCancel` | `POST` | `/api/v1/bar/orders/{order_id}/suspension/cancel-decision` | 经理审批取消挂起订单 | `bar.bill.hang_cancel` | `bar.order_suspension_cancel_decided` / `bar.order_suspension_cancel_decide_failed` | web | operation 级补充 |
 | BAR-酒吧经营 | `deliverBarOrder` | `POST` | `/api/v1/bar/orders/{order_id}/deliver` | 出酒或送达确认 | `bar.order.create` | `bar.order_delivered` / `bar.order_deliver_failed` | staff_work_phone, web | operation 级补充 |
 | BAR-酒吧经营 | `draftBarPayrollRule` | `POST` | `/api/v1/bar/payroll-rules` | 保存完整规则草案 | `bar.payroll.manage` | `bar.payroll_rule.drafted` / `bar.payroll_rule.draft_failed` | web | operation 级补充 |
+| BAR-酒吧经营 | `exportBarSuspendedOrders` | `GET` | `/api/v1/bar/suspended-orders/export` | 导出挂起订单风险看板（敏感） | `audit.operation_log.export` | `bar.order_suspension.exported` / `bar.order_suspension.export_failed` | web | operation 级补充 |
 | BAR-酒吧经营 | `getBarArrivalReminderPolicy` | `GET` | `/api/v1/bar/arrival-reminder-policies/{project_id}` | 查最晚到店时间前提醒提前分钟数（按项目） | `bar.reservation.view` | `not_applicable` / `not_applicable` | web | operation 级补充 |
 | BAR-酒吧经营 | `getBarBillRefundContext` | `GET` | `/api/v1/bar/bills/{id}/refund-context` | 读取本账单真实退款来源及累计明细 | `bar.bill.refund` | `bar.refund_context.read` / `bar.refund_context.read_failed` | web | operation 级补充 |
 | BAR-酒吧经营 | `getBarCatalogImage` | `GET` | `/api/v1/bar/catalog/images/{name}` | 回读酒吧商品/套餐图片 | `bar.product.view` | `not_applicable` / `not_applicable` | tablet, kiosk | operation 级补充 |
@@ -3179,6 +3198,7 @@
 | BAR-酒吧经营 | `listBarServiceResponsibilities` | `GET` | `/api/v1/bar/table-sessions/{id}/service-responsibilities` | 读取原服务责任时间区间 | `bar.payroll.view` | `bar.service.read` / `bar.service.read_failed` | web | operation 级补充 |
 | BAR-酒吧经营 | `listBarShifts` | `GET` | `/api/v1/bar/shifts` | 查询收银班次 | `bar.shift.manage` | `bar.shift.viewed` / `bar.shift.view_failed` | web | operation 级补充 |
 | BAR-酒吧经营 | `listBarStaffBookingSuspensions` | `GET` | `/api/v1/bar/staff-booking-suspensions` | 查询代订权限停用中的经手员工 | `bar.staff_booking.restore` | `bar.staff_booking_suspension.viewed` / `bar.staff_booking_suspension.view_failed` | web | operation 级补充 |
+| BAR-酒吧经营 | `listBarSuspendedOrders` | `GET` | `/api/v1/bar/suspended-orders` | 挂起订单风险看板 | `bar.order.view` | `bar.order_suspension.viewed` / `bar.order_suspension.view_failed` | web | operation 级补充 |
 | BAR-酒吧经营 | `listBarTableAvailability` | `GET` | `/api/v1/bar/tables/availability` | 酒吧空位视图(员工代订用) | `bar.reservation.create` | `bar.table_availability.viewed` / `bar.table_availability.view_failed` | staff_private_phone, web, tablet, kiosk, staff_work_phone | operation 级补充 |
 | BAR-酒吧经营 | `listBarTables` | `GET` | `/api/v1/bar/tables` | 查询桌台或卡座 | `bar.table.view` | `bar.table.viewed` / `bar.table.view_failed` | web | operation 级补充 |
 | BAR-酒吧经营 | `listBarTableSessions` | `GET` | `/api/v1/bar/table-sessions` | 查询酒水台位会话列表 | `bar.table_session.view` | `bar.table_session.list` / `bar.table_session.list_failed` | web | operation 级补充 |
@@ -3197,6 +3217,7 @@
 | BAR-酒吧经营 | `redeemBarDrinkEntitlement` | `POST` | `/api/v1/bar/entitlement-redemptions/drink` | 酒水权益兑换承接 | `bar.entitlement.redeem` | `bar.entitlement_redeemed` / `bar.entitlement_redeem_failed` | staff_work_phone, web | operation 级补充 |
 | BAR-酒吧经营 | `reopenBarBill` | `POST` | `/api/v1/bar/bills/{bill_id}/reopen` | 账单反结 | `bar.bill.reopen` | `bar.bill_reopened` / `bar.bill_reopen_failed` | web | operation 级补充 |
 | BAR-酒吧经营 | `requestBarBillStoredValueSmsCode` | `POST` | `/api/v1/bar/bills/{bill_id}/stored-value/sms` | 酒吧账单储值付款短信验证码 | `finance.payment.register` | `customer.otp_requested` / `customer.otp_request_failed` | web | operation 级补充 |
+| BAR-酒吧经营 | `requestBarOrderSuspensionCancel` | `POST` | `/api/v1/bar/orders/{order_id}/suspension/cancel` | 收银员发起取消挂起订单 | `bar.bill.hang` | `bar.order_suspension_cancel_requested` / `bar.order_suspension_cancel_request_failed` | web | operation 级补充 |
 | BAR-酒吧经营 | `resolveBarBillAnomaly` | `POST` | `/api/v1/bar/bills/{bill_id}/anomaly/resolve` | 主管处置异常账单 | `bar.bill.anomaly.resolve` | `bar.bill_anomaly_resolved` / `bar.bill_anomaly_resolve_failed` | web | operation 级补充 |
 | BAR-酒吧经营 | `resolveBarShift` | `POST` | `/api/v1/bar/shifts/{shift_id}/resolve` | 交班复核平账 | `finance.daily_close.manage` | `bar.shift_resolved` / `bar.shift_resolve_failed` | web | operation 级补充 |
 | BAR-酒吧经营 | `restoreBarStaffBookingSuspension` | `POST` | `/api/v1/bar/staff-booking-suspensions/{id}/restore` | 店长复核恢复员工代订权限 | `bar.staff_booking.restore` | `bar.staff_booking_restored` / `bar.staff_booking_restore_failed` | web | operation 级补充 |
@@ -3213,12 +3234,14 @@
 | BAR-酒吧经营 | `submitBarPayrollRule` | `POST` | `/api/v1/bar/payroll-rules/{id}/submit` | 提交有原件的已配置审批 | `bar.payroll.manage` | `bar.payroll_rule.submitted` / `bar.payroll_rule.submit_failed` | web | operation 级补充 |
 | BAR-酒吧经营 | `submitBarTableSessionSalesBackfill` | `POST` | `/api/v1/bar/table-sessions/{session_id}/sales-backfill` | 补录台位会话销售归属（人工补录，店长复核） | `bar.table_session.create` | `evidence.manual_backfill_submitted` / `evidence.manual_backfill_submit_failed` | web | operation 级补充 |
 | BAR-酒吧经营 | `submitBarTableSessionServiceBackfill` | `POST` | `/api/v1/bar/table-sessions/{id}/service-backfill` | 补录台位会话服务责任区间（人工补录，主管复核） | `bar.table_session.transfer` | `evidence.manual_backfill_submitted` / `evidence.manual_backfill_submit_failed` | web | operation 级补充 |
+| BAR-酒吧经营 | `suspendBarOrder` | `POST` | `/api/v1/bar/orders/{order_id}/suspend` | 挂起包厢未付款订单 | `bar.bill.hang` | `bar.order_suspended` / `bar.order_suspend_failed` | web | operation 级补充 |
 | BAR-酒吧经营 | `transferBarTableSession` | `POST` | `/api/v1/bar/table-sessions/{session_id}/transfer` | 转台（台位会话转移） | `bar.table_session.transfer` | `bar.table.transferred` / `bar.table_session.transfer_failed` | web | operation 级补充 |
 | BAR-酒吧经营 | `transitionBarProductionTicket` | `POST` | `/api/v1/bar/production-tickets/{ticket_id}/transition` | 流转出品工单状态 | `bar.production_ticket.manage` | `bar.production_ticket.transition` / `bar.production_ticket.transition_failed` | web | operation 级补充 |
 | BAR-酒吧经营 | `uploadBarCatalogImage` | `POST` | `/api/v1/bar/catalog/images` | 上传酒吧商品/套餐图片 | `bar.product.manage` | `bar.catalog.image_uploaded` / `bar.catalog.image_uploaded_failed` | web | operation 级补充 |
 | BAR-酒吧经营 | `verifyBarReservationInvitationEntry` | `POST` | `/api/v1/bar/reservations/{id}/invitation/entry-verify` | 订卡邀请函入场核验 | `bar.table.guest_checkin` | `bar.reservation_invitation_entered` / `bar.reservation_invitation_entry_failed` | staff_work_phone, web | operation 级补充 |
 | BAR-酒吧经营 | `voidBarOrderItem` | `POST` | `/api/v1/bar/orders/{order_id}/void-item` | 退菜退酒 | `bar.order_item.void` | `bar.order_item_voided` / `bar.order_item_void_failed` | web | operation 级补充 |
 | BAR-酒吧经营 | `witnessBarShift` | `POST` | `/api/v1/bar/shifts/{shift_id}/witness` | 交班见证归档 | `finance.daily_close.manage` | `bar.shift_witnessed` / `bar.shift_witness_failed` | web | operation 级补充 |
+| BAR-酒吧经营 | `writeOffBarOrderSuspension` | `POST` | `/api/v1/bar/orders/{order_id}/suspension/write-off` | 财务确认坏账订单核销结案 | `finance.ar_ap.manage` | `bar.order_suspension_written_off` / `bar.order_suspension_write_off_failed` | web | operation 级补充 |
 | CUS-客人端 | `applyCustomerStudentCertification` | `POST` | `/api/v1/customer/student-certifications` | 客人申请学生认证 | `not_applicable` | `customer.student_cert.applied` / `customer.student_cert.apply_failed` | app, miniapp | operation 级补充 |
 | CUS-客人端 | `approveCustomerBlacklistRequest` | `POST` | `/api/v1/customer-blacklist-requests/{request_id}/approve` | 批准黑名单申请的当前这一级（夜班值班经理批准 → 娱乐平台负责人终审，终审通过即执行） | `customer.blacklist.approve` | `customer.blacklist.approved` / `customer.blacklist.approve_failed` | web | operation 级补充 |
 | CUS-客人端 | `approveStudentCertification` | `POST` | `/api/v1/student-certifications/{certification_id}/approve` | 学生认证审核通过 | `ticket.student_cert.review` | `customer.student_cert.approved` / `customer.student_cert.approve_failed` | web | operation 级补充 |
