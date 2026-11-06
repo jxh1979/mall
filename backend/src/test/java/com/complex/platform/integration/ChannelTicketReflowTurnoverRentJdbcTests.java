@@ -1,7 +1,8 @@
 package com.complex.platform.integration;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
+import static com.complex.platform.support.DailyCloseFixture.markRangeFinal;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -115,6 +116,8 @@ class ChannelTicketReflowTurnoverRentJdbcTests {
                 .as("172-R1 回归：通票回流照旧不挂酒吧").containsExactly((String) null);
 
         YearMonth month = YearMonth.from(days.businessDate(null, bar, Instant.now()));
+        // 第十八批 V 段 159-R4：抽成出账要求账期内营业日的订单与核销、退款与冲正已标记为最终（本用例不测该闸，整段标齐）。
+        markRangeFinal(jdbc, "bar", bar, month.atDay(1), month.atEndOfMonth());
         assertThat(finance.computePeriodTurnoverRent(bar, contract, month.toString()))
                 .as("渠道售出的门票回流已本地出票、计入门票，不进该酒吧抽成基数（BSM:1347）").isZero();
     }

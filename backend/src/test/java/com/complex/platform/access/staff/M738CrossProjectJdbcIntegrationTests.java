@@ -1,7 +1,8 @@
 package com.complex.platform.access.staff;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
+import static com.complex.platform.support.DailyCloseFixture.markRangeFinal;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -16,6 +17,7 @@ import com.complex.platform.access.RoleRecord;
 import com.jayway.jsonpath.JsonPath;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
@@ -711,6 +713,8 @@ class M738CrossProjectJdbcIntegrationTests {
     // 请求体按前端（{month}，客户端补 idempotency_key、转蛇形）。修复前 A 公司人事一次结了两组（第一处断言即红）。
     @Test
     void commissionCloseSettlesOnlyGroupsInOwnScope() throws Exception {
+        // 第十八批 V 段 159-R8：mb、mb2 是 retail 商户，按所属综合体 entityB 判最终标记；2099-04 在夹具建档之后，先把该月五类标齐。
+        markRangeFinal(jdbcTemplate, "project", entityB, LocalDate.of(2099, 4, 1), LocalDate.of(2099, 4, 30));
         String ea = employee("ea", entityA);
         String eb = employee("eb", entityB);
         String mb = merchant("mb", entityB);

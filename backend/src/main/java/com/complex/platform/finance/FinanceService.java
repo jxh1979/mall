@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.39
+// 文件版本：V0.40
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -89,8 +89,9 @@ public class FinanceService implements TerminationSettlementPort {
     private static final String DEFAULT_REFUND_DIRECTION = "original";
     // 第十八批 S 段第 161 条 161-R3（第十八批裁决 35「酒吧逐店逐日查；游乐等按综合体逐日查」）：票务、游乐由综合体的 project 范围日结覆盖，不再单独出日结。
     private static final Set<String> DAILY_CLOSE_SCOPES = Set.of("project", "merchant", "bar");
-    /** 第十八批 R 段 143-R2：日结五类最终标记的数据类别与 ENUM:190 原词（按原句顺序）；143-R3 逾期待办同用（FinanceFinalMarkOverdueService）。 */
-    static final Map<String, String> FINAL_MARK_CATEGORIES = new java.util.LinkedHashMap<>();
+    /** 第十八批 R 段 143-R2：日结五类最终标记的数据类别与 ENUM:190 原词（按原句顺序）；143-R3 逾期待办同用（FinanceFinalMarkOverdueService）；
+     *  第十八批 V 段 159-R1 起 public，下游闸调用方要全部五类传 keySet()，要部分类别直接写类别键。 */
+    public static final Map<String, String> FINAL_MARK_CATEGORIES = new java.util.LinkedHashMap<>();
     static {
         FINAL_MARK_CATEGORIES.put("orders_verifications", "当日订单与核销记录");
         FINAL_MARK_CATEGORIES.put("refunds_reversals", "当日退款与冲正记录");
@@ -673,9 +674,30 @@ public class FinanceService implements TerminationSettlementPort {
                     if (dailyClose.finalMarkCategories().contains(category)) {
                         throw ApiException.conflict("FINAL_MARK_EXISTS", "该类数据已标记为最终，不可撤销");
                     }
+                    // 第十八批 V 段第 159 条 159-R6（BSM:1777「该预览单在上月最后一个营业日的五类数据……全部标记为最终之后自动生成，不设固定生成时点」；
+                    // DEC-R8-45；第十八批裁决 35「酒吧逐店逐日查；游乐等按综合体逐日查」）：营业日按起算日命名（ENUM:190），当月最后一个营业日即该月最后
+                    // 一个日历日。本次标记让该单位（酒吧按该店，综合体按 project 范围；非酒吧商户的 merchant 范围不是检查单位）这一天五类齐全时，
+                    // 提交后发事件由分红出该月预览；同日另一张日结已标过该类的不重发，幂等重放不重跑本闭包。
+                    LocalDate day = dailyClose.businessDate();
+                    String unitProject = bar == null && "project".equals(scopeType) ? scopeId : null;
+                    boolean monthEnd = day.plusDays(1).getDayOfMonth() == 1 && (bar != null || unitProject != null);
+                    Set<String> unitMarked = monthEnd
+                            ? new java.util.HashSet<>(repository.finalMarkCategoriesByDay(bar, unitProject, day, day).getOrDefault(day, Set.of()))
+                            : Set.of();
                     repository.saveDailyCloseFinalMark(dailyClose.id(), category, now);
+                    if (monthEnd && refundEvents != null && unitMarked.add(category)
+                            && unitMarked.containsAll(FINAL_MARK_CATEGORIES.keySet())) {
+                        refundEvents.publishEvent(new MonthEndBusinessDayFinal(bar, unitProject, java.time.YearMonth.from(day)));
+                    }
                     return withShiftDifference(repository.findDailyCloseById(dailyClose.id()).orElseThrow());
                 });
+    }
+
+    /**
+     * 第十八批 V 段第 159 条 159-R6（BSM:1777；DEC-R8-45）：某单位（barId 非空＝该酒吧；否则 projectId＝该综合体）当月最后一个营业日的五类数据
+     * 刚全部标记为最终；标记提交后由分红监听出该月预览（{@code DividendService#onMonthEndBusinessDayFinal}）。
+     */
+    public record MonthEndBusinessDayFinal(String barId, String projectId, java.time.YearMonth month) {
     }
 
     /**
@@ -2032,6 +2054,58 @@ public class FinanceService implements TerminationSettlementPort {
     }
 
     /**
+     * 第十八批 V 段第 159 条 159-R1（ENUM:190「非最终快照的数据一律不得进入结算、分红、正式提成计算和对账关账」「「最终快照」指某一营业日的某一类数据
+     * 在该营业日结束后不再变动的状态。」；第十八批裁决 35「酒吧逐店逐日查；游乐等按综合体逐日查」；18R 143-R3 复核修复补记「检查单位只取未存档的酒吧……
+     * 酒吧与综合体都跳过建档之前的营业日」）：下游取数前列出 from～to（含两端）里所给类别尚未标记为最终的营业日。单位：商户是酒吧按该酒吧，
+     * 否则按综合体（projectId，为空取商户所属综合体）；不在逾期待办同一检查单位集合（{@link FinanceRepository#listFinalMarkUnits}）里的单位
+     * 没有标记义务，返回空。建档之前的营业日不查；今天及以后还不能标的营业日照算未最终。每行「yyyy-MM-dd 单位名：类别原词、类别原词」，
+     * 按营业日升序；空＝全部已最终。不开事务、不抛业务异常、不判登录人与范围（系统作业与不持日结权限的月结操作人都调）。
+     */
+    public List<String> nonFinalDays(String merchantId, String projectId, LocalDate from, LocalDate to,
+            java.util.Collection<String> categories) {
+        String bar = businessDayResolver.barOfMerchant(merchantId);
+        String project = bar != null ? null : projectId != null ? projectId : businessDayResolver.projectOfMerchant(merchantId);
+        return repository.listFinalMarkUnits().stream()
+                .filter(unit -> bar != null ? bar.equals(unit.bar()) : unit.bar() == null && unit.id().equals(project))
+                .findFirst().map(unit -> unitNonFinalDays(unit, from, to, categories)).orElse(List.of());
+    }
+
+    /** 159-R1：projectId 为空取全部检查单位，否则取该综合体及其下在营未存档的酒吧；逐单位同 {@link #nonFinalDays}，按单位、营业日拼接。 */
+    public List<String> nonFinalDaysAllUnits(String projectId, LocalDate from, LocalDate to, java.util.Collection<String> categories) {
+        return repository.listFinalMarkUnits().stream().filter(unit -> projectId == null || projectId.equals(unit.project()))
+                .flatMap(unit -> unitNonFinalDays(unit, from, to, categories).stream()).toList();
+    }
+
+    /** 159-R1：未最终营业日的提示文案——各行以「；」连接，最多列 10 行，超出时末尾加「等，共 N 条」。 */
+    public static String describeNonFinalDays(List<String> lines) {
+        String shown = String.join("；", lines.subList(0, Math.min(lines.size(), 10)));
+        return lines.size() > 10 ? shown + "等，共 " + lines.size() + " 条" : shown;
+    }
+
+    private List<String> unitNonFinalDays(FinanceRepository.FinalMarkUnit unit, LocalDate from, LocalDate to,
+            java.util.Collection<String> categories) {
+        // 整段营业日都在建档之前：不查标记（先判区间末日，省掉逐单位查库）。
+        if (!businessDayResolver.end(unit.project(), unit.bar(), to).isAfter(unit.created())) {
+            return List.of();
+        }
+        Map<LocalDate, Set<String>> marked = repository.finalMarkCategoriesByDay(unit.bar(), unit.bar() == null ? unit.id() : null,
+                from, to);
+        List<String> lines = new java.util.ArrayList<>();
+        for (LocalDate day = from; !day.isAfter(to); day = day.plusDays(1)) {
+            if (!businessDayResolver.end(unit.project(), unit.bar(), day).isAfter(unit.created())) {
+                continue;
+            }
+            Set<String> done = marked.getOrDefault(day, Set.of());
+            List<String> missing = FINAL_MARK_CATEGORIES.entrySet().stream()
+                    .filter(e -> categories.contains(e.getKey()) && !done.contains(e.getKey())).map(Map.Entry::getValue).toList();
+            if (!missing.isEmpty()) {
+                lines.add(day + " " + unit.name() + "：" + String.join("、", missing));
+            }
+        }
+        return lines;
+    }
+
+    /**
      * 143-R1 日结范围闸（PGM:664「单店层面的财务工作——日结确认与锁定……由该酒吧对应的财务 BP 负责」；PGM:659「所有业务数据默认按项目隔离，
      * 普通岗位没有跨项目查看权」）：写法同 {@link #requireArApScope}——商户账号只认本商户的 merchant、bar 范围；其余账号按该码可触及的项目
      * 覆盖日结所属综合体（{@link #dailyCloseProject}）。
@@ -3126,6 +3200,15 @@ public class FinanceService implements TerminationSettlementPort {
     }
 
     private TurnoverCalc calculateTurnoverRent(TurnoverRentRuleRecord rule, LocalDate periodStart, LocalDate periodEnd) {
+        // 第十八批 V 段第 159 条 159-R4（ENUM:190「非最终快照的数据一律不得进入结算、分红、正式提成计算和对账关账」；ENUM:257「营业额＝该商户当期在本综合体内
+        // 含税实收成交总额，减去当期已成功的退款金额」）：取数之前，账期内该商户检查单位（酒吧按该店，其他商户按所属综合体）的「当日订单与核销记录」
+        // 「当日退款与冲正记录」须已全部标记为最终；三个出账入口都经本方法，抛出时快照、冲正应付与账单都还没写。
+        List<String> notFinal = nonFinalDays(rule.merchantId(), null, periodStart, periodEnd,
+                List.of("orders_verifications", "refunds_reversals"));
+        if (!notFinal.isEmpty()) {
+            throw ApiException.conflict("TURNOVER_DATA_NOT_FINAL",
+                    "以下营业日数据尚未标记为最终，不能出营业额抽成账单：" + describeNonFinalDays(notFinal));
+        }
         // 第十八批 Q 段第 140 条（BSM:1682「酒吧仍按每家酒吧配置」）：一次算窗口，酒吧商户的全部来源按该酒吧营业日窗，
         // 其他商户按所属综合体（同 DividendService 三来源同窗）。
         String bar = businessDayResolver.barOfMerchant(rule.merchantId());

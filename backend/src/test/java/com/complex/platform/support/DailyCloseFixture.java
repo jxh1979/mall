@@ -1,14 +1,18 @@
 package com.complex.platform.support;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import com.complex.platform.finance.DailyCloseRecord;
 import com.complex.platform.finance.FinanceRepository;
 import com.complex.platform.finance.FinanceService;
 import com.complex.platform.finance.dto.DailyCloseActionRequest;
 import com.complex.platform.finance.dto.DailyCloseRequest;
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.util.Collection;
 import java.util.List;
+import java.util.UUID;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 /**
@@ -37,6 +41,33 @@ public final class DailyCloseFixture {
     public static void markAllFinal(FinanceRepository marks, String dailyCloseId) {
         for (String category : FINAL_MARK_CATEGORIES) {
             marks.saveDailyCloseFinalMark(dailyCloseId, category, Instant.now());
+        }
+    }
+
+    /**
+     * 第十八批 V 段第 159 条 159-R1：直插一张待确认日结（同营业日同范围已有则复用，V044 uq_daily_close_scope_date）并标所给类别，返回日结编号。
+     * 直插不经服务层、不发事件；已插的标记撤不掉，要缺某天某类就把那天单独调本方法。日结表禁删（V149），不开事务的类要用不撞号的范围编号。
+     */
+    public static String closeWithMarks(JdbcTemplate jdbc, String scopeType, String scopeId, LocalDate day,
+            Collection<String> categories) {
+        String id = "dcfx_" + UUID.nameUUIDFromBytes((scopeType + "|" + scopeId + "|" + day).getBytes(StandardCharsets.UTF_8))
+                .toString().replace("-", "");
+        jdbc.update("INSERT INTO finance_daily_closes (id, business_date, scope_type, scope_id, status, created_at)"
+                + " VALUES (?, ?, ?, ?, 'pending_confirm', now()) ON CONFLICT (business_date, scope_type, scope_id) DO NOTHING",
+                id, day, scopeType, scopeId);
+        String closeId = jdbc.queryForObject("SELECT id FROM finance_daily_closes WHERE business_date = ? AND scope_type = ?"
+                + " AND scope_id = ?", String.class, day, scopeType, scopeId);
+        for (String category : categories) {
+            jdbc.update("INSERT INTO finance_daily_close_final_marks (daily_close_id, category, marked_at) VALUES (?, ?, now())"
+                    + " ON CONFLICT DO NOTHING", closeId, category);
+        }
+        return closeId;
+    }
+
+    /** 159-R1：from～to（含两端）逐营业日 {@link #closeWithMarks}，五类全标。 */
+    public static void markRangeFinal(JdbcTemplate jdbc, String scopeType, String scopeId, LocalDate from, LocalDate to) {
+        for (LocalDate day = from; !day.isAfter(to); day = day.plusDays(1)) {
+            closeWithMarks(jdbc, scopeType, scopeId, day, FINAL_MARK_CATEGORIES);
         }
     }
 

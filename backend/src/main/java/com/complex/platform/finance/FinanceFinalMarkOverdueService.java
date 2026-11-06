@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static com.complex.platform.common.Strings.trimToNull;
 
@@ -13,18 +13,16 @@ import com.complex.platform.access.staff.JdbcStaffRepository;
 import com.complex.platform.common.BusinessDayResolver;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.evidence.AuditEventService;
+import com.complex.platform.finance.FinanceRepository.FinalMarkUnit;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZonedDateTime;
-import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
-import java.util.stream.Collectors;
-import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Service;
 
 /**
@@ -34,6 +32,8 @@ import org.springframework.stereotype.Service;
  * 系统作业没有登录人，不走员工范围闸。检查单位：在营的每家酒吧（未存档，BSM:569「存档（先下线）」；按该酒吧的营业日与闭店时点，日结范围 bar 或
  * merchant）与每个启用的综合体（按综合体营业日，日结范围 project）；建档之前的营业日（营业日结束时刻不晚于建档时刻）该单位还不存在，不查。期限已到、该营业日没有日结或五类未标齐的，给持日结锁定权限、负责范围覆盖该综合体的平台侧财务人员
  * （在用、不带商户归属、非外包、有员工档案，同 FacilityWorkOrderService 物业主管取人）各发一条员工系统通知作待办，正文列缺的类别（ENUM:190 原词）。
+ * 第十八批 V 段第 159 条 159-R1：检查单位与标记并集查询下沉到 {@link FinanceRepository#listFinalMarkUnits}、
+ * {@link FinanceRepository#finalMarkCategoriesByDay}，与下游闸 {@link FinanceService#nonFinalDays} 共用，口径不变。
  * 通知编号由营业日＋检查单位＋员工档案派生，已发过即跳过（不能靠覆盖求幂等：覆盖会把员工已读的通知改回未读），每人每单位每营业日只发一次。
  * ponytail: 只回看当前营业日之前第 3、第 2 个营业日，作业停跑超过一天半会漏那几天；要补就放宽回看天数。
  */
@@ -42,11 +42,6 @@ public class FinanceFinalMarkOverdueService {
 
     private static final String PERM = "finance.daily_close.lock";
 
-    /** 检查单位：bar 为该酒吧（日结范围 bar 或 merchant），否则为综合体（日结范围 project）；project 为所属综合体。 */
-    private record Unit(String bar, String id, String name, String project, Instant created) {
-    }
-
-    private final NamedParameterJdbcTemplate jdbc;
     private final FinanceRepository repository;
     private final BusinessDayResolver businessDayResolver;
     private final AccessRepository accessRepository;
@@ -54,10 +49,9 @@ public class FinanceFinalMarkOverdueService {
     private final JdbcStaffRepository staffRepository;
     private final AuditEventService auditEventService;
 
-    public FinanceFinalMarkOverdueService(NamedParameterJdbcTemplate jdbc, FinanceRepository repository,
+    public FinanceFinalMarkOverdueService(FinanceRepository repository,
             BusinessDayResolver businessDayResolver, AccessRepository accessRepository, AuthorizationService authorizationService,
             JdbcStaffRepository staffRepository, AuditEventService auditEventService) {
-        this.jdbc = jdbc;
         this.repository = repository;
         this.businessDayResolver = businessDayResolver;
         this.accessRepository = accessRepository;
@@ -68,16 +62,10 @@ public class FinanceFinalMarkOverdueService {
 
     /** 按 now 检查一轮，返回本轮新发的待办条数。 */
     public int scanFinalMarkOverdue(Instant now) {
-        List<Unit> units = new ArrayList<>(jdbc.query(
-                "SELECT id, merchant_name, project_id, created_at FROM merchants WHERE merchant_type = 'bar' AND status = 'active' "
-                        + "AND archived_at IS NULL ORDER BY id",
-                Map.of(), (rs, i) -> new Unit(rs.getString(1), rs.getString(1), rs.getString(2), rs.getString(3),
-                        rs.getTimestamp(4).toInstant())));
-        units.addAll(jdbc.query("SELECT id, name, created_at FROM projects WHERE status = 'active' ORDER BY id",
-                Map.of(), (rs, i) -> new Unit(null, rs.getString(1), rs.getString(2), rs.getString(1), rs.getTimestamp(3).toInstant())));
+        List<FinalMarkUnit> units = repository.listFinalMarkUnits();
         Map<String, AuthorizationService.ProjectReach> recipients = null;
         int sent = 0;
-        for (Unit unit : units) {
+        for (FinalMarkUnit unit : units) {
             LocalDate current = businessDayResolver.businessDate(unit.project(), unit.bar(), now);
             for (LocalDate day : List.of(current.minusDays(3), current.minusDays(2))) {
                 if (!businessDayResolver.end(unit.project(), unit.bar(), day).isAfter(unit.created())) {
@@ -100,15 +88,15 @@ public class FinanceFinalMarkOverdueService {
         return sent;
     }
 
-    /** 该单位该营业日日结上还没标的类别（ENUM:190 原词）；没有日结即五类都缺。酒吧按 scope_id＝该酒吧取（bar、merchant 范围）。 */
-    private List<String> missing(Unit unit, LocalDate day) {
-        Set<String> marked = repository.listDailyCloses(null, null, day, unit.bar() == null ? "project" : null, unit.id(), 1, 10)
-                .items().stream().flatMap(close -> close.finalMarkCategories().stream()).collect(Collectors.toSet());
+    /** 该单位该营业日日结上还没标的类别（ENUM:190 原词）；没有日结即五类都缺。酒吧按 scope_id＝该酒吧取（bar、merchant 范围），同日多张取并集。 */
+    private List<String> missing(FinalMarkUnit unit, LocalDate day) {
+        Set<String> marked = repository.finalMarkCategoriesByDay(unit.bar(), unit.bar() == null ? unit.id() : null, day, day)
+                .getOrDefault(day, Set.of());
         return FinanceService.FINAL_MARK_CATEGORIES.entrySet().stream().filter(e -> !marked.contains(e.getKey()))
                 .map(Map.Entry::getValue).toList();
     }
 
-    private int notify(Unit unit, LocalDate day, List<String> missing, Map<String, AuthorizationService.ProjectReach> recipients,
+    private int notify(FinalMarkUnit unit, LocalDate day, List<String> missing, Map<String, AuthorizationService.ProjectReach> recipients,
             Instant now) {
         String title = "五类数据逾期未标记：营业日 " + day + "、" + unit.name();
         String body = (unit.bar() == null ? "综合体" : "酒吧") + unit.name() + "营业日 " + day

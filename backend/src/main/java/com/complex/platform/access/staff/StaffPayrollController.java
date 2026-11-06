@@ -1,10 +1,11 @@
 package com.complex.platform.access.staff;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static com.complex.platform.access.staff.StaffPayrollModels.*;
 import com.complex.platform.access.staff.dto.StaffAdjustmentAppealRequest;
 import com.complex.platform.common.api.*;
+import com.complex.platform.evidence.AuditEventService;
 import java.util.*;
 import java.util.function.Supplier;
 import org.springframework.web.bind.annotation.*;
@@ -14,7 +15,8 @@ import org.springframework.web.bind.annotation.*;
 public class StaffPayrollController {
     private final StaffPayrollService payroll;
     private final StaffPayrollConfigurationService config;
-    public StaffPayrollController(StaffPayrollService payroll,StaffPayrollConfigurationService config){this.payroll=payroll;this.config=config;}
+    private final AuditEventService audit;
+    public StaffPayrollController(StaffPayrollService payroll,StaffPayrollConfigurationService config,AuditEventService audit){this.payroll=payroll;this.config=config;this.audit=audit;}
     @GetMapping("/schemes") public ApiResponse<List<Scheme>> schemes(@RequestParam("user_id") String user){return call("scheme_list","staff_payroll_scheme",user,()->config.schemes(user));}
     @PostMapping("/schemes") public ApiResponse<Scheme> scheme(@RequestBody SchemeDraftRequest r){return call("scheme_draft","staff_payroll_scheme",null,()->config.draftScheme(r));}
     @PostMapping("/schemes/{id}/submit") public ApiResponse<Scheme> submitScheme(@PathVariable String id,@RequestBody SubmitRequest r){return call("scheme_submit","staff_payroll_scheme",id,()->config.submitScheme(id,r));}
@@ -37,7 +39,7 @@ public class StaffPayrollController {
     @GetMapping("/statements/{id}") public ApiResponse<StatementDetail> detail(@PathVariable String id){return call("detail","staff_payroll",id,()->payroll.detail(id,false));}
     @GetMapping("/mine/statements/{id}") public ApiResponse<StatementDetail> mine(@PathVariable String id){return call("detail_mine","staff_payroll",id,()->payroll.detail(id,true));}
     private <T> ApiResponse<T> call(String name,String type,String id,Supplier<T> action) {
-        try {T result=action.get();config.audit.recordSuccess("staff.payroll."+name,null,type,id,null,null,Map.of());return ApiResponse.ok(result);}
-        catch(RuntimeException e){config.audit.recordFailure("staff.payroll."+name+"_failed",null,type,id,null,null,e instanceof ApiException a?a.code():"INTERNAL_ERROR");throw e;}
+        try {T result=action.get();audit.recordSuccess("staff.payroll."+name,null,type,id,null,null,Map.of());return ApiResponse.ok(result);}
+        catch(RuntimeException e){audit.recordFailure("staff.payroll."+name+"_failed",null,type,id,null,null,e instanceof ApiException a?a.code():"INTERNAL_ERROR");throw e;}
     }
 }

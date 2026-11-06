@@ -1,6 +1,6 @@
 package com.complex.platform.dividend;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import com.complex.platform.common.api.PageResponse;
 import com.complex.platform.dividend.DividendRecords.DividendPlanRecord;
@@ -94,6 +94,15 @@ public interface DividendRepository {
     // ── 三来源期间取数（成本侧走 InventoryRepository.sumOutboundCost，不在本仓储）──
     /** 酒吧实收：bar_bill_settlements 结账流水（reversed=false），settled_at 落窗口（revenue.net 商户行级同谓词区间版）。 */
     long sumBarRevenueCent(String merchantId, Instant from, Instant to);
+
+    /**
+     * 第十八批 V 段第 159 条 159-R10（BSM:1777「每月另出一张只读的预览单，让主理人提前看到当月大致情况（预览只能看，不参与审批、不发放）」
+     * 「标记完成即自动生成」）：preview 为真时，尚未月结定格（扣留数未定）的服务费分项暂不计、不拦；商品收入来源未定照旧拦。
+     * preview 为假即三参版（BSM:1076「月结定格的扣留部分，扣留金额计入该商户营业额、抽成基数与分红净利润基数」，正式单照旧要求月结定格）。
+     */
+    default long sumBarRevenueCent(String merchantId, Instant from, Instant to, boolean preview) {
+        return sumBarRevenueCent(merchantId, from, to);
+    }
 
     /** 酒吧退款：bar_bill_adjustments(adjustment_type='refund') 经 bar_bills 归商户，refunded_at 落窗口。 */
     long sumBarRefundCent(String merchantId, Instant from, Instant to);

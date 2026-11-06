@@ -1,4 +1,4 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -1079,5 +1079,37 @@ describe("ContractWorkbenchPage 第十八批 Q 段第 138 条复核修正：已�
     await waitFor(() => expect(screen.queryByTestId("contract-period-bills-contract-gggg7777")).toBeTruthy());
     fireEvent.click(screen.getByTestId("contract-period-bills-contract-gggg7777"));
     await waitFor(() => expect(setGlobalError).toHaveBeenCalledWith("排租金AR需先选账期（年-月）"));
+  });
+});
+
+describe("ContractWorkbenchPage 第十八批 V 段第 159 条 159-R4：排租金AR 遇营业日数据未最终", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  // ENUM:190「非最终快照的数据一律不得进入结算、分红、正式提成计算和对账关账」：后端 409 TURNOVER_DATA_NOT_FINAL 不出账，页面显示后端原文。
+  it("排租金AR 被 409 拒绝 → setGlobalError 收到「操作冲突：以下营业日数据尚未标记为最终……」", async () => {
+    const props = baseProps();
+    const fetchMock = globalThis.fetch as unknown as {
+      getMockImplementation: () => ((input: RequestInfo | URL) => Promise<Response>) | undefined;
+      mockImplementation: (fn: (input: RequestInfo | URL) => Promise<Response>) => void;
+    };
+    const base = fetchMock.getMockImplementation()!;
+    const notFinal = "以下营业日数据尚未标记为最终，不能出营业额抽成账单：2026-08-20 某酒吧：当日退款与冲正记录";
+    fetchMock.mockImplementation((input) => String(input).includes("/period-bills")
+      ? Promise.resolve(new Response(
+        `{"success":false,"code":"STATE_CONFLICT","detail_code":"TURNOVER_DATA_NOT_FINAL","message":"${notFinal}"}`,
+        { status: 409, headers: { "content-type": "application/json" } }))
+      : base(input));
+    render(<ContractWorkbenchPage {...props} />);
+    await waitFor(() => expect(screen.getByTestId("contract-contract-aaaa1111")).toBeTruthy());
+    await waitFor(() => expect(screen.getByTestId("contract-bill-period")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("contract-bill-period"));
+    fireEvent.click(screen.getByRole("button", { name: "下一年" }));
+    fireEvent.click(screen.getByRole("button", { name: "8月" }));
+    await waitFor(() => expect(screen.getByTestId("contract-bill-period").textContent).toContain("2026年8月"));
+    fireEvent.click(screen.getByTestId("contract-actions-contract-aaaa1111"));
+    await waitFor(() => expect(screen.getByTestId("contract-period-bills-contract-aaaa1111")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("contract-period-bills-contract-aaaa1111"));
+    await waitFor(() => expect(props.setGlobalError).toHaveBeenCalledWith(`操作冲突：${notFinal}`));
+    expect(props.setActionResult).not.toHaveBeenCalled();
   });
 });

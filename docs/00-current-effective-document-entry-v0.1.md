@@ -23,7 +23,7 @@
 | 楼宇运营业务域 PRD | `docs/building-operations-prd-v1.0.md` |
 | 集团治理重建 PRD | `docs/group-governance-rebuild-prd-v1.0.md` |
 | 服务点单业务域 PRD | `docs/service-order-product-prd-v0.1.md`；承接域＝BSM 服务点单章（`section#service-order`）+ ENUM 第十二章「服务点单」；2026-08-05（R7）新建 |
-| P0 机器可读接口契约 | 当前可执行契约以 `docs/openapi/openapi-p0.json` 为准；`docs/openapi/openapi-p0.yaml` 为同名 YAML 镜像。operation 数以 `npm run verify:operation-matrix` / `verify:openapi-closure` 脚本输出为准；本轮（2026-11-05）核验为 1253 operations。YAML 镜像若落后于 JSON，不得用落后的 YAML 反向覆盖 JSON，需先同步差异 |
+| P0 机器可读接口契约 | 当前可执行契约以 `docs/openapi/openapi-p0.json` 为准；`docs/openapi/openapi-p0.yaml` 为同名 YAML 镜像。operation 数以 `npm run verify:operation-matrix` / `verify:openapi-closure` 脚本输出为准；本轮（2026-11-06）核验为 1253 operations。YAML 镜像若落后于 JSON，不得用落后的 YAML 反向覆盖 JSON，需先同步差异 |
 | OpenAPI 与业务 HTML 覆盖核对（2026-06-30 复核更新，分辨四类，勿再笼统列缺口） | ① 商户档案/入驻=已覆盖（`/api/v1/platform/merchants` + `merchant.profile.view/manage`）；② 应收=已覆盖（AR/AP 域）；③ 楼层/区域/点位/商铺/卡座/吧台位/游乐入口/库房/设备点位=由扁平 `spaces` 的 `space_type`+`parent_space_id` 自套承载（非缺口，映射见 foundation-database-design）；④ 发票=税务/电子发票平台第三方对接、故意延后（预留接口+后台开关+不阻塞自研，真实资料到位再补契约，见 finance-settlement-product-prd §6A）；⑤ 操作审计日志查询/导出=**现状已覆盖 + 明确增强项**：审计事件页 ADM-EVD-001（AUDITOR，搜索/筛选/导出留痕）已实现、由 `/api/v1/evidence/events` 承载，按对象时间线已 UNION `audit_events`；**待增强（P1/P2 留档、非阻塞）**=跨对象批量搜索/导出全量 `audit_events` 操作日志（如“导出某月全部退款放行”），需另开 audit_events 专属查询/导出端点+页+测试，按审计实际需要再排。 |
 | P0 operation 级验收矩阵 | `docs/p0-openapi-operation-acceptance-matrix-v0.1.md` |
 | P0 OpenAPI 权限、事件、任务追溯附录 | `docs/p0-openapi-contract-closure-appendix-v0.1.md` |
@@ -123,7 +123,7 @@
 
 ### 2.1 R1~R4 审计交付物登记（2026-06-18 附加）
 
-本节附加式登记 R1~R4 阶段审计与回填交付物，以及配套的数据隔离规格与 SMS 占位规格，便于审计入口统一追溯。本节为附加内容，不删除上文任一原有登记；当前事实基线以 `docs/p0-openapi-operation-acceptance-matrix-v0.1.md` 与 `npm run verify:*` 实时输出为准。本轮 2026-11-05 实测 OpenAPI 1253 operations、Flyway 最新 V604；后端 surefire 现有报告 4641 tests。
+本节附加式登记 R1~R4 阶段审计与回填交付物，以及配套的数据隔离规格与 SMS 占位规格，便于审计入口统一追溯。本节为附加内容，不删除上文任一原有登记；当前事实基线以 `docs/p0-openapi-operation-acceptance-matrix-v0.1.md` 与 `npm run verify:*` 实时输出为准。本轮 2026-11-06 实测 OpenAPI 1253 operations、Flyway 最新 V604；后端 surefire 现有报告 4641 tests。
 
 | 交付物 | 入口 |
 |---|---|
@@ -157,7 +157,7 @@
 <!-- 文档goal(2026-06-20)：新增 §2.3，登记 R6/R7 决策批次与本会话新功能落地，刷新事实基线 -->
 ## 2.3 R6/R7 决策批次与本会话新功能落地登记（2026-06-20）`文档goal(2026-06-20)`
 
-本节附加式登记业务决策批次与本会话已落地新功能，不删除上文任一原有内容。本轮 2026-11-05 取证为 Flyway 最新 V604、OpenAPI 1253 operations；后端 surefire 现有报告 4641 tests。各项以 `docs/openapi/openapi-p0.yaml`、`backend/src/main/resources/db/migration`、`backend/target/surefire-reports`、`npx playwright test --list` 与 `npm run verify:*` 实时输出为最终权威。
+本节附加式登记业务决策批次与本会话已落地新功能，不删除上文任一原有内容。本轮 2026-11-06 取证为 Flyway 最新 V604、OpenAPI 1253 operations；后端 surefire 现有报告 4641 tests。各项以 `docs/openapi/openapi-p0.yaml`、`backend/src/main/resources/db/migration`、`backend/target/surefire-reports`、`npx playwright test --list` 与 `npm run verify:*` 实时输出为最终权威。
 
 ### 决策批次登记
 

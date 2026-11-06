@@ -1,6 +1,6 @@
 package com.complex.platform.access.staff;
 
-// 文件版本：V0.30
+// 文件版本：V0.31
 
 import com.complex.platform.access.AccessActor;
 import com.complex.platform.access.AccessRepository;
@@ -1277,6 +1277,10 @@ public class StaffService {
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     private com.complex.platform.finance.FinanceRepository financeRepository;
 
+    /** 第十八批 V 段 159-R8：提成月结拨付前判派驻酒吧当月营业日的最终标记（必填注入；FinanceService 不依赖 staff 包，无环）。 */
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.complex.platform.finance.FinanceService financeService;
+
     /** 登记派驻：所属主体取自员工档案 company_id；同一员工在同一酒吧只能有一条进行中的派驻。需 staff.profile.review。 */
     public StaffDispatchRecord createDispatch(com.complex.platform.access.staff.dto.StaffDispatchCreateRequest request) {
         try {
@@ -1442,6 +1446,10 @@ public class StaffService {
      * 金额=该月派驻人员提成合计（总额收付、不轧差），到期=月末后的下一个付账日，会计期间=该月。
      * 第十八批 G 段 82a-R3（cg-pending-decisions 第 20 条「由持有有效工资管理权限且在授权范围内的人员人工触发月结」）：
      * 只结本人范围内的组（{@link #settlementInScope}，与清单同口径）；范围外的组留给有权的人结。
+     * 第十八批 V 段第 159 条 159-R8（ENUM:190「非最终快照的数据一律不得进入结算、分红、正式提成计算和对账关账」；BSM:1142「由该酒吧按月拨付给
+     * 娱乐平台公司」；决策台账 §25 Q32「正式提成仅用该项计算依赖的最终确认数据」；第十八批裁决 35「酒吧逐店逐日查」）：拨付按（月, 酒吧, 主体）
+     * 只落一次，所以本次要结的各组（范围内、金额大于 0）所在酒吧当月每个营业日的「当日订单与核销记录」「当日退款与冲正记录」须已标最终，
+     * 否则整次 409 COMMISSION_DATA_NOT_FINAL、一组都不写。
      */
     private int doCloseCommissionSettlement(String month, String merchantScope, String ownCompany,
                                             java.util.Set<String> projectIds) {
@@ -1453,17 +1461,24 @@ public class StaffService {
         String actor = actorIdOrSystem(authorizationService.currentActor());
         java.time.Instant now = java.time.Instant.now();
         int created = 0;
-        for (Map<String, Object> row : repository.aggregateDispatchedCommissions(month)) {
+        List<Map<String, Object>> groups = repository.aggregateDispatchedCommissions(month).stream()
+                .filter(row -> settlementInScope(merchantScope, ownCompany, projectIds, (String) row.get("merchant_id"),
+                        (String) row.get("company_id"), (String) row.get("project_id")))
+                .filter(row -> ((Number) row.get("amount_cent")).longValue() > 0L)
+                .toList();
+        List<String> notFinal = groups.stream().map(row -> (String) row.get("merchant_id")).distinct()
+                .flatMap(bar -> financeService.nonFinalDays(bar, null, yearMonth.atDay(1), yearMonth.atEndOfMonth(),
+                        List.of("orders_verifications", "refunds_reversals")).stream())
+                .toList();
+        if (!notFinal.isEmpty()) {
+            throw ApiException.conflict("COMMISSION_DATA_NOT_FINAL", "以下营业日数据尚未标记为最终，不能办理提成月结拨付："
+                    + com.complex.platform.finance.FinanceService.describeNonFinalDays(notFinal));
+        }
+        for (Map<String, Object> row : groups) {
             String merchantId = (String) row.get("merchant_id");
             String companyId = (String) row.get("company_id");
             String projectId = (String) row.get("project_id");
-            if (!settlementInScope(merchantScope, ownCompany, projectIds, merchantId, companyId, projectId)) {
-                continue;
-            }
             long amountCent = ((Number) row.get("amount_cent")).longValue();
-            if (amountCent <= 0L) {
-                continue;
-            }
             // 结算键：(月, 酒吧, 主体) 的确定性摘要，保证台账 id / 单号 / source_id 落在 64 字符内且重放得到同一键。
             String key = java.util.UUID.nameUUIDFromBytes((month + "|" + merchantId + "|" + companyId)
                     .getBytes(java.nio.charset.StandardCharsets.UTF_8)).toString().replace("-", "");

@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.06
+// 文件版本：V0.07
 
 import static com.complex.platform.bar.BarPayrollSupport.*;
 import static com.complex.platform.bar.BarPayrollRequests.*;
@@ -38,6 +38,13 @@ public class BarPayrollAllocationService {
     // 第十八批第 1 条（ENUM:187）：「本月尚未结束」按营业日判断，月末最后一个营业日到次日起点前仍属本月。
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     com.complex.platform.common.BusinessDayResolver businessDays = new com.complex.platform.common.BusinessDayResolver();
+    // 第十八批 V 段第 159 条 159-R9：月结定格前判账单所属营业日的最终标记（必填注入；FinanceService 不依赖 bar 包，无环）。
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.complex.platform.finance.FinanceService financeService;
+    // 159-R9（ENUM:190「非最终快照的数据一律不得进入结算、分红、正式提成计算和对账关账」；决策台账 §25 Q32「不要求无关五类数据全最终」）：
+    // 分配读账单分项、收款与结清、退款、作废与坏账冲减（BSM:1070「一律按订单最终保留收入重新计算并冲回差额」），只依赖订单与核销、退款与冲正两类；
+    // 服务责任与排班读交接记录和排班（BSM:1077「以真实交接记录为依据，不直接以整班考勤时长替代」），不是五类里的考勤记录。
+    private static final List<String> ALLOCATION_FINAL=List.of("orders_verifications","refunds_reversals");
     public BarPayrollAllocationService(BarPayrollSupport p,BarPayrollRuleService rules,
             BarServiceResponsibilityService responsibilities,IdempotencyService idem,AuditEventService audit,BarPayrollRefundService refunds,FinanceRepository finance,
             com.complex.platform.common.RevenueRefreshMarks revenueRefreshMarks) {
@@ -106,8 +113,15 @@ public class BarPayrollAllocationService {
             // BSM L1142/L1143：跨主体拨付是普通内部结算应收应付，按三个付账日结清；到期取月末后第一个付账日，付账日未配置则整次月结不写。
             LocalDate due=StaffService.nextInternalPayDayAfter(p.staff.internalSettlementPayDays(),period.atEndOfMonth());
             List<MonthRun> result=new ArrayList<>();
+            // 159-R9（BSM:1076「归属按服务费收取所属账期认定，以该账期月结定格时确定的应发数与扣留数为准」；第十八批裁决 35「酒吧逐店逐日查」）：
+            // 逐账单按其分项营业日判该酒吧两类已最终，缺则该账单记待处理、不定格不写原件；同月已标齐的账单照常定格，补标后重办月结即补定格。
+            Map<LocalDate,List<String>> notFinal=new HashMap<>();
             for(String bill:sources(r.projectId(),r.merchantId(),period)) {
                 p.lock("refund-source:"+bill);
+                List<String> waiting=p.jdbc.queryForList("SELECT DISTINCT business_date FROM bar_payroll_bill_components WHERE source_bill_id=? ORDER BY business_date",LocalDate.class,bill).stream()
+                    .flatMap(day->notFinal.computeIfAbsent(day,d->financeService.nonFinalDays(r.merchantId(),r.projectId(),d,d,ALLOCATION_FINAL)).stream()).toList();
+                if(!waiting.isEmpty()){result.add(pending(r.projectId(),r.merchantId(),r.month(),bill,
+                    "所属营业日数据尚未标记为最终，不能月结定格："+com.complex.platform.finance.FinanceService.describeNonFinalDays(waiting)));continue;}
                 Calculation c;
                 try {c=calculate(bill,r.month());}
                 catch(ApiException e){result.add(pending(r.projectId(),r.merchantId(),r.month(),bill,e.getMessage()));continue;}

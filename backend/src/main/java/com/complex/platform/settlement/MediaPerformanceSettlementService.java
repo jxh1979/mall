@@ -1,6 +1,6 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import static com.complex.platform.common.Strings.requireText;
 import static com.complex.platform.common.Strings.trimToNull;
@@ -204,6 +204,25 @@ public class MediaPerformanceSettlementService {
         FulfillmentRecord fact = repository.findFulfillmentByShow(show.id()).orElse(null);
         String pendingReason = fact == null || "recorded".equals(fact.status()) ? "unconfirmed"
                 : "disputed".equals(fact.status()) ? "disputed" : null;
+        // 第十八批 V 段第 159 条 159-R3（ENUM:190「非最终快照的数据一律不得进入结算、分红、正式提成计算和对账关账」；BSM:1145「该场适用的门票加价分配、
+        //   固定演出费和酒水提成共同引用该场已确认的实际履约事实」）：取数之前，演出日营业日（单位同 businessDay：演出酒吧按该店，否则按场次项目）
+        //   本场所需类别须已全部标记为最终——门票加价取已核销未冲正的入场，要订单与核销、退款与冲正；酒水提成取已出品未作废的普通单酒水，另要出品与物品交接；
+        //   固定演出费只引用履约事实与合同固定额，不判；待处理路径不取数据，不判。有未最终的就整场不结、一行不写。
+        if (pendingReason == null) {
+            java.util.Set<String> categories = new java.util.HashSet<>();
+            if (feeKinds.contains(FEE_TICKET_SHARE)) {
+                categories.addAll(List.of("orders_verifications", "refunds_reversals"));
+            }
+            if (feeKinds.contains(FEE_DRINK)) {
+                categories.addAll(List.of("orders_verifications", "refunds_reversals", "production_handover"));
+            }
+            List<String> notFinal = categories.isEmpty() ? List.of()
+                    : financeService.nonFinalDays(show.barMerchantId(), show.projectId(), show.showDate(), show.showDate(), categories);
+            if (!notFinal.isEmpty()) {
+                throw ApiException.conflict("MEDIA_SETTLEMENT_DATA_NOT_FINAL",
+                        "演出日营业日以下数据尚未标记为最终，不能结算门票加价分配或酒水提成：" + FinanceService.describeNonFinalDays(notFinal));
+            }
+        }
         String payee = requireEntity(show.projectId(), "performance_ticket");
         String actor = authorizationService.currentActor().id();
         Instant now = Instant.now();

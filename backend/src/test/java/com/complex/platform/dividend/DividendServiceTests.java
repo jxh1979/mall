@@ -1,6 +1,6 @@
 package com.complex.platform.dividend;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import com.complex.platform.support.InMemoryIdempotencyRepository;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -966,28 +966,26 @@ class DividendServiceTests {
     }
 
     @Test
-    void scheduledMonthlyPreviewRefreshesQuarterlyAndSkipsMonthlyPlans() {
-        // 月度预览定时作业入口：季度方案出 preview 单（系统操作人，不可审批），月度方案跳过。
+    void monthEndBusinessDayFinalPreviewRefreshesQuarterlyAndSkipsMonthlyPlans() {
+        // 159-R6 月末营业日五类标齐事件：季度方案出 preview 单（系统操作人，不可审批），月度方案不出。
         createDefaultPlan(); // 季度方案（MERCHANT）
         service.createPlan(new DividendPlanRequest("plan-monthly", "merchant_monthly", "usr_p2", null,
                 null, null, "monthly", null, null, null, null, null, null, null, null, null, null, null));
         repository.barRevenue.put(MERCHANT, 1_000_000L);
 
-        DividendComputeResultRecord first = service.runScheduledMonthlyPreview(YearMonth.of(2026, 7));
-        assertThat(first.computed()).hasSize(1);
-        DividendStatementRecord preview = first.computed().get(0);
-        assertThat(preview.kind()).isEqualTo("preview");
+        service.onMonthEndBusinessDayFinal(new FinanceService.MonthEndBusinessDayFinal(MERCHANT, null, YearMonth.of(2026, 7)));
+        DividendStatementRecord preview = repository.findActiveStatement(MERCHANT, "preview", "2026-07").orElseThrow();
         assertThat(preview.status()).isEqualTo("preview");
-        assertThat(preview.merchantId()).isEqualTo(MERCHANT);
         assertThat(preview.computedBy()).isEqualTo("system_dividend_preview");
-        // 月度方案不出月度预览 → 跳过清单含它。
-        assertThat(first.skipped()).anySatisfy(s -> assertThat(s.merchantId()).isEqualTo("merchant_monthly"));
 
         // 刷新式重跑：旧 preview 作废 + 新 preview（取后者，反映台账最新状态）。
-        DividendComputeResultRecord second = service.runScheduledMonthlyPreview(YearMonth.of(2026, 7));
-        assertThat(second.computed()).hasSize(1);
-        assertThat(second.computed().get(0).id()).isNotEqualTo(preview.id());
+        service.onMonthEndBusinessDayFinal(new FinanceService.MonthEndBusinessDayFinal(MERCHANT, null, YearMonth.of(2026, 7)));
+        assertThat(repository.findActiveStatement(MERCHANT, "preview", "2026-07").orElseThrow().id()).isNotEqualTo(preview.id());
         assertThat(repository.findStatementById(preview.id()).orElseThrow().status()).isEqualTo("voided");
+
+        // 月度方案不出月度预览。
+        service.onMonthEndBusinessDayFinal(new FinanceService.MonthEndBusinessDayFinal("merchant_monthly", null, YearMonth.of(2026, 7)));
+        assertThat(repository.statements.values()).noneMatch(s -> "merchant_monthly".equals(s.merchantId()));
     }
 
     // ── V303 扣除项三开关 ──────────────────────────────────────────

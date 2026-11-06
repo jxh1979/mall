@@ -1,5 +1,5 @@
 package com.complex.platform.dividend;
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static org.assertj.core.api.Assertions.*;
 import static org.mockito.Mockito.*;
@@ -39,6 +39,15 @@ class DividendBarRevenueTests {
         when(sources.withheldServiceFees("merchant",day,day.plusDays(1))).thenReturn(List.of(
             new WithheldRevenue("bill","merchant","project",day,null,null,"pending",List.of("待月结"))));
         assertThatThrownBy(()->repository.sumBarRevenueCent("merchant",from,to))
+            .isInstanceOf(ApiException.class).hasMessageContaining("不能确认分红");
+    }
+    // 第十八批 V 段 159-R10：预览不计尚未月结定格的服务费扣留数、只计商品收入；同样数据出正式单照旧拦。修复前四参版退化为三参版，预览也抛，doesNotThrow 断言红。
+    @Test void previewLeavesServiceFeesAwaitingMonthCloseOutButFinalStillBlocks() {
+        when(sources.withheldServiceFees("merchant",day,day.plusDays(1))).thenReturn(List.of(
+            new WithheldRevenue("bill","merchant","project",day,null,null,"pending",List.of("待月结"))));
+        assertThatCode(()->repository.sumBarRevenueCent("merchant",from,to,true)).doesNotThrowAnyException();
+        assertThat(repository.sumBarRevenueCent("merchant",from,to,true)).isEqualTo(8000L);
+        assertThatThrownBy(()->repository.sumBarRevenueCent("merchant",from,to,false))
             .isInstanceOf(ApiException.class).hasMessageContaining("不能确认分红");
     }
     @Test void refundWithoutConfirmedBreakdownCannotBeAssumedAllGoods() {

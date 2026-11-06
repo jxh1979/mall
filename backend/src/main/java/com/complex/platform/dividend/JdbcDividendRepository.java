@@ -1,5 +1,5 @@
 package com.complex.platform.dividend;
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
@@ -646,6 +646,12 @@ class JdbcDividendRepository implements DividendRepository {
 
     @Override
     public long sumBarRevenueCent(String merchantId, Instant from, Instant to) {
+        return sumBarRevenueCent(merchantId, from, to, false);
+    }
+
+    /** 159-R10：preview 为真时扣留数未定（尚未月结定格或历史无来源）的服务费行暂不计、不拦；商品收入来源未定照旧拦。 */
+    @Override
+    public long sumBarRevenueCent(String merchantId, Instant from, Instant to, boolean preview) {
         long amount = 0L;
         for (var row : barRevenueSources.completedCollections(merchantId, from, to)) {
             if (row.goodsRevenueCent() != null) amount = Math.addExact(amount, row.goodsRevenueCent());
@@ -659,6 +665,7 @@ class JdbcDividendRepository implements DividendRepository {
         for (var row : barRevenueSources.withheldServiceFees(merchantId,
                 businessDays.businessDate(project, bar, from), businessDays.businessDate(project, bar, to.minusNanos(1)).plusDays(1))) {
             if (row.amountCent() == null) {
+                if (preview) continue;
                 throw com.complex.platform.common.api.ApiException.conflict("BAR_REVENUE_PENDING", "服务费尚未月结或来源已变化，不能确认分红");
             }
             amount = Math.addExact(amount, row.amountCent());

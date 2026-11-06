@@ -1,10 +1,11 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 import org.springframework.beans.factory.annotation.Value;
 
 import com.complex.platform.access.AccessActor;
 import com.complex.platform.common.LocalZone;
+import com.complex.platform.common.api.ApiException;
 import java.time.Clock;
 import java.time.YearMonth;
 import java.util.List;
@@ -34,6 +35,8 @@ import org.springframework.stereotype.Component;
  */
 @Component
 public class SettlementMonthlyJob {
+
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(SettlementMonthlyJob.class);
 
     // 🔴 P1(2026-07-21):调度线程无登录主体,过账走 FinanceService.createArApItem(@GuardedAction)靠 currentActor()
     //   在生产必抛 UNAUTHENTICATED(自动过账彻底不工作、每月复现,且原被 SettlementMonthlyJobPostingTests 注入伪主体掩盖)。
@@ -83,9 +86,12 @@ public class SettlementMonthlyJob {
         this.postingEnabled = postingEnabled;
     }
 
-    /** @Scheduled 薄包装:默认关闭,每月 1 日 03:00 跑;回看窗口逐月幂等补算(AUD-035)。 */
+    /**
+     * @Scheduled 薄包装:默认关闭,每月 3 日 03:00(服务器时区)跑;回看窗口逐月幂等补算(AUD-035)。第十八批 V 段 159-R2：月末营业日在次月 1 日闭店
+     * (BSM:1682 出厂闭店为次日 07:00)，五类标记最迟到闭店所在自然日的次日 24:00(ENUM:190)即次月 2 日 24:00，3 日跑已过期限。
+     */
     @ConditionalOnProperty(name = "settlement.monthly.scheduled.enabled", havingValue = "true")
-    @Scheduled(cron = "${settlement.monthly.scheduled.cron:0 0 3 1 * *}")
+    @Scheduled(cron = "${settlement.monthly.scheduled.cron:0 0 3 3 * *}")
     public void scheduledSettle() {
         if (!scheduledEnabled) {
             return;
@@ -111,14 +117,25 @@ public class SettlementMonthlyJob {
                 // 平台口径 projectId=null;按期预判状态,只对缺月/未过账月补算,已过账(settled/reversed)跳过。
                 String status = repository.findBillStatusByPeriod(null, month.atDay(1), month.atEndOfMonth());
                 if (status == null || "draft".equals(status) || "confirmed".equals(status)) {
-                    String billId = service.settleMonth(null, month);
+                    String billId;
+                    try {
+                        billId = service.settleMonth(null, month);
+                    } catch (ApiException e) {
+                        // 第十八批 V 段 159-R2（ENUM:190）：本月仍有营业日两类数据未标记为最终——本轮跳过本月(不结、不过账)，下一轮回看窗口补算；
+                        //   其他异常照旧抛出。settleMonth 自带事务，只回滚本月。
+                        if (!"SETTLEMENT_DATA_NOT_FINAL".equals(e.code())) {
+                            throw e;
+                        }
+                        log.warn("通票月度分账跳过 {}：{}", month, e.getMessage());
+                        billId = null;
+                    }
                     // ① 过账(补 postBill 生产触发缺口):结算单一律 confirmed(第 75 条:结算环节不设超池待审批,超池额过账时由
                     //   娱乐平台公司承担),开过账闸即自动挂应付台账;网关端点 ②(POST /bills/{id}/post)供人工过账。
                     //   postBill @Transactional 全或无 + 幂等,confirmed 单重跑不重复挂账。
                     //   🔴 过账独立闸(与作业运行解耦):过账仅在 settlement.monthly.posting.enabled=true(默认 false·不进 application-prod.yml)时执行。
                     //   月度作业开关 settlement.monthly.scheduled.enabled 在 prod 本就 =true(算账单),但过账保持关——settleMonth 照常算
                     //   confirmed 单(内部计算不落账本),直到用户拍板翻 posting.enabled 才首次真过账。网关 POST /bills/{id}/post 人工过账不受此闸。
-                    if (postingEnabled && "confirmed".equals(repository.findBillStatus(billId))) {
+                    if (billId != null && postingEnabled && "confirmed".equals(repository.findBillStatus(billId))) {
                         postingService.postBill(billId);
                     }
                 }

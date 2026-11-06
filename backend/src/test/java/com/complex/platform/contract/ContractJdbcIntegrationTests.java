@@ -1,7 +1,8 @@
 package com.complex.platform.contract;
 
-// 文件版本：V0.23
+// 文件版本：V0.24
 
+import static com.complex.platform.support.DailyCloseFixture.markRangeFinal;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -825,6 +826,8 @@ class ContractJdbcIntegrationTests {
                     status, amount_cent, currency, merchant_id, created_at, updated_at)
                 VALUES (?, 'pos_r5', 'catering', 'order', ?, 'synced', 2000000, 'CNY', ?, ?, ?)
                 """, "ios_r5_" + s, "ext_r5_" + s, merchant, landed, landed);
+        // 第十八批 V 段 159-R4：抽成出账要求账期内营业日的订单与核销、退款与冲正已标记为最终（本用例不测该闸，整段标齐）。
+        markRangeFinal(jdbcTemplate, "project", project, LocalDate.parse("2098-02-01"), YearMonth.parse("2098-02").atEndOfMonth());
         mockMvc.perform(post("/api/v1/contracts/" + contractId + "/period-bills").with(admin)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"idempotency_key\":\"r5_bill_" + s + "\",\"period\":\"2098-02\"}"))
@@ -870,6 +873,8 @@ class ContractJdbcIntegrationTests {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"idempotency_key\":\"r5x_act_" + s + "\",\"space_ids\":[\"" + space + "\"]}"))
                 .andExpect(status().isOk());
+        // 第十八批 V 段 159-R4：抽成出账要求账期内营业日的订单与核销、退款与冲正已标记为最终（本用例不测该闸，整段标齐）。
+        markRangeFinal(jdbcTemplate, "project", project, LocalDate.parse("2098-01-01"), LocalDate.parse("2098-03-31"));
         for (String period : List.of("2098-01", "2098-02")) {
             mockMvc.perform(post("/api/v1/contracts/" + contractId + "/period-bills").with(admin)
                             .contentType(MediaType.APPLICATION_JSON)
