@@ -1,6 +1,6 @@
 package com.complex.platform.governance.review;
 
-// 文件版本：V0.30
+// 文件版本：V0.31
 
 import com.complex.platform.access.AccessActor;
 import com.complex.platform.access.AuthorizationService;
@@ -134,6 +134,10 @@ public class SupervisorReviewService {
             // HP-F03（BSM L1408「楼宇设备报废由设备所有权主体确认，沿现有审批流程办理，记录批准人、处置方式及实际处置凭证」）：
             // 恒阻断；发起人沿直接上级链到其指定的最终审批人（设备台账仅平台／项目物业方可写，所有权主体即该方）。
             new SupervisorReviewPolicyRecord("facility_equipment_scrap", "facility.equipment.scrap", 0, 1, true,
+                    List.of("reason"), "active", "one_level_up"),
+            // 第十八批 Y 段第 181 条 181-R1（ENUM:191「复核环节属业务审批，沿用平台治理地图「全平台审批通用时限」条。」；PGM:528「任一节点驳回则整单退回起草人」）：
+            // 对账差异关闭复核，恒阻断、金额下限 0（每笔都进待审）；提交人沿直接上级链到其指定的最终审批人；动作名以 finance. 开头按涉钱 1 个工作日。
+            new SupervisorReviewPolicyRecord("finance_reconciliation_difference_close", "finance.reconciliation_difference.close", 0, 1, true,
                     List.of("reason"), "active", "one_level_up"),
             // 第十八批 M 段第 117 条 117-R2（BSM:1380「承担方有争议的，工单挂起转上级判定，判定结果与依据留痕后才能结案」；PGM:528）：
             // 恒阻断；提出人沿直接上级链到其指定的最终审批人，审批意见即判定依据（必填）。设施工单与商户服务工单共用（117-R5，裁决 29）。
@@ -953,7 +957,8 @@ public class SupervisorReviewService {
 
     // 第十六批第 29 条（PGM L529「出厂默认 3 个工作日，涉钱审批出厂默认 1 个工作日」）：逐日先看已审批的工作日历
     // （finance.WorkingDayCalendar，ticket_points_calendar_days.working_day，含调休上班的周末）；该日未审批的仍按周末＋假期表。
-    Instant addWorkingDays(Instant from, int workingDays) {
+    // 第十八批 Y 段第 181 条 181-R2：公开给对账差异待识别、待处理停留时限的到期计算（FinanceReconciliationDifferenceService#escalateOverdue）。
+    public Instant addWorkingDays(Instant from, int workingDays) {
         java.time.ZonedDateTime at = from.atZone(com.complex.platform.common.LocalZone.ID);
         java.time.LocalDate day = at.toLocalDate();
         java.util.Set<java.time.LocalDate> holidays = new java.util.HashSet<>(

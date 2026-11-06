@@ -1,4 +1,4 @@
-# 文件版本：V0.11
+# 文件版本：V0.12
 server:
   address: ${COMPLEX_API_HOST:127.0.0.1}
 
@@ -75,4 +75,5 @@ settlement.merchant-statement-notice.scheduled.enabled: true  # 第十八批第 
 inventory.lending-overdue.scheduled.enabled: true            # 第十八批第 18 条 BSM「超过约定归还时间仍未归还的，系统自动生成一张工单并通知借出方主管」:借用逾期逐单建物业工单并通知借出方主管(同单只建一次,默认 300s 一轮)
 complaint.weekly-report.scheduled.enabled: true            # 第十八批 M 段第 111 条 BSM:1385「系统每周自动生成客诉周报」:北京时间每周一 08:00 给持接收码的门店与公司负责人各发上一周的客诉周报(员工系统通知,重跑只覆盖)
 finance.final-mark-overdue.scheduled.enabled: true          # 第十八批 R 段第 143 条 143-R3 ENUM:190「某一类数据在上述时点仍未标记的，系统自动生成待办并通知该域主管公司的财务负责人」:每家酒吧、每个综合体逐营业日查五类最终标记，过了闭店时点所在自然日的次日 24:00 仍未标齐的给同综合体持日结锁定权限的财务人员各发一条员工系统通知(第十八批裁决 35,每人每单位每营业日一次,默认每小时一轮)
+finance.reconciliation-escalation.scheduled.enabled: true    # 第十八批 Y 段第 181 条 181-R2 ENUM:191「待识别与待处理两个阶段各自的停留时限……超时未推进的，系统自动提醒并升级到上一级负责人」:对账差异待识别、待处理按所属项目该阶段时限(未配置按 1 个工作日)超时各升级一次,通知原负责人并改由其直接上级负责(无上级只提醒,默认 60s 一轮)
 compliance.reminder.scheduled.enabled: true                 # 第十八批 E 段第 22 条 PGM:531「到期预警一律提前发出……宽限期内可继续经营但每日提醒」:每日 08:00 全平台证照预警、到期与宽限提醒扫描(按去重键 upsert,商户专区可查看即送达)

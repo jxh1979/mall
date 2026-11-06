@@ -1,4 +1,4 @@
-// 文件版本：V0.23
+// 文件版本：V0.24
 export type AdminUser = {
   id: string;
   username: string;
@@ -748,23 +748,33 @@ export type FinanceLedgerRow = {
 };
 
 
+// 第十八批 Y 段第 180 条 180-R2：对账批次与差异按后端财务记录字段（ReconciliationBatchRecord、ReconciliationDifferenceRecord）。
 export type ReconciliationBatchRow = {
   id: string;
   batchNo?: string;
-  amount?: number;
-  totalAmount?: number;
-  status?: string;
-  providerCode?: string;
+  scopeType?: string;
+  scopeId?: string;
+  businessDate?: string;
 };
 
 export type ReconciliationDifferenceRow = {
   id: string;
-  differenceNo?: string;
-  amount?: number;
-  differenceAmount?: number;
-  diffAmount?: number;
+  batchId?: string;
+  differenceType?: string;
+  businessRef?: string;
+  amountCent?: number;
+  expectedAmountCent?: number | null;
+  actualAmountCent?: number | null;
+  source?: string;
   status?: string;
-  providerCode?: string;
+  evidenceAttachmentIds?: string[];
+  // 第十八批 Y 段第 181 条 181-R1：负责人、进入本阶段的时刻、识别写下的差异原因、待复核时的复核单号。
+  responsibleUserId?: string | null;
+  stageEnteredAt?: string | null;
+  identifiedCause?: string | null;
+  reviewId?: string | null;
+  // 第十八批 Y 段第 181 条 181-R2：本阶段（待识别或待处理）已超时升级的时刻，未升级为空。
+  stageEscalatedAt?: string | null;
 };
 
 export type MerchantWorkOrderRow = {

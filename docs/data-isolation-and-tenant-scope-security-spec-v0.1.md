@@ -56,7 +56,7 @@ scope 类型（与盘点 CSV 的 `scope_type` 对齐）：
 
 <!-- DATA_ISOLATION_SPEC_AUTO_START -->
 ### 3A. 自动迁移隔离基线（由 `npm run docs:data-isolation-spec` 生成）
-> 事实源：`backend/src/main/resources/db/migration`。当前解析到最新迁移 **V606**，发现 **270** 张含 scope 字段的表。不要手工修改本区块；新增迁移后运行 `npm run docs:data-isolation-spec`，提交前运行 `npm run verify:data-isolation-spec`。
+> 事实源：`backend/src/main/resources/db/migration`。当前解析到最新迁移 **V609**，发现 **271** 张含 scope 字段的表。不要手工修改本区块；新增迁移后运行 `npm run docs:data-isolation-spec`，提交前运行 `npm run verify:data-isolation-spec`。
 | 表 | scope 字段 | scope 类型 | 首次出现迁移 | 证据文件 |
 |---|---|---|---|---|
 | `access_grant_requests` | `merchant_id` + `project_id` | direct | V170 | `V170__access_grant_requests.sql` |
@@ -175,6 +175,7 @@ scope 类型（与盘点 CSV 的 `scope_type` 对齐）：
 | `facility_inspection_tasks` | `project_id` + `space_id` | direct | V167 | `V167__facility_inspection.sql` |
 | `facility_inspection_templates` | `project_id` | direct | V167 | `V167__facility_inspection.sql` |
 | `facility_work_orders` | `merchant_id` + `project_id` + `space_id` | direct | V166 | `V166__facility_work_orders.sql` |
+| `finance_reconciliation_stage_limits` | `project_id` | direct | V607 | `V607__finance_reconciliation_difference_columns_and_status.sql` |
 | `finance_refunds` | `merchant_id` + `project_id` | direct | V456 | `V456__finance_refund_lifecycle.sql` |
 | `giveaway_cost_configs` | `project_id` | direct | V223 | `V223__settlement_distribution_configs_batch2.sql` |
 | `high_value_thresholds` | `merchant_id` + `project_id` | direct | V350 | `V350__high_value_threshold_unify.sql` |

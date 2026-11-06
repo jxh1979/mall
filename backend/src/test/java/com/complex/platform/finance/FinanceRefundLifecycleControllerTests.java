@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.*;
@@ -41,6 +41,7 @@ class FinanceRefundLifecycleControllerTests {
     @MockitoBean FinanceService service;
     @MockitoBean AuthorizationService authorization;
     @MockitoBean StoredValueService storedValueService;
+    @MockitoBean FinanceReconciliationDifferenceService reconciliationDifferences; // 181-R1：控制器新依赖
 
     private static final String OPERATION = """
             {"idempotency_key":"query-one","operator_note":"核查退款"}

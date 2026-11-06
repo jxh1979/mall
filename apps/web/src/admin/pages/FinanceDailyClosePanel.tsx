@@ -1,4 +1,4 @@
-// 文件版本：V0.03
+// 文件版本：V0.04
 import React from "react";
 import type { AdminPageProps } from "../types";
 import { BarVenueSelect } from "../components/BarVenueSelect";
@@ -31,7 +31,8 @@ type Adjustment = { id: string; itemNo?: string; adjustmentAmountCent?: number; 
   approvalStatus?: string; approvedBy?: string | null; decidedAt?: string | null; originalBusinessDate?: string | null };
 type DailyClose = { id: string; businessDate?: string; scopeType?: string; scopeId?: string; status?: string; confirmedAt?: string | null; lockedAt?: string | null; archivedAt?: string | null; finalMarkCategories?: string[] };
 type Summary = { id: string; sourceStream?: string; amountCent?: number; refundCent?: number; orderCount?: number };
-type Props = Pick<AdminPageProps, "api" | "user" | "effectivePermissions" | "setGlobalError">;
+// 第十八批 Y 段复核修复（BSM:1682「按营业日生成日结批次。」）：180-R1 起对账批次随日结生成，生成成功后回调所在页面（对账差异页据此重读对账批次与差异）。
+type Props = Pick<AdminPageProps, "api" | "user" | "effectivePermissions" | "setGlobalError"> & { onGenerated?: () => void };
 
 const PAGE_SIZE = 20;
 const PLATFORM_SCOPES = ["project", "merchant", "bar"];
@@ -54,7 +55,7 @@ export function FinanceDailyClosePanel(props: Props) {
   return hasPermissions(props.effectivePermissions, ["finance.daily_close.manage"]) ? <DailyClosePanel {...props} /> : null;
 }
 
-function DailyClosePanel({ api, user, effectivePermissions, setGlobalError }: Props) {
+function DailyClosePanel({ api, user, effectivePermissions, setGlobalError, onGenerated }: Props) {
   const merchant = user.merchantId ?? "";
   const scopes = merchant ? MERCHANT_SCOPES : PLATFORM_SCOPES;
   const list = useServerPagedRows<DailyClose>((page, size) => api.getPaged(`/api/v1/finance/daily-closes?page=${page}&size=${size}`), PAGE_SIZE);
@@ -125,7 +126,7 @@ function DailyClosePanel({ api, user, effectivePermissions, setGlobalError }: Pr
       const body = { businessDate, scopeType, scopeId: chosenScope, operatorNote: note.trim() || undefined };
       const slot = `generate:${JSON.stringify(body)}`;
       const saved = await api.post<DailyClose>("/api/v1/finance/daily-closes", { ...body, idempotencyKey: keyFor(slot) });
-      delete keys.current[slot]; setNote(""); list.reload(); setRefresh((n) => n + 1);
+      delete keys.current[slot]; setNote(""); list.reload(); setRefresh((n) => n + 1); onGenerated?.();
       await loadSummaries(saved.id);
     });
   }

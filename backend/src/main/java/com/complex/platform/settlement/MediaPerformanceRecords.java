@@ -1,7 +1,8 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
+import com.fasterxml.jackson.annotation.JsonUnwrapped;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
@@ -29,6 +30,13 @@ public final class MediaPerformanceRecords {
         public boolean hasTicketShare() {
             return ticketShareMode != null && !"none".equals(ticketShareMode);
         }
+    }
+
+    /**
+     * 第十八批 Y 段 183-R2 复核修复（BSM:1839「卡片上的数字就是它下面明细的合计，点进去能核到每一笔」）：场次列表行＝合同记录字段平铺，
+     * 另带本场挂起待确认的演出结算条数（与总控「结算待确认」卡同口径；被新版本取代的版本为 0）。
+     */
+    public record ShowListItem(@JsonUnwrapped ShowRecord show, long pendingSettlementCount) {
     }
 
     /** 实际履约登记（传媒经办）与确认 / 争议 / 裁决留痕，一场一条。 */

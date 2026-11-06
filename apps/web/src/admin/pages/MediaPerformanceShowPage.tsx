@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
@@ -38,6 +38,8 @@ export type MediaShow = {
   drinkBaseTemplate: "show_window" | "whole_store_session" | null;
   status: "draft" | "locked" | "superseded";
   lockedBy: string | null;
+  /** 只有列表行带：本场现行版本上挂起待处理的演出结算条数（BSM:1839，与总控「结算待确认」卡同口径）。 */
+  pendingSettlementCount?: number;
 };
 type Fulfillment = {
   id: string; showId: string; actualStartAt: string; actualEndAt: string; completedContent: string; uncompletedContent: string | null;
@@ -300,7 +302,7 @@ export function MediaPerformanceShowPage({ api, setActionResult, setGlobalError,
                 <td>{show.ticketShareMode === "none" ? "-" : show.ticketShareMode === "ratio" ? `每张加价 ¥${yuan(show.ticketSurchargePerTicketCent)} × ${show.ticketShareBps}‱` : `每张加价 ¥${yuan(show.ticketSurchargePerTicketCent)}，分 ¥${yuan(show.ticketShareAmountCent)}`}</td>
                 <td>{yuan(show.fixedFeeCent)}</td>
                 <td>{show.drinkCommissionBps == null ? "-" : `${show.drinkCommissionBps}‱ / ${show.drinkBaseTemplate === "show_window" ? "演出时段" : "当场全店"}`}</td>
-                <td>{STATUS_LABEL[show.status]}</td>
+                <td>{STATUS_LABEL[show.status]}{show.pendingSettlementCount ? `；结算待处理 ${show.pendingSettlementCount} 项` : ""}</td>
                 <td><button type="button" data-testid={`mps-open-${show.id}`} disabled={busy === show.id} onClick={() => void open(show.id)}>查看</button></td>
               </tr>
             ))}

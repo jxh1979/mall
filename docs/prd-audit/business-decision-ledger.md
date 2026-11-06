@@ -1,6 +1,6 @@
 # PRD 审计业务裁决台账
 
-文档版本：V0.79
+文档版本：V0.80
 状态：进行中
 迁移日期：2026-07-27
 当前事实源：三份立法 HTML 以既有冻结基线叠加 James 此前 M02 至 M08 的点名批准、全量审计 M001、M002 的逐项批准，以及本轮 2026-10-16 至 2026-10-17 业务 HTML 审计中 Q01 至 Q40 及子题实际明确批准且未被后续替代的裁决，和 2026-10-17 第二批 HTML 业务线推演审计（A–F 六线 64 条、停车章）的逐项批准，并叠加本轮 CG 70 项来源确认与 C01–C09、N01–N03 最终澄清及补全文稿中 F01、W01–W05 的整体修改批准（本文件末节）；本轮最终规则、未采纳或替代关系、现行版本与字节哈希见本文件末节。历史记录保留为各自当时事实，不恢复已被替代的建议。
@@ -5432,3 +5432,90 @@ HTML 的语义补齐与直接引用同步可在本批核验；70项中的业务�
 - 控制席并入（测试遗留）：只改测试与行尾，无产品代码改动，197-R1 本场检票闸不放宽。A）backend/src/test/java/com/complex/platform/settlement/TicketSettlementBusinessMonthJdbcTests.java 的 issue() 补父票 ticket_instances 与父票 1 号人份的入场（admission，归属本餐厅），专属餐饮挂同一人份；verify() 先经真实核销入口（蛇形键、餐厅员工本店设备、真实授权链）核入场再核餐饮；cleanup 补删父票；业务断言不变。ExclusiveDirectPayDomainShareJdbcIntegrationTests 已由 176-R2 改为先在酒吧检票。全仓核销专属餐饮、零售票内券的后端用例只有这 4 个类，均已先检票。B）SettlementStateMachineJdbcIntegrationTests（三处）与 MerchantConcessionDiningSettlementJdbcIntegrationTests:147 的「当月」由 YearMonth.now(ZoneOffset.UTC) 改为 YearMonth.from(BusinessDayResolver.businessDate(项目, null, now))，与 189-R1 营业月口径一致，避免北京每月 1 日 08:00～10:00 运行时 UTC 月与营业月错开；断言含义不变。C）基线即 CRLF 的 backend/src/test/java/com/complex/platform/ticketing/SettlementDoubleWriteEndToEndTests.java 与 apps/web/src/admin/pages/TicketingPoliciesPage.combo.test.tsx 恢复 CRLF（新增行同样 CRLF），git diff cad888cc 只显示实质改动（先例 56257ce0、75efa71e）。验证：后端全量 --fresh 6508 条 0 红；前端 TicketingPoliciesPage 4 个文件 22 条全绿。
 - 18X 复核修复补记（2026-11-06）：① 第 197 条 197-R1「一份」的入场次数：backend/src/main/java/com/complex/platform/ticketing/JdbcTicketingRepository.java 的 maxEntryTotalTimes 改为只取同票同人份检票入场类（ticket、entry、admission）的 MAX(total_times)，去掉 amusement 开头各行（补偿补发行仍除外），与 165-R1 的 maxBarEntryTotalTimes 口径对齐；TicketingRepository 接口说明与 backend/src/test/java/com/complex/platform/ticketing/TicketingServiceTests.java 内存仓同名方法同步改；「本场已检票」的 hasVerifiedEntrySince 不动。修前单次通票同人份另有一行游乐次数大于 1 时，「一份」被游乐次数压小，第二份餐饮券 409 ENTITLEMENT_SESSION_SHARE_USED_UP。依据：BSM:800「只能在完成检票环节所在的那一个场次内核销」；BSM:784「游乐（指定项目/次数/场次）」，游乐次数不是检票次数。回归：MerchantConcessionDiningSettlementJdbcIntegrationTests 的 singleUseTicketDiningShareNotDividedByAmusementTimes（单次票入场 1 次、餐饮 2 次，同人份另有一行游乐 2 次；真实入口、蛇形键、餐厅员工本店设备，先核同人份本场入场；修前第二份 409 为红，修后两份都 200）。票务 PRD §8.3.1「÷ 同票同人份入场权益总次数」与 OpenAPI createTicketVerification 说明「÷同票同人份入场次数」与修后代码一致，未改。② 第 189 条 189-R1 月窗 ponytail 措辞更正：backend/src/main/java/com/complex/platform/settlement/TicketDistributionSettlementService.java 的 monthWindow 注释与本段 189-R1 补记里的同句改为「启用综合体不止一个时平台单取出厂 10:00 窗；起点晚于 10:00 的综合体，偏差落在其非营业时段；起点早于 10:00 的综合体，月首 [起点, 10:00) 的营业时段数据进上月单，且不在上月单最终快照闸检查范围内；要逐综合体切月时把平台单按项目拆窗」，代码逻辑不变。③ 复核另两条（多人票同场次闸按自然日判场次、票面有效期在场次中途截断同场次再入场）属既有缺陷、非本段引入，本段不改代码，已登记为待开发清单第 238、239 条。无新裁决。
 - 18X 落地位置补记·运行验收证据、快照、终验文档刷新（无新裁决）：业务提交 36f48b95 之后，按第十八批裁决 25 重刷了运行验收证据：后端全量 6509 测，0 失败 0 错误；apps/web 构建通过；常规界面验收（接口全部 mock）实跑 40 条全过；真实后端界面验收未跑，runtime_ready=false。随后依次重生成闭环当前态快照、生产闭环缺口报告、界面验收报告、无上线指挥台。生成器没改。手改 docs/final-closed-loop-acceptance-audit-v0.1.md 与 docs/code-implementation-acceptance-audit-v0.1.md：前端单测源码计数改为 1635；被核文件行数都没变；后端全量与常规界面验收的数字、日期改为本次实跑值；写入 npm run verify:unit 实跑结果，五个工作区全过。交付门禁于 2026-11-06 UTC 在工作树逐项实跑子项，NAS 两项现场探测未跑。仍红的有两项：一是 coding-host-protection，它写死主仓路径，在工作树口径下必红，属工具口径，不做；二是 final-closed-loop-audit，如实留 2 条红（integration-ready、business-acceptance-ready），原因是校验器要求终验把联调、业务验收写成「是」，而裁决 25 定了不跑真实后端界面验收、运行验收未就绪，终验写的是「否」。verify:delivery-gates 总链仍是红的。
+
+18Y 落地位置补记（2026-11-06）：第十八批 Y 段（batch45）按 18W 核实稿实现待开发清单第 180、181、182、183 条（对账差异，183-R2 按第十八批裁决 40）；运行验收证据、终验文档在本段最后一个提交刷新；各条落地位置见下。本段追加时，原台账除文档版本 V0.79→V0.80 外，其他历史字节保持。
+
+- 18Y 落地位置补记·控制席判定（2026-11-06）：本段（第十八批 Y 段，batch45）实现待开发清单第 180、181、182、183 条（对账差异），方案为 18W 核实稿（本机 b43-audit\g180-185-recon.json），183-R2 按第十八批裁决 40；迁移 V607（对账差异表列、四态约束、停留时限与超时升级、新权限码 finance.reconciliation.policy.manage）、V608（第三方差异删已忽略）、V609（日结汇总低价值差异来源）；分两条线：主线 180-R1→180-R2→181-R1→181-R2→180-R3→182-R1，独立线 181-R3→183-R1→183-R2；PRD 由文档组一次改。
+- 180-R1 落地位置：FinanceService.generateDailyClose 生成日结并完成七源汇总后，调用 repository.saveReconciliationBatch 生成该营业日该范围的财务对账批次。id＝recon_batch_＋stableToken("reconciliation_batch", 日结 id)，batch_no＝RB-＋同一串，状态 open，business_date、scope_type、scope_id 取该日结的，一营业日一范围一批。OpenAPI 改了 createDailyClose、listReconciliationBatches 两处描述。回归 FinanceReconciliationBatchJdbcTests。依据原句：BSM:1729「三方对账按日进行——全部数据均为电子数据，各项工作一律以每日为单位完成。」；BSM:1682「按营业日生成日结批次。」；ENUM:188「对账口径 按订单、按核销、按合同、按渠道、按日结」。对应裁决：无新裁决。
+- 18Y 落地位置补记·第 180 条 180-R2（对账差异页按财务记录显示、按批次范围读写，加「登记差异」入口：四类可登记，对账单原件必传并落库）：
+  迁移 V607 给 finance_reconciliation_differences 加 evidence_attachment_ids（JSONB NOT NULL DEFAULT '[]'，CHECK chk_frd_evidence 为数组）。
+  backend/src/main/java/com/complex/platform/finance/FinanceService.java：
+  - listReconciliationBatches、listReconciliationDifferences 照 listDailyCloses 按 projectReach(finance.reconciliation.view) 读：平台管理员看全部，商户账号只看本商户 merchant、bar 范围，其余按可触及项目；去掉读路径的 requirePlatformReconciliationAccess。
+  - JdbcFinanceRepository 两个 list 方法加 merchantId、projectIds 参数，差异经 JOIN 批次过滤。
+  - createReconciliationDifference 与 closeReconciliationDifference 在幂等之前经 requireReconciliationBatchInScope、requireReconciliationDifferenceInScope 取批次或差异（无则 404），再按批次范围过闸（复用 requireDailyCloseScope）；商户账号仍不得写（403 RECONCILIATION_PLATFORM_ONLY）。
+  - createDifference：actual_amount_cent 只有 missing 可为 0；平台侧取数为 0 只对 missing 且第三方侧大于 0 放行，两边都为 0 仍拒 400 RECONCILIATION_NO_SYSTEM_EXPECTED；RECONCILIATION_NO_DIFFERENCE 只对 amount 类型；原件附件经 EvidenceAttachmentValidator.requireExisting 校验后落库，不带原件照收。
+  - ReconciliationDifferenceRecord 加 evidenceAttachmentIds。
+  - JdbcAnalyticsRepository.reconciliationDifferenceDetail 的差异类型、来源按中文返回。
+  前端 apps/web/src/admin/pages/ReconciliationPage.tsx：
+  - 批次表列为批次号、营业日、范围；差异表列为差异号、营业日（取所属批次）、差异类型、业务单号、平台侧金额、第三方侧金额、差额、来源、状态；去掉渠道列；「未处理」＝状态不是 closed。
+  - 持 finance.reconciliation.difference.create 显示「登记差异」表单：选批次、差异类型、业务单号、第三方侧金额，对账单原件走 /api/v1/evidence/attachments/upload；来源固定 manual，未上传原件不能提交。
+  依据：
+  - BSM:1746「平台侧金额必须系统自动取数、不许手填；第三方侧接入前可人工录入但须标记并强制复核」。
+  - ENUM:202「渠道接入前的人工录入必须同时上传渠道提供的对账单原件作为凭证……无原件的录入不得进入对账结论，只能挂为待补凭证」。
+  - ENUM:189「金额差异、数量差异、状态差异、缺失差异（单边缺失）」。
+  - BSM:1318「查看与平台口径不一致的对账差异。」
+  - PGM:778「本商户订单回流、券核销、对账差异、结算依据、看板。」
+  - PGM:528 红线④「看不到别的商户和别的项目的数据」。
+  回归：
+  - backend/src/test/java/com/complex/platform/finance/FinanceReconciliationDifferenceRegisterJdbcTests 七条：manualDifferenceKeepsStatementOriginal、manualDifferenceWithoutStatementIsAccepted、missingDifferenceAcceptsOneSideZero、equalAmountsOnlyRejectedForAmountDifference、readsAndRegistrationFollowBatchScope、unknownStatementAttachmentIsRejected、metricDetailShowsTypeAndSourceInChinese。全部走真实入口、蛇形键，先生成日结得批次、上传原件再登记。
+  - FinanceServiceTests.reconciliationReadsAreLimitedToOwnMerchantForMerchantScopedCallers。
+  - 前端 ReconciliationPage.test.tsx「ReconciliationPage 180-R2 后端字段与登记差异」三条。
+  无新裁决。
+- 181-R1（第 181 条 财务对账差异四态，复核走统一审批）：
+  - 落地位置：
+    - 迁移 V607 的 181-R1 段：chk_frd_status 四值；新增 responsible_user_id、stage_entered_at、identified_cause、review_id 四列；能力开关 finance.reconciliation.resolve 的跨端全局显式开启行。
+    - 新建 finance/FinanceReconciliationDifferenceService：识别 identify、提交关闭复核 submitReview、审批结论回写 decided。
+    - FinanceService.createReconciliationDifference：登记一律进待识别，负责人为登记人；删除原一步关闭。
+    - FinanceController：新增 POST /api/v1/finance/reconciliation/differences/{difference_id}/identify；close 改为提交关闭复核。
+    - JdbcFinanceRepository：四态各步是带原状态条件的单句更新。
+    - SupervisorReviewService：审批策略 finance_reconciliation_difference_close（one_level_up、恒阻断、金额下限 0）。
+    - JdbcPlatformRepository.REVIEW_OBJECT_PROJECT_SQL：finance_reconciliation_difference 经所属批次取项目。
+    - 后台对账差异页 ReconciliationPage：识别、提交复核、复核中跳主管复核页，负责人与本阶段起始时间列。
+    - 共享状态字典：待识别、待处理。
+  - 依据原句：
+    - ENUM:191「差异处理状态 待识别、待处理、待复核、已关闭。……复核环节属业务审批，沿用平台治理地图「全平台审批通用时限」条。各阶段由财务岗全程负责。」
+    - BSM:1729「对不上的进差异处理，按原因定位、复核后处理」
+    - ENUM:202「复核人须比对原件与录入值后签字；无原件的录入不得进入对账结论，只能挂为待补凭证。」
+    - PGM:528「任一节点驳回则整单退回起草人」
+  - 对应裁决：无新裁决。
+- 18Y 落地位置补记 181-R2（第 181 条；依据 ENUM:191「待识别与待处理两个阶段各自的停留时限为业务参数，按项目可配，出厂默认 1 个工作日，须同时配置上下限；超时未推进的，系统自动提醒并升级到上一级负责人。」；无新裁决）：迁移 V607 追加 finance_reconciliation_differences.identify_escalated_at、handle_escalated_at 两列与时限表 finance_reconciliation_stage_limits（project_id＋stage 主键，CHECK 1 ≤ min_working_days ≤ working_days ≤ max_working_days；不预置行，缺行按出厂默认 1 个工作日，上下限数值不自拟，同 V591 与本台账「未了义务与待跟进」第 2 条），新权限 finance.reconciliation.policy.manage「配置对账差异停留时限（按项目）」挂 role_platform_admin；接口 GET /api/v1/finance/reconciliation/stage-limits?project_id=、PUT /api/v1/finance/reconciliation/stage-limits/{project_id}（FinanceController → FinanceReconciliationDifferenceService.stageLimits、saveStageLimit；按该码 requireReachableProject 过范围闸、在幂等之前；审计 finance.reconciliation_stage_limit.saved）；超时作业 FinanceReconciliationEscalationJob（finance.reconciliation-escalation.scheduled.enabled，默认关，application-prod.yml 开，60s 一轮）→ FinanceReconciliationDifferenceService.escalateOverdue：项目经批次取，时限按 SupervisorReviewService.addWorkingDays 自 stage_entered_at 起算，到期条件写入本阶段 escalated_at（每阶段只升级一次），给原负责人发员工系统通知「对账差异超时：编号」，有直接上级（org_hierarchy）的负责人改为上一级并同样通知、无上级只提醒，审计 finance.reconciliation_difference.escalated；复核驳回退回待处理时清 handle_escalated_at（JdbcFinanceRepository.returnReconciliationDifferenceToHandling）；差异列表与详情加只读 stage_escalated_at；待复核阶段仍由统一审批 escalateOverdue（PGM:529）处理。前端 ReconciliationPage「差异停留时限（按项目）」小节（持新权限才显示），差异表状态后标「（已超时升级）」；页面矩阵 ADM-FIN-002 补两接口与新权限。
+- 180-R3（第 180 条「按订单」口径）落地位置：JdbcFinanceRepository.aggregatePlatformExpectedForBusinessRef 平台侧系统取数依次取收款记录（ar_ap_payments 已登记金额）、已支付票务订单（ticket_orders.amount_cent，pay_status=paid）、酒吧账单（bar_bills.paid_amount_cent）；对账差异页「登记差异」表单业务单号标签改为「业务单号（收款记录号、票务订单号或酒吧账单号）」（ReconciliationPage.tsx）；OpenAPI createFinanceReconciliationDifference 请求体 business_ref 描述写明三种单号与取数顺序；回归 FinanceReconciliationDifferenceRegisterJdbcTests.orderReferencesTakePlatformSideFromTicketOrderAndBarBill、unpaidTicketOrderHasNoSystemExpected 与 ReconciliationPage.test.tsx「登记差异：业务单号标签写明收款记录号、票务订单号或酒吧账单号」。依据原句：ENUM:188「对账口径 按订单、按核销、按合同、按渠道、按日结」；BSM:1746「平台侧金额必须系统自动取数、不许手填」。对应裁决：无新裁决。
+- 第 182 条 182-R1（ENUM:191「差异未关闭期间，高价值差异所涉营业日的日结不得确认锁定；低价值差异单独列示带账进入下期。」「对账差异的高低价值判定：以该笔差异所涉金额与「高价值判定」条所配的同一金额阈值比较，高于阈值即高价值，其余为低价值；阈值未配置一律按高价值处理。」；DEC-P1B-08「高价值差异未关闭阻断所涉营业日日结、低价值带账入下期」；DEC-P1C-03 复用同一阈值；无新裁决）：落地位置——
+  - 迁移 V609__daily_close_low_value_difference_source.sql：finance_daily_close_summaries.chk_fdcs_source 加 low_value_difference。
+  - FinanceService.summarizeDailyClose：DAILY_CLOSE_SOURCES 加 low_value_difference，生成日结与确认重算时每次多写一行（amount_cent＝差异金额合计、order_count＝笔数、refund_cent＝0，0 笔也写）。阈值取 FinanceService.highValueThreshold，即 inventory.HighValueThresholdPort 全平台阈值，与 highValueDifferenceOpen 同源。
+  - 取数 FinanceRepository/JdbcFinanceRepository.lowValueOpenDifferenceTotals：财务差异按所属批次 business_date 不晚于本营业日、status 不是 closed；第三方差异按所属批次 period_start 不晚于本营业日、status 不是 resolved 或 matched；金额不大于阈值即低价值（等于阈值算低价值）；阈值未配置记 0 笔。
+  - 范围谓词与 158-R1 的 openHighValueReconciliationDifferenceExists 共用 JdbcFinanceRepository.openDifferenceAmounts（同一 SQL 片段）。
+  - 「带账进入下期」按营业日不晚于本日取数：未关闭的低价值差异在之后每一天该范围的日结里继续列示，关闭即不再列示，跨月自然带入。不另建带入快照表，不做月末另行结转，不新增阈值配置。
+  - 前端 fieldLabels.ts KEY_VALUE_LABELS.source_stream 加「低价值未关闭差异（含上期带入）」，FinanceDailyClosePanel 组件未改。
+  - OpenAPI listDailyCloseSummaries 描述补该行，操作数不变。
+  - 回归：FinanceDailyCloseLowValueDifferenceJdbcTests（前一营业日与本日的未关闭低价值差异计入；已关闭的、高价值的、次日的、他商户的不计；阈值未配置记 0 笔；等于阈值计入；低价值不拦确认，确认重算后仍列示；第三方差异起日不晚于本日且未处置的计入）；FinanceDailyClosePanel.test.tsx「汇总表单列低价值未关闭差异的中文名与金额」。
+  - 既有测试：FinanceJdbcIntegrationTests 三处汇总行数 7→8；FinanceServiceTests 来源闭集加该源。
+- 第 181 条 181-R3（DEC-R4-2026-08-04-43「删除对账差异的「已忽略」状态——账目均为电子、实时出账，不会事后发现一堆不平的账；留此终态等于承认可把查不平的钱吃掉」；对应裁决 DEC-R4-2026-08-04-43）：落地位置 IntegrationValidation.RECONCILIATION_STATUSES 删 ignored，POST /api/v1/integration/reconciliation/differences/{id}/resolve 收 status=ignored 回 400 VALIDATION_FAILED（可选值 open、difference_found、matched、resolved）；迁移 V608__integration_reconciliation_drop_ignored.sql 重建 integration_reconciliation_differences.chk_integration_recon_diffs_status（open、needs_review、difference_found、matched、resolved）与 integration_reconciliation_batches.chk_integration_recon_batches_status（open、difference_found、matched、resolved），研发阶段无存量（UD-07）不做数据迁移；158-R1 日结闸 SQL 不动。OpenAPI resolveIntegrationReconciliationDifference 的 status 描述列出可选值并注明 ignored 已删，操作数不变。回归 FinanceDailyCloseDifferenceGateJdbcTests：第⑤条改为处置收 ignored 回 400、日结仍 409、resolved 后可确认；新增第⑦条直接写库 ignored 被批次表与差异表状态约束拒。前端不改（无页面调第三方对账接口）；第三方差异四态与处理页属渠道接入（B 类），不做。
+- 183-R1（第 183 条，总控驾驶舱「对账差异」卡）：
+  落地位置：
+  - apps/web/src/admin/pages/OverviewPage.tsx：持 finance.reconciliation.view 时用 useMetricKpiValue 取 finance.recon_diff_count（from=to=所看营业日）。卡片「对账差异」放在「日结状态」卡旁：
+    - 取数成功显示合计并出「完整明细」入口，点数字到对账差异页 ADM-FIN-002；
+    - 端点拒绝（项目级账号 403）显示「—」、不出明细入口；
+    - 没有该权限不显示、不请求。
+  - 页面矩阵 ADM-OV-001 行补权限 finance.reconciliation.view 与接口 GET /api/v1/analytics/metric-detail?metric=finance.recon_diff_count。
+  - 测试：apps/web/src/admin/pages/OverviewPage.recondiff.test.tsx。
+  依据原句：BSM:1824「财务：日结状态、对账差异、结算待确认。」；BSM:1839「卡片明细对账：总控上每一张汇总卡片都能点开看明细——卡片上的数字就是它下面明细的合计，点进去能核到每一笔，数字对不上一眼看得出。」
+  对应裁决：无新裁决。
+- 第 183 条 183-R2（总控驾驶舱「结算待确认」卡）：apps/web/src/admin/pages/OverviewPage.tsx——持 media.performance.view 的读新增 GET /api/v1/settlement/media-shows/pending-settlement-count（MediaPerformanceController、MediaPerformanceService.pendingSettlementCount、JdbcMediaPerformanceRepository.countPendingSettlements；数查看人可见场次里 status=pending 的演出结算条数，含未确认、有争议、合同未约定三种挂起，范围同场次列表：商户账号只数本商户是酒吧方或传媒方的场次、平台管理员不限、其余按 media.performance.view 可触及的项目），持 ticket.points.billing.view 的读既有 GET /api/v1/loyalty/ticket-points-billing/bills 数 open_objections>0 的账单张数；卡上「演出结算 n · 积分账单异议 n」分开显示、不相加，只请求所持权限那一类，没权限的那一类不显示，两种都没有不出卡，读取失败显示「—」，点演出结算到 ADM-STL-004、点积分账单异议到 ADM-FIN-008；取查询时状态，不随所看营业日变，不进指标目录、不写快照。依据 BSM:1824「财务：日结状态、对账差异、结算待确认。」；对应裁决：第十八批裁决 40（「数演出结算挂起待确认的、积分月结账单有未处理异议的，分两个数显示，不相加」）。
+- 控制席并入（同根缺陷）：对账差异写入口原先只有平台管理员能用。
+  - A 落地：FinanceService.requirePlatformReconciliationAccess 改用不抛错的 AuthorizationService.currentMerchantIdQuietly（原用 currentMerchantScope，不带商户号的员工被 403 MERCHANT_SCOPE_REQUIRED）。商户账号仍 403 RECONCILIATION_PLATFORM_ONLY，平台侧员工按 180-R2 批次范围闸放行；登记（createDifference）、识别、提交复核三个调用点都走这个闸。
+  - A 同根第二处：EvidenceEventService.evidenceScope 对 finance_reconciliation_difference 的写入上传同样改用 currentMerchantIdQuietly（照 FS-021-R6 先例；查看路径不变），否则平台侧员工传不了渠道对账单原件。
+  - 依据：PGM:664「跨主体与平台层面的财务工作——三方对账……由财务中心负责」「单店层面的财务工作——……差异认定……由该酒吧对应的财务 BP 负责」。
+  - 新测试：FinanceReconciliationDifferenceFlowJdbcTests ⑥ platformStaffFinanceRegistersIdentifiesAndSubmitsReview（平台侧财务员工按真实请求上传原件、登记、识别、提交复核）；FinanceReconciliationEscalationJdbcTests ⑧ escalatedStaffSuperiorContinuesHandling（超时升级到同为平台侧普通员工的直接上级后，由上级识别、提交复核）。修前都是 403 MERCHANT_SCOPE_REQUIRED，修后 200。
+  - B：openapi-p0.yaml 与 .json 中 createFinanceReconciliationDifference 的 x-data-scope 由 platform 改为 project-entity，closeFinanceReconciliationDifference 由 project-entity-channel 改为 project-entity（照代码的批次范围闸）。
+  - C：FinanceDailyCloseDifferenceGateJdbcTests 的类注释和 financeBatch 助手注释改为「批次 180-R1 起随日结生成」的现状。
+  - D：ReconciliationPage.test.tsx「待复核的行没有识别、提交复核按钮……」改为先 waitFor 等列表与首行按钮落定，再在 waitFor 里点选 rd-c 直到勾上，断言不变。
+- 18Y 复核修复补记（2026-11-06）：本段复核意见 10 条经独立反驳核实成立，按控制席判定修复；另 2 条待裁的对账单原件格式由控制席判定。无新裁决。
+  - 按订单取数认订单号、账单号（依据 BSM:1746「平台侧金额必须系统自动取数、不许手填」）：JdbcFinanceRepository.aggregatePlatformExpectedForBusinessRef 票务订单按 id 或 order_no 匹配（仍限 pay_status=paid），酒吧账单按 id 或 bill_no 匹配（两列都唯一）。回归 FinanceReconciliationDifferenceRegisterJdbcTests.orderNoAndBillNoTakePlatformSide。OpenAPI createFinanceReconciliationDifference 的 business_ref 描述、财务 PRD §4 180-R3 实现现状同步。
+  - 复核人回读渠道对账单原件（依据 ENUM:202「复核人须比对原件与录入值后签字」；PGM:664「跨主体与平台层面的财务工作——三方对账」）：EvidenceEventService.resolveAttachmentFile 对 finance_reconciliation_difference 按附件编号进 evidenceScope；不带商户号的账号由 FinanceReconciliationDifferenceService.canViewStatement 判——引用该原件的差异里有一笔本人是其当前关闭复核单链上的审批人或被转发人，或持 finance.reconciliation.view 且可触及其所属批次（FinanceService.requireReconciliationDifferenceInScope），即可看；都不满足照旧 403 MERCHANT_SCOPE_REQUIRED，商户账号照旧按本商户，平台管理员不变。取数 FinanceRepository/JdbcFinanceRepository.listReconciliationDifferenceIdsByEvidenceAttachment（evidence_attachment_ids @> jsonb_build_array(附件编号)）。回归 FinanceReconciliationDifferenceFlowJdbcTests ⑦ reviewSuperiorReadsStatementOriginal、⑧ otherProjectStaffCannotReadStatementOriginal。上文「控制席并入」A 同根第二处所记「查看路径不变」自此更正为本条查看规则。OpenAPI readEvidenceAttachmentFile 描述、财务 PRD §5.2 181-R1 与 §6C.4 实现现状同步。
+  - 对账单原件格式（依据 ENUM:202「渠道接入前的人工录入必须同时上传渠道提供的对账单原件作为凭证」）：对账单原件格式：控制席按 ENUM:202 字面判定，未弹窗——原件按字面收渠道提供的原文件。EvidenceFileStorage.storeReconciliationStatement 只供 business_type=finance_reconciliation_difference：照片、视频之外另收 pdf、xlsx、csv，这三种的扩展名须与浏览器报的内容类型一致（csv 另认 application/vnd.ms-excel），不符 400 VALIDATION_FAILED，不收 xlsm 等带宏格式；其余业务类型不变。前端 ReconciliationPage「登记差异」「提交复核」两处上传控件 accept 加 .pdf、.xlsx、.csv，标签写明「支持 PDF、Excel、CSV 原件」。回归 FinanceReconciliationDifferenceRegisterJdbcTests.pdfStatementOriginalIsAccepted（含 xlsm 拒 400）；ReconciliationPage.test.tsx「登记差异与提交复核两处上传控件除照片、视频外另收 PDF、Excel、CSV，并写明支持 PDF、Excel、CSV 原件」。OpenAPI uploadEvidenceAttachment 描述、财务 PRD §6C.4 实现现状同步。
+  - 生成日结后同页重读批次（依据 BSM:1682「按营业日生成日结批次。」；ENUM:191「差异未关闭期间，高价值差异所涉营业日的日结不得确认锁定」）：FinanceDailyClosePanel 加可选回调 onGenerated，生成成功后调用；ReconciliationPage 传入 reload，批次与差异一起重读；范围内还没有任何批次和差异时列表处显示「暂无数据」，「登记差异」表单照常渲染（KPI 聚焦视图不放）。回归 ReconciliationPage.test.tsx「范围内还没有任何批次和差异时显示暂无数据，「登记差异」表单照常可见」「同页日结区块生成日结后，「登记差异」批次下拉出现随日结生成的新批次，批次数随之更新」。财务 PRD §6C.4 实现现状同步。
+  - rd-b 用例竞态（依据任务书测试写法「点击前先等页面被动 effect 落定」）：ReconciliationPage.test.tsx「待处理的行提交复核……」照上文控制席并入 D 的 rd-c 写法，先等首行选中落定，再在 waitFor 里点到 rd-b 勾上，断言不变。
+  - 结算待确认卡只数现行版本（依据第十八批裁决 40「数演出结算挂起待确认的、积分月结账单有未处理异议的，分两个数显示，不相加」）：JdbcMediaPerformanceRepository.countPendingSettlements 条件为 st.status='pending' AND s.status='locked'（常量 PENDING_SETTLEMENT），被新版本取代的版本上残留的 pending 不计。回归 MediaPerformancePendingCountJdbcIntegrationTests.supersededVersionPendingNotCounted。
+  - 卡片明细对账（依据 BSM:1839「卡片上的数字就是它下面明细的合计，点进去能核到每一笔，数字对不上一眼看得出」）：GET /api/v1/settlement/media-shows 每行另带同口径的 pending_settlement_count（MediaPerformanceRecords.ShowListItem），ADM-STL-004 场次列表在现行版本行的状态后标「结算待处理 n 项」。回归 MediaPerformancePendingCountJdbcIntegrationTests.cardCountEqualsSumOfListRows；MediaPerformanceShowPage.test.tsx「BSM:1839 卡片明细对账：场次列表在现行版本行上标「结算待处理 n 项」，被取代的版本行不标」。FieldLabels.java 与 fieldLabels.ts 加 pending_settlement_count「结算待处理条数」，页面矩阵 ADM-STL-004 key_fields 加该键；OpenAPI listMediaPerformanceShows、countMediaPerformancePendingSettlements 描述与看板 PRD §4 183-R2 实现现状同步。
+  - 文档：财务 PRD §6C.2 180-R2 实现现状删去「现阶段只有平台管理员能办」与「MERCHANT_SCOPE_REQUIRED（本段未改）」，改为写入口只拦商户账号（403 RECONCILIATION_PLATFORM_ONLY）、平台侧不带商户归属的员工按批次范围闸放行（越界 403 CROSS_PROJECT_FORBIDDEN），§5.2 181-R1 引用处同步（依据 PGM:664）。OpenAPI confirmDailyClose、lockDailyClose 描述删去「（ignored 也算未关闭）」（依据 DEC-R4-2026-08-04-43「删除对账差异的「已忽略」状态」）。OpenAPI 操作数不变（1257），info.version 不升，security-scans 两份 md 只改 SHA 行；覆盖表 BSM-0399、BEQ-0054、BSM-0401、BEQ-0058、BEQ-0063 就地补述。

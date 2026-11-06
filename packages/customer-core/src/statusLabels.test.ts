@@ -1,4 +1,4 @@
-// 文件版本：V0.04
+// 文件版本：V0.05
 import { describe, it, expect } from "vitest";
 import { formatBusinessStatus } from "./statusLabels";
 
@@ -131,5 +131,13 @@ describe("formatBusinessStatus KPI前置批全局补充", () => {
     // 未知值兜底回归
     expect(formatBusinessStatus("totally_unknown_code")).toBe("totally_unknown_code");
     expect(formatBusinessStatus("")).toBe("—");
+  });
+
+  // 第十八批 Y 段第 181 条 181-R1（ENUM:191「差异处理状态 待识别、待处理、待复核、已关闭」）。
+  it("财务对账差异四态翻中文", () => {
+    expect(formatBusinessStatus("pending_identification")).toBe("待识别");
+    expect(formatBusinessStatus("pending_handling")).toBe("待处理");
+    expect(formatBusinessStatus("pending_review")).toBe("待复核");
+    expect(formatBusinessStatus("closed")).toBe("已关闭");
   });
 });

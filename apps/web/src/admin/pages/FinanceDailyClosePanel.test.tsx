@@ -1,4 +1,4 @@
-// 文件版本：V0.03
+// 文件版本：V0.04
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { FinanceDailyClosePanel } from "./FinanceDailyClosePanel";
@@ -37,6 +37,7 @@ const BACKFILL = ["finance.daily_close.manage", "finance.daily_close.lock", "fin
 const SUMMARIES = [
   { id: "sm1", dailyCloseId: "dc1", sourceStream: "bar_deposit", amountCent: 10000, refundCent: 0, orderCount: 1 },
   { id: "sm2", dailyCloseId: "dc1", sourceStream: "bar", amountCent: 25000, refundCent: 500, orderCount: 3 },
+  { id: "sm3", dailyCloseId: "dc1", sourceStream: "low_value_difference", amountCent: 200000, refundCent: 0, orderCount: 2 },
 ];
 const BARS = [
   { id: "bar_a", merchantName: "一号酒吧", merchantType: "bar" },
@@ -90,6 +91,16 @@ describe("日结区块", () => {
     expect(screen.getByTestId("daily-close-summary-table").textContent).toContain("100.00");
     expect(screen.getByTestId("daily-close-summary-table").textContent).not.toContain("bar_deposit");
     expect(get).toHaveBeenCalledWith("/api/v1/finance/daily-closes/dc1/summaries");
+  });
+
+  // 第十八批 Y 段第 182 条 182-R1（ENUM:191「低价值差异单独列示带账进入下期」）：汇总表单列低价值未关闭差异（含上期带入）。
+  it("汇总表单列低价值未关闭差异的中文名与金额", async () => {
+    setup();
+    await waitFor(() => expect(screen.queryByTestId("daily-close-row-dc1")?.textContent ?? "").toContain("已锁定"));
+    fireEvent.click(screen.getByTestId("daily-close-open-dc1"));
+    await waitFor(() => expect(screen.queryByTestId("daily-close-summary-table")?.textContent ?? "").toContain("低价值未关闭差异（含上期带入）"));
+    expect(screen.getByTestId("daily-close-summary-table").textContent).toContain("2000.00");
+    expect(screen.getByTestId("daily-close-summary-table").textContent).not.toContain("low_value_difference");
   });
 
   it("平台侧账号生成：选营业日、范围类型选酒吧、选酒吧，查不到日结显示待生成，生成后提交且不发强制日结", async () => {

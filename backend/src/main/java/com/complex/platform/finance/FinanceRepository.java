@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.19
+// 文件版本：V0.20
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -449,6 +449,18 @@ public interface FinanceRepository {
         return false;
     }
 
+    /**
+     * 第十八批 Y 段第 182 条 182-R1（ENUM:191「低价值差异单独列示带账进入下期」「高于阈值即高价值，其余为低价值；阈值未配置一律按高价值处理」）：
+     * 营业日不晚于 businessDate、仍未关闭的低价值对账差异的笔数与金额合计——未关闭的低价值差异在之后每一天该范围的日结里继续列示，关闭即不再列示。
+     * 财务差异按所属批次营业日不晚于本日、status 不是 closed；第三方差异按所属批次对账期间起日不晚于本日、status 不是 resolved、matched；
+     * 金额不大于 thresholdCent 即低价值，thresholdCent 为 null 记 0 笔（一律按高价值，由日结闸拦）。范围口径同
+     * {@link #openHighValueReconciliationDifferenceExists}。default 无库替身归零；Jdbc 覆写。
+     */
+    default DailyCloseSourceTotals lowValueOpenDifferenceTotals(LocalDate businessDate, String scopeType, String scopeId,
+            Long thresholdCent) {
+        return DailyCloseSourceTotals.empty();
+    }
+
     PaymentIntentRecord savePaymentIntent(PaymentIntentRecord paymentIntent);
 
     /** 按 id 查支付意图（储值充值/会员开通绑支付意图：入账前校验支付意图存在且已成功）。 */
@@ -505,19 +517,71 @@ public interface FinanceRepository {
         throw new UnsupportedOperationException("财务仓储未实现原收款读取");
     }
 
-    List<ReconciliationBatchRecord> listReconciliationBatches();
+    /**
+     * 第十八批 Y 段第 180 条 180-R2：对账批次按范围读，口径同 {@link #listDailyCloses}——merchantId 非空只看该商户的 merchant、bar 范围批次；
+     * projectIds 非空只看这些项目的 project 范围批次与项目下商户的 merchant、bar 范围批次，空集合没有可见记录；两者都为 null＝平台全量。
+     */
+    List<ReconciliationBatchRecord> listReconciliationBatches(String merchantId, java.util.Set<String> projectIds);
 
     ReconciliationBatchRecord saveReconciliationBatch(ReconciliationBatchRecord batch);
 
-    List<ReconciliationDifferenceRecord> listReconciliationDifferences();
+    /** 180-R2：对账差异按所属批次的范围读，口径同 {@link #listReconciliationBatches}。 */
+    List<ReconciliationDifferenceRecord> listReconciliationDifferences(String merchantId, java.util.Set<String> projectIds);
 
     ReconciliationDifferenceRecord saveReconciliationDifference(ReconciliationDifferenceRecord difference);
 
     Optional<ReconciliationDifferenceRecord> findReconciliationDifferenceById(String id);
 
-    /** 正式关闭对账差异（1.6）：置 status=closed 并落 close_reason/closed_by/closed_at，返回更新后记录。 */
-    ReconciliationDifferenceRecord closeReconciliationDifference(
-            String id, String closeReason, String closedBy, java.time.Instant closedAt);
+    /** 第十八批 Y 段第 181 条 181-R1：待识别 → 待处理（写识别原因，负责人改为办理人，本阶段起始时刻＝now）；不在待识别返回 false。 */
+    default boolean identifyReconciliationDifference(String id, String cause, String responsibleUserId, Instant now) {
+        throw new UnsupportedOperationException("财务仓储未实现对账差异识别");
+    }
+
+    /** 181-R1：待处理 → 待复核（写处理结论 close_reason、合并后的原件附件与复核单号）；不在待处理返回 false。 */
+    default boolean submitReconciliationDifferenceReview(String id, String closeReason, List<String> evidenceAttachmentIds, String reviewId,
+            Instant now) {
+        throw new UnsupportedOperationException("财务仓储未实现对账差异提交复核");
+    }
+
+    /** 181-R1：复核通过——该复核单的待复核 → 已关闭（记终审人与时刻），返回提交复核时的处理结论；已不在该复核单的待复核返回空（只赢一次）。 */
+    default Optional<String> closeReconciliationDifference(String id, String reviewId, String closedBy, Instant closedAt) {
+        throw new UnsupportedOperationException("财务仓储未实现对账差异关闭");
+    }
+
+    /** 181-R1：复核驳回——该复核单的待复核 → 待处理（复核单号置空，本阶段起始时刻＝now）；已不在该复核单的待复核返回 false。181-R2：同时清待处理阶段的超时升级时刻。 */
+    default boolean returnReconciliationDifferenceToHandling(String id, String reviewId, Instant now) {
+        throw new UnsupportedOperationException("财务仓储未实现对账差异驳回");
+    }
+
+    /**
+     * 第十八批 Y 段第 181 条 181-R2（ENUM:191「待识别与待处理两个阶段各自的停留时限为业务参数，按项目可配，出厂默认 1 个工作日，须同时配置上下限」）：
+     * 项目某阶段的停留时限（工作日）与上下限；未配置时上下限为空、时限为出厂默认。
+     */
+    record ReconciliationStageLimit(String projectId, String stage, int workingDays, Integer minWorkingDays, Integer maxWorkingDays) {
+    }
+
+    /** 181-R2：该项目已配置的阶段时限（没有行即未配置）。 */
+    default List<ReconciliationStageLimit> listReconciliationStageLimits(String projectId) {
+        throw new UnsupportedOperationException("财务仓储未实现对账差异停留时限读取");
+    }
+
+    /** 181-R2：按项目与阶段写入（覆盖）停留时限与上下限。 */
+    default void saveReconciliationStageLimit(ReconciliationStageLimit limit, String actorId) {
+        throw new UnsupportedOperationException("财务仓储未实现对账差异停留时限保存");
+    }
+
+    /** 181-R2：待超时检查的差异——待识别或待处理、本阶段还没升级过；workingDays 为所属项目该阶段已配的时限，未配置为空。 */
+    record ReconciliationEscalationCandidate(String id, String status, String responsibleUserId, Instant stageEnteredAt, Integer workingDays) {
+    }
+
+    default List<ReconciliationEscalationCandidate> listReconciliationEscalationCandidates() {
+        throw new UnsupportedOperationException("财务仓储未实现对账差异超时扫描");
+    }
+
+    /** 181-R2：本阶段超时升级（条件写入，只赢一次）——记该阶段升级时刻，superiorId 非空时负责人改为上一级；已不在该阶段或该阶段已升级过返回 false。 */
+    default boolean markReconciliationDifferenceEscalated(String id, String stage, String superiorId, Instant now) {
+        throw new UnsupportedOperationException("财务仓储未实现对账差异超时升级");
+    }
 
     /** 按 id 查对账批次（创建差异前校验所属批次存在）。default 空实现避免破坏既有测试双子。 */
     default Optional<ReconciliationBatchRecord> findReconciliationBatchById(String id) {
@@ -530,6 +594,11 @@ public interface FinanceRepository {
      */
     default long aggregatePlatformExpectedForBusinessRef(String businessRef) {
         return 0L;
+    }
+
+    /** 18Y 复核修复（ENUM:202「复核人须比对原件与录入值后签字」）：原件附件里含该附件编号的对账差异编号（回读原件时按差异过范围闸）。default 无库替身为空。 */
+    default List<String> listReconciliationDifferenceIdsByEvidenceAttachment(String attachmentId) {
+        return List.of();
     }
 
     // ── R5 T7：日结锁定 + 补录审批 + 多源汇总 ──────────────────────────────

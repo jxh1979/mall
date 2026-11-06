@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.07
+// 文件版本：V0.08
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.groups.Tuple.tuple;
@@ -201,8 +201,8 @@ class FinanceJdbcIntegrationTests {
 
     @Test
     void reconciliationEndpointsCanListEmptyAndPersistedRows() {
-        assertThat(repository.listReconciliationBatches()).isNotNull();
-        assertThat(repository.listReconciliationDifferences()).isNotNull();
+        assertThat(repository.listReconciliationBatches(null, null)).isNotNull();
+        assertThat(repository.listReconciliationDifferences(null, null)).isNotNull();
 
         repository.saveReconciliationBatch(new ReconciliationBatchRecord(
                 "recon_batch_jdbc",
@@ -219,34 +219,38 @@ class FinanceJdbcIntegrationTests {
                 "amount",
                 "payment_jdbc",
                 100L,
-                "open",
+                "pending_identification",
                 Instant.parse("2026-06-14T00:00:00Z")
         ));
 
-        assertThat(repository.listReconciliationBatches())
+        assertThat(repository.listReconciliationBatches(null, null))
                 .extracting(ReconciliationBatchRecord::batchNo, ReconciliationBatchRecord::status)
                 .contains(tuple("RB-JDBC-001", "created"));
-        assertThat(repository.listReconciliationDifferences())
+        assertThat(repository.listReconciliationDifferences(null, null))
                 .extracting(ReconciliationDifferenceRecord::differenceType, ReconciliationDifferenceRecord::businessRef)
                 .contains(tuple("amount", "payment_jdbc"));
     }
 
     @Test
     void closeReconciliationDifferencePersistsClosedStatusAndReason() {
-        // 1.6 真实后端活证据：close 落 status=closed + close_reason/closed_by/closed_at；
-        // findById 回读为 closed；再 close 幂等仍 closed。走真实 Postgres。
+        // 第十八批 Y 段第 181 条 181-R1 真实后端活证据：四态各步落库——识别写原因与负责人，提交复核落处理结论、原件附件与复核单号，
+        // 复核通过置 closed 并记终审人、返回处理结论；再关闭不生效（只赢一次）。走真实 Postgres。
         repository.saveReconciliationBatch(new ReconciliationBatchRecord(
                 "recon_batch_close_jdbc", "RB-CLOSE-JDBC", "project", "project_jdbc",
                 LocalDate.parse("2026-06-14"), "created", Instant.parse("2026-06-14T00:00:00Z")));
         repository.saveReconciliationDifference(new ReconciliationDifferenceRecord(
                 "recon_diff_close_jdbc", "recon_batch_close_jdbc", "amount", "payment_close_jdbc",
-                2000L, "open", Instant.parse("2026-06-14T00:00:00Z")));
+                2000L, "pending_identification", Instant.parse("2026-06-14T00:00:00Z")));
+        Instant at = Instant.parse("2026-06-15T00:00:00Z");
 
-        ReconciliationDifferenceRecord closed = repository.closeReconciliationDifference(
-                "recon_diff_close_jdbc", "手工核对后正式关闭", "op_close", Instant.parse("2026-06-15T00:00:00Z"));
-        assertThat(closed.status()).isEqualTo("closed");
+        assertThat(repository.identifyReconciliationDifference("recon_diff_close_jdbc", "渠道少记一笔", "op_identify", at)).isTrue();
+        assertThat(repository.submitReconciliationDifferenceReview("recon_diff_close_jdbc", "手工核对后正式关闭", List.of("att_close_jdbc"),
+                "review_close_jdbc", at)).isTrue();
+        assertThat(repository.closeReconciliationDifference("recon_diff_close_jdbc", "review_close_jdbc", "op_close", at))
+                .contains("手工核对后正式关闭");
+        assertThat(repository.closeReconciliationDifference("recon_diff_close_jdbc", "review_close_jdbc", "op_close", at)).isEmpty();
 
-        // DB 层活证据：状态与关闭原因落库。
+        // DB 层活证据：状态、处理结论与终审人落库。
         assertThat(jdbcTemplate.queryForObject(
                 "SELECT status FROM finance_reconciliation_differences WHERE id = 'recon_diff_close_jdbc'", String.class))
                 .isEqualTo("closed");
@@ -256,8 +260,10 @@ class FinanceJdbcIntegrationTests {
         assertThat(jdbcTemplate.queryForObject(
                 "SELECT closed_by FROM finance_reconciliation_differences WHERE id = 'recon_diff_close_jdbc'", String.class))
                 .isEqualTo("op_close");
-        assertThat(repository.findReconciliationDifferenceById("recon_diff_close_jdbc"))
-                .get().extracting(ReconciliationDifferenceRecord::status).isEqualTo("closed");
+        assertThat(repository.findReconciliationDifferenceById("recon_diff_close_jdbc")).get()
+                .extracting(ReconciliationDifferenceRecord::status, ReconciliationDifferenceRecord::identifiedCause,
+                        ReconciliationDifferenceRecord::responsibleUserId, ReconciliationDifferenceRecord::evidenceAttachmentIds)
+                .containsExactly("closed", "渠道少记一笔", "op_identify", List.of("att_close_jdbc"));
     }
 
     @Test
@@ -511,7 +517,7 @@ class FinanceJdbcIntegrationTests {
         assertThat(JsonPath.<List<Object>>read(body, rowA + ".locked_at")).hasSize(1).doesNotContainNull();
         mockMvc.perform(get("/api/v1/finance/daily-closes/" + closeA + "/summaries").with(finance))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.items.length()").value(7));
+                .andExpect(jsonPath("$.data.items.length()").value(8));
 
         String closeP1 = lockDailyClose(finance, "dcl-p1-" + s, "2998-03-03", "project", p1);
         List<String> ours = List.of(closeA, closeB, closeP1);
@@ -550,7 +556,7 @@ class FinanceJdbcIntegrationTests {
         String close = JsonPath.read(body, "$.data.id");
         mockMvc.perform(get("/api/v1/finance/daily-closes/" + close + "/summaries").with(financeBp))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.items.length()").value(7));
+                .andExpect(jsonPath("$.data.items.length()").value(8));
         assertThat(lockedDayClose(item)).isNull();
         pay(financeBp, item, "dcf-pay1-" + s).andExpect(status().isOk());
         closeAction(financeBp, close, "lock", "dcf-lk0-" + s).andExpect(status().isConflict())
@@ -1104,7 +1110,7 @@ class FinanceJdbcIntegrationTests {
                 .andExpect(jsonPath("$.data.items[0].archived_at").isNotEmpty());
         mockMvc.perform(get("/api/v1/finance/daily-closes/" + close + "/summaries").with(financeBp))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.items.length()").value(7));
+                .andExpect(jsonPath("$.data.items.length()").value(8));
 
         closeAction(financeBp, close, "archive", "dca-ar2-" + s).andExpect(status().isConflict())
                 .andExpect(jsonPath("$.detail_code").value("DAILY_CLOSE_NOT_LOCKED"));

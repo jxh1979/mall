@@ -1,4 +1,4 @@
-# P0 OpenAPI Operation 验收矩阵 V0.56
+# P0 OpenAPI Operation 验收矩阵 V0.57
 
 ## 1. 文档定位
 
@@ -17,7 +17,7 @@
 
 ## 3. Operation 清单
 
-> 当前 `docs/openapi/openapi-p0.json` 共 1253 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
+> 当前 `docs/openapi/openapi-p0.json` 共 1257 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
 
 | 标签 | 方法 | 路径 | operationId | 摘要 | 请求体 | 权限 | 认证上下文 | 数据范围 | 终端/设备能力/调用通道 | 幂等 | 成功事件 | 失败事件 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -154,10 +154,13 @@
 | finance | `POST` | `/api/v1/finance/daily-closes` | `createDailyClose` | 生成日结 | `DailyCloseRequest` | `finance.daily_close.lock` | `staff-token` | `project-entity` | web | 是 | `finance_daily_close.generated` | `finance_daily_close.generate_failed` |
 | finance | `POST` | `/api/v1/finance/payment-intents` | `createPaymentIntent` | 创建聚合支付意图 | `PaymentIntentRequest` | `finance.payment_intent.create` | `staff-token` | `project-order` | web, kiosk, miniapp, app | 是 | `payment.intent_created` | `payment.intent_failed` |
 | finance | `POST` | `/api/v1/finance/payments/{payment_id}/confirm-offline` | `confirmOfflinePayment` | 现金或 POS 线下收款确认 | `OfflinePaymentConfirmRequest` | `finance.payment.register` | `staff-token` | `project-order` | web | 是 | `finance_payment.registered` | `finance_payment.register_failed` |
-| finance | `GET` | `/api/v1/finance/reconciliation/batches` | `listReconciliationBatches` | 查询对账批次 | `-` | `finance.reconciliation.view` | `staff-token` | `project` | web | 否 | `finance.reconciliation_batch.viewed` | `finance.reconciliation_batch.viewed_failed` |
-| finance | `GET` | `/api/v1/finance/reconciliation/differences` | `listReconciliationDifferences` | 对账差异 | `-` | `finance.reconciliation.view` | `staff-token` | `project-entity-channel` | web | 否 | `finance_reconciliation.difference_found` | `finance_reconciliation.view_failed` |
-| finance | `POST` | `/api/v1/finance/reconciliation/differences` | `createFinanceReconciliationDifference` | 创建对账差异 | `object` | `finance.reconciliation.difference.create` | `staff-token` | `platform` | web | 是 | `finance.reconciliation.difference_created` | `finance.reconciliation.difference_create_failed` |
-| finance | `POST` | `/api/v1/finance/reconciliation/differences/{difference_id}/close` | `closeFinanceReconciliationDifference` | 正式关闭对账差异 | `object` | `finance.reconciliation.resolve` | `staff-token` | `project-entity-channel` | web | 是 | `finance.reconciliation.difference_closed` | `finance.reconciliation.difference_close_failed` |
+| finance | `GET` | `/api/v1/finance/reconciliation/batches` | `listReconciliationBatches` | 查询对账批次 | `-` | `finance.reconciliation.view` | `staff-token` | `project-entity` | web | 否 | `finance.reconciliation_batch.viewed` | `finance.reconciliation_batch.viewed_failed` |
+| finance | `GET` | `/api/v1/finance/reconciliation/differences` | `listReconciliationDifferences` | 对账差异 | `-` | `finance.reconciliation.view` | `staff-token` | `project-entity` | web | 否 | `finance_reconciliation.difference_found` | `finance_reconciliation.view_failed` |
+| finance | `POST` | `/api/v1/finance/reconciliation/differences` | `createFinanceReconciliationDifference` | 创建对账差异 | `object` | `finance.reconciliation.difference.create` | `staff-token` | `project-entity` | web | 是 | `finance.reconciliation.difference_created` | `finance.reconciliation.difference_create_failed` |
+| finance | `POST` | `/api/v1/finance/reconciliation/differences/{difference_id}/close` | `closeFinanceReconciliationDifference` | 提交差异关闭复核 | `object` | `finance.reconciliation.resolve` | `staff-token` | `project-entity` | web | 是 | `finance.reconciliation.difference_review_submitted` | `finance.reconciliation.difference_review_submit_failed` |
+| finance | `POST` | `/api/v1/finance/reconciliation/differences/{difference_id}/identify` | `identifyFinanceReconciliationDifference` | 识别对账差异 | `object` | `finance.reconciliation.resolve` | `staff-token` | `project-entity` | web | 是 | `finance.reconciliation.difference_identified` | `finance.reconciliation.difference_identify_failed` |
+| finance | `GET` | `/api/v1/finance/reconciliation/stage-limits` | `listFinanceReconciliationStageLimits` | 查询对账差异停留时限（按项目） | `-` | `finance.reconciliation.policy.manage` | `staff-token` | `project` | web | 否 | `not_applicable` | `not_applicable` |
+| finance | `PUT` | `/api/v1/finance/reconciliation/stage-limits/{project_id}` | `saveFinanceReconciliationStageLimit` | 配置对账差异停留时限（按项目、按阶段，时限与上下限同配） | `object` | `finance.reconciliation.policy.manage` | `staff-token` | `project` | web | 是 | `finance.reconciliation_stage_limit.saved` | `finance.reconciliation_stage_limit.save_failed` |
 | finance | `GET` | `/api/v1/finance/internal-payables/{ar_ap_item_id}` | `getInternalPayableExecution` | 查普通内部结算往来的付款时点与执行状态 | `-` | `finance.ar_ap.view` | `staff-token` | `project-merchant` | web | 否 | `not_applicable` | `not_applicable` |
 | finance | `POST` | `/api/v1/finance/internal-payables/{ar_ap_item_id}/payment-attempts` | `initiateInternalPayment` | 登记内部应付已发起付款(银行在途) | `object` | `finance.payment.register` | `staff-token` | `project-merchant` | web | 是 | `finance.internal_payment.initiated` | `finance.internal_payment.initiate_failed` |
 | finance | `POST` | `/api/v1/finance/internal-payables/{ar_ap_item_id}/payment-attempts/{attempt_id}/failure` | `recordInternalPaymentFailure` | 登记内部应付付款明确失败(付款失败待处理) | `object` | `finance.payment.register` | `staff-token` | `project-merchant` | web | 是 | `finance.internal_payment.failed` | `finance.internal_payment.fail_record_failed` |
@@ -981,6 +984,7 @@
 | customer | `GET` | `/api/v1/customer/voucher-transfers/outgoing` | `listOutgoingCustomerVoucherTransfers` | 我发起的转赠(撤回入口/状态查看) | `-` | `not_applicable` | `customer-token` | `customer` | miniapp, app | 否 | `not_applicable` | `not_applicable` |
 | settlement | `GET` | `/api/v1/settlement/media-shows` | `listMediaPerformanceShows` | 逐场演出合同记录列表 | `-` | `media.performance.view` | `staff-token` | `project` | web | 否 | `media_show.listed` | `media_show.list_failed` |
 | settlement | `POST` | `/api/v1/settlement/media-shows` | `createMediaPerformanceShow` | 新建逐场演出合同记录（草案） | `object` | `media.performance.contract.manage` | `staff-token` | `project` | web | 是 | `media_show.created` | `media_show.create_failed` |
+| settlement | `GET` | `/api/v1/settlement/media-shows/pending-settlement-count` | `countMediaPerformancePendingSettlements` | 演出结算挂起待确认条数（总控驾驶舱结算待确认卡） | `-` | `media.performance.view` | `staff-token` | `project` | web | 否 | `not_applicable` | `not_applicable` |
 | settlement | `GET` | `/api/v1/settlement/media-shows/{id}` | `getMediaPerformanceShow` | 逐场演出合同详情（含履约事实与三项结算） | `-` | `media.performance.view` | `staff-token` | `project` | web | 否 | `media_show.viewed` | `media_show.view_failed` |
 | settlement | `PATCH` | `/api/v1/settlement/media-shows/{id}` | `updateMediaPerformanceShow` | 修改草案合同记录 | `object` | `media.performance.contract.manage` | `staff-token` | `project` | web | 是 | `media_show.updated` | `media_show.update_failed` |
 | settlement | `POST` | `/api/v1/settlement/media-shows/{id}/lock` | `lockMediaPerformanceShow` | 锁定合同版本 | `object` | `media.performance.contract.manage` | `staff-token` | `project` | web | 是 | `media_show.locked` | `media_show.lock_failed` |

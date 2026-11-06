@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "综合体管理系统 P0 API 契约",
-    "version": "V0.56",
+    "version": "V0.57",
     "description": "P0 首批编码前置契约。本文采用 JSON-compatible YAML，便于与 openapi-p0.json 保持一致。正式后端以 Java 21 + Spring Boot 4.x + springdoc-openapi 输出运行时 OpenAPI，并与本契约比对。"
   },
   "servers": [
@@ -5695,7 +5695,7 @@
         ],
         "operationId": "createDailyClose",
         "summary": "生成日结",
-        "description": "第十八批 R 段第 143 条 143-R1（ENUM:190「待生成、待确认、有差异、已确认、已锁定、已归档」；BSM:1682「按营业日生成日结批次。」）：生成日结，status 为 pending_confirm（待确认）、locked_at 为空，并按七源汇总当日金额、退款与笔数；同日同范围已生成 409 DAILY_CLOSE_EXISTS。生成时不拦日结闸、不给台账打锁，闸在 confirmDailyClose、lockDailyClose 时拦，台账在 lockDailyClose 时打锁。第十八批 S 段第 161 条 161-R3（第十八批裁决 35「酒吧逐店逐日查；游乐等按综合体逐日查」）：scope_type 只收 project、merchant、bar，票务、游乐由综合体的 project 范围日结覆盖、不再单独出日结，传 ticketing、amusement 拒 400 VALIDATION_FAILED。范围：商户账号只能办本商户的 merchant、bar 范围日结，否则 403 CROSS_MERCHANT_FORBIDDEN；其余账号按 finance.daily_close.lock 可触及的项目覆盖日结所属综合体（merchant、bar 范围取该商户所属项目），否则 403 CROSS_PROJECT_FORBIDDEN。",
+        "description": "第十八批 R 段第 143 条 143-R1（ENUM:190「待生成、待确认、有差异、已确认、已锁定、已归档」；BSM:1682「按营业日生成日结批次。」）：生成日结，status 为 pending_confirm（待确认）、locked_at 为空，并按七源汇总当日金额、退款与笔数；同日同范围已生成 409 DAILY_CLOSE_EXISTS。第十八批 Y 段第 180 条 180-R1（BSM:1729「三方对账按日进行」；ENUM:188 对账口径「按日结」）：生成日结时同时生成该营业日该范围的财务对账批次（business_date、scope_type、scope_id 取本日结的，一营业日一范围一批，listReconciliationBatches 可查）。生成时不拦日结闸、不给台账打锁，闸在 confirmDailyClose、lockDailyClose 时拦，台账在 lockDailyClose 时打锁。第十八批 S 段第 161 条 161-R3（第十八批裁决 35「酒吧逐店逐日查；游乐等按综合体逐日查」）：scope_type 只收 project、merchant、bar，票务、游乐由综合体的 project 范围日结覆盖、不再单独出日结，传 ticketing、amusement 拒 400 VALIDATION_FAILED。范围：商户账号只能办本商户的 merchant、bar 范围日结，否则 403 CROSS_MERCHANT_FORBIDDEN；其余账号按 finance.daily_close.lock 可触及的项目覆盖日结所属综合体（merchant、bar 范围取该商户所属项目），否则 403 CROSS_PROJECT_FORBIDDEN。",
         "x-permission": "finance.daily_close.lock",
         "x-data-scope": "project-entity",
         "x-terminal-allowed": [
@@ -5810,9 +5810,9 @@
         ],
         "operationId": "listReconciliationBatches",
         "summary": "查询对账批次",
-        "description": "用于查询对账批次。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。",
+        "description": "用于查询对账批次。第十八批 Y 段第 180 条 180-R1（BSM:1682「按营业日生成日结批次。」）：批次来源为生成日结（createDailyClose）时随之生成，一营业日一范围一批，business_date、scope_type、scope_id 取该日结的。180-R2（PGM:778「本商户订单回流、券核销、对账差异、结算依据、看板。」；PGM:528 红线④「看不到别的商户和别的项目的数据」）：范围同 listDailyCloses——平台管理员看全部；商户账号只看本商户的 merchant、bar 范围批次；其余按 finance.reconciliation.view 可触及的项目看 project 范围批次与这些项目下商户的 merchant、bar 范围批次。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。",
         "x-permission": "finance.reconciliation.view",
-        "x-data-scope": "project",
+        "x-data-scope": "project-entity",
         "x-terminal-allowed": [
           "web"
         ],
@@ -5840,8 +5840,9 @@
         ],
         "operationId": "listReconciliationDifferences",
         "summary": "对账差异",
+        "description": "第十八批 Y 段第 180 条 180-R2（BSM:1318「查看与平台口径不一致的对账差异。」；PGM:778；PGM:528 红线④）：按所属对账批次的范围读，范围同 listReconciliationBatches。每行返回差异类型 difference_type（amount 金额差异、count 数量差异、status 状态差异、missing 缺失差异）、业务单号 business_ref、平台侧金额 expected_amount_cent（系统取数）、第三方侧金额 actual_amount_cent、差额 amount_cent、来源 source（system 系统取数、manual 人工录入）、状态 status、渠道对账单原件附件编号 evidence_attachment_ids（不带原件为空，即待补凭证）。第十八批 Y 段第 181 条 181-R1（ENUM:191「差异处理状态 待识别、待处理、待复核、已关闭」）：status 为 pending_identification 待识别、pending_handling 待处理、pending_review 待复核、closed 已关闭；另返回负责人 responsible_user_id（登记人、识别人）、进入本阶段的时刻 stage_entered_at、识别写下的差异原因 identified_cause 与待复核时的复核单号 review_id。第十八批 Y 段第 181 条 181-R2（ENUM:191「超时未推进的，系统自动提醒并升级到上一级负责人」）：另返回本阶段（待识别或待处理）超时升级的时刻 stage_escalated_at，未升级为空。",
         "x-permission": "finance.reconciliation.view",
-        "x-data-scope": "project-entity-channel",
+        "x-data-scope": "project-entity",
         "x-terminal-allowed": [
           "web"
         ],
@@ -5867,9 +5868,10 @@
         ],
         "operationId": "createFinanceReconciliationDifference",
         "summary": "创建对账差异",
+        "description": "第十八批 Y 段第 180 条 180-R2（BSM:1746「平台侧金额必须系统自动取数、不许手填；第三方侧接入前可人工录入但须标记并强制复核」；ENUM:202「渠道接入前的人工录入必须同时上传渠道提供的对账单原件作为凭证……无原件的录入不得进入对账结论，只能挂为待补凭证。」；ENUM:189「金额差异、数量差异、状态差异、缺失差异（单边缺失）」）：差异挂在 batch_id 所指的对账批次下（无则 404 RECONCILIATION_BATCH_NOT_FOUND），在幂等之前按该批次范围过范围闸——商户账号不得登记（本商户范围 403 RECONCILIATION_PLATFORM_ONLY，别的商户 403 CROSS_MERCHANT_FORBIDDEN），其余账号按 finance.reconciliation.difference.create 可触及的项目覆盖批次所属综合体，否则 403 CROSS_PROJECT_FORBIDDEN。平台侧金额 expected_amount_cent 按 business_ref 系统取数；第十八批 Y 段第 181 条 181-R1（ENUM:191「待识别、待处理、待复核、已关闭」）：登记不论来源一律进待识别 pending_identification，负责人 responsible_user_id 为登记人。actual_amount_cent 只有缺失差异可为 0；非缺失差异平台侧为 0、缺失差异两边都为 0 拒 400 RECONCILIATION_NO_SYSTEM_EXPECTED；金额差异两边相等拒 400 RECONCILIATION_NO_DIFFERENCE，数量、状态差异两边金额可以相等。evidence_attachment_ids 为渠道对账单原件，须真实存在（否则 400 EVIDENCE_ATTACHMENT_NOT_FOUND），随差异落库并在返回中带回；不带原件照收（待补凭证）。",
         "x-auth-context": "staff-token",
         "x-permission": "finance.reconciliation.difference.create",
-        "x-data-scope": "platform",
+        "x-data-scope": "project-entity",
         "x-terminal-allowed": [
           "web"
         ],
@@ -5903,7 +5905,7 @@
                   },
                   "evidence_attachment_ids": {
                     "type": "array",
-                    "description": "证据附件 ID 列表；进入审计留痕。",
+                    "description": "渠道对账单原件附件 ID 列表（先经 /api/v1/evidence/attachments/upload 上传）；须真实存在，随差异落库；不带原件照收为待补凭证。",
                     "items": {
                       "type": "string",
                       "maxLength": 64
@@ -5921,7 +5923,7 @@
                   },
                   "business_ref": {
                     "type": "string",
-                    "description": "业务引用。",
+                    "description": "业务单号：收款记录号、票务订单号或酒吧账单号。第十八批 Y 段第 180 条 180-R3（ENUM:188「对账口径 按订单、按核销、按合同、按渠道、按日结」；BSM:1746「平台侧金额必须系统自动取数、不许手填」）：平台侧金额 expected_amount_cent 按此依次取数——收款记录取已登记金额，查不到取已支付（pay_status=paid）票务订单的订单金额，再查不到取酒吧账单的已付金额 paid_amount_cent；票务订单、酒吧账单按内部编号或订单号 order_no、账单号 bill_no 匹配（两列唯一）。",
                     "maxLength": 255
                   },
                   "source": {
@@ -5934,8 +5936,8 @@
                   },
                   "actual_amount_cent": {
                     "type": "integer",
-                    "description": "实际金额（source=manual 时填写）。（单位：分，禁止浮点）",
-                    "minimum": -999999999999,
+                    "description": "第三方侧金额（渠道对账单上的数）；只有缺失差异（difference_type=missing）可为 0。（单位：分，禁止浮点）",
+                    "minimum": 0,
                     "maximum": 999999999999
                   }
                 }
@@ -5968,16 +5970,17 @@
           "finance"
         ],
         "operationId": "closeFinanceReconciliationDifference",
-        "summary": "正式关闭对账差异",
+        "summary": "提交差异关闭复核",
+        "description": "第十八批 Y 段第 181 条 181-R1（ENUM:191「差异处理状态 待识别、待处理、待复核、已关闭。……复核环节属业务审批，沿用平台治理地图「全平台审批通用时限」条。各阶段由财务岗全程负责。」；ENUM:202「复核人须比对原件与录入值后签字；无原件的录入不得进入对账结论，只能挂为待补凭证。」；PGM:528「任一节点驳回则整单退回起草人」）：提交差异关闭复核，不再一步关闭。在幂等之前按差异所属批次范围过范围闸（同 createFinanceReconciliationDifference，权限码 finance.reconciliation.resolve；商户账号本商户范围 403 RECONCILIATION_PLATFORM_ONLY）。只收待处理 pending_handling，否则 409 RECONCILIATION_DIFFERENCE_STATUS_CONFLICT；evidence_attachment_ids 须真实存在（否则 400 EVIDENCE_ATTACHMENT_NOT_FOUND）并追加进差异的原件附件；人工录入（source=manual）合并后仍无原件 409 RECONCILIATION_EVIDENCE_PENDING。通过后进统一审批（动作 finance.reconciliation_difference.close，每笔都进待审，按涉钱 1 个工作日时限；提交人沿直接上级链到 final_approver_id，不填为直接上级），差异转待复核 pending_review 并返回复核单号 review_id；复核单普通查看人按差异所属项目判可见。审批通过差异转已关闭 closed（closed_by 为终审人）并向往来商户发认定结果短信；驳回退回待处理、review_id 置空，可再提交。提交人本人不得审批。",
         "x-auth-context": "staff-token",
         "x-permission": "finance.reconciliation.resolve",
-        "x-data-scope": "project-entity-channel",
+        "x-data-scope": "project-entity",
         "x-terminal-allowed": [
           "web"
         ],
         "x-idempotency-required": true,
-        "x-audit-event-success": "finance.reconciliation.difference_closed",
-        "x-audit-event-failure": "finance.reconciliation.difference_close_failed",
+        "x-audit-event-success": "finance.reconciliation.difference_review_submitted",
+        "x-audit-event-failure": "finance.reconciliation.difference_review_submit_failed",
         "parameters": [
           {
             "name": "difference_id",
@@ -6009,16 +6012,21 @@
                   },
                   "close_reason": {
                     "type": "string",
-                    "description": "关闭原因；进入审计留痕。",
+                    "description": "处理结论；落库并写入复核单，审批通过后作为认定结果。",
                     "maxLength": 1000
                   },
                   "evidence_attachment_ids": {
                     "type": "array",
-                    "description": "证据附件 ID 列表；进入审计留痕。",
+                    "description": "补充凭证附件 ID 列表（先经 /api/v1/evidence/attachments/upload 上传，渠道对账单原件即在此补）；须真实存在，追加进差异的原件附件。",
                     "items": {
                       "type": "string",
                       "maxLength": 64
                     }
+                  },
+                  "final_approver_id": {
+                    "type": "string",
+                    "description": "最终审批人（可不填：提交人的直接上级）；须在提交人的直接上级链上，否则 400 FINAL_APPROVER_NOT_IN_CHAIN。",
+                    "maxLength": 64
                   }
                 }
               }
@@ -6039,6 +6047,222 @@
             "$ref": "#/components/responses/Error"
           },
           "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/finance/reconciliation/differences/{difference_id}/identify": {
+      "post": {
+        "tags": [
+          "finance"
+        ],
+        "operationId": "identifyFinanceReconciliationDifference",
+        "summary": "识别对账差异",
+        "description": "第十八批 Y 段第 181 条 181-R1（BSM:1729「对不上的进差异处理，按原因定位、复核后处理」；ENUM:191「待识别、待处理、待复核、已关闭」「各阶段由财务岗全程负责」）：识别对账差异——写差异原因 identified_cause，待识别 pending_identification 转待处理 pending_handling，负责人 responsible_user_id 改为办理人，stage_entered_at 记进入待处理的时刻。只收待识别，否则 409 RECONCILIATION_DIFFERENCE_STATUS_CONFLICT。范围闸同 closeFinanceReconciliationDifference（在幂等之前）。",
+        "x-auth-context": "staff-token",
+        "x-permission": "finance.reconciliation.resolve",
+        "x-data-scope": "project-entity",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "finance.reconciliation.difference_identified",
+        "x-audit-event-failure": "finance.reconciliation.difference_identify_failed",
+        "parameters": [
+          {
+            "name": "difference_id",
+            "in": "path",
+            "required": true,
+            "description": "对账差异 ID。",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true,
+                "required": [
+                  "idempotency_key",
+                  "cause_note"
+                ],
+                "properties": {
+                  "idempotency_key": {
+                    "type": "string",
+                    "description": "操作幂等键；重复提交必须返回同一处理结果。",
+                    "maxLength": 128
+                  },
+                  "cause_note": {
+                    "type": "string",
+                    "description": "定位到的差异原因；写入差异 identified_cause。",
+                    "maxLength": 1000
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/finance/reconciliation/stage-limits": {
+      "get": {
+        "tags": [
+          "finance"
+        ],
+        "operationId": "listFinanceReconciliationStageLimits",
+        "summary": "查询对账差异停留时限（按项目）",
+        "description": "第十八批 Y 段第 181 条 181-R2（ENUM:191「待识别与待处理两个阶段各自的停留时限为业务参数，按项目可配，出厂默认 1 个工作日，须同时配置上下限；超时未推进的，系统自动提醒并升级到上一级负责人。」）：按待识别 pending_identification、待处理 pending_handling 顺序返回该项目两阶段的停留时限，每项含 project_id、stage、working_days（工作日）、min_working_days、max_working_days；未配置的阶段 working_days 为出厂默认 1、上下限为空。project_id 不填取本人项目；项目须在 finance.reconciliation.policy.manage 可触及范围内，否则 403 CROSS_PROJECT_FORBIDDEN。",
+        "x-auth-context": "staff-token",
+        "x-permission": "finance.reconciliation.policy.manage",
+        "x-data-scope": "project",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "not_applicable",
+        "x-audit-event-failure": "not_applicable",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "query",
+            "required": false,
+            "description": "综合体项目 ID；不填取本人项目。",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/finance/reconciliation/stage-limits/{project_id}": {
+      "put": {
+        "tags": [
+          "finance"
+        ],
+        "operationId": "saveFinanceReconciliationStageLimit",
+        "summary": "配置对账差异停留时限（按项目、按阶段，时限与上下限同配）",
+        "description": "第十八批 Y 段第 181 条 181-R2（ENUM:191「待识别与待处理两个阶段各自的停留时限为业务参数，按项目可配，出厂默认 1 个工作日，须同时配置上下限；超时未推进的，系统自动提醒并升级到上一级负责人。」）：配置该项目某一阶段的停留时限与上下限（工作日），三值须同时填写且 1 ≤ min_working_days ≤ working_days ≤ max_working_days，stage 只收 pending_identification、pending_handling，否则 400 VALIDATION_FAILED；同项目同阶段再保存即覆盖。项目须在 finance.reconciliation.policy.manage 可触及范围内（在幂等之前校验），否则 403 CROSS_PROJECT_FORBIDDEN。定时作业按差异所属项目该阶段的时限（未配置按 1 个工作日）自差异进入本阶段起算，超时的本阶段只升级一次——给当前负责人发员工系统通知，负责人有直接上级的改为上一级并同样通知，没有上级的只提醒；差异列表的 stage_escalated_at 为本阶段超时升级的时刻。待复核阶段按统一审批时限处理。",
+        "x-auth-context": "staff-token",
+        "x-permission": "finance.reconciliation.policy.manage",
+        "x-data-scope": "project",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "finance.reconciliation_stage_limit.saved",
+        "x-audit-event-failure": "finance.reconciliation_stage_limit.save_failed",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "description": "综合体项目 ID。",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true,
+                "required": [
+                  "idempotency_key",
+                  "stage",
+                  "working_days",
+                  "min_working_days",
+                  "max_working_days"
+                ],
+                "properties": {
+                  "idempotency_key": {
+                    "type": "string",
+                    "description": "操作幂等键；重复提交必须返回同一处理结果。",
+                    "maxLength": 128
+                  },
+                  "stage": {
+                    "type": "string",
+                    "description": "阶段，pending_identification 待识别或 pending_handling 待处理。",
+                    "enum": [
+                      "pending_identification",
+                      "pending_handling"
+                    ]
+                  },
+                  "working_days": {
+                    "type": "integer",
+                    "description": "停留时限（工作日），须在上下限之间。",
+                    "minimum": 1
+                  },
+                  "min_working_days": {
+                    "type": "integer",
+                    "description": "时限下限（工作日），不小于 1。",
+                    "minimum": 1
+                  },
+                  "max_working_days": {
+                    "type": "integer",
+                    "description": "时限上限（工作日），不小于停留时限。",
+                    "minimum": 1
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
             "$ref": "#/components/responses/Error"
           },
           "500": {
@@ -17333,7 +17557,7 @@
         ],
         "operationId": "confirmDailyClose",
         "summary": "确认日结",
-        "description": "第十八批 R 段第 143 条 143-R1（ENUM:190「待生成、待确认、有差异、已确认、已锁定、已归档」；PGM:664「单店层面的财务工作——日结确认与锁定……由该酒吧对应的财务 BP 负责」）：确认日结，按当前数据重算七源汇总并记确认时间 confirmed_at。只收 pending_confirm（待确认），否则 409 DAILY_CLOSE_NOT_PENDING；日结不存在 404 DAILY_CLOSE_NOT_FOUND。日结闸（确认与锁定两处都拦）：TK-14（ENUM「异常状态的统一出口」：异常单据未处置完毕，所属日结不得确认锁定）：原核销落在该营业日、仍待主管处置的票务核销异常存在时 409 DAY_CLOSE_ANOMALY_PENDING（merchant、bar 范围只看本商户）。第十六批第 16 条同一规则接酒吧账单：开单或收款落在该营业日、仍处于异常（abnormal）待主管处置的酒吧账单存在时同样 409 DAY_CLOSE_ANOMALY_PENDING（merchant、bar 范围只看本商户）。第十八批 Q 段第 144 条（BSM:1106「未结清订单阻止交班和日结」）：开单落在该营业日、仍未结清（结清、被合单、主管作废并冲正之外）的酒吧账单存在时 409 DAY_CLOSE_UNSETTLED_BILL，原文列出账单号（merchant、bar 范围只看本商户）。第十八批 R 段第 142 条 142-R2（ENUM:190「由当班收银员完成现金清点与盘收银，接班人与其对接完成交接，并由财务跟班跟进交接完成」）：开班落在该营业日（酒吧逐家按各自营业日窗）、财务尚未见证归档（未班结、未平账、未签字或未见证）的收银班次存在时 409 DAY_CLOSE_SHIFT_PENDING（merchant、bar 范围只看本酒吧）。第十八批 R 段 143-R2（ENUM:190「所属数据未标记为最终之前，日结不得确认、不得锁定。」）：五类数据未全部标记为最终（见 markDailyCloseFinal）时 409 DAY_CLOSE_NOT_FINAL，原文列出缺的类别。第十八批 S 段第 158 条 158-R1（ENUM:191「差异未关闭期间，高价值差异所涉营业日的日结不得确认锁定」「以该笔差异所涉金额与「高价值判定」条所配的同一金额阈值比较，高于阈值即高价值，其余为低价值；阈值未配置一律按高价值处理。」）：该营业日有未关闭的高价值对账差异时 409 DAY_CLOSE_DIFFERENCE_PENDING——财务对账差异按所属批次营业日、status 不是 closed 即未关闭；第三方对账差异按所属批次对账期间覆盖该营业日、status 不是 resolved 或 matched 即未关闭（ignored 也算未关闭）；差异金额大于全平台高价值阈值（等于不算）即高价值，阈值未配置一律按高价值；merchant、bar 范围只看本商户（财务批次范围为该商户、第三方差异的回流门店为该商户）。第十八批 S 段第 161 条 161-R2（第十八批裁决 35「酒吧逐店逐日查；游乐等按综合体逐日查」）：project 范围＝该综合体除酒吧外的业务——酒吧账单异常、未结清酒吧账单、收银班次三道闸不看（酒吧逐店另出日结）；票务核销异常只看原核销所属订单属该综合体、核销商户不是酒吧的；对账差异只看范围为该综合体或其非酒吧商户的财务对账批次，与回流门店属该综合体、不是酒吧的第三方差异。范围：商户账号只能办本商户的 merchant、bar 范围日结，否则 403 CROSS_MERCHANT_FORBIDDEN；其余账号按 finance.daily_close.lock 可触及的项目覆盖日结所属综合体（merchant、bar 范围取该商户所属项目），否则 403 CROSS_PROJECT_FORBIDDEN。第十八批 T 段第 157 条 157-R3（BSM:1109「经理确认最终无法收款后转为坏账损耗处理中并解除该订单对交班、日结的阻断」）：所属订单（或合单后改指本账单）挂起已转坏账损耗处理中、已核销结案的酒吧账单不算未结清。",
+        "description": "第十八批 R 段第 143 条 143-R1（ENUM:190「待生成、待确认、有差异、已确认、已锁定、已归档」；PGM:664「单店层面的财务工作——日结确认与锁定……由该酒吧对应的财务 BP 负责」）：确认日结，按当前数据重算七源汇总并记确认时间 confirmed_at。只收 pending_confirm（待确认），否则 409 DAILY_CLOSE_NOT_PENDING；日结不存在 404 DAILY_CLOSE_NOT_FOUND。日结闸（确认与锁定两处都拦）：TK-14（ENUM「异常状态的统一出口」：异常单据未处置完毕，所属日结不得确认锁定）：原核销落在该营业日、仍待主管处置的票务核销异常存在时 409 DAY_CLOSE_ANOMALY_PENDING（merchant、bar 范围只看本商户）。第十六批第 16 条同一规则接酒吧账单：开单或收款落在该营业日、仍处于异常（abnormal）待主管处置的酒吧账单存在时同样 409 DAY_CLOSE_ANOMALY_PENDING（merchant、bar 范围只看本商户）。第十八批 Q 段第 144 条（BSM:1106「未结清订单阻止交班和日结」）：开单落在该营业日、仍未结清（结清、被合单、主管作废并冲正之外）的酒吧账单存在时 409 DAY_CLOSE_UNSETTLED_BILL，原文列出账单号（merchant、bar 范围只看本商户）。第十八批 R 段第 142 条 142-R2（ENUM:190「由当班收银员完成现金清点与盘收银，接班人与其对接完成交接，并由财务跟班跟进交接完成」）：开班落在该营业日（酒吧逐家按各自营业日窗）、财务尚未见证归档（未班结、未平账、未签字或未见证）的收银班次存在时 409 DAY_CLOSE_SHIFT_PENDING（merchant、bar 范围只看本酒吧）。第十八批 R 段 143-R2（ENUM:190「所属数据未标记为最终之前，日结不得确认、不得锁定。」）：五类数据未全部标记为最终（见 markDailyCloseFinal）时 409 DAY_CLOSE_NOT_FINAL，原文列出缺的类别。第十八批 S 段第 158 条 158-R1（ENUM:191「差异未关闭期间，高价值差异所涉营业日的日结不得确认锁定」「以该笔差异所涉金额与「高价值判定」条所配的同一金额阈值比较，高于阈值即高价值，其余为低价值；阈值未配置一律按高价值处理。」）：该营业日有未关闭的高价值对账差异时 409 DAY_CLOSE_DIFFERENCE_PENDING——财务对账差异按所属批次营业日、status 不是 closed 即未关闭；第三方对账差异按所属批次对账期间覆盖该营业日、status 不是 resolved 或 matched 即未关闭；差异金额大于全平台高价值阈值（等于不算）即高价值，阈值未配置一律按高价值；merchant、bar 范围只看本商户（财务批次范围为该商户、第三方差异的回流门店为该商户）。第十八批 S 段第 161 条 161-R2（第十八批裁决 35「酒吧逐店逐日查；游乐等按综合体逐日查」）：project 范围＝该综合体除酒吧外的业务——酒吧账单异常、未结清酒吧账单、收银班次三道闸不看（酒吧逐店另出日结）；票务核销异常只看原核销所属订单属该综合体、核销商户不是酒吧的；对账差异只看范围为该综合体或其非酒吧商户的财务对账批次，与回流门店属该综合体、不是酒吧的第三方差异。范围：商户账号只能办本商户的 merchant、bar 范围日结，否则 403 CROSS_MERCHANT_FORBIDDEN；其余账号按 finance.daily_close.lock 可触及的项目覆盖日结所属综合体（merchant、bar 范围取该商户所属项目），否则 403 CROSS_PROJECT_FORBIDDEN。第十八批 T 段第 157 条 157-R3（BSM:1109「经理确认最终无法收款后转为坏账损耗处理中并解除该订单对交班、日结的阻断」）：所属订单（或合单后改指本账单）挂起已转坏账损耗处理中、已核销结案的酒吧账单不算未结清。",
         "x-permission": "finance.daily_close.lock",
         "x-data-scope": "project-entity",
         "x-terminal-allowed": [
@@ -17381,7 +17605,7 @@
         ],
         "operationId": "lockDailyClose",
         "summary": "锁定日结",
-        "description": "第十八批 R 段第 143 条 143-R1（BSM:2023「已拍板：日结锁定后不能直接补录影响金额，必须上级审批通过后补录。」）：锁定日结，记锁定时间 locked_at，并给该营业日到期的台账打锁（锁定后直接改账 409 DAY_CLOSE_LOCKED，须走锁定后补录审批；161-R2：综合体的 project 范围日结锁定或归档后，该综合体非酒吧商户与该综合体台账按营业日判封账的写入同样 409 DAY_CLOSE_LOCKED）。143-R7：merchant、bar 范围只锁该日结商户的台账；161-R2：project 范围只锁属该综合体（台账项目，空则取商户所属项目）且商户不是酒吧的台账。只收 confirmed（已确认），否则 409 DAILY_CLOSE_NOT_CONFIRMED；日结不存在 404 DAILY_CLOSE_NOT_FOUND。日结闸（确认与锁定两处都拦）：TK-14（ENUM「异常状态的统一出口」：异常单据未处置完毕，所属日结不得确认锁定）：原核销落在该营业日、仍待主管处置的票务核销异常存在时 409 DAY_CLOSE_ANOMALY_PENDING（merchant、bar 范围只看本商户）。第十六批第 16 条同一规则接酒吧账单：开单或收款落在该营业日、仍处于异常（abnormal）待主管处置的酒吧账单存在时同样 409 DAY_CLOSE_ANOMALY_PENDING（merchant、bar 范围只看本商户）。第十八批 Q 段第 144 条（BSM:1106「未结清订单阻止交班和日结」）：开单落在该营业日、仍未结清（结清、被合单、主管作废并冲正之外）的酒吧账单存在时 409 DAY_CLOSE_UNSETTLED_BILL，原文列出账单号（merchant、bar 范围只看本商户）。第十八批 R 段第 142 条 142-R2（ENUM:190「由当班收银员完成现金清点与盘收银，接班人与其对接完成交接，并由财务跟班跟进交接完成」）：开班落在该营业日（酒吧逐家按各自营业日窗）、财务尚未见证归档（未班结、未平账、未签字或未见证）的收银班次存在时 409 DAY_CLOSE_SHIFT_PENDING（merchant、bar 范围只看本酒吧）。第十八批 R 段 143-R2（ENUM:190「所属数据未标记为最终之前，日结不得确认、不得锁定。」）：五类数据未全部标记为最终（见 markDailyCloseFinal）时 409 DAY_CLOSE_NOT_FINAL，原文列出缺的类别。第十八批 S 段第 158 条 158-R1（ENUM:191「差异未关闭期间，高价值差异所涉营业日的日结不得确认锁定」「以该笔差异所涉金额与「高价值判定」条所配的同一金额阈值比较，高于阈值即高价值，其余为低价值；阈值未配置一律按高价值处理。」）：该营业日有未关闭的高价值对账差异时 409 DAY_CLOSE_DIFFERENCE_PENDING——财务对账差异按所属批次营业日、status 不是 closed 即未关闭；第三方对账差异按所属批次对账期间覆盖该营业日、status 不是 resolved 或 matched 即未关闭（ignored 也算未关闭）；差异金额大于全平台高价值阈值（等于不算）即高价值，阈值未配置一律按高价值；merchant、bar 范围只看本商户（财务批次范围为该商户、第三方差异的回流门店为该商户）。第十八批 S 段第 161 条 161-R2（第十八批裁决 35「酒吧逐店逐日查；游乐等按综合体逐日查」）：project 范围＝该综合体除酒吧外的业务——酒吧账单异常、未结清酒吧账单、收银班次三道闸不看（酒吧逐店另出日结）；票务核销异常只看原核销所属订单属该综合体、核销商户不是酒吧的；对账差异只看范围为该综合体或其非酒吧商户的财务对账批次，与回流门店属该综合体、不是酒吧的第三方差异。范围：商户账号只能办本商户的 merchant、bar 范围日结，否则 403 CROSS_MERCHANT_FORBIDDEN；其余账号按 finance.daily_close.lock 可触及的项目覆盖日结所属综合体（merchant、bar 范围取该商户所属项目），否则 403 CROSS_PROJECT_FORBIDDEN。第十八批 T 段第 157 条 157-R3（BSM:1109）：所属订单（或合单后改指本账单）挂起已转坏账损耗处理中、已核销结案的酒吧账单不算未结清。",
+        "description": "第十八批 R 段第 143 条 143-R1（BSM:2023「已拍板：日结锁定后不能直接补录影响金额，必须上级审批通过后补录。」）：锁定日结，记锁定时间 locked_at，并给该营业日到期的台账打锁（锁定后直接改账 409 DAY_CLOSE_LOCKED，须走锁定后补录审批；161-R2：综合体的 project 范围日结锁定或归档后，该综合体非酒吧商户与该综合体台账按营业日判封账的写入同样 409 DAY_CLOSE_LOCKED）。143-R7：merchant、bar 范围只锁该日结商户的台账；161-R2：project 范围只锁属该综合体（台账项目，空则取商户所属项目）且商户不是酒吧的台账。只收 confirmed（已确认），否则 409 DAILY_CLOSE_NOT_CONFIRMED；日结不存在 404 DAILY_CLOSE_NOT_FOUND。日结闸（确认与锁定两处都拦）：TK-14（ENUM「异常状态的统一出口」：异常单据未处置完毕，所属日结不得确认锁定）：原核销落在该营业日、仍待主管处置的票务核销异常存在时 409 DAY_CLOSE_ANOMALY_PENDING（merchant、bar 范围只看本商户）。第十六批第 16 条同一规则接酒吧账单：开单或收款落在该营业日、仍处于异常（abnormal）待主管处置的酒吧账单存在时同样 409 DAY_CLOSE_ANOMALY_PENDING（merchant、bar 范围只看本商户）。第十八批 Q 段第 144 条（BSM:1106「未结清订单阻止交班和日结」）：开单落在该营业日、仍未结清（结清、被合单、主管作废并冲正之外）的酒吧账单存在时 409 DAY_CLOSE_UNSETTLED_BILL，原文列出账单号（merchant、bar 范围只看本商户）。第十八批 R 段第 142 条 142-R2（ENUM:190「由当班收银员完成现金清点与盘收银，接班人与其对接完成交接，并由财务跟班跟进交接完成」）：开班落在该营业日（酒吧逐家按各自营业日窗）、财务尚未见证归档（未班结、未平账、未签字或未见证）的收银班次存在时 409 DAY_CLOSE_SHIFT_PENDING（merchant、bar 范围只看本酒吧）。第十八批 R 段 143-R2（ENUM:190「所属数据未标记为最终之前，日结不得确认、不得锁定。」）：五类数据未全部标记为最终（见 markDailyCloseFinal）时 409 DAY_CLOSE_NOT_FINAL，原文列出缺的类别。第十八批 S 段第 158 条 158-R1（ENUM:191「差异未关闭期间，高价值差异所涉营业日的日结不得确认锁定」「以该笔差异所涉金额与「高价值判定」条所配的同一金额阈值比较，高于阈值即高价值，其余为低价值；阈值未配置一律按高价值处理。」）：该营业日有未关闭的高价值对账差异时 409 DAY_CLOSE_DIFFERENCE_PENDING——财务对账差异按所属批次营业日、status 不是 closed 即未关闭；第三方对账差异按所属批次对账期间覆盖该营业日、status 不是 resolved 或 matched 即未关闭；差异金额大于全平台高价值阈值（等于不算）即高价值，阈值未配置一律按高价值；merchant、bar 范围只看本商户（财务批次范围为该商户、第三方差异的回流门店为该商户）。第十八批 S 段第 161 条 161-R2（第十八批裁决 35「酒吧逐店逐日查；游乐等按综合体逐日查」）：project 范围＝该综合体除酒吧外的业务——酒吧账单异常、未结清酒吧账单、收银班次三道闸不看（酒吧逐店另出日结）；票务核销异常只看原核销所属订单属该综合体、核销商户不是酒吧的；对账差异只看范围为该综合体或其非酒吧商户的财务对账批次，与回流门店属该综合体、不是酒吧的第三方差异。范围：商户账号只能办本商户的 merchant、bar 范围日结，否则 403 CROSS_MERCHANT_FORBIDDEN；其余账号按 finance.daily_close.lock 可触及的项目覆盖日结所属综合体（merchant、bar 范围取该商户所属项目），否则 403 CROSS_PROJECT_FORBIDDEN。第十八批 T 段第 157 条 157-R3（BSM:1109）：所属订单（或合单后改指本账单）挂起已转坏账损耗处理中、已核销结案的酒吧账单不算未结清。",
         "x-permission": "finance.daily_close.lock",
         "x-data-scope": "project-entity",
         "x-terminal-allowed": [
@@ -17525,7 +17749,7 @@
         ],
         "operationId": "listDailyCloseSummaries",
         "summary": "查询日结七源汇总",
-        "description": "返回日结生成时（确认时按当前数据重算）按官方售票/渠道售票/酒吧/游乐/供应链成本/第三方回流/订台定金七源聚合的金额、退款、计数。第十八批 R 段 143-R1：范围同日结写入——商户账号只看本商户的 merchant、bar 范围日结（否则 403 CROSS_MERCHANT_FORBIDDEN），其余按 finance.daily_close.manage 可触及的项目覆盖日结所属综合体（否则 403 CROSS_PROJECT_FORBIDDEN）。订台定金（bar_deposit）：按各酒吧营业日窗取当日到账的订台定金（各渠道，含一体机由授权员工登记的现金/POS），退款为当日实际退回成功的定金；定金不计入酒吧源。",
+        "description": "返回日结生成时（确认时按当前数据重算）按官方售票/渠道售票/酒吧/游乐/供应链成本/第三方回流/订台定金七源聚合的金额、退款、计数。第十八批 R 段 143-R1：范围同日结写入——商户账号只看本商户的 merchant、bar 范围日结（否则 403 CROSS_MERCHANT_FORBIDDEN），其余按 finance.daily_close.manage 可触及的项目覆盖日结所属综合体（否则 403 CROSS_PROJECT_FORBIDDEN）。订台定金（bar_deposit）：按各酒吧营业日窗取当日到账的订台定金（各渠道，含一体机由授权员工登记的现金/POS），退款为当日实际退回成功的定金；定金不计入酒吧源。第十八批 Y 段第 182 条 182-R1（ENUM:191「低价值差异单独列示带账进入下期」「高于阈值即高价值，其余为低价值；阈值未配置一律按高价值处理」）：另有一行低价值未关闭差异（low_value_difference，含上期带入）——营业日不晚于本日、本范围仍未关闭的低价值对账差异（财务差异按所属批次营业日、status 不是 closed；第三方差异按所属批次对账期间起日、status 不是 resolved、matched；金额不大于「高价值判定」条全平台阈值），order_count 为笔数、amount_cent 为差异金额合计、refund_cent 为 0，关闭即不再列示；阈值未配置记 0 笔（一律按高价值，由 confirmDailyClose 的 DAY_CLOSE_DIFFERENCE_PENDING 闸拦）；范围口径同该闸。",
         "x-permission": "finance.daily_close.manage",
         "x-data-scope": "project-entity",
         "x-terminal-allowed": [
@@ -23850,7 +24074,7 @@
                   },
                   "status": {
                     "type": "string",
-                    "description": "目标状态。",
+                    "description": "目标状态：open、difference_found、matched、resolved 之一；ignored（已忽略）已按 DEC-R4-2026-08-04-43 删除，传入回 400 VALIDATION_FAILED。",
                     "maxLength": 255
                   },
                   "resolution_note": {
@@ -54455,7 +54679,7 @@
         ],
         "operationId": "listMediaPerformanceShows",
         "summary": "逐场演出合同记录列表",
-        "description": "TK-29：按项目 / 商户范围列出逐场演出合同记录（商户用户只见自己是酒吧方或传媒方的场次）。第十八批 G 段 82b-R5：非商户、非平台管理员按 media.performance.view 可触及的项目取（含可跨项目角色勾选的项目），带 project_id 的须可触及（否则 403 PROJECT_SCOPE_MISMATCH）；商户账号照旧只看本人项目里本商户的场次。",
+        "description": "TK-29：按项目 / 商户范围列出逐场演出合同记录（商户用户只见自己是酒吧方或传媒方的场次）。第十八批 G 段 82b-R5：非商户、非平台管理员按 media.performance.view 可触及的项目取（含可跨项目角色勾选的项目），带 project_id 的须可触及（否则 403 PROJECT_SCOPE_MISMATCH）；商户账号照旧只看本人项目里本商户的场次。第十八批 Y 段 183-R2 复核修复（BSM:1839「卡片上的数字就是它下面明细的合计，点进去能核到每一笔」）：每行另带 pending_settlement_count——本场现行（已锁定）版本上挂起待确认的演出结算条数（status=pending，含未确认、有争议、合同未约定），与 countMediaPerformancePendingSettlements 同口径；被新版本取代的版本与草案为 0。",
         "x-auth-context": "staff-token",
         "x-permission": "media.performance.view",
         "x-data-scope": "project",
@@ -54591,6 +54815,35 @@
             "$ref": "#/components/responses/Error"
           },
           "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/settlement/media-shows/pending-settlement-count": {
+      "get": {
+        "tags": [
+          "settlement"
+        ],
+        "operationId": "countMediaPerformancePendingSettlements",
+        "summary": "演出结算挂起待确认条数（总控驾驶舱结算待确认卡）",
+        "description": "第十八批 Y 段第 183 条 183-R2（BSM:1824「财务：日结状态、对账差异、结算待确认。」；第十八批裁决 40「数演出结算挂起待确认的、积分月结账单有未处理异议的，分两个数显示，不相加」）：总控驾驶舱「结算待确认」卡的演出结算一类。pending_count＝查看人可见场次里挂起待确认（status=pending，含未确认、有争议、合同未约定）的演出结算条数，只数现行（已锁定）版本上的，被新版本取代的版本上残留的不计（与场次列表逐行 pending_settlement_count 同口径），取查询时状态；范围同场次列表（商户账号只数本人项目里本商户是酒吧方或传媒方的场次，平台管理员不限，其余按 media.performance.view 可触及的项目）。无 media.performance.view 返回 403。积分账单异议一类由前端按 GET /api/v1/loyalty/ticket-points-billing/bills 的 open_objections 计，两类不相加。",
+        "x-auth-context": "staff-token",
+        "x-permission": "media.performance.view",
+        "x-data-scope": "project",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-audit-event-success": "not_applicable",
+        "x-audit-event-failure": "not_applicable",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "403": {
             "$ref": "#/components/responses/Error"
           },
           "500": {
@@ -57479,7 +57732,7 @@
         ],
         "operationId": "uploadEvidenceAttachment",
         "summary": "上传证据照片/视频",
-        "description": "证据文件本地存储（同商品图片先例，不上云）；content_type 由服务端按扩展名判定，不信客户端自报。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。 dealer_admission 准入资料须同时具备 dealer.manage 与 evidence.attachment.create，并处于两者授权项目交集；绑定同时核验原附件及目标经销商，拒绝上传时不写文件。 dealer_overpayment用途凭证须绑定真实超收记录，同时满足经销到账核验与证据上传权限以及原收款订单真实项目范围。finance_refund仅在来源为dealer_order_refund时允许对应平台项目范围办理；其他来源保持原范围规则。文件须实际上传且来源绑定一致，登记元数据不能替代真实凭证。 本轮dealer_delivery、inventory_quarantine、facility_site_entry_report、ticket_sales_contract只能上传真实文件；禁止意向/绑定/完成元数据模拟上传，业务类型先去首尾空格再核验，按实际业务项目、货权及对应权限交集校验。 18F：business_type=manual_backfill（人工补录凭证，BSM 第 1642 行「微信截图、通话录音等」）另收语音 m4a/aac/mp3/amr/wav，且只能上传真实文件。 18I：工作手机（staff_work_phone）签名上传时，签名量第 6 行取部件规范串的 SHA-256——参数按名排序逐行 p:<名>=<值>，再文件按字段名排序逐行 f:<名>:<原文件名>:<文件字节 SHA-256>，换行连接；文件名用 ASCII；体积上限同不签名上传（Spring multipart 上限），不受 JSON 签名体 1MB 限制。",
+        "description": "证据文件本地存储（同商品图片先例，不上云）；content_type 由服务端按扩展名判定，不信客户端自报。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。 dealer_admission 准入资料须同时具备 dealer.manage 与 evidence.attachment.create，并处于两者授权项目交集；绑定同时核验原附件及目标经销商，拒绝上传时不写文件。 dealer_overpayment用途凭证须绑定真实超收记录，同时满足经销到账核验与证据上传权限以及原收款订单真实项目范围。finance_refund仅在来源为dealer_order_refund时允许对应平台项目范围办理；其他来源保持原范围规则。文件须实际上传且来源绑定一致，登记元数据不能替代真实凭证。 本轮dealer_delivery、inventory_quarantine、facility_site_entry_report、ticket_sales_contract只能上传真实文件；禁止意向/绑定/完成元数据模拟上传，业务类型先去首尾空格再核验，按实际业务项目、货权及对应权限交集校验。 18F：business_type=manual_backfill（人工补录凭证，BSM 第 1642 行「微信截图、通话录音等」）另收语音 m4a/aac/mp3/amr/wav，且只能上传真实文件。 18Y：business_type=finance_reconciliation_difference（渠道对账单原件，ENUM:202「上传渠道提供的对账单原件」）照片、视频之外另收 pdf、xlsx、csv，这三种另要求客户端报的内容类型与扩展名一致（csv 另认 application/vnd.ms-excel），不符 400 VALIDATION_FAILED，不收 xlsm 等带宏格式；平台侧不带商户归属的员工也可上传。 18I：工作手机（staff_work_phone）签名上传时，签名量第 6 行取部件规范串的 SHA-256——参数按名排序逐行 p:<名>=<值>，再文件按字段名排序逐行 f:<名>:<原文件名>:<文件字节 SHA-256>，换行连接；文件名用 ASCII；体积上限同不签名上传（Spring multipart 上限），不受 JSON 签名体 1MB 限制。",
         "x-permission": "evidence.attachment.create",
         "x-data-scope": "merchant",
         "x-terminal-allowed": [
@@ -57561,7 +57814,7 @@
         ],
         "operationId": "readEvidenceAttachmentFile",
         "summary": "回读证据文件",
-        "description": "主管复核要看得见照片/视频，否则「双证据」只是两串 id；跨商户读取一律拒绝。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。 dealer_admission 准入资料须同时具备 dealer.view 与 evidence.timeline.view，并处于两者授权项目交集；允许获授权的项目内部人员无商户身份办理。",
+        "description": "主管复核要看得见照片/视频，否则「双证据」只是两串 id；跨商户读取一律拒绝。18Y：business_type=finance_reconciliation_difference 的渠道对账单原件（上传时不带业务编号）回读时，不带商户归属的账号按引用该附件的对账差异判——本人是其中一笔当前关闭复核单链上的审批人或被转发人，或持 finance.reconciliation.view 且可触及其所属批次，即可看；都不满足的照旧（非平台管理员 403 MERCHANT_SCOPE_REQUIRED）；商户账号照旧按本商户判。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。 dealer_admission 准入资料须同时具备 dealer.view 与 evidence.timeline.view，并处于两者授权项目交集；允许获授权的项目内部人员无商户身份办理。",
         "x-permission": "evidence.timeline.view",
         "x-data-scope": "merchant",
         "x-terminal-allowed": [

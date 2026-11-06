@@ -1,9 +1,10 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import com.complex.platform.settlement.MediaPerformanceRecords.FulfillmentRecord;
 import com.complex.platform.settlement.MediaPerformanceRecords.SettlementRecord;
+import com.complex.platform.settlement.MediaPerformanceRecords.ShowListItem;
 import com.complex.platform.settlement.MediaPerformanceRecords.ShowRecord;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -84,29 +85,47 @@ public class JdbcMediaPerformanceRepository {
                 new MapSqlParameterSource("g", showGroupId), SHOW);
     }
 
-    /** 列表（按项目 / 商户范围过滤；商户既可是酒吧也可是传媒公司）。 */
-    public List<ShowRecord> listShows(String projectId, String merchantId) {
-        return jdbc.query("""
-                SELECT * FROM media_performance_shows
+    /**
+     * 第十八批 Y 段 183-R2 复核修复：挂起待确认的演出结算＝现行（已锁定）版本上 status=pending 的结算行。结算只写在已锁定版本上，
+     * 被新版本取代（superseded）的版本上残留的 pending 不再计入。总控卡计数与场次列表逐行计数共用这一条件。
+     */
+    private static final String PENDING_SETTLEMENT = "st.status = 'pending' AND s.status = 'locked'";
+    private static final String SHOW_LIST_SELECT = "SELECT s.*, (SELECT count(*) FROM media_performance_settlements st WHERE st.show_id = s.id AND "
+            + PENDING_SETTLEMENT + ") AS pending_settlement_count FROM media_performance_shows s\n";
+
+    /** 列表（按项目 / 商户范围过滤；商户既可是酒吧也可是传媒公司）；逐行带本场挂起待确认的演出结算条数。 */
+    public List<ShowListItem> listShows(String projectId, String merchantId) {
+        return jdbc.query(SHOW_LIST_SELECT + """
                  WHERE (:project_id::text IS NULL OR project_id = :project_id)
                    AND (:merchant_id::text IS NULL OR bar_merchant_id = :merchant_id OR media_merchant_id = :merchant_id)
                  ORDER BY show_date DESC, show_group_id, contract_version DESC
                  LIMIT 500
-                """, new MapSqlParameterSource().addValue("project_id", projectId).addValue("merchant_id", merchantId), SHOW);
+                """, new MapSqlParameterSource().addValue("project_id", projectId).addValue("merchant_id", merchantId), SHOW_LIST_ITEM);
     }
 
     /** 第十八批 G 段 82b-R5：给定项目集合内的场次（集合为空不出）。 */
-    public List<ShowRecord> listShowsIn(java.util.Collection<String> projectIds, String merchantId) {
+    public List<ShowListItem> listShowsIn(java.util.Collection<String> projectIds, String merchantId) {
         if (projectIds.isEmpty()) {
             return List.of();
         }
-        return jdbc.query("""
-                SELECT * FROM media_performance_shows
+        return jdbc.query(SHOW_LIST_SELECT + """
                  WHERE project_id IN (:project_ids)
                    AND (:merchant_id::text IS NULL OR bar_merchant_id = :merchant_id OR media_merchant_id = :merchant_id)
                  ORDER BY show_date DESC, show_group_id, contract_version DESC
                  LIMIT 500
-                """, new MapSqlParameterSource().addValue("project_ids", projectIds).addValue("merchant_id", merchantId), SHOW);
+                """, new MapSqlParameterSource().addValue("project_ids", projectIds).addValue("merchant_id", merchantId), SHOW_LIST_ITEM);
+    }
+
+    /** 第十八批 Y 段 183-R2：挂起待确认的演出结算条数（口径 {@link #PENDING_SETTLEMENT}）；projectIds 为 null 不限项目、为空集不出，merchantId 同 {@link #listShows}。 */
+    public long countPendingSettlements(java.util.Collection<String> projectIds, String merchantId) {
+        if (projectIds != null && projectIds.isEmpty()) {
+            return 0L;
+        }
+        return jdbc.queryForObject("SELECT count(*) FROM media_performance_settlements st JOIN media_performance_shows s ON s.id = st.show_id"
+                + " WHERE " + PENDING_SETTLEMENT
+                + " AND (:merchant_id::text IS NULL OR s.bar_merchant_id = :merchant_id OR s.media_merchant_id = :merchant_id)"
+                + (projectIds == null ? "" : " AND s.project_id IN (:project_ids)"),
+                new MapSqlParameterSource().addValue("project_ids", projectIds).addValue("merchant_id", merchantId), Long.class);
     }
 
     /** 月结补跑：该月演出日、已锁定、履约已确认或已裁决的场次。 */
@@ -288,6 +307,9 @@ public class JdbcMediaPerformanceRepository {
             rs.getObject("drink_commission_bps", Integer.class), rs.getString("drink_base_template"), rs.getString("status"),
             instant(rs, "locked_at"), rs.getString("locked_by"), rs.getString("created_by"),
             instant(rs, "created_at"), instant(rs, "updated_at"));
+
+    private static final RowMapper<ShowListItem> SHOW_LIST_ITEM = (rs, i) ->
+            new ShowListItem(SHOW.mapRow(rs, i), rs.getLong("pending_settlement_count"));
 
     private static final RowMapper<FulfillmentRecord> FULFILLMENT = (rs, i) -> new FulfillmentRecord(
             rs.getString("id"), rs.getString("show_id"), instant(rs, "actual_start_at"), instant(rs, "actual_end_at"),

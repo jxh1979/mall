@@ -1,4 +1,4 @@
-// 文件版本：V0.19
+// 文件版本：V0.20
 package com.complex.platform.governance.review;
 
 import com.complex.platform.support.InMemoryAuditEventRepository;
@@ -58,7 +58,7 @@ class SupervisorReviewServiceTests {
     void listPoliciesReturnsBlockingCatalogAndWritesAudit() {
         var page = service.listPolicies();
 
-        assertThat(page.total()).isEqualTo(54); // 包括工资、绩效、酒吧分配、合同三类（HP-C01）、门店要货未出库取消（FS-011）、借用物无法归还（FS-019）、楼宇设备报废（HP-F03）、停车免费放行与减免（HP-P01）、酒吧营业日（第十八批第 1 条）、招商黑名单例外放行与意向关键阶段确认（第十八批第 30 条）、高价值判定阈值（第十八批第 24 条）、证照宽限期（第十八批 E 段第 22 条）、商户加经营项目（第十八批 E 段第 20 条）、人工补录三类（第十八批 F 段第 14 条）、导出文件可编辑版（第十八批 H 段第 23 条）及工单费用承担方争议（第十八批 M 段第 117 条）审批。
+        assertThat(page.total()).isEqualTo(55); // 包括工资、绩效、酒吧分配、合同三类（HP-C01）、门店要货未出库取消（FS-011）、借用物无法归还（FS-019）、楼宇设备报废（HP-F03）、停车免费放行与减免（HP-P01）、酒吧营业日（第十八批第 1 条）、招商黑名单例外放行与意向关键阶段确认（第十八批第 30 条）、高价值判定阈值（第十八批第 24 条）、证照宽限期（第十八批 E 段第 22 条）、商户加经营项目（第十八批 E 段第 20 条）、人工补录三类（第十八批 F 段第 14 条）、导出文件可编辑版（第十八批 H 段第 23 条）、工单费用承担方争议（第十八批 M 段第 117 条）及对账差异关闭复核（第十八批 Y 段第 181 条）审批。
         assertThat(page.items())
                 .extracting(SupervisorReviewPolicyRecord::actionType)
                 .contains("manual_release", "bill_waiver", "contract_violation", "base_definition_violation",
@@ -69,7 +69,7 @@ class SupervisorReviewServiceTests {
                         "inventory.purchase_request", "inventory.purchase_terminate", "inventory.supply_contract", "inventory.purchase_return", "inventory.purchase_prepayment_resolution",
                         "inventory.transfer_order.cancel", "facility.equipment.scrap", "work_order.bearer_dispute", "parking.release.waive",
                         "leasing.blacklist_exception", "leasing.intent.key_stage", "settlement.high_value_threshold.configure",
-                        "security.export.editable_copy");
+                        "security.export.editable_copy", "finance.reconciliation_difference.close");
         assertThat(page.items())
                 .filteredOn(policy -> "contract_violation".equals(policy.actionType()))
                 .first()

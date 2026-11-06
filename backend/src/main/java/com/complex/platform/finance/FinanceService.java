@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.41
+// 文件版本：V0.42
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -23,7 +23,6 @@ import com.complex.platform.finance.dto.TurnoverRentBillRequest;
 import com.complex.platform.finance.dto.TurnoverRentRuleRequest;
 import com.complex.platform.finance.dto.OfflinePaymentConfirmRequest;
 import com.complex.platform.finance.dto.PaymentIntentRequest;
-import com.complex.platform.finance.dto.CloseReconciliationDifferenceRequest;
 import com.complex.platform.finance.dto.ReconciliationDifferenceRequest;
 import com.complex.platform.finance.dto.RefundRequest;
 import com.complex.platform.finance.dto.RefundOperationRequest;
@@ -102,9 +101,11 @@ public class FinanceService implements TerminationSettlementPort {
     private static final Set<String> OFFLINE_PAYMENT_METHODS = Set.of("cash", "bank_transfer", "pos", "other");
     // 第四轮裁决第 3 条：退租结算押金抵扣销账的收款方式（财务结算 PRD L945 押金动作「抵扣（offset）」；同 dividend_offset 范式）。
     private static final String DEPOSIT_OFFSET_METHOD = "deposit_offset";
-    // R5 T7：七源（与 finance_daily_close_summaries.chk_fdcs_source 一致；第十八批 O 段第 126 条 126-R1 加订台定金 bar_deposit）。
+    // R5 T7：七源（与 finance_daily_close_summaries.chk_fdcs_source 一致；第十八批 O 段第 126 条 126-R1 加订台定金 bar_deposit；
+    // 第十八批 Y 段第 182 条 182-R1 加低价值未关闭差异 low_value_difference，含上期带入）。
     private static final List<String> DAILY_CLOSE_SOURCES = List.of(
-            "official_ticket", "channel_ticket", "bar", "amusement", "supply_cost", "thirdparty_reflow", "bar_deposit");
+            "official_ticket", "channel_ticket", "bar", "amusement", "supply_cost", "thirdparty_reflow", "bar_deposit",
+            "low_value_difference");
     private static final Set<String> ADJUSTMENT_DECISIONS = Set.of("approve", "reject");
     // P0#7 / R6-D07：对账差异四类枚举（与 V105 chk_frd_difference_type 一致）。
     private static final Set<String> DIFFERENCE_TYPES = Set.of("amount", "count", "status", "missing");
@@ -247,16 +248,13 @@ public class FinanceService implements TerminationSettlementPort {
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     com.complex.platform.inventory.HighValueThresholdPort highValueThresholds;
 
-    private static final Map<String, String> DIFFERENCE_TYPE_LABELS = Map.of(
-            "amount", "金额差异", "count", "数量差异", "status", "状态差异", "missing", "缺失差异");
-
     /** 往来来源类型中文名（未知值原样）。 */
     public static String sourceTypeLabel(String sourceType) {
         return arApLabel(AR_AP_SOURCE_TYPE_LABELS, sourceType);
     }
 
-    /** 往来对方是商户才发（通知器内判定）；visibleOn 为空＝不写异议截止日。 */
-    private void notifyMerchantAmount(String counterpartyId, String event, long amountCent, String reason, LocalDate visibleOn,
+    /** 往来对方是商户才发（通知器内判定）；visibleOn 为空＝不写异议截止日。181-R1 起包内可见，对账差异复核通过后发认定结果同用。 */
+    void notifyMerchantAmount(String counterpartyId, String event, long amountCent, String reason, LocalDate visibleOn,
                                       String projectId, String refKey) {
         if (merchantAmountNotifier != null) {
             merchantAmountNotifier.notifyAfterCommit(counterpartyId, event, amountCent, reason, null, visibleOn, projectId, refKey);
@@ -932,6 +930,10 @@ public class FinanceService implements TerminationSettlementPort {
         );
     }
 
+    /**
+     * 第十八批 Y 段第 180 条 180-R2（PGM:778「本商户订单回流、券核销、对账差异、结算依据、看板。」；PGM:528 红线④「看不到别的商户和别的项目的数据」）：
+     * 对账批次与差异按批次范围读，同 {@link #listDailyCloses}——平台管理员看全部，商户账号只看本商户的 merchant、bar 范围，其余按可触及项目。
+     */
     public PageResponse<ReconciliationBatchRecord> listReconciliationBatches() {
         return readPage(
                 "finance.reconciliation_batch.viewed",
@@ -939,8 +941,10 @@ public class FinanceService implements TerminationSettlementPort {
                 "finance.reconciliation.view",
                 "finance_reconciliation_batch",
                 () -> {
-                    requirePlatformReconciliationAccess();
-                    return repository.listReconciliationBatches();
+                    var actor = authorizationService.currentActor();
+                    var reach = authorizationService.projectReach(actor, "finance.reconciliation.view");
+                    String merchant = reach.platformAdmin() ? null : trimToNull(actor.merchantId());
+                    return repository.listReconciliationBatches(merchant, readProjects(reach, merchant));
                 }
         );
     }
@@ -952,19 +956,21 @@ public class FinanceService implements TerminationSettlementPort {
                 "finance.reconciliation.view",
                 "finance_reconciliation_difference",
                 () -> {
-                    requirePlatformReconciliationAccess();
-                    return repository.listReconciliationDifferences();
+                    var actor = authorizationService.currentActor();
+                    var reach = authorizationService.projectReach(actor, "finance.reconciliation.view");
+                    String merchant = reach.platformAdmin() ? null : trimToNull(actor.merchantId());
+                    return repository.listReconciliationDifferences(merchant, readProjects(reach, merchant));
                 }
         );
     }
 
     /**
-     * Reconciliation batches/differences are platform/channel-level finance artifacts with no merchant
-     * dimension in the data model. A merchant-scoped caller must not read them — otherwise it would see
-     * every merchant's reconciliation data. Platform admins (no merchant scope) may read.
+     * 对账差异写入口商户账号不得办（180-R2 起读入口按批次范围过滤，不走这里）；181-R1 起包内可见，识别、提交复核同用。
+     * 第十八批 Y 段控制席并入（PGM:664「跨主体与平台层面的财务工作——三方对账……由财务中心负责」「单店层面的财务工作——……差异认定……由该酒吧对应的
+     * 财务 BP 负责」）：只拦商户账号——取商户编号用不抛错的 {@link AuthorizationService#currentMerchantIdQuietly}，平台侧不带商户编号的员工按批次范围闸放行。
      */
-    private void requirePlatformReconciliationAccess() {
-        if (authorizationService.currentMerchantScope().isPresent()) {
+    void requirePlatformReconciliationAccess() {
+        if (authorizationService.currentMerchantIdQuietly().isPresent()) {
             throw ApiException.forbidden(
                     "RECONCILIATION_PLATFORM_ONLY",
                     "对账数据为平台级数据，商户账号无权查看");
@@ -972,64 +978,86 @@ public class FinanceService implements TerminationSettlementPort {
     }
 
     /**
+     * 第十八批 Y 段第 180 条 180-R2（PGM:664「单店层面的财务工作——日结确认与锁定、商户费用账单出账、差异认定……由该酒吧对应的财务 BP 负责」；
+     * PGM:528 红线④「看不到别的商户和别的项目的数据」）：按批次号取批次（无则 404）再按批次范围过范围闸——批次随日结生成，范围即日结范围，
+     * 闸同 {@link #requireDailyCloseScope}；在幂等之前调。
+     */
+    private void requireReconciliationBatchInScope(String batchId, String permission) {
+        ReconciliationBatchRecord batch = repository.findReconciliationBatchById(requireText(batchId, "batch_id"))
+                .orElseThrow(() -> ApiException.notFound("RECONCILIATION_BATCH_NOT_FOUND", "对账批次不存在或已被删除"));
+        requireDailyCloseScope(batch.scopeType(), batch.scopeId(), permission, "对账差异");
+    }
+
+    /** 180-R2：按差异号取差异（无则 404）再按其所属批次过范围闸；在幂等之前调。181-R1 起包内可见，识别、提交复核同用。 */
+    void requireReconciliationDifferenceInScope(String differenceId, String permission) {
+        ReconciliationDifferenceRecord difference = repository.findReconciliationDifferenceById(requireText(differenceId, "difference_id"))
+                .orElseThrow(() -> ApiException.notFound("RECONCILIATION_DIFFERENCE_NOT_FOUND", "对账差异不存在或已被删除"));
+        requireReconciliationBatchInScope(difference.batchId(), permission);
+    }
+
+    /**
      * P0#7 / R6-D07：创建对账差异（强制化）。
      * <ul>
      *   <li>平台侧 expected 由系统取数（按 business_ref 聚合平台权威台账）——不接受请求体手填 expected。</li>
      *   <li>source=system：以系统取数 expected 比对申报 actual，写差额；无系统取数支撑则拒绝。</li>
-     *   <li>source=manual：第三方侧未接入，允许录入 actual，但必须有平台侧系统取数支撑（否则纯手填→拒绝），
-     *       且强制状态 needs_review（进复核）。</li>
+     *   <li>source=manual：第三方侧未接入，允许录入 actual，但必须有平台侧系统取数支撑（否则纯手填→拒绝）。</li>
+     *   <li>第十八批 Y 段第 181 条 181-R1：不论来源一律进待识别（pending_identification），负责人为登记人；强制复核由四态里的复核审批满足。</li>
      * </ul>
      */
     @com.complex.platform.gate.GuardedAction(capability = "finance.reconciliation.difference.create")
     @Transactional
     public ReconciliationDifferenceRecord createReconciliationDifference(ReconciliationDifferenceRequest request) {
+        ReconciliationDifferenceRequest actual = requireRequest(request);
+        // 180-R2：差异必须挂在已建对账批次下，按批次范围过范围闸（在幂等之前）。
+        requireReconciliationBatchInScope(actual.batchId(), "finance.reconciliation.difference.create");
         return executeWrite(
                 "createReconciliationDifference",
-                request == null ? null : request.idempotencyKey(),
-                request,
+                actual.idempotencyKey(),
+                actual,
                 ReconciliationDifferenceRecord.class,
                 "finance.reconciliation.difference_created",
                 "finance.reconciliation.difference_create_failed",
                 "finance.reconciliation.difference.create",
                 "finance_reconciliation_difference",
-                () -> createDifference(request));
+                () -> createDifference(actual));
     }
 
-    private ReconciliationDifferenceRecord createDifference(ReconciliationDifferenceRequest request) {
-        // 对账差异为平台级数据，商户角色不得写。
+    private ReconciliationDifferenceRecord createDifference(ReconciliationDifferenceRequest actual) {
+        // 对账差异写入口商户角色不得办。
         requirePlatformReconciliationAccess();
 
-        ReconciliationDifferenceRequest actual = requireRequest(request);
         String batchId = requireText(actual.batchId(), "batch_id");
         String differenceType = requireEnum(actual.differenceType(), DIFFERENCE_TYPES, "difference_type");
         String businessRef = requireText(actual.businessRef(), "business_ref");
         String source = requireEnum(actual.source(), DIFFERENCE_SOURCES, "source");
-        long actualAmountCent = requirePositive(actual.actualAmountCent(), "actual_amount_cent");
-
-        // 校验批次存在（差异必须挂在已建对账批次下）。
-        repository.findReconciliationBatchById(batchId)
-                .orElseThrow(() -> ApiException.notFound("RECONCILIATION_BATCH_NOT_FOUND", "对账批次不存在或已被删除"));
+        // 第十八批 Y 段第 180 条 180-R2（ENUM:189「缺失差异（单边缺失）」）：缺失差异第三方侧可为 0，其余类型照旧须大于 0。
+        boolean missing = "missing".equals(differenceType);
+        long actualAmountCent = missing && Long.valueOf(0L).equals(actual.actualAmountCent())
+                ? 0L : requirePositive(actual.actualAmountCent(), "actual_amount_cent");
+        // 180-R2（ENUM:202「渠道接入前的人工录入必须同时上传渠道提供的对账单原件作为凭证……无原件的录入不得进入对账结论，只能挂为待补凭证」）：
+        // 对账单原件须真实上传并随差异落库；不带原件照收（待补凭证），不得进入对账结论的拦截在提交复核处。
+        List<String> evidenceAttachmentIds = actual.evidenceAttachmentIds() == null ? List.of() : List.copyOf(actual.evidenceAttachmentIds());
+        if (!evidenceAttachmentIds.isEmpty()) {
+            refundEvidenceValidator.requireExisting(evidenceAttachmentIds, "evidence_attachment_ids");
+        }
 
         // 平台侧 expected 一律系统取数（不接受请求体手填）。0=无系统取数支撑。
         long expectedAmountCent = repository.aggregatePlatformExpectedForBusinessRef(businessRef);
-        if (expectedAmountCent <= 0) {
-            // 纯手填差异（无平台侧系统取数支撑）一律拒绝，无论 source。
+        if (expectedAmountCent <= 0 && !(missing && actualAmountCent > 0)) {
+            // 纯手填差异（无平台侧系统取数支撑）一律拒绝，无论 source；缺失差异平台侧缺失（第三方侧有数）除外，两边都为 0 仍拒。
             throw ApiException.badRequest("RECONCILIATION_NO_SYSTEM_EXPECTED",
                     "差异登记被拒绝：业务单号 " + businessRef + " 无平台侧系统收款，不允许仅手工登记的差异");
         }
 
-        // source=manual（第三方侧未接入）强制进复核；source=system 仍以系统取数与申报值比对，差额为 0 不应建差异。
+        // 180-R2：差额为 0 不建只对金额差异（数量、状态差异两边金额可以相等）。
         long differenceAmountCent = Math.abs(expectedAmountCent - actualAmountCent);
-        String status;
-        if ("manual".equals(source)) {
-            status = "needs_review";
-        } else {
-            if (differenceAmountCent == 0) {
-                throw ApiException.badRequest("RECONCILIATION_NO_DIFFERENCE",
-                        "应收与实收一致，无差异可登记");
-            }
-            status = "open";
+        if ("amount".equals(differenceType) && differenceAmountCent == 0) {
+            throw ApiException.badRequest("RECONCILIATION_NO_DIFFERENCE",
+                    "应收与实收一致，无差异可登记");
         }
+        // 第十八批 Y 段第 181 条 181-R1（ENUM:191「差异处理状态 待识别、待处理、待复核、已关闭」「各阶段由财务岗全程负责」）：不论来源一律进待识别，
+        // 负责人为登记人；BSM:1746「强制复核」由四态里的复核审批满足（FinanceReconciliationDifferenceService）。
+        String status = "pending_identification";
 
         Instant now = Instant.now();
         ReconciliationDifferenceRecord saved = repository.saveReconciliationDifference(new ReconciliationDifferenceRecord(
@@ -1042,7 +1070,13 @@ public class FinanceService implements TerminationSettlementPort {
                 actualAmountCent,
                 source,
                 status,
-                now));
+                now,
+                evidenceAttachmentIds,
+                authorizationService.currentActor().id(),
+                now,
+                null,
+                null,
+                null));
 
         // 留痕：executeWrite 已写 finance.reconciliation.difference_created（操作级）。
         // 这里额外写一条带取数明细（expected/actual/source/status）的强制化留痕，便于审计平台侧系统取数来源，
@@ -1061,47 +1095,6 @@ public class FinanceService implements TerminationSettlementPort {
                         "actual_amount_cent", actualAmountCent,
                         "status", status));
         return saved;
-    }
-
-    /** 正式关闭对账差异（1.6）：幂等（同 key/已关闭返回同结果），落 close_reason+审计。 */
-    @Transactional
-    public ReconciliationDifferenceRecord closeReconciliationDifference(
-            String differenceId, CloseReconciliationDifferenceRequest request) {
-        return executeWrite(
-                "closeFinanceReconciliationDifference",
-                request == null ? null : request.idempotencyKey(),
-                request,
-                ReconciliationDifferenceRecord.class,
-                "finance.reconciliation.difference_closed",
-                "finance.reconciliation.difference_close_failed",
-                "finance.reconciliation.resolve",
-                "finance_reconciliation_difference",
-                () -> closeDifference(differenceId, request));
-    }
-
-    private ReconciliationDifferenceRecord closeDifference(
-            String differenceId, CloseReconciliationDifferenceRequest request) {
-        requirePlatformReconciliationAccess();
-        CloseReconciliationDifferenceRequest actual = requireRequest(request);
-        String closeReason = requireText(actual.closeReason(), "close_reason");
-        ReconciliationDifferenceRecord difference = repository
-                .findReconciliationDifferenceById(requireText(differenceId, "difference_id"))
-                .orElseThrow(() -> ApiException.notFound(
-                        "RECONCILIATION_DIFFERENCE_NOT_FOUND", "对账差异不存在或已被删除"));
-        // 幂等：已关闭直接返回（executeWrite 幂等键层亦兜底）。
-        if ("closed".equals(difference.status())) {
-            return difference;
-        }
-        String closedBy = authorizationService.currentActor().id();
-        ReconciliationDifferenceRecord closed =
-                repository.closeReconciliationDifference(difference.id(), closeReason, closedBy, Instant.now());
-        if (difference.businessRef() != null) {
-            repository.findArApPaymentById(difference.businessRef()).flatMap(payment -> repository.findArApItemById(payment.arApItemId()))
-                    .ifPresent(item -> notifyMerchantAmount(item.counterpartyId(), "reconciliation_difference", difference.amountCent(),
-                            DIFFERENCE_TYPE_LABELS.getOrDefault(difference.differenceType(), difference.differenceType())
-                                    + "；认定结果：" + closeReason, null, item.projectId(), difference.id()));
-        }
-        return closed;
     }
 
     // ── P1#13 库存差异 → AR/AP（R6-D08）─────────────────────────────────────────
@@ -2111,17 +2104,22 @@ public class FinanceService implements TerminationSettlementPort {
      * 覆盖日结所属综合体（{@link #dailyCloseProject}）。
      */
     private void requireDailyCloseScope(String scopeType, String scopeId, String permission) {
+        requireDailyCloseScope(scopeType, scopeId, permission, "日结");
+    }
+
+    /** 180-R2：对账批次与差异（批次随日结生成，范围即日结范围）也过这道闸，subject 只改报错里的对象名。 */
+    private void requireDailyCloseScope(String scopeType, String scopeId, String permission, String subject) {
         authorizationService.requirePermission(permission);
         var actor = authorizationService.currentActor();
         var reach = authorizationService.projectReach(actor, permission);
         if (!reach.platformAdmin() && trimToNull(actor.merchantId()) != null) {
             if (!("merchant".equals(scopeType) || "bar".equals(scopeType)) || !actor.merchantId().equals(scopeId)) {
-                throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN", "无权操作其他商户的日结");
+                throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN", "无权操作其他商户的" + subject);
             }
             return;
         }
         if (!reach.covers(dailyCloseProject(scopeType, scopeId))) {
-            throw ApiException.forbidden("CROSS_PROJECT_FORBIDDEN", "无权操作其他项目的日结");
+            throw ApiException.forbidden("CROSS_PROJECT_FORBIDDEN", "无权操作其他项目的" + subject);
         }
     }
 
@@ -2161,6 +2159,11 @@ public class FinanceService implements TerminationSettlementPort {
         DailyCloseWindow w = dailyCloseWindow(businessDate, scopeType, scopeId);
         summarizeDailyClose(dailyCloseId, businessDate, now, scopeType, scopeId,
                 w.dayFrom(), w.dayTo(), w.barFrom(), w.barTo(), w.barWindows());
+        // 第十八批 Y 段第 180 条 180-R1（BSM:1729「三方对账按日进行」；BSM:1682「按营业日生成日结批次。」；ENUM:188「按日结」）：
+        // 随日结生成该营业日该范围的财务对账批次，一营业日一范围一批（同日同范围日结已唯一，见上方 DAILY_CLOSE_EXISTS）。
+        String batchToken = stableToken("reconciliation_batch", dailyCloseId);
+        repository.saveReconciliationBatch(new ReconciliationBatchRecord("recon_batch_" + batchToken, "RB-" + batchToken,
+                scopeType, scopeId, businessDate, "open", now));
         return saved;
     }
 
@@ -2252,8 +2255,12 @@ public class FinanceService implements TerminationSettlementPort {
 
     /** 第十八批 S 段第 158 条 158-R1：该日结的营业日、范围有未关闭的高价值对账差异（口径见 {@link FinanceRepository#openHighValueReconciliationDifferenceExists}）。 */
     private boolean highValueDifferenceOpen(DailyCloseRecord d) {
-        Long threshold = highValueThresholds == null ? null : highValueThresholds.findHighValueThresholdCent();
-        return repository.openHighValueReconciliationDifferenceExists(d.businessDate(), d.scopeType(), d.scopeId(), threshold);
+        return repository.openHighValueReconciliationDifferenceExists(d.businessDate(), d.scopeType(), d.scopeId(), highValueThreshold());
+    }
+
+    /** 对账差异高低价值判定用「高价值判定」条的同一金额阈值（ENUM:191），未配置为 null。 */
+    private Long highValueThreshold() {
+        return highValueThresholds == null ? null : highValueThresholds.findHighValueThresholdCent();
     }
 
     /**
@@ -2274,6 +2281,8 @@ public class FinanceService implements TerminationSettlementPort {
                 case "supply_cost" -> repository.aggregateSupplyCost(businessDate, from, to, scopeType, scopeId);
                 case "thirdparty_reflow" -> repository.aggregateThirdpartyReflow(businessDate, from, to, scopeType, scopeId);
                 case "bar_deposit" -> repository.aggregateBarDeposit(businessDate, barFrom, barTo, scopeType, scopeId, barWindows);
+                // 第十八批 Y 段第 182 条 182-R1（ENUM:191「低价值差异单独列示带账进入下期」）：营业日不晚于本日、本范围仍未关闭的低价值对账差异。
+                case "low_value_difference" -> repository.lowValueOpenDifferenceTotals(businessDate, scopeType, scopeId, highValueThreshold());
                 default -> FinanceRepository.DailyCloseSourceTotals.empty();
             };
             repository.saveDailyCloseSummary(new DailyCloseSummaryRecord(

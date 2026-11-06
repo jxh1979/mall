@@ -1,5 +1,5 @@
 package com.complex.platform.analytics;
-// 文件版本：V0.11
+// 文件版本：V0.12
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
 import com.complex.platform.contract.SpaceRentalDerivationSql;
@@ -2462,7 +2462,13 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
                 ? pagedParams(limit, offset)
                 : pagedRangeParams(start, end, limit, offset);
         java.util.List<java.util.Map<String, Object>> rows = jdbcTemplate.query("""
-                SELECT id, difference_type, amount_cent, source, status, created_at
+                SELECT id,
+                       -- 第十八批 Y 段第 180 条 180-R2：差异类型（ENUM:189 四类）与来源按中文返回（明细页对小写码走共享字典，字典没有这几个码）。
+                       CASE difference_type WHEN 'amount' THEN '金额差异' WHEN 'count' THEN '数量差异' WHEN 'status' THEN '状态差异'
+                            WHEN 'missing' THEN '缺失差异' ELSE difference_type END AS difference_type,
+                       amount_cent,
+                       CASE source WHEN 'system' THEN '系统取数' WHEN 'manual' THEN '人工录入' ELSE source END AS source,
+                       status, created_at
                   FROM finance_reconciliation_differences
                  %s
                  ORDER BY created_at DESC, id

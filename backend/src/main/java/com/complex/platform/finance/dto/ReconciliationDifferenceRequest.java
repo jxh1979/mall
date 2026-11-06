@@ -1,6 +1,6 @@
 package com.complex.platform.finance.dto;
 import jakarta.validation.constraints.NotNull;
-import jakarta.validation.constraints.Positive;
+import jakarta.validation.constraints.PositiveOrZero;
 
 import java.util.List;
 
@@ -20,7 +20,8 @@ public record ReconciliationDifferenceRequest(
         String batchId,
         String differenceType,
         String businessRef,
-        @NotNull @Positive Long actualAmountCent,
+        // 第十八批 Y 段第 180 条 180-R2（ENUM:189「缺失差异（单边缺失）」）：可为 0，只有缺失差异收 0（服务层判）。
+        @NotNull @PositiveOrZero Long actualAmountCent,
         String source
 ) {
 }
