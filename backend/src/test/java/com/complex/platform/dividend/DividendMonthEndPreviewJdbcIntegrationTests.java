@@ -161,8 +161,9 @@ class DividendMonthEndPreviewJdbcIntegrationTests {
         String bill = "dmp_bill_" + s;
         String session = "dmp_session_" + s;
         String at = "TIMESTAMPTZ '2026-08-25 14:00:00+08'";
-        jdbc.update("INSERT INTO spaces (id, project_id, space_name, space_type, status, created_at, updated_at)"
-                + " VALUES (?, ?, ?, 'shop', 'active', now(), now())", space, project, "月末预览卡座区" + s);
+        // 本类不开事务、铺位会留在库里：带上面积，免得能耗可租面积统计（MetricDetailConsistencyJdbcIntegrationTests）求和遇空值。
+        jdbc.update("INSERT INTO spaces (id, project_id, space_name, space_type, area_square_meter, status, created_at, updated_at)"
+                + " VALUES (?, ?, ?, 'shop', 30, 'active', now(), now())", space, project, "月末预览卡座区" + s);
         jdbc.update("INSERT INTO bar_tables (id, bar_id, merchant_id, table_code, table_name, table_type, capacity, allowed_pass_free_guest_count,"
                 + " min_consumption_cent, currency, status, created_at, updated_at, space_id)"
                 + " VALUES (?, ?, ?, ?, '月末预览卡座', 'card_seat', 4, 0, 0, 'CNY', 'active', now(), now(), ?)",
