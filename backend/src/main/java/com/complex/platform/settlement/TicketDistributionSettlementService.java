@@ -1,6 +1,6 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.05
+// 文件版本：V0.06
 
 import com.complex.platform.common.money.MoneyRounding;
 import com.complex.platform.finance.FinanceService;
@@ -8,7 +8,6 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.YearMonth;
-import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -34,7 +33,8 @@ import org.springframework.transaction.annotation.Transactional;
  * <p><b>带符号(R-3,2026-07-28 用户拍板,照 V335 先例)</b>:冲正月(红冲多于新核销)收入/池/分账/费
  * 各数一律带符号落库——负数=当月净追回,静默钳零会丢账;HALF_UP 对 0 对称保证冲正逐分对消。
  *
- * <p>月窗 = [月首 00:00 UTC, 次月首 00:00 UTC) 按 settlement_transactions.business_at(核销业务时刻)。
+ * <p>月窗 = [月首营业日起点, 月末营业日结束) 按 settlement_transactions.business_at(核销业务时刻)；营业日按综合体（平台单取唯一启用综合体，
+ * 没有或不止一个时出厂），见 {@link #monthWindow}（第十八批 X 段 189-R1）。
  *
  * <p><b>金额精度与尾差（R-7 / D15.1，2026-07-22 用户拍板）</b>：一切按比例拆分一律
  * {@link MoneyRounding} <b>四舍五入到分（HALF_UP）</b>，不再用 {@code a*bps/10000} 整除截断
@@ -96,7 +96,7 @@ public class TicketDistributionSettlementService {
     /**
      * S11④ 业态 → 收款方。酒吧/游乐/传媒份额各归一个经营主体（娱乐平台公司 / 游乐公司 / 传媒公司），
      * 主体是谁由 {@code revenue_stream_attribution} 后台可配，这里只定「查哪条收入流」；
-     * 餐饮/零售/其他没有单一主体，钱归提供这份权益的商户自己（per_merchant）。
+     * 「其他」没有单一主体，钱归提供这份权益的商户自己（per_merchant）；餐饮、零售归城市项目公司（第十八批 X 段 176-R2，见 {@link #CITY_COMPANY_FORMATS}）。
      *
      * <p>V384 补传媒一行：业务 HTML §「收入归属」明写「演出票 → 传媒公司」，
      * 缺这一行时演出份额会被当成 per_merchant 归到商户自己，传媒公司在结算单上完全看不见自己的钱。
@@ -105,23 +105,28 @@ public class TicketDistributionSettlementService {
             FORMAT_BAR, REVENUE_STREAM_ALL_PASS_TICKET,
             "amusement", "amusement_ticket",
             FORMAT_MEDIA, "performance_ticket");
+    /** 第十八批 X 段 176-R2（ENUM:49「餐饮域与零售域 → 城市项目公司」；DEC-R3-2026-08-04-11）：餐饮、零售份额归该项目城市项目公司。 */
+    private static final Set<String> CITY_COMPANY_FORMATS = Set.of("catering", "retail");
 
     private final JdbcSettlementBillRepository repository;
     private final RevenueStreamAttributionRepository attributionRepository;
     private final JdbcPassPoolRepository passPools;
     private final com.complex.platform.common.BusinessDayResolver businessDays;
     private final FinanceService financeService;
+    private final JdbcSettlementTransactionRepository transactions;
 
     public TicketDistributionSettlementService(JdbcSettlementBillRepository repository,
                                                RevenueStreamAttributionRepository attributionRepository,
                                                JdbcPassPoolRepository passPools,
                                                com.complex.platform.common.BusinessDayResolver businessDays,
-                                               FinanceService financeService) {
+                                               FinanceService financeService,
+                                               JdbcSettlementTransactionRepository transactions) {
         this.repository = repository;
         this.attributionRepository = attributionRepository;
         this.passPools = passPools;
         this.businessDays = businessDays;
         this.financeService = financeService;
+        this.transactions = transactions;
     }
 
     /**
@@ -155,10 +160,9 @@ public class TicketDistributionSettlementService {
             throw com.complex.platform.common.api.ApiException.conflict("SETTLEMENT_DATA_NOT_FINAL",
                     "以下营业日数据尚未标记为最终，不能结算通票分账：" + FinanceService.describeNonFinalDays(notFinal));
         }
-        Instant windowStart = periodStart.atStartOfDay().toInstant(ZoneOffset.UTC);
-        Instant windowEnd = month.plusMonths(1).atDay(1).atStartOfDay().toInstant(ZoneOffset.UTC);
+        Instant[] window = monthWindow(projectId, month);
         MonthCalc calc = compute(projectId, month, null);
-        List<RecoveryCalc> recoveries = recoveries(projectId, windowStart, windowEnd);
+        List<RecoveryCalc> recoveries = recoveries(projectId, window[0], window[1]);
 
         repository.upsertBill(calc.bill());
 
@@ -168,16 +172,25 @@ public class TicketDistributionSettlementService {
         // S11④ 各业态结算出口的留痕:每个业态一行「毛额 / 折扣补回 / 渠道费 / 净份额 / 归谁」。
         //   本批只保证份额算得出、归属定得住、非酒吧业态不进酒吧池;各业态自己的完整结算单另批。
         repository.deleteFormatSharesByBill(actualBillId);
+        // 第十八批 X 段 176-R2（ENUM:32「其余各域份额自收款之日起即为应付给对应域主管公司的款项」；ENUM:49「餐饮域与零售域 → 城市项目公司」）：
+        //   餐饮、零售份额行归该项目城市项目公司（同 189-R1 口径：平台单取唯一启用综合体）；恰好一家才取，否则归属留空、不改金额。
+        // ponytail: 多综合体平台单的餐饮、零售份额归属主体留空，上限同 189-R1；要逐综合体归属时把份额行按项目拆。
+        String cityProject = dayProject(projectId);
+        List<String> cityCompanies = cityProject == null ? List.of() : transactions.findProjectCompanies(cityProject);
         for (FormatShare share : calc.formatShares().values()) {
-            String kind = ENTITY_BENEFICIARY_FORMATS.containsKey(share.format()) ? BENEFICIARY_ENTITY : BENEFICIARY_PER_MERCHANT;
-            String entityId = BENEFICIARY_ENTITY.equals(kind)
+            boolean cityCompanyFormat = CITY_COMPANY_FORMATS.contains(share.format());
+            String kind = ENTITY_BENEFICIARY_FORMATS.containsKey(share.format()) || cityCompanyFormat
+                    ? BENEFICIARY_ENTITY : BENEFICIARY_PER_MERCHANT;
+            String entityId = cityCompanyFormat
+                    ? (cityCompanies.size() == 1 ? cityCompanies.getFirst() : null)
+                    : BENEFICIARY_ENTITY.equals(kind)
                     ? attributionRepository.resolveManagementEntity(
                             projectId, ENTITY_BENEFICIARY_FORMATS.get(share.format()))
                     : null;
             repository.upsertFormatShare(new SettlementBillFormatShareRecord(
                     actualBillId, share.format(), share.grossCent(), share.platformBorneCent(),
                     share.channelFeeCent(), share.routeFeeCent(), share.compServiceFeeCent(), share.giftCostCent(),
-                    share.giftPaidCent(), share.netCent(), kind, entityId));
+                    share.giftPaidCent(), share.netCent(), kind, entityId, share.internalSettledCent()));
         }
         // S7 差额台账落痕(append-only):首结追加陈述行;幂等重算若结论有变,先冲正取反旧净额、再追加新陈述,
         //   历史结论永在;结论没变不追加(重跑零膨胀)。收款主体快照与 G 同源(pass_gift_cost 归属流)。
@@ -220,8 +233,12 @@ public class TicketDistributionSettlementService {
      */
     private List<RecoveryCalc> recoveries(String projectId, Instant windowStart, Instant windowEnd) {
         java.util.LinkedHashMap<String, RecoveryCalc> out = new java.util.LinkedHashMap<>();
-        for (LocalDate originalStart : repository.findRecoveredOriginalMonths(projectId, windowStart, windowEnd)) {
-            YearMonth original = YearMonth.from(originalStart);
+        // 189-R1：原月＝原核销业务时刻所属营业日的月（与月窗同一套营业日）。
+        java.util.TreeSet<YearMonth> originals = new java.util.TreeSet<>();
+        for (Instant at : repository.findRecoveredOriginalTimes(projectId, windowStart, windowEnd)) {
+            originals.add(YearMonth.from(businessDays.businessDate(dayProject(projectId), null, at)));
+        }
+        for (YearMonth original : originals) {
             String originalBillId = repository.findBillId(projectId, original.atDay(1), original.atEndOfMonth());
             java.util.Map<String, Long> before = recoveryKeys(compute(projectId, original, windowStart).items());
             java.util.Map<String, Long> after = recoveryKeys(compute(projectId, original, windowEnd).items());
@@ -242,6 +259,21 @@ public class TicketDistributionSettlementService {
         return new ArrayList<>(out.values());
     }
 
+    /**
+     * 第十八批 X 段 189-R1（BSM:1682「全系统的钱账统一按「营业日」归集」「起止时点由后台配置（安全阈值，按综合体分别配置」）：
+     * 月窗＝[月首营业日起点, 月末营业日结束)，按综合体营业日、不传酒吧（与逐份分组 {@link #settleUnits} 同口径）。
+     */
+    private Instant[] monthWindow(String projectId, YearMonth month) {
+        // ponytail: 启用综合体不止一个时平台单取出厂 10:00 窗；起点晚于 10:00 的综合体，偏差落在其非营业时段；起点早于 10:00 的综合体，月首 [起点, 10:00) 的营业时段数据进上月单，且不在上月单最终快照闸检查范围内；要逐综合体切月时把平台单按项目拆窗。
+        String p = dayProject(projectId);
+        return new Instant[] {businessDays.start(p, null, month.atDay(1)), businessDays.end(p, null, month.atEndOfMonth())};
+    }
+
+    /** 月窗所按的综合体：项目单即该项目；平台单（null）取唯一启用综合体（看板单综合体口径先例），没有或不止一个时 null（出厂）。 */
+    private String dayProject(String projectId) {
+        return projectId != null ? projectId : businessDays.soleProject();
+    }
+
     private static java.util.Map<String, Long> recoveryKeys(List<ItemCalc> items) {
         java.util.Map<String, Long> out = new java.util.LinkedHashMap<>();
         for (ItemCalc item : items) {
@@ -258,8 +290,9 @@ public class TicketDistributionSettlementService {
     private MonthCalc compute(String projectId, YearMonth month, Instant recoveryCutoff) {
         LocalDate periodStart = month.atDay(1);
         LocalDate periodEnd = month.atEndOfMonth();
-        Instant windowStart = periodStart.atStartOfDay().toInstant(ZoneOffset.UTC);
-        Instant windowEnd = month.plusMonths(1).atDay(1).atStartOfDay().toInstant(ZoneOffset.UTC);
+        Instant[] window = monthWindow(projectId, month);
+        Instant windowStart = window[0];
+        Instant windowEnd = window[1];
 
         // D6 套票折扣归属(§7.4)：项目级配置（默认 platform_absorb）。折扣额已在核销时逐笔落 discount_amount_cent（append-only 账本），
         //   本引擎按 discount_bearer 应用——项目承担部分让商户拿满额、并记入 bill.combo_discount_cent。无折扣(折扣额=0)时全程 +0=零行为变更。
@@ -313,6 +346,18 @@ public class TicketDistributionSettlementService {
             throw com.complex.platform.common.api.ApiException.conflict("SETTLEMENT_CONSERVATION_VIOLATED",
                     "业态通路费汇总与进池分摊总额不符:Σ各业态通路费 " + pooledRouteFee
                             + " ≠ 当月进池分摊合计 " + pooledTotals.routeFeeCent());
+        }
+
+        // 第十八批 X 段 176-R2（BSM:749「跨域组合通票扣完上述通路费和适用的销售渠道费后，再按各业态价格占比分到各域」「由各域按分配份额自然共担」；
+        //   ENUM:52「游乐、餐饮、零售份额各自直接归属」）：有价专属直付行按售票固化的域份额并入业态拆分（毛额＝Σ域份额、通路费＝Σ按域份额分摊），
+        //   随后与各业态一起按毛额共担销售渠道费；按内部结算价应直付额另记 internal_settled（ENUM:53 差额＝净份额−它），直付明细（⑦b）不变。
+        //   K20 互核只核进池核销，放在其后。
+        for (var ds : repository.aggregateExclusiveDomainShares(projectId, windowStart, windowEnd, recoveryCutoff)) {
+            FormatShare cur = formatShares.get(ds.businessFormat());
+            formatShares.put(ds.businessFormat(),
+                    (cur == null ? new FormatShare(ds.businessFormat(), 0L, 0L) : cur).plusExclusive(ds));
+            ticketRevenue += ds.domainShareCent();
+            pooledRouteFee += ds.routeFeeCent();
         }
 
         // ⑥ 当期排名口径：本月各酒吧入场类核销人数（ENUM L52「按各酒吧当期核销入场人数由多到少排定」；赠酒等其他权益的核销不计名次）。
@@ -983,26 +1028,35 @@ public class TicketDistributionSettlementService {
      * (池链支;G 与 F 都归娱乐平台公司,瀑布顺序照 HTML:739 先 G 后 F——减法交换律下金额同,列示按此序)。
      * S7 giftPaidCent:本业态当月兑付实付(A,按提供方业态分记,HTML:962)——纯留痕<b>不进净份额</b>
      * (兑付由娱乐平台公司承担,不动各业态分账)。
+     * 第十八批 X 段 176-R2 internalSettledCent:本业态有价专属直付按内部结算价应直付额(ENUM:53)——纯留痕不进净份额。
      */
     private record FormatShare(String format, long grossCent, long platformBorneCent, long channelFeeCent,
-                               long routeFeeCent, long compServiceFeeCent, long giftCostCent, long giftPaidCent) {
+                               long routeFeeCent, long compServiceFeeCent, long giftCostCent, long giftPaidCent,
+                               long internalSettledCent) {
         FormatShare(String format, long grossCent, long platformBorneCent) {
-            this(format, grossCent, platformBorneCent, 0L, 0L, 0L, 0L, 0L);
+            this(format, grossCent, platformBorneCent, 0L, 0L, 0L, 0L, 0L, 0L);
         }
 
         FormatShare(String format, long grossCent, long platformBorneCent, long channelFeeCent, long routeFeeCent,
                     long compServiceFeeCent, long giftCostCent) {
-            this(format, grossCent, platformBorneCent, channelFeeCent, routeFeeCent, compServiceFeeCent, giftCostCent, 0L);
+            this(format, grossCent, platformBorneCent, channelFeeCent, routeFeeCent, compServiceFeeCent, giftCostCent, 0L, 0L);
         }
 
         FormatShare withChannelFee(long fee) {
             return new FormatShare(format, grossCent, platformBorneCent, fee, routeFeeCent, compServiceFeeCent,
-                    giftCostCent, giftPaidCent);
+                    giftCostCent, giftPaidCent, internalSettledCent);
         }
 
         FormatShare withGiftPaid(long paid) {
             return new FormatShare(format, grossCent, platformBorneCent, channelFeeCent, routeFeeCent,
-                    compServiceFeeCent, giftCostCent, paid);
+                    compServiceFeeCent, giftCostCent, paid, internalSettledCent);
+        }
+
+        /** 176-R2：并入本业态有价专属直付的域份额、分摊的通路费与按内部结算价应直付额。 */
+        FormatShare plusExclusive(JdbcSettlementBillRepository.ExclusiveDomainShare d) {
+            return new FormatShare(format, grossCent + d.domainShareCent(), platformBorneCent, channelFeeCent,
+                    routeFeeCent + d.routeFeeCent(), compServiceFeeCent, giftCostCent, giftPaidCent,
+                    internalSettledCent + d.internalSettledCent());
         }
 
         long netCent() {
@@ -1013,7 +1067,8 @@ public class TicketDistributionSettlementService {
         FormatShare plus(UnitBatch u) {
             return new FormatShare(format, grossCent + u.grossCent(), platformBorneCent + u.borneCent(),
                     channelFeeCent + u.salesChannelFeeCent(), routeFeeCent + u.routeFeeCent(),
-                    compServiceFeeCent + u.serviceFeeCent(), giftCostCent + u.giftCostCent(), giftPaidCent);
+                    compServiceFeeCent + u.serviceFeeCent(), giftCostCent + u.giftCostCent(), giftPaidCent,
+                    internalSettledCent);
         }
     }
 

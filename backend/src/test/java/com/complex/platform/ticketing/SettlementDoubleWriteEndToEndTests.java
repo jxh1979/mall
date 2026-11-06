@@ -39,6 +39,9 @@ class SettlementDoubleWriteEndToEndTests {
     @Autowired
     private JdbcTemplate jdbcTemplate;
 
+    @Autowired
+    private com.complex.platform.common.BusinessDayResolver businessDays;
+
     private final List<String> seededCodes = new ArrayList<>();
     private String deviceCode;
 
@@ -49,6 +52,7 @@ class SettlementDoubleWriteEndToEndTests {
             com.complex.platform.support.AppendOnlyTestBypass.update(jdbcTemplate, "DELETE FROM settlement_transactions WHERE entitlement_id = ?", "ent_" + code);
             jdbcTemplate.update("DELETE FROM ticket_verifications WHERE entitlement_id = ?", "ent_" + code);
             jdbcTemplate.update("DELETE FROM issued_entitlements WHERE id = ?", "ent_" + code);
+            jdbcTemplate.update("DELETE FROM ticket_instances WHERE order_id = ?", "order_" + code);
             jdbcTemplate.update("DELETE FROM ticket_orders WHERE id = ?", "order_" + code);
             jdbcTemplate.update("DELETE FROM entitlement_templates WHERE id = ?", "et_" + code);
             jdbcTemplate.update("DELETE FROM internal_price_catalog WHERE item_code = ?", "sku_et_et_" + code);
@@ -101,6 +105,11 @@ class SettlementDoubleWriteEndToEndTests {
 
         ticketingService.createVerification(new VerificationRequest(
                 "idem-a-" + suffix, "qr", code, deviceCode, "point_" + suffix, Map.of()));
+        // 第十八批 X 段 196-R1：同一场次内再入场放行不扣次、不再计结算；把首次核销挪到营业日起点之前（模拟下一场，订单未锁定综合体取出厂起点），
+        // 第二次才是新一场的扣次核销（@AfterEach 按权益删掉挪过的核销记录）。
+        Instant start = businessDays.start(null, null, businessDays.businessDate(null, null, Instant.now()));
+        jdbcTemplate.update("UPDATE ticket_verifications SET created_at = ? WHERE entitlement_id = ?",
+                java.sql.Timestamp.from(start.minusSeconds(60)), "ent_" + code);
         ticketingService.createVerification(new VerificationRequest(
                 "idem-b-" + suffix, "qr", code, deviceCode, "point_" + suffix, Map.of()));
 
@@ -222,16 +231,32 @@ class SettlementDoubleWriteEndToEndTests {
                 INSERT INTO entitlement_templates (id, name, entitlement_type, default_total_times,
                     default_value_cent, status, bar_item_ref, entitlement_kind, agreement_price_cent,
                     exclusive_merchant_id, catalog_item_code, created_at, updated_at)
-                VALUES (?, 'Dining', 'dining', ?, 0, 'active', NULL, 'virtual', ?, ?, ?, ?, ?)
+                VALUES (?, '餐饮', 'dining', ?, 0, 'active', NULL, 'virtual', ?, ?, ?, ?, ?)
                 """, templateId, totalTimes, internalPriceCent, restaurantMerchantId, itemCode, ts, ts);
         ticketingRepository.saveTicketOrder(new TicketOrderRecord(
                 "order_" + code, "ON-" + code, "cust_" + code, typeId, null, totalTimes,
                 java.time.LocalDate.parse("2026-06-18"), "web", null, 0L, null, 0L, 0L, "CNY", "paid", "issued", "created", now, now, null, null, null));
+        // 第十八批 X 段 197-R1：票内餐饮券须本场已检票——餐饮挂父票 1 号人份，同人份先核一项入园（本场检票）。
+        String parent = "ti_" + code;
+        jdbcTemplate.update("INSERT INTO ticket_instances (id, ticket_no, order_id, ticket_type_id, seq_in_order, num_people, total_times,"
+                + " status, created_at, updated_at) VALUES (?, ?, ?, ?, 1, 1, 1, 'active', now(), now())",
+                parent, "T-" + code, "order_" + code, typeId);
         ticketingRepository.saveIssuedEntitlement(new IssuedEntitlementRecord(
                 "ent_" + code, code, typeId, "order_" + code, templateId, "dining",
                 restaurantMerchantId, null, "point_" + suffix, totalTimes, 0, allocatedCent, "active",
                 now.minusSeconds(60), now.plusSeconds(3600), now, now, 1, allocatedCent,
-                "virtual", internalPriceCent, null, restaurantMerchantId, null, 0, null, null));
+                "virtual", internalPriceCent, null, restaurantMerchantId, parent, 1, null, null));
+        String entry = code + "-in";
+        seededCodes.add(0, entry);
+        jdbcTemplate.update("INSERT INTO entitlement_templates (id, name, entitlement_type, default_total_times, default_value_cent, status,"
+                + " created_at, updated_at) VALUES (?, ?, 'entry', 1, 0, 'active', now(), now())", "et_" + entry, "入园" + suffix);
+        ticketingRepository.saveIssuedEntitlement(new IssuedEntitlementRecord(
+                "ent_" + entry, entry, typeId, "order_" + code, "et_" + entry, "entry",
+                null, null, "point_" + suffix, 1, 0, 0L, "active",
+                now.minusSeconds(60), now.plusSeconds(3600), now, now, 1, null,
+                null, null, null, null, parent, 1, null, null));
+        ticketingService.createVerification(new VerificationRequest(
+                "idem-in-" + suffix, "qr", entry, deviceCode, "point_" + suffix, Map.of()));
         return code;
     }
 
@@ -267,7 +292,7 @@ class SettlementDoubleWriteEndToEndTests {
         jdbcTemplate.update("""
                 INSERT INTO entitlement_templates (id, name, entitlement_type, default_total_times,
                     default_value_cent, status, bar_item_ref, created_at, updated_at)
-                VALUES (?, 'Entry', 'entry', ?, 0, 'active', NULL, ?, ?)
+                VALUES (?, '入园', 'entry', ?, 0, 'active', NULL, ?, ?)
                 """, templateId, totalTimes, ts, ts);
         ticketingRepository.saveTicketOrder(new TicketOrderRecord(
                 "order_" + code, "ON-" + code, "cust_" + code, typeId, null, totalTimes,

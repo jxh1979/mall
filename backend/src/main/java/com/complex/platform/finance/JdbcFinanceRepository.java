@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.22
+// 文件版本：V0.23
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
@@ -1805,12 +1805,16 @@ class JdbcFinanceRepository implements FinanceRepository {
         // 「已完成结算」取实际付款，按付款时点归期（ENUM:257 账单一次出准、不在下期补差：未付讫的部分到付讫当期再计）。
         // 统一券 internal_price 核销（VoucherService）与通票合作方券 internal_purchased 核销（PartnerVoucherService）都给结算对象挂
         // source_type='partner_voucher' 应付；partner_kind=external_partner 的对手方是外部伙伴 id，按商户 id 过滤自然不计。
+        // 第十八批 X 段第 175 条 175-R1（ENUM:257「其通票或券核销划归本商户并已完成结算的部分计入」）：另计通票分账专属直付应付（ticket_distribution）
+        // 与补偿履约应付（compensation_fulfillment）的实际付款；两类追收应收（ticket_distribution_recovery、compensation_fulfillment_recovery）的
+        // 实际收回＝已完成结算的部分被收回，在收回当期相抵。补偿撤销追加的冲正行与重述行没有付款记录，不重计。
         return jdbcTemplate.query("""
-                SELECT p.id, p.amount_cent, p.payment_time
+                SELECT p.id, CASE WHEN i.direction = 'receivable' THEN -p.amount_cent ELSE p.amount_cent END AS amount_cent, p.payment_time
                   FROM ar_ap_payments p
                   JOIN ar_ap_items i ON i.id = p.ar_ap_item_id
-                 WHERE i.direction = 'payable'
-                   AND i.source_type = 'partner_voucher'
+                 WHERE ((i.direction = 'payable' AND i.source_type IN ('partner_voucher', 'ticket_distribution', 'compensation_fulfillment'))
+                        OR (i.direction = 'receivable'
+                            AND i.source_type IN ('ticket_distribution_recovery', 'compensation_fulfillment_recovery')))
                    AND i.counterparty_id = :merchant_id
                    AND p.payment_time >= :from_inclusive
                    AND p.payment_time < :to_exclusive

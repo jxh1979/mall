@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -170,6 +170,27 @@ class VoucherSettlementTurnoverRentJdbcTests {
         assertThat(finance.computePeriodTurnoverRent(bar, barContract, "2026-07")).isZero();
     }
 
+    /**
+     * 第十八批 X 段第 175 条 175-R1（ENUM:257「未计收服务费的商户（餐饮、零售等），其通票或券核销划归本商户并已完成结算的部分计入」；
+     * 138-R3 补记「未付讫的部分到付讫当期再计」）：本餐厅 7 月付讫的通票分账专属直付 1000 与补偿履约结算 500 计入，7 月收回的通票分账追收 300
+     * 与补偿应付追收 100 相抵；7 月未付讫、8 月付讫的通票分账 2000 只进 8 月；付给酒吧的通票分账不计。
+     * 7 月 (1000＋500−300−100) × 10% = 110，8 月 2000 × 10% = 200，酒吧 0。
+     */
+    @Test
+    void paidTicketDistributionAndCompensationSettlementsCountNetOfRecoveries() {
+        Instant july = Instant.parse("2026-07-12T06:00:00Z");
+        payable("td", catering, "ticket_distribution", 1000, july);
+        payable("cf", catering, "compensation_fulfillment", 500, july);
+        payable("tdr", catering, "ticket_distribution_recovery", 300, july);
+        payable("cfr", catering, "compensation_fulfillment_recovery", 100, july);
+        payable("td_aug", catering, "ticket_distribution", 2000, Instant.parse("2026-08-12T06:00:00Z"));
+        payable("td_bar", bar, "ticket_distribution", 1000, july);
+
+        assertThat(finance.computePeriodTurnoverRent(catering, contract, "2026-07")).isEqualTo(110L);
+        assertThat(finance.computePeriodTurnoverRent(catering, contract, "2026-08")).isEqualTo(200L);
+        assertThat(finance.computePeriodTurnoverRent(bar, barContract, "2026-07")).isZero();
+    }
+
     // ---------- helpers ----------
 
     private void merchant(String id, String name, String type) {
@@ -198,9 +219,11 @@ class VoucherSettlementTurnoverRentJdbcTests {
 
     private void payable(String tag, String counterparty, String sourceType, long amount, Instant paidAt) {
         String id = "vst_ap_" + tag + "_" + s;
+        // 175-R1：两类追收台账是应收，其余是应付。
         jdbc.update("INSERT INTO ar_ap_items(id,item_no,direction,counterparty_id,source_type,source_id,amount_cent,unpaid_amount_cent,due_date,"
-                + "status,created_at,updated_at) VALUES(?,?,'payable',?,?,?,?,?,'2026-07-31','open',now(),now())",
-                id, id, counterparty, sourceType, "vst_src_" + tag + "_" + s, amount, amount);
+                + "status,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,'2026-07-31','open',now(),now())",
+                id, id, sourceType.endsWith("_recovery") ? "receivable" : "payable", counterparty, sourceType, "vst_src_" + tag + "_" + s,
+                amount, amount);
         if (paidAt != null) {
             jdbc.update("INSERT INTO ar_ap_payments(id,ar_ap_item_id,amount_cent,payment_method,payment_time,created_at)"
                     + " VALUES(?,?,?,'bank_transfer',?,now())", "vst_pay_" + tag + "_" + s, id, amount, Timestamp.from(paidAt));

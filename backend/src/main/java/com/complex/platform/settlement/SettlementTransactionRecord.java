@@ -1,6 +1,6 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import java.time.Instant;
 
@@ -55,6 +55,9 @@ public record SettlementTransactionRecord(
         String giftCostConfigId,
         // 第十八批第 3 条（BSM L749「通路费……所有支付都会产生、官方渠道同样产生」）：本行分摊到的通路费（分）。
         //   进池核销行=本单付款时固化的通路费按本次核销额占本单实付比例分摊（>=0）；冲正行取原行之反；到期行按未核销额分摊。
-        long routeFeeCent
+        long routeFeeCent,
+        // 第十八批 X 段 176-R1（BSM:749「再按各业态价格占比分到各域……零元免费权益不参与域间分配」）：有价的专属直付核销行按售票固化的
+        //   业态价格占比拆得的本次域份额增量；冲正行取原行之反；非专属直付行、零元权益、到期行为 null。
+        Long domainShareCent
 ) {
 }

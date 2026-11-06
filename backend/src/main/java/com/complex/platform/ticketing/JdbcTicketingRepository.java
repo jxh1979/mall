@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.12
+// 文件版本：V0.13
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.List;
@@ -621,6 +621,37 @@ class JdbcTicketingRepository implements TicketingRepository {
                 .addValue("id", entitlementId)
                 .addValue("since", since.atOffset(java.time.ZoneOffset.UTC)), Integer.class);
         return count == null ? 0 : count;
+    }
+
+    @Override
+    public boolean hasVerifiedEntrySince(String parentTicketId, int slotIndex, java.time.Instant since) {
+        if (parentTicketId == null) {
+            return false;
+        }
+        // 197-R1：入场类型同 JdbcSettlementTransactionRepository 到期扫描的 visits；status='success' 自然排除已冲正的入场。
+        return Boolean.TRUE.equals(jdbcTemplate.queryForObject("""
+                SELECT EXISTS(SELECT 1 FROM ticket_verifications v JOIN issued_entitlements e ON e.id = v.entitlement_id
+                               WHERE e.parent_ticket_id = :parent AND e.slot_index = :slot
+                                 AND (e.entitlement_type IN ('ticket', 'entry', 'admission') OR e.entitlement_type LIKE 'amusement%')
+                                 AND v.status = 'success' AND v.created_at >= :since)
+                """, new MapSqlParameterSource()
+                .addValue("parent", parentTicketId)
+                .addValue("slot", slotIndex)
+                .addValue("since", since.atOffset(java.time.ZoneOffset.UTC)), Boolean.class));
+    }
+
+    @Override
+    public int maxEntryTotalTimes(String parentTicketId, int slotIndex) {
+        // 18X 复核修复：只取检票入场类（BSM:784 游乐次数不是检票次数），与 165-R1 maxBarEntryTotalTimes 同口径。
+        Integer max = jdbcTemplate.queryForObject("""
+                SELECT COALESCE(MAX(total_times), 0) FROM issued_entitlements
+                 WHERE parent_ticket_id = :parent AND slot_index = :slot
+                   AND entitlement_type IN ('ticket', 'entry', 'admission')
+                   AND compensation_item_id IS NULL
+                """, new MapSqlParameterSource()
+                .addValue("parent", parentTicketId)
+                .addValue("slot", slotIndex), Integer.class);
+        return max == null ? 0 : max;
     }
 
     @Override

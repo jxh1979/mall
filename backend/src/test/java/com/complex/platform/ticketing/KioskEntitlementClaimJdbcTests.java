@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -42,6 +42,7 @@ import org.springframework.transaction.annotation.Transactional;
  * 第十八批 Q 段第 148 条：赠饮须先核同票同人份这家酒吧的入场，未先核入场即核赠饮拒绝并留一条拒绝记录。
  * 第十八批 S 段第 166 条：核销的设备纳管门控按设备号查纳管状态（核销请求带的是设备台账行 id）。
  * 第十八批 S 段第 165 条：多次票的酒水（赠饮）每场次（这家酒吧本营业日）只能核本场一份（总次数÷这家酒吧入场次数，至少 1）。
+ * 第十八批 X 段第 196 条：酒吧入场与入园在同一场次内再次核销放行不扣次（落 success/session_reentry、不再计结算）。
  */
 @SpringBootTest(properties = {
         "spring.datasource.url=${SETTLE_TEST_DB_URL:jdbc:postgresql://127.0.0.1:5432/complex_test}",
@@ -312,6 +313,75 @@ class KioskEntitlementClaimJdbcTests {
         assertThat(usedTimes(gift)).isEqualTo(2);
     }
 
+    // 第十八批 X 段第 196 条 196-R1（BSM:800「同一场次内的重复进出仍须按上述三道环节依次通过，但不再重复扣减票面入场次数。」；ENUM:46「该场次内
+    // 可不限次数进出」；DEC-R4-2026-08-04-89「通票在当前场次内可以不限次数进出」）：3 次票这家酒吧的入场，一体机员工按蛇形键同一营业日核两次都成功，
+    // 第二次落 success/session_reentry、只扣 1 次、结算流水只 1 行。不开测试事务：结算流水在核销事务提交后写。修复前第二次再扣一次，原因断言即红。
+    @Test
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    void multiUseBarAdmissionReentryInSameSessionDoesNotConsumeOrSettleAgain() throws Exception {
+        String deviceRow = bindKioskToBar("kec-x196a-");
+        seedGiftDrink(1, 3);
+        String entry = "kec-entry-" + s;
+        jdbc.update("UPDATE issued_entitlements SET allocated_revenue_cent = 3000 WHERE id = ?", "ent_" + entry);
+        verifyOk("kec-x196a-in1-", entry, deviceRow);
+        expectReentry("kec-x196a-in2-", entry, deviceRow);
+        assertThat(usedTimes(entry)).isEqualTo(1);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM settlement_transactions WHERE entitlement_id = ?"
+                + " AND transaction_type = 'verification_settled'", Integer.class, "ent_" + entry)).isEqualTo(1);
+    }
+
+    // 196-R1：同场次再入场那条冲正不回补次数、不发冲正事件（财务不落冲正通知）；把这一场的核销记录挪到这家酒吧本营业日起点之前（模拟下一场）
+    // 再核，照常扣一次、原因为空。修复前第二次即扣次，原因断言即红。
+    @Test
+    void barAdmissionReentryReversalRestoresNothingAndNextSessionConsumesAgain() throws Exception {
+        String deviceRow = bindKioskToBar("kec-x196b-");
+        seedGiftDrink(1, 3);
+        String entry = "kec-entry-" + s;
+        verifyOk("kec-x196b-in1-", entry, deviceRow);
+        String reentry = expectReentry("kec-x196b-in2-", entry, deviceRow);
+        mockMvc.perform(post("/api/v1/ticketing/verifications/" + reentry + "/reverse").with(admin)
+                        .contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(Map.of(
+                                "idempotency_key", "kec-x196b-rev-" + s, "reason", "客人误扫"))))
+                .andExpect(status().isOk());
+        assertThat(usedTimes(entry)).isEqualTo(1);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM audit_events WHERE event_name = 'finance.verification_reversed_notified'"
+                + " AND metadata->>'verification_id' = ?", Integer.class, reentry)).isZero();
+
+        Instant start = businessDays.start(null, bar, businessDays.businessDate(null, bar, Instant.now()));
+        jdbc.update("UPDATE ticket_verifications SET created_at = ? WHERE entitlement_id = ?",
+                java.sql.Timestamp.from(start.minusSeconds(60)), "ent_" + entry);
+        String next = verifyOk("kec-x196b-in3-", entry, deviceRow);
+        assertThat(jdbc.queryForObject("SELECT result_reason FROM ticket_verifications WHERE id = ?", String.class, next)).isNull();
+        assertThat(usedTimes(entry)).isEqualTo(2);
+    }
+
+    // 196-R1：单次票（这家酒吧入场 1 次）同一营业日第二次核入场仍放行（success/session_reentry），同场次回得了场。修复前 409 ENTITLEMENT_USED_UP 即红。
+    @Test
+    void singleUseBarAdmissionReentersItsOnlySession() throws Exception {
+        String deviceRow = bindKioskToBar("kec-x196c-");
+        seedGiftDrink(1, 1);
+        String entry = "kec-entry-" + s;
+        verifyOk("kec-x196c-in1-", entry, deviceRow);
+        expectReentry("kec-x196c-in2-", entry, deviceRow);
+        assertThat(usedTimes(entry)).isEqualTo(1);
+    }
+
+    // 196-R1（BSM:780「其中『当天』『每天』一律按营业日计算……按综合体分别配置」）：入园（无酒吧、订单锁定本综合体）的 3 次票同一综合体营业日核两次
+    // 只扣 1 次；挪到该综合体本营业日起点之前（模拟下一场）再核照常扣。修复前第二次即扣次，原因断言即红。
+    @Test
+    void parkEntryReentryInSameComplexBusinessDayConsumesOnce() throws Exception {
+        String deviceRow = bindKioskToBar("kec-x196d-");
+        String park = seedParkEntry(3);
+        verifyOk("kec-x196d-in1-", park, deviceRow);
+        expectReentry("kec-x196d-in2-", park, deviceRow);
+        assertThat(usedTimes(park)).isEqualTo(1);
+        Instant start = businessDays.start(f.projectId, null, businessDays.businessDate(f.projectId, null, Instant.now()));
+        jdbc.update("UPDATE ticket_verifications SET created_at = ? WHERE entitlement_id = ?",
+                java.sql.Timestamp.from(start.minusSeconds(60)), "ent_" + park);
+        verifyOk("kec-x196d-in3-", park, deviceRow);
+        assertThat(usedTimes(park)).isEqualTo(2);
+    }
+
     // ---------- helpers ----------
 
     /** 管理员按后台真实请求把设备绑定为一体机（服务模式、按空间绑点位）并设所属酒吧，返回设备台账行 id。 */
@@ -347,6 +417,15 @@ class KioskEntitlementClaimJdbcTests {
                         .contentType(MediaType.APPLICATION_JSON).content(verification(keyPrefix + s, code, deviceRow)))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.detail_code").value("GIFT_DRINK_SESSION_SHARE_USED_UP"));
+    }
+
+    /** 196-R1：同场次再入场放行不扣次——200、success/session_reentry，返回核销记录 id。 */
+    private String expectReentry(String keyPrefix, String code, String deviceRow) throws Exception {
+        return CustomerTicketPaymentFixture.read(mockMvc.perform(post("/api/v1/ticketing/verifications").with(staff)
+                        .contentType(MediaType.APPLICATION_JSON).content(verification(keyPrefix + s, code, deviceRow)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("success"))
+                .andExpect(jsonPath("$.data.result_reason").value("session_reentry")), "$.data.id");
     }
 
     private int usedTimes(String code) {
@@ -450,6 +529,26 @@ class KioskEntitlementClaimJdbcTests {
                 bar, null, bar, entryTimes, 0, 0L, "active",
                 now.minusSeconds(60), now.plusSeconds(3600), now, now, 1, null,
                 null, null, null, null, parent, 1, null, null));
+        return code;
+    }
+
+    /** 196-R1：入园权益（无酒吧，订单锁定本综合体；归属本吧以过员工商户范围），总次数 times。 */
+    private String seedParkEntry(int times) {
+        String code = "kec-park-" + s;
+        String typeId = "tt_" + code;
+        jdbc.update("INSERT INTO ticket_types (id, ticket_name, base_calendar_price_mode, stock_required, status, created_at, updated_at)"
+                + " VALUES (?, '一体机入园票', 'fixed', FALSE, 'active', now(), now())", typeId);
+        jdbc.update("INSERT INTO entitlement_templates (id, name, entitlement_type, default_total_times, default_value_cent, status,"
+                + " created_at, updated_at) VALUES (?, '入园', 'entry', 1, 0, 'active', now(), now())", "et_" + code);
+        Instant now = Instant.now();
+        ticketingRepository.saveTicketOrder(new TicketOrderRecord(
+                "order_" + code, "ON-" + code, "cust_" + code, typeId, null, 1, LocalDate.now(), "web", null, 0L, null, 0L, 0L,
+                "CNY", "paid", "issued", "created", now, now, null, null, null, f.projectId));
+        ticketingRepository.saveIssuedEntitlement(new IssuedEntitlementRecord(
+                "ent_" + code, code, typeId, "order_" + code, "et_" + code, "entry",
+                bar, null, null, times, 0, 0L, "active",
+                now.minusSeconds(60), now.plusSeconds(3600), now, now, 1, null,
+                null, null, null, null, null, 1, null, null));
         return code;
     }
 }

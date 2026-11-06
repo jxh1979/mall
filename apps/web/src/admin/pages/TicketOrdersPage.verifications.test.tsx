@@ -1,4 +1,4 @@
-// 文件版本：V0.03
+// 文件版本：V0.04
 import { render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -17,6 +17,9 @@ const VERIFICATIONS = [
   { id: "v-bar", verificationNo: "V-BAR", status: "rejected", resultReason: "bar_entry_not_verified" },
   // 第十八批 S 段 165-R1（BSM:800「后续场次的附带权益也不得提前到当前场次使用」）：本场这家酒吧的赠饮已按单次份用完落 rejected。
   { id: "v-share", verificationNo: "V-SHARE", status: "rejected", resultReason: "gift_drink_session_share_used_up" },
+  // 第十八批 X 段 197-R1（BSM:800「餐饮券、零售券等，只能在完成检票环节所在的那一个场次内核销」）：本场未检票、本场一份已用完落 rejected。
+  { id: "v-in", verificationNo: "V-IN", status: "rejected", resultReason: "entitlement_session_not_checked_in" },
+  { id: "v-dshare", verificationNo: "V-DSHARE", status: "rejected", resultReason: "entitlement_session_share_used_up" },
 ];
 
 function perms(grants: string[]): EffectivePermissionsState {
@@ -94,5 +97,17 @@ describe("TicketOrdersPage 核销表中文显示（134-R3）", () => {
     const share = cells("v-share");
     expect(share[1]).toBe("拒绝");
     expect(share[2]).toBe("本场次这家酒吧的酒水（赠饮）已按票面一份用完，之后场次的份额不能提前使用");
+  });
+
+  it("197-R1：票内餐饮、零售券本场未检票与本场一份已用完的拒绝行，状态为「拒绝」、结果说明为中文", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.queryByTestId("ticket-verification-row-v-dshare")).not.toBeNull());
+
+    const notIn = cells("v-in");
+    expect(notIn[1]).toBe("拒绝");
+    expect(notIn[2]).toBe("须先完成本场次检票入场，才能核销票内的餐饮、零售券");
+    const dshare = cells("v-dshare");
+    expect(dshare[1]).toBe("拒绝");
+    expect(dshare[2]).toBe("本场次的餐饮、零售券已按票面一份用完，之后场次的份额不能提前使用");
   });
 });

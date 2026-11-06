@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -50,6 +50,7 @@ import org.springframework.transaction.annotation.Transactional;
  * 2026-10-21 操作员裁决：供应商不可用时不留不核、照常核销，恢复后从下一次入场开始留脸；不同意就不能首次入场）。
  *
  * <p>真库 + MockMvc，请求按终端真实形状（蛇形键）。人脸供应商以桩替换 {@link TicketFacePhotoService} 的端口，用例结束复原。
+ * 第十八批 X 段 196-R1 起同一场次（综合体营业日）内再次入场放行不扣次、不留脸不比对；验「下一次入场」的用例先把前次核销挪到本营业日起点之前（模拟下一场）。
  */
 @SpringBootTest(properties = {
         "spring.datasource.url=${SETTLE_TEST_DB_URL:jdbc:postgresql://127.0.0.1:5432/complex_test}",
@@ -71,6 +72,7 @@ class MultiUseTicketFaceBindingJdbcIntegrationTests {
     @Autowired private TicketFacePhotoService facePhotoService;
     @Autowired private TicketFacePhotoPurgeJob purgeJob;
     @Autowired private PiiCipher piiCipher;
+    @Autowired private com.complex.platform.common.BusinessDayResolver businessDays;
 
     private final String suffix = UUID.randomUUID().toString().replace("-", "").substring(0, 10);
     private final String merchant = "mch_tk06_" + suffix;
@@ -128,6 +130,9 @@ class MultiUseTicketFaceBindingJdbcIntegrationTests {
         assertThat(TicketVerificationService.outcomeStatusForCode("BAR_ENTRY_NOT_VERIFIED")).isEqualTo("rejected");
         // 第十八批 S 段 165-R1（BSM:800「后续场次的附带权益也不得提前到当前场次使用」）：本场这家酒吧的赠饮已按单次份用完，规则不允许。
         assertThat(TicketVerificationService.outcomeStatusForCode("GIFT_DRINK_SESSION_SHARE_USED_UP")).isEqualTo("rejected");
+        // 第十八批 X 段 197-R1（BSM:800 餐饮券、零售券只能在检票场次内核销、后续场次的附带权益不得提前使用）：本场未检票、本场一份已用完，规则不允许。
+        assertThat(TicketVerificationService.outcomeStatusForCode("ENTITLEMENT_SESSION_NOT_CHECKED_IN")).isEqualTo("rejected");
+        assertThat(TicketVerificationService.outcomeStatusForCode("ENTITLEMENT_SESSION_SHARE_USED_UP")).isEqualTo("rejected");
     }
 
     // R2 RED：同意 + 拍照 → 核销成功扣一次；同事务落同意（版本、时间、范围）与加密人脸，绑定父票实例。
@@ -196,6 +201,7 @@ class MultiUseTicketFaceBindingJdbcIntegrationTests {
         stub.available = true;
         preview(t).andExpect(jsonPath("$.data.face_binding").value("capture"));
         verify(t, FACE, true).andExpect(status().isOk());
+        nextSession(t);
         preview(t).andExpect(jsonPath("$.data.face_binding").value("match"));
         stub.available = false;
         preview(t).andExpect(jsonPath("$.data.face_binding").doesNotExist());
@@ -207,6 +213,7 @@ class MultiUseTicketFaceBindingJdbcIntegrationTests {
         stub.available = true;
         Ticket t = ticket(1, 3);
         verify(t, FACE, true).andExpect(status().isOk());
+        nextSession(t);
         stub.matchStatus = FaceVerificationResult.Status.FAILED;
         verify(t, OTHER_FACE, null).andExpect(status().isConflict())
                 .andExpect(jsonPath("$.detail_code").value("MULTI_USE_HOLDER_MISMATCH"));
@@ -222,6 +229,7 @@ class MultiUseTicketFaceBindingJdbcIntegrationTests {
         stub.available = true;
         Ticket t = ticket(1, 3);
         verify(t, FACE, true).andExpect(status().isOk());
+        nextSession(t);
         verify(t, OTHER_FACE, null).andExpect(status().isOk()).andExpect(jsonPath("$.data.status").value("success"));
         assertThat(stub.matchCalls).isEqualTo(1);
         assertThat(stub.lastStored).isEqualTo(FACE);
@@ -240,6 +248,7 @@ class MultiUseTicketFaceBindingJdbcIntegrationTests {
         assertThat(usedTimes(t)).isEqualTo(1);
         assertThat(faceConsents()).isZero();
 
+        nextSession(t);
         stub.available = true;
         verify(t, null, null).andExpect(status().isConflict())
                 .andExpect(jsonPath("$.detail_code").value("MULTI_USE_FACE_CONSENT_REQUIRED"));
@@ -247,6 +256,7 @@ class MultiUseTicketFaceBindingJdbcIntegrationTests {
         assertThat(usedTimes(t)).isEqualTo(2);
         assertThat(bindings(t)).isEqualTo(1);
 
+        nextSession(t);
         stub.available = false;
         stub.matchStatus = FaceVerificationResult.Status.FAILED;
         verify(t, null, null).andExpect(status().isOk());
@@ -262,13 +272,33 @@ class MultiUseTicketFaceBindingJdbcIntegrationTests {
         verify(t, FACE, true).andExpect(status().isOk());
         assertThat(faceConsents()).isEqualTo(1);
         assertThat(bindings(t)).isEqualTo(1);
+        nextSession(t);
         verify(t, FACE, null).andExpect(status().isOk());
         assertThat(bindings(t)).isEqualTo(1);
+        nextSession(t);
         verify(t, FACE, null).andExpect(status().isOk());
         assertThat(usedTimes(t)).isEqualTo(3);
         assertThat(bindings(t)).isZero();
         // 同意记录照常保留（BSM:844 保留必要的同意记录）。
         assertThat(faceConsents()).isEqualTo(1);
+    }
+
+    // 第十八批 X 段 196-R1（BSM:800「同一场次内的重复进出仍须按上述三道环节依次通过，但不再重复扣减票面入场次数。」；决策台账 §G-1「同场次内
+    // 重复进出不校验同一性……检票因属同场次重复进出而不扣次」）：一人多次票首入留脸后，同一营业日再入场不带照片 → 200 success/session_reentry、
+    // 不扣次、不比对；预检放行且 face_binding 为空。修复前第二次入场要求拍照，409 MULTI_USE_FACE_CAPTURE_REQUIRED 即红。
+    @Test
+    void multiUseReentryInSameSessionNeedsNoFaceAndPreviewAsksNone() throws Exception {
+        stub.available = true;
+        Ticket t = ticket(1, 3);
+        verify(t, FACE, true).andExpect(status().isOk());
+        verify(t, null, null).andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("success"))
+                .andExpect(jsonPath("$.data.result_reason").value("session_reentry"));
+        preview(t).andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.allowed").value(true))
+                .andExpect(jsonPath("$.data.face_binding").doesNotExist());
+        assertThat(usedTimes(t)).isEqualTo(1);
+        assertThat(stub.matchCalls).isZero();
     }
 
     // R4 RED：到期仍有剩余次数 → 清理任务删除；同父票补偿补发的入场权益仍在有效期内 → 保留到它到期。
@@ -362,6 +392,13 @@ class MultiUseTicketFaceBindingJdbcIntegrationTests {
             body.put("face_consent_accepted", consent);
         }
         return JSON.writeValueAsString(body);
+    }
+
+    /** 196-R1：把该票此前的核销挪到综合体本营业日起点之前，模拟下一场（订单未锁定综合体，取出厂起点）。 */
+    private void nextSession(Ticket t) {
+        Instant start = businessDays.start(null, null, businessDays.businessDate(null, null, Instant.now()));
+        jdbc.update("UPDATE ticket_verifications SET created_at = ? WHERE entitlement_id = ?",
+                Timestamp.from(start.minusSeconds(60)), t.entitlementId);
     }
 
     private int usedTimes(Ticket t) {

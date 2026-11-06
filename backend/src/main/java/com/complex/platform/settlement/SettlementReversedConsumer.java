@@ -1,12 +1,11 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
+import com.complex.platform.common.BusinessDayResolver;
 import com.complex.platform.ticketing.VerificationReversedEvent;
 import java.time.Instant;
-import java.time.LocalDate;
 import java.time.YearMonth;
-import java.time.ZoneOffset;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -41,11 +40,13 @@ public class SettlementReversedConsumer {
 
     private final JdbcSettlementTransactionRepository transactionRepository;
     private final JdbcSettlementBillRepository billRepository;
+    private final BusinessDayResolver businessDays;
 
     public SettlementReversedConsumer(JdbcSettlementTransactionRepository transactionRepository,
-                                      JdbcSettlementBillRepository billRepository) {
+                                      JdbcSettlementBillRepository billRepository, BusinessDayResolver businessDays) {
         this.transactionRepository = transactionRepository;
         this.billRepository = billRepository;
+        this.businessDays = businessDays;
     }
 
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
@@ -102,7 +103,8 @@ public class SettlementReversedConsumer {
                 //   月累计=天然释放封顶额度;该票 G 净额抵回 0 → 锚点复位,下一次核销可重新计提。
                 -original.giftCostCent(),
                 original.giftCostConfigId(),
-                -original.routeFeeCent()));   // 第十八批第 3 条：通路费取原行之反
+                -original.routeFeeCent(),     // 第十八批第 3 条：通路费取原行之反
+                negate(original.domainShareCent())));  // 176-R1：域份额取原行之反（null 仍 null）
     }
 
     /**
@@ -137,24 +139,30 @@ public class SettlementReversedConsumer {
                     reversalBusinessAt(original.projectId(), original.businessAt()),
                     -original.discountAmountCent(), -original.compServiceFeeCent(), original.compServiceFeeConfigId(),
                     original.beneficiaryEntityId(), original.parentTicketId(), -original.giftCostCent(), original.giftCostConfigId(),
-                    -original.routeFeeCent()));
+                    -original.routeFeeCent(), negate(original.domainShareCent())));
         }
+    }
+
+    private static Long negate(Long value) {
+        return value == null ? null : -value;
     }
 
     /**
      * 原核销所属月已过账 → 红冲落当月(now)；否则落原月(原核销时刻)由该月重算净掉。
      * FS-021-R2：生产月结出的是平台单（project_id 为空、覆盖全部项目），交易行却带核销项目——项目单与平台单任一已过账即算已过账。
+     * 第十八批 X 段 189-R1（BSM:1682「全系统的钱账统一按「营业日」归集」）：原月按营业日定、与月结月窗同口径——项目单按原行项目的营业日，
+     * 平台单按唯一启用综合体的营业日（没有或不止一个时出厂），各查各的单。
      */
     private Instant reversalBusinessAt(String projectId, Instant originalBusinessAt) {
-        YearMonth month = YearMonth.from(originalBusinessAt.atZone(ZoneOffset.UTC));
-        LocalDate periodStart = month.atDay(1);
-        LocalDate periodEnd = month.atEndOfMonth();
-        boolean posted = posted(billRepository.findBillStatusByPeriod(projectId, periodStart, periodEnd))
-                || (projectId != null && posted(billRepository.findBillStatusByPeriod(null, periodStart, periodEnd)));
+        boolean posted = (projectId != null && posted(projectId, projectId, originalBusinessAt))
+                || posted(null, businessDays.soleProject(), originalBusinessAt);
         return posted ? Instant.now() : originalBusinessAt;
     }
 
-    private static boolean posted(String status) {
+    /** billProjectId 为空＝平台单；原月＝dayProject 综合体营业日下 at 所在营业日的月。 */
+    private boolean posted(String billProjectId, String dayProject, Instant at) {
+        YearMonth month = YearMonth.from(businessDays.businessDate(dayProject, null, at));
+        String status = billRepository.findBillStatusByPeriod(billProjectId, month.atDay(1), month.atEndOfMonth());
         return status != null && !STATUS_DRAFT.equals(status) && !"confirmed".equals(status);
     }
 }

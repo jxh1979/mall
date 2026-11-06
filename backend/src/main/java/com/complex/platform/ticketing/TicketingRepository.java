@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.11
+// 文件版本：V0.12
 
 import java.util.List;
 import java.util.Map;
@@ -272,6 +272,19 @@ public interface TicketingRepository {
 
     /** 第十八批 S 段 165-R1：该权益自 since 起核销成功（status='success'，已冲正的不算）的记录数。 */
     int countSuccessfulVerificationsSince(String entitlementId, java.time.Instant since);
+
+    /**
+     * 第十八批 X 段 197-R1（BSM:800「餐饮券、零售券等，只能在完成检票环节所在的那一个场次内核销」）：父票 parentTicketId 第 slotIndex 号人份的
+     * 入场类权益（ticket / entry / admission / amusement 开头，同 settlement 有入场的营业日口径）自 since 起有核销成功记录。父票为空返回 false。
+     */
+    boolean hasVerifiedEntrySince(String parentTicketId, int slotIndex, java.time.Instant since);
+
+    /**
+     * 第十八批 X 段 197-R1：父票 parentTicketId 第 slotIndex 号人份检票入场类权益（ticket / entry / admission，不含 amusement 开头的游乐行——BSM:784
+     * 游乐次数不是检票次数，同 165-R1 maxBarEntryTotalTimes 口径；补偿补发行除外）的最大总次数＝入场次数；
+     * 没有返回 0。票内餐饮、零售券单次份＝总次数 ÷ 它（TK-10 口径，至少 1）。
+     */
+    int maxEntryTotalTimes(String parentTicketId, int slotIndex);
 
     List<VerificationRecord> listVerifications();
 

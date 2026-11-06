@@ -1,4 +1,4 @@
-// 文件版本：V0.05
+// 文件版本：V0.06
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
@@ -110,7 +110,7 @@ type GiftCoverageRow = {
 //   结算按【内部结算价】全额归餐厅商户(exclusive_merchant_id + agreement_price_cent，走 §6.4 不分摊直付)；
 //   价格(面值,可0)与折扣仅为售卖/展示口径，不参与结算(核销结算价=内部结算价，不再把折扣当面值乱记)。
 // costBearer：价格 0（纯赠送）时必选——这份赠品的成本谁出（V376）。
-type DiningLine = { merchantId: string; valueYuan: string; discount: string; catalogCode: string; costBearer: string };
+type DiningLine = { merchantId: string; valueYuan: string; discount: string; catalogCode: string; costBearer: string; totalTimes: string };
 
 function toRows<T>(data: unknown): T[] {
   if (Array.isArray(data)) return data as T[];
@@ -615,7 +615,7 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
     if (merchantId) void loadBarProducts(merchantId);
   }
   function addDiningLine() {
-    setDiningLines([...diningLines, { merchantId: merchants[0]?.id ?? "", valueYuan: "", discount: "", catalogCode: "", costBearer: "" }]);
+    setDiningLines([...diningLines, { merchantId: merchants[0]?.id ?? "", valueYuan: "", discount: "", catalogCode: "", costBearer: "", totalTimes: "1" }]);
   }
 
   // 创建单条权益模板并绑定到目标通票。merchantId 必填（后端强制）。
@@ -740,7 +740,7 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
         await createAndBind({
           name: `${merchantName(line.merchantId)} · 餐饮${discountNote}`,
           entitlementType: "dining",
-          totalTimes: 1,
+          totalTimes: Number(line.totalTimes) || 1,
           // 价格(面值)可为 0：留空=0（纯赠送/兑换）。
           valueCent: line.valueYuan.trim() ? Math.round(Number(line.valueYuan) * 100) : 0,
           merchantId: line.merchantId,
@@ -1154,7 +1154,7 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
       <div className="admin-table-scroll">
         <table className="admin-table" data-testid="combo-dining-table">
           <thead>
-            <tr><th>餐厅商户</th><th>价格（元，可 0）</th><th>折扣（如 8=八折，选填）</th><th>内部结算价（元）</th><th>成本承担方（价格 0 必选）</th><th>操作</th></tr>
+            <tr><th>餐厅商户</th><th>价格（元，可 0）</th><th>折扣（如 8=八折，选填）</th><th>内部结算价（元）</th><th>成本承担方（价格 0 必选）</th><th>次数</th><th>操作</th></tr>
           </thead>
           <tbody>
             {diningLines.map((line, index) => (
@@ -1180,6 +1180,7 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
                     {COST_BEARER_OPTIONS.map((o) => (<option key={o.value} value={o.value}>{o.label}</option>))}
                   </select>
                 </td>
+                <td><input aria-label="餐饮次数" type="number" min={1} value={line.totalTimes} onChange={(event) => setDiningLines(diningLines.map((l, i) => i === index ? { ...l, totalTimes: event.target.value } : l))} /></td>
                 <td><button type="button" className="admin-secondary-button" onClick={() => setDiningLines(diningLines.filter((_, i) => i !== index))}>移除</button></td>
               </tr>
             ))}

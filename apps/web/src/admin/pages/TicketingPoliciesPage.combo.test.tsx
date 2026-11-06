@@ -170,9 +170,40 @@ describe("TicketingPoliciesPage 组合式配置策略编排", () => {
       expect(body.exclusive_merchant_id).toBe("mch-1");
       expect(body.merchant_id).toBe("mch-1");
       expect(body.default_value_cent).toBe(0);
+      // 197-R2 回归：不改次数时模板与绑定仍按 1 次。
+      expect(body.default_total_times).toBe(1);
       // V376：纯赠送餐饮的绑定带上所选成本承担方。
       const bindCalls = postSpy.mock.calls.filter((c) => String(c[0]).includes("/ticketing/ticket-types/tt-1/entitlements"));
       expect((bindCalls[0]?.[1] as Record<string, unknown>).cost_bearer).toBe("merchant_concession");
+      expect((bindCalls[0]?.[1] as Record<string, unknown>).total_times).toBe(1);
+    });
+  });
+
+  it("餐饮项次数填 3 后提交：建模板 default_total_times=3、绑定 total_times=3（多次票每场一份配足）", async () => {
+    const postSpy = vi.fn(async (path: string, _body?: Record<string, unknown>) => {
+      if (path.includes("/entitlement-templates")) return { id: "tpl-dining-3" } as unknown;
+      return {} as unknown;
+    });
+    renderPage(postSpy);
+    // 先等通票与商户数据源加载落定（商户未到时「添加餐饮项」禁用）。
+    await waitFor(() => expect(screen.getByTestId("combo-ticket-select").querySelector('option[value="tt-1"]')).toBeTruthy());
+    await waitFor(() => expect((screen.getByTestId("combo-add-dining") as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.change(screen.getByTestId("combo-ticket-select"), { target: { value: "tt-1" } });
+    fireEvent.click(screen.getByTestId("combo-add-dining"));
+    await waitFor(() => expect(screen.getByTestId("combo-dining-line-0").querySelector('input[aria-label="餐饮次数"]')).toBeTruthy());
+    const row = screen.getByTestId("combo-dining-line-0");
+    fireEvent.change(row.querySelector('input[aria-label="餐饮次数"]')!, { target: { value: "3" } });
+    fireEvent.change(row.querySelector('input[aria-label="价格（元）"]')!, { target: { value: "30" } });
+
+    fireEvent.click(screen.getByTestId("combo-submit"));
+
+    await waitFor(() => {
+      const templateCalls = postSpy.mock.calls.filter((c) => String(c[0]).includes("/ticketing/entitlement-templates"));
+      expect(templateCalls.length).toBe(1);
+      expect((templateCalls[0]?.[1] as Record<string, unknown>).default_total_times).toBe(3);
+      const bindCalls = postSpy.mock.calls.filter((c) => String(c[0]).includes("/ticketing/ticket-types/tt-1/entitlements"));
+      expect(bindCalls.length).toBe(1);
+      expect((bindCalls[0]?.[1] as Record<string, unknown>).total_times).toBe(3);
     });
   });
 });

@@ -1,9 +1,10 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.complex.platform.common.BusinessDayResolver;
 import com.complex.platform.ticketing.SettlementSettledEvent;
 import com.complex.platform.ticketing.VerificationReversedEvent;
 import java.time.Instant;
@@ -39,6 +40,7 @@ class SettlementStateMachineJdbcIntegrationTests {
     @Autowired private TicketDistributionSettlementService settlementService;
     @Autowired private SettlementPostingService postingService;
     @Autowired private JdbcTemplate jdbcTemplate;
+    @Autowired private BusinessDayResolver businessDays;
 
     private final List<String> projects = new ArrayList<>();
     private final List<String> entIds = new ArrayList<>();
@@ -203,7 +205,7 @@ class SettlementStateMachineJdbcIntegrationTests {
         Instant sep = Instant.parse("2011-09-28T10:00:00Z");
         seedSettledFact("vx_old_" + p, "ent_old_" + p, p, bar, sep, 2000L, bar);
         seedBill(p, YearMonth.from(sep.atZone(ZoneOffset.UTC)), "settled"); // 原月已结付
-        YearMonth current = YearMonth.now(ZoneOffset.UTC);
+        YearMonth current = YearMonth.from(businessDays.businessDate(p, null, Instant.now()));
         seedSettledFact("vx_new_" + p, "ent_new_" + p, p, bar, current.atDay(1).atTime(12, 0).toInstant(ZoneOffset.UTC),
                 10000L, bar);
         reversedConsumer.onVerificationReversed(new VerificationReversedEvent(
@@ -256,7 +258,7 @@ class SettlementStateMachineJdbcIntegrationTests {
         seedSettledFact("vp_b1_" + p, "ent_b1_" + p, p, b, aug.plusSeconds(60), 0L, null, "tk1_" + p);
         seedSettledFact("vp_a2_" + p, "ent_a2_" + p, p, a, aug.plusSeconds(120), 0L, null, "tk2_" + p);
         seedBill(p, YearMonth.from(aug.atZone(ZoneOffset.UTC)), "settled");
-        YearMonth current = YearMonth.now(ZoneOffset.UTC);
+        YearMonth current = YearMonth.from(businessDays.businessDate(p, null, Instant.now()));
         seedSettledFact("vp_b2_" + p, "ent_b2_" + p, p, b, current.atDay(1).atTime(12, 0).toInstant(ZoneOffset.UTC),
                 0L, null, "tk3_" + p);
         reversedConsumer.onVerificationReversed(new VerificationReversedEvent(
@@ -298,7 +300,7 @@ class SettlementStateMachineJdbcIntegrationTests {
         seedSettledFact("vq_b3_" + p, "ent_b3_" + p, p, b, jul.plusSeconds(180), 0L, null, "tk3_" + p);
         seedSettledFact("vq_a2_" + p, "ent_a2_" + p, p, a, jul.plusSeconds(240), 0L, null, "tk4_" + p);
         seedBill(p, YearMonth.from(jul.atZone(ZoneOffset.UTC)), "settled");
-        YearMonth current = YearMonth.now(ZoneOffset.UTC);
+        YearMonth current = YearMonth.from(businessDays.businessDate(p, null, Instant.now()));
         seedSettledFact("vq_b4_" + p, "ent_b4_" + p, p, b, current.atDay(1).atTime(12, 0).toInstant(ZoneOffset.UTC),
                 0L, null, "tk5_" + p);
         reversedConsumer.onVerificationReversed(new VerificationReversedEvent(
@@ -524,7 +526,7 @@ class SettlementStateMachineJdbcIntegrationTests {
         jdbcTemplate.update("""
                 INSERT INTO entitlement_templates (id, name, entitlement_type, default_total_times,
                     default_value_cent, status, bar_item_ref, created_at, updated_at)
-                VALUES (?, 'E', 'entry', ?, 0, 'active', NULL, ?, ?) ON CONFLICT (id) DO NOTHING""",
+                VALUES (?, '入园', 'entry', ?, 0, 'active', NULL, ?, ?) ON CONFLICT (id) DO NOTHING""",
                 templateId, total, ct, ct);
         jdbcTemplate.update("""
                 INSERT INTO ticket_orders (id, order_no, customer_id, ticket_type_id, quantity, visit_date,
