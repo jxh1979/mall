@@ -8,13 +8,13 @@
     "RUNTIME_EVIDENCE_BOUND_TO_SOURCE_FINGERPRINT",
     "RUNTIME_EVIDENCE_DOES_NOT_CLOSE_PRODUCTION_MANIFEST"
   ],
-  "generated_at": "2026-11-06T03:28:06.973Z",
+  "generated_at": "2026-11-06T03:56:23.104Z",
   "git": {
-    "head": "273a7e804e9e7b07ec770b7e31e4a1947cfdc372",
-    "head_short": "273a7e80",
+    "head": "989dad0ef3bdd3db4de01175ace3e6712509f49d",
+    "head_short": "989dad0e",
     "branch": "feature/business-code-batch42-20261106",
     "worktree_dirty": false,
-    "source_fingerprint": "4845283178e12eaa06183f11495bfddc0b6f0f50e135e03220235907abca85ea",
+    "source_fingerprint": "d997f4a37823097dae28c13ade9a9ff7ace86d794afa70159c66635b0b7715bb",
     "source_fingerprint_file_count": 3299,
     "source_fingerprint_paths": [
       "backend/src/main",
@@ -55,7 +55,7 @@
     "failures": 0,
     "errors": 0,
     "skipped": 0,
-    "latest_mtime": "2026-11-06T03:25:35.509Z",
+    "latest_mtime": "2026-11-06T03:53:49.409Z",
     "passed": true
   },
   "web_unit_source": {
@@ -400,13 +400,13 @@
       {
         "path": "apps/web/dist/assets/main-CFrOZBA6.js",
         "size_bytes": 4337,
-        "mtime": "2026-11-06T03:25:43.682Z"
+        "mtime": "2026-11-06T03:53:57.607Z"
       }
     ],
     "largest_asset": {
       "path": "apps/web/dist/assets/vendor-antd-CzvkKKQu.js",
       "size_bytes": 251112,
-      "mtime": "2026-11-06T03:25:43.685Z"
+      "mtime": "2026-11-06T03:53:57.610Z"
     },
     "no_main_bundle_warning_expected": true
   },

@@ -16,11 +16,11 @@
 
 | 绑定项 | 当前值 |
 |---|---|
-| 生成时的 Git HEAD | `273a7e804e9e7b07ec770b7e31e4a1947cfdc372`（feature/business-code-batch42-20261106） |
+| 生成时的 Git HEAD | `989dad0ef3bdd3db4de01175ace3e6712509f49d`（feature/business-code-batch42-20261106） |
 | 生成时工作树 | 干净 |
-| 源码指纹 sha256 | `4845283178e12eaa06183f11495bfddc0b6f0f50e135e03220235907abca85ea` |
+| 源码指纹 sha256 | `d997f4a37823097dae28c13ade9a9ff7ace86d794afa70159c66635b0b7715bb` |
 | 指纹覆盖文件数 | 3299 |
-| 生成时间 | 2026-11-06T03:28:06.973Z |
+| 生成时间 | 2026-11-06T03:56:23.104Z |
 | 最大有效天数 | 30 |
 
 > 校验规则（`--check`）：若当前源码指纹与本文记录不一致（源码已变更），或本证据超过最大有效天数，则立即 FAIL；陈旧证据不再自欺 PASS。
@@ -55,7 +55,7 @@
 | failures | 0 |
 | errors | 0 |
 | skipped | 0 |
-| latest_mtime | 2026-11-06T03:25:35.509Z |
+| latest_mtime | 2026-11-06T03:53:49.409Z |
 
 ## 4. Web 与 UI 验收证据
 
