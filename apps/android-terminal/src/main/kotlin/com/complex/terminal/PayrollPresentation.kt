@@ -1,6 +1,6 @@
 package com.complex.terminal
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import java.math.BigDecimal
 
@@ -65,6 +65,6 @@ fun payrollDetailText(detail: PayrollStatementDetail) = buildString {
     append("  原工资单 ").append(it.originalStatementId).append("；").append(payrollMonth(it.originalMonth)).append("；并入 ").append(it.targetStatementId ?: "待并入").append('\n')
   }
   if (detail.payments.isEmpty()) append("暂无实际成功付款\n")
-  detail.payments.forEach { append("成功付款 ").append(it.financePaymentId).append("：").append(payrollMoney(it.amountCent)).append("；参考号 ").append(it.payRef ?: "—").append("；").append(it.paidAt ?: "—").append('\n') }
+  detail.payments.forEach { append("成功付款 ").append(it.financePaymentId).append("：").append(payrollMoney(it.amountCent)).append("；参考号 ").append(it.payRef ?: "—").append("；").append(it.paidAt?.let { t -> localTimeZh(t) } ?: "—").append('\n') }
   (detail.pendingItems + (detail.worktime?.pendingItems ?: emptyList())).distinct().forEach { append("待处理：").append(it.message).append("（").append(it.sourceId ?: "—").append("）\n") }
 }

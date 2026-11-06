@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: 综合体管理系统 P0 API 契约
-  version: V0.54
+  version: V0.55
   description: P0 首批编码前置契约。本文采用 JSON-compatible YAML，便于与 openapi-p0.json 保持一致。正式后端以 Java 21 + Spring Boot 4.x +
     springdoc-openapi 输出运行时 OpenAPI，并与本契约比对。
 servers:
@@ -11120,7 +11120,49 @@ paths:
       x-audit-event-failure: terminal_switch.view_failed
       responses:
         "200":
-          $ref: "#/components/responses/Page"
+          description: 统一分页响应；items 为终端能力开关行（第十八批 W 段第 194 条 194-R1：每行带能力中文名 capability_name）。
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/PageResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          items:
+                            type: array
+                            items:
+                              type: object
+                              description: 终端能力开关行（terminal_capability_switches）。
+                              properties:
+                                id:
+                                  type: string
+                                terminal_type:
+                                  type: string
+                                capability_code:
+                                  type: string
+                                capability_name:
+                                  type: string
+                                  nullable: true
+                                  description: 能力中文名，取权限中文名；非权限类能力为空。
+                                scope_type:
+                                  type: string
+                                scope_id:
+                                  type: string
+                                enabled:
+                                  type: boolean
+                                reason:
+                                  type: string
+                                  nullable: true
+                                  description: 说明。
+                                created_at:
+                                  type: string
+                                  format: date-time
+                                updated_at:
+                                  type: string
+                                  format: date-time
         "403":
           $ref: "#/components/responses/Error"
         "500":

@@ -1,4 +1,4 @@
-// 文件版本：V0.09
+// 文件版本：V0.10
 import React from "react";
 import { payrollDetailFields } from "./StaffPayrollDetail";
 import type { PayrollStatementDetail } from "./staffPayrollTypes";
@@ -109,11 +109,16 @@ export function StaffPayrollLeavePage({ api, user, setGlobalError, setActionResu
       setGlobalError("奖惩必须填 员工id/正金额(元)/事由(留痕硬要求)");
       return;
     }
-    const review = await api.post<{ reviewId?: string }>("/api/v1/staff/payroll/adjustments", {
-      userId: adjUser.trim(), month, adjType, amountCent: cent, reason: adjReason.trim(),
-    });
-    setActionResult({ action: "payroll_adjustment_requested", adjType, reviewId: review?.reviewId, note: "已发起复核，人力会签与直属起共三个组织层级全部通过后入账" });
-    setAdjUser(""); setAdjAmount(""); setAdjReason("");
+    // 第十八批 W 段 209-R1（PGM:291「含……提示、报错」）：本页四个写操作被后端拒绝时经全局报错显示中文，不记成功、不清空已填内容。
+    try {
+      const review = await api.post<{ reviewId?: string }>("/api/v1/staff/payroll/adjustments", {
+        userId: adjUser.trim(), month, adjType, amountCent: cent, reason: adjReason.trim(),
+      });
+      setActionResult({ action: "payroll_adjustment_requested", adjType, reviewId: review?.reviewId, note: "已发起复核，人力会签与直属起共三个组织层级全部通过后入账" });
+      setAdjUser(""); setAdjAmount(""); setAdjReason("");
+    } catch (error) {
+      setGlobalError(error instanceof Error ? error.message : "发起复核失败");
+    }
   };
 
   // CG-12：申诉——只能由被扣罚员工本人提出；清单按员工查看（人事）或看本人。
@@ -133,12 +138,16 @@ export function StaffPayrollLeavePage({ api, user, setGlobalError, setActionResu
       setGlobalError("申诉必须填 扣罚记录编号/申诉事由");
       return;
     }
-    const appeal = await api.post<{ id?: string; reviewId?: string }>(`/api/v1/staff/payroll/adjustments/${encodeURIComponent(appealAdjId.trim())}/appeals`, {
-      reason: appealReason.trim(),
-    });
-    setActionResult({ action: "payroll_adjustment_appeal_submitted", appealId: appeal?.id, reviewId: appeal?.reviewId, note: "申诉已报至人力部门与直属起共三个组织层级裁定" });
-    setAppealAdjId(""); setAppealReason("");
-    await loadAppeals();
+    try {
+      const appeal = await api.post<{ id?: string; reviewId?: string }>(`/api/v1/staff/payroll/adjustments/${encodeURIComponent(appealAdjId.trim())}/appeals`, {
+        reason: appealReason.trim(),
+      });
+      setActionResult({ action: "payroll_adjustment_appeal_submitted", appealId: appeal?.id, reviewId: appeal?.reviewId, note: "申诉已报至人力部门与直属起共三个组织层级裁定" });
+      setAppealAdjId(""); setAppealReason("");
+      await loadAppeals();
+    } catch (error) {
+      setGlobalError(error instanceof Error ? error.message : "提出申诉失败");
+    }
   };
 
   // CG-07：按（酒吧 → 人员所属主体 → 月）汇总派驻人员提成，生成内部结算应付；重复执行不重复挂账。
@@ -154,16 +163,24 @@ export function StaffPayrollLeavePage({ api, user, setGlobalError, setActionResu
   };
 
   const review = async (id: string, decision: "approve" | "reject") => {
-    await api.post(`/api/v1/staff/leaves/${id}/review`, { decision, reviewNote: decision === "approve" ? "准" : "驳回" });
-    setActionResult({ action: "leave_reviewed", id, decision });
-    await reload();
+    try {
+      await api.post(`/api/v1/staff/leaves/${id}/review`, { decision, reviewNote: decision === "approve" ? "准" : "驳回" });
+      setActionResult({ action: "leave_reviewed", id, decision });
+      await reload();
+    } catch (error) {
+      setGlobalError(error instanceof Error ? error.message : "请假审批失败");
+    }
   };
 
   // 2026-10-18 操作员裁决：销假=本人申请＋主管批准。主管在此批准（→ 已销假，BSM L1481 冲正/不扣薪）或驳回（假仍有效）。
   const reviewRevoke = async (id: string, decision: "approve" | "reject") => {
-    await api.post(`/api/v1/staff/leaves/${id}/revoke`, { decision, reviewNote: decision === "approve" ? "准予销假" : "不予销假" });
-    setActionResult({ action: "leave_revoke_reviewed", id, decision });
-    await reload();
+    try {
+      await api.post(`/api/v1/staff/leaves/${id}/revoke`, { decision, reviewNote: decision === "approve" ? "准予销假" : "不予销假" });
+      setActionResult({ action: "leave_revoke_reviewed", id, decision });
+      await reload();
+    } catch (error) {
+      setGlobalError(error instanceof Error ? error.message : "销假审批失败");
+    }
   };
 
   const detailRequest = React.useRef(0);

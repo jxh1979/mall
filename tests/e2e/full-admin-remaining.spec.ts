@@ -1,4 +1,4 @@
-// 文件版本：V0.18
+// 文件版本：V0.19
 import { expect, test } from "@playwright/test";
 import { installMockApi } from "./support/mock-api";
 import { fillCnDate } from "./support/cn-date";
@@ -835,7 +835,9 @@ test.describe("full admin remaining pages acceptance", () => {
       if (spec.pageId === "ADM-TER-001") {
         await expect(page.getByTestId("terminal-master-switch-table")).toBeVisible();
         await expect(page.getByTestId("terminal-master-web")).toContainText("Web 前端");
-        await expect(page.getByTestId("terminal-capability-group-tablet")).toContainText("camera.scan");
+        // 第 194 条 194-R2（PGM:287）：能力列显示中文名，不显示能力码。
+        await expect(page.getByTestId("terminal-capability-group-tablet")).toContainText("现场摄像头扫码");
+        await expect(page.getByTestId("terminal-capability-group-tablet")).not.toContainText("camera_scan");
         continue;
       }
       if (spec.pageId === "ADM-BAR-007") {
@@ -1030,7 +1032,9 @@ test.describe("full admin remaining pages acceptance", () => {
       if (spec.pageId === "ADM-INT-003") {
         const switchesTable = page.getByTestId("integration-switches-table");
         await expect(switchesTable).toBeVisible();
-        await expect(switchesTable).toContainText("face.verification.enabled");
+        // 第 194 条 194-R2（PGM:287）：只显示中文能力名，标签下不再带能力码。
+        await expect(switchesTable).toContainText("年龄核验环节（人脸扫描确认满 18 周岁）");
+        await expect(switchesTable).not.toContainText("face.verification.enabled");
         continue;
       }
     }
@@ -1245,9 +1249,10 @@ test.describe("full admin remaining pages acceptance", () => {
     await expect(page.getByTestId("admin-action-result")).toContainText("att-integration-compensation");
 
     await openAdminRoute(page, remainingRoutes.find((item) => item.pageId === "ADM-EVD-001")!);
-    // 错误翻译层：正文给业务话术，原始报文（含 SERVER_ERROR）收进折叠的技术详情供报障。
+    // 错误翻译层：正文给业务话术；第 193 条 193-R2（PGM:287）技术详情只留状态码，接口路径、request_id、原始报文不上屏。
     await expect(page.getByTestId("admin-error")).toContainText("服务暂时不可用");
-    await expect(page.getByTestId("admin-error-detail")).toContainText("SERVER_ERROR");
+    await expect(page.getByTestId("admin-error-detail")).toContainText("状态码 500");
+    await expect(page.getByTestId("admin-error-detail")).not.toContainText("SERVER_ERROR");
 
     await installMockApi(page, { empty: true });
     // 会话现持久化到 localStorage：先清会话再刷新，才能回到登录视图重新登录。

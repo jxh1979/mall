@@ -265,13 +265,20 @@ class JdbcTerminalDeviceRepository implements TerminalDeviceRepository {
 
     @Override
     public List<TerminalCapabilitySwitchRecord> listCapabilitySwitches() {
+        // 194-R1：能力中文名取权限中文名（能力码即权限码的开关行），非权限类能力为空。
         return jdbcTemplate.query("""
-                SELECT id, terminal_type, capability_code, scope_type, scope_id, enabled,
-                       reason, created_at, updated_at
-                  FROM terminal_capability_switches
-                 ORDER BY updated_at DESC, id
+                SELECT s.id, s.terminal_type, s.capability_code, s.scope_type, s.scope_id, s.enabled,
+                       s.reason, s.created_at, s.updated_at, p.permission_name AS capability_name
+                  FROM terminal_capability_switches s
+                  LEFT JOIN permissions p ON p.permission_code = s.capability_code
+                 ORDER BY s.updated_at DESC, s.id
                  LIMIT 1000
-                """, this::mapCapabilitySwitch);
+                """, (resultSet, rowNumber) -> {
+                    TerminalCapabilitySwitchRecord row = mapCapabilitySwitch(resultSet, rowNumber);
+                    return new TerminalCapabilitySwitchRecord(row.id(), row.terminalType(), row.capabilityCode(), row.scopeType(),
+                            row.scopeId(), row.enabled(), row.reason(), row.createdAt(), row.updatedAt(),
+                            resultSet.getString("capability_name"));
+                });
     }
 
     @Override

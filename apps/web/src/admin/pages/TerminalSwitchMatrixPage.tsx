@@ -5,6 +5,8 @@ import { useAdminResource } from "../hooks/useAdminResource";
 import type { AdminPageProps } from "../types";
 import { PermissionButton } from "../security/Can";
 import { TERMINAL_LABELS } from "../i18n/fieldLabels";
+import { SMS_CATALOG } from "./SmsNotificationSwitchesPage";
+import { THIRD_PARTY_SWITCH_CATALOG } from "./IntegrationSwitchesPage";
 
 // 3.19 终端十端开关统一矩阵（业务HTML「终端开关」节）：十类终端总开关 + 各能力开关按端分组，
 // 一页统管。关闭后运营可见可控；「接口拒绝业务动作 + 拉取失败兜底关闭」的逐请求后端强制为后续专项。
@@ -16,6 +18,8 @@ type SwitchRow = {
   scopeId: string;
   enabled: boolean;
   reason: string | null;
+  /** 194-R1：能力中文名（权限中文名；非权限类能力为空）。 */
+  capabilityName?: string | null;
 };
 
 // R-10（2026-07-22 用户裁决）：灰度层 = 求值链最细的一档，只能收窄不能放宽。
@@ -55,6 +59,21 @@ const TARGET_TYPE_LABELS: Record<string, string> = {
   device: "设备",
 };
 
+/**
+ * 第十八批 W 段第 194 条 194-R2（PGM:287「……枚举取值……必须全部为中文」）：不是权限码、也不在短信与第三方开关目录里的能力，
+ * 名称取各自种子说明（V088、V093、V096～V098）、BSM:971「设备管控」与 BSM:980「售票能力」。
+ */
+const CAPABILITY_LABELS: Record<string, string> = {
+  ticketing: "售票能力",
+  "terminal.enabled": "终端总开关",
+  managed_work_devices: "工作手机/平板/一体机设备管控",
+  "payment.gateway.enabled": "支付真实渠道",
+  "wecom.ai_qc.enabled": "企业微信人工智能语义质检",
+  "terminal.camera_scan.enabled": "现场摄像头扫码",
+  "terminal.tablet.enabled": "平板终端",
+  "staff.device_keystore.enabled": "员工设备公钥与指纹绑定",
+};
+
 function toRows(data: unknown): SwitchRow[] {
   if (Array.isArray(data)) return data as SwitchRow[];
   const items = (data as { items?: SwitchRow[] } | null)?.items;
@@ -86,11 +105,18 @@ export function TerminalSwitchMatrixPage({ api, setActionResult, setGlobalError,
     { onError: setGlobalError, fallbackMessage: "终端开关矩阵读取失败" },
   );
 
+  /** 194-R2：能力中文名——接口带回的权限中文名，否则短信、第三方开关目录，否则本页小表。 */
+  function capabilityLabel(code: string): string {
+    return rows.find((row) => row.capabilityCode === code && row.capabilityName)?.capabilityName
+      ?? SMS_CATALOG[code]?.label ?? THIRD_PARTY_SWITCH_CATALOG[code]?.label ?? CAPABILITY_LABELS[code] ?? code;
+  }
+
   async function toggle(row: SwitchRow) {
     try {
+      // 194-R4：后端只认 operator_note，更新时写进该行说明（同兄弟页 TerminalDevicesPage）。
       await api.put(`/api/v1/terminals/capability-switches/${row.id}`, {
         enabled: !row.enabled,
-        reason: `${row.enabled ? "后台关闭" : "后台打开"}：${TERMINAL_LABELS[row.terminalType] ?? row.terminalType} / ${row.capabilityCode}`,
+        operatorNote: `${row.enabled ? "后台关闭" : "后台打开"}：${TERMINAL_LABELS[row.terminalType] ?? row.terminalType} / ${capabilityLabel(row.capabilityCode)}`,
       });
       setActionResult({ action: "terminal_switch_toggled", id: row.id, enabled: !row.enabled });
       reload();
@@ -110,7 +136,7 @@ export function TerminalSwitchMatrixPage({ api, setActionResult, setGlobalError,
   /** 开/关某「端 × 能力」的灰度试点。开=进入试点期（白名单外一律关闭）。 */
   async function saveRollout(terminalType: string, capabilityCode: string, active: boolean, reason: string) {
     if (!capabilityCode.trim() || !reason.trim()) {
-      setGlobalError("能力码和理由都要填写");
+      setGlobalError("能力和理由都要填写");
       return;
     }
     try {
@@ -231,8 +257,10 @@ export function TerminalSwitchMatrixPage({ api, setActionResult, setGlobalError,
                 <tbody>
                   {list.map((row) => (
                     <tr key={row.id}>
-                      <td>{row.capabilityCode}</td>
-                      <td>{row.scopeType === "global" ? "全局" : `${row.scopeType}:${row.scopeId}`}</td>
+                      <td data-testid={`terminal-capability-name-${row.id}`}>{capabilityLabel(row.capabilityCode)}</td>
+                      <td data-testid={`terminal-capability-scope-${row.id}`}>
+                        {row.scopeType === "global" ? "全局" : `${TARGET_TYPE_LABELS[row.scopeType] ?? row.scopeType}：${row.scopeId}`}
+                      </td>
                       <td>{row.enabled ? "开" : "关"}</td>
                       <td>{row.reason ?? "—"}</td>
                       <td>
@@ -278,12 +306,19 @@ export function TerminalSwitchMatrixPage({ api, setActionResult, setGlobalError,
             </select>
           </label>
           <label>
-            能力码
-            <input
+            能力
+            <select
               value={rolloutForm.capabilityCode}
               data-testid="terminal-canary-capability-code"
               onChange={(event) => setRolloutForm({ ...rolloutForm, capabilityCode: event.target.value })}
-            />
+            >
+              <option value="">请选择能力</option>
+              {[...new Set(rows.map((row) => row.capabilityCode))].map((code) => (
+                <option key={code} value={code}>
+                  {capabilityLabel(code)}
+                </option>
+              ))}
+            </select>
           </label>
           <label>
             理由
@@ -309,7 +344,7 @@ export function TerminalSwitchMatrixPage({ api, setActionResult, setGlobalError,
           canary.map((view) => (
             <div key={view.rollout.id} data-testid={`terminal-canary-rollout-${view.rollout.id}`}>
               <h3>
-                {TERMINAL_LABELS[view.rollout.terminalType] ?? view.rollout.terminalType} / {view.rollout.capabilityCode}
+                {TERMINAL_LABELS[view.rollout.terminalType] ?? view.rollout.terminalType} / {capabilityLabel(view.rollout.capabilityCode)}
                 （{view.rollout.active ? "试点中" : "未启用"}）
               </h3>
               <p>{view.rollout.reason ?? "—"}</p>

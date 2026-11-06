@@ -1,6 +1,6 @@
 package com.complex.platform.dividend;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static com.complex.platform.support.DailyCloseFixture.markRangeFinal;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -107,6 +107,55 @@ class DividendFinalSnapshotGateJdbcIntegrationTests {
         assertThat(officialStatements(bar)).isEqualTo(1);
     }
 
+    /**
+     * 第十八批 W 段 207-R1（PGM:287「状态……报错……必须全部为中文，不得出现任何英文（如 active/draft 英文状态……）」）：
+     * 正式单登记依法可分配金额、提交审批后，同期再出单的跳过原因与再提交的状态冲突报错都写中文状态。
+     * 修复前拼 pending_review：跳过原因断言红。
+     */
+    @Test
+    void skipReasonAndStateConflictShowChineseStatementStatus() throws Exception {
+        project();
+        String bar = "dfg_st_" + s;
+        barWithMonthlyPlan(bar, "分红状态酒吧" + s, Instant.parse("2026-04-30T16:00:00Z"));
+        markRangeFinal(jdbc, "bar", bar, AUG_1, AUG_31);
+        RequestPostProcessor admin = new StaffRequestFixture(jdbc).staff("usr_dfg_admins_" + s, "platform_admin", project, null,
+                "finance.dividend.manage");
+        String draft = JsonPath.read(compute(admin, bar, "dfg-divs-1-" + s)
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString(), "$.data.computed[0].id");
+        String confirmed = JsonPath.read(mockMvc.perform(post("/api/v1/finance/dividends/statements/" + draft + "/legal-confirmation")
+                        .with(admin).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"idempotency_key\":\"dfg-legal-" + s + "\",\"legal_distributable_cent\":100000,"
+                                + "\"tax_accounting_ref\":\"税务核算" + s + "\",\"resolution_ref\":\"分配决议" + s + "\"}"))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString(), "$.data.id");
+        submit(admin, confirmed, "dfg-submit-1-" + s).andExpect(status().isOk());
+
+        compute(admin, bar, "dfg-divs-2-" + s)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.computed.length()").value(0))
+                .andExpect(jsonPath("$.data.skipped[0].merchant_id").value(bar))
+                .andExpect(jsonPath("$.data.skipped[0].reason").value("已有计算单进入审批流（待审批），不重算"));
+        submit(admin, confirmed, "dfg-submit-2-" + s)
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.message").value("只有草稿单可以提交审阅（当前状态：待审批）"));
+    }
+
+    /**
+     * 18W 复核修复（PGM:287「展示给用户的一切文字，包括……提示、报错……必须全部为中文，不得出现任何英文」）：
+     * 期间作业类别选「月度预览」、期间标签按占位提示填季度 2026-Q3，按前端蛇形键走真实计算入口与授权链，400 报错不含英文字母。
+     * 修复前报错为「preview 只支持月度期间标签（如 2026-07）」：断言红。
+     */
+    @Test
+    void previewWithNonMonthPeriodLabelIsRejectedInChinese() throws Exception {
+        project();
+        RequestPostProcessor admin = new StaffRequestFixture(jdbc).staff("usr_dfg_adminp_" + s, "platform_admin", project, null,
+                "finance.dividend.manage");
+        String message = JsonPath.read(mockMvc.perform(post("/api/v1/finance/dividends/statements/compute").with(admin)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"idempotency_key\":\"dfg-prev-" + s + "\",\"period_label\":\"2026-Q3\",\"kind\":\"preview\"}"))
+                .andExpect(status().isBadRequest()).andReturn().getResponse().getContentAsString(), "$.message");
+        assertThat(message).contains("2026-07").doesNotContainPattern("[A-Za-z]");
+    }
+
     // ---------- helpers ----------
 
     private void project() {
@@ -128,6 +177,13 @@ class DividendFinalSnapshotGateJdbcIntegrationTests {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"idempotency_key\":\"" + key + "\",\"period_label\":\"2026-08\",\"kind\":\"official\","
                         + "\"merchant_id\":\"" + bar + "\"}"));
+    }
+
+    /** 分红计算页「提交审阅」的真实请求形状（蛇形键）。 */
+    private ResultActions submit(RequestPostProcessor who, String statementId, String key) throws Exception {
+        return mockMvc.perform(post("/api/v1/finance/dividends/statements/" + statementId + "/submit").with(who)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"idempotency_key\":\"" + key + "\"}"));
     }
 
     private Integer officialStatements(String bar) {

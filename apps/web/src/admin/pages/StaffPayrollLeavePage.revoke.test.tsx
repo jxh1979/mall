@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -79,5 +79,57 @@ describe("StaffPayrollLeavePage 销假审批（本人申请＋主管批准）", 
     await waitFor(() => expect(posts).toHaveLength(1));
     expect(posts[0]?.url).toContain("/api/v1/staff/leaves/lv_rr/revoke");
     expect(posts[0]?.body.decision).toBe("reject");
+  });
+});
+
+// 第十八批 W 段 209-R1（PGM:291「用户看到的每一处文字都是中文，含状态、枚举、日期、按钮、提示、报错、导出与短信。」）：
+// 请假审批与销假审批被后端拒绝（如已被他人处理）时，页面经全局报错显示中文原文，不记已审批。修复前按钮 void 调用无 catch，什么都不显示。
+describe("StaffPayrollLeavePage 请假与销假审批被拒时显示报错（209-R1）", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  const PENDING = { id: "lv_p", user_id: "u-9", leave_type: "personal", start_date: "2099-09-12", end_date: "2099-09-12", reason: "事假", status: "pending" };
+  const message = "请假申请已审批，不能重复处理";
+
+  function stubRejected() {
+    vi.stubGlobal("fetch", vi.fn().mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (init?.method === "POST" && /\/staff\/leaves\/[^/]+\/(review|revoke)$/.test(url)) {
+        return Promise.resolve(new Response(JSON.stringify({ success: false, code: "STATE_CONFLICT", message }), { status: 409, headers: { "content-type": "application/json" } }));
+      }
+      if (url.includes("/staff/leaves")) return Promise.resolve(listEnvelope(url.includes("status=revoke_requested") ? [REVOKE_REQUESTED] : [PENDING]));
+      if (url.includes("/staff/payroll")) return Promise.resolve(listEnvelope(PAYROLL));
+      return Promise.resolve(listEnvelope([]));
+    }));
+  }
+  function renderWithSpies() {
+    const setActionResult = vi.fn();
+    const setGlobalError = vi.fn();
+    const props: AdminPageProps = { api: new AdminApi("test-token"), user: { id: "u1", username: "admin", accountType: "platform_admin" }, setActionResult, setGlobalError, effectivePermissions: ADMIN_PERMS };
+    render(<StaffPayrollLeavePage {...props} />);
+    return { setActionResult, setGlobalError };
+  }
+
+  it("请假「通过」接口回 409 时显示后端中文原文，不记已审批", async () => {
+    stubRejected();
+    const { setActionResult, setGlobalError } = renderWithSpies();
+    await waitFor(() => expect(screen.queryByTestId("leave-actions-lv_p")).not.toBeNull());
+
+    fireEvent.click(screen.getByTestId("leave-actions-lv_p"));
+    await waitFor(() => expect(screen.queryByTestId("leave-approve-lv_p")).not.toBeNull());
+    fireEvent.click(screen.getByTestId("leave-approve-lv_p"));
+    await waitFor(() => expect(setGlobalError).toHaveBeenCalledWith("操作冲突：" + message));
+    expect(setActionResult).not.toHaveBeenCalledWith(expect.objectContaining({ action: "leave_reviewed" }));
+  });
+
+  it("「批准销假」接口回 409 时显示后端中文原文，不记已审批", async () => {
+    stubRejected();
+    const { setActionResult, setGlobalError } = renderWithSpies();
+    await waitFor(() => expect(screen.queryByTestId("leave-actions-lv_rr")).not.toBeNull());
+
+    fireEvent.click(screen.getByTestId("leave-actions-lv_rr"));
+    await waitFor(() => expect(screen.queryByTestId("leave-revoke-approve-lv_rr")).not.toBeNull());
+    fireEvent.click(screen.getByTestId("leave-revoke-approve-lv_rr"));
+    await waitFor(() => expect(setGlobalError).toHaveBeenCalledWith("操作冲突：" + message));
+    expect(setActionResult).not.toHaveBeenCalledWith(expect.objectContaining({ action: "leave_revoke_reviewed" }));
   });
 });

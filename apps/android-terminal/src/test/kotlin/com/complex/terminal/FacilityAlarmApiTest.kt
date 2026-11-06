@@ -1,11 +1,12 @@
 package com.complex.terminal
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import com.sun.net.httpserver.HttpServer
 import java.net.InetSocketAddress
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 
 /** HP-F01（BSM「楼宇运营」告警条 L1417）：员工手机「我的接警」只读拉取，点「已收到并接手」才打明确接手接口（蛇形键、带幂等键）。 */
 class FacilityAlarmApiTest {
@@ -27,6 +28,11 @@ class FacilityAlarmApiTest {
       val mine = api.listMyFacilityAlarms()
       assertEquals(listOf("falm-1"), mine.map { it.id })
       assertEquals("awaiting_takeover", mine.single().status)
+      // 第十八批 W 段第 192 条 192-R1（PGM:287）：响应时限按本机时区显示，不出现 ISO 的英文字母。
+      val due = localTimeZh(mine.single().responseDueAt)
+      assertFalse(Regex("[A-Za-z]").containsMatchIn(due), due)
+      // 192-R2：优先级显示中文。
+      assertEquals("紧急", workPriorityZh(mine.single().priority))
       assertEquals(listOf("GET" to "/api/v1/facility/alarms/mine"), requests.map { it.first to it.second })
 
       val taken = api.takeOverFacilityAlarm("falm-1", FacilityAlarmTakeOverRequest(idempotencyKey = "k-take-1", note = "已到场"))

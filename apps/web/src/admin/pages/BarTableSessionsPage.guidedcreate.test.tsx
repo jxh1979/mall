@@ -67,4 +67,21 @@ describe("BarTableSessionsPage 引导式新建卡座", () => {
     expect(screen.queryByTestId("bar-new-table-submit")).toBeNull();
     expect(post.mock.calls.some((c) => c[0] === "/api/v1/bar/tables")).toBe(false);
   });
+
+  // 第十八批 W 段 205-R1：PGM:287「枚举取值……提示、报错……必须全部为中文，不得出现任何英文」；第十八批裁决 37 操作员原话与所选选项都叫「包厢」。
+  it("桌台类型叫「包厢」：下拉、名称提示与确认页都不出现英文 VIP 与「包坐」", async () => {
+    renderPage(makeApi());
+    await waitFor(() => expect(screen.getByTestId("bar-new-table-open")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("bar-new-table-open"));
+    await waitFor(() => expect((screen.getByTestId("bar-new-table-bar") as HTMLSelectElement).value).toBe("bar-main"));
+    const typeSelect = screen.getByTestId("bar-new-table-type") as HTMLSelectElement;
+    expect(Array.from(typeSelect.options).find((o) => o.value === "vip")?.textContent).toBe("包厢（同卡座流转）");
+    expect(screen.getByTestId("bar-new-table-name").getAttribute("placeholder")).toBe("如 包厢-01");
+    expect(screen.getByTestId("bar-new-table-guided").innerHTML).not.toMatch(/VIP|包坐/);
+    fireEvent.change(typeSelect, { target: { value: "vip" } });
+    fireEvent.change(screen.getByTestId("bar-new-table-name"), { target: { value: "包厢-01" } });
+    fireEvent.click(screen.getByTestId("bar-new-table-guided-next"));
+    await waitFor(() => expect(screen.getByTestId("bar-new-table-guided-summary").textContent).toContain("桌台类型包厢"));
+    expect(screen.getByTestId("bar-new-table-guided").innerHTML).not.toMatch(/VIP|包坐/);
+  });
 });

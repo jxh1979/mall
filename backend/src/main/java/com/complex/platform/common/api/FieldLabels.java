@@ -1,6 +1,6 @@
 package com.complex.platform.common.api;
 
-// 文件版本：V0.35
+// 文件版本：V0.36
 
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -154,6 +154,7 @@ public final class FieldLabels {
         p("verification_code", "验证码");
         p("role_id", "角色");
         p("capability_code", "能力编码");
+        p("capability_name", "能力名称");
         p("capabilities", "能力项");
         p("approver_permission_code", "审批权限");
         p("principal_user_id", "负责人");

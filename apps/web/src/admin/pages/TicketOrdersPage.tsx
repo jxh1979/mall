@@ -1,4 +1,4 @@
-// 文件版本：V0.05
+// 文件版本：V0.06
 import React from "react";
 import { TechDetails } from "../components/TechDetails";
 import { AdminDataState } from "../components/AdminDataState";
@@ -326,7 +326,8 @@ export function TicketOrdersPage({ api, setActionResult, setGlobalError, effecti
       setFormError(TEXT.noOrder);
       return;
     }
-    await runAction("ticket_order_issued", () => api.post(`/api/v1/ticketing/orders/${selectedOrder.id}/issue`, { operatorNote: TEXT.issueNote }));
+    // 199-R1（契约 TicketIssueRequest 必填 reason、不收 operator_note）：发固定出票原因。
+    await runAction("ticket_order_issued", () => api.post(`/api/v1/ticketing/orders/${selectedOrder.id}/issue`, { reason: TEXT.issueNote }));
   }
 
   async function previewVerification() {

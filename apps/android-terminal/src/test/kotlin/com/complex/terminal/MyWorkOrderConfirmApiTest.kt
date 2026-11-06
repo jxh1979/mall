@@ -1,6 +1,6 @@
 package com.complex.terminal
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import com.sun.net.httpserver.HttpServer
 import java.net.InetSocketAddress
@@ -32,6 +32,8 @@ class MyWorkOrderConfirmApiTest {
       val api = TerminalApiClient("http://127.0.0.1:${server.address.port}").apply { accessToken = "staff" }
       val mine = api.listMyWorkOrders()
       assertEquals(listOf("fwo-1", "fwo-2", "fwo-3"), mine.map { it.id })
+      // 第十八批 W 段第 192 条 192-R2（PGM:287）：物业工单状态显示中文。
+      assertEquals("待验收", facilityWorkOrderStatusZh(mine.first().status))
       assertEquals(listOf("fwo-2"), mine.filter { it.awaitsConfirmationBy("usr_me") }.map { it.id })
       assertEquals(listOf("fwo-1"), mine.filter { it.awaitsConfirmationBy("usr_x") }.map { it.id })
 

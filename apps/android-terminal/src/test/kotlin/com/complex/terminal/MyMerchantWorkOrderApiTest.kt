@@ -1,6 +1,6 @@
 package com.complex.terminal
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import com.sun.net.httpserver.HttpServer
 import java.net.InetSocketAddress
@@ -31,6 +31,8 @@ class MyMerchantWorkOrderApiTest {
       assertEquals("已处理待关闭", merchantWorkOrderStatusZh("resolved"))
       assertEquals("报修", merchantWorkOrderTypeZh("repair"))
       assertEquals("其他服务请求", merchantWorkOrderTypeZh("service"))
+      // 第十八批 W 段第 192 条 192-R2（PGM:287）：商户工单优先级显示中文。
+      assertEquals("高", workPriorityZh(mine.single().priority))
     } finally { server.stop(0) }
   }
 }

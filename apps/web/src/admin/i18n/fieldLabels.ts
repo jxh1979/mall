@@ -1,4 +1,4 @@
-// 文件版本：V0.22
+// 文件版本：V0.23
 // OBS-14-02 后台结果区字段中文名字典（PGM「全局原则 · 界面全中文（所有终端零英文）」）。
 // 键用后端 JSON 的蛇形写法；结果区查表时蛇形与驼峰同查（orderId / order_id 都命中 order_id）。
 // 与后端字段中文名表 FieldLabels.java（common.api 包）同键同名：前段按后端原样抄录，后端改名这里跟着改（门禁会比对）。
@@ -96,6 +96,7 @@ export const FIELD_LABELS: Record<string, string> = {
   verification_code: "验证码",
   role_id: "角色",
   capability_code: "能力编码",
+  capability_name: "能力名称",
   capabilities: "能力项",
   approver_permission_code: "审批权限",
   principal_user_id: "负责人",
@@ -3373,7 +3374,7 @@ export const KEY_VALUE_LABELS: Record<string, Record<string, string>> = {
   redeem_method: { in_store_staff: "店员核销", onsite_code: "场内扫码" },
   settlement_mode: { none: "不结算", internal_price: "内部结算价挂应付" },
   movement_type: { outbound: "出库", redeem_consume: "积分兑换消耗", gift_claim_consume: "礼物领取消耗" },
-  table_type: { card_seat: "卡座", bar_counter: "吧台位", vip: "贵宾包坐", loose_table: "散台" },
+  table_type: { card_seat: "卡座", bar_counter: "吧台位", vip: "包厢", loose_table: "散台" },
   // 第十八批 T 段第 157 条 157-R2（BSM:1105「已挂起待付款、已结清、取消审批中、已取消、待退款、坏账损耗处理中、已核销结案」）。
   suspension_status: { hanging_unpaid: "已挂起待付款", settled: "已结清", cancel_pending_approval: "取消审批中", cancelled: "已取消", pending_refund: "待退款", bad_debt_processing: "坏账损耗处理中", written_off_closed: "已核销结案" },
   // 第十八批 L 段 105-R1（ENUM:160「库房分类｜总库、酒吧库、吧台库存、消耗品库、礼品库、存酒区」）。
@@ -3390,6 +3391,20 @@ export const KEY_VALUE_LABELS: Record<string, Record<string, string>> = {
   // 第十八批 L 段 102-R3（第十八批裁决 26）：报修、其他服务请求的关单方式（同 MerchantWorkOrdersPage CLOSE_METHOD_LABELS）。
   close_method: { handler: "处理人完成即结束", staff_acceptance: "员工验收后关闭", merchant_confirm: "须商户确认" },
   currency: { CNY: "人民币" },
+  // 18W 复核修复（PGM:287）：应收应付台账「登记核销」结果区的收付方式与来源类型，与 FinanceArApLedgerPage 的 PAYMENT_METHODS、SOURCE_TYPE_LABELS 同名。
+  payment_method: { cash: "现金", bank_transfer: "银行转账", pos: "刷卡", other: "其他" },
+  source_type: {
+    termination_penalty: "退租违约金", deposit_refund: "退租押金退还", deposit: "押金",
+    contract_rent: "合同租金", contract_property_fee: "物业费", energy_fee: "能源费",
+    turnover_rent: "营业额抽成租金", dividend_payout: "持股分红发放", bar_bill: "酒吧账单",
+    dispatch_commission_transfer: "派驻提成月结拨付", bar_payroll_transfer: "酒吧报酬月结拨付", staff_payroll: "员工工资",
+    purchase_inbound: "采购入库", purchase_prepayment: "采购预付款", purchase_consignment: "寄售结算",
+    purchase_return_refund: "供应商退货退款", purchase_prepayment_refund: "采购未用预付款退款",
+    deposit_adjustment: "变更押金补退差额", compensation_fulfillment: "补偿新增履约结算", compensation_fulfillment_recovery: "补偿应付已付追收",
+    single_bar_service_fee: "单店门票综合服务费", ticket_distribution_recovery: "通票分账追收",
+    contract_parking_monthly: "车位月租", parking_fee: "停车费", parking_credit_cost: "停车抵免成本",
+    bar_shift_overage: "收银长款（营业外收入）", turnover_rent_reversal: "营业额抽成冲正",
+  },
 };
 
 // 终端码 → 中文名（PGM:745 受控的十一类终端）：终端开关矩阵与审计页「终端」列共用（第十八批 N 段第 122 条 122-R2）。

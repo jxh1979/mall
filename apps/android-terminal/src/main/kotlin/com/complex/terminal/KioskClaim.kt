@@ -1,6 +1,6 @@
 package com.complex.terminal
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 /**
  * 第十八批 M 段第 112 条 112-R2（BSM:985「扫码查看客人当前可领取的赠饮、礼物、积分兑换权益和领取状态。」；BSM:1948「……需要扫码后在一体机上
@@ -21,7 +21,7 @@ fun kioskEntitlementRequest(code: String, deviceRowId: String, pointId: String, 
     businessContext = listOfNotNull("scenario" to "kiosk_claim", staffId?.let { "staff_id" to it }).toMap(),
   )
 
-/** 票务权益类型（与客人端同词）。 */
+/** 票务权益类型（与客人端同词；第十八批 W 段第 192 条 192-R2 补后台模板可选的 amusement、bar，PGM:287）。 */
 fun entitlementTypeZh(type: String?): String = when (type) {
   "entry" -> "入园"
   "ride" -> "游乐项目"
@@ -29,5 +29,7 @@ fun entitlementTypeZh(type: String?): String = when (type) {
   "drink" -> "酒水"
   "admission" -> "入场资格"
   "dining" -> "餐饮"
+  "amusement" -> "游乐"
+  "bar" -> "酒吧"
   else -> type ?: "-"
 }

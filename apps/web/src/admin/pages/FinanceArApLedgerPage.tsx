@@ -1,4 +1,4 @@
-// 文件版本：V0.13
+// 文件版本：V0.14
 import React from "react";
 import { FinancePayrollPaymentPanel } from "./FinancePayrollPaymentPanel";
 import { FinanceRefundPanel } from "./FinanceRefundPanel";
@@ -19,6 +19,8 @@ import { MetricDetailLink, useMetricKpiValue } from "../components/MetricDetailE
 // 后端写权限码（与 FinanceController.requirePermission 对齐）
 const PAYMENT_PERMISSION = "finance.payment.register";
 const PAGE_SIZE = 10;
+// 第十八批 W 段 200-R1：收付方式闭集同后端 FinanceService.OFFLINE_PAYMENT_METHODS，前三项中文同 FinanceRefundPanel CHANNELS。
+const PAYMENT_METHODS: [string, string][] = [["cash", "现金"], ["bank_transfer", "银行转账"], ["pos", "刷卡"], ["other", "其他"]];
 
 // 排序指示符修复：共享 useSortedRows 的「↕」在当前 UI 字体下渲染成冒号状（表头看起来是「凭证:」）。
 // ponytail: 本页改用 ▲/▼ 且仅在已排序列显示（键盘可排序与 aria-sort 由 thProps 保证）；
@@ -60,6 +62,7 @@ export function FinanceArApLedgerPage({ api, setActionResult, setGlobalError, ef
   const [refundsOpen, setRefundsOpen] = React.useState(false);
   const [amount, setAmount] = React.useState("");
   const [reason, setReason] = React.useState("");
+  const [paymentMethod, setPaymentMethod] = React.useState("");
   const [formError, setFormError] = React.useState("");
   const [submitting, setSubmitting] = React.useState(false);
   const [exporting, setExporting] = React.useState(false);
@@ -119,6 +122,10 @@ export function FinanceArApLedgerPage({ api, setActionResult, setGlobalError, ef
       setFormError("核销或调整必须填写原因。");
       return false;
     }
+    if (!paymentMethod) {
+      setFormError("请选择收付方式。");
+      return false;
+    }
     setFormError("");
     return true;
   }
@@ -138,8 +145,9 @@ export function FinanceArApLedgerPage({ api, setActionResult, setGlobalError, ef
     setGlobalError(null);
     try {
       const result = await api.post(`/api/v1/finance/ar-ap-items/${selected.id}/payments`, {
-        amount: Math.round(numericAmount * 100),
-        reason,
+        amountCent: Math.round(numericAmount * 100),
+        paymentMethod,
+        operatorNote: reason,
       });
       setActionResult({ action: "ledger_payment", status: "partial", ledgerItemId: selected.id, result });
       ledger.reload();
@@ -204,6 +212,7 @@ export function FinanceArApLedgerPage({ api, setActionResult, setGlobalError, ef
       <AdminDataState loading={ledger.loading} error={ledger.error} empty={empty} onRetry={ledger.reload}>
         <div className="admin-form-row">
           <label>核销金额（元）<input data-testid="finance-payment-amount" type="number" min={0} step="0.01" value={amount} onChange={(event) => setAmount(event.target.value)} placeholder="如 100.00" /></label>
+          <label>收付方式<select data-testid="finance-payment-method" value={paymentMethod} onChange={(event) => setPaymentMethod(event.target.value)}><option value="">请选择</option>{PAYMENT_METHODS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
           <label>核销/调整原因<input data-testid="finance-payment-reason" value={reason} onChange={(event) => setReason(event.target.value)} placeholder="必填，留痕用" /></label>
           <HighRiskConfirm
             label="登记核销"

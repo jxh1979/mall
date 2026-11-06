@@ -1,4 +1,4 @@
-// 文件版本：V0.05
+// 文件版本：V0.06
 import { expect, test } from "@playwright/test";
 import { installMockApi } from "./support/mock-api";
 
@@ -137,6 +137,8 @@ test.describe("full admin MVP acceptance", () => {
     await expect(page.getByTestId("finance-ledger-error")).toContainText("原因");
 
     await page.getByTestId("finance-payment-reason").fill("客户部分付款");
+    // 第十八批 W 段 200-R1：登记核销须选收付方式（契约 ArApPaymentRequest 必填 payment_method）。
+    await page.getByTestId("finance-payment-method").selectOption("bank_transfer");
     await page.getByTestId("finance-payment-submit").click();
     await expect(page.getByTestId("admin-action-result")).toContainText("状态：部分收付");
     // 导出后端已落地（FinanceController.exportArApItems / OpenAPI finance_ar_ap.exported）：点击后真导出并回显 exported 快照，不再是“接口未就绪”占位。

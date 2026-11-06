@@ -1,6 +1,6 @@
 package com.complex.terminal
 
-// 文件版本：V0.22
+// 文件版本：V0.23
 
 import android.app.Activity
 import android.content.Intent
@@ -270,7 +270,7 @@ class MainActivity : Activity() {
     val password = editText("密码").apply {
       inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
     }
-    val status = statusText("请使用员工账号登录\nAPI: ${BuildConfig.COMPLEX_API_BASE_URL}")
+    val status = statusText("请使用员工账号登录")
 
     val loginButton = button("登录") {
       val u = username.text.toString().trim()
@@ -310,7 +310,7 @@ class MainActivity : Activity() {
       setText(workPhonePrefs.getString("device_id", ""))
     }
     val spaceId = editText("绑定空间（点位）")
-    val staffId = editText("持有员工档案编号（领用即绑定，U07-001）")
+    val staffId = editText("持有员工档案编号（领用即绑定）")
     val status = statusText("登录账号：${store.session?.username ?: "-"}\n由设备管理员填写已登记的设备编号与领用员工的档案编号；普通员工无需重复配置")
 
     val bindButton = button("绑定设备") {
@@ -387,7 +387,7 @@ class MainActivity : Activity() {
       entry("amusement_maintenance", "游乐检修提交 / 主管确认") { showMaintenance() },
       entry("staff_device", "员工设备凭证") { showStaffDevice() },
       entry("ticket_reverse", "票务核销冲正") { showReverse() },
-      declared?.let { statusText("—— 员工自有手机(BYOD 一期) ——") },
+      declared?.let { statusText("—— 员工自有手机 ——") },
       entry("inbox", "待办与消息中心") { showInbox() },
       entry("notices", "公司公告") { showStaffNotices() },
       entry("my_work_orders", "我的工单") { showMyWorkOrders() },
@@ -425,7 +425,7 @@ class MainActivity : Activity() {
     return buildString {
       append("员工：").append(s?.username ?: "未登录").append('\n')
       append("设备：").append(b?.deviceCode ?: "未绑定")
-      if (b?.status != null) append("（").append(b.status).append("）")
+      if (b?.status != null) append("（").append(deviceStatusZh(b.status)).append("）")
     }
   }
 
@@ -607,7 +607,7 @@ class MainActivity : Activity() {
               append(p.name ?: "券")
               p.goodsQuantity?.let { append(" × ").append(it).append(" 件") }
               append("\n状态：").append(voucherStatusZh(p.status))
-              p.expiresAt?.let { append("\n有效期至：").append(it) }
+              p.expiresAt?.let { append("\n有效期至：").append(localTimeZh(it)) }
               append('\n').append(p.blockReason?.let { "不可${verb}：${voucherBlockReasonZh(it)}" }
                 ?: p.goodsQuantity?.let { "可${verb}：须逐件扫 $it 个物品码" } ?: "可${verb}")
             }
@@ -626,8 +626,8 @@ class MainActivity : Activity() {
               append(entitlementTypeZh(e?.entitlementType))
               if (e != null) {
                 append("\n剩余次数：").append(e.totalTimes - e.usedTimes).append("（共 ").append(e.totalTimes).append(" 次）")
-                e.validTo?.let { append("\n有效期至：").append(it) }
-                append("\n状态：").append(statusZh(e.status))
+                e.validTo?.let { append("\n有效期至：").append(localTimeZh(it)) }
+                append("\n状态：").append(entitlementStatusZh(e.status))
               }
               append('\n').append(if (r.allowed) "可领取" else "不可领取")
             }
@@ -821,8 +821,10 @@ class MainActivity : Activity() {
     val tables = rowsContainer()
     var rows: List<BarTableAvailabilityRow> = emptyList()
     var picked: BarTableAvailabilityRow? = null
-    val time = editText("到店时间（如 2026-11-03T20:00:00+08:00）")
-    val latest = editText("最晚到店时间（如 2026-11-03T22:00:00+08:00）")
+    val date = editText("到店日期（如 2026-11-05）")
+    val time = editText("到店时刻（如 20:30）")
+    val latestDate = editText("最晚到店日期（如 2026-11-05）")
+    val latest = editText("最晚到店时刻（如 22:00）")
     val guests = editText("人数").apply { inputType = InputType.TYPE_CLASS_NUMBER }
     val phone = editText("客人手机号").apply { inputType = InputType.TYPE_CLASS_PHONE }
     val remark = editText("订台备注（选填）")
@@ -830,7 +832,7 @@ class MainActivity : Activity() {
       picked = null
       val list = rows.filter { it.barId == barId }
       fillSelectableRows(tables, list.map { r ->
-        "${r.tableCode ?: r.id} ${r.tableName ?: ""} ${tableTypeZh(r.tableType)}　可坐 ${r.capacity ?: 0} 人　低消 ¥${yuan(r.minConsumptionCent)}" +
+        "${r.tableCode ?: r.id} ${r.tableName ?: ""} ${barTableTypeZh(r.tableType)}　可坐 ${r.capacity ?: 0} 人　低消 ¥${yuan(r.minConsumptionCent)}" +
           (if (r.reserved == true) "　已订" else "") to { picked = r; status.text = "已选台位：${r.tableCode ?: r.id}" }
       }, "该酒吧暂无台位")
       list.forEachIndexed { i, r -> if (r.reserved == true) tables.getChildAt(i)?.apply { isEnabled = false; alpha = 0.4f } }
@@ -838,12 +840,12 @@ class MainActivity : Activity() {
     }
     val submit = button("提交订台") {
       val table = picked ?: run { status.text = "请先选酒吧和台位"; return@button }
-      val at = time.text.toString().trim()
-      val la = latest.text.toString().trim()
+      val at = localInstantOf(date.text.toString(), time.text.toString())
+      val la = localInstantOf(latestDate.text.toString(), latest.text.toString())
       val g = guests.text.toString().trim().toIntOrNull()
       val ph = phone.text.toString().trim()
-      if (at.isEmpty() || la.isEmpty() || ph.isEmpty() || g == null || g <= 0) {
-        status.text = "请填全到店时间、最晚到店时间、人数和客人手机号"
+      if (at == null || la == null || ph.isEmpty() || g == null || g <= 0) {
+        status.text = "请填全到店日期与时刻、最晚到店日期与时刻（如 2026-11-05 和 20:30）、人数和客人手机号"
         return@button
       }
       status.text = "正在提交订台…"
@@ -858,7 +860,7 @@ class MainActivity : Activity() {
       )
     }
     setContentView(screen(title = "订台", children = listOf(status, fieldLabel("选择酒吧"), bars, fieldLabel("选择台位"), tables,
-      time, latest, guests, phone, remark, submit, backButton())))
+      date, time, latestDate, latest, guests, phone, remark, submit, backButton())))
     runBackground(
       action = { api.listBarTableAvailability() },
       onSuccess = { all ->
@@ -1134,7 +1136,7 @@ class MainActivity : Activity() {
   /** 120-R2：订单一行——订单号、张数、金额、掩码手机号、支付状态、出票状态（中文）。 */
   private fun kioskOrderText(row: TicketOrderRow): String {
     val pay = when (row.payStatus) { "unpaid" -> "待支付"; "paid" -> "已支付"; else -> row.payStatus ?: "-" }
-    val issue = when (row.issueStatus) { "issued" -> "已出票"; "not_issued" -> "未出票"; else -> row.issueStatus ?: "-" }
+    val issue = when (row.issueStatus) { "issued" -> "已出票"; "not_issued" -> "未出票"; "issuing" -> "出票中"; else -> row.issueStatus ?: "-" }
     return "订单 ${row.orderNo ?: row.id}　${row.quantity} 张　¥${yuan(row.amountCent)}　${row.buyerPhone ?: ""}\n" +
       "支付：$pay　出票：$issue${if (row.status == "cancelled") "（已取消）" else ""}"
   }
@@ -1188,7 +1190,7 @@ class MainActivity : Activity() {
     val orderButton = button("提交点酒下单") {
       val bar = barId.text.toString().trim()
       val sku = skuId.text.toString().trim()
-      if (bar.isEmpty() || sku.isEmpty()) { status.text = "请填写酒吧与酒水 SKU"; return@button }
+      if (bar.isEmpty() || sku.isEmpty()) { status.text = "请填写酒吧与酒水编号"; return@button }
       val qty = quantity.text.toString().trim().ifEmpty { "1" }
       status.text = "正在下单…"
       runBackground(
@@ -1315,7 +1317,7 @@ class MainActivity : Activity() {
       onSuccess = { rows ->
         status.text = "选一条检修记录确认恢复营业"
         fillSelectableRows(records, rows.map { r ->
-          "项目 ${r.projectId ?: "-"}　设备 ${r.deviceId ?: "-"}\n检修人员 ${r.engineerName ?: "-"}　${r.maintenanceAt?.let { traceTime(it) } ?: ""}" to {
+          "项目 ${r.projectId ?: "-"}　设备 ${r.deviceId ?: "-"}\n检修人员 ${r.engineerName ?: "-"}　${r.maintenanceAt?.let { localTimeZh(it) } ?: ""}" to {
             confirmThen(
               title = "主管确认恢复营业",
               message = "确认后设施立即恢复营业，责任落在确认主管，不可撤销。\n请确认检修已完成且设施安全。",
@@ -1342,7 +1344,7 @@ class MainActivity : Activity() {
   private fun showStaffDevice() {
     val profileId = editText("员工档案")
     val status = statusText(
-      "设备公钥/指纹哈希取自 Android Keystore（EC P-256，私钥不可导出），首次绑定自动生成。",
+      "设备公钥与指纹由本机安全存储生成，私钥不可导出，首次绑定自动生成。",
     )
 
     val bindButton = button("绑定设备凭证") {
@@ -1464,7 +1466,7 @@ class MainActivity : Activity() {
         onSuccess = { orders ->
           status.text = if (orders.isEmpty()) "没有待出品的酒吧订单含此物品，不能出库" else "溯源码 $code 没有进行中的交接单，请选出库给哪张订单"
           orders.forEach { order ->
-            val label = "出库给：${order.tableName ?: "—"} ${order.createdAt?.let { traceTime(it) } ?: ""} ${order.productName ?: ""}×${order.quantity}"
+            val label = "出库给：${order.tableName ?: "—"} ${order.createdAt?.let { localTimeZh(it) } ?: ""} ${order.productName ?: ""}×${order.quantity}"
             actions.addView(button(label) {
               val device = api.deviceId
               if (device == null) { status.text = "请先绑定设备"; return@button }
@@ -1499,10 +1501,10 @@ class MainActivity : Activity() {
         val step = chain.steps.firstOrNull { it.segment == segment }
         append("\n\n").append(name).append("：").append(step?.stepStatus?.let { TRACE_STEP_STATUS[it] } ?: "—")
         step?.operatorUserId?.let { append("　扫码人 ").append(it) }
-        step?.scanAt?.let { append("　").append(traceTime(it)) }
+        step?.scanAt?.let { append("　").append(localTimeZh(it)) }
         chain.backfills.filter { it.targetPart == segment }.forEach { row ->
           append("\n　人工补录·").append(row.status?.let { TRACE_BACKFILL_STATUS[it] } ?: "—")
-          row.occurredAt?.let { append("　原时点 ").append(traceTime(it)) }
+          row.occurredAt?.let { append("　原时点 ").append(localTimeZh(it)) }
           row.responsibleStaffId?.let { append("　责任人 ").append(it) }
         }
       }
@@ -1566,10 +1568,7 @@ class MainActivity : Activity() {
       }, TRACE_EVIDENCE_REQUEST)
     }
     val submit = button("提交补录（进主管复核）") {
-      val occurred = runCatching {
-        java.time.LocalDateTime.parse("${date.text.toString().trim()}T${time.text.toString().trim()}")
-          .atZone(java.time.ZoneId.systemDefault()).toInstant().toString()
-      }.getOrNull()
+      val occurred = localInstantOf(date.text.toString(), time.text.toString())
       val why = reason.text.toString().trim()
       val who = responsible.text.toString().trim()
       if (occurred == null) { status.text = "请填写原时点日期和时刻（如 2026-10-29 和 20:30）"; return@button }
@@ -1601,11 +1600,6 @@ class MainActivity : Activity() {
       ?: ""
     return ext.takeIf { value -> value.all { it in 'a'..'z' || it in '0'..'9' } } ?: ""
   }
-
-  private fun traceTime(iso: String): String = runCatching {
-    java.time.Instant.parse(iso).atZone(java.time.ZoneId.systemDefault())
-      .format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm"))
-  }.getOrDefault(iso)
 
   // ---------------------------------------------------------------------------
   // 通用辅助
@@ -1659,7 +1653,7 @@ class MainActivity : Activity() {
     is javax.net.ssl.SSLException -> "无法安全连接到服务器，请检查网络或证书配置"
     is java.net.SocketTimeoutException -> "连接超时，请稍后重试"
     is java.io.IOException -> "无法连接到服务器，请检查网络后重试"
-    is IllegalStateException -> error.message?.let {
+    is IllegalStateException, is IllegalArgumentException -> error.message?.let {
       when {
         it.contains("offline") -> "网络离线，请检查连接后重试"
         it.contains("session") -> "请先登录"
@@ -1667,7 +1661,7 @@ class MainActivity : Activity() {
         else -> it
       }
     } ?: "操作失败"
-    else -> error.message ?: error.javaClass.simpleName
+    else -> "操作失败"
     }
   }
 
@@ -1744,11 +1738,11 @@ class MainActivity : Activity() {
             list,
             orders.map { o ->
               val pending = o.awaitsConfirmationBy(me)
-              "${if (pending) "[待我提单确认] " else ""}${o.code ?: o.id} [${o.status ?: "-"}] ${o.title ?: ""}\n优先级 ${o.priority ?: "-"} / 处理时限 ${o.handleDueAt ?: "-"}" to {
+              "${if (pending) "[待我提单确认] " else ""}${o.code ?: o.id} [${facilityWorkOrderStatusZh(o.status)}] ${o.title ?: ""}\n优先级 ${workPriorityZh(o.priority)} / 处理时限 ${localTimeZh(o.handleDueAt)}" to {
                 if (pending) { orderId.setText(o.id ?: ""); status.text = "已选待我提单确认：${o.code ?: o.id}" }
               }
             } + merchantOrders.map { m ->
-              "[商户工单] ${m.title ?: m.id} [${merchantWorkOrderStatusZh(m.status)}]\n${merchantWorkOrderTypeZh(m.workOrderType)}/${m.priority ?: "-"} / 处理时限 ${m.dueAt ?: "-"}" to {}
+              "[商户工单] ${m.title ?: m.id} [${merchantWorkOrderStatusZh(m.status)}]\n${merchantWorkOrderTypeZh(m.workOrderType)}/${workPriorityZh(m.priority)} / 处理时限 ${localTimeZh(m.dueAt)}" to {}
             },
             emptyText = "暂无流转到你的工单",
           )
@@ -1797,7 +1791,7 @@ class MainActivity : Activity() {
             list,
             alarms.map { a ->
               val st = if (a.status == "awaiting_takeover") "待明确接手" else "已明确接手"
-              "[$st] 设备 ${a.equipmentId ?: "-"} 优先级 ${a.priority ?: "-"}\n响应时限 ${a.responseDueAt ?: "-"}" +
+              "[$st] 设备 ${a.equipmentId ?: "-"} 优先级 ${workPriorityZh(a.priority)}\n响应时限 ${localTimeZh(a.responseDueAt)}" +
                 (if (a.uncovered == true) "（无已确认处置规则，待专业处置人员判定）" else "") to {
                 alarmId.setText(a.id ?: "")
                 status.text = "已选告警：${a.id}"
@@ -1830,8 +1824,10 @@ class MainActivity : Activity() {
     val list = rowsContainer()
     val barId = editText("酒吧(点上方桌位自动回填)")
     val tableId = editText("桌位(点上方空位自动回填)")
-    val time = editText("到店时间(如 2026-07-02T20:00:00Z)")
-    val latest = editText("最晚到店时间(如 2026-07-02T22:00:00Z)")
+    val date = editText("到店日期（如 2026-11-05）")
+    val time = editText("到店时刻（如 20:30）")
+    val latestDate = editText("最晚到店日期（如 2026-11-05）")
+    val latest = editText("最晚到店时刻（如 22:00）")
     val phone = editText("客人手机号(必填,核对会员是否受限)").apply { inputType = InputType.TYPE_CLASS_PHONE }
     val guests = editText("人数").apply { inputType = InputType.TYPE_CLASS_NUMBER }
     runBackground(
@@ -1842,7 +1838,7 @@ class MainActivity : Activity() {
           list,
           rows.map { r ->
             "${if (r.reserved == true) "[已订]" else "[空]"} ${r.tableCode ?: r.id} ${r.tableName ?: ""} " +
-              "${tableTypeZh(r.tableType)} ${r.capacity ?: 0}人 低消 ¥${"%.2f".format((r.minConsumptionCent ?: 0) / 100.0)}" to {
+              "${barTableTypeZh(r.tableType)} ${r.capacity ?: 0}人 低消 ¥${"%.2f".format((r.minConsumptionCent ?: 0) / 100.0)}" to {
               tableId.setText(r.id ?: "")
               r.barId?.let { barId.setText(it) }
               status.text = "已选桌位：${r.tableCode ?: r.id}"
@@ -1856,12 +1852,12 @@ class MainActivity : Activity() {
     val reserveButton = button("帮客人订位(免定金)") {
       val b = barId.text.toString().trim()
       val t = tableId.text.toString().trim()
-      val at = time.text.toString().trim()
-      val la = latest.text.toString().trim()
+      val at = localInstantOf(date.text.toString(), time.text.toString())
+      val la = localInstantOf(latestDate.text.toString(), latest.text.toString())
       val ph = phone.text.toString().trim()
       val g = guests.text.toString().trim().toIntOrNull()
-      if (b.isEmpty() || t.isEmpty() || at.isEmpty() || la.isEmpty() || ph.isEmpty() || g == null || g <= 0) {
-        status.text = "请填全 酒吧/桌位/时间/最晚到店时间/客人手机号/人数"
+      if (b.isEmpty() || t.isEmpty() || at == null || la == null || ph.isEmpty() || g == null || g <= 0) {
+        status.text = "请填全 酒吧/桌位/到店日期与时刻/最晚到店日期与时刻/客人手机号/人数"
         return@button
       }
       runBackground(
@@ -1882,7 +1878,7 @@ class MainActivity : Activity() {
     }
     setContentView(screen(
       title = "酒吧空位 / 帮客订位",
-      children = listOf(status, list, barId, tableId, time, latest, phone, guests, reserveButton,
+      children = listOf(status, list, barId, tableId, date, time, latestDate, latest, phone, guests, reserveButton,
         backButton()),
       sensitive = true,
     ))
@@ -1897,7 +1893,7 @@ class MainActivity : Activity() {
       onSuccess = { shifts ->
         status.text = "已发布班次 ${shifts.size} 个"
         list.text = if (shifts.isEmpty()) "暂无排班" else shifts.joinToString("\n\n") { s ->
-          "${s.workDate}  ${s.startAt ?: "-"} ~ ${s.endAt ?: "-"}\n点位: " +
+          "${s.workDate}  ${localTimeZh(s.startAt)} ~ ${localTimeZh(s.endAt)}\n点位: " +
             (s.pointSpaceIds?.takeIf { it.isNotEmpty() }?.joinToString("、") ?: "未指定") +
             (s.nightDutyProjectId?.let { "\n夜班值班职责: 项目 $it" } ?: "") +
             (s.note?.let { "\n备注: $it" } ?: "")
@@ -1918,7 +1914,7 @@ class MainActivity : Activity() {
     runBackground(action = { api.listMyShifts() }, onSuccess = {
       shifts = it
       shiftPicker.adapter = android.widget.ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item,
-        it.map { row -> "${row.startAt} 至 ${row.endAt} ${row.note ?: ""}" })
+        it.map { row -> "${localTimeZh(row.startAt)} 至 ${localTimeZh(row.endAt)} ${row.note ?: ""}" })
     }, onError = { status.text = "班次读取失败：${friendly(it)}" })
     val calibrate = button("为所选班次校准时间") {
       val shiftId = shifts.getOrNull(shiftPicker.selectedItemPosition)?.id
@@ -1946,7 +1942,7 @@ class MainActivity : Activity() {
       scan, button("重试同步待传事件") { flushWorkPhoneReceipts(status) },
       button("查看服务器领取事件") {
         runBackground(action = { api.attendanceReceiptEvents() }, onSuccess = { rows ->
-          status.text = rows.joinToString("\n") { row -> "${row.actualAt ?: row.observedAt ?: "-"} · ${if(row.status=="accepted") "已核实" else if(row.status=="rejected") "未采纳" else "待复核"}" }
+          status.text = rows.joinToString("\n") { row -> "${localTimeZh(row.actualAt ?: row.observedAt)} · ${if(row.status=="accepted") "已核实" else if(row.status=="rejected") "未采纳" else "待复核"}" }
         }, onError = { status.text = friendly(it) })
       },
       button("本机待传事件与主管代补报") { showPendingReceipts() },
@@ -1961,7 +1957,7 @@ class MainActivity : Activity() {
     fun reload() {
       rows = ChargingReceiptBridge.pending(this)
       picker.adapter = android.widget.ArrayAdapter(this,android.R.layout.simple_spinner_dropdown_item,
-        rows.map { "${it.eventId} · 原员工${it.holderUserId ?: "待核"} · ${it.observedAt}" })
+        rows.map { "${it.eventId} · 原员工${it.holderUserId ?: "待核"} · ${localTimeZh(it.observedAt)}" })
     }
     reload()
     val originalEmployee = editText("原领用员工编号（原事件无编号时须核对）")
@@ -1974,7 +1970,7 @@ class MainActivity : Activity() {
       runBackground(action = { api.historicalWorkPhoneContexts(employeeId) },onSuccess = { found ->
         historical = found
         historicalPicker.adapter = android.widget.ArrayAdapter(this,android.R.layout.simple_spinner_dropdown_item,
-          listOf("请选择拟关联的原领用记录") + found.map { "${it.id} · ${it.userId} · ${it.bindingAt} 至 ${it.closedAt ?: "尚未归还"}" })
+          listOf("请选择拟关联的原领用记录") + found.map { "${it.id} · ${it.userId} · ${localTimeZh(it.bindingAt)} 至 ${it.closedAt?.let { t -> localTimeZh(t) } ?: "尚未归还"}" })
         status.text = if (found.isEmpty()) "本机没有该员工可关联的真实领用记录，原事件继续保留" else "仅为主管提出的关联，须补证并经真实上级核实"
       },onError = { historical = emptyList(); status.text = "领用历史查询失败：${friendly(it)}" })
     }
@@ -2003,7 +1999,8 @@ class MainActivity : Activity() {
     val picker = android.widget.Spinner(this)
     var events = emptyList<AttendanceReceiptEvent>()
     val shift = editText("原员工已发布班次编号")
-    val actual = editText("核实的实际领取时间（如2026-10-18T20:00:00+08:00）")
+    val actualDate = editText("核实的实际领取日期（如 2026-11-05）")
+    val actual = editText("核实的实际领取时刻（如 20:30）")
     val reason = editText("补证原因")
     val evidence = editText("实际交接核实事实（原领用登记、交接人员及核对结论）")
     var requestKey = java.util.UUID.randomUUID().toString()
@@ -2021,7 +2018,7 @@ class MainActivity : Activity() {
         status.text = if (events.getOrNull(position)?.reason == "SUPERVISOR_CONTEXT_RECOVERY_REVIEW_REQUIRED")
           "原事件未记录领用编号；员工与领用关联由主管补证提出，仍须真实上一级同时核实关联和时间，尚未计入出勤。"
           else "请核对原领取、领用与实际时间证据，批准前保持待核。"
-        actual.setText(""); reason.setText(""); evidence.setText("")
+        actualDate.setText(""); actual.setText(""); reason.setText(""); evidence.setText("")
         requestKey = java.util.UUID.randomUUID().toString()
       }
       override fun onNothingSelected(parent: android.widget.AdapterView<*>?) {}
@@ -2032,8 +2029,8 @@ class MainActivity : Activity() {
       if (shift.text.isBlank() || actual.text.isBlank() || reason.text.isBlank() || evidence.text.isBlank()) {
         status.text = "请填写原班次、实际时间、原因和交接核实事实"; return@button
       }
-      val actualTime = try { java.time.OffsetDateTime.parse(actual.text.toString().trim()).toInstant().toString() }
-        catch (error: Exception) { status.text = "实际时间须包含日期、时间及时区"; return@button }
+      val actualTime = localInstantOf(actualDate.text.toString(), actual.text.toString())
+        ?: run { status.text = "请填写实际领取日期和时刻（如 2026-11-05 和 20:30）"; return@button }
       runBackground(action = { api.submitAttendanceReceiptReview(event.id, AttendanceReceiptReviewRequest(requestKey,
         shift.text.toString().trim(), actualTime, reason.text.toString().trim(), evidence.text.toString().trim())) },
         onSuccess = { result -> status.text = "已提交，等待经办主管的上一级审批。审批单：${result.reviewId}" },
@@ -2044,12 +2041,12 @@ class MainActivity : Activity() {
       if (event == null) { status.text = "请先查询并选择原事件"; return@button }
       runBackground(action = { api.attendanceReceiptReviewHistory(event.id) }, onSuccess = { rows ->
         status.text = if (rows.isEmpty()) "暂无核时申请" else rows.joinToString("\n\n") { row ->
-          "审批单 ${row.reviewId} · ${when(row.status) { "approved" -> "已批准并入考勤"; "rejected" -> "已驳回，原时间仍待核实"; else -> "待上一级审批" }}\n拟确认 ${row.actualAt}；班次 ${row.shiftId}\n核实事实：${row.handoverEvidence}"
+          "审批单 ${row.reviewId} · ${when(row.status) { "approved" -> "已批准并入考勤"; "rejected" -> "已驳回，原时间仍待核实"; else -> "待上一级审批" }}\n拟确认 ${localTimeZh(row.actualAt)}；班次 ${row.shiftId}\n核实事实：${row.handoverEvidence}"
         }
       }, onError = { status.text = "读取失败：${friendly(it)}" })
     }
     setContentView(screen(title = "领取实际时间核实", children = listOf(status, employee, load, picker,
-      shift, actual, reason, evidence, submit, history, backButton())))
+      shift, actualDate, actual, reason, evidence, submit, history, backButton())))
   }
 
   private fun showWorkPhoneReturn() {
@@ -2083,8 +2080,10 @@ class MainActivity : Activity() {
   private fun showShiftManage() {
     val userId = editText("员工")
     val workDate = editText("日期(2026-07-03)")
-    val startAt = editText("开始(2026-07-03T10:00:00Z)")
-    val endAt = editText("结束(2026-07-03T18:30:00Z)")
+    val startDate = editText("开始日期（如 2026-11-05）")
+    val startAt = editText("开始时刻（如 10:00）")
+    val endDate = editText("结束日期（如 2026-11-05）")
+    val endAt = editText("结束时刻（如 18:30）")
     val points = editText("点位,逗号分隔(可空)")
     val note = editText("备注(可空)")
     val nightDuty = android.widget.CheckBox(this).apply { text = "承担所属项目本日夜班值班经理职责" }
@@ -2092,10 +2091,10 @@ class MainActivity : Activity() {
     val submitButton = button("提交排班审批") {
       val u = userId.text.toString().trim()
       val d = workDate.text.toString().trim()
-      val st = startAt.text.toString().trim()
-      val en = endAt.text.toString().trim()
-      if (u.isEmpty() || d.isEmpty() || st.isEmpty() || en.isEmpty()) {
-        status.text = "请填全 员工/日期/起止时间"
+      val st = localInstantOf(startDate.text.toString(), startAt.text.toString())
+      val en = localInstantOf(endDate.text.toString(), endAt.text.toString())
+      if (u.isEmpty() || d.isEmpty() || st == null || en == null) {
+        status.text = "请填全 员工/日期/起止日期与时刻（如 2026-11-05 和 10:00）"
         return@button
       }
       runBackground(
@@ -2115,7 +2114,7 @@ class MainActivity : Activity() {
     }
     setContentView(screen(
       title = "主管排班",
-      children = listOf(status, userId, workDate, startAt, endAt, points, nightDuty, note, submitButton,
+      children = listOf(status, userId, workDate, startDate, startAt, endDate, endAt, points, nightDuty, note, submitButton,
         backButton()),
     ))
   }
@@ -2216,7 +2215,7 @@ class MainActivity : Activity() {
           status.text = "$m 考勤月视图(${days.size} 天)"
           list.text = days.joinToString("\n") { d ->
             val states = d.dayStatus?.joinToString("+") { labels[it] ?: it } ?: "-"
-            val shift = if (d.shiftStartAt != null) "  班次 ${d.shiftStartAt} ~ ${d.shiftEndAt}" else ""
+            val shift = if (d.shiftStartAt != null) "  班次 ${localTimeZh(d.shiftStartAt)} ~ ${localTimeZh(d.shiftEndAt)}" else ""
             "${d.date}  $states$shift"
           }
         },
@@ -2231,7 +2230,7 @@ class MainActivity : Activity() {
   }
 
   private fun showLeave() {
-    val typeLabel = linkedMapOf("personal" to "事假", "sick" to "病假", "comp" to "调休", "annual" to "年假")
+    val typeLabel = LEAVE_TYPE_LABELS
     val typeValues = listOf("") + typeLabel.keys                 // [0]=占位首项(空 token),提交前拦截
     val type = enumSpinner(listOf("请选择请假类型") + typeLabel.values)
     val start = editText("开始日期(2026-07-05)")
@@ -2250,7 +2249,7 @@ class MainActivity : Activity() {
             list,
             rows.map { r ->
               val st = leaveStatusLabel(r.status)
-              val text = "${r.startDate}~${r.endDate} ${r.leaveType?.let { typeLabel[it] ?: it } ?: "-"} [$st]" +
+              val text = "${r.startDate}~${r.endDate} ${leaveTypeZh(r.leaveType)} [$st]" +
                 (r.reviewNote?.let { " 批注:$it" } ?: "") + (r.revokeRequestReason?.let { " 销假理由:$it" } ?: "")
               text to {
                 if (r.status == "approved") {
@@ -2320,7 +2319,7 @@ class MainActivity : Activity() {
     runBackground(
       action = { api.listServiceCatalog() },
       onSuccess = { rows ->
-        catalog.text = "服务目录 ${rows.size} 项(点一项自动回填 id)"
+        catalog.text = "服务目录 ${rows.size} 项(点一项自动回填)"
         fillSelectableRows(
           catalogList,
           rows.map { r ->
@@ -2388,7 +2387,7 @@ class MainActivity : Activity() {
               val bitmap = com.journeyapps.barcodescanner.BarcodeEncoder()
                 .encodeBitmap(qr, com.google.zxing.BarcodeFormat.QR_CODE, 600, 600)
               qrImage.setImageBitmap(bitmap)
-            }.onFailure { status.append("\n二维码渲染失败:${it.message}") }
+            }.onFailure { status.append("\n二维码渲染失败") }
           }
         },
         onError = { status.text = "下单失败：${friendly(it)}" },
@@ -2408,7 +2407,6 @@ class MainActivity : Activity() {
     val status = statusText("正在拉取我的服务任务…")
     val list = rowsContainer()
     val orderId = editText("要操作的服务单(点上方任务自动回填)")
-    val labels = mapOf("pending_accept" to "待接单", "accepted" to "已接单", "completed" to "已完成", "cancelled" to "已取消")
     val refresh = {
       runBackground(
         action = {
@@ -2426,7 +2424,7 @@ class MainActivity : Activity() {
             list,
             orders.map { o ->
               "${o.itemName} ¥${"%.2f".format((o.priceCent ?: 0) / 100.0)} 桌台 ${o.tableId ?: "-"} " +
-                "[${labels[o.status] ?: o.status}]" + (o.customerNote?.let { "\n备注: $it" } ?: "") to {
+                "[${serviceOrderStatusZh(o.status)}]" + (o.customerNote?.let { "\n备注: $it" } ?: "") to {
                 orderId.setText(o.id ?: "")
               }
             },
@@ -2472,7 +2470,7 @@ class MainActivity : Activity() {
     val merchant = editText("自营商户编号（公司总部员工留空）")
     val company = android.widget.Spinner(this)
     var companies: List<StaffRegistrationCompany> = emptyList()
-    val status = statusText("选择所属公司并提交资料；本机将生成并随申请绑定该手机专属的设备标识（Keystore 公钥/指纹）。公司审批通过后，用本机登录。")
+    val status = statusText("选择所属公司并提交资料；本机将生成并随申请绑定该手机专属的设备标识（设备公钥/指纹）。公司审批通过后，用本机登录。")
     val requestKey = java.util.UUID.randomUUID().toString()
     val submit = button("提交本人注册申请") {
       val selected = companies.getOrNull(company.selectedItemPosition)
@@ -2877,8 +2875,8 @@ class MainActivity : Activity() {
 
   /** 支付渠道单选（微信/支付宝，默认微信）：返回控件与取值函数（按桌结账屏用）。 */
   private fun channelPicker(): Pair<android.widget.RadioGroup, () -> String> {
-    val wechatRadio = android.widget.RadioButton(this).apply { text = "微信 wechat"; id = View.generateViewId() }
-    val alipayRadio = android.widget.RadioButton(this).apply { text = "支付宝 alipay"; id = View.generateViewId() }
+    val wechatRadio = android.widget.RadioButton(this).apply { text = "微信"; id = View.generateViewId() }
+    val alipayRadio = android.widget.RadioButton(this).apply { text = "支付宝"; id = View.generateViewId() }
     val group = android.widget.RadioGroup(this).apply {
       orientation = LinearLayout.HORIZONTAL; addView(wechatRadio); addView(alipayRadio); check(wechatRadio.id)
     }
@@ -2889,7 +2887,7 @@ class MainActivity : Activity() {
   private fun settleAction(status: TextView, bill: BarBillRecord, ch: String, title: String, messageTail: String) {
     confirmThen(
       title = title,
-      message = "将按 ¥${"%.2f".format(bill.remainingDueCent / 100.0)}（渠道 $ch）$messageTail",
+      message = "将按 ¥${"%.2f".format(bill.remainingDueCent / 100.0)}（渠道 ${payChannelZh(ch)}）$messageTail",
     ) {
       status.text = "正在结算…"
       runBackground(
@@ -3103,12 +3101,6 @@ class MainActivity : Activity() {
     else -> raw ?: "-"
   }
 
-  /** 酒吧桌型->中文（bar table_type 字典：bar/standard/card_seat）。 */
-  private fun tableTypeZh(raw: String?): String = when (raw) {
-    "bar" -> "吧台"; "standard" -> "普通桌"; "card_seat" -> "卡座"
-    else -> raw ?: ""
-  }
-
   /** 员工账号状态->中文（StaffProfileRecord.status = active/inactive；与 registration_status 不同域，不共用 statusZh）。 */
   private fun staffStatusZh(raw: String?): String = when (raw) {
     "active" -> "正常"; "inactive" -> "停用"
@@ -3148,7 +3140,7 @@ class MainActivity : Activity() {
   private fun showMyProfile() {
     val session = store.session
     val identity = statusText(
-      "账号: ${session?.username ?: "-"}\n工号(用户id): ${session?.staffId ?: "-"}",
+      "账号: ${session?.username ?: "-"}\n工号: ${session?.staffId ?: "-"}",
     )
     val status = statusText("正在拉取本人档案…")
     runBackground(
@@ -3181,18 +3173,18 @@ class MainActivity : Activity() {
           .filter { it.status == "approved" || it.status == "rejected" }
           .forEach { lv ->
             val st = if (lv.status == "approved") "已通过" else "已驳回"
-            items.add("[请假审批] ${lv.startDate}~${lv.endDate} ${lv.leaveType} $st" +
+            items.add("[请假审批] ${lv.startDate}~${lv.endDate} ${leaveTypeZh(lv.leaveType)} $st" +
               (lv.reviewNote?.let { "，批注:$it" } ?: ""))
           }
         runCatching { api.listMyWorkOrders() }.getOrDefault(emptyList()).forEach { o ->
-          items.add("[待办工单] ${o.code ?: o.id} [${o.status ?: "-"}] ${o.title ?: ""} 时限${o.handleDueAt ?: "-"}")
+          items.add("[待办工单] ${o.code ?: o.id} [${facilityWorkOrderStatusZh(o.status)}] ${o.title ?: ""} 时限${localTimeZh(o.handleDueAt)}")
         }
         // 第十八批 M 段第 116 条：清单不含我的接警的终端（私人手机）不去调，免得每开一次就留一条被拒记录。
         (if (shows("my_alarms")) runCatching { api.listMyFacilityAlarms() }.getOrDefault(emptyList()) else emptyList())
           .filter { it.status == "awaiting_takeover" }
-          .forEach { a -> items.add("[待接警] 设备 ${a.equipmentId ?: "-"} 优先级 ${a.priority ?: "-"} 时限${a.responseDueAt ?: "-"}（去「我的接警」明确接手）") }
+          .forEach { a -> items.add("[待接警] 设备 ${a.equipmentId ?: "-"} 优先级 ${workPriorityZh(a.priority)} 时限${localTimeZh(a.responseDueAt)}（去「我的接警」明确接手）") }
         runCatching { api.listMyShifts() }.getOrDefault(emptyList()).forEach { s ->
-          items.add("[排班] ${s.workDate} ${s.startAt ?: "-"}~${s.endAt ?: "-"}")
+          items.add("[排班] ${s.workDate} ${localTimeZh(s.startAt)}~${localTimeZh(s.endAt)}")
         }
         runCatching { api.listStaffNotices() }.getOrDefault(emptyList()).forEach { n ->
           val needAck = n.consentRequired == true && n.consentStatus != "acknowledged"
