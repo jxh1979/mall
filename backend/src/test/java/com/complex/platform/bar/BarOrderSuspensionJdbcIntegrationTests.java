@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.containsString;
@@ -251,11 +251,14 @@ class BarOrderSuspensionJdbcIntegrationTests {
             String table = table(type, type);
             openSession(type, table);
             suspend(cashier, orderId(order(table, wine, 1)), "客人稍后付款", "hang-" + type + "-" + s).andExpect(status().isConflict())
-                    .andExpect(jsonPath("$.detail_code").value("BAR_ORDER_SUSPEND_VIP_ONLY"));
+                    .andExpect(jsonPath("$.detail_code").value("BAR_ORDER_SUSPEND_VIP_ONLY"))
+                    .andExpect(jsonPath("$.message").value("只有包厢订单可以挂起；散台、卡座须下单当场付款"));
         }
         String counter = table("counter", "bar_counter");
         suspend(cashier, orderId(order(counter, wine, 1)), "客人稍后付款", "hang-counter-" + s).andExpect(status().isConflict())
-                .andExpect(jsonPath("$.detail_code").value("BAR_ORDER_SUSPEND_VIP_ONLY"));
+                .andExpect(jsonPath("$.detail_code").value("BAR_ORDER_SUSPEND_VIP_ONLY"))
+                // 第十八批 W 段 205-R1：报错统一叫「包厢」（PGM:287；第十八批裁决 37 操作员原话与所选选项）。
+                .andExpect(jsonPath("$.message").value("只有包厢订单可以挂起；散台、卡座须下单当场付款"));
 
         String vip = table("vipr", "vip");
         openSession("vipr", vip);

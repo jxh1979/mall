@@ -1,6 +1,6 @@
 package com.complex.terminal
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import com.sun.net.httpserver.HttpServer
 import java.net.InetSocketAddress
@@ -58,6 +58,28 @@ class KioskReservationApiTest {
     val paid: Any? = api.registerKioskPayment(KioskPayTarget.Reservation("resv_1"), 20000, "cash", staff, posNo = null, signOut = true)
     assertEquals("held", (paid as? BarReservationRecord)?.holdStatus)
     assertEquals("/api/v1/bar/reservations/resv_1/pay-deposit", requests[1].path)
+  }
+
+  // 第十八批 W 段第 192 条 192-R3（PGM:287）：到店与最晚到店按「日期＋时刻」两栏填，转成 ISO 瞬时后按蛇形键提交。
+  @Test
+  fun kioskReservationSendsTimesConvertedFromDateAndClock() = withServer("held") { api, requests ->
+    val shanghai = java.time.ZoneId.of("Asia/Shanghai")
+    api.createBarReservation(BarReservationCreateRequest(
+      idempotencyKey = "kiosk-resv-192", barId = "bar_1", tableId = "table_1",
+      reservationTime = localInstantOf("2026-11-05", "20:30", shanghai) ?: "", guestCount = 2,
+      latestArrivalAt = localInstantOf("2026-11-05", "22:00", shanghai) ?: "", customerPhone = "13800000000"))
+
+    assertTrue(requests[0].body.contains("\"reservation_time\":\"2026-11-05T12:30:00Z\""), requests[0].body)
+    assertTrue(requests[0].body.contains("\"latest_arrival_at\":\"2026-11-05T14:00:00Z\""), requests[0].body)
+  }
+
+  // 第十八批 W 段第 205 条 205-R2（PGM:287；第十八批裁决 37「包厢」）：台位类型按后端闭集四码显示中文。
+  @Test
+  fun barTableTypeShowsChineseForAllFourCodes() {
+    assertEquals("卡座", barTableTypeZh("card_seat"))
+    assertEquals("包厢", barTableTypeZh("vip"))
+    assertEquals("吧台位", barTableTypeZh("bar_counter"))
+    assertEquals("散台", barTableTypeZh("loose_table"))
   }
 
   @Test

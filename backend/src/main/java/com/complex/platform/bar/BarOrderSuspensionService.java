@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static com.complex.platform.bar.BarValidation.requireRequest;
 import static com.complex.platform.bar.BarValidation.requireText;
@@ -138,7 +138,7 @@ public class BarOrderSuspensionService implements BarOrderBadDebtReviewPort {
         jdbc.queryForList("SELECT id FROM bar_orders WHERE id = ? FOR UPDATE", orderId);
         BarTableRecord table = order.tableId() == null ? null : repository.findTableById(order.tableId()).orElse(null);
         if (table == null || !"vip".equals(table.tableType())) {
-            throw ApiException.conflict("BAR_ORDER_SUSPEND_VIP_ONLY", "只有包厢（贵宾包座）订单可以挂起；散台、卡座须下单当场付款");
+            throw ApiException.conflict("BAR_ORDER_SUSPEND_VIP_ONLY", "只有包厢订单可以挂起；散台、卡座须下单当场付款");
         }
         if (find(orderId).isPresent()) {
             throw ApiException.conflict("BAR_ORDER_ALREADY_SUSPENDED", "本单已挂起，不能重复挂起");

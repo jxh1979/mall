@@ -1,8 +1,9 @@
-// 文件版本：V0.01
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+// 文件版本：V0.02
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { TicketingPoliciesPage } from "./TicketingPoliciesPage";
+import { AdminApi } from "../client/adminClient";
 import type { AdminApiClient, AdminPageProps, EffectivePermissionsState } from "../types";
 
 // 引导式流程(AUD-015 起):新建票种=分步弹窗(基本信息→绑定权益并发布→确认)。
@@ -16,6 +17,9 @@ function makeApi(postSpy: ReturnType<typeof vi.fn>, putSpy?: ReturnType<typeof v
       }
       if (path.includes("/qr-refresh-config")) {
         return { refreshIntervalSeconds: 15 } as unknown;
+      }
+      if (path.includes("/platform/merchants")) {
+        return { items: [{ id: "m-bar-1", merchantName: "一号酒吧", merchantType: "bar" }] } as unknown;
       }
       return { items: [] } as unknown;
     }),
@@ -35,10 +39,18 @@ function renderPage(postSpy: ReturnType<typeof vi.fn>, putSpy?: ReturnType<typeo
     effectivePermissions: ADMIN_PERMS,
   } as unknown as AdminPageProps;
   render(<TicketingPoliciesPage {...props} />);
+  return props;
+}
+
+// 第十八批 W 段 177-R1：等商户列表落到通用「新建模板」的提供方商户下拉里（页面被动加载落定）再操作。
+async function templateFormReady() {
+  await waitFor(() => expect(Array.from((screen.queryByTestId("entitlement-template-merchant") as HTMLSelectElement | null)?.options ?? [])
+    .map((o) => o.value)).toContain("m-bar-1"));
+  return within(screen.getByTestId("entitlement-template-form"));
 }
 
 describe("TicketingPoliciesPage 引导式新建票种", () => {
-  afterEach(() => vi.clearAllMocks());
+  afterEach(() => { vi.clearAllMocks(); vi.unstubAllGlobals(); });
 
   it("基本信息校验→绑权益填理由→确认发布,后端收到 create/bind/publish 三段", async () => {
     const postSpy = vi.fn(async (path: string, _body?: unknown) => {
@@ -148,13 +160,17 @@ describe("TicketingPoliciesPage 引导式新建票种", () => {
     });
 
     // ② TK-06（BSM:843「不设需要人脸照的票种」）：建权益模板没有「需要人脸照」开关，载荷也不带该字段。
-    fireEvent.change(screen.getByLabelText("模板名称"), { target: { value: "游乐入场" } });
+    //   177-R1：先选提供方商户，载荷带所选 merchant_id。
+    const tplForm = await templateFormReady();
+    fireEvent.change(tplForm.getByLabelText("模板名称"), { target: { value: "游乐入场" } });
+    fireEvent.change(tplForm.getByLabelText("提供方商户"), { target: { value: "m-bar-1" } });
     expect(screen.queryByTestId("entitlement-template-require-face-photo")).toBeNull();
     fireEvent.click(screen.getByTestId("entitlement-template-create"));
     await waitFor(() => {
       const tplCall = postSpy.mock.calls.find((c) => String(c[0]).endsWith("/ticketing/entitlement-templates"));
       expect(tplCall).toBeTruthy();
       expect((tplCall?.[1] ?? {}) as Record<string, unknown>).not.toHaveProperty("require_face_photo");
+      expect(((tplCall?.[1] ?? {}) as Record<string, unknown>).merchant_id).toBe("m-bar-1");
     });
 
     // ③ 批10/E：模板侧改价入口已下线——页面明说唯一可改价处 = 内部结算价目录（草案→他人复核转正），
@@ -162,5 +178,51 @@ describe("TicketingPoliciesPage 引导式新建票种", () => {
     expect(screen.queryByTestId("agreement-price-form")).toBeNull();
     expect(screen.getByTestId("agreement-price-scope-hint").textContent).toContain("内部结算价目录");
     expect(putSpy.mock.calls.some((c) => String(c[0]).includes("/agreement-price"))).toBe(false);
+  });
+
+  // 第十八批 W 段 177-R1（BSM:1754「每项权益都必须绑定实际提供方和审批版本，避免悬空账。」）：
+  //   通用「新建模板」提供方商户必选，未选不发请求、提示中文；权益类型下拉不含赠饮（控制席并入：赠饮在组合配置酒吧行建）。
+  it("177-R1 新建模板：未选提供方商户不发请求并提示，权益类型不含赠饮", async () => {
+    const postSpy = vi.fn(async (_path: string, _body?: unknown) => ({} as unknown));
+    const props = renderPage(postSpy);
+    const tplForm = await templateFormReady();
+    const typeOptions = Array.from((tplForm.getByLabelText("权益类型") as HTMLSelectElement).options).map((o) => o.value);
+    expect(typeOptions).toContain("entry");
+    expect(typeOptions).not.toContain("gift_drink");
+    fireEvent.change(tplForm.getByLabelText("模板名称"), { target: { value: "入园1次" } });
+    fireEvent.click(screen.getByTestId("entitlement-template-create"));
+    await waitFor(() => expect(props.setGlobalError).toHaveBeenCalledWith("请选择权益的提供方商户"));
+    expect(postSpy.mock.calls.some((c) => String(c[0]).endsWith("/ticketing/entitlement-templates"))).toBe(false);
+  });
+
+  // 177-R1（PGM:287「……提示、报错……必须全部为中文」）：后端拒绝时把中文报错显示出来，不再成未处理的拒绝。
+  it("177-R1 新建模板：后端 400 时显示中文报错", async () => {
+    const templatePosts: string[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes("/platform/merchants")) {
+        return new Response('{"success":true,"code":"OK","message":"success","data":{"items":[{"id":"m-bar-1","merchant_name":"一号酒吧","merchant_type":"bar"}]}}',
+          { status: 200, headers: { "content-type": "application/json" } });
+      }
+      if (url.endsWith("/ticketing/entitlement-templates") && init?.method === "POST") {
+        templatePosts.push(String(init.body));
+        return new Response('{"success":false,"code":"PARAM_INVALID","detail_code":"PARAM_INVALID","message":"商户未填写"}',
+          { status: 400, headers: { "content-type": "application/json" } });
+      }
+      return new Response('{"success":true,"code":"OK","message":"success","data":{"items":[]}}',
+        { status: 200, headers: { "content-type": "application/json" } });
+    }));
+    const setGlobalError = vi.fn();
+    const setActionResult = vi.fn();
+    render(<TicketingPoliciesPage {...({ api: new AdminApi(), user: { id: "u1", username: "admin", accountType: "platform_admin" },
+      setActionResult, setGlobalError, effectivePermissions: ADMIN_PERMS } as unknown as AdminPageProps)} />);
+    const tplForm = await templateFormReady();
+    fireEvent.change(tplForm.getByLabelText("模板名称"), { target: { value: "入园1次" } });
+    fireEvent.change(tplForm.getByLabelText("提供方商户"), { target: { value: "m-bar-1" } });
+    fireEvent.click(screen.getByTestId("entitlement-template-create"));
+    await waitFor(() => expect(setGlobalError).toHaveBeenCalledWith("商户未填写"));
+    expect(templatePosts.length).toBe(1);
+    expect(JSON.parse(templatePosts[0] ?? "{}").merchant_id).toBe("m-bar-1");
+    expect(setActionResult).not.toHaveBeenCalledWith(expect.objectContaining({ action: "entitlement_template_created" }));
   });
 });

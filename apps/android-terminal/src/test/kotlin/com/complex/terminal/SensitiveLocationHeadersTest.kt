@@ -1,6 +1,6 @@
 package com.complex.terminal
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import com.sun.net.httpserver.HttpServer
 import java.net.InetSocketAddress
@@ -82,11 +82,11 @@ class SensitiveLocationHeadersTest {
   fun locationGateDenialShowsTheServerReasonInsteadOfNoPermission() {
     fun denied(path: String, detail: String, message: String) =
       ApiException(403, path, """{"code":"FORBIDDEN","detail_code":"$detail","message":"$message"}""")
-    assertEquals("未取得本设备定位，不能执行核销、收款、退款、放行，只能查看（403 /api/v1/vouchers/redemptions）",
+    assertEquals("未取得本设备定位，不能执行核销、收款、退款、放行，只能查看（403）",
       apiErrorText(denied("/api/v1/vouchers/redemptions", "SENSITIVE_OPERATION_LOCATION_REQUIRED", "未取得本设备定位，不能执行核销、收款、退款、放行，只能查看")))
-    assertEquals("操作设备不在本项目授权范围内，只能查看（403 /api/v1/bar/bills/bill_1/settle）",
+    assertEquals("操作设备不在本项目授权范围内，只能查看（403）",
       apiErrorText(denied("/api/v1/bar/bills/bill_1/settle", "SENSITIVE_OPERATION_OUT_OF_RANGE", "操作设备不在本项目授权范围内，只能查看")))
-    assertEquals("当前账号或设备无权操作（403 /api/v1/vouchers/redemptions）",
+    assertEquals("当前账号或设备无权操作（403）",
       apiErrorText(denied("/api/v1/vouchers/redemptions", "PERMISSION_DENIED", "无权限")))
   }
 }

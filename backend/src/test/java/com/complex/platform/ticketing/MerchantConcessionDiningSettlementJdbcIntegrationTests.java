@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -162,6 +162,31 @@ class MerchantConcessionDiningSettlementJdbcIntegrationTests {
         bind(templateId, "merchant_concession").andExpect(status().isOk());
         assertThat(jdbc.queryForObject("SELECT cost_bearer FROM ticket_type_entitlements WHERE ticket_type_id = ? AND entitlement_template_id = ?",
                 String.class, typeId, templateId)).isEqualTo("merchant_concession");
+    }
+
+    @Test
+    void genericTemplateFormBodyStoresChosenProviderAndMissingMerchantRejectedInChinese() throws Exception {
+        // 第十八批 W 段 177-R1（BSM:1754「每项权益都必须绑定实际提供方和审批版本，避免悬空账。」）：按 TicketingPoliciesPage
+        // 通用「新建模板」的请求体蛇形键建入园模板——带 merchant_id 落库为所选提供方；不带则 400，出网报错为中文。
+        String body = mockMvc.perform(post("/api/v1/ticketing/entitlement-templates").with(session(admin, "platform_admin", "org_1", null))
+                        .contentType(MediaType.APPLICATION_JSON).content("""
+                                {"idempotency_key": "w177-tpl-%s", "name": "入园1次", "entitlement_type": "entry",
+                                 "default_total_times": 1, "default_value_cent": null, "status": "active", "merchant_id": "%s"}
+                                """.formatted(UUID.randomUUID(), restaurant)))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+        String templateId = new ObjectMapper().readTree(body).path("data").path("id").asText();
+        templateIds.add(templateId);
+        assertThat(jdbc.queryForObject("SELECT merchant_id FROM entitlement_templates WHERE id = ?", String.class, templateId))
+                .isEqualTo(restaurant);
+
+        mockMvc.perform(post("/api/v1/ticketing/entitlement-templates").with(session(admin, "platform_admin", "org_1", null))
+                        .contentType(MediaType.APPLICATION_JSON).content("""
+                                {"idempotency_key": "w177-tpl-%s", "name": "入园1次", "entitlement_type": "entry",
+                                 "default_total_times": 1, "default_value_cent": null, "status": "active"}
+                                """.formatted(UUID.randomUUID())))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("商户未填写"));
     }
 
     /** 按 TicketingPoliciesPage.createAndBind 餐饮行的请求形状建模板并绑到通票（纯赠送，票面原价 0）。 */

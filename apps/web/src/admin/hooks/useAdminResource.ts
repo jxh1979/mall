@@ -1,7 +1,7 @@
 import React from "react";
 import { ApiError, formatApiErrorDetail } from "../../shared/apiError";
 
-/** message=业务话术（原 err.message），detail=技术详情（path/status/request_id/原文），供折叠报障。 */
+/** message=业务话术（原 err.message），detail=技术详情（只有状态码，第 193 条 193-R2），供折叠报障。 */
 export interface AdminResourceError {
   message: string;
   detail: string | null;

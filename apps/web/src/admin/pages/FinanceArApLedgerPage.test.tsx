@@ -1,8 +1,10 @@
-// 文件版本：V0.08
+// 文件版本：V0.09
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { FinanceArApLedgerPage } from "./FinanceArApLedgerPage";
+import { formatActionResult } from "../components/ActionResultView";
+import { AdminApi } from "../client/adminClient";
 import type { AdminApiClient, AdminPageProps, EffectivePermissionsState, FinanceLedgerRow } from "../types";
 
 const ROWS: FinanceLedgerRow[] = [
@@ -27,11 +29,11 @@ function makeApi(getPaged = pagedResolver()): AdminApiClient {
 
 const ADMIN_PERMS: EffectivePermissionsState = { status: "ready", value: { grants: [], denies: [], wildcard: true } };
 
-function renderPage(api: AdminApiClient) {
+function renderPage(api: AdminApiClient, setActionResult: AdminPageProps["setActionResult"] = vi.fn()) {
   const fullProps: AdminPageProps = {
     api,
     user: { id: "u1", username: "admin", accountType: "platform_admin" },
-    setActionResult: vi.fn(),
+    setActionResult,
     setGlobalError: vi.fn(),
     effectivePermissions: ADMIN_PERMS,
   };
@@ -209,5 +211,85 @@ describe("FinanceArApLedgerPage 内部应付执行状态", () => {
     await waitFor(() => expect(screen.queryByTestId("finance-ledger-select-ap-cf")).not.toBeNull());
     fireEvent.click(screen.getByTestId("finance-ledger-select-ap-cf"));
     await waitFor(() => expect(screen.queryByTestId("internal-payable-panel")).not.toBeNull());
+  });
+});
+
+// 第十八批 W 段第 200 条 200-R1（契约 ArApPaymentRequest 必填 amount_cent、payment_method）：「登记核销」按契约发金额（分）与收付方式。
+describe("FinanceArApLedgerPage 登记核销请求体", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  function setupRealApi(setActionResult?: AdminPageProps["setActionResult"], paymentData?: unknown) {
+    const posts: { url: string; body: Record<string, unknown> }[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      let data: unknown = {};
+      if (init?.method === "POST") {
+        posts.push({ url, body: JSON.parse(String(init.body)) as Record<string, unknown> });
+        data = paymentData ?? { id: "pay-1", ar_ap_item_id: "ar-1", amount_cent: 10000, payment_method: "bank_transfer" };
+      } else if (url.includes("/api/v1/finance/ar-ap-items?")) {
+        data = { items: [{ id: "ar-1", item_no: "AR-0001", direction: "receivable", status: "open", amount_cent: 20000,
+          paid_amount_cent: 0, unpaid_amount_cent: 20000, due_date: "2026-08-01" }], total: 1, page: 1, page_size: 10 };
+      }
+      return new Response(JSON.stringify({ success: true, code: "OK", data }));
+    }));
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    renderPage(new AdminApi("test"), setActionResult);
+    return posts;
+  }
+
+  async function pageSettled() {
+    await waitFor(() => {
+      expect((screen.queryByTestId("finance-ledger-select-ar-1") as HTMLInputElement | null)?.checked).toBe(true);
+      expect(screen.queryByTestId("finance-payment-method")).not.toBeNull();
+    });
+  }
+
+  it("填 100.00、选银行转账、填原因并确认：请求体为 amount_cent、payment_method、operator_note、idempotency_key，不含 amount", async () => {
+    const posts = setupRealApi();
+    await pageSettled();
+    fireEvent.change(screen.getByTestId("finance-payment-amount"), { target: { value: "100.00" } });
+    fireEvent.change(screen.getByTestId("finance-payment-method"), { target: { value: "bank_transfer" } });
+    fireEvent.change(screen.getByTestId("finance-payment-reason"), { target: { value: "客户转账付款" } });
+    fireEvent.click(screen.getByTestId("finance-payment-submit"));
+    await waitFor(() => expect(posts).toHaveLength(1));
+    expect(posts[0]!.url).toContain("/api/v1/finance/ar-ap-items/ar-1/payments");
+    expect(posts[0]!.body).toMatchObject({ amount_cent: 10000, payment_method: "bank_transfer", operator_note: "客户转账付款" });
+    expect(typeof posts[0]!.body.idempotency_key).toBe("string");
+    expect(posts[0]!.body).not.toHaveProperty("amount");
+    expect(posts[0]!.body).not.toHaveProperty("reason");
+  });
+
+  it("没选收付方式时不发请求并提示「请选择收付方式。」", async () => {
+    const posts = setupRealApi();
+    await pageSettled();
+    fireEvent.change(screen.getByTestId("finance-payment-amount"), { target: { value: "100.00" } });
+    fireEvent.change(screen.getByTestId("finance-payment-reason"), { target: { value: "客户转账付款" } });
+    fireEvent.click(screen.getByTestId("finance-payment-submit"));
+    await waitFor(() => expect(screen.queryByTestId("finance-ledger-error")?.textContent).toBe("请选择收付方式。"));
+    expect(posts).toHaveLength(0);
+  });
+
+  // 18W 复核修复（PGM:287「枚举取值……必须全部为中文」）：登记核销成功后，结果区的收付方式与来源类型显示中文名，不显示原码。
+  it("登记核销成功后结果区收付方式、来源类型显示中文：不含 bank_transfer、POS刷卡 与来源原码", async () => {
+    const setActionResult = vi.fn();
+    setupRealApi(setActionResult, {
+      payment: { id: "pay-1", ar_ap_item_id: "ar-1", amount_cent: 10000, payment_method: "bank_transfer" },
+      item: { id: "ar-1", item_no: "AR-0001", direction: "receivable", source_type: "contract_rent", amount_cent: 20000 },
+    });
+    await pageSettled();
+    fireEvent.change(screen.getByTestId("finance-payment-amount"), { target: { value: "100.00" } });
+    fireEvent.change(screen.getByTestId("finance-payment-method"), { target: { value: "bank_transfer" } });
+    fireEvent.change(screen.getByTestId("finance-payment-reason"), { target: { value: "客户转账付款" } });
+    fireEvent.click(screen.getByTestId("finance-payment-submit"));
+    await waitFor(() => expect(setActionResult).toHaveBeenCalledWith(expect.objectContaining({ action: "ledger_payment", status: "partial" })));
+    const text = formatActionResult(setActionResult.mock.calls.at(-1)![0]);
+    expect(text).toContain("银行转账");
+    expect(text).toContain("合同租金");
+    expect(text).not.toContain("bank_transfer");
+    expect(text).not.toContain("POS刷卡");
+    expect(text).not.toContain("contract_rent");
   });
 });

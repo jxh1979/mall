@@ -1,4 +1,4 @@
-// 文件版本：V0.03
+// 文件版本：V0.04
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
@@ -9,7 +9,7 @@ import { PermissionSwitch } from "../components/PermissionSwitch";
 type SwitchRow = { id: string; terminalType: string; capabilityCode: string; scopeId: string | null; enabled: boolean };
 
 // §6 业务短信通知 两级开关目录（总开关 + 域 + 事件）。mandatory：BSM 第 1598 行不可关闭的三类（OBS-13-04），后端拒绝关闭、发送不看开关。
-const SMS_CATALOG: Record<string, { label: string; level: string; mandatory?: boolean }> = {
+export const SMS_CATALOG: Record<string, { label: string; level: string; mandatory?: boolean }> = {
   "sms_notification": { label: "短信通知总开关", level: "总" },
   "sms.notify.stored_wine": { label: "存酒（域开关）", level: "域" },
   "sms.notify.stored_wine.deposit": { label: "存酒成功", level: "事件" },
@@ -73,6 +73,8 @@ export function SmsNotificationSwitchesPage({ api, setActionResult, setGlobalErr
   async function toggle(row: SwitchRow) {
     const updated = await api.put<SwitchRow>(`/api/v1/terminals/capability-switches/${row.id}`, {
       enabled: !row.enabled, terminalType: row.terminalType, capabilityCode: row.capabilityCode, scopeId: row.scopeId,
+      // 同终端开关矩阵页 194-R4：后端只认 operator_note，更新时写进该行说明（PGM:908 终端开关启用、停用须留痕）。
+      operatorNote: `${row.enabled ? "后台关闭" : "后台打开"}：${SMS_CATALOG[row.capabilityCode]?.label ?? row.capabilityCode}`,
     });
     setRows((current) => current.map((item) => (item.id === row.id ? { ...item, enabled: updated.enabled } : item)));
     setActionResult({ action: "sms_switch_toggled", capabilityCode: row.capabilityCode, enabled: updated.enabled });
@@ -87,7 +89,7 @@ export function SmsNotificationSwitchesPage({ api, setActionResult, setGlobalErr
       <AdminDataState loading={loading} error={error} empty={rows.length === 0} onRetry={reload}>
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="sms-switches-table">
-            <thead><tr><th>通知项</th><th>层级</th><th>能力码</th><th>状态</th><th>操作</th></tr></thead>
+            <thead><tr><th>通知项</th><th>层级</th><th>状态</th><th>操作</th></tr></thead>
             <tbody>
               {rows.map((row) => {
                 const entry = SMS_CATALOG[row.capabilityCode];
@@ -95,7 +97,6 @@ export function SmsNotificationSwitchesPage({ api, setActionResult, setGlobalErr
                   <tr key={row.id} data-testid={`sms-switch-${row.capabilityCode}`}>
                     <td>{entry?.label ?? row.capabilityCode}</td>
                     <td>{entry?.level ?? "—"}</td>
-                    <td><small>{row.capabilityCode}</small></td>
                     <td data-testid={`sms-switch-state-${row.capabilityCode}`}>
                       {entry?.mandatory ? "开启（不可关闭）" : row.enabled ? "开启" : "关闭"}
                     </td>

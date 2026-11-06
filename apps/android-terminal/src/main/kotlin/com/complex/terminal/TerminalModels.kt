@@ -1,6 +1,6 @@
 package com.complex.terminal
 
-// 文件版本：V0.16
+// 文件版本：V0.17
 
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
@@ -180,6 +180,23 @@ fun verificationReasonZh(reason: String?): String = when (reason) {
   "amusement_verified" -> "游乐入场核销"
   else -> ""
 }
+
+/**
+ * 第十八批 W 段第 192 条 192-R1（PGM:287「……日期时间等，必须全部为中文，不得出现任何英文（如……mm/dd/yyyy 英文日期格式……）」）：
+ * 后端 ISO 瞬时（如 2026-11-05T12:30:00Z）按本机时区显示为 yyyy-MM-dd HH:mm；空值显示「-」，解析不了原样显示（原 MainActivity.traceTime 挪来）。
+ */
+fun localTimeZh(iso: String?, zone: java.time.ZoneId = java.time.ZoneId.systemDefault()): String =
+  if (iso.isNullOrBlank()) "-" else runCatching {
+    java.time.Instant.parse(iso).atZone(zone).format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm"))
+  }.getOrDefault(iso)
+
+/**
+ * 第十八批 W 段第 192 条 192-R3（PGM:287「……日期时间等，必须全部为中文，不得出现任何英文（如……mm/dd/yyyy 英文日期格式……）」）：
+ * 时间输入按「日期（如 2026-11-05）」「时刻（如 20:30）」两栏填，按本机时区转 ISO 瞬时照旧提交；格式不对返回 null（原交接补录写法抽出）。
+ */
+fun localInstantOf(date: String, time: String, zone: java.time.ZoneId = java.time.ZoneId.systemDefault()): String? = runCatching {
+  java.time.LocalDateTime.parse("${date.trim()}T${time.trim()}").atZone(zone).toInstant().toString()
+}.getOrNull()
 
 /**
  * 第十八批 Q 段第 150 条 150-R2（BSM:552「进场之后，工作手机扫客人二维码核销各酒吧入场、赠饮、游乐等场内权益……」；BSM:1036「……到店出示本人的动态入场码核验入场……」）：
@@ -605,6 +622,76 @@ fun merchantWorkOrderTypeZh(type: String?): String = when (type) {
   "complaint" -> "投诉"
   "service" -> "其他服务请求"
   else -> type ?: "-"
+}
+
+/**
+ * 第十八批 W 段第 205 条 205-R2（PGM:287「平台所有终端——……现场平板与设备端、安卓终端——展示给用户的一切文字……必须全部为中文」；
+ * 决策台账第十八批裁决 37「包厢」）：酒吧台位类型按后端闭集四码显示中文，一体机订台与员工代订共用（原 MainActivity.tableTypeZh 挪来）。
+ */
+fun barTableTypeZh(type: String?): String = when (type) {
+  "card_seat" -> "卡座"
+  "vip" -> "包厢"
+  "bar_counter" -> "吧台位"
+  "loose_table" -> "散台"
+  else -> type ?: "-"
+}
+
+// ── 第十八批 W 段第 192 条 192-R2（PGM:287「……状态、枚举取值、按钮、提示、报错……必须全部为中文……」；ENUM:41「票/权益状态」「未使用、部分使用、已使用、已过期、已退款、已作废」）：
+// 员工端枚举转中文，词取后台与客人端现有词典 ──
+
+/** 物业工单状态九值（V166 chk_fwo_status），中文同后台「工单时效」页。 */
+fun facilityWorkOrderStatusZh(status: String?): String = when (status) {
+  "pending_assign" -> "待派单"
+  "assigned" -> "已派单"
+  "processing" -> "处理中"
+  "pending_review" -> "待复核"
+  "pending_acceptance" -> "待验收"
+  "accepted" -> "已验收"
+  "closed" -> "已关闭"
+  "suspended" -> "已挂起"
+  "overtime" -> "已超时"
+  else -> status ?: "-"
+}
+
+/** 工单与告警优先级（物业工单与告警 urgent/high/normal，商户工单 low/medium/high/critical），中文同后台「工单时效」页。 */
+fun workPriorityZh(priority: String?): String = when (priority) {
+  "urgent", "critical" -> "紧急"
+  "high" -> "高"
+  "normal" -> "普通"
+  "medium" -> "中"
+  "low" -> "低"
+  else -> priority ?: "-"
+}
+
+/** 扫码支付渠道，中文同客人端词典。 */
+fun payChannelZh(channel: String?): String = when (channel) {
+  "wechat" -> "微信"
+  "alipay" -> "支付宝"
+  else -> channel ?: "-"
+}
+
+/** 门票权益状态（V253 chk_issued_entitlements_status 三值）；forfeited 由到期作废与注销／拉黑写入，按 ENUM:41 记「已作废」。 */
+fun entitlementStatusZh(status: String?): String = when (status) {
+  "active" -> "已生效"
+  "refunded" -> "已退款"
+  "forfeited" -> "已作废"
+  else -> status ?: "-"
+}
+
+/** 请假类型（V211 chk_leave_type 四类；原 MainActivity 请假屏四值表挪来，下拉与显示共用）。 */
+val LEAVE_TYPE_LABELS: Map<String, String> = linkedMapOf("personal" to "事假", "sick" to "病假", "comp" to "调休", "annual" to "年假")
+
+fun leaveTypeZh(type: String?): String = type?.let { LEAVE_TYPE_LABELS[it] ?: it } ?: "-"
+
+/** 服务单六态（V213 chk_svc_order_status）：created、paid 同后台「服务点单」页，其余同员工端原词。 */
+fun serviceOrderStatusZh(status: String?): String = when (status) {
+  "created" -> "待收款"
+  "paid" -> "已收款"
+  "pending_accept" -> "待接单"
+  "accepted" -> "已接单"
+  "completed" -> "已完成"
+  "cancelled" -> "已取消"
+  else -> status ?: "-"
 }
 
 // ── 第十八批 M 段第 112 条 112-R1（BSM:947「工作手机扫描权益二维码，核销赠饮、礼物或其他领取资格。」）：礼物（券）查券与核销 ──

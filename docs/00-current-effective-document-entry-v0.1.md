@@ -123,7 +123,7 @@
 
 ### 2.1 R1~R4 审计交付物登记（2026-06-18 附加）
 
-本节附加式登记 R1~R4 阶段审计与回填交付物，以及配套的数据隔离规格与 SMS 占位规格，便于审计入口统一追溯。本节为附加内容，不删除上文任一原有登记；当前事实基线以 `docs/p0-openapi-operation-acceptance-matrix-v0.1.md` 与 `npm run verify:*` 实时输出为准。本轮 2026-11-06 实测 OpenAPI 1253 operations、Flyway 最新 V604；后端 surefire 现有报告 4641 tests。
+本节附加式登记 R1~R4 阶段审计与回填交付物，以及配套的数据隔离规格与 SMS 占位规格，便于审计入口统一追溯。本节为附加内容，不删除上文任一原有登记；当前事实基线以 `docs/p0-openapi-operation-acceptance-matrix-v0.1.md` 与 `npm run verify:*` 实时输出为准。本轮 2026-11-06 实测 OpenAPI 1253 operations、Flyway 最新 V605；后端 surefire 现有报告 4641 tests。
 
 | 交付物 | 入口 |
 |---|---|
@@ -157,7 +157,7 @@
 <!-- 文档goal(2026-06-20)：新增 §2.3，登记 R6/R7 决策批次与本会话新功能落地，刷新事实基线 -->
 ## 2.3 R6/R7 决策批次与本会话新功能落地登记（2026-06-20）`文档goal(2026-06-20)`
 
-本节附加式登记业务决策批次与本会话已落地新功能，不删除上文任一原有内容。本轮 2026-11-06 取证为 Flyway 最新 V604、OpenAPI 1253 operations；后端 surefire 现有报告 4641 tests。各项以 `docs/openapi/openapi-p0.yaml`、`backend/src/main/resources/db/migration`、`backend/target/surefire-reports`、`npx playwright test --list` 与 `npm run verify:*` 实时输出为最终权威。
+本节附加式登记业务决策批次与本会话已落地新功能，不删除上文任一原有内容。本轮 2026-11-06 取证为 Flyway 最新 V605、OpenAPI 1253 operations；后端 surefire 现有报告 4641 tests。各项以 `docs/openapi/openapi-p0.yaml`、`backend/src/main/resources/db/migration`、`backend/target/surefire-reports`、`npx playwright test --list` 与 `npm run verify:*` 实时输出为最终权威。
 
 ### 决策批次登记
 

@@ -17,7 +17,7 @@ type SwitchCatalogEntry = {
  * docs/integration-capability-switches-v0.1.md 矩阵 v0.1）。disabledBehavior=当前未接入时的业务降级口径；
  * enabledRequirements=接入真实第三方 API/SDK 所需。新增第三方开关时在此补一条即可获得完整标注。
  */
-const THIRD_PARTY_SWITCH_CATALOG: Record<string, SwitchCatalogEntry> = {
+export const THIRD_PARTY_SWITCH_CATALOG: Record<string, SwitchCatalogEntry> = {
   "face.verification.enabled": {
     label: "年龄核验环节（人脸扫描确认满 18 周岁）",
     category: "人脸/年龄合规",
@@ -100,6 +100,8 @@ export function IntegrationSwitchesPage({ api, setActionResult, setGlobalError, 
       terminalType: row.terminalType,
       capabilityCode: row.capabilityCode,
       scopeId: row.scopeId,
+      // 同终端开关矩阵页 194-R4：后端只认 operator_note，更新时写进该行说明（PGM:908 终端开关启用、停用须留痕）。
+      operatorNote: `${next ? "后台打开" : "后台关闭"}：${THIRD_PARTY_SWITCH_CATALOG[row.capabilityCode]?.label ?? row.capabilityCode}`,
     });
     setRows((current) => current.map((item) => (item.id === row.id ? { ...item, enabled: updated.enabled } : item)));
     setActionResult({ action: "capability_switch_toggled", capabilityCode: row.capabilityCode, enabled: updated.enabled });
@@ -129,11 +131,7 @@ export function IntegrationSwitchesPage({ api, setActionResult, setGlobalError, 
                 const entry = THIRD_PARTY_SWITCH_CATALOG[row.capabilityCode];
                 return (
                   <tr key={row.id} data-testid={`switch-row-${row.capabilityCode}`}>
-                    <td>
-                      {entry ? entry.label : row.capabilityCode}
-                      <br />
-                      <small>{row.capabilityCode}</small>
-                    </td>
+                    <td>{entry ? entry.label : row.capabilityCode}</td>
                     <td>{entry ? entry.category : "—"}</td>
                     <td data-testid={`switch-state-${row.capabilityCode}`}>{row.enabled ? "开启" : "关闭"}</td>
                     <td data-testid={`switch-access-${row.capabilityCode}`}>{accessStatusOf(row, entry)}</td>

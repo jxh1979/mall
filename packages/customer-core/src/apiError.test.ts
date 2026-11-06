@@ -1,6 +1,6 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import { describe, expect, it } from "vitest";
-import { apiErrorFromResponse } from "./apiError";
+import { apiErrorFromResponse, formatApiErrorDetail } from "./apiError";
 
 function msgFor(status: number, body: Record<string, unknown>, method = "POST"): string {
   return apiErrorFromResponse("/api/v1/x", status, JSON.stringify(body), method).message;
@@ -84,5 +84,19 @@ describe("apiError translate — 字段级报错", () => {
 
   it("GET 读取失败与提交错误区分：404 读取语义", () => {
     expect(msgFor(404, { code: "NOT_FOUND", message: "x" }, "GET")).toContain("不存在");
+  });
+});
+
+// 第 193 条 193-R2（PGM:287「可以不用中文的只有四样，没有第五样：单据号、设备编号、二维码内容、系统内部标识符」）：
+// 技术详情折叠块只留状态码；接口路径、request_id、原始报文不上屏。
+describe("formatApiErrorDetail — 技术详情只留状态码", () => {
+  it("界面文本只有状态码，不含接口路径、request_id、原始报文", () => {
+    const raw = JSON.stringify({ code: "STATE_CONFLICT", message: "已被占用", request_id: "req-1" });
+    expect(formatApiErrorDetail(apiErrorFromResponse("/api/v1/bar/orders", 409, raw, "POST"))).toBe("状态码 409");
+    expect(formatApiErrorDetail(apiErrorFromResponse("/api/v1/x", 502, "<html>Bad Gateway</html>", "GET"))).toBe("状态码 502");
+  });
+
+  it("非 ApiError 不给技术详情", () => {
+    expect(formatApiErrorDetail(new Error("x"))).toBeNull();
   });
 });

@@ -1,6 +1,6 @@
 package com.complex.platform.terminal;
 
-// 文件版本：V0.13
+// 文件版本：V0.14
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.access.AuthorizationService.ProjectReach;
@@ -967,7 +967,8 @@ public class TerminalDeviceService {
                                 current.scopeType(),
                                 current.scopeId(),
                                 actual.enabled(),
-                                trimToNull(actual.operatorNote()),
+                                // 194 同根（控制席并入）：不带操作说明切开关时保留该行原说明，不写成空值。
+                                firstNonBlank(actual.operatorNote(), current.reason()),
                                 current.createdAt(),
                                 now
                         ));

@@ -1,6 +1,6 @@
 # PRD 审计业务裁决台账
 
-文档版本：V0.77
+文档版本：V0.78
 状态：进行中
 迁移日期：2026-07-27
 当前事实源：三份立法 HTML 以既有冻结基线叠加 James 此前 M02 至 M08 的点名批准、全量审计 M001、M002 的逐项批准，以及本轮 2026-10-16 至 2026-10-17 业务 HTML 审计中 Q01 至 Q40 及子题实际明确批准且未被后续替代的裁决，和 2026-10-17 第二批 HTML 业务线推演审计（A–F 六线 64 条、停车章）的逐项批准，并叠加本轮 CG 70 项来源确认与 C01–C09、N01–N03 最终澄清及补全文稿中 F01、W01–W05 的整体修改批准（本文件末节）；本轮最终规则、未采纳或替代关系、现行版本与字节哈希见本文件末节。历史记录保留为各自当时事实，不恢复已被替代的建议。
@@ -3943,6 +3943,12 @@ HTML 的语义补齐与直接引用同步可在本批核验；70项中的业务�
 | 36 | **第 155 条 保底月份的跨月退款冲正**（题面：「第 155 条：合同是「保底与抽成取高」，某月抽成额没到保底、按保底收租。这个月一笔 1000 元酒吧销售（落在 10% 档）下个月退款，是否仍给商户冲回 100 元抽成？HTML 只写「冲正金额一律按该笔款项在其原账期实际计费时所适用的档位与费率原额冲回」。」）—— 操作员选「按保底收的月份不冲」：原月按保底收租的，该月销售跨月退款不冲回；原月按抽成额收租的，照档位费率冲回。 | 第 155 条，18S 核实时弹窗，后续段实现。 |
 | 37 | **第 157 条 挂起适用范围与经理待办**（题面：「第 157 条：客人挂单后到闭店仍没付。HTML 写「经理未及时确认时，任务升级给店长或夜班值班经理」，没写多久算未及时。我理解为：闭店时给当班经理发「确认是否无法收款」待办，套用平台「全平台审批通用时限」（涉钱审批出厂 1 个工作日，后台可配），到时没处理就升级给店长和夜班值班经理；转坏账前一直挡交班和日结。对吗？」）—— 操作员没选给出的两个选项（「对，按通用时限（推荐）」「闭店就同时发三人」），原话：「散台和卡座下单的时候就应该收款，包厢要求服务人员在客人离开前必须完成收款」。追问（题面：「你答：「散台和卡座下单的时候就应该收款，包厢要求服务人员在客人离开前必须完成收款」。落到挂起订单上，我理解为：散台、卡座不能挂起，下单必须当场付款；只有包厢（系统里叫「贵宾包座」）可以挂起，客人离开（关台）时仍没付清，系统立即给当班经理发「确认能否收回」待办，经理在全平台审批通用时限内（涉钱出厂 1 个工作日）没处理就升级给店长或夜班值班经理。对吗？」）—— 操作员选「对，只有包厢能挂起」：散台、卡座下单必须当场付款、不能挂起；包厢关台时没付清就发经理待办，超时按通用时限升级。 | 第 157 条，18S 核实时弹窗，后续段实现。 |
 | 38 | **第 157 条 坏账订单与分红净利润**（题面：「第 157 条：HTML 写「转坏账核销的订单……也不计入分红净利润基数」。我理解为整单都不进：收入本来没收到不算，它出品时扣库存的商品成本也不算进分红的销货成本（损失由赔偿记录或门店损耗承担）。对吗？」）—— 操作员选「对，整单不进（推荐）」：收入与出库成本都不进分红净利润。 | 第 157 条，18S 核实时弹窗，后续段实现。 |
+| 39 | **第 202 条 酒吧账单反结时已付款项的处理**（题面：「第 202 条：酒吧账单反结（把已结账单重新打开、改正后再结，须主管审批）时，客人原先已付的钱怎么处理？现在反结只把原收款记录作废：储值卡扣的钱不退回，重新结账再选储值会再扣一次。」）—— 操作员选「储值当场退回原卡（推荐）」：反结生效时储值部分当场回原卡；现金、POS 等收款记录作废，收银按更正后的账单重新收款（通常客人还在场，多退少补）。（同日首次弹窗操作员问「什么是反结」，控制席解释为「把已结完账的酒吧账单重新打开、改正后再结一次，须主管审批留痕（BSM:1069）」后重问。） | 待做（第 202 条，18W 已核实） |
+| 40 | **第 183 条 总控驾驶舱「结算待确认」口径**（题面：「第 183 条：总控驾驶舱「财务：结算待确认」这一项数哪些？系统里会「待确认」的结算只有两类：演出结算（履约待确认、有争议、合同没约定时挂起）和门票积分月结账单（商户提了异议、财务还没处理完）。通票月度结算单按第 75 条算出即确认，不会待确认。」）—— 操作员选「两类分开显示（推荐）」：数演出结算挂起待确认的、积分月结账单有未处理异议的，分两个数显示，不相加。 | 待做（第 183 条，18W 已核实） |
+| 41 | **第 188 条 封账的范围、周期、条件与效果**（题面：「第 188 条：封账在系统里怎么做？HTML 只写「封账由财务部门执行，条件是账目已算清楚、经确认无误、四流一致」，又写正式会计核算在专业财税软件里做、本平台不替代；没写按什么范围和周期封、「四流一致」指什么、封账后拦什么。」）—— 操作员选「按综合体按月封账（推荐）」：财务中心按综合体＋月份在平台办理；只放行该月每天五类数据都已最终、日结都已锁定的月份；四流一致由财务核对后勾选确认留痕；封账不能撤销，不另加拦截。 | 待做（第 188 条，18W 已核实） |
+| 42 | **第 210 条 分红净利润扣税费的登记与出单前提**（题面：「第 210 条：分红净利润要扣「该期间的各项税费」，系统现在没有登记酒吧公司税费的地方。HTML 写平台保存「经授权人员手工填写并通过审批」的税费数据、实缴与申报的差额不进税费成本。我的方案：财务按公司、税种、所属期手工登记「实际申报金额」，经财务、税务、法务审核并由顶层平台公司老板最终确认后生效；分红扣本期内已生效的申报金额合计；按季申报的税整季计入季末那个月；不设「登记齐了才能出正式单」的前提。可以吗？」）—— 操作员选「登记齐了才能出单」：正式单出单前本期每个月都要有已生效的税费登记，缺的不出单并写跳过原因，其余同上（「其余同上」即题面方案的其余各项照做）。 | 待做（第 210 条，18W 已核实） |
+| 43 | **第 211 条 整期暂不分红或暂缓分红的登记**（题面：「第 211 条：「整期暂不分红或暂缓分红」须主理人与娱乐平台公司协商一致后执行，并记录原因与协商结果；系统现在没有登记处。我的方案：平台财务在持股分红页按商户按期登记（暂不分红或暂缓分红，原因、协商结果必填，不另走审批）；该期正式单已提交审批或已发放的不能再登记，草稿随登记作废；「暂不分红」该期不出正式单、利润不补分；「暂缓分红」等协商恢复后由财务登记恢复，再照常出单；月度预览照常。可以吗？」）—— 操作员选「按这个方案（推荐）」：照上面写的做。 | 待做（第 211 条，18W 已核实） |
+| 44 | **第 211 条 分红周期「按财务对账的固定处理日期设定」的读法**（题面：「第 211 条：HTML 写「分红周期可配：按财务对账的固定处理日期设定（例如一个月中的某几天）」，另一处写「发放走应付款项，落在三个付账日之一，具体哪一个由该公司在分红周期配置中指定」。我理解为：分红方案加一项「发放付账日」（每月三个付账日之一，出厂 5、15、25 日），审批通过后给主理人的应付和留存释放的应付都落在当天或之后第一个该付账日（现在是审批当天即到期）；分红期间仍按自然月、季、半年、年切分，正式单仍由财务手动出。对吗？」）—— 操作员选「对，按这个理解（推荐）」：只加「发放付账日」配置，期间切分与出单方式不变。 | 待做（第 211 条，18W 已核实） |
 
 第一段转正前最低池额试算与取消结算环节超池待审批：既有缺口，列入待开发清单第 75 条、随 18C 做（ENUM L52、BSM L752）。
 
@@ -5289,3 +5295,91 @@ HTML 的语义补齐与直接引用同步可在本批核验；70项中的业务�
   - 类别取舍按决策台账 §25 Q32（:3107）「不要求无关五类数据全最终」同理处理。
 - 控制席补（并入 159-R7）：StaffPayrollController 经 StaffPayrollConfigurationService 代理读 config.audit 为 null，自 b0944292 起 /api/v1/staff/payroll 下全部接口返回 500；改为构造注入 AuditEventService，业务逻辑不变；159-R7 回归 PayrollFinalSnapshotCommissionJdbcIntegrationTests 的工资计算与定格改回经真实接口。依据：159-R7 的闸在 staffPayrollCalculate、staffPayrollSettle 两个入口上生效（BSM:1500、ENUM:190 工资月结与正式提成计算），入口不可用则闸无法生效。
 - 18V 落地位置补记·运行验收证据、快照、终验文档刷新（无新裁决）：业务提交 273a7e80 与测试修复 989dad0e（分红月末预览测试的铺位带上面积，修 CI 上后端全量 1 条红）之后，按第十八批裁决 25 重刷了运行验收证据：后端全量 6482 测，0 失败 0 错误；apps/web 构建通过；常规界面验收（接口全部 mock）实跑 40 条全过；真实后端界面验收未跑，runtime_ready=false。随后依次重生成闭环当前态快照、生产闭环缺口报告、界面验收报告；无上线指挥台也重生成了，内容不变。生成器没改。手改 docs/final-closed-loop-acceptance-audit-v0.1.md 与 docs/code-implementation-acceptance-audit-v0.1.md：前端单测源码计数改为 1615；被核文件行数都没变；后端全量与常规界面验收的数字、日期改为本次实跑值；写入 npm run verify:unit 实跑结果，五个工作区全过。交付门禁于 2026-11-06 UTC 在工作树逐项实跑子项，NAS 两项现场探测未跑。仍红的有两项：一是 coding-host-protection，它写死主仓路径，在工作树口径下必红，属工具口径，不做；二是 final-closed-loop-audit，如实留 2 条红（integration-ready、business-acceptance-ready），原因是校验器要求终验把联调、业务验收写成「是」，而裁决 25 定了不跑真实后端界面验收、运行验收未就绪，终验写的是「否」。verify:delivery-gates 总链仍是红的。
+
+18W 落地位置补记（2026-11-06）：第十八批 W 段（batch43）核实待开发清单第 175～211 条并实现其中第 177、192、193、194、199、200、205、207、209 条；运行验收证据、终验文档在本段最后一个提交刷新；各条落地位置见下。本段追加时，原台账除文档版本 V0.77→V0.78 与裁决表新增第 39～44 行外，其他历史字节保持。
+
+- 18W 落地位置补记·控制席判定（2026-11-06）：待开发清单第 175～211 条在 main bcc3793f 上分十组只读核实（方案在本机 b43-audit\ 下十组 json），第 178、179、185、195 条不属实关闭，第 184 条契约部分并入第 198 条，其余 32 条分段实现；核实时弹窗定第十八批裁决 39～44（见裁决表）；核实旁见另记待开发清单第 212～234 条。本段（18W）做第 177、192、193、194、199、200、205、207、209 条；控制席并入（同页同根）五处：177 通用新建模板表单的「赠饮」选项、193-R2 网页读取失败技术详情只留状态码、194-R3 开关种子说明改中文（V605）、194-R4 开关矩阵页切开关改发 operatorNote、207 分红报错另三处英文状态；实现后控制席再并入两处同根：短信开关页与第三方开关页切开关改发 operator_note、分红依法可分配金额必填报错改中文；实现旁见另记待开发清单第 235 条（后台技术详情与留痕提示折叠块英文）。
+- 第 192 条（18W，安卓员工端界面全中文）落地位置：
+  - 192-R1：共享核心 apps/android-terminal/src/main/kotlin/com/complex/terminal/TerminalModels.kt 新增 localTimeZh（原 MainActivity.traceTime 挪入），把后端 ISO 瞬时按本机时区显示为 yyyy-MM-dd HH:mm。MainActivity.kt 的券和权益有效期、物业和商户工单处理时限、接警响应时限、我的排班、考勤屏班次、领取事件、本机待传事件、领用历史、核时审批历史、考勤月视图班次都改调它；PayrollPresentation.kt 工资单成功付款时间同样改调。
+  - 192-R2：TerminalModels.kt 新增 facilityWorkOrderStatusZh、workPriorityZh、payChannelZh、entitlementStatusZh（forfeited 已作废、refunded 已退款）、LEAVE_TYPE_LABELS 与 leaveTypeZh、serviceOrderStatusZh；KioskClaim.kt 的 entitlementTypeZh 补游乐、酒吧。MainActivity.kt 的设备状态、权益状态、出票中、工单与接警的状态和优先级、服务任务状态、支付渠道、请假类型全部改显示中文；删去登录屏服务地址、「BYOD 一期」「SKU」「Keystore」「用户id」「id」等英文字样；二维码渲染失败不拼异常原文；friendly() 兜底改为「操作失败」。
+  - 192-R3：TerminalModels.kt 新增 localInstantOf（日期＋时刻按本机时区转 ISO）。MainActivity.kt 一体机订台、帮客订位、核时实际领取时间、主管排班四处时间输入改为「日期（如 2026-11-05）」「时刻（如 20:30）」两栏，交接补录改调同一函数；请求体与后端不变。
+  依据原句：
+  - PGM:287「平台所有终端——后台管理端、客人手机端、现场平板与设备端、安卓终端——展示给用户的一切文字，包括菜单、页面标题、字段名、状态、枚举取值、按钮、提示、报错、导出文件表头与内容、短信与通知、日期时间等，必须全部为中文，不得出现任何英文（如 active/draft 英文状态、mm/dd/yyyy 英文日期格式、英文按钮或提示）。」
+  - ENUM:41「票/权益状态」「未使用、部分使用、已使用、已过期、已退款、已作废」。
+  对应裁决：无新裁决。
+  测试：TerminalFieldWorkflowTest 的 localTimeZhShowsIsoInstantAsLocalDateAndClock、payrollDetailShowsPaidAtAsLocalTime、terminalEnumLabelsCoverClosedSetsWithoutEnglish、localInstantOfJoinsDateAndClockInLocalZone；KioskReservationApiTest.kioskReservationSendsTimesConvertedFromDateAndClock；FacilityAlarmApiTest、MyWorkOrderConfirmApiTest、MyMerchantWorkOrderApiTest 在已有夹具上追加的中文断言。
+- 18W 落地位置补记·第 193 条 193-R1（安卓员工端失败提示去掉接口路径）：apps/android-terminal/src/main/kotlin/com/complex/terminal/ApiErrorText.kt apiErrorText 的末尾括号只留状态码（如「……（409）」），不再拼接口路径；完整路径、状态码和响应体仍由 android-app MainActivity.kt friendly() 记入设备日志，供报障。依据 PGM:287「可以不用中文的只有四样，没有第五样：单据号、设备编号、二维码内容、系统内部标识符。这四样之外，凡是展示给人看的文字一律中文，不得以“这是标识”为由保留英文。」；决策台账 DEC-R3B-2026-08-04-12「全中文原则的例外改为闭集：单据号、设备编号、二维码内容、系统内部标识符；不得以「这是标识」为由保留英文」。回归：ApiErrorTextTest（409、401、404、500 的输出都不含英文字母）、SensitiveLocationHeadersTest.locationGateDenialShowsTheServerReasonInsteadOfNoPermission（三处期望值改为「（403）」）。无新裁决。
+- 205-R2（第 205 条，安卓台位类型显示中文）：落地位置 apps/android-terminal/src/main/kotlin/com/complex/terminal/TerminalModels.kt 新增共享函数 barTableTypeZh，按后端台位类型闭集映射：card_seat 卡座、vip 包厢、bar_counter 吧台位、loose_table 散台。apps/android-terminal/android-app/app/src/main/kotlin/com/complex/terminal/MainActivity.kt 的一体机订台台位列表与员工代订桌位列表改调该函数，删掉原私有 tableTypeZh（原只认 bar/standard/card_seat，包厢、吧台位、散台原样显示英文码）。测试 KioskReservationApiTest.barTableTypeShowsChineseForAllFourCodes。依据 PGM:287「全局原则 · 界面全中文（所有终端零英文）：平台所有终端——后台管理端、客人手机端、现场平板与设备端、安卓终端——展示给用户的一切文字……必须全部为中文，不得出现任何英文」，以及决策台账:3944 第十八批裁决 37：操作员原话「包厢要求服务人员在客人离开前必须完成收款」，所选选项「对，只有包厢能挂起」，中文名定为「包厢」。对应裁决：第十八批裁决 37（命名），无新裁决。码值 vip 不变。
+- 177-R1（待开发清单第 177 条）：后台票务策略页 ADM-TKT-001 的通用「新建模板」表单加「提供方商户」必选下拉（apps/web/src/admin/pages/TicketingPoliciesPage.tsx：tplForm.merchantId、data-testid entitlement-template-merchant）。createTemplate 未选商户时提示「请选择权益的提供方商户」、不发请求；请求体带 merchant_id；接口拒绝时页面显示中文报错（如「商户未填写」），不再变成没人处理、页面也不提示的失败。控制席并入（同页同根）：通用表单的权益类型下拉去掉「赠饮」，赠饮模板一律在本页「组合式套票配置」酒吧行建；该处可选任一票种（含单店票），可选该吧的赠送商品与成本承担方，所以能覆盖。后端、OpenAPI 不改。依据：BSM:1754「每项权益都必须绑定实际提供方和审批版本，避免悬空账。」；PGM:287「展示给用户的一切文字，包括菜单、页面标题、字段名、状态、枚举取值、按钮、提示、报错……必须全部为中文」。无新裁决。测试：TicketingPoliciesPage.guidedcreate.test.tsx 新增「177-R1 新建模板：未选提供方商户不发请求并提示，权益类型不含赠饮」「177-R1 新建模板：后端 400 时显示中文报错」并改 ② 段；MerchantConcessionDiningSettlementJdbcIntegrationTests.genericTemplateFormBodyStoresChosenProviderAndMissingMerchantRejectedInChinese。
+- 18W 落地位置补记·第 199 条 199-R1（后台出票请求体改发 reason；无 HTML 原句，属代码自身缺陷，先例 18N 120-R2；依据契约 docs/openapi/openapi-p0.yaml TicketIssueRequest「required: idempotency_key、reason」「出票原因（必填）；缺失返回 400 VALIDATION_FAILED」，additionalProperties false；无新裁决）：`apps/web/src/admin/pages/TicketOrdersPage.tsx` 的 issueOrder 请求体由 `{ operatorNote: TEXT.issueNote }` 改为 `{ reason: TEXT.issueNote }`，发固定出票原因「完整后台验收出票」（同安卓一体机 120-R2 发固定原因的写法），不加出票原因输入框。原先页面经 adminClient 发出的是 operator_note，后端 StatusChangeRequest 不认，reason 为空，每次 400「原因未填写」。后端、OpenAPI、页面权限矩阵 CSV 不改，不加迁移。回归：前端 `TicketOrdersPage.issue.test.tsx`「选订单、点出票并确认后按契约发 reason，不发 operatorNote」；后端 `KioskTicketSaleJdbcTests.adminWebIssueWithPageBodyReasonIssuesAndOperatorNoteOnlyIsRejected`：后台网页 admin 渠道订单按页面请求体 idempotency_key、reason 出票，200，issue_status=issued；只发 operator_note 则 400「原因未填写」。
+- 200-R1（第 200 条，应收应付台账「登记核销」每次 400）：落地于 apps/web/src/admin/pages/FinanceArApLedgerPage.tsx。金额框后加「收付方式」下拉，四项为现金 cash、银行转账 bank_transfer、刷卡 pos、其他 other（同后端 FinanceService.OFFLINE_PAYMENT_METHODS），未选时提示「请选择收付方式。」且不提交；请求体由 amount、reason 改为 amount_cent、payment_method、operator_note（原因框内容）。依据：契约 docs/openapi/openapi-p0.yaml components.schemas.ArApPaymentRequest 把 amount_cent、payment_method 列为必填，payment_method 说明为「收付方式编码（必填），原样记为本笔收付款的收付方式；日后在本笔款项上退款时，以它作为原收款渠道。」。属页面按钮每次 400 的技术缺陷，无业务 HTML 依据（先例 18N 120-R2）。无新裁决。后端与契约不改；operator_note 是否进审计留痕归第 198 条。测试：FinanceArApLedgerPage.test.tsx「登记核销请求体」两条，FinanceJdbcIntegrationTests.ledgerPaymentWithPageRequestShapeRegistersAmountAndMethod（真实入口、蛇形键），e2e ADM-MVP-05 补选收付方式。
+- 209-R1（薪酬与请假页四个写操作补报错提示）
+  - 落地位置：apps/web/src/admin/pages/StaffPayrollLeavePage.tsx 中，saveAdjustment（:106，「发起复核」）、submitAppeal（:136，「提出申诉」）、review（:165，请假「通过」「驳回」）、reviewRevoke（:176，「批准销假」「驳回销假」）四个函数的请求段包进 try/catch，写法同 159-R8 的 closeCommissionSettlement。被后端拒绝时经全局报错显示共享客户端译好的中文（409 为「操作冲突：」加后端原文，403 为「当前账号无权进行此操作」）；兜底文字依次为「发起复核失败」「提出申诉失败」「请假审批失败」「销假审批失败」。失败时不记成功结果，也不清空已填内容。后端、接口、矩阵不变。
+  - 回归：
+    - StaffPayrollLeavePage.hrchain.test.tsx 2 条（奖惩接口回 409 时显示后端中文原文，不记已发起复核，已填员工与事由保留；申诉接口回 403（非本人申诉）时显示中文报错，不记申诉已提交）
+    - StaffPayrollLeavePage.revoke.test.tsx 2 条（请假「通过」接口回 409 时显示后端中文原文，不记已审批；「批准销假」接口回 409 时显示后端中文原文，不记已审批）
+  - 依据原句：PGM:291「用户看到的每一处文字都是中文，含状态、枚举、日期、按钮、提示、报错、导出与短信。」
+  - 对应裁决：无新裁决。
+- 193-R2（控制席并入（同页同根））：网页端读取失败的「技术详情」折叠块只显示状态码（如「状态码 500」），接口路径、request_id、原始响应体不上屏，仍留在 err.detail 供程序内部使用；报障看浏览器开发者工具的网络记录。落地位置：packages/customer-core/src/apiError.ts formatApiErrorDetail（后台 AdminDataState 经 useAdminResource、useServerPagedRows、MetricDetailPage，客人端 CustomerAuthShell 同源生效）。测试：packages/customer-core/src/apiError.test.ts「formatApiErrorDetail — 技术详情只留状态码」；apps/web/src/admin/components/AdminDataState.test.tsx「193-R2 读取失败的技术详情只留状态码，接口路径、request_id、原始报文不上屏」；tests/e2e/full-admin-remaining.spec.ts ADM-REM-03。依据：PGM:287「可以不用中文的只有四样，没有第五样：单据号、设备编号、二维码内容、系统内部标识符。这四样之外，凡是展示给人看的文字一律中文，不得以“这是标识”为由保留英文。」；决策台账 DEC-R3B-2026-08-04-12「全中文原则的例外改为闭集」。无新裁决。
+- 194-R1 终端开关列表带能力中文名：
+  - 落地位置：
+    - JdbcTerminalDeviceRepository.listCapabilitySwitches 改为 LEFT JOIN permissions，取 permission_name 作 capability_name。
+    - TerminalCapabilitySwitchRecord 末尾加 capabilityName 组件，原 9 参构造保留，置空；其余读写路径为空。
+    - OpenAPI listCapabilitySwitches 的 200 响应改为 PageResponse＋行 schema，含可空的 capability_name；操作数仍 1253。
+    - FieldLabels.java、fieldLabels.ts 补 capability_name「能力名称」。
+    - operation-traceability PRD V0.13 §6.3 实现现状。
+    - 回归：CapabilitySwitchChineseDisplayJdbcIntegrationTests.listCarriesPermissionChineseNameForPermissionCapabilities、toggleWritesOperatorNoteIntoReasonAndUpdateResponseKeepsItsFields。
+  - 依据：PGM:287「……展示给用户的一切文字，包括菜单、页面标题、字段名、状态、枚举取值……必须全部为中文……可以不用中文的只有四样，没有第五样：单据号、设备编号、二维码内容、系统内部标识符。」
+  - 无新裁决。
+- 194-R2 矩阵页与两个兄弟页的能力、范围显示中文：
+  - 落地位置：
+    - TerminalSwitchMatrixPage 的 capabilityLabel 取名顺序：接口带回的权限中文名，其次短信开关目录、第三方开关目录，再次本页小表（售票能力、终端总开关、工作手机/平板/一体机设备管控、支付真实渠道、企业微信人工智能语义质检、现场摄像头扫码、平板终端、员工设备公钥与指纹绑定）。
+    - 矩阵页：能力列显示中文名；范围列非全局显示「范围中文名：编号」；灰度试点标题显示中文名；能力手填框改为下拉（显示中文、提交原码）。
+    - SmsNotificationSwitchesPage 删去「能力码」列；IntegrationSwitchesPage 删去标签下的原码。
+    - 回归：TerminalSwitchMatrixPage.test.tsx、SmsNotificationSwitchesPage.test.tsx 新增一条、e2e ADM-REM-01。
+  - 依据：
+    - PGM:287 同上；
+    - 决策台账 DEC-R3B-2026-08-04-16「开关档位用词与既有逐字对齐（全局／综合体／商户／业务系统／模块／版本、设备／灰度）」；
+    - BSM:971「连接设备管控，限制安装软件、限制网站访问、记录设备违规。」；
+    - BSM:980「其中只有启用售票能力的一体机，才允许授权服务人员在到店服务场景下辅助客人购票」。
+  - 无新裁决。
+- 194-R4 矩阵页切开关改发 operatorNote：
+  - 控制席并入（同页同根）。
+  - 落地位置：
+    - TerminalSwitchMatrixPage.toggle 的请求键由 reason 改为 operatorNote，内容为「后台关闭／后台打开：终端中文名 / 能力中文名」。
+    - 后端 TerminalDeviceService.updateCapabilitySwitch 本就把 operator_note 写进该行说明（reason），属现有设计，未改。
+    - 回归：TerminalSwitchMatrixPage.test.tsx「切开关把本次操作说明以 operator_note 提交」；CapabilitySwitchChineseDisplayJdbcIntegrationTests.toggleWritesOperatorNoteIntoReasonAndUpdateResponseKeepsItsFields。
+  - 依据：PGM:908「终端开关启用、停用、灰度开放和被拒绝访问。」（须留痕）
+  - 无新裁决。
+- 194-R3 V605 把终端开关种子说明改为中文：
+  - 控制席并入（同页同根）。
+  - 落地位置：
+    - V605__terminal_switch_seed_reason_chinese.sql 按原种子说明逐条匹配，只改 reason。覆盖 V071、V088、V093、V096、V097、V098、V146、V177、V198（「Web 后台·」改为「网页后台·」）、V545、V554、V595、V600 各行。
+    - V197 中「客人 App」「Web 前端」「商户 App」是 HTML 终端名（PGM:724-725），照旧保留。
+    - 回归：CapabilitySwitchChineseDisplayJdbcIntegrationTests.seededSwitchDescriptionsAreChinese。
+  - 依据：PGM:287 同上。
+  - 无新裁决。
+- 第十八批 W 段第 205 条 205-R1（后台与后端报错统一叫「包厢」，去掉英文 VIP）落地位置如下，码值 vip 不变：
+  - apps/web/src/admin/i18n/fieldLabels.ts：KEY_VALUE_LABELS.table_type 的 vip 由「贵宾包坐」改为「包厢」。
+  - apps/web/src/admin/pages/BarTableSessionsPage.tsx 引导式新建卡座：卡座名称提示改「如 包厢-01」，桌台类型选项改「包厢（同卡座流转）」，确认页桌台类型改「包厢」。
+  - backend/src/main/java/com/complex/platform/bar/BarOrderSuspensionService.java：非包厢挂起返回 409 BAR_ORDER_SUSPEND_VIP_ONLY，报错改为「只有包厢订单可以挂起；散台、卡座须下单当场付款」。
+  依据：PGM:287「全局原则 · 界面全中文（所有终端零英文）」中「……枚举取值……提示、报错……必须全部为中文，不得出现任何英文」；决策台账:3944 第十八批裁决 37 中，操作员原话「包厢要求服务人员在客人离开前必须完成收款」与所选选项「对，只有包厢能挂起」都用「包厢」。无新裁决。
+  测试：BarTableSessionsPage.guidedcreate.test.tsx「桌台类型叫「包厢」：下拉、名称提示与确认页都不出现英文 VIP 与「包坐」」；BarOrderSuspensionJdbcIntegrationTests.onlyVipWithReasonPermissionAndScope 补 $.message 断言。
+- 18W 落地位置补记·第 207 条 207-R1：分红计算单状态在跳过原因和报错里改为中文名。落地位置：backend/src/main/java/com/complex/platform/dividend/DividendService.java 新增私有静态 STATEMENT_STATUS_LABELS（preview 预览（只读）、draft 草稿、pending_review 待审批、approved 已审批、paid 已发放、rejected 已驳回、voided 已作废，与前端 FinanceDividendsPage.tsx DIVIDEND_STATUS_LABELS 同名）。用到它的四处：runCompute 跳过原因「已有计算单进入审批流（待审批等），不重算」；以及控制席并入（同页同根）的三处报错：confirmLegalInternal「只有草稿或已驳回的正式单可以登记依法可分配金额（当前状态：…）」、requireStatus 通用报错（提交、审批、驳回、标记发放共用）「（当前状态：…）」、releaseInternal「只有已审批/已发放的计算单才有留存可释放（当前状态：…）」，原来都拼英文状态。商户编号照旧原样显示，属 PGM:287、PGM:299 列明可保留的系统内部标识符，先例见 18I 第 87 条。前端、接口、OpenAPI 不改。回归：DividendFinalSnapshotGateJdbcIntegrationTests.skipReasonAndStateConflictShowChineseStatementStatus（真实入口、蛇形键：出单 → 登记依法可分配金额 → 提交 → 同期再出单，跳过原因含「待审批」；再提交 409，报错「只有草稿单可以提交审阅（当前状态：待审批）」）。依据：PGM:287「展示给用户的一切文字，包括菜单、页面标题、字段名、状态、枚举取值、按钮、提示、报错……必须全部为中文，不得出现任何英文（如 active/draft 英文状态……）」。无新裁决。
+- 控制席并入（同页同根）：
+  - 短信开关页、第三方开关页切开关改发 operator_note（同 194-R4）：
+    - SmsNotificationSwitchesPage.toggle（:77）、IntegrationSwitchesPage.toggle（:104）照矩阵页写法，自动带「后台关闭/后台打开：能力中文名」（能力名取 SMS_CATALOG、THIRD_PARTY_SWITCH_CATALOG）；
+    - 后端 TerminalDeviceService.updateCapabilitySwitch 既有行分支（约 :970）改为 firstNonBlank(operator_note, 原说明)，不带 operator_note 时不再把说明写成空值，新建行分支不变；
+    - 回归：SmsNotificationSwitchesPage.test.tsx「切开关把本次操作说明以 operator_note 提交……」、IntegrationSwitchesPage.test.tsx「切开关把本次操作说明以 operator_note 提交」、CapabilitySwitchChineseDisplayJdbcIntegrationTests.toggleWithoutOperatorNoteKeepsExistingReason（真实入口、蛇形键、真实授权链）；
+    - PRD：operation-traceability PRD §6.3 与修订记录同步；
+    - 依据：PGM:908「终端开关启用、停用、灰度开放和被拒绝访问。」，不新增裁决。
+  - 分红依法可分配金额必填报错（同 207）核实不属实，未改：
+    - DividendService :877 的「legal_distributable_cent is required」是抛点机读文字，响应体经 GlobalExceptionHandler→FieldLabels.translate 已输出「依法可分配金额未填写」（FieldLabels.java:790）；
+    - FieldLabels 头注释写明抛点保留英文键给日志排障；
+    - 前端 FinanceDividendsPage.validateLegal 先拦金额为空；
+    - 临时探针实测返回 400「依法可分配金额未填写」，探针已删。
+- 18W 复核修复补记（2026-11-06）：4 条复核意见经独立反驳核实成立，控制席判定修法如下（①②③ 无新裁决，依据均为 PGM:287「平台所有终端……展示给用户的一切文字，包括菜单、页面标题、字段名、状态、枚举取值、按钮、提示、报错……必须全部为中文」「可以不用中文的只有四样，没有第五样：单据号、设备编号、二维码内容、系统内部标识符」）：
+  - ① 安卓员工端设备绑定屏（192 同根）：apps/android-terminal/android-app/app/src/main/kotlin/com/complex/terminal/MainActivity.kt showDeviceBinding（:313）持有员工档案编号输入框提示由「持有员工档案编号（领用即绑定，U07-001）」改为「持有员工档案编号（领用即绑定）」，只删需求编号。本文件与安卓共享核心 apps/android-terminal/src/main/kotlin 再 grep「U0x-」「需求编号」，其余命中都是代码注释、不上屏，未改。回归：android-app :app:compileDebugKotlin 通过，员工端 gradle test 全过（33 个测试文件 117 测）。
+  - ② 应收应付台账「登记核销」成功后的结果区（200 同根）：apps/web/src/admin/i18n/fieldLabels.ts KEY_VALUE_LABELS 加 payment_method（cash 现金、bank_transfer 银行转账、pos 刷卡、other 其他，同 FinanceArApLedgerPage PAYMENT_METHODS）与 source_type（二十七项取值与中文名同本页 SOURCE_TYPE_LABELS）。核过这些来源码加表前在任何结果区都原样显示英文，别的表 source_type 闭集里与之同码的只有 bar_bill（V527、V534）、contract_rent，含义相同，不改动别的页面原本已对的显示。结果区收付方式不再显示 bank_transfer 或「POS刷卡」，来源类型显示中文名。回归：FinanceArApLedgerPage.test.tsx「登记核销成功后结果区收付方式、来源类型显示中文：不含 bank_transfer、POS刷卡 与来源原码」（真实 AdminApi、文本体假响应，payment_method=bank_transfer、source_type=contract_rent）。
+  - ③ 持股分红页两句报错（同页同根，控制席并入 207）：backend/src/main/java/com/complex/platform/dividend/DividendService.java 新建方案 409 DIVIDEND_PLAN_EXISTS（:230）改为「该商户已有生效中的分红方案；请修改现有方案或先停用再新建」；计算 400 VALIDATION_FAILED（:368）改为「月度预览只支持月份期间标签（如 2026-07）」；码值不动。回归：DividendFinalSnapshotGateJdbcIntegrationTests.previewWithNonMonthPeriodLabelIsRejectedInChinese（真实入口、真实授权链、前端蛇形键：类别月度预览、期间标签 2026-Q3，400，$.message 不含英文字母）。
+  - ④ 覆盖矩阵 docs/prd-audit/html-prd-coverage.csv：控制席把 BSM-0770 新写出的两处未落分句登记为待开发清单第 236 条（通票权益绑定没有「审批版本」）、第 237 条（通票结算审阅台账没有按经营域、责任主体列示域间份额、域内分配与内部结算价权益），依据 BSM:1754「通票结算审阅财务侧设置独立审阅台账，按项目、经营域、责任主体和实际提供方列明第三方渠道费用、域间份额、域内分配、内部结算价权益、酒吧入场可分配池和责任主体承担的差额。每项权益都必须绑定实际提供方和审批版本，避免悬空账。」与任务书操作员 2026-11-06 选「照旧登记」；BSM-0770 备注两分句后各补「见待开发清单第 236 条」「见待开发清单第 237 条」。BSM-0619、BSM-0756 备注「是否须按票种发布时锁定待核，见待开发清单第 178 条」改为「是否须按票种发布时锁定，见待开发清单第 178 条 18W 核实不属实（ENUM:54 核销或结算时锁定当时版本即现状口径）」。第 178 条关闭理由：ENUM:54「价格变更形成新版本并只对后续生效，核销或结算时锁定当时版本。」，现状即此口径——TicketVerificationService.resolveSettlementPrice 经 InternalSettlementPriceResolver 取目录生效价（新版本须他人复核转正才生效），核销同事务固化进 ticket_verifications.settlement_price_cent；三份 HTML 没有发布时锁价的原句。

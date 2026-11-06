@@ -1,7 +1,8 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 // 两端（后台 adminClient / 客人端 customerClient）共用的接口错误翻译层。
 // 目标：err.message 一律是中文业务话术（62 页现有 err.message 渲染点自动受益），
-// 技术信息（path/status/request_id/原始报文）收进 err.detail，由 UI 折叠展示供报障。
+// 技术信息（path/status/request_id/原始报文）收进 err.detail；UI 折叠块只显示状态码（第 193 条 193-R2，PGM:287 不用中文的例外只有四样），
+// 接口路径、request_id、原始报文不上屏，报障看浏览器开发者工具的网络记录。
 
 export type ApiErrorDetail = {
   path: string;
@@ -26,13 +27,9 @@ export class ApiError extends Error {
   }
 }
 
-/** 供 UI「技术详情」折叠块使用的报障文本；非 ApiError 返回 null。 */
+/** 供 UI「技术详情」折叠块使用的报障文本：只留状态码；非 ApiError 返回 null。 */
 export function formatApiErrorDetail(error: unknown): string | null {
-  if (!(error instanceof ApiError)) return null;
-  const { path, status, requestId, raw } = error.detail;
-  return [`${path} ${status}`, requestId ? `request_id=${requestId}` : null, raw || null]
-    .filter(Boolean)
-    .join("\n");
+  return error instanceof ApiError ? `状态码 ${error.detail.status}` : null;
 }
 
 function hasChinese(text: string | null | undefined): boolean {

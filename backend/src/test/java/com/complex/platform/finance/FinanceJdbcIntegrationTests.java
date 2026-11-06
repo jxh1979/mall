@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.06
+// 文件版本：V0.07
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.groups.Tuple.tuple;
@@ -1294,6 +1294,46 @@ class FinanceJdbcIntegrationTests {
         return mockMvc.perform(post("/api/v1/finance/daily-closes/" + dailyCloseId + "/" + action).with(who)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"idempotency_key\":\"" + key + "\"}"));
+    }
+
+    /**
+     * 第十八批 W 段第 200 条 200-R1（契约 ArApPaymentRequest 必填 amount_cent、payment_method）：后台台账「登记核销」
+     * 按页面真实请求形状（蛇形键 amount_cent、payment_method、operator_note、idempotency_key）登记成功；
+     * 原页面形状（amount、reason）与缺收付方式均 400，台账不动。
+     */
+    @Test
+    void ledgerPaymentWithPageRequestShapeRegistersAmountAndMethod() throws Exception {
+        String s = suffix();
+        String project = "project_lpm_" + s;
+        String bar = "bar_lpm_" + s;
+        insertProject(project);
+        insertBar(bar, project);
+        String item = dueItem("arap_lpm_" + s, bar, project, farDay(s));
+        RequestPostProcessor finance = new StaffRequestFixture(jdbcTemplate).staff("usr_lpm_" + s, "staff", project, null,
+                "finance.payment.register");
+
+        ledgerPay(finance, item, "{\"amount\":10000,\"reason\":\"客户付款\",\"idempotency_key\":\"lpm-old-" + s + "\"}")
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.detail_code").value("VALIDATION_FAILED"));
+        ledgerPay(finance, item, "{\"amount_cent\":10000,\"operator_note\":\"客户付款\",\"idempotency_key\":\"lpm-nom-" + s + "\"}")
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.detail_code").value("VALIDATION_FAILED"));
+        assertThat(jdbcTemplate.queryForObject("SELECT paid_amount_cent FROM ar_ap_items WHERE id = ?", Long.class, item))
+                .isZero();
+
+        ledgerPay(finance, item, "{\"amount_cent\":10000,\"payment_method\":\"bank_transfer\",\"operator_note\":\"客户付款\","
+                + "\"idempotency_key\":\"lpm-ok-" + s + "\"}")
+                .andExpect(status().isOk());
+        assertThat(jdbcTemplate.queryForObject("SELECT paid_amount_cent FROM ar_ap_items WHERE id = ?", Long.class, item))
+                .isEqualTo(10000L);
+        assertThat(jdbcTemplate.queryForList("SELECT payment_method FROM ar_ap_payments WHERE ar_ap_item_id = ?", String.class, item))
+                .containsExactly("bank_transfer");
+    }
+
+    private org.springframework.test.web.servlet.ResultActions ledgerPay(RequestPostProcessor who, String itemId, String json)
+            throws Exception {
+        return mockMvc.perform(post("/api/v1/finance/ar-ap-items/" + itemId + "/payments").with(who)
+                .contentType(MediaType.APPLICATION_JSON).content(json));
     }
 
     private org.springframework.test.web.servlet.ResultActions pay(RequestPostProcessor who, String itemId, String key)

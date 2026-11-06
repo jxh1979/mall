@@ -1,5 +1,5 @@
 package com.complex.platform.dividend;
-// 文件版本：V0.08
+// 文件版本：V0.09
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.BusinessDayResolver;
@@ -86,6 +86,10 @@ public class DividendService {
     private static final Set<String> KINDS = Set.of("official", "preview");
     private static final Set<String> STATEMENT_STATUSES = Set.of(
             "preview", "draft", "pending_review", "approved", "paid", "rejected", "voided");
+    /** 207-R1 PGM:287「状态……报错……必须全部为中文」：跳过原因与报错里的计算单状态中文名，与前端 DIVIDEND_STATUS_LABELS 同名。 */
+    private static final java.util.Map<String, String> STATEMENT_STATUS_LABELS = java.util.Map.of(
+            "preview", "预览（只读）", "draft", "草稿", "pending_review", "待审批", "approved", "已审批",
+            "paid", "已发放", "rejected", "已驳回", "voided", "已作废");
     /** 可重算（作废+重出）的状态；已进入审批流的单不重算。 */
     private static final Set<String> RECOMPUTABLE_STATUSES = Set.of("preview", "draft", "rejected");
     /** 月度预览自动生成（159-R6 月末营业日五类标齐后）的系统操作人标识（无请求上下文，落 computed_by/voided_by 便于留痕追溯）。 */
@@ -223,7 +227,7 @@ public class DividendService {
                 List.of());
         if (!repository.insertPlan(plan)) {
             throw ApiException.conflict("DIVIDEND_PLAN_EXISTS",
-                    "该商户已有生效中的分红方案；请修改现有方案或先停用（status=ended）再新建");
+                    "该商户已有生效中的分红方案；请修改现有方案或先停用再新建");
         }
         // V309 自定义扣除项：新建时按请求整表落地（空/缺省=无自定义扣除）。
         repository.replaceCustomDeductions(plan.id(), parseCustomDeductions(plan.id(), request.customDeductions()));
@@ -361,7 +365,7 @@ public class DividendService {
         DividendPeriod period = DividendPeriod.parse(request.periodLabel());
         if ("preview".equals(kind) && !DividendPeriod.isMonthLabel(period.label())) {
             throw ApiException.badRequest("VALIDATION_FAILED",
-                    "preview 只支持月度期间标签（如 2026-07）");
+                    "月度预览只支持月份期间标签（如 2026-07）");
         }
         List<DividendPlanRecord> plans;
         if (request.merchantId() != null && !request.merchantId().isBlank()) {
@@ -415,7 +419,7 @@ public class DividendService {
             if (existing.isPresent()) {
                 if (!RECOMPUTABLE_STATUSES.contains(existing.get().status())) {
                     skipped.add(new DividendComputeSkipRecord(plan.merchantId(),
-                            "已有计算单进入审批流（" + existing.get().status() + "），不重算"));
+                            "已有计算单进入审批流（" + STATEMENT_STATUS_LABELS.get(existing.get().status()) + "），不重算"));
                     continue;
                 }
                 // C-1：作废 UPDATE 带期望前态守卫（preview/draft/rejected）；0 行=并发下已进入审批流，跳过不重算。
@@ -867,7 +871,7 @@ public class DividendService {
         }
         if (!"draft".equals(statement.status()) && !"rejected".equals(statement.status())) {
             throw ApiException.conflict("DIVIDEND_STATE_INVALID",
-                    "只有草稿或已驳回的正式单可以登记依法可分配金额（当前状态：" + statement.status() + "）");
+                    "只有草稿或已驳回的正式单可以登记依法可分配金额（当前状态：" + STATEMENT_STATUS_LABELS.get(statement.status()) + "）");
         }
         if (request.legalDistributableCent() == null) {
             throw ApiException.badRequest("VALIDATION_FAILED", "legal_distributable_cent is required");
@@ -944,7 +948,7 @@ public class DividendService {
     private static void requireStatus(DividendStatementRecord statement, String expected, String message) {
         if (!expected.equals(statement.status())) {
             throw ApiException.conflict("DIVIDEND_STATE_INVALID",
-                    message + "（当前状态：" + statement.status() + "）");
+                    message + "（当前状态：" + STATEMENT_STATUS_LABELS.get(statement.status()) + "）");
         }
     }
 
@@ -1034,7 +1038,7 @@ public class DividendService {
         DividendStatementRecord stmt = requireStatement(statementId);
         if (!"approved".equals(stmt.status()) && !"paid".equals(stmt.status())) {
             throw ApiException.conflict("DIVIDEND_STATE_INVALID",
-                    "只有已审批/已发放的计算单才有留存可释放（当前状态：" + stmt.status() + "）");
+                    "只有已审批/已发放的计算单才有留存可释放（当前状态：" + STATEMENT_STATUS_LABELS.get(stmt.status()) + "）");
         }
         if (stmt.reserveWithheldCent() <= 0) {
             throw ApiException.conflict("DIVIDEND_RESERVE_NONE", "该计算单没有发放保护线留存，无需释放");

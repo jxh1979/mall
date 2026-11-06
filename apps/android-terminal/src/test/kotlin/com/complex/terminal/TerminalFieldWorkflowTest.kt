@@ -1,6 +1,6 @@
 package com.complex.terminal
 
-// 文件版本：V0.07
+// 文件版本：V0.08
 
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
@@ -434,6 +434,69 @@ class TerminalFieldWorkflowTest {
     }
     assertEquals("", verificationReasonZh(null))
     assertEquals("", verificationReasonZh("unknown_reason"))
+  }
+
+  // 第十八批 W 段第 192 条 192-R1（PGM:287「……日期时间等，必须全部为中文，不得出现任何英文（如……mm/dd/yyyy 英文日期格式……）」）：
+  // 后端 ISO 瞬时按本机时区显示为「年-月-日 时:分」，空值显示「-」。
+  @Test
+  fun localTimeZhShowsIsoInstantAsLocalDateAndClock() {
+    val shanghai = java.time.ZoneId.of("Asia/Shanghai")
+    assertEquals("2026-11-05 20:30", localTimeZh("2026-11-05T12:30:00Z", shanghai))
+    assertEquals("-", localTimeZh(null, shanghai))
+  }
+
+  // 192-R1：工资单成功付款时间按本机时区显示，不出现 ISO 的 T、Z。
+  @Test
+  fun payrollDetailShowsPaidAtAsLocalTime() {
+    val saved = java.util.TimeZone.getDefault()
+    java.util.TimeZone.setDefault(java.util.TimeZone.getTimeZone("Asia/Shanghai"))
+    try {
+      val detail = PayrollStatementDetail(
+        statement = PayrollStatementRow(id = "pay-192", month = "2026-10", totalCent = 480000),
+        status = "paid", statementKind = "monthly", schemeVersionId = "scheme-1", factsId = "facts-1",
+        paymentDueDate = "2026-11-05", arApItemId = "ap-1", paidAmountCent = 480000,
+        lines = emptyList(), worktime = null, corrections = emptyList(),
+        payments = listOf(PayrollPayment("p-1", "finance-1", 480000, "bank_transfer", "bank-1", "2026-11-05T12:30:00Z")),
+        pendingItems = emptyList(),
+      )
+      val text = payrollDetailText(detail)
+      assertTrue(text.contains("2026-11-05 20:30"), text)
+      assertFalse(text.contains("2026-11-05T") || text.contains(":00Z"), text)
+    } finally {
+      java.util.TimeZone.setDefault(saved)
+    }
+  }
+
+  // 192-R2（PGM:287「……状态、枚举取值……必须全部为中文……」；ENUM:41「已退款、已作废」）：员工端各枚举闭集全部取值都有中文、不含英文。
+  @Test
+  fun terminalEnumLabelsCoverClosedSetsWithoutEnglish() {
+    val latin = Regex("[A-Za-z]")
+    fun allZh(values: List<String>, zh: (String?) -> String) = values.forEach { v ->
+      val text = zh(v)
+      assertFalse(latin.containsMatchIn(text), "$v -> $text")
+    }
+    allZh(listOf("pending_assign", "assigned", "processing", "pending_review", "pending_acceptance", "accepted", "closed", "suspended", "overtime"),
+      ::facilityWorkOrderStatusZh)
+    allZh(listOf("urgent", "high", "normal", "low", "medium", "critical"), ::workPriorityZh)
+    allZh(listOf("active", "refunded", "forfeited"), ::entitlementStatusZh)
+    allZh(listOf("personal", "sick", "comp", "annual"), ::leaveTypeZh)
+    allZh(listOf("created", "paid", "pending_accept", "accepted", "completed", "cancelled"), ::serviceOrderStatusZh)
+    allZh(listOf("wechat", "alipay"), ::payChannelZh)
+    assertEquals("已作废", entitlementStatusZh("forfeited"))
+    assertEquals("已退款", entitlementStatusZh("refunded"))
+    assertEquals("游乐", entitlementTypeZh("amusement"))
+    assertEquals("酒吧", entitlementTypeZh("bar"))
+    assertEquals("支付宝", payChannelZh("alipay"))
+  }
+
+  // 192-R3（PGM:287）：日期＋时刻两栏按本机时区转 ISO 瞬时，格式不对为空。
+  @Test
+  fun localInstantOfJoinsDateAndClockInLocalZone() {
+    val shanghai = java.time.ZoneId.of("Asia/Shanghai")
+    assertEquals("2026-11-05T12:30:00Z", localInstantOf("2026-11-05", "20:30", shanghai))
+    assertEquals("2026-11-05T12:30:00Z", localInstantOf(" 2026-11-05 ", " 20:30 ", shanghai))
+    assertNull(localInstantOf("2026/11/05", "20:30", shanghai))
+    assertNull(localInstantOf("2026-11-05", "", shanghai))
   }
 
   private fun okJson(body: String): HttpResponse<String> = StubResponse(200, body)

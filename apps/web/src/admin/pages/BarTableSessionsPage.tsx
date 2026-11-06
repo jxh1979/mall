@@ -1,4 +1,4 @@
-// 文件版本：V0.15
+// 文件版本：V0.16
 import React from "react";
 import { QRCodeSVG } from "qrcode.react";
 import { buildCustomerLink } from "@complex/customer-core/links";
@@ -501,11 +501,11 @@ export function BarTableSessionsPage({ api, setActionResult, setGlobalError, eff
             content: (
               <>
                 <label>所属酒吧<BarVenueSelect api={api} testId="bar-new-table-bar" value={newTable.barId} onChange={(v) => setNewTable((p) => ({ ...p, barId: v }))} autoSelectFirst setGlobalError={setGlobalError} /></label>
-                <label>卡座名称<input data-testid="bar-new-table-name" value={newTable.tableName} onChange={(event) => setNewTable((p) => ({ ...p, tableName: event.target.value }))} placeholder="如 VIP-01" /></label>
+                <label>卡座名称<input data-testid="bar-new-table-name" value={newTable.tableName} onChange={(event) => setNewTable((p) => ({ ...p, tableName: event.target.value }))} placeholder="如 包厢-01" /></label>
                 <label>桌台类型
                   <select data-testid="bar-new-table-type" aria-label="桌台类型" value={newTable.tableType} onChange={(event) => setNewTable((p) => ({ ...p, tableType: event.target.value }))}>
                     <option value="card_seat">卡座（出品走接单→制作→备好→送达流转）</option>
-                    <option value="vip">VIP 包坐（同卡座流转）</option>
+                    <option value="vip">包厢（同卡座流转）</option>
                     <option value="bar_counter">吧台位（直点即点即取，不走出品流转）</option>
                     <option value="loose_table">散台（客人扫码点单、下单即付款，不收服务费）</option>
                   </select>
@@ -528,7 +528,7 @@ export function BarTableSessionsPage({ api, setActionResult, setGlobalError, eff
         summary={[
           { label: "所属酒吧", value: newTable.barId.trim() || "未填写" },
           { label: "卡座名称", value: newTable.tableName.trim() || "未填写" },
-          { label: "桌台类型", value: newTable.tableType === "bar_counter" ? "吧台位（不走出品流转）" : newTable.tableType === "vip" ? "VIP 包坐" : newTable.tableType === "loose_table" ? "散台（扫码点单）" : "卡座" },
+          { label: "桌台类型", value: newTable.tableType === "bar_counter" ? "吧台位（不走出品流转）" : newTable.tableType === "vip" ? "包厢" : newTable.tableType === "loose_table" ? "散台（扫码点单）" : "卡座" },
           { label: "可进人数", value: newTable.capacity.trim() || "未填写" },
           { label: "低消（元）", value: newTable.minimumSpendYuan.trim() || "0" },
         ]}

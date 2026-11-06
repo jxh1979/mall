@@ -1,4 +1,4 @@
-// 文件版本：V0.04
+// 文件版本：V0.05
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
@@ -75,7 +75,8 @@ const VARIANT_LABELS: Record<string, string> = {
   channel: "渠道价",
   member: "会员价",
 };
-const ENTITLEMENT_TYPES = ["entry", "ride", "gift_drink", "bar", "amusement"];
+// 第十八批 W 段 177-R1（控制席并入）：通用「新建模板」不含赠饮——赠饮须选赠送商品，在「组合式套票配置」酒吧行建（该处可选任一票种含单店票、选该吧商品与成本承担方）。
+const ENTITLEMENT_TYPES = ["entry", "ride", "bar", "amusement"];
 
 // 组合式配置策略：酒吧权益种类（对应 entitlement_type）。gift_drink=酒水兑换，admission=入场资格。
 const BAR_ENTITLEMENT_KINDS = [
@@ -181,7 +182,8 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
   const [createOpen, setCreateOpen] = React.useState(false);
 
   // 区2 新建权益模板
-  const [tplForm, setTplForm] = React.useState({ name: "", entitlementType: "entry", totalTimes: "1", valueYuan: "" });
+  // 第十八批 W 段 177-R1（BSM:1754「每项权益都必须绑定实际提供方和审批版本，避免悬空账。」）：提供方商户必选。
+  const [tplForm, setTplForm] = React.useState({ name: "", entitlementType: "entry", totalTimes: "1", valueYuan: "", merchantId: "" });
   // 配置中心批5：改虚拟权益签约价（=内部结算价）。资金口径，理由必填。
   // 区3 通票组装（票种绑权益）
   const [bindForm, setBindForm] = React.useState({ ticketTypeId: "", templateId: "", quantity: "1", totalTimes: "1", numPeople: "1", componentPriceYuan: "", costBearer: "" });
@@ -453,17 +455,24 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
       setGlobalError("权益模板名称必填");
       return;
     }
-    await api.post("/api/v1/ticketing/entitlement-templates", {
-      idempotency_key: crypto.randomUUID(),
-      name: tplForm.name.trim(),
-      entitlement_type: tplForm.entitlementType,
-      default_total_times: Number(tplForm.totalTimes) || 1,
-      default_value_cent: tplForm.valueYuan.trim() ? Math.round(Number(tplForm.valueYuan) * 100) : null,
-      status: "active",
-    });
-    setActionResult({ action: "entitlement_template_created", name: tplForm.name.trim() });
-    setTplForm({ name: "", entitlementType: "entry", totalTimes: "1", valueYuan: "" });
-    reload();
+    if (!tplForm.merchantId) {
+      setGlobalError("请选择权益的提供方商户");
+      return;
+    }
+    try {
+      await api.post("/api/v1/ticketing/entitlement-templates", {
+        idempotency_key: crypto.randomUUID(),
+        name: tplForm.name.trim(),
+        entitlement_type: tplForm.entitlementType,
+        default_total_times: Number(tplForm.totalTimes) || 1,
+        default_value_cent: tplForm.valueYuan.trim() ? Math.round(Number(tplForm.valueYuan) * 100) : null,
+        status: "active",
+        merchant_id: tplForm.merchantId,
+      });
+      setActionResult({ action: "entitlement_template_created", name: tplForm.name.trim() });
+      setTplForm({ name: "", entitlementType: "entry", totalTimes: "1", valueYuan: "", merchantId: "" });
+      reload();
+    } catch (e) { setGlobalError(e instanceof Error ? e.message : "新建权益模板失败"); }
   }
 
   async function bindEntitlement() {
@@ -1217,6 +1226,10 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
       </div>
       <div className="admin-inline-form" data-testid="entitlement-template-form">
         <input aria-label="模板名称" placeholder="模板名称（如 入园1次）" value={tplForm.name} onChange={(event) => setTplForm({ ...tplForm, name: event.target.value })} />
+        <select aria-label="提供方商户" data-testid="entitlement-template-merchant" value={tplForm.merchantId} onChange={(event) => setTplForm({ ...tplForm, merchantId: event.target.value })}>
+          <option value="">选择提供方商户</option>
+          {merchants.map((m) => (<option key={m.id} value={m.id}>{m.merchantName}</option>))}
+        </select>
         <select aria-label="权益类型" value={tplForm.entitlementType} onChange={(event) => setTplForm({ ...tplForm, entitlementType: event.target.value })}>
           {ENTITLEMENT_TYPES.map((t) => (
             <option key={t} value={t}>{formatBusinessStatus(t)}</option>

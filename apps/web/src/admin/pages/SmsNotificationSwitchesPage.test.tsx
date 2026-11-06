@@ -1,8 +1,9 @@
-// 文件版本：V0.03
-import { render, screen, waitFor } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+// 文件版本：V0.04
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { SmsNotificationSwitchesPage } from "./SmsNotificationSwitchesPage";
+import { AdminApi } from "../client/adminClient";
 import type { AdminApiClient, AdminPageProps, EffectivePermissionsState } from "../types";
 
 const ADMIN_PERMS: EffectivePermissionsState = { status: "ready", value: { grants: [], denies: [], wildcard: true } };
@@ -25,7 +26,31 @@ function props(rows: ReturnType<typeof row>[]): AdminPageProps {
   };
 }
 
+const AT = "2026-11-06T00:00:00Z";
+
+function envelope(data: unknown): Response {
+  return new Response(JSON.stringify({ success: true, code: "OK", message: "success", data }), {
+    status: 200, headers: { "content-type": "application/json" },
+  });
+}
+
+function puts(fetchMock: ReturnType<typeof vi.fn>): Record<string, unknown>[] {
+  return fetchMock.mock.calls
+    .filter(([, init]) => (init as RequestInit | undefined)?.method === "PUT")
+    .map(([, init]) => JSON.parse(String((init as RequestInit).body)) as Record<string, unknown>);
+}
+
 describe("短信通知开关页", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("开关行只显示中文通知项，不再显示能力码（第十八批 W 段第 194 条 194-R2，PGM:287）", async () => {
+    render(<SmsNotificationSwitchesPage {...props([row("sms_notification"), row("sms.notify.stored_wine.deposit")])} />);
+    await waitFor(() => expect(screen.queryByTestId("sms-switch-sms_notification")?.textContent ?? "").toContain("短信通知总开关"));
+    expect(screen.getByTestId("sms-switch-sms_notification").textContent).not.toContain("sms_notification");
+    expect(screen.getByTestId("sms-switch-sms.notify.stored_wine.deposit").textContent).not.toContain("sms.notify");
+    expect(screen.getByTestId("sms-switches-table").textContent).not.toContain("能力码");
+  });
+
   it("订台短信开关行显示中文名（OBS-13-03，BSM 第 1596、1598 行）", async () => {
     render(<SmsNotificationSwitchesPage {...props([
       row("sms.notify.bar_reservation"),
@@ -98,5 +123,22 @@ describe("短信通知开关页", () => {
     expect(screen.getByTestId("sms-switch-toggle-sms.notify.stored_wine.expired")).toBeTruthy();
     expect(screen.getByTestId("sms-switch-sms.notify.merchant_fee.rent_dunning").textContent).toContain("房租催缴");
     expect(screen.getByTestId("sms-switch-toggle-sms.notify.merchant_fee.rent_dunning")).toBeTruthy();
+  });
+
+  it("切开关把本次操作说明以 operator_note 提交（第十八批 W 段第 194 条同根，同终端开关矩阵页 194-R4；PGM:908 终端开关启用、停用须留痕）", async () => {
+    const item = {
+      id: "tcs_sms_stored_wine_deposit", terminal_type: "*", capability_code: "sms.notify.stored_wine.deposit",
+      scope_type: "global", scope_id: "global", enabled: true, reason: "存酒成功短信", created_at: AT, updated_at: AT,
+    };
+    const fetchMock = vi.fn().mockImplementation((_input: RequestInfo | URL, init?: RequestInit) =>
+      Promise.resolve(envelope(init?.method === "PUT"
+        ? { ...item, enabled: false }
+        : { items: [item], page: 1, page_size: 50, total: 1 })));
+    vi.stubGlobal("fetch", fetchMock);
+    render(<SmsNotificationSwitchesPage {...props([])} api={new AdminApi()} />);
+    await waitFor(() => expect(screen.queryByTestId("sms-switch-state-sms.notify.stored_wine.deposit")?.textContent).toBe("开启"));
+    fireEvent.click(screen.getByTestId("sms-switch-toggle-sms.notify.stored_wine.deposit"));
+    await waitFor(() => expect(puts(fetchMock)).toHaveLength(1));
+    expect(puts(fetchMock)[0]).toMatchObject({ enabled: false, operator_note: "后台关闭：存酒成功" });
   });
 });

@@ -1,8 +1,9 @@
-// 文件版本：V0.03
+// 文件版本：V0.04
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { StaffPayrollLeavePage } from "./StaffPayrollLeavePage";
+import { AdminApi } from "../client/adminClient";
 import type { AdminApiClient, AdminPageProps, EffectivePermissionsState } from "../types";
 
 const ADMIN_PERMS: EffectivePermissionsState = { status: "ready", value: { grants: [], denies: [], wildcard: true } };
@@ -70,5 +71,60 @@ describe("StaffPayrollLeavePage 奖惩复核链与扣罚申诉（CG-12）", () =
     fireEvent.change(screen.getByTestId("appeal-user-input"), { target: { value: "usr_e" } });
     fireEvent.click(screen.getByTestId("appeal-load"));
     await waitFor(() => expect(api.get).toHaveBeenCalledWith("/api/v1/staff/payroll/adjustments/appeals?user_id=usr_e"));
+  });
+});
+
+// 第十八批 W 段 209-R1（PGM:291「用户看到的每一处文字都是中文，含状态、枚举、日期、按钮、提示、报错、导出与短信。」）：
+// 奖惩与申诉请求被后端拒绝时，页面经全局报错显示中文提示，不记成功、不清空已填内容。修复前按钮 void 调用无 catch，什么都不显示。
+describe("StaffPayrollLeavePage 奖惩与申诉被拒时显示报错（209-R1）", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  const PAYROLL = [{ id: "pay_1", user_id: "u-9", payer_company_id: "ent-platform" }];
+  function textResponse(body: unknown, status = 200): Response {
+    return new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
+  }
+  function stubRejectedPost(pathPart: string, status: number, error: Record<string, unknown>) {
+    vi.stubGlobal("fetch", vi.fn().mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (init?.method === "POST" && url.includes(pathPart)) return Promise.resolve(textResponse({ success: false, ...error }, status));
+      const items = url.includes("/staff/payroll?") ? PAYROLL : [];
+      return Promise.resolve(textResponse({ success: true, code: "OK", message: "success", data: { items, page: 1, page_size: 50, total: items.length } }));
+    }));
+  }
+  function renderReal() {
+    const setActionResult = vi.fn();
+    const setGlobalError = vi.fn();
+    const props: AdminPageProps = { api: new AdminApi("test-token"), user: { id: "u1", username: "admin", accountType: "platform_admin" }, setActionResult, setGlobalError, effectivePermissions: ADMIN_PERMS };
+    render(<StaffPayrollLeavePage {...props} />);
+    return { setActionResult, setGlobalError };
+  }
+
+  it("奖惩接口回 409 时显示后端中文原文，不记已发起复核，已填员工与事由保留", async () => {
+    const message = "员工档案未归属公司，无法确定经营主体配置";
+    stubRejectedPost("/api/v1/staff/payroll/adjustments", 409, { code: "STATE_CONFLICT", detail_code: "STAFF_COMPANY_REQUIRED", message });
+    const { setActionResult, setGlobalError } = renderReal();
+    await waitFor(() => expect(screen.getByTestId("payroll-payer-pay_1").textContent).toBe("ent-platform"));
+
+    fireEvent.change(screen.getByTestId("adj-user-input"), { target: { value: "usr_e" } });
+    fireEvent.change(screen.getByTestId("adj-amount-input"), { target: { value: "30" } });
+    fireEvent.change(screen.getByTestId("adj-reason-input"), { target: { value: "迟到" } });
+    fireEvent.click(screen.getByTestId("adj-save"));
+    await waitFor(() => expect(setGlobalError).toHaveBeenCalledWith("操作冲突：" + message));
+    expect(setActionResult).not.toHaveBeenCalledWith(expect.objectContaining({ action: "payroll_adjustment_requested" }));
+    expect((screen.getByTestId("adj-user-input") as HTMLInputElement).value).toBe("usr_e");
+    expect((screen.getByTestId("adj-reason-input") as HTMLInputElement).value).toBe("迟到");
+  });
+
+  it("申诉接口回 403（非本人申诉）时显示中文报错，不记申诉已提交", async () => {
+    stubRejectedPost("/api/v1/staff/payroll/adjustments/adj_1/appeals", 403, { code: "FORBIDDEN", detail_code: "APPEAL_SELF_ONLY", message: "只能由被扣罚员工本人提出申诉" });
+    const { setActionResult, setGlobalError } = renderReal();
+    await waitFor(() => expect(screen.getByTestId("payroll-payer-pay_1").textContent).toBe("ent-platform"));
+
+    fireEvent.change(screen.getByTestId("appeal-adj-input"), { target: { value: "adj_1" } });
+    fireEvent.change(screen.getByTestId("appeal-reason-input"), { target: { value: "当日已报备" } });
+    fireEvent.click(screen.getByTestId("appeal-submit"));
+    await waitFor(() => expect(setGlobalError).toHaveBeenCalledWith("当前账号无权进行此操作"));
+    expect(setActionResult).not.toHaveBeenCalledWith(expect.objectContaining({ action: "payroll_adjustment_appeal_submitted" }));
+    expect((screen.getByTestId("appeal-reason-input") as HTMLInputElement).value).toBe("当日已报备");
   });
 });

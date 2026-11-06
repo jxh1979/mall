@@ -1,4 +1,4 @@
-// 文件版本：V0.12
+// 文件版本：V0.13
 import type { Page, Route } from "@playwright/test";
 
 type ApiData = Record<string, unknown> | Array<Record<string, unknown>> | null;
@@ -305,7 +305,7 @@ function fixedRows(pathname: string, state: MockState, options: MockOptions = {}
     "/api/v1/terminals/capability-switches": [
       { id: "tcs_term_web", terminalType: "web", capabilityCode: "terminal.enabled", scopeType: "global", scopeId: "global", enabled: true, reason: "Web 前端总开关" },
       { id: "tcs_term_kiosk", terminalType: "kiosk", capabilityCode: "terminal.enabled", scopeType: "global", scopeId: "global", enabled: true, reason: "一体机总开关" },
-      { id: "tcs_camera_scan_off", terminalType: "tablet", capabilityCode: "camera.scan", scopeType: "global", scopeId: "global", enabled: false, reason: "相机扫码" },
+      { id: "tcs_camera_scan_off", terminalType: "tablet", capabilityCode: "terminal.camera_scan.enabled", scopeType: "global", scopeId: "global", enabled: false, reason: "相机扫码" },
       { id: "tcs_sms_master", terminalType: "*", capabilityCode: "sms_notification", scopeType: "global", scopeId: "global", enabled: false, reason: "短信通知总开关，默认关" },
       { id: "tcs_sms_stored_wine", terminalType: "*", capabilityCode: "sms.notify.stored_wine", scopeType: "global", scopeId: "global", enabled: true, reason: "存酒域开关" },
       { id: "tcs_sms_wine_deposit", terminalType: "*", capabilityCode: "sms.notify.stored_wine.deposit", scopeType: "global", scopeId: "global", enabled: true, reason: "存酒成功" },

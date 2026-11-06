@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -195,6 +195,24 @@ class KioskTicketSaleJdbcTests {
                 .andExpect(jsonPath("$.message").value("门店终端只能售卖本店单店票，不得售卖综合体通票"));
         assertThat(jdbc.queryForObject("SELECT count(*) FROM ticket_orders WHERE ticket_type_id = ?", Integer.class, f.ticketTypeId)).isZero();
         assertThat(jdbc.queryForObject("SELECT sold_quantity FROM ticket_types WHERE id = ?", Integer.class, f.ticketTypeId)).isEqualTo(sold);
+    }
+
+    @Test
+    void adminWebIssueWithPageBodyReasonIssuesAndOperatorNoteOnlyIsRejected() throws Exception {
+        // 第十八批 W 段 199-R1（契约 TicketIssueRequest：必填 idempotency_key、reason，additionalProperties false）：后台网页出票页按页面请求体
+        // （adminClient 转蛇形后两键 idempotency_key、reason）出票；原先页面发 operator_note，后端不认、reason 为空，每次 400「原因未填写」。
+        String orderId = CustomerTicketPaymentFixture.read(order(platformSeller, "kts-admin-web-" + s, ticketA, barA, "admin", f.phone, null)
+                .andExpect(status().isOk()), "$.data.id");
+        mockMvc.perform(post("/api/v1/ticketing/orders/" + orderId + "/issue").with(platformSeller)
+                        .contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(Map.of(
+                                "idempotency_key", "kts-admin-issue-note-" + s, "operator_note", "完整后台验收出票"))))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("原因未填写"));
+        mockMvc.perform(post("/api/v1/ticketing/orders/" + orderId + "/issue").with(platformSeller)
+                        .contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(Map.of(
+                                "idempotency_key", "kts-admin-issue-" + s, "reason", "完整后台验收出票"))))
+                .andExpect(status().isOk());
+        assertThat(jdbc.queryForObject("SELECT issue_status FROM ticket_orders WHERE id = ?", String.class, orderId)).isEqualTo("issued");
     }
 
     // ---------- helpers ----------
