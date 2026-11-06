@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.09
+// 文件版本：V0.10
 
 // 文件版本：V0.03
 
@@ -1027,6 +1027,7 @@ class TicketingServiceTests {
         // 多次票：核销两次，used_times=2。
         service.createVerification(new VerificationRequest(
                 "reverse-concurrent-a", "qr", entitlement.entitlementCode(), "dev_1", "gate_1", Map.of()));
+        nextSession(entitlement.id());
         VerificationResponse second = service.createVerification(new VerificationRequest(
                 "reverse-concurrent-b", "qr", entitlement.entitlementCode(), "dev_1", "gate_1", Map.of()));
         assertThat(ticketingRepository.findIssuedEntitlementByCode(entitlement.entitlementCode()))
@@ -2852,6 +2853,7 @@ class TicketingServiceTests {
         service.createVerification(new VerificationRequest(
                 "atomic-first", "qr", code, "dev_1", "gate_1", Map.of()
         ));
+        nextSession(ticketingRepository.findIssuedEntitlementByCode(code).orElseThrow().id());
 
         // Second call with different idempotency key should fail – entitlement is now exhausted
         org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.createVerification(new VerificationRequest(
@@ -3777,6 +3779,22 @@ class TicketingServiceTests {
                 .extracting(TicketInstanceRecord::status).isEqualTo("refund_pending");
     }
 
+    /**
+     * 第十八批 X 段 196-R1：入场类权益同一场次内再入场放行不扣次；验扣次或用尽的用例先把该权益此前的核销挪到营业日起点之前
+     * （模拟下一场；内存仓单测为出厂起点）。
+     */
+    private void nextSession(String entitlementId) {
+        com.complex.platform.common.BusinessDayResolver days = new com.complex.platform.common.BusinessDayResolver();
+        Instant before = days.start(null, null, days.businessDate(null, null, Instant.now())).minusSeconds(60);
+        ticketingRepository.verifications.replaceAll((id, v) -> !entitlementId.equals(v.entitlementId()) ? v
+                : new VerificationRecord(v.id(), v.verificationNo(), v.entitlementId(), v.entitlementCode(), v.credentialType(),
+                        v.credentialPayload(), v.deviceId(), v.pointId(), v.status(), v.resultReason(), v.sourceType(),
+                        v.clientTaskId(), before, v.nonce(), v.staffId(), v.merchantId(), v.windowValid(), v.signatureValid(),
+                        v.verifiedPeople(), v.reversesVerificationId(), v.reversedBy(), v.reversedAt(), v.settlementPriceCent(),
+                        v.amusementVerificationId(), v.anomalyOfVerificationId(), v.anomalyResolution(), v.anomalyResolvedBy(),
+                        v.anomalyResolvedAt(), v.anomalyResolutionReason()));
+    }
+
     private IssuedEntitlementRecord issueSingleEntitlement(String key) {
         TicketTypeRecord ticketType = createTicketType(key + "-ticket");
         EntitlementTemplateRecord template = createTemplate(key + "-template", 2, 9900L);
@@ -4184,6 +4202,27 @@ class TicketingServiceTests {
                     .filter(v -> entitlementId.equals(v.entitlementId()) && "success".equals(v.status())
                             && !v.createdAt().isBefore(since))
                     .count();
+        }
+
+        @Override
+        public boolean hasVerifiedEntrySince(String parentTicketId, int slotIndex, java.time.Instant since) {
+            // 197-R1：与 JdbcTicketingRepository 同口径（同票同人份的入场类权益、核销成功、自 since 起）。
+            return parentTicketId != null && verifications.values().stream().anyMatch(v -> {
+                IssuedEntitlementRecord e = issuedEntitlements.get(v.entitlementId());
+                return e != null && parentTicketId.equals(e.parentTicketId()) && e.slotIndex() == slotIndex
+                        && (java.util.Set.of("ticket", "entry", "admission").contains(e.entitlementType())
+                                || e.entitlementType().startsWith("amusement"))
+                        && "success".equals(v.status()) && !v.createdAt().isBefore(since);
+            });
+        }
+
+        @Override
+        public int maxEntryTotalTimes(String parentTicketId, int slotIndex) {
+            return issuedEntitlements.values().stream()
+                    .filter(e -> parentTicketId.equals(e.parentTicketId()) && e.slotIndex() == slotIndex
+                            && java.util.Set.of("ticket", "entry", "admission").contains(e.entitlementType())
+                            && e.compensationItemId() == null)
+                    .mapToInt(IssuedEntitlementRecord::totalTimes).max().orElse(0);
         }
 
         @Override

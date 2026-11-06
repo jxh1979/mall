@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.18
+// 文件版本：V0.19
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -137,7 +137,9 @@ public interface FinanceRepository {
 
     /**
      * 第十八批 Q 段第 138 条 138-R3：非酒吧商户已完成结算的券结算金额＝该商户为对手方的 partner_voucher 应付
-     * （统一券 internal_price 核销、通票合作方券 internal_purchased 核销）在 [from, to) 内的实际付款，逐笔（155-R3）。
+     * （统一券 internal_price 核销、通票合作方券 internal_purchased 核销）在 [from, to) 内的实际付款，逐笔（155-R3）；
+     * 第十八批 X 段第 175 条 175-R1：另计通票分账专属直付应付（ticket_distribution）与补偿履约应付（compensation_fulfillment）的实际付款，
+     * 两类追收应收（ticket_distribution_recovery、compensation_fulfillment_recovery）的实际收回取负相抵。
      * default 返回空兼容既有测试双子。
      */
     default List<TurnoverSourceRow> listSettledVoucherSettlementRows(String merchantId, Instant fromInclusive, Instant toExclusive) {

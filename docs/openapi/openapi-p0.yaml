@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: 综合体管理系统 P0 API 契约
-  version: V0.55
+  version: V0.56
   description: P0 首批编码前置契约。本文采用 JSON-compatible YAML，便于与 openapi-p0.json 保持一致。正式后端以 Java 21 + Spring Boot 4.x +
     springdoc-openapi 输出运行时 OpenAPI，并与本契约比对。
 servers:
@@ -12483,7 +12483,7 @@ paths:
         - ticketing
       operationId: createTicketVerification
       summary: 正式核销
-      description: "核销记录状态闭集（CG-05，ENUM「核销记录状态」）：success（成功）、rejected（拒绝：规则不允许）、failed（失败：设备或网络原因）、reversed（已冲正）、anomaly（异常：已成功扣次但现场未放行或实际交付有争议时提起的异常复核，见 POST /api/v1/ticketing/verifications/{id}/anomaly 与 POST /api/v1/ticketing/verification-anomalies/{id}/resolve）；不设预检通过态、不提供人工放行（manual_overridden 仅历史行保留）。 在线核销：过刷新窗口 / 签名失配以正常响应返回 status=failed（window_expired / signature_invalid）；规则不允许仍以错误响应返回（响应不变），业务事务结束后另起事务落一条 status=rejected 记录（result_reason 为错误码小写；不扣次、不落结算价）；设备或凭证技术原因抛错（设备封禁或未纳管、核销设备未绑定商户、凭证已用或已作废等）同样以错误响应返回，业务事务结束后另起事务落一条 status=failed 记录；设备未登记不落；参数校验、鉴权、越权、定位闸等未进入有效检票的错误不落核销记录（CG 裁决第46、48项）。第十八批 Q 段第 148 条 148-R1（ENUM:55「未先核入场即核酒水一律拒绝」）：酒水（赠饮）权益须本营业日内已核销同票同人份这家酒吧的入场权益，否则 409 BAR_ENTRY_NOT_VERIFIED（规则拒绝，落 rejected）。第十八批 S 段第 165 条 165-R1（BSM:800「后续场次的附带权益也不得提前到当前场次使用」）：多次票的酒水（赠饮）权益每场次（这家酒吧本营业日）只能核本场一份（赠饮总次数÷同票同人份这家酒吧入场次数，至少 1；补偿补发行按其全部次数），超出 409 GIFT_DRINK_SESSION_SHARE_USED_UP（规则拒绝，落 rejected）。第十八批 N 段第 123 条 123-R2（BSM:1630「核销、收款、退款、放行等敏感操作，操作设备定位落在该项目综合体授权范围之外时一律拒绝并留痕」；BSM:1876「Web 端同样适用」）：本操作属敏感操作定位闸的现场动作闭集（第十八批裁决 31）。操作对象所属项目已配授权范围（123-R1）时须带请求头 X-Geo-Latitude、X-Geo-Longitude（设备当下定位，WGS-84 十进制度）：没带或解析不了按范围外处理（裁决 30）返回 403 SENSITIVE_OPERATION_LOCATION_REQUIRED，到圆心距离超过授权半径返回 403 SENSITIVE_OPERATION_OUT_OF_RANGE，拒绝在独立事务里留痕 sensitive_operation.location_rejected（business_id 为本 operationId，业务回滚不丢）；项目没配授权范围不查位置（裁决 32）；判定在幂等之前，重放不能绕过；通过时不存位置。"
+      description: "核销记录状态闭集（CG-05，ENUM「核销记录状态」）：success（成功）、rejected（拒绝：规则不允许）、failed（失败：设备或网络原因）、reversed（已冲正）、anomaly（异常：已成功扣次但现场未放行或实际交付有争议时提起的异常复核，见 POST /api/v1/ticketing/verifications/{id}/anomaly 与 POST /api/v1/ticketing/verification-anomalies/{id}/resolve）；不设预检通过态、不提供人工放行（manual_overridden 仅历史行保留）。 在线核销：过刷新窗口 / 签名失配以正常响应返回 status=failed（window_expired / signature_invalid）；规则不允许仍以错误响应返回（响应不变），业务事务结束后另起事务落一条 status=rejected 记录（result_reason 为错误码小写；不扣次、不落结算价）；设备或凭证技术原因抛错（设备封禁或未纳管、核销设备未绑定商户、凭证已用或已作废等）同样以错误响应返回，业务事务结束后另起事务落一条 status=failed 记录；设备未登记不落；参数校验、鉴权、越权、定位闸等未进入有效检票的错误不落核销记录（CG 裁决第46、48项）。第十八批 Q 段第 148 条 148-R1（ENUM:55「未先核入场即核酒水一律拒绝」）：酒水（赠饮）权益须本营业日内已核销同票同人份这家酒吧的入场权益，否则 409 BAR_ENTRY_NOT_VERIFIED（规则拒绝，落 rejected）。第十八批 S 段第 165 条 165-R1（BSM:800「后续场次的附带权益也不得提前到当前场次使用」）：多次票的酒水（赠饮）权益每场次（这家酒吧本营业日）只能核本场一份（赠饮总次数÷同票同人份这家酒吧入场次数，至少 1；补偿补发行按其全部次数），超出 409 GIFT_DRINK_SESSION_SHARE_USED_UP（规则拒绝，落 rejected）。第十八批 N 段第 123 条 123-R2（BSM:1630「核销、收款、退款、放行等敏感操作，操作设备定位落在该项目综合体授权范围之外时一律拒绝并留痕」；BSM:1876「Web 端同样适用」）：本操作属敏感操作定位闸的现场动作闭集（第十八批裁决 31）。操作对象所属项目已配授权范围（123-R1）时须带请求头 X-Geo-Latitude、X-Geo-Longitude（设备当下定位，WGS-84 十进制度）：没带或解析不了按范围外处理（裁决 30）返回 403 SENSITIVE_OPERATION_LOCATION_REQUIRED，到圆心距离超过授权半径返回 403 SENSITIVE_OPERATION_OUT_OF_RANGE，拒绝在独立事务里留痕 sensitive_operation.location_rejected（business_id 为本 operationId，业务回滚不丢）；项目没配授权范围不查位置（裁决 32）；判定在幂等之前，重放不能绕过；通过时不存位置。第十八批 X 段第 196 条 196-R1（BSM:800「同一场次内的重复进出仍须按上述三道环节依次通过，但不再重复扣减票面入场次数」）：入园与酒吧入场资格（entry、admission；消耗窗口为 per_session、unlimited_in_day 的照旧）本场已有核销成功记录（已冲正的不算）时再次核销放行、不扣次——酒吧入场按这家酒吧本营业日、入园按订单综合体本营业日定本场；落 status=success、result_reason=session_reentry，不落结算价、不发积分与结算事件、不留脸不比对。第十八批 X 段第 197 条 197-R1（BSM:800「只能在完成检票环节所在的那一个场次内核销」「后续场次的附带权益也不得提前到当前场次使用」）：票内餐饮、零售券（专属直付，exclusive_merchant_id 非空）须同票同人份在本场（订单综合体本营业日）已有入场类核销成功（已冲正的不算），否则 409 ENTITLEMENT_SESSION_NOT_CHECKED_IN；每场只能核一份（该券总次数÷同票同人份入场次数，至少 1；入场次数不超过 1 的单次票与全园故障补偿补发行取全部次数），本场已达一份 409 ENTITLEMENT_SESSION_SHARE_USED_UP；两者均属规则拒绝，落 rejected、不扣次。"
       x-permission: verification.execute
       x-data-scope: project-point
       x-terminal-allowed:
@@ -12543,7 +12543,7 @@ paths:
         - ticketing
       operationId: reverseTicketVerification
       summary: 核销冲正
-      description: 对已成功核销记录做冲正：回滚 used_times、原记录置 reversed、新建 reversed 记录可追溯。reason 必填，权限 ticket.verify.reverse。 原记录有待主管处置的核销异常时 409 VERIFICATION_ANOMALY_OPEN（须走主管处置出口）。
+      description: 对已成功核销记录做冲正：回滚 used_times、原记录置 reversed、新建 reversed 记录可追溯。reason 必填，权限 ticket.verify.reverse。 原记录有待主管处置的核销异常时 409 VERIFICATION_ANOMALY_OPEN（须走主管处置出口）。 第十八批 X 段第 196 条 196-R1：result_reason 为 session_reentry（同场次再入场）或 day_replay（游乐当天重放）的放行记录，冲正时照常置 reversed 并新建 reversed 记录，但不回补次数、不发核销冲正事件。
       x-permission: ticket.verify.reverse
       x-data-scope: project-point
       x-terminal-allowed:
@@ -12685,7 +12685,7 @@ paths:
         - ticketing
       operationId: previewTicketVerification
       summary: 票务核销预览
-      description: 检票环节内部不设预检（DEC-R8-31 ③）：核销记录状态共六态、不设「预检通过」态；检票环节内部为一次动作——扫码即核销，不设先预检、后确认的两次操作（ENUM「核销记录状态」条）。第十八批 M 段 112-R2（BSM 第 1948 行「……需要扫码后在一体机上清楚看到能领什么、能领多少、是否已经领取，并把领取结果回写到权益记录。」）：一体机权益领取屏扫码后用本端点展示可领取内容（权益类型、总次数与已用次数、有效期、状态），确认后再调 createTicketVerification 领取。 TK-06：响应 data.face_binding 仅在一人多次票且人脸供应商可用时出现——capture=本次首次入场须客人同意并拍照留存，match=须拍照按留存人脸比对；单次票、多人票或供应商不可用时为空。
+      description: 检票环节内部不设预检（DEC-R8-31 ③）：核销记录状态共六态、不设「预检通过」态；检票环节内部为一次动作——扫码即核销，不设先预检、后确认的两次操作（ENUM「核销记录状态」条）。第十八批 M 段 112-R2（BSM 第 1948 行「……需要扫码后在一体机上清楚看到能领什么、能领多少、是否已经领取，并把领取结果回写到权益记录。」）：一体机权益领取屏扫码后用本端点展示可领取内容（权益类型、总次数与已用次数、有效期、状态），确认后再调 createTicketVerification 领取。 TK-06：响应 data.face_binding 仅在一人多次票且人脸供应商可用时出现——capture=本次首次入场须客人同意并拍照留存，match=须拍照按留存人脸比对；单次票、多人票或供应商不可用时为空。 第十八批 X 段第 196 条 196-R1：入园与酒吧入场资格同一场次内再次入场（判定同正式核销）时 allowed=true（剩余次数为 0 也放行），face_binding 为空。
       x-permission: verification.execute
       x-data-scope: project-point
       x-terminal-allowed:
@@ -18119,7 +18119,7 @@ paths:
         - finance
       operationId: billTurnoverRent
       summary: 营业额抽成计费生成应收
-      description: 第十八批 Q 段第 138 条：抽成基数＝该商户本账期回流营业额（只计餐饮、零售的第三方回流，同期退款相抵，跨期退款另挂冲正）；非酒吧商户另计已付讫的券与通票合作方券内部结算价结算金额（partner_voucher 应付的实际付款，按付款时点归期）；酒吧商户另计平台内成交——整单已确认的商品实收（折后实收，不含券抵扣、服务费与小费分项，按结清时点）＋月结定格的服务费扣留数−已退成的商品分项＋没收的订台定金＋已完成的服务点单全额，各来源按该酒吧营业日窗取数（第 140 条），合计为负按 0 计。服务费尚未月结定格或酒吧收入来源分项未齐时 409 BAR_REVENUE_PENDING，不出账（ENUM:257 账单一次出准、不使用预估数）。 第十八批 U 段第 155 条 155-R1：出账同一事务按酒吧整单逐笔记下该笔在当月累计中所适用的档位费率与本期是否按保底收租（规则保底生效）；所退账单在之前账期结清的商品退款为跨期退款，不进本期抽成基数，原月按保底收租的不冲回，原月按抽成额收租的按原档位费率原额逐笔挂营业额抽成冲正应付（source_type=turnover_rent_reversal，归本期，重出不重挂）；所退原账期的抽成尚未出账时 409 TURNOVER_RENT_ORIGIN_UNBILLED，不出账。 第十八批 U 段第 155 条 155-R3 起，餐饮、零售第三方回流订单同口径——净额大于 0 的回流订单逐笔记快照；同期回流退款从原订单里减；跨期回流退款按原订单快照逐笔冲正（原月按保底收租的不冲回），原账期未出账同样 409 TURNOVER_RENT_ORIGIN_UNBILLED；查不到本系统原订单的回流退款不计。 第十八批 V 段第 159 条 159-R4（ENUM:190「非最终快照的数据一律不得进入结算、分红、正式提成计算和对账关账」）：取数之前判账期内该商户检查单位（酒吧按该店，其他商户按所属综合体；建档前的营业日不计）各营业日的「当日订单与核销记录」「当日退款与冲正记录」是否已标记为最终，有未标齐的 409 TURNOVER_DATA_NOT_FINAL（message「以下营业日数据尚未标记为最终，不能出营业额抽成账单：」后列「yyyy-MM-dd 单位名：类别」，最多 10 行），不出账、不写逐笔快照与冲正应付。
+      description: 第十八批 Q 段第 138 条：抽成基数＝该商户本账期回流营业额（只计餐饮、零售的第三方回流，同期退款相抵，跨期退款另挂冲正）；非酒吧商户另计已付讫的券与通票合作方券内部结算价结算金额（partner_voucher 应付的实际付款，按付款时点归期）；另计通票分账专属直付与补偿履约结算（ticket_distribution、compensation_fulfillment 应付的实际付款，按付款时点归期；对应追收应收 ticket_distribution_recovery、compensation_fulfillment_recovery 的实际收回在收回当期相抵；第十八批 X 段第 175 条 175-R1）；酒吧商户另计平台内成交——整单已确认的商品实收（折后实收，不含券抵扣、服务费与小费分项，按结清时点）＋月结定格的服务费扣留数−已退成的商品分项＋没收的订台定金＋已完成的服务点单全额，各来源按该酒吧营业日窗取数（第 140 条），合计为负按 0 计。服务费尚未月结定格或酒吧收入来源分项未齐时 409 BAR_REVENUE_PENDING，不出账（ENUM:257 账单一次出准、不使用预估数）。 第十八批 U 段第 155 条 155-R1：出账同一事务按酒吧整单逐笔记下该笔在当月累计中所适用的档位费率与本期是否按保底收租（规则保底生效）；所退账单在之前账期结清的商品退款为跨期退款，不进本期抽成基数，原月按保底收租的不冲回，原月按抽成额收租的按原档位费率原额逐笔挂营业额抽成冲正应付（source_type=turnover_rent_reversal，归本期，重出不重挂）；所退原账期的抽成尚未出账时 409 TURNOVER_RENT_ORIGIN_UNBILLED，不出账。 第十八批 U 段第 155 条 155-R3 起，餐饮、零售第三方回流订单同口径——净额大于 0 的回流订单逐笔记快照；同期回流退款从原订单里减；跨期回流退款按原订单快照逐笔冲正（原月按保底收租的不冲回），原账期未出账同样 409 TURNOVER_RENT_ORIGIN_UNBILLED；查不到本系统原订单的回流退款不计。 第十八批 V 段第 159 条 159-R4（ENUM:190「非最终快照的数据一律不得进入结算、分红、正式提成计算和对账关账」）：取数之前判账期内该商户检查单位（酒吧按该店，其他商户按所属综合体；建档前的营业日不计）各营业日的「当日订单与核销记录」「当日退款与冲正记录」是否已标记为最终，有未标齐的 409 TURNOVER_DATA_NOT_FINAL（message「以下营业日数据尚未标记为最终，不能出营业额抽成账单：」后列「yyyy-MM-dd 单位名：类别」，最多 10 行），不出账、不写逐笔快照与冲正应付。
       x-auth-context: staff-token
       x-permission: finance.turnover_rent.bill
       x-data-scope: platform

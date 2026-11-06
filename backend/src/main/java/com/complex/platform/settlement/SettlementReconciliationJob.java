@@ -1,6 +1,6 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import org.springframework.beans.factory.annotation.Value;
 
@@ -122,7 +122,11 @@ public class SettlementReconciliationJob {
                     null,        // V355 beneficiary_entity_id:重建行归商户,无主体受益方
                     null,        // S3 父票锚点:重建行 fee 恒 0(见上),不参与「一张票一道」判定,置 null
                     0L, null,    // S6:重建行暂不还原赠送权益预估成本(同 P6 fee 口径,重建为罕见修复路径)
-                    0L));        // 第十八批第 3 条:重建行同样不还原通路费分摊(同上)
+                    0L,          // 第十八批第 3 条:重建行同样不还原通路费分摊(同上)
+                    // 176-R1:有价专属直付行按与在线消费者同一公式补记本次域份额(零元权益、非专属行 null)
+                    exclusiveByPrice && f.allocatedRevenueCent() != null && f.allocatedRevenueCent() > 0L
+                            ? SettlementAmounts.incrementalVerified(f.allocatedRevenueCent(), f.totalTimes(), f.k(), false, null)
+                            : null));
             rebuilt++;
         }
         return rebuilt;

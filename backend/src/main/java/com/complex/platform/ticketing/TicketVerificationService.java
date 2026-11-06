@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.11
+// 文件版本：V0.12
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.amusement.AmusementEntryRequest;
@@ -112,7 +112,9 @@ public class TicketVerificationService {
             // 148-R1（ENUM:55「未先核入场即核酒水一律拒绝」）：未先核这家酒吧的入场即核酒水（赠饮）。
             "BAR_ENTRY_NOT_VERIFIED",
             // 第十八批 S 段 165-R1（BSM:800「后续场次的附带权益也不得提前到当前场次使用」）：本场这家酒吧的赠饮已按单次份用完。
-            "GIFT_DRINK_SESSION_SHARE_USED_UP");
+            "GIFT_DRINK_SESSION_SHARE_USED_UP",
+            // 第十八批 X 段 197-R1（BSM:800）：票内餐饮、零售券本场未检票、本场一份已用完。
+            "ENTITLEMENT_SESSION_NOT_CHECKED_IN", "ENTITLEMENT_SESSION_SHARE_USED_UP");
     /** 设备、网络、凭证技术原因（签名无效、窗口过期、凭证不存在/已用、设备未登记/未纳管、归属无法解析）→ failed；在线抛错的同样由 createVerification 落 failed（设备未登记除外，145-R1）。 */
     static final Set<String> TECHNICAL_FAILURE_CODES = Set.of(
             "CREDENTIAL_NOT_FOUND", "CREDENTIAL_EXPIRED", "ENTITLEMENT_NOT_FOUND", "DEVICE_NOT_REGISTERED", "DEVICE_NOT_MANAGED",
@@ -261,7 +263,9 @@ public class TicketVerificationService {
         Instant now = Instant.now();
         boolean withinValidity = (entitlement.validFrom() == null || !now.isBefore(entitlement.validFrom()))
                 && (entitlement.validTo() == null || !now.isAfter(entitlement.validTo()));
-        boolean allowed = entitlement.remainingTimes() > 0
+        // 第十八批 X 段 196-R1：同场次再入场放行不扣次，预检同样放行、不要求留脸或比对（§G-1 同场次重复进出不校验同一性）。
+        boolean reentry = sessionReentry(entitlement, now);
+        boolean allowed = (entitlement.remainingTimes() > 0 || reentry)
                 && "active".equals(entitlement.status())
                 && withinValidity;
         return new VerificationPreviewResponse(
@@ -269,7 +273,7 @@ public class TicketVerificationService {
                 allowed ? "ok" : "not_allowed",
                 TicketEntitlementMapper.toOfflineEntitlementResponse(entitlement),
                 // TK-06：告诉检票终端本次入场要不要留脸（capture）或比对（match）；供应商不可用时为空。
-                allowed && facePhotoService != null ? facePhotoService.faceBinding(entitlement) : null
+                allowed && !reentry && facePhotoService != null ? facePhotoService.faceBinding(entitlement) : null
         );
     }
 
@@ -388,7 +392,7 @@ public class TicketVerificationService {
         }
         // 闸已得手（本路独占该核销的冲正权）→ 回滚权益核销次数（used_times-1，曾用满恢复 active）。
         // 原记录此前核销失败则无可回滚 → 拒绝（事务回滚，状态翻转一并撤销）。
-        if (!DAY_REPLAY_REASON.equals(original.resultReason())) {
+        if (!passThrough(original)) {
             repository.atomicReverseEntitlement(original.entitlementId(), now)
                     .orElseThrow(() -> ApiException.conflict("ENTITLEMENT_REVERSE_FAILED", "该权益没有已使用次数可冲正"));
             if ("amusement_online".equals(original.sourceType()))
@@ -436,7 +440,7 @@ public class TicketVerificationService {
         //     冲正专用幂等键 (ticket_verification_reversal, verificationId)，不与退款 deduct 冲突）；
         //   - finance 域 VerificationReversedConsumer（P1#19）：落"冲正已通知"审计留痕（无独立财务冲销对象，仅留痕）。
         // 消费者均按各自 source_doc 幂等；下游异常将随同事务回滚本次冲正（与既有 confirm 链同语义）。
-        if (!DAY_REPLAY_REASON.equals(original.resultReason())) {
+        if (!passThrough(original)) {
         // FS-012-R5：补偿补发权益的核销被冲正 → 对冲该次补偿履约已形成的承担方补偿应付。
         if (reversedEntitlement != null && reversedEntitlement.compensationItemId() != null && compensationFulfillmentPort != null) {
             compensationFulfillmentPort.reverseFulfillment(original.id(), now);
@@ -722,6 +726,18 @@ public class TicketVerificationService {
         // 148-R1：赠饮须这家酒吧本营业日内已核同票同人份的入场；165-R1：本营业日内只能核本场一份。置于人脸与扣次之前，被拒不扣次、不发赠饮与结算事件。
         if (GIFT_DRINK_ENTITLEMENT_TYPE.equals(entitlement.entitlementType())) {
             requireBarEntryVerified(entitlement, now);
+        }
+        // 第十八批 X 段 197-R1：票内餐饮、零售券（专属直付）须本场已检票、本场只能核一份。置于人脸与扣次之前，被拒不扣次、不发结算事件。
+        if (entitlement.exclusiveMerchantId() != null) {
+            requireSessionCheckedIn(entitlement, now);
+        }
+        // 第十八批 X 段 196-R1：入园与酒吧入场资格本场已入过场 → 放行不扣次（落 success/session_reentry），不落结算价、
+        // 不发积分与结算事件、不留脸不比对（§G-1 同场次重复进出不校验同一性）；首入照旧落到下方扣一次。
+        if (sessionReentry(entitlement, now)) {
+            VerificationRecord reentry = repository.saveVerification(sessionVerificationRecord(
+                    entitlement, request, credential, sourceType, clientTaskId, windowValid, signatureValid, now,
+                    SESSION_REENTRY_REASON));
+            return new VerificationResponse(reentry.id(), reentry.verificationNo(), reentry.status(), reentry.resultReason());
         }
         // TK-06：一人多次票（供应商可用时）——未绑定须同意 + 拍照，已绑定按留存人脸比对；不合规 → 拒、不扣次。
         //   置于场次 / 当天入场记录写入之前，被拒不留任何副作用。
@@ -1048,6 +1064,32 @@ public class TicketVerificationService {
     // 结算重构批3-3(PRD §6.3)：游乐消耗单位——按自然日激活(每自然日首刷消耗一次、当天无限、跨日新扣一次)。
     private static final String DAY_WINDOW = "unlimited_in_day";
     private static final String DAY_REPLAY_REASON = "day_replay";
+    private static final String SESSION_REENTRY_REASON = "session_reentry";
+
+    /** 放行不扣次的成功记录（游乐当天重放、196-R1 同场次再入场）：冲正时不回补次数、不发冲正事件。 */
+    private static boolean passThrough(VerificationRecord verification) {
+        return DAY_REPLAY_REASON.equals(verification.resultReason()) || SESSION_REENTRY_REASON.equals(verification.resultReason());
+    }
+
+    /**
+     * 第十八批 X 段第 196 条 196-R1（BSM:800「同一场次内可以不限次数进出……同一场次内的重复进出仍须按上述三道环节依次通过，
+     * 但不再重复扣减票面入场次数。」；ENUM:46「该场次内可不限次数进出」；DEC-R4-2026-08-04-89「通票在当前场次内可以不限次数进出」；
+     * BSM:780「其中『当天』『每天』一律按营业日计算……按综合体分别配置……酒吧仍按每家酒吧配置」）：入园与酒吧入场资格
+     * （per_session、unlimited_in_day 两条既有窗口除外）本场已核销成功（已冲正的不算）即同场次再入场。「当场」沿用 165-R1：
+     * 酒吧入场按这家酒吧本营业日，入园按订单综合体本营业日（无订单取出厂起点）。
+     */
+    private boolean sessionReentry(IssuedEntitlementRecord entitlement, Instant now) {
+        if (!TicketFacePhotoService.ENTRY_TYPES.contains(entitlement.entitlementType())
+                || SESSION_WINDOW.equals(entitlement.consumptionWindow()) || DAY_WINDOW.equals(entitlement.consumptionWindow())) {
+            return false;
+        }
+        String bar = entitlement.barId() != null || "admission".equals(entitlement.entitlementType())
+                ? providerMerchantId(entitlement) : null;
+        String project = bar != null ? null : Optional.ofNullable(entitlement.orderId())
+                .flatMap(repository::findTicketOrderById).map(TicketOrderRecord::projectId).orElse(null);
+        Instant since = businessDays.start(project, bar, businessDays.businessDate(project, bar, now));
+        return repository.countSuccessfulVerificationsSince(entitlement.id(), since) > 0;
+    }
 
     /**
      * 结算重构批3-2(PRD §6.2)：入场资格「场次规则」核销判定（consumption_window=per_session）。
@@ -1221,6 +1263,30 @@ public class TicketVerificationService {
         }
         if (repository.countSuccessfulVerificationsSince(entitlement.id(), since) >= share) {
             throw ApiException.conflict("GIFT_DRINK_SESSION_SHARE_USED_UP", "本场次这家酒吧的酒水（赠饮）已按票面一份用完，之后场次的份额不能提前使用");
+        }
+    }
+
+    /**
+     * 第十八批 X 段第 197 条 197-R1（BSM:800「该票所含的各项权益（各酒吧入场、酒水赠饮、游乐、餐饮券、零售券等），只能在完成检票环节所在的那一个
+     * 场次内核销」「该窗口内票面附带的各项权益（酒水、各酒吧入场等）按完整一份配足、完整可用，但仅限当场消耗……后续场次的附带权益也不得提前到当前场次使用。」；
+     * BSM:780「其中『当天』『每天』一律按营业日计算……按综合体分别配置」）：票内餐饮、零售券（专属直付）须同票同人份在本场（订单综合体本营业日，
+     * 无订单取出厂起点）已有入场类核销成功（已冲正的不算；同 SettlementExpiryJob 有入场的营业日口径）；「一份」同 165-R1（总次数 ÷ 入场次数、
+     * 至少 1，补偿补发行取它的全部次数），本场该券核销成功已达一份即拒绝。
+     */
+    private void requireSessionCheckedIn(IssuedEntitlementRecord entitlement, Instant now) {
+        String project = Optional.ofNullable(entitlement.orderId()).flatMap(repository::findTicketOrderById)
+                .map(TicketOrderRecord::projectId).orElse(null);
+        Instant since = businessDays.start(project, null, businessDays.businessDate(project, null, now));
+        if (!repository.hasVerifiedEntrySince(entitlement.parentTicketId(), entitlement.slotIndex(), since)) {
+            throw ApiException.conflict("ENTITLEMENT_SESSION_NOT_CHECKED_IN", "须先完成本场次检票入场，才能核销票内的餐饮、零售券");
+        }
+        int share = entitlement.totalTimes();
+        if (entitlement.compensationItemId() == null) {
+            int visits = repository.maxEntryTotalTimes(entitlement.parentTicketId(), entitlement.slotIndex());
+            share = visits <= 1 ? entitlement.totalTimes() : Math.max(1, entitlement.totalTimes() / visits);
+        }
+        if (repository.countSuccessfulVerificationsSince(entitlement.id(), since) >= share) {
+            throw ApiException.conflict("ENTITLEMENT_SESSION_SHARE_USED_UP", "本场次的餐饮、零售券已按票面一份用完，之后场次的份额不能提前使用");
         }
     }
 

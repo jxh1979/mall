@@ -1,6 +1,6 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -134,8 +134,8 @@ class TicketRefundSettlementReversalJdbcIntegrationTests {
                 "SELECT business_at FROM settlement_transactions WHERE order_id = ? AND transaction_no LIKE 'ST-RR-%'", Instant.class, order);
         assertThat(businessAt).isAfter(monthEnd(march));
         assertThat(billRepository.sumPooledTotals(project, monthStart(march), monthEnd(march)).revenueCent()).isEqualTo(6000L);
-        assertThat(billRepository.findRecoveredOriginalMonths(project, monthStart(businessAt), monthEnd(businessAt)))
-                .containsExactly(month.atDay(1));
+        assertThat(billRepository.findRecoveredOriginalTimes(project, monthStart(businessAt), monthEnd(businessAt)))
+                .containsExactly(march);
     }
 
     // ---------- 造数 ----------

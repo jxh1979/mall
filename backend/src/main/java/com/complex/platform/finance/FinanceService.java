@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.40
+// 文件版本：V0.41
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -3248,6 +3248,7 @@ public class FinanceService implements TerminationSettlementPort {
             // DEC-R8-98-06「券核销结算金额＝平台按内部结算价付给核销商户的钱，对未计收服务费的商户按既有裁决计入其营业额」）：非酒吧商户再计
             // 按内部结算价已付讫的券与通票合作方券结算金额，以付款时点按所属综合体营业日归期；酒吧是计收门票综合服务费的商户（ENUM:57），不计。
             // 155-R3：券结算逐笔只参与当月累计定位，不记快照。
+            // 第十八批 X 段第 175 条 175-R1：另计已付讫的通票分账专属直付与补偿履约结算，两类追收的实际收回在收回当期相抵（同一取数）。
             rows.addAll(repository.listSettledVoucherSettlementRows(rule.merchantId(), from, to));
         }
         // 第十八批 U 段第 155 条 155-R1、155-R3（ENUM:257「减去当期已成功的退款金额」「在退款发生的当期生成冲正，不回改历史月份」）：所退那笔在本窗内的

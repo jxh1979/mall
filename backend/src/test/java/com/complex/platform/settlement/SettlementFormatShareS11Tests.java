@@ -1,5 +1,5 @@
 package com.complex.platform.settlement;
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -213,7 +213,8 @@ class SettlementFormatShareS11Tests {
         assertThat(shares.get("amusement").get("beneficiary_kind")).as("游乐份额归游乐公司这个主体").isEqualTo("entity");
         assertThat(shares.get("amusement").get("beneficiary_entity_id"))
                 .as("V375 全局种子:amusement_ticket 流 → 游乐公司").isEqualTo("be_amusement");
-        assertThat(shares.get("catering").get("beneficiary_kind")).as("餐饮份额归提供这份餐的商户自己").isEqualTo("per_merchant");
+        // 第十八批 X 段 176-R2（ENUM:49「餐饮域与零售域 → 城市项目公司」）：餐饮份额归城市项目公司；本例项目未关联城市项目公司，归属留空。
+        assertThat(shares.get("catering").get("beneficiary_kind")).as("餐饮份额归城市项目公司这个主体").isEqualTo("entity");
         assertThat(shares.get("catering").get("beneficiary_entity_id")).isNull();
         assertThat(sumOf(shares, "net_revenue_cent") + (Long) b.get("channel_fee_cent")
                 + (Long) b.get("comp_service_fee_pooled_cent"))

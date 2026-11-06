@@ -1,6 +1,6 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.05
+// 文件版本：V0.06
 
 import org.springframework.beans.factory.annotation.Value;
 
@@ -180,7 +180,8 @@ public class SettlementExpiryJob {
                     0L, null,   // S6:到期归主体不是核销,无赠送权益预估成本;未使用票积分发行成本为零(ENUM L48)
                     // 第十八批第 3 条(ENUM L48「仅扣实际发生的通路费」):本类未核销额分摊本单付款时固化的通路费,官方渠道同样扣;
                     //   已固化进池的酒吧权益取快照里未开启各份的通路费(见 applyPooledShares)。
-                    f.pooled ? f.routeFee : routeFeeShares.shareOf(row.orderId(), f.amount)),
+                    f.pooled ? f.routeFee : routeFeeShares.shareOf(row.orderId(), f.amount),
+                    null),      // 176-R1 domain_share_cent:到期未核销归主体,非专属直付核销行
                     new JdbcSettlementTransactionRepository.UnverifiedExtras(f.category, f.channelFee, f.feeConfigId,
                             f.residual, f.residualEntityId));
         }

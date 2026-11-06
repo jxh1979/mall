@@ -1,6 +1,6 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import com.complex.platform.ticketing.SettlementSettledEvent;
 import java.time.YearMonth;
@@ -217,9 +217,17 @@ public class SettlementSettledConsumer {
             }
         }
 
+        // 第十八批 X 段 176-R1（BSM:749「跨域组合通票扣完上述通路费和适用的销售渠道费后，再按各业态价格占比分到各域——各业态价格在售票时刻
+        //   随订单一并固化……零元免费权益不参与域间分配」）：有价的专属直付行直付额仍按内部结算价，另记售票固化的业态份额按次数拆得的本次域份额；
+        //   零元权益（份额 0）不记。
+        Long domainShare = exclusiveByPrice && allocated != null && allocated > 0L
+                ? SettlementAmounts.incrementalVerified(allocated, total, used, false, null) : null;
         // 第十八批第 3 条（BSM L749「通路费……官方渠道同样产生……在拆分给各域之前从整单扣除且只扣一次，由各域按分配份额自然共担」）：
-        //   进池核销按本次核销额占本单实付的比例分摊本单付款时固化的通路费，月结按业态线性求和；专属直付不进池分账，不在此扣。
-        long routeFeeCent = exclusiveMerchantId == null && !(pooledAtSale && barFormat)
+        //   进池核销按本次核销额占本单实付的比例分摊本单付款时固化的通路费，月结按业态线性求和；176-R1：有价专属直付行按本次域份额分摊；
+        //   单一酒吧门票行不扣。
+        long routeFeeCent = exclusiveByPrice
+                ? routeFeeShares.shareOf(event.orderId(), domainShare == null ? 0L : domainShare)
+                : exclusiveMerchantId == null && !(pooledAtSale && barFormat)
                 ? routeFeeShares.shareOf(event.orderId(), verified) : 0L;
 
         repository.insertImmutableFact(new SettlementTransactionRecord(
@@ -251,7 +259,8 @@ public class SettlementSettledConsumer {
                 event.parentTicketId(),  // S3 父票锚点：「一张票只收一道综合服务费/一道 G」的判定键
                 giftCostCent,            // S6 本笔计提的赠送权益预估成本 G（>=0；首笔进池核销一次性,封顶后）
                 giftCostConfigId,        // S6 解析到的 pass_gift_cost_configs 规则 id（供封顶月累计 + 冲正沿用）
-                routeFeeCent             // 第十八批第 3 条 本笔分摊的通路费（>=0）
+                routeFeeCent,            // 第十八批第 3 条 本笔分摊的通路费（>=0）
+                domainShare              // 176-R1 有价专属直付行本次域份额（其余 null）
         ));
     }
 }
