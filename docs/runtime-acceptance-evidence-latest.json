@@ -8,14 +8,14 @@
     "RUNTIME_EVIDENCE_BOUND_TO_SOURCE_FINGERPRINT",
     "RUNTIME_EVIDENCE_DOES_NOT_CLOSE_PRODUCTION_MANIFEST"
   ],
-  "generated_at": "2026-11-06T03:56:23.104Z",
+  "generated_at": "2026-11-06T08:34:30.936Z",
   "git": {
-    "head": "989dad0ef3bdd3db4de01175ace3e6712509f49d",
-    "head_short": "989dad0e",
-    "branch": "feature/business-code-batch42-20261106",
+    "head": "77f855b16f772a47b452fd58ec2b1f69101b98dd",
+    "head_short": "77f855b1",
+    "branch": "feature/business-code-batch43-20261106",
     "worktree_dirty": false,
-    "source_fingerprint": "d997f4a37823097dae28c13ade9a9ff7ace86d794afa70159c66635b0b7715bb",
-    "source_fingerprint_file_count": 3299,
+    "source_fingerprint": "ac143d322619457d72f0913a1a2882e83c9884350ff209b0b5643c900a329c2f",
+    "source_fingerprint_file_count": 3304,
     "source_fingerprint_paths": [
       "backend/src/main",
       "backend/src/test",
@@ -50,12 +50,12 @@
   },
   "backend_surefire": {
     "path": "backend/target/surefire-reports",
-    "suites": 541,
-    "tests": 6482,
+    "suites": 542,
+    "tests": 6491,
     "failures": 0,
     "errors": 0,
     "skipped": 0,
-    "latest_mtime": "2026-11-06T03:53:49.409Z",
+    "latest_mtime": "2026-11-06T08:32:16.959Z",
     "passed": true
   },
   "web_unit_source": {
@@ -219,6 +219,7 @@
       "apps/web/src/admin/pages/IntegrationChannelMapsPage.test.tsx",
       "apps/web/src/admin/pages/IntegrationEventsPage.kpi.test.tsx",
       "apps/web/src/admin/pages/IntegrationEventsPage.rowdetail.test.tsx",
+      "apps/web/src/admin/pages/IntegrationSwitchesPage.test.tsx",
       "apps/web/src/admin/pages/InternalPriceCatalogPage.test.tsx",
       "apps/web/src/admin/pages/InventoryHighValueReviewPage.test.tsx",
       "apps/web/src/admin/pages/InventoryLedgerPage.guidedcreate.test.tsx",
@@ -333,9 +334,11 @@
       "apps/web/src/admin/pages/T3AReadonlyAnalyticsPage.rowdetail.test.tsx",
       "apps/web/src/admin/pages/T3AReadonlyAnalyticsPage.test.tsx",
       "apps/web/src/admin/pages/TerminalDevicesPage.test.tsx",
+      "apps/web/src/admin/pages/TerminalSwitchMatrixPage.test.tsx",
       "apps/web/src/admin/pages/TicketOrderTrace.test.tsx",
       "apps/web/src/admin/pages/TicketOrdersPage.anomaly.test.tsx",
       "apps/web/src/admin/pages/TicketOrdersPage.degraded.test.tsx",
+      "apps/web/src/admin/pages/TicketOrdersPage.issue.test.tsx",
       "apps/web/src/admin/pages/TicketOrdersPage.kpi.test.tsx",
       "apps/web/src/admin/pages/TicketOrdersPage.metricdetail.test.tsx",
       "apps/web/src/admin/pages/TicketOrdersPage.multiuseface.test.tsx",
@@ -376,8 +379,8 @@
       "apps/web/src/dealer/dealerPortalClient.test.ts",
       "apps/web/src/shared/ReplayedNotice.test.tsx"
     ],
-    "file_count": 315,
-    "test_count_from_source": 1615
+    "file_count": 318,
+    "test_count_from_source": 1633
   },
   "web_build": {
     "dist_index_exists": true,
@@ -398,15 +401,15 @@
     "asset_count": 169,
     "main_js_assets": [
       {
-        "path": "apps/web/dist/assets/main-CFrOZBA6.js",
+        "path": "apps/web/dist/assets/main-cwV8vVGO.js",
         "size_bytes": 4337,
-        "mtime": "2026-11-06T03:53:57.607Z"
+        "mtime": "2026-11-06T08:32:25.487Z"
       }
     ],
     "largest_asset": {
       "path": "apps/web/dist/assets/vendor-antd-CzvkKKQu.js",
       "size_bytes": 251112,
-      "mtime": "2026-11-06T03:53:57.610Z"
+      "mtime": "2026-11-06T08:32:25.495Z"
     },
     "no_main_bundle_warning_expected": true
   },
