@@ -1,16 +1,21 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static com.complex.platform.settlement.MediaPerformanceTestFixtures.BASE;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.containsString;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.complex.platform.common.LocalZone;
+import com.complex.platform.support.TestSecurityActors;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.sql.Timestamp;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.YearMonth;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.AfterEach;
@@ -23,6 +28,7 @@ import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.test.web.servlet.request.RequestPostProcessor;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -46,6 +52,7 @@ class MediaPerformanceSettlementJdbcIntegrationTests {
 
     @Autowired private MockMvc mockMvc;
     @Autowired private JdbcTemplate jdbc;
+    @Autowired private MediaPerformanceSettlementService settlementService;
 
     private final String suffix = MediaPerformanceTestFixtures.suffix();
     private final String project = "mps_prj_" + suffix;
@@ -59,6 +66,9 @@ class MediaPerformanceSettlementJdbcIntegrationTests {
     private RequestPostProcessor manager;
     private RequestPostProcessor mediaClerk;
     private RequestPostProcessor barOnSite;
+    private RequestPostProcessor financeBp;
+    /** 159-R3 新用例的演出日：北京时间今天减 3 天（已闭店，可标最终）。 */
+    private final LocalDate recentDay = LocalDate.now(LocalZone.ID).minusDays(3);
 
     @BeforeEach
     void seed() {
@@ -75,6 +85,10 @@ class MediaPerformanceSettlementJdbcIntegrationTests {
                 "media.performance.fulfillment.record");
         barOnSite = MediaPerformanceTestFixtures.staff(jdbc, "mps_site_" + suffix, project, bar,
                 "media.performance.fulfillment.confirm");
+        // 159-R3：项目与酒吧回填为 30 天前建档（随测试事务回滚），近几天的演出日要查最终标记；既有用例的 2014 演出日仍在建档之前、不查。
+        jdbc.update("UPDATE projects SET created_at = now() - interval '30 days' WHERE id = ?", project);
+        jdbc.update("UPDATE merchants SET created_at = now() - interval '30 days' WHERE id = ?", bar);
+        financeBp = MediaPerformanceTestFixtures.staff(jdbc, "mps_bp_" + suffix, project, null, "finance.daily_close.lock");
     }
 
     @AfterEach
@@ -364,10 +378,106 @@ class MediaPerformanceSettlementJdbcIntegrationTests {
                 Integer.class, showId)).isEqualTo(1);
     }
 
+    // 第十八批 V 段第 159 条 159-R3（ENUM:190「非最终快照的数据一律不得进入结算、分红、正式提成计算和对账关账」）：酒水提成要演出日营业日该酒吧的
+    // 订单与核销、退款与冲正、出品与物品交接已标记为最终；出品未标 → 409、一行不写、不挂应付；标齐后同一接口换幂等键结算出账。
+    @Test
+    void drinkCommission_waitsUntilShowDayDataFinal() throws Exception {
+        String date = recentDay.toString();
+        String showId = lockedShow(drinkOnly("whole_store_session", date));
+        recordAndConfirm(showId, null, date);
+        order("standard", Instant.parse(date + "T13:00:00Z"), 10000L, "delivered"); // 演出日 21:00（北京）
+        String closeId = dailyCloseMarked(recentDay, "orders_verifications", "refunds_reversals", "attendance", "anomaly_resolutions");
+        settleCall(showId)
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.detail_code").value("MEDIA_SETTLEMENT_DATA_NOT_FINAL"))
+                .andExpect(jsonPath("$.message").value(containsString("当日出品与物品交接记录")));
+        assertThat(settlements(showId)).isEmpty();
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM ar_ap_items WHERE source_type = ? AND merchant_id = ?", Integer.class,
+                SOURCE, bar)).isZero();
+
+        finalMark(closeId, "production_handover");
+        settle(showId);
+        List<Map<String, Object>> rows = settlements(showId);
+        assertThat(rows).hasSize(1);
+        assertThat(rows.get(0).get("fee_kind")).isEqualTo("drink_commission");
+        assertThat(rows.get(0).get("status")).isEqualTo("posted");
+        assertThat(num(rows.get(0), "base_amount_cent")).isEqualTo(10000L);
+        assertThat(num(rows.get(0), "amount_cent")).isEqualTo(1000L);
+        assertThat(arApItems(showId)).hasSize(1);
+    }
+
+    // 159-R3：只有固定演出费的场次不判最终标记（BSM:1145「②签订固定费用的，由该酒吧向传媒公司支付合同约定的固定费用」）——演出日当天没有任何日结也照结。
+    @Test
+    void fixedFeeOnly_settlesWithoutFinalMarks() throws Exception {
+        String date = recentDay.minusDays(1).toString();
+        String showId = lockedShow(fixedFeeOnly(date));
+        recordAndConfirm(showId, null, date);
+        settle(showId);
+        List<Map<String, Object>> rows = settlements(showId);
+        assertThat(rows).hasSize(1);
+        assertThat(rows.get(0).get("fee_kind")).isEqualTo("fixed_fee");
+        assertThat(rows.get(0).get("status")).isEqualTo("posted");
+    }
+
+    // 159-R3：事实未确认的场次照旧写待处理行（待处理路径不取数据，不判最终标记）。
+    @Test
+    void unconfirmedFacts_stayPendingWithoutFinalMarks() throws Exception {
+        String showId = lockedShow(MediaPerformanceTestFixtures.barShowBody(project, bar, media, ticketType,
+                recentDay.minusDays(2).toString()));
+        settle(showId);
+        List<Map<String, Object>> rows = settlements(showId);
+        assertThat(rows).hasSize(3);
+        assertThat(rows).allSatisfy(r -> {
+            assertThat(r.get("status")).isEqualTo("pending");
+            assertThat(r.get("pending_reason")).isEqualTo("unconfirmed");
+        });
+    }
+
+    // 159-R3：门票加价分配取已核销未冲正的入场，要退款与冲正已标记为最终（三项全填的场次因酒水提成同样要这一类，证明不了，故用单项场次）。
+    @Test
+    void ticketShare_needsRefundsReversalsFinal() throws Exception {
+        String date = recentDay.toString();
+        Map<String, Object> body = MediaPerformanceTestFixtures.barShowBody(project, bar, media, ticketType, date);
+        body.remove("fixed_fee_cent");
+        body.remove("drink_commission_bps");
+        body.remove("drink_base_template");
+        String showId = lockedShow(body);
+        recordAndConfirm(showId, null, date);
+        dailyCloseMarked(recentDay, "orders_verifications", "production_handover", "attendance", "anomaly_resolutions");
+        settleCall(showId)
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.detail_code").value("MEDIA_SETTLEMENT_DATA_NOT_FINAL"))
+                .andExpect(jsonPath("$.message").value(containsString("当日退款与冲正记录")));
+        assertThat(settlements(showId)).isEmpty();
+    }
+
+    // 159-R3：月结补跑逐场 try/catch——出品未标的酒水提成场次跳过、不写结算行，同月只有固定费的场次照结（不断言返回值：共享库里同月别的场次也会被取到）。
+    @Test
+    void monthlyBackfill_skipsNonFinalShow_settlesFixedFeeShow() throws Exception {
+        String date = recentDay.toString();
+        String drinkShow = lockedShow(drinkOnly("whole_store_session", date));
+        recordAndConfirm(drinkShow, null, date);
+        order("standard", Instant.parse(date + "T13:00:00Z"), 10000L, "delivered");
+        dailyCloseMarked(recentDay, "orders_verifications", "refunds_reversals", "attendance", "anomaly_resolutions");
+        String fixedShow = lockedShow(fixedFeeOnly(date));
+        recordAndConfirm(fixedShow, null, date);
+        TestSecurityActors.asPlatformAdmin();
+        settlementService.settleConfirmedForMonth(YearMonth.from(recentDay));
+        assertThat(settlements(drinkShow)).isEmpty();
+        List<Map<String, Object>> rows = settlements(fixedShow);
+        assertThat(rows).hasSize(1);
+        assertThat(rows.get(0).get("fee_kind")).isEqualTo("fixed_fee");
+        assertThat(rows.get(0).get("status")).isEqualTo("posted");
+    }
+
     // ---------------------------------------------------------------- 夹具
 
     private Map<String, Object> fixedFeeOnly() {
-        Map<String, Object> body = MediaPerformanceTestFixtures.barShowBody(project, bar, media, ticketType, SHOW_DATE);
+        return fixedFeeOnly(SHOW_DATE);
+    }
+
+    private Map<String, Object> fixedFeeOnly(String showDate) {
+        Map<String, Object> body = MediaPerformanceTestFixtures.barShowBody(project, bar, media, ticketType, showDate);
         body.put("ticket_share_mode", "none");
         body.remove("ticket_share_bps");
         body.remove("ticket_surcharge_per_ticket_cent");
@@ -378,7 +488,11 @@ class MediaPerformanceSettlementJdbcIntegrationTests {
     }
 
     private Map<String, Object> drinkOnly(String template) {
-        Map<String, Object> body = fixedFeeOnly();
+        return drinkOnly(template, SHOW_DATE);
+    }
+
+    private Map<String, Object> drinkOnly(String template, String showDate) {
+        Map<String, Object> body = fixedFeeOnly(showDate);
         body.remove("fixed_fee_cent");
         body.put("drink_commission_bps", 1000);
         body.put("drink_base_template", template);
@@ -398,8 +512,12 @@ class MediaPerformanceSettlementJdbcIntegrationTests {
     }
 
     private void recordAndConfirm(String showId, String uncompleted) throws Exception {
+        recordAndConfirm(showId, uncompleted, SHOW_DATE);
+    }
+
+    private void recordAndConfirm(String showId, String uncompleted, String showDate) throws Exception {
         mockMvc.perform(post(BASE + "/" + showId + "/fulfillment").with(mediaClerk).contentType(MediaType.APPLICATION_JSON)
-                        .content(JSON.writeValueAsString(MediaPerformanceTestFixtures.fulfillmentBody(SHOW_DATE, uncompleted))))
+                        .content(JSON.writeValueAsString(MediaPerformanceTestFixtures.fulfillmentBody(showDate, uncompleted))))
                 .andExpect(status().isOk());
         mockMvc.perform(post(BASE + "/" + showId + "/fulfillment/confirm").with(barOnSite).contentType(MediaType.APPLICATION_JSON)
                         .content("{\"idempotency_key\":\"cf-" + showId + "\"}"))
@@ -407,8 +525,32 @@ class MediaPerformanceSettlementJdbcIntegrationTests {
     }
 
     private void settle(String showId) throws Exception {
-        mockMvc.perform(post(BASE + "/" + showId + "/settle").with(manager).contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"idempotency_key\":\"st-" + showId + "-" + (++seq) + "\"}"))
+        settleCall(showId).andExpect(status().isOk());
+    }
+
+    private ResultActions settleCall(String showId) throws Exception {
+        return mockMvc.perform(post(BASE + "/" + showId + "/settle").with(manager).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"idempotency_key\":\"st-" + showId + "-" + (++seq) + "\"}"));
+    }
+
+    /** 159-R3：平台侧财务 BP 经真实接口（蛇形键）生成该酒吧该营业日的日结，再逐类标记为最终；返回日结编号。 */
+    private String dailyCloseMarked(LocalDate day, String... categories) throws Exception {
+        String response = mockMvc.perform(post("/api/v1/finance/daily-closes").with(financeBp).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"idempotency_key\":\"dc-" + suffix + "-" + (++seq) + "\",\"business_date\":\"" + day
+                                + "\",\"scope_type\":\"bar\",\"scope_id\":\"" + bar + "\"}"))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        String closeId = JSON.readTree(response).path("data").path("id").asText();
+        for (String category : categories) {
+            finalMark(closeId, category);
+        }
+        return closeId;
+    }
+
+    private void finalMark(String closeId, String category) throws Exception {
+        mockMvc.perform(post("/api/v1/finance/daily-closes/" + closeId + "/final-marks").with(financeBp)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"idempotency_key\":\"fm-" + suffix + "-" + (++seq) + "\",\"category\":\"" + category + "\"}"))
                 .andExpect(status().isOk());
     }
 

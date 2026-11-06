@@ -1,6 +1,6 @@
 package com.complex.platform.access.staff;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import static com.complex.platform.access.staff.StaffPayrollModels.*;
 import static com.complex.platform.common.Strings.requireText;
@@ -36,6 +36,11 @@ public class StaffPayrollService {
     // 第十八批第 1 条（ENUM:187「销售提成月份，一律以开台或下单时点所属的营业日为准」）：酒吧提成归属月按营业日。
     @org.springframework.beans.factory.annotation.Autowired(required=false)
     com.complex.platform.common.BusinessDayResolver businessDays=new com.complex.platform.common.BusinessDayResolver();
+    // 第十八批 V 段第 159 条 159-R7（ENUM:190「非最终快照的数据一律不得进入结算、分红、正式提成计算和对账关账」；BSM:1500「正式提成使用该项计算所依赖的
+    // 已最终确认数据，再统一进入工资单月结」；决策台账 §25 Q32「不要求无关五类数据全最终」）：酒吧销售提成按订单最终保留收入计（BSM:1070），依赖订单与核销、
+    // 退款与冲正两类；服务点单份额完成时按售价减管理费写定、完成后不可退（ENUM:290），只依赖订单与核销一类。
+    private static final List<String> BAR_COMMISSION_FINAL=List.of("orders_verifications","refunds_reversals");
+    private static final List<String> SERVICE_SHARE_FINAL=List.of("orders_verifications");
     public StaffPayrollService(StaffPayrollConfigurationService c,JdbcTemplate jdbc,StaffPayrollWorktimeService worktime,
             BarPayrollAllocationService bar,PayrollTaxService taxes,FinanceService finance,
             com.complex.platform.access.AuthorizationService auth,com.complex.platform.common.idempotency.IdempotencyService idem,
@@ -141,15 +146,29 @@ public class StaffPayrollService {
         else addDeferredSalary(lines,earnings,request,pending);
         for(var row:adjustments)if("bonus".equals(row.get("adj_type")))
             addIfUnpaid(lines,external("奖金","bonus",((Number)row.get("amount_cent")).longValue(),"payroll_bonus",(String)row.get("id"),row,work,true));
-        for(var row:jdbc.queryForList("SELECT id,source_type,source_id,amount_cent,note FROM staff_commission_ledger WHERE user_id=? AND month=? ORDER BY id",request.userId(),request.month()))
+        // 159-R7：服务单份额按完成时点所在营业日（ENUM:291；有酒吧按该酒吧，没有按服务单所属综合体，第十八批裁决 35「酒吧逐店逐日查；游乐等按综合体逐日查」）
+        // 判订单与核销已最终，未最终的记待结、不进本单；关联不到服务单的（手录）照旧计入。附加列取完即移出，工资行原件不变。
+        var finalDays=new HashMap<String,String>();
+        for(var row:jdbc.queryForList("SELECT l.id,l.source_type,l.source_id,l.amount_cent,l.note,o.bar_id order_bar_id,o.project_id order_project_id,o.completed_at order_completed_at FROM staff_commission_ledger l LEFT JOIN service_orders o ON l.source_type='service_order' AND o.id=l.source_id WHERE l.user_id=? AND l.month=? ORDER BY l.id",request.userId(),request.month())) {
+            String orderBar=(String)row.remove("order_bar_id"),orderProject=(String)row.remove("order_project_id");Object completed=row.remove("order_completed_at");
+            if(completed!=null) {
+                String barId=orderBar==null||orderBar.isBlank()?null:orderBar.trim(),projectId=barId==null?orderProject:null;
+                String waiting=nonFinal(finalDays,barId,projectId,businessDays.businessDate(projectId,barId,((Timestamp)completed).toInstant()),SERVICE_SHARE_FINAL);
+                if(!waiting.isEmpty()){pending.add(new PendingItem("SERVICE_COMMISSION_PENDING",(String)row.get("id"),waiting));continue;}
+            }
             addIfUnpaid(lines,external("已确认服务提成","commission",((Number)row.get("amount_cent")).longValue(),"staff_commission_ledger",(String)row.get("id"),row,work,true));
+        }
         List<String> barCommissions=businessDays.barCommissionIdsInMonth(YearMonth.parse(request.month()),request.userId());
         String inMonth=barCommissions.isEmpty()?"NULL":String.join(",",Collections.nCopies(barCommissions.size(),"?"));
         for(String source:jdbc.queryForList("SELECT c.id FROM bar_commission_calculations c JOIN bar_bills b ON b.id=c.bill_id WHERE c.id IN ("+inMonth+") AND c.status NOT IN ('void','cancelled') AND b.settlement_status<>'settled' ORDER BY c.id",
                 String.class,barCommissions.toArray()))pending.add(new PendingItem("BAR_COMMISSION_PENDING",source,"酒吧账单尚未确认结算，提成保留预计数"));
-        for(var row:jdbc.queryForList("SELECT c.id,c.bill_id,c.commission_base_cent,c.commission_rate_bp,c.commission_amount_cent,c.status FROM bar_commission_calculations c JOIN bar_bills b ON b.id=c.bill_id WHERE c.id IN ("+inMonth+") AND c.status NOT IN ('void','cancelled') AND b.settlement_status='settled' ORDER BY c.id",
-                barCommissions.toArray()))
+        // 159-R7：已结算账单的提成按账单所属营业日（ENUM:187，同 barCommissionIdsInMonth 口径）判该酒吧订单与核销、退款与冲正已最终，未最终的记待结保留预计数。
+        for(var row:jdbc.queryForList("SELECT c.id,c.bill_id,c.commission_base_cent,c.commission_rate_bp,c.commission_amount_cent,c.status,b.bar_id bill_bar_id FROM bar_commission_calculations c JOIN bar_bills b ON b.id=c.bill_id WHERE c.id IN ("+inMonth+") AND c.status NOT IN ('void','cancelled') AND b.settlement_status='settled' ORDER BY c.id",
+                barCommissions.toArray())) {
+            String waiting=nonFinal(finalDays,(String)row.remove("bill_bar_id"),null,businessDays.barBillBusinessDate((String)row.get("bill_id")),BAR_COMMISSION_FINAL);
+            if(!waiting.isEmpty()){pending.add(new PendingItem("BAR_COMMISSION_PENDING",(String)row.get("id"),waiting));continue;}
             addIfUnpaid(lines,external("已确认酒吧提成","commission",((Number)row.get("commission_amount_cent")).longValue(),"bar_commission",(String)row.get("id"),row,work,true));
+        }
         // 第十七批（操作员裁决补充第 1 条）：账单作废并冲正、提成已计入定格工资的，按原期以负额冲回实发提成（同酒吧收入冲正，超出本期可付的转待核实）。
         for(var row:jdbc.queryForList("SELECT c.id,c.bill_id,l.statement_id,l.amount_cent FROM bar_commission_calculations c JOIN staff_payroll_statement_lines l ON l.source_type='bar_commission' AND l.source_id=c.id WHERE c.id IN ("+inMonth+") AND c.status='void' ORDER BY c.id",
                 barCommissions.toArray())) {
@@ -199,6 +218,13 @@ public class StaffPayrollService {
         if(facts.statutoryDueDate()!=null)basis.put("statutory_due_date",facts.statutoryDueDate());
         basis.put("calendar_version_id",calendar.id());basis.put("payment_basis",scheme.paymentBasis());basis.put("resolved_due_date",due);
         return new Snapshot(scheme,facts,calendar,earnings,List.copyOf(lines),work,points,grade,adjustments,scores,cap,List.copyOf(pending),due,basis,sum);
+    }
+    /** 159-R7：单位该营业日所给类别未最终时返回待结说明，已最终返回空串；同一（单位, 营业日, 类别）一次计算只查一次。 */
+    private String nonFinal(Map<String,String> cache,String merchant,String project,LocalDate day,List<String> categories) {
+        return cache.computeIfAbsent(merchant+"|"+project+"|"+day+"|"+categories,k->{
+            var days=finance.nonFinalDays(merchant,project,day,day,categories);
+            return days.isEmpty()?"":"所属营业日数据尚未标记为最终，提成保留预计数："+FinanceService.describeNonFinalDays(days);
+        });
     }
     private BigDecimal points(Scheme scheme,List<ScoreAdjustment> rows) {
         var p=scheme.performanceRules();if(p==null)return null;BigDecimal value=p.basePoints();
@@ -300,6 +326,7 @@ public class StaffPayrollService {
                 case "ATTENDANCE_TIME_PENDING","ATTENDANCE_INTERVAL_PENDING" -> (sameMonth||sameCycle)&&workComplete&&snapshot.worktime().intervals().stream().anyMatch(i->i.shiftId().equals(source));
                 case "PERFORMANCE_BASIS_PENDING" -> sameMonth&&snapshot.grade()!=null&&snapshot.earnings().lines().stream().anyMatch(l->salaryKey(snapshot.scheme().userId(),snapshot.facts().month(),l.componentCode()).equals(source));
                 case "BAR_COMMISSION_PENDING" -> snapshot.lines().stream().anyMatch(l->"bar_commission".equals(l.sourceType())&&source.equals(l.sourceId()));
+                case "SERVICE_COMMISSION_PENDING" -> snapshot.lines().stream().anyMatch(l->"staff_commission_ledger".equals(l.sourceType())&&source.equals(l.sourceId()));
                 case "BAR_INCOME_REVERSAL_PENDING" -> snapshot.lines().stream().anyMatch(l->Set.of("bar_payroll_allocation","bar_commission_reversal").contains(l.sourceType())&&source.equals(l.sourceId()));
                 case "BAR_ALLOCATION_PAYER_PENDING" -> jdbc.queryForObject("SELECT count(*) FROM staff_payroll_statement_lines WHERE source_type='bar_payroll_allocation' AND source_id=?",Integer.class,source)>0;
                 case "BAR_ALLOCATION_PENDING" -> snapshot.lines().stream().anyMatch(l->"bar_payroll_allocation".equals(l.sourceType())&&sourceBill(l,source));

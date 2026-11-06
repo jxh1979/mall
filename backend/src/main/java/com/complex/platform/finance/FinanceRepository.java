@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.17
+// 文件版本：V0.18
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -555,6 +555,27 @@ public interface FinanceRepository {
     default PageResponse<DailyCloseRecord> listDailyCloses(String merchantId, java.util.Set<String> projectIds,
             LocalDate businessDate, String scopeType, String scopeId, int page, int size) {
         return new PageResponse<>(List.of(), page, size, 0L);
+    }
+
+    /**
+     * 第十八批 V 段第 159 条 159-R1（第十八批裁决 35「酒吧逐店逐日查；游乐等按综合体逐日查」）：五类最终标记的检查单位。bar 非空＝酒吧单位
+     * （id 即该酒吧，name 取商户名，project 取所属综合体）；否则为综合体单位（id＝project＝该综合体，name 取综合体名）。
+     */
+    record FinalMarkUnit(String bar, String id, String name, String project, Instant created) {
+    }
+
+    /** 159-R1：检查单位——在营未存档的酒吧，再加启用的综合体（逾期待办与下游闸同一集合）。default 返回空兼容既有测试双子。 */
+    default List<FinalMarkUnit> listFinalMarkUnits() {
+        return List.of();
+    }
+
+    /**
+     * 159-R1：单位在 from～to（含两端）各营业日已标为最终的类别。barId 非空取该酒吧 bar、merchant 范围的日结，否则取 projectId 的 project 范围日结；
+     * 同日多张日结取并集，没有日结的营业日没有键。default 返回空兼容既有测试双子。
+     */
+    default java.util.Map<LocalDate, java.util.Set<String>> finalMarkCategoriesByDay(String barId, String projectId, LocalDate from,
+            LocalDate to) {
+        return java.util.Map.of();
     }
 
     /**

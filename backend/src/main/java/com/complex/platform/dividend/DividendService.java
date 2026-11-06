@@ -1,5 +1,5 @@
 package com.complex.platform.dividend;
-// 文件版本：V0.07
+// 文件版本：V0.08
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.BusinessDayResolver;
@@ -36,7 +36,10 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.event.TransactionPhase;
+import org.springframework.transaction.event.TransactionalEventListener;
 import static com.complex.platform.common.Strings.requireText;
 
 /**
@@ -85,7 +88,7 @@ public class DividendService {
             "preview", "draft", "pending_review", "approved", "paid", "rejected", "voided");
     /** 可重算（作废+重出）的状态；已进入审批流的单不重算。 */
     private static final Set<String> RECOMPUTABLE_STATUSES = Set.of("preview", "draft", "rejected");
-    /** 月度预览定时作业的系统操作人标识（无请求上下文，落 computed_by/voided_by 便于留痕追溯）。 */
+    /** 月度预览自动生成（159-R6 月末营业日五类标齐后）的系统操作人标识（无请求上下文，落 computed_by/voided_by 便于留痕追溯）。 */
     static final String SYSTEM_OPERATOR = "system_dividend_preview";
     /** V304 留存自动释放定时作业的系统操作人标识（落 released_by 便于留痕追溯）。 */
     static final String SYSTEM_RELEASE_OPERATOR = "system_dividend_reserve_release";
@@ -372,18 +375,25 @@ public class DividendService {
     }
 
     /**
-     * 月度预览定时作业入口（{@link DividendMonthlyPreviewJob} 调用）：无请求上下文、系统操作人，
-     * 对每个生效中方案出上月 preview 单（季度、半年、年度方案出，月度方案跳过）。刷新式幂等——每次跑作废旧
-     * 未作废预览单再重出（runCompute 内 RECOMPUTABLE 含 preview）。preview 不可审批，维持 V299 拍板。
-     * 无鉴权闸：定时线程无 SecurityContext，本方法只对内部作业开放（无 Controller 绑定）。
+     * 第十八批 V 段第 159 条 159-R6（BSM:1777「该预览单在上月最后一个营业日的五类数据……全部标记为最终之后自动生成，不设固定生成时点——数据未全部
+     * 标记最终之前不得生成预览，标记完成即自动生成。」；DEC-R8-45；第十八批裁决 35「酒吧逐店逐日查；游乐等按综合体逐日查」）：取代每月固定时点的预览作业。
+     * 某单位当月最后一个营业日五类标齐的标记提交后，对该单位的生效方案出该月 preview 单——酒吧取该店的方案，综合体取其下非酒吧商户的方案；
+     * 系统操作人、刷新式幂等（runCompute 内 RECOMPUTABLE 含 preview），月度方案照旧跳过，preview 不可审批（V299）。提交后另开事务执行，
+     * 失败只记日志、不影响已提交的标记（财务可手动出预览，同闸）；无请求上下文，不设鉴权闸，无 Controller 绑定。
      */
-    @Transactional
-    public DividendComputeResultRecord runScheduledMonthlyPreview(java.time.YearMonth month) {
-        DividendPeriod period = DividendPeriod.parse(month.toString());
-        return runCompute(repository.listActivePlans(), "preview", period, SYSTEM_OPERATOR);
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void onMonthEndBusinessDayFinal(FinanceService.MonthEndBusinessDayFinal event) {
+        List<DividendPlanRecord> plans = event.barId() != null
+                ? repository.findActivePlanByMerchant(event.barId()).stream().toList()
+                : repository.listActivePlans().stream().filter(plan -> businessDayResolver.barOfMerchant(plan.merchantId()) == null
+                        && event.projectId().equals(businessDayResolver.projectOfMerchant(plan.merchantId()))).toList();
+        if (!plans.isEmpty()) {
+            runCompute(plans, "preview", DividendPeriod.parse(event.month().toString()), SYSTEM_OPERATOR);
+        }
     }
 
-    /** 期间作业核心循环（请求路径与定时预览共用；operator 显式传入以脱离鉴权上下文）。 */
+    /** 期间作业核心循环（请求路径与月末五类标齐预览共用；operator 显式传入以脱离鉴权上下文）。 */
     private DividendComputeResultRecord runCompute(
             List<DividendPlanRecord> plans, String kind, DividendPeriod period, String operator) {
         List<DividendStatementRecord> computed = new ArrayList<>();
@@ -393,6 +403,11 @@ public class DividendService {
             String mismatch = periodMismatchReason(kind, period, plan);
             if (mismatch != null) {
                 skipped.add(new DividendComputeSkipRecord(plan.merchantId(), mismatch));
+                continue;
+            }
+            String notFinal = nonFinalReason(kind, period, plan);
+            if (notFinal != null) {
+                skipped.add(new DividendComputeSkipRecord(plan.merchantId(), notFinal));
                 continue;
             }
             Optional<DividendStatementRecord> existing =
@@ -427,6 +442,24 @@ public class DividendService {
                 ? null : OFFICIAL_LABEL_HINTS.get(plan.periodType());
     }
 
+    /**
+     * 第十八批 V 段第 159 条 159-R5（ENUM:190「非最终快照的数据一律不得进入结算、分红、正式提成计算和对账关账」；BSM:1774「分红基数按「净利润」算：
+     * 一个周期里的经营收入（按含税实收口径），减掉这期间的全部成本、费用与税费之后的余额」）：正式单要求方案商户检查单位（酒吧按该店，其他商户按
+     * 所属综合体，建档前营业日不计）期间内每个营业日五类数据都已标记为最终；未齐返回跳过原因（列营业日与缺的类别），在作废旧单之前判，旧草稿不作废。
+     * 159-R6（BSM:1777「数据未全部标记最终之前不得生成预览」；DEC-R8-45「未全部标记最终之前不得生成」）：preview 只判该月最后一个营业日的五类，
+     * 手动出预览与月末自动生成同闸。
+     */
+    private String nonFinalReason(String kind, DividendPeriod period, DividendPlanRecord plan) {
+        boolean preview = "preview".equals(kind);
+        List<String> lines = payoutPort.nonFinalDays(plan.merchantId(), null, preview ? period.end() : period.start(), period.end(),
+                FinanceService.FINAL_MARK_CATEGORIES.keySet());
+        if (lines.isEmpty()) {
+            return null;
+        }
+        return (preview ? "该月最后一个营业日（" + period.end() + "）的五类数据尚未全部标记为最终，不得生成预览："
+                : "以下营业日数据尚未标记为最终，不能出正式分红单：") + FinanceService.describeNonFinalDays(lines);
+    }
+
     private DividendStatementRecord computeStatement(
             DividendPlanRecord plan, String kind, DividendPeriod period, String operator, Instant now) {
         String merchantId = plan.merchantId();
@@ -443,11 +476,15 @@ public class DividendService {
         long revenue = 0L;
 
         if (plan.revenueDomains().contains("bar")) {
-            long barGross = repository.sumBarRevenueCent(merchantId, from, to);
+            // 第十八批 V 段第 159 条 159-R10（BSM:1777「预览只能看，不参与审批、不发放」「标记完成即自动生成」）：预览时尚未月结定格的服务费扣留数暂不计、
+            // 不拦；正式单照旧要求月结定格（BSM:1076「月结定格的扣留部分，扣留金额计入该商户营业额、抽成基数与分红净利润基数」）。
+            boolean preview = "preview".equals(kind);
+            long barGross = repository.sumBarRevenueCent(merchantId, from, to, preview);
             long barRefund = repository.sumBarRefundCent(merchantId, from, to);
             revenue += barGross - barRefund;
             addLine(lines, statementId, merchantId, seq, "revenue_bar", barGross,
-                    "酒吧整单已确认商品收入及原经营日月结服务费扣留" + window, now);
+                    "酒吧整单已确认商品收入及原经营日月结服务费扣留" + window
+                            + (preview ? "；预览：尚未月结定格的服务费扣留数暂不计" : ""), now);
             addLine(lines, statementId, merchantId, seq, "revenue_bar_refund", -barRefund,
                     "酒吧已实际退成的商品分项" + window, now);
         }

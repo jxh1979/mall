@@ -1,7 +1,8 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
+import static com.complex.platform.support.DailyCloseFixture.markRangeFinal;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -109,6 +110,8 @@ class BarForfeitedDepositTurnoverRentJdbcTests {
         assertThat(settlement(booking)).isEqualTo("forfeited");
 
         YearMonth month = forfeitMonth(booking);
+        // 第十八批 V 段 159-R4：抽成出账要求账期内营业日的订单与核销、退款与冲正已标记为最终（本用例不测该闸，整段标齐）。
+        markRangeFinal(jdbc, "bar", bar, month.atDay(1), month.atEndOfMonth());
         mockMvc.perform(post("/api/v1/finance/turnover-rent/bills").with(admin).contentType(MediaType.APPLICATION_JSON)
                         .content(json.writeValueAsString(Map.of("idempotency_key", "ffd-bill-" + s, "rule_id", rule,
                                 "period_start", month.atDay(1).toString(), "period_end", month.atEndOfMonth().toString(),
@@ -164,7 +167,10 @@ class BarForfeitedDepositTurnoverRentJdbcTests {
         timeoutJob.releaseOverdue();
 
         assertThat(settlement(booking)).isEqualTo("forfeited");
-        assertThat(finance.computePeriodTurnoverRent(bar, contract, forfeitMonth(booking).toString())).isEqualTo(2_000L);
+        YearMonth month = forfeitMonth(booking);
+        // 第十八批 V 段 159-R4：抽成出账要求账期内营业日的订单与核销、退款与冲正已标记为最终（本用例不测该闸，整段标齐）。
+        markRangeFinal(jdbc, "bar", bar, month.atDay(1), month.atEndOfMonth());
+        assertThat(finance.computePeriodTurnoverRent(bar, contract, month.toString())).isEqualTo(2_000L);
     }
 
     /** 订台到店开台、未点单即关台（未达最低消费）→ 定金没收并计入抽成基数。 */
@@ -192,7 +198,10 @@ class BarForfeitedDepositTurnoverRentJdbcTests {
                 .andExpect(status().isOk());
 
         assertThat(settlement(booking)).isEqualTo("forfeited");
-        assertThat(finance.computePeriodTurnoverRent(bar, contract, forfeitMonth(booking).toString())).isEqualTo(2_000L);
+        YearMonth month = forfeitMonth(booking);
+        // 第十八批 V 段 159-R4：抽成出账要求账期内营业日的订单与核销、退款与冲正已标记为最终（本用例不测该闸，整段标齐）。
+        markRangeFinal(jdbc, "bar", bar, month.atDay(1), month.atEndOfMonth());
+        assertThat(finance.computePeriodTurnoverRent(bar, contract, month.toString())).isEqualTo(2_000L);
     }
 
     // ---------- helpers ----------

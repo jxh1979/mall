@@ -1,7 +1,9 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
+import static com.complex.platform.support.DailyCloseFixture.closeWithMarks;
+import static com.complex.platform.support.DailyCloseFixture.markRangeFinal;
 import static org.assertj.core.api.Assertions.*;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -9,6 +11,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.complex.platform.access.*;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.governance.review.SupervisorReviewDecisionRecord;
+import com.complex.platform.support.StaffRequestFixture;
+import com.jayway.jsonpath.JsonPath;
 import java.time.*;
 import java.sql.Timestamp;
 import java.util.*;
@@ -424,6 +428,85 @@ class BarPayrollAllocationJdbcIntegrationTests {
         var after=bars.findTableSessionById(session).orElseThrow();
         assertThat(after.tableId()).isEqualTo(target);assertThat(after.serviceStaffId()).isEqualTo(actor);
         assertThat(responsibilities.responsibilityRows(session).getLast().userId()).isEqualTo(actor);
+    }
+
+    /**
+     * 第十八批 V 段第 159 条 159-R9：服务费与小费月结定格闸。依据：ENUM:190「非最终快照的数据一律不得进入结算、分红、正式提成计算和对账关账」；
+     * BSM:1076「归属按服务费收取所属账期认定，以该账期月结定格时确定的应发数与扣留数为准」；第十八批裁决 35「酒吧逐店逐日查」。
+     * 酒吧改为 2026-01-01 建档（随测试事务回滚）；9-01 账单所属营业日由财务 BP 经真实接口生成日结、标除「当日订单与核销记录」以外四类，
+     * 另一张 9-02 账单当天五类标齐。月结按前端蛇形键走真实接口与授权链：9-01 账单待处理、不写原件，9-02 账单当场定格；
+     * 补标后换新幂等键再办月结，9-01 账单按不加闸时的 50/150 定格。修复前不判最终，9-01 账单第一次就定格，第一条断言即红。
+     */
+    @Test void serviceIncomeCloseWaitsPerBillUntilOrdersOfItsBusinessDayAreFinal() throws Exception {
+        jdbc.update("UPDATE merchants SET created_at=TIMESTAMPTZ '2026-01-01 00:00:00+08' WHERE id=?",merchant);
+        var fixture=new StaffRequestFixture(jdbc);
+        var payroll=fixture.staff("bpfin_pay_"+id(),"staff",project,merchant,"bar.payroll.manage");
+        var financeBp=fixture.staff("bpfin_bp_"+id(),"staff",project,null,"finance.daily_close.lock","finance.daily_close.manage");
+        String dailyClose=JsonPath.read(body(mvc.perform(post("/api/v1/finance/daily-closes").with(financeBp).contentType(MediaType.APPLICATION_JSON)
+            .content("{\"idempotency_key\":\"bf-gen-"+id()+"\",\"business_date\":\"2026-09-01\",\"scope_type\":\"bar\",\"scope_id\":\""+merchant+"\"}"))
+            .andExpect(status().isOk())),"$.data.id");
+        for(String category:List.of("refunds_reversals","production_handover","attendance","anomaly_resolutions"))finalMark(financeBp,dailyClose,category);
+        String next=billOn(LocalDate.parse("2026-09-02"));
+        markRangeFinal(jdbc,"bar",merchant,LocalDate.parse("2026-09-02"),LocalDate.parse("2026-09-02"));
+
+        List<Map<String,Object>> runs=closeVia(payroll);
+        assertThat(runs).filteredOn(r->"pending".equals(r.get("status"))).singleElement()
+            .satisfies(r->assertThat((List<?>)r.get("unresolved_sources")).singleElement().asString()
+                .startsWith(bill+":").contains("尚未标记为最终").contains("2026-09-01 测试酒吧：当日订单与核销记录"));
+        assertThat(runs).filteredOn(r->"confirmed".equals(r.get("status"))).hasSize(1);
+        assertThat(runCount(bill)).isZero();
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM bar_payroll_allocations WHERE source_bill_ids @> ?::jsonb",Integer.class,"[\""+bill+"\"]")).isZero();
+        assertThat(runCount(next)).isEqualTo(1);
+
+        finalMark(financeBp,dailyClose,"orders_verifications");
+        assertThat(closeVia(payroll)).hasSize(2).extracting(r->r.get("status")).containsOnly("confirmed");
+        assertThat(runCount(bill)).isEqualTo(1);
+        assertThat(allocations.confirmedAllocations(first,"2026-09")).filteredOn(a->a.sourceBillIds().contains(bill)).singleElement()
+            .extracting(BarPayrollAllocation::amountCent).isEqualTo(5000L);
+        assertThat(allocations.confirmedAllocations(second,"2026-09")).filteredOn(a->a.sourceBillIds().contains(bill)).singleElement()
+            .extracting(BarPayrollAllocation::amountCent).isEqualTo(15000L);
+    }
+    /** 159-R9：决策台账 §25 Q32「不要求无关五类数据全最终」——9-01 只缺「当日考勤记录」时照常定格（修复前后都绿，防闸收得过宽）。 */
+    @Test void serviceIncomeCloseDoesNotWaitForUnrelatedAttendance() throws Exception {
+        jdbc.update("UPDATE merchants SET created_at=TIMESTAMPTZ '2026-01-01 00:00:00+08' WHERE id=?",merchant);
+        closeWithMarks(jdbc,"bar",merchant,LocalDate.parse("2026-09-01"),
+            List.of("orders_verifications","refunds_reversals","production_handover","anomaly_resolutions"));
+        var payroll=new StaffRequestFixture(jdbc).staff("bpfin_pay_"+id(),"staff",project,merchant,"bar.payroll.manage");
+        assertThat(closeVia(payroll)).singleElement().satisfies(r->assertThat(r.get("status")).isEqualTo("confirmed"));
+        assertThat(runCount(bill)).isEqualTo(1);
+    }
+    List<Map<String,Object>> closeVia(RequestPostProcessor caller) throws Exception {
+        return JsonPath.read(body(mvc.perform(post("/api/v1/bar/payroll-runs/close").with(caller).contentType(MediaType.APPLICATION_JSON)
+            .content("{\"idempotency_key\":\"bf-close-"+id()+"\",\"project_id\":\""+project+"\",\"merchant_id\":\""+merchant+"\",\"month\":\"2026-09\"}"))
+            .andExpect(status().isOk())),"$.data");
+    }
+    void finalMark(RequestPostProcessor caller,String dailyClose,String category) throws Exception {
+        mvc.perform(post("/api/v1/finance/daily-closes/"+dailyClose+"/final-marks").with(caller).contentType(MediaType.APPLICATION_JSON)
+            .content("{\"idempotency_key\":\"bf-"+category+"-"+id()+"\",\"category\":\""+category+"\"}")).andExpect(status().isOk());
+    }
+    static String body(org.springframework.test.web.servlet.ResultActions result) throws Exception {
+        return result.andReturn().getResponse().getContentAsString(java.nio.charset.StandardCharsets.UTF_8);
+    }
+    int runCount(String sourceBill) {
+        return jdbc.queryForObject("SELECT count(*) FROM bar_payroll_runs WHERE source_snapshot->>'source_bill_id'=?",Integer.class,sourceBill);
+    }
+    /** 159-R9：同酒吧同卡座另一场次（营业日 day）一张已真实收款的账单，小费 20000 分，全程由 first 负责交接。 */
+    String billOn(LocalDate day) {
+        String s=id(),sess="bps2_"+s,order="bpo2_"+s,b="bpb2_"+s;
+        Instant from=day.atTime(12,0).toInstant(ZoneOffset.UTC),to=from.plusSeconds(8*3600);
+        jdbc.update("INSERT INTO bar_table_sessions(id,bar_id,merchant_id,business_date,table_id,service_staff_id,status,opened_at,closed_at,created_at,updated_at) VALUES(?,?,?,?,?,?,'closed',?,?,?,?)",
+            sess,merchant,merchant,day,table,first,Timestamp.from(from),Timestamp.from(to),Timestamp.from(from),Timestamp.from(to));
+        jdbc.update("INSERT INTO bar_orders(id,bar_id,merchant_id,table_id,order_source,status,total_amount_cent,currency,created_at,updated_at) VALUES(?,?,?,?,'staff','created',100000,'CNY',?,?)",
+            order,merchant,merchant,table,Timestamp.from(from),Timestamp.from(to));
+        jdbc.update("INSERT INTO bar_bills(id,bill_no,order_id,bar_id,merchant_id,table_id,subtotal_amount_cent,discount_amount_cent,deposit_deduct_amount_cent,payable_amount_cent,paid_amount_cent,currency,payment_status,settlement_status,tip_amount_cent,created_at,updated_at) VALUES(?,?,?,?,?,?,100000,0,0,100000,120000,'CNY','paid','settled',20000,?,?)",
+            b,"B"+s,order,merchant,merchant,table,Timestamp.from(from),Timestamp.from(to));
+        jdbc.update("INSERT INTO bar_bill_settlements(id,bill_id,settle_channel,settlement_amount_cent,merchant_id,settled_at) VALUES(?,?,'aggregate_pay',120000,?,?)","pay_"+s,b,merchant,Timestamp.from(to));
+        jdbc.update("INSERT INTO bar_payroll_bill_components(id,source_bill_id,session_id,source_table_id,project_id,merchant_id,business_date,component_type,amount_cent,original_base_cent,source_event_id,source_snapshot,collection_bill_id) VALUES(?,?,?,?,?,?,?,'tip',20000,20000,?,'[]'::jsonb,?)",
+            "c_"+s,b,sess,table,project,merchant,day,"event_"+s,b);
+        jdbc.update("INSERT INTO bar_payroll_collection_links(source_bill_id,collection_bill_id) VALUES(?,?)",b,b);
+        jdbc.update("INSERT INTO bar_service_responsibilities(id,session_id,table_id,project_id,merchant_id,user_id,payer_company_id,started_at,ended_at,source_id,recorded_by,reason) VALUES(?,?,?,?,?,?,?,?,?,?,?,'真实交接')",
+            id(),sess,table,project,merchant,first,company,Timestamp.from(from),Timestamp.from(to),id(),actor);
+        return b;
     }
 
     @Test void forgedApprovalEventCannotActivateRule() {

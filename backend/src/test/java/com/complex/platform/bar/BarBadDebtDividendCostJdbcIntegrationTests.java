@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -9,6 +9,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.complex.platform.common.BusinessDayResolver;
 import com.complex.platform.support.CustomerTicketPaymentFixture;
+import com.complex.platform.support.DailyCloseFixture;
 import com.complex.platform.support.StaffRequestFixture;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.Instant;
@@ -125,9 +126,12 @@ class BarBadDebtDividendCostJdbcIntegrationTests {
         deliver(keptOrder).andExpect(status().isOk());
         suspend(keptOrder).andExpect(status().isOk());
 
+        // 第十八批 V 段 159-R5：正式分红单要求期间内每个营业日五类已标最终；计算前把当月逐日标齐（直插待确认日结，不锁账）。
+        YearMonth month = YearMonth.from(days.businessDate(null, bar, Instant.now()));
+        DailyCloseFixture.markRangeFinal(jdbc, "bar", bar, month.atDay(1), month.atEndOfMonth());
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("idempotency_key", "bdd-div-" + s);
-        body.put("period_label", YearMonth.from(days.businessDate(null, bar, Instant.now())).toString());
+        body.put("period_label", month.toString());
         body.put("kind", "official");
         body.put("merchant_id", bar);
         String statement = data(mockMvc.perform(post("/api/v1/finance/dividends/statements/compute").with(admin)

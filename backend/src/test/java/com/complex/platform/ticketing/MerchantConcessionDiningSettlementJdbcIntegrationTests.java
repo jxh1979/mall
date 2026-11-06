@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -10,6 +10,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.complex.platform.access.AccessActor;
 import com.complex.platform.settlement.TicketDistributionSettlementService;
+import com.complex.platform.support.DailyCloseFixture;
 import com.complex.platform.support.TestSecurityActors;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.nio.charset.StandardCharsets;
@@ -131,7 +132,10 @@ class MerchantConcessionDiningSettlementJdbcIntegrationTests {
         assertThat(settledAmount(funded)).isEqualTo(CATALOG_PRICE_CENT);
 
         TestSecurityActors.asPlatformAdmin();
-        settlementService.settleMonth(project, YearMonth.now(ZoneOffset.UTC));
+        YearMonth month = YearMonth.now(ZoneOffset.UTC);
+        // 第十八批 V 段 159-R2：通票月度分账只结两类数据已标记为最终的月份，先把该综合体当月整段标齐。
+        DailyCloseFixture.markRangeFinal(jdbc, "project", project, month.atDay(1), month.atEndOfMonth());
+        settlementService.settleMonth(project, month);
         // 该餐厅专属直付只含平台出资那一笔；商户让利那笔不产生应付。
         assertThat(jdbc.queryForObject("""
                 SELECT si.final_amount_cent FROM settlement_items si JOIN settlement_bills sb ON sb.id = si.bill_id

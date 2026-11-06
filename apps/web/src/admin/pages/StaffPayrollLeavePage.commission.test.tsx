@@ -1,4 +1,4 @@
-// 文件版本：V0.03
+// 文件版本：V0.04
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -51,5 +51,29 @@ describe("StaffPayrollLeavePage 提成月结拨付（CG-07，BSM「营销人员�
     fireEvent.click(screen.getByRole("button", { name: "查看薪资单详情" }));
     expect(await screen.findByText("tax_assessment_locked")).toBeTruthy();
     expect(screen.getByText("tax_version_locked")).toBeTruthy();
+  });
+
+  // 第十八批 V 段 159-R8（ENUM:190「非最终快照的数据一律不得进入结算、分红、正式提成计算和对账关账」；PGM:291 报错提示中文）：
+  // 后端以 409 COMMISSION_DATA_NOT_FINAL 拒绝拨付时，页面经全局报错显示「操作冲突：」加后端原文。修复前按钮 void 调用无 catch，什么都不显示。
+  it("拨付被拒（营业日数据未标最终）时显示后端中文原文", async () => {
+    const message = "以下营业日数据尚未标记为最终，不能办理提成月结拨付：2026-09-20 提成酒吧：当日退款与冲正记录";
+    const fetchMock = vi.fn().mockImplementation((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("/staff/commission-settlements/close")) return Promise.resolve(new Response(JSON.stringify({ success: false, code: "STATE_CONFLICT", detail_code: "COMMISSION_DATA_NOT_FINAL", message }), { status: 409, headers: { "content-type": "application/json" } }));
+      if (url.includes("/staff/commission-settlements")) return Promise.resolve(listEnvelope(SETTLEMENTS));
+      if (url.includes("/staff/payroll?")) return Promise.resolve(listEnvelope(PAYROLL));
+      return Promise.resolve(listEnvelope([]));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const setGlobalError = vi.fn();
+    const setActionResult = vi.fn();
+    const props: AdminPageProps = { api: new AdminApi("test-token"), user: { id: "u1", username: "admin", accountType: "platform_admin" }, setActionResult, setGlobalError, effectivePermissions: ADMIN_PERMS };
+    render(<StaffPayrollLeavePage {...props} />);
+
+    await waitFor(() => expect(screen.getByTestId("payroll-payer-pay_1").textContent).toBe("ent-platform"));
+    await waitFor(() => expect(screen.getByTestId("commission-settlement-row-bcs_1").textContent).toContain("mch-bar"));
+    fireEvent.click(screen.getByTestId("payroll-commission-close"));
+    await waitFor(() => expect(setGlobalError).toHaveBeenCalledWith("操作冲突：" + message));
+    expect(setActionResult).not.toHaveBeenCalledWith(expect.objectContaining({ action: "commission_settlement_closed" }));
   });
 });

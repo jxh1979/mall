@@ -1,4 +1,4 @@
-// 文件版本：V0.20
+// 文件版本：V0.21
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { CnDatePicker } from "../components/CnDatePicker";
@@ -389,9 +389,14 @@ export function ContractWorkbenchPage({ api, user, setActionResult, setGlobalErr
       setGlobalError("排租金AR需先选账期（年-月）");
       return;
     }
-    const bills = await api.post<unknown[]>(`/api/v1/contracts/${row.id}/period-bills`, { period: billPeriod });
-    setActionResult({ action: "contract_period_bills_generated", contractId: row.id, period: billPeriod, count: (bills ?? []).length });
-    reload();
+    try {
+      const bills = await api.post<unknown[]>(`/api/v1/contracts/${row.id}/period-bills`, { period: billPeriod });
+      setActionResult({ action: "contract_period_bills_generated", contractId: row.id, period: billPeriod, count: (bills ?? []).length });
+      reload();
+    } catch (e) {
+      // 第十八批 V 段第 159 条 159-R4：账期内营业日数据未标记为最终（409 TURNOVER_DATA_NOT_FINAL）等拒绝原样提示。
+      setGlobalError(e instanceof Error ? e.message : String(e));
+    }
   }
 
   async function settle(row: ContractRow, forceTrigger?: string) {

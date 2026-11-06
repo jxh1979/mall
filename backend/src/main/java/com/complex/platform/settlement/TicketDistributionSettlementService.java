@@ -1,8 +1,9 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import com.complex.platform.common.money.MoneyRounding;
+import com.complex.platform.finance.FinanceService;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -109,15 +110,18 @@ public class TicketDistributionSettlementService {
     private final RevenueStreamAttributionRepository attributionRepository;
     private final JdbcPassPoolRepository passPools;
     private final com.complex.platform.common.BusinessDayResolver businessDays;
+    private final FinanceService financeService;
 
     public TicketDistributionSettlementService(JdbcSettlementBillRepository repository,
                                                RevenueStreamAttributionRepository attributionRepository,
                                                JdbcPassPoolRepository passPools,
-                                               com.complex.platform.common.BusinessDayResolver businessDays) {
+                                               com.complex.platform.common.BusinessDayResolver businessDays,
+                                               FinanceService financeService) {
         this.repository = repository;
         this.attributionRepository = attributionRepository;
         this.passPools = passPools;
         this.businessDays = businessDays;
+        this.financeService = financeService;
     }
 
     /**
@@ -140,6 +144,16 @@ public class TicketDistributionSettlementService {
         if (existingStatus != null && !"draft".equals(existingStatus) && !"confirmed".equals(existingStatus)) {
             throw com.complex.platform.common.api.ApiException.conflict("SETTLEMENT_ALREADY_POSTED",
                     "该月份结算单已过账/结算/冲正(状态=" + existingStatus + "),不可重结;如需重算请先对已过账明细做冲正");
+        }
+        // 第十八批 V 段第 159 条 159-R2（ENUM:190「非最终快照的数据一律不得进入结算、分红、正式提成计算和对账关账」；BSM:1689「通票权益核销后
+        //   才按所属域的已生效规则与实际提供方结算」）：分账只取核销与核销冲正事实、售票固化的池快照与入场使用、按核销挂与冲正的通票赠饮应付，
+        //   对应「当日订单与核销记录」「当日退款与冲正记录」两类。单位同逾期待办（第十八批裁决 35「酒吧逐店逐日查；游乐等按综合体逐日查」）：
+        //   projectId 为空＝全部在营未存档酒吧与启用综合体，非空＝该综合体及其下酒吧；建档前的营业日不查。有未最终的营业日就整月不结、一行不写。
+        List<String> notFinal = financeService.nonFinalDaysAllUnits(projectId, periodStart, periodEnd,
+                List.of("orders_verifications", "refunds_reversals"));
+        if (!notFinal.isEmpty()) {
+            throw com.complex.platform.common.api.ApiException.conflict("SETTLEMENT_DATA_NOT_FINAL",
+                    "以下营业日数据尚未标记为最终，不能结算通票分账：" + FinanceService.describeNonFinalDays(notFinal));
         }
         Instant windowStart = periodStart.atStartOfDay().toInstant(ZoneOffset.UTC);
         Instant windowEnd = month.plusMonths(1).atDay(1).atStartOfDay().toInstant(ZoneOffset.UTC);

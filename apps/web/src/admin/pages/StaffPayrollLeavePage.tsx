@@ -1,4 +1,4 @@
-// 文件版本：V0.08
+// 文件版本：V0.09
 import React from "react";
 import { payrollDetailFields } from "./StaffPayrollDetail";
 import type { PayrollStatementDetail } from "./staffPayrollTypes";
@@ -142,10 +142,15 @@ export function StaffPayrollLeavePage({ api, user, setGlobalError, setActionResu
   };
 
   // CG-07：按（酒吧 → 人员所属主体 → 月）汇总派驻人员提成，生成内部结算应付；重复执行不重复挂账。
+  // 第十八批 V 段 159-R8：派驻酒吧当月营业日数据未标最终时后端 409 拒绝，报错经全局提示显示后端中文原文。
   const closeCommissionSettlement = async () => {
-    const result = await api.post<{ settlements?: number }>("/api/v1/staff/commission-settlements/close", { month });
-    setActionResult({ action: "commission_settlement_closed", month, settlements: result?.settlements });
-    await reload();
+    try {
+      const result = await api.post<{ settlements?: number }>("/api/v1/staff/commission-settlements/close", { month });
+      setActionResult({ action: "commission_settlement_closed", month, settlements: result?.settlements });
+      await reload();
+    } catch (error) {
+      setGlobalError(error instanceof Error ? error.message : "提成月结拨付失败");
+    }
   };
 
   const review = async (id: string, decision: "approve" | "reject") => {

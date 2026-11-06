@@ -1,6 +1,6 @@
 # PRD 审计业务裁决台账
 
-文档版本：V0.76
+文档版本：V0.77
 状态：进行中
 迁移日期：2026-07-27
 当前事实源：三份立法 HTML 以既有冻结基线叠加 James 此前 M02 至 M08 的点名批准、全量审计 M001、M002 的逐项批准，以及本轮 2026-10-16 至 2026-10-17 业务 HTML 审计中 Q01 至 Q40 及子题实际明确批准且未被后续替代的裁决，和 2026-10-17 第二批 HTML 业务线推演审计（A–F 六线 64 条、停车章）的逐项批准，并叠加本轮 CG 70 项来源确认与 C01–C09、N01–N03 最终澄清及补全文稿中 F01、W01–W05 的整体修改批准（本文件末节）；本轮最终规则、未采纳或替代关系、现行版本与字节哈希见本文件末节。历史记录保留为各自当时事实，不恢复已被替代的建议。
@@ -5201,3 +5201,91 @@ HTML 的语义补齐与直接引用同步可在本批核验；70项中的业务�
     - ④ 服务点单 PRD（V0.08）§4.1 实现现状的 JdbcFinanceRepository.sumCompletedServiceOrderCent 改为 listCompletedServiceOrderRows；覆盖矩阵 docs/prd-audit/html-prd-coverage.csv 的 BSM-0177、BEQ-0032 两行 JdbcFinanceRepository.sumForfeitedBarDepositCent 改为 listForfeitedBarDepositRows（155-R1 改名，口径不变）。本台账 :4841、:4892 的历史补记不改。
     - openapi-p0.json 改动后同步 security-scans 两份 md 的「OpenAPI SHA-256」行，并重跑 refresh-entry-doc-baseline 与 docs:data-isolation-spec、docs:domain-ownership-scope、docs:operation-matrix、docs:openapi-closure。
 - 18U 落地位置补记·运行验收证据、快照、终验文档刷新（无新裁决）：业务提交 eaf9344f 之后，按第十八批裁决 25 重刷了运行验收证据：后端全量 6461 测，0 失败 0 错误；apps/web 构建通过；常规界面验收（接口全部 mock）实跑 40 条全过；真实后端界面验收未跑，runtime_ready=false。随后依次重生成闭环当前态快照、生产闭环缺口报告、界面验收报告；无上线指挥台也重生成了，内容不变。生成器没改。手改 docs/final-closed-loop-acceptance-audit-v0.1.md 与 docs/code-implementation-acceptance-audit-v0.1.md：前端单测源码计数改为 1613；被核文件行数都没变；后端全量与常规界面验收的数字、日期改为本次实跑值；写入 npm run verify:unit 实跑结果，五个工作区全过。交付门禁于 2026-11-05 UTC 在工作树逐项实跑子项，NAS 两项现场探测未跑。仍红的有两项：一是 coding-host-protection，它写死主仓路径，在工作树口径下必红，属工具口径，不做；二是 final-closed-loop-audit，如实留 2 条红（integration-ready、business-acceptance-ready），原因是校验器要求终验把联调、业务验收写成「是」，而裁决 25 定了不跑真实后端界面验收、运行验收未就绪，终验写的是「否」。verify:delivery-gates 总链仍是红的。
+
+18V 落地位置补记·第 159 条（2026-11-06）：第十八批 V 段（batch42）按待开发清单第 159 条（ENUM:190「非最终快照的数据一律不得进入结算、分红、正式提成计算和对账关账」；DEC-R8-45、决策台账 §25 Q32、第十八批裁决 35）实现；运行验收证据、终验文档在本段最后一个提交刷新；各条落地位置见下。本段追加时，原台账除文档版本 V0.76→V0.77 外，其他历史字节保持。
+
+- 18V 落地位置补记·控制席判定（2026-11-06）：第 159 条在现 main 9d8af4dc 上分三组重定方案为 159-R1～R10（方案在本机 b42-audit\g159-core.json、g159-settle.json、g159-payroll.json，一致性核对在 b42-audit\consistency.json），三组均无待裁题。控制席统一：夹具只由 R1 在 DailyCloseFixture 加 markRangeFinal 与 closeWithMarks；判定助手不判登录人与范围、逐单位先判整段是否都在建档前；StaffService、BarPayrollAllocationService 必填注入 FinanceService；四个分入口错误码 TURNOVER_DATA_NOT_FINAL、SETTLEMENT_DATA_NOT_FINAL、MEDIA_SETTLEMENT_DATA_NOT_FINAL、COMMISSION_DATA_NOT_FINAL 与待结码 SERVICE_COMMISSION_PENDING；通票月度分账作业默认改为每月 3 日 03:00（服务器时区，月末营业日标记期限为次月 2 日 24:00，ENUM:190）；积分发行费月结不加闸（只读两张积分发行费事实表，HTML 对其另有定格与追回规则，BSM:808、BSM:823、BSM:828）。重定方案时旁见另记待开发清单第 207～209 条。
+- 159-R1 最终快照判定助手。
+  - 落地位置：
+    - FinanceService.nonFinalDays：按商户或综合体、营业日区间和类别，列出未标记为最终的营业日。商户是酒吧按该酒吧，否则按综合体。不在逾期待办检查单位集合里的单位（已存档酒吧、未启用综合体、无所属综合体的商户），以及建档之前的营业日，都不列。
+    - FinanceService.nonFinalDaysAllUnits：平台全部检查单位，或某综合体及其下在营、未存档的酒吧。
+    - FinanceService.describeNonFinalDays：用「；」连接，最多列 10 行，超出时末尾加「等，共 N 条」。
+    - FinanceService.FINAL_MARK_CATEGORIES 改为 public。
+    - 检查单位与按营业日的标记并集下沉到 FinanceRepository.FinalMarkUnit、listFinalMarkUnits、finalMarkCategoriesByDay（JdbcFinanceRepository 实现）。逾期待办 FinanceFinalMarkOverdueService 改用同一查询，口径不变。
+    - 测试夹具 DailyCloseFixture.closeWithMarks、markRangeFinal。
+    - 回归 FinanceFinalSnapshotJdbcIntegrationTests。
+  - 依据：ENUM:190「非最终快照的数据一律不得进入结算、分红、正式提成计算和对账关账」「「最终快照」指某一营业日的某一类数据在该营业日结束后不再变动的状态。」；第十八批裁决 35「酒吧逐店逐日查；游乐等按综合体逐日查」；18R 143-R3 复核修复补记「检查单位只取未存档的酒吧……酒吧与综合体都跳过建档之前的营业日」。
+  - 无新裁决。
+- 159-R4 营业额抽成出账闸：
+  - 落地位置：FinanceService.calculateTurnoverRent 开头、任何取数和写入之前，调 nonFinalDays(商户, null, 账期首日, 账期末日, ["orders_verifications","refunds_reversals"])。结果非空就 409 TURNOVER_DATA_NOT_FINAL，文案「以下营业日数据尚未标记为最终，不能出营业额抽成账单：」后接 describeNonFinalDays 的结果。
+  - 覆盖范围：一处覆盖平台出抽成账单 billTurnoverRent（POST /api/v1/finance/turnover-rent/bills，失败留痕 finance.turnover_rent.bill_failed）、合同单期租金挂账 generateRentBill 与按期出账 generatePeriodBills。后两个经 resolveBillingRent → turnoverAlongChain → computePeriodTurnoverRentSnapshot 冒泡，整期不出，不写逐笔快照与跨期冲正应付。固定租金合同不受影响。
+  - 单位口径：同取数窗口，酒吧按该店，其他商户按所属综合体，建档前的营业日不计。
+  - 前端：合同工作台「排租金AR」补 catch，显示后端原文。
+  - 回归：TurnoverRentFinalSnapshotGateJdbcTests；ContractWorkbenchPage.test.tsx 159-R4 一条；既有 9 条用 DailyCloseFixture.markRangeFinal 补夹具。
+  - 依据：ENUM:190「非最终快照的数据一律不得进入结算、分红、正式提成计算和对账关账」；ENUM:257「营业额＝该商户当期在本综合体内含税实收成交总额，减去当期已成功的退款金额」。
+  - 对应裁决：无新裁决（检查单位口径沿用第十八批裁决 35「酒吧逐店逐日查；游乐等按综合体逐日查」）。
+- 159-R5 正式分红单闸：DividendService.runCompute 在 periodMismatchReason 之后、作废旧单之前调私有方法 nonFinalReason。kind=official 时调 FinanceService.nonFinalDays(方案商户, null, 期间首日, 期间末日, FINAL_MARK_CATEGORIES 五类全部)：检查单位按酒吧逐店、其他商户按所属综合体，建档前营业日不计。有未最终营业日就记跳过（DividendComputeSkipRecord，原因「以下营业日数据尚未标记为最终，不能出正式分红单：」后接逐日缺类清单），不作废旧草稿。手动 compute 和登记依法可分配金额后的重算（confirmLegalInternal，computed 为空时 409 DIVIDEND_STATE_INVALID 带此原因）同用这道闸；期间关账（ENUM:303，正式单 approved/paid 才冻结费用月份）随之覆盖。回归：DividendFinalSnapshotGateJdbcIntegrationTests；既有 BarBadDebtDividendCostJdbcIntegrationTests 按夹具约定用 markRangeFinal 补齐当月标记。依据：ENUM:190「非最终快照的数据一律不得进入结算、分红、正式提成计算和对账关账」；BSM:1774「分红基数按「净利润」算：一个周期里的经营收入（按含税实收口径），减掉这期间的全部成本、费用与税费之后的余额」。对应裁决：无新裁决。
+- 159-R6（分红月度预览改为月末营业日五类标齐即自动生成）。
+  落地位置：
+  - FinanceService.markDailyCloseFinal（:677-692）：某单位当月最后一个营业日（营业日按起算日命名，即该月最后一个日历日）的第五类标记保存后，发 FinanceService.MonthEndBusinessDayFinal 事件（:700）。单位口径：酒吧按该店的 bar、merchant 范围日结；综合体按 project 范围日结；非酒吧商户的 merchant 范围不是检查单位。同日另一张日结已标过的类别不重发；幂等重放不重发。
+  - DividendService.onMonthEndBusinessDayFinal（:386）：标记提交后（AFTER_COMMIT），另开事务对该单位的生效方案出该月预览。酒吧取该店的方案，综合体取其下非酒吧商户的方案；月度方案照旧不出；刷新式幂等；系统操作人 system_dividend_preview。失败只记日志、不影响已提交的标记。
+  - DividendService.nonFinalReason（:452）：手动 kind=preview 同闸，只判该月最后一个营业日五类，未齐跳过「该月最后一个营业日（yyyy-MM-dd）的五类数据尚未全部标记为最终，不得生成预览：……」。
+  - 删 DividendMonthlyPreviewJob（每月 1 日 02:00 固定时点、默认关闭），删 DividendService.runScheduledMonthlyPreview，不设兜底定时器。
+  - 回归：DividendMonthEndPreviewJdbcIntegrationTests（2 条，走真实生成、标记、计算接口），DividendServiceTests.monthEndBusinessDayFinalPreviewRefreshesQuarterlyAndSkipsMonthlyPlans。
+  依据原句：
+  - BSM:1777「该预览单在上月最后一个营业日的五类数据（见枚举速查表「日结状态」条）全部标记为最终之后自动生成，不设固定生成时点——数据未全部标记最终之前不得生成预览，标记完成即自动生成。」
+  - ENUM:300「月度预览（只看不发；在上月最后一个营业日的五类数据全部标记为最终后自动生成，不设固定时点）」
+  - 第十八批裁决 35「酒吧逐店逐日查；游乐等按综合体逐日查」
+  对应裁决：DEC-R8-45（决策台账:1584）「预览单在上月最后一个营业日的五类数据全部标记为最终之后自动生成，不设固定生成时点；未全部标记最终之前不得生成」。该行本身不改。
+- 159-R10（分红·预览遇服务费尚未月结定格不再整单失败）
+  落地位置：
+  - DividendRepository.sumBarRevenueCent 新增 default 四参 preview 方法（:103），默认转调三参版。
+  - JdbcDividendRepository.sumBarRevenueCent 四参覆写（:654）：preview 为真时，扣留数为空的服务费行（尚未月结定格或历史无来源）跳过不计（:668）；三参版即 preview=false，正式单照旧 409 BAR_REVENUE_PENDING；商品收入来源未定、退款分项未核照旧拦。
+  - DividendService.computeStatement：按 kind 传 preview（:482）；预览的 revenue_bar 明细说明末尾注明「；预览：尚未月结定格的服务费扣留数暂不计」（:487）。
+  - 回归：DividendBarRevenueTests.previewLeavesServiceFeesAwaitingMonthCloseOutButFinalStillBlocks、DividendMonthEndPreviewJdbcIntegrationTests.previewStillGeneratesWhileServiceFeeAwaitsMonthCloseAndLeavesItsWithheldPartOut。
+  依据原句：
+  - BSM:1777「每月另出一张只读的预览单，让主理人提前看到当月大致情况（预览只能看，不参与审批、不发放）；该预览单在上月最后一个营业日的五类数据（见枚举速查表「日结状态」条）全部标记为最终之后自动生成，不设固定生成时点——数据未全部标记最终之前不得生成预览，标记完成即自动生成。」
+  - ENUM:300「月度预览（只看不发；在上月最后一个营业日的五类数据全部标记为最终后自动生成，不设固定时点）」
+  - 正式单照旧依 BSM:1076「月结定格的扣留部分，扣留金额计入该商户营业额、抽成基数与分红净利润基数」。
+  对应裁决：无新裁决。
+- 159-R2（落地位置：backend/.../settlement/TicketDistributionSettlementService.java settleMonth、SettlementMonthlyJob.java scheduledSettle 与 cron 默认值）：通票月度分账在已过账守卫之后、取数与写库之前加五类最终标记闸。FinanceService.nonFinalDaysAllUnits(projectId, 月首, 月末, 「当日订单与核销记录」「当日退款与冲正记录」两类) 返回非空时，409 SETTLEMENT_DATA_NOT_FINAL（「以下营业日数据尚未标记为最终，不能结算通票分账：」＋describeNonFinalDays），整月一行不写。单位：平台口径＝全部在营未存档酒吧逐店＋启用综合体，指定综合体＝该综合体及其下酒吧；建档前的营业日不查。月度作业遇该码记 WARN、跳过当月结算与过账（同月演出补跑照常），其他异常照旧抛出；被跳过的月份由下一轮回看窗口补算。cron 默认值改为每月 3 日 03:00（0 0 3 3 * *，服务器时区，不加 zone，application-prod.yml 不改）。依据：ENUM:190「非最终快照的数据一律不得进入结算、分红、正式提成计算和对账关账」「由各域主管公司的财务岗在该营业日闭店之后完成核对并逐类标记，最迟不晚于该营业日闭店时点所在自然日的次日 24:00」；BSM:1689「通票权益核销后才按所属域的已生效规则与实际提供方结算；未核销不产生提供方结算。」；BSM:1682「出厂默认起点为上午 10:00、闭店为次日 07:00」。对应裁决：单位口径沿用第十八批裁决 35「酒吧逐店逐日查；游乐等按综合体逐日查」，其余无新裁决。回归：TicketSettlementFinalSnapshotGateJdbcTests（2 条）；既有 MerchantConcessionDiningSettlementJdbcIntegrationTests 1 条按 markRangeFinal 补当月标记。
+- 159-R3 演出场次结算闸：
+  - 落地位置：MediaPerformanceSettlementService.settleInternal（:207-225）。事实已确认（无待处理原因）的场次，取数前按本场费项取所需类别：门票加价分配要「当日订单与核销记录」「当日退款与冲正记录」；酒水提成另要「当日出品与物品交接记录」；固定演出费不判。
+  - 调 FinanceService.nonFinalDays(演出酒吧商户, 场次项目, 演出日, 演出日, 类别)。单位与演出营业日窗同口径：演出酒吧按该店，否则按场次项目。
+  - 有未最终就 409 MEDIA_SETTLEMENT_DATA_NOT_FINAL，文案「演出日营业日以下数据尚未标记为最终，不能结算门票加价分配或酒水提成：……」，整场不写结算行、不挂应付。
+  - 手工结算（POST /api/v1/settlement/media-shows/{id}/settle）照旧记 media_settlement.settle_failed；月结补跑 settleConfirmedForMonth 逐场跳过、下一轮补。待处理路径照旧写待处理行。
+  - 回归：MediaPerformanceSettlementJdbcIntegrationTests 加 5 条，即 drinkCommission_waitsUntilShowDayDataFinal、fixedFeeOnly_settlesWithoutFinalMarks、unconfirmedFacts_stayPendingWithoutFinalMarks、ticketShare_needsRefundsReversalsFinal、monthlyBackfill_skipsNonFinalShow_settlesFixedFeeShow。
+  - 依据：ENUM:190「非最终快照的数据一律不得进入结算、分红、正式提成计算和对账关账」；BSM:1145「该场适用的门票加价分配、固定演出费和酒水提成共同引用该场已确认的实际履约事实，分别按该场已锁定合同的适用条款结算。」
+  - 对应裁决：无新裁决。
+- 159-R7（无新裁决；决策台账 §25 Q32「正式提成仅用该项计算依赖的最终确认数据，再进入原工资月结。不要求无关五类数据全最终，不新增工资发放日、退款重算、月结重开或税务政策。」；依据 ENUM:190「非最终快照的数据一律不得进入结算、分红、正式提成计算和对账关账」、BSM:1500「正式提成使用该项计算所依赖的已最终确认数据，再统一进入工资单月结」、第十八批裁决 35「酒吧逐店逐日查；游乐等按综合体逐日查」）：落在 backend/src/main/java/com/complex/platform/access/staff/StaffPayrollService.java（V0.04）build，工资计算与定格（calculate、settle）都经它，月结、离职、补发三种工资同一处。已结算酒吧账单的提成，按账单所属营业日（BusinessDayResolver.barBillBusinessDate，ENUM:187「销售提成月份，一律以开台或下单时点所属的营业日为准」）调 FinanceService.nonFinalDays，判该酒吧「当日订单与核销记录」「当日退款与冲正记录」两类（BSM:1070「对应的销售提成按订单最终保留收入重新计算并冲回差额」）；未最终的不进本单，记待结 BAR_COMMISSION_PENDING（沿用现码，作废、坏账、补录改派三处结清不变）。服务点单份额（staff_commission_ledger 关联 service_orders 的行），按服务完成时点所在营业日（ENUM:291「服务点单份额与管理费的归属月份按服务完成时点所在营业日确定」）只判「当日订单与核销记录」一类（ENUM:290「服务完成后不可退」）；有酒吧按该酒吧，没有酒吧按服务单所属综合体；未最终的记待结 SERVICE_COMMISSION_PENDING。待结说明为「所属营业日数据尚未标记为最终，提成保留预计数：」接 FinanceService.describeNonFinalDays。resolvePendingSources 加 SERVICE_COMMISSION_PENDING 一支，后续工资单含该台账行即结清。不判的有：手录提成、酒吧提成冲回行、实时预计提成；出品、考勤、异常处置三类不要求。补标后由补发单计入，不新增工资发放日、不重开月结。无迁移、无新接口、无新错误码，前端不改。回归：PayrollFinalSnapshotCommissionJdbcIntegrationTests（4 条，其中 hrListsCalculationsThroughRealEndpoint 是控制席补）。
+- 159-R8（派驻与营销人员提成月结拨付闸）
+  - 落地位置：
+    - StaffService.doCloseCommissionSettlement：先按本人范围（settlementInScope）与金额大于 0 筛出本次要结的组，对组内酒吧去重，逐家调 FinanceService.nonFinalDays(酒吧, null, 月初, 月末, [orders_verifications, refunds_reversals])。合并后非空，就整次 409 COMMISSION_DATA_NOT_FINAL「以下营业日数据尚未标记为最终，不能办理提成月结拨付：」加 describeNonFinalDays，一组都不写；失败留痕沿用 staff.commission_settlement.close_failed。
+    - StaffService 加必填 @Autowired FinanceService 字段。
+    - 后台 StaffPayrollLeavePage 的提成月结拨付按钮被拒时，经全局报错显示「操作冲突：」加后端原文。
+  - 依据原句：
+    - ENUM:190「非最终快照的数据一律不得进入结算、分红、正式提成计算和对账关账」
+    - BSM:1142「营销在某家酒吧促成的订单产生的提成，由该酒吧按月拨付给娱乐平台公司」
+    - BSM:1143「其中应付给本人的提成、服务费等报酬，由该酒吧按月拨付给人员所属主体」
+  - 对应裁决：决策台账 §25 Q32「正式提成仅用该项计算依赖的最终确认数据，再进入原工资月结。不要求无关五类数据全最终，不新增工资发放日、退款重算、月结重开或税务政策。」检查单位按第十八批裁决 35「酒吧逐店逐日查」。
+  - 回归：
+    - CommissionSettlementFinalSnapshotJdbcIntegrationTests 2 条（closeWaitsUntilRefundsOfTheBarAreFinalAndIgnoresGroupsOutOfScope、closeDoesNotWaitForUnrelatedAttendance）
+    - StaffPayrollLeavePage.commission.test.tsx 1 条（拨付被拒时显示后端中文原文）
+    - M738CrossProjectJdbcIntegrationTests.commissionCloseSettlesOnlyGroupsInOwnScope 以 markRangeFinal 补 entityB 2099-04 五类标记。
+- 159-R9（酒吧服务费与小费月结定格闸）落地位置：
+  - 代码：BarPayrollAllocationService.close（POST /api/v1/bar/payroll-runs/close，operationId closeBarPayrollMonth）。逐账单在计算之前取该账单分项营业日（bar_payroll_bill_components.business_date，即服务费收取所属账期）。每个营业日调 FinanceService.nonFinalDays(商户, 综合体, 该日, 该日, orders_verifications、refunds_reversals)，同一次月结里同一营业日只查一次。
+  - 缺标时：该账单记待处理行，原因为「所属营业日数据尚未标记为最终，不能月结定格：」加 describeNonFinalDays 的结果。不定格，不写 bar_payroll_runs、bar_payroll_allocations 和跨主体应付。同月已标齐的账单照常定格，补标后换幂等键重办月结即补定格（按指纹出原件）。
+  - 类别取舍：当日考勤记录、当日出品与物品交接记录、当日异常处置记录三类不判。服务责任与排班读的是交接记录和排班，不是五类里的考勤记录。
+  - 不加闸的地方：只读概览 overview、工资预检 unresolvedAllocationSources、sourceUnresolved。未定格的账单在工资侧照旧记 BAR_ALLOCATION_PENDING。
+  - 注入与改动范围：FinanceService 用必填 @Autowired 字段注入。无迁移，无新接口、新字段、新错误码，前端不改。
+  - 回归：BarPayrollAllocationJdbcIntegrationTests.serviceIncomeCloseWaitsPerBillUntilOrdersOfItsBusinessDayAreFinal 走真实日结生成、标记和月结接口，按蛇形键请求，走真实授权链；serviceIncomeCloseDoesNotWaitForUnrelatedAttendance 覆盖 Q32。
+  依据：
+  - ENUM:190「非最终快照的数据一律不得进入结算、分红、正式提成计算和对账关账」
+  - BSM:1076「归属按服务费收取所属账期认定，以该账期月结定格时确定的应发数与扣留数为准」
+  - BSM:1070「凡属于服务费、小费与表演报酬的部分，因退款均发生在发放之前，一律按订单最终保留收入重新计算并冲回差额」
+  - BSM:1077「以真实交接记录为依据，不直接以整班考勤时长替代」
+  对应裁决：
+  - 第十八批裁决 35「酒吧逐店逐日查；游乐等按综合体逐日查」（决策台账:3942），对应单位口径。
+  - 类别取舍按决策台账 §25 Q32（:3107）「不要求无关五类数据全最终」同理处理。
+- 控制席补（并入 159-R7）：StaffPayrollController 经 StaffPayrollConfigurationService 代理读 config.audit 为 null，自 b0944292 起 /api/v1/staff/payroll 下全部接口返回 500；改为构造注入 AuditEventService，业务逻辑不变；159-R7 回归 PayrollFinalSnapshotCommissionJdbcIntegrationTests 的工资计算与定格改回经真实接口。依据：159-R7 的闸在 staffPayrollCalculate、staffPayrollSettle 两个入口上生效（BSM:1500、ENUM:190 工资月结与正式提成计算），入口不可用则闸无法生效。
+- 18V 落地位置补记·运行验收证据、快照、终验文档刷新（无新裁决）：业务提交 273a7e80 与测试修复 989dad0e（分红月末预览测试的铺位带上面积，修 CI 上后端全量 1 条红）之后，按第十八批裁决 25 重刷了运行验收证据：后端全量 6482 测，0 失败 0 错误；apps/web 构建通过；常规界面验收（接口全部 mock）实跑 40 条全过；真实后端界面验收未跑，runtime_ready=false。随后依次重生成闭环当前态快照、生产闭环缺口报告、界面验收报告；无上线指挥台也重生成了，内容不变。生成器没改。手改 docs/final-closed-loop-acceptance-audit-v0.1.md 与 docs/code-implementation-acceptance-audit-v0.1.md：前端单测源码计数改为 1615；被核文件行数都没变；后端全量与常规界面验收的数字、日期改为本次实跑值；写入 npm run verify:unit 实跑结果，五个工作区全过。交付门禁于 2026-11-06 UTC 在工作树逐项实跑子项，NAS 两项现场探测未跑。仍红的有两项：一是 coding-host-protection，它写死主仓路径，在工作树口径下必红，属工具口径，不做；二是 final-closed-loop-audit，如实留 2 条红（integration-ready、business-acceptance-ready），原因是校验器要求终验把联调、业务验收写成「是」，而裁决 25 定了不跑真实后端界面验收、运行验收未就绪，终验写的是「否」。verify:delivery-gates 总链仍是红的。

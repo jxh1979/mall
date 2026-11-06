@@ -10,7 +10,7 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 /**
- * 发放保护线留存·自动释放定时作业（照 {@link DividendMonthlyPreviewJob} / SettlementMonthlyJob 范式，薄 @Scheduled 包装）——建设 R。
+ * 发放保护线留存·自动释放定时作业（照 SettlementMonthlyJob 范式，薄 @Scheduled 包装）——建设 R。
  *
  * <p>每日凌晨（默认 03:00，cron 可配）遍历所有待释放留存候选（approved/paid + 有留存 + 未释放），
  * 按各自方案的释放规则判到期（next_period 期末进入下一期 / fixed_delay 期末延后 N 期 / annual 年度末；

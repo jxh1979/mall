@@ -1,7 +1,8 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
+import static com.complex.platform.support.DailyCloseFixture.markRangeFinal;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.entry;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -133,6 +134,8 @@ class BarPlatformTurnoverRentJdbcTests {
         settle(bill("full"), "full", 10_000);
 
         YearMonth month = barMonth(Instant.now());
+        // 第十八批 V 段 159-R4：抽成出账要求账期内营业日的订单与核销、退款与冲正已标记为最终（本用例不测该闸，整段标齐）。
+        markRangeFinal(jdbc, "bar", bar, month.atDay(1), month.atEndOfMonth());
         mockMvc.perform(post("/api/v1/finance/turnover-rent/bills").with(admin).contentType(MediaType.APPLICATION_JSON)
                         .content(json.writeValueAsString(Map.of("idempotency_key", "bpt-bill-" + s, "rule_id", rule,
                                 "period_start", month.atDay(1).toString(), "period_end", month.atEndOfMonth().toString(),
@@ -162,6 +165,8 @@ class BarPlatformTurnoverRentJdbcTests {
                 other, project);
         seededBill("other", other, table(other, "other", "bar_counter"), 50_000, 0, 0, 50_000, 50_000, "settled", now);
 
+        // 第十八批 V 段 159-R4：抽成出账要求账期内营业日的订单与核销、退款与冲正已标记为最终（本用例不测该闸，整段标齐）。
+        markRangeFinal(jdbc, "bar", bar, barMonth(now).atDay(1), barMonth(now).atEndOfMonth());
         assertThat(finance.computePeriodTurnoverRent(bar, contract, barMonth(now).toString())).isEqualTo(1_800L);
     }
 
@@ -534,7 +539,10 @@ class BarPlatformTurnoverRentJdbcTests {
         servicePost(waiter, elsewhere, "mark-paid", "other", Map.of());
         servicePost(waiter, elsewhere, "complete", "other", Map.of());
 
-        assertThat(finance.computePeriodTurnoverRent(bar, contract, barMonth(Instant.now()).toString())).isEqualTo(3_000L);
+        YearMonth month = barMonth(Instant.now());
+        // 第十八批 V 段 159-R4：抽成出账要求账期内营业日的订单与核销、退款与冲正已标记为最终（本用例不测该闸，整段标齐）。
+        markRangeFinal(jdbc, "bar", bar, month.atDay(1), month.atEndOfMonth());
+        assertThat(finance.computePeriodTurnoverRent(bar, contract, month.toString())).isEqualTo(3_000L);
     }
 
     // ---------- helpers ----------
