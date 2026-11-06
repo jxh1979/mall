@@ -1,4 +1,4 @@
-// 文件版本：V0.13
+// 文件版本：V0.14
 import type { Page, Route } from "@playwright/test";
 
 type ApiData = Record<string, unknown> | Array<Record<string, unknown>> | null;
@@ -89,8 +89,9 @@ function createState(empty = false) {
   const savedBottles = empty ? [] : [{ id: "saved-1", savedNo: "SAVED-1", customerName: "Guest A", itemName: "Wine", quantity: 1, status: "stored" }];
   const barTableSessions = empty ? [] : [{ id: "session-1", barId: "bar-main", merchantId: "merchant-1", businessDate: "2026-06-15", tableId: "table-1", reservationId: "reservation-1", customerId: "customer-1", guestCount: 2, status: "open", sessionVersion: 1, openedAt: now }, { id: "session-2", barId: "bar-main", merchantId: "merchant-1", businessDate: "2026-06-15", tableId: "table-2", reservationId: null, customerId: "customer-2", guestCount: 2, status: "open", sessionVersion: 1, openedAt: now }];
   const safetyInspections = empty ? [] : [{ id: "safety-1", inspectionNo: "SAFE-1", projectId: "amuse-1", projectName: "Adventure", templateId: "safety-template-1", overallResult: "pending_rectification", inspectionStatus: "created", rectificationStatus: "pending", reopenStatus: "pending", riskLevel: "medium", status: "open", evidenceAttachmentIds: ["att-safety-1"], inspectedAt: now, createdAt: now, updatedAt: now }];
-  const reconciliationBatches = empty ? [] : [{ id: "recon-batch-1", batchNo: "REC-1", amount: 9900, status: "open" }];
-  const reconciliationDifferences = empty ? [] : [{ id: "recon-diff-1", differenceNo: "DIFF-1", amount: 100, status: "unresolved" }];
+  // 第十八批 Y 段第 180 条 180-R2：对账批次与差异按后端财务记录字段。
+  const reconciliationBatches = empty ? [] : [{ id: "recon-batch-1", batchNo: "REC-1", scopeType: "bar", scopeId: "bar-main", businessDate: "2026-06-15", status: "open" }];
+  const reconciliationDifferences = empty ? [] : [{ id: "DIFF-1", batchId: "recon-batch-1", differenceType: "amount", businessRef: "PAY-1", amountCent: 100, expectedAmountCent: 10000, actualAmountCent: 9900, source: "manual", status: "pending_handling", evidenceAttachmentIds: ["att-recon-0"] }];
   const retryTasks = empty ? [] : [{ id: "retry-1", taskNo: "RT-1", providerCode: "mock-video", eventType: "webhook", status: "pending" }];
   const compensationTasks = empty ? [] : [{ id: "comp-1", taskNo: "CP-1", providerCode: "mock-video", eventType: "polling_check", status: "pending" }];
   const orderSyncs = empty ? [] : [{ id: "sync-1", orderNo: "SYNC-1", providerCode: "mock-pos", syncType: "order_paid", status: "processed", updatedAt: now }];
@@ -331,6 +332,8 @@ function fixedRows(pathname: string, state: MockState, options: MockOptions = {}
       { window_key: "leasing.lead_follow_up", days: 3, description: "招商线索未跟进提醒天数" },
     ],
     "/api/v1/settlement/invoice-items/summary": { subjects: [], rules: [], over_issued: [] },
+    // 第十八批 Y 段第 183 条 183-R2：总控驾驶舱「结算待确认」取演出结算挂起待确认条数。
+    "/api/v1/settlement/media-shows/pending-settlement-count": { pending_count: 0 },
     "/api/v1/settlement/invoice-items": { items: [], page: 1, page_size: 200, total: 0 },
     "/api/v1/staff/payroll/tax-versions": [
       { id: "tax-version-navigation", category: "测试税目", version: "V0.01", effective_from: "2026-06-01",
@@ -735,7 +738,8 @@ async function handleWrite(route: Route, pathname: string, state: MockState, opt
     return json(route, product);
   }
   if (/^\/api\/v1\/finance\/reconciliation\/differences\/[^/]+\/close$/.test(pathname)) {
-    return json(route, { id: pathname.split("/").at(-2), status: "closed", closeReason: String(bodyValue(body, "closeReason", "close_reason") ?? "") });
+    // 第十八批 Y 段第 181 条 181-R1：close 改为提交关闭复核，返回待复核与复核单号。
+    return json(route, { id: pathname.split("/").at(-2), status: "pending_review", reviewId: "review-recon-1", closeReason: String(bodyValue(body, "closeReason", "close_reason") ?? "") });
   }
   if (pathname === "/api/v1/ticketing/price-rules") {
     state.priceRules = state.priceRules ?? [];

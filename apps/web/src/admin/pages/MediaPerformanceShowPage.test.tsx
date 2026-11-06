@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -97,5 +97,16 @@ describe("MediaPerformanceShowPage 演出合同与履约结算(ADM-STL-004)", ()
     fireEvent.change(screen.getByTestId("mps-fixed-fee"), { target: { value: "990" } });
     fireEvent.click(screen.getByTestId("mps-version-submit"));
     await waitFor(() => expect(post).toHaveBeenCalledWith(`${BASE}/ms_1/versions`, expect.objectContaining({ fixedFeeCent: 99000 })));
+  });
+
+  it("BSM:1839 卡片明细对账：场次列表在现行版本行上标「结算待处理 n 项」，被取代的版本行不标", async () => {
+    const get = vi.fn().mockResolvedValue([
+      { ...LOCKED, id: "ms_2", contractVersion: 2, pendingSettlementCount: 2 },
+      { ...LOCKED, status: "superseded", pendingSettlementCount: 0 },
+    ]);
+    renderPage(makeApi(get));
+    await waitFor(() => expect(screen.getByTestId("mps-show-ms_2").textContent).toContain("已锁定；结算待处理 2 项"));
+    expect(screen.getByTestId("mps-show-ms_1").textContent).toContain("已被新版本取代");
+    expect(screen.getByTestId("mps-show-ms_1").textContent).not.toContain("结算待处理");
   });
 });

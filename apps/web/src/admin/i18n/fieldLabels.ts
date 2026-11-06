@@ -1,4 +1,4 @@
-// 文件版本：V0.23
+// 文件版本：V0.24
 // OBS-14-02 后台结果区字段中文名字典（PGM「全局原则 · 界面全中文（所有终端零英文）」）。
 // 键用后端 JSON 的蛇形写法；结果区查表时蛇形与驼峰同查（orderId / order_id 都命中 order_id）。
 // 与后端字段中文名表 FieldLabels.java（common.api 包）同键同名：前段按后端原样抄录，后端改名这里跟着改（门禁会比对）。
@@ -2824,6 +2824,16 @@ export const FIELD_LABELS: Record<string, string> = {
   max_radius_meters: "半径上限（米）",
   // 第 124 条 124-R4 结算单人工过账留痕（同后端 FieldLabels.java）。
   posted_count: "过账笔数",
+  // 第十八批 Y 段第 181 条 181-R1 对账差异四态（同后端 FieldLabels.java）。
+  cause_note: "差异原因",
+  identified_cause: "差异原因",
+  stage_entered_at: "本阶段起始时间",
+  // 第十八批 Y 段第 181 条 181-R2 对账差异停留时限与超时升级（同后端 FieldLabels.java；stage、working_days 已有同名）。
+  min_working_days: "时限下限（工作日）",
+  max_working_days: "时限上限（工作日）",
+  stage_escalated_at: "本阶段超时升级时刻",
+  // 第十八批 Y 段第 183 条 183-R2 复核修复：演出场次列表逐行结算待处理条数（同后端 FieldLabels.java）。
+  pending_settlement_count: "结算待处理条数",
 };
 
 // 结果对象里页面自定的取值（action 动作码、status 状态码）→ 中文；STATUS_LABELS 已有的码不重复列。
@@ -3071,6 +3081,10 @@ export const VALUE_LABELS: Record<string, string> = {
   org_superior_set: "直接上级已设置",
   approval_line_saved: "审批线已保存",
   reconciliation_difference_closed: "对账差异已关闭",
+  reconciliation_difference_registered: "对账差异已登记",
+  reconciliation_difference_identified: "对账差异已识别",
+  reconciliation_difference_review_submitted: "对账差异已提交复核",
+  reconciliation_stage_limit_saved: "对账差异停留时限已保存",
   refund_limit_saved: "退款额度已保存",
   refund_rule_saved: "退款规则已保存",
   risk_alert_created: "风险告警已创建",
@@ -3340,7 +3354,8 @@ export const KEY_VALUE_LABELS: Record<string, Record<string, string>> = {
   category: { bar: "酒吧", ticketing: "门票销售", amusement: "游乐", catering: "餐饮", retail: "零售", service: "服务", entertainment: "娱乐", spirit: "烈酒", wine: "葡萄酒", beer: "啤酒", cocktail: "鸡尾酒", soft_drink: "软饮", mixer: "调饮", tea: "茶饮", snack: "小吃" },
   scope_type: { archived_bar_products: "已存档的酒吧商品", archived_entitlement_templates: "已存档的通票权益模板", archived_merchants: "已存档的商户档案", archived_ticket_types: "已存档的票种", archived_ticket_price_rules: "已存档的票价规则", archived_bar_product_categories: "已存档的酒吧商品分类", archived_bar_combos: "已存档的酒吧套餐", project: "项目", merchant: "商户", bar: "酒吧", ticketing: "票务", amusement: "游乐" },
   // 第十八批 P 段第 133 条 133-R3：日结范围类型（上一行末五项）与日结七源（名称取自 OpenAPI listDailyCloseSummaries 描述）。
-  source_stream: { official_ticket: "官方售票", channel_ticket: "渠道售票", bar: "酒吧", amusement: "游乐", supply_cost: "供应链成本", thirdparty_reflow: "第三方回流", bar_deposit: "订台定金" },
+  // 第十八批 Y 段第 182 条 182-R1（ENUM:191「低价值差异单独列示带账进入下期」）：低价值未关闭差异 low_value_difference。
+  source_stream: { official_ticket: "官方售票", channel_ticket: "渠道售票", bar: "酒吧", amusement: "游乐", supply_cost: "供应链成本", thirdparty_reflow: "第三方回流", bar_deposit: "订台定金", low_value_difference: "低价值未关闭差异（含上期带入）" },
   // 第十八批 R 段第 143 条 143-R1：日结状态，与 ENUM:190「待生成、待确认、有差异、已确认、已锁定、已归档」同字（待生成按查不到日结显示，不入库）。
   daily_close_status: { pending_confirm: "待确认", has_difference: "有差异", confirmed: "已确认", locked: "已锁定", archived: "已归档" },
   // 第十八批 R 段第 143 条 143-R2：日结五类最终标记的数据类别，与 ENUM:190「当日订单与核销记录、当日退款与冲正记录、当日出品与物品交接记录、当日考勤记录、当日异常处置记录」同字。

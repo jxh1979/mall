@@ -63,7 +63,7 @@
 - 生产证据 item：
 - mock/测试/页面文件：
   - admin_ui: `apps/web/src/admin/pages/BarOrdersPage.tsx`，markers=`paymentId`, `posBoundary`, `settle`
-  - admin_ui: `apps/web/src/admin/pages/ReconciliationPage.tsx`，markers=`reconciliation-page`, `manual_review_logged`
+  - admin_ui: `apps/web/src/admin/pages/ReconciliationPage.tsx`，markers=`reconciliation-page`, `finance.reconciliation.difference_review_submitted`
   - backend_unit: `backend/src/test/java/com/complex/platform/bar/BarServiceTests.java`，markers=`barBillPayIntentReusesFinancePaymentIntentSemantics`, `partialSettlementKeepsOriginalPayableAndMarksPartialStatuses`
   - supplier_mock: `docs/supplier-mock/t3b-webhook-envelope.example.json`，markers=`payment.paid`, `idempotency_key`
   - openapi_contract: `docs/p0-openapi-operation-acceptance-matrix-v0.1.md`，markers=`/api/v1/bar/bills/{bill_id}/pay-intents`, `/api/v1/bar/bills/{bill_id}/settle`

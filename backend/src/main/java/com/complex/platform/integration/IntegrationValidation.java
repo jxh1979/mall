@@ -1,6 +1,6 @@
 package com.complex.platform.integration;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import com.complex.platform.common.api.ApiException;
 import java.util.List;
@@ -38,7 +38,8 @@ final class IntegrationValidation {
     private static final Set<String> SYNC_TYPES = Set.of("order", "refund", "voucher_verification");
     private static final Set<String> SYNC_STATUSES = Set.of("received", "synced", "failed", "difference_found");
     private static final Set<String> TASK_STATUSES = Set.of("open", "ready", "running", "failed", "resolved", "ignored");
-    private static final Set<String> RECONCILIATION_STATUSES = Set.of("open", "difference_found", "matched", "resolved", "ignored");
+    // 181-R3：DEC-R4-2026-08-04-43「删除对账差异的「已忽略」状态」，处置不再收 ignored（库内约束 V608 同步去掉）。
+    private static final Set<String> RECONCILIATION_STATUSES = Set.of("open", "difference_found", "matched", "resolved");
     private static final List<Pattern> SECRET_PATTERNS = List.of(
             Pattern.compile("(?i).*(password|passwd|secret|api[_-]?key|access[_-]?token|private[_-]?key)\\s*[:=].+"),
             Pattern.compile("(?i).*(sk-live|sk_test|sk-proj|AKIA[0-9A-Z]{16}|-----BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY-----).*"),

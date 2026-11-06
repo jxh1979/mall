@@ -1,6 +1,6 @@
 package com.complex.platform.evidence;
 
-// 文件版本：V0.10
+// 文件版本：V0.11
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -81,6 +81,8 @@ public class EvidenceEventService {
     org.springframework.beans.factory.ObjectProvider<com.complex.platform.amusement.AmusementSessionLifecycleService> amusementSessions;
     @org.springframework.beans.factory.annotation.Autowired
     org.springframework.beans.factory.ObjectProvider<com.complex.platform.facility.FacilityEquipmentScrapService> facilityScraps;
+    @org.springframework.beans.factory.annotation.Autowired
+    org.springframework.beans.factory.ObjectProvider<com.complex.platform.finance.FinanceReconciliationDifferenceService> reconciliationDifferences;
 
     public EvidenceEventService(
             EvidenceEventRepository repository,
@@ -151,7 +153,9 @@ public class EvidenceEventService {
         String type = requireText(businessType, "business_type");
         String merchantId = evidenceScope(type, businessId, "dealer.manage", "evidence.attachment.create").orElse(null);
         // 第十八批 F 段第 14 条 14-R1（BSM:1642「补录必须附原始记录凭证（微信截图、通话录音等）」）：人工补录凭证另收语音。
-        EvidenceFileStorage.StoredFile stored = "manual_backfill".equals(type) ? fileStorage.storeComplaintMedia(file) : fileStorage.store(file);
+        // 18Y 复核修复（ENUM:202「上传渠道提供的对账单原件」，原件即渠道给的文件本身）：对账差异原件另收 pdf、xlsx、csv。
+        EvidenceFileStorage.StoredFile stored = "manual_backfill".equals(type) ? fileStorage.storeComplaintMedia(file)
+                : "finance_reconciliation_difference".equals(type) ? fileStorage.storeReconciliationStatement(file) : fileStorage.store(file);
         Instant now = Instant.now();
         String id = "att_" + slug(stored.objectKey());
         EvidenceAttachmentRecord saved = repository.saveAttachment(new EvidenceAttachmentRecord(
@@ -186,7 +190,9 @@ public class EvidenceEventService {
     public java.nio.file.Path resolveAttachmentFile(String attachmentId) {
         EvidenceAttachmentRecord attachment = repository.findAttachmentById(requireText(attachmentId, "attachment_id"))
                 .orElseThrow(() -> ApiException.notFound("ATTACHMENT_NOT_FOUND", "证据附件不存在"));
-        evidenceScope(attachment.businessType(), attachment.businessId(), "dealer.view", "evidence.timeline.view").ifPresent(scope -> {
+        // 18Y 复核修复：对账单原件上传时差异还没建、不带业务编号，按附件编号找引用它的差异过范围闸。
+        String scopeId = "finance_reconciliation_difference".equals(attachment.businessType()) ? attachment.id() : attachment.businessId();
+        evidenceScope(attachment.businessType(), scopeId, "dealer.view", "evidence.timeline.view").ifPresent(scope -> {
             if (!scope.equals(attachment.merchantId())) {
                 throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN", "证据附件不属于本商户");
             }
@@ -605,6 +611,14 @@ public class EvidenceEventService {
                 }
                 return Optional.ofNullable(merchant);
             }
+        }
+        // 第十八批 Y 段控制席并入（PGM:664「跨主体与平台层面的财务工作——三方对账……由财务中心负责」）：对账差异登记、提交复核所附渠道对账单原件，
+        //   平台侧财务员工不带商户编号也可上传（同 FS-021-R6）；商户账号照旧记本商户。
+        // 18Y 复核修复（ENUM:202「复核人须比对原件与录入值后签字」）：回读原件时（businessId 为附件编号）不带商户编号的账号按引用该原件的对账差异过范围闸
+        //   （FinanceReconciliationDifferenceService#canViewStatement）；都不满足的、商户账号照旧。
+        if ("finance_reconciliation_difference".equals(type) && (!reading || (authorizationService.currentMerchantIdQuietly().isEmpty()
+                && reconciliationDifferences.getObject().canViewStatement(businessId)))) {
+            return authorizationService.currentMerchantIdQuietly();
         }
         if (!java.util.Set.of("dealer_admission", "dealer_overpayment").contains(type == null ? "" : type)) {
             return authorizationService.currentMerchantScope();

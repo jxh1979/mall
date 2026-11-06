@@ -161,3 +161,20 @@ describe("MetricDetailPage 敏感页", () => {
     expect(ticket).not.toHaveBeenCalled();
   });
 });
+
+// 第十八批 Y 段第 181 条 181-R1（ENUM:191「待识别、待处理、待复核、已关闭」）：对账差异笔数明细的状态列按四态中文显示。
+describe("MetricDetailPage 对账差异四态", () => {
+  it("对账差异笔数明细：状态列四态中文，不直出英文码", async () => {
+    const api = makeApi(() => ({ ...TICKET_PAYLOAD, metricKey: "finance.recon_diff_count", name: "对账差异", traceLinkPageId: null, traceLinkColumnKey: "id",
+      columns: [{ key: "status", label: "状态" }],
+      rows: [{ id: "rd-1", status: "pending_identification" }, { id: "rd-2", status: "pending_handling" }, { id: "rd-3", status: "pending_review" },
+        { id: "rd-4", status: "closed" }],
+      totalRows: 4 }));
+    renderPage(api, "finance.recon_diff_count||");
+
+    await waitFor(() => expect(screen.queryByTestId("metric-detail-row-rd-1")?.textContent).toContain("待识别"));
+    expect(screen.getByTestId("metric-detail-row-rd-2").textContent).toContain("待处理");
+    expect(screen.getByTestId("metric-detail-row-rd-3").textContent).toContain("待复核");
+    expect(screen.getByTestId("metric-detail-row-rd-4").textContent).toContain("已关闭");
+  });
+});

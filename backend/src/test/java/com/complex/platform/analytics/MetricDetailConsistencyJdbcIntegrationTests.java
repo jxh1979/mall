@@ -1,6 +1,6 @@
 package com.complex.platform.analytics;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -127,7 +127,7 @@ class MetricDetailConsistencyJdbcIntegrationTests {
         MetricDetailRows baseline = repository.reconciliationDifferenceDetail(null, null, 1, 0);
 
         insertReconBatch("rb_mdc_1");
-        insertReconDifference("rd_mdc_1", "rb_mdc_1", 300, "open");
+        insertReconDifference("rd_mdc_1", "rb_mdc_1", 300, "pending_identification"); // 181-R1 四态英码
         insertReconDifference("rd_mdc_2", "rb_mdc_1", -150, "closed"); // 已关闭也计数(与对账差异页合计一致)
 
         MetricDetailRows after = repository.reconciliationDifferenceDetail(null, null, 1, 0);

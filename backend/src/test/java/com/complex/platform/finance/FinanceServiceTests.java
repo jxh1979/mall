@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.16
+// 文件版本：V0.17
 
 import com.complex.platform.support.InMemoryAuditEventRepository;
 import com.complex.platform.support.InMemoryIdempotencyRepository;
@@ -31,7 +31,6 @@ import com.complex.platform.finance.dto.OfflinePaymentConfirmRequest;
 import com.complex.platform.finance.dto.PaymentIntentRequest;
 import com.complex.platform.finance.dto.PropertyFeeBillRequest;
 import com.complex.platform.finance.dto.PropertyFeeRateRequest;
-import com.complex.platform.finance.dto.CloseReconciliationDifferenceRequest;
 import com.complex.platform.finance.dto.ReconciliationDifferenceRequest;
 import com.complex.platform.finance.dto.RefundRequest;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -546,21 +545,25 @@ class FinanceServiceTests {
                 .contains("finance.reconciliation_batch.viewed", "finance_reconciliation.difference_found");
     }
 
+    /** 第十八批 Y 段第 180 条 180-R2（PGM:778、PGM:528 红线④）：商户账号只读到本商户 merchant、bar 范围的批次及其差异。 */
     @Test
-    void reconciliationReadsAreForbiddenForMerchantScopedCallers() {
+    void reconciliationReadsAreLimitedToOwnMerchantForMerchantScopedCallers() {
+        Instant at = Instant.parse("2026-06-18T00:00:00Z");
         financeRepository.saveReconciliationBatch(new ReconciliationBatchRecord(
-                "recon_batch_iso", "RB202606180001", "project", "project_1",
-                LocalDate.parse("2026-06-18"), "created", Instant.parse("2026-06-18T00:00:00Z")));
+                "recon_batch_own", "RB202606180002", "bar", "merchant_a", LocalDate.parse("2026-06-18"), "open", at));
+        financeRepository.saveReconciliationBatch(new ReconciliationBatchRecord(
+                "recon_batch_iso", "RB202606180001", "project", "project_1", LocalDate.parse("2026-06-18"), "created", at));
+        financeRepository.saveReconciliationDifference(new ReconciliationDifferenceRecord(
+                "recon_diff_own", "recon_batch_own", "amount", "payment_own", 100L, "open", at));
+        financeRepository.saveReconciliationDifference(new ReconciliationDifferenceRecord(
+                "recon_diff_iso", "recon_batch_iso", "amount", "payment_iso", 100L, "open", at));
 
-        // Reconciliation has no merchant dimension; a merchant-scoped caller must not read cross-merchant data.
         when(authorizationService.currentMerchantScope()).thenReturn(Optional.of("merchant_a"));
 
-        assertThatThrownBy(() -> service.listReconciliationBatches())
-                .isInstanceOf(ApiException.class)
-                .extracting("code").isEqualTo("RECONCILIATION_PLATFORM_ONLY");
-        assertThatThrownBy(() -> service.listReconciliationDifferences())
-                .isInstanceOf(ApiException.class)
-                .extracting("code").isEqualTo("RECONCILIATION_PLATFORM_ONLY");
+        assertThat(service.listReconciliationBatches().items()).extracting(ReconciliationBatchRecord::id)
+                .containsExactly("recon_batch_own");
+        assertThat(service.listReconciliationDifferences().items()).extracting(ReconciliationDifferenceRecord::id)
+                .containsExactly("recon_diff_own");
     }
 
     // ─── P0#7：对账差异强制化（R6-D07）───────────────────────────────────────
@@ -575,7 +578,7 @@ class FinanceServiceTests {
                 .isInstanceOf(ApiException.class)
                 .extracting("code")
                 .isEqualTo("RECONCILIATION_NO_SYSTEM_EXPECTED");
-        assertThat(financeRepository.listReconciliationDifferences()).isEmpty();
+        assertThat(financeRepository.listReconciliationDifferences(null, null)).isEmpty();
     }
 
     @Test
@@ -592,39 +595,17 @@ class FinanceServiceTests {
         assertThat(diff.actualAmountCent()).isEqualTo(48000L);
         assertThat(diff.amountCent()).isEqualTo(2000L);          // 差额 = |expected − actual|
         assertThat(diff.source()).isEqualTo("system");
-        assertThat(diff.status()).isEqualTo("open");
+        // 第十八批 Y 段第 181 条 181-R1（ENUM:191）：登记一律进待识别，负责人为登记人。
+        assertThat(diff.status()).isEqualTo("pending_identification");
+        assertThat(diff.responsibleUserId()).isEqualTo("op_default");
         assertThat(auditEventRepository.events).extracting(AuditEvent::eventName)
                 .contains("finance.reconciliation.difference_created", "finance_reconciliation.difference_hardened");
     }
 
     @Test
-    void closeReconciliationDifferenceMarksClosedIdempotentlyWithReason() {
-        // 1.6：对账差异正式关闭——落 closed + close_reason + 审计，重复 close 幂等。
-        seedReconciliationBatch("recon_batch_close");
-        doReturn(new AccessActor("op_close", "op_close", "staff", "org_1", null, "active"))
-                .when(authorizationService).currentActor();
-        financeRepository.platformExpectedByRef.put("payment_close", 50000L);
-        ReconciliationDifferenceRecord diff = service.createReconciliationDifference(new ReconciliationDifferenceRequest(
-                "diff-close", "note", List.of(),
-                "recon_batch_close", "amount", "payment_close", 48000L, "system"));
-        assertThat(diff.status()).isEqualTo("open");
-
-        ReconciliationDifferenceRecord closed = service.closeReconciliationDifference(diff.id(),
-                new CloseReconciliationDifferenceRequest("close-1", "手工核对后差异合理，正式关闭", List.of()));
-        assertThat(closed.status()).isEqualTo("closed");
-        assertThat(auditEventRepository.events).extracting(AuditEvent::eventName)
-                .contains("finance.reconciliation.difference_closed");
-
-        // 幂等：同 key 重复 close 仍 closed、不报错、不翻状态。
-        ReconciliationDifferenceRecord again = service.closeReconciliationDifference(diff.id(),
-                new CloseReconciliationDifferenceRequest("close-1", "手工核对后差异合理，正式关闭", List.of()));
-        assertThat(again.status()).isEqualTo("closed");
-    }
-
-    @Test
     void manualSourcedDifferenceWithSystemTakingsIsForcedIntoReview() {
         seedReconciliationBatch("recon_batch_man");
-        // 第三方侧未接入：有平台侧系统取数支撑，允许 source=manual 录入 actual，但强制进复核。
+        // 第三方侧未接入：有平台侧系统取数支撑，允许 source=manual 录入 actual；强制复核由四态里的复核审批满足（181-R1），登记进待识别。
         financeRepository.platformExpectedByRef.put("payment_man", 30000L);
 
         ReconciliationDifferenceRecord diff = service.createReconciliationDifference(new ReconciliationDifferenceRequest(
@@ -633,7 +614,7 @@ class FinanceServiceTests {
 
         assertThat(diff.source()).isEqualTo("manual");
         assertThat(diff.expectedAmountCent()).isEqualTo(30000L);
-        assertThat(diff.status()).isEqualTo("needs_review");
+        assertThat(diff.status()).isEqualTo("pending_identification");
     }
 
     @Test
@@ -1277,7 +1258,7 @@ class FinanceServiceTests {
         assertThat(summaries.items()).extracting(DailyCloseSummaryRecord::sourceStream)
                 .containsExactlyInAnyOrder(
                         "official_ticket", "channel_ticket", "bar", "amusement", "supply_cost", "thirdparty_reflow",
-                        "bar_deposit");
+                        "bar_deposit", "low_value_difference");
         assertThat(summaries.items())
                 .filteredOn(s -> "official_ticket".equals(s.sourceStream()))
                 .extracting(DailyCloseSummaryRecord::amountCent, DailyCloseSummaryRecord::orderCount)
@@ -2399,8 +2380,14 @@ class FinanceServiceTests {
         }
 
         @Override
-        public List<ReconciliationBatchRecord> listReconciliationBatches() {
-            return new ArrayList<>(reconciliationBatches.values());
+        public List<ReconciliationBatchRecord> listReconciliationBatches(String merchantId, java.util.Set<String> projectIds) {
+            return reconciliationBatches.values().stream().filter(b -> reconciliationVisible(b, merchantId, projectIds)).toList();
+        }
+
+        /** 180-R2 桩：同仓储口径（商户只到本商户 merchant、bar 范围；项目集合只认 project 范围，桩里没有商户归属表）。 */
+        private boolean reconciliationVisible(ReconciliationBatchRecord b, String merchantId, java.util.Set<String> projectIds) {
+            return (merchantId == null || (List.of("merchant", "bar").contains(b.scopeType()) && merchantId.equals(b.scopeId())))
+                    && (projectIds == null || ("project".equals(b.scopeType()) && projectIds.contains(b.scopeId())));
         }
 
         @Override
@@ -2410,8 +2397,9 @@ class FinanceServiceTests {
         }
 
         @Override
-        public List<ReconciliationDifferenceRecord> listReconciliationDifferences() {
-            return new ArrayList<>(reconciliationDifferences.values());
+        public List<ReconciliationDifferenceRecord> listReconciliationDifferences(String merchantId, java.util.Set<String> projectIds) {
+            return reconciliationDifferences.values().stream().filter(d -> reconciliationBatches.containsKey(d.batchId())
+                    && reconciliationVisible(reconciliationBatches.get(d.batchId()), merchantId, projectIds)).toList();
         }
 
         @Override
@@ -2423,17 +2411,6 @@ class FinanceServiceTests {
         @Override
         public java.util.Optional<ReconciliationDifferenceRecord> findReconciliationDifferenceById(String id) {
             return java.util.Optional.ofNullable(reconciliationDifferences.get(id));
-        }
-
-        @Override
-        public ReconciliationDifferenceRecord closeReconciliationDifference(
-                String id, String closeReason, String closedBy, java.time.Instant closedAt) {
-            ReconciliationDifferenceRecord d = reconciliationDifferences.get(id);
-            ReconciliationDifferenceRecord closed = new ReconciliationDifferenceRecord(
-                    d.id(), d.batchId(), d.differenceType(), d.businessRef(), d.amountCent(),
-                    d.expectedAmountCent(), d.actualAmountCent(), d.source(), "closed", d.createdAt());
-            reconciliationDifferences.put(id, closed);
-            return closed;
         }
 
         // P0#7：平台侧 expected 系统取数桩——key=business_ref → expected 金额（分）。无键=0（无系统取数支撑）。

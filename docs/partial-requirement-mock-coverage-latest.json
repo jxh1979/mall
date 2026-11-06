@@ -120,7 +120,7 @@
           "path": "apps/web/src/admin/pages/ReconciliationPage.tsx",
           "markers": [
             "reconciliation-page",
-            "manual_review_logged"
+            "finance.reconciliation.difference_review_submitted"
           ]
         },
         {

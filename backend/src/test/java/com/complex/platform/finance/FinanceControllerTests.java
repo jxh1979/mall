@@ -1,4 +1,4 @@
-// 文件版本：V0.06
+// 文件版本：V0.07
 package com.complex.platform.finance;
 
 import static org.mockito.ArgumentMatchers.any;
@@ -62,6 +62,10 @@ class FinanceControllerTests {
 
     @org.springframework.test.context.bean.override.mockito.MockitoBean
     private FinanceService service;
+
+    // 第十八批 Y 段第 181 条 181-R1：对账差异识别与提交关闭复核的服务。
+    @org.springframework.test.context.bean.override.mockito.MockitoBean
+    private FinanceReconciliationDifferenceService reconciliationDifferences;
 
     @Autowired
     private AuthorizationService authorizationService;

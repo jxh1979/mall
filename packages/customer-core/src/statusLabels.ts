@@ -1,4 +1,4 @@
-// 文件版本：V0.10
+// 文件版本：V0.11
 // 3.8 业务枚举中文化：展示层把后端状态码翻成中文业务口径；提交/请求仍用原码。
 // 未知码原样返回（不阻断展示），新增码逐步补此表即可。
 const STATUS_LABELS: Record<string, string> = {
@@ -250,6 +250,9 @@ const STATUS_LABELS: Record<string, string> = {
   // 设施工单流转（accepted/suspended 多义留页级）
   pending_review: "待复核",
   pending_acceptance: "待验收",
+  // 第十八批 Y 段第 181 条 181-R1（ENUM:191「差异处理状态 待识别、待处理、待复核、已关闭」）：财务对账差异四态（待复核、已关闭沿用同码）。
+  pending_identification: "待识别",
+  pending_handling: "待处理",
   overtime: "已超时",
   // 巡检整改
   rectifying: "整改中",

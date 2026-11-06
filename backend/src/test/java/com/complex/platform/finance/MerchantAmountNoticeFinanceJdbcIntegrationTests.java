@@ -1,8 +1,9 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -12,10 +13,14 @@ import com.complex.platform.access.AccessRepository;
 import com.complex.platform.access.AccessUser;
 import com.complex.platform.access.RoleRecord;
 import com.complex.platform.common.LocalZone;
+import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.crypto.PiiCipher;
 import com.complex.platform.finance.dto.ArApAdjustmentDecisionRequest;
 import com.complex.platform.finance.dto.ArApAdjustmentRequest;
 import com.complex.platform.finance.dto.CloseReconciliationDifferenceRequest;
+import com.complex.platform.finance.dto.IdentifyReconciliationDifferenceRequest;
+import com.complex.platform.governance.review.SupervisorReviewApprovalRequest;
+import com.complex.platform.governance.review.SupervisorReviewService;
 import com.complex.platform.settlement.InternalPayDayService;
 import com.complex.platform.support.InternalPayDayFixtures;
 import java.time.Instant;
@@ -51,6 +56,8 @@ import org.springframework.test.web.servlet.MockMvc;
 class MerchantAmountNoticeFinanceJdbcIntegrationTests {
 
     @Autowired FinanceService finance;
+    @Autowired FinanceReconciliationDifferenceService differences;
+    @Autowired SupervisorReviewService reviews;
     @Autowired JdbcFinanceRepository repository;
     @Autowired AccessRepository access;
     @Autowired JdbcTemplate jdbc;
@@ -76,7 +83,8 @@ class MerchantAmountNoticeFinanceJdbcIntegrationTests {
         String role = "mamt_role_" + suffix;
         access.createRole(new RoleRecord(role, "金额通知项目财务-" + Long.parseLong(suffix, 16), null, "project", "active", Instant.now(),
                 List.of("finance.ar_ap.view", "finance.deposit.manage", "finance.locked_backfill.request", "finance.locked_backfill.approve",
-                        "finance.reconciliation.view", "finance.reconciliation.resolve"), null, false, List.of()));
+                        "finance.reconciliation.view", "finance.reconciliation.resolve", "governance.supervisor_review.approve"),
+                null, false, List.of()));
         financeA = user(role);
         financeB = user(role);
         // 对账数据为平台级数据（FinanceService.requirePlatformReconciliationAccess），认定由平台财务办理。
@@ -152,17 +160,22 @@ class MerchantAmountNoticeFinanceJdbcIntegrationTests {
                 Integer.class, "mamt_supplier_" + suffix)).isZero();
     }
 
-    /** 对账差异认定（正式关闭）通知所涉商户，原因含差异类型与认定结果；不在异议期适用清单，不写异议截止日；重复关闭不重发。 */
+    /**
+     * 对账差异认定（第十八批 Y 段第 181 条 181-R1 起：识别、提交关闭复核、提交人上级审批通过后关闭）通知所涉商户，原因含差异类型与认定结果；
+     * 不在异议期适用清单，不写异议截止日；已关闭不能再提交复核、不重发。
+     */
     @Test
     void reconciliationDifferenceCloseNotifiesMerchantWithoutDeadline() {
         String difference = difference(paidPayment(merchant));
         String foreign = difference(paidPayment("mamt_other_" + suffix));
-        SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
-                new AccessActor(platformFinance, platformFinance, "platform_admin", "org_1", null, "active"), "test", List.of()));
+        jdbc.update("INSERT INTO org_hierarchy(user_id,superior_id) VALUES(?,?)", platformFinance, financeB);
 
-        finance.closeReconciliationDifference(difference, new CloseReconciliationDifferenceRequest(key(), "银行流水核对后以平台口径为准", List.of()));
-        finance.closeReconciliationDifference(difference, new CloseReconciliationDifferenceRequest(key(), "再次关闭", List.of()));
-        finance.closeReconciliationDifference(foreign, new CloseReconciliationDifferenceRequest(key(), "非商户往来", List.of()));
+        approvedClose(difference, "银行流水核对后以平台口径为准");
+        approvedClose(foreign, "非商户往来");
+        actAsPlatformFinance();
+        assertThatThrownBy(() -> differences.submitReview(difference,
+                new CloseReconciliationDifferenceRequest(key(), "再次关闭", List.of(), null)))
+                .isInstanceOf(ApiException.class).extracting("code").isEqualTo("RECONCILIATION_DIFFERENCE_STATUS_CONFLICT");
 
         assertThat(notices()).singleElement().satisfies(r -> {
             assertThat(r.get("event_key")).isEqualTo("reconciliation_difference");
@@ -234,8 +247,24 @@ class MerchantAmountNoticeFinanceJdbcIntegrationTests {
         repository.saveReconciliationBatch(new ReconciliationBatchRecord(batch, "RB-" + batch, "project", project,
                 LocalDate.now(LocalZone.ID), "created", Instant.now()));
         String id = "mamt_rd_" + UUID.randomUUID().toString().substring(0, 12);
-        repository.saveReconciliationDifference(new ReconciliationDifferenceRecord(id, batch, "amount", payment, 700L, "open", Instant.now()));
+        repository.saveReconciliationDifference(new ReconciliationDifferenceRecord(id, batch, "amount", payment, 700L, "pending_identification",
+                Instant.now()));
         return id;
+    }
+
+    /** 181-R1：平台财务识别、提交关闭复核，其直接上级（项目财务 B）审批通过。 */
+    private void approvedClose(String difference, String conclusion) {
+        actAsPlatformFinance();
+        differences.identify(difference, new IdentifyReconciliationDifferenceRequest(key(), "银行流水与渠道对账单逐笔核对"));
+        String reviewId = differences.submitReview(difference, new CloseReconciliationDifferenceRequest(key(), conclusion, List.of(), null))
+                .reviewId();
+        act(financeB);
+        reviews.approve(reviewId, new SupervisorReviewApprovalRequest(key(), null, List.of(), null, "approved", "已核对银行流水"));
+    }
+
+    private void actAsPlatformFinance() {
+        SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
+                new AccessActor(platformFinance, platformFinance, "platform_admin", "org_1", null, "active"), "test", List.of()));
     }
 
     private List<Map<String, Object>> notices() {

@@ -1,4 +1,4 @@
-// 文件版本：V0.19
+// 文件版本：V0.20
 import { expect, test } from "@playwright/test";
 import { installMockApi } from "./support/mock-api";
 import { fillCnDate } from "./support/cn-date";
@@ -862,9 +862,9 @@ test.describe("full admin remaining pages acceptance", () => {
       }
       if (spec.pageId === "ADM-FIN-002") {
         await expect(page.getByTestId("reconciliation-evidence")).toContainText("/api/v1/finance/reconciliation/differences");
-        await expect(page.getByTestId("reconciliation-summary")).toContainText("正式关闭接口已就绪");
+        await expect(page.getByTestId("reconciliation-summary")).toContainText("未处理: 1");
         await expect(page.getByTestId("reconciliation-differences-table")).toContainText("DIFF-1");
-        await expect(page.getByTestId("reconciliation-boundary")).toContainText("原因和附件");
+        await expect(page.getByTestId("reconciliation-boundary")).toContainText("复核通过才关闭");
         continue;
       }
       if (spec.pageId === "ADM-MER-001") {
@@ -1156,11 +1156,11 @@ test.describe("full admin remaining pages acceptance", () => {
     await expect(page.getByTestId("admin-action-result")).toContainText("明细项");
 
     await openAdminRoute(page, remainingRoutes.find((item) => item.pageId === "ADM-FIN-002")!);
+    // 第十八批 Y 段第 181 条 181-R1：待处理的差异填处理结论提交复核（复核通过才关闭）。
     await page.getByTestId("reconciliation-review-reason").fill("支付通道入账时间差异，待供应商对账单复核");
-    await page.getByTestId("reconciliation-review-attachment").fill("att-recon-1");
     await page.getByTestId("reconciliation-review-submit").click();
-    await expect(page.getByTestId("admin-action-result")).toContainText("对账差异已关闭");
-    await expect(page.getByTestId("admin-action-result")).toContainText("att-recon-1");
+    await expect(page.getByTestId("admin-action-result")).toContainText("对账差异已提交复核");
+    await expect(page.getByTestId("admin-action-result")).toContainText("待复核");
 
     await openAdminRoute(page, remainingRoutes.find((item) => item.pageId === "ADM-AMU-001")!);
     // 引导式流程 phase-7：新增场次收起为主按钮 + 分步弹窗（入口→填字段→下一步→提交）。

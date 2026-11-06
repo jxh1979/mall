@@ -1,5 +1,5 @@
 package com.complex.platform.governance;
-// 文件版本：V0.20
+// 文件版本：V0.21
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
@@ -98,6 +98,10 @@ class JdbcPlatformRepository implements PlatformRepository, SupervisorReviewRepo
             Map.entry("dealer_delivery_resolution", DEALER_ORDER_PROJECT + "(SELECT dd.order_id FROM dealer_delivery_resolutions dr"
                     + " JOIN dealer_delivery_discrepancies dd ON dd.id = dr.discrepancy_id WHERE dr.id = :id)"),
             Map.entry("facility_equipment_scrap", "SELECT project_id FROM facility_equipment_scraps WHERE id = :id"),
+            // 第十八批 Y 段第 181 条 181-R1：对账差异经所属批次取项目——project 范围取 scope_id，merchant、bar 范围取该商户所属项目。
+            Map.entry("finance_reconciliation_difference", "SELECT CASE WHEN b.scope_type = 'project' THEN b.scope_id ELSE m.project_id END"
+                    + " FROM finance_reconciliation_differences d JOIN finance_reconciliation_batches b ON b.id = d.batch_id"
+                    + " LEFT JOIN merchants m ON m.id = b.scope_id AND b.scope_type IN ('merchant', 'bar') WHERE d.id = :id"),
             Map.entry("work_order_bearer_dispute", "SELECT w.project_id FROM work_order_bearer_disputes d JOIN facility_work_orders w"
                     + " ON w.id = d.work_order_id AND d.business_type = 'facility_work_order' WHERE d.id = :id UNION ALL"
                     + " SELECT COALESCE(s.project_id, m.project_id) FROM work_order_bearer_disputes d JOIN merchant_service_work_orders o"

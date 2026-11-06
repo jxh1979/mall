@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.23
+// 文件版本：V0.24
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
@@ -487,51 +487,80 @@ class JdbcFinanceRepository implements FinanceRepository {
     @Override
     public boolean openHighValueReconciliationDifferenceExists(java.time.LocalDate businessDate, String scopeType, String scopeId,
             Long thresholdCent) {
+        return Boolean.TRUE.equals(jdbcTemplate.queryForObject("SELECT EXISTS (" + openDifferenceAmounts(
+                        "b.business_date = :business_date AND (:threshold IS NULL OR d.amount_cent > :threshold)",
+                        ":business_date BETWEEN b.period_start AND b.period_end"
+                                + " AND (:threshold IS NULL OR d.difference_amount_cent > :threshold)") + ")",
+                openDifferenceParams(businessDate, scopeType, scopeId, thresholdCent), Boolean.class));
+    }
+
+    /** 第十八批 Y 段第 182 条 182-R1：营业日不晚于本日、未关闭的低价值对账差异的笔数与金额合计，口径见接口。 */
+    @Override
+    public DailyCloseSourceTotals lowValueOpenDifferenceTotals(java.time.LocalDate businessDate, String scopeType, String scopeId,
+            Long thresholdCent) {
+        if (thresholdCent == null) {
+            return DailyCloseSourceTotals.empty();  // ENUM:191「阈值未配置一律按高价值处理」，由日结闸拦
+        }
+        return jdbcTemplate.queryForObject("SELECT COUNT(*) AS order_count, COALESCE(SUM(amount_cent), 0) AS amount_cent FROM ("
+                        + openDifferenceAmounts("b.business_date <= :business_date AND d.amount_cent <= :threshold",
+                                "b.period_start <= :business_date AND d.difference_amount_cent <= :threshold") + ") x",
+                openDifferenceParams(businessDate, scopeType, scopeId, thresholdCent),
+                (rs, rowNumber) -> new DailyCloseSourceTotals(rs.getLong("amount_cent"), 0L, rs.getInt("order_count")));
+    }
+
+    /**
+     * 158-R1、182-R1 共用：按日结范围取未关闭对账差异的金额行（列 amount_cent）——财务差异 status 不是 closed，第三方差异 status 不是 resolved、matched；
+     * financeCondition、thirdPartyCondition 分别是财务、第三方差异的营业日与金额条件。merchant、bar 范围只看本商户（财务批次范围为该商户、
+     * 第三方差异的回流门店为该商户）；第十八批 S 段第 161 条 161-R2：project 范围＝该综合体除酒吧外的业务——财务批次范围为该综合体或其非酒吧商户，
+     * 第三方差异的回流门店属该综合体且不是酒吧；其余平台口径。
+     */
+    private static String openDifferenceAmounts(String financeCondition, String thirdPartyCondition) {
+        return """
+                SELECT d.amount_cent AS amount_cent
+                  FROM finance_reconciliation_differences d
+                  JOIN finance_reconciliation_batches b ON b.id = d.batch_id
+                 WHERE d.status <> 'closed'
+                   AND %s
+                   AND (:merchant_scope = FALSE OR (b.scope_type IN ('merchant', 'bar') AND b.scope_id = :merchant_id))
+                   AND (:project_scope = FALSE OR (b.scope_type = 'project' AND b.scope_id = :project_id)
+                        OR (b.scope_type = 'merchant' AND EXISTS (SELECT 1 FROM merchants m WHERE m.id = b.scope_id
+                            AND m.project_id = :project_id AND m.merchant_type <> 'bar')))
+                UNION ALL
+                SELECT d.difference_amount_cent
+                  FROM integration_reconciliation_differences d
+                  JOIN integration_reconciliation_batches b ON b.id = d.batch_id
+                 WHERE d.status NOT IN ('resolved', 'matched')
+                   AND %s
+                   AND (:merchant_scope = FALSE OR EXISTS (
+                        SELECT 1
+                          FROM integration_order_syncs s
+                         WHERE s.provider_code = d.provider_code
+                           AND s.business_type = d.business_type
+                           AND s.external_business_id = d.external_business_id
+                           AND s.merchant_id = :merchant_id))
+                   AND (:project_scope = FALSE OR EXISTS (
+                        SELECT 1
+                          FROM integration_order_syncs s
+                          JOIN merchants m ON m.id = s.merchant_id
+                         WHERE s.provider_code = d.provider_code
+                           AND s.business_type = d.business_type
+                           AND s.external_business_id = d.external_business_id
+                           AND m.project_id = :project_id
+                           AND m.merchant_type <> 'bar'))
+                """.formatted(financeCondition, thirdPartyCondition);
+    }
+
+    private MapSqlParameterSource openDifferenceParams(java.time.LocalDate businessDate, String scopeType, String scopeId,
+            Long thresholdCent) {
         boolean merchantScope = isMerchantScope(scopeType);
-        // 第十八批 S 段第 161 条 161-R2：project 范围＝该综合体除酒吧外的业务——财务批次范围为该综合体或其非酒吧商户，第三方差异的回流门店属该综合体且不是酒吧。
         boolean projectScope = "project".equals(scopeType);
-        return Boolean.TRUE.equals(jdbcTemplate.queryForObject("""
-                SELECT EXISTS (
-                    SELECT 1
-                      FROM finance_reconciliation_differences d
-                      JOIN finance_reconciliation_batches b ON b.id = d.batch_id
-                     WHERE d.status <> 'closed'
-                       AND b.business_date = :business_date
-                       AND (:threshold IS NULL OR d.amount_cent > :threshold)
-                       AND (:merchant_scope = FALSE OR (b.scope_type IN ('merchant', 'bar') AND b.scope_id = :merchant_id))
-                       AND (:project_scope = FALSE OR (b.scope_type = 'project' AND b.scope_id = :project_id)
-                            OR (b.scope_type = 'merchant' AND EXISTS (SELECT 1 FROM merchants m WHERE m.id = b.scope_id
-                                AND m.project_id = :project_id AND m.merchant_type <> 'bar')))
-                    UNION ALL
-                    SELECT 1
-                      FROM integration_reconciliation_differences d
-                      JOIN integration_reconciliation_batches b ON b.id = d.batch_id
-                     WHERE d.status NOT IN ('resolved', 'matched')
-                       AND :business_date BETWEEN b.period_start AND b.period_end
-                       AND (:threshold IS NULL OR d.difference_amount_cent > :threshold)
-                       AND (:merchant_scope = FALSE OR EXISTS (
-                            SELECT 1
-                              FROM integration_order_syncs s
-                             WHERE s.provider_code = d.provider_code
-                               AND s.business_type = d.business_type
-                               AND s.external_business_id = d.external_business_id
-                               AND s.merchant_id = :merchant_id))
-                       AND (:project_scope = FALSE OR EXISTS (
-                            SELECT 1
-                              FROM integration_order_syncs s
-                              JOIN merchants m ON m.id = s.merchant_id
-                             WHERE s.provider_code = d.provider_code
-                               AND s.business_type = d.business_type
-                               AND s.external_business_id = d.external_business_id
-                               AND m.project_id = :project_id
-                               AND m.merchant_type <> 'bar')))
-                """, new MapSqlParameterSource()
+        return new MapSqlParameterSource()
                 .addValue("business_date", businessDate)
                 .addValue("threshold", thresholdCent, java.sql.Types.BIGINT)
                 .addValue("merchant_scope", merchantScope)
                 .addValue("merchant_id", merchantScope ? scopeId : null, java.sql.Types.VARCHAR)
                 .addValue("project_scope", projectScope)
-                .addValue("project_id", projectScope ? scopeId : null, java.sql.Types.VARCHAR), Boolean.class));
+                .addValue("project_id", projectScope ? scopeId : null, java.sql.Types.VARCHAR);
     }
 
     /** 开班落在该营业日（酒吧逐家按各自营业日窗）且满足 condition 的收银班次；merchant、bar 范围只看本酒吧，project 范围不看，其余平台口径。 */
@@ -814,12 +843,27 @@ class JdbcFinanceRepository implements FinanceRepository {
     }
 
     @Override
-    public List<ReconciliationBatchRecord> listReconciliationBatches() {
+    public List<ReconciliationBatchRecord> listReconciliationBatches(String merchantId, java.util.Set<String> projectIds) {
+        if (projectIds != null && projectIds.isEmpty()) return List.of();
         return jdbcTemplate.query("""
-                SELECT id, batch_no, scope_type, scope_id, business_date, status, created_at
-                  FROM finance_reconciliation_batches
-                 ORDER BY created_at DESC, id
-                """, this::mapReconciliationBatch);
+                SELECT b.id, b.batch_no, b.scope_type, b.scope_id, b.business_date, b.status, b.created_at
+                  FROM finance_reconciliation_batches b
+                """ + reconciliationScopeWhere(projectIds) + """
+                 ORDER BY b.created_at DESC, b.id
+                """, new MapSqlParameterSource().addValue("merchant_id", merchantId, java.sql.Types.VARCHAR)
+                .addValue("project_ids", projectIds), this::mapReconciliationBatch);
+    }
+
+    /**
+     * 第十八批 Y 段第 180 条 180-R2：对账批次（别名 b）的读范围谓词，同 {@link #listDailyCloses}——merchant_id 非空只到该商户的 merchant、bar 范围；
+     * projectIds 非空只到这些项目的 project 范围与项目下商户的 merchant、bar 范围。
+     */
+    private static String reconciliationScopeWhere(java.util.Set<String> projectIds) {
+        return " WHERE (:merchant_id IS NULL OR (b.scope_type IN ('merchant', 'bar') AND b.scope_id = :merchant_id))"
+                + (projectIds == null ? "" : """
+                   AND ((b.scope_type = 'project' AND b.scope_id IN (:project_ids))
+                        OR (b.scope_type IN ('merchant', 'bar') AND b.scope_id IN (SELECT id FROM merchants WHERE project_id IN (:project_ids))))
+                """);
     }
 
     @Override
@@ -842,13 +886,20 @@ class JdbcFinanceRepository implements FinanceRepository {
     }
 
     @Override
-    public List<ReconciliationDifferenceRecord> listReconciliationDifferences() {
+    public List<ReconciliationDifferenceRecord> listReconciliationDifferences(String merchantId, java.util.Set<String> projectIds) {
+        if (projectIds != null && projectIds.isEmpty()) return List.of();
         return jdbcTemplate.query("""
-                SELECT id, batch_id, difference_type, business_ref, amount_cent,
-                       expected_amount_cent, actual_amount_cent, source, status, created_at
-                  FROM finance_reconciliation_differences
-                 ORDER BY created_at DESC, id
-                """, this::mapReconciliationDifference);
+                SELECT d.id, d.batch_id, d.difference_type, d.business_ref, d.amount_cent,
+                       d.expected_amount_cent, d.actual_amount_cent, d.source, d.status, d.created_at, d.evidence_attachment_ids,
+                       d.responsible_user_id, d.stage_entered_at, d.identified_cause, d.review_id,
+                       CASE d.status WHEN 'pending_identification' THEN d.identify_escalated_at
+                                     WHEN 'pending_handling' THEN d.handle_escalated_at END AS stage_escalated_at
+                  FROM finance_reconciliation_differences d
+                  JOIN finance_reconciliation_batches b ON b.id = d.batch_id
+                """ + reconciliationScopeWhere(projectIds) + """
+                 ORDER BY d.created_at DESC, d.id
+                """, new MapSqlParameterSource().addValue("merchant_id", merchantId, java.sql.Types.VARCHAR)
+                .addValue("project_ids", projectIds), this::mapReconciliationDifference);
     }
 
     @Override
@@ -856,11 +907,13 @@ class JdbcFinanceRepository implements FinanceRepository {
         jdbcTemplate.update("""
                 INSERT INTO finance_reconciliation_differences (
                     id, batch_id, difference_type, business_ref, amount_cent,
-                    expected_amount_cent, actual_amount_cent, source, status, created_at
+                    expected_amount_cent, actual_amount_cent, source, status, created_at, evidence_attachment_ids,
+                    responsible_user_id, stage_entered_at, identified_cause, review_id
                 )
                 VALUES (
                     :id, :batch_id, :difference_type, :business_ref, :amount_cent,
-                    :expected_amount_cent, :actual_amount_cent, :source, :status, :created_at
+                    :expected_amount_cent, :actual_amount_cent, :source, :status, :created_at, CAST(:evidence_attachment_ids AS jsonb),
+                    :responsible_user_id, :stage_entered_at, :identified_cause, :review_id
                 )
                 ON CONFLICT (id) DO UPDATE SET
                     batch_id = EXCLUDED.batch_id,
@@ -870,7 +923,12 @@ class JdbcFinanceRepository implements FinanceRepository {
                     expected_amount_cent = EXCLUDED.expected_amount_cent,
                     actual_amount_cent = EXCLUDED.actual_amount_cent,
                     source = EXCLUDED.source,
-                    status = EXCLUDED.status
+                    status = EXCLUDED.status,
+                    evidence_attachment_ids = EXCLUDED.evidence_attachment_ids,
+                    responsible_user_id = EXCLUDED.responsible_user_id,
+                    stage_entered_at = EXCLUDED.stage_entered_at,
+                    identified_cause = EXCLUDED.identified_cause,
+                    review_id = EXCLUDED.review_id
                 """, reconciliationDifferenceParameters(difference));
         return difference;
     }
@@ -879,27 +937,116 @@ class JdbcFinanceRepository implements FinanceRepository {
     public Optional<ReconciliationDifferenceRecord> findReconciliationDifferenceById(String id) {
         return jdbcTemplate.query("""
                 SELECT id, batch_id, difference_type, business_ref, amount_cent,
-                       expected_amount_cent, actual_amount_cent, source, status, created_at
+                       expected_amount_cent, actual_amount_cent, source, status, created_at, evidence_attachment_ids,
+                       responsible_user_id, stage_entered_at, identified_cause, review_id,
+                       CASE status WHEN 'pending_identification' THEN identify_escalated_at
+                                   WHEN 'pending_handling' THEN handle_escalated_at END AS stage_escalated_at
                   FROM finance_reconciliation_differences
                  WHERE id = :id
                 """, Map.of("id", id), this::mapReconciliationDifference).stream().findFirst();
     }
 
+    /** 第十八批 Y 段第 181 条 181-R1：四态各步都是带原状态条件的单句更新，并发时只赢一次。 */
     @Override
-    public ReconciliationDifferenceRecord closeReconciliationDifference(
-            String id, String closeReason, String closedBy, java.time.Instant closedAt) {
-        jdbcTemplate.update("""
+    public boolean identifyReconciliationDifference(String id, String cause, String responsibleUserId, java.time.Instant now) {
+        return jdbcTemplate.update("""
                 UPDATE finance_reconciliation_differences
-                   SET status = 'closed', close_reason = :close_reason,
-                       closed_by = :closed_by, closed_at = :closed_at
-                 WHERE id = :id
-                """, new MapSqlParameterSource()
-                .addValue("id", id)
-                .addValue("close_reason", closeReason)
-                .addValue("closed_by", closedBy)
-                .addValue("closed_at", timestampWithTimeZone(closedAt)));
-        return findReconciliationDifferenceById(id)
-                .orElseThrow(() -> new IllegalStateException("reconciliation difference vanished after close: " + id));
+                   SET status = 'pending_handling', identified_cause = :cause, responsible_user_id = :responsible_user_id,
+                       stage_entered_at = :now
+                 WHERE id = :id AND status = 'pending_identification'
+                """, new MapSqlParameterSource().addValue("id", id).addValue("cause", cause)
+                .addValue("responsible_user_id", responsibleUserId).addValue("now", timestampWithTimeZone(now))) == 1;
+    }
+
+    @Override
+    public boolean submitReconciliationDifferenceReview(String id, String closeReason, List<String> evidenceAttachmentIds, String reviewId,
+            java.time.Instant now) {
+        return jdbcTemplate.update("""
+                UPDATE finance_reconciliation_differences
+                   SET status = 'pending_review', close_reason = :close_reason, evidence_attachment_ids = CAST(:evidence AS jsonb),
+                       review_id = :review_id, stage_entered_at = :now
+                 WHERE id = :id AND status = 'pending_handling'
+                """, new MapSqlParameterSource().addValue("id", id).addValue("close_reason", closeReason)
+                .addValue("evidence", writeJson(evidenceAttachmentIds)).addValue("review_id", reviewId)
+                .addValue("now", timestampWithTimeZone(now))) == 1;
+    }
+
+    @Override
+    public Optional<String> closeReconciliationDifference(String id, String reviewId, String closedBy, java.time.Instant closedAt) {
+        return jdbcTemplate.queryForList("""
+                UPDATE finance_reconciliation_differences
+                   SET status = 'closed', closed_by = :closed_by, closed_at = :closed_at, stage_entered_at = :closed_at
+                 WHERE id = :id AND status = 'pending_review' AND review_id = :review_id
+                RETURNING COALESCE(close_reason, '')
+                """, new MapSqlParameterSource().addValue("id", id).addValue("review_id", reviewId)
+                .addValue("closed_by", closedBy).addValue("closed_at", timestampWithTimeZone(closedAt)), String.class)
+                .stream().findFirst();
+    }
+
+    @Override
+    public boolean returnReconciliationDifferenceToHandling(String id, String reviewId, java.time.Instant now) {
+        return jdbcTemplate.update("""
+                UPDATE finance_reconciliation_differences
+                   SET status = 'pending_handling', review_id = NULL, stage_entered_at = :now, handle_escalated_at = NULL
+                 WHERE id = :id AND status = 'pending_review' AND review_id = :review_id
+                """, new MapSqlParameterSource().addValue("id", id).addValue("review_id", reviewId)
+                .addValue("now", timestampWithTimeZone(now))) == 1;
+    }
+
+    /** 第十八批 Y 段第 181 条 181-R2：项目已配置的阶段停留时限。 */
+    @Override
+    public List<ReconciliationStageLimit> listReconciliationStageLimits(String projectId) {
+        return jdbcTemplate.query("""
+                SELECT project_id, stage, working_days, min_working_days, max_working_days
+                  FROM finance_reconciliation_stage_limits
+                 WHERE project_id = :project_id
+                """, Map.of("project_id", projectId), (rs, rowNumber) -> new ReconciliationStageLimit(rs.getString("project_id"),
+                rs.getString("stage"), rs.getInt("working_days"), rs.getInt("min_working_days"), rs.getInt("max_working_days")));
+    }
+
+    @Override
+    public void saveReconciliationStageLimit(ReconciliationStageLimit limit, String actorId) {
+        jdbcTemplate.update("""
+                INSERT INTO finance_reconciliation_stage_limits (project_id, stage, working_days, min_working_days, max_working_days,
+                    updated_by, updated_at)
+                VALUES (:project_id, :stage, :working_days, :min_working_days, :max_working_days, :actor, now())
+                ON CONFLICT (project_id, stage) DO UPDATE SET working_days = EXCLUDED.working_days,
+                    min_working_days = EXCLUDED.min_working_days, max_working_days = EXCLUDED.max_working_days,
+                    updated_by = EXCLUDED.updated_by, updated_at = now()
+                """, new MapSqlParameterSource().addValue("project_id", limit.projectId()).addValue("stage", limit.stage())
+                .addValue("working_days", limit.workingDays()).addValue("min_working_days", limit.minWorkingDays())
+                .addValue("max_working_days", limit.maxWorkingDays()).addValue("actor", actorId));
+    }
+
+    /**
+     * 181-R2：待识别或待处理、本阶段还没升级过的差异，带所属项目该阶段已配的时限——项目经批次取（project 范围取 scope_id，merchant、bar 范围取该商户
+     * 所属项目，同复核单可见范围）。
+     */
+    @Override
+    public List<ReconciliationEscalationCandidate> listReconciliationEscalationCandidates() {
+        return jdbcTemplate.query("""
+                SELECT d.id, d.status, d.responsible_user_id, d.stage_entered_at, l.working_days
+                  FROM finance_reconciliation_differences d
+                  JOIN finance_reconciliation_batches b ON b.id = d.batch_id
+                  LEFT JOIN merchants m ON m.id = b.scope_id AND b.scope_type IN ('merchant', 'bar')
+                  LEFT JOIN finance_reconciliation_stage_limits l
+                         ON l.project_id = CASE WHEN b.scope_type = 'project' THEN b.scope_id ELSE m.project_id END AND l.stage = d.status
+                 WHERE d.responsible_user_id IS NOT NULL AND d.stage_entered_at IS NOT NULL
+                   AND ((d.status = 'pending_identification' AND d.identify_escalated_at IS NULL)
+                        OR (d.status = 'pending_handling' AND d.handle_escalated_at IS NULL))
+                """, (rs, rowNumber) -> new ReconciliationEscalationCandidate(rs.getString("id"), rs.getString("status"),
+                rs.getString("responsible_user_id"), nullableInstant(rs, "stage_entered_at"), rs.getObject("working_days", Integer.class)));
+    }
+
+    /** 181-R2：本阶段超时升级，带原状态与「本阶段未升级过」条件，只赢一次；上一级为空时负责人不变。 */
+    @Override
+    public boolean markReconciliationDifferenceEscalated(String id, String stage, String superiorId, java.time.Instant now) {
+        String column = "pending_identification".equals(stage) ? "identify_escalated_at" : "handle_escalated_at";
+        return jdbcTemplate.update("UPDATE finance_reconciliation_differences SET " + column + " = :now,"
+                + " responsible_user_id = COALESCE(:superior_id, responsible_user_id)"
+                + " WHERE id = :id AND status = :stage AND " + column + " IS NULL", new MapSqlParameterSource().addValue("id", id)
+                .addValue("stage", stage).addValue("superior_id", superiorId, java.sql.Types.VARCHAR)
+                .addValue("now", timestampWithTimeZone(now))) == 1;
     }
 
     @Override
@@ -915,12 +1062,25 @@ class JdbcFinanceRepository implements FinanceRepository {
     public long aggregatePlatformExpectedForBusinessRef(String businessRef) {
         // 平台侧 expected 系统取数：以 business_ref 关联平台权威支付台账（ar_ap_payments.id），
         // 聚合该笔的已登记金额作为平台侧应有值。无对应平台流水 → 返回 0（服务层据此判定无系统取数支撑）。
+        // 第十八批 Y 段第 180 条 180-R3（ENUM:188「对账口径 按订单、按核销、按合同、按渠道、按日结」）：按订单口径——收款记录查不到再查
+        // 已支付票务订单（取订单金额），再查酒吧账单（取已付金额）；三表编号互不相同。18Y 复核修复：票务订单、酒吧账单另认页面上显示的订单号（order_no）、
+        // 账单号（bill_no），两列都唯一。
         Long total = jdbcTemplate.queryForObject("""
-                SELECT COALESCE(SUM(amount_cent), 0)
-                  FROM ar_ap_payments
-                 WHERE id = :business_ref
+                SELECT COALESCE(
+                       (SELECT SUM(amount_cent) FROM ar_ap_payments WHERE id = :business_ref),
+                       (SELECT amount_cent FROM ticket_orders WHERE (id = :business_ref OR order_no = :business_ref) AND pay_status = 'paid'),
+                       (SELECT paid_amount_cent FROM bar_bills WHERE id = :business_ref OR bill_no = :business_ref),
+                       0)
                 """, Map.of("business_ref", businessRef), Long.class);
         return total == null ? 0L : total;
+    }
+
+    @Override
+    public List<String> listReconciliationDifferenceIdsByEvidenceAttachment(String attachmentId) {
+        return jdbcTemplate.queryForList("""
+                SELECT id FROM finance_reconciliation_differences
+                 WHERE evidence_attachment_ids @> jsonb_build_array(CAST(:attachment_id AS text))
+                """, Map.of("attachment_id", attachmentId), String.class);
     }
 
     // ── R5 T7：日结锁定 + 补录审批 + 多源汇总 ──────────────────────────────
@@ -2307,7 +2467,12 @@ class JdbcFinanceRepository implements FinanceRepository {
                 .addValue("actual_amount_cent", difference.actualAmountCent())
                 .addValue("source", difference.source())
                 .addValue("status", difference.status())
-                .addValue("created_at", timestampWithTimeZone(difference.createdAt()));
+                .addValue("created_at", timestampWithTimeZone(difference.createdAt()))
+                .addValue("evidence_attachment_ids", writeJson(difference.evidenceAttachmentIds()))
+                .addValue("responsible_user_id", difference.responsibleUserId())
+                .addValue("stage_entered_at", timestampWithTimeZone(difference.stageEnteredAt()))
+                .addValue("identified_cause", difference.identifiedCause())
+                .addValue("review_id", difference.reviewId());
     }
 
     private ArApItemRecord mapArApItem(ResultSet resultSet, int rowNumber) throws SQLException {
@@ -2369,7 +2534,13 @@ class JdbcFinanceRepository implements FinanceRepository {
                 nullableLong(resultSet, "actual_amount_cent"),
                 resultSet.getString("source"),
                 resultSet.getString("status"),
-                nullableInstant(resultSet, "created_at")
+                nullableInstant(resultSet, "created_at"),
+                readStringList(resultSet.getString("evidence_attachment_ids")),
+                resultSet.getString("responsible_user_id"),
+                nullableInstant(resultSet, "stage_entered_at"),
+                resultSet.getString("identified_cause"),
+                resultSet.getString("review_id"),
+                nullableInstant(resultSet, "stage_escalated_at")
         );
     }
 

@@ -1,6 +1,6 @@
 package com.complex.platform.evidence;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import com.complex.platform.common.api.ApiException;
 import java.io.IOException;
@@ -47,6 +47,14 @@ public class EvidenceFileStorage {
     /** ROOT-03 clients-R8（BSM 第 869 行「支持文字留言、照片、视频与语音」）：只供客人投诉入口——照片、视频之外加语音。 */
     private static final Map<String, String> COMPLAINT_TYPES = withAudio();
 
+    /**
+     * 18Y 复核修复（ENUM:202「渠道接入前的人工录入必须同时上传渠道提供的对账单原件作为凭证」，原件即渠道给的文件本身）：只供对账差异——照片、视频之外
+     * 另收 pdf、xlsx、csv，这三种按扩展名与浏览器报的内容类型一并判（不收 xlsm 等带宏格式）。
+     */
+    private static final Map<String, String> STATEMENT_DOCUMENTS = Map.of("pdf", "application/pdf",
+            "xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "csv", "text/csv");
+    private static final Map<String, String> STATEMENT_TYPES = withStatementDocuments();
+
     /** ROOT-03-R28 学生认证证件：只收照片。 */
     private static final Map<String, String> PHOTO_TYPES = Map.of("jpg", "image/jpeg", "jpeg", "image/jpeg",
             "png", "image/png", "webp", "image/webp", "heic", "image/heic");
@@ -55,6 +63,12 @@ public class EvidenceFileStorage {
         Map<String, String> types = new java.util.HashMap<>(ALLOWED_TYPES);
         types.putAll(Map.of("m4a", "audio/mp4", "aac", "audio/aac", "mp3", "audio/mpeg", "amr", "audio/amr",
                 "wav", "audio/wav"));
+        return Map.copyOf(types);
+    }
+
+    private static Map<String, String> withStatementDocuments() {
+        Map<String, String> types = new java.util.HashMap<>(ALLOWED_TYPES);
+        types.putAll(STATEMENT_DOCUMENTS);
         return Map.copyOf(types);
     }
 
@@ -82,6 +96,20 @@ public class EvidenceFileStorage {
     /** 客人投诉附件：照片、视频、语音（类型仍由扩展名服务端判定）。 */
     public StoredFile storeComplaintMedia(MultipartFile file) {
         return store(file, COMPLAINT_TYPES, "只支持照片 jpg/jpeg/png/webp/heic、视频 mp4/mov/webm 与语音 m4a/aac/mp3/amr/wav", null);
+    }
+
+    /** 18Y 复核修复：对账差异的渠道对账单原件——照片、视频与 pdf、xlsx、csv；后三种浏览器报的内容类型须与扩展名一致。 */
+    public StoredFile storeReconciliationStatement(MultipartFile file) {
+        String ext = extensionOf(file == null ? null : file.getOriginalFilename());
+        String expected = STATEMENT_DOCUMENTS.get(ext);
+        if (expected != null) {
+            String declared = file.getContentType() == null ? "" : file.getContentType().split(";")[0].trim().toLowerCase(Locale.ROOT);
+            // Windows 装了 Excel 时浏览器把 csv 报成 application/vnd.ms-excel。
+            if (!declared.equals(expected) && !("csv".equals(ext) && "application/vnd.ms-excel".equals(declared))) {
+                throw ApiException.badRequest("VALIDATION_FAILED", "对账单原件的扩展名与文件类型不符");
+            }
+        }
+        return store(file, STATEMENT_TYPES, "只支持照片 jpg/jpeg/png/webp/heic、视频 mp4/mov/webm 与对账单 pdf/xlsx/csv", null);
     }
 
     /** 学生认证证件照片：seal 把原字节加密后才落盘（PGM 第 876 行身份信息一律加密存放），磁盘上不留明文。 */

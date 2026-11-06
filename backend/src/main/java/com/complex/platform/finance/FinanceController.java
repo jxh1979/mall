@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.05
+// 文件版本：V0.06
 import static com.complex.platform.common.api.ApiRequests.requireIdempotencyKey;
 
 import com.complex.platform.access.AuthorizationService;
@@ -23,7 +23,9 @@ import com.complex.platform.finance.dto.PaymentIntentRequest;
 import com.complex.platform.finance.dto.PropertyFeeBillRequest;
 import com.complex.platform.finance.dto.PropertyFeeRateRequest;
 import com.complex.platform.finance.dto.CloseReconciliationDifferenceRequest;
+import com.complex.platform.finance.dto.IdentifyReconciliationDifferenceRequest;
 import com.complex.platform.finance.dto.ReconciliationDifferenceRequest;
+import com.complex.platform.finance.dto.ReconciliationStageLimitRequest;
 import com.complex.platform.finance.dto.RefundRequest;
 import com.complex.platform.finance.dto.RefundOperationRequest;
 import com.complex.platform.finance.dto.RefundExecutionRequest;
@@ -31,6 +33,7 @@ import com.complex.platform.finance.dto.RefundResultConfirmRequest;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -44,12 +47,16 @@ public class FinanceController implements com.complex.platform.security.ExportFi
     private final AuthorizationService authorizationService;
     // AUD-014 柜台确认储值充值即入账：确认+意图 CAS+入账同事务，见 confirmOfflinePayment 路由。
     private final com.complex.platform.customer.StoredValueService storedValueService;
+    // 第十八批 Y 段第 181 条 181-R1：对账差异识别与提交关闭复核（四态）。
+    private final FinanceReconciliationDifferenceService reconciliationDifferences;
 
     public FinanceController(FinanceService service, AuthorizationService authorizationService,
-                             com.complex.platform.customer.StoredValueService storedValueService) {
+                             com.complex.platform.customer.StoredValueService storedValueService,
+                             FinanceReconciliationDifferenceService reconciliationDifferences) {
         this.service = service;
         this.authorizationService = authorizationService;
         this.storedValueService = storedValueService;
+        this.reconciliationDifferences = reconciliationDifferences;
     }
 
     @GetMapping("/ar-ap-items")
@@ -257,7 +264,37 @@ public class FinanceController implements com.complex.platform.security.ExportFi
     ) {
         authorizationService.requirePermission("finance.reconciliation.resolve");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
-        return ApiResponse.ok(service.closeReconciliationDifference(differenceId, request));
+        // 181-R1：语义改为提交关闭复核（待处理 → 待复核），复核通过才关闭。
+        return ApiResponse.ok(reconciliationDifferences.submitReview(differenceId, request));
+    }
+
+    /** 第十八批 Y 段第 181 条 181-R1（BSM:1729「按原因定位、复核后处理」）：识别对账差异（待识别 → 待处理）。 */
+    @PostMapping("/reconciliation/differences/{difference_id}/identify")
+    public ApiResponse<ReconciliationDifferenceRecord> identifyReconciliationDifference(
+            @org.springframework.web.bind.annotation.PathVariable("difference_id") String differenceId,
+            @RequestBody @jakarta.validation.Valid IdentifyReconciliationDifferenceRequest request
+    ) {
+        authorizationService.requirePermission("finance.reconciliation.resolve");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(reconciliationDifferences.identify(differenceId, request));
+    }
+
+    /**
+     * 第十八批 Y 段第 181 条 181-R2（ENUM:191「待识别与待处理两个阶段各自的停留时限为业务参数，按项目可配，出厂默认 1 个工作日，须同时配置上下限」）：
+     * 查项目两阶段停留时限，未配置的按出厂默认 1 个工作日、上下限为空；权限与项目范围在服务层校验。
+     */
+    @GetMapping("/reconciliation/stage-limits")
+    public ApiResponse<List<FinanceRepository.ReconciliationStageLimit>> listReconciliationStageLimits(
+            @RequestParam(name = "project_id", required = false) String projectId) {
+        return ApiResponse.ok(reconciliationDifferences.stageLimits(projectId));
+    }
+
+    /** 181-R2：配置项目某一阶段的停留时限与上下限（三值同填）；权限与项目范围在服务层校验。 */
+    @PutMapping("/reconciliation/stage-limits/{project_id}")
+    public ApiResponse<FinanceRepository.ReconciliationStageLimit> saveReconciliationStageLimit(
+            @PathVariable("project_id") String projectId, @RequestBody ReconciliationStageLimitRequest request) {
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(reconciliationDifferences.saveStageLimit(projectId, request));
     }
 
     @PostMapping("/refunds")

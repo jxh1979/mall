@@ -1,6 +1,6 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static com.complex.platform.common.Strings.requireText;
 import static com.complex.platform.common.Strings.trimToNull;
@@ -12,6 +12,7 @@ import com.complex.platform.common.idempotency.IdempotencyService;
 import com.complex.platform.evidence.AuditEventService;
 import com.complex.platform.settlement.MediaPerformanceRecords.FulfillmentRecord;
 import com.complex.platform.settlement.MediaPerformanceRecords.ShowDetail;
+import com.complex.platform.settlement.MediaPerformanceRecords.ShowListItem;
 import com.complex.platform.settlement.MediaPerformanceRecords.ShowRecord;
 import com.complex.platform.settlement.MediaPerformanceRequests.ActionRequest;
 import com.complex.platform.settlement.MediaPerformanceRequests.DisputeRequest;
@@ -168,12 +169,12 @@ public class MediaPerformanceService {
     }
 
     /** OpenAPI 声明 media_show.listed / media_show.list_failed。 */
-    public List<ShowRecord> listShows(String projectId, String merchantId) {
+    public List<ShowListItem> listShows(String projectId, String merchantId) {
         try {
             authorizationService.requirePermission(PERM_VIEW);
             String merchant = authorizationService.currentMerchantIdQuietly().orElse(null);
             String requested = trimToNull(projectId);
-            List<ShowRecord> shows;
+            List<ShowListItem> shows;
             if (merchant != null || authorizationService.isPlatformAdmin(authorizationService.currentActor())) {
                 // 商户账号照旧只看本人项目里本商户是酒吧方或传媒方的场次；平台管理员照旧
                 shows = repository.listShows(authorizationService.currentProjectScopeQuietly().orElse(requested),
@@ -193,6 +194,20 @@ public class MediaPerformanceService {
             auditEventService.recordFailure("media_show.list_failed", PERM_VIEW, BUSINESS_TYPE, null, null, null, failure.code());
             throw failure;
         }
+    }
+
+    /**
+     * 第十八批 Y 段第 183 条 183-R2（BSM:1824「财务：日结状态、对账差异、结算待确认。」；第十八批裁决 40「数演出结算挂起待确认的、
+     * 积分月结账单有未处理异议的，分两个数显示，不相加」）：查看人可见场次现行（已锁定）版本上挂起待确认（status=pending，含未确认、有争议、合同未约定）
+     * 的演出结算条数（与场次列表逐行的 pending_settlement_count 同口径），取查询时状态。范围同 {@link #listShows}（不带项目参数）：商户账号与平台管理员照旧，其余按 media.performance.view 可触及的项目。
+     */
+    public long pendingSettlementCount() {
+        authorizationService.requirePermission(PERM_VIEW);
+        String merchant = authorizationService.currentMerchantIdQuietly().orElse(null);
+        java.util.Collection<String> projects = merchant != null || authorizationService.isPlatformAdmin(authorizationService.currentActor())
+                ? authorizationService.currentProjectScopeQuietly().map(List::of).orElse(null)
+                : reach(PERM_VIEW).organizationIds();
+        return repository.countPendingSettlements(projects, merchant);
     }
 
     /** OpenAPI 声明 media_show.viewed / media_show.view_failed。 */

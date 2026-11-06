@@ -8,14 +8,14 @@
     "RUNTIME_EVIDENCE_BOUND_TO_SOURCE_FINGERPRINT",
     "RUNTIME_EVIDENCE_DOES_NOT_CLOSE_PRODUCTION_MANIFEST"
   ],
-  "generated_at": "2026-11-06T18:31:18.070Z",
+  "generated_at": "2026-11-06T23:17:01.262Z",
   "git": {
-    "head": "36f48b95bd32d088982793506b047580530d5afe",
-    "head_short": "36f48b95",
-    "branch": "feature/business-code-batch44-20261106",
+    "head": "d1407e70e36c01f2ac90db6aa8e80a690f570748",
+    "head_short": "d1407e70",
+    "branch": "feature/business-code-batch45-20261106",
     "worktree_dirty": false,
-    "source_fingerprint": "7b4fa0c80bcea946bc51ea71e5d6e3ba277b17333f6da225f74760e988901f29",
-    "source_fingerprint_file_count": 3307,
+    "source_fingerprint": "709eb6a7cc2d5975b014832093f41564d62783ccb86301bc0dbdb42d07a74dd2",
+    "source_fingerprint_file_count": 3322,
     "source_fingerprint_paths": [
       "backend/src/main",
       "backend/src/test",
@@ -50,12 +50,12 @@
   },
   "backend_surefire": {
     "path": "backend/target/surefire-reports",
-    "suites": 544,
-    "tests": 6509,
+    "suites": 550,
+    "tests": 6548,
     "failures": 0,
     "errors": 0,
     "skipped": 0,
-    "latest_mtime": "2026-11-06T18:29:02.769Z",
+    "latest_mtime": "2026-11-06T23:14:47.994Z",
     "passed": true
   },
   "web_unit_source": {
@@ -266,7 +266,9 @@
       "apps/web/src/admin/pages/OverviewPage.dayclose.test.tsx",
       "apps/web/src/admin/pages/OverviewPage.kpi.test.tsx",
       "apps/web/src/admin/pages/OverviewPage.metricdetail.test.tsx",
+      "apps/web/src/admin/pages/OverviewPage.recondiff.test.tsx",
       "apps/web/src/admin/pages/OverviewPage.root04.test.tsx",
+      "apps/web/src/admin/pages/OverviewPage.settlepending.test.tsx",
       "apps/web/src/admin/pages/ParkingWorkbenchPage.test.tsx",
       "apps/web/src/admin/pages/PayrollTaxBracketsPage.fullpayroll.test.tsx",
       "apps/web/src/admin/pages/PayrollTaxBracketsPage.guidedcreate.test.tsx",
@@ -379,8 +381,8 @@
       "apps/web/src/dealer/dealerPortalClient.test.ts",
       "apps/web/src/shared/ReplayedNotice.test.tsx"
     ],
-    "file_count": 318,
-    "test_count_from_source": 1635
+    "file_count": 320,
+    "test_count_from_source": 1663
   },
   "web_build": {
     "dist_index_exists": true,
@@ -401,15 +403,15 @@
     "asset_count": 169,
     "main_js_assets": [
       {
-        "path": "apps/web/dist/assets/main-C_6bK3Tg.js",
+        "path": "apps/web/dist/assets/main-CKq_Xv_T.js",
         "size_bytes": 4337,
-        "mtime": "2026-11-06T18:29:10.985Z"
+        "mtime": "2026-11-06T23:14:56.288Z"
       }
     ],
     "largest_asset": {
       "path": "apps/web/dist/assets/vendor-antd-CzvkKKQu.js",
       "size_bytes": 251112,
-      "mtime": "2026-11-06T18:29:10.988Z"
+      "mtime": "2026-11-06T23:14:56.293Z"
     },
     "no_main_bundle_warning_expected": true
   },

@@ -19,7 +19,7 @@ const map = {
   ]],
   "REQ-21": ["吧台买酒支付意图、现金/POS 账单口径和对账差异可 mock 验收；真实聚合支付商户、回调、退款和日结文件仍需生产证据。", [
     ["admin_ui", "apps/web/src/admin/pages/BarOrdersPage.tsx", ["paymentId", "posBoundary", "settle"]],
-    ["admin_ui", "apps/web/src/admin/pages/ReconciliationPage.tsx", ["reconciliation-page", "manual_review_logged"]],
+    ["admin_ui", "apps/web/src/admin/pages/ReconciliationPage.tsx", ["reconciliation-page", "finance.reconciliation.difference_review_submitted"]],
     ["backend_unit", "backend/src/test/java/com/complex/platform/bar/BarServiceTests.java", ["barBillPayIntentReusesFinancePaymentIntentSemantics", "partialSettlementKeepsOriginalPayableAndMarksPartialStatuses"]],
     ["supplier_mock", "docs/supplier-mock/t3b-webhook-envelope.example.json", ["payment.paid", "idempotency_key"]],
     ["openapi_contract", "docs/p0-openapi-operation-acceptance-matrix-v0.1.md", ["/api/v1/bar/bills/{bill_id}/pay-intents", "/api/v1/bar/bills/{bill_id}/settle"]],

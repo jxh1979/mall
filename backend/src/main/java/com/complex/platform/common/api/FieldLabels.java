@@ -1,6 +1,6 @@
 package com.complex.platform.common.api;
 
-// 文件版本：V0.36
+// 文件版本：V0.37
 
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -816,6 +816,18 @@ public final class FieldLabels {
         p("max_radius_meters", "半径上限（米）");
         // 第 124 条 124-R4 结算单人工过账留痕（同前端 fieldLabels.ts）。
         p("posted_count", "过账笔数");
+        // 第十八批 Y 段第 181 条 181-R1 对账差异四态（同前端 fieldLabels.ts）。
+        p("cause_note", "差异原因");
+        p("identified_cause", "差异原因");
+        p("stage_entered_at", "本阶段起始时间");
+        // 第十八批 Y 段第 181 条 181-R2 对账差异停留时限与超时升级（同前端 fieldLabels.ts）。
+        p("stage", "阶段");
+        p("working_days", "工作日数");
+        p("min_working_days", "时限下限（工作日）");
+        p("max_working_days", "时限上限（工作日）");
+        p("stage_escalated_at", "本阶段超时升级时刻");
+        // 第十八批 Y 段第 183 条 183-R2 复核修复：演出场次列表逐行结算待处理条数（同前端 fieldLabels.ts）。
+        p("pending_settlement_count", "结算待处理条数");
     }
 
     /** 字段键（snake 或 camel）→ 中文业务名；认不出返回 null。 */

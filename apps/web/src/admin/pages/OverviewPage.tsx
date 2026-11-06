@@ -1,4 +1,4 @@
-// 文件版本：V0.03
+// 文件版本：V0.04
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { CnDatePicker } from "../components/CnDatePicker";
@@ -108,6 +108,35 @@ export function OverviewPage({ api, setGlobalError, navigateTo, effectivePermiss
   }, [api, canSeeDailyClose, asOfDay]);
   const dailyCloseDisplay = dailyCloseStatuses === null ? "—" : dailyCloseStatuses.length === 0 ? "待生成"
     : Object.entries(KEY_VALUE_LABELS.daily_close_status ?? {}).map(([code, label]) => `${label} ${dailyCloseStatuses.filter((status) => status === code).length}`).join(" · ");
+  // 第十八批 Y 段第 183 条 183-R1（BSM:1824「财务：日结状态、对账差异、结算待确认。」；BSM:1839「卡片上的数字就是它下面明细的合计」）：
+  // 复用指标 finance.recon_diff_count（所看营业日新发现的对账差异笔数，含已关闭，平台口径）。持 finance.reconciliation.view 才请求与显示；
+  // 端点拒绝（如项目级账号 403）显示「—」、不出完整明细入口。
+  const canSeeReconciliation = hasPermissions(effectivePermissions, ["finance.reconciliation.view"]);
+  const reconDiffKpi = useMetricKpiValue(api, "finance.recon_diff_count", { from: asOfDay, to: asOfDay, enabled: canSeeReconciliation && !!asOfDay });
+  // 第十八批 Y 段第 183 条 183-R2（BSM:1824「财务：……结算待确认。」；第十八批裁决 40「数演出结算挂起待确认的、积分月结账单有未处理异议的，
+  // 分两个数显示，不相加」）：取查询时状态（不随所看营业日变、不进指标目录、不写快照）。只请求所持权限那一类，没权限的那一类不显示；失败显示「—」。
+  const canSeeMediaPending = hasPermissions(effectivePermissions, ["media.performance.view"]);
+  const canSeePointsObjections = hasPermissions(effectivePermissions, ["ticket.points.billing.view"]);
+  const [mediaPending, setMediaPending] = React.useState<number | null>(null);
+  const [pointsObjections, setPointsObjections] = React.useState<number | null>(null);
+  React.useEffect(() => {
+    if (!canSeeMediaPending) return;
+    let cancelled = false;
+    api
+      .get<{ pendingCount: number }>("/api/v1/settlement/media-shows/pending-settlement-count")
+      .then((result) => { if (!cancelled) setMediaPending(result.pendingCount); })
+      .catch(() => undefined);
+    return () => { cancelled = true; };
+  }, [api, canSeeMediaPending]);
+  React.useEffect(() => {
+    if (!canSeePointsObjections) return;
+    let cancelled = false;
+    api
+      .get<Array<{ openObjections: number }>>("/api/v1/loyalty/ticket-points-billing/bills")
+      .then((bills) => { if (!cancelled) setPointsObjections(bills.filter((bill) => bill.openObjections > 0).length); })
+      .catch(() => undefined);
+    return () => { cancelled = true; };
+  }, [api, canSeePointsObjections]);
 
   const revenueValues = REVENUE_BARS.map((item) =>
     (item.code === "revenue.ticket" ? ticketDisplay : item.code === "revenue.bar" ? barDisplay : metricValue(data, item.code)) ?? 0);
@@ -148,6 +177,8 @@ export function OverviewPage({ api, setGlobalError, navigateTo, effectivePermiss
           })}</button><small>按商品及单位分列合格接收，不同单位不相加，查看采购单{receivedKpi.status === "ready" ? <> · <MetricDetailLink navigateTo={navigateTo} metric="supply.received" from={asOfDay} to={asOfDay} testid="overview-metric-detail-received" /></> : null}</small></div>
           <div className="admin-kpi-card admin-kpi-card--clickable" data-testid="overview-kpi-backfill"><span>补录数量</span><button type="button" className="admin-kpi-value" data-testid="overview-kpi-backfill-value" onClick={() => navigateTo?.("ADM-GOV-006")}>{backfillValue === null ? "—" : String(backfillValue)}</button><small data-testid="overview-kpi-backfill-status">{BACKFILL_STATUSES.map((status) => `${formatBusinessStatus(status)} ${Number(backfillStatusCounts[status] ?? 0)}`).join(" · ")}</small><small>提交即计一笔（锁账后补录、领取时刻补证），查看主管复核{backfillKpi.status === "ready" ? <> · <MetricDetailLink navigateTo={navigateTo} metric="risk.manual_backfill" from={asOfDay} to={asOfDay} testid="overview-metric-detail-backfill" /></> : null}</small></div>
           {canSeeDailyClose ? <div className="admin-kpi-card admin-kpi-card--clickable" data-testid="overview-kpi-dayclose"><span>日结状态</span><button type="button" className="admin-kpi-value" style={{ fontSize: 14, whiteSpace: "normal" }} data-testid="overview-kpi-dayclose-value" onClick={() => navigateTo?.("ADM-FIN-002")}>{dailyCloseDisplay}</button><small>所看营业日各范围日结，查不到即待生成，查看对账差异页日结区块</small></div> : null}
+          {canSeeReconciliation ? <div className="admin-kpi-card admin-kpi-card--clickable" data-testid="overview-kpi-recondiff"><span>对账差异</span><button type="button" className="admin-kpi-value" data-testid="overview-kpi-recondiff-value" onClick={() => navigateTo?.("ADM-FIN-002")}>{reconDiffKpi.status === "ready" && reconDiffKpi.value !== null ? String(reconDiffKpi.value) : "—"}</button><small>所看营业日新发现的对账差异笔数（含已关闭），查看对账差异页{reconDiffKpi.status === "ready" ? <> · <MetricDetailLink navigateTo={navigateTo} metric="finance.recon_diff_count" from={asOfDay} to={asOfDay} testid="overview-metric-detail-recondiff" /></> : null}</small></div> : null}
+          {canSeeMediaPending || canSeePointsObjections ? <div className="admin-kpi-card admin-kpi-card--clickable" data-testid="overview-kpi-settlepending"><span>结算待确认</span><span data-testid="overview-kpi-settlepending-value">{canSeeMediaPending ? <button type="button" className="admin-kpi-value" style={{ fontSize: 14 }} data-testid="overview-kpi-settlepending-media" onClick={() => navigateTo?.("ADM-STL-004")}>演出结算 {mediaPending ?? "—"}</button> : null}{canSeeMediaPending && canSeePointsObjections ? " · " : null}{canSeePointsObjections ? <button type="button" className="admin-kpi-value" style={{ fontSize: 14 }} data-testid="overview-kpi-settlepending-points" onClick={() => navigateTo?.("ADM-FIN-008")}>积分账单异议 {pointsObjections ?? "—"}</button> : null}</span><small>演出结算挂起待确认的条数、积分月结账单有未处理异议的张数，分开计、不相加，点各数查看</small></div> : null}
         </div>
         {hasRevenue || hasVolume ? (
           <div className="admin-chart-panel" data-testid="overview-charts">

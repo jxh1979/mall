@@ -1,4 +1,4 @@
-# P0 OpenAPI 权限、事件、任务追溯收口附录 V0.56
+# P0 OpenAPI 权限、事件、任务追溯收口附录 V0.57
 
 ## 1. 文档定位
 
@@ -14,11 +14,11 @@
 
 | 检查项 | 当前结果 | 执行结论 |
 |---|---:|---|
-| OpenAPI operation 数 | 1253 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
-| OpenAPI 权限/通用权限状态数 | 422 | 人工权限矩阵正文未覆盖 321 项；缺口以本文第 3 节补齐 |
-| OpenAPI 成功/失败事件数 | 2506 | 人工事件矩阵正文未覆盖 2457 项；完整事件字典以本文第 4 节为准 |
-| operation 级任务追溯 | 1253 | 人工任务映射正文未逐项覆盖 1247 个 operation；逐 operation 映射以本文第 5 节为准 |
-| 写接口数量 | 751 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
+| OpenAPI operation 数 | 1257 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
+| OpenAPI 权限/通用权限状态数 | 423 | 人工权限矩阵正文未覆盖 322 项；缺口以本文第 3 节补齐 |
+| OpenAPI 成功/失败事件数 | 2514 | 人工事件矩阵正文未覆盖 2465 项；完整事件字典以本文第 4 节为准 |
+| operation 级任务追溯 | 1257 | 人工任务映射正文未逐项覆盖 1251 个 operation；逐 operation 映射以本文第 5 节为准 |
+| 写接口数量 | 753 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
 
 ## 3. 权限码与认证上下文补充表
 
@@ -262,9 +262,10 @@
 | `finance.points_recovery.view` | staff-token | project-merchant | 1 | getPointsRecoveryDetail | OpenAPI 补充，以本附录为准 |
 | `finance.points_recovery.waive` | staff-token | project-merchant | 1 | waivePointsRecovery | OpenAPI 补充，以本附录为准 |
 | `finance.property_fee.manage` | staff-token | platform | 3 | listPropertyFeeRates, createPropertyFeeRate, billPropertyFee | OpenAPI 补充，以本附录为准 |
-| `finance.reconciliation.difference.create` | staff-token | platform | 1 | createFinanceReconciliationDifference | OpenAPI 补充，以本附录为准 |
-| `finance.reconciliation.resolve` | staff-token | project-entity-channel | 1 | closeFinanceReconciliationDifference | OpenAPI 补充，以本附录为准 |
-| `finance.reconciliation.view` | staff-token | project, project-entity-channel | 2 | listReconciliationBatches, listReconciliationDifferences | 已在权限矩阵正文出现 |
+| `finance.reconciliation.difference.create` | staff-token | project-entity | 1 | createFinanceReconciliationDifference | OpenAPI 补充，以本附录为准 |
+| `finance.reconciliation.policy.manage` | staff-token | project | 2 | listFinanceReconciliationStageLimits, saveFinanceReconciliationStageLimit | OpenAPI 补充，以本附录为准 |
+| `finance.reconciliation.resolve` | staff-token | project-entity | 2 | closeFinanceReconciliationDifference, identifyFinanceReconciliationDifference | OpenAPI 补充，以本附录为准 |
+| `finance.reconciliation.view` | staff-token | project-entity | 2 | listReconciliationBatches, listReconciliationDifferences | 已在权限矩阵正文出现 |
 | `finance.refund.create` | staff-token | project-order | 4 | createFinanceRefund, retryFinanceRefund, recordFinanceRefundExecution, confirmFinanceRefundResult | 已在权限矩阵正文出现 |
 | `finance.turnover_rent.bill` | staff-token | platform | 1 | billTurnoverRent | OpenAPI 补充，以本附录为准 |
 | `floor_plan.import.manage` | staff-token | project-space | 2 | createFloorPlanImport, publishFloorPlanImport | OpenAPI 补充，以本附录为准 |
@@ -336,7 +337,7 @@
 | `media.performance.fulfillment.confirm` | staff-token | project | 2 | confirmMediaPerformanceFulfillment, disputeMediaPerformanceFulfillment | OpenAPI 补充，以本附录为准 |
 | `media.performance.fulfillment.record` | staff-token | project | 1 | recordMediaPerformanceFulfillment | OpenAPI 补充，以本附录为准 |
 | `media.performance.settle` | staff-token | project | 2 | settleMediaPerformanceShow, adjustMediaPerformanceSettlement | OpenAPI 补充，以本附录为准 |
-| `media.performance.view` | staff-token | project | 2 | listMediaPerformanceShows, getMediaPerformanceShow | OpenAPI 补充，以本附录为准 |
+| `media.performance.view` | staff-token | project | 3 | listMediaPerformanceShows, countMediaPerformancePendingSettlements, getMediaPerformanceShow | OpenAPI 补充，以本附录为准 |
 | `merchant.billing.confirm` | staff-token | - | 1 | confirmMerchantBill | OpenAPI 补充，以本附录为准 |
 | `merchant.billing.dispute.submit` | staff-token | - | 1 | submitMerchantBillDispute | OpenAPI 补充，以本附录为准 |
 | `merchant.billing.dunning.record` | staff-token | - | 1 | recordMerchantBillDunning | OpenAPI 补充，以本附录为准 |
@@ -1551,10 +1552,14 @@
 | `finance.payroll.submit` | success | `submitPayrollBankPaymentFact` | `POST` | `/api/v1/finance/payroll/payment-attempts/{id}/submit` | FIN-财务台账 | `finance.payroll.payment.register` | 接口级事件，以本附录为准 |
 | `finance.reconciliation_batch.viewed` | success | `listReconciliationBatches` | `GET` | `/api/v1/finance/reconciliation/batches` | FIN-财务台账 | `finance.reconciliation.view` | 接口级事件，以本附录为准 |
 | `finance.reconciliation_batch.viewed_failed` | failure | `listReconciliationBatches` | `GET` | `/api/v1/finance/reconciliation/batches` | FIN-财务台账 | `finance.reconciliation.view` | 接口级事件，以本附录为准 |
-| `finance.reconciliation.difference_close_failed` | failure | `closeFinanceReconciliationDifference` | `POST` | `/api/v1/finance/reconciliation/differences/{difference_id}/close` | FIN-财务台账 | `finance.reconciliation.resolve` | 接口级事件，以本附录为准 |
-| `finance.reconciliation.difference_closed` | success | `closeFinanceReconciliationDifference` | `POST` | `/api/v1/finance/reconciliation/differences/{difference_id}/close` | FIN-财务台账 | `finance.reconciliation.resolve` | 接口级事件，以本附录为准 |
+| `finance.reconciliation_stage_limit.save_failed` | failure | `saveFinanceReconciliationStageLimit` | `PUT` | `/api/v1/finance/reconciliation/stage-limits/{project_id}` | FIN-财务台账 | `finance.reconciliation.policy.manage` | 接口级事件，以本附录为准 |
+| `finance.reconciliation_stage_limit.saved` | success | `saveFinanceReconciliationStageLimit` | `PUT` | `/api/v1/finance/reconciliation/stage-limits/{project_id}` | FIN-财务台账 | `finance.reconciliation.policy.manage` | 接口级事件，以本附录为准 |
 | `finance.reconciliation.difference_create_failed` | failure | `createFinanceReconciliationDifference` | `POST` | `/api/v1/finance/reconciliation/differences` | FIN-财务台账 | `finance.reconciliation.difference.create` | 接口级事件，以本附录为准 |
 | `finance.reconciliation.difference_created` | success | `createFinanceReconciliationDifference` | `POST` | `/api/v1/finance/reconciliation/differences` | FIN-财务台账 | `finance.reconciliation.difference.create` | 接口级事件，以本附录为准 |
+| `finance.reconciliation.difference_identified` | success | `identifyFinanceReconciliationDifference` | `POST` | `/api/v1/finance/reconciliation/differences/{difference_id}/identify` | FIN-财务台账 | `finance.reconciliation.resolve` | 接口级事件，以本附录为准 |
+| `finance.reconciliation.difference_identify_failed` | failure | `identifyFinanceReconciliationDifference` | `POST` | `/api/v1/finance/reconciliation/differences/{difference_id}/identify` | FIN-财务台账 | `finance.reconciliation.resolve` | 接口级事件，以本附录为准 |
+| `finance.reconciliation.difference_review_submit_failed` | failure | `closeFinanceReconciliationDifference` | `POST` | `/api/v1/finance/reconciliation/differences/{difference_id}/close` | FIN-财务台账 | `finance.reconciliation.resolve` | 接口级事件，以本附录为准 |
+| `finance.reconciliation.difference_review_submitted` | success | `closeFinanceReconciliationDifference` | `POST` | `/api/v1/finance/reconciliation/differences/{difference_id}/close` | FIN-财务台账 | `finance.reconciliation.resolve` | 接口级事件，以本附录为准 |
 | `finance.turnover_rent.bill_failed` | failure | `billTurnoverRent` | `POST` | `/api/v1/finance/turnover-rent/bills` | FIN-财务台账 | `finance.turnover_rent.bill` | 接口级事件，以本附录为准 |
 | `finance.turnover_rent.billed` | success | `billTurnoverRent` | `POST` | `/api/v1/finance/turnover-rent/bills` | FIN-财务台账 | `finance.turnover_rent.bill` | 接口级事件，以本附录为准 |
 | `floor_plan.create_failed` | failure | `createFloorPlan` | `POST` | `/api/v1/floor-plans` | P0-待归类 | `floor_plan.manage` | 接口级事件，以本附录为准 |
@@ -1981,6 +1986,8 @@
 | `merchant.viewed` | success | `getMerchantStaffBookingNoShowLimit` | `GET` | `/api/v1/platform/merchants/{merchant_id}/staff-booking-no-show-limit` | GOV-平台治理 | `merchant.profile.view` | 接口级事件，以本附录为准 |
 | `merchant.viewed` | success | `listMerchants` | `GET` | `/api/v1/platform/merchants` | GOV-平台治理 | `merchant.profile.view` | 接口级事件，以本附录为准 |
 | `not_applicable` | success | `closeStaffPayrollMonth` | `POST` | `/api/v1/staff/payroll/close` | STAFF-员工 | `staff.payroll.manage` | 接口级事件，以本附录为准 |
+| `not_applicable` | success | `countMediaPerformancePendingSettlements` | `GET` | `/api/v1/settlement/media-shows/pending-settlement-count` | P0-待归类 | `media.performance.view` | 接口级事件，以本附录为准 |
+| `not_applicable` | failure | `countMediaPerformancePendingSettlements` | `GET` | `/api/v1/settlement/media-shows/pending-settlement-count` | P0-待归类 | `media.performance.view` | 接口级事件，以本附录为准 |
 | `not_applicable` | success | `customerStoredValueAccount` | `GET` | `/api/v1/customer/stored-value/account` | CUS-客人端 | `customer.stored_value.view` | 接口级事件，以本附录为准 |
 | `not_applicable` | failure | `customerStoredValueAccount` | `GET` | `/api/v1/customer/stored-value/account` | CUS-客人端 | `customer.stored_value.view` | 接口级事件，以本附录为准 |
 | `not_applicable` | success | `customerStoredValueAccounts` | `GET` | `/api/v1/customer/stored-value/accounts` | CUS-客人端 | `customer.stored_value.view` | 接口级事件，以本附录为准 |
@@ -2215,6 +2222,8 @@
 | `not_applicable` | failure | `listFacilityWorkOrderCustomerMedia` | `GET` | `/api/v1/facility/work-orders/{work_order_id}/customer-media` | P0-待归类 | `facility.work_order.manage` | 接口级事件，以本附录为准 |
 | `not_applicable` | success | `listFacilityWorkOrders` | `GET` | `/api/v1/facility/work-orders` | P0-待归类 | `facility.work_order.manage` | 接口级事件，以本附录为准 |
 | `not_applicable` | failure | `listFacilityWorkOrders` | `GET` | `/api/v1/facility/work-orders` | P0-待归类 | `facility.work_order.manage` | 接口级事件，以本附录为准 |
+| `not_applicable` | success | `listFinanceReconciliationStageLimits` | `GET` | `/api/v1/finance/reconciliation/stage-limits` | FIN-财务台账 | `finance.reconciliation.policy.manage` | 接口级事件，以本附录为准 |
+| `not_applicable` | failure | `listFinanceReconciliationStageLimits` | `GET` | `/api/v1/finance/reconciliation/stage-limits` | FIN-财务台账 | `finance.reconciliation.policy.manage` | 接口级事件，以本附录为准 |
 | `not_applicable` | failure | `listFloorPlanImports` | `GET` | `/api/v1/floor-plans/{id}/imports` | P0-待归类 | `floor_plan.import.view` | 接口级事件，以本附录为准 |
 | `not_applicable` | failure | `listFloorPlans` | `GET` | `/api/v1/floor-plans` | P0-待归类 | `floor_plan.view` | 接口级事件，以本附录为准 |
 | `not_applicable` | failure | `listFloorPlanShapes` | `GET` | `/api/v1/floor-plans/{id}/shapes` | P0-待归类 | `floor_plan.view` | 接口级事件，以本附录为准 |
@@ -3405,7 +3414,7 @@
 | FIN-财务台账 | `archiveDailyClose` | `POST` | `/api/v1/finance/daily-closes/{id}/archive` | 归档日结 | `finance.daily_close.lock` | `finance_daily_close.archived` / `finance_daily_close.archive_failed` | web | operation 级补充 |
 | FIN-财务台账 | `billPropertyFee` | `POST` | `/api/v1/finance/property-fee/bills` | 物业费按期计费（每平米固定单价 × 面积，不退不补） | `finance.property_fee.manage` | `finance_property_fee.billed` / `finance_property_fee.bill_failed` | web | operation 级补充 |
 | FIN-财务台账 | `billTurnoverRent` | `POST` | `/api/v1/finance/turnover-rent/bills` | 营业额抽成计费生成应收 | `finance.turnover_rent.bill` | `finance.turnover_rent.billed` / `finance.turnover_rent.bill_failed` | web | operation 级补充 |
-| FIN-财务台账 | `closeFinanceReconciliationDifference` | `POST` | `/api/v1/finance/reconciliation/differences/{difference_id}/close` | 正式关闭对账差异 | `finance.reconciliation.resolve` | `finance.reconciliation.difference_closed` / `finance.reconciliation.difference_close_failed` | web | operation 级补充 |
+| FIN-财务台账 | `closeFinanceReconciliationDifference` | `POST` | `/api/v1/finance/reconciliation/differences/{difference_id}/close` | 提交差异关闭复核 | `finance.reconciliation.resolve` | `finance.reconciliation.difference_review_submitted` / `finance.reconciliation.difference_review_submit_failed` | web | operation 级补充 |
 | FIN-财务台账 | `computeDividendStatements` | `POST` | `/api/v1/finance/dividends/statements/compute` | 期间分红作业：对每个生效中方案出计算单（净利润=收入−成本−费用；幂等可重跑，草稿/预览/驳回作废重算，进入审批流跳过） | `finance.dividend.manage` | `dividend.computed` / `dividend.compute_failed` | web | operation 级补充 |
 | FIN-财务台账 | `confirmDailyClose` | `POST` | `/api/v1/finance/daily-closes/{id}/confirm` | 确认日结 | `finance.daily_close.lock` | `finance_daily_close.confirmed` / `finance_daily_close.confirm_failed` | web | operation 级补充 |
 | FIN-财务台账 | `confirmDividendLegalAmount` | `POST` | `/api/v1/finance/dividends/statements/{id}/legal-confirmation` | 财务登记依法可分配金额（仅正式草稿/已驳回单；本次分配取经营口径与核定额较小者并重算） | `finance.dividend.manage` | `dividend.legal_confirmed` / `dividend.legal_confirm_failed` | web | operation 级补充 |
@@ -3427,6 +3436,7 @@
 | FIN-财务台账 | `getInternalPayableExecution` | `GET` | `/api/v1/finance/internal-payables/{ar_ap_item_id}` | 查普通内部结算往来的付款时点与执行状态 | `finance.ar_ap.view` | `not_applicable` / `not_applicable` | web | operation 级补充 |
 | FIN-财务台账 | `getPayrollBankPaymentContext` | `GET` | `/api/v1/finance/payroll/{statementId}/payment-attempts` | 读取工资银行记录与同日补差事项 | `finance.payroll.view` | `finance.payroll.attempts_viewed` / `finance.payroll.attempts_view_failed` | app, dealer_portal, kiosk, merchant_app, merchant_portal, miniapp, mobile_admin, staff_work_phone, web | operation 级补充 |
 | FIN-财务台账 | `getPointsRecoveryDetail` | `GET` | `/api/v1/finance/points-recoveries/{customerId}` | 查看会员全部积分追回及豁免记录 | `finance.points_recovery.view` | `points.recovery.viewed` / `points.recovery.view_failed` | app, dealer_portal, kiosk, merchant_app, merchant_portal, miniapp, mobile_admin, staff_work_phone, web | operation 级补充 |
+| FIN-财务台账 | `identifyFinanceReconciliationDifference` | `POST` | `/api/v1/finance/reconciliation/differences/{difference_id}/identify` | 识别对账差异 | `finance.reconciliation.resolve` | `finance.reconciliation.difference_identified` / `finance.reconciliation.difference_identify_failed` | web | operation 级补充 |
 | FIN-财务台账 | `initiateInternalPayment` | `POST` | `/api/v1/finance/internal-payables/{ar_ap_item_id}/payment-attempts` | 登记内部应付已发起付款(银行在途) | `finance.payment.register` | `finance.internal_payment.initiated` / `finance.internal_payment.initiate_failed` | web | operation 级补充 |
 | FIN-财务台账 | `listArApItems` | `GET` | `/api/v1/finance/ar-ap-items` | 查询应收应付台账 | `finance.ar_ap.view` | `finance_ar_ap.viewed` / `finance_ar_ap.view_failed` | web | operation 级补充 |
 | FIN-财务台账 | `listArApPayments` | `GET` | `/api/v1/finance/ar-ap-items/{id}/payments` | 读取所选台账原收付款流水 | `finance.ar_ap.view` | `ar_ap_payment.listed` / `ar_ap_payment.list_failed` | web | operation 级补充 |
@@ -3436,6 +3446,7 @@
 | FIN-财务台账 | `listDividendPlans` | `GET` | `/api/v1/finance/dividends/plans` | 分红方案列表（商户 scope 账号只见本商户） | `finance.dividend.view` | `dividend.plans_listed` / `dividend.plans_list_failed` | web, merchant_portal, merchant_app | operation 级补充 |
 | FIN-财务台账 | `listDividendReserveReleases` | `GET` | `/api/v1/finance/dividends/reserve-releases` | 发放保护线留存·待释放/已释放台账（商户 scope 账号只见本商户，主理人视图同入口） | `finance.dividend.view` | `dividend.reserve_ledger_listed` / `dividend.reserve_ledger_list_failed` | web, merchant_portal, merchant_app | operation 级补充 |
 | FIN-财务台账 | `listDividendStatements` | `GET` | `/api/v1/finance/dividends/statements` | 分红计算单分页（商户 scope 账号只见本商户，主理人视图同入口） | `finance.dividend.view` | `dividend.statements_listed` / `dividend.statements_list_failed` | web, merchant_portal, merchant_app | operation 级补充 |
+| FIN-财务台账 | `listFinanceReconciliationStageLimits` | `GET` | `/api/v1/finance/reconciliation/stage-limits` | 查询对账差异停留时限（按项目） | `finance.reconciliation.policy.manage` | `not_applicable` / `not_applicable` | web | operation 级补充 |
 | FIN-财务台账 | `listFinanceRefunds` | `GET` | `/api/v1/finance/refunds` | 读取退款台账及未结状态 | `finance.ar_ap.view` | `finance_refund.listed` / `finance_refund.list_failed` | web | operation 级补充 |
 | FIN-财务台账 | `listMerchantExpensePeriodLocks` | `GET` | `/api/v1/finance/merchant-expenses/period-locks` | 查询某月已关账（分红核算完成、费用台账冻结）的商户清单（前端据此禁用费用录入/冲销） | `finance.merchant_expense.view` | `merchant_expense.period_locks_viewed` / `merchant_expense.period_locks_view_failed` | web | operation 级补充 |
 | FIN-财务台账 | `listMerchantExpenses` | `GET` | `/api/v1/finance/merchant-expenses` | 商户费用归集台账分页查询（分红净利润费用侧） | `finance.merchant_expense.view` | `merchant_expense.listed` / `merchant_expense.list_failed` | web | operation 级补充 |
@@ -3459,6 +3470,7 @@
 | FIN-财务台账 | `requestArApAdjustment` | `POST` | `/api/v1/finance/ar-ap-adjustments` | 锁定后补录审批申请 | `finance.locked_backfill.request` | `finance.locked_backfill_requested` / `finance.locked_backfill_request_failed` | web, mobile_admin | operation 级补充 |
 | FIN-财务台账 | `retryFinanceRefund` | `POST` | `/api/v1/finance/refunds/{refund_id}/retry` | 明确失败或尚未发起的退款在原单重试 | `finance.refund.create` | `finance_refund.retried` / `finance_refund.retry_failed` | web | operation 级补充 |
 | FIN-财务台账 | `reverseMerchantExpenseEntry` | `POST` | `/api/v1/finance/merchant-expenses/{id}/reverse` | 红字冲销费用台账行（负金额新行，不改历史行，理由必填） | `finance.merchant_expense.manage` | `merchant_expense.reversed` / `merchant_expense.reverse_failed` | web | operation 级补充 |
+| FIN-财务台账 | `saveFinanceReconciliationStageLimit` | `PUT` | `/api/v1/finance/reconciliation/stage-limits/{project_id}` | 配置对账差异停留时限（按项目、按阶段，时限与上下限同配） | `finance.reconciliation.policy.manage` | `finance.reconciliation_stage_limit.saved` / `finance.reconciliation_stage_limit.save_failed` | web | operation 级补充 |
 | FIN-财务台账 | `submitDividendStatement` | `POST` | `/api/v1/finance/dividends/statements/{id}/submit` | 提交审阅：draft → pending_review（预览单不可提交） | `finance.dividend.manage` | `dividend.submitted` / `dividend.submit_failed` | web | operation 级补充 |
 | FIN-财务台账 | `submitPayrollBankPaymentFact` | `POST` | `/api/v1/finance/payroll/payment-attempts/{id}/submit` | 登记工资银行已发起事实 | `finance.payroll.payment.register` | `finance.payroll.submit` / `finance.payroll.payment_failed` | app, dealer_portal, kiosk, merchant_app, merchant_portal, miniapp, mobile_admin, staff_work_phone, web | operation 级补充 |
 | FIN-财务台账 | `summarizeMerchantExpenses` | `GET` | `/api/v1/finance/merchant-expenses/summary` | 商户费用期间汇总（按商户+月份分类型合计，分红引擎费用侧取数点） | `finance.merchant_expense.view` | `merchant_expense.summary_viewed` / `merchant_expense.summary_view_failed` | web | operation 级补充 |
@@ -3709,6 +3721,7 @@
 | P0-待归类 | `confirmMerchantBill` | `POST` | `/api/v1/merchant-billing/bills/{id}/confirm` | 确认商户账单 | `merchant.billing.confirm` | `merchant.billing.confirm` / `merchant.billing.confirm_failed` | web | operation 级补充 |
 | P0-待归类 | `confirmMerchantServiceWorkOrderByMerchant` | `POST` | `/api/v1/merchant-service/work-orders/{id}/merchant-confirm` | 商户确认工单已解决并关闭 | `merchant.service_work_order.create` | `merchant_service.work_order.merchant_confirmed` / `merchant_service.work_order.merchant_confirm_failed` | web, merchant_portal, merchant_app | operation 级补充 |
 | P0-待归类 | `confirmTicketPointsBillUnchanged` | `POST` | `/api/v1/loyalty/ticket-points-billing/objections/{id}/confirm-unchanged` | 申请复核月结原金额无误 | `ticket.points.billing.manage` | `ticket.points.billing.objection.resolution.submitted` / `ticket.points.billing.objection.resolution.submitted.failed` | web | operation 级补充 |
+| P0-待归类 | `countMediaPerformancePendingSettlements` | `GET` | `/api/v1/settlement/media-shows/pending-settlement-count` | 演出结算挂起待确认条数（总控驾驶舱结算待确认卡） | `media.performance.view` | `not_applicable` / `not_applicable` | web | operation 级补充 |
 | P0-待归类 | `createComplianceExpiryItem` | `POST` | `/api/v1/compliance/expiry-items` | 创建合规到期项 | `compliance.expiry_item.manage` | `compliance.expiry_item.create` / `compliance.expiry_item.create_failed` | web | operation 级补充 |
 | P0-待归类 | `createContractDraft` | `POST` | `/api/v1/contracts` | 起草合同(草拟) | `contract.draft.manage` | `contract.drafted` / `contract.draft_failed` | web | operation 级补充 |
 | P0-待归类 | `createContractKeyDate` | `POST` | `/api/v1/compliance/contract-key-dates` | 创建合同关键日期 | `compliance.contract_key_date.manage` | `compliance.contract_key_date.create` / `compliance.contract_key_date.create_failed` | web | operation 级补充 |

@@ -1,11 +1,12 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import com.complex.platform.common.api.ApiResponse;
 import com.complex.platform.settlement.MediaPerformanceRecords.FulfillmentRecord;
 import com.complex.platform.settlement.MediaPerformanceRecords.SettlementRecord;
 import com.complex.platform.settlement.MediaPerformanceRecords.ShowDetail;
+import com.complex.platform.settlement.MediaPerformanceRecords.ShowListItem;
 import com.complex.platform.settlement.MediaPerformanceRecords.ShowRecord;
 import com.complex.platform.settlement.MediaPerformanceRequests.ActionRequest;
 import com.complex.platform.settlement.MediaPerformanceRequests.AdjustRequest;
@@ -14,6 +15,7 @@ import com.complex.platform.settlement.MediaPerformanceRequests.FulfillmentReque
 import com.complex.platform.settlement.MediaPerformanceRequests.ResolveRequest;
 import com.complex.platform.settlement.MediaPerformanceRequests.ShowRequest;
 import java.util.List;
+import java.util.Map;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -40,9 +42,15 @@ public class MediaPerformanceController {
     }
 
     @GetMapping
-    public ApiResponse<List<ShowRecord>> list(@RequestParam(value = "project_id", required = false) String projectId,
+    public ApiResponse<List<ShowListItem>> list(@RequestParam(value = "project_id", required = false) String projectId,
                                               @RequestParam(value = "merchant_id", required = false) String merchantId) {
         return ApiResponse.ok(service.listShows(projectId, merchantId));
+    }
+
+    /** 第十八批 Y 段第 183 条 183-R2（第十八批裁决 40）：总控驾驶舱「结算待确认」卡的演出结算一类。 */
+    @GetMapping("/pending-settlement-count")
+    public ApiResponse<Map<String, Long>> pendingSettlementCount() {
+        return ApiResponse.ok(Map.of("pending_count", service.pendingSettlementCount()));
     }
 
     @GetMapping("/{id}")
