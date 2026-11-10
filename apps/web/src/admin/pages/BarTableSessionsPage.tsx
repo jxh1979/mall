@@ -1,4 +1,4 @@
-// 文件版本：V0.17
+// 文件版本：V0.18
 import React from "react";
 import { QRCodeSVG } from "qrcode.react";
 import { buildCustomerLink } from "@complex/customer-core/links";
@@ -25,7 +25,8 @@ const BAR_TRANSFER_PERMISSION = "bar.table_session.transfer";
 const BAR_MERGE_PERMISSION = "bar.table_session.merge";
 // 第十批 TK-27-R3（BSM L1079「拆台：由授权岗位操作」）。
 const BAR_SPLIT_PERMISSION = "bar.table_session.split";
-type SessionActionKind = "transfer" | "merge" | "split";
+// 第十八批 AB 段第 190 条 190-R3：transfer_undo＝撤销最近一次转台（接口路径 transfer-undo）。
+type SessionActionKind = "transfer" | "merge" | "split" | "transfer_undo";
 
 /** 拆台人工归属文本：每行「ID=会话ID」，空行忽略（订单、邀请、成员三框共用）。 */
 function parseIdAssignments(text: string): { id: string; sessionId: string }[] {
@@ -86,7 +87,8 @@ export function BarTableSessionsPage({ api, setActionResult, setGlobalError, eff
   // 第十八批 T 段第 167 条 167-R3b（BSM:1079）：并台期间新发出的邀请及其已接受、已入场成员首次拆台前的原台分配。
   const [splitInvitationAssignments, setSplitInvitationAssignments] = React.useState("");
   const [splitMemberAssignments, setSplitMemberAssignments] = React.useState("");
-  const [actionReason, setActionReason] = React.useState("主管审批通过");
+  // 第十八批 AB 段第 190 条（控制席并入；BSM:1079「记录内容包括操作类型、原因、操作人、时间……」）：转/合/拆原因不预填，由操作人如实填写。
+  const [actionReason, setActionReason] = React.useState("");
   const [invitationMemberId, setInvitationMemberId] = React.useState("");
   const [invitationCopyNotice, setInvitationCopyNotice] = React.useState<{ link: string; text: string } | null>(null);
   const [barError, setBarError] = React.useState("");
@@ -212,7 +214,9 @@ export function BarTableSessionsPage({ api, setActionResult, setGlobalError, eff
     setSubmitting(true);
     setGlobalError(null);
     try {
-      const body = kind === "transfer"
+      const body = kind === "transfer_undo"
+        ? { reason: actionReason.trim(), sessionVersion: selectedSession.sessionVersion ?? 1 }
+        : kind === "transfer"
         ? { targetTableId: targetTableId.trim(), targetServiceStaffId: targetServiceStaffId.trim(), reason: actionReason.trim(), requestedByUserId: "admin-web", sessionVersion: selectedSession.sessionVersion ?? 1 }
         : kind === "merge"
           ? { mergedSessionId: mergedSessionId.trim(), reason: actionReason.trim(), requestedByUserId: "admin-web", primarySessionVersion: selectedSession.sessionVersion ?? 1, mergedSessionVersion: 1 }
@@ -223,8 +227,8 @@ export function BarTableSessionsPage({ api, setActionResult, setGlobalError, eff
               memberAssignments: parseIdAssignments(splitMemberAssignments).map(({ id, sessionId }) => ({ memberId: id, sessionId })),
               reason: actionReason.trim(), requestedByUserId: "admin-web", primarySessionVersion: selectedSession.sessionVersion ?? 1,
             };
-      const result = await api.post(`/api/v1/bar/table-sessions/${encodeURIComponent(selectedSession.id)}/${kind}`, body);
-      setActionResult({ action: `bar_table_session_${kind}`, status: kind === "transfer" ? "transferred" : kind === "merge" ? "merged" : "split", sessionId: selectedSession.id, result });
+      const result = await api.post(`/api/v1/bar/table-sessions/${encodeURIComponent(selectedSession.id)}/${kind === "transfer_undo" ? "transfer-undo" : kind}`, body);
+      setActionResult({ action: `bar_table_session_${kind}`, status: kind === "transfer_undo" ? "transfer_undone" : kind === "transfer" ? "transferred" : kind === "merge" ? "merged" : "split", sessionId: selectedSession.id, result });
       await reload();
     } catch (actionError) {
       const message = actionError instanceof Error ? actionError.message : "卡座会话操作失败";
@@ -597,7 +601,9 @@ export function BarTableSessionsPage({ api, setActionResult, setGlobalError, eff
           <label>目标卡座<input data-testid="bar-transfer-target-table" value={targetTableId} onChange={(event) => setTargetTableId(event.target.value)} placeholder="转入的卡座 ID" /></label>
           <label>目标卡座当班接手人<input data-testid="bar-transfer-target-staff" aria-label="目标卡座当班接手人" value={targetServiceStaffId} onChange={event => setTargetServiceStaffId(event.target.value)} placeholder="真实接手员工账号" /></label>
           <p>按目标工作点位已发布的排班或真实顶班记录核实接手人；原台服务责任截至实际转台时刻。</p>
-          <HighRiskConfirm label="转卡" impact="将把选中开台会话转移到目标卡座，必须确认未结账约束和主管审批。" disabled={submitting} precheck={() => validateSessionAction("transfer")} onConfirm={() => void runSessionAction("transfer")} permissionsState={effectivePermissions} permissions={[BAR_TRANSFER_PERMISSION]} data-testid="bar-transfer-submit" />
+          <HighRiskConfirm label="转卡" impact="将把选中开台会话转移到目标卡座，达到本酒吧转台次数上限时须主管审批。" disabled={submitting} precheck={() => validateSessionAction("transfer")} onConfirm={() => void runSessionAction("transfer")} permissionsState={effectivePermissions} permissions={[BAR_TRANSFER_PERMISSION]} data-testid="bar-transfer-submit" />
+          {/* 第十八批 AB 段第 190 条 190-R3（BSM:1079「撤销转台……按转台前快照恢复原台位、邀请关系、成员归属、可邀请人数、最低消费额和消费进度，并完整留痕」）：原因取「转/合/拆原因」框。 */}
+          <HighRiskConfirm label="撤销最近一次转台" impact="将把选中会话按转台前快照退回原台位，低消、可邀请人数与服务人一并恢复；转台后已有点单、付款、退款或邀请、成员变化，或原台已被占用时不能撤销。" disabled={submitting} precheck={() => validateSessionAction("transfer_undo")} onConfirm={() => void runSessionAction("transfer_undo")} permissionsState={effectivePermissions} permissions={[BAR_TRANSFER_PERMISSION]} data-testid="bar-transfer-undo-submit" />
           <label>合并目标会话<input data-testid="bar-merge-target-session" value={mergedSessionId} onChange={(event) => setMergedSessionId(event.target.value)} placeholder="被并入的会话 ID" /></label>
           <HighRiskConfirm label="合并" impact="将把选中会话与目标会话合并，账单和责任链必须留痕。" disabled={submitting} precheck={() => validateSessionAction("merge")} onConfirm={() => void runSessionAction("merge")} permissionsState={effectivePermissions} permissions={[BAR_MERGE_PERMISSION]} data-testid="bar-merge-submit" />
         </div>

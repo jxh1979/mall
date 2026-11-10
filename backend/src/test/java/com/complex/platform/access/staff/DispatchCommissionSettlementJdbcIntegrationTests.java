@@ -1,6 +1,6 @@
 package com.complex.platform.access.staff;
 
-// 文件版本：V0.05
+// 文件版本：V0.06
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -218,6 +218,26 @@ class DispatchCommissionSettlementJdbcIntegrationTests {
         PayrollApprovedCloseFixture.closeWithApprovedZeroTax(jdbcTemplate, json, payroll, ownStaffUserId, MONTH, "monthly");
         assertThat(jdbcTemplate.queryForObject("SELECT commission_cent FROM staff_payroll_statements WHERE user_id = ? AND month = ?",
                 Long.class, ownStaffUserId, MONTH)).isEqualTo(2_300L);
+    }
+
+    /**
+     * 第十八批裁决 46「派驻提成归集也改按计提时所属营业日」：派驻 9-01 起、9-30 结束；北京 10-01 02:30（出厂起点 10:00 前，属 9-30 营业日）下单结账计提的
+     * 提成仍按派驻期内归集、随 9 月拨付。
+     */
+    @Test
+    void dispatchCoverageFollowsTheAccrualBusinessDayOfTheBar() {
+        String accrual = "2026-09-30T18:30:00Z";
+        assertThat(businessDays.merchantBusinessDate(null, barMerchantId, Instant.parse(accrual))).isEqualTo(LocalDate.of(2026, 9, 30));
+        commission("a5", "tbl_cg07_" + suffix, dispatchedUserId, 700L, "calculated", accrual);
+        StaffDispatchRecord created = staffService.createDispatch(new StaffDispatchCreateRequest("cg07-dsp-acc-" + suffix, dispatchedUserId,
+                barMerchantId, "2026-09-01", "派驻到酒吧"));
+        staffService.endDispatch(created.id(), new StaffDispatchEndRequest("cg07-dsp-acc-end-" + suffix, "2026-09-30", "派驻期满"));
+
+        // 修复前红：按计提时点北京日历日（10-01）判不在派驻期内，只计 5000
+        assertThat(staffService.closeCommissionSettlement(
+                new StaffCommissionSettlementCloseRequest("cg07-close-acc-" + suffix, MONTH)).get("settlements")).isEqualTo(1);
+        assertThat(jdbcTemplate.queryForMap("SELECT amount_cent, calculation_count FROM bar_commission_settlements WHERE month = ? AND merchant_id = ?",
+                MONTH, barMerchantId)).containsEntry("amount_cent", 5_700L).containsEntry("calculation_count", 3);
     }
 
     /** 派驻记录登记 / 重复登记拒绝 / 结束 / 列表。 */

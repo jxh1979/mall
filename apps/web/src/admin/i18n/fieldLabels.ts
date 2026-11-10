@@ -1,4 +1,4 @@
-// 文件版本：V0.26
+// 文件版本：V0.27
 // OBS-14-02 后台结果区字段中文名字典（PGM「全局原则 · 界面全中文（所有终端零英文）」）。
 // 键用后端 JSON 的蛇形写法；结果区查表时蛇形与驼峰同查（orderId / order_id 都命中 order_id）。
 // 与后端字段中文名表 FieldLabels.java（common.api 包）同键同名：前段按后端原样抄录，后端改名这里跟着改（门禁会比对）。
@@ -277,6 +277,7 @@ export const FIELD_LABELS: Record<string, string> = {
   adjustment_rate: "调整比例",
   commission_mode: "分成方式",
   commission_ids: "提成记录编号",
+  accrual_days: "计提营业日",
   settlement_id: "结算单号",
   settlement_mode: "结算方式",
   settlement_entity_id: "结算主体",
@@ -491,6 +492,11 @@ export const FIELD_LABELS: Record<string, string> = {
   min_pct: "下限（%）",
   max_pct: "上限（%）",
   effective_pct: "生效值（%）",
+  // 第十八批 AB 段第 190 条 190-R1：酒吧转台次数上限（值与上下限同配，单位：次）。
+  value_count: "取值（次）",
+  min_count: "下限（次）",
+  max_count: "上限（次）",
+  effective_count: "生效值（次）",
   stat_month: "统计月份",
   no_show_count: "爽约笔数",
   booking_count: "代订笔数",
@@ -2889,6 +2895,8 @@ export const VALUE_LABELS: Record<string, string> = {
   bar_reservation_create: "新建订台",
   bar_table_session_create: "开台",
   bar_table_session_transfer: "转台",
+  // 第十八批 AB 段第 190 条 190-R3：撤销最近一次转台（BSM:1079）。
+  bar_table_session_transfer_undo: "撤销转台",
   bar_table_session_merge: "并台",
   bar_table_session_split: "拆台",
   bar_invitation_issue: "签发邀请函",
@@ -3077,6 +3085,7 @@ export const VALUE_LABELS: Record<string, string> = {
   merchant_pending_clear_alert_configured: "商户待清场告警已配置",
   merchant_staff_booking_no_show_limit_configured: "员工代订爽约率上限已配置",
   merchant_pour_loss_rate_configured: "酒吧损耗率阈值已配置",
+  merchant_table_transfer_limit_configured: "转台次数上限已配置",
   bar_staff_booking_restored: "员工代订权限已恢复",
   bar_sales_backfill_submitted: "销售归属补录已提交，待店长复核",
   bar_table_session_attribution_reassigned: "客人来源与销售已改派",
@@ -3210,6 +3219,8 @@ export const VALUE_LABELS: Record<string, string> = {
   wecom_cleanup_executed: "企业微信消息清理已执行",
   checked_in: "已入座",
   transferred: "已转移",
+  transfer_undo: "撤销转台",
+  transfer_undone: "已撤销转台",
   merged: "已合并",
   split: "已拆分",
   cleared: "已清台",

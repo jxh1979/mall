@@ -1,4 +1,4 @@
-# P0 OpenAPI Operation 验收矩阵 V0.59
+# P0 OpenAPI Operation 验收矩阵 V0.60
 
 ## 1. 文档定位
 
@@ -17,7 +17,7 @@
 
 ## 3. Operation 清单
 
-> 当前 `docs/openapi/openapi-p0.json` 共 1261 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
+> 当前 `docs/openapi/openapi-p0.json` 共 1264 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
 
 | 标签 | 方法 | 路径 | operationId | 摘要 | 请求体 | 权限 | 认证上下文 | 数据范围 | 终端/设备能力/调用通道 | 幂等 | 成功事件 | 失败事件 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -298,6 +298,8 @@
 | platform | `PUT` | `/api/v1/platform/merchants/{merchant_id}` | `updateMerchant` | 修改商户 | `MerchantProfileRequest` | `merchant.profile.manage` | `staff-token` | `project-merchant` | web | 是 | `merchant.updated` | `merchant.update_failed` |
 | platform | `GET` | `/api/v1/platform/merchants/{merchant_id}/pending-clear-alert` | `getMerchantPendingClearAlert` | 查询酒吧待清台提醒时限 | `-` | `merchant.profile.view` | `staff-token` | `project-merchant` | web | 否 | `merchant.viewed` | `not_applicable` |
 | platform | `PUT` | `/api/v1/platform/merchants/{merchant_id}/pending-clear-alert` | `configureMerchantPendingClearAlert` | 配置酒吧待清台提醒时限(值与上下限同配) | `object` | `merchant.profile.manage` | `staff-token` | `project-merchant` | web | 是 | `merchant.pending_clear_alert_configured` | `merchant.pending_clear_alert_config_failed` |
+| platform | `GET` | `/api/v1/platform/merchants/{merchant_id}/table-transfer-limit` | `getMerchantTableTransferLimit` | 查询酒吧转台次数上限 | `-` | `merchant.profile.view` | `staff-token` | `project-merchant` | web | 否 | `merchant.viewed` | `not_applicable` |
+| platform | `PUT` | `/api/v1/platform/merchants/{merchant_id}/table-transfer-limit` | `configureMerchantTableTransferLimit` | 配置酒吧转台次数上限(值与上下限同配) | `object` | `merchant.profile.manage` | `staff-token` | `project-merchant` | web | 是 | `merchant.table_transfer_limit_configured` | `merchant.table_transfer_limit_config_failed` |
 | platform | `GET` | `/api/v1/platform/merchants/{merchant_id}/staff-booking-no-show-limit` | `getMerchantStaffBookingNoShowLimit` | 查询酒吧员工代订爽约率上限 | `-` | `merchant.profile.view` | `staff-token` | `project-merchant` | web | 否 | `merchant.viewed` | `merchant.view_failed` |
 | platform | `PUT` | `/api/v1/platform/merchants/{merchant_id}/staff-booking-no-show-limit` | `configureMerchantStaffBookingNoShowLimit` | 配置酒吧员工代订爽约率上限(值与上下限同配) | `object` | `merchant.profile.manage` | `staff-token` | `project-merchant` | web | 是 | `merchant.staff_booking_no_show_limit_configured` | `merchant.staff_booking_no_show_limit_config_failed` |
 | platform | `GET` | `/api/v1/platform/merchants/{merchant_id}/pour-loss-rate` | `getMerchantPourLossRate` | 查询酒吧损耗率阈值 | `-` | `merchant.profile.view` | `staff-token` | `project-merchant` | web | 否 | `merchant.viewed` | `merchant.view_failed` |
@@ -501,6 +503,7 @@
 | bar | `POST` | `/api/v1/bar/table-sessions/{session_id}/merge` | `mergeBarTableSession` | 合并酒水台位会话 | `object` | `bar.table_session.merge` | `staff-token` | `project-bar-table` | web | 是 | `bar.table_session.merge` | `bar.table_session.merge_failed` |
 | bar | `POST` | `/api/v1/bar/table-sessions/{session_id}/split` | `splitBarTableSession` | 拆分酒水台位会话（拆台） | `object` | `bar.table_session.split` | `staff-token` | `project-bar-table` | web | 是 | `bar.table.split` | `bar.table.split_failed` |
 | bar | `POST` | `/api/v1/bar/table-sessions/{session_id}/transfer` | `transferBarTableSession` | 转台（台位会话转移） | `object` | `bar.table_session.transfer` | `staff-token` | `project-bar-table` | web | 是 | `bar.table.transferred` | `bar.table_session.transfer_failed` |
+| bar | `POST` | `/api/v1/bar/table-sessions/{session_id}/transfer-undo` | `undoBarTableTransfer` | 撤销最近一次转台 | `object` | `bar.table_session.transfer` | `staff-token` | `project-bar-table` | web | 是 | `bar.table.transfer_undone` | `bar.table_session.transfer_undo_failed` |
 | bar | `POST` | `/api/v1/bar/table-sessions/{session_id}/sales-backfill` | `submitBarTableSessionSalesBackfill` | 补录台位会话销售归属（人工补录，店长复核） | `object` | `bar.table_session.create` | `staff-token` | `project-bar-table` | web | 是 | `evidence.manual_backfill_submitted` | `evidence.manual_backfill_submit_failed` |
 | bar | `POST` | `/api/v1/bar/table-sessions/{session_id}/attribution-reassign` | `reassignBarTableSessionAttribution` | 改派开台客人来源与销售人员（店长办理） | `object` | `bar.table_session.attribution_reassign` | `staff-token` | `project-bar-table` | web | 是 | `bar.table_session.attribution_reassigned` | `bar.table_session.attribution_reassign_failed` |
 | bar | `GET` | `/api/v1/bar/bills/{bill_id}/operations` | `listBarBillOperations` | 查询酒水账单拆并操作记录 | `-` | `bar.bill.split_merge` | `staff-token` | `project-bar-table` | web | 否 | `bar.bill_operation.list` | `bar.bill_operation.list_failed` |

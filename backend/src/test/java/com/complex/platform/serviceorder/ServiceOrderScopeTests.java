@@ -1,4 +1,4 @@
-// 文件版本：V0.03
+// 文件版本：V0.04
 package com.complex.platform.serviceorder;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -98,7 +98,7 @@ class ServiceOrderScopeTests {
         when(staffRepo.findUserProjectId("usr_b")).thenReturn(Optional.of("prj_B"));
         when(repo.findCatalogItem("svc1")).thenReturn(Optional.of(new ServiceCatalogItemRecord(
                 "svc1", "点舞", 30000L, 10, true, "none", 0L, "usr_op", Instant.now())));
-        when(repo.saveOrder(any())).thenAnswer(i -> i.getArgument(0));
+        when(repo.saveOrder(any(), any())).thenAnswer(i -> i.getArgument(0));
         when(businessDays.businessDate(any(), any(), any())).thenReturn(java.time.LocalDate.parse("2099-07-10"));
 
         assertThatCode(() -> svc.createOrder(new com.complex.platform.serviceorder.dto.ServiceOrderCreateRequest(

@@ -1,6 +1,6 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.27
+// 文件版本：V0.28
 
 import com.complex.platform.auth.AuthService;
 import com.complex.platform.common.api.ApiException;
@@ -59,6 +59,14 @@ public class AuthorizationService implements CallerScopeResolver {
     @Autowired(required = false)
     public void setIdempotencyRepository(IdempotencyRepository idempotencyRepository) {
         this.idempotencyRepository = idempotencyRepository;
+    }
+
+    // 第十八批裁决 46：派驻期按各派驻酒吧营业日判（191-R1 商户范围），可选注入；单测 new 构造不传则按无派驻处理。
+    private com.complex.platform.access.staff.JdbcStaffRepository staffRepository;
+
+    @Autowired(required = false)
+    public void setStaffRepository(com.complex.platform.access.staff.JdbcStaffRepository staffRepository) {
+        this.staffRepository = staffRepository;
     }
 
     public void requirePermission(String permissionCode) {
@@ -1141,11 +1149,27 @@ public class AuthorizationService implements CallerScopeResolver {
         if (isPlatformAdminBridge(actor)) {
             return Optional.empty();
         }
-        String merchantId = actor.merchantId();
+        String merchantId = scopeMerchantIdOf(actor);
         if (merchantId != null && !merchantId.isBlank()) {
             return Optional.of(merchantId);
         }
         throw ApiException.forbidden("MERCHANT_SCOPE_REQUIRED", "此操作必须在商户范围内进行");
+    }
+
+    /**
+     * 第十八批 AB 段第 191 条 191-R1（BSM:1143「派驻仅由平台侧获授权人员登记，保留员工、目标商户及项目组织范围」「其他公司的人员派驻到某家酒吧工作期间……」；
+     * BSM:931、BSM:1468 本人帮客人订位）：本人此刻恰好在一家酒吧的派驻期内时取该派驻酒吧，否则取账号商户号。
+     * 只看起止日期、不看状态：结束派驻即置 ended，结束日期可选当天或以后（与提成归集同一判定）。
+     * 第十八批裁决 46：派驻期按各派驻记录所属酒吧此刻的营业日判（结束日当天的夜班过零点后、到营业日结束前仍算派驻期内）。
+     */
+    private String scopeMerchantIdOf(AccessActor actor) {
+        if (staffRepository != null) {
+            List<String> dispatched = staffRepository.dispatchMerchantIdsAt(actor.id(), Instant.now());
+            if (dispatched.size() == 1) {
+                return dispatched.get(0);
+            }
+        }
+        return actor.merchantId();
     }
 
     /**
@@ -1160,7 +1184,7 @@ public class AuthorizationService implements CallerScopeResolver {
             if (isPlatformAdminBridge(actor)) {
                 return Optional.empty();
             }
-            String merchantId = actor.merchantId();
+            String merchantId = scopeMerchantIdOf(actor);
             if (merchantId != null && !merchantId.isBlank()) {
                 return Optional.of(merchantId);
             }

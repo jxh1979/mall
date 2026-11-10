@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.09
+// 文件版本：V0.10
 
 import com.complex.platform.evidence.AuditedOperation;
 
@@ -28,6 +28,9 @@ enum BarWriteOperation implements AuditedOperation {
     ENABLE_TABLE("bar.table.enabled", "bar.table.enable_failed", "bar.table.disable", "bar_table"),
     CREATE_TABLE_SESSION("bar.table_session.create", "bar.table_session.create_failed", "bar.table_session.create", "bar_table_session"),
     TRANSFER_TABLE_SESSION("bar.table.transferred", "bar.table_session.transfer_failed", "bar.table_session.transfer", "bar_table_session_adjustment"),
+    // 第十八批 AB 段第 190 条 190-R3：撤销转台（BSM:1079「每次……撤销转台均须留痕」），沿用转台权限。
+    UNDO_TABLE_TRANSFER("bar.table.transfer_undone", "bar.table_session.transfer_undo_failed", "bar.table_session.transfer",
+            "bar_table_session_adjustment"),
     MERGE_TABLE_SESSIONS("bar.table_session.merge", "bar.table_session.merge_failed", "bar.table_session.merge", "bar_table_session_adjustment"),
     // 第十批 TK-27-R3：拆台（BSM L1079）。
     SPLIT_TABLE_SESSIONS("bar.table.split", "bar.table.split_failed", "bar.table_session.split", "bar_table_session_adjustment"),

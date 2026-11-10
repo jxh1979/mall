@@ -1,6 +1,6 @@
 package com.complex.platform.common.api;
 
-// 文件版本：V0.38
+// 文件版本：V0.39
 
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -356,6 +356,7 @@ public final class FieldLabels {
         p("adjustment_rate", "调整比例");
         p("commission_mode", "分成方式");
         p("commission_ids", "提成记录编号");
+        p("accrual_days", "计提营业日");
         p("settlement_id", "结算单号");
         p("settlement_mode", "结算方式");
         p("settlement_entity_id", "结算主体");
@@ -577,6 +578,11 @@ public final class FieldLabels {
         p("remind_minutes", "最晚到店前提醒分钟数");
         p("min_minutes", "分钟数下限");
         p("max_minutes", "分钟数上限");
+        // 第十八批 AB 段第 190 条 190-R1：酒吧转台次数上限（值与上下限同配，单位：次；与前端 fieldLabels.ts 同名）。
+        p("value_count", "取值（次）");
+        p("min_count", "下限（次）");
+        p("max_count", "上限（次）");
+        p("effective_count", "生效值（次）");
         // 第十八批 F 段第 14 条：人工补录（原因、责任人、凭证、录音起始）与补录参数（时限、录音提前量，值与上下限同配）。
         p("responsible_staff_id", "责任人");
         p("evidence_attachment_ids", "证据附件");

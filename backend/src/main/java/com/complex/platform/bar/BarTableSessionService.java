@@ -1,12 +1,15 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.10
+// 文件版本：V0.11
 
 import static com.complex.platform.bar.BarValidation.*;
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.evidence.AuditEventService;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -35,6 +38,9 @@ public class BarTableSessionService {
     // 第十八批第 1 条（ENUM:187「以开台或下单时点所属的营业日为准」）：开台营业日按该酒吧营业日由服务端确定。
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     com.complex.platform.common.BusinessDayResolver businessDays = new com.complex.platform.common.BusinessDayResolver();
+    // 第十八批 AB 段第 190 条 190-R2：转台次数达上限须主管审批（字段注入同上；单测不置位即不设闸）。
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    BarTransferLimitApprovalService transferLimitApprovals;
 
     private final BarRepository repository;
     private final AuthorizationService authorizationService;
@@ -279,6 +285,26 @@ public class BarTableSessionService {
         Instant now = Instant.now();
         String targetStaff = requireText(actual.targetServiceStaffId(), "target_service_staff_id");
         if (serviceResponsibilities != null) serviceResponsibilities.requireTransferStaff(targetTable.id(), targetStaff, now);
+        // 第十八批 AB 段第 190 条 190-R2（BSM:1079「同一会话的转台次数不得超过后台配置的上限……达到上限后须主管审批才能继续转台」；
+        // DEC-R6-19「达上限须主管审批」）：已转次数＝本会话转台留痕条数（撤销不减），达到本酒吧上限（未配置 10 次）时，有同目标台已批准未用的
+        // 超限转台申请即用掉继续；有待审批的 409；都没有就提交申请（独立事务）后 409，提示带审批单号。闸在任何写入之前。
+        int transferCount = (int) repository.listTableSessionAdjustments(session.id()).stream()
+                .filter(adjustment -> "transfer".equals(adjustment.adjustmentType())).count();
+        Integer transferLimit = transferLimitApprovals == null ? null : transferLimitApprovals.limit(session.barId());
+        String approvalId = null;
+        if (transferLimit != null && transferCount >= transferLimit) {
+            approvalId = transferLimitApprovals.consume(session.id(), targetTable.id());
+            if (approvalId == null) {
+                String pending = transferLimitApprovals.pendingReview(session.id());
+                if (pending != null) {
+                    throw ApiException.conflict("BAR_TRANSFER_LIMIT_APPROVAL_PENDING", "本会话超限转台申请正在等待主管审批，审批单号：" + pending);
+                }
+                String reviewId = transferLimitApprovals.request(session, sourceTable, targetTable, transferCount, transferLimit,
+                        requireText(actual.reason(), "reason"), actual.idempotencyKey());
+                throw ApiException.conflict("BAR_TRANSFER_LIMIT_APPROVAL_REQUIRED", "本会话已转台 " + transferCount + " 次，达到本酒吧上限 "
+                        + transferLimit + " 次，须主管审批后才能继续转台，已提交审批，审批单号：" + reviewId);
+            }
+        }
         // 第十批 TK-27-R2（BSM L1079「原台随转台成功立即释放，可供其他客人预订或开台」）：源台直接回空闲，不经待清台。
         // 复核 money B1（BSM L1079「单台转台与合并台组转台同样适用」）：合并台组整体转台时组内被并原台一并释放。
         repository.saveTable(tableWithStatus(sourceTable, "active", now));
@@ -288,7 +314,8 @@ public class BarTableSessionService {
         }
         repository.saveTable(tableWithStatus(targetTable, "opened", now));
         // 2c-5：DB 级乐观锁 CAS（替代仅内存比对的 requireSessionVersion），防并发转台双重占用。
-        BarTableSessionRecord updated = sessionMovedToTable(session, targetTable, targetStaff, now);
+        BarTableSessionRecord updated = sessionMovedToTable(session, targetTable.id(), targetTable.minConsumptionCent(),
+                targetTable.allowedPassFreeGuestCount(), targetStaff, now);
         if (!repository.updateTableSessionIfVersionMatches(updated, session.sessionVersion())) {
             throw ApiException.conflict("BAR_TABLE_SESSION_VERSION_CONFLICT", "台位会话已被并发变更，请刷新后重试");
         }
@@ -301,7 +328,7 @@ public class BarTableSessionService {
         }
         // 第十批 TK-24-R3（BSM L1062「转台按目标台的最低消费进度判断」）：按目标台阈值重判定金。
         if (depositSettlements != null) depositSettlements.evaluate(session.id());
-        return repository.saveTableSessionAdjustment(newAdjustment(
+        BarTableSessionAdjustmentRecord transferred = repository.saveTableSessionAdjustment(newAdjustment(
                 "transfer",
                 updated,
                 null,
@@ -319,8 +346,129 @@ public class BarTableSessionService {
                 targetTable.minConsumptionCent() > session.minConsumptionSnapshotCent(),
                 actual.idempotencyKey(),
                 safeList(actual.evidenceAttachmentIds()),
-                withInviteCapacity(transferSnapshot(session, updated, oldChain), inviteBefore, inviteAfter, inviteOccupied)
+                withTransferLimit(withInviteCapacity(transferSnapshot(session, updated, oldChain, now), inviteBefore, inviteAfter, inviteOccupied),
+                        transferCount, transferLimit, approvalId)
         ));
+        if (approvalId != null) transferLimitApprovals.linkAdjustment(approvalId, transferred.id());
+        return transferred;
+    }
+
+    /** 第十八批 AB 段第 190 条 190-R3：撤销转台的商户闸（BarService 在幂等之前调用）。 */
+    void requireSessionInScope(String sessionId) {
+        checkMerchantOwnership(repository.findTableSessionById(sessionId)
+                .orElseThrow(() -> ApiException.notFound("BAR_TABLE_SESSION_NOT_FOUND", "台位就餐会话不存在或已结束")).merchantId());
+    }
+
+    /**
+     * 第十八批 AB 段第 190 条 190-R3（BSM:1079「撤销转台：仅当转台后未新增邀请、未发生邀请接受、成员入场或移出，也未新增点单、付款、退款等账单或资金记录时，
+     * 方可按转台前快照恢复原台位、邀请关系、成员归属、可邀请人数、最低消费额和消费进度，并完整留痕；符合条件的撤销不得以新建单据冒充回退」「撤销转台前，
+     * 还必须确认转台前涉及的全部原台均未被其他会话重新预订或开台」「再次转台、并台、拆台或任何邀请、成员、订单、付款、退款变化，均属于后续变化。撤销只能
+     * 恢复最近一次仍满足条件的完整快照，不得跨层覆盖历史」；ENUM:114 同句；BSM:1062「撤销转台不得覆盖已经发生的资金记录」；决策台账 DEC-R6-19「撤销转台＝
+     * 按原路回退到转台前的台位与进度并留痕，不得以新建单据代替回退」）：
+     * 只撤本会话最近一次转台——其后有任何调整留痕（含撤销、并台、拆台）或会话版本已不是转台后的版本（服务交接等也抬版本）即 409 BAR_TRANSFER_UNDO_NOT_LATEST；
+     * 以转台时刻为界，台组（含整体转台前旧链）有订单、明细、作废、账单、付款、退款、定金退款应付或邀请、成员变化即 409 BAR_TRANSFER_UNDO_BLOCKED；
+     * 原台与旧链各台锁行后须空闲且无有效预留，否则 409 BAR_TRANSFER_UNDO_TABLE_OCCUPIED（停用台位同样算被占）。通过后旧链子会话回到并台，根会话按快照
+     * 回原台、低消与可邀请人数快照、服务人，原台开台、目标台回空闲，另记一条 transfer_undo 留痕；原转台留痕、订单与资金单据不动，不重判定金，已转次数不减。
+     */
+    BarTableSessionAdjustmentRecord undoTableTransfer(String sessionId, BarTableTransferUndoRequest request) {
+        BarTableTransferUndoRequest actual = requireRequest(request);
+        String reason = requireText(actual.reason(), "reason");
+        repository.lockTableSession(sessionId);
+        BarTableSessionRecord session = requireOpenTableSession(sessionId);
+        requireSessionVersion(session, actual.sessionVersion());
+        BarTableSessionAdjustmentRecord transfer = repository.listTableSessionAdjustments(session.id()).stream().findFirst()
+                .filter(adjustment -> "transfer".equals(adjustment.adjustmentType())).orElse(null);
+        JsonNode snapshot = transfer == null ? null : readSnapshot(transfer.snapshotJson());
+        if (snapshot == null || session.sessionVersion() != snapshot.path("version_after").asLong()) {
+            throw ApiException.conflict("BAR_TRANSFER_UNDO_NOT_LATEST",
+                    "撤销只能恢复本会话最近一次转台；该次转台已撤销，或其后已有再次转台、并台、拆台或服务交接，不能撤销");
+        }
+        if (repository.tableSessionChangedSince(repository.familySessionIds(session.id(), true),
+                Instant.parse(snapshot.path("transferred_at").asText()))) {
+            throw ApiException.conflict("BAR_TRANSFER_UNDO_BLOCKED", "转台后已有点单、付款、退款或邀请、成员变化，不能撤销；如需回原台请重新转台");
+        }
+        List<String> chain = new ArrayList<>();
+        snapshot.path("transferred_chain").forEach(id -> chain.add(id.asText()));
+        List<BarTableRecord> originals = new ArrayList<>(List.of(freeOriginalTable(transfer.fromTableId())));
+        for (String childId : chain) {
+            originals.add(freeOriginalTable(repository.findTableSessionById(childId).orElseThrow().tableId()));
+        }
+        BarTableRecord current = repository.findTableById(session.tableId()).orElseThrow();
+        long thresholdBefore = BarMinSpend.thresholdCent(repository, session.id());
+        int inviteBefore = BarInvitationQuota.capacity(repository, session.id());
+        Instant now = Instant.now();
+        for (String childId : chain) {
+            BarTableSessionRecord child = repository.findTableSessionById(childId).orElseThrow();
+            if (!repository.updateTableSessionIfVersionMatches(sessionWithStatus(child, "merged", now), child.sessionVersion())) {
+                throw versionConflict();
+            }
+        }
+        JsonNode staffBefore = snapshot.path("service_staff_before");
+        BarTableSessionRecord restored = sessionMovedToTable(session, transfer.fromTableId(),
+                snapshot.path("min_consumption_snapshot_before_cent").asLong(), snapshot.path("invite_capacity_snapshot_before").asInt(),
+                staffBefore.isNull() ? null : staffBefore.asText(), now);
+        if (!repository.updateTableSessionIfVersionMatches(restored, session.sessionVersion())) {
+            throw versionConflict();
+        }
+        originals.forEach(table -> repository.saveTable(tableWithStatus(table, "opened", now)));
+        repository.saveTable(tableWithStatus(current, "active", now));
+        String key = requireText(actual.idempotencyKey(), "idempotency_key");
+        if (serviceResponsibilities != null) serviceResponsibilities.recordTransferUndo(restored, now, "transfer_undo:" + key);
+        String base = sessionSnapshot(session, restored);
+        String undoSnapshot = base.substring(0, base.length() - 1) + ",\"undone_adjustment_id\":\"" + jsonText(transfer.id())
+                + "\",\"restored_chain\":" + snapshot.path("transferred_chain")
+                + ",\"min_consumption_snapshot_before_cent\":" + session.minConsumptionSnapshotCent()
+                + ",\"min_consumption_snapshot_after_cent\":" + restored.minConsumptionSnapshotCent()
+                + ",\"invite_capacity_snapshot_before\":" + session.allowedPassFreeGuestCountSnapshot()
+                + ",\"invite_capacity_snapshot_after\":" + restored.allowedPassFreeGuestCountSnapshot()
+                + ",\"service_staff_before\":" + jsonTextOrNull(session.serviceStaffId())
+                + ",\"service_staff_after\":" + jsonTextOrNull(restored.serviceStaffId()) + "}";
+        return repository.saveTableSessionAdjustment(newAdjustment(
+                "transfer_undo",
+                restored,
+                null,
+                null,
+                current.id(),
+                transfer.fromTableId(),
+                thresholdBefore,
+                BarMinSpend.thresholdCent(repository, session.id()),
+                null,
+                0L,
+                0L,
+                0L,
+                reason,
+                authorizationService.currentActor().id(),
+                false,
+                key,
+                List.of(),
+                withInviteCapacity(undoSnapshot, inviteBefore, BarInvitationQuota.capacity(repository, session.id()),
+                        BarInvitationQuota.members(repository, session.id()).size())
+        ));
+    }
+
+    /** 190-R3：锁原台行后须空闲且没有被有效预留占着（同订台占台 holdTable 的锁行与 heldByOther）；已开台、待清台、停用或被预留都算被占。 */
+    private BarTableRecord freeOriginalTable(String tableId) {
+        repository.lockTable(tableId);
+        BarTableRecord table = repository.findTableById(tableId)
+                .orElseThrow(() -> ApiException.notFound("BAR_TABLE_NOT_FOUND", "原台位不存在或已被删除"));
+        if (!"active".equals(table.status()) || repository.findHeldReservationId(tableId).isPresent()) {
+            throw ApiException.conflict("BAR_TRANSFER_UNDO_TABLE_OCCUPIED", "转台前的原台已被其他客人预订、开台或已停用，不能撤销");
+        }
+        return table;
+    }
+
+    private static final ObjectMapper SNAPSHOT_JSON = new ObjectMapper();
+
+    private static JsonNode readSnapshot(String snapshotJson) {
+        try {
+            return SNAPSHOT_JSON.readTree(snapshotJson);
+        } catch (JsonProcessingException e) {
+            throw new IllegalStateException("转台留痕快照无法解析", e);
+        }
+    }
+
+    private static String jsonTextOrNull(String value) {
+        return value == null ? "null" : "\"" + jsonText(value) + "\"";
     }
 
     BarTableSessionAdjustmentRecord mergeTableSessions(String primarySessionId, BarTableMergeRequest request) {
@@ -695,20 +843,22 @@ public class BarTableSessionService {
         );
     }
 
-    private BarTableSessionRecord sessionMovedToTable(BarTableSessionRecord session, BarTableRecord table, String targetStaff, Instant now) {
+    /** 转台：会话的台位、低消与可邀请人数快照、服务人换成给定值（版本 +1）；190-R3 撤销转台按转台前快照取值同用。 */
+    private BarTableSessionRecord sessionMovedToTable(BarTableSessionRecord session, String tableId, long minConsumptionCent,
+            int allowedPassFreeGuestCount, String serviceStaffId, Instant now) {
         return new BarTableSessionRecord(
                 session.id(),
                 session.barId(),
                 session.merchantId(),
                 session.businessDate(),
-                table.id(),
+                tableId,
                 session.reservationId(),
                 session.customerId(),
                 session.guestCount(),
-                table.minConsumptionCent(),
-                table.allowedPassFreeGuestCount(),
+                minConsumptionCent,
+                allowedPassFreeGuestCount,
                 session.salesStaffId(),
-                targetStaff,
+                serviceStaffId,
                 session.guestSource(),
                 session.status(),
                 session.openedAt(),
@@ -780,17 +930,30 @@ public class BarTableSessionService {
                 session.createdAt(), now);
     }
 
-    /** 转台快照：在会话快照上追加转台前旧并台链（只读留痕，供「撤销转台」整笔恢复）。 */
-    private String transferSnapshot(BarTableSessionRecord before, BarTableSessionRecord after, List<String> oldChain) {
+    /**
+     * 转台快照：在会话快照上追加转台前旧并台链（只读留痕，供「撤销转台」整笔恢复）。
+     * 第十八批 AB 段第 190 条 190-R3（BSM:1079「方可按转台前快照恢复原台位……可邀请人数、最低消费额」）：再记转台时刻（撤销以此为界判后续变化，
+     * 早于随后的定金重判）与根会话转台前的低消快照、可邀请人数快照、服务人。
+     */
+    private String transferSnapshot(BarTableSessionRecord before, BarTableSessionRecord after, List<String> oldChain, Instant transferredAt) {
         String base = sessionSnapshot(before, after);
         String chain = oldChain.stream().map(id -> "\"" + jsonText(id) + "\"").reduce((a, b) -> a + "," + b).orElse("");
-        return base.substring(0, base.length() - 1) + ",\"transferred_chain\":[" + chain + "]}";
+        return base.substring(0, base.length() - 1) + ",\"transferred_chain\":[" + chain + "],\"transferred_at\":\"" + transferredAt
+                + "\",\"min_consumption_snapshot_before_cent\":" + before.minConsumptionSnapshotCent()
+                + ",\"invite_capacity_snapshot_before\":" + before.allowedPassFreeGuestCountSnapshot()
+                + ",\"service_staff_before\":" + jsonTextOrNull(before.serviceStaffId()) + "}";
     }
 
     /** 第十八批 S 段第 167 条 167-R1（BSM:1079「记录内容包括……操作前后可邀请人数……邀请与成员归属」）：快照追加前后可邀请人数与已占人数。 */
     private static String withInviteCapacity(String snapshot, int before, int after, int occupied) {
         return snapshot.substring(0, snapshot.length() - 1) + ",\"invite_capacity_before\":" + before
                 + ",\"invite_capacity_after\":" + after + ",\"invite_occupied\":" + occupied + "}";
+    }
+
+    /** 第十八批 AB 段第 190 条 190-R2：快照追加本次转台前已转次数、本酒吧上限与用掉的超限转台申请编号（未设闸或未用为 null）。 */
+    private static String withTransferLimit(String snapshot, int count, Integer limit, String approvalId) {
+        return snapshot.substring(0, snapshot.length() - 1) + ",\"transfer_count\":" + count + ",\"transfer_limit\":" + limit
+                + ",\"transfer_limit_approval_id\":" + (approvalId == null ? "null" : "\"" + jsonText(approvalId) + "\"") + "}";
     }
 
     private BarTableSessionAdjustmentRecord newAdjustment(

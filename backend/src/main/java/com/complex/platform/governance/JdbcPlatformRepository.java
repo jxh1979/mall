@@ -1,5 +1,5 @@
 package com.complex.platform.governance;
-// 文件版本：V0.21
+// 文件版本：V0.22
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
@@ -76,6 +76,9 @@ class JdbcPlatformRepository implements PlatformRepository, SupervisorReviewRepo
             Map.entry("bar_business_day_config", "SELECT project_id FROM bar_business_day_configs WHERE id = :id"),
             Map.entry("amusement_business_day_config", "SELECT project_id FROM amusement_business_day_configs WHERE id = :id"),
             Map.entry("bar_bill", "SELECT m.project_id FROM bar_bills b JOIN merchants m ON m.id = b.bar_id WHERE b.id = :id"),
+            // 第十八批 AB 段第 190 条 190-R2：超限转台申请取酒吧（merchants.id＝bar_id）所属项目。
+            Map.entry("bar_table_transfer_limit_approval", "SELECT m.project_id FROM bar_table_transfer_limit_approvals a"
+                    + " JOIN merchants m ON m.id = a.bar_id WHERE a.id = :id"),
             Map.entry("inventory_purchase_request", "SELECT project_id FROM inventory_purchase_requests WHERE id = :id"),
             Map.entry("supply_contract", "SELECT project_id FROM supply_contracts WHERE id = :id"),
             Map.entry("purchase_quantity_resolution", "SELECT p.project_id FROM purchase_quantity_resolutions x"
@@ -1446,6 +1449,24 @@ class JdbcPlatformRepository implements PlatformRepository, SupervisorReviewRepo
                        pending_clear_alert_max_minutes = :hi, updated_at = now()
                  WHERE id = :id
                 """, Map.of("id", merchantId, "v", valueMinutes, "lo", minMinutes, "hi", maxMinutes));
+    }
+
+    @Override
+    public MerchantTableTransferLimitRecord findTableTransferLimit(String merchantId) {
+        return jdbcTemplate.queryForObject("""
+                SELECT table_transfer_limit, table_transfer_limit_min, table_transfer_limit_max
+                  FROM merchants WHERE id = :id
+                """, Map.of("id", merchantId), (rs, n) -> MerchantTableTransferLimitRecord.of(merchantId,
+                (Integer) rs.getObject(1), (Integer) rs.getObject(2), (Integer) rs.getObject(3)));
+    }
+
+    @Override
+    public void saveTableTransferLimit(String merchantId, int valueCount, int minCount, int maxCount) {
+        jdbcTemplate.update("""
+                UPDATE merchants SET table_transfer_limit = :v, table_transfer_limit_min = :lo,
+                       table_transfer_limit_max = :hi, updated_at = now()
+                 WHERE id = :id
+                """, Map.of("id", merchantId, "v", valueCount, "lo", minCount, "hi", maxCount));
     }
 
     // 列名前缀取自枚举常量（非请求输入）。

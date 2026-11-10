@@ -1,6 +1,6 @@
 package com.complex.platform.access.staff;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.access.AccessRepository;
@@ -279,10 +279,13 @@ public class StaffWorkPhoneAttendanceService {
     public List<Event> events(String userId) {
         try {
             String target = userId == null || userId.isBlank() ? auth.currentActor().id() : userId;
+            String dispatchMerchant=null;
             if (target.equals(auth.currentActor().id())) auth.requirePermission("staff.shift.view");
-            else { auth.requirePermission("staff.attendance.view"); requireScope(target,"staff.attendance.view"); }
-            var result=jdbc.query("SELECT * FROM staff_work_phone_events WHERE user_id=:user ORDER BY received_at DESC,id",
-                    Map.of("user",target),this::mapEvent);
+            else { auth.requirePermission("staff.attendance.view"); dispatchMerchant=requireScope(target,"staff.attendance.view"); }
+            // 第十八批 AB 段复核意见（第 191 条）：经派驻放行只列事件所在设备属于本商户的
+            var result=jdbc.query("SELECT * FROM staff_work_phone_events WHERE user_id=:user"
+                    +" AND (CAST(:merchant AS VARCHAR) IS NULL OR device_id IN (SELECT device_id FROM terminal_devices WHERE merchant_id=:merchant))"
+                    +" ORDER BY received_at DESC,id",new MapSqlParameterSource("user",target).addValue("merchant",dispatchMerchant),this::mapEvent);
             audit.recordSuccess("staff.attendance.receipts_viewed","staff.attendance.view","staff",target,null,null,Map.of("count",result.size()));
             return result;
         } catch (RuntimeException error) { failure("receipts_view_failed",error); throw error; }
@@ -464,7 +467,29 @@ public class StaffWorkPhoneAttendanceService {
                 .orElseThrow(()->ApiException.forbidden("ATTENDANCE_SHIFT_OWNER","须选择该员工已生效的班次"));
     }
 
-    void requireScope(String userId,String permission) {
+    /** 经派驻放行时返回调用方商户（调用方据此只给看、只给办该商户设备上的领取事件）；其余照旧核范围、返回 null。 */
+    String requireScope(String userId,String permission) {
+        String merchant=dispatchMerchant(userId);
+        if (merchant==null) requireReach(userId,permission);
+        return merchant;
+    }
+
+    /** 第十八批 AB 段复核意见（第 191 条；BSM:1143「其他公司的人员派驻到某家酒吧工作期间，由该酒吧负责排班、现场考勤和履约调度。」；PGM:659）：
+     *  单个领取事件——经派驻放行的只认事件所在设备属于本商户（terminal_devices.merchant_id）的，别家设备上的按非派驻路径判（照旧 403）。 */
+    void requireEventScope(Event event,String permission) {
+        String merchant=dispatchMerchant(event.userId());
+        if (merchant==null || !devices.findByDeviceId(event.deviceId()).map(d->merchant.equals(d.merchantId())).orElse(false))
+            requireReach(event.userId(),permission);
+    }
+
+    // 第十八批 AB 段第 191 条 191-R2（BSM:1143「由该酒吧负责排班、现场考勤和履约调度」）：商户账号核此刻派驻到本商户的员工（只看起止日期；
+    // 第十八批裁决 46 按该酒吧营业日判）
+    private String dispatchMerchant(String userId) {
+        String merchant=auth.currentActor().merchantId();
+        return merchant!=null && !merchant.isBlank() && staff.dispatchAt(userId,merchant,Instant.now()).isPresent() ? merchant : null;
+    }
+
+    private void requireReach(String userId,String permission) {
         var actor=auth.currentActor();
         var reach=auth.projectReach(actor,permission);
         var target=access.findUserById(userId).orElseThrow(()->ApiException.notFound("STAFF_NOT_FOUND","员工不存在"));

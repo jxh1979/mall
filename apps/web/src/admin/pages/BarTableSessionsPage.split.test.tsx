@@ -1,4 +1,4 @@
-// 文件版本：V0.03
+// 文件版本：V0.04
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { BarTableSessionsPage } from "./BarTableSessionsPage";
@@ -30,6 +30,7 @@ describe("卡座会话拆台", () => {
 
     await waitFor(() => expect(screen.getByTestId("bar-split-mode")).toBeTruthy());
     fireEvent.click(screen.getByTestId("bar-session-select-session-1"));
+    fireEvent.change(screen.getByTestId("bar-session-reason"), { target: { value: "客人分开坐" } });
     fireEvent.change(screen.getByTestId("bar-split-mode"), { target: { value: "single" } });
     fireEvent.click(screen.getByTestId("bar-split-submit"));
     expect(screen.getByTestId("bar-checkin-error").textContent).toContain("拆出的原台会话");
@@ -54,6 +55,7 @@ describe("卡座会话拆台", () => {
     await waitFor(() => expect(screen.queryByTestId("bar-split-member-assignments")).not.toBeNull());
     await waitFor(() => expect(screen.queryByTestId("bar-session-select-session-1")).not.toBeNull());
     fireEvent.click(screen.getByTestId("bar-session-select-session-1"));
+    fireEvent.change(screen.getByTestId("bar-session-reason"), { target: { value: "客人分开坐" } });
     fireEvent.change(screen.getByTestId("bar-split-invitation-assignments"), { target: { value: "rsv-1=session-2" } });
     fireEvent.change(screen.getByTestId("bar-split-member-assignments"), { target: { value: "invm-1=session-1\ninvm-2" } });
     fireEvent.click(screen.getByTestId("bar-split-submit"));

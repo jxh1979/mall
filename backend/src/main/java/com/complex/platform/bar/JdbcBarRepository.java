@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.14
+// 文件版本：V0.15
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
 import com.complex.platform.common.crypto.PiiCipher;
@@ -1848,6 +1848,36 @@ class JdbcBarRepository implements BarRepository {
         return jdbcTemplate.query("""
                 SELECT session_id FROM bar_order_service_sources WHERE order_id = :order_id
                 """, Map.of("order_id", orderId), (rs, rowNum) -> rs.getString("session_id")).stream().findFirst();
+    }
+
+    // 第十八批 AB 段第 190 条 190-R3（BSM:1079「再次转台、并台、拆台或任何邀请、成员、订单、付款、退款变化，均属于后续变化」；BSM:1062「撤销转台不得
+    // 覆盖已经发生的资金记录」）：since 及之后，这些会话的订单新建、明细新建或作废、账单新建或变动、付款、账单调整或退款、扫码付款，各订台的定金退款应付、
+    // 邀请签发或订台变动（吊销邀请会写），成员接受、入场或移出。
+    @Override
+    public boolean tableSessionChangedSince(List<String> sessionIds, Instant since) {
+        return Boolean.TRUE.equals(jdbcTemplate.queryForObject("""
+                WITH ord AS (SELECT order_id FROM bar_order_service_sources WHERE session_id IN (:ids)),
+                     bil AS (SELECT id FROM bar_bills WHERE order_id IN (SELECT order_id FROM ord)),
+                     rsv AS (SELECT reservation_id AS id FROM bar_table_sessions WHERE id IN (:ids) AND reservation_id IS NOT NULL
+                             UNION SELECT id FROM bar_reservations WHERE invitation_assigned_session_id IN (:ids))
+                SELECT EXISTS (SELECT 1 FROM bar_orders WHERE id IN (SELECT order_id FROM ord) AND created_at >= :since)
+                    OR EXISTS (SELECT 1 FROM bar_order_items WHERE order_id IN (SELECT order_id FROM ord)
+                                AND (created_at >= :since OR voided_at >= :since))
+                    OR EXISTS (SELECT 1 FROM bar_order_item_voids WHERE order_id IN (SELECT order_id FROM ord) AND created_at >= :since)
+                    OR EXISTS (SELECT 1 FROM bar_bills WHERE id IN (SELECT id FROM bil) AND (created_at >= :since OR updated_at >= :since))
+                    OR EXISTS (SELECT 1 FROM bar_bill_settlements WHERE bill_id IN (SELECT id FROM bil) AND settled_at >= :since)
+                    OR EXISTS (SELECT 1 FROM bar_bill_adjustments WHERE bill_id IN (SELECT id FROM bil)
+                                AND (created_at >= :since OR refunded_at >= :since))
+                    OR EXISTS (SELECT 1 FROM bar_scan_order_payments WHERE session_id IN (:ids)
+                                AND (created_at >= :since OR updated_at >= :since))
+                    OR EXISTS (SELECT 1 FROM ar_ap_items WHERE source_type = 'bar_deposit_refund' AND source_id IN (SELECT id FROM rsv)
+                                AND created_at >= :since)
+                    OR EXISTS (SELECT 1 FROM bar_reservations WHERE id IN (SELECT id FROM rsv)
+                                AND (invitation_issued_at >= :since OR updated_at >= :since))
+                    OR EXISTS (SELECT 1 FROM bar_reservation_invitation_members
+                                WHERE (assigned_session_id IN (:ids) OR reservation_id IN (SELECT id FROM rsv))
+                                  AND (created_at >= :since OR updated_at >= :since))
+                """, Map.of("ids", sessionIds, "since", timestampWithTimeZone(since)), Boolean.class));
     }
 
     @Override

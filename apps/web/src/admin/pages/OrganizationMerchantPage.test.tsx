@@ -1,4 +1,4 @@
-// 文件版本：V0.14
+// 文件版本：V0.15
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -430,6 +430,31 @@ describe("OrganizationMerchantPage 存档/删除写路径（M012-008）", () => 
     const [url, init] = putCalls()[0]!;
     expect(String(url)).toContain(`/api/v1/platform/merchants/m-bar/${path}`);
     expect(JSON.parse(String((init as RequestInit).body))).toMatchObject({ value_pct: 8, min_pct: 3, max_pct: 10 });
+  });
+
+  // 第十八批 AB 段第 190 条 190-R1（BSM:1079「同一会话的转台次数不得超过后台配置的上限（业务参数，按酒吧可配，出厂默认 10 次，须同时配置上下限）」）：
+  // 酒吧商户行「转台次数上限」入口：先读当前值（未配置按出厂 10 次），再按值、下限、上限三者同填 PUT（单位：次）。
+  it("酒吧商户：转台次数上限 → 读当前值后 PUT 值与上下限（蛇形键）", async () => {
+    const BAR = [{ id: "m-bar", project_id: "p-1", merchant_name: "酒吧丁", merchant_type: "bar", status: "active" }];
+    const ok = (data: unknown) => new Response(JSON.stringify({ success: true, code: "OK", message: "success", data }), { status: 200, headers: { "content-type": "application/json" } });
+    vi.spyOn(window, "prompt").mockReturnValueOnce("3").mockReturnValueOnce("1").mockReturnValueOnce("5");
+    renderPage((url, init) => {
+      if (url.includes("/table-transfer-limit") && init?.method === "PUT") return ok({ merchant_id: "m-bar", value_count: 3, min_count: 1, max_count: 5, effective_count: 3 });
+      if (url.includes("/table-transfer-limit")) return ok({ merchant_id: "m-bar", value_count: null, min_count: null, max_count: null, effective_count: 10 });
+      if (url.includes("/platform/merchants")) return envelope(BAR);
+      return undefined;
+    });
+    await waitFor(() => expect(screen.queryByTestId("merchant-actions-m-bar")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("merchant-actions-m-bar"));
+    await waitFor(() => expect(screen.queryByTestId("merchant-table-transfer-limit-m-bar")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("merchant-table-transfer-limit-m-bar"));
+    const fetchMock = globalThis.fetch as ReturnType<typeof vi.fn>;
+    const putCalls = () => fetchMock.mock.calls.filter(([, init]) => (init as RequestInit | undefined)?.method === "PUT");
+    await waitFor(() => expect(putCalls()).toHaveLength(1));
+    expect(window.prompt).toHaveBeenNthCalledWith(1, expect.stringContaining("未配置，按出厂 10 次"), "10");
+    const [url, init] = putCalls()[0]!;
+    expect(String(url)).toContain("/api/v1/platform/merchants/m-bar/table-transfer-limit");
+    expect(JSON.parse(String((init as RequestInit).body))).toMatchObject({ value_count: 3, min_count: 1, max_count: 5 });
   });
 
   it("写路径失败可见：存档接口报错 → setGlobalError 收到错误信息，不成未处理拒绝", async () => {

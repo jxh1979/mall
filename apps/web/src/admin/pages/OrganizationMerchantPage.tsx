@@ -1,4 +1,4 @@
-// 文件版本：V0.13
+// 文件版本：V0.14
 import React from "react";
 import { formatActionResult } from "../components/ActionResultView";
 import { TechDetails } from "../components/TechDetails";
@@ -389,6 +389,37 @@ export function OrganizationMerchantPage({ api, user, setActionResult, setGlobal
     }
   }
 
+  // 第十八批 AB 段第 190 条 190-R1（BSM:1079「同一会话的转台次数不得超过后台配置的上限（业务参数，按酒吧可配，出厂默认 10 次，须同时配置上下限）」）：
+  // 酒吧商户配置转台次数上限——先读当前值，再按值、下限、上限三者同填提交（后端校验值在闭区间内）。
+  async function configureTableTransferLimit(id: string) {
+    setGlobalError(null);
+    try {
+      const current = await api.get<{ valueCount?: number | null; minCount?: number | null; maxCount?: number | null; effectiveCount: number }>(
+        `/api/v1/platform/merchants/${id}/table-transfer-limit`);
+      const configured = current.valueCount != null;
+      const value = window.prompt(`转台次数上限（次）；${configured ? "当前已配置" : "未配置，按出厂 10 次"}：`, String(current.effectiveCount));
+      if (value === null) return;
+      const min = window.prompt("转台次数上限的下限（次，须与上限值、上限同时配置）：", configured ? String(current.minCount) : "");
+      if (min === null) return;
+      const max = window.prompt("转台次数上限的上限（次，须与上限值、下限同时配置）：", configured ? String(current.maxCount) : "");
+      if (max === null) return;
+      const v = Number(value.trim()), lo = Number(min.trim()), hi = Number(max.trim());
+      if (![v, lo, hi].every((n) => Number.isInteger(n) && n >= 0) || lo > v || v > hi) {
+        setGlobalError("须同时填写转台次数上限及其上下限（非负整数次），上限值须在上下限内");
+        return;
+      }
+      await api.put(`/api/v1/platform/merchants/${id}/table-transfer-limit`, {
+        idempotencyKey: `merchant-table-transfer-limit-${id}-${Date.now()}`,
+        valueCount: v,
+        minCount: lo,
+        maxCount: hi,
+      });
+      setActionResult({ action: "merchant_table_transfer_limit_configured", id });
+    } catch (actionError) {
+      reportWriteFailure(actionError, "转台次数上限保存失败");
+    }
+  }
+
   async function loadOperatingProjects(row: MerchantRow) {
     try {
       setOperating({ merchant: row, view: await api.get<OperatingProjectsView>(`/api/v1/platform/merchants/${row.id}/operating-projects`) });
@@ -525,6 +556,7 @@ export function OrganizationMerchantPage({ api, user, setActionResult, setGlobal
                 { key: "pending-clear-alert", label: "待清台提醒时限", permissions: ["merchant.profile.manage"], onClick: () => void configurePendingClearAlert(row.id), testId: `merchant-pending-clear-alert-${row.id}` },
                 { key: "no-show-limit", label: "代订爽约率上限", permissions: ["merchant.profile.manage"], onClick: () => void configureMerchantPercentParam(row.id, "staff-booking-no-show-limit", "代订爽约率上限", "未配置，不自动停用"), testId: `merchant-no-show-limit-${row.id}` },
                 { key: "pour-loss-rate", label: "损耗率阈值", permissions: ["merchant.profile.manage"], onClick: () => void configureMerchantPercentParam(row.id, "pour-loss-rate", "损耗率阈值", "未配置，按出厂 5%"), testId: `merchant-pour-loss-rate-${row.id}` },
+                { key: "table-transfer-limit", label: "转台次数上限", permissions: ["merchant.profile.manage"], onClick: () => void configureTableTransferLimit(row.id), testId: `merchant-table-transfer-limit-${row.id}` },
               ]
             : []),
           { key: "archive", label: "存档", permissions: ["merchant.profile.manage"], onClick: () => void archiveMerchant(row.id, true), testId: `merchant-archive-${row.id}` },

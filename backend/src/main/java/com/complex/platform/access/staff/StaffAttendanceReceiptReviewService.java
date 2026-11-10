@@ -1,6 +1,6 @@
 package com.complex.platform.access.staff;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -56,7 +56,8 @@ public class StaffAttendanceReceiptReviewService {
         try {
             auth.requirePermission(PERMISSION);
             var event=event(eventId);
-            phone.requireScope(event.userId(),PERMISSION);
+            // 第十八批 AB 段复核意见（第 191 条）：派驻放行只认本商户设备上的事件
+            phone.requireEventScope(event,PERMISSION);
             if(request==null || request.actualAt()==null)
                 throw ApiException.badRequest("VALIDATION_FAILED","须填写核实的实际领取时间");
             String reason=requireText(request.reason(),"reason");
@@ -102,7 +103,7 @@ public class StaffAttendanceReceiptReviewService {
         try {
             var event=event(eventId);
             if(event.userId().equals(auth.currentActor().id())) auth.requirePermission("staff.shift.view");
-            else {auth.requirePermission("staff.attendance.view");phone.requireScope(event.userId(),"staff.attendance.view");}
+            else {auth.requirePermission("staff.attendance.view");phone.requireEventScope(event,"staff.attendance.view");}
             var result=jdbc.query("SELECT * FROM staff_attendance_receipt_reviews WHERE event_id=:event ORDER BY created_at,id",Map.of("event",eventId),this::map);
             audit.recordSuccess("staff.attendance.receipt_review_viewed","staff.attendance.view","staff_work_phone_event",eventId,null,null,Map.of("count",result.size()));
             return result;

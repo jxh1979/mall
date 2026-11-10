@@ -1,5 +1,5 @@
 package com.complex.platform.governance;
-// 文件版本：V0.18
+// 文件版本：V0.19
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -447,6 +447,42 @@ public class PlatformService {
                     }
                     repository.savePendingClearAlert(id, value, min, max);
                     return repository.findPendingClearAlert(id);
+                });
+    }
+
+    /** 第十八批 AB 段第 190 条 190-R1（BSM:1079）：读酒吧（商户）转台次数上限；未配置返回出厂 10 次。 */
+    public MerchantTableTransferLimitRecord getTableTransferLimit(String merchantId) {
+        authorizationService.requirePlatformScope();
+        String id = requireText(merchantId, "merchant_id");
+        requireMerchant(id, "merchant.profile.view");
+        MerchantTableTransferLimitRecord result = repository.findTableTransferLimit(id);
+        auditEventService.recordSuccess("merchant.viewed", "merchant.profile.view", "merchant", id, null, null,
+                Map.of("entry", "/api/v1/platform/merchants/{merchant_id}/table-transfer-limit"));
+        return result;
+    }
+
+    /**
+     * 第十八批 AB 段第 190 条 190-R1（BSM:1079「同一会话的转台次数不得超过后台配置的上限（业务参数，按酒吧可配，出厂默认 10 次，须同时配置上下限）」；
+     * 决策台账 DEC-R6-19 同句）：范式同 TK-27 待清台提醒时限——值、下限、上限三者同填且 0≤下限≤值≤上限，否则 400；不另设硬上下限。
+     */
+    public MerchantTableTransferLimitRecord configureTableTransferLimit(String merchantId,
+                                                                        com.complex.platform.governance.dto.MerchantTableTransferLimitRequest request) {
+        authorizationService.requirePlatformScope();
+        String id = requireText(merchantId, "merchant_id");
+        return executeWrite("configureTableTransferLimit:" + id, request == null ? null : request.idempotencyKey(),
+                request, MerchantTableTransferLimitRecord.class, "merchant.table_transfer_limit_configured",
+                "merchant.table_transfer_limit_config_failed", "merchant.profile.manage", "merchant",
+                () -> requireMerchant(id, "merchant.profile.manage"), () -> {
+                    findMerchant(id);
+                    Integer value = request == null ? null : request.valueCount();
+                    Integer min = request == null ? null : request.minCount();
+                    Integer max = request == null ? null : request.maxCount();
+                    if (value == null || min == null || max == null || min < 0 || min > value || value > max) {
+                        throw ApiException.badRequest("VALIDATION_FAILED",
+                                "须同时填写转台次数上限及其上下限（次，不小于 0），上限值须在上下限内");
+                    }
+                    repository.saveTableTransferLimit(id, value, min, max);
+                    return repository.findTableTransferLimit(id);
                 });
     }
 
@@ -1449,6 +1485,9 @@ public class PlatformService {
             return record.id();
         }
         if (value instanceof MerchantPendingClearAlertRecord record) {
+            return record.merchantId();
+        }
+        if (value instanceof MerchantTableTransferLimitRecord record) {
             return record.merchantId();
         }
         if (value instanceof MerchantPercentParamRecord record) {
