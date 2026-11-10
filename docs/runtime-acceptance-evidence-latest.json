@@ -8,14 +8,14 @@
     "RUNTIME_EVIDENCE_BOUND_TO_SOURCE_FINGERPRINT",
     "RUNTIME_EVIDENCE_DOES_NOT_CLOSE_PRODUCTION_MANIFEST"
   ],
-  "generated_at": "2026-11-10T16:10:10.913Z",
+  "generated_at": "2026-11-10T19:48:48.096Z",
   "git": {
-    "head": "d405626b03a6edd6ac1598bcf8f5d29ec02930d8",
-    "head_short": "d405626b",
-    "branch": "feature/business-code-batch48-20261106",
+    "head": "c16382afa9bd7b620f3c7dac5e17fbb1d1fe694d",
+    "head_short": "c16382af",
+    "branch": "feature/business-code-batch49-20261106",
     "worktree_dirty": false,
-    "source_fingerprint": "d50463e66387a7cd658e8eefae4ff8e676b3ca7752f6c50c8ea089f9b7866730",
-    "source_fingerprint_file_count": 3348,
+    "source_fingerprint": "694706331238c98257bffe136641b3f707c3b65d535fe1074873acc79034e800",
+    "source_fingerprint_file_count": 3362,
     "source_fingerprint_paths": [
       "backend/src/main",
       "backend/src/test",
@@ -50,12 +50,12 @@
   },
   "backend_surefire": {
     "path": "backend/target/surefire-reports",
-    "suites": 560,
-    "tests": 6602,
+    "suites": 562,
+    "tests": 6613,
     "failures": 0,
     "errors": 0,
     "skipped": 0,
-    "latest_mtime": "2026-11-10T16:06:53.665Z",
+    "latest_mtime": "2026-11-10T19:46:59.731Z",
     "passed": true
   },
   "web_unit_source": {
@@ -187,6 +187,7 @@
       "apps/web/src/admin/pages/EnergyWorkbenchPage.guidedcreate.test.tsx",
       "apps/web/src/admin/pages/EnergyWorkbenchPage.test.tsx",
       "apps/web/src/admin/pages/EnergyWorkflowPanel.test.tsx",
+      "apps/web/src/admin/pages/EntityTaxDeclarationsPage.test.tsx",
       "apps/web/src/admin/pages/ExportDownloads.test.tsx",
       "apps/web/src/admin/pages/FacilityWorkbenchPage.alarm.test.tsx",
       "apps/web/src/admin/pages/FacilityWorkbenchPage.customercomplaint.test.tsx",
@@ -202,11 +203,14 @@
       "apps/web/src/admin/pages/FinanceArApLedgerPage.test.tsx",
       "apps/web/src/admin/pages/FinanceDailyClosePanel.test.tsx",
       "apps/web/src/admin/pages/FinanceDividendsPage.guidedcreate.test.tsx",
+      "apps/web/src/admin/pages/FinanceDividendsPage.hold.test.tsx",
       "apps/web/src/admin/pages/FinanceDividendsPage.legal.test.tsx",
       "apps/web/src/admin/pages/FinanceDividendsPage.oneshot.test.tsx",
       "apps/web/src/admin/pages/FinanceDividendsPage.reserve.test.tsx",
+      "apps/web/src/admin/pages/FinanceDividendsPage.tax.test.tsx",
       "apps/web/src/admin/pages/FinanceMerchantExpensePage.guidedcreate.test.tsx",
       "apps/web/src/admin/pages/FinanceMerchantExpensePage.lock.test.tsx",
+      "apps/web/src/admin/pages/FinanceMerchantExpensePage.payroll.test.tsx",
       "apps/web/src/admin/pages/FinancePayrollPaymentPanel.test.tsx",
       "apps/web/src/admin/pages/FinancePropertyFeePage.guidedcreate.test.tsx",
       "apps/web/src/admin/pages/FinancePropertyFeePage.robustness.test.tsx",
@@ -384,8 +388,8 @@
       "apps/web/src/dealer/dealerPortalClient.test.ts",
       "apps/web/src/shared/ReplayedNotice.test.tsx"
     ],
-    "file_count": 323,
-    "test_count_from_source": 1683
+    "file_count": 327,
+    "test_count_from_source": 1690
   },
   "web_build": {
     "dist_index_exists": true,
@@ -403,18 +407,18 @@
         "exists": true
       }
     ],
-    "asset_count": 169,
+    "asset_count": 170,
     "main_js_assets": [
       {
-        "path": "apps/web/dist/assets/main-gOS4xsDC.js",
+        "path": "apps/web/dist/assets/main-CHyuKd0D.js",
         "size_bytes": 4337,
-        "mtime": "2026-11-10T16:07:01.962Z"
+        "mtime": "2026-11-10T19:47:08.120Z"
       }
     ],
     "largest_asset": {
       "path": "apps/web/dist/assets/vendor-antd-CzvkKKQu.js",
       "size_bytes": 251112,
-      "mtime": "2026-11-10T16:07:01.965Z"
+      "mtime": "2026-11-10T19:47:08.123Z"
     },
     "no_main_bundle_warning_expected": true
   },
