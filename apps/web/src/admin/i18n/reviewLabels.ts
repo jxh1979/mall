@@ -1,4 +1,4 @@
-// 文件版本：V0.04
+// 文件版本：V0.05
 // 第十八批 I 段第 87 条（PGM:287「界面全中文（所有终端零英文）」）：主管复核的动作码、对象码、档位码与证据类型中文名，
 // 主管复核页与审批链页（ADM-GOV-009）共用（展示层翻译，提交仍原码）。原表与 formatReviewValue 自 SupervisorReviewPage.tsx 搬入。
 import { formatBusinessStatus } from "./statusLabels";
@@ -25,6 +25,8 @@ export const REVIEW_LABELS: Record<string, string> = {
   "work_order.bearer_dispute": "工单费用承担方争议", work_order_bearer_dispute: "工单费用承担方争议单",
   // 第十八批 AB 段第 190 条 190-R2（BSM:1079「达到上限后须主管审批才能继续转台」）：超限转台申请。
   "bar.table_session.transfer_over_limit": "转台超过次数上限", bar_table_transfer_limit_approval: "超限转台申请",
+  // 第十八批 AC 段第 210 条 210-R2（第十八批裁决 42）：税费实际申报金额登记走财务、税务、法务审核与最高确认。
+  entity_tax_declaration: "税费申报登记",
   "parking.release.waive": "停车免费放行与减免", parking_manual_release: "停车人工放行",
   "leasing.blacklist_exception": "黑名单例外放行", leasing_blacklist_exception: "黑名单例外放行单",
   "leasing.intent.key_stage": "招商意向关键阶段确认", leasing_intent: "招商意向",

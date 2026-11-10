@@ -3,12 +3,14 @@ package com.complex.platform.merchantexpense;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
+import com.complex.platform.access.staff.JdbcStaffRepository;
 import com.complex.platform.common.api.PageResponse;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Types;
 import java.time.Instant;
 import java.time.YearMonth;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
@@ -38,9 +40,11 @@ class JdbcMerchantExpenseRepository implements MerchantExpenseRepository {
     }
 
     private final NamedParameterJdbcTemplate jdbcTemplate;
+    private final JdbcStaffRepository staffRepository;
 
-    JdbcMerchantExpenseRepository(NamedParameterJdbcTemplate jdbcTemplate) {
+    JdbcMerchantExpenseRepository(NamedParameterJdbcTemplate jdbcTemplate, JdbcStaffRepository staffRepository) {
         this.jdbcTemplate = jdbcTemplate;
+        this.staffRepository = staffRepository;
     }
 
     private static MapSqlParameterSource filterParams(
@@ -273,10 +277,87 @@ class JdbcMerchantExpenseRepository implements MerchantExpenseRepository {
     }
 
     /**
+     * 人工成本自动挂接（第十八批 AC 段第 210 条 210-R1，BSM:1801「连接工资单月结，拿到这期的人工成本」；BSM:1774 人工成本「含薪资、销售提成、绩效、
+     * 奖金与社保，并含主理人本人的报酬」）。两段，都记 labor、来源 auto_payroll，关账月份不挂（BSM:1787）：
+     * (a) 本店员工工资单：该月已定格（表内行即已定格）、发放主体就是该店经营主体（生效绑定的运营主体，否则档案上的 business_entity_id，
+     * 同 StaffRegistrationService.companyChain）的工资单，金额＝税前应发（total_cent＋tax_cent）去掉小费与服务费应发（BSM:1719 代收代付）；
+     * 派驻、营销人员的工资单由其所属主体发放、基本薪资由所属主体承担（BSM:1142、1143），不挂。
+     * 18AC 复核修复：本店员工派驻到别家酒吧时，工资单里在那家（≠工资单商户）促成、计提时点所属那家营业日在派驻期内的提成行（bar_commission）及其
+     * 作废冲回行（bar_commission_reversal）已由那家经 (b) 拨付承担（BSM:1143「除此之外的一切费用一律由使用方酒吧承担——包括但不限于该人员在该酒吧
+     * 促成订单产生的提成」），从 (a) 金额里扣掉，扣完为 0 的不挂；派驻在期判法同 JdbcStaffRepository#aggregateDispatchedCommissions
+     * （JdbcStaffRepository#dispatchAt，第十八批裁决 46 按计提营业日）。
+     * (b) 派驻、营销人员提成拨付：ar_ap_items source_type=dispatch_commission_transfer，应付取正、作废冲回应收取负，按其会计期间归月。
+     */
+    @Override
+    public int attachPayrollLabor(String period, String operatorUserId, Instant now) {
+        MapSqlParameterSource params = new MapSqlParameterSource()
+                .addValue("period", period)
+                .addValue("operator", operatorUserId, Types.VARCHAR)
+                .addValue("created_at", timestampWithTimeZone(now));
+        addMonthBounds(params, period);
+        List<String> dispatchedLines = new ArrayList<>();
+        jdbcTemplate.query("""
+                SELECT l.id, c.sales_staff_id, COALESCE(b.merchant_id, b.bar_id) AS bar_merchant_id, c.created_at
+                  FROM staff_payroll_statements s
+                  JOIN staff_payroll_statement_lines l ON l.statement_id = s.id
+                  JOIN bar_commission_calculations c ON c.id = l.source_id
+                  JOIN bar_bills b ON b.id = c.bill_id
+                 WHERE s.month = :period
+                   AND l.source_type IN ('bar_commission', 'bar_commission_reversal')
+                   AND c.sales_staff_id IS NOT NULL
+                   AND COALESCE(b.merchant_id, b.bar_id) <> s.merchant_id
+                """, params, rs -> {
+                    if (staffRepository.dispatchAt(rs.getString("sales_staff_id"), rs.getString("bar_merchant_id"),
+                            rs.getTimestamp("created_at").toInstant()).isPresent()) {
+                        dispatchedLines.add(rs.getString("id"));
+                    }
+                });
+        params.addValue("dispatched_lines", dispatchedLines);
+        int statements = jdbcTemplate.update("""
+                INSERT INTO merchant_expense_entries (
+                    id, merchant_id, period, expense_type, amount_cent, source, source_ref,
+                    note, operator_user_id, created_at
+                )
+                SELECT 'mex_apy_' || s.id, m.id, :period, 'labor',
+                       s.total_cent + s.tax_cent - s.tip_cent - s.service_fee_cent - dc.cent, 'auto_payroll', s.id,
+                       '工资单月结人工成本（工资单 ' || s.id || '）', :operator, :created_at
+                  FROM staff_payroll_statements s
+                  JOIN merchants m ON m.id = s.merchant_id
+                  LEFT JOIN LATERAL (SELECT b.operation_entity_id FROM business_entity_bindings b
+                                      WHERE b.merchant_id = m.id AND b.status = 'active'
+                                      ORDER BY b.created_at DESC, b.id LIMIT 1) bb ON TRUE
+                  CROSS JOIN LATERAL (SELECT COALESCE(SUM(l.amount_cent), 0) AS cent FROM staff_payroll_statement_lines l
+                                       WHERE l.statement_id = s.id AND l.id IN (%s)) dc
+                 WHERE s.month = :period
+                   AND s.payer_company_id = COALESCE(bb.operation_entity_id, m.business_entity_id)
+                   AND s.total_cent + s.tax_cent - s.tip_cent - s.service_fee_cent - dc.cent <> 0"""
+                .formatted(dispatchedLines.isEmpty() ? "NULL" : ":dispatched_lines")
+                + lockNotExists("m.id")
+                + "\n                ON CONFLICT (id) DO NOTHING", params);
+        return statements + jdbcTemplate.update("""
+                INSERT INTO merchant_expense_entries (
+                    id, merchant_id, period, expense_type, amount_cent, source, source_ref,
+                    note, operator_user_id, created_at
+                )
+                SELECT 'mex_adc_' || i.id, i.merchant_id, :period, 'labor',
+                       CASE WHEN i.direction = 'payable' THEN i.amount_cent ELSE -i.amount_cent END, 'auto_payroll', i.id,
+                       CASE WHEN i.direction = 'payable' THEN '派驻、营销人员提成拨付（应付单 ' ELSE '派驻、营销人员提成作废冲回（应收单 ' END
+                           || i.item_no || '）', :operator, :created_at
+                  FROM ar_ap_items i
+                 WHERE i.source_type = 'dispatch_commission_transfer'
+                   AND i.accounting_period = :period
+                   AND i.merchant_id IS NOT NULL
+                   AND i.amount_cent <> 0"""
+                + lockNotExists("i.merchant_id")
+                + "\n                ON CONFLICT (id) DO NOTHING", params);
+    }
+
+    /**
      * 金额漂移报告：上游（ar_ap_items 锁定后补录审批可原地改 amount_cent）改账后，快照式挂接不自动追改。
      * 本查询对该期每个 auto 挂接行，算台账净额 = 原行 + 指向它的红字冲销行合计，与上游当前金额比对，
      * 不等则列入清单（处置 SOP：红字冲销旧行 + 手工录入修正额）。上游表按行 id 前缀区分
      * （mex_ap_=property_fee_bills，其余=ar_ap_items；ar_ap_items 应付按负额比，同 attachContractRent 的红字分录，155-R2）。
+     * auto_payroll（210-R1）不比：工资单定格后不改，提成拨付与作废冲回各为独立单据。
      */
     @Override
     public List<MerchantExpenseDriftRecord> listAutoDrift(String period) {
@@ -293,7 +374,7 @@ class JdbcMerchantExpenseRepository implements MerchantExpenseRepository {
                                        FROM merchant_expense_entries
                                       WHERE source = 'manual' AND source_ref IS NOT NULL
                                       GROUP BY source_ref) rv ON rv.source_ref = e.id
-                         WHERE e.period = :period AND e.source <> 'manual'
+                         WHERE e.period = :period AND e.source NOT IN ('manual', 'auto_payroll')
                        ) base
                   LEFT JOIN ar_ap_items ar ON ar.id = base.source_ref
                   LEFT JOIN property_fee_bills pb ON pb.id = base.source_ref

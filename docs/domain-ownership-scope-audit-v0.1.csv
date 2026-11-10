@@ -179,6 +179,7 @@ dealers,direct,project_id,project_id column on dealers,ready for project/merchan
 deposit_ledger,direct,merchant_id,merchant_id column on deposit_ledger,ready for project/merchant scoped query enforcement,V0.07,covered
 dividend_deduction_items,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",V0.07,covered
 dividend_legal_confirmations,direct,merchant_id,merchant_id column on dividend_legal_confirmations,ready for project/merchant scoped query enforcement,V0.07,covered
+dividend_period_holds,direct,merchant_id,merchant_id column on dividend_period_holds,ready for project/merchant scoped query enforcement,V0.07,covered
 dividend_plans,direct,merchant_id,merchant_id column on dividend_plans,ready for project/merchant scoped query enforcement,V0.07,covered
 dividend_reserve_releases,direct,merchant_id,merchant_id column on dividend_reserve_releases,ready for project/merchant scoped query enforcement,V0.07,covered
 dividend_statement_lines,direct,merchant_id,merchant_id column on dividend_statement_lines,ready for project/merchant scoped query enforcement,V0.07,covered
@@ -203,6 +204,7 @@ entitlement_day_activations,single_complex_default,P0_SINGLE_COMPLEX,single-comp
 entitlement_entry_records,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",V0.07,covered
 entitlement_sessions,direct,project_id,project_id column on entitlement_sessions,ready for project/merchant scoped query enforcement,V0.07,covered
 entitlement_templates,direct,venue_id,venue_id column on entitlement_templates,ready for project/merchant scoped query enforcement,V0.07,covered
+entity_tax_declarations,direct,business_entity_id,business_entity_id column on entity_tax_declarations,ready for project/merchant scoped query enforcement,V0.07,covered
 evidence_attachments,direct,merchant_id,merchant_id column on evidence_attachments,ready for project/merchant scoped query enforcement,V0.07,covered
 evidence_events,direct,merchant_id,merchant_id column on evidence_events,ready for project/merchant scoped query enforcement,V0.07,covered
 evidence_reviews,direct,merchant_id,merchant_id column on evidence_reviews,ready for project/merchant scoped query enforcement,V0.07,covered

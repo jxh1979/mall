@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -98,8 +98,10 @@ class BarBadDebtDividendCostJdbcIntegrationTests {
         bars.saveProduct(new BarProductRecord(wine, bar, bar, "干红", "wine", 30000L, "CNY", item, location, true, "active",
                 now, now, null, null, null, false, null, null, null));
         // 分红方案：月度、只计酒吧收入、扣销货成本。
-        jdbc.update("INSERT INTO dividend_plans (id, merchant_id, principal_user_id, period_type, revenue_domains, include_inventory_cost, status)"
-                + " VALUES (?, ?, 'usr_bdd_principal', 'monthly', 'bar', TRUE, 'active')", "divp_bdd_" + s, bar);
+        jdbc.update("INSERT INTO dividend_plans (id, merchant_id, principal_user_id, period_type, revenue_domains, include_inventory_cost, status,"
+                + " payout_pay_slot) VALUES (?, ?, 'usr_bdd_principal', 'monthly', 'bar', TRUE, 'active', 1)", "divp_bdd_" + s, bar);
+        // 210-R3 第十八批裁决 42 出单闸前提：经营主体各月已有生效税费登记。
+        com.complex.platform.support.EntityTaxFixture.taxDeclaredForAllMonths(jdbc, bar);
         StaffRequestFixture staffs = new StaffRequestFixture(jdbc);
         cashier = staffs.staff("usr_bdd_cashier_" + s, "staff", project, bar, "bar.order.create", "finance.payment.register", "bar.bill.hang",
                 "bar.table.open_close");

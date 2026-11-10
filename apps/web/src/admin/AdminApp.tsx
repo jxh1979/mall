@@ -1,4 +1,4 @@
-// 文件版本：V0.18
+// 文件版本：V0.19
 import React from "react";
 import { ConfigProvider, theme } from "antd";
 import zhCN from "antd/es/locale/zh_CN";
@@ -37,6 +37,7 @@ const FinanceArApLedgerPage = React.lazy(() => import("./pages/FinanceArApLedger
 const FinancePropertyFeePage = React.lazy(() => import("./pages/FinancePropertyFeePage").then((m) => ({ default: m.FinancePropertyFeePage })));
 const FinanceMerchantExpensePage = React.lazy(() => import("./pages/FinanceMerchantExpensePage").then((m) => ({ default: m.FinanceMerchantExpensePage })));
 const FinanceDividendsPage = React.lazy(() => import("./pages/FinanceDividendsPage").then((m) => ({ default: m.FinanceDividendsPage })));
+const EntityTaxDeclarationsPage = React.lazy(() => import("./pages/EntityTaxDeclarationsPage").then((m) => ({ default: m.EntityTaxDeclarationsPage })));
 const MerchantZoneDividendsPage = React.lazy(() => import("./pages/MerchantZoneDividendsPage").then((m) => ({ default: m.MerchantZoneDividendsPage })));
 const MerchantZoneLicensesPage = React.lazy(() => import("./pages/MerchantZoneLicensesPage").then((m) => ({ default: m.MerchantZoneLicensesPage })));
 const VoucherLedgerPage = React.lazy(() => import("./pages/VoucherLedgerPage").then((m) => ({ default: m.VoucherLedgerPage })));
@@ -410,6 +411,8 @@ function renderPage(route: AdminRoute, props: AdminPageProps) {
       return <FinanceMerchantExpensePage {...props} />;
     case "ADM-FIN-007":
       return <FinanceDividendsPage {...props} />;
+    case "ADM-FIN-010":
+      return <EntityTaxDeclarationsPage {...props} />;
     case "ADM-FIN-008":
       return <TicketPointsBillingPage {...props} />;
     case "ADM-STL-001":

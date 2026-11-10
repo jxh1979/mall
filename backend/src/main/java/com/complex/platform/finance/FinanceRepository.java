@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.21
+// 文件版本：V0.22
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -337,10 +337,11 @@ public interface FinanceRepository {
 
     /**
      * V304 分红留存释放：re-tag 应付项 source_type（前态守卫：仅当现值=expected 才翻，幂等）。返回影响行数。
+     * 211-R2：同一 UPDATE 把到期日改为 dueDate（方案发放付账日）。
      * default 兜底返回 0（测试双子无需真改；真 Jdbc @Override 为带守卫的 UPDATE）。
      */
     default int retagArApItemSourceType(
-            String id, String expectedSourceType, String newSourceType, java.time.Instant now) {
+            String id, String expectedSourceType, String newSourceType, java.time.LocalDate dueDate, java.time.Instant now) {
         return 0;
     }
 

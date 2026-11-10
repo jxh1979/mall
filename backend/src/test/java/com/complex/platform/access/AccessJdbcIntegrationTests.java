@@ -1,6 +1,6 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -796,13 +796,15 @@ class AccessJdbcIntegrationTests {
     }
 
     // M007-F-05（PGM-1.10.1 五类权限授出前须先审批：资金/分红发放、敏感经营数据查看/导出）：字典分类不得为「日常」。
+    // 18AC 复核修复（PGM:666 第五类「税费规则与税费调整」）：税费申报登记 finance.entity_tax.manage（V616）同列。
     @Test
     void moneyAndSensitiveExportPermissionsRequireApproval() {
         assertThat(jdbcTemplate.queryForList("""
                 SELECT permission_code FROM permissions
                  WHERE requires_approval = FALSE
                    AND permission_code IN ('finance.dividend.manage', 'finance.ar_ap.export',
-                                           'analytics.report.export', 'bar.internal_settlement_price.view')
+                                           'analytics.report.export', 'bar.internal_settlement_price.view',
+                                           'finance.entity_tax.manage')
                  ORDER BY permission_code
                 """, String.class)).isEmpty();
     }

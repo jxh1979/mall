@@ -1,4 +1,4 @@
-// 文件版本：V0.03
+// 文件版本：V0.04
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
@@ -14,6 +14,7 @@ import type { PagedResult } from "../client/adminClient";
 import type {
   AdminPageProps,
   DividendComputeResult,
+  DividendHoldRow,
   DividendPlanRow,
   DividendReserveLedgerRow,
   DividendStatementDetail,
@@ -63,13 +64,17 @@ const DOMAIN_LABELS: Record<string, string> = {
   ticket: "售票",
 };
 
-const EXPENSE_TYPE_LABELS: Record<string, string> = {
-  rent_allocation: "房租分摊",
-  energy: "能耗费",
-  property_fee: "物业费",
-  labor: "人工",
-  amortization: "摊销",
-  other: "其他",
+// 211-R2（BSM:1787「发放走应付款项，落在三个付账日之一，具体哪一个由该公司在分红周期配置中指定」）：全平台统一的每月三个付账日。
+const PAY_SLOT_LABELS: Record<string, string> = {
+  "1": "第一个付账日",
+  "2": "第二个付账日",
+  "3": "第三个付账日",
+};
+
+// 211-R1（BSM:1777「若因特殊情况需要整期暂不分红或暂缓分红的，须由主理人与娱乐平台公司协商一致后执行，并记录原因与协商结果」）：登记类别。
+const HOLD_TYPE_LABELS: Record<string, string> = {
+  skip: "暂不分红",
+  defer: "暂缓分红",
 };
 
 export const DIVIDEND_LINE_LABELS: Record<string, string> = {
@@ -85,6 +90,7 @@ export const DIVIDEND_LINE_LABELS: Record<string, string> = {
   expense_amortization: "费用·摊销",
   expense_other: "费用·其他",
   expense_ticket_service_fee: "费用·门票综合服务费（单店门票）",
+  tax_period: "该期税费",
   net_profit: "净利润",
   loss_carryforward: "亏损结转（往期未弥补亏损）",
   legal_cap: "依法可分配金额（核定）",
@@ -100,7 +106,7 @@ export const DIVIDEND_LINE_LABELS: Record<string, string> = {
 const TEXT = {
   title: "持股分红",
   description:
-    "平台持股 + 主理人经营的分红周期作业：期间收入 − 销货成本（V296 成本台账）− 费用（V297 费用台账）= 净利润，按方案比例劈分，主理人侧按股息红利代扣个税后净额发放。比例/税率/周期/基数构成全部可配，80/20 与 20% 仅默认值；每期算式逐项留痕可追溯。",
+    "平台持股 + 主理人经营的分红周期作业：期间收入 − 销货成本（V296 成本台账）− 费用（V297 费用台账）− 该期税费（已生效的税费实际申报金额）= 净利润，按方案比例劈分，主理人侧按股息红利代扣个税后净额发放。比例/税率/周期/计入收入域可配，销货成本、全部费用与该期税费一律扣减，80/20 与 20% 仅默认值；每期算式逐项留痕可追溯。",
   loadFailed: "分红数据读取失败",
   detailFailed: "计算单明细读取失败",
   merchantRequired: "请选择商户。",
@@ -108,7 +114,7 @@ const TEXT = {
   shareInvalid: "平台比例须在 0~100 之间。",
   taxInvalid: "代扣税率须在 0~100 之间。",
   domainRequired: "至少勾选一个计入收入域。",
-  expenseRequired: "至少勾选一种计入费用类别。",
+  paySlotRequired: "请选择发放付账日。",
   periodLabelRequired: "请填写期间标签（月份如 2026-07，季度如 2026-Q3，半年如 2026-H1，年度如 2026）。",
   reasonRequired: "驳回理由必填（进入审计留痕）。",
   floorPercentInvalid: "留存比例须在 0~100 之间。",
@@ -116,7 +122,14 @@ const TEXT = {
   legalAmountInvalid: "依法可分配金额须为不小于 0 的金额（元）。",
   legalTaxRefRequired: "请填写专业财税核算结果依据。",
   legalResolutionRequired: "请填写公司有效分配决议。",
+  holdPeriodRequired: "请填写期间标签（须与该商户分红方案的周期一致）。",
+  holdTypeRequired: "请选择暂不分红或暂缓分红。",
+  holdReasonRequired: "请填写原因。",
+  holdNegotiationRequired: "请填写协商结果。",
+  liftResultRequired: "请填写恢复分红的协商结果。",
 };
+
+const EMPTY_HOLD_FORM = { merchantId: "", periodLabel: "", holdType: "", reason: "", negotiationResult: "" };
 
 function centToYuan(cent: number | undefined | null): string {
   if (cent === undefined || cent === null || Number.isNaN(Number(cent))) return "—";
@@ -147,8 +160,8 @@ type PlanForm = {
   taxRatePercent: string;
   periodType: string;
   revenueDomains: string[];
-  includeInventoryCost: boolean;
-  expenseTypes: string[];
+  // 211-R2 发放付账日（"1"～"3"，未选为空）。
+  payoutPaySlot: string;
   status: string;
   note: string;
   // V303 扣除项三开关（默认全关=不改现有口径）+ 发放保护线参数。
@@ -170,8 +183,7 @@ const DEFAULT_PLAN_FORM: PlanForm = {
   taxRatePercent: "20",
   periodType: "semiannual",
   revenueDomains: ["bar", "ticket"],
-  includeInventoryCost: true,
-  expenseTypes: Object.keys(EXPENSE_TYPE_LABELS),
+  payoutPaySlot: "",
   status: "active",
   note: "",
   lossCarryforwardEnabled: false,
@@ -212,6 +224,13 @@ export function FinanceDividendsPage({ api, setActionResult, setGlobalError, eff
   const [legalTarget, setLegalTarget] = React.useState<DividendStatementRow | null>(null);
   const [legalForm, setLegalForm] = React.useState({ amountYuan: "", taxAccountingRef: "", resolutionRef: "", note: "" });
 
+  // 211-R1 整期暂不分红／暂缓分红登记（第十八批裁决 43）：列表、登记弹窗、暂缓行恢复弹窗。
+  const [holds, setHolds] = React.useState<DividendHoldRow[]>([]);
+  const [holdModalOpen, setHoldModalOpen] = React.useState(false);
+  const [holdForm, setHoldForm] = React.useState(EMPTY_HOLD_FORM);
+  const [liftTarget, setLiftTarget] = React.useState<DividendHoldRow | null>(null);
+  const [liftResult, setLiftResult] = React.useState("");
+
   const merchantsResource = useAdminResource(
     async () => {
       const rows = await api.get<MerchantAdmissionRow[]>("/api/v1/platform/merchants");
@@ -223,6 +242,13 @@ export function FinanceDividendsPage({ api, setActionResult, setGlobalError, eff
   const plansResource = useAdminResource(
     async () => {
       setPlans(await api.get<DividendPlanRow[]>("/api/v1/finance/dividends/plans"));
+    },
+    { onError: setGlobalError, fallbackMessage: TEXT.loadFailed },
+  );
+
+  const holdsResource = useAdminResource(
+    async () => {
+      setHolds(await api.get<DividendHoldRow[]>("/api/v1/finance/dividends/holds"));
     },
     { onError: setGlobalError, fallbackMessage: TEXT.loadFailed },
   );
@@ -272,6 +298,7 @@ export function FinanceDividendsPage({ api, setActionResult, setGlobalError, eff
     reload: async () => {
       rows.reload();
       await plansResource.reload();
+      await holdsResource.reload();
     },
     setGlobalError,
     setActionResult,
@@ -299,8 +326,7 @@ export function FinanceDividendsPage({ api, setActionResult, setGlobalError, eff
       taxRatePercent: plan.taxRateBps === undefined ? "20" : String(plan.taxRateBps / 100),
       periodType: plan.periodType ?? "semiannual",
       revenueDomains: plan.revenueDomains ?? ["bar", "ticket"],
-      includeInventoryCost: plan.includeInventoryCost !== false,
-      expenseTypes: plan.expenseTypes ?? Object.keys(EXPENSE_TYPE_LABELS),
+      payoutPaySlot: plan.payoutPaySlot ? String(plan.payoutPaySlot) : "",
       status: plan.status ?? "active",
       note: plan.note ?? "",
       lossCarryforwardEnabled: plan.lossCarryforwardEnabled === true,
@@ -337,6 +363,7 @@ export function FinanceDividendsPage({ api, setActionResult, setGlobalError, eff
     if (!planForm.principalUserId.trim()) return setFormError(TEXT.principalRequired);
     if (shareBps === null) return setFormError(TEXT.shareInvalid);
     if (taxBps === null) return setFormError(TEXT.taxInvalid);
+    if (!planForm.payoutPaySlot) return setFormError(TEXT.paySlotRequired);
     // V303 发放保护线参数校验（仅开启时）。
     const floorBps = planForm.payoutFloorEnabled ? percentToBps(planForm.payoutFloorPercent) : 0;
     const floorFixedCent = planForm.payoutFloorEnabled ? fixedYuanToCent(planForm.payoutFloorFixedYuan) : 0;
@@ -351,8 +378,7 @@ export function FinanceDividendsPage({ api, setActionResult, setGlobalError, eff
       taxRateBps: taxBps,
       periodType: planForm.periodType,
       revenueDomains: planForm.revenueDomains,
-      includeInventoryCost: planForm.includeInventoryCost,
-      expenseTypes: planForm.expenseTypes,
+      payoutPaySlot: Number(planForm.payoutPaySlot),
       status: planForm.status,
       note: planForm.note.trim() || null,
       lossCarryforwardEnabled: planForm.lossCarryforwardEnabled,
@@ -389,6 +415,41 @@ export function FinanceDividendsPage({ api, setActionResult, setGlobalError, eff
       setComputeNotice(result ?? null);
       return result;
     });
+  }
+
+  // ── 211-R1 暂不分红／暂缓分红登记 ──────────────────────────
+
+  function validateHold(): string | null {
+    if (!holdForm.merchantId) return TEXT.merchantRequired;
+    if (!holdForm.periodLabel.trim()) return TEXT.holdPeriodRequired;
+    if (!holdForm.holdType) return TEXT.holdTypeRequired;
+    if (!holdForm.reason.trim()) return TEXT.holdReasonRequired;
+    if (!holdForm.negotiationResult.trim()) return TEXT.holdNegotiationRequired;
+    return null;
+  }
+
+  async function submitHold() {
+    const invalid = validateHold();
+    if (invalid) return setFormError(invalid);
+    const request = {
+      idempotencyKey: nextKey("dividend-hold"),
+      merchantId: holdForm.merchantId,
+      periodLabel: holdForm.periodLabel.trim(),
+      holdType: holdForm.holdType,
+      reason: holdForm.reason.trim(),
+      negotiationResult: holdForm.negotiationResult.trim(),
+    };
+    const ok = await runAction("dividend_hold_recorded", request, () => api.post("/api/v1/finance/dividends/holds", request));
+    if (ok) setHoldModalOpen(false);
+  }
+
+  async function submitLift() {
+    if (!liftTarget) return;
+    if (!liftResult.trim()) return setFormError(TEXT.liftResultRequired);
+    const request = { idempotencyKey: nextKey("dividend-hold-lift"), liftResult: liftResult.trim() };
+    const ok = await runAction("dividend_hold_lifted", request, () =>
+      api.post(`/api/v1/finance/dividends/holds/${encodeURIComponent(liftTarget.id)}/lift`, request));
+    if (ok) setLiftTarget(null);
   }
 
   // ── 状态机动作 ────────────────────────────────────────────
@@ -464,7 +525,8 @@ export function FinanceDividendsPage({ api, setActionResult, setGlobalError, eff
         { label: "主理人", value: statement.principalUserId ?? "—" },
         { label: "分成比例（平台/主理人）", value: `${bpsToPercentText(statement.platformShareBps)} / ${bpsToPercentText(statement.platformShareBps === undefined ? undefined : 10000 - statement.platformShareBps)}` },
         { label: "代扣税率", value: bpsToPercentText(statement.taxRateBps) },
-        { label: "基数构成", value: `收入域：${(statement.revenueDomains ?? []).map((d) => DOMAIN_LABELS[d] ?? d).join("、") || "—"}；${statement.includeInventoryCost === false ? "不扣销货成本" : "扣销货成本"}；费用类别：${(statement.expenseTypes ?? []).map((t) => EXPENSE_TYPE_LABELS[t] ?? t).join("、") || "—"}` },
+        { label: "基数构成", value: `收入域：${(statement.revenueDomains ?? []).map((d) => DOMAIN_LABELS[d] ?? d).join("、") || "—"}；扣减销货成本、全部费用与该期税费` },
+        { label: "该期税费合计", value: `¥${centToYuan(statement.periodTaxCent)}` },
         ...(data.lines ?? []).map((line) => ({
           label: DIVIDEND_LINE_LABELS[line.lineType ?? ""] ?? line.lineType ?? "—",
           value: `¥${centToYuan(line.amountCent)}${line.detail ? `（${line.detail}）` : ""}`,
@@ -501,10 +563,10 @@ export function FinanceDividendsPage({ api, setActionResult, setGlobalError, eff
       </div>
       <div className="admin-table-scroll">
         <table className="admin-table" data-testid="dividend-plan-table">
-          <thead><tr><th>商户</th><th>主理人</th><th>平台/主理人</th><th>代扣税率</th><th>周期</th><th>基数构成</th><th>状态</th><th>操作</th></tr></thead>
+          <thead><tr><th>商户</th><th>主理人</th><th>平台/主理人</th><th>代扣税率</th><th>周期</th><th>发放付账日</th><th>基数构成</th><th>状态</th><th>操作</th></tr></thead>
           <tbody>
             {plans.length === 0 ? (
-              <tr data-testid="dividend-plan-table-empty"><td colSpan={8} className="admin-muted-action">暂无分红方案，点「新建分红方案」配置。</td></tr>
+              <tr data-testid="dividend-plan-table-empty"><td colSpan={9} className="admin-muted-action">暂无分红方案，点「新建分红方案」配置。</td></tr>
             ) : plans.map((plan) => (
               <tr key={plan.id} data-testid={`dividend-plan-row-${plan.id}`}>
                 <td>{merchants.find((m) => m.id === plan.merchantId) ? merchantLabel(merchants.find((m) => m.id === plan.merchantId)!) : plan.merchantId}</td>
@@ -512,7 +574,8 @@ export function FinanceDividendsPage({ api, setActionResult, setGlobalError, eff
                 <td>{bpsToPercentText(plan.platformShareBps)} / {bpsToPercentText(plan.platformShareBps === undefined ? undefined : 10000 - plan.platformShareBps)}</td>
                 <td>{bpsToPercentText(plan.taxRateBps)}</td>
                 <td>{PERIOD_TYPE_LABELS[plan.periodType ?? ""] ?? plan.periodType}</td>
-                <td>{(plan.revenueDomains ?? []).map((d) => DOMAIN_LABELS[d] ?? d).join("、")}{plan.includeInventoryCost === false ? "；不扣成本" : "；扣成本"}</td>
+                <td>{PAY_SLOT_LABELS[String(plan.payoutPaySlot ?? "")] ?? "—"}</td>
+                <td>{(plan.revenueDomains ?? []).map((d) => DOMAIN_LABELS[d] ?? d).join("、")}</td>
                 <td>{plan.status === "ended" ? "已停用" : "生效中"}</td>
                 <td>
                   <PermissionButton
@@ -553,6 +616,45 @@ export function FinanceDividendsPage({ api, setActionResult, setGlobalError, eff
           ))}
         </div>
       ) : null}
+
+      {/* ── 暂不分红／暂缓分红登记（211-R1，第十八批裁决 43）──────── */}
+      <h3>暂不分红／暂缓分红登记</h3>
+      <div className="admin-form-row">
+        <PermissionButton
+          permissionsState={effectivePermissions}
+          permissions={MANAGE_PERMS}
+          data-testid="dividend-hold-open"
+          onClick={() => { setFormError(""); setHoldForm({ ...EMPTY_HOLD_FORM, merchantId: merchants[0]?.id ?? "" }); setHoldModalOpen(true); }}
+        >＋ 登记暂不分红／暂缓分红</PermissionButton>
+        <span className="admin-muted-action">须主理人与娱乐平台公司协商一致后登记。该期正式单已提交审批或已发放的不能登记，草稿随登记作废；暂不分红该期不出正式单、利润不补分；暂缓分红协商恢复后登记恢复，再照常出单；月度预览照常。</span>
+      </div>
+      <div className="admin-table-scroll">
+        <table className="admin-table" data-testid="dividend-hold-table">
+          <thead><tr><th>商户</th><th>期间</th><th>类别</th><th>原因</th><th>协商结果</th><th>登记人 / 时间</th><th>恢复情况</th><th>操作</th></tr></thead>
+          <tbody>
+            {holds.length === 0 ? (
+              <tr data-testid="dividend-hold-table-empty"><td colSpan={8} className="admin-muted-action">暂无暂不分红或暂缓分红登记。</td></tr>
+            ) : holds.map((hold) => (
+              <tr key={hold.id} data-testid={`dividend-hold-row-${hold.id}`}>
+                <td>{merchants.find((m) => m.id === hold.merchantId) ? merchantLabel(merchants.find((m) => m.id === hold.merchantId)!) : hold.merchantId ?? "—"}</td>
+                <td>{hold.periodLabel ?? "—"}</td>
+                <td>{HOLD_TYPE_LABELS[hold.holdType ?? ""] ?? hold.holdType ?? "—"}</td>
+                <td>{hold.reason ?? "—"}</td>
+                <td>{hold.negotiationResult ?? "—"}</td>
+                <td>{hold.recordedBy ?? "—"} / {cnDate(hold.recordedAt)}</td>
+                <td>{hold.liftedAt ? `已恢复（${hold.liftResult ?? "—"}；${hold.liftedBy ?? "—"} / ${cnDate(hold.liftedAt)}）` : hold.holdType === "defer" ? "暂缓中" : "该期不分红"}</td>
+                <td className="admin-row-detail-cell">
+                  {hold.holdType === "defer" && !hold.liftedAt ? (
+                    <PermissionButton permissionsState={effectivePermissions} permissions={MANAGE_PERMS}
+                      data-testid={`dividend-hold-lift-open-${hold.id}`}
+                      onClick={() => { setFormError(""); setLiftResult(""); setLiftTarget(hold); }}>恢复分红</PermissionButton>
+                  ) : null}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
 
       {/* ── 计算单列表 ───────────────────────────────────────── */}
       <h3>分红计算单</h3>
@@ -677,7 +779,7 @@ export function FinanceDividendsPage({ api, setActionResult, setGlobalError, eff
         </div>
       </AdminDataState>
 
-      {formError && !planModalOpen && !rejectTarget && !legalTarget ? (
+      {formError && !planModalOpen && !rejectTarget && !legalTarget && !holdModalOpen && !liftTarget ? (
         <div className="admin-form-error" data-testid="dividend-form-error">{formError}</div>
       ) : null}
       <RowDetailDrawer open={detail !== null} title={detail?.title ?? ""} fields={detail?.fields ?? []} onClose={() => setDetail(null)} />
@@ -719,6 +821,7 @@ export function FinanceDividendsPage({ api, setActionResult, setGlobalError, eff
             validate: () => {
               if (percentToBps(planForm.platformSharePercent) === null) return TEXT.shareInvalid;
               if (percentToBps(planForm.taxRatePercent) === null) return TEXT.taxInvalid;
+              if (!planForm.payoutPaySlot) return TEXT.paySlotRequired;
               return null;
             },
             content: (
@@ -729,6 +832,11 @@ export function FinanceDividendsPage({ api, setActionResult, setGlobalError, eff
                 <label>分红周期<select data-testid="dividend-plan-period-type" value={planForm.periodType} onChange={(event) => setPlanForm({ ...planForm, periodType: event.target.value })}>
                   {Object.entries(PERIOD_TYPE_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
                 </select></label>
+                <label>发放付账日<select data-testid="dividend-plan-pay-slot" value={planForm.payoutPaySlot} onChange={(event) => setPlanForm({ ...planForm, payoutPaySlot: event.target.value })}>
+                  <option value="">请选择</option>
+                  {Object.entries(PAY_SLOT_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                </select></label>
+                <span className="admin-muted-action">全平台统一的每月三个付账日之一（出厂为 5、15、25 日，遇非银行工作日顺延）；审批通过后给主理人的应付、留存释放后的应付都落在当天或之后第一个该付账日。</span>
                 {editingPlan ? (
                   <label>方案状态<select data-testid="dividend-plan-status" value={planForm.status} onChange={(event) => setPlanForm({ ...planForm, status: event.target.value })}>
                     <option value="active">生效中</option>
@@ -740,10 +848,9 @@ export function FinanceDividendsPage({ api, setActionResult, setGlobalError, eff
           },
           {
             title: "分红基数构成",
-            description: "净利润 = 计入收入域合计 −（可选）销货成本 − 计入费用类别净额。凡涉数据皆可配。",
+            description: "净利润 = 计入收入域合计 − 销货成本 − 全部费用类别净额 − 该期税费（已生效的税费实际申报金额）；销货成本、费用与税费一律扣减，不可关闭。",
             validate: () => {
               if (planForm.revenueDomains.length === 0) return TEXT.domainRequired;
-              if (planForm.expenseTypes.length === 0) return TEXT.expenseRequired;
               return null;
             },
             content: (
@@ -751,11 +858,6 @@ export function FinanceDividendsPage({ api, setActionResult, setGlobalError, eff
                 <span>计入收入域：</span>
                 {Object.entries(DOMAIN_LABELS).map(([value, label]) => (
                   <label key={value}><input data-testid={`dividend-plan-domain-${value}`} type="checkbox" checked={planForm.revenueDomains.includes(value)} onChange={() => setPlanForm({ ...planForm, revenueDomains: toggleToken(planForm.revenueDomains, value) })} />{label}</label>
-                ))}
-                <label><input data-testid="dividend-plan-include-cost" type="checkbox" checked={planForm.includeInventoryCost} onChange={() => setPlanForm({ ...planForm, includeInventoryCost: !planForm.includeInventoryCost })} />扣减销货成本（V296 移动加权出库成本）</label>
-                <span>计入费用类别（V297 费用台账）：</span>
-                {Object.entries(EXPENSE_TYPE_LABELS).map(([value, label]) => (
-                  <label key={value}><input data-testid={`dividend-plan-expense-${value}`} type="checkbox" checked={planForm.expenseTypes.includes(value)} onChange={() => setPlanForm({ ...planForm, expenseTypes: toggleToken(planForm.expenseTypes, value) })} />{label}</label>
                 ))}
                 <label>备注（选填）<textarea data-testid="dividend-plan-note" value={planForm.note} onChange={(event) => setPlanForm({ ...planForm, note: event.target.value })} placeholder="如：与主理人协议约定 80/20" /></label>
               </>
@@ -800,7 +902,8 @@ export function FinanceDividendsPage({ api, setActionResult, setGlobalError, eff
           { label: "平台/主理人", value: `${planForm.platformSharePercent || "?"}% / ${planForm.platformSharePercent ? (100 - Number(planForm.platformSharePercent)).toFixed(2).replace(/\.?0+$/, "") : "?"}%` },
           { label: "代扣税率", value: `${planForm.taxRatePercent || "?"}%（股息红利）` },
           { label: "周期", value: PERIOD_TYPE_LABELS[planForm.periodType] ?? planForm.periodType },
-          { label: "基数构成", value: `收入域：${planForm.revenueDomains.map((d) => DOMAIN_LABELS[d] ?? d).join("、") || "无"}；${planForm.includeInventoryCost ? "扣销货成本" : "不扣销货成本"}；费用：${planForm.expenseTypes.map((t) => EXPENSE_TYPE_LABELS[t] ?? t).join("、") || "无"}` },
+          { label: "发放付账日", value: PAY_SLOT_LABELS[planForm.payoutPaySlot] ?? "未选择" },
+          { label: "基数构成", value: `收入域：${planForm.revenueDomains.map((d) => DOMAIN_LABELS[d] ?? d).join("、") || "无"}；扣减销货成本与全部费用` },
           {
             label: "扣除项",
             value: [
@@ -847,6 +950,76 @@ export function FinanceDividendsPage({ api, setActionResult, setGlobalError, eff
           { label: "依法可分配金额", value: legalForm.amountYuan ? `¥${legalForm.amountYuan}` : "未填写" },
           { label: "财税核算依据", value: legalForm.taxAccountingRef.trim() || "未填写" },
           { label: "分配决议", value: legalForm.resolutionRef.trim() || "未填写" },
+        ]}
+      />
+
+      {/* ── 暂不分红／暂缓分红登记（211-R1）────────────────────── */}
+      <GuidedFlowModal
+        open={holdModalOpen}
+        title="登记暂不分红／暂缓分红"
+        testId="dividend-hold-guided"
+        submitTestId="dividend-hold-save"
+        submitLabel="确认登记"
+        submitting={busyAction === "dividend_hold_recorded"}
+        error={formError || undefined}
+        onClose={() => setHoldModalOpen(false)}
+        onSubmit={submitHold}
+        steps={[
+          {
+            title: "商户、期间与协商结果",
+            description: "须主理人与娱乐平台公司协商一致后登记，原因与协商结果必填，不另走审批。期间标签须与该商户分红方案的周期一致；该期正式草稿随登记作废。",
+            validate: validateHold,
+            content: (
+              <>
+                <label>经营商户<select data-testid="dividend-hold-merchant" value={holdForm.merchantId} onChange={(event) => setHoldForm({ ...holdForm, merchantId: event.target.value })}>
+                  {merchantOptions.length === 0 ? <option value="">（暂无商户）</option> : null}
+                  {merchantOptions.map((m) => <option key={m.id} value={m.id}>{merchantLabel(m)}</option>)}
+                </select></label>
+                <label>期间标签<input data-testid="dividend-hold-period" type="text" placeholder="月份 2026-07 / 季度 2026-Q3 / 半年 2026-H1 / 年度 2026" value={holdForm.periodLabel} onChange={(event) => setHoldForm({ ...holdForm, periodLabel: event.target.value })} /></label>
+                <label>类别<select data-testid="dividend-hold-type" value={holdForm.holdType} onChange={(event) => setHoldForm({ ...holdForm, holdType: event.target.value })}>
+                  <option value="">请选择</option>
+                  {Object.entries(HOLD_TYPE_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                </select></label>
+                <label>原因<textarea data-testid="dividend-hold-reason" value={holdForm.reason} onChange={(event) => setHoldForm({ ...holdForm, reason: event.target.value })} /></label>
+                <label>协商结果<textarea data-testid="dividend-hold-negotiation" value={holdForm.negotiationResult} onChange={(event) => setHoldForm({ ...holdForm, negotiationResult: event.target.value })} /></label>
+              </>
+            ),
+          },
+        ]}
+        summary={[
+          { label: "经营商户", value: merchantOptions.find((m) => m.id === holdForm.merchantId) ? merchantLabel(merchantOptions.find((m) => m.id === holdForm.merchantId)!) : (holdForm.merchantId || "未选择") },
+          { label: "期间", value: holdForm.periodLabel.trim() || "未填写" },
+          { label: "类别", value: HOLD_TYPE_LABELS[holdForm.holdType] ?? "未选择" },
+          { label: "原因", value: holdForm.reason.trim() || "未填写" },
+          { label: "协商结果", value: holdForm.negotiationResult.trim() || "未填写" },
+        ]}
+      />
+
+      {/* ── 恢复暂缓分红（211-R1）────────────────────────────── */}
+      <GuidedFlowModal
+        open={liftTarget !== null}
+        title={`恢复分红 · ${liftTarget?.periodLabel ?? ""}`}
+        testId="dividend-hold-lift-guided"
+        submitTestId="dividend-hold-lift-save"
+        submitLabel="确认恢复"
+        submitting={busyAction === "dividend_hold_lifted"}
+        error={formError || undefined}
+        onClose={() => setLiftTarget(null)}
+        onSubmit={submitLift}
+        steps={[
+          {
+            title: "恢复分红的协商结果（必填）",
+            description: "双方协商恢复后登记，之后该期照常出正式单。",
+            validate: () => (liftResult.trim() ? null : TEXT.liftResultRequired),
+            content: (
+              <label>协商结果<textarea data-testid="dividend-hold-lift-result" value={liftResult} onChange={(event) => setLiftResult(event.target.value)} /></label>
+            ),
+          },
+        ]}
+        summary={[
+          { label: "期间", value: liftTarget?.periodLabel ?? "—" },
+          { label: "暂缓原因", value: liftTarget?.reason ?? "—" },
+          { label: "恢复协商结果", value: liftResult.trim() || "未填写" },
         ]}
       />
 

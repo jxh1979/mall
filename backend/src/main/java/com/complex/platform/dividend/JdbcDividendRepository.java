@@ -1,5 +1,5 @@
 package com.complex.platform.dividend;
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
@@ -33,7 +33,7 @@ class JdbcDividendRepository implements DividendRepository {
             + "revenue_domains, include_inventory_cost, expense_types, effective_from, status, note, updated_by, "
             + "created_at, updated_at, "
             + "loss_carryforward_enabled, arrears_offset_enabled, payout_floor_enabled, payout_floor_bps, "
-            + "payout_floor_fixed_cent, reserve_release_mode, reserve_release_delay_periods, principal_type";
+            + "payout_floor_fixed_cent, reserve_release_mode, reserve_release_delay_periods, principal_type, payout_pay_slot";
 
     private static final String STMT_COLS =
             "id, merchant_id, plan_id, kind, period_label, period_start, period_end, principal_user_id, "
@@ -44,7 +44,7 @@ class JdbcDividendRepository implements DividendRepository {
             + "created_at, updated_at, "
             + "loss_carryforward_enabled, loss_carryforward_in_cent, loss_carryforward_applied_cent, "
             + "loss_carryforward_after_cent, arrears_offset_cent, reserve_withheld_cent, payout_cent, "
-            + "principal_type, custom_deduction_cent, legal_distributable_cent";
+            + "principal_type, custom_deduction_cent, legal_distributable_cent, period_tax_cent";
 
     private final NamedParameterJdbcTemplate jdbcTemplate;
 
@@ -110,13 +110,13 @@ class JdbcDividendRepository implements DividendRepository {
                         status, note, updated_by, created_at, updated_at,
                         loss_carryforward_enabled, arrears_offset_enabled, payout_floor_enabled,
                         payout_floor_bps, payout_floor_fixed_cent,
-                        reserve_release_mode, reserve_release_delay_periods, principal_type)
+                        reserve_release_mode, reserve_release_delay_periods, principal_type, payout_pay_slot)
                     VALUES (:id, :merchant_id, :principal_user_id, :principal_name, :platform_share_bps,
                             :tax_rate_bps, :period_type, :revenue_domains, :include_inventory_cost, :expense_types,
                             :effective_from, :status, :note, :updated_by, :created_at, :updated_at,
                             :loss_carryforward_enabled, :arrears_offset_enabled, :payout_floor_enabled,
                             :payout_floor_bps, :payout_floor_fixed_cent,
-                            :reserve_release_mode, :reserve_release_delay_periods, :principal_type)
+                            :reserve_release_mode, :reserve_release_delay_periods, :principal_type, :payout_pay_slot)
                     ON CONFLICT (id) DO NOTHING
                     """, planParams(plan)) > 0;
         } catch (DuplicateKeyException conflict) {
@@ -158,7 +158,8 @@ class JdbcDividendRepository implements DividendRepository {
                     payout_floor_fixed_cent = :payout_floor_fixed_cent,
                     reserve_release_mode = :reserve_release_mode,
                     reserve_release_delay_periods = :reserve_release_delay_periods,
-                    principal_type = :principal_type
+                    principal_type = :principal_type,
+                    payout_pay_slot = :payout_pay_slot
                  WHERE id = :id
                 """, planParams(plan));
     }
@@ -188,7 +189,8 @@ class JdbcDividendRepository implements DividendRepository {
                 .addValue("payout_floor_fixed_cent", plan.payoutFloorFixedCent())
                 .addValue("reserve_release_mode", plan.reserveReleaseMode())
                 .addValue("reserve_release_delay_periods", plan.reserveReleaseDelayPeriods())
-                .addValue("principal_type", plan.principalType());
+                .addValue("principal_type", plan.principalType())
+                .addValue("payout_pay_slot", plan.payoutPaySlot(), Types.SMALLINT);
     }
 
     private DividendPlanRecord mapPlan(ResultSet rs, int rowNum) throws SQLException {
@@ -219,7 +221,8 @@ class JdbcDividendRepository implements DividendRepository {
                 rs.getString("reserve_release_mode"),
                 rs.getInt("reserve_release_delay_periods"),
                 rs.getString("principal_type"),
-                listCustomDeductions(rs.getString("id")));
+                listCustomDeductions(rs.getString("id")),
+                rs.getObject("payout_pay_slot", Integer.class));
     }
 
     // ── V309 自定义扣除项 ──────────────────────────────────────
@@ -340,7 +343,7 @@ class JdbcDividendRepository implements DividendRepository {
                     paid_at, created_at, updated_at,
                     loss_carryforward_enabled, loss_carryforward_in_cent, loss_carryforward_applied_cent,
                     loss_carryforward_after_cent, arrears_offset_cent, reserve_withheld_cent, payout_cent,
-                    principal_type, custom_deduction_cent, legal_distributable_cent)
+                    principal_type, custom_deduction_cent, legal_distributable_cent, period_tax_cent)
                 VALUES (:id, :merchant_id, :plan_id, :kind, :period_label, :period_start, :period_end,
                     :principal_user_id, :platform_share_bps, :tax_rate_bps, :revenue_domains,
                     :include_inventory_cost, :expense_types, :revenue_cent, :cost_cent, :expense_cent,
@@ -349,7 +352,7 @@ class JdbcDividendRepository implements DividendRepository {
                     :computed_by, NULL, NULL, NULL, NULL, NULL, NULL, :created_at, :updated_at,
                     :loss_carryforward_enabled, :loss_carryforward_in_cent, :loss_carryforward_applied_cent,
                     :loss_carryforward_after_cent, :arrears_offset_cent, :reserve_withheld_cent, :payout_cent,
-                    :principal_type, :custom_deduction_cent, :legal_distributable_cent)
+                    :principal_type, :custom_deduction_cent, :legal_distributable_cent, :period_tax_cent)
                 """, new MapSqlParameterSource()
                 .addValue("id", s.id())
                 .addValue("merchant_id", s.merchantId())
@@ -389,7 +392,8 @@ class JdbcDividendRepository implements DividendRepository {
                 .addValue("payout_cent", s.payoutCent())
                 .addValue("principal_type", s.principalType())
                 .addValue("custom_deduction_cent", s.customDeductionCent())
-                .addValue("legal_distributable_cent", s.legalDistributableCent(), Types.BIGINT));
+                .addValue("legal_distributable_cent", s.legalDistributableCent(), Types.BIGINT)
+                .addValue("period_tax_cent", s.periodTaxCent()));
     }
 
     @Override
@@ -528,7 +532,8 @@ class JdbcDividendRepository implements DividendRepository {
                 rs.getLong("payout_cent"),
                 rs.getString("principal_type"),
                 rs.getLong("custom_deduction_cent"),
-                rs.getObject("legal_distributable_cent", Long.class));
+                rs.getObject("legal_distributable_cent", Long.class),
+                rs.getLong("period_tax_cent"));
     }
 
     // ── V304 发放保护线留存·释放 ──────────────────────────────
@@ -782,5 +787,90 @@ class JdbcDividendRepository implements DividendRepository {
                         .addValue("expense_types", expenseTypes),
                 (rs, n) -> new DividendRecords.ExpenseTypeSumRecord(
                         rs.getString("expense_type"), rs.getLong("total_cent")));
+    }
+
+    /** 210-R3 方案商户经营主体：同 210-R1 口径（生效绑定的运营主体，否则商户档案上的经营主体）。 */
+    private static final String MERCHANT_ENTITY = "COALESCE((SELECT b.operation_entity_id FROM business_entity_bindings b"
+            + " WHERE b.merchant_id = :merchant_id AND b.status = 'active' ORDER BY b.created_at DESC, b.id LIMIT 1),"
+            + " (SELECT m.business_entity_id FROM merchants m WHERE m.id = :merchant_id))";
+
+    private String merchantEntityId(String merchantId) {
+        return jdbcTemplate.queryForObject("SELECT " + MERCHANT_ENTITY,
+                new MapSqlParameterSource("merchant_id", merchantId), String.class);
+    }
+
+    @Override
+    public List<DividendRecords.PeriodTaxSumRecord> sumEntityTaxByType(String merchantId, List<String> months) {
+        return jdbcTemplate.query("SELECT tax_type, SUM(declared_amount_cent) AS total_cent,"
+                        + " string_agg(CASE WHEN period_start_month = period_end_month THEN period_start_month"
+                        + " ELSE period_start_month || '～' || period_end_month END, '、' ORDER BY period_end_month, period_start_month) AS periods"
+                        + " FROM entity_tax_declarations WHERE status = 'approved' AND period_end_month IN (:months)"
+                        + " AND business_entity_id = :business_entity_id GROUP BY tax_type ORDER BY tax_type",
+                new MapSqlParameterSource().addValue("business_entity_id", merchantEntityId(merchantId)).addValue("months", months),
+                (rs, n) -> new DividendRecords.PeriodTaxSumRecord(rs.getString("tax_type"), rs.getLong("total_cent"), rs.getString("periods")));
+    }
+
+    @Override
+    public List<String> listMonthsWithoutApprovedTax(String merchantId, List<String> months) {
+        return jdbcTemplate.queryForList("SELECT mon.ym FROM (SELECT unnest(ARRAY[:months]::text[]) AS ym) mon"
+                        + " WHERE NOT EXISTS (SELECT 1 FROM entity_tax_declarations d WHERE d.status = 'approved'"
+                        + " AND d.period_start_month <= mon.ym AND d.period_end_month >= mon.ym AND d.business_entity_id = :business_entity_id)"
+                        + " ORDER BY mon.ym",
+                new MapSqlParameterSource().addValue("business_entity_id", merchantEntityId(merchantId)).addValue("months", months), String.class);
+    }
+
+    // ── V616 211-R1 整期暂不分红／暂缓分红登记 ──────────────────────
+    private static final String HOLD_COLS = "id, merchant_id, period_label, hold_type, reason, negotiation_result,"
+            + " recorded_by, recorded_at, lifted_by, lifted_at, lift_result";
+
+    @Override
+    public Optional<DividendRecords.DividendPeriodHoldRecord> findOpenHold(String merchantId, String periodLabel) {
+        return jdbcTemplate.query("SELECT " + HOLD_COLS + " FROM dividend_period_holds"
+                        + " WHERE merchant_id = :merchant_id AND period_label = :period_label AND lifted_at IS NULL",
+                new MapSqlParameterSource().addValue("merchant_id", merchantId).addValue("period_label", periodLabel),
+                this::mapHold).stream().findFirst();
+    }
+
+    @Override
+    public Optional<DividendRecords.DividendPeriodHoldRecord> findHoldById(String id) {
+        return jdbcTemplate.query("SELECT " + HOLD_COLS + " FROM dividend_period_holds WHERE id = :id",
+                new MapSqlParameterSource("id", id), this::mapHold).stream().findFirst();
+    }
+
+    @Override
+    public boolean insertHold(DividendRecords.DividendPeriodHoldRecord hold) {
+        return jdbcTemplate.update("INSERT INTO dividend_period_holds (id, merchant_id, period_label, hold_type, reason,"
+                        + " negotiation_result, recorded_by, recorded_at) VALUES (:id, :merchant_id, :period_label, :hold_type, :reason,"
+                        + " :negotiation_result, :recorded_by, :recorded_at) ON CONFLICT DO NOTHING",
+                new MapSqlParameterSource()
+                        .addValue("id", hold.id())
+                        .addValue("merchant_id", hold.merchantId())
+                        .addValue("period_label", hold.periodLabel())
+                        .addValue("hold_type", hold.holdType())
+                        .addValue("reason", hold.reason())
+                        .addValue("negotiation_result", hold.negotiationResult())
+                        .addValue("recorded_by", hold.recordedBy())
+                        .addValue("recorded_at", timestampWithTimeZone(hold.recordedAt()))) > 0;
+    }
+
+    @Override
+    public int liftHold(String id, String actor, String liftResult, Instant now) {
+        return jdbcTemplate.update("UPDATE dividend_period_holds SET lifted_by = :actor, lifted_at = :now, lift_result = :lift_result"
+                        + " WHERE id = :id AND hold_type = 'defer' AND lifted_at IS NULL",
+                new MapSqlParameterSource().addValue("id", id).addValue("actor", actor)
+                        .addValue("now", timestampWithTimeZone(now)).addValue("lift_result", liftResult));
+    }
+
+    @Override
+    public List<DividendRecords.DividendPeriodHoldRecord> listHolds() {
+        return jdbcTemplate.query("SELECT " + HOLD_COLS + " FROM dividend_period_holds ORDER BY recorded_at DESC, id",
+                new MapSqlParameterSource(), this::mapHold);
+    }
+
+    private DividendRecords.DividendPeriodHoldRecord mapHold(ResultSet rs, int rowNum) throws SQLException {
+        return new DividendRecords.DividendPeriodHoldRecord(rs.getString("id"), rs.getString("merchant_id"),
+                rs.getString("period_label"), rs.getString("hold_type"), rs.getString("reason"), rs.getString("negotiation_result"),
+                rs.getString("recorded_by"), nullableInstant(rs, "recorded_at"), rs.getString("lifted_by"),
+                nullableInstant(rs, "lifted_at"), rs.getString("lift_result"));
     }
 }

@@ -1,4 +1,4 @@
-// 文件版本：V0.03
+// 文件版本：V0.04
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -13,7 +13,7 @@ const PLANS = [
     id: "divp_1", merchant_id: "merchant-1", principal_user_id: "usr_principal", principal_name: "主理人甲",
     platform_share_bps: 8000, tax_rate_bps: 2000, period_type: "quarterly",
     revenue_domains: ["bar", "ticket"], include_inventory_cost: true,
-    expense_types: ["rent_allocation", "energy", "property_fee", "labor", "amortization", "other"],
+    expense_types: ["rent_allocation", "energy", "property_fee", "labor", "amortization", "other"], payout_pay_slot: 2,
     status: "active", created_at: "2026-07-18T00:00:00Z", updated_at: "2026-07-18T00:00:00Z",
   },
 ];
@@ -129,14 +129,15 @@ describe("FinanceDividendsPage 持股分红", () => {
     expect(screen.getByTestId("dividend-plan-guided-error").textContent).toContain("主理人");
     expect(screen.queryByTestId("dividend-plan-guided-summary")).toBeNull();
 
-    // 补齐：主理人 + 比例 70/30 + 去掉售票收入域 + 只留人工费用。
+    // 补齐：主理人 + 比例 70/30 + 去掉售票收入域 + 发放付账日。控制席并入（BSM:1774「减掉这期间的全部成本、费用与税费之后的余额」）：
+    // 销货成本与费用类别不再可选，载荷不带这两项（后端按全量）。
     fireEvent.change(screen.getByTestId("dividend-plan-principal"), { target: { value: "usr_new_principal" } });
     fireEvent.change(screen.getByTestId("dividend-plan-principal-name"), { target: { value: "主理人乙" } });
     fireEvent.change(screen.getByTestId("dividend-plan-share"), { target: { value: "70" } });
     fireEvent.click(screen.getByTestId("dividend-plan-domain-ticket"));
-    for (const type of ["rent_allocation", "energy", "property_fee", "amortization", "other"]) {
-      fireEvent.click(screen.getByTestId(`dividend-plan-expense-${type}`));
-    }
+    expect(screen.queryByTestId("dividend-plan-include-cost")).toBeNull();
+    expect(screen.queryByTestId("dividend-plan-expense-labor")).toBeNull();
+    fireEvent.change(screen.getByTestId("dividend-plan-pay-slot"), { target: { value: "1" } });
     fireEvent.click(screen.getByTestId("dividend-plan-guided-next"));
 
     await waitFor(() => expect(screen.getByTestId("dividend-plan-guided-summary")).toBeTruthy());
@@ -151,7 +152,8 @@ describe("FinanceDividendsPage 持股分红", () => {
     expect(body.tax_rate_bps).toBe(2000);
     expect(body.period_type).toBe("semiannual");
     expect(body.revenue_domains).toEqual(["bar"]);
-    expect(body.expense_types).toEqual(["labor"]);
+    expect(body).not.toHaveProperty("include_inventory_cost");
+    expect(body).not.toHaveProperty("expense_types");
     await waitFor(() => expect(screen.queryByTestId("dividend-plan-guided")).toBeNull());
     expect(setActionResult).toHaveBeenCalledWith(expect.objectContaining({ action: "dividend_plan_created" }));
   });
@@ -169,6 +171,23 @@ describe("FinanceDividendsPage 持股分红", () => {
       "半年（正式单按半年，月度出预览）",
       "年度（正式单按年，月度出预览）",
     ]);
+  });
+
+  it("发放付账日（BSM:1787、第十八批裁决 44）：方案表显示中文，弹窗不选拦截，选第二个付账日后载荷带 payout_pay_slot: 2", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("dividend-plan-row-divp_1").textContent).toContain("第二个付账日"));
+    fireEvent.click(screen.getByTestId("dividend-plan-create-open"));
+    const select = screen.getByTestId("dividend-plan-pay-slot") as HTMLSelectElement;
+    expect(Array.from(select.options).map((option) => option.textContent)).toEqual(["请选择", "第一个付账日", "第二个付账日", "第三个付账日"]);
+    fireEvent.change(screen.getByTestId("dividend-plan-principal"), { target: { value: "usr_p_slot" } });
+    fireEvent.click(screen.getByTestId("dividend-plan-guided-next"));
+    expect(screen.getByTestId("dividend-plan-guided-error").textContent).toContain("发放付账日");
+    fireEvent.change(select, { target: { value: "2" } });
+    fireEvent.click(screen.getByTestId("dividend-plan-guided-next"));
+    await waitFor(() => expect(screen.getByTestId("dividend-plan-guided-summary").textContent).toContain("第二个付账日"));
+    fireEvent.click(screen.getByTestId("dividend-plan-save"));
+    await waitFor(() => expect(lastWriteBody).toBeTruthy());
+    expect((lastWriteBody as Record<string, unknown>).payout_pay_slot).toBe(2);
   });
 
   it("期间作业：填期间标签生成计算单；驳回走理由必填弹窗", async () => {
@@ -200,6 +219,7 @@ describe("FinanceDividendsPage 持股分红", () => {
     await waitFor(() => expect(screen.getByTestId("dividend-plan-create-open")).toBeTruthy());
     fireEvent.click(screen.getByTestId("dividend-plan-create-open"));
     fireEvent.change(screen.getByTestId("dividend-plan-principal"), { target: { value: "usr_p_default" } });
+    fireEvent.change(screen.getByTestId("dividend-plan-pay-slot"), { target: { value: "1" } });
     // 三开关默认渲染为未勾选，保护线参数输入未展开。
     expect((screen.getByTestId("dividend-plan-loss-carryforward") as HTMLInputElement).checked).toBe(false);
     expect((screen.getByTestId("dividend-plan-arrears-offset") as HTMLInputElement).checked).toBe(false);
@@ -222,6 +242,7 @@ describe("FinanceDividendsPage 持股分红", () => {
     await waitFor(() => expect(screen.getByTestId("dividend-plan-create-open")).toBeTruthy());
     fireEvent.click(screen.getByTestId("dividend-plan-create-open"));
     fireEvent.change(screen.getByTestId("dividend-plan-principal"), { target: { value: "usr_p_ded" } });
+    fireEvent.change(screen.getByTestId("dividend-plan-pay-slot"), { target: { value: "1" } });
     fireEvent.click(screen.getByTestId("dividend-plan-loss-carryforward"));
     fireEvent.click(screen.getByTestId("dividend-plan-arrears-offset"));
     fireEvent.click(screen.getByTestId("dividend-plan-payout-floor"));

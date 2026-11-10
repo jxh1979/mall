@@ -1,4 +1,4 @@
-# P0 OpenAPI 权限、事件、任务追溯收口附录 V0.60
+# P0 OpenAPI 权限、事件、任务追溯收口附录 V0.61
 
 ## 1. 文档定位
 
@@ -14,11 +14,11 @@
 
 | 检查项 | 当前结果 | 执行结论 |
 |---|---:|---|
-| OpenAPI operation 数 | 1264 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
-| OpenAPI 权限/通用权限状态数 | 425 | 人工权限矩阵正文未覆盖 324 项；缺口以本文第 3 节补齐 |
-| OpenAPI 成功/失败事件数 | 2528 | 人工事件矩阵正文未覆盖 2479 项；完整事件字典以本文第 4 节为准 |
-| operation 级任务追溯 | 1264 | 人工任务映射正文未逐项覆盖 1258 个 operation；逐 operation 映射以本文第 5 节为准 |
-| 写接口数量 | 758 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
+| OpenAPI operation 数 | 1269 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
+| OpenAPI 权限/通用权限状态数 | 427 | 人工权限矩阵正文未覆盖 326 项；缺口以本文第 3 节补齐 |
+| OpenAPI 成功/失败事件数 | 2538 | 人工事件矩阵正文未覆盖 2489 项；完整事件字典以本文第 4 节为准 |
+| operation 级任务追溯 | 1269 | 人工任务映射正文未逐项覆盖 1263 个 operation；逐 operation 映射以本文第 5 节为准 |
+| 写接口数量 | 761 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
 
 ## 3. 权限码与认证上下文补充表
 
@@ -249,8 +249,10 @@
 | `finance.daily_close.lock` | staff-token | project-entity | 5 | createDailyClose, confirmDailyClose, lockDailyClose, markDailyCloseFinal, archiveDailyClose | 已在权限矩阵正文出现 |
 | `finance.daily_close.manage` | staff-token | project-bar-table, project-entity | 5 | listDailyCloses, listDailyCloseSummaries, listDailyCloseAdjustments, resolveBarShift, witnessBarShift | OpenAPI 补充，以本附录为准 |
 | `finance.deposit.manage` | staff-token | platform | 1 | recordDepositAction | OpenAPI 补充，以本附录为准 |
-| `finance.dividend.manage` | staff-token | platform | 9 | createDividendPlan, updateDividendPlan, computeDividendStatements, confirmDividendLegalAmount, submitDividendStatement, approveDividendStatement, rejectDividendStatement, markDividendStatementPaid, releaseDividendReserve | OpenAPI 补充，以本附录为准 |
-| `finance.dividend.view` | staff-token | merchant | 4 | listDividendPlans, listDividendStatements, getDividendStatement, listDividendReserveReleases | OpenAPI 补充，以本附录为准 |
+| `finance.dividend.manage` | staff-token | platform | 11 | createDividendPlan, updateDividendPlan, computeDividendStatements, confirmDividendLegalAmount, submitDividendStatement, approveDividendStatement, rejectDividendStatement, markDividendStatementPaid, releaseDividendReserve, recordDividendPeriodHold, liftDividendPeriodHold | OpenAPI 补充，以本附录为准 |
+| `finance.dividend.view` | staff-token | merchant, platform | 5 | listDividendPlans, listDividendStatements, getDividendStatement, listDividendReserveReleases, listDividendPeriodHolds | OpenAPI 补充，以本附录为准 |
+| `finance.entity_tax.manage` | staff-token | platform | 1 | declareEntityTax | OpenAPI 补充，以本附录为准 |
+| `finance.entity_tax.view` | staff-token | platform | 1 | listEntityTaxDeclarations | OpenAPI 补充，以本附录为准 |
 | `finance.inventory_variance.post` | staff-token | platform | 1 | postInventoryVariance | OpenAPI 补充，以本附录为准 |
 | `finance.locked_backfill.approve` | staff-token | project-entity | 1 | approveArApAdjustment | OpenAPI 补充，以本附录为准 |
 | `finance.locked_backfill.request` | staff-token | project-entity | 1 | requestArApAdjustment | OpenAPI 补充，以本附录为准 |
@@ -1291,6 +1293,12 @@
 | `dividend.approved` | success | `approveDividendStatement` | `POST` | `/api/v1/finance/dividends/statements/{id}/approve` | FIN-财务台账 | `finance.dividend.manage` | 接口级事件，以本附录为准 |
 | `dividend.compute_failed` | failure | `computeDividendStatements` | `POST` | `/api/v1/finance/dividends/statements/compute` | FIN-财务台账 | `finance.dividend.manage` | 接口级事件，以本附录为准 |
 | `dividend.computed` | success | `computeDividendStatements` | `POST` | `/api/v1/finance/dividends/statements/compute` | FIN-财务台账 | `finance.dividend.manage` | 接口级事件，以本附录为准 |
+| `dividend.hold_lift_failed` | failure | `liftDividendPeriodHold` | `POST` | `/api/v1/finance/dividends/holds/{hold_id}/lift` | FIN-财务台账 | `finance.dividend.manage` | 接口级事件，以本附录为准 |
+| `dividend.hold_lifted` | success | `liftDividendPeriodHold` | `POST` | `/api/v1/finance/dividends/holds/{hold_id}/lift` | FIN-财务台账 | `finance.dividend.manage` | 接口级事件，以本附录为准 |
+| `dividend.hold_record_failed` | failure | `recordDividendPeriodHold` | `POST` | `/api/v1/finance/dividends/holds` | FIN-财务台账 | `finance.dividend.manage` | 接口级事件，以本附录为准 |
+| `dividend.hold_recorded` | success | `recordDividendPeriodHold` | `POST` | `/api/v1/finance/dividends/holds` | FIN-财务台账 | `finance.dividend.manage` | 接口级事件，以本附录为准 |
+| `dividend.holds_list_failed` | failure | `listDividendPeriodHolds` | `GET` | `/api/v1/finance/dividends/holds` | FIN-财务台账 | `finance.dividend.view` | 接口级事件，以本附录为准 |
+| `dividend.holds_listed` | success | `listDividendPeriodHolds` | `GET` | `/api/v1/finance/dividends/holds` | FIN-财务台账 | `finance.dividend.view` | 接口级事件，以本附录为准 |
 | `dividend.legal_confirm_failed` | failure | `confirmDividendLegalAmount` | `POST` | `/api/v1/finance/dividends/statements/{id}/legal-confirmation` | FIN-财务台账 | `finance.dividend.manage` | 接口级事件，以本附录为准 |
 | `dividend.legal_confirmed` | success | `confirmDividendLegalAmount` | `POST` | `/api/v1/finance/dividends/statements/{id}/legal-confirmation` | FIN-财务台账 | `finance.dividend.manage` | 接口级事件，以本附录为准 |
 | `dividend.mark_paid_failed` | failure | `markDividendStatementPaid` | `POST` | `/api/v1/finance/dividends/statements/{id}/mark-paid` | FIN-财务台账 | `finance.dividend.manage` | 接口级事件，以本附录为准 |
@@ -1355,6 +1363,10 @@
 | `entity_binding.changed` | success | `createBusinessEntityBinding` | `POST` | `/api/v1/platform/business-entity-bindings` | GOV-平台治理 | `entity.binding.manage` | 已在事件矩阵正文出现 |
 | `entity_binding.view_failed` | failure | `listBusinessEntityBindings` | `GET` | `/api/v1/platform/business-entity-bindings` | GOV-平台治理 | `entity.binding.view` | 接口级事件，以本附录为准 |
 | `entity_binding.viewed` | success | `listBusinessEntityBindings` | `GET` | `/api/v1/platform/business-entity-bindings` | GOV-平台治理 | `entity.binding.view` | 接口级事件，以本附录为准 |
+| `entity_tax.declare_failed` | failure | `declareEntityTax` | `POST` | `/api/v1/finance/entity-taxes` | FIN-财务台账 | `finance.entity_tax.manage` | 接口级事件，以本附录为准 |
+| `entity_tax.declared` | success | `declareEntityTax` | `POST` | `/api/v1/finance/entity-taxes` | FIN-财务台账 | `finance.entity_tax.manage` | 接口级事件，以本附录为准 |
+| `entity_tax.list_failed` | failure | `listEntityTaxDeclarations` | `GET` | `/api/v1/finance/entity-taxes` | FIN-财务台账 | `finance.entity_tax.view` | 接口级事件，以本附录为准 |
+| `entity_tax.listed` | success | `listEntityTaxDeclarations` | `GET` | `/api/v1/finance/entity-taxes` | FIN-财务台账 | `finance.entity_tax.view` | 接口级事件，以本附录为准 |
 | `evidence.attachment_bind_failed` | failure | `bindEvidenceAttachment` | `POST` | `/api/v1/evidence/attachments/{attachment_id}/bind` | EVD-事件证据 | `evidence.attachment.create` | 接口级事件，以本附录为准 |
 | `evidence.attachment_bound` | success | `bindEvidenceAttachment` | `POST` | `/api/v1/evidence/attachments/{attachment_id}/bind` | EVD-事件证据 | `evidence.attachment.create` | 接口级事件，以本附录为准 |
 | `evidence.attachment_complete_failed` | failure | `completeEvidenceAttachmentUpload` | `POST` | `/api/v1/evidence/attachments/{attachment_id}/complete` | EVD-事件证据 | `evidence.attachment.create` | 接口级事件，以本附录为准 |
@@ -3435,7 +3447,7 @@
 | FIN-财务台账 | `billTurnoverRent` | `POST` | `/api/v1/finance/turnover-rent/bills` | 营业额抽成计费生成应收 | `finance.turnover_rent.bill` | `finance.turnover_rent.billed` / `finance.turnover_rent.bill_failed` | web | operation 级补充 |
 | FIN-财务台账 | `closeFinancePeriod` | `POST` | `/api/v1/finance/period-closes` | 封账（按综合体＋月份） | `finance.period_close.execute` | `finance_period.closed` / `finance_period.close_failed` | web | operation 级补充 |
 | FIN-财务台账 | `closeFinanceReconciliationDifference` | `POST` | `/api/v1/finance/reconciliation/differences/{difference_id}/close` | 提交差异关闭复核 | `finance.reconciliation.resolve` | `finance.reconciliation.difference_review_submitted` / `finance.reconciliation.difference_review_submit_failed` | web | operation 级补充 |
-| FIN-财务台账 | `computeDividendStatements` | `POST` | `/api/v1/finance/dividends/statements/compute` | 期间分红作业：对每个生效中方案出计算单（净利润=收入−成本−费用；幂等可重跑，草稿/预览/驳回作废重算，进入审批流跳过） | `finance.dividend.manage` | `dividend.computed` / `dividend.compute_failed` | web | operation 级补充 |
+| FIN-财务台账 | `computeDividendStatements` | `POST` | `/api/v1/finance/dividends/statements/compute` | 期间分红作业：对每个生效中方案出计算单（净利润=收入−成本−费用−税费；幂等可重跑，草稿/预览/驳回作废重算，进入审批流跳过） | `finance.dividend.manage` | `dividend.computed` / `dividend.compute_failed` | web | operation 级补充 |
 | FIN-财务台账 | `confirmDailyClose` | `POST` | `/api/v1/finance/daily-closes/{id}/confirm` | 确认日结 | `finance.daily_close.lock` | `finance_daily_close.confirmed` / `finance_daily_close.confirm_failed` | web | operation 级补充 |
 | FIN-财务台账 | `confirmDividendLegalAmount` | `POST` | `/api/v1/finance/dividends/statements/{id}/legal-confirmation` | 财务登记依法可分配金额（仅正式草稿/已驳回单；本次分配取经营口径与核定额较小者并重算） | `finance.dividend.manage` | `dividend.legal_confirmed` / `dividend.legal_confirm_failed` | web | operation 级补充 |
 | FIN-财务台账 | `confirmFinanceRefundResult` | `POST` | `/api/v1/finance/refunds/{refund_id}/confirm` | 另一人核实已有执行记录的实际退款结果 | `finance.refund.create` | `finance_refund.confirmed` / `finance_refund.confirm_failed` | web | operation 级补充 |
@@ -3444,12 +3456,13 @@
 | FIN-财务台账 | `createArApItem` | `POST` | `/api/v1/finance/ar-ap-items` | 手工新增应收应付台账项 | `finance.ar_ap.manage` | `finance_ar_ap.created` / `finance_ar_ap.create_failed` | web | operation 级补充 |
 | FIN-财务台账 | `createArApPayment` | `POST` | `/api/v1/finance/ar-ap-items/{id}/payments` | 应收应付收付款登记 | `finance.payment.register` | `finance_payment.registered` / `finance_payment.register_failed` | web | operation 级补充 |
 | FIN-财务台账 | `createDailyClose` | `POST` | `/api/v1/finance/daily-closes` | 生成日结 | `finance.daily_close.lock` | `finance_daily_close.generated` / `finance_daily_close.generate_failed` | web | operation 级补充 |
-| FIN-财务台账 | `createDividendPlan` | `POST` | `/api/v1/finance/dividends/plans` | 新建分红方案（比例/税率/周期/基数构成全可配，80/20 仅默认值） | `finance.dividend.manage` | `dividend.plan_created` / `dividend.plan_create_failed` | web | operation 级补充 |
+| FIN-财务台账 | `createDividendPlan` | `POST` | `/api/v1/finance/dividends/plans` | 新建分红方案（比例/税率/周期/收入域可配，80/20 仅默认值；销货成本、全部费用与该期税费固定扣减，发放付账日必填） | `finance.dividend.manage` | `dividend.plan_created` / `dividend.plan_create_failed` | web | operation 级补充 |
 | FIN-财务台账 | `createFinanceReconciliationDifference` | `POST` | `/api/v1/finance/reconciliation/differences` | 创建对账差异 | `finance.reconciliation.difference.create` | `finance.reconciliation.difference_created` / `finance.reconciliation.difference_create_failed` | web | operation 级补充 |
 | FIN-财务台账 | `createFinanceRefund` | `POST` | `/api/v1/finance/refunds` | 创建财务退款记录 | `finance.refund.create` | `finance_refund.created` / `finance_refund.create_failed` | web | operation 级补充 |
 | FIN-财务台账 | `createMerchantExpenseEntry` | `POST` | `/api/v1/finance/merchant-expenses` | 手工录入商户费用（人工/摊销/其他，理由必填） | `finance.merchant_expense.manage` | `merchant_expense.manual_created` / `merchant_expense.manual_create_failed` | web | operation 级补充 |
 | FIN-财务台账 | `createPaymentIntent` | `POST` | `/api/v1/finance/payment-intents` | 创建聚合支付意图 | `finance.payment_intent.create` | `payment.intent_created` / `payment.intent_failed` | web, kiosk, miniapp, app | operation 级补充 |
 | FIN-财务台账 | `createPropertyFeeRate` | `POST` | `/api/v1/finance/property-fee/rates` | 维护物业费费率（项目级、可按期） | `finance.property_fee.manage` | `finance_property_fee.rate_set` / `finance_property_fee.rate_set_failed` | web | operation 级补充 |
+| FIN-财务台账 | `declareEntityTax` | `POST` | `/api/v1/finance/entity-taxes` | 登记税费实际申报金额并提交财务、税务、法务审核与最高确认 | `finance.entity_tax.manage` | `entity_tax.declared` / `entity_tax.declare_failed` | web | operation 级补充 |
 | FIN-财务台账 | `exportArApItems` | `GET` | `/api/v1/finance/ar-ap-items/export` | 导出应收应付台账快照 | `finance.ar_ap.export` | `finance_ar_ap.exported` / `finance_ar_ap.export_failed` | web | operation 级补充 |
 | FIN-财务台账 | `getDividendStatement` | `GET` | `/api/v1/finance/dividends/statements/{id}` | 分红计算单详情（头 + 算式明细行，逐项可追溯到三个来源台账） | `finance.dividend.view` | `dividend.statement_viewed` / `dividend.statement_view_failed` | web, merchant_portal, merchant_app | operation 级补充 |
 | FIN-财务台账 | `getFinanceRefund` | `GET` | `/api/v1/finance/refunds/{refund_id}` | 读取退款详情和全部办理记录 | `finance.ar_ap.view` | `finance_refund.viewed` / `finance_refund.view_failed` | web | operation 级补充 |
@@ -3458,14 +3471,17 @@
 | FIN-财务台账 | `getPointsRecoveryDetail` | `GET` | `/api/v1/finance/points-recoveries/{customerId}` | 查看会员全部积分追回及豁免记录 | `finance.points_recovery.view` | `points.recovery.viewed` / `points.recovery.view_failed` | app, dealer_portal, kiosk, merchant_app, merchant_portal, miniapp, mobile_admin, staff_work_phone, web | operation 级补充 |
 | FIN-财务台账 | `identifyFinanceReconciliationDifference` | `POST` | `/api/v1/finance/reconciliation/differences/{difference_id}/identify` | 识别对账差异 | `finance.reconciliation.resolve` | `finance.reconciliation.difference_identified` / `finance.reconciliation.difference_identify_failed` | web | operation 级补充 |
 | FIN-财务台账 | `initiateInternalPayment` | `POST` | `/api/v1/finance/internal-payables/{ar_ap_item_id}/payment-attempts` | 登记内部应付已发起付款(银行在途) | `finance.payment.register` | `finance.internal_payment.initiated` / `finance.internal_payment.initiate_failed` | web | operation 级补充 |
+| FIN-财务台账 | `liftDividendPeriodHold` | `POST` | `/api/v1/finance/dividends/holds/{hold_id}/lift` | 恢复暂缓分红（登记恢复的协商结果，之后该期照常出正式单） | `finance.dividend.manage` | `dividend.hold_lifted` / `dividend.hold_lift_failed` | web | operation 级补充 |
 | FIN-财务台账 | `listArApItems` | `GET` | `/api/v1/finance/ar-ap-items` | 查询应收应付台账 | `finance.ar_ap.view` | `finance_ar_ap.viewed` / `finance_ar_ap.view_failed` | web | operation 级补充 |
 | FIN-财务台账 | `listArApPayments` | `GET` | `/api/v1/finance/ar-ap-items/{id}/payments` | 读取所选台账原收付款流水 | `finance.ar_ap.view` | `ar_ap_payment.listed` / `ar_ap_payment.list_failed` | web | operation 级补充 |
 | FIN-财务台账 | `listDailyCloseAdjustments` | `GET` | `/api/v1/finance/daily-closes/{id}/adjustments` | 查询日结的锁定后补录 | `finance.daily_close.manage` | `finance.daily_close_adjustment.viewed` / `finance.daily_close_adjustment.view_failed` | web | operation 级补充 |
 | FIN-财务台账 | `listDailyCloses` | `GET` | `/api/v1/finance/daily-closes` | 查询日结批次 | `finance.daily_close.manage` | `finance.daily_close.viewed` / `finance.daily_close.view_failed` | web | operation 级补充 |
 | FIN-财务台账 | `listDailyCloseSummaries` | `GET` | `/api/v1/finance/daily-closes/{id}/summaries` | 查询日结七源汇总 | `finance.daily_close.manage` | `finance.daily_close_summary.viewed` / `finance.daily_close_summary.view_failed` | web, mobile_admin | operation 级补充 |
+| FIN-财务台账 | `listDividendPeriodHolds` | `GET` | `/api/v1/finance/dividends/holds` | 整期暂不分红／暂缓分红登记列表（平台财务持股分红页用，最近登记在前） | `finance.dividend.view` | `dividend.holds_listed` / `dividend.holds_list_failed` | web | operation 级补充 |
 | FIN-财务台账 | `listDividendPlans` | `GET` | `/api/v1/finance/dividends/plans` | 分红方案列表（商户 scope 账号只见本商户） | `finance.dividend.view` | `dividend.plans_listed` / `dividend.plans_list_failed` | web, merchant_portal, merchant_app | operation 级补充 |
 | FIN-财务台账 | `listDividendReserveReleases` | `GET` | `/api/v1/finance/dividends/reserve-releases` | 发放保护线留存·待释放/已释放台账（商户 scope 账号只见本商户，主理人视图同入口） | `finance.dividend.view` | `dividend.reserve_ledger_listed` / `dividend.reserve_ledger_list_failed` | web, merchant_portal, merchant_app | operation 级补充 |
 | FIN-财务台账 | `listDividendStatements` | `GET` | `/api/v1/finance/dividends/statements` | 分红计算单分页（商户 scope 账号只见本商户，主理人视图同入口） | `finance.dividend.view` | `dividend.statements_listed` / `dividend.statements_list_failed` | web, merchant_portal, merchant_app | operation 级补充 |
+| FIN-财务台账 | `listEntityTaxDeclarations` | `GET` | `/api/v1/finance/entity-taxes` | 税费申报登记分页查询（按经营主体、所属月、税种、状态筛选） | `finance.entity_tax.view` | `entity_tax.listed` / `entity_tax.list_failed` | web | operation 级补充 |
 | FIN-财务台账 | `listFinancePeriodCloses` | `GET` | `/api/v1/finance/period-closes` | 查询已封账月份 | `finance.period_close.execute` | `finance_period.viewed` / `finance_period.view_failed` | web | operation 级补充 |
 | FIN-财务台账 | `listFinanceReconciliationStageLimits` | `GET` | `/api/v1/finance/reconciliation/stage-limits` | 查询对账差异停留时限（按项目） | `finance.reconciliation.policy.manage` | `not_applicable` / `not_applicable` | web | operation 级补充 |
 | FIN-财务台账 | `listFinanceRefunds` | `GET` | `/api/v1/finance/refunds` | 读取退款台账及未结状态 | `finance.ar_ap.view` | `finance_refund.listed` / `finance_refund.list_failed` | web | operation 级补充 |
@@ -3484,6 +3500,7 @@
 | FIN-财务台账 | `preparePayrollBankPayment` | `POST` | `/api/v1/finance/payroll/{statementId}/payment-attempts` | 准备工资银行付款 | `finance.payroll.payment.register` | `finance.payroll.prepare` / `finance.payroll.payment_failed` | app, dealer_portal, kiosk, merchant_app, merchant_portal, miniapp, mobile_admin, staff_work_phone, web | operation 级补充 |
 | FIN-财务台账 | `queryFinanceRefund` | `POST` | `/api/v1/finance/refunds/{refund_id}/query` | 查询原退款单的渠道权威结果 | `finance.ar_ap.view` | `finance_refund.queried` / `finance_refund.query_failed` | web | operation 级补充 |
 | FIN-财务台账 | `recordDepositAction` | `POST` | `/api/v1/finance/deposits/actions` | 押金台账动作（收取/退还/抵扣/没收） | `finance.deposit.manage` | `finance.deposit.action_recorded` / `finance.deposit.action_failed` | web | operation 级补充 |
+| FIN-财务台账 | `recordDividendPeriodHold` | `POST` | `/api/v1/finance/dividends/holds` | 登记整期暂不分红或暂缓分红（原因、协商结果必填，不另走审批；该期正式草稿随登记作废） | `finance.dividend.manage` | `dividend.hold_recorded` / `dividend.hold_record_failed` | web | operation 级补充 |
 | FIN-财务台账 | `recordFinanceRefundExecution` | `POST` | `/api/v1/finance/refunds/{refund_id}/execution` | 实际支付经办人本人登记原路执行凭证 | `finance.refund.create` | `finance_refund.execution_recorded` / `finance_refund.execution_failed` | web | operation 级补充 |
 | FIN-财务台账 | `recordInternalPaymentFailure` | `POST` | `/api/v1/finance/internal-payables/{ar_ap_item_id}/payment-attempts/{attempt_id}/failure` | 登记内部应付付款明确失败(付款失败待处理) | `finance.payment.register` | `finance.internal_payment.failed` / `finance.internal_payment.fail_record_failed` | web | operation 级补充 |
 | FIN-财务台账 | `rejectDividendStatement` | `POST` | `/api/v1/finance/dividends/statements/{id}/reject` | 驳回：pending_review → rejected（理由必填；驳回后可重算） | `finance.dividend.manage` | `dividend.rejected` / `dividend.reject_failed` | web | operation 级补充 |

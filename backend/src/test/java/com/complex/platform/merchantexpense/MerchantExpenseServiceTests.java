@@ -116,6 +116,11 @@ class MerchantExpenseServiceTests {
         }
 
         @Override
+        public int attachPayrollLabor(String period, String operatorUserId, Instant now) {
+            return 0;
+        }
+
+        @Override
         public List<MerchantExpenseDriftRecord> listAutoDrift(String period) {
             return List.of();
         }

@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.25
+// 文件版本：V0.26
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
@@ -293,16 +293,18 @@ class JdbcFinanceRepository implements FinanceRepository {
     }
 
     @Override
-    public int retagArApItemSourceType(String id, String expectedSourceType, String newSourceType, Instant now) {
+    public int retagArApItemSourceType(String id, String expectedSourceType, String newSourceType, LocalDate dueDate, Instant now) {
         // V304：re-tag 源类型（前态守卫幂等——仅当现值=expected 才翻）；append-only(V145 delete_only) 允许 UPDATE。
+        // 211-R2：同一 UPDATE 把到期日改为方案发放付账日。
         return jdbcTemplate.update("""
                 UPDATE ar_ap_items
-                   SET source_type = :new_source_type, updated_at = :now
+                   SET source_type = :new_source_type, due_date = :due_date, updated_at = :now
                  WHERE id = :id AND source_type = :expected_source_type
                 """, new MapSqlParameterSource()
                 .addValue("id", id)
                 .addValue("expected_source_type", expectedSourceType)
                 .addValue("new_source_type", newSourceType)
+                .addValue("due_date", dueDate)
                 .addValue("now", timestampWithTimeZone(now)));
     }
 

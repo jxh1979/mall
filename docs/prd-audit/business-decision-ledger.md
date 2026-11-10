@@ -1,6 +1,6 @@
 # PRD 审计业务裁决台账
 
-文档版本：V0.83
+文档版本：V0.84
 状态：进行中
 迁移日期：2026-07-27
 当前事实源：三份立法 HTML 以既有冻结基线叠加 James 此前 M02 至 M08 的点名批准、全量审计 M001、M002 的逐项批准，以及本轮 2026-10-16 至 2026-10-17 业务 HTML 审计中 Q01 至 Q40 及子题实际明确批准且未被后续替代的裁决，和 2026-10-17 第二批 HTML 业务线推演审计（A–F 六线 64 条、停车章）的逐项批准，并叠加本轮 CG 70 项来源确认与 C01–C09、N01–N03 最终澄清及补全文稿中 F01、W01–W05 的整体修改批准（本文件末节）；本轮最终规则、未采纳或替代关系、现行版本与字节哈希见本文件末节。历史记录保留为各自当时事实，不恢复已被替代的建议。
@@ -3946,9 +3946,9 @@ HTML 的语义补齐与直接引用同步可在本批核验；70项中的业务�
 | 39 | **第 202 条 酒吧账单反结时已付款项的处理**（题面：「第 202 条：酒吧账单反结（把已结账单重新打开、改正后再结，须主管审批）时，客人原先已付的钱怎么处理？现在反结只把原收款记录作废：储值卡扣的钱不退回，重新结账再选储值会再扣一次。」）—— 操作员选「储值当场退回原卡（推荐）」：反结生效时储值部分当场回原卡；现金、POS 等收款记录作废，收银按更正后的账单重新收款（通常客人还在场，多退少补）。（同日首次弹窗操作员问「什么是反结」，控制席解释为「把已结完账的酒吧账单重新打开、改正后再结一次，须主管审批留痕（BSM:1069）」后重问。） | 待做（第 202 条，18W 已核实） |
 | 40 | **第 183 条 总控驾驶舱「结算待确认」口径**（题面：「第 183 条：总控驾驶舱「财务：结算待确认」这一项数哪些？系统里会「待确认」的结算只有两类：演出结算（履约待确认、有争议、合同没约定时挂起）和门票积分月结账单（商户提了异议、财务还没处理完）。通票月度结算单按第 75 条算出即确认，不会待确认。」）—— 操作员选「两类分开显示（推荐）」：数演出结算挂起待确认的、积分月结账单有未处理异议的，分两个数显示，不相加。 | 待做（第 183 条，18W 已核实） |
 | 41 | **第 188 条 封账的范围、周期、条件与效果**（题面：「第 188 条：封账在系统里怎么做？HTML 只写「封账由财务部门执行，条件是账目已算清楚、经确认无误、四流一致」，又写正式会计核算在专业财税软件里做、本平台不替代；没写按什么范围和周期封、「四流一致」指什么、封账后拦什么。」）—— 操作员选「按综合体按月封账（推荐）」：财务中心按综合体＋月份在平台办理；只放行该月每天五类数据都已最终、日结都已锁定的月份；四流一致由财务核对后勾选确认留痕；封账不能撤销，不另加拦截。 | 待做（第 188 条，18W 已核实） |
-| 42 | **第 210 条 分红净利润扣税费的登记与出单前提**（题面：「第 210 条：分红净利润要扣「该期间的各项税费」，系统现在没有登记酒吧公司税费的地方。HTML 写平台保存「经授权人员手工填写并通过审批」的税费数据、实缴与申报的差额不进税费成本。我的方案：财务按公司、税种、所属期手工登记「实际申报金额」，经财务、税务、法务审核并由顶层平台公司老板最终确认后生效；分红扣本期内已生效的申报金额合计；按季申报的税整季计入季末那个月；不设「登记齐了才能出正式单」的前提。可以吗？」）—— 操作员选「登记齐了才能出单」：正式单出单前本期每个月都要有已生效的税费登记，缺的不出单并写跳过原因，其余同上（「其余同上」即题面方案的其余各项照做）。 | 待做（第 210 条，18W 已核实） |
-| 43 | **第 211 条 整期暂不分红或暂缓分红的登记**（题面：「第 211 条：「整期暂不分红或暂缓分红」须主理人与娱乐平台公司协商一致后执行，并记录原因与协商结果；系统现在没有登记处。我的方案：平台财务在持股分红页按商户按期登记（暂不分红或暂缓分红，原因、协商结果必填，不另走审批）；该期正式单已提交审批或已发放的不能再登记，草稿随登记作废；「暂不分红」该期不出正式单、利润不补分；「暂缓分红」等协商恢复后由财务登记恢复，再照常出单；月度预览照常。可以吗？」）—— 操作员选「按这个方案（推荐）」：照上面写的做。 | 待做（第 211 条，18W 已核实） |
-| 44 | **第 211 条 分红周期「按财务对账的固定处理日期设定」的读法**（题面：「第 211 条：HTML 写「分红周期可配：按财务对账的固定处理日期设定（例如一个月中的某几天）」，另一处写「发放走应付款项，落在三个付账日之一，具体哪一个由该公司在分红周期配置中指定」。我理解为：分红方案加一项「发放付账日」（每月三个付账日之一，出厂 5、15、25 日），审批通过后给主理人的应付和留存释放的应付都落在当天或之后第一个该付账日（现在是审批当天即到期）；分红期间仍按自然月、季、半年、年切分，正式单仍由财务手动出。对吗？」）—— 操作员选「对，按这个理解（推荐）」：只加「发放付账日」配置，期间切分与出单方式不变。 | 待做（第 211 条，18W 已核实） |
+| 42 | **第 210 条 分红净利润扣税费的登记与出单前提**（题面：「第 210 条：分红净利润要扣「该期间的各项税费」，系统现在没有登记酒吧公司税费的地方。HTML 写平台保存「经授权人员手工填写并通过审批」的税费数据、实缴与申报的差额不进税费成本。我的方案：财务按公司、税种、所属期手工登记「实际申报金额」，经财务、税务、法务审核并由顶层平台公司老板最终确认后生效；分红扣本期内已生效的申报金额合计；按季申报的税整季计入季末那个月；不设「登记齐了才能出正式单」的前提。可以吗？」）—— 操作员选「登记齐了才能出单」：正式单出单前本期每个月都要有已生效的税费登记，缺的不出单并写跳过原因，其余同上（「其余同上」即题面方案的其余各项照做）。 | 已落地（18AC，见 18AC 落地位置补记） |
+| 43 | **第 211 条 整期暂不分红或暂缓分红的登记**（题面：「第 211 条：「整期暂不分红或暂缓分红」须主理人与娱乐平台公司协商一致后执行，并记录原因与协商结果；系统现在没有登记处。我的方案：平台财务在持股分红页按商户按期登记（暂不分红或暂缓分红，原因、协商结果必填，不另走审批）；该期正式单已提交审批或已发放的不能再登记，草稿随登记作废；「暂不分红」该期不出正式单、利润不补分；「暂缓分红」等协商恢复后由财务登记恢复，再照常出单；月度预览照常。可以吗？」）—— 操作员选「按这个方案（推荐）」：照上面写的做。 | 已落地（18AC，见 18AC 落地位置补记） |
+| 44 | **第 211 条 分红周期「按财务对账的固定处理日期设定」的读法**（题面：「第 211 条：HTML 写「分红周期可配：按财务对账的固定处理日期设定（例如一个月中的某几天）」，另一处写「发放走应付款项，落在三个付账日之一，具体哪一个由该公司在分红周期配置中指定」。我理解为：分红方案加一项「发放付账日」（每月三个付账日之一，出厂 5、15、25 日），审批通过后给主理人的应付和留存释放的应付都落在当天或之后第一个该付账日（现在是审批当天即到期）；分红期间仍按自然月、季、半年、年切分，正式单仍由财务手动出。对吗？」）—— 操作员选「对，按这个理解（推荐）」：只加「发放付账日」配置，期间切分与出单方式不变。 | 已落地（18AC，见 18AC 落地位置补记） |
 | 45 | **第 202 条 反结时账单已登记退款的处理**（题面：「第 202 条反结补问：酒吧账单现金结了 3000，客人退一瓶已登记退款 500（财务还没把钱付出去），这时发现账单记错要反结。现在反结会把 3000 原收款整笔作废，按扣过退款的 2500 重收，收银「多退少补」当场退客人 500，财务那笔 500 又照付，客人多拿 500。怎么处理？」）—— 操作员选「只作废没退的部分（推荐）」：已登记的 500 退款照常由财务付出；反结只把没退的 2500 收款作废，再按更正后的账单重收。与第十七批「作废并冲正」遇到已退款时的处理一致，账和钱都不重复。（来由：18AA 收尾复核意见。） | 已落地（18AA 复核修复，第 202 条） |
 | 46 | **第 191 条 派驻起止日期按营业日判**（题面：「派驻员工的「派驻起止日期」，按自然日判还是按酒吧营业日判？现状（18AB 本段代码）：按自然日判（过零点就换日）的：员工的商户范围、点单时指定派驻履约人、开台时指派派驻员工为主责服务人、查看派驻员工的考勤领取事件；派驻提成归集（既有代码）也按计提时的自然日判。按班次工作日判的：派驻酒吧给派驻员工排班。后果：派驻最后一天的夜班酒吧能排进去，但一过零点，同一营业日里该员工名下的服务单就不能确认收款或完成，也不能被开台指派。HTML 依据：ENUM:187 写考勤日期、销售提成月份等「一律以开台或下单时点所属的营业日为准，不按自然日切分」，但没有点名派驻起止。决策台账里也没有相关裁决。」）—— 操作员选「按营业日判（推荐）」：凡判断是否在派驻期内都按酒吧营业日：结束日当天的夜班过零点后、到营业日结束前仍算派驻期内。已在派驻期内下的服务单，之后的收款、完成、取消按下单时所属营业日判。派驻提成归集也改按计提时所属营业日。与 ENUM:187 考勤日期、提成月份按营业日一致。（来由：18AB 收尾复核意见。） | 已落地（18AB 复核修复，第 191 条） |
 
@@ -5700,3 +5700,126 @@ HTML 的语义补齐与直接引用同步可在本批核验；70项中的业务�
   - BarTableSessionsPage.transferUndo.test.tsx
 - 18AB 复核修复补记·派驻服务单已有单动作按单据所属项目放行（第 191 条，同根补修）：backend/src/main/java/com/complex/platform/serviceorder/ServiceOrderService.java 已有服务单的 requirePerformerInScope(reach, ServiceOrderRecord) 先看该单 project_id（JdbcServiceOrderRepository.findOrderProjectId）是否在调用方可触及范围内，在即放行，不在再按履约人档案项目与派驻（下单时所属营业日）判；收款、完成、取消、出示收款码同经此方法，派驻目标项目运营（无商户号）可后台取消派驻服务单，别的项目照旧 403 CROSS_PROJECT_FORBIDDEN。doCreateOrder 未选酒吧时，经派驻放行的单按派驻目标项目取费率草案生效营业日，非派驻照旧按履约人档案项目。依据：复核意见 to_fix 第 3 条（B 所在项目的运营「列不出这些单，也没法从该页「后台取消」」）；PGM:659「所有业务数据默认按项目隔离，普通岗位没有跨项目查看权」；BSM:1141「公司账上每一笔都全额入账、可追可查」。回归：DispatchedPerformerServiceOrderJdbcIntegrationTests（barProjectOperatorCancelsDispatchedPerformerOrder、dispatchedOrderWithoutBarTakesFeeDraftDayFromTheBarProject）；同类 orderPlacedWithinTheDispatchIsCollectedNextBusinessDay 去掉「结束日之后营业日下的单照旧 403」一断言（该单落本项目，本项目点单员按单据所属项目即放行）。无迁移、无接口变化。
 - 18AB 落地位置补记·运行验收证据、快照、终验文档刷新（无新裁决）：业务提交 d405626b 之后，按第十八批裁决 25 重刷了运行验收证据：后端全量 6602 测，0 失败 0 错误；apps/web 构建通过；常规界面验收（接口全部 mock）实跑 40 条全过；真实后端界面验收未跑，runtime_ready=false。随后依次重生成闭环当前态快照、生产闭环缺口报告、界面验收报告、无上线指挥台。生成器没改。手改 docs/final-closed-loop-acceptance-audit-v0.1.md 与 docs/code-implementation-acceptance-audit-v0.1.md：前端单测源码计数改为 1683；被核文件行数按现状同步（BarService.java 1164→1183 行、BarTableSessionService.java 857→1020 行）；后端全量与常规界面验收的数字、日期改为本次实跑值；写入 npm run verify:unit 实跑结果，五个工作区全过。交付门禁于 2026-11-10 16:10 UTC 在工作树逐项实跑子项，NAS 两项现场探测未跑。仍红的有两项：一是 coding-host-protection，它写死主仓路径，在工作树口径下必红，属工具口径，不做；二是 final-closed-loop-audit，如实留 2 条红（integration-ready、business-acceptance-ready），原因是校验器要求终验把联调、业务验收写成「是」，而裁决 25 定了不跑真实后端界面验收、运行验收未就绪，终验写的是「否」。verify:delivery-gates 总链仍是红的。
+
+18AC 落地位置补记（2026-11-10）：第十八批 AC 段（batch49）按 18W 核实稿与第十八批裁决 42、43、44 实现待开发清单第 210、211 条（分红）；运行验收证据、终验文档在本段最后一个提交刷新；各条落地位置见下。本段追加时，原台账除文档版本 V0.83→V0.84 与裁决表第 42、43、44 行状态列外，其他历史字节保持。
+
+- 18AC 落地位置补记·控制席判定（2026-11-10）：本段（第十八批 AC 段，batch49）实现待开发清单第 210、211 条（分红），方案为 18W 核实稿（本机 b43-audit\g207-211-dividend.json），按第十八批裁决 42（税费登记经财务、税务、法务审核与顶层平台公司最终确认后生效，分红扣本期已生效的实际申报金额，按季申报的整季计入季末那个月；正式单出单前本期每个月都要有已生效的税费登记，缺的不出单并写跳过原因）、裁决 43（暂不分红／暂缓分红登记）、裁决 44（分红方案只加发放付账日）；控制席并入（210）：分红方案不能再关掉销货成本或任一类费用（BSM:1774「减掉这期间的全部成本、费用与税费之后的余额」）；迁移 V615（费用台账来源加 auto_payroll）、V616（发放付账日、税费申报登记、分红单该期税费、暂缓暂不分红登记）；分两条线：费用台账线 210-R1，分红线 211-R2→210-R2→210-R3→211-R1，汇合后由文档组一次改 PRD。
+- 第 210 条 210-R1（工资单月结人工成本与派驻、营销人员提成拨付自动挂接进费用台账）
+  - 落地位置：
+  - backend/src/main/java/com/complex/platform/merchantexpense/JdbcMerchantExpenseRepository.attachPayrollLabor，两段：
+  - 本店员工工资单：该月已定格、发放主体＝该店经营主体（生效绑定的运营主体，否则档案上的 business_entity_id），金额＝total_cent＋tax_cent−tip_cent−service_fee_cent；
+  - 派驻、营销人员提成拨付：ar_ap_items source_type=dispatch_commission_transfer，应付取正、作废冲回应收取负。
+  - 两段都记 labor、来源 auto_payroll，已关账月份不挂。
+  - MerchantExpenseService.syncAuto：来源加 auto_payroll，响应加 payroll_inserted。
+  - listAutoDrift 不比 auto_payroll。
+  - V615__merchant_expense_auto_payroll.sql：chk_mex_source 加 auto_payroll。
+  - 后台「商户费用台账」页：来源显示「自动·工资单月结」，说明文字同步。
+  - OpenAPI listMerchantExpenses 来源枚举、syncMerchantExpenseAuto 说明。
+  - 依据原句：
+  - BSM:1801「连接成本与费用台账，拿到这期的进货成本和各项费用；连接工资单月结，拿到这期的人工成本；连接税务处理，拿到这期的各项税费，算出净利润。」
+  - BSM:1774「人工成本（含薪资、销售提成、绩效、奖金与社保，并含主理人本人的报酬；主理人本人的报酬由主理人与娱乐平台公司协商确定并写入合同）」
+  - BSM:1143「除此之外的一切费用一律由使用方酒吧承担——包括但不限于该人员在该酒吧促成订单产生的提成」
+  - BSM:1142「营销在某家酒吧促成的订单产生的提成，由该酒吧按月拨付给娱乐平台公司」
+  - BSM:1719「月结定格的应发部分作代收代付、不计商户收入」
+  - BSM:1787「一个周期一旦关账，这个已核算月份的费用就不能再改」
+  - 对应裁决：
+  - E-01（BSM L1799 补「连接工资单月结，拿到这期的人工成本」，ENUM L296 补「该期人工成本（含薪资、销售提成、绩效、奖金与社保，并含主理人本人的报酬）」）；
+  - DEC-R4-2026-08-04-60「主理人本人的报酬计入人工成本」。
+  - 回归：MerchantExpensePayrollAttachJdbcIntegrationTests、FinanceMerchantExpensePage.payroll.test.tsx。
+- 18AC 落地位置补记·第 211 条 211-R2（分红方案指定发放付账日，审批挂应付与留存释放落在该付账日；对应裁决 第十八批裁决 44、DEC-R3-2026-08-04-05）：依据 BSM:1787「发放走应付款项，落在三个付账日之一，具体哪一个由该公司在分红周期配置中指定」；BSM:1683「每月有三个付账日（业务参数，全平台统一可配，初始为 5 日、15 日、25 日），遇法定节假日或非银行工作日顺延至下一个银行工作日」；DEC-R3-2026-08-04-05「落三个付账日之一，具体由该公司在分红周期配置中指定」；第十八批裁决 44「只加「发放付账日」配置，期间切分与出单方式不变」。
+  - backend/src/main/resources/db/migration/V616__dividend_payday_entity_tax_and_holds.sql 第 1 节：dividend_plans 加 payout_pay_slot SMALLINT 与 CHECK chk_dp_payout_pay_slot（1～3）。
+  - backend/src/main/java/com/complex/platform/dividend/：
+    - DividendRecords.DividendPlanRecord 与 dto/DividendPlanRequest 加 payoutPaySlot。
+    - JdbcDividendRepository 读写该列。
+    - DividendService 建方案必填 1～3（缺填 400「发放付账日未填写」，越界 400），改方案不填不改现值。
+    - DividendService 新增 payoutDueDate：取计算单所属方案的付账日，按商户营业日推算当天或之后第一个该付账日；方案无付账日返回 409 DIVIDEND_PAY_SLOT_MISSING「请先在分红方案中指定发放付账日」。approve 挂主理人应付、releaseInternal 释放留存都用它。
+  - backend/src/main/java/com/complex/platform/settlement/InternalPayDayService.java：加 payDayOnOrAfter(slot, from)，取当日已生效的三个付账日中的第 slot 个，找当天或之后第一个该日，再顺延到银行工作日。
+  - backend/src/main/java/com/complex/platform/finance/：
+    - FinanceService.createDividendPayoutPayable 加 dueDate 参数，走 persistDerivedArApItem 的到期日重载。
+    - FinanceService.releaseDividendReserveWithholding 加 dueDate 参数；FinanceRepository、JdbcFinanceRepository.retagArApItemSourceType 在同一条 UPDATE 里改 source_type 与 due_date。
+    - 留存待释放应付挂账时到期日不变。
+  - FieldLabels.java、apps/web/src/admin/i18n/fieldLabels.ts：payout_pay_slot＝发放付账日。
+  - apps/web/src/admin/pages/FinanceDividendsPage.tsx：方案弹窗加「发放付账日」下拉（第一、第二、第三个付账日，必选）；方案表加「发放付账日」列；确认页显示中文。apps/web/src/admin/types.ts 的 DividendPlanRow 加 payoutPaySlot。
+  - OpenAPI DividendPlanRequest 加 payout_pay_slot；approveDividendStatement、releaseDividendReserve 的失败码加 DIVIDEND_PAY_SLOT_MISSING。
+  - 回归：DividendFinalSnapshotGateJdbcIntegrationTests.payoutAndReleasedReserveFallDueOnPlanPayDay、planRequiresPayoutPaySlotAndCannotDropCostOrExpenses；FinanceDividendsPage.guidedcreate.test.tsx 的「发放付账日」用例。
+- 18AC 落地位置补记·控制席并入（第 210 条：分红方案不能关掉销货成本或任一类费用）：依据 BSM:1774「分红基数按「净利润」算：一个周期里的经营收入（按含税实收口径），减掉这期间的全部成本、费用与税费之后的余额」；分红 PRD §3 自写 include_inventory_cost 固定为 true、expense_types 固定为全量。
+  - backend/src/main/java/com/complex/platform/dividend/DividendService.java 新增 requireFullDeductions：建方案、改方案时 include_inventory_cost=false 或 expense_types 不是全部六类，一律 400 VALIDATION_FAILED（中文报错）；不填按全量或现值；计算代码不变。
+  - apps/web/src/admin/pages/FinanceDividendsPage.tsx：方案弹窗去掉「扣减销货成本」与费用类别复选框，载荷不带这两项；方案表「基数构成」只显示收入域；计算单详情固定写「扣减销货成本、全部费用与该期税费」；确认页写「扣减销货成本与全部费用」。
+  - OpenAPI include_inventory_cost、expense_types 说明写明固定值与 400。
+  - 依赖关成本或减费用的既有用例改为全量：DividendServiceTests.computeRespectsRevenueDomainsAndDeductsAllCostsAndExpenses 等。
+  - 研发阶段无存量（UD-07），不写数据迁移。
+- 18AC 落地位置补记·第 210 条 210-R2（税费实际申报金额登记与审批；对应裁决：第十八批裁决 42）：
+  - backend/src/main/resources/db/migration/V616__dividend_payday_entity_tax_and_holds.sql 第 2 节：
+    - 新表 entity_tax_declarations：
+      - business_entity_id 松引用主体档案（服务层核存在）。
+      - tax_type 闭集：vat 增值税、cultural_fee 文化事业建设费、surcharge 附加税、corporate_income 企业所得税、other 其他税费。
+      - 所属期 period_start_month～period_end_month：CHECK 年-月格式，末月不早于首月。
+      - 其余各列：declared_amount_cent≥0、reason、evidence_attachment_ids；status 取值 pending_review、approved、rejected；review_id、created_by、created_at、approved_at。
+    - 部分唯一索引 uq_etd_entity_tax_period_active：管主体、税种、所属期，只管待审批与已生效的行，驳回后可重登。
+    - 授权给 complex_app。
+    - 新权限码 finance.entity_tax.view（查看税费申报登记）与 finance.entity_tax.manage（登记税费实际申报金额）。库内没有财务税务类权限码可复用，授予方式同 V299 finance.dividend.*，只授 role_platform_admin。
+  - backend/src/main/java/com/complex/platform/finance/：新增 EntityTaxDeclaration（含 Request）、EntityTaxService、EntityTaxController。
+    - 登记即提交审批，不设草稿。照 PayrollTaxService.submitReview 先核财务、税务、法务三条线的真实部门起点，没配返回 409 TAX_DEPARTMENT_ROUTING_REQUIRED。
+    - 再进 SupervisorReviewService.evaluate：动作 finance.tax_rule.adjust，档位 tax_rule_adjustment_l3，终点为最高权限确认，提交人自审由复核链拦下。
+    - decided 监听复核终态，回写 approved（记 approved_at）或 rejected。
+    - 同主体、同税种、同所属期已有待审批或已生效的登记返回 409 ENTITY_TAX_DECLARATION_DUPLICATE；主体不存在返回 404 BUSINESS_ENTITY_NOT_FOUND。
+    - 审计事件 entity_tax.declared、entity_tax.declare_failed、entity_tax.listed、entity_tax.list_failed。
+    - 平台口径，商户账号拒。
+    - 接口：GET/POST /api/v1/finance/entity-taxes（listEntityTaxDeclarations、declareEntityTax）。
+  - apps/web/src/admin/pages/EntityTaxDeclarationsPage.tsx：财务菜单新页「税费申报登记」（ADM-FIN-010，/admin/finance/entity-taxes）。列表显示主体、税种中文、所属期、申报金额、状态中文和审批链；登记弹窗分两步，先填申报信息，再填财务、税务、法务三条线的最终审批人。
+  - 同步改动：
+    - AdminApp.tsx、adminRoutes.ts。
+    - reviewLabels.ts 补 entity_tax_declaration。
+    - fieldLabels.ts 与 FieldLabels.java 补 tax_type、period_start_month、period_end_month、declared_amount_cent；fieldLabels.ts 另补 entity_tax_declared 和 tax_type 各取值的中文。
+    - docs/openapi/openapi-p0.yaml、.json。
+    - docs/full-admin-page-permission-field-matrix-v0.1.csv 的 ADM-FIN-010 行。
+    - tools/verify-full-admin-page-matrix.mjs。
+    - tests/e2e/full-admin-remaining.spec.ts 与 tests/e2e/support/mock-api.ts。
+  - 测试：
+    - backend/src/test/java/com/complex/platform/finance/EntityTaxJdbcIntegrationTests.java：登记后经财务、税务、法务三线和最高确认逐级批，才生效；提交人自审被拒；同期重复登记 409；驳回后可重登；未配置部门起点时 409。
+    - apps/web/src/admin/pages/EntityTaxDeclarationsPage.test.tsx：「列表的税种与状态显示中文」「登记弹窗按蛇形键提交（金额元转分，三条线最终审批人）」。
+  依据：
+  - BSM:1760「平台只接收专业财税软件回传的数据，或保存经授权人员手工填写并通过审批的数据，这些数据在平台中用于内部结算、差异解释、经营分析和追溯，不代表平台已经完成正式申报或会计入账。」
+  - BSM:1760「税费金额分三个阶段分别保存、互不覆盖：系统计算金额、实际申报金额、实际缴纳金额；……」
+  - BSM:1760「所有税费规则和税费调整均须经过财务审核、税务审核、法务审核，再由顶层平台公司的老板最终确认后生效，提交人不得审批自己提交的调整。」
+  对应裁决：第十八批裁决 42（决策台账 :3949），题面方案「财务按公司、税种、所属期手工登记「实际申报金额」，经财务、税务、法务审核并由顶层平台公司老板最终确认后生效；分红扣本期内已生效的申报金额合计；按季申报的税整季计入季末那个月」照做，操作员把出单前提改为「登记齐了才能出单」。本步只落登记与审批（按季申报的整季登记一条：首月～末月）；分红扣税与出单闸见 210-R3。
+- 18AC 落地位置补记·210-R3 分红净利润扣该期税费（第 210 条）：
+  - 迁移：V616 第 3 节加 dividend_statements.period_tax_cent；重建 chk_ds_net_identity，等式改为 net_profit_cent = revenue_cent − cost_cent − expense_cent − period_tax_cent；chk_dsl_line_type 加 tax_period。
+  - 取数：JdbcDividendRepository.sumEntityTaxByType。方案商户的经营主体同 210-R1 口径：有生效绑定取其运营主体，否则取 merchants.business_entity_id。取 entity_tax_declarations 中 status=approved、period_end_month 落在本期月份内的 declared_amount_cent，按税种汇总；按季申报的整季计入季末那个月所在的那一期。
+  - 计算：DividendService.computeStatement 在费用之后逐税种落 tax_period 负额行，说明写税种中文名、「实际申报金额」与所属期；净利润 = 收入 − 销货成本 − 费用 − 税费；分红单回显 period_tax_cent；不设方案开关。
+  - 前端：FinanceDividendsPage 明细行「该期税费」、详情「该期税费合计」；商户专区页沿用同一标签。
+  - 依据：BSM:1774「分红基数按「净利润」算：一个周期里的经营收入（按含税实收口径），减掉这期间的全部成本、费用与税费之后的余额——……以及该期间的各项税费（含增值税、所得税及其他应由该主体承担的税费）」；BSM:1801「连接税务处理，拿到这期的各项税费，算出净利润。」
+  - 对应裁决：第十八批裁决 42（题面方案「分红扣本期内已生效的申报金额合计；按季申报的税整季计入季末那个月」照做）。
+  出单闸：
+  - 位置：DividendService.runCompute，在 periodMismatchReason 之后、nonFinalReason 之前，只判正式单。
+  - 判据：JdbcDividendRepository.listMonthsWithoutApprovedTax，本期每个月都须被该经营主体至少一条 status=approved 登记的所属期（period_start_month～period_end_month）覆盖。
+  - 处理：缺的月份该商户本期不出正式单、不作废已有单，跳过原因「本期 yyyy-MM、yyyy-MM 尚无已生效的税费申报登记，请先登记并审批通过后再出正式单」。登记依法可分配金额后的重算同闸，不出单时返回 409 DIVIDEND_STATE_INVALID。月度预览与月末自动预览不判此闸，照扣已生效税费。扣税取数看所属期末月，出单闸看所属期覆盖，各按各的判据。
+  - 对应裁决：第十八批裁决 42，操作员选「登记齐了才能出单：正式单出单前本期每个月都要有已生效的税费登记，缺的不出单并写跳过原因」。
+- 18AC 落地位置补记·第 211 条 211-R1：
+  依据：第十八批裁决 43「平台财务在持股分红页按商户按期登记（暂不分红或暂缓分红，原因、协商结果必填，不另走审批）；该期正式单已提交审批或已发放的不能再登记，草稿随登记作废；「暂不分红」该期不出正式单、利润不补分；「暂缓分红」等协商恢复后由财务登记恢复，再照常出单；月度预览照常。」；BSM:1777「若因特殊情况需要整期暂不分红或暂缓分红的，须由主理人与娱乐平台公司协商一致后执行，并记录原因与协商结果」（DEC-R4-2026-08-04-63 复述同句）。
+  落地位置：
+  1. 迁移 V616 第 4 节 dividend_period_holds：
+     - hold_type 取 skip 暂不分红／defer 暂缓分红；
+     - reason、negotiation_result 必填；
+     - lifted_by、lifted_at、lift_result 为暂缓分红恢复时登记；
+     - 部分唯一索引 uq_dph_merchant_period_open 保证同一商户同一期间只有一条未恢复登记。
+  2. 接口：GET、POST /api/v1/finance/dividends/holds，POST /api/v1/finance/dividends/holds/{hold_id}/lift。
+     - 实现：DividendController → DividendService.listHolds／recordHold／liftHold。
+     - 权限：查看用 finance.dividend.view，登记与恢复用 finance.dividend.manage，都只限平台口径。
+     - 事件：dividend.holds_listed、dividend.hold_recorded／hold_record_failed、dividend.hold_lifted／hold_lift_failed。
+  3. 登记规则：
+     - 商户须有生效方案，否则 404 DIVIDEND_PLAN_NOT_FOUND；
+     - 期间标签须与方案周期一致，否则 400；
+     - 该期正式单待审批、已审批或已发放的返回 409 DIVIDEND_STATE_INVALID；
+     - 该期草稿或已驳回的正式单随登记作废；
+     - 已有未恢复登记的返回 409 DIVIDEND_HOLD_EXISTS。
+  4. 恢复规则：只对未恢复的暂缓分红；暂不分红或已恢复的返回 409 DIVIDEND_HOLD_NOT_LIFTABLE。
+  5. 期间作业（runCompute）：在期间标签校验之后、第十八批裁决 42 出单闸之前判登记。正式单遇未恢复登记即跳过，原因写「本期经协商暂不分红（或暂缓分红），不出正式单（原因：…；协商结果：…）」；月度预览与月末自动预览不判。
+  6. 后台「财务 → 持股分红」页（FinanceDividendsPage）：期间作业下加「暂不分红／暂缓分红登记」列表与登记弹窗；暂缓行有「恢复分红」弹窗，恢复的协商结果必填。
+  回归：
+  - DividendFinalSnapshotGateJdbcIntegrationTests.deferHoldVoidsDraftSkipsOfficialUntilLiftedAndIsRefusedOnceSubmitted
+  - DividendFinalSnapshotGateJdbcIntegrationTests.skipHoldBlocksOfficialKeepsMonthlyPreviewAndCannotBeLifted
+  - FinanceDividendsPage.hold.test.tsx 两例
+  对应裁决：第十八批裁决 43。
+- 18AC 复核修复补记·第 210 条 210-R1 酒吧员工派驻别家的提成不重复计入两家人工成本：落在 backend/src/main/java/com/complex/platform/merchantexpense/JdbcMerchantExpenseRepository.java 的 attachPayrollLabor (a) 段。挂本店员工工资单时，金额再扣掉该单里的 bar_commission 与 bar_commission_reversal 行，条件是提成账单所在酒吧≠工资单商户、且按计提时点所属该酒吧营业日在本人派驻那家的期内。判法复用 JdbcStaffRepository#dispatchAt，与 aggregateDispatchedCommissions 同口径（第十八批裁决 46）。这部分已由那家经 (b) 段提成拨付承担，扣完为 0 不挂，其余口径不变。依据 BSM:1143「人员所属主体只承担该人员的基本薪资、社保和其他常规报酬，由人员所属主体直接支付给本人；除此之外的一切费用一律由使用方酒吧承担——包括但不限于该人员在该酒吧促成订单产生的提成」。新测试 MerchantExpensePayrollAttachJdbcIntegrationTests.barStaffDispatchedToAnotherBarHasCommissionThereBorneOnlyByThatBar。
+- 18AC 复核修复补记·第 210 条 210-R2 税费登记权限码授出须审批：落在迁移 V616（未发布，就地改）第 2 节权限种子。finance.entity_tax.manage 的 requires_approval 由 FALSE 改为 TRUE，同 V217 staff.tax_bracket.manage、V388 finance.dividend.manage；finance.entity_tax.view 不变。依据 PGM:666「以下五类权限授出前须先审批才生效——资金/核销/退款/调账/分红发放类、提权或跨商户跨项目、敏感经营数据的查看/导出/修改、高危业务（沽清/反结/存酒作废）；税费规则与税费调整」。回归为 AccessJdbcIntegrationTests.moneyAndSensitiveExportPermissionsRequireApproval，码列表并入 finance.entity_tax.manage。

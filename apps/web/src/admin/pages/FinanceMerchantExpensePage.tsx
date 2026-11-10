@@ -38,13 +38,14 @@ const SOURCE_LABELS: Record<string, string> = {
   auto_energy: "自动·能耗账单",
   auto_property: "自动·物业费账单",
   auto_rent: "自动·租金账单",
+  auto_payroll: "自动·工资单月结",
   manual: "手工录入",
 };
 
 const TEXT = {
   title: "商户费用台账",
   description:
-    "把「这家店这个月花了多少钱」归集成台账：能耗费/物业费按期自动挂接系统已出账单，人工/摊销/其他手工录入（理由必填）。台账仅追加，更正走红字冲销；期间汇总是分红净利润基数的费用侧取数点。",
+    "把「这家店这个月花了多少钱」归集成台账：能耗费/物业费按期自动挂接系统已出账单；人工按工资单月结与派驻营销提成拨付自动挂接，工资单外的人工成本手工录入；摊销/其他手工录入（理由必填）。台账仅追加，更正走红字冲销；期间汇总是分红净利润基数的费用侧取数点。",
   loadFailed: "商户费用台账读取失败",
   summaryFailed: "费用期间汇总读取失败",
   createFailed: "费用录入失败",
@@ -341,7 +342,7 @@ export function FinanceMerchantExpensePage({ api, setActionResult, setGlobalErro
           disabled={busyAction === "merchant_expense_auto_synced"}
           onClick={runSync}
         >自动挂接能耗/物业/租金</PermissionButton>
-        <span className="admin-muted-action">自动挂接把所选月份已出账的能耗费应收、物业费账单与合同计费物业费（双路径均自动归集）、租金（合同租金与营业额抽成，2026-07-18 拍板计入分红基数）汇入台账，重跑不重复计入；上游账单事后被更正的，挂接结果会附金额漂移提示。</span>
+        <span className="admin-muted-action">自动挂接把所选月份已出账的能耗费应收、物业费账单与合同计费物业费（双路径均自动归集）、租金（合同租金与营业额抽成，2026-07-18 拍板计入分红基数）与工资单月结人工成本（本店员工工资单及派驻、营销人员提成拨付）汇入台账，重跑不重复计入；上游账单事后被更正的，挂接结果会附金额漂移提示。</span>
       </div>
 
       {/* ── 金额漂移提示（自动挂接响应附带；上游改账后台账不自动追改）──────── */}

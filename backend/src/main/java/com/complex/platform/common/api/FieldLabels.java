@@ -1,6 +1,6 @@
 package com.complex.platform.common.api;
 
-// 文件版本：V0.39
+// 文件版本：V0.40
 
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -346,6 +346,7 @@ public final class FieldLabels {
         p("split_amount_cent", "拆分金额");
         p("settlement_amount_cent", "结算金额");
         p("payout_cent", "结算金额");
+        p("payout_pay_slot", "发放付账日");   // 211-R2 分红方案发放付账日（BSM:1787）
         p("price_cent", "价格");
         p("price_mode", "计价方式");
         p("base_calendar_price_mode", "基础日历定价方式");
@@ -720,6 +721,11 @@ public final class FieldLabels {
         p("period_start", "期初");
         // 第十八批 K 段 97-R3 吧台消耗统计（同前端 fieldLabels.ts）。
         p("period_end", "期末");
+        // 第十八批 AC 段第 210 条 210-R2 税费申报登记（同前端 fieldLabels.ts）。
+        p("tax_type", "税种");
+        p("period_start_month", "所属期首月");
+        p("period_end_month", "所属期末月");
+        p("declared_amount_cent", "实际申报金额");
         p("sale_form", "销售形式");
         p("pour_volume_ml", "出酒量（毫升）");
         p("subject_entity_id", "主体");
@@ -798,6 +804,12 @@ public final class FieldLabels {
         p("legal_distributable_cent", "依法可分配金额");
         p("tax_accounting_ref", "财税核算依据");
         p("resolution_ref", "分配决议");
+        p("period_tax_cent", "该期税费");   // 第十八批 AC 段 210-R3 分红单该期税费（BSM:1774，同前端 fieldLabels.ts）
+        // 第十八批 AC 段 211-R1 整期暂不分红／暂缓分红登记（第十八批裁决 43，同前端 fieldLabels.ts）。
+        p("hold_id", "暂不分红／暂缓分红登记");
+        p("hold_type", "登记类别");
+        p("negotiation_result", "协商结果");
+        p("lift_result", "恢复协商结果");
         // ── 第十三批 B 段 ROOT-03-R3：会员注册 ───────────────
         p("birth_date", "生日");
         p("member_terms_version", "会员条款版本");

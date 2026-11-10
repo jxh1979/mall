@@ -41,6 +41,12 @@ public interface MerchantExpenseRepository {
     /** 租金自动挂接：ar_ap_items receivable 且 source_type ∈ (contract_rent, turnover_rent)，按 accounting_period 归期。 */
     int attachContractRent(String period, String operatorUserId, Instant now);
 
+    /**
+     * 人工成本自动挂接（210-R1）：该月已定格、发放主体就是酒吧经营主体的本店员工工资单（税前应发去掉小费与服务费），
+     * 与派驻、营销人员提成拨付应付（作废冲回应收取负）按期汇入 labor；返回新计入行数。
+     */
+    int attachPayrollLabor(String period, String operatorUserId, Instant now);
+
     /** 金额漂移报告：该期每个已挂接源的台账净额（原行+冲销行合计）对上游单据当前金额，不一致的清单。 */
     List<MerchantExpenseDriftRecord> listAutoDrift(String period);
 }

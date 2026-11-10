@@ -1,4 +1,4 @@
-// 文件版本：V0.15
+// 文件版本：V0.16
 import type { AdminAccountForm, AdminNavGroup, AdminRoute, PermissionDefinitionRow } from "./types";
 
 export const adminRoutes: AdminRoute[] = [
@@ -60,6 +60,7 @@ export const adminRoutes: AdminRoute[] = [
   { pageId: "ADM-FIN-004", label: "物业费管理", module: "财务", group: "finance", route: "/admin/finance/property-fee", requiredPermissions: ["finance.property_fee.manage"] },
   { pageId: "ADM-FIN-006", label: "商户费用台账", module: "财务", group: "finance", route: "/admin/finance/merchant-expenses", requiredPermissions: ["finance.merchant_expense.view"] },
   { pageId: "ADM-FIN-007", label: "持股分红", module: "财务", group: "finance", route: "/admin/finance/dividends", requiredPermissions: ["finance.dividend.view"] },
+  { pageId: "ADM-FIN-010", label: "税费申报登记", module: "财务", group: "finance", route: "/admin/finance/entity-taxes", requiredPermissions: ["finance.entity_tax.view"] },
   { pageId: "ADM-FIN-009", label: "积分追回与豁免", module: "财务", group: "finance", route: "/admin/finance/points-recoveries", requiredPermissions: ["finance.points_recovery.view"] },
   { pageId: "ADM-FIN-008", label: "门票积分月结", module: "财务", group: "finance", route: "/admin/finance/ticket-points-bills", requiredPermissions: ["ticket.points.billing.view"] },
   { pageId: "ADM-STL-001", label: "结算配置中心", module: "结算", group: "settlement", route: "/admin/settlement/config", requiredPermissions: ["settlement.config.view"] },
