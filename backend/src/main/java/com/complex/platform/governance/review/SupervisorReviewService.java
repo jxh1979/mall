@@ -1,6 +1,6 @@
 package com.complex.platform.governance.review;
 
-// 文件版本：V0.32
+// 文件版本：V0.33
 
 import com.complex.platform.access.AccessActor;
 import com.complex.platform.access.AuthorizationService;
@@ -310,7 +310,7 @@ public class SupervisorReviewService {
                         requireBeneficiaryIfNeeded(actionType, beneficiaryId);
                         requireDesignatedRoleHolder(policy, request.finalApproverId()); // R-003 fail-closed
                         supervisorReviewRepository.saveSupervisorReview(decision);
-                        scheduleDeadline(decision.reviewId(), beneficiaryId, actionType, policy.policyCode());
+                        scheduleDeadline(decision.reviewId(), beneficiaryId, actionType);
                         generateChain(decision.reviewId(), initiatedBy, beneficiaryId, approvalLevel, request.finalApproverId(), lines, policy.requiredLevel());
                     }
                     auditEventService.recordSuccess(
@@ -671,7 +671,7 @@ public class SupervisorReviewService {
         if (blockedContent != null) {
             supervisorReviewRepository.bindSupervisorReviewToBlockedContent(decision.reviewId(), blockedContent);
         }
-        scheduleDeadline(decision.reviewId(), beneficiaryId, actionType, policyCode);
+        scheduleDeadline(decision.reviewId(), beneficiaryId, actionType);
         generateChain(decision.reviewId(), initiatedBy, beneficiaryId, approvalLevel, finalApproverId, List.of(), requiredLevel);
         auditEventService.recordSuccess(
                 "admission.blocked",
@@ -926,37 +926,108 @@ public class SupervisorReviewService {
 
     private static final int MONEY_DEADLINE_WORKING_DAYS = 1;
     private static final int DEFAULT_DEADLINE_WORKING_DAYS = 3;
+    // 第十八批 AD 段第 204 条 204-R1：后台没改过的审批类型，上下限按出厂 1～30 个工作日（沿用 V389）。
+    private static final int FACTORY_MIN_WORKING_DAYS = 1;
+    private static final int FACTORY_MAX_WORKING_DAYS = 30;
 
     /**
-     * M007-A-02（PGM-1.7.1「全平台审批通用时限」）：按策略参数 deadlineWorkingDays（工作日，含上下限）计算到期；
-     * 未配置时涉钱 1 个工作日、其余 3 个工作日。工作日按已审批的逐日工作日历判定（计入法定调休上班日、不计法定假日），
-     * 该日未审批的按周一至周五且不在 holiday_calendar 内。
+     * M007-A-02（PGM-1.7.1「全平台审批通用时限」）：复核单到期＝发起时刻加该审批类型的时限（{@link #deadlineFrom}）。工作日按已审批的逐日工作日历判定
+     * （计入法定调休上班日、不计法定假日），该日未审批的按周一至周五且不在 holiday_calendar 内。
      */
-    private void scheduleDeadline(String reviewId, String beneficiaryId, String actionType, String policyCode) {
-        int days = supervisorReviewRepository.findDeadlineWorkingDays(policyCode)
-                .orElse(isMoneyAction(actionType) ? MONEY_DEADLINE_WORKING_DAYS : DEFAULT_DEADLINE_WORKING_DAYS);
-        supervisorReviewRepository.scheduleSupervisorReview(reviewId, beneficiaryId, addWorkingDays(Instant.now(), Math.max(days, 1)));
+    private void scheduleDeadline(String reviewId, String beneficiaryId, String actionType) {
+        supervisorReviewRepository.scheduleSupervisorReview(reviewId, beneficiaryId, deadlineFrom(actionType, Instant.now()));
+    }
+
+    /**
+     * 第十八批 AD 段第 204 条 204-R1（PGM:529「任一业务审批节点超过后台配置的时限（业务参数，按审批类型可配，出厂默认 3 个工作日，涉钱审批出厂默认
+     * 1 个工作日，须同时配置上下限）未处理的，系统自动提醒并升级到该节点的上一级」）：审批类型＝被审批的动作类型；后台改过的取所存时限，否则出厂
+     * （涉钱 1、其余 3 个工作日）。复核单发起、超时升级后的顺延与包厢关台未付清待办三处同用。
+     */
+    public Instant deadlineFrom(String actionType, Instant from) {
+        return addWorkingDays(from, supervisorReviewRepository.findDeadlineWorkingDays(actionType).orElse(factoryWorkingDays(actionType)));
+    }
+
+    private static int factoryWorkingDays(String actionType) {
+        return isMoneyAction(actionType) ? MONEY_DEADLINE_WORKING_DAYS : DEFAULT_DEADLINE_WORKING_DAYS;
     }
 
     // M007-I3-F02：授权申请含资金/分红/退款/调账类权限时，AccessService 以 access.grant_request.money 作为动作名进链；
     // M087：范围变更同理（access.scope_change.money）——凡以 .money 结尾的授权动作名均按涉钱时限。
     static final String MONEY_GRANT_REQUEST_ACTION = "access.grant_request.money";
+    // 第十八批 T 段第 157 条 157-R5（第十八批裁决 37「包厢关台时没付清就发经理待办，超时按通用时限升级」）：包厢关台未付清待办的审批类型（不建复核单）。
+    public static final String BAR_UNPAID_CLOSE_ACTION = "bar.bill.unpaid_close";
+    // 204-R1：授权侧不在代码内策略、也不在准入闸策略表里的授权动作名（AccessService 建单所用），一并列进审批时限清单。
+    private static final List<String> ACCESS_REVIEW_ACTIONS = List.of(MONEY_GRANT_REQUEST_ACTION, "access.scope_change",
+            "access.scope_change.money", "access.role_viewable_projects.reduce");
 
     private static boolean isMoneyAction(String actionType) {
         String type = actionType == null ? "" : actionType;
         // U09-002：员工扣除上限是薪资安全阈值（BSM L1458、BSM-001 涉钱参数），与税费同按涉钱 1 个工作日。
+        // 第十八批 AD 段第 204 条 204-R1：包厢关台未付清确认（第十八批裁决 37 追问题面「涉钱出厂 1 个工作日」）、停车免费放行和减免（BSM:1438
+        // 「免费放行和减免须经物业主管审批」，减免即涉钱）、账单反结（第十八批裁决 39「反结生效时储值部分当场回原卡；现金、POS 等收款记录作废」）
+        // 出厂按涉钱 1 个工作日。
         return type.startsWith("finance.") || type.startsWith("staff.payroll.") || type.startsWith("ticket.reward.")
                 || type.equals("dealer.delivery_resolution") || type.equals("inventory.quarantine_disposition") || type.endsWith(".money")
                 || List.of("bill_waiver", "refund", "ar_ap_adjustment", "bar.bill_waiver",
-                "ticketing.refund_approve", "ticketing.verification_reverse").contains(type);
+                "ticketing.refund_approve", "ticketing.verification_reverse",
+                BAR_UNPAID_CLOSE_ACTION, "parking.release.waive", "bar.bill_reopen").contains(type);
+    }
+
+    /** 204-R1：审批时限清单的一行（工作日）；money＝出厂是否按涉钱，customized＝后台是否改过。 */
+    public record ApprovalDeadline(String actionType, boolean money, int factoryWorkingDays, int deadlineWorkingDays,
+            int minWorkingDays, int maxWorkingDays, boolean customized) {}
+
+    /** 204-R1：改一种审批类型的时限与上下限（三值同配，工作日）。 */
+    public record ApprovalDeadlineRequest(String idempotencyKey, Integer deadlineWorkingDays, Integer minWorkingDays,
+            Integer maxWorkingDays) {}
+
+    /**
+     * 204-R1（PGM:529「按审批类型可配」；PGM:536 合同三类随清单一并可改）：审批类型＝代码内复核策略的动作类型（不含授权档位模板 permission_grant_l1～l3，
+     * 它们不是被审批的动作）∪ 准入闸策略表启用中的阻断策略的动作类型 ∪ 授权侧四个授权动作 ∪ 包厢关台未付清确认，按动作类型排序；
+     * 后台改过的取所存时限与上下限，否则出厂（上下限 1～30）。
+     */
+    public List<ApprovalDeadline> listApprovalDeadlines() {
+        Map<String, SupervisorReviewRepository.ApprovalDeadlineSetting> saved = supervisorReviewRepository.listApprovalDeadlineSettings()
+                .stream().collect(Collectors.toMap(SupervisorReviewRepository.ApprovalDeadlineSetting::actionType, setting -> setting));
+        java.util.SortedSet<String> types = new java.util.TreeSet<>(supervisorReviewRepository.listBlockActionTypes());
+        policies.stream().map(SupervisorReviewPolicyRecord::actionType).filter(type -> !type.startsWith("permission_grant_l")).forEach(types::add);
+        types.addAll(ACCESS_REVIEW_ACTIONS);
+        types.add(BAR_UNPAID_CLOSE_ACTION);
+        return types.stream().map(type -> {
+            int factory = factoryWorkingDays(type);
+            SupervisorReviewRepository.ApprovalDeadlineSetting setting = saved.get(type);
+            return setting == null
+                    ? new ApprovalDeadline(type, isMoneyAction(type), factory, factory, FACTORY_MIN_WORKING_DAYS, FACTORY_MAX_WORKING_DAYS, false)
+                    : new ApprovalDeadline(type, isMoneyAction(type), factory, setting.deadlineWorkingDays(), setting.minWorkingDays(),
+                            setting.maxWorkingDays(), true);
+        }).toList();
     }
 
     /**
-     * 第十八批 T 段第 157 条 157-R5（PGM:529「涉钱审批出厂默认 1 个工作日」；第十八批裁决 37「超时按通用时限升级」）：涉钱审批通用时限的到期时刻，
-     * 工作日口径同 {@link #addWorkingDays}。
+     * 204-R1（PGM:529「须同时配置上下限」）：改一种审批类型的时限与上下限——不在清单 404 APPROVAL_TYPE_NOT_FOUND；三值不齐或不满足
+     * 1 ≤ 下限 ≤ 时限 ≤ 上限 400 VALIDATION_FAILED；幂等执行后写入并记 governance.approval_deadline.changed（前后值）。
+     * 权限、提交编号与失败留痕由控制器在幂等之前处理。
      */
-    public Instant moneyApprovalDeadline(Instant from) {
-        return addWorkingDays(from, MONEY_DEADLINE_WORKING_DAYS);
+    @Transactional
+    public ApprovalDeadline updateApprovalDeadline(String actionType, ApprovalDeadlineRequest request) {
+        return idempotencyService.execute("approvalDeadlineUpdate:" + actionType, request.idempotencyKey(), request, () -> {
+            ApprovalDeadline before = listApprovalDeadlines().stream().filter(row -> row.actionType().equals(actionType)).findFirst()
+                    .orElseThrow(() -> ApiException.notFound("APPROVAL_TYPE_NOT_FOUND", "没有这种审批类型"));
+            Integer days = request.deadlineWorkingDays();
+            Integer min = request.minWorkingDays();
+            Integer max = request.maxWorkingDays();
+            if (days == null || min == null || max == null || min < 1 || min > days || days > max) {
+                throw ApiException.badRequest("VALIDATION_FAILED", "审批时限须在上下限之间，下限不小于 1 个工作日");
+            }
+            supervisorReviewRepository.upsertApprovalDeadline(
+                    new SupervisorReviewRepository.ApprovalDeadlineSetting(actionType, days, min, max), authorizationService.currentActor().id());
+            auditEventService.recordSuccess("governance.approval_deadline.changed", "admission.policy.manage", "approval_deadline",
+                    actionType, null, request.idempotencyKey(),
+                    Map.of("before_deadline_working_days", before.deadlineWorkingDays(), "before_min_working_days", before.minWorkingDays(),
+                            "before_max_working_days", before.maxWorkingDays(), "after_deadline_working_days", days,
+                            "after_min_working_days", min, "after_max_working_days", max));
+            return new ApprovalDeadline(actionType, before.money(), before.factoryWorkingDays(), days, min, max, true);
+        }, ApprovalDeadline.class);
     }
 
     // 第十六批第 29 条（PGM L529「出厂默认 3 个工作日，涉钱审批出厂默认 1 个工作日」）：逐日先看已审批的工作日历
@@ -992,9 +1063,7 @@ public class SupervisorReviewService {
         int handled = 0;
         for (SupervisorReviewRepository.PendingReview item : supervisorReviewRepository.listOverdueSupervisorReviews(now, 200)) {
             SupervisorReviewDecisionRecord d = item.decision();
-            int days = supervisorReviewRepository.findDeadlineWorkingDays(d.policyCode())
-                    .orElse(isMoneyAction(d.actionType()) ? MONEY_DEADLINE_WORKING_DAYS : DEFAULT_DEADLINE_WORKING_DAYS);
-            Instant nextDue = addWorkingDays(now, Math.max(days, 1));
+            Instant nextDue = deadlineFrom(d.actionType(), now);
             String beneficiaryId = item.schedule() == null ? null : item.schedule().beneficiaryId();
             List<String> escalatedNodes = new ArrayList<>();
             List<String> remindedNodes = new ArrayList<>();

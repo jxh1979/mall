@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import com.complex.platform.access.AccessActor;
 import com.complex.platform.access.AuthorizationService;
@@ -61,7 +61,7 @@ public class BarUnpaidCloseTodoService {
     }
 
     /**
-     * 包厢关台被未结清账单拦下时：每张账单登记一条待办（已有不重登、期限不改；期限＝涉钱审批通用时限，无当班经理也照样起算），给当班经理各发一条
+     * 包厢关台被未结清账单拦下时：每张账单登记一条待办（已有不重登、期限不改；期限＝审批通用时限 bar.bill.unpaid_close（第十八批 AD 段 204-R1 后台可改，出厂涉钱 1 个工作日），无当班经理也照样起算），给当班经理各发一条
      * 员工系统通知（同一批账单每人只发一次）。独立事务：随后的 409 让关台回滚，待办不丢。
      */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
@@ -76,7 +76,7 @@ public class BarUnpaidCloseTodoService {
                     VALUES (:bill, :bar, :merchant, :project, :session, :now, :due) ON CONFLICT (bill_id) DO NOTHING""",
                     new MapSqlParameterSource().addValue("bill", bill.id()).addValue("bar", bill.barId())
                             .addValue("merchant", bill.merchantId()).addValue("project", project).addValue("session", sessionId)
-                            .addValue("now", Timestamp.from(now)).addValue("due", Timestamp.from(reviews.moneyApprovalDeadline(now))));
+                            .addValue("now", Timestamp.from(now)).addValue("due", Timestamp.from(reviews.deadlineFrom(SupervisorReviewService.BAR_UNPAID_CLOSE_ACTION, now))));
         }
         List<String> ids = bills.stream().map(BarBillRecord::id).sorted().toList();
         Instant deadline = jdbc.queryForObject("SELECT min(due_at) FROM bar_bill_unpaid_close_todos WHERE bill_id IN (:ids)",

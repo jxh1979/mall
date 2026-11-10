@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 package com.complex.platform.gate;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -26,6 +26,14 @@ class ServerModuleRoutesTests {
         assertThat(ServerModuleRoutes.moduleOf("web", "/api/v1/merchant-penalty-bounds")).isEqualTo("governance");
         assertThat(ServerModuleRoutes.moduleOf("web", "/api/v1/analytics/risk-alerts/x/resolve")).isEqualTo("risk");
         assertThat(ServerModuleRoutes.moduleOf("web", "/api/v1/access/effective-permissions")).as("外壳取权限").isNull();
+    }
+
+    /** 第十八批 AD 段第 204 条复核修复（PGM:737、PGM:744；100-R1 页面独用接口定模块）：主管复核页的审批时限清单（GET）与修改（PUT）归治理模块。 */
+    @Test
+    void approvalDeadlinesBelongToGovernance() {
+        assertThat(ServerModuleRoutes.moduleOf("web", "/api/v1/platform/approval-deadlines")).as("GET 清单").isEqualTo("governance");
+        assertThat(ServerModuleRoutes.moduleOf("web", "/api/v1/platform/approval-deadlines/staff.payroll.adjustment.add"))
+                .as("PUT 带 {action_type}").isEqualTo("governance");
     }
 
     @Test

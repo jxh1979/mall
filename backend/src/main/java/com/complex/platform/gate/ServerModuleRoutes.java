@@ -1,6 +1,6 @@
 package com.complex.platform.gate;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import java.util.Map;
 
@@ -61,6 +61,8 @@ final class ServerModuleRoutes {
                     Map.entry("/api/v1/merchant-service", "governance"),
                     Map.entry("/api/v1/vouchers", "governance"),
                     Map.entry("/api/v1/evidence/manual-backfill-policies", "governance"),
+                    // 第十八批 AD 段第 204 条：主管复核页审批时限（GET 清单、PUT 带 {action_type}）。
+                    Map.entry("/api/v1/platform/approval-deadlines", "governance"),
                     Map.entry("/api/v1/platform/business-entity-bindings", "governance"),
                     Map.entry("/api/v1/platform/space-types", "governance"),
                     Map.entry("/api/v1/platform/supervisor-review", "governance"),

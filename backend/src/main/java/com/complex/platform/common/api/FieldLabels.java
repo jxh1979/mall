@@ -1,6 +1,6 @@
 package com.complex.platform.common.api;
 
-// 文件版本：V0.40
+// 文件版本：V0.41
 
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -845,6 +845,8 @@ public final class FieldLabels {
         p("working_days", "工作日数");
         p("min_working_days", "时限下限（工作日）");
         p("max_working_days", "时限上限（工作日）");
+        // 第十八批 AD 段第 204 条 204-R1 审批时限（同前端 fieldLabels.ts 现值）。
+        p("deadline_working_days", "截止工作日数");
         p("stage_escalated_at", "本阶段超时升级时刻");
         // 第十八批 Y 段第 183 条 183-R2 复核修复：演出场次列表逐行结算待处理条数（同前端 fieldLabels.ts）。
         p("pending_settlement_count", "结算待处理条数");

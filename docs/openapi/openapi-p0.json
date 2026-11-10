@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "综合体管理系统 P0 API 契约",
-    "version": "V0.61",
+    "version": "V0.62",
     "description": "P0 首批编码前置契约。本文采用 JSON-compatible YAML，便于与 openapi-p0.json 保持一致。正式后端以 Java 21 + Spring Boot 4.x + springdoc-openapi 输出运行时 OpenAPI，并与本契约比对。"
   },
   "servers": [
@@ -17650,6 +17650,123 @@
             "$ref": "#/components/responses/Error"
           },
           "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/platform/approval-deadlines": {
+      "get": {
+        "tags": [
+          "platform"
+        ],
+        "operationId": "listApprovalDeadlines",
+        "summary": "查询各审批类型的审批时限",
+        "description": "第十八批 AD 段第 204 条 204-R1（PGM:529「任一业务审批节点超过后台配置的时限（业务参数，按审批类型可配，出厂默认 3 个工作日，涉钱审批出厂默认 1 个工作日，须同时配置上下限）未处理的，系统自动提醒并升级到该节点的上一级」；PGM:536「按合同类型可配，出厂默认 3 个工作日，须同时配置上下限」）：审批类型＝被审批的动作类型，清单为代码内复核策略的动作类型（不含授权档位模板 permission_grant_l1～l3）、准入闸策略表启用中的阻断策略的动作类型、授权侧 access.grant_request.money、access.scope_change、access.scope_change.money、access.role_viewable_projects.reduce 与包厢关台未付清确认 bar.bill.unpaid_close，按 action_type 排序；每项含 action_type、money（出厂是否按涉钱）、factory_working_days（出厂默认，涉钱 1、其余 3）、deadline_working_days、min_working_days、max_working_days（工作日）、customized（后台是否改过）。没改过的时限取出厂默认、上下限 1～30。出厂按涉钱的另含 bar.bill.unpaid_close（第十八批裁决 37）、parking.release.waive（BSM:1438）、bar.bill_reopen（第十八批裁决 39）。",
+        "x-auth-context": "staff-token",
+        "x-permission": "governance.supervisor_review.view",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "not_applicable",
+        "x-audit-event-failure": "not_applicable",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/platform/approval-deadlines/{action_type}": {
+      "put": {
+        "tags": [
+          "platform"
+        ],
+        "operationId": "updateApprovalDeadline",
+        "summary": "配置一种审批类型的审批时限（时限与上下限同配）",
+        "description": "第十八批 AD 段第 204 条 204-R1（PGM:529「后台配置的时限（业务参数，按审批类型可配，出厂默认 3 个工作日，涉钱审批出厂默认 1 个工作日，须同时配置上下限）」）：配置该审批类型的时限与上下限（工作日），与授权政策写口同一权限 admission.policy.manage；action_type 不在审批时限清单里的 404 APPROVAL_TYPE_NOT_FOUND「没有这种审批类型」；三值须同时填写且 1 ≤ min_working_days ≤ deadline_working_days ≤ max_working_days，否则 400 VALIDATION_FAILED「审批时限须在上下限之间，下限不小于 1 个工作日」；同一类型再保存即覆盖。成功记 governance.approval_deadline.changed（前后值），任一步失败（权限、提交编号、类型、校验）记 governance.approval_deadline.change_failed。此后新发起的该类型复核单按新时限计到期，超时升级后的顺延同样按新时限；包厢关台未付清待办登记时按 bar.bill.unpaid_close 的时限定期限。",
+        "x-auth-context": "staff-token",
+        "x-permission": "admission.policy.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "governance.approval_deadline.changed",
+        "x-audit-event-failure": "governance.approval_deadline.change_failed",
+        "parameters": [
+          {
+            "name": "action_type",
+            "in": "path",
+            "required": true,
+            "description": "审批类型（被审批的动作类型），取自审批时限清单的 action_type。",
+            "schema": {
+              "type": "string",
+              "maxLength": 100
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true,
+                "required": [
+                  "idempotency_key",
+                  "deadline_working_days",
+                  "min_working_days",
+                  "max_working_days"
+                ],
+                "properties": {
+                  "idempotency_key": {
+                    "type": "string",
+                    "description": "操作幂等键；重复提交必须返回同一处理结果。",
+                    "maxLength": 128
+                  },
+                  "deadline_working_days": {
+                    "type": "integer",
+                    "description": "审批时限（工作日），须在上下限之间。",
+                    "minimum": 1
+                  },
+                  "min_working_days": {
+                    "type": "integer",
+                    "description": "时限下限（工作日），不小于 1。",
+                    "minimum": 1
+                  },
+                  "max_working_days": {
+                    "type": "integer",
+                    "description": "时限上限（工作日），不小于审批时限。",
+                    "minimum": 1
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
             "$ref": "#/components/responses/Error"
           },
           "500": {

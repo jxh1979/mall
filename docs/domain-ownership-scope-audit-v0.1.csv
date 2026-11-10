@@ -50,6 +50,7 @@ analytics_risk_alerts,inherited,dimension/project/merchant,dimension/project/mer
 analytics_risk_rules,inherited,dimension/project/merchant,dimension/project/merchant fields or derived source table,must join through scope path before multi-complex rollout,V0.07,covered
 analytics_robot_metrics,inherited,dimension/project/merchant,dimension/project/merchant fields or derived source table,must join through scope path before multi-complex rollout,V0.07,covered
 analytics_staff_service_scores,inherited,dimension/project/merchant,dimension/project/merchant fields or derived source table,must join through scope path before multi-complex rollout,V0.07,covered
+approval_deadline_settings,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",V0.07,covered
 approval_lines,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",V0.07,covered
 ar_ap_adjustments,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",V0.07,covered
 ar_ap_item_sources,inherited,ar_ap_item_id,ar_ap_item_id -> ar_ap_items/finance_ar_ap_items -> merchant/entity scope,must join through scope path before multi-complex rollout,V0.07,covered

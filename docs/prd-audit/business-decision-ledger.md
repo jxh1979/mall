@@ -1,6 +1,6 @@
 # PRD 审计业务裁决台账
 
-文档版本：V0.84
+文档版本：V0.85
 状态：进行中
 迁移日期：2026-07-27
 当前事实源：三份立法 HTML 以既有冻结基线叠加 James 此前 M02 至 M08 的点名批准、全量审计 M001、M002 的逐项批准，以及本轮 2026-10-16 至 2026-10-17 业务 HTML 审计中 Q01 至 Q40 及子题实际明确批准且未被后续替代的裁决，和 2026-10-17 第二批 HTML 业务线推演审计（A–F 六线 64 条、停车章）的逐项批准，并叠加本轮 CG 70 项来源确认与 C01–C09、N01–N03 最终澄清及补全文稿中 F01、W01–W05 的整体修改批准（本文件末节）；本轮最终规则、未采纳或替代关系、现行版本与字节哈希见本文件末节。历史记录保留为各自当时事实，不恢复已被替代的建议。
@@ -3951,6 +3951,7 @@ HTML 的语义补齐与直接引用同步可在本批核验；70项中的业务�
 | 44 | **第 211 条 分红周期「按财务对账的固定处理日期设定」的读法**（题面：「第 211 条：HTML 写「分红周期可配：按财务对账的固定处理日期设定（例如一个月中的某几天）」，另一处写「发放走应付款项，落在三个付账日之一，具体哪一个由该公司在分红周期配置中指定」。我理解为：分红方案加一项「发放付账日」（每月三个付账日之一，出厂 5、15、25 日），审批通过后给主理人的应付和留存释放的应付都落在当天或之后第一个该付账日（现在是审批当天即到期）；分红期间仍按自然月、季、半年、年切分，正式单仍由财务手动出。对吗？」）—— 操作员选「对，按这个理解（推荐）」：只加「发放付账日」配置，期间切分与出单方式不变。 | 已落地（18AC，见 18AC 落地位置补记） |
 | 45 | **第 202 条 反结时账单已登记退款的处理**（题面：「第 202 条反结补问：酒吧账单现金结了 3000，客人退一瓶已登记退款 500（财务还没把钱付出去），这时发现账单记错要反结。现在反结会把 3000 原收款整笔作废，按扣过退款的 2500 重收，收银「多退少补」当场退客人 500，财务那笔 500 又照付，客人多拿 500。怎么处理？」）—— 操作员选「只作废没退的部分（推荐）」：已登记的 500 退款照常由财务付出；反结只把没退的 2500 收款作废，再按更正后的账单重收。与第十七批「作废并冲正」遇到已退款时的处理一致，账和钱都不重复。（来由：18AA 收尾复核意见。） | 已落地（18AA 复核修复，第 202 条） |
 | 46 | **第 191 条 派驻起止日期按营业日判**（题面：「派驻员工的「派驻起止日期」，按自然日判还是按酒吧营业日判？现状（18AB 本段代码）：按自然日判（过零点就换日）的：员工的商户范围、点单时指定派驻履约人、开台时指派派驻员工为主责服务人、查看派驻员工的考勤领取事件；派驻提成归集（既有代码）也按计提时的自然日判。按班次工作日判的：派驻酒吧给派驻员工排班。后果：派驻最后一天的夜班酒吧能排进去，但一过零点，同一营业日里该员工名下的服务单就不能确认收款或完成，也不能被开台指派。HTML 依据：ENUM:187 写考勤日期、销售提成月份等「一律以开台或下单时点所属的营业日为准，不按自然日切分」，但没有点名派驻起止。决策台账里也没有相关裁决。」）—— 操作员选「按营业日判（推荐）」：凡判断是否在派驻期内都按酒吧营业日：结束日当天的夜班过零点后、到营业日结束前仍算派驻期内。已在派驻期内下的服务单，之后的收款、完成、取消按下单时所属营业日判。派驻提成归集也改按计提时所属营业日。与 ENUM:187 考勤日期、提成月份按营业日一致。（来由：18AB 收尾复核意见。） | 已落地（18AB 复核修复，第 191 条） |
+| 47 | **第 204 条 审批时限清单两行同名「免单」**（题面：「主管复核页新加的「审批时限」清单里有两行都叫「免单」，界面上分不出来，改了一行另一行仍按出厂 1 个工作日。一行是酒吧收银对账单免单时走的审批（码 bar.bill_waiver），另一行是在主管复核页手动发起的免单复核（码 bill_waiver）。这两行的时限怎么配？」）—— 操作员选「分两行，酒吧那行改名」：酒吧收银那行改叫「酒吧账单免单」，两行各配各的。待复核列表和审批链页上，这个码的显示也会随之变成新名字。（同日首次弹窗操作员误选「合成一行（推荐）」，随即说明「打错了，重新问我」，重问后选定本选项。来由：18AD 收尾复核意见。） | 已落地（18AD 复核修复，第 204 条） |
 
 第一段转正前最低池额试算与取消结算环节超池待审批：既有缺口，列入待开发清单第 75 条、随 18C 做（ENUM L52、BSM L752）。
 
@@ -5824,3 +5825,66 @@ HTML 的语义补齐与直接引用同步可在本批核验；70项中的业务�
 - 18AC 复核修复补记·第 210 条 210-R1 酒吧员工派驻别家的提成不重复计入两家人工成本：落在 backend/src/main/java/com/complex/platform/merchantexpense/JdbcMerchantExpenseRepository.java 的 attachPayrollLabor (a) 段。挂本店员工工资单时，金额再扣掉该单里的 bar_commission 与 bar_commission_reversal 行，条件是提成账单所在酒吧≠工资单商户、且按计提时点所属该酒吧营业日在本人派驻那家的期内。判法复用 JdbcStaffRepository#dispatchAt，与 aggregateDispatchedCommissions 同口径（第十八批裁决 46）。这部分已由那家经 (b) 段提成拨付承担，扣完为 0 不挂，其余口径不变。依据 BSM:1143「人员所属主体只承担该人员的基本薪资、社保和其他常规报酬，由人员所属主体直接支付给本人；除此之外的一切费用一律由使用方酒吧承担——包括但不限于该人员在该酒吧促成订单产生的提成」。新测试 MerchantExpensePayrollAttachJdbcIntegrationTests.barStaffDispatchedToAnotherBarHasCommissionThereBorneOnlyByThatBar。
 - 18AC 复核修复补记·第 210 条 210-R2 税费登记权限码授出须审批：落在迁移 V616（未发布，就地改）第 2 节权限种子。finance.entity_tax.manage 的 requires_approval 由 FALSE 改为 TRUE，同 V217 staff.tax_bracket.manage、V388 finance.dividend.manage；finance.entity_tax.view 不变。依据 PGM:666「以下五类权限授出前须先审批才生效——资金/核销/退款/调账/分红发放类、提权或跨商户跨项目、敏感经营数据的查看/导出/修改、高危业务（沽清/反结/存酒作废）；税费规则与税费调整」。回归为 AccessJdbcIntegrationTests.moneyAndSensitiveExportPermissionsRequireApproval，码列表并入 finance.entity_tax.manage。
 - 18AC 落地位置补记·运行验收证据、快照、终验文档刷新（无新裁决）：业务提交 c16382af 之后，按第十八批裁决 25 重刷了运行验收证据：后端全量 6613 测，0 失败 0 错误；apps/web 构建通过；常规界面验收（接口全部 mock）实跑 40 条全过；真实后端界面验收未跑，runtime_ready=false。随后依次重生成闭环当前态快照、生产闭环缺口报告、界面验收报告、无上线指挥台。生成器没改。手改 docs/final-closed-loop-acceptance-audit-v0.1.md 与 docs/code-implementation-acceptance-audit-v0.1.md：前端单测源码计数改为 1690；被核文件行数都没变；后端全量与常规界面验收的数字、日期改为本次实跑值；写入 npm run verify:unit 实跑结果，五个工作区全过。交付门禁于 2026-11-10 19:48 UTC 在工作树逐项实跑子项，NAS 两项现场探测未跑。仍红的有两项：一是 coding-host-protection，它写死主仓路径，在工作树口径下必红，属工具口径，不做；二是 final-closed-loop-audit，如实留 2 条红（integration-ready、business-acceptance-ready），原因是校验器要求终验把联调、业务验收写成「是」，而裁决 25 定了不跑真实后端界面验收、运行验收未就绪，终验写的是「否」。verify:delivery-gates 总链仍是红的。
+
+18AD 落地位置补记（2026-11-10）：第十八批 AD 段（batch50）按 18W 核实稿与 18AD 复核修正实现待开发清单第 204 条（全平台审批通用时限按审批类型可配），第 208 条按第六批裁决 4 关闭；运行验收证据、终验文档在本段最后一个提交刷新；各条落地位置见下。本段追加时，原台账除文档版本 V0.84→V0.85 与裁决表新增第 47 行外，其他历史字节保持。
+
+- 18AD 落地位置补记·控制席判定（2026-11-10）：本段（第十八批 AD 段，batch50）实现待开发清单第 204 条（全平台审批通用时限按审批类型可配），方案为 18W 核实稿（本机 b43-audit\g204-209-payroll.json）并采纳 18AD 在现 main 上的复核修正（本机 b50-tmp\verify_18ad.json）；依据 PGM:529「业务参数，按审批类型可配，出厂默认 3 个工作日，涉钱审批出厂默认 1 个工作日，须同时配置上下限」与 PGM:536；审批类型落成被审批的动作类型；出厂按涉钱 1 个工作日在现有分类外只加三项：bar.bill.unpaid_close（第十八批裁决 37「包厢关台时没付清就发经理待办，超时按通用时限升级」，追问题面「涉钱出厂 1 个工作日」）、parking.release.waive（控制席并入，BSM:1438「免费放行和减免须经物业主管审批」，减免即涉钱）、bar.bill_reopen（第十八批裁决 39，反结放行储值退款与收款作废）；迁移 V617；分两步：后端 204-R1 → 前端 204-R2，之后文档组改平台治理 PRD。
+- 18AD 落地位置补记·第 208 条关闭（2026-11-10，无新裁决）：第 208 条「提成月结时还没结清、之后才收回结清的账单，派驻与营销人员提成不再拨付」经 18AD 在现 main 上正反两方核对：代码上走得通（提成月结闸 StaffService.doCloseCommissionSettlement 只看当月两类数据已最终，不看挂起与日结锁定），但要出现须包厢挂起单跨过月末仍未处置、月结后才收回，与 BSM:1103「必须在本营业日结清」、第十八批裁决 37 操作员原话「包厢要求服务人员在客人离开前必须完成收款」相悖；决策台账第六批第二轮操作员裁决第 4 条对「月结后才收齐的账单怎么补拨」已答「不会出现这种情况。」并撤回过同类补拨实现。按原裁决不修，待开发清单第 208 条关闭；覆盖表 BSM-0533、BSM-0534 备注同步改指此处。
+- 18AD 落地位置补记·第 204 条 204-R1（审批时限按审批类型可配；对应裁决与依据：PGM:529、PGM:536、第十八批裁决 37、第十八批裁决 39、BSM:1438）：
+  - 依据原句：
+    - PGM:529「任一业务审批节点超过后台配置的时限（业务参数，按审批类型可配，出厂默认 3 个工作日，涉钱审批出厂默认 1 个工作日，须同时配置上下限）未处理的，系统自动提醒并升级到该节点的上一级」。
+    - PGM:536：合同三类审批时限「按合同类型可配，出厂默认 3 个工作日，须同时配置上下限」，随本清单一并可改，不另做。
+    - 第十八批裁决 37「包厢关台时没付清就发经理待办，超时按通用时限升级」，追问题面「涉钱出厂 1 个工作日」。
+    - BSM:1438「免费放行和减免须经物业主管审批」（控制席并入：减免即涉钱）。
+    - 第十八批裁决 39「反结生效时储值部分当场回原卡；现金、POS 等收款记录作废」。
+  - backend/src/main/resources/db/migration/V617__approval_deadline_settings.sql：
+    - 新表 approval_deadline_settings：action_type 主键；deadline_working_days、min_working_days、max_working_days；CHECK 1 ≤ 下限 ≤ 时限 ≤ 上限，同 V607；另有 updated_by、updated_at。只存后台改过的审批类型。
+    - 同一迁移移走 supervisor_review_policies.parameters 的 deadlineWorkingDays 键（UD-07，不留旧键回落）。
+  - backend/src/main/java/com/complex/platform/governance/review/SupervisorReviewService.java：
+    - deadlineFrom(actionType, from)：后台改过的取所存值，否则出厂（涉钱 1、其余 3 个工作日）。复核单发起 scheduleDeadline、超时升级顺延 escalateOverdue、包厢关台未付清待办三处同用。删 moneyApprovalDeadline。
+    - isMoneyAction 只加三项，其余出厂分类沿用现码：bar.bill.unpaid_close（裁决 37）、parking.release.waive（BSM:1438）、bar.bill_reopen（裁决 39）。
+    - listApprovalDeadlines：审批类型＝代码内复核策略的动作类型（去掉 permission_grant_l1～l3）∪ 准入闸启用中的阻断策略动作类型 ∪ access.grant_request.money、access.scope_change、access.scope_change.money、access.role_viewable_projects.reduce ∪ bar.bill.unpaid_close，按动作类型排序。每行回 action_type、money、factory_working_days、deadline_working_days、min_working_days、max_working_days、customized；没改过的上下限 1～30。
+    - updateApprovalDeadline：
+      - 不在清单：404 APPROVAL_TYPE_NOT_FOUND「没有这种审批类型」；
+      - 三值不齐或不满足区间：400 VALIDATION_FAILED「审批时限须在上下限之间，下限不小于 1 个工作日」；
+      - 通过后幂等写入，记 governance.approval_deadline.changed（前后值）。
+  - SupervisorReviewRepository、JdbcPlatformRepository：findDeadlineWorkingDays 改按 action_type 读新表；新增 listApprovalDeadlineSettings、upsertApprovalDeadline、listBlockActionTypes。
+  - SupervisorReviewController：
+    - GET /api/v1/platform/approval-deadlines（governance.supervisor_review.view，listApprovalDeadlines）。
+    - PUT /api/v1/platform/approval-deadlines/{action_type}（admission.policy.manage，与授权政策写口同一权限，updateApprovalDeadline）。整段放在 recordingFailure 里，失败记 governance.approval_deadline.change_failed。
+  - BarUnpaidCloseTodoService：待办期限改为 deadlineFrom(bar.bill.unpaid_close, now)。
+  - AccessGrantPolicy：删第 5 组件 deadlineWorkingDays。
+  - 同步改动：
+    - OpenAPI yaml 与 json 各加 2 个操作（1269→1271）。
+    - FieldLabels.java 补 deadline_working_days「截止工作日数」，同前端现值。
+    - 前端 fieldLabels.ts 补 money「是否涉钱」、factory_working_days「出厂默认（工作日）」、customized「后台是否改过」（verify-admin-result-labels 要求）。
+  - 新测试：
+    - ApprovalDeadlineJdbcIntegrationTests：listsEveryApprovalTypeWithFactoryDefaults、configuredDeadlineDrivesPayrollAdjustmentDueAndEscalation、grantRequestDeadlinesFollowTheirOwnActionType、invalidUnknownOrUnauthorizedChangesAreRejected。
+    - BarUnpaidCloseTodoJdbcIntegrationTests.configuredUnpaidCloseDeadlineSetsTodoDue。
+    - AccessJdbcIntegrationTests.grantPolicyRoundTripsWithoutDeadlineWorkingDays（替换 storedGrantPolicyParsesAndSavingKeepsDeadlineWorkingDays）。
+- 18AD 落地位置补记·第 204 条 204-R2（后台主管复核页「审批时限」区块）
+  依据：
+  - PGM:529「任一业务审批节点超过后台配置的时限（业务参数，按审批类型可配，出厂默认 3 个工作日，涉钱审批出厂默认 1 个工作日，须同时配置上下限）未处理的，系统自动提醒并升级到该节点的上一级」；
+  - PGM:291「用户看到的每一处文字都是中文」；
+  - 第十八批裁决 37：bar.bill.unpaid_close 进清单，起中文名「包厢关台未付清确认」。
+  落地位置：
+  - 页面：apps/web/src/admin/pages/SupervisorReviewPage.tsx（ADM-GOV-006，V0.10）。
+    - 策略表下新加「审批时限（工作日）」区块，与页面原有读取同批读 GET /api/v1/platform/approval-deadlines。
+    - 按审批类型（formatReviewValue 中文名）列是否涉钱、出厂默认、当前时限、下限、上限。
+    - 「修改」受 admission.policy.manage 控制（PermissionButton），下限、时限、上限三值同配。
+    - 前端先校验 1≤下限≤时限≤上限（整数），不满足时提示与后端同句「审批时限须在上下限之间，下限不小于 1 个工作日」。
+    - 保存调 PUT /api/v1/platform/approval-deadlines/{action_type}；成功提示并重读，失败显示后端中文原文。
+  - 中文名：apps/web/src/admin/i18n/reviewLabels.ts（V0.06）只补两个：
+    - bar.bill.unpaid_close「包厢关台未付清确认」；
+    - amusement.manual_override「游乐人工干预」（V099 准入闸行）。
+    - access.role_viewable_projects.reduce 沿用 statusLabels「减少角色可查看项目」，按 18AD 复核修正不另起名。
+    - 按清单构成扫描 78 个动作码，其余都已有中文名。
+  - 页面矩阵：docs/full-admin-page-permission-field-matrix-v0.1.csv 的 ADM-GOV-006 行补 admission.policy.manage，以及 GET /api/v1/platform/approval-deadlines、PUT /api/v1/platform/approval-deadlines/{action_type}。
+  新测试：apps/web/src/admin/pages/SupervisorReviewPage.deadline.test.tsx，共 5 条：
+  - ① 清单显示中文审批类型、涉钱出厂 1 其余 3，区块里没有英文动作码；
+  - ② 改为下限 2、时限 5、上限 10 保存：PUT 路径带该审批类型、请求体三值，成功提示并重读；
+  - ③ 下限大于时限：不发请求，给中文提示；
+  - ④ 后端 400：显示后端中文原文，表格不变；
+  - ⑤ 不持 admission.policy.manage：修改按钮不可用。
+- 18AD 复核修复补记·第 204 条审批时限接口挂到治理模块：backend gate/ServerModuleRoutes.java 的 web 表新增 Map.entry("/api/v1/platform/approval-deadlines", "governance")（V0.02），按段边界最长前缀，GET 清单与 PUT /api/v1/platform/approval-deadlines/{action_type} 都归 Web「治理」模块。治理模块（tcs_web_mod_governance）关闭后，接口返回 403 TERMINAL_DISABLED 并按 governance 留痕。依据：PGM:737「关闭后菜单不可见或不可点，接口也要拒绝业务动作」、PGM:744「前端隐藏只是辅助，后端接口必须独立校验」，以及第 100 条 100-R1 规则（某个菜单组页面独用的接口才定模块，主管复核页属 governance 菜单组）。新测试：ServerModuleRoutesTests.approvalDeadlinesBelongToGovernance、ServerModuleSwitchJdbcIntegrationTests.governanceModuleOffRejectsApprovalDeadlines。
+- 18AD 复核修复补记·第十八批裁决 47 酒吧收银免单审批改名：apps/web/src/admin/i18n/reviewLabels.ts 只把 "bar.bill_waiver" 的中文名由「免单」改为「酒吧账单免单」，bill_waiver 仍叫「免单」，清单构成与接口不变；待复核列表、审批链页（ADM-GOV-009）和审批时限区块随之显示新名。依据：裁决 47 选项原文「酒吧收银那行改叫「酒吧账单免单」，两行各配各的。待复核列表和审批链页上，这个码的显示也会随之变成新名字。」后端 FieldLabels.java 与前端 fieldLabels.ts 都没有该键，未改。新测试：SupervisorReviewPage.deadline.test.tsx「⑥ 第十八批裁决 47：两行免单各叫各的」；既有用例 ApprovalChainPage.test.tsx:310 已按新名同步。

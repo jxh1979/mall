@@ -1,12 +1,13 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.endsWith;
 import static org.hamcrest.Matchers.not;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -134,7 +135,8 @@ class BarUnpaidCloseTodoJdbcIntegrationTests {
         Map<String, Object> todo = todo(unhungBill);
         Instant notifiedAt = ((Timestamp) todo.get("notified_at")).toInstant();
         Timestamp due = (Timestamp) todo.get("due_at");
-        assertThat(due.toInstant()).isEqualTo(reviews.moneyApprovalDeadline(notifiedAt));
+        // 第十八批 AD 段第 204 条 204-R1：bar.bill.unpaid_close 后台未改过，按出厂涉钱 1 个工作日（第十八批裁决 37 追问题面）。
+        assertThat(due.toInstant()).isEqualTo(reviews.addWorkingDays(notifiedAt, 1));
         assertThat(todo).containsEntry("session_id", session).containsEntry("project_id", project).containsEntry("escalated_at", null);
         assertThat(todo(hungBill)).containsEntry("due_at", due);
         assertThat(jdbc.queryForObject("SELECT count(*) FROM audit_events WHERE event_name = 'bar.bill_unpaid_close_notified' AND business_id = ?",
@@ -151,6 +153,32 @@ class BarUnpaidCloseTodoJdbcIntegrationTests {
                 .andExpect(jsonPath("$.detail_code").value("BAR_TABLE_SESSION_BILL_UNSETTLED"))
                 .andExpect(jsonPath("$.message").value(not(endsWith("已通知当班经理确认能否收回"))));
         assertThat(jdbc.queryForObject("SELECT count(*) FROM bar_bill_unpaid_close_todos WHERE bill_id = ?", Integer.class, cardBill)).isZero();
+    }
+
+    /**
+     * 第十八批 AD 段第 204 条 204-R1（PGM:529「后台配置的时限（业务参数，按审批类型可配……须同时配置上下限）」；第十八批裁决 37「超时按通用时限升级」）：
+     * 后台经审批时限接口把包厢关台未付清确认（bar.bill.unpaid_close）改为 2 个工作日后，包厢关台被拦登记的待办期限＝登记时刻加 2 个工作日。
+     * 不开测试事务：用例结束删掉该行配置，别的用例照旧按出厂值。
+     */
+    @Test
+    void configuredUnpaidCloseDeadlineSetsTodoDue() throws Exception {
+        RequestPostProcessor admin = staffs.staff("usr_uc_admin_" + s, "staff", project, null, "admission.policy.manage");
+        try {
+            mockMvc.perform(put("/api/v1/platform/approval-deadlines/bar.bill.unpaid_close").with(admin).contentType(MediaType.APPLICATION_JSON)
+                    .content(json.writeValueAsString(Map.of("idempotency_key", "uc-deadline-" + s, "deadline_working_days", 2,
+                            "min_working_days", 1, "max_working_days", 30))))
+                    .andExpect(status().isOk());
+            String table = table("vip", "vip");
+            String session = openSession("vip", table);
+            String bill = bill(order(table), "a");
+            serviceClose(session, "uc-close-cfg-" + s).andExpect(status().isConflict())
+                    .andExpect(jsonPath("$.detail_code").value("BAR_TABLE_SESSION_BILL_UNSETTLED"));
+            Map<String, Object> todo = todo(bill);
+            assertThat(((Timestamp) todo.get("due_at")).toInstant())
+                    .isEqualTo(reviews.addWorkingDays(((Timestamp) todo.get("notified_at")).toInstant(), 2));
+        } finally {
+            jdbc.update("DELETE FROM approval_deadline_settings WHERE action_type = 'bar.bill.unpaid_close'");
+        }
     }
 
     /**

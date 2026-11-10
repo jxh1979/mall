@@ -1,13 +1,16 @@
-// 文件版本：V0.05
+// 文件版本：V0.06
 // 第十八批 I 段第 87 条（PGM:287「界面全中文（所有终端零英文）」）：主管复核的动作码、对象码、档位码与证据类型中文名，
 // 主管复核页与审批链页（ADM-GOV-009）共用（展示层翻译，提交仍原码）。原表与 formatReviewValue 自 SupervisorReviewPage.tsx 搬入。
 import { formatBusinessStatus } from "./statusLabels";
 
 export const REVIEW_LABELS: Record<string, string> = {
   "staff.shift.publish": "发布排班", "staff.payroll.penalty_cap.adjust": "调整工资扣罚上限",
-  bill_waiver: "免单", "bar.bill_waiver": "免单", refund: "退款", ar_ap_adjustment: "调账",
+  // 第十八批裁决 47：酒吧收银免单审批（bar.bill_waiver）改叫「酒吧账单免单」，与主管复核页手动发起的免单复核（bill_waiver）分开。
+  bill_waiver: "免单", "bar.bill_waiver": "酒吧账单免单", refund: "退款", ar_ap_adjustment: "调账",
   permission_grant_l1: "一级权限授权", permission_grant_l2: "二级权限授权", permission_grant_l3: "三级权限授权",
   "finance.tax_rule.adjust": "调整税费规则",
+  // 第十八批 AD 段第 204 条 204-R2：审批时限清单里另两个审批类型（包厢关台未付清待办，第十八批裁决 37；V099 准入闸游乐人工干预）。
+  "bar.bill.unpaid_close": "包厢关台未付清确认", "amusement.manual_override": "游乐人工干预",
   reason: "原因说明", before_after: "变更前后资料", operator_note: "操作说明",
   evidence_attachment: "证据附件", violation_summary: "违规说明",
   contract_snapshot: "合同快照", definition_snapshot: "基础定义快照",

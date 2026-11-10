@@ -1,6 +1,6 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -710,24 +710,21 @@ class AccessJdbcIntegrationTests {
                 .containsExactly("expired");
     }
 
-    // M032-001（治理地图「全平台审批通用时限」为后台业务参数）：库内现行授权政策行（V389 起带 deadlineWorkingDays）
-    // 必须能按服务层同一解析路径读出；保存一份不带该键的政策后，库内该键保持原值。
+    // 第十八批 AD 段第 204 条 204-R1（PGM:529「后台配置的时限（业务参数，按审批类型可配……）」）：审批时限只存 approval_deadline_settings，
+    // V617 移走了策略表 parameters 里的 deadlineWorkingDays（UD-07 不留旧键）；库内现行授权政策行照旧按服务层同一解析路径读出，保存后读回一致、不带该键。
     @Test
-    void storedGrantPolicyParsesAndSavingKeepsDeadlineWorkingDays() throws Exception {
+    void grantPolicyRoundTripsWithoutDeadlineWorkingDays() throws Exception {
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM supervisor_review_policies WHERE jsonb_exists(parameters, 'deadlineWorkingDays')", Integer.class))
+                .isZero();
         var mapper = new com.fasterxml.jackson.databind.ObjectMapper();
-        String stored = repository.findGrantPolicy().orElseThrow();
-        int days = mapper.readTree(stored).path("deadlineWorkingDays").path("value").asInt();
-        assertThat(days).isPositive();
-
-        AccessGrantPolicy current = mapper.readValue(stored, AccessGrantPolicy.class);
+        AccessGrantPolicy current = mapper.readValue(repository.findGrantPolicy().orElseThrow(), AccessGrantPolicy.class);
 
         repository.saveGrantPolicy(mapper.writeValueAsString(new AccessGrantPolicy(
                 current.windowDays(), current.positionThreshold(), current.userThreshold(), current.riskReviews())));
-        assertThat(jdbcTemplate.queryForObject(
-                "SELECT (parameters -> 'deadlineWorkingDays' ->> 'value')::int FROM supervisor_review_policies"
-                        + " WHERE policy_code = 'access_grant'", Integer.class)).isEqualTo(days);
-        assertThat(mapper.readValue(repository.findGrantPolicy().orElseThrow(), AccessGrantPolicy.class).windowDays().value())
-                .isEqualTo(current.windowDays().value());
+        String saved = repository.findGrantPolicy().orElseThrow();
+        assertThat(mapper.readTree(saved).has("deadlineWorkingDays")).isFalse();
+        assertThat(mapper.readValue(saved, AccessGrantPolicy.class).windowDays().value()).isEqualTo(current.windowDays().value());
     }
 
     // M034-001（枚举速查「系统不提供人工放行…任何岗位、任何权限都不能以人工方式让一笔不满足规则的核销通过」）：
