@@ -1,6 +1,6 @@
 package com.complex.platform.governance.review;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import com.complex.platform.governance.chain.ApprovalChainNode;
 import java.time.Instant;
@@ -98,9 +98,28 @@ public interface SupervisorReviewRepository {
         return List.of();
     }
 
-    /** 策略参数 parameters.deadlineWorkingDays.value（工作日），未配置为空。 */
-    default Optional<Integer> findDeadlineWorkingDays(String policyCode) {
+    /** 第十八批 AD 段第 204 条 204-R1：后台改过的该审批类型（被审批的动作类型）的时限（工作日），没改过为空（按出厂）。 */
+    default Optional<Integer> findDeadlineWorkingDays(String actionType) {
         return Optional.empty();
+    }
+
+    /** 204-R1：后台改过的全部审批类型的时限与上下限。 */
+    default List<ApprovalDeadlineSetting> listApprovalDeadlineSettings() {
+        return List.of();
+    }
+
+    /** 204-R1：写入（覆盖）一种审批类型的时限与上下限。 */
+    default void upsertApprovalDeadline(ApprovalDeadlineSetting setting, String updatedBy) {
+        throw new UnsupportedOperationException("approval_deadline_settings");
+    }
+
+    /** 204-R1：准入闸策略表里启用中的阻断策略的动作类型。 */
+    default List<String> listBlockActionTypes() {
+        return List.of();
+    }
+
+    /** 204-R1：一种审批类型的时限与上下限（工作日），满足 1 ≤ 下限 ≤ 时限 ≤ 上限。 */
+    record ApprovalDeadlineSetting(String actionType, int deadlineWorkingDays, int minWorkingDays, int maxWorkingDays) {
     }
 
     /** holiday_calendar 中落在 [from, to] 的全部日期（含调休假期），用于按工作日计算到期。 */

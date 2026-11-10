@@ -1,4 +1,4 @@
-# P0 OpenAPI 权限、事件、任务追溯收口附录 V0.61
+# P0 OpenAPI 权限、事件、任务追溯收口附录 V0.62
 
 ## 1. 文档定位
 
@@ -14,11 +14,11 @@
 
 | 检查项 | 当前结果 | 执行结论 |
 |---|---:|---|
-| OpenAPI operation 数 | 1269 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
-| OpenAPI 权限/通用权限状态数 | 427 | 人工权限矩阵正文未覆盖 326 项；缺口以本文第 3 节补齐 |
-| OpenAPI 成功/失败事件数 | 2538 | 人工事件矩阵正文未覆盖 2489 项；完整事件字典以本文第 4 节为准 |
-| operation 级任务追溯 | 1269 | 人工任务映射正文未逐项覆盖 1263 个 operation；逐 operation 映射以本文第 5 节为准 |
-| 写接口数量 | 761 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
+| OpenAPI operation 数 | 1271 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
+| OpenAPI 权限/通用权限状态数 | 428 | 人工权限矩阵正文未覆盖 327 项；缺口以本文第 3 节补齐 |
+| OpenAPI 成功/失败事件数 | 2542 | 人工事件矩阵正文未覆盖 2493 项；完整事件字典以本文第 4 节为准 |
+| operation 级任务追溯 | 1271 | 人工任务映射正文未逐项覆盖 1265 个 operation；逐 operation 映射以本文第 5 节为准 |
+| 写接口数量 | 762 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
 
 ## 3. 权限码与认证上下文补充表
 
@@ -42,6 +42,7 @@
 | `access.temporary_grant.revoke` | staff-token | project | 1 | revokeTemporaryGrant | 已在权限矩阵正文出现 |
 | `access.user.manage` | staff-token | project | 1 | createAccessUser | 已在权限矩阵正文出现 |
 | `access.user.view` | staff-token | project | 2 | listAccessUsers, getUserEffectivePermissions | 已在权限矩阵正文出现 |
+| `admission.policy.manage` | staff-token | platform | 1 | updateApprovalDeadline | OpenAPI 补充，以本附录为准 |
 | `amusement.business_day.manage` | staff-token | project | 1 | submitAmusementBusinessDayConfig | OpenAPI 补充，以本附录为准 |
 | `amusement.business_day.view` | staff-token | project | 1 | listAmusementBusinessDayConfigs | OpenAPI 补充，以本附录为准 |
 | `amusement.capacity_config.manage` | staff-token | project-amusement | 3 | listAmusementCapacityConfigs, createAmusementCapacityConfig, disableAmusementCapacityConfig | OpenAPI 补充，以本附录为准 |
@@ -282,7 +283,7 @@
 | `governance.space.view` | staff-token | platform, project, project-merchant-space | 3 | listSpaces, listVenueBusinessHours, listSpaceTypes | 已在权限矩阵正文出现 |
 | `governance.supervisor_review.approve` | staff-token | project-entity | 1 | approveSupervisorReview | OpenAPI 补充，以本附录为准 |
 | `governance.supervisor_review.manage` | staff-token | project-entity | 1 | evaluateSupervisorReview | OpenAPI 补充，以本附录为准 |
-| `governance.supervisor_review.view` | staff-token | project, project-entity, project-merchant | 4 | listSupervisorReviewPolicies, readSupervisorReviewOriginal, readAmusementBusinessDayConfigOriginal, readBarBusinessDayConfigOriginal | OpenAPI 补充，以本附录为准 |
+| `governance.supervisor_review.view` | staff-token | platform, project, project-entity, project-merchant | 5 | listApprovalDeadlines, listSupervisorReviewPolicies, readSupervisorReviewOriginal, readAmusementBusinessDayConfigOriginal, readBarBusinessDayConfigOriginal | OpenAPI 补充，以本附录为准 |
 | `integration.channel_store_map.manage` | staff-token | platform | 2 | saveIntegrationChannelTicketTypeMap, archiveIntegrationChannelTicketTypeMap | OpenAPI 补充，以本附录为准 |
 | `integration.channel_store_map.view` | staff-token | platform | 1 | listIntegrationChannelTicketTypeMaps | OpenAPI 补充，以本附录为准 |
 | `integration.compensation.manage` | staff-token | platform | 2 | createCompensationTask, resolveCompensationTask | OpenAPI 补充，以本附录为准 |
@@ -1598,6 +1599,8 @@
 | `floor_plan.shape.save` | success | `saveFloorPlanShape` | `POST` | `/api/v1/floor-plans/{id}/shapes` | P0-待归类 | `floor_plan.manage` | 接口级事件，以本附录为准 |
 | `floor_plan.shape.save_failed` | failure | `saveFloorPlanShape` | `POST` | `/api/v1/floor-plans/{id}/shapes` | P0-待归类 | `floor_plan.manage` | 接口级事件，以本附录为准 |
 | `floor_plan.viewed` | success | `listFloorPlans` | `GET` | `/api/v1/floor-plans` | P0-待归类 | `floor_plan.view` | 接口级事件，以本附录为准 |
+| `governance.approval_deadline.change_failed` | failure | `updateApprovalDeadline` | `PUT` | `/api/v1/platform/approval-deadlines/{action_type}` | GOV-平台治理 | `admission.policy.manage` | 接口级事件，以本附录为准 |
+| `governance.approval_deadline.changed` | success | `updateApprovalDeadline` | `PUT` | `/api/v1/platform/approval-deadlines/{action_type}` | GOV-平台治理 | `admission.policy.manage` | 接口级事件，以本附录为准 |
 | `governance.supervisor_review.decide_failed` | failure | `approveSupervisorReview` | `POST` | `/api/v1/platform/supervisor-review/{review_id}/approve` | GOV-平台治理 | `governance.supervisor_review.approve` | 接口级事件，以本附录为准 |
 | `governance.supervisor_review.decided` | success | `approveSupervisorReview` | `POST` | `/api/v1/platform/supervisor-review/{review_id}/approve` | GOV-平台治理 | `governance.supervisor_review.approve` | 接口级事件，以本附录为准 |
 | `governance.supervisor_review.evaluate_failed` | failure | `evaluateSupervisorReview` | `POST` | `/api/v1/platform/supervisor-review/evaluate` | GOV-平台治理 | `governance.supervisor_review.manage` | 接口级事件，以本附录为准 |
@@ -2148,6 +2151,8 @@
 | `not_applicable` | failure | `listAmusementParkWideFaultActions` | `GET` | `/api/v1/amusement/park-wide-faults/{fault_id}/actions` | AMU-游乐安全 | `amusement.park_fault.view` | 接口级事件，以本附录为准 |
 | `not_applicable` | failure | `listAmusementParkWideFaults` | `GET` | `/api/v1/amusement/park-wide-faults` | AMU-游乐安全 | `amusement.park_fault.view` | 接口级事件，以本附录为准 |
 | `not_applicable` | failure | `listAmusementSafetyNotices` | `GET` | `/api/v1/amusement/safety-notices` | AMU-游乐安全 | `amusement.safety_notice.view` | 接口级事件，以本附录为准 |
+| `not_applicable` | success | `listApprovalDeadlines` | `GET` | `/api/v1/platform/approval-deadlines` | GOV-平台治理 | `governance.supervisor_review.view` | 接口级事件，以本附录为准 |
+| `not_applicable` | failure | `listApprovalDeadlines` | `GET` | `/api/v1/platform/approval-deadlines` | GOV-平台治理 | `governance.supervisor_review.view` | 接口级事件，以本附录为准 |
 | `not_applicable` | success | `listBarCombos` | `GET` | `/api/v1/bar/catalog/combos` | BAR-酒吧经营 | `bar.combo.view` | 接口级事件，以本附录为准 |
 | `not_applicable` | failure | `listBarCombos` | `GET` | `/api/v1/bar/catalog/combos` | BAR-酒吧经营 | `bar.combo.view` | 接口级事件，以本附录为准 |
 | `not_applicable` | success | `listBarProductCategories` | `GET` | `/api/v1/bar/catalog/categories` | BAR-酒吧经营 | `bar.category.view` | 接口级事件，以本附录为准 |
@@ -3536,6 +3541,7 @@
 | GOV-平台治理 | `getMerchantStaffBookingNoShowLimit` | `GET` | `/api/v1/platform/merchants/{merchant_id}/staff-booking-no-show-limit` | 查询酒吧员工代订爽约率上限 | `merchant.profile.view` | `merchant.viewed` / `merchant.view_failed` | web | operation 级补充 |
 | GOV-平台治理 | `getMerchantTableTransferLimit` | `GET` | `/api/v1/platform/merchants/{merchant_id}/table-transfer-limit` | 查询酒吧转台次数上限 | `merchant.profile.view` | `merchant.viewed` / `not_applicable` | web | operation 级补充 |
 | GOV-平台治理 | `getProjectSensitiveOperationRange` | `GET` | `/api/v1/platform/projects/{project_id}/sensitive-operation-range` | 查询项目敏感操作授权范围 | `platform.sensitive_operation_range.manage` | `platform.sensitive_operation_range.viewed` / `platform.sensitive_operation_range.view_failed` | web | operation 级补充 |
+| GOV-平台治理 | `listApprovalDeadlines` | `GET` | `/api/v1/platform/approval-deadlines` | 查询各审批类型的审批时限 | `governance.supervisor_review.view` | `not_applicable` / `not_applicable` | web | operation 级补充 |
 | GOV-平台治理 | `listBusinessEntities` | `GET` | `/api/v1/platform/business-entities` | 查询经营、运营、合同、结算主体档案 | `entity.binding.view` | `business_entity.viewed` / `not_applicable` | web | operation 级补充 |
 | GOV-平台治理 | `listBusinessEntityBindings` | `GET` | `/api/v1/platform/business-entity-bindings` | 查询四类主体绑定 | `entity.binding.view` | `entity_binding.viewed` / `entity_binding.view_failed` | web | operation 级补充 |
 | GOV-平台治理 | `listMerchants` | `GET` | `/api/v1/platform/merchants` | 查询商户 | `merchant.profile.view` | `merchant.viewed` / `not_applicable` | web, merchant_portal, merchant_app | operation 级补充 |
@@ -3548,6 +3554,7 @@
 | GOV-平台治理 | `requestMerchantOperatingProject` | `POST` | `/api/v1/platform/merchants/{merchant_id}/operating-projects` | 申请商户加经营项目(须审批生效) | `merchant.profile.manage` | `merchant.operating_project.requested` / `merchant.operating_project.request_failed` | web | operation 级补充 |
 | GOV-平台治理 | `saveProjectSensitiveOperationRange` | `PUT` | `/api/v1/platform/projects/{project_id}/sensitive-operation-range` | 配置项目敏感操作授权范围(圆心、半径与上下限同配) | `platform.sensitive_operation_range.manage` | `platform.sensitive_operation_range.saved` / `platform.sensitive_operation_range.save_failed` | web | operation 级补充 |
 | GOV-平台治理 | `saveVenueBusinessHours` | `POST` | `/api/v1/platform/venue-business-hours` | 配置场地营业时间 | `governance.space.manage` | `venue_business_hours.updated` / `venue_business_hours.update_failed` | web | operation 级补充 |
+| GOV-平台治理 | `updateApprovalDeadline` | `PUT` | `/api/v1/platform/approval-deadlines/{action_type}` | 配置一种审批类型的审批时限（时限与上下限同配） | `admission.policy.manage` | `governance.approval_deadline.changed` / `governance.approval_deadline.change_failed` | web | operation 级补充 |
 | GOV-平台治理 | `updateMerchant` | `PUT` | `/api/v1/platform/merchants/{merchant_id}` | 修改商户 | `merchant.profile.manage` | `merchant.updated` / `merchant.update_failed` | web | operation 级补充 |
 | INT-第三方集成 | `archiveIntegrationChannelTicketTypeMap` | `POST` | `/api/v1/integration/channel-ticket-type-maps/{id}/archive` | 停用渠道票种映射 | `integration.channel_store_map.manage` | `integration.channel_ticket_type_map.archived` / `integration.channel_ticket_type_map.archive_failed` | web | operation 级补充 |
 | INT-第三方集成 | `createCompensationTask` | `POST` | `/api/v1/integration/compensation-tasks` | 创建补偿任务 | `integration.compensation.manage` | `integration.compensation_task.created` / `integration.compensation_task.create_failed` | web | operation 级补充 |

@@ -1,4 +1,4 @@
-// 文件版本：V0.28
+// 文件版本：V0.29
 // OBS-14-02 后台结果区字段中文名字典（PGM「全局原则 · 界面全中文（所有终端零英文）」）。
 // 键用后端 JSON 的蛇形写法；结果区查表时蛇形与驼峰同查（orderId / order_id 都命中 order_id）。
 // 与后端字段中文名表 FieldLabels.java（common.api 包）同键同名：前段按后端原样抄录，后端改名这里跟着改（门禁会比对）。
@@ -2855,6 +2855,10 @@ export const FIELD_LABELS: Record<string, string> = {
   stage_escalated_at: "本阶段超时升级时刻",
   // 第十八批 Y 段第 183 条 183-R2 复核修复：演出场次列表逐行结算待处理条数（同后端 FieldLabels.java）。
   pending_settlement_count: "结算待处理条数",
+  // 第十八批 AD 段第 204 条 204-R1 审批时限清单每行（deadline_working_days、min_working_days、max_working_days 已有同名）。
+  money: "是否涉钱",
+  factory_working_days: "出厂默认（工作日）",
+  customized: "后台是否改过",
 };
 
 // 结果对象里页面自定的取值（action 动作码、status 状态码）→ 中文；STATUS_LABELS 已有的码不重复列。

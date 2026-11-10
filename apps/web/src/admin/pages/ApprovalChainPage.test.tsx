@@ -5,7 +5,7 @@ import { ApprovalChainPage } from "./ApprovalChainPage";
 import { AdminApi } from "../client/adminClient";
 import type { AdminPageProps, EffectivePermissionsState } from "../types";
 
-// 文件版本：V0.07
+// 文件版本：V0.08
 
 function raw(data: unknown): Response {
   return new Response(JSON.stringify({ success: true, code: "OK", message: "success", data }), { status: 200, headers: { "content-type": "application/json" } });
@@ -307,7 +307,7 @@ describe("ApprovalChainPage 审批链与节点裁决", () => {
       expect(objectId).toBe(`obj_${i}`);
     });
     expect(cells(`rv87_${actions.indexOf("staff.shift.publish")}`)[1]).toBe("发布排班");
-    expect(cells(`rv87_${actions.indexOf("bar.bill_waiver")}`)[1]).toBe("免单");
+    expect(cells(`rv87_${actions.indexOf("bar.bill_waiver")}`)[1]).toBe("酒吧账单免单"); // 第十八批裁决 47
     expect(cells(`rv87_${actions.indexOf("merchant.project.add")}`)[1]).toBe("商户加经营项目");
     const licence = objectTypes.indexOf("compliance_expiry_item");
     expect(cells(`rv87_${licence}`)[2]).toBe(`证照 / obj_${licence}`);

@@ -1,4 +1,4 @@
-# P0 OpenAPI Operation 验收矩阵 V0.61
+# P0 OpenAPI Operation 验收矩阵 V0.62
 
 ## 1. 文档定位
 
@@ -17,7 +17,7 @@
 
 ## 3. Operation 清单
 
-> 当前 `docs/openapi/openapi-p0.json` 共 1269 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
+> 当前 `docs/openapi/openapi-p0.json` 共 1271 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
 
 | 标签 | 方法 | 路径 | operationId | 摘要 | 请求体 | 权限 | 认证上下文 | 数据范围 | 终端/设备能力/调用通道 | 幂等 | 成功事件 | 失败事件 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -372,6 +372,8 @@
 | ticketing | `POST` | `/api/v1/ticketing/verifications/preview` | `previewTicketVerification` | 票务核销预览 | `VerificationRequest` | `verification.execute` | `staff-token` | `project-point` | staff_work_phone, kiosk, web<br>capability: verification-gate | 是 | `verification.previewed` | `verification.failed` |
 | merchant-billing | `GET` | `/api/v1/merchant-billing/bills` | `listMerchantBills` | List merchant bills | `-` | `merchant.billing.view` | `staff-token` | `project-merchant` | web, merchant_portal, merchant_app | 否 | `merchant_billing.bill.viewed` | `not_applicable` |
 | merchant-billing | `POST` | `/api/v1/merchant-billing/bills` | `createMerchantBill` | 创建商户账单 | `object` | `merchant.billing.manage` | `staff-token` | `-` | web | 是 | `merchant.billing.create` | `merchant.billing.create_failed` |
+| platform | `GET` | `/api/v1/platform/approval-deadlines` | `listApprovalDeadlines` | 查询各审批类型的审批时限 | `-` | `governance.supervisor_review.view` | `staff-token` | `platform` | web | 否 | `not_applicable` | `not_applicable` |
+| platform | `PUT` | `/api/v1/platform/approval-deadlines/{action_type}` | `updateApprovalDeadline` | 配置一种审批类型的审批时限（时限与上下限同配） | `object` | `admission.policy.manage` | `staff-token` | `platform` | web | 是 | `governance.approval_deadline.changed` | `governance.approval_deadline.change_failed` |
 | platform | `GET` | `/api/v1/platform/supervisor-review-policies` | `listSupervisorReviewPolicies` | 查询主管复核与违规阻断策略 | `-` | `governance.supervisor_review.view` | `staff-token` | `project-entity` | web | 否 | `governance.supervisor_review.policies_viewed` | `not_applicable` |
 | platform | `POST` | `/api/v1/platform/supervisor-review/evaluate` | `evaluateSupervisorReview` | 评估业务动作是否需要主管复核 | `SupervisorReviewEvaluateRequest` | `governance.supervisor_review.manage` | `staff-token` | `project-entity` | web | 是 | `governance.supervisor_review.evaluated` | `governance.supervisor_review.evaluate_failed` |
 | platform | `POST` | `/api/v1/platform/supervisor-review/{review_id}/approve` | `approveSupervisorReview` | 主管审批或驳回复核记录 | `SupervisorReviewApprovalRequest` | `governance.supervisor_review.approve` | `staff-token` | `project-entity` | web | 是 | `governance.supervisor_review.decided` | `governance.supervisor_review.decide_failed` |

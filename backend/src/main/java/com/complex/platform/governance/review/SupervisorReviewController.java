@@ -1,5 +1,5 @@
 package com.complex.platform.governance.review;
-// 文件版本：V0.03
+// 文件版本：V0.04
 import static com.complex.platform.common.api.ApiRequests.requireIdempotencyKey;
 
 import com.complex.platform.access.AccessService;
@@ -16,6 +16,7 @@ import java.util.Optional;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -45,6 +46,29 @@ public class SupervisorReviewController {
     public ApiResponse<PageResponse<SupervisorReviewPolicyRecord>> listPolicies() {
         authorizationService.requirePermission("governance.supervisor_review.view");
         return ApiResponse.ok(service.listPolicies());
+    }
+
+    /**
+     * 第十八批 AD 段第 204 条 204-R1（PGM:529「后台配置的时限（业务参数，按审批类型可配，出厂默认 3 个工作日，涉钱审批出厂默认 1 个工作日，须同时配置上下限）」）：
+     * 各审批类型的审批时限清单。
+     */
+    @GetMapping("/approval-deadlines")
+    public ApiResponse<List<SupervisorReviewService.ApprovalDeadline>> listApprovalDeadlines() {
+        authorizationService.requirePermission("governance.supervisor_review.view");
+        return ApiResponse.ok(service.listApprovalDeadlines());
+    }
+
+    /** 204-R1：改一种审批类型的时限与上下限，与授权政策写口同一权限；整段放进 recordingFailure，任一步失败落 governance.approval_deadline.change_failed。 */
+    @PutMapping("/approval-deadlines/{action_type}")
+    public ApiResponse<SupervisorReviewService.ApprovalDeadline> updateApprovalDeadline(@PathVariable("action_type") String actionType,
+            @RequestBody SupervisorReviewService.ApprovalDeadlineRequest request) {
+        String key = request == null ? null : request.idempotencyKey();
+        return ApiResponse.ok(operations.recordingFailure("governance.approval_deadline.change_failed", "admission.policy.manage",
+                "approval_deadline", actionType, key, () -> {
+                    authorizationService.requirePermission("admission.policy.manage");
+                    requireIdempotencyKey(key);
+                    return service.updateApprovalDeadline(actionType, request);
+                }));
     }
 
     @PostMapping("/supervisor-review/evaluate")

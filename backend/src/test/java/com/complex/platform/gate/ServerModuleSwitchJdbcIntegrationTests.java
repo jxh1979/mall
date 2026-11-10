@@ -1,4 +1,4 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 package com.complex.platform.gate;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -136,6 +136,21 @@ class ServerModuleSwitchJdbcIntegrationTests {
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.detail_code").value("TERMINAL_DISABLED"));
         assertThat(moduleRejections("inventory")).isEqualTo(before + 1);
+    }
+
+    /** 第十八批 AD 段第 204 条复核修复（PGM:737「关闭后菜单不可见或不可点，接口也要拒绝业务动作」；PGM:744）：治理模块关闭——
+     *  主管复核页的审批时限清单 403 并按 governance 留痕。 */
+    @Test
+    void governanceModuleOffRejectsApprovalDeadlines() throws Exception {
+        account(staff, "staff", null, "governance.supervisor_review.view");
+        Cookie[] session = webSession(staff);
+        close("tcs_web_mod_governance");
+        int before = moduleRejections("governance");
+
+        mockMvc.perform(web(get("/api/v1/platform/approval-deadlines"), session, "web"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.detail_code").value("TERMINAL_DISABLED"));
+        assertThat(moduleRejections("governance")).isEqualTo(before + 1);
     }
 
     /** 100-R1 (d)：商户专区模块关闭——商户账号不带模块头、改报别的模块都 403；外壳的未读账单提醒同样不给；异议被拒、不落异议，加 X-Forwarded-Prefix 头也一样。 */

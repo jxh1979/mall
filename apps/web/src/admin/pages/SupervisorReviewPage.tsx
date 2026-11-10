@@ -1,4 +1,4 @@
-// 文件版本：V0.09
+// 文件版本：V0.10
 import React from "react";
 import { withBase } from "../../basePath";
 import { formatReviewValue } from "../i18n/reviewLabels";
@@ -93,6 +93,12 @@ function sameAccount(candidate: string, actor?: { id?: string; username?: string
 const SUPERVISOR_REVIEW_PERMISSION = "governance.supervisor_review.manage";
 // M007-F-08（PGM-1.10 一个单一功能一个权限点）：评估用 manage，审批用 approve，与后端端点门禁一致。
 const SUPERVISOR_APPROVE_PERMISSION = "governance.supervisor_review.approve";
+// 第十八批 AD 段第 204 条 204-R2（PGM:529「后台配置的时限（业务参数，按审批类型可配，出厂默认 3 个工作日，涉钱审批出厂默认 1 个工作日，
+// 须同时配置上下限）」）：审批时限按被审批的动作类型可配，改时限与授权政策写口同一权限。
+const APPROVAL_DEADLINE_PERMISSION = "admission.policy.manage";
+const APPROVAL_DEADLINE_INVALID = "审批时限须在上下限之间，下限不小于 1 个工作日";
+type ApprovalDeadlineRow = { actionType: string; money: boolean; factoryWorkingDays: number; deadlineWorkingDays: number; minWorkingDays: number; maxWorkingDays: number };
+type ApprovalDeadlineForm = { actionType: string; days: string; min: string; max: string };
 
 // KPI 聚焦视图（照 OrganizationMerchantPage 样板）：点 KPI 数字=带参重进本页，只渲染策略表对应子集。
 // URL 约定：?kpi=policies[&subset=blocked|active]。
@@ -135,6 +141,8 @@ export function SupervisorReviewPage({ api, user, setActionResult, setGlobalErro
   const [kpiFocus, setKpiFocus] = React.useState<KpiFocus | null>(readKpiFocusFromUrl);
   // 行明细抽屉：整行可点 → 该复核策略完整字段（枚举中文·布尔中文）。
   const [detail, setDetail] = React.useState<{ title: string; fields: RowDetailField[] } | null>(null);
+  const [deadlines, setDeadlines] = React.useState<ApprovalDeadlineRow[]>([]);
+  const [deadlineForm, setDeadlineForm] = React.useState<ApprovalDeadlineForm | null>(null);
 
   React.useEffect(() => {
     const onPopState = () => setKpiFocus(readKpiFocusFromUrl());
@@ -166,6 +174,7 @@ export function SupervisorReviewPage({ api, user, setActionResult, setGlobalErro
     async () => {
       setRows(await api.get<SupervisorReviewPolicyRow[]>("/api/v1/platform/supervisor-review-policies"));
       setPendingRows(await api.get<PendingRow[]>("/api/v1/platform/supervisor-review/pending"));
+      setDeadlines(await api.get<ApprovalDeadlineRow[]>("/api/v1/platform/approval-deadlines"));
     },
     { onError: setGlobalError, fallbackMessage: TEXT.loadFailed, onStart: () => setGlobalError(null) },
   );
@@ -330,6 +339,30 @@ export function SupervisorReviewPage({ api, user, setActionResult, setGlobalErro
     await runAction("supervisor_review_rejected", request, () => api.post(`/api/v1/platform/supervisor-review/${latestReviewId}/approve`, request));
   }
 
+  // 204-R2：三值同配，前端先校验 1 ≤ 下限 ≤ 时限 ≤ 上限（整数），后端报错原文上屏。
+  async function saveDeadline() {
+    if (!deadlineForm) return;
+    const days = Number(deadlineForm.days), min = Number(deadlineForm.min), max = Number(deadlineForm.max);
+    if (![days, min, max].every(Number.isInteger) || min < 1 || min > days || days > max) {
+      setGlobalError(APPROVAL_DEADLINE_INVALID);
+      return;
+    }
+    try {
+      await api.put(`/api/v1/platform/approval-deadlines/${encodeURIComponent(deadlineForm.actionType)}`,
+        { deadlineWorkingDays: days, minWorkingDays: min, maxWorkingDays: max });
+      setActionResult(`已保存审批时限：${formatReviewValue(deadlineForm.actionType)} ${days} 个工作日（下限 ${min}、上限 ${max} 个工作日）`);
+      setDeadlineForm(null);
+      void reload();
+    } catch (err) {
+      setGlobalError(err instanceof Error ? err.message : "审批时限保存失败");
+    }
+  }
+
+  function deadlineInput(key: "min" | "days" | "max", label: string) {
+    return <label>{label}<input data-testid={`approval-deadline-${key}`} type="number" min={1} step={1} value={deadlineForm?.[key] ?? ""}
+      onChange={(event) => setDeadlineForm((form) => (form ? { ...form, [key]: event.target.value } : form))} /></label>;
+  }
+
   // 第十三批裁决第 5 条「上级审批后发布：运营编辑后走审批，批准才对客人展示」：审批客人端首页内容前先读这次要发布的原文（不盲批）。
   async function openHomeContentDraft(projectId: string) {
     try {
@@ -480,6 +513,27 @@ export function SupervisorReviewPage({ api, user, setActionResult, setGlobalErro
             {formError ? <div data-testid="supervisor-review-error" className="admin-inline-error">{formError}</div> : null}
 
             {policyTable}
+            <h3>审批时限（工作日）</h3>
+            <div className="admin-table-scroll" data-testid="approval-deadline-section">
+              <table className="admin-table" data-testid="approval-deadline-table">
+                <thead><tr><th>审批类型</th><th>是否涉钱</th><th>出厂默认</th><th>当前时限</th><th>下限</th><th>上限</th><th>操作</th></tr></thead>
+                <tbody>{deadlines.map((row) => (
+                  <tr key={row.actionType} data-testid={`approval-deadline-row-${row.actionType}`}>
+                    <td>{formatReviewValue(row.actionType)}</td><td>{displayValue(row.money)}</td><td>{row.factoryWorkingDays}</td>
+                    <td>{row.deadlineWorkingDays}</td><td>{row.minWorkingDays}</td><td>{row.maxWorkingDays}</td>
+                    <td><PermissionButton permissionsState={effectivePermissions} permissions={[APPROVAL_DEADLINE_PERMISSION]} data-testid={`approval-deadline-edit-${row.actionType}`}
+                      onClick={() => setDeadlineForm({ actionType: row.actionType, days: String(row.deadlineWorkingDays), min: String(row.minWorkingDays), max: String(row.maxWorkingDays) })}>修改</PermissionButton></td>
+                  </tr>
+                ))}</tbody>
+              </table>
+            </div>
+            {deadlineForm ? (
+              <div className="admin-inline-form" data-testid="approval-deadline-form">
+                <span>修改审批时限：{formatReviewValue(deadlineForm.actionType)}</span>
+                {deadlineInput("min", "下限（工作日）")}{deadlineInput("days", "时限（工作日）")}{deadlineInput("max", "上限（工作日）")}
+                <PermissionButton permissionsState={effectivePermissions} permissions={[APPROVAL_DEADLINE_PERMISSION]} data-testid="approval-deadline-save" onClick={() => void saveDeadline()}>保存</PermissionButton>
+              </div>
+            ) : null}
             <ManualBackfillPolicySection api={api} setActionResult={setActionResult} setGlobalError={setGlobalError} effectivePermissions={effectivePermissions} />
           </>
         )}

@@ -1,5 +1,5 @@
 package com.complex.platform.governance;
-// 文件版本：V0.22
+// 文件版本：V0.23
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
@@ -1289,14 +1289,36 @@ class JdbcPlatformRepository implements PlatformRepository, SupervisorReviewRepo
                 .addValue("escalation_count", node.escalationCount());
     }
 
+    // 第十八批 AD 段第 204 条 204-R1：审批时限只存 approval_deadline_settings（V617，只存后台改过的审批类型）。
     @Override
-    public Optional<Integer> findDeadlineWorkingDays(String policyCode) {
-        return jdbcTemplate.query("""
-                SELECT (parameters -> 'deadlineWorkingDays' ->> 'value')::int AS days
-                  FROM supervisor_review_policies
-                 WHERE policy_code = :policy_code
-                """, new MapSqlParameterSource().addValue("policy_code", policyCode),
-                (rs, rowNumber) -> integerValue(rs, "days")).stream().filter(java.util.Objects::nonNull).findFirst();
+    public Optional<Integer> findDeadlineWorkingDays(String actionType) {
+        return jdbcTemplate.queryForList("SELECT deadline_working_days FROM approval_deadline_settings WHERE action_type = :action_type",
+                new MapSqlParameterSource().addValue("action_type", actionType), Integer.class).stream().findFirst();
+    }
+
+    @Override
+    public List<SupervisorReviewRepository.ApprovalDeadlineSetting> listApprovalDeadlineSettings() {
+        return jdbcTemplate.query("SELECT action_type, deadline_working_days, min_working_days, max_working_days FROM approval_deadline_settings",
+                new MapSqlParameterSource(), (rs, rowNumber) -> new SupervisorReviewRepository.ApprovalDeadlineSetting(rs.getString("action_type"),
+                        rs.getInt("deadline_working_days"), rs.getInt("min_working_days"), rs.getInt("max_working_days")));
+    }
+
+    @Override
+    public void upsertApprovalDeadline(SupervisorReviewRepository.ApprovalDeadlineSetting setting, String updatedBy) {
+        jdbcTemplate.update("""
+                INSERT INTO approval_deadline_settings (action_type, deadline_working_days, min_working_days, max_working_days, updated_by, updated_at)
+                VALUES (:action_type, :days, :min, :max, :updated_by, now())
+                ON CONFLICT (action_type) DO UPDATE SET deadline_working_days = EXCLUDED.deadline_working_days,
+                    min_working_days = EXCLUDED.min_working_days, max_working_days = EXCLUDED.max_working_days,
+                    updated_by = EXCLUDED.updated_by, updated_at = EXCLUDED.updated_at
+                """, new MapSqlParameterSource().addValue("action_type", setting.actionType()).addValue("days", setting.deadlineWorkingDays())
+                .addValue("min", setting.minWorkingDays()).addValue("max", setting.maxWorkingDays()).addValue("updated_by", updatedBy));
+    }
+
+    @Override
+    public List<String> listBlockActionTypes() {
+        return jdbcTemplate.queryForList("SELECT DISTINCT action_type FROM supervisor_review_policies WHERE enabled AND outcome = 'block'",
+                new MapSqlParameterSource(), String.class);
     }
 
     @Override
