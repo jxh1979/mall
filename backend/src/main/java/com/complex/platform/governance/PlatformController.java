@@ -1,5 +1,5 @@
 package com.complex.platform.governance;
-// 文件版本：V0.08
+// 文件版本：V0.09
 import static com.complex.platform.common.api.ApiRequests.requireIdempotencyKey;
 
 import com.complex.platform.access.AuthorizationService;
@@ -117,6 +117,23 @@ public class PlatformController {
         authorizationService.requirePermission("merchant.profile.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.configurePendingClearAlert(merchantId, request));
+    }
+
+    /** 第十八批 AB 段第 190 条 190-R1（BSM:1079）：酒吧（商户）转台次数上限；未配置按出厂 10 次。 */
+    @GetMapping("/merchants/{merchant_id}/table-transfer-limit")
+    public ApiResponse<MerchantTableTransferLimitRecord> getTableTransferLimit(@PathVariable("merchant_id") String merchantId) {
+        authorizationService.requirePermission("merchant.profile.view");
+        return ApiResponse.ok(service.getTableTransferLimit(merchantId));
+    }
+
+    /** 第十八批 AB 段第 190 条 190-R1：配置转台次数上限（值、下限、上限同填且值在闭区间；权限同商户资料写口 merchant.profile.manage）。 */
+    @PutMapping("/merchants/{merchant_id}/table-transfer-limit")
+    public ApiResponse<MerchantTableTransferLimitRecord> configureTableTransferLimit(
+            @PathVariable("merchant_id") String merchantId,
+            @RequestBody com.complex.platform.governance.dto.MerchantTableTransferLimitRequest request) {
+        authorizationService.requirePermission("merchant.profile.manage");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.configureTableTransferLimit(merchantId, request));
     }
 
     /** 第十八批 C 段第 15 条（BSM:1468）：酒吧员工代订爽约率上限；未配置不自动停用代订权限。 */

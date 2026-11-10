@@ -1,5 +1,5 @@
 package com.complex.platform.governance;
-// 文件版本：V0.10
+// 文件版本：V0.11
 
 import java.util.List;
 import java.util.Optional;
@@ -193,6 +193,15 @@ public interface PlatformRepository {
     MerchantPendingClearAlertRecord findPendingClearAlert(String merchantId);
 
     void savePendingClearAlert(String merchantId, int valueMinutes, int minMinutes, int maxMinutes);
+
+    /** 第十八批 AB 段第 190 条 190-R1：酒吧（商户）转台次数上限（值与上下限同配；三者皆空＝未配置）。只有 JDBC 实现。 */
+    default MerchantTableTransferLimitRecord findTableTransferLimit(String merchantId) {
+        throw new UnsupportedOperationException("findTableTransferLimit");
+    }
+
+    default void saveTableTransferLimit(String merchantId, int valueCount, int minCount, int maxCount) {
+        throw new UnsupportedOperationException("saveTableTransferLimit");
+    }
 
     /** 第十八批 C 段：酒吧（商户）百分比参数（值与上下限同配；三者皆空＝未配置）。只有 JDBC 实现。 */
     default MerchantPercentParamRecord findPercentParam(String merchantId, MerchantPercentParamRecord.Param param) {

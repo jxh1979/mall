@@ -1,4 +1,4 @@
-# P0 OpenAPI 权限、事件、任务追溯收口附录 V0.59
+# P0 OpenAPI 权限、事件、任务追溯收口附录 V0.60
 
 ## 1. 文档定位
 
@@ -14,11 +14,11 @@
 
 | 检查项 | 当前结果 | 执行结论 |
 |---|---:|---|
-| OpenAPI operation 数 | 1261 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
+| OpenAPI operation 数 | 1264 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
 | OpenAPI 权限/通用权限状态数 | 425 | 人工权限矩阵正文未覆盖 324 项；缺口以本文第 3 节补齐 |
-| OpenAPI 成功/失败事件数 | 2522 | 人工事件矩阵正文未覆盖 2473 项；完整事件字典以本文第 4 节为准 |
-| operation 级任务追溯 | 1261 | 人工任务映射正文未逐项覆盖 1255 个 operation；逐 operation 映射以本文第 5 节为准 |
-| 写接口数量 | 756 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
+| OpenAPI 成功/失败事件数 | 2528 | 人工事件矩阵正文未覆盖 2479 项；完整事件字典以本文第 4 节为准 |
+| operation 级任务追溯 | 1264 | 人工任务映射正文未逐项覆盖 1258 个 operation；逐 operation 映射以本文第 5 节为准 |
+| 写接口数量 | 758 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
 
 ## 3. 权限码与认证上下文补充表
 
@@ -149,7 +149,7 @@
 | `bar.table_session.create` | staff-token | project-bar-table | 2 | createBarTableSession, submitBarTableSessionSalesBackfill | OpenAPI 补充，以本附录为准 |
 | `bar.table_session.merge` | staff-token | project-bar-table | 1 | mergeBarTableSession | OpenAPI 补充，以本附录为准 |
 | `bar.table_session.split` | staff-token | project-bar-table | 1 | splitBarTableSession | OpenAPI 补充，以本附录为准 |
-| `bar.table_session.transfer` | staff-token | project-bar-table, project-merchant | 3 | transferBarTableSession, handoverBarServiceResponsibility, submitBarTableSessionServiceBackfill | OpenAPI 补充，以本附录为准 |
+| `bar.table_session.transfer` | staff-token | project-bar-table, project-merchant | 4 | transferBarTableSession, undoBarTableTransfer, handoverBarServiceResponsibility, submitBarTableSessionServiceBackfill | OpenAPI 补充，以本附录为准 |
 | `bar.table_session.view` | staff-token | project-bar-table | 1 | listBarTableSessions | OpenAPI 补充，以本附录为准 |
 | `bar.table.disable` | staff-token | project-bar | 2 | disableBarTable, enableBarTable | OpenAPI 补充，以本附录为准 |
 | `bar.table.guest_checkin` | staff-token | project-bar | 1 | verifyBarReservationInvitationEntry | 已在权限矩阵正文出现 |
@@ -351,8 +351,8 @@
 | `merchant.portal.payee_account.approve` | staff-token | merchant | 1 | approveMerchantPortalPayeeAccountChange | OpenAPI 补充，以本附录为准 |
 | `merchant.portal.settlement.dispute` | staff-token | merchant | 2 | submitMerchantPortalSettlementDispute, rejectMerchantPortalSettlementResolution | OpenAPI 补充，以本附录为准 |
 | `merchant.portal.settlement.view` | staff-token | merchant | 3 | listMerchantPortalTicketSettlements, listMerchantPortalNotices, listMerchantPortalSettlements | OpenAPI 补充，以本附录为准 |
-| `merchant.profile.manage` | staff-token | project, project-merchant | 6 | createMerchant, updateMerchant, configureMerchantPendingClearAlert, configureMerchantStaffBookingNoShowLimit, configureMerchantPourLossRate, requestMerchantOperatingProject | 已在权限矩阵正文出现 |
-| `merchant.profile.view` | staff-token | project-merchant | 5 | listMerchants, getMerchantPendingClearAlert, getMerchantStaffBookingNoShowLimit, getMerchantPourLossRate, getMerchantOperatingProjects | 已在权限矩阵正文出现 |
+| `merchant.profile.manage` | staff-token | project, project-merchant | 7 | createMerchant, updateMerchant, configureMerchantPendingClearAlert, configureMerchantTableTransferLimit, configureMerchantStaffBookingNoShowLimit, configureMerchantPourLossRate, requestMerchantOperatingProject | 已在权限矩阵正文出现 |
+| `merchant.profile.view` | staff-token | project-merchant | 6 | listMerchants, getMerchantPendingClearAlert, getMerchantTableTransferLimit, getMerchantStaffBookingNoShowLimit, getMerchantPourLossRate, getMerchantOperatingProjects | 已在权限矩阵正文出现 |
 | `merchant.service_work_order.assign` | staff-token | platform, project-merchant | 5 | listMerchantServiceWorkOrderPolicies, saveMerchantServiceWorkOrderPolicy, saveMerchantServiceWorkOrderCloseMethod, assignMerchantServiceWorkOrder, listMerchantServiceWorkOrderOwnerCandidates | OpenAPI 补充，以本附录为准 |
 | `merchant.service_work_order.close` | staff-token | project-merchant | 2 | closeMerchantServiceWorkOrder, cancelMerchantServiceWorkOrderByStaff | OpenAPI 补充，以本附录为准 |
 | `merchant.service_work_order.create` | staff-token | merchant, project-merchant | 3 | createMerchantServiceWorkOrder, cancelMerchantServiceWorkOrder, confirmMerchantServiceWorkOrderByMerchant | OpenAPI 补充，以本附录为准 |
@@ -949,6 +949,7 @@
 | `bar.table_session.merge` | success | `mergeBarTableSession` | `POST` | `/api/v1/bar/table-sessions/{session_id}/merge` | BAR-酒吧经营 | `bar.table_session.merge` | 接口级事件，以本附录为准 |
 | `bar.table_session.merge_failed` | failure | `mergeBarTableSession` | `POST` | `/api/v1/bar/table-sessions/{session_id}/merge` | BAR-酒吧经营 | `bar.table_session.merge` | 接口级事件，以本附录为准 |
 | `bar.table_session.transfer_failed` | failure | `transferBarTableSession` | `POST` | `/api/v1/bar/table-sessions/{session_id}/transfer` | BAR-酒吧经营 | `bar.table_session.transfer` | 接口级事件，以本附录为准 |
+| `bar.table_session.transfer_undo_failed` | failure | `undoBarTableTransfer` | `POST` | `/api/v1/bar/table-sessions/{session_id}/transfer-undo` | BAR-酒吧经营 | `bar.table_session.transfer` | 接口级事件，以本附录为准 |
 | `bar.table_space_backlog.view_failed` | failure | `listBarTablesWithoutSpace` | `GET` | `/api/v1/bar/tables/without-space` | BAR-酒吧经营 | `bar.table.manage` | 接口级事件，以本附录为准 |
 | `bar.table_space_backlog.viewed` | success | `listBarTablesWithoutSpace` | `GET` | `/api/v1/bar/tables/without-space` | BAR-酒吧经营 | `bar.table.manage` | 接口级事件，以本附录为准 |
 | `bar.table_space.assign_failed` | failure | `assignBarTableSpace` | `PUT` | `/api/v1/bar/tables/{table_id}/space` | BAR-酒吧经营 | `bar.table.manage` | 接口级事件，以本附录为准 |
@@ -965,6 +966,7 @@
 | `bar.table.opened` | success | `openBarTable` | `POST` | `/api/v1/bar/tables/{table_id}/open` | BAR-酒吧经营 | `bar.table.open_close` | 接口级事件，以本附录为准 |
 | `bar.table.split` | success | `splitBarTableSession` | `POST` | `/api/v1/bar/table-sessions/{session_id}/split` | BAR-酒吧经营 | `bar.table_session.split` | 接口级事件，以本附录为准 |
 | `bar.table.split_failed` | failure | `splitBarTableSession` | `POST` | `/api/v1/bar/table-sessions/{session_id}/split` | BAR-酒吧经营 | `bar.table_session.split` | 接口级事件，以本附录为准 |
+| `bar.table.transfer_undone` | success | `undoBarTableTransfer` | `POST` | `/api/v1/bar/table-sessions/{session_id}/transfer-undo` | BAR-酒吧经营 | `bar.table_session.transfer` | 接口级事件，以本附录为准 |
 | `bar.table.transferred` | success | `transferBarTableSession` | `POST` | `/api/v1/bar/table-sessions/{session_id}/transfer` | BAR-酒吧经营 | `bar.table_session.transfer` | 接口级事件，以本附录为准 |
 | `bar.table.view_failed` | failure | `listBarTables` | `GET` | `/api/v1/bar/tables` | BAR-酒吧经营 | `bar.table.view` | 接口级事件，以本附录为准 |
 | `bar.table.viewed` | success | `listBarTables` | `GET` | `/api/v1/bar/tables` | BAR-酒吧经营 | `bar.table.view` | 接口级事件，以本附录为准 |
@@ -1983,6 +1985,8 @@
 | `merchant.reward.customer.viewed.failed` | failure | `getOwnMerchantConsumptionRewards` | `GET` | `/api/v1/customer/merchant-rewards` | CUS-客人端 | `not_applicable` | 接口级事件，以本附录为准 |
 | `merchant.staff_booking_no_show_limit_config_failed` | failure | `configureMerchantStaffBookingNoShowLimit` | `PUT` | `/api/v1/platform/merchants/{merchant_id}/staff-booking-no-show-limit` | GOV-平台治理 | `merchant.profile.manage` | 接口级事件，以本附录为准 |
 | `merchant.staff_booking_no_show_limit_configured` | success | `configureMerchantStaffBookingNoShowLimit` | `PUT` | `/api/v1/platform/merchants/{merchant_id}/staff-booking-no-show-limit` | GOV-平台治理 | `merchant.profile.manage` | 接口级事件，以本附录为准 |
+| `merchant.table_transfer_limit_config_failed` | failure | `configureMerchantTableTransferLimit` | `PUT` | `/api/v1/platform/merchants/{merchant_id}/table-transfer-limit` | GOV-平台治理 | `merchant.profile.manage` | 接口级事件，以本附录为准 |
+| `merchant.table_transfer_limit_configured` | success | `configureMerchantTableTransferLimit` | `PUT` | `/api/v1/platform/merchants/{merchant_id}/table-transfer-limit` | GOV-平台治理 | `merchant.profile.manage` | 接口级事件，以本附录为准 |
 | `merchant.update_failed` | failure | `createMerchant` | `POST` | `/api/v1/platform/merchants` | GOV-平台治理 | `merchant.profile.manage` | 接口级事件，以本附录为准 |
 | `merchant.update_failed` | failure | `updateMerchant` | `PUT` | `/api/v1/platform/merchants/{merchant_id}` | GOV-平台治理 | `merchant.profile.manage` | 接口级事件，以本附录为准 |
 | `merchant.updated` | success | `createMerchant` | `POST` | `/api/v1/platform/merchants` | GOV-平台治理 | `merchant.profile.manage` | 接口级事件，以本附录为准 |
@@ -1994,6 +1998,7 @@
 | `merchant.viewed` | success | `getMerchantPendingClearAlert` | `GET` | `/api/v1/platform/merchants/{merchant_id}/pending-clear-alert` | GOV-平台治理 | `merchant.profile.view` | 接口级事件，以本附录为准 |
 | `merchant.viewed` | success | `getMerchantPourLossRate` | `GET` | `/api/v1/platform/merchants/{merchant_id}/pour-loss-rate` | GOV-平台治理 | `merchant.profile.view` | 接口级事件，以本附录为准 |
 | `merchant.viewed` | success | `getMerchantStaffBookingNoShowLimit` | `GET` | `/api/v1/platform/merchants/{merchant_id}/staff-booking-no-show-limit` | GOV-平台治理 | `merchant.profile.view` | 接口级事件，以本附录为准 |
+| `merchant.viewed` | success | `getMerchantTableTransferLimit` | `GET` | `/api/v1/platform/merchants/{merchant_id}/table-transfer-limit` | GOV-平台治理 | `merchant.profile.view` | 接口级事件，以本附录为准 |
 | `merchant.viewed` | success | `listMerchants` | `GET` | `/api/v1/platform/merchants` | GOV-平台治理 | `merchant.profile.view` | 接口级事件，以本附录为准 |
 | `not_applicable` | success | `closeStaffPayrollMonth` | `POST` | `/api/v1/staff/payroll/close` | STAFF-员工 | `staff.payroll.manage` | 接口级事件，以本附录为准 |
 | `not_applicable` | success | `countMediaPerformancePendingSettlements` | `GET` | `/api/v1/settlement/media-shows/pending-settlement-count` | P0-待归类 | `media.performance.view` | 接口级事件，以本附录为准 |
@@ -2084,6 +2089,7 @@
 | `not_applicable` | failure | `getMerchantPortalUnreadBills` | `GET` | `/api/v1/merchant-portal/unread-bills` | P0-待归类 | `merchant.billing.view` | 接口级事件，以本附录为准 |
 | `not_applicable` | success | `getMerchantServiceWorkOrderMaterials` | `GET` | `/api/v1/merchant-service/work-orders/{id}/materials` | P0-待归类 | `merchant.service_work_order.process` | 接口级事件，以本附录为准 |
 | `not_applicable` | failure | `getMerchantServiceWorkOrderMaterials` | `GET` | `/api/v1/merchant-service/work-orders/{id}/materials` | P0-待归类 | `merchant.service_work_order.process` | 接口级事件，以本附录为准 |
+| `not_applicable` | failure | `getMerchantTableTransferLimit` | `GET` | `/api/v1/platform/merchants/{merchant_id}/table-transfer-limit` | GOV-平台治理 | `merchant.profile.view` | 接口级事件，以本附录为准 |
 | `not_applicable` | success | `getMyStaffProfile` | `GET` | `/api/v1/staff/profiles/mine` | STAFF-员工 | `staff.profile.self` | 接口级事件，以本附录为准 |
 | `not_applicable` | failure | `getMyStaffProfile` | `GET` | `/api/v1/staff/profiles/mine` | STAFF-员工 | `staff.profile.self` | 接口级事件，以本附录为准 |
 | `not_applicable` | success | `getMyStudentCertification` | `GET` | `/api/v1/customer/student-certifications/current` | CUS-客人端 | `not_applicable` | 接口级事件，以本附录为准 |
@@ -3258,6 +3264,7 @@
 | BAR-酒吧经营 | `suspendBarOrder` | `POST` | `/api/v1/bar/orders/{order_id}/suspend` | 挂起包厢未付款订单 | `bar.bill.hang` | `bar.order_suspended` / `bar.order_suspend_failed` | web | operation 级补充 |
 | BAR-酒吧经营 | `transferBarTableSession` | `POST` | `/api/v1/bar/table-sessions/{session_id}/transfer` | 转台（台位会话转移） | `bar.table_session.transfer` | `bar.table.transferred` / `bar.table_session.transfer_failed` | web | operation 级补充 |
 | BAR-酒吧经营 | `transitionBarProductionTicket` | `POST` | `/api/v1/bar/production-tickets/{ticket_id}/transition` | 流转出品工单状态 | `bar.production_ticket.manage` | `bar.production_ticket.transition` / `bar.production_ticket.transition_failed` | web | operation 级补充 |
+| BAR-酒吧经营 | `undoBarTableTransfer` | `POST` | `/api/v1/bar/table-sessions/{session_id}/transfer-undo` | 撤销最近一次转台 | `bar.table_session.transfer` | `bar.table.transfer_undone` / `bar.table_session.transfer_undo_failed` | web | operation 级补充 |
 | BAR-酒吧经营 | `uploadBarCatalogImage` | `POST` | `/api/v1/bar/catalog/images` | 上传酒吧商品/套餐图片 | `bar.product.manage` | `bar.catalog.image_uploaded` / `bar.catalog.image_uploaded_failed` | web | operation 级补充 |
 | BAR-酒吧经营 | `verifyBarReservationInvitationEntry` | `POST` | `/api/v1/bar/reservations/{id}/invitation/entry-verify` | 订卡邀请函入场核验 | `bar.table.guest_checkin` | `bar.reservation_invitation_entered` / `bar.reservation_invitation_entry_failed` | staff_work_phone, web | operation 级补充 |
 | BAR-酒吧经营 | `voidBarOrderItem` | `POST` | `/api/v1/bar/orders/{order_id}/void-item` | 退菜退酒 | `bar.order_item.void` | `bar.order_item_voided` / `bar.order_item_void_failed` | web | operation 级补充 |
@@ -3498,6 +3505,7 @@
 | GOV-平台治理 | `configureMerchantPendingClearAlert` | `PUT` | `/api/v1/platform/merchants/{merchant_id}/pending-clear-alert` | 配置酒吧待清台提醒时限(值与上下限同配) | `merchant.profile.manage` | `merchant.pending_clear_alert_configured` / `merchant.pending_clear_alert_config_failed` | web | operation 级补充 |
 | GOV-平台治理 | `configureMerchantPourLossRate` | `PUT` | `/api/v1/platform/merchants/{merchant_id}/pour-loss-rate` | 配置酒吧损耗率阈值(值与上下限同配) | `merchant.profile.manage` | `merchant.pour_loss_rate_configured` / `merchant.pour_loss_rate_config_failed` | web | operation 级补充 |
 | GOV-平台治理 | `configureMerchantStaffBookingNoShowLimit` | `PUT` | `/api/v1/platform/merchants/{merchant_id}/staff-booking-no-show-limit` | 配置酒吧员工代订爽约率上限(值与上下限同配) | `merchant.profile.manage` | `merchant.staff_booking_no_show_limit_configured` / `merchant.staff_booking_no_show_limit_config_failed` | web | operation 级补充 |
+| GOV-平台治理 | `configureMerchantTableTransferLimit` | `PUT` | `/api/v1/platform/merchants/{merchant_id}/table-transfer-limit` | 配置酒吧转台次数上限(值与上下限同配) | `merchant.profile.manage` | `merchant.table_transfer_limit_configured` / `merchant.table_transfer_limit_config_failed` | web | operation 级补充 |
 | GOV-平台治理 | `createBusinessEntity` | `POST` | `/api/v1/platform/business-entities` | 创建经营、运营、合同、结算主体档案 | `entity.binding.manage` | `business_entity.changed` / `business_entity.change_failed` | web | operation 级补充 |
 | GOV-平台治理 | `createBusinessEntityBinding` | `POST` | `/api/v1/platform/business-entity-bindings` | 创建四类主体唯一绑定 | `entity.binding.manage` | `entity_binding.changed` / `entity_binding.change_failed` | web | operation 级补充 |
 | GOV-平台治理 | `createMerchant` | `POST` | `/api/v1/platform/merchants` | 创建商户 | `merchant.profile.manage` | `merchant.updated` / `merchant.update_failed` | web | operation 级补充 |
@@ -3509,6 +3517,7 @@
 | GOV-平台治理 | `getMerchantPendingClearAlert` | `GET` | `/api/v1/platform/merchants/{merchant_id}/pending-clear-alert` | 查询酒吧待清台提醒时限 | `merchant.profile.view` | `merchant.viewed` / `not_applicable` | web | operation 级补充 |
 | GOV-平台治理 | `getMerchantPourLossRate` | `GET` | `/api/v1/platform/merchants/{merchant_id}/pour-loss-rate` | 查询酒吧损耗率阈值 | `merchant.profile.view` | `merchant.viewed` / `merchant.view_failed` | web | operation 级补充 |
 | GOV-平台治理 | `getMerchantStaffBookingNoShowLimit` | `GET` | `/api/v1/platform/merchants/{merchant_id}/staff-booking-no-show-limit` | 查询酒吧员工代订爽约率上限 | `merchant.profile.view` | `merchant.viewed` / `merchant.view_failed` | web | operation 级补充 |
+| GOV-平台治理 | `getMerchantTableTransferLimit` | `GET` | `/api/v1/platform/merchants/{merchant_id}/table-transfer-limit` | 查询酒吧转台次数上限 | `merchant.profile.view` | `merchant.viewed` / `not_applicable` | web | operation 级补充 |
 | GOV-平台治理 | `getProjectSensitiveOperationRange` | `GET` | `/api/v1/platform/projects/{project_id}/sensitive-operation-range` | 查询项目敏感操作授权范围 | `platform.sensitive_operation_range.manage` | `platform.sensitive_operation_range.viewed` / `platform.sensitive_operation_range.view_failed` | web | operation 级补充 |
 | GOV-平台治理 | `listBusinessEntities` | `GET` | `/api/v1/platform/business-entities` | 查询经营、运营、合同、结算主体档案 | `entity.binding.view` | `business_entity.viewed` / `not_applicable` | web | operation 级补充 |
 | GOV-平台治理 | `listBusinessEntityBindings` | `GET` | `/api/v1/platform/business-entity-bindings` | 查询四类主体绑定 | `entity.binding.view` | `entity_binding.viewed` / `entity_binding.view_failed` | web | operation 级补充 |

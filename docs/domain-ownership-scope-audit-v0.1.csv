@@ -97,6 +97,7 @@ bar_staff_booking_suspensions,direct,merchant_id,merchant_id column on bar_staff
 bar_table_guest_checkins,inherited,reservation/table linkage,reservation_id/table_id -> bar_reservations/bar_tables -> venue/project scope,must join through scope path before multi-complex rollout,V0.07,covered
 bar_table_session_adjustments,direct,merchant_id,merchant_id column on bar_table_session_adjustments,ready for project/merchant scoped query enforcement,V0.07,covered
 bar_table_sessions,direct,merchant_id,merchant_id column on bar_table_sessions,ready for project/merchant scoped query enforcement,V0.07,covered
+bar_table_transfer_limit_approvals,direct,merchant_id,merchant_id column on bar_table_transfer_limit_approvals,ready for project/merchant scoped query enforcement,V0.07,covered
 bar_tables,direct,merchant_id,merchant_id column on bar_tables,ready for project/merchant scoped query enforcement,V0.07,covered
 bar_void_reason_codes,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",V0.07,covered
 browser_devices,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",V0.07,covered

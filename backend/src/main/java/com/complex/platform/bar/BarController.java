@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.11
+// 文件版本：V0.12
 import static com.complex.platform.common.api.ApiRequests.requireIdempotencyKey;
 
 import com.complex.platform.access.AuthorizationService;
@@ -777,6 +777,17 @@ public class BarController {
         authorizationService.requirePermission("bar.table_session.transfer");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.transferTableSession(sessionId, request));
+    }
+
+    /** 第十八批 AB 段第 190 条 190-R3：撤销最近一次转台（BSM:1079），沿用转台权限，原因必填。 */
+    @PostMapping("/table-sessions/{session_id}/transfer-undo")
+    public ApiResponse<BarTableSessionAdjustmentRecord> undoTableTransfer(
+            @PathVariable("session_id") String sessionId,
+            @RequestBody(required = false) @jakarta.validation.Valid BarTableTransferUndoRequest request
+    ) {
+        authorizationService.requirePermission("bar.table_session.transfer");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.undoTableTransfer(sessionId, request));
     }
 
     @PostMapping("/table-sessions/{session_id}/merge")

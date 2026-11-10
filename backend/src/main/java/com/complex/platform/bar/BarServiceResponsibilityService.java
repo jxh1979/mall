@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.06
+// 文件版本：V0.07
 
 import static com.complex.platform.bar.BarPayrollSupport.*;
 import static com.complex.platform.common.Strings.requireText;
@@ -102,12 +102,18 @@ public class BarServiceResponsibilityService {
         if(!scheduledServiceStaff(table,at).contains(user))throw conflict("BAR_TARGET_SERVICE_STAFF_NOT_ON_DUTY","目标接手人须有该点位当前已发布排班或真实顶班记录，不能继承原台人员");
     }
     void recordTransfer(BarTableSessionRecord before,BarTableSessionRecord after,Instant at,String sourceId) {
-        String target=requireText(after.serviceStaffId(),"target_service_staff_id");
-        for(String id:family(before.id())) {
+        reassign(after,requireText(after.serviceStaffId(),"target_service_staff_id"),at,sourceId,"转台后由目标台位当班人员接手；原台区间保留");
+    }
+    /** 第十八批 AB 段第 190 条 190-R3（BSM:1079 撤销转台按转台前快照恢复）：台组现区间结束；转台前服务人非空的在原台接手，为空的（开台时可留空）服务人置空。 */
+    void recordTransferUndo(BarTableSessionRecord restored,Instant at,String sourceId) {
+        reassign(restored,restored.serviceStaffId(),at,sourceId,"撤销转台回到原台，由转台前服务人继续负责；转台期间区间保留");
+    }
+    private void reassign(BarTableSessionRecord after,String staff,Instant at,String sourceId,String reason) {
+        for(String id:family(after.id())) {
             session(id,true);
             end(id,at);
-            openFor(id,after.tableId(),target,at,eventKey(sourceId+":"+id),"转台后由目标台位当班人员接手；原台区间保留");
-            if(!id.equals(after.id()))p.jdbc.update("UPDATE bar_table_sessions SET service_staff_id=?,session_version=session_version+1,updated_at=? WHERE id=?",target,ts(at),id);
+            if(staff!=null)openFor(id,after.tableId(),staff,at,eventKey(sourceId+":"+id),reason);
+            if(!id.equals(after.id()))p.jdbc.update("UPDATE bar_table_sessions SET service_staff_id=?,session_version=session_version+1,updated_at=? WHERE id=?",staff,ts(at),id);
         }
     }
     void recordMerge(BarTableSessionRecord primary,BarTableSessionRecord merged,Instant at,String sourceId) {

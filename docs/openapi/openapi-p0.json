@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "综合体管理系统 P0 API 契约",
-    "version": "V0.59",
+    "version": "V0.60",
     "description": "P0 首批编码前置契约。本文采用 JSON-compatible YAML，便于与 openapi-p0.json 保持一致。正式后端以 Java 21 + Spring Boot 4.x + springdoc-openapi 输出运行时 OpenAPI，并与本契约比对。"
   },
   "servers": [
@@ -14203,6 +14203,122 @@
         "x-auth-context": "staff-token"
       }
     },
+    "/api/v1/platform/merchants/{merchant_id}/table-transfer-limit": {
+      "get": {
+        "tags": [
+          "platform"
+        ],
+        "operationId": "getMerchantTableTransferLimit",
+        "summary": "查询酒吧转台次数上限",
+        "description": "第十八批 AB 段第 190 条 190-R1（BSM:1079「同一会话的转台次数不得超过后台配置的上限（业务参数，按酒吧可配，出厂默认 10 次，须同时配置上下限）」；决策台账 DEC-R6-19 同句）：读酒吧（merchant_type=bar 的商户）转台次数上限；未配置时 value_count/min_count/max_count 为空、effective_count=10（出厂值）。第十八批 E 段（第 19 条）：对象须在本入口权限码可触及的项目里（可跨项目角色勾中的项目也算）。第十八批 E 段（第 20 条，PGM:659「商户在多个项目经营的，各经营项目的员工和主项目的员工一样，可以修改、存档、删除这份商户主档案」）：按该商户的经营项目（主项目加经审批追加的项目）判，任一在本入口权限码可触及范围内即可。",
+        "x-permission": "merchant.profile.view",
+        "x-data-scope": "project-merchant",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "merchant.viewed",
+        "x-audit-event-failure": "not_applicable",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/MerchantId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      },
+      "put": {
+        "tags": [
+          "platform"
+        ],
+        "operationId": "configureMerchantTableTransferLimit",
+        "summary": "配置酒吧转台次数上限(值与上下限同配)",
+        "description": "第十八批 AB 段第 190 条 190-R1（BSM:1079；决策台账 DEC-R6-19）：配置酒吧（商户）转台次数上限。按仓库「值与上下限同配」范式（同待清台提醒时限）：value_count、min_count、max_count 三者必填，min_count≥0 且 min_count≤value_count≤max_count，否则 400 VALIDATION_FAILED；不另设硬上下限。第十八批 E 段（第 19 条）：对象须在本入口权限码可触及的项目里（可跨项目角色勾中的项目也算），范围闸在幂等之前，同一幂等键在失去该项目后重放 403、不返回第一次结果。第十八批 E 段（第 20 条，PGM:659「商户在多个项目经营的，各经营项目的员工和主项目的员工一样，可以修改、存档、删除这份商户主档案」）：按该商户的经营项目（主项目加经审批追加的项目）判，任一在本入口权限码可触及范围内即可。",
+        "x-permission": "merchant.profile.manage",
+        "x-data-scope": "project-merchant",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "merchant.table_transfer_limit_configured",
+        "x-audit-event-failure": "merchant.table_transfer_limit_config_failed",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/MerchantId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "idempotency_key",
+                  "value_count",
+                  "min_count",
+                  "max_count"
+                ],
+                "properties": {
+                  "idempotency_key": {
+                    "type": "string",
+                    "description": "操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。",
+                    "maxLength": 128
+                  },
+                  "value_count": {
+                    "type": "integer",
+                    "description": "同一会话转台次数上限（次），须在 min_count 与 max_count 闭区间内。",
+                    "minimum": 0
+                  },
+                  "min_count": {
+                    "type": "integer",
+                    "description": "上限值的下限（次），与上限值、上限同时配置。",
+                    "minimum": 0
+                  },
+                  "max_count": {
+                    "type": "integer",
+                    "description": "上限值的上限（次），与上限值、下限同时配置。",
+                    "minimum": 0
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
+    },
     "/api/v1/platform/merchants/{merchant_id}/staff-booking-no-show-limit": {
       "get": {
         "tags": [
@@ -25125,7 +25241,7 @@
         ],
         "operationId": "transferBarTableSession",
         "summary": "转台（台位会话转移）",
-        "description": "ROOT-03-R19：转入台位正被有效预留占着时 409 BAR_TABLE_ALREADY_RESERVED（不能把别人订着的台转给在座客人）。 第十八批 S 段第 167 条 167-R1（BSM:1079「按目标台可邀请人数校验“已接受但尚未入场成员数＋已入场成员数”。超额即阻断转台，只能由开卡人先明确移出足够的未入场成员」「单台转台与合并台组转台同样适用」；ENUM:114 同句）：本台组（含整体转台前旧链）各订台已接受未入场与已入场成员合计超过目标台可邀请人数时 409 BAR_TRANSFER_INVITATION_OVER_CAPACITY，整笔不转，须由开卡人先在 App/小程序移出未入场的被邀请人；转台、并台调整记录的快照加记 invite_capacity_before、invite_capacity_after、invite_occupied（操作前后可邀请人数与已占人数）。",
+        "description": "ROOT-03-R19：转入台位正被有效预留占着时 409 BAR_TABLE_ALREADY_RESERVED（不能把别人订着的台转给在座客人）。 第十八批 S 段第 167 条 167-R1（BSM:1079「按目标台可邀请人数校验“已接受但尚未入场成员数＋已入场成员数”。超额即阻断转台，只能由开卡人先明确移出足够的未入场成员」「单台转台与合并台组转台同样适用」；ENUM:114 同句）：本台组（含整体转台前旧链）各订台已接受未入场与已入场成员合计超过目标台可邀请人数时 409 BAR_TRANSFER_INVITATION_OVER_CAPACITY，整笔不转，须由开卡人先在 App/小程序移出未入场的被邀请人；转台、并台调整记录的快照加记 invite_capacity_before、invite_capacity_after、invite_occupied（操作前后可邀请人数与已占人数）。 第十八批 AB 段第 190 条 190-R2（BSM:1079「同一会话的转台次数不得超过后台配置的上限（业务参数，按酒吧可配，出厂默认 10 次，须同时配置上下限），达到上限后须主管审批才能继续转台」；决策台账 DEC-R6-19）：本会话已转台次数（转台留痕条数，撤销不减）达到本酒吧转台次数上限（未配置按出厂 10 次）时，有同会话同目标台已批准未用的超限转台申请即用掉继续转台；本会话有待审批的超限转台申请时 409 BAR_TRANSFER_LIMIT_APPROVAL_PENDING（提示带审批单号，不另建申请）；否则提交超限转台申请（审批动作 bar.table_session.transfer_over_limit，发起人直接上级审批，批准后只用于一次转到申请里那张目标台的转台）后 409 BAR_TRANSFER_LIMIT_APPROVAL_REQUIRED，提示带已转次数、上限与审批单号，本次不转台；转台调整记录快照加记 transfer_count（本次转台前已转次数）、transfer_limit 与 transfer_limit_approval_id（用掉的申请编号）。 第十八批 AB 段第 190 条 190-R3：转台调整记录快照另记 transferred_at（转台时刻，撤销转台以此为界判后续变化）、min_consumption_snapshot_before_cent、invite_capacity_snapshot_before 与 service_staff_before（本会话转台前的低消快照、可邀请人数快照与服务人），供撤销最近一次转台（undoBarTableTransfer）按原路恢复。",
         "x-auth-context": "staff-token",
         "x-permission": "bar.table_session.transfer",
         "x-data-scope": "project-bar-table",
@@ -25215,6 +25331,89 @@
             "$ref": "#/components/responses/Error"
           },
           "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/bar/table-sessions/{session_id}/transfer-undo": {
+      "post": {
+        "tags": [
+          "bar"
+        ],
+        "operationId": "undoBarTableTransfer",
+        "summary": "撤销最近一次转台",
+        "description": "第十八批 AB 段第 190 条 190-R3（BSM:1079「撤销转台：仅当转台后未新增邀请、未发生邀请接受、成员入场或移出，也未新增点单、付款、退款等账单或资金记录时，方可按转台前快照恢复原台位、邀请关系、成员归属、可邀请人数、最低消费额和消费进度，并完整留痕；符合条件的撤销不得以新建单据冒充回退」「撤销转台前，还必须确认转台前涉及的全部原台均未被其他会话重新预订或开台」「撤销只能恢复最近一次仍满足条件的完整快照，不得跨层覆盖历史」；ENUM:114 同句；BSM:1062「撤销转台不得覆盖已经发生的资金记录」；决策台账 DEC-R6-19「撤销转台＝按原路回退到转台前的台位与进度并留痕，不得以新建单据代替回退」）：撤销本会话最近一次转台，沿用转台权限，原因必填（缺失 400 VALIDATION_FAILED）。本会话最近一条台位调整留痕不是转台（该次转台已撤销，或其后已有再次转台、并台、拆台），或会话版本已不是该次转台后的版本（如其后做过服务交接）时 409 BAR_TRANSFER_UNDO_NOT_LATEST；以转台时刻为界，台组（含整体转台前旧链）其后有订单新建、加菜、作废，账单、付款、退款、账单调整，转台当场或其后挂出的定金原路退款应付，或邀请签发、吊销、成员接受、入场、移出时 409 BAR_TRANSFER_UNDO_BLOCKED（如需回原台须重新转台）；转台前的原台（含整体转台的旧链各台）已被其他订台占着、已开台、待清台或已停用时 409 BAR_TRANSFER_UNDO_TABLE_OCCUPIED。通过后旧链子会话回到并台，会话按转台快照回到原台并恢复低消快照、可邀请人数快照与服务人（转台前无服务人的恢复为空），原台置已开台、目标台回空闲，另记一条 adjustment_type=transfer_undo 的调整留痕（from_table_id 为目标台、to_table_id 为原台，快照记 undone_adjustment_id、恢复前后的低消快照、可邀请人数快照与服务人及前后可邀请人数）；原转台留痕、订单与资金单据不动，不重判定金，已转台次数不减。商户账号只能撤销本商户的会话（403 CROSS_MERCHANT_FORBIDDEN，商户闸在幂等之前）；会话不存在 404 BAR_TABLE_SESSION_NOT_FOUND；会话不在开台状态 409 BAR_TABLE_SESSION_NOT_ACTIVE；请求的 session_version 与当前不符 409 BAR_TABLE_SESSION_VERSION_CONFLICT。",
+        "x-auth-context": "staff-token",
+        "x-permission": "bar.table_session.transfer",
+        "x-data-scope": "project-bar-table",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "bar.table.transfer_undone",
+        "x-audit-event-failure": "bar.table_session.transfer_undo_failed",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            },
+            "description": "台位会话 ID。"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "idempotency_key",
+                  "reason",
+                  "session_version"
+                ],
+                "properties": {
+                  "idempotency_key": {
+                    "type": "string",
+                    "description": "操作幂等键；重复提交必须返回同一处理结果，避免重复写入。",
+                    "maxLength": 128
+                  },
+                  "reason": {
+                    "type": "string",
+                    "description": "撤销转台原因（留痕）。",
+                    "maxLength": 4000
+                  },
+                  "session_version": {
+                    "type": "integer",
+                    "description": "会话当前版本号；与当前不符 409 BAR_TABLE_SESSION_VERSION_CONFLICT。"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
             "$ref": "#/components/responses/Error"
           },
           "409": {
@@ -43920,7 +44119,7 @@
         ],
         "operationId": "closeStaffCommissionSettlement",
         "summary": "提成月结拨付（酒吧 → 人员所属主体）",
-        "description": "CG-07（BSM「营销人员的归属与报酬」「派驻人员的成本与报酬」「平台内部各主体之间的应收应付，每月有三个付账日」）：按（酒吧商户 → 人员所属主体 → 月）汇总派驻记录覆盖计提日的员工在该酒吧的提成（作废/取消的计提不计），每组生成一条内部结算应付（ar_ap_items：direction=payable、source_type=dispatch_commission_transfer、counterparty=所属主体、merchant=酒吧、会计期间=该月），金额为总额、收支两条线不轧差；到期日＝该月月末之后的第一个付账日（三个付账日取结算配置出厂行）。同（月, 酒吧, 主体）已月结的组不重复挂账（重复执行返回 settlements=0）。提成计提本身不再按单对员工本人挂应付。第十八批 G 段（第 82 条）：只结本人授权范围内的组——平台管理员全部；商户账号只本商户；其余人员本公司人事结收款主体为本公司的组，经可跨项目角色持有本码的另结派驻项目在其可触及项目内的组；范围外的组留给有权的人结，同组不重复挂账不变。 第十八批 V 段第 159 条 159-R8（ENUM:190「非最终快照的数据一律不得进入结算、分红、正式提成计算和对账关账」；第十八批裁决 35「酒吧逐店逐日查」）：写入之前，本次要结的各组（本人范围内、金额大于 0）所在商户检查单位（酒吧按该店，其他商户按所属综合体；建档前的营业日不计）当月每个营业日的「当日订单与核销记录」「当日退款与冲正记录」须已标记为最终（当天没生成日结的也算未标），否则整次 409 COMMISSION_DATA_NOT_FINAL（message「以下营业日数据尚未标记为最终，不能办理提成月结拨付：」后列营业日、单位与类别），一组都不写；范围外的组与金额为 0 的组不判。",
+        "description": "CG-07（BSM「营销人员的归属与报酬」「派驻人员的成本与报酬」「平台内部各主体之间的应收应付，每月有三个付账日」）：按（酒吧商户 → 人员所属主体 → 月）汇总派驻记录覆盖计提日（派驻起止按计提时点所属该酒吧营业日判，第十八批裁决 46）的员工在该酒吧的提成（作废/取消的计提不计），每组生成一条内部结算应付（ar_ap_items：direction=payable、source_type=dispatch_commission_transfer、counterparty=所属主体、merchant=酒吧、会计期间=该月），金额为总额、收支两条线不轧差；到期日＝该月月末之后的第一个付账日（三个付账日取结算配置出厂行）。同（月, 酒吧, 主体）已月结的组不重复挂账（重复执行返回 settlements=0）。提成计提本身不再按单对员工本人挂应付。第十八批 G 段（第 82 条）：只结本人授权范围内的组——平台管理员全部；商户账号只本商户；其余人员本公司人事结收款主体为本公司的组，经可跨项目角色持有本码的另结派驻项目在其可触及项目内的组；范围外的组留给有权的人结，同组不重复挂账不变。 第十八批 V 段第 159 条 159-R8（ENUM:190「非最终快照的数据一律不得进入结算、分红、正式提成计算和对账关账」；第十八批裁决 35「酒吧逐店逐日查」）：写入之前，本次要结的各组（本人范围内、金额大于 0）所在商户检查单位（酒吧按该店，其他商户按所属综合体；建档前的营业日不计）当月每个营业日的「当日订单与核销记录」「当日退款与冲正记录」须已标记为最终（当天没生成日结的也算未标），否则整次 409 COMMISSION_DATA_NOT_FINAL（message「以下营业日数据尚未标记为最终，不能办理提成月结拨付：」后列营业日、单位与类别），一组都不写；范围外的组与金额为 0 的组不判。",
         "x-permission": "staff.payroll.manage",
         "x-data-scope": "platform",
         "x-terminal-allowed": [

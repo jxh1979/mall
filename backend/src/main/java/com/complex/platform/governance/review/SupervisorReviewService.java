@@ -1,6 +1,6 @@
 package com.complex.platform.governance.review;
 
-// 文件版本：V0.31
+// 文件版本：V0.32
 
 import com.complex.platform.access.AccessActor;
 import com.complex.platform.access.AuthorizationService;
@@ -142,6 +142,10 @@ public class SupervisorReviewService {
             // 第十八批 M 段第 117 条 117-R2（BSM:1380「承担方有争议的，工单挂起转上级判定，判定结果与依据留痕后才能结案」；PGM:528）：
             // 恒阻断；提出人沿直接上级链到其指定的最终审批人，审批意见即判定依据（必填）。设施工单与商户服务工单共用（117-R5，裁决 29）。
             new SupervisorReviewPolicyRecord("work_order_bearer_dispute", "work_order.bearer_dispute", 0, 1, true,
+                    List.of("reason"), "active", "one_level_up"),
+            // 第十八批 AB 段第 190 条 190-R2（BSM:1079「达到上限后须主管审批才能继续转台」；DEC-R6-19「达上限须主管审批」；PGM:528）：
+            // 超限转台申请，恒阻断；主管＝发起人直接上级，一次批准只用于一次转到申请里那张目标台的转台（BarTransferLimitApprovalService）。
+            new SupervisorReviewPolicyRecord("bar_table_transfer_over_limit", "bar.table_session.transfer_over_limit", 0, 1, true,
                     List.of("reason"), "active", "one_level_up"),
             // 第十八批第 30 条（PGM L502「确需继续的，须由具备单独授予的黑名单例外放行权限人员操作，按层级对应主管审批，申请人不得审批自己提交的申请」）：
             // 恒阻断；发起人沿直接上级链到其指定的最终审批人（PGM L540）。

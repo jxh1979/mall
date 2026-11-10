@@ -2,7 +2,7 @@ package com.complex.platform.access.staff;
 
 import com.complex.platform.common.api.ApiException;
 
-// 文件版本：V0.25
+// 文件版本：V0.26
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
@@ -351,6 +351,44 @@ public class JdbcStaffRepository {
         return n != null && n > 0;
     }
 
+    /** 第十八批 AB 段第 191 条 191-R2：该员工有派驻到该商户、起止日期覆盖该日的派驻记录（只看起止日期、不看状态，同提成归集）。 */
+    public boolean dispatchedOn(String userId, String merchantId, java.time.LocalDate day) {
+        return dispatchOn(userId, merchantId, day).isPresent();
+    }
+
+    /**
+     * 第十八批裁决 46（「凡判断是否在派驻期内都按酒吧营业日：结束日当天的夜班过零点后、到营业日结束前仍算派驻期内」）：at 时点所属该酒吧营业日
+     * 落在起止日期内的派驻记录（只看起止日期、不看状态）。商户范围、点单指定履约人、主责服务人、考勤核时四处共用。
+     */
+    public Optional<StaffDispatchRecord> dispatchAt(String userId, String merchantId, Instant at) {
+        return dispatchOn(userId, merchantId, dispatchDay(merchantId, at));
+    }
+
+    /** 第十八批裁决 46（191-R1 商户范围）：at 时点按各派驻记录所属酒吧的营业日在期的派驻酒吧。 */
+    public List<String> dispatchMerchantIdsAt(String userId, Instant at) {
+        return jdbcTemplate.queryForList("SELECT DISTINCT merchant_id FROM staff_dispatch_records WHERE user_id = :user_id",
+                Map.of("user_id", userId), String.class).stream().filter(merchant -> dispatchAt(userId, merchant, at).isPresent()).toList();
+    }
+
+    /** 第十八批裁决 46：派驻在期按派驻酒吧（派驻记录的 merchant_id）在 at 时点所属的营业日（ENUM:187；BusinessDayResolver#merchantBusinessDate）。 */
+    private java.time.LocalDate dispatchDay(String merchantId, Instant at) {
+        return businessDays.merchantBusinessDate(null, merchantId, at);
+    }
+
+    /** 第十八批裁决 46：该酒吧营业日 day 的起始时刻（考勤列表按打卡时点所属营业日判派驻）。 */
+    private Instant dispatchDayStart(String merchantId, java.time.LocalDate day) {
+        return businessDays.start(businessDays.projectOfMerchant(merchantId), businessDays.barOfMerchant(merchantId), day);
+    }
+
+    private Optional<StaffDispatchRecord> dispatchOn(String userId, String merchantId, java.time.LocalDate day) {
+        return jdbcTemplate.query(DISPATCH_SELECT + """
+                 WHERE user_id = :user_id AND merchant_id = :merchant_id
+                   AND start_date <= :day AND (end_date IS NULL OR end_date >= :day)
+                 ORDER BY start_date DESC, id LIMIT 1
+                """, Map.of("user_id", userId, "merchant_id", merchantId, "day", java.sql.Date.valueOf(day)), this::mapDispatch)
+                .stream().findFirst();
+    }
+
     public List<StaffDispatchRecord> listDispatches(String userId, String merchantId, String projectScope) {
         return jdbcTemplate.query(DISPATCH_SELECT + """
                  WHERE (:user_id::text IS NULL OR user_id = :user_id)
@@ -374,7 +412,7 @@ public class JdbcStaffRepository {
 
     /**
      * 该月派驻人员在各酒吧促成订单的提成，按（酒吧商户 → 人员所属主体）汇总：
-     * 提成归属月按开台或下单时点所属营业日（ENUM:187）；只计派驻记录覆盖计提日的员工（派驻起止按计提日判定），作废/取消的计提不计。
+     * 提成归属月按开台或下单时点所属营业日（ENUM:187）；只计派驻记录覆盖计提日的员工（派驻起止按计提时点所属该酒吧营业日判定，第十八批裁决 46「派驻提成归集也改按计提时所属营业日」），作废/取消的计提不计。
      * 行：merchant_id, company_id, project_id, amount_cent, calculation_count, staff_count。
      */
     public List<Map<String, Object>> aggregateDispatchedCommissions(String month) {
@@ -382,6 +420,13 @@ public class JdbcStaffRepository {
         if (commissions.isEmpty()) {
             return List.of();
         }
+        // 第十八批裁决 46：逐笔求计提时点所属该酒吧营业日（dispatchDay），随汇总查询带入判派驻起止。
+        List<Object[]> accrualDays = jdbcTemplate.query("""
+                SELECT c.id, COALESCE(b.merchant_id, b.bar_id) AS merchant_id, c.created_at
+                  FROM bar_commission_calculations c JOIN bar_bills b ON b.id = c.bill_id
+                 WHERE c.id IN (:commission_ids)
+                """, Map.of("commission_ids", commissions), (rs, n) -> new Object[] {rs.getString("id"),
+                dispatchDay(rs.getString("merchant_id"), rs.getTimestamp("created_at").toInstant()).toString()});
         return jdbcTemplate.queryForList("""
                 SELECT COALESCE(b.merchant_id, b.bar_id) AS merchant_id, d.company_id,
                        MAX(d.project_id) AS project_id,
@@ -390,18 +435,19 @@ public class JdbcStaffRepository {
                        COUNT(DISTINCT c.sales_staff_id) AS staff_count
                   FROM bar_commission_calculations c
                   JOIN bar_bills b ON b.id = c.bill_id
+                  JOIN (VALUES :accrual_days) AS k(id, accrual_day) ON k.id = c.id
                   JOIN staff_dispatch_records d
                     ON d.user_id = c.sales_staff_id
                    AND d.merchant_id = COALESCE(b.merchant_id, b.bar_id)
-                   AND d.start_date <= (c.created_at AT TIME ZONE :local_zone)::date
-                   AND (d.end_date IS NULL OR d.end_date >= (c.created_at AT TIME ZONE :local_zone)::date)
+                   AND d.start_date <= CAST(k.accrual_day AS date)
+                   AND (d.end_date IS NULL OR d.end_date >= CAST(k.accrual_day AS date))
                  WHERE c.id IN (:commission_ids)
                    AND c.sales_staff_id IS NOT NULL
                    AND c.status NOT IN ('void', 'cancelled')
                    AND b.settlement_status = 'settled'
                  GROUP BY COALESCE(b.merchant_id, b.bar_id), d.company_id
                  ORDER BY 1, 2
-                """, Map.of("commission_ids", commissions, "local_zone", com.complex.platform.common.LocalZone.ID.getId()));
+                """, Map.of("commission_ids", commissions, "accrual_days", accrualDays));
     }
 
     private static final String SETTLEMENT_SELECT = """
@@ -479,6 +525,15 @@ public class JdbcStaffRepository {
             + " (SELECT user_id FROM staff_profiles WHERE merchant_id = :merchant_scope"
             + " AND delete_status <> 'approved'))";
 
+    /** 第十八批 AB 段第 191 条 191-R2（BSM:1143「由该酒吧负责排班、现场考勤和履约调度」）：排班、考勤列表的商户范围另含派驻到该商户、
+     *  起止日期覆盖该行工作日或打卡时点所属营业日（day；第十八批裁决 46）的员工（只看起止日期）；工资单、请假仍用 STAFF_MERCHANT_FILTER。 */
+    private static String staffMerchantOrDispatchFilter(String day) {
+        return " AND (:merchant_scope::text IS NULL OR user_id IN"
+                + " (SELECT user_id FROM staff_profiles WHERE merchant_id = :merchant_scope AND delete_status <> 'approved')"
+                + " OR user_id IN (SELECT d.user_id FROM staff_dispatch_records d WHERE d.merchant_id = :merchant_scope"
+                + " AND d.start_date <= " + day + " AND (d.end_date IS NULL OR d.end_date >= " + day + ")))";
+    }
+
     public com.complex.platform.common.api.PageResponse<StaffLeaveRequestRecord> listLeavesPaged(
             String status, String userId, String projectScope, int page, int size) {
         return listLeavesPaged(status, userId, projectScope, null, page, size);
@@ -516,7 +571,7 @@ public class JdbcStaffRepository {
         String where = "WHERE (:work_date::date IS NULL OR work_date = :work_date)"
                 + "   AND (:user_id::text IS NULL OR user_id = :user_id)"
                 + "   AND (:project_scope::text IS NULL OR project_id = :project_scope)"
-                + STAFF_MERCHANT_FILTER
+                + staffMerchantOrDispatchFilter("staff_shift_schedules.work_date")
                 + " AND (:all_staff OR user_id IN (SELECT p.user_id FROM staff_profiles p WHERE p.company_id = :company_scope::text OR p.project_id IN (:project_ids)))";
         org.springframework.jdbc.core.namedparam.MapSqlParameterSource params = withStaffScope(
                 new org.springframework.jdbc.core.namedparam.MapSqlParameterSource()
@@ -551,12 +606,14 @@ public class JdbcStaffRepository {
         }
         String where = "WHERE punched_at >= :day_start AND punched_at < :day_end"
                 + "   AND (:project_scope::text IS NULL OR project_id = :project_scope)"
-                + STAFF_MERCHANT_FILTER
+                + staffMerchantOrDispatchFilter("(CASE WHEN punched_at < :punch_day_start THEN CAST(:punch_day AS date) - 1 ELSE CAST(:punch_day AS date) END)")
                 + " AND (:all_staff OR user_id IN (SELECT p.user_id FROM staff_profiles p WHERE p.company_id = :company_scope::text OR p.project_id IN (:project_ids)))";
         org.springframework.jdbc.core.namedparam.MapSqlParameterSource params = withStaffScope(
                 new org.springframework.jdbc.core.namedparam.MapSqlParameterSource()
                         .addValue("day_start", java.sql.Timestamp.from(date.atStartOfDay(LocalZone.ID).toInstant()))
                         .addValue("day_end", java.sql.Timestamp.from(date.plusDays(1).atStartOfDay(LocalZone.ID).toInstant()))
+                        .addValue("punch_day", java.sql.Date.valueOf(date))
+                        .addValue("punch_day_start", java.sql.Timestamp.from(dispatchDayStart(merchantScope, date)))
                         .addValue("project_scope", projectScope).addValue("merchant_scope", merchantScope), companyScope, projectIds);
         Long total = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM staff_attendance_records " + where, params, Long.class);
         params.addValue("limit", safeSize).addValue("offset", (long) (safePage - 1) * safeSize);

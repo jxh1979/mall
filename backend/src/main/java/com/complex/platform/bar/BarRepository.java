@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.12
+// 文件版本：V0.13
 
 import com.complex.platform.finance.PaymentIntentRecord;
 import java.util.List;
@@ -469,6 +469,11 @@ public interface BarRepository {
 
     /** 复核 money I2：该订台是否已挂出定金原路退款应付（ar_ap_items source_type=bar_deposit_refund）。默认 false。 */
     default boolean depositRefundPayableExists(String reservationId) {
+        return false;
+    }
+
+    /** 第十八批 AB 段第 190 条 190-R3：这些会话（台组含旧链）自 since 起有无订单、账单、资金或邀请、成员变化（撤销转台的后续变化）。内存桩默认 false。 */
+    default boolean tableSessionChangedSince(List<String> sessionIds, java.time.Instant since) {
         return false;
     }
 

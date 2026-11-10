@@ -1,6 +1,6 @@
 package com.complex.platform.serviceorder;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import java.time.Instant;
 import java.time.LocalDate;
@@ -178,6 +178,12 @@ class JdbcServiceOrderRepository {
     }
 
     public ServiceOrderRecord saveOrder(ServiceOrderRecord order) {
+        return saveOrder(order, null);
+    }
+
+    /** 第十八批 AB 段复核意见（第 191 条；BSM:1143「由该酒吧负责排班、现场考勤和履约调度」；PGM:659「所有业务数据默认按项目隔离」）：经派驻放行新建的服务单
+     *  project_id 落派驻目标项目（dispatchProjectId），其余照旧按履约人档案；只影响插入，ON CONFLICT 更新段不动。 */
+    public ServiceOrderRecord saveOrder(ServiceOrderRecord order, String dispatchProjectId) {
         jdbcTemplate.update("""
                 INSERT INTO service_orders (id, catalog_item_id, item_name, price_cent, bar_id, table_id,
                         performer_user_id, ordered_by, customer_note, status, cancel_reason,
@@ -187,8 +193,8 @@ class JdbcServiceOrderRepository {
                         :performer, :ordered_by, :note, :status, :cancel_reason,
                         :paid_at, :paid_by, :pay_method, :refund_note, :mgmt_fee, :dancer_share,
                         :created_at, :updated_at, :completed_at, :snap_fee_mode, :snap_fee_value, :snap_fee_version,
-                        (SELECT p.project_id FROM staff_profiles p WHERE p.user_id = :performer
-                          ORDER BY p.created_at DESC LIMIT 1))
+                        COALESCE(CAST(:dispatch_project_id AS VARCHAR), (SELECT p.project_id FROM staff_profiles p WHERE p.user_id = :performer
+                          ORDER BY p.created_at DESC LIMIT 1)))
                 ON CONFLICT (id) DO UPDATE SET
                     status = EXCLUDED.status,
                     cancel_reason = EXCLUDED.cancel_reason,
@@ -216,7 +222,8 @@ class JdbcServiceOrderRepository {
                 .addValue("completed_at", order.completedAt() == null ? null : java.sql.Timestamp.from(order.completedAt()))
                 .addValue("snap_fee_mode", order.snapMgmtFeeMode())
                 .addValue("snap_fee_value", order.snapMgmtFeeValue())
-                .addValue("snap_fee_version", order.snapFeeVersion()));
+                .addValue("snap_fee_version", order.snapFeeVersion())
+                .addValue("dispatch_project_id", dispatchProjectId));
         return order;
     }
 

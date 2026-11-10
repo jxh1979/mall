@@ -1,6 +1,6 @@
 package com.complex.platform.access.staff;
 
-// 文件版本：V0.31
+// 文件版本：V0.32
 
 import com.complex.platform.access.AccessActor;
 import com.complex.platform.access.AccessRepository;
@@ -666,7 +666,9 @@ public class StaffService {
         authorizationService.requirePermission("staff.shift.manage");
         // 第十八批 E 段 19-R1（移植 M738）：按 staff.shift.manage 可触及的范围在幂等之前先核排班员工
         var reach = reachOf("staff.shift.manage");
-        if (request != null && trimToNull(request.userId()) != null) requireUserInScope(request.userId().trim(), reach);
+        if (request != null && trimToNull(request.userId()) != null && !dispatchedHere(request.userId().trim(), request.workDate())) {
+            requireUserInScope(request.userId().trim(), reach);
+        }
         return idempotencyService.execute("staffShiftSubmit", request == null ? null : request.idempotencyKey(), request,
                 () -> {
                     StaffShiftRecord submitted = staffApprovals.submitShifts(List.of(draftShift(request, reach)), request.idempotencyKey()).shifts().getFirst();
@@ -689,7 +691,7 @@ public class StaffService {
                 || request.startAt() == null || request.endAt() == null || !request.endAt().isAfter(request.startAt())) {
             throw ApiException.badRequest("VALIDATION_FAILED", "须填写员工、工作日期及有效的开始结束时间");
         }
-        requireUserInScope(request.userId().trim(), reach);
+        if (!dispatchedHere(request.userId().trim(), request.workDate())) requireUserInScope(request.userId().trim(), reach);
         Instant now = clock.instant();
         StaffShiftRecord previous = trimToNull(request.shiftId()) == null
                 ? repository.findShiftByUserStart(request.userId().trim(), request.startAt()).orElse(null)
@@ -734,8 +736,10 @@ public class StaffService {
         // 第十八批 E 段 19-R1（移植 M738）：按 staff.shift.manage 可触及的范围在幂等之前先逐个核请求里的员工
         var reach = reachOf("staff.shift.manage");
         if (request != null && request.userIds() != null) {
+            java.time.LocalDate[] workDates = staffMerchantScope() == null || request.startDate() == null
+                    ? new java.time.LocalDate[0] : batchDates(request).toArray(java.time.LocalDate[]::new);
             request.userIds().stream().map(id -> trimToNull(id)).filter(java.util.Objects::nonNull).distinct()
-                    .forEach(id -> requireUserInScope(id, reach));
+                    .forEach(id -> { if (!dispatchedHere(id, workDates)) requireUserInScope(id, reach); });
         }
         return idempotencyService.execute("staffShiftBatchSubmit", request == null ? null : request.idempotencyKey(), request,
                 () -> {
@@ -762,18 +766,9 @@ public class StaffService {
         if (userIds.isEmpty()) {
             throw ApiException.badRequest("VALIDATION_FAILED", "必须选择至少一名员工");
         }
-        int days = request.days() == null ? 7 : request.days();
-        if (days < 1 || days > 31) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "排班天数必须在 1 到 31 天之间");
-        }
-        java.util.Set<java.time.DayOfWeek> weekdays = parseWeekdays(request.weekdays());
+        List<java.time.LocalDate> dates = batchDates(request);
         java.time.LocalTime startTime = parseShiftTime(request.startTime(), "开始");
         java.time.LocalTime endTime = parseShiftTime(request.endTime(), "结束");
-
-        List<java.time.LocalDate> dates = java.util.stream.IntStream.range(0, days)
-                .mapToObj(request.startDate()::plusDays)
-                .filter(date -> weekdays.isEmpty() || weekdays.contains(date.getDayOfWeek()))
-                .toList();
         if (dates.isEmpty()) {
             throw ApiException.badRequest("VALIDATION_FAILED", "所选日期范围内没有勾中的星期几，请至少勾一天");
         }
@@ -786,7 +781,8 @@ public class StaffService {
         List<String> points = request.pointSpaceIds() == null ? List.of() : request.pointSpaceIds().stream()
                 .map(id -> trimToNull(id)).filter(java.util.Objects::nonNull).distinct().toList();
 
-        userIds.forEach(id -> requireUserInScope(id, reach));
+        java.time.LocalDate[] workDates = dates.toArray(java.time.LocalDate[]::new);
+        userIds.forEach(id -> { if (!dispatchedHere(id, workDates)) requireUserInScope(id, reach); });
         java.util.List<StaffShiftRecord> saved = new java.util.ArrayList<>();
         for (java.time.LocalDate date : dates) {
             Instant startAt = date.atTime(startTime).atZone(LocalZone.ID).toInstant();
@@ -800,6 +796,19 @@ public class StaffService {
             }
         }
         return staffApprovals.submitShifts(List.copyOf(saved), request.idempotencyKey());
+    }
+
+    /** 批量排班的日期窗口：起始日期起 days 天（默认 7，1～31），weekdays 非空只取勾中的星期几。 */
+    private static List<java.time.LocalDate> batchDates(com.complex.platform.access.staff.dto.StaffShiftBatchRequest request) {
+        int days = request.days() == null ? 7 : request.days();
+        if (days < 1 || days > 31) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "排班天数必须在 1 到 31 天之间");
+        }
+        java.util.Set<java.time.DayOfWeek> weekdays = parseWeekdays(request.weekdays());
+        return java.util.stream.IntStream.range(0, days)
+                .mapToObj(request.startDate()::plusDays)
+                .filter(date -> weekdays.isEmpty() || weekdays.contains(date.getDayOfWeek()))
+                .toList();
     }
 
     private static java.util.Set<java.time.DayOfWeek> parseWeekdays(List<Integer> weekdays) {
@@ -836,8 +845,11 @@ public class StaffService {
         var history = staffApprovals.history(id);
         if (history.isEmpty()) {
             var shift = repository.findShiftById(id).orElseThrow(() -> ApiException.notFound("SHIFT_NOT_FOUND", "排班不存在"));
-            requireUserReadable(shift.userId(), reach);
-        } else { requireUserReadable(history.getFirst().after().userId(), reach); }
+            if (!dispatchedHere(shift.userId(), shift.workDate())) requireUserReadable(shift.userId(), reach);
+        } else {
+            StaffShiftRecord after = history.getFirst().after();
+            if (!dispatchedHere(after.userId(), after.workDate())) requireUserReadable(after.userId(), reach);
+        }
         return history;
     }
 
@@ -859,8 +871,8 @@ public class StaffService {
         String reason = requireReason(request.reason());
         // 第十八批 E 段 19-R1（移植 M738）：原班次员工与顶班员工都按 staff.shift.manage 可触及的范围判，在幂等之前
         var reach = reachOf("staff.shift.manage");
-        requireUserInScope(shift.userId(), reach);
-        requireUserInScope(coverUserId, reach);
+        if (!dispatchedHere(shift.userId(), shift.workDate())) requireUserInScope(shift.userId(), reach);
+        if (!dispatchedHere(coverUserId, shift.workDate())) requireUserInScope(coverUserId, reach);
         if (request.startAt() == null || request.endAt() == null || !request.endAt().isAfter(request.startAt())
                 || request.startAt().isBefore(shift.startAt()) || request.endAt().isAfter(shift.endAt())) {
             throw ApiException.badRequest("COVER_RANGE_INVALID", "顶班起止须在原班次范围内且结束晚于开始");
@@ -901,7 +913,7 @@ public class StaffService {
         authorizationService.requirePermission("staff.shift.manage");
         var source = repository.findShiftById(shiftId)
                 .orElseThrow(() -> ApiException.notFound("SHIFT_NOT_FOUND", "原排班不存在"));
-        requireUserReadable(source.userId(), reachOf("staff.shift.manage"));
+        if (!dispatchedHere(source.userId(), source.workDate())) requireUserReadable(source.userId(), reachOf("staff.shift.manage"));
         List<StaffShiftCoverRecord> covers = repository.listShiftCovers(shiftId);
         auditEventService.recordSuccess("staff.shift.covers_viewed", "staff.shift.manage", "staff_shift", shiftId, null, null, Map.of("count", covers.size()));
         return covers;
@@ -1601,6 +1613,15 @@ public class StaffService {
      *  排班、考勤、请假列表的项目条件——商户账号为 null（只按商户，看得到各经营项目里本商户的），其余同 projectScope()。写入口不用。 */
     private String readProjectScope() {
         return staffMerchantScope() != null ? null : projectScope();
+    }
+
+    /** 第十八批 AB 段第 191 条 191-R2（BSM:1143「其他公司的人员派驻到某家酒吧工作期间，由该酒吧负责排班、现场考勤和履约调度」；BSM:1474 主管排班、
+     *  领班安排顶班；决策台账 :328）：调用方是商户账号、员工派驻到该商户且派驻起止日期覆盖每个工作日（只看起止日期，同提成归集）时为真。
+     *  只用于排班、顶班、排班历史与顶班记录；工资、奖罚、请假、档案仍按原判定。 */
+    private boolean dispatchedHere(String userId, java.time.LocalDate... workDates) {
+        String merchant = staffMerchantScope();
+        return merchant != null && workDates.length > 0 && java.util.Arrays.stream(workDates)
+                .allMatch(day -> day != null && repository.dispatchedOn(userId, merchant, day));
     }
 
     /** 第十八批 E 段 20-R3：读详情（排班历史、顶班记录、扣罚申诉）——商户账号只核员工档案的商户；其余同 requireUserInScope。 */

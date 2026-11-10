@@ -1,4 +1,4 @@
-// 文件版本：V0.06
+// 文件版本：V0.07
 import { expect, test } from "@playwright/test";
 import { installMockApi } from "./support/mock-api";
 
@@ -118,6 +118,7 @@ test.describe("full admin MVP acceptance", () => {
 
     await expect(page.getByTestId("admin-page-title")).toContainText("卡座与订台");
     await page.getByTestId("bar-session-select-session-1").check();
+    await page.getByTestId("bar-session-reason").fill("客人换台");
     await page.getByTestId("bar-transfer-target-table").fill("table-2");
     await page.getByTestId("bar-transfer-target-staff").fill("staff-2");
     await page.getByTestId("bar-transfer-submit").click();

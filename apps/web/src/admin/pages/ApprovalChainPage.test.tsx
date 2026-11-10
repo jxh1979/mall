@@ -5,7 +5,7 @@ import { ApprovalChainPage } from "./ApprovalChainPage";
 import { AdminApi } from "../client/adminClient";
 import type { AdminPageProps, EffectivePermissionsState } from "../types";
 
-// 文件版本：V0.06
+// 文件版本：V0.07
 
 function raw(data: unknown): Response {
   return new Response(JSON.stringify({ success: true, code: "OK", message: "success", data }), { status: 200, headers: { "content-type": "application/json" } });
@@ -270,7 +270,8 @@ describe("ApprovalChainPage 审批链与节点裁决", () => {
       "leasing.blacklist_exception", "leasing.intent.key_stage", "merchant.project.add", "inventory.trace.scan_backfill", "bar.sales.backfill", "bar.service.backfill",
       "parking.release.waive", "ticket.reward.rule", "ticket.reward.national", "ticket.reward.sales_contract", "staff.shift.publish", "staff.attendance.receipt.review",
       "staff.payroll.penalty_cap.adjust", "manual_release", "bill_waiver", "refund", "ar_ap_adjustment", "contract_violation", "base_definition_violation",
-      "permission_grant_l3", "finance.tax_rule.adjust", "staff.profile.employment_status.change", "staff.payroll.adjustment.add", "staff.payroll.adjustment.appeal"];
+      "permission_grant_l3", "finance.tax_rule.adjust", "staff.profile.employment_status.change", "staff.payroll.adjustment.add", "staff.payroll.adjustment.appeal",
+      "bar.table_session.transfer_over_limit"];
     const admissionActions = ["bar.bill_waiver", "amusement.reopen", "bar.bill_reopen", "amusement.incident_close", "amusement.group_booking_approve",
       "bar.order_item_void", "bar.shift_close", "ticketing.refund_approve", "ticketing.dynamic_pricing_publish", "ticketing.verification_reverse",
       "inventory.stock_adjust", "inventory.purchase_receive", "inventory.saved_bottle_claim", "finance.refund", "finance.offline_payment_confirm",
@@ -288,7 +289,7 @@ describe("ApprovalChainPage 审批链与节点裁决", () => {
       "payroll_tax_assessment", "staff_shift_batch", "staff_penalty_cap", "bar_payroll_rule", "bar_business_day_config", "inspection",
       "amusement_maintenance_record", "amusement_incident", "amusement_group_booking", "bar_order_item", "bar_shift", "ticket_refund",
       "ticket_dynamic_pricing_rule", "verification", "inventory_stock_adjustment", "saved_bottle", "finance_refund", "finance_offline_payment_confirmation",
-      "customer_home_content", "position_role_template"];
+      "customer_home_content", "position_role_template", "bar_table_transfer_limit_approval"];
     const levels = ["one_level_up", "two_levels_up", "top_authority", "specific_role", "hr_three_levels_up"];
     const actions = [...evaluateActions, ...admissionActions, ...accessActions];
     const rows = actions.map((action, i) => ({ decision: { review_id: `rv87_${i}`, action_type: action, object_type: objectTypes[i % objectTypes.length],

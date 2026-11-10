@@ -1,6 +1,6 @@
 # PRD 审计业务裁决台账
 
-文档版本：V0.82
+文档版本：V0.83
 状态：进行中
 迁移日期：2026-07-27
 当前事实源：三份立法 HTML 以既有冻结基线叠加 James 此前 M02 至 M08 的点名批准、全量审计 M001、M002 的逐项批准，以及本轮 2026-10-16 至 2026-10-17 业务 HTML 审计中 Q01 至 Q40 及子题实际明确批准且未被后续替代的裁决，和 2026-10-17 第二批 HTML 业务线推演审计（A–F 六线 64 条、停车章）的逐项批准，并叠加本轮 CG 70 项来源确认与 C01–C09、N01–N03 最终澄清及补全文稿中 F01、W01–W05 的整体修改批准（本文件末节）；本轮最终规则、未采纳或替代关系、现行版本与字节哈希见本文件末节。历史记录保留为各自当时事实，不恢复已被替代的建议。
@@ -3950,6 +3950,7 @@ HTML 的语义补齐与直接引用同步可在本批核验；70项中的业务�
 | 43 | **第 211 条 整期暂不分红或暂缓分红的登记**（题面：「第 211 条：「整期暂不分红或暂缓分红」须主理人与娱乐平台公司协商一致后执行，并记录原因与协商结果；系统现在没有登记处。我的方案：平台财务在持股分红页按商户按期登记（暂不分红或暂缓分红，原因、协商结果必填，不另走审批）；该期正式单已提交审批或已发放的不能再登记，草稿随登记作废；「暂不分红」该期不出正式单、利润不补分；「暂缓分红」等协商恢复后由财务登记恢复，再照常出单；月度预览照常。可以吗？」）—— 操作员选「按这个方案（推荐）」：照上面写的做。 | 待做（第 211 条，18W 已核实） |
 | 44 | **第 211 条 分红周期「按财务对账的固定处理日期设定」的读法**（题面：「第 211 条：HTML 写「分红周期可配：按财务对账的固定处理日期设定（例如一个月中的某几天）」，另一处写「发放走应付款项，落在三个付账日之一，具体哪一个由该公司在分红周期配置中指定」。我理解为：分红方案加一项「发放付账日」（每月三个付账日之一，出厂 5、15、25 日），审批通过后给主理人的应付和留存释放的应付都落在当天或之后第一个该付账日（现在是审批当天即到期）；分红期间仍按自然月、季、半年、年切分，正式单仍由财务手动出。对吗？」）—— 操作员选「对，按这个理解（推荐）」：只加「发放付账日」配置，期间切分与出单方式不变。 | 待做（第 211 条，18W 已核实） |
 | 45 | **第 202 条 反结时账单已登记退款的处理**（题面：「第 202 条反结补问：酒吧账单现金结了 3000，客人退一瓶已登记退款 500（财务还没把钱付出去），这时发现账单记错要反结。现在反结会把 3000 原收款整笔作废，按扣过退款的 2500 重收，收银「多退少补」当场退客人 500，财务那笔 500 又照付，客人多拿 500。怎么处理？」）—— 操作员选「只作废没退的部分（推荐）」：已登记的 500 退款照常由财务付出；反结只把没退的 2500 收款作废，再按更正后的账单重收。与第十七批「作废并冲正」遇到已退款时的处理一致，账和钱都不重复。（来由：18AA 收尾复核意见。） | 已落地（18AA 复核修复，第 202 条） |
+| 46 | **第 191 条 派驻起止日期按营业日判**（题面：「派驻员工的「派驻起止日期」，按自然日判还是按酒吧营业日判？现状（18AB 本段代码）：按自然日判（过零点就换日）的：员工的商户范围、点单时指定派驻履约人、开台时指派派驻员工为主责服务人、查看派驻员工的考勤领取事件；派驻提成归集（既有代码）也按计提时的自然日判。按班次工作日判的：派驻酒吧给派驻员工排班。后果：派驻最后一天的夜班酒吧能排进去，但一过零点，同一营业日里该员工名下的服务单就不能确认收款或完成，也不能被开台指派。HTML 依据：ENUM:187 写考勤日期、销售提成月份等「一律以开台或下单时点所属的营业日为准，不按自然日切分」，但没有点名派驻起止。决策台账里也没有相关裁决。」）—— 操作员选「按营业日判（推荐）」：凡判断是否在派驻期内都按酒吧营业日：结束日当天的夜班过零点后、到营业日结束前仍算派驻期内。已在派驻期内下的服务单，之后的收款、完成、取消按下单时所属营业日判。派驻提成归集也改按计提时所属营业日。与 ENUM:187 考勤日期、提成月份按营业日一致。（来由：18AB 收尾复核意见。） | 已落地（18AB 复核修复，第 191 条） |
 
 第一段转正前最低池额试算与取消结算环节超池待审批：既有缺口，列入待开发清单第 75 条、随 18C 做（ENUM L52、BSM L752）。
 
@@ -5609,3 +5610,92 @@ HTML 的语义补齐与直接引用同步可在本批核验；70项中的业务�
   - 第十七批⑤作废口径：作废只冲正未退部分的收款，已退额按 TK-20-R2「后收的先退」占在最后几笔收款上，另记不冲正的留存，各期合计为 0。
   回归：BarBillReopenJdbcIntegrationTests 的 reopenAfterRegisteredCashRefundReversesOnlyUnrefundedCollection、voidAfterReopenAndResettleRefundsNewCollectionOnly、reopenAfterCashRefundReturnsOnlyReversedStoredValue。
 - 18AA 落地位置补记·运行验收证据、快照、终验文档刷新（无新裁决）：业务提交 8ed7ecb6 之后，按第十八批裁决 25 重刷了运行验收证据：后端全量 6563 测，0 失败 0 错误；apps/web 构建通过；常规界面验收（接口全部 mock）实跑 40 条全过；真实后端界面验收未跑，runtime_ready=false。随后依次重生成闭环当前态快照、生产闭环缺口报告、界面验收报告、无上线指挥台。生成器没改。手改 docs/final-closed-loop-acceptance-audit-v0.1.md 与 docs/code-implementation-acceptance-audit-v0.1.md：前端单测源码计数改为 1679；被核文件行数按实测同步（BarService.java 1136→1164、BarOrderService.java 1848→1857、BarBillingService.java 1057→1112、BarTableSessionService.java 828→857 行）；后端全量与常规界面验收的数字、日期改为本次实跑值；写入 npm run verify:unit 实跑结果，五个工作区全过。交付门禁于 2026-11-10 UTC 在工作树逐项实跑子项，NAS 两项现场探测未跑。仍红的有两项：一是 coding-host-protection，它写死主仓路径，在工作树口径下必红，属工具口径，不做；二是 final-closed-loop-audit，如实留 2 条红（integration-ready、business-acceptance-ready），原因是校验器要求终验把联调、业务验收写成「是」，而裁决 25 定了不跑真实后端界面验收、运行验收未就绪，终验写的是「否」。verify:delivery-gates 总链仍是红的。
+
+18AB 落地位置补记（2026-11-10）：第十八批 AB 段（batch48）按 18W 核实稿实现待开发清单第 190、191 条（转台与派驻，191 复核修复按第十八批裁决 46）；运行验收证据、终验文档在本段最后一个提交刷新；各条落地位置见下。本段追加时，原台账除文档版本 V0.82→V0.83 与裁决表新增第 46 行外，其他历史字节保持。
+
+- 18AB 落地位置补记·控制席判定（2026-11-10）：本段（第十八批 AB 段，batch48）实现待开发清单第 190、191 条（转台与派驻），方案为 18W 核实稿（本机 b43-audit\g190-206-bartable.json、g191-195-terminal.json），无新裁决，依 DEC-R6-19、DEC-R8-95 射程 2 与决策台账 :328；控制席并入（190）：后台卡座与开台页「转/合/拆原因」框默认值「主管审批通过」改为空、提交前须填真实原因（BSM:1079「记录内容包括操作类型、原因、操作人、时间……」）；迁移 V614（merchants 转台次数上限三列、超限转台申请表、调整类型放开 transfer_undo）；分两条线：转台线 190-R1→190-R2→190-R3，派驻线 191-R1→191-R2→191-R3→191-R4；PRD 由文档组一次改。
+- 18AB 落地位置补记·第 190 条 190-R1（转台次数上限按酒吧可配；对应裁决 DEC-R6-19）：
+  - backend/src/main/resources/db/migration/V614__bar_table_transfer_limit_and_undo.sql 第 1 节：merchants 加 table_transfer_limit、table_transfer_limit_min、table_transfer_limit_max 与 CHECK chk_merchants_table_transfer_limit（三者同空；或同填且 0≤下限≤值≤上限，不另设硬上下限）。
+  - backend/src/main/java/com/complex/platform/governance/：
+    - 新增 MerchantTableTransferLimitRecord，未配置时生效值取出厂 10 次；新增 dto/MerchantTableTransferLimitRequest。
+    - PlatformRepository、JdbcPlatformRepository 加 findTableTransferLimit、saveTableTransferLimit。
+    - PlatformService 加 getTableTransferLimit（读口审计 merchant.viewed）与 configureTableTransferLimit（成功审计 merchant.table_transfer_limit_configured，失败审计 merchant.table_transfer_limit_config_failed；三值缺一、下限为负或值不在上下限内 400 VALIDATION_FAILED）。
+    - PlatformController 加 GET/PUT /api/v1/platform/merchants/{merchant_id}/table-transfer-limit（merchant.profile.view / merchant.profile.manage，PUT 要幂等键）。
+  - apps/web/src/admin/pages/OrganizationMerchantPage.tsx：酒吧商户行加「转台次数上限」按钮（merchant.profile.manage），先读当前值（未配置提示「未配置，按出厂 10 次」），值、下限、上限同填后 PUT。
+  - apps/web/src/admin/i18n/fieldLabels.ts 与 backend/src/main/java/com/complex/platform/common/api/FieldLabels.java：补 value_count、min_count、max_count、effective_count；fieldLabels.ts 的 VALUE_LABELS 补 merchant_table_transfer_limit_configured。
+  - docs/openapi/openapi-p0.yaml、.json：getMerchantTableTransferLimit、configureMerchantTableTransferLimit。docs/full-admin-page-permission-field-matrix-v0.1.csv：ADM-GOV-002 行。
+  - 测试：backend/src/test/java/com/complex/platform/governance/MerchantTableTransferLimitJdbcIntegrationTests.java；apps/web/src/admin/pages/OrganizationMerchantPage.test.tsx「酒吧商户：转台次数上限 → 读当前值后 PUT 值与上下限（蛇形键）」。
+  依据：
+  - BSM:1079「循环转台：同一会话的转台次数不得超过后台配置的上限（业务参数，按酒吧可配，出厂默认 10 次，须同时配置上下限），达到上限后须主管审批才能继续转台。」
+  对应裁决：DEC-R6-19（决策台账 :1274）「**循环转台**＝同一会话转台次数上限（业务参数，按酒吧可配，出厂默认 10 次，须同时配置上下限），达上限须主管审批」。本步只落「上限按酒吧可配」，达上限的主管审批见 190-R2。
+- 190-R2（第十八批 AB 段第 190 条）落地位置：
+  - BarTableSessionService.transferTableSession 在名额校验、接手人校验之后、任何写入之前加闸：已转次数＝本会话 adjustment_type=transfer 的留痕条数（撤销不减）；上限取 merchants.table_transfer_limit，未配置按出厂 10 次。达到上限时，有同会话同目标台已批准未用的超限转台申请即用掉继续；有待审批的申请 409 BAR_TRANSFER_LIMIT_APPROVAL_PENDING；否则提交申请后 409 BAR_TRANSFER_LIMIT_APPROVAL_REQUIRED（提示带审批单号）。转台快照记 transfer_count、transfer_limit、transfer_limit_approval_id。
+  - 新服务 BarTransferLimitApprovalService：申请用 REQUIRES_NEW 独立事务提交（转台随后 409 回滚，申请与复核单仍在）；审批定案由事件回写 approved 或 rejected；转台成功时把申请改为 used，并回填 adjustment_id。
+  - SupervisorReviewService 代码内策略加 bar_table_transfer_over_limit（动作 bar.table_session.transfer_over_limit，one_level_up，主管＝发起人直接上级）。
+  - JdbcPlatformRepository.REVIEW_OBJECT_PROJECT_SQL 加对象 bar_table_transfer_limit_approval（取酒吧所属项目）。
+  - V614 第 2 节建 bar_table_transfer_limit_approvals 表。
+  - reviewLabels.ts 加「转台超过次数上限」「超限转台申请」。
+  - BarTableSessionsPage 转台确认文案改为「达到本酒吧转台次数上限时须主管审批」。
+  - OpenAPI transferBarTableSession 说明补两个 409。
+  依据原句：
+  - BSM:1079「同一会话的转台次数不得超过后台配置的上限（业务参数，按酒吧可配，出厂默认 10 次，须同时配置上下限），达到上限后须主管审批才能继续转台」；
+  - PGM:528「系统按组织层级自动补全从发起人到该最终审批人之间的全部直接上级节点，逐级审批」。
+  对应裁决：决策台账:1274 DEC-R6-19（「循环转台＝同一会话转台次数上限……达上限须主管审批」）。
+  原因框默认值（控制席并入）：后台卡座与开台页 BarTableSessionsPage「转/合/拆原因」输入框默认值由「主管审批通过」改为空串，提交前的非空校验照旧拦空。依据 BSM:1079「每次拆单、合单、转台、并台、拆台和撤销转台均须留痕。记录内容包括操作类型、原因、操作人、时间……」；对应：控制席并入（无新裁决）。
+- 18AB 落地位置补记·第 190 条 190-R3（撤销转台；依据 BSM:1079「撤销转台：仅当转台后未新增邀请、未发生邀请接受、成员入场或移出，也未新增点单、付款、退款等账单或资金记录时，方可按转台前快照恢复原台位、邀请关系、成员归属、可邀请人数、最低消费额和消费进度，并完整留痕；符合条件的撤销不得以新建单据冒充回退。」「撤销转台前，还必须确认转台前涉及的全部原台均未被其他会话重新预订或开台」「再次转台、并台、拆台或任何邀请、成员、订单、付款、退款变化，均属于后续变化。撤销只能恢复最近一次仍满足条件的完整快照，不得跨层覆盖历史。」「每次拆单、合单、转台、并台、拆台和撤销转台均须留痕。」，ENUM:114 同句；BSM:1062「撤销转台不得覆盖已经发生的资金记录」；对应裁决：DEC-R6-19（本台账:1274「撤销转台＝按原路回退到转台前的台位与进度并留痕，不得以新建单据代替回退」），DEC-R8-95 射程 2（本台账:2074「合并台整体转台只切断活动并台拓扑，不删除历史消费、提成、小费、循环转台次数或审计记录；旧链只可在仍满足撤销条件时用于整笔恢复」，据此撤销不减已转次数）；无新裁决）：
+  迁移 V614 第 3 节把 chk_bar_table_adjustment_type 扩为含 transfer_undo（写法同 V521）。
+  转台留痕快照（BarTableSessionService.transferSnapshot）加记转台时刻 transferred_at，以及根会话转台前的 min_consumption_snapshot_before_cent、invite_capacity_snapshot_before、service_staff_before。
+  新接口 POST /api/v1/bar/table-sessions/{session_id}/transfer-undo：BarController → BarService.undoTableTransfer，@GuardedAction(capability=bar.table_session.transfer)；控制器 requirePermission bar.table_session.transfer（HTML 未给撤销另定岗位，撤销是同一转台的原路回退，沿用转台权限）；商户闸在幂等之前；审计 bar.table.transfer_undone／bar.table_session.transfer_undo_failed；请求 BarTableTransferUndoRequest(idempotency_key, session_version, reason 必填)。
+  BarTableSessionService.undoTableTransfer：
+  ① 锁会话行；本会话最近一条调整留痕须为 transfer，且会话版本等于该次转台后的版本，否则 409 BAR_TRANSFER_UNDO_NOT_LATEST。
+  ② 以转台时刻为界，台组（含整体转台前旧链）有以下任一变化即 409 BAR_TRANSFER_UNDO_BLOCKED（BarRepository/JdbcBarRepository.tableSessionChangedSince）：订单新建、明细新建或作废、账单新建或变动、付款、账单调整或退款、扫码付款、定金退款应付，或订台签发邀请或变动、成员接受、入场、移出。
+  ③ 原台与旧链各台锁行后须空闲且无有效预留，否则 409 BAR_TRANSFER_UNDO_TABLE_OCCUPIED（停用台位同样算被占）。
+  ④ 通过后旧链子会话由 merged_transferred 改回 merged；根会话按快照回原台，并恢复低消快照、可邀请人数快照与服务人（CAS 版本 +1）；原台与旧链各台置已开台，目标台回空闲。
+  ⑤ 服务责任由 BarServiceResponsibilityService.recordTransferUndo 处理：台组现区间结束；转台前服务人非空的在原台开新区间，为空的服务人置空。
+  ⑥ 另记一条 transfer_undo 留痕：from 为目标台、to 为原台，带前后阈值、原因、操作人，证据为空列表；快照含 undone_adjustment_id、restored_chain、恢复前后的低消快照、可邀请人数快照与服务人，以及前后可邀请人数。
+  ⑦ 原转台留痕、订单与资金单据不动，不重判定金，已转次数（转台留痕条数）不减。
+  后台「卡座与订台」页（BarTableSessionsPage）转台表单旁加「撤销最近一次转台」（HighRiskConfirm，权限 bar.table_session.transfer，原因取「转/合/拆原因」框，请求体 reason 与 session_version）；fieldLabels.ts 补结果动作 bar_table_session_transfer_undo「撤销转台」和状态 transfer_undone「已撤销转台」。
+  OpenAPI 新增操作 undoBarTableTransfer（请求 schema 与三个 409 码），转台操作说明补快照新字段；全量页面矩阵 ADM-BAR-001 行补该接口。
+  测试：BarTableTransferUndoJdbcIntegrationTests（7 条：单台撤销恢复、整体转台撤销恢复并台链与空服务人、下单或加菜阻断、邀请接受阻断、转台当场定金退回阻断、原台被预留／开台／停用阻断、只能撤最近一次）；BarTableSessionsPage.transferUndo.test.tsx「点「撤销最近一次转台」带原因与场次版本发撤销请求」。
+- 191-R1 派驻期间本人按派驻酒吧取商户范围：落地位置 backend/src/main/java/com/complex/platform/access/AuthorizationService.java（currentMerchantScope、currentMerchantIdQuietly 经私有助手 scopeMerchantIdOf：本人今天〔北京日历日〕恰好一条起止日期覆盖的派驻时取派驻酒吧，否则取账号商户号）、AccessRepository.java 与 JdbcAccessRepository.java（findDispatchMerchantIdsOn，staff_dispatch_records 按 start_date／end_date 判，不看 status，与提成归集 JdbcStaffRepository.aggregateDispatchedCommissions 同一判定）；回归 backend/src/test/java/com/complex/platform/bar/BarDispatchedStaffBookingJdbcIntegrationTests.java。依据原句：BSM:1143「派驻仅由平台侧获授权人员登记，保留员工、目标商户及项目组织范围」「其他公司的人员派驻到某家酒吧工作期间，由该酒吧负责排班、现场考勤和履约调度」；BSM:931「员工私人手机装的是同一个工作 App，按设备放权：注册、看公告、查自己的工单、帮客人订位」；BSM:1468「帮客人订位：查酒吧空位，替客人预订卡座/散台」。对应裁决：决策台账 :328「人员所属主体不负责派驻酒吧的现场排班；派驻期间由服务经营主体负责排班、现场考勤和履约调度」。
+- 191-R2 落地位置：
+  - backend/src/main/java/com/complex/platform/access/staff/StaffService.java
+    - dispatchedHere（:1621）：商户账号对「派驻到本商户、派驻起止日期覆盖每个工作日」的员工放行（只看起止日期、不看状态）。
+    - 用在单排 upsertShift :669 与 draftShift :694、按周批量 :742/:785（逐日，日期窗口抽成 batchDates :802）、顶班 coverShift :874-875（取原班次工作日）、排班历史 :848/:851、顶班记录 :916。
+    - 工资、奖罚、请假、档案仍按原判定。
+  - JdbcStaffRepository.java
+    - dispatchedOn（:355）：191-R3、191-R4 共用。
+    - staffMerchantOrDispatchFilter（:493）：排班列表 :537 按该行 work_date、考勤列表 :572 按打卡日，另含派驻到本商户且起止覆盖的员工。工资单、请假列表不变。
+  - StaffWorkPhoneAttendanceService.java requireScope（:469-471）：商户账号对当天派驻到本商户的员工放行，覆盖核时补报、领取记录查看、领取事件查看。
+  - 回归：DispatchedStaffShiftJdbcIntegrationTests（4 例）。
+  - 依据：BSM:1143「其他公司的人员派驻到某家酒吧工作期间，由该酒吧负责排班、现场考勤和履约调度。」；BSM:1474「主管排班：排到几点几分，可指定当天工作点位……」「由领班直接安排其他工作人员顶班……」。
+  - 对应裁决：决策台账 :328「人员所属主体不负责派驻酒吧的现场排班；派驻期间由服务经营主体负责排班、现场考勤和履约调度」。
+  - 无迁移、无接口变化。
+- 191-R3 落地位置：backend/src/main/java/com/complex/platform/serviceorder/ServiceOrderService.java requirePerformerInScope（约 :519-532）——履约人档案项目不在可触及范围内时，调用方有商户范围（currentMerchantIdQuietly）且履约人今天派驻到该商户（JdbcStaffRepository.dispatchedOn，只看起止日期）的同样放行；下单、确认收款、完成、取消同经此方法。回归：DispatchedPerformerServiceOrderJdbcIntegrationTests。依据：BSM:1143「其他公司的人员派驻到某家酒吧工作期间，由该酒吧负责排班、现场考勤和履约调度」；BSM:1128「点单员帮客人下单，下单时就指定由哪位服务提供人履约。」对应裁决：决策台账 :328「人员所属主体不负责派驻酒吧的现场排班；派驻期间由服务经营主体负责排班、现场考勤和履约调度」。
+- 191-R4 落地位置：backend/src/main/java/com/complex/platform/bar/BarPayrollSupport.java requireWorker（V0.02）：服务人员以 bar.order.create 触及该台位项目，或本人持该码且今天（所在地日历日）派驻到该台位商户（JdbcStaffRepository.dispatchedOn，只看起止日期），即可任主责服务人。开台确认责任人、服务交接、转台接手、服务责任补录、服务费分配规则参与人一并放开；付款主体仍取档案所属主体；派驻结束日之后照旧 409 BAR_SERVICE_WORKER_INVALID。回归 BarDispatchedServiceStaffJdbcIntegrationTests。依据：BSM:1143「其他公司的人员派驻到某家酒吧工作期间，由该酒吧负责排班、现场考勤和履约调度」「其中应付给本人的提成、服务费等报酬，由该酒吧按月拨付给人员所属主体」；BSM:1077「主责服务提供人按当日该场次排班指派到该卡座」；BSM:1474「顶班人员按顶班记录取得该班次的小费与服务费份额」。对应裁决：决策台账 :328「人员所属主体不负责派驻酒吧的现场排班；派驻期间由服务经营主体负责排班、现场考勤和履约调度」。
+- 18AB 复核修复补记·第十八批裁决 46 与复核意见（第 191、190 条）：
+  ①派驻在期按酒吧营业日。取营业日的写法收在 backend/src/main/java/com/complex/platform/access/staff/JdbcStaffRepository.java：dispatchDay 用 BusinessDayResolver#merchantBusinessDate 取派驻记录 merchant_id 所在酒吧在动作时点的营业日；dispatchAt、dispatchMerchantIdsAt 供四处共用。
+  - AuthorizationService.scopeMerchantIdOf（商户范围）：按各派驻记录所属酒吧此刻的营业日判。
+  - ServiceOrderService.requirePerformerInScope：下单按此刻；已有服务单的收款、完成、取消、出示收款码按该单下单时点判。
+  - BarPayrollSupport.requireWorker、StaffWorkPhoneAttendanceService.requireScope：改用同一判定。
+  - 派驻提成归集 JdbcStaffRepository.aggregateDispatchedCommissions：改按计提时点所属该酒吧营业日判。
+  - 考勤列表 listAttendanceOnPaged：按打卡时点所属营业日判派驻。
+  - 排班按班次 work_date（即营业日），不变。
+  - 191-R1 原 AccessRepository、JdbcAccessRepository.findDispatchMerchantIdsOn 撤回。
+  ②派驻考勤放行限本酒吧设备：StaffWorkPhoneAttendanceService.events 经派驻放行只列 terminal_devices.merchant_id＝本商户的事件；StaffAttendanceReceiptReviewService.submit、history 经 requireEventScope 按事件所在设备判，别家设备上的照旧 403 STAFF_SCOPE_MISMATCH。
+  ③派驻服务单落派驻目标项目：JdbcServiceOrderRepository.saveOrder(单据, 派驻目标项目) 插入时 project_id 取 staff_dispatch_records.project_id；非派驻照旧按履约人档案，ON CONFLICT 不动。
+  ④apps/web/src/admin/i18n/fieldLabels.ts 的 VALUE_LABELS 补 transfer_undo「撤销转台」。
+  依据：
+  - 第十八批裁决 46 选项原文「凡判断是否在派驻期内都按酒吧营业日：结束日当天的夜班过零点后、到营业日结束前仍算派驻期内。已在派驻期内下的服务单，之后的收款、完成、取消按下单时所属营业日判。派驻提成归集也改按计提时所属营业日。与 ENUM:187 考勤日期、提成月份按营业日一致。」
+  - ENUM:187「……一律以开台或下单时点所属的营业日为准，不按自然日切分」
+  - BSM:1143「其他公司的人员派驻到某家酒吧工作期间，由该酒吧负责排班、现场考勤和履约调度。」
+  - PGM:659「所有业务数据默认按项目隔离，普通岗位没有跨项目查看权」
+  - PGM:287「全局原则 · 界面全中文（所有终端零英文）」
+  回归：
+  - DispatchedPerformerServiceOrderJdbcIntegrationTests（endDateNightAfterMidnightStillOrders、orderPlacedWithinTheDispatchIsCollectedNextBusinessDay、dispatchedPerformerOrderBelongsToTheBarProject）
+  - BarDispatchedServiceStaffJdbcIntegrationTests（endDateNightAfterMidnightStillServes、afterTheEndDateBusinessDayCannotServe）
+  - BarDispatchedStaffBookingJdbcIntegrationTests.endDateNightAfterMidnightKeepsTheBar
+  - DispatchedStaffShiftJdbcIntegrationTests（endDateNightAfterMidnightStillViewsReceipts、attendanceListCountsAfterMidnightPunchesToTheEndDate、receiptsOnAnotherBarsDeviceStayWithThatBar）
+  - DispatchCommissionSettlementJdbcIntegrationTests.dispatchCoverageFollowsTheAccrualBusinessDayOfTheBar
+  - BarTableSessionsPage.transferUndo.test.tsx
+- 18AB 复核修复补记·派驻服务单已有单动作按单据所属项目放行（第 191 条，同根补修）：backend/src/main/java/com/complex/platform/serviceorder/ServiceOrderService.java 已有服务单的 requirePerformerInScope(reach, ServiceOrderRecord) 先看该单 project_id（JdbcServiceOrderRepository.findOrderProjectId）是否在调用方可触及范围内，在即放行，不在再按履约人档案项目与派驻（下单时所属营业日）判；收款、完成、取消、出示收款码同经此方法，派驻目标项目运营（无商户号）可后台取消派驻服务单，别的项目照旧 403 CROSS_PROJECT_FORBIDDEN。doCreateOrder 未选酒吧时，经派驻放行的单按派驻目标项目取费率草案生效营业日，非派驻照旧按履约人档案项目。依据：复核意见 to_fix 第 3 条（B 所在项目的运营「列不出这些单，也没法从该页「后台取消」」）；PGM:659「所有业务数据默认按项目隔离，普通岗位没有跨项目查看权」；BSM:1141「公司账上每一笔都全额入账、可追可查」。回归：DispatchedPerformerServiceOrderJdbcIntegrationTests（barProjectOperatorCancelsDispatchedPerformerOrder、dispatchedOrderWithoutBarTakesFeeDraftDayFromTheBarProject）；同类 orderPlacedWithinTheDispatchIsCollectedNextBusinessDay 去掉「结束日之后营业日下的单照旧 403」一断言（该单落本项目，本项目点单员按单据所属项目即放行）。无迁移、无接口变化。

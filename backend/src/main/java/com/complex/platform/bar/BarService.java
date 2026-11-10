@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.13
+// 文件版本：V0.14
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.PageResponse;
@@ -677,6 +677,25 @@ public class BarService {
                 BarTableSessionAdjustmentRecord.class,
                 BarWriteOperation.TRANSFER_TABLE_SESSION,
                 () -> tableSessionService.transferTableSession(id, request)
+        );
+    }
+
+    /**
+     * 第十八批 AB 段第 190 条 190-R3（BSM:1079「撤销转台……按转台前快照恢复……并完整留痕」；DEC-R6-19「撤销转台＝按原路回退到转台前的台位与进度并留痕」）：
+     * 撤销最近一次转台。HTML 未给撤销另定岗位，撤销是同一转台的原路回退，沿用转台权限；商户闸在幂等之前。
+     */
+    @com.complex.platform.gate.GuardedAction(capability = "bar.table_session.transfer")
+    @Transactional
+    public BarTableSessionAdjustmentRecord undoTableTransfer(String sessionId, BarTableTransferUndoRequest request) {
+        String id = operations.requireText(sessionId, "session_id");
+        tableSessionService.requireSessionInScope(id);
+        return operations.executeWrite(
+                "undoBarTableTransfer:" + id,
+                request == null ? null : request.idempotencyKey(),
+                request,
+                BarTableSessionAdjustmentRecord.class,
+                BarWriteOperation.UNDO_TABLE_TRANSFER,
+                () -> tableSessionService.undoTableTransfer(id, request)
         );
     }
 

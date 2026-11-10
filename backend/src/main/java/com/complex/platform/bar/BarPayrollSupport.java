@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static com.complex.platform.common.Strings.requireText;
 import com.complex.platform.access.AccessActor;
@@ -71,6 +71,9 @@ class BarPayrollSupport {
         if(company==null || jdbc.queryForObject("SELECT count(*) FROM business_entity_projects p JOIN business_entities e ON e.id=p.business_entity_id WHERE p.business_entity_id=? AND p.project_id=? AND e.status='active'",
                 Integer.class,company,project)!=1)throw invalid("经营公司须具有该综合体的有效经营主体关联");
     }
+    /** 第十八批 AB 段第 191 条 191-R4（BSM:1143「其他公司的人员派驻到某家酒吧工作期间，由该酒吧负责排班、现场考勤和履约调度」；
+     *  BSM:1077「主责服务提供人按当日该场次排班指派到该卡座」）：本人以 bar.order.create 触及该项目，或本人持该码且此刻所属该酒吧营业日（第十八批裁决 46）
+     *  派驻到该商户（只看起止日期）；其余条件不变，付款主体仍取档案所属主体。 */
     String requireWorker(String user,String project,String merchant) {
         var p=staff.findProfileByUserId(requireText(user,"user_id")).orElseThrow(()->invalid("服务人员须有员工档案"));
         var u=access.findUserById(user).orElseThrow(()->invalid("服务人员账号不存在"));
@@ -78,7 +81,9 @@ class BarPayrollSupport {
         if(!"active".equals(u.status()) || !"active".equals(p.status()) || !"approved".equals(p.registrationStatus())
                 || p.archivedAt()!=null || !List.of("employed","trial").contains(p.employmentStatus())
                 || access.isEmploymentBusinessBlocked(user,Instant.now())
-                || !auth.canReachProject(subject,project,"bar.order.create")
+                || !(auth.canReachProject(subject,project,"bar.order.create")
+                    || (merchant!=null && auth.canReachProject(subject,u.organizationId(),"bar.order.create")
+                        && staff.dispatchAt(user,merchant,Instant.now()).isPresent()))
                 || (p.merchantId()!=null && !Objects.equals(p.merchantId(),merchant))
                 || (u.merchantId()!=null && !Objects.equals(u.merchantId(),merchant)))
             throw conflict("BAR_SERVICE_WORKER_INVALID","服务人员须在岗且具有本综合体及商户的点单工作权限");
