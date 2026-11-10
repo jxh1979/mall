@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.19
+// 文件版本：V0.20
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
@@ -316,7 +316,7 @@ class BarServiceTests {
         // 扫码点单（绑桌台会话 + 继承入场闸）：开启功能标志后，扫开台会话二维码下单 → 单据绑会话桌台、来源 app/miniapp、
         // 不重复核龄（继承场馆入场闸结论）；bar/桌台取自会话（扫码定位），客户端只传 items。
         BarTableRecord table = service.createTable(new BarTableRequest(
-                "scan-table", "create", List.of(), "bar_1", "VIP 扫码", "card_seat", 0L, 4, "active"));
+                "scan-table", "create", List.of(), "bar_1", "VIP 扫码", "loose_table", 0L, 4, "active"));
         BarProductRecord product = service.createProduct(new BarProductRequest(
                 "scan-product", "create product", List.of(), "bar_1", "精酿", "beer",
                 3800L, null, null, "active", null, null, false, null, null, null, null, null, null, null));

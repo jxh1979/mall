@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.15
+// 文件版本：V0.16
 
 import static com.complex.platform.bar.BarBillRecords.*;
 import static com.complex.platform.bar.BarValidation.*;
@@ -24,6 +24,8 @@ import org.springframework.stereotype.Service;
 public class BarBillingService {
 
     private static final String CURRENCY_CNY = "CNY";
+    /** 留存流水 ID 前缀：作废或反结时被已登记退款占用、不冲正的那部分收款（见 {@link #reverseUnrefundedCollections}）。 */
+    static final String KEPT_SETTLEMENT = "settle_kept_";
     @org.springframework.beans.factory.annotation.Autowired
     BarPayrollSourceService payrollSources;
     @org.springframework.beans.factory.annotation.Autowired
@@ -71,6 +73,9 @@ public class BarBillingService {
     // 第十八批 T 段第 157 条 157-R2：挂起订单结清联动、合单改指（字段注入免改构造点；单测未注入即不联动）。
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     BarOrderSuspensionService suspensions;
+    // 第十八批裁决 45：反结与作废共用「只冲正没被已登记退款占用的收款」（字段注入免改构造点；null＝旧构造/单测内存双子，整笔冲正）。
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    org.springframework.jdbc.core.JdbcTemplate jdbc;
 
     public BarBillingService(
             BarRepository repository,
@@ -443,12 +448,9 @@ public class BarBillingService {
      * 不在结算流水里、没有可回的卡，并入同一笔退款应付。
      */
     long refundCollectedOnVoid(BarBillRecord bill, String reason, long onAccountCollectedCent) {
-        long refunded = repository.listBillAdjustments(bill.id()).stream()
-                .filter(a -> "applied".equals(a.status()))
-                .mapToLong(a -> "refund".equals(a.adjustmentType()) ? a.amountCent()
-                        : "refund_reversal".equals(a.adjustmentType()) ? -a.amountCent() : 0L)
-                .sum();
-        long collected = bill.paidAmountCent() - refunded + onAccountCollectedCent;
+        long refunded = refundedNetCent(bill.id());
+        // 第十八批裁决 45：反结时已留存的收款（被反结前的退款占用）不在重结后的实收里，已退额先扣留存，只按新收款算未退部分。
+        long collected = bill.paidAmountCent() - (refunded - keptCollectedCent(bill.id())) + onAccountCollectedCent;
         if (collected <= 0) {
             return refunded;
         }
@@ -456,6 +458,54 @@ public class BarBillingService {
                 .orElseThrow(() -> ApiException.notFound("BAR_ORDER_NOT_FOUND", "酒吧订单不存在或已被删除"));
         receivableLedgerService.createRefundPayable(bill, order, bill.id(), collected, bill.id(), reason, List.of());
         return refunded;
+    }
+
+    /** 已登记退款净额（applied 的 refund 减 refund_reversal，含财务尚未实付的退款应付）：作废与反结同一取法。 */
+    long refundedNetCent(String billId) {
+        return repository.listBillAdjustments(billId).stream()
+                .filter(a -> "applied".equals(a.status()))
+                .mapToLong(a -> "refund".equals(a.adjustmentType()) ? a.amountCent()
+                        : "refund_reversal".equals(a.adjustmentType()) ? -a.amountCent() : 0L)
+                .sum();
+    }
+
+    /** 本单留存流水合计：作废或反结时被已登记退款占用、不冲正的收款，之后不再冲正、不再退。 */
+    long keptCollectedCent(String billId) {
+        return repository.listBillSettlements(billId).stream().filter(s -> s.id().startsWith(KEPT_SETTLEMENT))
+                .mapToLong(BarBillSettlementRecord::settlementAmountCent).sum();
+    }
+
+    /**
+     * 第十七批⑤（作废）与第十八批裁决 45（反结「只把没退的 2500 收款作废」）共用：已退额按退款原路同序（TK-20-R2「后收的先退」）占在最后几笔收款上，
+     * 本单收款流水整体置冲正，被已退额占用的部分按原收款时点、渠道另记一笔不冲正的留存流水（收款营业日即结账营业日，调用方已校验未锁日结）。
+     * 之前作废或反结已留存的部分即已退款占用，原样保留，已退额先扣它，只在其余收款上再占（反结重结后再作废、再反结时不重复冲减）。
+     */
+    void reverseUnrefundedCollections(String billId, long refunded) {
+        if (jdbc == null) {
+            repository.markBillSettlementsReversed(billId);
+            return;
+        }
+        List<Object[]> kept = new java.util.ArrayList<>();
+        long left = refunded - keptCollectedCent(billId);
+        for (Map<String, Object> s : jdbc.queryForList("""
+                SELECT id, settlement_amount_cent FROM bar_bill_settlements
+                 WHERE bill_id = ? AND NOT reversed AND left(id, 12) <> 'settle_kept_' ORDER BY settled_at DESC, id DESC""", billId)) {
+            if (left <= 0) {
+                break;
+            }
+            long part = Math.min(left, ((Number) s.get("settlement_amount_cent")).longValue());
+            left -= part;
+            kept.add(new Object[] {part, s.get("id")});
+        }
+        jdbc.update("UPDATE bar_bill_settlements SET reversed = TRUE WHERE bill_id = ? AND NOT reversed AND left(id, 12) <> 'settle_kept_'",
+                billId);
+        for (Object[] k : kept) {
+            jdbc.update("""
+                    INSERT INTO bar_bill_settlements (id, bill_id, settle_channel, cashier_staff_id, pos_transaction_no,
+                            settlement_amount_cent, merchant_id, settled_at)
+                    SELECT 'settle_kept_' || md5(id), bill_id, settle_channel, cashier_staff_id, pos_transaction_no, ?, merchant_id, settled_at
+                      FROM bar_bill_settlements WHERE id = ?""", k);
+        }
     }
 
     /** 第十一批 TK-04-R5（ENUM L77「从消费单据可以反查该单产生的积分与成长值记录」）：账单端查看本单商户消费奖励，限本商户。 */
@@ -910,7 +960,12 @@ public class BarBillingService {
         repository.saveBill(reopened);
         // 2c-3 reopen 冲正：把原结算流水标 reversed，使 finance 对账聚合 + analytics 营收聚合排除，
         // 避免反结→重结后原结算与重结算同窗口双计入对账/net。
-        repository.markBillSettlementsReversed(bill.id());
+        // 第十八批 AA 段第 202 条 202-R1（第十八批裁决 39「反结生效时储值部分当场回原卡；现金、POS 等收款记录作废，收银按更正后的账单重新收款」）：
+        // 原收款里经储值支付的部分同一事务当场回原卡（任一失败整笔回滚）；其余渠道随下面冲正作废，不挂退款应付。
+        receivableLedgerService.refundStoredValueOnReopen(bill);
+        // 第十八批裁决 45（「已登记的 500 退款照常由财务付出；反结只把没退的 2500 收款作废，再按更正后的账单重收」）：同第十七批⑤作废，
+        // 被反结前已登记退款（含财务未实付的退款应付）占用的收款另记不冲正的留存，只冲正没退的部分；储值上被占用的部分已由退款回卡，上面不再退。
+        reverseUnrefundedCollections(bill.id(), refundedNetCent(bill.id()));
         auditEventService.recordSuccess("bar.bill_reopened", "bar.bill.reopen", "bar_bill",
                 bill.id(), null, key,
                 Map.of("reopen_count", reopened.reopenCount(), "payable_amount_cent", reopened.payableAmountCent()));

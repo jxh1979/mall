@@ -1,4 +1,4 @@
-# P0 OpenAPI 权限、事件、任务追溯收口附录 V0.58
+# P0 OpenAPI 权限、事件、任务追溯收口附录 V0.59
 
 ## 1. 文档定位
 
@@ -14,11 +14,11 @@
 
 | 检查项 | 当前结果 | 执行结论 |
 |---|---:|---|
-| OpenAPI operation 数 | 1259 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
-| OpenAPI 权限/通用权限状态数 | 424 | 人工权限矩阵正文未覆盖 323 项；缺口以本文第 3 节补齐 |
-| OpenAPI 成功/失败事件数 | 2518 | 人工事件矩阵正文未覆盖 2469 项；完整事件字典以本文第 4 节为准 |
-| operation 级任务追溯 | 1259 | 人工任务映射正文未逐项覆盖 1253 个 operation；逐 operation 映射以本文第 5 节为准 |
-| 写接口数量 | 754 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
+| OpenAPI operation 数 | 1261 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
+| OpenAPI 权限/通用权限状态数 | 425 | 人工权限矩阵正文未覆盖 324 项；缺口以本文第 3 节补齐 |
+| OpenAPI 成功/失败事件数 | 2522 | 人工事件矩阵正文未覆盖 2473 项；完整事件字典以本文第 4 节为准 |
+| operation 级任务追溯 | 1261 | 人工任务映射正文未逐项覆盖 1255 个 operation；逐 operation 映射以本文第 5 节为准 |
+| 写接口数量 | 756 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
 
 ## 3. 权限码与认证上下文补充表
 
@@ -151,6 +151,7 @@
 | `bar.table_session.split` | staff-token | project-bar-table | 1 | splitBarTableSession | OpenAPI 补充，以本附录为准 |
 | `bar.table_session.transfer` | staff-token | project-bar-table, project-merchant | 3 | transferBarTableSession, handoverBarServiceResponsibility, submitBarTableSessionServiceBackfill | OpenAPI 补充，以本附录为准 |
 | `bar.table_session.view` | staff-token | project-bar-table | 1 | listBarTableSessions | OpenAPI 补充，以本附录为准 |
+| `bar.table.disable` | staff-token | project-bar | 2 | disableBarTable, enableBarTable | OpenAPI 补充，以本附录为准 |
 | `bar.table.guest_checkin` | staff-token | project-bar | 1 | verifyBarReservationInvitationEntry | 已在权限矩阵正文出现 |
 | `bar.table.manage` | staff-token | project-bar, project-bar-table | 3 | createBarTable, assignBarTableSpace, listBarTablesWithoutSpace | 已在权限矩阵正文出现 |
 | `bar.table.open_close` | staff-token | project-bar, project-merchant | 3 | openBarTable, clearBarTable, closeBarServiceResponsibility | 已在权限矩阵正文出现 |
@@ -956,6 +957,10 @@
 | `bar.table.changed` | success | `createBarTable` | `POST` | `/api/v1/bar/tables` | BAR-酒吧经营 | `bar.table.manage` | 接口级事件，以本附录为准 |
 | `bar.table.clear_failed` | failure | `clearBarTable` | `POST` | `/api/v1/bar/tables/{table_id}/clear` | BAR-酒吧经营 | `bar.table.open_close` | 接口级事件，以本附录为准 |
 | `bar.table.cleared` | success | `clearBarTable` | `POST` | `/api/v1/bar/tables/{table_id}/clear` | BAR-酒吧经营 | `bar.table.open_close` | 接口级事件，以本附录为准 |
+| `bar.table.disable_failed` | failure | `disableBarTable` | `POST` | `/api/v1/bar/tables/{table_id}/disable` | BAR-酒吧经营 | `bar.table.disable` | 接口级事件，以本附录为准 |
+| `bar.table.disabled` | success | `disableBarTable` | `POST` | `/api/v1/bar/tables/{table_id}/disable` | BAR-酒吧经营 | `bar.table.disable` | 接口级事件，以本附录为准 |
+| `bar.table.enable_failed` | failure | `enableBarTable` | `POST` | `/api/v1/bar/tables/{table_id}/enable` | BAR-酒吧经营 | `bar.table.disable` | 接口级事件，以本附录为准 |
+| `bar.table.enabled` | success | `enableBarTable` | `POST` | `/api/v1/bar/tables/{table_id}/enable` | BAR-酒吧经营 | `bar.table.disable` | 接口级事件，以本附录为准 |
 | `bar.table.open_failed` | failure | `openBarTable` | `POST` | `/api/v1/bar/tables/{table_id}/open` | BAR-酒吧经营 | `bar.table.open_close` | 接口级事件，以本附录为准 |
 | `bar.table.opened` | success | `openBarTable` | `POST` | `/api/v1/bar/tables/{table_id}/open` | BAR-酒吧经营 | `bar.table.open_close` | 接口级事件，以本附录为准 |
 | `bar.table.split` | success | `splitBarTableSession` | `POST` | `/api/v1/bar/table-sessions/{session_id}/split` | BAR-酒吧经营 | `bar.table_session.split` | 接口级事件，以本附录为准 |
@@ -3185,7 +3190,9 @@
 | BAR-酒吧经营 | `decideBarOrderItemVoid` | `POST` | `/api/v1/bar/order-item-voids/{void_id}/decision` | 退菜退酒审批决策（通过/驳回） | `bar.order_item.void` | `bar.order_item_void_decided` / `bar.order_item_void.decide_failed` | web | operation 级补充 |
 | BAR-酒吧经营 | `decideBarOrderSuspensionCancel` | `POST` | `/api/v1/bar/orders/{order_id}/suspension/cancel-decision` | 经理审批取消挂起订单 | `bar.bill.hang_cancel` | `bar.order_suspension_cancel_decided` / `bar.order_suspension_cancel_decide_failed` | web | operation 级补充 |
 | BAR-酒吧经营 | `deliverBarOrder` | `POST` | `/api/v1/bar/orders/{order_id}/deliver` | 出酒或送达确认 | `bar.order.create` | `bar.order_delivered` / `bar.order_deliver_failed` | staff_work_phone, web | operation 级补充 |
+| BAR-酒吧经营 | `disableBarTable` | `POST` | `/api/v1/bar/tables/{table_id}/disable` | 停用台位（店长） | `bar.table.disable` | `bar.table.disabled` / `bar.table.disable_failed` | web | operation 级补充 |
 | BAR-酒吧经营 | `draftBarPayrollRule` | `POST` | `/api/v1/bar/payroll-rules` | 保存完整规则草案 | `bar.payroll.manage` | `bar.payroll_rule.drafted` / `bar.payroll_rule.draft_failed` | web | operation 级补充 |
+| BAR-酒吧经营 | `enableBarTable` | `POST` | `/api/v1/bar/tables/{table_id}/enable` | 恢复停用台位（店长） | `bar.table.disable` | `bar.table.enabled` / `bar.table.enable_failed` | web | operation 级补充 |
 | BAR-酒吧经营 | `exportBarSuspendedOrders` | `GET` | `/api/v1/bar/suspended-orders/export` | 导出挂起订单风险看板（敏感） | `audit.operation_log.export` | `bar.order_suspension.exported` / `bar.order_suspension.export_failed` | web | operation 级补充 |
 | BAR-酒吧经营 | `getBarArrivalReminderPolicy` | `GET` | `/api/v1/bar/arrival-reminder-policies/{project_id}` | 查最晚到店时间前提醒提前分钟数（按项目） | `bar.reservation.view` | `not_applicable` / `not_applicable` | web | operation 级补充 |
 | BAR-酒吧经营 | `getBarBillRefundContext` | `GET` | `/api/v1/bar/bills/{id}/refund-context` | 读取本账单真实退款来源及累计明细 | `bar.bill.refund` | `bar.refund_context.read` / `bar.refund_context.read_failed` | web | operation 级补充 |

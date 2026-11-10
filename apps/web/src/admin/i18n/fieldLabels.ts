@@ -1,4 +1,4 @@
-// 文件版本：V0.25
+// 文件版本：V0.26
 // OBS-14-02 后台结果区字段中文名字典（PGM「全局原则 · 界面全中文（所有终端零英文）」）。
 // 键用后端 JSON 的蛇形写法；结果区查表时蛇形与驼峰同查（orderId / order_id 都命中 order_id）。
 // 与后端字段中文名表 FieldLabels.java（common.api 包）同键同名：前段按后端原样抄录，后端改名这里跟着改（门禁会比对）。
@@ -2883,6 +2883,9 @@ export const VALUE_LABELS: Record<string, string> = {
   bar_order_item_void_rejected: "订单明细作废已驳回",
   bar_table_clear: "桌台清台",
   bar_table_create: "新建桌台",
+  // 第十八批 AA 段第 206 条 206-R2：台位停用与恢复（ENUM:100）。
+  bar_table_disabled: "台位已停用",
+  bar_table_enabled: "台位已恢复",
   bar_reservation_create: "新建订台",
   bar_table_session_create: "开台",
   bar_table_session_transfer: "转台",
@@ -3223,6 +3226,7 @@ export const VALUE_LABELS: Record<string, string> = {
   bar_bill_settled: "酒吧账单已结账",
   bar_bill_anomaly_raised: "酒吧账单争议已登记",
   bar_bill_anomaly_resolved: "酒吧账单异常已处置",
+  bar_bill_reopened: "酒吧账单已反结",
   // 第十八批 T 段第 157 条 157-R2：挂起动作与挂起七态中账单状态表里没有的四个（BSM:1105）。
   bar_order_suspended: "包厢订单已挂起",
   bar_order_suspension_bad_debt: "挂起订单已转坏账",

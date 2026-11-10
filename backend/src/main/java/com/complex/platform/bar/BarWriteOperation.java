@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.08
+// 文件版本：V0.09
 
 import com.complex.platform.evidence.AuditedOperation;
 
@@ -23,6 +23,9 @@ enum BarWriteOperation implements AuditedOperation {
     OPEN_TABLE("bar.table.opened", "bar.table.open_failed", "bar.table.open_close", "bar_table"),
     // 第十批 TK-27-R2：清台登记恢复空闲（BSM L1058）。
     CLEAR_TABLE("bar.table.cleared", "bar.table.clear_failed", "bar.table.open_close", "bar_table"),
+    // 第十八批 AA 段第 206 条 206-R1：台位停用与恢复（ENUM:100、BSM:1058「台位停用与恢复由店长及以上操作，填原因留痕」）。
+    DISABLE_TABLE("bar.table.disabled", "bar.table.disable_failed", "bar.table.disable", "bar_table"),
+    ENABLE_TABLE("bar.table.enabled", "bar.table.enable_failed", "bar.table.disable", "bar_table"),
     CREATE_TABLE_SESSION("bar.table_session.create", "bar.table_session.create_failed", "bar.table_session.create", "bar_table_session"),
     TRANSFER_TABLE_SESSION("bar.table.transferred", "bar.table_session.transfer_failed", "bar.table_session.transfer", "bar_table_session_adjustment"),
     MERGE_TABLE_SESSIONS("bar.table_session.merge", "bar.table_session.merge_failed", "bar.table_session.merge", "bar_table_session_adjustment"),

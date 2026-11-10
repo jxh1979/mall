@@ -1,6 +1,6 @@
 package com.complex.terminal
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import com.sun.net.httpserver.HttpServer
 import java.net.InetSocketAddress
@@ -80,6 +80,15 @@ class KioskReservationApiTest {
     assertEquals("包厢", barTableTypeZh("vip"))
     assertEquals("吧台位", barTableTypeZh("bar_counter"))
     assertEquals("散台", barTableTypeZh("loose_table"))
+  }
+
+  // 第十八批 AA 段第 206 条 206-R3（ENUM:100「台位未被占用——既无有效预留也未开台——时即可再次接受预订」）：一体机订台与员工代订列表按台位状态显示，
+  // 中文名同后台卡座表（空闲、已开台、待清台、停用），已开台、待清台不再显示「空」；有效预留仍显示「已订」。
+  @Test
+  fun bookingListLabelsFollowTableStatus() {
+    fun row(status: String, reserved: Boolean = false) = BarTableAvailabilityRow(id = "t", status = status, reserved = reserved)
+    assertEquals(listOf("空闲", "已开台", "待清台", "停用", "已订"),
+      listOf(row("active"), row("opened"), row("pending_clear"), row("disabled"), row("active", true)).map { barTableBookingLabel(it) })
   }
 
   @Test

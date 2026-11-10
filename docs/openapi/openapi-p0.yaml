@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: 综合体管理系统 P0 API 契约
-  version: V0.58
+  version: V0.59
   description: P0 首批编码前置契约。本文采用 JSON-compatible YAML，便于与 openapi-p0.json 保持一致。正式后端以 Java 21 + Spring Boot 4.x +
     springdoc-openapi 输出运行时 OpenAPI，并与本契约比对。
 servers:
@@ -2468,6 +2468,7 @@ paths:
       operationId: createBarOrder
       x-failure-codes:
         - CONTRACT_SCOPE_VIOLATION
+        - BAR_TABLE_DISABLED
       summary: 点单
       description: 订单销售取该台位当前开台会话的销售归属，不由请求指定、不取下单人（第十八批 I 段第 86 条，BSM 第 1070 行「只归帮该客人预订的那个人」）；没有开台会话（吧台直点）的订单无销售。第十八批 N 段第 120 条 120-R4（BSM:1611「订单从哪里来，是官方 App/小程序、第三方、销售人员、一体机还是现场工作台。」；BSM:1004「……一体机的下单、领取、状态检查和异常提示都要记录设备、点位和时间。」）：订单创建终端 created_terminal 取请求的可信终端（没有即 web），可信终端是一体机时订单来源 order_source 记 kiosk（其余 staff），有可信设备号即记 device_id；一体机吧台买酒按本机酒吧的吧台位下单（吧台位不建出品票），再经 POST /api/v1/bar/orders/{order_id}/bill 生成待支付账单。第十八批 T 段第 157 条 157-R1（BSM:1064、ENUM:117「最低消费是下单的前置条件：客人在该台位下单时，本次下单后的累计消费金额必须达到该台位适用的最低消费，未达到的不允许提交订单。」）：凡该台位适用的最低消费大于 0（不论台位类型），有开台会话按台组阈值与累计进度、无会话按台位低消对本单金额判，本次下单后累计未达到即 409 BAR_MIN_CONSUMPTION_NOT_MET，整单不落；散台、卡座须下单当场付款（第十八批裁决 37），本单账单付清后才能出品（见 POST /api/v1/bar/orders/{order_id}/deliver）。
       x-permission: bar.order.create
@@ -3001,6 +3002,110 @@ paths:
       x-auth-context: staff-token
       x-failure-codes:
         - BAR_TABLE_NOT_PENDING_CLEAR
+  /api/v1/bar/tables/{table_id}/disable:
+    post:
+      tags:
+        - bar
+      operationId: disableBarTable
+      summary: 停用台位（店长）
+      description: 第十八批 AA 段第 206 条 206-R1（ENUM:100「台位停用与恢复由店长及以上操作，填原因留痕」「已预留只能经取消订台、超时释放、到店开台三条路径退出」；BSM:1058 同句）：只停空闲台位（active 且没有被有效预留占着），已预留、已开台、待清台的 409 BAR_TABLE_NOT_DISABLABLE（须先按取消订台、关台、清台流程回到空闲）；成功后台位为停用（disabled），不能开台、转入、被订台，客人订台选项不再出现，吧台位下单 409 BAR_TABLE_DISABLED。原因必填，成功留痕带原因与前后状态；别的商户的台位 403 CROSS_MERCHANT_FORBIDDEN，且不占请求编号。
+      x-auth-context: staff-token
+      x-permission: bar.table.disable
+      x-data-scope: project-bar
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: bar.table.disabled
+      x-audit-event-failure: bar.table.disable_failed
+      x-failure-codes:
+        - BAR_TABLE_NOT_DISABLABLE
+        - CROSS_MERCHANT_FORBIDDEN
+      parameters:
+        - $ref: "#/components/parameters/TableId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - idempotency_key
+                - reason
+              properties:
+                idempotency_key:
+                  type: string
+                  maxLength: 128
+                  description: 操作幂等键；重复提交返回第一次的结果。
+                reason:
+                  type: string
+                  maxLength: 1000
+                  description: 停用原因（必填，进入审计留痕）。
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/bar/tables/{table_id}/enable:
+    post:
+      tags:
+        - bar
+      operationId: enableBarTable
+      summary: 恢复停用台位（店长）
+      description: 第十八批 AA 段第 206 条 206-R1（ENUM:100「台位停用与恢复由店长及以上操作，填原因留痕」；BSM:1058 同句）：只收停用（disabled）台位，否则 409 BAR_TABLE_NOT_DISABLED；成功后台位回空闲（active），可再开台、被订台、下单。原因必填，成功留痕带原因与前后状态；别的商户的台位 403 CROSS_MERCHANT_FORBIDDEN，且不占请求编号。
+      x-auth-context: staff-token
+      x-permission: bar.table.disable
+      x-data-scope: project-bar
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: bar.table.enabled
+      x-audit-event-failure: bar.table.enable_failed
+      x-failure-codes:
+        - BAR_TABLE_NOT_DISABLED
+        - CROSS_MERCHANT_FORBIDDEN
+      parameters:
+        - $ref: "#/components/parameters/TableId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - idempotency_key
+                - reason
+              properties:
+                idempotency_key:
+                  type: string
+                  maxLength: 128
+                  description: 操作幂等键；重复提交返回第一次的结果。
+                reason:
+                  type: string
+                  maxLength: 1000
+                  description: 恢复原因（必填，进入审计留痕）。
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
   /api/v1/customer/auth/phone-login:
     post:
       tags:
@@ -16858,6 +16963,7 @@ paths:
         - bar
       operationId: reopenBarBill
       summary: 账单反结
+      description: 第十八批 AA 段第 202 条 202-R1（BSM:1069「反结（重开已结账单）、沽清（卖完、临时下架）均需主管审批留痕」；ENUM:111 高危动作「反结、沽清、免单、账单调整、存酒作废（照片+视频）。」）：反结须主管审批——首次提交一律 409 ADMISSION_BLOCKED，并建主管复核单（单号在提示里），审批链按上一级沿发起人直接上级生成；主管批准后发起人以同样内容（提交编号除外）原样再提交才执行，批准只能用一次，再反结须重新审批；发起人不能审批自己的复核单。执行时账单不是已结账 409 BAR_BILL_NOT_REOPENABLE，异常 409 BAR_BILL_ABNORMAL，已作废 409 BAR_BILL_VOIDED，结账营业日已锁 409 DAY_CLOSE_LOCKED；reason 必填。生效后账单回到未付、未结（reopened 置真、reopen_count 加一），记一行反结操作（原因、发起人、前后快照）与审计 bar.bill_reopened。第十八批裁决 39：原收款里经储值支付的部分同一事务当场退回原卡（先赠送金后本金），现金、POS、聚合支付等其余收款记录冲正作废、不挂退款应付，由收银按更正后的账单重新收款；同一反结重放不重复退卡。第十八批裁决 45：反结前已登记的退款（含财务尚未实付的退款应付）照常由财务付出、不另挂应付，反结只冲正未被已退额占用的收款，占用部分按「后收的先退」以原收款时点、渠道另记一笔不冲正的留存流水，储值退卡只退实际冲正的储值部分；与作废并冲正同口径，不重复冲减。
       x-permission: bar.bill.reopen
       x-data-scope: project-bar-table
       x-terminal-allowed:
@@ -16880,6 +16986,12 @@ paths:
           $ref: "#/components/responses/Error"
         "500":
           $ref: "#/components/responses/Error"
+      x-failure-codes:
+        - ADMISSION_BLOCKED
+        - BAR_BILL_NOT_REOPENABLE
+        - BAR_BILL_ABNORMAL
+        - BAR_BILL_VOIDED
+        - DAY_CLOSE_LOCKED
   /api/v1/bar/bills/{bill_id}/anomaly:
     post:
       tags:
@@ -24479,8 +24591,9 @@ paths:
       operationId: placeBarScanOrder
       x-failure-codes:
         - CONTRACT_SCOPE_VIOLATION
+        - BAR_SCAN_ORDER_TABLE_NOT_ALLOWED
       summary: 扫码点单（绑桌台会话）
-      description: 订单销售取该台位当前开台会话的销售归属，不由请求指定、不取下单人（第十八批 I 段第 86 条，BSM 第 1070 行「只归帮该客人预订的那个人」）；没有开台会话（吧台直点）的订单无销售。第十八批 T 段第 157 条 157-R1：同 POST /api/v1/bar/orders，下单即按台组判最低消费（BSM:1064、ENUM:117），本次下单后累计未达到 409 BAR_MIN_CONSUMPTION_NOT_MET；散台订单本单账单付清后才能出品。
+      description: 订单销售取该台位当前开台会话的销售归属，不由请求指定、不取下单人（第十八批 I 段第 86 条，BSM 第 1070 行「只归帮该客人预订的那个人」）；没有开台会话（吧台直点）的订单无销售。第十八批 T 段第 157 条 157-R1：同 POST /api/v1/bar/orders，下单即按台组判最低消费（BSM:1064、ENUM:117），本次下单后累计未达到 409 BAR_MIN_CONSUMPTION_NOT_MET；散台订单本单账单付清后才能出品。第十八批 AA 段第 203 条 203-R1：台位不是散台（卡座、包厢、吧台位）返回 409 BAR_SCAN_ORDER_TABLE_NOT_ALLOWED，不落单（BSM:1025「扫码点单只适用于散台，卡座不开放扫码点单」；PGM:744「前端隐藏只是辅助，后端接口必须独立校验」）。
       x-permission: bar.order.create
       x-data-scope: project-bar-table
       x-terminal-allowed:

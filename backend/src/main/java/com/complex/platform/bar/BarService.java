@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.12
+// 文件版本：V0.13
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.PageResponse;
@@ -615,6 +615,34 @@ public class BarService {
                 BarTableRecord.class,
                 BarWriteOperation.CLEAR_TABLE,
                 () -> tableSessionService.clearTable(id, request)
+        );
+    }
+
+    /** 第十八批 AA 段第 206 条 206-R1（ENUM:100、BSM:1058「台位停用与恢复由店长及以上操作，填原因留痕」）：商户闸在幂等之前；留痕带原因与前后状态。 */
+    @com.complex.platform.gate.GuardedAction(capability = "bar.table.disable")
+    @Transactional
+    public BarTableRecord disableTable(String tableId, BarTableStatusChangeRequest request) {
+        return changeTableStatus(tableId, request, true);
+    }
+
+    @com.complex.platform.gate.GuardedAction(capability = "bar.table.disable")
+    @Transactional
+    public BarTableRecord enableTable(String tableId, BarTableStatusChangeRequest request) {
+        return changeTableStatus(tableId, request, false);
+    }
+
+    private BarTableRecord changeTableStatus(String tableId, BarTableStatusChangeRequest request, boolean disable) {
+        String id = operations.requireText(tableId, "table_id");
+        tableSessionService.requireTableInScope(id);
+        Map<String, Object> detail = new java.util.LinkedHashMap<>();
+        return operations.executeWriteFilling(
+                (disable ? "disableBarTable:" : "enableBarTable:") + id,
+                request == null ? null : request.idempotencyKey(),
+                request,
+                BarTableRecord.class,
+                disable ? BarWriteOperation.DISABLE_TABLE : BarWriteOperation.ENABLE_TABLE,
+                detail,
+                () -> tableSessionService.changeTableStatus(id, request, disable, detail)
         );
     }
 

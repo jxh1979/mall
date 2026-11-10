@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.10
+// 文件版本：V0.11
 import static com.complex.platform.common.api.ApiRequests.requireIdempotencyKey;
 
 import com.complex.platform.access.AuthorizationService;
@@ -732,6 +732,28 @@ public class BarController {
         authorizationService.requirePermission("bar.table.open_close");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.clearTable(tableId, request));
+    }
+
+    /** 第十八批 AA 段第 206 条 206-R1：台位停用（ENUM:100、BSM:1058「台位停用与恢复由店长及以上操作，填原因留痕」）；只停空闲台位，原因必填。 */
+    @PostMapping("/tables/{table_id}/disable")
+    public ApiResponse<BarTableRecord> disableTable(
+            @PathVariable("table_id") String tableId,
+            @RequestBody(required = false) @jakarta.validation.Valid BarTableStatusChangeRequest request
+    ) {
+        authorizationService.requirePermission("bar.table.disable");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.disableTable(tableId, request));
+    }
+
+    /** 第十八批 AA 段第 206 条 206-R1：停用台位恢复空闲（同上），原因必填。 */
+    @PostMapping("/tables/{table_id}/enable")
+    public ApiResponse<BarTableRecord> enableTable(
+            @PathVariable("table_id") String tableId,
+            @RequestBody(required = false) @jakarta.validation.Valid BarTableStatusChangeRequest request
+    ) {
+        authorizationService.requirePermission("bar.table.disable");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.enableTable(tableId, request));
     }
 
     @GetMapping("/table-sessions")

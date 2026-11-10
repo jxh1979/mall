@@ -1,6 +1,6 @@
 package com.complex.terminal
 
-// 文件版本：V0.17
+// 文件版本：V0.18
 
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
@@ -634,6 +634,19 @@ fun barTableTypeZh(type: String?): String = when (type) {
   "bar_counter" -> "吧台位"
   "loose_table" -> "散台"
   else -> type ?: "-"
+}
+
+/**
+ * 第十八批 AA 段第 206 条 206-R3（ENUM:100「桌台/卡座/吧台位状态｜空闲、已预留、已开台、待清台、停用、异常」；
+ * 「台位未被占用——既无有效预留也未开台——时即可再次接受预订」）：一体机订台与员工代订列表的台位状态，有效预留显示「已订」，
+ * 其余按台位状态显示，中文名同后台卡座表（206-R2）。
+ */
+fun barTableBookingLabel(row: BarTableAvailabilityRow): String = if (row.reserved == true) "已订" else when (row.status) {
+  "active" -> "空闲"
+  "opened" -> "已开台"
+  "pending_clear" -> "待清台"
+  "disabled" -> "停用"
+  else -> row.status ?: "-"
 }
 
 // ── 第十八批 W 段第 192 条 192-R2（PGM:287「……状态、枚举取值、按钮、提示、报错……必须全部为中文……」；ENUM:41「票/权益状态」「未使用、部分使用、已使用、已过期、已退款、已作废」）：

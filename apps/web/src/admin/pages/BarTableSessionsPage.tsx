@@ -1,4 +1,4 @@
-// 文件版本：V0.16
+// 文件版本：V0.17
 import React from "react";
 import { QRCodeSVG } from "qrcode.react";
 import { buildCustomerLink } from "@complex/customer-core/links";
@@ -42,6 +42,14 @@ const BAR_SESSION_CREATE_PERMISSION = "bar.table_session.create";
 const BAR_TABLE_OPEN_CLOSE_PERMISSION = "bar.table.open_close";
 // 第十八批 C 段第 15 条（BSM L1468「……自动停用其代订权限，由店长复核后恢复」）。
 const BAR_STAFF_BOOKING_RESTORE_PERMISSION = "bar.staff_booking.restore";
+// 第十八批 AA 段第 206 条 206-R2（ENUM:100「台位停用与恢复由店长及以上操作，填原因留痕」）。
+const BAR_TABLE_DISABLE_PERMISSION = "bar.table.disable";
+// 同上（ENUM:100「桌台/卡座/吧台位状态｜空闲、已预留、已开台、待清台、停用、异常」，PGM:287 状态全中文）：台位状态按 ENUM 名称显示。
+const TABLE_STATUS_LABELS: Record<string, string> = { active: "空闲", opened: "已开台", pending_clear: "待清台", disabled: "停用" };
+function tableStatusLabel(row: BarTableRow) {
+  if (row.heldReservationId) return "已预留";
+  return (row.status ? TABLE_STATUS_LABELS[row.status] : undefined) ?? formatBusinessStatus(row.status);
+}
 
 /** 本地日期时间（datetime-local）→ UTC 时刻串；同一输入总得同一串，重复提交时请求内容逐字不变。 */
 function localDateTimeToUtc(value: string) {
@@ -140,7 +148,7 @@ export function BarTableSessionsPage({ api, setActionResult, setGlobalError, eff
         { label: "卡座", value: row.tableCode ?? row.tableName ?? "—" },
         { label: "所属酒吧", value: row.barId ?? "—" },
         { label: "容量", value: row.capacity ?? row.guestLimit ? `${row.capacity ?? row.guestLimit} 人` : "—" },
-        { label: "状态", value: formatBusinessStatus(row.status) },
+        { label: "状态", value: tableStatusLabel(row) },
       ],
     });
   }
@@ -242,6 +250,32 @@ export function BarTableSessionsPage({ api, setActionResult, setGlobalError, eff
       setBarError(message);
       setGlobalError(message);
       setActionResult({ action: "bar_table_clear", status: "failed", message });
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  // 第十八批 AA 段第 206 条 206-R2：空闲台位停用、停用台位恢复，原因必填（空则不发）；能否停用由服务端按台位当前状态判。
+  async function changeTableStatus(table: BarTableRow, disable: boolean) {
+    const label = disable ? "停用" : "恢复";
+    const reason = window.prompt(`${label}原因（必填）：`)?.trim();
+    if (!reason) {
+      setBarError(`${label}台位须填写原因。`);
+      return;
+    }
+    const action = disable ? "bar_table_disabled" : "bar_table_enabled";
+    setSubmitting(true);
+    setGlobalError(null);
+    try {
+      const result = await api.post(`/api/v1/bar/tables/${encodeURIComponent(table.id)}/${disable ? "disable" : "enable"}`, { reason });
+      setActionResult({ action, status: disable ? "disabled" : "enabled", tableId: table.id, result });
+      setBarError("");
+      await reload();
+    } catch (actionError) {
+      const message = actionError instanceof Error ? actionError.message : `${label}台位失败`;
+      setBarError(message);
+      setGlobalError(message);
+      setActionResult({ action, status: "failed", message });
     } finally {
       setSubmitting(false);
     }
@@ -656,12 +690,15 @@ export function BarTableSessionsPage({ api, setActionResult, setGlobalError, eff
         <h3>卡座</h3>
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="bar-tables-table">
-            <thead><tr><th>卡座</th><th>容量</th><th>状态</th><th>待清台</th><th>详情</th></tr></thead>
-            <tbody>{tables.map((row) => <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`bar-table-row-${row.id}`} onClick={() => openTableDetail(row)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openTableDetail(row); } }}><td>{row.tableCode ?? row.tableName}</td><td>{row.capacity ?? row.guestLimit} 人</td><td>{formatBusinessStatus(row.status)}{row.heldReservationId ? <span data-testid={`bar-table-held-${row.id}`}>（已预留 · 订台号 {row.heldReservationId}）</span> : null}</td>
+            <thead><tr><th>卡座</th><th>容量</th><th>状态</th><th>待清台</th><th>操作</th><th>详情</th></tr></thead>
+            <tbody>{tables.map((row) => <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`bar-table-row-${row.id}`} onClick={() => openTableDetail(row)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openTableDetail(row); } }}><td>{row.tableCode ?? row.tableName}</td><td>{row.capacity ?? row.guestLimit} 人</td><td>{row.heldReservationId ? <span data-testid={`bar-table-held-${row.id}`}>已预留 · 订台号 {row.heldReservationId}</span> : tableStatusLabel(row)}</td>
               <td onClick={(event) => event.stopPropagation()}>{row.status === "pending_clear" ? <>
                 <span className={row.pendingClearOverdue ? "admin-inline-error" : undefined}>{row.pendingClearOverdue ? "已超时，请提醒当班主管" : "清理中"}{row.pendingClearSince ? ` · ${cnDate(row.pendingClearSince)} 起` : ""}</span>
                 <PermissionButton permissionsState={effectivePermissions} permissions={[BAR_TABLE_OPEN_CLOSE_PERMISSION]} disabled={submitting} onClick={() => void clearTable(row)} data-testid={`bar-table-clear-${row.id}`}>登记恢复空闲</PermissionButton>
               </> : "—"}</td>
+              <td onClick={(event) => event.stopPropagation()}>{(row.status === "active" && !row.heldReservationId) || row.status === "disabled"
+                ? <PermissionButton permissionsState={effectivePermissions} permissions={[BAR_TABLE_DISABLE_PERMISSION]} disabled={submitting} onClick={() => void changeTableStatus(row, row.status === "active")} data-testid={`bar-table-${row.status === "active" ? "disable" : "enable"}-${row.id}`}>{row.status === "active" ? "停用" : "恢复"}</PermissionButton>
+                : "—"}</td>
               <td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看卡座详情" onClick={(event) => { event.stopPropagation(); openTableDetail(row); }}>查看详情</button>
                 {row.tableType === "loose_table" ? <button type="button" className="admin-row-detail-btn" data-testid={`bar-table-qr-${row.id}`} onClick={(event) => { event.stopPropagation(); setQrTableId(qrTableId === row.id ? "" : row.id); }}>桌台二维码</button> : null}</td></tr>)}</tbody>
           </table>

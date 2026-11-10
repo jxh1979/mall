@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.11
+// 文件版本：V0.12
 
 import com.complex.platform.finance.PaymentIntentRecord;
 import java.util.List;
@@ -192,6 +192,10 @@ public interface BarRepository {
 
     /** 第十八批 S 段第 167 条 167-R1：锁台组根会话行（JDBC：SELECT … FOR UPDATE），序列化台组内的名额校验。内存桩默认无操作。 */
     default void lockTableSession(String sessionId) {
+    }
+
+    /** 第十八批 AA 段第 206 条 206-R1：锁台位行（JDBC：SELECT … FOR UPDATE），停用与订台占台串行。内存桩默认无操作。 */
+    default void lockTable(String tableId) {
     }
 
     // ── 第十八批 T 段第 167 条 167-R3a：并台期间新发出的邀请及其成员，首次拆台前分配到某一张原台（BSM:1079）。内存桩默认空实现 ──

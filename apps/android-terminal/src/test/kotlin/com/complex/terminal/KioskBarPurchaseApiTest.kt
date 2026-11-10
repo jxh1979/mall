@@ -1,6 +1,6 @@
 package com.complex.terminal
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import com.sun.net.httpserver.HttpServer
 import java.net.InetSocketAddress
@@ -51,6 +51,17 @@ class KioskBarPurchaseApiTest {
     )
     assertEquals(listOf("counter_1", "counter_2"), kioskBarCounters(rows, "bar_1").map { it.id })
     assertEquals(emptyList(), kioskBarCounters(rows, "bar_2").map { it.id })
+  }
+
+  // 第十八批 AA 段第 206 条 206-R3（ENUM:100「桌台/卡座/吧台位状态｜空闲、已预留、已开台、待清台、停用、异常」；「台位停用与恢复由店长及以上操作，填原因留痕」）：
+  // 停用的吧台位不给一体机买酒（只有一个吧台位时会直接进点单，停用的每单 409）。
+  @Test
+  fun disabledBarCounterSeatIsNotOffered() {
+    val rows = listOf(
+      BarTableAvailabilityRow(id = "counter_1", barId = "bar_1", tableType = "bar_counter", status = "active"),
+      BarTableAvailabilityRow(id = "counter_2", barId = "bar_1", tableType = "bar_counter", status = "disabled"),
+    )
+    assertEquals(listOf("counter_1"), kioskBarCounters(rows, "bar_1").map { it.id })
   }
 
   @Test

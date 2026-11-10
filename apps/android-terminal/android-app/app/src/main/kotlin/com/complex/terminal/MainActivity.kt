@@ -1,6 +1,6 @@
 package com.complex.terminal
 
-// 文件版本：V0.23
+// 文件版本：V0.24
 
 import android.app.Activity
 import android.content.Intent
@@ -812,7 +812,7 @@ class MainActivity : Activity() {
   /**
    * 第十八批 N 段第 120 条 120-R3（BSM:987「支持订台下单：选择酒吧、日期、时段、卡座/桌台/吧台位、人数和订台备注；订台需要支付定金。」；
    * BSM:1058「……客人自助订台支付定金成功……该台位即进入已预留……冲突时先支付定金者得……」）：一体机订台屏，常驻会话即可下（客人可自助）。
-   * 先选酒吧再选台位（已订的置灰），填到店时间、最晚到店时间、人数、客人手机号、订台备注下单；服务端按一体机来源记定金待付，
+   * 先选酒吧再选台位（已订、已开台、待清台、停用的置灰，第十八批 AA 段 206-R3），填到店时间、最晚到店时间、人数、客人手机号、订台备注下单；服务端按一体机来源记定金待付，
    * 收定金走 [kioskPayStep]（授权员工登记现金 / POS），登记后才保留台位。
    */
   private fun showKioskReservation() {
@@ -833,10 +833,11 @@ class MainActivity : Activity() {
       val list = rows.filter { it.barId == barId }
       fillSelectableRows(tables, list.map { r ->
         "${r.tableCode ?: r.id} ${r.tableName ?: ""} ${barTableTypeZh(r.tableType)}　可坐 ${r.capacity ?: 0} 人　低消 ¥${yuan(r.minConsumptionCent)}" +
-          (if (r.reserved == true) "　已订" else "") to { picked = r; status.text = "已选台位：${r.tableCode ?: r.id}" }
+          (if (r.reserved == true || r.status != "active") "　${barTableBookingLabel(r)}" else "") to { picked = r; status.text = "已选台位：${r.tableCode ?: r.id}" }
       }, "该酒吧暂无台位")
-      list.forEachIndexed { i, r -> if (r.reserved == true) tables.getChildAt(i)?.apply { isEnabled = false; alpha = 0.4f } }
-      status.text = "请选台位（已订的不可选）"
+      // 206-R3（ENUM:100「台位未被占用——既无有效预留也未开台——时即可再次接受预订」）：已订、已开台、待清台、停用的置灰不可点。
+      list.forEachIndexed { i, r -> if (r.reserved == true || r.status != "active") tables.getChildAt(i)?.apply { isEnabled = false; alpha = 0.4f } }
+      status.text = "请选台位（已订、已开台、待清台、停用的不可选）"
     }
     val submit = button("提交订台") {
       val table = picked ?: run { status.text = "请先选酒吧和台位"; return@button }
@@ -1837,7 +1838,7 @@ class MainActivity : Activity() {
         fillSelectableRows(
           list,
           rows.map { r ->
-            "${if (r.reserved == true) "[已订]" else "[空]"} ${r.tableCode ?: r.id} ${r.tableName ?: ""} " +
+            "[${barTableBookingLabel(r)}] ${r.tableCode ?: r.id} ${r.tableName ?: ""} " +
               "${barTableTypeZh(r.tableType)} ${r.capacity ?: 0}人 低消 ¥${"%.2f".format((r.minConsumptionCent ?: 0) / 100.0)}" to {
               tableId.setText(r.id ?: "")
               r.barId?.let { barId.setText(it) }
@@ -1846,6 +1847,8 @@ class MainActivity : Activity() {
           },
           emptyText = "暂无桌位",
         )
+        // 第十八批 AA 段第 206 条 206-R3（ENUM:100「台位未被占用——既无有效预留也未开台——时即可再次接受预订」）：已开台、待清台、停用的标明状态并置灰不可点。
+        rows.forEachIndexed { i, r -> if (r.status != "active") list.getChildAt(i)?.apply { isEnabled = false; alpha = 0.4f } }
       },
       onError = { status.text = "拉取失败：${friendly(it)}" },
     )

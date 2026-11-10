@@ -1,6 +1,6 @@
 # PRD 审计业务裁决台账
 
-文档版本：V0.81
+文档版本：V0.82
 状态：进行中
 迁移日期：2026-07-27
 当前事实源：三份立法 HTML 以既有冻结基线叠加 James 此前 M02 至 M08 的点名批准、全量审计 M001、M002 的逐项批准，以及本轮 2026-10-16 至 2026-10-17 业务 HTML 审计中 Q01 至 Q40 及子题实际明确批准且未被后续替代的裁决，和 2026-10-17 第二批 HTML 业务线推演审计（A–F 六线 64 条、停车章）的逐项批准，并叠加本轮 CG 70 项来源确认与 C01–C09、N01–N03 最终澄清及补全文稿中 F01、W01–W05 的整体修改批准（本文件末节）；本轮最终规则、未采纳或替代关系、现行版本与字节哈希见本文件末节。历史记录保留为各自当时事实，不恢复已被替代的建议。
@@ -3949,6 +3949,7 @@ HTML 的语义补齐与直接引用同步可在本批核验；70项中的业务�
 | 42 | **第 210 条 分红净利润扣税费的登记与出单前提**（题面：「第 210 条：分红净利润要扣「该期间的各项税费」，系统现在没有登记酒吧公司税费的地方。HTML 写平台保存「经授权人员手工填写并通过审批」的税费数据、实缴与申报的差额不进税费成本。我的方案：财务按公司、税种、所属期手工登记「实际申报金额」，经财务、税务、法务审核并由顶层平台公司老板最终确认后生效；分红扣本期内已生效的申报金额合计；按季申报的税整季计入季末那个月；不设「登记齐了才能出正式单」的前提。可以吗？」）—— 操作员选「登记齐了才能出单」：正式单出单前本期每个月都要有已生效的税费登记，缺的不出单并写跳过原因，其余同上（「其余同上」即题面方案的其余各项照做）。 | 待做（第 210 条，18W 已核实） |
 | 43 | **第 211 条 整期暂不分红或暂缓分红的登记**（题面：「第 211 条：「整期暂不分红或暂缓分红」须主理人与娱乐平台公司协商一致后执行，并记录原因与协商结果；系统现在没有登记处。我的方案：平台财务在持股分红页按商户按期登记（暂不分红或暂缓分红，原因、协商结果必填，不另走审批）；该期正式单已提交审批或已发放的不能再登记，草稿随登记作废；「暂不分红」该期不出正式单、利润不补分；「暂缓分红」等协商恢复后由财务登记恢复，再照常出单；月度预览照常。可以吗？」）—— 操作员选「按这个方案（推荐）」：照上面写的做。 | 待做（第 211 条，18W 已核实） |
 | 44 | **第 211 条 分红周期「按财务对账的固定处理日期设定」的读法**（题面：「第 211 条：HTML 写「分红周期可配：按财务对账的固定处理日期设定（例如一个月中的某几天）」，另一处写「发放走应付款项，落在三个付账日之一，具体哪一个由该公司在分红周期配置中指定」。我理解为：分红方案加一项「发放付账日」（每月三个付账日之一，出厂 5、15、25 日），审批通过后给主理人的应付和留存释放的应付都落在当天或之后第一个该付账日（现在是审批当天即到期）；分红期间仍按自然月、季、半年、年切分，正式单仍由财务手动出。对吗？」）—— 操作员选「对，按这个理解（推荐）」：只加「发放付账日」配置，期间切分与出单方式不变。 | 待做（第 211 条，18W 已核实） |
+| 45 | **第 202 条 反结时账单已登记退款的处理**（题面：「第 202 条反结补问：酒吧账单现金结了 3000，客人退一瓶已登记退款 500（财务还没把钱付出去），这时发现账单记错要反结。现在反结会把 3000 原收款整笔作废，按扣过退款的 2500 重收，收银「多退少补」当场退客人 500，财务那笔 500 又照付，客人多拿 500。怎么处理？」）—— 操作员选「只作废没退的部分（推荐）」：已登记的 500 退款照常由财务付出；反结只把没退的 2500 收款作废，再按更正后的账单重收。与第十七批「作废并冲正」遇到已退款时的处理一致，账和钱都不重复。（来由：18AA 收尾复核意见。） | 已落地（18AA 复核修复，第 202 条） |
 
 第一段转正前最低池额试算与取消结算环节超池待审批：既有缺口，列入待开发清单第 75 条、随 18C 做（ENUM L52、BSM L752）。
 
@@ -5547,3 +5548,64 @@ HTML 的语义补齐与直接引用同步可在本批核验；70项中的业务�
   - 新测试：FinanceJdbcIntegrationTests.lockedCashReceiptRefundBackfillApprovalOnlyCreatesTodoWhileExecutionStillNeedsDevice。现金原收款的锁定台账，乙批准退款补录得 200，建「600:cash:requested」待办，台账不变；之后不带设备号登记执行仍 403 DEVICE_CONTEXT_REQUIRED。
 - 18Z 复核修复补记（2026-11-10）：六视角复核意见 3 条，成立 2 条、不成立 1 条，无新裁决。① 页面矩阵 docs/full-admin-page-permission-field-matrix-v0.1.csv 本段改了 ADM-FIN-002 行，文件版本（记在 ADM-OV-001 行）V0.20→V0.21。② 覆盖表 BSM-0426（BSM:1803）重判出「付款确认没有按全平台统一审批模型办理」（registerArApPayment 单人登记即结清；DEC-R5-2026-08-04-08），本段范围外，按操作员 2026-11-06「照旧登记」登记为待开发清单第 241 条（待核实），备注补条号。
 - 18Z 落地位置补记·运行验收证据、快照、终验文档刷新（无新裁决）：业务提交 1f486677 之后，按第十八批裁决 25 重刷了运行验收证据：后端全量 6554 测，0 失败 0 错误（首轮碰上既有偶发的会员生日奖励用例，整轮重跑后全绿，证据按重跑那次生成）；apps/web 构建通过；常规界面验收（接口全部 mock）实跑 40 条全过；真实后端界面验收未跑，runtime_ready=false。随后依次重生成闭环当前态快照、生产闭环缺口报告、界面验收报告、无上线指挥台。生成器没改。手改 docs/final-closed-loop-acceptance-audit-v0.1.md 与 docs/code-implementation-acceptance-audit-v0.1.md：前端单测源码计数改为 1671；被核文件行数按实测同步（BarBillingService.java 1056→1057 行）；后端全量与常规界面验收的数字、日期改为本次实跑值；写入 npm run verify:unit 实跑结果，五个工作区全过。交付门禁于 2026-11-06 UTC 在工作树逐项实跑子项，NAS 两项现场探测未跑。仍红的有两项：一是 coding-host-protection，它写死主仓路径，在工作树口径下必红，属工具口径，不做；二是 final-closed-loop-audit，如实留 2 条红（integration-ready、business-acceptance-ready），原因是校验器要求终验把联调、业务验收写成「是」，而裁决 25 定了不跑真实后端界面验收、运行验收未就绪，终验写的是「否」。verify:delivery-gates 总链仍是红的。
+
+18AA 落地位置补记（2026-11-10）：第十八批 AA 段（batch47）按 18W 核实稿实现待开发清单第 202、203、206 条（酒吧账单反结与台位，202 按第十八批裁决 39）；运行验收证据、终验文档在本段最后一个提交刷新；各条落地位置见下。本段追加时，原台账除文档版本 V0.81→V0.82 与裁决表新增第 45 行外，其他历史字节保持。
+
+- 18AA 落地位置补记·控制席判定（2026-11-10）：本段（第十八批 AA 段，batch47）实现待开发清单第 202、203、206 条（酒吧账单反结与台位），方案为 18W 核实稿（本机 b43-audit\g179-203-barbill.json、g190-206-bartable.json），202 按第十八批裁决 39；控制席补（裁决 39，并入 202-R1）：反结生效时该账单经储值支付的部分当场退回原卡（复用第十七批裁决第 1 条作废并冲正的储值回卡写法），现金、POS 等其余收款照现状作废、不挂退款应付，由收银按更正后的账单重新收款，与反结同一事务、同一反结不重复退卡；控制席并入（206-R3）：一体机订台与员工代订两处台位列表按台位状态显示，已开台、待清台与停用一样标明并置灰不可点（ENUM:100「台位未被占用——既无有效预留也未开台——时即可再次接受预订」）；迁移 V612（反结操作类型、反结准入策略）、V613（权限码 bar.table.disable）；分两条线：账单线 202-R1→202-R2，台位线 203-R1→206-R1→206-R2→206-R3；PRD 由文档组一次改。
+- 202-R1（第 202 条；对应第十八批裁决 39）。
+  落地位置：
+  - 迁移 V612__bar_bill_reopen_supervisor_review.sql：bar_bill_operations 类型约束放开 reopen；新增反结准入策略 bar_bill_reopen_block（always、block、one_level_up，同免单 V068 bar_bill_waiver_block 档位）；同组 V099 的 bar_bill_reopen_over_space 停用。
+  - 反结仍经 BarService.reopenBill 的准入闸：首次提交 409 ADMISSION_BLOCKED 并建主管复核单，主管批准后原样再提交才执行，批准只能用一次，发起人不能审批自己的单。
+  - OpenAPI reopenBarBill 补说明与 x-failure-codes（ADMISSION_BLOCKED、BAR_BILL_NOT_REOPENABLE、BAR_BILL_ABNORMAL、BAR_BILL_VOIDED、DAY_CLOSE_LOCKED）。
+  - 回归：BarBillReopenJdbcIntegrationTests。
+  - 依据原句：BSM:1069「反结（重开已结账单）、沽清（卖完、临时下架）均需主管审批留痕」；ENUM:111「高危动作（需审批/双证据）」行「反结、沽清、免单、账单调整、存酒作废（照片+视频）。」
+  控制席补（裁决 39）储值退卡：
+  - 落地位置：BarBillingService.reopenBill 在冲正原收款（markBillSettlementsReversed）前调用 BarReceivableLedgerService.refundStoredValueOnReopen，由 FinanceBarReceivableLedgerService 实现。
+  - 做法：对该账单每笔储值结算，按 barsv_<结算幂等键> 找到消费流水，尚未回冲的部分经 StoredValueService.refundConsumption 当场退回原卡（先赠送金后本金）；退卡键 barsvreopen_<结算幂等键>，与反结同一事务、任一失败整笔回滚，同一反结不重复退卡。现金、POS、聚合支付等其余收款照现状冲正作废、不挂退款应付。
+  - 依据：第十八批裁决 39 选项原文「反结生效时储值部分当场回原卡；现金、POS 等收款记录作废，收银按更正后的账单重新收款（通常客人还在场，多退少补）」。
+- 202-R2 落地位置：后台「订单/出品/账单」页 apps/web/src/admin/pages/BarOrdersPage.tsx 新加「反结（重开已结账单）」区（只对已结账账单、持 bar.bill.reopen 可点，原因必填；首次提交被准入闸拦下生成主管复核单，提示主管在「主管复核」页批准后原样再点一次；说明写明储值部分反结生效时退回原卡，其余收款作废后由收银按更正后的账单重新收款）；结果区动作码 bar_bill_reopened「酒吧账单已反结」（apps/web/src/admin/i18n/fieldLabels.ts）；页面矩阵 ADM-BAR-002 行补 bar.bill.reopen 与 POST /api/v1/bar/bills/{bill_id}/reopen；测试 apps/web/src/admin/pages/BarOrdersPage.reopen.test.tsx。依据 BSM:1069「反结（重开已结账单）、沽清（卖完、临时下架）均需主管审批留痕」。对应裁决：第十八批裁决 39（「反结生效时储值部分当场回原卡；现金、POS 等收款记录作废，收银按更正后的账单重新收款（通常客人还在场，多退少补）」），页面说明文案照此口径写。
+- 203-R1（第 203 条，员工扫码下单只限散台）：落地在 backend/src/main/java/com/complex/platform/bar/BarOrderService.java 的 createScanOrder，即员工扫码下单 POST /api/v1/bar/table-sessions/{session_id}/scan-orders 与客人扫码付款成单共用的下单核心。本商户会话校验之后、成单之前按会话台位判类型，非散台（卡座、包厢、吧台位）409 BAR_SCAN_ORDER_TABLE_NOT_ALLOWED「扫码点单只适用于散台，卡座不开放扫码点单」、不落单。OpenAPI placeBarScanOrder 的说明与 x-failure-codes 同步补上；回归为 BarOnTheSpotPaymentJdbcIntegrationTests.staffScanOrderOnlyOnLooseTable（真库、真实 HTTP、真实授权链），BarServiceTests 原用例台位改为散台。依据原句：BSM:1025「扫码点单只适用于散台，卡座不开放扫码点单。」；PGM:744「前端隐藏只是辅助，后端接口必须独立校验。」对应裁决：无新裁决。
+- 206-R1（第 206 条台位停用与恢复，后端）落地位置：
+  - 迁移 V613__bar_table_disable.sql：权限码 bar.table.disable「停用与恢复酒吧台位（店长）」授 role_platform_admin，由运营分配给店长及以上角色；另有该能力的跨端全局显式开启行。
+  - BarController：POST /api/v1/bar/tables/{table_id}/disable、/enable，请求体为 idempotency_key 与必填的 reason。
+  - BarService.disableTable／enableTable：商户闸在幂等之前；留痕 bar.table.disabled／bar.table.enabled，带 reason、status_before、status_after。
+  - BarTableSessionService.changeTableStatus：锁台位行；停用只收空闲台位（active 且无有效预留），否则 409 BAR_TABLE_NOT_DISABLABLE；恢复只收停用台位，否则 409 BAR_TABLE_NOT_DISABLED。
+  - BarOrderService.createOrderInternal：停用的台位下单 409 BAR_TABLE_DISABLED。
+  - 开台、转入、订台以及客人订台选项本来就只认 active，停用后自然不能用。
+  依据：ENUM:100「台位停用与恢复由店长及以上操作，填原因留痕」「已预留只能经取消订台、超时释放、到店开台三条路径退出」；BSM:1058 同句。
+  对应裁决：无新裁决。
+- 第 206 条 206-R2（后台卡座表与卡座详情：台位停用、恢复按钮与台位状态中文名）落地位置：
+  - apps/web/src/admin/pages/BarTableSessionsPage.tsx：TABLE_STATUS_LABELS、tableStatusLabel，卡座表状态列与卡座详情「状态」按 ENUM 名称显示；卡座表「操作」列加「停用」「恢复」按钮（权限 bar.table.disable）；changeTableStatus 原因必填，发 POST /api/v1/bar/tables/{table_id}/disable、/enable。
+  - apps/web/src/admin/i18n/fieldLabels.ts：VALUE_LABELS 加 bar_table_disabled、bar_table_enabled。
+  - docs/full-admin-page-permission-field-matrix-v0.1.csv：ADM-BAR-001 行。
+  - 测试：apps/web/src/admin/pages/BarTableSessionsPage.disable.test.tsx。
+  依据：
+  - ENUM:100「桌台/卡座/吧台位状态｜空闲、已预留、已开台、待清台、停用、异常」「台位停用与恢复由店长及以上操作，填原因留痕」
+  - BSM:1058 同句
+  - PGM:287「全局原则 · 界面全中文（所有终端零英文）」
+  对应裁决：无新裁决。后台台位状态 opened、pending_clear 原样英文一项，已含在 206-R2 方案内。
+- 18AA 落地位置补记·第 206 条 206-R3（无新裁决；一体机订台与员工代订列表按台位状态显示为控制席并入）：
+  - 安卓共享核 KioskBarPurchase.kt：kioskBarCounters 排除 status=disabled 的吧台位，一体机吧台买酒不再提供停用的吧台位。
+  - TerminalModels.kt 新增 barTableBookingLabel：有效预留显示「已订」，其余按台位状态显示空闲、已开台、待清台、停用，中文名同后台卡座表 206-R2。
+  - MainActivity 一体机订台列表（showKioskReservation）：已订、已开台、待清台、停用的标明状态并置灰不可选。
+  - MainActivity 员工代订列表（showBarAvailability）：前缀按状态显示，不再一律「[空]」；已开台、待清台、停用的置灰不可点。
+  - 服务端空位视图本来就带台位状态，没改。
+  - 测试：KioskBarPurchaseApiTest.disabledBarCounterSeatIsNotOffered、KioskReservationApiTest.bookingListLabelsFollowTableStatus。
+  依据 ENUM:100「桌台/卡座/吧台位状态｜空闲、已预留、已开台、待清台、停用、异常」、「台位未被占用——既无有效预留也未开台——时即可再次接受预订，同一营业日内前一波客人接待完毕、台位恢复空闲后可以继续预订。」；ENUM:100 与 BSM:1058「台位停用与恢复由店长及以上操作，填原因留痕」。
+- 18AA 复核修复补记·第十八批裁决 45（第 202 条）：反结时账单已登记退款的处理。
+  落地位置：
+  - BarBillingService.reverseUnrefundedCollections 从 BarBillAnomalyService 挪入，作废与反结共用一份；同类新增 refundedNetCent、keptCollectedCent。
+  - reopenBill 由整笔冲正（markBillSettlementsReversed）改为：按反结前已登记退款净额（含财务未实付的退款应付）只冲正没被占用的收款；被占用的部分按「后收的先退」以原收款时点、渠道另记一笔不冲正的留存流水 settle_kept_。
+  - 已留存的部分之后不再冲正、不再退：
+    - refundCollectedOnVoid 的未退额扣除留存；
+    - FinanceBarReceivableLedgerService.createRefundPayable 的已退额先扣留存，留存流水不再分配退款；
+    - refundStoredValueOnReopen 跳过留存流水；
+    - BarBillRefundStatusService.refresh 的「已退款」按重结实收加留存判定。
+  - 同一路径：JdbcBarRepository.refundGoodsCent 的合计转 BIGINT。原先带退款明细的账单重结报 500，「按更正后的账单重收」走不通。
+  - 已登记的退款照常由财务付出，不另挂应付；页面反结按钮条件不改，不加拦截。
+  依据：
+  - 第十八批裁决 45 原文「已登记的 500 退款照常由财务付出；反结只把没退的 2500 收款作废，再按更正后的账单重收。与第十七批「作废并冲正」遇到已退款时的处理一致，账和钱都不重复。」
+  - 第十八批裁决 39「反结生效时储值部分当场回原卡；现金、POS 等收款记录作废，收银按更正后的账单重新收款（通常客人还在场，多退少补）」。
+  - 第十七批⑤作废口径：作废只冲正未退部分的收款，已退额按 TK-20-R2「后收的先退」占在最后几笔收款上，另记不冲正的留存，各期合计为 0。
+  回归：BarBillReopenJdbcIntegrationTests 的 reopenAfterRegisteredCashRefundReversesOnlyUnrefundedCollection、voidAfterReopenAndResettleRefundsNewCollectionOnly、reopenAfterCashRefundReturnsOnlyReversedStoredValue。
+- 18AA 落地位置补记·运行验收证据、快照、终验文档刷新（无新裁决）：业务提交 8ed7ecb6 之后，按第十八批裁决 25 重刷了运行验收证据：后端全量 6563 测，0 失败 0 错误；apps/web 构建通过；常规界面验收（接口全部 mock）实跑 40 条全过；真实后端界面验收未跑，runtime_ready=false。随后依次重生成闭环当前态快照、生产闭环缺口报告、界面验收报告、无上线指挥台。生成器没改。手改 docs/final-closed-loop-acceptance-audit-v0.1.md 与 docs/code-implementation-acceptance-audit-v0.1.md：前端单测源码计数改为 1679；被核文件行数按实测同步（BarService.java 1136→1164、BarOrderService.java 1848→1857、BarBillingService.java 1057→1112、BarTableSessionService.java 828→857 行）；后端全量与常规界面验收的数字、日期改为本次实跑值；写入 npm run verify:unit 实跑结果，五个工作区全过。交付门禁于 2026-11-10 UTC 在工作树逐项实跑子项，NAS 两项现场探测未跑。仍红的有两项：一是 coding-host-protection，它写死主仓路径，在工作树口径下必红，属工具口径，不做；二是 final-closed-loop-audit，如实留 2 条红（integration-ready、business-acceptance-ready），原因是校验器要求终验把联调、业务验收写成「是」，而裁决 25 定了不跑真实后端界面验收、运行验收未就绪，终验写的是「否」。verify:delivery-gates 总链仍是红的。
