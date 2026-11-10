@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.24
+// 文件版本：V0.25
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
@@ -227,12 +227,14 @@ class JdbcFinanceRepository implements FinanceRepository {
                 "SELECT EXISTS (SELECT 1 FROM ar_ap_items WHERE origin_item_id = :id)", Map.of("id", itemId), Boolean.class));
     }
 
+    // 第十八批 Z 段 186-R1：只有批准的金额调整补录红冲替换原行；收付款补录批准后原行仍是当前有效应付。
     @Override
     public boolean isPurchasePayableReplaced(String itemId) {
         return Boolean.TRUE.equals(jdbcTemplate.queryForObject("""
                 SELECT EXISTS (SELECT 1 FROM purchase_payable_adjustments WHERE original_item_id = :id)
                     OR EXISTS (SELECT 1 FROM purchase_prepayment_resolutions WHERE original_item_id = :id AND status = 'posted')
-                    OR EXISTS (SELECT 1 FROM ar_ap_adjustments WHERE ar_ap_item_id = :id AND approval_status = 'approved')
+                    OR EXISTS (SELECT 1 FROM ar_ap_adjustments WHERE ar_ap_item_id = :id AND approval_status = 'approved'
+                                AND kind = 'amount')
                 """, Map.of("id", itemId), Boolean.class));
     }
 
@@ -245,7 +247,8 @@ class JdbcFinanceRepository implements FinanceRepository {
                    AND NOT EXISTS (SELECT 1 FROM purchase_prepayment_resolutions p
                                     WHERE p.original_item_id = ar_ap_items.id AND p.status = 'posted')
                    AND NOT EXISTS (SELECT 1 FROM ar_ap_adjustments a
-                                    WHERE a.ar_ap_item_id = ar_ap_items.id AND a.approval_status = 'approved')
+                                    WHERE a.ar_ap_item_id = ar_ap_items.id AND a.approval_status = 'approved'
+                                      AND a.kind = 'amount')
                 """, Map.of("source_type", sourceType, "source_id", sourceId), this::mapArApItem);
         if (current.size() > 1) throw ApiException.conflict(
                 "PURCHASE_PAYABLE_AMBIGUOUS", "采购来源存在多张有效应付，请核实更正链");
@@ -1210,6 +1213,52 @@ class JdbcFinanceRepository implements FinanceRepository {
                     result.computeIfAbsent(rs.getObject(1, LocalDate.class), day -> new java.util.HashSet<>()).add(rs.getString(2));
                 });
         return result;
+    }
+
+    /** 第十八批 Z 段第 188 条 188-R1：单位划分同 {@link #finalMarkCategoriesByDay}；已锁定、已归档的日结都算已锁定（143-R5 归档是锁定之后的终态）。 */
+    @Override
+    public List<LocalDate> unlockedCloseDays(String barId, String projectId, LocalDate from, LocalDate to) {
+        return jdbcTemplate.query("SELECT CAST(d AS DATE) FROM (SELECT generate_series(CAST(:from AS TIMESTAMP), CAST(:to AS TIMESTAMP),"
+                        + " INTERVAL '1 day') AS d) g WHERE NOT EXISTS (SELECT 1 FROM finance_daily_closes c"
+                        + " WHERE c.business_date = CAST(d AS DATE) AND c.status IN ('locked', 'archived')"
+                        + (barId != null ? " AND c.scope_type IN ('merchant', 'bar')" : " AND c.scope_type = 'project'")
+                        + " AND c.scope_id = :scope_id) ORDER BY 1",
+                new MapSqlParameterSource().addValue("scope_id", barId != null ? barId : projectId)
+                        .addValue("from", from).addValue("to", to),
+                (rs, i) -> rs.getObject(1, LocalDate.class));
+    }
+
+    @Override
+    public boolean periodCloseExists(String projectId, LocalDate periodMonth) {
+        return Boolean.TRUE.equals(jdbcTemplate.queryForObject(
+                "SELECT EXISTS (SELECT 1 FROM finance_period_closes WHERE project_id = :project_id AND period_month = :period_month)",
+                new MapSqlParameterSource().addValue("project_id", projectId).addValue("period_month", periodMonth), Boolean.class));
+    }
+
+    @Override
+    public PeriodCloseRecord savePeriodClose(PeriodCloseRecord close) {
+        jdbcTemplate.update("INSERT INTO finance_period_closes (id, project_id, period_month, closed_by, closed_at)"
+                        + " VALUES (:id, :project_id, :period_month, :closed_by, :closed_at)",
+                new MapSqlParameterSource().addValue("id", close.id()).addValue("project_id", close.projectId())
+                        .addValue("period_month", java.time.YearMonth.parse(close.periodMonth()).atDay(1))
+                        .addValue("closed_by", close.closedBy())
+                        .addValue("closed_at", java.sql.Timestamp.from(close.closedAt())));
+        return close;
+    }
+
+    @Override
+    public List<PeriodCloseRecord> listPeriodCloses(java.util.Set<String> projectIds, String projectId) {
+        if (projectIds != null && projectIds.isEmpty()) {
+            return List.of();
+        }
+        return jdbcTemplate.query("SELECT id, project_id, period_month, closed_by, closed_at FROM finance_period_closes WHERE TRUE"
+                        + (projectIds == null ? "" : " AND project_id IN (:project_ids)")
+                        + (projectId == null ? "" : " AND project_id = :project_id")
+                        + " ORDER BY period_month DESC, project_id",
+                new MapSqlParameterSource().addValue("project_ids", projectIds).addValue("project_id", projectId),
+                (rs, i) -> new PeriodCloseRecord(rs.getString("id"), rs.getString("project_id"),
+                        java.time.YearMonth.from(rs.getObject("period_month", LocalDate.class)).toString(),
+                        rs.getString("closed_by"), rs.getTimestamp("closed_at").toInstant()));
     }
 
     @Override
@@ -2234,11 +2283,11 @@ class JdbcFinanceRepository implements FinanceRepository {
         jdbcTemplate.update("""
                 INSERT INTO ar_ap_adjustments (
                     id, ar_ap_item_id, locked_day_close_id, adjustment_amount_cent,
-                    approval_status, requested_by, approved_by, reason, created_at, decided_at
+                    approval_status, requested_by, approved_by, reason, created_at, decided_at, kind, payment_method
                 )
                 VALUES (
                     :id, :ar_ap_item_id, :locked_day_close_id, :adjustment_amount_cent,
-                    :approval_status, :requested_by, :approved_by, :reason, :created_at, :decided_at
+                    :approval_status, :requested_by, :approved_by, :reason, :created_at, :decided_at, :kind, :payment_method
                 )
                 ON CONFLICT (id) DO NOTHING
                 """, adjustmentParameters(adjustment));
@@ -2249,6 +2298,7 @@ class JdbcFinanceRepository implements FinanceRepository {
     private static final String ADJUSTMENT_SELECT = """
             SELECT a.id, a.ar_ap_item_id, a.locked_day_close_id, a.adjustment_amount_cent,
                    a.approval_status, a.requested_by, a.approved_by, a.reason, a.created_at, a.decided_at,
+                   a.kind, a.payment_method,
                    (SELECT i.item_no FROM ar_ap_items i WHERE i.id = a.ar_ap_item_id) AS item_no,
                    (SELECT d.business_date FROM finance_daily_closes d WHERE d.id = a.locked_day_close_id) AS original_business_date
               FROM ar_ap_adjustments a
@@ -2293,7 +2343,9 @@ class JdbcFinanceRepository implements FinanceRepository {
                 .addValue("approved_by", adjustment.approvedBy())
                 .addValue("reason", adjustment.reason())
                 .addValue("created_at", timestampWithTimeZone(adjustment.createdAt()))
-                .addValue("decided_at", timestampWithTimeZone(adjustment.decidedAt()));
+                .addValue("decided_at", timestampWithTimeZone(adjustment.decidedAt()))
+                .addValue("kind", adjustment.kind())
+                .addValue("payment_method", adjustment.paymentMethod());
     }
 
     private DailyCloseRecord mapDailyClose(ResultSet resultSet, int rowNumber) throws SQLException {
@@ -2338,7 +2390,9 @@ class JdbcFinanceRepository implements FinanceRepository {
                 nullableInstant(resultSet, "created_at"),
                 nullableInstant(resultSet, "decided_at"),
                 resultSet.getString("item_no"),
-                resultSet.getObject("original_business_date", java.time.LocalDate.class));
+                resultSet.getObject("original_business_date", java.time.LocalDate.class),
+                resultSet.getString("kind"),
+                resultSet.getString("payment_method"));
     }
 
     private MapSqlParameterSource arApItemParameters(ArApItemRecord item) {

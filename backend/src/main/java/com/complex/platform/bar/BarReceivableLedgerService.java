@@ -1,14 +1,17 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import java.time.LocalDate;
 import java.util.List;
 
 interface BarReceivableLedgerService {
 
-    /** R5 T7 协同：经营日是否被锁定日结纳入；反结改动结账后金额前校验，锁定则须走补录审批。 */
-    boolean isBusinessDayLocked(LocalDate businessDate);
+    /**
+     * R5 T7 协同：经营日是否被锁定日结纳入；反结改动结账后金额前校验，锁定则须走补录审批。
+     * 第十八批 Z 段第 187 条 187-R1（18R 143-R7、18S 161-R1 按日结 scope_id 判锁）：按账单所属酒吧商户判，不按操作人范围。
+     */
+    boolean isBusinessDayLocked(LocalDate businessDate, String merchantId);
 
     String createReceivableForOnAccountBill(
             BarBillRecord bill,

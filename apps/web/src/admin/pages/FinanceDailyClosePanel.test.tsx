@@ -1,4 +1,4 @@
-// 文件版本：V0.04
+// 文件版本：V0.05
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { FinanceDailyClosePanel } from "./FinanceDailyClosePanel";
@@ -27,10 +27,18 @@ const LOCKED_ITEMS = [{ id: "it1", itemNo: "AR-0001", direction: "receivable", a
 const ADJUSTMENTS = [
   { id: "adj1", arApItemId: "it1", itemNo: "AR-0001", lockedDayCloseId: "d3", adjustmentAmountCent: 500, approvalStatus: "approved",
     requestedBy: "财务甲", approvedBy: "财务乙", reason: "漏记收入", createdAt: "2026-11-03T02:00:00Z", decidedAt: "2026-11-03T05:00:00Z",
-    originalBusinessDate: "2026-11-01" },
+    originalBusinessDate: "2026-11-01", kind: "amount", paymentMethod: null },
   { id: "adj2", arApItemId: "it1", itemNo: "AR-0001", lockedDayCloseId: "d3", adjustmentAmountCent: -300, approvalStatus: "pending",
     requestedBy: "财务丙", approvedBy: null, reason: "多记冲减", createdAt: "2026-11-04T02:00:00Z", decidedAt: null,
-    originalBusinessDate: "2026-11-01" },
+    originalBusinessDate: "2026-11-01", kind: "amount", paymentMethod: null },
+  // 第十八批 Z 段第 186 条 186-R1：收付款补录（kind=payment），批准后登记收付款。
+  { id: "adj3", arApItemId: "it1", itemNo: "AR-0001", lockedDayCloseId: "d3", adjustmentAmountCent: 60000, approvalStatus: "pending",
+    requestedBy: "财务丙", approvedBy: null, reason: "到期后补缴", createdAt: "2026-11-05T02:00:00Z", decidedAt: null,
+    originalBusinessDate: "2026-11-01", kind: "payment", paymentMethod: "bank_transfer" },
+  // 186-R2（控制席并入，同根）：退款补录（kind=refund），收付方式照原收款记录，批准后按原收款原路退款。
+  { id: "adj4", arApItemId: "it1", itemNo: "AR-0001", lockedDayCloseId: "d3", adjustmentAmountCent: 20000, approvalStatus: "pending",
+    requestedBy: "财务丙", approvedBy: null, reason: "异议成立多退", createdAt: "2026-11-06T02:00:00Z", decidedAt: null,
+    originalBusinessDate: "2026-11-01", kind: "refund", paymentMethod: "bank_transfer" },
 ];
 const BACKFILL = ["finance.daily_close.manage", "finance.daily_close.lock", "finance.ar_ap.view", "finance.locked_backfill.request",
   "finance.locked_backfill.approve"];
@@ -298,6 +306,66 @@ describe("日结区块", () => {
     expect(text).toContain("应收");
     expect(text).toContain("内部核算");
     expect(text).not.toContain("internal_accounting");
+  });
+
+  // 第十八批 Z 段第 186 条 186-R1（ENUM:190「日结锁定后的补录须上级审批，且不改动已锁定的日结金额：补录金额归入当期……」；
+  // BSM:2023「已拍板：日结锁定后不能直接补录影响金额，必须上级审批通过后补录。」；第七批裁决 19「人工登记收款仍受锁定拦截。」）。
+  it("本日结锁定的台账可申请收付款补录：提交类型、台账、金额（分）、收付方式、原因与幂等键，补录表显示类型与收付方式中文", async () => {
+    const post = vi.fn().mockResolvedValue({ id: "adj4", approvalStatus: "pending" });
+    const { get } = setup({ rows: STEPS, post, grants: BACKFILL });
+    await waitFor(() => expect(screen.queryByTestId("daily-close-open-d3")).not.toBeNull());
+    fireEvent.click(screen.getByTestId("daily-close-open-d3"));
+    await waitFor(() => expect(screen.queryByTestId("daily-close-adjustments")?.textContent ?? "").toContain("到期后补缴"));
+    const text = screen.getByTestId("daily-close-adjustments").textContent ?? "";
+    for (const value of ["类型", "收付方式", "金额调整", "收付款补录", "银行转账", "600.00"]) expect(text).toContain(value);
+    expect(text).not.toContain("bank_transfer");
+    await waitFor(() => expect((screen.getByTestId("daily-close-payment-backfill-it1") as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.change(screen.getByTestId("daily-close-payment-backfill-amount-it1"), { target: { value: "600" } });
+    fireEvent.change(screen.getByTestId("daily-close-payment-backfill-method-it1"), { target: { value: "bank_transfer" } });
+    fireEvent.change(screen.getByTestId("daily-close-payment-backfill-reason-it1"), { target: { value: "到期后补缴" } });
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+    fireEvent.click(screen.getByTestId("daily-close-payment-backfill-it1"));
+    expect(confirm.mock.calls[0]?.[0]).toContain("日结锁定后不能直接补录影响金额，必须上级审批通过后补录。");
+    await waitFor(() => expect(post).toHaveBeenCalledWith("/api/v1/finance/ar-ap-adjustments", { kind: "payment", arApItemId: "it1",
+      adjustmentAmountCent: 60000, paymentMethod: "bank_transfer", reason: "到期后补缴", idempotencyKey: expect.any(String) }));
+    await waitFor(() => expect(get.mock.calls.filter(([url]) => url === "/api/v1/finance/daily-closes/d3/adjustments")).toHaveLength(2));
+  });
+
+  // 第十八批 Z 段第 186 条 186-R2（控制席并入，同根；BSM:1323「提出异议期间商户的付款义务不暂停，先按原值付款，异议成立后多退少补」；
+  // ENUM:190「日结锁定后的补录须上级审批……」；第七批裁决 19）：应收台账另可「申请退款补录」（金额、原因），上级批准后按原收款原路退款。
+  it("本日结锁定的应收台账可申请退款补录：提交类型、台账、金额（分）、原因与幂等键，非应收台账不出；补录表显示「退款补录」", async () => {
+    const post = vi.fn().mockResolvedValue({ id: "adj5", approvalStatus: "pending" });
+    const { get } = setup({ rows: STEPS, post, grants: BACKFILL });
+    await waitFor(() => expect(screen.queryByTestId("daily-close-open-d3")).not.toBeNull());
+    fireEvent.click(screen.getByTestId("daily-close-open-d3"));
+    await waitFor(() => expect(screen.queryByTestId("daily-close-adjustments")?.textContent ?? "").toContain("异议成立多退"));
+    expect(screen.getByTestId("daily-close-adjustments").textContent).toContain("退款补录");
+    await waitFor(() => expect((screen.getByTestId("daily-close-refund-backfill-it1") as HTMLButtonElement).disabled).toBe(false));
+    expect(screen.queryByTestId("daily-close-refund-backfill-it2")).toBeNull();
+    fireEvent.change(screen.getByTestId("daily-close-refund-backfill-amount-it1"), { target: { value: "200" } });
+    fireEvent.change(screen.getByTestId("daily-close-refund-backfill-reason-it1"), { target: { value: "异议成立多退" } });
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+    fireEvent.click(screen.getByTestId("daily-close-refund-backfill-it1"));
+    expect(confirm.mock.calls[0]?.[0]).toContain("日结锁定后不能直接补录影响金额，必须上级审批通过后补录。");
+    await waitFor(() => expect(post).toHaveBeenCalledWith("/api/v1/finance/ar-ap-adjustments", { kind: "refund", arApItemId: "it1",
+      adjustmentAmountCent: 20000, reason: "异议成立多退", idempotencyKey: expect.any(String) }));
+    await waitFor(() => expect(get.mock.calls.filter(([url]) => url === "/api/v1/finance/daily-closes/d3/adjustments")).toHaveLength(2));
+  });
+
+  it("收付款补录未选收付方式不弹确认、不提交", async () => {
+    const post = vi.fn();
+    setup({ rows: STEPS, post, grants: BACKFILL });
+    await waitFor(() => expect(screen.queryByTestId("daily-close-open-d3")).not.toBeNull());
+    fireEvent.click(screen.getByTestId("daily-close-open-d3"));
+    await waitFor(() => expect(screen.queryByTestId("daily-close-payment-backfill-it1")).not.toBeNull());
+    await waitFor(() => expect((screen.getByTestId("daily-close-payment-backfill-it1") as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.change(screen.getByTestId("daily-close-payment-backfill-amount-it1"), { target: { value: "600" } });
+    fireEvent.change(screen.getByTestId("daily-close-payment-backfill-reason-it1"), { target: { value: "到期后补缴" } });
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+    fireEvent.click(screen.getByTestId("daily-close-payment-backfill-it1"));
+    await waitFor(() => expect(screen.getByRole("alert").textContent).toContain("收付方式"));
+    expect(confirm).not.toHaveBeenCalled();
+    expect(post).not.toHaveBeenCalled();
   });
 
   // 143-R1：确认时后端按当前数据重算七源汇总（锁定不再重算）；已展开的行确认后重读汇总，锁定前看到的就是确认时的金额。

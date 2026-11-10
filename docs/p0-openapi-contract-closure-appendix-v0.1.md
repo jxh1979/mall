@@ -1,4 +1,4 @@
-# P0 OpenAPI 权限、事件、任务追溯收口附录 V0.57
+# P0 OpenAPI 权限、事件、任务追溯收口附录 V0.58
 
 ## 1. 文档定位
 
@@ -14,11 +14,11 @@
 
 | 检查项 | 当前结果 | 执行结论 |
 |---|---:|---|
-| OpenAPI operation 数 | 1257 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
-| OpenAPI 权限/通用权限状态数 | 423 | 人工权限矩阵正文未覆盖 322 项；缺口以本文第 3 节补齐 |
-| OpenAPI 成功/失败事件数 | 2514 | 人工事件矩阵正文未覆盖 2465 项；完整事件字典以本文第 4 节为准 |
-| operation 级任务追溯 | 1257 | 人工任务映射正文未逐项覆盖 1251 个 operation；逐 operation 映射以本文第 5 节为准 |
-| 写接口数量 | 753 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
+| OpenAPI operation 数 | 1259 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
+| OpenAPI 权限/通用权限状态数 | 424 | 人工权限矩阵正文未覆盖 323 项；缺口以本文第 3 节补齐 |
+| OpenAPI 成功/失败事件数 | 2518 | 人工事件矩阵正文未覆盖 2469 项；完整事件字典以本文第 4 节为准 |
+| operation 级任务追溯 | 1259 | 人工任务映射正文未逐项覆盖 1253 个 operation；逐 operation 映射以本文第 5 节为准 |
+| 写接口数量 | 754 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
 
 ## 3. 权限码与认证上下文补充表
 
@@ -259,6 +259,7 @@
 | `finance.payment.register` | staff-token | platform, project-bar-table, project-entity, project-merchant, project-order | 8 | settleBarBill, requestBarBillStoredValueSmsCode, createArApPayment, confirmOfflinePayment, initiateInternalPayment, recordInternalPaymentFailure, postponeInternalPaymentForFunds, confirmTicketOrderPayment | 已在权限矩阵正文出现 |
 | `finance.payroll.payment.register` | staff-token | project-entity | 3 | preparePayrollBankPayment, submitPayrollBankPaymentFact, confirmPayrollBankPaymentResult | OpenAPI 补充，以本附录为准 |
 | `finance.payroll.view` | staff-token | project-entity | 1 | getPayrollBankPaymentContext | OpenAPI 补充，以本附录为准 |
+| `finance.period_close.execute` | staff-token | project | 2 | listFinancePeriodCloses, closeFinancePeriod | OpenAPI 补充，以本附录为准 |
 | `finance.points_recovery.view` | staff-token | project-merchant | 1 | getPointsRecoveryDetail | OpenAPI 补充，以本附录为准 |
 | `finance.points_recovery.waive` | staff-token | project-merchant | 1 | waivePointsRecovery | OpenAPI 补充，以本附录为准 |
 | `finance.property_fee.manage` | staff-token | platform | 3 | listPropertyFeeRates, createPropertyFeeRate, billPropertyFee | OpenAPI 补充，以本附录为准 |
@@ -1502,6 +1503,10 @@
 | `finance_payment.register_failed` | failure | `createArApPayment` | `POST` | `/api/v1/finance/ar-ap-items/{id}/payments` | FIN-财务台账 | `finance.payment.register` | 接口级事件，以本附录为准 |
 | `finance_payment.registered` | success | `confirmOfflinePayment` | `POST` | `/api/v1/finance/payments/{payment_id}/confirm-offline` | FIN-财务台账 | `finance.payment.register` | 已在事件矩阵正文出现 |
 | `finance_payment.registered` | success | `createArApPayment` | `POST` | `/api/v1/finance/ar-ap-items/{id}/payments` | FIN-财务台账 | `finance.payment.register` | 已在事件矩阵正文出现 |
+| `finance_period.close_failed` | failure | `closeFinancePeriod` | `POST` | `/api/v1/finance/period-closes` | FIN-财务台账 | `finance.period_close.execute` | 接口级事件，以本附录为准 |
+| `finance_period.closed` | success | `closeFinancePeriod` | `POST` | `/api/v1/finance/period-closes` | FIN-财务台账 | `finance.period_close.execute` | 接口级事件，以本附录为准 |
+| `finance_period.view_failed` | failure | `listFinancePeriodCloses` | `GET` | `/api/v1/finance/period-closes` | FIN-财务台账 | `finance.period_close.execute` | 接口级事件，以本附录为准 |
+| `finance_period.viewed` | success | `listFinancePeriodCloses` | `GET` | `/api/v1/finance/period-closes` | FIN-财务台账 | `finance.period_close.execute` | 接口级事件，以本附录为准 |
 | `finance_property_fee.bill_failed` | failure | `billPropertyFee` | `POST` | `/api/v1/finance/property-fee/bills` | FIN-财务台账 | `finance.property_fee.manage` | 接口级事件，以本附录为准 |
 | `finance_property_fee.billed` | success | `billPropertyFee` | `POST` | `/api/v1/finance/property-fee/bills` | FIN-财务台账 | `finance.property_fee.manage` | 接口级事件，以本附录为准 |
 | `finance_property_fee.rate_set` | success | `createPropertyFeeRate` | `POST` | `/api/v1/finance/property-fee/rates` | FIN-财务台账 | `finance.property_fee.manage` | 接口级事件，以本附录为准 |
@@ -3414,6 +3419,7 @@
 | FIN-财务台账 | `archiveDailyClose` | `POST` | `/api/v1/finance/daily-closes/{id}/archive` | 归档日结 | `finance.daily_close.lock` | `finance_daily_close.archived` / `finance_daily_close.archive_failed` | web | operation 级补充 |
 | FIN-财务台账 | `billPropertyFee` | `POST` | `/api/v1/finance/property-fee/bills` | 物业费按期计费（每平米固定单价 × 面积，不退不补） | `finance.property_fee.manage` | `finance_property_fee.billed` / `finance_property_fee.bill_failed` | web | operation 级补充 |
 | FIN-财务台账 | `billTurnoverRent` | `POST` | `/api/v1/finance/turnover-rent/bills` | 营业额抽成计费生成应收 | `finance.turnover_rent.bill` | `finance.turnover_rent.billed` / `finance.turnover_rent.bill_failed` | web | operation 级补充 |
+| FIN-财务台账 | `closeFinancePeriod` | `POST` | `/api/v1/finance/period-closes` | 封账（按综合体＋月份） | `finance.period_close.execute` | `finance_period.closed` / `finance_period.close_failed` | web | operation 级补充 |
 | FIN-财务台账 | `closeFinanceReconciliationDifference` | `POST` | `/api/v1/finance/reconciliation/differences/{difference_id}/close` | 提交差异关闭复核 | `finance.reconciliation.resolve` | `finance.reconciliation.difference_review_submitted` / `finance.reconciliation.difference_review_submit_failed` | web | operation 级补充 |
 | FIN-财务台账 | `computeDividendStatements` | `POST` | `/api/v1/finance/dividends/statements/compute` | 期间分红作业：对每个生效中方案出计算单（净利润=收入−成本−费用；幂等可重跑，草稿/预览/驳回作废重算，进入审批流跳过） | `finance.dividend.manage` | `dividend.computed` / `dividend.compute_failed` | web | operation 级补充 |
 | FIN-财务台账 | `confirmDailyClose` | `POST` | `/api/v1/finance/daily-closes/{id}/confirm` | 确认日结 | `finance.daily_close.lock` | `finance_daily_close.confirmed` / `finance_daily_close.confirm_failed` | web | operation 级补充 |
@@ -3446,6 +3452,7 @@
 | FIN-财务台账 | `listDividendPlans` | `GET` | `/api/v1/finance/dividends/plans` | 分红方案列表（商户 scope 账号只见本商户） | `finance.dividend.view` | `dividend.plans_listed` / `dividend.plans_list_failed` | web, merchant_portal, merchant_app | operation 级补充 |
 | FIN-财务台账 | `listDividendReserveReleases` | `GET` | `/api/v1/finance/dividends/reserve-releases` | 发放保护线留存·待释放/已释放台账（商户 scope 账号只见本商户，主理人视图同入口） | `finance.dividend.view` | `dividend.reserve_ledger_listed` / `dividend.reserve_ledger_list_failed` | web, merchant_portal, merchant_app | operation 级补充 |
 | FIN-财务台账 | `listDividendStatements` | `GET` | `/api/v1/finance/dividends/statements` | 分红计算单分页（商户 scope 账号只见本商户，主理人视图同入口） | `finance.dividend.view` | `dividend.statements_listed` / `dividend.statements_list_failed` | web, merchant_portal, merchant_app | operation 级补充 |
+| FIN-财务台账 | `listFinancePeriodCloses` | `GET` | `/api/v1/finance/period-closes` | 查询已封账月份 | `finance.period_close.execute` | `finance_period.viewed` / `finance_period.view_failed` | web | operation 级补充 |
 | FIN-财务台账 | `listFinanceReconciliationStageLimits` | `GET` | `/api/v1/finance/reconciliation/stage-limits` | 查询对账差异停留时限（按项目） | `finance.reconciliation.policy.manage` | `not_applicable` / `not_applicable` | web | operation 级补充 |
 | FIN-财务台账 | `listFinanceRefunds` | `GET` | `/api/v1/finance/refunds` | 读取退款台账及未结状态 | `finance.ar_ap.view` | `finance_refund.listed` / `finance_refund.list_failed` | web | operation 级补充 |
 | FIN-财务台账 | `listMerchantExpensePeriodLocks` | `GET` | `/api/v1/finance/merchant-expenses/period-locks` | 查询某月已关账（分红核算完成、费用台账冻结）的商户清单（前端据此禁用费用录入/冲销） | `finance.merchant_expense.view` | `merchant_expense.period_locks_viewed` / `merchant_expense.period_locks_view_failed` | web | operation 级补充 |

@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.08
+// 文件版本：V0.09
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.groups.Tuple.tuple;
@@ -1219,6 +1219,293 @@ class FinanceJdbcIntegrationTests {
         mockMvc.perform(get("/api/v1/finance/daily-closes/" + close + "/adjustments").with(merchantB))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.detail_code").value("CROSS_MERCHANT_FORBIDDEN"));
+    }
+
+    // ─── 第十八批 Z 段第 186 条 186-R1：锁定后收付款补录 ─────────────────────
+    /**
+     * ENUM:190「日结锁定后的补录须上级审批，且不改动已锁定的日结金额：补录金额归入当期，并在补录记录上标明其所属的原营业日；……」；
+     * BSM:2023「已拍板：日结锁定后不能直接补录影响金额，必须上级审批通过后补录。」；第七批裁决 19「人工登记收款仍受锁定拦截。」：
+     * 综合体 P 下商户的一笔应收、一笔应付到期日为 D，P 的项目范围日结 D 已锁定——人工登记收款仍 409 DAY_CLOSE_LOCKED；财务甲申请收付款补录
+     * （kind=payment）待审批、带原营业日，财务乙批准后台账已收付增加、收付记录按所选方式落在批准时刻，台账锁与日结七源汇总不变、不追加冲正与重述行；
+     * 驳回不动台账；申请人不能自批；超过未收付额、收付方式不在线下四种、未锁定的台账均 400。平台侧财务按后台真实请求形状（蛇形键）。
+     * 被拒的写请求会把本测试事务标为只回滚，补录审批的准入闸在只回滚的事务里取不到保存点会保守拦截，故成功路径排在被拒请求之前。
+     */
+    @Test
+    void lockedItemPaymentBackfillSettlesOnlyAfterSuperiorApproval() throws Exception {
+        String s = suffix();
+        String p = "project_dpb_" + s;
+        String shop = "mch_dpb_" + s;
+        insertProject(p);
+        insertShop(shop, p);
+        LocalDate day = farDay(s);
+        String receivable = dueItem("arap_dpb_r_" + s, shop, p, day);
+        String payable = "arap_dpb_p_" + s;
+        Instant created = Instant.now();
+        repository.saveArApItem(new ArApItemRecord(payable, "NO-" + payable, "payable", shop, "manual", "src_" + payable,
+                8000L, 0L, 8000L, "CNY", day, day.toString().substring(0, 7), "pending_payment", created, created, shop, p));
+        String open = dueItem("arap_dpb_o_" + s, shop, p, day.plusDays(1));
+        StaffRequestFixture staffs = new StaffRequestFixture(jdbcTemplate);
+        RequestPostProcessor financeA = staffs.staff("usr_dpb_a_" + s, "staff", p, null,
+                "finance.daily_close.lock", "finance.daily_close.manage", "finance.payment.register",
+                "finance.locked_backfill.request", "finance.locked_backfill.approve");
+        RequestPostProcessor financeB = staffs.staff("usr_dpb_b_" + s, "staff", p, null, "finance.locked_backfill.approve");
+
+        String close = lockDailyClose(financeA, "dpb-" + s, day.toString(), "project", p);
+        assertThat(lockedDayClose(receivable)).isEqualTo(close);
+        assertThat(lockedDayClose(payable)).isEqualTo(close);
+        List<String> closeBefore = dailyCloseFacts(close);
+        // 补录审批的准入按台账商户的生效合同判（与 FinanceProjectScopeRefundJdbcIntegrationTests 同一夹具口径）。
+        jdbcTemplate.update("INSERT INTO contracts (id, merchant_id, contract_subject_id, settlement_subject_id, effective_date,"
+                + " expiry_date, lifecycle_status, allowed_business_scope, created_at, updated_at) VALUES (?, ?, 'subj_dpb', 'subj_dpb',"
+                + " current_date - 1, current_date + 365, 'effective', '[\"finance\"]'::jsonb, now(), now())", "ctr_dpb_" + s, shop);
+
+        String first = JsonPath.read(paymentBackfill(financeA, receivable, 6000, "bank_transfer", "dpb-r1-" + s)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.approval_status").value("pending"))
+                .andExpect(jsonPath("$.data.kind").value("payment"))
+                .andExpect(jsonPath("$.data.payment_method").value("bank_transfer"))
+                .andExpect(jsonPath("$.data.locked_day_close_id").value(close))
+                .andExpect(jsonPath("$.data.original_business_date").value(day.toString()))
+                .andReturn().getResponse().getContentAsString(), "$.data.id");
+        String second = JsonPath.read(paymentBackfill(financeA, receivable, 1000, "cash", "dpb-r2-" + s)
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString(), "$.data.id");
+        String rejected = JsonPath.read(paymentBackfill(financeA, receivable, 500, "pos", "dpb-r3-" + s)
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString(), "$.data.id");
+        String payOut = JsonPath.read(paymentBackfill(financeA, payable, 8000, "other", "dpb-p1-" + s)
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString(), "$.data.id");
+
+        Instant beforeApproval = Instant.now();
+        decideBackfill(financeB, first, "approve", "dpb-apv1-" + s)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.approval_status").value("approved"))
+                .andExpect(jsonPath("$.data.kind").value("payment"));
+        assertThat(itemLedger(receivable)).isEqualTo("6000:4000:partial_paid:" + close);
+        assertThat(jdbcTemplate.queryForList("SELECT payment_method || ':' || amount_cent FROM ar_ap_payments WHERE ar_ap_item_id = ?",
+                String.class, receivable)).containsExactly("bank_transfer:6000");
+        assertThat(jdbcTemplate.queryForObject("SELECT payment_time FROM ar_ap_payments WHERE ar_ap_item_id = ?",
+                java.sql.Timestamp.class, receivable).toInstant()).isAfterOrEqualTo(beforeApproval.minusSeconds(1));
+        decideBackfill(financeB, payOut, "approve", "dpb-apv2-" + s).andExpect(status().isOk());
+        assertThat(itemLedger(payable)).isEqualTo("8000:0:settled:" + close);
+        decideBackfill(financeB, rejected, "reject", "dpb-rej-" + s)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.approval_status").value("rejected"));
+        assertThat(itemLedger(receivable)).isEqualTo("6000:4000:partial_paid:" + close);
+        assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM ar_ap_items WHERE origin_item_id IN (?, ?)", Integer.class,
+                receivable, payable)).isZero();
+        assertThat(dailyCloseFacts(close)).isEqualTo(closeBefore);
+        mockMvc.perform(get("/api/v1/finance/daily-closes/" + close + "/adjustments").with(financeA))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items[?(@.id == '" + first + "')].kind").value(org.hamcrest.Matchers.contains("payment")))
+                .andExpect(jsonPath("$.data.items[?(@.id == '" + first + "')].payment_method")
+                        .value(org.hamcrest.Matchers.contains("bank_transfer")))
+                .andExpect(jsonPath("$.data.items[?(@.id == '" + first + "')].adjustment_amount_cent")
+                        .value(org.hamcrest.Matchers.contains(6000)))
+                .andExpect(jsonPath("$.data.items[?(@.id == '" + first + "')].original_business_date")
+                        .value(org.hamcrest.Matchers.contains(day.toString())))
+                .andExpect(jsonPath("$.data.items[?(@.id == '" + rejected + "')].approval_status")
+                        .value(org.hamcrest.Matchers.contains("rejected")));
+
+        decideBackfill(financeA, second, "approve", "dpb-self-" + s)
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.detail_code").value("SELF_APPROVAL_FORBIDDEN"));
+        pay(financeA, receivable, "dpb-pay-" + s).andExpect(status().isConflict())
+                .andExpect(jsonPath("$.detail_code").value("DAY_CLOSE_LOCKED"));
+        paymentBackfill(financeA, receivable, 4001, "cash", "dpb-over-" + s).andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.detail_code").value("VALIDATION_FAILED"));
+        paymentBackfill(financeA, receivable, 100, "wechat", "dpb-wx-" + s).andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.detail_code").value("VALIDATION_FAILED"));
+        paymentBackfill(financeA, open, 100, "cash", "dpb-open-" + s).andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.detail_code").value("AR_AP_ITEM_NOT_LOCKED"));
+        assertThat(itemLedger(receivable)).isEqualTo("6000:4000:partial_paid:" + close);
+    }
+
+    // ─── 第十八批 Z 段第 186 条 186-R2（控制席并入，同根）：锁定后退款补录 ─────────────────────
+    /**
+     * BSM:1323「提出异议期间商户的付款义务不暂停，先按原值付款，异议成立后多退少补」；ENUM:190「日结锁定后的补录须上级审批，且不改动已锁定的日结金额：
+     * 补录金额归入当期，并在补录记录上标明其所属的原营业日；……」；第七批裁决 19：综合体 P 下商户的一笔应收到期日为 D、锁定前已按银行转账收到 1000 分，
+     * P 的项目范围日结 D 锁定后——财务甲申请退款补录（kind=refund）待审批，收付方式取原收款记录、带原营业日；财务乙批准后按该笔原收款建原路退款待办
+     * （requested，沿原收款渠道），台账、台账锁与日结七源汇总不变；驳回不建退款。直接原路退款仍 409 DAY_CLOSE_LOCKED；超过该笔收款可退余额、
+     * 应付台账、未锁定台账均 400。平台侧财务按后台真实请求形状（蛇形键）；被拒的写请求排在成功路径之后（同 186-R1 用例）。
+     */
+    @Test
+    void lockedItemRefundBackfillCreatesOriginalPathRefundOnlyAfterSuperiorApproval() throws Exception {
+        String s = suffix();
+        String p = "project_drb_" + s;
+        String shop = "mch_drb_" + s;
+        insertProject(p);
+        insertShop(shop, p);
+        LocalDate day = farDay(s);
+        String receivable = dueItem("arap_drb_r_" + s, shop, p, day);
+        String payable = "arap_drb_p_" + s;
+        Instant created = Instant.now();
+        repository.saveArApItem(new ArApItemRecord(payable, "NO-" + payable, "payable", shop, "manual", "src_" + payable,
+                8000L, 0L, 8000L, "CNY", day, day.toString().substring(0, 7), "pending_payment", created, created, shop, p));
+        String open = dueItem("arap_drb_o_" + s, shop, p, day.plusDays(1));
+        StaffRequestFixture staffs = new StaffRequestFixture(jdbcTemplate);
+        RequestPostProcessor financeA = staffs.staff("usr_drb_a_" + s, "staff", p, null,
+                "finance.daily_close.lock", "finance.daily_close.manage", "finance.payment.register", "finance.refund.create",
+                "finance.locked_backfill.request", "finance.locked_backfill.approve");
+        RequestPostProcessor financeB = staffs.staff("usr_drb_b_" + s, "staff", p, null, "finance.locked_backfill.approve");
+        // 退款分级授权按批准时的操作人（乙）判，给乙一档额度（与 FinanceProjectScopeRefundJdbcIntegrationTests 同一夹具口径）。
+        jdbcTemplate.update("INSERT INTO refund_authority_limits (id, subject_type, subject_id, refund_domain, limit_amount_cent, project_id,"
+                + " status) VALUES (?, 'staff', ?, 'finance', 1000000, NULL, 'active')", "ral_drb_" + s, "usr_drb_b_" + s);
+        jdbcTemplate.update("INSERT INTO contracts (id, merchant_id, contract_subject_id, settlement_subject_id, effective_date,"
+                + " expiry_date, lifecycle_status, allowed_business_scope, created_at, updated_at) VALUES (?, ?, 'subj_drb', 'subj_drb',"
+                + " current_date - 1, current_date + 365, 'effective', '[\"finance\"]'::jsonb, now(), now())", "ctr_drb_" + s, shop);
+
+        pay(financeA, receivable, "drb-pay-" + s).andExpect(status().isOk());
+        String receipt = jdbcTemplate.queryForObject("SELECT id FROM ar_ap_payments WHERE ar_ap_item_id = ?", String.class, receivable);
+        String close = lockDailyClose(financeA, "drb-" + s, day.toString(), "project", p);
+        assertThat(itemLedger(receivable)).isEqualTo("1000:9000:partial_paid:" + close);
+        List<String> closeBefore = dailyCloseFacts(close);
+
+        String first = JsonPath.read(refundBackfill(financeA, receivable, 600, "drb-r1-" + s)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.approval_status").value("pending"))
+                .andExpect(jsonPath("$.data.kind").value("refund"))
+                .andExpect(jsonPath("$.data.payment_method").value("bank_transfer"))
+                .andExpect(jsonPath("$.data.locked_day_close_id").value(close))
+                .andExpect(jsonPath("$.data.original_business_date").value(day.toString()))
+                .andReturn().getResponse().getContentAsString(), "$.data.id");
+        String rejected = JsonPath.read(refundBackfill(financeA, receivable, 100, "drb-r2-" + s)
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString(), "$.data.id");
+        assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM finance_refunds WHERE target_id = ?", Integer.class, receipt)).isZero();
+
+        decideBackfill(financeB, first, "approve", "drb-apv-" + s)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.approval_status").value("approved"))
+                .andExpect(jsonPath("$.data.kind").value("refund"));
+        assertThat(jdbcTemplate.queryForList("SELECT refund_amount_cent || ':' || refund_channel || ':' || refund_direction || ':' || status"
+                + " || ':' || source_type || ':' || project_id || ':' || requested_by FROM finance_refunds WHERE target_id = ?",
+                String.class, receipt)).containsExactly("600:bank_transfer:original:requested:ar_ap_payment:" + p + ":usr_drb_b_" + s);
+        decideBackfill(financeB, rejected, "reject", "drb-rej-" + s)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.approval_status").value("rejected"));
+        assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM finance_refunds WHERE target_id = ?", Integer.class, receipt)).isOne();
+        assertThat(itemLedger(receivable)).isEqualTo("1000:9000:partial_paid:" + close);
+        assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM ar_ap_items WHERE origin_item_id = ?", Integer.class, receivable))
+                .isZero();
+        assertThat(dailyCloseFacts(close)).isEqualTo(closeBefore);
+        mockMvc.perform(get("/api/v1/finance/daily-closes/" + close + "/adjustments").with(financeA))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items[?(@.id == '" + first + "')].kind").value(org.hamcrest.Matchers.contains("refund")))
+                .andExpect(jsonPath("$.data.items[?(@.id == '" + first + "')].payment_method")
+                        .value(org.hamcrest.Matchers.contains("bank_transfer")))
+                .andExpect(jsonPath("$.data.items[?(@.id == '" + first + "')].adjustment_amount_cent")
+                        .value(org.hamcrest.Matchers.contains(600)))
+                .andExpect(jsonPath("$.data.items[?(@.id == '" + first + "')].original_business_date")
+                        .value(org.hamcrest.Matchers.contains(day.toString())));
+
+        mockMvc.perform(post("/api/v1/finance/refunds").with(financeA)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"idempotency_key\":\"drb-direct-" + s + "\",\"target_id\":\"" + receipt + "\",\"refund_amount_cent\":100,"
+                        + "\"reason\":\"异议成立多退\",\"refund_direction\":\"original\"}"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.detail_code").value("DAY_CLOSE_LOCKED"));
+        refundBackfill(financeA, receivable, 401, "drb-over-" + s).andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.detail_code").value("VALIDATION_FAILED"));
+        refundBackfill(financeA, payable, 100, "drb-out-" + s).andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.detail_code").value("REFUND_REQUIRES_RECEIVABLE"));
+        refundBackfill(financeA, open, 100, "drb-open-" + s).andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.detail_code").value("AR_AP_ITEM_NOT_LOCKED"));
+        assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM finance_refunds WHERE target_id = ?", Integer.class, receipt)).isOne();
+        assertThat(itemLedger(receivable)).isEqualTo("1000:9000:partial_paid:" + close);
+    }
+
+    /**
+     * 控制席判定（实现遗留，186-R2）：设备闸管「钱当面退出去」那一步。原收款为现金的锁定台账，乙批准退款补录（后台、不带设备号）
+     * 只建退款待办、不结清；之后在退款办理处不带设备号登记执行现金退款仍 403 DEVICE_CONTEXT_REQUIRED。
+     */
+    @Test
+    void lockedCashReceiptRefundBackfillApprovalOnlyCreatesTodoWhileExecutionStillNeedsDevice() throws Exception {
+        String s = suffix();
+        String p = "project_drc_" + s;
+        String shop = "mch_drc_" + s;
+        insertProject(p);
+        insertShop(shop, p);
+        LocalDate day = farDay(s);
+        String receivable = dueItem("arap_drc_r_" + s, shop, p, day);
+        StaffRequestFixture staffs = new StaffRequestFixture(jdbcTemplate);
+        RequestPostProcessor financeA = staffs.staff("usr_drc_a_" + s, "staff", p, null,
+                "finance.daily_close.lock", "finance.daily_close.manage", "finance.payment.register", "finance.refund.create",
+                "finance.locked_backfill.request", "finance.locked_backfill.approve");
+        RequestPostProcessor financeB = staffs.staff("usr_drc_b_" + s, "staff", p, null, "finance.locked_backfill.approve");
+        jdbcTemplate.update("INSERT INTO refund_authority_limits (id, subject_type, subject_id, refund_domain, limit_amount_cent, project_id,"
+                + " status) VALUES (?, 'staff', ?, 'finance', 1000000, NULL, 'active')", "ral_drc_" + s, "usr_drc_b_" + s);
+        jdbcTemplate.update("INSERT INTO contracts (id, merchant_id, contract_subject_id, settlement_subject_id, effective_date,"
+                + " expiry_date, lifecycle_status, allowed_business_scope, created_at, updated_at) VALUES (?, ?, 'subj_drc', 'subj_drc',"
+                + " current_date - 1, current_date + 365, 'effective', '[\"finance\"]'::jsonb, now(), now())", "ctr_drc_" + s, shop);
+
+        mockMvc.perform(post("/api/v1/finance/ar-ap-items/" + receivable + "/payments").with(financeA)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"idempotency_key\":\"drc-pay-" + s + "\",\"amount_cent\":1000,\"payment_method\":\"cash\","
+                        + "\"payment_time\":\"" + Instant.now() + "\"}"))
+                .andExpect(status().isOk());
+        String receipt = jdbcTemplate.queryForObject("SELECT id FROM ar_ap_payments WHERE ar_ap_item_id = ?", String.class, receivable);
+        String close = lockDailyClose(financeA, "drc-" + s, day.toString(), "project", p);
+
+        String backfillId = JsonPath.read(refundBackfill(financeA, receivable, 600, "drc-r1-" + s)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.payment_method").value("cash"))
+                .andReturn().getResponse().getContentAsString(), "$.data.id");
+        decideBackfill(financeB, backfillId, "approve", "drc-apv-" + s)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.approval_status").value("approved"));
+        String refundId = jdbcTemplate.queryForObject("SELECT id FROM finance_refunds WHERE target_id = ?", String.class, receipt);
+        assertThat(jdbcTemplate.queryForObject("SELECT refund_amount_cent || ':' || refund_channel || ':' || status FROM finance_refunds"
+                + " WHERE id = ?", String.class, refundId)).isEqualTo("600:cash:requested");
+        assertThat(itemLedger(receivable)).isEqualTo("1000:9000:partial_paid:" + close);
+
+        mockMvc.perform(post("/api/v1/finance/refunds/" + refundId + "/execution").with(financeA)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"idempotency_key\":\"drc-exe-" + s + "\",\"operator_note\":\"当面退现金\","
+                        + "\"evidence_attachment_ids\":[\"att_drc_" + s + "\"],\"payment_reference\":\"cash-drc-" + s + "\"}"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.detail_code").value("DEVICE_CONTEXT_REQUIRED"));
+        assertThat(jdbcTemplate.queryForObject("SELECT status FROM finance_refunds WHERE id = ?", String.class, refundId))
+                .isEqualTo("requested");
+        assertThat(itemLedger(receivable)).isEqualTo("1000:9000:partial_paid:" + close);
+    }
+
+    /** 186-R2：日结页面「申请退款补录」的真实请求形状（类型＋台账＋金额分＋原因＋幂等键；收付方式由后端取原收款记录）。 */
+    private org.springframework.test.web.servlet.ResultActions refundBackfill(RequestPostProcessor who, String itemId, long amountCent,
+            String key) throws Exception {
+        return mockMvc.perform(post("/api/v1/finance/ar-ap-adjustments").with(who)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"kind\":\"refund\",\"ar_ap_item_id\":\"" + itemId + "\",\"adjustment_amount_cent\":" + amountCent
+                        + ",\"reason\":\"异议成立多退\",\"idempotency_key\":\"" + key + "\"}"));
+    }
+
+    /** 186-R1：日结页面「申请收付款补录」的真实请求形状（类型＋台账＋金额分＋收付方式＋原因＋幂等键）。 */
+    private org.springframework.test.web.servlet.ResultActions paymentBackfill(RequestPostProcessor who, String itemId, long amountCent,
+            String method, String key) throws Exception {
+        return mockMvc.perform(post("/api/v1/finance/ar-ap-adjustments").with(who)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"kind\":\"payment\",\"ar_ap_item_id\":\"" + itemId + "\",\"adjustment_amount_cent\":" + amountCent
+                        + ",\"payment_method\":\"" + method + "\",\"reason\":\"到期后补缴\",\"idempotency_key\":\"" + key + "\"}"));
+    }
+
+    /** 补录审批（批准、驳回）的真实请求形状。 */
+    private org.springframework.test.web.servlet.ResultActions decideBackfill(RequestPostProcessor who, String adjustmentId,
+            String decision, String key) throws Exception {
+        return mockMvc.perform(post("/api/v1/finance/ar-ap-adjustments/" + adjustmentId + "/approve").with(who)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"idempotency_key\":\"" + key + "\",\"decision\":\"" + decision + "\"}"));
+    }
+
+    /** 台账已收付:未收付:状态:锁定日结。 */
+    private String itemLedger(String itemId) {
+        return jdbcTemplate.queryForObject("SELECT paid_amount_cent || ':' || unpaid_amount_cent || ':' || status || ':' || locked_day_close_id"
+                + " FROM ar_ap_items WHERE id = ?", String.class, itemId);
+    }
+
+    /** 日结记录与七源汇总（同 ContractApprovalChainJdbcIntegrationTests 写法）。 */
+    private List<String> dailyCloseFacts(String closeId) {
+        List<String> facts = new java.util.ArrayList<>(jdbcTemplate.queryForList("SELECT business_date || ':' || status || ':' || locked_at"
+                + " FROM finance_daily_closes WHERE id = ?", String.class, closeId));
+        facts.addAll(jdbcTemplate.queryForList("SELECT source_stream || ':' || amount_cent || ':' || refund_cent || ':' || order_count"
+                + " FROM finance_daily_close_summaries WHERE daily_close_id = ? ORDER BY source_stream", String.class, closeId));
+        return facts;
     }
 
     /** 143-R4：日结页面「申请补录」的真实请求形状（幂等键＋台账＋调整额分＋原因）。 */

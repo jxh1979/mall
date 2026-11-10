@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.18
+// 文件版本：V0.19
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
@@ -5246,7 +5246,7 @@ class BarServiceTests {
         private boolean businessDayLocked = false;
 
         @Override
-        public boolean isBusinessDayLocked(java.time.LocalDate businessDate) {
+        public boolean isBusinessDayLocked(java.time.LocalDate businessDate, String merchantId) {
             return businessDayLocked;
         }
 

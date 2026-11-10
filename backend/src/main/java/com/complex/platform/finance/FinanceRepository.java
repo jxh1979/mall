@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.20
+// 文件版本：V0.21
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -647,6 +647,33 @@ public interface FinanceRepository {
     default java.util.Map<LocalDate, java.util.Set<String>> finalMarkCategoriesByDay(String barId, String projectId, LocalDate from,
             LocalDate to) {
         return java.util.Map.of();
+    }
+
+    /**
+     * 第十八批 Z 段第 188 条 188-R1（第十八批裁决 41「只放行该月每天五类数据都已最终、日结都已锁定的月份」）：单位在 from～to（含两端）里没有已锁定
+     * 或已归档日结的营业日，按营业日升序。barId 非空看该酒吧 bar、merchant 范围的日结，否则看 projectId 的 project 范围日结（单位划分同
+     * {@link #finalMarkCategoriesByDay}）；建档之前的营业日由调用方跳过。default 返回空兼容既有测试双子。
+     */
+    default List<LocalDate> unlockedCloseDays(String barId, String projectId, LocalDate from, LocalDate to) {
+        return List.of();
+    }
+
+    /** 188-R1：该综合体该月（periodMonth 取月首）是否已封账。default 返回 false 兼容既有测试双子。 */
+    default boolean periodCloseExists(String projectId, LocalDate periodMonth) {
+        return false;
+    }
+
+    /** 188-R1：记一条封账（finance_period_closes，一综合体一月一行）。default 抛错，测试双子按需实现。 */
+    default PeriodCloseRecord savePeriodClose(PeriodCloseRecord close) {
+        throw new UnsupportedOperationException("财务仓储未实现封账");
+    }
+
+    /**
+     * 188-R1：封账记录按月份倒序。projectIds 为 null＝不按可触及项目过滤，空集合没有可见记录；projectId 非空再按综合体过滤。
+     * default 返回空兼容既有测试双子。
+     */
+    default List<PeriodCloseRecord> listPeriodCloses(java.util.Set<String> projectIds, String projectId) {
+        return List.of();
     }
 
     /**

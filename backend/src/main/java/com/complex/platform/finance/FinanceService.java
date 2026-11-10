@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.42
+// 文件版本：V0.43
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -107,6 +107,7 @@ public class FinanceService implements TerminationSettlementPort {
             "official_ticket", "channel_ticket", "bar", "amusement", "supply_cost", "thirdparty_reflow", "bar_deposit",
             "low_value_difference");
     private static final Set<String> ADJUSTMENT_DECISIONS = Set.of("approve", "reject");
+    private static final Set<String> ADJUSTMENT_KINDS = Set.of("amount", "payment", "refund");
     // P0#7 / R6-D07：对账差异四类枚举（与 V105 chk_frd_difference_type 一致）。
     private static final Set<String> DIFFERENCE_TYPES = Set.of("amount", "count", "status", "missing");
     // 取数来源：system=平台侧系统取数；manual=第三方侧未接入手工录入进复核（与 V105 chk_frd_source 一致）。
@@ -526,15 +527,15 @@ public class FinanceService implements TerminationSettlementPort {
     /**
      * R5 T7 协同：判断某经营日是否已被锁定日结纳入（status='locked'）。
      * 供其他域（如 bar 反结）在改动结账后金额前校验，锁定则须走补录审批，不得直接冲减锁定日 net。
+     * 第十八批 Z 段第 187 条 187-R1（ENUM:190「日结锁定后的补录须上级审批，且不改动已锁定的日结金额」；18R 143-R7、18S 161-R1）：
+     * 按调用方传入的账单所属商户判（该酒吧 merchant、bar 范围日结），不再取操作人的商户范围——平台管理员处置时不被别家的封账拦住。
      */
     @Transactional(readOnly = true)
-    public boolean isBusinessDayLocked(LocalDate businessDate) {
+    public boolean isBusinessDayLocked(LocalDate businessDate, String merchantId) {
         if (businessDate == null) {
             return false;
         }
-        // F-OPS-09：按调用方 merchant scope 判定——商户 scope 仅看本商户封账，平台口径看全部封账。
-        return repository.lockedDailyCloseExistsForDate(
-                businessDate, authorizationService.currentMerchantScope().orElse(null));
+        return repository.lockedDailyCloseExistsForDate(businessDate, merchantId);
     }
 
     /**
@@ -1243,7 +1244,7 @@ public class FinanceService implements TerminationSettlementPort {
                 "finance_refund.create_failed",
                 "finance.refund.create",
                 "finance_refund",
-                () -> refund(request)
+                () -> refund(request, "finance.refund.create")
         );
         return dispatchPreparedRefund(prepared);
     }
@@ -1655,7 +1656,15 @@ public class FinanceService implements TerminationSettlementPort {
     private ArApAdjustmentRecord createAdjustment(ArApAdjustmentRequest request) {
         ArApAdjustmentRequest actual = requireRequest(request);
         String itemId = requireText(actual.arApItemId(), "ar_ap_item_id");
-        long amountCent = requireNonZero(actual.adjustmentAmountCent(), "adjustment_amount_cent");
+        // 第十八批 Z 段第 186 条 186-R1（ENUM:190「日结锁定后的补录须上级审批……」；BSM:2023；第七批裁决 19「人工登记收款仍受锁定拦截。」）：
+        // 收付款补录（kind=payment）金额为正、收付方式取线下四种，批准后登记收付款；缺省为金额调整（amount）。
+        // 186-R2（控制席并入，同根；BSM:1323「……先按原值付款，异议成立后多退少补」）：退款补录（kind=refund）金额为正，收付方式照原收款记录。
+        String kind = trimToNull(actual.kind()) == null ? "amount" : requireEnum(actual.kind(), ADJUSTMENT_KINDS, "kind");
+        boolean payment = "payment".equals(kind);
+        boolean refund = "refund".equals(kind);
+        long amountCent = payment || refund ? requirePositive(actual.adjustmentAmountCent(), "adjustment_amount_cent")
+                : requireNonZero(actual.adjustmentAmountCent(), "adjustment_amount_cent");
+        String paymentMethod = payment ? requireEnum(actual.paymentMethod(), OFFLINE_PAYMENT_METHODS, "payment_method") : null;
         String reason = requireText(actual.reason(), "reason");
 
         ArApItemRecord item = repository.findArApItemByIdForUpdate(itemId)
@@ -1669,6 +1678,22 @@ public class FinanceService implements TerminationSettlementPort {
         String lockedDayCloseId = repository.findArApItemLockedDayCloseId(itemId)
                 .orElseThrow(() -> ApiException.badRequest("AR_AP_ITEM_NOT_LOCKED",
                         "该应收应付款项未被锁定，请直接修改，无需补录调整"));
+        if (payment && amountCent > item.unpaidAmountCent()) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "支付金额超过未付金额");
+        }
+        if (refund) {
+            // 186-R2：只退应收（同退款路径 REFUND_REQUIRES_RECEIVABLE）；可退余额按所退的那笔原收款算，已退及待退都占额（同退款路径）。
+            if (!"receivable".equals(item.direction())) {
+                throw ApiException.badRequest("REFUND_REQUIRES_RECEIVABLE", "仅已实际收到的款项可在本入口向原付款人退款");
+            }
+            ArApPaymentRecord original = refundBackfillTarget(itemId);
+            long refunded = repository.sumRefundedAmountByTargetId(original.id());
+            if (amountCent > original.amountCent() - refunded) {
+                throw ApiException.badRequest("VALIDATION_FAILED",
+                        "退款金额超过可退余额（支付金额：" + original.amountCent() + "，已退及待退：" + refunded + "）");
+            }
+            paymentMethod = original.paymentMethod();
+        }
 
         Instant now = Instant.now();
         return repository.saveArApAdjustment(new ArApAdjustmentRecord(
@@ -1684,7 +1709,9 @@ public class FinanceService implements TerminationSettlementPort {
                 null,
                 item.itemNo(),
                 // 143-R4（ENUM:190「在补录记录上标明其所属的原营业日」）：锁定该台账的日结的营业日。
-                repository.findDailyCloseById(lockedDayCloseId).map(DailyCloseRecord::businessDate).orElse(null)));
+                repository.findDailyCloseById(lockedDayCloseId).map(DailyCloseRecord::businessDate).orElse(null),
+                kind,
+                paymentMethod));
     }
 
     private ArApAdjustmentRecord decideAdjustment(String adjustmentId, boolean approve) {
@@ -1712,7 +1739,20 @@ public class FinanceService implements TerminationSettlementPort {
                     "补录调整的申请人不能自行审批，须由其他审批人处理");
         }
 
-        if (approve) {
+        if (approve && "payment".equals(adjustment.kind())) {
+            // 186-R1：收付款补录批准即登记收付款，不红冲重述、不发金额变动通知；付款时间取批准时刻（ENUM:190「补录金额归入当期」），台账锁与日结汇总不动。
+            // 审批人范围已由上方 requireArApScope 判过；permission 传 null 只为跳过 requireNotLocked（与裁决 19 的系统落账同一入口），
+            // 押金退还、积分发行费的到期闸与已冲正闸、采购应付闸仍在 settleArApItem 里照判。
+            settleArApItem(item.id(), adjustment.adjustmentAmountCent(), adjustment.paymentMethod(), now, null,
+                    "adj_" + adjustment.id(), null);
+        } else if (approve && "refund".equals(adjustment.kind())) {
+            // 186-R2（控制席并入，同根）：退款补录批准即按所退的原收款走现有原路退款路径建退款待办，台账、台账锁与日结汇总不动。
+            // 审批人范围已由上方 requireArApScope 判过；permission 传 null 只为跳过 requireNotLocked（同 186-R1），
+            // 可退余额、分级授权、只退应收、沿原收款渠道、后收先退各闸仍在 refund 里照判；现场渠道设备闸（控制席判定）不在后台审批时判，
+            // 现金、刷卡的待办在退款办理处登记执行与核实时照判。
+            refund(new RefundRequest("adj_" + adjustment.id(), null, List.of(), refundBackfillTarget(item.id()).id(),
+                    adjustment.adjustmentAmountCent(), adjustment.reason(), adjustment.paymentMethod(), DEFAULT_REFUND_DIRECTION), null);
+        } else if (approve) {
             requireCurrentPurchasePayable(item);
             // P0-B（V344）红冲：审批通过不再改写原行，改为「原行不动 + 追加一条严格取反的冲正行
             // + 追加一条重述行（原额 + 补录额）」。三行相加恒等于补录后的应有金额（守恒），
@@ -1755,7 +1795,20 @@ public class FinanceService implements TerminationSettlementPort {
                 adjustment.createdAt(),
                 now,
                 adjustment.itemNo(),
-                adjustment.originalBusinessDate()));
+                adjustment.originalBusinessDate(),
+                adjustment.kind(),
+                adjustment.paymentMethod()));
+    }
+
+    /**
+     * 第十八批 Z 段 186-R2：退款补录退的原收款——该台账最后一笔尚未退完（按退款成功计）的收款，即现有退款路径「须先退完该单后收的款项」
+     * （REFUND_LATEST_PAYMENT_FIRST）唯一放行的那笔；没有可退的收款 400。
+     */
+    private ArApPaymentRecord refundBackfillTarget(String itemId) {
+        return repository.listArApPayments(itemId).stream()
+                .filter(payment -> repository.sumSucceededRefundAmountByTargetId(payment.id()) < payment.amountCent())
+                .findFirst()
+                .orElseThrow(() -> ApiException.badRequest("VALIDATION_FAILED", "该台账没有可退的收款"));
     }
 
     /**
@@ -1897,7 +1950,8 @@ public class FinanceService implements TerminationSettlementPort {
     /**
      * ar_ap 台账结算回写公共逻辑（FOR UPDATE 行锁防并发双扣 + 跨商户校验 + 锁定日拦截 + 登记 payment + 回写 paid/unpaid/status）。
      * 供 registerPayment（在线/后台登记收付款）与 F1 confirmOffline（线下确认收款关联应收）共用，保证回款口径一致。
-     * permission 为 null 仅限系统按结算清单自动落账（退租押金抵扣销账），不按操作人权限范围复核，也不受日结锁定拦截（见下）。
+     * permission 为 null 仅限系统按结算清单自动落账（退租押金抵扣销账），不按操作人权限范围复核，也不受日结锁定拦截（见下）；
+     * 第十八批 Z 段 186-R1 锁定后收付款补录经上级批准后也传 null（审批人范围已在 decideAdjustment 判过）。
      */
     private ArApPaymentResponse settleArApItem(
             String arApItemId, long amountCent, String paymentMethod,
@@ -2073,6 +2127,82 @@ public class FinanceService implements TerminationSettlementPort {
     public static String describeNonFinalDays(List<String> lines) {
         String shown = String.join("；", lines.subList(0, Math.min(lines.size(), 10)));
         return lines.size() > 10 ? shown + "等，共 " + lines.size() + " 条" : shown;
+    }
+
+    /**
+     * 第十八批 Z 段第 188 条 188-R1（BSM:1803「封账由财务部门执行，条件是账目已算清楚、经确认无误、四流一致。」；PGM:664「跨主体与平台层面的财务工作——
+     * 三方对账、分账复核、封账、开票、付款执行、守恒校验不通过时的追查——由财务中心负责。」；ENUM:190「非最终快照的数据一律不得进入结算、分红、正式提成计算和对账关账」；
+     * 第十八批裁决 41「财务中心按综合体＋月份在平台办理；只放行该月每天五类数据都已最终、日结都已锁定的月份；四流一致由财务核对后勾选确认留痕；
+     * 封账不能撤销，不另加拦截」）：按综合体＋月份封账。范围闸同日结的 project 范围（{@link #requireDailyCloseScope}：商户账号 403，综合体须在可触及范围内），
+     * 在幂等之前；之后依次拦——未勾选四流一致 400；该月检查单位（{@link #nonFinalDaysAllUnits}）有未最终营业日 409 PERIOD_CLOSE_DATA_NOT_FINAL；
+     * 有营业日没有已锁定或已归档的日结 409 PERIOD_CLOSE_DAY_NOT_LOCKED（单位与建档前跳过同 {@link #unitNonFinalDays}）；已封过 409 PERIOD_ALREADY_CLOSED。
+     * 不提供撤销，也不另加写入拦截（该月营业日已全部锁定，锁定后补录照常归入当期）。
+     */
+    @com.complex.platform.gate.GuardedAction(capability = "finance.period_close.execute")
+    @Transactional
+    public PeriodCloseRecord closePeriod(com.complex.platform.finance.dto.PeriodCloseRequest request) {
+        com.complex.platform.finance.dto.PeriodCloseRequest actual = requireRequest(request);
+        String projectId = requireText(actual.projectId(), "project_id");
+        requireDailyCloseScope("project", projectId, "finance.period_close.execute", "封账");
+        return executeWrite(
+                "closePeriod",
+                actual.idempotencyKey(),
+                actual,
+                PeriodCloseRecord.class,
+                "finance_period.closed",
+                "finance_period.close_failed",
+                "finance.period_close.execute",
+                "finance_period_close",
+                () -> {
+                    if (!Boolean.TRUE.equals(actual.fourFlowsConfirmed())) {
+                        throw ApiException.badRequest("VALIDATION_FAILED", "须由财务核对四流一致后勾选确认，才能封账");
+                    }
+                    java.time.YearMonth month;
+                    try {
+                        month = java.time.YearMonth.parse(requireText(actual.periodMonth(), "period_month"));
+                    } catch (java.time.DateTimeException exception) {
+                        throw ApiException.badRequest("VALIDATION_FAILED", "封账月份格式不正确，应为 YYYY-MM");
+                    }
+                    LocalDate from = month.atDay(1);
+                    LocalDate to = month.atEndOfMonth();
+                    List<String> notFinal = nonFinalDaysAllUnits(projectId, from, to, FINAL_MARK_CATEGORIES.keySet());
+                    if (!notFinal.isEmpty()) {
+                        throw ApiException.conflict("PERIOD_CLOSE_DATA_NOT_FINAL",
+                                "以下营业日数据尚未标记为最终，不能封账：" + describeNonFinalDays(notFinal));
+                    }
+                    List<String> unlocked = repository.listFinalMarkUnits().stream().filter(unit -> projectId.equals(unit.project()))
+                            .flatMap(unit -> repository.unlockedCloseDays(unit.bar(), unit.bar() == null ? unit.id() : null, from, to)
+                                    .stream()
+                                    .filter(day -> businessDayResolver.end(unit.project(), unit.bar(), day).isAfter(unit.created()))
+                                    .map(day -> day + " " + unit.name()))
+                            .toList();
+                    if (!unlocked.isEmpty()) {
+                        throw ApiException.conflict("PERIOD_CLOSE_DAY_NOT_LOCKED",
+                                "以下营业日的日结尚未锁定，不能封账：" + describeNonFinalDays(unlocked));
+                    }
+                    if (repository.periodCloseExists(projectId, from)) {
+                        throw ApiException.conflict("PERIOD_ALREADY_CLOSED", "该综合体该月已封账，封账不能撤销");
+                    }
+                    return repository.savePeriodClose(new PeriodCloseRecord(
+                            "period_close_" + stableToken("period_close", projectId + ":" + month), projectId, month.toString(),
+                            authorizationService.currentActor().id(), Instant.now()));
+                });
+    }
+
+    /**
+     * 188-R1：已封账月份，按月份倒序。范围同日结列表（{@link #listDailyCloses}）：平台管理员看全部；商户账号只看本商户范围，封账按综合体办，没有可看的；
+     * 其余按 finance.period_close.execute 可触及的项目。projectId 非空再按综合体过滤。
+     */
+    public PageResponse<PeriodCloseRecord> listPeriodCloses(String projectId) {
+        return readPage("finance_period.viewed", "finance_period.view_failed", "finance.period_close.execute", "finance_period_close",
+                () -> {
+                    authorizationService.requirePermission("finance.period_close.execute");
+                    var actor = authorizationService.currentActor();
+                    var reach = authorizationService.projectReach(actor, "finance.period_close.execute");
+                    Set<String> projects = reach.platformAdmin() ? null
+                            : trimToNull(actor.merchantId()) != null ? Set.of() : reach.organizationIds();
+                    return repository.listPeriodCloses(projects, trimToNull(projectId));
+                });
     }
 
     private List<String> unitNonFinalDays(FinanceRepository.FinalMarkUnit unit, LocalDate from, LocalDate to,
@@ -2454,12 +2584,18 @@ public class FinanceService implements TerminationSettlementPort {
         }
     }
 
-    private FinanceRefundRecord refund(RefundRequest request) {
+    /**
+     * permission 为 null 仅限第十八批 Z 段 186-R2 锁定后退款补录经上级批准（审批人范围已在 decideAdjustment 判过），
+     * 只跳过本处范围闸与日结锁定拦截（同 settleArApItem），以及现场渠道设备闸（控制席判定：设备闸管「钱当面退出去」那一步，
+     * 补录批准只建退款待办；现金、刷卡的待办登记执行与核实时仍由 requireRefundExecutionAuthority 照判），其余各闸照判。
+     */
+    private FinanceRefundRecord refund(RefundRequest request, String permission) {
         RefundRequest actual = requireRequest(request);
         String targetId = requireText(actual.targetId(), "target_id");
         long refundAmountCent = requirePositive(actual.refundAmountCent(), "refund_amount_cent");
         // P3：现场渠道(cash/pos)退款由服务端强制要求设备上下文，缺 deviceId 直接拒（不靠请求体可空绕过设备门控）。
-        requireDeviceContextForOnsiteChannel(actual.refundChannel(), actual.deviceId());
+        // 186-R2 补录批准（permission 为 null）只建待办，不在后台审批时判，见方法注释。
+        if (permission != null) requireDeviceContextForOnsiteChannel(actual.refundChannel(), actual.deviceId());
         // 跨模块闭环②a：退款=高价值兑付高风险动作，接入 MDM 门控。
         // 现场/工作机退款时请求携带 deviceId → 触发硬门控；后台台账类退款无设备上下文 → 留空安全跳过。
         requireManagedDeviceForFinanceAction(actual.deviceId(), "finance.refund");
@@ -2477,10 +2613,11 @@ public class FinanceService implements TerminationSettlementPort {
         rejectPayrollMutation(item);
         // FS-021-R6（BSM L1673「所有数据默认按项目隔离」；PGM L664 付款执行由财务中心负责）：按项目范围与商户交集办理，
         //   项目财务没有商户编号也能办本项目的退款；他项目拒绝，商户账号仍只限本商户。
-        requireArApScope(item, "finance.refund.create");
-
-        // R5 T7 硬拦截：已锁定台账禁止直接退款（影响金额），必须走补录审批。
-        requireNotLocked(item.id());
+        if (permission != null) {
+            requireArApScope(item, permission);
+            // R5 T7 硬拦截：已锁定台账禁止直接退款（影响金额），必须走补录审批（186-R2 退款补录）。
+            requireNotLocked(item.id());
+        }
 
         // P1 fix: prevent refunding more than the original payment (cumulative check)
         long alreadyRefunded = repository.sumRefundedAmountByTargetId(targetId);
@@ -2508,7 +2645,7 @@ public class FinanceService implements TerminationSettlementPort {
         if (!"original".equals(direction) && !("cash".equals(direction) && "cash".equals(channel))) {
             throw ApiException.conflict("REFUND_ORIGINAL_PATH_REQUIRED", "本入口不得改用非原收款路径退款");
         }
-        requireDeviceContextForOnsiteChannel(channel, actual.deviceId());
+        if (permission != null) requireDeviceContextForOnsiteChannel(channel, actual.deviceId());
         // 混合收款后收先退；未结退款也占额，不能改编号重复申请。
         for (ArApPaymentRecord later : repository.listArApPayments(item.id())) {
             if (later.id().equals(payment.id())) break;
@@ -4083,6 +4220,9 @@ public class FinanceService implements TerminationSettlementPort {
             return record.id();
         }
         if (value instanceof DepositLedgerRecord record) {
+            return record.id();
+        }
+        if (value instanceof PeriodCloseRecord record) {
             return record.id();
         }
         return null;

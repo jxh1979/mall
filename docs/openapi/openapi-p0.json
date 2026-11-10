@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "综合体管理系统 P0 API 契约",
-    "version": "V0.57",
+    "version": "V0.58",
     "description": "P0 首批编码前置契约。本文采用 JSON-compatible YAML，便于与 openapi-p0.json 保持一致。正式后端以 Java 21 + Spring Boot 4.x + springdoc-openapi 输出运行时 OpenAPI，并与本契约比对。"
   },
   "servers": [
@@ -6122,6 +6122,120 @@
             "$ref": "#/components/responses/Error"
           },
           "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/finance/period-closes": {
+      "get": {
+        "tags": [
+          "finance"
+        ],
+        "operationId": "listFinancePeriodCloses",
+        "summary": "查询已封账月份",
+        "description": "第十八批 Z 段第 188 条 188-R1（第十八批裁决 41「财务中心按综合体＋月份在平台办理；只放行该月每天五类数据都已最终、日结都已锁定的月份；四流一致由财务核对后勾选确认留痕；封账不能撤销，不另加拦截」）：按月份倒序列出封账记录，每项含 id、project_id（综合体）、period_month（YYYY-MM）、closed_by（封账人）、closed_at（封账时间）；记录存在即财务已核对四流一致并勾选确认。范围同日结列表：平台管理员看全部；商户账号没有可看的综合体封账，返回空；其余按 finance.period_close.execute 可触及的项目看。可选按 project_id 过滤。",
+        "x-auth-context": "staff-token",
+        "x-permission": "finance.period_close.execute",
+        "x-data-scope": "project",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "finance_period.viewed",
+        "x-audit-event-failure": "finance_period.view_failed",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "query",
+            "required": false,
+            "description": "按综合体项目 ID 过滤。",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Page"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "finance"
+        ],
+        "operationId": "closeFinancePeriod",
+        "summary": "封账（按综合体＋月份）",
+        "description": "第十八批 Z 段第 188 条 188-R1（BSM:1803「封账由财务部门执行，条件是账目已算清楚、经确认无误、四流一致。」；PGM:664「跨主体与平台层面的财务工作——三方对账、分账复核、封账、开票、付款执行、守恒校验不通过时的追查——由财务中心负责。」；ENUM:190「非最终快照的数据一律不得进入结算、分红、正式提成计算和对账关账」；第十八批裁决 41「财务中心按综合体＋月份在平台办理；只放行该月每天五类数据都已最终、日结都已锁定的月份；四流一致由财务核对后勾选确认留痕；封账不能撤销，不另加拦截」）：按综合体＋月份封账。范围（在幂等之前校验）：商户账号 403 CROSS_MERCHANT_FORBIDDEN；其余账号按 finance.period_close.execute 可触及的项目覆盖该综合体，否则 403 CROSS_PROJECT_FORBIDDEN。依次拦：four_flows_confirmed 不为 true、period_month 不是 YYYY-MM 拒 400 VALIDATION_FAILED；该月检查单位（该综合体与其下在营未存档的酒吧，跳过建档之前的营业日）有营业日五类数据未全部标记为最终拒 409 PERIOD_CLOSE_DATA_NOT_FINAL（提示逐行列出营业日、单位与缺的类别）；有营业日没有已锁定或已归档的日结拒 409 PERIOD_CLOSE_DAY_NOT_LOCKED（提示逐行列出营业日与单位）；该综合体该月已封账拒 409 PERIOD_ALREADY_CLOSED。成功返回封账记录（id、project_id、period_month、closed_by、closed_at）。不提供撤销，也不另加写入拦截：该月营业日已全部锁定，之后的锁定后补录照常走上级审批、归入当期。",
+        "x-auth-context": "staff-token",
+        "x-permission": "finance.period_close.execute",
+        "x-data-scope": "project",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "finance_period.closed",
+        "x-audit-event-failure": "finance_period.close_failed",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true,
+                "required": [
+                  "idempotency_key",
+                  "project_id",
+                  "period_month",
+                  "four_flows_confirmed"
+                ],
+                "properties": {
+                  "idempotency_key": {
+                    "type": "string",
+                    "description": "操作幂等键；重复提交必须返回同一处理结果。",
+                    "maxLength": 128
+                  },
+                  "project_id": {
+                    "type": "string",
+                    "description": "综合体项目 ID。",
+                    "maxLength": 64
+                  },
+                  "period_month": {
+                    "type": "string",
+                    "description": "封账月份，YYYY-MM。",
+                    "maxLength": 7
+                  },
+                  "four_flows_confirmed": {
+                    "type": "boolean",
+                    "description": "财务已核对四流一致并勾选确认，须为 true。"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
             "$ref": "#/components/responses/Error"
           },
           "409": {
@@ -17789,7 +17903,7 @@
         ],
         "operationId": "listDailyCloseAdjustments",
         "summary": "查询日结的锁定后补录",
-        "description": "第十八批 R 段第 143 条 143-R4（ENUM:190「日结锁定后的补录须上级审批，且不改动已锁定的日结金额：补录金额归入当期，并在补录记录上标明其所属的原营业日；同时在原营业日的日结锁定表单上关联显示该笔补录的金额与情况，两边互相可查。」；财务 PRD §5.4 日结页面直接展示补录人、补录原因、批准人含时间）：按日结号列出挂在该日结上的锁定后补录（locked_day_close_id 为该日结），按申请时间倒序；每条带 item_no（台账单号）、adjustment_amount_cent（调整额，分，可为负）、reason（补录原因）、requested_by（补录人）、created_at（申请时间）、approval_status（pending、approved、rejected）、approved_by（批准人）、decided_at（批准时间）、original_business_date（原营业日，即该日结的营业日）。范围同 listDailyCloseSummaries：商户账号只看本商户的 merchant、bar 范围日结（否则 403 CROSS_MERCHANT_FORBIDDEN），其余按 finance.daily_close.manage 可触及的项目覆盖日结所属综合体（否则 403 CROSS_PROJECT_FORBIDDEN）；日结不存在 404 DAILY_CLOSE_NOT_FOUND。",
+        "description": "第十八批 R 段第 143 条 143-R4（ENUM:190「日结锁定后的补录须上级审批，且不改动已锁定的日结金额：补录金额归入当期，并在补录记录上标明其所属的原营业日；同时在原营业日的日结锁定表单上关联显示该笔补录的金额与情况，两边互相可查。」；财务 PRD §5.4 日结页面直接展示补录人、补录原因、批准人含时间）：按日结号列出挂在该日结上的锁定后补录（locked_day_close_id 为该日结），按申请时间倒序；每条带 item_no（台账单号）、adjustment_amount_cent（调整额，分，可为负）、reason（补录原因）、requested_by（补录人）、created_at（申请时间）、approval_status（pending、approved、rejected）、approved_by（批准人）、decided_at（批准时间）、original_business_date（原营业日，即该日结的营业日）、kind（补录类型，第十八批 Z 段 186-R1：amount 金额调整、payment 收付款补录；186-R2：refund 退款补录）、payment_method（收付款补录的收付方式、退款补录所退原收款的收付方式，金额调整为空）。范围同 listDailyCloseSummaries：商户账号只看本商户的 merchant、bar 范围日结（否则 403 CROSS_MERCHANT_FORBIDDEN），其余按 finance.daily_close.manage 可触及的项目覆盖日结所属综合体（否则 403 CROSS_PROJECT_FORBIDDEN）；日结不存在 404 DAILY_CLOSE_NOT_FOUND。",
         "x-permission": "finance.daily_close.manage",
         "x-data-scope": "project-entity",
         "x-terminal-allowed": [
@@ -17828,7 +17942,7 @@
         ],
         "operationId": "requestArApAdjustment",
         "summary": "锁定后补录审批申请",
-        "description": "对已锁定日结的应收应付台账发起补录申请（pending），由上级审批通过后才真正写入金额变动。第十八批 R 段 143-R4：返回的补录记录带 item_no（台账单号）与 original_business_date（原营业日，即锁定该台账的日结的营业日，ENUM:190「在补录记录上标明其所属的原营业日」）；按日结号可查（listDailyCloseAdjustments）。",
+        "description": "对已锁定日结的应收应付台账发起补录申请（pending），由上级审批通过后才真正写入金额变动。第十八批 R 段 143-R4：返回的补录记录带 item_no（台账单号）与 original_business_date（原营业日，即锁定该台账的日结的营业日，ENUM:190「在补录记录上标明其所属的原营业日」）；按日结号可查（listDailyCloseAdjustments）。第十八批 Z 段第 186 条 186-R1（ENUM:190「日结锁定后的补录须上级审批，且不改动已锁定的日结金额：补录金额归入当期……」；BSM:2023「已拍板：日结锁定后不能直接补录影响金额，必须上级审批通过后补录。」；第七批裁决 19「人工登记收款仍受锁定拦截。」）：kind 缺省 amount（金额调整，调整额不得为 0）；kind=payment 为收付款补录：adjustment_amount_cent 须为正且不超过台账未收付额（否则 400 VALIDATION_FAILED「支付金额超过未付金额」），payment_method 取 cash、bank_transfer、pos、other（否则 400 VALIDATION_FAILED）；台账未锁定照旧 400 AR_AP_ITEM_NOT_LOCKED。返回的补录记录带 kind 与 payment_method。第十八批 Z 段 186-R2（控制席并入，同根；BSM:1323「提出异议期间商户的付款义务不暂停，先按原值付款，异议成立后多退少补」；ENUM:190「日结锁定后的补录须上级审批……」）：kind=refund 为退款补录：只退应收（否则 400 REFUND_REQUIRES_RECEIVABLE）；所退原收款为该台账最后一笔尚未退完（按退款成功计）的收款，没有可退的收款 400 VALIDATION_FAILED；adjustment_amount_cent 须为正且不超过该笔收款的可退余额（已退及待退都占额，否则 400 VALIDATION_FAILED）；不填 payment_method，记录上的 payment_method 为该笔原收款的收付方式。",
         "x-permission": "finance.locked_backfill.request",
         "x-data-scope": "project-entity",
         "x-terminal-allowed": [
@@ -17871,7 +17985,7 @@
         ],
         "operationId": "approveArApAdjustment",
         "summary": "锁定后补录审批决定",
-        "description": "上级对补录申请做出 approve/reject 决定；approve 才把金额变动入账并留痕，reject 不改账。第十八批 R 段 143-R4：返回的补录记录带 item_no（台账单号）与 original_business_date（原营业日）。第十八批 S 段 160-R1：approve 追加的冲正行与重述行沿用原行到期日（缴费期限不变）；经营看板的合同应收与净收入按批准当日计补录差额，不改写原营业日（ENUM:190「补录金额归入当期」）。",
+        "description": "上级对补录申请做出 approve/reject 决定；approve 才把金额变动入账并留痕，reject 不改账。第十八批 R 段 143-R4：返回的补录记录带 item_no（台账单号）与 original_business_date（原营业日）。第十八批 S 段 160-R1：approve 追加的冲正行与重述行沿用原行到期日（缴费期限不变）；经营看板的合同应收与净收入按批准当日计补录差额，不改写原营业日（ENUM:190「补录金额归入当期」）。第十八批 Z 段 186-R1：kind=payment 的收付款补录 approve 即按申请的金额与收付方式给该台账登记一笔收付款（付款时间取批准时刻，补录金额归入当期），不追加冲正行与重述行，台账锁与日结七源汇总不动；押金退还、积分发行费的到期闸与已冲正闸照判（409）。第十八批 Z 段 186-R2：kind=refund 的退款补录 approve 即按所退原收款走现有原路退款路径建一笔退款待办（requested，沿原收款渠道），台账、台账锁与日结七源汇总不动；可退余额（400 VALIDATION_FAILED）、分级授权（按审批人额度，超额 403 REFUND_REVIEW_REQUIRED）、只退应收、沿原收款渠道（409 REFUND_CHANNEL_MISMATCH）、后收先退（409 REFUND_LATEST_PAYMENT_FIRST）各闸照判；原收款为现金、刷卡的，批准时不判现场设备，只建待办，待办在退款办理处登记执行与核实时仍须带设备（否则 403 DEVICE_CONTEXT_REQUIRED）。",
         "x-permission": "finance.locked_backfill.approve",
         "x-data-scope": "project-entity",
         "x-terminal-allowed": [
@@ -89740,12 +89854,34 @@
           "adjustment_amount_cent": {
             "type": "integer",
             "format": "int64",
-            "description": "补录变动额（整数分，带符号；正=增、负=减）；不得为 0。"
+            "description": "补录变动额（整数分，带符号；正=增、负=减）；不得为 0。kind=payment 时为收付金额，须为正且不超过台账未收付额；kind=refund 时为退款金额，须为正且不超过所退原收款的可退余额。"
           },
           "reason": {
             "type": "string",
             "description": "补录原因；必填，进入审计留痕。",
             "maxLength": 255
+          },
+          "kind": {
+            "type": "string",
+            "description": "补录类型（第十八批 Z 段 186-R1、186-R2）：amount 金额调整（缺省）、payment 收付款补录（上级批准后登记收付款）、refund 退款补录（上级批准后按原收款原路退款）。",
+            "maxLength": 16,
+            "enum": [
+              "amount",
+              "payment",
+              "refund"
+            ],
+            "default": "amount"
+          },
+          "payment_method": {
+            "type": "string",
+            "description": "收付款补录的收付方式：cash 现金、bank_transfer 银行转账、pos 刷卡、other 其他；kind=payment 时必填，金额调整与退款补录不填（退款补录的收付方式照原收款记录）。",
+            "maxLength": 32,
+            "enum": [
+              "cash",
+              "bank_transfer",
+              "pos",
+              "other"
+            ]
           }
         }
       },

@@ -601,3 +601,126 @@ describe("ReconciliationPage 生成日结后重读批次与对账单原件格式
     }
   });
 });
+
+// 第十八批 Z 段第 188 条 188-R2（BSM:1803「封账由财务部门执行，条件是账目已算清楚、经确认无误、四流一致。」；PGM:664 封账由财务中心负责；
+// 第十八批裁决 41「财务中心按综合体＋月份在平台办理；……四流一致由财务核对后勾选确认留痕；封账不能撤销，不另加拦截」）：
+// 对账差异页的封账区块，持 finance.period_close.execute 才显示。走真实客户端，假响应用文本体。
+describe("ReconciliationPage 188-R2 封账区块", () => {
+  const CLOSED = { id: "pc-1", project_id: "proj_1", period_month: "2026-06", closed_by: "usr-fin-9", closed_at: "2026-07-03T02:30:00Z" };
+  const NEW_CLOSE = { id: "pc-2", project_id: "proj_1", period_month: "2026-07", closed_by: "usr-fin-9", closed_at: "2026-08-02T03:00:00Z" };
+  const NOT_FINAL = "以下营业日数据尚未标记为最终，不能封账：2026-07-15 酒吧 bar_a（当日考勤记录）";
+  type Call = { url: string; method?: string; body: unknown };
+
+  function respond(status: number, payload: unknown): Response {
+    return new Response(JSON.stringify(payload), { status, headers: { "content-type": "application/json" } });
+  }
+  const ok = (data: unknown) => respond(200, { success: true, code: "OK", message: "success", data });
+
+  // 封账成功后列表才带上新封账月份；postStatus=409 时按后端原样返回中文提示。
+  function stub(calls: Call[], postStatus = 200) {
+    let rows: unknown[] = [CLOSED];
+    vi.stubGlobal("fetch", vi.fn().mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      calls.push({ url, method: init?.method, body: init?.body });
+      if (url.includes("/api/v1/finance/period-closes") && init?.method === "POST") {
+        if (postStatus !== 200) {
+          return Promise.resolve(respond(postStatus, { success: false, code: "STATE_CONFLICT", detail_code: "PERIOD_CLOSE_DATA_NOT_FINAL", message: NOT_FINAL }));
+        }
+        rows = [NEW_CLOSE, CLOSED];
+        return Promise.resolve(ok(NEW_CLOSE));
+      }
+      if (url.includes("/api/v1/finance/period-closes")) return Promise.resolve(ok({ items: rows, page: 1, page_size: 20, total: rows.length }));
+      if (url.includes("/analytics/metric-detail")) return Promise.resolve(respond(403, { success: false, code: "FORBIDDEN", message: "无权限" }));
+      return Promise.resolve(ok({ items: [], page: 1, page_size: 20, total: 0 }));
+    }));
+  }
+
+  function renderReal(effectivePermissions: EffectivePermissionsState = ADMIN_PERMS) {
+    return render(<ReconciliationPage api={new AdminApi("test-token")} user={{ id: "u1", username: "admin", accountType: "platform_admin" }}
+      setActionResult={vi.fn()} setGlobalError={vi.fn()} effectivePermissions={effectivePermissions} />);
+  }
+
+  // 先等本区块读出已封账列表、对账区空态落定，再操作。
+  async function settled() {
+    await waitFor(() => expect(screen.queryByTestId("finance-period-close-row-pc-1")).not.toBeNull());
+    await waitFor(() => expect(screen.queryByTestId("admin-empty")).not.toBeNull());
+  }
+
+  // 填综合体编号；中文月份选择器选年 → 选月。
+  function fillForm() {
+    fireEvent.change(screen.getByTestId("finance-period-close-project"), { target: { value: "proj_1" } });
+    fireEvent.click(screen.getByTestId("finance-period-close-month"));
+    fireEvent.click(screen.getByRole("button", { name: "选择年份" }));
+    fireEvent.click(screen.getByRole("button", { name: "2026" }));
+    fireEvent.click(screen.getByRole("button", { name: "7月" }));
+  }
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+    window.history.replaceState({}, "", "/admin/finance/reconciliation");
+  });
+
+  it("持 finance.period_close.execute 才显示封账区块", async () => {
+    stub([]);
+    const view = renderReal({ status: "ready", value: { grants: ["finance.reconciliation.view", "finance.period_close.execute"], denies: [], wildcard: false } });
+    await waitFor(() => expect(screen.queryByTestId("finance-period-close-panel")).not.toBeNull());
+    view.unmount();
+    renderReal({ status: "ready", value: { grants: ["finance.reconciliation.view", "finance.daily_close.manage"], denies: [], wildcard: false } });
+    await waitFor(() => expect(screen.queryByTestId("admin-empty")).not.toBeNull());
+    expect(screen.queryByTestId("finance-period-close-panel")).toBeNull();
+  });
+
+  it("已封账列表显示月份、综合体、封账人与封账时间", async () => {
+    stub([]);
+    renderReal();
+    await waitFor(() => expect(screen.queryByTestId("finance-period-close-row-pc-1")).not.toBeNull());
+    const text = screen.getByTestId("finance-period-close-row-pc-1").textContent ?? "";
+    expect(text).toContain("2026年6月");
+    expect(text).toContain("proj_1");
+    expect(text).toContain("usr-fin-9");
+    expect(text).toContain("2026年7月3日 02:30");
+  });
+
+  it("未勾选已核对四流一致不弹确认、不发封账请求", async () => {
+    const calls: Call[] = [];
+    stub(calls);
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+    renderReal();
+    await settled();
+    fillForm();
+    fireEvent.click(screen.getByTestId("finance-period-close-submit"));
+    await waitFor(() => expect(screen.queryByTestId("finance-period-close-error")?.textContent ?? "").toContain("勾选已核对四流一致"));
+    expect(confirm).not.toHaveBeenCalled();
+    expect(calls.some((call) => call.method === "POST")).toBe(false);
+  });
+
+  it("勾选并二次确认后以蛇形键 POST project_id、period_month、four_flows_confirmed、idempotency_key，列表随即出现新封账月份", async () => {
+    const calls: Call[] = [];
+    stub(calls);
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+    renderReal();
+    await settled();
+    fillForm();
+    fireEvent.click(screen.getByTestId("finance-period-close-four-flows"));
+    fireEvent.click(screen.getByTestId("finance-period-close-submit"));
+    await waitFor(() => expect(screen.queryByTestId("finance-period-close-row-pc-2")).not.toBeNull());
+    expect(String(confirm.mock.calls[0]?.[0])).toContain("封账由财务部门执行，条件是账目已算清楚、经确认无误、四流一致。");
+    const post = calls.find((call) => call.method === "POST")!;
+    expect(post.url.endsWith("/api/v1/finance/period-closes")).toBe(true);
+    const sent = JSON.parse(String(post.body));
+    expect(Object.keys(sent).sort()).toEqual(["four_flows_confirmed", "idempotency_key", "period_month", "project_id"]);
+    expect(sent).toMatchObject({ project_id: "proj_1", period_month: "2026-07", four_flows_confirmed: true });
+  });
+
+  it("封账被拒 409 时原样显示后端中文提示", async () => {
+    stub([], 409);
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    renderReal();
+    await settled();
+    fillForm();
+    fireEvent.click(screen.getByTestId("finance-period-close-four-flows"));
+    fireEvent.click(screen.getByTestId("finance-period-close-submit"));
+    await waitFor(() => expect(screen.queryByTestId("finance-period-close-error")?.textContent ?? "").toContain(NOT_FINAL));
+  });
+});

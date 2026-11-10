@@ -1,6 +1,6 @@
 package com.complex.platform.common.api;
 
-// 文件版本：V0.37
+// 文件版本：V0.38
 
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -382,6 +382,8 @@ public final class FieldLabels {
         p("period", "期间");
         p("period_label", "期间名称");
         p("period_type", "期间类型");
+        p("period_month", "月份");
+        p("four_flows_confirmed", "四流一致确认");
         p("contract_id", "合同");
         // CG-11a 经销
         p("dealer_id", "经销商");
