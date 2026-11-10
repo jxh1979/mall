@@ -227,6 +227,7 @@ finance_offline_payment_confirmations,single_complex_default,P0_SINGLE_COMPLEX,s
 finance_payment_intents,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",V0.07,covered
 finance_payroll_payment_attempts,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",V0.07,covered
 finance_payroll_payment_events,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",V0.07,covered
+finance_period_closes,direct,project_id,project_id column on finance_period_closes,ready for project/merchant scoped query enforcement,V0.07,covered
 finance_reconciliation_batches,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",V0.07,covered
 finance_reconciliation_differences,inherited,batch_id,batch_id -> finance_reconciliation_batches -> project/entity scope,must join through scope path before multi-complex rollout,V0.07,covered
 finance_reconciliation_stage_limits,direct,project_id,project_id column on finance_reconciliation_stage_limits,ready for project/merchant scoped query enforcement,V0.07,covered

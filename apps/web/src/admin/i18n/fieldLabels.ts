@@ -1,4 +1,4 @@
-// 文件版本：V0.24
+// 文件版本：V0.25
 // OBS-14-02 后台结果区字段中文名字典（PGM「全局原则 · 界面全中文（所有终端零英文）」）。
 // 键用后端 JSON 的蛇形写法；结果区查表时蛇形与驼峰同查（orderId / order_id 都命中 order_id）。
 // 与后端字段中文名表 FieldLabels.java（common.api 包）同键同名：前段按后端原样抄录，后端改名这里跟着改（门禁会比对）。
@@ -292,6 +292,8 @@ export const FIELD_LABELS: Record<string, string> = {
   period: "期间",
   period_label: "期间名称",
   period_type: "期间类型",
+  period_month: "月份",
+  four_flows_confirmed: "四流一致确认",
   contract_id: "合同",
   dealer_id: "经销商",
   dealer_contract_id: "经销合同",
@@ -3362,7 +3364,8 @@ export const KEY_VALUE_LABELS: Record<string, Record<string, string>> = {
   final_mark_category: { orders_verifications: "当日订单与核销记录", refunds_reversals: "当日退款与冲正记录", production_handover: "当日出品与物品交接记录", attendance: "当日考勤记录", anomaly_resolutions: "当日异常处置记录" },
   period_type: { quarterly: "按季度", monthly: "按月", semiannual: "按半年", annual: "按年" },
   reserve_release_mode: { manual: "手动释放", next_period: "下期返还", fixed_delay: "固定延后若干期", annual: "年度末清算" },
-  kind: { official: "正式单", preview: "月度预览", app: "预装软件", site: "网站白名单" },
+  // 第十八批 Z 段第 186 条 186-R1：锁定后补录类型（ar_ap_adjustments.kind）金额调整 amount、收付款补录 payment；186-R2 退款补录 refund。
+  kind: { official: "正式单", preview: "月度预览", app: "预装软件", site: "网站白名单", amount: "金额调整", payment: "收付款补录", refund: "退款补录" },
   matter_type: { delivery_receipt: "签收", return_request: "退货申请", freight_confirmation: "运费确认", delivery_resolution: "交付差异", overpayment_use: "超收用途", result_delivery: "结果交付" },
   expense_type: { labor: "人工", rent_allocation: "房租分摊", energy: "能耗费", property_fee: "物业费", amortization: "摊销" },
   unit: { unit: "未填单位" },

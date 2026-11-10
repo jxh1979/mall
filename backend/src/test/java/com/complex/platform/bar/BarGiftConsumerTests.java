@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -282,7 +282,7 @@ class BarGiftConsumerTests {
         long reversedAmount;
 
         @Override
-        public boolean isBusinessDayLocked(java.time.LocalDate businessDate) {
+        public boolean isBusinessDayLocked(java.time.LocalDate businessDate, String merchantId) {
             return false;
         }
 

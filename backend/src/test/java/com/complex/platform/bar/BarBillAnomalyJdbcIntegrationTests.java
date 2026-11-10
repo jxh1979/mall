@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.05
+// 文件版本：V0.06
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -232,6 +232,50 @@ class BarBillAnomalyJdbcIntegrationTests {
         assertThat(jdbc.queryForObject("SELECT reversed FROM bar_bill_settlements WHERE bill_id=?", Boolean.class, bill)).isFalse();
         call(supervisor, bill + "/anomaly/resolve", "{\"resolution\":\"restored\",\"reason\":\"走补录调整\",\"idempotency_key\":\"rlr_%s\"}")
                 .andExpect(status().isOk()).andExpect(jsonPath("$.data.payment_status").value("paid"));
+    }
+
+    /**
+     * 第十八批 Z 段第 187 条 187-R1（ENUM:190「日结锁定后的补录须上级审批，且不改动已锁定的日结金额」；18R 143-R7、18S 161-R1 按日结 scope_id 判锁）：
+     * 平台管理员处置酒吧账单异常按账单所属酒吧判锁——同营业日别家酒吧的 bar 范围日结、别的综合体的 project 范围日结已锁定，
+     * 不拦本酒吧账单「作废并冲正」；本酒吧的 bar 范围日结锁定后照拦。
+     */
+    @Test
+    void platformAdminVoidReverseLockedOnlyByBillBarDailyClose() throws Exception {
+        Instant at = Instant.parse("2014-07-15T12:00:00Z");
+        LocalDate day = businessDays.businessDate(null, "bba_bar_" + suffix, at);
+        String bill = settledBillAt(at);
+        String otherProject = "bba_prj2_" + suffix;
+        jdbc.update("INSERT INTO projects(id,venue_type,name,status,created_at,updated_at) VALUES(?,'complex','别的综合体','active',now(),now())",
+                otherProject);
+        String adminId = "usr_dc_fin_" + suffix;
+        DailyCloseFixture.asFinanceAdmin(jdbc, adminId);
+        DailyCloseFixture.lock(finance, financeRepository, new DailyCloseRequest("bba-close-b-" + suffix, "日结", List.of(), day, "bar",
+                "bba_merb_" + suffix));
+        DailyCloseFixture.lock(finance, financeRepository, new DailyCloseRequest("bba-close-p-" + suffix, "日结", List.of(), day, "project",
+                otherProject));
+        SecurityContextHolder.clearContext();
+        jdbc.update("INSERT INTO role_permissions (role_id, permission_code) VALUES (?, 'bar.bill.anomaly.resolve')", "role_" + adminId);
+        AccessActor adminActor = new AccessActor(adminId, adminId + "_user", "platform_admin", "org_1", null, "active");
+        RequestPostProcessor admin = request -> {
+            request.addHeader("X-Terminal-Type", "web");
+            return authentication(new UsernamePasswordAuthenticationToken(adminActor, "token", List.of())).postProcessRequest(request);
+        };
+
+        call(cashier, bill + "/anomaly", "{\"reason\":\"客人称记错卡座\",\"idempotency_key\":\"rpa_%s\"}").andExpect(status().isOk());
+        call(admin, bill + "/anomaly/resolve",
+                "{\"resolution\":\"voided_reversed\",\"reason\":\"核实整单记错，作废并冲正\",\"idempotency_key\":\"rpav_%s\"}")
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.payment_status").value("void"));
+
+        String second = settledBillAt(at.plusSeconds(600));
+        DailyCloseFixture.asFinanceAdmin(jdbc, adminId);
+        DailyCloseFixture.lock(finance, financeRepository, new DailyCloseRequest("bba-close-a-" + suffix, "日结", List.of(), day, "bar",
+                merchant));
+        SecurityContextHolder.clearContext();
+        call(cashier, second + "/anomaly", "{\"reason\":\"次日客人来电称记错卡座\",\"idempotency_key\":\"rpa2_%s\"}")
+                .andExpect(status().isOk());
+        call(admin, second + "/anomaly/resolve", "{\"resolution\":\"voided_reversed\",\"reason\":\"作废重开\",\"idempotency_key\":\"rpav2_%s\"}")
+                .andExpect(status().isConflict()).andExpect(jsonPath("$.detail_code").value("DAY_CLOSE_LOCKED"));
+        assertThat(jdbc.queryForObject("SELECT payment_status FROM bar_bills WHERE id=?", String.class, second)).isEqualTo("abnormal");
     }
 
     /**

@@ -1,4 +1,4 @@
-# P0 OpenAPI Operation 验收矩阵 V0.57
+# P0 OpenAPI Operation 验收矩阵 V0.58
 
 ## 1. 文档定位
 
@@ -17,7 +17,7 @@
 
 ## 3. Operation 清单
 
-> 当前 `docs/openapi/openapi-p0.json` 共 1257 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
+> 当前 `docs/openapi/openapi-p0.json` 共 1259 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
 
 | 标签 | 方法 | 路径 | operationId | 摘要 | 请求体 | 权限 | 认证上下文 | 数据范围 | 终端/设备能力/调用通道 | 幂等 | 成功事件 | 失败事件 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -159,6 +159,8 @@
 | finance | `POST` | `/api/v1/finance/reconciliation/differences` | `createFinanceReconciliationDifference` | 创建对账差异 | `object` | `finance.reconciliation.difference.create` | `staff-token` | `project-entity` | web | 是 | `finance.reconciliation.difference_created` | `finance.reconciliation.difference_create_failed` |
 | finance | `POST` | `/api/v1/finance/reconciliation/differences/{difference_id}/close` | `closeFinanceReconciliationDifference` | 提交差异关闭复核 | `object` | `finance.reconciliation.resolve` | `staff-token` | `project-entity` | web | 是 | `finance.reconciliation.difference_review_submitted` | `finance.reconciliation.difference_review_submit_failed` |
 | finance | `POST` | `/api/v1/finance/reconciliation/differences/{difference_id}/identify` | `identifyFinanceReconciliationDifference` | 识别对账差异 | `object` | `finance.reconciliation.resolve` | `staff-token` | `project-entity` | web | 是 | `finance.reconciliation.difference_identified` | `finance.reconciliation.difference_identify_failed` |
+| finance | `GET` | `/api/v1/finance/period-closes` | `listFinancePeriodCloses` | 查询已封账月份 | `-` | `finance.period_close.execute` | `staff-token` | `project` | web | 否 | `finance_period.viewed` | `finance_period.view_failed` |
+| finance | `POST` | `/api/v1/finance/period-closes` | `closeFinancePeriod` | 封账（按综合体＋月份） | `object` | `finance.period_close.execute` | `staff-token` | `project` | web | 是 | `finance_period.closed` | `finance_period.close_failed` |
 | finance | `GET` | `/api/v1/finance/reconciliation/stage-limits` | `listFinanceReconciliationStageLimits` | 查询对账差异停留时限（按项目） | `-` | `finance.reconciliation.policy.manage` | `staff-token` | `project` | web | 否 | `not_applicable` | `not_applicable` |
 | finance | `PUT` | `/api/v1/finance/reconciliation/stage-limits/{project_id}` | `saveFinanceReconciliationStageLimit` | 配置对账差异停留时限（按项目、按阶段，时限与上下限同配） | `object` | `finance.reconciliation.policy.manage` | `staff-token` | `project` | web | 是 | `finance.reconciliation_stage_limit.saved` | `finance.reconciliation_stage_limit.save_failed` |
 | finance | `GET` | `/api/v1/finance/internal-payables/{ar_ap_item_id}` | `getInternalPayableExecution` | 查普通内部结算往来的付款时点与执行状态 | `-` | `finance.ar_ap.view` | `staff-token` | `project-merchant` | web | 否 | `not_applicable` | `not_applicable` |

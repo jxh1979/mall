@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.14
+// 文件版本：V0.15
 
 import static com.complex.platform.bar.BarBillRecords.*;
 import static com.complex.platform.bar.BarValidation.*;
@@ -940,7 +940,8 @@ public class BarBillingService {
                 .orElse(null);
         LocalDate settleDay = businessDays.businessDate(null, bill.barId(),
                 latestSettlement != null && latestSettlement.settledAt() != null ? latestSettlement.settledAt() : Instant.now());
-        if (receivableLedgerService.isBusinessDayLocked(settleDay)) {
+        // 第十八批 Z 段第 187 条 187-R1：按账单所属酒吧商户判锁（等于 bar 日结的 scope_id），不按操作人范围。
+        if (receivableLedgerService.isBusinessDayLocked(settleDay, bill.merchantId())) {
             throw ApiException.conflict("DAY_CLOSE_LOCKED",
                     "结账营业日 " + settleDay + " 已锁定，请走补录调整流程");
         }

@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.06
+// 文件版本：V0.07
 import static com.complex.platform.common.api.ApiRequests.requireIdempotencyKey;
 
 import com.complex.platform.access.AuthorizationService;
@@ -190,6 +190,26 @@ public class FinanceController implements com.complex.platform.security.ExportFi
             @RequestParam(name = "size", defaultValue = "20") int size) {
         authorizationService.requirePermission("finance.daily_close.manage");
         return ApiResponse.ok(service.listDailyCloses(businessDate, scopeType, scopeId, page, size));
+    }
+
+    /**
+     * 第十八批 Z 段第 188 条 188-R1（BSM:1803「封账由财务部门执行，条件是账目已算清楚、经确认无误、四流一致。」；第十八批裁决 41「财务中心按综合体＋月份
+     * 在平台办理」）：按综合体＋月份封账。
+     */
+    @PostMapping("/period-closes")
+    public ApiResponse<PeriodCloseRecord> closePeriod(
+            @RequestBody @jakarta.validation.Valid com.complex.platform.finance.dto.PeriodCloseRequest request) {
+        authorizationService.requirePermission("finance.period_close.execute");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.closePeriod(request));
+    }
+
+    /** 188-R1：已封账月份列表，与封账同一个码；可按综合体过滤。 */
+    @GetMapping("/period-closes")
+    public ApiResponse<PageResponse<PeriodCloseRecord>> listPeriodCloses(
+            @RequestParam(name = "project_id", required = false) String projectId) {
+        authorizationService.requirePermission("finance.period_close.execute");
+        return ApiResponse.ok(service.listPeriodCloses(projectId));
     }
 
     @PostMapping("/ar-ap-adjustments")
