@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.13
+// 文件版本：V0.14
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
 import com.complex.platform.common.crypto.PiiCipher;
@@ -506,6 +506,12 @@ class JdbcBarRepository implements BarRepository {
     @Override
     public void lockTableSession(String sessionId) {
         jdbcTemplate.query("SELECT id FROM bar_table_sessions WHERE id = :id FOR UPDATE", Map.of("id", sessionId),
+                (rs, rowNum) -> rs.getString("id"));
+    }
+
+    @Override
+    public void lockTable(String tableId) {
+        jdbcTemplate.query("SELECT id FROM bar_tables WHERE id = :id FOR UPDATE", Map.of("id", tableId),
                 (rs, rowNum) -> rs.getString("id"));
     }
 
@@ -1856,7 +1862,7 @@ class JdbcBarRepository implements BarRepository {
     public long refundGoodsCent(String adjustmentId, long amountCent) {
         List<Long> goods = jdbcTemplate.query("""
                 SELECT CASE WHEN count(*) = 0 THEN NULL
-                            ELSE COALESCE(SUM(amount_cent) FILTER (WHERE component_type = 'goods'), 0) END AS goods
+                            ELSE CAST(COALESCE(SUM(amount_cent) FILTER (WHERE component_type = 'goods'), 0) AS BIGINT) END AS goods
                   FROM bar_payroll_refund_lines WHERE adjustment_id = :id
                 """, Map.of("id", adjustmentId), (rs, rowNum) -> (Long) rs.getObject("goods", Long.class));
         return goods.isEmpty() || goods.get(0) == null ? amountCent : goods.get(0);

@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import static com.complex.platform.bar.BarValidation.requireRequest;
 import static com.complex.platform.bar.BarValidation.requireText;
@@ -14,8 +14,6 @@ import com.complex.platform.finance.FinanceRepository;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.LocalDate;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -125,7 +123,9 @@ public class BarBillAnomalyService {
                 UPDATE bar_bills SET payment_status = 'void', settlement_status = 'void', abnormal_prior_status = NULL,
                        updated_at = now()
                  WHERE id = ?""", bill.id());
-        reverseUnrefundedCollections(bill.id(), refunded);
+        // 第十七批⑤：作废前已办过的退款已在退款营业日冲减（现有跨期退款口径；那一天可能已锁日结，不改），作废只冲正未退部分的收款，
+        // 作废账单在各期合计为 0（日结、分红与经营分析都按收款流水取实收、按退款取冲减，不重复冲减）；与反结共用（第十八批裁决 45）。
+        billing.reverseUnrefundedCollections(bill.id(), refunded);
         // BSM L1064「以该笔留款抵付的部分不重复收款、不重复确认收入」：本单低消留款含在实收里已随作废退回，不再作台组抵用额；
         // 本单抵用过的台组留款不再算已用、回到台组余额（同退品驳回把留款置 reversed）。
         jdbc.update("""
@@ -194,35 +194,6 @@ public class BarBillAnomalyService {
                    AND a.unpaid_amount_cent > 0 AND NOT EXISTS (SELECT 1 FROM ar_ap_items c WHERE c.origin_item_id = a.id)
                 ON CONFLICT (id) DO NOTHING""", java.sql.Date.valueOf(businessDays.businessDate(null,
                 jdbc.queryForObject("SELECT bar_id FROM bar_bills WHERE id = ?", String.class, billId), Instant.now())), billId);
-    }
-
-    /**
-     * 第十七批⑤：作废前已办过的退款已在退款营业日冲减（现有跨期退款口径；那一天可能已锁日结，不改），作废只冲正未退部分的收款，
-     * 作废账单在各期合计为 0（日结、分红与经营分析都按收款流水取实收、按退款取冲减，不重复冲减）。已退额按退款原路同序
-     * （TK-20-R2「后收的先退」）占在最后几笔收款上：本单收款流水整体置冲正（同反结），被已退额占用的部分按原收款时点、渠道另记一笔
-     * 不冲正的留存流水（收款营业日即结账营业日，作废前已校验未锁日结）。
-     */
-    private void reverseUnrefundedCollections(String billId, long refunded) {
-        List<Object[]> kept = new ArrayList<>();
-        long left = refunded;
-        for (Map<String, Object> s : jdbc.queryForList("""
-                SELECT id, settlement_amount_cent FROM bar_bill_settlements
-                 WHERE bill_id = ? AND NOT reversed ORDER BY settled_at DESC, id DESC""", billId)) {
-            if (left <= 0) {
-                break;
-            }
-            long part = Math.min(left, ((Number) s.get("settlement_amount_cent")).longValue());
-            left -= part;
-            kept.add(new Object[] {part, s.get("id")});
-        }
-        repository.markBillSettlementsReversed(billId);
-        for (Object[] k : kept) {
-            jdbc.update("""
-                    INSERT INTO bar_bill_settlements (id, bill_id, settle_channel, cashier_staff_id, pos_transaction_no,
-                            settlement_amount_cent, merchant_id, settled_at)
-                    SELECT 'settle_kept_' || md5(id), bill_id, settle_channel, cashier_staff_id, pos_transaction_no, ?, merchant_id, settled_at
-                      FROM bar_bill_settlements WHERE id = ?""", k);
-        }
     }
 
     private BarBillRecord lockedBill(String billId) {

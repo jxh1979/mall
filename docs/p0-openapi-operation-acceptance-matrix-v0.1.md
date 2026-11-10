@@ -1,4 +1,4 @@
-# P0 OpenAPI Operation 验收矩阵 V0.58
+# P0 OpenAPI Operation 验收矩阵 V0.59
 
 ## 1. 文档定位
 
@@ -17,7 +17,7 @@
 
 ## 3. Operation 清单
 
-> 当前 `docs/openapi/openapi-p0.json` 共 1259 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
+> 当前 `docs/openapi/openapi-p0.json` 共 1261 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
 
 | 标签 | 方法 | 路径 | operationId | 摘要 | 请求体 | 权限 | 认证上下文 | 数据范围 | 终端/设备能力/调用通道 | 幂等 | 成功事件 | 失败事件 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -118,6 +118,8 @@
 | bar | `POST` | `/api/v1/bar/tables` | `createBarTable` | 创建桌台或卡座 | `BarTableRequest` | `bar.table.manage` | `staff-token` | `project-bar` | web | 是 | `bar.table.changed` | `bar.table.change_failed` |
 | bar | `POST` | `/api/v1/bar/tables/{table_id}/open` | `openBarTable` | 开台 | `OpenBarTableRequest` | `bar.table.open_close` | `staff-token` | `project-bar` | web | 是 | `bar.table.opened` | `bar.table.open_failed` |
 | bar | `POST` | `/api/v1/bar/tables/{table_id}/clear` | `clearBarTable` | 清台登记恢复空闲 | `object` | `bar.table.open_close` | `staff-token` | `project-bar` | web | 是 | `bar.table.cleared` | `bar.table.clear_failed` |
+| bar | `POST` | `/api/v1/bar/tables/{table_id}/disable` | `disableBarTable` | 停用台位（店长） | `object` | `bar.table.disable` | `staff-token` | `project-bar` | web | 是 | `bar.table.disabled` | `bar.table.disable_failed` |
+| bar | `POST` | `/api/v1/bar/tables/{table_id}/enable` | `enableBarTable` | 恢复停用台位（店长） | `object` | `bar.table.disable` | `staff-token` | `project-bar` | web | 是 | `bar.table.enabled` | `bar.table.enable_failed` |
 | customer | `POST` | `/api/v1/customer/auth/phone-login` | `customerPhoneLogin` | 客人手机号登录 | `CustomerPhoneLoginRequest` | `public` | `public` | `customer` | miniapp, app | 否 | `customer.auth.login` | `customer.auth.login_failed` |
 | customer | `POST` | `/api/v1/customer/auth/sms-codes` | `requestCustomerLoginSmsCode` | 客人登录取短信验证码 | `CustomerLoginSmsCodeRequest` | `public` | `public` | `customer` | miniapp, app, kiosk | 否 | `customer.otp_requested` | `customer.otp_request_failed` |
 | customer | `POST` | `/api/v1/customer/auth/register` | `registerCustomerMember` | 客人注册会员（短信验证＋生日＋满 18 周岁＋同意当前会员条款与隐私条款） | `CustomerRegisterRequest` | `public` | `public` | `customer` | miniapp, app | 否 | `customer.registered` | `customer.register_failed` |

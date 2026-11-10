@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import java.time.LocalDate;
 import java.util.List;
@@ -64,6 +64,13 @@ interface BarReceivableLedgerService {
     default long reverseStoredValueRefund(BarBillRecord bill, BarOrderRecord order, String originalAdjustmentId,
                                           String reversalIdempotencyKey, String reason) {
         return 0L;
+    }
+
+    /**
+     * 第十八批 AA 段第 202 条 202-R1（第十八批裁决 39「反结生效时储值部分当场回原卡；现金、POS 等收款记录作废，收银按更正后的账单重新收款」）：
+     * 反结时把该账单经储值支付、尚未回冲的部分当场退回原卡；其余渠道不挂退款应付。default no-op 供内存测试双子兼容。
+     */
+    default void refundStoredValueOnReopen(BarBillRecord bill) {
     }
 
     /**

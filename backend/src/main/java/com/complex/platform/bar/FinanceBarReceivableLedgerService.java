@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.05
+// 文件版本：V0.06
 
 import com.complex.platform.finance.ArApItemRecord;
 import com.complex.platform.finance.FinanceService;
@@ -101,13 +101,18 @@ class FinanceBarReceivableLedgerService implements BarReceivableLedgerService {
         List<BarBillSettlementRecord> settlements = barRepository == null || storedValueService == null
                 ? new java.util.ArrayList<>() : new java.util.ArrayList<>(barRepository.listBillSettlements(bill.id()));
         java.util.Collections.reverse(settlements);
-        long skip = Math.max(0L, alreadyRefunded);
+        // 第十八批裁决 45：留存流水（作废或反结时被已登记退款占用、不冲正的收款）不再退，已退额先扣它，只在其余收款上占。
+        long skip = Math.max(0L, alreadyRefunded - settlements.stream().filter(s -> s.id().startsWith(BarBillingService.KEPT_SETTLEMENT))
+                .mapToLong(BarBillSettlementRecord::settlementAmountCent).sum());
         long left = refundAmountCent;
         long otherChannelsCent = 0L;
         int seq = 0;
         for (BarBillSettlementRecord settlement : settlements) {
             if (left <= 0) {
                 break;
+            }
+            if (settlement.id().startsWith(BarBillingService.KEPT_SETTLEMENT)) {
+                continue;
             }
             long capacity = settlement.settlementAmountCent();
             long skipped = Math.min(capacity, skip);
@@ -176,6 +181,30 @@ class FinanceBarReceivableLedgerService implements BarReceivableLedgerService {
             credited += reversal.amountCent();
         }
         return credited;
+    }
+
+    @Override
+    public void refundStoredValueOnReopen(BarBillRecord bill) {
+        // 第十八批 AA 段第 202 条 202-R1（第十八批裁决 39）：本账单每笔储值结算对应的消费流水（barsv_<结算幂等键>）尚未回冲的部分当场回原卡
+        // （StoredValueService.refundConsumption，先赠送金后本金）；之前反结已回卡、退款已回冲的部分不再回，回卡键按结算流水定，同一笔不重复回。
+        if (barRepository == null || customerRepository == null || storedValueService == null) {
+            return;
+        }
+        for (BarBillSettlementRecord settlement : barRepository.listBillSettlements(bill.id())) {
+            // 第十八批裁决 45：留存流水是被已登记退款占用的收款，那部分已由退款处理，不再回卡。
+            if (!"stored_value".equals(settlement.settleChannel()) || settlement.id().startsWith(BarBillingService.KEPT_SETTLEMENT)) {
+                continue;
+            }
+            String key = settlement.id().substring("settle_".length());
+            var consume = customerRepository.findStoredValueTransactionByIdempotencyKey("barsv_" + key)
+                    .orElseThrow(() -> com.complex.platform.common.api.ApiException.conflict(
+                            "STORED_VALUE_CONSUME_NOT_FOUND", "找不到该结算对应的储值消费流水"));
+            long[] reversed = customerRepository.sumStoredValueReversals(consume.id());
+            long open = -consume.principalCent() - consume.bonusCent() - reversed[0] - reversed[1];
+            if (open > 0) {
+                storedValueService.refundConsumption(consume.id(), open, "酒吧账单反结 " + bill.id(), "barsvreopen_" + key);
+            }
+        }
     }
 
     @Override

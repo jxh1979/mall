@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -189,6 +189,27 @@ class BarOnTheSpotPaymentJdbcIntegrationTests {
         scanOrder(table, 2).andExpect(status().isOk()).andExpect(jsonPath("$.data.amount_cent").value(1000));
     }
 
+    /**
+     * 第十八批 AA 段第 203 条 203-R1（BSM:1025「扫码点单只适用于散台，卡座不开放扫码点单。」；PGM:744「前端隐藏只是辅助，后端接口必须独立校验。」）：
+     * 员工扫码下单接口同样只限散台——卡座、包厢、吧台位开台后扫码下单 409 BAR_SCAN_ORDER_TABLE_NOT_ALLOWED、不落单；散台照常成单、来源 app。
+     */
+    @Test
+    void staffScanOrderOnlyOnLooseTable() throws Exception {
+        for (String type : List.of("card_seat", "vip", "bar_counter")) {
+            String tag = "ss" + type.charAt(0) + type.length();
+            String table = table(tag, type, 0L);
+            openSession(tag, table, 0L);
+            staffScanOrder("session_spot_" + tag + "_" + s).andExpect(status().isConflict())
+                    .andExpect(jsonPath("$.detail_code").value("BAR_SCAN_ORDER_TABLE_NOT_ALLOWED"));
+            assertThat(orders(table)).isZero();
+        }
+        String loose = table("ssloose", "loose_table", 0L);
+        openSession("ssloose", loose, 0L);
+        staffScanOrder("session_spot_ssloose_" + s).andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.order_source").value("app"));
+        assertThat(orders(loose)).isEqualTo(1);
+    }
+
     // ---------- helpers ----------
 
     private String table(String tag, String type, long minConsumptionCent) {
@@ -248,6 +269,15 @@ class BarOnTheSpotPaymentJdbcIntegrationTests {
         body.put("items", List.of(Map.of("product_id", beer, "quantity", quantity)));
         return mockMvc.perform(post("/api/v1/customer/bar-tables/" + table + "/scan-orders").header("X-Terminal-Type", "miniapp")
                 .header("Idempotency-Key", key).contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(body)));
+    }
+
+    /** 员工扫码下单 POST /api/v1/bar/table-sessions/{session_id}/scan-orders：体 idempotency_key、items=[{product_id, quantity}]。 */
+    private ResultActions staffScanOrder(String session) throws Exception {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("idempotency_key", "spot-staff-scan-" + UUID.randomUUID());
+        body.put("items", List.of(Map.of("product_id", beer, "quantity", 1)));
+        return mockMvc.perform(post("/api/v1/bar/table-sessions/" + session + "/scan-orders").with(staff)
+                .contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(body)));
     }
 
     private String orderId(ResultActions result) throws Exception {

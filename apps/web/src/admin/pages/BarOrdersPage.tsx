@@ -1,4 +1,4 @@
-// 文件版本：V0.11
+// 文件版本：V0.12
 import React from "react";
 import { BarRefundBreakdownPanel } from "./BarRefundBreakdownPanel";
 import { BarShiftPanel } from "./BarShiftPanel";
@@ -34,7 +34,7 @@ const TEXT = {
   billRequired: "\u9700\u5148\u751f\u6210\u8d26\u5355\u540e\u624d\u80fd\u7ed3\u7b97\u3002",
   title: "\u8ba2\u5355/\u51fa\u54c1/\u8d26\u5355",
   description: "\u628a\u9152\u5427\u70b9\u5355\u3001\u51fa\u54c1\u3001\u8d26\u5355\u3001\u7ed3\u7b97\u548c\u9500\u552e\u63d0\u6210\u53e3\u5f84\u653e\u5728\u540c\u4e00\u64cd\u4f5c\u9762\uff1b\u62c6\u5355\u3001\u5408\u5355\u3001\u6302\u8d26\u7ee7\u7eed\u6309\u589e\u5f3a POS \u80fd\u529b\u6269\u5c55\u3002",
-  evidence: "\u63a5\u53e3\u8bc1\u636e\uff1a\u8bfb\u53d6 /api/v1/bar/orders\uff1b\u751f\u6210\u8d26\u5355 POST /api/v1/bar/orders/{order_id}/bill\uff1b\u51fa\u54c1 POST /api/v1/bar/orders/{order_id}/deliver\uff1b\u7ed3\u7b97 POST /api/v1/bar/bills/{bill_id}/settle\u3002",
+  evidence: "\u63a5\u53e3\u8bc1\u636e\uff1a\u8bfb\u53d6 /api/v1/bar/orders\uff1b\u751f\u6210\u8d26\u5355 POST /api/v1/bar/orders/{order_id}/bill\uff1b\u51fa\u54c1 POST /api/v1/bar/orders/{order_id}/deliver\uff1b\u7ed3\u7b97 POST /api/v1/bar/bills/{bill_id}/settle\uff1b反结 POST /api/v1/bar/bills/{bill_id}/reopen\u3002",
   orderCount: "\u8ba2\u5355\u6570",
   currentRows: "\u5f53\u524d\u5217\u8868\u8bb0\u5f55",
   openOrders: "\u672a\u5b8c\u7ed3",
@@ -222,6 +222,9 @@ export function BarOrdersPage({ api, user, setActionResult, setGlobalError, effe
   const [deliverSkip, setDeliverSkip] = React.useState<{ orderId: string; ids: string[] }>({ orderId: "", ids: [] });
   // 第十六批第 16 条：客人账单争议登记与主管处置共用一个原因输入。
   const [anomalyReason, setAnomalyReason] = React.useState("");
+  // 第十八批 AA 段第 202 条 202-R2：反结原因（被拦下送审后原样再点要用同一原因，失败不清空）与送审说明。
+  const [reopenReason, setReopenReason] = React.useState("");
+  const [reopenNote, setReopenNote] = React.useState("");
   const [suspendReason, setSuspendReason] = React.useState("");
   const [badDebtReason, setBadDebtReason] = React.useState("");
   // 第十八批 T 段第 157 条 157-R4：转坏账含高价值已出品商品时的现场照片、视频（上传后拿回附件 ID）。
@@ -508,6 +511,31 @@ export function BarOrdersPage({ api, user, setActionResult, setGlobalError, effe
       { resolution, reason: anomalyReason.trim() }));
   }
 
+  // ==== 第十八批 AA 段第 202 条 202-R2（BSM:1069「反结（重开已结账单）……均需主管审批留痕」；第十八批裁决 39）：
+  // 首次提交被准入闸拦下（ADMISSION_BLOCKED）并生成主管复核单，主管批准后原样再点一次才重开 ====
+  function validateReopen() {
+    if (!selectedBill?.id) {
+      setFormError("请先选择已生成账单的订单。");
+      return false;
+    }
+    if (!reopenReason.trim()) {
+      setFormError("反结须填写原因，进入审计留痕。");
+      return false;
+    }
+    return true;
+  }
+
+  async function reopenBill() {
+    setReopenNote("");
+    await runOrderAction("bar_bill_reopened", () => api.post(`/api/v1/bar/bills/${selectedBill!.id}/reopen`, { reason: reopenReason.trim() })
+      .catch((error: unknown) => {
+        if (error instanceof ApiError && error.detailCode === "ADMISSION_BLOCKED") {
+          setReopenNote("已提交主管审批：主管在「主管复核」页批准后，请原样再点一次「反结」。");
+        }
+        throw error;
+      }));
+  }
+
   // ==== V345（BAR-VOID-A1）退酒申请 / 审批 ====
   function validateVoidRequest() {
     if (!selectedOrder) {
@@ -739,6 +767,23 @@ export function BarOrdersPage({ api, user, setActionResult, setGlobalError, effe
           )) : (
             <PermissionButton permissionsState={effectivePermissions} permissions={["bar.bill.adjust"]} data-testid="bar-bill-anomaly-raise" disabled={busyAction !== "" || selectedBill?.status === "void"} onClick={() => void raiseBillAnomaly()}>登记争议（置为异常）</PermissionButton>
           )}
+        </div>
+        <div className="admin-section-title">反结（重开已结账单）</div>
+        <p className="admin-muted-action" data-testid="bar-bill-reopen-hint">反结须主管审批：首次提交生成主管复核单，主管批准后原样再点一次，账单才重开为未付，之后重新登记收款。储值部分在反结生效时退回原卡，其余收款作废后由收银按更正后的账单重新收款。</p>
+        <div className="admin-form-row" data-testid="bar-bill-reopen-form">
+          <span data-testid="bar-bill-reopen-status">选中账单：{selectedBill?.id ? `${selectedBill.id} / ${formatBusinessStatus(selectedBill.status)}` : TEXT.noBill}</span>
+          <label>反结原因<input aria-label="反结原因" data-testid="bar-bill-reopen-reason" value={reopenReason} onChange={(e) => setReopenReason(e.target.value)} placeholder="例如：漏记一瓶香槟，改正后重结" /></label>
+          <HighRiskConfirm
+            label="反结"
+            impact="账单重开为未付：储值部分当场退回原卡，其余收款记录作废，由收银按更正后的账单重新收款。首次提交生成主管复核单，批准后原样再点一次才生效。"
+            disabled={busyAction !== "" || selectedBill?.status !== "paid"}
+            precheck={validateReopen}
+            onConfirm={() => void reopenBill()}
+            permissionsState={effectivePermissions}
+            permissions={["bar.bill.reopen"]}
+            data-testid="bar-bill-reopen"
+          />
+          {reopenNote ? <span data-testid="bar-bill-reopen-note">{reopenNote}</span> : null}
         </div>
         {canSuspend(selectedOrder) ? (
           <div className="admin-form-row" data-testid="bar-order-suspend-form">

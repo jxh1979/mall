@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.09
+// 文件版本：V0.10
 
 import static com.complex.platform.bar.BarValidation.*;
 
@@ -103,6 +103,35 @@ public class BarTableSessionService {
             throw ApiException.conflict("BAR_TABLE_NOT_PENDING_CLEAR", "台位不在待清台状态，不能登记恢复空闲");
         }
         return repository.saveTable(tableWithStatus(table, "active", Instant.now()));
+    }
+
+    /** 第十八批 AA 段第 206 条 206-R1：停用、恢复的商户闸（BarService 在幂等之前调用）。 */
+    BarTableRecord requireTableInScope(String tableId) {
+        BarTableRecord table = repository.findTableById(tableId)
+                .orElseThrow(() -> ApiException.notFound("BAR_TABLE_NOT_FOUND", "台位不存在或已被删除"));
+        checkMerchantOwnership(table.merchantId());
+        return table;
+    }
+
+    /**
+     * 第十八批 AA 段第 206 条 206-R1（ENUM:100「已预留只能经取消订台、超时释放、到店开台三条路径退出」「台位停用与恢复由店长及以上操作，填原因留痕」）：
+     * 停用只收空闲台位（active 且没有被有效预留占着），恢复只收停用台位；先锁台位行，与订台占台（holdTable）串行。开台、转入、订台本就只认 active。
+     */
+    BarTableRecord changeTableStatus(String tableId, BarTableStatusChangeRequest request, boolean disable, Map<String, Object> detail) {
+        String reason = requireText(requireRequest(request).reason(), "reason");
+        repository.lockTable(tableId);
+        BarTableRecord table = requireTableInScope(tableId);
+        if (disable && (!"active".equals(table.status()) || repository.findHeldReservationId(tableId).isPresent())) {
+            throw ApiException.conflict("BAR_TABLE_NOT_DISABLABLE", "只有空闲台位可以停用；已预留、已开台、待清台的须先按取消订台、关台、清台流程回到空闲");
+        }
+        if (!disable && !"disabled".equals(table.status())) {
+            throw ApiException.conflict("BAR_TABLE_NOT_DISABLED", "该台位未停用，不能恢复");
+        }
+        String after = disable ? "disabled" : "active";
+        detail.put("reason", reason);
+        detail.put("status_before", table.status());
+        detail.put("status_after", after);
+        return repository.saveTable(tableWithStatus(table, after, Instant.now()));
     }
 
     // 平台直营会话的租户占位：bar_table_sessions.merchant_id 为 NOT NULL（V019），

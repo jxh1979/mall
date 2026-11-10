@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.12
+// 文件版本：V0.13
 
 import static com.complex.platform.bar.BarValidation.*;
 
@@ -220,6 +220,10 @@ public class BarOrderService {
         }
         // B1d④ 跨商户下单防护：桌位/预定/商品须属订单商户（裁决：资源皆属某商户，平台直营亦为特殊商户）。
         requireResourceInOrderMerchant(merchantId, table.merchantId(), "bar table");
+        // 第十八批 AA 段第 206 条 206-R1（ENUM:100 桌台/卡座/吧台位状态「停用」）：吧台位不经开台直接下单，停用的台位在下单核心一处拦下（各下单入口都经此）。
+        if ("disabled".equals(table.status())) {
+            throw ApiException.conflict("BAR_TABLE_DISABLED", "该台位已停用，请选择其他台位");
+        }
         BarReservationRecord reservation = null;
         if (trimToNull(actual.reservationId()) != null) {
             reservation = repository.findReservationById(actual.reservationId())
@@ -535,6 +539,11 @@ public class BarOrderService {
                             "无权操作其他商户的台位会话");
                 }
             });
+        }
+        // 第十八批 AA 段第 203 条 203-R1（BSM:1025「扫码点单只适用于散台，卡座不开放扫码点单。」；PGM:744「后端接口必须独立校验」）：
+        // 员工、客人共用核心一处收口，非散台（含台位取不到）一律拒；客人路径付款前已判过（CustomerBarScanOrderService.looseTable）。
+        if (!"loose_table".equals(repository.findTableById(session.tableId()).map(BarTableRecord::tableType).orElse(null))) {
+            throw ApiException.conflict("BAR_SCAN_ORDER_TABLE_NOT_ALLOWED", "扫码点单只适用于散台，卡座不开放扫码点单");
         }
         BarOrderRequest derived = new BarOrderRequest(
                 actual.idempotencyKey(),
