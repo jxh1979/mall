@@ -1,4 +1,4 @@
-// 文件版本：V0.03
+// 文件版本：V0.04
 package com.complex.platform.serviceorder;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -356,7 +356,7 @@ class ServiceOrderSafetyTests {
         staffUser("svp_rs_" + tag, "active", "inactive", resignedPhone, true);
         staffUser("svp_pr_" + tag, "active", "active", principalPhone, false);
         staffUser("svp_hi_" + tag, "active", "active", historyPhone, false);
-        jdbcTemplate.update("INSERT INTO dividend_plans(id,merchant_id,principal_user_id,principal_name,status) VALUES(?,?,?,'主理人','active')",
+        jdbcTemplate.update("INSERT INTO dividend_plans(id,merchant_id,principal_user_id,principal_name,status,payout_pay_slot) VALUES(?,?,?,'主理人','active',1)",
                 "dp_feentf_" + tag, bar, "svp_pr_" + tag);
         // 历史履约人(无 service.order.perform 权限)在该酒吧做过该服务:旧口径会通告,新口径不通告。
         service.createOrder(new com.complex.platform.serviceorder.dto.ServiceOrderCreateRequest(

@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.43
+// 文件版本：V0.44
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -3489,11 +3489,12 @@ public class FinanceService implements TerminationSettlementPort {
      * V299 持股分红发放端口：审批通过的分红计算单按主理人净发放额（代扣后）挂应付
      * (payable, counterparty=主理人账户, source_type='dividend_payout', source_id=计算单 id——
      * (direction,source_type,source_id) 部分唯一索引防一单重挂；幂等键取计算单 id 使派生 id 确定)。
+     * 211-R2：到期日 dueDate＝方案发放付账日（第十八批裁决 44「审批通过后给主理人的应付……落在当天或之后第一个该付账日」）。
      */
     public String createDividendPayoutPayable(
-            String principalUserId, String merchantId, long netAmountCent, String statementId) {
+            String principalUserId, String merchantId, long netAmountCent, String statementId, LocalDate dueDate) {
         ArApItemRecord item = persistDerivedArApItem(
-                "payable", principalUserId, "dividend_payout", statementId, netAmountCent, statementId, merchantId);
+                "payable", principalUserId, "dividend_payout", statementId, netAmountCent, statementId, merchantId, null, dueDate);
         return item.id();
     }
 
@@ -3515,15 +3516,16 @@ public class FinanceService implements TerminationSettlementPort {
      * FOR UPDATE 行锁串行化并发释放 + 前态守卫（仅 dividend_reserve_withheld 可翻）幂等：
      * 已释放（他线程先翻 / 无待释放应付）返回 empty，由分红侧抛 DIVIDEND_RESERVE_ALREADY_RELEASED。
      * released 应付走既有付款流程真正发放给主理人（不再被待释放支付守卫拦截）。
+     * 211-R2：翻类型同时把到期日改为 dueDate（方案发放付账日，第十八批裁决 44「留存释放的应付……落在当天或之后第一个该付账日」）。
      */
-    public java.util.Optional<DividendReserveReleaseRef> releaseDividendReserveWithholding(String statementId) {
+    public java.util.Optional<DividendReserveReleaseRef> releaseDividendReserveWithholding(String statementId, LocalDate dueDate) {
         java.util.Optional<ArApItemRecord> withheld = repository.findReserveWithheldByStatementForUpdate(statementId);
         if (withheld.isEmpty()) {
             return java.util.Optional.empty();
         }
         ArApItemRecord item = withheld.get();
         int flipped = repository.retagArApItemSourceType(
-                item.id(), "dividend_reserve_withheld", "dividend_reserve_released", Instant.now());
+                item.id(), "dividend_reserve_withheld", "dividend_reserve_released", dueDate, Instant.now());
         if (flipped == 0) {
             return java.util.Optional.empty();   // 并发下已被他线程释放
         }

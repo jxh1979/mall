@@ -1,4 +1,4 @@
-// 文件版本：V0.14
+// 文件版本：V0.15
 import type { Page, Route } from "@playwright/test";
 
 type ApiData = Record<string, unknown> | Array<Record<string, unknown>> | null;
@@ -245,6 +245,7 @@ function fixedRows(pathname: string, state: MockState, options: MockOptions = {}
     "/api/v1/finance/merchant-expenses": { items: [{ id: "mex_m_1", merchantId: "merchant-1", period: "2026-07", expenseType: "labor", amountCent: 500000, source: "manual", sourceRef: null, note: "七月人工", operatorUserId: "usr_admin", createdAt: now }, { id: "mex_ae_1", merchantId: "merchant-1", period: "2026-07", expenseType: "energy", amountCent: 88800, source: "auto_energy", sourceRef: "arap_energy_1", note: "能耗费自动挂接", operatorUserId: "usr_admin", createdAt: now }], page: 1, pageSize: 20, total: 2 },
     "/api/v1/finance/dividends/plans": [{ id: "divp_1", merchantId: "merchant-1", principalUserId: "usr_principal", principalName: "主理人甲", platformShareBps: 8000, taxRateBps: 2000, periodType: "quarterly", revenueDomains: ["bar", "ticket"], includeInventoryCost: true, expenseTypes: ["rent_allocation", "energy", "property_fee", "labor", "amortization", "other"], status: "active", createdAt: now, updatedAt: now }],
     "/api/v1/finance/dividends/statements": { items: [{ id: "divs_q2", merchantId: "merchant-1", planId: "divp_1", kind: "official", periodLabel: "2026-Q2", periodStart: "2026-04-01", periodEnd: "2026-06-30", principalUserId: "usr_principal", platformShareBps: 8000, taxRateBps: 2000, revenueCent: 1020000, costCent: 150000, expenseCent: 220000, netProfitCent: 650000, distributableCent: 650000, platformShareCent: 520000, principalGrossCent: 130000, taxCent: 26000, principalNetCent: 104000, noCostBasisCount: 0, status: "approved", createdAt: now }], page: 1, pageSize: 20, total: 1 },
+    "/api/v1/finance/entity-taxes": { items: [], page: 1, pageSize: 20, total: 0 },
     "/api/v1/finance/merchant-expenses/summary": [{ merchantId: "merchant-1", period: "2026-07", expenseType: "labor", totalCent: 500000 }, { merchantId: "merchant-1", period: "2026-07", expenseType: "energy", totalCent: 88800 }],
     "/api/v1/vouchers/definitions": { items: [{ id: "vdef_1", name: "满 100 减 50 券", voucherKind: "merchant_discount", redeemMethod: "in_store_staff", settlementMode: "none", merchantId: "merchant-1", faceValueCent: 5000, validDays: 30, status: "active", createdAt: now, updatedAt: now }], page: 1, pageSize: 200, total: 1 },
     "/api/v1/vouchers/instances": { items: [{ id: "vi_1", definitionId: "vdef_1", customerId: "customer-1", code: "VCAAA", sourceType: "points_redemption", sourceRef: "redemption_1", status: "issued", issuedAt: now, expiresAt: null, createdAt: now, updatedAt: now }], page: 1, pageSize: 20, total: 1 },

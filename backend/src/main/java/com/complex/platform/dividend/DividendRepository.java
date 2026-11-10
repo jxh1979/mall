@@ -1,6 +1,6 @@
 package com.complex.platform.dividend;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import com.complex.platform.common.api.PageResponse;
 import com.complex.platform.dividend.DividendRecords.DividendPlanRecord;
@@ -128,4 +128,26 @@ public interface DividendRepository {
     /** 费用净额：V297 merchant_expense_entries 按月份桶 + 计入类别分类型汇总（冲销行为负值自然抵减）。 */
     List<DividendRecords.ExpenseTypeSumRecord> sumExpenseByType(
             String merchantId, List<String> months, List<String> expenseTypes);
+
+    // ── V616 210-R3 该期税费与第十八批裁决 42 出单闸（经营主体同 210-R1 口径：生效绑定的运营主体，否则商户档案上的经营主体）──
+    /** 方案商户经营主体已生效（approved）、所属期末月落在 months 内的税费实际申报金额，按税种汇总（按季申报的整季计入季末那个月）。 */
+    List<DividendRecords.PeriodTaxSumRecord> sumEntityTaxByType(String merchantId, List<String> months);
+
+    /** months 中没有被方案商户经营主体任一已生效申报登记的所属期（首月～末月）覆盖的月份，升序。 */
+    List<String> listMonthsWithoutApprovedTax(String merchantId, List<String> months);
+
+    // ── V616 211-R1 整期暂不分红／暂缓分红登记（第十八批裁决 43）──
+    /** 该商户该期间未恢复的登记（同一商户同一期间至多一条）。 */
+    Optional<DividendRecords.DividendPeriodHoldRecord> findOpenHold(String merchantId, String periodLabel);
+
+    Optional<DividendRecords.DividendPeriodHoldRecord> findHoldById(String id);
+
+    /** 新登记；该商户该期间已有未恢复的登记（部分唯一索引）返回 false。 */
+    boolean insertHold(DividendRecords.DividendPeriodHoldRecord hold);
+
+    /** 恢复暂缓分红：只改未恢复的 defer 行，返回改动行数。 */
+    int liftHold(String id, String actor, String liftResult, Instant now);
+
+    /** 全部登记，最近登记在前。 */
+    List<DividendRecords.DividendPeriodHoldRecord> listHolds();
 }

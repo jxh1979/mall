@@ -1,4 +1,4 @@
-// 文件版本：V0.20
+// 文件版本：V0.21
 import { expect, test } from "@playwright/test";
 import { installMockApi } from "./support/mock-api";
 import { fillCnDate } from "./support/cn-date";
@@ -32,6 +32,7 @@ const remainingRoutes: RouteSpec[] = [
   { pageId: "ADM-FIN-004", label: "物业费管理", route: "/admin/finance/property-fee" },
   { pageId: "ADM-FIN-006", label: "商户费用台账", route: "/admin/finance/merchant-expenses" },
   { pageId: "ADM-FIN-007", label: "持股分红", route: "/admin/finance/dividends" },
+  { pageId: "ADM-FIN-010", label: "税费申报登记", route: "/admin/finance/entity-taxes" },
   { pageId: "ADM-GOV-005", label: "商户准入审批流水", route: "/admin/governance/admission-audits" },
   { pageId: "ADM-GOV-006", label: "主管复核与违规阻断", route: "/admin/governance/supervisor-review" },
   { pageId: "ADM-GOV-007", label: "空间种类", route: "/admin/governance/space-types" },
@@ -171,6 +172,9 @@ async function openAdminRoute(page: import("@playwright/test").Page, spec: Route
   } else if (spec.pageId === "ADM-FIN-007") {
     await expect(page.getByTestId("finance-dividends-page")).toBeVisible();
     await expect(page.getByTestId("dividend-statement-table")).toBeVisible();
+  } else if (spec.pageId === "ADM-FIN-010") {
+    await expect(page.getByTestId("entity-tax-page")).toBeVisible();
+    await expect(page.getByTestId("entity-tax-table")).toBeVisible();
   } else if (spec.pageId === "ADM-PARK-001") {
     await expect(page.getByTestId("parking-workbench-page")).toBeVisible();
   } else if (spec.pageId === "ADM-MER-009") {

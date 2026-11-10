@@ -4,7 +4,7 @@ import java.util.List;
 
 /**
  * 自动挂接执行结果：本次新计入的能耗 / 物业费（账单路径 + 合同计费路径）/ 租金（合同租金 + 营业额抽成）
- * 行数（重跑幂等，已计入的为 0）。
+ * 行数（重跑幂等，已计入的为 0）；payrollInserted＝工资单月结人工成本与派驻、营销人员提成拨付（含作废冲回）新挂接行数（210-R1）。
  * drift = 金额漂移报告：已挂接源的台账净额（原行 + 冲销行合计）与上游单据当前金额不一致的清单
  * （上游锁定后补录审批可原地改金额，台账是快照式挂接不自动追改——发现漂移按 SOP 红字冲销旧行 + 手工录入修正额）。
  * lockedMerchants = 该月「费用侧冻结」（关账）的商户 id 清单——语义是<b>该期全部被 approved/paid 正式分红单
@@ -18,6 +18,7 @@ public record MerchantExpenseSyncResultRecord(
         int propertyInserted,
         int contractPropertyInserted,
         int rentInserted,
+        int payrollInserted,
         List<MerchantExpenseDriftRecord> drift,
         // 语义=当月全部关账商户，非仅「本次跳过」的（见类型 javadoc）。
         List<String> lockedMerchants) {

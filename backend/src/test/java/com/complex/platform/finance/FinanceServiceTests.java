@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.17
+// 文件版本：V0.18
 
 import com.complex.platform.support.InMemoryAuditEventRepository;
 import com.complex.platform.support.InMemoryIdempotencyRepository;
@@ -325,7 +325,7 @@ class FinanceServiceTests {
                 .satisfies(e -> assertThat(((ApiException) e).code()).isEqualTo("DIVIDEND_RESERVE_NOT_RELEASED"));
 
         // 释放：re-tag 待释放 → 已释放（金额不变）。
-        assertThat(service.releaseDividendReserveWithholding("divs_guard")).isPresent();
+        assertThat(service.releaseDividendReserveWithholding("divs_guard", LocalDate.of(2026, 8, 15))).isPresent();
 
         // 已释放 → 放行可付，落账 settled。
         ArApPaymentResponse resp = service.registerArApPayment(
@@ -2256,14 +2256,15 @@ class FinanceServiceTests {
 
         // V304 释放：re-tag source_type（前态守卫），内存版真改（默认接口实现是 no-op）。
         @Override
-        public int retagArApItemSourceType(String id, String expectedSourceType, String newSourceType, Instant now) {
+        public int retagArApItemSourceType(String id, String expectedSourceType, String newSourceType, LocalDate dueDate,
+                Instant now) {
             ArApItemRecord cur = arApItems.get(id);
             if (cur == null || !expectedSourceType.equals(cur.sourceType())) {
                 return 0;
             }
             arApItems.put(id, new ArApItemRecord(cur.id(), cur.itemNo(), cur.direction(), cur.counterpartyId(),
                     newSourceType, cur.sourceId(), cur.amountCent(), cur.paidAmountCent(), cur.unpaidAmountCent(),
-                    cur.currency(), cur.dueDate(), cur.accountingPeriod(), cur.status(), cur.createdAt(), now,
+                    cur.currency(), dueDate, cur.accountingPeriod(), cur.status(), cur.createdAt(), now,
                     cur.merchantId(), cur.projectId()));
             return 1;
         }

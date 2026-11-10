@@ -1,10 +1,11 @@
 package com.complex.platform.dividend;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import com.complex.platform.common.api.ApiResponse;
 import com.complex.platform.common.api.PageResponse;
 import com.complex.platform.dividend.DividendRecords.DividendComputeResultRecord;
+import com.complex.platform.dividend.DividendRecords.DividendPeriodHoldRecord;
 import com.complex.platform.dividend.DividendRecords.DividendPlanRecord;
 import com.complex.platform.dividend.DividendRecords.DividendReserveLedgerRecord;
 import com.complex.platform.dividend.DividendRecords.DividendReserveReleaseRecord;
@@ -12,6 +13,7 @@ import com.complex.platform.dividend.DividendRecords.DividendStatementDetailReco
 import com.complex.platform.dividend.DividendRecords.DividendStatementRecord;
 import com.complex.platform.dividend.dto.DividendActionRequest;
 import com.complex.platform.dividend.dto.DividendComputeRequest;
+import com.complex.platform.dividend.dto.DividendHoldRequest;
 import com.complex.platform.dividend.dto.DividendPlanRequest;
 import java.util.List;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -122,5 +124,26 @@ public class DividendController {
     public ApiResponse<DividendReserveReleaseRecord> releaseReserve(
             @PathVariable("id") String statementId, @RequestBody DividendActionRequest request) {
         return ApiResponse.ok(service.releaseReserve(statementId, request));
+    }
+
+    // ── 211-R1 整期暂不分红／暂缓分红登记（第十八批裁决 43）──────────
+
+    /** 登记列表（finance.dividend.view，平台口径）。 */
+    @GetMapping("/holds")
+    public ApiResponse<List<DividendPeriodHoldRecord>> listHolds() {
+        return ApiResponse.ok(service.listHolds());
+    }
+
+    /** 登记暂不分红或暂缓分红（finance.dividend.manage；该期正式草稿随登记作废）。 */
+    @PostMapping("/holds")
+    public ApiResponse<DividendPeriodHoldRecord> recordHold(@RequestBody DividendHoldRequest request) {
+        return ApiResponse.ok(service.recordHold(request));
+    }
+
+    /** 恢复暂缓分红（finance.dividend.manage；只对未恢复的暂缓分红）。 */
+    @PostMapping("/holds/{hold_id}/lift")
+    public ApiResponse<DividendPeriodHoldRecord> liftHold(
+            @PathVariable("hold_id") String holdId, @RequestBody DividendHoldRequest.Lift request) {
+        return ApiResponse.ok(service.liftHold(holdId, request));
     }
 }

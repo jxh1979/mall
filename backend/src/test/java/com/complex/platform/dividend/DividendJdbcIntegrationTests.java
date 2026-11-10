@@ -1,6 +1,6 @@
 package com.complex.platform.dividend;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
@@ -24,6 +24,7 @@ import com.complex.platform.evidence.AuditedOperationExecutor;
 import com.complex.platform.finance.FinanceService;
 import com.complex.platform.finance.dto.ArApPaymentRequest;
 import com.complex.platform.inventory.InventoryRepository;
+import com.complex.platform.support.InternalPayDayFixtures;
 import com.complex.platform.support.TestSecurityActors;
 import java.sql.Connection;
 import java.sql.Savepoint;
@@ -83,6 +84,10 @@ class DividendJdbcIntegrationTests {
     @Autowired
     private JdbcTemplate jdbcTemplate;
 
+    // 211-R2 审批挂主理人应付、释放留存按方案发放付账日推算到期日。
+    @Autowired
+    private com.complex.platform.settlement.InternalPayDayService payDays;
+
     // 前端真实请求体（蛇形键）按生产 Jackson 口径（SNAKE_CASE）反序列化，范式同 FacilityAlarmJdbcIntegrationTests。
     private final com.fasterxml.jackson.databind.ObjectMapper objectMapper = new com.fasterxml.jackson.databind.ObjectMapper()
             .findAndRegisterModules()
@@ -100,6 +105,13 @@ class DividendJdbcIntegrationTests {
     // 欠款抵扣走真实 FinanceService.settleArApItem → checkMerchantOwnership → currentActor() 读 SecurityContextHolder；
     // 用例内以 TestSecurityActors.asPlatformAdmin() 注入平台管理员上下文（生产 approve 必经 requirePlatformScope，恒有认证），
     // @AfterEach 清理防跨用例污染（DividendService 自身鉴权走注入 mock，与此 ThreadLocal 互不干扰）。
+    /** 211-R2：付账日推算要已审批的工作日与银行工作日；210-R3 第十八批裁决 42 出单闸前提：商户经营主体各月已有生效税费登记（都随测试事务回滚）。 */
+    @org.junit.jupiter.api.BeforeEach
+    void seedPayDayCalendar() {
+        InternalPayDayFixtures.seed(jdbcTemplate);
+        com.complex.platform.support.EntityTaxFixture.taxDeclaredForAllMonths(jdbcTemplate, MERCHANT);
+    }
+
     @AfterEach
     void clearSecurityContext() {
         TestSecurityActors.clear();
@@ -112,7 +124,7 @@ class DividendJdbcIntegrationTests {
         when(authorizationService.currentActor()).thenReturn(
                 new AccessActor(actorId, "platform_admin_user", "platform_admin", "org_1", null, "active"));
         return new DividendService(repository, inventoryRepository, businessDayResolver,
-                authorizationService, operations, payoutPort);
+                authorizationService, operations, payoutPort, payDays);
     }
 
     /** 资金链使用真实账号与逐项授权；平台账号类型不能代替分红审批或付款权限。 */
@@ -133,16 +145,25 @@ class DividendJdbcIntegrationTests {
     private DividendService serviceWithRealPlatformActor(String actorId) {
         authorizePlatformActor(actorId, DividendService.MANAGE_PERM);
         return new DividendService(repository, inventoryRepository, businessDayResolver,
-                realAuthorizationService, operations, payoutPort);
+                realAuthorizationService, operations, payoutPort, payDays);
     }
 
     private static DividendPlanRecord plan(String id, String periodType) {
         Instant now = Instant.parse("2026-07-18T00:00:00Z");
-        return new DividendRecords.DividendPlanRecord(id, MERCHANT, "usr_principal_jdbc", "主理人甲",
+        return slotted(new DividendRecords.DividendPlanRecord(id, MERCHANT, "usr_principal_jdbc", "主理人甲",
                 8000, 2000, periodType, List.of("bar", "ticket"), true,
                 List.of("rent_allocation", "energy", "property_fee", "labor", "amortization", "other"),
                 null, "active", null, "usr_div_jdbc", now, now,
-                false, false, false, 0, 0L);
+                false, false, false, 0, 0L));
+    }
+
+    /** 211-R2 方案发放付账日（夹具取第一个付账日）：审批挂主理人应付按它推算到期日。 */
+    private static DividendPlanRecord slotted(DividendPlanRecord p) {
+        return new DividendPlanRecord(p.id(), p.merchantId(), p.principalUserId(), p.principalName(), p.platformShareBps(),
+                p.taxRateBps(), p.periodType(), p.revenueDomains(), p.includeInventoryCost(), p.expenseTypes(), p.effectiveFrom(),
+                p.status(), p.note(), p.updatedBy(), p.createdAt(), p.updatedAt(), p.lossCarryforwardEnabled(),
+                p.arrearsOffsetEnabled(), p.payoutFloorEnabled(), p.payoutFloorBps(), p.payoutFloorFixedCent(),
+                p.reserveReleaseMode(), p.reserveReleaseDelayPeriods(), p.principalType(), p.customDeductions(), 1);
     }
 
     private static DividendStatementRecord statement(String id, String planId, long revenue, long cost,
@@ -209,7 +230,7 @@ class DividendJdbcIntegrationTests {
         DividendService service = serviceWithPlatformActor("usr_div_jdbc");
         com.complex.platform.dividend.dto.DividendPlanRequest annual = objectMapper.readValue("""
                 {"idempotency_key":"annual-jdbc","merchant_id":"merchant_div_annual","principal_user_id":"usr_principal_jdbc",
-                 "principal_name":"主理人乙","period_type":"annual"}
+                 "principal_name":"主理人乙","period_type":"annual","payout_pay_slot":1}
                 """, com.complex.platform.dividend.dto.DividendPlanRequest.class);
         assertThatCode(() -> service.createPlan(annual)).doesNotThrowAnyException();
         assertThat(jdbcTemplate.queryForList(
@@ -486,8 +507,8 @@ class DividendJdbcIntegrationTests {
         DividendService service = serviceWithPlatformActor("usr_div_jdbc");
         service.createPlan(new com.complex.platform.dividend.dto.DividendPlanRequest(
                 "co-jdbc", MERCHANT, "usr_principal_jdbc", "公司主理人",
-                null, null, "monthly", List.of("ticket"), false, List.of("labor"),
-                null, null, null, null, null, null, null, null, null, null, "company", null));
+                null, null, "monthly", List.of("ticket"), null, null,
+                null, null, null, null, null, null, null, null, null, null, "company", null, 1));
         DividendStatementRecord s = service.compute(
                 new DividendComputeRequest("co-jdbc-c", "2026-07", "official", MERCHANT)).computed().get(0);
         assertThat(s.principalType()).isEqualTo("company");
@@ -528,10 +549,10 @@ class DividendJdbcIntegrationTests {
         java.time.OffsetDateTime ts = java.time.OffsetDateTime.parse("2026-07-15T12:00:00Z");
         seedTicketRevenue("cd", 1_000_000L, ts);
         Instant now = Instant.parse("2026-07-18T00:00:00Z");
-        DividendPlanRecord p = new DividendRecords.DividendPlanRecord("divp_jdbc_cd", MERCHANT,
+        DividendPlanRecord p = slotted(new DividendRecords.DividendPlanRecord("divp_jdbc_cd", MERCHANT,
                 "usr_principal_jdbc", "主理人甲", 8000, 2000, "monthly", List.of("ticket"), false,
                 List.of("labor"), null, "active", null, "usr_div_jdbc", now, now,
-                false, false, false, 0, 0L, "manual", 1, "individual", List.of());
+                false, false, false, 0, 0L, "manual", 1, "individual", List.of()));
         repository.insertPlan(p);
         repository.replaceCustomDeductions("divp_jdbc_cd", List.of(
                 new DividendRecords.DividendCustomDeductionRecord("divd_jdbc_1", "divp_jdbc_cd",
@@ -574,11 +595,11 @@ class DividendJdbcIntegrationTests {
     void lossCarryforwardProjectionCarriesAcrossApprovedPeriods() {
         Instant ts = Instant.parse("2026-07-15T12:00:00Z");
         // 亏损结转开的月度方案。
-        DividendPlanRecord lcfPlan = new DividendRecords.DividendPlanRecord("divp_jdbc_lcf", MERCHANT,
+        DividendPlanRecord lcfPlan = slotted(new DividendRecords.DividendPlanRecord("divp_jdbc_lcf", MERCHANT,
                 "usr_principal_jdbc", "主理人甲", 8000, 2000, "monthly", List.of("bar", "ticket"), true,
                 List.of("rent_allocation", "energy", "property_fee", "labor", "amortization", "other"),
                 null, "active", null, "usr_div_jdbc", ts, ts,
-                true, false, false, 0, 0L);
+                true, false, false, 0, 0L));
         repository.insertPlan(lcfPlan);
         // 2026-07 亏损 500.00：仅一笔人工费，无收入 → 净利 −50000。
         jdbcTemplate.update("""
@@ -686,10 +707,10 @@ class DividendJdbcIntegrationTests {
 
     private static DividendPlanRecord arrearsPlan(String id) {
         Instant now = Instant.parse("2026-07-18T00:00:00Z");
-        return new DividendRecords.DividendPlanRecord(id, MERCHANT, "usr_principal_jdbc", "主理人甲",
+        return slotted(new DividendRecords.DividendPlanRecord(id, MERCHANT, "usr_principal_jdbc", "主理人甲",
                 8000, 2000, "monthly", List.of("bar", "ticket"), true, List.of("labor"),
                 null, "active", null, "usr_div_jdbc", now, now,
-                false, true, false, 0, 0L);   // arrears_offset_enabled=true
+                false, true, false, 0, 0L));   // arrears_offset_enabled=true
     }
 
     /**
@@ -793,10 +814,10 @@ class DividendJdbcIntegrationTests {
 
     private static DividendPlanRecord floorPlan(String id) {
         Instant now = Instant.parse("2026-07-18T00:00:00Z");
-        return new DividendRecords.DividendPlanRecord(id, MERCHANT, "usr_principal_jdbc", "主理人甲",
+        return slotted(new DividendRecords.DividendPlanRecord(id, MERCHANT, "usr_principal_jdbc", "主理人甲",
                 8000, 2000, "monthly", List.of("bar", "ticket"), true, List.of("labor"),
                 null, "active", null, "usr_div_jdbc", now, now,
-                false, false, true, 1000, 0L);   // payout_floor_enabled=true, 留 10%
+                false, false, true, 1000, 0L));   // payout_floor_enabled=true, 留 10%
     }
 
     /**
@@ -955,9 +976,9 @@ class DividendJdbcIntegrationTests {
 
     private static DividendPlanRecord ticketOnlyPlan(String id) {
         Instant now = Instant.parse("2026-07-18T00:00:00Z");
-        return new DividendRecords.DividendPlanRecord(id, MERCHANT, "usr_principal_jdbc", "主理人甲",
+        return slotted(new DividendRecords.DividendPlanRecord(id, MERCHANT, "usr_principal_jdbc", "主理人甲",
                 8000, 2000, "monthly", List.of("ticket"), false, List.of("labor"),
-                null, "active", null, "usr_div_jdbc", now, now, false, false, false, 0, 0L);
+                null, "active", null, "usr_div_jdbc", now, now, false, false, false, 0, 0L));
     }
 
     @Test

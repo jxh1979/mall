@@ -1,6 +1,6 @@
 package com.complex.platform.dividend.dto;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import java.util.List;
 
@@ -19,6 +19,8 @@ import java.util.List;
  *
  * <p>V308 主理人类型（可空=修改时不改现值 / 新建时默认 individual）：principalType（individual/company）。
  * <p>V309 自定义扣除项（可空=修改时不改现值 / 新建时默认无）：customDeductions 非空时整表替换该方案的扣除项。
+ * <p>V616 211-R2 发放付账日（新建必填 1～3；修改时可空=不改现值）：payoutPaySlot。
+ * <p>控制席并入（BSM:1774）：includeInventoryCost 只能为空或 true，expenseTypes 只能为空或全部六类。
  */
 public record DividendPlanRequest(
         String idempotencyKey,
@@ -42,7 +44,8 @@ public record DividendPlanRequest(
         String reserveReleaseMode,
         Integer reserveReleaseDelayPeriods,
         String principalType,
-        List<CustomDeductionItem> customDeductions) {
+        List<CustomDeductionItem> customDeductions,
+        Integer payoutPaySlot) {
 
     /**
      * V309 自定义扣除项请求。name 必填；sourceType=fixed 用 amountCent（默认 0），ratio 用 ratioBps +
@@ -57,6 +60,20 @@ public record DividendPlanRequest(
             Boolean enabled) {
     }
 
+    /** 向后兼容构造（V616 之前的 22 参形态）：发放付账日默认 null（新建时必填校验拦下）。 */
+    public DividendPlanRequest(
+            String idempotencyKey, String merchantId, String principalUserId, String principalName,
+            Integer platformShareBps, Integer taxRateBps, String periodType, List<String> revenueDomains,
+            Boolean includeInventoryCost, List<String> expenseTypes, String effectiveFrom, String status,
+            String note, Boolean lossCarryforwardEnabled, Boolean arrearsOffsetEnabled, Boolean payoutFloorEnabled,
+            Integer payoutFloorBps, Long payoutFloorFixedCent, String reserveReleaseMode,
+            Integer reserveReleaseDelayPeriods, String principalType, List<CustomDeductionItem> customDeductions) {
+        this(idempotencyKey, merchantId, principalUserId, principalName, platformShareBps, taxRateBps, periodType,
+                revenueDomains, includeInventoryCost, expenseTypes, effectiveFrom, status, note,
+                lossCarryforwardEnabled, arrearsOffsetEnabled, payoutFloorEnabled, payoutFloorBps,
+                payoutFloorFixedCent, reserveReleaseMode, reserveReleaseDelayPeriods, principalType, customDeductions, null);
+    }
+
     /** 向后兼容构造（V308/V309 之前的 20 参形态）：类型/自定义扣除两参默认 null。 */
     public DividendPlanRequest(
             String idempotencyKey, String merchantId, String principalUserId, String principalName,
@@ -68,7 +85,7 @@ public record DividendPlanRequest(
         this(idempotencyKey, merchantId, principalUserId, principalName, platformShareBps, taxRateBps, periodType,
                 revenueDomains, includeInventoryCost, expenseTypes, effectiveFrom, status, note,
                 lossCarryforwardEnabled, arrearsOffsetEnabled, payoutFloorEnabled, payoutFloorBps,
-                payoutFloorFixedCent, reserveReleaseMode, reserveReleaseDelayPeriods, null, null);
+                payoutFloorFixedCent, reserveReleaseMode, reserveReleaseDelayPeriods, null, null, null);
     }
 
     /** 向后兼容构造（V304 之前的 18 参形态）：释放规则/类型/自定义扣除默认 null（服务层补默认）。 */
@@ -81,6 +98,6 @@ public record DividendPlanRequest(
         this(idempotencyKey, merchantId, principalUserId, principalName, platformShareBps, taxRateBps, periodType,
                 revenueDomains, includeInventoryCost, expenseTypes, effectiveFrom, status, note,
                 lossCarryforwardEnabled, arrearsOffsetEnabled, payoutFloorEnabled, payoutFloorBps,
-                payoutFloorFixedCent, null, null, null, null);
+                payoutFloorFixedCent, null, null, null, null, null);
     }
 }

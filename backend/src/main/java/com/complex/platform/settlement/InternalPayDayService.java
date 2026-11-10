@@ -1,6 +1,6 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import static com.complex.platform.common.Strings.requireText;
 import static com.complex.platform.common.Strings.trimToNull;
@@ -131,6 +131,15 @@ public class InternalPayDayService {
                 """, item.id(), s.route(), projectId, item.counterpartyId(), s.billingPeriodStart(),
                 Timestamp.from(s.visibleAt()), s.objectionDeadline(), s.designatedPayDay(), s.dueDate(), s.payDaysRuleId(),
                 s.routeRuleId(), s.objectionWorkingDays());
+    }
+
+    /**
+     * 211-R2（BSM:1787「发放走应付款项，落在三个付账日之一，具体哪一个由该公司在分红周期配置中指定」；BSM:1683「遇法定节假日或非银行工作日
+     * 顺延至下一个银行工作日」）：from 当天或之后第一个「第 slot 个付账日」（取 from 当日已生效的三个付账日配置），再顺延到银行工作日。
+     */
+    public LocalDate payDayOnOrAfter(int slot, LocalDate from) {
+        int day = effective("pay_days", null, from).payDays()[slot - 1];
+        return calendar.bankDayOnOrAfter(firstPayDayOnOrAfter(new int[]{day}, from));
     }
 
     /** 当天或之后的第一个配置付账日（不含银行工作日顺延）。 */

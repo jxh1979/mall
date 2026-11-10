@@ -1,6 +1,6 @@
 package com.complex.platform.dividend;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.allOf;
@@ -188,8 +188,8 @@ class DividendMonthEndPreviewJdbcIntegrationTests {
     private void merchantWithPlan(String id, String name, String type, String periodType) {
         jdbc.update("INSERT INTO merchants(id,merchant_name,merchant_type,status,project_id,created_at,updated_at)"
                 + " VALUES(?,?,?,'active',?,TIMESTAMPTZ '2026-05-01 00:00:00+08',now())", id, name, type, project);
-        jdbc.update("INSERT INTO dividend_plans (id, merchant_id, principal_user_id, period_type, revenue_domains, include_inventory_cost, status)"
-                + " VALUES (?, ?, ?, ?, 'bar', FALSE, 'active')", "divp_" + id, id, "usr_dmp_principal_" + s, periodType);
+        jdbc.update("INSERT INTO dividend_plans (id, merchant_id, principal_user_id, period_type, revenue_domains, include_inventory_cost, status,"
+                + " payout_pay_slot) VALUES (?, ?, ?, ?, 'bar', TRUE, 'active', 1)", "divp_" + id, id, "usr_dmp_principal_" + s, periodType);
     }
 
     /** 日结生成的真实请求形状（蛇形键）。 */

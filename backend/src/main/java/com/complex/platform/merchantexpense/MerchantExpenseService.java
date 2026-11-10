@@ -36,7 +36,8 @@ public class MerchantExpenseService {
 
     private static final Set<String> EXPENSE_TYPES = Set.of(
             "rent_allocation", "energy", "property_fee", "labor", "amortization", "other");
-    private static final Set<String> SOURCES = Set.of("auto_energy", "auto_property", "auto_rent", "manual");
+    private static final Set<String> SOURCES = Set.of(
+            "auto_energy", "auto_property", "auto_rent", "auto_payroll", "manual");
     private static final Pattern PERIOD_PATTERN = Pattern.compile("^\\d{4}-(0[1-9]|1[0-2])$");
 
     private final MerchantExpenseRepository repository;
@@ -204,6 +205,8 @@ public class MerchantExpenseService {
      * 幂等可重跑：同商户同月同来源单据不重复计入（id 派生 + 部分唯一索引）。
      * 响应附金额漂移报告（上游改账后台账净额与上游不一致的清单；处置 SOP=红字冲销旧行+手工录入修正额）。
      * 上游出账本身是手动触发（能耗结算/物业费出账），故此处用手动触发端点而非 @Scheduled 空跑。
+     * 第十八批 AC 段第 210 条 210-R1（BSM:1801「连接工资单月结，拿到这期的人工成本」）：另挂工资单月结人工成本与派驻、营销人员提成拨付
+     * （来源 auto_payroll，见 {@link MerchantExpenseRepository#attachPayrollLabor}）。
      */
     @Transactional
     public MerchantExpenseSyncResultRecord syncAuto(MerchantExpenseSyncRequest request) {
@@ -230,8 +233,9 @@ public class MerchantExpenseService {
                     int propertyInserted = repository.attachPropertyFees(period, operator, now);
                     int contractPropertyInserted = repository.attachContractPropertyFees(period, operator, now);
                     int rentInserted = repository.attachContractRent(period, operator, now);
+                    int payrollInserted = repository.attachPayrollLabor(period, operator, now);
                     return new MerchantExpenseSyncResultRecord(period, energyInserted, propertyInserted,
-                            contractPropertyInserted, rentInserted, repository.listAutoDrift(period),
+                            contractPropertyInserted, rentInserted, payrollInserted, repository.listAutoDrift(period),
                             repository.listLockedMerchants(period));
                 },
                 MerchantExpenseService::businessId,

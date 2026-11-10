@@ -1,4 +1,4 @@
-// 文件版本：V0.24
+// 文件版本：V0.25
 export type AdminUser = {
   id: string;
   username: string;
@@ -1097,6 +1097,8 @@ export type MerchantExpenseSyncResult = {
   propertyInserted?: number;
   contractPropertyInserted?: number;
   rentInserted?: number;
+  // 210-R1：工资单月结人工成本与派驻、营销人员提成拨付（含作废冲回）本次新挂接行数。
+  payrollInserted?: number;
   drift?: MerchantExpenseDriftRow[];
   // 分红期间关账锁跳过清单：该月被 approved/paid 正式分红单覆盖（关账）的商户 id，自动挂接对其跳过。
   lockedMerchants?: string[];
@@ -1129,6 +1131,23 @@ export type DividendPlanRow = {
   // V304 发放保护线留存·释放规则。
   reserveReleaseMode?: string;
   reserveReleaseDelayPeriods?: number;
+  // 211-R2 发放付账日：全平台统一每月三个付账日中的第几个（1～3）。
+  payoutPaySlot?: number | null;
+};
+
+// 211-R1 整期暂不分红／暂缓分红登记行（第十八批裁决 43）：holdType skip 暂不分红 / defer 暂缓分红；lifted* 与 liftResult 为暂缓分红恢复登记。
+export type DividendHoldRow = {
+  id: string;
+  merchantId?: string;
+  periodLabel?: string;
+  holdType?: string;
+  reason?: string;
+  negotiationResult?: string;
+  recordedBy?: string;
+  recordedAt?: string;
+  liftedBy?: string | null;
+  liftedAt?: string | null;
+  liftResult?: string | null;
 };
 
 // V304 发放保护线留存·待释放/已释放台账行。
@@ -1186,6 +1205,8 @@ export type DividendStatementRow = {
   payoutCent?: number;
   // FS-014 财务登记的依法可分配金额快照（未登记为空；正式单须先登记才可提交审阅）。
   legalDistributableCent?: number | null;
+  // 210-R3 该期税费：已生效税费实际申报金额合计（净利润已扣；逐税种见 tax_period 明细行）。
+  periodTaxCent?: number;
 };
 
 export type DividendStatementLineRow = {

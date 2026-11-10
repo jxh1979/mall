@@ -1,6 +1,6 @@
 package com.complex.platform.dividend;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import java.time.Instant;
 import java.time.LocalDate;
@@ -42,7 +42,25 @@ public final class DividendRecords {
             // V308 主理人类型（individual 个人 / company 公司）：公司股东不代扣个税、全额发放。
             String principalType,
             // V309 自定义扣除项（读路径由仓储装填；写路径经方案请求整表替换）。
-            List<DividendCustomDeductionRecord> customDeductions) {
+            List<DividendCustomDeductionRecord> customDeductions,
+            // V616 211-R2 发放付账日：全平台统一每月三个付账日中的第几个（1～3，BSM:1787「由该公司在分红周期配置中指定」）。
+            Integer payoutPaySlot) {
+
+        /** 向后兼容构造（V616 之前的 25 参形态）：发放付账日未指定。 */
+        public DividendPlanRecord(
+                String id, String merchantId, String principalUserId, String principalName,
+                int platformShareBps, int taxRateBps, String periodType, List<String> revenueDomains,
+                boolean includeInventoryCost, List<String> expenseTypes, LocalDate effectiveFrom, String status,
+                String note, String updatedBy, Instant createdAt, Instant updatedAt,
+                boolean lossCarryforwardEnabled, boolean arrearsOffsetEnabled, boolean payoutFloorEnabled,
+                int payoutFloorBps, long payoutFloorFixedCent, String reserveReleaseMode,
+                int reserveReleaseDelayPeriods, String principalType, List<DividendCustomDeductionRecord> customDeductions) {
+            this(id, merchantId, principalUserId, principalName, platformShareBps, taxRateBps, periodType,
+                    revenueDomains, includeInventoryCost, expenseTypes, effectiveFrom, status, note, updatedBy,
+                    createdAt, updatedAt, lossCarryforwardEnabled, arrearsOffsetEnabled, payoutFloorEnabled,
+                    payoutFloorBps, payoutFloorFixedCent, reserveReleaseMode, reserveReleaseDelayPeriods,
+                    principalType, customDeductions, null);
+        }
 
         /** 向后兼容构造（V308/V309 之前的 23 参形态）：类型默认个人、自定义扣除空。 */
         public DividendPlanRecord(
@@ -57,7 +75,7 @@ public final class DividendRecords {
                     revenueDomains, includeInventoryCost, expenseTypes, effectiveFrom, status, note, updatedBy,
                     createdAt, updatedAt, lossCarryforwardEnabled, arrearsOffsetEnabled, payoutFloorEnabled,
                     payoutFloorBps, payoutFloorFixedCent, reserveReleaseMode, reserveReleaseDelayPeriods,
-                    "individual", List.of());
+                    "individual", List.of(), null);
         }
 
         /** 向后兼容构造（V304 之前的 21 参形态）：释放规则默认手动、延后 1 期；类型默认个人、自定义扣除空。 */
@@ -71,7 +89,7 @@ public final class DividendRecords {
             this(id, merchantId, principalUserId, principalName, platformShareBps, taxRateBps, periodType,
                     revenueDomains, includeInventoryCost, expenseTypes, effectiveFrom, status, note, updatedBy,
                     createdAt, updatedAt, lossCarryforwardEnabled, arrearsOffsetEnabled, payoutFloorEnabled,
-                    payoutFloorBps, payoutFloorFixedCent, "manual", 1, "individual", List.of());
+                    payoutFloorBps, payoutFloorFixedCent, "manual", 1, "individual", List.of(), null);
         }
     }
 
@@ -141,7 +159,32 @@ public final class DividendRecords {
             // V309 自定义扣除合计快照（逐项留痕在明细行；发放额恒等含本项）。
             long customDeductionCent,
             // V507 FS-014 财务登记的依法可分配金额快照（未核定为空；本次分配 = min(经营候选额, 本额)）。
-            Long legalDistributableCent) {
+            Long legalDistributableCent,
+            // V616 210-R3 该期税费：方案商户经营主体已生效、所属期末月落在本期内的税费实际申报金额合计（净利润已扣；逐税种见 tax_period 明细行）。
+            long periodTaxCent) {
+
+        /** 向后兼容构造（V616 之前的形态）：该期税费 0。 */
+        public DividendStatementRecord(
+                String id, String merchantId, String planId, String kind, String periodLabel,
+                LocalDate periodStart, LocalDate periodEnd, String principalUserId, int platformShareBps,
+                int taxRateBps, List<String> revenueDomains, boolean includeInventoryCost, List<String> expenseTypes,
+                long revenueCent, long costCent, long expenseCent, long netProfitCent, long distributableCent,
+                long platformShareCent, long principalGrossCent, long taxCent, long principalNetCent,
+                long noCostBasisCount, String status, String rejectReason, String arApItemId, String computedBy,
+                String submittedBy, Instant submittedAt, String approvedBy, Instant approvedAt, String paidBy,
+                Instant paidAt, Instant createdAt, Instant updatedAt, boolean lossCarryforwardEnabled,
+                long lossCarryforwardInCent, long lossCarryforwardAppliedCent, long lossCarryforwardAfterCent,
+                long arrearsOffsetCent, long reserveWithheldCent, long payoutCent, String principalType,
+                long customDeductionCent, Long legalDistributableCent) {
+            this(id, merchantId, planId, kind, periodLabel, periodStart, periodEnd, principalUserId,
+                    platformShareBps, taxRateBps, revenueDomains, includeInventoryCost, expenseTypes, revenueCent,
+                    costCent, expenseCent, netProfitCent, distributableCent, platformShareCent, principalGrossCent,
+                    taxCent, principalNetCent, noCostBasisCount, status, rejectReason, arApItemId, computedBy,
+                    submittedBy, submittedAt, approvedBy, approvedAt, paidBy, paidAt, createdAt, updatedAt,
+                    lossCarryforwardEnabled, lossCarryforwardInCent, lossCarryforwardAppliedCent,
+                    lossCarryforwardAfterCent, arrearsOffsetCent, reserveWithheldCent, payoutCent, principalType,
+                    customDeductionCent, legalDistributableCent, 0L);
+        }
 
         /** 向后兼容构造（V507 之前的形态）：未核定依法可分配金额。 */
         public DividendStatementRecord(
@@ -163,7 +206,7 @@ public final class DividendRecords {
                     submittedBy, submittedAt, approvedBy, approvedAt, paidBy, paidAt, createdAt, updatedAt,
                     lossCarryforwardEnabled, lossCarryforwardInCent, lossCarryforwardAppliedCent,
                     lossCarryforwardAfterCent, arrearsOffsetCent, reserveWithheldCent, payoutCent, principalType,
-                    customDeductionCent, null);
+                    customDeductionCent, null, 0L);
         }
 
         /** 商户侧（主理人视图）脱敏：内部操作员 id 与应付款项 id 不外发（平台侧照旧全量）。 */
@@ -177,7 +220,7 @@ public final class DividendRecords {
                     createdAt, updatedAt,
                     lossCarryforwardEnabled, lossCarryforwardInCent, lossCarryforwardAppliedCent,
                     lossCarryforwardAfterCent, arrearsOffsetCent, reserveWithheldCent, payoutCent,
-                    principalType, customDeductionCent, legalDistributableCent);
+                    principalType, customDeductionCent, legalDistributableCent, periodTaxCent);
         }
     }
 
@@ -214,6 +257,19 @@ public final class DividendRecords {
 
     /** 费用侧分类型净额（V297 台账期间汇总，供逐类落算式明细行）。 */
     public record ExpenseTypeSumRecord(String expenseType, long totalCent) {
+    }
+
+    /** 210-R3 该期税费分税种合计（已生效实际申报金额；periods 为计入的各登记所属期，如「2026-01～2026-03」，按所属期末月排序以「、」连接）。 */
+    public record PeriodTaxSumRecord(String taxType, long totalCent, String periods) {
+    }
+
+    /**
+     * 211-R1 整期暂不分红／暂缓分红登记（V616 dividend_period_holds；BSM:1777；第十八批裁决 43）。holdType：skip 暂不分红 / defer 暂缓分红；
+     * liftedBy、liftedAt、liftResult 为暂缓分红恢复时登记（恢复的协商结果），未恢复为空。
+     */
+    public record DividendPeriodHoldRecord(
+            String id, String merchantId, String periodLabel, String holdType, String reason, String negotiationResult,
+            String recordedBy, Instant recordedAt, String liftedBy, Instant liftedAt, String liftResult) {
     }
 
     /** 期间作业跳过项（商户 + 原因，如已进入审批流不重算）。 */

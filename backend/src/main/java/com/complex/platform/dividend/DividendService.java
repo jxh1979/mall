@@ -1,5 +1,5 @@
 package com.complex.platform.dividend;
-// 文件版本：V0.09
+// 文件版本：V0.10
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.BusinessDayResolver;
@@ -8,6 +8,7 @@ import com.complex.platform.common.api.PageResponse;
 import com.complex.platform.common.money.MoneyRounding;
 import com.complex.platform.dividend.DividendRecords.DividendComputeResultRecord;
 import com.complex.platform.dividend.DividendRecords.DividendComputeSkipRecord;
+import com.complex.platform.dividend.DividendRecords.DividendPeriodHoldRecord;
 import com.complex.platform.dividend.DividendRecords.DividendPlanRecord;
 import com.complex.platform.dividend.DividendRecords.DividendReserveLedgerRecord;
 import com.complex.platform.dividend.DividendRecords.DividendReserveReleaseCandidateRecord;
@@ -19,13 +20,16 @@ import com.complex.platform.dividend.DividendRecords.DividendStatementRecord;
 import com.complex.platform.dividend.DividendRecords.ExpenseTypeSumRecord;
 import com.complex.platform.dividend.dto.DividendActionRequest;
 import com.complex.platform.dividend.dto.DividendComputeRequest;
+import com.complex.platform.dividend.dto.DividendHoldRequest;
 import com.complex.platform.dividend.dto.DividendLegalConfirmationRequest;
 import com.complex.platform.dividend.dto.DividendPlanRequest;
 import com.complex.platform.evidence.AuditedOperation;
 import com.complex.platform.evidence.AuditedOperationExecutor;
+import com.complex.platform.finance.EntityTaxService;
 import com.complex.platform.finance.FinanceService;
 import com.complex.platform.inventory.InventoryCostSummaryRecord;
 import com.complex.platform.inventory.InventoryRepository;
+import com.complex.platform.settlement.InternalPayDayService;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -92,6 +96,9 @@ public class DividendService {
             "paid", "已发放", "rejected", "已驳回", "voided", "已作废");
     /** 可重算（作废+重出）的状态；已进入审批流的单不重算。 */
     private static final Set<String> RECOMPUTABLE_STATUSES = Set.of("preview", "draft", "rejected");
+    /** 211-R1 整期暂不分红／暂缓分红登记类别中文名（第十八批裁决 43）。 */
+    private static final java.util.Map<String, String> HOLD_LABELS = java.util.Map.of("skip", "暂不分红", "defer", "暂缓分红");
+    private static final String HOLD_OBJECT = "dividend_period_hold";
     /** 月度预览自动生成（159-R6 月末营业日五类标齐后）的系统操作人标识（无请求上下文，落 computed_by/voided_by 便于留痕追溯）。 */
     static final String SYSTEM_OPERATOR = "system_dividend_preview";
     /** V304 留存自动释放定时作业的系统操作人标识（落 released_by 便于留痕追溯）。 */
@@ -122,6 +129,7 @@ public class DividendService {
     private final AuthorizationService authorizationService;
     private final AuditedOperationExecutor operations;
     private final FinanceService payoutPort;
+    private final InternalPayDayService payDays;
 
     // 第十八批第 13 条（BSM 第 1597 行「分红出单与发放」，第 1598 行不可关闭）：业务提交后通知商户。@Lazy 防初始化环；为 null（单测手工构造）＝不发。
     @org.springframework.beans.factory.annotation.Autowired(required = false)
@@ -150,13 +158,15 @@ public class DividendService {
             BusinessDayResolver businessDayResolver,
             AuthorizationService authorizationService,
             AuditedOperationExecutor operations,
-            FinanceService payoutPort) {
+            FinanceService payoutPort,
+            InternalPayDayService payDays) {
         this.repository = repository;
         this.inventoryRepository = inventoryRepository;
         this.businessDayResolver = businessDayResolver;
         this.authorizationService = authorizationService;
         this.operations = operations;
         this.payoutPort = payoutPort;
+        this.payDays = payDays;
     }
 
     // ── 方案配置 ──────────────────────────────────────────────
@@ -188,6 +198,7 @@ public class DividendService {
     }
 
     private DividendPlanRecord createPlanInternal(DividendPlanRequest request) {
+        requireFullDeductions(request);
         String merchantId = requireText(request.merchantId(), "merchant_id");
         String principalUserId = requireText(request.principalUserId(), "principal_user_id");
         Instant now = Instant.now();
@@ -224,7 +235,8 @@ public class DividendService {
                 // V308 主理人类型（默认个人=代扣个税）；V309 自定义扣除项另表持久化，插入记录先占空。
                 requireEnum(orDefault(request.principalType(), DEFAULT_PRINCIPAL_TYPE),
                         PRINCIPAL_TYPES, "principal_type"),
-                List.of());
+                List.of(),
+                requirePaySlot(request.payoutPaySlot()));
         if (!repository.insertPlan(plan)) {
             throw ApiException.conflict("DIVIDEND_PLAN_EXISTS",
                     "该商户已有生效中的分红方案；请修改现有方案或先停用再新建");
@@ -261,6 +273,7 @@ public class DividendService {
                 && !existing.merchantId().equals(request.merchantId().trim())) {
             throw ApiException.badRequest("VALIDATION_FAILED", "分红方案的所属商户不能变更");
         }
+        requireFullDeductions(request);
         DividendPlanRecord updated = new DividendPlanRecord(
                 existing.id(),
                 existing.merchantId(),
@@ -300,7 +313,8 @@ public class DividendService {
                 // V308 主理人类型（可空=不改现值）；V309 自定义扣除项另表持久化，更新记录先占空。
                 requireEnum(orDefault(request.principalType(), existing.principalType()),
                         PRINCIPAL_TYPES, "principal_type"),
-                List.of());
+                List.of(),
+                requirePaySlot(orDefault(request.payoutPaySlot(), existing.payoutPaySlot())));
         if (!repository.updatePlan(updated)) {
             // ended 改回 active 撞同商户唯一生效索引（uq_dividend_plans_active_merchant）→ 业务 409 非 500。
             throw ApiException.conflict("DIVIDEND_PLAN_EXISTS",
@@ -312,6 +326,31 @@ public class DividendService {
         }
         return repository.findPlanById(planId)
                 .orElseThrow(() -> ApiException.notFound("DIVIDEND_PLAN_NOT_FOUND", "分红方案已被并发修改，请刷新后重试"));
+    }
+
+    /**
+     * 控制席并入（BSM:1774「分红基数按「净利润」算：一个周期里的经营收入（按含税实收口径），减掉这期间的全部成本、费用与税费之后的余额」）：
+     * 方案不能关掉销货成本或去掉任一类费用；不填按全量（新建）或现值（修改）。
+     */
+    private static void requireFullDeductions(DividendPlanRequest request) {
+        if (Boolean.FALSE.equals(request.includeInventoryCost())) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "分红净利润须减掉期间全部成本、费用与税费，不能关闭扣减销货成本");
+        }
+        if (request.expenseTypes() != null
+                && !Set.copyOf(requireTokens(request.expenseTypes(), EXPENSE_TYPES, "expense_types")).equals(EXPENSE_TYPES)) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "分红净利润须减掉期间全部成本、费用与税费，计入的费用类别须为全部类别，不能去掉任一类费用");
+        }
+    }
+
+    /** 211-R2 发放付账日（BSM:1787「落在三个付账日之一，具体哪一个由该公司在分红周期配置中指定」）：全平台统一每月三个付账日中的第几个，必填 1～3。 */
+    private static Integer requirePaySlot(Integer slot) {
+        if (slot == null) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "payout_pay_slot is required");
+        }
+        if (slot < 1 || slot > 3) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "payout_pay_slot 须为第一、第二、第三个付账日之一（1～3）");
+        }
+        return slot;
     }
 
     /** V309 请求项 → 校验 + 落地记录（sort_order=输入序）。fixed 用固定额；ratio 用比例+基数。 */
@@ -407,6 +446,24 @@ public class DividendService {
             String mismatch = periodMismatchReason(kind, period, plan);
             if (mismatch != null) {
                 skipped.add(new DividendComputeSkipRecord(plan.merchantId(), mismatch));
+                continue;
+            }
+            // 211-R1 第十八批裁决 43「「暂不分红」该期不出正式单、利润不补分；「暂缓分红」等协商恢复后由财务登记恢复，再照常出单；月度预览照常」：
+            // 只判正式单，有未恢复登记的不出单并写明原因与协商结果（该期草稿已在登记时作废）。
+            Optional<DividendPeriodHoldRecord> hold = "official".equals(kind)
+                    ? repository.findOpenHold(plan.merchantId(), period.label()) : Optional.empty();
+            if (hold.isPresent()) {
+                skipped.add(new DividendComputeSkipRecord(plan.merchantId(), "本期经协商" + HOLD_LABELS.get(hold.get().holdType())
+                        + "，不出正式单（原因：" + hold.get().reason() + "；协商结果：" + hold.get().negotiationResult() + "）"));
+                continue;
+            }
+            // 第十八批裁决 42「登记齐了才能出单：正式单出单前本期每个月都要有已生效的税费登记，缺的不出单并写跳过原因」：只判正式单（月度预览照扣
+            // 已生效税费、不判），看各月是否被已生效登记的所属期覆盖（扣税取数另看所属期末月）；在作废旧单之前判，已有草稿不作废。
+            List<String> untaxed = "official".equals(kind)
+                    ? repository.listMonthsWithoutApprovedTax(plan.merchantId(), period.months()) : List.of();
+            if (!untaxed.isEmpty()) {
+                skipped.add(new DividendComputeSkipRecord(plan.merchantId(), "本期 " + String.join("、", untaxed)
+                        + " 尚无已生效的税费申报登记，请先登记并审批通过后再出正式单"));
                 continue;
             }
             String notFinal = nonFinalReason(kind, period, plan);
@@ -546,7 +603,17 @@ public class DividendService {
                             + String.join("、", period.months()) + "）", now);
         }
 
-        long netProfit = revenue - cost - expense;
+        // 210-R3（BSM:1774「……以及该期间的各项税费（含增值税、所得税及其他应由该主体承担的税费）」；BSM:1801「连接税务处理，拿到这期的各项税费，
+        // 算出净利润」；第十八批裁决 42「分红扣本期内已生效的申报金额合计；按季申报的税整季计入季末那个月」）：方案商户经营主体已生效、所属期末月落在
+        // 本期内的实际申报金额逐税种扣减，不设方案开关（BSM:1774「全部」）。
+        long periodTax = 0L;
+        for (DividendRecords.PeriodTaxSumRecord taxSum : repository.sumEntityTaxByType(merchantId, period.months())) {
+            periodTax += taxSum.totalCent();
+            addLine(lines, statementId, merchantId, seq, "tax_period", -taxSum.totalCent(),
+                    EntityTaxService.TAX_LABELS.get(taxSum.taxType()) + "实际申报金额（已生效登记，所属期 " + taxSum.periods() + "）", now);
+        }
+
+        long netProfit = revenue - cost - expense - periodTax;
 
         // V303 扣除项三开关（默认全关时逐分等于 V299 现状）。
         // 亏损结转累计恒结转：无论本期开关都读往期累计（关闭期不扣但不清零，用户 2026-07-19 拍板）。
@@ -581,7 +648,7 @@ public class DividendService {
                 plan.payoutFloorEnabled(), plan.payoutFloorBps(), plan.payoutFloorFixedCent(), legalCap);
 
         addLine(lines, statementId, merchantId, seq, "net_profit", netProfit,
-                "净利润 = 收入 − 销货成本 − 费用（亏损期可分配额为 0，不倒扣主理人）", now);
+                "净利润 = 收入 − 销货成本 − 费用 − 税费（亏损期可分配额为 0，不倒扣主理人）", now);
         if (dist.carryInCent() > 0 || dist.carryAfterCent() > 0) {
             // 累计恒结转留痕：开启期弥补（扣减可分配额）、关闭期仅结转不扣（累计保留）。
             String note = plan.lossCarryforwardEnabled()
@@ -656,7 +723,7 @@ public class DividendService {
                 null, null, operator, null, null, null, null, null, null, now, now,
                 plan.lossCarryforwardEnabled(), dist.carryInCent(), dist.carryAppliedCent(),
                 dist.carryAfterCent(), dist.arrearsOffsetCent(), dist.reserveWithheldCent(), dist.payoutCent(),
-                plan.principalType(), dist.customDeductionCent(), legalCap);
+                plan.principalType(), dist.customDeductionCent(), legalCap, periodTax);
         repository.insertStatement(statement);
         for (DividendStatementLineRecord line : lines) {
             repository.insertLine(line);
@@ -800,7 +867,7 @@ public class DividendService {
                     if (statement.payoutCent() > 0) {
                         arApItemId = payoutPort.createDividendPayoutPayable(
                                 statement.principalUserId(), statement.merchantId(),
-                                statement.payoutCent(), statement.id());
+                                statement.payoutCent(), statement.id(), payoutDueDate(statement, now));
                     }
                     // V303 发放保护线留存 → 记为欠主理人的待释放款（非平台白拿；释放为后续 R）。
                     if (statement.reserveWithheldCent() > 0) {
@@ -1049,7 +1116,7 @@ public class DividendService {
         }
         // finance 侧 re-tag 待释放留存应付 → 已释放（金额不变，全额一次）；已释放/无待释放应付 → empty。
         Optional<FinanceService.DividendReserveReleaseRef> ref =
-                payoutPort.releaseDividendReserveWithholding(statementId);
+                payoutPort.releaseDividendReserveWithholding(statementId, payoutDueDate(stmt, now));
         if (ref.isEmpty()) {
             throw ApiException.conflict("DIVIDEND_RESERVE_ALREADY_RELEASED",
                     "该计算单的留存已释放，不可重复释放");
@@ -1072,7 +1139,116 @@ public class DividendService {
         return release;
     }
 
+    // ── 211-R1 整期暂不分红／暂缓分红登记 ──────────────────────
+
+    /** 登记列表（平台财务持股分红页用；商户账号拒）。 */
+    public List<DividendPeriodHoldRecord> listHolds() {
+        authorizationService.requirePermission(VIEW_PERM);
+        authorizationService.requirePlatformScope();
+        return operations.readSingle(
+                AuditedOperation.of("dividend.holds_listed", "dividend.holds_list_failed", VIEW_PERM, HOLD_OBJECT),
+                repository::listHolds,
+                result -> "all");
+    }
+
+    /**
+     * 211-R1 登记暂不分红或暂缓分红（BSM:1777「若因特殊情况需要整期暂不分红或暂缓分红的，须由主理人与娱乐平台公司协商一致后执行，并记录原因与协商结果」；
+     * 第十八批裁决 43「平台财务在持股分红页按商户按期登记（暂不分红或暂缓分红，原因、协商结果必填，不另走审批）；该期正式单已提交审批或已发放的不能再登记，
+     * 草稿随登记作废」）：期间标签须与该商户生效方案的周期一致；同一商户同一期间只能有一条未恢复的登记。
+     */
+    @Transactional
+    public DividendPeriodHoldRecord recordHold(DividendHoldRequest request) {
+        authorizationService.requirePermission(MANAGE_PERM);
+        authorizationService.requirePlatformScope();
+        requireRequest(request);
+        return operations.executeWrite(
+                "recordDividendHold",
+                request.idempotencyKey(),
+                request,
+                DividendPeriodHoldRecord.class,
+                AuditedOperation.of("dividend.hold_recorded", "dividend.hold_record_failed", MANAGE_PERM, HOLD_OBJECT),
+                () -> recordHoldInternal(request),
+                DividendService::businessId,
+                java.util.Map.of());
+    }
+
+    private DividendPeriodHoldRecord recordHoldInternal(DividendHoldRequest request) {
+        String merchantId = requireText(request.merchantId(), "merchant_id");
+        String holdType = requireEnum(request.holdType(), HOLD_LABELS.keySet(), "hold_type");
+        String reason = requireText(request.reason(), "reason");
+        String negotiationResult = requireText(request.negotiationResult(), "negotiation_result");
+        DividendPlanRecord plan = repository.findActivePlanByMerchant(merchantId)
+                .orElseThrow(() -> ApiException.notFound("DIVIDEND_PLAN_NOT_FOUND", "该商户没有生效中的分红方案: " + merchantId));
+        DividendPeriod period = DividendPeriod.parse(request.periodLabel());
+        String mismatch = periodMismatchReason("official", period, plan);
+        if (mismatch != null) {
+            throw ApiException.badRequest("VALIDATION_FAILED", mismatch.replace("，跳过", ""));
+        }
+        Optional<DividendStatementRecord> official = repository.findActiveStatement(merchantId, "official", period.label());
+        if (official.isPresent() && !RECOMPUTABLE_STATUSES.contains(official.get().status())) {
+            throw ApiException.conflict("DIVIDEND_STATE_INVALID", "该期正式单已提交审批或已发放（当前状态："
+                    + STATEMENT_STATUS_LABELS.get(official.get().status()) + "），不能再登记暂不分红或暂缓分红");
+        }
+        String operator = currentOperator();
+        Instant now = Instant.now();
+        DividendPeriodHoldRecord hold = new DividendPeriodHoldRecord("divh_" + UUID.randomUUID().toString().replace("-", ""),
+                merchantId, period.label(), holdType, reason, negotiationResult, operator, now, null, null, null);
+        if (!repository.insertHold(hold)) {
+            throw ApiException.conflict("DIVIDEND_HOLD_EXISTS", "该商户本期已有未恢复的暂不分红或暂缓分红登记");
+        }
+        // 草稿随登记作废（已驳回的正式单同为可重算态，一并作废）；0 行＝并发下已提交审批，整笔回滚。
+        if (official.isPresent()) {
+            requireTransition(repository.markVoided(official.get().id(), operator, now), "作废该期正式草稿");
+        }
+        return hold;
+    }
+
+    /**
+     * 211-R1 恢复暂缓分红（第十八批裁决 43「「暂缓分红」等协商恢复后由财务登记恢复，再照常出单」）：只对未恢复的暂缓分红，恢复的协商结果必填；
+     * 暂不分红不恢复（「该期不出正式单、利润不补分」）。
+     */
+    @Transactional
+    public DividendPeriodHoldRecord liftHold(String holdId, DividendHoldRequest.Lift request) {
+        authorizationService.requirePermission(MANAGE_PERM);
+        authorizationService.requirePlatformScope();
+        requireRequest(request);
+        String id = requireText(holdId, "hold_id");
+        return operations.executeWrite(
+                "liftDividendHold:" + id,
+                request.idempotencyKey(),
+                request,
+                DividendPeriodHoldRecord.class,
+                AuditedOperation.of("dividend.hold_lifted", "dividend.hold_lift_failed", MANAGE_PERM, HOLD_OBJECT),
+                () -> {
+                    String liftResult = requireText(request.liftResult(), "lift_result");
+                    DividendPeriodHoldRecord hold = repository.findHoldById(id)
+                            .orElseThrow(() -> ApiException.notFound("DIVIDEND_HOLD_NOT_FOUND", "暂不分红或暂缓分红登记不存在：" + id));
+                    if (!"defer".equals(hold.holdType())) {
+                        throw ApiException.conflict("DIVIDEND_HOLD_NOT_LIFTABLE", "暂不分红的期间不恢复：该期不出正式单、利润不补分");
+                    }
+                    if (repository.liftHold(id, currentOperator(), liftResult, Instant.now()) == 0) {
+                        throw ApiException.conflict("DIVIDEND_HOLD_NOT_LIFTABLE", "该暂缓分红登记已恢复，不能重复恢复");
+                    }
+                    return repository.findHoldById(id).orElseThrow();
+                },
+                DividendService::businessId,
+                java.util.Map.of());
+    }
+
     // ── 辅助 ──────────────────────────────────────────────────
+
+    /**
+     * 211-R2（BSM:1787「发放走应付款项，落在三个付账日之一，具体哪一个由该公司在分红周期配置中指定」；DEC-R3-2026-08-04-05；第十八批裁决 44
+     * 「审批通过后给主理人的应付和留存释放的应付都落在当天或之后第一个该付账日」）：按计算单所属方案的发放付账日，取 at 所在营业日当天或之后第一个该付账日
+     * （遇非银行工作日顺延，BSM:1683）。
+     */
+    private LocalDate payoutDueDate(DividendStatementRecord statement, Instant at) {
+        Integer slot = repository.findPlanById(statement.planId()).map(DividendPlanRecord::payoutPaySlot).orElse(null);
+        if (slot == null) {
+            throw ApiException.conflict("DIVIDEND_PAY_SLOT_MISSING", "请先在分红方案中指定发放付账日");
+        }
+        return payDays.payDayOnOrAfter(slot, businessDayResolver.merchantBusinessDate(null, statement.merchantId(), at));
+    }
 
     private String scopeMerchant(String requested) {
         return authorizationService.currentMerchantScope().orElse(requested);
@@ -1102,6 +1278,9 @@ public class DividendService {
         }
         if (saved instanceof DividendReserveReleaseRecord release) {
             return release.id();
+        }
+        if (saved instanceof DividendPeriodHoldRecord hold) {
+            return hold.id();
         }
         return "all";
     }

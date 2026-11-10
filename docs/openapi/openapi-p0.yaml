@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: 综合体管理系统 P0 API 契约
-  version: V0.60
+  version: V0.61
   description: P0 首批编码前置契约。本文采用 JSON-compatible YAML，便于与 openapi-p0.json 保持一致。正式后端以 Java 21 + Spring Boot 4.x +
     springdoc-openapi 输出运行时 OpenAPI，并与本契约比对。
 servers:
@@ -24384,6 +24384,117 @@ paths:
           $ref: "#/components/responses/Error"
         "500":
           $ref: "#/components/responses/Error"
+  /api/v1/finance/entity-taxes:
+    get:
+      tags:
+        - finance
+      operationId: listEntityTaxDeclarations
+      summary: 税费申报登记分页查询（按经营主体、所属月、税种、状态筛选）
+      description: 第十八批 AC 段第 210 条 210-R2（第十八批裁决 42）：经营主体税费实际申报金额登记列表，month 筛所属期覆盖该月的登记。响应 data 为分页：items（id、business_entity_id、entity_name、tax_type、period_start_month、period_end_month、declared_amount_cent、reason、evidence_attachment_ids、status、review_id、created_by、created_at、approved_at）、page、page_size、total。status：pending_review 待财务、税务、法务审核与最高确认 / approved 已生效 / rejected 已驳回。商户账号返回 403 PLATFORM_SCOPE_REQUIRED。
+      x-auth-context: staff-token
+      x-permission: finance.entity_tax.view
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: entity_tax.listed
+      x-audit-event-failure: entity_tax.list_failed
+      parameters:
+        - name: business_entity_id
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 64
+          description: 经营主体 ID 筛选。
+        - name: month
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 7
+          description: 所属月（如 2026-02）：只列所属期覆盖该月的登记。
+        - name: tax_type
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - vat
+              - cultural_fee
+              - surcharge
+              - corporate_income
+              - other
+          description: 税种筛选。
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - pending_review
+              - approved
+              - rejected
+          description: 登记状态筛选：pending_review 待审批 / approved 已生效 / rejected 已驳回。
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+          description: 页码（1 起）。
+        - name: page_size
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+          description: 每页行数（上限 200）。
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+    post:
+      tags:
+        - finance
+      operationId: declareEntityTax
+      summary: 登记税费实际申报金额并提交财务、税务、法务审核与最高确认
+      description: 第十八批 AC 段第 210 条 210-R2（第十八批裁决 42；BSM:1760）：财务按经营主体、税种、所属期登记实际申报金额，登记即提交审批（不设草稿）。须先配置财务、税务、法务三条线的真实部门起点（在用且具正式审批角色），否则 409 TAX_DEPARTMENT_ROUTING_REQUIRED；各线最终审批人由 parallel_lines 逐线指定；复核动作 finance.tax_rule.adjust，终点为最高权限确认，提交人不能审批自己的登记。全部通过才生效（status=approved，记 approved_at），任一节点驳回即 rejected，驳回后可重新登记。同一经营主体、税种、所属期已有待审批或已生效登记返回 409 ENTITY_TAX_DECLARATION_DUPLICATE；经营主体不存在返回 404 BUSINESS_ENTITY_NOT_FOUND。响应 data 为登记记录（字段同列表 items）。
+      x-auth-context: staff-token
+      x-permission: finance.entity_tax.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: entity_tax.declared
+      x-audit-event-failure: entity_tax.declare_failed
+      requestBody:
+        $ref: "#/components/requestBodies/EntityTaxDeclarationRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-failure-codes:
+        - TAX_DEPARTMENT_ROUTING_REQUIRED
+        - ENTITY_TAX_DECLARATION_DUPLICATE
+        - BUSINESS_ENTITY_NOT_FOUND
   /api/v1/finance/merchant-expenses:
     get:
       tags:
@@ -24435,8 +24546,9 @@ paths:
               - auto_energy
               - auto_property
               - auto_rent
+              - auto_payroll
               - manual
-          description: 来源筛选：自动挂接（能耗/物业费/租金）或手工录入。
+          description: 来源筛选：自动挂接（能耗/物业费/租金/工资单月结人工成本）或手工录入。
         - name: page
           in: query
           required: false
@@ -24600,6 +24712,7 @@ paths:
         - finance
       operationId: syncMerchantExpenseAuto
       summary: 自动挂接能耗费/物业费/租金账单到费用台账（按期幂等可重跑）
+      description: 把所选月份已出账的能耗费、物业费（账单与合同计费两条路径）、租金（合同租金与营业额抽成）汇入费用台账，并挂接人工成本（第 210 条 210-R1）：该月已定格、发放主体就是该店经营主体的本店员工工资单（税前应发去掉小费与服务费），以及派驻、营销人员提成拨付（作废冲回取负），来源 auto_payroll、类型 labor；已关账（被已审批或已发放正式分红单覆盖）的商户月份不挂。响应 data：period、energy_inserted、property_inserted、contract_property_inserted、rent_inserted、payroll_inserted（本次新挂接的人工成本行数）、drift（金额漂移清单，不含 auto_payroll）、locked_merchants。
       x-auth-context: staff-token
       x-permission: finance.merchant_expense.manage
       x-data-scope: platform
@@ -40263,7 +40376,7 @@ paths:
       tags:
         - finance
       operationId: createDividendPlan
-      summary: 新建分红方案（比例/税率/周期/基数构成全可配，80/20 仅默认值）
+      summary: 新建分红方案（比例/税率/周期/收入域可配，80/20 仅默认值；销货成本、全部费用与该期税费固定扣减，发放付账日必填）
       x-auth-context: staff-token
       x-permission: finance.dividend.manage
       x-data-scope: platform
@@ -40334,8 +40447,8 @@ paths:
       tags:
         - finance
       operationId: computeDividendStatements
-      summary: 期间分红作业：对每个生效中方案出计算单（净利润=收入−成本−费用；幂等可重跑，草稿/预览/驳回作废重算，进入审批流跳过）
-      description: 第十八批 V 段第 159 条（ENUM:190「非最终快照的数据一律不得进入结算、分红、正式提成计算和对账关账」）：159-R5 正式单（kind=official）——方案商户检查单位（酒吧按该店，其他商户按所属综合体；建档前的营业日不计）期间内任一营业日五类数据未全部标记为最终的，该方案不出单、记入 skipped（reason「以下营业日数据尚未标记为最终，不能出正式分红单：」后列「yyyy-MM-dd 单位名：类别原词、类别原词」，最多 10 行），旧草稿不作废。159-R6 预览（kind=preview；BSM:1777、DEC-R8-45）只判该月最后一个营业日的五类，未齐的方案记入 skipped（reason「该月最后一个营业日（yyyy-MM-dd）的五类数据尚未全部标记为最终，不得生成预览：」后接同样的列表）；某单位该日五类标齐时由 markDailyCloseFinal 提交后自动出预览，不设定时作业。跳过不是错误码，照常返回 200。159-R10：预览单不计尚未月结定格的服务费扣留数（revenue_bar 明细说明注明「预览：尚未月结定格的服务费扣留数暂不计」），正式单照旧要求月结定格，未定格 409 BAR_REVENUE_PENDING。
+      summary: 期间分红作业：对每个生效中方案出计算单（净利润=收入−成本−费用−税费；幂等可重跑，草稿/预览/驳回作废重算，进入审批流跳过）
+      description: 第十八批 V 段第 159 条（ENUM:190「非最终快照的数据一律不得进入结算、分红、正式提成计算和对账关账」）：159-R5 正式单（kind=official）——方案商户检查单位（酒吧按该店，其他商户按所属综合体；建档前的营业日不计）期间内任一营业日五类数据未全部标记为最终的，该方案不出单、记入 skipped（reason「以下营业日数据尚未标记为最终，不能出正式分红单：」后列「yyyy-MM-dd 单位名：类别原词、类别原词」，最多 10 行），旧草稿不作废。159-R6 预览（kind=preview；BSM:1777、DEC-R8-45）只判该月最后一个营业日的五类，未齐的方案记入 skipped（reason「该月最后一个营业日（yyyy-MM-dd）的五类数据尚未全部标记为最终，不得生成预览：」后接同样的列表）；某单位该日五类标齐时由 markDailyCloseFinal 提交后自动出预览，不设定时作业。跳过不是错误码，照常返回 200。159-R10：预览单不计尚未月结定格的服务费扣留数（revenue_bar 明细说明注明「预览：尚未月结定格的服务费扣留数暂不计」），正式单照旧要求月结定格，未定格 409 BAR_REVENUE_PENDING。第十八批 AC 段第 210 条 210-R3（BSM:1774「以及该期间的各项税费（含增值税、所得税及其他应由该主体承担的税费）」；BSM:1801「连接税务处理，拿到这期的各项税费，算出净利润」；第十八批裁决 42）：净利润再减该期税费——取方案商户经营主体（生效绑定的运营主体，否则商户档案上的经营主体）已生效（status=approved）、所属期末月落在本期内的税费实际申报金额（按季申报的整季计入季末那个月所在的那一期），逐税种落 tax_period 负额明细行，合计回显于计算单 period_tax_cent（net_profit_cent = revenue_cent − cost_cent − expense_cent − period_tax_cent）。正式单另判出单闸（第十八批裁决 42「正式单出单前本期每个月都要有已生效的税费登记，缺的不出单并写跳过原因」）：本期每个月都须被该经营主体至少一条已生效申报登记的所属期（period_start_month～period_end_month）覆盖，缺的该方案不出单、旧单不作废，记入 skipped（reason「本期 yyyy-MM、yyyy-MM 尚无已生效的税费申报登记，请先登记并审批通过后再出正式单」）；登记依法可分配金额后的重算同闸（不出单时 409 DIVIDEND_STATE_INVALID，message 即该原因）；预览照扣已生效税费、不判此闸。第十八批 AC 段第 211 条 211-R1（BSM:1777；第十八批裁决 43「「暂不分红」该期不出正式单、利润不补分；「暂缓分红」等协商恢复后由财务登记恢复，再照常出单；月度预览照常」）：正式单在期间标签校验之后、出单闸之前先判暂不分红／暂缓分红登记，该商户该期有未恢复登记的不出单、记入 skipped（reason「本期经协商暂不分红（或暂缓分红），不出正式单（原因：…；协商结果：…）」）；预览不判。
       x-auth-context: staff-token
       x-permission: finance.dividend.manage
       x-data-scope: platform
@@ -40588,6 +40701,7 @@ paths:
         - SELF_APPROVAL_FORBIDDEN
         - DIVIDEND_ARREARS_CHANGED
         - DIVIDEND_LEGAL_AMOUNT_REQUIRED
+        - DIVIDEND_PAY_SLOT_MISSING
       requestBody:
         $ref: "#/components/requestBodies/DividendActionRequest"
       responses:
@@ -40772,6 +40886,7 @@ paths:
         - DIVIDEND_RESERVE_NONE
         - DIVIDEND_RESERVE_ALREADY_RELEASED
         - DIVIDEND_LEGAL_BASIS_MISSING
+        - DIVIDEND_PAY_SLOT_MISSING
       requestBody:
         $ref: "#/components/requestBodies/DividendActionRequest"
       responses:
@@ -40795,6 +40910,102 @@ paths:
             type: string
             maxLength: 64
           description: 分红计算单 ID。
+  /api/v1/finance/dividends/holds:
+    get:
+      tags:
+        - finance
+      operationId: listDividendPeriodHolds
+      summary: 整期暂不分红／暂缓分红登记列表（平台财务持股分红页用，最近登记在前）
+      description: 第十八批 AC 段第 211 条 211-R1（BSM:1777；第十八批裁决 43）：响应 data 为数组，元素 id、merchant_id、period_label、hold_type（skip 暂不分红 / defer 暂缓分红）、reason、negotiation_result、recorded_by、recorded_at、lifted_by、lifted_at、lift_result（暂缓分红恢复时登记的恢复人、时间与协商结果，未恢复为空）。商户账号返回 403 PLATFORM_SCOPE_REQUIRED。
+      x-auth-context: staff-token
+      x-permission: finance.dividend.view
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: dividend.holds_listed
+      x-audit-event-failure: dividend.holds_list_failed
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+    post:
+      tags:
+        - finance
+      operationId: recordDividendPeriodHold
+      summary: 登记整期暂不分红或暂缓分红（原因、协商结果必填，不另走审批；该期正式草稿随登记作废）
+      description: 第十八批 AC 段第 211 条 211-R1（BSM:1777「若因特殊情况需要整期暂不分红或暂缓分红的，须由主理人与娱乐平台公司协商一致后执行，并记录原因与协商结果」；第十八批裁决 43）：平台财务按商户、按期登记。该商户须有生效中的分红方案（否则 404 DIVIDEND_PLAN_NOT_FOUND），期间标签须与方案周期一致（否则 400 VALIDATION_FAILED）；该期正式单已提交审批、已审批或已发放的返回 409 DIVIDEND_STATE_INVALID；该期草稿或已驳回的正式单随登记作废；同一商户同一期间已有未恢复的登记返回 409 DIVIDEND_HOLD_EXISTS。登记后该期正式单不出（computeDividendStatements 记入 skipped）：暂不分红该期不出正式单、利润不补分；暂缓分红登记恢复后照常出单；月度预览照常。响应 data 为登记记录（字段同列表元素）。
+      x-auth-context: staff-token
+      x-permission: finance.dividend.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: dividend.hold_recorded
+      x-audit-event-failure: dividend.hold_record_failed
+      x-failure-codes:
+        - DIVIDEND_PLAN_NOT_FOUND
+        - DIVIDEND_STATE_INVALID
+        - DIVIDEND_HOLD_EXISTS
+      requestBody:
+        $ref: "#/components/requestBodies/DividendHoldRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/finance/dividends/holds/{hold_id}/lift:
+    post:
+      tags:
+        - finance
+      operationId: liftDividendPeriodHold
+      summary: 恢复暂缓分红（登记恢复的协商结果，之后该期照常出正式单）
+      description: 第十八批 AC 段第 211 条 211-R1（第十八批裁决 43「「暂缓分红」等协商恢复后由财务登记恢复，再照常出单」）：只对未恢复的暂缓分红登记；暂不分红或已恢复的返回 409 DIVIDEND_HOLD_NOT_LIFTABLE，登记不存在返回 404 DIVIDEND_HOLD_NOT_FOUND。响应 data 为登记记录（lifted_by、lifted_at、lift_result 已填）。
+      x-auth-context: staff-token
+      x-permission: finance.dividend.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: dividend.hold_lifted
+      x-audit-event-failure: dividend.hold_lift_failed
+      x-failure-codes:
+        - DIVIDEND_HOLD_NOT_FOUND
+        - DIVIDEND_HOLD_NOT_LIFTABLE
+      requestBody:
+        $ref: "#/components/requestBodies/DividendHoldLiftRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      parameters:
+        - name: hold_id
+          in: path
+          required: true
+          schema:
+            type: string
+            maxLength: 64
+          description: 暂不分红／暂缓分红登记 ID。
   /api/v1/vouchers/definitions:
     get:
       tags:
@@ -58489,6 +58700,12 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/PropertyFeeBillRequest"
+    EntityTaxDeclarationRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/EntityTaxDeclarationRequest"
     MerchantExpenseEntryRequest:
       required: true
       content:
@@ -58951,6 +59168,18 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/DividendActionRequest"
+    DividendHoldRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/DividendHoldRequest"
+    DividendHoldLiftRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/DividendHoldLiftRequest"
     DividendLegalConfirmationRequest:
       required: true
       content:
@@ -67106,6 +67335,77 @@ components:
           items:
             type: string
             maxLength: 64
+    EntityTaxDeclarationRequest:
+      type: object
+      description: 请求载荷 `EntityTaxDeclarationRequest`（税费实际申报金额登记，第十八批裁决 42）：按经营主体、税种、所属期登记一笔实际申报金额，登记即提交财务、税务、法务审核与最高确认，审批通过才生效。
+      additionalProperties: false
+      required:
+        - idempotency_key
+        - business_entity_id
+        - tax_type
+        - period_start_month
+        - period_end_month
+        - declared_amount_cent
+        - reason
+        - parallel_lines
+      properties:
+        idempotency_key:
+          type: string
+          description: 操作幂等键；同键同载荷重放返回同一登记，不重复提交审批。
+          maxLength: 128
+        business_entity_id:
+          type: string
+          description: 经营主体 ID（主体档案）。
+          maxLength: 64
+        tax_type:
+          type: string
+          description: 税种：vat 增值税 / cultural_fee 文化事业建设费 / surcharge 附加税 / corporate_income 企业所得税 / other 其他应由该主体承担的税费。
+          enum:
+            - vat
+            - cultural_fee
+            - surcharge
+            - corporate_income
+            - other
+        period_start_month:
+          type: string
+          description: 所属期首月（年-月，如 2026-01）。
+          maxLength: 7
+        period_end_month:
+          type: string
+          description: 所属期末月（年-月，不早于首月；按季申报的整季登记一条，末月为季末月）。
+          maxLength: 7
+        declared_amount_cent:
+          type: integer
+          format: int64
+          minimum: 0
+          description: 实际申报金额（分，按税务申报表），不能为负数。
+        reason:
+          type: string
+          description: 登记原因（如按哪一期申报表登记），进入复核单与审计留痕。
+          maxLength: 1000
+        evidence_attachment_ids:
+          type: array
+          items:
+            type: string
+          description: 可选：已上传的证据附件 ID，随复核单给审批人查看。
+        parallel_lines:
+          type: array
+          description: 财务（finance_review）、税务（tax_review）、法务（legal_review）三条线各自的最终审批人，须逐线给齐。
+          items:
+            type: object
+            properties:
+              line_code:
+                type: string
+                minLength: 1
+                description: 平行审批线代码
+              final_approver_id:
+                type: string
+                minLength: 1
+                description: 该线最终审批人
+            required:
+              - line_code
+              - final_approver_id
+            additionalProperties: false
     MerchantExpenseEntryRequest:
       type: object
       description: 请求载荷 `MerchantExpenseEntryRequest`（商户费用手工录入）：人工/摊销/其他等无系统单据的费用进台账，note=录入理由必填（审计留痕）。金额单位分、不可为 0；更正走红字冲销，不改历史行。
@@ -69541,7 +69841,7 @@ components:
           maxLength: 64
     DividendPlanRequest:
       type: object
-      description: 请求载荷 `DividendPlanRequest`（分红方案新建/修改共用）：凡涉数据皆可配——比例/税率/周期/基数构成开关全部可调，空缺按默认口径补齐（平台 80%、股息红利
+      description: 请求载荷 `DividendPlanRequest`（分红方案新建/修改共用）：比例/税率/周期/计入收入域可调，销货成本与全部费用类别固定扣减（BSM:1774），新建须指定发放付账日，空缺按默认口径补齐（平台 80%、股息红利
         20%、季度+月度预览、净利润全项）。修改时 merchant_id 不可变更；status=ended 停用方案。一个商户同一时期只允许一个生效中方案。
       additionalProperties: false
       required:
@@ -69581,6 +69881,11 @@ components:
             - semiannual
             - annual
           description: 分红周期（BSM L1777 月、季、半年、年，默认半年）：monthly 月度正式 / quarterly 季度正式+月度预览 / semiannual 半年正式+月度预览（默认）/ annual 年度正式+月度预览；正式单期间标签依次为 2026-07 / 2026-Q3 / 2026-H1 / 2026。
+        payout_pay_slot:
+          type: integer
+          minimum: 1
+          maximum: 3
+          description: 发放付账日：全平台统一每月三个付账日中的第几个（1 第一个、2 第二个、3 第三个，出厂 5、15、25 日；BSM:1787、第十八批裁决 44）。新建必填，修改时不填不改现值；不在 1～3 返回 400 VALIDATION_FAILED。审批通过后给主理人的应付、留存释放后的应付，到期日落在当天营业日或之后第一个该付账日（遇非银行工作日顺延至下一个银行工作日）；方案无发放付账日时审批与释放返回 409 DIVIDEND_PAY_SLOT_MISSING。方案记录（列表、新建、修改的返回）同名字段回显。
         revenue_domains:
           type: array
           items:
@@ -69591,7 +69896,7 @@ components:
           description: 计入收入域（默认 bar+ticket；复用 revenue.net 商户行级谓词区间版）。
         include_inventory_cost:
           type: boolean
-          description: 是否扣减销货成本（V296 移动加权出库成本，默认 true）。
+          description: 扣减销货成本（V296 移动加权出库成本），固定为 true：分红净利润须减掉期间全部成本、费用与税费（BSM:1774）；可不填，填 false 返回 400 VALIDATION_FAILED。
         expense_types:
           type: array
           items:
@@ -69603,7 +69908,7 @@ components:
               - labor
               - amortization
               - other
-          description: 计入费用类别（V297 费用归集台账，默认全部六类）。
+          description: 计入费用类别（V297 费用归集台账），固定为全部六类（BSM:1774 减掉期间全部费用）；可不填，填了须为全部六类，少任一类返回 400 VALIDATION_FAILED。
         effective_from:
           type: string
           format: date
@@ -69731,6 +70036,60 @@ components:
         note:
           type: string
           description: 说明/理由（驳回必填，进入审计留痕）。
+          maxLength: 1000
+    DividendHoldRequest:
+      type: object
+      description: 请求载荷 `DividendHoldRequest`（211-R1 整期暂不分红／暂缓分红登记，第十八批裁决 43）：须主理人与娱乐平台公司协商一致后登记，原因与协商结果必填，不另走审批。
+      additionalProperties: false
+      required:
+        - idempotency_key
+        - merchant_id
+        - period_label
+        - hold_type
+        - reason
+        - negotiation_result
+      properties:
+        idempotency_key:
+          type: string
+          description: 操作幂等键；同键同载荷重放返回同一登记。
+          maxLength: 128
+        merchant_id:
+          type: string
+          description: 商户 ID（须有生效中的分红方案）。
+          maxLength: 64
+        period_label:
+          type: string
+          description: 期间标签，须与该商户方案周期一致：月度 2026-07 / 季度 2026-Q3 / 半年 2026-H1 / 年度 2026。
+          maxLength: 16
+        hold_type:
+          type: string
+          enum:
+            - skip
+            - defer
+          description: 类别：skip 暂不分红（该期不出正式单、利润不补分）/ defer 暂缓分红（协商恢复后登记恢复，再照常出单）。
+        reason:
+          type: string
+          description: 原因（必填）。
+          maxLength: 1000
+        negotiation_result:
+          type: string
+          description: 主理人与娱乐平台公司的协商结果（必填）。
+          maxLength: 1000
+    DividendHoldLiftRequest:
+      type: object
+      description: 请求载荷 `DividendHoldLiftRequest`（211-R1 恢复暂缓分红，第十八批裁决 43）：登记恢复分红的协商结果。
+      additionalProperties: false
+      required:
+        - idempotency_key
+        - lift_result
+      properties:
+        idempotency_key:
+          type: string
+          description: 操作幂等键；同键同载荷重放返回首次响应。
+          maxLength: 128
+        lift_result:
+          type: string
+          description: 恢复分红的协商结果（必填）。
           maxLength: 1000
     DividendLegalConfirmationRequest:
       type: object

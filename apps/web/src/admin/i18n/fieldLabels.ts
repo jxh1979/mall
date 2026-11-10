@@ -1,4 +1,4 @@
-// 文件版本：V0.27
+// 文件版本：V0.28
 // OBS-14-02 后台结果区字段中文名字典（PGM「全局原则 · 界面全中文（所有终端零英文）」）。
 // 键用后端 JSON 的蛇形写法；结果区查表时蛇形与驼峰同查（orderId / order_id 都命中 order_id）。
 // 与后端字段中文名表 FieldLabels.java（common.api 包）同键同名：前段按后端原样抄录，后端改名这里跟着改（门禁会比对）。
@@ -219,6 +219,7 @@ export const FIELD_LABELS: Record<string, string> = {
   additional_deposit_amount_cent: "追加押金",
   additional_service_fee_cent: "追加服务费",
   opening_cash_cent: "备用金",
+  declared_amount_cent: "实际申报金额",
   declared_cash_cent: "申报现金金额",
   overage_cause: "长款原因（录像查明）",
   resolved_by_user_id: "复核人",
@@ -693,6 +694,13 @@ export const FIELD_LABELS: Record<string, string> = {
   legal_distributable_cent: "依法可分配金额",
   tax_accounting_ref: "财税核算依据",
   resolution_ref: "分配决议",
+  period_tax_cent: "该期税费",
+  // 第十八批 AC 段第 211 条 211-R1 整期暂不分红／暂缓分红登记（第十八批裁决 43，同后端 FieldLabels.java）。
+  hold_id: "暂不分红／暂缓分红登记",
+  hold_type: "登记类别",
+  negotiation_result: "协商结果",
+  lift_result: "恢复协商结果",
+  lifted_by: "解除人",
   birth_date: "生日",
   member_terms_version: "会员条款版本",
   privacy_terms_version: "隐私条款版本",
@@ -1878,7 +1886,9 @@ export const FIELD_LABELS: Record<string, string> = {
   payout_floor_enabled: "启用保底",
   payout_floor_fixed_cent: "保底金额",
   payout_items: "结算明细",
+  payout_pay_slot: "发放付账日",
   payroll_calculation_id: "工资计算单",
+  payroll_inserted: "工资单月结人工成本已挂接",
   payroll_month: "工资月份",
   penalty_cent: "现金处罚扣款",
   penalty_terms: "违约条款",
@@ -1902,7 +1912,9 @@ export const FIELD_LABELS: Record<string, string> = {
   performance_rules: "绩效规则",
   performer_user_id: "履约人",
   period_end: "期末",
+  period_end_month: "所属期末月",
   period_start: "期初",
+  period_start_month: "所属期首月",
   permission_code: "权限",
   permission_codes: "权限点",
   permission_name: "权限名称",
@@ -2475,6 +2487,7 @@ export const FIELD_LABELS: Record<string, string> = {
   tax_cent: "代扣个税",
   tax_date: "纳税日期",
   tax_rate_bps: "税率（万分比）",
+  tax_type: "税种",
   tax_version_id: "税表版本",
   taxable_cent: "应税金额",
   template_application_count: "模板应用次数",
@@ -2981,7 +2994,10 @@ export const VALUE_LABELS: Record<string, string> = {
   dividend_reserve_released: "分红预留已释放",
   dividend_rejected: "分红已驳回",
   dividend_legal_confirmed: "依法可分配金额已确认",
+  dividend_hold_recorded: "暂不分红或暂缓分红已登记",
+  dividend_hold_lifted: "暂缓分红已恢复",
   merchant_expense_created: "商户费用已登记",
+  entity_tax_declared: "税费申报已登记并提交审批",
   merchant_expense_reversed: "商户费用已冲回",
   merchant_expense_auto_synced: "商户费用已自动同步",
   payroll_bank_fact: "工资银行付款已登记",
@@ -3361,6 +3377,10 @@ export const VALUE_LABELS: Record<string, string> = {
 // 按键取值表：结果对象里同一个码在不同键下含义不同（如 source=outbound「外拓」、movement_type=outbound「出库」），按键名查（蛇形与驼峰同查）；
 // 取值优先查这里，再查状态码表与 VALUE_LABELS。各表与页面下拉、页内中文表同口径。
 export const KEY_VALUE_LABELS: Record<string, Record<string, string>> = {
+  // 第十八批 AC 段第 210 条 210-R2：税费申报登记的税种（同后端 entity_tax_declarations.chk_etd_tax_type）。
+  tax_type: { vat: "增值税", cultural_fee: "文化事业建设费", surcharge: "附加税", corporate_income: "企业所得税", other: "其他税费" },
+  // 第十八批 AC 段第 211 条 211-R1：暂不分红／暂缓分红登记类别（同后端 dividend_period_holds.chk_dph_hold_type）。
+  hold_type: { skip: "暂不分红", defer: "暂缓分红" },
   duty_role: { primary: "主接", backup: "备用", supervisor: "物业主管", project_lead: "项目负责人", specialist: "专业处置人员" },
   alarm_type: { elevator: "电梯扶梯", hvac: "暖通空调", power: "配电供电", water_fire: "给排水消防" },
   result: { pass: "通过", fail: "不通过" },
