@@ -1,9 +1,9 @@
-# 文件版本：V0.01
+# 文件版本：V0.02
 name: backend-tests
 # 后端全量单测（第 73 条，EV-07c-15）：PR 到 main 时在 GitHub ubuntu runner 上起 PostgreSQL 服务容器（与 160 complex-postgres 同一镜像摘要），
 # 用现有入口 node tools/run-backend-maven.mjs 跑 backend 全部测试（Flyway 全迁 + 真库集成测试）。
 # 只在 PR 上、且后端相关路径变化时触发，不随 push main 重跑；同分支新推送取消旧运行。
-# 私有库免费版设不了必需检查，本工作流只是可见信号、不阻断合并；ops/160/merge-pr.sh 仍只等 predeploy-gates。
+# 私有库免费版设不了必需检查（2026-11-11 第十八批裁决 48 定不升级、不公开）；ops/160/merge-pr.sh 自 V0.03 起对本提交触发了的本工作流也等绿才合并。
 # 库账号与口令是仓内测试本就写着的开发默认值（application.yml 与各测试类同值），不引用任何 secrets。
 on:
   pull_request:
