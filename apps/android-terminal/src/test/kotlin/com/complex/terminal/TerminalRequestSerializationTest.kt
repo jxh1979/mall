@@ -1,6 +1,6 @@
 package com.complex.terminal
 
-// 文件版本：V0.07
+// 文件版本：V0.08
 
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
@@ -182,23 +182,22 @@ class TerminalRequestSerializationTest {
       api.json.encodeToString(
         BarOrderRequest(
           idempotencyKey = "android_bar_order_1",
-          operatorNote = "note",
           barId = "bar_1",
           tableId = "table_1",
           items = listOf(mapOf("sku" to "beer", "qty" to "2")),
-          serviceUserIds = listOf("staff_2"),
-          paymentMode = "postpaid",
         ),
       ),
     ).jsonObject
     assertTrue("idempotency_key" in order)
-    assertTrue("operator_note" in order)
+    // 第十八批 AF 段第 198 条 198-R5：服务端不读下单的 operator_note、evidence_attachment_ids、service_user_ids，终端不再发。
+    assertFalse("operator_note" in order)
+    assertFalse("evidence_attachment_ids" in order)
     assertTrue("bar_id" in order)
     assertTrue("table_id" in order)
     // 第十八批 I 段 86-R1：订单销售由服务端取开台会话的销售，点单请求不含 salesperson_user_id。
     assertTrue("salesperson_user_id" !in order)
-    assertTrue("service_user_ids" in order)
-    assertTrue("payment_mode" in order)
+    assertFalse("service_user_ids" in order)
+    assertFalse("payment_mode" in order)
     assertEquals(2, order["items"]!!.jsonArray.size.let { 2 })
 
     val settle = api.json.parseToJsonElement(
@@ -219,6 +218,9 @@ class TerminalRequestSerializationTest {
     // 第十八批 Q 段第 153 条 153-R2（BSM:940「……一律按执行该动作的设备绑定与该次登录会话定位到操作人并留痕」）：收款人由服务端按本员工会话定，结账体不发 cashier_staff_id。
     assertFalse("cashier_staff_id" in settle)
     assertTrue("pos_transaction_no" in settle)
+    // 198-R5：服务端不读结账的 operator_note、evidence_attachment_ids，结账体不再发。
+    assertFalse("operator_note" in settle)
+    assertFalse("evidence_attachment_ids" in settle)
 
     val intent = api.json.parseToJsonElement(
       api.json.encodeToString(
@@ -259,13 +261,13 @@ class TerminalRequestSerializationTest {
       api.json.encodeToString(
         StaffDeviceIntegrityReportRequest(
           idempotencyKey = "android_staff_device_integrity_1",
-          operatorNote = "note",
           integrityStatus = "compromised",
         ),
       ),
     ).jsonObject
     assertTrue("idempotency_key" in integrity)
-    assertTrue("operator_note" in integrity)
+    // 198-R5：服务端不读完整性上报的 operator_note，不再发。
+    assertFalse("operator_note" in integrity)
     assertTrue("integrity_status" in integrity)
   }
 
@@ -310,5 +312,28 @@ class TerminalRequestSerializationTest {
     assertTrue("has_pending_tasks" in body)
     assertFalse("deviceCode" in body)
     assertFalse("hasPendingTasks" in body)
+  }
+
+  @Test
+  fun appScreenRequestsNoLongerCarryKeysTheServerDoesNotRead() {
+    // 第十八批 AF 段第 198 条 198-R5：员工 App 的商户代提交员工注册、工作手机归还与故障换机（android-app MainActivity），
+    // 不再发服务端不读的 operator_note、evidence_attachment_ids；模型已无这些分量，带着这些键解码再编码也发不出去。
+    val reg = api.json.parseToJsonElement(api.json.encodeToString(api.json.decodeFromString<StaffRegistrationSubmitRequest>(
+      """{"idempotency_key":"reg_1","project_id":"project_1","name":"测试员工","operator_note":"商户手机代提交","merchant_id":"merchant_1"}"""))).jsonObject
+    assertFalse("operator_note" in reg)
+    assertEquals("merchant_1", reg["merchant_id"]?.toString()?.trim('"'))
+
+    val ret = api.json.parseToJsonElement(api.json.encodeToString(api.json.decodeFromString<DeviceReturnRequest>(
+      """{"idempotency_key":"ret_1","device_code":"P0-ANDROID-1","has_pending_tasks":false,"reason":"屏幕碎裂","operator_note":"屏幕碎裂","evidence_attachment_ids":[]}"""))).jsonObject
+    assertFalse("operator_note" in ret)
+    assertFalse("evidence_attachment_ids" in ret)
+    // 交接说明经 reason 读取落库，照发。
+    assertEquals("屏幕碎裂", ret["reason"]?.toString()?.trim('"'))
+
+    val swap = api.json.parseToJsonElement(
+      api.json.encodeToString(WorkPhoneSwapRequest("swap_1", "P0-ANDROID-1", "device_2", "屏幕碎裂")),
+    ).jsonObject
+    assertFalse("evidence_attachment_ids" in swap)
+    assertEquals("device_2", swap["replacement_device_id"]?.toString()?.trim('"'))
   }
 }

@@ -246,7 +246,6 @@ export function AmusementSafetyPage({ api, setActionResult, setGlobalError, effe
     }
     const request = {
       idempotencyKey: nextKey("amusement-safety-submit"),
-      operatorNote: "完整后台提交巡检",
       attachmentIds: ["att-amusement-safety-submit"],
       actionResult: "submitted",
       comment: "发现高风险项，进入整改",
@@ -265,7 +264,6 @@ export function AmusementSafetyPage({ api, setActionResult, setGlobalError, effe
     }
     const request = {
       idempotencyKey: nextKey("amusement-safety-rectify"),
-      operatorNote: rectifyNote,
       attachmentIds: ["att-amusement-safety-rectify"],
       actionResult: "rectified",
       comment: rectifyNote,
@@ -280,7 +278,6 @@ export function AmusementSafetyPage({ api, setActionResult, setGlobalError, effe
     }
     const request = {
       idempotencyKey: nextKey("amusement-safety-recheck"),
-      operatorNote: "完整后台复检通过",
       attachmentIds: ["att-amusement-safety-recheck"],
       actionResult: "pass",
       comment: "复检通过，提交重开审批",

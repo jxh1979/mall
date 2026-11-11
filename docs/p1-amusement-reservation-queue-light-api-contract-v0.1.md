@@ -1,4 +1,4 @@
-# P1 游乐预约/排队轻闭环接口契约 V0.11
+# P1 游乐预约/排队轻闭环接口契约 V0.12
 
 ## 1. 范围
 
@@ -50,8 +50,7 @@
 {
   "idempotency_key": "reservation-complete-once",
   "action": "completed",
-  "reason": "customer arrived",
-  "evidence_attachment_ids": ["att_1"]
+  "reason": "customer arrived"
 }
 ```
 

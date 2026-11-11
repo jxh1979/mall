@@ -1,4 +1,4 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 package com.complex.platform.gate;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -167,8 +167,6 @@ class TabletFunctionsJdbcIntegrationTests {
 
         Map<String, Object> settle = new LinkedHashMap<>();
         settle.put("idempotency_key", "b36tf-settle-" + suffix);
-        settle.put("operator_note", "Android terminal bar settlement");
-        settle.put("evidence_attachment_ids", List.of());
         settle.put("payment_id", intentId);
         settle.put("settlement_amount_cent", payable);
         settle.put("payment_channel", "wechat");
@@ -216,8 +214,6 @@ class TabletFunctionsJdbcIntegrationTests {
         String key = "b36tf-settle-zero-" + suffix;
         Map<String, Object> settle = new LinkedHashMap<>();
         settle.put("idempotency_key", key);
-        settle.put("operator_note", "Android terminal bar settlement");
-        settle.put("evidence_attachment_ids", List.of());
         settle.put("payment_id", key);
         settle.put("settlement_amount_cent", 0);
         settle.put("payment_channel", "wechat");

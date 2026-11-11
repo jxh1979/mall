@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 // FS-017（BSM L1072 ④）：门店退出交接——填退出门店与指定领取地点、逐瓶接收状态 → POST …/saved-bottles/handover 蛇形键
 // items[0].condition='damaged'；交接后表格该行「保管方/领取地点」显示领取地点；清单只含退出门店的在存、未过期存酒（平台视图下别家酒吧不塞进 items）。
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
@@ -59,7 +59,7 @@ describe("StoredWinePage 门店退出交接（FS-017）", () => {
     window.history.replaceState({}, "", "/admin/bar/stored-wine");
   });
 
-  it("退出区块填领取地点与逐瓶状态 → POST …/handover body.items[0].condition==='damaged'；交接后表格显示领取地点", async () => {
+  it("退出区块填领取地点与逐瓶状态 → POST …/handover body.items[0].condition==='damaged'，不含 operator_note；交接后表格显示领取地点", async () => {
     vi.spyOn(window, "confirm").mockReturnValue(true);
     const api = makeApi();
     renderPage(api);
@@ -85,6 +85,8 @@ describe("StoredWinePage 门店退出交接（FS-017）", () => {
         ],
       }),
     ));
+    // 第十八批 AF 段 198-R5：服务端不读 operator_note，请求体不再带（本页备注框只随补救登记提交）。
+    expect(vi.mocked(api.post).mock.calls.find(([path]) => path === "/api/v1/inventory/saved-bottles/handover")![1]).not.toHaveProperty("operator_note");
     await waitFor(() => expect(screen.getByTestId("stored-wine-custody-w-2").textContent).toBe("平台仓 A 区"));
   });
 

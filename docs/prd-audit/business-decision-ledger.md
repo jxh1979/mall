@@ -1,6 +1,6 @@
 # PRD 审计业务裁决台账
 
-文档版本：V0.86
+文档版本：V0.87
 状态：进行中
 迁移日期：2026-07-27
 当前事实源：三份立法 HTML 以既有冻结基线叠加 James 此前 M02 至 M08 的点名批准、全量审计 M001、M002 的逐项批准，以及本轮 2026-10-16 至 2026-10-17 业务 HTML 审计中 Q01 至 Q40 及子题实际明确批准且未被后续替代的裁决，和 2026-10-17 第二批 HTML 业务线推演审计（A–F 六线 64 条、停车章）的逐项批准，并叠加本轮 CG 70 项来源确认与 C01–C09、N01–N03 最终澄清及补全文稿中 F01、W01–W05 的整体修改批准（本文件末节）；本轮最终规则、未采纳或替代关系、现行版本与字节哈希见本文件末节。历史记录保留为各自当时事实，不恢复已被替代的建议。
@@ -6115,3 +6115,328 @@ HTML 的语义补齐与直接引用同步可在本批核验；70项中的业务�
     - 调拨单列表与详情（listTransferOrders、getTransferOrder）的 x-data-scope 按同对象 createTransferOrder 写 project，实际只校 inventory.transfer_order.view、不按项目过滤，已登记待开发清单第 250 条（待核实）。
   - f. 复核修复：票种与价格规则审批删除的契约说明由「物理删除」改为软删除。approveDeleteTicketPriceRule（yaml :13842 description、:13882 decision 字段说明；json :18486、:18535）与 approveDeleteTicketType（yaml :14521、:14561；json :19441、:19490）四处 yaml 与 json 同值改：「approved 且无活引用即物理删除」改为「approved 且无活引用即删除（软删除：delete_status 置 approved，行保留、各处不再显示）」，decision 字段说明改为「approved 通过（无活引用即软删除：delete_status 置 approved，行保留、各处不再显示）」。代码：TicketCatalogService.approveDeleteTicketType（:326）、approveDeletePriceRule（:349）经 approveDeleteCatalogRecord 调 JdbcTicketingRepository.deleteTicketType（:186-187）、deletePriceRule（:959-960），只执行 UPDATE … SET delete_status = 'approved'，行保留。依据 BSM:571「这里的"删除"不是真从数据库里抹掉，而是把数据转入后台留存、前台各处不再显示，数据始终留在库里可查、可审计、可恢复」、BSM:570「删除（走审批·软删除）」。基线已有的 approveDeleteEntitlementTemplate（yaml :13303）不是本段新增，不动。改后 yaml 与 json 深比较一致，操作数仍 1360。
 - 18AE 落地位置补记·运行验收证据、快照、终验文档刷新（无新裁决）：业务提交 6001dcf4 之后，按第十八批裁决 25 重刷了运行验收证据：后端全量 6639 测，0 失败 0 错误；apps/web 构建通过；常规界面验收（接口全部 mock）实跑 40 条全过；真实后端界面验收未跑，runtime_ready=false。随后依次重生成闭环当前态快照、生产闭环缺口报告、界面验收报告、无上线指挥台。生成器没改。手改 docs/final-closed-loop-acceptance-audit-v0.1.md 与 docs/code-implementation-acceptance-audit-v0.1.md：前端单测源码计数改为 1700；被核文件行数都没变；后端全量与常规界面验收的数字、日期改为本次实跑值；写入 npm run verify:unit 实跑结果，五个工作区全过。交付门禁于 2026-11-11 11:29 UTC 在工作树逐项实跑子项，NAS 两项现场探测未跑。仍红的有两项：一是 coding-host-protection，它写死主仓路径，在工作树口径下必红，属工具口径，不做；二是 final-closed-loop-audit，如实留 2 条红（integration-ready、business-acceptance-ready），原因是校验器要求终验把联调、业务验收写成「是」，而裁决 25 定了不跑真实后端界面验收、运行验收未就绪，终验写的是「否」。verify:delivery-gates 总链仍是红的。
+
+18AF 落地位置补记（2026-11-11）：第十八批 AF 段（batch52）按 18AF 核实处置表实现待开发清单第 198 条 198-R5，第 198 条至此全部完成；运行验收证据、终验文档在本段最后一个提交刷新；各条落地位置见下。本段追加时，原台账除文档版本 V0.86→V0.87 外，其他历史字节保持。
+
+- 18AF 落地位置补记·控制席判定（2026-11-11）：本段（第十八批 AF 段，batch52）实现待开发清单第 198 条最后一项 198-R5（其余请求结构逐行核对），第 198 条至此全部完成。在 d3b7cb9b 上用 18W 同一改进扫描重跑得 323 行候选（182 个操作），另补扫「契约声明、DTO 根本没有」18 行；按业务域分 9 组逐行从控制器追到服务层、查客户端发送与 HTML 依据，每组独立反驳、有争议逐条仲裁（本机 b52-tmp\verify_18af_merged.json、verify_18af_final.json）。结论：契约删 202 行（规则① 156 行、规则② 46 行客户端停发），另 5 处契约外多发字段网页停发，删 4 个从不被记录的输入框（采购建单「申请依据」、合规扫描「操作备注」、客人 App 与小程序订台「联系手机号」）；保留 141 行（共用 schema 被另一入口读取 98、入口停用恒拒 21、实读 15、规则③ 3：cancelSavedBottle.reason 依 BSM:1940、cancelBarReservation.reason 依 BSM:1058、requestArApAdjustment.evidence_attachment_ids 依 BSM:1642，另 4 行为共用检查改判）。PGM:899、PGM:905、PGM:906 泛泛「为什么要能查到」不单独构成规则③（先例：18AE 198-R2 已删 Mdm*、Logout 等 operator_note；18W 结论 PGM:968）。采购建单「申请依据」框按规则②删：建单接口从不记录，BSM:1211 的建议理由仍在采购建议表显示，采购审批另有自己的「申请依据」框且后端读取，18D 第 33 条落地的「预填申请依据」一并撤（合同、商品、数量预填保留）。依据为 OpenAPI 与代码一致（待开发清单第 94、113、124、136、153、170、171 条先例：契约只删、后端 DTO 分量保留；153-R2「现在安卓不再发」）。核实旁见登记待开发清单第 252～259 条并补充第 229 条；无迁移，操作数 1360 不变。
+- 18AF 落地位置补记·第 198 条 198-R5 契约（总述）：docs/openapi/openapi-p0.yaml 与 openapi-p0.json 按 18AF 处置表 delete_contract 共删 202 行（op＋字段）。其中 components.schemas 56 个 schema 删 78 个属性（对应 99 行），内联请求体 64 个操作删 103 个属性。另一并删 required 项 4 个：PermissionTemplateApplyRequest.template_id、SupervisorReviewApprovalRequest.reviewer_level、EvidenceAttachmentCompleteRequest.object_key、swapStaffWorkPhone 内联 evidence_attachment_ids；都没有删空。requestBodies 示例键 6 个：BarOrderRequest.example 的 service_user_ids、payment_mode；ArApAdjustmentDecisionRequest.example 的 operator_note；SupervisorReviewApprovalRequest.examples.approve 的 reviewer_level；CustomerBarReservationRequest.example 的 contact_phone；SupervisorReviewEvaluateRequest.examples.contractViolation 的 operator_note。只改契约：后端 DTO 分量保留，操作数不变（1360）。处置表 keep 141 行不动，其中规则③保留 cancelSavedBottle.reason（BSM:1940，第 252 条）、cancelBarReservation.reason（BSM:1058，第 230 条）、requestArApAdjustment.evidence_attachment_ids（BSM:1642，第 253 条）；规则⑤保留 createStockMovement、transferStockMovement 的 photo_attachment_ids、video_attachment_ids（StockMovementRequest 与 createTypedStockMovement 共用）。客户端在发的 46 行（规则②）由本条客户端各组停发。依据：处置规则①「确实不读、没有客户端发送→只删契约」、②「确实不读、客户端在发→删契约并让客户端停发」；OpenAPI 与代码一致先例 153-R2（决策台账:4953「服务端早已不读这个字段」「现在安卓不再发」）、170-R1（:5179）、18G 82c-R4（:4148「以代码和权威字典为准，只改契约」），以及第 94、113、124、136、153、170、171 条。回归：npm run verify:p0-contract 全绿。一次性断言 ~/audit-tmp/b52_c/b52c_assert.mjs（不进仓）核过：yaml 与 json 整份深比较一致，操作实数 1360，202 行所删键已不在 properties、required、example 里，keep 141 行键仍在。共用检查 check_schema_safety.py 删前 problems 0，删后只报 NOT_IN_SCHEMA 99、NOT_IN_INLINE 103。
+- 18AF 落地位置补记·第 198 条 198-R5 契约：存酒（30 行，规则② 12 行），读取核实都在 InventoryService.java，控制器在 InventoryController.java:190-440。
+  - SavedBottleRemedyActionRequest（approve、settle、advance、staff-liability、recovery/settle 五个入口共用）删 operator_note、reason：:1892-2025 五个入口都不调 operatorNote() 或 reason()；operatorNote() 只出现在 :1868，属于补救登记 SavedBottleRemedyRequest。
+  - SavedBottleClaimRequest（claimSavedBottle）删 operator_note：:822-855 只读 verification_code、claim_items、bottle_label_value、customer_name_or_nickname、evidence_attachment_ids。
+  - SavedBottleManualPickupPolicyRequest 删 reason：:1263-1290 只读 project_id 与各订单阈值。
+  - SavedBottleRenewalPolicyRequest 删 reason：:1297-1330 只读 policy_key、scope_id、value、min_value、max_value。
+  - SavedBottleManualPickupRequest（initiate、review、confirmMarketing 三个入口）删 operator_note：:1380-1511 三个入口都不读。
+  - SavedBottleRequest（createSavedBottle）删 operator_note：:430-487 不读。
+  - SavedBottleManualPickupDispenseRequest 删 operator_note：:1515-1550 只读 present_in_person、claim_items、evidence_attachment_ids。
+  - SavedBottleHandoverRequest 删 operator_note：:2072-2156 只读 merchant_id、pickup_location、items、照片和视频。
+  - SavedBottleExitNoticeRequest 删 operator_note：:2041-2061 只读 merchant_id。
+  - SavedBottleRenewalRequest（renewSavedBottle、reviewSavedBottleRenewal）删 operator_note：:1026-1047 只读 verification_code；:1054-1100 只读 decision、reason。
+  - SavedBottleTransferRequest 删 operator_note、reason：:762-819 不调 operatorNote() 或 reason()，转让记录不带原因。
+  - 内联 cancelSavedBottle 删 operator_note、evidence_attachment_ids：:1701-1727 和 applyCancel :1734 只用照片、视频 id；reason 按规则③保留。
+  - 内联 disputeSavedBottle 删 operator_note、evidence_attachment_ids、photo_attachment_ids、video_attachment_ids：:1758-1785 只对 reason 做 requireText，再改状态为 disputed。
+  - 网页 StoredWinePage.tsx 发 operator_note 的 12 个请求（:388、:447、:486、:531、:657、:695、:743，以及 :625 经 :961/:965/:972/:979/:983/:990）按规则②停发；备注框保留，补救登记（:598）仍读取（InventoryService:1868）。
+- 18AF 落地位置补记·第 198 条 198-R5 契约：库存、经销与商户计费（18 行，规则② 1 行）。
+  - PurchaseRequestCreate（createPurchaseRequest）删 operator_note：InventoryService.java:388-395 → PurchaseWorkflowService.java:161-183 只读 items、supplier_id、供货合同；网页 PurchaseWorkbenchPage.tsx:170 在发，按规则②停发并删「申请依据」框（控制席判定 4）。
+  - InventorySupplierRequest 删 operator_note、evidence_attachment_ids：InventoryService.java:3552-3577 只读 supplier_name、contact_name、contact_phone、status。
+  - StockAdjustmentRequest、StockInRequest 删 operator_note：InventoryStockMovementService.java:70-169、:171-222 不读。
+  - RecordVarianceRequest 删 book_qty：InventoryService.java:2413-2416 账面数取 sumStockBalanceByItemAndWarehouse，注释写明「不信客户端传入」。
+  - ReviewVarianceRequest 删 reason：:2460 reviewVariance 不读，请求只进幂等散列。
+  - 内联 createInventoryStockBatch 删 operator_note：:4147-4175 不读。
+  - 内联 scanInventoryRiskAlerts 删 operator_note、operator_user_id：:4177-4231 只读幂等键与 expiry_warning_days，:4180-4181 操作人取登录主体。
+  - 内联 createSupplierReconciliation 删 operator_note、operator_user_id：:4265-4300 不读，:4280-4281 操作人取登录主体。
+  - 内联 cancelTransferOrder 删 scanned_trace_codes：:3478-3500 只用幂等键。
+  - 内联 inspectDealerReturn 删顶层 note：DealerReturnService.java:267-361 只读明细行 note（:306，保留）和 evidence_attachment_ids。
+  - 内联 createMerchantBill、confirmMerchantBill、submitMerchantBillDispute、recordMerchantBillDunning 删 operator_note：MerchantBillingService.java:121-310 各个 validate 方法和 Once 方法都不读。
+- 18AF 落地位置补记·第 198 条 198-R5 契约：酒吧（37 行，规则② 9 行）。
+  - BarOrderRequest（createBarOrder、addBarOrderItem 共用）删 operator_note、evidence_attachment_ids、service_user_ids、payment_mode，同时删 requestBodies 示例里的 service_user_ids、payment_mode：BarOrderService.java createOrderInternal :209-340 只读 bar_id、table_id、reservation_id、幂等键、items；addOrderItem :562-632 只读 items；扫码点单 :550-557 抄进 derived 后也不读；服务责任取开台会话（:322）。安卓 TerminalModels.kt:337、:342 和 TerminalWorkflow.kt:272 写死的值按规则②停发。
+  - BarBillSettleRequest（settleBarBill）删 operator_note、evidence_attachment_ids：BarBillingService.java:216-416 settleBill、settleLatePayment 都不读；网页 BarOrdersPage.tsx:429、安卓 TerminalModels.kt:397、TerminalWorkflow.kt:369 停发。
+  - BarOrderItemVoidRequest 删 operator_note：BarOrderService.java:1090-1221 不读；网页 BarOrdersPage.tsx:566 停发。
+  - BarBillTipRequest 删 operator_note、evidence_attachment_ids：BarBillingService.java:1008-1047 不读。
+  - BarProductRequest 删 operator_note、evidence_attachment_ids：BarOrderService.java:114-196 不读。
+  - BarProductSoldOutRequest 删 operator_note、evidence_attachment_ids：:1028-1070 只读 sold_out、reason。
+  - BarBillReopenRequest 删 operator_note：BarBillingService.java:945-990 只读 reason、evidence_attachment_ids。
+  - 内联 adjustBarBill、splitBarBill、mergeBarBill 删 operator_note、requested_by_user_id：BarBillingService.java:544、:691、:765 发起人取 currentActor()。
+  - 内联 transferBarTableSession、splitBarTableSession、mergeBarTableSession 删 operator_note、requested_by_user_id：BarTableSessionService.java:256、:563、:487 发起人取 currentActor()；网页 BarTableSessionsPage.tsx:220、:228、:222 写死的 requested_by_user_id 停发。
+  - 内联 createBarTableSession 删 operator_note、evidence_attachment_ids、merchant_id、opened_by_user_id：:148-221 不读，商户取登录范围（:153-155）。
+  - 内联 issueBarReservationInvitation、revokeBarReservationInvitation 删 operator_note：BarEntryService.java:463-523 不读。
+  - 内联 transitionBarProductionTicket 删 operator_user_id：BarOrderService.java:843 操作人取 currentActor()。
+- 18AF 落地位置补记·第 198 条 198-R5 契约：游乐排队预约与票务（5 行，全是规则①）。
+  - 内联 changeAmusementQueueEntryStatus、changeAmusementReservationStatus 删 evidence_attachment_ids：AmusementBookingService :249-266、:206-225 只读 action 等。
+  - TicketOrderRequest（createTicketOrder）删 evidence_attachment_ids：TicketOrderService.java:140-260、requireKioskSale :929-950 都不调 evidenceAttachmentIds()。
+  - TicketPriceRuleRequest 删 operator_note、evidence_attachment_ids：TicketCatalogService.java:148-191 不读。
+- 18AF 落地位置补记·第 198 条 198-R5 契约：访问治理与员工档案（20 行，规则② 7 行）。
+  - PermissionTemplateApplyRequest（applyPermissionTemplate）删 operator_note、evidence_attachment_ids、template_id，template_id 连同 required 项一起删：AccessService.java:390-494 只读 mode、target_user_ids、幂等键，模板取路径 id（:433-434）；网页 PermissionTemplatesPage.tsx:327、AccessUsersPage.tsx:143 写死的 operator_note 停发。
+  - PermissionTemplateRequest（create、update、copy 三个入口）删 evidence_attachment_ids、source_template_id：templateFromRequest :3509-3535 不读证据；来源模板在复制时取路径 id（:373、:379），在修改时取库内原模板（:289）；网页 PermissionTemplatesPage.tsx:256 透传的 source_template_id 停发。
+  - AccessGrantApplyRequest、RoleRequest 删 evidence_attachment_ids：:1505-1580、:551-605 不读。
+  - TemporaryGrantRequest 删 operator_note、evidence_attachment_ids：:2331-2383 只读 reason 等。
+  - EmployeeNoticeAcknowledgeRequest 删 operator_note：StaffService.java:1134-1176 不读。
+  - StaffDeviceBindRequest、StaffDeviceRebindDecisionRequest、StaffDeviceIntegrityReportRequest、StaffDeviceRevokeRequest 删 operator_note：:474-526、:529-567、:573-617、:624-660 不读；安卓 TerminalWorkflow.kt:399、:422、:445 停发。
+  - StaffRegistrationRequest 删 operator_note：:132-187 不读；网页 AccessUsersPage.tsx:118、安卓 MainActivity.kt:2518 停发。
+  - 内联 upsertApprovalLine 删 operator_note：OrgHierarchyService.java:134-198 不读；网页 OrgHierarchyPage.tsx:137 停发。
+- 18AF 落地位置补记·第 198 条 198-R5 契约：终端与设施（24 行，规则② 3 行）。
+  - DeviceBindRequest、DeviceUnbindRequest、DeviceReturnRequest 各删 operator_note、evidence_attachment_ids：TerminalDeviceService.java requireBindInScope :862-876、unbind :1250-1300（只读 reason）、returnBoundDevice :1184-1248 都不读；请求只进幂等散列，成功事件元数据为 Map.of()（:1411）。安卓 returnTerminalDevice 写死的附件（TerminalModels.kt:259、MainActivity.kt:2066、TerminalWorkflow.kt:148）停发，operatorNote 实参（MainActivity.kt:2067）去掉，说明框保留，同页换机读 reason。
+  - CapabilitySwitchRequest 删 evidence_attachment_ids：:934-994 不读。
+  - 内联 markTerminalDeviceRepair、markTerminalDeviceLost、markTerminalDeviceFound、markTerminalDeviceScrap、markTerminalDeviceArchived、completeTerminalDeviceRepair 各删 operator_note、evidence_attachment_ids：transitionLifecycle :497-523 与 applyLifecycle :525-602 只读 reason、staff_id。
+  - 内联 detectMdmViolations、handleMdmViolation 删 operator_note、evidence_attachment_ids：MdmController.java:92-116 只把四项或三项传给 MdmService。
+  - 内联 swapStaffWorkPhone 删 evidence_attachment_ids，连同 required 项一起删：swapWorkPhone :253-256 只读 old_device_code、replacement_device_id、reason，:279、:281 只是转塞，下游不读；安卓 TerminalModels.kt:1011 默认值停发。
+- 18AF 落地位置补记·第 198 条 198-R5 契约：财务、能耗、楼层图与演出结算（23 行，规则② 6 行）。
+  - ArApAdjustmentDecisionRequest 删 operator_note、evidence_attachment_ids，并删示例里的 operator_note：FinanceService.java:1640-1653 只读 decision。
+  - ArApAdjustmentRequest 删 operator_note：:1656-1715 只读 reason；evidence_attachment_ids 按规则③保留。
+  - PropertyFeeBillRequest 删 operator_note、evidence_attachment_ids：billPropertyFeeInternal :3950 起只读 project_id、period、merchant_ids；网页 FinancePropertyFeePage.tsx:162-163 写死的值停发。
+  - ArApItemRequest 删 operator_note、evidence_attachment_ids：createItem :1876-1932 不读。
+  - OfflinePaymentConfirmRequest 删 operator_note：:912-931 只读 ar_ap_item_id 与幂等键。
+  - FinanceRefundRequest 删 operator_note：refund :2592-2666 只读 reason 等，operatorNote() 只属于 RefundOperationRequest；网页 FinanceRefundPanel.tsx:75 停发。
+  - 内联 billTurnoverRent、postInventoryVariance、recordDepositAction 删 operator_note、evidence_attachment_ids：:3688-3735、:3154-3212、:3753-3810 不读。
+  - 内联 createFinanceReconciliationDifference 删 operator_note：:1026 起不读。
+  - EnergyReadingRecordRequest 删 prev_reading_value：EnergyService.java:101-114 起点取库内最近已审核终值。
+  - FloorPlanCreateRequest、FloorPlanImportPublishRequest、内联 saveFloorPlanShape 删 operator_note：FloorPlanService.java:230、:360、:260 起不读。
+  - 内联 createMediaPerformanceShowVersion 删 project_id、media_merchant_id、show_kind：MediaPerformanceService.java:159-160 以原版本重组；网页 MediaPerformanceShowPage.tsx:150-153 透传的值停发。
+- 18AF 落地位置补记·第 198 条 198-R5 契约：复核、证据、集成、合规、游乐安全、商户门户、客人订台与营收归属（30 行，规则② 8 行）。
+  - SupervisorReviewApprovalRequest 删 reviewer_level，连同 required 项和 examples.approve 里的同名键一起删：SupervisorReviewService.java:364-365 层级取登录主体；网页 ApprovalChainPage.tsx:259、:266 停发。
+  - SupervisorReviewEvaluateRequest 删 operator_note，并删 examples.contractViolation 里的同名键：:265-330 不读；网页 SupervisorReviewPage.tsx:228 停发。
+  - EvidenceAttachmentCompleteRequest 删 object_key，连同 required 项一起删：EvidenceEventService.java:361-364 忽略客户端提交的值，改用库内 objectKey。
+  - CustomerBarReservationRequest 删 contact_phone，并删示例里的同名键：CustomerService.java:941-1015 不读；客人端 BarReservationPage.tsx、小程序 reserve/index.js、customer-core service.ts:256 停发并删框（控制席判定 6）。
+  - AmusementSafetyActionRequest（submit、rectify、recheck 三个入口）删 operator_note：AmusementInspectionService.java:292-388 不读；网页 AmusementSafetyPage.tsx:249、:268、:283 停发。
+  - 内联 acknowledgeAmusementSafetyNotice、createAmusementSafetyNotice 删 operator_note：AmusementSafetyService.java:192-253 不读。
+  - 内联 createComplianceExpiryItem、createContractKeyDate、scanComplianceReminders 删 operator_note：ComplianceService.java:427-516 不读；网页 ComplianceRemindersPage.tsx:105 停发并删「操作备注」框。
+  - 内联 createCompensationTask、createRetryTask、resolveCompensationTask、createIntegrationReconciliationDifference、resolveIntegrationReconciliationDifference 删 operator_note；createIntegrationReconciliationBatch、createOrderSync 删 operator_note、evidence_attachment_ids：IntegrationOrderSyncService 和 IntegrationReconciliationService 的各个 Once 方法都不读。
+  - ProviderAdapterTestRequest 删 operator_note、evidence_attachment_ids：ProviderAdapterService.java:267-310 不读。
+  - 内联 runRetryTaskNow 删 action：runRetryTaskNowOnce :897-920 只读 reason、evidence_attachment_ids；网页 IntegrationEventsPage.tsx:209 停发。
+  - 内联 claimRiskAlert、dismissRiskAlert 删 target_handler_id：RiskAlertService.java 只有 transfer（:173）、escalate（:202）读取。
+  - 内联 resolveEvidenceRiskAlert 删 reason：:218-245 只读 resolution_conclusion、evidence_refs。
+  - 内联 submitMerchantPortalSettlementDispute、rejectMerchantPortalSettlementResolution 删 operator_note：MerchantPortalService.java:134-191 只读 reason。
+  - 内联 upsertRevenueAttributionRule 删 is_draft：OperatingParamsService.java:176 写死草案。
+- 18AF 落地位置补记·第 198 条 198-R5 契约：补扫，契约有、DTO 没有（15 行，规则①）。
+  - 内联 reportRiskAlert、claimRiskAlert、transferRiskAlert、escalateRiskAlert、dismissRiskAlert、resolveEvidenceRiskAlert 各删 operator_note、evidence_attachment_ids：RiskAlertReportRequest.java:8-18、RiskAlertActionRequest.java:16-21、RiskAlertResolveRequest.java:9-14 都没有这两个分量，也没有别名注解，未知键被 Jackson 丢弃。
+  - 内联 createSiteEntryReport、reviewSiteEntryReport 删 note：SiteEntryReportRequest.java:6-15、SiteEntryReportReviewRequest.java:4-7 都没有这个分量。
+  - 内联 settlementConfigUpsertComprehensiveServiceFee 删 entitlement_type：SettlementConfigWriteRequests.java:44-46 没有这个分量，V365 已把第三维换成 ticket_type_id。
+  - 扫描误报、实际被读取的 bindTicketTypeEntitlement.num_people、component_price_cent 和 upsertRefundAuthorityLimit.project_id 不动。
+- 18AF 落地位置补记·第 198 条 198-R5·存酒网页（代码不读、客户端在发：网页停发，契约删除见契约一条；无新裁决）：
+  - 网页停发：apps/web/src/admin/pages/StoredWinePage.tsx（V0.06→V0.07）12 个请求体去掉 operator_note。
+    - 七个单独发出的请求：转让 transferSavedBottle（POST /api/v1/inventory/saved-bottles/{id}/transfer）、转存 renewSavedBottle（…/{id}/renewals）、转存复核 reviewSavedBottleRenewal（…/renewals/{id}/review）、作废 cancelSavedBottle（…/{id}/cancel）、门店退出清点通知 noticeSavedBottleExit（…/exit-notice）、交接 handoverSavedBottlesToPlatform（…/handover）、领取 claimSavedBottle（…/{id}/claim）。
+    - 共用 remedyAction 发出的五个：补救审批 approveSavedBottleRemedy（主管、财务两键）、对客结案 settleSavedBottleRemedy、平台垫付 advanceSavedBottleRemedyByPlatform、员工赔偿 assignSavedBottleRemedyStaffLiability、追收已收回 settleSavedBottleRemedyRecovery（…/remedies/{id}/approve、settle、advance、staff-liability、recovery/settle）。
+  - 保留：「备注」框（data-testid stored-wine-claim-note、operatorNote 状态），补救登记 registerSavedBottleRemedy（…/{id}/remedy）照发 operator_note。
+    - 原因：服务端 InventoryService.java:1868 把它读作补存新瓶的 manual_note，不满足规则②「该框内容对本页所有调用都不被读取时才删框」。
+    - 对应 BSM:1170「存酒登记必须拍照、填写人工备注，并留取客人手机号和姓名/昵称。」
+    - 默认值「完整后台验收领取」被读取落库的问题已补进第 229 条，本段不改。
+  - 不改的：
+    - 后端不改，DTO 分量保留；InventoryService.java 里 operatorNote() 只在 :1868（补救登记）与 :3184、:3189、:3450（调拨单）读取。
+    - 转让写死的空 evidence_attachment_ids、领取写死的 att-saved-bottle-claim-1 服务端在读，不归本条（后者留第 229 条）。
+    - 作废的 reason 按规则③保留（BSM:1940，第 252 条）。
+  - 依据：
+    - 198-R5 方案处置规则②。
+    - OpenAPI 与代码一致的先例：待开发清单第 94、113、124、136、153、170、171 条。本台账 18Q 153-R2「服务端早已不读这个字段」「现在安卓不再发」；18U 170-R1、171-R1；18G 82c-R4「以代码和权威字典为准，只改契约」。
+    - HTML 原句：PGM:968「本条为操作指引，不作为合规判定依据」；BSM:1073「取酒核验、对应标签、取用前后剩余量、操作员工和时间必须留痕」（不含人工备注）；BSM:1170「存酒登记必须拍照、填写人工备注」（对应补救登记照发）。
+    - 18AF 控制席判定 5「存酒共用备注框保留」。
+  - 测试（前端）：
+    - StoredWinePage.holder.test.tsx（V0.02→V0.03）：「198-R3②／198-R5：领取请求体不含 claim_by_phone 与 operator_note」；「转让分组：发码 scene=transfer，提交转让 → POST …/transfer 含 to_name_or_nickname/to_phone/verification_code，不含 operator_note」。
+    - StoredWinePage.renewal.test.tsx（V0.01→V0.02）：「转存分组：发码 scene=renew，提交 → POST …/renewals 含 verification_code（蛇形键），不含 operator_note」；「选中存酒后列出待复核转存，点「营销主管复核」→ POST …/renewals/rnw_1/review，不含 operator_note」。
+    - StoredWinePage.cancel.test.tsx（V0.01→V0.02）：作废请求体不含 operator_note。
+    - StoredWinePage.exitnotice.test.tsx（V0.01→V0.02）：清点通知请求体不含 operator_note。
+    - StoredWinePage.handover.test.tsx（V0.01→V0.02）：交接请求体不含 operator_note。
+    - StoredWinePage.recovery.test.tsx（V0.01→V0.02）新增「198-R5：审批（主管、财务）、结案、垫付、员工赔偿、追收已收回的请求体都不含 operator_note」。
+    - StoredWinePage.remedy.test.tsx（V0.02→V0.03）：补救登记请求体仍带 operator_note。
+- 18AF 落地位置补记·第 198 条 198-R5·K2 酒吧与票务网页（代码不读、网页在发的写死键：网页停发；无新裁决）：
+  - 网页停发：
+    - BarOrdersPage.tsx（V0.12→V0.13）：结账 settleBarBill（POST /api/v1/bar/bills/{id}/settle）的请求体删去写死的 operatorNote「按本次真实收款凭据登记，多渠道累计足额后完成账单」。发起退菜退酒 voidBarOrderItem（POST /api/v1/bar/orders/{id}/void-item）删去 operatorNote: TEXT.voidNote；常量 voidNote「后台发起退菜退酒申请」只这一处用，一并删了。
+    - BarTableSessionsPage.tsx（V0.19→V0.20）：转台、并台、拆台（transferBarTableSession、mergeBarTableSession、splitBarTableSession）三处请求体删去写死的 requestedByUserId: "admin-web"。
+    - TicketOrdersPage.tsx（V0.07→V0.08）：核销预检（POST /api/v1/ticketing/verifications/preview）的请求体只发 entitlementCode，删去写死的 operatorNote 和常量 previewNote「完整后台验收核销预检」。这一项契约本来没声明，按 client_extra_stop 只停发、不改契约。
+    - 以上都是写死值，没有输入框，不涉及删框。
+  - 与代码一致（后端不改，DTO 分量保留）：
+    - BarTableSessionService.java:256、:487、:563 的发起人取 authorizationService.currentActor().id()，请求里的 requested_by_user_id 不读。
+    - BarBillingService 的结账（settleBill、settleLatePayment）不读 operator_note；它唯一一处 operatorNote() 在 :166，属于生成账单。
+    - BarOrderService.voidOrderItem（:1090 起）读明细、原因、原因码、证据、回库、账单，不读 operator_note。
+    - ticketing/dto/VerificationRequest.java 没有 operator_note 分量，Jackson 收到后直接丢弃。
+  - 依据：
+    - 规则②：确实不读、客户端在发的，删契约并让客户端停发，写死的值直接删。核销预检照 18AF 控制席判定的 client_extra_stop 处理。
+    - OpenAPI 与代码一致的先例：第 94、113、124、136、153、170、171 条，即本台账 18Q 153-R2「服务端早已不读这个字段」「现在安卓不再发」、18U 170-R1、171-R1，以及 18G 82c-R4「以代码和权威字典为准，只改契约」。
+    - 同类落地：18AE 198-R3①（MerchantWorkOrdersPage 去掉写死的 operatorUserId）、198-R3③（清台不再带写死的 operator_note）。
+    - HTML 原句：
+      - BSM:940「收银、核销、收款、放行等现场动作，一律按执行该动作的设备绑定与该次登录会话定位到操作人并留痕」
+      - BSM:1079「记录内容包括操作类型、原因、操作人、时间、涉及的原台和目标台」。操作人已取登录主体，不构成规则③。
+      - BSM:1631「订台、点单、支付、核销、扫码、接单、关闭异常时，系统自动留下时间和动作」
+      - BSM:1633「人工只在异常、退款、免单、调账、补录时填写原因、照片、视频或复核意见」。退菜的原因、原因码、证据另有字段，而且后端在读。
+      - PGM:968「本条为操作指引，不作为合规判定依据」
+  - 关联：
+    - 与第 229 条同类（写死的假值）。BarOrdersPage 结账备注不在第 229 条列表里。
+    - 第 232 条：operator_note 的说明写着「进入审计留痕」，契约删掉字段后这个问题就没了。
+  - 测试（前端）：
+    - BarOrdersPage.cashier.test.tsx「选现金结账不出现现金收款人输入，提交体不含 cashierStaffId、operatorNote」
+    - 新增 BarOrdersPage.void.test.tsx「发起退菜退酒请求体不含 operatorNote」
+    - BarTableSessionsPage.transfer.test.tsx「未指定接手人不提交，填写后随真实场次版本提交」，断言请求体不含 requestedByUserId
+    - BarTableSessionsPage.split.test.tsx「按拆台方式与订单归属提交拆台请求」，断言不含 requestedByUserId；另新增「卡座会话并台 › 并台请求体不含 requestedByUserId」
+    - TicketOrdersPage.multiuseface.test.tsx 新增「核销预检请求体不含 operatorNote」
+- 18AF 落地位置补记·第 198 条 198-R5·K3 治理网页（代码不读、网页在发的请求键：网页停发；契约由同段 C 组同值删；无新裁决）：
+  - 网页停发（写死值直接删，无输入框）：
+    - AccessUsersPage.tsx：员工注册 POST /api/v1/staff/registrations（submitStaffRegistration）去掉写死的 operatorNote「后台辅助员工登记，等待对应公司审批」；StaffService.submitRegistration 只读 project_id、merchant_id、name、phone、id_doc、staff_level_id、idempotency_key。建号后套模板 POST /api/v1/access/permission-templates/{id}/apply（applyPermissionTemplate）去掉写死的 operatorNote「后台手动录入后应用权限模板」；AccessService 应用模板 :390-494 不读，事件元数据不含。同页建账号 POST /api/v1/access/users 的 operator_note 由 AccessService.java:1864 读取，留给第 229 条。
+    - PermissionTemplatesPage.tsx：修改模板 PUT /api/v1/access/permission-templates/{id}（updatePermissionTemplate）去掉透传的 sourceTemplateId；来源取库内原模板（AccessService.java:289 existing.sourceTemplateId()）。应用模板（applyPermissionTemplate）去掉写死的 operatorNote「后台应用单次有效权限模板／后台应用权限模板」。新建、修改、复制的 operator_note 有读取，不动。
+    - OrgHierarchyPage.tsx：保存平行审批线 PUT /api/v1/access/approval-lines/{line_code}（upsertApprovalLine）去掉写死的 operatorNote「后台维护平行审批线」；OrgHierarchyService.doUpsertApprovalLine 只读 idempotency_key、line_name、min_start_rank、entry_user_id、status、hr_final_approver_id。直接上级保存的 operatorNote 由 OrgHierarchyService.java:102 读取，不动。
+    - SupervisorReviewPage.tsx：
+      - 评估 POST /api/v1/platform/supervisor-review/evaluate（evaluateSupervisorReview）去掉写死的 operatorNote「完整后台主管复核评估」。
+      - 转交 POST …/{review_id}/forward（forwardSupervisorReview，契约本无此键，任务书并入的契约外多发字段）去掉写死的 operatorNote「后台转交审批」；SupervisorReviewService.forward 只读 idempotency_key、forwarded_to、comment。
+      - 放行／驳回写死的 operatorNote 被 SupervisorReviewService.java:1474 读取，属第 229 条，不动。
+    - ApprovalChainPage.tsx：
+      - 节点通过／驳回 POST …/{review_id}/approve（approveSupervisorReview）去掉写死的 reviewerLevel: null 及请求体透传；层级取登录人（SupervisorReviewService.java:364-365）。
+      - 转交（forwardSupervisorReview，契约外多发）去掉写死的 operatorNote「审批链转交」及请求体透传。
+      - 通过／驳回的 operatorNote（取审批意见）有读取，不动；重生成发 {} 由通用请求层补幂等键，不动。
+  - 网页停发（用户填写，保留框）：StaffProfilesPage.tsx changeArchive。
+    - 取消存档 POST /api/v1/staff/profiles/{id}/unarchive（unarchiveStaffProfile）：控制器无请求体（StaffController.java:96-99），请求体改为 {}，幂等键由 adminClient normalizeRequestBody 注入。
+    - 审批删除 POST …/delete-approve（approveDeleteStaffProfile）：StaffService.approveDeleteProfile 只读 decision，只发 {decision:"approved"}。
+    - 「改动事由」框 staff-profiles-reason 保留：存档（StaffService.java:337、:343）、申请删除（:425）等同页请求读取。
+  - 不改的：后端与 DTO 分量；tests/e2e（mock-api.ts:735 的 reviewerLevel 缺省回落 3，不用改）。安卓 MainActivity 注册代提交的 operatorNote 归 K5。
+  - 依据：
+    - 规则：198-R5 规则②（确实不读、客户端在发 → 删契约并让客户端停发；写死值直接删；用户填写的框只有在对本页所有调用都不被读取时才删，否则只停发该请求）。转交与员工档案取消存档、审批删除三处为任务书并入的契约外多发字段，只停发、不改契约。PGM:899、:905、:906 泛泛句不按规则③（18AF 控制席判定 2）。
+    - 先例：OpenAPI 与代码一致的第 94、113、124、136、153、170、171 条。153-R2（本台账:4953）「服务端早已不读这个字段」「现在安卓不再发」；170-R1（:5179）；171-R1（:5096）；82c-R4（:4148）「以代码和权威字典为准，只改契约」；18AE 201-R5「转交只收 idempotency_key、forwarded_to、comment」。
+    - HTML 原句：PGM:968「本条为操作指引，不作为合规判定依据；留痕是否完备以「所有有过程的业务动作都必须留痕」为准。」；PGM:529「超时事实、每次催办、转发与最终处置全程留痕」（转发由 governance.supervisor_review.forwarded 事件承担，不要求人工备注）；BSM:576「存档及删除都需要填写理由」与 BSM:570「再"申请删除"、填写删除理由，由具备最高权限的人审批通过后执行」（理由在存档与申请删除时读取落行，取消存档与审批删除不另要求）。
+  - 测试（前端，请求体断言不含该键）：
+    - 新增：StaffProfilesPage.test.tsx「恢复档案不带事由（198-R5）」「最高权限批准删除只发 decision，不带事由（198-R5）」。
+    - 改动：AccessUsersPage.test.tsx「账号 POST 成功、套模板 403…；套模板不发写死备注（198-R5）」；M006AccessRegistration.test.tsx「M006-011 员工引导表单提交注册申请，不发密码或预先赋权，也不发写死备注（198-R5）」；PermissionTemplatesPage.test.tsx「选中带秒的模板…（M001-F18）；不发来源模板编号（198-R5）」「应用模板发出的套用方式…（M001-F21）；不发写死备注（198-R5）」；OrgHierarchyPage.test.tsx「保存审批线提交 min_start_rank 与 status、不发写死备注（198-R5）…」；SupervisorReviewPage.test.tsx「待复核清单…转交提交 forwarded_to、不发写死备注（198-R5）…」「%s 评估先提示受益人，填写后提交，不发写死备注（198-R5）」；ApprovalChainPage.test.tsx「通过当前节点 → 提交 decision=approved、不发复核人层级（198-R5）…」「转交当前节点提交 forwarded_to，不发写死备注（198-R5）」。
+- 18AF 落地位置补记·第 198 条 198-R5（K4 其余网页：代码不读、网页在发的请求字段，网页停发，契约删除见 C 线；无新裁决，采购建单「申请依据」框按控制席判定 4，合规扫描「操作备注」框按控制席判定 6）：
+  - 游乐安全巡检：AmusementSafetyPage.tsx 的提交、整改、复检三个请求体去掉 operatorNote。提交与复检的写死文案「完整后台提交巡检」「完整后台复检通过」直接删。整改原先把「整改说明」框内容复制进 operatorNote：框保留，同一内容仍以 comment 发送，AmusementInspectionService.java:294、:306、:324 读取。服务端出处：三者共用 AmusementSafetyActionRequest，submitSafetyInspectionInternal（:230-283）、rectifySafetyInspectionInternal（:292-333）、recheckSafetyInspectionInternal（:335-388）都不读请求的 operator_note；:219 读的是新建巡检的 AmusementSafetyInspectionRequest。同一请求写死的假附件 att-amusement-safety-* 会被读取，留给第 229 条。
+  - 合规提醒扫描：ComplianceRemindersPage.tsx 删扫描表单的「操作备注」框（compliance-scan-note）、scanForm.operatorNote 状态键与请求体 operator_note。ComplianceService.scanRemindersOnce（:494-516）只读 scan_date、default_lookahead_days；这个框只给扫描用，所以按规则②删框。该页三处写入每次 400，已登记第 258 条，本段不改。
+  - 物业费出账：FinancePropertyFeePage.tsx 的出账请求体删写死的 operatorNote「后台【物业费管理】独立出账」和假附件 evidenceAttachmentIds ["att-property-fee-bill"]（第 229 条点名的这一处，按规则②本就要删）。billPropertyFeeInternal（FinanceService.java:3950 起）只读 project_id、period、merchant_ids。
+  - 新建退款：FinanceRefundPanel.tsx 新建退款的请求体去掉 operatorNote，它原是「退款原因」的复制。退款原因框保留，仍以 reason 发送：FinanceService.java:2659 落库，:2664 记入提交尝试。「说明」框供重试、执行、核实使用，RefundOperationRequest 会读，不动。
+  - 立即重试：IntegrationEventsPage.tsx 的立即重试请求体删写死的 action "run_now"。runRetryTaskNowOnce（IntegrationOrderSyncService.java:897-920）只读 reason、evidence_attachment_ids；「重试原因」框不动。
+  - 演出合同新建版本：MediaPerformanceShowPage.tsx 的 POST /api/v1/settlement/media-shows/{id}/versions 请求体去掉 projectId、showKind、mediaMerchantId。MediaPerformanceService.createVersion（:141-170）按原版本重组这三项。新建、修改照发（validate :397、:398、:408 读取），项目、场次类型、传媒公司商户三个框保留。
+  - 采购建单（控制席判定 4，规则②删框）：PurchaseWorkbenchPage.tsx「新建采购申请」删「申请依据」框、请求体 operatorNote 与它的必填校验。「按建议发起采购」不再预填 reason，合同、商品、数量照旧预填。这一处撤去了本台账 :3973 第 33 条 18D 落地写的「申请依据」预填。合同审批、采购审批各自的「申请依据」框不动，PurchaseWorkflowService.java:247 必填、:250 写进审批载荷。建单 PurchaseWorkflowService.java:161-183 不读 operator_note；建议理由仍在采购建议表「理由」列显示。
+  - 不改的：后端不改，DTO 分量保留；tests/e2e 不用改（mock-api.ts:842 整改先取 comment，其余 e2e 不断言这些键）。
+  - 依据：
+    - 处置规则②：确实不读、客户端在发的，删契约并让客户端停发；写死的值直接删；输入框只有在内容对本页所有调用都不被读取时才删。
+    - OpenAPI 与代码一致的先例：第 94、113、124、136、153、170、171 条。本台账 18Q 153-R2「服务端早已不读这个字段」「现在安卓不再发」、18U 170-R1、171-R1；同型的有 18AE 198-R3、198-R4。
+    - HTML 原句：BSM:1211「系统根据安全库存、销量和在途数量生成建议采购数量及理由，由采购人员人工调整并按审批链批准后生成采购单，不得自动向供应商下单。」（理由由建议表承载，送审 note 必填）；BSM:1633「人工只在异常、退款、免单、调账、补录时填写原因、照片、视频或复核意见。」（退款原因由 reason 必填落库满足）；PGM:968「本条为操作指引，不作为合规判定依据」。
+    - 控制席判定 2：PGM:899、:905、:906 不单独构成规则③。
+  - 测试（前端）：
+    - AmusementSafetyPage.test.tsx「AmusementSafetyPage 巡检动作停发操作备注」三例：「提交巡检请求体不含 operator_note」「整改请求体不含 operator_note」「复检请求体不含 operator_note」，整改仍带 comment。
+    - ComplianceRemindersPage.test.tsx「扫描表单不再有「操作备注」框，请求体不含 operator_note」。
+    - FinancePropertyFeePage.robustness.test.tsx「出账只发项目、计费期与所选商户，不带写死的操作备注和附件编号」。
+    - FinanceRefundPanel.test.tsx「从原收款流水发起退款，金额按分发送且不宣称请求即成功」：加断言新建请求不含 operatorNote。
+    - IntegrationEventsPage.rowdetail.test.tsx「立即重试只发重试原因，不带写死的 action」。
+    - MediaPerformanceShowPage.test.tsx「锁定后字段只读：无「锁定」按钮、输入禁用；改动走「新建合同版本」提交到 /versions，不带沿用原版本的项目、场次类型、传媒商户」。
+    - PurchaseWorkbenchPage.test.tsx「新建采购只提交所选批准合同的一种商品，供应商来自该合同，不设申请依据框」「采购建议列出建议量与理由，按建议发起采购预填合同商品数量，人工改数量后提交，建单不带申请依据」。
+- 18AF 落地位置补记·第 198 条 198-R5·安卓员工端（控制席判定 7；无新裁决）：apps/android-terminal 的共享模型 TerminalModels.kt（android-app 经 kotlin.srcDir 复用）去掉服务端不读的请求分量，写死的值一并删除，安卓不再发；契约同删见本段契约一节。后端不改，DTO 分量保留；操作数不变（1360）；无迁移。逐项：
+  ① createBarOrder
+    - 改法：BarOrderRequest（TerminalModels.kt:333）删 operatorNote、evidenceAttachmentIds、serviceUserIds；TerminalWorkflow.createBarOrder（TerminalWorkflow.kt:261）删写死的 operatorNote「Android terminal bar order」。
+    - 现状：原来两个列表默认 emptyList()，在 encodeDefaults=true 下每次下单都发 []，一体机 KioskBarPurchase.kt:20 同样如此；该文件不改，随模型停发。
+    - 不读的证据：BarOrderService.createOrderInternal 不读这三个键，服务责任取开台会话（BarOrderService.java:322）。BSM:1070「协助服务、加单、送达等其他经手人只留责任痕迹、不产生销售提成」讲的是提成归属，不构成规则③。
+  ② settleBarBill
+    - 改法：BarBillSettleRequest（TerminalModels.kt:391）删 operatorNote、evidenceAttachmentIds；TerminalWorkflow.settleBarBill（:356）删写死的 operatorNote「Android terminal bar settlement」。一体机 KioskPayment.kt:42 不改，随模型停发空列表。
+    - 不读的证据：BarBillingService.settleBill、settleLatePayment 都不读。BSM:1633「人工只在异常、退款、免单、调账、补录时填写原因、照片、视频或复核意见」不含结账。
+  ③ bindStaffDeviceCredential、approveStaffDeviceRebind、reportStaffDeviceIntegrity
+    - 改法：StaffDeviceBindRequest（:424）、StaffDeviceRebindDecisionRequest（:433，只剩 idempotencyKey）、StaffDeviceIntegrityReportRequest（:439）删 operatorNote；TerminalWorkflow（:388、:413、:432）删三处写死的备注。
+    - 不读的证据：StaffService.bindCredential、approveRebind、reportIntegrity 都不读。
+  ④ submitStaffRegistration
+    - 改法：StaffRegistrationSubmitRequest（:488）删 operatorNote；android-app MainActivity.kt:2518 商户代提交去掉写死的第 4 个位置实参「商户手机代提交」，merchant、phone、idDoc 按位置顺延。
+    - 不读的证据：StaffService.submitRegistration 不读。
+  ⑤ returnTerminalDevice
+    - 改法：DeviceReturnRequest（:248）删 operatorNote、evidenceAttachmentIds；MainActivity.kt:2066-2067 工作手机归还去掉 operatorNote=交接说明 这个实参。
+    - 保留：「交接说明／故障原因」框（MainActivity.kt:2058）。同一框的内容经 reason 由归还读取落库（TerminalDeviceService.java:1228、:1243），同页换机也读（:257、:288）。
+  ⑥ swapStaffWorkPhone
+    - 改法：WorkPhoneSwapRequest（:1001）删 evidenceAttachmentIds（原来默认空列表，每次都发 []）。MainActivity.kt:2076 按位置传 4 个参数，不用改。
+    - 不读的证据：TerminalDeviceService.java:279、:281 只转塞，不读。
+  - 不改：
+    - P0Fixture 冒烟夹具，同 18AE not_doing 先例；
+    - KioskBarPurchase.kt、KioskPayment.kt 和两个 TerminalApiClient；
+    - 建账单 createBarOrderBill 的 operator_note（BarBillingService:166 读取）与支付意图请求，都不在处置表里。
+  - 依据：
+    - 控制席判定 7：写死的 operator_note、evidence_attachment_ids、service_user_ids 停发，同 153-R2「现在安卓不再发」先例；returnTerminalDevice 的说明框保留，只去掉 operatorNote 实参。
+    - 处置规则②。
+    - OpenAPI 与代码一致的先例第 94、113、124、136、153、170、171 条：18Q 153-R2（决策台账:4953）「服务端早已不读这个字段」「现在安卓不再发」，并删共享模型分量；18G 82c-R4（:4148）「以代码和权威字典为准，只改契约」；170-R1（:5179）；171-R1（:5096）。
+    - HTML 原句：BSM:940「收银、核销、收款、放行等现场动作，一律按执行该动作的设备绑定与该次登录会话定位到操作人并留痕」；BSM:1631「订台、点单、支付、核销、扫码、接单、关闭异常时，系统自动留下时间和动作。」；PGM:968「本条为操作指引，不作为合规判定依据」。
+  - 测试：
+    - TerminalFieldWorkflowTest.barOrderPaymentIntentAndSettlement：下单体不含 operator_note、evidence_attachment_ids、service_user_ids，结账体不含 operator_note、evidence_attachment_ids。
+    - TerminalFieldWorkflowTest.staffDeviceRebindBindApproveAndIntegrityReport：绑定、批准换机、完整性上报三次请求体都不含 operator_note。
+    - TerminalRequestSerializationTest.barOrderAndSettlementRequestsUseSnakeCaseFields、staffDeviceCredentialRequestsUseSnakeCaseFields：都改为断言不含这些键。
+    - 新增 TerminalRequestSerializationTest.appScreenRequestsNoLongerCarryKeysTheServerDoesNotRead：员工注册不含 operator_note；归还不含 operator_note、evidence_attachment_ids，reason 照发；换机不含 evidence_attachment_ids。
+    - 结果：安卓单测 120 个全绿；android-app :app:compileDebugKotlin 通过。
+- 18AF 落地位置补记·第 198 条 198-R5 客人端（控制席判定 6；处置规则②；无新裁决）：createCustomerBarReservation 的 contact_phone。
+  - 改法：契约删字段由 C 线做（components.schemas.CustomerBarReservationRequest 的 properties.contact_phone，非必填；components.requestBodies.CustomerBarReservationRequest 示例里的 contact_phone）。客人三端停发 contact_phone，并删「联系手机号」框：这个框只给本页订台请求用，订台又不读它。
+  - 落地位置：
+    - apps/customer-app/src/pages/BarReservationPage.tsx（V0.02→V0.03）：删 Draft.contactPhone 和 EMPTY_DRAFT 初值、订台请求体的 contactPhone、「联系手机号（选填）」label 与 Input#reservation-phone。
+    - apps/customer-miniapp/miniprogram/pages/reserve/index.js（V0.01→V0.02）：删 data.contactPhone、onPhone、订台请求体的 contactPhone。
+    - apps/customer-miniapp/miniprogram/pages/reserve/index.wxml（V0.01→V0.02）：删 input#contact-phone「联系手机号（可不填）」。
+    - packages/customer-core/src/service.ts（V0.12→V0.13）：createBarReservation 入参类型删 contactPhone?，透传去掉。
+  - 读取证据：CustomerController.java:299-311 → CustomerService.java:941 起的 createBarReservation 只取 bar_id、table_id、table_type、latest_arrival_at、guest_count、reservation_time，不取 contact_phone；整份请求只进 executeWrite（:1665 起）的幂等散列。:461 的 actual.contactPhone() 属于客人购票请求，不动；三端购票的联系手机号框和 contactPhone 也不动。
+  - 依据：
+    - OpenAPI 与代码一致的先例第 94、113、124、136、153、170、171 条：本台账 18Q 153-R2「服务端早已不读这个字段」「现在安卓不再发」、18U 170-R1、171-R1；「以代码和权威字典为准，只改契约」。
+    - HTML 原句 BSM:1062「无论是否支付定金，每一笔订台都必须填写最晚到店时间」：对订台只要求最晚到店时间。三份 HTML 没有要求客人自助订台记录联系手机号的原句，规则③不适用；客人身份取客人令牌。
+    - 第十三批裁决第 7 条（员工代订必须录入客人手机号、只用于核对）只管员工代订（BarReservationRequest），与本请求无关。
+  - 不改的：后端 CustomerBarReservationRequest 的 contactPhone 分量保留；tests/e2e 不需改（customer-mock-api.ts 订台分支不读 contact_phone，customer-journey.spec.ts CUST-03 不填手机号）。
+  - 测试（前端）：
+    - apps/customer-app BarReservationPage.test.tsx：paymentUnavailableShowsNoSuccess 补断言订台请求的键不含 contactPhone；新增「reservationFormHasNoContactPhoneBox：订台表单不再渲染「联系手机号（选填）」框」。
+    - apps/customer-miniapp test/bar.test.js：新增「reserveFormHasNoContactPhoneAndRequestOmitsIt」，断言没有 #contact-phone 框，POST /api/v1/customer/bar-reservations 请求体不含 contact_phone。
+- 18AF 落地位置补记·第 198 条 198-R5 后端真实入口回归（R1：存酒、库存与经销与商户计费、酒吧、票务；只新增测试类，后端代码、契约未改；无新裁决）：依据方案 198-R5 tests「每个业务域至少一条后端真实入口回归，按网页新形状（蛇形）请求返回 200」；写法同 18AE 落地位置补记 c（BarOrderBillWebShapeJdbcIntegrationTests、SpaceTypeCreateWebShapeJdbcIntegrationTests）；契约只删、DTO 分量保留，依据决策台账:4148「以代码和权威字典为准，只改契约」，以及 OpenAPI 与代码一致的先例第 94、113、124、136、153、170、171 条（153-R2「服务端早已不读这个字段」「现在安卓不再发」）。四个类都走真实 HTTP、蛇形键与真实授权链（StaffRequestFixture 在真库建账号与权限码，请求头 X-Terminal-Type: web），用 @Transactional 回滚；入口未改，只锁现行为，不先红。类名带 Tests 后缀，否则 surefire 默认 includes 不收，全量与 CI backend-tests 跑不到。① 存酒 SavedBottleTransferWebShape198R5Tests.transferSavedBottle_webShapeWithoutOperatorNote_ok：门店员工（bar.saved_bottle.manage）先按契约删后形状 POST /api/v1/inventory/saved-bottles 登记，不带 operator_note（createSavedBottle，规则①）；再按存酒页转让停发后的形状 POST /api/v1/inventory/saved-bottles/{id}/transfer，只带 idempotency_key、evidence_attachment_ids、to_name_or_nickname、to_phone、verification_code，不带 operator_note（transferSavedBottle，规则②）。结果 200、status transferred，持有人换成受让人，saved_bottle_transfers 落登录员工与整瓶数量。② 库存与经销与商户计费 PurchaseRequestCreateWebShape198R5Tests.createPurchaseRequest_webShapeWithoutOperatorNote_ok：采购人员按采购工作台建单的新形状 POST /api/v1/inventory/purchase-requests，带 supplier_id、supply_contract_id、items[{item_id, quantity}]、expected_arrival_date、idempotency_key，不带 operator_note（createPurchaseRequest，规则②，18AF 控制席判定 4 删「申请依据」框）。结果 200、status created，requested_by 取登录主体，project_id 为合同所在项目；造数合同直接置为已批准，审批链由 PurchaseInboundPayableJdbcIntegrationTests 覆盖。③ 酒吧 BarBillSettleWebShape198R5Tests.settleBill_webShapeCashWithoutOperatorNote_ok：收银员开班、下单、出账后，按后台订单页现金结账停发后的形状 POST /api/v1/bar/bills/{bill_id}/settle，带 payment_id、payment_channel=cash、idempotency_key，不带 operator_note（settleBarBill，网页与安卓写死值停发，规则②）。结果 200、settlement_status settled、paid_amount_cent 600。④ 票务 TicketPriceRuleCreateWebShape198R5Tests.createTicketPriceRule_webShapeFixedPriceWithoutNoteAndEvidence_ok：票务管理员（ticket.price_variant.manage）按票务策略页 createRule 固定价的真实形状 POST /api/v1/ticketing/price-rules，带 idempotency_key、ticket_type_id、variant_type、price_mode、discount_rate=null 与三档价格，不带 operator_note、evidence_attachment_ids（createTicketPriceRule，规则①）。结果 200，ticket_price_rules 落 fixed_price、三档价格照填、折扣为空。
+- 18AF 落地位置补记·第 198 条 198-R5 后端真实入口回归（R2：访问治理、终端与设施、财务分红与结算、集成游乐合规与证据）。全部走真实 HTTP、蛇形键、真实授权链（StaffRequestFixture 真库建账号、角色与权限码），请求体按客户端停发后的形状；入口未改，只锁现行为，不先红。
+  ① ApprovalLineUpsertWebShape198R5Tests.upsertApprovalLine_webShapeWithoutOperatorNote_saved。操作人：本项目员工（access.role.assign）。请求：按 OrgHierarchyPage 停发后形状 PUT /api/v1/access/approval-lines/{line_code}，带 idempotency_key、line_name、min_start_rank、entry_user_id、hr_final_approver_id、status，不带 operator_note。结果：200；approval_lines 照请求落库；access.approval_line.saved 成功留痕一条。所锁：upsertApprovalLine.operator_note 规则②，OrgHierarchyService.java:134-198 不读。
+  ② WorkPhoneReturnShapeAfter198R5Tests.returnWorkPhone_androidShapeWithoutOperatorNoteAndEvidence_returned。操作人：设备接收人（terminal.device.bind）。请求：按安卓 MainActivity.showWorkPhoneReturn 停发后形状 POST /api/v1/terminals/devices/return，带 idempotency_key、device_code、has_pending_tasks=false、reason，不带 operator_note、evidence_attachment_ids，归还本项目员工在用的工作手机。结果：200；设备 returned、return_reason 落库；terminal.device.returned 状态流水一条；持有员工 device_return 下班一条；领用上下文以 shift_end 结束。所锁：returnTerminalDevice 两键规则②，TerminalDeviceService.java:185-201、:879-883、:1184-1248 不读。
+  ③ PropertyFeeBillWebShape198R5Tests.billPropertyFee_webShapeWithoutOperatorNoteAndEvidence_billed。操作人：平台财务（finance.property_fee.manage；入口走 currentMerchantScope）。请求：按 FinancePropertyFeePage 停发后形状 POST /api/v1/finance/property-fee/bills，带 idempotency_key、project_id、period、merchant_ids，不带 operator_note、evidence_attachment_ids。结果：200；按 800 分/㎡×12.50㎡ 出账 10000 分；property_fee_bills 与待收 ar_ap_items 各一条。所锁：billPropertyFee 两键规则②，FinanceService.java:3950 起只读 project_id、period、merchant_ids。
+  ④ AmusementSafetySubmitWebShape198R5Tests.submitSafetyInspection_webShapeWithoutOperatorNote_submitted。操作人：游乐项目所属商户的员工（amusement.safety_inspection.submit）。请求：按 AmusementSafetyPage 停发后形状 POST /api/v1/amusement/safety-inspections/{id}/submit，带 idempotency_key、attachment_ids、action_result、comment，不带 operator_note。结果：200；巡检 submitted，整改与重开都是 pending；operator_note 列取 comment；submit 动作一条。所锁：submitAmusementSafetyInspection.operator_note 规则②，AmusementInspectionService.java:230-283 不读。
+  依据：198-R5 处置规则②；控制席判定 2（PGM:899、PGM:905、PGM:906 不按规则③；PGM:968「本条为操作指引，不作为合规判定依据」）；OpenAPI 与代码一致先例 153-R2、170-R1、171-R1 落地位置补记与决策台账约 :4139；同类先例为 18AE 198-R1、198-R2 tests② 的 BarOrderBillWebShapeJdbcIntegrationTests、SpaceTypeCreateWebShapeJdbcIntegrationTests。
+- J 汇合（e2e 与扫描复跑）：
+  - e2e：tests/e2e 不改。依据是 grep tests/e2e 全部 spec 与 support。查了两类：一是本段停发的键，蛇形、驼峰两种写法（operator_note/operatorNote、evidence_attachment_ids、service_user_ids、requested_by_user_id、source_template_id、reviewer_level、media_merchant_id、show_kind、contact_phone、action:"run_now"）；二是被删输入框（customer-app reservation-phone「联系手机号（选填）」、customer-miniapp contact-phone、ComplianceRemindersPage compliance-scan-note「操作备注」、PurchaseWorkbenchPage「申请依据」）。没有任何断言或填写步骤用到它们。support/mock-api.ts 只是按 bodyValue 读请求体、读不到就用默认值，不受影响。用例标题没有改，界面验收报告不用因 e2e 重生成。
+  - 扫描复跑（d3b7cb9b 加本段改动，2026-11-11）：
+    - g198_vscan.py 从 323 行降到 138 行。消失的 185 行都在处置表 delete_contract 里；没有新增行；剩下 138 行都在 keep 里。
+    - g198_extra.py 从 18 行降到 3 行。消失的 15 行都按规则①删了；剩下 3 行是 keep 里已确认的扫描误报，实际被读取：bindTicketTypeEntitlement 的 num_people、component_price_cent，upsertRefundAuthorityLimit.project_id。
+    - delete_contract 里不在扫描基线中的 2 行，由共用检查确认已删：swapStaffWorkPhone.evidence_attachment_ids（V6 核实）、copyPermissionTemplate.evidence_attachment_ids（控制席判定 3 补删）。
+    - 共用检查 check_schema_safety.py 报 problems 202，全部是 NOT_IN_INLINE 103 加 NOT_IN_SCHEMA 99，与删除清单 202 行一一对应。keep 141 行（138 加 3）全部还在契约里。
+    - npm run verify:p0-contract 通过，operation-matrix 与 openapi-closure 都是 1360 operations in sync。
+  - 测试结果：
+    - 8 个新增后端回归类：tests=8 failures=0。
+    - apps/web 全量：330 个文件、1823 个测试全过，typecheck 0 错。
+    - 客人端：customer-app 131、customer-miniapp 85、customer-core 77，全过。
+    - 安卓员工端：120 个测试全过，android-app 编译通过。
+- 18AF 落地位置补记·第 198 条 198-R5 下位文档与 PRD 同步（无新裁决）：契约删了字段、客户端停发了，下位契约文档的请求字段表、请求示例和 PRD 现状句按现行 OpenAPI 与页面改写。只删行、删键、改句，不新增业务规则。依据是处置规则①②，以及「OpenAPI 与代码一致」先例：第 170-R1、171-R1、153-R2 条落地位置补记和本台账约 :4139「以代码和权威字典为准，只改契约」；契约只删字段，后端 DTO 分量保留。各文件头相对 d3b7cb9b +0.01。逐份改法如下：
+  - ① docs/p1-bar-bill-split-merge-api-contract-v0.1.md（V0.12）：§3 拆单、合单示例删 requested_by_user_id（splitBarBill、mergeBarBill）。合单示例的 secondary_bill_id 改为 merged_bill_id，与现契约 BarBillMergeRequest 一致，代码 BarBillingService.java:749 读的是 requireText(actual.mergedBillId(), "merged_bill_id")。
+  - ② docs/p1-bar-table-session-api-contract-v0.1.md（V0.12）：
+    - §4.1 创建卡座会话删 merchantId、openedByUserId、evidenceAttachmentIds（createBarTableSession）；
+    - §4.2 转卡、§4.3 合并删 requestedByUserId（transferBarTableSession、mergeBarTableSession；后台卡座会话页已停发，前端用例 BarTableSessionsPage.transfer.test.tsx、BarTableSessionsPage.split.test.tsx「并台请求体不含 requestedByUserId」）；
+    - 变更日志加一行。
+  - ③ docs/p1-bar-bill-adjustment-api-contract-v0.1.md（V0.12）：§4 请求字段删 requestedByUserId、operatorNote（adjustBarBill）。响应字段不动。
+  - ④ docs/p1-bar-production-ticket-workflow-api-contract-v0.1.md（V0.11）：§4.3 流转示例删 operator_user_id（transitionBarProductionTicket）。
+  - ⑤ docs/p1-amusement-reservation-queue-light-api-contract-v0.1.md（V0.12）：状态变更示例删 evidence_attachment_ids（changeAmusementReservationStatus、changeAmusementQueueEntryStatus）。
+  - ⑥ docs/p1-amusement-safety-waiver-incident-api-contract-v0.1.md（V0.12）：§4.1、§4.2 删 operator_note 行（createAmusementSafetyNotice、acknowledgeAmusementSafetyNotice）。
+  - ⑦ docs/p1-contract-compliance-expiry-api-contract-v0.1.md（V0.12）：§3.2、§3.4、§3.6 示例删 operator_note（createContractKeyDate、createComplianceExpiryItem、scanComplianceReminders；合规扫描弹窗「操作备注」框已删，用例在 ComplianceRemindersPage.test.tsx）。
+  - ⑧ docs/p1-floor-plan-polygon-api-contract-v0.1.md（V0.22）：§4.1、§4.2 删 operator_note 行（createFloorPlan、saveFloorPlanShape），加修订行。
+  - ⑨ docs/p2-floor-plan-import-api-contract-v0.1.md（V0.21）：§3.4 示例删 operator_note（publishFloorPlanImport），加修订行。
+  - ⑩ docs/p1-integration-retry-compensation-reconciliation-api-contract-v0.1.md（V0.12）：run-now 示例删 "action": "run_now"（runRetryTaskNow；网页已停发，用例在 IntegrationEventsPage.rowdetail.test.tsx）。
+  - ⑪ docs/p1-inventory-alerts-reconciliation-api-contract-v0.1.md（V0.12）：
+    - §3.2 删 operator_note（createInventoryStockBatch）；
+    - §3.4 删 operator_note、operator_user_id（scanInventoryRiskAlerts）；
+    - §3.6 删 operator_note、operator_user_id（createSupplierReconciliation）。
+  - ⑫ docs/p1-merchant-billing-portal-api-contract-v0.1.md（V0.12）：§4.2～§4.5 示例删 operator_note（createMerchantBill、confirmMerchantBill、submitMerchantBillDispute、recordMerchantBillDunning）。
+  - ⑬ docs/p0-api-contract-pack-v0.1.md（V0.11）：§13.1 示例覆盖表改两行，变更日志加一行。
+    - 「客人订台」去掉「联系方式」：CustomerBarReservationRequest 已删 contact_phone，客人 App 与小程序的订台框已删（BarReservationPage.test.tsx「reservationFormHasNoContactPhoneBox」、customer-miniapp bar.test.js「reserveFormHasNoContactPhoneAndRequestOmitsIt」）。
+    - 「酒吧点单」去掉「服务责任和支付模式」：BarOrderRequest 已删 service_user_ids、payment_mode，安卓已停发。
+  - ⑭ docs/supply-chain-inventory-product-prd-v0.1.md（V0.38，变更日志加一行）：§7.1 第 33 条实现现状句改为：按建议预填建单表单的合同、商品与数量后人工调整数量；建单不填申请依据，申请依据在采购审批时填写；建议理由在采购建议区列出。
+    - 依据：第十八批 AF 段控制席判定 4；BSM:1211「系统根据安全库存、销量和在途数量生成建议采购数量及理由，由采购人员人工调整并按审批链批准后生成采购单，不得自动向供应商下单」。
+    - 页面与代码：PurchaseWorkbenchPage 删建单「申请依据」框、停发 operatorNote；采购审批框照发 note，PurchaseWorkflowService:251 记为 reason。
+    - 测试：PurchaseWorkbenchPage.test.tsx「新建采购只提交所选批准合同的一种商品，供应商来自该合同，不设申请依据框」与「采购建议列出建议量与理由，按建议发起采购预填合同商品数量，人工改数量后提交，建单不带申请依据」。
+  - 核过未改：
+    - customer-app-miniapp 两份文档没有订台手机号的现状句；
+    - 页面矩阵各行 key_fields 不含被删输入项；
+    - 其余命中是数据库列定义、契约保留字段或业务目标句。
+  - 门禁：verify:predeploy、verify-full-admin-page-matrix（117 页）、git diff --check 都通过。
+- 18AF 落地位置补记·控制席既有用例同步（无新裁决）：J 汇合 not_done 把仍按旧形状发被删键的既有用例交控制席定，控制席照 18AE 补记 d 先例（InventoryControllerTests.claimSavedBottleUsesSnakeCaseRequestShape 按网页真实形状去掉 claim_by_phone），把声明按前端、网页、安卓真实形状发请求的既有用例同步成停发后的新形状。只删请求体里的键，后端 DTO 分量保留，各用例断言的业务结果不变；各键的处置见本段契约各条与处置表 delete_contract 对应行（规则①②）。逐个：
+  - backend/src/test/java/com/complex/platform/bar/BarControllerTests.java（V0.07→V0.08）：createOrderAcceptsAdminWebSnakeCaseBodyAndKeepsReservationBinding 下单请求体去掉 operator_note、evidence_attachment_ids、service_user_ids、payment_mode（createBarOrder）；settleBillAcceptsSnakeCaseVoucherCodeFromWeb 结账请求体去掉 operator_note（settleBarBill）。
+  - backend/src/test/java/com/complex/platform/bar/BarInvitationTableMoveJdbcIntegrationTests.java（V0.02→V0.03）：本类各拆台用例共用的辅助方法 split(…) 请求体去掉 requested_by_user_id（splitBarTableSession）。
+  - backend/src/test/java/com/complex/platform/bar/BarPlatformTurnoverRentJdbcTests.java（V0.03→V0.04）：webCashierRefundOfAJulySaleIsReversedInAugust 现金结账请求体去掉 operator_note（settleBarBill）。
+  - backend/src/test/java/com/complex/platform/bar/BarSalesAttributionJdbcTests.java（V0.04→V0.05）：guestSourceFollowsTheGuestAcrossATransfer 转台请求体去掉 requested_by_user_id（transferBarTableSession）。
+  - backend/src/test/java/com/complex/platform/bar/KioskBarOrderJdbcTests.java（V0.05→V0.06）：backOfficeShiftPanelOpensWithoutThresholdAndAnyCashDifferenceNeedsReview 后台现金结账请求体去掉 operator_note（settleBarBill）。
+  - backend/src/test/java/com/complex/platform/gate/AndroidDeviceBootstrapJdbcIntegrationTests.java（V0.01→V0.02）：privatePhoneRebindRequestPassesWithDeclaredType 设备凭证绑定请求体去掉 operator_note（bindStaffDeviceCredential）。
+  - backend/src/test/java/com/complex/platform/gate/TabletFunctionsJdbcIntegrationTests.java（V0.02→V0.03）：tabletScanCheckoutSettlesWithPaymentIntentId、tabletSettlesZeroDueBillCoveredByRetainedAmount 平板结账请求体去掉 operator_note、evidence_attachment_ids（settleBarBill）。
+  - backend/src/test/java/com/complex/platform/inventory/InventoryControllerTests.java（V0.10→V0.11）：renewSavedBottleUsesSnakeCaseRequestAndResponse 续存请求体去掉 operator_note（renewSavedBottle），并删去该用例对 captor.getValue().operatorNote() 的断言；savedBottleRemedyAndHandoverUseSnakeCaseRequestShape 财务审批补救请求体去掉 reason（approveSavedBottleRemedy）；transferSavedBottleUsesSnakeCaseRequestAndResponse 转让请求体去掉 operator_note（transferSavedBottle）。
+  - backend/src/test/java/com/complex/platform/inventory/PurchaseInboundPayableJdbcIntegrationTests.java（V0.07→V0.08）：suggestionFollowsRulingFiveAndOnlyApprovedPurchasesCountAsInTransit 按建议建单请求体去掉 operator_note（createPurchaseRequest；18AF 控制席判定 4 删建单「申请依据」框）。
+  - apps/web/src/admin/client/adminClient.test.ts（无文件头版本行）：「AdminApi 同一次操作的请求编号」下「页面用下划线键 idempotency_key 传的按点击编号不算请求内容：结果未明后再提交仍是同一次操作，沿用首发编号」用例，合规扫描请求体去掉 operator_note: null（scanComplianceReminders；合规扫描「操作备注」框已删）。
+  - 依据：J not_done「要不要按 18AE 补记 d 的先例……同步，交控制席定」；18AE 补记 d 先例（用例声明按前端、网页、安卓真实形状的，同步成新形状）。
+- 18AF 复核修复补记（无新裁决）：18AF 收尾复核 8 条意见经独立反驳核实成立（其中 3 条同指 tools/apply-openapi-p0-examples.mjs），按处置表、处置规则与先例直接修，没有要操作员裁定的。后端代码不改；本段契约共删 203 行（处置表 delete_contract 202 行＋复核补删 1 行），操作数仍 1360。
+  - ① 调拨发货 shipTransferOrder（POST /api/v1/inventory/transfer-orders/{order_id}/ship）：docs/openapi/openapi-p0.yaml（原 :8285-8288）与 openapi-p0.json（原 :10832-10836）同值删内联请求体的 properties.operator_note（不在 required、无 example）。
+    - 规则①：服务端不读。InventoryController.java:731-739 收 ReceiveTransferRequest；InventoryService.java:3221-3255 shipTransferOrder 的 executeWrite 只传单号；门店要货分支走 transferFlow.outbound(o)（InventoryTransferFlowService.java:190-193，备注传 null）；借调分支只读 scannedTraceCodes()（:3243）。同 DTO 的 operatorNote() 只在取消、收货等别的入口读，那些入口契约各自内联，规则⑤不适用。
+    - 没有客户端在发：InventoryTransferWorkbenchPage.tsx:1043 发货传 undefined、经 :517 发成 {}，借用扫码发货 :1205 只发 scannedTraceCodes；安卓与 tests/e2e 无调用。三份 HTML 没有对发货要求记录备注的原句（BSM:1940 说的是异常调拨，BSM:1201 只要求扫码），不构成规则③。后端 ReceiveTransferRequest 分量保留，客户端不改。
+    - 漏扫原因：g198_vscan.py 取映射注解后的第一个括号，该入口在映射注解与方法签名之间夹 @IdempotencyKeyFromPath("order_id")，整个操作被跳过。复核人另核同类盲区（夹 @GuardedAction 的 4 个考勤操作、全限定名 @RequestBody 的 7 个存档操作）与 Map 请求体，字段都被读取。
+    - 处置表（本机 b52-tmp\verify_18af_final.json）delete_contract 末尾补一行（unread_no_client）；160 删除清单 ~/audit-tmp/b52_verify/del_list.tsv 末尾补「shipTransferOrder operator_note」（共 203 行）。共用检查 check_schema_safety.py 只报 NOT_IN_SCHEMA 99、NOT_IN_INLINE 104，没有别的问题。
+  - ② RecordVarianceRequest 说明（yaml :70525、json :97274）：「variance_qty=counted_qty−book_qty（带符号）」改为「variance_qty=counted_qty−账面数（带符号；账面取系统库存值，请求不传）」，yaml 与 json 同值，只改这一句。依据：处置表 recordInventoryStocktakeVariance.book_qty 一行 note「删字段时要一起改写成『账面取系统值』」；代码 InventoryService.java:2413-2416 账面数取系统库存值，不信客户端传入。
+  - ③ tools/apply-openapi-p0-examples.mjs（无文件头版本行）：删 CustomerBarReservationRequest 示例的 contact_phone（原 :52）、BarOrderRequest 示例的 service_user_ids（原 :68）与 payment_mode（原 :69），原 :67 行尾逗号随之去掉。
+    - 依据：处置表 createBarOrder.payment_mode、addBarOrderItem.payment_mode 两行「同时删 tools/apply-openapi-p0-examples.mjs:69」；createBarOrder.service_user_ids、createCustomerBarReservation.contact_phone 两行「示例键一起删」，脚本里是同一示例、同一根源；先例 18U 170-R1 同步过本脚本的 CustomerBarReservationRequest 示例（本台账:5204）。
+    - 在 160 一次性副本（~/audit-tmp/b52_f1/copy，不在工作树）重跑该脚本，与工作树现契约对比：json 与 yaml 语义差异只剩两处既有漂移，即 BarOrderRequest 示例的 salesperson_user_id（脚本现 :66；18I 56257ce0 已从契约示例删）与 CustomerTicketOrderRequest 示例的 price_rule_id（脚本 :29；第十三批 B 段 8f3ae344 已从契约示例删）；另脚本用 YAML.stringify 整份重排 yaml 文本（语义一致）。差异不止 salesperson_user_id 一处，这两处都没改，交控制席。
+  - ④ docs/supplier-mock/t3b-provider-adapter-test.example.json（无文件头版本行）：body 删 operator_note、evidence_attachment_ids 两键，mock_payload 收尾逗号去掉。依据：处置表 testProviderAdapterMock 两行 test_refs「下位示例文档……删契约时同步」。node tools/verify-t3b-supplier-mock-kit.mjs 与 npm run verify:partial-requirement-mock-coverage 仍为通过。
+  - ⑤ apps/android-terminal/src/test/kotlin/com/complex/terminal/TerminalRequestSerializationTest.kt（本段已 V0.07→V0.08，不再升）：barOrderAndSettlementRequestsUseSnakeCaseFields 构造 BarOrderRequest 去掉 paymentMode = "postpaid"，assertTrue("payment_mode" in order) 改为 assertFalse("payment_mode" in order)。依据：处置表 createBarOrder.payment_mode 一行 test_refs（:190、:201）与 addBarOrderItem.payment_mode 一行 note「安卓 TerminalRequestSerializationTest.kt:190、:201 也要同步」。TerminalWorkflow.createBarOrder 的闲置 paymentMode 参数不动。安卓员工端 gradle test 120 个全过。
+  - 同步：yaml 与 json 整份深比较一致，操作实数 1360；最终 openapi-p0.json 的 SHA-256 为 65737eefed80bc7e7fdc7d6061cc5c722a43f264b6aefda3e5d4a3546349e1eb，security-scans/findings-register-v1.md 与 formal-security-baseline-v1.md 只改「OpenAPI SHA-256」行。npm run docs:operation-matrix、docs:openapi-closure 重跑，两份生成物标题版本随 info.version 由 V0.63 变为 V0.64；node tools/refresh-entry-doc-baseline.mjs 报无漂移。

@@ -5,7 +5,7 @@ import { ApprovalChainPage } from "./ApprovalChainPage";
 import { AdminApi } from "../client/adminClient";
 import type { AdminPageProps, EffectivePermissionsState } from "../types";
 
-// 文件版本：V0.08
+// 文件版本：V0.09
 
 function raw(data: unknown): Response {
   return new Response(JSON.stringify({ success: true, code: "OK", message: "success", data }), { status: 200, headers: { "content-type": "application/json" } });
@@ -114,7 +114,7 @@ describe("ApprovalChainPage 审批链与节点裁决", () => {
     expect(screen.getByTestId("approval-chain-node-main-2").textContent).not.toMatch(/pending|approved|user/);
   });
 
-  it("通过当前节点 → 提交 decision=approved 并给出中文结果；驳回按钮受 approve 权限门控", async () => {
+  it("通过当前节点 → 提交 decision=approved、不发复核人层级（198-R5）并给出中文结果；驳回按钮受 approve 权限门控", async () => {
     const props = renderPage(ADMIN_PERMS, "review_c1");
     await waitFor(() => expect(screen.getByTestId("approval-chain-nodes")).toBeTruthy());
     vi.spyOn(window, "confirm").mockReturnValue(true);
@@ -126,6 +126,7 @@ describe("ApprovalChainPage 审批链与节点裁决", () => {
     expect(body.decision).toBe("approved");
     expect(body.comment).toBe("证据齐备，同意");
     expect(body.evidence_attachment_ids).toEqual([]);
+    expect(body).not.toHaveProperty("reviewer_level");
     await waitFor(() => expect(props.setActionResult).toHaveBeenCalledWith("复核单 review_c1 当前节点已通过，等待后续节点审批"));
 
     vi.unstubAllGlobals();
@@ -145,7 +146,7 @@ describe("ApprovalChainPage 审批链与节点裁决", () => {
     await waitFor(() => expect(props.setActionResult).toHaveBeenCalledWith("复核单 review_orphan 审批链已重生成，共 1 个节点"));
   });
 
-  it("转交当前节点提交 forwarded_to", async () => {
+  it("转交当前节点提交 forwarded_to，不发写死备注（198-R5）", async () => {
     const props = renderPage(ADMIN_PERMS, "review_c1");
     await waitFor(() => expect(screen.getByTestId("approval-chain-nodes")).toBeTruthy());
     fireEvent.change(screen.getByTestId("approval-chain-forward-target"), { target: { value: "usr_y" } });
@@ -153,7 +154,9 @@ describe("ApprovalChainPage 审批链与节点裁决", () => {
     const fetchMock = vi.mocked(globalThis.fetch);
     await waitFor(() => expect(fetchMock.mock.calls.some(([input]) => String(input).includes("/review_c1/forward"))).toBe(true));
     const call = fetchMock.mock.calls.find(([input]) => String(input).includes("/review_c1/forward"));
-    expect(JSON.parse(String((call?.[1] as RequestInit | undefined)?.body)).forwarded_to).toBe("usr_y");
+    const body = JSON.parse(String((call?.[1] as RequestInit | undefined)?.body));
+    expect(body.forwarded_to).toBe("usr_y");
+    expect(body).not.toHaveProperty("operator_note");
     await waitFor(() => expect(props.setActionResult).toHaveBeenCalledWith("复核单 review_c1 当前节点已转交给 usr_y"));
   });
 

@@ -1,8 +1,10 @@
-# P1 商场平面图图片与多边形坐标 API 契约 V0.21
+# P1 商场平面图图片与多边形坐标 API 契约 V0.22
 
 文档类型：Implementation / API Contract
 
 > 2026-09-20 160 全量审计 M019（B3-r1，V0.1→V0.2）：删去现行 DTO/OpenAPI 中不存在的 `evidence_attachment_ids`、`operator_user_id` 字段行，`z_index` 改为选填缺省 0（M019-001）；错误矩阵按现行实现改写——他图 `shape_id` 为 400 `VALIDATION_FAILED`、未知 `shape_id` 按该 id 新建，补 `PROJECT_NOT_FOUND`/`CROSS_PROJECT_FORBIDDEN`/`CROSS_MERCHANT_FORBIDDEN`（M019-002）；§9 引用改为现行迁移文件与真实标题（M019-003）。
+
+> 2026-11-11 第十八批 AF 段第 198 条 198-R5（V0.21→V0.22）：§4.1 创建平面图、§4.2 保存多边形标注删 `operator_note` 字段行（服务端不读，正式 OpenAPI 已删，后端 DTO 分量保留）。
 
 本文档固化 P1-FLOOR-PLAN-01「商场平面图先做图片 + 多边形坐标」的最小可编码契约。P0 空间档案中的轻量 `polygon_points` 保持兼容；本 P1 模块作为后续商户、游乐项目、设备、视频点位、机器人点位和 CAD/SVG 导入的标准地图数据源。
 
@@ -43,7 +45,6 @@
 | 字段 | 必填 | 类型 | 规则 |
 |---|---|---|---|
 | `idempotency_key` | 是 | string | 同一创建请求幂等 |
-| `operator_note` | 否 | string | 审计说明，默认 `created` |
 | `project_id` | 是 | string | 所属综合体/项目 |
 | `building_code` | 否 | string | 楼栋编码 |
 | `floor_no` | 是 | string | 楼层，如 `B1`、`1F`、`3F` |
@@ -59,7 +60,6 @@
 | 字段 | 必填 | 类型 | 规则 |
 |---|---|---|---|
 | `idempotency_key` | 是 | string | 同一标注写入请求幂等 |
-| `operator_note` | 否 | string | 审计说明，默认 `shape_saved` |
 | `shape_id` | 否 | string | 为空时创建；不为空时更新该标注 |
 | `shape_type` | 是 | enum | `shop` 铺位 / `booth` 摊位 / `public_area` 公共区 / `area` 区域 / `entrance` 入口 / `facility` 设施 / `risk_zone` 风险区 / `route` 路径。给人看只用这八种中文，无走道 |
 | `ref_type` | 是 | enum | `space`/`merchant`/`project`/`amusement_project`/`device`/`custom` |

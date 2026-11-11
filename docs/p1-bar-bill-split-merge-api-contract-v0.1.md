@@ -1,4 +1,4 @@
-# P1 酒吧账单拆单/合单接口契约 V0.11
+# P1 酒吧账单拆单/合单接口契约 V0.12
 
 ## 1. 范围
 
@@ -23,7 +23,6 @@
   "idempotency_key": "split-bill-once",
   "split_amount_cent": 40000,
   "reason": "guest wants separate payment",
-  "requested_by_user_id": "cashier_1",
   "evidence_attachment_ids": ["att_1"]
 }
 ```
@@ -33,9 +32,8 @@
 ```json
 {
   "idempotency_key": "merge-bill-once",
-  "secondary_bill_id": "bill_2",
+  "merged_bill_id": "bill_2",
   "reason": "same table checkout together",
-  "requested_by_user_id": "cashier_1",
   "evidence_attachment_ids": ["att_1"]
 }
 ```

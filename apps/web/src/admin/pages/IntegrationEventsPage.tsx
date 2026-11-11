@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import React from "react";
 import { TechDetails } from "../components/TechDetails";
 import { AdminDataState } from "../components/AdminDataState";
@@ -206,7 +206,6 @@ export function IntegrationEventsPage({ api, user, setActionResult, setGlobalErr
     }
     const request = {
       idempotency_key: `integration-retry-${Date.now()}`,
-      action: "run_now",
       reason: retryReason,
     };
     await runAction("integration_retry_run_now", request, () => api.post(`/api/v1/integration/retry-tasks/${selectedRetry.id}/run-now`, request));

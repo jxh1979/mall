@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
@@ -85,5 +85,23 @@ describe("ComplianceRemindersPage 按证照类型配置与续期登记", () => {
     const call = post.mock.calls.find((c) => c[0] === "/api/v1/compliance/expiry-items/cei_1/renewal");
     expect(call?.[1]).toMatchObject({ valid_to: "2027-09-30" });
     expect(Object.keys(call?.[1] ?? {})).toContain("idempotency_key");
+  });
+});
+
+// 第十八批 AF 段 198-R5：扫描入口不读 operator_note，契约删字段；「操作备注」框只供扫描使用，删框并停发。
+describe("ComplianceRemindersPage 扫描生成提醒停发操作备注", () => {
+  it("扫描表单不再有「操作备注」框，请求体不含 operator_note", async () => {
+    const post = vi.fn().mockResolvedValue({ generatedCount: 0 });
+    renderPage(makeApi(undefined, post));
+    await waitFor(() => expect(screen.queryByTestId("compliance-scan")).not.toBeNull());
+    expect(screen.queryByTestId("compliance-scan-note")).toBeNull();
+    expect(screen.getByTestId("compliance-scan-form").textContent).not.toContain("操作备注");
+
+    fireEvent.click(screen.getByTestId("compliance-scan"));
+
+    await waitFor(() => expect(post.mock.calls.some((call) => call[0] === "/api/v1/compliance/reminders/scan")).toBe(true));
+    const call = post.mock.calls.find((c) => c[0] === "/api/v1/compliance/reminders/scan");
+    expect(call?.[1]).not.toHaveProperty("operator_note");
+    expect(call?.[1]).toMatchObject({ default_lookahead_days: 30 });
   });
 });

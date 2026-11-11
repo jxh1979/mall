@@ -1,4 +1,4 @@
-// 文件版本：V0.09
+// 文件版本：V0.10
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
@@ -106,7 +106,8 @@ export function StaffProfilesPage({ api, user, setActionResult, setGlobalError, 
     setSubmittingId(row.id);
     try {
       await api.post("/api/v1/staff/profiles/" + encodeURIComponent(row.id) + "/" + action,
-        action === "delete-approve" ? { decision: "approved", reason: reason.trim() } : { reason: reason.trim() });
+        // 198-R5：取消存档入口无请求体、审批删除只读 decision，事由只随存档与申请删除发送。
+        action === "delete-approve" ? { decision: "approved" } : action === "unarchive" ? {} : { reason: reason.trim() });
       setActionResult({ 结果: action === "archive" ? "员工档案已存档" : action === "unarchive" ? "员工档案已恢复"
         : action === "delete-request" && !isMaster ? "删除申请已提交，等待最高权限审批" : "员工档案已删除", 员工档案: row.id });
       setReason("");

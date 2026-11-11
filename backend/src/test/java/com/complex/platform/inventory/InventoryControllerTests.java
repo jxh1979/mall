@@ -1,4 +1,4 @@
-// 文件版本：V0.10
+// 文件版本：V0.11
 package com.complex.platform.inventory;
 
 import static org.mockito.ArgumentMatchers.any;
@@ -609,7 +609,6 @@ class InventoryControllerTests {
                         .content("""
                                 {
                                   "idempotency_key": "admin-saved-bottle-renew-saved_1",
-                                  "operator_note": "客人到店代办转存",
                                   "verification_code": "000000"
                                 }
                                 """))
@@ -625,7 +624,6 @@ class InventoryControllerTests {
                 org.mockito.ArgumentCaptor.forClass(com.complex.platform.inventory.dto.SavedBottleRenewalRequest.class);
         verify(service).renewSavedBottle(eq("saved_1"), captor.capture());
         org.assertj.core.api.Assertions.assertThat(captor.getValue().verificationCode()).isEqualTo("000000");
-        org.assertj.core.api.Assertions.assertThat(captor.getValue().operatorNote()).isEqualTo("客人到店代办转存");
         verify(authorizationService).requirePermission("bar.saved_bottle.manage");
     }
 
@@ -699,7 +697,7 @@ class InventoryControllerTests {
                         .with(user("ops").roles("P0_SMOKE"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"idempotency_key": "admin-remedy-approve-fin", "role": "finance", "reason": "同意赔付"}
+                                {"idempotency_key": "admin-remedy-approve-fin", "role": "finance"}
                                 """))
                 .andExpect(status().isOk());
         verify(authorizationService).requirePermission("finance.ar_ap.manage");
@@ -720,7 +718,6 @@ class InventoryControllerTests {
                         .content("""
                                 {
                                   "idempotency_key": "admin-saved-bottle-transfer-saved_1",
-                                  "operator_note": "后台转让",
                                   "evidence_attachment_ids": ["att-1"],
                                   "to_name_or_nickname": "乙",
                                   "to_phone": "13900139000",

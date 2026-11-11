@@ -1,4 +1,4 @@
-# P1 酒吧出品票据状态闭环 API 合同 V0.1
+# P1 酒吧出品票据状态闭环 API 合同 V0.11
 
 ## 1. 边界
 
@@ -57,7 +57,6 @@ Request:
   "idempotency_key": "production-ready-001",
   "target_status": "ready",
   "station_code": "bar-counter-1",
-  "operator_user_id": "staff_bar_1",
   "operator_note": "ready for waiter",
   "reason": "optional reason",
   "evidence_attachment_ids": ["att_ready"]

@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 // FS-025 存酒转存（延期）（ENUM L120 / BSM L1072）：员工代办转存向当前持有人发码（scene=renew）、按蛇形键提交 /renewals；
 // 待复核的转存由当班营销主管在本页复核（/renewals/{id}/review，decision=approve|reject；驳回须填原因）。
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
@@ -55,7 +55,7 @@ describe("StoredWinePage 转存（延期）（FS-025）", () => {
     window.history.replaceState({}, "", "/admin/bar/stored-wine");
   });
 
-  it("转存分组：发码 scene=renew，提交 → POST …/renewals 含 verification_code（蛇形键）", async () => {
+  it("转存分组：发码 scene=renew，提交 → POST …/renewals 含 verification_code（蛇形键），不含 operator_note", async () => {
     vi.spyOn(window, "confirm").mockReturnValue(true);
     const api = makeApi();
     renderPage(api);
@@ -72,9 +72,11 @@ describe("StoredWinePage 转存（延期）（FS-025）", () => {
       "/api/v1/inventory/saved-bottles/w-1/renewals",
       expect.objectContaining({ verification_code: "000000", idempotency_key: expect.any(String) }),
     ));
+    // 第十八批 AF 段 198-R5：服务端不读 operator_note，请求体不再带（本页备注框只随补救登记提交）。
+    expect(vi.mocked(api.post).mock.calls.find(([path]) => path === "/api/v1/inventory/saved-bottles/w-1/renewals")![1]).not.toHaveProperty("operator_note");
   });
 
-  it("选中存酒后列出待复核转存，点「营销主管复核」→ POST …/renewals/rnw_1/review", async () => {
+  it("选中存酒后列出待复核转存，点「营销主管复核」→ POST …/renewals/rnw_1/review，不含 operator_note", async () => {
     vi.spyOn(window, "confirm").mockReturnValue(true);
     const api = makeApi();
     renderPage(api);
@@ -88,6 +90,8 @@ describe("StoredWinePage 转存（延期）（FS-025）", () => {
       "/api/v1/inventory/saved-bottles/renewals/rnw_1/review",
       expect.objectContaining({ idempotency_key: expect.any(String), decision: "approve" }),
     ));
+    // 第十八批 AF 段 198-R5：服务端不读 operator_note，请求体不再带（本页备注框只随补救登记提交）。
+    expect(vi.mocked(api.post).mock.calls.find(([path]) => path === "/api/v1/inventory/saved-bottles/renewals/rnw_1/review")![1]).not.toHaveProperty("operator_note");
   });
 
   it("营销主管驳回：填驳回原因后点「驳回代办转存」→ POST …/review decision=reject 带 reason；不填原因不发请求", async () => {

@@ -1,4 +1,4 @@
-<!-- 文件版本：V0.01 -->
+<!-- 文件版本：V0.02 -->
 <view class="page">
   <view wx:if="{{!loggedIn}}" id="login-required" class="card">
     <view>订台需要先登录</view>
@@ -48,7 +48,6 @@
       </picker>
       <view id="deposit-rules" class="hint">定金不抵扣消费、不计入最低消费累计；在该台位的消费达到该台位适用的最低消费后，定金原路退回；到店未达最低消费、爽约或超时取消的，定金按规则没收。超过最晚到店时间未到店的，台位自动释放、定金按爽约规则没收。</view>
       <view class="field row">人数<input id="guests" type="number" value="{{guests}}" bindinput="onGuests" /></view>
-      <view class="field"><input id="contact-phone" type="number" value="{{contactPhone}}" placeholder="联系手机号（可不填）" bindinput="onPhone" /></view>
       <button id="reserve-submit" type="primary" loading="{{submitting}}" disabled="{{submitting}}" bindtap="submit">提交订台（下一步付定金）</button>
     </view>
   </block>

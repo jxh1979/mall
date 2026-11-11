@@ -1,4 +1,4 @@
-// 文件版本：V0.06
+// 文件版本：V0.07
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
@@ -77,6 +77,29 @@ describe("StaffProfilesPage 员工档案销售岗维护（ADM-STF-004）", () =>
     fireEvent.click(screen.getByTestId("staff-profile-delete-request-sp-1"));
     await waitFor(() => expect(api.post).toHaveBeenCalledWith("/api/v1/staff/profiles/sp-1/delete-request", { reason: "申请清理" }));
     expect(screen.queryByTestId("staff-profile-delete-approve-sp-1")).toBeNull();
+  });
+
+  // 198-R5：取消存档入口不收请求体，事由框照留（存档、申请删除读取），恢复时不再带事由。
+  it("恢复档案不带事由（198-R5）", async () => {
+    const api = makeApi();
+    vi.mocked(api.get).mockResolvedValue([{ ...PROFILES[0], archivedAt: "2026-09-08T00:00:00Z", deleteStatus: "none" }]);
+    renderPage(api);
+    await waitFor(() => expect(screen.getByTestId("staff-profile-unarchive-sp-1")).toBeTruthy());
+    fireEvent.change(screen.getByTestId("staff-profiles-reason"), { target: { value: "误存档" } });
+    fireEvent.click(screen.getByTestId("staff-profile-unarchive-sp-1"));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith("/api/v1/staff/profiles/sp-1/unarchive", {}));
+  });
+
+  // 198-R5：审批删除只读 decision；删除理由在申请删除时已读取落行。
+  it("最高权限批准删除只发 decision，不带事由（198-R5）", async () => {
+    const api = makeApi();
+    vi.mocked(api.get).mockResolvedValue([{ ...PROFILES[0], archivedAt: "2026-09-08T00:00:00Z", deleteStatus: "pending" }]);
+    render(<StaffProfilesPage api={api} user={{ id: "usr_master_authority", username: "master-authority", accountType: "platform_admin" }}
+      setActionResult={vi.fn()} setGlobalError={vi.fn()} effectivePermissions={ADMIN_PERMS} />);
+    await waitFor(() => expect(screen.getByTestId("staff-profile-delete-approve-sp-1")).toBeTruthy());
+    fireEvent.change(screen.getByTestId("staff-profiles-reason"), { target: { value: "清理离职档案" } });
+    fireEvent.click(screen.getByTestId("staff-profile-delete-approve-sp-1"));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith("/api/v1/staff/profiles/sp-1/delete-approve", { decision: "approved" }));
   });
 
   it("列出员工并显示销售岗是/否", async () => {

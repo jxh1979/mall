@@ -1,4 +1,4 @@
-// 文件版本：V0.06
+// 文件版本：V0.07
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { HighRiskConfirm } from "../components/HighRiskConfirm";
@@ -72,7 +72,7 @@ export function FinanceRefundPanel({ api, user, effectivePermissions, setActionR
       const body: Record<string, unknown> = { operatorNote: note.trim(), evidenceAttachmentIds: evidence.map((item) => item.id), deviceId: deviceId.trim() || undefined };
       let updated: FinanceRefundRow;
       if (action === "create") {
-        updated = await api.post<FinanceRefundRow>("/api/v1/finance/refunds", { operatorNote: reason.trim(), deviceId: deviceId.trim() || undefined, targetId: paymentId, refundAmountCent: Math.round(Number(amount) * 100), reason: reason.trim(), refundDirection: "original" });
+        updated = await api.post<FinanceRefundRow>("/api/v1/finance/refunds", { deviceId: deviceId.trim() || undefined, targetId: paymentId, refundAmountCent: Math.round(Number(amount) * 100), reason: reason.trim(), refundDirection: "original" });
         setAmount(""); setReason(""); setPaymentId("");
       } else {
         if (!selected) return;

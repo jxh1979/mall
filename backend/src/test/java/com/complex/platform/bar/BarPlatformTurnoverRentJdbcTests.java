@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import static com.complex.platform.support.DailyCloseFixture.markRangeFinal;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -342,7 +342,6 @@ class BarPlatformTurnoverRentJdbcTests {
         settle.put("payment_id", "bpt-pay-real-" + s);
         settle.put("payment_channel", "cash");
         settle.put("settlement_amount_cent", 10_000);
-        settle.put("operator_note", "现金结账");
         mockMvc.perform(post("/api/v1/bar/bills/" + billId + "/settle").with(cashier).contentType(MediaType.APPLICATION_JSON)
                 .content(json.writeValueAsString(settle))).andExpect(status().isOk());
         jdbc.update("UPDATE bar_bill_settlements SET settled_at = ? WHERE bill_id = ?", Timestamp.from(JULY), billId);

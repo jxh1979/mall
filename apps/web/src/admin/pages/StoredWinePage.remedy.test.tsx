@@ -1,4 +1,4 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 // FS-017（BSM L1072）：作废后对客补存/赔付——选中已作废行出现补存/赔付面板，选「赔付」填 120 元 → POST …/remedy 蛇形键 amount_cent=12000。
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -56,7 +56,8 @@ describe("StoredWinePage 补存/赔付（FS-017）", () => {
     fireEvent.click(screen.getByTestId("stored-wine-remedy-submit"));
     await waitFor(() => expect(api.post).toHaveBeenCalledWith(
       "/api/v1/inventory/saved-bottles/c-1/remedy",
-      expect.objectContaining({ remedy_type: "compensation", amount_cent: 12000 }),
+      // 第十八批 AF 段 198-R5：补救登记服务端读 operator_note，本页备注框照发。
+      expect.objectContaining({ remedy_type: "compensation", amount_cent: 12000, operator_note: expect.any(String) }),
     ));
   });
 

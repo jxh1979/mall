@@ -1,6 +1,6 @@
 package com.complex.terminal
 
-// 文件版本：V0.18
+// 文件版本：V0.19
 
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
@@ -255,8 +255,6 @@ data class DeviceReturnRequest(
   @SerialName("has_pending_tasks")
   val hasPendingTasks: Boolean = false,
   val reason: String? = null,
-  val operatorNote: String? = null,
-  val evidenceAttachmentIds: List<String> = emptyList(),
 )
 
 enum class ReturnStatus {
@@ -330,16 +328,14 @@ data class AmusementMaintenanceRecord(
 // ---------------------------------------------------------------------------
 // 酒吧 一体机/平板 点酒 POST /api/v1/bar/orders
 // ---------------------------------------------------------------------------
+// 第十八批 AF 段第 198 条 198-R5：服务端不读的请求键不再发（契约同删），模型去掉对应分量。
 @Serializable
 data class BarOrderRequest(
   val idempotencyKey: String,
-  val operatorNote: String? = null,
-  val evidenceAttachmentIds: List<String> = emptyList(),
   val barId: String? = null,
   val tableId: String? = null,
   val reservationId: String? = null,
   val items: List<Map<String, String>> = emptyList(),
-  val serviceUserIds: List<String> = emptyList(),
   val paymentMode: String? = null,
 )
 
@@ -390,11 +386,10 @@ data class PaymentIntentRecord(
 
 // 酒吧账单结算 POST /api/v1/bar/bills/{bill_id}/settle
 // 第十八批 Q 段第 153 条 153-R2：收款人由服务端按登录会话定（BSM:940），不发 cashier_staff_id。
+// 第十八批 AF 段第 198 条 198-R5：服务端不读的请求键不再发（契约同删），模型去掉对应分量。
 @Serializable
 data class BarBillSettleRequest(
   val idempotencyKey: String,
-  val operatorNote: String? = null,
-  val evidenceAttachmentIds: List<String> = emptyList(),
   val paymentId: String? = null,
   val settlementAmountCent: Long? = null,
   val paymentChannel: String? = null,
@@ -428,7 +423,6 @@ val BarBillRecord.remainingDueCent: Long get() = payableAmountCent + tipAmountCe
 @Serializable
 data class StaffDeviceBindRequest(
   val idempotencyKey: String,
-  val operatorNote: String? = null,
   val staffProfileId: String? = null,
   val devicePublicKey: String? = null,
   val deviceFingerprintHash: String? = null,
@@ -438,14 +432,12 @@ data class StaffDeviceBindRequest(
 @Serializable
 data class StaffDeviceRebindDecisionRequest(
   val idempotencyKey: String,
-  val operatorNote: String? = null,
 )
 
 // 设备完整性上报 POST .../device-credentials/{id}/report-integrity
 @Serializable
 data class StaffDeviceIntegrityReportRequest(
   val idempotencyKey: String,
-  val operatorNote: String? = null,
   val integrityStatus: String? = null,
 )
 
@@ -497,7 +489,6 @@ data class StaffRegistrationSubmitRequest(
   val idempotencyKey: String,
   val projectId: String,
   val name: String,
-  val operatorNote: String? = null,
   val merchantId: String? = null,
   val phone: String? = null,
   val idDoc: String? = null,
@@ -1008,7 +999,7 @@ data class AttendanceReceiptReview(val id: String, val eventId: String, val revi
 
 @Serializable
 data class WorkPhoneSwapRequest(val idempotencyKey: String, val oldDeviceCode: String, val replacementDeviceId: String,
-  val reason: String, val evidenceAttachmentIds: List<String> = emptyList())
+  val reason: String)
 
 @Serializable
 data class AttendancePunchRequest(

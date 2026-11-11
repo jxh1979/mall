@@ -1,4 +1,4 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
@@ -199,6 +199,8 @@ export function MediaPerformanceShowPage({ api, setActionResult, setGlobalError,
     setFormError(null);
     const payload = body();
     if (typeof payload === "string") { setFormError(payload); return; }
+    // 第十八批 AF 段 198-R5：新建版本时项目、场次类型、传媒公司商户沿用原版本（服务端按原版本重组），不再发送。
+    if (mode === "version") { delete payload.projectId; delete payload.showKind; delete payload.mediaMerchantId; }
     const path = mode === "create" ? BASE : mode === "edit" ? `${BASE}/${selected!.id}` : `${BASE}/${selected!.id}/versions`;
     setBusy("save");
     try {

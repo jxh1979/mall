@@ -1,4 +1,4 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -78,7 +78,7 @@ describe("MediaPerformanceShowPage 演出合同与履约结算(ADM-STL-004)", ()
     })));
   });
 
-  it("锁定后字段只读：无「锁定」按钮、输入禁用；改动走「新建合同版本」提交到 /versions", async () => {
+  it("锁定后字段只读：无「锁定」按钮、输入禁用；改动走「新建合同版本」提交到 /versions，不带沿用原版本的项目、场次类型、传媒商户", async () => {
     const get = vi.fn().mockImplementation((path: string) =>
       Promise.resolve(path === BASE ? [LOCKED] : { show: LOCKED, fulfillment: null, settlements: [] }));
     const post = vi.fn().mockResolvedValue({ ...LOCKED, id: "ms_2", contractVersion: 2, status: "draft" });
@@ -97,6 +97,11 @@ describe("MediaPerformanceShowPage 演出合同与履约结算(ADM-STL-004)", ()
     fireEvent.change(screen.getByTestId("mps-fixed-fee"), { target: { value: "990" } });
     fireEvent.click(screen.getByTestId("mps-version-submit"));
     await waitFor(() => expect(post).toHaveBeenCalledWith(`${BASE}/ms_1/versions`, expect.objectContaining({ fixedFeeCent: 99000 })));
+    // 第十八批 AF 段 198-R5：新建版本时项目、场次类型、传媒公司商户沿用原版本，服务端不读请求体这三项，网页不再发。
+    const versionBody = post.mock.calls.find((call) => call[0] === `${BASE}/ms_1/versions`)?.[1];
+    expect(versionBody).not.toHaveProperty("projectId");
+    expect(versionBody).not.toHaveProperty("showKind");
+    expect(versionBody).not.toHaveProperty("mediaMerchantId");
   });
 
   it("BSM:1839 卡片明细对账：场次列表在现行版本行上标「结算待处理 n 项」，被取代的版本行不标", async () => {

@@ -1,6 +1,8 @@
-# P2-A 平面图 SVG/标准 JSON 导入接口契约 V0.2
+# P2-A 平面图 SVG/标准 JSON 导入接口契约 V0.21
 
 > 2026-09-20 160 全量审计 M019（B3-r1，V0.1→V0.2）：发布前置改为 `parsed`/`published` 可继续发布剩余待处理候选（M019-004）；示例 id 改为派生形态并加说明（M019-005）；`source_format` 必填无默认、解析闭合 `<polyline>`、非八种整单拒绝（M019-006）；§6 验证口径以 verify:predeploy 为准（M019-007）；§3.4 补高危二次确认句（M019-008）。
+
+> 2026-11-11 第十八批 AF 段第 198 条 198-R5（V0.2→V0.21）：§3.4 发布导入候选请求示例删 `operator_note`（服务端不读，正式 OpenAPI 已删，后端 DTO 分量保留）。
 
 ## 1. 定位
 
@@ -143,7 +145,6 @@
 ```json
 {
   "idempotency_key": "floor-import-publish-001",
-  "operator_note": "publish reviewed candidates",
   "candidate_ids": ["fpic_1"]
 }
 ```

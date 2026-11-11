@@ -1,4 +1,4 @@
-# P0 API Contract Pack V0.1
+# P0 API Contract Pack V0.11
 
 > **口径修订（2026-08-06 R10）：「人工放行」已废止**——ENUM「核销记录状态」条 明确「**系统不提供人工放行：核销要么成功、要么拒绝或失败，任何岗位、任何权限都不能以人工方式让一笔不满足规则的核销通过**」（DEC-CFG-2026-08-03-12 / DEC-R6-08）。本文原有的「人工放行」取值、端点、按钮、指标、权限点与复核类型**一律废止**，废止处就地标注「原含『人工放行』，已废止·见文首口径」；已实现的端点、权限点与状态取值待代码轮下线，期间不得新增调用、不得新写入。**注意**：合同或基础定义违规被卡住后「由更高级审核放行」的准入场景仍然存在，那是准入阻断的升级放行，与核销域无关，不得回读为「可以人工放行一笔核销」。
 
@@ -518,8 +518,8 @@ P0 不要求在尚未进入编码的 operation 上一次性补满全部业务样
 | 第三方 Webhook | `Webhook`、`WebhookAccepted` | 供应商回调具备事件号、幂等键、原始摘要、平台接收回执样例 |
 | 客人购票 | `CustomerTicketOrderRequest` | App/小程序/Web 用于客人自助购票；售票型一体机通过票务侧 staff-token 路径由授权服务人员辅助到店购票 |
 | 核销类动作 | `Verification` | 票务核销、卡座入场、年龄核验、库存追踪扫码复用统一核销请求信封 |
-| 客人订台 | `CustomerBarReservationRequest` | 订台资源、人数、定金和联系方式进入同一请求形态 |
-| 酒吧点单 | `BarOrderRequest` | 卡座、商品、销售归属、服务责任和支付模式可生成 DTO/mock |
+| 客人订台 | `CustomerBarReservationRequest` | 订台资源、人数和定金进入同一请求形态 |
+| 酒吧点单 | `BarOrderRequest` | 卡座、商品和销售归属可生成 DTO/mock |
 | 支付意图 | `PaymentIntent` | 聚合支付优先、保留直连接口抽象，金额统一按分 |
 | 游乐安全提交 | `AmusementSafetyActionRequest` | 开放前安全巡检、整改、复检和恢复审批的动作提交可测试 |
 | 供应商 mock | `ProviderAdapterTestRequest` | 供应商未定时仍可验证鉴权、Webhook、轮询、对账、字段映射和失败重试 |
@@ -543,3 +543,4 @@ P0 不要求在尚未进入编码的 operation 上一次性补满全部业务样
 | 2026-06-13 | V0.1 OpenAPI 权限/事件/任务追溯收口 | 新增 `p0-openapi-contract-closure-appendix-v0.1.md` 和 `verify:openapi-closure`；接口级权限、事件、任务簇、终端和样例准入以 OpenAPI 反向生成附录收口 |
 | 2026-06-13 | V0.1 生产前置台账接口收口 | 新增 `ops` 接口组，补齐生产前置责任状态查询、更新和准入检查三个 operation |
 | 2026-10-07 | V0.1 重复提交已完成标记 | 5.1 成功响应补记可选布尔字段 `replayed`：重复提交返回第一次处理结果时为 `true`，第一次执行、失败和查看类请求的响应不带；OpenAPI `SuccessResponse` 同步登记（M725-F03） |
+| 2026-11-11 | V0.11 请求示例对齐 | §13.1「客人订台」「酒吧点单」两行按现行 OpenAPI 示例改写：`CustomerBarReservationRequest` 已删 `contact_phone`，`BarOrderRequest` 已删 `service_user_ids`、`payment_mode`（第十八批 AF 段第 198 条 198-R5，服务端不读，契约只删、后端 DTO 分量保留） |

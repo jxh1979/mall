@@ -14,9 +14,7 @@
       "event_type": "payment.paid",
       "provider_order_id": "mock-order-1001",
       "status": "paid"
-    },
-    "operator_note": "T3-B mock contract test; no production vendor control",
-    "evidence_attachment_ids": []
+    }
   },
   "production_policy": "NO_PRODUCTION_VENDOR_CONTROL"
 }

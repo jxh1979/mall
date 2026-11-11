@@ -183,3 +183,38 @@ describe("AmusementSafetyPage 定期检修主管确认", () => {
     expect(Object.keys(JSON.parse(String((init as RequestInit).body)))).toEqual(["idempotency_key"]);
   });
 });
+
+// 第十八批 AF 段 198-R5：提交、整改、复检三个入口都不读请求里的 operator_note，契约删字段、网页停发（整改说明仍以 comment 发出并被读取）。
+describe("AmusementSafetyPage 巡检动作停发操作备注", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    window.history.replaceState({}, "", "/admin/amusement/safety");
+  });
+
+  it.each([
+    ["提交巡检", "amusement-safety-submit", "submit"],
+    ["整改", "amusement-safety-rectify", "rectify"],
+    ["复检", "amusement-safety-recheck", "recheck"],
+  ])("%s请求体不含 operator_note", async (_label, testId, action) => {
+    const fetchMock = vi.fn().mockImplementation((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("/amusement/safety-inspections")) return Promise.resolve(envelope(ROWS));
+      return Promise.resolve(envelope([]));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    render(<AmusementSafetyPage api={new AdminApi("test-token")} user={{ id: "u1", username: "admin", accountType: "platform_admin" }}
+      setActionResult={vi.fn()} setGlobalError={vi.fn()} effectivePermissions={ADMIN_PERMS} />);
+    await waitFor(() => expect(screen.getByTestId("amusement-safety-row-i-1")).toBeTruthy());
+    await waitFor(() => expect((screen.getByTestId(testId) as HTMLButtonElement).disabled).toBe(false));
+
+    fireEvent.click(screen.getByTestId(testId));
+
+    const isPost = (init: unknown) => (init as RequestInit | undefined)?.method === "POST";
+    await waitFor(() => expect(fetchMock.mock.calls.some(([, init]) => isPost(init))).toBe(true));
+    const [url, init] = fetchMock.mock.calls.find(([, i]) => isPost(i))!;
+    expect(String(url)).toContain(`/api/v1/amusement/safety-inspections/i-1/${action}`);
+    const body = JSON.parse(String((init as RequestInit).body)) as Record<string, unknown>;
+    expect(body).not.toHaveProperty("operator_note");
+    expect(body).toHaveProperty("comment");
+  });
+});

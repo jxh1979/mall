@@ -1,4 +1,4 @@
-# P1 酒吧账单调整 API 契约 V0.11
+# P1 酒吧账单调整 API 契约 V0.12
 
 ## 1. 文档定位
 
@@ -36,8 +36,6 @@
 | `adjustmentType` | 是 | 支持 `service_fee`、`min_spend_top_up`、`on_account` |
 | `amountCent` | 是 | 金额，单位分；服务费和低消补差必须大于 0，挂账必须为 0 |
 | `reason` | 是 | 调整原因，用于运营复盘和审计 |
-| `requestedByUserId` | 是 | 操作人或发起人用户 ID |
-| `operatorNote` | 否 | 操作备注，当前切片保留字段 |
 | `evidenceAttachmentIds` | 否 | 凭证、截图、审批附件 ID 列表 |
 
 ## 5. 响应字段

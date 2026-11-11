@@ -1,6 +1,6 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.07
+// 文件版本：V0.08
 
 import static org.assertj.core.api.Assertions.*;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -527,7 +527,7 @@ class PurchaseInboundPayableJdbcIntegrationTests {
   assertThat(number("SELECT count(*) FROM inventory_purchase_requests")).isEqualTo(requests);
   assertThat(auditCount("inventory.purchase_suggestion.viewed")).isEqualTo(viewed+1);
   // 采购人员按建议人工改数后用现有建单入口提交（前端蛇形请求体），待批不计在途；批准后计在途，系统不下单。
-  String body="{\"idempotency_key\":\""+key()+"\",\"operator_note\":\"按建议人工调整为 30\",\"supplier_id\":\""+supplier+"\",\"supply_contract_id\":\""+contract
+  String body="{\"idempotency_key\":\""+key()+"\",\"supplier_id\":\""+supplier+"\",\"supply_contract_id\":\""+contract
    +"\",\"items\":[{\"item_id\":\""+item+"\",\"quantity\":30}],\"expected_arrival_date\":\""+today().plusDays(3)+"\"}";
   String created=com.jayway.jsonpath.JsonPath.read(postJson("/api/v1/inventory/purchase-requests",body).andExpect(status().isOk())
    .andExpect(jsonPath("$.data.status").value("created")).andReturn().getResponse().getContentAsString(java.nio.charset.StandardCharsets.UTF_8),"$.data.id");

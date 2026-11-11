@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -196,7 +196,7 @@ class BarSalesAttributionJdbcTests {
         shift("t", spaceOf(target));
         Long version = jdbc.queryForObject("SELECT session_version FROM bar_table_sessions WHERE id=?", Long.class, session);
         String body = "{\"idempotency_key\":\"bsa-t-" + suffix + "\",\"target_table_id\":\"" + target + "\",\"target_service_staff_id\":\""
-                + user("t") + "\",\"reason\":\"客人换到靠窗散台\",\"requested_by_user_id\":\"admin-web\",\"session_version\":" + version + "}";
+                + user("t") + "\",\"reason\":\"客人换到靠窗散台\",\"session_version\":" + version + "}";
         mockMvc.perform(post("/api/v1/bar/table-sessions/" + session + "/transfer").with(clerkB).contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isOk());

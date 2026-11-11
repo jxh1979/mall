@@ -14,7 +14,7 @@ import type { AdminPageProps } from "../types";
 import { cnDate } from "../components/RowDetailDrawer";
 import { withBase } from "../../basePath";
 
-// 文件版本：V0.05
+// 文件版本：V0.06
 
 // M087-A-02（PGM-1.7.1「发起单据时只需指定该事项的最终审批人，系统按组织层级自动补全……逐级审批」「任一节点驳回则整单退回起草人」
 // 「主线与各条平行线全部通过……才生效」）：审批链与节点裁决页——查看某复核单的主线/平行线节点，逐节点通过、驳回或转交；
@@ -256,14 +256,13 @@ export function ApprovalChainPage({ api, setActionResult, setGlobalError, effect
       idempotencyKey: nextKey(`chain-${decision}`),
       operatorNote: comment.trim(),
       evidenceAttachmentIds: selectedReview?.evidenceAttachmentIds ?? [],
-      reviewerLevel: null,
       decision,
       comment: comment.trim(),
     };
     await runAction(decision === "approved" ? "chain_node_approved" : "chain_node_rejected", request, () =>
       api.post(`/api/v1/platform/supervisor-review/${encodeURIComponent(reviewId)}/approve`, {
         idempotencyKey: request.idempotencyKey, operatorNote: request.operatorNote, evidenceAttachmentIds: request.evidenceAttachmentIds,
-        reviewerLevel: request.reviewerLevel, decision: request.decision, comment: request.comment,
+        decision: request.decision, comment: request.comment,
       }));
   }
 
@@ -272,9 +271,9 @@ export function ApprovalChainPage({ api, setActionResult, setGlobalError, effect
       setFormError("请先选择单据并填写转交账号");
       return;
     }
-    const request = { reviewId, idempotencyKey: nextKey("chain-forward"), operatorNote: "审批链转交", forwardedTo: forwardTarget.trim(), comment: comment.trim() };
+    const request = { reviewId, idempotencyKey: nextKey("chain-forward"), forwardedTo: forwardTarget.trim(), comment: comment.trim() };
     await runAction("chain_node_forwarded", request, () => api.post(`/api/v1/platform/supervisor-review/${encodeURIComponent(reviewId)}/forward`, {
-      idempotencyKey: request.idempotencyKey, operatorNote: request.operatorNote, forwardedTo: request.forwardedTo, comment: request.comment,
+      idempotencyKey: request.idempotencyKey, forwardedTo: request.forwardedTo, comment: request.comment,
     }));
   }
 

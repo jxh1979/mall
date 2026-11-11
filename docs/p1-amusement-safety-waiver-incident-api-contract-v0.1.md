@@ -1,4 +1,4 @@
-# P1 游乐安全告知、电子免责与事故工单 API 契约 V0.11
+# P1 游乐安全告知、电子免责与事故工单 API 契约 V0.12
 
 文档类型：Implementation / API Contract
 
@@ -45,7 +45,6 @@
 | 字段 | 必填 | 类型 | 规则 |
 |---|---|---|---|
 | `idempotency_key` | 是 | string | 同一创建请求幂等 |
-| `operator_note` | 否 | string | 审计说明 |
 | `evidence_attachment_ids` | 否 | string[] | 附件/法务材料引用 |
 | `project_id` | 是 | string | 所属综合体/项目 |
 | `amusement_project_id` | 否 | string | 游乐项目 ID |
@@ -63,7 +62,6 @@
 | 字段 | 必填 | 类型 | 规则 |
 |---|---|---|---|
 | `idempotency_key` | 是 | string | 同一确认请求幂等 |
-| `operator_note` | 否 | string | 审计说明 |
 | `evidence_attachment_ids` | 否 | string[] | 签名、照片、录屏等证据引用 |
 | `project_id` | 是 | string | 所属项目 |
 | `amusement_project_id` | 否 | string | 游乐项目 |

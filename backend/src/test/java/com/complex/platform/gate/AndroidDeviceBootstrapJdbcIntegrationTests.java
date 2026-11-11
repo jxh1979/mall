@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 package com.complex.platform.gate;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -210,7 +210,6 @@ class AndroidDeviceBootstrapJdbcIntegrationTests {
         String token = login(employee, null);
         Map<String, Object> request = new LinkedHashMap<>();
         request.put("idempotency_key", "b33ab-cred-" + suffix);
-        request.put("operator_note", "Android terminal device credential bind");
         request.put("staff_profile_id", employeeProfile);
         request.put("device_public_key", Base64.getEncoder().encodeToString(phoneKeys.getPublic().getEncoded()));
         request.put("device_fingerprint_hash", "fp_new");

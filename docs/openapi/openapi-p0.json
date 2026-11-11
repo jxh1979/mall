@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "综合体管理系统 P0 API 契约",
-    "version": "V0.63",
+    "version": "V0.64",
     "description": "P0 首批编码前置契约。本文采用 JSON-compatible YAML，便于与 openapi-p0.json 保持一致。正式后端以 Java 21 + Spring Boot 4.x + springdoc-openapi 输出运行时 OpenAPI，并与本契约比对。"
   },
   "servers": [
@@ -4040,9 +4040,6 @@
                 "properties": {
                   "idempotency_key": {
                     "type": "string"
-                  },
-                  "operator_note": {
-                    "type": "string"
                   }
                 }
               }
@@ -4129,9 +4126,6 @@
                 "type": "object",
                 "properties": {
                   "idempotency_key": {
-                    "type": "string"
-                  },
-                  "operator_note": {
                     "type": "string"
                   }
                 }
@@ -6241,11 +6235,6 @@
                     "description": "操作幂等键；重复提交必须返回同一处理结果，避免重复写入。",
                     "maxLength": 128
                   },
-                  "operator_note": {
-                    "type": "string",
-                    "description": "操作留痕备注；进入审计。",
-                    "maxLength": 1000
-                  },
                   "evidence_attachment_ids": {
                     "type": "array",
                     "description": "渠道对账单原件附件 ID 列表（先经 /api/v1/evidence/attachments/upload 上传）；须真实存在，随差异落库；不带原件照收为待补凭证。",
@@ -7478,11 +7467,6 @@
                     "description": "操作幂等键；重复提交必须返回同一处理结果，避免重复写入。",
                     "maxLength": 128
                   },
-                  "operator_note": {
-                    "type": "string",
-                    "description": "操作留痕备注。",
-                    "maxLength": 1000
-                  },
                   "shape_id": {
                     "type": "string",
                     "description": "图形 ID。",
@@ -7611,11 +7595,6 @@
                     "type": "string",
                     "description": "操作幂等键；重复提交必须返回同一处理结果，避免重复写入。",
                     "maxLength": 128
-                  },
-                  "operator_note": {
-                    "type": "string",
-                    "description": "操作留痕备注；进入审计。",
-                    "maxLength": 1000
                   },
                   "evidence_attachment_ids": {
                     "type": "array",
@@ -7840,19 +7819,6 @@
                     "type": "string",
                     "description": "操作幂等键；重复提交必须返回同一处理结果，避免重复写入。",
                     "maxLength": 128
-                  },
-                  "operator_note": {
-                    "type": "string",
-                    "description": "操作留痕备注；进入审计。",
-                    "maxLength": 1000
-                  },
-                  "evidence_attachment_ids": {
-                    "type": "array",
-                    "description": "证据附件 ID 列表；进入审计留痕。",
-                    "items": {
-                      "type": "string",
-                      "maxLength": 64
-                    }
                   },
                   "provider_code": {
                     "type": "string",
@@ -8418,11 +8384,6 @@
                     "type": "string",
                     "description": "操作幂等键；重复提交必须返回同一处理结果，避免重复写入。",
                     "maxLength": 128
-                  },
-                  "operator_note": {
-                    "type": "string",
-                    "description": "操作留痕备注；进入审计。",
-                    "maxLength": 1000
                   },
                   "evidence_attachment_ids": {
                     "type": "array",
@@ -10051,11 +10012,6 @@
                     "description": "作废原因",
                     "maxLength": 255
                   },
-                  "operator_note": {
-                    "type": "string",
-                    "description": "操作备注",
-                    "maxLength": 255
-                  },
                   "photo_attachment_ids": {
                     "type": "array",
                     "description": "照片证据 id 列表(高价值作废必填且非空)",
@@ -10067,14 +10023,6 @@
                   "video_attachment_ids": {
                     "type": "array",
                     "description": "视频证据 id 列表(高价值作废必填且非空)",
-                    "items": {
-                      "type": "string",
-                      "maxLength": 64
-                    }
-                  },
-                  "evidence_attachment_ids": {
-                    "type": "array",
-                    "description": "综合证据附件 id 列表(兼容字段;不再单独作为放行判据)",
                     "items": {
                       "type": "string",
                       "maxLength": 64
@@ -10880,11 +10828,6 @@
                       "type": "string"
                     },
                     "description": "借用单借出方交货扫到的随货溯源码（须扫齐）。"
-                  },
-                  "operator_note": {
-                    "type": "string",
-                    "maxLength": 500,
-                    "description": "操作备注。"
                   }
                 }
               }
@@ -11079,13 +11022,6 @@
                     "type": "string",
                     "maxLength": 128,
                     "description": "幂等键（X-Idempotency-Key 请求体镜像）。"
-                  },
-                  "scanned_trace_codes": {
-                    "type": "array",
-                    "items": {
-                      "type": "string"
-                    },
-                    "description": "随货溯源码清单（高价值必扫核对，防调包）。"
                   },
                   "operator_note": {
                     "type": "string",
@@ -19948,11 +19884,6 @@
                     "description": "操作幂等键；重复提交必须返回同一处理结果，避免重复写入。",
                     "maxLength": 128
                   },
-                  "operator_note": {
-                    "type": "string",
-                    "description": "操作留痕备注。",
-                    "maxLength": 1000
-                  },
                   "merchant_id": {
                     "type": "string",
                     "description": "商户 ID。",
@@ -26513,19 +26444,6 @@
                     "description": "操作幂等键；重复提交必须返回同一处理结果，避免重复写入。",
                     "maxLength": 128
                   },
-                  "operator_note": {
-                    "type": "string",
-                    "description": "操作留痕备注；进入审计。",
-                    "maxLength": 1000
-                  },
-                  "evidence_attachment_ids": {
-                    "type": "array",
-                    "description": "证据附件 ID 列表；进入审计留痕。",
-                    "items": {
-                      "type": "string",
-                      "maxLength": 64
-                    }
-                  },
                   "source_domain": {
                     "type": "string",
                     "description": "来源业务域。",
@@ -26752,24 +26670,6 @@
                     "description": "操作幂等键；重复提交必须返回同一处理结果，避免重复写入。",
                     "maxLength": 128
                   },
-                  "operator_note": {
-                    "type": "string",
-                    "description": "操作留痕备注；进入审计。",
-                    "maxLength": 1000
-                  },
-                  "evidence_attachment_ids": {
-                    "type": "array",
-                    "description": "证据附件 ID 列表；进入审计留痕。",
-                    "items": {
-                      "type": "string",
-                      "maxLength": 64
-                    }
-                  },
-                  "target_handler_id": {
-                    "type": "string",
-                    "description": "目标处理人用户 ID（transfer/escalate 必填）。",
-                    "maxLength": 64
-                  },
                   "reason": {
                     "type": "string",
                     "description": "操作原因。",
@@ -26844,19 +26744,6 @@
                     "type": "string",
                     "description": "操作幂等键；重复提交必须返回同一处理结果，避免重复写入。",
                     "maxLength": 128
-                  },
-                  "operator_note": {
-                    "type": "string",
-                    "description": "操作留痕备注；进入审计。",
-                    "maxLength": 1000
-                  },
-                  "evidence_attachment_ids": {
-                    "type": "array",
-                    "description": "证据附件 ID 列表；进入审计留痕。",
-                    "items": {
-                      "type": "string",
-                      "maxLength": 64
-                    }
                   },
                   "target_handler_id": {
                     "type": "string",
@@ -26938,19 +26825,6 @@
                     "description": "操作幂等键；重复提交必须返回同一处理结果，避免重复写入。",
                     "maxLength": 128
                   },
-                  "operator_note": {
-                    "type": "string",
-                    "description": "操作留痕备注；进入审计。",
-                    "maxLength": 1000
-                  },
-                  "evidence_attachment_ids": {
-                    "type": "array",
-                    "description": "证据附件 ID 列表；进入审计留痕。",
-                    "items": {
-                      "type": "string",
-                      "maxLength": 64
-                    }
-                  },
                   "target_handler_id": {
                     "type": "string",
                     "description": "目标处理人用户 ID（transfer/escalate 必填）。",
@@ -27031,27 +26905,9 @@
                     "description": "操作幂等键；重复提交必须返回同一处理结果，避免重复写入。",
                     "maxLength": 128
                   },
-                  "operator_note": {
-                    "type": "string",
-                    "description": "操作留痕备注；进入审计。",
-                    "maxLength": 1000
-                  },
-                  "evidence_attachment_ids": {
-                    "type": "array",
-                    "description": "证据附件 ID 列表；进入审计留痕。",
-                    "items": {
-                      "type": "string",
-                      "maxLength": 64
-                    }
-                  },
                   "resolution_conclusion": {
                     "type": "string",
                     "description": "处置结论。",
-                    "maxLength": 4000
-                  },
-                  "reason": {
-                    "type": "string",
-                    "description": "处置原因。",
                     "maxLength": 4000
                   }
                 }
@@ -27123,24 +26979,6 @@
                     "description": "操作幂等键；重复提交必须返回同一处理结果，避免重复写入。",
                     "maxLength": 128
                   },
-                  "operator_note": {
-                    "type": "string",
-                    "description": "操作留痕备注；进入审计。",
-                    "maxLength": 1000
-                  },
-                  "evidence_attachment_ids": {
-                    "type": "array",
-                    "description": "证据附件 ID 列表；进入审计留痕。",
-                    "items": {
-                      "type": "string",
-                      "maxLength": 64
-                    }
-                  },
-                  "target_handler_id": {
-                    "type": "string",
-                    "description": "目标处理人用户 ID（transfer/escalate 必填）。",
-                    "maxLength": 64
-                  },
                   "reason": {
                     "type": "string",
                     "description": "操作原因。",
@@ -27204,19 +27042,6 @@
                     "type": "string",
                     "description": "操作幂等键；重复提交必须返回同一处理结果，避免重复写入。",
                     "maxLength": 128
-                  },
-                  "operator_note": {
-                    "type": "string",
-                    "description": "操作留痕备注；进入审计。",
-                    "maxLength": 1000
-                  },
-                  "evidence_attachment_ids": {
-                    "type": "array",
-                    "description": "证据附件 ID 列表；进入审计留痕。",
-                    "items": {
-                      "type": "string",
-                      "maxLength": 64
-                    }
                   },
                   "merchant_id": {
                     "type": "string",
@@ -27302,19 +27127,6 @@
                     "description": "操作幂等键；重复提交必须返回同一处理结果，避免重复写入。",
                     "maxLength": 128
                   },
-                  "operator_note": {
-                    "type": "string",
-                    "description": "操作留痕备注；进入审计。",
-                    "maxLength": 1000
-                  },
-                  "evidence_attachment_ids": {
-                    "type": "array",
-                    "description": "证据附件 ID 列表；进入审计留痕。",
-                    "items": {
-                      "type": "string",
-                      "maxLength": 64
-                    }
-                  },
                   "inventory_variance_id": {
                     "type": "string",
                     "description": "库存差异记录 ID。",
@@ -27385,19 +27197,6 @@
                     "type": "string",
                     "description": "操作幂等键；重复提交必须返回同一处理结果，避免重复写入。",
                     "maxLength": 128
-                  },
-                  "operator_note": {
-                    "type": "string",
-                    "description": "操作留痕备注；进入审计。",
-                    "maxLength": 1000
-                  },
-                  "evidence_attachment_ids": {
-                    "type": "array",
-                    "description": "证据附件 ID 列表；进入审计留痕。",
-                    "items": {
-                      "type": "string",
-                      "maxLength": 64
-                    }
                   },
                   "rule_id": {
                     "type": "string",
@@ -27629,19 +27428,6 @@
                     "description": "操作幂等键；重复提交必须返回同一处理结果，避免重复写入。",
                     "maxLength": 128
                   },
-                  "operator_note": {
-                    "type": "string",
-                    "description": "操作留痕备注；进入审计。",
-                    "maxLength": 1000
-                  },
-                  "evidence_attachment_ids": {
-                    "type": "array",
-                    "description": "证据附件 ID 列表；进入审计留痕。",
-                    "items": {
-                      "type": "string",
-                      "maxLength": 64
-                    }
-                  },
                   "provider_code": {
                     "type": "string",
                     "description": "渠道/供应商编码。",
@@ -27768,11 +27554,6 @@
                     "description": "操作幂等键；重复提交必须返回同一处理结果，避免重复写入。",
                     "maxLength": 128
                   },
-                  "operator_note": {
-                    "type": "string",
-                    "description": "操作留痕备注；进入审计。",
-                    "maxLength": 1000
-                  },
                   "evidence_attachment_ids": {
                     "type": "array",
                     "description": "证据附件 ID 列表；进入审计留痕。",
@@ -27897,11 +27678,6 @@
                     "type": "string",
                     "description": "操作幂等键；重复提交必须返回同一处理结果，避免重复写入。",
                     "maxLength": 128
-                  },
-                  "operator_note": {
-                    "type": "string",
-                    "description": "操作留痕备注；进入审计。",
-                    "maxLength": 1000
                   },
                   "evidence_attachment_ids": {
                     "type": "array",
@@ -28124,11 +27900,6 @@
                     "description": "操作幂等键；重复提交必须返回同一处理结果，避免重复写入。",
                     "maxLength": 128
                   },
-                  "operator_note": {
-                    "type": "string",
-                    "description": "操作留痕备注；进入审计。",
-                    "maxLength": 1000
-                  },
                   "evidence_attachment_ids": {
                     "type": "array",
                     "description": "证据附件 ID 列表；进入审计留痕。",
@@ -28219,11 +27990,6 @@
                     "type": "string",
                     "description": "操作幂等键；重复提交必须返回同一处理结果，避免重复写入。",
                     "maxLength": 128
-                  },
-                  "action": {
-                    "type": "string",
-                    "description": "执行动作。",
-                    "maxLength": 255
                   },
                   "reason": {
                     "type": "string",
@@ -28322,27 +28088,9 @@
                     "description": "操作幂等键；重复提交必须返回同一处理结果，避免重复写入。",
                     "maxLength": 128
                   },
-                  "operator_note": {
-                    "type": "string",
-                    "description": "操作留痕备注；进入审计。",
-                    "maxLength": 1000
-                  },
-                  "evidence_attachment_ids": {
-                    "type": "array",
-                    "description": "证据附件 ID 列表；进入审计留痕。",
-                    "items": {
-                      "type": "string",
-                      "maxLength": 64
-                    }
-                  },
                   "bar_id": {
                     "type": "string",
                     "description": "吧台 ID。",
-                    "maxLength": 64
-                  },
-                  "merchant_id": {
-                    "type": "string",
-                    "description": "商户 ID。",
                     "maxLength": 64
                   },
                   "table_id": {
@@ -28372,11 +28120,6 @@
                   "service_staff_id": {
                     "type": "string",
                     "description": "主责服务人。卡座与 VIP 包坐须为该卡座点位此刻已发布排班或真实顶班人员，否则 409 BAR_SERVICE_STAFF_NOT_SCHEDULED；不填时当班恰好一人即指派该人，多人或无人留空（BSM 第 1077 行）。散台、吧台位照旧取本字段。",
-                    "maxLength": 64
-                  },
-                  "opened_by_user_id": {
-                    "type": "string",
-                    "description": "开台操作人。",
                     "maxLength": 64
                   }
                 }
@@ -28447,11 +28190,6 @@
                     "description": "操作幂等键；重复提交必须返回同一处理结果，避免重复写入。",
                     "maxLength": 128
                   },
-                  "operator_note": {
-                    "type": "string",
-                    "description": "操作留痕备注；进入审计。",
-                    "maxLength": 1000
-                  },
                   "evidence_attachment_ids": {
                     "type": "array",
                     "description": "证据附件 ID 列表；进入审计留痕。",
@@ -28469,11 +28207,6 @@
                     "type": "string",
                     "description": "合并原因。",
                     "maxLength": 4000
-                  },
-                  "requested_by_user_id": {
-                    "type": "string",
-                    "description": "发起人。",
-                    "maxLength": 64
                   },
                   "primary_session_version": {
                     "type": "integer",
@@ -28554,11 +28287,6 @@
                     "type": "string",
                     "description": "操作幂等键；重复提交必须返回同一处理结果，避免重复写入。",
                     "maxLength": 128
-                  },
-                  "operator_note": {
-                    "type": "string",
-                    "description": "操作留痕备注；进入审计。",
-                    "maxLength": 1000
                   },
                   "evidence_attachment_ids": {
                     "type": "array",
@@ -28653,11 +28381,6 @@
                     "description": "拆台原因。",
                     "maxLength": 4000
                   },
-                  "requested_by_user_id": {
-                    "type": "string",
-                    "description": "发起人。",
-                    "maxLength": 64
-                  },
                   "primary_session_version": {
                     "type": "integer",
                     "description": "主会话版本号。"
@@ -28736,11 +28459,6 @@
                     "description": "操作幂等键；重复提交必须返回同一处理结果，避免重复写入。",
                     "maxLength": 128
                   },
-                  "operator_note": {
-                    "type": "string",
-                    "description": "操作留痕备注；进入审计。",
-                    "maxLength": 1000
-                  },
                   "evidence_attachment_ids": {
                     "type": "array",
                     "description": "证据附件 ID 列表；进入审计留痕。",
@@ -28758,11 +28476,6 @@
                     "type": "string",
                     "description": "转台原因。",
                     "maxLength": 4000
-                  },
-                  "requested_by_user_id": {
-                    "type": "string",
-                    "description": "发起人。",
-                    "maxLength": 64
                   },
                   "session_version": {
                     "type": "integer",
@@ -29200,11 +28913,6 @@
                     "description": "操作幂等键；重复提交必须返回同一处理结果，避免重复写入。",
                     "maxLength": 128
                   },
-                  "operator_note": {
-                    "type": "string",
-                    "description": "操作留痕备注；进入审计。",
-                    "maxLength": 1000
-                  },
                   "evidence_attachment_ids": {
                     "type": "array",
                     "description": "证据附件 ID 列表；进入审计留痕。",
@@ -29228,11 +28936,6 @@
                     "type": "string",
                     "description": "调整原因。",
                     "maxLength": 4000
-                  },
-                  "requested_by_user_id": {
-                    "type": "string",
-                    "description": "发起人。",
-                    "maxLength": 64
                   },
                   "refund_lines": {
                     "type": "array",
@@ -29309,11 +29012,6 @@
                     "description": "操作幂等键；重复提交必须返回同一处理结果，避免重复写入。",
                     "maxLength": 128
                   },
-                  "operator_note": {
-                    "type": "string",
-                    "description": "操作留痕备注；进入审计。",
-                    "maxLength": 1000
-                  },
                   "evidence_attachment_ids": {
                     "type": "array",
                     "description": "证据附件 ID 列表；进入审计留痕。",
@@ -29331,11 +29029,6 @@
                     "type": "string",
                     "description": "合并原因。",
                     "maxLength": 4000
-                  },
-                  "requested_by_user_id": {
-                    "type": "string",
-                    "description": "发起人。",
-                    "maxLength": 64
                   }
                 }
               }
@@ -29405,11 +29098,6 @@
                     "description": "操作幂等键；重复提交必须返回同一处理结果，避免重复写入。",
                     "maxLength": 128
                   },
-                  "operator_note": {
-                    "type": "string",
-                    "description": "操作留痕备注；进入审计。",
-                    "maxLength": 1000
-                  },
                   "evidence_attachment_ids": {
                     "type": "array",
                     "description": "证据附件 ID 列表；进入审计留痕。",
@@ -29428,11 +29116,6 @@
                     "type": "string",
                     "description": "拆分原因。",
                     "maxLength": 4000
-                  },
-                  "requested_by_user_id": {
-                    "type": "string",
-                    "description": "发起人。",
-                    "maxLength": 64
                   }
                 }
               }
@@ -29650,11 +29333,6 @@
                     "description": "出品工位编码。",
                     "maxLength": 255
                   },
-                  "operator_user_id": {
-                    "type": "string",
-                    "description": "操作人。",
-                    "maxLength": 64
-                  },
                   "reason": {
                     "type": "string",
                     "description": "流转原因。",
@@ -29737,14 +29415,6 @@
                     "type": "string",
                     "description": "原因。",
                     "maxLength": 4000
-                  },
-                  "evidence_attachment_ids": {
-                    "type": "array",
-                    "description": "证据附件 ID 列表。",
-                    "items": {
-                      "type": "string",
-                      "maxLength": 64
-                    }
                   }
                 }
               }
@@ -29823,14 +29493,6 @@
                     "type": "string",
                     "description": "原因。",
                     "maxLength": 4000
-                  },
-                  "evidence_attachment_ids": {
-                    "type": "array",
-                    "description": "证据附件 ID 列表。",
-                    "items": {
-                      "type": "string",
-                      "maxLength": 64
-                    }
                   }
                 }
               }
@@ -30248,11 +29910,6 @@
                     "description": "操作幂等键；重复提交必须返回同一处理结果，避免重复写入。",
                     "maxLength": 128
                   },
-                  "operator_note": {
-                    "type": "string",
-                    "description": "操作留痕备注；进入审计。",
-                    "maxLength": 1000
-                  },
                   "evidence_attachment_ids": {
                     "type": "array",
                     "description": "证据附件 ID 列表；进入审计留痕。",
@@ -30378,11 +30035,6 @@
                     "type": "string",
                     "description": "操作幂等键；重复提交必须返回同一处理结果，避免重复写入。",
                     "maxLength": 128
-                  },
-                  "operator_note": {
-                    "type": "string",
-                    "description": "操作留痕备注；进入审计。",
-                    "maxLength": 1000
                   },
                   "evidence_attachment_ids": {
                     "type": "array",
@@ -31459,19 +31111,9 @@
                     "description": "操作幂等键；重复提交必须返回同一处理结果，避免重复写入。",
                     "maxLength": 128
                   },
-                  "operator_note": {
-                    "type": "string",
-                    "description": "操作留痕备注。",
-                    "maxLength": 1000
-                  },
                   "expiry_warning_days": {
                     "type": "integer",
                     "description": "临期预警天数阈值。"
-                  },
-                  "operator_user_id": {
-                    "type": "string",
-                    "description": "操作人。",
-                    "maxLength": 64
                   }
                 }
               }
@@ -31557,11 +31199,6 @@
                     "type": "string",
                     "description": "操作幂等键；重复提交必须返回同一处理结果，避免重复写入。",
                     "maxLength": 128
-                  },
-                  "operator_note": {
-                    "type": "string",
-                    "description": "操作留痕备注；进入审计。",
-                    "maxLength": 1000
                   },
                   "evidence_attachment_ids": {
                     "type": "array",
@@ -31827,11 +31464,6 @@
                     "description": "操作幂等键；重复提交必须返回同一处理结果，避免重复写入。",
                     "maxLength": 128
                   },
-                  "operator_note": {
-                    "type": "string",
-                    "description": "操作留痕备注；进入审计。",
-                    "maxLength": 1000
-                  },
                   "evidence_attachment_ids": {
                     "type": "array",
                     "description": "证据附件 ID 列表；进入审计留痕。",
@@ -31871,11 +31503,6 @@
                     "type": "string",
                     "description": "状态。",
                     "maxLength": 255
-                  },
-                  "operator_user_id": {
-                    "type": "string",
-                    "description": "操作人。",
-                    "maxLength": 64
                   }
                 }
               }
@@ -32069,39 +31696,10 @@
                     "description": "操作幂等键；重复提交必须返回同一处理结果，避免重复写入。",
                     "maxLength": 128
                   },
-                  "operator_note": {
-                    "type": "string",
-                    "description": "操作留痕备注；进入审计。",
-                    "maxLength": 1000
-                  },
-                  "evidence_attachment_ids": {
-                    "type": "array",
-                    "description": "证据附件 ID 列表；进入审计留痕。",
-                    "items": {
-                      "type": "string",
-                      "maxLength": 64
-                    }
-                  },
                   "reason": {
                     "type": "string",
                     "description": "争议原因。",
                     "maxLength": 4000
-                  },
-                  "photo_attachment_ids": {
-                    "type": "array",
-                    "description": "照片附件 ID 列表。",
-                    "items": {
-                      "type": "string",
-                      "maxLength": 64
-                    }
-                  },
-                  "video_attachment_ids": {
-                    "type": "array",
-                    "description": "视频附件 ID 列表。",
-                    "items": {
-                      "type": "string",
-                      "maxLength": 64
-                    }
                   }
                 }
               }
@@ -32657,11 +32255,6 @@
                     "description": "操作幂等键；重复提交必须返回同一处理结果，避免重复写入。",
                     "maxLength": 128
                   },
-                  "operator_note": {
-                    "type": "string",
-                    "description": "操作留痕备注；进入审计。",
-                    "maxLength": 1000
-                  },
                   "evidence_attachment_ids": {
                     "type": "array",
                     "description": "证据附件 ID 列表；进入审计留痕。",
@@ -32801,11 +32394,6 @@
                     "type": "string",
                     "description": "操作幂等键；重复提交必须返回同一处理结果，避免重复写入。",
                     "maxLength": 128
-                  },
-                  "operator_note": {
-                    "type": "string",
-                    "description": "操作留痕备注；进入审计。",
-                    "maxLength": 1000
                   },
                   "evidence_attachment_ids": {
                     "type": "array",
@@ -32973,11 +32561,6 @@
                     "type": "string",
                     "description": "操作幂等键；重复提交必须返回同一处理结果，避免重复写入。",
                     "maxLength": 128
-                  },
-                  "operator_note": {
-                    "type": "string",
-                    "description": "操作留痕备注。",
-                    "maxLength": 1000
                   },
                   "scan_date": {
                     "type": "string",
@@ -33489,19 +33072,6 @@
                     "description": "操作幂等键；重复提交必须返回同一处理结果，避免重复写入。",
                     "maxLength": 128
                   },
-                  "operator_note": {
-                    "type": "string",
-                    "description": "操作留痕备注；进入审计。",
-                    "maxLength": 1000
-                  },
-                  "evidence_attachment_ids": {
-                    "type": "array",
-                    "description": "证据附件 ID 列表；进入审计留痕。",
-                    "items": {
-                      "type": "string",
-                      "maxLength": 64
-                    }
-                  },
                   "staff_id": {
                     "type": "string",
                     "description": "关联员工 ID。",
@@ -33580,19 +33150,6 @@
                     "type": "string",
                     "description": "操作幂等键；重复提交必须返回同一处理结果，避免重复写入。",
                     "maxLength": 128
-                  },
-                  "operator_note": {
-                    "type": "string",
-                    "description": "操作留痕备注；进入审计。",
-                    "maxLength": 1000
-                  },
-                  "evidence_attachment_ids": {
-                    "type": "array",
-                    "description": "证据附件 ID 列表；进入审计留痕。",
-                    "items": {
-                      "type": "string",
-                      "maxLength": 64
-                    }
                   },
                   "staff_id": {
                     "type": "string",
@@ -33673,19 +33230,6 @@
                     "description": "操作幂等键；重复提交必须返回同一处理结果，避免重复写入。",
                     "maxLength": 128
                   },
-                  "operator_note": {
-                    "type": "string",
-                    "description": "操作留痕备注；进入审计。",
-                    "maxLength": 1000
-                  },
-                  "evidence_attachment_ids": {
-                    "type": "array",
-                    "description": "证据附件 ID 列表；进入审计留痕。",
-                    "items": {
-                      "type": "string",
-                      "maxLength": 64
-                    }
-                  },
                   "staff_id": {
                     "type": "string",
                     "description": "关联员工 ID。",
@@ -33763,19 +33307,6 @@
                     "type": "string",
                     "description": "操作幂等键；重复提交必须返回同一处理结果，避免重复写入。",
                     "maxLength": 128
-                  },
-                  "operator_note": {
-                    "type": "string",
-                    "description": "操作留痕备注；进入审计。",
-                    "maxLength": 1000
-                  },
-                  "evidence_attachment_ids": {
-                    "type": "array",
-                    "description": "证据附件 ID 列表；进入审计留痕。",
-                    "items": {
-                      "type": "string",
-                      "maxLength": 64
-                    }
                   },
                   "staff_id": {
                     "type": "string",
@@ -33855,19 +33386,6 @@
                     "type": "string",
                     "description": "操作幂等键；重复提交必须返回同一处理结果，避免重复写入。",
                     "maxLength": 128
-                  },
-                  "operator_note": {
-                    "type": "string",
-                    "description": "操作留痕备注；进入审计。",
-                    "maxLength": 1000
-                  },
-                  "evidence_attachment_ids": {
-                    "type": "array",
-                    "description": "证据附件 ID 列表；进入审计留痕。",
-                    "items": {
-                      "type": "string",
-                      "maxLength": 64
-                    }
                   },
                   "staff_id": {
                     "type": "string",
@@ -34042,19 +33560,6 @@
                     "description": "操作幂等键；重复提交必须返回同一处理结果，避免重复写入。",
                     "maxLength": 128
                   },
-                  "operator_note": {
-                    "type": "string",
-                    "description": "操作留痕备注；进入审计。",
-                    "maxLength": 1000
-                  },
-                  "evidence_attachment_ids": {
-                    "type": "array",
-                    "description": "证据附件 ID 列表；进入审计留痕。",
-                    "items": {
-                      "type": "string",
-                      "maxLength": 64
-                    }
-                  },
                   "staff_id": {
                     "type": "string",
                     "description": "关联员工 ID。",
@@ -34209,19 +33714,6 @@
                     "description": "操作幂等键；重复提交必须返回同一处理结果，避免重复写入。",
                     "maxLength": 128
                   },
-                  "operator_note": {
-                    "type": "string",
-                    "description": "操作留痕备注；进入审计。",
-                    "maxLength": 1000
-                  },
-                  "evidence_attachment_ids": {
-                    "type": "array",
-                    "description": "证据附件 ID 列表。",
-                    "items": {
-                      "type": "string",
-                      "maxLength": 64
-                    }
-                  },
                   "device_id": {
                     "type": "string",
                     "description": "设备 ID。",
@@ -34311,19 +33803,6 @@
                     "description": "操作幂等键；重复提交必须返回同一处理结果，避免重复写入。",
                     "maxLength": 128
                   },
-                  "operator_note": {
-                    "type": "string",
-                    "description": "操作留痕备注；进入审计。",
-                    "maxLength": 1000
-                  },
-                  "evidence_attachment_ids": {
-                    "type": "array",
-                    "description": "证据附件 ID 列表。",
-                    "items": {
-                      "type": "string",
-                      "maxLength": 64
-                    }
-                  },
                   "disposition": {
                     "type": "string",
                     "description": "处置动作。",
@@ -34405,11 +33884,6 @@
                     "description": "操作幂等键；重复提交必须返回同一处理结果，避免重复写入。",
                     "maxLength": 128
                   },
-                  "operator_note": {
-                    "type": "string",
-                    "description": "操作留痕备注。",
-                    "maxLength": 1000
-                  },
                   "operator_user_id": {
                     "type": "string",
                     "description": "操作人。",
@@ -34481,11 +33955,6 @@
                     "type": "string",
                     "description": "操作幂等键；重复提交必须返回同一处理结果，避免重复写入。",
                     "maxLength": 128
-                  },
-                  "operator_note": {
-                    "type": "string",
-                    "description": "操作留痕备注。",
-                    "maxLength": 1000
                   },
                   "evidence_attachment_ids": {
                     "type": "array",
@@ -34576,11 +34045,6 @@
                     "type": "string",
                     "description": "操作幂等键；重复提交必须返回同一处理结果，避免重复写入。",
                     "maxLength": 128
-                  },
-                  "operator_note": {
-                    "type": "string",
-                    "description": "操作留痕备注。",
-                    "maxLength": 1000
                   },
                   "dunning_channel": {
                     "type": "string",
@@ -37741,9 +37205,6 @@
                   },
                   "status": {
                     "type": "string"
-                  },
-                  "is_draft": {
-                    "type": "boolean"
                   },
                   "idempotency_key": {
                     "type": "string"
@@ -46184,9 +45645,6 @@
                 "properties": {
                   "idempotency_key": {
                     "type": "string"
-                  },
-                  "note": {
-                    "type": "string"
                   }
                 },
                 "required": [
@@ -46432,9 +45890,6 @@
                 "type": "object",
                 "properties": {
                   "idempotency_key": {
-                    "type": "string"
-                  },
-                  "note": {
                     "type": "string"
                   }
                 },
@@ -46981,11 +46436,6 @@
                     "description": "操作幂等键；重复提交必须返回同一处理结果，避免重复写入。",
                     "maxLength": 128
                   },
-                  "operator_note": {
-                    "type": "string",
-                    "description": "操作留痕备注。",
-                    "maxLength": 1000
-                  },
                   "reason": {
                     "type": "string",
                     "description": "异议理由(商户留言)。",
@@ -47058,11 +46508,6 @@
                     "type": "string",
                     "description": "操作幂等键；重复提交必须返回同一处理结果，避免重复写入。",
                     "maxLength": 128
-                  },
-                  "operator_note": {
-                    "type": "string",
-                    "description": "操作留痕备注。",
-                    "maxLength": 1000
                   },
                   "reason": {
                     "type": "string",
@@ -57467,11 +56912,6 @@
                       ]
                     }
                   },
-                  "note": {
-                    "type": "string",
-                    "description": "说明",
-                    "maxLength": 500
-                  },
                   "evidence_attachment_ids": {
                     "type": "array",
                     "minItems": 1,
@@ -62005,21 +61445,8 @@
                   "idempotency_key": {
                     "type": "string"
                   },
-                  "project_id": {
-                    "type": "string"
-                  },
                   "bar_merchant_id": {
                     "type": "string"
-                  },
-                  "media_merchant_id": {
-                    "type": "string"
-                  },
-                  "show_kind": {
-                    "type": "string",
-                    "enum": [
-                      "bar_show",
-                      "self_hosted"
-                    ]
                   },
                   "show_date": {
                     "type": "string",
@@ -62802,9 +62229,6 @@
                     "type": "string"
                   },
                   "merchant_id": {
-                    "type": "string"
-                  },
-                  "entitlement_type": {
                     "type": "string"
                   },
                   "fee_bps": {
@@ -67577,14 +67001,6 @@
                     "description": "同一请求重试必须复用幂等键",
                     "maxLength": 128
                   },
-                  "operator_note": {
-                    "type": [
-                      "string",
-                      "null"
-                    ],
-                    "description": "操作说明",
-                    "maxLength": 1000
-                  },
                   "line_name": {
                     "type": "string",
                     "description": "审批线名称",
@@ -69238,21 +68654,13 @@
                     "type": "string",
                     "description": "",
                     "minLength": 1
-                  },
-                  "evidence_attachment_ids": {
-                    "type": "array",
-                    "items": {
-                      "type": "string",
-                      "description": ""
-                    }
                   }
                 },
                 "required": [
                   "idempotency_key",
                   "old_device_code",
                   "replacement_device_id",
-                  "reason",
-                  "evidence_attachment_ids"
+                  "reason"
                 ],
                 "additionalProperties": false,
                 "description": ""
@@ -86785,7 +86193,6 @@
               "table_type": "vip",
               "reservation_time": "2026-06-20T21:00:00+08:00",
               "guest_count": 6,
-              "contact_phone": "13800138000",
               "latest_arrival_at": "2026-06-20T23:00:00+08:00"
             }
           }
@@ -86839,11 +86246,7 @@
                   "quantity": 1,
                   "unit_price_cent": 128800
                 }
-              ],
-              "service_user_ids": [
-                "staff_service_001"
-              ],
-              "payment_mode": "scan_qr"
+              ]
             }
           }
         }
@@ -87633,7 +87036,6 @@
                 "summary": "Evaluate contract violation blocking",
                 "value": {
                   "idempotency_key": "review-evaluate-1",
-                  "operator_note": "完整后台验收主管复核评估",
                   "evidence_attachment_ids": [
                     "att_contract_snapshot"
                   ],
@@ -87664,7 +87066,6 @@
                   "evidence_attachment_ids": [
                     "att_review_evidence"
                   ],
-                  "reviewer_level": 3,
                   "decision": "approved",
                   "comment": "同意放行"
                 }
@@ -87722,8 +87123,7 @@
             },
             "example": {
               "idempotency_key": "arap_adj_decide_20260630_000001",
-              "decision": "approve",
-              "operator_note": "经财务复核同意补录"
+              "decision": "approve"
             }
           }
         }
@@ -90741,15 +90141,6 @@
             "description": "操作备注；用于解释人工处理、异常处理或审批判断，进入审计留痕。",
             "maxLength": 1000
           },
-          "evidence_attachment_ids": {
-            "type": "array",
-            "description": "证据附件 ID 列表；用于绑定图片、合同、审批、支付凭证或异常说明。",
-            "items": {
-              "type": "string",
-              "maxLength": 64
-            },
-            "maxItems": 50
-          },
           "role_name": {
             "type": "string",
             "description": "名称字段；用于后台展示、检索和审计记录，保存前必须去除首尾空白。",
@@ -90867,15 +90258,6 @@
             "description": "操作备注；用于解释人工处理、异常处理或审批判断，进入审计留痕。",
             "maxLength": 1000
           },
-          "evidence_attachment_ids": {
-            "type": "array",
-            "description": "证据附件 ID 列表；用于绑定图片、合同、审批、支付凭证或异常说明。",
-            "items": {
-              "type": "string",
-              "maxLength": 64
-            },
-            "maxItems": 50
-          },
           "template_name": {
             "type": "string",
             "description": "名称字段；用于后台展示、检索和审计记录，保存前必须去除首尾空白。",
@@ -90888,11 +90270,6 @@
               "base",
               "temporary"
             ],
-            "maxLength": 64
-          },
-          "source_template_id": {
-            "type": "string",
-            "description": "业务对象唯一标识；必须引用当前数据范围内存在且允许访问的记录。",
             "maxLength": 64
           },
           "permission_codes": {
@@ -90940,33 +90317,13 @@
         "description": "请求载荷 `PermissionTemplateApplyRequest`；字段、必填项和枚举用于生成 DTO、校验和契约测试。",
         "additionalProperties": false,
         "required": [
-          "target_user_ids",
-          "template_id"
+          "target_user_ids"
         ],
         "properties": {
           "idempotency_key": {
             "type": "string",
             "description": "操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。",
             "maxLength": 128
-          },
-          "operator_note": {
-            "type": "string",
-            "description": "操作备注；用于解释人工处理、异常处理或审批判断，进入审计留痕。",
-            "maxLength": 1000
-          },
-          "evidence_attachment_ids": {
-            "type": "array",
-            "description": "证据附件 ID 列表；用于绑定图片、合同、审批、支付凭证或异常说明。",
-            "items": {
-              "type": "string",
-              "maxLength": 64
-            },
-            "maxItems": 50
-          },
-          "template_id": {
-            "type": "string",
-            "description": "业务对象唯一标识；必须引用当前数据范围内存在且允许访问的记录。",
-            "maxLength": 64
           },
           "target_user_ids": {
             "type": "array",
@@ -91003,20 +90360,6 @@
             "type": "string",
             "description": "操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。",
             "maxLength": 128
-          },
-          "operator_note": {
-            "type": "string",
-            "description": "操作备注；用于解释人工处理、异常处理或审批判断，进入审计留痕。",
-            "maxLength": 1000
-          },
-          "evidence_attachment_ids": {
-            "type": "array",
-            "description": "证据附件 ID 列表；用于绑定图片、合同、审批、支付凭证或异常说明。",
-            "items": {
-              "type": "string",
-              "maxLength": 64
-            },
-            "maxItems": 50
           },
           "target_user_id": {
             "type": "string",
@@ -91069,20 +90412,6 @@
             "type": "string",
             "description": "操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。",
             "maxLength": 128
-          },
-          "operator_note": {
-            "type": "string",
-            "description": "操作备注；用于解释人工处理、异常处理或审批判断，进入审计留痕。",
-            "maxLength": 1000
-          },
-          "evidence_attachment_ids": {
-            "type": "array",
-            "description": "证据附件 ID 列表；用于绑定图片、合同、审批、支付凭证或异常说明。",
-            "items": {
-              "type": "string",
-              "maxLength": 64
-            },
-            "maxItems": 50
           },
           "device_id": {
             "type": "string",
@@ -91277,15 +90606,6 @@
             "type": "string",
             "description": "操作备注；用于解释人工处理、异常处理或审批判断，进入审计留痕。",
             "maxLength": 1000
-          },
-          "evidence_attachment_ids": {
-            "type": "array",
-            "description": "证据附件 ID 列表；用于绑定图片、合同、审批、支付凭证或异常说明。",
-            "items": {
-              "type": "string",
-              "maxLength": 64
-            },
-            "maxItems": 50
           },
           "enabled": {
             "type": "boolean",
@@ -91611,20 +90931,6 @@
             "description": "操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。",
             "maxLength": 128
           },
-          "operator_note": {
-            "type": "string",
-            "description": "操作备注；用于解释人工处理、异常处理或审批判断，进入审计留痕。",
-            "maxLength": 1000
-          },
-          "evidence_attachment_ids": {
-            "type": "array",
-            "description": "证据附件 ID 列表；用于绑定图片、合同、审批、支付凭证或异常说明。",
-            "items": {
-              "type": "string",
-              "maxLength": 64
-            },
-            "maxItems": 50
-          },
           "ticket_type_id": {
             "type": "string",
             "description": "票务唯一标识；必须引用当前数据范围内存在且允许访问的记录。",
@@ -91707,15 +91013,6 @@
             "type": "string",
             "description": "操作备注；用于解释人工处理、异常处理或审批判断，进入审计留痕。",
             "maxLength": 1000
-          },
-          "evidence_attachment_ids": {
-            "type": "array",
-            "description": "证据附件 ID 列表；用于绑定图片、合同、审批、支付凭证或异常说明。",
-            "items": {
-              "type": "string",
-              "maxLength": 64
-            },
-            "maxItems": 50
           },
           "ticket_type_id": {
             "type": "string",
@@ -92246,12 +91543,6 @@
             "minimum": 0,
             "maximum": 999999
           },
-          "contact_phone": {
-            "type": "string",
-            "description": "手机号字段；用于客人或员工身份匹配，保存和展示必须遵守脱敏规则。",
-            "maxLength": 20,
-            "pattern": "^\\+?[0-9]{6,20}$"
-          },
           "latest_arrival_at": {
             "type": "string",
             "format": "date-time",
@@ -92420,20 +91711,6 @@
             "description": "操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。",
             "maxLength": 128
           },
-          "operator_note": {
-            "type": "string",
-            "description": "操作备注；用于解释人工处理、异常处理或审批判断，进入审计留痕。",
-            "maxLength": 1000
-          },
-          "evidence_attachment_ids": {
-            "type": "array",
-            "description": "证据附件 ID 列表；用于绑定图片、合同、审批、支付凭证或异常说明。",
-            "items": {
-              "type": "string",
-              "maxLength": 64
-            },
-            "maxItems": 50
-          },
           "bar_id": {
             "type": "string",
             "description": "酒吧唯一标识；必须引用当前数据范围内存在且允许访问的记录。",
@@ -92456,26 +91733,6 @@
               "type": "object"
             },
             "maxItems": 200
-          },
-          "service_user_ids": {
-            "type": "array",
-            "description": "`service_user_ids` ID 列表；必须引用已存在的业务对象并进入审计校验。",
-            "items": {
-              "type": "string",
-              "maxLength": 64
-            },
-            "maxItems": 200
-          },
-          "payment_mode": {
-            "type": "string",
-            "description": "下单时选择的支付方式（可空）：scan_qr 扫码、pay_code 付款码、offline 线下、on_account 挂账。下单不按它处理，实际收款渠道在结账时按 payment_channel 确定。",
-            "enum": [
-              "scan_qr",
-              "pay_code",
-              "offline",
-              "on_account"
-            ],
-            "maxLength": 64
           }
         }
       },
@@ -92560,20 +91817,6 @@
             "description": "操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。",
             "maxLength": 128
           },
-          "operator_note": {
-            "type": "string",
-            "description": "操作备注；用于解释人工处理、异常处理或审批判断，进入审计留痕。",
-            "maxLength": 1000
-          },
-          "evidence_attachment_ids": {
-            "type": "array",
-            "description": "证据附件 ID 列表；用于绑定图片、合同、审批、支付凭证或异常说明。",
-            "items": {
-              "type": "string",
-              "maxLength": 64
-            },
-            "maxItems": 50
-          },
           "payment_id": {
             "type": "string",
             "description": "支付唯一标识；必须引用当前数据范围内存在且允许访问的记录。",
@@ -92652,20 +91895,6 @@
             "description": "操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。",
             "maxLength": 128
           },
-          "operator_note": {
-            "type": "string",
-            "description": "操作备注；用于解释人工处理、异常处理或审批判断，进入审计留痕。",
-            "maxLength": 1000
-          },
-          "evidence_attachment_ids": {
-            "type": "array",
-            "description": "证据附件 ID 列表；用于绑定图片、合同、审批、支付凭证或异常说明。",
-            "items": {
-              "type": "string",
-              "maxLength": 64
-            },
-            "maxItems": 50
-          },
           "supplier_name": {
             "type": "string",
             "description": "名称字段；用于后台展示、检索和审计记录，保存前必须去除首尾空白。",
@@ -92709,11 +91938,6 @@
             "type": "string",
             "description": "操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。",
             "maxLength": 128
-          },
-          "operator_note": {
-            "type": "string",
-            "description": "操作备注；用于解释人工处理、异常处理或审批判断，进入审计留痕。",
-            "maxLength": 1000
           },
           "evidence_attachment_ids": {
             "type": "array",
@@ -92779,11 +92003,6 @@
             "type": "string",
             "description": "操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。",
             "maxLength": 128
-          },
-          "operator_note": {
-            "type": "string",
-            "description": "操作备注；用于解释人工处理、异常处理或审批判断，进入审计留痕。",
-            "maxLength": 1000
           },
           "evidence_attachment_ids": {
             "type": "array",
@@ -92977,11 +92196,6 @@
             "description": "操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。",
             "maxLength": 128
           },
-          "operator_note": {
-            "type": "string",
-            "description": "操作备注；用于解释人工处理、异常处理或审批判断，进入审计留痕。",
-            "maxLength": 1000
-          },
           "evidence_attachment_ids": {
             "type": "array",
             "description": "证据附件 ID 列表；用于绑定图片、合同、审批、支付凭证或异常说明。",
@@ -93060,11 +92274,6 @@
             "description": "操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。",
             "maxLength": 128
           },
-          "operator_note": {
-            "type": "string",
-            "description": "操作备注；用于解释人工处理、异常处理或审批判断，进入审计留痕。",
-            "maxLength": 1000
-          },
           "evidence_attachment_ids": {
             "type": "array",
             "description": "证据附件 ID 列表；用于绑定图片、合同、审批、支付凭证或异常说明。",
@@ -93130,11 +92339,6 @@
             "description": "操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。",
             "maxLength": 128
           },
-          "operator_note": {
-            "type": "string",
-            "description": "操作备注；用于解释人工处理、异常处理或审批判断，进入审计留痕。",
-            "maxLength": 1000
-          },
           "evidence_attachment_ids": {
             "type": "array",
             "description": "证据附件 ID 列表；用于绑定图片、合同、审批、支付凭证或异常说明。",
@@ -93159,11 +92363,6 @@
             "type": "integer",
             "description": "转让数量；可省略（整瓶转让）；传值必须等于剩余量，不得拆分。",
             "minimum": 1
-          },
-          "reason": {
-            "type": "string",
-            "description": "转让事由。",
-            "maxLength": 500
           },
           "verification_code": {
             "type": "string",
@@ -93206,11 +92405,6 @@
             "description": "操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。",
             "maxLength": 128
           },
-          "operator_note": {
-            "type": "string",
-            "description": "操作备注；用于解释人工处理、异常处理或审批判断，进入审计留痕。",
-            "maxLength": 1000
-          },
           "evidence_attachment_ids": {
             "type": "array",
             "description": "证据附件 ID 列表；用于绑定图片、合同、审批、支付凭证或异常说明。",
@@ -93240,11 +92434,6 @@
             "type": "string",
             "description": "操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。",
             "maxLength": 128
-          },
-          "operator_note": {
-            "type": "string",
-            "description": "操作备注；用于解释人工处理、异常处理或审批判断，进入审计留痕。",
-            "maxLength": 1000
           },
           "evidence_attachment_ids": {
             "type": "array",
@@ -93278,11 +92467,6 @@
             "type": "string",
             "description": "操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。",
             "maxLength": 128
-          },
-          "operator_note": {
-            "type": "string",
-            "description": "操作备注；用于解释人工处理、异常处理或审批判断，进入审计留痕。",
-            "maxLength": 1000
           },
           "verification_code": {
             "type": "string",
@@ -93371,11 +92555,6 @@
             "description": "操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。",
             "maxLength": 128
           },
-          "operator_note": {
-            "type": "string",
-            "description": "操作备注；用于解释人工处理、异常处理或审批判断，进入审计留痕。",
-            "maxLength": 1000
-          },
           "role": {
             "type": "string",
             "description": "审批角色：supervisor=门店主管，finance=财务；仅 /approve 使用。",
@@ -93383,11 +92562,6 @@
               "supervisor",
               "finance"
             ]
-          },
-          "reason": {
-            "type": "string",
-            "description": "审批/处置说明。",
-            "maxLength": 500
           },
           "evidence_ids": {
             "type": "array",
@@ -93418,11 +92592,6 @@
             "description": "操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。",
             "maxLength": 128
           },
-          "operator_note": {
-            "type": "string",
-            "description": "操作备注；用于解释人工处理、异常处理或审批判断，进入审计留痕。",
-            "maxLength": 1000
-          },
           "merchant_id": {
             "type": "string",
             "description": "退出门店（商户）id；商户 scope 操作者只能为本店办理。",
@@ -93444,11 +92613,6 @@
             "type": "string",
             "description": "操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。",
             "maxLength": 128
-          },
-          "operator_note": {
-            "type": "string",
-            "description": "操作备注；用于解释人工处理、异常处理或审批判断，进入审计留痕。",
-            "maxLength": 1000
           },
           "merchant_id": {
             "type": "string",
@@ -93502,11 +92666,6 @@
             "type": "string",
             "description": "操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。",
             "maxLength": 128
-          },
-          "operator_note": {
-            "type": "string",
-            "description": "操作备注；用于解释人工处理、异常处理或审批判断，进入审计留痕。",
-            "maxLength": 1000
           },
           "evidence_attachment_ids": {
             "type": "array",
@@ -93915,11 +93074,6 @@
             "description": "操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。",
             "maxLength": 128
           },
-          "operator_note": {
-            "type": "string",
-            "description": "操作备注；用于解释人工处理、异常处理或审批判断，进入审计留痕。",
-            "maxLength": 1000
-          },
           "evidence_attachment_ids": {
             "type": "array",
             "description": "证据附件 ID 列表；用于绑定图片、合同、审批、支付凭证或异常说明。",
@@ -93964,11 +93118,6 @@
             "type": "string",
             "description": "操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。",
             "maxLength": 128
-          },
-          "operator_note": {
-            "type": "string",
-            "description": "操作备注；用于解释人工处理、异常处理或审批判断，进入审计留痕。",
-            "maxLength": 1000
           },
           "evidence_attachment_ids": {
             "type": "array",
@@ -94028,20 +93177,6 @@
             "type": "string",
             "description": "操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。",
             "maxLength": 128
-          },
-          "operator_note": {
-            "type": "string",
-            "description": "操作备注；用于解释人工处理、异常处理或审批判断，进入审计留痕。",
-            "maxLength": 1000
-          },
-          "evidence_attachment_ids": {
-            "type": "array",
-            "description": "证据附件 ID 列表；用于绑定图片、合同、审批、支付凭证或异常说明。",
-            "items": {
-              "type": "string",
-              "maxLength": 64
-            },
-            "maxItems": 50
           },
           "direction": {
             "type": "string",
@@ -94248,18 +93383,12 @@
         "additionalProperties": false,
         "required": [
           "idempotency_key",
-          "object_key",
           "checksum"
         ],
         "properties": {
           "idempotency_key": {
             "type": "string",
             "description": "操作幂等键；重复提交返回第一次的结果。",
-            "maxLength": 128
-          },
-          "object_key": {
-            "type": "string",
-            "description": "EvidenceAttachmentCompleteRequest.object_key 字段；必须按本 schema 的类型、必填项、枚举、长度、单位和对应 PRD 规则校验。",
             "maxLength": 128
           },
           "checksum": {
@@ -94379,20 +93508,6 @@
             "type": "string",
             "description": "操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。",
             "maxLength": 128
-          },
-          "operator_note": {
-            "type": "string",
-            "description": "操作备注；用于解释人工处理、异常处理或审批判断，进入审计留痕。",
-            "maxLength": 1000
-          },
-          "evidence_attachment_ids": {
-            "type": "array",
-            "description": "证据附件 ID 列表；用于绑定图片、合同、审批、支付凭证或异常说明。",
-            "items": {
-              "type": "string",
-              "maxLength": 64
-            },
-            "maxItems": 50
           },
           "provider_code": {
             "type": "string",
@@ -94583,20 +93698,6 @@
             "type": "string",
             "description": "解绑原因；设备遗失、维修、更换、退役或误绑必须说明。",
             "maxLength": 1000
-          },
-          "operator_note": {
-            "type": "string",
-            "description": "操作备注；用于补充解绑背景、现场情况或审批说明。",
-            "maxLength": 1000
-          },
-          "evidence_attachment_ids": {
-            "type": "array",
-            "description": "证据附件 ID 列表；用于关联设备交接、维修、报损或审批附件。",
-            "items": {
-              "type": "string",
-              "maxLength": 64
-            },
-            "maxItems": 50
           }
         }
       },
@@ -94775,20 +93876,6 @@
             "maxLength": 128,
             "description": "酒吧商品.idempotency_key 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。"
           },
-          "operator_note": {
-            "type": "string",
-            "maxLength": 1000,
-            "description": "酒吧商品.operator_note 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。"
-          },
-          "evidence_attachment_ids": {
-            "type": "array",
-            "items": {
-              "type": "string",
-              "maxLength": 64
-            },
-            "maxItems": 50,
-            "description": "酒吧商品.evidence_attachment_ids 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。"
-          },
           "bar_id": {
             "type": "string",
             "maxLength": 64,
@@ -94932,20 +94019,6 @@
             "type": "string",
             "maxLength": 128,
             "description": "设备.idempotency_key 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。"
-          },
-          "operator_note": {
-            "type": "string",
-            "maxLength": 1000,
-            "description": "设备.operator_note 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。"
-          },
-          "evidence_attachment_ids": {
-            "type": "array",
-            "items": {
-              "type": "string",
-              "maxLength": 64
-            },
-            "maxItems": 50,
-            "description": "设备.evidence_attachment_ids 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。"
           },
           "device_code": {
             "type": "string",
@@ -95779,11 +94852,6 @@
             "maxLength": 128,
             "description": "幂等键，防止重复创建或重复发布。"
           },
-          "operator_note": {
-            "type": "string",
-            "maxLength": 1000,
-            "description": "操作备注，进入审计留痕。"
-          },
           "project_id": {
             "type": "string",
             "maxLength": 64,
@@ -95891,11 +94959,6 @@
             "type": "string",
             "maxLength": 128,
             "description": "幂等键，防止重复发布。"
-          },
-          "operator_note": {
-            "type": "string",
-            "maxLength": 1000,
-            "description": "发布备注，进入审计留痕。"
           },
           "candidate_ids": {
             "type": "array",
@@ -96576,10 +95639,6 @@
             "minLength": 1,
             "description": "supervisorreviewevaluate.idempotency_key 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。"
           },
-          "operator_note": {
-            "type": "string",
-            "description": "supervisorreviewevaluate.operator_note 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。"
-          },
           "evidence_attachment_ids": {
             "type": "array",
             "items": {
@@ -96626,7 +95685,6 @@
         "type": "object",
         "required": [
           "idempotency_key",
-          "reviewer_level",
           "decision"
         ],
         "properties": {
@@ -96645,11 +95703,6 @@
               "type": "string"
             },
             "description": "supervisorreviewapproval.evidence_attachment_ids 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。"
-          },
-          "reviewer_level": {
-            "type": "integer",
-            "minimum": 1,
-            "description": "supervisorreviewapproval.reviewer_level 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。"
           },
           "decision": {
             "type": "string",
@@ -96744,11 +95797,6 @@
             "description": "操作幂等键；重复提交时必须返回同一处理结果，避免重复入账。",
             "maxLength": 128
           },
-          "operator_note": {
-            "type": "string",
-            "description": "操作备注；进入审计留痕。",
-            "maxLength": 1000
-          },
           "evidence_attachment_ids": {
             "type": "array",
             "description": "证据附件 ID 列表；用于绑定补录凭证。",
@@ -96809,20 +95857,6 @@
             "type": "string",
             "description": "操作幂等键；重复提交时必须返回同一处理结果。",
             "maxLength": 128
-          },
-          "operator_note": {
-            "type": "string",
-            "description": "审批备注；进入审计留痕。",
-            "maxLength": 1000
-          },
-          "evidence_attachment_ids": {
-            "type": "array",
-            "description": "证据附件 ID 列表；用于绑定审批凭证。",
-            "items": {
-              "type": "string",
-              "maxLength": 64
-            },
-            "maxItems": 50
           },
           "decision": {
             "type": "string",
@@ -96961,11 +95995,6 @@
             "description": "幂等键；同一注册重试必须复用。",
             "maxLength": 128
           },
-          "operator_note": {
-            "type": "string",
-            "description": "操作备注。",
-            "maxLength": 1000
-          },
           "project_id": {
             "type": "string",
             "description": "综合体归属（隔离），必填。",
@@ -97053,11 +96082,6 @@
             "description": "幂等键。",
             "maxLength": 128
           },
-          "operator_note": {
-            "type": "string",
-            "description": "操作备注。",
-            "maxLength": 1000
-          },
           "staff_profile_id": {
             "type": "string",
             "description": "员工档案 id。",
@@ -97086,11 +96110,6 @@
             "type": "string",
             "description": "幂等键。",
             "maxLength": 128
-          },
-          "operator_note": {
-            "type": "string",
-            "description": "操作备注。",
-            "maxLength": 1000
           }
         }
       },
@@ -97107,11 +96126,6 @@
             "type": "string",
             "description": "幂等键。",
             "maxLength": 128
-          },
-          "operator_note": {
-            "type": "string",
-            "description": "操作备注。",
-            "maxLength": 1000
           },
           "integrity_status": {
             "type": "string",
@@ -97138,11 +96152,6 @@
             "description": "幂等键。",
             "maxLength": 128
           },
-          "operator_note": {
-            "type": "string",
-            "description": "操作备注。",
-            "maxLength": 1000
-          },
           "reason": {
             "type": "string",
             "description": "失效原因，记入 revoked_reason。",
@@ -97162,11 +96171,6 @@
             "type": "string",
             "description": "幂等键。",
             "maxLength": 128
-          },
-          "operator_note": {
-            "type": "string",
-            "description": "操作备注。",
-            "maxLength": 1000
           },
           "consent": {
             "type": "boolean",
@@ -97855,11 +96859,6 @@
             "description": "操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。",
             "maxLength": 128
           },
-          "operator_note": {
-            "type": "string",
-            "description": "操作备注；用于解释人工处理、异常处理或审批判断，进入审计留痕。",
-            "maxLength": 1000
-          },
           "evidence_attachment_ids": {
             "type": "array",
             "description": "证据附件 ID 列表；用于绑定图片、合同、审批、支付凭证或异常说明。",
@@ -97908,11 +96907,6 @@
             "description": "操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。",
             "maxLength": 128
           },
-          "operator_note": {
-            "type": "string",
-            "description": "操作备注；用于解释人工处理、异常处理或审批判断，进入审计留痕。",
-            "maxLength": 1000
-          },
           "evidence_attachment_ids": {
             "type": "array",
             "description": "证据附件 ID 列表；用于绑定图片、合同、审批、支付凭证或异常说明。",
@@ -97939,20 +96933,6 @@
             "description": "操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。",
             "maxLength": 128
           },
-          "operator_note": {
-            "type": "string",
-            "description": "操作备注；用于解释人工处理、异常处理或审批判断，进入审计留痕。",
-            "maxLength": 1000
-          },
-          "evidence_attachment_ids": {
-            "type": "array",
-            "description": "证据附件 ID 列表；用于绑定图片、合同、审批、支付凭证或异常说明。",
-            "items": {
-              "type": "string",
-              "maxLength": 64
-            },
-            "maxItems": 50
-          },
           "sold_out": {
             "type": "boolean",
             "description": "true=置沽清(86)，false=恢复供应；省略默认置沽清。"
@@ -97973,20 +96953,6 @@
             "type": "string",
             "description": "操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。",
             "maxLength": 128
-          },
-          "operator_note": {
-            "type": "string",
-            "description": "操作备注；用于解释人工处理、异常处理或审批判断，进入审计留痕。",
-            "maxLength": 1000
-          },
-          "evidence_attachment_ids": {
-            "type": "array",
-            "description": "证据附件 ID 列表；用于绑定图片、合同、审批、支付凭证或异常说明。",
-            "items": {
-              "type": "string",
-              "maxLength": 64
-            },
-            "maxItems": 50
           },
           "tip_amount_cent": {
             "type": "integer",
@@ -98305,7 +97271,7 @@
       },
       "RecordVarianceRequest": {
         "type": "object",
-        "description": "请求载荷 `RecordVarianceRequest`（V108 库存差异明细）；variance_qty=counted_qty−book_qty（带符号），review_status=pending。variance_amount_cent 显式传入优先，否则按 variance_qty×unit_cost_cents 成本估算。",
+        "description": "请求载荷 `RecordVarianceRequest`（V108 库存差异明细）；variance_qty=counted_qty−账面数（带符号；账面取系统库存值，请求不传），review_status=pending。variance_amount_cent 显式传入优先，否则按 variance_qty×unit_cost_cents 成本估算。",
         "additionalProperties": false,
         "required": [
           "item_id",
@@ -98326,10 +97292,6 @@
             "type": "string",
             "description": "批次号（可空）。",
             "maxLength": 64
-          },
-          "book_qty": {
-            "type": "number",
-            "description": "账面数量（缺省 0）。"
           },
           "counted_qty": {
             "type": "number",
@@ -98401,11 +97363,6 @@
               "approved",
               "rejected"
             ]
-          },
-          "reason": {
-            "type": "string",
-            "description": "复核意见（可空）。",
-            "maxLength": 1000
           }
         }
       },
@@ -98685,19 +97642,6 @@
             "type": "string",
             "description": "操作幂等键；重复提交时必须返回同一处理结果，避免重复计费/重复入账。",
             "maxLength": 128
-          },
-          "operator_note": {
-            "type": "string",
-            "description": "操作留痕备注；进入审计。",
-            "maxLength": 1000
-          },
-          "evidence_attachment_ids": {
-            "type": "array",
-            "description": "证据附件 ID 列表；进入审计留痕。",
-            "items": {
-              "type": "string",
-              "maxLength": 64
-            }
           },
           "project_id": {
             "type": "string",
@@ -101182,10 +100126,6 @@
             "type": "number",
             "description": "本期读数。"
           },
-          "prev_reading_value": {
-            "type": "number",
-            "description": "兼容字段，服务按同表最近已审核有效终值或真实启用初值计算，绝不使用调用者代填起点"
-          },
           "read_mode": {
             "type": "string",
             "description": "省略也按人工记录；自报remote不能绕过照片",
@@ -101412,16 +100352,6 @@
             "type": "string",
             "description": "操作备注。",
             "maxLength": 1000
-          },
-          "evidence_attachment_ids": {
-            "type": "array",
-            "description": "证据附件 id。",
-            "items": {
-              "type": "string",
-              "description": "附件 id。",
-              "maxLength": 64
-            },
-            "maxItems": 50
           },
           "request_type": {
             "type": "string",
@@ -102674,11 +101604,6 @@
             "type": "string",
             "description": "操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。",
             "maxLength": 128
-          },
-          "operator_note": {
-            "type": "string",
-            "description": "操作备注；用于解释人工处理、异常处理或审批判断，进入审计留痕。",
-            "maxLength": 1000
           },
           "evidence_attachment_ids": {
             "type": "array",
@@ -115191,11 +114116,6 @@
             "type": "integer",
             "description": "条件值上限（须同时配置上下限）。",
             "minimum": 1
-          },
-          "reason": {
-            "type": "string",
-            "description": "调整原因，进入审计留痕。",
-            "maxLength": 500
           }
         }
       },
@@ -115274,11 +114194,6 @@
             "type": "integer",
             "description": "上限（须同时配置上下限）。",
             "minimum": 0
-          },
-          "reason": {
-            "type": "string",
-            "description": "调整原因，进入审计留痕。",
-            "maxLength": 500
           }
         }
       },

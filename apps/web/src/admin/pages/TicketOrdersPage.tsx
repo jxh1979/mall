@@ -1,4 +1,4 @@
-// 文件版本：V0.07
+// 文件版本：V0.08
 import React from "react";
 import { TechDetails } from "../components/TechDetails";
 import { AdminDataState } from "../components/AdminDataState";
@@ -51,7 +51,6 @@ const TEXT = {
   createdAt: "\u4e0b\u5355\u65f6\u95f4",
   paidAt: "\u652f\u4ed8\u65f6\u95f4",
   issueNote: "\u5b8c\u6574\u540e\u53f0\u9a8c\u6536\u51fa\u7968",
-  previewNote: "\u5b8c\u6574\u540e\u53f0\u9a8c\u6536\u6838\u9500\u9884\u68c0",
   ordersHelp: "\u8ba2\u5355\u603b\u6570",
   paidHelp: "\u5df2\u652f\u4ed8\u8ba2\u5355",
   pendingIssueHelp: "\u672a\u51fa\u7968\u8ba2\u5355",
@@ -340,10 +339,7 @@ export function TicketOrdersPage({ api, setActionResult, setGlobalError, effecti
     // 换一张票就先清掉上一张票的人脸提示。
     setFaceBinding(null);
     await runAction("ticket_verification_previewed", async () => {
-      const preview = await api.post<VerificationPreviewResult>("/api/v1/ticketing/verifications/preview", {
-        entitlementCode,
-        operatorNote: TEXT.previewNote,
-      });
+      const preview = await api.post<VerificationPreviewResult>("/api/v1/ticketing/verifications/preview", { entitlementCode });
       // TK-06：只按后端给的人脸处置提示；单次票、多人票或供应商不可用时不出现任何人脸区块。
       setFaceBinding(preview?.faceBinding ?? null);
       return preview;

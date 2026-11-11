@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 // 订台（BSM「官方 App 和小程序都可以订台，订台需要支付定金；订台页面须写明该卡座适用的最低消费金额与服务费比例」；BSM「客人自助订台必须支付定金，
 // 定金直接进该卡座所属的酒吧商户……每一笔订台都必须填写最晚到店时间；超过最晚到店时间未到店的，系统自动释放该台位」）：
 // 选台位（写明最低消费、服务费比例、可进人数与应付定金；已被预留的、本酒吧未配定金规则的不可选）→ 填到店时间、最晚到店时间与人数 → 下单 →
@@ -30,7 +30,7 @@ function optionView(option) {
 Component({
   data: {
     loggedIn: false, paused: false, loading: true, loadError: '', options: [], picked: null,
-    reserveDate: '', reserveTime: '', latestDate: '', latestTime: '', guests: '2', contactPhone: '', submitting: false, error: '',
+    reserveDate: '', reserveTime: '', latestDate: '', latestTime: '', guests: '2', submitting: false, error: '',
     reservation: null, depositText: '', busy: false, unavailable: false, unavailableText: pay.PAYMENT_UNAVAILABLE_TEXT,
     awaitingIntentId: '', payError: '', paid: false,
   },
@@ -70,9 +70,6 @@ Component({
     onGuests(e) {
       this.setData({ guests: e.detail.value })
     },
-    onPhone(e) {
-      this.setData({ contactPhone: e.detail.value })
-    },
     async submit() {
       const { picked, reserveDate, reserveTime, latestDate, latestTime } = this.data
       const guests = Number(this.data.guests)
@@ -89,7 +86,6 @@ Component({
       try {
         const reservation = await api.service('bar', picked.projectId).createBarReservation({
           barId: picked.barId, tableId: picked.tableId, tableType: picked.tableType, reservationTime, latestArrivalAt, guestCount: guests,
-          contactPhone: this.data.contactPhone.trim() || undefined,
         })
         this.setData({ reservation, depositText: yuan(reservation.depositAmountCent) })
       } catch (err) {

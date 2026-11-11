@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: 综合体管理系统 P0 API 契约
-  version: V0.63
+  version: V0.64
   description: P0 首批编码前置契约。本文采用 JSON-compatible YAML，便于与 openapi-p0.json 保持一致。正式后端以 Java 21 + Spring Boot 4.x +
     springdoc-openapi 输出运行时 OpenAPI，并与本契约比对。
 servers:
@@ -2924,8 +2924,6 @@ paths:
               properties:
                 idempotency_key:
                   type: string
-                operator_note:
-                  type: string
       responses:
         "200":
           $ref: "#/components/responses/Success"
@@ -2983,8 +2981,6 @@ paths:
               type: object
               properties:
                 idempotency_key:
-                  type: string
-                operator_note:
                   type: string
       responses:
         "200":
@@ -4511,10 +4507,6 @@ paths:
                   type: string
                   description: 操作幂等键；重复提交必须返回同一处理结果，避免重复写入。
                   maxLength: 128
-                operator_note:
-                  type: string
-                  description: 操作留痕备注；进入审计。
-                  maxLength: 1000
                 evidence_attachment_ids:
                   type: array
                   description: 渠道对账单原件附件 ID 列表（先经 /api/v1/evidence/attachments/upload 上传）；须真实存在，随差异落库；不带原件照收为待补凭证。
@@ -5399,10 +5391,6 @@ paths:
                   type: string
                   description: 操作幂等键；重复提交必须返回同一处理结果，避免重复写入。
                   maxLength: 128
-                operator_note:
-                  type: string
-                  description: 操作留痕备注。
-                  maxLength: 1000
                 shape_id:
                   type: string
                   description: 图形 ID。
@@ -5499,10 +5487,6 @@ paths:
                   type: string
                   description: 操作幂等键；重复提交必须返回同一处理结果，避免重复写入。
                   maxLength: 128
-                operator_note:
-                  type: string
-                  description: 操作留痕备注；进入审计。
-                  maxLength: 1000
                 evidence_attachment_ids:
                   type: array
                   description: 证据附件 ID 列表；进入审计留痕。
@@ -5669,16 +5653,6 @@ paths:
                   type: string
                   description: 操作幂等键；重复提交必须返回同一处理结果，避免重复写入。
                   maxLength: 128
-                operator_note:
-                  type: string
-                  description: 操作留痕备注；进入审计。
-                  maxLength: 1000
-                evidence_attachment_ids:
-                  type: array
-                  description: 证据附件 ID 列表；进入审计留痕。
-                  items:
-                    type: string
-                    maxLength: 64
                 provider_code:
                   type: string
                   description: 渠道编码。
@@ -6092,10 +6066,6 @@ paths:
                   type: string
                   description: 操作幂等键；重复提交必须返回同一处理结果，避免重复写入。
                   maxLength: 128
-                operator_note:
-                  type: string
-                  description: 操作留痕备注；进入审计。
-                  maxLength: 1000
                 evidence_attachment_ids:
                   type: array
                   description: 证据附件 ID 列表；进入审计留痕。
@@ -7384,10 +7354,6 @@ paths:
                   type: string
                   description: 作废原因
                   maxLength: 255
-                operator_note:
-                  type: string
-                  description: 操作备注
-                  maxLength: 255
                 photo_attachment_ids:
                   type: array
                   description: 照片证据 id 列表(高价值作废必填且非空)
@@ -7397,12 +7363,6 @@ paths:
                 video_attachment_ids:
                   type: array
                   description: 视频证据 id 列表(高价值作废必填且非空)
-                  items:
-                    type: string
-                    maxLength: 64
-                evidence_attachment_ids:
-                  type: array
-                  description: 综合证据附件 id 列表(兼容字段;不再单独作为放行判据)
                   items:
                     type: string
                     maxLength: 64
@@ -8322,10 +8282,6 @@ paths:
                   items:
                     type: string
                   description: 借用单借出方交货扫到的随货溯源码（须扫齐）。
-                operator_note:
-                  type: string
-                  maxLength: 500
-                  description: 操作备注。
       x-failure-codes:
       - TRANSFER_ORDER_NOT_FOUND
       - TRANSFER_ORDER_NOT_CREATED
@@ -8467,11 +8423,6 @@ paths:
                   type: string
                   maxLength: 128
                   description: 幂等键（X-Idempotency-Key 请求体镜像）。
-                scanned_trace_codes:
-                  type: array
-                  items:
-                    type: string
-                  description: 随货溯源码清单（高价值必扫核对，防调包）。
                 operator_note:
                   type: string
                   maxLength: 500
@@ -14885,10 +14836,6 @@ paths:
                   type: string
                   description: 操作幂等键；重复提交必须返回同一处理结果，避免重复写入。
                   maxLength: 128
-                operator_note:
-                  type: string
-                  description: 操作留痕备注。
-                  maxLength: 1000
                 merchant_id:
                   type: string
                   description: 商户 ID。
@@ -20346,16 +20293,6 @@ paths:
                   type: string
                   description: 操作幂等键；重复提交必须返回同一处理结果，避免重复写入。
                   maxLength: 128
-                operator_note:
-                  type: string
-                  description: 操作留痕备注；进入审计。
-                  maxLength: 1000
-                evidence_attachment_ids:
-                  type: array
-                  description: 证据附件 ID 列表；进入审计留痕。
-                  items:
-                    type: string
-                    maxLength: 64
                 source_domain:
                   type: string
                   description: 来源业务域。
@@ -20520,20 +20457,6 @@ paths:
                   type: string
                   description: 操作幂等键；重复提交必须返回同一处理结果，避免重复写入。
                   maxLength: 128
-                operator_note:
-                  type: string
-                  description: 操作留痕备注；进入审计。
-                  maxLength: 1000
-                evidence_attachment_ids:
-                  type: array
-                  description: 证据附件 ID 列表；进入审计留痕。
-                  items:
-                    type: string
-                    maxLength: 64
-                target_handler_id:
-                  type: string
-                  description: 目标处理人用户 ID（transfer/escalate 必填）。
-                  maxLength: 64
                 reason:
                   type: string
                   description: 操作原因。
@@ -20587,16 +20510,6 @@ paths:
                   type: string
                   description: 操作幂等键；重复提交必须返回同一处理结果，避免重复写入。
                   maxLength: 128
-                operator_note:
-                  type: string
-                  description: 操作留痕备注；进入审计。
-                  maxLength: 1000
-                evidence_attachment_ids:
-                  type: array
-                  description: 证据附件 ID 列表；进入审计留痕。
-                  items:
-                    type: string
-                    maxLength: 64
                 target_handler_id:
                   type: string
                   description: 目标处理人用户 ID（transfer/escalate 必填）。
@@ -20654,16 +20567,6 @@ paths:
                   type: string
                   description: 操作幂等键；重复提交必须返回同一处理结果，避免重复写入。
                   maxLength: 128
-                operator_note:
-                  type: string
-                  description: 操作留痕备注；进入审计。
-                  maxLength: 1000
-                evidence_attachment_ids:
-                  type: array
-                  description: 证据附件 ID 列表；进入审计留痕。
-                  items:
-                    type: string
-                    maxLength: 64
                 target_handler_id:
                   type: string
                   description: 目标处理人用户 ID（transfer/escalate 必填）。
@@ -20721,23 +20624,9 @@ paths:
                   type: string
                   description: 操作幂等键；重复提交必须返回同一处理结果，避免重复写入。
                   maxLength: 128
-                operator_note:
-                  type: string
-                  description: 操作留痕备注；进入审计。
-                  maxLength: 1000
-                evidence_attachment_ids:
-                  type: array
-                  description: 证据附件 ID 列表；进入审计留痕。
-                  items:
-                    type: string
-                    maxLength: 64
                 resolution_conclusion:
                   type: string
                   description: 处置结论。
-                  maxLength: 4000
-                reason:
-                  type: string
-                  description: 处置原因。
                   maxLength: 4000
       responses:
         "200":
@@ -20787,20 +20676,6 @@ paths:
                   type: string
                   description: 操作幂等键；重复提交必须返回同一处理结果，避免重复写入。
                   maxLength: 128
-                operator_note:
-                  type: string
-                  description: 操作留痕备注；进入审计。
-                  maxLength: 1000
-                evidence_attachment_ids:
-                  type: array
-                  description: 证据附件 ID 列表；进入审计留痕。
-                  items:
-                    type: string
-                    maxLength: 64
-                target_handler_id:
-                  type: string
-                  description: 目标处理人用户 ID（transfer/escalate 必填）。
-                  maxLength: 64
                 reason:
                   type: string
                   description: 操作原因。
@@ -20847,16 +20722,6 @@ paths:
                   type: string
                   description: 操作幂等键；重复提交必须返回同一处理结果，避免重复写入。
                   maxLength: 128
-                operator_note:
-                  type: string
-                  description: 操作留痕备注；进入审计。
-                  maxLength: 1000
-                evidence_attachment_ids:
-                  type: array
-                  description: 证据附件 ID 列表；进入审计留痕。
-                  items:
-                    type: string
-                    maxLength: 64
                 merchant_id:
                   type: string
                   description: 商户 ID。
@@ -20919,16 +20784,6 @@ paths:
                   type: string
                   description: 操作幂等键；重复提交必须返回同一处理结果，避免重复写入。
                   maxLength: 128
-                operator_note:
-                  type: string
-                  description: 操作留痕备注；进入审计。
-                  maxLength: 1000
-                evidence_attachment_ids:
-                  type: array
-                  description: 证据附件 ID 列表；进入审计留痕。
-                  items:
-                    type: string
-                    maxLength: 64
                 inventory_variance_id:
                   type: string
                   description: 库存差异记录 ID。
@@ -20981,16 +20836,6 @@ paths:
                   type: string
                   description: 操作幂等键；重复提交必须返回同一处理结果，避免重复写入。
                   maxLength: 128
-                operator_note:
-                  type: string
-                  description: 操作留痕备注；进入审计。
-                  maxLength: 1000
-                evidence_attachment_ids:
-                  type: array
-                  description: 证据附件 ID 列表；进入审计留痕。
-                  items:
-                    type: string
-                    maxLength: 64
                 rule_id:
                   type: string
                   description: 抽成规则 ID。
@@ -21162,16 +21007,6 @@ paths:
                   type: string
                   description: 操作幂等键；重复提交必须返回同一处理结果，避免重复写入。
                   maxLength: 128
-                operator_note:
-                  type: string
-                  description: 操作留痕备注；进入审计。
-                  maxLength: 1000
-                evidence_attachment_ids:
-                  type: array
-                  description: 证据附件 ID 列表；进入审计留痕。
-                  items:
-                    type: string
-                    maxLength: 64
                 provider_code:
                   type: string
                   description: 渠道/供应商编码。
@@ -21266,10 +21101,6 @@ paths:
                   type: string
                   description: 操作幂等键；重复提交必须返回同一处理结果，避免重复写入。
                   maxLength: 128
-                operator_note:
-                  type: string
-                  description: 操作留痕备注；进入审计。
-                  maxLength: 1000
                 evidence_attachment_ids:
                   type: array
                   description: 证据附件 ID 列表；进入审计留痕。
@@ -21363,10 +21194,6 @@ paths:
                   type: string
                   description: 操作幂等键；重复提交必须返回同一处理结果，避免重复写入。
                   maxLength: 128
-                operator_note:
-                  type: string
-                  description: 操作留痕备注；进入审计。
-                  maxLength: 1000
                 evidence_attachment_ids:
                   type: array
                   description: 证据附件 ID 列表；进入审计留痕。
@@ -21530,10 +21357,6 @@ paths:
                   type: string
                   description: 操作幂等键；重复提交必须返回同一处理结果，避免重复写入。
                   maxLength: 128
-                operator_note:
-                  type: string
-                  description: 操作留痕备注；进入审计。
-                  maxLength: 1000
                 evidence_attachment_ids:
                   type: array
                   description: 证据附件 ID 列表；进入审计留痕。
@@ -21599,10 +21422,6 @@ paths:
                   type: string
                   description: 操作幂等键；重复提交必须返回同一处理结果，避免重复写入。
                   maxLength: 128
-                action:
-                  type: string
-                  description: 执行动作。
-                  maxLength: 255
                 reason:
                   type: string
                   description: 执行原因。
@@ -21673,23 +21492,9 @@ paths:
                   type: string
                   description: 操作幂等键；重复提交必须返回同一处理结果，避免重复写入。
                   maxLength: 128
-                operator_note:
-                  type: string
-                  description: 操作留痕备注；进入审计。
-                  maxLength: 1000
-                evidence_attachment_ids:
-                  type: array
-                  description: 证据附件 ID 列表；进入审计留痕。
-                  items:
-                    type: string
-                    maxLength: 64
                 bar_id:
                   type: string
                   description: 吧台 ID。
-                  maxLength: 64
-                merchant_id:
-                  type: string
-                  description: 商户 ID。
                   maxLength: 64
                 table_id:
                   type: string
@@ -21713,10 +21518,6 @@ paths:
                 service_staff_id:
                   type: string
                   description: 主责服务人。卡座与 VIP 包坐须为该卡座点位此刻已发布排班或真实顶班人员，否则 409 BAR_SERVICE_STAFF_NOT_SCHEDULED；不填时当班恰好一人即指派该人，多人或无人留空（BSM 第 1077 行）。散台、吧台位照旧取本字段。
-                  maxLength: 64
-                opened_by_user_id:
-                  type: string
-                  description: 开台操作人。
                   maxLength: 64
       responses:
         "200":
@@ -21765,10 +21566,6 @@ paths:
                   type: string
                   description: 操作幂等键；重复提交必须返回同一处理结果，避免重复写入。
                   maxLength: 128
-                operator_note:
-                  type: string
-                  description: 操作留痕备注；进入审计。
-                  maxLength: 1000
                 evidence_attachment_ids:
                   type: array
                   description: 证据附件 ID 列表；进入审计留痕。
@@ -21783,10 +21580,6 @@ paths:
                   type: string
                   description: 合并原因。
                   maxLength: 4000
-                requested_by_user_id:
-                  type: string
-                  description: 发起人。
-                  maxLength: 64
                 primary_session_version:
                   type: integer
                   description: 主会话版本号。
@@ -21844,10 +21637,6 @@ paths:
                   type: string
                   description: 操作幂等键；重复提交必须返回同一处理结果，避免重复写入。
                   maxLength: 128
-                operator_note:
-                  type: string
-                  description: 操作留痕备注；进入审计。
-                  maxLength: 1000
                 evidence_attachment_ids:
                   type: array
                   description: 证据附件 ID 列表；进入审计留痕。
@@ -21917,10 +21706,6 @@ paths:
                   type: string
                   description: 拆台原因。
                   maxLength: 4000
-                requested_by_user_id:
-                  type: string
-                  description: 发起人。
-                  maxLength: 64
                 primary_session_version:
                   type: integer
                   description: 主会话版本号。
@@ -21977,10 +21762,6 @@ paths:
                   type: string
                   description: 操作幂等键；重复提交必须返回同一处理结果，避免重复写入。
                   maxLength: 128
-                operator_note:
-                  type: string
-                  description: 操作留痕备注；进入审计。
-                  maxLength: 1000
                 evidence_attachment_ids:
                   type: array
                   description: 证据附件 ID 列表；进入审计留痕。
@@ -21995,10 +21776,6 @@ paths:
                   type: string
                   description: 转台原因。
                   maxLength: 4000
-                requested_by_user_id:
-                  type: string
-                  description: 发起人。
-                  maxLength: 64
                 session_version:
                   type: integer
                   description: 会话版本号。
@@ -22311,10 +22088,6 @@ paths:
                   type: string
                   description: 操作幂等键；重复提交必须返回同一处理结果，避免重复写入。
                   maxLength: 128
-                operator_note:
-                  type: string
-                  description: 操作留痕备注；进入审计。
-                  maxLength: 1000
                 evidence_attachment_ids:
                   type: array
                   description: 证据附件 ID 列表；进入审计留痕。
@@ -22334,10 +22107,6 @@ paths:
                   type: string
                   description: 调整原因。
                   maxLength: 4000
-                requested_by_user_id:
-                  type: string
-                  description: 发起人。
-                  maxLength: 64
                 refund_lines:
                   type: array
                   items:
@@ -22390,10 +22159,6 @@ paths:
                   type: string
                   description: 操作幂等键；重复提交必须返回同一处理结果，避免重复写入。
                   maxLength: 128
-                operator_note:
-                  type: string
-                  description: 操作留痕备注；进入审计。
-                  maxLength: 1000
                 evidence_attachment_ids:
                   type: array
                   description: 证据附件 ID 列表；进入审计留痕。
@@ -22408,10 +22173,6 @@ paths:
                   type: string
                   description: 合并原因。
                   maxLength: 4000
-                requested_by_user_id:
-                  type: string
-                  description: 发起人。
-                  maxLength: 64
       responses:
         "200":
           $ref: "#/components/responses/Success"
@@ -22459,10 +22220,6 @@ paths:
                   type: string
                   description: 操作幂等键；重复提交必须返回同一处理结果，避免重复写入。
                   maxLength: 128
-                operator_note:
-                  type: string
-                  description: 操作留痕备注；进入审计。
-                  maxLength: 1000
                 evidence_attachment_ids:
                   type: array
                   description: 证据附件 ID 列表；进入审计留痕。
@@ -22478,10 +22235,6 @@ paths:
                   type: string
                   description: 拆分原因。
                   maxLength: 4000
-                requested_by_user_id:
-                  type: string
-                  description: 发起人。
-                  maxLength: 64
       responses:
         "200":
           $ref: "#/components/responses/Success"
@@ -22636,10 +22389,6 @@ paths:
                   type: string
                   description: 出品工位编码。
                   maxLength: 255
-                operator_user_id:
-                  type: string
-                  description: 操作人。
-                  maxLength: 64
                 reason:
                   type: string
                   description: 流转原因。
@@ -22699,12 +22448,6 @@ paths:
                   type: string
                   description: 原因。
                   maxLength: 4000
-                evidence_attachment_ids:
-                  type: array
-                  description: 证据附件 ID 列表。
-                  items:
-                    type: string
-                    maxLength: 64
       responses:
         "200":
           $ref: "#/components/responses/Success"
@@ -22760,12 +22503,6 @@ paths:
                   type: string
                   description: 原因。
                   maxLength: 4000
-                evidence_attachment_ids:
-                  type: array
-                  description: 证据附件 ID 列表。
-                  items:
-                    type: string
-                    maxLength: 64
       responses:
         "200":
           $ref: "#/components/responses/Success"
@@ -23068,10 +22805,6 @@ paths:
                   type: string
                   description: 操作幂等键；重复提交必须返回同一处理结果，避免重复写入。
                   maxLength: 128
-                operator_note:
-                  type: string
-                  description: 操作留痕备注；进入审计。
-                  maxLength: 1000
                 evidence_attachment_ids:
                   type: array
                   description: 证据附件 ID 列表；进入审计留痕。
@@ -23165,10 +22898,6 @@ paths:
                   type: string
                   description: 操作幂等键；重复提交必须返回同一处理结果，避免重复写入。
                   maxLength: 128
-                operator_note:
-                  type: string
-                  description: 操作留痕备注；进入审计。
-                  maxLength: 1000
                 evidence_attachment_ids:
                   type: array
                   description: 证据附件 ID 列表；进入审计留痕。
@@ -23943,17 +23672,9 @@ paths:
                   type: string
                   description: 操作幂等键；重复提交必须返回同一处理结果，避免重复写入。
                   maxLength: 128
-                operator_note:
-                  type: string
-                  description: 操作留痕备注。
-                  maxLength: 1000
                 expiry_warning_days:
                   type: integer
                   description: 临期预警天数阈值。
-                operator_user_id:
-                  type: string
-                  description: 操作人。
-                  maxLength: 64
       responses:
         "200":
           $ref: "#/components/responses/Success"
@@ -24015,10 +23736,6 @@ paths:
                   type: string
                   description: 操作幂等键；重复提交必须返回同一处理结果，避免重复写入。
                   maxLength: 128
-                operator_note:
-                  type: string
-                  description: 操作留痕备注；进入审计。
-                  maxLength: 1000
                 evidence_attachment_ids:
                   type: array
                   description: 证据附件 ID 列表；进入审计留痕。
@@ -24213,10 +23930,6 @@ paths:
                   type: string
                   description: 操作幂等键；重复提交必须返回同一处理结果，避免重复写入。
                   maxLength: 128
-                operator_note:
-                  type: string
-                  description: 操作留痕备注；进入审计。
-                  maxLength: 1000
                 evidence_attachment_ids:
                   type: array
                   description: 证据附件 ID 列表；进入审计留痕。
@@ -24249,10 +23962,6 @@ paths:
                   type: string
                   description: 状态。
                   maxLength: 255
-                operator_user_id:
-                  type: string
-                  description: 操作人。
-                  maxLength: 64
       responses:
         "200":
           $ref: "#/components/responses/Success"
@@ -24390,32 +24099,10 @@ paths:
                   type: string
                   description: 操作幂等键；重复提交必须返回同一处理结果，避免重复写入。
                   maxLength: 128
-                operator_note:
-                  type: string
-                  description: 操作留痕备注；进入审计。
-                  maxLength: 1000
-                evidence_attachment_ids:
-                  type: array
-                  description: 证据附件 ID 列表；进入审计留痕。
-                  items:
-                    type: string
-                    maxLength: 64
                 reason:
                   type: string
                   description: 争议原因。
                   maxLength: 4000
-                photo_attachment_ids:
-                  type: array
-                  description: 照片附件 ID 列表。
-                  items:
-                    type: string
-                    maxLength: 64
-                video_attachment_ids:
-                  type: array
-                  description: 视频附件 ID 列表。
-                  items:
-                    type: string
-                    maxLength: 64
       responses:
         "200":
           $ref: "#/components/responses/Success"
@@ -24473,10 +24160,6 @@ paths:
                   type: string
                   description: 操作幂等键；重复提交必须返回同一处理结果，避免重复写入。
                   maxLength: 128
-                operator_note:
-                  type: string
-                  description: 操作留痕备注；进入审计。
-                  maxLength: 1000
                 evidence_attachment_ids:
                   type: array
                   description: 证据附件 ID 列表；进入审计留痕。
@@ -24580,10 +24263,6 @@ paths:
                   type: string
                   description: 操作幂等键；重复提交必须返回同一处理结果，避免重复写入。
                   maxLength: 128
-                operator_note:
-                  type: string
-                  description: 操作留痕备注；进入审计。
-                  maxLength: 1000
                 evidence_attachment_ids:
                   type: array
                   description: 证据附件 ID 列表；进入审计留痕。
@@ -24708,10 +24387,6 @@ paths:
                   type: string
                   description: 操作幂等键；重复提交必须返回同一处理结果，避免重复写入。
                   maxLength: 128
-                operator_note:
-                  type: string
-                  description: 操作留痕备注。
-                  maxLength: 1000
                 scan_date:
                   type: string
                   format: date
@@ -25075,16 +24750,6 @@ paths:
                   type: string
                   description: 操作幂等键；重复提交必须返回同一处理结果，避免重复写入。
                   maxLength: 128
-                operator_note:
-                  type: string
-                  description: 操作留痕备注；进入审计。
-                  maxLength: 1000
-                evidence_attachment_ids:
-                  type: array
-                  description: 证据附件 ID 列表；进入审计留痕。
-                  items:
-                    type: string
-                    maxLength: 64
                 staff_id:
                   type: string
                   description: 关联员工 ID。
@@ -25141,16 +24806,6 @@ paths:
                   type: string
                   description: 操作幂等键；重复提交必须返回同一处理结果，避免重复写入。
                   maxLength: 128
-                operator_note:
-                  type: string
-                  description: 操作留痕备注；进入审计。
-                  maxLength: 1000
-                evidence_attachment_ids:
-                  type: array
-                  description: 证据附件 ID 列表；进入审计留痕。
-                  items:
-                    type: string
-                    maxLength: 64
                 staff_id:
                   type: string
                   description: 关联员工 ID。
@@ -25207,16 +24862,6 @@ paths:
                   type: string
                   description: 操作幂等键；重复提交必须返回同一处理结果，避免重复写入。
                   maxLength: 128
-                operator_note:
-                  type: string
-                  description: 操作留痕备注；进入审计。
-                  maxLength: 1000
-                evidence_attachment_ids:
-                  type: array
-                  description: 证据附件 ID 列表；进入审计留痕。
-                  items:
-                    type: string
-                    maxLength: 64
                 staff_id:
                   type: string
                   description: 关联员工 ID。
@@ -25272,16 +24917,6 @@ paths:
                   type: string
                   description: 操作幂等键；重复提交必须返回同一处理结果，避免重复写入。
                   maxLength: 128
-                operator_note:
-                  type: string
-                  description: 操作留痕备注；进入审计。
-                  maxLength: 1000
-                evidence_attachment_ids:
-                  type: array
-                  description: 证据附件 ID 列表；进入审计留痕。
-                  items:
-                    type: string
-                    maxLength: 64
                 staff_id:
                   type: string
                   description: 关联员工 ID。
@@ -25338,16 +24973,6 @@ paths:
                   type: string
                   description: 操作幂等键；重复提交必须返回同一处理结果，避免重复写入。
                   maxLength: 128
-                operator_note:
-                  type: string
-                  description: 操作留痕备注；进入审计。
-                  maxLength: 1000
-                evidence_attachment_ids:
-                  type: array
-                  description: 证据附件 ID 列表；进入审计留痕。
-                  items:
-                    type: string
-                    maxLength: 64
                 staff_id:
                   type: string
                   description: 关联员工 ID。
@@ -25475,16 +25100,6 @@ paths:
                   type: string
                   description: 操作幂等键；重复提交必须返回同一处理结果，避免重复写入。
                   maxLength: 128
-                operator_note:
-                  type: string
-                  description: 操作留痕备注；进入审计。
-                  maxLength: 1000
-                evidence_attachment_ids:
-                  type: array
-                  description: 证据附件 ID 列表；进入审计留痕。
-                  items:
-                    type: string
-                    maxLength: 64
                 staff_id:
                   type: string
                   description: 关联员工 ID。
@@ -25595,16 +25210,6 @@ paths:
                   type: string
                   description: 操作幂等键；重复提交必须返回同一处理结果，避免重复写入。
                   maxLength: 128
-                operator_note:
-                  type: string
-                  description: 操作留痕备注；进入审计。
-                  maxLength: 1000
-                evidence_attachment_ids:
-                  type: array
-                  description: 证据附件 ID 列表。
-                  items:
-                    type: string
-                    maxLength: 64
                 device_id:
                   type: string
                   description: 设备 ID。
@@ -25668,16 +25273,6 @@ paths:
                   type: string
                   description: 操作幂等键；重复提交必须返回同一处理结果，避免重复写入。
                   maxLength: 128
-                operator_note:
-                  type: string
-                  description: 操作留痕备注；进入审计。
-                  maxLength: 1000
-                evidence_attachment_ids:
-                  type: array
-                  description: 证据附件 ID 列表。
-                  items:
-                    type: string
-                    maxLength: 64
                 disposition:
                   type: string
                   description: 处置动作。
@@ -25735,10 +25330,6 @@ paths:
                   type: string
                   description: 操作幂等键；重复提交必须返回同一处理结果，避免重复写入。
                   maxLength: 128
-                operator_note:
-                  type: string
-                  description: 操作留痕备注。
-                  maxLength: 1000
                 operator_user_id:
                   type: string
                   description: 操作人。
@@ -25789,10 +25380,6 @@ paths:
                   type: string
                   description: 操作幂等键；重复提交必须返回同一处理结果，避免重复写入。
                   maxLength: 128
-                operator_note:
-                  type: string
-                  description: 操作留痕备注。
-                  maxLength: 1000
                 evidence_attachment_ids:
                   type: array
                   description: 证据附件 ID 列表。
@@ -25857,10 +25444,6 @@ paths:
                   type: string
                   description: 操作幂等键；重复提交必须返回同一处理结果，避免重复写入。
                   maxLength: 128
-                operator_note:
-                  type: string
-                  description: 操作留痕备注。
-                  maxLength: 1000
                 dunning_channel:
                   type: string
                   description: 催收渠道。
@@ -28151,8 +27734,6 @@ paths:
                   type: string
                 status:
                   type: string
-                is_draft:
-                  type: boolean
                 idempotency_key:
                   type: string
       responses:
@@ -34871,8 +34452,6 @@ paths:
               properties:
                 idempotency_key:
                   type: string
-                note:
-                  type: string
               required:
                 - idempotency_key
   /api/v1/facility/site-entry-reports/{report_id}:
@@ -35039,8 +34618,6 @@ paths:
               type: object
               properties:
                 idempotency_key:
-                  type: string
-                note:
                   type: string
               required:
                 - idempotency_key
@@ -35438,10 +35015,6 @@ paths:
                   type: string
                   description: 操作幂等键；重复提交必须返回同一处理结果，避免重复写入。
                   maxLength: 128
-                operator_note:
-                  type: string
-                  description: 操作留痕备注。
-                  maxLength: 1000
                 reason:
                   type: string
                   description: 异议理由(商户留言)。
@@ -35494,10 +35067,6 @@ paths:
                   type: string
                   description: 操作幂等键；重复提交必须返回同一处理结果，避免重复写入。
                   maxLength: 128
-                operator_note:
-                  type: string
-                  description: 操作留痕备注。
-                  maxLength: 1000
                 reason:
                   type: string
                   description: 不接受裁决的理由。
@@ -43023,10 +42592,6 @@ paths:
                     required:
                       - item_id
                       - accepted_quantity
-                note:
-                  type: string
-                  description: 说明
-                  maxLength: 500
                 evidence_attachment_ids:
                   type: array
                   minItems: 1
@@ -46404,17 +45969,8 @@ paths:
               properties:
                 idempotency_key:
                   type: string
-                project_id:
-                  type: string
                 bar_merchant_id:
                   type: string
-                media_merchant_id:
-                  type: string
-                show_kind:
-                  type: string
-                  enum:
-                    - bar_show
-                    - self_hosted
                 show_date:
                   type: string
                   format: date
@@ -46949,8 +46505,6 @@ paths:
                 project_id:
                   type: string
                 merchant_id:
-                  type: string
-                entitlement_type:
                   type: string
                 fee_bps:
                   type: integer
@@ -50374,12 +49928,6 @@ paths:
                   type: string
                   description: 同一请求重试必须复用幂等键
                   maxLength: 128
-                operator_note:
-                  type:
-                    - string
-                    - "null"
-                  description: 操作说明
-                  maxLength: 1000
                 line_name:
                   type: string
                   description: 审批线名称
@@ -51561,17 +51109,11 @@ paths:
                   type: string
                   description: ""
                   minLength: 1
-                evidence_attachment_ids:
-                  type: array
-                  items:
-                    type: string
-                    description: ""
               required:
                 - idempotency_key
                 - old_device_code
                 - replacement_device_id
                 - reason
-                - evidence_attachment_ids
               additionalProperties: false
               description: ""
   /api/v1/dealers/orders/{id}/delivery:
@@ -62555,7 +62097,6 @@ components:
             table_type: vip
             reservation_time: "2026-06-20T21:00:00+08:00"
             guest_count: 6
-            contact_phone: "13800138000"
             latest_arrival_at: "2026-06-20T23:00:00+08:00"
     BarTableRequest:
       required: true
@@ -62590,9 +62131,6 @@ components:
               - sku_id: sku_whisky_001
                 quantity: 1
                 unit_price_cent: 128800
-            service_user_ids:
-              - staff_service_001
-            payment_mode: scan_qr
     BarOrderDeliveryRequest:
       required: true
       content:
@@ -63098,7 +62636,6 @@ components:
               summary: Evaluate contract violation blocking
               value:
                 idempotency_key: review-evaluate-1
-                operator_note: 完整后台验收主管复核评估
                 evidence_attachment_ids:
                   - att_contract_snapshot
                 action_type: contract_violation
@@ -63120,7 +62657,6 @@ components:
                 operator_note: 主管复核证据已核验
                 evidence_attachment_ids:
                   - att_review_evidence
-                reviewer_level: 3
                 decision: approved
                 comment: 同意放行
     StaffLevelAssignmentRequest:
@@ -63158,7 +62694,6 @@ components:
           example:
             idempotency_key: arap_adj_decide_20260630_000001
             decision: approve
-            operator_note: 经财务复核同意补录
     BarReservationDepositActionRequest:
       required: true
       content:
@@ -65224,13 +64759,6 @@ components:
           type: string
           description: 操作备注；用于解释人工处理、异常处理或审批判断，进入审计留痕。
           maxLength: 1000
-        evidence_attachment_ids:
-          type: array
-          description: 证据附件 ID 列表；用于绑定图片、合同、审批、支付凭证或异常说明。
-          items:
-            type: string
-            maxLength: 64
-          maxItems: 50
         role_name:
           type: string
           description: 名称字段；用于后台展示、检索和审计记录，保存前必须去除首尾空白。
@@ -65323,13 +64851,6 @@ components:
           type: string
           description: 操作备注；用于解释人工处理、异常处理或审批判断，进入审计留痕。
           maxLength: 1000
-        evidence_attachment_ids:
-          type: array
-          description: 证据附件 ID 列表；用于绑定图片、合同、审批、支付凭证或异常说明。
-          items:
-            type: string
-            maxLength: 64
-          maxItems: 50
         template_name:
           type: string
           description: 名称字段；用于后台展示、检索和审计记录，保存前必须去除首尾空白。
@@ -65341,10 +64862,6 @@ components:
           enum:
             - base
             - temporary
-          maxLength: 64
-        source_template_id:
-          type: string
-          description: 业务对象唯一标识；必须引用当前数据范围内存在且允许访问的记录。
           maxLength: 64
         permission_codes:
           type: array
@@ -65384,27 +64901,11 @@ components:
       additionalProperties: false
       required:
         - target_user_ids
-        - template_id
       properties:
         idempotency_key:
           type: string
           description: 操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。
           maxLength: 128
-        operator_note:
-          type: string
-          description: 操作备注；用于解释人工处理、异常处理或审批判断，进入审计留痕。
-          maxLength: 1000
-        evidence_attachment_ids:
-          type: array
-          description: 证据附件 ID 列表；用于绑定图片、合同、审批、支付凭证或异常说明。
-          items:
-            type: string
-            maxLength: 64
-          maxItems: 50
-        template_id:
-          type: string
-          description: 业务对象唯一标识；必须引用当前数据范围内存在且允许访问的记录。
-          maxLength: 64
         target_user_ids:
           type: array
           description: "`target_user_ids` ID 列表；必须引用已存在的业务对象并进入审计校验。"
@@ -65433,17 +64934,6 @@ components:
           type: string
           description: 操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。
           maxLength: 128
-        operator_note:
-          type: string
-          description: 操作备注；用于解释人工处理、异常处理或审批判断，进入审计留痕。
-          maxLength: 1000
-        evidence_attachment_ids:
-          type: array
-          description: 证据附件 ID 列表；用于绑定图片、合同、审批、支付凭证或异常说明。
-          items:
-            type: string
-            maxLength: 64
-          maxItems: 50
         target_user_id:
           type: string
           description: 用户/员工唯一标识；必须引用当前数据范围内存在且允许访问的记录。
@@ -65485,17 +64975,6 @@ components:
           type: string
           description: 操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。
           maxLength: 128
-        operator_note:
-          type: string
-          description: 操作备注；用于解释人工处理、异常处理或审批判断，进入审计留痕。
-          maxLength: 1000
-        evidence_attachment_ids:
-          type: array
-          description: 证据附件 ID 列表；用于绑定图片、合同、审批、支付凭证或异常说明。
-          items:
-            type: string
-            maxLength: 64
-          maxItems: 50
         device_id:
           type: string
           description: 设备唯一 ID；必须来自设备绑定档案，不允许临时文本代替。
@@ -65653,13 +65132,6 @@ components:
           type: string
           description: 操作备注；用于解释人工处理、异常处理或审批判断，进入审计留痕。
           maxLength: 1000
-        evidence_attachment_ids:
-          type: array
-          description: 证据附件 ID 列表；用于绑定图片、合同、审批、支付凭证或异常说明。
-          items:
-            type: string
-            maxLength: 64
-          maxItems: 50
         enabled:
           type: boolean
           description: CapabilitySwitchRequest.enabled 字段；必须按本 schema 的类型、必填项、枚举、长度、单位和对应 PRD 规则校验。
@@ -65918,17 +65390,6 @@ components:
           type: string
           description: 操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。
           maxLength: 128
-        operator_note:
-          type: string
-          description: 操作备注；用于解释人工处理、异常处理或审批判断，进入审计留痕。
-          maxLength: 1000
-        evidence_attachment_ids:
-          type: array
-          description: 证据附件 ID 列表；用于绑定图片、合同、审批、支付凭证或异常说明。
-          items:
-            type: string
-            maxLength: 64
-          maxItems: 50
         ticket_type_id:
           type: string
           description: 票务唯一标识；必须引用当前数据范围内存在且允许访问的记录。
@@ -65996,13 +65457,6 @@ components:
           type: string
           description: 操作备注；用于解释人工处理、异常处理或审批判断，进入审计留痕。
           maxLength: 1000
-        evidence_attachment_ids:
-          type: array
-          description: 证据附件 ID 列表；用于绑定图片、合同、审批、支付凭证或异常说明。
-          items:
-            type: string
-            maxLength: 64
-          maxItems: 50
         ticket_type_id:
           type: string
           description: 票务唯一标识；必须引用当前数据范围内存在且允许访问的记录。
@@ -66456,11 +65910,6 @@ components:
           description: 数量字段；必须为非负数，并受对应业务容量、库存或分页规则约束。
           minimum: 0
           maximum: 999999
-        contact_phone:
-          type: string
-          description: 手机号字段；用于客人或员工身份匹配，保存和展示必须遵守脱敏规则。
-          maxLength: 20
-          pattern: ^\+?[0-9]{6,20}$
         latest_arrival_at:
           type: string
           format: date-time
@@ -66593,17 +66042,6 @@ components:
           type: string
           description: 操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。
           maxLength: 128
-        operator_note:
-          type: string
-          description: 操作备注；用于解释人工处理、异常处理或审批判断，进入审计留痕。
-          maxLength: 1000
-        evidence_attachment_ids:
-          type: array
-          description: 证据附件 ID 列表；用于绑定图片、合同、审批、支付凭证或异常说明。
-          items:
-            type: string
-            maxLength: 64
-          maxItems: 50
         bar_id:
           type: string
           description: 酒吧唯一标识；必须引用当前数据范围内存在且允许访问的记录。
@@ -66622,22 +66060,6 @@ components:
           items:
             type: object
           maxItems: 200
-        service_user_ids:
-          type: array
-          description: "`service_user_ids` ID 列表；必须引用已存在的业务对象并进入审计校验。"
-          items:
-            type: string
-            maxLength: 64
-          maxItems: 200
-        payment_mode:
-          type: string
-          description: 下单时选择的支付方式（可空）：scan_qr 扫码、pay_code 付款码、offline 线下、on_account 挂账。下单不按它处理，实际收款渠道在结账时按 payment_channel 确定。
-          enum:
-            - scan_qr
-            - pay_code
-            - offline
-            - on_account
-          maxLength: 64
     BarOrderDeliveryRequest:
       type: object
       description: 请求载荷 `BarOrderDeliveryRequest`；字段、必填项和枚举用于生成 DTO、校验和契约测试。
@@ -66701,17 +66123,6 @@ components:
           type: string
           description: 操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。
           maxLength: 128
-        operator_note:
-          type: string
-          description: 操作备注；用于解释人工处理、异常处理或审批判断，进入审计留痕。
-          maxLength: 1000
-        evidence_attachment_ids:
-          type: array
-          description: 证据附件 ID 列表；用于绑定图片、合同、审批、支付凭证或异常说明。
-          items:
-            type: string
-            maxLength: 64
-          maxItems: 50
         payment_id:
           type: string
           description: 支付唯一标识；必须引用当前数据范围内存在且允许访问的记录。
@@ -66773,17 +66184,6 @@ components:
           type: string
           description: 操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。
           maxLength: 128
-        operator_note:
-          type: string
-          description: 操作备注；用于解释人工处理、异常处理或审批判断，进入审计留痕。
-          maxLength: 1000
-        evidence_attachment_ids:
-          type: array
-          description: 证据附件 ID 列表；用于绑定图片、合同、审批、支付凭证或异常说明。
-          items:
-            type: string
-            maxLength: 64
-          maxItems: 50
         supplier_name:
           type: string
           description: 名称字段；用于后台展示、检索和审计记录，保存前必须去除首尾空白。
@@ -66821,10 +66221,6 @@ components:
           type: string
           description: 操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。
           maxLength: 128
-        operator_note:
-          type: string
-          description: 操作备注；用于解释人工处理、异常处理或审批判断，进入审计留痕。
-          maxLength: 1000
         evidence_attachment_ids:
           type: array
           description: 证据附件 ID 列表；用于绑定图片、合同、审批、支付凭证或异常说明。
@@ -66875,10 +66271,6 @@ components:
           type: string
           description: 操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。
           maxLength: 128
-        operator_note:
-          type: string
-          description: 操作备注；用于解释人工处理、异常处理或审批判断，进入审计留痕。
-          maxLength: 1000
         evidence_attachment_ids:
           type: array
           description: 证据附件 ID 列表；用于绑定图片、合同、审批、支付凭证或异常说明。
@@ -67030,10 +66422,6 @@ components:
           type: string
           description: 操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。
           maxLength: 128
-        operator_note:
-          type: string
-          description: 操作备注；用于解释人工处理、异常处理或审批判断，进入审计留痕。
-          maxLength: 1000
         evidence_attachment_ids:
           type: array
           description: 证据附件 ID 列表；用于绑定图片、合同、审批、支付凭证或异常说明。
@@ -67095,10 +66483,6 @@ components:
           type: string
           description: 操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。
           maxLength: 128
-        operator_note:
-          type: string
-          description: 操作备注；用于解释人工处理、异常处理或审批判断，进入审计留痕。
-          maxLength: 1000
         evidence_attachment_ids:
           type: array
           description: 证据附件 ID 列表；用于绑定图片、合同、审批、支付凭证或异常说明。
@@ -67149,10 +66533,6 @@ components:
           type: "string"
           description: "操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。"
           maxLength: 128
-        operator_note:
-          type: "string"
-          description: "操作备注；用于解释人工处理、异常处理或审批判断，进入审计留痕。"
-          maxLength: 1000
         evidence_attachment_ids:
           type: "array"
           description: "证据附件 ID 列表；用于绑定图片、合同、审批、支付凭证或异常说明。"
@@ -67173,10 +66553,6 @@ components:
           type: "integer"
           description: "转让数量；可省略（整瓶转让）；传值必须等于剩余量，不得拆分。"
           minimum: 1
-        reason:
-          type: "string"
-          description: "转让事由。"
-          maxLength: 500
         verification_code:
           type: "string"
           description: "出让人（当前持有人）手机收到的短信验证码；由 /verification-code（scene=transfer）发送。"
@@ -67208,10 +66584,6 @@ components:
           type: "string"
           description: "操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。"
           maxLength: 128
-        operator_note:
-          type: "string"
-          description: "操作备注；用于解释人工处理、异常处理或审批判断，进入审计留痕。"
-          maxLength: 1000
         evidence_attachment_ids:
           type: "array"
           description: "证据附件 ID 列表；用于绑定图片、合同、审批、支付凭证或异常说明。"
@@ -67235,10 +66607,6 @@ components:
           type: "string"
           description: "操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。"
           maxLength: 128
-        operator_note:
-          type: "string"
-          description: "操作备注；用于解释人工处理、异常处理或审批判断，进入审计留痕。"
-          maxLength: 1000
         evidence_attachment_ids:
           type: "array"
           description: "证据附件 ID 列表；用于绑定图片、合同、审批、支付凭证或异常说明。"
@@ -67264,10 +66632,6 @@ components:
           type: "string"
           description: "操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。"
           maxLength: 128
-        operator_note:
-          type: "string"
-          description: "操作备注；用于解释人工处理、异常处理或审批判断，进入审计留痕。"
-          maxLength: 1000
         verification_code:
           type: "string"
           description: "客人本人手机收到的短信验证码；由 /verification-code（scene=renew）发送；员工代办转存时必填。"
@@ -67322,10 +66686,6 @@ components:
           type: "integer"
           description: "条件值上限（须同时配置上下限）。"
           minimum: 1
-        reason:
-          type: "string"
-          description: "调整原因，进入审计留痕。"
-          maxLength: 500
     SavedBottleReminderPolicyRequest:
       type: "object"
       description: "存酒到期提醒节点配置（BSM L1072，业务参数，按项目可配）：scope_id=global|project:<id>；reminder_days 为到期前第 N 天。"
@@ -67387,10 +66747,6 @@ components:
           type: "integer"
           description: "上限（须同时配置上下限）。"
           minimum: 0
-        reason:
-          type: "string"
-          description: "调整原因，进入审计留痕。"
-          maxLength: 500
     SavedBottleRemedyRequest:
       type: "object"
       description: "存酒作废后对客补存/赔付登记（BSM L1072）：replacement 须带新瓶底标签值、登记照片与出库库位；compensation 须带 amount_cent。"
@@ -67444,20 +66800,12 @@ components:
           type: "string"
           description: "操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。"
           maxLength: 128
-        operator_note:
-          type: "string"
-          description: "操作备注；用于解释人工处理、异常处理或审批判断，进入审计留痕。"
-          maxLength: 1000
         role:
           type: "string"
           description: "审批角色：supervisor=门店主管，finance=财务；仅 /approve 使用。"
           enum:
             - "supervisor"
             - "finance"
-        reason:
-          type: "string"
-          description: "审批/处置说明。"
-          maxLength: 500
         evidence_ids:
           type: "array"
           description: "凭证附件 id 列表：结案时为实物/赔款交付凭证，追收时为收回凭证。"
@@ -67480,10 +66828,6 @@ components:
           type: "string"
           description: "操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。"
           maxLength: 128
-        operator_note:
-          type: "string"
-          description: "操作备注；用于解释人工处理、异常处理或审批判断，进入审计留痕。"
-          maxLength: 1000
         merchant_id:
           type: "string"
           description: "退出门店（商户）id；商户 scope 操作者只能为本店办理。"
@@ -67501,10 +66845,6 @@ components:
           type: "string"
           description: "操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。"
           maxLength: 128
-        operator_note:
-          type: "string"
-          description: "操作备注；用于解释人工处理、异常处理或审批判断，进入审计留痕。"
-          maxLength: 1000
         merchant_id:
           type: "string"
           description: "退出门店（商户）id。"
@@ -67546,10 +66886,6 @@ components:
           type: string
           description: 操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。
           maxLength: 128
-        operator_note:
-          type: string
-          description: 操作备注；用于解释人工处理、异常处理或审批判断，进入审计留痕。
-          maxLength: 1000
         evidence_attachment_ids:
           type: array
           description: 证据附件 ID 列表；用于绑定图片、合同、审批、支付凭证或异常说明。
@@ -67874,10 +67210,6 @@ components:
           type: string
           description: 操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。
           maxLength: 128
-        operator_note:
-          type: string
-          description: 操作备注；用于解释人工处理、异常处理或审批判断，进入审计留痕。
-          maxLength: 1000
         evidence_attachment_ids:
           type: array
           description: 证据附件 ID 列表；用于绑定图片、合同、审批、支付凭证或异常说明。
@@ -67913,10 +67245,6 @@ components:
           type: string
           description: 操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。
           maxLength: 128
-        operator_note:
-          type: string
-          description: 操作备注；用于解释人工处理、异常处理或审批判断，进入审计留痕。
-          maxLength: 1000
         evidence_attachment_ids:
           type: array
           description: 证据附件 ID 列表；用于绑定图片、合同、审批、支付凭证或异常说明。
@@ -67964,17 +67292,6 @@ components:
           type: string
           description: 操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。
           maxLength: 128
-        operator_note:
-          type: string
-          description: 操作备注；用于解释人工处理、异常处理或审批判断，进入审计留痕。
-          maxLength: 1000
-        evidence_attachment_ids:
-          type: array
-          description: 证据附件 ID 列表；用于绑定图片、合同、审批、支付凭证或异常说明。
-          items:
-            type: string
-            maxLength: 64
-          maxItems: 50
         direction:
           type: string
           description: ArApItemRequest.direction 字段；必须按本 schema 的类型、必填项、枚举、长度、单位和对应 PRD 规则校验。
@@ -68137,16 +67454,11 @@ components:
       additionalProperties: false
       required:
         - idempotency_key
-        - object_key
         - checksum
       properties:
         idempotency_key:
           type: string
           description: 操作幂等键；重复提交返回第一次的结果。
-          maxLength: 128
-        object_key:
-          type: string
-          description: EvidenceAttachmentCompleteRequest.object_key 字段；必须按本 schema 的类型、必填项、枚举、长度、单位和对应 PRD 规则校验。
           maxLength: 128
         checksum:
           type: string
@@ -68241,17 +67553,6 @@ components:
           type: string
           description: 操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。
           maxLength: 128
-        operator_note:
-          type: string
-          description: 操作备注；用于解释人工处理、异常处理或审批判断，进入审计留痕。
-          maxLength: 1000
-        evidence_attachment_ids:
-          type: array
-          description: 证据附件 ID 列表；用于绑定图片、合同、审批、支付凭证或异常说明。
-          items:
-            type: string
-            maxLength: 64
-          maxItems: 50
         provider_code:
           type: string
           description: ProviderAdapterTestRequest.provider_code 字段；必须按本 schema 的类型、必填项、枚举、长度、单位和对应 PRD 规则校验。
@@ -68402,17 +67703,6 @@ components:
           type: string
           description: 解绑原因；设备遗失、维修、更换、退役或误绑必须说明。
           maxLength: 1000
-        operator_note:
-          type: string
-          description: 操作备注；用于补充解绑背景、现场情况或审批说明。
-          maxLength: 1000
-        evidence_attachment_ids:
-          type: array
-          description: 证据附件 ID 列表；用于关联设备交接、维修、报损或审批附件。
-          items:
-            type: string
-            maxLength: 64
-          maxItems: 50
     AccessUserRequest:
       type: object
       description: 权限用户请求体。字段必须与 OpenAPI、后端 DTO、前端请求、Android 请求和供应商 mock 保持一致。
@@ -68552,17 +67842,6 @@ components:
           type: string
           maxLength: 128
           description: 酒吧商品.idempotency_key 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。
-        operator_note:
-          type: string
-          maxLength: 1000
-          description: 酒吧商品.operator_note 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。
-        evidence_attachment_ids:
-          type: array
-          items:
-            type: string
-            maxLength: 64
-          maxItems: 50
-          description: 酒吧商品.evidence_attachment_ids 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。
         bar_id:
           type: string
           maxLength: 64
@@ -68676,17 +67955,6 @@ components:
           type: string
           maxLength: 128
           description: 设备.idempotency_key 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。
-        operator_note:
-          type: string
-          maxLength: 1000
-          description: 设备.operator_note 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。
-        evidence_attachment_ids:
-          type: array
-          items:
-            type: string
-            maxLength: 64
-          maxItems: 50
-          description: 设备.evidence_attachment_ids 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。
         device_code:
           type: string
           maxLength: 128
@@ -69357,10 +68625,6 @@ components:
           type: string
           maxLength: 128
           description: 幂等键，防止重复创建或重复发布。
-        operator_note:
-          type: string
-          maxLength: 1000
-          description: 操作备注，进入审计留痕。
         project_id:
           type: string
           maxLength: 64
@@ -69446,10 +68710,6 @@ components:
           type: string
           maxLength: 128
           description: 幂等键，防止重复发布。
-        operator_note:
-          type: string
-          maxLength: 1000
-          description: 发布备注，进入审计留痕。
         candidate_ids:
           type: array
           minItems: 1
@@ -69983,9 +69243,6 @@ components:
           type: string
           minLength: 1
           description: supervisorreviewevaluate.idempotency_key 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。
-        operator_note:
-          type: string
-          description: supervisorreviewevaluate.operator_note 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。
         evidence_attachment_ids:
           type: array
           items:
@@ -70022,7 +69279,6 @@ components:
       type: object
       required:
         - idempotency_key
-        - reviewer_level
         - decision
       properties:
         idempotency_key:
@@ -70037,10 +69293,6 @@ components:
           items:
             type: string
           description: supervisorreviewapproval.evidence_attachment_ids 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。
-        reviewer_level:
-          type: integer
-          minimum: 1
-          description: supervisorreviewapproval.reviewer_level 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。
         decision:
           type: string
           enum:
@@ -70112,10 +69364,6 @@ components:
           type: string
           description: 操作幂等键；重复提交时必须返回同一处理结果，避免重复入账。
           maxLength: 128
-        operator_note:
-          type: string
-          description: 操作备注；进入审计留痕。
-          maxLength: 1000
         evidence_attachment_ids:
           type: array
           description: 证据附件 ID 列表；用于绑定补录凭证。
@@ -70164,17 +69412,6 @@ components:
           type: string
           description: 操作幂等键；重复提交时必须返回同一处理结果。
           maxLength: 128
-        operator_note:
-          type: string
-          description: 审批备注；进入审计留痕。
-          maxLength: 1000
-        evidence_attachment_ids:
-          type: array
-          description: 证据附件 ID 列表；用于绑定审批凭证。
-          items:
-            type: string
-            maxLength: 64
-          maxItems: 50
         decision:
           type: string
           description: 审批决定；approve 才把金额变动入账，reject 不改账。
@@ -70282,10 +69519,6 @@ components:
           type: string
           description: 幂等键；同一注册重试必须复用。
           maxLength: 128
-        operator_note:
-          type: string
-          description: 操作备注。
-          maxLength: 1000
         project_id:
           type: string
           description: 综合体归属（隔离），必填。
@@ -70354,10 +69587,6 @@ components:
           type: string
           description: 幂等键。
           maxLength: 128
-        operator_note:
-          type: string
-          description: 操作备注。
-          maxLength: 1000
         staff_profile_id:
           type: string
           description: 员工档案 id。
@@ -70380,10 +69609,6 @@ components:
           type: string
           description: 幂等键。
           maxLength: 128
-        operator_note:
-          type: string
-          description: 操作备注。
-          maxLength: 1000
     StaffDeviceIntegrityReportRequest:
       type: object
       description: 端侧完整性上报请求体。非 trusted 即自动失效凭证 + 复核。
@@ -70396,10 +69621,6 @@ components:
           type: string
           description: 幂等键。
           maxLength: 128
-        operator_note:
-          type: string
-          description: 操作备注。
-          maxLength: 1000
         integrity_status:
           type: string
           description: 端侧完整性状态。
@@ -70419,10 +69640,6 @@ components:
           type: string
           description: 幂等键。
           maxLength: 128
-        operator_note:
-          type: string
-          description: 操作备注。
-          maxLength: 1000
         reason:
           type: string
           description: 失效原因，记入 revoked_reason。
@@ -70438,10 +69655,6 @@ components:
           type: string
           description: 幂等键。
           maxLength: 128
-        operator_note:
-          type: string
-          description: 操作备注。
-          maxLength: 1000
         consent:
           type: boolean
           description: true 表示同意（consented）。
@@ -70984,10 +70197,6 @@ components:
           type: string
           description: 操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。
           maxLength: 128
-        operator_note:
-          type: string
-          description: 操作备注；用于解释人工处理、异常处理或审批判断，进入审计留痕。
-          maxLength: 1000
         evidence_attachment_ids:
           type: array
           description: 证据附件 ID 列表；用于绑定图片、合同、审批、支付凭证或异常说明。
@@ -71025,10 +70234,6 @@ components:
           type: string
           description: 操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。
           maxLength: 128
-        operator_note:
-          type: string
-          description: 操作备注；用于解释人工处理、异常处理或审批判断，进入审计留痕。
-          maxLength: 1000
         evidence_attachment_ids:
           type: array
           description: 证据附件 ID 列表；用于绑定图片、合同、审批、支付凭证或异常说明。
@@ -71049,17 +70254,6 @@ components:
           type: string
           description: 操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。
           maxLength: 128
-        operator_note:
-          type: string
-          description: 操作备注；用于解释人工处理、异常处理或审批判断，进入审计留痕。
-          maxLength: 1000
-        evidence_attachment_ids:
-          type: array
-          description: 证据附件 ID 列表；用于绑定图片、合同、审批、支付凭证或异常说明。
-          items:
-            type: string
-            maxLength: 64
-          maxItems: 50
         sold_out:
           type: boolean
           description: true=置沽清(86)，false=恢复供应；省略默认置沽清。
@@ -71076,17 +70270,6 @@ components:
           type: string
           description: 操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。
           maxLength: 128
-        operator_note:
-          type: string
-          description: 操作备注；用于解释人工处理、异常处理或审批判断，进入审计留痕。
-          maxLength: 1000
-        evidence_attachment_ids:
-          type: array
-          description: 证据附件 ID 列表；用于绑定图片、合同、审批、支付凭证或异常说明。
-          items:
-            type: string
-            maxLength: 64
-          maxItems: 50
         tip_amount_cent:
           type: integer
           description: "`tip_amount_cent` 小费固定额，单位分；不得使用浮点数。"
@@ -71339,7 +70522,7 @@ components:
     RecordVarianceRequest:
       type: object
       description: 请求载荷 `RecordVarianceRequest`（V108
-        库存差异明细）；variance_qty=counted_qty−book_qty（带符号），review_status=pending。variance_amount_cent 显式传入优先，否则按
+        库存差异明细）；variance_qty=counted_qty−账面数（带符号；账面取系统库存值，请求不传），review_status=pending。variance_amount_cent 显式传入优先，否则按
         variance_qty×unit_cost_cents 成本估算。
       additionalProperties: false
       required:
@@ -71358,9 +70541,6 @@ components:
           type: string
           description: 批次号（可空）。
           maxLength: 64
-        book_qty:
-          type: number
-          description: 账面数量（缺省 0）。
         counted_qty:
           type: number
           description: 实盘数量（缺省 0）。
@@ -71417,10 +70597,6 @@ components:
           enum:
             - approved
             - rejected
-        reason:
-          type: string
-          description: 复核意见（可空）。
-          maxLength: 1000
     ConfigureOverCapacityPolicyRequest:
       type: object
       description: 请求载荷 `ConfigureOverCapacityPolicyRequest`（V104 amusement_over_capacity_policy 写入侧，按 project_id 幂等
@@ -71645,16 +70821,6 @@ components:
           type: string
           description: 操作幂等键；重复提交时必须返回同一处理结果，避免重复计费/重复入账。
           maxLength: 128
-        operator_note:
-          type: string
-          description: 操作留痕备注；进入审计。
-          maxLength: 1000
-        evidence_attachment_ids:
-          type: array
-          description: 证据附件 ID 列表；进入审计留痕。
-          items:
-            type: string
-            maxLength: 64
         project_id:
           type: string
           description: 项目 ID（费率按此 + period 解析）。
@@ -73591,9 +72757,6 @@ components:
         reading_value:
           type: number
           description: 本期读数。
-        prev_reading_value:
-          type: number
-          description: "兼容字段，服务按同表最近已审核有效终值或真实启用初值计算，绝不使用调用者代填起点"
         read_mode:
           type: string
           description: "省略也按人工记录；自报remote不能绕过照片"
@@ -73772,14 +72935,6 @@ components:
           type: string
           description: 操作备注。
           maxLength: 1000
-        evidence_attachment_ids:
-          type: array
-          description: 证据附件 id。
-          items:
-            type: string
-            description: 附件 id。
-            maxLength: 64
-          maxItems: 50
         request_type:
           type: string
           description: 申请类型。
@@ -74755,10 +73910,6 @@ components:
           type: string
           description: 操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。
           maxLength: 128
-        operator_note:
-          type: string
-          description: 操作备注；用于解释人工处理、异常处理或审批判断，进入审计留痕。
-          maxLength: 1000
         evidence_attachment_ids:
           type: array
           description: 证据附件 ID 列表；用于绑定图片、合同、审批、支付凭证或异常说明。

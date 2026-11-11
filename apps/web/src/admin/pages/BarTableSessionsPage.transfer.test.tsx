@@ -1,4 +1,4 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { BarTableSessionsPage } from "./BarTableSessionsPage";
@@ -32,6 +32,8 @@ describe("转台明确目标当班服务人员", () => {
     fireEvent.click(screen.getByTestId("bar-transfer-submit"));
     await waitFor(() => expect(post).toHaveBeenCalledWith("/api/v1/bar/table-sessions/session-1/transfer",
       expect.objectContaining({ targetTableId: "next-table", targetServiceStaffId: "next-staff", sessionVersion: 3 })));
+    // 第十八批 AF 段第 198 条 198-R5（BarTableSessionService 发起人取登录主体，不读 requested_by_user_id）：转台请求体不再带写死的 requestedByUserId。
+    expect(Object.keys(post.mock.calls[0]![1] as object)).not.toContain("requestedByUserId");
   });
 
   // 第十八批 AB 段第 190 条（控制席并入；BSM:1079「每次拆单、合单、转台、并台、拆台和撤销转台均须留痕。记录内容包括操作类型、原因、操作人、时间……」）：

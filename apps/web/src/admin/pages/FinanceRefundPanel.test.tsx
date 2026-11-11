@@ -1,4 +1,4 @@
-// 文件版本：V0.05
+// 文件版本：V0.06
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { FinanceArApLedgerPage } from "./FinanceArApLedgerPage";
@@ -82,6 +82,8 @@ describe("财务退款完整操作", () => {
     fireEvent.change(screen.getByLabelText("退款原因"), { target: { value: "多收款核实退回" } });
     fireEvent.click(screen.getByRole("button", { name: "发起原路退款" }));
     await waitFor(() => expect(api.post).toHaveBeenCalledWith("/api/v1/finance/refunds", expect.objectContaining({ targetId: "payment-1", refundAmountCent: 2001, reason: "多收款核实退回", refundDirection: "original" })));
+    // 第十八批 AF 段 198-R5：新建退款只读退款原因（reason），不读 operatorNote；网页停发，退款原因框保留。
+    expect(vi.mocked(api.post).mock.calls.find(([path]) => path === "/api/v1/finance/refunds")?.[1]).not.toHaveProperty("operatorNote");
     expect(screen.queryByText("退款成功，已结清")).not.toBeInTheDocument();
   });
   it("核实结果必须上传凭证，经办人与流水号来自服务端执行记录", async () => {

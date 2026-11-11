@@ -1,4 +1,4 @@
-// 文件版本：V0.19
+// 文件版本：V0.20
 import React from "react";
 import { QRCodeSVG } from "qrcode.react";
 import { buildCustomerLink } from "@complex/customer-core/links";
@@ -217,15 +217,15 @@ export function BarTableSessionsPage({ api, setActionResult, setGlobalError, eff
       const body = kind === "transfer_undo"
         ? { reason: actionReason.trim(), sessionVersion: selectedSession.sessionVersion ?? 1 }
         : kind === "transfer"
-        ? { targetTableId: targetTableId.trim(), targetServiceStaffId: targetServiceStaffId.trim(), reason: actionReason.trim(), requestedByUserId: "admin-web", sessionVersion: selectedSession.sessionVersion ?? 1 }
+        ? { targetTableId: targetTableId.trim(), targetServiceStaffId: targetServiceStaffId.trim(), reason: actionReason.trim(), sessionVersion: selectedSession.sessionVersion ?? 1 }
         : kind === "merge"
-          ? { mergedSessionId: mergedSessionId.trim(), reason: actionReason.trim(), requestedByUserId: "admin-web", primarySessionVersion: selectedSession.sessionVersion ?? 1, mergedSessionVersion: 1 }
+          ? { mergedSessionId: mergedSessionId.trim(), reason: actionReason.trim(), primarySessionVersion: selectedSession.sessionVersion ?? 1, mergedSessionVersion: 1 }
           : {
               mode: splitMode, splitSessionId: splitMode === "single" ? splitSessionId.trim() : undefined,
               orderAssignments: parseIdAssignments(splitAssignments).map(({ id, sessionId }) => ({ orderId: id, sessionId })),
               invitationAssignments: parseIdAssignments(splitInvitationAssignments).map(({ id, sessionId }) => ({ reservationId: id, sessionId })),
               memberAssignments: parseIdAssignments(splitMemberAssignments).map(({ id, sessionId }) => ({ memberId: id, sessionId })),
-              reason: actionReason.trim(), requestedByUserId: "admin-web", primarySessionVersion: selectedSession.sessionVersion ?? 1,
+              reason: actionReason.trim(), primarySessionVersion: selectedSession.sessionVersion ?? 1,
             };
       const result = await api.post(`/api/v1/bar/table-sessions/${encodeURIComponent(selectedSession.id)}/${kind === "transfer_undo" ? "transfer-undo" : kind}`, body);
       setActionResult({ action: `bar_table_session_${kind}`, status: kind === "transfer_undo" ? "transfer_undone" : kind === "transfer" ? "transferred" : kind === "merge" ? "merged" : "split", sessionId: selectedSession.id, result });

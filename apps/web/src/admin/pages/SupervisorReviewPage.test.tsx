@@ -1,4 +1,4 @@
-// 文件版本：V0.07
+// 文件版本：V0.08
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -132,7 +132,7 @@ describe("SupervisorReviewPage 结果提示全中文 + 审批权限点", () => {
     expect((screen.getByTestId("supervisor-review-reject") as HTMLButtonElement).disabled).toBe(true);
   });
 
-  it("待复核清单展示到期与升级次数；转交提交 forwarded_to 且结果为中文句子（PGM-1.7.1）", async () => {
+  it("待复核清单展示到期与升级次数；转交提交 forwarded_to、不发写死备注（198-R5）且结果为中文句子（PGM-1.7.1）", async () => {
     const props = renderPage();
     await waitFor(() => expect(screen.getByTestId("supervisor-review-pending-review_p1")).toBeTruthy());
     const row = screen.getByTestId("supervisor-review-pending-review_p1").textContent ?? "";
@@ -146,6 +146,7 @@ describe("SupervisorReviewPage 结果提示全中文 + 审批权限点", () => {
     const call = fetchMock.mock.calls.find(([input]) => String(input).includes("/forward"));
     const body = JSON.parse(String((call?.[1] as RequestInit | undefined)?.body));
     expect(body.forwarded_to).toBe("usr_x");
+    expect(body).not.toHaveProperty("operator_note");
     await waitFor(() => expect(props.setActionResult).toHaveBeenCalledWith(expect.stringMatching(/^复核单 review_p1 已转交给 usr_x/)));
   });
 
@@ -406,7 +407,7 @@ describe("M043 真实审批信封与既有规则", () => {
     expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url).includes("/approve"))).toBe(false);
   });
 
-  it.each(["bill_waiver", "refund", "ar_ap_adjustment"])("%s 评估先提示受益人，填写后提交", async (action) => {
+  it.each(["bill_waiver", "refund", "ar_ap_adjustment"])("%s 评估先提示受益人，填写后提交，不发写死备注（198-R5）", async (action) => {
     renderPage();
     await waitFor(() => expect(screen.getByTestId("supervisor-review-action-type")).toBeTruthy());
     fireEvent.change(screen.getByTestId("supervisor-review-action-type"), { target: { value: action } });
@@ -419,6 +420,7 @@ describe("M043 真实审批信封与既有规则", () => {
     await waitFor(() => expect(screen.getByTestId("supervisor-review-current-review").textContent).toContain("review_1"));
     const call = vi.mocked(fetch).mock.calls.find(([url]) => String(url).includes("/evaluate"));
     expect(JSON.parse(String(call?.[1]?.body))).toMatchObject({ action_type: action, beneficiary_id: "usr_benef", amount_cent: 0 });
+    expect(JSON.parse(String(call?.[1]?.body))).not.toHaveProperty("operator_note");
   });
 
   it("真实目录、待审枚举及抽屉均显示中文，未知枚举不泄漏原码", async () => {

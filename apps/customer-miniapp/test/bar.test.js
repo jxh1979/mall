@@ -1,4 +1,4 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 // 订台、我的订台与邀请函、接受邀请（BSM「官方 App 和小程序都可以订台，订台需要支付定金；订台页面须写明该卡座适用的最低消费金额与服务费比例」；
 // BSM「客人自助订台必须支付定金……每一笔订台都必须填写最晚到店时间」；BSM「订卡客人可在 App/小程序查看自己的订卡邀请函二维码（注明酒吧、卡座、
 // 可进人数），转发给朋友；朋友在 App/小程序确认接受后占一个名额……可把尚未入场的被邀请人移出邀请函」；第十三批裁决第 4 条「酒吧员工确认后签发」）：
@@ -130,6 +130,28 @@ test("reservationCarriesSelectedTableProject", async () => {
   fire(page, ["#reserve-submit"], "tap");
   await flush();
   expect(header(requests.find((r) => r.key === "POST /api/v1/customer/bar-reservations"), "x-project-id")).toBe("p2");
+});
+
+// 18AF 198-R5 判定 6（处置规则②）：客人订台接口不读联系手机号，删「联系手机号（可不填）」框，订台请求不再带 contact_phone。
+test("reserveFormHasNoContactPhoneAndRequestOmitsIt", async () => {
+  const { requests } = installWx({
+    "GET /api/v1/customer/bar-reservation-options": ok(OPTIONS),
+    "POST /api/v1/customer/bar-reservations": ok(RESERVATION),
+  }, TOKEN);
+  const page = mount("pages/reserve/index");
+  await flush();
+  fire(page, ["#pick-T1"], "tap");
+  await flush();
+  expect(q(page, "#reserve-form")).not.toBeNull();
+  expect(q(page, "#contact-phone")).toBeNull();
+  for (const [id, value] of [["#reserve-date", "2026-10-25"], ["#reserve-time", "21:00"], ["#latest-date", "2026-10-25"], ["#latest-time", "22:30"]]) {
+    fire(page, [id], "change", { value });
+  }
+  fire(page, ["#reserve-submit"], "tap");
+  await flush();
+  const body = requests.find((r) => r.key === "POST /api/v1/customer/bar-reservations")?.body;
+  expect(body).toMatchObject({ bar_id: "bar-1", table_id: "T1", guest_count: 2 });
+  expect(body).not.toHaveProperty("contact_phone");
 });
 
 test("depositWithoutLaunchShowsUnavailableAndNoSuccess", async () => {
