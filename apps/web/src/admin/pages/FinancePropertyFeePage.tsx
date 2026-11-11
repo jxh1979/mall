@@ -159,8 +159,6 @@ export function FinancePropertyFeePage({ api, setActionResult, setGlobalError, e
     }
     const request = {
       idempotencyKey: nextKey("property-fee-bill"),
-      operatorNote: "后台【物业费管理】独立出账",
-      evidenceAttachmentIds: ["att-property-fee-bill"],
       projectId,
       period: billPeriod.trim(),
       merchantIds,

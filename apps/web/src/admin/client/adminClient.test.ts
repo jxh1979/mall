@@ -611,7 +611,7 @@ describe("AdminApi 同一次操作的请求编号", () => {
     const api = new AdminApi();
     // ComplianceRemindersPage 的扫描写法：下划线键 `crs-${Date.now()}`，两次点击必然不同。
     const scan = (idempotency_key: string) =>
-      api.post("/api/v1/compliance/reminders/scan", { idempotency_key, scan_date: null, default_lookahead_days: 30, operator_note: null });
+      api.post("/api/v1/compliance/reminders/scan", { idempotency_key, scan_date: null, default_lookahead_days: 30 });
 
     await expect(scan("crs-1000")).rejects.toThrow("Failed to fetch");
     await expect(scan("crs-2000")).resolves.toEqual({ generatedCount: 3 });

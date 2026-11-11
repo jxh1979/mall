@@ -1,4 +1,4 @@
-// 文件版本：V0.12
+// 文件版本：V0.13
 import React from "react";
 import { BarRefundBreakdownPanel } from "./BarRefundBreakdownPanel";
 import { BarShiftPanel } from "./BarShiftPanel";
@@ -65,7 +65,6 @@ const TEXT = {
   deliverNote: "\u5b8c\u6574\u540e\u53f0\u9a8c\u6536\u51fa\u54c1",
   settleNote: "\u5b8c\u6574\u540e\u53f0\u9a8c\u6536\u7ed3\u7b97",
   focusClear: "\u6e05\u9664\u7b5b\u9009\uff0c\u8fd4\u56de\u5168\u90e8",
-  voidNote: "\u540e\u53f0\u53d1\u8d77\u9000\u83dc\u9000\u9152\u7533\u8bf7",
 };
 
 // KPI \u805a\u7126\u89c6\u56fe\uff08\u7167 OrganizationMerchantPage \u6837\u677f\uff09\uff1a\u70b9 KPI \u6570\u5b57=\u5e26 ?kpi= \u53c2\u6570\u91cd\u8fdb\u672c\u9875\uff0c\u53ea\u6e32\u67d3\u8ba2\u5355\u8868\u5e76\u6309\u5b50\u96c6\u8fc7\u6ee4\u3002
@@ -426,7 +425,6 @@ export function BarOrdersPage({ api, user, setActionResult, setGlobalError, effe
       posTransactionNo: paymentChannel === "pos" ? posTransactionNo.trim() || undefined : undefined,
       ...(voucherCode.trim() ? { voucherCode: voucherCode.trim() } : {}),
       ...(memberPhone.trim() ? { memberPhone: memberPhone.trim() } : {}),
-      operatorNote: "按本次真实收款凭据登记，多渠道累计足额后完成账单",
     };
     const serialized = JSON.stringify({ billId, ...body });
     if (paymentRetry.current?.body !== serialized) paymentRetry.current = { body: serialized, key: crypto.randomUUID() };
@@ -563,7 +561,6 @@ export function BarOrdersPage({ api, user, setActionResult, setGlobalError, effe
         evidenceAttachmentIds: voidEvidence.map((e) => e.id),
         returnToStock: voidReturnToStock,
         billId: firstBillId(selectedOrder) || undefined,
-        operatorNote: TEXT.voidNote,
       },
     ));
   }

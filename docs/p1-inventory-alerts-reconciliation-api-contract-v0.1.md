@@ -1,4 +1,4 @@
-# P1 库存预警与供应商对账 API 合同 V0.11
+# P1 库存预警与供应商对账 API 合同 V0.12
 
 ## 1. 定位与边界
 
@@ -37,7 +37,6 @@
 ```json
 {
   "idempotency_key": "batch-create-001",
-  "operator_note": "record inbound batch",
   "evidence_attachment_ids": ["att_batch"],
   "item_id": "item_1",
   "location_id": "warehouse_1",
@@ -74,9 +73,7 @@
 ```json
 {
   "idempotency_key": "risk-scan-20260614",
-  "operator_note": "daily risk scan",
-  "expiry_warning_days": 7,
-  "operator_user_id": "staff_ops"
+  "expiry_warning_days": 7
 }
 ```
 
@@ -126,15 +123,13 @@
 ```json
 {
   "idempotency_key": "supplier-recon-202606",
-  "operator_note": "monthly reconciliation",
   "evidence_attachment_ids": ["att_invoice", "att_bank_flow"],
   "supplier_id": "supplier_1",
   "period_start": "2026-06-01",
   "period_end": "2026-06-30",
   "expected_amount_cent": 100000,
   "actual_amount_cent": 88000,
-  "status": "difference_found",
-  "operator_user_id": "staff_finance"
+  "status": "difference_found"
 }
 ```
 

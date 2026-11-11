@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 // FS-017（BSM L1072 ③「退出前清点存酒并通知客人在原店取回」）：点清点通知 → POST …/saved-bottles/exit-notice {merchant_id}，并显示返回清点数。
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -40,7 +40,7 @@ describe("StoredWinePage 退出清点通知（FS-017）", () => {
     window.history.replaceState({}, "", "/admin/bar/stored-wine");
   });
 
-  it("填退出门店 id 点「清点并通知客人原店取回」→ POST …/exit-notice {merchant_id: m_1}，显示清点 2 瓶、通知 2 位", async () => {
+  it("填退出门店 id 点「清点并通知客人原店取回」→ POST …/exit-notice {merchant_id: m_1}，不含 operator_note，显示清点 2 瓶、通知 2 位", async () => {
     vi.spyOn(window, "confirm").mockReturnValue(true);
     const api = makeApi();
     renderPage(api);
@@ -51,6 +51,8 @@ describe("StoredWinePage 退出清点通知（FS-017）", () => {
       "/api/v1/inventory/saved-bottles/exit-notice",
       expect.objectContaining({ merchant_id: "m_1" }),
     ));
+    // 第十八批 AF 段 198-R5：服务端不读 operator_note，请求体不再带（本页备注框只随补救登记提交）。
+    expect(vi.mocked(api.post).mock.calls.find(([path]) => path === "/api/v1/inventory/saved-bottles/exit-notice")![1]).not.toHaveProperty("operator_note");
     await waitFor(() => {
       const text = screen.getByTestId("stored-wine-exit-result").textContent ?? "";
       expect(text).toContain("2 瓶");

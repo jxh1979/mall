@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.05
+// 文件版本：V0.06
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.containsString;
@@ -264,7 +264,7 @@ class KioskBarOrderJdbcTests {
         String key = "kbo-panelsettle-" + s;
         mockMvc.perform(post("/api/v1/bar/bills/" + billId + "/settle").with(webCashier).contentType(MediaType.APPLICATION_JSON)
                         .content(json.writeValueAsString(Map.of("idempotency_key", key, "payment_id", key,
-                                "payment_channel", "cash", "operator_note", "按本次真实收款凭据登记，多渠道累计足额后完成账单"))))
+                                "payment_channel", "cash"))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.settlement_status").value("settled"));
         closeFromPanel(first, "kbo-panel-close1-" + s, 29_999)

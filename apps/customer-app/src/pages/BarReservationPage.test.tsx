@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
@@ -71,6 +71,8 @@ describe("BarReservationPage 订卡规则、定金与不可自助订台", () => 
       barId: "bar-1", tableId: "t-a", tableType: "card_seat", guestCount: 4,
       reservationTime: new Date("2026-10-25T20:00").toISOString(), latestArrivalAt: new Date("2026-10-25T21:00").toISOString(),
     }));
+    // 18AF 198-R5 判定 6：客人订台接口不读 contact_phone，订台请求不再带联系手机号。
+    expect(Object.keys(service.createBarReservation.mock.lastCall?.[0] ?? {})).not.toContain("contactPhone");
     await clickDepositPay();
     await waitFor(() => expect(screen.queryByTestId("deposit-unavailable")?.textContent ?? "").toContain("支付暂不可用，未扣款"));
     expect(service.startDepositPayment).toHaveBeenCalledWith("res-1");
@@ -109,6 +111,17 @@ describe("BarReservationPage 订卡规则、定金与不可自助订台", () => 
     fireEvent.click(screen.getByTestId("reservation-submit"));
     await waitFor(() => expect(screen.queryByTestId("reservation-error")?.textContent ?? "").toContain("该酒吧暂未开放自助订台"));
     expect(screen.queryByTestId("deposit-pay")).toBeNull();
+  });
+
+  // 18AF 198-R5 判定 6（处置规则②）：客人订台接口不读联系手机号，该框只给本页订台请求用 → 删框。
+  it("reservationFormHasNoContactPhoneBox：订台表单不再渲染「联系手机号（选填）」框", async () => {
+    render(<BarReservationPage service={makeService() as unknown as CustomerService} />);
+    await waitFor(() => expect(screen.queryByTestId("reservation-pick-t-a")).not.toBeNull());
+    await waitFor(() => expect(screen.getByTestId("reservation-pick-t-a")).not.toBeDisabled());
+    fireEvent.click(screen.getByTestId("reservation-pick-t-a"));
+    await waitFor(() => expect(screen.queryByLabelText("人数")).not.toBeNull());
+    expect(screen.queryByLabelText("联系手机号（选填）")).toBeNull();
+    expect(document.getElementById("reservation-phone")).toBeNull();
   });
 
   // BSM L858「凡与客人有关的规则一律在其消费之前告知……订卡时在订卡规则中写明」；BSM L889「定金不抵扣消费、不计入最低消费累计；

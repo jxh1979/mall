@@ -1,6 +1,6 @@
 package com.complex.terminal
 
-// 文件版本：V0.08
+// 文件版本：V0.09
 
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
@@ -133,8 +133,10 @@ class TerminalFieldWorkflowTest {
   @Test
   fun barOrderPaymentIntentAndSettlement() {
     val paths = mutableListOf<String>()
+    val bodies = mutableMapOf<String, String>()
     val api = newApi { req ->
       paths += req.path
+      bodies[req.path] = req.body
       when (req.path) {
         "/api/v1/bar/orders" -> {
           assertTrue("\"bar_id\":\"bar-1\"" in req.body)
@@ -173,6 +175,11 @@ class TerminalFieldWorkflowTest {
 
     val bill = workflow.settleBarBillByScan(BarBillRecord(id = "bill-1", payableAmountCent = 9900), "wechat")
     assertEquals("settled", bill.settlementStatus)
+    // 第十八批 AF 段第 198 条 198-R5：服务端不读下单的 operator_note、evidence_attachment_ids、service_user_ids 与结账的 operator_note、evidence_attachment_ids，终端不再发。
+    val orderBody = bodies["/api/v1/bar/orders"].orEmpty()
+    listOf("operator_note", "evidence_attachment_ids", "service_user_ids").forEach { assertFalse(it in orderBody, it) }
+    val settleBody = bodies["/api/v1/bar/bills/bill-1/settle"].orEmpty()
+    listOf("operator_note", "evidence_attachment_ids").forEach { assertFalse(it in settleBody, it) }
     assertEquals(
       listOf(
         "/api/v1/bar/orders",
@@ -237,8 +244,10 @@ class TerminalFieldWorkflowTest {
   @Test
   fun staffDeviceRebindBindApproveAndIntegrityReport() {
     val paths = mutableListOf<String>()
+    val bodies = mutableMapOf<String, String>()
     val api = newApi { req ->
       paths += req.path
+      bodies[req.path] = req.body
       when (req.path) {
         "/api/v1/staff/device-credentials" -> {
           assertTrue("\"device_fingerprint_hash\":\"hash-new\"" in req.body)
@@ -278,6 +287,9 @@ class TerminalFieldWorkflowTest {
       ),
       paths,
     )
+    // 第十八批 AF 段第 198 条 198-R5：绑定设备凭证、批准换机、完整性上报，服务端都不读 operator_note，终端不再发。
+    assertEquals(3, bodies.size)
+    bodies.forEach { (path, body) -> assertFalse("operator_note" in body, path) }
   }
 
   @Test

@@ -1,4 +1,4 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -141,13 +141,15 @@ describe("M038-012 员工账号页创建后套模板失败", () => {
     vi.restoreAllMocks();
   });
 
-  it("账号 POST 成功、套模板 403：账号只发一笔且入表，弹窗关闭，提示含「账号已创建」与失败原因", async () => {
+  it("账号 POST 成功、套模板 403：账号只发一笔且入表，弹窗关闭，提示含「账号已创建」与失败原因；套模板不发写死备注（198-R5）", async () => {
     const posts: string[] = [];
+    const applyBodies: string[] = [];
     vi.stubGlobal("fetch", vi.fn().mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
       if ((init?.method ?? "GET").toUpperCase() === "POST") {
         posts.push(url);
         if (url.includes("/apply")) {
+          applyBodies.push(String(init?.body));
           return Promise.resolve(new Response(
             JSON.stringify({ success: false, code: "GRANT_REQUIRES_APPROVAL", message: "以下权限的授予需要审批：[a.b]" }),
             { status: 403, headers: { "content-type": "application/json" } },
@@ -184,6 +186,7 @@ describe("M038-012 员工账号页创建后套模板失败", () => {
     await waitFor(() => expect(screen.getByTestId("access-user-row-u-new")).toBeTruthy());
     expect(posts.filter((url) => url.includes("/access/users"))).toHaveLength(1);
     expect(posts.filter((url) => url.includes("/permission-templates/tpl-1/apply"))).toHaveLength(1);
+    expect(JSON.parse(applyBodies[0]!)).not.toHaveProperty("operator_note");
     await waitFor(() => expect(screen.queryByTestId("access-user-create")).toBeNull());
     expect(props.setActionResult).toHaveBeenCalledWith(expect.stringMatching(/创建员工：vendor-a.*账号已创建；套用权限模板 tpl-1 失败：/));
     expect(props.setGlobalError).toHaveBeenLastCalledWith(expect.stringMatching(/\S/));

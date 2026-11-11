@@ -1,4 +1,4 @@
-// 文件版本：V0.05
+// 文件版本：V0.06
 import React from "react";
 import { AdminPageHeader } from "../components/AdminPageHeader";
 import { PermissionButton } from "../security/Can";
@@ -95,10 +95,10 @@ export function PurchaseWorkbenchPage({ api, user, effectivePermissions, setActi
     try { setSuggestions(await api.get<Suggestion[]>(`/api/v1/inventory/purchase-suggestions?project_id=${enc(id)}`)); }
     catch (e) { setError(`采购建议读取失败：${e instanceof Error ? e.message : "请稍后重试"}`); }
   }
-  // BSM:1211「生成建议采购数量及理由，由采购人员人工调整并按审批链批准后生成采购单」：只预填现有建单表单，由采购人员改后提交，不自动建单或下单。
+  // BSM:1211「生成建议采购数量及理由，由采购人员人工调整并按审批链批准后生成采购单」：只预填现有建单表单（合同、商品、数量），由采购人员改后提交，不自动建单或下单；理由只在建议表显示，建单不记申请依据（第十八批 AF 段判定 4）。
   function purchaseFromSuggestion(s: Suggestion, c: Contract) {
     open("purchase-create");
-    setForm(v => ({ ...v, supplyContractId: c.id, itemId: s.itemId, quantity: String(s.suggestedQuantity), reason: s.reason }));
+    setForm(v => ({ ...v, supplyContractId: c.id, itemId: s.itemId, quantity: String(s.suggestedQuantity) }));
   }
   function permissions(a: Action): string[] {
     if (a.startsWith("contract") || a === "terms") return [CONTRACT];
@@ -167,7 +167,7 @@ export function PurchaseWorkbenchPage({ api, user, effectivePermissions, setActi
         case "purchase-create": {
           const c = options.contracts.find(c => c.id === required("supplyContractId", "已批准供货合同"));
           const itemId = required("itemId", "采购商品"); if (!c || !c.purchasableScope.includes(itemId)) throw new Error("请选择合同允许采购的商品");
-          path = "/api/v1/inventory/purchase-requests"; body = { supplierId: c.supplierId, supplyContractId: c.id, items: [{ item_id: itemId, quantity: integer("quantity", "采购数量", 1) }], expectedArrivalDate: required("expectedArrivalDate", "预计到货日"), operatorNote: required("reason", "申请依据") }; break;
+          path = "/api/v1/inventory/purchase-requests"; body = { supplierId: c.supplierId, supplyContractId: c.id, items: [{ item_id: itemId, quantity: integer("quantity", "采购数量", 1) }], expectedArrivalDate: required("expectedArrivalDate", "预计到货日") }; break;
         }
         case "approve": path = `${purchasePath}/approve`; body = { decision: "approved", supplyContractId: detail!.purchase.supplyContractId, note: required("reason", "申请依据"), ...approval() }; break;
         case "order": case "arrive": path = `${purchasePath}/${action}`; body = { note: required("reason", "实际进度说明") }; break;
@@ -255,7 +255,7 @@ export function PurchaseWorkbenchPage({ api, user, effectivePermissions, setActi
       {action === "contract-create" && <>{select("projectId", "合同综合体", choices(options.projects), () => set("merchantId", ""))}{select("supplierId", "合同供应商", choices(options.suppliers))}{enumSelect("contractMode", "采购模式", { platform_self_use: "平台自用", merchant_self_purchase: "商户自采", platform_purchase_distribution: "平台采购配送" })}{form.contractMode === "merchant_self_purchase" && select("merchantId", "自采商户", choices(options.merchants.filter(m => (m.operatingProjectIds ?? [m.projectId]).includes(form.projectId))))}{input("validFrom", "合同开始日", "date")}{input("validTo", "合同结束日", "date")}{input("supplyScope", "供货范围")}{input("priceTerms", "原合同价格约定")}{input("summary", "合同摘要")}<fieldset><legend>合同允许采购商品</legend>{options.inventoryItems.map(item => <label key={item.id}><input type="checkbox" checked={scope.includes(item.id)} onChange={e => setScope(v => e.target.checked ? [...v, item.id] : v.filter(id => id !== item.id))} />{itemName(item.id)}</label>)}</fieldset><p>先创建真实合同编号，再上传原件和登记执行条款；本步骤不会自动批准合同。</p></>}
       {action === "terms" && <>{select("purchaserEntityId", "我方采购主体", choices(options.entities.filter(e => !e.projectId || e.projectId === contract?.contract.projectId)))}{enumSelect("settlementMethod", "结算方式", methods)}{enumSelect("priceBasis", "计价依据", { contract_unit_price: "合同固定单价", accepted_actual_unit_price: "合格接收实际单价" })}{form.priceBasis === "contract_unit_price" && scope.map(id => <label key={id}>{itemName(id)}合同单价（分）<input aria-label={`${itemName(id)}合同单价（分）`} type="number" min="0" step="1" value={prices[id] ?? ""} onChange={e => setPrices(v => ({ ...v, [id]: e.target.value }))} /></label>)}{enumSelect("dueAnchor", "到期起算事件", anchors)}{form.dueAnchor === "fixed_date" ? input("fixedDueDate", "合同付款日期", "date") : input("termDays", "起算后天数", "number")}{form.dueAnchor === "contract_signed" && input("signedOn", "实际签约日", "date")}{form.settlementMethod === "prepaid" && <>{input("prepaymentAmountCent", "本采购预付金额（分）", "number")}{input("prepaymentRemainderTerms", "未用预付余额处理约定")}</>}{form.settlementMethod === "consignment" && input("consignmentSaleBasis", "售出确认依据")}</>}
       {action === "contract-approve" && <>{input("reason", "申请依据")}{approvalFields(["business_review", "finance_review", "legal_review"])}</>}
-      {action === "purchase-create" && <>{select("supplyContractId", "已批准供货合同", usableContracts.map(c => ({ id: c.id, label: `${c.contractNo}／${supplierName(c.supplierId)}` })), () => set("itemId", ""))}{selectedContract && <p>供应商：{supplierName(selectedContract.supplierId)}；合同有效期 {selectedContract.validFrom} 至 {selectedContract.validTo}</p>}{select("itemId", "采购商品", options.inventoryItems.filter(i => selectedContract?.purchasableScope.includes(i.id)).map(i => ({ id: i.id, label: itemName(i.id) })))}{input("quantity", "采购数量", "number")}{input("expectedArrivalDate", "预计到货日", "date")}{input("reason", "申请依据")}<p>一份采购申请只包含一个商品；其他商品分别建单。</p></>}
+      {action === "purchase-create" && <>{select("supplyContractId", "已批准供货合同", usableContracts.map(c => ({ id: c.id, label: `${c.contractNo}／${supplierName(c.supplierId)}` })), () => set("itemId", ""))}{selectedContract && <p>供应商：{supplierName(selectedContract.supplierId)}；合同有效期 {selectedContract.validFrom} 至 {selectedContract.validTo}</p>}{select("itemId", "采购商品", options.inventoryItems.filter(i => selectedContract?.purchasableScope.includes(i.id)).map(i => ({ id: i.id, label: itemName(i.id) })))}{input("quantity", "采购数量", "number")}{input("expectedArrivalDate", "预计到货日", "date")}<p>一份采购申请只包含一个商品；其他商品分别建单。</p></>}
       {action === "approve" && <>{input("reason", "申请依据")}{approvalFields()}</>}
       {(action === "order" || action === "arrive") && input("reason", "实际进度说明")}
       {action === "receive" && <>{input("arrivedQuantity", "本次实到数量", "number")}{input("acceptedQuantity", "本次合格接收数量", "number")}{input("rejectedQuantity", "本次拒收数量", "number")}{input("unitCostCent", "实际到货单价（分）", "number")}{select("warehouseId", "接收仓库", choices(activeWarehouses), () => set("locationId", ""))}{select("locationId", "实际库位编号", options.locations.filter(l => l.warehouseId === form.warehouseId).map(l => ({ id: l.id, label: l.id })))}{input("receivedAt", "实际验收时间（当前设备时区）", "datetime-local")}{input("reason", "验收说明")}<p>只有合格接收部分进入可用库存；拒收及未交数量继续保留为未完成余量。</p></>}

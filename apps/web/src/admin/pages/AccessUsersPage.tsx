@@ -1,4 +1,4 @@
-// 文件版本：V0.03
+// 文件版本：V0.04
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
@@ -115,7 +115,6 @@ export function AccessUsersPage({ api, setActionResult, setGlobalError, effectiv
           name: username.trim(),
           projectId: organizationId.trim(),
           merchantId: merchantId.trim() || undefined,
-          operatorNote: "后台辅助员工登记，等待对应公司审批",
         });
         setActionResult(`员工注册申请已提交：${registration.id}。在员工档案中完成公司审批后生成账号，并自动获得员工自助权限。`);
         setUsername("");
@@ -140,7 +139,6 @@ export function AccessUsersPage({ api, setActionResult, setGlobalError, effectiv
           await api.post(`/api/v1/access/permission-templates/${encodeURIComponent(selectedTemplateId)}/apply`, {
             targetUserIds: [created.id],
             mode: "append",
-            operatorNote: "后台手动录入后应用权限模板",
           });
         } catch (applyFailure) {
           applyError = applyFailure instanceof Error ? applyFailure.message : "套用权限模板失败";

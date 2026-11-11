@@ -1,4 +1,4 @@
-// 文件版本：V0.07
+// 文件版本：V0.08
 package com.complex.platform.bar;
 
 import static org.mockito.ArgumentMatchers.any;
@@ -194,7 +194,7 @@ class BarControllerTests {
                         .with(user("bar").roles("P0_SMOKE"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"idempotency_key":"order-deposit-web","operator_note":"web order","evidence_attachment_ids":[],"bar_id":"bar_1","table_id":"table_1","reservation_id":"reservation_1","items":[{"product_id":"product_1","quantity":2}],"service_user_ids":[],"payment_mode":"offline"}
+                                {"idempotency_key":"order-deposit-web","bar_id":"bar_1","table_id":"table_1","reservation_id":"reservation_1","items":[{"product_id":"product_1","quantity":2}]}
                                 """))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.id").value("order_1"));
@@ -235,7 +235,7 @@ class BarControllerTests {
                         .with(user("bar").roles("P0_SMOKE"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"idempotency_key":"settle-web-voucher","payment_id":"payment_1","payment_channel":"aggregate_pay","voucher_code":"VCAAA","operator_note":"按本次真实收款凭据登记，多渠道累计足额后完成账单"}
+                                {"idempotency_key":"settle-web-voucher","payment_id":"payment_1","payment_channel":"aggregate_pay","voucher_code":"VCAAA"}
                                 """))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.settlement_status").value("settled"));

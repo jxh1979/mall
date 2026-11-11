@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
@@ -70,5 +70,14 @@ describe("TicketOrdersPage 一人多次票留脸提示（TK-06）", () => {
     await waitFor(() => expect(screen.queryByTestId("ticket-face-photo-panel")).toBeNull());
     expect(screen.queryByTestId("ticket-face-binding")).toBeNull();
     expect(get).not.toHaveBeenCalledWith(expect.stringContaining("/face-photo"));
+  });
+
+  // 第十八批 AF 段第 198 条 198-R5（核销预检 VerificationRequest 契约与 DTO 都没有 operator_note）：预检请求体不再带写死的 operatorNote。
+  it("核销预检请求体不含 operatorNote", async () => {
+    const { post } = renderWithPreview({ allowed: true, entitlement: { id: "ent-1" } });
+    await runPreview();
+    await waitFor(() => expect(post).toHaveBeenCalledWith("/api/v1/ticketing/verifications/preview", expect.anything()));
+    const body = post.mock.calls.find(([path]) => path === "/api/v1/ticketing/verifications/preview")![1];
+    expect(Object.keys(body as object)).not.toContain("operatorNote");
   });
 });

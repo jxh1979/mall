@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -98,5 +98,26 @@ describe("IntegrationEventsPage 行明细抽屉", () => {
     const cell = screen.getByTestId("integration-event-row-retry-1").querySelector("td:nth-child(2)") as HTMLElement;
     fireEvent.click(cell);
     expect(screen.queryByTestId("row-detail-drawer")).toBeNull();
+  });
+});
+
+// 第十八批 AF 段 198-R5：立即重试入口只读重试原因与附件，不读 action；契约删字段，网页停发写死的 "run_now"。
+describe("IntegrationEventsPage 立即重试请求体", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it("立即重试只发重试原因，不带写死的 action", async () => {
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    const api = makeApi();
+    renderPage({ api });
+    await waitFor(() => expect(screen.getByTestId("integration-event-row-retry-1")).toBeTruthy());
+    fireEvent.change(screen.getByTestId("integration-events-retry-reason"), { target: { value: "供应商超时后人工触发重试" } });
+
+    fireEvent.click(screen.getByTestId("integration-events-run-retry"));
+
+    const runNow = "/api/v1/integration/retry-tasks/retry-1/run-now";
+    await waitFor(() => expect(vi.mocked(api.post).mock.calls.some(([path]) => path === runNow)).toBe(true));
+    const body = vi.mocked(api.post).mock.calls.find(([path]) => path === runNow)?.[1];
+    expect(body).toMatchObject({ reason: "供应商超时后人工触发重试" });
+    expect(body).not.toHaveProperty("action");
   });
 });

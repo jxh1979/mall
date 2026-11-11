@@ -253,7 +253,6 @@ export function PermissionTemplatesPage({ api, setActionResult, setGlobalError, 
       const body = {
         templateName: templateName.trim(),
         templateType,
-        sourceTemplateId: selected?.sourceTemplateId ?? undefined,
         permissionCodes: selectedPermissionCodes,
         // M001-F25：修改不发数据范围，保留的权限码沿用原条目范围（条目范围不一的在用模板也能收窄）
         validFrom: keepOrIso(validFrom, selected.validFrom),
@@ -324,7 +323,6 @@ export function PermissionTemplatesPage({ api, setActionResult, setGlobalError, 
       await api.post(`/api/v1/access/permission-templates/${encodeURIComponent(selected.id)}/apply`, {
         targetUserIds: parseTargetUsers(targetUsersText),
         mode: singleUse ? "single_use" : "append",
-        operatorNote: singleUse ? "后台应用单次有效权限模板" : "后台应用权限模板",
       });
       setActionResult(`${singleUse ? "单次有效临时模板已应用" : "模板已应用"}：${selected.id}，目标账号 ${parseTargetUsers(targetUsersText).join("、")}`);
       await reload();

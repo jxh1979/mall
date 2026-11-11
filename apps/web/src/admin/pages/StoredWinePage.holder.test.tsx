@@ -1,4 +1,4 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 // FS-016 存酒持有人核验（BSM L1073 / L1198 / PGM L878）：领取与转让都向当前持有人发短信验证码；
 // 转让表单按蛇形键提交；检索只按手机号走 POST lookup（手机号不进 URL）。
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
@@ -57,7 +57,8 @@ describe("StoredWinePage 持有人核验（FS-016）", () => {
 
   // 第十八批 AE 段第 198 条 198-R3②（BSM:1073「手机号也不得单独作为放酒凭证」；取酒核验对象是存酒当前持有人手机）：
   // 领取表单没有手机号框，领取请求体不带 claim_by_phone（服务端不读）。
-  it("198-R3②：领取请求体不含 claim_by_phone", async () => {
+  // 第十八批 AF 段 198-R5：服务端不读 operator_note，领取请求体也不带。
+  it("198-R3②／198-R5：领取请求体不含 claim_by_phone 与 operator_note", async () => {
     vi.spyOn(window, "confirm").mockReturnValue(true);
     const api = makeApi();
     renderPage(api);
@@ -68,9 +69,10 @@ describe("StoredWinePage 持有人核验（FS-016）", () => {
     await waitFor(() => expect(api.post).toHaveBeenCalledWith("/api/v1/inventory/saved-bottles/w-1/claim", expect.anything()));
     const body = vi.mocked(api.post).mock.calls.find(([path]) => path === "/api/v1/inventory/saved-bottles/w-1/claim")![1];
     expect(Object.keys(body as object)).not.toContain("claim_by_phone");
+    expect(Object.keys(body as object)).not.toContain("operator_note");
   });
 
-  it("转让分组：发码 scene=transfer，提交转让 → POST …/transfer 含 to_name_or_nickname/to_phone/verification_code", async () => {
+  it("转让分组：发码 scene=transfer，提交转让 → POST …/transfer 含 to_name_or_nickname/to_phone/verification_code，不含 operator_note", async () => {
     vi.spyOn(window, "confirm").mockReturnValue(true);
     const api = makeApi();
     renderPage(api);
@@ -89,6 +91,8 @@ describe("StoredWinePage 持有人核验（FS-016）", () => {
       "/api/v1/inventory/saved-bottles/w-1/transfer",
       expect.objectContaining({ to_name_or_nickname: "受让人乙", to_phone: "13900139000", verification_code: "000000" }),
     ));
+    // 第十八批 AF 段 198-R5：服务端不读 operator_note，请求体不再带（本页备注框只随补救登记提交）。
+    expect(vi.mocked(api.post).mock.calls.find(([path]) => path === "/api/v1/inventory/saved-bottles/w-1/transfer")![1]).not.toHaveProperty("operator_note");
   });
 
   it("检索只按手机号：输入手机号点「检索」→ POST …/saved-bottles/lookup {phone}，表内只剩命中记录", async () => {

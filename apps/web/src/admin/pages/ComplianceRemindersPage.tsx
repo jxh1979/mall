@@ -65,7 +65,7 @@ function asRows<T>(value: unknown): T[] {
  */
 export function ComplianceRemindersPage({ api, setActionResult, setGlobalError, effectivePermissions }: AdminPageProps) {
   const [data, setData] = React.useState<ComplianceData | null>(null);
-  const [scanForm, setScanForm] = React.useState({ scanDate: "", lookaheadDays: "30", operatorNote: "" });
+  const [scanForm, setScanForm] = React.useState({ scanDate: "", lookaheadDays: "30" });
   const [keyDateForm, setKeyDateForm] = React.useState({ contractId: "", title: "", dateType: "renewal", dueDate: "" });
   const [expiryForm, setExpiryForm] = React.useState({ itemType: "business_license", itemName: "", documentNo: "", validTo: "" });
   const [detail, setDetail] = React.useState<{ title: string; fields: RowDetailField[] } | null>(null);
@@ -102,7 +102,6 @@ export function ComplianceRemindersPage({ api, setActionResult, setGlobalError, 
         idempotency_key: `crs-${Date.now()}`,
         scan_date: scanForm.scanDate || null,
         default_lookahead_days: Number(scanForm.lookaheadDays) || 30,
-        operator_note: scanForm.operatorNote || null,
       });
       setActionResult({ action: "compliance_reminder_scanned", generatedCount: result?.generatedCount ?? 0 });
       reload();
@@ -258,7 +257,6 @@ export function ComplianceRemindersPage({ api, setActionResult, setGlobalError, 
         <div className="admin-form-grid" data-testid="compliance-scan-form">
           <label>扫描基准日（留空=今日）<input type="date" data-testid="compliance-scan-date" value={scanForm.scanDate} onChange={(e) => setScanForm({ ...scanForm, scanDate: e.target.value })} /></label>
           <label>提前天数（只对合同关键日期生效，证照按类型配置）<input data-testid="compliance-scan-lookahead" value={scanForm.lookaheadDays} onChange={(e) => setScanForm({ ...scanForm, lookaheadDays: e.target.value })} /></label>
-          <label>操作备注<input data-testid="compliance-scan-note" value={scanForm.operatorNote} onChange={(e) => setScanForm({ ...scanForm, operatorNote: e.target.value })} /></label>
           <PermissionButton permissionsState={effectivePermissions} permissions={REMINDER_SCAN} data-testid="compliance-scan" onClick={() => void scanReminders()}>扫描生成提醒</PermissionButton>
         </div>
 

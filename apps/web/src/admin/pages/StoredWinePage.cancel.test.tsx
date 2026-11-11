@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 // FS-017（BSM L1072「存酒作废需照片+视频双证据+主管复核」）：作废表单缺视频 id 时 precheck 拦截并提示；填齐后 POST …/cancel 含双证据。
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -40,7 +40,7 @@ describe("StoredWinePage 作废（FS-017）", () => {
     window.history.replaceState({}, "", "/admin/bar/stored-wine");
   });
 
-  it("缺视频 id 时 precheck 拦截并提示；填齐照片+视频后 POST …/cancel 含 photo_attachment_ids 与 video_attachment_ids", async () => {
+  it("缺视频 id 时 precheck 拦截并提示；填齐照片+视频后 POST …/cancel 含 photo_attachment_ids 与 video_attachment_ids，不含 operator_note", async () => {
     const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
     const api = makeApi();
     renderPage(api);
@@ -59,5 +59,7 @@ describe("StoredWinePage 作废（FS-017）", () => {
       "/api/v1/inventory/saved-bottles/w-1/cancel",
       expect.objectContaining({ reason: "酒瓶破损", photo_attachment_ids: ["att_photo"], video_attachment_ids: ["att_video"] }),
     ));
+    // 第十八批 AF 段 198-R5：服务端不读 operator_note，请求体不再带（本页备注框只随补救登记提交）。
+    expect(vi.mocked(api.post).mock.calls.find(([path]) => path === "/api/v1/inventory/saved-bottles/w-1/cancel")![1]).not.toHaveProperty("operator_note");
   });
 });

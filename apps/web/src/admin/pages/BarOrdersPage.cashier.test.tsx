@@ -1,4 +1,4 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { BarOrdersPage } from "./BarOrdersPage";
@@ -9,7 +9,7 @@ import type { AdminApiClient, AdminPageProps } from "../types";
 describe("酒吧结账收款人取登录人", () => {
   afterEach(() => vi.restoreAllMocks());
 
-  it("选现金结账不出现现金收款人输入，提交体不含 cashierStaffId", async () => {
+  it("选现金结账不出现现金收款人输入，提交体不含 cashierStaffId、operatorNote", async () => {
     const post = vi.fn().mockResolvedValue({ id: "bill-1", settlementStatus: "settled" });
     const api = {
       get: vi.fn(async (url: string) => (url === "/api/v1/bar/orders"
@@ -40,6 +40,8 @@ describe("酒吧结账收款人取登录人", () => {
     await waitFor(() => expect(post).toHaveBeenCalledWith("/api/v1/bar/bills/bill-1/settle",
       expect.objectContaining({ paymentChannel: "cash", paymentId: "cash-1" })));
     expect(post.mock.calls[0]?.[1]).not.toHaveProperty("cashierStaffId");
+    // 第十八批 AF 段第 198 条 198-R5（BarBillingService 结账不读 operator_note）：结账请求体不再带写死的 operatorNote。
+    expect(post.mock.calls[0]?.[1]).not.toHaveProperty("operatorNote");
   });
 
   // 第十八批 P 段第 133 条 133-R1（BSM:1081「收银员开班记备用金」）：订单列表为空时页面显示「暂无数据」，收银交班区块仍在、能开班。

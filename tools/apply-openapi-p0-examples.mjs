@@ -49,7 +49,6 @@ const requestBodyExamples = {
     table_type: "vip",
     reservation_time: "2026-06-20T21:00:00+08:00",
     guest_count: 6,
-    contact_phone: "13800138000",
     latest_arrival_at: "2026-06-20T23:00:00+08:00"
   },
   BarOrderRequest: {
@@ -64,9 +63,7 @@ const requestBodyExamples = {
         unit_price_cent: 128800
       }
     ],
-    salesperson_user_id: "staff_sales_001",
-    service_user_ids: ["staff_service_001"],
-    payment_mode: "scan_qr"
+    salesperson_user_id: "staff_sales_001"
   },
   PaymentIntent: {
     idempotency_key: "pay_intent_20260612_000001",

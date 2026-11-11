@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.allOf;
@@ -502,7 +502,6 @@ class BarInvitationTableMoveJdbcIntegrationTests {
             body.put("member_assignments", memberAssignments);
         }
         body.put("reason", "客人分开坐");
-        body.put("requested_by_user_id", "admin-web");
         body.put("primary_session_version", version(primary));
         return mockMvc.perform(post("/api/v1/bar/table-sessions/" + primary + "/split").with(clerk)
                 .contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(body)));

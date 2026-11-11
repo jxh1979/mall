@@ -1,4 +1,4 @@
-// 文件版本：V0.04
+// 文件版本：V0.05
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { BarTableSessionsPage } from "./BarTableSessionsPage";
@@ -44,6 +44,8 @@ describe("卡座会话拆台", () => {
         mode: "single", splitSessionId: "session-2", primarySessionVersion: 2,
         orderAssignments: [{ orderId: "ord-9", sessionId: "session-2" }, { orderId: "ord-10", sessionId: "session-1" }],
       })));
+    // 第十八批 AF 段第 198 条 198-R5（BarTableSessionService 发起人取登录主体，不读 requested_by_user_id）：拆台请求体不再带写死的 requestedByUserId。
+    expect(Object.keys(post.mock.calls[0]![1] as object)).not.toContain("requestedByUserId");
     await waitFor(() => expect(props.setActionResult).toHaveBeenCalledWith(expect.objectContaining({ action: "bar_table_session_split", status: "split" })));
   });
 
@@ -80,5 +82,24 @@ describe("卡座会话拆台", () => {
     expect(screen.queryByTestId("bar-renew-minutes")).toBeNull();
     expect(document.body.textContent).not.toContain("续卡");
     expect(document.body.textContent).not.toContain("续时");
+  });
+});
+
+// 第十八批 AF 段第 198 条 198-R5（BarTableSessionService.mergeTableSession 发起人取登录主体 currentActor，不读 requested_by_user_id）：
+// 并台请求体不再带写死的 requestedByUserId。
+describe("卡座会话并台", () => {
+  afterEach(() => vi.restoreAllMocks());
+  it("并台请求体不含 requestedByUserId", async () => {
+    const { post } = mount();
+
+    await waitFor(() => expect(screen.queryByTestId("bar-session-select-session-1")).not.toBeNull());
+    fireEvent.click(screen.getByTestId("bar-session-select-session-1"));
+    fireEvent.change(screen.getByTestId("bar-session-reason"), { target: { value: "两桌客人合坐" } });
+    fireEvent.change(screen.getByTestId("bar-merge-target-session"), { target: { value: "session-2" } });
+    await waitFor(() => expect((screen.getByTestId("bar-merge-target-session") as HTMLInputElement).value).toBe("session-2"));
+    fireEvent.click(screen.getByTestId("bar-merge-submit"));
+    await waitFor(() => expect(post).toHaveBeenCalledWith("/api/v1/bar/table-sessions/session-1/merge",
+      expect.objectContaining({ mergedSessionId: "session-2", reason: "两桌客人合坐", primarySessionVersion: 2 })));
+    expect(Object.keys(post.mock.calls[0]![1] as object)).not.toContain("requestedByUserId");
   });
 });

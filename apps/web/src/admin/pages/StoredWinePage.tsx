@@ -1,4 +1,4 @@
-// 文件版本：V0.06
+// 文件版本：V0.07
 import React from "react";
 import { formatBusinessStatus } from "../i18n/statusLabels";
 import { TechDetails } from "../components/TechDetails";
@@ -225,6 +225,7 @@ export function StoredWinePage({ api, setActionResult, setGlobalError, effective
   const [handoverVideos, setHandoverVideos] = React.useState("");
   const [handoverItems, setHandoverItems] = React.useState<Record<string, { quantity: string; condition: string }>>({});
   const [claimQuantity, setClaimQuantity] = React.useState("1");
+  // 第十八批 AF 段 198-R5：备注只随补救登记提交（服务端读作补存新瓶的人工备注）；其余请求服务端不读，不发。
   const [operatorNote, setOperatorNote] = React.useState(TEXT.auditNote);
   const [formError, setFormError] = React.useState("");
   const [submitting, setSubmitting] = React.useState(false);
@@ -385,7 +386,6 @@ export function StoredWinePage({ api, setActionResult, setGlobalError, effective
     try {
       const body = {
         idempotency_key: `admin-saved-bottle-transfer-${selected.id}-${transferToPhone.trim()}`,
-        operator_note: operatorNote,
         evidence_attachment_ids: [],
         to_name_or_nickname: transferToName.trim(),
         to_phone: transferToPhone.trim(),
@@ -444,7 +444,6 @@ export function StoredWinePage({ api, setActionResult, setGlobalError, effective
     try {
       const body = {
         idempotency_key: `admin-saved-bottle-renew-${selected.id}-${Date.now()}`,
-        operator_note: operatorNote,
         verification_code: renewalCode.trim(),
       };
       const result = await api.post(`/api/v1/inventory/saved-bottles/${selected.id}/renewals`, body);
@@ -483,7 +482,6 @@ export function StoredWinePage({ api, setActionResult, setGlobalError, effective
       const reason = decision === "reject" ? (renewalRejectReason[renewalId] ?? "").trim() : "";
       const body = {
         idempotency_key: `admin-saved-bottle-renewal-review-${renewalId}-${decision}`,
-        operator_note: operatorNote,
         decision,
         ...(reason ? { reason } : {}),
       };
@@ -528,7 +526,6 @@ export function StoredWinePage({ api, setActionResult, setGlobalError, effective
     try {
       const body = {
         idempotency_key: `admin-saved-bottle-cancel-${selected.id}`,
-        operator_note: operatorNote,
         reason: cancelReason.trim(),
         photo_attachment_ids: splitIds(cancelPhotos),
         video_attachment_ids: splitIds(cancelVideos),
@@ -622,7 +619,7 @@ export function StoredWinePage({ api, setActionResult, setGlobalError, effective
     setRemedyError("");
     setGlobalError(null);
     try {
-      const body = { idempotency_key: `admin-saved-bottle-remedy-${path.replace("/", "-")}-${remedyId}`, operator_note: operatorNote, ...extra };
+      const body = { idempotency_key: `admin-saved-bottle-remedy-${path.replace("/", "-")}-${remedyId}`, ...extra };
       const result = await api.post(`/api/v1/inventory/saved-bottles/remedies/${remedyId}/${path}`, body);
       setActionResult({ action: `stored_wine_remedy_${path.replace("/", "_")}`, remedyId, requestBody: body, result });
       if (selected) {
@@ -654,7 +651,7 @@ export function StoredWinePage({ api, setActionResult, setGlobalError, effective
     setSubmitting(true);
     setGlobalError(null);
     try {
-      const body = { idempotency_key: `admin-saved-bottle-exit-notice-${exitMerchantId.trim()}-${Date.now()}`, operator_note: operatorNote, merchant_id: exitMerchantId.trim() };
+      const body = { idempotency_key: `admin-saved-bottle-exit-notice-${exitMerchantId.trim()}-${Date.now()}`, merchant_id: exitMerchantId.trim() };
       const result = await api.post<{ bottleCount?: number; notifiedCount?: number }>("/api/v1/inventory/saved-bottles/exit-notice", body);
       setExitResult(`已清点 ${numberValue(result?.bottleCount)} 瓶，已通知 ${numberValue(result?.notifiedCount)} 位客人在原店取回`);
       setActionResult({ action: "stored_wine_exit_noticed", requestBody: body, result });
@@ -692,7 +689,6 @@ export function StoredWinePage({ api, setActionResult, setGlobalError, effective
     try {
       const body = {
         idempotency_key: `admin-saved-bottle-handover-${exitMerchantId.trim()}-${Date.now()}`,
-        operator_note: operatorNote,
         merchant_id: exitMerchantId.trim(),
         pickup_location: handoverLocation.trim(),
         photo_attachment_ids: splitIds(handoverPhotos),
@@ -740,7 +736,6 @@ export function StoredWinePage({ api, setActionResult, setGlobalError, effective
     try {
       const body = {
         idempotency_key: `admin-saved-bottle-claim-${selected.id}-${quantity}`,
-        operator_note: operatorNote,
         evidence_attachment_ids: ["att-saved-bottle-claim-1"],
         claim_items: [{ saved_bottle_id: selected.id, item_name: selected.itemName ?? selected.savedNo ?? selected.id, claim_quantity: quantity }],
         verification_code: verificationCode,

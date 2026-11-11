@@ -1,6 +1,6 @@
 package com.complex.terminal
 
-// 文件版本：V0.06
+// 文件版本：V0.07
 
 import java.util.UUID
 
@@ -269,7 +269,6 @@ class TerminalWorkflow(
     val order = api.createBarOrder(
       BarOrderRequest(
         idempotencyKey = newClientTaskId("bar-order"),
-        operatorNote = "Android terminal bar order",
         barId = barId,
         tableId = tableId,
         reservationId = reservationId,
@@ -366,7 +365,6 @@ class TerminalWorkflow(
       billId,
       BarBillSettleRequest(
         idempotencyKey = stableIdempotencyKey("bar-settle", billId, settlementAmountCent.toString()),
-        operatorNote = "Android terminal bar settlement",
         paymentId = paymentId,
         settlementAmountCent = settlementAmountCent,
         paymentChannel = paymentChannel,
@@ -396,7 +394,6 @@ class TerminalWorkflow(
     val record = api.bindStaffDeviceCredential(
       StaffDeviceBindRequest(
         idempotencyKey = stableIdempotencyKey("staff-device-bind", staffProfileId, deviceFingerprintHash),
-        operatorNote = "Android terminal device credential bind",
         staffProfileId = staffProfileId,
         devicePublicKey = devicePublicKey,
         deviceFingerprintHash = deviceFingerprintHash,
@@ -419,7 +416,6 @@ class TerminalWorkflow(
       credentialId,
       StaffDeviceRebindDecisionRequest(
         idempotencyKey = stableIdempotencyKey("staff-device-approve-rebind", credentialId),
-        operatorNote = "Android terminal approve device rebind",
       ),
     )
     store.addEvent(
@@ -442,7 +438,6 @@ class TerminalWorkflow(
       credentialId,
       StaffDeviceIntegrityReportRequest(
         idempotencyKey = stableIdempotencyKey("staff-device-integrity", credentialId, integrityStatus),
-        operatorNote = "Android terminal device integrity report",
         integrityStatus = integrityStatus,
       ),
     )

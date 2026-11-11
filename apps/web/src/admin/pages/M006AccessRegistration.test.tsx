@@ -1,4 +1,4 @@
-// 文件版本：V0.04
+// 文件版本：V0.05
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import { AccessUsersPage } from "./AccessUsersPage";
@@ -16,7 +16,7 @@ function props() {
     effectivePermissions: { status: "ready", value: { wildcard: true, grants: [], denies: [] } },
   } as AdminPageProps;
 }
-it("M006-011 员工引导表单提交注册申请，不发密码或预先赋权", async () => {
+it("M006-011 员工引导表单提交注册申请，不发密码或预先赋权，也不发写死备注（198-R5）", async () => {
   const p = props();
   render(<AccessUsersPage {...p} />);
   await waitFor(() => expect(screen.getByTestId("access-user-create-open")).toBeTruthy());
@@ -30,6 +30,7 @@ it("M006-011 员工引导表单提交注册申请，不发密码或预先赋权"
   await waitFor(() => expect(p.api.post).toHaveBeenCalledTimes(1));
   expect(p.api.post).toHaveBeenCalledWith("/api/v1/staff/registrations", expect.objectContaining({ name: "新员工", projectId: "org-1" }));
   expect(vi.mocked(p.api.post).mock.calls[0]?.[1]).not.toHaveProperty("password");
+  expect(vi.mocked(p.api.post).mock.calls[0]?.[1]).not.toHaveProperty("operatorNote");
 });
 it("M006-025 新建表单不收集无用途的手机号", async () => {
   render(<AccessUsersPage {...props()} />);

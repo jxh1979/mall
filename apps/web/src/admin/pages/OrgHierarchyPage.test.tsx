@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -78,7 +78,7 @@ describe("OrgHierarchyPage 组织层级与审批线维护", () => {
     await waitFor(() => expect(screen.getByTestId("org-hierarchy-error").textContent).toContain("1 到 30"));
   });
 
-  it("保存审批线提交 min_start_rank 与 status；只有 view 权限时保存按钮不可用", async () => {
+  it("保存审批线提交 min_start_rank 与 status、不发写死备注（198-R5）；只有 view 权限时保存按钮不可用", async () => {
     const props = renderPage();
     await waitFor(() => expect(screen.getByTestId("approval-line-form")).toBeTruthy());
     fireEvent.change(screen.getByTestId("approval-line-code"), { target: { value: "legal_review" } });
@@ -93,6 +93,7 @@ describe("OrgHierarchyPage 组织层级与审批线维护", () => {
     expect(body.min_start_rank).toBe(3);
     expect(body.hr_final_approver_id).toBe("usr_hr");
     expect(body.status).toBe("active");
+    expect(body).not.toHaveProperty("operator_note");
     await waitFor(() => expect(props.setActionResult).toHaveBeenCalledWith(expect.stringMatching(/^已保存平行审批线 legal_review/)));
 
     vi.unstubAllGlobals();

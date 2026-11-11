@@ -1,4 +1,4 @@
-# P1 商户账单门户 API 合同 V0.11
+# P1 商户账单门户 API 合同 V0.12
 
 ## 1. 定位与边界
 
@@ -108,7 +108,6 @@ P1 后台先使用员工权限体系保护接口；真实商户登录态接入�
 ```json
 {
   "idempotency_key": "bill-create-202606",
-  "operator_note": "issue June bill",
   "merchant_id": "merchant_1",
   "ar_ap_item_id": "arap_202606",
   "bill_period_start": "2026-06-01",
@@ -137,7 +136,6 @@ P1 后台先使用员工权限体系保护接口；真实商户登录态接入�
 ```json
 {
   "idempotency_key": "bill-confirm-202606",
-  "operator_note": "merchant confirmed",
   "operator_user_id": "staff_finance"
 }
 ```
@@ -155,7 +153,6 @@ P1 后台先使用员工权限体系保护接口；真实商户登录态接入�
 ```json
 {
   "idempotency_key": "bill-dispute-202606",
-  "operator_note": "merchant dispute",
   "evidence_attachment_ids": ["att_meter_photo"],
   "reason_code": "energy_amount_mismatch",
   "description": "Energy reading does not match meter photo",
@@ -176,7 +173,6 @@ P1 后台先使用员工权限体系保护接口；真实商户登录态接入�
 ```json
 {
   "idempotency_key": "bill-dunning-202606-01",
-  "operator_note": "first reminder",
   "dunning_channel": "wecom",
   "message_template": "rent_overdue_first_notice",
   "status": "sent",

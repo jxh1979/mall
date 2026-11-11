@@ -1,4 +1,4 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 import { Alert, Button, Card, Empty, Input, List, Result, Space, Spin, Tag, Typography } from "antd";
 import { useEffect, useState } from "react";
 
@@ -28,8 +28,8 @@ function unavailableReason(option: BarReservationOption): string | null {
 const DEPOSIT_RULES = "定金不抵扣消费、不计入最低消费累计；在该台位的消费达到该台位适用的最低消费后，定金原路退回；"
   + "到店未达最低消费、爽约或超时取消的，定金按规则没收。超过最晚到店时间未到店的，台位自动释放、定金按爽约规则没收。";
 
-type Draft = { reservationTime: string; latestArrivalAt: string; guestCount: string; contactPhone: string };
-const EMPTY_DRAFT: Draft = { reservationTime: "", latestArrivalAt: "", guestCount: "2", contactPhone: "" };
+type Draft = { reservationTime: string; latestArrivalAt: string; guestCount: string };
+const EMPTY_DRAFT: Draft = { reservationTime: "", latestArrivalAt: "", guestCount: "2" };
 
 // ③ 订台（BSM「官方 App 和小程序都可以订台，订台需要支付定金；订台页面须写明该卡座适用的最低消费金额与服务费比例」；BSM「客人自助订台必须支付定金，
 // 定金直接进该卡座所属的酒吧商户……每一笔订台都必须填写最晚到店时间」）：选台位（写明最低消费、服务费比例、应付定金与可进人数；已预留与未配定金规则的
@@ -75,7 +75,6 @@ export function BarReservationPage({ service, onProject }: { service: CustomerSe
         reservationTime: new Date(draft.reservationTime).toISOString(),
         latestArrivalAt: new Date(draft.latestArrivalAt).toISOString(),
         guestCount: guests,
-        contactPhone: draft.contactPhone.trim() || undefined,
       }));
     } catch (err) {
       setError(err instanceof Error ? err.message : "订台失败");
@@ -155,8 +154,6 @@ export function BarReservationPage({ service, onProject }: { service: CustomerSe
             <Text type="secondary" data-testid="reservation-deposit-rules">{DEPOSIT_RULES}</Text>
             <label htmlFor="reservation-guests">人数</label>
             <Input id="reservation-guests" type="number" min={1} value={draft.guestCount} onChange={set("guestCount")} />
-            <label htmlFor="reservation-phone">联系手机号（选填）</label>
-            <Input id="reservation-phone" type="tel" value={draft.contactPhone} onChange={set("contactPhone")} />
             <Button type="primary" block loading={submitting} disabled={!ready} onClick={() => void submit()} data-testid="reservation-submit">
               提交订台（下一步付定金）
             </Button>

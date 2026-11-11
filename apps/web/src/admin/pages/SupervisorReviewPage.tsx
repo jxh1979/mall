@@ -1,4 +1,4 @@
-// 文件版本：V0.10
+// 文件版本：V0.11
 import React from "react";
 import { withBase } from "../../basePath";
 import { formatReviewValue } from "../i18n/reviewLabels";
@@ -225,7 +225,6 @@ export function SupervisorReviewPage({ api, user, setActionResult, setGlobalErro
     }
     const request = {
       idempotencyKey: nextKey("supervisor-review-evaluate"),
-      operatorNote: "完整后台主管复核评估",
       evidenceAttachmentIds: evidenceAttachment.trim() ? [evidenceAttachment.trim()] : [],
       actionType,
       objectType,
@@ -264,7 +263,6 @@ export function SupervisorReviewPage({ api, user, setActionResult, setGlobalErro
     }
     const request = {
       idempotencyKey: nextKey("supervisor-review-forward"),
-      operatorNote: "后台转交审批",
       forwardedTo: forwardTarget.trim(),
       comment: approvalComment,
     };

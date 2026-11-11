@@ -1,4 +1,4 @@
-# P1 第三方回流、重试、补偿和对账接口合同 V0.11
+# P1 第三方回流、重试、补偿和对账接口合同 V0.12
 
 ## 1. 范围
 
@@ -83,7 +83,6 @@
 ```json
 {
   "idempotency_key": "retry-now-001",
-  "action": "run_now",
   "reason": "manual retry after provider timeout"
 }
 ```

@@ -1,4 +1,4 @@
-// 文件版本：V0.05
+// 文件版本：V0.06
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import { PurchaseWorkbenchPage } from "./PurchaseWorkbenchPage";
@@ -79,9 +79,10 @@ it("第 82 条 82b-R8：主项目在别处、已批准在所选项目经营的�
   await waitFor(() => expect(Array.from((screen.getByLabelText("自采商户") as HTMLSelectElement).options, o => o.textContent)).toContain("跨项目经营商户"));
   expect(Array.from((screen.getByLabelText("自采商户") as HTMLSelectElement).options, o => o.textContent)).not.toContain("别的项目商户");
 });
-it("新建采购只提交所选批准合同的一种商品，供应商来自该合同", async () => {
-  const { posts } = setup(); await screen.findByText("合同一"); click("新建采购申请"); fill("已批准供货合同", "sc_1"); fill("采购商品", "item_A_01"); fill("采购数量", "15"); fill("预计到货日", "2026-02-01"); fill("申请依据", "门店补货"); click("确认新建采购申请");
-  await waitFor(() => expect(posts).toHaveLength(1)); expect(posts[0]!.body).toMatchObject({ supplier_id: "supplier_1", supply_contract_id: "sc_1", items: [{ item_id: "item_A_01", quantity: 15 }] });
+// 第十八批 AF 段 198-R5 判定 4：建单接口不记申请依据，「申请依据」框删去、请求停发；送审另有自己的「申请依据」框。
+it("新建采购只提交所选批准合同的一种商品，供应商来自该合同，不设申请依据框", async () => {
+  const { posts } = setup(); await screen.findByText("合同一"); click("新建采购申请"); fill("已批准供货合同", "sc_1"); fill("采购商品", "item_A_01"); fill("采购数量", "15"); fill("预计到货日", "2026-02-01"); expect(screen.queryByLabelText("申请依据")).toBeNull(); click("确认新建采购申请");
+  await waitFor(() => expect(posts).toHaveLength(1)); expect(posts[0]!.body).toMatchObject({ supplier_id: "supplier_1", supply_contract_id: "sc_1", items: [{ item_id: "item_A_01", quantity: 15 }] }); expect(posts[0]!.body).not.toHaveProperty("operator_note");
 });
 // 第 23 条复核（PGM:687「这一次看到的是哪些对象（哪个客人、哪个商户、哪些单据）」；PGM:686 采购价、供应链价格）：查看合同读到逐商品合同单价后，
 // 这份供货合同报为这一次看到的对象。
@@ -172,7 +173,8 @@ it("批准预付调整由不同财务人员过账，证据绑定调整方案且�
   await waitFor(() => expect(posts).toHaveLength(1)); expect(posts[0]!.path).toBe("/api/v1/inventory/purchase-prepayment-resolutions/ppr_1/post"); expect(uploads[0]!.get("business_type")).toBe("purchase_prepayment_resolution"); expect(uploads[0]!.get("business_id")).toBe("ppr_1"); expect(posts[0]!.body).not.toHaveProperty("paid");
 });
 // 第十八批第 33 条（BSM:1211「系统根据安全库存、销量和在途数量生成建议采购数量及理由，由采购人员人工调整并按审批链批准后生成采购单，不得自动向供应商下单」）。
-it("采购建议列出建议量与理由，按建议发起采购预填合同商品数量与申请依据，人工改数量后提交", async () => {
+// 第十八批 AF 段判定 4：理由只在采购建议表显示，建单不预填、不发申请依据。
+it("采购建议列出建议量与理由，按建议发起采购预填合同商品数量，人工改数量后提交，建单不带申请依据", async () => {
   const reason = "安全库存 20 ＋ 近 7 天销量 33 － 当前可用 12 － 在途 10 ＝ 建议采购 31";
   const { posts } = setup();
   await waitFor(() => expect(screen.queryByLabelText("采购建议综合体")).not.toBeNull());
@@ -181,9 +183,10 @@ it("采购建议列出建议量与理由，按建议发起采购预填合同商�
   expect(screen.getByText(reason).closest("tr")).toHaveTextContent("瓶装饮品平台31");
   click("按建议发起采购");
   expect(screen.getByLabelText("已批准供货合同")).toHaveValue("sc_1"); expect(screen.getByLabelText("采购商品")).toHaveValue("item_A_01");
-  expect(screen.getByLabelText("采购数量")).toHaveValue(31); expect(screen.getByLabelText("申请依据")).toHaveValue(reason);
+  expect(screen.getByLabelText("采购数量")).toHaveValue(31); expect(screen.queryByLabelText("申请依据")).toBeNull();
   fill("采购数量", "30"); fill("预计到货日", "2026-02-01"); click("确认新建采购申请");
   await waitFor(() => expect(posts).toHaveLength(1)); expect(posts[0]!.path).toBe("/api/v1/inventory/purchase-requests");
-  expect(posts[0]!.body).toMatchObject({ supplier_id: "supplier_1", supply_contract_id: "sc_1", items: [{ item_id: "item_A_01", quantity: 30 }], operator_note: reason });
+  expect(posts[0]!.body).toMatchObject({ supplier_id: "supplier_1", supply_contract_id: "sc_1", items: [{ item_id: "item_A_01", quantity: 30 }] });
+  expect(posts[0]!.body).not.toHaveProperty("operator_note");
   expect(posts.some(p => p.path.endsWith("/order"))).toBe(false);
 });

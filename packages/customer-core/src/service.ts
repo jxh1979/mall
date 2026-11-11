@@ -1,4 +1,4 @@
-// 文件版本：V0.12
+// 文件版本：V0.13
 // 客人端业务服务层（三端共用）：封装客人用到的真实端点（客人接口 customer 前缀等），接口以 docs/openapi/openapi-p0.yaml 为准。
 // 请求经注入的 CustomerApi 发出（各端自带 transport），本文件不依赖浏览器。
 
@@ -253,7 +253,6 @@ export class CustomerService {
     tableType?: string;
     reservationTime: string;
     guestCount: number;
-    contactPhone?: string;
     // ROOT-03-R19（BSM 第 1062 行）：每笔订台必填最晚到店时间。
     latestArrivalAt: string;
   }): Promise<BarReservation> {

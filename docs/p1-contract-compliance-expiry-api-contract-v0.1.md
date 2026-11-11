@@ -1,4 +1,4 @@
-# P1 合同关键日期与证照到期 API 合同 V0.11
+# P1 合同关键日期与证照到期 API 合同 V0.12
 
 ## 1. 定位与边界
 
@@ -41,7 +41,6 @@ AI 辅助识别只作为后续输入来源保留：可记录 `source_type=ai_sug
 ```json
 {
   "idempotency_key": "contract-date-create",
-  "operator_note": "record contract end date",
   "evidence_attachment_ids": ["att-contract"],
   "contract_id": "contract_1",
   "merchant_id": "merchant_1",
@@ -77,7 +76,6 @@ AI 辅助识别只作为后续输入来源保留：可记录 `source_type=ai_sug
 ```json
 {
   "idempotency_key": "expiry-item-create",
-  "operator_note": "record alcohol license",
   "evidence_attachment_ids": ["att-license"],
   "subject_type": "merchant",
   "subject_id": "merchant_1",
@@ -120,7 +118,6 @@ AI 辅助识别只作为后续输入来源保留：可记录 `source_type=ai_sug
 ```json
 {
   "idempotency_key": "scan-20260614",
-  "operator_note": "daily scan",
   "scan_date": "2026-06-14",
   "default_lookahead_days": 30,
   "operator_user_id": "staff_ops"

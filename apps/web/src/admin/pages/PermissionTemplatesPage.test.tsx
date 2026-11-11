@@ -159,9 +159,9 @@ describe("M038 权限模板页回归", () => {
 
   // M001-F18（控制席 2026-10-02 裁定）：输入框只到分钟；选中带秒的模板、不改时间直接保存，请求里的生效 / 截止与原值逐字一致，
   // 不因按分钟回填而截短（截短会把生效判为放宽而 409、把截止判为收窄而给在用员工写无实义的改前改后留痕）。
-  it("选中带秒的模板、不改时间保存，请求里的生效与截止时间与原值逐字一致（M001-F18）", async () => {
+  it("选中带秒的模板、不改时间保存，请求里的生效与截止时间与原值逐字一致（M001-F18）；不发来源模板编号（198-R5）", async () => {
     vi.stubEnv("TZ", "Asia/Shanghai");
-    const seconds = [{ ...TIMED[0], id: "tpl-seconds", valid_from: "2026-06-14T00:00:30Z", valid_until: "2026-06-15T00:00:45Z" }];
+    const seconds = [{ ...TIMED[0], id: "tpl-seconds", valid_from: "2026-06-14T00:00:30Z", valid_until: "2026-06-15T00:00:45Z", source_template_id: "tpl-origin" }];
     let putBody: Record<string, unknown> | null = null;
     vi.stubGlobal("fetch", vi.fn().mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
@@ -184,6 +184,7 @@ describe("M038 权限模板页回归", () => {
     await waitFor(() => expect(putBody).toBeTruthy());
     expect(putBody!.valid_from).toBe("2026-06-14T00:00:30Z");
     expect(putBody!.valid_until).toBe("2026-06-15T00:00:45Z");
+    expect(putBody).not.toHaveProperty("source_template_id"); // 198-R5：修改入口取库内原来源，不读请求里的来源模板
   });
 });
 
@@ -248,7 +249,7 @@ describe("M038-011 权限模板页复制/应用防连点", () => {
   });
 
   // M001-F21：套用方式只用契约闭集里的取值——不勾单次发 append，勾选单次发 single_use。
-  it("应用模板发出的套用方式在契约闭集内：默认 append，勾选单次为 single_use（M001-F21）", async () => {
+  it("应用模板发出的套用方式在契约闭集内：默认 append，勾选单次为 single_use（M001-F21）；不发写死备注（198-R5）", async () => {
     vi.spyOn(window, "confirm").mockReturnValue(true);
     const { bodies, ok } = renderPending();
     // 第 125 条：表单回填在被动 effect 里，等回填值出现（或复位）后再操作，否则补跑的 effect 会把勾选冲掉。
@@ -261,6 +262,7 @@ describe("M038-011 权限模板页复制/应用防连点", () => {
     fireEvent.click(screen.getByTestId("permission-template-apply"));
     await waitFor(() => expect(bodies).toHaveLength(1));
     expect(JSON.parse(bodies[0]!).mode).toBe("single_use");
+    expect(JSON.parse(bodies[0]!)).not.toHaveProperty("operator_note");
     ok();
     // 应用后重读，回填 effect 按模板 tpl-1（非单次）把勾选复位；复位即说明重读后的回填已执行，再点第二笔。
     await waitFor(() => {
@@ -270,6 +272,7 @@ describe("M038-011 权限模板页复制/应用防连点", () => {
     fireEvent.click(screen.getByTestId("permission-template-apply"));
     await waitFor(() => expect(bodies).toHaveLength(2));
     expect(JSON.parse(bodies[1]!).mode).toBe("append");
+    expect(JSON.parse(bodies[1]!)).not.toHaveProperty("operator_note");
     expect(bodies.map((body) => JSON.parse(body).mode).every((mode: string) => ["append", "merge", "single_use"].includes(mode))).toBe(true);
     ok();
   });

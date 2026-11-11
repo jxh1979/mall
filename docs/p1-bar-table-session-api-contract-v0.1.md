@@ -1,4 +1,4 @@
-# P1 酒吧卡座会话调整 API 契约 V0.11
+# P1 酒吧卡座会话调整 API 契约 V0.12
 
 > **[A2 修订 2026-07-28]** 与 MAIN `bar-business-operations-product-prd-v0.1.md` §7.3A / `DEC-SEAT-NO-RENEW-001` 对齐：
 > **产品不做「续卡/续时」**。下文原 `renew` 接口与字段整节废止，不得再作为实现/验收依据。
@@ -43,7 +43,6 @@
 |---|---:|---|
 | `idempotencyKey` | 是 | 幂等键 |
 | `barId` | 是 | 酒吧 ID，必须与卡座归属一致 |
-| `merchantId` | 是 | 商户/运营主体 ID |
 | `businessDate` | 是 | 营业日 |
 | `tableId` | 是 | 卡座 ID |
 | `reservationId` | 否 | 关联预订；如果提供，必须与酒吧和卡座一致 |
@@ -51,8 +50,6 @@
 | `guestCount` | 否 | 入座人数，必须非负 |
 | `salesStaffId` | 否 | 销售人员 ID |
 | `serviceStaffId` | 否 | 服务人员 ID |
-| `openedByUserId` | 否 | 开卡操作人，后续可并入操作者上下文 |
-| `evidenceAttachmentIds` | 否 | 证据附件 |
 
 ### 4.2 转卡
 
@@ -63,7 +60,6 @@
 | `idempotencyKey` | 是 | 幂等键 |
 | `targetTableId` | 是 | 目标卡座，必须与当前会话同酒吧且状态为 `active` |
 | `reason` | 是 | 调整原因 |
-| `requestedByUserId` | 是 | 操作人 |
 | `sessionVersion` | 是 | 乐观锁版本，防止并发覆盖 |
 | `evidenceAttachmentIds` | 否 | 证据附件 |
 
@@ -78,7 +74,6 @@
 | `idempotencyKey` | 是 | 幂等键 |
 | `mergedSessionId` | 是 | 被合并的副会话 |
 | `reason` | 是 | 合并原因 |
-| `requestedByUserId` | 是 | 操作人 |
 | `primarySessionVersion` | 是 | 主会话版本 |
 | `mergedSessionVersion` | 是 | 副会话版本 |
 | `evidenceAttachmentIds` | 否 | 证据附件 |
@@ -138,3 +133,4 @@ mvn -Dtest=BarServiceTests,BarControllerTests,BarJdbcIntegrationTests test
 ## 变更日志
 
 | 2026-07-28 | A2 | 废止续卡整节与 renew 接口；对齐 MAIN §7.3A / DEC-SEAT-NO-RENEW-001 |
+| 2026-11-11 | AF（V0.12） | 第十八批 AF 段第 198 条 198-R5：§4.1 删 `merchantId`、`openedByUserId`、`evidenceAttachmentIds`，§4.2 转卡、§4.3 合并删 `requestedByUserId`（服务端不读，正式 OpenAPI 已删，后端 DTO 分量保留；后台卡座会话页转台、并台、拆台停发 `requestedByUserId`） |

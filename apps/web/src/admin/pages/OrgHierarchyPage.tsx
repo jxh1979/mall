@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
@@ -134,11 +134,10 @@ export function OrgHierarchyPage({ api, setActionResult, setGlobalError, effecti
       entryUserId: lineForm.entryUserId.trim() || null,
       hrFinalApproverId: lineForm.hrFinalApproverId.trim() || null,
       status: lineForm.status,
-      operatorNote: "后台维护平行审批线",
     };
     await runAction("approval_line_saved", request, () => api.put(`/api/v1/access/approval-lines/${encodeURIComponent(code)}`, {
       idempotencyKey: request.idempotencyKey, lineName: request.lineName, minStartRank: request.minStartRank,
-      entryUserId: request.entryUserId, hrFinalApproverId: request.hrFinalApproverId, status: request.status, operatorNote: request.operatorNote,
+      entryUserId: request.entryUserId, hrFinalApproverId: request.hrFinalApproverId, status: request.status,
     }));
   }
 

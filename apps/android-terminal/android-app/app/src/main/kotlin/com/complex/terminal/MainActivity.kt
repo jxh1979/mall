@@ -1,6 +1,6 @@
 package com.complex.terminal
 
-// 文件版本：V0.24
+// 文件版本：V0.25
 
 import android.app.Activity
 import android.content.Intent
@@ -2064,7 +2064,7 @@ class MainActivity : Activity() {
       if (!completed.isChecked || code.text.isBlank() || reason.text.isBlank()) { status.text = "请核对实物、完成情况并填写交接说明"; return@button }
       runBackground(action = {
         api.returnDevice(DeviceReturnRequest(idempotencyKey=returnKey, deviceCode=code.text.toString().trim(),
-          hasPendingTasks=false, reason=reason.text.toString(), operatorNote=reason.text.toString()))
+          hasPendingTasks=false, reason=reason.text.toString()))
       }, onSuccess = {
         status.text = "归还成功，下班时间已记录"
         if (it.deviceCode == api.deviceId) ChargingReceiptBridge.clearAnchor(this)
@@ -2515,7 +2515,7 @@ class MainActivity : Activity() {
       val pj = projectId.text.toString().trim()
       val merchant = merchantId.text.toString().trim()
       if (n.isEmpty() || pj.isEmpty() || merchant.isEmpty()) { status.text = "请填姓名、项目与商户编号"; return@button }
-      val request = StaffRegistrationSubmitRequest(requestKey, pj, n, "商户手机代提交", merchant,
+      val request = StaffRegistrationSubmitRequest(requestKey, pj, n, merchant,
         phone.text.toString().trim().ifEmpty { null }, idDoc.text.toString().trim().ifEmpty { null })
       runBackground(
         action = { api.submitStaffRegistration(request) },
