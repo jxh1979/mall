@@ -54,7 +54,7 @@ const TEXT = {
   merchantRequired: "请选择费用归属商户。",
   periodRequired: "请填写费用月份（如 2026-07）。",
   amountRequired: "金额必须是非零数字（元，可为负仅限冲销场景请走冲销）。",
-  noteRequired: "理由必填（进入审计留痕）。",
+  noteRequired: "理由必填（存进费用台账行，不写入审计事件）。",
 };
 
 function centToYuan(cent: number | undefined | null): string {
@@ -479,7 +479,7 @@ export function FinanceMerchantExpensePage({ api, setActionResult, setGlobalErro
           },
           {
             title: "录入理由（必填）",
-            description: "理由与操作人一并进入审计留痕；台账仅追加，录错请用红字冲销更正。",
+            description: "理由与操作人一并存进费用台账行，理由不写入审计事件；台账仅追加，录错请用红字冲销更正。",
             validate: () => (formNote.trim() ? null : TEXT.noteRequired),
             content: (
               <label>理由<textarea data-testid="merchant-expense-create-note" value={formNote} onChange={(event) => setFormNote(event.target.value)} placeholder="如：2026-07 店员工资及社保分摊" /></label>

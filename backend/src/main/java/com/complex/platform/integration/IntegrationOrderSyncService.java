@@ -1,6 +1,6 @@
 package com.complex.platform.integration;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import static com.complex.platform.integration.IntegrationValidation.*;
 import static com.complex.platform.common.Strings.trimToNull;
@@ -347,7 +347,7 @@ final class IntegrationOrderSyncService {
         );
     }
 
-    IntegrationTaskRecord resolveCompensationTask(String id, IntegrationTaskResolveRequest request) {
+    IntegrationTaskRecord resolveCompensationTask(String id, IntegrationTaskResolveRequest request, String actorUserId) {
         String taskId = requireTextValue(id, "id");
         String operationId = "resolveIntegrationCompensationTask:" + taskId;
         return executor.executeWrite(
@@ -360,7 +360,7 @@ final class IntegrationOrderSyncService {
                         "integration.compensation_task.resolve_failed",
                         "integration.compensation.manage",
                         "integration_compensation_task"),
-                () -> resolveCompensationTaskOnce(taskId, request),
+                () -> resolveCompensationTaskOnce(taskId, request, actorUserId),
                 saved -> ((IntegrationTaskRecord) saved).id(),
                 Map.of("operation_id", operationId)
         );
@@ -794,6 +794,8 @@ final class IntegrationOrderSyncService {
         projection.put("amount_cent", nonNegative(request.amountCent(), "amount_cent"));
         projection.put("status", request.status());
         projection.put("signature_state", "skeleton"); // 渠道回流签名校验骨架（资料未到，不拦截）。
+        // 第 260 条（第十八批裁决 49）：选填项未传（如 external_channel_order_id）不放进投影——Map.copyOf 不收 null。
+        projection.values().removeIf(java.util.Objects::isNull);
 
         if (adapterOpt.isEmpty()) {
             projection.put("mock", true);
@@ -919,7 +921,7 @@ final class IntegrationOrderSyncService {
         return repository.saveRetryTask(updated);
     }
 
-    private IntegrationTaskRecord resolveCompensationTaskOnce(String id, IntegrationTaskResolveRequest request) {
+    private IntegrationTaskRecord resolveCompensationTaskOnce(String id, IntegrationTaskResolveRequest request, String actorUserId) {
         validateTaskResolveRequest(request);
         IntegrationTaskRecord existing = repository.findCompensationTaskById(id)
                 .orElseThrow(() -> ApiException.notFound("INTEGRATION_COMPENSATION_TASK_NOT_FOUND", "集成补偿任务不存在或已被删除"));
@@ -934,7 +936,7 @@ final class IntegrationOrderSyncService {
                 existing.retryCount(),
                 existing.maxRetryCount(),
                 existing.nextRetryAt(),
-                request.operatorUserId(),
+                actorUserId, // 第十八批 AG 段 255-R3③（PGM:899）：处置人落登录人，请求体 operator_user_id 不采信
                 request.resolutionNote(),
                 existing.payload(),
                 safeList(request.evidenceAttachmentIds()),

@@ -1,4 +1,4 @@
-# P1 商户账单门户 API 合同 V0.12
+# P1 商户账单门户 API 合同 V0.13
 
 ## 1. 定位与边界
 
@@ -135,8 +135,7 @@ P1 后台先使用员工权限体系保护接口；真实商户登录态接入�
 
 ```json
 {
-  "idempotency_key": "bill-confirm-202606",
-  "operator_user_id": "staff_finance"
+  "idempotency_key": "bill-confirm-202606"
 }
 ```
 
@@ -155,8 +154,7 @@ P1 后台先使用员工权限体系保护接口；真实商户登录态接入�
   "idempotency_key": "bill-dispute-202606",
   "evidence_attachment_ids": ["att_meter_photo"],
   "reason_code": "energy_amount_mismatch",
-  "description": "Energy reading does not match meter photo",
-  "operator_user_id": "staff_finance"
+  "description": "Energy reading does not match meter photo"
 }
 ```
 
@@ -176,8 +174,7 @@ P1 后台先使用员工权限体系保护接口；真实商户登录态接入�
   "dunning_channel": "wecom",
   "message_template": "rent_overdue_first_notice",
   "status": "sent",
-  "sent_at": "2026-06-16T02:00:00Z",
-  "operator_user_id": "staff_finance"
+  "sent_at": "2026-06-16T02:00:00Z"
 }
 ```
 
@@ -190,6 +187,7 @@ P1 后台先使用员工权限体系保护接口；真实商户登录态接入�
 - 确认账单写入 `merchant.billing.confirm`。
 - 提交异议写入 `merchant.billing.dispute.submit`。
 - 记录催缴写入 `merchant.billing.dunning.record`。
+- 确认、异议、催缴的操作人一律取登录人（确认成功事件的 `operator_user_id`、异议单与催缴记录的操作人），请求体不传操作人。
 - 校验失败写入对应 `*_failed` 审计事件。
 
 错误码：

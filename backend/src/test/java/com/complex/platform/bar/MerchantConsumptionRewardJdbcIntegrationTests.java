@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -188,7 +188,8 @@ class MerchantConsumptionRewardJdbcIntegrationTests {
 
     @Test
     void birthdayLockedAtPaymentTimeAndLevelMultiplierApplied() {
-        rules(base.minus(1, ChronoUnit.DAYS), 1_000L, 100L);
+        // 规则须早于「生日前一天 23:30」那笔付款生效：base 北京时刻落在 23:30～24:00 时，base 减一天晚于该笔付款，约 2% 偶发红。
+        rules(base.minus(2, ChronoUnit.DAYS), 1_000L, 100L);
         LocalDate birthday = LocalDate.ofInstant(base, com.complex.platform.common.LocalZone.ID);
         jdbc.update("INSERT INTO customer_birthday_rules(id,rule_name,window_type,multiplier_basis_points,status) VALUES(?,?,'birthday_day',20000,'active')",
                 "cbr_" + s, "生日加倍_" + s);

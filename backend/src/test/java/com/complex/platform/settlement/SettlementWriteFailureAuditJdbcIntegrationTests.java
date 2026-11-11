@@ -1,6 +1,6 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -146,6 +146,31 @@ class SettlementWriteFailureAuditJdbcIntegrationTests {
 
         assertThat(failuresById("settlement.bill.post_failed", bill))
                 .containsExactly("settlement_bill|settlement.bill.post|SETTLEMENT_BILL_NOT_CONFIRMED");
+    }
+
+    /**
+     * 第十八批 AG 段 259-R3（OpenAPI 与代码一致：综合服务费草案请求体补 ticket_type_id、monthly_cap_amount_cent）：按蛇形键带票种与月封顶 → 200，
+     * 草案行落所传票种与封顶；票种不存在 → 400，不落草案。
+     */
+    @Test
+    void comprehensiveServiceFeeDraftKeepsTicketTypeAndMonthlyCap() throws Exception {
+        String ticketType = "r3_tt_" + suffix;
+        jdbc.update("INSERT INTO ticket_types (id, ticket_name, base_calendar_price_mode, stock_required, status, created_at, updated_at)"
+                + " VALUES (?, '综合服务费草案票种', 'fixed_price', FALSE, 'active', now(), now())", ticketType);
+        RequestPostProcessor manager = staff("r3_csf_" + suffix, "settlement.config.manage");
+        String body = "{\"idempotency_key\":\"%s\",\"project_id\":\"" + project + "\",\"ticket_type_id\":\"%s\",\"fee_bps\":1000,"
+                + "\"monthly_cap_amount_cent\":5000}";
+
+        send("/api/v1/settlement/config/comprehensive-service-fee", manager, body.formatted("r3_csf_bad_" + suffix, "r3_tt_missing_" + suffix))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.detail_code").value("VALIDATION_FAILED"));
+        send("/api/v1/settlement/config/comprehensive-service-fee", manager, body.formatted("r3_csf_ok_" + suffix, ticketType))
+                .andExpect(status().isOk());
+
+        assertThat(jdbc.queryForList("""
+                SELECT ticket_type_id || '|' || monthly_cap_amount_cent FROM comprehensive_service_fee_configs
+                 WHERE project_id = ? AND is_draft = TRUE AND status = 'active'""", String.class, project))
+                .containsExactly(ticketType + "|5000");
     }
 
     private String bill(String status) {

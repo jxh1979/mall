@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.hasItem;
@@ -152,6 +152,9 @@ class BarBillReopenJdbcIntegrationTests {
         assertThat(jdbc.queryForMap("SELECT operation_type, reason, requested_by_user_id FROM bar_bill_operations WHERE primary_bill_id = ?", bill))
                 .containsEntry("operation_type", "reopen").containsEntry("reason", "客人追加消费，重开改正后再结")
                 .containsEntry("requested_by_user_id", cashierId);
+        // 第十八批 AG 段 232-R1 ③：反结原因同时存进账单的反结原因。
+        assertThat(jdbc.queryForObject("SELECT reopen_reason FROM bar_bills WHERE id = ?", String.class, bill))
+                .isEqualTo("客人追加消费，重开改正后再结");
         assertThat(billRow(bill)).containsEntry("reopened", true).containsEntry("reopen_count", 1)
                 .containsEntry("payment_status", "unpaid").containsEntry("settlement_status", "unsettled").containsEntry("paid_amount_cent", 0L);
         assertThat(jdbc.queryForObject("SELECT count(*) FROM bar_bill_settlements WHERE bill_id = ? AND NOT reversed", Integer.class, bill)).isZero();
@@ -332,13 +335,16 @@ class BarBillReopenJdbcIntegrationTests {
         body.put("adjustment_type", "refund");
         body.put("amount_cent", amountCent);
         body.put("reason", "客人退回果盘");
-        body.put("evidence_attachment_ids", List.of());
+        body.put("evidence_attachment_ids", List.of("att_rb_refund"));
         body.put("refund_lines", List.of(Map.of("source_bill_id", bill, "component_type", "goods", "amount_cent", amountCent)));
         call(refunder, "/api/v1/bar/bills/" + bill + "/adjustments", body).andExpect(status().isConflict())
                 .andExpect(jsonPath("$.detail_code").value("ADMISSION_BLOCKED"));
         approvePending("bar.bill_waiver", bill);
-        call(refunder, "/api/v1/bar/bills/" + bill + "/adjustments", body).andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.adjustment_type").value("refund"));
+        String adjustment = read(call(refunder, "/api/v1/bar/bills/" + bill + "/adjustments", body).andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.adjustment_type").value("refund")), "$.data.id");
+        // 第十八批 AG 段 232-R3 ③：证据附件编号随本次调整记录保存。
+        assertThat(jdbc.queryForList("SELECT jsonb_array_elements_text(evidence_attachment_ids) FROM bar_bill_adjustments WHERE id = ?",
+                String.class, adjustment)).containsExactly("att_rb_refund");
     }
 
     private void approvePending(String action, String bill) throws Exception {

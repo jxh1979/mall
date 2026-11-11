@@ -1,6 +1,6 @@
 package com.complex.platform.integration;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import com.complex.platform.common.api.ApiException;
 import java.util.List;
@@ -171,7 +171,6 @@ final class IntegrationValidation {
             throw ApiException.badRequest("VALIDATION_FAILED", "请求内容不能为空");
         }
         requireText(request.idempotencyKey(), "idempotency_key");
-        requireText(request.operatorUserId(), "operator_user_id");
         taskStatus(request.status());
         requireText(request.resolutionNote(), "resolution_note");
     }
@@ -224,7 +223,6 @@ final class IntegrationValidation {
             throw ApiException.badRequest("VALIDATION_FAILED", "请求内容不能为空");
         }
         requireText(request.idempotencyKey(), "idempotency_key");
-        requireText(request.operatorUserId(), "operator_user_id");
         reconciliationStatus(request.status());
         requireText(request.resolutionNote(), "resolution_note");
     }

@@ -1,6 +1,6 @@
 package com.complex.platform.merchantbilling;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -243,7 +243,8 @@ public class MerchantBillingService {
                 confirmed.id(),
                 requestId(),
                 request.idempotencyKey(),
-                Map.of("operator_user_id", requireText(request.operatorUserId(), "operator_user_id"))
+                // 第十八批 AG 段 255-R1（PGM:899；先例 18AE 198-R3）：操作人取登录人，请求体 operator_user_id 不采信。
+                Map.of("operator_user_id", authorizationService.currentActor().id())
         );
         return confirmed;
     }
@@ -262,7 +263,7 @@ public class MerchantBillingService {
                 requireText(request.description(), "description"),
                 "submitted",
                 evidenceIds(request.evidenceAttachmentIds()),
-                requireText(request.operatorUserId(), "operator_user_id"),
+                authorizationService.currentActor().id(), // 255-R1：异议操作人取登录人
                 now,
                 now
         ));
@@ -292,7 +293,7 @@ public class MerchantBillingService {
                 requireText(request.messageTemplate(), "message_template"),
                 normalizeAllowed(request.status(), "status", DUNNING_STATUSES),
                 request.sentAt() == null ? Instant.now() : request.sentAt(),
-                requireText(request.operatorUserId(), "operator_user_id"),
+                authorizationService.currentActor().id(), // 255-R1：催缴操作人取登录人
                 Instant.now()
         ));
         auditEventService.recordSuccess(
@@ -538,7 +539,6 @@ public class MerchantBillingService {
             throw ApiException.badRequest("VALIDATION_FAILED", "请求内容不能为空");
         }
         requireText(request.idempotencyKey(), "idempotency_key");
-        requireText(request.operatorUserId(), "operator_user_id");
     }
 
     private void validateDisputeRequest(MerchantBillDisputeRequest request) {
@@ -548,7 +548,6 @@ public class MerchantBillingService {
         requireText(request.idempotencyKey(), "idempotency_key");
         requireText(request.reasonCode(), "reason_code");
         requireText(request.description(), "description");
-        requireText(request.operatorUserId(), "operator_user_id");
     }
 
     private void validateDunningRequest(MerchantBillDunningRequest request) {
@@ -559,7 +558,6 @@ public class MerchantBillingService {
         normalizeAllowed(request.dunningChannel(), "dunning_channel", DUNNING_CHANNELS);
         requireText(request.messageTemplate(), "message_template");
         normalizeAllowed(request.status(), "status", DUNNING_STATUSES);
-        requireText(request.operatorUserId(), "operator_user_id");
     }
 
     private void validateLines(List<MerchantBillLineRequest> lines, Long totalAmountCent) {

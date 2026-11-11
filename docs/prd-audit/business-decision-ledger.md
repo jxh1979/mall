@@ -1,6 +1,6 @@
 # PRD 审计业务裁决台账
 
-文档版本：V0.88
+文档版本：V0.89
 状态：进行中
 迁移日期：2026-07-27
 当前事实源：三份立法 HTML 以既有冻结基线叠加 James 此前 M02 至 M08 的点名批准、全量审计 M001、M002 的逐项批准，以及本轮 2026-10-16 至 2026-10-17 业务 HTML 审计中 Q01 至 Q40 及子题实际明确批准且未被后续替代的裁决，和 2026-10-17 第二批 HTML 业务线推演审计（A–F 六线 64 条、停车章）的逐项批准，并叠加本轮 CG 70 项来源确认与 C01–C09、N01–N03 最终澄清及补全文稿中 F01、W01–W05 的整体修改批准（本文件末节）；本轮最终规则、未采纳或替代关系、现行版本与字节哈希见本文件末节。历史记录保留为各自当时事实，不恢复已被替代的建议。
@@ -3955,6 +3955,16 @@ HTML 的语义补齐与直接引用同步可在本批核验；70项中的业务�
 | 48 | **main 分支保护**（题面：「【第 1/3 题：main 分支要不要加服务器端的硬保护】前因：代码仓 jxh1979/mall 是 GitHub 个人免费账号下的私有仓库。GitHub 对这种仓库不开放「分支保护」——不能设「合并前 CI 必须全绿」「禁止直接推送 main」「禁止强推、删除 main」。今天实查，接口原话返回 403「升级 Pro 或把仓库改公开才能用」。现在靠三样软办法顶着：① 160 主仓装了本地钩子，拒绝直推 main（设一个环境变量就能绕过；其他电脑上的副本没有这个钩子）；② 合并脚本 merge-pr.sh 会先等 predeploy 检查变绿再合并；③ 后端全量、前端测试两项 CI，合并脚本不等，由我合并前人工确认变绿。漏洞：在 GitHub 网页上点「合并」、直接敲 gh pr merge、从没装钩子的副本推送，这三种情况都拦不住，CI 是红的也能进 main。目前所有合并都由我走合并脚本，还没出过事，但没有任何东西在服务器端兜底。怎么定？」）—— 操作员选「不花钱，只加强合并脚本」：不升级。我把 merge-pr.sh 改成后端全量、前端测试、predeploy 三项都要对最新提交变绿才合并（没触发的项视为不需要）。好处：免费，把现在靠人工核对的两项也交给脚本。坏处：仍是软约束，绕过脚本（网页点合并、直接敲命令）照样拦不住。（2026-11-11 弹窗；来由：待开发清单第 73 条 18E 落地后遗留「分支保护要操作员决定是升级 Pro 还是公开仓库」。） | 已落地（18AG-0：`ops/160/merge-pr.sh` V0.03、两份 PR 单测工作流注释、`docs/deploy-and-change-flow-v0.1.md` V0.09） |
 | 49 | **第三方回流登记不带渠道订单号报 500**（题面：「【第 2/3 题：第三方回流登记不带「渠道订单号」就报 500】前因：美团、抖音等第三方渠道把订单、退款回流给平台，走的是「回流订单登记」接口。这些回流是营业额抽成、自动对账的取数来源。18U 段做营业额抽成冲正时顺带发现：接口契约里「外部渠道订单号」是选填，代码也没校验它，但紧接着把它原样放进一个不允许空值的结构，没传就抛空指针，接口返回 500（服务器内部错误），这笔回流登记失败。今天在现 main 上逐行核过，仍是这样。当时属范围外没改。现在谁会碰到：后台只读这张表，没有页面会发起登记；真正的调用方是第三方渠道回调。渠道对接属 B 类（等供应商资料），还没接通，所以眼下业务上碰不到。接通后，只要某个渠道的回调不带渠道订单号，这笔回流就登记不进来，抽成和对账会少数。哪些渠道会不带，要等供应商资料才知道。修法很小：空值不放进去，契约不变，补一条「不带渠道订单号也能登记」的回归测试。顺带一点：同一接口契约还把「同步类型」「状态」标成选填，代码却是必填（不传会报 400，不是 500），属第 259 条「契约漏标必填」同类。要不要修、什么时候修？」）—— 操作员选「登记进清单，下一段修（推荐）」：作为新条目登进待开发清单（A 类、工作量小），和第 259 条（契约漏标必填）放在同一段修，走完整流程（测试、复核、PR、CI、合并）。好处：第三方接通前就把坑填了，接通时不会因此丢回流；符合「范围外缺口照旧登记」的规矩。坏处：多一条清单条目，不影响当前进度。（2026-11-11 弹窗；来由：18U 段 155-R3 实现旁见「既有问题，没改」。） | 待开发清单第 260 条（随第 259 条同段修） |
 | 50 | **XM-ONESHOT-RETURN 本机 77 个一次性动作提交**（题面：「【第 3/3 题：本机 77 个「一次性动作」提交怎么处理】前因：9 月全量审计时，你 09-25 定了「凡只能用一次的动作（单次授权、门票核销、券核销等），只有成功并返回确认才算完成；同一次操作重复提交时，返回第一次的结果并提示已完成」，并立了专项 XM-ONESHOT-RETURN，分 23 批（B01～B23）排查全平台的一次性动作：重复提交、两人同时点、先扣后失败不回补。进展：B01～B03 已进主干。B04～B23 在本机做出 77 个提交（之前我报的是 75，今天精确点数是 77），覆盖 20 个领域：票务付款与核销、游乐入场、第三方券回流、会员钱包、库存调拨、酒吧收款与开单与出品、押金与补录、结算过账、退租结算、工单与巡检、服务点单、招商签约、治理审批、风险处置、外部回调等。09-26 你定「先保 M002，7 条线做完当前批就暂停」；10-03 你定「29 个专项全做」（含本项）。之后审计流程停在 M738、转入「代码全面补齐」，这批提交一直没推到 160、没进主干。现状：这批提交基于 09-25 的主干，之后主干又合了 223 个提交，后端与前端改了 1916 个文件，直接搬会大量冲突，也可能和之后的裁决相抵。你 09-25 批的治理地图第 303 行追加句至今没落进 HTML（原定随本专项落）；HTML 里现有的依据是第 528 行「同一笔操作重复提交不重复生效」和第 303 行「同时操作以先成功为准」。现在的待开发清单里只有第 222 条（同一酒吧订单可以重复生成账单）和它重叠。怎么处理？」）—— 操作员选「逐批核实、照草稿重做（推荐）」：按 B04～B23 逐批在现主干上核每个入口还缺不缺（主干后来可能已用别的写法补上）；仍缺的登记进待开发清单，实现时把本机草稿当参考、在现主干上重写，走现行流程（实现、测试、复核、PR、CI、合并）；第 303 行追加句在实施时按惯例逐句弹窗确认后落 HTML。好处：只做真缺的，不把过时代码带进来，和后来的裁决一致。坏处：工作量大（我估计相当于 6～10 个段），排在第 212～259 条核实之后或穿插。（2026-11-11 弹窗；来由：2026-11-06 历史代码查询。） | 待开发清单第 261 条（逐批核实后登记、照草稿在现主干重做） |
+| 51 | **第 214 条 组合通票各域份额挂应付的月份**（题面：「【第 1/10 题（第 214 条）：组合通票里属于游乐、餐饮零售等域的钱，哪个月挂成应付】前因：组合通票（一张票含酒吧、游乐、餐饮零售等多个域的权益）由娱乐平台公司统一收款。业务枚举原句：「娱乐平台公司只把拆分后归属酒吧域的份额确认为自身收入，其余各域份额自收款之日起即为应付给对应域主管公司的款项，按已审批的域间规则结算，不得计入自身收入、不得挪用。」现状：每月出通票结算单时，各域份额只记在结算单上，娱乐平台公司对游乐公司、城市项目公司（餐饮零售）等的应付一笔都没挂。这是要补的，问题是挂在哪个月。分歧：原句「自收款之日起即为应付」字面是收款当天；但同句又说「按已审批的域间规则结算」，业务地图另写「通票权益核销后才按所属域的已生效规则与实际提供方结算」，枚举又把「到期未核销票款」单独立项。两种读法合计金额一样，差别在挂账月份、账龄和对账口径。决策台账里没有答案。怎么挂？」）—— 操作员选「随月结按核销月、到期月挂（推荐）」：当月核销形成的份额挂在核销所在月；从未核销、到期的部分在到期所在月另挂一笔；都等当月数据标记最终、月结出单后才挂。好处：和现有月结拆份额、「核销后才结算」「到期未核销单独立项」一致，改动中等。坏处：从客人付款到挂应付之间有时间差，这段时间钱不算娱乐平台公司收入，但也还没形成应付。（2026-11-11 弹窗；来由：18AG 核实第 212～259 条的待裁题。） | 待开发清单第 214 条（18AG 核实 214-R1、214-R2） |
+| 52 | **第 236 条 「每项权益都必须绑定实际提供方和审批版本」的审批版本**（题面：「【第 2/10 题（第 236 条）：「每项权益都必须绑定实际提供方和审批版本」里的「审批版本」指什么】前因：业务地图通票结算审阅一句：「每项权益都必须绑定实际提供方和审批版本，避免悬空账。」实际提供方现在已强制绑定（第 177 条做了），「审批版本」没有承载。三份 HTML 里「审批版本」只出现这一处。HTML 里有两种带审批的版本：① 内部结算价版本：提供方提交、域主管公司审批，改价形成新版本，「核销或结算时锁定当时版本」。现在审批和版本都有，但核销时没记下用的是哪一版。② 票种规则版本：组合通票定价与域间规则由平台权限统一审批；发布时把凑整差额和各域分摊记入票种规则版本、发布后不得再改。现在票种发布不走审批、没有版本（这一处我会另登记成新条目）。你指的是哪种？」）—— 操作员选「两种都要」：①②都做。好处：最全。坏处：工作量最大。（2026-11-11 弹窗；来由：18AG 核实第 212～259 条的待裁题。） | 待开发清单第 236 条（内部结算价审批版本与票种规则审批版本都做） |
+| 53 | **第 226 条 台位「异常」的进入与恢复**（题面：「【第 3/10 题（第 226 条）：台位「异常」怎么进、怎么出】前因：台位六种状态里有「异常」，原句：「异常由系统告警或人工登记进入，处置完成后由当班主管确认恢复，全程留痕。」现在台位没有异常态，也没有登记和恢复入口（停用与恢复第 206 条已做：只有空闲台位能停用，恢复回空闲）。HTML 没写哪类系统告警会自动置异常，这次只做人工登记。HTML 也没写：哪些状态的台位可以登记异常、谁能登记、恢复后回哪一态。另有一句约束：「已预留只能经取消订台、超时释放、到店开台三条路径退出」。「当班主管」第十批裁决 6 已界定。怎么定？」）—— 操作员选「空闲或待清台可登，恢复回空闲（推荐）」：空闲或待清台的台位，现场有开关台权限的员工填原因即可登记异常；已预留的不能直接转异常；已开台的先把客人转台（原台随即释放）再登记；处置完当班主管确认恢复，回空闲。好处：不打断在台客人的账，和停用口径一致。坏处：客人在台时发现设施坏了，要先转台。（2026-11-11 弹窗；来由：18AG 核实第 212～259 条的待裁题。） | 待开发清单第 226 条（18AG 核实 226-R1～R3） |
+| 54 | **第 240 条 结算五态怎么落**（题面：「【第 4/10 题（第 240 条）：结算五态怎么落】前因：枚举原句：「结算状态：草稿、待复核、已确认、已调整、已归档。待复核与已调整由财务复核并作出调整，异议由涉及部门与商户提出。」系统里没有任何结算对象用这五态，各用各的：- 通票月度分账结算单：月结算出即确认；- 通票结算流水：结算审阅页「结算状态」列现在恒显示「草稿」，月结确认后也不变；- 演出结算：挂起待确认、已入账，被财务调整的旧行标已调整；- 门票积分月结账单：出账、商户异议中、异议处理完；- 退租结算另有枚举专条六态；分红单有出单、审阅、审批、发放流程。HTML 没写五态落在哪类对象、和现有状态怎么对应。怎么定？」）—— 操作员选「五态作页面统一显示口径（推荐）」：不新建结算单、不改各对象现有流转；退租结算、分红单照各自专条。通票月结单、通票流水（随所属月结单）、演出结算、积分月结账单按五态显示：未出结果或未出账→草稿；演出挂起、积分账单有未处理异议→待复核；已出结果或已入账→已确认；被财务调整取代的演出行→已调整；所属综合体该月已封账（裁决 41）→已归档。好处：改动小，顺带修掉流水恒显示草稿，和裁决 40 一致。坏处：只是显示口径，不是真正按五态流转。（2026-11-11 弹窗；来由：18AG 核实第 212～259 条的待裁题。） | 待开发清单第 240 条（18AG 核实 240-R1、240-R2） |
+| 55 | **第 241 条 付款确认的范围**（题面：「【第 5/10 题（第 241 条）：哪些付款要走「付款确认」统一审批】前因：业务地图分红一节原句：「审批通过后的发放进入应付款项台账，走付款确认。付款确认按全平台统一的审批模型执行——发起时指定主线最终审批人，系统按组织层级逐级自动补全；财务、法务及相关部门作为平行线……主线与各条平行线都通过才完成付款确认；具体流程按支付类型分别设定。」三份 HTML 里「付款确认」只有这一处。已有裁决 DEC-R5-2026-08-04-08 只定了审批模型本身，没说管哪些付款。现状：应收应付台账「登记付款」一个有权限的财务就能登记并结清，没有审批；分红实发的应付也走这条路，而且不付款也能把分红标记已发放。范围怎么定？」）—— 操作员选「所有对外付款都走付款确认」：所有应付都先走付款确认，按支付类型分别设流程。好处：全平台付款都有审批把关。坏处：规模很大；退款、工资、货款各类都要设流程，日常付款会明显变慢；不少已有各自的审批（如退款审批、工资审批），会重复审批。（未选：「只管分红发放的应付（推荐）」「先不做」。）（2026-11-11 弹窗；来由：18AG 核实第 212～259 条的待裁题。） | 待开发清单第 241 条（所有对外付款按支付类型设流程，方案待按本裁决重定） |
+| 56 | **第 253 条 日结锁定后补录的凭证、责任人与时限**（题面：「【第 6/10 题（第 253 条）：日结锁定后的补录，要不要附凭证、写责任人、受 3 天时限】前因：业务地图「留痕与异常」子系统原句：「记录缺失时允许人工补录，但必须写原因和责任人。补录时限为业务发生后的配置天数内（出厂默认 3 天），超时不得补录；补录必须附原始记录凭证（微信截图、通话录音等）并经审核。」同节另写「人工只在异常、退款、免单、调账、补录时填写原因、照片、视频或复核意见」。枚举另写「日结锁定后的补录须上级审批」。现状：日结锁定后的三种补录（漏登的收付款补录、金额调整、退款补录）只填原因、经上级审批，不收凭证、不写责任人、不限天数。已做的人工补录主链（第 14 条）只管交接扫码、销售归属、服务责任三类。冲突点：3 天时限与「商户异议期间先按原值付款，异议成立后多退少补」——异议成立、日结后才发现的漏登，往往已过 3 天。怎么定？」）—— 操作员选「三种都附凭证写责任人，不套时限（推荐）」：三种锁账补录提交时必须上传原始凭证（银行回单、转账截图、异议处理结论等）并写责任人；「业务发生后 3 天内」不套。好处：凭证与责任人留痕齐，异议成立后的调账退款照常能办。坏处：时限一句只对第 14 条那三类生效。（2026-11-11 弹窗；来由：18AG 核实第 212～259 条的待裁题。） | 待开发清单第 253 条（18AG 核实 253-R1～R3） |
+| 57 | **第 254 条 存酒登记「先取隐私同意」的取得方式**（题面：「【第 7/10 题（第 254 条）：存酒登记「先取隐私同意」怎么取】前因：业务地图原句：「存酒登记先取隐私同意，记手机号/姓名昵称/瓶底标签数值/照片，并记录存入时间与到期时间。」现在存酒登记没有任何同意记录，而且存酒登记本身还没有客户端入口（本条要补）。客人自助注册的同意由客人本人在 App 内完成、记在会员同意记录里（要会员编号），散客存酒没有会员编号。HTML 没写由谁、以什么方式取得同意。参考：同一段里「转存须客人本人短信验证码确认」。怎么取？」）—— 操作员未选列出的选项（「员工勾选确认，系统记下（推荐）」「短信验证码，客人报码同意」「客人用 App 或小程序扫码同意」），另写答复（逐字）：「短信验证码或者小程序，这个点击同意都可以。」（2026-11-11 弹窗；来由：18AG 核实第 212～259 条的待裁题。） | 待开发清单第 254 条（18AG 核实 254-R1～R7） |
+| 58 | **第 254 条 存酒争议怎么了结**（题面：「【第 8/10 题（第 254 条）：存酒登记了争议后，这瓶酒怎么了结】前因：业务地图原句：「管理存酒取酒、转让、作废、争议和异常处理。」HTML 没写争议怎么了结、由谁了结。现状：登记争议后，存酒变「争议中」，取酒、转让、转存、作废都不再受理，到期也不转库存——没有任何出口，这瓶酒会永远卡住。代码注释写「待线下核实后由作废/复核流程收口」，但没有对应入口。争议一般发生在客人对剩余量、瓶底标签或归属有异议时。怎么了结？」）—— 操作员选「主管核实后可恢复或转作废（推荐）」：门店主管核实后二选一：争议不成立，恢复为存酒中、照常可取；争议成立，走现有存酒作废（高价值的要照片＋视频＋主管复核，裁决 14），作废后按现有补存或赔付处理。好处：用现有作废、补存流程收口。坏处：主管多一个处理入口。（2026-11-11 弹窗；来由：18AG 核实第 212～259 条的待裁题。） | 待开发清单第 254 条（18AG 核实 254-R1～R7） |
+| 59 | **第 233 条 附加税与其他税费的差异机制**（题面：「【第 9/10 题（第 233 条）：附加税和「其他税费」的申报差异走哪套机制】前因：税务处理原句：「两套差异机制按税种互斥适用、不得叠加：增值税、文化事业建设费等流转税按申报差异生成补提／冲回调整单，差异保留、不做拉平；企业所得税等税种按季度与财税软件核对拉平（以财税软件为准）。同一税种只能走其中一套。」现状：平台税费申报登记（第 210 条做的）现有五个税种：增值税、文化事业建设费、附加税、企业所得税、其他税费。HTML 点名了增值税、文化事业建设费、企业所得税，附加税和其他税费走哪套没写。附加税在枚举里和增值税、文化事业建设费一样，按「主体×收入类别」配「有没有、收多少」；其他税费（印花税、房产税等）不按收入配比例，平台算不出「系统计算金额」。怎么定？」）—— 操作员选「附加税出调整单，其他税费按季拉平（推荐）」：附加税跟流转税走补提或冲回调整单；其他税费和企业所得税一样，按季与财税软件核对、以财税软件为准拉平。好处：附加税和增值税同表同口径；其他税费没有系统计算基数，以财税软件为准最合理。（2026-11-11 弹窗；来由：18AG 核实第 212～259 条的待裁题。） | 待开发清单第 233 条（18AG 核实 233-R1～R7） |
+| 60 | **第 233 条 五家主体收入、成本与利润的汇总口径**（题面：「【第 10/10 题（第 233 条）：五家主体的「收入、成本与利润」怎么汇总】前因：税务处理末句：「娱乐平台公司、游乐公司、传媒公司、中央餐饮公司、城市项目公司五家主体各自的收入、成本与利润，由平台汇总计算；其中涉税的正式核算数据由专业财税软件回传关键信息，平台据此与自身的内部结算数据合并计算。」同段又写企业所得税等「系统内配置税率比例并据以生成一版计算结果」，按季与财税软件核对拉平。现状：平台没有按主体汇总收入、成本、利润的地方。HTML 没写成本取哪些数据。我的理解：收入＝按收入归属配置归到该主体的各类收入（含税实收）；成本＝该主体在平台内作为付款方的内部结算应付（提成拨付、渠道费、赠送权益兑付等）＋该主体作为发放主体的工资单税前应发；利润＝收入−成本；企业所得税系统计算＝利润×配置比例；酒吧经营主体沿用持股分红的税前口径（收入−销货成本−费用）。怎么定？」）—— 操作员选「按上面的口径自动汇总（推荐）」：全部用平台已有数据自动算。好处：不增加手工登记。坏处：没进平台的成本算不进去，系统这一版所得税会和财税软件有差，按季拉平时以财税软件为准校正（HTML 本就这样设计）。（2026-11-11 弹窗；来由：18AG 核实第 212～259 条的待裁题。） | 待开发清单第 233 条（18AG 核实 233-R1～R7） |
 
 第一段转正前最低池额试算与取消结算环节超池待审批：既有缺口，列入待开发清单第 75 条、随 18C 做（ENUM L52、BSM L752）。
 
@@ -6445,3 +6455,127 @@ HTML 的语义补齐与直接引用同步可在本批核验；70项中的业务�
   - 同步：yaml 与 json 整份深比较一致，操作实数 1360；最终 openapi-p0.json 的 SHA-256 为 65737eefed80bc7e7fdc7d6061cc5c722a43f264b6aefda3e5d4a3546349e1eb，security-scans/findings-register-v1.md 与 formal-security-baseline-v1.md 只改「OpenAPI SHA-256」行。npm run docs:operation-matrix、docs:openapi-closure 重跑，两份生成物标题版本随 info.version 由 V0.63 变为 V0.64；node tools/refresh-entry-doc-baseline.mjs 报无漂移。
 - 18AF 落地位置补记·运行验收证据、快照、终验文档刷新（无新裁决）：业务提交 f525e359 之后，按第十八批裁决 25 重刷了运行验收证据：后端全量 6647 测，0 失败 0 错误；apps/web 构建通过；常规界面验收（接口全部 mock）实跑 40 条全过；真实后端界面验收未跑，runtime_ready=false。随后依次重生成闭环当前态快照、生产闭环缺口报告、界面验收报告、无上线指挥台。生成器没改。手改 docs/final-closed-loop-acceptance-audit-v0.1.md 与 docs/code-implementation-acceptance-audit-v0.1.md：前端单测源码计数改为 1709；被核文件行数都没变；后端全量与常规界面验收的数字、日期改为本次实跑值；写入 npm run verify:unit 实跑结果，五个工作区全过。交付门禁于 2026-11-11 16:09 UTC 在工作树逐项实跑子项，NAS 两项现场探测未跑。仍红的有两项：一是 coding-host-protection，它写死主仓路径，在工作树口径下必红，属工具口径，不做；二是 final-closed-loop-audit，如实留 2 条红（integration-ready、business-acceptance-ready），原因是校验器要求终验把联调、业务验收写成「是」，而裁决 25 定了不跑真实后端界面验收、运行验收未就绪，终验写的是「否」。verify:delivery-gates 总链仍是红的。
 - 18AG-0 落地位置补记·第十八批裁决 48（main 分支保护）：`ops/160/merge-pr.sh` V0.02→V0.03，等完 predeploy-gates 后，对本提交已触发的 `backend-tests.yml`、`web-tests.yml` run 也逐个 `gh run watch --exit-status` 等绿，predeploy 已有 run 后另两份给 1 分钟宽限、仍没有即视为本次改动未触发、不需要；未通过的提示改为「CI 未通过(run …)」。`.github/workflows/backend-tests.yml` V0.01→V0.02、`web-tests.yml` V0.02→V0.03 只改说明注释一行；`docs/deploy-and-change-flow-v0.1.md` V0.08→V0.09 同步第 3、4 道与流程第 4 步、已知局限一句。仍是软约束：绕过脚本（网页点合并、直接 gh pr merge）照样拦不住，裁决已知。第十八批裁决 49、50 本次只入表，落地分别见待开发清单第 260、261 条。
+
+18AG 落地位置补记（2026-11-11）：第十八批 AG 段（batch53）按 18AG 核实方案实现待开发清单第 232、255、259、260 条（接口契约组）；运行验收证据、终验文档在本段最后一个提交刷新；各条落地位置见下。本段追加时，原台账除文档版本 V0.88→V0.89 与第十八批裁决表第 51～60 行（控制席已插入）外，其他历史字节保持。
+
+- 18AG 落地位置补记·控制席判定（2026-11-11）：本段（第十八批 AG 段，batch53）实现待开发清单第 232、255、259、260 条（接口契约组），并修既有偶发红测试。方案为 18AG 核实（本机 b53-audit\g232-259-openapi.json，质疑者修订版）。2026-11-11 操作员弹窗定第十八批裁决 51～60（原文逐字见本台账第十八批裁决表第 51～60 行，控制席插入），本段只入表，落地见待开发清单第 214、226、233、236、240、241、253、254 条。控制席更正第十八批裁决 50 题面：「你 09-25 批的治理地图第 303 行追加句至今没落进 HTML」不实，该句 2026-10-07 已随 M724（264f6ad9，治理地图 V0.21）落进 PGM:303；错因是控制席按原文 grep HTML、句中夹 <strong> 标签未命中；该错不影响所选选项，只去掉「实施时逐句弹窗确认后落 HTML」一步。18AG 核实第 212～259 条：第 220 条不属实关闭，其余 47 条待做 107 项；第 261 条逐批核实 28 项；核实旁见登记待开发清单第 262～285 条。依据：OpenAPI 与代码一致（待开发清单第 94、113、124、136、153、170、171 条先例）；第十八批裁决 49（第 260 条随第 259 条同段修）。偶发红测试 MerchantConsumptionRewardJdbcIntegrationTests.birthdayLockedAtPaymentTimeAndLevelMultiplierApplied 规则生效时刻 base-1 天改 base-2 天（随机 base 北京时刻落在 23:30～24:00 时规则晚于前一天 23:30 的付款生效，约 2%；2026-11-11 PR #585 首跑 backend-tests 红过一次）。
+- 18AG 落地位置补记·第 232、255、259、260 条契约线（无新裁决）：只改 docs/openapi/openapi-p0.yaml 与 .json（两份同值，按键路径就地改，不重排、不用锚点；操作数 1360 不变）和三份下位契约文档：p1-merchant-billing-portal-api-contract-v0.1.md、p1-amusement-safety-waiver-incident-api-contract-v0.1.md、p1-integration-retry-compensation-reconciliation-api-contract-v0.1.md，各 V0.12→V0.13。三份都没有修订表，照 18AF 只升文件头。后端 DTO 分量保留。逐 rid：
+  ① 232-R1（30 处说明）：「进入审计/审计留痕」按现码改为「存进……，不写入审计事件」。涉及：
+     - PermissionTemplateRequest.operator_note；RoleRequest.description；AmusementSafetyInspectionRequest.operator_note、abnormal_note；BarOrderDeliveryRequest.operator_note；FloorPlanImportCreateRequest.operator_note；ProviderAdapterRequest.operator_note；StockMovementRequest.operator_note；CapabilitySwitchRequest.operator_note；
+     - 游乐事故新建、追加处置、关闭三个内联 operator_note；SavedBottleRemedyRequest.operator_note；ArApAdjustmentRequest.reason；BarOrderItemVoidRequest.reason；BarBillReopenRequest.reason；BarShiftOpenRequest.note、BarShiftCloseRequest.note；transitionBarProductionTicket 内联 operator_note；EntityTaxDeclarationRequest.reason；
+     - MerchantExpenseEntryRequest 的 schema 说明与 note；MerchantExpenseReversalRequest.note；DividendActionRequest.note；VoucherRevokeRequest 的 schema 说明与 revokeVoucher summary；RefundOperationRequest、RefundExecutionRequest、RefundResultConfirmRequest 的 operator_note；TicketTypePricingRequest.reason。
+     逐处核过成功事件元数据：只记 template_type、operation_id、status 等，或为空。⑩SavedBottleRemedyRequest、⑪ArApAdjustmentRequest 对应的第 254、245、253 条本段未做，按现码写。不改的有：第一类 25 个确实进审计的入口、AmusementCapacityConfigRequest、ApprovalRequest、BarProductSoldOutRequest.reason（归第 221 条）、archiveIntegrationChannelTicketTypeMap.reason（归第 251 条）。依据：本台账约 :4148「以代码和权威字典为准，只改契约」；约 :5952 PGM:968「本条为操作指引，不作为合规判定依据」（不补「备注进入留痕」代码）；约 :6121（PGM:899、905、906 不按规则③）。
+  ② 232-R2：BarScanOrderRequest 删 operator_note、evidence_attachment_ids、service_user_ids、payment_mode，只剩 idempotency_key、items。CustomerTicketOrderRequest 删 buyer_note，requestBodies 示例里的同名键一并删。依据：198-R5 处置规则①（约 :6121、:6122）。
+  ③ 232-R3：21 处内联 evidence_attachment_ids 说明改为「证据附件 ID 列表；随本单保存。」。各入口都把编号落进本单，不进审计元数据。依据同①。
+  ④ 255-R2：
+     - confirmMerchantBill、submitMerchantBillDispute、recordMerchantBillDunning 删 operator_user_id，操作说明写「操作人取登录人。」。
+     - 异议 required 加 reason_code、description。
+     - 催缴 required 加 dunning_channel、message_template、status；dunning_channel enum [wecom, sms, email, manual]，status enum [sent, failed, scheduled]；sent_at 说明补「不填取当前时间」。
+     - 下位文档删三处示例里的 operator_user_id，§5 补「操作人一律取登录人」一句。
+     依据：PGM:899「谁发起……谁审批、结果是什么，都要能查到」；约 :5959（198-R3「服务端操作人一律取登录人」）；170-R1、171-R1。与后端线 255-R1 同批合并。
+  ⑤ 255-R3（契约部分）：
+     - 删 operator_user_id：createAmusementSafetyNotice、acknowledgeAmusementSafetyNotice、addAmusementIncidentAction、resolveIntegrationReconciliationDifference、resolveCompensationTask、saveMerchantFeeNotificationRecipient。
+     - createAmusementIncident 删 reported_by_user_id，closeAmusementIncident 删 closed_by_user_id。
+     - saveMerchantFeeNotificationRecipient 说明改为：平台口径只需 merchant_id，两种口径的创建人都取登录人（覆盖已有记录时不改）。
+     - 游乐下位文档字段表删五行，§4 补「操作人一律取登录人」；集成下位文档两处示例删 operator_user_id。
+     依据同④。与后端线代码改取值同批。
+  ⑥ 259-R1：claimRiskAlert、transferRiskAlert、escalateRiskAlert、resolveEvidenceRiskAlert、dismissRiskAlert 内联请求体补 evidence_refs（array，items string maxLength 64，可空）。RiskAlertService 五处透传，写进处置动作记录。
+  ⑦ 259-R2：按 SiteEntryReportService 现码补字段：
+     - createSiteEntryReport 补 project_id、space_id、work_scope、planned_start_date、planned_end_date、crew_count、contact_name、contact_phone，除 space_id 外都进 required。
+     - reviewSiteEntryReport 补 decision（enum [approve, reject]，进 required）与 review_comment。
+     - uploadSiteEntryCompletion 补 attachment_ids（minItems 1，进 required）。
+  ⑧ 259-R3：settlementConfigUpsertComprehensiveServiceFee 补 ticket_type_id、monthly_cap_amount_cent；settlementConfigUpsertComboDiscount 补 rounding_tolerance_cent。三项都可空，依据 SettlementConfigWriteService 现码。
+  ⑨ 259-R4：CustomerBarReservationRequest 的 required 加 table_id（CustomerService requireText）。
+  ⑩ 259-R5：
+     - PaymentIntentRequest 补 device_id、payee_merchant_id、fund_mode。说明写明只有通用支付意图入口读；收款商户与资金模式按现码写为「随网关请求下发」，不写方案原句「落进支付意图」。
+     - SupervisorReviewEvaluateRequest 补 final_approver_id、parallel_lines、beneficiary_id；授权类事项缺受益人返回 400 BENEFICIARY_REQUIRED，只写进说明，不进 required。
+     - reportInspectionException 补 photos、qr_code、gps_lat、gps_lng、checklist_result（写法照 submitFacilityInspectionRecord），abnormal_note 进 required。
+     - scanTraceSegment、reportRobotSegment、reviewTraceHandoverException 补 properties 与 required。幂等键三者都进 required（executeWrite 经幂等服务，缺键即拒）；segment 为四个员工段 enum；robot_task_ref 必填；decision 为 enum [approved, rejected]。
+     - createIntegrationReconciliationDifference 补 provider_payload。
+     - ProviderAdapter 补 operator_note、evidence_attachment_ids。
+  ⑪ 259-R6：92 个键进 required：
+     - 方案所列 89 键中的 86 键：游乐 30、酒吧 12、库存与供应链 12，集成、财务、终端、楼层图、经营参数 32。其中含第 260 条 createOrderSync 的 sync_type、status（第十八批裁决 49）。
+     - 按「同一操作无条件必填一并补」另加 6 键：createCompensationTask、createRetryTask 的 status（validateTaskRequest→requireEnum）；createMerchantBill 的 lines（validateLines 为空即 400）；transferBarTableSession 的 session_version，mergeBarTableSession 的 primary_session_version、merged_session_version（requireSessionVersion 为空即 409，同 splitBarTableSession 已标 primary_session_version）。
+  ⑫ 259-R7：additionalProperties:false 结构有 7 键进 required：MerchantWorkOrderActionRequest.operator_note、MerchantWorkOrderAssignRequest.operator_note、OfflinePaymentConfirmRequest.payment_method、AccessUserRequest.password、FloorPlanCreateRequest.project_id、StockInRequest.warehouse_id、EntitlementTemplateRequest.merchant_id。均逐个读校验函数，确认无条件必填。不加的有：
+     - 方案所列 reviewHighValue.role：只在存酒库房存货处置时必填（InventoryHighValueReviewService.decideDisposal）。
+     - 其余候选：账号、主体、项目的状态缺省取默认；商户合作方式可空、商户状态缺省取默认；模板类型缺省取 base；灰度目标类型与编号在归档入口不读；黑名单申请、押金退还等待、结算异议期的 project_id 回落本人项目范围；游乐与酒吧营业日配置的 final_approver_id 为空时按直接上级链生成。
+  R1～R7 依据：OpenAPI 与代码一致先例第 94、113、124、136、153、170、171 条；本台账 170-R1（约 :5179）、171-R1（约 :5096）、约 :4148；第十八批裁决 49。
+  核对：每个 rid 后 yaml 与 json 全文深等（node yaml 包），操作数 1360；收尾比对脚本 verify_all.py 全过；重跑 g259_req.py＋g259_post.py，开放结构 A 侧只剩 upsertWecomRetentionPolicy，B 侧只剩第 258 条合规三入口与 not_doing 所列条件必填类；verify:openapi、verify:openapi-examples、verify:client-routes、verify:client-openapi、verify:client-payload --strict 绿。本线无测试用例改动。
+- 18AG 落地位置补记·第 255 条、第 260 条与偶发红测试（后端线）：
+  - 255-R1：MerchantBillingService.java（V0.02→V0.03）。confirmBillOnce 成功事件 merchant.billing.confirm 元数据 operator_user_id、submitDisputeOnce 异议单操作人、recordDunningOnce 催缴记录操作人，一律改取 authorizationService.currentActor().id()。validateConfirmRequest、validateDisputeRequest、validateDunningRequest 删 operator_user_id 必填，reason_code、description、dunning_channel、message_template、status 必填不动。DTO 分量保留，表列不变，无迁移。依据 PGM:899「谁发起、谁销售、谁服务、谁第一个处理异常、为什么、谁审批、结果是什么，都要能查到。」；先例决策台账 18AE 198-R3「服务端操作人一律取登录人」（7f5a7d96 上第 5962 行）。测试：MerchantBillingOperatorJdbcIntegrationTests.confirmDisputeAndDunningRecordTheLoggedInOperator、.disputeWithoutReasonCodeIsStillRejected；MerchantBillingServiceTests.recordDunningKeepsAuditableChannelAndOperator（断言改为登录人）。
+  - 255-R3① 游乐安全告知与事故：AmusementSafetyService.java 五处改取登录人，分别是告知新建（落 amusement_safety_notices.created_by_user_id）、告知确认（amusement_waiver_acknowledgements.operator_user_id）、事故上报（amusement_incidents.reported_by_user_id 及首条 created 处置记录）、追加处置、关闭（amusement_incident_actions.operator_user_id）。validateNoticeRequest、validateAcknowledgementRequest、validateIncidentCreateRequest、validateIncidentActionRequest、validateIncidentCloseRequest 删 operator_user_id、reported_by_user_id、closed_by_user_id 必填。DTO 分量保留。依据同上（PGM:899「谁第一个处理异常」「结果是什么」；先例 198-R3）。测试：AmusementSafetyOperatorJdbcIntegrationTests.noticeAndAcknowledgementRecordTheLoggedInOperator、.incidentReportActionAndCloseRecordTheLoggedInOperator。
+  - 255-R3② 集成对账差异处置：IntegrationReconciliationService.resolveReconciliationDifferenceOnce 的 assigned_to_user_id 改落控制器已传入的登录人 actorUserId（原落请求体）；IntegrationValidation.java（V0.04→V0.05）validateReconciliationDifferenceResolveRequest 删 operator_user_id 必填；登记人自审仍 403 SELF_REVIEW_FORBIDDEN。依据 PGM:899「谁审批、结果是什么」；先例 198-R3。测试：IntegrationOperatorJdbcIntegrationTests.reconciliationDifferenceResolveRecordsTheLoggedInOperator。
+  - 255-R3③ 集成补偿任务处置：IntegrationController.java（V0.01→V0.02）resolveCompensationTask 传 authorizationService.currentActor().id()，经 IntegrationService.java（V0.02→V0.03）到 IntegrationOrderSyncService.java（V0.04→V0.05）resolveCompensationTask/Once 新参数 actorUserId，落 integration_compensation_tasks.operator_user_id；IntegrationValidation.validateTaskResolveRequest 删 operator_user_id 必填。依据同②。测试：IntegrationOperatorJdbcIntegrationTests.compensationTaskResolveRecordsTheLoggedInOperator；IntegrationControllerTests、IntegrationServiceTests 随签名同步。
+  - 255-R3④ 商户费用通知接收人平台口径：MerchantFeeNotificationRecipientController.upsert 两条口径都以登录人为操作人（平台口径商户号取请求值，自助口径强制本商户），落 merchant_fee_notification_recipient.created_by。依据同上。测试：MerchantBillingOperatorJdbcIntegrationTests.platformRecipientUpsertRecordsTheLoggedInOperator；MerchantFeeNotificationRecipientControllerTests.upsertRequiresManagePermissionAndReturnsRecipient（补 verify upsert 收到登录人）。
+  - 第 260 条：IntegrationOrderSyncService.mapPayload 初始各键放进投影后 projection.values().removeIf(Objects::isNull)，未传的 external_channel_order_id 不进 standard_model（Map.copyOf 不收 null），契约不变。依据第十八批裁决 49（决策台账表第 49 行）「空值不放进投影，契约不变；补『不带渠道订单号也能登记』的真实流程回归」。测试：IntegrationOperatorJdbcIntegrationTests.orderSyncWithoutExternalChannelOrderIdIsRegistered（POST /api/v1/integration/order-syncs 不带 external_channel_order_id，改前 500、改后 200，列为空、投影无该键）。
+  - 偶发红测试：MerchantConsumptionRewardJdbcIntegrationTests.birthdayLockedAtPaymentTimeAndLevelMultiplierApplied（V0.02→V0.03）的规则生效时刻 base.minus(1, DAYS) 改为 base.minus(2, DAYS)，只改测试。原因：随机 base 落在北京 23:30～24:00 时，规则晚于「生日前一天 23:30」那笔付款生效，约 2% 偶发红（2026-11-11 PR #585 首跑 backend-tests 红过一次）。
+- 【18AG 网页线（W-web）落地位置补记】
+  - 第 232 条补充（并入 232-R1 同批，网页提示改成现码实情）
+    - 改法：七处提示的「进入审计留痕」改成实际存在哪里、「不写入审计事件」，口径与 232-R1 契约新说明一致。
+    - 落地位置与新文案：
+      - apps/web/src/admin/pages/BarOrdersPage.tsx V0.14 反结校验提示「反结须填写原因，存进账单的反结原因与反结操作记录，不写入审计事件。」（依据 BarBillingService.reopenBill：bills.reopen_reason＋反结操作记录，成功事件只记 reopen_count、payable_amount_cent）。
+      - 同文件退菜退酒提示「退菜退酒必须填写原因，存进退菜退酒单，不写入审计事件。」（依据 BarOrderService.voidOrderItem：退菜退酒单 reason，成功事件元数据不含原因）。
+      - FinanceDividendsPage.tsx V0.05 reasonRequired「驳回理由必填（存为分红单的驳回理由，不写入审计事件）。」（依据 DividendService.reject 走 markRejected，transition 元数据为空）。
+      - FinanceMerchantExpensePage.tsx noteRequired「理由必填（存进费用台账行，不写入审计事件）。」，录入步骤说明「理由与操作人一并存进费用台账行，理由不写入审计事件；台账仅追加，录错请用红字冲销更正。」（依据 MerchantExpenseService.createManualInternal、reverseInternal，元数据为空）。
+      - VoucherLedgerPage.tsx V0.04 reasonRequired「作废理由必填（存进券实例，不写入审计事件）。」，作废步骤说明「……理由存进券实例、不写入审计事件，操作人记入审计事件。」（依据 VoucherService.revokeInternal 写 voucher_instances.revoke_reason，元数据为空）。
+    - 不改：挂起、确认坏账、发起取消、账单异常的提示属实（第一类入口确实写进审计事件元数据）。
+    - 依据：决策台账:4148「以代码和权威字典为准，只改契约」先例（OpenAPI 与代码一致第 94、113、124、136、153、170、171 条）；决策台账:5952（PGM:968 为操作指引，不补「备注进入留痕」代码）。
+    - 测试：网页 apps/web 与 tests 下没有断言这七处文案的用例，无须同步；b53_web.sh 全量 330/330 文件、1824/1824 用例绿。
+  - 255-R3 ③（集成补偿任务处置，网页停发操作人）
+    - 改法：resolveCompensation 请求体删 operator_user_id: user.id，组件参数解构去掉不再使用的 user。服务端改取登录人归后端线 255-R3 ③。
+    - 落地位置：apps/web/src/admin/pages/IntegrationEventsPage.tsx V0.03。
+    - 依据：PGM:899「谁发起、谁销售、谁服务、谁第一个处理异常、为什么、谁审批、结果是什么，都要能查到。」；先例决策台账:5959（18AE 198-R3「服务端操作人一律取登录人」），198 规则②客户端停发。
+    - 测试：IntegrationEventsPage.rowdetail.test.tsx V0.03「IntegrationEventsPage 处理补偿请求体 > 处理补偿不带 operator_user_id」，断言请求体不含 operator_user_id。
+- 18AG 汇合组（J）：
+  - e2e 不改：tests/e2e 对本段删掉的请求字段都没有断言，也没有断言七处改过的网页提示文案。删掉的字段指 operator_user_id、reported_by_user_id、closed_by_user_id、buyer_note，以及员工扫码点单的 operator_note、evidence_attachment_ids、service_user_ids、payment_mode。补偿处置 mock（tests/e2e/support/mock-api.ts:918）只读 status 与 evidence_attachment_ids。
+  - 232-R2 ② 汇合时补做：
+    - packages/customer-core/src/service.ts 的 createTicketOrder 删 buyerNote 可选类型（V0.14）。
+    - tools/apply-openapi-p0-examples.mjs 的 CustomerTicketOrderRequest 示例删 buyer_note，依据 18AF f525e359 先例「示例生成脚本与供应商 mock 示例对齐」。
+  - 门禁：
+    - 后端定向 23 类 216 测 0 红。
+    - apps/web typecheck 0 错，vitest 330 个文件 1824 条全过。
+    - 客人三端 77/131/85、商户 App 4 全过。
+    - openapi-p0.yaml 与 .json 深比较一致，操作数 1360。
+    - git diff --check 无报。
+    - verify:p0-contract 在重生成操作矩阵与契约闭合附录后全绿；重生成的差异只有 revokeVoucher 一行说明。
+- 18AG 落地位置补记·下位文档现状同步（D-docs，无新裁决）：照各线文档要点 grep docs/ 下的 md、csv（三份 HTML、生成物、契约线已改的三份 P1 下位契约文档与历史记录目录除外），与新契约、新代码不符的现状句只有三处，就地改成现码实情。
+  ① docs/amusement-operations-development-design.md V0.16→V0.17：
+    - §7.15 amusement_incidents.reported_by_user_id 说明补「人工上报的上报人取登录人（请求体所填不采信），系统超容事故记 `system`」。
+    - §7.16 amusement_incident_actions.operator_user_id 补「取登录人（请求体所填不采信）」。
+    - §18 变更日志加行。
+    - 依据：255-R3（AmusementSafetyService 新建、处置、关闭取 authorizationService.currentActor().id()）；PGM:899「谁发起、谁销售、谁服务、谁第一个处理异常、为什么、谁审批、结果是什么，都要能查到。」；18AE 198-R3「服务端操作人一律取登录人」先例。
+  ② docs/third-party-access-layer-spec-v0.2.md V0.2→V0.21：
+    - §2B.2 external_channel_order_id 一行补实现现状：回流登记 `POST /api/v1/integration/order-syncs` 中选填，不传照常登记、标准模型投影不含该键（原先不传即 500）。
+    - 表下「与现状差异：当前无该列」一句改标已过期（V109 已补 `channel`、`external_channel_order_id` 两列与唯一索引 `uq_integration_order_syncs_channel_order`）。
+    - 变更日志加行。
+    - 依据：第 260 条、第十八批裁决 49；IntegrationOrderSyncService.mapPayload 空值不放进投影。
+  ③ docs/full-admin-page-permission-field-matrix-v0.1.csv：
+    - ADM-MER-007 规则列「平台口径(merchant.billing.manage)不变」改为「平台口径(merchant.billing.manage)操作人同样以登录主体为准」。
+    - 依据：255-R3 ④，MerchantFeeNotificationRecipientController 两种口径都取登录人。
+  其余说明：
+    - PRD 经 grep 没有写到这些入口的操作人来源、请求必填或「备注、证据进入审计留痕」，未改。
+    - 本组无测试改动。
+    - 门禁：git diff --check 通过，verify-full-admin-page-matrix（117 页）通过；verify:predeploy 只因待收尾重生成的 operation-matrix、openapi-closure 两份生成物不同步而红，其余各步都绿。
+- 18AG 落地位置补记·收尾（无新裁决）：收尾实际落下、上文各条未记的改动如下。
+  - tools/apply-openapi-p0-examples.mjs：除 buyer_note 外，另删 CustomerTicketOrderRequest.price_rule_id 与 BarOrderRequest.salesperson_user_id，即 18AF 落地位置补记写「交控制席」的两处既有漂移；在副本重跑，json、yaml 解析后语义零差异。
+  - docs/p1-integration-retry-compensation-reconciliation-api-contract-v0.1.md 另补两句：§3.1「`external_channel_order_id` 选填，不传照常登记。」；§3.3「处理人取登录人。」（文件头随契约线 V0.13，不另升版）。
+  - 收尾补的真实流程回归（都在 @Transactional 类，蛇形键、真实授权链）：
+    - 232-R1 ③：BarBillReopenJdbcIntegrationTests.reopenNeedsSupervisorApprovalAndReturnsStoredValueToCard，反结操作记录的 reason 为指认，账单 reopen_reason 为新增断言。
+    - 232-R2 ④：指认 TicketPurchaseWithoutFaceJdbcIntegrationTests.customerOrderForAmusementTicketSucceedsWithoutPhotos、CustomerRegistrationJdbcIntegrationTests.ticketOrderSalesChannelFollowsVerifiedTerminal（蛇形键、不带 buyer_note，200 并落单），不新增。
+    - 232-R3 ③：BarBillReopenJdbcIntegrationTests 的 refund 助手新增断言 bar_bill_adjustments.evidence_attachment_ids 存同一组编号，经 reopenAfterRegisteredCashRefundReversesOnlyUnrefundedCollection、voidAfterReopenAndResettleRefundsNewCollectionOnly、reopenAfterCashRefundReturnsOnlyReversedStoredValue 覆盖。
+    - 259-R1：EvidenceEventJdbcIntegrationTests.claimingARiskAlertKeepsItsEvidenceRefsOnTheClaimAction（新增）。
+    - 259-R2：SiteEntryCompletionJdbcIntegrationTests.createAndReviewFollowTheContractFields（新增）。
+    - 259-R3：SettlementWriteFailureAuditJdbcIntegrationTests.comprehensiveServiceFeeDraftKeepsTicketTypeAndMonthlyCap（新增）。
+    - 259-R4：BarReservationHoldJdbcIntegrationTests.customerReservationWithoutTableIdRejected（新增）；带齐 200 指认同类 reserve() 助手。
+    - 259-R5 ②：TraceHandoverChainRulesJdbcTests.workPhoneHandoverRecordsTheVerifiedPhoneOnScannedSegments，扫码 out_verify 200 为指认，不带 segment 400 为新增断言。
+    - 259-R6 ②（新增，每个领域一条）：AmusementSafetyOperatorJdbcIntegrationTests.closeWithoutResolutionIsRejected、BarReservationHoldJdbcIntegrationTests.openSessionWithoutTableIdRejected、InventoryTransferRequisitionJdbcIntegrationTests.receiptWithoutWarehouseIdIsRejected、TerminalDeviceCrossProjectReachJdbcIntegrationTests.repairWithoutReasonIsRejected、IntegrationOperatorJdbcIntegrationTests.orderSyncWithoutSyncTypeIsRejected。
+    - 259-R7 ②：FloorPlanJdbcIntegrationTests.createFloorPlanRequiresProjectId（新增）。
+  - apps/web/src/admin/pages/VoucherLedgerPage.tsx 第 85、663 两行改回 LF，git diff --check 原生全绿。
+  - 上文 D 组门禁句是 D 组交付时的状态；终态：收尾重生成 operation-matrix、openapi-closure 后，verify:p0-contract、verify:predeploy 全绿。
+- 18AG 复核修复补记（无新裁决）：18AG 收尾复核意见经反驳核实成立，按以下 ①～④ 改，没有要操作员裁定的。依据「OpenAPI 与代码一致」（本台账:4161 82c-R4「以代码和权威字典为准，只改契约」）。
+  ① 259-R6 收回 receiveTransferOrder 三键：docs/openapi/openapi-p0.yaml 与 .json 两份同值，内联请求体 required 恢复为只有 idempotency_key，lines、location_id、warehouse_id 移出；三个属性说明各补「门店要货签收、借调买断收货必填；借用型收货不读。」。现码 InventoryService.receiveTransferOrder：门店要货（supply）走 InventoryTransferFlowService.receive，借调买断走 purchaseStockIn，两条都校验三键；借用型（lending＋borrow）只读 scanned_trace_codes。属方案 259-R6 not_doing ⑥（只在特定取值下必填的不进 required）；BSM:1201「「借」只转移保管责任、不转移所有权」。上文 ⑪ 键数随改为 92 个、方案所列 89 键中的 86 键（库存与供应链 12）。InventoryTransferRequisitionJdbcIntegrationTests.receiptWithoutWarehouseIdIsRejected 只改注释措辞，写明测的是门店要货签收分支，用例不动。
+  ② 255-R3 ④ 费用通知接收人：saveMerchantFeeNotificationRecipient 说明里「登录人不属任何商户 403 MERCHANT_SCOPE_REQUIRED」移回商户自助口径分句，「两种口径的创建人都取登录人（覆盖已有记录时不改）」另起分句；yaml 与 json 同值。现码 MerchantFeeNotificationRecipientController.selfServiceScopeOrPlatform 持 merchant.billing.manage 直接放行、不查商户归属，只有自助口径取不到商户才抛该 403。
+  ③ 第 232 条补充段同根（232-R1 ㉑ 的网页版）：apps/web/src/admin/pages/TicketingPoliciesPage.tsx（V0.06→V0.07）改价理由提示由「改价理由必填（事后要能查是谁为什么改成这个数）。」改为「改价理由必填（只做必填校验，不保存）。」，与契约 TicketTypePricingRequest.reason「改价理由；必填（只做必填校验，不落库、不写入审计事件）」一致；TicketingPoliciesPage.pricing.test.tsx 注释同步，断言 toContain「理由」不变。现码 TicketCatalogService.updatePricing 只做 requireText(reason)，成功事件 ticket_product.pricing_changed 元数据为空。HTML 没有原句要求保存改价理由，不补存理由的代码（同本台账:5981 PGM:968 先例）。
+  ④ 255-R1 回归补齐：MerchantBillingOperatorJdbcIntegrationTests.confirmDisputeAndDunningRecordTheLoggedInOperator 的确认请求体补 "operator_user_id":"someone_else"，断言不变（成功事件元数据 operator_user_id 仍为登录员工），照方案 255-R1 tests①；只改测试。
+  同步与测试：yaml 与 json 整份深比较一致，操作实数 1360；最终 openapi-p0.json 的 SHA-256 为 801601680d48b956121a2ea214834963f97540507d177d62e1f623ff182c4f35，security-scans 两份 md 只改「OpenAPI SHA-256」行；docs:operation-matrix、docs:openapi-closure 重跑，node tools/refresh-entry-doc-baseline.mjs 报无漂移。MerchantBillingOperatorJdbcIntegrationTests 3 测、InventoryTransferRequisitionJdbcIntegrationTests 19 测定向 0 红；b53_web.sh TicketingPoliciesPage 4 个文件 22 条全绿。
+  复核旁见：AccessUserRequest.account_type 枚举与现码不一致（不含 outsourced_vendor），已登记待开发清单第 286 条，本段不改。

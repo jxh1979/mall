@@ -224,7 +224,7 @@ final class IntegrationReconciliationService {
                 existing.differenceAmountCent(),
                 reconciliationStatus(request.status()),
                 existing.sourceDomain(),
-                request.operatorUserId(),
+                actorUserId, // 第十八批 AG 段 255-R3②（PGM:899）：处置人落登录人，请求体 operator_user_id 不采信
                 request.resolutionNote(),
                 existing.providerPayload(),
                 safeList(request.evidenceAttachmentIds()),

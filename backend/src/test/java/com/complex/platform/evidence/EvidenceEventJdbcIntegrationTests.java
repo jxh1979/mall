@@ -239,6 +239,27 @@ class EvidenceEventJdbcIntegrationTests {
                 .andExpect(jsonPath("$.data.business_id").value("ctr_r5"));
     }
 
+    /** 第十八批 AG 段 259-R1（OpenAPI 与代码一致：认领等五个处置动作的请求体补 evidence_refs）：认领按蛇形键带 evidence_refs → 写进该次认领动作记录。 */
+    @Test
+    void claimingARiskAlertKeepsItsEvidenceRefsOnTheClaimAction() throws Exception {
+        RequestPostProcessor admin = platformAdmin("u_259_risk_admin");
+        String n = String.valueOf(System.nanoTime());
+        String alertId = com.jayway.jsonpath.JsonPath.read(mockMvc.perform(post("/api/v1/evidence/risk-alerts").with(admin)
+                        .contentType(MediaType.APPLICATION_JSON).content("""
+                                {"idempotency_key":"risk-259-%s","source_domain":"bar","alert_type":"price_anomaly","risk_level":"high",
+                                 "summary":"酒水单价异常"}""".formatted(n)))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString(java.nio.charset.StandardCharsets.UTF_8),
+                "$.data.alert_id");
+        mockMvc.perform(post("/api/v1/evidence/risk-alerts/" + alertId + "/claim").with(admin)
+                        .contentType(MediaType.APPLICATION_JSON).content("""
+                                {"idempotency_key":"risk-claim-259-%s","reason":"值班经理认领","evidence_refs":["att_259_a","att_259_b"]}
+                                """.formatted(n)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("handling"));
+        assertThat(jdbcTemplate.queryForList("SELECT jsonb_array_elements_text(evidence_refs) FROM risk_alert_actions"
+                + " WHERE alert_id = ? AND action_type = 'claim'", String.class, alertId)).containsExactly("att_259_a", "att_259_b");
+    }
+
     /** 平台管理员账号（种子角色 role_platform_admin）；后台 Web 终端＋生产过滤器放入的 AccessActor 主体。 */
     private RequestPostProcessor platformAdmin(String userId) {
         jdbcTemplate.update("INSERT INTO access_users (id, username, account_type, organization_id, merchant_id, status, created_at) "

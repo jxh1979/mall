@@ -1,9 +1,13 @@
 package com.complex.platform.facility;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 import com.complex.platform.access.AccessActor;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.evidence.EvidenceEventRepository;
@@ -23,10 +27,14 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.request.RequestPostProcessor;
 import org.springframework.transaction.annotation.Transactional;
 
 @SpringBootTest(properties = {
@@ -35,8 +43,10 @@ import org.springframework.transaction.annotation.Transactional;
         "spring.datasource.password=${COMPLEX_DATABASE_PASSWORD:complex_dev_pwd}",
         "evidence.attachment.dir=/tmp/complex-site-entry-completion-test"
 })
+@AutoConfigureMockMvc
 @Transactional
 class SiteEntryCompletionJdbcIntegrationTests {
+    @Autowired MockMvc mockMvc;
     @Autowired SiteEntryReportService service;
     @Autowired SiteEntryReportController controller;
     @Autowired SiteEntryReportRepository repository;
@@ -204,6 +214,46 @@ class SiteEntryCompletionJdbcIntegrationTests {
             pool.shutdownNow();
             pool.awaitTermination(5, java.util.concurrent.TimeUnit.SECONDS);
         }
+    }
+
+    /**
+     * 第十八批 AG 段 259-R2（OpenAPI 与代码一致：新建进场报备、审核的请求字段按 SiteEntryReportService 现码补齐）：外包供应商按蛇形键新建，
+     * 缺联系电话 → 400「联系电话未填写」，带齐 → 200；物业审核员按蛇形键审核通过并填审核意见 → 状态 approved、审核意见落库。
+     */
+    @Test void createAndReviewFollowTheContractFields() throws Exception {
+        String creator = vendor + "_c";
+        seedUser(creator, "outsourced_vendor", List.of("facility.site_entry.create_assigned"));
+        String body = """
+                {"idempotency_key":"%s","project_id":"%s","work_scope":"二层走廊吊顶维修","planned_start_date":"%s",
+                 "planned_end_date":"%s","crew_count":3,"contact_name":"王师傅"%s}""";
+        String start = LocalDate.now().toString();
+        String end = LocalDate.now().plusDays(2).toString();
+        mockMvc.perform(post("/api/v1/facility/site-entry-reports").with(web(creator, "outsourced_vendor"))
+                        .contentType(MediaType.APPLICATION_JSON).content(body.formatted("no-phone-" + report, project, start, end, "")))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.detail_code").value("VALIDATION_FAILED"))
+                .andExpect(jsonPath("$.message").value("联系电话未填写"));
+        String created = com.jayway.jsonpath.JsonPath.read(mockMvc.perform(post("/api/v1/facility/site-entry-reports")
+                        .with(web(creator, "outsourced_vendor")).contentType(MediaType.APPLICATION_JSON)
+                        .content(body.formatted("create-" + report, project, start, end, ",\"contact_phone\":\"13800000001\"")))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString(java.nio.charset.StandardCharsets.UTF_8), "$.data.id");
+
+        mockMvc.perform(post("/api/v1/facility/site-entry-reports/" + created + "/review").with(web(reviewer, "staff"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"idempotency_key\":\"review-" + report + "\",\"decision\":\"approve\",\"review_comment\":\"资料齐全，同意进场\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("approved"));
+        assertThat(jdbc.queryForMap("SELECT status, review_comment FROM site_entry_reports WHERE id = ?", created))
+                .containsEntry("status", "approved").containsEntry("review_comment", "资料齐全，同意进场");
+    }
+
+    /** 后台 Web 终端＋生产过滤器放入的 AccessActor 主体（与账号行一致）。 */
+    private RequestPostProcessor web(String id, String type) {
+        AccessActor actor = new AccessActor(id, id, type, project, null, "active");
+        return request -> {
+            request.addHeader("X-Terminal-Type", "web");
+            return authentication(new UsernamePasswordAuthenticationToken(actor, "token", List.of())).postProcessRequest(request);
+        };
     }
 
     private String upload(String name) {

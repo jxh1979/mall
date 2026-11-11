@@ -1,4 +1,4 @@
-# P1 游乐安全告知、电子免责与事故工单 API 契约 V0.12
+# P1 游乐安全告知、电子免责与事故工单 API 契约 V0.13
 
 文档类型：Implementation / API Contract
 
@@ -40,6 +40,8 @@
 
 ## 4. 字段
 
+操作人一律取登录人（告知创建人、确认登记人、事故上报人、处置人、关闭人），请求体不传操作人。
+
 ### 4.1 创建安全告知
 
 | 字段 | 必填 | 类型 | 规则 |
@@ -55,7 +57,6 @@
 | `status` | 是 | enum | `active`/`inactive`/`archived` |
 | `effective_from` | 否 | instant | 生效时间 |
 | `effective_to` | 否 | instant | 失效时间 |
-| `operator_user_id` | 是 | string | 操作人 |
 
 ### 4.2 电子免责/告知确认
 
@@ -73,7 +74,6 @@
 | `content_version` | 是 | string | 确认的文本版本 |
 | `content_hash` | 否 | string | 文本哈希，占位给后续法务/电子签 |
 | `acknowledged_at` | 否 | instant | 为空时取服务端当前时间 |
-| `operator_user_id` | 是 | string | 操作人 |
 
 ### 4.3 创建事故工单
 
@@ -90,7 +90,6 @@
 | `severity` | 是 | enum | 严重级别 |
 | `title` | 是 | string | 事故标题 |
 | `description` | 是 | string | 事故描述 |
-| `reported_by_user_id` | 是 | string | 上报人 |
 | `reported_channel` | 是 | string | 上报渠道 |
 | `occurred_at` | 否 | instant | 为空时取服务端当前时间 |
 
@@ -102,9 +101,7 @@
 | `operator_note` | 处理必填，关闭可选 | string | 处理说明 |
 | `evidence_attachment_ids` | 否 | string[] | 证据引用 |
 | `target_status` | 处理必填 | enum | `processing`/`pending_external`/`resolved` |
-| `operator_user_id` | 处理必填 | string | 处理人 |
 | `resolution` | 关闭必填 | string | 结论和处理结果 |
-| `closed_by_user_id` | 关闭必填 | string | 关闭人 |
 
 ## 5. 事件
 

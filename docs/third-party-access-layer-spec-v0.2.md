@@ -1,4 +1,4 @@
-# 第三方接入层产品规格 V0.2
+# 第三方接入层产品规格 V0.21
 > 2026-07-04 逻辑一致性修订：补名词四层脚注
 
 ## 1. 文档定位
@@ -47,10 +47,10 @@
 
 | 字段 | 含义 | 取值/说明 |
 |---|---|---|
-| `external_channel_order_id` | 团购渠道侧订单号 | 区分一笔渠道券核销与一笔 POS 订单（两条独立对账线，对齐 §6 回流层级） |
+| `external_channel_order_id` | 团购渠道侧订单号 | 区分一笔渠道券核销与一笔 POS 订单（两条独立对账线，对齐 §6 回流层级）；实现现状（2026-11-11 第十八批 AG 段第 260 条，第十八批裁决 49）：回流登记 `POST /api/v1/integration/order-syncs` 中选填，不传照常登记、标准模型投影不含该键（原先不传即 500） |
 | `channel` | 团购渠道 | `meituan`（美团）/ `dianping`（大众点评）/ `douyin`（抖音） |
 
-> 与现状差异：真实 `integration_order_syncs`（V030）当前**无** `external_channel_order_id`/`channel` 列，团购回流被并入通用 catering/retail。落地时需新迁移补渠道语义列或独立渠道回流表，并在 mapPayload 中按 `channel` 分流。
+> 与现状差异：~~真实 `integration_order_syncs`（V030）当前**无** `external_channel_order_id`/`channel` 列，团购回流被并入通用 catering/retail。落地时需新迁移补渠道语义列或独立渠道回流表，并在 mapPayload 中按 `channel` 分流。~~ 已过期——V109 已给 `integration_order_syncs` 补 `channel`、`external_channel_order_id` 两列与渠道级幂等唯一索引 `uq_integration_order_syncs_channel_order`。
 
 ### 2B.3 自动差异识别（回流→标准模型→对账→差异→复核）
 
@@ -804,6 +804,7 @@ flowchart TD
 | 2026-06-07 收口 | 增 | §6A 已知缺口 | 新增"已知缺口（待复核）"节，登记 third-1 对外方向仅接口预留、双回流层级、团购渠道待复核 | 全文原无"已知缺口"节。依据 finding overclaim-1 |
 | 2026-06-08 | 改 | §3/§6A/§7 | 将 P0 接口预留与团购渠道口径由"待复核"收口为"已补齐并复核通过"，真实第三方字段改列为 P1/P2 实施依赖 | 对齐用户"第三方先留接口，自己的系统先开发"决策与产品流复核报告 |
 | `文档goalP1(2026-06-20)` | 增 | §8 | 新增"补登：人脸/年龄核验(face.verification.enabled)与设备/闸机(gate_nfc_scan_device)供应商接入规格"，补两类此前在本层只在字段字典 §7 出现专项字段、但无页面/字段/失败场景/核验留痕完整登记的供应商 | 产品规格层缺两类供应商完整口径；与 `third-party-integration-development-design` §13.6/§14.17 设备事件、合规 §2 年龄核验对齐 |
+| 2026-11-11 | 改 | 抬头、§2B.2 | V0.21：第十八批 AG 段第 260 条（第十八批裁决 49）：`external_channel_order_id` 一行补实现现状——回流登记中选填，不传照常登记、标准模型投影不含该键（原先不传即 500）；表下「与现状差异」一句 V109 已落地，改标已过期 | 第十八批裁决 49；OpenAPI createOrderSync 该字段选填；IntegrationOrderSyncService.mapPayload 现码；V109 迁移 |
 
 ---
 

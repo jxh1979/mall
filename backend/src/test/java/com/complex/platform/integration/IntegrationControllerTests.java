@@ -1,4 +1,4 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 package com.complex.platform.integration;
 
 import static org.mockito.ArgumentMatchers.any;
@@ -89,7 +89,7 @@ class IntegrationControllerTests {
         when(service.runRetryTaskNow(eq("retry_1"), any(StatusChangeRequest.class))).thenReturn(task("retry_task", "ready"));
         when(service.listCompensationTasks()).thenReturn(new PageResponse<>(List.of(task("compensation_task", "open")), 1, 50, 1));
         when(service.createCompensationTask(any(IntegrationTaskRequest.class))).thenReturn(task("compensation_task", "open"));
-        when(service.resolveCompensationTask(eq("compensation_1"), any(IntegrationTaskResolveRequest.class))).thenReturn(task("compensation_task", "resolved"));
+        when(service.resolveCompensationTask(eq("compensation_1"), any(IntegrationTaskResolveRequest.class), anyString())).thenReturn(task("compensation_task", "resolved"));
         when(service.listReconciliationBatches()).thenReturn(new PageResponse<>(List.of(batch()), 1, 50, 1));
         when(service.createReconciliationBatch(any(ReconciliationBatchRequest.class))).thenReturn(batch());
         when(service.listReconciliationDifferences()).thenReturn(new PageResponse<>(List.of(difference("open")), 1, 50, 1));

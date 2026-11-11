@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.groups.Tuple.tuple;
 
 import com.complex.platform.access.AuthorizationService;
+import com.complex.platform.support.TestSecurityActors;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.PageResponse;
 import com.complex.platform.common.idempotency.IdempotencyRecord;
@@ -39,6 +40,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -51,6 +53,7 @@ class MerchantBillingServiceTests {
 
     @BeforeEach
     void setUp() {
+        TestSecurityActors.asPlatformAdmin();
         merchantBillingRepository = new InMemoryMerchantBillingRepository();
         financeRepository = new InMemoryFinanceRepository();
         auditEventRepository = new InMemoryAuditEventRepository();
@@ -63,6 +66,11 @@ class MerchantBillingServiceTests {
                 null,
                 null
         );
+    }
+
+    @AfterEach
+    void tearDown() {
+        TestSecurityActors.clear();
     }
 
     @Test
@@ -192,7 +200,7 @@ class MerchantBillingServiceTests {
                         MerchantBillDunningRecord::status,
                         MerchantBillDunningRecord::operatorUserId
                 )
-                .containsExactly(bill.id(), "merchant_1", "wecom", "rent_overdue_first_notice", "sent", "staff_finance");
+                .containsExactly(bill.id(), "merchant_1", "wecom", "rent_overdue_first_notice", "sent", "usr_admin");
     }
 
     @Test

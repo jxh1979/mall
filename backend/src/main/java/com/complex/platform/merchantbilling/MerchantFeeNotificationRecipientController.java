@@ -65,14 +65,13 @@ public class MerchantFeeNotificationRecipientController {
             @RequestBody @jakarta.validation.Valid MerchantFeeNotificationRecipientRequest request
     ) {
         Optional<String> selfScope = selfServiceScopeOrPlatform();
-        MerchantFeeNotificationRecipientRequest effective = selfScope
-                .map(scope -> new MerchantFeeNotificationRecipientRequest(
-                        scope,
-                        request == null ? null : request.feeEvent(),
-                        request == null ? null : request.recipientName(),
-                        request == null ? null : request.recipientPhone(),
-                        authorizationService.currentActor().id()))
-                .orElse(request);
+        // 第十八批 AG 段 255-R3④（PGM:899）：两条口径的操作人都取登录人，请求体 operator_user_id 不采信；自助口径另强制本商户。
+        MerchantFeeNotificationRecipientRequest effective = new MerchantFeeNotificationRecipientRequest(
+                selfScope.orElse(request == null ? null : request.merchantId()),
+                request == null ? null : request.feeEvent(),
+                request == null ? null : request.recipientName(),
+                request == null ? null : request.recipientPhone(),
+                authorizationService.currentActor().id());
         return ApiResponse.ok(maskPhoneForUnauthorized(service.upsert(effective)));
     }
 

@@ -1,7 +1,8 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 package com.complex.platform.merchantbilling;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
@@ -172,6 +173,8 @@ class MerchantFeeNotificationRecipientControllerTests {
     @Test
     void upsertRequiresManagePermissionAndReturnsRecipient() throws Exception {
         when(service.upsert(any(MerchantFeeNotificationRecipientRequest.class))).thenReturn(recipient("active"));
+        when(authorizationService.currentActor()).thenReturn(
+                new AccessActor("usr_platform_finance", "platform_finance", "platform_admin", "org_1", null, "active"));
 
         mockMvc.perform(post("/api/v1/merchant-billing/fee-notification-recipients")
                         .with(user("finance").roles("P0_SMOKE"))
@@ -189,6 +192,9 @@ class MerchantFeeNotificationRecipientControllerTests {
                 .andExpect(jsonPath("$.data.status").value("active"));
 
         verify(authorizationService).requirePermission("merchant.billing.manage");
+        // 第十八批 AG 段 255-R3④：平台口径也取登录人为操作人，请求体所填 staff_finance 不采信。
+        verify(service).upsert(argThat(request -> "merchant_1".equals(request.merchantId())
+                && "usr_platform_finance".equals(request.operatorUserId())));
     }
 
     @Test
