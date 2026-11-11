@@ -101,7 +101,7 @@ describe("TicketingPoliciesPage 通票定价核算（V369）", () => {
     renderPage(putSpy);
     await selectPass();
 
-    // 理由没填先拦下——事后要能查是谁为什么把价改成这个数。
+    // 理由没填先拦下（改价理由只做必填校验，不保存）。
     fireEvent.click(screen.getByTestId("combo-pricing-save"));
     await waitFor(() => expect(screen.getByTestId("combo-pricing-error").textContent).toContain("理由"));
 

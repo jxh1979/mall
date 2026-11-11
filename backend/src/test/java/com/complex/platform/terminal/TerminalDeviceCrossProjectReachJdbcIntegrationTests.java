@@ -1,6 +1,6 @@
 package com.complex.platform.terminal;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -134,6 +134,22 @@ class TerminalDeviceCrossProjectReachJdbcIntegrationTests {
         send(plainB, DEVICES + "/" + noSpace + "/repair", reasonJson("mb-n")).andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.detail_code").value("CROSS_PROJECT_FORBIDDEN"));
         send(plainA, DEVICES + "/" + noSpace + "/repair", reasonJson("ma-n")).andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("repair"));
+    }
+
+    // 第十八批 AG 段 259-R6（OpenAPI 与代码一致：markTerminalDeviceRepair 等生命周期入口的 reason 进 required）：送修不带 reason → 400
+    // 「原因未填写」、设备仍为 bound；带上原因 → 200、设备变为 repair。
+    @Test
+    void repairWithoutReasonIsRejected() throws Exception {
+        String inA = device("nr", "bound", null, spaceA, null);
+        RequestPostProcessor plain = staff("nr", projectA, role("nr", List.of()));
+
+        send(plain, DEVICES + "/" + inA + "/repair", "{\"idempotency_key\": \"r5d-nr-none-" + suffix + "\"}")
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.detail_code").value("VALIDATION_FAILED"))
+                .andExpect(jsonPath("$.message").value("原因未填写"));
+        assertThat(jdbc.queryForObject("SELECT status FROM terminal_devices WHERE id = ?", String.class, inA)).isEqualTo("bound");
+        send(plain, DEVICES + "/" + inA + "/repair", reasonJson("nr-ok")).andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.status").value("repair"));
     }
 

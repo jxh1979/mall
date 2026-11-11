@@ -1,4 +1,4 @@
-// 文件版本：V0.06
+// 文件版本：V0.07
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
@@ -582,7 +582,7 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
   // V369 改售价／折扣：保存当场比对允许误差，超出后端直接拒（前端提示与后端同一口径）。
   async function savePricing() {
     if (!comboTicketId) { setPricingError("请先选择要配置的通票。"); return; }
-    if (!pricingReason.trim()) { setPricingError("改价理由必填（事后要能查是谁为什么改成这个数）。"); return; }
+    if (!pricingReason.trim()) { setPricingError("改价理由必填（只做必填校验，不保存）。"); return; }
     setPricingError("");
     setPricingBusy(true);
     try {

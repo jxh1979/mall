@@ -1,10 +1,10 @@
-# 游乐设施运营系统开发设计文档 V0.16
+# 游乐设施运营系统开发设计文档 V0.17
 
 > **口径修订（2026-08-06 R10）：「人工放行」已废止**——ENUM「核销记录状态」条 明确「**系统不提供人工放行：核销要么成功、要么拒绝或失败，任何岗位、任何权限都不能以人工方式让一笔不满足规则的核销通过**」（DEC-CFG-2026-08-03-12 / DEC-R6-08）。本文原有的「人工放行」流程（§6.5）、表 `AmusementManualOverride`、状态取值 `manual_override`、端点 `/api/v1/amusement/manual-overrides`、权限点 `amusement.verification.override`、事件 `amusement.verification_overridden`、指标与页面入口**一律废止**，废止处就地标注；已实现的表、端点与取值待代码轮下线，期间不得新增调用、不得新写入。
 
 > **口径修订（2026-08-06 R10）：「场次容量／三维度容量」已废止**——BSM「容量控制」条 明确「**只按单个游乐项目的实时在玩人数控制容量，不再按场次/时段或点位/设备另设容量；排队人数不占用容量**」（DEC-R5-2026-08-04-04；R8 用户裁决 D-02）。本文原「按项目 + 场次/时段 + 点位/设备三维度取最小可放行余量」的容量判定口径**整体废止**，一律改为「**项目容量（实时在玩人数）**」单维；双阈值不变（运营容量软上限告警放行、安全容量硬上限阻断并自动停运）。`amusement_capacity_config`、`amusement_capacity_snapshot` 的场次维与点位/设备维字段待代码轮下线，期间不得据以新增受控维度。
 
-> 版本：V0.16 ｜ 最后更新：2026-11-04 ｜ 迁移证据：保留历史迁移记录；TK-17/18 新增 V483/V484/V487 ｜ 状态：现行；本批同步单项目容量、营业日配置与实际结束实现，未完成项仍单列。
+> 版本：V0.17 ｜ 最后更新：2026-11-11 ｜ 迁移证据：保留历史迁移记录；TK-17/18 新增 V483/V484/V487 ｜ 状态：现行；本批同步单项目容量、营业日配置与实际结束实现，未完成项仍单列。
 > 新功能承接见 docs/v099-v124-feature-implementation-and-acceptance-spec-v0.1.md
 > <!-- 文档goalP3(2026-06-20)：补版本/日期/覆盖迁移头，未改正文 -->
 >
@@ -739,7 +739,7 @@ stateDiagram-v2
 | status | varchar(32) | 当前 CHECK：created、processing、pending_external、resolved、closed、cancelled |
 | title | varchar(160) | 标题 |
 | description | varchar(2000) | 描述 |
-| reported_by_user_id / reported_channel | varchar(64) | 上报人、渠道 |
+| reported_by_user_id / reported_channel | varchar(64) | 上报人、渠道；人工上报的上报人取登录人（请求体所填不采信），系统超容事故记 `system` |
 | occurred_at / closed_at | timestamptz | 发生与关闭时间 |
 | resolution | varchar(2000) | 处理结果 |
 | evidence_attachment_ids | jsonb | 证据附件 |
@@ -754,7 +754,7 @@ stateDiagram-v2
 | incident_id | varchar(64) | 事故 ID |
 | action_type | varchar(32) | 当前 CHECK：created、commented、status_changed、closed |
 | from_status / to_status | varchar(32) | 状态变更前后值 |
-| operator_user_id | varchar(64) | 操作人 |
+| operator_user_id | varchar(64) | 操作人；取登录人（请求体所填不采信） |
 | operator_note | varchar(1000) | 处理说明 |
 | evidence_attachment_ids | jsonb | 证据附件 |
 | created_at | timestamptz | 创建时间 |
@@ -1258,6 +1258,7 @@ P0 完成时必须满足：
 
 | 日期 | 类型 | 位置 | 内容 | 原因/依据 |
 |---|---|---|---|---|
+| 2026-11-11 | 改 | 抬头、§7.15、§7.16 | V0.17：第十八批 AG 段第 255 条 255-R3：游乐事故上报人（`amusement_incidents.reported_by_user_id`）与事故处置动作操作人（`amusement_incident_actions.operator_user_id`，含新建、追加处置、关闭）改取登录人，请求体里的 `reported_by_user_id`、`operator_user_id`、`closed_by_user_id` 不再读；系统超容事故上报人仍记 `system` | PGM:899「谁发起、谁销售、谁服务、谁第一个处理异常、为什么、谁审批、结果是什么，都要能查到。」；决策台账 18AE 198-R3「服务端操作人一律取登录人」先例；AmusementSafetyService 现码 |
 | 2026-11-04 | 改 | 抬头、§8.5 | V0.16：第十八批 Q 段第 146 条安卓工作手机「游乐核销」屏改走票务核销入口 `POST /api/v1/ticketing/verifications`，删去「场次（可选）」输入、补扫码核销，不再调游乐直连入口；项目由入口点位或设备定位，场次取当前开放场次，员工不选项目与场次 | BSM:552「进场之后，工作手机扫客人二维码核销各酒吧入场、赠饮、游乐等场内权益」；BSM:766「和游乐相连，票里的游乐权益到项目入口核销。」 |
 | 2026-11-03 | 改 | 抬头、§6.4.2、§8.5、§10.1、§12.2 | V0.15：第十八批 O 段第 129 条下线游乐离线核销（安卓离线核销队列与同步入口、后端离线同步与离线权益包接口删除），端侧现状、离线核销下线口径、核销 API 表与 §10.1 核销员、§12.2 安卓端承接的离线排队现状改为已下线；验证边界删去离线拒绝记录范围隔离两处说法（所依据的用例已随通道删除） | BSM:800「……核销必须在线、不做离线核销。……」 |
 | 2026-10-17 | 改 | §16 | V0.10：验收清单明确为故障解除后才原入场者取消补偿，与 §6.8 及 C09 一致，不扩大至故障期间已经原入场并受影响者 | C09 最终裁决及本轮逐句核验 |

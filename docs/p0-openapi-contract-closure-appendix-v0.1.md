@@ -1,4 +1,4 @@
-# P0 OpenAPI 权限、事件、任务追溯收口附录 V0.64
+# P0 OpenAPI 权限、事件、任务追溯收口附录 V0.65
 
 ## 1. 文档定位
 
@@ -3603,7 +3603,7 @@
 | CUS-客人端 | `requestCustomerSavedBottleRenewalCode` | `POST` | `/api/v1/customer/saved-bottles/{saved_bottle_id}/renewal-code` | 客人本人转存发码（只对当前持有人本人，发到本人手机） | `not_applicable` | `bar.saved_bottle.verification_code_requested` / `bar.saved_bottle.verification_code_request_failed` | miniapp, app | operation 级补充 |
 | CUS-客人端 | `requestCustomerStoredValueSmsCode` | `POST` | `/api/v1/customer/stored-value/sms` | 储值付款短信验证码 | `not_applicable` | `customer.otp_requested` / `customer.otp_request_failed` | app, miniapp | operation 级补充 |
 | CUS-客人端 | `revokeCustomerVoucherTransfer` | `POST` | `/api/v1/customer/voucher-transfers/{transfer_id}/revoke` | 撤回转赠(领取前发起人可撤回) | `not_applicable` | `voucher_transfer.revoked` / `voucher_transfer.revoke_failed` | miniapp, app | operation 级补充 |
-| CUS-客人端 | `revokeVoucher` | `POST` | `/api/v1/vouchers/instances/{id}/revoke` | 作废券（仅未核销可作废；理由必填进审计留痕） | `customer.voucher.manage` | `voucher.revoked` / `voucher.revoke_failed` | web | operation 级补充 |
+| CUS-客人端 | `revokeVoucher` | `POST` | `/api/v1/vouchers/instances/{id}/revoke` | 作废券（仅未核销可作废；理由必填，存进券实例） | `customer.voucher.manage` | `voucher.revoked` / `voucher.revoke_failed` | web | operation 级补充 |
 | CUS-客人端 | `saveLoyaltyConfigBirthdayRule` | `POST` | `/api/v1/loyalty/config/birthday-rules` | 新增或更新生日加倍规则（全平台，仅全国范围账号） | `customer.loyalty.manage` | `customer.birthday_rule.saved` / `customer.birthday_rule.save_failed` | web | operation 级补充 |
 | CUS-客人端 | `saveLoyaltyConfigCheckInTier` | `POST` | `/api/v1/loyalty/config/check-in-tiers` | 新增或更新本项目连续签到阶梯 | `customer.loyalty.manage` | `customer.check_in_tier.saved` / `customer.check_in_tier.save_failed` | web | operation 级补充 |
 | CUS-客人端 | `saveLoyaltyConfigMemberLevel` | `POST` | `/api/v1/loyalty/config/member-levels` | 新增或更新会员等级档位（全平台，仅全国范围账号） | `customer.loyalty.manage` | `customer.member_level.saved` / `customer.member_level.save_failed` | web | operation 级补充 |

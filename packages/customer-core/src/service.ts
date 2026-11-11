@@ -1,4 +1,4 @@
-// 文件版本：V0.13
+// 文件版本：V0.14
 // 客人端业务服务层（三端共用）：封装客人用到的真实端点（客人接口 customer 前缀等），接口以 docs/openapi/openapi-p0.yaml 为准。
 // 请求经注入的 CustomerApi 发出（各端自带 transport），本文件不依赖浏览器。
 
@@ -213,7 +213,6 @@ export class CustomerService {
     quantity: number;
     visitDate?: string;
     contactPhone?: string;
-    buyerNote?: string;
     // AUD-076 单店票挂酒吧：单店票必填该票所属酒吧 id（通票不传）；请求体自动 snake_case 为 bar_id。
     barId?: string;
   }): Promise<TicketOrder> {

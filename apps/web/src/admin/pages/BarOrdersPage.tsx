@@ -1,4 +1,4 @@
-// 文件版本：V0.13
+// 文件版本：V0.14
 import React from "react";
 import { BarRefundBreakdownPanel } from "./BarRefundBreakdownPanel";
 import { BarShiftPanel } from "./BarShiftPanel";
@@ -517,7 +517,7 @@ export function BarOrdersPage({ api, user, setActionResult, setGlobalError, effe
       return false;
     }
     if (!reopenReason.trim()) {
-      setFormError("反结须填写原因，进入审计留痕。");
+      setFormError("反结须填写原因，存进账单的反结原因与反结操作记录，不写入审计事件。");
       return false;
     }
     return true;
@@ -545,7 +545,7 @@ export function BarOrdersPage({ api, user, setActionResult, setGlobalError, effe
       return false;
     }
     if (!voidReason.trim()) {
-      setFormError("退菜退酒必须填写原因，进入审计留痕。");
+      setFormError("退菜退酒必须填写原因，存进退菜退酒单，不写入审计事件。");
       return false;
     }
     return true;

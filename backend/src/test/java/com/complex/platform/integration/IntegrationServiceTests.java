@@ -1,6 +1,6 @@
 package com.complex.platform.integration;
 
-// 文件版本：V0.05
+// 文件版本：V0.06
 
 import com.complex.platform.support.InMemoryAuditEventRepository;
 import com.complex.platform.support.InMemoryIdempotencyRepository;
@@ -756,7 +756,8 @@ class IntegrationServiceTests {
                         "finance_1",
                         "resolved",
                         "manual ledger adjusted"
-                )
+                ),
+                "finance_1"
         );
         ReconciliationBatchRecord batch = service.createReconciliationBatch(new ReconciliationBatchRequest(
                 "reconcile-batch",

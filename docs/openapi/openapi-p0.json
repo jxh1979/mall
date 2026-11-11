@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "综合体管理系统 P0 API 契约",
-    "version": "V0.64",
+    "version": "V0.65",
     "description": "P0 首批编码前置契约。本文采用 JSON-compatible YAML，便于与 openapi-p0.json 保持一致。正式后端以 Java 21 + Spring Boot 4.x + springdoc-openapi 输出运行时 OpenAPI，并与本契约比对。"
   },
   "servers": [
@@ -1406,7 +1406,10 @@
                 "type": "object",
                 "additionalProperties": true,
                 "required": [
-                  "idempotency_key"
+                  "idempotency_key",
+                  "project_id",
+                  "session_id",
+                  "customer_id"
                 ],
                 "properties": {
                   "idempotency_key": {
@@ -1515,7 +1518,10 @@
                 "type": "object",
                 "additionalProperties": true,
                 "required": [
-                  "idempotency_key"
+                  "idempotency_key",
+                  "project_id",
+                  "session_id",
+                  "customer_id"
                 ],
                 "properties": {
                   "idempotency_key": {
@@ -6227,7 +6233,8 @@
                   "batch_id",
                   "difference_type",
                   "business_ref",
-                  "source"
+                  "source",
+                  "actual_amount_cent"
                 ],
                 "properties": {
                   "idempotency_key": {
@@ -7459,7 +7466,12 @@
                 "type": "object",
                 "additionalProperties": true,
                 "required": [
-                  "idempotency_key"
+                  "idempotency_key",
+                  "label",
+                  "shape_type",
+                  "ref_type",
+                  "status",
+                  "polygon_points"
                 ],
                 "properties": {
                   "idempotency_key": {
@@ -7588,7 +7600,10 @@
                 "required": [
                   "idempotency_key",
                   "provider_code",
-                  "task_type"
+                  "task_type",
+                  "business_type",
+                  "external_business_id",
+                  "status"
                 ],
                 "properties": {
                   "idempotency_key": {
@@ -7598,7 +7613,7 @@
                   },
                   "evidence_attachment_ids": {
                     "type": "array",
-                    "description": "证据附件 ID 列表；进入审计留痕。",
+                    "description": "证据附件 ID 列表；随本单保存。",
                     "items": {
                       "type": "string",
                       "maxLength": 64
@@ -7812,7 +7827,9 @@
                   "idempotency_key",
                   "provider_code",
                   "business_type",
-                  "external_business_id"
+                  "external_business_id",
+                  "sync_type",
+                  "status"
                 ],
                 "properties": {
                   "idempotency_key": {
@@ -8377,7 +8394,10 @@
                 "required": [
                   "idempotency_key",
                   "provider_code",
-                  "task_type"
+                  "task_type",
+                  "business_type",
+                  "external_business_id",
+                  "status"
                 ],
                 "properties": {
                   "idempotency_key": {
@@ -8387,7 +8407,7 @@
                   },
                   "evidence_attachment_ids": {
                     "type": "array",
-                    "description": "证据附件 ID 列表；进入审计留痕。",
+                    "description": "证据附件 ID 列表；随本单保存。",
                     "items": {
                       "type": "string",
                       "maxLength": 64
@@ -11564,15 +11584,15 @@
                   },
                   "warehouse_id": {
                     "type": "string",
-                    "description": "门店要货签收与借调买断收货：入库的本商户在用仓库。"
+                    "description": "门店要货签收与借调买断收货：入库的本商户在用仓库。门店要货签收、借调买断收货必填；借用型收货不读。"
                   },
                   "location_id": {
                     "type": "string",
-                    "description": "门店要货签收与借调买断收货：入库库位。"
+                    "description": "门店要货签收与借调买断收货：入库库位。门店要货签收、借调买断收货必填；借用型收货不读。"
                   },
                   "lines": {
                     "type": "array",
-                    "description": "门店要货签收与借调买断收货：逐行登记。",
+                    "description": "门店要货签收与借调买断收货：逐行登记。门店要货签收、借调买断收货必填；借用型收货不读。",
                     "items": {
                       "type": "object",
                       "required": [
@@ -12720,7 +12740,28 @@
           "content": {
             "application/json": {
               "schema": {
-                "type": "object"
+                "type": "object",
+                "required": [
+                  "idempotency_key",
+                  "segment"
+                ],
+                "properties": {
+                  "idempotency_key": {
+                    "type": "string",
+                    "description": "操作幂等键；重复提交必须返回同一处理结果，避免重复写入。",
+                    "maxLength": 128
+                  },
+                  "segment": {
+                    "type": "string",
+                    "description": "员工扫码段：out_verify 出库核验、kitchen_receive 后厨接收、staff_pickup 服务员取走、deliver_customer 送达客人；须按序扫，机器人配送段 dispatch 返回 400 HANDOVER_SEGMENT_NOT_STAFF。",
+                    "enum": [
+                      "out_verify",
+                      "kitchen_receive",
+                      "staff_pickup",
+                      "deliver_customer"
+                    ]
+                  }
+                }
               }
             }
           }
@@ -12782,7 +12823,30 @@
           "content": {
             "application/json": {
               "schema": {
-                "type": "object"
+                "type": "object",
+                "required": [
+                  "idempotency_key",
+                  "robot_task_ref"
+                ],
+                "properties": {
+                  "idempotency_key": {
+                    "type": "string",
+                    "description": "操作幂等键；重复提交必须返回同一处理结果，避免重复写入。",
+                    "maxLength": 128
+                  },
+                  "robot_task_ref": {
+                    "type": "string",
+                    "description": "机器人任务引用（必填）。"
+                  },
+                  "status": {
+                    "type": "string",
+                    "description": "机器人上报状态（可空，默认 delivered）；delivered_no_receiver 记缺口异常，其他非 delivered 取值记差异异常，都进复核。"
+                  },
+                  "report_diff": {
+                    "type": "boolean",
+                    "description": "上报与人工预期不符（可空）；为 true 时记差异异常进复核。"
+                  }
+                }
               }
             }
           }
@@ -12839,7 +12903,30 @@
           "content": {
             "application/json": {
               "schema": {
-                "type": "object"
+                "type": "object",
+                "required": [
+                  "idempotency_key",
+                  "decision"
+                ],
+                "properties": {
+                  "idempotency_key": {
+                    "type": "string",
+                    "description": "操作幂等键；重复提交必须返回同一处理结果，避免重复写入。",
+                    "maxLength": 128
+                  },
+                  "decision": {
+                    "type": "string",
+                    "description": "复核结论：approved 通过、rejected 驳回。",
+                    "enum": [
+                      "approved",
+                      "rejected"
+                    ]
+                  },
+                  "reason": {
+                    "type": "string",
+                    "description": "复核意见（可空），随复核结论保存。"
+                  }
+                }
               }
             }
           }
@@ -19876,7 +19963,13 @@
                 "additionalProperties": true,
                 "required": [
                   "idempotency_key",
-                  "merchant_id"
+                  "merchant_id",
+                  "ar_ap_item_id",
+                  "bill_period_start",
+                  "bill_period_end",
+                  "due_date",
+                  "total_amount_cent",
+                  "lines"
                 ],
                 "properties": {
                   "idempotency_key": {
@@ -26674,6 +26767,14 @@
                     "type": "string",
                     "description": "操作原因。",
                     "maxLength": 4000
+                  },
+                  "evidence_refs": {
+                    "type": "array",
+                    "description": "证据引用列表；写进该次处置动作记录。",
+                    "items": {
+                      "type": "string",
+                      "maxLength": 64
+                    }
                   }
                 }
               }
@@ -26754,6 +26855,14 @@
                     "type": "string",
                     "description": "操作原因。",
                     "maxLength": 4000
+                  },
+                  "evidence_refs": {
+                    "type": "array",
+                    "description": "证据引用列表；写进该次处置动作记录。",
+                    "items": {
+                      "type": "string",
+                      "maxLength": 64
+                    }
                   }
                 }
               }
@@ -26834,6 +26943,14 @@
                     "type": "string",
                     "description": "操作原因。",
                     "maxLength": 4000
+                  },
+                  "evidence_refs": {
+                    "type": "array",
+                    "description": "证据引用列表；写进该次处置动作记录。",
+                    "items": {
+                      "type": "string",
+                      "maxLength": 64
+                    }
                   }
                 }
               }
@@ -26909,6 +27026,14 @@
                     "type": "string",
                     "description": "处置结论。",
                     "maxLength": 4000
+                  },
+                  "evidence_refs": {
+                    "type": "array",
+                    "description": "证据引用列表；写进该次处置动作记录。",
+                    "items": {
+                      "type": "string",
+                      "maxLength": 64
+                    }
                   }
                 }
               }
@@ -26983,6 +27108,14 @@
                     "type": "string",
                     "description": "操作原因。",
                     "maxLength": 4000
+                  },
+                  "evidence_refs": {
+                    "type": "array",
+                    "description": "证据引用列表；写进该次处置动作记录。",
+                    "items": {
+                      "type": "string",
+                      "maxLength": 64
+                    }
                   }
                 }
               }
@@ -27556,7 +27689,7 @@
                   },
                   "evidence_attachment_ids": {
                     "type": "array",
-                    "description": "证据附件 ID 列表；进入审计留痕。",
+                    "description": "证据附件 ID 列表；随本单保存。",
                     "items": {
                       "type": "string",
                       "maxLength": 64
@@ -27609,6 +27742,11 @@
                     "type": "string",
                     "description": "分派处理人。",
                     "maxLength": 64
+                  },
+                  "provider_payload": {
+                    "type": "object",
+                    "description": "第三方原始报文（可空），随差异保存。",
+                    "additionalProperties": true
                   }
                 }
               }
@@ -27671,7 +27809,8 @@
                 "additionalProperties": true,
                 "required": [
                   "idempotency_key",
-                  "status"
+                  "status",
+                  "resolution_note"
                 ],
                 "properties": {
                   "idempotency_key": {
@@ -27681,16 +27820,11 @@
                   },
                   "evidence_attachment_ids": {
                     "type": "array",
-                    "description": "证据附件 ID 列表；进入审计留痕。",
+                    "description": "证据附件 ID 列表；随本单保存。",
                     "items": {
                       "type": "string",
                       "maxLength": 64
                     }
-                  },
-                  "operator_user_id": {
-                    "type": "string",
-                    "description": "处理人用户 ID。",
-                    "maxLength": 64
                   },
                   "status": {
                     "type": "string",
@@ -27892,7 +28026,8 @@
                 "additionalProperties": true,
                 "required": [
                   "idempotency_key",
-                  "status"
+                  "status",
+                  "resolution_note"
                 ],
                 "properties": {
                   "idempotency_key": {
@@ -27902,16 +28037,11 @@
                   },
                   "evidence_attachment_ids": {
                     "type": "array",
-                    "description": "证据附件 ID 列表；进入审计留痕。",
+                    "description": "证据附件 ID 列表；随本单保存。",
                     "items": {
                       "type": "string",
                       "maxLength": 64
                     }
-                  },
-                  "operator_user_id": {
-                    "type": "string",
-                    "description": "处理人用户 ID。",
-                    "maxLength": 64
                   },
                   "status": {
                     "type": "string",
@@ -27983,7 +28113,8 @@
                 "type": "object",
                 "additionalProperties": true,
                 "required": [
-                  "idempotency_key"
+                  "idempotency_key",
+                  "reason"
                 ],
                 "properties": {
                   "idempotency_key": {
@@ -28080,7 +28211,9 @@
                 "type": "object",
                 "additionalProperties": true,
                 "required": [
-                  "idempotency_key"
+                  "idempotency_key",
+                  "bar_id",
+                  "table_id"
                 ],
                 "properties": {
                   "idempotency_key": {
@@ -28182,7 +28315,11 @@
                 "type": "object",
                 "additionalProperties": true,
                 "required": [
-                  "idempotency_key"
+                  "idempotency_key",
+                  "merged_session_id",
+                  "reason",
+                  "primary_session_version",
+                  "merged_session_version"
                 ],
                 "properties": {
                   "idempotency_key": {
@@ -28192,7 +28329,7 @@
                   },
                   "evidence_attachment_ids": {
                     "type": "array",
-                    "description": "证据附件 ID 列表；进入审计留痕。",
+                    "description": "证据附件 ID 列表；随本单保存。",
                     "items": {
                       "type": "string",
                       "maxLength": 64
@@ -28290,7 +28427,7 @@
                   },
                   "evidence_attachment_ids": {
                     "type": "array",
-                    "description": "证据附件 ID 列表；进入审计留痕。",
+                    "description": "证据附件 ID 列表；随本单保存。",
                     "items": {
                       "type": "string",
                       "maxLength": 64
@@ -28451,7 +28588,9 @@
                 "required": [
                   "idempotency_key",
                   "target_table_id",
-                  "target_service_staff_id"
+                  "target_service_staff_id",
+                  "reason",
+                  "session_version"
                 ],
                 "properties": {
                   "idempotency_key": {
@@ -28461,7 +28600,7 @@
                   },
                   "evidence_attachment_ids": {
                     "type": "array",
-                    "description": "证据附件 ID 列表；进入审计留痕。",
+                    "description": "证据附件 ID 列表；随本单保存。",
                     "items": {
                       "type": "string",
                       "maxLength": 64
@@ -28905,7 +29044,9 @@
                 "type": "object",
                 "additionalProperties": true,
                 "required": [
-                  "idempotency_key"
+                  "idempotency_key",
+                  "adjustment_type",
+                  "reason"
                 ],
                 "properties": {
                   "idempotency_key": {
@@ -28915,7 +29056,7 @@
                   },
                   "evidence_attachment_ids": {
                     "type": "array",
-                    "description": "证据附件 ID 列表；进入审计留痕。",
+                    "description": "证据附件 ID 列表；随本单保存。",
                     "items": {
                       "type": "string",
                       "maxLength": 64
@@ -29004,7 +29145,9 @@
                 "type": "object",
                 "additionalProperties": true,
                 "required": [
-                  "idempotency_key"
+                  "idempotency_key",
+                  "merged_bill_id",
+                  "reason"
                 ],
                 "properties": {
                   "idempotency_key": {
@@ -29014,7 +29157,7 @@
                   },
                   "evidence_attachment_ids": {
                     "type": "array",
-                    "description": "证据附件 ID 列表；进入审计留痕。",
+                    "description": "证据附件 ID 列表；随本单保存。",
                     "items": {
                       "type": "string",
                       "maxLength": 64
@@ -29090,7 +29233,9 @@
                 "type": "object",
                 "additionalProperties": true,
                 "required": [
-                  "idempotency_key"
+                  "idempotency_key",
+                  "split_amount_cent",
+                  "reason"
                 ],
                 "properties": {
                   "idempotency_key": {
@@ -29100,7 +29245,7 @@
                   },
                   "evidence_attachment_ids": {
                     "type": "array",
-                    "description": "证据附件 ID 列表；进入审计留痕。",
+                    "description": "证据附件 ID 列表；随本单保存。",
                     "items": {
                       "type": "string",
                       "maxLength": 64
@@ -29302,7 +29447,8 @@
                 "additionalProperties": true,
                 "required": [
                   "idempotency_key",
-                  "target_status"
+                  "target_status",
+                  "station_code"
                 ],
                 "properties": {
                   "idempotency_key": {
@@ -29312,12 +29458,12 @@
                   },
                   "operator_note": {
                     "type": "string",
-                    "description": "操作留痕备注；进入审计。",
+                    "description": "操作留痕备注；reason 为空时作为出品单事件说明落库，不写入审计事件。",
                     "maxLength": 1000
                   },
                   "evidence_attachment_ids": {
                     "type": "array",
-                    "description": "证据附件 ID 列表；进入审计留痕。",
+                    "description": "证据附件 ID 列表；随本单保存。",
                     "items": {
                       "type": "string",
                       "maxLength": 64
@@ -29398,7 +29544,9 @@
                 "type": "object",
                 "additionalProperties": true,
                 "required": [
-                  "idempotency_key"
+                  "idempotency_key",
+                  "action",
+                  "reason"
                 ],
                 "properties": {
                   "idempotency_key": {
@@ -29476,7 +29624,9 @@
                 "type": "object",
                 "additionalProperties": true,
                 "required": [
-                  "idempotency_key"
+                  "idempotency_key",
+                  "action",
+                  "reason"
                 ],
                 "properties": {
                   "idempotency_key": {
@@ -29569,7 +29719,12 @@
                 "type": "object",
                 "additionalProperties": true,
                 "required": [
-                  "idempotency_key"
+                  "idempotency_key",
+                  "project_id",
+                  "title",
+                  "description",
+                  "severity",
+                  "reported_channel"
                 ],
                 "properties": {
                   "idempotency_key": {
@@ -29579,12 +29734,12 @@
                   },
                   "operator_note": {
                     "type": "string",
-                    "description": "操作留痕备注；进入审计。",
+                    "description": "事故处置记录备注；写进事故处置记录（不填记默认文字），不写入审计事件。",
                     "maxLength": 1000
                   },
                   "evidence_attachment_ids": {
                     "type": "array",
-                    "description": "证据附件 ID 列表；进入审计留痕。",
+                    "description": "证据附件 ID 列表；随本单保存。",
                     "items": {
                       "type": "string",
                       "maxLength": 64
@@ -29629,11 +29784,6 @@
                     "type": "string",
                     "description": "事件描述。",
                     "maxLength": 4000
-                  },
-                  "reported_by_user_id": {
-                    "type": "string",
-                    "description": "上报人。",
-                    "maxLength": 64
                   },
                   "reported_channel": {
                     "type": "string",
@@ -29705,7 +29855,9 @@
                 "type": "object",
                 "additionalProperties": true,
                 "required": [
-                  "idempotency_key"
+                  "idempotency_key",
+                  "operator_note",
+                  "target_status"
                 ],
                 "properties": {
                   "idempotency_key": {
@@ -29715,12 +29867,12 @@
                   },
                   "operator_note": {
                     "type": "string",
-                    "description": "操作留痕备注；进入审计。",
+                    "description": "必填；写进事故处置记录，不写入审计事件。",
                     "maxLength": 1000
                   },
                   "evidence_attachment_ids": {
                     "type": "array",
-                    "description": "证据附件 ID 列表；进入审计留痕。",
+                    "description": "证据附件 ID 列表；随本单保存。",
                     "items": {
                       "type": "string",
                       "maxLength": 64
@@ -29730,11 +29882,6 @@
                     "type": "string",
                     "description": "目标状态。",
                     "maxLength": 255
-                  },
-                  "operator_user_id": {
-                    "type": "string",
-                    "description": "处置人。",
-                    "maxLength": 64
                   }
                 }
               }
@@ -29796,7 +29943,8 @@
                 "type": "object",
                 "additionalProperties": true,
                 "required": [
-                  "idempotency_key"
+                  "idempotency_key",
+                  "resolution"
                 ],
                 "properties": {
                   "idempotency_key": {
@@ -29806,12 +29954,12 @@
                   },
                   "operator_note": {
                     "type": "string",
-                    "description": "操作留痕备注；进入审计。",
+                    "description": "事故处置记录备注；写进事故处置记录（不填记默认文字），不写入审计事件。",
                     "maxLength": 1000
                   },
                   "evidence_attachment_ids": {
                     "type": "array",
-                    "description": "证据附件 ID 列表；进入审计留痕。",
+                    "description": "证据附件 ID 列表；随本单保存。",
                     "items": {
                       "type": "string",
                       "maxLength": 64
@@ -29821,11 +29969,6 @@
                     "type": "string",
                     "description": "处置结论。",
                     "maxLength": 4000
-                  },
-                  "closed_by_user_id": {
-                    "type": "string",
-                    "description": "关闭人。",
-                    "maxLength": 64
                   }
                 }
               }
@@ -29902,7 +30045,13 @@
                 "type": "object",
                 "additionalProperties": true,
                 "required": [
-                  "idempotency_key"
+                  "idempotency_key",
+                  "project_id",
+                  "notice_type",
+                  "title",
+                  "content_version",
+                  "content_text",
+                  "status"
                 ],
                 "properties": {
                   "idempotency_key": {
@@ -29912,7 +30061,7 @@
                   },
                   "evidence_attachment_ids": {
                     "type": "array",
-                    "description": "证据附件 ID 列表；进入审计留痕。",
+                    "description": "证据附件 ID 列表；随本单保存。",
                     "items": {
                       "type": "string",
                       "maxLength": 64
@@ -29962,11 +30111,6 @@
                     "type": "string",
                     "format": "date-time",
                     "description": "生效止。"
-                  },
-                  "operator_user_id": {
-                    "type": "string",
-                    "description": "操作人。",
-                    "maxLength": 64
                   }
                 }
               }
@@ -30028,7 +30172,13 @@
                 "type": "object",
                 "additionalProperties": true,
                 "required": [
-                  "idempotency_key"
+                  "idempotency_key",
+                  "project_id",
+                  "customer_id",
+                  "visitor_name",
+                  "signer_name",
+                  "content_version",
+                  "acknowledgement_method"
                 ],
                 "properties": {
                   "idempotency_key": {
@@ -30038,7 +30188,7 @@
                   },
                   "evidence_attachment_ids": {
                     "type": "array",
-                    "description": "证据附件 ID 列表；进入审计留痕。",
+                    "description": "证据附件 ID 列表；随本单保存。",
                     "items": {
                       "type": "string",
                       "maxLength": 64
@@ -30093,11 +30243,6 @@
                     "type": "string",
                     "format": "date-time",
                     "description": "确认时间。"
-                  },
-                  "operator_user_id": {
-                    "type": "string",
-                    "description": "操作人。",
-                    "maxLength": 64
                   }
                 }
               }
@@ -31192,7 +31337,11 @@
                 "type": "object",
                 "additionalProperties": true,
                 "required": [
-                  "idempotency_key"
+                  "idempotency_key",
+                  "batch_no",
+                  "item_id",
+                  "location_id",
+                  "quantity"
                 ],
                 "properties": {
                   "idempotency_key": {
@@ -31202,7 +31351,7 @@
                   },
                   "evidence_attachment_ids": {
                     "type": "array",
-                    "description": "证据附件 ID 列表；进入审计留痕。",
+                    "description": "证据附件 ID 列表；随本单保存。",
                     "items": {
                       "type": "string",
                       "maxLength": 64
@@ -31330,7 +31479,8 @@
                 "additionalProperties": true,
                 "required": [
                   "idempotency_key",
-                  "qualification_type"
+                  "qualification_type",
+                  "supplier_id"
                 ],
                 "properties": {
                   "idempotency_key": {
@@ -31456,7 +31606,12 @@
                 "type": "object",
                 "additionalProperties": true,
                 "required": [
-                  "idempotency_key"
+                  "idempotency_key",
+                  "supplier_id",
+                  "period_start",
+                  "period_end",
+                  "expected_amount_cent",
+                  "actual_amount_cent"
                 ],
                 "properties": {
                   "idempotency_key": {
@@ -31466,7 +31621,7 @@
                   },
                   "evidence_attachment_ids": {
                     "type": "array",
-                    "description": "证据附件 ID 列表；进入审计留痕。",
+                    "description": "证据附件 ID 列表；随本单保存。",
                     "items": {
                       "type": "string",
                       "maxLength": 64
@@ -31592,7 +31747,8 @@
                 "additionalProperties": true,
                 "required": [
                   "idempotency_key",
-                  "settlement_method"
+                  "settlement_method",
+                  "supplier_id"
                 ],
                 "properties": {
                   "idempotency_key": {
@@ -31688,7 +31844,8 @@
                 "type": "object",
                 "additionalProperties": true,
                 "required": [
-                  "idempotency_key"
+                  "idempotency_key",
+                  "reason"
                 ],
                 "properties": {
                   "idempotency_key": {
@@ -32257,7 +32414,7 @@
                   },
                   "evidence_attachment_ids": {
                     "type": "array",
-                    "description": "证据附件 ID 列表；进入审计留痕。",
+                    "description": "证据附件 ID 列表；随本单保存。",
                     "items": {
                       "type": "string",
                       "maxLength": 64
@@ -32397,7 +32554,7 @@
                   },
                   "evidence_attachment_ids": {
                     "type": "array",
-                    "description": "证据附件 ID 列表；进入审计留痕。",
+                    "description": "证据附件 ID 列表；随本单保存。",
                     "items": {
                       "type": "string",
                       "maxLength": 64
@@ -33064,7 +33221,8 @@
                 "type": "object",
                 "additionalProperties": true,
                 "required": [
-                  "idempotency_key"
+                  "idempotency_key",
+                  "reason"
                 ],
                 "properties": {
                   "idempotency_key": {
@@ -33143,7 +33301,8 @@
                 "type": "object",
                 "additionalProperties": true,
                 "required": [
-                  "idempotency_key"
+                  "idempotency_key",
+                  "reason"
                 ],
                 "properties": {
                   "idempotency_key": {
@@ -33222,7 +33381,8 @@
                 "type": "object",
                 "additionalProperties": true,
                 "required": [
-                  "idempotency_key"
+                  "idempotency_key",
+                  "reason"
                 ],
                 "properties": {
                   "idempotency_key": {
@@ -33300,7 +33460,8 @@
                 "type": "object",
                 "additionalProperties": true,
                 "required": [
-                  "idempotency_key"
+                  "idempotency_key",
+                  "reason"
                 ],
                 "properties": {
                   "idempotency_key": {
@@ -33379,7 +33540,8 @@
                 "type": "object",
                 "additionalProperties": true,
                 "required": [
-                  "idempotency_key"
+                  "idempotency_key",
+                  "reason"
                 ],
                 "properties": {
                   "idempotency_key": {
@@ -33848,6 +34010,7 @@
         ],
         "operationId": "confirmMerchantBill",
         "summary": "确认商户账单",
+        "description": "操作人取登录人。",
         "x-auth-context": "staff-token",
         "x-permission": "merchant.billing.confirm",
         "x-terminal-allowed": [
@@ -33883,11 +34046,6 @@
                     "type": "string",
                     "description": "操作幂等键；重复提交必须返回同一处理结果，避免重复写入。",
                     "maxLength": 128
-                  },
-                  "operator_user_id": {
-                    "type": "string",
-                    "description": "操作人。",
-                    "maxLength": 64
                   }
                 }
               }
@@ -33920,6 +34078,7 @@
         ],
         "operationId": "submitMerchantBillDispute",
         "summary": "提交账单争议",
+        "description": "操作人取登录人。",
         "x-auth-context": "staff-token",
         "x-permission": "merchant.billing.dispute.submit",
         "x-terminal-allowed": [
@@ -33948,7 +34107,9 @@
                 "type": "object",
                 "additionalProperties": true,
                 "required": [
-                  "idempotency_key"
+                  "idempotency_key",
+                  "reason_code",
+                  "description"
                 ],
                 "properties": {
                   "idempotency_key": {
@@ -33973,11 +34134,6 @@
                     "type": "string",
                     "description": "争议说明。",
                     "maxLength": 4000
-                  },
-                  "operator_user_id": {
-                    "type": "string",
-                    "description": "操作人。",
-                    "maxLength": 64
                   }
                 }
               }
@@ -34010,6 +34166,7 @@
         ],
         "operationId": "recordMerchantBillDunning",
         "summary": "记录账单催收",
+        "description": "操作人取登录人。",
         "x-auth-context": "staff-token",
         "x-permission": "merchant.billing.dunning.record",
         "x-terminal-allowed": [
@@ -34038,7 +34195,10 @@
                 "type": "object",
                 "additionalProperties": true,
                 "required": [
-                  "idempotency_key"
+                  "idempotency_key",
+                  "dunning_channel",
+                  "message_template",
+                  "status"
                 ],
                 "properties": {
                   "idempotency_key": {
@@ -34049,6 +34209,12 @@
                   "dunning_channel": {
                     "type": "string",
                     "description": "催收渠道。",
+                    "enum": [
+                      "wecom",
+                      "sms",
+                      "email",
+                      "manual"
+                    ],
                     "maxLength": 255
                   },
                   "message_template": {
@@ -34059,17 +34225,17 @@
                   "status": {
                     "type": "string",
                     "description": "状态。",
+                    "enum": [
+                      "sent",
+                      "failed",
+                      "scheduled"
+                    ],
                     "maxLength": 255
                   },
                   "sent_at": {
                     "type": "string",
                     "format": "date-time",
-                    "description": "发送时间。"
-                  },
-                  "operator_user_id": {
-                    "type": "string",
-                    "description": "操作人。",
-                    "maxLength": 64
+                    "description": "发送时间；不填取当前时间。"
                   }
                 }
               }
@@ -34151,7 +34317,7 @@
         ],
         "operationId": "saveMerchantFeeNotificationRecipient",
         "summary": "保存商户费用通知接收人",
-        "description": "第十八批 AE 段第 201 条 201-R7（契约与代码一致，照决策台账 171-R1 先例补契约）：保存一位费用通知接收人。同一商户同一 fee_event（含空＝通用接收人）已有记录则覆盖姓名与电话并恢复为生效，没有则新建，返回保存后的记录（电话脱敏同列表）。平台口径（merchant.billing.manage）按请求的 merchant_id 保存，merchant_id 与 operator_user_id 必填（operator_user_id 记为创建人，覆盖已有记录时不改），缺了 400 VALIDATION_FAILED；商户自助口径（不持平台码而持 merchant.portal.fee_recipient.manage）的 merchant_id 与 operator_user_id 一律取登录主体、请求所填值被忽略，登录人不属任何商户 403 MERCHANT_SCOPE_REQUIRED；两码都没有 403 PERMISSION_DENIED。recipient_name、recipient_phone 必填，缺了 400 VALIDATION_FAILED；fee_event 只收 rent、utilities、property、renewal（不分大小写，不填或空白＝通用接收人），其他值 400 VALIDATION_FAILED。无审计事件写点。",
+        "description": "第十八批 AE 段第 201 条 201-R7（契约与代码一致，照决策台账 171-R1 先例补契约）：保存一位费用通知接收人。同一商户同一 fee_event（含空＝通用接收人）已有记录则覆盖姓名与电话并恢复为生效，没有则新建，返回保存后的记录（电话脱敏同列表）。平台口径（merchant.billing.manage）按请求的 merchant_id 保存，merchant_id 必填，缺了 400 VALIDATION_FAILED；商户自助口径（不持平台码而持 merchant.portal.fee_recipient.manage）的 merchant_id 一律取登录主体、请求所填值被忽略，登录人不属任何商户 403 MERCHANT_SCOPE_REQUIRED；两种口径的创建人都取登录人（覆盖已有记录时不改）；两码都没有 403 PERMISSION_DENIED。recipient_name、recipient_phone 必填，缺了 400 VALIDATION_FAILED；fee_event 只收 rent、utilities、property、renewal（不分大小写，不填或空白＝通用接收人），其他值 400 VALIDATION_FAILED。无审计事件写点。",
         "x-permission": "merchant.billing.manage",
         "x-data-scope": "project-merchant",
         "x-terminal-allowed": [
@@ -34202,11 +34368,6 @@
                     "type": "string",
                     "maxLength": 32,
                     "description": "接收人手机号。"
-                  },
-                  "operator_user_id": {
-                    "type": "string",
-                    "maxLength": 80,
-                    "description": "操作人；平台口径必填并记为创建人，商户自助口径忽略（取登录人）。"
                   }
                 }
               }
@@ -37094,6 +37255,10 @@
             "application/json": {
               "schema": {
                 "type": "object",
+                "required": [
+                  "window_key",
+                  "days"
+                ],
                 "properties": {
                   "window_key": {
                     "type": "string"
@@ -37181,6 +37346,13 @@
             "application/json": {
               "schema": {
                 "type": "object",
+                "required": [
+                  "id",
+                  "rule_scope",
+                  "revenue_source",
+                  "attribution_mode",
+                  "refund_attribution"
+                ],
                 "properties": {
                   "id": {
                     "type": "string"
@@ -45645,10 +45817,54 @@
                 "properties": {
                   "idempotency_key": {
                     "type": "string"
+                  },
+                  "project_id": {
+                    "type": "string",
+                    "description": "所属项目 ID。",
+                    "maxLength": 64
+                  },
+                  "space_id": {
+                    "type": "string",
+                    "description": "施工空间 ID（可空）。",
+                    "maxLength": 64
+                  },
+                  "work_scope": {
+                    "type": "string",
+                    "description": "施工范围。"
+                  },
+                  "planned_start_date": {
+                    "type": "string",
+                    "format": "date",
+                    "description": "计划开始日期。"
+                  },
+                  "planned_end_date": {
+                    "type": "string",
+                    "format": "date",
+                    "description": "计划结束日期；早于计划开始日期返回 400 VALIDATION_FAILED。"
+                  },
+                  "crew_count": {
+                    "type": "integer",
+                    "description": "进场人数。",
+                    "minimum": 1
+                  },
+                  "contact_name": {
+                    "type": "string",
+                    "description": "现场联系人。"
+                  },
+                  "contact_phone": {
+                    "type": "string",
+                    "description": "联系电话。"
                   }
                 },
                 "required": [
-                  "idempotency_key"
+                  "idempotency_key",
+                  "project_id",
+                  "work_scope",
+                  "planned_start_date",
+                  "planned_end_date",
+                  "crew_count",
+                  "contact_name",
+                  "contact_phone"
                 ]
               }
             }
@@ -45824,12 +46040,21 @@
                   "idempotency_key": {
                     "type": "string"
                   },
+                  "attachment_ids": {
+                    "type": "array",
+                    "description": "完工材料附件编号；须为本报备单已上传的附件。",
+                    "items": {
+                      "type": "string"
+                    },
+                    "minItems": 1
+                  },
                   "note": {
                     "type": "string"
                   }
                 },
                 "required": [
-                  "idempotency_key"
+                  "idempotency_key",
+                  "attachment_ids"
                 ]
               }
             }
@@ -45891,10 +46116,23 @@
                 "properties": {
                   "idempotency_key": {
                     "type": "string"
+                  },
+                  "decision": {
+                    "type": "string",
+                    "description": "审核结论：approve 通过、reject 驳回。",
+                    "enum": [
+                      "approve",
+                      "reject"
+                    ]
+                  },
+                  "review_comment": {
+                    "type": "string",
+                    "description": "审核意见（可空），写进报备单。"
                   }
                 },
                 "required": [
-                  "idempotency_key"
+                  "idempotency_key",
+                  "decision"
                 ]
               }
             }
@@ -46047,12 +46285,54 @@
                   "idempotency_key": {
                     "type": "string"
                   },
+                  "photos": {
+                    "type": "array",
+                    "description": "照片附件 id 或 URL。",
+                    "items": {
+                      "type": "string",
+                      "description": "照片附件 id 或 URL。",
+                      "maxLength": 2048
+                    },
+                    "maxItems": 50
+                  },
+                  "qr_code": {
+                    "type": "string",
+                    "description": "点位二维码。",
+                    "maxLength": 255
+                  },
+                  "gps_lat": {
+                    "type": "number",
+                    "description": "纬度。",
+                    "minimum": -90,
+                    "maximum": 90
+                  },
+                  "gps_lng": {
+                    "type": "number",
+                    "description": "经度。",
+                    "minimum": -180,
+                    "maximum": 180
+                  },
+                  "checklist_result": {
+                    "type": "array",
+                    "description": "检查项结果。",
+                    "items": {
+                      "type": "object",
+                      "additionalProperties": true
+                    },
+                    "maxItems": 200
+                  },
                   "note": {
                     "type": "string"
+                  },
+                  "abnormal_note": {
+                    "type": "string",
+                    "description": "异常说明（必填）。",
+                    "maxLength": 1000
                   }
                 },
                 "required": [
-                  "idempotency_key"
+                  "idempotency_key",
+                  "abnormal_note"
                 ]
               }
             }
@@ -60365,7 +60645,7 @@
           "customer"
         ],
         "operationId": "revokeVoucher",
-        "summary": "作废券（仅未核销可作废；理由必填进审计留痕）",
+        "summary": "作废券（仅未核销可作废；理由必填，存进券实例）",
         "x-auth-context": "staff-token",
         "x-permission": "customer.voucher.manage",
         "x-data-scope": "merchant",
@@ -62231,12 +62511,23 @@
                   "merchant_id": {
                     "type": "string"
                   },
+                  "ticket_type_id": {
+                    "type": "string",
+                    "description": "票种 ID（可空，空表示通用）；须为存在的票种，否则 400 VALIDATION_FAILED。",
+                    "maxLength": 64
+                  },
                   "fee_bps": {
                     "type": "integer"
                   },
                   "fixed_amount_cent": {
                     "type": "integer",
                     "format": "int64"
+                  },
+                  "monthly_cap_amount_cent": {
+                    "type": "integer",
+                    "format": "int64",
+                    "description": "月度封顶金额（分；可空，空表示不封顶）。",
+                    "minimum": 0
                   }
                 },
                 "required": [
@@ -62300,6 +62591,12 @@
                   },
                   "split_platform_bps": {
                     "type": "integer"
+                  },
+                  "rounding_tolerance_cent": {
+                    "type": "integer",
+                    "format": "int64",
+                    "description": "凑整允许误差（分；可空，空则沿用 500 分）。",
+                    "minimum": 0
                   }
                 },
                 "required": [
@@ -86157,8 +86454,7 @@
               "ticket_type_id": "ticket_weekend_adult",
               "quantity": 2,
               "visit_date": "2026-06-20",
-              "contact_phone": "13800138000",
-              "buyer_note": "周末双人票"
+              "contact_phone": "13800138000"
             }
           }
         }
@@ -89367,6 +89663,20 @@
             "type": "string",
             "description": "聚合支付通道，保留直连接口抽象",
             "maxLength": 64
+          },
+          "device_id": {
+            "type": "string",
+            "description": "现场设备发起时的设备 ID（可空）；填了须为受管设备。只有通用支付意图入口（POST /api/v1/finance/payment-intents）读；酒吧账单、门票订单两个发起支付入口不读。",
+            "maxLength": 64
+          },
+          "payee_merchant_id": {
+            "type": "string",
+            "description": "收款商户 ID（可空，空为平台收款）；随支付意图发给支付网关，按它路由收款主体。只有通用支付意图入口（POST /api/v1/finance/payment-intents）读；酒吧账单、门票订单两个发起支付入口不读。",
+            "maxLength": 64
+          },
+          "fund_mode": {
+            "type": "string",
+            "description": "资金模式（可空，如 merchant_prepaid 商户预收直达商户、platform_collect 平台代收）；随支付意图发给支付网关。只有通用支付意图入口（POST /api/v1/finance/payment-intents）读；酒吧账单、门票订单两个发起支付入口不读。"
           }
         },
         "description": "paymentintent请求体。字段必须与 OpenAPI、后端 DTO、前端请求、Android 请求和供应商 mock 保持一致。"
@@ -89499,6 +89809,20 @@
             "type": "string",
             "description": "供应商密钥引用；只能存储密钥管理系统或人工台账中的引用，不得明文保存密钥。",
             "maxLength": 512
+          },
+          "operator_note": {
+            "type": "string",
+            "description": "操作备注；存进适配器档案，不写入审计事件。",
+            "maxLength": 1000
+          },
+          "evidence_attachment_ids": {
+            "type": "array",
+            "description": "证据附件 ID 列表；存进适配器档案。",
+            "items": {
+              "type": "string",
+              "maxLength": 64
+            },
+            "maxItems": 50
           }
         },
         "description": "provideradapter请求体。字段必须与 OpenAPI、后端 DTO、前端请求、Android 请求和供应商 mock 保持一致。"
@@ -90148,7 +90472,7 @@
           },
           "description": {
             "type": "string",
-            "description": "说明文本；用于人工复核、异常处理或审计，不得写入敏感明文。",
+            "description": "角色说明；存进角色档案，不得写入敏感明文。",
             "maxLength": 1000
           },
           "permission_codes": {
@@ -90255,7 +90579,7 @@
           },
           "operator_note": {
             "type": "string",
-            "description": "操作备注；用于解释人工处理、异常处理或审批判断，进入审计留痕。",
+            "description": "操作备注；新建、修改、复制时存为模板说明与备注（修改在用岗位模板而转出高危权限待审批时，也作为该申请的事由）；不写入审计事件。",
             "maxLength": 1000
           },
           "template_name": {
@@ -90604,7 +90928,7 @@
           },
           "operator_note": {
             "type": "string",
-            "description": "操作备注；用于解释人工处理、异常处理或审批判断，进入审计留痕。",
+            "description": "操作备注；存为开关行的说明（不填保留原说明），不写入审计事件。",
             "maxLength": 1000
           },
           "enabled": {
@@ -91441,11 +91765,6 @@
             "maxLength": 20,
             "pattern": "^\\+?[0-9]{6,20}$"
           },
-          "buyer_note": {
-            "type": "string",
-            "description": "说明文本；用于人工复核、异常处理或审计，不得写入敏感明文。",
-            "maxLength": 1000
-          },
           "bar_id": {
             "type": "string",
             "description": "酒吧唯一标识；单店票必填、通票必空；服务端据票种校验并快照。",
@@ -91509,7 +91828,8 @@
           "bar_id",
           "table_type",
           "reservation_time",
-          "latest_arrival_at"
+          "latest_arrival_at",
+          "table_id"
         ],
         "properties": {
           "idempotency_key": {
@@ -91751,7 +92071,7 @@
           },
           "operator_note": {
             "type": "string",
-            "description": "操作备注；用于解释人工处理、异常处理或审批判断，进入审计留痕。",
+            "description": "送达备注；写进出品单的送达事件（不填记默认文字），不写入审计事件。",
             "maxLength": 1000
           },
           "evidence_attachment_ids": {
@@ -91996,7 +92316,8 @@
         "additionalProperties": false,
         "required": [
           "source_type",
-          "items"
+          "items",
+          "warehouse_id"
         ],
         "properties": {
           "idempotency_key": {
@@ -92060,7 +92381,7 @@
           },
           "operator_note": {
             "type": "string",
-            "description": "操作备注；用于解释人工处理、异常处理或审批判断，进入审计留痕。",
+            "description": "操作备注；源库位是存酒库房的出库（含按类型出库）必填，作为存酒库房出库待审调整单的原因；按类型登记报损（damage、loss、waste）必填，作为报损调整单原因；调拨及其他出入库不读；都不写入审计事件。",
             "maxLength": 1000
           },
           "evidence_attachment_ids": {
@@ -92503,7 +92824,7 @@
           },
           "operator_note": {
             "type": "string",
-            "description": "操作备注；用于解释人工处理、异常处理或审批判断，进入审计留痕。",
+            "description": "操作备注；同品同量补存（replacement）时存为补存新瓶的人工备注，赔付不读；不写入审计事件。",
             "maxLength": 1000
           },
           "remedy_type": {
@@ -92999,7 +93320,7 @@
           },
           "operator_note": {
             "type": "string",
-            "description": "操作备注；用于解释人工处理、异常处理或审批判断，进入审计留痕。",
+            "description": "巡检备注；存进巡检记录，不写入审计事件。",
             "maxLength": 1000
           },
           "evidence_attachment_ids": {
@@ -93056,7 +93377,7 @@
           },
           "abnormal_note": {
             "type": "string",
-            "description": "异常说明（可空）；overall_result 非 pass 时填报，进入审计留痕。",
+            "description": "异常说明（可空）；overall_result 非 pass 时填报，存进巡检记录，不写入审计事件。",
             "maxLength": 1000
           }
         }
@@ -93111,7 +93432,8 @@
         "required": [
           "payment_id",
           "amount_cent",
-          "evidence_attachment_ids"
+          "evidence_attachment_ids",
+          "payment_method"
         ],
         "properties": {
           "idempotency_key": {
@@ -93592,7 +93914,7 @@
           },
           "operator_note": {
             "type": "string",
-            "description": "操作备注；用于解释人工处理、异常处理或审批判断，进入审计留痕。",
+            "description": "操作备注；存进适配器档案，不写入审计事件。",
             "maxLength": 1000
           },
           "evidence_attachment_ids": {
@@ -93708,7 +94030,8 @@
         "required": [
           "username",
           "account_type",
-          "organization_id"
+          "organization_id",
+          "password"
         ],
         "properties": {
           "idempotency_key": {
@@ -94098,7 +94421,8 @@
         "additionalProperties": false,
         "required": [
           "name",
-          "entitlement_type"
+          "entitlement_type",
+          "merchant_id"
         ],
         "properties": {
           "idempotency_key": {
@@ -94844,7 +95168,8 @@
           "image_width",
           "image_height",
           "version_no",
-          "status"
+          "status",
+          "project_id"
         ],
         "properties": {
           "idempotency_key": {
@@ -94924,7 +95249,7 @@
           "operator_note": {
             "type": "string",
             "maxLength": 1000,
-            "description": "操作备注，进入审计留痕。"
+            "description": "操作备注；存进导入任务，不写入审计事件。"
           },
           "source_format": {
             "type": "string",
@@ -95118,7 +95443,8 @@
         "required": [
           "idempotency_key",
           "owner_department",
-          "owner_user_id"
+          "owner_user_id",
+          "operator_note"
         ],
         "properties": {
           "idempotency_key": {
@@ -95158,7 +95484,8 @@
         "additionalProperties": false,
         "required": [
           "idempotency_key",
-          "target_status"
+          "target_status",
+          "operator_note"
         ],
         "properties": {
           "idempotency_key": {
@@ -95677,6 +96004,40 @@
           "violation_summary": {
             "type": "string",
             "description": "supervisorreviewevaluate.violation_summary 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。"
+          },
+          "final_approver_id": {
+            "type": "string",
+            "description": "主线最终审批人（可空）；留空按档位下限沿直接上级链生成。",
+            "maxLength": 64
+          },
+          "parallel_lines": {
+            "type": "array",
+            "description": "平行部门线及各线最终审批人（可空）。",
+            "items": {
+              "type": "object",
+              "properties": {
+                "line_code": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "平行审批线代码"
+                },
+                "final_approver_id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "该线最终审批人"
+                }
+              },
+              "required": [
+                "line_code",
+                "final_approver_id"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "beneficiary_id": {
+            "type": "string",
+            "description": "直接受益人（被授权人）；进入审批的授权类事项必填，缺了 400 BENEFICIARY_REQUIRED，其余事项可空。",
+            "maxLength": 64
           }
         },
         "description": "supervisorreviewevaluate请求体。字段必须与 OpenAPI、后端 DTO、前端请求、Android 请求和供应商 mock 保持一致。"
@@ -95818,7 +96179,7 @@
           },
           "reason": {
             "type": "string",
-            "description": "补录原因；必填，进入审计留痕。",
+            "description": "补录原因；必填，存进补录申请单，不写入审计事件。",
             "maxLength": 255
           },
           "kind": {
@@ -96875,7 +97236,7 @@
           },
           "reason": {
             "type": "string",
-            "description": "退菜退酒原因码/说明；进入审计与责任归属留痕。",
+            "description": "退菜退酒说明；必填，存进退菜退酒单，不写入审计事件。",
             "maxLength": 500
           },
           "return_to_stock": {
@@ -96918,7 +97279,7 @@
           },
           "reason": {
             "type": "string",
-            "description": "反结原因；进入主管复核与审计留痕。",
+            "description": "反结原因；必填，存进账单的反结原因与反结操作记录，不写入审计事件。",
             "maxLength": 500
           }
         }
@@ -97169,7 +97530,7 @@
           },
           "note": {
             "type": "string",
-            "description": "开班备注；进入审计留痕。",
+            "description": "开班备注；存进班次，不写入审计事件。",
             "maxLength": 1000
           }
         }
@@ -97200,7 +97561,7 @@
           },
           "note": {
             "type": "string",
-            "description": "班结备注；进入审计留痕。",
+            "description": "班结备注；存进班次（不填保留原备注），不写入审计事件。",
             "maxLength": 1000
           }
         }
@@ -97717,7 +98078,7 @@
           },
           "reason": {
             "type": "string",
-            "description": "登记原因（如按哪一期申报表登记），进入复核单与审计留痕。",
+            "description": "登记原因（如按哪一期申报表登记）；必填，存进税费申报登记，不写入审计事件。",
             "maxLength": 1000
           },
           "evidence_attachment_ids": {
@@ -97755,7 +98116,7 @@
       },
       "MerchantExpenseEntryRequest": {
         "type": "object",
-        "description": "请求载荷 `MerchantExpenseEntryRequest`（商户费用手工录入）：人工/摊销/其他等无系统单据的费用进台账，note=录入理由必填（审计留痕）。金额单位分、不可为 0；更正走红字冲销，不改历史行。",
+        "description": "请求载荷 `MerchantExpenseEntryRequest`（商户费用手工录入）：人工/摊销/其他等无系统单据的费用进台账，note=录入理由必填（存进费用台账行）。金额单位分、不可为 0；更正走红字冲销，不改历史行。",
         "additionalProperties": false,
         "required": [
           "idempotency_key",
@@ -97800,7 +98161,7 @@
           },
           "note": {
             "type": "string",
-            "description": "录入理由（必填，进入审计留痕）。",
+            "description": "录入理由（必填），存进费用台账行，不写入审计事件。",
             "maxLength": 1000
           }
         }
@@ -97821,7 +98182,7 @@
           },
           "note": {
             "type": "string",
-            "description": "冲销理由（必填，进入审计留痕）。",
+            "description": "冲销理由（必填），存进红字冲销行，不写入审计事件。",
             "maxLength": 1000
           }
         }
@@ -97968,20 +98329,6 @@
             "description": "操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。",
             "maxLength": 128
           },
-          "operator_note": {
-            "type": "string",
-            "description": "操作备注；用于解释人工处理、异常处理或审批判断，进入审计留痕。",
-            "maxLength": 1000
-          },
-          "evidence_attachment_ids": {
-            "type": "array",
-            "description": "证据附件 ID 列表；用于绑定图片、合同、审批、支付凭证或异常说明。",
-            "items": {
-              "type": "string",
-              "maxLength": 64
-            },
-            "maxItems": 50
-          },
           "items": {
             "type": "array",
             "description": "BarOrderRequest 明细列表；每一项必须按对应明细 schema 校验类型、数量、金额、状态和数据范围。",
@@ -97989,26 +98336,6 @@
               "type": "object"
             },
             "maxItems": 200
-          },
-          "service_user_ids": {
-            "type": "array",
-            "description": "`service_user_ids` ID 列表；必须引用已存在的业务对象并进入审计校验。",
-            "items": {
-              "type": "string",
-              "maxLength": 64
-            },
-            "maxItems": 200
-          },
-          "payment_mode": {
-            "type": "string",
-            "description": "下单时选择的支付方式（可空）：scan_qr 扫码、pay_code 付款码、offline 线下、on_account 挂账。下单不按它处理，实际收款渠道在结账时按 payment_channel 确定。",
-            "enum": [
-              "scan_qr",
-              "pay_code",
-              "offline",
-              "on_account"
-            ],
-            "maxLength": 64
           }
         }
       },
@@ -101091,7 +101418,7 @@
           },
           "note": {
             "type": "string",
-            "description": "说明/理由（驳回必填，进入审计留痕）。",
+            "description": "说明/理由；驳回时必填，存为分红单的驳回理由；释放留存时存进释放记录；提交、审批通过、标记发放不读；不写入审计事件。",
             "maxLength": 1000
           }
         }
@@ -101330,7 +101657,7 @@
       },
       "VoucherRevokeRequest": {
         "type": "object",
-        "description": "请求载荷 `VoucherRevokeRequest`（作废券）：仅未核销（issued）券可作废，理由必填进审计留痕。",
+        "description": "请求载荷 `VoucherRevokeRequest`（作废券）：仅未核销（issued）券可作废，理由必填，存进券实例。",
         "additionalProperties": false,
         "required": [
           "idempotency_key",
@@ -101560,7 +101887,7 @@
           },
           "reason": {
             "type": "string",
-            "description": "改价理由（必填）；进入审计留痕，事后能查是谁为什么把价改成这个数。",
+            "description": "改价理由；必填（只做必填校验，不落库、不写入审计事件）。",
             "maxLength": 1000
           },
           "combo_discount_rate": {
@@ -101664,7 +101991,7 @@
           },
           "operator_note": {
             "type": "string",
-            "description": "操作备注；用于解释人工处理、异常处理或审批判断，进入审计留痕。",
+            "description": "操作备注；重试时存进退款操作记录，查询不读；不写入审计事件。",
             "maxLength": 1000
           },
           "evidence_attachment_ids": {
@@ -101701,7 +102028,7 @@
           },
           "operator_note": {
             "type": "string",
-            "description": "操作备注；用于解释人工处理、异常处理或审批判断，进入审计留痕。",
+            "description": "执行说明；必填，存进退款操作记录，不写入审计事件。",
             "maxLength": 1000
           },
           "evidence_attachment_ids": {
@@ -101747,7 +102074,7 @@
           },
           "operator_note": {
             "type": "string",
-            "description": "操作备注；用于解释人工处理、异常处理或审批判断，进入审计留痕。",
+            "description": "核实说明；必填，存进退款操作记录，不写入审计事件。",
             "maxLength": 1000
           },
           "evidence_attachment_ids": {

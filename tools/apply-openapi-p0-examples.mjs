@@ -26,11 +26,9 @@ const requestBodyExamples = {
   },
   CustomerTicketOrderRequest: {
     ticket_type_id: "ticket_weekend_adult",
-    price_rule_id: "price_weekend_202606",
     quantity: 2,
     visit_date: "2026-06-20",
-    contact_phone: "13800138000",
-    buyer_note: "周末双人票"
+    contact_phone: "13800138000"
   },
   Verification: {
     idempotency_key: "verify_20260612_000001",
@@ -62,8 +60,7 @@ const requestBodyExamples = {
         quantity: 1,
         unit_price_cent: 128800
       }
-    ],
-    salesperson_user_id: "staff_sales_001"
+    ]
   },
   PaymentIntent: {
     idempotency_key: "pay_intent_20260612_000001",

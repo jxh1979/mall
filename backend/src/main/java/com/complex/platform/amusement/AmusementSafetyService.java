@@ -202,7 +202,7 @@ public class AmusementSafetyService {
                 normalizeAllowed(request.status(), "status", STATUSES),
                 request.effectiveFrom(),
                 request.effectiveTo(),
-                requireText(request.operatorUserId(), "operator_user_id"),
+                authorizationService.currentActor().id(), // 第十八批 AG 段 255-R3（PGM:899）：取登录人，请求体所填不采信
                 evidenceIds(request.evidenceAttachmentIds()),
                 now,
                 now,
@@ -239,7 +239,7 @@ public class AmusementSafetyService {
                         requireText(request.contentVersion(), "content_version"),
                         trimToNull(request.contentHash()),
                         request.acknowledgedAt() == null ? now : request.acknowledgedAt(),
-                        requireText(request.operatorUserId(), "operator_user_id"),
+                        authorizationService.currentActor().id(), // 第十八批 AG 段 255-R3（PGM:899）：取登录人，请求体所填不采信
                         evidenceIds(request.evidenceAttachmentIds()),
                         now
                 )
@@ -270,7 +270,7 @@ public class AmusementSafetyService {
                 "created",
                 requireText(request.title(), "title"),
                 requireText(request.description(), "description"),
-                requireText(request.reportedByUserId(), "reported_by_user_id"),
+                authorizationService.currentActor().id(), // 第十八批 AG 段 255-R3（PGM:899）：取登录人，请求体所填不采信
                 requireText(request.reportedChannel(), "reported_channel"),
                 request.occurredAt() == null ? now : request.occurredAt(),
                 null,
@@ -377,7 +377,7 @@ public class AmusementSafetyService {
                 existing.status().equals(targetStatus) ? "commented" : "status_changed",
                 existing.status(),
                 saved.status(),
-                requireText(request.operatorUserId(), "operator_user_id"),
+                authorizationService.currentActor().id(), // 第十八批 AG 段 255-R3（PGM:899）：取登录人，请求体所填不采信
                 requireText(request.operatorNote(), "operator_note"),
                 evidenceIds(request.evidenceAttachmentIds())
         ));
@@ -406,7 +406,7 @@ public class AmusementSafetyService {
                 "closed",
                 existing.status(),
                 "closed",
-                requireText(request.closedByUserId(), "closed_by_user_id"),
+                authorizationService.currentActor().id(), // 第十八批 AG 段 255-R3（PGM:899）：取登录人，请求体所填不采信
                 defaultNote(request.operatorNote(), "closed"),
                 evidenceIds(request.evidenceAttachmentIds())
         ));
@@ -449,7 +449,6 @@ public class AmusementSafetyService {
         requireText(request.contentVersion(), "content_version");
         requireText(request.contentText(), "content_text");
         normalizeAllowed(request.status(), "status", STATUSES);
-        requireText(request.operatorUserId(), "operator_user_id");
     }
 
     private void validateAcknowledgementRequest(AmusementWaiverAcknowledgementRequest request) {
@@ -463,7 +462,6 @@ public class AmusementSafetyService {
         requireText(request.signerName(), "signer_name");
         requireText(request.acknowledgementMethod(), "acknowledgement_method");
         requireText(request.contentVersion(), "content_version");
-        requireText(request.operatorUserId(), "operator_user_id");
     }
 
     private void validateIncidentCreateRequest(AmusementIncidentCreateRequest request) {
@@ -475,7 +473,6 @@ public class AmusementSafetyService {
         normalizeAllowed(request.severity(), "severity", SEVERITIES);
         requireText(request.title(), "title");
         requireText(request.description(), "description");
-        requireText(request.reportedByUserId(), "reported_by_user_id");
         requireText(request.reportedChannel(), "reported_channel");
     }
 
@@ -486,7 +483,6 @@ public class AmusementSafetyService {
         requireText(request.idempotencyKey(), "idempotency_key");
         requireText(request.operatorNote(), "operator_note");
         normalizeAllowed(request.targetStatus(), "target_status", ACTION_TARGET_STATUSES);
-        requireText(request.operatorUserId(), "operator_user_id");
     }
 
     private void validateIncidentCloseRequest(AmusementIncidentCloseRequest request) {
@@ -495,7 +491,6 @@ public class AmusementSafetyService {
         }
         requireText(request.idempotencyKey(), "idempotency_key");
         requireText(request.resolution(), "resolution");
-        requireText(request.closedByUserId(), "closed_by_user_id");
     }
 
     private AmusementIncidentActionRecord action(

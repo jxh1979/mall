@@ -1,6 +1,6 @@
 package com.complex.platform.integration;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static com.complex.platform.integration.IntegrationValidation.*;
 
@@ -451,8 +451,8 @@ public class IntegrationService {
         return orderSyncService.createCompensationTask(request);
     }
 
-    public IntegrationTaskRecord resolveCompensationTask(String id, IntegrationTaskResolveRequest request) {
-        return orderSyncService.resolveCompensationTask(id, request);
+    public IntegrationTaskRecord resolveCompensationTask(String id, IntegrationTaskResolveRequest request, String actorUserId) {
+        return orderSyncService.resolveCompensationTask(id, request, actorUserId);
     }
 
     public PageResponse<ReconciliationBatchRecord> listReconciliationBatches() {

@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -84,6 +84,33 @@ class BarReservationHoldJdbcIntegrationTests {
         customers.saveCustomer(new CustomerRecord(otherId, otherPhone, "136****" + otherPhone.substring(7), "active", null, null, now, now));
         customers.saveSession(new CustomerSessionRecord("sess_hold_other_" + f.suffix, otherId, otherToken, "miniapp", now,
                 now.plusSeconds(3600), "active"));
+    }
+
+    /** 第十八批 AG 段 259-R4（OpenAPI 与代码一致：CustomerBarReservationRequest 的 table_id 进 required）：客人订台不带 table_id → 400「桌台未填写」。 */
+    @Test
+    void customerReservationWithoutTableIdRejected() throws Exception {
+        Map<String, Object> body = reservationBody("no-table");
+        body.remove("table_id");
+        customerPost(f.token, "/api/v1/customer/bar-reservations", body)
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.detail_code").value("VALIDATION_FAILED"))
+                .andExpect(jsonPath("$.message").value("桌台未填写"));
+    }
+
+    /** 第十八批 AG 段 259-R6（OpenAPI 与代码一致：createBarTableSession 的 table_id 进 required）：后台开台不带 table_id → 400「桌台未填写」，不开台。 */
+    @Test
+    void openSessionWithoutTableIdRejected() throws Exception {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("idempotency_key", "open-no-table-" + f.suffix);
+        body.put("bar_id", barId);
+        body.put("business_date", java.time.LocalDate.now().toString());
+        body.put("guest_count", 2);
+        mockMvc.perform(post("/api/v1/bar/table-sessions").with(platformAdmin())
+                        .contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(body)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.detail_code").value("VALIDATION_FAILED"))
+                .andExpect(jsonPath("$.message").value("桌台未填写"));
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM bar_table_sessions WHERE table_id = ?", Integer.class, tableId)).isZero();
     }
 
     @Test

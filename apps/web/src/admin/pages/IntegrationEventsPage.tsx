@@ -1,4 +1,4 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 import React from "react";
 import { TechDetails } from "../components/TechDetails";
 import { AdminDataState } from "../components/AdminDataState";
@@ -92,7 +92,7 @@ function nextKey() {
   return `integration-polling-${Date.now()}`;
 }
 
-export function IntegrationEventsPage({ api, user, setActionResult, setGlobalError, effectivePermissions, navigateTo }: AdminPageProps) {
+export function IntegrationEventsPage({ api, setActionResult, setGlobalError, effectivePermissions, navigateTo }: AdminPageProps) {
   const [rows, setRows] = React.useState<LoadedEventRow[]>([]);
   const [pollingNote, setPollingNote] = React.useState("已完成 Webhook 与定时轮询一致性校验");
   const [retryReason, setRetryReason] = React.useState("供应商超时后人工触发重试");
@@ -218,7 +218,6 @@ export function IntegrationEventsPage({ api, user, setActionResult, setGlobalErr
     }
     const request = {
       idempotency_key: `integration-compensation-${Date.now()}`,
-      operator_user_id: user.id,
       status: "resolved",
       resolution_note: compensationNote,
       evidence_attachment_ids: ["att-integration-compensation"],

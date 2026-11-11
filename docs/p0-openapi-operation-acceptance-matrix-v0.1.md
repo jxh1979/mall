@@ -1,4 +1,4 @@
-# P0 OpenAPI Operation 验收矩阵 V0.64
+# P0 OpenAPI Operation 验收矩阵 V0.65
 
 ## 1. 文档定位
 
@@ -1067,7 +1067,7 @@
 | customer | `POST` | `/api/v1/vouchers/definitions` | `createVoucherDefinition` | 新建券定义（商户折扣券/店内实物券；外部伙伴券仍配置在通票权益模板 V282） | `VoucherDefinitionRequest` | `customer.voucher.manage` | `staff-token` | `merchant` | web | 是 | `voucher.definition_created` | `voucher.definition_create_failed` |
 | customer | `GET` | `/api/v1/vouchers/instances` | `listVoucherInstances` | 券实例台账（收编积分兑换券＋营销赠券；状态机 issued→redeemed/expired/revoked） | `-` | `customer.voucher.view` | `staff-token` | `merchant` | web | 否 | `voucher.instances_viewed` | `voucher.instances_view_failed` |
 | customer | `POST` | `/api/v1/vouchers/instances` | `issueVouchers` | 营销赠发券（按定义给客人发放；商户 scope 只能发自家券） | `VoucherIssueRequest` | `customer.voucher.manage` | `staff-token` | `merchant` | web | 是 | `voucher.issued` | `voucher.issue_failed` |
-| customer | `POST` | `/api/v1/vouchers/instances/{id}/revoke` | `revokeVoucher` | 作废券（仅未核销可作废；理由必填进审计留痕） | `VoucherRevokeRequest` | `customer.voucher.manage` | `staff-token` | `merchant` | web | 是 | `voucher.revoked` | `voucher.revoke_failed` |
+| customer | `POST` | `/api/v1/vouchers/instances/{id}/revoke` | `revokeVoucher` | 作废券（仅未核销可作废；理由必填，存进券实例） | `VoucherRevokeRequest` | `customer.voucher.manage` | `staff-token` | `merchant` | web | 是 | `voucher.revoked` | `voucher.revoke_failed` |
 | customer | `GET` | `/api/v1/vouchers/redemptions` | `listVoucherRedemptions` | 统一核销记录（append-only：核销点/操作员/结算挂钩一张表；settlement_amount_cent=内部结算价按 voucher.internal_price.view 权限脱敏） | `-` | `customer.voucher.view` | `staff-token` | `merchant` | web | 否 | `voucher.redemptions_viewed` | `voucher.redemptions_view_failed` |
 | customer | `POST` | `/api/v1/vouchers/redemptions` | `redeemVoucher` | 统一核销（实物券扣库存＋内部结算价挂应付；酒吧商户（merchant_type=bar）的折扣券不在此核销——须在酒吧结账 settleBarBill 时抵扣核销，本端点返回 VOUCHER_REQUIRES_BILL；非酒吧商户的折扣券仍可在此独立核销（操作员裁决 2026-10-20 第三轮第 9 条）；每券一次；响应 settlement_amount_cent 按 voucher.internal_price.view 权限脱敏） | `VoucherRedeemRequest` | `customer.voucher.redeem` | `staff-token` | `merchant` | web, staff_work_phone, kiosk | 是 | `voucher.redeemed` | `voucher.redeem_failed` |
 | customer | `POST` | `/api/v1/vouchers/redemptions/preview` | `previewVoucherRedemption` | 按客人出示的券码查券（只读：不改券状态、不落惰性过期、不消费码、不动库存与预占） | `VoucherRedeemPreviewRequest` | `customer.voucher.redeem` | `staff-token` | `merchant` | staff_work_phone, kiosk | 否 | `voucher.redeem_previewed` | `voucher.redeem_preview_failed` |

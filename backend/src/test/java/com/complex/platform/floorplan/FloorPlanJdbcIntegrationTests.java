@@ -1,17 +1,25 @@
 package com.complex.platform.floorplan;
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.groups.Tuple.tuple;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.complex.platform.support.StaffRequestFixture;
 import java.time.Instant;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.request.RequestPostProcessor;
 import org.springframework.transaction.annotation.Transactional;
 
 @SpringBootTest(properties = {
@@ -19,6 +27,7 @@ import org.springframework.transaction.annotation.Transactional;
         "spring.datasource.username=complex",
         "spring.datasource.password=${COMPLEX_DATABASE_PASSWORD:complex_dev_pwd}"
 })
+@AutoConfigureMockMvc
 @Transactional
 class FloorPlanJdbcIntegrationTests {
 
@@ -27,6 +36,9 @@ class FloorPlanJdbcIntegrationTests {
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
+
+    @Autowired
+    private MockMvc mockMvc;
 
     @Test
     void migrationCreatesFloorPlanTablesAndSeedsPermissions() {
@@ -49,6 +61,29 @@ class FloorPlanJdbcIntegrationTests {
                 "floor_plan.import.view",
                 "floor_plan.import.manage"
         );
+    }
+
+    /** 第十八批 AG 段 259-R7（OpenAPI 与代码一致：FloorPlanCreateRequest 的 project_id 进 required）：新建平面图不带 project_id → 400「项目未填写」；带齐 → 200。 */
+    @Test
+    void createFloorPlanRequiresProjectId() throws Exception {
+        String n = String.valueOf(System.nanoTime());
+        String project = "prj_259_fp_" + n;
+        jdbcTemplate.update("INSERT INTO projects (id, venue_type, name, status, created_at, updated_at)"
+                + " VALUES (?, 'complex', '平面图必填回归', 'active', now(), now())", project);
+        RequestPostProcessor admin = new StaffRequestFixture(jdbcTemplate).staff("usr_259_fp_" + n, "platform_admin", null, null,
+                "floor_plan.manage");
+        String body = """
+                {"idempotency_key":"fp-259-%s-%s",%s"floor_no":"B1","plan_name":"负一层平面图","image_url":"https://example.invalid/b1.png",
+                 "image_width":1200,"image_height":800,"version_no":"v1","status":"active"}""";
+
+        mockMvc.perform(post("/api/v1/floor-plans").with(admin).contentType(MediaType.APPLICATION_JSON).content(body.formatted("none", n, "")))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.detail_code").value("VALIDATION_FAILED"))
+                .andExpect(jsonPath("$.message").value("项目未填写"));
+        mockMvc.perform(post("/api/v1/floor-plans").with(admin).contentType(MediaType.APPLICATION_JSON)
+                        .content(body.formatted("ok", n, "\"project_id\":\"" + project + "\",")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.project_id").value(project));
     }
 
     @Test

@@ -1,5 +1,5 @@
 package com.complex.platform.integration;
-// 文件版本：V0.01
+// 文件版本：V0.02
 import static com.complex.platform.common.api.ApiRequests.requireIdempotencyKey;
 
 import com.complex.platform.access.AuthorizationService;
@@ -65,7 +65,8 @@ public class IntegrationController {
     ) {
         authorizationService.requirePermission(COMPENSATION_MANAGE_PERMISSION);
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
-        return ApiResponse.ok(service.resolveCompensationTask(id, request));
+        // 第十八批 AG 段 255-R3③（PGM:899）：处置人取登录人，请求体 operator_user_id 不采信。
+        return ApiResponse.ok(service.resolveCompensationTask(id, request, authorizationService.currentActor().id()));
     }
 
     @GetMapping("/devices")

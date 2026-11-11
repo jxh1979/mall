@@ -1,6 +1,6 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -274,6 +274,18 @@ class InventoryTransferRequisitionJdbcIntegrationTests {
         assertThat(orderStatus(id)).isEqualTo("shipped");
         assertThat(count("SELECT count(*) FROM inventory_stock_balances WHERE location_id=?", location)).isZero();
         assertThat(count("SELECT count(*) FROM ar_ap_items WHERE source_type='inventory_transfer' AND source_id=?", id)).isZero();
+    }
+
+    /** 第十八批 AG 段 259-R6（OpenAPI 与代码一致：receiveTransferOrder 门店要货签收分支 warehouse_id 必填）：门店要货（supply）签收不带 warehouse_id → 400「仓库未填写」，单据不动。 */
+    @Test
+    void receiptWithoutWarehouseIdIsRejected() throws Exception {
+        String id = createSupply(2, 1000L, List.of());
+        walkToPendingReceipt(id);
+        call(store, id, "receive", receiptBody(line(id, 2, 2, 0, List.of())).replace("\"warehouse_id\":\"" + warehouse + "\",", ""))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.detail_code").value("VALIDATION_FAILED"))
+                .andExpect(jsonPath("$.message").value("仓库未填写"));
+        assertThat(orderStatus(id)).isEqualTo("pending_receipt");
     }
 
     /**

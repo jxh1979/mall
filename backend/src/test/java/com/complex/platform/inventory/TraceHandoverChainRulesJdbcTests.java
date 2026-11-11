@@ -1,6 +1,6 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -184,6 +184,12 @@ class TraceHandoverChainRulesJdbcTests {
                 + "\",\"trace_code\":\"TRC-P-" + suffix + "\",\"order_id\":\"" + order + "\",\"device_id\":\"" + device + "\"}")
                 .andExpect(status().isOk()).andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
         String id = JsonPath.read(created, "$.data.handover.id");
+        // 第十八批 AG 段 259-R5 ②（OpenAPI 与代码一致：scanTraceSegment 的 segment 进 required）：工作手机扫码不带 segment → 400。
+        phonePost(device, keys, "/api/v1/inventory/trace-handovers/" + id + "/scan-segment",
+                "{\"idempotency_key\":\"thr-ps-none-" + suffix + "\"}")
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.detail_code").value("VALIDATION_FAILED"))
+                .andExpect(jsonPath("$.message").value("分段未填写"));
         phoneScan(device, keys, id, "out_verify").andExpect(status().isOk());
 
         String upload = "/api/v1/evidence/attachments/upload";

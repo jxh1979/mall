@@ -1,4 +1,4 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -119,5 +119,25 @@ describe("IntegrationEventsPage 立即重试请求体", () => {
     const body = vi.mocked(api.post).mock.calls.find(([path]) => path === runNow)?.[1];
     expect(body).toMatchObject({ reason: "供应商超时后人工触发重试" });
     expect(body).not.toHaveProperty("action");
+  });
+});
+
+// 第十八批 AG 段 255-R3：补偿任务处置的操作人由服务端取登录人，网页停发 operator_user_id。
+describe("IntegrationEventsPage 处理补偿请求体", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it("处理补偿不带 operator_user_id", async () => {
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    const api = makeApi();
+    renderPage({ api });
+    await waitFor(() => expect(screen.getByTestId("integration-event-row-comp-1")).toBeTruthy());
+
+    fireEvent.click(screen.getByTestId("integration-events-resolve-compensation"));
+
+    const resolve = "/api/v1/integration/compensation-tasks/comp-1/resolve";
+    await waitFor(() => expect(vi.mocked(api.post).mock.calls.some(([path]) => path === resolve)).toBe(true));
+    const body = vi.mocked(api.post).mock.calls.find(([path]) => path === resolve)?.[1];
+    expect(body).toMatchObject({ status: "resolved", resolution_note: "已核对订单和券核销回流，处理补偿任务" });
+    expect(body).not.toHaveProperty("operator_user_id");
   });
 });

@@ -1,4 +1,4 @@
-// 文件版本：V0.04
+// 文件版本：V0.05
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
@@ -116,7 +116,7 @@ const TEXT = {
   domainRequired: "至少勾选一个计入收入域。",
   paySlotRequired: "请选择发放付账日。",
   periodLabelRequired: "请填写期间标签（月份如 2026-07，季度如 2026-Q3，半年如 2026-H1，年度如 2026）。",
-  reasonRequired: "驳回理由必填（进入审计留痕）。",
+  reasonRequired: "驳回理由必填（存为分红单的驳回理由，不写入审计事件）。",
   floorPercentInvalid: "留存比例须在 0~100 之间。",
   floorFixedInvalid: "留存固定额须为不小于 0 的金额（元）。",
   legalAmountInvalid: "依法可分配金额须为不小于 0 的金额（元）。",

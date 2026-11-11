@@ -1,4 +1,4 @@
-// 文件版本：V0.03
+// 文件版本：V0.04
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
@@ -82,7 +82,7 @@ const TEXT = {
   customerRequired: "请填写客人 ID。",
   definitionRequired: "请选择券定义。",
   quantityInvalid: "发放张数必须是 1-100 的整数。",
-  reasonRequired: "作废理由必填（进入审计留痕）。",
+  reasonRequired: "作废理由必填（存进券实例，不写入审计事件）。",
 };
 
 function centToYuan(cent: number | undefined | null): string {
@@ -660,7 +660,7 @@ export function VoucherLedgerPage({ api, setActionResult, setGlobalError, effect
         steps={[
           {
             title: "作废理由（必填）",
-            description: "仅未核销（已发放）的券可作废；作废后不可恢复、不可核销，理由与操作人进入审计留痕。",
+            description: "仅未核销（已发放）的券可作废；作废后不可恢复、不可核销；理由存进券实例、不写入审计事件，操作人记入审计事件。",
             validate: () => (revokeReason.trim() ? null : TEXT.reasonRequired),
             content: (
               <label>理由<textarea data-testid="voucher-revoke-reason" value={revokeReason} onChange={(event) => setRevokeReason(event.target.value)} placeholder="如：活动提前下线，未核销券统一作废" /></label>
