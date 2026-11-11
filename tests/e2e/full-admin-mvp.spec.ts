@@ -1,4 +1,4 @@
-// 文件版本：V0.07
+// 文件版本：V0.08
 import { expect, test } from "@playwright/test";
 import { installMockApi } from "./support/mock-api";
 
@@ -129,15 +129,15 @@ test.describe("full admin MVP acceptance", () => {
     await expect(page.getByTestId("admin-action-result")).toContainText("状态：已合并");
   });
 
-  test("ADM-MVP-05 finance ledger requires adjustment reason and supports partial payment", async ({ page }) => {
+  test("ADM-MVP-05 finance ledger requires payment method and supports partial payment", async ({ page }) => {
     await installMockApi(page);
     await adminLogin(page, "/admin/finance/ar-ap-ledger");
 
     await page.getByTestId("finance-payment-amount").fill("50");
     await page.getByTestId("finance-payment-submit").click();
-    await expect(page.getByTestId("finance-ledger-error")).toContainText("原因");
+    // 第 198 条 198-R4②：收付款登记不再有原因框，空选收付方式时第一个拦截是收付方式。
+    await expect(page.getByTestId("finance-ledger-error")).toContainText("请选择收付方式。");
 
-    await page.getByTestId("finance-payment-reason").fill("客户部分付款");
     // 第十八批 W 段 200-R1：登记核销须选收付方式（契约 ArApPaymentRequest 必填 payment_method）。
     await page.getByTestId("finance-payment-method").selectOption("bank_transfer");
     await page.getByTestId("finance-payment-submit").click();

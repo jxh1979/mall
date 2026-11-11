@@ -332,3 +332,37 @@ describe("AuditEventsPage 导出留痕没拿到结果再点", () => {
     expect(posts[1]).toBe(posts[0]);
   });
 });
+
+// 第十八批 AE 段第 198 条 198-R3⑥：导出登记只发设备、登记人与事件，导出原因记在 events[0].summary；
+// 不再带 operator_note 与写死的假附件 att-audit-export（服务端不读）。真实页面经真实客户端，只桩网络层。
+describe("AuditEventsPage 导出登记请求体", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    window.history.replaceState({}, "", "/admin/audit/events");
+  });
+
+  it("198-R3⑥：请求体不含 operator_note、evidence_attachment_ids，events[0].summary 为所填原因", async () => {
+    const posts: string[] = [];
+    vi.stubGlobal("fetch", vi.fn().mockImplementation((_input: RequestInfo | URL, init?: RequestInit) => {
+      if ((init?.method ?? "GET").toUpperCase() === "POST") {
+        posts.push(String(init?.body));
+        return Promise.resolve(new Response(JSON.stringify({ success: true, code: "OK", message: "success", data: { accepted_count: 1 } }),
+          { status: 200, headers: { "content-type": "application/json" } }));
+      }
+      return Promise.resolve(new Response(
+        JSON.stringify({ success: true, code: "OK", message: "success", data: { items: [{ id: "e1", event_type: "login", event_category: "auth", result: "success", trace_id: "t-1", summary: "登录成功" }], page: 1, page_size: 10, total: 1 } }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      ));
+    }));
+    render(<AuditEventsPage api={new AdminApi("test-token")} user={{ id: "u1", username: "admin", accountType: "platform_admin" }}
+      setActionResult={vi.fn()} setGlobalError={vi.fn()} effectivePermissions={ADMIN_PERMS} />);
+    await waitFor(() => expect(screen.getByTestId("audit-events-table").textContent).toContain("登录成功"), { timeout: 5000 });
+    fireEvent.change(screen.getByTestId("audit-events-export-reason"), { target: { value: "季度审计抽查导出" } });
+    fireEvent.click(screen.getByTestId("audit-events-export"));
+    await waitFor(() => expect(posts).toHaveLength(1), { timeout: 5000 });
+    const body = JSON.parse(posts[0]!) as Record<string, unknown> & { events: Array<{ summary: string }> };
+    expect(body).not.toHaveProperty("operator_note");
+    expect(body).not.toHaveProperty("evidence_attachment_ids");
+    expect(body.events[0]?.summary).toBe("季度审计抽查导出");
+  });
+});

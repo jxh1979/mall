@@ -1,4 +1,4 @@
-// 文件版本：V0.04
+// 文件版本：V0.05
 import React from "react";
 import { formatActionResult } from "../components/ActionResultView";
 import { TechDetails } from "../components/TechDetails";
@@ -144,7 +144,6 @@ export function AdmissionAuditsPage({ api, user, setActionResult, setGlobalError
     const operation = ["admission-audit-export", exportReason, eventPayload];
     const payload = {
       idempotencyKey: `admission-audit-export-${Date.now()}`,
-      operatorNote: exportReason,
       // 第 32 条：本次导出没有上传文件，不带附件；登记人取当前登录账号（与审计事件页导出同口径）。
       deviceCode: "web-admin",
       staffId: user.id,

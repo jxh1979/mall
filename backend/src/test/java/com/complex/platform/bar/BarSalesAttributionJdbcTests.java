@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -471,9 +471,10 @@ class BarSalesAttributionJdbcTests {
                 .content("{\"idempotency_key\":\"bsa-b-" + seq.incrementAndGet() + "-" + suffix + "\"}"));
     }
 
+    /** 照网页计算提成（BarCommissionsPage）的请求形状：第 198 条 198-R3⑤ 起只带幂等键。 */
     private ResultActions commission(RequestPostProcessor who, String bill) throws Exception {
         return mockMvc.perform(post("/api/v1/bar/bills/" + bill + "/commissions/calculate").with(who).contentType(MediaType.APPLICATION_JSON)
-                .content("{\"idempotency_key\":\"bsa-c-" + seq.incrementAndGet() + "-" + suffix + "\",\"include_only_table_sales\":true}"));
+                .content("{\"idempotency_key\":\"bsa-c-" + seq.incrementAndGet() + "-" + suffix + "\"}"));
     }
 
     /** A 代订、B 开台（带订台）、B 点单开单并计提，返回 {会话, 订单, 账单}。 */

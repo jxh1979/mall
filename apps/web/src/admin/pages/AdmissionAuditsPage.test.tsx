@@ -1,4 +1,4 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -125,9 +125,13 @@ describe("AdmissionAuditsPage KPI 聚焦视图", () => {
     expect(screen.getByTestId("admission-audits-guided-summary").textContent).toMatch(/本页 \d+ 户/);
     fireEvent.click(screen.getByTestId("admission-audits-export"));
     await waitFor(() => expect(posted).not.toBeNull());
-    const body = posted as unknown as { staff_id?: string; evidence_attachment_ids?: unknown; events: Array<{ payload: Record<string, number> }> };
+    const body = posted as unknown as { staff_id?: string; operator_note?: unknown; evidence_attachment_ids?: unknown;
+      events: Array<{ summary?: string; payload: Record<string, number> }> };
     expect(body.staff_id).toBe("u-7");
     expect(body.evidence_attachment_ids).toBeUndefined();
+    // 第 198 条 198-R3⑥：不带 operator_note（服务端不读），导出原因记在 events[0].summary。
+    expect(body.operator_note).toBeUndefined();
+    expect(body.events[0]?.summary).toBe("完整后台准入流水导出");
     expect(body.events[0]?.payload).toMatchObject({ merchant_count: 610, binding_count: 620, contract_count: 630 });
   });
 

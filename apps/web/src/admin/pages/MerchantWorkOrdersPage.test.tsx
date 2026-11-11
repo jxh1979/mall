@@ -298,6 +298,25 @@ describe("MerchantWorkOrdersPage 第 102 条 派单负责人与关单", () => {
     const [, putInit] = fetchMock.mock.calls.find(([url, init]) => init?.method === "PUT" && String(url).includes("/work-order-close-methods"))!;
     expect(JSON.parse(String(putInit.body))).toMatchObject({ work_order_type: "repair", close_method: "merchant_confirm" });
   });
+
+  // 第十八批 AE 段第 198 条 198-R3①（BSM:940「收银、核销、收款、放行等现场动作，一律按执行该动作的设备绑定与该次登录会话定位到操作人并留痕」）：
+  // 派单、处理、关闭的请求体都不再带写死的 operator_user_id，操作人由服务端取登录人。
+  it("198-R3①：派单、处理、关闭三次请求体都不含 operator_user_id", async () => {
+    const fetchMock = mockFetch();
+    await waitFor(() => expect(screen.getByTestId("merchant-work-order-owner-user").textContent).toContain("张师傅（usr_pa）"));
+    fireEvent.change(screen.getByTestId("merchant-work-order-owner-user"), { target: { value: "usr_pa" } });
+    fireEvent.click(screen.getByTestId("merchant-work-order-assign"));
+    await waitFor(() => expect(posts(fetchMock, "/wo-c/assign")).toHaveLength(1));
+    await waitFor(() => expect((screen.getByTestId("merchant-work-order-process") as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.click(screen.getByTestId("merchant-work-order-process"));
+    await waitFor(() => expect(posts(fetchMock, "/wo-c/actions")).toHaveLength(1));
+    await waitFor(() => expect((screen.getByTestId("merchant-work-order-close") as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.click(screen.getByTestId("merchant-work-order-close"));
+    await waitFor(() => expect(posts(fetchMock, "/wo-c/close")).toHaveLength(1));
+    for (const suffix of ["/wo-c/assign", "/wo-c/actions", "/wo-c/close"]) {
+      expect(JSON.parse(String(posts(fetchMock, suffix)[0]![1].body))).not.toHaveProperty("operator_user_id");
+    }
+  });
 });
 
 // 第十八批 M 段第 111 条：111-R2 第十八批裁决 27「派单后，重复提或误提的由客户关怀部填原因取消」；

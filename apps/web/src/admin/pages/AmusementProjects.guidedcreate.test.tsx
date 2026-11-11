@@ -80,6 +80,9 @@ describe("AmusementSessionsPage 引导式新建项目(phase-8)", () => {
     await waitFor(() => expect(lastPostBody).toBeTruthy());
     expect((lastPostBody as { project_name: string }).project_name).toBe("新星球大冒险");
     expect((lastPostBody as { capacity: number }).capacity).toBe(45);
+    // 第 198 条 198-R3⑦：新建项目不再带写死的 operator_note 与空 evidence_attachment_ids（服务端不读）。
+    expect(lastPostBody).not.toHaveProperty("operator_note");
+    expect(lastPostBody).not.toHaveProperty("evidence_attachment_ids");
     await waitFor(() => expect(screen.queryByTestId("amusement-project-guided")).toBeNull());
     expect(setActionResult).toHaveBeenCalledWith(expect.objectContaining({ action: "amusement_project_created" }));
   });

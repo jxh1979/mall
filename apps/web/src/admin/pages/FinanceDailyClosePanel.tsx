@@ -1,4 +1,4 @@
-// 文件版本：V0.05
+// 文件版本：V0.06
 import React from "react";
 import type { AdminPageProps } from "../types";
 import { BarVenueSelect } from "../components/BarVenueSelect";
@@ -75,7 +75,6 @@ function DailyClosePanel({ api, user, effectivePermissions, setGlobalError, onGe
   const [businessDate, setBusinessDate] = React.useState("");
   const [scopeType, setScopeType] = React.useState(merchant ? "merchant" : "project");
   const [scopeId, setScopeId] = React.useState(merchant);
-  const [note, setNote] = React.useState("");
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState("");
   // 所选营业日与范围的日结：undefined＝还没选好，null＝待生成。
@@ -136,10 +135,10 @@ function DailyClosePanel({ api, user, effectivePermissions, setGlobalError, onGe
     await run(async () => {
       if (!businessDate) throw new Error("请选择营业日");
       if (!chosenScope) throw new Error("请填写范围编号");
-      const body = { businessDate, scopeType, scopeId: chosenScope, operatorNote: note.trim() || undefined };
+      const body = { businessDate, scopeType, scopeId: chosenScope };
       const slot = `generate:${JSON.stringify(body)}`;
       const saved = await api.post<DailyClose>("/api/v1/finance/daily-closes", { ...body, idempotencyKey: keyFor(slot) });
-      delete keys.current[slot]; setNote(""); list.reload(); setRefresh((n) => n + 1); onGenerated?.();
+      delete keys.current[slot]; list.reload(); setRefresh((n) => n + 1); onGenerated?.();
       await loadSummaries(saved.id);
     });
   }
@@ -217,7 +216,6 @@ function DailyClosePanel({ api, user, effectivePermissions, setGlobalError, onGe
       {merchant ? <span>范围对象：{merchant}</span>
         : scopeType === "bar" ? <label>酒吧<BarVenueSelect api={api} value={scopeId} onChange={setScopeId} testId="daily-close-scope-bar" autoSelectFirst setGlobalError={setGlobalError} /></label>
         : <label>{scopeType === "merchant" ? "商户编号" : "项目编号"}<input aria-label="范围编号" value={scopeId} onChange={(e) => setScopeId(e.target.value)} /></label>}
-      <label>备注<input aria-label="日结备注" value={note} onChange={(e) => setNote(e.target.value)} /></label>
       <button type="button" data-testid="daily-close-generate-submit" disabled={busy} onClick={() => void generate()}>生成日结</button>
     </div> : null}
     {canLock && current !== undefined ? <p data-testid="daily-close-current-status">所选营业日与范围的日结状态：{current ? statusLabel(current.status) : "待生成"}</p> : null}

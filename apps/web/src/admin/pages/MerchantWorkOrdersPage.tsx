@@ -248,7 +248,6 @@ export function MerchantWorkOrdersPage({ api, setActionResult, setGlobalError, e
       evidenceAttachmentIds: ["att-merchant-work-order-assign"],
       ownerDepartment,
       ownerUserId,
-      operatorUserId: "staff_dispatcher",
     };
     await runAction("merchant_work_order_assigned", request, () => api.post(`/api/v1/merchant-service/work-orders/${selected.id}/assign`, request));
   }
@@ -267,7 +266,6 @@ export function MerchantWorkOrdersPage({ api, setActionResult, setGlobalError, e
       operatorNote: processNote,
       evidenceAttachmentIds: ["att-merchant-work-order-process"],
       targetStatus,
-      operatorUserId: "staff_processor",
     };
     await runAction("merchant_work_order_processed", request, () => api.post(`/api/v1/merchant-service/work-orders/${selected.id}/actions`, request));
   }
@@ -291,7 +289,6 @@ export function MerchantWorkOrdersPage({ api, setActionResult, setGlobalError, e
       evidenceAttachmentIds: ["att-merchant-work-order-close"],
       resolution,
       satisfactionScore: satisfactionScore.trim() ? Number(satisfactionScore) : null,
-      operatorUserId: "staff_closer",
       ...(closeReason.trim() ? { closeReason: closeReason.trim() } : {}),
     };
     await runAction("merchant_work_order_closed", request, () => api.post(`/api/v1/merchant-service/work-orders/${selected.id}/close`, request));

@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -83,7 +83,9 @@ describe("AdmissionAuditsPage 引导式登记证据事件(phase-9)", () => {
     fireEvent.click(screen.getByTestId("admission-audits-export"));
 
     await waitFor(() => expect(lastPostBody).toBeTruthy());
-    expect((lastPostBody as { operator_note: string }).operator_note).toBe("季度准入审计导出");
+    // 第 198 条 198-R3⑥：不带 operator_note（服务端不读），导出原因记在 events[0].summary。
+    expect(lastPostBody).not.toHaveProperty("operator_note");
+    expect((lastPostBody as { events: Array<{ summary: string }> }).events[0]?.summary).toBe("季度准入审计导出");
     expect((lastPostBody as { events: Array<{ event_type: string }> }).events[0]?.event_type).toBe("merchant.admission.audit_exported");
     await waitFor(() => expect(screen.queryByTestId("admission-audits-guided")).toBeNull());
     expect(setActionResult).toHaveBeenCalledWith(expect.objectContaining({ action: "admission_audit_exported", audit: "merchant_admission_trace_ready" }));

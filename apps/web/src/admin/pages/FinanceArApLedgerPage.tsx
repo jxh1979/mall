@@ -1,4 +1,4 @@
-// 文件版本：V0.14
+// 文件版本：V0.15
 import React from "react";
 import { FinancePayrollPaymentPanel } from "./FinancePayrollPaymentPanel";
 import { FinanceRefundPanel } from "./FinanceRefundPanel";
@@ -61,7 +61,6 @@ function centToYuan(cent: number | undefined): string {
 export function FinanceArApLedgerPage({ api, setActionResult, setGlobalError, effectivePermissions, navigateTo, user }: AdminPageProps) {
   const [refundsOpen, setRefundsOpen] = React.useState(false);
   const [amount, setAmount] = React.useState("");
-  const [reason, setReason] = React.useState("");
   const [paymentMethod, setPaymentMethod] = React.useState("");
   const [formError, setFormError] = React.useState("");
   const [submitting, setSubmitting] = React.useState(false);
@@ -118,10 +117,6 @@ export function FinanceArApLedgerPage({ api, setActionResult, setGlobalError, ef
       setFormError("核销金额必须是大于 0 的数字。");
       return false;
     }
-    if (!reason.trim()) {
-      setFormError("核销或调整必须填写原因。");
-      return false;
-    }
     if (!paymentMethod) {
       setFormError("请选择收付方式。");
       return false;
@@ -147,7 +142,6 @@ export function FinanceArApLedgerPage({ api, setActionResult, setGlobalError, ef
       const result = await api.post(`/api/v1/finance/ar-ap-items/${selected.id}/payments`, {
         amountCent: Math.round(numericAmount * 100),
         paymentMethod,
-        operatorNote: reason,
       });
       setActionResult({ action: "ledger_payment", status: "partial", ledgerItemId: selected.id, result });
       ledger.reload();
@@ -204,7 +198,7 @@ export function FinanceArApLedgerPage({ api, setActionResult, setGlobalError, ef
 
   return (
     <section data-testid="finance-ledger-page">
-      <AdminPageHeader title="应收应付台账" description="P0 完整台账支持应收、应付、部分核销、余额和调整原因留痕。" />
+      <AdminPageHeader title="应收应付台账" description="P0 完整台账支持应收、应付、部分核销、余额。" />
       <div className="admin-kpi-grid" data-testid="finance-ledger-summary">
         <div className="admin-kpi-card"><span>应收欠费余额（元）</span><strong className="admin-kpi-value--text" data-testid="finance-ledger-kpi-ar">{arBalanceKpi.status === "ready" && arBalanceKpi.value !== null ? centToYuan(arBalanceKpi.value) : "—"}</strong><small>逾期未清·期末时点{arBalanceKpi.status === "ready" ? <MetricDetailLink navigateTo={navigateTo} metric="finance.ar_balance" testid="finance-ledger-metric-detail-ar" /> : null}</small></div>
         <div className="admin-kpi-card"><span>应付欠款余额（元）</span><strong className="admin-kpi-value--text" data-testid="finance-ledger-kpi-ap">{apBalanceKpi.status === "ready" && apBalanceKpi.value !== null ? centToYuan(apBalanceKpi.value) : "—"}</strong><small>逾期未清·期末时点{apBalanceKpi.status === "ready" ? <MetricDetailLink navigateTo={navigateTo} metric="finance.ap_balance" testid="finance-ledger-metric-detail-ap" /> : null}</small></div>
@@ -213,7 +207,6 @@ export function FinanceArApLedgerPage({ api, setActionResult, setGlobalError, ef
         <div className="admin-form-row">
           <label>核销金额（元）<input data-testid="finance-payment-amount" type="number" min={0} step="0.01" value={amount} onChange={(event) => setAmount(event.target.value)} placeholder="如 100.00" /></label>
           <label>收付方式<select data-testid="finance-payment-method" value={paymentMethod} onChange={(event) => setPaymentMethod(event.target.value)}><option value="">请选择</option>{PAYMENT_METHODS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
-          <label>核销/调整原因<input data-testid="finance-payment-reason" value={reason} onChange={(event) => setReason(event.target.value)} placeholder="必填，留痕用" /></label>
           <HighRiskConfirm
             label="登记核销"
             impact="将对选中凭证写入部分核销/调账并落库留痕，影响应收应付余额和后续对账。"

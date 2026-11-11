@@ -1,4 +1,4 @@
-// 文件版本：V0.05
+// 文件版本：V0.06
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { FinanceDailyClosePanel } from "./FinanceDailyClosePanel";
@@ -127,6 +127,9 @@ describe("日结区块", () => {
       businessDate: "2026-11-02", scopeType: "bar", scopeId: "bar_b", idempotencyKey: expect.any(String) })));
     expect(confirm).not.toHaveBeenCalled();
     expect(post.mock.calls[0]?.[1]).not.toHaveProperty("forceClose");
+    // 第 198 条 198-R4①：生成日结只发营业日、范围与幂等键，没有「日结备注」框（服务端不读 operator_note）。
+    expect(Object.keys(post.mock.calls[0]?.[1] as object).sort()).toEqual(["businessDate", "idempotencyKey", "scopeId", "scopeType"]);
+    expect(screen.queryByLabelText("日结备注")).toBeNull();
     await waitFor(() => expect(get).toHaveBeenCalledWith("/api/v1/finance/daily-closes/dc-new/summaries"));
     await waitFor(() => expect(getPaged.mock.calls.filter(([url]) => url === "/api/v1/finance/daily-closes?page=1&size=20")).toHaveLength(2));
   });

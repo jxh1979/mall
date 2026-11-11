@@ -82,7 +82,6 @@ export function SpaceTypesPage({ api, user, setActionResult, setGlobalError, eff
         typeCode: code,
         typeName: name,
         sortOrder: Number(form.sortOrder) || 100,
-        status: "active",
       });
       setActionResult({ action: "space_type_saved", typeCode: code });
       setForm({ typeCode: "", typeName: "", sortOrder: "100" });

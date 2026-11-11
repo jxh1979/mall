@@ -1,4 +1,4 @@
-// 文件版本：V0.04
+// 文件版本：V0.05
 import React from "react";
 import { formatActionResult } from "../components/ActionResultView";
 import { TechDetails } from "../components/TechDetails";
@@ -272,15 +272,13 @@ export function AmusementSessionsPage({ api, setActionResult, setGlobalError, ef
     setProjectSubmitting(true);
     const request = {
       idempotencyKey: `amusement-project-create-${Date.now()}`,
-      operatorNote: "完整后台新建游乐项目",
-      evidenceAttachmentIds: [],
       projectName,
       capacity: numericCapacity,
       openStatus: "open",
     };
     try {
       const result = await api.post<unknown>("/api/v1/amusement/projects", request);
-      setActionResult({ action: "amusement_project_created", evidenceAttachmentIds: request.evidenceAttachmentIds, request, result });
+      setActionResult({ action: "amusement_project_created", request, result });
       setProjectOpen(false);
       await reload();
     } catch (actionError) {

@@ -1,4 +1,4 @@
-// 文件版本：V0.05
+// 文件版本：V0.06
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -73,11 +73,13 @@ describe("AmusementFaultCompensationPage 全园故障补偿（CG-08b，ENUM「�
     expect(screen.getByTestId("amusement-fault-compensation-page").textContent).not.toContain("延长原核销权");
     expect(screen.queryByTestId("compensation-initiate")).toBeNull();
     fireEvent.change(screen.getByTestId("compensation-role"), { target: { value: "engineering_safety" } });
-    fireEvent.change(screen.getByTestId("compensation-note"), { target: { value: "工程岗确认发放" } });
+    // 第 198 条 198-R3④：确认只读岗位与幂等键（发放原因在发起时已必填），页面不再有「确认说明」框。
+    expect(screen.queryByTestId("compensation-note")).toBeNull();
     fireEvent.click(screen.getByTestId("compensation-confirm"));
     await waitFor(() => expect(fetchMock.mock.calls.some((c) => String(c[0]).includes("/api/v1/amusement/compensation-batches/b-1/confirm"))).toBe(true));
     const body = bodyOf(fetchMock, (url) => url.includes("/compensation-batches/b-1/confirm"));
     expect(body.role).toBe("engineering_safety");
+    expect(Object.keys(body).sort()).toEqual(["idempotency_key", "role"]);
     await waitFor(() => expect(setActionResult).toHaveBeenCalledWith(expect.objectContaining({ 确认岗位: "工程或安全岗位" })));
   });
 

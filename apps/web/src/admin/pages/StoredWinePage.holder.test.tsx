@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 // FS-016 存酒持有人核验（BSM L1073 / L1198 / PGM L878）：领取与转让都向当前持有人发短信验证码；
 // 转让表单按蛇形键提交；检索只按手机号走 POST lookup（手机号不进 URL）。
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
@@ -46,13 +46,28 @@ describe("StoredWinePage 持有人核验（FS-016）", () => {
     const api = makeApi();
     renderPage(api);
     await waitFor(() => expect(screen.queryByTestId("stored-wine-claim-send-code")).not.toBeNull());
-    expect((screen.getByTestId("stored-wine-claim-phone") as HTMLInputElement).value).toBe("");
+    expect(screen.queryByTestId("stored-wine-claim-phone")).toBeNull();
     fireEvent.click(screen.getByTestId("stored-wine-select-w-1"));
     fireEvent.click(screen.getByTestId("stored-wine-claim-send-code"));
     await waitFor(() => expect(api.post).toHaveBeenCalledWith(
       "/api/v1/inventory/saved-bottles/w-1/verification-code",
       expect.objectContaining({ scene: "claim" }),
     ));
+  });
+
+  // 第十八批 AE 段第 198 条 198-R3②（BSM:1073「手机号也不得单独作为放酒凭证」；取酒核验对象是存酒当前持有人手机）：
+  // 领取表单没有手机号框，领取请求体不带 claim_by_phone（服务端不读）。
+  it("198-R3②：领取请求体不含 claim_by_phone", async () => {
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    const api = makeApi();
+    renderPage(api);
+    await waitFor(() => expect(screen.queryByTestId("stored-wine-claim-code")).not.toBeNull());
+    fireEvent.click(screen.getByTestId("stored-wine-select-w-1"));
+    fireEvent.change(screen.getByTestId("stored-wine-claim-code"), { target: { value: "000000" } });
+    fireEvent.click(screen.getByTestId("stored-wine-claim"));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith("/api/v1/inventory/saved-bottles/w-1/claim", expect.anything()));
+    const body = vi.mocked(api.post).mock.calls.find(([path]) => path === "/api/v1/inventory/saved-bottles/w-1/claim")![1];
+    expect(Object.keys(body as object)).not.toContain("claim_by_phone");
   });
 
   it("转让分组：发码 scene=transfer，提交转让 → POST …/transfer 含 to_name_or_nickname/to_phone/verification_code", async () => {

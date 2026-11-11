@@ -1,6 +1,6 @@
-# 供应链与库存：供应商、供应合同、采购、库房、批次、流水开发设计 V0.25
+# 供应链与库存：供应商、供应合同、采购、库房、批次、流水开发设计 V0.26
 
-> 版本：V0.25 ｜ 最后更新：2026-11-01 ｜ 覆盖迁移基线：V454 ｜ 状态：现行
+> 版本：V0.26 ｜ 最后更新：2026-11-11 ｜ 覆盖迁移基线：V454 ｜ 状态：现行
 > <!-- 文档goalP3(2026-06-20)：补版本/日期/覆盖迁移头，未改正文 -->
 
 > **M09 现行口径（2026-09-03）：** 三份业务 HTML 是业务真源；本文细化但不得新增业务。迁移、Java、OpenAPI、页面和测试只证明当前实现事实，不得反向定义业务规则。下文带“建议”“任务”或未标已落地的结构/API 均为目标设计或缺口，不代表当前实现。R7/R5 横幅仅作历史留痕，现行实现以本轮逐项标注为准。
@@ -359,7 +359,7 @@ flowchart TD
 
 可消费物品不存在保留所有权的“借”，一律按“调（买断）”处理，交付扫码时所有权转移并按内部结算价同步出账；不可消费物品借用只转移保管责任，不转移所有权，且必须记录应还数量和期限，超期必须自动生成工单、通知借出方主管并持续走通用超时升级。溯源码须同时记录所有权主体、当前保管主体、借出主体、借入主体、应还数量与期限；时间由借出方交货扫码、每次保管人变更扫码和借出方实际归还收货扫码自动产生，不设手工填写（依据 PRD §7.6、BSM「跨主体流转」、ENUM「跨主体借调」）。
 
-> **当前实现 GAP：** V277 未拒绝可消费品 `lending`，接受请求方任意非负单价且不核验内部结算价，`lending_mode` 还可为空；发货时出账、收货时才改 owner。borrow/lending 收货也会错误改 owner；空 mode 收货后既不能归还也不能取消。当前另缺保管人、应还时间和实际归还时间；第十八批第 18 条起交货按出货库位扣出让方库存并写借出（`lend_out`）或调拨（`transfer`）流水、归还写归还（`lend_return`）流水，借用逾期自动建物业工单（V564）。Controller/UI 已有基础调用；正式 OpenAPI 只收录 return/cancel，仍漏 list/get/create/ship/receive 与 `supply-entities` GET/POST，客户端覆盖也漏扫工作台。
+> **当前实现 GAP：** V277 未拒绝可消费品 `lending`，接受请求方任意非负单价且不核验内部结算价，`lending_mode` 还可为空；发货时出账、收货时才改 owner。borrow/lending 收货也会错误改 owner；空 mode 收货后既不能归还也不能取消。当前另缺保管人、应还时间和实际归还时间；第十八批第 18 条起交货按出货库位扣出让方库存并写借出（`lend_out`）或调拨（`transfer`）流水、归还写归还（`lend_return`）流水，借用逾期自动建物业工单（V564）。Controller/UI 已有基础调用；正式 OpenAPI 已收录 list/get/create/ship/receive/return/cancel 与 `supply-entities` GET/POST（list/get 与 supply-entities 于第十八批 AE 段第 201 条 201-R6 补入），客户端覆盖也漏扫工作台。
 
 ### 5.8 外部经销供货
 
@@ -689,8 +689,8 @@ HTML 十二类、目标机读 code 与当前实现须分列；目标 code 是技
 | 项 | 当前事实 | GAP / 目标 |
 |---|---|---|
 | 供应合同审批 | V138 已 seed `inventory.supply_contract.approve`，但 Controller、Service 审计权限和 OpenAPI 仍使用 `inventory.purchase.approve` | 三处统一改用独立合同审批权限；仅有采购审批权不得审批合同 |
-| 跨主体调拨 | Controller/UI 已使用 `GET/POST /inventory/supply-entities` 及调拨 list/get/create/ship/receive/return/cancel；工作台实际调用 supply-entities GET | OpenAPI 目前仅收录 transfer return/cancel，漏 list/get/create/ship/receive 和 supply-entities GET/POST；客户端覆盖脚本也未扫描调拨工作台，缺任一路径时门禁应失败 |
-| 存酒转让 | Controller 已有 `POST /inventory/saved-bottles/{id}/transfer`，服务已有对应运行路径 | 正式 OpenAPI YAML/JSON、验收矩阵和 closure 附录均缺该路径；契约覆盖门禁未能发现该漂移 |
+| 跨主体调拨 | Controller/UI 已使用 `GET/POST /inventory/supply-entities` 及调拨 list/get/create/ship/receive/return/cancel；工作台实际调用 supply-entities GET | OpenAPI 已收录调拨 list/get/create/ship/receive/return/cancel 和 supply-entities GET/POST（list/get 与 supply-entities 于第十八批 AE 段第 201 条 201-R6 补入）；客户端覆盖脚本也未扫描调拨工作台，缺任一路径时门禁应失败 |
+| 存酒转让 | Controller 已有 `POST /inventory/saved-bottles/{id}/transfer`，服务已有对应运行路径 | 正式 OpenAPI YAML/JSON、验收矩阵和 closure 附录均已收录该路径 |
 | 进货查验 | 采购只在 `approved` 且 `supplier_id` 非空时检查 `active` 且 `valid_to` 未过期，不检查未来 `valid_from`；空供应商跳过，`receive` 不重验；没有 `purchase_inspections` 表和入库强绑定 | 建立查验台账；缺收货时有效的供货方资质、票据或合格证明时禁止确认入库 |
 | 采购多明细 | 正式 OpenAPI 对 `items` 声明 `maxItems: 200`；Java DTO 未配置项数上限，服务只要求列表非空并取第一项，V012 只保存一组 `item_id/quantity` | 第二项以后会被静默忽略，应用层也不拒绝超过 200 项；正式契约与实现须统一为单项拒绝或完整多项处理 |
 | 智能采购、门店要货、外部经销 | 智能采购建议已有只读正式 API（`GET /api/v1/inventory/purchase-suggestions`，第十八批第 33 条）；其余冻结 HTML 已规定业务流程，当前未形成完整正式 API | 依 §5.1、§5.2、§5.8 建契约；智能采购只能生成建议，人工审批后成单，不能自动向供应商下单 |
@@ -735,7 +735,7 @@ HTML 十二类、目标机读 code 与当前实现须分列；目标 code 是技
 
 当前 inventory 域已经有供应商、合同、采购申请、库房、物品、批次、余额、流水、高价值判断/复核、存酒、交接和跨主体调拨服务。新增能力优先落在现有领域服务和仓储端口，不为单一用例再造平行框架。
 
-已确认的实现差距：酒水自采未阻断；资质校验可被空供应商和未来 `valid_from` 绕过且收货不重验；采购申请未记录申请人且审批未校验自审；采购多明细静默丢项；合同生命周期只有 `active` 写入路径；高价值字段可空、判定读移动加权价、缺成本按高价值；报损实物废弃前财务 BP 确认门禁缺失；`loss` 仍归 `damage_report`；跨主体流转存在可消费品借用、任意价格、空 mode、时点分裂和借用改权；合同审批复用采购权限；合同/流转作用域不完整；PII 权限直授；正式 OpenAPI 的调拨、存酒转让、高价值和 typed 流水契约漂移；存酒转让允许部分数量且未正确切换权益人与取酒身份；账户注销未联动存酒提醒、主动放弃选择和转库存；HTML 十二类 code 未闭环。另有进货查验、门店要货、经销、完整存酒、获批内部结算价版本消费/引用、保管/期限及追溯码 `bound/consumed` 运行路径尚未形成完整能力。吧台按杯商品第十八批 I 段第 76 条（V575）起按标准出酒量（按容量）扣库存，设备实采超出部分或未配设备的标准损耗一并扣减、记入同一条流水（见 §5.9），按吧台有无采集设备二分已由第十八批第 17 条（V560）落；损耗率转核查工单仍未闭环。
+已确认的实现差距：酒水自采未阻断；资质校验可被空供应商和未来 `valid_from` 绕过且收货不重验；采购申请未记录申请人且审批未校验自审；采购多明细静默丢项；合同生命周期只有 `active` 写入路径；高价值字段可空、判定读移动加权价、缺成本按高价值；报损实物废弃前财务 BP 确认门禁缺失；`loss` 仍归 `damage_report`；跨主体流转存在可消费品借用、任意价格、空 mode、时点分裂和借用改权；合同审批复用采购权限；合同/流转作用域不完整；PII 权限直授；正式 OpenAPI 的高价值和 typed 流水契约漂移；存酒转让允许部分数量且未正确切换权益人与取酒身份；账户注销未联动存酒提醒、主动放弃选择和转库存；HTML 十二类 code 未闭环。另有进货查验、门店要货、经销、完整存酒、获批内部结算价版本消费/引用、保管/期限及追溯码 `bound/consumed` 运行路径尚未形成完整能力。吧台按杯商品第十八批 I 段第 76 条（V575）起按标准出酒量（按容量）扣库存，设备实采超出部分或未配设备的标准损耗一并扣减、记入同一条流水（见 §5.9），按吧台有无采集设备二分已由第十八批第 17 条（V560）落；损耗率转核查工单仍未闭环。
 
 ## 12. 当前 GAP 清单与后续编码边界
 
@@ -759,7 +759,7 @@ HTML 十二类、目标机读 code 与当前实现须分列；目标 code 是技
 | 合同审批权限 | 运行时和 OpenAPI 使用采购审批权限 | 独立 `inventory.supply_contract.approve` |
 | PII 权限 | V339 免审批并直授平台管理员 `pii.contact_phone.view` | 高敏能力逐项审批、单独授予，平台管理员不自动取得 |
 | 合同/流转隔离 | 合同与流转的查询、创建、审批缺完整项目/商户作用域；流转表无直接隔离列 | 项目与商户隔离不可关闭，普通岗位不得跨项目/商户 |
-| 调拨、主体与存酒转让契约 | OpenAPI 仅含跨主体 transfer return/cancel，漏 list/get/create/ship/receive 与 supply-entities GET/POST；运行时存酒 transfer 也未进入 YAML/JSON、验收矩阵和 closure 附录；覆盖工具漏扫工作台及存酒转让 | Controller/UI 实际依赖路径全部进入正式契约与覆盖门禁 |
+| 调拨、主体与存酒转让契约 | OpenAPI 已含跨主体 transfer list/get/create/ship/receive/return/cancel 与 supply-entities GET/POST（list/get 与 supply-entities 于第十八批 AE 段第 201 条 201-R6 补入）；存酒 transfer 已进入 YAML/JSON、验收矩阵和 closure 附录；覆盖工具漏扫工作台及存酒转让 | Controller/UI 实际依赖路径全部进入正式契约与覆盖门禁 |
 | 高价值/typed 正式契约 | OpenAPI 仍写数量×单价与物料阈值、无阈值放行，并称 typed 允许 inbound/outbound/damage | 契约不得与冻结高价值规则及当前 Java 白名单漂移；实现差异仍按 GAP 管理 |
 | 库存流水 code | 当前写入 `inbound/outbound/transfer/...`，白名单有限，且 `movement_type` 无 CHECK | 每个技术 code 必须完整、无歧义回映射到 HTML 十二类之一；同一类型的方向/已授权原因子码须在 UI、统计和业务契约归并回原类型；未实现 code 不得宣称已落地 |
 | 存酒转让 | 请求允许部分 `transferQuantity`；保存后原 `customer*` 和剩余量不变，仅写 `transferTo*`，取酒仍校验原姓名；转让流水操作者为空，用户文案仍有“转赠” | 单标签酒瓶只能整瓶转让且不得拆分；生效时正确切换权益人与取酒身份，流水记录操作者，文案统一“转让” |
@@ -807,6 +807,7 @@ V112 已建立两张子表并提供正式 list/create API；供应商主表没�
 
 | 日期 | 类型 | 位置 | 内容 | 原因/依据 |
 |---|---|---|---|---|
+| 2026-11-11 | 改 | §5.7 当前实现 GAP 段、§7 API 契约边界跨主体调拨行与存酒转让行、§11 已确认实现差距句、§12 GAP 清单调拨/主体与存酒转让契约行 | 版本升 V0.26；第十八批 AE 段第 201 条 201-R6：调拨单列表与详情（`GET /api/v1/inventory/transfer-orders`、`GET /api/v1/inventory/transfer-orders/{order_id}`）与 `GET/POST /api/v1/inventory/supply-entities` 补进正式 OpenAPI（只改契约、不改运行时），两行现状句改为 transfer list/get/create/ship/receive/return/cancel 与 supply-entities GET/POST 均已收录；存酒转让 `POST /inventory/saved-bottles/{id}/transfer`（transferSavedBottle）核实已在正式 YAML/JSON、验收矩阵与 closure 附录，§7 存酒转让行与 §12 同行后半句改为已收录；复核修复：§5.7 当前实现 GAP 段的 OpenAPI 半句同根改为已收录，§11 已确认实现差距句去掉调拨、存酒转让契约漂移 | 待开发清单第 201 条；决策台账 171-R1 先例（OpenAPI 与代码一致） |
 | 2026-11-01 | 改 | §6.13 积分兑换消耗、礼物领取消耗两行与表后实现事实句 | 版本升 V0.25；第十八批 M 段第 112 条 112-R3：积分兑换来的店内实物券核销写 `redeem_consume`，营销赠发的店内实物券核销与门票或套餐赠饮出品扣库（含冲正）写 `gift_claim_consume`，typed 白名单加 `gift_claim_consume` | BSM:1194、BSM:1179、BSM:1937、BSM:1049；ENUM:162 |
 | 2026-10-29 | 改 | 文首当前实现事实表追溯码/交接行、§5.5 当前实现 GAP 句、§10 酒吧经营行、§11、§12 GAP 表（吧台损耗率、五段交接/异常复核两行与末段）、§13B | V0.24 同版续记；第十八批 I 段第 76、84、85 条落地事实同步到现状与缺口句：按杯按容量扣库存、交接人工段按顺序放行与机器人段不计入完成、同段重复扫码不覆盖、工作手机交接扫码；缺段补录已于第十八批 F 段第 14 条接入通用人工补录主链，不再列为缺口；损耗率转核查工单仍未落地 | BSM L1065、L1168、L1201、L1891；ENUM L106 |
 | 2026-10-29 | 改 | §5.9 吧台按杯损耗率现状句 | 版本升 V0.24；第十八批 I 段第 76 条（V575）按杯按标准出酒量（按容量）扣减库存已落地，现状句同步；损耗率转核查工单仍未落地 | BSM L1065、L1168；ENUM L79、L106 |

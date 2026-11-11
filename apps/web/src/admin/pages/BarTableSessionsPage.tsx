@@ -1,4 +1,4 @@
-// 文件版本：V0.18
+// 文件版本：V0.19
 import React from "react";
 import { QRCodeSVG } from "qrcode.react";
 import { buildCustomerLink } from "@complex/customer-core/links";
@@ -245,7 +245,7 @@ export function BarTableSessionsPage({ api, setActionResult, setGlobalError, eff
     setSubmitting(true);
     setGlobalError(null);
     try {
-      const result = await api.post(`/api/v1/bar/tables/${encodeURIComponent(table.id)}/clear`, { operatorNote: "清理完成，登记恢复空闲" });
+      const result = await api.post(`/api/v1/bar/tables/${encodeURIComponent(table.id)}/clear`, {});
       setActionResult({ action: "bar_table_clear", status: "cleared", tableId: table.id, result });
       setBarError("");
       await reload();
