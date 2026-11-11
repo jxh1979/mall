@@ -1,9 +1,9 @@
-# 文件版本：V0.02
+# 文件版本：V0.03
 name: web-tests
 # 前端各工作区类型检查与单测（第 73 条，EV-07c-15）：PR 到 main 时在 GitHub ubuntu runner 上装依赖后跑
 # npm run typecheck（customer-core、web、customer-app、merchant-app）与 npm run test:unit（customer-core、web、customer-app、customer-miniapp、merchant-app 五个工作区；merchant-app 为商户手机应用）。
 # 只在 PR 上、且前端相关路径变化时触发，不随 push main 重跑；同分支新推送取消旧运行。
-# 私有库免费版设不了必需检查，本工作流只是可见信号、不阻断合并；ops/160/merge-pr.sh 仍只等 predeploy-gates。
+# 私有库免费版设不了必需检查（2026-11-11 第十八批裁决 48 定不升级、不公开）；ops/160/merge-pr.sh 自 V0.03 起对本提交触发了的本工作流也等绿才合并。
 on:
   pull_request:
     branches: [main]

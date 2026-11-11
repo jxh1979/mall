@@ -1,4 +1,4 @@
-# 部署与变更流程 V0.08（2026-07-05 起；M001 修订：CI 定义同步、事件基线与已验提交合并；第 73 条：PR 单测工作流）
+# 部署与变更流程 V0.09（2026-07-05 起；M001 修订：CI 定义同步、事件基线与已验提交合并；第 73 条：PR 单测工作流；第十八批裁决 48：合并脚本等三项 CI）
 
 ## 为什么改
 此前:AI 直推 main、部署只跑后端测试、治理门禁不 gate 部署 → 曾带着红门禁(scope 登记/安全基线/后台矩阵漂移)上生产。补三道真门禁。
@@ -7,18 +7,18 @@
 1. **部署门禁(硬阻断,.160)**:`complex-deploy-api.sh`/`complex-deploy-web.sh` 在构建前逐项执行固定的预部署门禁清单（含 HTML 台账、条目引用与参数分层三项）(delivery-gates 快子集,静态无需 DB);红即 `exit 1` 不碰生产。
 2. **本地 pre-push 钩子(.160)**:禁止 `git push ...:main`;正道走 feature 分支 + PR。紧急覆盖 `ALLOW_MAIN_PUSH=1`(须在 PR/说明记录原因)。
 3. **GitHub Actions(独立、隔离,✅已激活 2026-07-06)**:生效定义是 `.github/workflows/predeploy-gates.yml`,`ops/ci/predeploy-gates.yml` 是它的字节一致镜像(`verify:delivery-gates-docs` 机检两者一致、checkout 实际字段为 `fetch-depth: 0`、事件基线及预部署执行步骤有效;浅克隆会让 html-ledger-sync/html-param-tier 取不到基线)。现于 PR/push 到 main 时在 GitHub ubuntu runner 上跑 `verify:predeploy`。即便激活,私有库免费版也无法设 required check,只是可见信号 + 独立复现;硬阻断由第 1、2 道承担。
-   - **PR 单测工作流(2026-10-29 第 73 条,EV-07c-15)**:另有两份只在 PR 到 main 时触发的工作流(不随 push main 重跑,同分支新推送取消旧运行)。`.github/workflows/backend-tests.yml` 在 `backend/**`、`docs/openapi/**`、`tools/run-backend-maven.mjs` 或本文件变化时触发,起 PostgreSQL 服务容器(与 160 complex-postgres 同一镜像摘要,库账号口令用仓内测试默认值,不引用 secrets)跑 `node tools/run-backend-maven.mjs -B -ntp test` 后端全量;`.github/workflows/web-tests.yml` 在 `apps/web/**`、`apps/customer-app/**`、`apps/customer-miniapp/**`、`packages/**`、`package.json`、`package-lock.json`、`tsconfig.base.json` 或本文件变化时触发,跑 `npm ci --ignore-scripts`、`npm run typecheck`、`npm run test:unit`(四个工作区)。私有库免费版设不了必需检查,两者同样只是可见信号;`ops/160/merge-pr.sh` 仍只等 predeploy-gates。
-4. **合并前置检查(`ops/160/merge-pr.sh`,2026-08-07 门禁升级批 1 补;2026-09-03 M001 修订)**:合并前取本分支 head commit 对应的 predeploy-gates run,`gh run watch --exit-status` 等到绿后,再次核对远端分支与 PR head 仍是该 commit,并以 `gh pr merge --match-head-commit <已验 SHA>` 合并;等待期间分支被推新 commit 即中止。非成功即中止并打印 run URL。补的正是第 3 道"只是可见信号"的缺口——把"人记得去看一眼"变成机器动作。逃生口 `SKIP_CI_WAIT=1`(打印醒目警告,**须在 PR 说明原因**)。
+   - **PR 单测工作流(2026-10-29 第 73 条,EV-07c-15)**:另有两份只在 PR 到 main 时触发的工作流(不随 push main 重跑,同分支新推送取消旧运行)。`.github/workflows/backend-tests.yml` 在 `backend/**`、`docs/openapi/**`、`tools/run-backend-maven.mjs` 或本文件变化时触发,起 PostgreSQL 服务容器(与 160 complex-postgres 同一镜像摘要,库账号口令用仓内测试默认值,不引用 secrets)跑 `node tools/run-backend-maven.mjs -B -ntp test` 后端全量;`.github/workflows/web-tests.yml` 在 `apps/web/**`、`apps/customer-app/**`、`apps/customer-miniapp/**`、`packages/**`、`package.json`、`package-lock.json`、`tsconfig.base.json` 或本文件变化时触发,跑 `npm ci --ignore-scripts`、`npm run typecheck`、`npm run test:unit`(四个工作区)。私有库免费版设不了必需检查(2026-11-11 第十八批裁决 48 定不升级 Pro、不公开仓库);`ops/160/merge-pr.sh` 自 V0.03 起对本提交触发了的这两份也等绿才合并,没触发的视为不需要。
+4. **合并前置检查(`ops/160/merge-pr.sh`,2026-08-07 门禁升级批 1 补;2026-09-03 M001 修订)**:合并前取本分支 head commit 对应的 predeploy-gates run(V0.03 起连同本提交已触发的 backend-tests、web-tests run),`gh run watch --exit-status` 逐个等到绿后,再次核对远端分支与 PR head 仍是该 commit,并以 `gh pr merge --match-head-commit <已验 SHA>` 合并;等待期间分支被推新 commit 即中止。非成功即中止并打印 run URL。补的正是第 3 道"只是可见信号"的缺口——把"人记得去看一眼"变成机器动作。逃生口 `SKIP_CI_WAIT=1`(打印醒目警告,**须在 PR 说明原因**)。
 
 ## 变更流程
 1. feature 分支上开发 + 提交。
 2. `ops/160/propose-change.sh "<标题>"` → 本地 predeploy 绿 → 推分支 → 开 PR。
 3. **独立复核**:把 PR diff 交由 **codex(不同模型)** 做对抗复核(本环境最接近"独立"的手段;非人工,须知悉此局限)。
-4. 复核通过 → `ops/160/merge-pr.sh --squash`(自动等 GitHub Actions predeploy 绿再合;CI 故障时 `SKIP_CI_WAIT=1` 强合,须在 PR 说明原因)。
+4. 复核通过 → `ops/160/merge-pr.sh --squash`(自动等 GitHub Actions predeploy 及本提交已触发的后端、前端单测绿再合;CI 故障时 `SKIP_CI_WAIT=1` 强合,须在 PR 说明原因)。
 5. 部署:`complex-deploy-api.sh`(自带 predeploy 硬闸)。
 
 ## 已知局限(诚实记录)
-- GitHub 分支保护/required check 需 Pro 或公开库,当前用不了 → 结构性强制靠本地钩子(可 --no-verify 绕过)+ 部署硬闸。
+- GitHub 分支保护/required check 需 Pro 或公开库,当前用不了 → 结构性强制靠本地钩子(可 --no-verify 绕过)+ 部署硬闸。2026-11-11 第十八批裁决 48 定不升级、不公开,合并脚本改等三项 CI(见第 4 道),绕过脚本的合并仍拦不住。
 - "独立复核"是不同模型(codex)而非人类;闭环里仍无人类工程师的独立判断,这是残留风险。
 - **门禁与被部署代码同仓同信任域**:能直推/合并 main 的主体,同一提交里就能把 `package.json` 的 `verify:predeploy` 改成 `true`、或删掉部署脚本里的 gate——本方案挡不住“篡改门禁本身”。真正的服务端强制需:受保护 CI/受控部署系统执行部署,或对 `package.json`/`ops/160/complex-deploy-*.sh`/hook/CI 文件加 CODEOWNERS 人审(仍非服务端强制)。
 - GitHub Actions 已激活；修改生效 workflow 时同步镜像，维护方式见下。
