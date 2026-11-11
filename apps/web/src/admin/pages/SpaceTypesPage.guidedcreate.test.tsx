@@ -64,9 +64,10 @@ describe("SpaceTypesPage 引导式新增空间类型(phase-7)", () => {
     fireEvent.click(screen.getByTestId("space-types-save"));
 
     await waitFor(() => expect(post).toHaveBeenCalledTimes(1));
-    expect(post).toHaveBeenCalledWith("/api/v1/platform/space-types", expect.objectContaining({
-      typeCode: "floor", typeName: "楼层", sortOrder: 200, status: "active",
-    }));
+    // 第 198 条 198-R3⑧：新建一律启用、服务端不读 status，请求体不再带写死的 status。
+    expect(post).toHaveBeenCalledWith("/api/v1/platform/space-types", {
+      idempotencyKey: expect.any(String), typeCode: "floor", typeName: "楼层", sortOrder: 200,
+    });
     await waitFor(() => expect(screen.queryByTestId("space-types-guided")).toBeNull());
     expect(setActionResult).toHaveBeenCalledWith(expect.objectContaining({ action: "space_type_saved" }));
   });

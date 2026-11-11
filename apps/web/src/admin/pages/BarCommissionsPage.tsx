@@ -156,9 +156,9 @@ export function BarCommissionsPage({ api, setActionResult, setGlobalError, effec
       setFormError(TEXT.noBill);
       return;
     }
-    // 请求体只带后端 CommissionCalculateRequest 真有的字段：费率由后端按角色档从结算配置中心取，
+    // 第 198 条 198-R3⑤：请求体为空，幂等键由通用请求层注入（服务端不读 include_only_table_sales）。费率由后端按角色档从结算配置中心取，
     // 前端不下发费率（原先下发的 salesRate/nonSalesRate 后端根本不接，纯属误导读者以为费率由页面定）。
-    const requestBody = { includeOnlyTableSales: true };
+    const requestBody = {};
     setSubmitting(true);
     setFormError("");
     setGlobalError(null);

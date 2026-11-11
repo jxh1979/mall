@@ -1,4 +1,4 @@
-# P1 商户服务工单 API 契约 V0.12
+# P1 商户服务工单 API 契约 V0.13
 
 文档类型：Implementation / API Contract
 
@@ -71,7 +71,6 @@
 | `priority` | 是 | enum | `low`/`medium`/`high`/`critical` |
 | `title` | 是 | string | 1-160 字符 |
 | `description` | 是 | string | 1-2000 字符 |
-| `reported_by_user_id` | 是 | string | 上报人 |
 | `reported_channel` | 是 | string | `web`、`staff_app`、`merchant_portal` 等 |
 | `due_at` | 否 | instant | SLA 到期时间，UTC |
 
@@ -84,7 +83,6 @@
 | `evidence_attachment_ids` | 否 | string[] | 证据引用 |
 | `owner_department` | 是 | string | 责任部门 |
 | `owner_user_id` | 是 | string | 责任人 |
-| `operator_user_id` | 是 | string | 操作人 |
 
 ### 4.3 处理动作
 
@@ -94,7 +92,6 @@
 | `operator_note` | 是 | string | 处理说明 |
 | `evidence_attachment_ids` | 否 | string[] | 证据引用 |
 | `target_status` | 否 | enum | `assigned`/`processing`/`pending_merchant`/`resolved` |
-| `operator_user_id` | 是 | string | 操作人 |
 
 ### 4.4 关闭工单
 
@@ -105,7 +102,6 @@
 | `evidence_attachment_ids` | 否 | string[] | 证据引用 |
 | `resolution` | 是 | string | 解决方案 |
 | `satisfaction_score` | 否 | integer | 1-5，不填为空（不替提单方默认评分） |
-| `operator_user_id` | 是 | string | 操作人 |
 | `close_reason` | 投诉必填 | string | 关闭缘由，记入关闭动作说明与留痕（102-R2） |
 
 ## 5. 事件

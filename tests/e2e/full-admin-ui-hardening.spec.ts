@@ -1,4 +1,4 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 import { test, expect, type Page } from "@playwright/test";
 import { installMockApi } from "./support/mock-api";
 import { fillCnDate } from "./support/cn-date";
@@ -104,7 +104,6 @@ test.describe("full admin UI hardening acceptance", () => {
 
     await openNav(page, "ADM-FIN-001");
     await page.getByTestId("finance-payment-amount").fill("0");
-    await page.getByTestId("finance-payment-reason").fill("测试核销");
     await page.getByTestId("finance-payment-submit").click();
     await expect(page.getByTestId("finance-ledger-error")).toContainText("大于 0");
   });

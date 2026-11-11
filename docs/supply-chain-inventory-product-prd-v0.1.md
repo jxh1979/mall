@@ -1,6 +1,6 @@
-# 供应链与库存管理产品 PRD V0.36
+# 供应链与库存管理产品 PRD V0.37
 
-> 版本：V0.36｜最后更新：2026-11-03｜M09 复核：业务目标与当前实现必须分列；代码只作实现事实证据，不得反向定义 HTML 业务规则。
+> 版本：V0.37｜最后更新：2026-11-11｜M09 复核：业务目标与当前实现必须分列；代码只作实现事实证据，不得反向定义 HTML 业务规则。
 
 > **锚点口径（2026-09-03 M09 全量复核）**：本文引用三份业务 HTML（BSM＝`business-system-map-for-operations-v0.1.html`／PGM＝`platform-governance-map-for-operations-v0.1.html`／ENUM＝`business-enum-quick-reference-v0.1.html`）时，一律采用**「条目名主锚点 + 冻结行号辅助」**；辅助行号对应冻结提交 `61f4fbb1be2fae9df8fcbb48f1cb2af9bb53ec68`。例如库存流水的主锚点是 BSM「库存流水」与 ENUM「库存流水类型」，不得再用旧快照 L1108 冒充现行锚点。历史变更日志只说明当时动作，不具有现行业务解释权。
 
@@ -549,7 +549,7 @@ flowchart TD
 | 报损、盘点差异、存酒作废 | 低价值调整与存酒作废即时生效（18D 裁决补充第 14 条口径）；typed `damage/loss/waste` 与调整单入口高价值建复核单并强制照片＋视频；盘点单流程高价值差异须照片＋视频（第十八批第 24 条）；发起人／录入人不得审批自己的复核单；后台「库存 · 高价值复核」页可审批 | `loss` 仍被映射到 `damage_report`，不得把 `loss` 解释成 HTML 第三种报损原因 |
 | 跨主体借调 | V277 允许可消费品 `lending`、任意非负单价和空 `lending_mode`；发货时结算、收货时才改 owner，两侧库存/流水不联动；借用收货也改 owner，空 mode 收货后不能归还或取消 | 缺内部结算价校验、交付时点一致性、库存守恒、组合校验、保管主体、归还期限和超期工单；不得称借/调已闭环 |
 | 权限与数据隔离 | 合同审批仍用 `inventory.purchase.approve`；V339 免审批并直授平台管理员手机号明文权限；合同列表/创建/审批及流转创建/详情/列表缺完整项目/商户作用域校验 | 合同审批职责未分离，PII 高敏权限违反逐项授予，合同与流转单存在跨作用域暴露/操作风险 |
-| 正式 OpenAPI | 跨主体 transfer 仅收录 return/cancel，漏 list/get/create/ship/receive 与 `supply-entities` GET/POST；运行时已有存酒 `POST /api/v1/inventory/saved-bottles/{id}/transfer`，正式 YAML/JSON、验收矩阵和 closure 附录均缺失；高价值说明仍是“数量×单价≥物料阈值、无阈值即时放行”；typed 流水仍称允许 `inbound/outbound/damage` | 覆盖脚本漏扫工作台及存酒转让；高价值说明与 HTML/Java 漂移；typed 入口实际拒绝 inbound 并允许 `outbound/damage/waste/loss/redeem_consume`，契约未对齐 |
+| 正式 OpenAPI | 跨主体 transfer 的 list/get/create/ship/receive/return/cancel 与 `supply-entities` GET/POST 均已收录（list/get 与 `supply-entities` GET/POST 于第十八批 AE 段第 201 条 201-R6 补入）；存酒 `POST /api/v1/inventory/saved-bottles/{id}/transfer` 已收录于正式 YAML/JSON、验收矩阵和 closure 附录；高价值说明仍是“数量×单价≥物料阈值、无阈值即时放行”；typed 流水仍称允许 `inbound/outbound/damage` | 覆盖脚本漏扫工作台及存酒转让；高价值说明与 HTML/Java 漂移；typed 入口实际拒绝 inbound 并允许 `outbound/damage/waste/loss/redeem_consume`，契约未对齐 |
 | 库存流水 code 覆盖 | `movement_type` 列无 DB CHECK；当前入库写 `inbound`，typed 和调整入口白名单分裂，调拨写单一 `transfer` | 每个技术 code 尚未形成完整、无歧义回映射到 HTML 十二类之一的运行闭环；同一类型的方向/已授权原因子码须在 UI、统计和业务契约归并回原类型；未实现 code 不得称已实现 |
 | 存酒转让 | `transferQuantity` 可空且服务接受 `1..remainingQuantity`；保存时保留原 `customerId/name/phone`，只写 `transferTo*`，取酒仍校验原姓名；转让流水的操作者为空，用户文案仍有“转赠” | 现有路径违反单标签酒瓶整瓶转让、不得拆分的规则，也未正确切换权益人与取酒身份；不得称转让闭环已实现 |
 | 账户注销与存酒 | `CustomerService.deregisterAccount` 只把账户状态改为 `deregistered`，未检查或提醒名下存酒，也未提供主动放弃选择或联动转库存 | 注销时放弃的存酒尚未按到期规则转为所在酒吧自有库存，不得称账户注销的存酒库存后果已闭环 |
@@ -577,6 +577,7 @@ flowchart TD
 
 | 日期 | 类型 | 位置 | 内容 | 原因/依据 |
 |---|---|---|---|---|
+| 2026-11-11 | 第十八批 AE 段实现同步（V0.37） | §10.1 正式 OpenAPI 行 | 第 201 条 201-R6：调拨单列表 `GET /api/v1/inventory/transfer-orders`、详情 `GET /api/v1/inventory/transfer-orders/{order_id}` 与 `GET/POST /api/v1/inventory/supply-entities` 补进正式 OpenAPI（只改契约、不改运行时）；现状句改为跨主体 transfer 的 list/get/create/ship/receive/return/cancel 与 `supply-entities` GET/POST 均已收录；存酒转让 `POST /api/v1/inventory/saved-bottles/{id}/transfer`（transferSavedBottle）核实已在正式 YAML/JSON、验收矩阵与 closure 附录，同行后半句改为已收录 | 待开发清单第 201 条；决策台账 171-R1 先例（OpenAPI 与代码一致） |
 | 2026-11-03 | 第十八批 N 段实现同步（V0.36） | §7.2 门店要货与库房履约·实装现状（FS-011） | 第十八批 N 段第 121 条 121-R1：门店要货签收时合格随货码未登记的，按本行物品登记到门店；已登记的，归属商户与登记物料随转为门店和本行物品；拒收与短少码不登记、仍归供货主体；签收后门店库管可按码列出库订单、建交接链 | BSM:1166、BSM:1197、BSM:1201、BSM:1212 |
 | 2026-11-01 | 第十八批 M 段实现同步（V0.35 同版续记） | §5 核心对象库位行、§6 库房管理行 | 第十八批 M 段第 119 条：库位先在库存台账「库房」区块按库房建档（119-R1：迁移 V588 `warehouse_locations`、`GET/POST /api/v1/inventory/warehouse-locations`，采购验收、门店要货签收、借调买断收货只收所选仓库下已建档的库位；119-R2：库房行列出库位并「＋库位」建档，采购验收「实际库位编号」改为只能选所选仓库下已建档的库位） | BSM:1936、BSM:1162；PGM:480 |
 | 2026-11-01 | 第十八批 M 段实现同步（V0.35 同版续记） | §7.6.5 扫码纪律与买断 | 第十八批 M 段第 112 条 112-R4：买断收货时随货溯源码的归属商户与登记物料随转为接收方及其所选物品，借用不变 | BSM:1201、BSM:1197 |

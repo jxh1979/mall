@@ -1,4 +1,4 @@
-// 文件版本：V0.05
+// 文件版本：V0.06
 import React from "react";
 import { formatBusinessStatus } from "../i18n/statusLabels";
 import { TechDetails } from "../components/TechDetails";
@@ -105,7 +105,6 @@ const TEXT = {
   onlineCheck: "在线校验",
   onlineCheckHelp: "高价值酒水不支持离线领取",
   claim: "在线领取核销",
-  phone: "领取手机号（可空）",
   code: "短信验证码 / 动态取酒码",
   quantity: "领取数量",
   note: "备注",
@@ -192,7 +191,6 @@ export function StoredWinePage({ api, setActionResult, setGlobalError, effective
   // 第 23 条 23-R5：敏感页这一次看到的对象（PGM:687「哪个客人、哪个商户、哪些单据」）。
   React.useEffect(() => reportViewedObjects?.("saved_bottle", rows), [rows, reportViewedObjects]);
   const { selectedId, setSelectedId, selected } = useSelectedRow(rows);
-  const [claimPhone, setClaimPhone] = React.useState("");
   const [verificationCode, setVerificationCode] = React.useState("");
   // FS-016 转让分组：受让人三件套 + 出让人（当前持有人）短信验证码。
   const [transferToName, setTransferToName] = React.useState("");
@@ -745,7 +743,6 @@ export function StoredWinePage({ api, setActionResult, setGlobalError, effective
         operator_note: operatorNote,
         evidence_attachment_ids: ["att-saved-bottle-claim-1"],
         claim_items: [{ saved_bottle_id: selected.id, item_name: selected.itemName ?? selected.savedNo ?? selected.id, claim_quantity: quantity }],
-        claim_by_phone: claimPhone.trim() || undefined,
         verification_code: verificationCode,
       };
       const result = await api.post(`/api/v1/inventory/saved-bottles/${selected.id}/claim`, body);
@@ -783,7 +780,6 @@ export function StoredWinePage({ api, setActionResult, setGlobalError, effective
         </div>
 
         <div className="admin-form-grid" data-testid="stored-wine-claim-form">
-          <label>{TEXT.phone}<input data-testid="stored-wine-claim-phone" value={claimPhone} onChange={(event) => setClaimPhone(event.target.value)} /></label>
           <label>{TEXT.code}<input data-testid="stored-wine-claim-code" value={verificationCode} onChange={(event) => setVerificationCode(event.target.value)} /></label>
           <button type="button" className="admin-secondary-button" data-testid="stored-wine-claim-send-code" disabled={!selected} onClick={() => void sendVerificationCode("claim")}>{TEXT.sendCode}</button>
           <label>{TEXT.quantity}<input data-testid="stored-wine-claim-quantity" type="number" min="1" value={claimQuantity} onChange={(event) => setClaimQuantity(event.target.value)} /></label>

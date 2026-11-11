@@ -1,4 +1,4 @@
-// 文件版本：V0.06
+// 文件版本：V0.07
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
@@ -74,7 +74,6 @@ export function AmusementFaultCompensationPage({ api, setActionResult, setGlobal
   const [role, setRole] = React.useState(canHead ? ROLE_HEAD : ROLE_ENGINEERING_SAFETY);
   const [reason, setReason] = React.useState("");
   const [bearer, setBearer] = React.useState("");
-  const [note, setNote] = React.useState("");
   const [policyDays, setPolicyDays] = React.useState("");
   const [policyMin, setPolicyMin] = React.useState("");
   const [policyMax, setPolicyMax] = React.useState("");
@@ -127,7 +126,7 @@ export function AmusementFaultCompensationPage({ api, setActionResult, setGlobal
     try {
       await call();
       setActionResult({ 结果: label, ...result });
-      setReason(""); setNote("");
+      setReason("");
       await reload();
     } catch (actionError) {
       setFormError(actionError instanceof Error ? actionError.message : `${label}失败`);
@@ -144,7 +143,7 @@ export function AmusementFaultCompensationPage({ api, setActionResult, setGlobal
 
   function confirm(batch: BatchRow) {
     void run("补偿已发放：完整票面权益已在原票下补发",
-      () => api.post(`/api/v1/amusement/compensation-batches/${encodeURIComponent(batch.id)}/confirm`, { role, note: note.trim() || undefined }),
+      () => api.post(`/api/v1/amusement/compensation-batches/${encodeURIComponent(batch.id)}/confirm`, { role }),
       { 批次: batch.id, 确认岗位: roleLabel(role) });
   }
 
@@ -199,7 +198,6 @@ export function AmusementFaultCompensationPage({ api, setActionResult, setGlobal
             {entities.map((e) => <option key={e.id} value={e.id}>{e.entityName ?? e.id}</option>)}
           </select>
         </label>
-        <label>确认说明<input aria-label="确认说明" data-testid="compensation-note" value={note} onChange={(event) => setNote(event.target.value)} /></label>
         {pendingBatch ? (
           <button type="button" data-testid="compensation-confirm" disabled={submitting || !canAct} onClick={() => confirm(pendingBatch)}>{pendingBatch.initiatedRole ? "第二岗位确认并发放" : "岗位确认（两岗位先后确认后发放）"}</button>
         ) : currentSessionBatch ? null : (

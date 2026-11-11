@@ -1,6 +1,6 @@
 # PRD 审计业务裁决台账
 
-文档版本：V0.85
+文档版本：V0.86
 状态：进行中
 迁移日期：2026-07-27
 当前事实源：三份立法 HTML 以既有冻结基线叠加 James 此前 M02 至 M08 的点名批准、全量审计 M001、M002 的逐项批准，以及本轮 2026-10-16 至 2026-10-17 业务 HTML 审计中 Q01 至 Q40 及子题实际明确批准且未被后续替代的裁决，和 2026-10-17 第二批 HTML 业务线推演审计（A–F 六线 64 条、停车章）的逐项批准，并叠加本轮 CG 70 项来源确认与 C01–C09、N01–N03 最终澄清及补全文稿中 F01、W01–W05 的整体修改批准（本文件末节）；本轮最终规则、未采纳或替代关系、现行版本与字节哈希见本文件末节。历史记录保留为各自当时事实，不恢复已被替代的建议。
@@ -5889,3 +5889,228 @@ HTML 的语义补齐与直接引用同步可在本批核验；70项中的业务�
 - 18AD 复核修复补记·第 204 条审批时限接口挂到治理模块：backend gate/ServerModuleRoutes.java 的 web 表新增 Map.entry("/api/v1/platform/approval-deadlines", "governance")（V0.02），按段边界最长前缀，GET 清单与 PUT /api/v1/platform/approval-deadlines/{action_type} 都归 Web「治理」模块。治理模块（tcs_web_mod_governance）关闭后，接口返回 403 TERMINAL_DISABLED 并按 governance 留痕。依据：PGM:737「关闭后菜单不可见或不可点，接口也要拒绝业务动作」、PGM:744「前端隐藏只是辅助，后端接口必须独立校验」，以及第 100 条 100-R1 规则（某个菜单组页面独用的接口才定模块，主管复核页属 governance 菜单组）。新测试：ServerModuleRoutesTests.approvalDeadlinesBelongToGovernance、ServerModuleSwitchJdbcIntegrationTests.governanceModuleOffRejectsApprovalDeadlines。
 - 18AD 复核修复补记·第十八批裁决 47 酒吧收银免单审批改名：apps/web/src/admin/i18n/reviewLabels.ts 只把 "bar.bill_waiver" 的中文名由「免单」改为「酒吧账单免单」，bill_waiver 仍叫「免单」，清单构成与接口不变；待复核列表、审批链页（ADM-GOV-009）和审批时限区块随之显示新名。依据：裁决 47 选项原文「酒吧收银那行改叫「酒吧账单免单」，两行各配各的。待复核列表和审批链页上，这个码的显示也会随之变成新名字。」后端 FieldLabels.java 与前端 fieldLabels.ts 都没有该键，未改。新测试：SupervisorReviewPage.deadline.test.tsx「⑥ 第十八批裁决 47：两行免单各叫各的」；既有用例 ApprovalChainPage.test.tsx:310 已按新名同步。
 - 18AD 落地位置补记·运行验收证据、快照、终验文档刷新（无新裁决）：业务提交 b06c6cb0 之后，按第十八批裁决 25 重刷了运行验收证据：后端全量 6620 测，0 失败 0 错误；apps/web 构建通过；常规界面验收（接口全部 mock）实跑 40 条全过；真实后端界面验收未跑，runtime_ready=false。随后依次重生成闭环当前态快照、生产闭环缺口报告、界面验收报告、无上线指挥台。生成器没改。手改 docs/final-closed-loop-acceptance-audit-v0.1.md 与 docs/code-implementation-acceptance-audit-v0.1.md：前端单测源码计数改为 1696；被核文件行数都没变；后端全量与常规界面验收的数字、日期改为本次实跑值；写入 npm run verify:unit 实跑结果，五个工作区全过。交付门禁于 2026-11-10 22:21 UTC 在工作树逐项实跑子项，NAS 两项现场探测未跑。仍红的有两项：一是 coding-host-protection，它写死主仓路径，在工作树口径下必红，属工具口径，不做；二是 final-closed-loop-audit，如实留 2 条红（integration-ready、business-acceptance-ready），原因是校验器要求终验把联调、业务验收写成「是」，而裁决 25 定了不跑真实后端界面验收、运行验收未就绪，终验写的是「否」。verify:delivery-gates 总链仍是红的。
+
+18AE 落地位置补记（2026-11-11）：第十八批 AE 段（batch51）按 18W 核实稿与 18AE 复核修正实现待开发清单第 198 条（198-R1～R4）与第 201 条（201-R1～R8）；198-R5 下一段做；运行验收证据、终验文档在本段最后一个提交刷新；各条落地位置见下。本段追加时，原台账除文档版本 V0.85→V0.86 外，其他历史字节保持。
+
+- 18AE 落地位置补记·控制席判定（2026-11-11）：本段（第十八批 AE 段，batch51）实现待开发清单第 198 条 198-R1～R4（请求字段契约声明了、代码不读：契约删字段，客户端在发的停发并删不被记录的输入框）与第 201 条 201-R1～R8（89 个控制器入口补进 OpenAPI），方案为 18W 核实稿（本机 b43-audit\g198-201-openapi.json），18AE 在现 main 上重跑核过（本机 b51-tmp\verify_18ae.json：89 个入口一个未补、无新增漏登；198-R1～R3 的 94 项未变）；依据为 OpenAPI 与代码一致（待开发清单第 94、113、124、136、153、170、171 条先例：契约只删、后端 DTO 分量保留）与 PGM:966、PGM:968、BSM:1631、BSM:1633；198-R4② 因第 200 条已在 18W 按原样落地，改为撤销 200-R1 留下的「核销/调整原因」框——收付款登记属 BSM:1631「支付、核销」系统自动留痕、不是调账（第七批裁决 19「人工登记收款」），调账原因由 ArApAdjustment 必填落库并经审批；198-R5（其余约 120 个操作逐行核对）下一段做；无迁移，操作数 1271→1360。
+- 18AE 落地位置补记·第 198 条 198-R1：docs/openapi/openapi-p0.yaml 与 openapi-p0.json 的酒吧、游乐类请求结构，删去代码不读、也没有客户端发送的字段，共 34 个。只改契约：后端 DTO 分量保留，网页、安卓不改，操作数不变（1271）。每处字段从 properties 删除（都不在 required 里）；components.requestBodies 示例里的同名键一并删除。
+  - ① BarTableSpaceAssignmentRequest（assignBarTableSpace）删 operator_note、evidence_attachment_ids：BarTableSessionService.java:223-226 只读 space_id（:226）；无客户端调用。
+  - ② BarReservationCancelRequest（cancelBarReservation）删 operator_note、evidence_attachment_ids：BarEntryService.java:236-242 只读 no_show 与幂等键；无客户端调用。reason 保留，依据 BSM:1058「店长及以上可人工取消预留，必须填原因并留痕」，缺的读取与入口见待开发清单第 230 条。
+  - ③ BarReservationDepositActionRequest（payBarReservationDeposit、checkInBarReservationDeposit 共用）删 operator_note、evidence_attachment_ids，并删 components.requestBodies.BarReservationDepositActionRequest 示例里的 operator_note：BarEntryService.java:182-234 两入口都不读；安卓 TerminalModels.kt:887-891 只发 idempotency_key、channel、pos_transaction_no。channel、pos_transaction_no 有读取，保留。
+  - ④ BarDepositRuleRequest（createBarDepositRule）删 operator_note、evidence_attachment_ids：BarEntryService.java:401 起只读 bar_id、scope_type、scope_id、mode、fixed_amount_cent、ratio_bps、cancel_free_before_minutes；无客户端调用。
+  - ⑤ BarOrderBillCreateRequest（createBarOrderBill）删 min_spend_fill_required、payment_mode、service_fee_rate_bp：BarBillingService.java:166 只读 operator_note、evidence_attachment_ids（这两项保留），全仓 minSpendFillRequired()、serviceFeeRateBp() 0 处读取；网页 BarOrdersPage.tsx:355 只发 operatorNote；安卓 TerminalWorkflow.kt:296-299、KioskBarPurchase.kt:21 不赋值，TerminalApiClient.kt:53 explicitNulls=false 不发空值。
+  - ⑥ BarReservationRequest（createBarReservation）删 operator_note：BarEntryService.java:60-136 不读；网页 BarTableSessionsPage.tsx:368-375 与安卓 TerminalModels.kt:850-861 都不带。
+  - ⑦ BarTableRequest（createBarTable）删 operator_note、evidence_attachment_ids：BarTableSessionService.java:53-77 只读 bar_id、table_name、table_type、minimum_spend_cent、capacity、status；网页 BarTableSessionsPage.tsx:309-315 不发。
+  - ⑧ BarOrderDeliveryRequest（deliverBarOrder）删 delivered_by_user_id：BarOrderService.java:633-730 不读，全仓 deliveredByUserId() 0 处读取，送达人取登录会话；网页 BarOrdersPage.tsx:364-367 不发，安卓无送达调用。
+  - ⑨ OpenBarTableRequest（openBarTable）删 operator_note、evidence_attachment_ids、table_id、opened_by_user_id、guest_count，只剩 idempotency_key 与必填 reservation_id：BarTableSessionService.java:79-97 只读 reservation_id（:87），台位取路径参数（BarController.java:716）；全仓无客户端调用。
+  - ⑩ BarEntitlementDrinkRedemptionRequest（redeemBarDrinkEntitlement）删 operator_note、evidence_attachment_ids：BarEntitlementRedemptionService.java:43-54 只读 verification_id 与幂等键；无客户端调用。
+  - ⑪ 游乐，删 operator_note、evidence_attachment_ids 的四个：
+    - ConfigureOverCapacityPolicyRequest：AmusementService.java:669-684 只读 operating_capacity、disposal_mode、enabled。
+    - AmusementDeviceRequest：:1221-1244 只读 device_code、name、location_point_id、status、safety_check_interval_hours。
+    - AmusementProjectEntitlementRequest：:1195-1211 只读 entitlement_type 与幂等键；网页 TicketingPoliciesPage.tsx:729-732 只发 idempotency_key、entitlement_type。
+    - AmusementProjectSpaceAssignmentRequest：:240-260 只读 space_id。
+  - ⑪ 游乐，只删 operator_note 的三个（evidence_attachment_ids 有读取，保留）：
+    - AmusementProjectRuleRequest：:1173-1193。
+    - AmusementSafetyTemplateRequest：:1101-1118。
+    - AmusementSessionRequest：:1142-1171；网页 AmusementSessionsPage.tsx:307-314 不发。
+  - ⑫ AmusementMaintenanceResumeRequest（confirmAmusementMaintenanceResume）删 remark，并删 components.requestBodies.AmusementMaintenanceResumeRequest 示例里的 remark：AmusementMaintenanceService.java:158 起只 requireRequest，确认人取当前登录主管；网页 AmusementSafetyPage.tsx:237 只发幂等键；安卓 MainActivity.kt:1328 不带 remark。
+  - 不动：已退役的 AmusementCapacityConfigRequest；网页在发的 AmusementProjectRequest（归 198-R3⑦）。
+  - 依据：决策台账:4148「以代码和权威字典为准，只改契约」；先例 170-R1（决策台账:5179，:5182「BarReservationRequest 删 commission_rate（全库无读取）」，DTO 保留）、153-R2（决策台账:4953），以及第 94、113、124、136、153、170、171 条「OpenAPI 与代码一致」；BSM:940「收银、核销、收款、放行等现场动作，一律按执行该动作的设备绑定与该次登录会话定位到操作人并留痕」（送达人、开台人取登录会话）。
+  - 回归：npm run verify:p0-contract 全绿；一次性比对脚本 ~/audit-tmp/b51_a1/a1_check.js 核过 yaml 与 json 整份深比较一致，实际 json 与「原 json 按清单结构化删除」的结果深比较一致，并逐条断言方案 tests①。
+  - 无迁移、无新接口、无新裁决；后端、网页、安卓代码不改。
+- 18AE 落地位置补记·第 198 条 198-R2：docs/openapi/openapi-p0.yaml 与 openapi-p0.json 的平台治理、商户、票务、库存、设备、认证、考勤、运维类请求结构，删去代码不读、也没有客户端发送的字段，共 44 个。只改契约，操作数不变（1271），后端 DTO 分量保留。
+  - ① AccessUserRequest（createAccessUser）删 phone：DTO 分量是 @JsonIgnore（AccessUserRequest.java:14），后端从不接收；网页 AccessUsersPage.tsx:125-134、安卓 P0Fixture.kt:111-120 不发。
+  - ②～⑦ 平台治理六个 schema 各删 operator_note、evidence_attachment_ids：
+    - BusinessEntityRequest：PlatformService.java:111-143 不读。
+    - BusinessEntityBindingRequest：:1019-1064 不读；网页只调 /change（SubjectBindingsPage.tsx:174）。
+    - MerchantProfileRequest（createMerchant、updateMerchant 共用）：:183-193、:214-224 不读；网页 OrganizationMerchantPage.tsx:239-252 不发。
+    - ProjectRequest：:690-730 不读。
+    - SpaceRequest：:921-978 不读。
+    - SpaceTypeRequest：:784-811 只读 type_code、type_name、sort_order；网页 SpaceTypesPage.tsx:80-86 不发。status 归 198-R3⑧。
+  - ⑧ 票务三个 schema：
+    - TicketTypeEntitlementRequest 删 operator_note、evidence_attachment_ids：TicketCatalogService.java:439 起不读。
+    - EntitlementTemplateRequest 删 operator_note、evidence_attachment_ids：:195 起不读。
+    - TicketTypeRequest 删 operator_note、evidence_attachment_ids、status：:68 起不读，建票固定 draft，见 :79-81。
+    - 网页 TicketingPoliciesPage.tsx:413-428、:430、:463-471、:493、:639-660 都不发这些键。
+  - ⑨ 退款与安全例外：
+    - RefundRequest（requestTicketRefund）删 operator_note、evidence_attachment_ids：TicketRefundService.java:109 起只读 target_id、refund_amount_cent、reason、refund_channel、entitlement_ids、ticket_instance_ids、reason_code、responsible_entity_id。
+    - TicketSafetyEventRequest 删 operator_note、evidence_attachment_ids：TicketSafetyExceptionService.java:61 起只读 ticket_instance_id、slot_index、reason、situation、responsible_entity_id。
+    - 网页 TicketRefundCasesPanel.tsx:71-77、:92-98 不发。
+  - ⑩ InventoryItemRequest（createInventoryItem）删 venue_id、merchant_id、operator_note、evidence_attachment_ids：InventoryService.java:257 起不读这四项，商户取登录范围（:269）；网页 InventoryLedgerPage.tsx:357-364 不发。
+  - ⑪ MDM 四个 schema：
+    - MdmDeviceEnrollRequest 删 operator_note、evidence_attachment_ids、reason：MdmService.java:170-209 只读 device_id、policy_status 与幂等键。
+    - MdmPolicyViolationRequest 删 operator_note、evidence_attachment_ids：:265-303 只读 device_id、violation_type、detail。
+    - MdmAppWhitelistRequest 删 operator_note、evidence_attachment_ids：:91-124 不读这两项；reason 有读取，保留。
+    - MdmSiteWhitelistRequest 删 operator_note、evidence_attachment_ids：:133-166 不读这两项；reason 有读取，保留。
+    - 网页 MdmWhitelistPage.tsx:59-68 不发这两项；入网与违规上报无客户端调用。
+  - ⑫ LogoutRequest（logout）删 operator_note：AuthService.java:263-321、ProductionAuthService.java:266-317 只读 session_id、device_id 与幂等键；网页 AdminApp.tsx:820 只发 session_id；安卓 TerminalApiClient.kt:81-82（android-app 为 :84-85）发 LogoutRequest，TerminalModels.kt:41-44 只有 idempotencyKey、sessionId。
+  - ⑬ punchStaffAttendance 内联请求体删 device_fingerprint：StaffService.java:1036-1072 只读 punch_type、method、tag_ref 与幂等键，全仓 deviceFingerprint() 只在 JdbcStaffRepository.java:1261 读考勤记录，不读请求；契约说明原就写「不采用此字段」；安卓 AttendancePunchRequest 无构造调用。
+  - ⑭ ProductionReadinessItemUpdateRequest 删 operator_note、evidence_attachment_ids：ProductionReadinessService.java:123-142 与 ProductionReadinessItem.updateFrom 不读；status 枚举不变（tools/verify-openapi-contract.mjs:148 只核它）。
+  - ⑮ EvidenceReviewRequest（createEvidenceReview）删 operator_note：EvidenceEventService.java:377-438 只读 business_type、business_id、review_result、comment、evidence_attachment_ids；无客户端调用。
+  - ⑯ StaffPayrollCalculateRequest（staffPayrollCalculate）删 calculation_id、tax_assessment_id，并把说明中「calculation_id/tax_assessment_id不用于该阶段；」半句删掉：计算阶段只读 user_id、month、statement_kind、facts_id、origin_event_id（StaffPayrollService.java:74-80、:261-270），这两项只在定格时读（:88、:98）；网页 StaffPayrollBasisPanel.tsx:98 计算请求不发。StaffPayrollSettleRequest 不动，两项仍在 properties 与 required。
+  - 安卓 P0Fixture.kt:124、:137 冒烟夹具仍发 operator_note，照 not_doing 不改（服务端 DTO 保留分量、照常忽略）。
+  - 依据：决策台账:4148「以代码和权威字典为准，只改契约」；先例 170-R1（决策台账:5179、:5182）、153-R2（决策台账:4953、:4961「不声明 cashier_staff_id（服务端不读，依 127-R3 ①）」），以及第 94、113、124、136、153、170、171 条；PGM:968「本条为操作指引，不作为合规判定依据」（不补「备注进入留痕」代码）。
+  - 回归：npm run verify:p0-contract 全绿；一次性比对脚本 ~/audit-tmp/b51_a1/a1_check.js（同 198-R1）。
+  - 无迁移、无新接口、无新裁决；后端、网页、安卓代码不改。
+- 18AE 落地位置补记·第 198 条 198-R3（代码不读、客户端在发的请求字段：契约删除、客户端停发；无新裁决）：
+  - 契约：docs/openapi/openapi-p0.yaml 与 .json 同值删 15 个字段、去 1 处必填。MerchantWorkOrderAssignRequest、MerchantWorkOrderActionRequest、MerchantWorkOrderCloseRequest 删 operator_user_id，MerchantWorkOrderCreateRequest 删 reported_by_user_id，四处连同 required 项一起删；SavedBottleClaimRequest 删 claim_by_phone；clearBarTable 内联请求体删 operator_note、evidence_attachment_ids；confirmAmusementFaultCompensationBatch 内联请求体删 note；CommissionCalculateRequest 删 include_only_table_sales、recalculate，bill_id 移出必填（required 只剩它，整块删）；EventBatchRequest、AmusementProjectRequest 各删 operator_note、evidence_attachment_ids；SpaceTypeRequest 删 status。操作数 1271 不变。
+  - 网页停发：MerchantWorkOrdersPage.tsx 派单、处理、关闭去掉写死的 operatorUserId（staff_dispatcher、staff_processor、staff_closer）；StoredWinePage.tsx 删领取手机号框（claimPhone、TEXT.phone、请求体 claim_by_phone）；BarTableSessionsPage.tsx 清台请求体改为空，幂等键由 adminClient normalizeRequestBody 注入，满足 BarController.java:733；AmusementFaultCompensationPage.tsx 确认只发 role，删「确认说明」框与 note 状态；BarCommissionsPage.tsx 计算提成请求体改为空；AuditEventsPage.tsx 删 operator_note 与写死的假附件 att-audit-export，AdmissionAuditsPage.tsx 删 operatorNote，两页导出原因仍记在 events[0].summary；AmusementSessionsPage.tsx 新建项目删写死的 operatorNote「完整后台新建游乐项目」与空 evidenceAttachmentIds；SpaceTypesPage.tsx 删写死的 status。
+  - 下位文档：docs/p1-merchant-service-work-order-api-contract-v0.1.md 请求字段表删 reported_by_user_id 与三处 operator_user_id 共四行，数据表列不动，V0.12→V0.13。
+  - 不改的：后端不改，DTO 分量保留；服务端操作人一律取登录人（MerchantServiceService.java:501、:572、:591、:664）。安卓 P0Fixture 冒烟夹具照 not_doing 不动。
+  - 依据：OpenAPI 与代码一致的先例第 94、113、124、136、153、170、171 条——本台账 18Q 153-R2「服务端早已不读这个字段」「现在安卓不再发」、18U 170-R1、171-R1，以及 18G 82c-R4「以代码和权威字典为准，只改契约」。HTML 原句：BSM:940「收银、核销、收款、放行等现场动作，一律按执行该动作的设备绑定与该次登录会话定位到操作人并留痕」；BSM:1073「手机号也不得单独作为放酒凭证」；BSM:1058「由负责该台位的服务员完成清理后在系统登记恢复空闲」；BSM:1070「销售提成一张账单的提成只计一次」；ENUM:148「批量发放前须由游乐公司负责人和工程或安全岗位共同确认」（发放原因在发起时已必填并记录）；PGM:968「本条为操作指引，不作为合规判定依据」。
+  - 测试（前端）：MerchantWorkOrdersPage.test.tsx「198-R3①：派单、处理、关闭三次请求体都不含 operator_user_id」；StoredWinePage.holder.test.tsx「198-R3②：领取请求体不含 claim_by_phone」，原手机号框断言改为框不存在；BarTableSessionsPage.clear.test.tsx 断言清台请求体为空；AmusementFaultCompensationPage.test.tsx 断言无 compensation-note 框、确认请求体只有 idempotency_key 与 role；新增 BarCommissionsPage.calculate.test.tsx「198-R3⑤：计算提成调 /bills/{账单}/commissions/calculate，请求体不含 include_only_table_sales」；AuditEventsPage.test.tsx「198-R3⑥：请求体不含 operator_note、evidence_attachment_ids，events[0].summary 为所填原因」；AdmissionAuditsPage.test.tsx 与 AdmissionAuditsPage.guidedcreate.test.tsx 断言不带 operator_note、原因在 events[0].summary；AmusementProjects.guidedcreate.test.tsx 断言新建项目请求体不含 operator_note、evidence_attachment_ids；SpaceTypesPage.guidedcreate.test.tsx 断言新建请求体不含 status。
+  - 测试（后端，真实入口、蛇形键）：MerchantServiceJdbcIntegrationTests.assignProcessCloseWithoutOperatorUserIdRecordLoggedInStaff，派单、处理、关闭的网页形状助手已去掉 operator_user_id，动作记录的操作人为各次登录员工；BarSalesAttributionJdbcTests 计算提成助手只带 idempotency_key，各用例 200。
+- 18AE 落地位置补记·第 198 条 198-R4（日结生成与台账收付款登记的备注、附件：契约删除、网页停发并去掉不被记录的输入框；第 184、200 条移交本条定；无新裁决）：
+  - 契约：openapi yaml 与 json 同值删 DailyCloseRequest、ArApPaymentRequest 的 operator_note、evidence_attachment_ids，共 4 个字段。服务端出处：createDailyClose（FinanceService.java:548-564）与 generateDailyClose（:2264 起）只读 business_date、scope_type、scope_id 与幂等键，成功事件元数据为空（executeWrite 约 :4118-4139）；registerPayment（:1934-1946）只读 amount_cent、payment_method、payment_time、bank_flow_ref、device_id 与幂等键。
+  - 网页：FinanceDailyClosePanel.tsx 删「备注」框（aria-label 日结备注）、note 状态与请求体 operatorNote；FinanceArApLedgerPage.tsx 撤销 18W 200-R1 留下的「核销/调整原因」框（finance-payment-reason）、reason 状态、原因必填校验与请求体 operatorNote，请求体只发 amountCent、paymentMethod 与通用幂等键；页头说明同根去掉「和调整原因留痕」。
+  - 不改的：后端不改，DTO 分量保留。
+  - 收付款登记不算调账的依据：BSM:1631「订台、点单、支付、核销、扫码、接单、关闭异常时，系统自动留下时间和动作。」收付款登记属其中「支付、核销」的系统自动留痕：契约 summary 为「应收应付收付款登记」，本台账:3646 第七批裁决 19 称作「人工登记收款」，代码只记一笔收付款。BSM:1633「人工只在异常、退款、免单、调账、补录时填写原因、照片、视频或复核意见。」与 BSM:2027 说的调账，由 ArApAdjustment 承担：requestAdjustment（FinanceService.java:1625 起）原因必填（:1668）、落库、经审批。
+  - 另据：PGM:968「本条为操作指引，不作为合规判定依据；留痕是否完备以「所有有过程的业务动作都必须留痕」为准」；PGM:949（日结各动作已落事件）；先例 153-R2、170-R1、171-R1（契约与代码一致）。
+  - 测试（前端）：FinanceDailyClosePanel.test.tsx「平台侧账号生成……」断言生成请求体只有 businessDate、scopeType、scopeId、idempotencyKey，且无「日结备注」框；FinanceArApLedgerPage.test.tsx「填 100.00、选银行转账并确认：请求体为 amount_cent、payment_method、idempotency_key，不含 operator_note、amount；页面没有原因框」，另两条去掉填原因。
+  - 测试（e2e）：full-admin-mvp.spec.ts ADM-MVP-05 改名为「finance ledger requires payment method and supports partial payment」，空提交断言「请选择收付方式。」；full-admin-ui-hardening.spec.ts 删填原因。
+  - 测试（后端）：FinanceJdbcIntegrationTests.ledgerPaymentWithPageRequestShapeRegistersAmountAndMethod 成功那次请求体去掉 operator_note；生成日结助手 generate 与 dailyCloseSummariesCountGroupBuyTicketOnceAndSkipUnmappedReflow 按网页新形状不带 operator_note，均 200 并生成日结。
+- 18AE 落地位置补记·第 201 条 201-R1（无新裁决）：OpenAPI 补酒吧目录与订台存档生命周期 16 个 POST 操作——分类 /api/v1/bar/catalog/categories/{id}/archive、/unarchive、/delete-request、/delete-approve（archiveBarProductCategory、unarchiveBarProductCategory、requestDeleteBarProductCategory、approveDeleteBarProductCategory），商品 /api/v1/bar/catalog/products/{id}/ 同四件（archiveBarProduct、unarchiveBarProduct、requestDeleteBarProduct、approveDeleteBarProduct），套餐 /api/v1/bar/catalog/combos/{id}/ 同四件（archiveBarCombo、unarchiveBarCombo、requestDeleteBarCombo、approveDeleteBarCombo），订台 /api/v1/bar/reservations/{id}/ 同四件（archiveBarReservation、unarchiveBarReservation、requestDeleteBarReservation、approveDeleteBarReservation）。写法照同对象既有操作：权限取控制器 requirePermission（bar.category／bar.product／bar.combo／bar.reservation 的 .manage 管存档、取消存档、申请删除，.approve 管审批删除）；数据范围目录照 saveBarProductCategory、saveBarCombo 写 project，订台照 cancelBarReservation 写 project-bar；终端只写 web（目录 12 个由后台 BarProductsPage、BarCombosPage 调用，订台 4 个全仓无客户端）；控制器不校验幂等键，x-idempotency-required 写 false；x-auth-context 写 staff-token；请求体内联、additionalProperties 为 false，存档与申请删除只收必填 reason，审批只收必填 decision（approved／rejected，不分大小写，其他值 400 VALIDATION_FAILED；comment 服务层不读、不声明），取消存档无请求体；x-failure-codes 按 BarPosCatalogService.archiveEntity／doRequestDelete／doApproveDelete 与 BarService.archiveReservation／doRequestDeleteReservation／doApproveDeleteReservation 实际抛出列出（BAR_CATEGORY／BAR_PRODUCT／BAR_COMBO／BAR_RESERVATION 的 _NOT_FOUND、_NOT_ARCHIVED、_DELETE_ALREADY_PENDING、_DELETE_NOT_PENDING，BAR_MERCHANT_SCOPE，BAR_CATALOG_SELF_APPROVE_FORBIDDEN／BAR_RESERVATION_SELF_APPROVE_FORBIDDEN，BAR_CATEGORY_IN_USE／BAR_PRODUCT_IN_USE／BAR_RESERVATION_IN_USE，VALIDATION_FAILED；套餐审批不做占用检查）。事件取 BarWriteOperation.java:79-86：申请删除为 bar.category／product／combo／reservation.delete_requested 与 .delete_request_failed，审批删除为 .delete_approved 与 .delete_approve_failed（驳回也落 delete_approved）；存档与取消存档 8 个操作（archiveBarProductCategory、unarchiveBarProductCategory、archiveBarProduct、unarchiveBarProduct、archiveBarCombo、unarchiveBarCombo、archiveBarReservation、unarchiveBarReservation）无事件写点，成功与失败事件照现码写 not_applicable（缺口见待开发清单第 248 条）。后端、网页与安卓代码不改，无迁移；OpenAPI 操作数由 201-R8 收尾统一计。依据 BSM:569「就从各处的选择列表里隐藏，不再被新业务选用；但历史照样能查、能对账」、BSM:570「要删除，得先存档」「申请人不能审批自己的申请」、BSM:576「存档及删除都需要填写理由」、BSM:577「卡座预订这类业务记录，现在也支持存档、以及审批后删除（同样带删前占用检查：还被业务在用的删不掉）」；先例 171-R1（决策台账:5096）、170-R1（:5179）、153-R2（:4953）「契约与代码一致」，130-R1（:4821）终端声明按客户端实际调用。回归 BarCategoryArchiveDeleteEntryJdbcIntegrationTests.archivingCategoryRequiresReasonAndRecordsArchiver、deleteRequestAndApprovalFollowContractAndRejectSelfApproval（真实 HTTP、蛇形键、真实授权链）。
+- 18AE 落地位置补记·第 201 条 201-R2（无新裁决）：OpenAPI 补票务 11 个控制器入口，后端、网页、安卓代码都不改，无迁移。
+  - 票种四件：POST /api/v1/ticketing/ticket-types/{id}/archive、/unarchive、/delete-request、/delete-approve（archiveTicketType、unarchiveTicketType、requestDeleteTicketType、approveDeleteTicketType；TicketingController.java:56、:64、:72、:80）。权限 ticket.product.manage，审批删除用 ticket.type.approve；数据范围 project。
+  - 价格规则四件：POST /api/v1/ticketing/price-rules/{id}/archive、/unarchive、/delete-request、/delete-approve（archiveTicketPriceRule、unarchiveTicketPriceRule、requestDeleteTicketPriceRule、approveDeleteTicketPriceRule；:127、:135、:143、:151）。权限 ticket.price_variant.manage，审批删除用 ticket.price_rule.approve；数据范围 project-channel。
+  - 分销费率：POST /api/v1/ticketing/distribution-merchant-rates（createTicketDistributionMerchantRate；:159）。权限 ticket.price_variant.manage，数据范围照同表既有操作 settlementConfigUpsertMerchantRate 写 platform。
+  - 合作方券：POST /api/v1/ticketing/partner-vouchers/configs（createPartnerVoucherConfig；PartnerVoucherController.java:25；权限 ticket.entitlement.manage）、/redemptions（importPartnerVoucherRedemption；:32；权限 verification.execute），数据范围都写 project。
+  - 写法照权益模板存档四件与 disableBarTable：
+    - 终端按客户端实际调用只写 web（TicketingPoliciesPage.tsx）；x-auth-context 写 staff-token。
+    - 请求体内联、additionalProperties:false，只声明服务方法实际读取的字段：取消存档只收 idempotency_key；审批删除只收 idempotency_key 与 decision（approved/rejected，其他值 400 VALIDATION_FAILED），不收不被读取的 comment；合作方券两件不收不被读取的 idempotency_key。
+    - x-idempotency-required：存档、删除八件与分销费率写 true，合作方券两件写 false。
+    - x-failure-codes 按 TicketCatalogService、TicketingService:351-368、PartnerVoucherService:39、:60 的实际抛出列出。
+  - 事件取值：存档、删除八件取 TicketingWriteOperation.java:13-20，即 ticket_product.archived／archive_failed、unarchived／unarchive_failed、delete_requested／delete_request_failed、delete_approved／delete_approve_failed，价格规则为 ticket_price_variant 同名八个。
+  - 无事件写点、写 not_applicable 的有三个：createTicketDistributionMerchantRate（TicketingService.createDistributionMerchantRate 只做 repository.save）；createPartnerVoucherConfig、importPartnerVoucherRedemption（PartnerVoucherService 没有事件字面量，挂应付走 FinanceService.createPartnerVoucherPayable:3596，也不落事件）。
+  - 依据：决策台账第 171 条 171-R1（:5096）「契约与代码一致」补契约先例；BSM:569「存档（先下线）」「从各处的选择列表里隐藏，不再被新业务选用；但历史照样能查、能对账」；BSM:576「存档及删除都需要填写理由」「申请人不得审批自己的申请」。
+  - 回归：TicketArchiveDeleteAndDistributionRateJdbcIntegrationTests 的 distributionMerchantRateTakesExactlyOneOfPerGuestOrFixedAmount、ticketTypeArchiveNeedsReasonAndDeleteRequesterCannotApproveOwnRequest。
+  - OpenAPI 操作数本组 +11，由汇装与收尾统一计。
+- 18AE 落地位置补记·第 201 条 201-R3（无新裁决）：OpenAPI 补平台治理 11 个操作：
+  - POST /api/v1/platform/business-entities/{entity_id}/projects（associateBusinessEntityProject，entity.binding.manage）
+  - PUT /api/v1/platform/merchants/{merchant_id}/project（assignMerchantProject，merchant.profile.manage）
+  - POST /api/v1/platform/merchants/{merchant_id}/archive、/unarchive、/delete-request（archiveMerchant、unarchiveMerchant、requestDeleteMerchant，merchant.profile.manage）
+  - POST /api/v1/platform/merchants/{merchant_id}/delete-approve（approveDeleteMerchant，merchant.profile.approve）
+  - DELETE /api/v1/platform/space-types/{id}（deleteSpaceType）
+  - POST /api/v1/platform/space-types/{id}/archive、/unarchive、/delete-request（archiveSpaceType、unarchiveSpaceType、requestDeleteSpaceType，governance.space.manage）
+  - POST /api/v1/platform/space-types/{id}/delete-approve（approveDeleteSpaceType，x-permission authenticated：控制器不校权限码，服务层先要平台范围、再要最高权限，PlatformService.java:891-895）
+  写法照同对象既有操作：
+  - x-data-scope：商户与主体写 project-merchant，空间种类写 platform。
+  - 终端只写 web。客户端调用见 OrganizationMerchantPage.tsx:289、:305、:319 与 SpaceTypesPage.tsx:106、:118、:132、:144；补主项目与主体追加项目没有客户端调用。
+  - 商户与主体 6 个操作在控制器校验幂等键，x-idempotency-required 写 true；空间种类 5 个不校验，写 false。
+  - 请求体内联、additionalProperties:false，只声明服务层实际读取的字段：取消存档商户的 reason 与审批商户删除的 comment 只进审计元数据、可空；两个审批的 decision 写枚举 approved、rejected。
+  - x-failure-codes 按 PlatformService 实际抛出的错误码列出。
+  - 补主项目与主体追加项目的最高权限闸在幂等与留痕之前，被拒不落失败事件，已写进 description。
+  事件取值：
+  - merchant.archived 与 merchant.archive_failed；merchant.unarchived 与 merchant.unarchive_failed。
+  - merchant.delete_requested 与 merchant.delete_request_failed。最高权限本人发起时直接软删，仍只落 delete_requested（PlatformService.java:300、:327-336）。
+  - merchant.delete_approved 与 merchant.delete_approve_failed，驳回改落 merchant.delete_rejected（:355-356）。
+  - merchant.project_assigned 与 merchant.project_assign_failed。
+  - business_entity.project_associated 与 business_entity.project_associate_failed。
+  - space_type.archived；space_type.unarchived。
+  - space_type.delete_requested，最高权限本人发起时直接删除、改落 space_type.deleted（:877）。
+  - space_type.delete_approved，驳回改落 space_type.delete_rejected（:917）。
+  无事件写点、写 not_applicable 的：
+  - deleteSpaceType 的成功与失败事件。
+  - archiveSpaceType、unarchiveSpaceType、requestDeleteSpaceType、approveDeleteSpaceType 的失败事件。
+  直删空间种类照 recordDealerReturnRefundResult、markStaffPayrollPaidLegacy 的先例，写明恒拒：种类存在时 400 SPACE_TYPE_DELETE_REQUIRES_APPROVAL，不存在时 404 SPACE_TYPE_NOT_FOUND（PlatformService.java:813-817）；不写 200，标 deprecated；运行时不改。
+  回归：SpaceTypeArchiveDeleteEntryJdbcIntegrationTests（approveDelete_byPlatformAdminNotMaster_forbidden403_stillPending、directDelete_alwaysRejected400RequiresApproval_rowKept、archive_reasonRequired400_thenArchived200WithEvent）。后端运行时代码不改，无迁移。
+  依据：
+  - BSM:569「存档（先下线）」。
+  - BSM:576「存档及删除都需要填写理由」「删除一律须由具备最高权限的人审批通过后执行，不设例外，申请人不得审批自己的申请；持授权 U 盘密钥的最高权限本人发起的操作，不需要经过任何审批」（BSM:577 同句）。
+  - 先例：第 171 条 171-R1（决策台账:5096），以及第 94、136 条「契约与代码一致」。
+- 18AE 落地位置补记·第 201 条 201-R4（无新裁决）：OpenAPI 补员工档案、设施设备、商户服务工单、服务目录各自的存档、取消存档、申请删除、审批删除，共 16 个操作，全为新 path、POST。
+  - 员工档案：archiveStaffProfile、unarchiveStaffProfile、requestDeleteStaffProfile、approveDeleteStaffProfile（/api/v1/staff/profiles/{id}/archive|unarchive|delete-request|delete-approve，StaffController.java:90、:96、:118、:125）。权限取 StaffService 的 @GuardedAction：存档与取消存档 staff.profile.submit（:333），申请删除 staff.profile.review（:410），审批删除 staff.profile.approve（:437）。
+  - 设施设备：archiveFacilityEquipment、unarchiveFacilityEquipment、requestDeleteFacilityEquipment、approveDeleteFacilityEquipment（/api/v1/facility/equipment/{equipment_id}/…，FacilityController.java:50、:57、:63、:71）。权限 facility.equipment.manage，审批删除 facility.equipment.approve。
+  - 商户服务工单：archiveMerchantServiceWorkOrder、unarchiveMerchantServiceWorkOrder、requestDeleteMerchantServiceWorkOrder、approveDeleteMerchantServiceWorkOrder（/api/v1/merchant-service/work-orders/{id}/…，MerchantServiceController.java:199、:206、:212、:219）。权限 merchant.service_work_order.close，审批删除 merchant.service_work_order.approve。
+  - 服务目录：archiveServiceCatalogItem、unarchiveServiceCatalogItem、requestDeleteServiceCatalogItem、approveDeleteServiceCatalogItem（/api/v1/services/catalog/{id}/…，ServiceOrderController.java:72、:78、:83、:89）。权限在服务层：service.catalog.manage，审批删除 service.catalog.approve。
+  - 写法依据：照第 171 条 171-R1（决策台账:5096，契约与代码一致）与同对象既有操作（setStaffSalesPosition、changeFacilityEquipmentStatus、closeMerchantServiceWorkOrder、draftServiceCatalogFeeChange）。
+  - 扩展字段：x-data-scope 依次为 project、platform、project-merchant、platform。x-terminal-allowed 只写 web：员工档案、服务目录由后台页面调用（StaffProfilesPage.tsx:108，ServiceOrdersPage.tsx:134、:143、:150）；设施设备、商户服务工单的这四件无客户端调用。控制器都不校验幂等键，x-idempotency-required 为 false。x-auth-context 为 staff-token。x-failure-codes 列服务层实际抛出的错误码。
+  - requestBody：内联，设 additionalProperties:false，只声明服务方法实际读取的字段。
+    - 存档与申请删除只有 reason，必填。
+    - 审批删除只有 decision：员工档案、设施设备、商户服务工单为必填，approved/rejected 去空白后不分大小写，其他值 400 VALIDATION_FAILED；服务目录不必填，只有 approved（区分大小写）算批准，其他值（含不传）按驳回处理、不报 400，写进 description，不改代码。
+    - 取消存档无请求体。
+    - DTO 里不读的 comment、idempotency_key 不进契约，分量保留。
+  - 成功事件（取服务层实落名）：
+    - 员工档案：staff.profile.archived、unarchived、delete_requested、delete_approved；驳回落 staff.profile.delete_rejected；最高权限本人发起的申请删除当场执行，另落 delete_approved。
+    - 设施设备：facility.equipment_archived、equipment_unarchived、equipment_delete_requested、equipment_delete_approved；驳回落 equipment_delete_rejected；最高权限本人发起同上。
+    - 商户服务工单：merchant_service.work_order.archived、unarchived、delete_requested、delete_approved；驳回落 delete_rejected。
+    - 服务目录：service.catalog.archived、unarchived、delete_requested、delete_approved；驳回落 delete_rejected（ServiceOrderService.java:247、:276 拼接）。
+  - 失败事件：只有服务目录四件有写点（withFailureAudit）：存档与取消存档落 service.catalog.archive_failed，申请删除落 delete_request_failed，审批删除落 delete_approve_failed。
+  - 无失败事件写点、x-audit-event-failure 写 not_applicable 的 12 个操作：员工档案、设施设备、商户服务工单各自的存档、取消存档、申请删除、审批删除。
+  - HTML 原句：BSM:577「业务记录也能存档删除：员工档案、设施设备、商户服务工单、卡座预订这类业务记录，现在也支持存档、以及审批后删除」「存档及删除都需要填写理由」；BSM:569「存档（先下线）」。
+  - 不改控制器与运行时行为。
+  - 回归：MerchantWorkOrderArchiveDeleteHttpJdbcIntegrationTests（archiveRequiresReasonAndRecordsIt、deleteRequestThenApprovalByAnotherApprover），走真实接口与真实角色授权，请求体按蛇形键。
+- 18AE 落地位置补记·第 201 条 201-R5（无新裁决）：OpenAPI 补 14 个操作。GET/POST /api/v1/access/grant-policy（getAccessGrantPolicy、updateAccessGrantPolicy）；POST /api/v1/access/position-role-templates/{id}/lifecycle（changePositionRoleTemplateLifecycle）；PUT /api/v1/access/users/{id}/scope（changeUserScope）；POST /api/v1/access/users/{id}/permission-overrides 与 …/remove（setUserPermissionOverrides、removeUserPermissionOverrides）；GET /api/v1/access/org-hierarchy 与 PUT …/{user_id}（listOrgHierarchy、setOrgDirectSuperior）；GET /api/v1/platform/supervisor-review/pending、POST …/{review_id}/forward、GET …/{review_id}/chain、POST …/{review_id}/chain/regenerate（listPendingSupervisorReviews、forwardSupervisorReview、getSupervisorReviewChain、regenerateSupervisorReviewChain）；POST /api/v1/auth/master/challenge 与 /api/v1/auth/master/login（issueMasterAuthChallenge、masterAuthLogin）。写法：请求体内联、additionalProperties:false，只声明服务方法实际读取的字段；授权政策 policy 只有 window_days、position_threshold、user_threshold、risk_reviews 四键（18AD 已删 deadlineWorkingDays），operator_note 必填；转交只收 idempotency_key、forwarded_to、comment；重生成审批链与取挑战码无请求体。权限与幂等照控制器；数据范围照同对象或同类既有操作：岗位模板、员工覆盖、范围变更、组织层级为 project，授权政策为 platform（同审批时限），主管复核为 project-entity；破窗两项照 /api/v1/auth/login 写 security []、x-permission public、x-data-scope none、x-auth-context public。终端按客户端实际调用只写 web（AccessGovernancePage、OrgHierarchyPage、SupervisorReviewPage、ApprovalChainPage）。岗位模板 approve_delete、reject_delete 须同时具备 access.role.assign 与 governance.supervisor_review.approve；最高权限本人解除自己账号上的显式拒绝不过 access.role.assign（M002-F08）；两条都写进 description。事件取值：access.grant_policy.changed／change_failed；access.position_role_template.<动作>（主值 archive，description 列出 restore、request_delete、approve_delete、reject_delete）／lifecycle_failed；access.user_scope.changed／change_failed；access.user_permission_override.set／set_failed 与 remove／remove_failed；access.org_hierarchy.superior_set；governance.supervisor_review.forwarded、governance.supervisor_review.chain_regenerated；auth.master.challenge_issued；auth.master.login_succeeded／login_failed；限速超限落 master_auth.challenge_rate_limited、master_auth.login_rate_limited。无事件写点（写 not_applicable）：getAccessGrantPolicy、listOrgHierarchy、listPendingSupervisorReviews、getSupervisorReviewChain 两侧，setOrgDirectSuperior、forwardSupervisorReview、regenerateSupervisorReviewChain 失败侧；平台管理员看待办另落 governance.supervisor_review.pending_listed_cross_scope、最高权限逐笔看范围外单据落 governance.supervisor_review.viewed_cross_scope，写在 description。照现码写明：授权政策值越界或风险等级不全的，在请求体解析时即 400 REQUEST_BODY_INVALID、不落事件。回归 AccessGovernanceEntryJdbcIntegrationTests（setsDirectSuperiorWithContractBodyAndReadsItBack、rejectsSelfAsDirectSuperior、grantPolicyWriteFollowsContractBodyAndRejections）；后端、网页与安卓代码不改，无迁移；本组 +14 个操作，计数由汇装与收尾计入。依据：先例 171-R1「契约与代码一致」（决策台账:5096）、130-R1「OpenAPI 终端声明按客户端实际调用补齐，只改契约、不改运行时」（决策台账:4821）；PGM:528「系统按组织层级自动补全从发起人到该最终审批人之间的全部直接上级节点，逐级审批」、PGM:661「最终权限 = 角色权限 + 基础模板 + 有效临时模板 + 员工单独授予 − 显式拒绝；显式拒绝优先级最高。」、PGM:665「某岗位层级频繁申请同类临时权限时系统自动总结、建议平台管理员转为固定权限，某个人频繁申请时提交异常总结供复核」、PGM:709「跨商户、跨项目权限每次均须先审批，审批通过后方可生效」、PGM:869「万一管理员账号全部无法登录，走「破窗」应急通道恢复进入系统。」、BSM:569「存档（先下线）」、BSM:576「存档及删除都需要填写理由」。
+- 18AE 落地位置补记·第 201 条 201-R6（无新裁决）：OpenAPI 补结算、库存、渠道映射 11 个控制器已有入口，照现码、不改运行时：
+  - 结算：GET /api/v1/settlement/transactions（listSettlementTransactions）与 GET /api/v1/settlement/bills（listSettlementBills），权限 finance.settlement.view，查询参数沿用控制器驼峰原名 projectId、merchantId、page、size 与 projectId、month（month 形如 2026-06，不填返回最近 24 单）。
+  - 营业额抽成规则：POST /api/v1/finance/turnover-rent/rules（createTurnoverRentRule），权限 finance.turnover_rent.bill，只落草案。
+  - 供货主体：GET 与 POST /api/v1/inventory/supply-entities（listSupplyEntities 权限 inventory.supply_entity.view；createSupplyEntity 权限 inventory.supply_entity.manage）。
+  - 调拨单：GET /api/v1/inventory/transfer-orders（listTransferOrders，在已有 path 下补 get）与 GET /api/v1/inventory/transfer-orders/{order_id}（getTransferOrder），权限 inventory.transfer_order.view。
+  - 未归属回流：GET /api/v1/integration/order-syncs/unattributed（listIntegrationUnattributedOrderSyncs），权限 integration.order_sync.view。
+  - 渠道门店映射：GET、POST /api/v1/integration/channel-store-maps 与 POST /api/v1/integration/channel-store-maps/{id}/archive（listIntegrationChannelStoreMaps、saveIntegrationChannelStoreMap、archiveIntegrationChannelStoreMap），权限 integration.channel_store_map.view 与 .manage；列表 description 写明可见范围：商户账号只见本商户，平台管理员与最高权限不限，不挂商户的员工只见按本入口权限码可触及项目内商户的映射。依据 PGM:659「数据的项目与商户隔离不提供关闭开关」。
+  - 写法依据：照同对象或同类既有操作（listIntegrationChannelTicketTypeMaps 一族、billTurnoverRent、createTransferOrder）与 171-R1 写。
+    - x-auth-context 写 staff-token；终端只写 web（网页调用在 SettlementReviewPage、ContractWorkbenchPage、InventoryTransferWorkbenchPage、IntegrationChannelMapsPage；order-syncs/unattributed 与 POST supply-entities 无客户端，照「没有客户端的只写 web」）。
+    - 写操作 x-idempotency-required 为 true。
+    - 请求体内联、additionalProperties:false、只声明服务方法实际读取的字段：抽成规则不收 operator_note、evidence_attachment_ids；停用映射只收 idempotency_key 与 reason。
+    - x-data-scope：结算、抽成规则、供货主体、未归属回流、映射写操作为 platform，调拨单为 project，映射列表为 project-merchant。
+    - x-failure-codes 按控制器与服务层实际抛出列。
+  - 事件取值：
+    - 抽成规则：finance_turnover_rent_rule.created 与 finance_turnover_rent_rule.create_failed
+    - 新建供货主体：inventory.supply_entity_changed 与 inventory.supply_entity_change_failed
+    - 未归属回流：integration.order_sync.unattributed_viewed 与 integration.order_sync.unattributed_view_failed
+    - 映射列表：integration.channel_store_map.viewed 与 view_failed
+    - 映射登记：integration.channel_store_map.saved 与 save_failed
+    - 映射停用：integration.channel_store_map.archived 与 archive_failed
+  - 无事件写点（成功与失败事件都写 not_applicable）的 5 个：listSettlementTransactions、listSettlementBills、listSupplyEntities、listTransferOrders、getTransferOrder。
+  - 回归用例：ChannelStoreMapMaintenanceEntryJdbcTests.saveListArchiveWithContractBodies、ChannelStoreMapMaintenanceEntryJdbcTests.archiveRejectsMissingReasonAndUnknownMap。
+  - OpenAPI 操作数与版本由 201-R8 收尾统一改；后端、网页、安卓代码不改，无迁移。
+  - 先例：171-R1「契约与代码一致」，130-R1「OpenAPI 终端声明按客户端实际调用补齐，只改契约、不改运行时」。
+- 18AE 落地位置补记·第 201 条 201-R7（无新裁决；契约与代码一致，先例 171-R1（决策台账 171-R1 落地位置补记，现 :5096）、130-R1「终端声明按客户端实际调用」、18P 136-R1；数据清理依据 BSM:576「选清理范围（已存档、且超过设定天数的配置数据）」「提交→由具备最高权限的人审批→批量清理，全程留痕、绝不碰在用的活数据」）：
+  OpenAPI 补 10 个控制器入口，只改契约，运行时不变。
+  一、商户费用通知接收人（MerchantFeeNotificationRecipientController :43、:53、:63、:79）
+  - 四个操作：listMerchantFeeNotificationRecipients（GET，查询参数 merchant_id）、getMerchantFeeNotificationRecipient（GET /{id}）、saveMerchantFeeNotificationRecipient（POST）、deactivateMerchantFeeNotificationRecipient（POST /{id}/deactivate）。
+  - 权限：x-permission 写平台码 merchant.billing.manage。description 写明自助口径：不持平台码而持 merchant.portal.fee_recipient.manage 时固定为本商户（selfServiceScopeOrPlatform :87；保存 :67-75 改取登录主体，请求所填 merchant_id 与 operator_user_id 被忽略）。
+  - 联系电话脱敏：持 pii.contact_phone.view 且确有电话时给明文，单次来源看一次扣一次（:44-45）。
+  - 保存的请求体只声明 merchant_id、fee_event（rent/utilities/property/renewal）、recipient_name、recipient_phone、operator_user_id，必填项是 recipient_name、recipient_phone。平台口径下 merchant_id 与 operator_user_id 必填（MerchantFeeNotificationRecipientService :47、:52）。
+  - 终端：列表、保存、停用按 MerchantZoneFeeRecipientsPage.tsx :104、:132、:143 的实际调用写 web、merchant_portal、merchant_app；GET /{id} 没有客户端调用，只写 web。
+  - 数据范围 project-merchant。四个都没有事件写点，写 not_applicable。
+  二、集中数据清理（DataCleanupController :30、:37、:45、:52）
+  - 四个操作：listDataCleanupJobs（GET /jobs，查询参数 status）、previewDataCleanup（POST /preview）、submitDataCleanupJob（POST /jobs/{id}/submit）、approveDataCleanupJob（POST /jobs/{id}/approve）。
+  - 权限：前三个 data.cleanup.request，审批 data.cleanup.approve。数据范围 platform，终端 web（DataCleanupPage.tsx :45、:62、:85、:104）。
+  - 请求体：试运行收 scope_type（七个范围枚举，必填）与 older_than_days（0～3650，不填按 30）；提交收 reason（必填）；审批收 decision（approved/rejected，去首尾空白、不分大小写）。
+  - 试运行只统计与取样、不删数据，不扣单次授权（:38）。
+  - 事件：只有审批批准后的执行段落事件，成功 data.cleanup.executed、失败 data.cleanup.execute_failed（DataCleanupService :36-37、:109）。驳回、DATA_CLEANUP_JOB_NOT_FOUND、409 DATA_CLEANUP_NOT_PENDING（:97）、自审拒绝 403 DATA_CLEANUP_SELF_APPROVE_FORBIDDEN（:99）都不落事件，已写进 description。列表、试运行、提交写 not_applicable。
+  三、游乐出场核销（AmusementController :523，createAmusementExitVerification）
+  - 权限 amusement.verification.execute，数据范围 project-amusement-point，没有客户端调用，终端只写 web。
+  - 控制器 :527 校验幂等键，x-idempotency-required 写 true。
+  - 请求体声明 idempotency_key、credential_payload（两者必填），以及 point_id、device_id、staff_id、evidence_attachment_ids。
+  - 失败码：凭证找不到权益 404 TICKET_NOT_FOUND（AmusementService :1527）；没有未释放入场、也没有既有出场记录 409 ENTITLEMENT_NO_ACTIVE_ENTRY（:1533-1534）；已出过场按幂等返回原出场记录（:1536）；另有 403 FORBIDDEN、403 CROSS_MERCHANT_FORBIDDEN、409 AMUSEMENT_ENTRY_DAY_PENDING、403 TERMINAL_DISABLED。
+  - 事件：出场核销本身没有事件写点，写 not_applicable。系统自动恢复开放时另落 amusement.project.auto_reopened，已写进 description。
+  四、积分兑换券领取（LoyaltyController :52，fulfillPointsRedemption）
+  - 没有请求体，幂等键取路径里的兑换单号（@IdempotencyKeyFromPath），x-idempotency-required 写 true。
+  - 权限 customer.loyalty.manage（CustomerService :800），数据范围 project，没有客户端调用，终端只写 web。
+  - 事件：成功 customer.points_voucher_fulfilled，失败 customer.points_voucher_fulfill_failed（:808 起）。
+  - 失败码：REDEMPTION_NOT_FOUND、REDEMPTION_NOT_PENDING。只对历史 pending_pickup 记录生效。
+  五、汇总
+  - 无事件写点、成功与失败事件都写 not_applicable 的共 8 个：费用通知接收人四个、listDataCleanupJobs、previewDataCleanup、submitDataCleanupJob、createAmusementExitVerification。
+  - OpenAPI 操作数 +10（PR-B 合计按合并时实数写）。
+  - 回归测试：DataCleanupDryRunApprovalJdbcIntegrationTests 的 dryRunWithContractBodyIsListedAndOutOfRangeOrUnauthorizedPreviewIsRejected 与 submitNeedsReasonAndSelfApprovalIsForbiddenAndRejectionWritesNoCleanupEvent。
+  - 后端、网页与安卓代码不改，没有迁移。
+- 18AE 落地位置补记·第 201 条 201-R8 收尾与控制席收尾并入（无新裁决）：
+  - a. 201-R8 收尾（依据：方案 201-R8⑥「逐 rid 写改法与依据，格式同 170-R1、171-R1」）：
+    - docs/openapi/openapi-p0.yaml 与 openapi-p0.json 操作数 1271→1360（新增 89、删 0，即 201-R1～R7 的 16、11、11、16、14、11、10），info.version V0.62→V0.63；最终 openapi-p0.json 的 SHA-256 为 f06d9b325abb238da2425731c894e4d332acbb2a5e5f20e9ffbaddc2cbadcdc1（本条 f 项复核修复后实算）。
+    - security-scans/findings-register-v1.md 与 security-scans/formal-security-baseline-v1.md 只改「OpenAPI operation count」行（1271→1360）与「OpenAPI SHA-256」行（改为上值），未整份重生成；docs/production-readiness-evidence/security-baseline-latest.json 只改 openapi_operation_count 为 1360。
+    - node tools/refresh-entry-doc-baseline.mjs 刷新入口文档：README.md 基线表「OpenAPI operation 数」1271→1360；docs/00-current-effective-document-entry-v0.1.md 六处 operation 数 1271→1360，其中三处取证日期 2026-11-10→2026-11-11。复核修复后再跑一次，报无漂移。
+    - 四个 docs 生成器依次重跑（npm run docs:data-isolation-spec、docs:domain-ownership-scope、docs:operation-matrix、docs:openapi-closure）：docs/p0-openapi-operation-acceptance-matrix-v0.1.md 与 docs/p0-openapi-contract-closure-appendix-v0.1.md 按 1360 个操作重生成；docs/data-isolation-and-tenant-scope-security-spec-v0.1.md 与 docs/domain-ownership-scope-audit-v0.1.csv 无漂移。复核修复只改说明文字，重跑后生成物无新增变化。
+    - 界面验收报告 docs/closed-loop-implementation-ui-acceptance-report-v0.1.md 用 npm run docs:ui-experience-acceptance 按 e2e 新标题重生成：ADM-MVP-05 一行由「finance ledger requires adjustment reason and supports partial payment」改为「finance ledger requires payment method and supports partial payment」。
+    - docs/full-admin-mvp-requirements-code-matrix-v0.1.csv 的 ADM-FIN-001 行（198-R4②）：需求列「调整原因必填」改为「收付方式必填」，验收说明「无原因阻断，填写原因后 partial」改为「未选收付方式阻断，选择收付方式后 partial」。
+  - b. 控制席收尾并入（198-R3⑧ 同根）：createSpaceType 的说明（paths./api/v1/platform/space-types.post.description，yaml :33318、json :44887）由「后台管理员录入或修改空间类型字典项（按 type_code upsert）；新增/启用后即可用于空间 space_type 硬校验。」改为「后台管理员录入空间类型字典项；新建一律为启用（active）；type_code 已存在时 409 SPACE_TYPE_CODE_EXISTS，不能用新增改已有种类；新增后即可用于空间 space_type 硬校验。」；components.schemas.SpaceTypeRequest.description（yaml :73930、json :101617）由「空间类型字典录入/修改请求；type_code 为唯一键，存在则更新名称/排序/状态。」改为「空间类型字典录入请求；type_code 为唯一键，已存在时 409 SPACE_TYPE_CODE_EXISTS；新建一律为启用（active）。」。与代码一致：PlatformService.java:799-805 编码已存在抛 409 SPACE_TYPE_CODE_EXISTS，比对所用 listSpaceTypes 含各状态（JdbcPlatformRepository.java:445 起不按状态过滤）；:806-809 新建固定写 active。依据「OpenAPI 与代码一致」先例（170-R1、171-R1、153-R2 落地位置补记）。
+  - c. 方案 198-R1、198-R2 tests② 补的两条后端真实入口回归（真实 HTTP、蛇形键、真实授权链）：
+    - BarOrderBillWebShapeJdbcIntegrationTests.createBill_webShapeIdempotencyKeyAndOperatorNoteOnly_ok：按网页形状 POST /api/v1/bar/orders/{order_id}/bill，请求体只带 idempotency_key 与 operator_note，200 且账单落库（198-R1⑤）。
+    - SpaceTypeCreateWebShapeJdbcIntegrationTests.createSpaceType_webShapeWithoutStatus_createdActive：平台管理员按网页形状 POST /api/v1/platform/space-types（idempotency_key、type_code、type_name、sort_order，不带 status），200，返回与库内种类均为 active（198-R2、198-R3⑧）。
+  - d. InventoryControllerTests.claimSavedBottleUsesSnakeCaseRequestShape（:747）领取用例按网页真实请求形状去掉 claim_by_phone（198-R3②），文件版本 V0.09→V0.10。
+  - e. 201-R6 同步的两份供应链文档：
+    - docs/supply-chain-inventory-product-prd-v0.1.md V0.36→V0.37：§10.1 正式 OpenAPI 行改为跨主体 transfer 的 list/get/create/ship/receive/return/cancel 与 supply-entities GET/POST 均已收录（list/get 与 supply-entities 由 201-R6 补入）；存酒转让 POST /api/v1/inventory/saved-bottles/{id}/transfer 已收录于正式 YAML/JSON、验收矩阵和 closure 附录。
+    - docs/supply-chain-inventory-development-design-v0.1.md V0.25→V0.26：§5.7 跨主体调拨、借用与归还「当前实现 GAP」段的 OpenAPI 半句（本次复核修复）、§7 跨主体调拨行与存酒转让行、§12 调拨/主体与存酒转让契约行改为已收录；§11 已确认实现差距句去掉调拨、存酒转让契约漂移（本次复核修复同根）；§14 变更日志本段一行同步位置与内容。
+    - 调拨单列表与详情（listTransferOrders、getTransferOrder）的 x-data-scope 按同对象 createTransferOrder 写 project，实际只校 inventory.transfer_order.view、不按项目过滤，已登记待开发清单第 250 条（待核实）。
+  - f. 复核修复：票种与价格规则审批删除的契约说明由「物理删除」改为软删除。approveDeleteTicketPriceRule（yaml :13842 description、:13882 decision 字段说明；json :18486、:18535）与 approveDeleteTicketType（yaml :14521、:14561；json :19441、:19490）四处 yaml 与 json 同值改：「approved 且无活引用即物理删除」改为「approved 且无活引用即删除（软删除：delete_status 置 approved，行保留、各处不再显示）」，decision 字段说明改为「approved 通过（无活引用即软删除：delete_status 置 approved，行保留、各处不再显示）」。代码：TicketCatalogService.approveDeleteTicketType（:326）、approveDeletePriceRule（:349）经 approveDeleteCatalogRecord 调 JdbcTicketingRepository.deleteTicketType（:186-187）、deletePriceRule（:959-960），只执行 UPDATE … SET delete_status = 'approved'，行保留。依据 BSM:571「这里的"删除"不是真从数据库里抹掉，而是把数据转入后台留存、前台各处不再显示，数据始终留在库里可查、可审计、可恢复」、BSM:570「删除（走审批·软删除）」。基线已有的 approveDeleteEntitlementTemplate（yaml :13303）不是本段新增，不动。改后 yaml 与 json 深比较一致，操作数仍 1360。

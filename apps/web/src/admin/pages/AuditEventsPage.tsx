@@ -1,4 +1,4 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 import React from "react";
 import { formatActionResult } from "../components/ActionResultView";
 import { TechDetails } from "../components/TechDetails";
@@ -262,8 +262,6 @@ export function AuditEventsPage({ api, user, setActionResult, setGlobalError, ef
     const operation = ["audit-events-export", exportReason, payload];
     const request = {
       idempotency_key: `audit-export-${Date.now()}`,
-      operator_note: exportReason,
-      evidence_attachment_ids: ["att-audit-export"],
       device_code: "web-admin",
       staff_id: user.id,
       events: [{

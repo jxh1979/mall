@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { BarTableSessionsPage } from "./BarTableSessionsPage";
@@ -30,6 +30,8 @@ describe("卡座待清台登记恢复空闲", () => {
     expect(screen.getByTestId("bar-table-row-t1").textContent).toContain("超时");
 
     fireEvent.click(screen.getByTestId("bar-table-clear-t1"));
-    await waitFor(() => expect(post).toHaveBeenCalledWith("/api/v1/bar/tables/t1/clear", expect.objectContaining({ operatorNote: expect.any(String) })));
+    await waitFor(() => expect(post).toHaveBeenCalledWith("/api/v1/bar/tables/t1/clear", expect.anything()));
+    // 第 198 条 198-R3③：清台只登记恢复空闲，请求体为空（幂等键由通用请求层注入），不再带写死的 operator_note。
+    expect(post.mock.calls[0]?.[1]).toEqual({});
   });
 });

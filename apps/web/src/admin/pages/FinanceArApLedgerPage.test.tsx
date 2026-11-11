@@ -1,4 +1,4 @@
-// 文件版本：V0.09
+// 文件版本：V0.10
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -247,16 +247,18 @@ describe("FinanceArApLedgerPage 登记核销请求体", () => {
     });
   }
 
-  it("填 100.00、选银行转账、填原因并确认：请求体为 amount_cent、payment_method、operator_note、idempotency_key，不含 amount", async () => {
+  // 第 198 条 198-R4②：收付款登记是系统自动留痕的「支付、核销」（BSM:1631），不是调账；页面没有原因框，请求体不带 operator_note。
+  it("填 100.00、选银行转账并确认：请求体为 amount_cent、payment_method、idempotency_key，不含 operator_note、amount；页面没有原因框", async () => {
     const posts = setupRealApi();
     await pageSettled();
+    expect(screen.queryByTestId("finance-payment-reason")).toBeNull();
     fireEvent.change(screen.getByTestId("finance-payment-amount"), { target: { value: "100.00" } });
     fireEvent.change(screen.getByTestId("finance-payment-method"), { target: { value: "bank_transfer" } });
-    fireEvent.change(screen.getByTestId("finance-payment-reason"), { target: { value: "客户转账付款" } });
     fireEvent.click(screen.getByTestId("finance-payment-submit"));
     await waitFor(() => expect(posts).toHaveLength(1));
     expect(posts[0]!.url).toContain("/api/v1/finance/ar-ap-items/ar-1/payments");
-    expect(posts[0]!.body).toMatchObject({ amount_cent: 10000, payment_method: "bank_transfer", operator_note: "客户转账付款" });
+    expect(posts[0]!.body).toMatchObject({ amount_cent: 10000, payment_method: "bank_transfer" });
+    expect(posts[0]!.body).not.toHaveProperty("operator_note");
     expect(typeof posts[0]!.body.idempotency_key).toBe("string");
     expect(posts[0]!.body).not.toHaveProperty("amount");
     expect(posts[0]!.body).not.toHaveProperty("reason");
@@ -266,7 +268,6 @@ describe("FinanceArApLedgerPage 登记核销请求体", () => {
     const posts = setupRealApi();
     await pageSettled();
     fireEvent.change(screen.getByTestId("finance-payment-amount"), { target: { value: "100.00" } });
-    fireEvent.change(screen.getByTestId("finance-payment-reason"), { target: { value: "客户转账付款" } });
     fireEvent.click(screen.getByTestId("finance-payment-submit"));
     await waitFor(() => expect(screen.queryByTestId("finance-ledger-error")?.textContent).toBe("请选择收付方式。"));
     expect(posts).toHaveLength(0);
@@ -282,7 +283,6 @@ describe("FinanceArApLedgerPage 登记核销请求体", () => {
     await pageSettled();
     fireEvent.change(screen.getByTestId("finance-payment-amount"), { target: { value: "100.00" } });
     fireEvent.change(screen.getByTestId("finance-payment-method"), { target: { value: "bank_transfer" } });
-    fireEvent.change(screen.getByTestId("finance-payment-reason"), { target: { value: "客户转账付款" } });
     fireEvent.click(screen.getByTestId("finance-payment-submit"));
     await waitFor(() => expect(setActionResult).toHaveBeenCalledWith(expect.objectContaining({ action: "ledger_payment", status: "partial" })));
     const text = formatActionResult(setActionResult.mock.calls.at(-1)![0]);

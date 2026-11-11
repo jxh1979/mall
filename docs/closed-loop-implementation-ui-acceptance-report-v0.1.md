@@ -60,7 +60,7 @@
 | 常规 UI | ADM-MVP-02 account and permission template workflows are actionable | tests/e2e/full-admin-mvp.spec.ts |
 | 常规 UI | ADM-MVP-03 ticketing policy validates weekday/weekend/holiday base price before publish | tests/e2e/full-admin-mvp.spec.ts |
 | 常规 UI | ADM-MVP-04 bar table session transfer and merge | tests/e2e/full-admin-mvp.spec.ts |
-| 常规 UI | ADM-MVP-05 finance ledger requires adjustment reason and supports partial payment | tests/e2e/full-admin-mvp.spec.ts |
+| 常规 UI | ADM-MVP-05 finance ledger requires payment method and supports partial payment | tests/e2e/full-admin-mvp.spec.ts |
 | 常规 UI | ADM-MVP-06 integration adapter requires provider code, type and mode and supports mock test | tests/e2e/full-admin-mvp.spec.ts |
 | 常规 UI | ADM-MVP-07 ops readiness cannot verify blocker without evidence ref | tests/e2e/full-admin-mvp.spec.ts |
 | 常规 UI | ADM-MVP-08 role permission and mobile layout are enforceable | tests/e2e/full-admin-mvp.spec.ts |

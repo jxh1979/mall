@@ -557,6 +557,24 @@ class MerchantServiceJdbcIntegrationTests {
                 """.formatted(UUID.randomUUID(), reason)));
     }
 
+    /**
+     * 第十八批 AE 段第 198 条 198-R3①（BSM:940「收银、核销、收款、放行等现场动作，一律按执行该动作的设备绑定与该次登录会话定位到操作人并留痕」）：
+     * 后台按网页新形状（不带 operator_user_id）派单、处理、关闭都 200，动作记录的操作人是各次的登录员工。
+     */
+    @Test
+    void assignProcessCloseWithoutOperatorUserIdRecordLoggedInStaff() throws Exception {
+        seedOperatingMerchant();
+        RequestPostProcessor closer = account("k", project("a"), null, role("closer", "merchant.service_work_order.view", "merchant.service_work_order.close"));
+        String id = createAsMerchant("repair", "high", "");
+        moveTo(id, "resolved");
+        close(closer, id, "").andExpect(status().isOk()).andExpect(jsonPath("$.data.status").value("closed"));
+        assertThat(jdbcTemplate.queryForList("SELECT action_type, operator_user_id FROM merchant_service_work_order_actions "
+                + "WHERE work_order_id = ? AND action_type <> 'created'", id))
+                .extracting(row -> tuple(row.get("action_type"), row.get("operator_user_id")))
+                .containsExactlyInAnyOrder(tuple("assigned", user("b")), tuple("status_changed", user("pa")),
+                        tuple("status_changed", user("pa")), tuple("closed", user("k")));
+    }
+
     /** 派给 pa，由 pa 按后台处理的蛇形键依次走到目标状态（assigned 之后先 processing）。 */
     private void moveTo(String id, String target) throws Exception {
         assign(dispatcherB, id, user("pa")).andExpect(status().isOk());
@@ -570,7 +588,7 @@ class MerchantServiceJdbcIntegrationTests {
     private ResultActions act(RequestPostProcessor who, String id, String targetStatus, String note) throws Exception {
         return mockMvc.perform(post(WORK_ORDERS + "/" + id + "/actions").with(who).contentType(MediaType.APPLICATION_JSON).content("""
                 {"idempotency_key":"%s","operator_note":"%s","evidence_attachment_ids":["att-merchant-work-order-process"],
-                 "target_status":"%s","operator_user_id":"staff_processor"}
+                 "target_status":"%s"}
                 """.formatted(UUID.randomUUID(), note, targetStatus)));
     }
 
@@ -578,7 +596,7 @@ class MerchantServiceJdbcIntegrationTests {
     private ResultActions close(RequestPostProcessor who, String id, String extra) throws Exception {
         return mockMvc.perform(post(WORK_ORDERS + "/" + id + "/close").with(who).contentType(MediaType.APPLICATION_JSON).content("""
                 {"idempotency_key":"%s","operator_note":"完整后台关闭商户服务工单","evidence_attachment_ids":["att-merchant-work-order-close"],
-                 "resolution":"已维修完成并确认关闭","satisfaction_score":null,"operator_user_id":"staff_closer"%s}
+                 "resolution":"已维修完成并确认关闭","satisfaction_score":null%s}
                 """.formatted(UUID.randomUUID(), extra)));
     }
 
@@ -675,7 +693,7 @@ class MerchantServiceJdbcIntegrationTests {
     private ResultActions assign(RequestPostProcessor who, String id, String ownerUserId) throws Exception {
         return mockMvc.perform(post(WORK_ORDERS + "/" + id + "/assign").with(who).contentType(MediaType.APPLICATION_JSON).content("""
                 {"idempotency_key":"%s","operator_note":"完整后台商户工单派单","evidence_attachment_ids":["att-merchant-work-order-assign"],
-                 "owner_department":"property","owner_user_id":"%s","operator_user_id":"staff_dispatcher"}
+                 "owner_department":"property","owner_user_id":"%s"}
                 """.formatted(UUID.randomUUID(), ownerUserId)));
     }
 

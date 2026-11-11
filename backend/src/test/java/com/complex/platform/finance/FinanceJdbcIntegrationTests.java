@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.09
+// 文件版本：V0.10
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.groups.Tuple.tuple;
@@ -462,7 +462,7 @@ class FinanceJdbcIntegrationTests {
         RequestPostProcessor finance = financeActor("usr_" + prefix);
         String body = mockMvc.perform(post("/api/v1/finance/daily-closes").with(finance)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"idempotency_key\":\"" + prefix + "\",\"operator_note\":\"日结\","
+                        .content("{\"idempotency_key\":\"" + prefix + "\","
                                 + "\"business_date\":\"2097-06-26\",\"scope_type\":\"project\","
                                 + "\"scope_id\":\"project_" + prefix + "\"}"))
                 .andExpect(status().isOk())
@@ -1577,7 +1577,7 @@ class FinanceJdbcIntegrationTests {
             String scopeType, String scopeId) throws Exception {
         return mockMvc.perform(post("/api/v1/finance/daily-closes").with(who)
                 .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"idempotency_key\":\"" + key + "\",\"operator_note\":\"日结\",\"business_date\":\"" + day
+                .content("{\"idempotency_key\":\"" + key + "\",\"business_date\":\"" + day
                         + "\",\"scope_type\":\"" + scopeType + "\",\"scope_id\":\"" + scopeId + "\"}"));
     }
 
@@ -1591,7 +1591,7 @@ class FinanceJdbcIntegrationTests {
 
     /**
      * 第十八批 W 段第 200 条 200-R1（契约 ArApPaymentRequest 必填 amount_cent、payment_method）：后台台账「登记核销」
-     * 按页面真实请求形状（蛇形键 amount_cent、payment_method、operator_note、idempotency_key）登记成功；
+     * 按页面真实请求形状（蛇形键 amount_cent、payment_method、idempotency_key；第 198 条 198-R4② 起页面不发 operator_note）登记成功；
      * 原页面形状（amount、reason）与缺收付方式均 400，台账不动。
      */
     @Test
@@ -1614,7 +1614,7 @@ class FinanceJdbcIntegrationTests {
         assertThat(jdbcTemplate.queryForObject("SELECT paid_amount_cent FROM ar_ap_items WHERE id = ?", Long.class, item))
                 .isZero();
 
-        ledgerPay(finance, item, "{\"amount_cent\":10000,\"payment_method\":\"bank_transfer\",\"operator_note\":\"客户付款\","
+        ledgerPay(finance, item, "{\"amount_cent\":10000,\"payment_method\":\"bank_transfer\","
                 + "\"idempotency_key\":\"lpm-ok-" + s + "\"}")
                 .andExpect(status().isOk());
         assertThat(jdbcTemplate.queryForObject("SELECT paid_amount_cent FROM ar_ap_items WHERE id = ?", Long.class, item))
