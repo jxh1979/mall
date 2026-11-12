@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { SettlementReviewPage } from "./SettlementReviewPage";
@@ -141,5 +141,27 @@ describe("SettlementReviewPage 结算流水内部结算价版本", () => {
     fireEvent.click(screen.getByTestId("settlement-review-row-s_n"));
     await waitFor(() => expect(screen.queryByTestId("row-detail-title")?.textContent ?? "").toContain("ST-N"));
     expect(drawerValue("内部结算价版本")).toBe("—");
+  });
+});
+
+// 第十八批 AJ 段 236-R6（BSM 第 1754 行「每项权益都必须绑定实际提供方和审批版本，避免悬空账。」；第 756 行「订单保存……规则版本」）：
+// 结算流水详情列出该笔订单下单时生效的票种规则版本「第 N 版」，没有版本的票种显示「—」（不显示第 0 版）。
+describe("SettlementReviewPage 结算流水票种规则版本", () => {
+  it("流水详情显示该笔订单所属票种规则版本，没有版本的显示「—」", async () => {
+    renderPage(REVIEW, [
+      { ...TRANSACTION_ROW, id: "s_r", transactionNo: "ST-R", settlementCatalogEntryId: null, ticketTypeRuleVersionNo: 2 },
+      { ...TRANSACTION_ROW, id: "s_e", transactionNo: "ST-E", settlementCatalogEntryId: null, ticketTypeRuleVersionNo: null },
+    ]);
+    await waitFor(() => expect(screen.queryByTestId("settlement-bill-review-bill_rv")).not.toBeNull());
+    await waitFor(() => expect(screen.queryByTestId("settlement-review-row-s_e")).not.toBeNull());
+
+    fireEvent.click(screen.getByTestId("settlement-review-row-s_r"));
+    await waitFor(() => expect(screen.queryByTestId("row-detail-drawer")?.textContent ?? "").toContain("票种规则版本"));
+    expect(drawerValue("票种规则版本")).toBe("第 2 版");
+
+    fireEvent.click(screen.getByTestId("row-detail-close"));
+    fireEvent.click(screen.getByTestId("settlement-review-row-s_e"));
+    await waitFor(() => expect(screen.queryByTestId("row-detail-title")?.textContent ?? "").toContain("ST-E"));
+    expect(drawerValue("票种规则版本")).toBe("—");
   });
 });

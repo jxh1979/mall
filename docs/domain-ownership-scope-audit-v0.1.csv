@@ -535,6 +535,7 @@ ticket_slot_holders,single_complex_default,P0_SINGLE_COMPLEX,single-complex defa
 ticket_transfers,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",V0.07,covered
 ticket_type_entitlements,inherited,ticket_type_id,ticket_type_id -> ticket_types -> project scope,must join through scope path before multi-complex rollout,V0.07,covered
 ticket_type_gift_floors,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",V0.07,covered
+ticket_type_rule_versions,direct,project_id,project_id column on ticket_type_rule_versions,ready for project/merchant scoped query enforcement,V0.07,covered
 ticket_types,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",V0.07,covered
 ticket_use_rewards,direct,project_id,project_id column on ticket_use_rewards,ready for project/merchant scoped query enforcement,V0.07,covered
 ticket_verifications,direct,merchant_id,merchant_id column on ticket_verifications,ready for project/merchant scoped query enforcement,V0.07,covered

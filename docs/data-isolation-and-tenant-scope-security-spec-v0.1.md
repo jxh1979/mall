@@ -56,7 +56,7 @@ scope 类型（与盘点 CSV 的 `scope_type` 对齐）：
 
 <!-- DATA_ISOLATION_SPEC_AUTO_START -->
 ### 3A. 自动迁移隔离基线（由 `npm run docs:data-isolation-spec` 生成）
-> 事实源：`backend/src/main/resources/db/migration`。当前解析到最新迁移 **V623**，发现 **275** 张含 scope 字段的表。不要手工修改本区块；新增迁移后运行 `npm run docs:data-isolation-spec`，提交前运行 `npm run verify:data-isolation-spec`。
+> 事实源：`backend/src/main/resources/db/migration`。当前解析到最新迁移 **V624**，发现 **276** 张含 scope 字段的表。不要手工修改本区块；新增迁移后运行 `npm run docs:data-isolation-spec`，提交前运行 `npm run verify:data-isolation-spec`。
 | 表 | scope 字段 | scope 类型 | 首次出现迁移 | 证据文件 |
 |---|---|---|---|---|
 | `access_grant_requests` | `merchant_id` + `project_id` | direct | V170 | `V170__access_grant_requests.sql` |
@@ -321,6 +321,7 @@ scope 类型（与盘点 CSV 的 `scope_type` 对齐）：
 | `ticket_refunds` | `merchant_id` | direct | V220 | `V220__ticket_refunds_merchant_id.sql` |
 | `ticket_reward_config_versions` | `merchant_id` + `project_id` | direct | V469, V558 | `V469__ticket_use_rewards_and_issuance_facts.sql`<br>`V558__stored_value_bonus_versions_and_nationwide_loyalty_levels.sql` |
 | `ticket_safety_events` | `project_id` | direct | V526 | `V526__ticket_refund_reasons_and_safety_exception.sql` |
+| `ticket_type_rule_versions` | `project_id` | direct | V624 | `V624__ticket_type_rule_versions.sql` |
 | `ticket_use_rewards` | `project_id` | direct | V469 | `V469__ticket_use_rewards_and_issuance_facts.sql` |
 | `ticket_verifications` | `merchant_id` | direct | V066 | `V066__ticket_anticounterfeit_window_nonce.sql` |
 | `turnover_rent_rules` | `merchant_id` | direct | V110 | `V110__complex_billing.sql` |

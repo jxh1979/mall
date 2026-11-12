@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import static com.complex.platform.common.api.ApiRequests.requireIdempotencyKey;
 
@@ -21,6 +21,7 @@ import com.complex.platform.ticketing.dto.QrRefreshConfigRequest;
 import com.complex.platform.ticketing.dto.TicketPriceRuleRequest;
 import com.complex.platform.ticketing.dto.TicketRefundRequest;
 import com.complex.platform.ticketing.dto.TicketTypeEntitlementRequest;
+import com.complex.platform.ticketing.dto.TicketTypePublishRequest;
 import com.complex.platform.ticketing.dto.TicketTypeRequest;
 import com.complex.platform.ticketing.dto.VerificationAnomalyResolveRequest;
 import com.complex.platform.ticketing.dto.VerificationRequest;
@@ -107,10 +108,11 @@ public class TicketingController {
         return ApiResponse.ok(service.updateQrRefreshConfig(request));
     }
 
+    /** 第十八批 AJ 段 236-R3：跨域组合通票首次发布提交项目之上的平台权限审批（带最终审批人），返回仍为草稿、获批即上架。 */
     @PostMapping("/ticketing/ticket-types/{id}/publish")
     public ApiResponse<TicketTypeRecord> publishTicketType(
             @PathVariable String id,
-            @RequestBody @jakarta.validation.Valid StatusChangeRequest request
+            @RequestBody @jakarta.validation.Valid TicketTypePublishRequest request
     ) {
         authorizationService.requirePermission("ticket.product.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
@@ -279,6 +281,22 @@ public class TicketingController {
             @PathVariable("id") String id) {
         authorizationService.requirePermission("ticket.product.view");
         return ApiResponse.ok(service.listGiftCoverage(id));
+    }
+
+    /** 第十八批 AJ 段 236-R3 票种规则版本（跨域组合通票）：各版三档价、折扣、权益组成、凑整差额与各域分摊，新版在前。 */
+    @GetMapping("/ticketing/ticket-types/{id}/rule-versions")
+    public ApiResponse<PageResponse<TicketTypeRuleVersionView>> listTicketTypeRuleVersions(@PathVariable("id") String id) {
+        authorizationService.requirePermission("ticket.product.view");
+        return ApiResponse.ok(service.listTicketTypeRuleVersions(id));
+    }
+
+    /** 第十八批 AJ 段 236-R7（第十八批裁决 61）：撤回票种规则草稿版或待审提交（待审的同时作废复核单），现表不变、旧版照卖。 */
+    @PostMapping("/ticketing/ticket-types/{id}/rule-versions/withdraw")
+    public ApiResponse<TicketTypeRuleVersionView> withdrawTicketTypeRuleVersion(
+            @PathVariable("id") String id, @RequestBody @jakarta.validation.Valid TicketCatalogArchiveRequest request) {
+        authorizationService.requirePermission("ticket.product.manage");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.withdrawTicketTypeRuleVersion(id, request));
     }
 
     /** 第十八批 AH 段 215-R2 票种最低赠酒杯数（ENUM:34「按票种可配，出厂默认 1 杯，须同时配置上下限」）。 */

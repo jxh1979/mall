@@ -1,4 +1,4 @@
-# P0 OpenAPI 权限、事件、任务追溯收口附录 V0.67
+# P0 OpenAPI 权限、事件、任务追溯收口附录 V0.68
 
 ## 1. 文档定位
 
@@ -14,11 +14,11 @@
 
 | 检查项 | 当前结果 | 执行结论 |
 |---|---:|---|
-| OpenAPI operation 数 | 1365 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
+| OpenAPI operation 数 | 1367 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
 | OpenAPI 权限/通用权限状态数 | 444 | 人工权限矩阵正文未覆盖 343 项；缺口以本文第 3 节补齐 |
-| OpenAPI 成功/失败事件数 | 2730 | 人工事件矩阵正文未覆盖 2681 项；完整事件字典以本文第 4 节为准 |
-| operation 级任务追溯 | 1365 | 人工任务映射正文未逐项覆盖 1359 个 operation；逐 operation 映射以本文第 5 节为准 |
-| 写接口数量 | 839 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
+| OpenAPI 成功/失败事件数 | 2734 | 人工事件矩阵正文未覆盖 2685 项；完整事件字典以本文第 4 节为准 |
+| operation 级任务追溯 | 1367 | 人工任务映射正文未逐项覆盖 1361 个 operation；逐 operation 映射以本文第 5 节为准 |
+| 写接口数量 | 840 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
 
 ## 3. 权限码与认证上下文补充表
 
@@ -449,8 +449,8 @@
 | `ticket.price_rule.approve` | staff-token | project-channel | 1 | approveDeleteTicketPriceRule | OpenAPI 补充，以本附录为准 |
 | `ticket.price_variant.manage` | staff-token | platform, project-channel | 5 | createTicketPriceRule, archiveTicketPriceRule, unarchiveTicketPriceRule, requestDeleteTicketPriceRule, createTicketDistributionMerchantRate | 已在权限矩阵正文出现 |
 | `ticket.price_variant.view` | staff-token | project-channel | 1 | listTicketPriceRules | 已在权限矩阵正文出现 |
-| `ticket.product.manage` | staff-token | platform, project | 10 | updateTicketQrRefreshConfig, createTicketType, configureTicketTypeMinGiftCups, bindTicketTypeEntitlement, publishTicketType, archiveTicketType, unarchiveTicketType, requestDeleteTicketType, updateTicketTypePricing, saveTicketExpiryReminderPolicy | 已在权限矩阵正文出现 |
-| `ticket.product.view` | staff-token | platform, project | 6 | getTicketQrRefreshConfig, listTicketTypes, listTicketTypeGiftCoverage, getTicketTypeMinGiftCups, ticketTypePriceCheck, getTicketExpiryReminderPolicy | 已在权限矩阵正文出现 |
+| `ticket.product.manage` | staff-token | platform, project | 11 | updateTicketQrRefreshConfig, createTicketType, configureTicketTypeMinGiftCups, bindTicketTypeEntitlement, publishTicketType, withdrawTicketTypeRuleVersion, archiveTicketType, unarchiveTicketType, requestDeleteTicketType, updateTicketTypePricing, saveTicketExpiryReminderPolicy | 已在权限矩阵正文出现 |
+| `ticket.product.view` | staff-token | platform, project | 7 | getTicketQrRefreshConfig, listTicketTypes, listTicketTypeGiftCoverage, getTicketTypeMinGiftCups, listTicketTypeRuleVersions, ticketTypePriceCheck, getTicketExpiryReminderPolicy | 已在权限矩阵正文出现 |
 | `ticket.refund.approve` | staff-token | project-order | 4 | confirmTicketRefundPayout, approveTicketRefund, approveTicketSafetyEvent, rejectTicketRefund | 已在权限矩阵正文出现 |
 | `ticket.refund.request` | staff-token | project-order | 2 | requestTicketRefund, requestTicketSafetyEvent | 已在权限矩阵正文出现 |
 | `ticket.refund.view` | staff-token | -, project-order | 3 | listTicketRefunds, listTicketSafetyEvents, listTicketRefundLines | OpenAPI 补充，以本附录为准 |
@@ -3074,8 +3074,10 @@
 | `ticket_product.unarchive_failed` | failure | `unarchiveTicketType` | `POST` | `/api/v1/ticketing/ticket-types/{id}/unarchive` | TIC-票务权益 | `ticket.product.manage` | 接口级事件，以本附录为准 |
 | `ticket_product.unarchived` | success | `unarchiveTicketType` | `POST` | `/api/v1/ticketing/ticket-types/{id}/unarchive` | TIC-票务权益 | `ticket.product.manage` | 接口级事件，以本附录为准 |
 | `ticket_product.view_failed` | failure | `listTicketTypeGiftCoverage` | `GET` | `/api/v1/ticketing/ticket-types/{id}/gift-coverage` | TIC-票务权益 | `ticket.product.view` | 接口级事件，以本附录为准 |
+| `ticket_product.view_failed` | failure | `listTicketTypeRuleVersions` | `GET` | `/api/v1/ticketing/ticket-types/{id}/rule-versions` | TIC-票务权益 | `ticket.product.view` | 接口级事件，以本附录为准 |
 | `ticket_product.view_failed` | failure | `listTicketTypes` | `GET` | `/api/v1/ticketing/ticket-types` | TIC-票务权益 | `ticket.product.view` | 接口级事件，以本附录为准 |
 | `ticket_product.viewed` | success | `listTicketTypeGiftCoverage` | `GET` | `/api/v1/ticketing/ticket-types/{id}/gift-coverage` | TIC-票务权益 | `ticket.product.view` | 接口级事件，以本附录为准 |
+| `ticket_product.viewed` | success | `listTicketTypeRuleVersions` | `GET` | `/api/v1/ticketing/ticket-types/{id}/rule-versions` | TIC-票务权益 | `ticket.product.view` | 接口级事件，以本附录为准 |
 | `ticket_product.viewed` | success | `listTicketTypes` | `GET` | `/api/v1/ticketing/ticket-types` | TIC-票务权益 | `ticket.product.view` | 接口级事件，以本附录为准 |
 | `ticket_refund.approve_failed` | failure | `approveTicketRefund` | `POST` | `/api/v1/ticketing/refunds/{refund_id}/approve` | TIC-票务权益 | `ticket.refund.approve` | 接口级事件，以本附录为准 |
 | `ticket_refund.approved` | success | `approveTicketRefund` | `POST` | `/api/v1/ticketing/refunds/{refund_id}/approve` | TIC-票务权益 | `ticket.refund.approve` | 接口级事件，以本附录为准 |
@@ -3103,6 +3105,8 @@
 | `ticket_transfer.viewed` | success | `listTicketTransfers` | `GET` | `/api/v1/ticketing/ticket-transfers` | TIC-票务权益 | `ticket.transfer.read` | 接口级事件，以本附录为准 |
 | `ticket_type.min_gift_cups_config_failed` | failure | `configureTicketTypeMinGiftCups` | `PUT` | `/api/v1/ticketing/ticket-types/{id}/min-gift-cups` | TIC-票务权益 | `ticket.product.manage` | 接口级事件，以本附录为准 |
 | `ticket_type.min_gift_cups_configured` | success | `configureTicketTypeMinGiftCups` | `PUT` | `/api/v1/ticketing/ticket-types/{id}/min-gift-cups` | TIC-票务权益 | `ticket.product.manage` | 接口级事件，以本附录为准 |
+| `ticket_type.rule_version.withdraw_failed` | failure | `withdrawTicketTypeRuleVersion` | `POST` | `/api/v1/ticketing/ticket-types/{id}/rule-versions/withdraw` | TIC-票务权益 | `ticket.product.manage` | 接口级事件，以本附录为准 |
+| `ticket_type.rule_version.withdrawn` | success | `withdrawTicketTypeRuleVersion` | `POST` | `/api/v1/ticketing/ticket-types/{id}/rule-versions/withdraw` | TIC-票务权益 | `ticket.product.manage` | 接口级事件，以本附录为准 |
 | `ticket.expiry_reminder_policy_update_failed` | failure | `saveTicketExpiryReminderPolicy` | `PUT` | `/api/v1/ticketing/expiry-reminder-policies/{project_id}` | TIC-票务权益 | `ticket.product.manage` | 接口级事件，以本附录为准 |
 | `ticket.expiry_reminder_policy_updated` | success | `saveTicketExpiryReminderPolicy` | `PUT` | `/api/v1/ticketing/expiry-reminder-policies/{project_id}` | TIC-票务权益 | `ticket.product.manage` | 接口级事件，以本附录为准 |
 | `ticket.issue_failed` | failure | `issueTicket` | `POST` | `/api/v1/ticketing/orders/{order_id}/issue` | TIC-票务权益 | `ticket.ticket.issue` | 接口级事件，以本附录为准 |
@@ -4556,6 +4560,7 @@
 | TIC-票务权益 | `listTicketSafetyEvents` | `GET` | `/api/v1/ticketing/safety-events` | 查询通票安全事件 | `ticket.refund.view` | `ticket_safety_event.viewed` / `ticket_safety_event.view_failed` | web, merchant_portal, merchant_app | operation 级补充 |
 | TIC-票务权益 | `listTicketTransfers` | `GET` | `/api/v1/ticketing/ticket-transfers` | 查询门票转赠记录(客服纠纷排查,只读) | `ticket.transfer.read` | `ticket_transfer.viewed` / `ticket_transfer.view_failed` | web | operation 级补充 |
 | TIC-票务权益 | `listTicketTypeGiftCoverage` | `GET` | `/api/v1/ticketing/ticket-types/{id}/gift-coverage` | 票面赠酒清单（按酒吧分组） | `ticket.product.view` | `ticket_product.viewed` / `ticket_product.view_failed` | web | operation 级补充 |
+| TIC-票务权益 | `listTicketTypeRuleVersions` | `GET` | `/api/v1/ticketing/ticket-types/{id}/rule-versions` | 票种规则版本（跨域组合通票） | `ticket.product.view` | `ticket_product.viewed` / `ticket_product.view_failed` | web | operation 级补充 |
 | TIC-票务权益 | `listTicketTypes` | `GET` | `/api/v1/ticketing/ticket-types` | 票种查询 | `ticket.product.view` | `ticket_product.viewed` / `ticket_product.view_failed` | web | operation 级补充 |
 | TIC-票务权益 | `listTicketVerifications` | `GET` | `/api/v1/ticketing/verifications` | 查询票核销记录 | `verification.view` | `verification.viewed` / `verification.view_failed` | web, staff_work_phone, kiosk | operation 级补充 |
 | TIC-票务权益 | `previewTicketVerification` | `POST` | `/api/v1/ticketing/verifications/preview` | 票务核销预览 | `verification.execute` | `verification.previewed` / `verification.failed` | staff_work_phone, kiosk, web<br>device: verification-gate | operation 级补充 |
@@ -4579,6 +4584,7 @@
 | TIC-票务权益 | `unarchiveTicketType` | `POST` | `/api/v1/ticketing/ticket-types/{id}/unarchive` | 取消存档票种 | `ticket.product.manage` | `ticket_product.unarchived` / `ticket_product.unarchive_failed` | web | operation 级补充 |
 | TIC-票务权益 | `updateTicketQrRefreshConfig` | `PUT` | `/api/v1/ticketing/qr-refresh-config` | 改全场统一动态码刷新间隔 | `ticket.product.manage` | `ticket.qr_refresh_config.updated` / `ticket.qr_refresh_config.update_failed` | web | operation 级补充 |
 | TIC-票务权益 | `updateTicketTypePricing` | `PUT` | `/api/v1/ticketing/ticket-types/{id}/pricing` | 改票种售价／折扣（凑整误差闸） | `ticket.product.manage` | `ticket_product.pricing_changed` / `ticket_product.pricing_change_failed` | web | operation 级补充 |
+| TIC-票务权益 | `withdrawTicketTypeRuleVersion` | `POST` | `/api/v1/ticketing/ticket-types/{id}/rule-versions/withdraw` | 撤回票种规则草稿版或待审提交（跨域组合通票） | `ticket.product.manage` | `ticket_type.rule_version.withdrawn` / `ticket_type.rule_version.withdraw_failed` | web | operation 级补充 |
 
 ## 6. OpenAPI 示例覆盖执行口径
 

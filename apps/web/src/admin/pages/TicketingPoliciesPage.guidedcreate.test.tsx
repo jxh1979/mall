@@ -1,4 +1,4 @@
-// 文件版本：V0.03
+// 文件版本：V0.04
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -233,5 +233,43 @@ describe("TicketingPoliciesPage 引导式新建票种", () => {
     expect(templatePosts.length).toBe(1);
     expect(JSON.parse(templatePosts[0] ?? "{}").merchant_id).toBe("m-bar-1");
     expect(setActionResult).not.toHaveBeenCalledWith(expect.objectContaining({ action: "entitlement_template_created" }));
+  });
+
+  // 第十八批 AJ 段 236-R5⑦（第十八批裁决 62 选项原文「还得改向导（先建草稿不立即上架）或另做建草稿票的入口」）：勾「先存为草稿、不立即上架」
+  //   只建草稿票，不绑权益、不发布；组合在「组合式套票配置」配齐后到票种行点「发布」。
+  it("236-R5⑦ 勾「先存为草稿、不立即上架」：只建草稿票，不选模板不填理由也能保存，不绑权益不发布", async () => {
+    const postSpy = vi.fn(async (path: string, _body?: unknown) => {
+      if (path.endsWith("/ticketing/ticket-types")) return { id: "tt-draft-new" } as unknown;
+      return {} as unknown;
+    });
+    const props = renderPage(postSpy);
+    await waitFor(() => expect(screen.getByTestId("ticket-create-open")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("ticket-create-open"));
+    await waitFor(() => expect(screen.getByTestId("ticket-policy").textContent).toContain("要做跨域组合通票请勾选"));
+    expect(screen.queryByTestId("ticket-create-template")).not.toBeNull();
+
+    fireEvent.click(screen.getByTestId("ticket-create-draft-only"));
+    await waitFor(() => expect(screen.getByTestId("ticket-policy").textContent).toContain("只建草稿票"));
+    expect(screen.queryByTestId("ticket-create-template")).toBeNull();
+    expect(screen.queryByTestId("ticket-publish-reason")).toBeNull();
+    fireEvent.change(screen.getByTestId("ticket-weekday-price"), { target: { value: "199" } });
+    fireEvent.change(screen.getByTestId("ticket-weekend-price"), { target: { value: "219" } });
+    fireEvent.change(screen.getByTestId("ticket-holiday-price"), { target: { value: "239" } });
+    fireEvent.click(screen.getByTestId("ticket-policy-next"));
+
+    await waitFor(() => expect(screen.queryByTestId("ticket-policy-summary")).not.toBeNull());
+    const summary = screen.getByTestId("ticket-policy-summary").textContent ?? "";
+    expect(summary).toContain("建完是否上架");
+    expect(summary).toContain("否，先存为草稿");
+    expect(summary).not.toContain("权益模板");
+    expect(summary).not.toContain("发布理由");
+    expect(screen.getByTestId("ticket-publish").textContent).toContain("保存草稿");
+    fireEvent.click(screen.getByTestId("ticket-publish"));
+
+    await waitFor(() => expect(props.setActionResult).toHaveBeenCalledWith(expect.objectContaining({ action: "ticket_type_draft_created" })));
+    expect(postSpy.mock.calls.map((c) => String(c[0]))).toEqual(["/api/v1/ticketing/ticket-types"]);
+    const body = (postSpy.mock.calls[0]?.[1] ?? {}) as Record<string, unknown>;
+    expect(body).toMatchObject({ ticket_name: "后台通票策略", weekday_price_cent: 19900 });
+    expect(typeof body.idempotency_key).toBe("string");
   });
 });

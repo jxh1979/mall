@@ -1,4 +1,4 @@
-# P0 OpenAPI Operation 验收矩阵 V0.67
+# P0 OpenAPI Operation 验收矩阵 V0.68
 
 ## 1. 文档定位
 
@@ -17,7 +17,7 @@
 
 ## 3. Operation 清单
 
-> 当前 `docs/openapi/openapi-p0.json` 共 1365 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
+> 当前 `docs/openapi/openapi-p0.json` 共 1367 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
 
 | 标签 | 方法 | 路径 | operationId | 摘要 | 请求体 | 权限 | 认证上下文 | 数据范围 | 终端/设备能力/调用通道 | 幂等 | 成功事件 | 失败事件 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -393,7 +393,9 @@
 | ticketing | `GET` | `/api/v1/ticketing/ticket-types/{id}/min-gift-cups` | `getTicketTypeMinGiftCups` | 查票种最低赠酒杯数（没配过为出厂 1 杯） | `-` | `ticket.product.view` | `staff-token` | `project` | web | 否 | `not_applicable` | `not_applicable` |
 | ticketing | `PUT` | `/api/v1/ticketing/ticket-types/{id}/min-gift-cups` | `configureTicketTypeMinGiftCups` | 配置票种最低赠酒杯数（杯数与上下限同配） | `TicketTypeGiftFloorRequest` | `ticket.product.manage` | `staff-token` | `project` | web | 是 | `ticket_type.min_gift_cups_configured` | `ticket_type.min_gift_cups_config_failed` |
 | ticketing | `POST` | `/api/v1/ticketing/ticket-types/{id}/entitlements` | `bindTicketTypeEntitlement` | 绑定票类型权益 | `TicketTypeEntitlementRequest` | `ticket.product.manage` | `staff-token` | `project` | web | 是 | `ticket_product_entitlement.bound` | `ticket_product_entitlement.bound_failed` |
-| ticketing | `POST` | `/api/v1/ticketing/ticket-types/{id}/publish` | `publishTicketType` | 发布票种 | `StatusChangeRequest` | `ticket.product.manage` | `staff-token` | `project` | web | 是 | `ticket_price.published` | `ticket_price.publish_failed` |
+| ticketing | `POST` | `/api/v1/ticketing/ticket-types/{id}/publish` | `publishTicketType` | 发布票种 | `TicketTypePublishRequest` | `ticket.product.manage` | `staff-token` | `project` | web | 是 | `ticket_price.published` | `ticket_price.publish_failed` |
+| ticketing | `GET` | `/api/v1/ticketing/ticket-types/{id}/rule-versions` | `listTicketTypeRuleVersions` | 票种规则版本（跨域组合通票） | `-` | `ticket.product.view` | `staff-token` | `project` | web | 否 | `ticket_product.viewed` | `ticket_product.view_failed` |
+| ticketing | `POST` | `/api/v1/ticketing/ticket-types/{id}/rule-versions/withdraw` | `withdrawTicketTypeRuleVersion` | 撤回票种规则草稿版或待审提交（跨域组合通票） | `object` | `ticket.product.manage` | `staff-token` | `project` | web | 是 | `ticket_type.rule_version.withdrawn` | `ticket_type.rule_version.withdraw_failed` |
 | ticketing | `POST` | `/api/v1/ticketing/ticket-types/{id}/archive` | `archiveTicketType` | 存档票种 | `object` | `ticket.product.manage` | `staff-token` | `project` | web | 是 | `ticket_product.archived` | `ticket_product.archive_failed` |
 | ticketing | `POST` | `/api/v1/ticketing/ticket-types/{id}/unarchive` | `unarchiveTicketType` | 取消存档票种 | `object` | `ticket.product.manage` | `staff-token` | `project` | web | 是 | `ticket_product.unarchived` | `ticket_product.unarchive_failed` |
 | ticketing | `POST` | `/api/v1/ticketing/ticket-types/{id}/delete-request` | `requestDeleteTicketType` | 发起票种删除申请 | `object` | `ticket.product.manage` | `staff-token` | `project` | web | 是 | `ticket_product.delete_requested` | `ticket_product.delete_request_failed` |

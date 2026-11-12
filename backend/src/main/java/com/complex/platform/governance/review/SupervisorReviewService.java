@@ -1,6 +1,6 @@
 package com.complex.platform.governance.review;
 
-// 文件版本：V0.33
+// 文件版本：V0.34
 
 import com.complex.platform.access.AccessActor;
 import com.complex.platform.access.AuthorizationService;
@@ -178,6 +178,11 @@ public class SupervisorReviewService {
             new SupervisorReviewPolicyRecord("ticket_reward_sales_contract", "ticket.reward.sales_contract", 0, 1, true,
                     List.of("reason"), "active", "specific_role", "ticket.reward.sales_contract.approve",
                     List.of("business_review", "finance_review", "legal_review")),
+            // 第十八批 AJ 段第 236 条 236-R3（第十八批裁决 52 ②；ENUM:32「跨域组合通票的定价与域间结算规则由项目之上的平台权限统一审批」；PGM:528）：
+            // 跨域组合通票票种规则发布，恒阻断；提交人沿直接上级链到其指定的最终审批人，末节点须经角色持有跨域组合通票票种规则审批权限
+            // （能看全部项目由 TicketTypeRuleVersionService 提交时核）。
+            new SupervisorReviewPolicyRecord("ticket_type_rule_publish", "ticket.type.rule.publish", 0, 1, true,
+                    List.of("reason"), "active", "specific_role", "ticket.product.publish.approve"),
             new SupervisorReviewPolicyRecord("staff_shift_publish", "staff.shift.publish", 0, 1, true, List.of("reason"), "active", "one_level_up"),
             new SupervisorReviewPolicyRecord("staff_attendance_receipt_review", "staff.attendance.receipt.review", 0, 1, true, List.of("reason"), "active", "one_level_up"),
             new SupervisorReviewPolicyRecord("staff_penalty_cap_adjust", "staff.payroll.penalty_cap.adjust", 0, 3, true,
@@ -965,12 +970,12 @@ public class SupervisorReviewService {
         // U09-002：员工扣除上限是薪资安全阈值（BSM L1458、BSM-001 涉钱参数），与税费同按涉钱 1 个工作日。
         // 第十八批 AD 段第 204 条 204-R1：包厢关台未付清确认（第十八批裁决 37 追问题面「涉钱出厂 1 个工作日」）、停车免费放行和减免（BSM:1438
         // 「免费放行和减免须经物业主管审批」，减免即涉钱）、账单反结（第十八批裁决 39「反结生效时储值部分当场回原卡；现金、POS 等收款记录作废」）
-        // 出厂按涉钱 1 个工作日。
+        // 出厂按涉钱 1 个工作日；第十八批 AJ 段 236-R3 跨域组合通票票种规则发布（定价与域间分账）同按涉钱。
         return type.startsWith("finance.") || type.startsWith("staff.payroll.") || type.startsWith("ticket.reward.")
                 || type.equals("dealer.delivery_resolution") || type.equals("inventory.quarantine_disposition") || type.endsWith(".money")
                 || List.of("bill_waiver", "refund", "ar_ap_adjustment", "bar.bill_waiver",
                 "ticketing.refund_approve", "ticketing.verification_reverse",
-                BAR_UNPAID_CLOSE_ACTION, "parking.release.waive", "bar.bill_reopen").contains(type);
+                BAR_UNPAID_CLOSE_ACTION, "parking.release.waive", "bar.bill_reopen", "ticket.type.rule.publish").contains(type);
     }
 
     /** 204-R1：审批时限清单的一行（工作日）；money＝出厂是否按涉钱，customized＝后台是否改过。 */

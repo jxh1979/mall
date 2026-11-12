@@ -1,6 +1,6 @@
 # PRD 审计业务裁决台账
 
-文档版本：V0.91
+文档版本：V0.92
 状态：进行中
 迁移日期：2026-07-27
 当前事实源：三份立法 HTML 以既有冻结基线叠加 James 此前 M02 至 M08 的点名批准、全量审计 M001、M002 的逐项批准，以及本轮 2026-10-16 至 2026-10-17 业务 HTML 审计中 Q01 至 Q40 及子题实际明确批准且未被后续替代的裁决，和 2026-10-17 第二批 HTML 业务线推演审计（A–F 六线 64 条、停车章）的逐项批准，并叠加本轮 CG 70 项来源确认与 C01–C09、N01–N03 最终澄清及补全文稿中 F01、W01–W05 的整体修改批准（本文件末节）；本轮最终规则、未采纳或替代关系、现行版本与字节哈希见本文件末节。历史记录保留为各自当时事实，不恢复已被替代的建议。
@@ -3966,6 +3966,8 @@ HTML 的语义补齐与直接引用同步可在本批核验；70项中的业务�
 | 59 | **第 233 条 附加税与其他税费的差异机制**（题面：「【第 9/10 题（第 233 条）：附加税和「其他税费」的申报差异走哪套机制】前因：税务处理原句：「两套差异机制按税种互斥适用、不得叠加：增值税、文化事业建设费等流转税按申报差异生成补提／冲回调整单，差异保留、不做拉平；企业所得税等税种按季度与财税软件核对拉平（以财税软件为准）。同一税种只能走其中一套。」现状：平台税费申报登记（第 210 条做的）现有五个税种：增值税、文化事业建设费、附加税、企业所得税、其他税费。HTML 点名了增值税、文化事业建设费、企业所得税，附加税和其他税费走哪套没写。附加税在枚举里和增值税、文化事业建设费一样，按「主体×收入类别」配「有没有、收多少」；其他税费（印花税、房产税等）不按收入配比例，平台算不出「系统计算金额」。怎么定？」）—— 操作员选「附加税出调整单，其他税费按季拉平（推荐）」：附加税跟流转税走补提或冲回调整单；其他税费和企业所得税一样，按季与财税软件核对、以财税软件为准拉平。好处：附加税和增值税同表同口径；其他税费没有系统计算基数，以财税软件为准最合理。（2026-11-11 弹窗；来由：18AG 核实第 212～259 条的待裁题。） | 待开发清单第 233 条（18AG 核实 233-R1～R7） |
 | 60 | **第 233 条 五家主体收入、成本与利润的汇总口径**（题面：「【第 10/10 题（第 233 条）：五家主体的「收入、成本与利润」怎么汇总】前因：税务处理末句：「娱乐平台公司、游乐公司、传媒公司、中央餐饮公司、城市项目公司五家主体各自的收入、成本与利润，由平台汇总计算；其中涉税的正式核算数据由专业财税软件回传关键信息，平台据此与自身的内部结算数据合并计算。」同段又写企业所得税等「系统内配置税率比例并据以生成一版计算结果」，按季与财税软件核对拉平。现状：平台没有按主体汇总收入、成本、利润的地方。HTML 没写成本取哪些数据。我的理解：收入＝按收入归属配置归到该主体的各类收入（含税实收）；成本＝该主体在平台内作为付款方的内部结算应付（提成拨付、渠道费、赠送权益兑付等）＋该主体作为发放主体的工资单税前应发；利润＝收入−成本；企业所得税系统计算＝利润×配置比例；酒吧经营主体沿用持股分红的税前口径（收入−销货成本−费用）。怎么定？」）—— 操作员选「按上面的口径自动汇总（推荐）」：全部用平台已有数据自动算。好处：不增加手工登记。坏处：没进平台的成本算不进去，系统这一版所得税会和财税软件有差，按季拉平时以财税软件为准校正（HTML 本就这样设计）。（2026-11-11 弹窗；来由：18AG 核实第 212～259 条的待裁题。） | 待开发清单第 233 条（18AG 核实 233-R1～R7） |
 | 61 | **第 236 条 已上架的跨域组合通票改价或改组成时停不停售**（题面：「【第 236 条：已上架的跨域组合通票要改价或改组成时，停不停售】前因：你定的裁决 52「两种都要」里，第②种是「票种规则版本」。原句：「跨域组合通票的定价与域间结算规则由项目之上的平台权限统一审批」「每次发布时把凑整差额金额及各域分摊数额记入票种规则版本、发布后不得再改」。设计按原句把审批范围放在跨域组合通票（有价权益分属两个及以上域主管公司的通票）：发布须由项目之上的平台权限审批，审批通过即留一版规则（价格、权益组成、凑整差额、各域分摊）；单一酒吧门票仍由酒吧自己定价，不走这道审批。现状：跨域组合通票发布不审批、不留版本；已上架后可以直接改售价折扣、加有价权益。只有改组成跌破售价误差或最低赠酒杯数时，票才会退回草稿；改售价不改状态。已经卖出的票，权益和金额在出票时已固化，不受后来改动影响。分歧：HTML 和裁决只说「发布后不得再改」「由平台权限审批」，没说已上架的票要调价、加权益、改最低赠酒杯数时，审批期间停不停售、能不能改。决策台账里没有答案。下面三种都合字面，工作量差很多。怎么定？」）—— 操作员选「不停售：旧版照卖，新版获批后再换」：改动另存一份草稿版审批，审批期间照旧版卖，获批后自动换成新版。好处：不影响卖票。坏处：工作量明显更大，下单定价与出票都要改成读「当前生效版」，同一时刻会有两版规则并存。（未选：「改了就退回草稿停售，新版获批后再上架（推荐）」「已上架不许改，要改就另建新票种」。）（2026-11-12 弹窗；来由：18AI 只读设计第 236 条待裁题。控制席说明：裁决 52 的②以该题题面为准（组合通票定价与域间规则由平台权限统一审批；发布时把凑整差额和各域分摊记入票种规则版本、发布后不得再改）；第 2 题选项二的说明「票种（含权益组成、价格、出资方）发布须经审批并留版本」是未被选中选项的说明，18AI 任务书曾误引为选项原文，已按 18AI 设计质疑者意见更正，审批范围按题面收在跨域组合通票。） | 待开发清单第 236 条（236-R3～R6 另开 18AJ） |
+| 62 | **第 236 条 已上架的非跨域票加别的经营域收费权益变成跨域组合通票**（题面：「【第 236 条·问 1/2】已上架的非跨域票，加了别的经营域的收费权益、变成跨域组合通票时，审批期间停不停售？ 前因：裁决 61 定的是「已上架的跨域组合通票」改动另存草稿版审批、旧版照卖。这里的票改之前不是跨域组合通票，没有获批的跨域旧版可照卖，裁决 61 没覆盖到。 现状：①后台建票只有引导式向导一条路，向导只绑一条权益、建完立即上架。所以做一张跨域组合通票的正常做法是：先用向导建出单权益票（票名、售价往往已按组合定好）并上架，再到「组合式套票配置」加别的经营域的权益——代码注释也把「先建票、再一次性配组合权益」写成正常流程，每做一张新的跨域组合通票都会走到这里。②组合配置一次提交是逐条写入的：先酒吧，再游乐，再餐饮零售。③现行规则：已上架的票加了有价权益后，售价与「各业态价格合计×折扣」差额超出允许误差、或赠酒不够，就退回草稿停售；单权益票再加一条有价权益，售价几乎必然对不上，所以现在这一步本来就会退回草稿。」）—— 操作员选「不许加，另建票种」：已上架的非跨域票一律不许加别的经营域收费权益，要做跨域组合通票就另建票种。好处：规则最简单。坏处：向导建票即上架，常规路径会被直接拦住，还得改向导（先建草稿不立即上架）或另做建草稿票的入口，工作量更大。（未选：「退回草稿停售，发布时审批（推荐）」「照裁决 61：旧版照卖」）（2026-11-12 弹窗；来由：18AJ 只读设计第 236 条待裁题。控制席说明：零元免费权益不参与域间分配（BSM:749），已上架票加别域零元权益不受本裁决限制；「另建票种」的入口按选项原文所列二者之一落地（改向导可先建草稿不立即上架，草稿票配齐组合后经发布入口提交平台权限审批）。） | 待开发清单第 236 条（18AJ） |
+| 63 | **第 236 条 跨域组合通票的派生价与动态价是否经平台审批**（题面：「【第 236 条·问 2/2】跨域组合通票的会员价、新人价、学生价、团体价、渠道价和动态价，要不要也经项目之上的平台权限审批、记入票种规则版本？ 前因：HTML 写「跨域组合通票的定价与域间结算规则由项目之上的平台权限统一审批」；《业务系统地图》写组合通票「售价由各业态价格相加后统一打折得出」、凑整差额「每次发布时……记入票种规则版本」；裁决 61 题面写「审批通过即留一版规则（价格、权益组成、凑整差额、各域分摊）」。另一处 HTML 写「会员价、渠道价、动态价都在对应基础价上按打折/减免/加价/固定额派生；动态价按时段、容量等规则配置，可先试算再发布」。 现状：票种本身有平日、周末、节假日三档基础价和折扣。派生价（会员、新人、学生、团体、渠道）由有票务价格权限的人直接配置；动态价由有发布权限的人发布（可先试算）。订单逐单记下所用的派生价和动态价规则。 分歧：「定价」只指票种本身的价格构成，还是连派生价、动态价也算。决策台账没有答案。」）—— 操作员选「派生价动态价也审批」：跨域组合通票的派生价、动态价规则也要经项目之上的平台权限审批，并记入票种规则版本。好处：跨域组合通票的实际成交价全部受平台管控。坏处：日常调会员价、节假日加价都要等平台审批；需另立条目实现（派生价、动态价都要接审批与版本），工作量大，本段不做。（未选：「只管票种本身价格（推荐）」）（2026-11-12 弹窗；来由：18AJ 只读设计第 236 条待裁题。控制席说明：按选项原文「需另立条目实现……本段不做」，登记待开发清单第 297 条；18AJ 只做票种本身三档价、折扣、权益组成、最低赠酒杯数、凑整差额与各域分摊的审批与版本。） | 待开发清单第 297 条 |
 
 第一段转正前最低池额试算与取消结算环节超池待审批：既有缺口，列入待开发清单第 75 条、随 18C 做（ENUM L52、BSM L752）。
 
@@ -6900,3 +6902,158 @@ HTML 的语义补齐与直接引用同步可在本批核验；70项中的业务�
   - 测试：node tools/verify-full-admin-page-matrix.mjs 通过；git diff --check 无报。
 - 18AI 复核修复补记（无新裁决）：收尾六视角复核 4 条意见，独立反驳核实成立 3 条（都只改文档），另 1 条被驳回。① docs/settlement-rebuild-prd-v1.0.md §4 与 §10.2C 的 unverified_net_cent 释义补「纯游乐票、纯游乐通票与传媒自办演出票由归属主体自收，不计；单一经营域的尾差归该域时一并扣」，与 JdbcSettlementBillRepository.aggregateUnverifiedNetByFormat 现码及本节 214-R2 一致（PRD 本段已升版，不再升）。② docs/prd-audit/html-prd-coverage.csv 的 BEQ-0128、BSM-0610、BSM-0750 维持 PARTIAL：同规则仍有已登记未做的待开发清单第 289 条（销售渠道费固定额锚点撤销后不复位，ENUM:51）、第 262 条（补偿履约账期按自然月，BSM:1682），备注句尾注明，去掉 BEQ-0128「本段复核 14 分句均已落地」。③ 本节 237-R1、214-R1、237-R3 几处行号按现码刷新（C、D 段后来改过同一批文件）。
 - 18AI 落地位置补记·运行验收证据、快照、终验文档刷新（无新裁决）：业务提交 63978161 之后，按第十八批裁决 25 重刷了运行验收证据：后端全量 6711 测，0 失败 0 错误；apps/web 构建通过；常规界面验收（接口全部 mock）实跑 40 条全过；真实后端界面验收未跑，runtime_ready=false。随后依次重生成闭环当前态快照、生产闭环缺口报告、界面验收报告、无上线指挥台。生成器没改。手改 docs/final-closed-loop-acceptance-audit-v0.1.md 与 docs/code-implementation-acceptance-audit-v0.1.md：前端单测源码计数改为 1719；被核文件行数都没变；后端全量与常规界面验收的数字、日期改为本次实跑值；写入 npm run verify:unit 实跑结果，五个工作区全过。交付门禁于 2026-11-12 05:30 UTC 在工作树逐项实跑子项，NAS 两项现场探测未跑。仍红的有两项：一是 coding-host-protection，它写死主仓路径，在工作树口径下必红，属工具口径，不做；二是 final-closed-loop-audit，如实留 2 条红（integration-ready、business-acceptance-ready），原因是校验器要求终验把联调、业务验收写成「是」，而裁决 25 定了不跑真实后端界面验收、运行验收未就绪，终验写的是「否」。verify:delivery-gates 总链仍是红的。
+
+18AJ 落地位置补记（2026-11-12）：第十八批 AJ 段（batch56）按 18AJ 只读设计实现待开发清单第 236 条 236-R3～R7（票种规则审批版本）；运行验收证据、终验文档在本段最后一个提交刷新；各条落地位置见下。本段追加时，原台账除文档版本 V0.91→V0.92 与第十八批裁决表第 62、63 行（控制席已插入）外，其他历史字节保持。
+
+- 18AJ 落地位置补记·控制席判定（2026-11-12）：本段（第十八批 AJ 段，batch56）实现待开发清单第 236 条 236-R3～R7 票种规则审批版本（18AJ 只读设计 b56-audit/d-236-r3r6-r2.json：两方案综合、依据与代码双视角质疑、按裁决 62、63 修订后的定稿）。按第十八批裁决 52 ②题面与裁决 61：跨域组合通票（有价权益分属两个及以上域主管公司；零元免费权益不参与域间分配）首次发布经项目之上的平台权限审批、获批即上架，审批即留一版票种规则（三档价、折扣、权益组成、最低赠酒杯数、凑整差额与各域分摊，生效后不再改）；已上架跨域组合通票的改价折扣、加权益、改最低赠酒杯数另存草稿版审批，审批期间旧版照卖，获批后自动换成新版；下单定价与出票读当前生效版，订单另记下单时的版本。本段弹窗定第十八批裁决 62（已上架的非跨域票一律不许加别的经营域收费权益，要做跨域组合通票就另建票种；向导改为可先存草稿、不立即上架）、裁决 63（跨域组合通票的派生价与动态价也要经平台审批并记入票种规则版本——按选项原文另立待开发清单第 297 条，本段不做），插入裁决表第 62、63 行。待开发清单第 287 条（已上架通票被退回草稿后后台没有重新发布入口）随本段草稿票「发布」入口关闭。只读设计范围外旁见另记第 298～300 条（待核实）。
+- 18AJ 落地位置补记 · S1 段（第 236 条②，第十八批裁决 52 ②票种规则审批版本）
+  236-R3　跨域组合通票首次发布经项目之上的平台权限审批、获批即上架，审批即留一版票种规则。
+  改法：
+  - 迁移 V624：新表 ticket_type_rule_versions（含 project_id；状态取值 draft、pending_review、effective、superseded、withdrawn；每票种至多 1 份生效版加 1 份未结版，由两条部分唯一索引保证；effective 起内容列不再改）。权限种子 ticket.product.publish.approve（跨域组合通票票种规则审批）。
+  - 跨域判定 TicketCatalogService.crossDomain：只看未挂酒吧的通票里各业态价格大于 0、提供方业态不为空的绑定，按业态折成主管公司（酒吧→娱乐平台公司，游乐→游乐公司，演出传媒→传媒公司，餐饮与零售→城市项目公司，其他→商户档案主管公司），两家及以上即为跨域组合通票。提供方经 TicketingRepository.findTemplateProviders 取。
+  - 版本快照 TicketCatalogService.snapshot：三档价、折扣、最低赠酒杯数、权益组成（含提供方与业态）、合计、算出售价、凑整差额，以及各域折扣分摊、凑整分摊与所得。分摊与出票拆分同一算法；零元权益不进各域分摊。
+  - 首次发布 publishTicketType：未上架的跨域组合通票过完全部发布闸后，经 TicketTypeRuleVersionService.submit 提交主管复核，票仍为草稿。最终审批人须指定、在用、能看全部项目，否则 400 VALIDATION_FAILED；须经角色持审批权限（FINAL_APPROVER_LACKS_ROLE）、在提交人直接上级链上（FINAL_APPROVER_NOT_IN_CHAIN）；提交人自批 403。
+  - 审批回写 TicketTypeRuleVersionService.decided：通过即原生效版置 superseded、本版生效，三档价与折扣套回现表并上架；驳回则本版回草稿、保留复核单号。
+  - 待审期间改价、加权益、改最低赠酒杯数、再发布一律 409 TICKET_RULE_VERSION_PENDING。
+  - 复核策略 ticket_type_rule_publish（动作 ticket.type.rule.publish，specific_role ticket.product.publish.approve），涉钱时限 1 个工作日；复核单项目映射加 ticket_type_rule_version。
+  - 新读口 GET /api/v1/ticketing/ticket-types/{id}/rule-versions。改价、加权益、改最低赠酒杯数、发布四处成功留痕补记 rule_version_id 与 rule_version_status。
+  - 发布请求体换 TicketTypePublishRequest，加可空 final_approver_id。
+  - 前端：复核动作码与对象码中文名（reviewLabels.ts）；规则版本响应键中文名（fieldLabels.ts）；页面矩阵 ADM-TKT-001 加该读口。
+  - 非跨域票种的发布行为不变。
+  依据：
+  - ENUM:32「跨域组合通票的定价与域间结算规则由项目之上的平台权限统一审批，票款由娱乐平台公司统一收款。」
+  - BSM:754「……每次发布时把凑整差额金额及各域分摊数额记入票种规则版本、发布后不得再改。」
+  - BSM:749「零元免费权益不参与域间分配」；ENUM:49；ENUM:195。
+  - PGM:528「发起单据时只需指定该事项的最终审批人，系统按组织层级自动补全从发起人到该最终审批人之间的全部直接上级节点，逐级审批……任一节点驳回则整单退回起草人。」
+  - 第十八批裁决 52 ②题面「组合通票定价与域间规则由平台权限统一审批；发布时把凑整差额和各域分摊记入票种规则版本、发布后不得再改」。
+  - 决策台账第 75 条 18C 落地补记「项目之上的平台权限审批（……能看全部项目，不得自批）」。
+  测试：
+  - TicketTypeRuleVersionJdbcIntegrationTests.crossDomainPassFirstPublishGoesToPlatformApprovalAndKeepsRuleVersion
+  - TicketTypeRuleVersionJdbcIntegrationTests.finalApproverMustSeeAllProjectsSitOnTheChainAndNotBeTheSubmitter
+  - TicketTypeRuleVersionJdbcIntegrationTests.rejectedVersionReturnsToDraftAndIsResubmittedAsTheSameVersion
+  - TicketTypeRuleVersionJdbcIntegrationTests.pendingVersionBlocksEditsAndRepublish
+  - TicketTypeRuleVersionJdbcIntegrationTests.sameDomainPassAndSingleBarTicketPublishDirectly
+  - SupervisorReviewServiceTests.listPoliciesReturnsBlockingCatalogAndWritesAudit（策略数 56→57）
+  - TicketingServiceTests 23 处发布请求体换 TicketTypePublishRequest
+  - ApprovalChainPage.test.tsx「待审表动作类型、对象、档位三列覆盖全部复核码，显示中文，与主管复核页同名」
+- 236-R7（第十八批裁决 61、裁决 62；第十八批 AJ 段 S2）
+  改法：
+  - 改价、加权益、改最低赠酒杯数：已上架、按现表即当前生效版判为跨域组合通票的票种，这三类改动不写现表，存进该票种唯一一份未结版本（草稿版；没有就由现表起一份），也不退回草稿。改价照旧当场过误差闸（按草稿组成算）。
+  - 发布：有草稿版的已上架票种在「组合式套票配置」的「规则版本」小节点「提交审批」（同走发布接口），用草稿内容跑全部发布闸（至少一个权益、各业态价格、赠送出资方、通票赠酒下限、内部结算价、凑整误差，次序同现行），再提交项目之上的平台权限审批，票保持上架、旧版照卖照出票。
+  - 待审期间：改动与再发布一律 409 TICKET_RULE_VERSION_PENDING。
+  - 驳回：版本回到草稿、内容保留。
+  - 撤回：新增撤回接口（作废复核单），草稿版与待审提交都可撤回，现表不变；撤回后再改由现表另起新草稿，版本号续增。
+  - 获批：在审批同一事务里把草稿版套回现表（三档价、折扣、新增绑定、最低赠酒杯数），旧生效版置已被取代、内容不变，无需再手动上架。
+  - 裁决 62：已上架、现表不跨域的票，加一条有价权益后会成为跨域组合通票的，一律 409 TICKET_CROSS_DOMAIN_NEW_TYPE_REQUIRED，报错写明「另建票种」。绑定不落库、不退回草稿、不改状态，判定排在 236-R2 内部结算价闸与 V369、215-R1 退回草稿之前。零元权益、同域权益、单店票、草稿票（含已退回草稿的）照现行。
+  落地位置：
+  - backend/src/main/java/com/complex/platform/ticketing/TicketCatalogService.java：
+    - updatePricing、bindTicketTypeEntitlement（裁决 62 判定与草稿版路径）、configureGiftFloor、publishTicketType（草稿版提交审批）；
+    - requirePublishable（发布闸抽成一处，现表与草稿版共用）；
+    - barGiftCoverageViolation(barId, 提供方行, 最低杯数) 重载；
+    - Draft、toDraftVersion、openDraft、draftOf、providerRows、withdrawRuleVersion；
+    - withBinding 改收绑定列表；
+    - listRuleVersions 的 price_check 改用 draftOf。
+  - TicketTypeRuleVersionService.withdraw：锁序「复核单→票种行」，待审的先 SupervisorReviewService.cancelPendingReview，再锁票种行重读；无未结版本 409 TICKET_RULE_VERSION_NOT_OPEN。
+  - 撤回接口：TicketingService.withdrawTicketTypeRuleVersion（@GuardedAction ticket.product.manage、幂等、留痕）；TicketingController POST /api/v1/ticketing/ticket-types/{id}/rule-versions/withdraw；TicketingWriteOperation.WITHDRAW_TICKET_TYPE_RULE_VERSION（ticket_type.rule_version.withdrawn、ticket_type.rule_version.withdraw_failed，对象 ticket_type_rule_version）。
+  - TicketingRepository.TemplateProvider 加 archived 分量（JdbcTicketingRepository.findTemplateProviders 同步），草稿版赠酒下限按现表口径跳过已存档模板。
+  - 获批换版、驳回回草稿沿用 236-R3 的 TicketTypeRuleVersionService.decided。
+  依据：
+  - 第十八批裁决 61 选项原文「改动另存一份草稿版审批，审批期间照旧版卖，获批后自动换成新版」；
+  - 第十八批裁决 62 选项原文「已上架的非跨域票一律不许加别的经营域收费权益，要做跨域组合通票就另建票种」，控制席说明「零元免费权益不参与域间分配（BSM:749），已上架票加别域零元权益不受本裁决限制」；
+  - ENUM:32「跨域组合通票的定价与域间结算规则由项目之上的平台权限统一审批」；
+  - BSM:754「每次发布时把凑整差额金额及各域分摊数额记入票种规则版本、发布后不得再改」；
+  - BSM:749「零元免费权益不参与域间分配」；
+  - ENUM:34「该最低赠酒杯数属于票面强制要求提供的权益，一律记为域主管公司出资」；
+  - PGM:528「任一节点驳回则整单退回起草人」。
+  测试名：backend/src/test/java/com/complex/platform/ticketing/TicketTypeRuleVersionJdbcIntegrationTests
+  - publishedComboPassEditsGoIntoOneDraftVersionAndSwapInOnApproval
+  - rejectedDraftKeepsContentAndWithdrawCancelsReviewWhileCurrentVersionKeepsSelling
+  - publishedSingleDomainPassCannotTakePaidEntitlementFromAnotherDomain
+  - draftTicketMayBecomeCrossDomainPassThroughApproval
+- 【18AJ 落地位置补记 · S3（236-R4、236-R6）】
+  236-R4（订单记下单时生效的票种规则版本）：
+  - 依据：BSM:756「订单保存基础价、动态价、全部命中资格价、最终选中价和规则版本。」；第十八批裁决 61 所选选项原文「下单定价与出票都要改成读「当前生效版」，同一时刻会有两版规则并存」。
+  - 改法：V624 同一文件加 ticket_orders.ticket_type_rule_version_id（VARCHAR(64)，外键到 ticket_type_rule_versions(id)，可空，backend/src/main/resources/db/migration/V624__ticket_type_rule_versions.sql:70-71）。JdbcTicketingRepository.saveTicketOrder（:1072 起，加列在 :1078，注释 :1088-1089）的 INSERT 用子查询写入「该票种 status='effective' 的那一版」，ON CONFLICT 不更新该列，所以出票、置已付款回写时不改。
+  - 下单定价与出票不改代码：草稿版只存在版本表，现表只在获批时整体换成新版，所以下单、出票读到的就是各自时刻的当前生效版。
+  - 测试：TicketTypeRuleVersionJdbcIntegrationTests.ordersRecordRuleVersionInForceWhenPlacedAndSettlementReviewShowsIt。
+    - 第 1 版时下单 A：记第 1 版，19900。
+    - 第 2 版（加有价餐饮 3000、改价 22500）获批后下单 B：记第 2 版，22500；B 出票含有价餐饮。
+    - A 在换版后出票，所记仍是第 1 版。
+    - 纯游乐通票订单该列为空。
+  236-R6（通票结算审阅流水显示该笔订单所属票种规则版本）：
+  - 依据：BSM:1754「每项权益都必须绑定实际提供方和审批版本，避免悬空账。」
+  - 后端：settlement/JdbcSettlementTransactionRepository.listVerificationSettled 加标量子查询，经 settlement_transactions.order_id 关联 ticket_orders.ticket_type_rule_version_id，再关联 ticket_type_rule_versions.version_no，作为 ticket_type_rule_version_no（:513-515）。SettlementTransactionView 末位加 Integer ticketTypeRuleVersionNo（:574），用 getObject 读取，空值不读成 0（:537）。SettlementQueryServiceTests:44 构造末位补 null。
+  - 前端：apps/web/src/admin/pages/SettlementReviewPage.tsx 流水详情加「票种规则版本」（:178），有值「第 N 版」，空「—」。apps/web/src/admin/i18n/fieldLabels.ts:2906 补 ticket_type_rule_version_no「票种规则版本」。
+  - 测试：
+    - 后端：同上用例，三单游乐入场经结算消费者入账后，GET /api/v1/settlement/transactions 返回的版本号分别为 1、2、null。
+    - 前端：SettlementReviewPage.review.test.tsx「流水详情显示该笔订单所属票种规则版本，没有版本的显示「—」」。
+- 236-R5（18AJ S4，前端，apps/web 后台票务策略页）：
+  - 改法与落地位置：
+    - ① 草稿票种行「发布」（TicketingPoliciesPage.tsx:433 catalogActions，:442 publishDraftTicket）。未存档、无删除申请、状态为草稿的票种行加「发布」，先问发布理由，再问最终审批人用户编号（跨域组合通票必填，其余留空），POST /api/v1/ticketing/ticket-types/{id}/publish {idempotency_key, reason, final_approver_id}。返回草稿时提示「已提交发布审批，审批通过后自动上架」，返回已上架时提示「已发布」，后端中文报错原样显示。向导先存的草稿票，以及被 V369、215-R1、215-R2 退回草稿的票，补齐后都从这里发布。第 287 条所列三处缺口（向导是唯一的发布调用、票种行没有发布、组合配置提示「重新发布」而页面无按钮）由此补上，第 287 条关闭。
+    - ② 组合配置区「规则版本」小节（:1275；:695 loadRuleVersions，:1004 ruleVersionTable，:967 submitRuleVersion，:985 withdrawRuleVersion）。GET …/rule-versions，生效版与未结版本并列一张表，列第 N 版、状态、三档价、折扣、各业态价格合计、系统算出售价、凑整差额、各域分摊、权益组成（提供方、业态、份数、次数、人数、业态价格、出资方）、最低赠酒杯数（空则显示「出厂 1 杯」）。未结版本按情形注「审批前不生效，旧版照常售卖」「上次提交已被驳回，已退回草稿」「审批中，须先撤回提交才能再改」。票已上架且未结版本为草稿时有「提交审批」（发布理由、最终审批人，走 publish）。「放弃草稿」「撤回提交」走 POST …/rule-versions/withdraw。已被取代、已撤回的版本列在下方。
+    - ③ 票已上架且有未结版本时，定价核算、改价回显、最低赠酒杯数改读草稿版，标题注「草稿版」（:710 draftVersion，:1314，:1450）；赠酒清单仍显示生效版。
+    - ④ 组合配置成功提示改按裁决 61、62 口径（:950）；改价、最低赠酒杯数、④ 通票组装的成功提示附「已上架的跨域组合通票改动存入草稿版，旧版照常售卖，提交审批获批后自动换成新版」（:174）。
+    - ⑤ reviewLabels.ts:32：ticket.type.rule.publish 为「跨域组合通票规则审批」，ticket_type_rule_version 为「票种规则版本」。
+    - ⑥ 页面矩阵 ADM-TKT-001 补 POST /api/v1/ticketing/ticket-types/{id}/rule-versions/withdraw（GET rule-versions 已由 236-R3 补）；fieldLabels.ts:3245-3250 补 5 个结果动作中文名。
+    - ⑦ 向导第 2 步「先存为草稿、不立即上架」（:1208、:1221 ticket-create-draft-only）。勾选后不选模板、不填理由，按钮为「保存草稿」，确认信息去掉权益模板、发布理由两行，加「建完是否上架」；只 POST /api/v1/ticketing/ticket-types，不绑权益、不发布（:512）。
+    - ⑧ 组合配置防绕过（submitCombo :859 起，:923）。先按原顺序收集写入任务；对已上架、非单店、写入前现取规则版本中没有生效版的票，本次有价行按提供方业态折成主管公司（:169），达到两家及以上就整体拦下，提示另建票种，不发任何请求；否则有价行先写、零元行在后。其余票种照原顺序写。
+    - ⑩「④ 通票组装」bindEntitlement 补 try/catch，后端报错由 setGlobalError 显示（:582）。
+  - 依据：
+    - ENUM:32「跨域组合通票的定价与域间结算规则由项目之上的平台权限统一审批」
+    - PGM:528「发起单据时只需指定该事项的最终审批人」
+    - BSM:754「每次发布时把凑整差额金额及各域分摊数额记入票种规则版本」
+    - ENUM:30「草稿（规则未发布）」
+    - PGM:287「界面全中文（所有终端零英文）」
+    - 第十八批裁决 61 所选选项原文「改动另存一份草稿版审批，审批期间照旧版卖，获批后自动换成新版」
+    - 第十八批裁决 62 所选选项原文「已上架的非跨域票一律不许加别的经营域收费权益，要做跨域组合通票就另建票种。……还得改向导（先建草稿不立即上架）或另做建草稿票的入口」；控制席说明「草稿票配齐组合后经发布入口提交平台权限审批」
+  - 测试：
+    - TicketingPoliciesPage.ruleversions.test.tsx（236-R5① 3 条、②③ 3 条、⑧ a～e 5 条、⑩ 2 条）
+    - TicketingPoliciesPage.guidedcreate.test.tsx「236-R5⑦ 勾「先存为草稿、不立即上架」：只建草稿票，不选模板不填理由也能保存，不绑权益不发布」
+    - SupervisorReviewPage.test.tsx「跨域组合通票规则审批的动作类型与对象显示中文」
+    - ApprovalChainPage.test.tsx「待审表动作类型、对象、档位三列覆盖全部复核码，显示中文，与主管复核页同名」（加两条断言）
+- 【契约（K-contract）】docs/openapi/openapi-p0.yaml 与 .json 两份同值、就地添加。
+  236-R3（第十八批裁决 52 ②；ENUM:32「跨域组合通票的定价与域间结算规则由项目之上的平台权限统一审批」；BSM:754「每次发布时把凑整差额金额及各域分摊数额记入票种规则版本、发布后不得再改」）：
+  - publishTicketType 请求体由 StatusChange 换成新组件 TicketTypePublishRequest（idempotency_key、reason 必填，final_approver_id 可空），responses 补 400。
+  - 说明写明：跨域判定口径；首次发布提交平台权限审批、返回 draft、获批即上架；最终审批人须能看全部项目、经角色持有 ticket.product.publish.approve、在提交人直接上级链上（400 VALIDATION_FAILED、FINAL_APPROVER_LACKS_ROLE、FINAL_APPROVER_NOT_IN_CHAIN）；409 TICKET_RULE_VERSION_PENDING 与 TICKET_RULE_APPROVAL_REQUIRED；留痕元数据 rule_version_id、rule_version_status。
+  - 新增 listTicketTypeRuleVersions（GET /api/v1/ticketing/ticket-types/{id}/rule-versions；ticket.product.view；ticket_product.viewed／view_failed；TICKET_TYPE_NOT_FOUND），响应为新组件 TicketTypeRuleVersionView，逐字段写出。
+  - updateTicketTypePricing、bindTicketTypeEntitlement、configureTicketTypeMinGiftCups 说明补 409 TICKET_RULE_VERSION_PENDING 与留痕元数据；configureTicketTypeMinGiftCups 的 x-failure-codes 补 TICKET_RULE_VERSION_PENDING。
+  - listApprovalDeadlines 说明里「出厂按涉钱另含」加 ticket.type.rule.publish。
+  236-R7（第十八批裁决 61「改动另存一份草稿版审批，审批期间照旧版卖，获批后自动换成新版」；第十八批裁决 62「已上架的非跨域票一律不许加别的经营域收费权益，要做跨域组合通票就另建票种」）：
+  - 新增 withdrawTicketTypeRuleVersion（POST /api/v1/ticketing/ticket-types/{id}/rule-versions/withdraw；ticket.product.manage；x-idempotency-required true；ticket_type.rule_version.withdrawn／withdraw_failed；TICKET_TYPE_NOT_FOUND、TICKET_RULE_VERSION_NOT_OPEN、VALIDATION_FAILED）。
+  - 改价、加权益、改最低赠酒杯数与发布四处说明补草稿版落点：返回值、获批同一事务换版、旧版 superseded。
+  - bindTicketTypeEntitlement 说明补 409 TICKET_CROSS_DOMAIN_NEW_TYPE_REQUIRED，排在 236-R2 闸与 V369、215-R1 之前；零元权益与草稿票种不受限。
+  236-R6（BSM:1754「每项权益都必须绑定实际提供方和审批版本，避免悬空账。」；BSM:756）：listSettlementTransactions 说明补 items[].ticket_type_rule_version_no（integer，可空）。
+  236-R4、236-R5 不改契约。操作数 1365→1367。校验：verify:openapi、verify:openapi-examples、verify:client-routes、verify:client-openapi、verify-client-payload-policy --strict 全部 PASS。
+- 【J 汇合】e2e 不改，tests/e2e 零改动，门禁全绿，工作树零改动。
+  e2e 不改的依据：
+  - 向导用例 full-admin-mvp.spec.ts:91-112、full-admin-ui-hardening.spec.ts:89-104 用到的 testid 都还在。
+  - 「先存为草稿」默认不勾（TicketingPoliciesPage.tsx:222），不勾时模板与发布理由照常渲染（:1225-1236），成功文案仍是「票务规则已发布」（fieldLabels.ts:3235）。
+  - 规则版本只在选中「配置通票」后才拉（:264 初值为空、:1266）。e2e 没有用例选通票，mock 的 GET 和写请求兜底（mock-api.ts:476、handleWrite 末行）也能接住，所以不补 rule-versions 和 withdraw 的假路由。
+  门禁结论：
+  - 后端四个新增或改动的测试类在 --fresh 下（V624 真迁）共 206 个用例全绿。
+  - apps/web：typecheck 0 错；vitest 332 个文件、1849 个用例全绿。
+  - 客人三个工作区共 293 个用例全绿：customer-core 77、customer-app 131、customer-miniapp 85。
+  - 安卓员工端 gradle test 121 个用例全绿，android-app 编译通过。
+  - 镜像里重生成操作矩阵与契约闭环附录后，verify:p0-contract 8 步全过。
+  - yaml 与 json 深比较一致；操作数 1367；git diff --check 通过。
+- 文档组（D-docs，第 236 条 236-R3～236-R7）：现状句按现码就地补齐，每份只升一次版，修订表各加一行，不新增业务规则。
+  改法与落地位置：
+  1. docs/ticketing-entitlement-checkin-product-prd-v0.1.md V0.32→V0.33：
+     - §5 票种发布上架闸新增两条实现现状：一条写跨域组合通票判据、首次发布经项目之上的平台权限审批并留票种规则版本、已上架改动另存草稿版（旧版照卖、获批换版）、待审期间 409、撤回、留痕；另一条写裁决 62 的 409 TICKET_CROSS_DOMAIN_NEW_TYPE_REQUIRED、向导先存草稿、草稿票种行「发布」、组合配置防绕过、「④ 通票组装」报错显示、「规则版本」小节。
+     - §6 :195 改为：从草稿票种行「发布」重新上架，跨域组合通票改走草稿版、不退回草稿。
+     - §12A.2 补订单记下单时生效的版本。
+  2. docs/settlement-rebuild-prd-v1.0.md V1.15→V1.16：
+     - §5.0c ①-b 闸位句与「记入票种规则版本」句补实现现状（rounding_diff_cent、domain_allocations，生效后不改，月结承担口径未改）。
+     - §5.3 删去「裁决 52 ② 票种规则审批版本尚未实现」，改为已落地，并补流水与详情的「票种规则版本」。
+     - §10.2 登记 V624。
+  3. docs/platform-governance-prd-v0.1.md V0.83→V0.84：§2A.5 出厂按涉钱的类型加 ticket.type.rule.publish（跨域组合通票规则审批）。
+  4. docs/full-admin-page-permission-field-matrix-v0.1.csv：ADM-TKT-001 实现说明补 236-R5 入口；ADM-FIN-005 补 236-R6「票种规则版本」。
+  依据：
+  - ENUM:32「跨域组合通票的定价与域间结算规则由项目之上的平台权限统一审批」
+  - BSM:754「每次发布时把凑整差额金额及各域分摊数额记入票种规则版本、发布后不得再改」
+  - BSM:756「订单保存基础价、动态价、全部命中资格价、最终选中价和规则版本。」
+  - PGM:529「出厂默认 3 个工作日，涉钱审批出厂默认 1 个工作日」
+  - 第十八批裁决 52 ②、61、62
+  验证：verify-full-admin-page-matrix 通过；git diff --check 通过。测试：无（只改文档）。
+- 18AJ 复核修复补记（无新裁决）：收尾六视角复核 5 条意见，独立反驳核实成立 3 条（都是次要的文档与页面文案），另 2 条被驳回（票务 PRD「每次提交留一版」同段已写明驳回即该版退回草稿、保留内容；「其他」业态按主管公司实体自成一键属方案 not_doing）。① apps/web/src/admin/pages/TicketingPoliciesPage.tsx 页头说明与「怎么用这一页」原写先建票种并发布、再用组合配置加跨酒吧／游乐／餐饮权益，正是第十八批裁决 62 拦下的路径；改为跨经营域的组合通票新建时勾选「先存为草稿、不立即上架」、配齐后在票种行点「发布」提交审批，已上架的票只能加同一经营域的收费权益。② 本节 236-R7「发布」一句原写已上架票种的草稿版从票种行「发布」提交，与页面不符（票种行「发布」只给草稿票）；改为在「组合式套票配置」的「规则版本」小节点「提交审批」。③ docs/p0-operation-permission-matrix-v0.1.md 撤回 D-docs 新增的 ticket.product.publish.approve 行与修订行，版本回到 V0.12（人工权限矩阵不扩表，同历段口径；该权限码已在 V624 种子、OpenAPI 与页面矩阵登记），本节 D-docs 条第 4 项删去、后项顺延。
+- 18AJ 落地位置补记·运行验收证据、快照、终验文档刷新（无新裁决）：业务提交 898bcae5 之后，按第十八批裁决 25 重刷了运行验收证据：后端全量 6721 测，0 失败 0 错误；apps/web 构建通过；常规界面验收（接口全部 mock）实跑 40 条全过；真实后端界面验收未跑，runtime_ready=false。随后依次重生成闭环当前态快照、生产闭环缺口报告、界面验收报告、无上线指挥台。生成器没改。手改 docs/final-closed-loop-acceptance-audit-v0.1.md 与 docs/code-implementation-acceptance-audit-v0.1.md：前端单测源码计数改为 1735；被核文件中 TicketingService.java 行数由 1244 改为 1285，其余无变化；后端全量与常规界面验收的数字、日期改为本次实跑值；写入 npm run verify:unit 实跑结果，五个工作区全过。交付门禁于 2026-11-12 11:37 UTC 在工作树逐项实跑子项，NAS 两项现场探测未跑。仍红的有两项：一是 coding-host-protection，它写死主仓路径，在工作树口径下必红，属工具口径，不做；二是 final-closed-loop-audit，如实留 2 条红（integration-ready、business-acceptance-ready），原因是校验器要求终验把联调、业务验收写成「是」，而裁决 25 定了不跑真实后端界面验收、运行验收未就绪，终验写的是「否」。verify:delivery-gates 总链仍是红的。

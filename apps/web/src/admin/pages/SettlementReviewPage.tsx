@@ -1,4 +1,4 @@
-// 文件版本：V0.03
+// 文件版本：V0.04
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
@@ -33,6 +33,9 @@ export type SettlementRow = {
   // 第十八批 AI 段 236-R1（BSM 第 1754 行「每项权益都必须绑定实际提供方和审批版本」；ENUM 第 54 行「核销或结算时锁定当时版本」）：
   //   核销所用内部结算价目录行（审批版本）；不按内部结算价结算的为空。
   settlementCatalogEntryId: string | null;
+  // 第十八批 AJ 段 236-R6（BSM 第 1754 行「每项权益都必须绑定实际提供方和审批版本」；第 756 行「订单保存……规则版本」）：
+  //   该笔订单下单时生效的票种规则版本号；没有版本的票种为空。
+  ticketTypeRuleVersionNo?: number | null;
 };
 
 // S4:月度结算单头(财务对账视角)。金额带符号——负数月 = 冲正多于新核销,当月净追回。
@@ -172,6 +175,7 @@ export function SettlementReviewPage({ api, setGlobalError, navigateTo }: AdminP
         { label: "人数", value: String(row.numPeople) },
         { label: "核销金额", value: `¥${centToYuan(row.verifiedAmountCent)}` },
         { label: "内部结算价版本", value: row.settlementCatalogEntryId ?? "—" },
+        { label: "票种规则版本", value: row.ticketTypeRuleVersionNo == null ? "—" : `第 ${row.ticketTypeRuleVersionNo} 版` },
         { label: "结算状态", value: formatBusinessStatus(row.settlementStatus ?? "—") },
         { label: "发生时间", value: cnDate(row.createdAt) },
       ],

@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.12
+// 文件版本：V0.13
 
 // 文件版本：V0.03
 
@@ -34,6 +34,7 @@ import com.complex.platform.ticketing.dto.TicketOrderRequest;
 import com.complex.platform.ticketing.dto.TicketPriceRuleRequest;
 import com.complex.platform.ticketing.dto.TicketRefundRequest;
 import com.complex.platform.ticketing.dto.TicketTypeEntitlementRequest;
+import com.complex.platform.ticketing.dto.TicketTypePublishRequest;
 import com.complex.platform.ticketing.dto.QrRefreshConfigRequest;
 import com.complex.platform.ticketing.dto.TicketTypeRequest;
 import com.complex.platform.ticketing.dto.VerificationRequest;
@@ -266,7 +267,7 @@ class TicketingServiceTests {
                 "s6-bind-ride", "bind", List.of(), rideTpl.id(), 1, 1, 3000L, "default", 1, null));
 
         assertThatThrownBy(() -> service.publishTicketType(pass.id(),
-                        new StatusChangeRequest("s6-pub-1", "publish", "ready", List.of())))
+                        new TicketTypePublishRequest("s6-pub-1", "publish", "ready", List.of())))
                 .isInstanceOfSatisfying(ApiException.class,
                         e -> assertThat(e.code()).isEqualTo("TICKET_COMPONENT_PRICE_REQUIRED"))
                 .hasMessageContaining("S6 Ride");   // 报出是哪条权益没填,运营能直接去补
@@ -275,14 +276,14 @@ class TicketingServiceTests {
         service.bindTicketTypeEntitlement(pass.id(), new TicketTypeEntitlementRequest(
                 "s6-bind-ride-2", "bind", List.of(), rideTpl.id(), 1, 1, 3000L, "default", 1, 3000L));
         assertThatThrownBy(() -> service.publishTicketType(pass.id(),
-                        new StatusChangeRequest("s6-pub-2", "publish", "ready", List.of())))
+                        new TicketTypePublishRequest("s6-pub-2", "publish", "ready", List.of())))
                 .isInstanceOf(ApiException.class);
 
         // S11③:单业态票同样要填(旧口径只卡跨业态票,于是纯酒吧票整票没价、出票时只能均摊兜底)。
         TicketTypeRecord single = createTicketType("single-pass");
         service.bindTicketTypeEntitlement(single.id(), new TicketTypeEntitlementRequest(
                 "s6-bind-single", "bind", List.of(), barTpl.id(), 1, 1, 9900L, "default", 1, null));
-        assertThatThrownBy(() -> service.publishTicketType(single.id(), new StatusChangeRequest(
+        assertThatThrownBy(() -> service.publishTicketType(single.id(), new TicketTypePublishRequest(
                 "s6-pub-3", "publish", "ready", List.of())))
                 .isInstanceOfSatisfying(ApiException.class,
                         e -> assertThat(e.code()).isEqualTo("TICKET_COMPONENT_PRICE_REQUIRED"));
@@ -293,7 +294,7 @@ class TicketingServiceTests {
                 "s6-bind-priced", "bind", List.of(), barTpl.id(), 1, 1, 9900L, "default", 1, 9900L));
         service.bindTicketTypeEntitlement(ok.id(), new TicketTypeEntitlementRequest(
                 "s6-bind-free", "bind", List.of(), rideTpl.id(), 1, 1, 0L, "default", 1, 0L));
-        assertThat(service.publishTicketType(ok.id(), new StatusChangeRequest(
+        assertThat(service.publishTicketType(ok.id(), new TicketTypePublishRequest(
                 "s6-pub-4", "publish", "ready", List.of())).status()).isEqualTo("published");
     }
 
@@ -335,7 +336,7 @@ class TicketingServiceTests {
 
     private void assertPublishRejected(String ticketTypeId, String key, String code) {
         assertThatThrownBy(() -> service.publishTicketType(ticketTypeId,
-                new StatusChangeRequest(key, "publish", "ready", List.of())))
+                new TicketTypePublishRequest(key, "publish", "ready", List.of())))
                 .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo(code));
     }
 
@@ -348,7 +349,7 @@ class TicketingServiceTests {
         bindBarEntitlements(pass.id(), "mch_bar_b", "B", 0);
 
         assertThatThrownBy(() -> service.publishTicketType(pass.id(),
-                new StatusChangeRequest("k17-pub-1", "publish", "ready", List.of())))
+                new TicketTypePublishRequest("k17-pub-1", "publish", "ready", List.of())))
                 .isInstanceOfSatisfying(ApiException.class,
                         e -> assertThat(e.code()).isEqualTo("PASS_BAR_GIFT_COVERAGE_INSUFFICIENT"));
     }
@@ -360,7 +361,7 @@ class TicketingServiceTests {
         bindBarEntitlements(pass.id(), "mch_bar_d", "D", 2);
 
         assertThat(service.publishTicketType(pass.id(),
-                new StatusChangeRequest("k17-pub-2", "publish", "ready", List.of())).status())
+                new TicketTypePublishRequest("k17-pub-2", "publish", "ready", List.of())).status())
                 .isEqualTo("published");
 
         // 票面按吧分组：各吧分别赠几杯，与发布校验取的是同一份数据。
@@ -393,7 +394,7 @@ class TicketingServiceTests {
         bindBarEntitlements(single.id(), "mch_bar_e", "E", 0);
 
         assertThat(service.publishTicketType(single.id(),
-                new StatusChangeRequest("k17-pub-single", "publish", "ready", List.of())).status())
+                new TicketTypePublishRequest("k17-pub-single", "publish", "ready", List.of())).status())
                 .isEqualTo("published");
     }
 
@@ -416,7 +417,7 @@ class TicketingServiceTests {
         bindBarGift(pass.id(), "mch_bar_g", "G2", 1, 1, 0L, "merchant_concession");
 
         assertThat(service.publishTicketType(pass.id(),
-                new StatusChangeRequest("k215-pub-2", "publish", "ready", List.of())).status()).isEqualTo("published");
+                new TicketTypePublishRequest("k215-pub-2", "publish", "ready", List.of())).status()).isEqualTo("published");
     }
 
     @Test
@@ -437,7 +438,7 @@ class TicketingServiceTests {
         bindBarGift(pass.id(), "mch_bar_i", "I", 2, 1, 0L, "platform_funded");
 
         assertThatThrownBy(() -> service.publishTicketType(pass.id(),
-                new StatusChangeRequest("k215-pub-4", "publish", "ready", List.of())))
+                new TicketTypePublishRequest("k215-pub-4", "publish", "ready", List.of())))
                 .isInstanceOfSatisfying(ApiException.class, e -> {
                     assertThat(e.code()).isEqualTo("PASS_BAR_GIFT_COVERAGE_INSUFFICIENT");
                     assertThat(e.getMessage()).contains("需 3 杯");
@@ -462,7 +463,7 @@ class TicketingServiceTests {
         TicketTypeRecord pass = createTicketType("k215-draft");
         bindBarEntitlements(pass.id(), "mch_bar_k", "K", 1);
         assertThat(service.publishTicketType(pass.id(),
-                new StatusChangeRequest("k215-pub-5", "publish", "ready", List.of())).status()).isEqualTo("published");
+                new TicketTypePublishRequest("k215-pub-5", "publish", "ready", List.of())).status()).isEqualTo("published");
 
         bindBarEntry(pass.id(), "mch_bar_l", "L", 1);
 
@@ -516,7 +517,7 @@ class TicketingServiceTests {
                 "link_cb_free", tt.id(), "tpl_cb_free", 1, 1, 0L, "default", 1, 0L, null, now, now));
 
         assertThatThrownBy(() -> service.publishTicketType(tt.id(),
-                new StatusChangeRequest("cb-pub-1", "publish", "ready", List.of())))
+                new TicketTypePublishRequest("cb-pub-1", "publish", "ready", List.of())))
                 .isInstanceOfSatisfying(ApiException.class,
                         e -> assertThat(e.code()).isEqualTo("TICKET_COST_BEARER_REQUIRED"))
                 .hasMessageContaining("免费小食");
@@ -529,7 +530,7 @@ class TicketingServiceTests {
         ticketingRepository.saveTicketTypeEntitlement(new TicketTypeEntitlementRecord(
                 "link_cb_entry", plain.id(), "tpl_cb_entry", 1, 1, 5000L, "default", 1, 5000L, null, now, now));
         assertThat(service.publishTicketType(plain.id(),
-                new StatusChangeRequest("cb-pub-2", "publish", "ready", List.of())).status())
+                new TicketTypePublishRequest("cb-pub-2", "publish", "ready", List.of())).status())
                 .isEqualTo("published");
     }
 
@@ -1553,7 +1554,7 @@ class TicketingServiceTests {
         EntitlementTemplateRecord credentialTpl = createTemplate("credential-gate-tpl", 2, 9900L);
         service.bindTicketTypeEntitlement(ticketType.id(), new TicketTypeEntitlementRequest(
                 "credential-gate-bind", "bind", List.of(), credentialTpl.id(), 1, 2, 9900L, "default", 1, 9900L));
-        TicketTypeRecord published = service.publishTicketType(ticketType.id(), new StatusChangeRequest(
+        TicketTypeRecord published = service.publishTicketType(ticketType.id(), new TicketTypePublishRequest(
                 "publish-ticket",
                 "publish",
                 "ready",
@@ -3575,7 +3576,7 @@ class TicketingServiceTests {
         service.bindTicketTypeEntitlement(tt.id(), new TicketTypeEntitlementRequest(
                 key + "-bind", "bind", List.of(), tpl.id(), 1, 1, 9900L, "default", 1, 9900L));
         // AUD-015：走真实发布闸上架（已有绑定）。
-        return service.publishTicketType(tt.id(), new StatusChangeRequest(
+        return service.publishTicketType(tt.id(), new TicketTypePublishRequest(
                 key + "-pub", "publish", "publish for test", List.of()));
     }
 
@@ -3792,7 +3793,7 @@ class TicketingServiceTests {
             EntitlementTemplateRecord tpl = createTemplate(key + "-tpl", 1, 9900L);
             service.bindTicketTypeEntitlement(tt.id(), new TicketTypeEntitlementRequest(
                     key + "-bind", "bind", List.of(), tpl.id(), 1, 1, 9900L, "default", 1, 9900L));
-            service.publishTicketType(tt.id(), new StatusChangeRequest(key + "-pub", "p", "publish", List.of()));
+            service.publishTicketType(tt.id(), new TicketTypePublishRequest(key + "-pub", "p", "publish", List.of()));
             TicketOrderRecord order = service.createTicketOrder(new TicketOrderRequest(
                     key + "-order", "c", List.of(), tt.id(), null, 1, LocalDate.parse("2026-06-20"),
                     "admin", "13800138000", "cust_" + key));
@@ -3813,7 +3814,7 @@ class TicketingServiceTests {
                 9900L, 11900L, 12900L, false, "active", null, null, true, null, null, null, null));
         assertThat(tt.status()).isEqualTo("draft");
         // 无权益绑定不可发布(AUD-015:公开可售的票必须能出票)。
-        assertThatThrownBy(() -> service.publishTicketType(tt.id(), new StatusChangeRequest(
+        assertThatThrownBy(() -> service.publishTicketType(tt.id(), new TicketTypePublishRequest(
                 "b2-gate-pub", "p", "publish", List.of())))
                 .isInstanceOfSatisfying(ApiException.class,
                         e -> assertThat(e.code()).isEqualTo("TICKET_TYPE_ENTITLEMENT_REQUIRED"));
@@ -3827,7 +3828,7 @@ class TicketingServiceTests {
         EntitlementTemplateRecord tpl = createTemplate("b2-gate-tpl", 1, 9900L);
         service.bindTicketTypeEntitlement(tt.id(), new TicketTypeEntitlementRequest(
                 "b2-gate-bind", "bind", List.of(), tpl.id(), 1, 1, 9900L, "default", 1, 9900L));
-        assertThat(service.publishTicketType(tt.id(), new StatusChangeRequest(
+        assertThat(service.publishTicketType(tt.id(), new TicketTypePublishRequest(
                 "b2-gate-pub2", "p", "publish", List.of())).status()).isEqualTo("published");
         assertThat(service.createTicketOrder(new TicketOrderRequest(
                 "b2-gate-order2", "c", List.of(), tt.id(), null, 1, LocalDate.parse("2026-06-20"),
@@ -4786,7 +4787,7 @@ class TicketingServiceTests {
     }
 
     private void publish(String ticketTypeId, String key) {
-        service.publishTicketType(ticketTypeId, new StatusChangeRequest(key, "p", "上架", List.of()));
+        service.publishTicketType(ticketTypeId, new TicketTypePublishRequest(key, "p", "上架", List.of()));
     }
 
     @Test
@@ -4814,9 +4815,9 @@ class TicketingServiceTests {
         TicketTypeRecord up = seedComboPass("v369-up", 17800L, new java.math.BigDecimal("85"));   // 算出 174.25 → 上调到 178
         TicketTypeRecord down = seedComboPass("v369-down", 17000L, new java.math.BigDecimal("85")); // 下调到 170
 
-        assertThat(service.publishTicketType(up.id(), new StatusChangeRequest(
+        assertThat(service.publishTicketType(up.id(), new TicketTypePublishRequest(
                 "v369-up-pub", "p", "上架", List.of())).status()).isEqualTo("published");
-        assertThat(service.publishTicketType(down.id(), new StatusChangeRequest(
+        assertThat(service.publishTicketType(down.id(), new TicketTypePublishRequest(
                 "v369-down-pub", "p", "上架", List.of())).status()).isEqualTo("published");
     }
 
@@ -4856,7 +4857,7 @@ class TicketingServiceTests {
                         e -> assertThat(e.code()).isEqualTo("TICKET_PRICE_OUT_OF_TOLERANCE"));
 
         toleranceStub.toleranceCent = 1000L;  // 10 元：放行
-        assertThat(service.publishTicketType(pass.id(), new StatusChangeRequest(
+        assertThat(service.publishTicketType(pass.id(), new TicketTypePublishRequest(
                 "v369-cfg-pub2", "p", "上架", List.of())).status()).isEqualTo("published");
         assertThat(service.ticketTypePriceCheck(pass.id()).toleranceCent()).isEqualTo(1000L);
     }
@@ -4877,7 +4878,7 @@ class TicketingServiceTests {
         TicketTypePriceCheck after = service.ticketTypePriceCheck(pass.id());
         assertThat(after.componentTotalCent()).isEqualTo(20500L);
         assertThat(after.computedPriceCent()).isEqualTo(before);
-        assertThat(service.publishTicketType(pass.id(), new StatusChangeRequest(
+        assertThat(service.publishTicketType(pass.id(), new TicketTypePublishRequest(
                 "v369-free-pub", "p", "上架", List.of())).status()).isEqualTo("published");
     }
 

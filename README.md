@@ -118,8 +118,8 @@ npm test --workspace apps/customer-miniapp                # 小程序 simulate �
 <!-- baseline:auto-begin（tools/refresh-entry-doc-baseline.mjs 生成，手改会被覆盖） -->
 | 指标 | 当前值 | 取证方式 |
 |---|---|---|
-| Flyway 最新迁移 | **V623**（588 个迁移） | `backend/src/main/resources/db/migration` 实时统计 |
-| OpenAPI operation 数 | **1365** | `docs/openapi/openapi-p0.json` 方法统计（与 `npm run verify:operation-matrix` 同口径） |
+| Flyway 最新迁移 | **V624**（589 个迁移） | `backend/src/main/resources/db/migration` 实时统计 |
+| OpenAPI operation 数 | **1367** | `docs/openapi/openapi-p0.json` 方法统计（与 `npm run verify:operation-matrix` 同口径） |
 | 后端测试 | **4641** tests（现有 surefire 报告） | `backend/target/surefire-reports` 合计；无报告时保留上次快照，不声明刚完成全量测试 |
 | 前端 E2E | 以 `npx playwright test --list` 实时输出为准 | 不写死快照数 |
 <!-- baseline:auto-end -->

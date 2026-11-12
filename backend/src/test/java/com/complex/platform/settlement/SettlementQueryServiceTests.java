@@ -41,7 +41,7 @@ class SettlementQueryServiceTests {
             this.offset = offset;
             return List.of(new SettlementTransactionView(
                     "st_1", "STX-1", "prj_a", "mch_a", null, "tt_1", "entry", "merchant",
-                    3, 1, 15000L, "settled", Instant.now(), null));
+                    3, 1, 15000L, "settled", Instant.now(), null, null));
         }
     }
 

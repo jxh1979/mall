@@ -1,6 +1,6 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.09
+// 文件版本：V0.10
 
 import java.sql.Timestamp;
 import java.time.Instant;
@@ -509,7 +509,10 @@ public class JdbcSettlementTransactionRepository {
                        verified_count, num_people, verified_amount_cent,
                        settlement_status, created_at,
                        (SELECT v.settlement_catalog_entry_id FROM ticket_verifications v
-                         WHERE v.id = settlement_transactions.verification_id) AS settlement_catalog_entry_id
+                         WHERE v.id = settlement_transactions.verification_id) AS settlement_catalog_entry_id,
+                       (SELECT rv.version_no FROM ticket_orders o
+                          JOIN ticket_type_rule_versions rv ON rv.id = o.ticket_type_rule_version_id
+                         WHERE o.id = settlement_transactions.order_id) AS ticket_type_rule_version_no
                   FROM settlement_transactions
                  WHERE transaction_type = 'verification_settled'
                    AND (:project_id::text  IS NULL OR project_id  = :project_id)
@@ -530,7 +533,8 @@ public class JdbcSettlementTransactionRepository {
                         rs.getLong("verified_amount_cent"),
                         rs.getString("settlement_status"),
                         rs.getTimestamp("created_at").toInstant(),
-                        rs.getString("settlement_catalog_entry_id")));
+                        rs.getString("settlement_catalog_entry_id"),
+                        rs.getObject("ticket_type_rule_version_no", Integer.class)));
     }
 
     /** 平台侧结算审阅:同筛选条件下的总条数(分页 total)。 */
@@ -564,7 +568,10 @@ public class JdbcSettlementTransactionRepository {
             Instant createdAt,
             // 第十八批 AI 段 236-R1（BSM:1754「每项权益都必须绑定实际提供方和审批版本」；ENUM:54「核销或结算时锁定当时版本」）：
             // 该笔核销所用内部结算价目录行（＝审批版本），非按内部结算价结算的为 null。
-            String settlementCatalogEntryId
+            String settlementCatalogEntryId,
+            // 第十八批 AJ 段 236-R6（BSM:1754「每项权益都必须绑定实际提供方和审批版本，避免悬空账。」；BSM:756「订单保存……规则版本」）：
+            // 该笔订单下单时生效的票种规则版本号，没有版本的票种为 null（不读成 0）。
+            Integer ticketTypeRuleVersionNo
     ) {
     }
 
