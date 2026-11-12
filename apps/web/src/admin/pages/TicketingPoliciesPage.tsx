@@ -1,4 +1,4 @@
-// 文件版本：V0.08
+// 文件版本：V0.09
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
@@ -140,6 +140,39 @@ type PriceCheckRow = {
   roundingSuggested: number;
 };
 
+// 第十八批 AJ 段 236-R5 跨域组合通票票种规则版本（后端 GET /ticketing/ticket-types/{id}/rule-versions，adminClient 已 snake→camel；ENUM:32「跨域组合通票的
+//   定价与域间结算规则由项目之上的平台权限统一审批」；BSM:754「每次发布时把凑整差额金额及各域分摊数额记入票种规则版本」）。
+type RuleVersionRow = {
+  id: string;
+  versionNo: number;
+  status: string;
+  weekdayPriceCent: number | null;
+  weekendPriceCent: number | null;
+  holidayPriceCent: number | null;
+  comboDiscountRate: number | string | null;
+  minGiftCups: number | null;
+  minGiftCupsLower: number | null;
+  minGiftCupsUpper: number | null;
+  entitlements: Array<{ bindingId: string; templateName: string | null; providerMerchantName: string | null; businessFormat: string | null;
+    quantity: number; totalTimes: number; numPeople: number; componentPriceCent: number | null; costBearer: string | null }>;
+  componentTotalCent: number;
+  computedPriceCent: number;
+  roundingDiffCent: number | null;
+  domainAllocations: Array<{ domain: string; domainName: string | null; componentTotalCent: number; discountShareCent: number; roundingShareCent: number }>;
+  reviewId: string | null;
+  // 票种已上架时其未结版本的定价核算（草稿价、草稿组成）；其余为空。
+  priceCheck: PriceCheckRow | null;
+};
+
+// 236-R5⑧（第十八批裁决 62）：业态 → 主管公司（ENUM:49「酒吧域 → 娱乐平台公司；游乐域 → 游乐公司；餐饮域与零售域 → 城市项目公司；演出传媒域 → 传媒公司」，
+//   同后端 TicketCatalogService 口径）；「其他」业态按商户自成一键。
+const FORMAT_COMPANIES: Record<string, string> = {
+  bar: "entertainment_platform_company", amusement: "amusement_company", media: "media_company",
+  catering: "city_project_company", retail: "city_project_company",
+};
+// 236-R5④⑩（第十八批裁决 61「审批期间照旧版卖，获批后自动换成新版」）：已上架跨域组合通票的改价、加权益、改最低赠酒杯数存入草稿版。
+const DRAFT_VERSION_NOTE = "已上架的跨域组合通票改动存入草稿版，旧版照常售卖，提交审批获批后自动换成新版";
+
 export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, effectivePermissions, focusObjectId, navigateTo, reportViewedObjects }: AdminPageProps) {
   const [tickets, setTickets] = React.useState<TicketTypeRow[]>([]);
   const [templates, setTemplates] = React.useState<EntitlementTemplateRow[]>([]);
@@ -185,6 +218,8 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
   const [busy, setBusy] = React.useState(false);
   // 引导式流程 phase-2：新建票种收起为主按钮，点击弹出分步引导（GuidedFlowModal）。
   const [createOpen, setCreateOpen] = React.useState(false);
+  // 第十八批 AJ 段 236-R5⑦（第十八批裁决 62「还得改向导（先建草稿不立即上架）」）：向导先存为草稿、不立即上架。
+  const [draftOnly, setDraftOnly] = React.useState(false);
 
   // 区2 新建权益模板
   // 第十八批 W 段 177-R1（BSM:1754「每项权益都必须绑定实际提供方和审批版本，避免悬空账。」）：提供方商户必选。
@@ -248,6 +283,10 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
   const [amusementPriceYuan, setAmusementPriceYuan] = React.useState("");
   const [comboBusy, setComboBusy] = React.useState(false);
   const [comboError, setComboError] = React.useState("");
+  // 第十八批 AJ 段 236-R5② 选中通票的票种规则版本（新版在前）与草稿版提交审批表单。
+  const [ruleVersions, setRuleVersions] = React.useState<RuleVersionRow[]>([]);
+  const [ruleSubmitReason, setRuleSubmitReason] = React.useState("");
+  const [ruleSubmitApprover, setRuleSubmitApprover] = React.useState("");
 
   // 行明细抽屉：三张业务表（票种/权益模板/派生价规则）整行可点 → 该行完整字段（金额¥·枚举中文·引用 TraceLink）。
   const [detail, setDetail] = React.useState<{ title: string; fields: RowDetailField[] } | null>(null);
@@ -374,7 +413,7 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
     return "生效中";
   }
 
-  function catalogActions(kind: "ticket-types" | "price-rules", row: { id: string; archivedAt?: string | null; deleteStatus?: string }) {
+  function catalogActions(kind: "ticket-types" | "price-rules", row: { id: string; archivedAt?: string | null; deleteStatus?: string; status?: string }) {
     const manage = kind === "ticket-types" ? MANAGE : ["ticket.price_variant.manage"];
     const approve = kind === "ticket-types" ? ["ticket.type.approve"] : ["ticket.price_rule.approve"];
     const prefix = kind === "ticket-types" ? "ticket-type" : "price-rule";
@@ -389,9 +428,41 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
           { key: "delete-request", label: "申请删除", permissions: manage, danger: true, onClick: () => void requestDeleteCatalog(kind, row.id), testId: `${prefix}-delete-request-${row.id}` },
         ]
       : [
+          // 第十八批 AJ 段 236-R5①（关闭第 287 条）：草稿票种行「发布」。
+          ...(kind === "ticket-types" && row.status === "draft"
+            ? [{ key: "publish", label: "发布", permissions: MANAGE, onClick: () => void publishDraftTicket(row.id), testId: `ticket-type-publish-${row.id}` }]
+            : []),
           { key: "archive", label: "存档", permissions: manage, onClick: () => void archiveCatalog(kind, row.id, true), testId: `${prefix}-archive-${row.id}` },
         ];
     return <RowActions actions={actions} permissionsState={effectivePermissions} testId={`${prefix}-actions-${row.id}`} />;
+  }
+
+  // 第十八批 AJ 段 236-R5①（关闭第 287 条）：草稿票种行「发布」——向导先存的草稿票配齐组合后、被退回草稿的票补齐后都从这里发布；跨域组合通票须填
+  //   最终审批人，后端提交项目之上的平台权限审批，返回仍为草稿、获批即上架（ENUM:32；PGM:528「发起单据时只需指定该事项的最终审批人」）。
+  async function publishDraftTicket(id: string) {
+    const reason = window.prompt("发布理由：");
+    if (reason === null) return;
+    if (!reason.trim()) { setGlobalError("发布理由必填"); return; }
+    const approver = window.prompt("最终审批人用户编号（跨域组合通票必填，其余留空）：");
+    if (approver === null) return;
+    setGlobalError(null);
+    try {
+      const saved = await api.post<{ status?: string }>(`/api/v1/ticketing/ticket-types/${encodeURIComponent(id)}/publish`, {
+        idempotency_key: crypto.randomUUID(),
+        reason: reason.trim(),
+        final_approver_id: approver.trim() || null,
+      });
+      const published = saved?.status === "published";
+      setActionResult({
+        action: published ? "ticket_type_published" : "ticket_type_publish_submitted",
+        ticketTypeId: id,
+        note: published ? "已发布" : "已提交发布审批，审批通过后自动上架",
+      });
+      if (id === comboTicketId) void loadRuleVersions(id);
+      await reload();
+    } catch (err) {
+      setGlobalError(err instanceof Error ? err.message : "发布失败");
+    }
   }
 
   async function publish() {
@@ -409,11 +480,11 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
       setError("票种名称必填。");
       return;
     }
-    if (!createTemplateId) {
+    if (!draftOnly && !createTemplateId) {
       setError("必须绑定一个权益模板——公开可售的票必须能出票。");
       return;
     }
-    if (!publishReason.trim()) {
+    if (!draftOnly && !publishReason.trim()) {
       setError("发布理由必填。");
       return;
     }
@@ -437,6 +508,13 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
         // V230：资格/定价档分类（新人票/学生票等）。仅分类与报表用，价照样在本页三档价与派生价规则里配。
         ticket_category: ticketCategory,
       });
+      // 236-R5⑦：只建草稿票，不绑权益、不发布（向导绑定会把这条权益的业态价格写死为平日价，对要配组合的草稿票不成立）。
+      if (draftOnly) {
+        setActionResult({ action: "ticket_type_draft_created", ticketTypeId: ticket.id });
+        setCreateOpen(false);
+        reload();
+        return;
+      }
       const ticketId = ticket.id ?? "ticket-1";
       await api.post(`/api/v1/ticketing/ticket-types/${ticketId}/entitlements`, {
         idempotency_key: `${createKey}-bind-${createTemplateId}`,
@@ -501,22 +579,27 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
       setGlobalError(`「${boundTemplate.name}」是赠送权益（各业态价格 0），请选择成本承担方（商户让利型/平台出资型）。`);
       return;
     }
-    await api.post(`/api/v1/ticketing/ticket-types/${bindForm.ticketTypeId}/entitlements`, {
-      idempotency_key: crypto.randomUUID(),
-      entitlement_template_id: bindForm.templateId,
-      quantity: Number(bindForm.quantity) || 1,
-      total_times: Number(bindForm.totalTimes) || 1,
-      num_people: Number(bindForm.numPeople) || 1,
-      // S11：票面原价（元→分）。这份权益按票面值多少钱，决定客人这笔钱有多少分给它所属的业态。
-      //   免费的填 0（0=免费=不分钱）；留空=还没定价，票种发布时会被拦下不许开卖。
-      component_price_cent: bindForm.componentPriceYuan.trim() === ""
-        ? null
-        : Math.round(Number(bindForm.componentPriceYuan) * 100),
-      // V376：成本承担方（赠送权益必选；非赠送类可空）。
-      cost_bearer: bindForm.costBearer || null,
-    });
-    setActionResult({ action: "ticket_entitlement_bound", ticketTypeId: bindForm.ticketTypeId });
-    reload();
+    // 第十八批 AJ 段 236-R5⑩：后端拒绝（如第十八批裁决 62 的「另建票种」、待审期间改动）把中文报错显示出来，不再成未处理的拒绝。
+    try {
+      await api.post(`/api/v1/ticketing/ticket-types/${bindForm.ticketTypeId}/entitlements`, {
+        idempotency_key: crypto.randomUUID(),
+        entitlement_template_id: bindForm.templateId,
+        quantity: Number(bindForm.quantity) || 1,
+        total_times: Number(bindForm.totalTimes) || 1,
+        num_people: Number(bindForm.numPeople) || 1,
+        // S11：票面原价（元→分）。这份权益按票面值多少钱，决定客人这笔钱有多少分给它所属的业态。
+        //   免费的填 0（0=免费=不分钱）；留空=还没定价，票种发布时会被拦下不许开卖。
+        component_price_cent: bindForm.componentPriceYuan.trim() === ""
+          ? null
+          : Math.round(Number(bindForm.componentPriceYuan) * 100),
+        // V376：成本承担方（赠送权益必选；非赠送类可空）。
+        cost_bearer: bindForm.costBearer || null,
+      });
+      setActionResult({ action: "ticket_entitlement_bound", ticketTypeId: bindForm.ticketTypeId, note: DRAFT_VERSION_NOTE });
+      reload();
+    } catch (err) {
+      setGlobalError(err instanceof Error ? err.message : "绑定权益失败");
+    }
   }
 
   async function createRule() {
@@ -573,9 +656,6 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
       .get<GiftFloorRow>(`/api/v1/ticketing/ticket-types/${encodeURIComponent(ticketTypeId)}/min-gift-cups`)
       .catch(() => null);
     setGiftFloor(row);
-    setFloorCups(row ? String(row.minGiftCups) : "");
-    setFloorLower(row?.minGiftCupsLower == null ? "" : String(row.minGiftCupsLower));
-    setFloorUpper(row?.minGiftCupsUpper == null ? "" : String(row.minGiftCupsUpper));
   }, [api]);
 
   // 215-R2 保存最低赠酒杯数（ENUM:34「须同时配置上下限」）：三个值都填才发；已上架通票跌破新下限后端退回草稿，刷新票种列表。
@@ -594,7 +674,8 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
         min_gift_cups_upper: Number(floorUpper),
       });
       setGiftFloor(saved);
-      setActionResult({ action: "ticket_type_min_gift_cups_saved", ticketTypeId: comboTicketId, minGiftCups: saved?.minGiftCups });
+      setActionResult({ action: "ticket_type_min_gift_cups_saved", ticketTypeId: comboTicketId, minGiftCups: saved?.minGiftCups, note: DRAFT_VERSION_NOTE });
+      void loadRuleVersions(comboTicketId);
       reload();
     } catch (err) {
       setGiftFloorError(err instanceof Error ? err.message : "最低赠酒杯数保存失败");
@@ -608,23 +689,52 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
       .get<PriceCheckRow>(`/api/v1/ticketing/ticket-types/${encodeURIComponent(ticketTypeId)}/price-check`)
       .catch(() => null);
     setPriceCheck(row);
-    if (row) {
-      setPricingDiscount(String(row.comboDiscountRate ?? 100));
-      setPricingWeekday(row.filledPriceCent == null ? "" : (row.filledPriceCent / 100).toFixed(2));
-    }
   }, [api]);
+
+  // 第十八批 AJ 段 236-R5② 票种规则版本：选中通票后拉一次，发布、提交、撤回与各处保存后再刷新（读失败按没有版本显示）。
+  const loadRuleVersions = React.useCallback(async (ticketTypeId: string) => {
+    if (!ticketTypeId) { setRuleVersions([]); return; }
+    const rows = await api
+      .get<unknown>(`/api/v1/ticketing/ticket-types/${encodeURIComponent(ticketTypeId)}/rule-versions`)
+      .catch(() => ({ items: [] }));
+    setRuleVersions(toRows<RuleVersionRow>(rows));
+  }, [api]);
+
+  const comboTicket = tickets.find((t) => t.id === comboTicketId);
+  const effectiveVersion = ruleVersions.find((v) => v.status === "effective") ?? null;
+  // 每个票种至多一份未结版本（草稿或待审）。
+  const openVersion = ruleVersions.find((v) => v.status === "draft" || v.status === "pending_review") ?? null;
+  const currentVersions = [effectiveVersion, openVersion].filter((v): v is RuleVersionRow => v != null);
+  const historyVersions = ruleVersions.filter((v) => v.status === "superseded" || v.status === "withdrawn");
+  // 236-R5③：票种已上架且有未结版本时，定价核算、改价与最低赠酒杯数读草稿版；其余照旧读现表（未上架票种的现表本就是草稿）。
+  const draftVersion = comboTicket?.status === "published" ? openVersion : null;
+  const shownCheck = draftVersion ? draftVersion.priceCheck : priceCheck;
+  const shownFloor = React.useMemo<GiftFloorRow | null>(() => (draftVersion
+    ? { minGiftCups: draftVersion.minGiftCups ?? 1, minGiftCupsLower: draftVersion.minGiftCupsLower, minGiftCupsUpper: draftVersion.minGiftCupsUpper }
+    : giftFloor), [draftVersion, giftFloor]);
+  // 改价与最低赠酒杯数表单回显所读的那一份（现表或草稿版），读到新数据才回显。
+  React.useEffect(() => {
+    if (!shownCheck) return;
+    setPricingDiscount(String(shownCheck.comboDiscountRate ?? 100));
+    setPricingWeekday(shownCheck.filledPriceCent == null ? "" : (shownCheck.filledPriceCent / 100).toFixed(2));
+  }, [shownCheck]);
+  React.useEffect(() => {
+    setFloorCups(shownFloor ? String(shownFloor.minGiftCups) : "");
+    setFloorLower(shownFloor?.minGiftCupsLower == null ? "" : String(shownFloor.minGiftCupsLower));
+    setFloorUpper(shownFloor?.minGiftCupsUpper == null ? "" : String(shownFloor.minGiftCupsUpper));
+  }, [shownFloor]);
 
   // 运营边填边看：填的这个数离系统算出的售价差多少、超没超允许误差（提交前就知道，不用等报错）。
   const pricingLiveDiffCent = React.useMemo(() => {
-    if (!priceCheck || pricingWeekday.trim() === "") return null;
+    if (!shownCheck || pricingWeekday.trim() === "") return null;
     const filled = Math.round(Number(pricingWeekday) * 100);
     if (!Number.isFinite(filled)) return null;
     const rate = Number(pricingDiscount);
     const computed = Number.isFinite(rate)
-      ? Math.round(priceCheck.componentTotalCent * rate / 100)
-      : priceCheck.computedPriceCent;
+      ? Math.round(shownCheck.componentTotalCent * rate / 100)
+      : shownCheck.computedPriceCent;
     return { filled, computed, diff: filled - computed };
-  }, [priceCheck, pricingWeekday, pricingDiscount]);
+  }, [shownCheck, pricingWeekday, pricingDiscount]);
 
   // V369 改售价／折扣：保存当场比对允许误差，超出后端直接拒（前端提示与后端同一口径）。
   async function savePricing() {
@@ -641,8 +751,9 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
         weekend_price_cent: pricingWeekend.trim() ? Math.round(Number(pricingWeekend) * 100) : null,
         holiday_price_cent: pricingHoliday.trim() ? Math.round(Number(pricingHoliday) * 100) : null,
       });
-      setActionResult({ action: "ticket_type_pricing_updated", ticketTypeId: comboTicketId });
+      setActionResult({ action: "ticket_type_pricing_updated", ticketTypeId: comboTicketId, note: DRAFT_VERSION_NOTE });
       await loadPriceCheck(comboTicketId);
+      void loadRuleVersions(comboTicketId);
       reload();
     } catch (err) {
       setPricingError(err instanceof Error ? err.message : "改售价失败");
@@ -744,39 +855,45 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
     setComboError("");
     setComboBusy(true);
     try {
+      // 第十八批 AJ 段 236-R5⑧：先按原顺序把三段收成写入任务（paid＝该行写入的各业态价格大于 0），再按需预判、改序后逐条写入。
+      const tasks: Array<{ paid: boolean; merchantId: string; run: () => Promise<void> }> = [];
       // 酒吧权益：每行一条模板（gift_drink=酒水兑换 / admission=入场资格），绑定该商户。
       for (const line of barLines) {
         if (!line.merchantId) continue;
         const kindLabel = BAR_ENTITLEMENT_KINDS.find((k) => k.value === line.kind)?.label ?? line.kind;
-        await createAndBind({
+        // 票面原价 = 这一行填的价格；赠送/免费的留空即 0（不参与分钱）。
+        const componentPriceCent = line.valueYuan.trim() ? Math.round(Number(line.valueYuan) * 100) : 0;
+        tasks.push({ paid: componentPriceCent > 0, merchantId: line.merchantId, run: () => createAndBind({
           name: `${merchantName(line.merchantId)} · ${kindLabel}`,
           entitlementType: line.kind,
           totalTimes: Number(line.totalTimes) || 1,
           valueCent: line.valueYuan.trim() ? Math.round(Number(line.valueYuan) * 100) : null,
           merchantId: line.merchantId,
           barItemRef: line.kind === "gift_drink" ? line.barItemRef : null,
-          // 票面原价 = 这一行填的价格；赠送/免费的留空即 0（不参与分钱）。
-          componentPriceCent: line.valueYuan.trim() ? Math.round(Number(line.valueYuan) * 100) : 0,
+          componentPriceCent,
           // V376：酒水兑换的成本承担方（赠送时必选，上方已前置拦）。入场资格无此概念。
           costBearer: line.kind === "gift_drink" ? (line.costBearer || null) : null,
-        }, comboTicketId);
+        }, comboTicketId) });
       }
       // 游乐设施：每个项目一条 amusement 类权益模板 + 绑定通票 + 收紧项目核销绑定。归属商户用统一选择的 amusementMerchantId。
+      // 游乐票面原价：游乐份额就是按它在整票里的占比分给游乐公司的，留空即 0=不分。
+      const amusementPriceCent = amusementPriceYuan.trim() ? Math.round(Number(amusementPriceYuan) * 100) : 0;
       for (const project of chosenProjects) {
-        await createAndBind({
-          name: `${project.projectName} · 游乐`,
-          entitlementType: "amusement",
-          totalTimes: Number(projectTimes) || 1,
-          valueCent: null,
-          merchantId: amusementMerchantId,
-          // 游乐票面原价：游乐份额就是按它在整票里的占比分给游乐公司的，留空即 0=不分。
-          componentPriceCent: amusementPriceYuan.trim() ? Math.round(Number(amusementPriceYuan) * 100) : 0,
-        }, comboTicketId);
-        // 项目↔权益类型绑定（V082）：配置后该项目核销收紧为「仅接受 amusement 类权益」。
-        await api.post(`/api/v1/amusement/projects/${project.id}/entitlements`, {
-          idempotency_key: crypto.randomUUID(),
-          entitlement_type: "amusement",
-        }).catch(() => undefined); // 已绑定（唯一键冲突）时忽略。
+        tasks.push({ paid: amusementPriceCent > 0, merchantId: amusementMerchantId, run: async () => {
+          await createAndBind({
+            name: `${project.projectName} · 游乐`,
+            entitlementType: "amusement",
+            totalTimes: Number(projectTimes) || 1,
+            valueCent: null,
+            merchantId: amusementMerchantId,
+            componentPriceCent: amusementPriceCent,
+          }, comboTicketId);
+          // 项目↔权益类型绑定（V082）：配置后该项目核销收紧为「仅接受 amusement 类权益」。
+          await api.post(`/api/v1/amusement/projects/${project.id}/entitlements`, {
+            idempotency_key: crypto.randomUUID(),
+            entitlement_type: "amusement",
+          }).catch(() => undefined); // 已绑定（唯一键冲突）时忽略。
+        } });
       }
       // 餐饮/零售权益：每行一条权益模板，所选商户业态为零售时 entitlement_type='retail'（零售券），其余 'dining'（餐饮券）（217-R1，ENUM:36）。
       //   价格(面值,可0)→default_value_cent；内部结算价→agreement_price_cent；专属餐厅→exclusive_merchant_id。
@@ -785,43 +902,139 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
         if (!line.merchantId) continue;
         const discountNote = line.discount.trim() ? ` · ${line.discount}折` : "";
         const retail = merchants.find((m) => m.id === line.merchantId)?.merchantType === "retail";
-        await createAndBind({
+        // 票面原价 = 这一行填的价格（0=纯赠送，不参与分钱）。内部结算价是另一条线，不能拿来当票面原价。
+        const componentPriceCent = line.valueYuan.trim() ? Math.round(Number(line.valueYuan) * 100) : 0;
+        tasks.push({ paid: componentPriceCent > 0, merchantId: line.merchantId, run: () => createAndBind({
           name: `${merchantName(line.merchantId)} · ${retail ? "零售" : "餐饮"}${discountNote}`,
           entitlementType: retail ? "retail" : "dining",
           totalTimes: Number(line.totalTimes) || 1,
           // 价格(面值)可为 0：留空=0（纯赠送/兑换）。
-          valueCent: line.valueYuan.trim() ? Math.round(Number(line.valueYuan) * 100) : 0,
+          valueCent: componentPriceCent,
           merchantId: line.merchantId,
           // 批10/E：内部结算价唯一可编辑处 = 内部结算 SKU 目录；此处只挂目录条目引用（留空=未配价）。
           catalogItemCode: line.catalogCode.trim() || null,
           // 专属餐厅商户：使核销结算全额归该餐厅、不进池分摊。
           exclusiveMerchantId: line.merchantId,
-          // 票面原价 = 这一行填的价格（0=纯赠送，不参与分钱）。内部结算价是另一条线，不能拿来当票面原价。
-          componentPriceCent: line.valueYuan.trim() ? Math.round(Number(line.valueYuan) * 100) : 0,
+          componentPriceCent,
           // V376：纯赠送（价格 0）的餐饮项必须标成本承担方（上方已前置拦）；有价格的选填。
           costBearer: line.costBearer || null,
-        }, comboTicketId);
+        }, comboTicketId) });
       }
+      // 236-R5⑧（第十八批裁决 62「已上架的非跨域票一律不许加别的经营域收费权益，要做跨域组合通票就另建票种」）：已上架、非单店、没有生效版（即不是
+      //   跨域组合通票）的票逐条写入时，可能先被 V369／215-R1 退回草稿、其后各行再写进别域收费权益，绕过「另建票种」。写入前现取规则版本，本次有价行
+      //   已分属两个及以上主管公司的整体拦下、不发任何请求；否则有价行先写——第一条有价行写入时票仍为已上架，由后端按裁决 62 判定。零元行不参与。
+      const ticket = tickets.find((row) => row.id === comboTicketId);
+      let ordered = tasks;
+      if (ticket?.status === "published" && !ticket.barId) {
+        const versions = await api
+          .get<unknown>(`/api/v1/ticketing/ticket-types/${encodeURIComponent(comboTicketId)}/rule-versions`)
+          .catch(() => ({ items: [] }));
+        if (!toRows<RuleVersionRow>(versions).some((v) => v.status === "effective")) {
+          const companies = new Set(tasks.filter((task) => task.paid).map((task) =>
+            FORMAT_COMPANIES[merchants.find((m) => m.id === task.merchantId)?.merchantType ?? ""] ?? `other:${task.merchantId}`));
+          if (companies.size >= 2) {
+            setComboError("已上架的票不能加别的经营域收费权益；要做跨域组合通票请另建票种（新建票种时勾选「先存为草稿、不立即上架」，配齐组合后在票种行点「发布」提交审批）");
+            return;
+          }
+          ordered = [...tasks.filter((task) => task.paid), ...tasks.filter((task) => !task.paid)];
+        }
+      }
+      for (const task of ordered) await task.run();
       setActionResult({
         action: "pass_config_strategy_composed",
         ticketTypeId: comboTicketId,
         bars: barLines.length,
         amusementProjects: chosenProjects.length,
         dining: diningLines.length,
-        // V369：改了票的组成，这张票会退回草稿——售价要按新的业态构成重新核对再发布。
-        note: "已上架的票改了组成会退回草稿，请在下方「定价核算」核对售价后重新发布。",
+        // 236-R5④：已上架跨域组合通票的改动进草稿版（第十八批裁决 61）；其余已上架通票照 V369／215-R1 退回草稿，补齐后用票种行「发布」重新上架。
+        note: "已上架的跨域组合通票改动已存入草稿版，旧版照常售卖，提交审批获批后自动换成新版；其余已上架通票改了组成后售价对不上或赠酒不够的会退回草稿，补齐后用票种行的「发布」重新上架。",
       });
       setBarLines([]);
       setSelectedProjects({});
       setDiningLines([]);
       void loadGiftCoverage(comboTicketId);
       void loadPriceCheck(comboTicketId);
+      void loadRuleVersions(comboTicketId);
       reload();
     } catch (composeError) {
       setComboError(composeError instanceof Error ? composeError.message : "组合配置失败");
     } finally {
       setComboBusy(false);
     }
+  }
+
+  // 第十八批 AJ 段 236-R5② 已上架跨域组合通票的草稿版提交审批：走发布接口，后端用草稿内容跑全部发布闸后提交项目之上的平台权限审批，票保持上架、旧版照卖。
+  async function submitRuleVersion() {
+    if (!ruleSubmitReason.trim()) { setGlobalError("发布理由必填"); return; }
+    setGlobalError(null);
+    try {
+      await api.post(`/api/v1/ticketing/ticket-types/${encodeURIComponent(comboTicketId)}/publish`, {
+        idempotency_key: crypto.randomUUID(),
+        reason: ruleSubmitReason.trim(),
+        final_approver_id: ruleSubmitApprover.trim() || null,
+      });
+      setActionResult({ action: "ticket_type_rule_version_submitted", ticketTypeId: comboTicketId, note: "已提交审批，获批后自动换成新版" });
+      setRuleSubmitReason("");
+      await loadRuleVersions(comboTicketId);
+    } catch (err) {
+      setGlobalError(err instanceof Error ? err.message : "提交审批失败");
+    }
+  }
+
+  // 236-R5② 放弃草稿版或撤回待审提交（待审的同时作废复核单），现表不变、旧版照卖。
+  async function withdrawRuleVersion(pending: boolean) {
+    const reason = window.prompt(pending ? "撤回提交理由：" : "放弃草稿理由：");
+    if (reason === null) return;
+    if (!reason.trim()) { setGlobalError("理由必填"); return; }
+    setGlobalError(null);
+    try {
+      await api.post(`/api/v1/ticketing/ticket-types/${encodeURIComponent(comboTicketId)}/rule-versions/withdraw`, {
+        idempotency_key: crypto.randomUUID(),
+        reason: reason.trim(),
+      });
+      setActionResult({ action: "ticket_type_rule_version_withdrawn", ticketTypeId: comboTicketId });
+      void loadGiftFloor(comboTicketId);
+      await loadRuleVersions(comboTicketId);
+    } catch (err) {
+      setGlobalError(err instanceof Error ? err.message : "撤回失败");
+    }
+  }
+
+  // 236-R5② 规则版本表：每列一版（生效版与未结版本并列看差异），行是版本内容（BSM:754 凑整差额与各域分摊；BSM:1754 每项权益的实际提供方）。
+  function ruleVersionTable(versions: RuleVersionRow[], testId: string) {
+    const rows: Array<[string, (v: RuleVersionRow) => React.ReactNode]> = [
+      ["状态", (v) => formatBusinessStatus(v.status)],
+      ["平日价（填的售价）", (v) => `¥${yuan(v.weekdayPriceCent)}`],
+      ["周末价", (v) => `¥${yuan(v.weekendPriceCent)}`],
+      ["节假日价", (v) => `¥${yuan(v.holidayPriceCent)}`],
+      ["票种折扣", (v) => `${String(v.comboDiscountRate ?? 100)}%`],
+      ["各业态价格合计", (v) => `¥${yuan(v.componentTotalCent)}`],
+      ["系统算出售价", (v) => `¥${yuan(v.computedPriceCent)}`],
+      ["凑整差额", (v) => (v.roundingDiffCent == null ? "—" : `¥${yuan(v.roundingDiffCent)}`)],
+      ["各域分摊", (v) => v.domainAllocations.map((d) => (
+        <div key={d.domain}>{`${d.domainName ?? d.domain}：业态价格合计 ¥${yuan(d.componentTotalCent)}，折扣分摊 ¥${yuan(d.discountShareCent)}，`
+          + `凑整分摊 ¥${yuan(d.roundingShareCent)}`}</div>
+      ))],
+      ["权益组成", (v) => v.entitlements.map((e) => (
+        <div key={e.bindingId}>{`${e.templateName ?? "—"}（提供方 ${e.providerMerchantName ?? "—"}，${formatBusinessStatus(e.businessFormat ?? "—")}，`
+          + `${e.quantity} 份、每份 ${e.totalTimes} 次、${e.numPeople} 人，业态价格 ¥${yuan(e.componentPriceCent)}，`
+          + `出资方 ${COST_BEARER_OPTIONS.find((o) => o.value === e.costBearer)?.label.split("（")[0] ?? "—"}）`}</div>
+      ))],
+      ["最低赠酒杯数", (v) => (v.minGiftCups == null ? "出厂 1 杯"
+        : `${v.minGiftCups} 杯（下限 ${v.minGiftCupsLower ?? "—"} 杯、上限 ${v.minGiftCupsUpper ?? "—"} 杯）`)],
+    ];
+    return (
+      <div className="admin-table-scroll">
+        <table className="admin-table" data-testid={testId}>
+          <thead><tr><th>版本</th>{versions.map((v) => <th key={v.id}>{`第 ${v.versionNo} 版`}</th>)}</tr></thead>
+          <tbody>
+            {rows.map(([label, cell]) => (
+              <tr key={label}><th>{label}</th>{versions.map((v) => <td key={v.id}>{cell(v)}</td>)}</tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    );
   }
 
   // #172(2026-07-19 拍板)：保存全场统一动态码刷新间隔（出示验证类二维码全场一套设置）。
@@ -841,14 +1054,14 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
     <section data-testid="ticketing-policies-page">
       <AdminPageHeader
         title="票务策略"
-        description="票种/通票、权益、适用范围与派生价规则全部在此配置：先建票种并发布，再用「组合式配置策略」一次性给通票配好跨酒吧/游乐/餐饮的权益，最后配派生价（新人/学生/多人/渠道/会员）。"
+        description="票种/通票、权益、适用范围与派生价规则全部在此配置：先建票种并发布，再用「组合式配置策略」给通票配同一经营域的权益；要做跨经营域（酒吧/游乐/餐饮等）的组合通票，新建票种时勾选「先存为草稿、不立即上架」，用「组合式配置策略」配齐后在票种行点「发布」提交审批，获批即上架；最后配派生价（新人/学生/多人/渠道/会员）。"
       />
 
       {focusObjectId && (
         <div className="admin-state" data-testid="ticketing-policies-focus">已从下钻定位到票种：{focusObjectId}（下表高亮行）</div>
       )}
       <div className="admin-preview" data-testid="ticketing-workflow-guide">
-        <strong>怎么用这一页（票务策略配置流程）：</strong>① 先在「票种 / 通票」建好票种并发布 → ② 建「权益模板」（入园 / 酒水兑换 / 游乐等可复用的权益）→ ③ 用「通票组装」把票种绑上权益，或用「组合式套票配置」一次性给一张通票配好跨酒吧 / 游乐 / 餐饮的套票权益 → ④ 最后配「派生价规则」（新人 / 学生 / 多人 / 渠道 / 会员的折扣或固定价）。切换下方标签逐步配置。
+        <strong>怎么用这一页（票务策略配置流程）：</strong>① 先在「票种 / 通票」建好票种并发布（要做跨经营域的组合通票，新建时勾选「先存为草稿、不立即上架」）→ ② 建「权益模板」（入园 / 酒水兑换 / 游乐等可复用的权益）→ ③ 用「通票组装」把票种绑上权益，或用「组合式套票配置」一次性给一张通票配好套票权益（已上架的票只能加同一经营域的收费权益；跨经营域的组合通票配齐后在票种行点「发布」提交审批，获批即上架）→ ④ 最后配「派生价规则」（新人 / 学生 / 多人 / 渠道 / 会员的折扣或固定价）。切换下方标签逐步配置。
       </div>
       <div className="admin-preview" data-testid="ticketing-qr-refresh-config">
         <strong>动态验证码刷新间隔（全场统一）：</strong>
@@ -924,7 +1137,7 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
       </AdminDataState>
       {/* 引导式流程 phase-2：新建票种入口按钮（权限门在入口），点击弹出分步引导。 */}
       <div className="admin-form-row">
-        <PermissionButton permissionsState={effectivePermissions} permissions={MANAGE} data-testid="ticket-create-open" onClick={() => { setError(""); setCreateKey(crypto.randomUUID()); setCreateOpen(true); }}>
+        <PermissionButton permissionsState={effectivePermissions} permissions={MANAGE} data-testid="ticket-create-open" onClick={() => { setError(""); setCreateKey(crypto.randomUUID()); setDraftOnly(false); setCreateOpen(true); }}>
           ＋ 新建票种
         </PermissionButton>
       </div>
@@ -933,7 +1146,7 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
         title="新建票种"
         testId="ticket-policy"
         submitTestId="ticket-publish"
-        submitLabel="发布策略"
+        submitLabel={draftOnly ? "保存草稿" : "发布策略"}
         submitting={busy}
         error={error}
         onClose={() => setCreateOpen(false)}
@@ -991,24 +1204,36 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
             ),
           },
           {
-            title: "绑定权益并发布",
-            description: "公开可售的票必须能出票：至少绑定一个权益模板，填写发布理由后上架。更多分项权益可发布后在「组合式套票配置」补充。",
+            // 236-R5⑦：标题固定（GuidedFlowModal 以标题作该步 key，标题一变该步整块重挂），说明按「先存为草稿」切换。
+            title: "绑定权益并发布，或先存为草稿",
+            description: draftOnly
+              ? "只建草稿票，不绑权益、不上架：到「组合式套票配置」配齐各业态权益与价格、在「定价核算」核对售价，再在票种行点「发布」提交审批。"
+              : "公开可售的票必须能出票：至少绑定一个权益模板，填写发布理由后上架。同一经营域的分项权益可发布后在「组合式套票配置」补充；要做跨域组合通票请勾选「先存为草稿、不立即上架」。",
             validate: () => {
+              if (draftOnly) return null;
               if (!createTemplateId) return "必须选择一个权益模板。";
               if (!publishReason.trim()) return "发布理由必填。";
               return null;
             },
             content: (
               <>
-                <label>权益模板（必选）
-                  <select data-testid="ticket-create-template" aria-label="权益模板" value={createTemplateId} onChange={(event) => setCreateTemplateId(event.target.value)}>
-                    <option value="">选择权益模板</option>
-                    {templates.map((t) => (
-                      <option key={t.id} value={t.id}>{t.name}</option>
-                    ))}
-                  </select>
+                <label>
+                  <input data-testid="ticket-create-draft-only" type="checkbox" checked={draftOnly} onChange={(event) => setDraftOnly(event.target.checked)} aria-label="先存为草稿、不立即上架" />
+                  先存为草稿、不立即上架
                 </label>
-                <label>发布理由（必填）<input data-testid="ticket-publish-reason" value={publishReason} onChange={(event) => setPublishReason(event.target.value)} placeholder="如：暑期档新票上架" aria-label="发布理由" /></label>
+                {draftOnly ? null : (
+                  <>
+                    <label>权益模板（必选）
+                      <select data-testid="ticket-create-template" aria-label="权益模板" value={createTemplateId} onChange={(event) => setCreateTemplateId(event.target.value)}>
+                        <option value="">选择权益模板</option>
+                        {templates.map((t) => (
+                          <option key={t.id} value={t.id}>{t.name}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <label>发布理由（必填）<input data-testid="ticket-publish-reason" value={publishReason} onChange={(event) => setPublishReason(event.target.value)} placeholder="如：暑期档新票上架" aria-label="发布理由" /></label>
+                  </>
+                )}
               </>
             ),
           },
@@ -1023,8 +1248,11 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
           { label: "票种分类", value: TICKET_CATEGORY_LABELS[ticketCategory] ?? "标准票" },
           { label: "可退票", value: refundable ? "可退" : "不可退" },
           { label: "单店酒吧", value: barId ? (merchants.find((m) => m.id === barId)?.merchantName ?? barId) : "通票" },
-          { label: "权益模板", value: createTemplateId ? (templates.find((t) => t.id === createTemplateId)?.name ?? createTemplateId) : "未选择" },
-          { label: "发布理由", value: publishReason.trim() || "未填写" },
+          ...(draftOnly ? [] : [
+            { label: "权益模板", value: createTemplateId ? (templates.find((t) => t.id === createTemplateId)?.name ?? createTemplateId) : "未选择" },
+            { label: "发布理由", value: publishReason.trim() || "未填写" },
+          ]),
+          { label: "建完是否上架", value: draftOnly ? "否，先存为草稿" : "是" },
         ]}
       />
 
@@ -1035,7 +1263,7 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
         选一张通票，勾选多个酒吧并为每个配权益（酒水兑换/次数/面值）、多选游乐设施、加餐饮/零售项（餐饮或零售商户/价格/折扣/内部结算价），点「组合配置到通票」一次性写入。
       </div>
       <div className="admin-inline-form" data-testid="pass-combo-form">
-        <select aria-label="配置通票" data-testid="combo-ticket-select" value={comboTicketId} onChange={(event) => { setComboTicketId(event.target.value); void loadGiftCoverage(event.target.value); void loadGiftFloor(event.target.value); void loadPriceCheck(event.target.value); }}>
+        <select aria-label="配置通票" data-testid="combo-ticket-select" value={comboTicketId} onChange={(event) => { setComboTicketId(event.target.value); void loadGiftCoverage(event.target.value); void loadGiftFloor(event.target.value); void loadPriceCheck(event.target.value); void loadRuleVersions(event.target.value); }}>
           <option value="">选择要配置的通票</option>
           {tickets.map((t) => (
             <option key={t.id} value={t.id}>{t.ticketName}</option>
@@ -1043,7 +1271,47 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
         </select>
       </div>
 
-      <h4>定价核算（系统算出售价 vs 你填的售价）</h4>
+      {/* 第十八批 AJ 段 236-R5②（ENUM:32；BSM:754；第十八批裁决 61）：跨域组合通票规则版本——生效版与未结版本并列，提交审批、放弃草稿或撤回提交，历史版本列在下方。 */}
+      <h4>规则版本</h4>
+      {!comboTicketId ? null : ruleVersions.length === 0 ? (
+        <div className="admin-preview" data-testid="rule-versions-empty">这张票没有规则版本（跨域组合通票提交发布审批后才有）。</div>
+      ) : (
+        <>
+          {currentVersions.length > 0 ? ruleVersionTable(currentVersions, "rule-versions-table") : null}
+          {openVersion ? (
+            <div className="admin-preview" data-testid="rule-version-open-note">
+              {[draftVersion ? "审批前不生效，旧版照常售卖" : "",
+                openVersion.status === "draft" && openVersion.reviewId ? "上次提交已被驳回，已退回草稿" : "",
+                openVersion.status === "pending_review" ? "审批中，须先撤回提交才能再改" : ""].filter(Boolean).join("；")}
+            </div>
+          ) : null}
+          {openVersion ? (
+            <div className="admin-inline-form" data-testid="rule-version-actions">
+              {draftVersion?.status === "draft" ? (
+                <>
+                  <label>发布理由
+                    <input aria-label="发布理由" data-testid="rule-version-submit-reason" value={ruleSubmitReason}
+                      onChange={(event) => setRuleSubmitReason(event.target.value)} />
+                  </label>
+                  <label>最终审批人（用户编号）
+                    <input aria-label="最终审批人" data-testid="rule-version-submit-approver" value={ruleSubmitApprover}
+                      placeholder="项目之上的平台权限审批人，不是登录名" onChange={(event) => setRuleSubmitApprover(event.target.value)} />
+                  </label>
+                  <PermissionButton permissionsState={effectivePermissions} permissions={MANAGE} data-testid="rule-version-submit"
+                    onClick={() => void submitRuleVersion()}>提交审批</PermissionButton>
+                </>
+              ) : null}
+              <PermissionButton permissionsState={effectivePermissions} permissions={MANAGE} data-testid="rule-version-withdraw"
+                onClick={() => void withdrawRuleVersion(openVersion.status === "pending_review")}>
+                {openVersion.status === "pending_review" ? "撤回提交" : "放弃草稿"}
+              </PermissionButton>
+            </div>
+          ) : null}
+          {historyVersions.length > 0 ? ruleVersionTable(historyVersions, "rule-versions-history") : null}
+        </>
+      )}
+
+      <h4 data-testid="combo-price-check-title">定价核算{draftVersion ? "（草稿版）" : ""}（系统算出售价 vs 你填的售价）</h4>
       <div className="admin-preview">
         通票的售价不用自己拍脑袋：各业态价格加起来、再按票种折扣打一下，系统就算出该卖多少。
         你可以在这个数上下调一点凑个好卖的整数（尾数 8/9/0），但差得太多就是填错了——超过后台配的允许误差，这张票不许开卖。
@@ -1051,18 +1319,18 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
       </div>
       {!comboTicketId ? (
         <div className="admin-preview" data-testid="combo-price-check-empty">请先选择要配置的通票。</div>
-      ) : !priceCheck ? (
+      ) : !shownCheck ? (
         <div className="admin-preview" data-testid="combo-price-check-empty">定价核算读取中或暂不可用。</div>
       ) : (
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="combo-price-check-table">
             <tbody>
-              <tr><th>各业态价格合计</th><td data-testid="price-check-component-total">¥{yuan(priceCheck.componentTotalCent)}</td></tr>
-              <tr><th>票种折扣</th><td data-testid="price-check-discount">{String(priceCheck.comboDiscountRate ?? 100)}%</td></tr>
-              <tr><th>系统算出售价</th><td data-testid="price-check-computed">¥{yuan(priceCheck.computedPriceCent)}</td></tr>
-              <tr><th>当前填的售价（平日价）</th><td data-testid="price-check-filled">{priceCheck.filledPriceCent == null ? "还没填" : `¥${yuan(priceCheck.filledPriceCent)}`}</td></tr>
-              <tr><th>允许误差</th><td data-testid="price-check-tolerance">¥{yuan(priceCheck.toleranceCent)}</td></tr>
-              <tr><th>凑整建议</th><td data-testid="price-check-suggested">¥{yuan(priceCheck.roundingSuggested)}（整元、尾数 8/9/0）</td></tr>
+              <tr><th>各业态价格合计</th><td data-testid="price-check-component-total">¥{yuan(shownCheck.componentTotalCent)}</td></tr>
+              <tr><th>票种折扣</th><td data-testid="price-check-discount">{String(shownCheck.comboDiscountRate ?? 100)}%</td></tr>
+              <tr><th>系统算出售价</th><td data-testid="price-check-computed">¥{yuan(shownCheck.computedPriceCent)}</td></tr>
+              <tr><th>当前填的售价（平日价）</th><td data-testid="price-check-filled">{shownCheck.filledPriceCent == null ? "还没填" : `¥${yuan(shownCheck.filledPriceCent)}`}</td></tr>
+              <tr><th>允许误差</th><td data-testid="price-check-tolerance">¥{yuan(shownCheck.toleranceCent)}</td></tr>
+              <tr><th>凑整建议</th><td data-testid="price-check-suggested">¥{yuan(shownCheck.roundingSuggested)}（整元、尾数 8/9/0）</td></tr>
             </tbody>
           </table>
         </div>
@@ -1091,16 +1359,16 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
         <PermissionButton permissionsState={effectivePermissions} permissions={MANAGE} data-testid="combo-pricing-save"
           disabled={pricingBusy} onClick={() => void savePricing()}>保存售价</PermissionButton>
       </div>
-      {priceCheck && pricingLiveDiffCent ? (
+      {shownCheck && pricingLiveDiffCent ? (
         <div className="admin-preview" data-testid="combo-pricing-live-hint">
-          {Math.abs(pricingLiveDiffCent.diff) <= priceCheck.toleranceCent
+          {Math.abs(pricingLiveDiffCent.diff) <= shownCheck.toleranceCent
             ? `没问题：系统算出 ¥${yuan(pricingLiveDiffCent.computed)}，你填 ¥${yuan(pricingLiveDiffCent.filled)}，`
               + `${pricingLiveDiffCent.diff >= 0 ? "上调" : "下调"} ¥${yuan(Math.abs(pricingLiveDiffCent.diff))}，`
-              + `在允许误差 ¥${yuan(priceCheck.toleranceCent)} 之内。`
+              + `在允许误差 ¥${yuan(shownCheck.toleranceCent)} 之内。`
             : `超了：系统算出 ¥${yuan(pricingLiveDiffCent.computed)}，你填 ¥${yuan(pricingLiveDiffCent.filled)}，`
               + `${pricingLiveDiffCent.diff >= 0 ? "上调" : "下调"} ¥${yuan(Math.abs(pricingLiveDiffCent.diff))}，`
-              + `超出允许误差 ¥${yuan(priceCheck.toleranceCent)} 达 ¥${yuan(Math.abs(pricingLiveDiffCent.diff) - priceCheck.toleranceCent)}，`
-              + `这张票发不出去。凑整可填 ¥${yuan(priceCheck.roundingSuggested)}。`}
+              + `超出允许误差 ¥${yuan(shownCheck.toleranceCent)} 达 ¥${yuan(Math.abs(pricingLiveDiffCent.diff) - shownCheck.toleranceCent)}，`
+              + `这张票发不出去。凑整可填 ¥${yuan(shownCheck.roundingSuggested)}。`}
         </div>
       ) : null}
       {pricingError ? <div className="admin-error" data-testid="combo-pricing-error">{pricingError}</div> : null}
@@ -1179,12 +1447,12 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
         </table>
       </div>
 
-      <h4>最低赠酒杯数（按票种）</h4>
+      <h4>最低赠酒杯数（按票种）{draftVersion ? "（草稿版）" : ""}</h4>
       <div className="admin-preview" data-testid="combo-gift-floor-current">
         {!comboTicketId ? "请先选择要配置的通票。"
-          : !giftFloor ? "最低赠酒杯数读取中或暂不可用。"
-          : giftFloor.minGiftCupsLower == null ? `本票最低赠酒杯数：出厂默认 ${giftFloor.minGiftCups} 杯`
-          : `本票最低赠酒杯数：${giftFloor.minGiftCups} 杯（下限 ${giftFloor.minGiftCupsLower} 杯、上限 ${giftFloor.minGiftCupsUpper} 杯）`}
+          : !shownFloor ? "最低赠酒杯数读取中或暂不可用。"
+          : shownFloor.minGiftCupsLower == null ? `本票最低赠酒杯数：出厂默认 ${shownFloor.minGiftCups} 杯`
+          : `本票最低赠酒杯数：${shownFloor.minGiftCups} 杯（下限 ${shownFloor.minGiftCupsLower} 杯、上限 ${shownFloor.minGiftCupsUpper} 杯）`}
       </div>
       <div className="admin-inline-form" data-testid="combo-gift-floor-form">
         <label>最低赠酒杯数

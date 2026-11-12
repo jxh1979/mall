@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.15
+// 文件版本：V0.16
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.List;
@@ -1075,15 +1075,18 @@ class JdbcTicketingRepository implements TicketingRepository {
                     id, order_no, customer_id, ticket_type_id, price_rule_id, quantity, visit_date,
                     sales_channel, buyer_phone, amount_cent, dynamic_pricing_rule_id, base_amount_cent,
                     dynamic_adjustment_cent, currency, pay_status, issue_status, status, created_at, updated_at,
-                    merchant_id, paid_at, bar_id, project_id, buyer_phone_hash
+                    merchant_id, paid_at, bar_id, project_id, buyer_phone_hash, ticket_type_rule_version_id
                 )
                 VALUES (
                     :id, :order_no, :customer_id, :ticket_type_id, :price_rule_id, :quantity, :visit_date,
                     :sales_channel, :buyer_phone, :amount_cent, :dynamic_pricing_rule_id, :base_amount_cent,
                     :dynamic_adjustment_cent, :currency, :pay_status, :issue_status, :status, :created_at, :updated_at,
-                    :merchant_id, :paid_at, :bar_id, :project_id, :buyer_phone_hash
+                    :merchant_id, :paid_at, :bar_id, :project_id, :buyer_phone_hash,
+                    (SELECT id FROM ticket_type_rule_versions WHERE ticket_type_id = :ticket_type_id AND status = 'effective')
                 )
                 -- merchant_id、bar_id 与 project_id 为下单快照，后续 update（出票/置 paid）不覆盖。
+                -- 第十八批 AJ 段 236-R4（BSM:756「订单保存基础价、动态价、全部命中资格价、最终选中价和规则版本。」）：ticket_type_rule_version_id
+                --   记下单时该票种生效的票种规则版本（没有版本的票种为空），同为下单快照、不覆盖。
                 ON CONFLICT (id) DO UPDATE SET
                     customer_id = EXCLUDED.customer_id,
                     ticket_type_id = EXCLUDED.ticket_type_id,
@@ -1378,6 +1381,28 @@ class JdbcTicketingRepository implements TicketingRepository {
                         resultSet.getInt("total_times"),
                         resultSet.getString("cost_bearer"),
                         resultSet.getObject("component_price_cent", Long.class)));
+    }
+
+    @Override
+    public Map<String, TemplateProvider> findTemplateProviders(java.util.Collection<String> templateIds) {
+        // 第十八批 AJ 段 236-R3：模板商户即提供方；「其他」业态取商户档案主管公司（V511）。
+        if (templateIds.isEmpty()) {
+            return Map.of();
+        }
+        Map<String, TemplateProvider> providers = new java.util.HashMap<>();
+        jdbcTemplate.query("""
+                SELECT et.id, et.name, et.entitlement_type, et.merchant_id, m.merchant_name, m.merchant_type,
+                       m.supervising_company_id, be.entity_name AS supervising_company_name, et.archived_at IS NOT NULL AS archived
+                  FROM entitlement_templates et
+                  LEFT JOIN merchants m ON m.id = et.merchant_id
+                  LEFT JOIN business_entities be ON be.id = m.supervising_company_id
+                 WHERE et.id IN (:ids)
+                """, Map.of("ids", templateIds), (rs, n) -> new TemplateProvider(rs.getString("id"), rs.getString("name"),
+                        rs.getString("entitlement_type"), rs.getString("merchant_id"), rs.getString("merchant_name"),
+                        rs.getString("merchant_type"), rs.getString("supervising_company_id"), rs.getString("supervising_company_name"),
+                        rs.getBoolean("archived")))
+                .forEach(provider -> providers.put(provider.templateId(), provider));
+        return providers;
     }
 
     @Override

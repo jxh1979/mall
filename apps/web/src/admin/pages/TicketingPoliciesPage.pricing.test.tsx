@@ -28,6 +28,7 @@ function renderPage(putSpy: ReturnType<typeof vi.fn>) {
   const api = {
     get: vi.fn(async (path: string) => {
       if (path.includes("/price-check")) return PRICE_CHECK as unknown;
+      if (path.includes("/rule-versions")) return { items: [] } as unknown;
       if (path.includes("/ticketing/ticket-types")) return { items: TICKETS } as unknown;
       return { items: [] } as unknown;
     }),

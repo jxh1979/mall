@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.13
+// 文件版本：V0.14
 
 import java.util.List;
 import java.util.Map;
@@ -184,6 +184,24 @@ public interface TicketingRepository {
      */
     default List<TicketTypeProviderEntitlementRow> listTicketTypeProviderEntitlements(String ticketTypeId) {
         return List.of();
+    }
+
+    /**
+     * 第十八批 AJ 段 236-R3：权益模板的提供方（商户、业态、「其他」业态商户档案指定的主管公司），跨域组合通票判定与票种规则版本快照共用；
+     * archived＝模板已存档（236-R7 草稿版提交审批时赠酒下限同现表口径跳过）。default 只填模板字段、业态为空（测试替身判不出跨域，既有单测行为不变）；Jdbc 覆盖。
+     */
+    default Map<String, TemplateProvider> findTemplateProviders(java.util.Collection<String> templateIds) {
+        Map<String, TemplateProvider> providers = new java.util.HashMap<>();
+        for (String id : templateIds) {
+            findEntitlementTemplateById(id).ifPresent(template -> providers.put(id, new TemplateProvider(id, template.name(),
+                    template.entitlementType(), template.merchantId(), null, null, null, null, template.archivedAt() != null)));
+        }
+        return providers;
+    }
+
+    record TemplateProvider(String templateId, String templateName, String entitlementType, String providerMerchantId,
+            String providerMerchantName, String merchantType, String supervisingCompanyId, String supervisingCompanyName,
+            boolean archived) {
     }
 
     /** 第十八批 AH 段 215-R2：票种的最低赠酒杯数（后台配过才有行）。default 空＝出厂 1 杯，兼容测试假实现。 */

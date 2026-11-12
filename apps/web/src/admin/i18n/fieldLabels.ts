@@ -1,4 +1,4 @@
-// 文件版本：V0.31
+// 文件版本：V0.32
 // OBS-14-02 后台结果区字段中文名字典（PGM「全局原则 · 界面全中文（所有终端零英文）」）。
 // 键用后端 JSON 的蛇形写法；结果区查表时蛇形与驼峰同查（orderId / order_id 都命中 order_id）。
 // 与后端字段中文名表 FieldLabels.java（common.api 包）同键同名：前段按后端原样抄录，后端改名这里跟着改（门禁会比对）。
@@ -2890,6 +2890,20 @@ export const FIELD_LABELS: Record<string, string> = {
   free_direct_settled_cent: "零元平台出资权益直付",
   // 第十八批 AI 段 236-R1 结算流水核销所用内部结算价目录行（GET /api/v1/settlement/transactions；ENUM:54「核销或结算时锁定当时版本」）。
   settlement_catalog_entry_id: "内部结算价版本",
+  // 第十八批 AJ 段 236-R3 跨域组合通票票种规则版本（GET /api/v1/ticketing/ticket-types/{id}/rule-versions；BSM:754「每次发布时把凑整差额金额及
+  // 各域分摊数额记入票种规则版本」）与改价、加权益、改最低赠酒杯数、发布四处成功留痕补记。
+  rule_version_status: "规则版本状态",
+  rounding_diff_cent: "凑整差额",
+  domain_allocations: "各域分摊",
+  domain_name: "经营域",
+  discount_share_cent: "折扣分摊",
+  rounding_share_cent: "凑整分摊",
+  share_cent: "分摊所得",
+  provider_merchant_id: "提供方商户",
+  provider_merchant_name: "提供方商户名称",
+  price_check: "定价核算",
+  // 第十八批 AJ 段 236-R6 结算流水该笔订单所属票种规则版本号（GET /api/v1/settlement/transactions；BSM:756「订单保存……规则版本」）。
+  ticket_type_rule_version_no: "票种规则版本",
 };
 
 // 结果对象里页面自定的取值（action 动作码、status 状态码）→ 中文；STATUS_LABELS 已有的码不重复列。
@@ -3228,6 +3242,12 @@ export const VALUE_LABELS: Record<string, string> = {
   ticket_type_delete_requested: "票种删除申请已提交",
   ticket_type_delete_approved: "票种删除已批准",
   ticket_type_delete_rejected: "票种删除已驳回",
+  // 第十八批 AJ 段 236-R5 票务策略页：草稿票种行「发布」、规则版本区提交审批与放弃或撤回、向导先存为草稿。
+  ticket_type_published: "票种已发布",
+  ticket_type_publish_submitted: "票种发布已提交审批",
+  ticket_type_rule_version_submitted: "票种规则草稿版已提交审批",
+  ticket_type_rule_version_withdrawn: "票种规则版本已撤回",
+  ticket_type_draft_created: "票种草稿已保存",
   price_rule_archived: "票价规则已存档",
   price_rule_unarchived: "票价规则已取消存档",
   price_rule_delete_requested: "票价规则删除申请已提交",

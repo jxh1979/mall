@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.09
+// 文件版本：V0.10
 
 import com.complex.platform.common.api.ApiException;
 
@@ -19,6 +19,7 @@ import com.complex.platform.ticketing.dto.QrRefreshConfigRequest;
 import com.complex.platform.ticketing.dto.TicketPriceRuleRequest;
 import com.complex.platform.ticketing.dto.TicketRefundRequest;
 import com.complex.platform.ticketing.dto.TicketTypeEntitlementRequest;
+import com.complex.platform.ticketing.dto.TicketTypePublishRequest;
 import com.complex.platform.ticketing.dto.TicketTypeRequest;
 import com.complex.platform.ticketing.dto.VerificationRequest;
 import com.complex.platform.ticketing.dto.VerificationAnomalyResolveRequest;
@@ -115,6 +116,15 @@ public class TicketingService {
         );
     }
 
+    /** 第十八批 AJ 段 236-R3：票种规则版本（跨域组合通票），新版在前。 */
+    public PageResponse<TicketTypeRuleVersionView> listTicketTypeRuleVersions(String ticketTypeId) {
+        String id = operations.requireText(ticketTypeId, "ticket_type_id");
+        return operations.readPage(
+                TicketingReadOperation.LIST_TICKET_TYPES,
+                () -> catalogService.listRuleVersions(id)
+        );
+    }
+
     /**
      * V369 票种定价核算：各业态票面原价合计 × 票种折扣 = 系统算出售价，与运营填的售价差多少、超没超允许误差。
      * 建票/改票页拿它做实时提示，发布闸拒绝时报的是同一份计算。
@@ -129,14 +139,19 @@ public class TicketingService {
     public TicketTypeRecord updateTicketTypePricing(String ticketTypeId,
             com.complex.platform.ticketing.dto.TicketTypePricingRequest request) {
         String id = operations.requireText(ticketTypeId, "ticket_type_id");
+        java.util.Map<String, Object> trail = new java.util.LinkedHashMap<>();
         return operations.executeWrite(
                 "updateTicketTypePricing:" + id,
                 request == null ? null : request.idempotencyKey(),
                 request,
                 TicketTypeRecord.class,
                 TicketingWriteOperation.UPDATE_TICKET_TYPE_PRICING,
-                () -> catalogService.updatePricing(id, request)
-        );
+                () -> {
+                    TicketTypeRecord saved = catalogService.updatePricing(id, request);
+                    trail.putAll(catalogService.ruleVersionTrail(id)); // 236-R3：这次只存了草稿版或只提交了审批时记下版本
+                    return saved;
+                },
+                trail);
     }
 
     /** 第十八批 AH 段 215-R2 票种最低赠酒杯数（没配过的按出厂 1 杯）。 */
@@ -163,6 +178,7 @@ public class TicketingService {
                     trail.put("min_gift_cups", saved.minGiftCups());
                     trail.put("min_gift_cups_lower", saved.minGiftCupsLower());
                     trail.put("min_gift_cups_upper", saved.minGiftCupsUpper());
+                    trail.putAll(catalogService.ruleVersionTrail(id)); // 236-R3：这次只存了草稿版或只提交了审批时记下版本
                     return saved;
                 },
                 trail);
@@ -514,14 +530,19 @@ public class TicketingService {
     @Transactional
     public TicketTypeEntitlementRecord bindTicketTypeEntitlement(String ticketTypeId, TicketTypeEntitlementRequest request) {
         String id = operations.requireText(ticketTypeId, "ticket_type_id");
+        java.util.Map<String, Object> trail = new java.util.LinkedHashMap<>();
         return operations.executeWrite(
                 "bindTicketTypeEntitlement:" + id,
                 request == null ? null : request.idempotencyKey(),
                 request,
                 TicketTypeEntitlementRecord.class,
                 TicketingWriteOperation.BIND_TICKET_TYPE_ENTITLEMENT,
-                () -> catalogService.bindTicketTypeEntitlement(id, request)
-        );
+                () -> {
+                    TicketTypeEntitlementRecord saved = catalogService.bindTicketTypeEntitlement(id, request);
+                    trail.putAll(catalogService.ruleVersionTrail(id)); // 236-R3：这次只存了草稿版或只提交了审批时记下版本
+                    return saved;
+                },
+                trail);
     }
 
     @com.complex.platform.gate.GuardedAction(capability = "ticket.order.create")
@@ -753,15 +774,35 @@ public class TicketingService {
 
     @com.complex.platform.gate.GuardedAction(capability = "ticket.product.manage")
     @Transactional
-    public TicketTypeRecord publishTicketType(String ticketTypeId, StatusChangeRequest request) {
+    public TicketTypeRecord publishTicketType(String ticketTypeId, TicketTypePublishRequest request) {
         String id = operations.requireText(ticketTypeId, "ticket_type_id");
+        java.util.Map<String, Object> trail = new java.util.LinkedHashMap<>();
         return operations.executeWrite(
                 "publishTicketType:" + id,
                 request == null ? null : request.idempotencyKey(),
                 request,
                 TicketTypeRecord.class,
                 TicketingWriteOperation.PUBLISH_TICKET_TYPE,
-                () -> catalogService.publishTicketType(id, request)
+                () -> {
+                    TicketTypeRecord saved = catalogService.publishTicketType(id, request);
+                    trail.putAll(catalogService.ruleVersionTrail(id)); // 236-R3：这次只存了草稿版或只提交了审批时记下版本
+                    return saved;
+                },
+                trail);
+    }
+
+    /** 第十八批 AJ 段 236-R7（第十八批裁决 61）：撤回跨域组合通票票种规则草稿版或待审提交（待审的同时作废复核单），现表不变、旧版照卖。 */
+    @com.complex.platform.gate.GuardedAction(capability = "ticket.product.manage")
+    @Transactional
+    public TicketTypeRuleVersionView withdrawTicketTypeRuleVersion(String ticketTypeId, TicketCatalogArchiveRequest request) {
+        String id = operations.requireText(ticketTypeId, "ticket_type_id");
+        return operations.executeWrite(
+                "withdrawTicketTypeRuleVersion:" + id,
+                request == null ? null : request.idempotencyKey(),
+                request,
+                TicketTypeRuleVersionView.class,
+                TicketingWriteOperation.WITHDRAW_TICKET_TYPE_RULE_VERSION,
+                () -> catalogService.withdrawRuleVersion(id, request)
         );
     }
 

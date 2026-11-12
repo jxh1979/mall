@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "综合体管理系统 P0 API 契约",
-    "version": "V0.67",
+    "version": "V0.68",
     "description": "P0 首批编码前置契约。本文采用 JSON-compatible YAML，便于与 openapi-p0.json 保持一致。正式后端以 Java 21 + Spring Boot 4.x + springdoc-openapi 输出运行时 OpenAPI，并与本契约比对。"
   },
   "servers": [
@@ -19208,7 +19208,7 @@
         ],
         "operationId": "configureTicketTypeMinGiftCups",
         "summary": "配置票种最低赠酒杯数（杯数与上下限同配）",
-        "description": "第十八批 AH 段 215-R2（ENUM「通票赠酒下限」条「一张酒吧通票或跨域组合通票覆盖的每一家酒吧，赠酒杯数不得低于后台配置的最低赠酒杯数（业务参数，按票种可配，出厂默认 1 杯，须同时配置上下限），各酒吧分别赠几杯在售票时写明票面，低于该下限的票种不得发布上架」）：min_gift_cups、min_gift_cups_lower、min_gift_cups_upper 须同时填写且 1 ≤ 下限 ≤ 杯数 ≤ 上限，否则 400 VALIDATION_FAILED；幂等键缺失或超过 128 字 400 VALIDATION_FAILED；票种不存在 404 TICKET_TYPE_NOT_FOUND；已存档或待删除的票种 409 TICKET_TYPE_NOT_CONFIGURABLE。已上架的通票按新杯数跌破赠酒下限（判定同 publishTicketType）即退回草稿（draft）。成功留痕 ticket_type.min_gift_cups_configured（业务类型 ticket_type）记 min_gift_cups_before、min_gift_cups、min_gift_cups_lower、min_gift_cups_upper。",
+        "description": "第十八批 AH 段 215-R2（ENUM「通票赠酒下限」条「一张酒吧通票或跨域组合通票覆盖的每一家酒吧，赠酒杯数不得低于后台配置的最低赠酒杯数（业务参数，按票种可配，出厂默认 1 杯，须同时配置上下限），各酒吧分别赠几杯在售票时写明票面，低于该下限的票种不得发布上架」）：min_gift_cups、min_gift_cups_lower、min_gift_cups_upper 须同时填写且 1 ≤ 下限 ≤ 杯数 ≤ 上限，否则 400 VALIDATION_FAILED；幂等键缺失或超过 128 字 400 VALIDATION_FAILED；票种不存在 404 TICKET_TYPE_NOT_FOUND；已存档或待删除的票种 409 TICKET_TYPE_NOT_CONFIGURABLE。已上架的通票按新杯数跌破赠酒下限（判定同 publishTicketType）即退回草稿（draft）。成功留痕 ticket_type.min_gift_cups_configured（业务类型 ticket_type）记 min_gift_cups_before、min_gift_cups、min_gift_cups_lower、min_gift_cups_upper。 第十八批 AJ 段 236-R7（第十八批裁决 61）：已上架的跨域组合通票（判定同 publishTicketType）改最低赠酒杯数存入该票种唯一一份草稿版，审批通过前现表、票面赠酒与售卖不变（不退回草稿），草稿赠酒够不够数在 publishTicketType 提交审批时由发布闸点名；返回草稿值（GET 同路径仍为生效值），获批后自动换成新版。第十八批 AJ 段 236-R3：该票规则已提交审批、尚无结论时 409 TICKET_RULE_VERSION_PENDING「这张票的规则已提交审批，须先撤回提交再改」，须先经 withdrawTicketTypeRuleVersion 撤回。票种已上架且有未结版本时，成功留痕元数据另带 rule_version_id、rule_version_status（draft 存入草稿版）。",
         "x-permission": "ticket.product.manage",
         "x-data-scope": "project",
         "x-terminal-allowed": [
@@ -19220,7 +19220,8 @@
         "x-failure-codes": [
           "VALIDATION_FAILED",
           "TICKET_TYPE_NOT_FOUND",
-          "TICKET_TYPE_NOT_CONFIGURABLE"
+          "TICKET_TYPE_NOT_CONFIGURABLE",
+          "TICKET_RULE_VERSION_PENDING"
         ],
         "parameters": [
           {
@@ -19298,7 +19299,7 @@
         ],
         "operationId": "bindTicketTypeEntitlement",
         "summary": "绑定票类型权益",
-        "description": "用于绑定票类型权益。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。第十八批 AH 段 215-R1（ENUM「通票赠酒下限」条「低于该下限的票种不得发布上架」）：已上架的通票（bar_id 为空）改组成后跌破最低赠酒杯数（判定同 publishTicketType 的 PASS_BAR_GIFT_COVERAGE_INSUFFICIENT、PASS_BAR_GIFT_FLOOR_NOT_PLATFORM_FUNDED）即退回草稿（draft），本次绑定照常保存，补齐后重新发布。 第十八批 AI 段 236-R2（ENUM:54「任何商户在没有获批内部结算价之前，不得为其开通需要该价格结算的权益或券。」）：只在票种已上架时检查本次新绑定——须按内部结算价结算的权益（判据同 publishTicketType）其提供方没有获批生效价的，409 TICKET_ENTITLEMENT_PRICE_NOT_APPROVED，绑定不落库、票种不退回草稿。",
+        "description": "用于绑定票类型权益。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。第十八批 AH 段 215-R1（ENUM「通票赠酒下限」条「低于该下限的票种不得发布上架」）：已上架的通票（bar_id 为空）改组成后跌破最低赠酒杯数（判定同 publishTicketType 的 PASS_BAR_GIFT_COVERAGE_INSUFFICIENT、PASS_BAR_GIFT_FLOOR_NOT_PLATFORM_FUNDED）即退回草稿（draft），本次绑定照常保存，补齐后重新发布。 第十八批 AI 段 236-R2（ENUM:54「任何商户在没有获批内部结算价之前，不得为其开通需要该价格结算的权益或券。」）：只在票种已上架时检查本次新绑定——须按内部结算价结算的权益（判据同 publishTicketType）其提供方没有获批生效价的，409 TICKET_ENTITLEMENT_PRICE_NOT_APPROVED，绑定不落库、票种不退回草稿。 第十八批 AJ 段 236-R7（第十八批裁决 62「已上架的非跨域票一律不许加别的经营域收费权益，要做跨域组合通票就另建票种」）：票种已上架且现不是跨域组合通票时，本次绑定为有价权益（component_price_cent 大于 0）且加上后成为跨域组合通票（有价权益分属两个及以上域主管公司，判定同 publishTicketType）的，409 TICKET_CROSS_DOMAIN_NEW_TYPE_REQUIRED「已上架的票不能加别的经营域收费权益；要做跨域组合通票请另建票种（新建票种时勾选「先存为草稿、不立即上架」，配齐组合后在票种行点「发布」提交审批）」，绑定不落库、票种不退回草稿；要做跨域组合通票须另建票种（建票后先不发布，配齐组合后经 publishTicketType 提交审批）；零元权益与草稿票种不受此限；这道判定在 236-R2 内部结算价闸与 V369、215-R1 退回草稿判定之前。第十八批裁决 61：已上架的跨域组合通票加权益存入该票种唯一一份草稿版（不写现表、不退回草稿），审批通过前现表与售卖不变，经 publishTicketType 提交审批、获批后自动换成新版；返回本条绑定（尚未进现表，获批时按原绑定 id 与创建时间插入）。第十八批 AJ 段 236-R3：该票规则已提交审批、尚无结论时 409 TICKET_RULE_VERSION_PENDING「这张票的规则已提交审批，须先撤回提交再改」，须先经 withdrawTicketTypeRuleVersion 撤回。票种已上架且有未结版本时，成功留痕 ticket_product_entitlement.bound 元数据另带 rule_version_id、rule_version_status（draft 存入草稿版）。",
         "x-permission": "ticket.product.manage",
         "x-data-scope": "project",
         "x-terminal-allowed": [
@@ -19343,7 +19344,7 @@
         ],
         "operationId": "publishTicketType",
         "summary": "发布票种",
-        "description": "第十八批 AH 段 215-R1（ENUM「通票赠酒下限」条「一张酒吧通票或跨域组合通票覆盖的每一家酒吧，赠酒杯数不得低于后台配置的最低赠酒杯数（业务参数，按票种可配，出厂默认 1 杯，须同时配置上下限），各酒吧分别赠几杯在售票时写明票面，低于该下限的票种不得发布上架」「该最低赠酒杯数属于票面强制要求提供的权益，一律记为域主管公司出资」）：bar_id 为空的通票，覆盖的每家酒吧（绑定了该吧入场类权益的酒吧）赠饮杯数（票面价 0 的 gift_drink，份数×次数）不得少于最低杯数×max(1, 该吧入场次数)，否则 409 PASS_BAR_GIFT_COVERAGE_INSUFFICIENT（点名还差的酒吧）；带票面价的兑换券不计；不含赠酒的通票不再放行；单店票（bar_id 非空）不套。最低杯数以内的赠饮须平台出资型（cost_bearer platform_funded），否则 409 PASS_BAR_GIFT_FLOOR_NOT_PLATFORM_FUNDED；超出部分可标商户让利。最低杯数见 GET /api/v1/ticketing/ticket-types/{id}/min-gift-cups（没配过为出厂 1 杯）。 第十八批 AI 段 236-R2（第十八批裁决 52 ①；ENUM:54「任何商户在没有获批内部结算价之前，不得为其开通需要该价格结算的权益或券。」；BSM:1754「每项权益都必须绑定实际提供方和审批版本，避免悬空账。」）：票内须提供方兑付、核销时按内部结算价结算的权益（赠饮、实物、专属直付；专属直付且商户让利型的除外），其提供方（模板商户，空则专属商户）在内部结算价目录里没有获批生效价（目录草案须他人复核转正）的，409 TICKET_ENTITLEMENT_PRICE_NOT_APPROVED 拒绝发布并点名权益；这道闸在赠酒下限闸之后、凑整误差闸之前。",
+        "description": "第十八批 AH 段 215-R1（ENUM「通票赠酒下限」条「一张酒吧通票或跨域组合通票覆盖的每一家酒吧，赠酒杯数不得低于后台配置的最低赠酒杯数（业务参数，按票种可配，出厂默认 1 杯，须同时配置上下限），各酒吧分别赠几杯在售票时写明票面，低于该下限的票种不得发布上架」「该最低赠酒杯数属于票面强制要求提供的权益，一律记为域主管公司出资」）：bar_id 为空的通票，覆盖的每家酒吧（绑定了该吧入场类权益的酒吧）赠饮杯数（票面价 0 的 gift_drink，份数×次数）不得少于最低杯数×max(1, 该吧入场次数)，否则 409 PASS_BAR_GIFT_COVERAGE_INSUFFICIENT（点名还差的酒吧）；带票面价的兑换券不计；不含赠酒的通票不再放行；单店票（bar_id 非空）不套。最低杯数以内的赠饮须平台出资型（cost_bearer platform_funded），否则 409 PASS_BAR_GIFT_FLOOR_NOT_PLATFORM_FUNDED；超出部分可标商户让利。最低杯数见 GET /api/v1/ticketing/ticket-types/{id}/min-gift-cups（没配过为出厂 1 杯）。 第十八批 AI 段 236-R2（第十八批裁决 52 ①；ENUM:54「任何商户在没有获批内部结算价之前，不得为其开通需要该价格结算的权益或券。」；BSM:1754「每项权益都必须绑定实际提供方和审批版本，避免悬空账。」）：票内须提供方兑付、核销时按内部结算价结算的权益（赠饮、实物、专属直付；专属直付且商户让利型的除外），其提供方（模板商户，空则专属商户）在内部结算价目录里没有获批生效价（目录草案须他人复核转正）的，409 TICKET_ENTITLEMENT_PRICE_NOT_APPROVED 拒绝发布并点名权益；这道闸在赠酒下限闸之后、凑整误差闸之前。 第十八批 AJ 段 236-R3（第十八批裁决 52 ②；ENUM:32「跨域组合通票的定价与域间结算规则由项目之上的平台权限统一审批」；BSM:754「每次发布时把凑整差额金额及各域分摊数额记入票种规则版本、发布后不得再改」）：请求体为 TicketTypePublishRequest（idempotency_key、reason 必填，final_approver_id 可空）。跨域组合通票＝bar_id 为空、有价权益（component_price_cent 大于 0）的提供方按业态折成域主管公司（酒吧归娱乐平台公司，游乐归游乐公司，演出传媒归传媒公司，餐饮与零售归城市项目公司，其他业态按商户档案主管公司）后分属两家及以上，零元权益不计（BSM:749）。未上架的跨域组合通票闸全过后不直接上架：把三档价、折扣、权益组成、最低赠酒杯数、凑整差额与各域分摊记成一版票种规则（见 listTicketTypeRuleVersions），提交项目之上的平台权限审批（复核策略 ticket.type.rule.publish，specific_role，最终审批人须经角色持有 ticket.product.publish.approve；出厂按涉钱审批时限 1 个工作日），返回 status 仍为 draft；审批通过即在同一事务里上架（status published、该版 effective）；驳回则该版退回草稿（保留 review_id）、票仍为草稿，可改后再发布或撤回。final_approver_id 为最终审批人用户 id，跨域组合通票必填：未填 400 VALIDATION_FAILED「跨域组合通票须指定最终审批人（项目之上的平台权限）」；该人不存在或已停用 400 VALIDATION_FAILED；该人须能看全部项目（平台管理员，或经勾了「可以查看全部项目」的角色持有 ticket.product.publish.approve），否则 400 VALIDATION_FAILED「跨域组合通票的定价与域间结算规则须由项目之上的平台权限审批，最终审批人须能看全部项目」；须经角色持有 ticket.product.publish.approve，否则 400 FINAL_APPROVER_LACKS_ROLE；须在提交人的直接上级链上，否则 400 FINAL_APPROVER_NOT_IN_CHAIN（系统补全从提交人到该人之间的全部直接上级节点逐级审批，PGM:528）；提交人不得自批（审批时 403 SUPERVISOR_SELF_REVIEW_FORBIDDEN）。该票规则已提交审批、尚无结论时再发布 409 TICKET_RULE_VERSION_PENDING「这张票的规则已提交审批，须先撤回提交再改」（须先经 withdrawTicketTypeRuleVersion 撤回）；复核未进入待审 409 TICKET_RULE_APPROVAL_REQUIRED「票种规则须进入审批，不得直接生效」。非跨域票种（单店门票、酒吧通票、纯游乐票、演出票等）照旧闸全过即上架，不填 final_approver_id、不建版本。成功留痕 ticket_price.published 在这次提交了审批时元数据另带 rule_version_id、rule_version_status（pending_review）。 第十八批 AJ 段 236-R7（第十八批裁决 61「改动另存一份草稿版审批，审批期间照旧版卖，获批后自动换成新版」）：已上架跨域组合通票有草稿版时，用草稿内容（草稿价、草稿组成、草稿最低赠酒杯数）跑全部发布闸（失败码同现行发布闸：TICKET_TYPE_ENTITLEMENT_REQUIRED、TICKET_COMPONENT_PRICE_REQUIRED、TICKET_COST_BEARER_REQUIRED、PASS_BAR_GIFT_COVERAGE_INSUFFICIENT、PASS_BAR_GIFT_FLOOR_NOT_PLATFORM_FUNDED、TICKET_ENTITLEMENT_PRICE_NOT_APPROVED、TICKET_PRICE_OUT_OF_TOLERANCE 等）后提交同一审批（须带 final_approver_id，审批人要求同上），返回票种仍为 published、现表与售卖不变；获批后在审批同一事务里自动换成新版（三档价、折扣、草稿新增权益、最低赠酒杯数套回现表，原生效版置 superseded），无需再发布。已上架且没有草稿版的票种再发布照现行。",
         "x-permission": "ticket.product.manage",
         "x-data-scope": "project",
         "x-terminal-allowed": [
@@ -19359,13 +19360,206 @@
           }
         ],
         "requestBody": {
-          "$ref": "#/components/requestBodies/StatusChange"
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TicketTypePublishRequest"
+              },
+              "example": {
+                "idempotency_key": "ticket-type-publish-20261112-000001",
+                "reason": "酒吧＋游乐跨域组合通票首次上架",
+                "final_approver_id": "user_000123"
+              }
+            }
+          }
         },
         "responses": {
           "200": {
             "$ref": "#/components/responses/Success"
           },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
           "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
+    },
+    "/api/v1/ticketing/ticket-types/{id}/rule-versions": {
+      "get": {
+        "tags": [
+          "ticketing"
+        ],
+        "operationId": "listTicketTypeRuleVersions",
+        "summary": "票种规则版本（跨域组合通票）",
+        "description": "第十八批 AJ 段 236-R3（第十八批裁决 52 ②；ENUM:32「跨域组合通票的定价与域间结算规则由项目之上的平台权限统一审批」；BSM:754「每次发布时把凑整差额金额及各域分摊数额记入票种规则版本、发布后不得再改」）：列出该票种的全部票种规则版本（跨域组合通票提交发布审批或已上架后改动才有，其余票种为空），新版在前，一次返回全部、不分页。每版记三档价、折扣、最低赠酒杯数（三者为空＝没配过、按出厂 1 杯）、权益组成（含提供方、业态、经营域、业态价格、出资方）、各业态价格合计、系统算出售价、凑整差额（填的平日价－算出售价）与各域分摊（与出票拆分同一算法；零元权益不计），只按平日价算；状态 draft 草稿、pending_review 待审批、effective 生效中、superseded 已被新版本取代、withdrawn 已撤回，生效起内容不再改。每个票种至多一份生效版与一份未结版本（draft 或 pending_review）；票种已上架时其未结版本另附 price_check（按草稿价、草稿组成与现行允许误差），其余为 null。票种不存在 404 TICKET_TYPE_NOT_FOUND。",
+        "x-permission": "ticket.product.view",
+        "x-data-scope": "project",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "ticket_product.viewed",
+        "x-audit-event-failure": "ticket_product.view_failed",
+        "x-failure-codes": [
+          "TICKET_TYPE_NOT_FOUND"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "票种 id。"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "票种规则版本列表，新版在前；items 为 TicketTypeRuleVersionView。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/PageResponse"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "type": "object",
+                          "properties": {
+                            "items": {
+                              "type": "array",
+                              "items": {
+                                "$ref": "#/components/schemas/TicketTypeRuleVersionView"
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
+    },
+    "/api/v1/ticketing/ticket-types/{id}/rule-versions/withdraw": {
+      "post": {
+        "tags": [
+          "ticketing"
+        ],
+        "operationId": "withdrawTicketTypeRuleVersion",
+        "summary": "撤回票种规则草稿版或待审提交（跨域组合通票）",
+        "description": "第十八批 AJ 段 236-R7（第十八批裁决 61「改动另存一份草稿版审批，审批期间照旧版卖，获批后自动换成新版」）：撤回该票种唯一一份未结版本——草稿版（放弃草稿）或待审提交（撤回提交）。待审的先作废复核单（复核单置驳回、待审节点取消，从审批人待办消失、不能再批准），再把版本置 withdrawn、reason 记撤回理由；现表不变、旧版照卖。撤回后再改价、加权益或改最低赠酒杯数由现表另起新草稿（版本号续增）；首次发布待审的票撤回后仍为草稿，可改可再发布。reason 必填，缺失或幂等键缺失、超过 128 个字符 400 VALIDATION_FAILED；票种不存在 404 TICKET_TYPE_NOT_FOUND；没有草稿或待审版本（含撤回前已获批）409 TICKET_RULE_VERSION_NOT_OPEN「这张票没有可撤回的草稿或待审批版本」。成功留痕 ticket_type.rule_version.withdrawn（业务类型 ticket_type_rule_version，对象为该版本），失败留痕 ticket_type.rule_version.withdraw_failed。",
+        "x-permission": "ticket.product.manage",
+        "x-data-scope": "project",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "ticket_type.rule_version.withdrawn",
+        "x-audit-event-failure": "ticket_type.rule_version.withdraw_failed",
+        "x-failure-codes": [
+          "TICKET_TYPE_NOT_FOUND",
+          "TICKET_RULE_VERSION_NOT_OPEN",
+          "VALIDATION_FAILED"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "票种 id。"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "idempotency_key",
+                  "reason"
+                ],
+                "properties": {
+                  "idempotency_key": {
+                    "type": "string",
+                    "maxLength": 128,
+                    "description": "操作幂等键；重复提交返回第一次的结果。"
+                  },
+                  "reason": {
+                    "type": "string",
+                    "description": "撤回理由（必填），记入该版本。"
+                  }
+                }
+              },
+              "example": {
+                "idempotency_key": "rule-version-withdraw-20261112-000001",
+                "reason": "草稿加错了权益，整份放弃重配"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "已撤回；data 为 TicketTypeRuleVersionView（status 为 withdrawn、reason 为撤回理由、price_check 为 null）。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SuccessResponse"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "$ref": "#/components/schemas/TicketTypeRuleVersionView"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
             "$ref": "#/components/responses/Error"
           },
           "409": {
@@ -20215,7 +20409,7 @@
         ],
         "operationId": "listApprovalDeadlines",
         "summary": "查询各审批类型的审批时限",
-        "description": "第十八批 AD 段第 204 条 204-R1（PGM:529「任一业务审批节点超过后台配置的时限（业务参数，按审批类型可配，出厂默认 3 个工作日，涉钱审批出厂默认 1 个工作日，须同时配置上下限）未处理的，系统自动提醒并升级到该节点的上一级」；PGM:536「按合同类型可配，出厂默认 3 个工作日，须同时配置上下限」）：审批类型＝被审批的动作类型，清单为代码内复核策略的动作类型（不含授权档位模板 permission_grant_l1～l3）、准入闸策略表启用中的阻断策略的动作类型、授权侧 access.grant_request.money、access.scope_change、access.scope_change.money、access.role_viewable_projects.reduce 与包厢关台未付清确认 bar.bill.unpaid_close，按 action_type 排序；每项含 action_type、money（出厂是否按涉钱）、factory_working_days（出厂默认，涉钱 1、其余 3）、deadline_working_days、min_working_days、max_working_days（工作日）、customized（后台是否改过）。没改过的时限取出厂默认、上下限 1～30。出厂按涉钱的另含 bar.bill.unpaid_close（第十八批裁决 37）、parking.release.waive（BSM:1438）、bar.bill_reopen（第十八批裁决 39）。",
+        "description": "第十八批 AD 段第 204 条 204-R1（PGM:529「任一业务审批节点超过后台配置的时限（业务参数，按审批类型可配，出厂默认 3 个工作日，涉钱审批出厂默认 1 个工作日，须同时配置上下限）未处理的，系统自动提醒并升级到该节点的上一级」；PGM:536「按合同类型可配，出厂默认 3 个工作日，须同时配置上下限」）：审批类型＝被审批的动作类型，清单为代码内复核策略的动作类型（不含授权档位模板 permission_grant_l1～l3）、准入闸策略表启用中的阻断策略的动作类型、授权侧 access.grant_request.money、access.scope_change、access.scope_change.money、access.role_viewable_projects.reduce 与包厢关台未付清确认 bar.bill.unpaid_close，按 action_type 排序；每项含 action_type、money（出厂是否按涉钱）、factory_working_days（出厂默认，涉钱 1、其余 3）、deadline_working_days、min_working_days、max_working_days（工作日）、customized（后台是否改过）。没改过的时限取出厂默认、上下限 1～30。出厂按涉钱的另含 bar.bill.unpaid_close（第十八批裁决 37）、parking.release.waive（BSM:1438）、bar.bill_reopen（第十八批裁决 39）、ticket.type.rule.publish（第十八批 AJ 段 236-R3，跨域组合通票票种规则发布）。",
         "x-auth-context": "staff-token",
         "x-permission": "governance.supervisor_review.view",
         "x-data-scope": "platform",
@@ -64153,7 +64347,7 @@
         ],
         "operationId": "listSettlementTransactions",
         "summary": "通票核销结算流水列表",
-        "description": "第十八批 AE 段第 201 条 201-R6（照现码补契约）：平台侧结算审阅：只读查看通票核销产生的结算流水（transaction_type=verification_settled），按创建时间倒序分页；projectId、merchantId 按综合体项目、商户过滤。page 小于 1 按 1，size 取 1～100（超出按边界取）。只读，不落审计事件。无 finance.settlement.view 权限 403 PERMISSION_DENIED。 第十八批 AI 段 236-R1（BSM:1754「每项权益都必须绑定实际提供方和审批版本，避免悬空账。」；ENUM:54「核销或结算时锁定当时版本」）：items 每行另带 settlement_catalog_entry_id（string，可空，最长 80）——该笔核销所用内部结算价目录行（internal_price_catalog.id＝审批版本），不按内部结算价结算的为空。",
+        "description": "第十八批 AE 段第 201 条 201-R6（照现码补契约）：平台侧结算审阅：只读查看通票核销产生的结算流水（transaction_type=verification_settled），按创建时间倒序分页；projectId、merchantId 按综合体项目、商户过滤。page 小于 1 按 1，size 取 1～100（超出按边界取）。只读，不落审计事件。无 finance.settlement.view 权限 403 PERMISSION_DENIED。 第十八批 AI 段 236-R1（BSM:1754「每项权益都必须绑定实际提供方和审批版本，避免悬空账。」；ENUM:54「核销或结算时锁定当时版本」）：items 每行另带 settlement_catalog_entry_id（string，可空，最长 80）——该笔核销所用内部结算价目录行（internal_price_catalog.id＝审批版本），不按内部结算价结算的为空。 第十八批 AJ 段 236-R6（BSM:1754「每项权益都必须绑定实际提供方和审批版本，避免悬空账。」；BSM:756「订单保存基础价、动态价、全部命中资格价、最终选中价和规则版本。」）：items 每行另带 ticket_type_rule_version_no（integer，可空）——该笔订单下单时生效的票种规则版本号（同 listTicketTypeRuleVersions 的 version_no）；没有版本的票种为 null。",
         "x-auth-context": "staff-token",
         "x-permission": "finance.settlement.view",
         "x-data-scope": "platform",
@@ -65366,7 +65560,7 @@
         ],
         "operationId": "updateTicketTypePricing",
         "summary": "改票种售价／折扣（凑整误差闸）",
-        "description": "设置票种折扣与凑整后的售价。保存当场比对：填的售价与系统按各业态价格（原称「票面原价」）×折扣算出的售价， 差额超过后台可配的允许误差即拒绝（不等到发布才报错）。只动定价三档与折扣，其余字段一律不动。",
+        "description": "设置票种折扣与凑整后的售价。保存当场比对：填的售价与系统按各业态价格（原称「票面原价」）×折扣算出的售价， 差额超过后台可配的允许误差即拒绝（不等到发布才报错）。只动定价三档与折扣，其余字段一律不动。 第十八批 AJ 段 236-R7（第十八批裁决 61「改动另存一份草稿版审批，审批期间照旧版卖，获批后自动换成新版」）：已上架的跨域组合通票（判定同 publishTicketType）改价存入该票种唯一一份草稿版（同样当场按草稿组成过误差闸），审批通过前现表与售卖不变，经 publishTicketType 提交审批、获批后自动换成新版；返回现表票种（生效版价格不变）。第十八批 AJ 段 236-R3：该票规则已提交审批、尚无结论时 409 TICKET_RULE_VERSION_PENDING「这张票的规则已提交审批，须先撤回提交再改」，须先经 withdrawTicketTypeRuleVersion 撤回（首次发布待审的草稿票同样 409）。票种已上架且有未结版本时，成功留痕 ticket_product.pricing_changed 元数据另带 rule_version_id、rule_version_status（draft 存入草稿版）。",
         "x-permission": "ticket.product.manage",
         "x-data-scope": "project",
         "x-terminal-allowed": [
@@ -95109,6 +95303,385 @@
             "format": "date-time",
             "nullable": true,
             "description": "最后修改时间；没配过为空。"
+          }
+        }
+      },
+      "TicketTypePublishRequest": {
+        "type": "object",
+        "description": "第十八批 AJ 段 236-R3 票种发布请求：前四项同 StatusChangeRequest；跨域组合通票须另带最终审批人 final_approver_id（ENUM:32「项目之上的平台权限统一审批」；PGM:528「发起单据时只需指定该事项的最终审批人」），其余票种不填。",
+        "required": [
+          "idempotency_key",
+          "reason"
+        ],
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "maxLength": 128,
+            "description": "幂等键；同一发布重试必须复用。"
+          },
+          "action": {
+            "type": "string",
+            "maxLength": 64,
+            "description": "状态动作编码（可不填，发布不读取）。"
+          },
+          "reason": {
+            "type": "string",
+            "maxLength": 1000,
+            "description": "发布理由（必填）；跨域组合通票提交审批时记为复核单「发布理由」。"
+          },
+          "evidence_attachment_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 64
+            },
+            "maxItems": 50,
+            "description": "证据附件 ID 列表（可不填）。"
+          },
+          "final_approver_id": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 64,
+            "description": "最终审批人用户 id：跨域组合通票必填（须能看全部项目、经角色持有 ticket.product.publish.approve、在提交人的直接上级链上），其余票种不填或填空。"
+          }
+        }
+      },
+      "TicketTypeRuleVersionView": {
+        "type": "object",
+        "description": "第十八批 AJ 段 236-R3 跨域组合通票票种规则版本（ENUM:32「跨域组合通票的定价与域间结算规则由项目之上的平台权限统一审批」；BSM:754「每次发布时把凑整差额金额及各域分摊数额记入票种规则版本、发布后不得再改」）：三档价、折扣、最低赠酒杯数、权益组成、各业态价格合计与算出售价、凑整差额与各域分摊，只按平日价算（同凑整误差闸）。生效（effective）起内容不再改；每个票种至多一份生效版与一份未结版本（draft 或 pending_review）。",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "ticket_type_id",
+          "version_no",
+          "status",
+          "combo_discount_rate",
+          "entitlements",
+          "component_total_cent",
+          "computed_price_cent",
+          "domain_allocations",
+          "created_at",
+          "updated_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "版本 id（ttrv_ 开头）。"
+          },
+          "ticket_type_id": {
+            "type": "string",
+            "description": "票种 id。"
+          },
+          "project_id": {
+            "type": "string",
+            "nullable": true,
+            "description": "票种所属项目：提交审批时票种恰属一个项目才记（供复核单项目映射），其余为空。"
+          },
+          "version_no": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "第 N 版（同一票种从 1 起续增）。"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "draft",
+              "pending_review",
+              "effective",
+              "superseded",
+              "withdrawn"
+            ],
+            "description": "draft 草稿（含被驳回退回的）、pending_review 待审批、effective 生效中、superseded 已被新版本取代、withdrawn 已撤回。"
+          },
+          "weekday_price_cent": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true,
+            "description": "平日价（分）；凑整差额与各域分摊按它算。"
+          },
+          "weekend_price_cent": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true,
+            "description": "周末价（分，可空）。"
+          },
+          "holiday_price_cent": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true,
+            "description": "节假日价（分，可空）。"
+          },
+          "combo_discount_rate": {
+            "type": "number",
+            "description": "票种折扣（百分数，100=不打折）。"
+          },
+          "min_gift_cups": {
+            "type": "integer",
+            "nullable": true,
+            "description": "最低赠酒杯数；与上下限同为空＝没配过、按出厂 1 杯。"
+          },
+          "min_gift_cups_lower": {
+            "type": "integer",
+            "nullable": true,
+            "description": "最低赠酒杯数下限；没配过为空。"
+          },
+          "min_gift_cups_upper": {
+            "type": "integer",
+            "nullable": true,
+            "description": "最低赠酒杯数上限；没配过为空。"
+          },
+          "entitlements": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "description": "版本里的一条权益绑定：提供方与业态（经营域）随版本记下。",
+              "required": [
+                "binding_id",
+                "entitlement_template_id",
+                "quantity",
+                "total_times",
+                "num_people",
+                "created_at"
+              ],
+              "properties": {
+                "binding_id": {
+                  "type": "string",
+                  "description": "绑定 id；获批时按此 id 插入现表。"
+                },
+                "entitlement_template_id": {
+                  "type": "string",
+                  "description": "权益模板 id。"
+                },
+                "template_name": {
+                  "type": "string",
+                  "nullable": true,
+                  "description": "权益模板名称。"
+                },
+                "entitlement_type": {
+                  "type": "string",
+                  "nullable": true,
+                  "description": "权益类型。"
+                },
+                "provider_merchant_id": {
+                  "type": "string",
+                  "nullable": true,
+                  "description": "实际提供方商户 id（模板商户）。"
+                },
+                "provider_merchant_name": {
+                  "type": "string",
+                  "nullable": true,
+                  "description": "实际提供方商户名称。"
+                },
+                "business_format": {
+                  "type": "string",
+                  "nullable": true,
+                  "description": "提供方业态：bar、amusement、media、catering、retail、other。"
+                },
+                "domain": {
+                  "type": "string",
+                  "nullable": true,
+                  "description": "经营域键：bar、amusement、media、catering、retail；other 业态为 other:＋商户档案主管公司 id（未指定主管公司则为商户 id）。"
+                },
+                "quantity": {
+                  "type": "integer",
+                  "description": "份数。"
+                },
+                "total_times": {
+                  "type": "integer",
+                  "description": "次数。"
+                },
+                "num_people": {
+                  "type": "integer",
+                  "description": "每份人数。"
+                },
+                "value_amount_cent": {
+                  "type": "integer",
+                  "format": "int64",
+                  "nullable": true,
+                  "description": "面值（分，可空）。"
+                },
+                "effective_rule": {
+                  "type": "string",
+                  "nullable": true,
+                  "description": "生效规则（可空）。"
+                },
+                "component_price_cent": {
+                  "type": "integer",
+                  "format": "int64",
+                  "nullable": true,
+                  "description": "业态价格（分）；大于 0 的计入跨域判定与各域分摊，零元权益不参与域间分配（BSM:749）。"
+                },
+                "cost_bearer": {
+                  "type": "string",
+                  "nullable": true,
+                  "description": "出资方：platform_funded 平台出资型／merchant_concession 商户让利型；非赠送类可空。"
+                },
+                "created_at": {
+                  "type": "string",
+                  "format": "date-time",
+                  "description": "绑定创建时间；获批插入现表时沿用，出票顺序不变。"
+                }
+              }
+            },
+            "description": "权益组成（含零元权益）。"
+          },
+          "component_total_cent": {
+            "type": "integer",
+            "format": "int64",
+            "description": "各业态价格合计（分，Σ业态价格×份数，零元不计）。"
+          },
+          "computed_price_cent": {
+            "type": "integer",
+            "format": "int64",
+            "description": "系统算出售价（分）＝合计×折扣÷100。"
+          },
+          "rounding_diff_cent": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true,
+            "description": "凑整差额（分）＝填的平日价－算出售价；平日价为空时为空。"
+          },
+          "domain_allocations": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "description": "一个经营域的分摊（BSM:754「凑整产生的差额按各业态价格比例，与折扣一并分摊到各域」），与出票拆分同一算法（最大余数补尾）。",
+              "required": [
+                "domain",
+                "domain_name",
+                "component_total_cent",
+                "discount_share_cent",
+                "rounding_share_cent",
+                "share_cent"
+              ],
+              "properties": {
+                "domain": {
+                  "type": "string",
+                  "description": "经营域键（同 entitlements[].domain）。"
+                },
+                "domain_name": {
+                  "type": "string",
+                  "description": "经营域中文名，如「酒吧域（娱乐平台公司）」「游乐域（游乐公司）」「其他业态（主管公司名）」。"
+                },
+                "component_total_cent": {
+                  "type": "integer",
+                  "format": "int64",
+                  "description": "该域各业态价格合计（分）。"
+                },
+                "discount_share_cent": {
+                  "type": "integer",
+                  "format": "int64",
+                  "description": "折扣分摊（分）＝该域合计－按算出售价所得。"
+                },
+                "rounding_share_cent": {
+                  "type": "integer",
+                  "format": "int64",
+                  "description": "凑整分摊（分）＝按填的平日价所得－按算出售价所得；各域之和等于 rounding_diff_cent。"
+                },
+                "share_cent": {
+                  "type": "integer",
+                  "format": "int64",
+                  "description": "该域按填的平日价所得（分）。"
+                }
+              }
+            },
+            "description": "各域分摊；只列业态价格合计大于 0 的域，平日价为空时为空数组。"
+          },
+          "reason": {
+            "type": "string",
+            "nullable": true,
+            "description": "提交审批时为发布理由，撤回后为撤回理由；草稿未提交为空。"
+          },
+          "review_id": {
+            "type": "string",
+            "nullable": true,
+            "description": "复核单 id；提交审批后有值，被驳回退回草稿后保留。"
+          },
+          "created_by": {
+            "type": "string",
+            "description": "创建人。"
+          },
+          "updated_by": {
+            "type": "string",
+            "description": "最后修改人。"
+          },
+          "submitted_by": {
+            "type": "string",
+            "nullable": true,
+            "description": "提交审批人。"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "创建时间。"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "最后修改时间。"
+          },
+          "submitted_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "description": "提交审批时间。"
+          },
+          "decided_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "description": "获批生效时间。"
+          },
+          "price_check": {
+            "type": "object",
+            "nullable": true,
+            "description": "票种已上架时其未结版本的定价核算（按草稿价、草稿组成与现行允许误差，同 ticketTypePriceCheck）；其余为 null。",
+            "properties": {
+              "ticket_type_id": {
+                "type": "string",
+                "description": "票种 id。"
+              },
+              "component_total_cent": {
+                "type": "integer",
+                "format": "int64",
+                "description": "各业态价格合计（分）。"
+              },
+              "combo_discount_rate": {
+                "type": "number",
+                "description": "票种折扣（百分数，100=不打折）。"
+              },
+              "computed_price_cent": {
+                "type": "integer",
+                "format": "int64",
+                "description": "系统算出售价（分）。"
+              },
+              "filled_price_cent": {
+                "type": "integer",
+                "format": "int64",
+                "nullable": true,
+                "description": "填的平日价（分）；未填为空。"
+              },
+              "diff_cent": {
+                "type": "integer",
+                "format": "int64",
+                "nullable": true,
+                "description": "填的－算出的（分，带符号）；未填价为空。"
+              },
+              "tolerance_cent": {
+                "type": "integer",
+                "format": "int64",
+                "description": "后台可配的允许误差（分）。"
+              },
+              "within_tolerance": {
+                "type": "boolean",
+                "description": "是否在允许误差内（未填价视为不通过）。"
+              },
+              "rounding_suggested": {
+                "type": "integer",
+                "format": "int64",
+                "description": "按「整元且尾数 8/9/0」建议的凑整售价（分）。"
+              }
+            }
           }
         }
       },

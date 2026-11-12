@@ -1,5 +1,5 @@
 package com.complex.platform.governance;
-// 文件版本：V0.23
+// 文件版本：V0.24
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
@@ -114,6 +114,8 @@ class JdbcPlatformRepository implements PlatformRepository, SupervisorReviewRepo
             Map.entry("leasing_blacklist_exception", "SELECT project_id FROM leasing_blacklist_exceptions WHERE id = :id"),
             Map.entry("leasing_intent", "SELECT project_id FROM leasing_intents WHERE id = :id"),
             Map.entry("ticket_reward_config", "SELECT project_id FROM ticket_reward_config_versions WHERE id = :id"),
+            // 第十八批 AJ 段 236-R3：跨域组合通票票种规则版本（提交时票种恰属一个项目才记）。
+            Map.entry("ticket_type_rule_version", "SELECT project_id FROM ticket_type_rule_versions WHERE id = :id"),
             Map.entry("ticket_points_objection_resolution", "SELECT b.project_id FROM ticket_points_bill_objections x"
                     + " JOIN ticket_points_monthly_bills b ON b.id = x.bill_id WHERE x.id = :id"),
             Map.entry("access_grant_request", "SELECT u.organization_id FROM access_grant_requests g JOIN access_users u ON u.id = g.target_user_id"
