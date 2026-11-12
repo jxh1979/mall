@@ -1,4 +1,4 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 import React from "react";
 import { AdminPageHeader } from "../components/AdminPageHeader";
 import type { AdminPageProps, GovernanceProjectRow } from "../types";
@@ -42,12 +42,15 @@ const ACTION_LABELS: Record<string, string> = { list: "列入黑名单", release
 
 const key = (prefix: string) => `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 const emptySetting: BoundedSetting = { value: "", min: "", max: "" };
+const bounded = (value: number, min: number | null, max: number | null): BoundedSetting =>
+  ({ value: String(value), min: min == null ? "" : String(min), max: max == null ? "" : String(max) });
 
 /**
  * 客人账号管理页（ADM-CUS-001）：按手机号精确查客人（盲索引，不提供全量浏览，PII 最小化）。
  * ROOT-03-R23（BSM 第 819 行、ENUM 第 68 行）：受限只停自助订台与员工代订，由客服主管填原因置入，截止按项目受限时长（出厂 90 天，值与上下限同配），
  * 可提前解除；黑名单由保安团队申请、申请所在项目当班夜班值班经理批准、娱乐平台负责人终审，两级都批准才关闭账户；解除同级复核，原账户保持已关闭、
  * 手机号可重新注册。ROOT-03-R22（ENUM 第 68 行）：同号一年内注销与注册合计超上限提示风控（全平台，出厂 3 次，值与上下限同配）。
+ * 第十八批 AH 段 218-R2（BSM 第 800 行）：高频出入场预警阈值按项目配置，一晚、连续两日各带上下限（出厂 4 次、7 次），六值同配。
  */
 export function CustomerAccountsPage(props: AdminPageProps) {
   const { api, setActionResult, setGlobalError, effectivePermissions, user, reportViewedObjects } = props;
@@ -64,6 +67,8 @@ export function CustomerAccountsPage(props: AdminPageProps) {
   React.useEffect(() => reportViewedObjects?.("customer", account ? [account] : []), [account, reportViewedObjects]);
   const [restriction, setRestriction] = React.useState<BoundedSetting>(emptySetting);
   const [churn, setChurn] = React.useState<BoundedSetting>(emptySetting);
+  const [frequentNight, setFrequentNight] = React.useState<BoundedSetting>(emptySetting);
+  const [frequentTwoDay, setFrequentTwoDay] = React.useState<BoundedSetting>(emptySetting);
   // 行明细抽屉：整行可点 → 该客人账号完整字段（掩码手机号·中文状态·中文日期）。
   const [detail, setDetail] = React.useState<{ title: string; fields: RowDetailField[] } | null>(null);
 
@@ -89,6 +94,10 @@ export function CustomerAccountsPage(props: AdminPageProps) {
     api.get<{ durationDays: number; minDays: number | null; maxDays: number | null }>(`/api/v1/customer-restriction-settings/${encodeURIComponent(project)}`)
       .then((s) => setRestriction({ value: String(s.durationDays), min: s.minDays == null ? "" : String(s.minDays), max: s.maxDays == null ? "" : String(s.maxDays) }))
       .catch(() => setRestriction(emptySetting));
+    api.get<{ nightThreshold: number; nightMin: number | null; nightMax: number | null; twoDayThreshold: number; twoDayMin: number | null;
+      twoDayMax: number | null }>(`/api/v1/customer-frequent-entry-alert-settings/${encodeURIComponent(project)}`)
+      .then((s) => { setFrequentNight(bounded(s.nightThreshold, s.nightMin, s.nightMax)); setFrequentTwoDay(bounded(s.twoDayThreshold, s.twoDayMin, s.twoDayMax)); })
+      .catch(() => { setFrequentNight(emptySetting); setFrequentTwoDay(emptySetting); });
   }, [api, project]);
 
   function openAccountDetail(row: CustomerAccountRow) {
@@ -168,8 +177,8 @@ export function CustomerAccountsPage(props: AdminPageProps) {
       { idempotencyKey: key(`customer-blacklist-${decision}`) }, () => loadRequests());
   }
 
-  function saveBounded(form: BoundedSetting, names: [string, string, string], label: string, action: string, path: string) {
-    const numbers = [form.value, form.min, form.max].map((v) => v.trim());
+  function saveBounded(forms: BoundedSetting[], names: string[], label: string, action: string, path: string) {
+    const numbers = forms.flatMap((form) => [form.value, form.min, form.max]).map((v) => v.trim());
     if (numbers.some((v) => v === "" || !Number.isInteger(Number(v)))) {
       setGlobalError(`${label}须同时填写值及上下限（整数）`);
       return;
@@ -318,16 +327,28 @@ export function CustomerAccountsPage(props: AdminPageProps) {
         {boundedInputs(restriction, setRestriction, "受限天数", "customer-restriction-inputs")}
         <PermissionButton permissionsState={effectivePermissions} permissions={MANAGE} data-testid="customer-restriction-save"
           disabled={!project}
-          onClick={() => saveBounded(restriction, ["durationDays", "minDays", "maxDays"], "受限时长", "customer_restriction_setting_saved",
+          onClick={() => saveBounded([restriction], ["durationDays", "minDays", "maxDays"], "受限时长", "customer_restriction_setting_saved",
             `/api/v1/customer-restriction-settings/${encodeURIComponent(project)}`)}>
           保存本项目受限时长
+        </PermissionButton>
+      </div>
+      <div className="admin-inline-form" data-testid="customer-frequent-entry-setting">
+        <span>高频出入场预警阈值（次，本项目；一晚＝一个营业日，达到即提示楼宇保安团队调阅录像、不阻断入场）</span>
+        {boundedInputs(frequentNight, setFrequentNight, "一晚出入阈值", "customer-frequent-night-inputs")}
+        {boundedInputs(frequentTwoDay, setFrequentTwoDay, "连续两日出入阈值", "customer-frequent-two-day-inputs")}
+        <PermissionButton permissionsState={effectivePermissions} permissions={MANAGE} data-testid="customer-frequent-entry-save"
+          disabled={!project}
+          onClick={() => saveBounded([frequentNight, frequentTwoDay],
+            ["nightThreshold", "nightMin", "nightMax", "twoDayThreshold", "twoDayMin", "twoDayMax"], "出入阈值",
+            "customer_frequent_entry_alert_setting_saved", `/api/v1/customer-frequent-entry-alert-settings/${encodeURIComponent(project)}`)}>
+          保存本项目出入阈值
         </PermissionButton>
       </div>
       <div className="admin-inline-form" data-testid="customer-churn-setting">
         <span>同号一年内注销与注册合计次数上限（全平台，超过即提示风控、不阻断）</span>
         {boundedInputs(churn, setChurn, "次数上限", "customer-churn-inputs")}
         <PermissionButton permissionsState={effectivePermissions} permissions={MANAGE} data-testid="customer-churn-save"
-          onClick={() => saveBounded(churn, ["threshold", "minThreshold", "maxThreshold"], "次数上限", "customer_churn_alert_setting_saved",
+          onClick={() => saveBounded([churn], ["threshold", "minThreshold", "maxThreshold"], "次数上限", "customer_churn_alert_setting_saved",
             "/api/v1/customer-churn-alert-setting")}>
           保存次数上限
         </PermissionButton>

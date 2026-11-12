@@ -1,10 +1,10 @@
-# 票务通票、权益、核销与结算开发设计 V0.13
+# 票务通票、权益、核销与结算开发设计 V0.14
 
 > **核销口径**：核销记录只有成功／拒绝（规则不允许）／失败（设备或网络原因）／已冲正／待复核／异常六态。检票环节内部扫码即核销，不设先校验、后确认的两次操作，也不设中间态；系统不提供人工放行。
 
 > **口径修订（2026-08-06 R10）：「场次容量」已废止**——BSM「容量控制」条 明确「**只按单个游乐项目的实时在玩人数控制容量，不再按场次/时段或点位/设备另设容量；排队人数不占用容量**」（DEC-R5-2026-08-04-04；R8 用户裁决 D-02）。本文原「场次容量」一律改称「**项目容量（实时在玩人数）**」；双阈值不变（运营容量软上限告警放行、安全容量硬上限阻断并自动停运）。仍按场次/时段或点位/设备维度罗列的页面、接口、组件与字段只作历史结构参考，容量口径一律以本条为准，相关字段待代码轮下线，期间不得据以新增受控维度。
 
-> 版本：V0.13 ｜ 最后更新：2026-11-03 ｜ 覆盖迁移基线：见各小节迁移号（当前仓库最新 V385）｜ 状态：现行
+> 版本：V0.14 ｜ 最后更新：2026-11-11 ｜ 覆盖迁移基线：见各小节迁移号（当前仓库最新 V385）｜ 状态：现行
 > 新功能承接见 docs/v099-v124-feature-implementation-and-acceptance-spec-v0.1.md
 > <!-- 文档goalP3(2026-06-20)：补版本/日期/覆盖迁移头，未改正文 -->
 
@@ -176,7 +176,7 @@ erDiagram
 - 退款按**票实例**判断：一张「票」= 一行 `ticket_instances`，一张票可拆出一至多行通过 `issued_entitlements.parent_ticket_id` 归属的权益；多人票人数和一人多次票次数属于票及其子权益属性，不得把单个权益行当成一张票。普通退款只允许发生在订单完全未核销时；门票或权益一经开始核销（含部分核销），除通票安全例外外，该订单不得形成“部分核销 + 部分退款”。
   - **实现约束**：`TicketRefundService.requestRefund` 的 `resolveRefundInstances` 解析 `ticket_instance_ids` 前须先检查订单是否存在任何核销事实；订单完全未核销时，`ticket_refund_lines` 才可展开所选 `ticket_instances` 的全部 `issued_entitlements` 做冲正和金额拆分。
   - **当前积分耦合缺口**：现行 `TicketVerificationService` / `LoyaltyService` 仍直接按订单核销比例确认积分。业务边界应改为票务只提交核销人次事实，由积分域按已生效票务规则计算；当前代码不得反向成为业务规则。
-- 门票到期生命周期（F-TXN-03，piece②）：系统定时任务 `TicketingService.processExpiredPaidEntitlements`（按权益 `valid_to < now` 实时判定，由 `TicketOrderExpiryJob` 触发、开关 `ticket.order.expiry.scheduled.enabled` 默认关）——
+- 门票到期生命周期（F-TXN-03，piece②）：系统定时任务 `TicketingService.processExpiredPaidEntitlements`（按权益 `valid_to < now` 实时判定，父票本场（订单综合体本营业日）已有入场类核销成功的权益先剔除、场次结束后下一轮再处理（第十八批 AH 段 239-R2），由 `TicketOrderExpiryJob` 触发、开关 `ticket.order.expiry.scheduled.enabled` 默认关）——
   - **到期不退款（业务 HTML 为准）**：到期未核销款先扣一次通路费，经第三方渠道售出的再扣一次销售渠道费，再扣一次票务积分发行成本，余额按票种经营域归属。目标业务态只允许「已过期」；当前 `processExpiredPaidEntitlements` / `forfeitEntitlement` 实际写入技术值 `forfeited`，是待修实现缺口，不得把该值解释为第七个票/权益业务状态。
   - **~~到期按票实例自动退款（2026-06-29 口径）~~ 已废止（2026-08-03）**：该口径把「到期未用」当成了退款理由，与上面两条 HTML 原文直接冲突。`TicketRefundService.autoRefundExpiredWholeTickets` 已随之删除（删前全仓 grep 确认零调用点、`npm run verify:tenant-isolation` PASS）。票种 `refundable` 只表示「**客人可申请**整票退款」，勾选与否都不影响到期处置；客人仍走人工申请 → 审批 → 确认拨付的退款链。后台勾选框与 OpenAPI `refundable` 描述已同步去掉「到期未用自动退」。
   - **退款在途与到期并行**：退款申请使用独立的 `usage_blocked`/`block_reason` 可用性阻断字段，票和权益业务状态仍只取六态。到期任务可置 `expired`，退款流程按退款单状态继续处理，不以新增 `refund_pending` 或 `forfeited` 票/权益状态承载。
@@ -466,7 +466,7 @@ sequenceDiagram
 3. 若涉及已核销权益，除通票安全例外外直接拒绝退款；核销冲正只撤销核销事实，不形成普通退款入口。
 4. 以独立可用性阻断字段阻止退款期间继续核销，不新增票/权益业务状态。
 5. 人工申请、额度内自助和系统批量三条发起路径都进入同一授权与复核链，申请人不得审批自己的申请；审批通过（`approved`）= 已批准并已发起不可逆兑付：设置退款处理阻断、回补限量票名额、发打款拨付事件；此时**尚未**计入「已退金额」。
-6. 财务实际打款成功后走「确认拨付」（`POST /api/v1/ticketing/refunds/{refund_id}/confirm-payout`，`reason` 留痕原路退回结果）置 `success`；退款到此才是最终完成态，才更新订单/票/权益的对外「已退」口径并计入结算冲正。
+6. 财务实际打款成功后走「确认拨付」（`POST /api/v1/ticketing/refunds/{refund_id}/confirm-payout`，`reason` 为原路退回结果，去首尾空白后写入退款单 `payout_result` 并记入成功留痕 `ticket_refund.payout_confirmed` 的 `metadata.payout_result`，第十八批 AH 段 256-R1、V620）置 `success`；退款到此才是最终完成态，才更新订单/票/权益的对外「已退」口径并计入结算冲正。
 7. 对已生成结算明细做冲正。
 8. 写入退款、冲正、权益状态变化事件。
 
@@ -834,8 +834,8 @@ Java/Flyway 主链已经存在；本节只记录现行表的字段缺口，以�
 | `GET` | `/api/v1/ticketing/tickets/{ticket_id}/credential` | 票务域查询票凭证 |
 | `POST` | `/api/v1/ticketing/refunds` | 申请退款 |
 | `POST` | `/api/v1/ticketing/refunds/{refund_id}/approve` | 审批退款（到 `approved`，尚未计入已退金额） |
-| `POST` | `/api/v1/ticketing/refunds/{refund_id}/confirm-payout` | 确认拨付（财务实际打款后 `approved→success`，`reason` 填原路退回结果） |
-| `GET` | `/api/v1/ticketing/refunds` | 查询退款单台账（后台「待确认拨付」看板数据源） |
+| `POST` | `/api/v1/ticketing/refunds/{refund_id}/confirm-payout` | 确认拨付（财务实际打款后 `approved→success`，`reason` 填原路退回结果，写入退款单 `payout_result` 并记入成功留痕） |
+| `GET` | `/api/v1/ticketing/refunds` | 查询退款单台账（后台「待确认拨付」看板数据源；每行带 `payout_result`） |
 
 说明：以上接口只服务官方 App/小程序的客人自助购票和订单查询，不提供工作人员平板代客购票入口。
 
@@ -1366,6 +1366,7 @@ com.complex.ticketing
 
 | 日期 | 类型 | 位置 | 内容 | 原因/依据 |
 |---|---|---|---|---|
+| 2026-11-11 | 改 | §4.2 门票到期生命周期、§5.6、§7.2/全文版本 | 版本升至 V0.14；第十八批 AH 段第 239 条 239-R2：到期作废作业剔除父票本场已检票的权益，场次结束后下一轮再处理；第 256 条 256-R1：确认拨付的原路退回结果写入退款单 `payout_result` 并记入成功留痕，退款台账每行返回 `payout_result`（V620） | ENUM:46「……一经完成检票环节……该票即绑定至当前场次，其全部权益的可用窗口收窄为该场次……」；BSM:806「系统完整记录……原路退回结果……」 |
 | 2026-11-03 | 改 | §4.5/全文版本 | 版本升至 V0.13；第十八批 P 段第 134 条同步：CG-05 已落地说明改为在线规则拒绝落 rejected 记录（业务回滚后另起事务写入、不扣次），规则拒绝码补 `VENUE_NOT_IN_SESSION`、`ENTRY_PASS_PAST_SESSION_VOID`、`AMUSEMENT_NO_OPEN_SESSION` | docs/decisions/2026-10-18-cg-pending-decisions.md 第 46 项「正常在线核销的业务规则拒绝也记录为rejected并留痕；既有在线核销原则不变。」 |
 | 2026-11-03 | 改 | §4.5/全文版本 | 版本升至 V0.12；第十八批 O 段第 129 条同步：CG-05 已落地说明删去终端离线同步落记录一句，当前实现缺口注明终端同步 `offline_verification` 入口已删除 | BSM:800「……核销必须在线、不做离线核销。……」 |
 | 2026-08-30 | 改 | 文首/§5.3/§5.5–§5.7/全文版本 | 版本升至 V0.11；同步页内版本横幅；结算交易改为追加不可变事实；退款守卫改为目标实现并对齐现行错误码 | M03 Grok Build FULL3 修复切片复审 |

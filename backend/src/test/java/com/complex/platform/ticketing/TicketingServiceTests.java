@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.10
+// 文件版本：V0.11
 
 // 文件版本：V0.03
 
@@ -299,23 +299,41 @@ class TicketingServiceTests {
 
     /** K17 用例夹具：某家酒吧的入场 + 可选赠酒，绑到同一张票上。 */
     private void bindBarEntitlements(String ticketTypeId, String barMerchantId, String tag, int giftCups) {
+        bindBarEntry(ticketTypeId, barMerchantId, tag, 1);
+        if (giftCups > 0) {
+            // V376：赠送类绑定必须显式标成本承担方（漏标拒保存），夹具按改造前唯一行为标平台出资型。
+            bindBarGift(ticketTypeId, barMerchantId, tag, giftCups, 1, 0L, "platform_funded");
+        }
+    }
+
+    /** 第十八批 AH 段 215-R1 夹具：某家酒吧的入场，次数 totalTimes（多次票每次检票开一个场次）。 */
+    private void bindBarEntry(String ticketTypeId, String barMerchantId, String tag, int totalTimes) {
         ticketingRepository.merchantTypes.put(barMerchantId, "bar");
         EntitlementTemplateRecord entry = service.createEntitlementTemplate(new EntitlementTemplateRequest(
                 "k17-tpl-entry-" + tag, "entry", List.of(), tag + " 入场", "admission", 1, 5000L, "active",
                 null, barMerchantId, null, null));
         service.bindTicketTypeEntitlement(ticketTypeId, new TicketTypeEntitlementRequest(
-                "k17-bind-entry-" + tag, "bind", List.of(), entry.id(), 1, 1, 5000L, "default", 1, 5000L));
-        if (giftCups > 0) {
-            ticketingRepository.barProducts.put("k17-prod-" + tag,
-                    new BarProductRefRecord("k17-prod-" + tag, barMerchantId, 4200L, null, false, "active"));
-            EntitlementTemplateRecord gift = service.createEntitlementTemplate(new EntitlementTemplateRequest(
-                    "k17-tpl-gift-" + tag, "gift", List.of(), tag + " 赠酒", "gift_drink", 1, 0L, "active",
-                    "k17-prod-" + tag, barMerchantId, null, null));
-            // V376：赠送类绑定必须显式标成本承担方（漏标拒保存），夹具按改造前唯一行为标平台出资型。
-            service.bindTicketTypeEntitlement(ticketTypeId, new TicketTypeEntitlementRequest(
-                    "k17-bind-gift-" + tag, "bind", List.of(), gift.id(), giftCups, 1, 0L, "default", 1, 0L,
-                    "platform_funded"));
-        }
+                "k17-bind-entry-" + tag, "bind", List.of(), entry.id(), 1, totalTimes, 5000L, "default", 1, 5000L));
+    }
+
+    /** 215-R1 夹具：某家酒吧的一行酒水（票面价 0 为赠饮，带票面价为兑换券，ENUM:36「酒水（赠饮/兑换券）」）。 */
+    private void bindBarGift(String ticketTypeId, String barMerchantId, String tag, int quantity, int totalTimes,
+                             long componentPriceCent, String costBearer) {
+        ticketingRepository.merchantTypes.put(barMerchantId, "bar");
+        ticketingRepository.barProducts.put("k17-prod-" + tag,
+                new BarProductRefRecord("k17-prod-" + tag, barMerchantId, 4200L, null, false, "active"));
+        EntitlementTemplateRecord gift = service.createEntitlementTemplate(new EntitlementTemplateRequest(
+                "k17-tpl-gift-" + tag, "gift", List.of(), tag + " 赠酒", "gift_drink", 1, 0L, "active",
+                "k17-prod-" + tag, barMerchantId, null, null));
+        service.bindTicketTypeEntitlement(ticketTypeId, new TicketTypeEntitlementRequest(
+                "k17-bind-gift-" + tag, "bind", List.of(), gift.id(), quantity, totalTimes, componentPriceCent, "default", 1,
+                componentPriceCent, costBearer));
+    }
+
+    private void assertPublishRejected(String ticketTypeId, String key, String code) {
+        assertThatThrownBy(() -> service.publishTicketType(ticketTypeId,
+                new StatusChangeRequest(key, "publish", "ready", List.of())))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo(code));
     }
 
     @Test
@@ -350,15 +368,102 @@ class TicketingServiceTests {
                         org.assertj.core.groups.Tuple.tuple("mch_bar_d", 2));
     }
 
-    @Test
-    void publishDoesNotRequireGiftDrinksOnAnOrdinaryTicketWithoutAnyGift() {
-        // 普通门票本来就不含赠酒，卡它只会让运营连普通票都发不出去 → 本条不适用。
-        TicketTypeRecord ticket = createTicketType("k17-plain");
-        bindBarEntitlements(ticket.id(), "mch_bar_e", "E", 0);
+    // ===== 第十八批 AH 段 215-R1（ENUM:34「一张酒吧通票或跨域组合通票覆盖的每一家酒吧，赠酒杯数不得低于后台配置的最低赠酒杯数……
+    //   低于该下限的票种不得发布上架」「该最低赠酒杯数属于票面强制要求提供的权益，一律记为域主管公司出资」；ENUM:46「该窗口内附带权益按完整一份配足」）=====
 
-        assertThat(service.publishTicketType(ticket.id(),
-                new StatusChangeRequest("k17-pub-3", "publish", "ready", List.of())).status())
+    @Test
+    void publishBlocksPassCoveringBarWithoutAnyGiftDrink() {
+        // 通票覆盖了 E 吧却一杯赠酒都没有：低于出厂 1 杯，不得发布（原「普通门票不含赠酒放行」口径与 ENUM:34 相反）。
+        TicketTypeRecord pass = createTicketType("k17-plain");
+        bindBarEntitlements(pass.id(), "mch_bar_e", "E", 0);
+
+        assertPublishRejected(pass.id(), "k17-pub-3", "PASS_BAR_GIFT_COVERAGE_INSUFFICIENT");
+    }
+
+    @Test
+    void publishAllowsSingleBarTicketWithoutGiftDrink() {
+        // ENUM:34 只说酒吧通票或跨域组合通票：单店票（bar_id＝该吧）不套通票赠酒下限。
+        registerBar("mch_bar_e", "单店酒吧");
+        TicketTypeRecord single = service.createTicketType(new TicketTypeRequest(
+                "k17-single", "create", List.of(), "单店入场票", "weekday_weekend_holiday", 9900L, 9900L, 9900L, false, "active",
+                null, null, true, "mch_bar_e", null, null, null));
+        bindBarEntitlements(single.id(), "mch_bar_e", "E", 0);
+
+        assertThat(service.publishTicketType(single.id(),
+                new StatusChangeRequest("k17-pub-single", "publish", "ready", List.of())).status())
                 .isEqualTo("published");
+    }
+
+    @Test
+    void publishBlocksPassWhoseFloorCupsAreOnlyMerchantConcession() {
+        // BSM:1033「只有商户主动申请并书面确认让利的权益才记为商户让利」：最低杯数以内须平台出资。
+        TicketTypeRecord pass = createTicketType("k215-concession");
+        bindBarEntry(pass.id(), "mch_bar_f", "F", 1);
+        bindBarGift(pass.id(), "mch_bar_f", "F", 1, 1, 0L, "merchant_concession");
+
+        assertPublishRejected(pass.id(), "k215-pub-1", "PASS_BAR_GIFT_FLOOR_NOT_PLATFORM_FUNDED");
+    }
+
+    @Test
+    void publishAllowsPassWithPlatformFloorCupPlusConcessionExtra() {
+        // 下限以内 1 杯平台出资，超出下限的 1 杯可标商户让利。
+        TicketTypeRecord pass = createTicketType("k215-extra");
+        bindBarEntry(pass.id(), "mch_bar_g", "G", 1);
+        bindBarGift(pass.id(), "mch_bar_g", "G1", 1, 1, 0L, "platform_funded");
+        bindBarGift(pass.id(), "mch_bar_g", "G2", 1, 1, 0L, "merchant_concession");
+
+        assertThat(service.publishTicketType(pass.id(),
+                new StatusChangeRequest("k215-pub-2", "publish", "ready", List.of())).status()).isEqualTo("published");
+    }
+
+    @Test
+    void publishBlocksPassWhoseOnlyDrinkIsPricedVoucher() {
+        // ENUM:36「酒水（赠饮/兑换券）」：带票面价的兑换券不是赠酒，不计入最低赠酒杯数。
+        TicketTypeRecord pass = createTicketType("k215-voucher");
+        bindBarEntry(pass.id(), "mch_bar_h", "H", 1);
+        bindBarGift(pass.id(), "mch_bar_h", "H", 1, 1, 3000L, null);
+
+        assertPublishRejected(pass.id(), "k215-pub-3", "PASS_BAR_GIFT_COVERAGE_INSUFFICIENT");
+    }
+
+    @Test
+    void publishBlocksMultiVisitPassWithFewerCupsThanVisits() {
+        // ENUM:46 多次票每次检票开一个场次、附带权益按完整一份配足：入场 3 次至少 3 杯，赠 2 杯不得发布。
+        TicketTypeRecord pass = createTicketType("k215-visits");
+        bindBarEntry(pass.id(), "mch_bar_i", "I", 3);
+        bindBarGift(pass.id(), "mch_bar_i", "I", 2, 1, 0L, "platform_funded");
+
+        assertThatThrownBy(() -> service.publishTicketType(pass.id(),
+                new StatusChangeRequest("k215-pub-4", "publish", "ready", List.of())))
+                .isInstanceOfSatisfying(ApiException.class, e -> {
+                    assertThat(e.code()).isEqualTo("PASS_BAR_GIFT_COVERAGE_INSUFFICIENT");
+                    assertThat(e.getMessage()).contains("需 3 杯");
+                });
+    }
+
+    @Test
+    void giftCoverageCountsTotalTimesAsCups() {
+        // BSM:1032「各酒吧分别赠几杯在售票时写明票面」：一行 1 份、次数 3 的赠酒，票面写 3 杯。
+        TicketTypeRecord pass = createTicketType("k215-cups");
+        bindBarEntry(pass.id(), "mch_bar_j", "J", 1);
+        bindBarGift(pass.id(), "mch_bar_j", "J", 1, 3, 0L, "platform_funded");
+
+        assertThat(service.listGiftCoverage(pass.id()).items())
+                .extracting(TicketTypeGiftCoverageRow::barId, TicketTypeGiftCoverageRow::cups, TicketTypeGiftCoverageRow::barTotalCups)
+                .containsExactly(org.assertj.core.groups.Tuple.tuple("mch_bar_j", 3, 3));
+    }
+
+    @Test
+    void bindingBarEntryWithoutGiftOntoPublishedPassReturnsItToDraft() {
+        // 已上架通票新增一家酒吧入场却漏配赠酒，不得继续挂售（同 V369 改组成退回草稿）。
+        TicketTypeRecord pass = createTicketType("k215-draft");
+        bindBarEntitlements(pass.id(), "mch_bar_k", "K", 1);
+        assertThat(service.publishTicketType(pass.id(),
+                new StatusChangeRequest("k215-pub-5", "publish", "ready", List.of())).status()).isEqualTo("published");
+
+        bindBarEntry(pass.id(), "mch_bar_l", "L", 1);
+
+        assertThat(ticketingRepository.findTicketTypeById(pass.id()).orElseThrow().status()).isEqualTo("draft");
     }
 
     // ===== V376（2026-08-01 拍板）：赠送权益成本承担方必填，漏标拒保存/拒发布 =====
@@ -3966,7 +4071,8 @@ class TicketingServiceTests {
                         return template == null ? null : new TicketTypeProviderEntitlementRow(
                                 template.id(), template.name(), template.entitlementType(), template.merchantId(),
                                 template.merchantId(), merchantTypes.get(template.merchantId()),
-                                binding.quantity(), binding.numPeople());
+                                binding.quantity(), binding.numPeople(), binding.totalTimes(), binding.costBearer(),
+                                binding.componentPriceCent());
                     })
                     .filter(java.util.Objects::nonNull)
                     .toList();
@@ -4217,6 +4323,18 @@ class TicketingServiceTests {
         }
 
         @Override
+        public boolean hasVerifiedTicketEntrySince(String parentTicketId, java.time.Instant since) {
+            // 第十八批 AH 段 239-R1：同票任一人份，其余同 hasVerifiedEntrySince。
+            return parentTicketId != null && verifications.values().stream().anyMatch(v -> {
+                IssuedEntitlementRecord e = issuedEntitlements.get(v.entitlementId());
+                return e != null && parentTicketId.equals(e.parentTicketId())
+                        && (java.util.Set.of("ticket", "entry", "admission").contains(e.entitlementType())
+                                || e.entitlementType().startsWith("amusement"))
+                        && "success".equals(v.status()) && !v.createdAt().isBefore(since);
+            });
+        }
+
+        @Override
         public int maxEntryTotalTimes(String parentTicketId, int slotIndex) {
             return issuedEntitlements.values().stream()
                     .filter(e -> parentTicketId.equals(e.parentTicketId()) && e.slotIndex() == slotIndex
@@ -4439,14 +4557,15 @@ class TicketingServiceTests {
         }
 
         @Override
-        public int markTicketRefundSucceeded(String refundId, java.time.Instant succeededAt) {
+        public int markTicketRefundSucceeded(String refundId, java.time.Instant succeededAt, String payoutResult) {
             TicketRefundRecord r = refunds.get(refundId);
             if (r == null || !"approved".equals(r.status())) {
                 return 0;
             }
             refunds.put(refundId, new TicketRefundRecord(
                     r.id(), r.targetId(), r.refundAmountCent(), r.reason(), r.refundChannel(),
-                    "success", r.requestedBy(), r.approvedBy(), r.approvedAt(), r.createdAt(), succeededAt, r.merchantId()));
+                    "success", r.requestedBy(), r.approvedBy(), r.approvedAt(), r.createdAt(), succeededAt, r.merchantId())
+                    .withPayoutResult(payoutResult));
             return 1;
         }
 

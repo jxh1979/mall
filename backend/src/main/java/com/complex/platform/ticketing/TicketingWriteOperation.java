@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.05
+// 文件版本：V0.06
 
 import com.complex.platform.evidence.AuditedOperation;
 
@@ -34,6 +34,9 @@ enum TicketingWriteOperation implements AuditedOperation {
     // V369 改票种售价/折扣(综合/联合通票售价自动算 + 凑整误差闸):保存当场比对允许误差,超出即拒。
     UPDATE_TICKET_TYPE_PRICING("ticket_product.pricing_changed", "ticket_product.pricing_change_failed", "ticket.product.manage", "ticket_type"),
     PUBLISH_TICKET_TYPE("ticket_price.published", "ticket_price.publish_failed", "ticket.product.manage", "ticket_type"),
+    // 第十八批 AH 段 215-R2：按票种改最低赠酒杯数（ENUM:34「按票种可配……须同时配置上下限」），留痕记改前改后。
+    CONFIGURE_TICKET_TYPE_MIN_GIFT_CUPS("ticket_type.min_gift_cups_configured", "ticket_type.min_gift_cups_config_failed",
+            "ticket.product.manage", "ticket_type"),
     REQUEST_TICKET_REFUND("ticket_refund.requested", "ticket_refund.request_failed", "ticket.refund.request", "ticket_refund"),
     APPROVE_TICKET_REFUND("ticket_refund.approved", "ticket_refund.approve_failed", "ticket.refund.approve", "ticket_refund"),
     REJECT_TICKET_REFUND("ticket_refund.rejected", "ticket_refund.reject_failed", "ticket.refund.approve", "ticket_refund"),

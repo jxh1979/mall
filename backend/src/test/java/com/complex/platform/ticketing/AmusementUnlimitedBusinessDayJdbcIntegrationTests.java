@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static org.assertj.core.api.Assertions.*;
 import com.complex.platform.amusement.*;
@@ -127,6 +127,26 @@ class AmusementUnlimitedBusinessDayJdbcIntegrationTests {
                 String.class,entitlement)).isEqualTo("reversed");
         assertThat(jdbc.queryForObject("SELECT first_ticket_verification_id FROM entitlement_business_day_activations WHERE entitlement_id=?",
                 String.class,entitlement)).isEqualTo(firstTicket);
+    }
+
+    // 第十八批 AH 段第 239 条 239-R1（ENUM:46「上述有效期类型决定的是「这张票在多长时间内可以开始使用」；一经完成检票环节……其全部权益的可用窗口
+    // 收窄为该场次」；BSM:800「该票所含的各项权益（各酒吧入场、酒水赠饮、游乐……），只能在完成检票环节所在的那一个场次内核销」）：游乐票本营业日已入场后
+    // 票面有效期到点，出场再入场仍放行（day_replay）；把本场入场挪到上一营业日（模拟新场次）后再入场 409 ENTITLEMENT_EXPIRED。
+    // 修复前到点后再入场即 409 ENTITLEMENT_EXPIRED，放行断言即红。
+    @Test void admittedTicketReentersAfterValidToWithinItsBusinessDayButNotInANewOne() {
+        seed(2);
+        enter("first");
+        jdbc.update("UPDATE issued_entitlements SET valid_to=? WHERE id=?",java.sql.Timestamp.from(Instant.now().minusSeconds(1)),entitlement);
+        amusement.exitVerification(new AmusementExitRequest("exit_"+key,code,null,null,"gate",List.of()));
+        var again=new java.util.concurrent.atomic.AtomicReference<AmusementVerificationRecord>();
+        assertThatCode(()->again.set(enter("again"))).as("本场已入场的游乐票到点后同营业日再入场放行").doesNotThrowAnyException();
+        assertThat(again.get().failureReason()).isEqualTo("day_replay");
+        assertThat(used()).isEqualTo(1);
+        jdbc.update("UPDATE ticket_verifications SET created_at=created_at-interval '1 day' WHERE entitlement_id=?",entitlement);
+        amusement.exitVerification(new AmusementExitRequest("exit2_"+key,code,null,null,"gate",List.of()));
+        assertThatThrownBy(()->enter("third"))
+                .isInstanceOfSatisfying(com.complex.platform.common.api.ApiException.class,
+                    error->assertThat(error.code()).isEqualTo("ENTITLEMENT_EXPIRED"));
     }
 
     @Test void pendingRefundStillBlocksAnAlreadyActivatedDay() {

@@ -1,6 +1,6 @@
 package com.complex.terminal
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import com.sun.net.httpserver.HttpServer
 import java.net.InetSocketAddress
@@ -15,6 +15,12 @@ import kotlin.test.assertEquals
  * 一体机权益领取屏扫到的码分两路——券动态码走查券与核销，其余按门票权益走核销预览与核销（设备＝本机设备台账行、点位＝本机绑定点位）。
  */
 class KioskClaimTest {
+  // 第十八批 AH 段 217-R1（ENUM:36「餐饮券、零售券」；PGM:287「展示给用户的一切文字……必须全部为中文」）：后台组合配置可建零售券，领取屏显示中文。
+  @Test
+  fun retailEntitlementTypeShowsChinese() {
+    assertEquals("零售", entitlementTypeZh("retail"))
+  }
+
   @Test
   fun voucherDynamicCodesGoToVoucherAndOtherCodesToEntitlement() {
     assertEquals(ClaimTarget.VOUCHER, claimTarget("vrc_abc"))

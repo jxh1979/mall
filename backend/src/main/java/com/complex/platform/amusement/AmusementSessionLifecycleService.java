@@ -1,6 +1,6 @@
 package com.complex.platform.amusement;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -244,7 +244,7 @@ public class AmusementSessionLifecycleService {
             """,id,session.id(),session.projectId(),window.complexId(),window.versionId(),
                 java.sql.Date.valueOf(window.businessDate()),timestamp(window.startAt()),timestamp(window.endAt()),
                 mode,timestamp(session.endTime()),timestamp(at),actor,timestamp(now),reason,encode(evidenceIds),key,people);
-        if("early".equals(mode))createFollowups(id,session,entries,now,at,reason,window.complexId());
+        if("early".equals(mode))createFollowups(id,session,now,at,reason,window.complexId());
         jdbc.update("""
             UPDATE amusement_verifications SET released_at=?,release_source='session_end',release_source_id=?
              WHERE session_id=? AND direction='entry' AND verification_result='success' AND released_at IS NULL
@@ -263,9 +263,16 @@ public class AmusementSessionLifecycleService {
         return findEnding(id);
     }
 
-    private void createFollowups(String ending,AmusementSessionRecord session,List<Map<String,Object>> entries,Instant now,
+    private void createFollowups(String ending,AmusementSessionRecord session,Instant now,
             Instant at,String reason,String complexId) {
-        for(var entry:entries) {
+        // 18AH 复核修复：V619 起同一权益同场次可有多条未释放入场——入场待办按权益只建一条，取最新那条入场，与补偿取数
+        // （JdbcAmusementFaultCompensationRepository.listSessionEndAffectedShares 的 DISTINCT ON (e.id) … ORDER BY av.created_at DESC）
+        // 同一条，发放时 completeSessionEndFollowups 才能写回；无权益的入场照旧每条一条。
+        for(var entry:jdbc.queryForList("""
+            SELECT DISTINCT ON (COALESCE(entitlement_id,id)) id,entitlement_id FROM amusement_verifications
+             WHERE session_id=? AND direction='entry' AND verification_result='success' AND released_at IS NULL
+             ORDER BY COALESCE(entitlement_id,id),created_at DESC
+            """,session.id())) {
             String entitlement=(String)entry.get("entitlement_id");
             List<String> orders=entitlement==null?List.of():jdbc.queryForList(
                     "SELECT order_id FROM issued_entitlements WHERE id=?",String.class,entitlement);

@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -113,6 +113,9 @@ class TicketRefundStoredValueJdbcIntegrationTests {
         assertThat(approved.status()).isEqualTo("success");
         assertThat(jdbcTemplate.queryForObject("SELECT status FROM ticket_refunds WHERE id = ?", String.class, requested.id()))
                 .isEqualTo("success");
+        // 256-R1：储值笔当场回原卡的自动成功路径没有人工填写的原路退回结果，payout_result 为空。
+        assertThat(jdbcTemplate.queryForObject("SELECT payout_result FROM ticket_refunds WHERE id = ?", String.class, requested.id()))
+                .isNull();
         assertThat(account()).containsEntry("principal_cent", 5_100L).containsEntry("bonus_cent", 5_000L);
         Map<String, Object> reversal = jdbcTemplate.queryForMap(
                 "SELECT principal_cent, bonus_cent, original_txn_id FROM customer_stored_value_transactions WHERE account_id = ? AND txn_type = 'consume_reversal'",

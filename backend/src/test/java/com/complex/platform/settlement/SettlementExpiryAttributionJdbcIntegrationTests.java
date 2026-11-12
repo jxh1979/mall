@@ -1,6 +1,6 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
@@ -374,6 +374,82 @@ class SettlementExpiryAttributionJdbcIntegrationTests {
         assertThat(rows(absent)).as("票面到期再扫不重复").hasSize(1);
     }
 
+    // ─── 第十八批 AH 段 238-R2／239-R2：场次终结按营业日闭店处理 ──────────────────
+
+    /**
+     * 238-R2（BSM:800「一个场次＝一次开门到关门；跨夜场次以该场次的实际闭店时间为准，不按自然日切分」；ENUM:48「同票已开启的那个场次一经结束即永无法入场，
+     * 于该场次结束时按本条处理，不等票面有效期届满」）＋239-R2：两人票首场次键是营业日（无场次配置的票），第 2 人未入场、票面到期落在场次中途——
+     * 闭店前不处理，闭店后按「从未完成检票环节」处理、业务时刻＝该营业日闭店（出厂次日 07:00、所在地时区）。修复前取票面到期与次日零点较早者，闭店前即处理。
+     */
+    @Test
+    void multiPersonNoShowSlotOfBusinessDayKeyedSessionSettlesAtThatDaysClose() {
+        String p = project("ahmp");
+        String bar = merchant("bar", "bar");
+        LocalDate day = LocalDate.of(2012, 3, 1);
+        Instant close = day.plusDays(1).atTime(7, 0).atZone(com.complex.platform.common.LocalZone.ID).toInstant();
+        Tk t = ticket("t", p, "web", 2, close.minusSeconds(4 * 3600));
+        ent(t, "s1", 1, "entry", 1, 1, 5000, bar);
+        String absent = ent(t, "s2", 2, "entry", 1, 0, 5000, bar);
+        jdbc.update("UPDATE ticket_instances SET first_used_at = ?, first_session_key = ? WHERE id = ?",
+                Timestamp.from(T), day.toString(), t.parent());
+
+        expiryJob.expireUnverified(close.minusSeconds(3600));
+        assertThat(rows(absent)).as("票面已到期但场次未结束不处理").isEmpty();
+        expiryJob.expireUnverified(close.plusSeconds(3600));
+        assertThat(one(absent).get("unverified_category")).isEqualTo("never_checked_in");
+        assertThat(((Timestamp) one(absent).get("business_at")).toInstant()).isEqualTo(close);
+    }
+
+    /**
+     * 239-R2（ENUM:46「一经完成检票环节……该票即绑定至当前场次，其全部权益的可用窗口收窄为该场次」；ENUM:48「已完成检票环节（刷码核销成功）、但权益未在该场次内
+     * 核销的，按场次终结制作为未核销份额进入分账减除」）：单人票当营业日已入场、票面到期落在场次中途、赠饮未用——闭店前不出到期事实（客人本场仍可核），
+     * 闭店后记「场次终结未核销」、业务时刻＝该营业日闭店。修复前票面到期一过即记，闭店前断言即红。
+     */
+    @Test
+    void checkedInTicketsUnusedShareSettlesAtTheSessionCloseNotAtValidTo() {
+        String p = project("ahci");
+        String bar = merchant("bar", "bar");
+        LocalDate day = LocalDate.of(2012, 3, 1);
+        Instant close = day.plusDays(1).atTime(7, 0).atZone(com.complex.platform.common.LocalZone.ID).toInstant();
+        Tk t = ticket("t", p, "web", 1, close.minusSeconds(4 * 3600));
+        String entry = ent(t, "in", 1, "entry", 1, 1, 3000, bar);
+        String drink = ent(t, "drink", 1, "drink", 1, 0, 2000, bar);
+        entered(entry, p, bar, close.minusSeconds(6 * 3600));
+
+        expiryJob.expireUnverified(close.minusSeconds(3600));
+        assertThat(rows(drink)).as("本场未结束不处理").isEmpty();
+        expiryJob.expireUnverified(close.plusSeconds(3600));
+        assertThat(one(drink).get("unverified_category")).isEqualTo("session_ended");
+        assertThat(((Timestamp) one(drink).get("business_at")).toInstant()).isEqualTo(close);
+    }
+
+    /**
+     * 18AH 复核修复（ENUM:46「一经完成检票环节……该票即绑定至当前场次，其全部权益的可用窗口收窄为该场次」；BSM:778「同一场次内不同人可在不同时间分别入场」；
+     * BSM:800「场次结束时仍未核销的权益即行终结」）：本场按整张票判，与核销放行 TicketVerificationService.ticketCheckedInThisSession 同口径——两人票第 1 人票面到期前入场、
+     * 第 2 人票面到期后才入场（239-R1 放行），第 2 人份未用的赠饮闭店前不出到期事实，闭店后记「场次终结未核销」、业务时刻＝该营业日闭店。
+     * 修复前只看本人份自己的入场时刻，闭店前断言即红。
+     */
+    @Test
+    void secondPersonEnteringAfterValidToKeepsItsUnusedShareUntilTheSessionCloses() {
+        String p = project("ahc2");
+        String bar = merchant("bar", "bar");
+        LocalDate day = LocalDate.of(2012, 3, 1);
+        Instant close = day.plusDays(1).atTime(7, 0).atZone(com.complex.platform.common.LocalZone.ID).toInstant();
+        Instant validTo = close.minusSeconds(4 * 3600);
+        Tk t = ticket("t", p, "web", 2, validTo);
+        String first = ent(t, "in1", 1, "entry", 1, 1, 3000, bar);
+        String second = ent(t, "in2", 2, "entry", 1, 1, 3000, bar);
+        String drink = ent(t, "drink2", 2, "drink", 1, 0, 2000, bar);
+        entered(first, p, bar, validTo.minusSeconds(1800));
+        entered(second, p, bar, validTo.plusSeconds(1800));
+
+        expiryJob.expireUnverified(close.minusSeconds(3600));
+        assertThat(rows(drink)).as("本场未结束不处理").isEmpty();
+        expiryJob.expireUnverified(close.plusSeconds(3600));
+        assertThat(one(drink).get("unverified_category")).isEqualTo("session_ended");
+        assertThat(((Timestamp) one(drink).get("business_at")).toInstant()).isEqualTo(close);
+    }
+
     // ─── 夹具 ────────────────────────────────────────────────────────────────
 
     private record Tk(String tag, String order, String parent, String type, String template, Instant validTo) {
@@ -455,6 +531,17 @@ class SettlementExpiryAttributionJdbcIntegrationTests {
                 id, t.type(), t.order(), t.template(), "c_" + id, type, merchant, total, used, at,
                 Timestamp.from(t.validTo()), at, at, allocated, t.parent(), slot);
         return id;
+    }
+
+    /** 第十八批 AH 段 239-R2：该人份一笔入场核销结算行（到期作业按它定入场营业日）。 */
+    private void entered(String ent, String project, String merchant, Instant at) {
+        Timestamp ts = Timestamp.from(at);
+        jdbc.update("""
+                INSERT INTO settlement_transactions (id, transaction_no, transaction_type, entitlement_id, verification_id, entitlement_type,
+                    verified_count, total_times, num_people, allocated_revenue_cent, verified_amount_cent, unverified_amount_cent,
+                    beneficiary_type, merchant_id, project_id, settlement_status, entitlement_valid_to, created_at, updated_at, business_at)
+                VALUES (?, ?, 'verification_settled', ?, ?, 'entry', 1, 1, 1, 3000, 3000, 0, 'merchant', ?, ?, 'draft', ?, ?, ?, ?)""",
+                "st_vs_" + ent, "ST-VS-" + ent, ent, "ver_" + ent, merchant, project, ts, ts, ts, ts);
     }
 
     private List<Map<String, Object>> rows(String ent) {

@@ -1,6 +1,6 @@
 package com.complex.platform.amusement;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import com.complex.platform.support.InMemoryAuditEventRepository;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -3184,6 +3184,10 @@ class AmusementServiceTests {
         @Override
         public boolean consumeEntitlement(String entitlementId) {
             FakeEntitlement entitlement = byId.get(entitlementId);
+            // 第十八批 AH 段 239-R1：票面到期由票务侧消费回调复核（替身没有场次记录，到期一律按本场未检票拒绝）。
+            if (entitlement != null && entitlement.validTo != null && Instant.now().isAfter(entitlement.validTo)) {
+                throw ApiException.conflict("ENTITLEMENT_EXPIRED", "该权益已过期");
+            }
             if (entitlement == null || entitlement.usedTimes >= entitlement.totalTimes) {
                 return false;
             }

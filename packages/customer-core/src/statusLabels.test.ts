@@ -1,4 +1,4 @@
-// 文件版本：V0.05
+// 文件版本：V0.06
 import { describe, it, expect } from "vitest";
 import { formatBusinessStatus } from "./statusLabels";
 
@@ -14,6 +14,8 @@ describe("formatBusinessStatus 新增枚举域中文化", () => {
   it("风险预警/主管复核/售票渠道翻中文", () => {
     expect(formatBusinessStatus("staff_behavior")).toBe("员工行为");
     expect(formatBusinessStatus("suspicious")).toBe("可疑");
+    // 第十八批 AH 段 218-R1：高频出入场预警类型（统一风控预警队列 alert_type）。
+    expect(formatBusinessStatus("ticket.frequent_entry")).toBe("高频出入场");
     expect(formatBusinessStatus("contract_violation")).toBe("合同违规");
     expect(formatBusinessStatus("web")).toBe("网页端");
     expect(formatBusinessStatus("miniapp")).toBe("小程序");

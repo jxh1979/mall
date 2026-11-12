@@ -1,6 +1,6 @@
 package com.complex.platform.common.api;
 
-// 文件版本：V0.41
+// 文件版本：V0.42
 
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -745,6 +745,19 @@ public final class FieldLabels {
         p("warning_months", "预警提前月数");
         p("warning_min_months", "预警提前月数下限");
         p("warning_max_months", "预警提前月数上限");
+        // 第十八批 AH 段第 218 条 218-R2 高频出入场预警阈值（BSM:800）。
+        p("night_threshold", "一晚出入阈值");
+        p("night_min", "一晚阈值下限");
+        p("night_max", "一晚阈值上限");
+        p("two_day_threshold", "连续两日出入阈值");
+        p("two_day_min", "连续两日阈值下限");
+        p("two_day_max", "连续两日阈值上限");
+        // 第十八批 AH 段第 215 条 215-R2 通票最低赠酒杯数（ENUM:34）。
+        p("min_gift_cups", "最低赠酒杯数");
+        p("min_gift_cups_lower", "最低赠酒杯数下限");
+        p("min_gift_cups_upper", "最低赠酒杯数上限");
+        // 第十八批 AH 段第 256 条 256-R1 门票退款确认拨付的原路退回结果（BSM:806）。
+        p("payout_result", "原路退回结果");
         p("reason_code", "原因编码");
         p("note", "备注");
         p("comment", "备注");

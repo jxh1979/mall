@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -13,12 +13,16 @@ import com.complex.platform.customer.CustomerRepository;
 import com.complex.platform.support.CustomerTicketPaymentFixture;
 import com.complex.platform.support.StaffRequestFixture;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -27,6 +31,8 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.mock.web.MockHttpServletRequest;
+import org.springframework.test.util.AopTestUtils;
+import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.test.web.servlet.request.RequestPostProcessor;
@@ -43,6 +49,9 @@ import org.springframework.transaction.annotation.Transactional;
  * 第十八批 S 段第 166 条：核销的设备纳管门控按设备号查纳管状态（核销请求带的是设备台账行 id）。
  * 第十八批 S 段第 165 条：多次票的酒水（赠饮）每场次（这家酒吧本营业日）只能核本场一份（总次数÷这家酒吧入场次数，至少 1）。
  * 第十八批 X 段第 196 条：酒吧入场与入园在同一场次内再次核销放行不扣次（落 success/session_reentry、不再计结算）。
+ * 第十八批 AH 段第 238 条：多人票场次键按订单综合体营业日，零点后同场次再入场与第二人首入放行；第 239 条：本场已检票的票票面有效期到点后
+ * 本场内再入场、附带权益与同票他人首入照常，到期作废作业留到场次结束。
+ * 第十八批 AH 段第 218 条：同票同人份一晚、连续两日入园次数达到综合体阈值即写高频出入场预警（酒吧入场不计），入场照常；阈值后台按项目配置。
  */
 @SpringBootTest(properties = {
         "spring.datasource.url=${SETTLE_TEST_DB_URL:jdbc:postgresql://127.0.0.1:5432/complex_test}",
@@ -59,6 +68,8 @@ class KioskEntitlementClaimJdbcTests {
     @Autowired private CustomerRepository customers;
     @Autowired private JdbcTicketingRepository ticketingRepository;
     @Autowired private com.complex.platform.common.BusinessDayResolver businessDays;
+    @Autowired private TicketVerificationService verificationService;
+    @Autowired private TicketingService ticketingService;
 
     private CustomerTicketPaymentFixture f;
     private String s;
@@ -87,6 +98,11 @@ class KioskEntitlementClaimJdbcTests {
                 "terminal.switch.manage", "mdm.device.manage", "mdm.violation.handle", "ticket.verify.reverse");
         staff = kiosk(staffs.staff("usr_kec_staff_" + s, "staff", f.projectId, bar, "customer.voucher.redeem", "verification.execute"));
         keeper = staffs.staff("usr_kec_keep_" + s, "staff", f.projectId, bar, "inventory.trace_code.register");
+    }
+
+    @AfterEach
+    void systemClock() {
+        at(null);
     }
 
     @Test
@@ -382,6 +398,83 @@ class KioskEntitlementClaimJdbcTests {
         assertThat(usedTimes(park)).isEqualTo(2);
     }
 
+    // 第十八批 AH 段第 238 条 238-R1（BSM:800「一个场次＝一次开门到关门；跨夜场次以该场次的实际闭店时间为准，不按自然日切分」「同一场次内可以不限次数进出」；
+    // ENUM:46「该场次内可不限次数进出……多人票每人同理，但各人仍须在同一场次内完成入场」；BSM:780「其中「当天」「每天」一律按营业日计算……时区一律取项目所在地时间，
+    // 禁止使用服务器默认时区」）：三人票入园（订单锁定本综合体；已批准营业日版本 10:00 起、次日 07:00 闭店，所在地时区取本机时区，使服务器自然日与当地日历一致），
+    // 固定时钟当地 23:30 第 1 人入场，次日 00:40 第 1 人再入场放行（success/session_reentry）、第 2 人首入成功，首场次键是营业日；次日 10:30（下一营业日）
+    // 第 3 人首入 409 MULTI_PERSON_CROSS_SESSION_FORBIDDEN。修复前场次键取自然日，00:40 再入场 409，再入场断言即红。
+    @Test
+    void multiPersonTicketReentersAndSecondPersonEntersAfterMidnightInTheSameBusinessDay() throws Exception {
+        ZoneId zone = ZoneId.systemDefault();
+        approvedBusinessDay(zone);
+        String deviceRow = bindKioskToBar("kec-ah238-");
+        LocalDate day = LocalDate.of(2031, 1, 15);
+        String park = seedMultiPersonParkEntry(3, day.atStartOfDay(zone).toInstant());
+        at(day.atTime(23, 30).atZone(zone).toInstant());
+        verifyOk("kec-ah238-p1-", park + "-1", deviceRow);
+        at(day.plusDays(1).atTime(0, 40).atZone(zone).toInstant());
+        expectReentry("kec-ah238-p1again-", park + "-1", deviceRow);
+        verifyOk("kec-ah238-p2-", park + "-2", deviceRow);
+        assertThat(jdbc.queryForObject("SELECT first_session_key FROM ticket_instances WHERE id = ?", String.class, "ti_" + park))
+                .isEqualTo("2031-01-15");
+        at(day.plusDays(1).atTime(10, 30).atZone(zone).toInstant());
+        expectRejected("kec-ah238-p3-", park + "-3", deviceRow, "MULTI_PERSON_CROSS_SESSION_FORBIDDEN");
+    }
+
+    // 第十八批 AH 段第 239 条 239-R1（ENUM:46「上述有效期类型决定的是「这张票在多长时间内可以开始使用」；一经完成检票环节……该票即绑定至当前场次，
+    // 其全部权益的可用窗口收窄为该场次……该场次内可不限次数进出」）：本场已核这家酒吧入场后票面有效期到点，一体机员工按蛇形键再核入场放行
+    // （success/session_reentry）、预检放行、核赠饮成功；把本场核销挪到上一营业日（模拟新场次）后再核入场 409 ENTITLEMENT_EXPIRED。
+    // 修复前到点后再入场 409 ENTITLEMENT_EXPIRED，再入场断言即红。
+    @Test
+    void checkedInTicketReentersAndRedeemsGiftAfterValidToButCannotOpenANewSession() throws Exception {
+        String deviceRow = bindKioskToBar("kec-ah239a-");
+        String gift = seedGiftDrink(1, 1);
+        String entry = "kec-entry-" + s;
+        verifyOk("kec-ah239a-in1-", entry, deviceRow);
+        expireNow("ti_" + gift);
+        expectReentry("kec-ah239a-in2-", entry, deviceRow);
+        mockMvc.perform(post("/api/v1/ticketing/verifications/preview").with(staff)
+                        .contentType(MediaType.APPLICATION_JSON).content(verification("kec-ah239a-pre-" + s, entry, deviceRow)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.allowed").value(true));
+        verifyOk("kec-ah239a-gift-", gift, deviceRow);
+        jdbc.update("UPDATE ticket_verifications SET created_at = created_at - interval '1 day' WHERE entitlement_id = ?", "ent_" + entry);
+        expectRejected("kec-ah239a-in3-", entry, deviceRow, "ENTITLEMENT_EXPIRED");
+    }
+
+    // 239-R1（ENUM:46「其全部权益的可用窗口收窄为该场次」；BSM:778「同一场次内不同人可在不同时间分别入场」）：两人票入园第 1 人检票后票面有效期到点，
+    // 第 2 人同场次首入成功。修复前 409 ENTITLEMENT_EXPIRED 即红。
+    @Test
+    void secondPersonEntersTheOpenedSessionAfterValidTo() throws Exception {
+        String deviceRow = bindKioskToBar("kec-ah239b-");
+        String park = seedMultiPersonParkEntry(2, Instant.now());
+        verifyOk("kec-ah239b-p1-", park + "-1", deviceRow);
+        expireNow("ti_" + park);
+        verifyOk("kec-ah239b-p2-", park + "-2", deviceRow);
+    }
+
+    // 第十八批 AH 段第 239 条 239-R2（ENUM:48「同票已开启的那个场次一经结束即永无法入场，于该场次结束时按本条处理，不等票面有效期届满」；BSM:800「场次结束时
+    // 仍未核销的权益即行终结」）：本场已检票后票面有效期到点，到期作废作业不动本场未用的赠饮与同票第 2 人入园；把本场核销挪到上一营业日（场次已结束）
+    // 后再跑即作废。修复前作业当场作废，第一处 active 断言即红。
+    @Test
+    void expiryJobLeavesThisSessionsUnusedEntitlementsUntilTheSessionEnds() throws Exception {
+        String deviceRow = bindKioskToBar("kec-ah239c-");
+        String gift = seedGiftDrink(1, 1);
+        String park = seedMultiPersonParkEntry(2, Instant.now());
+        verifyOk("kec-ah239c-in-", "kec-entry-" + s, deviceRow);
+        verifyOk("kec-ah239c-p1-", park + "-1", deviceRow);
+        expireNow("ti_" + gift);
+        expireNow("ti_" + park);
+        ticketingService.processExpiredPaidEntitlements(Instant.now());
+        assertThat(entitlementStatus(gift)).as("本场未用的赠饮").isEqualTo("active");
+        assertThat(entitlementStatus(park + "-2")).as("同票第 2 人入园").isEqualTo("active");
+        jdbc.update("UPDATE ticket_verifications SET created_at = created_at - interval '1 day' WHERE entitlement_id IN (?, ?)",
+                "ent_kec-entry-" + s, "ent_" + park + "-1");
+        ticketingService.processExpiredPaidEntitlements(Instant.now());
+        assertThat(entitlementStatus(gift)).isEqualTo("forfeited");
+        assertThat(entitlementStatus(park + "-2")).isEqualTo("forfeited");
+    }
+
     // ---------- helpers ----------
 
     /** 管理员按后台真实请求把设备绑定为一体机（服务模式、按空间绑点位）并设所属酒吧，返回设备台账行 id。 */
@@ -529,6 +622,184 @@ class KioskEntitlementClaimJdbcTests {
                 bar, null, bar, entryTimes, 0, 0L, "active",
                 now.minusSeconds(60), now.plusSeconds(3600), now, now, 1, null,
                 null, null, null, null, parent, 1, null, null));
+        return code;
+    }
+
+    /** 第十八批 AH 段 238-R1：把核销取的「现在」定在 when（null 复原系统时钟）。 */
+    private void at(Instant when) {
+        Object target = AopTestUtils.getTargetObject(verificationService);
+        ReflectionTestUtils.setField(target, "clock", when == null ? Clock.systemUTC() : Clock.fixed(when, ZoneOffset.UTC));
+    }
+
+    /** 238-R1：本综合体已批准的营业日版本（起点 10:00、闭店次日 07:00），所在地时区 zone，2020 年起生效。 */
+    private void approvedBusinessDay(ZoneId zone) {
+        Instant effective = Instant.parse("2020-01-01T00:00:00Z");
+        jdbc.update("""
+                INSERT INTO amusement_business_day_configs(id,project_id,version,zone_id,cutoff_hour,min_cutoff_hour,max_cutoff_hour,
+                  close_hour,min_close_hour,max_close_hour,effective_at,status,reason,created_by,created_at,decided_by,decided_at)
+                VALUES(?,?,'V0.01',?,10,0,23,7,0,23,?,'approved','测试已批准版本','kec_requester',?,'usr_master',?)
+                """, "abd_kec_" + s, f.projectId, zone.getId(), java.sql.Timestamp.from(effective),
+                java.sql.Timestamp.from(effective.minusSeconds(7200)), java.sql.Timestamp.from(effective.minusSeconds(3600)));
+        businessDays.invalidate();
+    }
+
+    /** 239：该父票各权益票面有效期刚到点（1 秒前）。 */
+    private void expireNow(String parent) {
+        jdbc.update("UPDATE issued_entitlements SET valid_to = ? WHERE parent_ticket_id = ?",
+                java.sql.Timestamp.from(Instant.now().minusSeconds(1)), parent);
+    }
+
+    /** 规则不允许：409 与错误码。 */
+    private void expectRejected(String keyPrefix, String code, String deviceRow, String detailCode) throws Exception {
+        mockMvc.perform(post("/api/v1/ticketing/verifications").with(staff)
+                        .contentType(MediaType.APPLICATION_JSON).content(verification(keyPrefix + s, code, deviceRow)))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.detail_code").value(detailCode));
+    }
+
+    private String entitlementStatus(String code) {
+        return jdbc.queryForObject("SELECT status FROM issued_entitlements WHERE id = ?", String.class, "ent_" + code);
+    }
+
+    // 第十八批 AH 段第 218 条 218-R1（BSM:800「一晚出入次数或连续两日出入合计次数达到后台配置的阈值即触发核查（业务参数，按项目可配，出厂默认一晚 4 次、
+    // 连续两日合计 7 次……）……由系统自动预警，楼宇保安团队据预警调阅录像」；BSM:1657「预警只作提示与线索汇集，不自动阻断业务」）：一人入园票按员工端蛇形键，
+    // 固定时钟在下一营业日 14:00 核同一人份入园：第 3 次后没有高频出入场预警，第 4 次后恰一条（来源票务、关联父票、订单综合体、待处理），第 5 次仍一条，
+    // 入场都照常成功。修复前没有预警，第 4 次后的断言即红。
+    @Test
+    void fourthParkEntryOfOnePersonInOneBusinessDayRaisesOneFrequentEntryAlert() throws Exception {
+        String deviceRow = bindKioskToBar("kec-ah218a-");
+        String park = seedPersonParkEntry(1);
+        at(businessDayAt(1));
+        verifyOk("kec-ah218a-in1-", park, deviceRow);
+        expectReentry("kec-ah218a-in2-", park, deviceRow);
+        expectReentry("kec-ah218a-in3-", park, deviceRow);
+        assertThat(frequentEntryAlerts(park)).isEmpty();
+        expectReentry("kec-ah218a-in4-", park, deviceRow);
+        assertThat(frequentEntryAlerts(park)).containsExactly("ticketing/ti_" + park + "/" + f.projectId + "/open");
+        expectReentry("kec-ah218a-in5-", park, deviceRow);
+        assertThat(frequentEntryAlerts(park)).hasSize(1);
+    }
+
+    // 218-R1（BSM:800「「连续两日」指连续两个营业日，均不按自然日切分」）：本综合体一晚阈值配为 5、连续两日 7；同一人份前一营业日入园 3 次、本营业日 4 次
+    // （固定时钟两日各 14:00）→ 只出连续两日一条（一晚 4 次未达 5）。修复前没有预警即红。
+    @Test
+    void sevenEntriesOverTwoBusinessDaysRaiseOnlyTheTwoDayAlert() throws Exception {
+        String deviceRow = bindKioskToBar("kec-ah218c-");
+        String park = seedPersonParkEntry(2);
+        jdbc.update("INSERT INTO customer_frequent_entry_alert_settings (project_id, night_threshold, night_min, night_max,"
+                + " two_day_threshold, two_day_min, two_day_max) VALUES (?, 5, 1, 10, 7, 1, 14)", f.projectId);
+        at(businessDayAt(1));
+        verifyOk("kec-ah218c-d1in1-", park, deviceRow);
+        expectReentry("kec-ah218c-d1in2-", park, deviceRow);
+        expectReentry("kec-ah218c-d1in3-", park, deviceRow);
+        at(businessDayAt(2));
+        verifyOk("kec-ah218c-d2in1-", park, deviceRow);
+        expectReentry("kec-ah218c-d2in2-", park, deviceRow);
+        expectReentry("kec-ah218c-d2in3-", park, deviceRow);
+        expectReentry("kec-ah218c-d2in4-", park, deviceRow);
+        assertThat(jdbc.queryForList("SELECT summary FROM risk_alerts WHERE alert_type = 'ticket.frequent_entry' AND source_ref = ?",
+                String.class, "ti_" + park)).singleElement().asString().contains("连续两个营业日出入合计 7 次");
+    }
+
+    // 218-R1（BSM:800「完成检票环节指其中二维码刷码核销成功的那一刻，与各酒吧入场、各游乐项目入场等场内单点核销相区别」）：同一人份这家酒吧入场核 4 次
+    // （首次扣次、其后同场次再入场）不算出入场，不出预警。
+    @Test
+    void barAdmissionsAreNotCountedAsFrequentEntries() throws Exception {
+        String deviceRow = bindKioskToBar("kec-ah218b-");
+        String gift = seedGiftDrink(1, 1);
+        String entry = "kec-entry-" + s;
+        verifyOk("kec-ah218b-in1-", entry, deviceRow);
+        expectReentry("kec-ah218b-in2-", entry, deviceRow);
+        expectReentry("kec-ah218b-in3-", entry, deviceRow);
+        expectReentry("kec-ah218b-in4-", entry, deviceRow);
+        assertThat(frequentEntryAlerts(gift)).isEmpty();
+    }
+
+    // 218-R2（BSM:800「（业务参数，按项目可配，出厂默认一晚 4 次、连续两日合计 7 次，须同时配置上下限）」）：后台按蛇形键把本综合体一晚阈值配为 2（上下限 1～10）、
+    // 连续两日 7（1～14），同一营业日核同一人份入园 2 次即出一条预警。修复前没有配置入口，PUT 断言即红。
+    @Test
+    void projectNightThresholdConfiguredInAdminAppliesToParkEntries() throws Exception {
+        String deviceRow = bindKioskToBar("kec-ah218d-");
+        String park = seedPersonParkEntry(1);
+        RequestPostProcessor ops = new StaffRequestFixture(jdbc).staff("usr_kec_ops_" + s, "staff", f.projectId, null,
+                "customer.account.manage");
+        mockMvc.perform(put("/api/v1/customer-frequent-entry-alert-settings/" + f.projectId).with(ops)
+                        .contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(Map.of(
+                                "idempotency_key", "kec-ah218d-set-" + s, "night_threshold", 2, "night_min", 1, "night_max", 10,
+                                "two_day_threshold", 7, "two_day_min", 1, "two_day_max", 14))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.night_threshold").value(2));
+        at(businessDayAt(1));
+        verifyOk("kec-ah218d-in1-", park, deviceRow);
+        assertThat(frequentEntryAlerts(park)).isEmpty();
+        expectReentry("kec-ah218d-in2-", park, deviceRow);
+        assertThat(frequentEntryAlerts(park)).hasSize(1);
+    }
+
+    /** 218-R1：本综合体（无已批准版本按出厂 10:00 起）当前营业日之后第 days 个营业日的 14:00，远离营业日切点。 */
+    private Instant businessDayAt(int days) {
+        LocalDate today = businessDays.businessDate(f.projectId, null, Instant.now());
+        return businessDays.start(f.projectId, null, today.plusDays(days)).plusSeconds(4 * 3600);
+    }
+
+    /** 218-R1：该票（父票 ti_码）的高频出入场预警「来源/父票/综合体/状态」。 */
+    private List<String> frequentEntryAlerts(String code) {
+        return jdbc.queryForList("SELECT source_domain || '/' || source_ref || '/' || project_id || '/' || status FROM risk_alerts"
+                + " WHERE alert_type = 'ticket.frequent_entry' AND source_ref = ?", String.class, "ti_" + code);
+    }
+
+    /**
+     * 218-R1：一人入园票（父票一人；1 号人份一张入园权益，总次数 times；订单锁定本综合体；归属本吧以过员工商户范围），
+     * 有效期自现在前 1 分钟起 3 天，父票为 ti_码。
+     */
+    private String seedPersonParkEntry(int times) {
+        String code = "kec-person-" + s;
+        String typeId = "tt_" + code;
+        jdbc.update("INSERT INTO ticket_types (id, ticket_name, base_calendar_price_mode, stock_required, status, created_at, updated_at)"
+                + " VALUES (?, '一体机一人入园票', 'fixed', FALSE, 'active', now(), now())", typeId);
+        jdbc.update("INSERT INTO entitlement_templates (id, name, entitlement_type, default_total_times, default_value_cent, status,"
+                + " created_at, updated_at) VALUES (?, '入园', 'entry', 1, 0, 'active', now(), now())", "et_" + code);
+        Instant now = Instant.now();
+        ticketingRepository.saveTicketOrder(new TicketOrderRecord(
+                "order_" + code, "ON-" + code, "cust_" + code, typeId, null, 1, LocalDate.now(), "web", null, 0L, null, 0L, 0L,
+                "CNY", "paid", "issued", "created", now, now, null, null, null, f.projectId));
+        jdbc.update("INSERT INTO ticket_instances (id, ticket_no, order_id, ticket_type_id, seq_in_order, num_people, total_times,"
+                + " status, created_at, updated_at) VALUES (?, ?, ?, ?, 1, 1, ?, 'active', now(), now())",
+                "ti_" + code, "T-" + code, "order_" + code, typeId, times);
+        ticketingRepository.saveIssuedEntitlement(new IssuedEntitlementRecord(
+                "ent_" + code, code, typeId, "order_" + code, "et_" + code, "entry",
+                bar, null, null, times, 0, 0L, "active",
+                now.minusSeconds(60), now.plusSeconds(3 * 86_400), now, now, 1, null,
+                null, null, null, null, "ti_" + code, 1, null, null));
+        return code;
+    }
+
+    /**
+     * 238-R1／239：people 人入园票（订单锁定本综合体；归属本吧以过员工商户范围），每人份一张入园权益，码为「票码-人份序号」，
+     * 有效期自 from 前 1 分钟起 3 天。
+     */
+    private String seedMultiPersonParkEntry(int people, Instant from) {
+        String code = "kec-mp-" + s;
+        String typeId = "tt_" + code;
+        String parent = "ti_" + code;
+        jdbc.update("INSERT INTO ticket_types (id, ticket_name, base_calendar_price_mode, stock_required, status, created_at, updated_at)"
+                + " VALUES (?, '一体机多人入园票', 'fixed', FALSE, 'active', now(), now())", typeId);
+        jdbc.update("INSERT INTO entitlement_templates (id, name, entitlement_type, default_total_times, default_value_cent, status,"
+                + " created_at, updated_at) VALUES (?, '入园', 'entry', 1, 0, 'active', now(), now())", "et_" + code);
+        Instant now = Instant.now();
+        ticketingRepository.saveTicketOrder(new TicketOrderRecord(
+                "order_" + code, "ON-" + code, "cust_" + code, typeId, null, 1, LocalDate.now(), "web", null, 0L, null, 0L, 0L,
+                "CNY", "paid", "issued", "created", now, now, null, null, null, f.projectId));
+        jdbc.update("INSERT INTO ticket_instances (id, ticket_no, order_id, ticket_type_id, seq_in_order, num_people, total_times,"
+                + " status, created_at, updated_at) VALUES (?, ?, ?, ?, 1, ?, 1, 'active', now(), now())",
+                parent, "T-" + code, "order_" + code, typeId, people);
+        for (int slot = 1; slot <= people; slot++) {
+            ticketingRepository.saveIssuedEntitlement(new IssuedEntitlementRecord(
+                    "ent_" + code + "-" + slot, code + "-" + slot, typeId, "order_" + code, "et_" + code, "entry",
+                    bar, null, null, 1, 0, 0L, "active",
+                    from.minusSeconds(60), from.plusSeconds(3 * 86_400), now, now, 1, null,
+                    null, null, null, null, parent, slot, null, null));
+        }
         return code;
     }
 

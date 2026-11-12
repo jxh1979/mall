@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.08
+// 文件版本：V0.09
 
 import com.complex.platform.common.api.ApiException;
 
@@ -137,6 +137,35 @@ public class TicketingService {
                 TicketingWriteOperation.UPDATE_TICKET_TYPE_PRICING,
                 () -> catalogService.updatePricing(id, request)
         );
+    }
+
+    /** 第十八批 AH 段 215-R2 票种最低赠酒杯数（没配过的按出厂 1 杯）。 */
+    public TicketTypeGiftFloor getGiftFloor(String ticketTypeId) {
+        return catalogService.getGiftFloor(operations.requireText(ticketTypeId, "ticket_type_id"));
+    }
+
+    /** 215-R2 改票种最低赠酒杯数（杯数与上下限同配）：成功留痕记改前改后；已上架通票跌破即退回草稿。 */
+    @com.complex.platform.gate.GuardedAction(capability = "ticket.product.manage")
+    @Transactional
+    public TicketTypeGiftFloor configureGiftFloor(String ticketTypeId,
+            com.complex.platform.ticketing.dto.TicketTypeGiftFloorRequest request) {
+        String id = operations.requireText(ticketTypeId, "ticket_type_id");
+        java.util.Map<String, Object> trail = new java.util.LinkedHashMap<>();
+        return operations.executeWrite(
+                "configureTicketTypeMinGiftCups:" + id,
+                request == null ? null : request.idempotencyKey(),
+                request,
+                TicketTypeGiftFloor.class,
+                TicketingWriteOperation.CONFIGURE_TICKET_TYPE_MIN_GIFT_CUPS,
+                () -> {
+                    trail.put("min_gift_cups_before", catalogService.getGiftFloor(id).minGiftCups());
+                    TicketTypeGiftFloor saved = catalogService.configureGiftFloor(id, request, actorId());
+                    trail.put("min_gift_cups", saved.minGiftCups());
+                    trail.put("min_gift_cups_lower", saved.minGiftCupsLower());
+                    trail.put("min_gift_cups_upper", saved.minGiftCupsUpper());
+                    return saved;
+                },
+                trail);
     }
 
     public PageResponse<TicketPriceRuleRecord> listTicketPriceRules() {
@@ -651,7 +680,12 @@ public class TicketingService {
      * <p>无认证上下文，由 TicketOrderExpiryJob 触发；forfeit 为单 UPDATE，逐条独立原子。返回处理的权益数。</p>
      */
     public int processExpiredPaidEntitlements(java.time.Instant now) {
-        List<IssuedEntitlementRecord> expired = repository.listExpiredUnusedActiveEntitlements(now);
+        // 第十八批 AH 段 239-R2（ENUM:46「一经完成检票环节……其全部权益的可用窗口收窄为该场次」；ENUM:48「同票已开启的那个场次一经结束即永无法入场，
+        // 于该场次结束时按本条处理」；BSM:800「场次结束时仍未核销的权益即行终结」）：父票本场已检票的权益本场内不受票面有效期截断——先剔除，
+        // 不作废也不动在途转赠；场次结束（进入下一营业日）后下轮照常处理。
+        List<IssuedEntitlementRecord> expired = repository.listExpiredUnusedActiveEntitlements(now).stream()
+                .filter(e -> !verificationService.ticketCheckedInThisSession(e, now))
+                .toList();
         // AUD-077 票到期先终止在途转赠(pending→voided,解冻退回原持票人),再走既有到期退款/作废规则。
         if (transferService != null) {
             java.util.Set<String> expiringParents = new java.util.LinkedHashSet<>();
@@ -1086,8 +1120,18 @@ public class TicketingService {
                 request,
                 TicketRefundRecord.class,
                 TicketingWriteOperation.CONFIRM_TICKET_REFUND_PAYOUT,
-                () -> refundService.confirmPayout(id, request)
+                () -> refundService.confirmPayout(id, request),
+                payoutResultMetadata(request)
         );
+    }
+
+    /**
+     * 第十八批 AH 段第 256 条 256-R1（BSM:806「系统完整记录……原路退回结果」；PGM:899「结果是什么，都要能查到」）：
+     * 确认拨付的成功留痕记原路退回结果。执行前组好；为空时服务层按必填拒，这里给空元数据（Map.of 不收 null）。
+     */
+    private java.util.Map<String, Object> payoutResultMetadata(StatusChangeRequest request) {
+        String result = request == null ? null : com.complex.platform.common.Strings.trimToNull(request.reason());
+        return result == null ? java.util.Map.of() : java.util.Map.of("payout_result", result);
     }
 
     public PageResponse<TicketRefundLineRecord> listTicketRefundLines(String refundId) {

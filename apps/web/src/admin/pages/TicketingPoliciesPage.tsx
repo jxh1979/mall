@@ -1,4 +1,4 @@
-// 文件版本：V0.07
+// 文件版本：V0.08
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
@@ -76,7 +76,9 @@ const VARIANT_LABELS: Record<string, string> = {
   member: "会员价",
 };
 // 第十八批 W 段 177-R1（控制席并入）：通用「新建模板」不含赠饮——赠饮须选赠送商品，在「组合式套票配置」酒吧行建（该处可选任一票种含单店票、选该吧商品与成本承担方）。
-const ENTITLEMENT_TYPES = ["entry", "ride", "bar", "amusement"];
+// 第十八批 AH 段 217-R1 并入第 217 条补充：只留 ENUM:36 有、契约 EntitlementTemplateRequest.entitlement_type 有、后端收的类型；
+//   ride（游乐项目）即 ENUM:36「游乐」＝amusement，bar（酒吧）在 ENUM:36 权益类型里无对应项，均去掉。
+const ENTITLEMENT_TYPES = ["entry", "amusement"];
 
 // 组合式配置策略：酒吧权益种类（对应 entitlement_type）。gift_drink=酒水兑换，admission=入场资格。
 const BAR_ENTITLEMENT_KINDS = [
@@ -106,7 +108,10 @@ type GiftCoverageRow = {
   cups: number;
   barTotalCups: number;
 };
+// 第十八批 AH 段 215-R2 票种最低赠酒杯数（后端 GET /ticketing/ticket-types/{id}/min-gift-cups，adminClient 已 snake→camel）；没配过的上下限为空＝出厂 1 杯。
+type GiftFloorRow = { minGiftCups: number; minGiftCupsLower: number | null; minGiftCupsUpper: number | null };
 // 餐饮权益行（用户2026-07-06 拍板）：选餐厅商户 + 价格(可0) + 折扣 + 内部结算价。
+// 第十八批 AH 段 217-R1：同一行也配零售券——所选商户业态为零售时建 retail 权益（ENUM:36「餐饮券、零售券」），其余建 dining。
 //   结算按【内部结算价】全额归餐厅商户(exclusive_merchant_id + agreement_price_cent，走 §6.4 不分摊直付)；
 //   价格(面值,可0)与折扣仅为售卖/展示口径，不参与结算(核销结算价=内部结算价，不再把折扣当面值乱记)。
 // costBearer：价格 0（纯赠送）时必选——这份赠品的成本谁出（V376）。
@@ -227,6 +232,12 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
   const [barProducts, setBarProducts] = React.useState<Record<string, BarProductRow[]>>({});
   // 票面赠酒清单（各酒吧分别赠几杯）。
   const [giftCoverage, setGiftCoverage] = React.useState<GiftCoverageRow[]>([]);
+  // 215-R2 最低赠酒杯数（按票种，值与上下限同配）。
+  const [giftFloor, setGiftFloor] = React.useState<GiftFloorRow | null>(null);
+  const [floorCups, setFloorCups] = React.useState("");
+  const [floorLower, setFloorLower] = React.useState("");
+  const [floorUpper, setFloorUpper] = React.useState("");
+  const [giftFloorError, setGiftFloorError] = React.useState("");
   const [diningLines, setDiningLines] = React.useState<DiningLine[]>([]);
   const [selectedProjects, setSelectedProjects] = React.useState<Record<string, boolean>>({});
   const [projectTimes, setProjectTimes] = React.useState("1");
@@ -554,6 +565,42 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
     setGiftCoverage(toRows<GiftCoverageRow>(rows));
   }, [api]);
 
+  // 215-R2 最低赠酒杯数：选中通票后拉一次，回显到三个输入框。
+  const loadGiftFloor = React.useCallback(async (ticketTypeId: string) => {
+    setGiftFloorError("");
+    if (!ticketTypeId) { setGiftFloor(null); return; }
+    const row = await api
+      .get<GiftFloorRow>(`/api/v1/ticketing/ticket-types/${encodeURIComponent(ticketTypeId)}/min-gift-cups`)
+      .catch(() => null);
+    setGiftFloor(row);
+    setFloorCups(row ? String(row.minGiftCups) : "");
+    setFloorLower(row?.minGiftCupsLower == null ? "" : String(row.minGiftCupsLower));
+    setFloorUpper(row?.minGiftCupsUpper == null ? "" : String(row.minGiftCupsUpper));
+  }, [api]);
+
+  // 215-R2 保存最低赠酒杯数（ENUM:34「须同时配置上下限」）：三个值都填才发；已上架通票跌破新下限后端退回草稿，刷新票种列表。
+  async function saveGiftFloor() {
+    if (!comboTicketId) { setGiftFloorError("请先选择要配置的通票。"); return; }
+    if (!floorCups.trim() || !floorLower.trim() || !floorUpper.trim()) {
+      setGiftFloorError("最低赠酒杯数须与其下限、上限同时填写。");
+      return;
+    }
+    setGiftFloorError("");
+    try {
+      const saved = await api.put<GiftFloorRow>(`/api/v1/ticketing/ticket-types/${encodeURIComponent(comboTicketId)}/min-gift-cups`, {
+        idempotency_key: crypto.randomUUID(),
+        min_gift_cups: Number(floorCups),
+        min_gift_cups_lower: Number(floorLower),
+        min_gift_cups_upper: Number(floorUpper),
+      });
+      setGiftFloor(saved);
+      setActionResult({ action: "ticket_type_min_gift_cups_saved", ticketTypeId: comboTicketId, minGiftCups: saved?.minGiftCups });
+      reload();
+    } catch (err) {
+      setGiftFloorError(err instanceof Error ? err.message : "最低赠酒杯数保存失败");
+    }
+  }
+
   // V369 定价核算：选中通票后拉一次，配完权益/改完价再刷新。运营看到的和发布闸判的是同一份计算。
   const loadPriceCheck = React.useCallback(async (ticketTypeId: string) => {
     if (!ticketTypeId) { setPriceCheck(null); return; }
@@ -667,7 +714,7 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
     }
     const chosenProjects = projects.filter((p) => selectedProjects[p.id]);
     if (barLines.length === 0 && chosenProjects.length === 0 && diningLines.length === 0) {
-      setComboError("至少选择一个酒吧权益、游乐设施或餐饮项。");
+      setComboError("至少选择一个酒吧权益、游乐设施或餐饮/零售项。");
       return;
     }
     // 游乐权益也须归属商户（后端强制），选了游乐就必须选归属商户。
@@ -691,7 +738,7 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
     const missingDiningBearer = diningLines.find((line) =>
       line.merchantId && !(Number(line.valueYuan) > 0) && !line.costBearer);
     if (missingDiningBearer) {
-      setComboError(`${merchantName(missingDiningBearer.merchantId)} 的餐饮项是纯赠送（价格 0），请选择成本承担方（商户让利型/平台出资型）。`);
+      setComboError(`${merchantName(missingDiningBearer.merchantId)} 的餐饮/零售项是纯赠送（价格 0），请选择成本承担方（商户让利型/平台出资型）。`);
       return;
     }
     setComboError("");
@@ -731,15 +778,16 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
           entitlement_type: "amusement",
         }).catch(() => undefined); // 已绑定（唯一键冲突）时忽略。
       }
-      // 餐饮权益：每行一条 dining 权益模板（entitlement_type='dining'）。
+      // 餐饮/零售权益：每行一条权益模板，所选商户业态为零售时 entitlement_type='retail'（零售券），其余 'dining'（餐饮券）（217-R1，ENUM:36）。
       //   价格(面值,可0)→default_value_cent；内部结算价→agreement_price_cent；专属餐厅→exclusive_merchant_id。
       //   核销结算全额按内部结算价归该餐厅(§6.4 不分摊)，不把折扣/面值当结算价乱记。折扣仅记入名称备注(售卖口径，不影响结算)。
       for (const line of diningLines) {
         if (!line.merchantId) continue;
         const discountNote = line.discount.trim() ? ` · ${line.discount}折` : "";
+        const retail = merchants.find((m) => m.id === line.merchantId)?.merchantType === "retail";
         await createAndBind({
-          name: `${merchantName(line.merchantId)} · 餐饮${discountNote}`,
-          entitlementType: "dining",
+          name: `${merchantName(line.merchantId)} · ${retail ? "零售" : "餐饮"}${discountNote}`,
+          entitlementType: retail ? "retail" : "dining",
           totalTimes: Number(line.totalTimes) || 1,
           // 价格(面值)可为 0：留空=0（纯赠送/兑换）。
           valueCent: line.valueYuan.trim() ? Math.round(Number(line.valueYuan) * 100) : 0,
@@ -982,12 +1030,12 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
 
           </>) },
           { key: "combo", label: "② 组合式套票配置", forceRender: true, children: (<>
-      <h3>组合式配置策略（一次性给通票配跨酒吧/游乐/餐饮的权益）</h3>
+      <h3>组合式配置策略（一次性给通票配跨酒吧/游乐/餐饮/零售的权益）</h3>
       <div className="admin-preview">
-        选一张通票，勾选多个酒吧并为每个配权益（酒水兑换/次数/面值）、多选游乐设施、加餐饮项（餐厅/价格/折扣/内部结算价），点「组合配置到通票」一次性写入。
+        选一张通票，勾选多个酒吧并为每个配权益（酒水兑换/次数/面值）、多选游乐设施、加餐饮/零售项（餐饮或零售商户/价格/折扣/内部结算价），点「组合配置到通票」一次性写入。
       </div>
       <div className="admin-inline-form" data-testid="pass-combo-form">
-        <select aria-label="配置通票" data-testid="combo-ticket-select" value={comboTicketId} onChange={(event) => { setComboTicketId(event.target.value); void loadGiftCoverage(event.target.value); void loadPriceCheck(event.target.value); }}>
+        <select aria-label="配置通票" data-testid="combo-ticket-select" value={comboTicketId} onChange={(event) => { setComboTicketId(event.target.value); void loadGiftCoverage(event.target.value); void loadGiftFloor(event.target.value); void loadPriceCheck(event.target.value); }}>
           <option value="">选择要配置的通票</option>
           {tickets.map((t) => (
             <option key={t.id} value={t.id}>{t.ticketName}</option>
@@ -1106,7 +1154,7 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
       <button type="button" className="admin-secondary-button" data-testid="combo-add-bar" onClick={addBarLine} disabled={merchants.length === 0}>+ 添加酒吧权益</button>
       <div className="admin-preview">
         酒水兑换要指明赠送的是哪件商品：客人只能到这家酒吧核销，平台按这件商品的内部结算价与这家酒吧结算。
-        这张票让客人能进的每个酒吧都要至少赠一杯，各吧几杯写在票面上（下方清单即票面写明的内容）。
+        这张通票让客人能进的每个酒吧赠酒不得少于本票最低赠酒杯数（出厂 1 杯，多次票按每次入场一份计），最低杯数以内的赠酒须选平台出资型；各吧几杯写在票面上（下方清单即票面写明的内容）。
       </div>
 
       <h4>票面赠酒清单（各酒吧分别赠几杯）</h4>
@@ -1131,6 +1179,31 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
         </table>
       </div>
 
+      <h4>最低赠酒杯数（按票种）</h4>
+      <div className="admin-preview" data-testid="combo-gift-floor-current">
+        {!comboTicketId ? "请先选择要配置的通票。"
+          : !giftFloor ? "最低赠酒杯数读取中或暂不可用。"
+          : giftFloor.minGiftCupsLower == null ? `本票最低赠酒杯数：出厂默认 ${giftFloor.minGiftCups} 杯`
+          : `本票最低赠酒杯数：${giftFloor.minGiftCups} 杯（下限 ${giftFloor.minGiftCupsLower} 杯、上限 ${giftFloor.minGiftCupsUpper} 杯）`}
+      </div>
+      <div className="admin-inline-form" data-testid="combo-gift-floor-form">
+        <label>最低赠酒杯数
+          <input aria-label="最低赠酒杯数" data-testid="combo-gift-floor-cups" type="number" min={1} step={1}
+            value={floorCups} onChange={(event) => setFloorCups(event.target.value)} />
+        </label>
+        <label>下限
+          <input aria-label="最低赠酒杯数下限" data-testid="combo-gift-floor-lower" type="number" min={1} step={1}
+            value={floorLower} onChange={(event) => setFloorLower(event.target.value)} />
+        </label>
+        <label>上限
+          <input aria-label="最低赠酒杯数上限" data-testid="combo-gift-floor-upper" type="number" min={1} step={1}
+            value={floorUpper} onChange={(event) => setFloorUpper(event.target.value)} />
+        </label>
+        <PermissionButton permissionsState={effectivePermissions} permissions={MANAGE} data-testid="combo-gift-floor-save"
+          onClick={() => void saveGiftFloor()}>保存最低赠酒杯数</PermissionButton>
+      </div>
+      {giftFloorError ? <div className="admin-error" data-testid="combo-gift-floor-error">{giftFloorError}</div> : null}
+
       <h4>游乐设施（多选）</h4>
       <div className="admin-inline-form" data-testid="combo-amusement-list">
         {projects.length === 0 ? <span>暂无游乐设施</span> : projects.map((p) => (
@@ -1147,21 +1220,21 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
         </select>
       </div>
 
-      <h4>餐饮（多选）</h4>
+      <h4>餐饮/零售（多选）</h4>
       <div className="admin-preview">
-        餐饮的钱归餐厅商户所有：核销时按「内部结算价」全额结算给该餐厅（不进池、不分摊）。价格可设为 0（纯赠送/兑换）；也可同时配价格、折扣与内部结算价。折扣仅为售卖口径，不影响结算金额。
+        餐饮券、零售券的钱归所选的餐饮或零售商户所有：选零售商户即配零售券，其余配餐饮券；核销时按「内部结算价」全额结算给该商户（不进池、不分摊）。价格可设为 0（纯赠送/兑换）；也可同时配价格、折扣与内部结算价。折扣仅为售卖口径，不影响结算金额。
       </div>
       <div className="admin-table-scroll">
         <table className="admin-table" data-testid="combo-dining-table">
           <thead>
-            <tr><th>餐厅商户</th><th>价格（元，可 0）</th><th>折扣（如 8=八折，选填）</th><th>内部结算价（元）</th><th>成本承担方（价格 0 必选）</th><th>次数</th><th>操作</th></tr>
+            <tr><th>餐饮/零售商户</th><th>价格（元，可 0）</th><th>折扣（如 8=八折，选填）</th><th>内部结算价（元）</th><th>成本承担方（价格 0 必选）</th><th>次数</th><th>操作</th></tr>
           </thead>
           <tbody>
             {diningLines.map((line, index) => (
               <tr key={index} data-testid={`combo-dining-line-${index}`}>
                 <td>
-                  <select aria-label="餐厅商户" value={line.merchantId} onChange={(event) => setDiningLines(diningLines.map((l, i) => i === index ? { ...l, merchantId: event.target.value } : l))}>
-                    <option value="">选择餐厅商户</option>
+                  <select aria-label="餐饮/零售商户" value={line.merchantId} onChange={(event) => setDiningLines(diningLines.map((l, i) => i === index ? { ...l, merchantId: event.target.value } : l))}>
+                    <option value="">选择餐饮/零售商户</option>
                     {merchants.map((m) => (<option key={m.id} value={m.id}>{m.merchantName}</option>))}
                   </select>
                 </td>
@@ -1187,7 +1260,7 @@ export function TicketingPoliciesPage({ api, setActionResult, setGlobalError, ef
           </tbody>
         </table>
       </div>
-      <button type="button" className="admin-secondary-button" data-testid="combo-add-dining" onClick={addDiningLine} disabled={merchants.length === 0}>+ 添加餐饮项</button>
+      <button type="button" className="admin-secondary-button" data-testid="combo-add-dining" onClick={addDiningLine} disabled={merchants.length === 0}>+ 添加餐饮/零售项</button>
 
       <div className="admin-form-row">
         <PermissionButton permissionsState={effectivePermissions} permissions={MANAGE} data-testid="combo-submit" onClick={() => void submitCombo()} disabled={comboBusy}>

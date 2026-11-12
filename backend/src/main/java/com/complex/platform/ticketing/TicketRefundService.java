@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.05
+// 文件版本：V0.06
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -295,23 +295,24 @@ public class TicketRefundService {
      * 财务实际打款后确认拨付：approved→success（终态）。依据 business-enum-quick-reference-v0.1.html
      * 「退款单状态」行：退款以“成功”为最终完成态，只有“成功”才计入“已退金额”；以及
      * business-system-map-for-operations-v0.1.html「退款授权与留痕」行：系统完整记录“原路退回结果”
-     * （本方法的 reason 写入审计事件 ticket_refund.payout_confirmed 即为该结果留痕）。
+     * （256-R1：本方法的 reason 去首尾空白后写进退款单 payout_result；成功留痕 ticket_refund.payout_confirmed 的 metadata.payout_result
+     * 由 TicketingService.confirmTicketRefundPayout 记入）。
      * markTicketRefundSucceeded 本身是 WHERE status='approved' 的 CAS，天然幂等；命中 0 行=当前状态不可确认。
      */
     TicketRefundRecord confirmPayout(String refundId, StatusChangeRequest request) {
         StatusChangeRequest actual = requireRequest(request);
-        requireText(actual.reason(), "reason");
+        String payoutResult = requireText(actual.reason(), "reason");
         TicketRefundRecord current = repository.findTicketRefundById(requireText(refundId, "refund_id"))
                 .orElseThrow(() -> ApiException.notFound("TICKET_REFUND_NOT_FOUND", "票务退款不存在或已被删除"));
         repository.findTicketOrderById(current.targetId())
                 .ifPresent(order -> enforceMerchantScope(order.merchantId()));
         Instant now = Instant.now();
-        if (repository.markTicketRefundSucceeded(current.id(), now) == 0) {
+        if (repository.markTicketRefundSucceeded(current.id(), now, payoutResult) == 0) {
             throw ApiException.conflict("TICKET_REFUND_NOT_PAYOUT_CONFIRMABLE",
                     "只有“已通过”的退款才能确认拨付，当前状态不可确认");
         }
         eventPublisher.publishEvent(new TicketRewardFacts.Refunded(current.id()));
-        return current.withStatus("success", current.approvedBy(), current.approvedAt(), now);
+        return current.withStatus("success", current.approvedBy(), current.approvedAt(), now).withPayoutResult(payoutResult);
     }
 
     /**
@@ -400,7 +401,7 @@ public class TicketRefundService {
                 eventPublisher.publishEvent(new TicketRefundApprovedEvent(order.id(), approved.id(), left, approved.refundChannel()));
             }
             if (!awaitsPayout) {
-                repository.markTicketRefundSucceeded(approved.id(), now);
+                repository.markTicketRefundSucceeded(approved.id(), now, null); // 256-R1：回卡到账即结果，无人工填写的原路退回结果
                 eventPublisher.publishEvent(new TicketRewardFacts.Refunded(approved.id()));
                 return approved.withStatus("success", approved.approvedBy(), approved.approvedAt(), now);
             }

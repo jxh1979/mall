@@ -1,4 +1,4 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -193,6 +193,15 @@ describe("TicketingPoliciesPage 引导式新建票种", () => {
     fireEvent.click(screen.getByTestId("entitlement-template-create"));
     await waitFor(() => expect(props.setGlobalError).toHaveBeenCalledWith("请选择权益的提供方商户"));
     expect(postSpy.mock.calls.some((c) => String(c[0]).endsWith("/ticketing/entitlement-templates"))).toBe(false);
+  });
+
+  // 第十八批 AH 段 217-R1 并入第 217 条补充（ENUM:36 权益类型「入场、游乐、酒水（赠饮/兑换券）……」；契约 EntitlementTemplateRequest.entitlement_type
+  //   枚举）：通用「新建模板」权益类型只留 ENUM:36 有、契约有、后端收的入园、游乐；ride（游乐项目）即游乐、bar（酒吧）不是权益类型，去掉。
+  it("217 补充 新建模板：权益类型下拉只有入园、游乐", async () => {
+    renderPage(vi.fn(async () => ({} as unknown)));
+    const tplForm = await templateFormReady();
+    const typeOptions = Array.from((tplForm.getByLabelText("权益类型") as HTMLSelectElement).options).map((o) => o.value);
+    expect(typeOptions).toEqual(["entry", "amusement"]);
   });
 
   // 177-R1（PGM:287「……提示、报错……必须全部为中文」）：后端拒绝时把中文报错显示出来，不再成未处理的拒绝。

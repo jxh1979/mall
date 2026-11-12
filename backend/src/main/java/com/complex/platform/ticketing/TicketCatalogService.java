@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.governance.MerchantRecord;
@@ -10,6 +10,7 @@ import com.complex.platform.ticketing.dto.EntitlementTemplateDeleteApprovalReque
 import com.complex.platform.ticketing.dto.StatusChangeRequest;
 import com.complex.platform.ticketing.dto.TicketPriceRuleRequest;
 import com.complex.platform.ticketing.dto.TicketTypeEntitlementRequest;
+import com.complex.platform.ticketing.dto.TicketTypeGiftFloorRequest;
 import com.complex.platform.ticketing.dto.TicketTypePricingRequest;
 import com.complex.platform.ticketing.dto.TicketTypeRequest;
 import java.math.BigDecimal;
@@ -484,14 +485,21 @@ public class TicketCatalogService {
                 now,
                 now
         );
+        boolean published = "published".equals(ticketType.status());
         // V369：已上架的票被改了组成（加权益／改票面原价）后，售价若已经对不上新的业态构成，就把票退回草稿。
         //   直接拒绝会把「先建票、再一次性配组合权益」这条正常流程堵死；继续挂着卖则是让客人按一个
         //   系统自己都算不出来的价买。只在真的对不上时才下架，改完价重新发布即可（重新走一遍误差闸）。
-        if ("published".equals(ticketType.status())
-                && !priceWithinTolerance(ticketType, withBinding(ticketType.id(), binding))) {
+        if (published && !priceWithinTolerance(ticketType, withBinding(ticketType.id(), binding))) {
+            repository.saveTicketType(ticketType.withStatus("draft", now));
+            published = false;
+        }
+        TicketTypeEntitlementRecord saved = repository.saveTicketTypeEntitlement(binding);
+        // 第十八批 AH 段 215-R1（ENUM:34「低于该下限的票种不得发布上架」）：已上架通票改了组成后跌破最低赠酒杯数
+        //   （如新增一家酒吧入场却漏配赠酒），同 V369 退回草稿，补齐后重新发布。
+        if (published && barGiftCoverageViolation(ticketType) != null) {
             repository.saveTicketType(ticketType.withStatus("draft", now));
         }
-        return repository.saveTicketTypeEntitlement(binding);
+        return saved;
     }
 
     /**
@@ -551,7 +559,10 @@ public class TicketCatalogService {
         }
         requireComponentPrices(current.id());
         requireCostBearers(current.id());
-        requireBarGiftCoverage(current.id());
+        ApiException giftShortfall = barGiftCoverageViolation(current);
+        if (giftShortfall != null) {
+            throw giftShortfall;
+        }
         // V369 凑整误差闸：填的售价与系统算出的售价差太多就不许开卖（HTML:741「超出即拒绝发布」）。
         requirePriceWithinTolerance(current, repository.listTicketTypeEntitlements(current.id()));
         // 发布只翻状态，其余（库存/已售/分类/可退/酒吧归属/折扣）一律原样带过，避免被置空/清零。
@@ -564,57 +575,118 @@ public class TicketCatalogService {
     private static final String MERCHANT_TYPE_BAR = "bar";
     /** 赠酒类权益。 */
     private static final String GIFT_DRINK_ENTITLEMENT_TYPE = "gift_drink";
+    /** 第十八批 AH 段 215-R2：没配过的票种按出厂最低赠酒杯数（ENUM:34「出厂默认 1 杯」）。 */
+    private static final int FACTORY_MIN_GIFT_CUPS = 1;
 
     /**
-     * S5 K17「每个酒吧至少赠一杯」发布校验（业务 HTML §通票赠酒按酒吧分配：
-     * 「一张通票覆盖的每个酒吧至少赠一杯，各酒吧分别赠几杯在售票时写明票面」）。
+     * 第十八批 AH 段 215-R1 通票赠酒下限（ENUM:34「一张酒吧通票或跨域组合通票覆盖的每一家酒吧，赠酒杯数不得低于后台配置的最低赠酒杯数……
+     * 低于该下限的票种不得发布上架……该最低赠酒杯数属于票面强制要求提供的权益，一律记为域主管公司出资」；BSM:1033「只有商户主动申请并书面确认
+     * 让利的权益才记为商户让利、不结算」）：
+     * <ul>
+     *   <li>只管通票（票种 bar_id 为空），单店票不套（ENUM:34 只说酒吧通票或跨域组合通票）；</li>
+     *   <li>覆盖的酒吧＝该票种实际绑定了入场类权益的酒吧，不按固定家数；</li>
+     *   <li>赠酒只计票面价 0 的赠饮，带票面价的是兑换券（ENUM:36「酒水（赠饮/兑换券）」），不计入下限；每人份杯数＝份数×次数；</li>
+     *   <li>多次票每完成一次检票开一个场次、附带权益按完整一份配足（ENUM:46）：该吧入场次数 N 时应有 N×最低杯数，与 165-R1 运行期
+     *       「一份＝总次数÷入场次数」同口径；</li>
+     *   <li>应有杯数以内须平台出资型，超出部分可标商户让利。</li>
+     * </ul>
      *
-     * <p><b>为什么卡在发布这一步</b>：票一旦开卖，客人拿着它进 B 吧却发现没有赠酒，B 吧的店长要么自掏腰包
-     * 请这杯、要么让客人白跑一趟——两种都得吵一架，而且事后没法补（票面已经印出去了）。所以在票还没卖
-     * 之前就把漏配的吧点名报出来，让运营当场补上。
-     *
-     * <p><b>什么票才卡</b>：只卡「已经带了赠酒的票」。一张不含任何赠酒的普通门票本来就不该被要求请客，
-     * 卡它只会让运营连普通票都发不出去。但只要这张票给某家吧配了赠酒，它覆盖的每家吧就都得有——
-     * 有 A 没 B 恰恰是最常见也最伤人的漏配。
-     *
-     * <p>覆盖的酒吧集合按该票种<b>实际绑定的入场类权益</b>动态算，不按固定家数（可能七八家，也可能二三十家）。
+     * @return 不过时的 409（发布闸抛出；改组成、改下限时据此把已上架通票退回草稿），过了返回 null
      */
-    private void requireBarGiftCoverage(String ticketTypeId) {
-        java.util.List<TicketTypeProviderEntitlementRow> rows =
-                repository.listTicketTypeProviderEntitlements(ticketTypeId);
-        java.util.Map<String, Integer> giftUnitsByBar = new java.util.LinkedHashMap<>();
-        java.util.Map<String, String> barNames = new java.util.LinkedHashMap<>();
-        java.util.Set<String> barsWithEntry = new java.util.LinkedHashSet<>();
-        for (TicketTypeProviderEntitlementRow row : rows) {
-            if (row.providerMerchantId() == null || !MERCHANT_TYPE_BAR.equals(row.providerMerchantType())) {
+    private ApiException barGiftCoverageViolation(TicketTypeRecord ticketType) {
+        if (trimToNull(ticketType.barId()) != null) {
+            return null;
+        }
+        int floor = giftFloor(ticketType.id()).minGiftCups();
+        java.util.Map<String, String> barNames = new java.util.HashMap<>();
+        java.util.Map<String, Integer> visitsByBar = new java.util.HashMap<>();
+        java.util.Map<String, Integer> cupsByBar = new java.util.HashMap<>();
+        java.util.Map<String, Integer> platformCupsByBar = new java.util.HashMap<>();
+        for (TicketTypeProviderEntitlementRow row : repository.listTicketTypeProviderEntitlements(ticketType.id())) {
+            String bar = row.providerMerchantId();
+            if (bar == null || !MERCHANT_TYPE_BAR.equals(row.providerMerchantType())) {
                 continue;
             }
-            barNames.putIfAbsent(row.providerMerchantId(),
-                    row.providerMerchantName() == null ? row.providerMerchantId() : row.providerMerchantName());
+            barNames.putIfAbsent(bar, row.providerMerchantName() == null ? bar : row.providerMerchantName());
             if (ENTRY_ENTITLEMENT_TYPES.contains(row.entitlementType())) {
-                barsWithEntry.add(row.providerMerchantId());
+                visitsByBar.merge(bar, row.totalTimes(), Math::max);
             }
-            if (GIFT_DRINK_ENTITLEMENT_TYPE.equals(row.entitlementType())) {
-                giftUnitsByBar.merge(row.providerMerchantId(), row.units(), Integer::sum);
+            if (GIFT_DRINK_ENTITLEMENT_TYPE.equals(row.entitlementType())
+                    && (row.componentPriceCent() == null || row.componentPriceCent() == 0L)) {
+                int cups = row.quantity() * row.totalTimes();
+                cupsByBar.merge(bar, cups, Integer::sum);
+                if (TicketTypeEntitlementRecord.COST_BEARER_PLATFORM_FUNDED.equals(row.costBearer())) {
+                    platformCupsByBar.merge(bar, cups, Integer::sum);
+                }
             }
         }
-        if (giftUnitsByBar.values().stream().noneMatch(units -> units >= 1)) {
-            return; // 这张票压根不含赠酒（普通门票）→ 本条不适用。
+        java.util.List<String> shortBars = new java.util.ArrayList<>();
+        java.util.List<String> concessionBars = new java.util.ArrayList<>();
+        for (java.util.Map.Entry<String, Integer> visits : visitsByBar.entrySet()) {
+            String bar = visits.getKey();
+            int required = floor * Math.max(1, visits.getValue());
+            int cups = cupsByBar.getOrDefault(bar, 0);
+            if (cups < required) {
+                shortBars.add(barNames.get(bar) + "（需 " + required + " 杯，现 " + cups + " 杯）");
+            }
+            int platformCups = platformCupsByBar.getOrDefault(bar, 0);
+            if (platformCups < required) {
+                concessionBars.add(barNames.get(bar) + "（需 " + required + " 杯，平台出资 " + platformCups + " 杯）");
+            }
         }
-        java.util.List<String> missing = barsWithEntry.stream()
-                .filter(barId -> giftUnitsByBar.getOrDefault(barId, 0) < 1)
-                .map(barNames::get)
-                .sorted()
-                .toList();
-        if (!missing.isEmpty()) {
-            throw ApiException.conflict("PASS_BAR_GIFT_COVERAGE_INSUFFICIENT",
-                    "这张票覆盖的每个酒吧都要至少赠一杯，还差：" + String.join("、", missing));
+        if (!shortBars.isEmpty()) {
+            return ApiException.conflict("PASS_BAR_GIFT_COVERAGE_INSUFFICIENT", "这张通票覆盖的每家酒吧赠酒不得少于最低 " + floor
+                    + " 杯（多次票按每次入场一份计），还差：" + String.join("、", shortBars.stream().sorted().toList()));
         }
+        if (!concessionBars.isEmpty()) {
+            return ApiException.conflict("PASS_BAR_GIFT_FLOOR_NOT_PLATFORM_FUNDED",
+                    "最低赠酒杯数以内的赠酒一律记为域主管公司出资，请把这些酒吧的赠酒成本承担方改为平台出资型："
+                            + String.join("、", concessionBars.stream().sorted().toList()));
+        }
+        return null;
+    }
+
+    /** 215-R2：该票种的最低赠酒杯数，没配过的按出厂 1 杯（上下限 HTML 未给出厂数值，留空）。 */
+    private TicketTypeGiftFloor giftFloor(String ticketTypeId) {
+        return repository.findGiftFloor(ticketTypeId).orElseGet(() -> new TicketTypeGiftFloor(
+                ticketTypeId, FACTORY_MIN_GIFT_CUPS, null, null, null, null));
+    }
+
+    TicketTypeGiftFloor getGiftFloor(String ticketTypeId) {
+        return giftFloor(requireTicketTypeRecord(ticketTypeId).id());
     }
 
     /**
-     * S5 票面按酒吧分组的赠酒清单（只读投影）：售票时要写明「各酒吧分别赠几杯」。
-     * 与 K17 发布校验取同一份数据，票面写的和发布时校的必定是同一件事。
+     * 215-R2 按票种配最低赠酒杯数（ENUM:34「业务参数，按票种可配，出厂默认 1 杯，须同时配置上下限」）：杯数与下限、上限须同时填写，
+     * 且 1 ≤ 下限 ≤ 杯数 ≤ 上限。已上架通票改高后跌破即退回草稿（同 V369 改组成退回草稿），补齐赠酒后重新发布。
+     */
+    TicketTypeGiftFloor configureGiftFloor(String ticketTypeId, TicketTypeGiftFloorRequest request, String actorId) {
+        TicketTypeGiftFloorRequest actual = requireRequest(request);
+        TicketTypeRecord ticketType = requireTicketTypeRecord(ticketTypeId);
+        if (ticketType.archivedAt() != null || !"none".equals(ticketType.deleteStatus())) {
+            throw ApiException.conflict("TICKET_TYPE_NOT_CONFIGURABLE", "已存档或待删除的票种不可改最低赠酒杯数");
+        }
+        if (actual.minGiftCups() == null || actual.minGiftCupsLower() == null || actual.minGiftCupsUpper() == null) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "最低赠酒杯数须与其下限、上限同时填写");
+        }
+        int cups = actual.minGiftCups();
+        int lower = actual.minGiftCupsLower();
+        int upper = actual.minGiftCupsUpper();
+        if (lower < 1 || lower > cups || cups > upper) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "最低赠酒杯数须满足：1 ≤ 下限 ≤ 杯数 ≤ 上限");
+        }
+        Instant now = Instant.now();
+        TicketTypeGiftFloor floor = new TicketTypeGiftFloor(ticketType.id(), cups, lower, upper, actorId, now);
+        repository.saveGiftFloor(floor);
+        if ("published".equals(ticketType.status()) && barGiftCoverageViolation(ticketType) != null) {
+            repository.saveTicketType(ticketType.withStatus("draft", now));
+        }
+        return floor;
+    }
+
+    /**
+     * S5 票面按酒吧分组的赠酒清单（只读投影）：售票时要写明「各酒吧分别赠几杯」（BSM:1032）；杯数＝份数×次数×每份人数。
+     * 与 215-R1 通票赠酒下限发布闸取同一份数据，票面写的和发布时校的必定是同一件事。
      */
     java.util.List<TicketTypeGiftCoverageRow> listGiftCoverage(String ticketTypeId) {
         requireTicketTypeRecord(ticketTypeId);

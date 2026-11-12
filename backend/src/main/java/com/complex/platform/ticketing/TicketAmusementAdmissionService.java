@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import com.complex.platform.amusement.AmusementBusinessDayService.Window;
 import com.complex.platform.amusement.AmusementEntitlementGateway.Consumption;
@@ -35,6 +35,9 @@ public class TicketAmusementAdmissionService {
         var entitlement=lockEntitlement(entitlementId);
         verifications.getObject().requireAmusementConsumption(entitlement,at);
         requireOriginalTicketComplex(entitlement,window);
+        // 第十八批 AH 段 219-R1（BSM:800 只能在检票场次内核销、后续场次份额不得提前用）：票内游乐须本场已检票、本场按一份封顶，被拒不扣次。
+        if (!"unlimited_in_day".equals(entitlement.consumptionWindow()))
+            verifications.getObject().requireAmusementSessionShare(entitlement,at);
         if ("unlimited_in_day".equals(entitlement.consumptionWindow())) {
             requireMultiPersonWindow(entitlement,window,at);
             // 先沿用实际已激活且尚未结束的原窗口，后来改日切版本不能再次收费。
@@ -66,6 +69,8 @@ public class TicketAmusementAdmissionService {
         var entitlement=repository.findIssuedEntitlementById(entitlementId).orElseThrow();
         verifications.getObject().requireAmusementConsumption(entitlement,at);
         requireOriginalTicketComplex(entitlement,window);
+        if(!"unlimited_in_day".equals(entitlement.consumptionWindow()))
+            verifications.getObject().requireAmusementSessionShare(entitlement,at);
         if("unlimited_in_day".equals(entitlement.consumptionWindow())) {
             requireMultiPersonWindow(entitlement,window,at);
             if(jdbc.queryForObject("""

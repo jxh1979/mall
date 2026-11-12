@@ -1,10 +1,10 @@
-# 游乐设施运营系统开发设计文档 V0.17
+# 游乐设施运营系统开发设计文档 V0.18
 
 > **口径修订（2026-08-06 R10）：「人工放行」已废止**——ENUM「核销记录状态」条 明确「**系统不提供人工放行：核销要么成功、要么拒绝或失败，任何岗位、任何权限都不能以人工方式让一笔不满足规则的核销通过**」（DEC-CFG-2026-08-03-12 / DEC-R6-08）。本文原有的「人工放行」流程（§6.5）、表 `AmusementManualOverride`、状态取值 `manual_override`、端点 `/api/v1/amusement/manual-overrides`、权限点 `amusement.verification.override`、事件 `amusement.verification_overridden`、指标与页面入口**一律废止**，废止处就地标注；已实现的表、端点与取值待代码轮下线，期间不得新增调用、不得新写入。
 
 > **口径修订（2026-08-06 R10）：「场次容量／三维度容量」已废止**——BSM「容量控制」条 明确「**只按单个游乐项目的实时在玩人数控制容量，不再按场次/时段或点位/设备另设容量；排队人数不占用容量**」（DEC-R5-2026-08-04-04；R8 用户裁决 D-02）。本文原「按项目 + 场次/时段 + 点位/设备三维度取最小可放行余量」的容量判定口径**整体废止**，一律改为「**项目容量（实时在玩人数）**」单维；双阈值不变（运营容量软上限告警放行、安全容量硬上限阻断并自动停运）。`amusement_capacity_config`、`amusement_capacity_snapshot` 的场次维与点位/设备维字段待代码轮下线，期间不得据以新增受控维度。
 
-> 版本：V0.17 ｜ 最后更新：2026-11-11 ｜ 迁移证据：保留历史迁移记录；TK-17/18 新增 V483/V484/V487 ｜ 状态：现行；本批同步单项目容量、营业日配置与实际结束实现，未完成项仍单列。
+> 版本：V0.18 ｜ 最后更新：2026-11-11 ｜ 迁移证据：保留历史迁移记录；TK-17/18 新增 V483/V484/V487 ｜ 状态：现行；本批同步单项目容量、营业日配置与实际结束实现，未完成项仍单列。
 > 新功能承接见 docs/v099-v124-feature-implementation-and-acceptance-spec-v0.1.md
 > <!-- 文档goalP3(2026-06-20)：补版本/日期/覆盖迁移头，未改正文 -->
 >
@@ -21,7 +21,7 @@
 > **✅ R7 复审上修标注（2026-06-19，只读核验真实迁移/代码后回填）**
 > R5 横幅与下方 D11 原标注的四项缺口已在本会话 P0 实现并落库（V081/V082/V083，且代码已接线），以下上修；仅"一体机端侧实际集成"保持开放。
 > - **✅ 检修整表 + 恢复营业联动已落地（V081）**：新建 `amusement_maintenance_record`（检修单位复用供应链供应商 supplier_category∈{maintenance,service}、工程师、检修结果、异常说明、来源终端/点位结构化、`supervisor_confirmed_by`/`resume_business_at`）；主管确认恢复时联动写 `amusement_projects.open_status`(maintenance→open)，`AmusementMaintenanceService` 提供提交检修 / `confirm-resume` 端点；CHECK 硬约束确认前不得由 maintenance 流转回 open。
-> - **✅ 现场核销校验票务权益已落地（V082）**：新建 `amusement_project_entitlements`（项目↔权益类型绑定）；`AmusementService.createVerification` 经 `AmusementEntitlementGateway` 在线校验存在/active/有效期/剩余次数/游乐类/绑定本项目，不可用即拒绝（`ENTITLEMENT_USED`/`ENTITLEMENT_EXPIRED`/无剩余次数等）。当前“项目无任何绑定配置时仅校验游乐类放行”的兼容回退与 HTML“绑定哪些票务权益可以使用这个项目”不一致，登记为待修代码缺口。
+> - **✅ 现场核销校验票务权益已落地（V082）**：新建 `amusement_project_entitlements`（项目↔权益类型绑定）；`AmusementService.createVerification` 经 `AmusementEntitlementGateway` 在线校验存在/active/有效期/剩余次数/游乐类/绑定本项目，不可用即拒绝（`ENTITLEMENT_USED`/`ENTITLEMENT_EXPIRED`/无剩余次数等）。第十八批 AH 段 239-R1 起游乐侧只拦未生效，票面到期改由票务侧消费回调复核，本场已检票的票本场内不受票面有效期截断。当前“项目无任何绑定配置时仅校验游乐类放行”的兼容回退与 HTML“绑定哪些票务权益可以使用这个项目”不一致，登记为待修代码缺口。
 > - **✅ 三维度容量已落地（V083）**（**口径已废止·见文首口径**：三维度容量整体作废，现行只按项目实时在玩人数单维控量；本条只记录当时的落地事实）：新建 `amusement_capacity_config`（点位/设备维并发容量）+ `amusement_capacity_snapshot`（项目/场次/点位设备各维在场计数物化），核销按"项目安全上限 / 场次 / 点位设备"三维度取最小可放行余量原子 check+increment；仅校验已配置受控维度，未配置维度退化为场次单维。
 > - **端侧现状（M07 复核）**：`apps/android-terminal/` 已有游乐在线核销、检修提交和主管确认恢复调用；原“无 amusement/safety 实际端侧集成”已失效。在线核销与检修链可复用；游乐离线核销违反 HTML“必须在线、不做离线核销”，已于第十八批 O 段第 129 条下线（安卓离线核销队列与同步入口、后端离线同步与离线权益包接口均已删除）。
 > - **验收口径（已正式）**：检修主管确认通过后项目 `open_status` 自动恢复为 `open`；无有效/未绑定本项目权益核销失败并返回明确原因；项目容量（实时在玩人数）余量为 0 即拒绝（`session_full`）（原按「场次/三维度容量」，已废止·见文首口径）。
@@ -306,6 +306,7 @@ stateDiagram-v2
 - `AmusementBusinessDayService` 计算各综合体有效窗口，入场与场次保存当时版本和起止边界；指标明细、聚合与小时客流共用 `AmusementBusinessDayAnalytics`，综合体范围按实际归属过滤；缺资料不以服务器时区或其他域窗口替代。
 - 后台入口 `ADM-AMU-008` 提交完整新旧快照并可查看审批原件；证据上传与读取分别核业务权限和证据权限的真实综合体交集。
 - **当天无限票入场实现（V487）**：两种在线核销入口通过 `TicketAmusementAdmissionService` 和现有共享幂等链办理；真实综合体已审批窗口写入 `entitlement_business_day_activations`，首刷扣一次，同一锁定窗口再次入场不重复扣次或发送奖励、结算事件。每次真实入场都保留游乐与票务关联事实；缺真实游乐项目明确拒绝，不再回退服务器自然日。容量失败仅回补本次尚未完成入场的激活，冲正保留原件。真实终端编号与游乐资产码分别核对，不把资产码写进票务终端外键；动态凭证按请求令牌与持久化摘要对应事实验签，不恢复明文存储。
+- **第十八批 AH 段（第 219 条 219-R1 及补充、第 239 条 239-R1）**：`TicketAmusementAdmissionService` 消费与预览在扣次前对非当天无限权益调 `TicketVerificationService.requireAmusementSessionShare`——同人份有入场类权益的票内游乐须本场（订单综合体本营业日）已检票、本场按一份封顶，否则 409 `ENTITLEMENT_SESSION_NOT_CHECKED_IN` / `ENTITLEMENT_SESSION_SHARE_USED_UP`、不扣次；`AmusementService` 只拦权益未生效，票面到期由票务侧 `requireAmusementConsumption` 复核，本场已检票的票本场内放行；V619 去掉 `uk_amusement_verifications_active_entry`，同一权益同一场次可有多条未释放成功入场，并发扣次仍由权益行锁与原子扣次守住。
 - **验证边界**：当天无限、真实凭证及24小时奖励链、出场并发、闭场／暂停后的原请求重放已完成定向数据库测试；撤权或改变原请求事实仍拒绝。出口自动感应、真实设备与外部供应商联调另列，不能据此宣称完整设备链交付。
 
 > **~~三维度容量校验规则~~（修订说明 2026-06-07，amuse-1 / PRD §11 已确认规则 1）——本规则于 2026-08-06 R10 整块废止**：
@@ -524,7 +525,6 @@ stateDiagram-v2
 索引：
 
 - `idx_amusement_verifications_session`
-- `uk_amusement_verifications_active_entry`
 - `uk_amusement_verifications_exit_of_entry`
 
 ### 7.8 amusement_manual_overrides（已废止待下线）
@@ -1258,6 +1258,7 @@ P0 完成时必须满足：
 
 | 日期 | 类型 | 位置 | 内容 | 原因/依据 |
 |---|---|---|---|---|
+| 2026-11-11 | 改 | 抬头、文首已落地清单、§6.4.2、§7.7 索引 | V0.18：第十八批 AH 段第 219 条 219-R1：票内游乐消费与预览扣次前判本场已检票、一份封顶；第 239 条 239-R1：游乐侧有效期闸只拦未生效，票面到期由票务侧按本场已检票例外复核；第 219 条补充：V619 删除 `uk_amusement_verifications_active_entry`，§7.7 索引清单删去该行 | BSM:800「该票所含的各项权益（各酒吧入场、酒水赠饮、游乐、餐饮券、零售券等），只能在完成检票环节所在的那一个场次内核销……」；ENUM:46；BSM:780「按可用次数逐次核销（每用一次扣一次，剩余为 0 才算用完）」；V619 迁移 |
 | 2026-11-11 | 改 | 抬头、§7.15、§7.16 | V0.17：第十八批 AG 段第 255 条 255-R3：游乐事故上报人（`amusement_incidents.reported_by_user_id`）与事故处置动作操作人（`amusement_incident_actions.operator_user_id`，含新建、追加处置、关闭）改取登录人，请求体里的 `reported_by_user_id`、`operator_user_id`、`closed_by_user_id` 不再读；系统超容事故上报人仍记 `system` | PGM:899「谁发起、谁销售、谁服务、谁第一个处理异常、为什么、谁审批、结果是什么，都要能查到。」；决策台账 18AE 198-R3「服务端操作人一律取登录人」先例；AmusementSafetyService 现码 |
 | 2026-11-04 | 改 | 抬头、§8.5 | V0.16：第十八批 Q 段第 146 条安卓工作手机「游乐核销」屏改走票务核销入口 `POST /api/v1/ticketing/verifications`，删去「场次（可选）」输入、补扫码核销，不再调游乐直连入口；项目由入口点位或设备定位，场次取当前开放场次，员工不选项目与场次 | BSM:552「进场之后，工作手机扫客人二维码核销各酒吧入场、赠饮、游乐等场内权益」；BSM:766「和游乐相连，票里的游乐权益到项目入口核销。」 |
 | 2026-11-03 | 改 | 抬头、§6.4.2、§8.5、§10.1、§12.2 | V0.15：第十八批 O 段第 129 条下线游乐离线核销（安卓离线核销队列与同步入口、后端离线同步与离线权益包接口删除），端侧现状、离线核销下线口径、核销 API 表与 §10.1 核销员、§12.2 安卓端承接的离线排队现状改为已下线；验证边界删去离线拒绝记录范围隔离两处说法（所依据的用例已随通道删除） | BSM:800「……核销必须在线、不做离线核销。……」 |

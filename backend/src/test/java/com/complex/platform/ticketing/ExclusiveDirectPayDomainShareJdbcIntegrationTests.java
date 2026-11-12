@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -306,6 +306,32 @@ class ExclusiveDirectPayDomainShareJdbcIntegrationTests {
 
         assertThat(num(formatShare(bill, "amusement"), "channel_fee_cent")).as("游乐份额不再担餐饮那份").isEqualTo(100L);
         assertThat(num(formatShare(bill, "catering"), "channel_fee_cent")).isEqualTo(300L);
+    }
+
+    @Test
+    void retailVoucherBuiltLikeComboRowVerifiesAtRetailMerchantAndSettlesToCityCompany() throws Exception {
+        // 第十八批 AH 段 217-R1（ENUM:36「餐饮券、零售券」；ENUM:51「餐饮与零售的域主管公司为城市项目公司……直接与实际提供的餐饮、零售商户结算」）：
+        // 后台组合配置「餐饮/零售」行选零售商户时按前端同键建 retail 权益（专属直付该商户）；先检票入场，零售商户员工在本店设备核销，
+        // 月结记入零售业态、归城市项目公司。本夹具把直付商户的业态改成零售。
+        jdbc.update("UPDATE merchants SET merchant_type = 'retail' WHERE id = ?", restaurant);
+        String entryTpl = template("直付酒吧 · 入场", "entry", bar, null, null);
+        bind(entryTpl, BAR_PRICE_CENT, null);
+        String retailTpl = template("直付零售 · 零售", "retail", restaurant, catalogCode, restaurant);
+        bind(retailTpl, DINING_PRICE_CENT, "platform_funded");
+        String order = sell();
+        verify(code(order, entryTpl), barStaff, bar, barDevice);
+        String retailVerification = verify(code(order, retailTpl), staff, restaurant, device);
+
+        Map<String, Object> settledRow = settled(retailVerification);
+        assertThat(settledRow.get("exclusive_merchant_id")).as("零售券全额直付该零售商户").isEqualTo(restaurant);
+        assertThat(num(settledRow, "verified_amount_cent")).as("直付额按内部结算价").isEqualTo(CATALOG_PRICE_CENT);
+        moveToMidMonth(order);
+        String company = cityCompany("城市项目公司丙");
+
+        Map<String, Object> retail = formatShare(settlement.settleMonth(project, MONTH), "retail");
+        assertThat(retail).as("零售券份额记入零售业态").isNotNull();
+        assertThat(num(retail, "gross_revenue_cent")).isEqualTo(DINING_PRICE_CENT);
+        assertThat(retail.get("beneficiary_entity_id")).as("ENUM:51 零售域 → 城市项目公司").isEqualTo(company);
     }
 
     private void moveToMidMonth(String order) {

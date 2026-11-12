@@ -1,8 +1,9 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.complex.platform.amusement.AmusementExitRequest;
@@ -39,6 +40,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
  * 真实票务入场到游乐出场的数据库回归：审批营业日、场次锁版、真实父票及操作人范围。
  * 验证单项目人数释放、重复出场、两笔不同请求并发入场和无入场拒绝。
  * 已退休场次容量不再占用；该测试只覆盖既有出场调用，不代表出口自动感应链已交付。
+ * 第十八批 AH 段第 219 条补充：同一权益两笔不同请求并发入场各按一次使用扣次（BSM:780「每用一次扣一次」），不再靠 V234 唯一约束拒第二笔。
  */
 @SpringBootTest(properties = {
         "spring.datasource.url=jdbc:postgresql://127.0.0.1:5432/complex_test",
@@ -150,7 +152,7 @@ class AmusementExitReleaseJdbcIntegrationTests {
     }
 
     @Test
-    void concurrentDoubleEntrySameEntitlementRejectedByUniqueConstraint() throws Exception {
+    void concurrentDoubleEntrySameEntitlementSerializesAndConsumesTwice() throws Exception {
         String suffix = Long.toString(System.nanoTime());
         seedDevice(suffix);
         String pointId = "point_dbl_" + suffix;
@@ -202,19 +204,18 @@ class AmusementExitReleaseJdbcIntegrationTests {
             assertThat(waiting).as("第二笔真实核销须等待同项目锁").isTrue();
             commitFirst.countDown();
             assertThat(first.get(10, TimeUnit.SECONDS).status()).isEqualTo("success");
-            assertThatThrownBy(() -> second.get(10, TimeUnit.SECONDS))
-                    .hasCauseInstanceOf(org.springframework.dao.DataIntegrityViolationException.class);
+            assertThatCode(() -> second.get(10, TimeUnit.SECONDS)).doesNotThrowAnyException();
         } finally {
             commitFirst.countDown();
             pool.shutdownNow();
             assertThat(pool.awaitTermination(10, TimeUnit.SECONDS)).isTrue();
         }
-        assertThat(activeEntryCount(projectId)).isEqualTo(1);
-        assertThat(projectSnapshotOccupied(projectId)).isEqualTo(1);
+        assertThat(activeEntryCount(projectId)).isEqualTo(2);
+        assertThat(projectSnapshotOccupied(projectId)).isEqualTo(2);
         assertThat(jdbcTemplate.queryForObject(
-                "SELECT used_times FROM issued_entitlements WHERE id=?", Integer.class, "ent_" + code)).isEqualTo(1);
+                "SELECT used_times FROM issued_entitlements WHERE id=?", Integer.class, "ent_" + code)).isEqualTo(2);
         assertThat(jdbcTemplate.queryForObject(
-                "SELECT count(*) FROM ticket_verifications WHERE entitlement_id=?", Integer.class, "ent_" + code)).isEqualTo(1);
+                "SELECT count(*) FROM ticket_verifications WHERE entitlement_id=?", Integer.class, "ent_" + code)).isEqualTo(2);
     }
 
     @Test
