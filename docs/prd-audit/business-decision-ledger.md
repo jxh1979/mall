@@ -1,6 +1,6 @@
 # PRD 审计业务裁决台账
 
-文档版本：V0.89
+文档版本：V0.90
 状态：进行中
 迁移日期：2026-07-27
 当前事实源：三份立法 HTML 以既有冻结基线叠加 James 此前 M02 至 M08 的点名批准、全量审计 M001、M002 的逐项批准，以及本轮 2026-10-16 至 2026-10-17 业务 HTML 审计中 Q01 至 Q40 及子题实际明确批准且未被后续替代的裁决，和 2026-10-17 第二批 HTML 业务线推演审计（A–F 六线 64 条、停车章）的逐项批准，并叠加本轮 CG 70 项来源确认与 C01–C09、N01–N03 最终澄清及补全文稿中 F01、W01–W05 的整体修改批准（本文件末节）；本轮最终规则、未采纳或替代关系、现行版本与字节哈希见本文件末节。历史记录保留为各自当时事实，不恢复已被替代的建议。
@@ -6580,3 +6580,173 @@ HTML 的语义补齐与直接引用同步可在本批核验；70项中的业务�
   同步与测试：yaml 与 json 整份深比较一致，操作实数 1360；最终 openapi-p0.json 的 SHA-256 为 801601680d48b956121a2ea214834963f97540507d177d62e1f623ff182c4f35，security-scans 两份 md 只改「OpenAPI SHA-256」行；docs:operation-matrix、docs:openapi-closure 重跑，node tools/refresh-entry-doc-baseline.mjs 报无漂移。MerchantBillingOperatorJdbcIntegrationTests 3 测、InventoryTransferRequisitionJdbcIntegrationTests 19 测定向 0 红；b53_web.sh TicketingPoliciesPage 4 个文件 22 条全绿。
   复核旁见：AccessUserRequest.account_type 枚举与现码不一致（不含 outsourced_vendor），已登记待开发清单第 286 条，本段不改。
 - 18AG 落地位置补记·运行验收证据、快照、终验文档刷新（无新裁决）：业务提交 3bd0bde4 之后，按第十八批裁决 25 重刷了运行验收证据：后端全量 6665 测，0 失败 0 错误；apps/web 构建通过；常规界面验收（接口全部 mock）实跑 40 条全过；真实后端界面验收未跑，runtime_ready=false。随后依次重生成闭环当前态快照、生产闭环缺口报告、界面验收报告、无上线指挥台。生成器没改。手改 docs/final-closed-loop-acceptance-audit-v0.1.md 与 docs/code-implementation-acceptance-audit-v0.1.md：前端单测源码计数改为 1710；被核文件行数都没变；后端全量与常规界面验收的数字、日期改为本次实跑值；写入 npm run verify:unit 实跑结果，五个工作区全过。交付门禁于 2026-11-11 20:58 UTC 在工作树逐项实跑子项，NAS 两项现场探测未跑。仍红的有两项：一是 coding-host-protection，它写死主仓路径，在工作树口径下必红，属工具口径，不做；二是 final-closed-loop-audit，如实留 2 条红（integration-ready、business-acceptance-ready），原因是校验器要求终验把联调、业务验收写成「是」，而裁决 25 定了不跑真实后端界面验收、运行验收未就绪，终验写的是「否」。verify:delivery-gates 总链仍是红的。
+
+18AH 落地位置补记（2026-11-12）：第十八批 AH 段（batch54）按 18AG 核实方案实现待开发清单第 238、239、219、218、215、217、256 条（票务入场与权益组）；运行验收证据、终验文档在本段最后一个提交刷新；各条落地位置见下。本段追加时，原台账除文档版本 V0.89→V0.90 外，其他历史字节保持。
+
+- 18AH 落地位置补记·控制席判定（2026-11-12）：本段（第十八批 AH 段，batch54）实现待开发清单第 238、239、219、218、215、217、256 条（票务入场与权益组，18AG 核实方案 b53-audit\g215-256-ticketops.json）与第 217、219 条补充段；无新裁决。第 219 条补充（非场次型游乐同一开放场次同一权益第二次入场先扣次再撞唯一约束 409）按任务书先核实：BSM:780「按可用次数逐次核销」、ENUM:144「一人多次票当天多次入场」，HTML 无未出场不得再入场的原句，故 V619 末尾去掉 uk_amusement_verifications_active_entry，并发扣次仍由权益行锁与原子扣次守住。迁移 V618（ticket_type_gift_floors）、V619（customer_frequent_entry_alert_settings＋去索引）、V620（ticket_refunds.payout_result）。OpenAPI 新增 4 个操作（1360→1364）。合并脚本 ops/160/merge-pr.sh V0.03→V0.04：PR #586 合并时按 --workflow 过滤的查询在 1 分钟宽限内没查到已建的 web-tests run（三份同一秒建、查询有延迟），误判未触发；改为按提交整体查询再按工作流名过滤，两份合一个最长 3 分钟的宽限循环；tools/gate-hardening-tests/m001-regression.mjs 假 gh 随之按新查询输出工作流名。
+- 18AH 落地位置补记·文档旁见并入（无新裁决）：证据风控 PRD §8.2「两类异常的计数与触发……均无承载」中反复注销注册一类已过时（CustomerChurnAlertService 第十三批 ROOT-03-R22 已落地），与本段改的高频出入场同句，收尾一并改成现状。会员 PRD 约 :289「注销重注册计数与预警触发当前无承载」只说注销重注册，与本段改的高频出入场不同句，按操作员 2026-11-06「照旧登记」撤回（会员 PRD 恢复 V1.11 原样），登记待开发清单第 288 条。
+- 18AH 落地位置补记·第 238 条 238-R1（多人票场次键无营业场次时取订单综合体营业日）：
+  - 改法：TicketVerificationService.sessionKeyFor 改为 sessionKeyFor(权益, now)，venue 营业场次分支不动；回退值由服务器默认时区自然日改为 businessDays.businessDate(订单综合体, null, now)（新增私有方法 orderProject，无订单取出厂口径）。enforceMultiPersonSameSession、markTicketInstanceFirstUse 两处调用同改，检票、酒吧入场、游乐全部调用者一并覆盖；键仍是 YYYY-MM-DD。为固定时刻验证，同类加包内可见字段 clock（默认系统时钟，只用于核销与预检取「现在」）。
+  - 依据：BSM:800「一个场次＝一次开门到关门；跨夜场次以该场次的实际闭店时间为准，不按自然日切分」「同一场次内的重复进出仍须按上述三道环节依次通过，但不再重复扣减票面入场次数」；BSM:780「其中「当天」「每天」一律按营业日计算……时区一律取项目所在地时间，禁止使用服务器默认时区」；ENUM:46「该场次内可不限次数进出……多人票每人同理，但各人仍须在同一场次内完成入场」；DEC-R4-2026-08-04-89。
+  - 测试：KioskEntitlementClaimJdbcTests.multiPersonTicketReentersAndSecondPersonEntersAfterMidnightInTheSameBusinessDay。三人票，当地 23:30 第 1 人入场，次日 00:40 第 1 人再入场放行（session_reentry）、第 2 人首入成功，首场次键为营业日 2031-01-15；次日 10:30 第 3 人 409 MULTI_PERSON_CROSS_SESSION_FORBIDDEN。
+- 18AH 落地位置补记·第 238 条 238-R2（首场次结束时刻按营业日闭店时点算）：
+  - 改法：FirstSessionWindow.endOf 加参数 BusinessDayResolver、projectId。日期键分支由次日自然零点改为 BusinessDayResolver.closeAt(订单综合体, null, 键日期)，venue 场次分支不动。
+  - 落地位置：SettlementExpiryJob 的 businessAt、sessionEnd 由静态方法改为实例方法，传 row.projectId() 与已注入的 businessDays；JdbcTicketingRepository.findFirstSession 左连 ticket_orders 取 project_id，仓储字段注入 BusinessDayResolver，转赠场次限制随之按闭店判结束。
+  - 依据：BSM:800「一个场次＝一次开门到关门；跨夜场次以该场次的实际闭店时间为准」；ENUM:48「同票已开启的那个场次一经结束即永无法入场，于该场次结束时按本条处理，不等票面有效期届满」；BSM:809「受赠人打开转赠页面时，若该人份权益所绑定的场次已经结束……」。
+  - 测试：TicketTransferNoFreezeJdbcIntegrationTests.businessDayKeyedFirstSessionEndsAtThatDaysCloseNotMidnight（结束时刻为出厂次日 07:00 北京时间，不是零点）；SettlementExpiryAttributionJdbcIntegrationTests.multiPersonNoShowSlotOfBusinessDayKeyedSessionSettlesAtThatDaysClose。
+- 18AH 落地位置补记·第 239 条 239-R1（本场已检票的票在本场内不受票面有效期截断，有效期只拦开新场次）：
+  - 改法：仓储新增 hasVerifiedTicketEntrySince(父票, since)（Jdbc 与 hasVerifiedEntrySince 共用 verifiedEntrySince，人份序号可空；内存仓同步）。TicketVerificationService 新增 ticketCheckedInThisSession（同父票任一人份自订单综合体本营业日起点有入场类核销成功）与 expiredForNewSession。
+  - 落地位置：核销有效期闸、预检 withinValidity、requireAmusementConsumption 都改为「到期且本场未检票」才拒 ENTITLEMENT_EXPIRED；AmusementService.performAmusementVerification 去掉 validTo 那半，只拦未生效，票面到期由票务侧消费回调带本场例外复核。valid_from、active、父票冻结等闸位置不动。
+  - 依据：ENUM:46「上述有效期类型决定的是「这张票在多长时间内可以开始使用」；一经完成检票环节……该票即绑定至当前场次，其全部权益的可用窗口收窄为该场次」「该场次内可不限次数进出」；BSM:778「同一场次内不同人可在不同时间分别入场」。
+  - 测试：
+    - KioskEntitlementClaimJdbcTests.checkedInTicketReentersAndRedeemsGiftAfterValidToButCannotOpenANewSession（到点后再入场放行、预检放行、赠饮成功；挪到上一营业日后 409 ENTITLEMENT_EXPIRED）
+    - KioskEntitlementClaimJdbcTests.secondPersonEntersTheOpenedSessionAfterValidTo
+    - AmusementUnlimitedBusinessDayJdbcIntegrationTests.admittedTicketReentersAfterValidToWithinItsBusinessDayButNotInANewOne
+- 18AH 落地位置补记·第 239 条 239-R2（到期作废与到期未核销处理对本场已检票的票延到场次结束）：
+  - 改法：TicketingService.processExpiredPaidEntitlements 先剔除父票本场已检票的权益（ticketCheckedInThisSession），再作废在途转赠和权益；场次结束、进入下一营业日后下轮照常处理。SettlementExpiryJob.businessAt：
+    - 多人票本人未检票、首场次已开启的人份，一律取首场次结束时刻，不再与票面到期取较早者；
+    - 已检票人份的票面到期所在营业日内、到期前有入场时刻的，取票面到期与该营业日闭店的较晚者。
+    - 不加迁移。
+  - 依据：BSM:800「场次结束时仍未核销的权益即行终结，不得顺延至下一场次、不得折现，按分账规则作为未核销份额处理」；ENUM:48「已完成检票环节（刷码核销成功）、但权益未在该场次内核销的，按场次终结制作为未核销份额进入分账减除」「同票已开启的那个场次一经结束即永无法入场，于该场次结束时按本条处理，不等票面有效期届满」；ENUM:46「其全部权益的可用窗口收窄为该场次」。
+  - 测试：KioskEntitlementClaimJdbcTests.expiryJobLeavesThisSessionsUnusedEntitlementsUntilTheSessionEnds；SettlementExpiryAttributionJdbcIntegrationTests.checkedInTicketsUnusedShareSettlesAtTheSessionCloseNotAtValidTo；SettlementExpiryAttributionJdbcIntegrationTests.multiPersonNoShowSlotOfBusinessDayKeyedSessionSettlesAtThatDaysClose。
+- 18AH 落地位置补记·第 219、218 条（第十八批 AH 段 B 段，票务入场与权益组，无新裁决；方案 18AG 核实 b53-audit\g215-256-ticketops.json 的 219-R1、218-R1、218-R2，外加控制席判定并入的第 219 条补充）：
+  - 219-R1 票内游乐先判本场已检票，按本场一份封顶。
+    - 改法：TicketVerificationService.requireSessionCheckedIn 加权益称谓参数（197-R1 处传「餐饮、零售券」，原文案不变）；新增 requireAmusementSessionShare，无父票或同人份没有入园、酒吧入场类权益的纯游乐票不加闸，其余要求本场（订单综合体本营业日）已检票、每场一份（游乐总次数÷同人份入场次数，至少 1）。
+    - 落地位置：TicketAmusementAdmissionService.consume 与 preview 在扣次前调用，当天无限窗口除外。拒绝码 409 ENTITLEMENT_SESSION_NOT_CHECKED_IN、409 ENTITLEMENT_SESSION_SHARE_USED_UP，落 rejected、不扣次。不加迁移。
+    - 依据：BSM:800「该票所含的各项权益（各酒吧入场、酒水赠饮、游乐、餐饮券、零售券等），只能在完成检票环节所在的那一个场次内核销」「后续场次的附带权益也不得提前到当前场次使用」；ENUM:46「该窗口内附带权益按完整一份配足、仅限当场消耗」。
+    - 测试：AmusementVerifyRoutingJdbcIntegrationTests.comboTicketAmusementNeedsThisSessionsCheckInAndIsCappedAtOneShare、singleVisitTicketUsesAllItsAmusementInItsOnlySession。
+  - 第 219 条补充，同一开放场次再次入场。
+    - 核实结论：HTML 允许，已改。
+    - 改法：V619 末尾 DROP INDEX uk_amusement_verifications_active_entry，同一权益同一场次可以有多条未释放入场。多次票再玩照常成功、每次扣一次、在玩人数各加一，由场次结束或营业日结束释放；并发扣次仍由权益行锁与原子扣次守住。
+    - 落地位置：V619__customer_frequent_entry_alert_settings.sql 末段；AmusementService 入场写入处的注释。
+    - 依据：BSM:780「按可用次数逐次核销（每用一次扣一次，剩余为 0 才算用完）」；BSM:800「该窗口内票面附带的各项权益……按完整一份配足、完整可用」；ENUM:144「含一人多次票当天多次入场、当天不限次数一类表述」；BSM:1263 在玩人数只由入场核销、出场自动扣减、场次结束与营业日结束产生。
+    - 测试：AmusementVerifyRoutingJdbcIntegrationTests.multiUseAmusementPlaysAgainInTheSameOpenSessionBeforeRelease；AmusementExitReleaseJdbcIntegrationTests.concurrentDoubleEntrySameEntitlementSerializesAndConsumesTwice（原名 concurrentDoubleEntrySameEntitlementRejectedByUniqueConstraint，按 BSM:780 改了断言）。
+  - 218-R1 检票成功后按人份统计一晚、连续两日出入次数，达阈值写系统预警。
+    - 改法：V619 建 customer_frequent_entry_alert_settings，带两组上下限 CHECK，出厂行 __global__ 为 4、7。新服务 TicketFrequentEntryAlertService，由 TicketVerificationService.createVerification 在核销成功后同一事务调用。
+    - 计数口径：同父票同人份入园（entry）成功核销，含同场次再入场，已冲正、酒吧入场、游乐不计；一晚＝订单综合体本营业日，连续两日＝本营业日与上一营业日。
+    - 预警：达到项目阈值（没有项目行取出厂行）即调 RiskAlertService.recordSystemAlert，来源 ticketing、类型 ticket.frequent_entry、关联父票、项目为订单综合体；同人份同营业日同类一条，不阻断入场。前端 statusLabels 显示「高频出入场」。
+    - 依据：BSM:800「一晚出入次数或连续两日出入合计次数达到后台配置的阈值即触发核查……由系统自动预警，楼宇保安团队据预警调阅录像」「完成检票环节指其中二维码刷码核销成功的那一刻，与各酒吧入场、各游乐项目入场等场内单点核销相区别」；BSM:1657「预警只作提示与线索汇集，不自动阻断业务」；DEC-R4-2026-08-04-89。
+    - 测试：KioskEntitlementClaimJdbcTests.fourthParkEntryOfOnePersonInOneBusinessDayRaisesOneFrequentEntryAlert、sevenEntriesOverTwoBusinessDaysRaiseOnlyTheTwoDayAlert、barAdmissionsAreNotCountedAsFrequentEntries；statusLabels.test.ts「风险预警/主管复核/售票渠道翻中文」。
+  - 218-R2 出入场预警阈值按项目配置。
+    - 改法与落地位置：CustomerAccountStatusService 新增 get/configureFrequentEntryAlertSetting（customer.account.manage 权限、项目范围闸、六值同配、两组各自 1≤下限≤阈值≤上限、幂等、成功与失败都留痕）。CustomerMembershipSettingsController 新增 GET/PUT /api/v1/customer-frequent-entry-alert-settings/{project_id}；ServerModuleRoutes 归 governance。FieldLabels.java 与 fieldLabels.ts 补 6 个键。客人账号管理页 CustomerAccountsPage 加两组输入；页面矩阵 ADM-CUS-001 行补这两个接口。
+    - 依据：BSM:800「（业务参数，按项目可配，出厂默认一晚 4 次、连续两日合计 7 次，须同时配置上下限）」；DEC-R4-2026-08-04-89「阈值后台可配」。
+    - 测试：CustomerAccountStatusJdbcIntegrationTests.frequentEntryAlertSettingFallsBackToFactoryAndSavesSixValuesTogether、frequentEntryAlertSettingRequiresBoundsAndThresholdWithinThem；KioskEntitlementClaimJdbcTests.projectNightThresholdConfiguredInAdminAppliesToParkEntries；CustomerAccountsPage.test.tsx「高频出入场预警阈值按项目一晚、连续两日各与上下限同配」。
+- 18AH 落地位置补记（C 段）：
+  215-R1 通票发布闸
+  - 改法：发布闸按每家覆盖酒吧核对赠酒杯数与平台出资杯数。
+    - 只管 bar_id 为空的通票，单店票不套；不含赠酒的通票不再放行。
+    - 只计票面价 0 的赠饮，每人份杯数＝份数×次数；带票面价的兑换券不计。
+    - 应有杯数＝最低杯数×max(1, 该吧入场类最大次数)；不足报 409 PASS_BAR_GIFT_COVERAGE_INSUFFICIENT。
+    - 应有杯数以内须平台出资型，否则报 409 PASS_BAR_GIFT_FLOOR_NOT_PLATFORM_FUNDED。
+    - 已上架通票改组成后跌破即退回草稿。
+    - 票面赠酒清单杯数改为份数×次数×每份人数。
+  - 落地位置：
+    - TicketCatalogService.barGiftCoverageViolation（publishTicketType 抛出；bindTicketTypeEntitlement 已上架通票跌破退回草稿）；
+    - TicketTypeProviderEntitlementRow 加 totalTimes、costBearer、componentPriceCent，units() 改为份数×次数×人数；
+    - JdbcTicketingRepository.listTicketTypeProviderEntitlements 多取三列；
+    - TicketingPoliciesPage 酒吧行说明文字。
+  - 依据：
+    - ENUM:34「一张酒吧通票或跨域组合通票覆盖的每一家酒吧，赠酒杯数不得低于后台配置的最低赠酒杯数（业务参数，按票种可配，出厂默认 1 杯，须同时配置上下限），各酒吧分别赠几杯在售票时写明票面，低于该下限的票种不得发布上架」「该最低赠酒杯数属于票面强制要求提供的权益，一律记为域主管公司出资」；
+    - BSM:1033「只有商户主动申请并书面确认让利的权益才记为商户让利、不结算」；
+    - ENUM:36「酒水（赠饮/兑换券）」；
+    - ENUM:46「该窗口内附带权益按完整一份配足」；
+    - BSM:1032「各酒吧分别赠几杯在售票时写明票面」。
+  - 测试：
+    - TicketingServiceTests：publishBlocksPassCoveringBarWithoutAnyGiftDrink、publishAllowsSingleBarTicketWithoutGiftDrink、publishBlocksPassWhoseFloorCupsAreOnlyMerchantConcession、publishAllowsPassWithPlatformFloorCupPlusConcessionExtra、publishBlocksPassWhoseOnlyDrinkIsPricedVoucher、publishBlocksMultiVisitPassWithFewerCupsThanVisits、giftCoverageCountsTotalTimesAsCups、bindingBarEntryWithoutGiftOntoPublishedPassReturnsItToDraft；
+    - PassBarGiftFloorJdbcIntegrationTests.passPublishGateChecksEveryBarFloorAndPlatformFunding。
+  215-R2 最低赠酒杯数按票种可配
+  - 改法：按票种配最低赠酒杯数，杯数与下限、上限同时填写，且 1≤下限≤杯数≤上限；没配过的按出厂 1 杯；成功留痕记改前改后；已上架通票改高后跌破即退回草稿。
+  - 落地位置：
+    - 迁移 V618 ticket_type_gift_floors；
+    - GET 和 PUT /api/v1/ticketing/ticket-types/{id}/min-gift-cups（TicketingController.getTicketTypeMinGiftCups、configureTicketTypeMinGiftCups）；
+    - TicketCatalogService.getGiftFloor、configureGiftFloor；TicketingService.configureGiftFloor（留痕 ticket_type.min_gift_cups_configured，失败 ticket_type.min_gift_cups_config_failed）；
+    - TicketingRepository 和 JdbcTicketingRepository 的 findGiftFloor、saveGiftFloor；
+    - TicketingPoliciesPage 组合配置区「最低赠酒杯数（按票种）」；
+    - FieldLabels.java 与 fieldLabels.ts 补 min_gift_cups、min_gift_cups_lower、min_gift_cups_upper；
+    - 页面矩阵 ADM-TKT-001 行。
+  - 依据：
+    - ENUM:34「后台配置的最低赠酒杯数（业务参数，按票种可配，出厂默认 1 杯，须同时配置上下限）」；
+    - BSM:1032 同句。
+  - 测试：
+    - PassBarGiftFloorJdbcIntegrationTests.minGiftCupsConfiguredPerTicketTypeWithBoundsAndPublishedPassFallsBackToDraft；
+    - TicketingPoliciesPage.combo.test「215-R2 最低赠酒杯数：选中通票回显出厂 1 杯，填 2／1／3 保存发蛇形键」。
+  217-R1 餐饮/零售行（含第 217 条补充）
+  - 改法：
+    - 组合配置「餐饮」行改为「餐饮/零售」行，所选商户业态为零售时建 retail 权益（名称「· 零售」），其余建 dining（名称「· 餐饮」）；商户下拉不按业态过滤；后端不动。
+    - 第 217 条补充：通用「新建模板」权益类型下拉只留 entry、amusement。ride（游乐项目）即 ENUM:36「游乐」＝amusement，已在下拉里；bar 在 ENUM:36 权益类型里没有对应项。不改契约，不改后端。
+    - 安卓一体机领取屏 retail 显示「零售」。
+  - 落地位置：
+    - TicketingPoliciesPage：submitCombo 餐饮/零售循环、ENTITLEMENT_TYPES、餐饮/零售区标题、列名、按钮、校验文案；
+    - apps/android-terminal KioskClaim.kt 的 entitlementTypeZh。
+  - 依据：
+    - ENUM:36「入场、游乐、酒水（赠饮/兑换券）、卡座免通票入场名额、餐饮券、零售券、服务权益、积分兑换虚拟券」；
+    - ENUM:51「餐饮与零售的域主管公司为城市项目公司……直接与实际提供的餐饮、零售商户结算」；
+    - PGM:287「展示给用户的一切文字……必须全部为中文」。
+  - 测试：
+    - TicketingPoliciesPage.combo.test「217-R1 餐饮/零售行：选零售商户建 retail 权益（名称「· 零售」），选餐饮商户建 dining 权益（名称「· 餐饮」）」；
+    - TicketingPoliciesPage.guidedcreate.test「217 补充 新建模板：权益类型下拉只有入园、游乐」；
+    - KioskClaimTest.retailEntitlementTypeShowsChinese；
+    - ExclusiveDirectPayDomainShareJdbcIntegrationTests.retailVoucherBuiltLikeComboRowVerifiesAtRetailMerchantAndSettlesToCityCompany。
+- 18AH 落地位置补记·第 256 条（D 段，无新裁决）：
+  ① 256-R1 确认兑付的原路退回结果落退款单并进成功留痕。
+     - 改法：新迁移 V620__ticket_refunds_payout_result.sql，ALTER TABLE ticket_refunds ADD COLUMN payout_result TEXT，可空。TicketingRepository 和 JdbcTicketingRepository 的 markTicketRefundSucceeded 加参数 payoutResult，CAS 同时 SET payout_result；listTicketRefunds 和 findTicketRefundById 两处 SELECT 带出 payout_result；JdbcTicketingRowMapper 读取该列。TicketRefundRecord 末位加 payoutResult（另加 16 参构造器补 null，withStatus 和 withPayoutItems 原样带过，新增 withPayoutResult）。TicketRefundService.confirmPayout 把去掉首尾空白后的 reason 写进退款单，返回值也带上；储值笔当场回原卡的自动成功路径传 null。TicketingService.confirmTicketRefundPayout 改用 7 参 executeWrite，成功留痕 ticket_refund.payout_confirmed 的 metadata 记 payout_result。TicketRefundService 原注释称「reason 写入审计事件」，与代码不符，已改为实际落点。FieldLabels.java 和 apps/web/src/admin/i18n/fieldLabels.ts 同键同名补 payout_result「原路退回结果」。前端页面不改：TicketOrdersPage 原本就必填并发送 reason；按方案 not_doing，退款台账页不新增显示列。
+     - 落地位置：backend/src/main/resources/db/migration/V620__ticket_refunds_payout_result.sql；ticketing/TicketRefundRecord.java、TicketingRepository.java、JdbcTicketingRepository.java、JdbcTicketingRowMapper.java、TicketRefundService.java、TicketingService.java；common/api/FieldLabels.java；apps/web/src/admin/i18n/fieldLabels.ts。
+     - 依据：BSM:806「系统完整记录退款原因、责任主体、发起人、审批人、适用规则版本、原路退回结果以及对应财务、积分、成长值和权益冲正。」PGM:899「谁发起、谁销售、谁服务、谁第一个处理异常、为什么、谁审批、结果是什么，都要能查到。」
+     - 测试：新增 TicketRefundReasonJdbcIntegrationTests.confirmPayoutRecordsPayoutResultOnRefundAuditAndList。另一审批人批准后，按前端同键真实 HTTP 调 POST confirm-payout，断言退款单 status=success 且 payout_result 等于所填文本、成功留痕 metadata.payout_result 等于该文本、GET 退款台账返回 payout_result。TicketRefundStoredValueJdbcIntegrationTests.approvedRefundOfStoredValuePaidOrderCreditsCardBonusFirstAndIsSuccess 加断言：储值自动成功路径的 payout_result 为空。
+     - 内存仓同步改了：TicketingServiceTests.InMemoryTicketingRepository。
+     - 契约（confirmTicketRefundPayout 和 listTicketRefunds 的描述补 payout_result）由契约线统一改。
+- 18AH 契约落地位置（docs/openapi/openapi-p0.yaml 与 .json 同值；info.version 由收尾统一加一；本段只改契约，回归由各 rid 测试承担，契约侧由 verify:openapi、verify:client-openapi、verify:client-payload 门禁验）：
+  - 238-R1：createTicketVerification 描述补「多人票同场次闸无营业场次时按订单综合体营业日判同一场次，跨营业日仍 409 MULTI_PERSON_CROSS_SESSION_FORBIDDEN」。依据 BSM:800「跨夜场次以该场次的实际闭店时间为准，不按自然日切分」。
+  - 238-R2：initiateCustomerTicketTransfer、claimCustomerTicketTransfer、previewCustomerTicketTransfer 描述在 session_ended 说明后补「首场次键为营业日时，场次结束＝该营业日闭店时点」。三者共用 TicketTransferService.sessionLimit。依据 BSM:800「一个场次＝一次开门到关门；跨夜场次以该场次的实际闭店时间为准」。
+  - 239-R1：createTicketVerification、previewTicketVerification、createAmusementVerification 描述补「票面有效期只决定能否开启新场次……本场未检票、有效期已过的仍 409 ENTITLEMENT_EXPIRED」。依据 ENUM:46「上述有效期类型决定的是「这张票在多长时间内可以开始使用」；一经完成检票环节……该票即绑定至当前场次，其全部权益的可用窗口收窄为该场次」。
+  - 219-R1：上述三个操作描述补票内游乐须本场已检票（409 ENTITLEMENT_SESSION_NOT_CHECKED_IN）、每场一份（409 ENTITLEMENT_SESSION_SHARE_USED_UP）；正式核销落 rejected，游乐核销入口不扣次，预检同样返回两码。createAmusementVerification 的 x-failure-codes 补这两码。依据 BSM:800「只能在完成检票环节所在的那一个场次内核销」「后续场次的附带权益也不得提前到当前场次使用」。
+  - 第 219 条补充：createTicketVerification、createAmusementVerification 描述补同一权益同一开放场次再次入场照常成功、多次票每次扣一次（V619 去掉 V234 唯一约束）。依据 BSM:780「按可用次数逐次核销（每用一次扣一次，剩余为 0 才算用完）」。
+  - 218-R1：createTicketVerification 描述补入园检票后按同票同人份一晚、连续两日次数写 ticket.frequent_entry 风控预警，不阻断。依据 BSM:800「一晚出入次数或连续两日出入合计次数达到后台配置的阈值即触发核查……由系统自动预警」；BSM:1657「预警只作提示与线索汇集，不自动阻断业务」。
+  - 218-R2：新增 GET 与 PUT /api/v1/customer-frequent-entry-alert-settings/{project_id}（getCustomerFrequentEntryAlertSetting、configureCustomerFrequentEntryAlertSetting；customer.account.manage；x-data-scope project；PUT 事件 customer.frequent_entry_alert_setting.configured 与 config_failed）。新 schema CustomerFrequentEntryAlertSettingRequest、CustomerFrequentEntryAlertSetting。依据 BSM:800「（业务参数，按项目可配，出厂默认一晚 4 次、连续两日合计 7 次，须同时配置上下限）」。
+  - 215-R1：publishTicketType 新增描述（两个 409：PASS_BAR_GIFT_COVERAGE_INSUFFICIENT、PASS_BAR_GIFT_FLOOR_NOT_PLATFORM_FUNDED）；bindTicketTypeEntitlement 描述补跌破即退回草稿；listTicketTypeGiftCoverage 描述「至少赠一杯」改为不低于该票种最低赠酒杯数（出厂 1 杯），并写明 cups 与 bar_total_cups 口径。依据 ENUM:34「一张酒吧通票或跨域组合通票覆盖的每一家酒吧，赠酒杯数不得低于后台配置的最低赠酒杯数……低于该下限的票种不得发布上架」「该最低赠酒杯数属于票面强制要求提供的权益，一律记为域主管公司出资」。
+  - 215-R2：新增 GET 与 PUT /api/v1/ticketing/ticket-types/{id}/min-gift-cups（getTicketTypeMinGiftCups 权限 ticket.product.view；configureTicketTypeMinGiftCups 权限 ticket.product.manage，事件 ticket_type.min_gift_cups_configured 与 config_failed）。新 schema TicketTypeGiftFloorRequest、TicketTypeGiftFloor。依据 ENUM:34「后台配置的最低赠酒杯数（业务参数，按票种可配，出厂默认 1 杯，须同时配置上下限）」。
+  - 217-R1：components.schemas.EntitlementTemplateRequest.entitlement_type 枚举补 retail。依据 ENUM:36「餐饮券、零售券」。
+  - 256-R1：confirmTicketRefundPayout 描述补原路退回结果写入 payout_result 并记入成功留痕 metadata.payout_result；listTicketRefunds 描述补每行 payout_result。依据 BSM:806「系统完整记录……原路退回结果」。
+- 18AH 汇合验证（J 段）：
+  - e2e：tests/e2e 不用改。在 tests/e2e 下 grep 了本段改动的四处，没有选择器或断言命中：票务策略页组合配置（餐饮/零售行、最低赠酒杯数）、新建模板权益类型下拉、客人账号页出入场预警阈值、票务订单退款原路退回结果。碰到这几页的 ADM-MVP-03、ADM-UI-HARDEN-04、ADM-CUS-001 用的都是没改过的选择器；视觉快照不含改动页；mock-api 遇到没登记的 GET 回空数组，新加的两个 GET 都不会抛错。
+  - 门禁结论（基线 976c2611 加 A～D、K 段改动）：
+    - 后端：14 个类，--fresh 真迁 V618～V620，tests=341，全绿。
+    - 网页：typecheck 返回 0，vitest 330 个文件 1828 个测试全过。
+    - 客人工作区：customer-core 77、customer-app 131、customer-miniapp 85 个测试全过。
+    - 安卓：员工端 gradle test 121 个测试全过，android-app 编译返回 0。
+    - 契约：重生成两份附录后，verify:p0-contract 全链通过，核了 1364 个操作；yaml 与 json 深比较值差异 0 处。
+    - git diff --check 通过。
+- 文档组（D-docs）：按 A～D 段的文档要点和现码，把六份文档里的现状句就地改成现码实情，每份只升一版、修订表各加一行。落地位置：
+  - docs/ticketing-entitlement-checkin-product-prd-v0.1.md V0.31：§6 通票赠酒下限补 215-R1/R2（V618）；§6 门票到期生命周期补 238-R2/239-R2；§6.1 补 217-R1；§7.1 有效期类型补 239-R1；§8.3.1 补 238-R1、219-R1、218-R1/R2（V619）；§8.4.2 补 256-R1（V620）。
+  - docs/evidence-risk-control-product-prd-v0.1.md V0.07：§8.2 实现状态补 218 现状，只更正高频出入场这一类。
+  - docs/amusement-business-operations-product-prd-v0.1.md V0.16：§7.2 补 219-R1、239-R1；§7.2B 补第 219 条补充，V619 去掉 V234 唯一约束。
+  - docs/amusement-operations-development-design.md V0.18：文首已落地清单补 239-R1；§6.4.2 补 219-R1 与补充、239-R1；§7.7 索引删去 uk_amusement_verifications_active_entry。
+  - docs/ticketing-pass-entitlement-development-design.md V0.14：§4.2 到期作业补 239-R2；§5.6 与 §7.2 接口表补 256-R1 的 payout_result。
+  - docs/settlement-rebuild-prd-v1.0.md V1.14：§5.3 K17 一条补 215-R1/R2 改后口径，票面赠酒清单杯数改为份数×次数×每份人数。
+  依据：
+  - BSM:800「一个场次＝一次开门到关门；跨夜场次以该场次的实际闭店时间为准，不按自然日切分。」
+  - BSM:800「该票所含的各项权益（各酒吧入场、酒水赠饮、游乐、餐饮券、零售券等），只能在完成检票环节所在的那一个场次内核销……」
+  - ENUM:46「上述有效期类型决定的是「这张票在多长时间内可以开始使用」」
+  - ENUM:48「于该场次结束时按本条处理，不等票面有效期届满」
+  - ENUM:34「一张酒吧通票或跨域组合通票覆盖的每一家酒吧，赠酒杯数不得低于后台配置的最低赠酒杯数（业务参数，按票种可配，出厂默认 1 杯，须同时配置上下限）」
+  - ENUM:36「餐饮券、零售券」
+  - BSM:780「按可用次数逐次核销（每用一次扣一次，剩余为 0 才算用完）」
+  - BSM:806「系统完整记录退款原因、责任主体、发起人、审批人、适用规则版本、原路退回结果以及对应财务、积分、成长值和权益冲正。」
+  - BSM:1657「预警只作提示与线索汇集，不自动阻断业务」
+  - BSM:1263
+  测试：只改文档，没有新用例。node tools/verify-full-admin-page-matrix.mjs 通过（117 页）；git diff --check 干净；verify:html-ledger-sync 与 verify:entry-anchors PASS。
+- 18AH 复核修复补记（无新裁决）：18AH 收尾复核意见经独立反驳核实成立，按以下 ①～④ 改，没有要操作员裁定的。
+  ① 到期作业已检票分支按整张票判本场（239-R2 同根）：
+    - 改法：SettlementExpiryJob.businessAt 的已检票分支改看同父票各人份的入场时刻。票面到期所在营业日 D 内、票面到期前同父票任一人份有入场类核销成功的，取票面到期与 closeAt(D) 的较晚者（多人票已检票人份同理），与 TicketVerificationService.ticketCheckedInThisSession 的核销放行同口径；不再只看本人份自己的入场时刻。第 2 人在票面到期后才首入（239-R1 放行）时，闭店前不再把他本场未用的权益记成未核销份额，闭店后业务时刻取闭店。
+    - 落地位置：JdbcSettlementTransactionRepository（V0.07→V0.08）findExpiredUnverifiedEntitlements 的入场时刻子查询改为按同父票取数，另出 ticket_entry_ats（本人份 entry_ats 用 FILTER 照旧，按营业日计已开启次数不变），ExpiredUnverifiedRow 加 ticketEntryAts；SettlementExpiryJob.businessAt 改用 ticketEntryAts。票务 PRD §6 门票到期生命周期 238-R2／239-R2 现状句的限定语由「限该人份在该营业日、票面到期前已入场的」改为「限同票任一人份在该营业日、票面到期前已入场的，按整张票判本场，与本场核销放行同口径」。
+    - 依据：ENUM:46「一经完成检票环节……该票即绑定至当前场次，其全部权益的可用窗口收窄为该场次」；BSM:778「同一场次内不同人可在不同时间分别入场」；BSM:800「场次结束时仍未核销的权益即行终结，不得顺延至下一场次、不得折现，按分账规则作为未核销份额处理」；ENUM:48「已完成检票环节（刷码核销成功）、但权益未在该场次内核销的，按场次终结制作为未核销份额进入分账减除」。
+    - 测试：SettlementExpiryAttributionJdbcIntegrationTests.secondPersonEnteringAfterValidToKeepsItsUnusedShareUntilTheSessionCloses（固定营业日 2012-03-01，两人票第 1 人票面到期前入场、第 2 人到期后入场；闭店前跑作业不出第 2 人份赠饮的到期事实，闭店后出 session_ended、business_at＝闭店）。修复前 RED：「本场未结束不处理」Expecting empty，实得 business_at＝票面到期的到期事实。
+  ② 提前结束入场待办按权益去重（第 219 条补充同根）：
+    - 改法：AmusementSessionLifecycleService（V0.04→V0.05）createFollowups 建入场待办时按权益去重，每个权益只给最新那条未释放入场建一条，与 JdbcAmusementFaultCompensationRepository.listSessionEndAffectedShares 的 DISTINCT ON (e.id) … ORDER BY av.created_at DESC 取同一条；没有权益的入场照旧每条一条。两岗确认发放后，completeSessionEndFollowups 按补偿项的原入场核销写回，即可收掉这条待办。
+    - 依据：BSM:1263「已售但未履行的权益按既有取消、补偿规则处理并留痕」；本台账 TK-18「已入场（已扣次）的客人按 ENUM L148「全园故障与补偿通票」规则补偿（原票下恢复本次 1 次……）」；ENUM:148「同一故障下同一原人份或次份只补偿一次」。
+    - 测试：AmusementVerifyRoutingJdbcIntegrationTests.sameEntitlementEnteredTwiceLeavesNoPendingEntryFollowupAfterEarlyEndCompensationIssued。全程走真实入口、蛇形键：同一权益在同一开放场次入场两次，提前结束，游乐公司负责人、工程或安全岗先后确认发放；之后该场次入场待办只有一条，状态 completed。修复前 RED：实得 ["completed", "pending"]。
+  ③ docs/full-admin-page-permission-field-matrix-v0.1.csv：本段改了 ADM-TKT-001、ADM-CUS-001 两行，第 2 行 ADM-OV-001 的「文件版本：V0.26」改为「V0.27」，只改这一处。依据：任务书「改动的基线文件相对 976c2611 只 +0.01」，以及该文件以往每次改动都升版本的惯例。
+  ④ 撤回会员 PRD 顺手改（控制席选撤回）：docs/member-and-tier-product-prd-v1.0.md 恢复为 976c2611 原样（V1.11，§10.1 末句与修订表都回到原文）。证据风控 PRD §8.2 那一句同时说两类异常，同句的现状更正保留。上文「18AH 落地位置补记·文档旁见并入」随之改为只写证据风控 PRD §8.2 的同句更正。依据：操作员 2026-11-06「照旧登记」（范围外缺口登记成待开发清单（待核实）新条目，本段不顺手改）。会员 PRD 约 :289 那句已登记待开发清单第 288 条。
+  定向回归：上述两类与 AmusementHardCapacityAutoReopenJdbcIntegrationTests、ParkWideFaultCompensationJdbcIntegrationTests、ParkWideFaultSalesSuspensionJdbcIntegrationTests、AmusementExitReleaseJdbcIntegrationTests、AmusementUnlimitedBusinessDayJdbcIntegrationTests、KioskEntitlementClaimJdbcTests、SettlementBatch1P345Tests、SettlementPassPerTicketEngineTests、SettlementStateMachineJdbcIntegrationTests、ThirdPartyPassTicketEndToEndJdbcTests、MerchantAccountCrossProjectOtherReadsJdbcIntegrationTests 共 221 测，0 失败 0 错误；settlement、amusement 两个包全部测试类 共 685 测，0 失败 0 错误。
+  复核旁见：已上架通票被退回草稿后，后台没有重新发布的入口，已登记待开发清单第 287 条，本段不改。
+- 18AH 落地位置补记·运行验收证据、快照、终验文档刷新（无新裁决）：业务提交 c3b59c15 之后，按第十八批裁决 25 重刷了运行验收证据：后端全量 6695 测，0 失败 0 错误；apps/web 构建通过；常规界面验收（接口全部 mock）实跑 40 条全过；真实后端界面验收未跑，runtime_ready=false。随后依次重生成闭环当前态快照、生产闭环缺口报告、界面验收报告、无上线指挥台。生成器没改。手改 docs/final-closed-loop-acceptance-audit-v0.1.md 与 docs/code-implementation-acceptance-audit-v0.1.md：前端单测源码计数改为 1714；被核文件中 TicketingService.java 行数由 1200 改为 1244，其余无变化；后端全量与常规界面验收的数字、日期改为本次实跑值；写入 npm run verify:unit 实跑结果，五个工作区全过。交付门禁于 2026-11-12 00:52 UTC 在工作树逐项实跑子项，NAS 两项现场探测未跑。仍红的有两项：一是 coding-host-protection，它写死主仓路径，在工作树口径下必红，属工具口径，不做；二是 final-closed-loop-audit，如实留 2 条红（integration-ready、business-acceptance-ready），原因是校验器要求终验把联调、业务验收写成「是」，而裁决 25 定了不跑真实后端界面验收、运行验收未就绪，终验写的是「否」。verify:delivery-gates 总链仍是红的。

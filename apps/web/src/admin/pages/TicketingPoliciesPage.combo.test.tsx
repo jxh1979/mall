@@ -1,6 +1,8 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+// 文件版本：V0.01
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { AdminApi } from "../client/adminClient";
 import { TicketingPoliciesPage } from "./TicketingPoliciesPage";
 import type { AdminApiClient, AdminPageProps, EffectivePermissionsState } from "../types";
 
@@ -205,5 +207,88 @@ describe("TicketingPoliciesPage 组合式配置策略编排", () => {
       expect(bindCalls.length).toBe(1);
       expect((bindCalls[0]?.[1] as Record<string, unknown>).total_times).toBe(3);
     });
+  });
+});
+
+
+// 第十八批 AH 段：真实 AdminApi（蛇形键响应经客户端转驼峰），假响应用文本体。
+function okBody(data: string): Response {
+  return new Response(`{"success":true,"code":"OK","message":"success","data":${data}}`,
+    { status: 200, headers: { "content-type": "application/json" } });
+}
+
+function stubBackend(sent: Array<{ method: string; url: string; body: Record<string, unknown> }>, extra?: (url: string, method: string) => Response | null) {
+  vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input);
+    const method = init?.method ?? "GET";
+    if (method !== "GET") sent.push({ method, url, body: JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown> });
+    const hit = extra?.(url, method);
+    if (hit) return hit;
+    if (method === "POST" && url.endsWith("/ticketing/entitlement-templates")) return okBody(`{"id":"tpl-${sent.length}"}`);
+    if (method !== "GET") return okBody("{}");
+    if (url.includes("/platform/merchants")) {
+      return okBody('{"items":[{"id":"mch-food","merchant_name":"一号餐厅","merchant_type":"catering"},{"id":"mch-shop","merchant_name":"一号零售","merchant_type":"retail"}]}');
+    }
+    if (/\/ticketing\/ticket-types(\?|$)/.test(url)) return okBody('{"items":[{"id":"tt-1","ticket_name":"夏日通票","status":"published"}]}');
+    return okBody('{"items":[]}');
+  }));
+  render(<TicketingPoliciesPage {...({ api: new AdminApi(), user: { id: "u1", username: "admin", accountType: "platform_admin" },
+    setActionResult: vi.fn(), setGlobalError: vi.fn(), effectivePermissions: ADMIN_PERMS } as unknown as AdminPageProps)} />);
+}
+
+describe("TicketingPoliciesPage 第十八批 AH 段", () => {
+  afterEach(() => { vi.clearAllMocks(); vi.unstubAllGlobals(); });
+
+  // 217-R1（ENUM:36「餐饮券、零售券」；ENUM:51「直接与实际提供的餐饮、零售商户结算」）：组合配置「餐饮/零售」行按所选商户业态建 retail 或 dining 权益。
+  it("217-R1 餐饮/零售行：选零售商户建 retail 权益（名称「· 零售」），选餐饮商户建 dining 权益（名称「· 餐饮」）", async () => {
+    const sent: Array<{ method: string; url: string; body: Record<string, unknown> }> = [];
+    stubBackend(sent);
+    await waitFor(() => expect(screen.getByTestId("combo-ticket-select").querySelector('option[value="tt-1"]')).toBeTruthy());
+    await waitFor(() => expect((screen.getByTestId("combo-add-dining") as HTMLButtonElement).disabled).toBe(false));
+    expect(screen.queryByText("餐饮/零售（多选）")).not.toBeNull();
+    expect(within(screen.getByTestId("combo-dining-table")).queryByText("餐饮/零售商户")).not.toBeNull();
+
+    fireEvent.change(screen.getByTestId("combo-ticket-select"), { target: { value: "tt-1" } });
+    fireEvent.click(screen.getByTestId("combo-add-dining"));
+    await waitFor(() => expect(screen.getByTestId("combo-dining-line-0")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("combo-add-dining"));
+    await waitFor(() => expect(screen.getByTestId("combo-dining-line-1")).toBeTruthy());
+    const shop = screen.getByTestId("combo-dining-line-0");
+    fireEvent.change(within(shop).getByLabelText("餐饮/零售商户"), { target: { value: "mch-shop" } });
+    fireEvent.change(within(shop).getByLabelText("价格（元）"), { target: { value: "30" } });
+    fireEvent.change(within(screen.getByTestId("combo-dining-line-1")).getByLabelText("价格（元）"), { target: { value: "20" } });
+    fireEvent.click(screen.getByTestId("combo-submit"));
+
+    await waitFor(() => expect(sent.filter((c) => c.url.endsWith("/ticketing/entitlement-templates")).length).toBe(2));
+    const templates = sent.filter((c) => c.url.endsWith("/ticketing/entitlement-templates")).map((c) => c.body);
+    expect(templates[0]).toMatchObject({ entitlement_type: "retail", merchant_id: "mch-shop", exclusive_merchant_id: "mch-shop" });
+    expect(String(templates[0]?.name)).toMatch(/· 零售$/);
+    expect(templates[1]).toMatchObject({ entitlement_type: "dining", merchant_id: "mch-food", exclusive_merchant_id: "mch-food" });
+    expect(String(templates[1]?.name)).toMatch(/· 餐饮$/);
+  });
+
+  // 215-R2（ENUM:34「后台配置的最低赠酒杯数（业务参数，按票种可配，出厂默认 1 杯，须同时配置上下限）」）：组合配置区按选中通票回显与保存。
+  it("215-R2 最低赠酒杯数：选中通票回显出厂 1 杯，填 2／1／3 保存发蛇形键", async () => {
+    const sent: Array<{ method: string; url: string; body: Record<string, unknown> }> = [];
+    stubBackend(sent, (url, method) => {
+      if (!url.endsWith("/ticketing/ticket-types/tt-1/min-gift-cups")) return null;
+      return method === "PUT"
+        ? okBody('{"ticket_type_id":"tt-1","min_gift_cups":2,"min_gift_cups_lower":1,"min_gift_cups_upper":3}')
+        : okBody('{"ticket_type_id":"tt-1","min_gift_cups":1,"min_gift_cups_lower":null,"min_gift_cups_upper":null}');
+    });
+    await waitFor(() => expect(screen.getByTestId("combo-ticket-select").querySelector('option[value="tt-1"]')).toBeTruthy());
+    fireEvent.change(screen.getByTestId("combo-ticket-select"), { target: { value: "tt-1" } });
+    await waitFor(() => expect(screen.queryByTestId("combo-gift-floor-current")?.textContent ?? "").toContain("出厂默认 1 杯"));
+
+    fireEvent.change(screen.getByTestId("combo-gift-floor-cups"), { target: { value: "2" } });
+    fireEvent.change(screen.getByTestId("combo-gift-floor-lower"), { target: { value: "1" } });
+    fireEvent.change(screen.getByTestId("combo-gift-floor-upper"), { target: { value: "3" } });
+    fireEvent.click(screen.getByTestId("combo-gift-floor-save"));
+
+    await waitFor(() => expect(sent.filter((c) => c.method === "PUT").length).toBe(1));
+    const put = sent.find((c) => c.method === "PUT");
+    expect(put?.url).toContain("/api/v1/ticketing/ticket-types/tt-1/min-gift-cups");
+    expect(put?.body).toMatchObject({ min_gift_cups: 2, min_gift_cups_lower: 1, min_gift_cups_upper: 3 });
+    expect(typeof put?.body.idempotency_key).toBe("string");
   });
 });

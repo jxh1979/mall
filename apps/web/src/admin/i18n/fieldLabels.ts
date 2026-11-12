@@ -1,4 +1,4 @@
-// 文件版本：V0.29
+// 文件版本：V0.30
 // OBS-14-02 后台结果区字段中文名字典（PGM「全局原则 · 界面全中文（所有终端零英文）」）。
 // 键用后端 JSON 的蛇形写法；结果区查表时蛇形与驼峰同查（orderId / order_id 都命中 order_id）。
 // 与后端字段中文名表 FieldLabels.java（common.api 包）同键同名：前段按后端原样抄录，后端改名这里跟着改（门禁会比对）。
@@ -907,6 +907,9 @@ export const FIELD_LABELS: Record<string, string> = {
   bar_order_id: "酒吧订单",
   bar_project_id: "酒吧项目",
   bar_total_cups: "酒吧总杯数",
+  min_gift_cups: "最低赠酒杯数",
+  min_gift_cups_lower: "最低赠酒杯数下限",
+  min_gift_cups_upper: "最低赠酒杯数上限",
   barcode: "条码",
   bars: "酒吧",
   base_amount_cent: "基础金额",
@@ -1886,6 +1889,7 @@ export const FIELD_LABELS: Record<string, string> = {
   payout_floor_enabled: "启用保底",
   payout_floor_fixed_cent: "保底金额",
   payout_items: "结算明细",
+  payout_result: "原路退回结果",
   payout_pay_slot: "发放付账日",
   payroll_calculation_id: "工资计算单",
   payroll_inserted: "工资单月结人工成本已挂接",
@@ -2698,6 +2702,12 @@ export const FIELD_LABELS: Record<string, string> = {
   warning_months: "预警提前月数",
   warning_min_months: "预警提前月数下限",
   warning_max_months: "预警提前月数上限",
+  night_threshold: "一晚出入阈值",
+  night_min: "一晚阈值下限",
+  night_max: "一晚阈值上限",
+  two_day_threshold: "连续两日出入阈值",
+  two_day_min: "连续两日阈值下限",
+  two_day_max: "连续两日阈值上限",
   credit_hour_price_cent: "抵免每小时单价",
   credit_price_entry_id: "抵免价目",
   occupancy: "车位占用",
@@ -3274,6 +3284,8 @@ export const VALUE_LABELS: Record<string, string> = {
   customer_restriction_lifted: "客人受限已解除",
   customer_restriction_setting_saved: "客人受限规则已保存",
   customer_churn_alert_setting_saved: "客人流失预警规则已保存",
+  customer_frequent_entry_alert_setting_saved: "高频出入场预警阈值已保存",
+  ticket_type_min_gift_cups_saved: "最低赠酒杯数已保存",
   customer_blacklist_list_requested: "拉黑申请已提交",
   customer_blacklist_release_requested: "解除黑名单申请已提交",
   customer_blacklist_request_approved: "黑名单申请已批准",

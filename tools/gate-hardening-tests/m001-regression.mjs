@@ -1,4 +1,4 @@
-// 文件版本：V0.07
+// 文件版本：V0.08
 // 实际运行治理脚本；输入和模拟合并均在临时目录，绝不操作真实 PR。
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -222,7 +222,8 @@ set -eu
 case "$1 $2" in
  'pr view')
   if [[ "$*" == *headRefOid* ]]; then if [[ -f advanced ]]; then echo bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb; else echo aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa; fi; fi;;
- 'run list') echo 101;;
+ 'run list')
+  if [[ "$*" == *workflowName* ]]; then printf 'predeploy-gates 101\\nbackend-tests 101\\nweb-tests 101\\n'; else echo 101; fi;;
  'run watch') if [[ "$M001_MODE" == watch ]]; then touch advanced; fi;;
  'pr merge')
   if [[ "$M001_MODE" == late ]]; then touch advanced; fi

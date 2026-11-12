@@ -1,4 +1,4 @@
-# P0 OpenAPI Operation 验收矩阵 V0.65
+# P0 OpenAPI Operation 验收矩阵 V0.66
 
 ## 1. 文档定位
 
@@ -17,7 +17,7 @@
 
 ## 3. Operation 清单
 
-> 当前 `docs/openapi/openapi-p0.json` 共 1360 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
+> 当前 `docs/openapi/openapi-p0.json` 共 1364 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
 
 | 标签 | 方法 | 路径 | operationId | 摘要 | 请求体 | 权限 | 认证上下文 | 数据范围 | 终端/设备能力/调用通道 | 幂等 | 成功事件 | 失败事件 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -390,6 +390,8 @@
 | ticketing | `GET` | `/api/v1/ticketing/ticket-types` | `listTicketTypes` | 票种查询 | `-` | `ticket.product.view` | `staff-token` | `project` | web | 否 | `ticket_product.viewed` | `ticket_product.view_failed` |
 | ticketing | `POST` | `/api/v1/ticketing/ticket-types` | `createTicketType` | 创建票种 | `TicketTypeRequest` | `ticket.product.manage` | `staff-token` | `project` | web | 是 | `ticket_product.changed` | `ticket_product.change_failed` |
 | ticketing | `GET` | `/api/v1/ticketing/ticket-types/{id}/gift-coverage` | `listTicketTypeGiftCoverage` | 票面赠酒清单（按酒吧分组） | `-` | `ticket.product.view` | `staff-token` | `project` | web | 否 | `ticket_product.viewed` | `ticket_product.view_failed` |
+| ticketing | `GET` | `/api/v1/ticketing/ticket-types/{id}/min-gift-cups` | `getTicketTypeMinGiftCups` | 查票种最低赠酒杯数（没配过为出厂 1 杯） | `-` | `ticket.product.view` | `staff-token` | `project` | web | 否 | `not_applicable` | `not_applicable` |
+| ticketing | `PUT` | `/api/v1/ticketing/ticket-types/{id}/min-gift-cups` | `configureTicketTypeMinGiftCups` | 配置票种最低赠酒杯数（杯数与上下限同配） | `TicketTypeGiftFloorRequest` | `ticket.product.manage` | `staff-token` | `project` | web | 是 | `ticket_type.min_gift_cups_configured` | `ticket_type.min_gift_cups_config_failed` |
 | ticketing | `POST` | `/api/v1/ticketing/ticket-types/{id}/entitlements` | `bindTicketTypeEntitlement` | 绑定票类型权益 | `TicketTypeEntitlementRequest` | `ticket.product.manage` | `staff-token` | `project` | web | 是 | `ticket_product_entitlement.bound` | `ticket_product_entitlement.bound_failed` |
 | ticketing | `POST` | `/api/v1/ticketing/ticket-types/{id}/publish` | `publishTicketType` | 发布票种 | `StatusChangeRequest` | `ticket.product.manage` | `staff-token` | `project` | web | 是 | `ticket_price.published` | `ticket_price.publish_failed` |
 | ticketing | `POST` | `/api/v1/ticketing/ticket-types/{id}/archive` | `archiveTicketType` | 存档票种 | `object` | `ticket.product.manage` | `staff-token` | `project` | web | 是 | `ticket_product.archived` | `ticket_product.archive_failed` |
@@ -847,6 +849,8 @@
 | customer | `POST` | `/api/v1/customer-blacklist-requests/{request_id}/reject` | `rejectCustomerBlacklistRequest` | 驳回黑名单申请（由当前这一级有权批准的人驳回，账户不变） | `object` | `customer.blacklist.approve` | `staff-token` | `project` | web | 是 | `customer.blacklist.rejected` | `customer.blacklist.reject_failed` |
 | customer | `GET` | `/api/v1/customer-restriction-settings/{project_id}` | `getCustomerRestrictionSetting` | 查本项目会员受限时长（未配置时回落出厂 90 天） | `-` | `customer.account.manage` | `staff-token` | `project` | web | 否 | `not_applicable` | `not_applicable` |
 | customer | `PUT` | `/api/v1/customer-restriction-settings/{project_id}` | `configureCustomerRestrictionSetting` | 配置本项目会员受限时长（天数与上下限同配） | `CustomerRestrictionSettingRequest` | `customer.account.manage` | `staff-token` | `project` | web | 是 | `customer.restriction_setting.configured` | `customer.restriction_setting.config_failed` |
+| customer | `GET` | `/api/v1/customer-frequent-entry-alert-settings/{project_id}` | `getCustomerFrequentEntryAlertSetting` | 查本项目高频出入场预警阈值（未配置回落出厂一晚 4 次、连续两日 7 次） | `-` | `customer.account.manage` | `staff-token` | `project` | web | 否 | `not_applicable` | `not_applicable` |
+| customer | `PUT` | `/api/v1/customer-frequent-entry-alert-settings/{project_id}` | `configureCustomerFrequentEntryAlertSetting` | 配置本项目高频出入场预警阈值（一晚、连续两日各与上下限同配） | `CustomerFrequentEntryAlertSettingRequest` | `customer.account.manage` | `staff-token` | `project` | web | 是 | `customer.frequent_entry_alert_setting.configured` | `customer.frequent_entry_alert_setting.config_failed` |
 | customer | `GET` | `/api/v1/customer-churn-alert-setting` | `getCustomerChurnAlertSetting` | 查同号注销与注册频次预警上限（全平台） | `-` | `customer.account.manage` | `staff-token` | `platform` | web | 否 | `not_applicable` | `not_applicable` |
 | customer | `PUT` | `/api/v1/customer-churn-alert-setting` | `configureCustomerChurnAlertSetting` | 配置同号一年内注销与注册合计次数上限（全平台，值与上下限同配） | `CustomerChurnAlertSettingRequest` | `customer.account.manage` | `staff-token` | `platform` | web | 是 | `customer.churn_alert_setting.configured` | `customer.churn_alert_setting.config_failed` |
 | customer | `POST` | `/api/v1/customer/deregister` | `deregisterCustomerAccount` | 客人自助注销本人账号（个人信息删除、积分券清零、名下存酒须确认放弃） | `CustomerDeregisterRequest` | `not_applicable` | `customer-token` | `self` | miniapp, app | 否 | `customer.account.deregistered` | `customer.account.deregister_failed` |

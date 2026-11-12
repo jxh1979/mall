@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.13
+// 文件版本：V0.14
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.List;
@@ -19,6 +19,9 @@ class JdbcTicketingRepository implements TicketingRepository {
     private final ObjectMapper jsonMapper;
     // ROOT-03-R29：购票手机号盲索引（与 customers.phone_hash 同一函数），供未注册手机号注册后归集渠道票与一体机票。
     private final com.complex.platform.common.crypto.BlindIndex blindIndex;
+    // 第十八批 AH 段 238-R2：营业日键的首场次结束于订单综合体该营业日闭店（字段注入免改构造点）。
+    @org.springframework.beans.factory.annotation.Autowired
+    com.complex.platform.common.BusinessDayResolver businessDays;
 
     JdbcTicketingRepository(NamedParameterJdbcTemplate jdbcTemplate, ObjectMapper objectMapper,
             com.complex.platform.common.crypto.PiiCipher piiCipher, com.complex.platform.common.crypto.BlindIndex blindIndex) {
@@ -625,18 +628,28 @@ class JdbcTicketingRepository implements TicketingRepository {
 
     @Override
     public boolean hasVerifiedEntrySince(String parentTicketId, int slotIndex, java.time.Instant since) {
+        return verifiedEntrySince(parentTicketId, slotIndex, since);
+    }
+
+    @Override
+    public boolean hasVerifiedTicketEntrySince(String parentTicketId, java.time.Instant since) {
+        return verifiedEntrySince(parentTicketId, null, since);
+    }
+
+    /** slotIndex 为空＝同票任一人份（第十八批 AH 段 239-R1）。 */
+    private boolean verifiedEntrySince(String parentTicketId, Integer slotIndex, java.time.Instant since) {
         if (parentTicketId == null) {
             return false;
         }
         // 197-R1：入场类型同 JdbcSettlementTransactionRepository 到期扫描的 visits；status='success' 自然排除已冲正的入场。
         return Boolean.TRUE.equals(jdbcTemplate.queryForObject("""
                 SELECT EXISTS(SELECT 1 FROM ticket_verifications v JOIN issued_entitlements e ON e.id = v.entitlement_id
-                               WHERE e.parent_ticket_id = :parent AND e.slot_index = :slot
+                               WHERE e.parent_ticket_id = :parent AND (CAST(:slot AS INTEGER) IS NULL OR e.slot_index = :slot)
                                  AND (e.entitlement_type IN ('ticket', 'entry', 'admission') OR e.entitlement_type LIKE 'amusement%')
                                  AND v.status = 'success' AND v.created_at >= :since)
                 """, new MapSqlParameterSource()
                 .addValue("parent", parentTicketId)
-                .addValue("slot", slotIndex)
+                .addValue("slot", slotIndex, java.sql.Types.INTEGER)
                 .addValue("since", since.atOffset(java.time.ZoneOffset.UTC)), Boolean.class));
     }
 
@@ -815,19 +828,21 @@ class JdbcTicketingRepository implements TicketingRepository {
     }
 
     @Override
-    public int markTicketRefundSucceeded(String refundId, java.time.Instant succeededAt) {
+    public int markTicketRefundSucceeded(String refundId, java.time.Instant succeededAt, String payoutResult) {
         // AUD-018：退款兑付完成 → success 终态 + succeeded_at（有效退款生效时刻，财务/分析按此聚合）。
         // CAS 仅当仍 approved 生效（幂等：重复调用/已 success 命中 0 行）。
         return jdbcTemplate.update("""
                 UPDATE ticket_refunds
                    SET status = 'success',
                        succeeded_at = :succeeded_at,
+                       payout_result = :payout_result,
                        updated_at = :succeeded_at
                  WHERE id = :id
                    AND status = 'approved'
                 """, new MapSqlParameterSource()
                 .addValue("id", refundId)
-                .addValue("succeeded_at", succeededAt.atOffset(java.time.ZoneOffset.UTC)));
+                .addValue("succeeded_at", succeededAt.atOffset(java.time.ZoneOffset.UTC))
+                .addValue("payout_result", payoutResult));
     }
 
     @Override
@@ -835,7 +850,7 @@ class JdbcTicketingRepository implements TicketingRepository {
         return jdbcTemplate.query("""
                 SELECT id, target_id, refund_amount_cent, reason, refund_channel, status,
                        requested_by, approved_by, approved_at, created_at, updated_at, merchant_id,
-                       reason_code, responsible_entity_id, ticket_type_refundable_snapshot, payout_items::text AS payout_items
+                       reason_code, responsible_entity_id, ticket_type_refundable_snapshot, payout_items::text AS payout_items, payout_result
                   FROM ticket_refunds
                  ORDER BY created_at DESC, id
                 """, Map.of(), rowMapper::mapTicketRefund);
@@ -1339,7 +1354,10 @@ class JdbcTicketingRepository implements TicketingRepository {
                        m.merchant_name             AS provider_merchant_name,
                        m.merchant_type             AS provider_merchant_type,
                        tte.quantity                AS quantity,
-                       tte.num_people              AS num_people
+                       tte.num_people              AS num_people,
+                       tte.total_times             AS total_times,
+                       tte.cost_bearer             AS cost_bearer,
+                       tte.component_price_cent    AS component_price_cent
                   FROM ticket_type_entitlements tte
                   JOIN entitlement_templates et ON et.id = tte.entitlement_template_id
                   LEFT JOIN merchants m ON m.id = et.merchant_id
@@ -1355,7 +1373,36 @@ class JdbcTicketingRepository implements TicketingRepository {
                         resultSet.getString("provider_merchant_name"),
                         resultSet.getString("provider_merchant_type"),
                         resultSet.getInt("quantity"),
-                        resultSet.getInt("num_people")));
+                        resultSet.getInt("num_people"),
+                        resultSet.getInt("total_times"),
+                        resultSet.getString("cost_bearer"),
+                        resultSet.getObject("component_price_cent", Long.class)));
+    }
+
+    @Override
+    public Optional<TicketTypeGiftFloor> findGiftFloor(String ticketTypeId) {
+        return jdbcTemplate.query("""
+                SELECT ticket_type_id, min_cups, min_cups_lower, min_cups_upper, updated_by, updated_at
+                  FROM ticket_type_gift_floors WHERE ticket_type_id = :id
+                """, Map.of("id", ticketTypeId), (rs, n) -> new TicketTypeGiftFloor(rs.getString("ticket_type_id"),
+                rs.getInt("min_cups"), rs.getInt("min_cups_lower"), rs.getInt("min_cups_upper"), rs.getString("updated_by"),
+                rs.getTimestamp("updated_at").toInstant())).stream().findFirst();
+    }
+
+    @Override
+    public void saveGiftFloor(TicketTypeGiftFloor floor) {
+        // 215-R2：按票种 upsert（V618 ticket_type_gift_floors，CHECK 1 ≤ 下限 ≤ 杯数 ≤ 上限）。
+        jdbcTemplate.update("""
+                INSERT INTO ticket_type_gift_floors (ticket_type_id, min_cups, min_cups_lower, min_cups_upper, updated_by, updated_at)
+                VALUES (:id, :cups, :lower, :upper, :by, now())
+                ON CONFLICT (ticket_type_id) DO UPDATE SET min_cups = EXCLUDED.min_cups, min_cups_lower = EXCLUDED.min_cups_lower,
+                    min_cups_upper = EXCLUDED.min_cups_upper, updated_by = EXCLUDED.updated_by, updated_at = EXCLUDED.updated_at
+                """, new MapSqlParameterSource()
+                .addValue("id", floor.ticketTypeId())
+                .addValue("cups", floor.minGiftCups())
+                .addValue("lower", floor.minGiftCupsLower())
+                .addValue("upper", floor.minGiftCupsUpper())
+                .addValue("by", floor.updatedBy()));
     }
 
     // ===== 结算重构批3-2(PRD §6.2) 酒吧入场资格「场次规则」：营业时间表/场次/入场记录裸查询（不引 bar/venue 域类型）=====
@@ -1570,7 +1617,7 @@ class JdbcTicketingRepository implements TicketingRepository {
         return jdbcTemplate.query("""
                 SELECT id, target_id, refund_amount_cent, reason, refund_channel, status,
                        requested_by, approved_by, approved_at, created_at, updated_at, merchant_id,
-                       reason_code, responsible_entity_id, ticket_type_refundable_snapshot, payout_items::text AS payout_items
+                       reason_code, responsible_entity_id, ticket_type_refundable_snapshot, payout_items::text AS payout_items, payout_result
                   FROM ticket_refunds
                  WHERE id = :id
                 """, Map.of("id", id), rowMapper::mapTicketRefund).stream().findFirst();
@@ -1959,9 +2006,10 @@ class JdbcTicketingRepository implements TicketingRepository {
     @Override
     public Optional<FirstSessionWindow.Session> findFirstSession(String parentTicketId) {
         return jdbcTemplate.query("""
-                SELECT ti.first_session_key, vs.session_date,
+                SELECT ti.first_session_key, vs.session_date, o.project_id,
                        EXTRACT(EPOCH FROM h.open_time)::int AS open_s, EXTRACT(EPOCH FROM h.close_time)::int AS close_s
                   FROM ticket_instances ti
+                  LEFT JOIN ticket_orders o ON o.id = ti.order_id
                   LEFT JOIN venue_sessions vs ON vs.id = ti.first_session_key
                   LEFT JOIN venue_business_hours h ON h.venue_id = vs.venue_id AND h.is_draft = FALSE
                         AND h.day_of_week = EXTRACT(DOW FROM vs.session_date)::int
@@ -1971,7 +2019,8 @@ class JdbcTicketingRepository implements TicketingRepository {
                     java.time.LocalDate day = rs.getObject("session_date", java.time.LocalDate.class);
                     String key = rs.getString("first_session_key");
                     return new FirstSessionWindow.Session(day == null ? key : day.toString(),
-                            FirstSessionWindow.endOf(key, day, (Integer) rs.getObject("open_s"), (Integer) rs.getObject("close_s")));
+                            FirstSessionWindow.endOf(key, day, (Integer) rs.getObject("open_s"), (Integer) rs.getObject("close_s"),
+                                    businessDays, rs.getString("project_id")));
                 }).stream().findFirst();
     }
 

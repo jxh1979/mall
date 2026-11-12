@@ -1,6 +1,6 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static com.complex.platform.common.Strings.requireText;
 import static com.complex.platform.common.Strings.trimToNull;
@@ -32,6 +32,8 @@ import org.springframework.transaction.annotation.Transactional;
  *   <li>黑名单：保安团队申请（customer.blacklist.request）→ 申请所在项目此刻在班的夜班值班经理批准 → 娱乐平台负责人终审
  *       （customer.blacklist.approve）；两级都批准才执行。列入＝关闭账户；解除＝同级审批链复核，原账户保持已关闭、手机号释放可重新注册。
  *       申请人与两级批准人须为不同的人。</li>
+ *   <li>高频出入场预警阈值（第十八批 AH 段 218-R2，BSM 第 800 行）：一晚、连续两日各一个阈值，按项目可配，出厂一晚 4 次、连续两日 7 次，
+ *       阈值与上下限同配；票务检票成功后据此预警（TicketFrequentEntryAlertService）。</li>
  * </ul>
  */
 @Service
@@ -47,6 +49,14 @@ public class CustomerAccountStatusService {
     }
 
     public record RestrictionSettingRequest(String idempotencyKey, Integer durationDays, Integer minDays, Integer maxDays) {
+    }
+
+    public record FrequentEntryAlertSetting(String projectId, int nightThreshold, Integer nightMin, Integer nightMax,
+            int twoDayThreshold, Integer twoDayMin, Integer twoDayMax, String updatedBy, Instant updatedAt) {
+    }
+
+    public record FrequentEntryAlertSettingRequest(String idempotencyKey, Integer nightThreshold, Integer nightMin, Integer nightMax,
+            Integer twoDayThreshold, Integer twoDayMin, Integer twoDayMax) {
     }
 
     private final NamedParameterJdbcTemplate jdbc;
@@ -147,6 +157,76 @@ public class CustomerAccountStatusService {
                         rs.getTimestamp("updated_at").toInstant()))
                 .stream().findFirst()
                 .orElseThrow(() -> ApiException.conflict("CUSTOMER_RESTRICTION_NOT_CONFIGURED", "受限时长未配置"));
+    }
+
+    // ---------- 高频出入场预警阈值（第十八批 AH 段 218-R2） ----------
+
+    public FrequentEntryAlertSetting getFrequentEntryAlertSetting(String projectId) {
+        authorizationService.requirePermission(MANAGE);
+        return resolveFrequentEntry(requireProject(projectId, MANAGE));
+    }
+
+    /**
+     * 本项目高频出入场预警阈值（BSM 第 800 行「一晚出入次数或连续两日出入合计次数达到后台配置的阈值即触发核查（业务参数，按项目可配，出厂默认一晚 4 次、
+     * 连续两日合计 7 次，须同时配置上下限）」）：六个值须同时填写，两组各自 1 ≤ 下限 ≤ 阈值 ≤ 上限。变更留痕前后值。
+     */
+    @Transactional
+    public FrequentEntryAlertSetting configureFrequentEntryAlertSetting(String projectId, FrequentEntryAlertSettingRequest request) {
+        try {
+            authorizationService.requirePermission(MANAGE);
+            String project = requireProject(projectId, MANAGE);
+            if (request == null || request.nightThreshold() == null || request.nightMin() == null || request.nightMax() == null
+                    || request.twoDayThreshold() == null || request.twoDayMin() == null || request.twoDayMax() == null) {
+                throw ApiException.badRequest("VALIDATION_FAILED", "一晚、连续两日出入阈值须与各自下限、上限同时填写");
+            }
+            if (request.nightMin() < 1 || request.nightMin() > request.nightThreshold() || request.nightThreshold() > request.nightMax()
+                    || request.twoDayMin() < 1 || request.twoDayMin() > request.twoDayThreshold()
+                    || request.twoDayThreshold() > request.twoDayMax()) {
+                throw ApiException.badRequest("VALIDATION_FAILED", "出入阈值须满足：1 ≤ 下限 ≤ 阈值 ≤ 上限");
+            }
+            return idempotencyService.execute("configureCustomerFrequentEntryAlertSetting:" + project, request.idempotencyKey(), request, () -> {
+                FrequentEntryAlertSetting before = resolveFrequentEntry(project);
+                jdbc.update("""
+                        INSERT INTO customer_frequent_entry_alert_settings (project_id, night_threshold, night_min, night_max,
+                            two_day_threshold, two_day_min, two_day_max, updated_by, updated_at)
+                        VALUES (:project, :night, :night_min, :night_max, :two_day, :two_day_min, :two_day_max, :by, now())
+                        ON CONFLICT (project_id) DO UPDATE SET night_threshold = EXCLUDED.night_threshold, night_min = EXCLUDED.night_min,
+                            night_max = EXCLUDED.night_max, two_day_threshold = EXCLUDED.two_day_threshold,
+                            two_day_min = EXCLUDED.two_day_min, two_day_max = EXCLUDED.two_day_max,
+                            updated_by = EXCLUDED.updated_by, updated_at = EXCLUDED.updated_at
+                        """, new MapSqlParameterSource().addValue("project", project)
+                        .addValue("night", request.nightThreshold()).addValue("night_min", request.nightMin())
+                        .addValue("night_max", request.nightMax()).addValue("two_day", request.twoDayThreshold())
+                        .addValue("two_day_min", request.twoDayMin()).addValue("two_day_max", request.twoDayMax())
+                        .addValue("by", authorizationService.currentActor().id()));
+                auditEventService.recordSuccess("customer.frequent_entry_alert_setting.configured", MANAGE,
+                        "customer_frequent_entry_alert_setting", project, null, request.idempotencyKey(), Map.of(
+                                "night_threshold_before", before.nightThreshold(), "night_threshold", request.nightThreshold(),
+                                "night_min", request.nightMin(), "night_max", request.nightMax(),
+                                "two_day_threshold_before", before.twoDayThreshold(), "two_day_threshold", request.twoDayThreshold(),
+                                "two_day_min", request.twoDayMin(), "two_day_max", request.twoDayMax()));
+                return resolveFrequentEntry(project);
+            }, FrequentEntryAlertSetting.class);
+        } catch (RuntimeException exception) {
+            auditEventService.recordFailure("customer.frequent_entry_alert_setting.config_failed", MANAGE,
+                    "customer_frequent_entry_alert_setting", projectId, null, request == null ? null : request.idempotencyKey(),
+                    codeOf(exception));
+            throw exception;
+        }
+    }
+
+    private FrequentEntryAlertSetting resolveFrequentEntry(String project) {
+        return jdbc.query("""
+                SELECT project_id, night_threshold, night_min, night_max, two_day_threshold, two_day_min, two_day_max, updated_by, updated_at
+                  FROM customer_frequent_entry_alert_settings
+                 WHERE project_id IN (:project, :global) ORDER BY CASE WHEN project_id = :project THEN 0 ELSE 1 END LIMIT 1
+                """, new MapSqlParameterSource().addValue("project", project).addValue("global", GLOBAL_SCOPE),
+                (rs, n) -> new FrequentEntryAlertSetting(rs.getString("project_id"), rs.getInt("night_threshold"),
+                        (Integer) rs.getObject("night_min"), (Integer) rs.getObject("night_max"), rs.getInt("two_day_threshold"),
+                        (Integer) rs.getObject("two_day_min"), (Integer) rs.getObject("two_day_max"), rs.getString("updated_by"),
+                        rs.getTimestamp("updated_at").toInstant()))
+                .stream().findFirst()
+                .orElseThrow(() -> ApiException.conflict("CUSTOMER_FREQUENT_ENTRY_ALERT_NOT_CONFIGURED", "高频出入场预警阈值未配置"));
     }
 
     // ---------- 黑名单申请与两级批准 ----------

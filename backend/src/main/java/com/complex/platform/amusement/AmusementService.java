@@ -1,6 +1,6 @@
 package com.complex.platform.amusement;
 
-// 文件版本：V0.05
+// 文件版本：V0.06
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -1426,8 +1426,9 @@ public class AmusementService {
         if (!"active".equals(entitlement.status())) {
             throw ApiException.conflict("ENTITLEMENT_USED", "该权益未生效");
         }
-        if ((entitlement.validFrom() != null && now.isBefore(entitlement.validFrom()))
-                || (entitlement.validTo() != null && now.isAfter(entitlement.validTo()))) {
+        // 第十八批 AH 段 239-R1（ENUM:46「上述有效期类型决定的是「这张票在多长时间内可以开始使用」」）：票面到期改由票务侧消费回调
+        // （TicketVerificationService.requireAmusementConsumption）按「本场已检票的票本场内不受截断」复核，这里只拦尚未生效。
+        if (entitlement.validFrom() != null && now.isBefore(entitlement.validFrom())) {
             throw ApiException.conflict("ENTITLEMENT_EXPIRED", "该权益不在有效期内");
         }
         if (!isAmusementEntitlementType(entitlement.entitlementType())) {
@@ -1487,7 +1488,7 @@ public class AmusementService {
             recordOverCapacity(project, session, deviceId, "soft", "operating_capacity", policy);
         }
         // 入场保留权益、点位和设备事实；出场只释放该入场对应的项目人数。
-        // entitlementId 参与「同一权益同一场次至多一条未释放入场」并发唯一约束。
+        // 第十八批 AH 段第 219 条补充（V619 去掉 V234 唯一约束）：同一权益同一场次可有多条未释放入场（BSM:780 多次票每用一次扣一次）。
         AmusementVerificationRecord saved = repository.saveVerification(AmusementVerificationRecord.entry(
                 "verification_" + slug(idempotencyKey),
                 project.id(),

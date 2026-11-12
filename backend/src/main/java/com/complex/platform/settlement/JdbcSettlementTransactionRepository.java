@@ -1,6 +1,6 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.07
+// 文件版本：V0.08
 
 import java.sql.Timestamp;
 import java.time.Instant;
@@ -299,6 +299,7 @@ public class JdbcSettlementTransactionRepository {
     //   由作业按首场次实际闭店时刻判定是否已可处理（ENUM L48「于该场次结束时按本条处理，不等票面有效期届满」）。
     //   人份汇总（是否检票、入场次数）按同父票同 slot 全部权益取；入场类权益口径同 TicketRewardService（ticket/entry/admission/amusement*）。
     //   第十八批第 2 条：另取该人份仍有效的入场类核销时刻（作业按营业日计已开启次数，与逐份分账同口径）；
+    //   18AH 复核修复：另取同父票各人份仍有效的入场类核销时刻（作业按整张票判本场，与核销放行 ticketCheckedInThisSession 同口径）；
     //   第十八批第 3 条：销售渠道费取订单付款时固化的配置（ticket_order_channel_fees）。
     public java.util.List<ExpiredUnverifiedRow> findExpiredUnverifiedEntitlements(Instant now) {
         MapSqlParameterSource params = new MapSqlParameterSource().addValue("now", Timestamp.from(now));
@@ -307,7 +308,7 @@ public class JdbcSettlementTransactionRepository {
                        vs.session_date,
                        EXTRACT(EPOCH FROM h.open_time)::int  AS open_s,
                        EXTRACT(EPOCH FROM h.close_time)::int AS close_s,
-                       sl.checked_in, sl.visits, sl.opened, ea.entry_ats,
+                       sl.checked_in, sl.visits, sl.opened, ea.entry_ats, ea.ticket_entry_ats,
                        f.sales_fee_config_id, COALESCE(f.sales_fee_bps, 0) AS sales_fee_bps, f.sales_fixed_amount_cent,
                        (EXISTS (SELECT 1 FROM settlement_transactions a
                                  WHERE a.parent_ticket_id = c.parent_ticket_id
@@ -363,10 +364,12 @@ public class JdbcSettlementTransactionRepository {
                           OR (s.parent_ticket_id = c.parent_ticket_id AND s.slot_index = c.slot_index)
                   ) sl
                   CROSS JOIN LATERAL (
-                      SELECT COALESCE(ARRAY_AGG(COALESCE(st.business_at, st.created_at)), ARRAY[]::timestamptz[]) AS entry_ats
+                      SELECT COALESCE(ARRAY_AGG(COALESCE(st.business_at, st.created_at))
+                                          FILTER (WHERE s.id = c.id OR s.slot_index = c.slot_index), ARRAY[]::timestamptz[]) AS entry_ats,
+                             COALESCE(ARRAY_AGG(COALESCE(st.business_at, st.created_at)), ARRAY[]::timestamptz[]) AS ticket_entry_ats
                         FROM settlement_transactions st
                         JOIN issued_entitlements s ON s.id = st.entitlement_id
-                       WHERE (s.id = c.id OR (s.parent_ticket_id = c.parent_ticket_id AND s.slot_index = c.slot_index))
+                       WHERE (s.id = c.id OR s.parent_ticket_id = c.parent_ticket_id)
                          AND st.transaction_type = 'verification_settled' AND st.verification_id IS NOT NULL
                          AND (st.entitlement_type IN ('ticket', 'entry', 'admission') OR st.entitlement_type LIKE 'amusement%')
                          AND NOT EXISTS (SELECT 1 FROM settlement_transactions r
@@ -401,6 +404,7 @@ public class JdbcSettlementTransactionRepository {
                         rs.getBoolean("pooled_at_sale"),
                         rs.getInt("slot_index"),
                         java.util.Arrays.stream((Timestamp[]) rs.getArray("entry_ats").getArray()).map(Timestamp::toInstant).toList(),
+                        java.util.Arrays.stream((Timestamp[]) rs.getArray("ticket_entry_ats").getArray()).map(Timestamp::toInstant).toList(),
                         rs.getString("sales_fee_config_id") == null ? JdbcSettlementBillRepository.NO_SALES_FEE
                                 : new JdbcSettlementBillRepository.ChannelFeeConfig(rs.getString("sales_fee_config_id"),
                                         rs.getInt("sales_fee_bps"), (Long) rs.getObject("sales_fixed_amount_cent"))));
@@ -590,6 +594,8 @@ public class JdbcSettlementTransactionRepository {
             // 第十八批第 2 条:人份序号与该人份仍有效的入场类核销时刻(按营业日计已开启次数)。
             int slotIndex,
             java.util.List<Instant> slotEntryAts,
+            // 18AH 复核修复:同父票各人份仍有效的入场类核销时刻(按整张票判本场,与 ticketCheckedInThisSession 同口径)。
+            java.util.List<Instant> ticketEntryAts,
             // 第十八批第 3 条:订单付款时固化的销售渠道费配置(官方渠道/存量订单=不扣)。
             JdbcSettlementBillRepository.ChannelFeeConfig salesFee
     ) {

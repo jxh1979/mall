@@ -1,6 +1,6 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -45,6 +45,7 @@ import org.springframework.transaction.annotation.Transactional;
  * 须同时配置上下限）自动恢复有效，客服主管也可提前人工解除，填原因留痕。黑名单不设自动到期。解除黑名单须按列入时同级审批链（夜班值班经理批准、
  * 娱乐平台负责人批准）复核，填原因留痕；解除后原账户保持已关闭，该手机号自解除时起允许重新注册」；
  * ENUM 第 68 行「将客人列入黑名单即为关闭其账户，黑名单全平台通用，由保安团队申请、夜班值班经理批准、娱乐平台负责人批准」。
+ * 第十八批 AH 段第 218 条 218-R2：高频出入场预警阈值按项目配置（一晚、连续两日各带上下限）。
  */
 @SpringBootTest(properties = {
         "spring.datasource.url=${SETTLE_TEST_DB_URL:jdbc:postgresql://127.0.0.1:5432/complex_test}",
@@ -156,6 +157,55 @@ class CustomerAccountStatusJdbcIntegrationTests {
         mockMvc.perform(put("/api/v1/customer-restriction-settings/" + project).with(staff("usr_r23_ops_" + suffix, "customer.account.manage"))
                         .contentType(MediaType.APPLICATION_JSON).content(JSON.writeValueAsString(body)))
                 .andExpect(status().isBadRequest());
+    }
+
+    // ---------- 第十八批 AH 段第 218 条 218-R2 高频出入场预警阈值 ----------
+
+    // BSM:800「一晚出入次数或连续两日出入合计次数达到后台配置的阈值即触发核查（业务参数，按项目可配，出厂默认一晚 4 次、连续两日合计 7 次，须同时配置上下限）」：
+    // 本项目未配置时回落出厂 4／7；按后台真实请求（蛇形键）六值同配后回显本项目值。修复前没有该入口，第一处断言即红。
+    @Test
+    void frequentEntryAlertSettingFallsBackToFactoryAndSavesSixValuesTogether() throws Exception {
+        RequestPostProcessor ops = staff("usr_r23_ops_" + suffix, "customer.account.manage");
+        String url = "/api/v1/customer-frequent-entry-alert-settings/" + project;
+        mockMvc.perform(get(url).with(ops))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.project_id").value("__global__"))
+                .andExpect(jsonPath("$.data.night_threshold").value(4))
+                .andExpect(jsonPath("$.data.two_day_threshold").value(7));
+        mockMvc.perform(put(url).with(ops).contentType(MediaType.APPLICATION_JSON)
+                        .content(JSON.writeValueAsString(Map.of("idempotency_key", "ah218_fe_" + suffix,
+                                "night_threshold", 3, "night_min", 2, "night_max", 6,
+                                "two_day_threshold", 5, "two_day_min", 3, "two_day_max", 12))))
+                .andExpect(status().isOk());
+        mockMvc.perform(get(url).with(ops))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.project_id").value(project))
+                .andExpect(jsonPath("$.data.night_threshold").value(3))
+                .andExpect(jsonPath("$.data.night_min").value(2))
+                .andExpect(jsonPath("$.data.night_max").value(6))
+                .andExpect(jsonPath("$.data.two_day_threshold").value(5))
+                .andExpect(jsonPath("$.data.two_day_min").value(3))
+                .andExpect(jsonPath("$.data.two_day_max").value(12));
+    }
+
+    // 218-R2（BSM:800「须同时配置上下限」）：缺任一上下限 400；阈值超出上限 400，都不落库。
+    @Test
+    void frequentEntryAlertSettingRequiresBoundsAndThresholdWithinThem() throws Exception {
+        RequestPostProcessor ops = staff("usr_r23_ops_" + suffix, "customer.account.manage");
+        String url = "/api/v1/customer-frequent-entry-alert-settings/" + project;
+        Map<String, Object> body = new LinkedHashMap<>(Map.of("idempotency_key", "ah218_fe_bad_" + suffix,
+                "night_threshold", 3, "night_min", 2, "night_max", 6, "two_day_threshold", 5, "two_day_min", 3));
+        mockMvc.perform(put(url).with(ops).contentType(MediaType.APPLICATION_JSON).content(JSON.writeValueAsString(body)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.detail_code").value("VALIDATION_FAILED"));
+        body.put("two_day_max", 12);
+        body.put("night_threshold", 7);
+        body.put("idempotency_key", "ah218_fe_bad2_" + suffix);
+        mockMvc.perform(put(url).with(ops).contentType(MediaType.APPLICATION_JSON).content(JSON.writeValueAsString(body)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.detail_code").value("VALIDATION_FAILED"));
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM customer_frequent_entry_alert_settings WHERE project_id = ?",
+                Integer.class, project)).isZero();
     }
 
     @Test

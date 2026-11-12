@@ -1,4 +1,4 @@
-# P0 OpenAPI 权限、事件、任务追溯收口附录 V0.65
+# P0 OpenAPI 权限、事件、任务追溯收口附录 V0.66
 
 ## 1. 文档定位
 
@@ -14,11 +14,11 @@
 
 | 检查项 | 当前结果 | 执行结论 |
 |---|---:|---|
-| OpenAPI operation 数 | 1360 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
+| OpenAPI operation 数 | 1364 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
 | OpenAPI 权限/通用权限状态数 | 444 | 人工权限矩阵正文未覆盖 343 项；缺口以本文第 3 节补齐 |
-| OpenAPI 成功/失败事件数 | 2720 | 人工事件矩阵正文未覆盖 2671 项；完整事件字典以本文第 4 节为准 |
-| operation 级任务追溯 | 1360 | 人工任务映射正文未逐项覆盖 1354 个 operation；逐 operation 映射以本文第 5 节为准 |
-| 写接口数量 | 837 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
+| OpenAPI 成功/失败事件数 | 2728 | 人工事件矩阵正文未覆盖 2679 项；完整事件字典以本文第 4 节为准 |
+| operation 级任务追溯 | 1364 | 人工任务映射正文未逐项覆盖 1358 个 operation；逐 operation 映射以本文第 5 节为准 |
+| 写接口数量 | 839 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
 
 ## 3. 权限码与认证上下文补充表
 
@@ -179,7 +179,7 @@
 | `contract.settlement.manage` | staff-token | platform | 3 | settleContract, listContractSettlements, checkContractSettlementDocuments | OpenAPI 补充，以本附录为准 |
 | `contract.space.color.manage` | staff-token | platform | 2 | listSpaceExpiryColorRules, saveSpaceExpiryColorRule | OpenAPI 补充，以本附录为准 |
 | `contract.view` | staff-token | merchant, platform | 4 | listMerchantPortalContracts, listVacantSpaces, listExpiringContracts, getRentToSales | 已在权限矩阵正文出现 |
-| `customer.account.manage` | staff-token | platform, project | 7 | lookupCustomerAccountByPhone, suspendCustomerAccount, reinstateCustomerAccount, getCustomerRestrictionSetting, configureCustomerRestrictionSetting, getCustomerChurnAlertSetting, configureCustomerChurnAlertSetting | OpenAPI 补充，以本附录为准 |
+| `customer.account.manage` | staff-token | platform, project | 9 | lookupCustomerAccountByPhone, suspendCustomerAccount, reinstateCustomerAccount, getCustomerRestrictionSetting, configureCustomerRestrictionSetting, getCustomerFrequentEntryAlertSetting, configureCustomerFrequentEntryAlertSetting, getCustomerChurnAlertSetting, configureCustomerChurnAlertSetting | OpenAPI 补充，以本附录为准 |
 | `customer.blacklist.approve` | staff-token | project | 2 | approveCustomerBlacklistRequest, rejectCustomerBlacklistRequest | OpenAPI 补充，以本附录为准 |
 | `customer.blacklist.request` | staff-token | project | 2 | requestCustomerBlacklistChange, listCustomerBlacklistRequests | OpenAPI 补充，以本附录为准 |
 | `customer.home_content.manage` | staff-token | project | 2 | getCustomerHomeContent, publishCustomerHomeContent | OpenAPI 补充，以本附录为准 |
@@ -449,8 +449,8 @@
 | `ticket.price_rule.approve` | staff-token | project-channel | 1 | approveDeleteTicketPriceRule | OpenAPI 补充，以本附录为准 |
 | `ticket.price_variant.manage` | staff-token | platform, project-channel | 5 | createTicketPriceRule, archiveTicketPriceRule, unarchiveTicketPriceRule, requestDeleteTicketPriceRule, createTicketDistributionMerchantRate | 已在权限矩阵正文出现 |
 | `ticket.price_variant.view` | staff-token | project-channel | 1 | listTicketPriceRules | 已在权限矩阵正文出现 |
-| `ticket.product.manage` | staff-token | platform, project | 9 | updateTicketQrRefreshConfig, createTicketType, bindTicketTypeEntitlement, publishTicketType, archiveTicketType, unarchiveTicketType, requestDeleteTicketType, updateTicketTypePricing, saveTicketExpiryReminderPolicy | 已在权限矩阵正文出现 |
-| `ticket.product.view` | staff-token | platform, project | 5 | getTicketQrRefreshConfig, listTicketTypes, listTicketTypeGiftCoverage, ticketTypePriceCheck, getTicketExpiryReminderPolicy | 已在权限矩阵正文出现 |
+| `ticket.product.manage` | staff-token | platform, project | 10 | updateTicketQrRefreshConfig, createTicketType, configureTicketTypeMinGiftCups, bindTicketTypeEntitlement, publishTicketType, archiveTicketType, unarchiveTicketType, requestDeleteTicketType, updateTicketTypePricing, saveTicketExpiryReminderPolicy | 已在权限矩阵正文出现 |
+| `ticket.product.view` | staff-token | platform, project | 6 | getTicketQrRefreshConfig, listTicketTypes, listTicketTypeGiftCoverage, getTicketTypeMinGiftCups, ticketTypePriceCheck, getTicketExpiryReminderPolicy | 已在权限矩阵正文出现 |
 | `ticket.refund.approve` | staff-token | project-order | 4 | confirmTicketRefundPayout, approveTicketRefund, approveTicketSafetyEvent, rejectTicketRefund | 已在权限矩阵正文出现 |
 | `ticket.refund.request` | staff-token | project-order | 2 | requestTicketRefund, requestTicketSafetyEvent | 已在权限矩阵正文出现 |
 | `ticket.refund.view` | staff-token | -, project-order | 3 | listTicketRefunds, listTicketSafetyEvents, listTicketRefundLines | OpenAPI 补充，以本附录为准 |
@@ -1136,6 +1136,8 @@
 | `customer.complaints_viewed` | success | `listMyCustomerComplaints` | `GET` | `/api/v1/customer/complaints` | CUS-客人端 | `not_applicable` | 接口级事件，以本附录为准 |
 | `customer.consent.create_failed` | failure | `createCustomerConsent` | `POST` | `/api/v1/customer/consents` | CUS-客人端 | `not_applicable` | 接口级事件，以本附录为准 |
 | `customer.consent.created` | success | `createCustomerConsent` | `POST` | `/api/v1/customer/consents` | CUS-客人端 | `not_applicable` | 接口级事件，以本附录为准 |
+| `customer.frequent_entry_alert_setting.config_failed` | failure | `configureCustomerFrequentEntryAlertSetting` | `PUT` | `/api/v1/customer-frequent-entry-alert-settings/{project_id}` | CUS-客人端 | `customer.account.manage` | 接口级事件，以本附录为准 |
+| `customer.frequent_entry_alert_setting.configured` | success | `configureCustomerFrequentEntryAlertSetting` | `PUT` | `/api/v1/customer-frequent-entry-alert-settings/{project_id}` | CUS-客人端 | `customer.account.manage` | 接口级事件，以本附录为准 |
 | `customer.home_content_publish_failed` | failure | `publishCustomerHomeContent` | `POST` | `/api/v1/home-contents/{project_id}/publish` | CUS-客人端 | `customer.home_content.manage` | 接口级事件，以本附录为准 |
 | `customer.home_content_published` | success | `publishCustomerHomeContent` | `POST` | `/api/v1/home-contents/{project_id}/publish` | CUS-客人端 | `customer.home_content.manage` | 接口级事件，以本附录为准 |
 | `customer.level_evaluate_failed` | failure | `evaluateMemberLevel` | `POST` | `/api/v1/loyalty/points-accounts/{customer_id}/evaluate-level` | CUS-客人端 | `customer.loyalty.evaluate` | 接口级事件，以本附录为准 |
@@ -2181,6 +2183,8 @@
 | `not_applicable` | failure | `getCustomerBarTableCurrentBill` | `GET` | `/api/v1/customer/bar-tables/{table_id}/current-bill` | CUS/BAR-客人订台 | `public` | 接口级事件，以本附录为准 |
 | `not_applicable` | success | `getCustomerChurnAlertSetting` | `GET` | `/api/v1/customer-churn-alert-setting` | CUS-客人端 | `customer.account.manage` | 接口级事件，以本附录为准 |
 | `not_applicable` | failure | `getCustomerChurnAlertSetting` | `GET` | `/api/v1/customer-churn-alert-setting` | CUS-客人端 | `customer.account.manage` | 接口级事件，以本附录为准 |
+| `not_applicable` | success | `getCustomerFrequentEntryAlertSetting` | `GET` | `/api/v1/customer-frequent-entry-alert-settings/{project_id}` | CUS-客人端 | `customer.account.manage` | 接口级事件，以本附录为准 |
+| `not_applicable` | failure | `getCustomerFrequentEntryAlertSetting` | `GET` | `/api/v1/customer-frequent-entry-alert-settings/{project_id}` | CUS-客人端 | `customer.account.manage` | 接口级事件，以本附录为准 |
 | `not_applicable` | success | `getCustomerHomeContent` | `GET` | `/api/v1/home-contents/{project_id}` | CUS-客人端 | `customer.home_content.manage` | 接口级事件，以本附录为准 |
 | `not_applicable` | failure | `getCustomerHomeContent` | `GET` | `/api/v1/home-contents/{project_id}` | CUS-客人端 | `customer.home_content.manage` | 接口级事件，以本附录为准 |
 | `not_applicable` | failure | `getCustomerParkingCredit` | `GET` | `/api/v1/customer/parking/credits` | CUS-客人端 | `not_applicable` | 接口级事件，以本附录为准 |
@@ -2252,6 +2256,8 @@
 | `not_applicable` | failure | `getTicketExpiryReminderPolicy` | `GET` | `/api/v1/ticketing/expiry-reminder-policies/{project_id}` | TIC-票务权益 | `ticket.product.view` | 接口级事件，以本附录为准 |
 | `not_applicable` | success | `getTicketQrRefreshConfig` | `GET` | `/api/v1/ticketing/qr-refresh-config` | TIC-票务权益 | `ticket.product.view` | 接口级事件，以本附录为准 |
 | `not_applicable` | failure | `getTicketQrRefreshConfig` | `GET` | `/api/v1/ticketing/qr-refresh-config` | TIC-票务权益 | `ticket.product.view` | 接口级事件，以本附录为准 |
+| `not_applicable` | success | `getTicketTypeMinGiftCups` | `GET` | `/api/v1/ticketing/ticket-types/{id}/min-gift-cups` | TIC-票务权益 | `ticket.product.view` | 接口级事件，以本附录为准 |
+| `not_applicable` | failure | `getTicketTypeMinGiftCups` | `GET` | `/api/v1/ticketing/ticket-types/{id}/min-gift-cups` | TIC-票务权益 | `ticket.product.view` | 接口级事件，以本附录为准 |
 | `not_applicable` | success | `getTraceabilityAutoCaptureRate` | `GET` | `/api/v1/evidence/traceability/auto-capture-rate` | EVD-事件证据 | `evidence.timeline.view` | 接口级事件，以本附录为准 |
 | `not_applicable` | failure | `getTraceabilityAutoCaptureRate` | `GET` | `/api/v1/evidence/traceability/auto-capture-rate` | EVD-事件证据 | `evidence.timeline.view` | 接口级事件，以本附录为准 |
 | `not_applicable` | success | `getTraceHandover` | `GET` | `/api/v1/inventory/trace-handovers/{id}` | INV-库存存酒 | `inventory.handover.scan` | 接口级事件，以本附录为准 |
@@ -3093,6 +3099,8 @@
 | `ticket_transfer.revoked` | success | `revokeCustomerTicketTransfer` | `POST` | `/api/v1/customer/ticket-transfers/{transfer_id}/revoke` | CUS/TIC-客人购票 | `not_applicable` | 接口级事件，以本附录为准 |
 | `ticket_transfer.view_failed` | failure | `listTicketTransfers` | `GET` | `/api/v1/ticketing/ticket-transfers` | TIC-票务权益 | `ticket.transfer.read` | 接口级事件，以本附录为准 |
 | `ticket_transfer.viewed` | success | `listTicketTransfers` | `GET` | `/api/v1/ticketing/ticket-transfers` | TIC-票务权益 | `ticket.transfer.read` | 接口级事件，以本附录为准 |
+| `ticket_type.min_gift_cups_config_failed` | failure | `configureTicketTypeMinGiftCups` | `PUT` | `/api/v1/ticketing/ticket-types/{id}/min-gift-cups` | TIC-票务权益 | `ticket.product.manage` | 接口级事件，以本附录为准 |
+| `ticket_type.min_gift_cups_configured` | success | `configureTicketTypeMinGiftCups` | `PUT` | `/api/v1/ticketing/ticket-types/{id}/min-gift-cups` | TIC-票务权益 | `ticket.product.manage` | 接口级事件，以本附录为准 |
 | `ticket.expiry_reminder_policy_update_failed` | failure | `saveTicketExpiryReminderPolicy` | `PUT` | `/api/v1/ticketing/expiry-reminder-policies/{project_id}` | TIC-票务权益 | `ticket.product.manage` | 接口级事件，以本附录为准 |
 | `ticket.expiry_reminder_policy_updated` | success | `saveTicketExpiryReminderPolicy` | `PUT` | `/api/v1/ticketing/expiry-reminder-policies/{project_id}` | TIC-票务权益 | `ticket.product.manage` | 接口级事件，以本附录为准 |
 | `ticket.issue_failed` | failure | `issueTicket` | `POST` | `/api/v1/ticketing/orders/{order_id}/issue` | TIC-票务权益 | `ticket.ticket.issue` | 接口级事件，以本附录为准 |
@@ -3517,6 +3525,7 @@
 | CUS-客人端 | `approveStudentCertification` | `POST` | `/api/v1/student-certifications/{certification_id}/approve` | 学生认证审核通过 | `ticket.student_cert.review` | `customer.student_cert.approved` / `customer.student_cert.approve_failed` | web | operation 级补充 |
 | CUS-客人端 | `claimCustomerVoucherTransfer` | `POST` | `/api/v1/customer/voucher-transfers/{transfer_id}/claim` | 确认领取转赠(手机号只指定人可领;链接/二维码先确认者得) | `not_applicable` | `voucher_transfer.claimed` / `voucher_transfer.claim_failed` | miniapp, app | operation 级补充 |
 | CUS-客人端 | `configureCustomerChurnAlertSetting` | `PUT` | `/api/v1/customer-churn-alert-setting` | 配置同号一年内注销与注册合计次数上限（全平台，值与上下限同配） | `customer.account.manage` | `customer.churn_alert_setting.configured` / `customer.churn_alert_setting.config_failed` | web | operation 级补充 |
+| CUS-客人端 | `configureCustomerFrequentEntryAlertSetting` | `PUT` | `/api/v1/customer-frequent-entry-alert-settings/{project_id}` | 配置本项目高频出入场预警阈值（一晚、连续两日各与上下限同配） | `customer.account.manage` | `customer.frequent_entry_alert_setting.configured` / `customer.frequent_entry_alert_setting.config_failed` | web | operation 级补充 |
 | CUS-客人端 | `configureCustomerRestrictionSetting` | `PUT` | `/api/v1/customer-restriction-settings/{project_id}` | 配置本项目会员受限时长（天数与上下限同配） | `customer.account.manage` | `customer.restriction_setting.configured` / `customer.restriction_setting.config_failed` | web | operation 级补充 |
 | CUS-客人端 | `configureStoredValueMerchantCard` | `POST` | `/api/v1/loyalty/stored-value/merchant-card-config` | 配置商户储值卡（仅平台）：发卡资格 + 资金模式（预收/代收）+ 消费扣款顺序 | `customer.stored_value.refund` | `stored_value.merchant_card_configured` / `stored_value.merchant_card_config_failed` | web | operation 级补充 |
 | CUS-客人端 | `configureStoredValueMerchantRefundRule` | `POST` | `/api/v1/loyalty/stored-value/merchant-refund-rules` | 配置商户级储值卡退款规则（发卡商户自设可否退/比例） | `customer.stored_value.refund` | `stored_value.merchant_refund_rule_configured` / `stored_value.merchant_refund_rule_failed` | web | operation 级补充 |
@@ -3541,6 +3550,7 @@
 | CUS-客人端 | `freezeStoredValueAccount` | `POST` | `/api/v1/loyalty/stored-value/{customer_id}/freeze` | 冻结会员储值账户（后台） | `customer.stored_value.freeze` | `stored_value.frozen` / `stored_value.frozen_failed` | web | operation 级补充 |
 | CUS-客人端 | `fulfillPointsRedemption` | `POST` | `/api/v1/loyalty/points-redemptions/{redemption_id}/fulfill` | 积分兑换券领取（店员端） | `customer.loyalty.manage` | `customer.points_voucher_fulfilled` / `customer.points_voucher_fulfill_failed` | web | operation 级补充 |
 | CUS-客人端 | `getCustomerChurnAlertSetting` | `GET` | `/api/v1/customer-churn-alert-setting` | 查同号注销与注册频次预警上限（全平台） | `customer.account.manage` | `not_applicable` / `not_applicable` | web | operation 级补充 |
+| CUS-客人端 | `getCustomerFrequentEntryAlertSetting` | `GET` | `/api/v1/customer-frequent-entry-alert-settings/{project_id}` | 查本项目高频出入场预警阈值（未配置回落出厂一晚 4 次、连续两日 7 次） | `customer.account.manage` | `not_applicable` / `not_applicable` | web | operation 级补充 |
 | CUS-客人端 | `getCustomerHomeContent` | `GET` | `/api/v1/home-contents/{project_id}` | 查客人端首页已发布与待审批的综合体介绍与活动公告 | `customer.home_content.manage` | `not_applicable` / `not_applicable` | web | operation 级补充 |
 | CUS-客人端 | `getCustomerParkingCredit` | `GET` | `/api/v1/customer/parking/credits` | 客人查看本日停车消费抵免 | `not_applicable` | `parking.credit.granted` / `not_applicable` | app, miniapp | operation 级补充 |
 | CUS-客人端 | `getCustomerPoints` | `GET` | `/api/v1/customer/points` | 积分余额 | `not_applicable` | `customer.points_viewed` / `customer.points_view_failed` | miniapp, app | 已在任务映射正文出现 |
@@ -4514,6 +4524,7 @@
 | TIC-票务权益 | `archiveTicketType` | `POST` | `/api/v1/ticketing/ticket-types/{id}/archive` | 存档票种 | `ticket.product.manage` | `ticket_product.archived` / `ticket_product.archive_failed` | web | operation 级补充 |
 | TIC-票务权益 | `bindTicketTypeEntitlement` | `POST` | `/api/v1/ticketing/ticket-types/{id}/entitlements` | 绑定票类型权益 | `ticket.product.manage` | `ticket_product_entitlement.bound` / `ticket_product_entitlement.bound_failed` | web | operation 级补充 |
 | TIC-票务权益 | `cancelTicketOrder` | `POST` | `/api/v1/ticketing/orders/{order_id}/cancel` | 取消未支付票务订单（回补库存） | `ticket.order.create` | `ticket_order.cancelled` / `ticket_order.cancel_failed` | web, kiosk | operation 级补充 |
+| TIC-票务权益 | `configureTicketTypeMinGiftCups` | `PUT` | `/api/v1/ticketing/ticket-types/{id}/min-gift-cups` | 配置票种最低赠酒杯数（杯数与上下限同配） | `ticket.product.manage` | `ticket_type.min_gift_cups_configured` / `ticket_type.min_gift_cups_config_failed` | web | operation 级补充 |
 | TIC-票务权益 | `confirmTicketOrderPayment` | `POST` | `/api/v1/ticketing/orders/{order_id}/confirm-payment` | 确认票务订单支付成功（回写 paid） | `finance.payment.register` | `ticket_order.payment_confirmed` / `ticket_order.payment_confirm_failed` | web, kiosk | operation 级补充 |
 | TIC-票务权益 | `confirmTicketRefundPayout` | `POST` | `/api/v1/ticketing/refunds/{refund_id}/confirm-payout` | 退款确认拨付 | `ticket.refund.approve` | `ticket_refund.payout_confirmed` / `ticket_refund.payout_confirm_failed` | web | operation 级补充 |
 | TIC-票务权益 | `createEntitlementTemplate` | `POST` | `/api/v1/ticketing/entitlement-templates` | 创建权益模板 | `ticket.entitlement.manage` | `ticket_entitlement_template.changed` / `ticket_entitlement_template.changed_failed` | web | operation 级补充 |
@@ -4528,6 +4539,7 @@
 | TIC-票务权益 | `getTicketCredential` | `GET` | `/api/v1/ticketing/tickets/{ticket_id}/credential` | 获取动态二维码凭证 | `ticket.credential.view` | `ticket_credential.refreshed` / `ticket_credential.refresh_failed` | web, miniapp, app | operation 级补充 |
 | TIC-票务权益 | `getTicketExpiryReminderPolicy` | `GET` | `/api/v1/ticketing/expiry-reminder-policies/{project_id}` | 查未核销票到期提醒提前小时数（按项目） | `ticket.product.view` | `not_applicable` / `not_applicable` | web | operation 级补充 |
 | TIC-票务权益 | `getTicketQrRefreshConfig` | `GET` | `/api/v1/ticketing/qr-refresh-config` | 读全场统一动态码刷新间隔 | `ticket.product.view` | `not_applicable` / `not_applicable` | web | operation 级补充 |
+| TIC-票务权益 | `getTicketTypeMinGiftCups` | `GET` | `/api/v1/ticketing/ticket-types/{id}/min-gift-cups` | 查票种最低赠酒杯数（没配过为出厂 1 杯） | `ticket.product.view` | `not_applicable` / `not_applicable` | web | operation 级补充 |
 | TIC-票务权益 | `importPartnerVoucherRedemption` | `POST` | `/api/v1/ticketing/partner-vouchers/redemptions` | 导入合作方券核销回流 | `verification.execute` | `not_applicable` / `not_applicable` | web | operation 级补充 |
 | TIC-票务权益 | `issueTicket` | `POST` | `/api/v1/ticketing/orders/{order_id}/issue` | 出票（含一体机辅助售票） | `ticket.ticket.issue` | `ticket.issued` / `ticket.issue_failed` | web, kiosk, miniapp, app | operation 级补充 |
 | TIC-票务权益 | `listEntitlementTemplates` | `GET` | `/api/v1/ticketing/entitlement-templates` | 查询权益模板 | `ticket.entitlement.view` | `ticket_entitlement_template.viewed` / `ticket_entitlement_template.viewed_failed` | web | operation 级补充 |

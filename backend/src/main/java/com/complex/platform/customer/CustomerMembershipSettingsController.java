@@ -1,6 +1,6 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static com.complex.platform.common.api.ApiRequests.requireIdempotencyKey;
 
@@ -17,7 +17,8 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * 后台：会员受限时长与注册注销频次预警参数（值与上下限同配）、黑名单申请的查看与两级批准（ROOT-03-R22、R23）。
+ * 后台：会员受限时长与注册注销频次预警参数（值与上下限同配）、黑名单申请的查看与两级批准（ROOT-03-R22、R23）；
+ * 高频出入场预警阈值（第十八批 AH 段 218-R2，一晚、连续两日各带上下限，按项目）。
  */
 @RestController
 @RequestMapping("/api/v1")
@@ -55,6 +56,20 @@ public class CustomerMembershipSettingsController {
             @RequestBody CustomerAccountStatusService.RestrictionSettingRequest request) {
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(statusService.configureRestrictionSetting(projectId, request));
+    }
+
+    @GetMapping("/customer-frequent-entry-alert-settings/{project_id}")
+    public ApiResponse<CustomerAccountStatusService.FrequentEntryAlertSetting> getFrequentEntryAlertSetting(
+            @PathVariable("project_id") String projectId) {
+        return ApiResponse.ok(statusService.getFrequentEntryAlertSetting(projectId));
+    }
+
+    @PutMapping("/customer-frequent-entry-alert-settings/{project_id}")
+    public ApiResponse<CustomerAccountStatusService.FrequentEntryAlertSetting> configureFrequentEntryAlertSetting(
+            @PathVariable("project_id") String projectId,
+            @RequestBody CustomerAccountStatusService.FrequentEntryAlertSettingRequest request) {
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(statusService.configureFrequentEntryAlertSetting(projectId, request));
     }
 
     @GetMapping("/customer-blacklist-requests")

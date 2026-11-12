@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -99,6 +99,17 @@ class TicketTransferNoFreezeJdbcIntegrationTests {
         jdbc.update("UPDATE ticket_instances SET first_session_key = ? WHERE id = ?", past, f.parent);
         preview(f, r.claimCode()).andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.session_ended").value(true));
+    }
+
+    // 第十八批 AH 段第 238 条 238-R2（BSM:800「一个场次＝一次开门到关门；跨夜场次以该场次的实际闭店时间为准，不按自然日切分」；BSM:809「受赠人打开转赠页面时，
+    // 若该人份权益所绑定的场次已经结束……」）：首场次键是营业日（无场次配置的票）时，转赠判场次结束取该营业日闭店（无营业日版本按出厂次日 07:00、所在地时区），
+    // 不是次日零点。修复前取系统时区次日零点即红。
+    @Test
+    void businessDayKeyedFirstSessionEndsAtThatDaysCloseNotMidnight() {
+        Fixture f = seed(2);
+        jdbc.update("UPDATE ticket_instances SET first_session_key = '2031-01-15', first_used_at = now() WHERE id = ?", f.parent);
+        assertThat(repository.findFirstSession(f.parent)).get().extracting(FirstSessionWindow.Session::end)
+                .isEqualTo(Instant.parse("2031-01-15T23:00:00Z"));
     }
 
     @Test

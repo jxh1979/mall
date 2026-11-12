@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.12
+// 文件版本：V0.13
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.amusement.AmusementEntryRequest;
@@ -88,6 +88,14 @@ public class TicketVerificationService {
     // 字段注入免改构造点；内存仓单测（无 Spring）取出厂起点。
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     com.complex.platform.common.BusinessDayResolver businessDays = new com.complex.platform.common.BusinessDayResolver();
+
+    // 第十八批 AH 段 238-R1：核销与预检取「现在」的时钟（字段注入免改构造点；用例换固定时钟验跨零点同场次，生产恒系统时钟）。
+    java.time.Clock clock = java.time.Clock.systemUTC();
+
+    // 第十八批 AH 段 218-R1：检票成功后按人份数一晚、连续两日出入次数，达阈值写高频出入场预警（同一事务、不阻断入场）。
+    // 字段注入免改构造点；内存仓单测（无 Spring）为 null 不预警。
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    TicketFrequentEntryAlertService frequentEntryAlerts;
 
     // CG-05 核销记录状态闭集（ENUM「核销记录状态」：成功、拒绝（规则不允许）、失败（设备或网络原因）、已冲正、异常）。
     // 落记录的非成功结果按 result_reason 归类：规则不允许 → rejected；设备 / 网络 / 凭证技术原因 → failed。
@@ -260,9 +268,10 @@ public class TicketVerificationService {
         }
         // P0-2 越权修复：预览同样会泄露他商户权益明细（剩余次数/人数/有效期），按调用者商户范围校验归属（平台 scope 放行）。
         enforceMerchantScope(entitlement.merchantId());
-        Instant now = Instant.now();
+        Instant now = Instant.now(clock);
+        // 第十八批 AH 段 239-R1（ENUM:46）：有效期只决定能否开启新场次，本场已检票的票本场内不受票面有效期截断。
         boolean withinValidity = (entitlement.validFrom() == null || !now.isBefore(entitlement.validFrom()))
-                && (entitlement.validTo() == null || !now.isAfter(entitlement.validTo()));
+                && !expiredForNewSession(entitlement, now);
         // 第十八批 X 段 196-R1：同场次再入场放行不扣次，预检同样放行、不要求留脸或比对（§G-1 同场次重复进出不校验同一性）。
         boolean reentry = sessionReentry(entitlement, now);
         boolean allowed = (entitlement.remainingTimes() > 0 || reentry)
@@ -286,6 +295,9 @@ public class TicketVerificationService {
             // 请求事务照旧整体回滚（不扣次、单次授权不扣），另落一条 rejected 核销记录；145-R1（ENUM:43）：技术失败同样另落 failed。
             recordRuleRejection(request, error);
             throw error;
+        }
+        if (frequentEntryAlerts != null && STATUS_SUCCESS.equals(response.status())) {
+            frequentEntryAlerts.afterEntry(response.id());
         }
         if ("failed".equals(response.status())) {
             // M723-F08（第 656 行「操作被拒绝或失败的不算用掉」）：在线核销以正常返回报告失败（过刷新窗口、签名失配，
@@ -552,7 +564,7 @@ public class TicketVerificationService {
      * AUD-066 多人票同场次核销守卫（用户口径）：同一父票的各人份额必须在同一场次内核销——
      * 同场次内不同人可不同时间分别入场（不要求同一时刻），但不能跨场次/日期。
      * 无父票（存量/直发手造）或单人票（父票 num_people&lt;=1）不约束。
-     * 场次键：优先取 venue 当前 open 场次；无场次配置的票回退自然日（"不能跨日期"的机械保证）。
+     * 场次键：优先取 venue 当前 open 场次；无场次配置的票取订单综合体营业日（第十八批 AH 段 238-R1：BSM:800 跨夜场次不按自然日切分）。
      * ponytail：读父票首场次键→比对（读在消费前，写用 COALESCE 写一次）；并发极端下可能双放行两场次，
      *   频度极低、可接受上限；若需强一致改为父票行加锁。
      */
@@ -566,16 +578,19 @@ public class TicketVerificationService {
             return;
         }
         String firstKey = parent.firstSessionKey();
-        if (firstKey != null && !firstKey.equals(sessionKeyFor(entitlement.venueId(), now))) {
+        if (firstKey != null && !firstKey.equals(sessionKeyFor(entitlement, now))) {
             throw ApiException.conflict("MULTI_PERSON_CROSS_SESSION_FORBIDDEN",
                     "多人票各人份额必须在同一场次内核销，不能跨场次/日期");
         }
     }
 
-    /** AUD-066 场次键：venue 当前 open 场次 id；无场次配置回退自然日（系统默认时区）。 */
-    private String sessionKeyFor(String venueId, Instant now) {
-        return repository.resolveOpenSessionForVenue(venueId, now)
-                .orElse(now.atZone(java.time.ZoneId.systemDefault()).toLocalDate().toString());
+    /**
+     * AUD-066 场次键：venue 当前 open 场次 id；无场次配置取订单综合体营业日（无订单按出厂口径）。第十八批 AH 段 238-R1（BSM:800「一个场次＝一次开门到关门；
+     * 跨夜场次以该场次的实际闭店时间为准，不按自然日切分」；BSM:780「其中「当天」「每天」一律按营业日计算……时区一律取项目所在地时间，禁止使用服务器默认时区」）。
+     */
+    private String sessionKeyFor(IssuedEntitlementRecord entitlement, Instant now) {
+        return repository.resolveOpenSessionForVenue(entitlement.venueId(), now)
+                .orElseGet(() -> businessDays.businessDate(orderProject(entitlement), null, now).toString());
     }
 
     /** AUD-066：首次成功核销定格父票 first_used_at 与首场次键（写一次，COALESCE）。无父票跳过。 */
@@ -587,7 +602,7 @@ public class TicketVerificationService {
         // AUD 复核 P2-6：原子抢占父票首场次键——CAS 命中 0 行=同父票已被别的场次抢占（多人票各人份额并发首刷跨场次），
         // 抛错回滚本次消费（本方法在 TicketingService.createVerification 的 @Transactional 事务内，回滚 atomicUseEntitlement）。
         // 与 enforceMultiPersonSameSession 的读检查构成「读快拒 + 写原子闸」双闸，封死并发窗口。
-        if (repository.markTicketInstanceFirstUse(parentId, sessionKeyFor(entitlement.venueId(), now), now) == 0) {
+        if (repository.markTicketInstanceFirstUse(parentId, sessionKeyFor(entitlement, now), now) == 0) {
             throw ApiException.conflict("MULTI_PERSON_CROSS_SESSION_FORBIDDEN",
                     "多人票各人份额必须在同一场次内核销，不能跨场次/日期");
         }
@@ -635,7 +650,7 @@ public class TicketVerificationService {
         }
         // S5 K16：业务不变量——赠送权益只能在提供它的那家商户核销。读快拒，置于消费权益/落任何记录之前。
         enforceProviderMerchantMatch(entitlement, request);
-        Instant now = Instant.now();
+        Instant now = Instant.now(clock);
         // P1 清单#19：动态二维码 window_valid 真实计算——非动态凭证（直接凭权益码）无刷新窗口概念，window_valid=null。
         Boolean windowValid = credential == null ? null : isCredentialWindowValid(credential, now);
         if (Boolean.FALSE.equals(windowValid)) {
@@ -717,7 +732,9 @@ public class TicketVerificationService {
         if (entitlement.validFrom() != null && now.isBefore(entitlement.validFrom())) {
             throw ApiException.conflict("ENTITLEMENT_NOT_YET_VALID", "该权益尚未到生效时间");
         }
-        if (entitlement.validTo() != null && now.isAfter(entitlement.validTo())) {
+        // 第十八批 AH 段 239-R1（ENUM:46「上述有效期类型决定的是「这张票在多长时间内可以开始使用」；一经完成检票环节……该票即绑定至当前场次，
+        // 其全部权益的可用窗口收窄为该场次」）：票面有效期只拦开新场次，本场已检票的票本场内再入场、附带权益与同票他人首入不受截断。
+        if (expiredForNewSession(entitlement, now)) {
             throw ApiException.conflict("ENTITLEMENT_EXPIRED", "该权益已过期");
         }
         // AUD-066 多人票同场次核销守卫（用户口径）：同一父票的各人份额必须在同一场次内核销——
@@ -729,7 +746,7 @@ public class TicketVerificationService {
         }
         // 第十八批 X 段 197-R1：票内餐饮、零售券（专属直付）须本场已检票、本场只能核一份。置于人脸与扣次之前，被拒不扣次、不发结算事件。
         if (entitlement.exclusiveMerchantId() != null) {
-            requireSessionCheckedIn(entitlement, now);
+            requireSessionCheckedIn(entitlement, now, "餐饮、零售券");
         }
         // 第十八批 X 段 196-R1：入园与酒吧入场资格本场已入过场 → 放行不扣次（落 success/session_reentry），不落结算价、
         // 不发积分与结算事件、不留脸不比对（§G-1 同场次重复进出不校验同一性）；首入照旧落到下方扣一次。
@@ -979,7 +996,8 @@ public class TicketVerificationService {
         if(!DAY_WINDOW.equals(entitlement.consumptionWindow())) enforceMultiPersonSameSession(entitlement,now);
         if(entitlement.validFrom()!=null && now.isBefore(entitlement.validFrom()))
             throw ApiException.conflict("ENTITLEMENT_NOT_YET_VALID","该权益尚未到生效时间");
-        if(entitlement.validTo()!=null && now.isAfter(entitlement.validTo()))
+        // 第十八批 AH 段 239-R1（ENUM:46）：游乐入场的票面到期在此复核（AmusementService 只拦未生效），本场已检票的票本场内不受截断。
+        if(expiredForNewSession(entitlement,now))
             throw ApiException.conflict("ENTITLEMENT_EXPIRED","该权益已过期");
     }
 
@@ -1271,14 +1289,12 @@ public class TicketVerificationService {
      * 场次内核销」「该窗口内票面附带的各项权益（酒水、各酒吧入场等）按完整一份配足、完整可用，但仅限当场消耗……后续场次的附带权益也不得提前到当前场次使用。」；
      * BSM:780「其中『当天』『每天』一律按营业日计算……按综合体分别配置」）：票内餐饮、零售券（专属直付）须同票同人份在本场（订单综合体本营业日，
      * 无订单取出厂起点）已有入场类核销成功（已冲正的不算；同 SettlementExpiryJob 有入场的营业日口径）；「一份」同 165-R1（总次数 ÷ 入场次数、
-     * 至少 1，补偿补发行取它的全部次数），本场该券核销成功已达一份即拒绝。
+     * 至少 1，补偿补发行取它的全部次数），本场该券核销成功已达一份即拒绝。label＝报错里的权益称谓（第十八批 AH 段 219-R1 游乐共用）。
      */
-    private void requireSessionCheckedIn(IssuedEntitlementRecord entitlement, Instant now) {
-        String project = Optional.ofNullable(entitlement.orderId()).flatMap(repository::findTicketOrderById)
-                .map(TicketOrderRecord::projectId).orElse(null);
-        Instant since = businessDays.start(project, null, businessDays.businessDate(project, null, now));
+    private void requireSessionCheckedIn(IssuedEntitlementRecord entitlement, Instant now, String label) {
+        Instant since = sessionStart(entitlement, now);
         if (!repository.hasVerifiedEntrySince(entitlement.parentTicketId(), entitlement.slotIndex(), since)) {
-            throw ApiException.conflict("ENTITLEMENT_SESSION_NOT_CHECKED_IN", "须先完成本场次检票入场，才能核销票内的餐饮、零售券");
+            throw ApiException.conflict("ENTITLEMENT_SESSION_NOT_CHECKED_IN", "须先完成本场次检票入场，才能核销票内的" + label);
         }
         int share = entitlement.totalTimes();
         if (entitlement.compensationItemId() == null) {
@@ -1286,8 +1302,47 @@ public class TicketVerificationService {
             share = visits <= 1 ? entitlement.totalTimes() : Math.max(1, entitlement.totalTimes() / visits);
         }
         if (repository.countSuccessfulVerificationsSince(entitlement.id(), since) >= share) {
-            throw ApiException.conflict("ENTITLEMENT_SESSION_SHARE_USED_UP", "本场次的餐饮、零售券已按票面一份用完，之后场次的份额不能提前使用");
+            throw ApiException.conflict("ENTITLEMENT_SESSION_SHARE_USED_UP", "本场次的" + label + "已按票面一份用完，之后场次的份额不能提前使用");
         }
+    }
+
+    /**
+     * 第十八批 AH 段第 219 条 219-R1（BSM:800「该票所含的各项权益（各酒吧入场、酒水赠饮、游乐、餐饮券、零售券等），只能在完成检票环节所在的那一个场次内核销」
+     * 「后续场次的附带权益也不得提前到当前场次使用」；ENUM:46「该窗口内附带权益按完整一份配足、仅限当场消耗」）：票内游乐同 197-R1 餐饮——本场已检票、
+     * 本场只能用一份（总次数 ÷ 同人份入场次数）。无父票或同人份没有检票类权益（纯游乐票，首次游乐即开场次）不加闸。游乐消费回调扣次前调用。
+     */
+    void requireAmusementSessionShare(IssuedEntitlementRecord entitlement, Instant now) {
+        if (entitlement.parentTicketId() == null
+                || repository.maxEntryTotalTimes(entitlement.parentTicketId(), entitlement.slotIndex()) == 0) {
+            return;
+        }
+        requireSessionCheckedIn(entitlement, now, "游乐");
+    }
+
+    /** 订单锁定的综合体；无订单为 null（按出厂营业日）。 */
+    private String orderProject(IssuedEntitlementRecord entitlement) {
+        return Optional.ofNullable(entitlement.orderId()).flatMap(repository::findTicketOrderById)
+                .map(TicketOrderRecord::projectId).orElse(null);
+    }
+
+    /** 本场起点：订单综合体本营业日起始时刻（无订单取出厂起点）。 */
+    private Instant sessionStart(IssuedEntitlementRecord entitlement, Instant now) {
+        String project = orderProject(entitlement);
+        return businessDays.start(project, null, businessDays.businessDate(project, null, now));
+    }
+
+    /**
+     * 第十八批 AH 段 239-R1（ENUM:46「一经完成检票环节……该票即绑定至当前场次，其全部权益的可用窗口收窄为该场次」；BSM:778「同一场次内不同人可在不同时间
+     * 分别入场」）：同父票任一人份本场（订单综合体本营业日）已有入场类核销成功。无父票为 false。到期作废作业（TicketingService）同口径。
+     */
+    boolean ticketCheckedInThisSession(IssuedEntitlementRecord entitlement, Instant now) {
+        return entitlement.parentTicketId() != null
+                && repository.hasVerifiedTicketEntrySince(entitlement.parentTicketId(), sessionStart(entitlement, now));
+    }
+
+    /** 239-R1：票面有效期已过且本票本场未检票——有效期只拦开新场次。 */
+    private boolean expiredForNewSession(IssuedEntitlementRecord entitlement, Instant now) {
+        return entitlement.validTo() != null && now.isAfter(entitlement.validTo()) && !ticketCheckedInThisSession(entitlement, now);
     }
 
     /**

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 文件版本：V0.03
+# 文件版本：V0.04
 # 合并前置检查(2026-08-07 门禁升级批 1,用户弹窗批立项):CI 绿灯才允许合并。
 # 病史:本仓是私有库免费版,设不了 required status check,.github/workflows/predeploy-gates.yml
 #      自己在注释里写明只是「可见信号」。也就是说 gh pr merge 对红灯毫无抵抗力,全靠人记得去看一眼。
@@ -9,6 +9,8 @@
 # 逃生口:SKIP_CI_WAIT=1 ops/160/merge-pr.sh   —— 只在 CI 本身故障时用,会打印醒目警告。
 # V0.03(2026-11-11 第十八批裁决 48:不升级 Pro、不公开仓库,只加强本脚本):除 predeploy-gates 外,
 #      backend-tests、web-tests 对本提交触发了的也要等绿才合并;这两份按改动路径触发,没触发的视为不需要。
+# V0.04(2026-11-11 18AH):PR #586 合并时按 --workflow 过滤的查询在宽限 1 分钟内没查到已建的 web-tests run(同一秒建、查询有延迟),
+#      误判为未触发。改为按提交整体查询再按工作流名过滤,两份合一个宽限循环,最长 3 分钟。
 set -euo pipefail
 method="${1:---squash}"
 case "$method" in --squash|--merge|--rebase) ;; *) echo "合并方式只能是 --squash|--merge|--rebase" >&2; exit 1;; esac
@@ -54,19 +56,23 @@ else
     echo "        CI 确实故障时可用 SKIP_CI_WAIT=1 强行合并(会打印警告并需在 PR 说明原因)。" >&2
     exit 1
   fi
-  # 三份工作流由同一次 PR 事件同时建 run;predeploy 已有 run 后,另两份再给 1 分钟宽限,仍没有即本次改动未触发。
-  for wf in backend-tests.yml web-tests.yml; do
-    wf_ids=""
-    for i in $(seq 1 6); do
-      wf_ids="$(gh run list --commit "$head_sha" --workflow "$wf" --limit 10 --json databaseId -q '.[].databaseId' )"
-      [[ -n "$wf_ids" ]] && break
-      sleep 10
-    done
+  # 三份工作流由同一次 PR 事件同时建 run,但按工作流过滤的查询可能延迟几分钟才查得到;
+  # 所以按提交整体查询、再按工作流名过滤,两份合一个宽限循环(最长 3 分钟),仍没有的即本次改动未触发。
+  backend_ids=""; web_ids=""
+  for i in $(seq 1 18); do
+    all_runs="$(gh run list --commit "$head_sha" --limit 30 --json databaseId,workflowName -q '.[] | "\(.workflowName) \(.databaseId)"' )"
+    backend_ids="$(printf '%s\n' "$all_runs" | awk '$1 == "backend-tests" {print $2}')"
+    web_ids="$(printf '%s\n' "$all_runs" | awk '$1 == "web-tests" {print $2}')"
+    [[ -n "$backend_ids" && -n "$web_ids" ]] && break
+    sleep 10
+  done
+  for pair in "backend-tests.yml:$backend_ids" "web-tests.yml:$web_ids"; do
+    wf="${pair%%:*}"; wf_ids="${pair#*:}"
     if [[ -z "$wf_ids" ]]; then
-      echo "[merge] ${wf} 对 ${head_sha:0:8} 没有触发(改动不涉及它的路径),视为不需要。"
+      echo "[merge] ${wf} 对 ${head_sha:0:8} 3 分钟内没有 run(改动不涉及它的路径),视为不需要。"
     else
       echo "[merge] 另等 ${wf} 对 ${head_sha:0:8} 的 CI 结果..."
-      run_ids="$run_ids $wf_ids"
+      run_ids="$run_ids $(echo $wf_ids)"
     fi
   done
   for rid in $run_ids; do

@@ -133,6 +133,7 @@ customer_churn_alert_settings,single_complex_default,P0_SINGLE_COMPLEX,single-co
 customer_complaint_media,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",V0.07,covered
 customer_consents,inherited,customer_id,customer_id -> customers -> project/customer scope,must join through scope path before multi-complex rollout,V0.07,covered
 customer_deregistration_marks,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",V0.07,covered
+customer_frequent_entry_alert_settings,direct,project_id,project_id column on customer_frequent_entry_alert_settings,ready for project/merchant scoped query enforcement,V0.07,covered
 customer_growth_ledger,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",V0.07,covered
 customer_home_content_drafts,direct,project_id,project_id column on customer_home_content_drafts,ready for project/merchant scoped query enforcement,V0.07,covered
 customer_home_contents,direct,project_id,project_id column on customer_home_contents,ready for project/merchant scoped query enforcement,V0.07,covered
@@ -533,6 +534,7 @@ ticket_safety_events,direct,project_id,project_id column on ticket_safety_events
 ticket_slot_holders,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",V0.07,covered
 ticket_transfers,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",V0.07,covered
 ticket_type_entitlements,inherited,ticket_type_id,ticket_type_id -> ticket_types -> project scope,must join through scope path before multi-complex rollout,V0.07,covered
+ticket_type_gift_floors,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",V0.07,covered
 ticket_types,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",V0.07,covered
 ticket_use_rewards,direct,project_id,project_id column on ticket_use_rewards,ready for project/merchant scoped query enforcement,V0.07,covered
 ticket_verifications,direct,merchant_id,merchant_id column on ticket_verifications,ready for project/merchant scoped query enforcement,V0.07,covered

@@ -1,6 +1,6 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.06
+// 文件版本：V0.07
 
 import org.springframework.beans.factory.annotation.Value;
 
@@ -295,22 +295,32 @@ public class SettlementExpiryJob {
     }
 
     /**
-     * 本行的业务时刻;未到可处理时刻返回 null。多人票本人从未检票的人份按首场次结束时刻处理
-     * (ENUM L48「同票已开启的那个场次一经结束即永无法入场，于该场次结束时按本条处理，不等票面有效期届满」),其余按票面到期。
+     * 本行的业务时刻;未到可处理时刻返回 null。多人票本人从未检票、同票首场次已开启的人份按首场次结束时刻处理
+     * (ENUM L48「同票已开启的那个场次一经结束即永无法入场，于该场次结束时按本条处理，不等票面有效期届满」;第十八批 AH 段 239-R2 起不再与票面到期取较早者);
+     * 已检票人份的票面到期所在营业日内、到期前同父票任一人份已入场的(按整张票判本场,与 TicketVerificationService.ticketCheckedInThisSession 同口径,18AH 复核修复;
+     * 多人票已检票人份同理),本场内不受票面有效期截断(ENUM L46「一经完成检票环节……其全部权益的可用窗口收窄为该场次」),
+     * 取该营业日闭店与票面到期较晚者(239-R2);其余按票面到期。
      */
-    private static Instant businessAt(JdbcSettlementTransactionRepository.ExpiredUnverifiedRow row, Instant now) {
-        Instant sessionEnd = !row.slotCheckedIn() && row.parentNumPeople() > 1 && row.firstSessionKey() != null
-                ? sessionEnd(row) : null;
-        if (sessionEnd != null && sessionEnd.isBefore(row.validTo())) {
-            return sessionEnd.isAfter(now) ? null : sessionEnd;
+    private Instant businessAt(JdbcSettlementTransactionRepository.ExpiredUnverifiedRow row, Instant now) {
+        Instant at = row.validTo();
+        if (!row.slotCheckedIn() && row.parentNumPeople() > 1 && row.firstSessionKey() != null) {
+            Instant sessionEnd = sessionEnd(row);
+            at = sessionEnd == null ? at : sessionEnd;
+        } else if (row.slotCheckedIn()) {
+            java.time.LocalDate day = businessDays.businessDate(row.projectId(), null, at);
+            Instant close = businessDays.closeAt(row.projectId(), null, day).toInstant();
+            if (close.isAfter(at) && row.ticketEntryAts().stream().anyMatch(entry -> !entry.isAfter(row.validTo())
+                    && day.equals(businessDays.businessDate(row.projectId(), null, entry)))) {
+                at = close;
+            }
         }
-        return row.validTo().isBefore(now) ? row.validTo() : null;
+        return at.isAfter(now) ? null : at;
     }
 
-    /** 首场次结束时刻（算法见 {@link com.complex.platform.ticketing.FirstSessionWindow#endOf}，门票转赠场次限制共用）。 */
-    private static Instant sessionEnd(JdbcSettlementTransactionRepository.ExpiredUnverifiedRow row) {
+    /** 首场次结束时刻（算法见 {@link com.complex.platform.ticketing.FirstSessionWindow#endOf}，门票转赠场次限制共用；营业日键按售票项目，238-R2）。 */
+    private Instant sessionEnd(JdbcSettlementTransactionRepository.ExpiredUnverifiedRow row) {
         return com.complex.platform.ticketing.FirstSessionWindow.endOf(row.firstSessionKey(), row.sessionDate(),
-                row.sessionOpenSecond(), row.sessionCloseSecond());
+                row.sessionOpenSecond(), row.sessionCloseSecond(), businessDays, row.projectId());
     }
 
     /**

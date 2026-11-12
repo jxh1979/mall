@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -314,7 +314,8 @@ final class JdbcTicketingRowMapper {
                 resultSet.getString("reason_code"),
                 resultSet.getString("responsible_entity_id"),
                 (Boolean) resultSet.getObject("ticket_type_refundable_snapshot"),
-                payoutItems(resultSet.getString("payout_items"))
+                payoutItems(resultSet.getString("payout_items")),
+                resultSet.getString("payout_result")
         );
     }
 

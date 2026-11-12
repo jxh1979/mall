@@ -1,9 +1,14 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.complex.platform.access.AccessActor;
 import com.complex.platform.auth.SessionIssuer;
@@ -20,27 +25,35 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.request.RequestPostProcessor;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
  * TK-05-R1 普通退款理由五类闭集（BSM:804「只有票种规则明确允许、活动或场次取消、平台或履约方无法提供服务、重复扣款、法律法规要求这五种情形
  * 才允许退款……确需在五种情形之外退款的，只能由持授权 U 盘密钥的最高权限逐笔放行」「最高权限逐笔放行不解除已开始核销后的退款禁止」；
  * BSM:785「票种规则明确允许退款」出厂默认关闭、逐票种开启；BSM:806 记录退款原因、责任主体、适用规则版本）。
+ * 第十八批 AH 段第 256 条 256-R1：确认拨付填的原路退回结果落退款单、进成功留痕（BSM:806「原路退回结果」；PGM:899「结果是什么，都要能查到」）。
  */
 @SpringBootTest(properties = {
         "spring.datasource.url=${SETTLE_TEST_DB_URL:jdbc:postgresql://127.0.0.1:5432/complex_test}",
         "spring.datasource.username=complex",
         "spring.datasource.password=${COMPLEX_DATABASE_PASSWORD:complex_dev_pwd}"
 })
+@AutoConfigureMockMvc
 @Transactional
 class TicketRefundReasonJdbcIntegrationTests {
 
     @Autowired private JdbcTicketingRepository repository;
     @Autowired private TicketRefundService refundService;
     @Autowired private JdbcTemplate jdbcTemplate;
+    @Autowired private MockMvc mockMvc;
 
     private final Instant now = Instant.now();
     private String suffix;
@@ -168,6 +181,53 @@ class TicketRefundReasonJdbcIntegrationTests {
         assertThatThrownBy(() -> refundService.requestRefund(request("r1-mov", "master_override", entityId, instB)))
                 .isInstanceOf(ApiException.class)
                 .extracting(e -> ((ApiException) e).code()).isEqualTo("TICKET_INSTANCE_VERIFIED_NO_REFUND");
+    }
+
+    /**
+     * 256-R1（BSM:806「系统完整记录……原路退回结果」；PGM:899「结果是什么，都要能查到」）：另一审批人批准后，财务按前端同键
+     * POST confirm-payout {idempotency_key, reason} 填的原路退回结果写进退款单 payout_result、记入成功留痕，退款台账接口返回。
+     */
+    @Test
+    void confirmPayoutRecordsPayoutResultOnRefundAuditAndList() throws Exception {
+        TicketRefundRecord refund = refundService.requestRefund(request("r256-req", "event_cancelled", entityId, instA));
+        TestSecurityActors.asPlatformAdmin("usr_r256_approver");
+        assertThat(refundService.approveRefund(refund.id(),
+                new StatusChangeRequest("r256-a-" + suffix, "approve", "审批通过", List.of())).status()).isEqualTo("approved");
+        RequestPostProcessor finance = financeActor();
+        String result = "微信原路退回成功，交易单号 W123";
+
+        mockMvc.perform(post("/api/v1/ticketing/refunds/" + refund.id() + "/confirm-payout").with(finance)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"idempotency_key\":\"r256-payout-" + suffix + "\",\"reason\":\"" + result + "\"}"))
+                .andExpect(status().isOk());
+
+        assertThat(jdbcTemplate.queryForMap("SELECT status, payout_result FROM ticket_refunds WHERE id = ?", refund.id()))
+                .containsEntry("status", "success")
+                .containsEntry("payout_result", result);
+        assertThat(jdbcTemplate.queryForList("SELECT metadata->>'payout_result' FROM audit_events"
+                + " WHERE event_name = 'ticket_refund.payout_confirmed' AND business_id = ?", String.class, refund.id()))
+                .containsExactly(result);
+        mockMvc.perform(get("/api/v1/ticketing/refunds").with(finance))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items[?(@.id == '" + refund.id() + "')].payout_result")
+                        .value(org.hamcrest.Matchers.contains(result)));
+    }
+
+    /** 财务人员：角色带确认拨付与查看退款台账两个权限码，走真实授权链。 */
+    private RequestPostProcessor financeActor() {
+        String role = "role_r256_" + suffix;
+        jdbcTemplate.update("INSERT INTO roles(id,role_name,description,data_scope,status,created_at) VALUES(?,?,'退款确认拨付回归','project','active',now())",
+                role, "退款确认拨付回归" + suffix);
+        jdbcTemplate.update("INSERT INTO role_permissions(role_id,permission_code) SELECT ?,permission_code FROM permissions WHERE permission_code IN('ticket.refund.approve','ticket.refund.view')", role);
+        String user = "usr_r256_fin_" + suffix;
+        jdbcTemplate.update("INSERT INTO access_users(id,username,account_type,organization_id,status,created_at) VALUES(?,?,'platform_admin','org','active',now())", user, user);
+        jdbcTemplate.update("INSERT INTO user_roles(user_id,role_id) VALUES(?,?)", user, role);
+        AccessActor actor = new AccessActor(user, user, "platform_admin", "org", null, "active");
+        return request -> {
+            request.addHeader("X-Terminal-Type", "web");
+            return authentication(new UsernamePasswordAuthenticationToken(actor, null,
+                    List.of(new SimpleGrantedAuthority("ROLE_P0_STAFF")))).postProcessRequest(request);
+        };
     }
 
     private TicketRefundRequest request(String key, String reasonCode, String responsibleEntityId, String instanceId) {

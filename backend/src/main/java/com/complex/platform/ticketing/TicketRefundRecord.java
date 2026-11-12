@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import java.time.Instant;
 import java.util.List;
@@ -27,7 +27,10 @@ public record TicketRefundRecord(
         Boolean ticketTypeRefundableSnapshot,
         // ROOT-03-R20（BSM 第 1749 行混合支付逐笔原路退回）：批准时分到在线笔、待财务原路打款的各笔（渠道×金额）；储值笔当场回原卡，不在其中。
         // 未分笔（批准前或只分到储值笔）为空。
-        List<PayoutItem> payoutItems
+        List<PayoutItem> payoutItems,
+        // 第十八批 AH 段第 256 条 256-R1（V620；BSM:806「系统完整记录……原路退回结果」）：财务确认拨付时填的原路退回结果。
+        // 储值笔当场回原卡的自动成功路径与尚未确认拨付的为空。
+        String payoutResult
 ) {
     /** 待财务原路打款的一笔：原收款渠道与本次分到的金额（分）。 */
     public record PayoutItem(String channel, long amountCent) {
@@ -49,16 +52,31 @@ public record TicketRefundRecord(
                 createdAt, updatedAt, merchantId, reasonCode, responsibleEntityId, ticketTypeRefundableSnapshot, null);
     }
 
+    /** 256-R1 前的 16 参构造：原路退回结果为空。 */
+    public TicketRefundRecord(String id, String targetId, long refundAmountCent, String reason, String refundChannel,
+            String status, String requestedBy, String approvedBy, Instant approvedAt, Instant createdAt, Instant updatedAt,
+            String merchantId, String reasonCode, String responsibleEntityId, Boolean ticketTypeRefundableSnapshot,
+            List<PayoutItem> payoutItems) {
+        this(id, targetId, refundAmountCent, reason, refundChannel, status, requestedBy, approvedBy, approvedAt,
+                createdAt, updatedAt, merchantId, reasonCode, responsibleEntityId, ticketTypeRefundableSnapshot, payoutItems, null);
+    }
+
     /** 状态流转（批准/驳回/拨付确认）：其余字段原样带过。 */
     public TicketRefundRecord withStatus(String status, String approvedBy, Instant approvedAt, Instant updatedAt) {
         return new TicketRefundRecord(id, targetId, refundAmountCent, reason, refundChannel, status, requestedBy, approvedBy,
                 approvedAt, createdAt, updatedAt, merchantId, reasonCode, responsibleEntityId, ticketTypeRefundableSnapshot,
-                payoutItems);
+                payoutItems, payoutResult);
     }
 
     public TicketRefundRecord withPayoutItems(List<PayoutItem> items) {
         return new TicketRefundRecord(id, targetId, refundAmountCent, reason, refundChannel, status, requestedBy, approvedBy,
                 approvedAt, createdAt, updatedAt, merchantId, reasonCode, responsibleEntityId, ticketTypeRefundableSnapshot,
-                items);
+                items, payoutResult);
+    }
+
+    public TicketRefundRecord withPayoutResult(String result) {
+        return new TicketRefundRecord(id, targetId, refundAmountCent, reason, refundChannel, status, requestedBy, approvedBy,
+                approvedAt, createdAt, updatedAt, merchantId, reasonCode, responsibleEntityId, ticketTypeRefundableSnapshot,
+                payoutItems, result);
     }
 }

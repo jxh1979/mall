@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import static com.complex.platform.common.api.ApiRequests.requireIdempotencyKey;
 
@@ -279,6 +279,23 @@ public class TicketingController {
             @PathVariable("id") String id) {
         authorizationService.requirePermission("ticket.product.view");
         return ApiResponse.ok(service.listGiftCoverage(id));
+    }
+
+    /** 第十八批 AH 段 215-R2 票种最低赠酒杯数（ENUM:34「按票种可配，出厂默认 1 杯，须同时配置上下限」）。 */
+    @GetMapping("/ticketing/ticket-types/{id}/min-gift-cups")
+    public ApiResponse<TicketTypeGiftFloor> getTicketTypeMinGiftCups(@PathVariable("id") String id) {
+        authorizationService.requirePermission("ticket.product.view");
+        return ApiResponse.ok(service.getGiftFloor(id));
+    }
+
+    /** 215-R2 改票种最低赠酒杯数：杯数与下限、上限同时填写；已上架通票跌破即退回草稿。 */
+    @PutMapping("/ticketing/ticket-types/{id}/min-gift-cups")
+    public ApiResponse<TicketTypeGiftFloor> configureTicketTypeMinGiftCups(
+            @PathVariable("id") String id,
+            @RequestBody @jakarta.validation.Valid com.complex.platform.ticketing.dto.TicketTypeGiftFloorRequest request) {
+        authorizationService.requirePermission("ticket.product.manage");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.configureGiftFloor(id, request));
     }
 
     // 批10/E：原「改虚拟权益签约价」端点(配置中心批5/PR#274)已下线——内部结算价唯一可编辑处收编为

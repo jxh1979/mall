@@ -90,7 +90,7 @@
   },
   "architecture_line_counts": {
     "apps/web/src/main.tsx": 50,
-    "backend/src/main/java/com/complex/platform/ticketing/TicketingService.java": 1200,
+    "backend/src/main/java/com/complex/platform/ticketing/TicketingService.java": 1244,
     "backend/src/main/java/com/complex/platform/bar/BarService.java": 1183,
     "backend/src/main/java/com/complex/platform/bar/BarOrderService.java": 1857,
     "backend/src/main/java/com/complex/platform/bar/BarBillingService.java": 1112,
@@ -128,10 +128,10 @@
       "reason": "current live mount check failed, and historical passed evidence cannot prove current automount or production recovery readiness"
     },
     "runtime_acceptance": {
-      "backend_tests": 6665,
+      "backend_tests": 6695,
       "backend_failures": 0,
       "backend_errors": 0,
-      "web_unit_tests": 1710,
+      "web_unit_tests": 1714,
       "ui_tests": 47,
       "real_backend_ui_tests": 3,
       "last_run_passed": true,

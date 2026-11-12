@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.12
+// 文件版本：V0.13
 
 import java.util.List;
 import java.util.Map;
@@ -186,6 +186,15 @@ public interface TicketingRepository {
         return List.of();
     }
 
+    /** 第十八批 AH 段 215-R2：票种的最低赠酒杯数（后台配过才有行）。default 空＝出厂 1 杯，兼容测试假实现。 */
+    default Optional<TicketTypeGiftFloor> findGiftFloor(String ticketTypeId) {
+        return Optional.empty();
+    }
+
+    /** 215-R2：按票种保存最低赠酒杯数与上下限。default 空实现兼容测试假实现。 */
+    default void saveGiftFloor(TicketTypeGiftFloor floor) {
+    }
+
     /**
      * 结算重构批3-2(PRD §6.2)：按 venue 营业时间表惰性解析当前场次。
      * 当前营业 → 取/开当日 open 场次并返回 session_id；非营业时段 → 空(调用方报 VENUE_NOT_IN_SESSION)。
@@ -279,6 +288,9 @@ public interface TicketingRepository {
      */
     boolean hasVerifiedEntrySince(String parentTicketId, int slotIndex, java.time.Instant since);
 
+    /** 第十八批 AH 段 239-R1：父票 parentTicketId 任一人份的入场类权益（口径同 {@link #hasVerifiedEntrySince}）自 since 起有核销成功记录。父票为空返回 false。 */
+    boolean hasVerifiedTicketEntrySince(String parentTicketId, java.time.Instant since);
+
     /**
      * 第十八批 X 段 197-R1：父票 parentTicketId 第 slotIndex 号人份检票入场类权益（ticket / entry / admission，不含 amusement 开头的游乐行——BSM:784
      * 游乐次数不是检票次数，同 165-R1 maxBarEntryTotalTimes 口径；补偿补发行除外）的最大总次数＝入场次数；
@@ -309,8 +321,11 @@ public interface TicketingRepository {
     /** F-TXN-04 退款审批状态 CAS：仅当退款单仍为 requested 才翻转 approved，返回受影响行数（并发只一路得 1，防双拨付）。 */
     int markTicketRefundApproved(String refundId, String approvedBy, java.time.Instant approvedAt);
 
-    /** AUD-018：退款兑付完成 CAS(status='approved'→'success' + succeeded_at)，仅当仍 approved 生效。返回受影响行数。 */
-    int markTicketRefundSucceeded(String refundId, java.time.Instant succeededAt);
+    /**
+     * AUD-018：退款兑付完成 CAS(status='approved'→'success' + succeeded_at)，仅当仍 approved 生效。返回受影响行数。
+     * 256-R1：payoutResult＝财务确认拨付填的原路退回结果，写进 payout_result；储值笔当场回卡的自动成功路径传 null。
+     */
+    int markTicketRefundSucceeded(String refundId, java.time.Instant succeededAt, String payoutResult);
 
     /** 退款单台账（后台“待确认拨付”看板的数据源）：按创建时间倒序。 */
     List<TicketRefundRecord> listTicketRefunds();

@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
@@ -26,6 +26,8 @@ function makeApi(overrides: Partial<AdminApiClient> = {}): AdminApiClient {
       if (url === "/api/v1/platform/projects") return Promise.resolve([{ id: "prj_1", name: "长沙综合体" }]);
       if (url === "/api/v1/customer-churn-alert-setting") return Promise.resolve({ threshold: 3, minThreshold: null, maxThreshold: null });
       if (url.startsWith("/api/v1/customer-restriction-settings/")) return Promise.resolve({ projectId: "__global__", durationDays: 90, minDays: null, maxDays: null });
+      if (url.startsWith("/api/v1/customer-frequent-entry-alert-settings/")) return Promise.resolve({ projectId: "__global__",
+        nightThreshold: 4, nightMin: null, nightMax: null, twoDayThreshold: 7, twoDayMin: null, twoDayMax: null });
       if (url.startsWith("/api/v1/customer-blacklist-requests")) return Promise.resolve(PENDING);
       return Promise.resolve([]);
     }),
@@ -149,6 +151,25 @@ describe("CustomerAccountsPage", () => {
     fireEvent.click(screen.getByTestId("customer-churn-save"));
     await waitFor(() => expect(api.put).toHaveBeenCalledWith("/api/v1/customer-churn-alert-setting",
       expect.objectContaining({ threshold: 3, minThreshold: 1, maxThreshold: 10 })));
+  });
+
+  // 第十八批 AH 段第 218 条 218-R2（BSM:800「一晚出入次数或连续两日出入合计次数达到后台配置的阈值即触发核查（业务参数，按项目可配，出厂默认一晚 4 次、
+  // 连续两日合计 7 次，须同时配置上下限）」）：选项目回显出厂 4／7，上下限没填拦下不提交；六值填齐后按项目 PUT。
+  it("高频出入场预警阈值按项目一晚、连续两日各与上下限同配", async () => {
+    const { api, setGlobalError } = renderPage();
+    await waitFor(() => expect(screen.getByLabelText("一晚出入阈值")).toHaveValue(4));
+    expect(screen.getByLabelText("连续两日出入阈值")).toHaveValue(7);
+    fireEvent.click(screen.getByTestId("customer-frequent-entry-save"));
+    expect(setGlobalError).toHaveBeenCalledWith(expect.stringContaining("上下限"));
+    expect(api.put).not.toHaveBeenCalled();
+
+    fireEvent.change(screen.getByLabelText("一晚出入阈值下限"), { target: { value: "2" } });
+    fireEvent.change(screen.getByLabelText("一晚出入阈值上限"), { target: { value: "10" } });
+    fireEvent.change(screen.getByLabelText("连续两日出入阈值下限"), { target: { value: "3" } });
+    fireEvent.change(screen.getByLabelText("连续两日出入阈值上限"), { target: { value: "14" } });
+    fireEvent.click(screen.getByTestId("customer-frequent-entry-save"));
+    await waitFor(() => expect(api.put).toHaveBeenCalledWith("/api/v1/customer-frequent-entry-alert-settings/prj_1",
+      expect.objectContaining({ nightThreshold: 4, nightMin: 2, nightMax: 10, twoDayThreshold: 7, twoDayMin: 3, twoDayMax: 14 })));
   });
 
   it("无权限时操作按钮禁用（fail-safe）", async () => {

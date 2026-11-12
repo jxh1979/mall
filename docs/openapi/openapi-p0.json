@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "综合体管理系统 P0 API 契约",
-    "version": "V0.65",
+    "version": "V0.66",
     "description": "P0 首批编码前置契约。本文采用 JSON-compatible YAML，便于与 openapi-p0.json 保持一致。正式后端以 Java 21 + Spring Boot 4.x + springdoc-openapi 输出运行时 OpenAPI，并与本契约比对。"
   },
   "servers": [
@@ -1939,12 +1939,14 @@
         ],
         "operationId": "createAmusementVerification",
         "summary": "游乐权益核销",
-        "description": "现场核销：识别票务权益实例→在线校验（存在/active/有效期/剩余次数/游乐类/绑定本项目）→消费票务权益(used_times+1)→按权益 numPeople 整体占用该项目的实时在玩人数容量→留痕。多人票余量不足 N 时整单拒绝并回补权益。（原「占用场次/点位设备/项目安全三维容量」「任一受控维度余量不足」已废止（DEC-R5-2026-08-04-04 / R8 用户裁决 D-02），待代码轮下线，不得新增调用。现行只按单个项目的实时在玩人数控制容量，排队人数不占用容量——BSM「容量控制」条。）失败码：TICKET_NOT_FOUND(权益不存在/凭证失效)、ENTITLEMENT_EXPIRED(不在有效期)、ENTITLEMENT_USED(非active或剩余次数为0)、ENTITLEMENT_NOT_AMUSEMENT(非游乐类权益)、ENTITLEMENT_NOT_FOR_PROJECT(权益未绑定本项目)、SESSION_CAPACITY_EXHAUSTED(项目容量（实时在玩人数）耗尽，已消费权益回补；原称「场次容量耗尽」，已废止（DEC-R5-2026-08-04-04 / R8 用户裁决 D-02），待代码轮下线，不得新增调用。机读错误码不变)、PROJECT_NOT_OPEN/SESSION_NOT_OPEN/SAFETY_BLOCKED。项目无绑定配置时回退按游乐类放行。达硬上限（安全容量）阻断并由系统自动停运（项目 paused，记 auto_paused_reason=hard_capacity，停运与 over_capacity 异常在独立事务落库，不随被拒核销回滚）；出场释放使项目实时在玩人数回落到硬上限以下后，由系统自动恢复开放（paused→open，留痕 amusement.project.auto_reopened，triggered_by=system）；高危事故停运与人工状态不自动恢复——BSM「容量分两道」条。 第十八批 N 段第 123 条 123-R2（BSM:1630「核销、收款、退款、放行等敏感操作，操作设备定位落在该项目综合体授权范围之外时一律拒绝并留痕」；BSM:1876「Web 端同样适用」）：本操作属敏感操作定位闸的现场动作闭集（第十八批裁决 31）。操作对象所属项目已配授权范围（123-R1）时须带请求头 X-Geo-Latitude、X-Geo-Longitude（设备当下定位，WGS-84 十进制度）：没带或解析不了按范围外处理（裁决 30）返回 403 SENSITIVE_OPERATION_LOCATION_REQUIRED，到圆心距离超过授权半径返回 403 SENSITIVE_OPERATION_OUT_OF_RANGE，拒绝在独立事务里留痕 sensitive_operation.location_rejected（business_id 为本 operationId，业务回滚不丢）；项目没配授权范围不查位置（裁决 32）；判定在幂等之前，重放不能绕过；通过时不存位置。",
+        "description": "现场核销：识别票务权益实例→在线校验（存在/active/有效期/剩余次数/游乐类/绑定本项目）→消费票务权益(used_times+1)→按权益 numPeople 整体占用该项目的实时在玩人数容量→留痕。多人票余量不足 N 时整单拒绝并回补权益。（原「占用场次/点位设备/项目安全三维容量」「任一受控维度余量不足」已废止（DEC-R5-2026-08-04-04 / R8 用户裁决 D-02），待代码轮下线，不得新增调用。现行只按单个项目的实时在玩人数控制容量，排队人数不占用容量——BSM「容量控制」条。）失败码：TICKET_NOT_FOUND(权益不存在/凭证失效)、ENTITLEMENT_EXPIRED(不在有效期)、ENTITLEMENT_USED(非active或剩余次数为0)、ENTITLEMENT_NOT_AMUSEMENT(非游乐类权益)、ENTITLEMENT_NOT_FOR_PROJECT(权益未绑定本项目)、SESSION_CAPACITY_EXHAUSTED(项目容量（实时在玩人数）耗尽，已消费权益回补；原称「场次容量耗尽」，已废止（DEC-R5-2026-08-04-04 / R8 用户裁决 D-02），待代码轮下线，不得新增调用。机读错误码不变)、PROJECT_NOT_OPEN/SESSION_NOT_OPEN/SAFETY_BLOCKED。项目无绑定配置时回退按游乐类放行。达硬上限（安全容量）阻断并由系统自动停运（项目 paused，记 auto_paused_reason=hard_capacity，停运与 over_capacity 异常在独立事务落库，不随被拒核销回滚）；出场释放使项目实时在玩人数回落到硬上限以下后，由系统自动恢复开放（paused→open，留痕 amusement.project.auto_reopened，triggered_by=system）；高危事故停运与人工状态不自动恢复——BSM「容量分两道」条。 第十八批 N 段第 123 条 123-R2（BSM:1630「核销、收款、退款、放行等敏感操作，操作设备定位落在该项目综合体授权范围之外时一律拒绝并留痕」；BSM:1876「Web 端同样适用」）：本操作属敏感操作定位闸的现场动作闭集（第十八批裁决 31）。操作对象所属项目已配授权范围（123-R1）时须带请求头 X-Geo-Latitude、X-Geo-Longitude（设备当下定位，WGS-84 十进制度）：没带或解析不了按范围外处理（裁决 30）返回 403 SENSITIVE_OPERATION_LOCATION_REQUIRED，到圆心距离超过授权半径返回 403 SENSITIVE_OPERATION_OUT_OF_RANGE，拒绝在独立事务里留痕 sensitive_operation.location_rejected（business_id 为本 operationId，业务回滚不丢）；项目没配授权范围不查位置（裁决 32）；判定在幂等之前，重放不能绕过；通过时不存位置。第十八批 AH 段 239-R1（ENUM:46「上述有效期类型决定的是「这张票在多长时间内可以开始使用」；一经完成检票环节……该票即绑定至当前场次，其全部权益的可用窗口收窄为该场次」）：票面有效期只决定能否开启新场次；同票任一人份本场（订单综合体本营业日）已有入场类核销成功的，本场内再入场、附带权益（赠饮、餐饮零售券、游乐）与同票他人首入不受票面有效期截断，预检 allowed 同口径；本场未检票、有效期已过的仍 409 ENTITLEMENT_EXPIRED。第十八批 AH 段 219-R1（BSM:800「只能在完成检票环节所在的那一个场次内核销」「后续场次的附带权益也不得提前到当前场次使用」）：票内游乐（同票同人份另有入园或酒吧入场类权益；纯游乐票、当天无限窗口照旧）须本场（订单综合体本营业日）已有入场类核销成功，否则 409 ENTITLEMENT_SESSION_NOT_CHECKED_IN；每场只能用一份（游乐总次数÷同人份入场次数，至少 1；单次票和补偿补发行取全部），本场已达一份 409 ENTITLEMENT_SESSION_SHARE_USED_UP；两者均属规则拒绝，不扣次。第十八批 AH 段第 219 条补充（BSM:780「按可用次数逐次核销（每用一次扣一次，剩余为 0 才算用完）」）：同一权益在同一开放场次再次入场照常成功，多次票每次扣一次、在玩人数各加一（V619 去掉 V234 同一权益同一场次至多一条未释放入场的唯一约束，不再整笔回滚 409）。",
         "x-permission": "amusement.verification.execute",
         "x-failure-codes": [
           "TICKET_NOT_FOUND",
           "ENTITLEMENT_EXPIRED",
           "ENTITLEMENT_USED",
+          "ENTITLEMENT_SESSION_NOT_CHECKED_IN",
+          "ENTITLEMENT_SESSION_SHARE_USED_UP",
           "ENTITLEMENT_NOT_AMUSEMENT",
           "ENTITLEMENT_NOT_FOR_PROJECT",
           "SESSION_CAPACITY_EXHAUSTED",
@@ -18680,7 +18682,7 @@
         ],
         "operationId": "listTicketRefunds",
         "summary": "查询退款单列表",
-        "description": "后台退款台账；业务人员据此看哪几笔已“已通过”但钱还没实际打出去（待确认拨付）。商户范围只见本商户受理的退款。每行带 payout_items（[{channel, amount_cent}]）：ROOT-03-R20（BSM 第 1749 行混合支付逐笔原路退回）批准时分到在线笔、待财务原路打款的各笔；储值部分已当场回原卡、不在其中，财务按此打款，不按整笔 refund_amount_cent。未分笔的为空。",
+        "description": "后台退款台账；业务人员据此看哪几笔已“已通过”但钱还没实际打出去（待确认拨付）。商户范围只见本商户受理的退款。每行带 payout_items（[{channel, amount_cent}]）：ROOT-03-R20（BSM 第 1749 行混合支付逐笔原路退回）批准时分到在线笔、待财务原路打款的各笔；储值部分已当场回原卡、不在其中，财务按此打款，不按整笔 refund_amount_cent。未分笔的为空。第十八批 AH 段 256-R1：每行另带 payout_result（财务确认拨付时填的原路退回结果；储值部分当场回原卡的自动成功退款与尚未确认拨付的为空）。",
         "x-auth-context": "staff-token",
         "x-permission": "ticket.refund.view",
         "x-data-scope": "project-order",
@@ -18747,7 +18749,7 @@
         ],
         "operationId": "confirmTicketRefundPayout",
         "summary": "退款确认拨付",
-        "description": "财务实际打完款后确认兑付，退款单“已通过”→“成功”。组合支付的退款只按 payout_items 所列渠道与金额打款（储值部分批准时已回卡）。业务口径：退款以“成功”为最终完成态，只有“成功”的退款才计入“已退金额”；“已通过”只表示已批准并已发起不可逆兑付。reason 填原路退回结果。FS-013：单一酒吧门票整张退款成功即回原计费月重算服务费总额，只登记台账未覆盖的差额：先调减原月应收未收部分(原行不动＋冲正行＋重述行)，超出部分列应退(single_bar_service_fee 应付，source_id=退款单 id)，调整记当前账期、关联原计费月；同一退款不重复登记。",
+        "description": "财务实际打完款后确认兑付，退款单“已通过”→“成功”。组合支付的退款只按 payout_items 所列渠道与金额打款（储值部分批准时已回卡）。业务口径：退款以“成功”为最终完成态，只有“成功”的退款才计入“已退金额”；“已通过”只表示已批准并已发起不可逆兑付。reason 填原路退回结果。第十八批 AH 段 256-R1（BSM:806「系统完整记录……原路退回结果」）：原路退回结果（reason 去首尾空白）写入退款单 payout_result，并记入成功留痕 ticket_refund.payout_confirmed 的 metadata.payout_result；返回的退款单带 payout_result。FS-013：单一酒吧门票整张退款成功即回原计费月重算服务费总额，只登记台账未覆盖的差额：先调减原月应收未收部分(原行不动＋冲正行＋重述行)，超出部分列应退(single_bar_service_fee 应付，source_id=退款单 id)，调整记当前账期、关联原计费月；同一退款不重复登记。",
         "x-permission": "ticket.refund.approve",
         "x-data-scope": "project-order",
         "x-terminal-allowed": [
@@ -19103,7 +19105,7 @@
         ],
         "operationId": "listTicketTypeGiftCoverage",
         "summary": "票面赠酒清单（按酒吧分组）",
-        "description": "返回该票种各酒吧分别赠几杯，售票时写明票面。一张通票覆盖的每个酒吧至少赠一杯，客人只能到发放该赠酒的酒吧核销。",
+        "description": "返回该票种各酒吧分别赠几杯，售票时写明票面。一张通票覆盖的每个酒吧赠酒不低于该票种最低赠酒杯数（出厂 1 杯，见 GET /api/v1/ticketing/ticket-types/{id}/min-gift-cups），客人只能到发放该赠酒的酒吧核销。第十八批 AH 段 215-R1：每行 cups＝份数×次数×每份人数，bar_total_cups 为该酒吧在本票面上的合计杯数（同口径）。",
         "x-permission": "ticket.product.view",
         "x-data-scope": "project",
         "x-terminal-allowed": [
@@ -19135,6 +19137,160 @@
         "x-auth-context": "staff-token"
       }
     },
+    "/api/v1/ticketing/ticket-types/{id}/min-gift-cups": {
+      "get": {
+        "tags": [
+          "ticketing"
+        ],
+        "operationId": "getTicketTypeMinGiftCups",
+        "summary": "查票种最低赠酒杯数（没配过为出厂 1 杯）",
+        "description": "第十八批 AH 段 215-R2（ENUM「通票赠酒下限」条「后台配置的最低赠酒杯数（业务参数，按票种可配，出厂默认 1 杯，须同时配置上下限）」）：返回该票种最低赠酒杯数及上下限；没配过的票种 min_gift_cups 为 1（出厂），min_gift_cups_lower、min_gift_cups_upper、updated_by、updated_at 为空。票种不存在 404 TICKET_TYPE_NOT_FOUND。",
+        "x-permission": "ticket.product.view",
+        "x-data-scope": "project",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "not_applicable",
+        "x-audit-event-failure": "not_applicable",
+        "x-failure-codes": [
+          "TICKET_TYPE_NOT_FOUND"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "票种 id。"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "票种最低赠酒杯数；data 为 TicketTypeGiftFloor。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SuccessResponse"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "$ref": "#/components/schemas/TicketTypeGiftFloor"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      },
+      "put": {
+        "tags": [
+          "ticketing"
+        ],
+        "operationId": "configureTicketTypeMinGiftCups",
+        "summary": "配置票种最低赠酒杯数（杯数与上下限同配）",
+        "description": "第十八批 AH 段 215-R2（ENUM「通票赠酒下限」条「一张酒吧通票或跨域组合通票覆盖的每一家酒吧，赠酒杯数不得低于后台配置的最低赠酒杯数（业务参数，按票种可配，出厂默认 1 杯，须同时配置上下限），各酒吧分别赠几杯在售票时写明票面，低于该下限的票种不得发布上架」）：min_gift_cups、min_gift_cups_lower、min_gift_cups_upper 须同时填写且 1 ≤ 下限 ≤ 杯数 ≤ 上限，否则 400 VALIDATION_FAILED；幂等键缺失或超过 128 字 400 VALIDATION_FAILED；票种不存在 404 TICKET_TYPE_NOT_FOUND；已存档或待删除的票种 409 TICKET_TYPE_NOT_CONFIGURABLE。已上架的通票按新杯数跌破赠酒下限（判定同 publishTicketType）即退回草稿（draft）。成功留痕 ticket_type.min_gift_cups_configured（业务类型 ticket_type）记 min_gift_cups_before、min_gift_cups、min_gift_cups_lower、min_gift_cups_upper。",
+        "x-permission": "ticket.product.manage",
+        "x-data-scope": "project",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "ticket_type.min_gift_cups_configured",
+        "x-audit-event-failure": "ticket_type.min_gift_cups_config_failed",
+        "x-failure-codes": [
+          "VALIDATION_FAILED",
+          "TICKET_TYPE_NOT_FOUND",
+          "TICKET_TYPE_NOT_CONFIGURABLE"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "票种 id。"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TicketTypeGiftFloorRequest"
+              },
+              "example": {
+                "idempotency_key": "gift-floor-20261111-000001",
+                "min_gift_cups": 2,
+                "min_gift_cups_lower": 1,
+                "min_gift_cups_upper": 3
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "已保存；data 为 TicketTypeGiftFloor。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SuccessResponse"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "$ref": "#/components/schemas/TicketTypeGiftFloor"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
+    },
     "/api/v1/ticketing/ticket-types/{id}/entitlements": {
       "post": {
         "tags": [
@@ -19142,7 +19298,7 @@
         ],
         "operationId": "bindTicketTypeEntitlement",
         "summary": "绑定票类型权益",
-        "description": "用于绑定票类型权益。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。",
+        "description": "用于绑定票类型权益。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。第十八批 AH 段 215-R1（ENUM「通票赠酒下限」条「低于该下限的票种不得发布上架」）：已上架的通票（bar_id 为空）改组成后跌破最低赠酒杯数（判定同 publishTicketType 的 PASS_BAR_GIFT_COVERAGE_INSUFFICIENT、PASS_BAR_GIFT_FLOOR_NOT_PLATFORM_FUNDED）即退回草稿（draft），本次绑定照常保存，补齐后重新发布。",
         "x-permission": "ticket.product.manage",
         "x-data-scope": "project",
         "x-terminal-allowed": [
@@ -19187,6 +19343,7 @@
         ],
         "operationId": "publishTicketType",
         "summary": "发布票种",
+        "description": "第十八批 AH 段 215-R1（ENUM「通票赠酒下限」条「一张酒吧通票或跨域组合通票覆盖的每一家酒吧，赠酒杯数不得低于后台配置的最低赠酒杯数（业务参数，按票种可配，出厂默认 1 杯，须同时配置上下限），各酒吧分别赠几杯在售票时写明票面，低于该下限的票种不得发布上架」「该最低赠酒杯数属于票面强制要求提供的权益，一律记为域主管公司出资」）：bar_id 为空的通票，覆盖的每家酒吧（绑定了该吧入场类权益的酒吧）赠饮杯数（票面价 0 的 gift_drink，份数×次数）不得少于最低杯数×max(1, 该吧入场次数)，否则 409 PASS_BAR_GIFT_COVERAGE_INSUFFICIENT（点名还差的酒吧）；带票面价的兑换券不计；不含赠酒的通票不再放行；单店票（bar_id 非空）不套。最低杯数以内的赠饮须平台出资型（cost_bearer platform_funded），否则 409 PASS_BAR_GIFT_FLOOR_NOT_PLATFORM_FUNDED；超出部分可标商户让利。最低杯数见 GET /api/v1/ticketing/ticket-types/{id}/min-gift-cups（没配过为出厂 1 杯）。",
         "x-permission": "ticket.product.manage",
         "x-data-scope": "project",
         "x-terminal-allowed": [
@@ -19587,7 +19744,7 @@
         ],
         "operationId": "createTicketVerification",
         "summary": "正式核销",
-        "description": "核销记录状态闭集（CG-05，ENUM「核销记录状态」）：success（成功）、rejected（拒绝：规则不允许）、failed（失败：设备或网络原因）、reversed（已冲正）、anomaly（异常：已成功扣次但现场未放行或实际交付有争议时提起的异常复核，见 POST /api/v1/ticketing/verifications/{id}/anomaly 与 POST /api/v1/ticketing/verification-anomalies/{id}/resolve）；不设预检通过态、不提供人工放行（manual_overridden 仅历史行保留）。 在线核销：过刷新窗口 / 签名失配以正常响应返回 status=failed（window_expired / signature_invalid）；规则不允许仍以错误响应返回（响应不变），业务事务结束后另起事务落一条 status=rejected 记录（result_reason 为错误码小写；不扣次、不落结算价）；设备或凭证技术原因抛错（设备封禁或未纳管、核销设备未绑定商户、凭证已用或已作废等）同样以错误响应返回，业务事务结束后另起事务落一条 status=failed 记录；设备未登记不落；参数校验、鉴权、越权、定位闸等未进入有效检票的错误不落核销记录（CG 裁决第46、48项）。第十八批 Q 段第 148 条 148-R1（ENUM:55「未先核入场即核酒水一律拒绝」）：酒水（赠饮）权益须本营业日内已核销同票同人份这家酒吧的入场权益，否则 409 BAR_ENTRY_NOT_VERIFIED（规则拒绝，落 rejected）。第十八批 S 段第 165 条 165-R1（BSM:800「后续场次的附带权益也不得提前到当前场次使用」）：多次票的酒水（赠饮）权益每场次（这家酒吧本营业日）只能核本场一份（赠饮总次数÷同票同人份这家酒吧入场次数，至少 1；补偿补发行按其全部次数），超出 409 GIFT_DRINK_SESSION_SHARE_USED_UP（规则拒绝，落 rejected）。第十八批 N 段第 123 条 123-R2（BSM:1630「核销、收款、退款、放行等敏感操作，操作设备定位落在该项目综合体授权范围之外时一律拒绝并留痕」；BSM:1876「Web 端同样适用」）：本操作属敏感操作定位闸的现场动作闭集（第十八批裁决 31）。操作对象所属项目已配授权范围（123-R1）时须带请求头 X-Geo-Latitude、X-Geo-Longitude（设备当下定位，WGS-84 十进制度）：没带或解析不了按范围外处理（裁决 30）返回 403 SENSITIVE_OPERATION_LOCATION_REQUIRED，到圆心距离超过授权半径返回 403 SENSITIVE_OPERATION_OUT_OF_RANGE，拒绝在独立事务里留痕 sensitive_operation.location_rejected（business_id 为本 operationId，业务回滚不丢）；项目没配授权范围不查位置（裁决 32）；判定在幂等之前，重放不能绕过；通过时不存位置。第十八批 X 段第 196 条 196-R1（BSM:800「同一场次内的重复进出仍须按上述三道环节依次通过，但不再重复扣减票面入场次数」）：入园与酒吧入场资格（entry、admission；消耗窗口为 per_session、unlimited_in_day 的照旧）本场已有核销成功记录（已冲正的不算）时再次核销放行、不扣次——酒吧入场按这家酒吧本营业日、入园按订单综合体本营业日定本场；落 status=success、result_reason=session_reentry，不落结算价、不发积分与结算事件、不留脸不比对。第十八批 X 段第 197 条 197-R1（BSM:800「只能在完成检票环节所在的那一个场次内核销」「后续场次的附带权益也不得提前到当前场次使用」）：票内餐饮、零售券（专属直付，exclusive_merchant_id 非空）须同票同人份在本场（订单综合体本营业日）已有入场类核销成功（已冲正的不算），否则 409 ENTITLEMENT_SESSION_NOT_CHECKED_IN；每场只能核一份（该券总次数÷同票同人份入场次数，至少 1；入场次数不超过 1 的单次票与全园故障补偿补发行取全部次数），本场已达一份 409 ENTITLEMENT_SESSION_SHARE_USED_UP；两者均属规则拒绝，落 rejected、不扣次。",
+        "description": "核销记录状态闭集（CG-05，ENUM「核销记录状态」）：success（成功）、rejected（拒绝：规则不允许）、failed（失败：设备或网络原因）、reversed（已冲正）、anomaly（异常：已成功扣次但现场未放行或实际交付有争议时提起的异常复核，见 POST /api/v1/ticketing/verifications/{id}/anomaly 与 POST /api/v1/ticketing/verification-anomalies/{id}/resolve）；不设预检通过态、不提供人工放行（manual_overridden 仅历史行保留）。 在线核销：过刷新窗口 / 签名失配以正常响应返回 status=failed（window_expired / signature_invalid）；规则不允许仍以错误响应返回（响应不变），业务事务结束后另起事务落一条 status=rejected 记录（result_reason 为错误码小写；不扣次、不落结算价）；设备或凭证技术原因抛错（设备封禁或未纳管、核销设备未绑定商户、凭证已用或已作废等）同样以错误响应返回，业务事务结束后另起事务落一条 status=failed 记录；设备未登记不落；参数校验、鉴权、越权、定位闸等未进入有效检票的错误不落核销记录（CG 裁决第46、48项）。第十八批 Q 段第 148 条 148-R1（ENUM:55「未先核入场即核酒水一律拒绝」）：酒水（赠饮）权益须本营业日内已核销同票同人份这家酒吧的入场权益，否则 409 BAR_ENTRY_NOT_VERIFIED（规则拒绝，落 rejected）。第十八批 S 段第 165 条 165-R1（BSM:800「后续场次的附带权益也不得提前到当前场次使用」）：多次票的酒水（赠饮）权益每场次（这家酒吧本营业日）只能核本场一份（赠饮总次数÷同票同人份这家酒吧入场次数，至少 1；补偿补发行按其全部次数），超出 409 GIFT_DRINK_SESSION_SHARE_USED_UP（规则拒绝，落 rejected）。第十八批 N 段第 123 条 123-R2（BSM:1630「核销、收款、退款、放行等敏感操作，操作设备定位落在该项目综合体授权范围之外时一律拒绝并留痕」；BSM:1876「Web 端同样适用」）：本操作属敏感操作定位闸的现场动作闭集（第十八批裁决 31）。操作对象所属项目已配授权范围（123-R1）时须带请求头 X-Geo-Latitude、X-Geo-Longitude（设备当下定位，WGS-84 十进制度）：没带或解析不了按范围外处理（裁决 30）返回 403 SENSITIVE_OPERATION_LOCATION_REQUIRED，到圆心距离超过授权半径返回 403 SENSITIVE_OPERATION_OUT_OF_RANGE，拒绝在独立事务里留痕 sensitive_operation.location_rejected（business_id 为本 operationId，业务回滚不丢）；项目没配授权范围不查位置（裁决 32）；判定在幂等之前，重放不能绕过；通过时不存位置。第十八批 X 段第 196 条 196-R1（BSM:800「同一场次内的重复进出仍须按上述三道环节依次通过，但不再重复扣减票面入场次数」）：入园与酒吧入场资格（entry、admission；消耗窗口为 per_session、unlimited_in_day 的照旧）本场已有核销成功记录（已冲正的不算）时再次核销放行、不扣次——酒吧入场按这家酒吧本营业日、入园按订单综合体本营业日定本场；落 status=success、result_reason=session_reentry，不落结算价、不发积分与结算事件、不留脸不比对。第十八批 X 段第 197 条 197-R1（BSM:800「只能在完成检票环节所在的那一个场次内核销」「后续场次的附带权益也不得提前到当前场次使用」）：票内餐饮、零售券（专属直付，exclusive_merchant_id 非空）须同票同人份在本场（订单综合体本营业日）已有入场类核销成功（已冲正的不算），否则 409 ENTITLEMENT_SESSION_NOT_CHECKED_IN；每场只能核一份（该券总次数÷同票同人份入场次数，至少 1；入场次数不超过 1 的单次票与全园故障补偿补发行取全部次数），本场已达一份 409 ENTITLEMENT_SESSION_SHARE_USED_UP；两者均属规则拒绝，落 rejected、不扣次。第十八批 AH 段 239-R1（ENUM:46「上述有效期类型决定的是「这张票在多长时间内可以开始使用」；一经完成检票环节……该票即绑定至当前场次，其全部权益的可用窗口收窄为该场次」）：票面有效期只决定能否开启新场次；同票任一人份本场（订单综合体本营业日）已有入场类核销成功的，本场内再入场、附带权益（赠饮、餐饮零售券、游乐）与同票他人首入不受票面有效期截断，预检 allowed 同口径；本场未检票、有效期已过的仍 409 ENTITLEMENT_EXPIRED。第十八批 AH 段 238-R1（BSM:800「跨夜场次以该场次的实际闭店时间为准，不按自然日切分」）：多人票同场次闸无营业场次时按订单综合体营业日判同一场次，跨营业日仍 409 MULTI_PERSON_CROSS_SESSION_FORBIDDEN。第十八批 AH 段 219-R1（BSM:800「只能在完成检票环节所在的那一个场次内核销」「后续场次的附带权益也不得提前到当前场次使用」）：票内游乐（同票同人份另有入园或酒吧入场类权益；纯游乐票、当天无限窗口照旧）须本场（订单综合体本营业日）已有入场类核销成功，否则 409 ENTITLEMENT_SESSION_NOT_CHECKED_IN；每场只能用一份（游乐总次数÷同人份入场次数，至少 1；单次票和补偿补发行取全部），本场已达一份 409 ENTITLEMENT_SESSION_SHARE_USED_UP；两者均属规则拒绝，落 rejected、不扣次。第十八批 AH 段第 219 条补充（BSM:780「按可用次数逐次核销（每用一次扣一次，剩余为 0 才算用完）」）：同一权益在同一开放场次再次入场照常成功，多次票每次扣一次、在玩人数各加一（V619 去掉 V234 同一权益同一场次至多一条未释放入场的唯一约束，不再整笔回滚 409）。第十八批 AH 段 218-R1（BSM:800「一晚出入次数或连续两日出入合计次数达到后台配置的阈值即触发核查……由系统自动预警」；BSM:1657「预警只作提示与线索汇集，不自动阻断业务」）：入园（entry）检票成功后，同票同人份订单综合体本营业日（一晚）或本营业日连同上一营业日（连续两日）的检票成功次数（含同场次再入场；已冲正、酒吧入场、游乐不计）达到项目阈值（GET /api/v1/customer-frequent-entry-alert-settings/{project_id}，未配置取出厂一晚 4 次、连续两日 7 次），就写统一风控预警（source_domain ticketing、alert_type ticket.frequent_entry、source_ref 父票、risk_level suspicious、project_id 订单综合体，同人份同营业日同类一条）；不阻断，响应不变。",
         "x-permission": "verification.execute",
         "x-data-scope": "project-point",
         "x-terminal-allowed": [
@@ -19875,7 +20032,7 @@
         ],
         "operationId": "previewTicketVerification",
         "summary": "票务核销预览",
-        "description": "检票环节内部不设预检（DEC-R8-31 ③）：核销记录状态共六态、不设「预检通过」态；检票环节内部为一次动作——扫码即核销，不设先预检、后确认的两次操作（ENUM「核销记录状态」条）。第十八批 M 段 112-R2（BSM 第 1948 行「……需要扫码后在一体机上清楚看到能领什么、能领多少、是否已经领取，并把领取结果回写到权益记录。」）：一体机权益领取屏扫码后用本端点展示可领取内容（权益类型、总次数与已用次数、有效期、状态），确认后再调 createTicketVerification 领取。 TK-06：响应 data.face_binding 仅在一人多次票且人脸供应商可用时出现——capture=本次首次入场须客人同意并拍照留存，match=须拍照按留存人脸比对；单次票、多人票或供应商不可用时为空。 第十八批 X 段第 196 条 196-R1：入园与酒吧入场资格同一场次内再次入场（判定同正式核销）时 allowed=true（剩余次数为 0 也放行），face_binding 为空。",
+        "description": "检票环节内部不设预检（DEC-R8-31 ③）：核销记录状态共六态、不设「预检通过」态；检票环节内部为一次动作——扫码即核销，不设先预检、后确认的两次操作（ENUM「核销记录状态」条）。第十八批 M 段 112-R2（BSM 第 1948 行「……需要扫码后在一体机上清楚看到能领什么、能领多少、是否已经领取，并把领取结果回写到权益记录。」）：一体机权益领取屏扫码后用本端点展示可领取内容（权益类型、总次数与已用次数、有效期、状态），确认后再调 createTicketVerification 领取。 TK-06：响应 data.face_binding 仅在一人多次票且人脸供应商可用时出现——capture=本次首次入场须客人同意并拍照留存，match=须拍照按留存人脸比对；单次票、多人票或供应商不可用时为空。 第十八批 X 段第 196 条 196-R1：入园与酒吧入场资格同一场次内再次入场（判定同正式核销）时 allowed=true（剩余次数为 0 也放行），face_binding 为空。第十八批 AH 段 239-R1（ENUM:46「上述有效期类型决定的是「这张票在多长时间内可以开始使用」；一经完成检票环节……该票即绑定至当前场次，其全部权益的可用窗口收窄为该场次」）：票面有效期只决定能否开启新场次；同票任一人份本场（订单综合体本营业日）已有入场类核销成功的，本场内再入场、附带权益（赠饮、餐饮零售券、游乐）与同票他人首入不受票面有效期截断，预检 allowed 同口径；本场未检票、有效期已过的仍 409 ENTITLEMENT_EXPIRED。第十八批 AH 段 219-R1（BSM:800「只能在完成检票环节所在的那一个场次内核销」「后续场次的附带权益也不得提前到当前场次使用」）：票内游乐（同票同人份另有入园或酒吧入场类权益；纯游乐票、当天无限窗口照旧）须本场（订单综合体本营业日）已有入场类核销成功，否则 409 ENTITLEMENT_SESSION_NOT_CHECKED_IN；每场只能用一份（游乐总次数÷同人份入场次数，至少 1；单次票和补偿补发行取全部），本场已达一份 409 ENTITLEMENT_SESSION_SHARE_USED_UP；预检对票内游乐同样返回这两个 409。",
         "x-permission": "verification.execute",
         "x-data-scope": "project-point",
         "x-terminal-allowed": [
@@ -45548,6 +45705,162 @@
         "x-auth-context": "staff-token"
       }
     },
+    "/api/v1/customer-frequent-entry-alert-settings/{project_id}": {
+      "get": {
+        "tags": [
+          "customer"
+        ],
+        "operationId": "getCustomerFrequentEntryAlertSetting",
+        "summary": "查本项目高频出入场预警阈值（未配置回落出厂一晚 4 次、连续两日 7 次）",
+        "description": "第十八批 AH 段 218-R2（BSM「核销单位」条「一晚出入次数或连续两日出入合计次数达到后台配置的阈值即触发核查（业务参数，按项目可配，出厂默认一晚 4 次、连续两日合计 7 次，须同时配置上下限）」）：返回本项目阈值；本项目未配置时回落出厂行（project_id 为 __global__，一晚 4 次、连续两日 7 次，上下限为空）。出厂行缺失时 409 CUSTOMER_FREQUENT_ENTRY_ALERT_NOT_CONFIGURED。项目须在入口权限码可触及范围内（含可跨项目角色勾选的项目），否则 403 CROSS_PROJECT_FORBIDDEN。",
+        "x-permission": "customer.account.manage",
+        "x-data-scope": "project",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-audit-event-success": "not_applicable",
+        "x-audit-event-failure": "not_applicable",
+        "x-failure-codes": [
+          "FORBIDDEN",
+          "CROSS_PROJECT_FORBIDDEN",
+          "CUSTOMER_FREQUENT_ENTRY_ALERT_NOT_CONFIGURED"
+        ],
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "综合体项目 id（须在入口权限码可触及范围内（含可跨项目角色勾选的项目），否则 403 CROSS_PROJECT_FORBIDDEN）"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "本项目高频出入场预警阈值；data 为 CustomerFrequentEntryAlertSetting。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SuccessResponse"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "$ref": "#/components/schemas/CustomerFrequentEntryAlertSetting"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      },
+      "put": {
+        "tags": [
+          "customer"
+        ],
+        "operationId": "configureCustomerFrequentEntryAlertSetting",
+        "summary": "配置本项目高频出入场预警阈值（一晚、连续两日各与上下限同配）",
+        "description": "第十八批 AH 段 218-R2（BSM「核销单位」条「一晚出入次数或连续两日出入合计次数达到后台配置的阈值即触发核查（业务参数，按项目可配，出厂默认一晚 4 次、连续两日合计 7 次，须同时配置上下限）」）：night_threshold、night_min、night_max、two_day_threshold、two_day_min、two_day_max 须同时填写，缺任一值 400 VALIDATION_FAILED（一晚、连续两日出入阈值须与各自下限、上限同时填写）；两组各自须 1 ≤ 下限 ≤ 阈值 ≤ 上限，否则 400 VALIDATION_FAILED（出入阈值须满足：1 ≤ 下限 ≤ 阈值 ≤ 上限）；项目须在入口权限码可触及范围内（含可跨项目角色勾选的项目），否则 403 CROSS_PROJECT_FORBIDDEN；出厂行缺失时 409 CUSTOMER_FREQUENT_ENTRY_ALERT_NOT_CONFIGURED。入园检票成功后据此写高频出入场预警（见 createTicketVerification）。变更留痕前后值（night_threshold_before、two_day_threshold_before）。",
+        "x-permission": "customer.account.manage",
+        "x-data-scope": "project",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "customer.frequent_entry_alert_setting.configured",
+        "x-audit-event-failure": "customer.frequent_entry_alert_setting.config_failed",
+        "x-failure-codes": [
+          "VALIDATION_FAILED",
+          "FORBIDDEN",
+          "CROSS_PROJECT_FORBIDDEN",
+          "CUSTOMER_FREQUENT_ENTRY_ALERT_NOT_CONFIGURED"
+        ],
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "综合体项目 id（须在入口权限码可触及范围内（含可跨项目角色勾选的项目），否则 403 CROSS_PROJECT_FORBIDDEN）"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CustomerFrequentEntryAlertSettingRequest"
+              },
+              "example": {
+                "idempotency_key": "frequent-entry-alert-20261111-000001",
+                "night_threshold": 4,
+                "night_min": 2,
+                "night_max": 8,
+                "two_day_threshold": 7,
+                "two_day_min": 3,
+                "two_day_max": 14
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "已保存；data 为 CustomerFrequentEntryAlertSetting。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SuccessResponse"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "$ref": "#/components/schemas/CustomerFrequentEntryAlertSetting"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
+    },
     "/api/v1/customer-churn-alert-setting": {
       "get": {
         "tags": [
@@ -52811,7 +53124,7 @@
           }
         },
         "x-auth-context": "customer-token",
-        "description": " ROOT-03 clients-R40（BSM 第 809 行「发起转赠后不冻结该权益……接收人确认领取、原持有人自行核销、原持有人再次转赠——以先处理成功的那个动作为准，其余动作自动失效并提示……转出时，系统须同时向转出人与受赠人明示这一场次限制。受赠人打开转赠页面时，若该人份权益所绑定的场次已经结束，页面须明确提示「该权益所在场次已结束、权益已终结」，此时不发生领取」）：在途不冻结——原持有人仍可核销或再次转赠（再次转赠作废前一笔在途，void_reason=holder_retransferred）；场次已结束不阻止发起。响应带 session_restricted（多人票同票已有人入场＝本人份只能在该场次内入场）、session_label（该场次日期）、session_ended（该场次已结束、权益已终结）。 PGM 第 744 行「前端隐藏只是辅助，后端接口必须独立校验」：按综合体的客人端终端开关以所转票所属订单的综合体在服务端判（不取客户端自报的 X-Project-Id，先于幂等），该综合体客人端已关→403 TERMINAL_DISABLED，不建转赠。"
+        "description": " ROOT-03 clients-R40（BSM 第 809 行「发起转赠后不冻结该权益……接收人确认领取、原持有人自行核销、原持有人再次转赠——以先处理成功的那个动作为准，其余动作自动失效并提示……转出时，系统须同时向转出人与受赠人明示这一场次限制。受赠人打开转赠页面时，若该人份权益所绑定的场次已经结束，页面须明确提示「该权益所在场次已结束、权益已终结」，此时不发生领取」）：在途不冻结——原持有人仍可核销或再次转赠（再次转赠作废前一笔在途，void_reason=holder_retransferred）；场次已结束不阻止发起。响应带 session_restricted（多人票同票已有人入场＝本人份只能在该场次内入场）、session_label（该场次日期）、session_ended（该场次已结束、权益已终结）。第十八批 AH 段 238-R2（BSM:800「一个场次＝一次开门到关门；跨夜场次以该场次的实际闭店时间为准」）：首场次键为营业日时，场次结束＝该营业日闭店时点。 PGM 第 744 行「前端隐藏只是辅助，后端接口必须独立校验」：按综合体的客人端终端开关以所转票所属订单的综合体在服务端判（不取客户端自报的 X-Project-Id，先于幂等），该综合体客人端已关→403 TERMINAL_DISABLED，不建转赠。"
       }
     },
     "/api/v1/customer/ticket-transfers/{transfer_id}/claim": {
@@ -52880,7 +53193,7 @@
           }
         },
         "x-auth-context": "customer-token",
-        "description": " ROOT-03 clients-R40（BSM 第 809 行「发起转赠后不冻结该权益……接收人确认领取、原持有人自行核销、原持有人再次转赠——以先处理成功的那个动作为准，其余动作自动失效并提示……转出时，系统须同时向转出人与受赠人明示这一场次限制。受赠人打开转赠页面时，若该人份权益所绑定的场次已经结束，页面须明确提示「该权益所在场次已结束、权益已终结」，此时不发生领取」）：与核销、改转争同一人份行锁，先成功者为准；原持有人已核销或已改转时 409 TICKET_TRANSFER_VOIDED（原持有人已使用或已改转他人，本次转赠已失效）；该人份权益所在场次已结束 409 TICKET_TRANSFER_SESSION_ENDED（不发生领取）。响应带 session_restricted（多人票同票已有人入场＝本人份只能在该场次内入场）、session_label（该场次日期）、session_ended（该场次已结束、权益已终结）。 PGM 第 744 行「前端隐藏只是辅助，后端接口必须独立校验」：按综合体的客人端终端开关以转赠票所属订单的综合体在服务端判（不取客户端自报的 X-Project-Id，先于幂等），该综合体客人端已关→403 TERMINAL_DISABLED，不改归属。",
+        "description": " ROOT-03 clients-R40（BSM 第 809 行「发起转赠后不冻结该权益……接收人确认领取、原持有人自行核销、原持有人再次转赠——以先处理成功的那个动作为准，其余动作自动失效并提示……转出时，系统须同时向转出人与受赠人明示这一场次限制。受赠人打开转赠页面时，若该人份权益所绑定的场次已经结束，页面须明确提示「该权益所在场次已结束、权益已终结」，此时不发生领取」）：与核销、改转争同一人份行锁，先成功者为准；原持有人已核销或已改转时 409 TICKET_TRANSFER_VOIDED（原持有人已使用或已改转他人，本次转赠已失效）；该人份权益所在场次已结束 409 TICKET_TRANSFER_SESSION_ENDED（不发生领取）。响应带 session_restricted（多人票同票已有人入场＝本人份只能在该场次内入场）、session_label（该场次日期）、session_ended（该场次已结束、权益已终结）。第十八批 AH 段 238-R2（BSM:800「一个场次＝一次开门到关门；跨夜场次以该场次的实际闭店时间为准」）：首场次键为营业日时，场次结束＝该营业日闭店时点。 PGM 第 744 行「前端隐藏只是辅助，后端接口必须独立校验」：按综合体的客人端终端开关以转赠票所属订单的综合体在服务端判（不取客户端自报的 X-Project-Id，先于幂等），该综合体客人端已关→403 TERMINAL_DISABLED，不改归属。",
         "x-failure-codes": [
           "TICKET_TRANSFER_VOIDED",
           "TICKET_TRANSFER_SESSION_ENDED",
@@ -52982,7 +53295,7 @@
           }
         },
         "x-auth-context": "customer-token",
-        "description": " ROOT-03 clients-R40（BSM 第 809 行「发起转赠后不冻结该权益……接收人确认领取、原持有人自行核销、原持有人再次转赠——以先处理成功的那个动作为准，其余动作自动失效并提示……转出时，系统须同时向转出人与受赠人明示这一场次限制。受赠人打开转赠页面时，若该人份权益所绑定的场次已经结束，页面须明确提示「该权益所在场次已结束、权益已终结」，此时不发生领取」）：领取预览不算领取。响应带 session_restricted（多人票同票已有人入场＝本人份只能在该场次内入场）、session_label（该场次日期）、session_ended（该场次已结束、权益已终结）。session_ended=true 时客户端提示「该权益所在场次已结束、权益已终结」并禁用确认领取。 PGM 第 744 行「前端隐藏只是辅助，后端接口必须独立校验」：按综合体的客人端终端开关以领取码对应转赠票所属订单的综合体在服务端判（不取客户端自报的 X-Project-Id），该综合体客人端已关→403 TERMINAL_DISABLED。"
+        "description": " ROOT-03 clients-R40（BSM 第 809 行「发起转赠后不冻结该权益……接收人确认领取、原持有人自行核销、原持有人再次转赠——以先处理成功的那个动作为准，其余动作自动失效并提示……转出时，系统须同时向转出人与受赠人明示这一场次限制。受赠人打开转赠页面时，若该人份权益所绑定的场次已经结束，页面须明确提示「该权益所在场次已结束、权益已终结」，此时不发生领取」）：领取预览不算领取。响应带 session_restricted（多人票同票已有人入场＝本人份只能在该场次内入场）、session_label（该场次日期）、session_ended（该场次已结束、权益已终结）。第十八批 AH 段 238-R2（BSM:800「一个场次＝一次开门到关门；跨夜场次以该场次的实际闭店时间为准」）：首场次键为营业日时，场次结束＝该营业日闭店时点。session_ended=true 时客户端提示「该权益所在场次已结束、权益已终结」并禁用确认领取。 PGM 第 744 行「前端隐藏只是辅助，后端接口必须独立校验」：按综合体的客人端终端开关以领取码对应转赠票所属订单的综合体在服务端判（不取客户端自报的 X-Project-Id），该综合体客人端已关→403 TERMINAL_DISABLED。"
       }
     },
     "/api/v1/customer/ticket-transfers/incoming": {
@@ -91634,6 +91947,112 @@
           }
         }
       },
+      "CustomerFrequentEntryAlertSettingRequest": {
+        "type": "object",
+        "description": "请求载荷 `CustomerFrequentEntryAlertSettingRequest`；第十八批 AH 段 218-R2 按项目高频出入场预警阈值，一晚、连续两日各与上下限同配。",
+        "additionalProperties": false,
+        "required": [
+          "idempotency_key",
+          "night_threshold",
+          "night_min",
+          "night_max",
+          "two_day_threshold",
+          "two_day_min",
+          "two_day_max"
+        ],
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "description": "操作幂等键；重复提交返回同一处理结果。",
+            "maxLength": 128
+          },
+          "night_threshold": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "一晚出入阈值（一个营业日内同票同人份检票成功次数达到即预警）。"
+          },
+          "night_min": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "一晚阈值下限。"
+          },
+          "night_max": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "一晚阈值上限。"
+          },
+          "two_day_threshold": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "连续两日出入阈值（本营业日连同上一营业日合计次数达到即预警）。"
+          },
+          "two_day_min": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "连续两日阈值下限。"
+          },
+          "two_day_max": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "连续两日阈值上限。"
+          }
+        }
+      },
+      "CustomerFrequentEntryAlertSetting": {
+        "type": "object",
+        "description": "高频出入场预警阈值（第十八批 AH 段 218-R2）；本项目未配置时为出厂行（project_id 为 __global__，上下限为空）。",
+        "additionalProperties": false,
+        "required": [
+          "project_id",
+          "night_threshold",
+          "two_day_threshold",
+          "updated_at"
+        ],
+        "properties": {
+          "project_id": {
+            "type": "string",
+            "description": "综合体项目 id；未配置回落出厂行时为 __global__。"
+          },
+          "night_threshold": {
+            "type": "integer",
+            "description": "一晚出入阈值。"
+          },
+          "night_min": {
+            "type": "integer",
+            "nullable": true,
+            "description": "一晚阈值下限；出厂行为空。"
+          },
+          "night_max": {
+            "type": "integer",
+            "nullable": true,
+            "description": "一晚阈值上限；出厂行为空。"
+          },
+          "two_day_threshold": {
+            "type": "integer",
+            "description": "连续两日出入阈值。"
+          },
+          "two_day_min": {
+            "type": "integer",
+            "nullable": true,
+            "description": "连续两日阈值下限；出厂行为空。"
+          },
+          "two_day_max": {
+            "type": "integer",
+            "nullable": true,
+            "description": "连续两日阈值上限；出厂行为空。"
+          },
+          "updated_by": {
+            "type": "string",
+            "nullable": true,
+            "description": "最后修改人；出厂行为空。"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "最后修改时间。"
+          }
+        }
+      },
       "CustomerChurnAlertSettingRequest": {
         "type": "object",
         "description": "请求载荷 `CustomerChurnAlertSettingRequest`；ROOT-03-R22 同号一年内注销与注册合计次数上限（全平台），值与上下限同配。",
@@ -94445,7 +94864,8 @@
               "stored_value",
               "gift_drink",
               "admission",
-              "dining"
+              "dining",
+              "retail"
             ],
             "description": "权益模板.entitlement_type 字段；业务含义以字段名和所属接口为准，测试必须覆盖缺失、错类型和越界场景。"
           },
@@ -94563,6 +94983,80 @@
               "merchant_concession"
             ],
             "description": "成本承担方：platform_funded 平台出资型／merchant_concession 商户让利型。赠送类权益（component_price_cent 为 0 或不填、且由提供方兑付）必填，漏标返回 400 TICKET_COST_BEARER_REQUIRED；非赠送类可空；其他取值返回 400 VALIDATION_FAILED。"
+          }
+        }
+      },
+      "TicketTypeGiftFloorRequest": {
+        "type": "object",
+        "description": "请求载荷 `TicketTypeGiftFloorRequest`；第十八批 AH 段 215-R2 票种最低赠酒杯数，杯数与上下限同配，1 ≤ 下限 ≤ 杯数 ≤ 上限。",
+        "additionalProperties": false,
+        "required": [
+          "idempotency_key",
+          "min_gift_cups",
+          "min_gift_cups_lower",
+          "min_gift_cups_upper"
+        ],
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "description": "操作幂等键；重复提交返回同一处理结果。",
+            "maxLength": 128
+          },
+          "min_gift_cups": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "最低赠酒杯数（通票覆盖的每家酒吧每次入场至少赠这么多杯）。"
+          },
+          "min_gift_cups_lower": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "最低赠酒杯数下限。"
+          },
+          "min_gift_cups_upper": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "最低赠酒杯数上限。"
+          }
+        }
+      },
+      "TicketTypeGiftFloor": {
+        "type": "object",
+        "description": "票种最低赠酒杯数（第十八批 AH 段 215-R2）；没配过的票种为出厂 1 杯，上下限、改动人与时间为空。",
+        "additionalProperties": false,
+        "required": [
+          "ticket_type_id",
+          "min_gift_cups"
+        ],
+        "properties": {
+          "ticket_type_id": {
+            "type": "string",
+            "description": "票种 id。"
+          },
+          "min_gift_cups": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "最低赠酒杯数。"
+          },
+          "min_gift_cups_lower": {
+            "type": "integer",
+            "nullable": true,
+            "description": "最低赠酒杯数下限；没配过为空。"
+          },
+          "min_gift_cups_upper": {
+            "type": "integer",
+            "nullable": true,
+            "description": "最低赠酒杯数上限；没配过为空。"
+          },
+          "updated_by": {
+            "type": "string",
+            "nullable": true,
+            "description": "最后修改人；没配过为空。"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "description": "最后修改时间；没配过为空。"
           }
         }
       },

@@ -56,7 +56,7 @@ scope 类型（与盘点 CSV 的 `scope_type` 对齐）：
 
 <!-- DATA_ISOLATION_SPEC_AUTO_START -->
 ### 3A. 自动迁移隔离基线（由 `npm run docs:data-isolation-spec` 生成）
-> 事实源：`backend/src/main/resources/db/migration`。当前解析到最新迁移 **V617**，发现 **274** 张含 scope 字段的表。不要手工修改本区块；新增迁移后运行 `npm run docs:data-isolation-spec`，提交前运行 `npm run verify:data-isolation-spec`。
+> 事实源：`backend/src/main/resources/db/migration`。当前解析到最新迁移 **V620**，发现 **275** 张含 scope 字段的表。不要手工修改本区块；新增迁移后运行 `npm run docs:data-isolation-spec`，提交前运行 `npm run verify:data-isolation-spec`。
 | 表 | scope 字段 | scope 类型 | 首次出现迁移 | 证据文件 |
 |---|---|---|---|---|
 | `access_grant_requests` | `merchant_id` + `project_id` | direct | V170 | `V170__access_grant_requests.sql` |
@@ -145,6 +145,7 @@ scope 类型（与盘点 CSV 的 `scope_type` 对齐）：
 | `contracts` | `merchant_id` + `project_id` | direct | V010, V162 | `V010__p0_foundation_residual_platform_terminal_evidence.sql`<br>`V162__contract_lifecycle.sql` |
 | `customer_blacklist_requests` | `project_id` | direct | V537 | `V537__customer_identity_and_member_status.sql` |
 | `customer_check_in_tiers` | `project_id` | direct | V089 | `V089__member_loyalty_level_points.sql` |
+| `customer_frequent_entry_alert_settings` | `project_id` | direct | V619 | `V619__customer_frequent_entry_alert_settings.sql` |
 | `customer_home_content_drafts` | `project_id` | direct | V542 | `V542__b14_review_fixes_deposit_payout_drafts.sql` |
 | `customer_home_contents` | `project_id` | direct | V541 | `V541__customer_voucher_codes_notices_and_home_content.sql` |
 | `customer_points_rules` | `project_id` | direct | V060 | `V060__customer_points_rules_and_gift_convergence.sql` |

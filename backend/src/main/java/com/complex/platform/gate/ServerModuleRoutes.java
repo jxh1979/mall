@@ -1,6 +1,6 @@
 package com.complex.platform.gate;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import java.util.Map;
 
@@ -53,6 +53,7 @@ final class ServerModuleRoutes {
                     Map.entry("/api/v1/customer-blacklist-requests", "governance"),
                     Map.entry("/api/v1/customer-churn-alert-setting", "governance"),
                     Map.entry("/api/v1/customer-restriction-settings", "governance"),
+                    Map.entry("/api/v1/customer-frequent-entry-alert-settings", "governance"),
                     Map.entry("/api/v1/leasing", "governance"),
                     Map.entry("/api/v1/loyalty/config", "governance"),
                     Map.entry("/api/v1/merchant-billing", "governance"),

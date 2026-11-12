@@ -1,4 +1,4 @@
-// 文件版本：V0.11
+// 文件版本：V0.12
 // 3.8 业务枚举中文化：展示层把后端状态码翻成中文业务口径；提交/请求仍用原码。
 // 未知码原样返回（不阻断展示），新增码逐步补此表即可。
 const STATUS_LABELS: Record<string, string> = {
@@ -171,6 +171,8 @@ const STATUS_LABELS: Record<string, string> = {
   "parking.fee_evasion": "停车逃费",
   "parking.overstay": "停车超长滞留",
   "parking.manual_release": "停车人工放行",
+  // 第十八批 AH 段 218-R1 高频出入场疑似借票（统一异常队列 alert_type）
+  "ticket.frequent_entry": "高频出入场",
   // 风险等级
   suspicious: "可疑",
   // 主管复核动作类型
