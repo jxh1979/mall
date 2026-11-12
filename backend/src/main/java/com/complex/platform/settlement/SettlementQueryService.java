@@ -1,5 +1,6 @@
 package com.complex.platform.settlement;
 
+import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.PageResponse;
 import org.springframework.stereotype.Service;
 
@@ -14,11 +15,14 @@ public class SettlementQueryService {
 
     private final JdbcSettlementTransactionRepository repository;
     private final JdbcSettlementBillRepository billRepository;
+    private final TicketDistributionSettlementService distribution;
 
     public SettlementQueryService(JdbcSettlementTransactionRepository repository,
-                                  JdbcSettlementBillRepository billRepository) {
+                                  JdbcSettlementBillRepository billRepository,
+                                  TicketDistributionSettlementService distribution) {
         this.repository = repository;
         this.billRepository = billRepository;
+        this.distribution = distribution;
     }
 
     public PageResponse<JdbcSettlementTransactionRepository.SettlementTransactionView> listSettlements(
@@ -42,6 +46,27 @@ public class SettlementQueryService {
             periodStart = java.time.YearMonth.parse(month.trim()).atDay(1);
         }
         return billRepository.listBills(blankToNull(projectId), periodStart, 24);
+    }
+
+    /**
+     * 第十八批 AI 段 237-R2（BSM:1754「通票结算审阅财务侧设置独立审阅台账，按项目、经营域、责任主体和实际提供方列明第三方渠道费用、域间份额、
+     * 域内分配、内部结算价权益、酒吧入场可分配池和责任主体承担的差额」）：某张月度结算单的审阅明细三段——经营域份额、域内分配、按实际提供方的
+     * 内部结算价权益（月窗同该单月结）。项目、酒吧入场可分配池与整单渠道费用在结算单头列（{@link #listBills}）。
+     */
+    public BillReview billReview(String billId) {
+        JdbcSettlementBillRepository.OverPoolContext bill = billRepository.findOverPoolContext(billId);
+        if (bill == null) {
+            throw ApiException.notFound("SETTLEMENT_BILL_NOT_FOUND", "结算单不存在：" + billId);
+        }
+        java.time.Instant[] window = distribution.monthWindow(bill.projectId(), java.time.YearMonth.from(bill.periodStart()));
+        return new BillReview(billRepository.listFormatShareViews(billId), billRepository.listItemViews(billId),
+                billRepository.aggregateInternalPriceByProvider(bill.projectId(), window[0], window[1]));
+    }
+
+    /** 第十八批 AI 段 237-R2：结算单审阅明细（经营域份额、域内分配、按实际提供方的内部结算价权益）。 */
+    public record BillReview(java.util.List<JdbcSettlementBillRepository.FormatShareView> domainShares,
+                             java.util.List<JdbcSettlementBillRepository.ItemView> allocations,
+                             java.util.List<JdbcSettlementBillRepository.ProviderInternalPrice> internalPriceByProvider) {
     }
 
     private static String blankToNull(String v) {

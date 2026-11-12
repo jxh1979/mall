@@ -1,6 +1,6 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.05
+// 文件版本：V0.06
 
 import com.complex.platform.common.api.ApiException;
 import java.sql.Timestamp;
@@ -54,6 +54,23 @@ public class JdbcSettlementBillRepository implements com.complex.platform.ticket
     private static final String POOLED_AT_SALE = """
             (COALESCE(%2$s.merchant_type, 'bar') = 'bar'
              AND EXISTS (SELECT 1 FROM pass_pool_snapshots pps WHERE pps.ticket_instance_id = %1$s.parent_ticket_id))""";
+
+    /**
+     * 单一酒吧门票行（ENUM:32「单一酒吧门票由对应酒吧商户定价、销售并确认已核销部分的收入」）：订单挂酒吧，其核销按专属直付记到订单酒吧
+     * （见 SettlementSettledConsumer 专属商户取订单酒吧）。%1$s＝结算事实行别名。第十八批 AI 段 216-R1、212-R1 共用。
+     */
+    static final String SINGLE_BAR_ROW =
+            "EXISTS (SELECT 1 FROM ticket_orders sbo WHERE sbo.id = %1$s.order_id AND sbo.bar_id = %1$s.exclusive_merchant_id)";
+
+    /**
+     * 归属主体自收的票（第十八批 AI 段 237-R1、214-R2；ENUM:32「纯游乐票和纯游乐通票由游乐公司负责」「演出票由传媒公司负责」；BSM:1720「与娱乐平台公司无关」；
+     * BSM:1144「由传媒公司自行定价、售票、收款」）：本行订单里有价的权益全在本行业态——与「该行业态是游乐或传媒」合用即纯游乐票、纯游乐通票与传媒自办演出票。
+     * %1$s＝结算事实行别名，%2$s＝该行业态表达式。
+     */
+    static final String OWN_COLLECTED = """
+            NOT EXISTS (SELECT 1 FROM issued_entitlements oe LEFT JOIN merchants om ON om.id = oe.merchant_id
+                         WHERE oe.order_id = %1$s.order_id AND oe.allocated_revenue_cent > 0
+                           AND COALESCE(om.merchant_type, 'bar') <> %2$s)""";
 
     public JdbcSettlementBillRepository(NamedParameterJdbcTemplate jdbcTemplate) {
         this.jdbcTemplate = jdbcTemplate;
@@ -207,6 +224,23 @@ public class JdbcSettlementBillRepository implements com.complex.platform.ticket
      */
     public List<FormatRevenue> aggregateFormatRevenue(String projectId, Instant monthStart, Instant nextMonthStart,
                                                       Instant recoveryCutoff) {
+        return formatRevenue(projectId, monthStart, nextMonthStart, recoveryCutoff, "");
+    }
+
+    /**
+     * 第十八批 AI 段 237-R1（ENUM:32「收款主体不等于收入归属主体」「纯游乐票和纯游乐通票由游乐公司负责」；BSM:1720「与娱乐平台公司无关」；
+     * BSM:1144「由传媒公司自行定价、售票、收款」）：{@link #aggregateFormatRevenue} 同一批进池核销中，归属主体自收的游乐、传媒行（{@link #OWN_COLLECTED}）
+     * 按业态汇总——这部分不是娱乐平台公司代收，不进域间份额。
+     */
+    public List<FormatRevenue> aggregateOwnCollectedFormatRevenue(String projectId, Instant monthStart, Instant nextMonthStart,
+                                                                  Instant recoveryCutoff) {
+        return formatRevenue(projectId, monthStart, nextMonthStart, recoveryCutoff,
+                "   AND COALESCE(m.merchant_type, 'bar') IN ('amusement','media')\n   AND "
+                        + OWN_COLLECTED.formatted("st", "COALESCE(m.merchant_type, 'bar')") + "\n");
+    }
+
+    private List<FormatRevenue> formatRevenue(String projectId, Instant monthStart, Instant nextMonthStart,
+                                              Instant recoveryCutoff, String extraCondition) {
         // S4:各业态行带上本业态计提的综合服务费——费跟着核销走,游乐/餐饮份额的费从各自净份额扣,
         //   不错扣进酒吧池;Σ各业态费 与 sumPooledTotals 的费合计由引擎 K20 运行期互核。
         // S6:赠送权益预估成本(G)同一范式跟核销走——计提落在哪行核销上就扣在那行所属业态的份额里,
@@ -225,6 +259,7 @@ public class JdbcSettlementBillRepository implements com.complex.platform.ticket
                    AND st.exclusive_merchant_id IS NULL
                    AND NOT """ + POOLED_AT_SALE.formatted("st", "m") + WINDOW + """
                    AND (:project_id::text IS NULL OR st.project_id = :project_id)
+                """ + extraCondition + """
                  GROUP BY 1
                  ORDER BY 1
                 """, monthWindow(projectId, monthStart, nextMonthStart, recoveryCutoff), (rs, i) ->
@@ -345,6 +380,48 @@ public class JdbcSettlementBillRepository implements com.complex.platform.ticket
 
     /** 不扣销售渠道费（官方渠道、存量订单）。 */
     static final ChannelFeeConfig NO_SALES_FEE = new ChannelFeeConfig(null, 0, null);
+
+    /**
+     * 第十八批 AI 段 212-R1（ENUM:51「所有支付都会产生通路费、官方渠道同样产生……不由该笔业务的收款主体单独承担」「任何票种经第三方渠道售出时，
+     * 销售渠道费一律先从整单扣除且只扣一次」「每笔分摊的结果与所用合同版本必须留痕」；BSM:749「官方渠道售出的票不扣销售渠道费，但仍扣通路费」）：
+     * 当月单一酒吧门票核销与冲正行按酒吧 × 订单付款时固化的销售渠道费配置汇总核销额、已分摊的通路费与固定额锚点票数（锚点写法同
+     * {@link #aggregateChannelRevenue}：每张票只在其首笔核销所在月计 +1，冲的恰是锚点行计 −1）。官方渠道没有固化配置＝不扣销售渠道费。
+     */
+    public List<SingleBarFee> aggregateSingleBarFees(String projectId, Instant monthStart, Instant nextMonthStart,
+                                                     Instant recoveryCutoff) {
+        return jdbcTemplate.query("""
+                SELECT st.exclusive_merchant_id                    AS merchant_id,
+                       f.sales_fee_config_id, COALESCE(f.sales_fee_bps, 0) AS sales_fee_bps, f.sales_fixed_amount_cent,
+                       COALESCE(SUM(st.verified_amount_cent), 0) AS revenue_cent,
+                       COALESCE(SUM(st.route_fee_cent), 0)       AS route_fee_cent,
+                       COALESCE(SUM(CASE WHEN a.verification_id IS NOT NULL
+                                         THEN CASE st.transaction_type WHEN 'verification_settled' THEN 1 ELSE -1 END
+                                         ELSE 0 END), 0)          AS ticket_count
+                  FROM settlement_transactions st
+                  LEFT JOIN ticket_order_channel_fees f ON f.order_id = st.order_id
+                  LEFT JOIN (SELECT DISTINCT ON (x.parent_ticket_id) x.parent_ticket_id, x.verification_id
+                               FROM settlement_transactions x
+                              WHERE x.transaction_type = 'verification_settled'
+                                AND x.verification_id IS NOT NULL
+                                AND x.domain_share_cent IS NULL
+                """ + "                AND " + SINGLE_BAR_ROW.formatted("x") + "\n" + """
+                                AND x.parent_ticket_id IS NOT NULL
+                                AND (:project_id::text IS NULL OR x.project_id = :project_id)
+                              ORDER BY x.parent_ticket_id, COALESCE(x.business_at, x.created_at), x.id) a
+                         ON a.parent_ticket_id = st.parent_ticket_id AND a.verification_id = st.verification_id
+                 WHERE st.transaction_type IN ('verification_settled','verification_reversed')
+                   AND st.verification_id IS NOT NULL
+                   AND st.domain_share_cent IS NULL
+                """ + "   AND " + SINGLE_BAR_ROW.formatted("st") + "\n" + WINDOW + """
+                   AND (:project_id::text IS NULL OR st.project_id = :project_id)
+                 GROUP BY 1, 2, 3, 4
+                 ORDER BY 1, 2
+                """, monthWindow(projectId, monthStart, nextMonthStart, recoveryCutoff), (rs, i) ->
+                new SingleBarFee(rs.getString("merchant_id"),
+                        new ChannelFeeConfig(rs.getString("sales_fee_config_id"), rs.getInt("sales_fee_bps"),
+                                (Long) rs.getObject("sales_fixed_amount_cent")),
+                        rs.getLong("revenue_cent"), rs.getLong("route_fee_cent"), rs.getLong("ticket_count")));
+    }
 
     /**
      * 当月各酒吧统计：按 merchant_id 聚合 核销数(Σverified_count) + 客数(Σnum_people)。仅归属商户的核销。
@@ -536,6 +613,35 @@ public class JdbcSettlementBillRepository implements com.complex.platform.ticket
                         java.sql.Types.TIMESTAMP);
     }
 
+    /**
+     * 第十八批 AI 段 214-R2（ENUM:49「其一，到期未核销票款」「游乐域 → 游乐公司」；ENUM:48「按本表「域归属对照」条归属」「仅扣实际发生的通路费」
+     * 「各项均只扣一次」；第十八批裁决 51「从未核销、到期的部分在到期所在月另挂一笔」）：本月到期未核销事实中归游乐、传媒、餐饮、零售业态归属主体的
+     * 票款，按业态汇总未核销额减到期作业已扣的通路费与销售渠道费（单一经营域尾差归该域主体时一并扣）；两类到期事实（从未检票、场次终结）都并入。
+     * 归属主体自收的纯游乐票、纯游乐通票与传媒自办演出票（{@link #OWN_COLLECTED}）、酒吧（娱乐平台公司自身）与「其他」不进。
+     */
+    public java.util.Map<String, Long> aggregateUnverifiedNetByFormat(String projectId, Instant monthStart, Instant nextMonthStart) {
+        java.util.Map<String, Long> out = new java.util.LinkedHashMap<>();
+        jdbcTemplate.query("""
+                SELECT COALESCE(m.merchant_type, 'bar') AS business_format,
+                       COALESCE(SUM(st.unverified_amount_cent - st.route_fee_cent - st.channel_fee_cent
+                                    - CASE WHEN st.channel_fee_residual_entity_id = st.beneficiary_entity_id
+                                           THEN st.channel_fee_residual_cent ELSE 0 END), 0) AS net_cent
+                  FROM settlement_transactions st
+                  LEFT JOIN merchants m ON m.id = st.merchant_id
+                 WHERE st.transaction_type = 'unverified_expired'
+                   AND COALESCE(st.business_at, st.created_at) >= :start AND COALESCE(st.business_at, st.created_at) < :end
+                   AND (:project_id::text IS NULL OR st.project_id = :project_id)
+                   AND COALESCE(m.merchant_type, 'bar') IN ('amusement','media','catering','retail')
+                   AND NOT (COALESCE(m.merchant_type, 'bar') IN ('amusement','media') AND """
+                + " " + OWN_COLLECTED.formatted("st", "COALESCE(m.merchant_type, 'bar')") + """
+                )
+                 GROUP BY 1
+                """, monthWindow(projectId, monthStart, nextMonthStart), rs -> {
+                    out.put(rs.getString("business_format"), rs.getLong("net_cent"));
+                });
+        return out;
+    }
+
     /** FS-021-R2：本窗内被撤销、早于本窗的原核销业务时刻，升序；第十八批 X 段 189-R1：原月由调用方按营业日定。 */
     public List<Instant> findRecoveredOriginalTimes(String projectId, Instant monthStart, Instant nextMonthStart) {
         return jdbcTemplate.queryForList("""
@@ -597,14 +703,18 @@ public class JdbcSettlementBillRepository implements com.complex.platform.ticket
      *
      * <p>ponytail: 核销无结算事实行(direct 出票无分摊快照被消费者跳过)时其兑付不进本聚合——
      * 该场景无月窗/项目锚点可依;真出现由结算重建任务补建事实行后自然并入。
+     *
+     * <p>第十八批 AI 段 216-R1（ENUM:52「按件计＝票面各权益数量乘提供方内部结算价之和……该笔预扣归娱乐平台公司，预扣数与日后实付数的差额
+     * 也留在娱乐平台公司」；BSM:752 同句）：另含零元专属直付（平台出资的餐饮、零售赠送，不记域份额）按内部结算价直付的核销与冲正额，
+     * 业态取专属商户；有价专属直付行（记了域份额）与单一酒吧门票行不进。商户让利的零元行结算价为 0，不影响。
      */
     public List<GiftPaid> aggregateGiftPaid(String projectId, Instant monthStart, Instant nextMonthStart,
                                             Instant recoveryCutoff) {
         return jdbcTemplate.query("""
+                SELECT ticket_type_id, business_format, COALESCE(SUM(paid_cent), 0) AS paid_cent FROM (
                 SELECT st.ticket_type_id,
                        COALESCE(m.merchant_type, 'bar')       AS business_format,
-                       COALESCE(SUM(CASE WHEN a.direction = 'payable' THEN a.amount_cent
-                                         ELSE -a.amount_cent END), 0) AS paid_cent
+                       CASE WHEN a.direction = 'payable' THEN a.amount_cent ELSE -a.amount_cent END AS paid_cent
                   FROM ar_ap_items a
                   JOIN settlement_transactions st
                     ON st.verification_id = a.source_id
@@ -614,11 +724,64 @@ public class JdbcSettlementBillRepository implements com.complex.platform.ticket
                  WHERE a.source_type = 'pass_drink_settlement'
                 """ + WINDOW + """
                    AND (:project_id::text IS NULL OR st.project_id = :project_id)
+                 UNION ALL
+                SELECT st.ticket_type_id, COALESCE(m.merchant_type, 'bar'), st.verified_amount_cent
+                  FROM settlement_transactions st
+                  LEFT JOIN merchants m ON m.id = st.exclusive_merchant_id
+                 WHERE st.transaction_type IN ('verification_settled','verification_reversed')
+                   AND st.verification_id IS NOT NULL
+                   AND st.exclusive_merchant_id IS NOT NULL
+                   AND st.domain_share_cent IS NULL
+                """ + "   AND NOT " + SINGLE_BAR_ROW.formatted("st") + "\n" + WINDOW + """
+                   AND (:project_id::text IS NULL OR st.project_id = :project_id)
+                ) paid
                  GROUP BY 1, 2
                  ORDER BY 1, 2
                 """, monthWindow(projectId, monthStart, nextMonthStart, recoveryCutoff), (rs, i) ->
                 new GiftPaid(rs.getString("ticket_type_id"), rs.getString("business_format"),
                         rs.getLong("paid_cent")));
+    }
+
+    /**
+     * 第十八批 AI 段 237-R2（BSM:1754「按项目、经营域、责任主体和实际提供方列明……内部结算价权益」）：月窗内按实际提供方汇总内部结算价权益——
+     * 赠饮兑付应付净额（联结与月窗同 {@link #aggregateGiftPaid} 第一支，按应付对手方分组），与通票专属直付按内部结算价的直付额：有价行（记了域份额，
+     * 差额由该域归属主体承担）与零元平台出资行（娱乐平台公司承担）分两列。单一酒吧门票行是门票票款、不是内部结算价权益，不进。
+     */
+    public List<ProviderInternalPrice> aggregateInternalPriceByProvider(String projectId, Instant monthStart, Instant nextMonthStart) {
+        return jdbcTemplate.query("""
+                SELECT p.merchant_id, m.merchant_name, COALESCE(m.merchant_type, 'bar') AS business_format,
+                       COALESCE(SUM(p.gift_cent), 0) AS gift_drink_paid_cent,
+                       COALESCE(SUM(p.paid_cent), 0) AS paid_direct_settled_cent,
+                       COALESCE(SUM(p.free_cent), 0) AS free_direct_settled_cent
+                  FROM (
+                SELECT a.counterparty_id AS merchant_id,
+                       CASE WHEN a.direction = 'payable' THEN a.amount_cent ELSE -a.amount_cent END AS gift_cent,
+                       0 AS paid_cent, 0 AS free_cent
+                  FROM ar_ap_items a
+                  JOIN settlement_transactions st
+                    ON st.verification_id = a.source_id
+                   AND st.transaction_type = CASE a.direction WHEN 'payable' THEN 'verification_settled'
+                                                              ELSE 'verification_reversed' END
+                 WHERE a.source_type = 'pass_drink_settlement'
+                """ + WINDOW + """
+                   AND (:project_id::text IS NULL OR st.project_id = :project_id)
+                 UNION ALL
+                SELECT st.exclusive_merchant_id, 0,
+                       CASE WHEN st.domain_share_cent IS NOT NULL THEN st.verified_amount_cent ELSE 0 END,
+                       CASE WHEN st.domain_share_cent IS NULL THEN st.verified_amount_cent ELSE 0 END
+                  FROM settlement_transactions st
+                 WHERE st.transaction_type IN ('verification_settled','verification_reversed')
+                   AND st.verification_id IS NOT NULL
+                   AND st.exclusive_merchant_id IS NOT NULL
+                """ + "   AND NOT " + SINGLE_BAR_ROW.formatted("st") + "\n" + WINDOW + """
+                   AND (:project_id::text IS NULL OR st.project_id = :project_id)
+                ) p
+                  LEFT JOIN merchants m ON m.id = p.merchant_id
+                 GROUP BY 1, 2, 3
+                 ORDER BY 1
+                """, monthWindow(projectId, monthStart, nextMonthStart), (rs, i) -> new ProviderInternalPrice(
+                rs.getString("merchant_id"), rs.getString("merchant_name"), rs.getString("business_format"),
+                rs.getLong("gift_drink_paid_cent"), rs.getLong("paid_direct_settled_cent"), rs.getLong("free_direct_settled_cent")));
     }
 
     /**
@@ -924,15 +1087,17 @@ public class JdbcSettlementBillRepository implements com.complex.platform.ticket
     }
 
     /** S11：写一行结算单 × 业态份额留痕（V366;S4 补本业态综合服务费列;S6 补本业态赠送权益预估成本列;
-     *  S7 补本业态兑付实付列 gift_actual_paid_cent——纯留痕不进净份额）。 */
+     *  S7 补本业态兑付实付列 gift_actual_paid_cent——纯留痕不进净份额；第十八批 AI 段 V622 补域间份额、追收与到期未核销归属四列）。 */
     public void upsertFormatShare(SettlementBillFormatShareRecord share) {
         jdbcTemplate.update("""
                 INSERT INTO settlement_bill_format_shares (
                     bill_id, business_format, gross_revenue_cent, platform_borne_discount_cent,
                     channel_fee_cent, route_fee_cent, comp_service_fee_cent, gift_cost_cent, gift_actual_paid_cent,
-                    net_revenue_cent, beneficiary_kind, beneficiary_entity_id, internal_settled_cent)
+                    net_revenue_cent, beneficiary_kind, beneficiary_entity_id, internal_settled_cent,
+                    inter_entity_net_cent, recovery_net_cent, recovery_internal_settled_cent, unverified_net_cent)
                 VALUES (:bill_id, :business_format, :gross, :discount, :channel_fee, :route_fee, :comp_service_fee,
-                        :gift_cost, :gift_actual_paid, :net, :beneficiary_kind, :beneficiary_entity_id, :internal_settled)
+                        :gift_cost, :gift_actual_paid, :net, :beneficiary_kind, :beneficiary_entity_id, :internal_settled,
+                        :inter_entity_net, :recovery_net, :recovery_internal_settled, :unverified_net)
                 ON CONFLICT (bill_id, business_format) DO UPDATE SET
                     gross_revenue_cent           = EXCLUDED.gross_revenue_cent,
                     platform_borne_discount_cent = EXCLUDED.platform_borne_discount_cent,
@@ -945,6 +1110,10 @@ public class JdbcSettlementBillRepository implements com.complex.platform.ticket
                     beneficiary_kind             = EXCLUDED.beneficiary_kind,
                     beneficiary_entity_id        = EXCLUDED.beneficiary_entity_id,
                     internal_settled_cent        = EXCLUDED.internal_settled_cent,
+                    inter_entity_net_cent        = EXCLUDED.inter_entity_net_cent,
+                    recovery_net_cent            = EXCLUDED.recovery_net_cent,
+                    recovery_internal_settled_cent = EXCLUDED.recovery_internal_settled_cent,
+                    unverified_net_cent          = EXCLUDED.unverified_net_cent,
                     updated_at                   = now()
                 """, new MapSqlParameterSource()
                 .addValue("bill_id", share.billId())
@@ -959,7 +1128,63 @@ public class JdbcSettlementBillRepository implements com.complex.platform.ticket
                 .addValue("net", share.netRevenueCent())
                 .addValue("beneficiary_kind", share.beneficiaryKind())
                 .addValue("beneficiary_entity_id", share.beneficiaryEntityId())
-                .addValue("internal_settled", share.internalSettledCent()));
+                .addValue("internal_settled", share.internalSettledCent())
+                .addValue("inter_entity_net", share.interEntityNetCent())
+                .addValue("recovery_net", share.recoveryNetCent())
+                .addValue("recovery_internal_settled", share.recoveryInternalSettledCent())
+                .addValue("unverified_net", share.unverifiedNetCent()));
+    }
+
+    /** 第十八批 AI 段 214-R1、214-R2：过账读本单各业态份额行（域间份额、代付、追收、到期未核销归属与归属主体）。 */
+    public List<SettlementBillFormatShareRecord> listFormatSharesForPosting(String billId) {
+        return jdbcTemplate.query("SELECT * FROM settlement_bill_format_shares WHERE bill_id = :bill_id ORDER BY business_format",
+                new MapSqlParameterSource("bill_id", billId), (rs, i) -> new SettlementBillFormatShareRecord(
+                        rs.getString("bill_id"), rs.getString("business_format"), rs.getLong("gross_revenue_cent"),
+                        rs.getLong("platform_borne_discount_cent"), rs.getLong("channel_fee_cent"), rs.getLong("route_fee_cent"),
+                        rs.getLong("comp_service_fee_cent"), rs.getLong("gift_cost_cent"), rs.getLong("gift_actual_paid_cent"),
+                        rs.getLong("net_revenue_cent"), rs.getString("beneficiary_kind"), rs.getString("beneficiary_entity_id"),
+                        rs.getLong("internal_settled_cent"), rs.getLong("inter_entity_net_cent"), rs.getLong("recovery_net_cent"),
+                        rs.getLong("recovery_internal_settled_cent"), rs.getLong("unverified_net_cent")));
+    }
+
+    /**
+     * 第十八批 AI 段 237-R2（BSM:1754「按项目、经营域、责任主体和实际提供方列明第三方渠道费用、域间份额……和责任主体承担的差额」；ENUM:53「自行承担差额」）：
+     * 审阅明细读本单各业态份额行与责任主体名；差额＝净份额−按内部结算价直付额，只对有直付的行列。
+     */
+    public List<FormatShareView> listFormatShareViews(String billId) {
+        return jdbcTemplate.query("""
+                SELECT s.*, be.entity_name AS beneficiary_entity_name
+                  FROM settlement_bill_format_shares s
+                  LEFT JOIN business_entities be ON be.id = s.beneficiary_entity_id
+                 WHERE s.bill_id = :bill_id
+                 ORDER BY s.business_format
+                """, new MapSqlParameterSource("bill_id", billId), (rs, i) -> {
+                    long net = rs.getLong("net_revenue_cent");
+                    long internal = rs.getLong("internal_settled_cent");
+                    return new FormatShareView(rs.getString("business_format"), rs.getString("beneficiary_kind"),
+                            rs.getString("beneficiary_entity_id"), rs.getString("beneficiary_entity_name"),
+                            rs.getLong("gross_revenue_cent"), rs.getLong("channel_fee_cent"), rs.getLong("route_fee_cent"),
+                            rs.getLong("comp_service_fee_cent"), rs.getLong("gift_cost_cent"), rs.getLong("gift_actual_paid_cent"),
+                            net, rs.getLong("inter_entity_net_cent"), rs.getLong("unverified_net_cent"), internal,
+                            internal == 0L ? null : net - internal);
+                });
+    }
+
+    /** 第十八批 AI 段 237-R2（BSM:1754「按……实际提供方列明……域内分配」）：审阅明细读本单各商户分账明细（连商户名、业态与单一酒吧门票两层费）。 */
+    public List<ItemView> listItemViews(String billId) {
+        return jdbcTemplate.query("""
+                SELECT si.merchant_id, m.merchant_name, COALESCE(m.merchant_type, 'bar') AS business_format,
+                       si.distribution_method, si.verified_count, si.guest_count, si.rank_no, si.final_amount_cent,
+                       si.single_bar_route_fee_cent, si.single_bar_channel_fee_cent, si.status
+                  FROM settlement_items si
+                  LEFT JOIN merchants m ON m.id = si.merchant_id
+                 WHERE si.bill_id = :bill_id
+                 ORDER BY si.distribution_method, si.rank_no NULLS LAST, si.merchant_id
+                """, new MapSqlParameterSource("bill_id", billId), (rs, i) -> new ItemView(
+                rs.getString("merchant_id"), rs.getString("merchant_name"), rs.getString("business_format"),
+                rs.getString("distribution_method"), rs.getInt("verified_count"), rs.getInt("guest_count"),
+                rs.getObject("rank_no", Integer.class), rs.getLong("final_amount_cent"), rs.getLong("single_bar_route_fee_cent"),
+                rs.getLong("single_bar_channel_fee_cent"), rs.getString("status")));
     }
 
     /** upsert settlement_items（bill+merchant 唯一）。 */
@@ -974,15 +1199,19 @@ public class JdbcSettlementBillRepository implements com.complex.platform.ticket
                 .addValue("distribution_method", item.distributionMethod())
                 .addValue("calculated_amount_cent", item.calculatedAmountCent())
                 .addValue("final_amount_cent", item.finalAmountCent())
-                .addValue("status", item.status());
+                .addValue("status", item.status())
+                .addValue("single_bar_route_fee_cent", item.singleBarRouteFeeCent())
+                .addValue("single_bar_channel_fee_cent", item.singleBarChannelFeeCent());
         jdbcTemplate.update("""
                 INSERT INTO settlement_items (
                     id, bill_id, merchant_id, verified_count, guest_count, rank_no, distribution_method,
-                    calculated_amount_cent, final_amount_cent, status, updated_at
+                    calculated_amount_cent, final_amount_cent, status, single_bar_route_fee_cent, single_bar_channel_fee_cent,
+                    updated_at
                 )
                 VALUES (
                     :id, :bill_id, :merchant_id, :verified_count, :guest_count, :rank_no, :distribution_method,
-                    :calculated_amount_cent, :final_amount_cent, :status, now()
+                    :calculated_amount_cent, :final_amount_cent, :status, :single_bar_route_fee_cent, :single_bar_channel_fee_cent,
+                    now()
                 )
                 ON CONFLICT (bill_id, merchant_id, distribution_method) DO UPDATE SET
                     verified_count         = EXCLUDED.verified_count,
@@ -992,6 +1221,8 @@ public class JdbcSettlementBillRepository implements com.complex.platform.ticket
                     calculated_amount_cent = EXCLUDED.calculated_amount_cent,
                     final_amount_cent      = EXCLUDED.final_amount_cent,
                     status                 = EXCLUDED.status,
+                    single_bar_route_fee_cent   = EXCLUDED.single_bar_route_fee_cent,
+                    single_bar_channel_fee_cent = EXCLUDED.single_bar_channel_fee_cent,
                     updated_at             = now()
                 """, params);
     }
@@ -1182,6 +1413,27 @@ public class JdbcSettlementBillRepository implements com.complex.platform.ticket
     }
 
     /**
+     * 第十八批 AI 段 237-R2：审阅明细的业态份额行。interEntityNetCent＝域间份额（237-R1），unverifiedNetCent＝到期未核销归属（214-R2），
+     * differenceCent＝净份额−按内部结算价直付额（ENUM:53 责任主体承担（负）或所得（正）的差额；无直付的行为空）。
+     */
+    public record FormatShareView(String businessFormat, String beneficiaryKind, String beneficiaryEntityId,
+                                  String beneficiaryEntityName, long grossRevenueCent, long channelFeeCent, long routeFeeCent,
+                                  long compServiceFeeCent, long giftCostCent, long giftActualPaidCent, long netRevenueCent,
+                                  long interEntityNetCent, long unverifiedNetCent, long internalSettledCent, Long differenceCent) {
+    }
+
+    /** 第十八批 AI 段 237-R2：审阅明细的域内分配行（settlement_items 一行连商户名与业态）。 */
+    public record ItemView(String merchantId, String merchantName, String businessFormat, String distributionMethod,
+                           int verifiedCount, int guestCount, Integer rankNo, long finalAmountCent,
+                           long singleBarRouteFeeCent, long singleBarChannelFeeCent, String status) {
+    }
+
+    /** 第十八批 AI 段 237-R2：审阅明细按实际提供方的内部结算价权益（赠饮应付净额、有价权益直付、零元平台出资直付）。 */
+    public record ProviderInternalPrice(String merchantId, String merchantName, String businessFormat,
+                                        long giftDrinkPaidCent, long paidDirectSettledCent, long freeDirectSettledCent) {
+    }
+
+    /**
      * 短期经营激励单次有效期（上限配置与申请期限同一读法）：数值 + 单位(day/month)。
      * 用户 2026-07-28 纠正「不是指校验大于等于一个月，也可以三天」——三天的短期激励必须配得出来。
      */
@@ -1251,6 +1503,10 @@ public class JdbcSettlementBillRepository implements com.complex.platform.ticket
      * FS-023:id 供到期未核销款逐笔记录所用渠道费配置(ENUM L51「每笔分摊的结果与所用合同版本必须留痕」)。
      */
     public record ChannelFeeConfig(String id, int feeBps, Long fixedAmountCent) {
+    }
+
+    /** 第十八批 AI 段 212-R1：单一酒吧门票某酒吧 × 销售渠道费配置的当月核销额、已分摊通路费与固定额锚点票数。 */
+    public record SingleBarFee(String merchantId, ChannelFeeConfig fee, long revenueCent, long routeFeeCent, long ticketCount) {
     }
 
     /** 第十八批第 3 条：某支付通路的通路费率（万分比）与所用配置行 id（未配置＝0 / null）。 */

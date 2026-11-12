@@ -1,6 +1,6 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.08
+// 文件版本：V0.09
 
 import java.sql.Timestamp;
 import java.time.Instant;
@@ -301,6 +301,7 @@ public class JdbcSettlementTransactionRepository {
     //   第十八批第 2 条：另取该人份仍有效的入场类核销时刻（作业按营业日计已开启次数，与逐份分账同口径）；
     //   18AH 复核修复：另取同父票各人份仍有效的入场类核销时刻（作业按整张票判本场，与核销放行 ticketCheckedInThisSession 同口径）；
     //   第十八批第 3 条：销售渠道费取订单付款时固化的配置（ticket_order_channel_fees）。
+    //   第十八批 AI 段 212-R1（ENUM:48「各项均只扣一次」）：固定额锚点另认单一酒吧门票核销行——月结已按其首笔核销扣过一道。
     public java.util.List<ExpiredUnverifiedRow> findExpiredUnverifiedEntitlements(Instant now) {
         MapSqlParameterSource params = new MapSqlParameterSource().addValue("now", Timestamp.from(now));
         return jdbcTemplate.query("""
@@ -314,7 +315,9 @@ public class JdbcSettlementTransactionRepository {
                                  WHERE a.parent_ticket_id = c.parent_ticket_id
                                    AND a.transaction_type = 'verification_settled'
                                    AND a.verification_id IS NOT NULL
-                                   AND a.exclusive_merchant_id IS NULL)
+                                   AND (a.exclusive_merchant_id IS NULL OR
+                """ + JdbcSettlementBillRepository.SINGLE_BAR_ROW.formatted("a") + """
+                ))
                         -- 同票已有到期事实扣过渠道费（如多人票未到人份先于首场次结束时处理）：固定额不再扣第二次（ENUM L48「各项均只扣一次」）
                         OR EXISTS (SELECT 1 FROM settlement_transactions f
                                      JOIN issued_entitlements fe ON fe.id = f.entitlement_id
@@ -504,7 +507,9 @@ public class JdbcSettlementTransactionRepository {
                 SELECT id, transaction_no, project_id, merchant_id, exclusive_merchant_id,
                        ticket_type_id, entitlement_type, beneficiary_type,
                        verified_count, num_people, verified_amount_cent,
-                       settlement_status, created_at
+                       settlement_status, created_at,
+                       (SELECT v.settlement_catalog_entry_id FROM ticket_verifications v
+                         WHERE v.id = settlement_transactions.verification_id) AS settlement_catalog_entry_id
                   FROM settlement_transactions
                  WHERE transaction_type = 'verification_settled'
                    AND (:project_id::text  IS NULL OR project_id  = :project_id)
@@ -524,7 +529,8 @@ public class JdbcSettlementTransactionRepository {
                         rs.getInt("num_people"),
                         rs.getLong("verified_amount_cent"),
                         rs.getString("settlement_status"),
-                        rs.getTimestamp("created_at").toInstant()));
+                        rs.getTimestamp("created_at").toInstant(),
+                        rs.getString("settlement_catalog_entry_id")));
     }
 
     /** 平台侧结算审阅:同筛选条件下的总条数(分页 total)。 */
@@ -555,7 +561,10 @@ public class JdbcSettlementTransactionRepository {
             int numPeople,
             long verifiedAmountCent,
             String settlementStatus,
-            Instant createdAt
+            Instant createdAt,
+            // 第十八批 AI 段 236-R1（BSM:1754「每项权益都必须绑定实际提供方和审批版本」；ENUM:54「核销或结算时锁定当时版本」）：
+            // 该笔核销所用内部结算价目录行（＝审批版本），非按内部结算价结算的为 null。
+            String settlementCatalogEntryId
     ) {
     }
 

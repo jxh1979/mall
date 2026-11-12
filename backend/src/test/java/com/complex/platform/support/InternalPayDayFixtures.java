@@ -1,4 +1,4 @@
-// 文件版本：V0.03
+// 文件版本：V0.04
 package com.complex.platform.support;
 
 import java.sql.Date;
@@ -14,7 +14,8 @@ public final class InternalPayDayFixtures {
 
     public static final String[] SETTLEMENT_ROUTES = {
             "ticket_distribution", "ticket_distribution_recovery", "platform_incentive_subsidy", "single_bar_service_fee",
-            "compensation_fulfillment", "compensation_fulfillment_recovery", "parking_credit_cost"};
+            "compensation_fulfillment", "compensation_fulfillment_recovery", "parking_credit_cost",
+            "pass_domain_share", "pass_domain_direct_settlement", "pass_unverified_attribution"};
 
     private InternalPayDayFixtures() {
     }

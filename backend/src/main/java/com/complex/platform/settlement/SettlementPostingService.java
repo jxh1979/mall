@@ -1,6 +1,6 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import com.complex.platform.common.money.MoneyRounding;
 import com.complex.platform.finance.ArApItemRecord;
@@ -31,6 +31,8 @@ import org.springframework.transaction.annotation.Transactional;
  *   <li>FS-021-R4：每条往来的到期日按该钱路财务指定付账日、异议期与银行工作日推算并固化（internal_payable_schedules），
  *       规则或日历缺失即拒绝过账、账单保持 confirmed；付款时点的项目（异议期按项目、收款方专区可见、换账户审批）取往来对方
  *       所属项目——生产月结出平台单（project_id 为空），明细取商户所属项目、服务费取计费月项目；</li>
+ *   <li>第十八批 AI 段 214-R1、214-R2（第十八批裁决 51）：明细之后按业态份额行挂娱乐平台公司与各域主管公司之间的组合通票往来——域间份额、餐饮零售代付、
+ *       原月已过账后撤销的追收与到期未核销归属各自分笔（BSM:755「不得轧差」）；归属主体未定即整单拒绝、一笔不挂；</li>
  *   <li>全部明细 posted 后 → 结算单 status='settled'、settled_at=now；</li>
  *   <li>幂等：明细 status='posted' 已过即跳过；ar_ap 唯一索引 (direction,source_type,source_id) +
  *       PK=arap_&lt;明细 id&gt; 双保险，重复过账不产生第二条应付。</li>
@@ -60,6 +62,14 @@ public class SettlementPostingService {
     private static final String SOURCE_PLATFORM_INCENTIVE_SUBSIDY = "platform_incentive_subsidy";
     /** FS-021-R1：负额明细（向商户追回）过账为该商户的单独追收应收。 */
     static final String SOURCE_TICKET_DISTRIBUTION_RECOVERY = "ticket_distribution_recovery";
+    /**
+     * 第十八批 AI 段 214-R1、214-R2（ENUM:32「其余各域份额自收款之日起即为应付给对应域主管公司的款项」；BSM:749；BSM:755「不得轧差」；
+     * ENUM:49「其一，到期未核销票款」）：组合通票各域份额的主体间往来——域间份额（正挂应付、负挂应收）、餐饮零售代付（娱乐平台公司按内部结算价
+     * 直付商户的额，城市项目公司应还，正挂应收、负挂应付）、到期未核销归属（应付）。同名钱路须财务先定付账日规则（上线前配置前提）。
+     */
+    static final String SOURCE_PASS_DOMAIN_SHARE = "pass_domain_share";
+    static final String SOURCE_PASS_DOMAIN_DIRECT_SETTLEMENT = "pass_domain_direct_settlement";
+    static final String SOURCE_PASS_UNVERIFIED_ATTRIBUTION = "pass_unverified_attribution";
     /** 第一段两种方式（超池只由第一段合计高于份池产生，越池两段拆只对它们；第二段、专属直付与 R2 追收明细不拆）。 */
     private static final java.util.Set<String> FIRST_SEGMENT_METHODS = java.util.Set.of(
             TicketDistributionSettlementService.METHOD_BY_VENUE_PER_GUEST, TicketDistributionSettlementService.METHOD_BY_FIXED_AMOUNT);
@@ -69,15 +79,18 @@ public class SettlementPostingService {
     private final com.complex.platform.evidence.AuditEventService auditEventService;
     private final SingleBarServiceFeeService singleBarServiceFees;
     private final InternalPayDayService payDays;
+    private final com.complex.platform.common.BusinessDayResolver businessDays;
 
     public SettlementPostingService(JdbcSettlementBillRepository repository, FinanceService financeService,
                                     com.complex.platform.evidence.AuditEventService auditEventService,
-                                    SingleBarServiceFeeService singleBarServiceFees, InternalPayDayService payDays) {
+                                    SingleBarServiceFeeService singleBarServiceFees, InternalPayDayService payDays,
+                                    com.complex.platform.common.BusinessDayResolver businessDays) {
         this.repository = repository;
         this.financeService = financeService;
         this.auditEventService = auditEventService;
         this.singleBarServiceFees = singleBarServiceFees;
         this.payDays = payDays;
+        this.businessDays = businessDays;
     }
 
     /**
@@ -101,6 +114,8 @@ public class SettlementPostingService {
                     "只有已确认的账单才能过账；当前状态：" + ctx.status());
         }
 
+        // 第十八批 AI 段 214-R1、214-R2：先核组合通票各域份额的归属主体，定不出即整单拒绝（明细与份额都在明细过账之前拦下，一笔不挂）。
+        List<SharePosting> sharePostings = sharePostings(billId);
         boolean overPool = ctx.overPool();
         // 第十八批第 2 条(ENUM L52「娱乐平台公司确需让第一段合计高于池金额的……超出部分由娱乐平台公司承担」):超池额只由某几份第一段
         //   合计高于该份池产生;补贴合计恰为超池额,按本单第一段明细金额占比累计额差分拆到各家(可分配池里的未核销减除、未分配、暂挂、
@@ -155,6 +170,15 @@ public class SettlementPostingService {
             posted++;
         }
 
+        // 第十八批 AI 段 214-R1、214-R2（ENUM:32「其余各域份额自收款之日起即为应付给对应域主管公司的款项」；BSM:749「其份额由跨域组合通票的收款主体
+        //   （娱乐平台公司）直接与实际提供的餐饮、零售商户结算」；BSM:755「一律按总额收付、收支两条线，不得轧差」；ENUM:49「其一，到期未核销票款」；
+        //   第十八批裁决 51）：台账项目取结算单项目，付款时点项目平台单取唯一启用综合体（同月结 dayProject 口径）。
+        String shareProject = ctx.projectId() != null ? ctx.projectId() : businessDays.soleProject();
+        for (SharePosting p : sharePostings) {
+            post(p.direction(), p.sourceId(), p.entityId(), p.amountCent(), p.sourceType(), p.prefix(), ctx.projectId(), shareProject,
+                    schedule);
+        }
+
         // FS-013（BSM L755「单店门票综合服务费按前述计费月汇总后的应收总额另行收取，同样走三个付账日……平台内部各主体之间的
         //   应收应付，一律按总额收付、收支两条线，不得轧差」）：本单所属项目×月份的单店服务费计费月，按 min(Σ未退票逐票费, 锁定封顶)
         //   各挂一笔酒吧应收，与上面的票款应付分别收付；0 元不挂。台账与付款时点的项目取计费月锁定的售票项目（平台单不丢项目）。
@@ -172,6 +196,53 @@ public class SettlementPostingService {
             repository.markBillSettled(billId);
         }
         return posted;
+    }
+
+    /**
+     * 第十八批 AI 段 214-R1、214-R2：本单各业态份额行要挂的组合通票往来（source_id＝结算单 id「|」业态，追收再加「|rcv」、到期未核销加「|ue」）：
+     * 域间份额正挂应付、负挂应收；餐饮零售行按内部结算价应直付额（娱乐平台公司代城市项目公司直付商户，BSM:749）正挂应收、负挂应付；追收同规则另挂；
+     * 到期未核销归属挂应付。酒吧与「其他」行这几列恒 0，不挂。
+     */
+    // ponytail: 生产月结只出平台单（SettlementMonthlyJob settleMonth(null, month)），启用综合体不止一个时餐饮零售归属主体本就为空，本闸会令整单（含酒吧应付）
+    //   不能过账，上限同 176-R2、189-R1；届时须先把份额按项目拆。
+    private List<SharePosting> sharePostings(String billId) {
+        List<SharePosting> out = new java.util.ArrayList<>();
+        for (SettlementBillFormatShareRecord share : repository.listFormatSharesForPosting(billId)) {
+            String key = billId + "|" + share.businessFormat();
+            String entity = share.beneficiaryEntityId();
+            boolean city = TicketDistributionSettlementService.CITY_COMPANY_FORMATS.contains(share.businessFormat());
+            List<SharePosting> row = new java.util.ArrayList<>();
+            signed(row, share.interEntityNetCent(), "payable", key, entity, SOURCE_PASS_DOMAIN_SHARE, "settle-pds-");
+            signed(row, city ? share.internalSettledCent() : 0L, "receivable", key, entity, SOURCE_PASS_DOMAIN_DIRECT_SETTLEMENT,
+                    "settle-pdd-");
+            signed(row, share.recoveryNetCent(), "payable", key + "|rcv", entity, SOURCE_PASS_DOMAIN_SHARE, "settle-pds-");
+            signed(row, city ? share.recoveryInternalSettledCent() : 0L, "receivable", key + "|rcv", entity,
+                    SOURCE_PASS_DOMAIN_DIRECT_SETTLEMENT, "settle-pdd-");
+            if (share.unverifiedNetCent() > 0L) {
+                row.add(new SharePosting("payable", key + "|ue", entity, share.unverifiedNetCent(), SOURCE_PASS_UNVERIFIED_ATTRIBUTION,
+                        "settle-pua-"));
+            }
+            if (!row.isEmpty() && entity == null) {
+                throw com.complex.platform.common.api.ApiException.conflict("SETTLEMENT_DOMAIN_ENTITY_MISSING",
+                        "结算单某业态份额的归属主体未定（餐饮零售须该综合体恰有一家有效城市项目公司），不能过账");
+            }
+            out.addAll(row);
+        }
+        return out;
+    }
+
+    /** 金额非 0 才挂：正按 positiveDirection，负按反方向挂其绝对值。 */
+    private static void signed(List<SharePosting> row, long amount, String positiveDirection, String sourceId, String entity,
+                               String sourceType, String prefix) {
+        if (amount != 0L) {
+            String direction = amount > 0L ? positiveDirection : "payable".equals(positiveDirection) ? "receivable" : "payable";
+            row.add(new SharePosting(direction, sourceId, entity, Math.abs(amount), sourceType, prefix));
+        }
+    }
+
+    /** 一笔组合通票域间往来。 */
+    private record SharePosting(String direction, String sourceId, String entityId, long amountCent, String sourceType,
+                                String prefix) {
     }
 
     /**

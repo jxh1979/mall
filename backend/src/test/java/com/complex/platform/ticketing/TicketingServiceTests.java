@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.11
+// 文件版本：V0.12
 
 // 文件版本：V0.03
 
@@ -320,8 +320,11 @@ class TicketingServiceTests {
     private void bindBarGift(String ticketTypeId, String barMerchantId, String tag, int quantity, int totalTimes,
                              long componentPriceCent, String costBearer) {
         ticketingRepository.merchantTypes.put(barMerchantId, "bar");
+        // 第十八批 AI 段 236-R2：赠酒商品引用的内部结算价目录条目已获批生效。
         ticketingRepository.barProducts.put("k17-prod-" + tag,
-                new BarProductRefRecord("k17-prod-" + tag, barMerchantId, 4200L, null, false, "active"));
+                new BarProductRefRecord("k17-prod-" + tag, barMerchantId, 4200L, null, false, "active", "k17-sku-" + tag));
+        ticketingRepository.catalogPrices.put("k17-sku-" + tag,
+                new TicketingRepository.CatalogPriceRef(barMerchantId, 4200L, "ipc-k17-" + tag));
         EntitlementTemplateRecord gift = service.createEntitlementTemplate(new EntitlementTemplateRequest(
                 "k17-tpl-gift-" + tag, "gift", List.of(), tag + " 赠酒", "gift_drink", 1, 0L, "active",
                 "k17-prod-" + tag, barMerchantId, null, null));
@@ -473,7 +476,8 @@ class TicketingServiceTests {
         // 漏标不再默认平台出资型——否则运营漏标一个商户让利型赠品，平台就替商户多付一笔预估成本。
         TicketTypeRecord tt = createTicketType("cb-bind");
         ticketingRepository.barProducts.put("cb-prod",
-                new BarProductRefRecord("cb-prod", "mch_cb_bar", 4200L, null, false, "active"));
+                new BarProductRefRecord("cb-prod", "mch_cb_bar", 4200L, null, false, "active", "cb-sku"));
+        ticketingRepository.catalogPrices.put("cb-sku", new TicketingRepository.CatalogPriceRef("mch_cb_bar", 4200L, "ipc-cb"));
         EntitlementTemplateRecord gift = service.createEntitlementTemplate(new EntitlementTemplateRequest(
                 "cb-tpl-gift", "gift", List.of(), "赠酒一杯", "gift_drink", 1, 0L, "active",
                 "cb-prod", "mch_cb_bar", null, null));
@@ -3897,7 +3901,7 @@ class TicketingServiceTests {
                         v.clientTaskId(), before, v.nonce(), v.staffId(), v.merchantId(), v.windowValid(), v.signatureValid(),
                         v.verifiedPeople(), v.reversesVerificationId(), v.reversedBy(), v.reversedAt(), v.settlementPriceCent(),
                         v.amusementVerificationId(), v.anomalyOfVerificationId(), v.anomalyResolution(), v.anomalyResolvedBy(),
-                        v.anomalyResolvedAt(), v.anomalyResolutionReason()));
+                        v.anomalyResolvedAt(), v.anomalyResolutionReason(), v.settlementCatalogEntryId()));
     }
 
     private IssuedEntitlementRecord issueSingleEntitlement(String key) {
@@ -4057,6 +4061,11 @@ class TicketingServiceTests {
         final Map<String, String> deviceMerchants = new LinkedHashMap<>();
         @Override public java.util.Optional<BarProductRefRecord> findBarProductRef(String id) {
             return java.util.Optional.ofNullable(barProducts.get(id));
+        }
+        // 第十八批 AI 段 236-R2：内部结算价目录生效行（item_code → 生效行）；发布与已上架加权益要求提供方价已获批。
+        final Map<String, CatalogPriceRef> catalogPrices = new LinkedHashMap<>();
+        @Override public java.util.Optional<CatalogPriceRef> findActiveCatalogPrice(String itemCode) {
+            return java.util.Optional.ofNullable(catalogPrices.get(itemCode));
         }
         @Override public java.util.Optional<String> findTerminalDeviceMerchantId(String deviceId) {
             return java.util.Optional.ofNullable(deviceMerchants.get(deviceId));

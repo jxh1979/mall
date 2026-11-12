@@ -1,4 +1,4 @@
-// 文件版本：V0.12
+// 文件版本：V0.13
 // 3.8 业务枚举中文化：展示层把后端状态码翻成中文业务口径；提交/请求仍用原码。
 // 未知码原样返回（不阻断展示），新增码逐步补此表即可。
 const STATUS_LABELS: Record<string, string> = {
@@ -439,6 +439,15 @@ const STATUS_LABELS: Record<string, string> = {
   // 第十八批第 2 条：通票分账方案版本（已通告）与逐份分账结果（暂挂后补配续算）。
   notified: "已通告",
   resumed: "已续算",
+  // 第十八批 AI 段 237-R3：通票结算单审阅明细的域内分配方式与明细状态（settlement_items）。
+  by_rank_tier: "按销售排名档位",
+  by_venue_per_guest: "按每客单价",
+  by_fixed_amount: "按固定额",
+  exclusive_full: "专属直付",
+  exclusive_recovery: "专属直付追收",
+  pooled_recovery: "分池追收",
+  pooled_resume: "暂挂续算",
+  posted: "已入账",
 };
 
 export function formatBusinessStatus(code: string | null | undefined): string {

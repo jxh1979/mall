@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -171,7 +171,8 @@ final class JdbcTicketingParameterSource {
                 .addValue("reversed_by", verification.reversedBy())
                 .addValue("reversed_at", timestampWithTimeZone(verification.reversedAt()))
                 .addValue("settlement_price_cent", verification.settlementPriceCent())
-                .addValue("amusement_verification_id", verification.amusementVerificationId());
+                .addValue("amusement_verification_id", verification.amusementVerificationId())
+                .addValue("settlement_catalog_entry_id", verification.settlementCatalogEntryId());
     }
 
     MapSqlParameterSource priceRuleParameters(TicketPriceRuleRecord rule) {

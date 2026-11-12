@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -60,6 +60,7 @@ class PassBarGiftFloorJdbcIntegrationTests {
     private final String project = "prj_c215_" + suffix;
     private final String bar = "bar_c215_" + suffix;
     private final String product = "bp_c215_" + suffix;
+    private final String catalogCode = "sku_c215_" + suffix;
     private final String admin = "usr_c215_admin_" + suffix;
     private final List<String> ticketTypes = new ArrayList<>();
     private final List<String> templates = new ArrayList<>();
@@ -70,10 +71,14 @@ class PassBarGiftFloorJdbcIntegrationTests {
                 + " VALUES (?, 'complex', '赠酒下限综合体', 'active', now(), now())", project);
         jdbc.update("INSERT INTO merchants (id, merchant_name, merchant_type, status, project_id, created_at, updated_at)"
                 + " VALUES (?, ?, 'bar', 'active', ?, now(), now())", bar, "赠酒下限酒吧" + n, project);
+        // 第十八批 AI 段 236-R2（ENUM:54「任何商户在没有获批内部结算价之前，不得为其开通需要该价格结算的权益或券」）：赠酒商品引用已获批生效的目录条目。
+        jdbc.update("INSERT INTO internal_price_catalog (id, item_code, merchant_id, category, item_name, price_cent, status, is_draft,"
+                + " updated_by, created_at, updated_at) VALUES (?, ?, ?, 'beverage', '赠酒一杯', 2000, 'active', FALSE, 'seed_c215', now(), now())",
+                catalogCode, catalogCode, bar);
         jdbc.update("INSERT INTO bar_products (id, bar_id, product_name, product_type, price_cent, currency, inventory_item_id,"
-                + " stock_location_id, stock_deduction_required, status, internal_settlement_price_cent, created_at, updated_at)"
-                + " VALUES (?, ?, '赠酒一杯', 'beverage', 3800, 'CNY', NULL, 'default', FALSE, 'active', 2000, now(), now())",
-                product, bar);
+                + " stock_location_id, stock_deduction_required, status, internal_settlement_price_cent, catalog_item_code, created_at, updated_at)"
+                + " VALUES (?, ?, '赠酒一杯', 'beverage', 3800, 'CNY', NULL, 'default', FALSE, 'active', 2000, ?, now(), now())",
+                product, bar, catalogCode);
         String roleId = "role_" + admin;
         jdbc.update("INSERT INTO access_users (id, username, account_type, organization_id, merchant_id, status, created_at)"
                 + " VALUES (?, ?, 'platform_admin', 'org_1', NULL, 'active', now())", admin, admin);
@@ -95,6 +100,7 @@ class PassBarGiftFloorJdbcIntegrationTests {
             jdbc.update("DELETE FROM entitlement_templates WHERE id = ?", template);
         }
         jdbc.update("DELETE FROM bar_products WHERE id = ?", product);
+        jdbc.update("DELETE FROM internal_price_catalog WHERE item_code = ?", catalogCode);
         jdbc.update("UPDATE projects SET status = 'suspended' WHERE id = ?", project);
     }
 

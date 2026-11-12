@@ -1,4 +1,4 @@
-// 文件版本：V0.05
+// 文件版本：V0.06
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -509,7 +509,7 @@ describe("SettlementConfigPage 付账日与钱路指派", () => {
     vi.unstubAllGlobals();
   });
 
-  it("提交钱路指派规则请求体为蛇形 {route, statement_day, pay_slot, effective_from}；待审规则可审批；补偿应付钱路可选", async () => {
+  it("提交钱路指派规则请求体为蛇形 {route, statement_day, pay_slot, effective_from}；待审规则可审批；补偿应付与通票域间往来钱路可选", async () => {
     const calls: { url: string; method: string; body: Record<string, unknown> | null }[] = [];
     const ok = (data: unknown) => new Response(JSON.stringify({ success: true, code: "OK", message: "success", data }),
       { status: 200, headers: { "content-type": "application/json" } });
@@ -530,7 +530,10 @@ describe("SettlementConfigPage 付账日与钱路指派", () => {
       setActionResult={vi.fn()} setGlobalError={vi.fn()} effectivePermissions={ADMIN_PERMS} />);
 
     await waitFor(() => expect(screen.queryByTestId("internal-pay-day-rule-ipdr-1")).not.toBeNull());
-    expect(Array.from((screen.getByTestId("internal-pay-day-route") as HTMLSelectElement).options).map((o) => o.textContent)).toContain("补偿新增履约结算");
+    const routeOptions = Array.from((screen.getByTestId("internal-pay-day-route") as HTMLSelectElement).options).map((o) => o.textContent);
+    expect(routeOptions).toContain("补偿新增履约结算");
+    // 第十八批 AI 段 214-R1、214-R2：组合通票各域份额三个钱路须财务先定付账日规则才能过账（上线前配置前提），钱路可选。
+    expect(routeOptions).toEqual(expect.arrayContaining(["通票域间份额", "通票餐饮零售代付", "通票到期未核销归属"]));
     fireEvent.change(screen.getByTestId("internal-pay-day-route"), { target: { value: "ticket_distribution" } });
     fireEvent.change(screen.getByTestId("internal-pay-day-statement-day"), { target: { value: "3" } });
     fireEvent.change(screen.getByTestId("internal-pay-day-slot"), { target: { value: "3" } });

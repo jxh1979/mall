@@ -1,4 +1,4 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
@@ -30,6 +30,9 @@ export type SettlementRow = {
   verifiedAmountCent: number;
   settlementStatus: string | null;
   createdAt: string;
+  // 第十八批 AI 段 236-R1（BSM 第 1754 行「每项权益都必须绑定实际提供方和审批版本」；ENUM 第 54 行「核销或结算时锁定当时版本」）：
+  //   核销所用内部结算价目录行（审批版本）；不按内部结算价结算的为空。
+  settlementCatalogEntryId: string | null;
 };
 
 // S4:月度结算单头(财务对账视角)。金额带符号——负数月 = 冲正多于新核销,当月净追回。
@@ -67,9 +70,34 @@ export type SettlementBillRow = {
   giftVarianceCent: number;
 };
 
+// 第十八批 AI 段 237-R3（BSM 第 1754 行「通票结算审阅财务侧设置独立审阅台账，按项目、经营域、责任主体和实际提供方列明第三方渠道费用、
+//   域间份额、域内分配、内部结算价权益、酒吧入场可分配池和责任主体承担的差额」）：月度结算单审阅明细，后端 GET /api/v1/settlement/bills/{id}/review。
+type DomainShareRow = {
+  businessFormat: string; beneficiaryKind: string; beneficiaryEntityId: string | null; beneficiaryEntityName: string | null;
+  grossRevenueCent: number; channelFeeCent: number; routeFeeCent: number; compServiceFeeCent: number; giftCostCent: number;
+  giftActualPaidCent: number; netRevenueCent: number; interEntityNetCent: number; unverifiedNetCent: number;
+  internalSettledCent: number; differenceCent: number | null;
+};
+type AllocationRow = {
+  merchantId: string; merchantName: string | null; businessFormat: string; distributionMethod: string; verifiedCount: number;
+  guestCount: number; rankNo: number | null; finalAmountCent: number; singleBarRouteFeeCent: number; singleBarChannelFeeCent: number;
+  status: string;
+};
+type ProviderPriceRow = {
+  merchantId: string; merchantName: string | null; businessFormat: string;
+  giftDrinkPaidCent: number; paidDirectSettledCent: number; freeDirectSettledCent: number;
+};
+export type SettlementBillReview = {
+  domainShares: DomainShareRow[]; allocations: AllocationRow[]; internalPriceByProvider: ProviderPriceRow[];
+};
+
 function centToYuan(cent: number | undefined | null): string {
   if (cent === undefined || cent === null || Number.isNaN(Number(cent))) return "—";
   return new Intl.NumberFormat("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(cent) / 100);
+}
+
+function yuanCell(cent: number | null, testid?: string) {
+  return <td className="admin-num" style={{ textAlign: "right" }} data-testid={testid}>{centToYuan(cent)}</td>;
 }
 
 export function SettlementReviewPage({ api, setGlobalError, navigateTo }: AdminPageProps) {
@@ -103,6 +131,15 @@ export function SettlementReviewPage({ api, setGlobalError, navigateTo }: AdminP
   }, [api]);
   React.useEffect(() => { loadBills(); }, [loadBills]);
 
+  // 237-R3：点某张结算单的「审阅明细」，在结算单表下展开三表；后点的单覆盖先点的，迟到的旧响应不覆盖。
+  const [review, setReview] = React.useState<{ bill: SettlementBillRow; data: SettlementBillReview | null; error: string | null } | null>(null);
+  function openReview(bill: SettlementBillRow) {
+    setReview({ bill, data: null, error: null });
+    api.get<SettlementBillReview>(`/api/v1/settlement/bills/${encodeURIComponent(bill.id)}/review`)
+      .then((data) => setReview((cur) => (cur?.bill.id === bill.id ? { bill, data, error: null } : cur)))
+      .catch(() => setReview((cur) => (cur?.bill.id === bill.id ? { bill, data: null, error: "审阅明细读取失败" } : cur)));
+  }
+
   function isOverPool(bill: SettlementBillRow): boolean {
     return bill.pooledDistributedCent > bill.availablePoolCent;
   }
@@ -134,6 +171,7 @@ export function SettlementReviewPage({ api, setGlobalError, navigateTo }: AdminP
         { label: "核销张数", value: String(row.verifiedCount) },
         { label: "人数", value: String(row.numPeople) },
         { label: "核销金额", value: `¥${centToYuan(row.verifiedAmountCent)}` },
+        { label: "内部结算价版本", value: row.settlementCatalogEntryId ?? "—" },
         { label: "结算状态", value: formatBusinessStatus(row.settlementStatus ?? "—") },
         { label: "发生时间", value: cnDate(row.createdAt) },
       ],
@@ -152,7 +190,7 @@ export function SettlementReviewPage({ api, setGlobalError, navigateTo }: AdminP
 
   return (
     <section data-testid="settlement-review-page">
-      <AdminPageHeader title="通票结算审阅" description="查看通票核销结算流水与月度结算单。流水只读，确认与入账由月度结算负责；第一段合计超过份池的部分由娱乐平台公司承担，结算不设超池待审批。" />
+      <AdminPageHeader title="通票结算审阅" description="查看通票核销结算流水与月度结算单；月度结算单的审阅明细按经营域、责任主体和实际提供方列明第三方渠道费用、域间份额、域内分配与内部结算价权益。流水只读，确认与入账由月度结算负责；第一段合计超过份池的部分由娱乐平台公司承担，结算不设超池待审批。" />
       <AdminDataState loading={rows.loading} error={rows.error} empty={empty} onRetry={rows.reload}>
         <div className="admin-kpi-grid" data-testid="settlement-review-summary">
           <div className="admin-kpi-card"><span>结算笔数</span><strong className="admin-kpi-value--text" data-testid="settlement-review-kpi-count">{countDisplay}</strong><small>{noFilter ? "平台全量" : "当前筛选"}{noFilter && countKpi.status === "ready" ? <MetricDetailLink navigateTo={navigateTo} metric="settlement.transaction_count" testid="settlement-review-metric-detail-count" /> : null}</small></div>
@@ -205,7 +243,7 @@ export function SettlementReviewPage({ api, setGlobalError, navigateTo }: AdminP
             </p>
             <div className="admin-table-scroll">
               <table className="admin-table" data-testid="settlement-review-bills-table">
-                <thead><tr><th>结算月</th><th>项目</th><th>通票收入（元）</th><th>通路费（元）</th><th>销售渠道费（元）</th><th>综合服务费·池链（元）</th><th>综合服务费·专属（元）</th><th>服务费归属</th><th>赠付预扣（元）</th><th>赠付实付（元）</th><th>赠付差额（元）</th><th>可分配池（元）</th><th>已分配（元）</th><th>分账尾差（元）</th><th>未分配池余额（元）</th><th>通票未核销减除额（归属主体）</th><th>暂挂（元）</th><th>状态</th><th>超池（元，娱乐平台公司承担）</th></tr></thead>
+                <thead><tr><th>结算月</th><th>项目</th><th>通票收入（元）</th><th>通路费（元）</th><th>销售渠道费（元）</th><th>综合服务费·池链（元）</th><th>综合服务费·专属（元）</th><th>服务费归属</th><th>赠付预扣（元）</th><th>赠付实付（元）</th><th>赠付差额（元）</th><th>可分配池（元）</th><th>已分配（元）</th><th>分账尾差（元）</th><th>未分配池余额（元）</th><th>通票未核销减除额（归属主体）</th><th>暂挂（元）</th><th>状态</th><th>超池（元，娱乐平台公司承担）</th><th>审阅明细</th></tr></thead>
                 <tbody>{bills.map((bill) => (
                   <tr key={bill.id} data-testid={`settlement-review-bill-${bill.id}`}>
                     <td>{bill.periodStart?.slice(0, 7) ?? "—"}</td>
@@ -229,10 +267,85 @@ export function SettlementReviewPage({ api, setGlobalError, navigateTo }: AdminP
                     <td className="admin-num" style={{ textAlign: "right" }} data-testid={`settlement-bill-suspended-${bill.id}`}>{centToYuan(bill.poolSuspendedCent)}</td>
                     <td>{formatBusinessStatus(bill.status ?? "—")}</td>
                     <td className="admin-num" style={{ textAlign: "right" }} data-testid={`settlement-bill-overpool-amount-${bill.id}`}>{isOverPool(bill) ? centToYuan(overPoolCent(bill)) : "—"}</td>
+                    <td><button type="button" className="admin-row-detail-btn" data-testid={`settlement-bill-review-${bill.id}`} onClick={() => openReview(bill)}>审阅明细</button></td>
                   </tr>
                 ))}</tbody>
               </table>
             </div>
+            {review ? (
+              <div data-testid="settlement-review-detail">
+                <h4>审阅明细 · {review.bill.periodStart?.slice(0, 7) ?? "—"} · {review.bill.projectId ?? "平台默认"}</h4>
+                {review.error ? <p className="admin-muted-action">{review.error}</p> : review.data === null ? <p className="admin-muted-action">读取中…</p> : (
+                  <>
+                    <h5>经营域份额</h5>
+                    <p className="admin-muted-action">责任主体承担的差额＝业态净份额减内部结算价直付，为负由责任主体承担，为正归其所得；到期未核销归属＝该域份额中从未核销、到期的部分。</p>
+                    {review.data.domainShares.length === 0 ? <p className="admin-muted-action">本单没有经营域份额</p> : (
+                      <div className="admin-table-scroll">
+                        <table className="admin-table" data-testid="settlement-review-domain-shares">
+                          <thead><tr><th>经营域</th><th>责任主体</th><th>毛额（元）</th><th>第三方渠道费用（元）</th><th>通路费（元）</th><th>门票综合服务费（元）</th><th>赠送权益预估成本（元）</th><th>赠付实付（元）</th><th>业态净份额（元）</th><th>域间份额（元）</th><th>到期未核销归属（元）</th><th>内部结算价直付（元）</th><th>责任主体承担的差额（元）</th></tr></thead>
+                          <tbody>{review.data.domainShares.map((s) => (
+                            <tr key={s.businessFormat}>
+                              <td data-testid={`settlement-share-format-${s.businessFormat}`}>{formatBusinessStatus(s.businessFormat)}</td>
+                              <td>{s.beneficiaryEntityName ?? (s.beneficiaryKind === "per_merchant" ? "各提供商户" : "归属未配置")}</td>
+                              {yuanCell(s.grossRevenueCent)}
+                              {yuanCell(s.channelFeeCent)}
+                              {yuanCell(s.routeFeeCent)}
+                              {yuanCell(s.compServiceFeeCent)}
+                              {yuanCell(s.giftCostCent)}
+                              {yuanCell(s.giftActualPaidCent)}
+                              {yuanCell(s.netRevenueCent)}
+                              {yuanCell(s.interEntityNetCent, `settlement-share-inter-entity-${s.businessFormat}`)}
+                              {yuanCell(s.unverifiedNetCent, `settlement-share-unverified-${s.businessFormat}`)}
+                              {yuanCell(s.internalSettledCent)}
+                              {yuanCell(s.differenceCent, `settlement-share-difference-${s.businessFormat}`)}
+                            </tr>
+                          ))}</tbody>
+                        </table>
+                      </div>
+                    )}
+                    <h5>域内分配</h5>
+                    {review.data.allocations.length === 0 ? <p className="admin-muted-action">本单没有域内分配明细</p> : (
+                      <div className="admin-table-scroll">
+                        <table className="admin-table" data-testid="settlement-review-allocations">
+                          <thead><tr><th>实际提供方</th><th>业态</th><th>分配方式</th><th>核销次数</th><th>人数</th><th>名次</th><th>金额（元）</th><th>单店门票销售渠道费（元）</th><th>单店门票通路费（元）</th><th>状态</th></tr></thead>
+                          <tbody>{review.data.allocations.map((a) => (
+                            <tr key={`${a.merchantId}-${a.distributionMethod}`}>
+                              <td>{a.merchantName ?? a.merchantId}</td>
+                              <td>{formatBusinessStatus(a.businessFormat)}</td>
+                              <td>{formatBusinessStatus(a.distributionMethod)}</td>
+                              <td className="admin-num" style={{ textAlign: "right" }}>{a.verifiedCount}</td>
+                              <td className="admin-num" style={{ textAlign: "right" }}>{a.guestCount}</td>
+                              <td className="admin-num" style={{ textAlign: "right" }}>{a.rankNo ?? "—"}</td>
+                              {yuanCell(a.finalAmountCent)}
+                              {yuanCell(a.singleBarChannelFeeCent, `settlement-allocation-channel-fee-${a.merchantId}-${a.distributionMethod}`)}
+                              {yuanCell(a.singleBarRouteFeeCent, `settlement-allocation-route-fee-${a.merchantId}-${a.distributionMethod}`)}
+                              <td>{formatBusinessStatus(a.status)}</td>
+                            </tr>
+                          ))}</tbody>
+                        </table>
+                      </div>
+                    )}
+                    <h5>内部结算价权益（按实际提供方）</h5>
+                    {review.data.internalPriceByProvider.length === 0 ? <p className="admin-muted-action">本单没有内部结算价权益</p> : (
+                      <div className="admin-table-scroll">
+                        <table className="admin-table" data-testid="settlement-review-internal-price">
+                          <thead><tr><th>实际提供方</th><th>业态</th><th>赠饮内部结算价应付（元）</th><th>有价权益按内部结算价直付（元）</th><th>零元平台出资权益直付（元，娱乐平台公司承担）</th></tr></thead>
+                          <tbody>{review.data.internalPriceByProvider.map((p) => (
+                            <tr key={p.merchantId}>
+                              <td>{p.merchantName ?? p.merchantId}</td>
+                              <td>{formatBusinessStatus(p.businessFormat)}</td>
+                              {yuanCell(p.giftDrinkPaidCent, `settlement-provider-gift-${p.merchantId}`)}
+                              {yuanCell(p.paidDirectSettledCent, `settlement-provider-paid-${p.merchantId}`)}
+                              {yuanCell(p.freeDirectSettledCent, `settlement-provider-free-${p.merchantId}`)}
+                            </tr>
+                          ))}</tbody>
+                        </table>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            ) : null}
           </div>
         ) : null}
       </AdminDataState>

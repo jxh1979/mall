@@ -1,6 +1,6 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -9,9 +9,14 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.complex.platform.access.AccessActor;
 import com.complex.platform.common.LocalZone;
+import com.complex.platform.support.CustomerTicketPaymentFixture;
+import com.complex.platform.support.StaffRequestFixture;
+import com.complex.platform.support.TicketSalesContractTestFixtures;
 import com.complex.platform.support.TestSecurityActors;
 import com.complex.platform.ticketing.TicketRewardFacts;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.sql.Timestamp;
+import java.time.Instant;
 import java.time.YearMonth;
 import java.util.ArrayList;
 import java.util.List;
@@ -30,6 +35,7 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.test.web.servlet.request.RequestPostProcessor;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -55,6 +61,8 @@ class SingleBarServiceFeeJdbcIntegrationTests {
     @Autowired private ApplicationEventPublisher events;
     @Autowired private TicketDistributionSettlementService settlement;
     @Autowired private SettlementPostingService posting;
+    @Autowired private SingleBarServiceFeeService fees;
+    @Autowired private ObjectMapper json;
 
     private final String suffix = UUID.randomUUID().toString().substring(0, 8);
     private final String project = "fs013_prj_" + suffix;
@@ -173,7 +181,8 @@ class SingleBarServiceFeeJdbcIntegrationTests {
         assertThat(items("receivable", "single_bar_service_fee")).as("原应收与收款不覆盖").hasSize(1);
         Map<String, Object> adjustment = jdbc.queryForMap(
                 "SELECT a.accounting_period, m.billing_month FROM single_bar_service_fee_adjustments a JOIN single_bar_service_fee_months m ON m.id=a.month_id WHERE a.refund_id=?", refundA);
-        assertThat(adjustment.get("accounting_period")).isEqualTo(YearMonth.now(LocalZone.ID).toString());
+        assertThat(adjustment.get("accounting_period")).as("213-R1：当前账期按确认时刻所属该酒吧营业日定月")
+                .isEqualTo(fees.businessMonth(project, bar, Instant.now()).toString());
         assertThat(adjustment.get("billing_month").toString()).isEqualTo(SOLD.atDay(1).toString());
 
         events.publishEvent(new TicketRewardFacts.Refunded(refundB));
@@ -193,7 +202,7 @@ class SingleBarServiceFeeJdbcIntegrationTests {
         Map<String, Object> restated = rows.stream().filter(r -> num(r, "amount_cent") == 7_000L).findFirst().orElseThrow();
         assertThat(num(restated, "unpaid_amount_cent")).isEqualTo(7_000L);
         assertThat(restated.get("origin_item_id")).isNotNull();
-        assertThat(restated.get("accounting_period")).isEqualTo(YearMonth.now(LocalZone.ID).toString());
+        assertThat(restated.get("accounting_period")).isEqualTo(fees.businessMonth(project, bar, Instant.now()).toString());
         assertThat(items("payable", "single_bar_service_fee")).isEmpty();
     }
 
@@ -209,7 +218,96 @@ class SingleBarServiceFeeJdbcIntegrationTests {
         assertThat(items("payable", "single_bar_service_fee")).isEmpty();
     }
 
+    // 第十八批 AI 段 213-R1（BSM:1682「全系统的钱账统一按「营业日」归集」「酒吧仍按每家酒吧配置」；决策台账 FS-013「按客人付款成功（售出）所在月计入」）：
+    //   计费月＝付款成功时刻所属该酒吧营业日的月。出厂营业日 10:00 起算：北京 7 月 1 日 09:30 付款属 6 月 30 日营业日 → 计入 6 月；10:30 → 7 月。
+    @Test
+    void billingMonthFollowsBarBusinessDayOfPaymentOnFirstMorning() throws Exception {
+        RequestPostProcessor seller = publishForSale();
+        String early = sellOverHttp(seller, Instant.parse("2026-07-01T01:30:00Z"));
+        String late = sellOverHttp(seller, Instant.parse("2026-07-01T02:30:00Z"));
+
+        assertThat(billingMonth(early)).as("北京 7-01 09:30 付款属 6-30 营业日，计入 6 月").isEqualTo("2026-06-01");
+        assertThat(billingMonth(late)).as("北京 7-01 10:30 付款属 7-01 营业日").isEqualTo("2026-07-01");
+    }
+
+    // 213-R1：该酒吧已批准营业日起点 12:00 时按该酒吧的版本定月：北京 7 月 1 日 11:00 付款仍属 6 月 30 日营业日。
+    @Test
+    void billingMonthUsesTheBarsApprovedBusinessDayStart() throws Exception {
+        Instant effective = Instant.parse("2026-01-01T00:00:00Z");
+        jdbc.update("""
+                INSERT INTO bar_business_day_configs(id,bar_id,project_id,version,cutoff_hour,min_cutoff_hour,max_cutoff_hour,
+                  close_hour,min_close_hour,max_close_hour,effective_at,status,reason,created_by,created_at,decided_by,decided_at)
+                VALUES(?,?,?,'V0.01',12,0,23,7,0,23,?,'approved','单店服务费营业日回归','fs013_requester',?,'usr_master',?)
+                """, "bbd_fs013_" + suffix, bar, project, Timestamp.from(effective),
+                Timestamp.from(effective.minusSeconds(7200)), Timestamp.from(effective.minusSeconds(3600)));
+        RequestPostProcessor seller = publishForSale();
+
+        String order = sellOverHttp(seller, Instant.parse("2026-07-01T03:00:00Z"));
+
+        assertThat(billingMonth(order)).as("酒吧 12:00 起算：北京 7-01 11:00 属 6-30 营业日").isEqualTo("2026-06-01");
+    }
+
+    // 213-R1：退款调整的当前账期与售出计费月共用同一营业日定月（BSM:755「在当前账期生成关联原计费月的调整」）。
+    @Test
+    void businessMonthOfFirstMorningBeforeDayStartIsThePreviousMonth() {
+        assertThat(fees.businessMonth(project, bar, Instant.parse("2026-07-01T01:00:00Z"))).isEqualTo(YearMonth.of(2026, 6));
+        assertThat(fees.businessMonth(project, bar, Instant.parse("2026-07-01T02:00:00Z"))).isEqualTo(YearMonth.of(2026, 7));
+    }
+
     // ───────── helpers ─────────
+
+    /** 213-R1 真实售票链：单店票种已发布（每张 8000 分、一次入场）且有已批准销售合同；平台员工按后台网页下单、登记现金、出票。 */
+    private RequestPostProcessor publishForSale() {
+        jdbc.update("UPDATE ticket_types SET base_calendar_price_mode='flat', weekday_price_cent=8000, weekend_price_cent=8000,"
+                + " holiday_price_cent=8000, stock_required=FALSE, status='published', validity_days=1 WHERE id=?", type);
+        String entry = "fs013_entry_" + suffix;
+        jdbc.update("INSERT INTO entitlement_templates(id,name,entitlement_type,default_total_times,default_value_cent,status,merchant_id,"
+                + "entitlement_kind,consumption_window,created_at,updated_at) VALUES(?,'单店入场','entry',1,8000,'active',?,'virtual','per_use',now(),now())",
+                entry, bar);
+        jdbc.update("INSERT INTO ticket_type_entitlements(id,ticket_type_id,entitlement_template_id,quantity,total_times,num_people,"
+                + "value_amount_cent,component_price_cent,created_at,updated_at) VALUES(?,?,?,1,1,1,8000,8000,now(),now())",
+                "fs013_bind_" + suffix, type, entry);
+        TicketSalesContractTestFixtures.approvedPublished(jdbc, json, type, project, bar);
+        return new StaffRequestFixture(jdbc).staff("fs013_seller_" + suffix, "staff", project, null,
+                "ticket.order.create", "ticket.order.read", "finance.payment_intent.create", "finance.payment.register", "ticket.ticket.issue");
+    }
+
+    /** 按后台网页请求体（蛇形键）下单、登记现金收款、确认收款后出票；出票前把付款成功时刻固定到指定时点（服务端取确认收款时刻）。 */
+    private String sellOverHttp(RequestPostProcessor seller, Instant paidAt) throws Exception {
+        String key = "fs013-bd-" + suffix + "-" + (++seq);
+        ResultActions created = mockMvc.perform(post("/api/v1/ticketing/orders").with(seller).contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"idempotency_key": "%s-order", "ticket_type_id": "%s", "quantity": 1, "sales_channel": "admin", "bar_id": "%s"}
+                                """.formatted(key, type, bar)))
+                .andExpect(status().isOk());
+        String order = CustomerTicketPaymentFixture.read(created, "$.data.id");
+        String amount = CustomerTicketPaymentFixture.read(created, "$.data.amount_cent");
+        String intent = CustomerTicketPaymentFixture.read(mockMvc.perform(post("/api/v1/ticketing/orders/" + order + "/pay-intents")
+                        .with(seller).contentType(MediaType.APPLICATION_JSON).content("""
+                                {"idempotency_key": "%s-intent", "business_order_type": "ticket_order", "business_order_id": "%s",
+                                 "amount_cent": %s, "currency": "CNY", "channel": "cash"}
+                                """.formatted(key, order, amount)))
+                .andExpect(status().isOk()), "$.data.id");
+        mockMvc.perform(post("/api/v1/ticketing/orders/" + order + "/confirm-payment").with(seller)
+                        .contentType(MediaType.APPLICATION_JSON).content("""
+                                {"idempotency_key": "%s-confirm", "payment_intent_id": "%s"}
+                                """.formatted(key, intent)))
+                .andExpect(status().isOk());
+        jdbc.update("UPDATE ticket_orders SET paid_at=? WHERE id=?", Timestamp.from(paidAt), order);
+        mockMvc.perform(post("/api/v1/ticketing/orders/" + order + "/issue").with(seller)
+                        .contentType(MediaType.APPLICATION_JSON).content("""
+                                {"idempotency_key": "%s-issue", "reason": "客人在前台补票"}
+                                """.formatted(key)))
+                .andExpect(status().isOk());
+        return order;
+    }
+
+    private String billingMonth(String order) {
+        return jdbc.queryForObject("""
+                SELECT DISTINCT m.billing_month::text FROM single_bar_service_fee_months m
+                  JOIN single_bar_service_fee_tickets t ON t.month_id = m.id WHERE t.order_id = ?
+                """, String.class, order);
+    }
 
     /** 售出并出票：订单付款成功在售出月，出票事实发布后由结算域逐票锁定。权益分摊额刻意给 30000（≠ 客人实付分摊）。 */
     private List<String> sell(int quantity, long amountCent) {

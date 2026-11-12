@@ -1,6 +1,6 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -243,6 +243,8 @@ class PassPoolSnapshotJdbcIntegrationTests {
      * 单一酒吧门票按真实出票链（{@link TicketOrderService#issuePaidOrderAutomatically}）出票：后台通用权益模板不填商户与专属商户，
      * 出票时权益商户回退为订单酒吧、专属商户为空。核销后月结，已核销票款按专属直付结付给订单上的那家酒吧（ENUM L32「单一酒吧门票……
      * 票款由娱乐平台公司统一收款后结付给该酒吧商户」），不进可分配池与未分配池余额；综合服务费售出时已另行锁定（FS-013），不从票款里扣。
+     * 第十八批 AI 段 212-R1（ENUM:51「所有支付都会产生通路费、官方渠道同样产生」「不由该笔业务的收款主体单独承担」）：本单通路费 60 从该酒吧直付额先扣，
+     * 官方渠道（app）不扣销售渠道费。
      */
     @Test
     void singleBarTicketVerifiedRevenueIsPaidDirectToOrderBar() {
@@ -269,9 +271,11 @@ class PassPoolSnapshotJdbcIntegrationTests {
 
         String bill = settlement.settleMonth(project, YearMonth.of(2016, 5));
 
-        assertThat(jdbc.queryForList("SELECT final_amount_cent FROM settlement_items WHERE bill_id = ? AND merchant_id = ?"
-                        + " AND distribution_method = 'exclusive_full'", Long.class, bill, barA))
-                .as("订单酒吧拿到已核销票款 10000").containsExactly(10_000L);
+        Map<String, Object> item = jdbc.queryForMap("SELECT * FROM settlement_items WHERE bill_id = ? AND merchant_id = ?"
+                + " AND distribution_method = 'exclusive_full'", bill, barA);
+        assertThat(num(item, "final_amount_cent")).as("订单酒吧拿到已核销票款 10000 − 本单通路费 60").isEqualTo(9_940L);
+        assertThat(num(item, "single_bar_route_fee_cent")).isEqualTo(60L);
+        assertThat(num(item, "single_bar_channel_fee_cent")).as("官方渠道不扣销售渠道费").isZero();
         Map<String, Object> row = jdbc.queryForMap("SELECT * FROM settlement_bills WHERE id = ?", bill);
         assertThat(num(row, "available_pool_cent")).as("不进可分配池").isZero();
         assertThat(num(row, "pool_undistributed_cent")).as("不进未分配池余额").isZero();
