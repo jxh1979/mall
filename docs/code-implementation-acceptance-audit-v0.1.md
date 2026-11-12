@@ -47,7 +47,7 @@
 ## 5. 验证证据
 
 - `npm run verify:p0`：通过。
-- `npm run verify:delivery-gates`：未通过。2026-11-11 20:58 UTC 在工作树逐项跑子项（总链遇红即停），仍红：`verify:coding-host-protection`（写死主仓路径；用 `COMPLEX_EXPECTED_CODING_REPO_ROOT` 指向工作树复跑仍红在基线文档与证据里的 canonical_repo_root）、`verify:final-closed-loop-audit`（只剩 integration-ready、business-acceptance-ready 两条就绪结论校验，运行验收未就绪）；`verify:nas-current-state-drift`、`verify:nas-diagnostics` 的现场探测未跑；其余子项通过（同终验 §7「交付总闸口」一行）。
+- `npm run verify:delivery-gates`：未通过。2026-11-12 00:52 UTC 在工作树逐项跑子项（总链遇红即停），仍红：`verify:coding-host-protection`（写死主仓路径；用 `COMPLEX_EXPECTED_CODING_REPO_ROOT` 指向工作树复跑仍红在基线文档与证据里的 canonical_repo_root）、`verify:final-closed-loop-audit`（只剩 integration-ready、business-acceptance-ready 两条就绪结论校验，运行验收未就绪）；`verify:nas-current-state-drift`、`verify:nas-diagnostics` 的现场探测未跑；其余子项通过（同终验 §7「交付总闸口」一行）。
 - `npm run verify:ui`：47 条 Playwright 用例（源码定义计数），常规界面验收（接口全部 mock）实跑 40 条通过，覆盖完整后台 MVP、非首批页面、视觉回归、移动端、错误态和角色权限路径。
 - `npm run verify:ui:real-backend:seeded`：3 条，按第十八批裁决 25 未跑。
 - `security-scans/semgrep-latest-summary.json`：scan_ref=`security-scans/semgrep-20260617-044736-p-default.json`，results=0，errors=0，paths_scanned=1033。
