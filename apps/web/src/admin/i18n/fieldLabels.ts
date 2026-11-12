@@ -1,4 +1,4 @@
-// 文件版本：V0.30
+// 文件版本：V0.31
 // OBS-14-02 后台结果区字段中文名字典（PGM「全局原则 · 界面全中文（所有终端零英文）」）。
 // 键用后端 JSON 的蛇形写法；结果区查表时蛇形与驼峰同查（orderId / order_id 都命中 order_id）。
 // 与后端字段中文名表 FieldLabels.java（common.api 包）同键同名：前段按后端原样抄录，后端改名这里跟着改（门禁会比对）。
@@ -2869,6 +2869,27 @@ export const FIELD_LABELS: Record<string, string> = {
   money: "是否涉钱",
   factory_working_days: "出厂默认（工作日）",
   customized: "后台是否改过",
+  // 第十八批 AI 段 237-R2 通票结算单审阅明细（GET /api/v1/settlement/bills/{id}/review；同 SettlementReviewPage 审阅明细表头）。
+  domain_shares: "经营域份额",
+  internal_price_by_provider: "内部结算价权益（按实际提供方）",
+  beneficiary_kind: "归属方式",
+  beneficiary_entity_id: "责任主体",
+  beneficiary_entity_name: "责任主体名称",
+  gross_revenue_cent: "毛额",
+  comp_service_fee_cent: "门票综合服务费",
+  net_revenue_cent: "业态净份额",
+  inter_entity_net_cent: "域间份额",
+  unverified_net_cent: "到期未核销归属",
+  internal_settled_cent: "内部结算价直付",
+  difference_cent: "责任主体承担的差额",
+  final_amount_cent: "分账金额",
+  single_bar_route_fee_cent: "单店门票通路费",
+  single_bar_channel_fee_cent: "单店门票销售渠道费",
+  gift_drink_paid_cent: "赠饮内部结算价应付",
+  paid_direct_settled_cent: "有价权益按内部结算价直付",
+  free_direct_settled_cent: "零元平台出资权益直付",
+  // 第十八批 AI 段 236-R1 结算流水核销所用内部结算价目录行（GET /api/v1/settlement/transactions；ENUM:54「核销或结算时锁定当时版本」）。
+  settlement_catalog_entry_id: "内部结算价版本",
 };
 
 // 结果对象里页面自定的取值（action 动作码、status 状态码）→ 中文；STATUS_LABELS 已有的码不重复列。
@@ -3473,6 +3494,8 @@ export const KEY_VALUE_LABELS: Record<string, Record<string, string>> = {
     single_bar_service_fee: "单店门票综合服务费", ticket_distribution_recovery: "通票分账追收",
     contract_parking_monthly: "车位月租", parking_fee: "停车费", parking_credit_cost: "停车抵免成本",
     bar_shift_overage: "收银长款（营业外收入）", turnover_rent_reversal: "营业额抽成冲正",
+    // 第十八批 AI 段 214-R1、214-R2：组合通票各域份额主体间往来（同 FinanceArApLedgerPage SOURCE_TYPE_LABELS、后端 AR_AP_SOURCE_TYPE_LABELS）。
+    pass_domain_share: "通票域间份额", pass_domain_direct_settlement: "通票餐饮零售代付", pass_unverified_attribution: "通票到期未核销归属",
   },
 };
 

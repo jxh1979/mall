@@ -41,14 +41,14 @@ class SettlementQueryServiceTests {
             this.offset = offset;
             return List.of(new SettlementTransactionView(
                     "st_1", "STX-1", "prj_a", "mch_a", null, "tt_1", "entry", "merchant",
-                    3, 1, 15000L, "settled", Instant.now()));
+                    3, 1, 15000L, "settled", Instant.now(), null));
         }
     }
 
     @Test
     void clampsPageAndSizeAndComputesOffset() {
         CapturingRepo repo = new CapturingRepo();
-        SettlementQueryService service = new SettlementQueryService(repo, null);
+        SettlementQueryService service = new SettlementQueryService(repo, null, null);
 
         PageResponse<SettlementTransactionView> page = service.listSettlements("prj_a", null, 3, 20);
 
@@ -63,7 +63,7 @@ class SettlementQueryServiceTests {
     @Test
     void clampsNonPositivePageAndOversizeAndBlankFilters() {
         CapturingRepo repo = new CapturingRepo();
-        SettlementQueryService service = new SettlementQueryService(repo, null);
+        SettlementQueryService service = new SettlementQueryService(repo, null, null);
 
         service.listSettlements("  ", "   ", 0, 9999);
 

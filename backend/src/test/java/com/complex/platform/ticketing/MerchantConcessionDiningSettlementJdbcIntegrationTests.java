@@ -1,9 +1,10 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.05
+// 文件版本：V0.06
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -14,6 +15,7 @@ import com.complex.platform.settlement.TicketDistributionSettlementService;
 import com.complex.platform.support.DailyCloseFixture;
 import com.complex.platform.support.InternalPayDayFixtures;
 import com.complex.platform.support.TestSecurityActors;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
@@ -312,6 +314,58 @@ class MerchantConcessionDiningSettlementJdbcIntegrationTests {
         assertThat(usedTimes(code)).isEqualTo(2);
     }
 
+    // 第十八批 AI 段 236-R1（BSM:1754「每项权益都必须绑定实际提供方和审批版本，避免悬空账。」；ENUM:54「价格变更形成新版本并只对后续生效，
+    // 核销或结算时锁定当时版本。」；第十八批裁决 52 ①）：平台出资餐饮行核销记下当时生效的内部结算价目录行（＝审批版本）；该条目改价落草案、
+    // 由另一人复核转正后再核销另一张，记新行、按新价，前一笔不变；商户让利行不结算、不记版本；结算审阅流水带出所用版本。
+    @Test
+    void verificationLocksApprovedCatalogEntryVersionAndReviewListShowsIt() throws Exception {
+        String funded = createAndBind("让利餐厅 · 餐饮（审批版本）", catalogCode, "platform_funded");
+        String before = issue(funded, "v236a");
+        String after = issue(funded, "v236b");
+        String concession = issue(createAndBind("让利餐厅 · 餐饮（商户让利、审批版本）", catalogCode, "merchant_concession"), "v236c");
+        verify(before);
+        verify(concession);
+        assertThat(catalogEntry(before)).isEqualTo(catalogCode);
+        assertThat(catalogEntry(concession)).isNull();
+
+        long n = Long.parseLong(suffix, 16);
+        String pricer = "usr_c236_price_" + suffix;
+        String reviewer = "usr_c236_review_" + suffix;
+        String viewer = "usr_c236_view_" + suffix;
+        user(pricer, "platform_admin", "org_1", null, "内部结算价提交" + n, List.of("settlement.config.manage"));
+        user(reviewer, "platform_admin", "org_1", null, "内部结算价复核" + n, List.of("settlement.config.manage"));
+        user(viewer, "platform_admin", "org_1", null, "结算审阅查看" + n, List.of("finance.settlement.view"));
+        mockMvc.perform(post("/api/v1/settlement/config/internal-price-item").with(session(pricer, "platform_admin", "org_1", null))
+                        .contentType(MediaType.APPLICATION_JSON).content("""
+                                {"idempotency_key": "c236-price-%s", "item_code": "%s", "merchant_id": "%s", "category": "dining",
+                                 "item_name": "套餐", "price_cent": 3500}
+                                """.formatted(suffix, catalogCode, restaurant)))
+                .andExpect(status().isOk());
+        String draft = jdbc.queryForObject("SELECT id FROM internal_price_catalog WHERE item_code = ? AND is_draft = TRUE",
+                String.class, catalogCode);
+        mockMvc.perform(post("/api/v1/settlement/config/internal_price_item/" + draft + "/activate")
+                        .with(session(reviewer, "platform_admin", "org_1", null)))
+                .andExpect(status().isOk());
+
+        verify(after);
+        assertThat(catalogEntry(after)).isEqualTo(draft);
+        assertThat(settlementPrice(after)).isEqualTo(3500L);
+        assertThat(catalogEntry(before)).as("已核销的一笔锁定当时版本，转正后不变").isEqualTo(catalogCode);
+        assertThat(settlementPrice(before)).isEqualTo(CATALOG_PRICE_CENT);
+
+        String body = mockMvc.perform(get("/api/v1/settlement/transactions").param("merchantId", restaurant).param("size", "50")
+                        .with(session(viewer, "platform_admin", "org_1", null)))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+        java.util.Map<String, String> versions = new java.util.HashMap<>();
+        for (JsonNode item : new ObjectMapper().readTree(body).path("data").path("items")) {
+            versions.put(item.path("id").asText(), item.path("settlement_catalog_entry_id").asText(null));
+        }
+        assertThat(versions).containsEntry(transactionId(before), catalogCode)
+                .containsEntry(transactionId(after), draft)
+                .containsEntry(transactionId(concession), null);
+    }
+
     /** 按 TicketingPoliciesPage.createAndBind 餐饮行的请求形状建模板并绑到通票（纯赠送，票面原价 0）。 */
     private String createAndBind(String name, String catalog, String costBearer) throws Exception {
         String templateId = template(name, catalog, costBearer);
@@ -423,6 +477,16 @@ class MerchantConcessionDiningSettlementJdbcIntegrationTests {
     private Long settledAmount(String code) {
         return jdbc.queryForObject("SELECT verified_amount_cent FROM settlement_transactions WHERE entitlement_id = ?",
                 Long.class, "ent_" + code);
+    }
+
+    private String catalogEntry(String code) {
+        return jdbc.queryForObject("SELECT settlement_catalog_entry_id FROM ticket_verifications WHERE entitlement_id = ? AND status = 'success'",
+                String.class, "ent_" + code);
+    }
+
+    private String transactionId(String code) {
+        return jdbc.queryForObject("SELECT id FROM settlement_transactions WHERE entitlement_id = ? AND transaction_type = 'verification_settled'",
+                String.class, "ent_" + code);
     }
 
     private void user(String userId, String accountType, String organizationId, String merchantId, String roleName,

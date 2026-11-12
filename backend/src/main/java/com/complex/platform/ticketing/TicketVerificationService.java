@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.13
+// 文件版本：V0.14
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.amusement.AmusementEntryRequest;
@@ -492,7 +492,7 @@ public class TicketVerificationService {
                 original.entitlementId(), original.entitlementCode(), original.credentialType(), original.credentialPayload(),
                 original.deviceId(), original.pointId(), STATUS_ANOMALY, anomalyReason, "verification_anomaly", null, Instant.now(),
                 null, raisedBy, original.merchantId(), null, null, original.verifiedPeople(), null, null, null, null, null,
-                original.id(), null, null, null, null));
+                original.id(), null, null, null, null, null));
     }
 
     private static final Set<String> ANOMALY_RESOLUTIONS = Set.of("restored", "voided_reversed");
@@ -789,10 +789,11 @@ public class TicketVerificationService {
         markTicketInstanceFirstUse(updated, now);
         // 结算重构批3-1(PRD §6.1)：核销成功 → 判定本次结算价并写入核销记录 settlement_price_cent（供对账/by_entitlement_price 分账）。
         // FS-012：补偿补发权益按履约时目录生效价锁价（含版本），其余照旧。
-        InternalSettlementPriceResolver.VersionedPrice compensationPrice =
-                updated.compensationItemId() == null ? null : compensationPrice(updated);
-        Long settlementPriceCent = updated.compensationItemId() == null ? resolveSettlementPrice(updated)
-                : compensationPrice == null ? null : compensationPrice.priceCent();
+        // 第十八批 AI 段 236-R1（ENUM:54「核销或结算时锁定当时版本」；BSM:1754「每项权益都必须绑定实际提供方和审批版本」）：
+        //   提供方兑付类按内部结算价核销时，所用目录行（＝审批版本）随核销记录落库。
+        InternalSettlementPriceResolver.VersionedPrice lockedPrice =
+                updated.compensationItemId() == null ? resolveSettlementPrice(updated) : compensationPrice(updated);
+        Long settlementPriceCent = lockedPrice == null ? null : lockedPrice.priceCent();
         VerificationRecord verification = repository.saveVerification(new VerificationRecord(
                 "ver_" + UUID.randomUUID().toString().replace("-", ""),
                 "V" + System.currentTimeMillis() + UUID.randomUUID().toString().substring(0, 4).toUpperCase(Locale.ROOT),
@@ -819,7 +820,7 @@ public class TicketVerificationService {
                 null,
                 null,
                 settlementPriceCent
-        ));
+        ).withSettlementCatalogEntryId(lockedPrice == null ? null : lockedPrice.catalogEntryId()));
         // TK-06：扣次成功后同事务——首次留脸落同意并加密绑定父票；该票用完（或已到期）即删除人脸。
         if (facePhotoService != null) {
             facePhotoService.afterUse(updated, pendingFace, verification.id(), verification.deviceId(), now);
@@ -828,7 +829,7 @@ public class TicketVerificationService {
         // customer 域据此把已确认份额对齐 floor(总额 × Σused / Σtotal)（多次/多人票部分核销按张数比例确认）。
         // CG-08b：补偿补发权益的使用不重复产生原人份/次份的积分与成长值（不发积分确认事件），履约锁定到补偿记录。
         if (updated.compensationItemId() != null) {
-            recordCompensationFulfillment(updated, verification, now, compensationPrice);
+            recordCompensationFulfillment(updated, verification, now, lockedPrice);
         } else if (updated.orderId() != null && !updated.orderId().isBlank()) {
             eventPublisher.publishEvent(new TicketRewardFacts.Used(verification.id(), credential == null ? null : credential.id()));
         }
@@ -968,7 +969,8 @@ public class TicketVerificationService {
                 terminalDeviceId,admission.locationPointId(),"success",dayReplay?DAY_REPLAY_REASON:"amusement_verified",
                 "amusement_online",null,now,credential==null?null:credential.nonce(),admission.staffId(),
                 consumed.merchantId(),windowValid,signatureValid,admission.verifiedPeople(),null,null,null,
-                settlementPriceCent,admission.id()));
+                settlementPriceCent,admission.id())
+                .withSettlementCatalogEntryId(compensationPrice==null?null:compensationPrice.catalogEntryId()));
         if(!dayReplay) {
             if(consumed.compensationItemId()!=null)
                 recordCompensationFulfillment(consumed,verification,now,compensationPrice);
@@ -1407,8 +1409,9 @@ public class TicketVerificationService {
      *   <li><b>其余（入场/游乐等）</b>：票面价即分账基准、本就不是成本口径，维持现状（虚拟取签约单价、
      *       否则回退 value_amount_cent），逐分不变。</li>
      * </ul>
+     * 第十八批 AI 段 236-R1：连同所用目录行（＝审批版本）一起返回；非目录取价（商户让利 0、票面价）版本为空，没有票面价时返回 null。
      */
-    private Long resolveSettlementPrice(IssuedEntitlementRecord entitlement) {
+    private InternalSettlementPriceResolver.VersionedPrice resolveSettlementPrice(IssuedEntitlementRecord entitlement) {
         if (InternalSettlementPriceResolver.providerRedeemed(
                 entitlement.entitlementType(), entitlement.entitlementKind(), entitlement.exclusiveMerchantId())) {
             // 第十八批 S 段 156-R1（BSM:751「商户让利的零元免费权益不结算」，BSM:1689 同义）：专属直付的餐饮、零售权益
@@ -1416,21 +1419,22 @@ public class TicketVerificationService {
             //   赠饮没有专属商户，商户让利由 BarGiftConsumer 不挂应付，不走这里。
             if (entitlement.exclusiveMerchantId() != null
                     && TicketTypeEntitlementRecord.COST_BEARER_MERCHANT_CONCESSION.equals(costBearer(entitlement))) {
-                return 0L;
+                return new InternalSettlementPriceResolver.VersionedPrice(0L, null);
             }
             // 批10/E:两支取价统一收口目录——商品支经商品的目录引用,餐饮/零售支经模板的目录引用;
             // 核销时固化的即「当时的目录生效价」(改价转正只影响此后核销,已核销流水一分不动)。
             EntitlementTemplateRecord template = repository
                     .findEntitlementTemplateById(entitlement.entitlementTemplateId()).orElse(null);
-            return priceResolver.require(
+            return priceResolver.requireVersioned(
                     template == null ? null : template.barItemRef(),
                     providerMerchantId(entitlement),
                     template == null ? null : template.catalogItemCode());
         }
         if (KIND_VIRTUAL.equals(entitlement.entitlementKind()) && entitlement.agreementPriceCent() != null) {
-            return entitlement.agreementPriceCent();
+            return new InternalSettlementPriceResolver.VersionedPrice(entitlement.agreementPriceCent(), null);
         }
-        return entitlement.valueAmountCent();
+        return entitlement.valueAmountCent() == null ? null
+                : new InternalSettlementPriceResolver.VersionedPrice(entitlement.valueAmountCent(), null);
     }
 
     /**

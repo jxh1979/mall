@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.governance.MerchantRecord;
@@ -49,6 +49,8 @@ public class TicketCatalogService {
     private final TicketingRepository repository;
     // AUD-076：按 id 取酒吧商户（判业态/存档/取名）。可为 null=兼容既有单测（不校验酒吧、不解析名称）。
     private final BarMerchantDirectory barDirectory;
+    // 第十八批 AI 段 236-R2：同包无状态解析器，发布与加权益时查提供方内部结算价是否已获批生效（与核销取价同一处）。
+    private final InternalSettlementPriceResolver priceResolver;
 
     // V369：凑整允许误差（后台可配，取自结算配置中心「通票分账 → 套票折扣归属」那一行）。
     // 字段注入免改构造点；生产由 Spring 恒注入 JdbcSettlementBillRepository，端口自身缺配置时 fail-loud。
@@ -64,6 +66,7 @@ public class TicketCatalogService {
     public TicketCatalogService(TicketingRepository repository, BarMerchantDirectory barDirectory) {
         this.repository = repository;
         this.barDirectory = barDirectory;
+        this.priceResolver = new InternalSettlementPriceResolver(repository);
     }
 
     TicketTypeRecord createTicketType(TicketTypeRequest request) {
@@ -486,6 +489,10 @@ public class TicketCatalogService {
                 now
         );
         boolean published = "published".equals(ticketType.status());
+        if (published) {
+            // 第十八批 AI 段 236-R2：已上架票种加须按内部结算价结算的权益，提供方价未获批即拒，绑定不落库、票种不退回草稿。
+            requireApprovedInternalPrices(java.util.List.of(binding), "不能加到已上架票种");
+        }
         // V369：已上架的票被改了组成（加权益／改票面原价）后，售价若已经对不上新的业态构成，就把票退回草稿。
         //   直接拒绝会把「先建票、再一次性配组合权益」这条正常流程堵死；继续挂着卖则是让客人按一个
         //   系统自己都算不出来的价买。只在真的对不上时才下架，改完价重新发布即可（重新走一遍误差闸）。
@@ -563,6 +570,7 @@ public class TicketCatalogService {
         if (giftShortfall != null) {
             throw giftShortfall;
         }
+        requireApprovedInternalPrices(repository.listTicketTypeEntitlements(current.id()), "不能发布");
         // V369 凑整误差闸：填的售价与系统算出的售价差太多就不许开卖（HTML:741「超出即拒绝发布」）。
         requirePriceWithinTolerance(current, repository.listTicketTypeEntitlements(current.id()));
         // 发布只翻状态，其余（库存/已售/分类/可退/酒吧归属/折扣）一律原样带过，避免被置空/清零。
@@ -873,6 +881,37 @@ public class TicketCatalogService {
             throw ApiException.badRequest("TICKET_COST_BEARER_REQUIRED",
                     "这些赠送权益还没标成本承担方（商户让利型/平台出资型），票不能发布："
                             + missing.stream().sorted().distinct().collect(java.util.stream.Collectors.joining("、")));
+        }
+    }
+
+    /**
+     * 第十八批 AI 段 236-R2（第十八批裁决 52 ①；ENUM:54「任何商户在没有获批内部结算价之前，不得为其开通需要该价格结算的权益或券。」；
+     * BSM:1754「每项权益都必须绑定实际提供方和审批版本，避免悬空账。」）：核销时要按内部结算价结算的权益（判据同
+     * {@link TicketVerificationService} 核销取价：提供方兑付类，专属直付且商户让利型除外），其提供方在内部结算价目录里须已有获批生效价
+     * （目录草案须他人复核转正）。提供方取法同 {@link InternalSettlementPriceResolver#byItemGiftCostCent}：模板商户，空则专属商户。
+     */
+    private void requireApprovedInternalPrices(java.util.List<TicketTypeEntitlementRecord> bindings, String action) {
+        java.util.List<String> missing = new java.util.ArrayList<>();
+        for (TicketTypeEntitlementRecord binding : bindings) {
+            EntitlementTemplateRecord template =
+                    repository.findEntitlementTemplateById(binding.entitlementTemplateId()).orElse(null);
+            if (template == null || !InternalSettlementPriceResolver.providerRedeemed(
+                    template.entitlementType(), template.entitlementKind(), template.exclusiveMerchantId())) {
+                continue;
+            }
+            if (template.exclusiveMerchantId() != null
+                    && TicketTypeEntitlementRecord.COST_BEARER_MERCHANT_CONCESSION.equals(binding.costBearer())) {
+                continue; // 商户让利的专属直付权益不结算（BSM:751），核销不取内部结算价。
+            }
+            String provider = template.merchantId() != null ? template.merchantId() : template.exclusiveMerchantId();
+            if (priceResolver.resolve(template.barItemRef(), provider, template.catalogItemCode()).isEmpty()) {
+                missing.add("「" + template.name() + "」");
+            }
+        }
+        if (!missing.isEmpty()) {
+            throw ApiException.conflict("TICKET_ENTITLEMENT_PRICE_NOT_APPROVED",
+                    "权益" + missing.stream().sorted().distinct().collect(java.util.stream.Collectors.joining("、"))
+                            + "的提供方内部结算价还没有获批生效（内部结算价目录草案须他人复核转正），" + action);
         }
     }
 

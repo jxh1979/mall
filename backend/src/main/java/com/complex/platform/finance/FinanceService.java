@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.44
+// 文件版本：V0.45
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -78,7 +78,10 @@ public class FinanceService implements TerminationSettlementPort {
             // FS-021-R1：通票分账负额明细（向商户追回）单独挂追收应收，不与应付轧差（BSM L755）。
             "ticket_distribution_recovery",
             // 第十八批 U 段第 155 条 155-R1（ENUM:257「在退款发生的当期生成冲正」）：跨期退款按原账期档位费率冲回的营业额抽成，挂商户应付。
-            "turnover_rent_reversal");
+            "turnover_rent_reversal",
+            // 第十八批 AI 段 214-R1、214-R2（ENUM:32「其余各域份额自收款之日起即为应付给对应域主管公司的款项」；BSM:755「不得轧差」；
+            //   ENUM:49「其一，到期未核销票款」）：月结过账挂娱乐平台公司与游乐公司、城市项目公司等之间的组合通票域间份额、餐饮零售代付与到期未核销归属。
+            "pass_domain_share", "pass_domain_direct_settlement", "pass_unverified_attribution");
     // P1#13 库存差异原因（与 V108 chk_inventory_variance_reason 一致）。
     private static final Set<String> INVENTORY_VARIANCE_REASONS = Set.of("damage", "shortage", "overage", "supplier_fault");
     // P1#14 保证金四动作（与 V110 chk_deposit_ledger_action 一致）。
@@ -150,6 +153,9 @@ public class FinanceService implements TerminationSettlementPort {
             Map.entry("ticket_distribution_recovery", "通票分账追收"),
             // 第十八批 U 段第 155 条 155-R1（PGM:287「界面全中文（所有终端零英文）」）。
             Map.entry("turnover_rent_reversal", "营业额抽成冲正"),
+            // 第十八批 AI 段 214-R1、214-R2：组合通票各域份额主体间往来（与前端 FinanceArApLedgerPage、InternalPayDaysPanel 同名）。
+            Map.entry("pass_domain_share", "通票域间份额"), Map.entry("pass_domain_direct_settlement", "通票餐饮零售代付"),
+            Map.entry("pass_unverified_attribution", "通票到期未核销归属"),
             // 第十八批 M 段第 117 条（ENUM:256、BSM:1380）：商户承担的工单用料费应收。
             Map.entry("work_order_material", "工单用料费（商户承担）"),
             // 第十八批 R 段第 142 条 142-R1（BSM:1081「长款当期计入该商户营业外收入并单独留痕可查」）。

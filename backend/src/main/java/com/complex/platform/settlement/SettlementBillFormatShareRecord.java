@@ -1,6 +1,6 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 /**
  * S11 结算单 × 业态份额留痕（V366 {@code settlement_bill_format_shares} 一行）。
@@ -28,6 +28,11 @@ package com.complex.platform.settlement;
  * @param beneficiaryEntityId        beneficiary_kind=entity 时的 business_entities.id；归属未配置时为空
  * @param internalSettledCent        第十八批 X 段 176-R2：本业态有价专属直付按内部结算价应直付给实际提供商户的合计（ENUM:53），
  *                                   与净份额之差即归属主体承担（负）或归属主体所得（正）的差额
+ * @param interEntityNetCent         第十八批 AI 段 237-R1：域间份额——本业态净份额中由娱乐平台公司代收、应归归属主体的部分（游乐、传媒行扣除
+ *                                   归属主体自收的纯游乐票、纯游乐通票与传媒自办演出票；餐饮零售行即净份额；酒吧与「其他」为 0；ENUM:32、BSM:1720）
+ * @param recoveryNetCent            第十八批 AI 段 214-R1：原月已过账后撤销、在本月追收的域间份额（负＝向归属主体追回；决策台账 FS-021）
+ * @param recoveryInternalSettledCent 第十八批 AI 段 214-R1：原月已过账后撤销、在本月追收的按内部结算价应直付额
+ * @param unverifiedNetCent          第十八批 AI 段 214-R2：本月到期未核销、归本业态归属主体的组合通票票款（扣实际发生的通路费与销售渠道费；ENUM:49）
  */
 public record SettlementBillFormatShareRecord(
         String billId,
@@ -42,6 +47,10 @@ public record SettlementBillFormatShareRecord(
         long netRevenueCent,
         String beneficiaryKind,
         String beneficiaryEntityId,
-        long internalSettledCent
+        long internalSettledCent,
+        long interEntityNetCent,
+        long recoveryNetCent,
+        long recoveryInternalSettledCent,
+        long unverifiedNetCent
 ) {
 }

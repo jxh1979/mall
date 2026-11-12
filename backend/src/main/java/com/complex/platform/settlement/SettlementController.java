@@ -59,6 +59,17 @@ public class SettlementController {
     }
 
     /**
+     * 第十八批 AI 段 237-R2（BSM:1754「通票结算审阅财务侧设置独立审阅台账，按项目、经营域、责任主体和实际提供方列明……」）：某张月度结算单的审阅明细。
+     * 只读；权限同结算流水审阅，另限平台范围（列各家分得金额，ENUM:52「仅其他酒吧分得的具体金额不对其开放」）。单不存在 404 SETTLEMENT_BILL_NOT_FOUND。
+     */
+    @GetMapping("/bills/{id}/review")
+    public ApiResponse<SettlementQueryService.BillReview> billReview(@PathVariable("id") String billId) {
+        authorizationService.requirePermission("finance.settlement.view");
+        authorizationService.requirePlatformScope();
+        return ApiResponse.ok(service.billReview(billId));
+    }
+
+    /**
      * 过账网关(②):把某 confirmed 结算单的各酒吧分账挂 finance 应付台账。仅 confirmed 单(draft/settled 由 postBill 拒);
      * 幂等(重复过账不重复挂);返回本次过账明细笔数。高敏权限 settlement.bill.post + 平台域。
      * 第十八批 N 段第 124 条 124-R4（PGM L966「所有有过程的业务动作都必须留痕」、PGM L738）：人工过账成功落 settlement.bill.posted

@@ -1,6 +1,6 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import com.complex.platform.ticketing.SettlementSettledEvent;
 import java.time.YearMonth;
@@ -224,10 +224,11 @@ public class SettlementSettledConsumer {
                 ? SettlementAmounts.incrementalVerified(allocated, total, used, false, null) : null;
         // 第十八批第 3 条（BSM L749「通路费……官方渠道同样产生……在拆分给各域之前从整单扣除且只扣一次，由各域按分配份额自然共担」）：
         //   进池核销按本次核销额占本单实付的比例分摊本单付款时固化的通路费，月结按业态线性求和；176-R1：有价专属直付行按本次域份额分摊；
-        //   单一酒吧门票行不扣。
+        //   单一酒吧门票行（权益本身不专属、专属商户取自订单酒吧）同样按本次核销额分摊（第十八批 AI 段 212-R1；ENUM:51「所有支付都会产生通路费、
+        //   官方渠道同样产生」「不由该笔业务的收款主体单独承担」），月结从该酒吧直付额扣。
         long routeFeeCent = exclusiveByPrice
                 ? routeFeeShares.shareOf(event.orderId(), domainShare == null ? 0L : domainShare)
-                : exclusiveMerchantId == null && !(pooledAtSale && barFormat)
+                : event.exclusiveMerchantId() == null && !(pooledAtSale && barFormat)
                 ? routeFeeShares.shareOf(event.orderId(), verified) : 0L;
 
         repository.insertImmutableFact(new SettlementTransactionRecord(

@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "综合体管理系统 P0 API 契约",
-    "version": "V0.66",
+    "version": "V0.67",
     "description": "P0 首批编码前置契约。本文采用 JSON-compatible YAML，便于与 openapi-p0.json 保持一致。正式后端以 Java 21 + Spring Boot 4.x + springdoc-openapi 输出运行时 OpenAPI，并与本契约比对。"
   },
   "servers": [
@@ -19298,7 +19298,7 @@
         ],
         "operationId": "bindTicketTypeEntitlement",
         "summary": "绑定票类型权益",
-        "description": "用于绑定票类型权益。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。第十八批 AH 段 215-R1（ENUM「通票赠酒下限」条「低于该下限的票种不得发布上架」）：已上架的通票（bar_id 为空）改组成后跌破最低赠酒杯数（判定同 publishTicketType 的 PASS_BAR_GIFT_COVERAGE_INSUFFICIENT、PASS_BAR_GIFT_FLOOR_NOT_PLATFORM_FUNDED）即退回草稿（draft），本次绑定照常保存，补齐后重新发布。",
+        "description": "用于绑定票类型权益。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。第十八批 AH 段 215-R1（ENUM「通票赠酒下限」条「低于该下限的票种不得发布上架」）：已上架的通票（bar_id 为空）改组成后跌破最低赠酒杯数（判定同 publishTicketType 的 PASS_BAR_GIFT_COVERAGE_INSUFFICIENT、PASS_BAR_GIFT_FLOOR_NOT_PLATFORM_FUNDED）即退回草稿（draft），本次绑定照常保存，补齐后重新发布。 第十八批 AI 段 236-R2（ENUM:54「任何商户在没有获批内部结算价之前，不得为其开通需要该价格结算的权益或券。」）：只在票种已上架时检查本次新绑定——须按内部结算价结算的权益（判据同 publishTicketType）其提供方没有获批生效价的，409 TICKET_ENTITLEMENT_PRICE_NOT_APPROVED，绑定不落库、票种不退回草稿。",
         "x-permission": "ticket.product.manage",
         "x-data-scope": "project",
         "x-terminal-allowed": [
@@ -19343,7 +19343,7 @@
         ],
         "operationId": "publishTicketType",
         "summary": "发布票种",
-        "description": "第十八批 AH 段 215-R1（ENUM「通票赠酒下限」条「一张酒吧通票或跨域组合通票覆盖的每一家酒吧，赠酒杯数不得低于后台配置的最低赠酒杯数（业务参数，按票种可配，出厂默认 1 杯，须同时配置上下限），各酒吧分别赠几杯在售票时写明票面，低于该下限的票种不得发布上架」「该最低赠酒杯数属于票面强制要求提供的权益，一律记为域主管公司出资」）：bar_id 为空的通票，覆盖的每家酒吧（绑定了该吧入场类权益的酒吧）赠饮杯数（票面价 0 的 gift_drink，份数×次数）不得少于最低杯数×max(1, 该吧入场次数)，否则 409 PASS_BAR_GIFT_COVERAGE_INSUFFICIENT（点名还差的酒吧）；带票面价的兑换券不计；不含赠酒的通票不再放行；单店票（bar_id 非空）不套。最低杯数以内的赠饮须平台出资型（cost_bearer platform_funded），否则 409 PASS_BAR_GIFT_FLOOR_NOT_PLATFORM_FUNDED；超出部分可标商户让利。最低杯数见 GET /api/v1/ticketing/ticket-types/{id}/min-gift-cups（没配过为出厂 1 杯）。",
+        "description": "第十八批 AH 段 215-R1（ENUM「通票赠酒下限」条「一张酒吧通票或跨域组合通票覆盖的每一家酒吧，赠酒杯数不得低于后台配置的最低赠酒杯数（业务参数，按票种可配，出厂默认 1 杯，须同时配置上下限），各酒吧分别赠几杯在售票时写明票面，低于该下限的票种不得发布上架」「该最低赠酒杯数属于票面强制要求提供的权益，一律记为域主管公司出资」）：bar_id 为空的通票，覆盖的每家酒吧（绑定了该吧入场类权益的酒吧）赠饮杯数（票面价 0 的 gift_drink，份数×次数）不得少于最低杯数×max(1, 该吧入场次数)，否则 409 PASS_BAR_GIFT_COVERAGE_INSUFFICIENT（点名还差的酒吧）；带票面价的兑换券不计；不含赠酒的通票不再放行；单店票（bar_id 非空）不套。最低杯数以内的赠饮须平台出资型（cost_bearer platform_funded），否则 409 PASS_BAR_GIFT_FLOOR_NOT_PLATFORM_FUNDED；超出部分可标商户让利。最低杯数见 GET /api/v1/ticketing/ticket-types/{id}/min-gift-cups（没配过为出厂 1 杯）。 第十八批 AI 段 236-R2（第十八批裁决 52 ①；ENUM:54「任何商户在没有获批内部结算价之前，不得为其开通需要该价格结算的权益或券。」；BSM:1754「每项权益都必须绑定实际提供方和审批版本，避免悬空账。」）：票内须提供方兑付、核销时按内部结算价结算的权益（赠饮、实物、专属直付；专属直付且商户让利型的除外），其提供方（模板商户，空则专属商户）在内部结算价目录里没有获批生效价（目录草案须他人复核转正）的，409 TICKET_ENTITLEMENT_PRICE_NOT_APPROVED 拒绝发布并点名权益；这道闸在赠酒下限闸之后、凑整误差闸之前。",
         "x-permission": "ticket.product.manage",
         "x-data-scope": "project",
         "x-terminal-allowed": [
@@ -19819,7 +19819,7 @@
           }
         },
         "x-auth-context": "staff-token",
-        "description": "用于查询票核销记录。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。 核销记录状态闭集（CG-05，ENUM「核销记录状态」）：success（成功）、rejected（拒绝：规则不允许）、failed（失败：设备或网络原因）、reversed（已冲正）、anomaly（异常：已成功扣次但现场未放行或实际交付有争议时提起的异常复核，见 POST /api/v1/ticketing/verifications/{id}/anomaly 与 POST /api/v1/ticketing/verification-anomalies/{id}/resolve）；不设预检通过态、不提供人工放行（manual_overridden 仅历史行保留）。 anomaly 记录带 anomaly_of_verification_id（原成功核销）、anomaly_resolution（null=待主管处置 / restored 更正后恢复 / voided_reversed 作废并冲正）、anomaly_resolved_by、anomaly_resolved_at、anomaly_resolution_reason。"
+        "description": "用于查询票核销记录。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。 核销记录状态闭集（CG-05，ENUM「核销记录状态」）：success（成功）、rejected（拒绝：规则不允许）、failed（失败：设备或网络原因）、reversed（已冲正）、anomaly（异常：已成功扣次但现场未放行或实际交付有争议时提起的异常复核，见 POST /api/v1/ticketing/verifications/{id}/anomaly 与 POST /api/v1/ticketing/verification-anomalies/{id}/resolve）；不设预检通过态、不提供人工放行（manual_overridden 仅历史行保留）。 anomaly 记录带 anomaly_of_verification_id（原成功核销）、anomaly_resolution（null=待主管处置 / restored 更正后恢复 / voided_reversed 作废并冲正）、anomaly_resolved_by、anomaly_resolved_at、anomaly_resolution_reason。 第十八批 AI 段 236-R1（ENUM:54「核销或结算时锁定当时版本」）：每条记录另带 settlement_catalog_entry_id（可空）——按内部结算价核销成功时所用内部结算价目录行（internal_price_catalog.id＝审批版本，补偿补发履约按目录锁价的同记）；票面价或协议价取价、商户让利专属直付的核销，以及冲正、异常复核等其余记录为空。"
       }
     },
     "/api/v1/ticketing/verifications/{id}/reverse": {
@@ -19879,7 +19879,7 @@
         ],
         "operationId": "raiseTicketVerificationAnomaly",
         "summary": "核销提起异常复核",
-        "description": "TK-14（ENUM「核销记录状态」）：平台已记录核销成功并扣减次数，但现场未放行或实际权益交付存在争议、需要主管核实时提起异常复核——新增一条 status=anomaly 的核销记录（anomaly_of_verification_id 指向原记录），保留原成功记录与扣次事实，不改次数、不发积分结算事件、不自动退款。只对 status=success 的记录提起，拒绝、失败、已冲正记录 409 VERIFICATION_ANOMALY_SOURCE_NOT_SUCCESS；同一原记录已有待处置异常 409 VERIFICATION_ANOMALY_OPEN；跨商户 403 CROSS_MERCHANT_FORBIDDEN；reason 必填。",
+        "description": "TK-14（ENUM「核销记录状态」）：平台已记录核销成功并扣减次数，但现场未放行或实际权益交付存在争议、需要主管核实时提起异常复核——新增一条 status=anomaly 的核销记录（anomaly_of_verification_id 指向原记录），保留原成功记录与扣次事实，不改次数、不发积分结算事件、不自动退款。只对 status=success 的记录提起，拒绝、失败、已冲正记录 409 VERIFICATION_ANOMALY_SOURCE_NOT_SUCCESS；同一原记录已有待处置异常 409 VERIFICATION_ANOMALY_OPEN；跨商户 403 CROSS_MERCHANT_FORBIDDEN；reason 必填。 第十八批 AI 段 236-R1：返回的异常复核记录 settlement_catalog_entry_id 为空（所用内部结算价目录行只记在原成功核销记录上）。",
         "x-permission": "verification.execute",
         "x-data-scope": "project-merchant",
         "x-terminal-allowed": [
@@ -19951,7 +19951,7 @@
         ],
         "operationId": "resolveTicketVerificationAnomaly",
         "summary": "主管处置核销异常",
-        "description": "TK-14（ENUM「异常状态的统一出口」）：主管在系统内二选一处置——restored（更正后恢复：原成功记录与扣次不动）或 voided_reversed（作废并冲正：先对原核销记录过与直接冲正相同的合同准入闸 ticketing.verification_reverse，商户生效合同经营范围不含票务时建复核单并 409 ADMISSION_BLOCKED；通过后同事务走既有核销冲正，恢复次数、原记录置已冲正、冲正原因「异常复核作废：」+原因）；填写原因并留痕（处置人、时间、原因写在异常记录上）；两种处置都不自动退款，补偿仍走既有故障补偿流程。异常记录不存在 404 VERIFICATION_ANOMALY_NOT_FOUND；已处置 409 VERIFICATION_ANOMALY_ALREADY_RESOLVED；跨商户 403 CROSS_MERCHANT_FORBIDDEN；resolution、reason 必填。",
+        "description": "TK-14（ENUM「异常状态的统一出口」）：主管在系统内二选一处置——restored（更正后恢复：原成功记录与扣次不动）或 voided_reversed（作废并冲正：先对原核销记录过与直接冲正相同的合同准入闸 ticketing.verification_reverse，商户生效合同经营范围不含票务时建复核单并 409 ADMISSION_BLOCKED；通过后同事务走既有核销冲正，恢复次数、原记录置已冲正、冲正原因「异常复核作废：」+原因）；填写原因并留痕（处置人、时间、原因写在异常记录上）；两种处置都不自动退款，补偿仍走既有故障补偿流程。异常记录不存在 404 VERIFICATION_ANOMALY_NOT_FOUND；已处置 409 VERIFICATION_ANOMALY_ALREADY_RESOLVED；跨商户 403 CROSS_MERCHANT_FORBIDDEN；resolution、reason 必填。 第十八批 AI 段 236-R1：返回的异常复核记录 settlement_catalog_entry_id 为空（所用内部结算价目录行只记在原成功核销记录上）。",
         "x-permission": "ticket.verify.anomaly.resolve",
         "x-data-scope": "project-merchant",
         "x-terminal-allowed": [
@@ -64055,7 +64055,7 @@
         ],
         "operationId": "settlementPostBill",
         "summary": "结算单过账(挂应付台账)",
-        "description": "把某 confirmed 结算单各酒吧分账挂 finance 应付台账(幂等·仅 confirmed 单;draft/settled 拒);第 75 条起结算环节不设超池待审批,超池单同样 confirmed 即可过账,超出部分记 platform_incentive_subsidy 由娱乐平台公司承担。返回本次过账明细笔数。FS-013：同时把本单覆盖的项目×月份(平台单＝全部项目)的单一酒吧门票综合服务费计费月，按 min(Σ未退票逐票费, 该月首张票锁定的月度封顶) 各挂一笔酒吧应收(source_type=single_bar_service_fee，项目取计费月锁定的售票项目，0 元不挂、已挂不重复)，与票款应付分别收付、不轧差。FS-021：负额明细(向酒吧追回，含原月已结付后撤销核销的单列追收明细)过账为该酒吧的单独追收应收(source_type=ticket_distribution_recovery)，不与应付轧差；各笔往来到期日按该钱路财务指定付账日、次月出账日起的异议期与已审批银行工作日推算并固化(规则取过账时刻已生效的已批版本；付款时点的项目取往来对方所属项目，平台单取明细商户项目)，过账时缺已生效的付账日规则 409 PAY_DAY_NOT_CONFIGURED、缺日历 400 WORKING_CALENDAR_MISSING，账单保持已确认。",
+        "description": "把某 confirmed 结算单各酒吧分账挂 finance 应付台账(幂等·仅 confirmed 单;draft/settled 拒);第 75 条起结算环节不设超池待审批,超池单同样 confirmed 即可过账,超出部分记 platform_incentive_subsidy 由娱乐平台公司承担。返回本次过账明细笔数。FS-013：同时把本单覆盖的项目×月份(平台单＝全部项目)的单一酒吧门票综合服务费计费月，按 min(Σ未退票逐票费, 该月首张票锁定的月度封顶) 各挂一笔酒吧应收(source_type=single_bar_service_fee，项目取计费月锁定的售票项目，0 元不挂、已挂不重复)，与票款应付分别收付、不轧差。FS-021：负额明细(向酒吧追回，含原月已结付后撤销核销的单列追收明细)过账为该酒吧的单独追收应收(source_type=ticket_distribution_recovery)，不与应付轧差；各笔往来到期日按该钱路财务指定付账日、次月出账日起的异议期与已审批银行工作日推算并固化(规则取过账时刻已生效的已批版本；付款时点的项目取往来对方所属项目，平台单取明细商户项目)，过账时缺已生效的付账日规则 409 PAY_DAY_NOT_CONFIGURED、缺日历 400 WORKING_CALENDAR_MISSING，账单保持已确认。 第十八批 AI 段 214-R1、214-R2（第十八批裁决 51；ENUM:32「其余各域份额自收款之日起即为应付给对应域主管公司的款项」；BSM:749；BSM:755「不得轧差」；ENUM:49「其一，到期未核销票款」）：明细之后，按本单各业态份额行挂娱乐平台公司与该业态归属主体之间的组合通票往来，各笔分别收付、不轧差——域间份额（source_type=pass_domain_share，inter_entity_net_cent 正挂应付、负挂应收）；餐饮零售行按内部结算价应直付额（source_type=pass_domain_direct_settlement，娱乐平台公司代城市项目公司直付商户，internal_settled_cent 正挂应收、负挂应付），与份额分笔；原月已过账后撤销、在本月追收的部分同规则另挂（recovery_net_cent、recovery_internal_settled_cent，source_id 加 |rcv）；本月到期未核销归属挂应付（source_type=pass_unverified_attribution，unverified_net_cent，source_id 加 |ue）。source_id＝结算单 id|业态，往来对方＝该行归属主体，台账项目取结算单项目，付款时点项目平台单取唯一启用综合体；金额为 0 不挂，酒吧与「其他」行不挂。有要挂的往来而归属主体未定（餐饮零售须该综合体恰有一家有效城市项目公司）时 409 SETTLEMENT_DOMAIN_ENTITY_MISSING，整单不过账、一笔不挂，账单保持已确认；三个新钱路没有已生效的付账日规则时同样 409 PAY_DAY_NOT_CONFIGURED。返回值仍是本次过账明细笔数（不含这些往来）。",
         "x-auth-context": "staff-token",
         "x-permission": "settlement.bill.post",
         "x-data-scope": "platform",
@@ -64097,6 +64097,55 @@
         }
       }
     },
+    "/api/v1/settlement/bills/{id}/review": {
+      "get": {
+        "tags": [
+          "settlement"
+        ],
+        "operationId": "getSettlementBillReview",
+        "summary": "月度结算单审阅明细",
+        "description": "第十八批 AI 段 237-R2（BSM:1754「通票结算审阅」行「财务侧设置独立审阅台账，按项目、经营域、责任主体和实际提供方列明第三方渠道费用、域间份额、域内分配、内部结算价权益、酒吧入场可分配池和责任主体承担的差额」）：某张月度结算单的审阅明细，只读，不落审计事件；项目、酒吧入场可分配池与整单渠道费用见结算单头（listSettlementBills）。data 分三段：domain_shares（经营域份额，每业态一行）：business_format、beneficiary_kind（entity 归属主体／per_merchant 逐商户）、beneficiary_entity_id 与 beneficiary_entity_name（可空）、gross_revenue_cent、channel_fee_cent（第三方渠道费用）、route_fee_cent（通路费）、comp_service_fee_cent（综合服务费）、gift_cost_cent、gift_actual_paid_cent、net_revenue_cent（净份额）、inter_entity_net_cent（域间份额）、unverified_net_cent（到期未核销归属）、internal_settled_cent（按内部结算价直付额）、difference_cent（责任主体承担（负）或所得（正）的差额＝net_revenue_cent−internal_settled_cent，internal_settled_cent 为 0 时为空）；allocations（域内分配，本单各商户分账明细）：merchant_id、merchant_name、business_format、distribution_method（by_rank_tier／by_venue_per_guest／by_fixed_amount／exclusive_full／exclusive_recovery／pooled_recovery／pooled_resume）、verified_count、guest_count、rank_no（可空）、final_amount_cent、single_bar_route_fee_cent、single_bar_channel_fee_cent、status（draft／posted／reversed）；internal_price_by_provider（按实际提供方的内部结算价权益，月窗同该单月结）：merchant_id、merchant_name、business_format、gift_drink_paid_cent（赠饮兑付应付净额）、paid_direct_settled_cent（有价权益按内部结算价直付额，差额由该域归属主体承担）、free_direct_settled_cent（零元平台出资直付额，娱乐平台公司承担）；单一酒吧门票行是门票票款，不进此段。权限 finance.settlement.view，另限平台范围（列各家分得金额，ENUM:52「仅其他酒吧分得的具体金额不对其开放」）：无权限 403 PERMISSION_DENIED，商户账号或外包供应商 403 PLATFORM_SCOPE_REQUIRED；结算单不存在 404 SETTLEMENT_BILL_NOT_FOUND。",
+        "x-auth-context": "staff-token",
+        "x-permission": "finance.settlement.view",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "not_applicable",
+        "x-audit-event-failure": "not_applicable",
+        "x-failure-codes": [
+          "PERMISSION_DENIED",
+          "PLATFORM_SCOPE_REQUIRED",
+          "SETTLEMENT_BILL_NOT_FOUND"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "结算单 id。"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
     "/api/v1/settlement/transactions": {
       "get": {
         "tags": [
@@ -64104,7 +64153,7 @@
         ],
         "operationId": "listSettlementTransactions",
         "summary": "通票核销结算流水列表",
-        "description": "第十八批 AE 段第 201 条 201-R6（照现码补契约）：平台侧结算审阅：只读查看通票核销产生的结算流水（transaction_type=verification_settled），按创建时间倒序分页；projectId、merchantId 按综合体项目、商户过滤。page 小于 1 按 1，size 取 1～100（超出按边界取）。只读，不落审计事件。无 finance.settlement.view 权限 403 PERMISSION_DENIED。",
+        "description": "第十八批 AE 段第 201 条 201-R6（照现码补契约）：平台侧结算审阅：只读查看通票核销产生的结算流水（transaction_type=verification_settled），按创建时间倒序分页；projectId、merchantId 按综合体项目、商户过滤。page 小于 1 按 1，size 取 1～100（超出按边界取）。只读，不落审计事件。无 finance.settlement.view 权限 403 PERMISSION_DENIED。 第十八批 AI 段 236-R1（BSM:1754「每项权益都必须绑定实际提供方和审批版本，避免悬空账。」；ENUM:54「核销或结算时锁定当时版本」）：items 每行另带 settlement_catalog_entry_id（string，可空，最长 80）——该笔核销所用内部结算价目录行（internal_price_catalog.id＝审批版本），不按内部结算价结算的为空。",
         "x-auth-context": "staff-token",
         "x-permission": "finance.settlement.view",
         "x-data-scope": "platform",
@@ -65441,9 +65490,12 @@
                       "single_bar_service_fee",
                       "compensation_fulfillment",
                       "compensation_fulfillment_recovery",
-                      "parking_credit_cost"
+                      "parking_credit_cost",
+                      "pass_domain_share",
+                      "pass_domain_direct_settlement",
+                      "pass_unverified_attribution"
                     ],
-                    "description": "钱路(应收应付来源)，kind=route 必填。"
+                    "description": "钱路(应收应付来源)，kind=route 必填。第十八批 AI 段 214-R1、214-R2 加 pass_domain_share（通票域间份额）、pass_domain_direct_settlement（通票餐饮零售代付）、pass_unverified_attribution（通票到期未核销归属），上线前须先定规则，否则结算单过账 409 PAY_DAY_NOT_CONFIGURED。"
                   },
                   "first_pay_day": {
                     "type": "integer",

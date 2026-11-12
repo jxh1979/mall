@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import java.time.Instant;
 
@@ -41,7 +41,10 @@ public record VerificationRecord(
         String anomalyResolution,
         String anomalyResolvedBy,
         Instant anomalyResolvedAt,
-        String anomalyResolutionReason
+        String anomalyResolutionReason,
+        // 第十八批 AI 段 236-R1（V623；ENUM:54「核销或结算时锁定当时版本」）：按内部结算价核销时所用目录行（internal_price_catalog.id＝审批版本），
+        // 非提供方兑付权益与商户让利专属直付行为 null。
+        String settlementCatalogEntryId
 ) {
 
     /** 既有 24 参数调用点（含游乐交叉引用）零改动：异常复核字段默认 null。 */
@@ -55,7 +58,7 @@ public record VerificationRecord(
         this(id, verificationNo, entitlementId, entitlementCode, credentialType, credentialPayload, deviceId,
                 pointId, status, resultReason, sourceType, clientTaskId, createdAt, nonce, staffId, merchantId,
                 windowValid, signatureValid, verifiedPeople, reversesVerificationId, reversedBy, reversedAt,
-                settlementPriceCent, amusementVerificationId, null, null, null, null, null);
+                settlementPriceCent, amusementVerificationId, null, null, null, null, null, null);
     }
 
     /** 读库时补上异常复核列（行映射器只映到游乐交叉引用为止）。 */
@@ -63,7 +66,17 @@ public record VerificationRecord(
         return new VerificationRecord(id, verificationNo, entitlementId, entitlementCode, credentialType, credentialPayload,
                 deviceId, pointId, status, resultReason, sourceType, clientTaskId, createdAt, nonce, staffId, merchantId,
                 windowValid, signatureValid, verifiedPeople, reversesVerificationId, reversedBy, reversedAt,
-                settlementPriceCent, amusementVerificationId, of, resolution, resolvedBy, resolvedAt, resolutionReason);
+                settlementPriceCent, amusementVerificationId, of, resolution, resolvedBy, resolvedAt, resolutionReason,
+                settlementCatalogEntryId);
+    }
+
+    /** 236-R1：带上核销所用内部结算价目录行（读库与核销落库共用）。 */
+    VerificationRecord withSettlementCatalogEntryId(String catalogEntryId) {
+        return new VerificationRecord(id, verificationNo, entitlementId, entitlementCode, credentialType, credentialPayload,
+                deviceId, pointId, status, resultReason, sourceType, clientTaskId, createdAt, nonce, staffId, merchantId,
+                windowValid, signatureValid, verifiedPeople, reversesVerificationId, reversedBy, reversedAt,
+                settlementPriceCent, amusementVerificationId, anomalyOfVerificationId, anomalyResolution, anomalyResolvedBy,
+                anomalyResolvedAt, anomalyResolutionReason, catalogEntryId);
     }
 
     /**

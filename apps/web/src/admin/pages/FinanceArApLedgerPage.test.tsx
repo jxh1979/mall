@@ -1,4 +1,4 @@
-// 文件版本：V0.10
+// 文件版本：V0.11
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -172,6 +172,28 @@ describe("FinanceArApLedgerPage 营业额抽成冲正", () => {
   });
 });
 
+// 第十八批 AI 段 214-R1、214-R2（ENUM:32「其余各域份额自收款之日起即为应付给对应域主管公司的款项」；BSM:755「不得轧差」；ENUM:49「其一，到期未核销票款」）：
+// 组合通票各域份额的主体间往来在台账显中文来源，与后端 AR_AP_SOURCE_TYPE_LABELS 同名。
+describe("FinanceArApLedgerPage 通票域间往来来源", () => {
+  it("台账详情展示通票域间份额、通票餐饮零售代付、通票到期未核销归属", async () => {
+    const rows: FinanceLedgerRow[] = [
+      { id: "ap-pds", itemNo: "ARAP-PDS-1", direction: "payable", status: "pending_payment", amountCent: 91000, unpaidAmountCent: 91000, dueDate: "2026-12-05", sourceType: "pass_domain_share" },
+      { id: "ar-pdd", itemNo: "ARAP-PDD-1", direction: "receivable", status: "pending_collection", amountCent: 200000, unpaidAmountCent: 200000, dueDate: "2026-12-05", sourceType: "pass_domain_direct_settlement" },
+      { id: "ap-pua", itemNo: "ARAP-PUA-1", direction: "payable", status: "pending_payment", amountCent: 182000, unpaidAmountCent: 182000, dueDate: "2026-12-05", sourceType: "pass_unverified_attribution" },
+    ];
+    const api = makeApi(vi.fn().mockResolvedValue({ items: rows, total: 3, page: 1, size: 10 }));
+    // 选中应付行会带出内部应付执行面板（同下方执行状态用例的假响应形状）。
+    (api.get as ReturnType<typeof vi.fn>).mockImplementation((path: string) =>
+      Promise.resolve(path.includes("/internal-payables/") ? { executionStatus: "pending", inTransit: false, attempts: [], postponements: [] } : []));
+    renderPage(api);
+    await waitFor(() => expect(screen.queryByTestId("finance-ledger-row-ap-pua")).not.toBeNull());
+    for (const [id, label] of [["ap-pds", "通票域间份额"], ["ar-pdd", "通票餐饮零售代付"], ["ap-pua", "通票到期未核销归属"]] as const) {
+      fireEvent.click(screen.getByTestId(`finance-ledger-row-${id}`));
+      await waitFor(() => expect(screen.queryByText(label)).not.toBeNull());
+    }
+  });
+});
+
 // FS-021-R5（BSM L1683；ENUM L253）：选中普通内部结算应付 → 显示执行状态与付款时点，可登记已发起付款（在途）。
 describe("FinanceArApLedgerPage 内部应付执行状态", () => {
   const PAYABLE: FinanceLedgerRow = { id: "ap-td", itemNo: "ARAP-TD-1", direction: "payable", status: "pending_payment", amountCent: 5000, unpaidAmountCent: 5000, dueDate: "2026-11-25", sourceType: "ticket_distribution" };
@@ -210,6 +232,18 @@ describe("FinanceArApLedgerPage 内部应付执行状态", () => {
     renderPage(api);
     await waitFor(() => expect(screen.queryByTestId("finance-ledger-select-ap-cf")).not.toBeNull());
     fireEvent.click(screen.getByTestId("finance-ledger-select-ap-cf"));
+    await waitFor(() => expect(screen.queryByTestId("internal-payable-panel")).not.toBeNull());
+  });
+
+  // 第十八批 AI 段 214-R1：娱乐平台公司对域主管公司的组合通票域间份额应付同为普通内部结算应付，选中即出执行面板。
+  it("通票域间份额应付（pass_domain_share）同样显示执行面板", async () => {
+    const row: FinanceLedgerRow = { ...PAYABLE, id: "ap-pds", itemNo: "ARAP-PDS-1", sourceType: "pass_domain_share" };
+    const api = makeApi(vi.fn().mockResolvedValue({ items: [row], total: 1, page: 1, size: 10 }));
+    (api.get as ReturnType<typeof vi.fn>).mockImplementation((path: string) =>
+      Promise.resolve(path.includes("/internal-payables/") ? { ...EXECUTION, arApItemId: "ap-pds", sourceType: "pass_domain_share" } : []));
+    renderPage(api);
+    await waitFor(() => expect(screen.queryByTestId("finance-ledger-select-ap-pds")).not.toBeNull());
+    fireEvent.click(screen.getByTestId("finance-ledger-select-ap-pds"));
     await waitFor(() => expect(screen.queryByTestId("internal-payable-panel")).not.toBeNull());
   });
 });

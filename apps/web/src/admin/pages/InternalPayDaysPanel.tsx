@@ -1,4 +1,4 @@
-// 文件版本：V0.03
+// 文件版本：V0.04
 import React from "react";
 import { PermissionButton } from "../security/Can";
 import { cnDate } from "../components/RowDetailDrawer";
@@ -18,6 +18,10 @@ const ROUTE_LABELS: Record<string, string> = {
   compensation_fulfillment: "补偿新增履约结算",
   compensation_fulfillment_recovery: "补偿应付已付追收",
   parking_credit_cost: "停车抵免成本",
+  // 第十八批 AI 段 214-R1、214-R2：组合通票各域份额的主体间往来（与后端 InternalPayDayService.ROUTES 同词表），须先定规则才能过账。
+  pass_domain_share: "通票域间份额",
+  pass_domain_direct_settlement: "通票餐饮零售代付",
+  pass_unverified_attribution: "通票到期未核销归属",
 };
 const STATUS_LABELS: Record<string, string> = { pending: "待审批", approved: "已批准", rejected: "已驳回" };
 

@@ -1,6 +1,6 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.05
+// 文件版本：V0.06
 
 import static com.complex.platform.common.Strings.requireText;
 import static com.complex.platform.common.Strings.trimToNull;
@@ -52,10 +52,11 @@ public class InternalPayDayService {
     public static final String COMPENSATION_FULFILLMENT_RECOVERY = "compensation_fulfillment_recovery";
     /** HP-P01（BSM「停车场」章「消费抵免」条「按内部结算价与城市项目公司走平台内部各主体之间的普通内部结算应收应付，按月结算」）：停车抵免成本。 */
     public static final String PARKING_CREDIT_COST = "parking_credit_cost";
-    /** 本批纳入财务指定付账日的普通内部结算钱路（应收应付来源）。 */
+    /** 本批纳入财务指定付账日的普通内部结算钱路（应收应付来源）；第十八批 AI 段 214-R1、214-R2 加组合通票各域份额三个钱路。 */
     public static final Set<String> ROUTES = Set.of("ticket_distribution", "ticket_distribution_recovery",
             "platform_incentive_subsidy", SingleBarServiceFeeService.SOURCE_TYPE, COMPENSATION_FULFILLMENT,
-            COMPENSATION_FULFILLMENT_RECOVERY, PARKING_CREDIT_COST);
+            COMPENSATION_FULFILLMENT_RECOVERY, PARKING_CREDIT_COST, SettlementPostingService.SOURCE_PASS_DOMAIN_SHARE,
+            SettlementPostingService.SOURCE_PASS_DOMAIN_DIRECT_SETTLEMENT, SettlementPostingService.SOURCE_PASS_UNVERIFIED_ATTRIBUTION);
     private static final String GLOBAL = "__global__";
 
     public record Rule(String id, String kind, String route, Integer firstPayDay, Integer secondPayDay, Integer thirdPayDay,

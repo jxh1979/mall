@@ -1,4 +1,4 @@
-# P0 OpenAPI Operation 验收矩阵 V0.66
+# P0 OpenAPI Operation 验收矩阵 V0.67
 
 ## 1. 文档定位
 
@@ -17,7 +17,7 @@
 
 ## 3. Operation 清单
 
-> 当前 `docs/openapi/openapi-p0.json` 共 1364 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
+> 当前 `docs/openapi/openapi-p0.json` 共 1365 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
 
 | 标签 | 方法 | 路径 | operationId | 摘要 | 请求体 | 权限 | 认证上下文 | 数据范围 | 终端/设备能力/调用通道 | 幂等 | 成功事件 | 失败事件 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -1119,6 +1119,7 @@
 | settlement | `POST` | `/api/v1/settlement/config/attribution-rules/{id}/activate` | `settlementConfigActivateAttributionRuleAlias` | 复核转正:归因规则草案(弃用薄别名) | `-` | `settlement.config.manage` | `staff-token` | `platform` | web | 否 | `settlement.config.draft.activated` | `settlement.config.draft.activate_failed` |
 | settlement | `GET` | `/api/v1/settlement/bills` | `listSettlementBills` | 月度结算单头列表 | `-` | `finance.settlement.view` | `staff-token` | `platform` | web | 否 | `not_applicable` | `not_applicable` |
 | settlement | `POST` | `/api/v1/settlement/bills/{id}/post` | `settlementPostBill` | 结算单过账(挂应付台账) | `-` | `settlement.bill.post` | `staff-token` | `platform` | web | 否 | `settlement.bill.posted` | `settlement.bill.post_failed` |
+| settlement | `GET` | `/api/v1/settlement/bills/{id}/review` | `getSettlementBillReview` | 月度结算单审阅明细 | `-` | `finance.settlement.view` | `staff-token` | `platform` | web | 否 | `not_applicable` | `not_applicable` |
 | settlement | `GET` | `/api/v1/settlement/transactions` | `listSettlementTransactions` | 通票核销结算流水列表 | `-` | `finance.settlement.view` | `staff-token` | `platform` | web | 否 | `not_applicable` | `not_applicable` |
 | bar | `GET` | `/api/v1/bar/order-item-voids` | `listBarOrderItemVoids` | 退酒审批待审队列 | `-` | `bar.order_item.void` | `staff-token` | `project-bar-table` | web | 否 | `bar.order_item_void.viewed` | `bar.order_item_void.view_failed` |
 | settlement | `POST` | `/api/v1/settlement/config/high-value-threshold` | `settlementConfigUpsertHighValueThreshold` | 提交高价值判定阈值调整(最高权限审批) | `object` | `settlement.config.manage` | `staff-token` | `platform` | web | 是 | `settlement.config.high_value_thresholds.updated` | `settlement.config.high_value_thresholds.update_failed` |

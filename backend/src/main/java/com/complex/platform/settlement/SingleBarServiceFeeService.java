@@ -1,8 +1,8 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
-import com.complex.platform.common.LocalZone;
+import com.complex.platform.common.BusinessDayResolver;
 import com.complex.platform.finance.ArApItemRecord;
 import com.complex.platform.finance.FinanceRepository;
 import com.complex.platform.ticketing.TicketRewardFacts;
@@ -23,13 +23,14 @@ import org.springframework.stereotype.Service;
  * 「售出月，只退款剔除：按客人付款成功（售出）所在月计入；之后只有整张退款成功才从原月剔除重算；到期没用的票照常计费」）。
  * <ol>
  *   <li>出票即逐票锁定（与出票同一事务）：计费基数＝订单客人实付按张均分（「该张票订单上保存的最终选中价」，不取权益分摊、
- *       内部结算价，也不先扣渠道费用），费率或固定额与规则 id、逐票应计费；计费月＝付款成功所在月（所在地时区）。
+ *       内部结算价，也不先扣渠道费用），费率或固定额与规则 id、逐票应计费；计费月＝付款成功时刻所属该酒吧营业日的月
+ *       （BSM:1682「全系统的钱账统一按「营业日」归集」「酒吧仍按每家酒吧配置」，第十八批 AI 段 213-R1）。
  *       同一项目×酒吧×计费月首张票写入时锁定该月封顶（「该月原锁定合同约定的月度封顶」），之后改配置不影响原月。</li>
  *   <li>月应收总额＝min(Σ未退票逐票费, 锁定封顶)，未设封顶按汇总额；月结过账时单独挂酒吧应收（见
  *       {@link SettlementPostingService#postBill}），不从票款应付里扣（「按总额收付、收支两条线，不得轧差」）。</li>
  *   <li>整张退款成功（与确认拨付同一事务）：回原计费月重算；按台账已有原应收、历次调整与应退核出「已登记总额」，
  *       只登记未被覆盖的差额——先调减原应收未收部分（V344 原行不动＋冲正行＋重述行），超出部分另列应退；
- *       调整记在当前账期、关联原计费月，不动当前计费月封顶。</li>
+ *       调整记在当前账期（当前时刻所属该酒吧营业日的月，与计费月同一口径）、关联原计费月，不动当前计费月封顶。</li>
  * </ol>
  */
 @Service
@@ -41,13 +42,20 @@ public class SingleBarServiceFeeService {
     private final JdbcSettlementBillRepository bills;
     private final FinanceRepository finance;
     private final InternalPayDayService payDays;
+    private final BusinessDayResolver businessDays;
 
     public SingleBarServiceFeeService(JdbcTemplate jdbc, JdbcSettlementBillRepository bills, FinanceRepository finance,
-                                      InternalPayDayService payDays) {
+                                      InternalPayDayService payDays, BusinessDayResolver businessDays) {
         this.jdbc = jdbc;
         this.bills = bills;
         this.finance = finance;
         this.payDays = payDays;
+        this.businessDays = businessDays;
+    }
+
+    /** 时刻 at 所属该酒吧营业日的月（与 TicketOrderService.saleBusinessDate 同口径）：售出计费月与退款调整账期共用。 */
+    YearMonth businessMonth(String projectId, String barId, Instant at) {
+        return YearMonth.from(businessDays.merchantBusinessDate(projectId, barId, at));
     }
 
     /** 未挂应收的计费月（过账用）；项目为该计费月锁定的售票项目。 */
@@ -69,7 +77,7 @@ public class SingleBarServiceFeeService {
         }
         String project = (String) order.get("project_id");
         String bar = (String) order.get("bar_id");
-        LocalDate month = YearMonth.from(((Timestamp) order.get("paid_at")).toInstant().atZone(LocalZone.ID)).atDay(1);
+        LocalDate month = businessMonth(project, bar, ((Timestamp) order.get("paid_at")).toInstant()).atDay(1);
         var cfg = bills.findComprehensiveServiceFee(project, bar, (String) order.get("ticket_type_id"));
         String monthId = "sbfm_" + UUID.nameUUIDFromBytes((project + "|" + bar + "|" + month).getBytes(StandardCharsets.UTF_8));
         jdbc.update("""
@@ -161,7 +169,9 @@ public class SingleBarServiceFeeService {
                     fact.refundId(), t.get("parent_ticket_id"));
         }
         long after = monthTotal(monthId);
-        String period = YearMonth.now(LocalZone.ID).toString();
+        Instant now = Instant.now();
+        YearMonth periodMonth = businessMonth((String) month.get("project_id"), (String) month.get("bar_merchant_id"), now);
+        String period = periodMonth.toString();
         long cut = 0L;
         long due = 0L;
         String reversalId = null;
@@ -172,7 +182,6 @@ public class SingleBarServiceFeeService {
             ArApItemRecord current = currentReceivable(monthId);
             cut = current == null ? 0L : Math.min(before - after, current.unpaidAmountCent());
             due = before - after - cut;
-            Instant now = Instant.now();
             if (cut > 0L) {
                 reversalId = "arap_sbf_cz_" + fact.refundId();
                 finance.appendArApItem(new ArApItemRecord(reversalId, "SBF-CZ-" + fact.refundId(), current.direction(),
@@ -194,7 +203,7 @@ public class SingleBarServiceFeeService {
                 dueId = "arap_sbf_tk_" + fact.refundId();
                 // FS-021-R4：应退同走三个付账日——按当前账期推算财务指定付账日并固化（不再填「今天+30 天」）。
                 var schedule = payDays.schedule(SOURCE_TYPE, (String) month.get("project_id"),
-                        YearMonth.now(LocalZone.ID).atDay(1), now);
+                        periodMonth.atDay(1), now);
                 ArApItemRecord dueItem = new ArApItemRecord(dueId, "SBF-TK-" + fact.refundId(), "payable",
                         (String) month.get("bar_merchant_id"), SOURCE_TYPE, fact.refundId(), due, 0L, due, "CNY",
                         schedule.dueDate(), period, "pending_payment", now, now,

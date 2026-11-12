@@ -1,6 +1,6 @@
 # PRD 审计业务裁决台账
 
-文档版本：V0.90
+文档版本：V0.91
 状态：进行中
 迁移日期：2026-07-27
 当前事实源：三份立法 HTML 以既有冻结基线叠加 James 此前 M02 至 M08 的点名批准、全量审计 M001、M002 的逐项批准，以及本轮 2026-10-16 至 2026-10-17 业务 HTML 审计中 Q01 至 Q40 及子题实际明确批准且未被后续替代的裁决，和 2026-10-17 第二批 HTML 业务线推演审计（A–F 六线 64 条、停车章）的逐项批准，并叠加本轮 CG 70 项来源确认与 C01–C09、N01–N03 最终澄清及补全文稿中 F01、W01–W05 的整体修改批准（本文件末节）；本轮最终规则、未采纳或替代关系、现行版本与字节哈希见本文件末节。历史记录保留为各自当时事实，不恢复已被替代的建议。
@@ -3965,6 +3965,7 @@ HTML 的语义补齐与直接引用同步可在本批核验；70项中的业务�
 | 58 | **第 254 条 存酒争议怎么了结**（题面：「【第 8/10 题（第 254 条）：存酒登记了争议后，这瓶酒怎么了结】前因：业务地图原句：「管理存酒取酒、转让、作废、争议和异常处理。」HTML 没写争议怎么了结、由谁了结。现状：登记争议后，存酒变「争议中」，取酒、转让、转存、作废都不再受理，到期也不转库存——没有任何出口，这瓶酒会永远卡住。代码注释写「待线下核实后由作废/复核流程收口」，但没有对应入口。争议一般发生在客人对剩余量、瓶底标签或归属有异议时。怎么了结？」）—— 操作员选「主管核实后可恢复或转作废（推荐）」：门店主管核实后二选一：争议不成立，恢复为存酒中、照常可取；争议成立，走现有存酒作废（高价值的要照片＋视频＋主管复核，裁决 14），作废后按现有补存或赔付处理。好处：用现有作废、补存流程收口。坏处：主管多一个处理入口。（2026-11-11 弹窗；来由：18AG 核实第 212～259 条的待裁题。） | 待开发清单第 254 条（18AG 核实 254-R1～R7） |
 | 59 | **第 233 条 附加税与其他税费的差异机制**（题面：「【第 9/10 题（第 233 条）：附加税和「其他税费」的申报差异走哪套机制】前因：税务处理原句：「两套差异机制按税种互斥适用、不得叠加：增值税、文化事业建设费等流转税按申报差异生成补提／冲回调整单，差异保留、不做拉平；企业所得税等税种按季度与财税软件核对拉平（以财税软件为准）。同一税种只能走其中一套。」现状：平台税费申报登记（第 210 条做的）现有五个税种：增值税、文化事业建设费、附加税、企业所得税、其他税费。HTML 点名了增值税、文化事业建设费、企业所得税，附加税和其他税费走哪套没写。附加税在枚举里和增值税、文化事业建设费一样，按「主体×收入类别」配「有没有、收多少」；其他税费（印花税、房产税等）不按收入配比例，平台算不出「系统计算金额」。怎么定？」）—— 操作员选「附加税出调整单，其他税费按季拉平（推荐）」：附加税跟流转税走补提或冲回调整单；其他税费和企业所得税一样，按季与财税软件核对、以财税软件为准拉平。好处：附加税和增值税同表同口径；其他税费没有系统计算基数，以财税软件为准最合理。（2026-11-11 弹窗；来由：18AG 核实第 212～259 条的待裁题。） | 待开发清单第 233 条（18AG 核实 233-R1～R7） |
 | 60 | **第 233 条 五家主体收入、成本与利润的汇总口径**（题面：「【第 10/10 题（第 233 条）：五家主体的「收入、成本与利润」怎么汇总】前因：税务处理末句：「娱乐平台公司、游乐公司、传媒公司、中央餐饮公司、城市项目公司五家主体各自的收入、成本与利润，由平台汇总计算；其中涉税的正式核算数据由专业财税软件回传关键信息，平台据此与自身的内部结算数据合并计算。」同段又写企业所得税等「系统内配置税率比例并据以生成一版计算结果」，按季与财税软件核对拉平。现状：平台没有按主体汇总收入、成本、利润的地方。HTML 没写成本取哪些数据。我的理解：收入＝按收入归属配置归到该主体的各类收入（含税实收）；成本＝该主体在平台内作为付款方的内部结算应付（提成拨付、渠道费、赠送权益兑付等）＋该主体作为发放主体的工资单税前应发；利润＝收入−成本；企业所得税系统计算＝利润×配置比例；酒吧经营主体沿用持股分红的税前口径（收入−销货成本−费用）。怎么定？」）—— 操作员选「按上面的口径自动汇总（推荐）」：全部用平台已有数据自动算。好处：不增加手工登记。坏处：没进平台的成本算不进去，系统这一版所得税会和财税软件有差，按季拉平时以财税软件为准校正（HTML 本就这样设计）。（2026-11-11 弹窗；来由：18AG 核实第 212～259 条的待裁题。） | 待开发清单第 233 条（18AG 核实 233-R1～R7） |
+| 61 | **第 236 条 已上架的跨域组合通票改价或改组成时停不停售**（题面：「【第 236 条：已上架的跨域组合通票要改价或改组成时，停不停售】前因：你定的裁决 52「两种都要」里，第②种是「票种规则版本」。原句：「跨域组合通票的定价与域间结算规则由项目之上的平台权限统一审批」「每次发布时把凑整差额金额及各域分摊数额记入票种规则版本、发布后不得再改」。设计按原句把审批范围放在跨域组合通票（有价权益分属两个及以上域主管公司的通票）：发布须由项目之上的平台权限审批，审批通过即留一版规则（价格、权益组成、凑整差额、各域分摊）；单一酒吧门票仍由酒吧自己定价，不走这道审批。现状：跨域组合通票发布不审批、不留版本；已上架后可以直接改售价折扣、加有价权益。只有改组成跌破售价误差或最低赠酒杯数时，票才会退回草稿；改售价不改状态。已经卖出的票，权益和金额在出票时已固化，不受后来改动影响。分歧：HTML 和裁决只说「发布后不得再改」「由平台权限审批」，没说已上架的票要调价、加权益、改最低赠酒杯数时，审批期间停不停售、能不能改。决策台账里没有答案。下面三种都合字面，工作量差很多。怎么定？」）—— 操作员选「不停售：旧版照卖，新版获批后再换」：改动另存一份草稿版审批，审批期间照旧版卖，获批后自动换成新版。好处：不影响卖票。坏处：工作量明显更大，下单定价与出票都要改成读「当前生效版」，同一时刻会有两版规则并存。（未选：「改了就退回草稿停售，新版获批后再上架（推荐）」「已上架不许改，要改就另建新票种」。）（2026-11-12 弹窗；来由：18AI 只读设计第 236 条待裁题。控制席说明：裁决 52 的②以该题题面为准（组合通票定价与域间规则由平台权限统一审批；发布时把凑整差额和各域分摊记入票种规则版本、发布后不得再改）；第 2 题选项二的说明「票种（含权益组成、价格、出资方）发布须经审批并留版本」是未被选中选项的说明，18AI 任务书曾误引为选项原文，已按 18AI 设计质疑者意见更正，审批范围按题面收在跨域组合通票。） | 待开发清单第 236 条（236-R3～R6 另开 18AJ） |
 
 第一段转正前最低池额试算与取消结算环节超池待审批：既有缺口，列入待开发清单第 75 条、随 18C 做（ENUM L52、BSM L752）。
 
@@ -6750,3 +6751,152 @@ HTML 的语义补齐与直接引用同步可在本批核验；70项中的业务�
   定向回归：上述两类与 AmusementHardCapacityAutoReopenJdbcIntegrationTests、ParkWideFaultCompensationJdbcIntegrationTests、ParkWideFaultSalesSuspensionJdbcIntegrationTests、AmusementExitReleaseJdbcIntegrationTests、AmusementUnlimitedBusinessDayJdbcIntegrationTests、KioskEntitlementClaimJdbcTests、SettlementBatch1P345Tests、SettlementPassPerTicketEngineTests、SettlementStateMachineJdbcIntegrationTests、ThirdPartyPassTicketEndToEndJdbcTests、MerchantAccountCrossProjectOtherReadsJdbcIntegrationTests 共 221 测，0 失败 0 错误；settlement、amusement 两个包全部测试类 共 685 测，0 失败 0 错误。
   复核旁见：已上架通票被退回草稿后，后台没有重新发布的入口，已登记待开发清单第 287 条，本段不改。
 - 18AH 落地位置补记·运行验收证据、快照、终验文档刷新（无新裁决）：业务提交 c3b59c15 之后，按第十八批裁决 25 重刷了运行验收证据：后端全量 6695 测，0 失败 0 错误；apps/web 构建通过；常规界面验收（接口全部 mock）实跑 40 条全过；真实后端界面验收未跑，runtime_ready=false。随后依次重生成闭环当前态快照、生产闭环缺口报告、界面验收报告、无上线指挥台。生成器没改。手改 docs/final-closed-loop-acceptance-audit-v0.1.md 与 docs/code-implementation-acceptance-audit-v0.1.md：前端单测源码计数改为 1714；被核文件中 TicketingService.java 行数由 1200 改为 1244，其余无变化；后端全量与常规界面验收的数字、日期改为本次实跑值；写入 npm run verify:unit 实跑结果，五个工作区全过。交付门禁于 2026-11-12 00:52 UTC 在工作树逐项实跑子项，NAS 两项现场探测未跑。仍红的有两项：一是 coding-host-protection，它写死主仓路径，在工作树口径下必红，属工具口径，不做；二是 final-closed-loop-audit，如实留 2 条红（integration-ready、business-acceptance-ready），原因是校验器要求终验把联调、业务验收写成「是」，而裁决 25 定了不跑真实后端界面验收、运行验收未就绪，终验写的是「否」。verify:delivery-gates 总链仍是红的。
+
+18AI 落地位置补记（2026-11-12）：第十八批 AI 段（batch55）按 18AI 只读设计实现待开发清单第 212、213、214、216、237 条与第 236 条 236-R1、236-R2（通票结算口径与审阅台账组）；运行验收证据、终验文档在本段最后一个提交刷新；各条落地位置见下。本段追加时，原台账除文档版本 V0.90→V0.91 与第十八批裁决表第 61 行（控制席已插入）外，其他历史字节保持。
+
+- 18AI 落地位置补记·控制席判定（2026-11-12）：本段（第十八批 AI 段，batch55）实现待开发清单第 212、213、214、216、237 条与第 236 条 236-R1、236-R2（18AI 只读设计 b55-audit\d1-recheck.json、d2-236-versions.json，质疑者修订版）。第十八批裁决 61（第 236 条，已上架的跨域组合通票改价或改组成时不停售、旧版照卖新版获批后再换）本段插入裁决表第 61 行，236-R3～R6 票种规则版本按裁决 61 另开 18AJ。控制席更正：18AI 任务书曾把裁决 52 题面第 2 题选项二的说明「票种（含权益组成、价格、出资方）发布须经审批并留版本」误引为选项原文，按设计质疑者意见以题面为准，审批范围收在跨域组合通票。第 212 条补充段（到期作业固定额锚点漏认有价专属直付行）核实后正常业务走不到，不做；212-R1 已让到期锚点同认单店票行。第 214 条按裁决 51：组合通票各域份额随月结按核销月、到期月挂主体间应付。三个新钱路 pass_domain_share、pass_domain_direct_settlement、pass_unverified_attribution 须财务先制定并审批付账日指派规则，否则过账整单 409 PAY_DAY_NOT_CONFIGURED，属上线前配置前提、不建补挂机制（同第八批同批说明）。已知上限：生产月结只出平台单，启用综合体不止一个时餐饮零售归属主体为空、整单过账被拒，同 176-R2、189-R1。决策台账约 :5415（176-R1 补记）所写「单一酒吧门票行通路费仍为 0」已由 212-R1 按 ENUM:51 改为按核销额分摊本单通路费（历史字节不改，于此注明）。核实旁见登记待开发清单第 289～296 条。
+- 18AI 落地位置补记·第 213 条 213-R1（单店门票综合服务费计费月与退款调整当前账期按该酒吧营业日定月；无新裁决）：
+  - 改法：SingleBarServiceFeeService 构造注入 BusinessDayResolver，新增 businessMonth(项目, 酒吧, 时刻)，取该时刻所属该酒吧营业日的月（merchantBusinessDate，与 TicketOrderService.saleBusinessDate 同口径）。出票逐票锁定的计费月改取 businessMonth(订单项目, 订单酒吧, paid_at)。整张退款成功时，调整的 accounting_period 与应退付账日推算账期改取 businessMonth(月行项目, 月行酒吧, 当前时刻)，仍关联原计费月。无迁移，无接口变化。
+  - 落地位置：backend/src/main/java/com/complex/platform/settlement/SingleBarServiceFeeService.java。
+  - 依据：BSM:1682「全系统的钱账统一按「营业日」归集」「酒吧仍按每家酒吧配置」；ENUM:187「全系统的钱账统一按「营业日」归集」；本台账第八批裁决 3（FS-013）「按客人付款成功（售出）所在月计入」；BSM:755「在当前账期生成关联原计费月的调整，不改变当前计费月的封顶额度」。
+  - 测试：SingleBarServiceFeeJdbcIntegrationTests 的 billingMonthFollowsBarBusinessDayOfPaymentOnFirstMorning（北京 7-01 09:30 付款记 6 月、10:30 记 7 月；后台网页下单、登记现金、确认收款、出票，走真实接口）、billingMonthUsesTheBarsApprovedBusinessDayStart（酒吧 12:00 起算，11:00 付款记 6 月）、businessMonthOfFirstMorningBeforeDayStartIsThePreviousMonth；既有 refundOfCollectedMonthRegistersOnlyUncoveredRefundDue、refundOfUncollectedMonthOnlyReducesPending 的账期断言改按该酒吧营业日定月。
+- 18AI 落地位置补记·第 216 条 216-R1（赠付差额实付 A 计入零元平台出资的餐饮、零售专属直付；无新裁决）：
+  - 改法：JdbcSettlementBillRepository.aggregateGiftPaid 改为两支并集。第一支是原赠饮应付（pass_drink_settlement）。第二支是零元专属直付核销与冲正行（专属商户非空、域份额为空、不是单一酒吧门票行），按内部结算价直付额计入，业态取专属商户。新增常量 SINGLE_BAR_ROW（订单挂酒吧且行的专属商户＝订单酒吧），与 212-R1 共用。有价专属直付行（记了域份额）、商户让利零元行（结算价 0）、单一酒吧门票行不改变 A。G 口径不改。差额仍只按 platform_absorb 留痕（18B 复核后裁决第 11 条）。无迁移，无接口变化。
+  - 落地位置：backend/src/main/java/com/complex/platform/settlement/JdbcSettlementBillRepository.java（aggregateGiftPaid、SINGLE_BAR_ROW）；TicketDistributionSettlementService.java 月结注释同步。
+  - 依据：ENUM:52「按件计＝票面各权益数量乘提供方内部结算价之和……该笔预扣归娱乐平台公司，预扣数与日后实付数的差额也留在娱乐平台公司」；BSM:752「预扣数与实付数的差额也留在娱乐平台公司」；ENUM:37「免费型折扣券即零元免费权益」。
+  - 测试：ExclusiveDirectPayDomainShareJdbcIntegrationTests.zeroPricePlatformFundedDiningAndRetailDirectPayCountsIntoGiftActualPaid。按件计 G＝3000（零元餐饮 2000＋零元零售 1000），实付 A＝3000，差额 0；餐饮业态行 gift_actual_paid 2000、零售行 1000。有价餐饮、商户让利零元餐饮、单店票行不进 A。撤销餐厅核销后重结，A＝1000、差额 2000。
+- 18AI 落地位置补记·第 212 条 212-R1（单店酒吧门票核销行分摊通路费，月结按订单固化的销售渠道费配置计费，两层费从该酒吧直付额扣并逐商户留痕；到期作业固定额锚点同步认单店票行；V621；无新裁决）：
+  - 改法（第 1 步）：SettlementSettledConsumer 中，单一酒吧门票行（权益本身不专属、专属商户取订单酒吧）按本次核销额分摊本单付款时固化的通路费。冲正行取原行之反，不改。
+  - 改法（第 2 步）：JdbcSettlementBillRepository 新增 aggregateSingleBarFees，按酒吧和订单付款时固化的销售渠道费配置（ticket_order_channel_fees）汇总当月单店票核销额、已分摊通路费与固定额锚点票数（每张票首笔核销所在月计 1，冲锚点计 −1）。
+  - 改法（第 3 步）：TicketDistributionSettlementService 月结专属直付（exclusive_full）净额＝毛额−实收综合服务费−单店票通路费−单店票销售渠道费（比例＝费率×核销额，固定额＝每张金额×锚点票数；官方渠道无固化配置不扣）。两项费不并入单头渠道费、通路费与业态份额，也不另挂对酒吧的应收。
+  - 改法（第 4 步）：迁移 V621 给 settlement_items 加 single_bar_route_fee_cent、single_bar_channel_fee_cent（默认 0），按商户留痕；追收明细恒 0。原月已结付后撤销的追收自动按扣费后直付额算差；分红、开票清单读明细终额，随之按扣费后金额。
+  - 改法（第 5 步）：JdbcSettlementTransactionRepository.findExpiredUnverifiedEntitlements 的固定额锚点另认单一酒吧门票核销行，月结已扣过的票到期不再扣第二道。
+  - 改法（其它）：上文 18X 第 176 条 176-R1 补记中「单一酒吧门票行通路费仍为 0」一句，已按 ENUM:51 改为分摊。第 212 条「补充」段核实后正常业务走不到，不做（197-R1 起票内餐饮、零售券须本场已检票，锚点总落在更早的入场行）。
+  - 落地位置：backend/src/main/java/com/complex/platform/settlement/SettlementSettledConsumer.java、JdbcSettlementBillRepository.java（aggregateSingleBarFees、SingleBarFee、upsertItem）、TicketDistributionSettlementService.java（⑦b、ItemCalc、明细写入）、SettlementItemRecord.java、JdbcSettlementTransactionRepository.java；backend/src/main/resources/db/migration/V621__settlement_items_single_bar_fees.sql。
+  - 依据：ENUM:51「所有支付都会产生通路费、官方渠道同样产生；通路费在拆分给各域之前从整单扣除，由各域按分配份额自然共担，不由该笔业务的收款主体单独承担」「任何票种经第三方渠道售出时，销售渠道费一律先从整单扣除且只扣一次」「每笔分摊的结果与所用合同版本必须留痕」；BSM:749「官方渠道售出的票不扣销售渠道费，但仍扣通路费」；ENUM:48「各项均只扣一次」；ENUM:32「单一酒吧门票由对应酒吧商户定价、销售并确认已核销部分的收入」；本台账 FS-021「单店按该次核销原结付金额」。
+  - 测试（ExclusiveDirectPayDomainShareJdbcIntegrationTests）：
+    - singleBarTicketRowSharesRouteFeeWithoutDomainShare（原 singleBarTicketRowKeepsNoDomainShareAndNoRouteFee）。
+    - channelSoldSingleBarTicketPaysBothFeesOutOfTheBarsDirectPayAndAReversalRecoversTheNet（美团回流单店票 5000：核销行通路费 50，月结直付 4550，两列 50 与 400；次月追收 −4550）。
+    - officialChannelSingleBarTicketPaysOnlyTheRouteFee（后台网页官方渠道现金 1%：直付 4950，销售渠道费 0）。
+    - fixedAmountSalesFeeIsTakenOncePerSingleBarTicketAndNotAgainAtExpiry（每张固定 300：两张票三次核销扣 600；乙票余下次数到期，到期事实渠道费与尾差为 0）。
+  - 测试（其它）：PassPoolSnapshotJdbcIntegrationTests.singleBarTicketVerifiedRevenueIsPaidDirectToOrderBar 期望改为 10000−通路费 60＝9940（官方渠道不扣销售渠道费）。
+- 18AI 落地位置补记·第 237 条 237-R1（业态份额拆出娱乐平台公司代收部分即域间份额并留痕）：
+  - 改法：月结业态份额行新增域间份额 inter_entity_net_cent。游乐、传媒行用净份额扣除归属主体自收的纯游乐票、纯游乐通票与传媒自办演出票那部分净额。自收的判据是订单里有价权益全在本行业态。自收部分的销售渠道费按毛额占比从该业态行摊回，与按业态毛额分摊渠道费是同一近似。餐饮、零售行的域间份额就是净份额；酒吧（娱乐平台公司自身收入）和「其他」（归提供商户自己）为 0。无接口变化。
+  - 落地位置：迁移 V622__settlement_format_share_inter_entity.sql（与 214-R1、214-R2 共用）；settlement/JdbcSettlementBillRepository.java 的 OWN_COLLECTED（:70）、aggregateOwnCollectedFormatRevenue（:235）、upsertFormatShare（:1091）；settlement/TicketDistributionSettlementService.java 的 compute 域间份额一步（:442-452）、interEntityFormat（:288）、FormatShare.withInterEntity（:1128）；settlement/SettlementBillFormatShareRecord.java 加四列。
+  - 依据：ENUM:32「票款由娱乐平台公司统一收款」「收款主体不等于收入归属主体」「其余各域份额自收款之日起即为应付给对应域主管公司的款项」「纯游乐票和纯游乐通票由游乐公司负责」；BSM:1720「与娱乐平台公司无关」；BSM:1144「由传媒公司自行定价、售票、收款」；BSM:1754「列明第三方渠道费用、域间份额」。
+  - 测试：ExclusiveDirectPayDomainShareJdbcIntegrationTests.interEntityShareLeavesOutThePureAmusementTicketTheAmusementCompanyCollectsItself。
+- 18AI 落地位置补记·第 214 条 214-R1（月结过账挂组合通票各域份额的主体间往来，核销部分，含跨月撤销追收；第十八批裁决 51）：
+  - 改法：结算单过账时，在明细之后按业态份额行挂娱乐平台公司与各域主管公司之间的往来。域间份额正挂应付、负挂应收，来源 pass_domain_share「通票域间份额」。餐饮、零售行按内部结算价应直付额正挂应收、负挂应付，来源 pass_domain_direct_settlement「通票餐饮零售代付」。两者分笔，不轧差；source_id＝结算单 id「|」业态。原月已过账后撤销的核销，在撤销所在月按原月两次重算之差记 recovery_net_cent、recovery_internal_settled_cent；过账按同一规则另挂，source_id 加「|rcv」。归属主体未定时，在明细过账之前拒绝，报 409 SETTLEMENT_DOMAIN_ENTITY_MISSING，一笔不挂，账单保持 confirmed。两个新来源加进应收应付来源闭集，同名钱路加进付账日钱路闭集，前端补中文名与内部应付执行面板。付款时点项目：平台单取唯一启用综合体。
+  - 上线前配置前提：三个新钱路 pass_domain_share、pass_domain_direct_settlement、pass_unverified_attribution 须财务先制定并审批付账日指派规则，否则过账整单 409 PAY_DAY_NOT_CONFIGURED。同第八批同批说明「属上线前配置前提，不建补挂机制」。
+  - 已知上限：生产月结只出平台单（SettlementMonthlyJob settleMonth(null, month)），启用综合体不止一个时，餐饮零售归属主体为空，整单（含酒吧应付）过账被拒。上限同 176-R2、189-R1，要避免须先把份额按项目拆；代码已用 ponytail 注释记下。
+  - 落地位置：V622 的 recovery_net_cent、recovery_internal_settled_cent；settlement/SettlementPostingService.java 的来源常量（:70-72）、过账前核归属（:118）、挂账（:177）、sharePostings（:208，409 在 :226）；settlement/TicketDistributionSettlementService.java 的 recoveries（:242，按业态比较在 :257）、settleMonth 写份额行与补零行（:183）；settlement/JdbcSettlementBillRepository.java 的 listFormatSharesForPosting（:1139）；settlement/InternalPayDayService.java 的 ROUTES（:58）；finance/FinanceService.java 的 SOURCE_TYPES（:84）、AR_AP_SOURCE_TYPE_LABELS（:157）；前端 apps/web/src/admin/pages/InternalPayDaysPanel.tsx 的 ROUTE_LABELS（:22 起）、FinanceArApLedgerPage.tsx（:51）、FinanceInternalPayablePanel.tsx 的 INTERNAL_PAYABLE_ROUTES（:12）、i18n/fieldLabels.ts（:3498）；测试夹具 support/InternalPayDayFixtures.java（:18）。
+  - 依据：ENUM:32「其余各域份额自收款之日起即为应付给对应域主管公司的款项」；BSM:749「其份额由跨域组合通票的收款主体（娱乐平台公司）直接与实际提供的餐饮、零售商户结算」；BSM:755「一律按总额收付、收支两条线，不得轧差」；BSM:804「再冲回域间份额」；第十八批裁决 51「当月核销形成的份额挂在核销所在月」「都等当月数据标记最终、月结出单后才挂」；决策台账 FS-021「单独列追收、按原月重算」。
+  - 测试：PassDomainShareInterEntityPostingJdbcTests.monthEndPostingOwesEachDomainEntityItsShareSeparatelyAndRecoversNextMonthAfterReversal、wholeBillIsRefusedWhileTheCateringEntityIsUnsettledOrANewRouteHasNoApprovedPayDayRule；前端 FinanceArApLedgerPage.test.tsx「台账详情展示通票域间份额、通票餐饮零售代付、通票到期未核销归属」「通票域间份额应付（pass_domain_share）同样显示执行面板」，SettlementConfigPage.test.tsx「提交钱路指派规则请求体为蛇形……补偿应付与通票域间往来钱路可选」。
+- 18AI 落地位置补记·第 214 条 214-R2（到期未核销、归非酒吧域主体的组合通票票款过账，并入业态份额行，到期所在月另挂；第十八批裁决 51）：
+  - 改法：月结把本月到期未核销事实中归游乐、传媒、餐饮、零售业态归属主体的票款，记进该业态份额行 unverified_net_cent。金额＝未核销额−到期作业已扣的通路费−销售渠道费；单一经营域的尾差归该域时一并扣。从未检票与场次终结两类都并入。当月没有该业态行时补一行零份额；这笔不进净份额，也不进拆份额互核。纯游乐票、纯游乐通票、传媒自办演出票按与 237-R1 同一自收判据排除；酒吧与「其他」不聚合。过账时对归属主体另挂一笔应付，来源 pass_unverified_attribution「通票到期未核销归属」，source_id 加「|ue」，与同月核销份额分笔。
+  - 落地位置：V622 的 unverified_net_cent；settlement/JdbcSettlementBillRepository.java 的 aggregateUnverifiedNetByFormat（:622）；settlement/TicketDistributionSettlementService.java 的 compute 到期一步（:456）、FormatShare.withUnverified（:1133）；settlement/SettlementPostingService.java 的 sharePostings（:208）；钱路、来源与前端同 214-R1。
+  - 依据：ENUM:49「游乐域 → 游乐公司」「其一，到期未核销票款」；ENUM:48「仅扣实际发生的通路费」；BSM:1720「与娱乐平台公司无关」；第十八批裁决 51「从未核销、到期的部分在到期所在月另挂一笔」。
+  - 测试：PassDomainShareInterEntityPostingJdbcTests.expiredUnverifiedPartsArePostedApartFromVerifiedSharesWhileBarAndPureAmusementAreNot。
+- 18AI 落地位置补记（C 段，第 237 条 237-R2、237-R3，同批）：
+  237-R2
+  - 改法：新增只读接口 GET /api/v1/settlement/bills/{id}/review。
+    - 校验：权限 finance.settlement.view，另限平台范围 requirePlatformScope；单不存在 404 SETTLEMENT_BILL_NOT_FOUND。
+    - 返回三段：
+      - domain_shares：本单各业态份额行连责任主体名，列毛额、第三方渠道费用、通路费、门票综合服务费、赠送权益预估成本、赠付实付、业态净份额、域间份额（237-R1）、到期未核销归属（214-R2）、内部结算价直付、责任主体承担的差额（＝净份额−内部结算价直付，无直付的行为空）。
+      - allocations：settlement_items 连商户名与业态，含 212-R1 的单店门票通路费、销售渠道费。
+      - internal_price_by_provider：本单月窗内（与月结同一月窗）按实际提供方汇总，列赠饮应付净额、有价权益按内部结算价直付额、零元平台出资直付额；单一酒吧门票行是门票票款，不计入。
+  - 落地位置：
+    - SettlementController.billReview（:66）
+    - SettlementQueryService.billReview（:56，BillReview 记录 :67）
+    - JdbcSettlementBillRepository.aggregateInternalPriceByProvider（:750）、listFormatShareViews（:1154）、listItemViews（:1174），记录 FormatShareView、ItemView、ProviderInternalPrice（:1419-1433）
+    - TicketDistributionSettlementService.monthWindow 改包内可见（:297）
+    - apps/web/src/admin/i18n/fieldLabels.ts 补 18 个响应键中文名
+    - docs/full-admin-page-permission-field-matrix-v0.1.csv ADM-FIN-005 接口列
+  - 依据：
+    - BSM:1754「通票结算审阅财务侧设置独立审阅台账，按项目、经营域、责任主体和实际提供方列明第三方渠道费用、域间份额、域内分配、内部结算价权益、酒吧入场可分配池和责任主体承担的差额。」
+    - ENUM:53「哪个主体按内部结算价向实际提供方足额结算并自行承担差额；定得高于内部结算价时，高出内部结算价的部分也归该责任主体。」
+    - ENUM:52「仅其他酒吧分得的具体金额不对其开放。」
+  - 测试：ticketing/ExclusiveDirectPayDomainShareJdbcIntegrationTests.billReviewListsDomainSharesAllocationsAndInternalPriceByProviderToPlatformFinanceOnly。
+  237-R3
+  - 改法：通票结算审阅页月度结算单每行加「审阅明细」按钮，点后读 237-R2 接口，在结算单表下展开三表：经营域份额、域内分配、内部结算价权益（按实际提供方）。
+    - 经营域、分配方式、明细状态走 formatBusinessStatus；packages/customer-core/src/statusLabels.ts 补 by_rank_tier、by_venue_per_guest、by_fixed_amount、exclusive_full、exclusive_recovery、pooled_recovery、pooled_resume、posted 的中文名。
+    - 页头说明补「按经营域、责任主体和实际提供方列明」。
+  - 落地位置：apps/web/src/admin/pages/SettlementReviewPage.tsx（openReview :136、页头 :193、按钮 :270、明细区 :276 起）；packages/customer-core/src/statusLabels.ts。
+  - 依据：BSM:1754 同句。
+  - 测试：apps/web/src/admin/pages/SettlementReviewPage.review.test.tsx 两例，「按经营域、责任主体和实际提供方列明域间份额、域内分配与内部结算价权益」「本单没有份额、分配与内部结算价权益时逐表提示」。
+  上限：平台单不按项目拆份额，项目列取结算单项目，同 176-R2、189-R1 已记上限。
+- 18AI 落地位置补记 · D 段（第 236 条①，第十八批裁决 52 ①内部结算价审批版本）
+  236-R1　核销时记下所用的内部结算价目录行（即审批版本），结算审阅流水里能查到。
+  改法：
+  - 迁移 V623：ticket_verifications 加 settlement_catalog_entry_id，外键指向 internal_price_catalog(id)。
+  - TicketVerificationService.resolveSettlementPrice 改为返回 VersionedPrice：提供方兑付的按 requireVersioned 取目录生效价，同时拿到目录行 id；商户让利的专属直付行为 0、版本为空；票面价取价的版本为空。
+  - 一般核销和游乐补偿入场都把目录行随核销记录落库，相关文件是 VerificationRecord、JdbcTicketingRepository、JdbcTicketingParameterSource。
+  - JdbcSettlementTransactionRepository.listVerificationSettled 带出该列，GET /api/v1/settlement/transactions 每行多一个 settlement_catalog_entry_id。
+  - 后台通票结算审阅页（SettlementReviewPage）流水详情加「内部结算价版本」一行。
+  - 字段中文名：FieldLabels.java 与 fieldLabels.ts 同名「内部结算价版本」。
+  依据：
+  - BSM:1754「每项权益都必须绑定实际提供方和审批版本，避免悬空账。」
+  - ENUM:54「价格变更形成新版本并只对后续生效，核销或结算时锁定当时版本。」
+  测试：
+  - MerchantConcessionDiningSettlementJdbcIntegrationTests.verificationLocksApprovedCatalogEntryVersionAndReviewListShowsIt
+  - SettlementReviewPage.review.test.tsx「流水详情显示核销所用内部结算价版本，没有版本的显示「—」」
+  236-R2　票种发布、给已上架票种加权益时，须提供方兑付的权益必须已有获批生效的内部结算价。
+  改法：
+  - 新增 TicketCatalogService.requireApprovedInternalPrices。判据同核销取价：提供方兑付类，专属直付且商户让利型除外。提供方是模板商户，空则取专属商户。目录里没有获批生效价就报 409 TICKET_ENTITLEMENT_PRICE_NOT_APPROVED，并点名权益。
+  - 发布：publishTicketType 在赠酒下限闸之后、凑整误差闸之前检查。
+  - 加权益：bindTicketTypeEntitlement 只在票种已上架时检查本条新绑定；被拒时绑定不落库、票种不退回草稿。
+  - 后台票务策略页沿用后端的中文报错，页面不改。
+  依据：
+  - ENUM:54「任何商户在没有获批内部结算价之前，不得为其开通需要该价格结算的权益或券。」
+  - BSM:1754「每项权益都必须绑定实际提供方和审批版本，避免悬空账。」
+  测试（TicketEntitlementPriceGateJdbcIntegrationTests）：
+  - publishBlockedUntilProviderInternalPriceApprovedByAnotherPerson
+  - bindingUnapprovedGiftDrinkToPublishedTicketRejectedAndNotStored
+  - merchantConcessionExclusiveDiningWithoutCatalogPricePublishes
+  既有夹具 PassBarGiftFloorJdbcIntegrationTests、TicketingServiceTests 补了获批内部结算价。
+  第 236 条「补充」段（凑整差额与各域分摊记入票种规则版本）属于②票种规则审批版本，按第十八批裁决 61 留给 18AJ（236-R3～R6），本段不做。
+- 【18AI K-contract 契约落地位置补记】
+  - 214-R1、214-R2：
+    - 改法：付账日规则 submitInternalPayDayRule 的 route 枚举加 pass_domain_share（通票域间份额）、pass_domain_direct_settlement（通票餐饮零售代付）、pass_unverified_attribution（通票到期未核销归属）；settlementPostBill 说明补组合通票三类主体间往来的方向、分笔、source_id 规则，以及 409 SETTLEMENT_DOMAIN_ENTITY_MISSING、新钱路缺规则 409 PAY_DAY_NOT_CONFIGURED。
+    - 落地位置：docs/openapi/openapi-p0.yaml 与 .json（POST /api/v1/settlement/internal-pay-days/rules 的请求体 route；POST /api/v1/settlement/bills/{id}/post）。
+    - 依据：ENUM:32「其余各域份额自收款之日起即为应付给对应域主管公司的款项」；BSM:755「不得轧差」；ENUM:49「其一，到期未核销票款」；第十八批裁决 51。
+    - 校验：npm run verify:openapi PASS。
+  - 237-R2：
+    - 改法：新增 GET /api/v1/settlement/bills/{id}/review。operationId getSettlementBillReview，x-permission finance.settlement.view，x-data-scope platform，审计成功与失败事件都是 not_applicable，x-failure-codes 为 PERMISSION_DENIED、PLATFORM_SCOPE_REQUIRED、SETTLEMENT_BILL_NOT_FOUND；说明列出 domain_shares、allocations、internal_price_by_provider 三段字段。
+    - 落地位置：openapi-p0.yaml 与 .json 的 /api/v1/settlement/bills/{id}/review，紧跟 /bills/{id}/post 之后。操作数 1364→1365。
+    - 依据：BSM:1754「通票结算审阅」行「财务侧设置独立审阅台账，按项目、经营域、责任主体和实际提供方列明第三方渠道费用、域间份额、域内分配、内部结算价权益、酒吧入场可分配池和责任主体承担的差额」；ENUM:52「仅其他酒吧分得的具体金额不对其开放」。
+    - 校验：verify:openapi、verify:client-openapi PASS。
+  - 236-R1：
+    - 改法：listSettlementTransactions 的 items 每行带 settlement_catalog_entry_id（可空，最长 80）；listTicketVerifications、raiseTicketVerificationAnomaly、resolveTicketVerificationAnomaly 的说明写明 VerificationRecord 的 settlement_catalog_entry_id——按内部结算价核销成功的记录带值，冲正与异常复核记录为空。
+    - 落地位置：openapi-p0.yaml 与 .json 的 GET /api/v1/settlement/transactions、GET /api/v1/ticketing/verifications、POST /api/v1/ticketing/verifications/{id}/anomaly、POST /api/v1/ticketing/verification-anomalies/{id}/resolve。
+    - 依据：BSM:1754「每项权益都必须绑定实际提供方和审批版本，避免悬空账。」；ENUM:54「核销或结算时锁定当时版本」。
+    - 校验：verify:openapi PASS。
+  - 236-R2：
+    - 改法：publishTicketType、bindTicketTypeEntitlement 的说明补 409 TICKET_ENTITLEMENT_PRICE_NOT_APPROVED。发布时：赠饮、实物、专属直付须有提供方获批内部结算价，商户让利专属直付除外；闸在赠酒下限闸之后、凑整误差闸之前。绑定时：只在票种已上架时查本次新绑定，绑定不落库、票种不退回草稿。两操作基线无 x-failure-codes，照 215-R1 先例只写进说明。
+    - 落地位置：openapi-p0.yaml 与 .json 的 POST /api/v1/ticketing/ticket-types/{id}/publish、POST /api/v1/ticketing/ticket-types/{id}/entitlements。
+    - 依据：ENUM:54「任何商户在没有获批内部结算价之前，不得为其开通需要该价格结算的权益或券。」；第十八批裁决 52 ①。
+    - 校验：verify:openapi PASS。
+- 18AI J（汇合验证）：
+  - e2e 不改。tests/e2e 里只有 full-admin-remaining.spec.ts:26 按路由打开通票结算审阅页（ADM-FIN-005）；审阅明细按钮与三表、流水详情「内部结算价版本」都是新增，原有选择器不变。内部付账日规则面板没有 e2e 用到；只补了三个钱路的中文标签。票务策略页 ADM-MVP-03 的发布与绑定走 mock 成功桩；真实后端建票用例不带权益绑定，236-R2 价格闸不会拦。
+  - 门禁结论：
+    - 后端：整删镜像 target，--fresh 空库真迁 V621～V623，跑本段新增和改动的测试类与付账日夹具使用类，共 27 类，330/0。
+    - 前端：typecheck 0 错，vitest 331 文件、1833 个用例全过；customer-core、customer-app、customer-miniapp、merchant-app 单测全过。
+    - 安卓：员工端 gradle test 与 android-app 编译都是退出码 0。
+    - 契约：镜像里重生成 operation-matrix 与 openapi-closure 后，verify:p0-contract 全过（1365 个操作）；yaml 与 json 深比较一致；git diff --check 干净。
+    - 没有发现各段之间互相波及的问题。
+- 18AI 文档组（D-docs）：把各段实现现状同步进 PRD、下位设计文档与页面矩阵，每份相对 96291f07 只升一次版。不新增业务规则，规则原文一处没改。
+  - docs/settlement-rebuild-prd-v1.0.md V1.15。
+    - 212-R1 落在三处：文首缺口①、§5.1 第十八批第 2 条落地记录、§6.4。单一酒吧门票核销行按核销额分摊本单通路费；月结从该酒吧直付额先扣通路费与按订单付款时固化配置计的销售渠道费，官方渠道不扣；逐商户落 settlement_items.single_bar_route_fee_cent／single_bar_channel_fee_cent（V621）。依据 ENUM:51「所有支付都会产生通路费、官方渠道同样产生」「每笔分摊的结果与所用合同版本必须留痕」。
+    - 213-R1 落在 §7.2 FS-013。计费月与退款调整账期都按该酒吧营业日定月。依据 BSM:1682「全系统的钱账统一按「营业日」归集」。
+    - 216-R1 落在 §5.3 S7。实付合计 A 另含零元专属直付。依据 ENUM:52「预扣数与日后实付数的差额也留在娱乐平台公司」。
+    - 237-R1、214-R1、214-R2 落在 §4 实现现状与 §10.2C（V622）。内容包括：域间份额、追收与到期未核销归属四列；过账分笔挂 pass_domain_share、pass_domain_direct_settlement、pass_unverified_attribution；归属主体未定时 409 SETTLEMENT_DOMAIN_ENTITY_MISSING；三条钱路须先审批付账日规则，否则 409 PAY_DAY_NOT_CONFIGURED，不建补挂机制；平台单多综合体已知上限同 176-R2、189-R1。依据 ENUM:32「其余各域份额自收款之日起即为应付给对应域主管公司的款项」、ENUM:49、第十八批裁决 51。
+    - 237-R2、237-R3 落在 §5.3。审阅明细读 GET /api/v1/settlement/bills/{id}/review，列三表。依据 BSM:1754「财务侧设置独立审阅台账，按项目、经营域、责任主体和实际提供方列明……」。
+    - 236-R1 落在 §5.3 与 §10.2（V623）。核销记 ticket_verifications.settlement_catalog_entry_id，流水详情显示「内部结算价版本」。依据 ENUM:54「核销或结算时锁定当时版本」、第十八批裁决 52①。
+    - 236-R2 落在 §9.7 开通前置闸。发布与已上架加权益须有获批内部结算价，否则 409 TICKET_ENTITLEMENT_PRICE_NOT_APPROVED。依据 ENUM:54「任何商户在没有获批内部结算价之前，不得为其开通需要该价格结算的权益或券。」
+  - docs/finance-settlement-product-prd-v0.1.md V0.33：§3A FS-013 补 213-R1；§3B.4 第 4 项补 236-R1；§4B.1 补三条新钱路与上线前配置前提。
+  - docs/ticketing-entitlement-checkin-product-prd-v0.1.md V0.32：§5 发布上架闸补 236-R2 实现现状。
+  - docs/finance-ar-ap-ledger-development-design-v0.1.md V0.11：source_type 补三个来源；single_bar_service_fee 计费月按酒吧营业日。
+  - docs/full-admin-page-permission-field-matrix-v0.1.csv 文件版本 V0.28：ADM-FIN-005 补审阅明细与内部结算价版本；ADM-FIN-001 补三个来源的中文名与执行面板。
+  - 测试：node tools/verify-full-admin-page-matrix.mjs 通过；git diff --check 无报。
+- 18AI 复核修复补记（无新裁决）：收尾六视角复核 4 条意见，独立反驳核实成立 3 条（都只改文档），另 1 条被驳回。① docs/settlement-rebuild-prd-v1.0.md §4 与 §10.2C 的 unverified_net_cent 释义补「纯游乐票、纯游乐通票与传媒自办演出票由归属主体自收，不计；单一经营域的尾差归该域时一并扣」，与 JdbcSettlementBillRepository.aggregateUnverifiedNetByFormat 现码及本节 214-R2 一致（PRD 本段已升版，不再升）。② docs/prd-audit/html-prd-coverage.csv 的 BEQ-0128、BSM-0610、BSM-0750 维持 PARTIAL：同规则仍有已登记未做的待开发清单第 289 条（销售渠道费固定额锚点撤销后不复位，ENUM:51）、第 262 条（补偿履约账期按自然月，BSM:1682），备注句尾注明，去掉 BEQ-0128「本段复核 14 分句均已落地」。③ 本节 237-R1、214-R1、237-R3 几处行号按现码刷新（C、D 段后来改过同一批文件）。
+- 18AI 落地位置补记·运行验收证据、快照、终验文档刷新（无新裁决）：业务提交 63978161 之后，按第十八批裁决 25 重刷了运行验收证据：后端全量 6711 测，0 失败 0 错误；apps/web 构建通过；常规界面验收（接口全部 mock）实跑 40 条全过；真实后端界面验收未跑，runtime_ready=false。随后依次重生成闭环当前态快照、生产闭环缺口报告、界面验收报告、无上线指挥台。生成器没改。手改 docs/final-closed-loop-acceptance-audit-v0.1.md 与 docs/code-implementation-acceptance-audit-v0.1.md：前端单测源码计数改为 1719；被核文件行数都没变；后端全量与常规界面验收的数字、日期改为本次实跑值；写入 npm run verify:unit 实跑结果，五个工作区全过。交付门禁于 2026-11-12 05:30 UTC 在工作树逐项实跑子项，NAS 两项现场探测未跑。仍红的有两项：一是 coding-host-protection，它写死主仓路径，在工作树口径下必红，属工具口径，不做；二是 final-closed-loop-audit，如实留 2 条红（integration-ready、business-acceptance-ready），原因是校验器要求终验把联调、业务验收写成「是」，而裁决 25 定了不跑真实后端界面验收、运行验收未就绪，终验写的是「否」。verify:delivery-gates 总链仍是红的。

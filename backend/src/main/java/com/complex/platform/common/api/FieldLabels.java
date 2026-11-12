@@ -1,6 +1,6 @@
 package com.complex.platform.common.api;
 
-// 文件版本：V0.42
+// 文件版本：V0.43
 
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -362,6 +362,7 @@ public final class FieldLabels {
         p("settlement_mode", "结算方式");
         p("settlement_entity_id", "结算主体");
         p("settlement_subject_id", "结算主体");
+        p("settlement_catalog_entry_id", "内部结算价版本");   // 236-R1 核销所用内部结算价目录行（ENUM:54）
         p("statement_id", "对账单号");
         // 第 75 条：短期经营激励申请与单次有效期上限（须同时配置上下限）。
         p("special_approval_term_value", "短期经营激励单次有效期上限");

@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.14
+// 文件版本：V0.15
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.List;
@@ -729,14 +729,14 @@ class JdbcTicketingRepository implements TicketingRepository {
                     credential_payload, device_id, point_id, status, result_reason, source_type,
                     client_task_id, created_at, nonce, staff_id, merchant_id, window_valid, signature_valid,
                     verified_people, reverses_verification_id, reversed_by, reversed_at, settlement_price_cent,
-                    amusement_verification_id, anomaly_of_verification_id
+                    amusement_verification_id, anomaly_of_verification_id, settlement_catalog_entry_id
                 )
                 VALUES (
                     :id, :verification_no, :entitlement_id, :entitlement_code, :credential_type,
                     :credential_payload, :device_id, :point_id, :status, :result_reason, :source_type,
                     :client_task_id, :created_at, :nonce, :staff_id, :merchant_id, :window_valid, :signature_valid,
                     :verified_people, :reverses_verification_id, :reversed_by, :reversed_at, :settlement_price_cent,
-                    :amusement_verification_id, :anomaly_of_verification_id
+                    :amusement_verification_id, :anomaly_of_verification_id, :settlement_catalog_entry_id
                 )
                 """, parameterSource.verificationParameters(verification)
                 .addValue("anomaly_of_verification_id", verification.anomalyOfVerificationId()));
@@ -750,7 +750,7 @@ class JdbcTicketingRepository implements TicketingRepository {
                        credential_payload, device_id, point_id, status, result_reason, source_type,
                        client_task_id, created_at, nonce, staff_id, merchant_id, window_valid, signature_valid,
                        verified_people, reverses_verification_id, reversed_by, reversed_at, settlement_price_cent,
-                       amusement_verification_id, %s
+                       amusement_verification_id, settlement_catalog_entry_id, %s
                   FROM ticket_verifications
                  ORDER BY created_at DESC, id
                 """.formatted(ANOMALY_COLUMNS), this::mapVerification);
@@ -763,7 +763,7 @@ class JdbcTicketingRepository implements TicketingRepository {
                        credential_payload, device_id, point_id, status, result_reason, source_type,
                        client_task_id, created_at, nonce, staff_id, merchant_id, window_valid, signature_valid,
                        verified_people, reverses_verification_id, reversed_by, reversed_at, settlement_price_cent,
-                       amusement_verification_id, %s
+                       amusement_verification_id, settlement_catalog_entry_id, %s
                   FROM ticket_verifications
                  WHERE id = :id
                 """.formatted(ANOMALY_COLUMNS), Map.of("id", id), this::mapVerification).stream().findFirst();
@@ -776,7 +776,8 @@ class JdbcTicketingRepository implements TicketingRepository {
         java.time.OffsetDateTime resolvedAt = rs.getObject("anomaly_resolved_at", java.time.OffsetDateTime.class);
         return rowMapper.mapVerification(rs, rowNumber).withAnomaly(rs.getString("anomaly_of_verification_id"),
                 rs.getString("anomaly_resolution"), rs.getString("anomaly_resolved_by"),
-                resolvedAt == null ? null : resolvedAt.toInstant(), rs.getString("anomaly_resolution_reason"));
+                resolvedAt == null ? null : resolvedAt.toInstant(), rs.getString("anomaly_resolution_reason"))
+                .withSettlementCatalogEntryId(rs.getString("settlement_catalog_entry_id"));
     }
 
     @Override

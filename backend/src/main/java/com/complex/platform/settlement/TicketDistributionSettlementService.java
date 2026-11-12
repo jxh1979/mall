@@ -1,6 +1,6 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.06
+// 文件版本：V0.07
 
 import com.complex.platform.common.money.MoneyRounding;
 import com.complex.platform.finance.FinanceService;
@@ -106,7 +106,7 @@ public class TicketDistributionSettlementService {
             "amusement", "amusement_ticket",
             FORMAT_MEDIA, "performance_ticket");
     /** 第十八批 X 段 176-R2（ENUM:49「餐饮域与零售域 → 城市项目公司」；DEC-R3-2026-08-04-11）：餐饮、零售份额归该项目城市项目公司。 */
-    private static final Set<String> CITY_COMPANY_FORMATS = Set.of("catering", "retail");
+    static final Set<String> CITY_COMPANY_FORMATS = Set.of("catering", "retail");
 
     private final JdbcSettlementBillRepository repository;
     private final RevenueStreamAttributionRepository attributionRepository;
@@ -162,7 +162,7 @@ public class TicketDistributionSettlementService {
         }
         Instant[] window = monthWindow(projectId, month);
         MonthCalc calc = compute(projectId, month, null);
-        List<RecoveryCalc> recoveries = recoveries(projectId, window[0], window[1]);
+        Recoveries recoveries = recoveries(projectId, window[0], window[1]);
 
         repository.upsertBill(calc.bill());
 
@@ -177,7 +177,12 @@ public class TicketDistributionSettlementService {
         // ponytail: 多综合体平台单的餐饮、零售份额归属主体留空，上限同 189-R1；要逐综合体归属时把份额行按项目拆。
         String cityProject = dayProject(projectId);
         List<String> cityCompanies = cityProject == null ? List.of() : transactions.findProjectCompanies(cityProject);
-        for (FormatShare share : calc.formatShares().values()) {
+        // 第十八批 AI 段 214-R1（决策台账 FS-021「单独列追收、按原月重算」）：追收按业态写进本单份额行；本单无该业态行的补零份额行（同 ③b 先例）。
+        java.util.LinkedHashSet<String> formats = new java.util.LinkedHashSet<>(calc.formatShares().keySet());
+        formats.addAll(recoveries.formatDiffs().keySet());
+        for (String format : formats) {
+            FormatShare share = calc.formatShares().getOrDefault(format, new FormatShare(format, 0L, 0L));
+            long[] recovery = recoveries.formatDiffs().getOrDefault(format, new long[2]);
             boolean cityCompanyFormat = CITY_COMPANY_FORMATS.contains(share.format());
             String kind = ENTITY_BENEFICIARY_FORMATS.containsKey(share.format()) || cityCompanyFormat
                     ? BENEFICIARY_ENTITY : BENEFICIARY_PER_MERCHANT;
@@ -190,7 +195,8 @@ public class TicketDistributionSettlementService {
             repository.upsertFormatShare(new SettlementBillFormatShareRecord(
                     actualBillId, share.format(), share.grossCent(), share.platformBorneCent(),
                     share.channelFeeCent(), share.routeFeeCent(), share.compServiceFeeCent(), share.giftCostCent(),
-                    share.giftPaidCent(), share.netCent(), kind, entityId, share.internalSettledCent()));
+                    share.giftPaidCent(), share.netCent(), kind, entityId, share.internalSettledCent(),
+                    share.interEntityNetCent(), recovery[0], recovery[1], share.unverifiedNetCent()));
         }
         // S7 差额台账落痕(append-only):首结追加陈述行;幂等重算若结论有变,先冲正取反旧净额、再追加新陈述,
         //   历史结论永在;结论没变不追加(重跑零膨胀)。收款主体快照与 G 同源(pass_gift_cost 归属流)。
@@ -213,14 +219,15 @@ public class TicketDistributionSettlementService {
                     itemId,
                     actualBillId, item.merchantId(),
                     item.verifiedCount(), item.guestCount(), item.rankNo(),
-                    item.method(), item.amount(), item.amount(), ITEM_STATUS_DRAFT));
+                    item.method(), item.amount(), item.amount(), ITEM_STATUS_DRAFT,
+                    item.singleBarRouteFeeCent(), item.singleBarChannelFeeCent()));
         }
         // FS-021-R2：追收明细（每家每支一条，按原月拆分回指原月结算单），不计入当月分账合计与越池判定。
-        for (RecoveryCalc recovery : recoveries) {
+        for (RecoveryCalc recovery : recoveries.items()) {
             String itemId = "si_rcv_" + java.util.UUID.nameUUIDFromBytes((actualBillId + "|" + recovery.merchantId() + "|"
                     + recovery.method()).getBytes(java.nio.charset.StandardCharsets.UTF_8)).toString().replace("-", "");
             repository.upsertItem(new SettlementItemRecord(itemId, actualBillId, recovery.merchantId(), 0, 0, null,
-                    recovery.method(), recovery.amount(), recovery.amount(), ITEM_STATUS_DRAFT));
+                    recovery.method(), recovery.amount(), recovery.amount(), ITEM_STATUS_DRAFT, 0L, 0L));
             recovery.byOriginalBill().forEach((originalBill, amount) ->
                     repository.insertItemRecovery(itemId, originalBill, amount));
         }
@@ -230,9 +237,12 @@ public class TicketDistributionSettlementService {
     /**
      * FS-021-R2：本窗内被撤销核销所属的原月（已结付），以原月口径两次重算——只含早于本窗的撤销 vs 再含本窗的撤销——之差，
      * 逐家形成追收：单店（专属直付）即该次核销原结付金额，分池即原月剔除该次核销后各家应得的变化。原月账单与已付款不回改。
+     * 第十八批 AI 段 214-R1（BSM:804「再冲回域间份额」）：同两次重算另比游乐、传媒、餐饮、零售业态行的域间份额与按内部结算价应直付额，按业态记追收。
      */
-    private List<RecoveryCalc> recoveries(String projectId, Instant windowStart, Instant windowEnd) {
+    private Recoveries recoveries(String projectId, Instant windowStart, Instant windowEnd) {
         java.util.LinkedHashMap<String, RecoveryCalc> out = new java.util.LinkedHashMap<>();
+        // 业态 → {域间份额之差, 应直付额之差}
+        java.util.Map<String, long[]> formatDiffs = new java.util.LinkedHashMap<>();
         // 189-R1：原月＝原核销业务时刻所属营业日的月（与月窗同一套营业日）。
         java.util.TreeSet<YearMonth> originals = new java.util.TreeSet<>();
         for (Instant at : repository.findRecoveredOriginalTimes(projectId, windowStart, windowEnd)) {
@@ -240,8 +250,22 @@ public class TicketDistributionSettlementService {
         }
         for (YearMonth original : originals) {
             String originalBillId = repository.findBillId(projectId, original.atDay(1), original.atEndOfMonth());
-            java.util.Map<String, Long> before = recoveryKeys(compute(projectId, original, windowStart).items());
-            java.util.Map<String, Long> after = recoveryKeys(compute(projectId, original, windowEnd).items());
+            MonthCalc beforeCalc = compute(projectId, original, windowStart);
+            MonthCalc afterCalc = compute(projectId, original, windowEnd);
+            java.util.LinkedHashSet<String> formats = new java.util.LinkedHashSet<>(beforeCalc.formatShares().keySet());
+            formats.addAll(afterCalc.formatShares().keySet());
+            for (String format : formats) {
+                if (!interEntityFormat(format)) {
+                    continue;
+                }
+                FormatShare b = beforeCalc.formatShares().getOrDefault(format, new FormatShare(format, 0L, 0L));
+                FormatShare a = afterCalc.formatShares().getOrDefault(format, new FormatShare(format, 0L, 0L));
+                long[] d = formatDiffs.computeIfAbsent(format, k -> new long[2]);
+                d[0] += a.interEntityNetCent() - b.interEntityNetCent();
+                d[1] += a.internalSettledCent() - b.internalSettledCent();
+            }
+            java.util.Map<String, Long> before = recoveryKeys(beforeCalc.items());
+            java.util.Map<String, Long> after = recoveryKeys(afterCalc.items());
             java.util.LinkedHashSet<String> keys = new java.util.LinkedHashSet<>(before.keySet());
             keys.addAll(after.keySet());
             for (String key : keys) {
@@ -256,14 +280,21 @@ public class TicketDistributionSettlementService {
                 out.put(key, new RecoveryCalc(cur.merchantId(), cur.method(), cur.amount() + diff, cur.byOriginalBill()));
             }
         }
-        return new ArrayList<>(out.values());
+        formatDiffs.values().removeIf(d -> d[0] == 0L && d[1] == 0L);
+        return new Recoveries(new ArrayList<>(out.values()), formatDiffs);
+    }
+
+    /** 份额归娱乐平台公司之外的域主管公司的业态：游乐、传媒（ENUM:32）与餐饮、零售（ENUM:49「餐饮域与零售域 → 城市项目公司」）。 */
+    private static boolean interEntityFormat(String format) {
+        return CITY_COMPANY_FORMATS.contains(format) || ENTITY_BENEFICIARY_FORMATS.containsKey(format) && !FORMAT_BAR.equals(format);
     }
 
     /**
      * 第十八批 X 段 189-R1（BSM:1682「全系统的钱账统一按「营业日」归集」「起止时点由后台配置（安全阈值，按综合体分别配置」）：
      * 月窗＝[月首营业日起点, 月末营业日结束)，按综合体营业日、不传酒吧（与逐份分组 {@link #settleUnits} 同口径）。
+     * 第十八批 AI 段 237-R2：结算单审阅明细（{@link SettlementQueryService#billReview}）按同一月窗读，故包内可见。
      */
-    private Instant[] monthWindow(String projectId, YearMonth month) {
+    Instant[] monthWindow(String projectId, YearMonth month) {
         // ponytail: 启用综合体不止一个时平台单取出厂 10:00 窗；起点晚于 10:00 的综合体，偏差落在其非营业时段；起点早于 10:00 的综合体，月首 [起点, 10:00) 的营业时段数据进上月单，且不在上月单最终快照闸检查范围内；要逐综合体切月时把平台单按项目拆窗。
         String p = dayProject(projectId);
         return new Instant[] {businessDays.start(p, null, month.atDay(1)), businessDays.end(p, null, month.atEndOfMonth())};
@@ -370,7 +401,8 @@ public class TicketDistributionSettlementService {
         //    同一事务、同一月窗,按「项目 × 规则(pass_gift_cost_configs)」结出 差额 V = 预扣 G − 实付 A。
         //    G = 本月进池计提净额(按计提行快照的规则 id 分组) + 本月有池快照各份按快照规则 id 均分的 G;
         //    A = ar_ap_items(pass_drink_settlement) 对冲净额(月窗/项目/票种锚点取该核销的结算事实行,票种再走与计提同一个
-        //    findPassGiftCostConfig 归到规则)。处理规则只剩 platform_absorb:差额留娱乐平台公司仅留痕(ENUM L52;18B 复核后裁决第 11 条)。
+        //    findPassGiftCostConfig 归到规则)＋零元专属直付(平台出资的餐饮、零售赠送)按内部结算价直付的核销与冲正额(216-R1)。
+        //    处理规则只剩 platform_absorb:差额留娱乐平台公司仅留痕(ENUM L52;18B 复核后裁决第 11 条)。
         GiftVarianceCalc giftVariance = settleGiftVariance(projectId, windowStart, windowEnd, recoveryCutoff,
                 pooledGiftCost + units.giftCostCent(), units.giftCostByConfig());
 
@@ -401,6 +433,32 @@ public class TicketDistributionSettlementService {
         // 渠道费按各业态毛额占比摊下去;分摊尾差【不再并进酒吧支】,而是单列到同一尾差口径
         //   (治理地图「不得悄悄并进任一参与方」—— 酒吧也是参与方,不能替全场认这几分)。
         long channelFeeResidual = allocateChannelFee(formatShares, channelFee, ticketRevenue);
+
+        // 第十八批 AI 段 237-R1（ENUM:32「票款由娱乐平台公司统一收款」「收款主体不等于收入归属主体」「其余各域份额自收款之日起即为应付给对应域主管公司的
+        //   款项」「纯游乐票和纯游乐通票由游乐公司负责」；BSM:1720「与娱乐平台公司无关」；BSM:1144「由传媒公司自行定价、售票、收款」）：域间份额＝净份额中
+        //   娱乐平台公司代收、应归归属主体的部分——游乐、传媒行扣除归属主体自收的纯游乐票、纯游乐通票与传媒自办演出票那部分净额，餐饮零售行即净份额，
+        //   酒吧（娱乐平台公司自身收入）与「其他」（归提供商户自己）为 0。
+        // ponytail: 自收部分的销售渠道费按毛额占比从该业态行摊回，与 allocateChannelFee 按业态毛额分摊同一近似。
+        Map<String, JdbcSettlementBillRepository.FormatRevenue> ownCollected = new HashMap<>();
+        for (var oc : repository.aggregateOwnCollectedFormatRevenue(projectId, windowStart, windowEnd, recoveryCutoff)) {
+            ownCollected.put(oc.businessFormat(), oc);
+        }
+        for (var e : formatShares.entrySet()) {
+            FormatShare s = e.getValue();
+            var oc = ownCollected.get(s.format());
+            long ownGross = oc == null ? 0L : oc.revenueCent() + platformBorneDiscount(discountCfg, oc.discountCent());
+            long ownNet = oc == null ? 0L : ownGross - oc.routeFeeCent()
+                    - (s.grossCent() == 0L ? 0L : MoneyRounding.prorate(s.channelFeeCent(), ownGross, s.grossCent()));
+            e.setValue(s.withInterEntity(interEntityFormat(s.format()) ? s.netCent() - ownNet : 0L));
+        }
+        // 第十八批 AI 段 214-R2（ENUM:49「其一，到期未核销票款」；第十八批裁决 51「从未核销、到期的部分在到期所在月另挂一笔」）：本月到期未核销、归非酒吧域
+        //   归属主体的票款另列在该业态行（不进净份额与拆份额互核）；当月无该业态行的补零份额行。原月重算口径不并。
+        if (recoveryCutoff == null) {
+            for (var u : repository.aggregateUnverifiedNetByFormat(projectId, windowStart, windowEnd).entrySet()) {
+                FormatShare cur = formatShares.get(u.getKey());
+                formatShares.put(u.getKey(), (cur == null ? new FormatShare(u.getKey(), 0L, 0L) : cur).withUnverified(u.getValue()));
+            }
+        }
 
         // ③b S7 兑付成本按【提供方业态】分记(HTML:962「成本按提供方的商户业态分开记账」):
         //    A 按业态归堆落业态份额行 gift_actual_paid_cent。纯留痕不进净份额(兑付由娱乐平台公司承担,
@@ -457,7 +515,7 @@ public class TicketDistributionSettlementService {
         //   把封顶前原始费聚合后再压:商户级规则=该商户当月封顶、票种级规则=该票种当月封顶、全局规则=各商户各自当月封顶(不跨商户合并)。
         //   两趟:①逐聚合行累计 商户毛额 + (商户,规则)原始费/cap ②各组封顶 → 商户净额一条 exclusive_full 明细。
         java.util.LinkedHashMap<String, long[]> merchantAgg = new java.util.LinkedHashMap<>();
-        // P6:merchantAgg[mid] = {grossSum, verifiedCount, guestCount, compServiceFeeSum}
+        // P6:merchantAgg[mid] = {grossSum, verifiedCount, guestCount, compServiceFeeSum, singleBarRouteFee, singleBarChannelFee}
         //   compServiceFeeSum = 每笔核销/冲正落库的【实收】综合服务费之和(核销 fee>=0·增量封顶后·冲正 fee<=0·取原行之反)。
         for (var ex : exclusives) {
             // D6：项目按归属承担的折扣加回该商户毛额，使其拿满额(platform_absorb 全额/split_by_ratio 平台份额/merchant_absorb=0)。
@@ -466,7 +524,7 @@ public class TicketDistributionSettlementService {
             long platformBorne = platformBorneDiscount(discountCfg, ex.discountCent());
             long gross = ex.revenueCent() + platformBorne;
             comboDiscountCent += platformBorne; // 项目承担的专属折扣入账
-            long[] mg = merchantAgg.computeIfAbsent(ex.merchantId(), k -> new long[4]);
+            long[] mg = merchantAgg.computeIfAbsent(ex.merchantId(), k -> new long[6]);
             mg[0] += gross;
             mg[1] += ex.verifiedCount();
             mg[2] += ex.guestCount();
@@ -477,14 +535,26 @@ public class TicketDistributionSettlementService {
             //   比例三模式跨月红冲全守恒。封顶已在核销时按「商户×规则」按月增量应用，此处无需再 clamp。
             mg[3] += ex.compServiceFeeCent();
         }
+        // 第十八批 AI 段 212-R1（ENUM:51「所有支付都会产生通路费、官方渠道同样产生……不由该笔业务的收款主体单独承担」「任何票种经第三方渠道售出时，
+        //   销售渠道费一律先从整单扣除且只扣一次」；BSM:749「官方渠道售出的票不扣销售渠道费，但仍扣通路费」）：单一酒吧门票行已按核销额分摊的通路费、
+        //   按订单付款时固化配置计的销售渠道费（比例＝费率×核销额，固定额＝每张×锚点票数），从整单先扣、定出该酒吧直付额并逐商户留痕；
+        //   不另挂对酒吧的应收，也不并入单头渠道费、通路费与业态份额（verifyFormatSplit 只核进池行）。
+        for (var sb : repository.aggregateSingleBarFees(projectId, windowStart, windowEnd, recoveryCutoff)) {
+            long[] mg = merchantAgg.computeIfAbsent(sb.merchantId(), k -> new long[6]);
+            mg[4] += sb.routeFeeCent();
+            mg[5] += sb.fee().fixedAmountCent() != null
+                    ? sb.fee().fixedAmountCent() * sb.ticketCount()
+                    : MoneyRounding.bpsOf(sb.revenueCent(), sb.fee().feeBps());
+        }
         long exclusiveServiceFee = 0L;
-        // 商户净额 = 毛额合计 − 该商户当月【实收】综合服务费合计;各商户一条 exclusive_full 直付明细(同商户多票种合并)。
+        // 商户净额 = 毛额合计 − 该商户当月【实收】综合服务费合计 − 单一酒吧门票通路费与销售渠道费(212-R1);
+        //   各商户一条 exclusive_full 直付明细(同商户多票种合并)。
         for (var e : merchantAgg.entrySet()) {
             long[] mg = e.getValue();
             long merchantFee = mg[3];
             exclusiveServiceFee += merchantFee;
-            long net = mg[0] - merchantFee;
-            items.add(new ItemCalc(e.getKey(), (int) mg[1], (int) mg[2], null, net, METHOD_EXCLUSIVE_FULL));
+            long net = mg[0] - merchantFee - mg[4] - mg[5];
+            items.add(new ItemCalc(e.getKey(), (int) mg[1], (int) mg[2], null, net, METHOD_EXCLUSIVE_FULL, mg[4], mg[5]));
         }
 
         // distributed = 池分账 + 专属直付（两口径并列写入同一结算单明细；续算明细另列不计入）。
@@ -1029,34 +1099,47 @@ public class TicketDistributionSettlementService {
      * S7 giftPaidCent:本业态当月兑付实付(A,按提供方业态分记,HTML:962)——纯留痕<b>不进净份额</b>
      * (兑付由娱乐平台公司承担,不动各业态分账)。
      * 第十八批 X 段 176-R2 internalSettledCent:本业态有价专属直付按内部结算价应直付额(ENUM:53)——纯留痕不进净份额。
+     * 第十八批 AI 段 237-R1 interEntityNetCent:域间份额(净份额中娱乐平台公司代收、应归归属主体的部分);
+     * 214-R2 unverifiedNetCent:本月到期未核销归本业态归属主体的票款——两者都不进净份额。
      */
     private record FormatShare(String format, long grossCent, long platformBorneCent, long channelFeeCent,
                                long routeFeeCent, long compServiceFeeCent, long giftCostCent, long giftPaidCent,
-                               long internalSettledCent) {
+                               long internalSettledCent, long interEntityNetCent, long unverifiedNetCent) {
         FormatShare(String format, long grossCent, long platformBorneCent) {
-            this(format, grossCent, platformBorneCent, 0L, 0L, 0L, 0L, 0L, 0L);
+            this(format, grossCent, platformBorneCent, 0L, 0L, 0L, 0L, 0L, 0L, 0L, 0L);
         }
 
         FormatShare(String format, long grossCent, long platformBorneCent, long channelFeeCent, long routeFeeCent,
                     long compServiceFeeCent, long giftCostCent) {
-            this(format, grossCent, platformBorneCent, channelFeeCent, routeFeeCent, compServiceFeeCent, giftCostCent, 0L, 0L);
+            this(format, grossCent, platformBorneCent, channelFeeCent, routeFeeCent, compServiceFeeCent, giftCostCent,
+                    0L, 0L, 0L, 0L);
         }
 
         FormatShare withChannelFee(long fee) {
             return new FormatShare(format, grossCent, platformBorneCent, fee, routeFeeCent, compServiceFeeCent,
-                    giftCostCent, giftPaidCent, internalSettledCent);
+                    giftCostCent, giftPaidCent, internalSettledCent, interEntityNetCent, unverifiedNetCent);
         }
 
         FormatShare withGiftPaid(long paid) {
             return new FormatShare(format, grossCent, platformBorneCent, channelFeeCent, routeFeeCent,
-                    compServiceFeeCent, giftCostCent, paid, internalSettledCent);
+                    compServiceFeeCent, giftCostCent, paid, internalSettledCent, interEntityNetCent, unverifiedNetCent);
+        }
+
+        FormatShare withInterEntity(long interEntity) {
+            return new FormatShare(format, grossCent, platformBorneCent, channelFeeCent, routeFeeCent,
+                    compServiceFeeCent, giftCostCent, giftPaidCent, internalSettledCent, interEntity, unverifiedNetCent);
+        }
+
+        FormatShare withUnverified(long unverified) {
+            return new FormatShare(format, grossCent, platformBorneCent, channelFeeCent, routeFeeCent,
+                    compServiceFeeCent, giftCostCent, giftPaidCent, internalSettledCent, interEntityNetCent, unverified);
         }
 
         /** 176-R2：并入本业态有价专属直付的域份额、分摊的通路费与按内部结算价应直付额。 */
         FormatShare plusExclusive(JdbcSettlementBillRepository.ExclusiveDomainShare d) {
             return new FormatShare(format, grossCent + d.domainShareCent(), platformBorneCent, channelFeeCent,
                     routeFeeCent + d.routeFeeCent(), compServiceFeeCent, giftCostCent, giftPaidCent,
-                    internalSettledCent + d.internalSettledCent());
+                    internalSettledCent + d.internalSettledCent(), interEntityNetCent, unverifiedNetCent);
         }
 
         long netCent() {
@@ -1068,7 +1151,7 @@ public class TicketDistributionSettlementService {
             return new FormatShare(format, grossCent + u.grossCent(), platformBorneCent + u.borneCent(),
                     channelFeeCent + u.salesChannelFeeCent(), routeFeeCent + u.routeFeeCent(),
                     compServiceFeeCent + u.serviceFeeCent(), giftCostCent + u.giftCostCent(), giftPaidCent,
-                    internalSettledCent);
+                    internalSettledCent, interEntityNetCent, unverifiedNetCent);
         }
     }
 
@@ -1078,13 +1161,23 @@ public class TicketDistributionSettlementService {
                              List<JdbcPassPoolRepository.UnitResult> unitResults, List<ItemCalc> resumeItems) {
     }
 
+    /** FS-021-R2 追收明细与第十八批 AI 段 214-R1 业态追收（业态 → {域间份额之差, 应直付额之差}）。 */
+    private record Recoveries(List<RecoveryCalc> items, java.util.Map<String, long[]> formatDiffs) {
+    }
+
     /** FS-021-R2 追收明细：某家某支的追收合计（负＝向该家追回）及按原月结算单拆分。 */
     private record RecoveryCalc(String merchantId, String method, long amount, java.util.Map<String, Long> byOriginalBill) {
     }
 
-    /** 分账中间结果（method：第一段固定金额/固定单价、第二段 by_rank_tier、续算 pooled_resume、专属直付 exclusive_full）。 */
+    /**
+     * 分账中间结果（method：第一段固定金额/固定单价、第二段 by_rank_tier、续算 pooled_resume、专属直付 exclusive_full）。
+     * singleBarRouteFeeCent／singleBarChannelFeeCent：专属直付明细中已扣的单一酒吧门票通路费、销售渠道费（212-R1），其余分配方式为 0。
+     */
     private record ItemCalc(String merchantId, int verifiedCount, int guestCount, Integer rankNo, long amount,
-                            String method) {
+                            String method, long singleBarRouteFeeCent, long singleBarChannelFeeCent) {
+        ItemCalc(String merchantId, int verifiedCount, int guestCount, Integer rankNo, long amount, String method) {
+            this(merchantId, verifiedCount, guestCount, rankNo, amount, method, 0L, 0L);
+        }
     }
 
     /** 第十八批第 2 条：第二段一家参与者（当期入场人数决定名次，是否在本份核销决定拿或减除）。 */

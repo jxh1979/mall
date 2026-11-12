@@ -1,4 +1,4 @@
-# P0 OpenAPI 权限、事件、任务追溯收口附录 V0.66
+# P0 OpenAPI 权限、事件、任务追溯收口附录 V0.67
 
 ## 1. 文档定位
 
@@ -14,10 +14,10 @@
 
 | 检查项 | 当前结果 | 执行结论 |
 |---|---:|---|
-| OpenAPI operation 数 | 1364 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
+| OpenAPI operation 数 | 1365 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
 | OpenAPI 权限/通用权限状态数 | 444 | 人工权限矩阵正文未覆盖 343 项；缺口以本文第 3 节补齐 |
-| OpenAPI 成功/失败事件数 | 2728 | 人工事件矩阵正文未覆盖 2679 项；完整事件字典以本文第 4 节为准 |
-| operation 级任务追溯 | 1364 | 人工任务映射正文未逐项覆盖 1358 个 operation；逐 operation 映射以本文第 5 节为准 |
+| OpenAPI 成功/失败事件数 | 2730 | 人工事件矩阵正文未覆盖 2681 项；完整事件字典以本文第 4 节为准 |
+| operation 级任务追溯 | 1365 | 人工任务映射正文未逐项覆盖 1359 个 operation；逐 operation 映射以本文第 5 节为准 |
 | 写接口数量 | 839 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
 
 ## 3. 权限码与认证上下文补充表
@@ -279,7 +279,7 @@
 | `finance.reconciliation.resolve` | staff-token | project-entity | 2 | closeFinanceReconciliationDifference, identifyFinanceReconciliationDifference | OpenAPI 补充，以本附录为准 |
 | `finance.reconciliation.view` | staff-token | project-entity | 2 | listReconciliationBatches, listReconciliationDifferences | 已在权限矩阵正文出现 |
 | `finance.refund.create` | staff-token | project-order | 4 | createFinanceRefund, retryFinanceRefund, recordFinanceRefundExecution, confirmFinanceRefundResult | 已在权限矩阵正文出现 |
-| `finance.settlement.view` | staff-token | platform | 2 | listSettlementBills, listSettlementTransactions | OpenAPI 补充，以本附录为准 |
+| `finance.settlement.view` | staff-token | platform | 3 | listSettlementBills, getSettlementBillReview, listSettlementTransactions | OpenAPI 补充，以本附录为准 |
 | `finance.turnover_rent.bill` | staff-token | platform | 2 | billTurnoverRent, createTurnoverRentRule | OpenAPI 补充，以本附录为准 |
 | `floor_plan.import.manage` | staff-token | project-space | 2 | createFloorPlanImport, publishFloorPlanImport | OpenAPI 补充，以本附录为准 |
 | `floor_plan.import.view` | staff-token | project-space | 2 | listFloorPlanImports, getFloorPlanImportDetails | OpenAPI 补充，以本附录为准 |
@@ -2238,6 +2238,8 @@
 | `not_applicable` | failure | `getRoleViewableProjects` | `GET` | `/api/v1/access/roles/{id}/viewable-projects` | AUTH-账号权限 | `access.role.manage` | 接口级事件，以本附录为准 |
 | `not_applicable` | success | `getServicePayConfig` | `GET` | `/api/v1/services/pay-config` | P0-待归类 | `service.order.create` | 接口级事件，以本附录为准 |
 | `not_applicable` | failure | `getServicePayConfig` | `GET` | `/api/v1/services/pay-config` | P0-待归类 | `service.order.create` | 接口级事件，以本附录为准 |
+| `not_applicable` | success | `getSettlementBillReview` | `GET` | `/api/v1/settlement/bills/{id}/review` | P0-待归类 | `finance.settlement.view` | 接口级事件，以本附录为准 |
+| `not_applicable` | failure | `getSettlementBillReview` | `GET` | `/api/v1/settlement/bills/{id}/review` | P0-待归类 | `finance.settlement.view` | 接口级事件，以本附录为准 |
 | `not_applicable` | success | `getSettlementObjectionPeriod` | `GET` | `/api/v1/settlement/internal-pay-days/objection-period` | P0-待归类 | `settlement.config.view` | 接口级事件，以本附录为准 |
 | `not_applicable` | failure | `getSettlementObjectionPeriod` | `GET` | `/api/v1/settlement/internal-pay-days/objection-period` | P0-待归类 | `settlement.config.view` | 接口级事件，以本附录为准 |
 | `not_applicable` | success | `getSiteEntryReport` | `GET` | `/api/v1/facility/site-entry-reports/{report_id}` | P0-待归类 | `facility.site_entry.view_assigned` | 接口级事件，以本附录为准 |
@@ -4139,6 +4141,7 @@
 | P0-待归类 | `getParkingOverview` | `GET` | `/api/v1/parking/overview` | 在场与出场记录及车位占用 | `parking.ops.view` | `not_applicable` / `not_applicable` | web | operation 级补充 |
 | P0-待归类 | `getParkingPolicy` | `GET` | `/api/v1/parking/policies/{project_id}` | 查看本项目停车业务参数 | `parking.ops.view` | `not_applicable` / `not_applicable` | web | operation 级补充 |
 | P0-待归类 | `getServicePayConfig` | `GET` | `/api/v1/services/pay-config` | 公司统一收款码(下单出示用) | `service.order.create` | `not_applicable` / `not_applicable` | web | operation 级补充 |
+| P0-待归类 | `getSettlementBillReview` | `GET` | `/api/v1/settlement/bills/{id}/review` | 月度结算单审阅明细 | `finance.settlement.view` | `not_applicable` / `not_applicable` | web | operation 级补充 |
 | P0-待归类 | `getSettlementObjectionPeriod` | `GET` | `/api/v1/settlement/internal-pay-days/objection-period` | 查非积分商户账单异议期(按项目) | `settlement.config.view` | `not_applicable` / `not_applicable` | web | operation 级补充 |
 | P0-待归类 | `getSiteEntryReport` | `GET` | `/api/v1/facility/site-entry-reports/{report_id}` | 查看单个进场报备单 | `facility.site_entry.view_assigned` | `not_applicable` / `not_applicable` | web | operation 级补充 |
 | P0-待归类 | `getWecomCleanupPreview` | `GET` | `/api/v1/compliance/wecom/cleanup-previews/{id}` | 查看本人清理预览 | `wecom.retention.manage` | `wecom.cleanup_viewed` / `wecom.cleanup_view_failed` | web | operation 级补充 |
