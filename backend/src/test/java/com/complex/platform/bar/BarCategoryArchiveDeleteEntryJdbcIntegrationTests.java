@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -64,7 +64,7 @@ class BarCategoryArchiveDeleteEntryJdbcIntegrationTests {
         SecurityContextHolder.clearContext();
     }
 
-    /** 存档：reason 是契约必填，空请求体 400 VALIDATION_FAILED；带 reason 200，记存档人与存档时间；存档不写审计事件。 */
+    /** 存档：reason 是契约必填，空请求体 400 VALIDATION_FAILED；带 reason 200，记存档人与存档时间；存档成功与被拒各落审计事件（248-R1）。 */
     @Test
     void archivingCategoryRequiresReasonAndRecordsArchiver() throws Exception {
         RequestPostProcessor manager = staff("mgr", "酒吧分类管理回归角色", "bar.category.manage");
@@ -83,8 +83,8 @@ class BarCategoryArchiveDeleteEntryJdbcIntegrationTests {
                 .isEqualTo("本季不再售卖");
         assertThat(jdbc.queryForList("SELECT event_name FROM audit_events WHERE actor_id = ? AND business_type = 'bar_product_category'",
                         String.class, userId("mgr")))
-                .as("存档不写审计事件（契约 not_applicable）；只有新建分类的 bar.category.saved")
-                .containsExactly("bar.category.saved");
+                .as("第十八批 AK 段第 248 条 248-R1：新建分类的 bar.category.saved，缺理由被拒的 bar.category.archive_failed，存档成功的 bar.category.archived")
+                .containsExactlyInAnyOrder("bar.category.saved", "bar.category.archive_failed", "bar.category.archived");
     }
 
     /**

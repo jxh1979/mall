@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.06
+// 文件版本：V0.07
 
 import com.complex.platform.finance.ArApItemRecord;
 import com.complex.platform.finance.FinanceService;
@@ -39,6 +39,10 @@ class FinanceBarReceivableLedgerService implements BarReceivableLedgerService {
     // 第十八批第 1 条：挂账应收、退款与赠饮应付的落账日按该酒吧的营业日（ENUM:187），不按服务器时区自然日。
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     private com.complex.platform.common.BusinessDayResolver businessDays = new com.complex.platform.common.BusinessDayResolver();
+
+    // 第十八批 AK 段第 225 条 225-R1：认出没有商户号的平台侧财务 BP（字段注入免改构造点；旧构造/单测未注入即照旧）。
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.complex.platform.access.AuthorizationService authorizationService;
 
     private LocalDate today(String barId) {
         return businessDays.businessDate(null, barId, java.time.Instant.now());
@@ -144,7 +148,7 @@ class FinanceBarReceivableLedgerService implements BarReceivableLedgerService {
         // source_id 取退款调整记录 id（唯一），与 V008 唯一索引 (direction, source_type, source_id) 对齐，幂等。
         // 退款过账与退款主流程（V079 减项）同事务执行（applyBillAdjustment @Transactional / createArApItem @Transactional
         // 复用同一外层事务）：过账失败将回滚退款，保证财务台账与账单减项强一致，不出现"退了钱但台账无记录"。
-        ArApItemRecord item = financeService.createArApItem(new ArApItemRequest(
+        ArApItemRequest payable = new ArApItemRequest(
                 "bar-refund-" + adjustmentId,
                 "bar bill refund payable: " + bill.id() + " (" + reason + ")",
                 evidenceAttachmentIds == null ? List.of() : List.copyOf(evidenceAttachmentIds),
@@ -155,7 +159,15 @@ class FinanceBarReceivableLedgerService implements BarReceivableLedgerService {
                 otherChannelsCent,
                 today,
                 YearMonth.from(today).toString()
-        ));
+        );
+        // 第十八批 AK 段第 225 条 225-R1（PGM:664「异常单据处置……由该酒吧对应的财务 BP 负责」）：没有商户号的平台侧财务 BP 处置异常账单
+        // 「作废并冲正」——退款应付按账单所属酒吧及其综合体落账（商户侧主管办理时落的同一归属）。其余退款入口都限商户账号与平台管理员，照旧。
+        boolean platformSideStaff = authorizationService != null
+                && !authorizationService.isPlatformAdmin(authorizationService.currentActor())
+                && authorizationService.currentMerchantIdQuietly().isEmpty();
+        ArApItemRecord item = platformSideStaff
+                ? financeService.createArApItem(payable, bill.merchantId(), businessDays.projectOfMerchant(bill.barId()))
+                : financeService.createArApItem(payable);
         return item.id();
     }
 

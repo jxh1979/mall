@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.16
+// 文件版本：V0.17
 
 import static com.complex.platform.bar.BarBillRecords.*;
 import static com.complex.platform.bar.BarValidation.*;
@@ -108,6 +108,26 @@ public class BarBillingService {
             throw ApiException.forbidden("REFUND_REVIEW_REQUIRED",
                     "退款金额超过自助授权限额，须由有权限的审批人处理");
         }
+    }
+
+    /**
+     * 第十八批 AK 段第 222 条 222-R1（PGM:303「同一次操作重复提交时，返回第一次的结果并提示已完成。」；PGM:528「⑤同一笔操作重复提交不重复生效」）：
+     * 本单已开出的账单＝未作废的最早一张（拆出的账单开得比原单晚；客人扫码已付单成单时随单记的已结清账单也算）。已作废的不算已开——
+     * 作废并冲正后再开不是重复提交。订单不存在或不属于本商户的返回空，由 {@link #createBill} 照旧拒绝并留失败痕。
+     */
+    Optional<BarBillRecord> issuedBill(String orderId) {
+        BarOrderRecord order = repository.findOrderById(orderId).orElse(null);
+        if (order == null) {
+            return Optional.empty();
+        }
+        try {
+            checkMerchantOwnership(order.merchantId());
+        } catch (ApiException outOfScope) {
+            return Optional.empty();
+        }
+        return repository.listBillsByOrderIds(List.of(order.id())).stream()
+                .filter(bill -> !"void".equals(bill.settlementStatus()))
+                .min(java.util.Comparator.comparing(BarBillRecord::createdAt));
     }
 
     BarBillRecord createBill(String orderId, BarOrderBillCreateRequest request) {

@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.06
+// 文件版本：V0.07
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.containsString;
@@ -172,6 +172,50 @@ class KioskBarOrderJdbcTests {
                 .andExpect(status().isOk());
         assertThat(jdbc.queryForObject("SELECT available_quantity FROM inventory_stock_balances WHERE item_id = ? AND location_id = ?",
                 Integer.class, item, location)).isEqualTo(8);
+    }
+
+    /**
+     * 第十八批 AK 段第 261 条 261-B09-R1 后端守护用例（PGM:303「同一次操作重复提交时，返回第一次的结果并提示已完成。」；PGM:528「⑤同一笔操作重复提交
+     * 不重复生效（重复点击、网络重发、渠道重复回调都只算一次）」；BSM:990「允许现场现金和 POS 机支付，但必须由授权员工记录到订单、账单、日结和对账里。」）：
+     * 一体机登记现金没拿到结果再按时沿用原请求编号（同时作付款凭据编号）——同酒吧另一位授权员工登录后用同一编号、同一内容再提交，
+     * 返回第一次的账单并提示已完成，结算流水、已付金额与现金收款留痕都只记一次，收款人仍是第一次登记的员工。服务端沿用共用幂等层，本条不改服务端。
+     */
+    @Test
+    void kioskCashSettlementResubmittedWithSameKeyByAnotherCashierReturnsTheFirstResult() throws Exception {
+        String order = data(order(kiosk(resident), "replay").andExpect(status().isOk())).path("id").asText();
+        String billId = data(mockMvc.perform(post("/api/v1/bar/orders/" + order + "/bill").with(kiosk(resident))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json.writeValueAsString(Map.of("idempotency_key", "kbo-replaybill-" + s))))
+                .andExpect(status().isOk())).path("id").asText();
+        String key = "kbo-replaysettle-" + s;
+        Map<String, Object> settle = new LinkedHashMap<>();
+        settle.put("idempotency_key", key);
+        settle.put("payment_id", key);
+        settle.put("settlement_amount_cent", 10_000);
+        settle.put("payment_channel", "cash");
+        JsonNode first = data(mockMvc.perform(post("/api/v1/bar/bills/" + billId + "/settle").with(kiosk(cashier))
+                        .contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(settle)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.settlement_status").value("settled"))
+                .andExpect(jsonPath("$.replayed").doesNotExist()));
+
+        RequestPostProcessor secondCashier = new StaffRequestFixture(jdbc).staff("usr_kbo_cashier2_" + s, "staff", project, bar,
+                "finance.payment.register");
+        JsonNode replayed = data(mockMvc.perform(post("/api/v1/bar/bills/" + billId + "/settle").with(kiosk(secondCashier))
+                        .contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(settle)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.replayed").value(true))
+                .andExpect(jsonPath("$.message").value("该操作已完成（重复提交，返回首次结果）")));
+
+        assertThat(replayed).isEqualTo(first);
+        assertThat(replayed.path("id").asText()).isEqualTo(billId);
+        assertThat(jdbc.queryForMap("SELECT count(*) AS settlements, min(cashier_staff_id) AS cashier, max(settlement_amount_cent) AS amount"
+                + " FROM bar_bill_settlements WHERE bill_id = ?", billId))
+                .containsEntry("settlements", 1L).containsEntry("cashier", cashierId).containsEntry("amount", 10_000L);
+        assertThat(jdbc.queryForMap("SELECT paid_amount_cent, payment_status, settlement_status FROM bar_bills WHERE id = ?", billId))
+                .containsEntry("paid_amount_cent", 10_000L).containsEntry("payment_status", "paid").containsEntry("settlement_status", "settled");
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM audit_events WHERE event_name = 'payment.cash_received' AND business_id = ?",
+                Integer.class, billId)).isEqualTo(1);
     }
 
     /** 回归：商户员工在后台网页下单（不带一体机终端与设备号）——来源仍记员工、不记设备；创建终端记服务端认定的可信终端（商户账号的网页请求即商户网页门户）。 */

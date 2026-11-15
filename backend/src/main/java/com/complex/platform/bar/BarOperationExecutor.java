@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import com.complex.platform.common.api.PageResponse;
 import com.complex.platform.evidence.AuditedOperationExecutor;
@@ -65,6 +65,11 @@ public class BarOperationExecutor {
      *  状态机天然防重放(删后重放 404、驳回后重放 400),故豁免幂等。 */
     <T> T auditedWrite(BarWriteOperation operation, java.util.function.Supplier<T> action) {
         return operations.readSingle(operation, action, this::businessId);
+    }
+
+    /** 同上，成功留痕另带业务明细（第十八批 AK 段第 248 条 248-R1：存档理由）。 */
+    <T> T auditedWrite(BarWriteOperation operation, Map<String, Object> detail, java.util.function.Supplier<T> action) {
+        return operations.readSingle(operation, action, this::businessId, detail);
     }
 
     String requireText(String value, String fieldName) {

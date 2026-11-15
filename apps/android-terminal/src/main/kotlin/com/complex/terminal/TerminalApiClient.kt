@@ -1,6 +1,6 @@
 package com.complex.terminal
 
-// 文件版本：V0.14
+// 文件版本：V0.15
 
 import java.net.URI
 import java.net.URLEncoder
@@ -57,6 +57,9 @@ class TerminalApiClient(
   var accessToken: String? = null
   /** 第十八批 N 段第 120 条 120-R1 复核：授权员工那一段请求的令牌，只对发起它的线程有效（[asStaff] 设、还），常驻令牌 [accessToken] 不动。 */
   val staffToken = ThreadLocal<String?>()
+  /** 第十八批 AK 段第 261 条 261-B09-R1（PGM:303「同一次操作重复提交时，返回第一次的结果并提示已完成。」）：本线程最近一次成功响应是重复提交、
+   *  返回的是第一次的结果时服务端的提示（响应顶层 replayed=true 时的 message，见 [replayedNotice]），否则为空。 */
+  val lastReplayedNotice = ThreadLocal<String?>()
   var deviceId: String? = null
   var deviceSigner: ((ByteArray) -> String)? = null
   /** U01-001/U02-001：终端身份由绑定/登记的设备类型决定并只声明一次——应用在绑定成功后写入（staff_work_phone / tablet / kiosk）；
@@ -494,6 +497,7 @@ class TerminalApiClient(
       throw ApiException(response.statusCode(), path, response.body())
     }
     val element = json.parseToJsonElement(response.body())
+    lastReplayedNotice.set(replayedNotice(element))
     if (element is JsonObject && element.containsKey("code") && element.containsKey("data")) {
       return json.decodeFromJsonElement(element["data"]!!)
     }

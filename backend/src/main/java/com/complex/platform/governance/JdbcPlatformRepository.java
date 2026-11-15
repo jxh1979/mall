@@ -1,5 +1,5 @@
 package com.complex.platform.governance;
-// 文件版本：V0.24
+// 文件版本：V0.25
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
@@ -76,6 +76,8 @@ class JdbcPlatformRepository implements PlatformRepository, SupervisorReviewRepo
             Map.entry("bar_business_day_config", "SELECT project_id FROM bar_business_day_configs WHERE id = :id"),
             Map.entry("amusement_business_day_config", "SELECT project_id FROM amusement_business_day_configs WHERE id = :id"),
             Map.entry("bar_bill", "SELECT m.project_id FROM bar_bills b JOIN merchants m ON m.id = b.bar_id WHERE b.id = :id"),
+            // 第十八批 AK 段第 221 条 221-R1：沽清、长期下架、解除沽清的复核单取商品所属酒吧（merchants.id＝bar_id）的项目。
+            Map.entry("bar_product", "SELECT m.project_id FROM bar_products p JOIN merchants m ON m.id = p.bar_id WHERE p.id = :id"),
             // 第十八批 AB 段第 190 条 190-R2：超限转台申请取酒吧（merchants.id＝bar_id）所属项目。
             Map.entry("bar_table_transfer_limit_approval", "SELECT m.project_id FROM bar_table_transfer_limit_approvals a"
                     + " JOIN merchants m ON m.id = a.bar_id WHERE a.id = :id"),

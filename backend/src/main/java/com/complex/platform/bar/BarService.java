@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.14
+// 文件版本：V0.15
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.PageResponse;
@@ -140,6 +140,14 @@ public class BarService {
     @Transactional
     public BarBillRecord createOrderBill(String orderId, BarOrderBillCreateRequest request) {
         String id = operations.requireText(orderId, "order_id");
+        // 第十八批 AK 段第 222 条 222-R1（PGM:303「同一次操作重复提交时，返回第一次的结果并提示已完成。」）：本单已开出未作废账单的，
+        // 按订单认出重复提交（后台成功后再点会换新请求编号），返回已开出的那张并提示已完成。放在幂等层之前：幂等层里执行过动作的请求
+        // 不算重复提交（IdempotentReplayContext#markExecuted），在其内标记不生效。
+        java.util.Optional<BarBillRecord> issued = billingService.issuedBill(id);
+        if (issued.isPresent()) {
+            com.complex.platform.common.idempotency.IdempotentReplayContext.markCurrentReplayed();
+            return issued.get();
+        }
         return operations.executeWrite(
                 "createBarOrderBill:" + id,
                 request == null ? null : request.idempotencyKey(),
@@ -289,6 +297,13 @@ public class BarService {
     @com.complex.platform.gate.GuardedAction(capability = "bar.reservation.manage")
     @Transactional
     public BarReservationRecord archiveReservation(String reservationId, boolean archive, String reason) {
+        // 第十八批 AK 段第 248 条 248-R1（PGM:966；BSM:576）：订台存档、取消存档落成功与失败事件（越权也落失败事件），存档事件记理由。
+        return operations.auditedWrite(
+                archive ? BarWriteOperation.ARCHIVE_BAR_RESERVATION : BarWriteOperation.UNARCHIVE_BAR_RESERVATION,
+                BarPosCatalogService.archiveDetail(archive, reason), () -> doArchiveReservation(reservationId, archive, reason));
+    }
+
+    private BarReservationRecord doArchiveReservation(String reservationId, boolean archive, String reason) {
         BarReservationRecord reservation = requireReservationInScope(reservationId);
         String r = archive ? requireText(reason, "reason") : null;
         java.time.Instant now = java.time.Instant.now();
@@ -433,6 +448,14 @@ public class BarService {
     public BarReservationRecord payReservationDeposit(String reservationId, BarReservationDepositActionRequest request) {
         String id = operations.requireText(reservationId, "reservation_id");
         checkReservationLocation("payBarReservationDeposit", id);
+        // 第十八批 AK 段第 261 条 261-B10-R1（PGM:303「同一次操作重复提交时，返回第一次的结果并提示已完成。」）：一体机收款步骤每次提交都换新请求编号，
+        // 没拿到结果再点时按订台认出重复提交——定金已登记的返回当前订台并提示已完成，不再记支付、收款人与占台。放在幂等层之前，理由同
+        // createOrderBill（幂等层里执行过动作的请求不算重复提交，在其内标记不生效）；排在定位闸之后，范围外的订台仍由 payDeposit 拒绝并留失败痕。
+        java.util.Optional<BarReservationRecord> registered = entryService.registeredDeposit(id);
+        if (registered.isPresent()) {
+            com.complex.platform.common.idempotency.IdempotentReplayContext.markCurrentReplayed();
+            return registered.get();
+        }
         return operations.executeWrite(
                 "payBarReservationDeposit:" + id,
                 request == null ? null : request.idempotencyKey(),
@@ -457,16 +480,26 @@ public class BarService {
         );
     }
 
-    @com.complex.platform.gate.GuardedAction(capability = "bar.reservation.manage")
+    /**
+     * 第十八批 AK 段第 230 条 230-R1（BSM:1058「已预留只能经取消订台、超时释放、到店开台三条路径退出；店长及以上可人工取消预留，必须填原因并留痕。」；
+     * PGM:966「所有有过程的业务动作都必须留痕」）：人工取消订台用单独的权限码（V626，由运营分配给店长及以上角色）；商户闸在幂等之前；
+     * 成功留痕带取消原因与是否按爽约。超时释放走作业（BarEntryService.expireOverdue），不经此入口。
+     */
+    @com.complex.platform.gate.GuardedAction(capability = "bar.reservation.cancel")
     @Transactional
     public BarReservationRecord cancelReservation(String reservationId, BarReservationCancelRequest request) {
         String id = operations.requireText(reservationId, "reservation_id");
+        requireReservationInScope(id);
+        Map<String, Object> detail = new java.util.LinkedHashMap<>();
+        detail.put("reason", request == null || request.reason() == null ? "" : request.reason().trim());
+        detail.put("no_show", request != null && Boolean.TRUE.equals(request.noShow()));
         return operations.executeWrite(
                 "cancelBarReservation:" + id,
                 request == null ? null : request.idempotencyKey(),
                 request,
                 BarReservationRecord.class,
                 BarWriteOperation.CANCEL_RESERVATION,
+                detail,
                 () -> entryService.cancelReservation(id, request)
         );
     }
@@ -643,6 +676,37 @@ public class BarService {
                 disable ? BarWriteOperation.DISABLE_TABLE : BarWriteOperation.ENABLE_TABLE,
                 detail,
                 () -> tableSessionService.changeTableStatus(id, request, disable, detail)
+        );
+    }
+
+    /**
+     * 第十八批 AK 段第 226 条 226-R1（ENUM:100、BSM:1058「异常由系统告警或人工登记进入，处置完成后由当班主管确认恢复，全程留痕。」；第十八批裁决 53）：
+     * 人工登记台位异常、当班主管确认恢复；与开台、清台同权限码 bar.table.open_close。商户闸在幂等之前；留痕带原因与前后状态。
+     */
+    @com.complex.platform.gate.GuardedAction(capability = "bar.table.open_close")
+    @Transactional
+    public BarTableRecord markTableAbnormal(String tableId, BarTableStatusChangeRequest request) {
+        return changeTableAbnormal(tableId, request, true);
+    }
+
+    @com.complex.platform.gate.GuardedAction(capability = "bar.table.open_close")
+    @Transactional
+    public BarTableRecord resolveTableAbnormal(String tableId, BarTableStatusChangeRequest request) {
+        return changeTableAbnormal(tableId, request, false);
+    }
+
+    private BarTableRecord changeTableAbnormal(String tableId, BarTableStatusChangeRequest request, boolean mark) {
+        String id = operations.requireText(tableId, "table_id");
+        tableSessionService.requireTableInScope(id);
+        Map<String, Object> detail = new java.util.LinkedHashMap<>();
+        return operations.executeWriteFilling(
+                (mark ? "markBarTableAbnormal:" : "resolveBarTableAbnormal:") + id,
+                request == null ? null : request.idempotencyKey(),
+                request,
+                BarTableRecord.class,
+                mark ? BarWriteOperation.MARK_TABLE_ABNORMAL : BarWriteOperation.RESOLVE_TABLE_ABNORMAL,
+                detail,
+                () -> tableSessionService.changeTableAbnormal(id, request, mark, detail)
         );
     }
 
@@ -906,6 +970,8 @@ public class BarService {
     @Transactional
     public BarBillRecord resolveBillAnomaly(String billId, BarBillAnomalyResolveRequest request) {
         String id = operations.requireText(billId, "bill_id");
+        // 第十八批 AK 段第 225 条 225-R1：范围闸在幂等之前（BarBillAnomalyService.requireResolveScope）。
+        anomalyService.requireResolveScope(id);
         return operations.executeWrite(
                 "resolveBarBillAnomaly:" + id,
                 request == null ? null : request.idempotencyKey(),
@@ -1029,17 +1095,42 @@ public class BarService {
         );
     }
 
-    @com.complex.platform.gate.GuardedAction(capability = "bar.product.sold_out")
+    /**
+     * 第十八批 AK 段第 221 条 221-R1（BSM:1069「沽清（卖完、临时下架）均需主管审批留痕」；ENUM:111「沽清分两档：临时沽清（本营业日有效，
+     * 营业日切换时点自动恢复在售）与长期下架（须主管审批解除后才恢复）；沽清与解除同样须审批留痕」）：临时沽清、长期下架、解除沽清各是一种
+     * 主管复核动作（V625 三条恒阻断策略）——首次提交建复核单，主管批准后原样再提交才生效，批准只放行所批的那一种。
+     */
+    @com.complex.platform.gate.GuardedAction(capability = "bar.product.sold_out", admissionAction = "bar.product_sold_out", objectType = "bar_product")
     @Transactional
-    public BarProductRecord markProductSoldOut(String productId, BarProductSoldOutRequest request) {
+    public BarProductRecord markProductSoldOutTemporary(String productId, BarProductSoldOutRequest request) {
+        return changeProductSoldOut(productId, request, BarWriteOperation.MARK_PRODUCT_SOLD_OUT, "temporary");
+    }
+
+    @com.complex.platform.gate.GuardedAction(capability = "bar.product.sold_out", admissionAction = "bar.product_delist", objectType = "bar_product")
+    @Transactional
+    public BarProductRecord delistProduct(String productId, BarProductSoldOutRequest request) {
+        return changeProductSoldOut(productId, request, BarWriteOperation.DELIST_PRODUCT, "long_term");
+    }
+
+    @com.complex.platform.gate.GuardedAction(capability = "bar.product.sold_out", admissionAction = "bar.product_sold_out_release", objectType = "bar_product")
+    @Transactional
+    public BarProductRecord releaseProductSoldOut(String productId, BarProductSoldOutRequest request) {
+        return changeProductSoldOut(productId, request, BarWriteOperation.RELEASE_PRODUCT_SOLD_OUT, null);
+    }
+
+    /** soldOutType＝目标档位（temporary、long_term），空＝解除沽清。成功留痕明细（档位、到期时间、原因）由业务动作执行时填入。 */
+    private BarProductRecord changeProductSoldOut(String productId, BarProductSoldOutRequest request, BarWriteOperation operation,
+            String soldOutType) {
         String id = operations.requireText(productId, "product_id");
-        return operations.executeWrite(
+        Map<String, Object> detail = new java.util.LinkedHashMap<>();
+        return operations.executeWriteFilling(
                 "markBarProductSoldOut:" + id,
                 request == null ? null : request.idempotencyKey(),
                 request,
                 BarProductRecord.class,
-                BarWriteOperation.MARK_PRODUCT_SOLD_OUT,
-                () -> orderService.markSoldOut(id, request)
+                operation,
+                detail,
+                () -> orderService.markSoldOut(id, request, soldOutType, detail)
         );
     }
 

@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.09
+// 文件版本：V0.10
 
 import static com.complex.platform.bar.BarValidation.*;
 
@@ -179,6 +179,22 @@ public class BarEntryService {
         return ApiException.conflict("BAR_TABLE_ALREADY_RESERVED", "该台位已被预订或正在使用，请选择其他台位");
     }
 
+    /**
+     * 第十八批 AK 段第 261 条 261-B10-R1（PGM:303「同一次操作重复提交时，返回第一次的结果并提示已完成。」；PGM:528「⑤同一笔操作重复提交不重复生效
+     * （重复点击、网络重发、渠道重复回调都只算一次）」；PGM:662）：每个订台只登记一次定金，按订台认重复提交——定金登记过的订台
+     * （deposit_paid_at 有值，含抢台失败后已取消、待原路退的）。从未支付过的（待支付、免收、已超时释放）返回空，由 {@link #payDeposit} 照旧办理或
+     * 409；订台不存在或不属于本商户的也返回空，由 {@link #payDeposit} 照旧拒绝并留失败痕。
+     */
+    java.util.Optional<BarReservationRecord> registeredDeposit(String reservationId) {
+        BarReservationRecord reservation = repository.findReservationById(reservationId).orElse(null);
+        if (reservation == null || reservation.depositPaidAt() == null) {
+            return java.util.Optional.empty();
+        }
+        boolean outOfScope = authorizationService.currentMerchantScope()
+                .filter(scope -> !scope.equals(reservation.merchantId())).isPresent();
+        return outOfScope ? java.util.Optional.empty() : java.util.Optional.of(reservation);
+    }
+
     BarReservationRecord payDeposit(String reservationId, BarReservationDepositActionRequest request) {
         BarReservationDepositActionRequest actual = requireRequest(request);
         BarReservationRecord reservation = requireReservation(reservationId);
@@ -233,8 +249,13 @@ public class BarEntryService {
         return saved;
     }
 
+    /**
+     * 员工人工取消订台。第十八批 AK 段第 230 条 230-R1（BSM:1058「店长及以上可人工取消预留，必须填原因并留痕。」）：原因必填，缺失或空白
+     * 400、整笔不取消（原因随成功留痕记录，见 BarService.cancelReservation）；超时释放作业走 expireOverdue，不经此方法。
+     */
     BarReservationRecord cancelReservation(String reservationId, BarReservationCancelRequest request) {
         BarReservationCancelRequest actual = requireRequest(request);
+        requireText(actual.reason(), "reason");
         BarReservationRecord reservation = requireReservation(reservationId);
         BarReservationRecord cancelled = cancel(reservation, actual.noShow() != null && actual.noShow(), false, actual.idempotencyKey());
         sms(cancelled, "cancelled");

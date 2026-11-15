@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.06
+// 文件版本：V0.07
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -22,6 +22,7 @@ import com.complex.platform.finance.FinanceService;
 import com.complex.platform.finance.dto.DailyCloseActionRequest;
 import com.complex.platform.finance.dto.DailyCloseRequest;
 import com.complex.platform.support.DailyCloseFixture;
+import com.complex.platform.support.StaffRequestFixture;
 import com.complex.platform.support.TestSecurityActors;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.math.BigDecimal;
@@ -566,6 +567,94 @@ class BarBillAnomalyJdbcIntegrationTests {
                 Long.class, bill)).containsExactly(12_000L);
         assertThat(jdbc.queryForList("SELECT amount_cent, status FROM ar_ap_items WHERE origin_item_id=?", receivable))
                 .containsExactly(Map.of("amount_cent", -18_000L, "status", "reversed"));
+    }
+
+    /**
+     * 第十八批 AK 段第 225 条 225-R1（PGM:664「单店层面的财务工作——日结确认与锁定、商户费用账单出账、差异认定、异常单据处置、报损物品的财务确认——
+     * 由该酒吧对应的财务 BP 负责」；ENUM:221「异常单据未处置完毕，所属日结不得确认锁定。」）：没有商户号、按 bar.bill.anomaly.resolve 可触及该酒吧
+     * 所属综合体的平台侧财务 BP 处置酒吧账单异常——「更正后恢复」回到进入异常前的状态，留痕操作人为该财务；「作废并冲正」账单作废、收款冲正、
+     * 退款应付已挂。
+     */
+    @Test
+    void platformFinanceBpOfReachableProjectResolvesBarBillAnomaly() throws Exception {
+        String financeId = "bba_fin_" + suffix;
+        RequestPostProcessor financeBp = new StaffRequestFixture(jdbc).staff(financeId, "staff", project, null, "bar.bill.anomaly.resolve");
+        String unpaid = ownBarBill("unpaid", "unsettled", 0L);
+        String settled = ownBarBill("paid", "settled", 30000L);
+        bars.saveBillSettlement(new BarBillSettlementRecord("settle_bba_fin_" + suffix, settled, "pos", null, "POS-FIN-" + suffix,
+                30000L, merchant, Instant.now()));
+        call(cashier, unpaid + "/anomaly", "{\"reason\":\"客人称未点第二瓶\",\"idempotency_key\":\"fa_%s\"}").andExpect(status().isOk());
+        call(cashier, settled + "/anomaly", "{\"reason\":\"客人称整单记错卡座\",\"idempotency_key\":\"fb_%s\"}").andExpect(status().isOk());
+
+        call(financeBp, unpaid + "/anomaly/resolve",
+                "{\"idempotency_key\":\"fr_%s\",\"resolution\":\"restored\",\"reason\":\"核对小票两瓶均已送达，按原账单收款\"}")
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.payment_status").value("unpaid"));
+        assertThat(jdbc.queryForList("SELECT actor_id FROM audit_events WHERE event_name='bar.bill_anomaly_resolved' AND business_id=?",
+                String.class, unpaid)).containsExactly(financeId);
+
+        call(financeBp, settled + "/anomaly/resolve",
+                "{\"idempotency_key\":\"fv_%s\",\"resolution\":\"voided_reversed\",\"reason\":\"核实整单记错，作废并冲正\"}")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.payment_status").value("void"))
+                .andExpect(jsonPath("$.data.settlement_status").value("void"));
+        assertThat(jdbc.queryForObject("SELECT reversed FROM bar_bill_settlements WHERE bill_id=?", Boolean.class, settled)).isTrue();
+        // 退款应付按账单所属酒吧及其综合体落账（财务 BP 自己没有商户号）。
+        assertThat(jdbc.queryForList("SELECT amount_cent, merchant_id, project_id FROM ar_ap_items"
+                + " WHERE direction='payable' AND source_type='refund' AND source_id=?", settled))
+                .containsExactly(Map.of("amount_cent", 30000L, "merchant_id", merchant, "project_id", project));
+    }
+
+    /**
+     * 225-R1 范围闸（在幂等之前）：只可触及别的综合体的同类财务账号 403 CROSS_PROJECT_FORBIDDEN、不落幂等记录、账单仍异常；别家酒吧的商户账号
+     * 403 CROSS_MERCHANT_FORBIDDEN；本店商户侧主管照常可处置。
+     */
+    @Test
+    void anomalyResolveOutOfReachRejectedBeforeIdempotencyWhileOwnSupervisorStillResolves() throws Exception {
+        String otherProject = "bba_prj_other_" + suffix;
+        String otherBar = "bba_mer_other_" + suffix;
+        jdbc.update("INSERT INTO projects(id,venue_type,name,status,created_at,updated_at) VALUES(?,'complex','别的综合体','active',now(),now())",
+                otherProject);
+        jdbc.update("INSERT INTO merchants(id,merchant_name,merchant_type,status,project_id,created_at,updated_at)"
+                + " VALUES(?,'别家酒吧','bar','active',?,now(),now())", otherBar, project);
+        StaffRequestFixture staffs = new StaffRequestFixture(jdbc);
+        RequestPostProcessor otherProjectFinance = staffs.staff("bba_fin_other_" + suffix, "staff", otherProject, null,
+                "bar.bill.anomaly.resolve");
+        RequestPostProcessor otherBarSupervisor = staffs.staff("bba_sup_other_" + suffix, "staff", project, otherBar,
+                "bar.bill.anomaly.resolve");
+        String bill = ownBarBill("unpaid", "unsettled", 0L);
+        call(cashier, bill + "/anomaly", "{\"reason\":\"客人称未点第二瓶\",\"idempotency_key\":\"sa_%s\"}").andExpect(status().isOk());
+
+        call(otherProjectFinance, bill + "/anomaly/resolve",
+                "{\"idempotency_key\":\"sp_%s\",\"resolution\":\"restored\",\"reason\":\"核实已点\"}")
+                .andExpect(status().isForbidden()).andExpect(jsonPath("$.detail_code").value("CROSS_PROJECT_FORBIDDEN"));
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM idempotency_records WHERE idempotency_key=?", Integer.class, "sp_" + suffix))
+                .isZero();
+        call(otherBarSupervisor, bill + "/anomaly/resolve",
+                "{\"idempotency_key\":\"sm_%s\",\"resolution\":\"restored\",\"reason\":\"核实已点\"}")
+                .andExpect(status().isForbidden()).andExpect(jsonPath("$.detail_code").value("CROSS_MERCHANT_FORBIDDEN"));
+        assertThat(jdbc.queryForObject("SELECT payment_status FROM bar_bills WHERE id=?", String.class, bill)).isEqualTo("abnormal");
+
+        call(supervisor, bill + "/anomaly/resolve",
+                "{\"idempotency_key\":\"ss_%s\",\"resolution\":\"restored\",\"reason\":\"核实已点，按原账单收款\"}")
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.payment_status").value("unpaid"));
+    }
+
+    /** 本酒吧（酒吧即商户，挂在本综合体）的 30000 账单。 */
+    private String ownBarBill(String paymentStatus, String settlementStatus, long paidCent) {
+        jdbc.update("INSERT INTO merchants(id,merchant_name,merchant_type,status,project_id,created_at,updated_at)"
+                + " VALUES(?,'账单异常酒吧','bar','active',?,now(),now()) ON CONFLICT (id) DO NOTHING", merchant, project);
+        int n = seq.incrementAndGet();
+        String table = "bba_tbl_" + suffix + "_" + n;
+        String order = "bba_ord_" + suffix + "_" + n;
+        String bill = "bba_bill_" + suffix + "_" + n;
+        Instant now = Instant.now();
+        bars.saveTable(new BarTableRecord(table, merchant, merchant, "T-" + suffix + "-" + n, "财务处置回归卡座", "card_seat",
+                4, 1, 0L, "CNY", "active", now, now));
+        bars.saveOrder(new BarOrderRecord(order, merchant, merchant, table, null, null, "staff", "billed", 30000L, "CNY", "web",
+                null, null, now, now));
+        bars.saveBill(new BarBillRecord(bill, "BILL-BBA-" + suffix + "-" + n, order, merchant, merchant, table, null,
+                30000L, 0L, 0L, 30000L, paidCent, "CNY", paymentStatus, settlementStatus, null, null, now, now));
+        return bill;
     }
 
     /** 商户口径日结酒吧源：收款减退款。 */

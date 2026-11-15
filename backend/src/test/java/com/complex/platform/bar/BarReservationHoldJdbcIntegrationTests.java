@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -221,7 +221,8 @@ class BarReservationHoldJdbcIntegrationTests {
                 .andExpect(status().isOk()), "$.data.id");
         mockMvc.perform(post("/api/v1/bar/reservations/" + staffBooking + "/cancel").with(platformAdmin())
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(json.writeValueAsString(Map.of("idempotency_key", "cancel-" + f.suffix, "no_show", false))))
+                        .content(json.writeValueAsString(Map.of("idempotency_key", "cancel-" + f.suffix, "no_show", false,
+                                "reason", "客人来电取消"))))
                 .andExpect(status().isOk());
         assertThat(row(staffBooking)).containsEntry("hold_status", "released");
         customerPost(f.token, "/api/v1/customer/bar-reservations", reservationBody("rebook")).andExpect(status().isOk());
@@ -289,7 +290,8 @@ class BarReservationHoldJdbcIntegrationTests {
                 "$.data.payment_intent_id");
         mockMvc.perform(post("/api/v1/bar/reservations/" + reservation + "/cancel").with(platformAdmin())
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(json.writeValueAsString(Map.of("idempotency_key", "cancel-late-" + f.suffix, "no_show", false))))
+                        .content(json.writeValueAsString(Map.of("idempotency_key", "cancel-late-" + f.suffix, "no_show", false,
+                                "reason", "客人来电取消"))))
                 .andExpect(status().isOk());
         f.markPaid(intentId);
         confirmDeposit(f.token, reservation, intentId)
@@ -522,7 +524,8 @@ class BarReservationHoldJdbcIntegrationTests {
             String role = "role_" + userId;
             jdbc.update("INSERT INTO roles (id, role_name, description, data_scope, status, created_at)"
                     + " VALUES (?, ?, '订台回归', 'platform', 'active', now())", role, role);
-            for (String code : List.of("bar.reservation.create", "bar.reservation.manage", "bar.reservation.view",
+            // 第十八批 AK 段第 230 条 230-R1：人工取消订台改用 bar.reservation.cancel。
+            for (String code : List.of("bar.reservation.create", "bar.reservation.manage", "bar.reservation.view", "bar.reservation.cancel",
                     "bar.reservation.invitation.manage", "bar.table.guest_checkin", "bar.table_session.create")) {
                 jdbc.update("INSERT INTO role_permissions (role_id, permission_code) VALUES (?, ?)", role, code);
             }

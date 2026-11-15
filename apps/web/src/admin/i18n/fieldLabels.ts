@@ -1,4 +1,4 @@
-// 文件版本：V0.32
+// 文件版本：V0.33
 // OBS-14-02 后台结果区字段中文名字典（PGM「全局原则 · 界面全中文（所有终端零英文）」）。
 // 键用后端 JSON 的蛇形写法；结果区查表时蛇形与驼峰同查（orderId / order_id 都命中 order_id）。
 // 与后端字段中文名表 FieldLabels.java（common.api 包）同键同名：前段按后端原样抄录，后端改名这里跟着改（门禁会比对）。
@@ -2369,6 +2369,9 @@ export const FIELD_LABELS: Record<string, string> = {
   sold_out: "已售罄",
   sold_out_at: "售罄时间",
   sold_out_reason: "售罄原因",
+  // 第十八批 AK 段第 221 条（ENUM:111「沽清分两档：临时沽清……与长期下架」）：与后端 FieldLabels.java 同键同名。
+  sold_out_type: "沽清档位",
+  sold_out_until: "临时沽清到期时间",
   sold_quantity: "已售数量",
   sort_order: "排序",
   source_adjustment_id: "来源调整单",
@@ -2937,6 +2940,10 @@ export const VALUE_LABELS: Record<string, string> = {
   bar_product_created: "酒水商品已创建",
   bar_product_category_assigned: "商品分类已调整",
   bar_product_image_uploaded: "商品图片已上传",
+  // 第十八批 AK 段第 221 条 221-R3（ENUM:111 沽清两档与解除）：后台商品页沽清、解除沽清的结果动作。
+  bar_product_sold_out: "商品已临时沽清",
+  bar_product_delisted: "商品已长期下架",
+  bar_product_sold_out_released: "商品已解除沽清",
   bar_products_archived: "酒水商品已存档",
   bar_products_unarchived: "酒水商品已取消存档",
   bar_categories_archived: "酒水分类已存档",
@@ -2954,7 +2961,12 @@ export const VALUE_LABELS: Record<string, string> = {
   // 第十八批 AA 段第 206 条 206-R2：台位停用与恢复（ENUM:100）。
   bar_table_disabled: "台位已停用",
   bar_table_enabled: "台位已恢复",
+  // 第十八批 AK 段第 226 条 226-R2：台位登记异常与确认恢复（ENUM:100）。
+  bar_table_abnormal_marked: "台位已登记异常",
+  bar_table_abnormal_resolved: "台位已确认恢复",
   bar_reservation_create: "新建订台",
+  // 第十八批 AK 段第 230 条 230-R2：人工取消订台（BSM:1058）。
+  bar_reservation_cancelled: "订台已取消",
   bar_table_session_create: "开台",
   bar_table_session_transfer: "转台",
   // 第十八批 AB 段第 190 条 190-R3：撤销最近一次转台（BSM:1079）。

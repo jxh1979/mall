@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static com.complex.platform.support.DailyCloseFixture.markRangeFinal;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -90,8 +90,9 @@ class BarForfeitedDepositTurnoverRentJdbcTests {
         StaffRequestFixture staffs = new StaffRequestFixture(jdbc);
         admin = staffs.staff("usr_ffd_admin_" + s, "platform_admin", f.projectId, null,
                 "terminal.device.bind", "finance.turnover_rent.bill");
+        // 第十八批 AK 段第 230 条 230-R1：人工取消订台须持 bar.reservation.cancel（店长及以上），原因必填。
         staff = staffs.staff("usr_ffd_staff_" + s, "staff", f.projectId, bar,
-                "bar.reservation.create", "bar.reservation.manage", "bar.reservation.view",
+                "bar.reservation.create", "bar.reservation.manage", "bar.reservation.view", "bar.reservation.cancel",
                 "bar.table_session.create", "bar.table.open_close");
         mockMvc.perform(post("/api/v1/terminals/devices/bind").with(admin).contentType(MediaType.APPLICATION_JSON)
                         .content(json.writeValueAsString(Map.of("idempotency_key", "ffd-bind-" + s, "device_id", device,
@@ -105,7 +106,8 @@ class BarForfeitedDepositTurnoverRentJdbcTests {
         String booking = kioskPaidDeposit("noshow", table("a"));
         mockMvc.perform(post("/api/v1/bar/reservations/" + booking + "/cancel").with(staff)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(json.writeValueAsString(Map.of("idempotency_key", "ffd-cancel-" + s, "no_show", true))))
+                        .content(json.writeValueAsString(Map.of("idempotency_key", "ffd-cancel-" + s, "no_show", true,
+                                "reason", "客人爽约"))))
                 .andExpect(status().isOk());
         assertThat(settlement(booking)).isEqualTo("forfeited");
 

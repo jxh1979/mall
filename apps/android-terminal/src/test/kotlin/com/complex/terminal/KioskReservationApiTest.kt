@@ -1,6 +1,6 @@
 package com.complex.terminal
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import com.sun.net.httpserver.HttpServer
 import java.net.InetSocketAddress
@@ -55,7 +55,7 @@ class KioskReservationApiTest {
     assertEquals(20000L, created.depositAmountCent)
 
     val staff = LoginResponse(accessToken = "staff_tok", sessionId = "ses_staff", user = ApiUser(id = "usr_cashier"))
-    val paid: Any? = api.registerKioskPayment(KioskPayTarget.Reservation("resv_1"), 20000, "cash", staff, posNo = null, signOut = true)
+    val paid: Any? = api.registerKioskPayment(KioskPayTarget.Reservation("resv_1"), 20000, "cash", staff, posNo = null, signOut = true, stepKey = KioskPaymentKey())
     assertEquals("held", (paid as? BarReservationRecord)?.holdStatus)
     assertEquals("/api/v1/bar/reservations/resv_1/pay-deposit", requests[1].path)
   }
@@ -84,17 +84,19 @@ class KioskReservationApiTest {
 
   // 第十八批 AA 段第 206 条 206-R3（ENUM:100「台位未被占用——既无有效预留也未开台——时即可再次接受预订」）：一体机订台与员工代订列表按台位状态显示，
   // 中文名同后台卡座表（空闲、已开台、待清台、停用），已开台、待清台不再显示「空」；有效预留仍显示「已订」。
+  // 第十八批 AK 段第 226 条 226-R3（PGM:287「界面全中文（所有终端零英文）」；ENUM:100「……停用、异常」）：异常（abnormal）显示「异常」，不原样显示英文码。
   @Test
   fun bookingListLabelsFollowTableStatus() {
     fun row(status: String, reserved: Boolean = false) = BarTableAvailabilityRow(id = "t", status = status, reserved = reserved)
-    assertEquals(listOf("空闲", "已开台", "待清台", "停用", "已订"),
-      listOf(row("active"), row("opened"), row("pending_clear"), row("disabled"), row("active", true)).map { barTableBookingLabel(it) })
+    assertEquals(listOf("空闲", "已开台", "待清台", "停用", "异常", "已订"),
+      listOf(row("active"), row("opened"), row("pending_clear"), row("disabled"), row("abnormal"), row("active", true))
+        .map { barTableBookingLabel(it) })
   }
 
   @Test
   fun depositRegisteredAfterAnotherPaidFirstReadsBackCancelled() = withServer("") { api, _ ->
     val staff = LoginResponse(accessToken = "staff_tok", sessionId = "ses_staff", user = ApiUser(id = "usr_cashier"))
-    val paid: Any? = api.registerKioskPayment(KioskPayTarget.Reservation("resv_1"), 20000, "cash", staff, posNo = null, signOut = true)
+    val paid: Any? = api.registerKioskPayment(KioskPayTarget.Reservation("resv_1"), 20000, "cash", staff, posNo = null, signOut = true, stepKey = KioskPaymentKey())
     assertEquals("cancelled", (paid as? BarReservationRecord)?.status)
   }
 }

@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.06
+// 文件版本：V0.07
 
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 
@@ -217,7 +217,10 @@ final class JdbcBarRowMapper {
                 resultSet.getString("delete_status"),
                 resultSet.getString("delete_requested_by"),
                 nullableInstant(resultSet, "delete_requested_at"),
-                resultSet.getString("delete_reason")
+                resultSet.getString("delete_reason"),
+                // V625 沽清档位与临时沽清到期时间。
+                resultSet.getString("sold_out_type"),
+                nullableInstant(resultSet, "sold_out_until")
         );
     }
 

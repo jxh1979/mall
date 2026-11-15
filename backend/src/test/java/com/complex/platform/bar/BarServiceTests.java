@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.20
+// 文件版本：V0.21
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
@@ -4176,9 +4176,11 @@ class BarServiceTests {
                 500000L, null, null, "active", null, null, false, null, null, null, null, null, null, null));
         BarReservationRecord reservation = createReservation("soldout", "bar_1", 2);
 
-        BarProductRecord soldOut = service.markProductSoldOut(product.id(), new BarProductSoldOutRequest(
-                "soldout-1", "out of stock", List.of(), true, "kegs empty"));
+        BarProductRecord soldOut = service.markProductSoldOutTemporary(product.id(), new BarProductSoldOutRequest(
+                "soldout-1", "out of stock", List.of(), true, "kegs empty", "temporary"));
         assertThat(soldOut.soldOut()).isTrue();
+        assertThat(soldOut.soldOutType()).isEqualTo("temporary");
+        assertThat(soldOut.soldOutUntil()).isAfter(Instant.now());
 
         assertThatThrownBy(() -> service.createOrder(new BarOrderRequest(
                 "order-soldout", "create order", List.of(), "bar_1",
@@ -4188,9 +4190,11 @@ class BarServiceTests {
                 .extracting("code")
                 .isEqualTo("PRODUCT_SOLD_OUT");
 
-        BarProductRecord restored = service.markProductSoldOut(product.id(), new BarProductSoldOutRequest(
-                "soldout-2", "back in stock", List.of(), false, "refilled"));
+        BarProductRecord restored = service.releaseProductSoldOut(product.id(), new BarProductSoldOutRequest(
+                "soldout-2", "back in stock", List.of(), false, "refilled", null));
         assertThat(restored.soldOut()).isFalse();
+        assertThat(restored.soldOutType()).isNull();
+        assertThat(restored.soldOutUntil()).isNull();
 
         // now ordering succeeds
         BarOrderRecord order = service.createOrder(new BarOrderRequest(

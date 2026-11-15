@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.12
+// 文件版本：V0.13
 import static com.complex.platform.common.api.ApiRequests.requireIdempotencyKey;
 
 import com.complex.platform.access.AuthorizationService;
@@ -478,7 +478,18 @@ public class BarController {
     ) {
         authorizationService.requirePermission("bar.product.sold_out");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
-        return ApiResponse.ok(service.markProductSoldOut(productId, request));
+        // 第十八批 AK 段第 221 条 221-R1（ENUM:111「沽清分两档……沽清与解除同样须审批留痕」）：临时沽清、长期下架、解除各是一种主管复核动作，
+        // 按请求分派到各自过准入闸的服务方法；置沽清缺档位或档位非法 400。
+        if (Boolean.FALSE.equals(request.soldOut())) {
+            return ApiResponse.ok(service.releaseProductSoldOut(productId, request));
+        }
+        if ("temporary".equals(request.soldOutType())) {
+            return ApiResponse.ok(service.markProductSoldOutTemporary(productId, request));
+        }
+        if ("long_term".equals(request.soldOutType())) {
+            return ApiResponse.ok(service.delistProduct(productId, request));
+        }
+        throw ApiException.badRequest("VALIDATION_FAILED", "沽清须选择档位：临时沽清或长期下架");
     }
 
     @PostMapping("/orders/{order_id}/items")
@@ -624,12 +635,13 @@ public class BarController {
         return ApiResponse.ok(service.checkInReservationDeposit(id, request));
     }
 
+    /** 第十八批 AK 段第 230 条 230-R1（BSM:1058「店长及以上可人工取消预留，必须填原因并留痕。」）：人工取消订台用单独的权限码，原因必填。 */
     @PostMapping("/reservations/{id}/cancel")
     public ApiResponse<BarReservationRecord> cancelReservation(
             @PathVariable String id,
             @RequestBody(required = false) @jakarta.validation.Valid BarReservationCancelRequest request
     ) {
-        authorizationService.requirePermission("bar.reservation.manage");
+        authorizationService.requirePermission("bar.reservation.cancel");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.cancelReservation(id, request));
     }
@@ -754,6 +766,31 @@ public class BarController {
         authorizationService.requirePermission("bar.table.disable");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.enableTable(tableId, request));
+    }
+
+    /**
+     * 第十八批 AK 段第 226 条 226-R1：人工登记台位异常（ENUM:100、BSM:1058「异常由系统告警或人工登记进入，处置完成后由当班主管确认恢复，全程留痕。」；
+     * 第十八批裁决 53）；只收空闲或待清台的台位，原因必填。
+     */
+    @PostMapping("/tables/{table_id}/abnormal")
+    public ApiResponse<BarTableRecord> markTableAbnormal(
+            @PathVariable("table_id") String tableId,
+            @RequestBody(required = false) @jakarta.validation.Valid BarTableStatusChangeRequest request
+    ) {
+        authorizationService.requirePermission("bar.table.open_close");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.markTableAbnormal(tableId, request));
+    }
+
+    /** 第十八批 AK 段第 226 条 226-R1：当班主管确认异常台位恢复空闲（同上），原因必填。 */
+    @PostMapping("/tables/{table_id}/abnormal/resolve")
+    public ApiResponse<BarTableRecord> resolveTableAbnormal(
+            @PathVariable("table_id") String tableId,
+            @RequestBody(required = false) @jakarta.validation.Valid BarTableStatusChangeRequest request
+    ) {
+        authorizationService.requirePermission("bar.table.open_close");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.resolveTableAbnormal(tableId, request));
     }
 
     @GetMapping("/table-sessions")

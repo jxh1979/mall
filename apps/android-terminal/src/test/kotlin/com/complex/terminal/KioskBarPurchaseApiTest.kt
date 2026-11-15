@@ -1,6 +1,6 @@
 package com.complex.terminal
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import com.sun.net.httpserver.HttpServer
 import java.net.InetSocketAddress
@@ -64,6 +64,17 @@ class KioskBarPurchaseApiTest {
     assertEquals(listOf("counter_1"), kioskBarCounters(rows, "bar_1").map { it.id })
   }
 
+  // 第十八批 AK 段第 226 条 226-R3（ENUM:100「桌台/卡座/吧台位状态｜空闲、已预留、已开台、待清台、停用、异常」；
+  // 「台位未被占用——既无有效预留也未开台——时即可再次接受预订」）：登记为异常的吧台位不给一体机买酒。
+  @Test
+  fun abnormalBarCounterSeatIsNotOffered() {
+    val rows = listOf(
+      BarTableAvailabilityRow(id = "counter_1", barId = "bar_1", tableType = "bar_counter", status = "abnormal"),
+      BarTableAvailabilityRow(id = "counter_2", barId = "bar_1", tableType = "bar_counter", status = "active"),
+    )
+    assertEquals(listOf("counter_2"), kioskBarCounters(rows, "bar_1").map { it.id })
+  }
+
   @Test
   fun kioskBarOrderIsPlacedOnTheCounterThenBilledWithSnakeCaseKeys() = withServer { api, requests ->
     val bill = api.placeKioskBarOrder("bar_1", "counter_1",
@@ -81,7 +92,7 @@ class KioskBarPurchaseApiTest {
   @Test
   fun barBillCashRegisteredOnTheKioskCarriesThePaymentReference() = withServer { api, requests ->
     val staff = LoginResponse(accessToken = "staff_tok", sessionId = "ses_staff", user = ApiUser(id = "usr_cashier"))
-    api.registerKioskPayment(KioskPayTarget.BarBill("bill_1"), 13000, "cash", staff, posNo = null, signOut = true)
+    api.registerKioskPayment(KioskPayTarget.BarBill("bill_1"), 13000, "cash", staff, posNo = null, signOut = true, stepKey = KioskPaymentKey())
 
     assertEquals(listOf("/api/v1/bar/bills/bill_1/settle", "/api/v1/auth/logout"), requests.map { it.path })
     assertBody(requests[0].body, "\"payment_id\":", "\"settlement_amount_cent\":13000", "\"payment_channel\":\"cash\"")

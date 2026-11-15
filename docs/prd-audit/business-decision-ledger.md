@@ -1,6 +1,6 @@
 # PRD 审计业务裁决台账
 
-文档版本：V0.92
+文档版本：V0.93
 状态：进行中
 迁移日期：2026-07-27
 当前事实源：三份立法 HTML 以既有冻结基线叠加 James 此前 M02 至 M08 的点名批准、全量审计 M001、M002 的逐项批准，以及本轮 2026-10-16 至 2026-10-17 业务 HTML 审计中 Q01 至 Q40 及子题实际明确批准且未被后续替代的裁决，和 2026-10-17 第二批 HTML 业务线推演审计（A–F 六线 64 条、停车章）的逐项批准，并叠加本轮 CG 70 项来源确认与 C01–C09、N01–N03 最终澄清及补全文稿中 F01、W01–W05 的整体修改批准（本文件末节）；本轮最终规则、未采纳或替代关系、现行版本与字节哈希见本文件末节。历史记录保留为各自当时事实，不恢复已被替代的建议。
@@ -7057,3 +7057,77 @@ HTML 的语义补齐与直接引用同步可在本批核验；70项中的业务�
   验证：verify-full-admin-page-matrix 通过；git diff --check 通过。测试：无（只改文档）。
 - 18AJ 复核修复补记（无新裁决）：收尾六视角复核 5 条意见，独立反驳核实成立 3 条（都是次要的文档与页面文案），另 2 条被驳回（票务 PRD「每次提交留一版」同段已写明驳回即该版退回草稿、保留内容；「其他」业态按主管公司实体自成一键属方案 not_doing）。① apps/web/src/admin/pages/TicketingPoliciesPage.tsx 页头说明与「怎么用这一页」原写先建票种并发布、再用组合配置加跨酒吧／游乐／餐饮权益，正是第十八批裁决 62 拦下的路径；改为跨经营域的组合通票新建时勾选「先存为草稿、不立即上架」、配齐后在票种行点「发布」提交审批，已上架的票只能加同一经营域的收费权益。② 本节 236-R7「发布」一句原写已上架票种的草稿版从票种行「发布」提交，与页面不符（票种行「发布」只给草稿票）；改为在「组合式套票配置」的「规则版本」小节点「提交审批」。③ docs/p0-operation-permission-matrix-v0.1.md 撤回 D-docs 新增的 ticket.product.publish.approve 行与修订行，版本回到 V0.12（人工权限矩阵不扩表，同历段口径；该权限码已在 V624 种子、OpenAPI 与页面矩阵登记），本节 D-docs 条第 4 项删去、后项顺延。
 - 18AJ 落地位置补记·运行验收证据、快照、终验文档刷新（无新裁决）：业务提交 898bcae5 之后，按第十八批裁决 25 重刷了运行验收证据：后端全量 6721 测，0 失败 0 错误；apps/web 构建通过；常规界面验收（接口全部 mock）实跑 40 条全过；真实后端界面验收未跑，runtime_ready=false。随后依次重生成闭环当前态快照、生产闭环缺口报告、界面验收报告、无上线指挥台。生成器没改。手改 docs/final-closed-loop-acceptance-audit-v0.1.md 与 docs/code-implementation-acceptance-audit-v0.1.md：前端单测源码计数改为 1735；被核文件中 TicketingService.java 行数由 1244 改为 1285，其余无变化；后端全量与常规界面验收的数字、日期改为本次实跑值；写入 npm run verify:unit 实跑结果，五个工作区全过。交付门禁于 2026-11-12 11:37 UTC 在工作树逐项实跑子项，NAS 两项现场探测未跑。仍红的有两项：一是 coding-host-protection，它写死主仓路径，在工作树口径下必红，属工具口径，不做；二是 final-closed-loop-audit，如实留 2 条红（integration-ready、business-acceptance-ready），原因是校验器要求终验把联调、业务验收写成「是」，而裁决 25 定了不跑真实后端界面验收、运行验收未就绪，终验写的是「否」。verify:delivery-gates 总链仍是红的。
+
+18AK 落地位置补记（2026-11-15）：第十八批 AK 段（batch57）按 18AG 核实方案实现待开发清单第 221、222、225、226、230、248 条与第 261 条 B09、B10、B12（酒吧经营组）；无新裁决；运行验收证据、终验文档在本段最后一个提交刷新；各条落地位置见下。本段追加时，原台账除文档版本 V0.92→V0.93 外，其他历史字节保持。
+
+- 18AK 落地位置补记·控制席判定（2026-11-15）：本段（第十八批 AK 段，batch57）实现待开发清单第 221、222、225、226、230、248 条与第 261 条 261-B09-R1、261-B10-R1、261-B12-R1（18AG 核实方案：本机 b53-audit\g221-248-barops.json，oneshot\o5-b09.json、o6-b10-b11.json、o1-b04-b12.json；B04 两项不在本段）。自 18AJ 合并后改由新的控制席（Cursor 代理）续做，交接说明在本机 D:\AI\ccwork\Cline交接说明-2026-11-12.md。没有新弹窗：第 226 条按第十八批裁决 53（空闲或待清台可登记异常，恢复回空闲）；其余各项方案均无待裁题。控制席定了三处做法：① 第 222 条两份方案写法不一——g221-248-barops.json 写「本单已有未作废账单即 409 BAR_ORDER_BILL_EXISTS，并锁订单行」，o6-b10-b11.json notes【B10 与第 222 条重叠】写「返回已开出的账单并标已完成，不加订单行锁」；按后者做，依据 PGM:303 段尾「同一次操作重复提交时，返回第一次的结果并提示已完成。」，不新增错误码。② 261-B09-R1 照方案做客户端沿用编号（服务端不改），261-B10-R1 照方案做服务端按订台认重交（一体机端不改），安卓收款三支不统一；票务支归 B05。③ 222-R1 与 261-B10-R1 的「认出重交」判断都放在共用幂等层之前：实测在幂等层的动作里调 IdempotentReplayContext.markCurrentReplayed()，会被幂等层执行完动作后的 markExecuted() 冲掉，响应不带 replayed=true；放在之前才能提示已完成，范围校验仍先过（订单、订台不存在或不属于本商户的返回空，交原流程拒绝并留失败痕）。本段迁移 V625、V626；OpenAPI 操作数 1367→1369（226-R1 加两个），info.version V0.68→V0.69；新权限码 1 个（bar.reservation.cancel）；新准入策略 3 条（221-R1）。18N 第 120 条 120-R7 落地补记所记「每次提交新幂等键」，酒吧账单支由本段 261-B09-R1 改为「同一次登记没拿到结果再按，沿用原编号」（历史字节不改，于此注明）；票务支、订台定金支仍是每次提交新编号。实施旁见登记待开发清单第 301～304 条（待核实）。
+- 18AK 落地位置补记·第 222 条 222-R1（同一订单只生成一张账单；无新裁决）：
+  改法：BarBillingService 新增 issuedBill(orderId)，取本单 settlement_status 不是 void 的最早一张账单（拆出的账单开得比原单晚；客人扫码已付单成单时随单记的已结清账单也算）；订单不存在或不属于本商户的返回空。BarService.createOrderBill 在 operations.executeWrite 之前调它，有则标已重放并直接返回，不新开账单、不重复计服务费与留款抵用；没有才照原流程开单。已作废账单不算已开，作废并冲正后可再开。不加订单行锁（三个调用方不会同时对同一订单开单，方案 not_doing）。无迁移、无新错误码；重复提交不再落 bar.bill.created。
+  依据：
+  - PGM:303「同一次操作重复提交时，返回第一次的结果并提示已完成。」
+  - PGM:528「⑤同一笔操作重复提交不重复生效（重复点击、网络重发、渠道重复回调都只算一次）」
+  契约与文档：OpenAPI createBarOrderBill 说明同步；酒吧 PRD §6 补实现现状。
+  测试：BarOnTheSpotPaymentJdbcIntegrationTests 加 3 例（换编号再开返回同一账单并带 replayed；客人扫码已付单由后台再开返回原已结清账单；作废并冲正后可再开）。
+- 18AK 落地位置补记·第 225 条 225-R1（平台侧财务 BP 按综合体可触及处置酒吧账单异常；无新裁决）：
+  改法：BarBillAnomalyService 新增 requireResolveScope(billId)（照 142-R1 的 BarShiftService.requireFinanceScope）：账单不存在 404 BAR_BILL_NOT_FOUND；有商户号的须是本商户，否则 403 CROSS_MERCHANT_FORBIDDEN；没有商户号的按 bar.bill.anomaly.resolve 判能否触及该酒吧所属综合体，不能则 403 CROSS_PROJECT_FORBIDDEN。BarService.resolveBillAnomaly 在幂等之前调它；resolve 内改为直接锁账单行，不再走会抛 MERCHANT_SCOPE_REQUIRED 的商户范围读取；登记争议（raise）不动。
+  与方案不一致：方案说「作废并冲正」的后续调用没有商户范围闸，实测不成立——挂退款应付时 FinanceService 取过账人的商户范围，没有商户号的财务 BP 仍 403。所以 FinanceService 加重载 createArApItem(request, explicitMerchantId, explicitProjectId)，FinanceBarReceivableLedgerService.createRefundPayable 认出「没有商户号且不是平台管理员」时走它，按账单所属酒吧及其综合体落账、判锁；商户账号与平台管理员的路径不变。无迁移、无新权限码（bar.bill.anomaly.resolve 由平台管理员配进财务 BP 岗位模板）。
+  依据：
+  - PGM:664「单店层面的财务工作——日结确认与锁定、商户费用账单出账、差异认定、异常单据处置、报损物品的财务确认——由该酒吧对应的财务 BP 负责」
+  - ENUM:221「异常单据未处置完毕，所属日结不得确认锁定。」
+  契约与文档：OpenAPI resolveBarBillAnomaly 说明与失败码（CROSS_PROJECT_FORBIDDEN、BAR_BILL_NOT_FOUND）同步；酒吧 PRD §6 补实现现状。
+  测试：BarBillAnomalyJdbcIntegrationTests 加 2 例（可触及综合体的平台侧财务 BP 更正后恢复与作废并冲正都成功、退款应付已挂；只可触及别的综合体的 403 且不落幂等记录、别家商户 403、本店主管仍可办）。
+- 18AK 落地位置补记·第 248 条 248-R1（酒吧分类、商品、套餐与订台的存档、取消存档落成功与失败事件；无新裁决）：
+  改法：AuditedOperationExecutor.readSingle 加带成功明细的重载，BarOperationExecutor 加 auditedWrite(operation, detail, action)。BarWriteOperation 加 8 项：bar.category.archived／archive_failed、bar.category.unarchived／unarchive_failed，商品（bar.product.*）、套餐（bar.combo.*）、订台（bar.reservation.*）同式。BarPosCatalogService.archiveCategory、archiveProduct、archiveCombo 与 BarService.archiveReservation 用它包住（订台含范围校验，越权也落失败事件），存档事件明细带 reason。取消存档清空行内存档人、时间与理由的写法不改（同 PlatformService.unarchiveMerchant 先例，原存档记录由存档事件承载）。无迁移。
+  依据：
+  - PGM:966「已拍板：所有有过程的业务动作都必须留痕」
+  - BSM:576「存档及删除都需要填写理由」
+  契约：OpenAPI 8 个存档、取消存档操作的成功与失败事件由 not_applicable 回补为上述事件名。
+  测试：BarCatalogWriteAuditJdbcIntegrationTests 加 2 例；BarCategoryArchiveDeleteEntryJdbcIntegrationTests 一条既有断言原锁「存档不写审计事件」，改为断言新事件。
+- 18AK 落地位置补记·第 261 条 261-B12-R1（退菜退酒发起与驳回写账单先锁账单行；第十八批裁决 50）：
+  改法：BarOrderService.handleVoidBillAmount 与 reverseVoidSideEffects 读账单由 findBillById 改为 findBillByIdForUpdate（与结账同式）；预检不动。与结账同时发生时按结账后的账单处理（已结即走退款冲正），不再把已结账单写回未结、已付 0。不加明细锁、不做多明细预锁（方案 not_doing：出品与退菜只有后台订单页一个入口）。无迁移，接口契约不变。
+  依据：
+  - PGM:303「两个操作同时发生冲突时，一律以“先处理成功”的那个为准」
+  - BSM:1068「出品后退品按是否回库处理；正常退品应予退款」
+  测试：新类 BarOrderItemVoidBillLockJdbcIntegrationTests 2 例（真库双线程：退酒等结账、驳回等结账，结果与顺序执行一致）；该类不开测试事务，夹具按随机后缀隔离。酒吧 PRD §10.2.1 补实现现状。
+- 18AK 落地位置补记·第 221 条 221-R1～221-R3（沽清分临时沽清与长期下架两档，沽清与解除各经主管审批，临时沽清营业日切换自动恢复，后台商品页入口；无新裁决）：
+  221-R1　迁移 V625__bar_product_sold_out_tiers.sql：bar_products 加 sold_out_type（temporary、long_term）与 sold_out_until，约束 chk_bar_products_sold_out_type；插三条恒阻断准入策略 bar_product_sold_out_block、bar_product_delist_block、bar_product_sold_out_release_block（动作 bar.product_sold_out、bar.product_delist、bar.product_sold_out_release，对象类型 bar_product，上一级主管）。BarProductSoldOutRequest 加 sold_out_type；BarController.markProductSoldOut 按请求分派到 BarService.markProductSoldOutTemporary、delistProduct、releaseProductSoldOut（各带自己的准入动作），置沽清缺档位或档位非法 400 VALIDATION_FAILED。BarOrderService.markSoldOut 按档写：临时沽清的到期时刻取该酒吧本营业日结束时刻，长期下架为空，解除清空；「没有变化」按沽清与档位同时相同判；原因为空存空，不再落英文默认值；删去自写的重复留痕。成功事件：bar.product_sold_out、bar.product_delisted、bar.product_sold_out_released，明细带档位、到期时间与原因。JdbcPlatformRepository 的复核对象项目查询加 bar_product，项目侧主管看得到复核单。FieldLabels.java 与 fieldLabels.ts 加 sold_out_type「沽清档位」、sold_out_until「临时沽清到期时间」；reviewLabels.ts 加三动作与对象类型中文名。
+  221-R2　新类 BarSoldOutRestoreJob：restoreExpired(now) 取到期的临时沽清商品，逐个独立事务恢复在售并留痕 bar.product_sold_out_auto_restored，不经审批；定时包装由 bar.sold-out-restore.scheduled.enabled 控制，application-prod.yml 已开。
+  221-R3　后台商品页 BarProductsPage.tsx：在售行「沽清」（弹框选档位、填原因）、已沽清行「解除沽清」，权限 bar.product.sold_out；状态按档位显示；被准入闸拦下时提示已提交主管审批，并记下这次的档位与原因，再点同一商品的「沽清」时原样带回（主管的批准只能被同样内容的再次提交用掉，M724-F16）。页面矩阵 ADM-BAR-005 行补权限与接口。
+  与方案不一致：留痕用执行时填明细的 executeWriteFilling（到期时间到动作执行时才算得出）；商品记录用 withSoldOut 保留其余字段，旧写法重建记录会把分类与图片写成空，顺带不再发生。
+  不做：安卓平板沽清入口、库存归零自动沽清（ENUM:111「库存归零不自动沽清」）。
+  依据：
+  - BSM:1069「反结（重开已结账单）、沽清（卖完、临时下架）均需主管审批留痕」
+  - ENUM:111「沽清分两档：临时沽清（本营业日有效，营业日切换时点自动恢复在售）与长期下架（须主管审批解除后才恢复）；沽清与解除同样须审批留痕，作用范围为本酒吧。」
+  测试：新类 BarProductSoldOutJdbcIntegrationTests 3 例、BarSoldOutRestoreJobJdbcIntegrationTests 1 例；BarServiceTests 原沽清用例按新签名调整；前端 BarProductsPage.soldOut.test.tsx 6 例，ApprovalChainPage.test.tsx 补三动作与对象类型中文名断言。酒吧 PRD §10.2.3 补实现现状。
+- 18AK 落地位置补记·第 226 条 226-R1～226-R3（台位「异常」人工登记与当班主管确认恢复；第十八批裁决 53）：
+  226-R1　新接口 POST /api/v1/bar/tables/{table_id}/abnormal（markBarTableAbnormal）与 POST /api/v1/bar/tables/{table_id}/abnormal/resolve（resolveBarTableAbnormal），权限 bar.table.open_close，原因必填。BarService.markTableAbnormal、resolveTableAbnormal：本商户闸在幂等之前，留痕带原因与前后状态（bar.table.abnormal_marked、bar.table.abnormal_resolved，失败 bar.table.abnormal_mark_failed、bar.table.abnormal_resolve_failed）。BarTableSessionService.changeTableAbnormal 先锁台位行：登记只收空闲（active 且没有被有效预留占着）或待清台，否则 409 BAR_TABLE_NOT_ABNORMALIZABLE；确认恢复只收异常台位（否则 409 BAR_TABLE_NOT_ABNORMAL），确认人须是本酒吧此刻有排班的员工（BarRepository.isStaffOnDutyAtBar，否则 403 BAR_TABLE_RESOLVER_NOT_ON_DUTY；「当班主管」按第十批裁决 6），恢复回空闲。开台、转入、订台本就只认空闲，异常台位自然不可用；下单核心的停用闸扩到异常（409 BAR_TABLE_ABNORMAL）。无迁移（bar_tables.status 无约束）、无新权限码。
+  226-R2　后台卡座与订台页 BarTableSessionsPage.tsx：状态名加「异常」，空闲与待清台行「登记异常」、异常行「确认恢复」，原因必填；页面矩阵 ADM-BAR-001 行补两个接口。
+  226-R3　安卓 TerminalModels.kt 台位列表 abnormal 显示「异常」；KioskBarPurchase.kt 一体机不提供异常的吧台位。
+  不做：系统告警自动置异常（HTML 只写「由系统告警或人工登记进入」，没写告警来源）；已开台台位直接转异常（裁决 53）；安卓登记、确认入口。
+  依据：
+  - ENUM:100、BSM:1058「异常由系统告警或人工登记进入，处置完成后由当班主管确认恢复，全程留痕。」
+  - ENUM:100「已预留只能经取消订台、超时释放、到店开台三条路径退出」
+  测试：新类 BarTableAbnormalJdbcIntegrationTests 4 例；前端 BarTableSessionsPage.abnormal.test.tsx 3 例；安卓 KioskReservationApiTest、KioskBarPurchaseApiTest 各补 1 例。酒吧 PRD §5 补实现现状。
+- 18AK 落地位置补记·第 230 条 230-R1、230-R2（人工取消订台限店长及以上、原因必填进留痕；无新裁决）：
+  230-R1　迁移 V626__bar_reservation_cancel_permission.sql：权限码 bar.reservation.cancel「人工取消订台（店长）」（高危，授平台管理员，由运营分配给店长及以上角色）与跨端全局显式开启行。BarController.cancelReservation 改查该权限码；BarService.cancelReservation 改用该能力码，幂等之前先过本商户范围，成功留痕 bar.reservation.cancelled 带 reason 与 no_show；BarEntryService.cancelReservation 原因缺失或空白 400 VALIDATION_FAILED。超时释放作业不经此入口。原因不另建列（同 V613）。
+  230-R2　后台卡座与订台页订台列表对已预留的选中行加「取消订台」（权限 bar.reservation.cancel）与必填原因，沿用同页不可撤销动作的二次确认控件；页面矩阵 ADM-BAR-001 行补权限与接口。
+  不做：安卓取消入口；爽约标记不改。
+  依据：
+  - BSM:1058「已预留只能经取消订台、超时释放、到店开台三条路径退出；店长及以上可人工取消预留，必须填原因并留痕。」
+  契约：OpenAPI cancelBarReservation 权限、原因必填与失败码同步。
+  测试：新类 BarReservationManualCancelJdbcIntegrationTests 4 例；既有订台测试的取消授权夹具随权限码调整；前端 BarTableSessionsPage.cancelReservation.test.tsx 3 例。酒吧 PRD §5 补实现现状。
+- 18AK 落地位置补记·第 261 条 261-B10-R1（一体机登记订台定金重复提交返回第一次的结果并提示已完成；第十八批裁决 50）：
+  改法：BarEntryService 新增 registeredDeposit(reservationId)：订台的定金已登记过（deposit_paid_at 有值，含抢台失败后已取消、待原路退的）即返回当前订台；不存在、不属于本商户或从未支付过的返回空。BarService.payReservationDeposit 在定位闸之后、幂等层之前调它，有则标已重放并直接返回，不再记支付、收款人与占台；从未支付过的（免收、已超时释放）照旧 409 BAR_DEPOSIT_NOT_PAYABLE。不加订台行锁，一体机端不改。
+  与方案不一致：方案写在 BarEntryService.payDeposit 内判断，改到幂等层之前，理由见控制席判定③。
+  依据：
+  - PGM:303「同一次操作重复提交时，返回第一次的结果并提示已完成。」
+  - PGM:528「⑤同一笔操作重复提交不重复生效（重复点击、网络重发、渠道重复回调都只算一次）」
+  测试：KioskBarReservationJdbcTests 加 3 例（换编号再登记返回已登记订台、留痕与收款人不变；抢台失败已取消的订台再登记不重复登记原路待退；从未支付的照旧 409、别家商户读不到已付订台）。酒吧 PRD 订台定金一节补实现现状。
+- 18AK 落地位置补记·第 261 条 261-B09-R1（一体机登记酒吧账单现金、POS 收款，没拿到结果再按时沿用原请求编号并提示已完成；第十八批裁决 50）：
+  改法（只改安卓终端，服务端不改）：共享核 KioskPayment.kt 新增 KioskPaymentKey——收款步骤持有的登记编号：目标、金额、渠道、POS 号都不变时沿用；拿到成功结果或被服务端明确拒绝（4xx，409 IDEMPOTENCY_IN_PROGRESS 除外）后清掉；网络异常、超时、5xx、409 处理中时保留。registerKioskPayment 的酒吧账单支改用调用方传入的编号（同时作 payment_id），票务支、订台定金支不动。两份 TerminalApiClient.kt 解包响应时记下顶层 replayed 的提示；MainActivity.kt 的 kioskPayStep 每进一次建一个编号对象，重放时在状态行与浮层显示服务端「该操作已完成（重复提交，返回首次结果）」，再照成功往下走。
+  与方案不一致：方案只写状态行显示，因吧台买酒付款成功后立即换屏、状态行看不到，另加一个浮层显示同一句。
+  依据：
+  - PGM:303「同一个操作被重复提交，系统只认一次……同一次操作重复提交时，返回第一次的结果并提示已完成。」
+  - BSM:990「允许现场现金和 POS 机支付，但必须由授权员工记录到订单、账单、日结和对账里。」
+  测试：安卓 KioskPaymentApiTest 加 3 例；后端 KioskBarOrderJdbcTests 加 1 例守护用例（同一编号由同商户另一位收银再交，返回第一次的账单并带 replayed，结算流水与留痕各只一条）。
+- 18AK 复核修复补记（无新裁决）：收尾复核改了三处。① 后台商品页沽清被准入闸拦下后，原实现关弹框并清空表单，再点时要重选档位、重填原因；主管的批准只认同样内容的再次提交（M724-F16），原因稍有出入就会再次被拦。改为记下被拦那次的档位与原因，再点同一商品的「沽清」时原样带回，提示语写明档位与原因保持不变；前端补 1 例。② apps/web/src/admin/pages/ApprovalChainPage.test.tsx 与页面矩阵的文件版本漏升，各补 +0.01。③ 酒吧 PRD 缺第 226、230 条与 261-B10-R1 的实现现状，已补（§5、订台定金一节与变更日志）。

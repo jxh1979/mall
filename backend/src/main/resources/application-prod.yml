@@ -1,4 +1,4 @@
-# 文件版本：V0.12
+# 文件版本：V0.13
 server:
   address: ${COMPLEX_API_HOST:127.0.0.1}
 
@@ -61,6 +61,8 @@ customer.deregistration-mark-purge.scheduled.enabled: true
 customer.payment.settle.scheduled.enabled: true
 # ROOT-03-R19（BSM 第 1062 行「超过最晚到店时间未到店的，系统自动释放该台位——已付定金的按爽约规则没收定金，未付定金的直接作废」）：默认 60s 一轮。
 bar.reservation-timeout.scheduled.enabled: true
+# 第 221 条 221-R2（ENUM 第 111 行「临时沽清（本营业日有效，营业日切换时点自动恢复在售）」）：临时沽清到期自动恢复在售并留痕，默认 60s 一轮。
+bar.sold-out-restore.scheduled.enabled: true
 
 # 2026-10-18 CG-03 / CG-11b 批量发布配套(BSM「营业日结束时由系统自动清零在玩人数」「到首付款截止时仍未达到合同门槛的订单取消」为系统自动动作,
 # 同 AUD-033 先例 prod 开启;两作业均为薄 @Scheduled 包装,业务规则在服务层,默认间隔 60s / 300s):

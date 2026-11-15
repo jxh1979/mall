@@ -84,6 +84,15 @@ public class AuditedOperationExecutor {
     }
 
     public <T> T readSingle(AuditedOperation operation, Supplier<T> action, Function<Object, String> businessIdResolver) {
+        return readSingle(operation, action, businessIdResolver, Map.of());
+    }
+
+    /**
+     * 同上，成功事件另带调用方给的明细（第十八批 AK 段第 248 条 248-R1：酒吧目录与订台存档的理由进留痕，BSM:576「存档及删除都需要填写理由」）；
+     * 失败事件照旧只记错误码。
+     */
+    public <T> T readSingle(AuditedOperation operation, Supplier<T> action, Function<Object, String> businessIdResolver,
+            Map<String, Object> successMetadata) {
         try {
             T item = action.get();
             auditEventService.recordSuccess(
@@ -93,7 +102,7 @@ public class AuditedOperationExecutor {
                     businessIdResolver.apply(item),
                     null,
                     null,
-                    Map.of()
+                    successMetadata
             );
             return item;
         } catch (RuntimeException exception) {
