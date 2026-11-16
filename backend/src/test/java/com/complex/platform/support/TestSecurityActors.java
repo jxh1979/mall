@@ -1,6 +1,7 @@
 package com.complex.platform.support;
 
 import com.complex.platform.access.AccessActor;
+import com.complex.platform.auth.SessionIssuer;
 import java.util.List;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -56,6 +57,17 @@ public final class TestSecurityActors {
     public static void asSupervisor(String userId, int level) {
         AccessActor actor = new AccessActor(
                 userId, userId + "_user", "supervisor_l" + level, "org_1", null, "active");
+        SecurityContextHolder.getContext().setAuthentication(
+                new UsernamePasswordAuthenticationToken(actor, "token", List.of()));
+    }
+
+    /**
+     * 最高权限本人（保留超管账号，组织 platform-company、无商户）——isMasterAuthority 为真。
+     * 第十八批 AO 段第 249 条：删除审批只认最高权限本人（BSM:576）。
+     */
+    public static void asMasterAuthority() {
+        AccessActor actor = new AccessActor(SessionIssuer.MASTER_USER_ID, SessionIssuer.MASTER_USERNAME,
+                SessionIssuer.MASTER_ACCOUNT_TYPE, "platform-company", null, "active");
         SecurityContextHolder.getContext().setAuthentication(
                 new UsernamePasswordAuthenticationToken(actor, "token", List.of()));
     }

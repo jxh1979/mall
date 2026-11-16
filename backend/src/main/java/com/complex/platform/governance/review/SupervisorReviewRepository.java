@@ -1,6 +1,6 @@
 package com.complex.platform.governance.review;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import com.complex.platform.governance.chain.ApprovalChainNode;
 import java.time.Instant;
@@ -88,6 +88,10 @@ public interface SupervisorReviewRepository {
     default boolean escalateSupervisorReview(String reviewId, String approvalLevel, Integer requiredApproverRank,
                                              Instant dueAt, Instant escalatedAt) {
         return false;
+    }
+
+    /** 第十八批 AO 段第 246 条 246-R1：待审单据的到期改为各待审节点到期中最早的（还没轮到的节点没有到期，不参与）；都没有到期则不动。 */
+    default void refreshSupervisorReviewDue(String reviewId) {
     }
 
     default List<PendingReview> listPendingSupervisorReviews(int limit) {

@@ -72,7 +72,7 @@ export function DataCleanupPage({ api, setActionResult, setGlobalError, effectiv
     }
   }
 
-  // ③ 提交清理申请：dry_run → pending_approval（待另一账号审批）。
+  // ③ 提交清理申请：dry_run → pending_approval（待最高权限审批）；最高权限本人提交即执行（第十八批 AO 段第 249 条 249-R8，BSM:576）。
   async function submitForApproval() {
     if (!preview?.id) {
       setFormError("请先点「预览（试运行）」生成待清理项，再提交申请。");
@@ -83,7 +83,11 @@ export function DataCleanupPage({ api, setActionResult, setGlobalError, effectiv
     setBusy(true);
     try {
       const job = await api.post<DataCleanupJobRow>(`/api/v1/ops/data-cleanup/jobs/${preview.id}/submit`, { reason });
-      setActionResult({ action: "data_cleanup_submit", jobId: job.id, status: job.status });
+      if (job.status === "executed") {
+        setActionResult({ action: "data_cleanup_decide", jobId: job.id, status: job.status, deletedCount: job.deletedCount ?? 0 });
+      } else {
+        setActionResult({ action: "data_cleanup_submit", jobId: job.id, status: job.status });
+      }
       setPreview(null);
       setReason("");
       await reload();
@@ -120,7 +124,7 @@ export function DataCleanupPage({ api, setActionResult, setGlobalError, effectiv
     <div data-testid="data-cleanup-page">
       <AdminPageHeader
         title="数据清理工具"
-        description="集中清理旧的、已存档的配置数据。只能清理「已存档超过 N 天」的数据，绝不删除在用数据；每次清理都要先预览、再由另一位有权限的同事审批后才真正删除，全程留痕可追溯。"
+        description="集中清理旧的、已存档的配置数据。只能清理「已存档超过 N 天」的数据，绝不删除在用数据；每次清理都要先预览、再由最高权限审批后才真正删除（最高权限本人提交的直接执行），全程留痕可追溯。"
       />
 
       {/* ①②③ 发起区：选范围 + 条件 → 预览 → 提交申请 */}
@@ -219,7 +223,7 @@ export function DataCleanupPage({ api, setActionResult, setGlobalError, effectiv
         ) : null}
       </section>
 
-      {/* ④ 待审批区：另一账号批准并执行 / 驳回（禁自审由后端强制） */}
+      {/* ④ 待审批区：最高权限批准并执行 / 驳回（由后端强制） */}
       <section className="admin-section-highlight" data-testid="data-cleanup-pending">
         <h2>待审批的清理申请</h2>
         <AdminDataState loading={loading} error={error} empty={pending.length === 0} onRetry={reload}>

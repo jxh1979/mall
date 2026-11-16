@@ -1,4 +1,4 @@
-// 文件版本：V0.35
+// 文件版本：V0.36
 // OBS-14-02 后台结果区字段中文名字典（PGM「全局原则 · 界面全中文（所有终端零英文）」）。
 // 键用后端 JSON 的蛇形写法；结果区查表时蛇形与驼峰同查（orderId / order_id 都命中 order_id）。
 // 与后端字段中文名表 FieldLabels.java（common.api 包）同键同名：前段按后端原样抄录，后端改名这里跟着改（门禁会比对）。
@@ -3200,6 +3200,8 @@ export const VALUE_LABELS: Record<string, string> = {
   service_catalog_archived: "服务目录已存档",
   service_catalog_unarchived: "服务目录已取消存档",
   service_catalog_delete_requested: "服务目录删除申请已提交",
+  service_catalog_delete_approved: "服务目录删除已批准",
+  service_catalog_delete_rejected: "服务目录删除已驳回",
   service_catalog_saved: "服务目录已保存",
   service_order_cancelled: "服务单已取消",
   service_pay_config_saved: "服务付款配置已保存",

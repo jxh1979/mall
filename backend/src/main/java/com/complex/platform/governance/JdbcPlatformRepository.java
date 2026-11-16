@@ -1,5 +1,5 @@
 package com.complex.platform.governance;
-// 文件版本：V0.27
+// 文件版本：V0.28
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
@@ -1136,6 +1136,17 @@ class JdbcPlatformRepository implements PlatformRepository, SupervisorReviewRepo
                 .addValue("due_at", timestampWithTimeZone(dueAt))) == 1;
     }
 
+    // 第十八批 AO 段第 246 条 246-R1：单据到期＝各当前节点中最早的到期（未轮到的待审节点 due_at 为空，不参与取最小）。
+    @Override
+    public void refreshSupervisorReviewDue(String reviewId) {
+        jdbcTemplate.update("""
+                UPDATE supervisor_review_decisions d
+                   SET due_at = n.min_due
+                  FROM (SELECT min(due_at) AS min_due FROM supervisor_review_nodes WHERE review_id = :review_id AND status = 'pending') n
+                 WHERE d.review_id = :review_id AND d.review_status = 'pending_review' AND n.min_due IS NOT NULL
+                """, new MapSqlParameterSource().addValue("review_id", reviewId));
+    }
+
     @Override
     public List<SupervisorReviewRepository.PendingReview> listPendingSupervisorReviews(int limit) {
         return jdbcTemplate.query(PENDING_REVIEW_COLUMNS + """
@@ -1195,8 +1206,8 @@ class JdbcPlatformRepository implements PlatformRepository, SupervisorReviewRepo
     public void saveChainNodes(String reviewId, List<ApprovalChainNode> nodes) {
         for (ApprovalChainNode node : nodes) {
             jdbcTemplate.update("""
-                    INSERT INTO supervisor_review_nodes (node_id, review_id, line_code, seq, approver_kind, approver_id, status, escalation_count)
-                    VALUES (:node_id, :review_id, :line_code, :seq, :approver_kind, :approver_id, :status, :escalation_count)
+                    INSERT INTO supervisor_review_nodes (node_id, review_id, line_code, seq, approver_kind, approver_id, status, escalation_count, due_at)
+                    VALUES (:node_id, :review_id, :line_code, :seq, :approver_kind, :approver_id, :status, :escalation_count, :due_at)
                     """, chainNodeParameters(node));
         }
     }
@@ -1205,14 +1216,15 @@ class JdbcPlatformRepository implements PlatformRepository, SupervisorReviewRepo
     public List<ApprovalChainNode> listChainNodes(String reviewId) {
         return jdbcTemplate.query("""
                 SELECT node_id, review_id, line_code, seq, approver_kind, approver_id, status, decided_by, decided_at,
-                       forwarded_to, forwarded_by, escalation_count
+                       forwarded_to, forwarded_by, escalation_count, due_at
                   FROM supervisor_review_nodes
                  WHERE review_id = :review_id
                  ORDER BY line_code, seq
                 """, new MapSqlParameterSource().addValue("review_id", reviewId), (rs, rowNumber) -> new ApprovalChainNode(
                 rs.getString("node_id"), rs.getString("review_id"), rs.getString("line_code"), rs.getInt("seq"),
                 rs.getString("approver_kind"), rs.getString("approver_id"), rs.getString("status"), rs.getString("decided_by"),
-                nullableInstant(rs, "decided_at"), rs.getString("forwarded_to"), rs.getString("forwarded_by"), rs.getInt("escalation_count")));
+                nullableInstant(rs, "decided_at"), rs.getString("forwarded_to"), rs.getString("forwarded_by"), rs.getInt("escalation_count"),
+                nullableInstant(rs, "due_at")));
     }
 
     @Override
@@ -1220,7 +1232,8 @@ class JdbcPlatformRepository implements PlatformRepository, SupervisorReviewRepo
         return jdbcTemplate.update("""
                 UPDATE supervisor_review_nodes
                    SET approver_id = :approver_id, status = :status, decided_by = :decided_by, decided_at = :decided_at,
-                       forwarded_to = :forwarded_to, forwarded_by = :forwarded_by, escalation_count = :escalation_count
+                       forwarded_to = :forwarded_to, forwarded_by = :forwarded_by, escalation_count = :escalation_count,
+                       due_at = :due_at
                  WHERE node_id = :node_id AND status = 'pending'
                 """, chainNodeParameters(node)
                 .addValue("decided_by", node.decidedBy())
@@ -1294,7 +1307,8 @@ class JdbcPlatformRepository implements PlatformRepository, SupervisorReviewRepo
                 .addValue("approver_kind", node.approverKind())
                 .addValue("approver_id", node.approverId())
                 .addValue("status", node.status())
-                .addValue("escalation_count", node.escalationCount());
+                .addValue("escalation_count", node.escalationCount())
+                .addValue("due_at", timestampWithTimeZone(node.dueAt()));
     }
 
     // 第十八批 AD 段第 204 条 204-R1：审批时限只存 approval_deadline_settings（V617，只存后台改过的审批类型）。

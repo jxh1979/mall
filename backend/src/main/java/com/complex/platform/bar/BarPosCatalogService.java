@@ -58,14 +58,14 @@ public class BarPosCatalogService {
         this.comboKind = new CatalogKind<>("BAR_COMBO", "套餐",
                 this::requireCombo, repository::saveCombo, null,
                 repository::setComboArchiveReason,
-                null, null,
+                repository::countComboReferences, refs -> "该套餐仍被 " + refs + " 条订单明细引用",
                 repository::deleteCombo);
     }
 
     // ---------- 分类 ----------
 
     public List<BarProductCategoryRecord> listCategories(String barId, boolean includeArchived) {
-        return repository.listCategories(authorizationService.currentMerchantScope(), trimToNull(barId), includeArchived);
+        return repository.listCategories(listScope(), trimToNull(barId), includeArchived);
     }
 
     @Transactional
@@ -145,7 +145,7 @@ public class BarPosCatalogService {
     // ---------- 套餐 ----------
 
     public List<BarComboRecord> listCombos(String barId, boolean includeArchived) {
-        return repository.listCombos(authorizationService.currentMerchantScope(), trimToNull(barId), includeArchived);
+        return repository.listCombos(listScope(), trimToNull(barId), includeArchived);
     }
 
     @Transactional
@@ -259,7 +259,7 @@ public class BarPosCatalogService {
     @Transactional
     public BarProductCategoryRecord requestDeleteCategory(String id, BarCatalogDeleteRequest request) {
         return operations.auditedWrite(BarWriteOperation.REQUEST_DELETE_BAR_CATEGORY,
-                () -> doRequestDelete(categoryKind, id, request));
+                () -> doRequestDelete(categoryKind, id, request, BarWriteOperation.APPROVE_DELETE_BAR_CATEGORY));
     }
 
     @Transactional
@@ -279,7 +279,7 @@ public class BarPosCatalogService {
     @Transactional
     public BarProductRecord requestDeleteProduct(String id, BarCatalogDeleteRequest request) {
         return operations.auditedWrite(BarWriteOperation.REQUEST_DELETE_BAR_PRODUCT,
-                () -> doRequestDelete(productKind, id, request));
+                () -> doRequestDelete(productKind, id, request, BarWriteOperation.APPROVE_DELETE_BAR_PRODUCT));
     }
 
     @Transactional
@@ -299,7 +299,7 @@ public class BarPosCatalogService {
     @Transactional
     public BarComboRecord requestDeleteCombo(String id, BarCatalogDeleteRequest request) {
         return operations.auditedWrite(BarWriteOperation.REQUEST_DELETE_BAR_COMBO,
-                () -> doRequestDelete(comboKind, id, request));
+                () -> doRequestDelete(comboKind, id, request, BarWriteOperation.APPROVE_DELETE_BAR_COMBO));
     }
 
     @Transactional
@@ -314,9 +314,8 @@ public class BarPosCatalogService {
      * 单类目录实体接进生命周期助手的全部差异点：错误码前缀、中文实体名、按 id 取记录（require 校验）、
      * withArchive/withDelete 结果落库、（商品）落库后重取权威记录（reload，null = 直接用落库返回值）、
      * 存档理由落库、活引用计数与占用文案、物理删除。
-     * countReferences 为 null = 该实体无外部活引用检查（套餐：bar_combo_items 是套餐自身明细，
-     * 无订单表引用套餐，故活引用恒 0，审批通过直接软删——软删=UPDATE delete_status，不触发 CASCADE，
-     * 明细自动保留（可恢复）；前台读被 delete_status 过滤隐藏）。
+     * 套餐的活引用是订单明细（套餐下单展开出的明细记 combo_id，V580；第十八批 AO 段第 249 条 249-R2）；
+     * 删除是软删＝UPDATE delete_status，不触发 CASCADE，套餐自身明细保留；前台读被 delete_status 过滤隐藏。
      */
     private record CatalogKind<T extends BarCatalogLifecycle<T>>(
             String codePrefix, String entityName,
@@ -349,8 +348,15 @@ public class BarPosCatalogService {
         return kind.reload() == null ? saved : kind.reload().apply(id);
     }
 
-    private <T extends BarCatalogLifecycle<T>> T doRequestDelete(CatalogKind<T> kind, String id, BarCatalogDeleteRequest request) {
-        Optional<String> scope = authorizationService.currentMerchantScope();
+    /**
+     * 第十八批 AO 段第 249 条 249-R1（第十八批裁决 71）：持授权 U 盘密钥的最高权限本人发起的删除不按商户范围（PGM:528 逐笔开放），
+     * 落待审批后当场执行（BSM:576「持授权 U 盘密钥的最高权限本人发起的操作，不需要经过任何审批。」）：占用检查照走，另落一条
+     * approveOp 的 delete_approved；有占用 409 *_IN_USE，外层事务整笔回滚。find* 已滤掉删除的行，返回值在内存里构造。
+     */
+    private <T extends BarCatalogLifecycle<T>> T doRequestDelete(CatalogKind<T> kind, String id, BarCatalogDeleteRequest request,
+            BarWriteOperation approveOp) {
+        boolean master = isMaster();
+        Optional<String> scope = master ? Optional.empty() : authorizationService.currentMerchantScope();
         T entity = kind.require().apply(id);
         checkOwnership(scope, entity.merchantId());
         if (entity.archivedAt() == null) {
@@ -362,14 +368,21 @@ public class BarPosCatalogService {
         Instant now = Instant.now();
         String reason = requireText(request == null ? null : request.reason(), "reason");
         T saved = kind.save().apply(entity.withDelete("pending", actorId(), now, reason, now));
+        if (master) {
+            operations.auditedWrite(approveOp, () -> executeDelete(kind, id));
+            return saved.withDelete("approved", actorId(), now, reason, now);
+        }
         return kind.reload() == null ? saved : kind.reload().apply(id);
     }
 
     private <T extends BarCatalogLifecycle<T>> BarCatalogDeleteDecision doApproveDelete(
             CatalogKind<T> kind, String id, BarCatalogDeleteApprovalRequest request) {
-        Optional<String> scope = authorizationService.currentMerchantScope();
+        // 第十八批 AO 段第 249 条 249-R1（BSM:576「删除一律须由具备最高权限的人审批通过后执行，不设例外」）：审批只认最高权限本人；
+        // 最高权限审批不按商户范围取记录（PGM:528「持授权 U 盘密钥的最高权限可以逐笔开放，每次只对当前这一笔生效并留痕」）。
+        if (!isMaster()) {
+            throw ApiException.forbidden("MASTER_APPROVAL_REQUIRED", "酒吧" + kind.entityName() + "删除须由最高权限本人批准");
+        }
         T entity = kind.require().apply(id);
-        checkOwnership(scope, entity.merchantId());
         requirePending(entity.deleteStatus(), kind.codePrefix() + "_DELETE_NOT_PENDING");
         String decision = decisionOf(request);
         forbidSelfApprove(entity.deleteRequestedBy());
@@ -377,11 +390,14 @@ public class BarPosCatalogService {
             kind.save().apply(entity.withDelete("none", null, null, null, Instant.now()));
             return new BarCatalogDeleteDecision(id, "rejected", false);
         }
-        if (kind.countReferences() != null) {
-            long refs = kind.countReferences().applyAsLong(id);
-            if (refs > 0) {
-                throw ApiException.conflict(kind.codePrefix() + "_IN_USE", kind.inUseMessage().apply(refs));
-            }
+        return executeDelete(kind, id);
+    }
+
+    /** 删前查占用（BSM:572「只要还有占用就拦住不让删」），无占用即软删。 */
+    private <T extends BarCatalogLifecycle<T>> BarCatalogDeleteDecision executeDelete(CatalogKind<T> kind, String id) {
+        long refs = kind.countReferences().applyAsLong(id);
+        if (refs > 0) {
+            throw ApiException.conflict(kind.codePrefix() + "_IN_USE", kind.inUseMessage().apply(refs));
         }
         kind.physicalDelete().accept(id);
         return new BarCatalogDeleteDecision(id, "approved", true);
@@ -426,6 +442,15 @@ public class BarPosCatalogService {
             throw ApiException.forbidden("BAR_CATALOG_SELF_APPROVE_FORBIDDEN",
                     "删除申请的发起人不能审批自己的申请");
         }
+    }
+
+    private boolean isMaster() {
+        return authorizationService.isMasterAuthority(authorizationService.currentActor());
+    }
+
+    /** 第十八批裁决 71：最高权限看全部酒吧的分类、套餐（不按商户范围）；其他人照旧按当前商户范围。 */
+    private Optional<String> listScope() {
+        return isMaster() ? Optional.empty() : authorizationService.currentMerchantScope();
     }
 
     /** 当前操作者 id（存档/删除留痕 + 自审校验）；无鉴权上下文（测试/内部调用）回退 null。 */

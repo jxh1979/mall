@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { IntegrationChannelMapsPage } from "./IntegrationChannelMapsPage";
 import type { AdminApiClient, AdminPageProps, EffectivePermissionsState } from "../types";
@@ -16,6 +16,10 @@ const STORE_MAPS = [
   {
     id: "smap-1", providerCode: "meituan-groupbuy", channel: "douyin", externalStoreId: "dy-store-1",
     merchantId: "mch_bar_1", status: "inactive",
+  },
+  {
+    id: "smap-2", providerCode: "meituan-groupbuy", channel: "douyin", externalStoreId: "dy-store-2",
+    merchantId: "mch_bar_2", status: "active",
   },
 ];
 
@@ -44,6 +48,10 @@ function renderPage(): AdminApiClient {
 }
 
 describe("IntegrationChannelMapsPage 渠道映射维护（批6）", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it("两张映射表渲染，渠道/状态全中文", async () => {
     renderPage();
     await waitFor(() => expect(screen.getByTestId("ticket-map-row-mt-prod-1")).toBeTruthy());
@@ -75,13 +83,44 @@ describe("IntegrationChannelMapsPage 渠道映射维护（批6）", () => {
     ));
   });
 
-  it("停用生效行走 archive 端点并带停用理由", async () => {
+  // 第十八批 AO 段第 251 条 251-R2（BSM:576「存档及删除都需要填写理由」）：停用理由由操作人填写，不再写死。
+  it("停用票种映射：弹窗填的理由随 archive 请求提交", async () => {
+    vi.spyOn(window, "prompt").mockReturnValue("渠道下架");
     const api = renderPage();
     await waitFor(() => expect(screen.getByTestId("ticket-map-archive-mt-prod-1")).toBeTruthy());
     fireEvent.click(screen.getByTestId("ticket-map-archive-mt-prod-1"));
     await waitFor(() => expect(api.post).toHaveBeenCalledWith(
       "/api/v1/integration/channel-ticket-type-maps/map-1/archive",
-      expect.objectContaining({ reason: expect.stringContaining("停用") }),
+      expect.objectContaining({ reason: "渠道下架" }),
+    ));
+  });
+
+  it("停用弹窗取消：不提交", async () => {
+    vi.spyOn(window, "prompt").mockReturnValue(null);
+    const api = renderPage();
+    await waitFor(() => expect(screen.getByTestId("ticket-map-archive-mt-prod-1")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("ticket-map-archive-mt-prod-1"));
+    await waitFor(() => expect(window.prompt).toHaveBeenCalled());
+    expect(api.post).not.toHaveBeenCalled();
+  });
+
+  it("停用理由为空白：提示必填、不提交", async () => {
+    vi.spyOn(window, "prompt").mockReturnValue("   ");
+    const api = renderPage();
+    await waitFor(() => expect(screen.getByTestId("ticket-map-archive-mt-prod-1")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("ticket-map-archive-mt-prod-1"));
+    await waitFor(() => expect(screen.queryByTestId("channel-maps-error")?.textContent ?? "").toContain("停用理由不能为空"));
+    expect(api.post).not.toHaveBeenCalled();
+  });
+
+  it("停用门店映射：弹窗填的理由随 archive 请求提交", async () => {
+    vi.spyOn(window, "prompt").mockReturnValue("门店闭店");
+    const api = renderPage();
+    await waitFor(() => expect(screen.getByTestId("store-map-archive-dy-store-2")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("store-map-archive-dy-store-2"));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith(
+      "/api/v1/integration/channel-store-maps/smap-2/archive",
+      expect.objectContaining({ reason: "门店闭店" }),
     ));
   });
 });

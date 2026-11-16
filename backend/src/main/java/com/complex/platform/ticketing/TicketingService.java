@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.11
+// 文件版本：V0.12
 
 import com.complex.platform.common.api.ApiException;
 
@@ -233,7 +233,18 @@ public class TicketingService {
                 request,
                 TicketTypeRecord.class,
                 TicketingWriteOperation.REQUEST_DELETE_TICKET_TYPE,
-                () -> catalogService.requestDeleteTicketType(ticketTypeId, request, actorId())
+                () -> {
+                    TicketTypeRecord saved = catalogService.requestDeleteTicketType(ticketTypeId, request, actorId());
+                    if (!isMaster()) {
+                        return saved;
+                    }
+                    // 第十八批 AO 段第 249 条 249-R4（BSM:576「持授权 U 盘密钥的最高权限本人发起的操作，不需要经过任何审批。」）：
+                    // 当场删除，占用检查照走，另落一条 delete_approved；有占用 409，本方法事务整笔回滚。
+                    catalogService.executeDeleteTicketType(ticketTypeId);
+                    operations.recordSuccess(TicketingWriteOperation.APPROVE_DELETE_TICKET_TYPE, ticketTypeId);
+                    return saved.withDelete("approved", saved.deleteRequestedBy(), saved.deleteRequestedAt(),
+                            saved.deleteReason(), saved.updatedAt());
+                }
         );
     }
 
@@ -247,7 +258,10 @@ public class TicketingService {
                 request,
                 TicketTypeDeleteDecision.class,
                 TicketingWriteOperation.APPROVE_DELETE_TICKET_TYPE,
-                () -> catalogService.approveDeleteTicketType(ticketTypeId, request, actorId())
+                () -> {
+                    requireMasterApproval("票种");
+                    return catalogService.approveDeleteTicketType(ticketTypeId, request, actorId());
+                }
         );
     }
 
@@ -289,7 +303,17 @@ public class TicketingService {
                 request,
                 TicketPriceRuleRecord.class,
                 TicketingWriteOperation.REQUEST_DELETE_TICKET_PRICE_RULE,
-                () -> catalogService.requestDeletePriceRule(ruleId, request, actorId())
+                () -> {
+                    TicketPriceRuleRecord saved = catalogService.requestDeletePriceRule(ruleId, request, actorId());
+                    if (!isMaster()) {
+                        return saved;
+                    }
+                    // 同上（249-R4）：最高权限本人发起即删，占用 409 整笔回滚。
+                    catalogService.executeDeletePriceRule(ruleId);
+                    operations.recordSuccess(TicketingWriteOperation.APPROVE_DELETE_TICKET_PRICE_RULE, ruleId);
+                    return saved.withDelete("approved", saved.deleteRequestedBy(), saved.deleteRequestedAt(),
+                            saved.deleteReason(), saved.updatedAt());
+                }
         );
     }
 
@@ -303,7 +327,10 @@ public class TicketingService {
                 request,
                 TicketPriceRuleDeleteDecision.class,
                 TicketingWriteOperation.APPROVE_DELETE_TICKET_PRICE_RULE,
-                () -> catalogService.approveDeletePriceRule(ruleId, request, actorId())
+                () -> {
+                    requireMasterApproval("价格规则");
+                    return catalogService.approveDeletePriceRule(ruleId, request, actorId());
+                }
         );
     }
 
@@ -433,6 +460,25 @@ public class TicketingService {
                 TicketingWriteOperation.CREATE_TICKET_PRICE_RULE,
                 () -> catalogService.createPriceRule(request)
         );
+    }
+
+    /** 持授权 U 盘密钥的最高权限本人；无鉴权上下文（测试/内部调用）按非最高权限。 */
+    private boolean isMaster() {
+        if (authorizationService == null) {
+            return false;
+        }
+        try {
+            return authorizationService.isMasterAuthority(authorizationService.currentActor());
+        } catch (RuntimeException unauthenticated) {
+            return false;
+        }
+    }
+
+    /** 第十八批 AO 段第 249 条 249-R4（BSM:576「删除一律须由具备最高权限的人审批通过后执行，不设例外」）：先于自审闸。 */
+    private void requireMasterApproval(String entityName) {
+        if (!isMaster()) {
+            throw ApiException.forbidden("MASTER_APPROVAL_REQUIRED", entityName + "删除须由最高权限本人批准");
+        }
     }
 
     /** 当前操作者 id（用于存档/删除申请留痕与自审校验）；测试无鉴权上下文时回退 null。 */

@@ -1,6 +1,6 @@
 package com.complex.platform.governance.chain;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -56,9 +56,9 @@ class ApprovalChainNodeConcurrencyJdbcTests {
                 """, reviewId, "tr_" + reviewId);
         repository.saveChainNodes(reviewId, List.of(
                 new ApprovalChainNode(reviewId + ":main:1", reviewId, ApprovalChainNode.MAIN_LINE, 1, ApprovalChainNode.KIND_USER,
-                        "usr_m087_a", ApprovalChainNode.PENDING, null, null, null, null, 0),
+                        "usr_m087_a", ApprovalChainNode.PENDING, null, null, null, null, 0, null),
                 new ApprovalChainNode(reviewId + ":finance_review:1", reviewId, "finance_review", 1, ApprovalChainNode.KIND_USER,
-                        "usr_m087_b", ApprovalChainNode.PENDING, null, null, null, null, 0)));
+                        "usr_m087_b", ApprovalChainNode.PENDING, null, null, null, null, 0, null)));
     }
 
     @Test

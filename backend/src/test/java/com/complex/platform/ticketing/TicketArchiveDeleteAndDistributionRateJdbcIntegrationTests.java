@@ -1,14 +1,18 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.complex.platform.access.AccessActor;
+import com.complex.platform.auth.SessionIssuer;
 import com.complex.platform.support.StaffRequestFixture;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
@@ -18,6 +22,8 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.test.web.servlet.request.RequestPostProcessor;
@@ -28,7 +34,8 @@ import org.springframework.transaction.annotation.Transactional;
  * 走真实入口与真实授权链锁住现行为——入口已存在，本类只锁现行为，不涉及先红后绿。
  * ① 票务分销商户费率：per_guest_cent 与 fixed_amount_cent 二选一，两个都填或都不填 400 VALIDATION_FAILED，只填一项 200。
  * ② 票种存档、申请删除、审批删除（BSM:569「存档（先下线）」；BSM:576「存档及删除都需要填写理由」「申请人不得审批自己的申请」）：
- * 存档缺理由 400，带理由 200；申请删除后申请人本人审批 403 TICKET_TYPE_SELF_APPROVE_FORBIDDEN，票种仍在、仍待审批。
+ * 存档缺理由 400，带理由 200；申请删除后申请人本人（非最高权限）审批 403 MASTER_APPROVAL_REQUIRED，票种仍在、仍待审批；
+ * 最高权限本人审批 200 删除（第十八批 AO 段第 249 条 249-R4，BSM:576「删除一律须由具备最高权限的人审批通过后执行，不设例外」）。
  */
 @SpringBootTest(properties = {
         "spring.datasource.url=${SETTLE_TEST_DB_URL:jdbc:postgresql://127.0.0.1:5432/complex_test}",
@@ -98,10 +105,26 @@ class TicketArchiveDeleteAndDistributionRateJdbcIntegrationTests {
                 .andExpect(jsonPath("$.data.delete_status").value("pending"));
         call(manager, base + "/delete-approve", Map.of("idempotency_key", "tadr-delapp-" + s, "decision", "approved"))
                 .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.detail_code").value("TICKET_TYPE_SELF_APPROVE_FORBIDDEN"));
+                .andExpect(jsonPath("$.detail_code").value("MASTER_APPROVAL_REQUIRED"));
 
         assertThat(jdbc.queryForObject("SELECT delete_status FROM ticket_types WHERE id = ?", String.class, ticketType))
                 .isEqualTo("pending");
+        call(master(), base + "/delete-approve", Map.of("idempotency_key", "tadr-delapp-master-" + s, "decision", "approved"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.deleted").value(true));
+        assertThat(jdbc.queryForObject("SELECT delete_status FROM ticket_types WHERE id = ?", String.class, ticketType))
+                .isEqualTo("approved");
+    }
+
+    /** 最高权限本人（保留超管账号，组织 platform-company、无商户），经后台 Web 终端。 */
+    private RequestPostProcessor master() {
+        AccessActor actor = new AccessActor(SessionIssuer.MASTER_USER_ID, SessionIssuer.MASTER_USERNAME,
+                SessionIssuer.MASTER_ACCOUNT_TYPE, "platform-company", null, "active");
+        return request -> {
+            request.addHeader("X-Terminal-Type", "web");
+            return authentication(new UsernamePasswordAuthenticationToken(actor, null,
+                    List.of(new SimpleGrantedAuthority("ROLE_P0_STAFF")))).postProcessRequest(request);
+        };
     }
 
     private ResultActions rate(RequestPostProcessor actor, Map<String, ?> body) throws Exception {

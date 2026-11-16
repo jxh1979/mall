@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.08
+// 文件版本：V0.09
 
 import com.complex.platform.common.api.PageResponse;
 import com.complex.platform.evidence.AuditedOperationExecutor;
@@ -53,6 +53,11 @@ public class TicketingOperationExecutor {
                 this::businessId,
                 successMetadata
         );
+    }
+
+    /** 第十八批 AO 段第 249 条 249-R4：同一请求里另记一条成功事件（最高权限本人发起即删时补记 delete_approved）。 */
+    void recordSuccess(TicketingWriteOperation operation, String businessId) {
+        operations.recordDetail(operation.successEvent(), operation.permissionCode(), operation.businessType(), businessId, Map.of());
     }
 
     String requireText(String value, String fieldName) {

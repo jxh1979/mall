@@ -256,8 +256,8 @@ class BarPosCatalogJdbcIntegrationTests {
                     "barcat_del", "bar_del", "merchant_pos_test", "待删分类", 1, "active", now, now));
             service.archiveCategory("barcat_del", true, "测试存档理由");
             service.requestDeleteCategory("barcat_del", new BarCatalogDeleteRequest("配错"));
-            // 禁自审：换一个审批人（申请人不能审批自己的申请）。
-            com.complex.platform.support.TestSecurityActors.asPlatformAdmin("usr_approver");
+            // 审批只认最高权限本人（第十八批 AO 段第 249 条 249-R1；BSM:576「删除一律须由具备最高权限的人审批通过后执行」）。
+            com.complex.platform.support.TestSecurityActors.asMasterAuthority();
             BarCatalogDeleteDecision decision = service.approveDeleteCategory(
                     "barcat_del", new BarCatalogDeleteApprovalRequest("approved", null));
             assertThat(decision.deleted()).isTrue();
@@ -278,8 +278,8 @@ class BarPosCatalogJdbcIntegrationTests {
             catalog.updateProductCategory("product_cat_use", "barcat_use", now);
             service.archiveCategory("barcat_use", true, "测试存档理由");
             service.requestDeleteCategory("barcat_use", new BarCatalogDeleteRequest("试删"));
-            // 禁自审：换一个审批人（申请人不能审批自己的申请）。
-            com.complex.platform.support.TestSecurityActors.asPlatformAdmin("usr_approver");
+            // 审批只认最高权限本人（第十八批 AO 段第 249 条 249-R1；BSM:576「删除一律须由具备最高权限的人审批通过后执行」）。
+            com.complex.platform.support.TestSecurityActors.asMasterAuthority();
             assertThatThrownBy(() -> service.approveDeleteCategory(
                     "barcat_use", new BarCatalogDeleteApprovalRequest("approved", null)))
                     .isInstanceOf(com.complex.platform.common.api.ApiException.class);
@@ -312,8 +312,8 @@ class BarPosCatalogJdbcIntegrationTests {
             barRepository.saveProduct(newProduct("product_del", "bar_pdel", "待删商品"));
             service.archiveProduct("product_del", true, "测试存档理由");
             service.requestDeleteProduct("product_del", new BarCatalogDeleteRequest("下架"));
-            // 禁自审：换一个审批人（申请人不能审批自己的申请）。
-            com.complex.platform.support.TestSecurityActors.asPlatformAdmin("usr_approver");
+            // 审批只认最高权限本人（第十八批 AO 段第 249 条 249-R1；BSM:576「删除一律须由具备最高权限的人审批通过后执行」）。
+            com.complex.platform.support.TestSecurityActors.asMasterAuthority();
             BarCatalogDeleteDecision decision = service.approveDeleteProduct(
                     "product_del", new BarCatalogDeleteApprovalRequest("approved", null));
             assertThat(decision.deleted()).isTrue();
@@ -335,8 +335,8 @@ class BarPosCatalogJdbcIntegrationTests {
                     List.of(new BarComboItemRecord("bci_puse", "barcombo_puse", "product_puse", "被套餐引用商品", 1))));
             service.archiveProduct("product_puse", true, "测试存档理由");
             service.requestDeleteProduct("product_puse", new BarCatalogDeleteRequest("试删"));
-            // 禁自审：换一个审批人（申请人不能审批自己的申请）。
-            com.complex.platform.support.TestSecurityActors.asPlatformAdmin("usr_approver");
+            // 审批只认最高权限本人（第十八批 AO 段第 249 条 249-R1；BSM:576「删除一律须由具备最高权限的人审批通过后执行」）。
+            com.complex.platform.support.TestSecurityActors.asMasterAuthority();
             assertThatThrownBy(() -> service.approveDeleteProduct(
                     "product_puse", new BarCatalogDeleteApprovalRequest("approved", null)))
                     .isInstanceOf(com.complex.platform.common.api.ApiException.class);
@@ -346,7 +346,7 @@ class BarPosCatalogJdbcIntegrationTests {
         }
     }
 
-    // ---- 套餐（无外部活引用，可直接删；明细随 CASCADE 清除）----
+    // ---- 套餐（没被订单明细引用时可删；软删保留明细）----
     @Test
     void archiveComboSucceeds() {
         com.complex.platform.support.TestSecurityActors.asPlatformAdmin();
@@ -377,8 +377,8 @@ class BarPosCatalogJdbcIntegrationTests {
                     List.of(new BarComboItemRecord("bci_cdel", "barcombo_del", "product_cdel", "套餐用商品2", 1))));
             service.archiveCombo("barcombo_del", true, "测试存档理由");
             service.requestDeleteCombo("barcombo_del", new BarCatalogDeleteRequest("撤套餐"));
-            // 禁自审：换一个审批人（申请人不能审批自己的申请）。
-            com.complex.platform.support.TestSecurityActors.asPlatformAdmin("usr_approver");
+            // 审批只认最高权限本人（第十八批 AO 段第 249 条 249-R1；BSM:576「删除一律须由具备最高权限的人审批通过后执行」）。
+            com.complex.platform.support.TestSecurityActors.asMasterAuthority();
             BarCatalogDeleteDecision decision = service.approveDeleteCombo(
                     "barcombo_del", new BarCatalogDeleteApprovalRequest("approved", null));
             assertThat(decision.deleted()).isTrue();
@@ -409,7 +409,7 @@ class BarPosCatalogJdbcIntegrationTests {
 
     @Test
     void deleteRequestInitiatorCannotApprove() {
-        // 职责分离：删除申请发起人不能审批自己的申请。
+        // 删除申请发起人（非最高权限）审批自己的申请：最高权限闸先拦下（249-R1）。
         com.complex.platform.support.TestSecurityActors.asPlatformAdmin("usr_initiator");
         try {
             barRepository.saveProduct(newProduct("product_self", "bar_self", "自审商品"));
@@ -418,7 +418,7 @@ class BarPosCatalogJdbcIntegrationTests {
             assertThatThrownBy(() -> service.approveDeleteProduct(
                     "product_self", new BarCatalogDeleteApprovalRequest("approved", null)))
                     .isInstanceOf(com.complex.platform.common.api.ApiException.class)
-                    .hasFieldOrPropertyWithValue("code", "BAR_CATALOG_SELF_APPROVE_FORBIDDEN");
+                    .hasFieldOrPropertyWithValue("code", "MASTER_APPROVAL_REQUIRED");
         } finally {
             com.complex.platform.support.TestSecurityActors.clear();
         }
@@ -432,7 +432,7 @@ class BarPosCatalogJdbcIntegrationTests {
             barRepository.saveProduct(newProduct("product_rej", "bar_rej", "被驳回商品"));
             service.archiveProduct("product_rej", true, "测试存档理由");
             service.requestDeleteProduct("product_rej", new BarCatalogDeleteRequest("误删申请"));
-            com.complex.platform.support.TestSecurityActors.asPlatformAdmin("usr_approver");
+            com.complex.platform.support.TestSecurityActors.asMasterAuthority();
             BarCatalogDeleteDecision decision = service.approveDeleteProduct(
                     "product_rej", new BarCatalogDeleteApprovalRequest("rejected", null));
             assertThat(decision.deleted()).isFalse();

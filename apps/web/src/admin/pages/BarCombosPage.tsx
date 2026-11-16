@@ -37,7 +37,9 @@ const EMPTY_COMBO_FORM: ComboForm = { barId: "", comboName: "", priceYuan: "", c
  *   后台从既有 SKU（bar_products）挑若干件组成套餐，定套餐整体售价与内部结算价。供平板图形化点单直接下套餐。
  * 查看需 bar.combo.view；维护需 bar.combo.manage（含内部结算价，敏感）。
  */
-export function BarCombosPage({ api, setActionResult, setGlobalError, effectivePermissions, reportViewedObjects }: AdminPageProps) {
+export function BarCombosPage({ api, user, setActionResult, setGlobalError, effectivePermissions, reportViewedObjects }: AdminPageProps) {
+  // 第十八批 AO 段第 249 条 249-R8：持授权 U 盘密钥的最高权限本人发起的删除不需要审批（BSM:576），按钮与提示照员工档案页判最高权限。
+  const isMaster = user.id === "usr_master_authority" && user.username === "master-authority";
   const [rows, setRows] = React.useState<BarComboRow[]>([]);
   // 第 23 条 23-R5：敏感页这一次看到的对象（PGM:687「哪个客人、哪个商户、哪些单据」）。
   React.useEffect(() => reportViewedObjects?.("bar_combo", rows), [rows, reportViewedObjects]);
@@ -105,13 +107,14 @@ export function BarCombosPage({ api, setActionResult, setGlobalError, effectiveP
   }
 
   async function requestDeleteCombo(id: string) {
-    const reason = window.prompt("删除理由（提交后需上级审批）：");
+    const reason = window.prompt(isMaster ? "删除理由（最高权限本人发起即删除）：" : "删除理由（提交后需最高权限审批）：");
     if (reason === null) {
       return; // 用户点「取消」= 中止申请。
     }
     try {
       await api.post(`/api/v1/bar/catalog/combos/${id}/delete-request`, { reason });
-      setActionResult({ action: "bar_combo_delete_requested", id });
+      if (isMaster) setActionResult({ action: "bar_combo_delete_approved", id, deleted: true });
+      else setActionResult({ action: "bar_combo_delete_requested", id });
       await reload();
     } catch (e) {
       setGlobalError(e instanceof Error ? e.message : "删除申请失败");
@@ -137,7 +140,7 @@ export function BarCombosPage({ api, setActionResult, setGlobalError, effectiveP
       : row.archivedAt
       ? [
           { key: "unarchive", label: "取消存档", permissions: ["bar.combo.manage"], onClick: () => void archiveCombo(row.id, false), testId: `bar-combo-unarchive-${row.id}` },
-          { key: "delete-request", label: "申请删除", permissions: ["bar.combo.manage"], danger: true, onClick: () => void requestDeleteCombo(row.id), testId: `bar-combo-delete-request-${row.id}` },
+          { key: "delete-request", label: isMaster ? "直接删除" : "申请删除", permissions: ["bar.combo.manage"], danger: true, onClick: () => void requestDeleteCombo(row.id), testId: `bar-combo-delete-request-${row.id}` },
         ]
       : [
           { key: "archive", label: "存档", permissions: ["bar.combo.manage"], onClick: () => void archiveCombo(row.id, true), testId: `bar-combo-archive-${row.id}` },

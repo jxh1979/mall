@@ -109,6 +109,13 @@ class JdbcBarPosCatalogRepository {
         return count == null ? 0L : count;
     }
 
+    /** 套餐活引用：套餐下单展开出的订单明细（bar_order_items.combo_id，V580），不分订单状态（第十八批 AO 段第 249 条 249-R2，BSM:572）。 */
+    long countComboReferences(String id) {
+        Long count = jdbcTemplate.queryForObject("SELECT COUNT(1) FROM bar_order_items WHERE combo_id = :id",
+                Map.of("id", id), Long.class);
+        return count == null ? 0L : count;
+    }
+
     // ---------- 商品：设分类/图片、按分类列、存档/删除 ----------
 
     Optional<BarProductRecord> findProduct(String id) {

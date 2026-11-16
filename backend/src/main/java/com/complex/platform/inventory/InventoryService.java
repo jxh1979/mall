@@ -1,6 +1,6 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.20
+// 文件版本：V0.21
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.LocalZone;
@@ -3261,8 +3261,8 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
                 InventoryTransferOrderRecord.class, "inventory.transfer_order_shipped", "inventory.transfer_order_ship_failed",
                 "inventory.transfer_order.manage", "inventory_transfer_order",
                 () -> {
-                    InventoryTransferOrderRecord o = repository.findTransferOrderById(id).orElseThrow(() ->
-                            ApiException.notFound("TRANSFER_ORDER_NOT_FOUND", "调拨单不存在或已被删除"));
+                    // 第十八批 AO 段 261-B04-R2：先锁单据行再判状态，与取消同时发生只认先提交的一笔。
+                    InventoryTransferOrderRecord o = transferFlow.lockForUpdate(id);
                     // FS-011：门店要货的发货＝出库（待出库→配送中）；货款在接收方合格签收后形成，借调发货也不再挂账。
                     if ("supply".equals(o.transferType())) {
                         return transferFlow.outbound(o);
@@ -3519,8 +3519,8 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
                 InventoryTransferOrderRecord.class, "inventory.transfer_order_cancelled",
                 "inventory.transfer_order_cancel_failed", "inventory.transfer_order.manage", "inventory_transfer_order",
                 () -> {
-                    InventoryTransferOrderRecord o = repository.findTransferOrderById(id).orElseThrow(() ->
-                            ApiException.notFound("TRANSFER_ORDER_NOT_FOUND", "调拨单不存在或已被删除"));
+                    // 第十八批 AO 段 261-B04-R2：先锁单据行再判状态，与发货同时发生只认先提交的一笔。
+                    InventoryTransferOrderRecord o = transferFlow.lockForUpdate(id);
                     if ("shipped".equals(o.status())) {
                         throw ApiException.conflict(InventoryTransferFlowService.SHIPPED_NOT_CANCELLABLE,
                                 "已出库的单不能直接取消，须实际退回验收或经复核完成损失处理");
@@ -3536,10 +3536,16 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
                 });
     }
 
+    /** 第十八批 AO 段第 250 条 250-R1：只能看本商户为当事方或可触及项目的单（见 {@link InventoryTransferFlowService#visibleTo}）。 */
     public InventoryTransferOrderRecord getTransferOrder(String orderId) {
         authorizationService.requirePermission("inventory.transfer_order.view");
         InventoryTransferOrderRecord o = repository.findTransferOrderById(requireText(orderId, "order_id")).orElseThrow(() ->
                 ApiException.notFound("TRANSFER_ORDER_NOT_FOUND", "调拨单不存在或已被删除"));
+        if (!transferFlow.visibleTo("inventory.transfer_order.view").test(o)) {
+            throw authorizationService.currentMerchantIdQuietly().isPresent()
+                    ? ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN", "只能查看本商户为出让方或接收方的调拨单")
+                    : ApiException.forbidden("CROSS_PROJECT_FORBIDDEN", AuthorizationService.PROJECT_OUT_OF_REACH);
+        }
         return new InventoryTransferOrderRecord(o.id(), o.transferType(), o.lendingMode(), o.fromOwnerType(), o.fromOwnerId(),
                 o.toOwnerType(), o.toOwnerId(), o.fromLocationId(), o.toLocationId(), o.status(), o.operatorNote(),
                 o.createdBy(), o.createdAt(), o.updatedAt(), o.returnDueAt(), o.projectId(), repository.listTransferLinesByOrder(o.id()));
@@ -3547,7 +3553,9 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
 
     public PageResponse<InventoryTransferOrderRecord> listTransferOrders() {
         authorizationService.requirePermission("inventory.transfer_order.view");
-        List<InventoryTransferOrderRecord> rows = repository.listTransferOrders();
+        // 第十八批 AO 段第 250 条 250-R1：按单上的所属项目与当事商户过滤，总数按过滤后的条数。
+        List<InventoryTransferOrderRecord> rows = repository.listTransferOrders().stream()
+                .filter(transferFlow.visibleTo("inventory.transfer_order.view")).toList();
         return new PageResponse<>(rows, DEFAULT_PAGE, DEFAULT_PAGE_SIZE, rows.size());
     }
 

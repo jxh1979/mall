@@ -131,11 +131,16 @@ export function IntegrationChannelMapsPage({ api, setActionResult, setGlobalErro
     setStoreForm((current) => ({ ...current, externalStoreId: "", merchantId: "" }));
   }
 
+  // 第十八批 AO 段第 251 条 251-R2（BSM:576「存档及删除都需要填写理由」）：停用理由由操作人填写，不再写死。
   async function archive(endpoint: string, action: string, id: string) {
-    const request = {
-      idempotency_key: nextKey("map-archive"),
-      reason: "后台停用渠道映射（停用后该渠道对应回流按未配置处理）",
-    };
+    const input = window.prompt("停用理由：");
+    if (input === null) return;
+    const reason = input.trim();
+    if (!reason) {
+      setFormError("停用理由不能为空");
+      return;
+    }
+    const request = { idempotency_key: nextKey("map-archive"), reason };
     await runAction(action, { id, ...request }, () => api.post(`${endpoint}/${id}/archive`, request));
   }
 

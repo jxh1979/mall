@@ -1,6 +1,6 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.35
+// 文件版本：V0.36
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.*;
@@ -408,7 +408,7 @@ class M006SecurityRegressionTests {
                         "top", "permission-target", Instant.now().plusSeconds(3600), 0, null, null)));
         // M087：最高权限事项的链末节点为主会话节点（可变持有，裁决后 listChainNodes 反映新状态）。
         List<com.complex.platform.governance.chain.ApprovalChainNode> topChain = new ArrayList<>(List.of(
-                new com.complex.platform.governance.chain.ApprovalChainNode("n_top", "top", "main", 1, "master", null, "pending", null, null, null, null, 0)));
+                new com.complex.platform.governance.chain.ApprovalChainNode("n_top", "top", "main", 1, "master", null, "pending", null, null, null, null, 0, null)));
         when(reviewRepository.listChainNodes("top")).thenAnswer(a -> List.copyOf(topChain));
         when(reviewRepository.updateChainNode(any())).thenAnswer(a -> { topChain.set(0, a.getArgument(0)); return true; });
         when(reviewRepository.saveSupervisorReview(any())).thenAnswer(a -> a.getArgument(0));

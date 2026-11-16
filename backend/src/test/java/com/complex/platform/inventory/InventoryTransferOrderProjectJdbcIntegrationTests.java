@@ -1,9 +1,10 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -202,6 +203,27 @@ class InventoryTransferOrderProjectJdbcIntegrationTests {
                 .containsEntry("merchant_id", merchant).containsEntry("counterparty_id", lender).containsEntry("project_id", projectB);
     }
 
+    // 第十八批 AO 段第 250 条 250-R1（PGM:659「所有业务数据默认按项目隔离，普通岗位没有跨项目查看权」「一个商户在两个或更多项目中有经营的，
+    // 看到的是每一个项目内他经营的商户」；第十八批裁决 18 单上记所属项目）：调拨单列表与详情按单上的所属项目与当事商户过滤——商户账号只见本商户
+    // 为出让方或接收方的单，非商户账号只见可触及项目的单，平台管理员都见。库里可能有别的单，列表只断言含与不含。修复前红：各账号都看到全部单、详情都 200
+    @Test
+    void listAndDetailOnlyShowOrdersOfTheOwnMerchantOrAReachableProject() throws Exception {
+        String x = id(create(admin, supplyBody(merchant, projectB)).andExpect(status().isOk()));
+        String y = id(create(admin, supplyBody(lender, null)).andExpect(status().isOk()));
+
+        assertThat(listed(lenderStaff)).contains(y).doesNotContain(x);
+        read(lenderStaff, x).andExpect(status().isForbidden()).andExpect(jsonPath("$.detail_code").value("CROSS_MERCHANT_FORBIDDEN"));
+        read(lenderStaff, y).andExpect(status().isOk()).andExpect(jsonPath("$.data.id").value(y));
+
+        assertThat(listed(staffA)).contains(y).doesNotContain(x);
+        read(staffA, x).andExpect(status().isForbidden()).andExpect(jsonPath("$.detail_code").value("CROSS_PROJECT_FORBIDDEN"));
+
+        assertThat(listed(staffB)).contains(x).doesNotContain(y);
+
+        assertThat(listed(admin)).contains(x, y);
+        read(admin, x).andExpect(status().isOk()).andExpect(jsonPath("$.data.id").value(x));
+    }
+
     // ── 夹具 ──
 
     private String supplyBody(String to, String project) {
@@ -224,6 +246,16 @@ class InventoryTransferOrderProjectJdbcIntegrationTests {
         call(storeB, id, "receive", "{\"scanned_trace_codes\":[\"" + codeA + "\",\"" + codeB + "\"]}")
                 .andExpect(status().isOk()).andExpect(jsonPath("$.data.status").value("received"));
         return id;
+    }
+
+    /** 后台调拨工作台列表：返回列出的单号。 */
+    private List<String> listed(RequestPostProcessor who) throws Exception {
+        return JsonPath.read(mockMvc.perform(get(BASE).with(who)).andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8), "$.data.items[*].id");
+    }
+
+    private ResultActions read(RequestPostProcessor who, String id) throws Exception {
+        return mockMvc.perform(get(BASE + "/" + id).with(who));
     }
 
     private ResultActions create(RequestPostProcessor who, String body) throws Exception {

@@ -1,6 +1,6 @@
 package com.complex.platform.governance.review;
 
-// 文件版本：V0.36
+// 文件版本：V0.37
 
 import com.complex.platform.access.AccessActor;
 import com.complex.platform.access.AuthorizationService;
@@ -333,7 +333,8 @@ public class SupervisorReviewService {
                         requireDesignatedRoleHolder(policy, request.finalApproverId()); // R-003 fail-closed
                         supervisorReviewRepository.saveSupervisorReview(decision);
                         scheduleDeadline(decision.reviewId(), beneficiaryId, actionType);
-                        generateChain(decision.reviewId(), initiatedBy, beneficiaryId, approvalLevel, request.finalApproverId(), lines, policy.requiredLevel());
+                        generateChain(decision.reviewId(), initiatedBy, beneficiaryId, approvalLevel, request.finalApproverId(), lines, policy.requiredLevel(),
+                                actionType);
                     }
                     auditEventService.recordSuccess(
                             "governance.supervisor_review.evaluated",
@@ -441,6 +442,13 @@ public class SupervisorReviewService {
                     List<ApprovalChainNode> after = supervisorReviewRepository.listChainNodes(id);
                     boolean anyRejected = after.stream().anyMatch(n -> ApprovalChainNode.REJECTED.equals(n.status()));
                     if (!anyRejected && !ApprovalChainService.allApproved(after)) {
+                        // 246-R1：本线刚接手的下一节点自此起计时，其他线当前节点的到期不动；单据到期改为各当前节点中最早的。
+                        for (ApprovalChainNode next : ApprovalChainService.currentNodes(after)) {
+                            if (next.dueAt() == null) {
+                                supervisorReviewRepository.updateChainNode(next.withDue(deadlineFrom(pending.actionType(), now)));
+                            }
+                        }
+                        supervisorReviewRepository.refreshSupervisorReviewDue(id);
                         return pending; // 链上仍有节点待审：单据保持待审（PGM-1.7.1 逐级审批）
                     }
                     String outcome = anyRejected ? "rejected" : "approved";
@@ -694,7 +702,7 @@ public class SupervisorReviewService {
             supervisorReviewRepository.bindSupervisorReviewToBlockedContent(decision.reviewId(), blockedContent);
         }
         scheduleDeadline(decision.reviewId(), beneficiaryId, actionType);
-        generateChain(decision.reviewId(), initiatedBy, beneficiaryId, approvalLevel, finalApproverId, List.of(), requiredLevel);
+        generateChain(decision.reviewId(), initiatedBy, beneficiaryId, approvalLevel, finalApproverId, List.of(), requiredLevel, actionType);
         auditEventService.recordSuccess(
                 "admission.blocked",
                 MANAGE_PERMISSION,
@@ -774,7 +782,7 @@ public class SupervisorReviewService {
         String beneficiaryId = supervisorReviewRepository.findSupervisorReviewSchedule(id)
                 .map(SupervisorReviewRepository.ReviewSchedule::beneficiaryId).orElse(null);
         List<ApprovalChainNode> nodes = generateChain(id, pending.initiatedBy(), beneficiaryId,
-                ApprovalLevel.fromCode(pending.approvalLevel()), null, List.of(), pending.requiredLevel());
+                ApprovalLevel.fromCode(pending.approvalLevel()), null, List.of(), pending.requiredLevel(), pending.actionType());
         if (nodes.isEmpty()) {
             throw ApiException.conflict("APPROVAL_CHAIN_UNRESOLVED", "组织层级、人事会签配置或有效授权尚未补齐，审批链无法生成");
         }
@@ -791,7 +799,8 @@ public class SupervisorReviewService {
     }
 
     private List<ApprovalChainNode> generateChain(String reviewId, String initiatedBy, String beneficiaryId, ApprovalLevel level,
-                                                  String finalApproverId, List<ApprovalChainService.ParallelLine> lines, int requiredLevel) {
+                                                  String finalApproverId, List<ApprovalChainService.ParallelLine> lines, int requiredLevel,
+                                                  String actionType) {
         List<ApprovalChainNode> nodes;
         if (level == ApprovalLevel.HR_THREE_LEVELS_UP) {
             var hr = staffHrRouting == null ? Optional.<String>empty() : staffHrRouting.resolve(beneficiaryId, initiatedBy);
@@ -830,7 +839,13 @@ public class SupervisorReviewService {
             );
             return nodes;
         }
+        // 第十八批 AO 段第 246 条 246-R1（PGM:529「任一业务审批节点超过后台配置的时限……未处理的，系统自动提醒并升级到该节点的上一级」）：
+        // 各线首节点自发起时起计时；还没轮到的节点到期为空，接手时再起算（approve）。单据到期取各当前节点中最早的。
+        Instant due = deadlineFrom(actionType, Instant.now());
+        List<ApprovalChainNode> current = ApprovalChainService.currentNodes(nodes);
+        nodes = nodes.stream().map(n -> current.contains(n) ? n.withDue(due) : n).toList();
         supervisorReviewRepository.saveChainNodes(reviewId, nodes);
+        supervisorReviewRepository.refreshSupervisorReviewDue(reviewId);
         auditEventService.recordSuccess(
                 "governance.supervisor_review.chain_generated",
                 MANAGE_PERMISSION,
@@ -1096,6 +1111,10 @@ public class SupervisorReviewService {
             List<String> remindedNodes = new ArrayList<>();
             List<ApprovalChainNode> chain = supervisorReviewRepository.listChainNodes(d.reviewId());
             for (ApprovalChainNode node : ApprovalChainService.currentNodes(chain)) {
+                // 第十八批 AO 段第 246 条 246-R1：只处理已到期的当前节点；未到期的（平行线、刚接手的下一节点）不升级也不催办。
+                if (node.dueAt() == null || node.dueAt().isAfter(now)) {
+                    continue;
+                }
                 // M087-I5-04（PGM-1.7.1「升级到达该单据的最终审批节点、不再有上一级可升后仍然超时的，单据保持待审」）：
                 // 本线最后一个节点（指定最终审批人 / 顶端）是该单据的最终审批节点，只催办，不把链外的人升级进来。
                 boolean finalNode = chain.stream().noneMatch(n -> n.lineCode().equals(node.lineCode()) && n.seq() > node.seq());
@@ -1111,9 +1130,10 @@ public class SupervisorReviewService {
                 }
                 if (superior.isPresent() && !superior.get().equals(d.initiatedBy()) && !superior.get().equals(beneficiaryId)) {
                     supervisorReviewRepository.updateChainNode(
-                            node.withApprover(superior.get(), node.escalationCount() + 1).withForward(null, null));
+                            node.withApprover(superior.get(), node.escalationCount() + 1).withForward(null, null).withDue(nextDue));
                     escalatedNodes.add(node.nodeId() + "->" + superior.get());
                 } else {
+                    supervisorReviewRepository.updateChainNode(node.withDue(nextDue)); // 246-R1：催办节点自此重新计时
                     remindedNodes.add(node.nodeId());
                 }
             }
@@ -1124,6 +1144,7 @@ public class SupervisorReviewService {
             if (!supervisorReviewRepository.escalateSupervisorReview(d.reviewId(), d.approvalLevel(), d.requiredApproverRank(), nextDue, now)) {
                 continue;
             }
+            supervisorReviewRepository.refreshSupervisorReviewDue(d.reviewId()); // 246-R1：单据到期取各当前节点中最早的；链未生成的单据照上句整单顺延
             handled++;
             auditEventService.recordSuccess(
                     escalated ? "governance.supervisor_review.escalated" : "governance.supervisor_review.reminded",

@@ -1,13 +1,16 @@
 package com.complex.platform.ops;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.complex.platform.access.AccessActor;
+import com.complex.platform.auth.SessionIssuer;
 import com.complex.platform.support.StaffRequestFixture;
 import com.jayway.jsonpath.JsonPath;
 import java.util.List;
@@ -18,6 +21,8 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.test.web.servlet.request.RequestPostProcessor;
@@ -28,7 +33,9 @@ import org.springframework.transaction.annotation.Transactional;
  * 锁住试运行、提交、审批驳回的现行行为与拒绝路径。依据 BSM:576「选清理范围（已存档、且超过设定天数的配置数据）」
  * 「提交→由具备最高权限的人审批→批量清理，全程留痕、绝不碰在用的活数据」。入口已存在，回归只锁现行为（无 RED 阶段）。
  *
- * <p>夹具随测试事务回滚：发起人同时持 data.cleanup.approve，证明「不能审批自己的申请」由自审闸拦住而不是缺权限。</p>
+ * <p>夹具随测试事务回滚：发起人同时持 data.cleanup.approve。第十八批 AO 段第 249 条 249-R7（BSM:576「删除一律须由具备最高权限的人
+ * 审批通过后执行，不设例外……持授权 U 盘密钥的最高权限本人发起的操作，不需要经过任何审批。」）：审批只认最高权限本人，发起人与另一位
+ * 持 data.cleanup.approve 的非最高权限审批人都 403 MASTER_APPROVAL_REQUIRED；最高权限本人提交即执行。</p>
  */
 @SpringBootTest(properties = {
         "spring.datasource.url=${SETTLE_TEST_DB_URL:jdbc:postgresql://127.0.0.1:5432/complex_test}",
@@ -95,47 +102,92 @@ class DataCleanupDryRunApprovalJdbcIntegrationTests {
         String jobId = JsonPath.read(preview(requester, "{\"scope_type\":\"archived_bar_combos\",\"older_than_days\":0}")
                 .andExpect(status().isOk()).andReturn().getResponse().getContentAsString(), "$.data.id");
 
-        submit(jobId, "{}")
+        submit(requester, jobId, "{}")
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.detail_code").value("VALIDATION_FAILED"));
-        submit(jobId, "{\"reason\":\"清理测试遗留的旧套餐\"}")
+        submit(requester, jobId, "{\"reason\":\"清理测试遗留的旧套餐\"}")
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.status").value("pending_approval"))
                 .andExpect(jsonPath("$.data.reason").value("清理测试遗留的旧套餐"))
                 .andExpect(jsonPath("$.data.requested_by").value(requesterId));
-        submit(jobId, "{\"reason\":\"再次提交\"}")
+        submit(requester, jobId, "{\"reason\":\"再次提交\"}")
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.detail_code").value("DATA_CLEANUP_NOT_DRY_RUN"));
 
         approve(requester, jobId, "approved")
                 .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.detail_code").value("DATA_CLEANUP_SELF_APPROVE_FORBIDDEN"));
-        approve(approver, jobId, "maybe")
+                .andExpect(jsonPath("$.detail_code").value("MASTER_APPROVAL_REQUIRED"));
+        approve(approver, jobId, "approved")
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.detail_code").value("MASTER_APPROVAL_REQUIRED"));
+        approve(master(), jobId, "maybe")
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.detail_code").value("VALIDATION_FAILED"));
         assertThat(statusOf(jobId)).isEqualTo("pending_approval");
 
-        approve(approver, jobId, " Rejected ")
+        approve(master(), jobId, " Rejected ")
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.status").value("rejected"))
-                .andExpect(jsonPath("$.data.approved_by").value(approverId))
+                .andExpect(jsonPath("$.data.approved_by").value(SessionIssuer.MASTER_USER_ID))
                 .andExpect(jsonPath("$.data.executed_at").doesNotExist());
-        approve(approver, jobId, "approved")
+        approve(master(), jobId, "approved")
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.detail_code").value("DATA_CLEANUP_NOT_PENDING"));
         assertThat(jdbc.queryForObject("SELECT count(*) FROM audit_events WHERE event_name LIKE 'data.cleanup.%' AND business_id = ?",
                 Integer.class, jobId)).isZero();
     }
 
+    /** 249-R7：最高权限本人审批通过即执行，落 data.cleanup.executed。 */
+    @Test
+    void masterApprovalExecutesTheCleanup() throws Exception {
+        String jobId = JsonPath.read(preview(requester, "{\"scope_type\":\"archived_bar_combos\",\"older_than_days\":0}")
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString(), "$.data.id");
+        submit(requester, jobId, "{\"reason\":\"清理测试遗留的旧套餐\"}").andExpect(status().isOk());
+
+        approve(master(), jobId, "approved")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("executed"))
+                .andExpect(jsonPath("$.data.approved_by").value(SessionIssuer.MASTER_USER_ID));
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM audit_events WHERE event_name = 'data.cleanup.executed' AND business_id = ?",
+                Integer.class, jobId)).isEqualTo(1);
+    }
+
+    /** 249-R7：最高权限本人提交试运行任务即执行，不经审批（BSM:576「持授权 U 盘密钥的最高权限本人发起的操作，不需要经过任何审批」）。 */
+    @Test
+    void masterSubmissionExecutesWithoutApproval() throws Exception {
+        String jobId = JsonPath.read(preview(master(), "{\"scope_type\":\"archived_bar_combos\",\"older_than_days\":0}")
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString(), "$.data.id");
+
+        submit(master(), jobId, "{\"reason\":\"最高权限清理旧套餐\"}")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("executed"))
+                .andExpect(jsonPath("$.data.reason").value("最高权限清理旧套餐"))
+                .andExpect(jsonPath("$.data.approved_by").value(SessionIssuer.MASTER_USER_ID));
+        assertThat(statusOf(jobId)).isEqualTo("executed");
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM audit_events WHERE event_name = 'data.cleanup.executed' AND business_id = ?",
+                Integer.class, jobId)).isEqualTo(1);
+    }
+
     // ---------- helpers ----------
+
+    /** 最高权限本人（保留超管账号，组织 platform-company、无商户），经后台 Web 终端。 */
+    private RequestPostProcessor master() {
+        AccessActor actor = new AccessActor(SessionIssuer.MASTER_USER_ID, SessionIssuer.MASTER_USERNAME,
+                SessionIssuer.MASTER_ACCOUNT_TYPE, "platform-company", null, "active");
+        return request -> {
+            request.addHeader("X-Terminal-Type", "web");
+            return authentication(new UsernamePasswordAuthenticationToken(actor, null,
+                    List.of(new SimpleGrantedAuthority("ROLE_P0_STAFF")))).postProcessRequest(request);
+        };
+    }
 
     private ResultActions preview(RequestPostProcessor who, String json) throws Exception {
         return mockMvc.perform(post("/api/v1/ops/data-cleanup/preview").with(who)
                 .contentType(MediaType.APPLICATION_JSON).content(json));
     }
 
-    private ResultActions submit(String jobId, String json) throws Exception {
-        return mockMvc.perform(post("/api/v1/ops/data-cleanup/jobs/" + jobId + "/submit").with(requester)
+    private ResultActions submit(RequestPostProcessor who, String jobId, String json) throws Exception {
+        return mockMvc.perform(post("/api/v1/ops/data-cleanup/jobs/" + jobId + "/submit").with(who)
                 .contentType(MediaType.APPLICATION_JSON).content(json));
     }
 

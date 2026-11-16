@@ -1,6 +1,6 @@
 package com.complex.platform.integration;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -9,7 +9,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.complex.platform.support.StaffRequestFixture;
+import com.complex.platform.ticketing.TicketTypeRecord;
+import com.complex.platform.ticketing.TicketingRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.time.Instant;
 import java.util.Map;
 import java.util.UUID;
 import org.hamcrest.Matchers;
@@ -29,6 +32,8 @@ import org.springframework.transaction.annotation.Transactional;
  * 第十八批 AE 段第 201 条 201-R6（决策台账 171-R1 先例「契约与代码一致」）：渠道门店映射三个入口补进 OpenAPI 后，
  * 按契约声明的请求体（蛇形键、只发声明字段）走真实入口与真实授权链：登记、列表、停用成功并落契约写的成功事件；
  * 停用缺理由 400 VALIDATION_FAILED、映射不存在 404 INTEGRATION_CHANNEL_STORE_MAP_NOT_FOUND。入口已存在，本类只锁现行为。
+ * 第十八批 AO 段第 251 条 251-R1（BSM:576「存档及删除都需要填写理由」；PGM:966「已拍板：所有有过程的业务动作都必须留痕」）：
+ * 门店映射与票种映射停用时所填理由记入成功事件元数据 reason。
  */
 @SpringBootTest(properties = {
         "spring.datasource.url=${SETTLE_TEST_DB_URL:jdbc:postgresql://127.0.0.1:5432/complex_test}",
@@ -44,6 +49,7 @@ class ChannelStoreMapMaintenanceEntryJdbcTests {
     @Autowired private MockMvc mockMvc;
     @Autowired private JdbcTemplate jdbc;
     @Autowired private ObjectMapper json;
+    @Autowired private TicketingRepository ticketing;
 
     private final String s = UUID.randomUUID().toString().replace("-", "").substring(0, 10);
     private final String project = "csme_prj_" + s;
@@ -79,6 +85,26 @@ class ChannelStoreMapMaintenanceEntryJdbcTests {
 
         assertThat(events("integration.channel_store_map.saved", id)).isEqualTo(1);
         assertThat(events("integration.channel_store_map.archived", id)).isEqualTo(1);
+        assertThat(successReason("integration.channel_store_map.archived", id)).isEqualTo("门店闭店，停用映射");
+    }
+
+    @Test
+    void ticketTypeMapArchiveRecordsReasonInSuccessEvent() throws Exception {
+        String ticketType = "csme_tt_" + s;
+        Instant now = Instant.now();
+        ticketing.saveTicketType(new TicketTypeRecord(
+                ticketType, "渠道映射回归票", "fixed", 8800L, 8800L, 8800L,
+                false, "published", 2, null, now, now, null, 0, null, false, null, TicketTypeRecord.NO_COMBO_DISCOUNT));
+        String id = json.readTree(send("/api/v1/integration/channel-ticket-type-maps", Map.of("idempotency_key", "csme-tt-save-" + s,
+                        "provider_code", "csme-pos", "channel", "meituan", "external_product_id", "mt-prod-" + s, "ticket_type_id", ticketType))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString()).path("data").path("id").asText();
+
+        send("/api/v1/integration/channel-ticket-type-maps/" + id + "/archive", Map.of("idempotency_key", "csme-tt-archive-" + s, "reason", "渠道商品下架"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("inactive"));
+
+        assertThat(successReason("integration.channel_ticket_type_map.archived", id)).isEqualTo("渠道商品下架");
     }
 
     @Test
@@ -105,5 +131,10 @@ class ChannelStoreMapMaintenanceEntryJdbcTests {
     private Integer events(String eventName, String businessId) {
         return jdbc.queryForObject("SELECT count(*) FROM audit_events WHERE event_name = ? AND business_id = ? AND event_result = 'success'",
                 Integer.class, eventName, businessId);
+    }
+
+    private String successReason(String eventName, String businessId) {
+        return jdbc.queryForObject("SELECT metadata->>'reason' FROM audit_events WHERE event_name = ? AND business_id = ? AND event_result = 'success'",
+                String.class, eventName, businessId);
     }
 }

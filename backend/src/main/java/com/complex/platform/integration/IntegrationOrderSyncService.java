@@ -1,6 +1,6 @@
 package com.complex.platform.integration;
 
-// 文件版本：V0.05
+// 文件版本：V0.06
 
 import static com.complex.platform.integration.IntegrationValidation.*;
 import static com.complex.platform.common.Strings.trimToNull;
@@ -105,6 +105,9 @@ final class IntegrationOrderSyncService {
     IntegrationChannelStoreMapRecord archiveChannelStoreMap(String id, StatusChangeRequest request) {
         String mapId = requireTextValue(id, "id");
         String operationId = "archiveIntegrationChannelStoreMap:" + mapId;
+        // 第十八批 AO 段第 251 条 251-R1（BSM:576「存档及删除都需要填写理由」；PGM:966「所有有过程的业务动作都必须留痕」）：
+        // 停用理由记入成功事件元数据 reason；必填仍由执行体内 validateStatusChange 拦，缺填不写成功事件（Map.of 不收 null，先取空串）。
+        String reason = request == null || request.reason() == null ? "" : request.reason().trim();
         return executor.executeWrite(
                 operationId,
                 request == null ? null : request.idempotencyKey(),
@@ -117,7 +120,7 @@ final class IntegrationOrderSyncService {
                         "integration_channel_store_map"),
                 () -> archiveChannelStoreMapOnce(mapId, request),
                 saved -> ((IntegrationChannelStoreMapRecord) saved).id(),
-                Map.of("operation_id", operationId)
+                Map.of("operation_id", operationId, "reason", reason)
         );
     }
 
@@ -220,6 +223,8 @@ final class IntegrationOrderSyncService {
     IntegrationChannelTicketTypeMapRecord archiveChannelTicketTypeMap(String id, StatusChangeRequest request) {
         String mapId = requireTextValue(id, "id");
         String operationId = "archiveIntegrationChannelTicketTypeMap:" + mapId;
+        // 第十八批 AO 段第 251 条 251-R1：同门店映射停用，理由记入成功事件元数据 reason。
+        String reason = request == null || request.reason() == null ? "" : request.reason().trim();
         return executor.executeWrite(
                 operationId,
                 request == null ? null : request.idempotencyKey(),
@@ -232,7 +237,7 @@ final class IntegrationOrderSyncService {
                         "integration_channel_ticket_type_map"),
                 () -> archiveChannelTicketTypeMapOnce(mapId, request),
                 saved -> ((IntegrationChannelTicketTypeMapRecord) saved).id(),
-                Map.of("operation_id", operationId)
+                Map.of("operation_id", operationId, "reason", reason)
         );
     }
 
