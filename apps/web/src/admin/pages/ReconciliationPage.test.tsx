@@ -286,11 +286,12 @@ describe("ReconciliationPage 180-R2 后端字段与登记差异", () => {
   });
 
   // 第十八批 Y 段第 180 条 180-R3（ENUM:188「对账口径 按订单、按核销、按合同、按渠道、按日结」）：业务单号可填收款记录号、票务订单号或酒吧账单号。
-  it("登记差异：业务单号标签写明收款记录号、票务订单号或酒吧账单号", async () => {
+  // 第十八批 AL 段第 224 条 224-R1（ENUM:173「财务差异按本表「差异处理状态」条处理」）：另可填已核验的经销到账记录号。
+  it("登记差异：业务单号标签写明收款记录号、票务订单号、酒吧账单号或经销到账记录号", async () => {
     stubFetch([]);
     renderReal();
     await waitFor(() => expect(screen.queryByTestId("reconciliation-register-ref")).not.toBeNull());
-    expect(screen.getByTestId("reconciliation-register-ref").closest("label")?.textContent).toBe("业务单号（收款记录号、票务订单号或酒吧账单号）");
+    expect(screen.getByTestId("reconciliation-register-ref").closest("label")?.textContent).toBe("业务单号（收款记录号、票务订单号、酒吧账单号或经销到账记录号）");
   });
 
   it("没有 finance.reconciliation.difference.create 权限不出登记表单", async () => {
@@ -309,7 +310,8 @@ describe("ReconciliationPage 181-R1 差异四态", () => {
   const row = (id: string, status: string) => ({ id, batch_id: "rb-1", difference_type: "amount", business_ref: `pay-${id}`, amount_cent: 2500,
     expected_amount_cent: 10000, actual_amount_cent: 7500, source: "manual", status, created_at: "2026-07-02T02:00:00Z", evidence_attachment_ids: ["att-0"],
     responsible_user_id: "usr-fin-1", stage_entered_at: "2026-07-02T02:00:00Z", identified_cause: null, review_id: status === "pending_review" ? "review-1" : null });
-  const ROWS_181 = [row("rd-a", "pending_identification"), row("rd-b", "pending_handling"), row("rd-c", "pending_review"), row("rd-d", "closed")];
+  const ROWS_181 = [row("rd-a", "pending_identification"), row("rd-b", "pending_handling"), row("rd-c", "pending_review"),
+    { ...row("rd-d", "closed"), ledger_entry: true, posted_ar_ap_item_id: "arap_rd_d" }];
 
   function body(data: unknown, status = 200): Response {
     return new Response(JSON.stringify(status < 400 ? { success: true, code: "OK", message: "success", data } : { success: false, code: "FORBIDDEN", message: "无权限" }),
@@ -375,7 +377,7 @@ describe("ReconciliationPage 181-R1 差异四态", () => {
     expect(sent.idempotency_key).toBeTruthy();
   });
 
-  it("待处理的行提交复核：以蛇形键 POST close 带 close_reason、evidence_attachment_ids、final_approver_id", async () => {
+  it("待处理的行提交复核：以蛇形键 POST close 带 close_reason、evidence_attachment_ids、final_approver_id、ledger_entry", async () => {
     const posts: Array<{ url: string; body: unknown }> = [];
     stub(posts);
     renderReal();
@@ -398,7 +400,17 @@ describe("ReconciliationPage 181-R1 差异四态", () => {
     fireEvent.click(screen.getByTestId("reconciliation-review-submit"));
     await waitFor(() => expect(posts.some((post) => post.url.endsWith("/api/v1/finance/reconciliation/differences/rd-b/close"))).toBe(true));
     const sent = JSON.parse(String(posts.find((post) => post.url.endsWith("/rd-b/close"))!.body));
-    expect(sent).toMatchObject({ close_reason: "以平台口径为准", evidence_attachment_ids: ["att-9"], final_approver_id: "usr-boss" });
+    expect(sent).toMatchObject({ close_reason: "以平台口径为准", evidence_attachment_ids: ["att-9"], final_approver_id: "usr-boss", ledger_entry: false });
+
+    // 第十八批 AL 段第 223 条 223-R1（BSM:1751「高价值差异复核通过才入账、同一差异只入账一次」）：勾选「认定结果入应收应付台账」再提交带 ledger_entry: true。
+    await waitFor(() => expect((screen.getByTestId("reconciliation-review-reason") as HTMLInputElement).value).toBe(""));
+    fireEvent.change(screen.getByTestId("reconciliation-review-reason"), { target: { value: "银行少到账，向往来方追收" } });
+    fireEvent.click(screen.getByTestId("reconciliation-review-ledger-entry"));
+    await waitFor(() => expect((screen.getByTestId("reconciliation-review-submit") as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.click(screen.getByTestId("reconciliation-review-submit"));
+    await waitFor(() => expect(posts.filter((post) => post.url.endsWith("/rd-b/close"))).toHaveLength(2));
+    expect(JSON.parse(String(posts.filter((post) => post.url.endsWith("/rd-b/close"))[1]!.body)))
+      .toMatchObject({ close_reason: "银行少到账，向往来方追收", ledger_entry: true });
   });
 
   it("待复核的行没有识别、提交复核按钮，提示到主管复核页审批并可跳转", async () => {
@@ -420,6 +432,23 @@ describe("ReconciliationPage 181-R1 差异四态", () => {
     expect(screen.getByTestId("reconciliation-reviewing").textContent).toContain("复核中，到主管复核页审批");
     fireEvent.click(screen.getByTestId("reconciliation-goto-review"));
     expect(props.navigateTo).toHaveBeenCalledWith("ADM-GOV-006");
+  });
+
+  // 第十八批 AL 段第 223 条 223-R1（BSM:1751「高价值差异复核通过才入账、同一差异只入账一次」）：差异详情显示是否认定结果入应收应付台账与入账台账编号。
+  it("差异详情显示认定结果入台账与入账台账编号", async () => {
+    stub([]);
+    renderReal();
+    await waitFor(() => expect(screen.queryByTestId("reconciliation-difference-row-rd-d")).not.toBeNull());
+    await waitFor(() => expect(screen.queryByTestId("reconciliation-identify-submit")).not.toBeNull());
+
+    fireEvent.click(screen.getByTestId("reconciliation-difference-row-rd-d"));
+    const posted = screen.getByTestId("row-detail-drawer").textContent ?? "";
+    expect(posted).toContain("认定结果入应收应付台账是");
+    expect(posted).toContain("入账台账编号arap_rd_d");
+    fireEvent.keyDown(window, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByTestId("row-detail-drawer")).toBeNull());
+    fireEvent.click(screen.getByTestId("reconciliation-difference-row-rd-a"));
+    expect(screen.getByTestId("row-detail-drawer").textContent).toContain("认定结果入应收应付台账否");
   });
 });
 

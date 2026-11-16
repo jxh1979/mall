@@ -1,5 +1,5 @@
 package com.complex.platform.governance;
-// 文件版本：V0.25
+// 文件版本：V0.26
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
@@ -107,6 +107,8 @@ class JdbcPlatformRepository implements PlatformRepository, SupervisorReviewRepo
             Map.entry("finance_reconciliation_difference", "SELECT CASE WHEN b.scope_type = 'project' THEN b.scope_id ELSE m.project_id END"
                     + " FROM finance_reconciliation_differences d JOIN finance_reconciliation_batches b ON b.id = d.batch_id"
                     + " LEFT JOIN merchants m ON m.id = b.scope_id AND b.scope_type IN ('merchant', 'bar') WHERE d.id = :id"),
+            // 第十八批 AL 段第 245 条 245-R1：日结锁定后补录单取所补台账的项目。
+            Map.entry("ar_ap_adjustment", "SELECT i.project_id FROM ar_ap_adjustments a JOIN ar_ap_items i ON i.id = a.ar_ap_item_id WHERE a.id = :id"),
             Map.entry("work_order_bearer_dispute", "SELECT w.project_id FROM work_order_bearer_disputes d JOIN facility_work_orders w"
                     + " ON w.id = d.work_order_id AND d.business_type = 'facility_work_order' WHERE d.id = :id UNION ALL"
                     + " SELECT COALESCE(s.project_id, m.project_id) FROM work_order_bearer_disputes d JOIN merchant_service_work_orders o"

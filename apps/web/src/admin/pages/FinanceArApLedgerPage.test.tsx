@@ -1,4 +1,4 @@
-// 文件版本：V0.11
+// 文件版本：V0.12
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -106,6 +106,17 @@ describe("FinanceArApLedgerPage 来源类型（退租相关可辨识）", () => 
     await waitFor(() => expect(getPaged).toHaveBeenCalled());
     fireEvent.click(screen.getByTestId("finance-ledger-row-ar-sbf"));
     await waitFor(() => expect(screen.getByText("单店门票综合服务费")).toBeTruthy());
+  });
+
+  // 第十八批 AL 段第 223 条 223-R1（BSM:1751「高价值差异复核通过才入账」）：对账差异复核通过后入账的应收应付（source_type=reconciliation_difference）显中文来源。
+  it("台账详情展示来源类型中文标签（对账差异）", async () => {
+    const rows: FinanceLedgerRow[] = [
+      { id: "ar-rd", itemNo: "ARAP-RD-1", direction: "receivable", status: "pending_collection", amountCent: 1000, unpaidAmountCent: 1000, dueDate: "2026-11-16", sourceType: "reconciliation_difference" },
+    ];
+    renderPage(makeApi(vi.fn().mockResolvedValue({ items: rows, total: 1, page: 1, size: 10 })));
+    await waitFor(() => expect(screen.queryByTestId("finance-ledger-row-ar-rd")).not.toBeNull());
+    fireEvent.click(screen.getByTestId("finance-ledger-row-ar-rd"));
+    await waitFor(() => expect(screen.queryByText("对账差异")).not.toBeNull());
   });
 });
 

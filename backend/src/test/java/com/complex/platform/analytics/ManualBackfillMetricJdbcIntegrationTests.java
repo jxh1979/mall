@@ -1,6 +1,6 @@
 package com.complex.platform.analytics;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.groups.Tuple.tuple;
@@ -17,7 +17,6 @@ import com.complex.platform.common.BusinessDayResolver;
 import com.complex.platform.common.LocalZone;
 import com.complex.platform.common.RevenueRefreshMarks;
 import com.complex.platform.finance.FinanceService;
-import com.complex.platform.finance.dto.ArApAdjustmentDecisionRequest;
 import com.complex.platform.finance.dto.ArApAdjustmentRequest;
 import com.complex.platform.support.StaffRequestFixture;
 import com.jayway.jsonpath.JsonPath;
@@ -69,6 +68,7 @@ class ManualBackfillMetricJdbcIntegrationTests {
     @Autowired private RevenueRefreshMarks marks;
     @Autowired private JdbcTemplate jdbc;
     @Autowired private MockMvc mockMvc;
+    @Autowired private com.complex.platform.evidence.EvidenceEventService evidence;
 
     private final String suffix = UUID.randomUUID().toString().substring(0, 8);
     private final String project = "mbf_p_" + suffix;
@@ -92,7 +92,7 @@ class ManualBackfillMetricJdbcIntegrationTests {
                 """, "mbf_c_" + suffix, merchant);
         String role = "mbf_role_" + suffix;
         access.createRole(new RoleRecord(role, "项目财务", null, "project", "active", Instant.now(),
-                List.of("finance.ar_ap.view", "finance.locked_backfill.request", "finance.locked_backfill.approve"),
+                List.of("finance.ar_ap.view", "finance.locked_backfill.request"),
                 null, false, List.of()));
         requester = user(role);
         approver = user(role);
@@ -122,8 +122,8 @@ class ManualBackfillMetricJdbcIntegrationTests {
         jdbc.update("UPDATE ar_ap_adjustments SET created_at=? WHERE id=?",
                 Timestamp.from(businessDayResolver.start(null, null, d).minusSeconds(60)), earlier.id());
         act(approver);
-        finance.approveAdjustment(approved.id(), decision("approve"));
-        finance.approveAdjustment(rejected.id(), decision("reject"));
+        com.complex.platform.support.LockedBackfillFixture.decide(finance, approved, true);
+        com.complex.platform.support.LockedBackfillFixture.decide(finance, rejected, false);
         com.complex.platform.support.TestSecurityActors.asPlatformAdmin();
 
         AnalyticsRecords.MetricValue card = analytics.overview(Optional.of(merchant), d).metrics().get("risk.manual_backfill");
@@ -145,7 +145,7 @@ class ManualBackfillMetricJdbcIntegrationTests {
 
         // 批准剩下那笔：笔数不变，只是状态另列变化。
         act(approver);
-        finance.approveAdjustment(pending.id(), decision("approve"));
+        com.complex.platform.support.LockedBackfillFixture.decide(finance, pending, true);
         com.complex.platform.support.TestSecurityActors.asPlatformAdmin();
         card = analytics.overview(Optional.of(merchant), d).metrics().get("risk.manual_backfill");
         assertThat(card.value()).isEqualByComparingTo("3");
@@ -172,7 +172,7 @@ class ManualBackfillMetricJdbcIntegrationTests {
         act(requester);
         var adjustment = finance.requestAdjustment(request(item));
         act(approver);
-        finance.approveAdjustment(adjustment.id(), decision("approve"));
+        com.complex.platform.support.LockedBackfillFixture.decide(finance, adjustment, true);
         DashboardAggregationJob job = new DashboardAggregationJob(repository,
                 Clock.fixed(LocalDate.of(2097, 8, 5).atTime(12, 0).atZone(LocalZone.ID).toInstant(), LocalZone.ID),
                 businessDayResolver, true);
@@ -208,8 +208,11 @@ class ManualBackfillMetricJdbcIntegrationTests {
                 """, "mbf_cn_" + suffix, reduced);
         StaffRequestFixture staffs = new StaffRequestFixture(jdbc);
         RequestPostProcessor bp = staffs.staff("mbf_bp_" + suffix, "staff", project, null,
-                "finance.locked_backfill.request", "finance.daily_close.manage");
-        RequestPostProcessor boss = staffs.staff("mbf_boss_" + suffix, "staff", project, null, "finance.locked_backfill.approve");
+                "finance.locked_backfill.request", "finance.daily_close.manage", "evidence.attachment.create");
+        RequestPostProcessor boss = staffs.staff("mbf_boss_" + suffix, "staff", project, null,
+                "governance.supervisor_review.view", "governance.supervisor_review.approve");
+        // 第十八批 AL 段 245-R1：补录走统一审批，老板是申请人直接上级。
+        jdbc.update("INSERT INTO org_hierarchy(user_id,superior_id) VALUES(?,?)", "mbf_bp_" + suffix, "mbf_boss_" + suffix);
         String[] up = lockedContractRent(merchant, d);
         String[] down = lockedContractRent(reduced, d);
         Integer marksBefore = jdbc.queryForObject("SELECT COUNT(*) FROM analytics_revenue_refresh_dates WHERE business_date = ?", Integer.class, d);
@@ -270,17 +273,27 @@ class ManualBackfillMetricJdbcIntegrationTests {
     /** 160-R1：申请人提交锁定后补录、另一人批准（后台真实请求形状），返回补录单号。 */
     private String approvedBackfill(RequestPostProcessor requesterRequest, RequestPostProcessor approverRequest, String itemId,
             long amountCent) throws Exception {
-        String id = JsonPath.read(mockMvc.perform(post("/api/v1/finance/ar-ap-adjustments").with(requesterRequest)
+        // 第十八批 AL 段第 253 条：补录区块先上传原始凭证（银行回单 pdf）、写责任人（申请人本人）。
+        String proof = JsonPath.read(mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                        .multipart("/api/v1/evidence/attachments/upload")
+                        .file(new org.springframework.mock.web.MockMultipartFile("file", "bank-receipt.pdf", "application/pdf",
+                                "%PDF-1.4 receipt".getBytes(java.nio.charset.StandardCharsets.UTF_8)))
+                        .param("business_type", "finance_locked_backfill").with(requesterRequest))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString(), "$.data.id");
+        String body = mockMvc.perform(post("/api/v1/finance/ar-ap-adjustments").with(requesterRequest)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"idempotency_key\":\"mbf-adj-" + itemId + "\",\"ar_ap_item_id\":\"" + itemId
-                                + "\",\"adjustment_amount_cent\":" + amountCent + ",\"reason\":\"核实租金差额\"}"))
+                                + "\",\"adjustment_amount_cent\":" + amountCent + ",\"reason\":\"核实租金差额\",\"evidence_attachment_ids\":[\""
+                                + proof + "\"],\"responsible_staff_id\":\"mbf_bp_" + suffix + "\"}"))
                 .andExpect(status().isOk())
-                .andReturn().getResponse().getContentAsString(), "$.data.id");
-        mockMvc.perform(post("/api/v1/finance/ar-ap-adjustments/" + id + "/approve").with(approverRequest)
+                .andReturn().getResponse().getContentAsString();
+        String id = JsonPath.read(body, "$.data.id");
+        // 245-R1：主管复核页审批通过的真实请求。
+        mockMvc.perform(post("/api/v1/platform/supervisor-review/" + JsonPath.read(body, "$.data.review_id") + "/approve").with(approverRequest)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"idempotency_key\":\"mbf-apv-" + itemId + "\",\"decision\":\"approve\"}"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.approval_status").value("approved"));
+                        .content("{\"idempotency_key\":\"mbf-apv-" + itemId + "\",\"decision\":\"approved\",\"comment\":\"核对租金差额\"}"))
+                .andExpect(status().isOk());
+        assertThat(jdbc.queryForObject("SELECT approval_status FROM ar_ap_adjustments WHERE id = ?", String.class, id)).isEqualTo("approved");
         return id;
     }
 
@@ -310,12 +323,10 @@ class ManualBackfillMetricJdbcIntegrationTests {
         return item;
     }
 
-    private static ArApAdjustmentRequest request(String item) {
-        return new ArApAdjustmentRequest(UUID.randomUUID().toString(), "锁账后补录", List.of(), item, 30L, "核实少记");
-    }
-
-    private static ArApAdjustmentDecisionRequest decision(String value) {
-        return new ArApAdjustmentDecisionRequest(UUID.randomUUID().toString(), "独立复核", List.of(), value);
+    /** 第十八批 AL 段第 253 条：当前操作人（申请人）先上传原始凭证，责任人写申请人。 */
+    private ArApAdjustmentRequest request(String item) {
+        return new ArApAdjustmentRequest(UUID.randomUUID().toString(), "锁账后补录",
+                List.of(com.complex.platform.support.LockedBackfillFixture.evidence(evidence)), item, 30L, "核实少记", null, null, requester, null);
     }
 
     private String user(String role) {

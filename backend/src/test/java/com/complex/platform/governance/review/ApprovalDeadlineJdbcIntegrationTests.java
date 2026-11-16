@@ -1,6 +1,6 @@
 package com.complex.platform.governance.review;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -108,11 +108,13 @@ class ApprovalDeadlineJdbcIntegrationTests {
         factory.put("bar.table_session.transfer_over_limit", 3);
         factory.put("bar.bill_reopen", 1);
         factory.put("parking.release.waive", 1);
+        // 第十八批 AL 段第 245 条 245-R1：日结锁定后补录进统一审批（涉钱）；原审批入口的超合同范围准入策略停用（V628），清单不再有。
+        factory.put("finance.locked_backfill.review", 1);
         factory.forEach((type, days) -> assertThat(rows.get(type)).as(type)
                 .containsEntry("money", days == 1).containsEntry("factory_working_days", days)
                 .containsEntry("deadline_working_days", days).containsEntry("min_working_days", 1)
                 .containsEntry("max_working_days", 30).containsEntry("customized", false));
-        assertThat(rows).doesNotContainKeys("permission_grant_l1", "permission_grant_l2", "permission_grant_l3");
+        assertThat(rows).doesNotContainKeys("permission_grant_l1", "permission_grant_l2", "permission_grant_l3", "finance.locked_backfill_approve");
     }
 
     // ② 奖惩复核改为 5 个工作日（下限 2、上限 10）后，经真实接口发起的奖惩复核到期＝发起时刻加 5 个工作日；到期升级后仍按 5 个工作日顺延。

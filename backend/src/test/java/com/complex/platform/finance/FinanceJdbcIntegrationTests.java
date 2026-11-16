@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.10
+// 文件版本：V0.11
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.groups.Tuple.tuple;
@@ -245,7 +245,7 @@ class FinanceJdbcIntegrationTests {
 
         assertThat(repository.identifyReconciliationDifference("recon_diff_close_jdbc", "渠道少记一笔", "op_identify", at)).isTrue();
         assertThat(repository.submitReconciliationDifferenceReview("recon_diff_close_jdbc", "手工核对后正式关闭", List.of("att_close_jdbc"),
-                "review_close_jdbc", at)).isTrue();
+                "review_close_jdbc", false, at)).isTrue();
         assertThat(repository.closeReconciliationDifference("recon_diff_close_jdbc", "review_close_jdbc", "op_close", at))
                 .contains("手工核对后正式关闭");
         assertThat(repository.closeReconciliationDifference("recon_diff_close_jdbc", "review_close_jdbc", "op_close", at)).isEmpty();
@@ -1069,9 +1069,11 @@ class FinanceJdbcIntegrationTests {
         StaffRequestFixture staffs = new StaffRequestFixture(jdbcTemplate);
         RequestPostProcessor financeBp = staffs.staff("usr_dca_bp_" + s, "staff", project, null,
                 "finance.daily_close.lock", "finance.daily_close.manage", "finance.payment.register",
-                "finance.locked_backfill.request");
+                "finance.locked_backfill.request", "evidence.attachment.create");
         RequestPostProcessor approver = staffs.staff("usr_dca_ap_" + s, "staff", project, null,
-                "finance.locked_backfill.approve");
+                "governance.supervisor_review.view", "governance.supervisor_review.approve");
+        // 第十八批 AL 段 245-R1：锁定后补录走统一审批，审批人＝申请人直接上级。
+        jdbcTemplate.update("INSERT INTO org_hierarchy(user_id,superior_id) VALUES(?,?)", "usr_dca_bp_" + s, "usr_dca_ap_" + s);
         RequestPostProcessor admin = staffs.staff("usr_dca_adm_" + s, "platform_admin", project, null, "finance.ar_ap.manage");
         RequestPostProcessor merchantB = staffs.staff("usr_dca_mch_" + s, "staff", project, barB,
                 "finance.daily_close.lock", "finance.daily_close.manage");
@@ -1087,22 +1089,16 @@ class FinanceJdbcIntegrationTests {
                 .andExpect(jsonPath("$.data.locked_at").isNotEmpty());
         assertThat(lockedDayClose(item)).isEqualTo(close);
 
-        // 补录审批的准入按台账商户的生效合同判（与 FinanceProjectScopeRefundJdbcIntegrationTests 同一夹具口径）。
+        // 台账商户的生效合同原供旧补录审批入口的超合同范围准入判定；第十八批 AL 段 245-R1 删该入口、V628 停用该准入策略后已不影响本用例（夹具照旧保留）。
         jdbcTemplate.update("INSERT INTO contracts (id, merchant_id, contract_subject_id, settlement_subject_id, effective_date,"
                 + " expiry_date, lifecycle_status, allowed_business_scope, created_at, updated_at) VALUES (?, ?, 'subj_dca', 'subj_dca',"
                 + " current_date - 1, current_date + 365, 'effective', '[\"finance\"]'::jsonb, now(), now())", "ctr_dca_" + s, barA);
-        String adjustment = JsonPath.read(mockMvc.perform(post("/api/v1/finance/ar-ap-adjustments").with(financeBp)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"idempotency_key\":\"dca-adj-" + s + "\",\"ar_ap_item_id\":\"" + item
-                                + "\",\"adjustment_amount_cent\":300,\"reason\":\"核实少记\"}"))
+        String adjustment = JsonPath.read(backfill(financeBp, item, 300, "核实少记", "dca-adj-" + s)
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.locked_day_close_id").value(close))
                 .andReturn().getResponse().getContentAsString(), "$.data.id");
-        mockMvc.perform(post("/api/v1/finance/ar-ap-adjustments/" + adjustment + "/approve").with(approver)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"idempotency_key\":\"dca-apv-" + s + "\",\"decision\":\"approve\"}"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.approval_status").value("approved"));
+        decideBackfill(approver, adjustment, "approve", "dca-apv-" + s).andExpect(status().isOk());
+        assertThat(adjustmentStatus(adjustment)).isEqualTo("approved");
         mockMvc.perform(get("/api/v1/finance/daily-closes?business_date=" + day + "&scope_type=merchant&scope_id=" + barA
                         + "&page=1&size=20").with(financeBp))
                 .andExpect(status().isOk())
@@ -1160,8 +1156,9 @@ class FinanceJdbcIntegrationTests {
         String approverId = "usr_dcb_ap_" + s;
         RequestPostProcessor financeBp = staffs.staff(requester, "staff", project, null,
                 "finance.daily_close.lock", "finance.daily_close.manage", "finance.ar_ap.view",
-                "finance.locked_backfill.request", "finance.locked_backfill.approve");
-        RequestPostProcessor approver = staffs.staff(approverId, "staff", project, null, "finance.locked_backfill.approve");
+                "finance.locked_backfill.request", "evidence.attachment.create", "governance.supervisor_review.approve");
+        RequestPostProcessor approver = staffs.staff(approverId, "staff", project, null, "governance.supervisor_review.view", "governance.supervisor_review.approve");
+        jdbcTemplate.update("INSERT INTO org_hierarchy(user_id,superior_id) VALUES(?,?)", requester, approverId);
         RequestPostProcessor merchantB = staffs.staff("usr_dcb_mch_" + s, "staff", project, barB, "finance.daily_close.manage");
 
         String close = lockDailyClose(financeBp, "dcb-" + s, day.toString(), "merchant", barA);
@@ -1172,7 +1169,7 @@ class FinanceJdbcIntegrationTests {
         Object summariesBefore = JsonPath.read(mockMvc.perform(get("/api/v1/finance/daily-closes/" + close + "/summaries")
                 .with(financeBp)).andExpect(status().isOk()).andReturn().getResponse().getContentAsString(), "$.data.items");
 
-        // 补录审批的准入按台账商户的生效合同判（与 FinanceProjectScopeRefundJdbcIntegrationTests 同一夹具口径）。
+        // 台账商户的生效合同原供旧补录审批入口的超合同范围准入判定；第十八批 AL 段 245-R1 删该入口、V628 停用该准入策略后已不影响本用例（夹具照旧保留）。
         jdbcTemplate.update("INSERT INTO contracts (id, merchant_id, contract_subject_id, settlement_subject_id, effective_date,"
                 + " expiry_date, lifecycle_status, allowed_business_scope, created_at, updated_at) VALUES (?, ?, 'subj_dcb', 'subj_dcb',"
                 + " current_date - 1, current_date + 365, 'effective', '[\"finance\"]'::jsonb, now(), now())", "ctr_dcb_" + s, barA);
@@ -1196,11 +1193,7 @@ class FinanceJdbcIntegrationTests {
                 .andExpect(jsonPath("$.data.items[?(@.id == '" + second + "')].adjustment_amount_cent")
                         .value(org.hamcrest.Matchers.contains(-200)));
 
-        mockMvc.perform(post("/api/v1/finance/ar-ap-adjustments/" + first + "/approve").with(approver)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"idempotency_key\":\"dcb-apv-" + s + "\",\"decision\":\"approve\"}"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.original_business_date").value(day.toString()));
+        decideBackfill(approver, first, "approve", "dcb-apv-" + s).andExpect(status().isOk());
         mockMvc.perform(get("/api/v1/finance/daily-closes/" + close + "/adjustments").with(financeBp))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.items[?(@.id == '" + first + "')].approval_status").value(org.hamcrest.Matchers.contains("approved")))
@@ -1211,11 +1204,9 @@ class FinanceJdbcIntegrationTests {
                 .with(financeBp)).andExpect(status().isOk()).andReturn().getResponse().getContentAsString(), "$.data.items");
         assertThat(summariesAfter).isEqualTo(summariesBefore);
 
-        mockMvc.perform(post("/api/v1/finance/ar-ap-adjustments/" + second + "/approve").with(financeBp)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"idempotency_key\":\"dcb-self-" + s + "\",\"decision\":\"approve\"}"))
+        decideBackfill(financeBp, second, "approve", "dcb-self-" + s)
                 .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.detail_code").value("SELF_APPROVAL_FORBIDDEN"));
+                .andExpect(jsonPath("$.detail_code").value("SUPERVISOR_SELF_REVIEW_FORBIDDEN"));
         mockMvc.perform(get("/api/v1/finance/daily-closes/" + close + "/adjustments").with(merchantB))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.detail_code").value("CROSS_MERCHANT_FORBIDDEN"));
@@ -1247,14 +1238,15 @@ class FinanceJdbcIntegrationTests {
         StaffRequestFixture staffs = new StaffRequestFixture(jdbcTemplate);
         RequestPostProcessor financeA = staffs.staff("usr_dpb_a_" + s, "staff", p, null,
                 "finance.daily_close.lock", "finance.daily_close.manage", "finance.payment.register",
-                "finance.locked_backfill.request", "finance.locked_backfill.approve");
-        RequestPostProcessor financeB = staffs.staff("usr_dpb_b_" + s, "staff", p, null, "finance.locked_backfill.approve");
+                "finance.locked_backfill.request", "evidence.attachment.create", "governance.supervisor_review.approve");
+        RequestPostProcessor financeB = staffs.staff("usr_dpb_b_" + s, "staff", p, null, "governance.supervisor_review.view", "governance.supervisor_review.approve");
+        jdbcTemplate.update("INSERT INTO org_hierarchy(user_id,superior_id) VALUES(?,?)", "usr_dpb_a_" + s, "usr_dpb_b_" + s);
 
         String close = lockDailyClose(financeA, "dpb-" + s, day.toString(), "project", p);
         assertThat(lockedDayClose(receivable)).isEqualTo(close);
         assertThat(lockedDayClose(payable)).isEqualTo(close);
         List<String> closeBefore = dailyCloseFacts(close);
-        // 补录审批的准入按台账商户的生效合同判（与 FinanceProjectScopeRefundJdbcIntegrationTests 同一夹具口径）。
+        // 台账商户的生效合同原供旧补录审批入口的超合同范围准入判定；第十八批 AL 段 245-R1 删该入口、V628 停用该准入策略后已不影响本用例（夹具照旧保留）。
         jdbcTemplate.update("INSERT INTO contracts (id, merchant_id, contract_subject_id, settlement_subject_id, effective_date,"
                 + " expiry_date, lifecycle_status, allowed_business_scope, created_at, updated_at) VALUES (?, ?, 'subj_dpb', 'subj_dpb',"
                 + " current_date - 1, current_date + 365, 'effective', '[\"finance\"]'::jsonb, now(), now())", "ctr_dpb_" + s, shop);
@@ -1275,10 +1267,8 @@ class FinanceJdbcIntegrationTests {
                 .andExpect(status().isOk()).andReturn().getResponse().getContentAsString(), "$.data.id");
 
         Instant beforeApproval = Instant.now();
-        decideBackfill(financeB, first, "approve", "dpb-apv1-" + s)
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.approval_status").value("approved"))
-                .andExpect(jsonPath("$.data.kind").value("payment"));
+        decideBackfill(financeB, first, "approve", "dpb-apv1-" + s).andExpect(status().isOk());
+        assertThat(adjustmentStatus(first)).isEqualTo("approved");
         assertThat(itemLedger(receivable)).isEqualTo("6000:4000:partial_paid:" + close);
         assertThat(jdbcTemplate.queryForList("SELECT payment_method || ':' || amount_cent FROM ar_ap_payments WHERE ar_ap_item_id = ?",
                 String.class, receivable)).containsExactly("bank_transfer:6000");
@@ -1286,9 +1276,8 @@ class FinanceJdbcIntegrationTests {
                 java.sql.Timestamp.class, receivable).toInstant()).isAfterOrEqualTo(beforeApproval.minusSeconds(1));
         decideBackfill(financeB, payOut, "approve", "dpb-apv2-" + s).andExpect(status().isOk());
         assertThat(itemLedger(payable)).isEqualTo("8000:0:settled:" + close);
-        decideBackfill(financeB, rejected, "reject", "dpb-rej-" + s)
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.approval_status").value("rejected"));
+        decideBackfill(financeB, rejected, "reject", "dpb-rej-" + s).andExpect(status().isOk());
+        assertThat(adjustmentStatus(rejected)).isEqualTo("rejected");
         assertThat(itemLedger(receivable)).isEqualTo("6000:4000:partial_paid:" + close);
         assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM ar_ap_items WHERE origin_item_id IN (?, ?)", Integer.class,
                 receivable, payable)).isZero();
@@ -1307,7 +1296,7 @@ class FinanceJdbcIntegrationTests {
 
         decideBackfill(financeA, second, "approve", "dpb-self-" + s)
                 .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.detail_code").value("SELF_APPROVAL_FORBIDDEN"));
+                .andExpect(jsonPath("$.detail_code").value("SUPERVISOR_SELF_REVIEW_FORBIDDEN"));
         pay(financeA, receivable, "dpb-pay-" + s).andExpect(status().isConflict())
                 .andExpect(jsonPath("$.detail_code").value("DAY_CLOSE_LOCKED"));
         paymentBackfill(financeA, receivable, 4001, "cash", "dpb-over-" + s).andExpect(status().isBadRequest())
@@ -1344,8 +1333,9 @@ class FinanceJdbcIntegrationTests {
         StaffRequestFixture staffs = new StaffRequestFixture(jdbcTemplate);
         RequestPostProcessor financeA = staffs.staff("usr_drb_a_" + s, "staff", p, null,
                 "finance.daily_close.lock", "finance.daily_close.manage", "finance.payment.register", "finance.refund.create",
-                "finance.locked_backfill.request", "finance.locked_backfill.approve");
-        RequestPostProcessor financeB = staffs.staff("usr_drb_b_" + s, "staff", p, null, "finance.locked_backfill.approve");
+                "finance.locked_backfill.request", "evidence.attachment.create", "governance.supervisor_review.approve");
+        RequestPostProcessor financeB = staffs.staff("usr_drb_b_" + s, "staff", p, null, "governance.supervisor_review.view", "governance.supervisor_review.approve");
+        jdbcTemplate.update("INSERT INTO org_hierarchy(user_id,superior_id) VALUES(?,?)", "usr_drb_a_" + s, "usr_drb_b_" + s);
         // 退款分级授权按批准时的操作人（乙）判，给乙一档额度（与 FinanceProjectScopeRefundJdbcIntegrationTests 同一夹具口径）。
         jdbcTemplate.update("INSERT INTO refund_authority_limits (id, subject_type, subject_id, refund_domain, limit_amount_cent, project_id,"
                 + " status) VALUES (?, 'staff', ?, 'finance', 1000000, NULL, 'active')", "ral_drb_" + s, "usr_drb_b_" + s);
@@ -1371,16 +1361,13 @@ class FinanceJdbcIntegrationTests {
                 .andExpect(status().isOk()).andReturn().getResponse().getContentAsString(), "$.data.id");
         assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM finance_refunds WHERE target_id = ?", Integer.class, receipt)).isZero();
 
-        decideBackfill(financeB, first, "approve", "drb-apv-" + s)
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.approval_status").value("approved"))
-                .andExpect(jsonPath("$.data.kind").value("refund"));
+        decideBackfill(financeB, first, "approve", "drb-apv-" + s).andExpect(status().isOk());
+        assertThat(adjustmentStatus(first)).isEqualTo("approved");
         assertThat(jdbcTemplate.queryForList("SELECT refund_amount_cent || ':' || refund_channel || ':' || refund_direction || ':' || status"
                 + " || ':' || source_type || ':' || project_id || ':' || requested_by FROM finance_refunds WHERE target_id = ?",
                 String.class, receipt)).containsExactly("600:bank_transfer:original:requested:ar_ap_payment:" + p + ":usr_drb_b_" + s);
-        decideBackfill(financeB, rejected, "reject", "drb-rej-" + s)
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.approval_status").value("rejected"));
+        decideBackfill(financeB, rejected, "reject", "drb-rej-" + s).andExpect(status().isOk());
+        assertThat(adjustmentStatus(rejected)).isEqualTo("rejected");
         assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM finance_refunds WHERE target_id = ?", Integer.class, receipt)).isOne();
         assertThat(itemLedger(receivable)).isEqualTo("1000:9000:partial_paid:" + close);
         assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM ar_ap_items WHERE origin_item_id = ?", Integer.class, receivable))
@@ -1428,8 +1415,9 @@ class FinanceJdbcIntegrationTests {
         StaffRequestFixture staffs = new StaffRequestFixture(jdbcTemplate);
         RequestPostProcessor financeA = staffs.staff("usr_drc_a_" + s, "staff", p, null,
                 "finance.daily_close.lock", "finance.daily_close.manage", "finance.payment.register", "finance.refund.create",
-                "finance.locked_backfill.request", "finance.locked_backfill.approve");
-        RequestPostProcessor financeB = staffs.staff("usr_drc_b_" + s, "staff", p, null, "finance.locked_backfill.approve");
+                "finance.locked_backfill.request", "evidence.attachment.create", "governance.supervisor_review.approve");
+        RequestPostProcessor financeB = staffs.staff("usr_drc_b_" + s, "staff", p, null, "governance.supervisor_review.view", "governance.supervisor_review.approve");
+        jdbcTemplate.update("INSERT INTO org_hierarchy(user_id,superior_id) VALUES(?,?)", "usr_drc_a_" + s, "usr_drc_b_" + s);
         jdbcTemplate.update("INSERT INTO refund_authority_limits (id, subject_type, subject_id, refund_domain, limit_amount_cent, project_id,"
                 + " status) VALUES (?, 'staff', ?, 'finance', 1000000, NULL, 'active')", "ral_drc_" + s, "usr_drc_b_" + s);
         jdbcTemplate.update("INSERT INTO contracts (id, merchant_id, contract_subject_id, settlement_subject_id, effective_date,"
@@ -1448,9 +1436,8 @@ class FinanceJdbcIntegrationTests {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.payment_method").value("cash"))
                 .andReturn().getResponse().getContentAsString(), "$.data.id");
-        decideBackfill(financeB, backfillId, "approve", "drc-apv-" + s)
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.approval_status").value("approved"));
+        decideBackfill(financeB, backfillId, "approve", "drc-apv-" + s).andExpect(status().isOk());
+        assertThat(adjustmentStatus(backfillId)).isEqualTo("approved");
         String refundId = jdbcTemplate.queryForObject("SELECT id FROM finance_refunds WHERE target_id = ?", String.class, receipt);
         assertThat(jdbcTemplate.queryForObject("SELECT refund_amount_cent || ':' || refund_channel || ':' || status FROM finance_refunds"
                 + " WHERE id = ?", String.class, refundId)).isEqualTo("600:cash:requested");
@@ -1473,7 +1460,7 @@ class FinanceJdbcIntegrationTests {
         return mockMvc.perform(post("/api/v1/finance/ar-ap-adjustments").with(who)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"kind\":\"refund\",\"ar_ap_item_id\":\"" + itemId + "\",\"adjustment_amount_cent\":" + amountCent
-                        + ",\"reason\":\"异议成立多退\",\"idempotency_key\":\"" + key + "\"}"));
+                        + ",\"reason\":\"异议成立多退\",\"idempotency_key\":\"" + key + "\"" + lockedBackfillProof(who) + "}"));
     }
 
     /** 186-R1：日结页面「申请收付款补录」的真实请求形状（类型＋台账＋金额分＋收付方式＋原因＋幂等键）。 */
@@ -1482,15 +1469,42 @@ class FinanceJdbcIntegrationTests {
         return mockMvc.perform(post("/api/v1/finance/ar-ap-adjustments").with(who)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"kind\":\"payment\",\"ar_ap_item_id\":\"" + itemId + "\",\"adjustment_amount_cent\":" + amountCent
-                        + ",\"payment_method\":\"" + method + "\",\"reason\":\"到期后补缴\",\"idempotency_key\":\"" + key + "\"}"));
+                        + ",\"payment_method\":\"" + method + "\",\"reason\":\"到期后补缴\",\"idempotency_key\":\"" + key + "\""
+                        + lockedBackfillProof(who) + "}"));
     }
 
-    /** 补录审批（批准、驳回）的真实请求形状。 */
+    /** 第十八批 AL 段 245-R1：补录审批改走统一审批——主管复核页对该补录复核单通过、驳回的真实请求形状。 */
     private org.springframework.test.web.servlet.ResultActions decideBackfill(RequestPostProcessor who, String adjustmentId,
             String decision, String key) throws Exception {
-        return mockMvc.perform(post("/api/v1/finance/ar-ap-adjustments/" + adjustmentId + "/approve").with(who)
+        String reviewId = jdbcTemplate.queryForObject("SELECT review_id FROM ar_ap_adjustments WHERE id = ?", String.class, adjustmentId);
+        return mockMvc.perform(post("/api/v1/platform/supervisor-review/" + reviewId + "/approve").with(who)
                 .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"idempotency_key\":\"" + key + "\",\"decision\":\"" + decision + "\"}"));
+                .content("{\"idempotency_key\":\"" + key + "\",\"decision\":\"" + ("approve".equals(decision) ? "approved" : "rejected")
+                        + "\",\"comment\":\"已核对原始凭证\"}"));
+    }
+
+    private String adjustmentStatus(String adjustmentId) {
+        return jdbcTemplate.queryForObject("SELECT approval_status FROM ar_ap_adjustments WHERE id = ?", String.class, adjustmentId);
+    }
+
+    private String backfillResponsible;
+
+    /**
+     * 第十八批 AL 段第 253 条（第十八批裁决 56）：补录区块先上传原始凭证（银行回单 pdf）、写责任人，返回请求体追加的两个键（带前置逗号）。
+     * 责任人为本例另建的无权限员工（不在审批链上）。
+     */
+    private String lockedBackfillProof(RequestPostProcessor who) throws Exception {
+        String evidence = JsonPath.read(mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                        .multipart("/api/v1/evidence/attachments/upload")
+                        .file(new org.springframework.mock.web.MockMultipartFile("file", "bank-receipt.pdf", "application/pdf",
+                                "%PDF-1.4 receipt".getBytes(java.nio.charset.StandardCharsets.UTF_8)))
+                        .param("business_type", "finance_locked_backfill").with(who))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString(), "$.data.id");
+        if (backfillResponsible == null) {
+            backfillResponsible = "usr_bf_resp_" + suffix();
+            new StaffRequestFixture(jdbcTemplate).staff(backfillResponsible, "staff", null, null);
+        }
+        return ",\"evidence_attachment_ids\":[\"" + evidence + "\"],\"responsible_staff_id\":\"" + backfillResponsible + "\"";
     }
 
     /** 台账已收付:未收付:状态:锁定日结。 */
@@ -1514,7 +1528,7 @@ class FinanceJdbcIntegrationTests {
         return mockMvc.perform(post("/api/v1/finance/ar-ap-adjustments").with(who)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"idempotency_key\":\"" + key + "\",\"ar_ap_item_id\":\"" + itemId
-                        + "\",\"adjustment_amount_cent\":" + amountCent + ",\"reason\":\"" + reason + "\"}"));
+                        + "\",\"adjustment_amount_cent\":" + amountCent + ",\"reason\":\"" + reason + "\"" + lockedBackfillProof(who) + "}"));
     }
 
     /** 143-R2：五类最终标记的真实请求形状（幂等键＋类别）。 */

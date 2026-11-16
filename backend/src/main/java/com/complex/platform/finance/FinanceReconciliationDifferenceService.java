@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static com.complex.platform.common.Strings.requireText;
 import static com.complex.platform.common.Strings.trimToNull;
@@ -28,6 +28,7 @@ import java.time.Instant;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Supplier;
 import org.springframework.context.event.EventListener;
@@ -103,6 +104,7 @@ public class FinanceReconciliationDifferenceService {
     /**
      * 提交关闭复核：只收待处理；所附凭证须真实存在并追加进原件附件（补原件即在此补）；人工录入合并后仍无原件拒 409（ENUM:202「只能挂为待补凭证」）；
      * 否则进统一审批（每笔都进待审，动作名以 finance. 开头按涉钱 1 个工作日），记复核单号转待复核。范围闸在幂等之前。
+     * 第十八批 AL 段 223-R1：勾选认定结果入应收应付台账的，先核可入账（{@link #ledgerSummary}），入账方向与金额写进复核摘要。
      */
     @GuardedAction(capability = PERM)
     @Transactional
@@ -127,12 +129,13 @@ public class FinanceReconciliationDifferenceService {
                     if ("manual".equals(difference.source()) && evidence.isEmpty()) {
                         throw ApiException.conflict("RECONCILIATION_EVIDENCE_PENDING", "人工录入未附渠道对账单原件，只能挂为待补凭证，补上原件后再提交复核");
                     }
-                    String summary = "对账差异 " + difference.id() + "（" + typeLabel(difference) + "，差额 "
-                            + BigDecimal.valueOf(difference.amountCent(), 2).toPlainString() + " 元）处理结论：" + closeReason;
+                    boolean ledgerEntry = Boolean.TRUE.equals(actual.ledgerEntry());
+                    String summary = "对账差异 " + difference.id() + "（" + typeLabel(difference) + "，差额 " + yuan(difference.amountCent())
+                            + " 元）处理结论：" + closeReason + (ledgerEntry ? ledgerSummary(difference) : "");
                     String reviewId = reviews.evaluate(new SupervisorReviewEvaluateRequest(actual.idempotencyKey() + ":review", closeReason, evidence,
                             REVIEW_ACTION, REVIEW_OBJECT, difference.id(), difference.amountCent(), summary,
                             trimToNull(actual.finalApproverId()), List.of())).reviewId();
-                    if (!repository.submitReconciliationDifferenceReview(difference.id(), closeReason, evidence, reviewId, Instant.now())) {
+                    if (!repository.submitReconciliationDifferenceReview(difference.id(), closeReason, evidence, reviewId, ledgerEntry, Instant.now())) {
                         throw statusConflict();
                     }
                     return find(differenceId);
@@ -141,7 +144,9 @@ public class FinanceReconciliationDifferenceService {
 
     /**
      * 审批结论回写：通过才关闭（记终审人），照原一步关闭向往来商户发认定结果短信（第十八批第 13 条）；驳回退回待处理，可再提交复核，
-     * 审计带驳回意见。申请人与受益人不得审批由统一审批引擎保证。
+     * 审计带驳回意见。申请人与受益人不得审批由统一审批引擎保证。第十八批 AL 段 223-R1（BSM:1751「高价值差异复核通过才入账、同一差异只入账一次」）：
+     * 提交时勾选入账的，在差异真正转已关闭的同一处向原往来方入应收应付台账——关闭是带待复核与复核单号条件的单句更新、只成功一次，审批重放不再发结论事件，
+     * 台账号按来源＋差异号确定，同一差异只入一次。
      */
     @EventListener
     @Transactional
@@ -155,13 +160,14 @@ public class FinanceReconciliationDifferenceService {
             repository.closeReconciliationDifference(differenceId, decision.reviewId(), authorizationService.currentActor().id(), now)
                     .ifPresent(closeReason -> {
                         ReconciliationDifferenceRecord difference = find(differenceId);
-                        if (difference.businessRef() != null) {
-                            repository.findArApPaymentById(difference.businessRef())
-                                    .flatMap(payment -> repository.findArApItemById(payment.arApItemId()))
-                                    .ifPresent(item -> finance.notifyMerchantAmount(item.counterpartyId(), "reconciliation_difference",
-                                            difference.amountCent(), typeLabel(difference) + "；认定结果：" + closeReason, null,
-                                            item.projectId(), difference.id()));
+                        Optional<ArApItemRecord> origin = originItem(difference);
+                        if (difference.ledgerEntry()) {
+                            ArApItemRecord item = origin.orElseThrow();
+                            finance.postReconciliationDifference(differenceId, ledgerDirection(item, difference), item, difference.amountCent());
                         }
+                        origin.ifPresent(item -> finance.notifyMerchantAmount(item.counterpartyId(), "reconciliation_difference",
+                                difference.amountCent(), typeLabel(difference) + "；认定结果：" + closeReason, null,
+                                item.projectId(), difference.id()));
                         auditEventService.recordSuccess("finance.reconciliation.difference_closed", PERM, REVIEW_OBJECT, differenceId, null, null,
                                 Map.of("review_id", decision.reviewId(), "close_reason", closeReason));
                     });
@@ -301,5 +307,35 @@ public class FinanceReconciliationDifferenceService {
 
     private static String typeLabel(ReconciliationDifferenceRecord difference) {
         return DIFFERENCE_TYPE_LABELS.getOrDefault(difference.differenceType(), difference.differenceType());
+    }
+
+    /**
+     * 第十八批 AL 段第 223 条 223-R1（BSM:1751「高价值差异复核通过才入账、同一差异只入账一次」；BSM:1746「资金以银行实际到账为准」）：勾选入账须差额大于 0、
+     * 业务单号追得到原往来台账（收款记录或已核验的经销到账），否则 400；返回追加进复核摘要的入账说明，供审批人看方向与金额。
+     */
+    private String ledgerSummary(ReconciliationDifferenceRecord difference) {
+        if (difference.amountCent() <= 0) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "差额为 0，无需入应收应付台账");
+        }
+        ArApItemRecord origin = originItem(difference).orElseThrow(() -> ApiException.badRequest("VALIDATION_FAILED",
+                "该差异的业务单号不是收款记录或已核验的经销到账记录，没有可入账的原往来台账"));
+        return "；认定后入应收应付台账：向往来方 " + origin.counterpartyId() + " 记"
+                + ("receivable".equals(ledgerDirection(origin, difference)) ? "应收" : "应付") + " " + yuan(difference.amountCent())
+                + " 元（原台账 " + origin.itemNo() + "）";
+    }
+
+    /** 223-R1：业务单号对应的原往来台账（收款记录或已核验的经销到账，见 {@link FinanceRepository#findReconciliationOriginArApItem}）。 */
+    private Optional<ArApItemRecord> originItem(ReconciliationDifferenceRecord difference) {
+        return difference.businessRef() == null ? Optional.empty() : repository.findReconciliationOriginArApItem(difference.businessRef());
+    }
+
+    /** 223-R1：实际到账少于平台记录取原台账同方向（原为应收即对方仍欠，原为应付即我方仍欠），否则取反方向。 */
+    private static String ledgerDirection(ArApItemRecord origin, ReconciliationDifferenceRecord difference) {
+        String opposite = "receivable".equals(origin.direction()) ? "payable" : "receivable";
+        return difference.actualAmountCent() < difference.expectedAmountCent() ? origin.direction() : opposite;
+    }
+
+    private static String yuan(long cent) {
+        return BigDecimal.valueOf(cent, 2).toPlainString();
     }
 }

@@ -1,4 +1,4 @@
-// 文件版本：V0.08
+// 文件版本：V0.09
 // 第十八批 I 段第 87 条（PGM:287「界面全中文（所有终端零英文）」）：主管复核的动作码、对象码、档位码与证据类型中文名，
 // 主管复核页与审批链页（ADM-GOV-009）共用（展示层翻译，提交仍原码）。原表与 formatReviewValue 自 SupervisorReviewPage.tsx 搬入。
 import { formatBusinessStatus } from "./statusLabels";
@@ -24,6 +24,8 @@ export const REVIEW_LABELS: Record<string, string> = {
   "facility.equipment.scrap": "楼宇设备报废", facility_equipment_scrap: "楼宇设备报废单",
   // 第十八批 Y 段第 181 条 181-R1（ENUM:191「复核环节属业务审批」）：对账差异关闭复核。
   "finance.reconciliation_difference.close": "对账差异关闭复核", finance_reconciliation_difference: "对账差异",
+  // 第十八批 AL 段第 245 条 245-R1（ENUM:190「日结锁定后的补录须上级审批」）：日结锁定后补录改走统一审批（对象 ar_ap_adjustment 沿用「调账」）。
+  "finance.locked_backfill.review": "日结锁定后补录",
   // 第十八批 M 段第 117 条（BSM:1380「承担方有争议的，工单挂起转上级判定」）：设施工单与商户服务工单共用。
   "work_order.bearer_dispute": "工单费用承担方争议", work_order_bearer_dispute: "工单费用承担方争议单",
   // 第十八批 AB 段第 190 条 190-R2（BSM:1079「达到上限后须主管审批才能继续转台」）：超限转台申请。
@@ -60,7 +62,7 @@ export const REVIEW_LABELS: Record<string, string> = {
   "bar.order_item_void": "酒吧订单明细作废", "bar.shift_close": "酒吧交班", "ticketing.refund_approve": "门票退款审批", "ticketing.dynamic_pricing_publish": "动态定价发布",
   "ticketing.verification_reverse": "核销冲正", "inventory.stock_adjust": "库存调整", "inventory.purchase_receive": "采购入库验收",
   "inventory.saved_bottle_claim": "存酒领取", "finance.refund": "财务退款", "finance.offline_payment_confirm": "线下收款确认",
-  "finance.locked_backfill_approve": "锁账后补录审批", "customer.home_content.publish": "首页内容发布", "access.position_role_template.delete": "删除岗位模板",
+  "customer.home_content.publish": "首页内容发布", "access.position_role_template.delete": "删除岗位模板",
   "access.scope_change": "员工任职范围变更", "access.scope_change.money": "员工任职范围变更（涉钱）", "access.grant_request": "权限授权申请",
   "access.grant_request.money": "权限授权申请（涉钱）",
   // 87-R2：三路调用处传入的对象码（不放进全局 STATUS_LABELS：inspection 在合规提醒页另有「复检」之意）。

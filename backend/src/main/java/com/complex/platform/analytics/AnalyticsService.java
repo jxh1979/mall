@@ -1,6 +1,6 @@
 package com.complex.platform.analytics;
 
-// 文件版本：V0.10
+// 文件版本：V0.11
 
 import com.complex.platform.analytics.AnalyticsRecords.AiQualityResultRecord;
 import com.complex.platform.analytics.AnalyticsRecords.AiQualityTaskRecord;
@@ -221,6 +221,9 @@ public class AnalyticsService {
     private com.complex.platform.finance.FinancePayrollService financePayroll;
     @Autowired(required = false)
     private com.complex.platform.access.staff.StaffPayrollService staffPayroll;
+    // 第十八批 AL 段 240-R3：结算三指标明细的五态结算状态（同结算审阅页）；单测直接 new 时无 bean，按 null 兜底。
+    @Autowired(required = false)
+    private com.complex.platform.settlement.SettlementQueryService settlementQuery;
 
     // M737：平台管理员的可触及范围（一切）。各「平台全量便捷重载」与未注入判定服务时的兜底共用。
     private static final com.complex.platform.access.AuthorizationService.ProjectReach PLATFORM_ADMIN_REACH =
@@ -1953,9 +1956,9 @@ public class AnalyticsService {
             case "amusement.exit_count" -> repository.amusementVerificationDirectionDetail(windowStart, windowEnd, false, safeSize, offset);
             case "amusement.inspection_count" -> repository.amusementInspectionDetail(windowStart, windowEnd, safeSize, offset);
             // 第四批（财务域）可加类：通票核销结算流水，谓词同结算审阅页 listVerificationSettled 基础谓词。
-            case "settlement.transaction_count" -> repository.settlementTransactionDetail(windowStart, windowEnd, "count", safeSize, offset, scope);
-            case "settlement.verified_amount" -> repository.settlementTransactionDetail(windowStart, windowEnd, "amount", safeSize, offset, scope);
-            case "settlement.verified_count" -> repository.settlementTransactionDetail(windowStart, windowEnd, "tickets", safeSize, offset, scope);
+            case "settlement.transaction_count" -> withSettlementState(repository.settlementTransactionDetail(windowStart, windowEnd, "count", safeSize, offset, scope));
+            case "settlement.verified_amount" -> withSettlementState(repository.settlementTransactionDetail(windowStart, windowEnd, "amount", safeSize, offset, scope));
+            case "settlement.verified_count" -> withSettlementState(repository.settlementTransactionDetail(windowStart, windowEnd, "tickets", safeSize, offset, scope));
             // 第五批（人事域）可加类：谓词逐字同各列表端点。班次按 work_date 落日区间、考勤按 punched_at 自然日窗、薪资单按 month 字符串区间——
             // 均用经营日区间的 LocalDate 端点（effectiveFrom/effectiveTo），由仓储自建各自的日期/自然日窗谓词（见 MetricRegistry 口径说明）。
             case "staff.shift_count" -> repository.staffShiftDetail(effectiveFrom, effectiveTo, safeSize, offset, scope);
@@ -1979,6 +1982,21 @@ public class AnalyticsService {
         return assembleMetricDetail(definition, null, effectiveFrom, effectiveTo, now, detail.summaryValue(),
                 null, null, appendProjectScopeNote("revenue.bar".equals(definition.metricKey()) ? BAR_CONFIRMED_REVENUE_NOTE : null, scope),
                 definition.columns(), detail, safePage, safeSize, true);
+    }
+
+    /**
+     * 第十八批 AL 段 240-R3（ENUM:192；第十八批裁决 54「通票流水（随所属月结单）……按五态显示」「顺带修掉流水恒显示草稿」）：结算三指标明细行的
+     * 「结算状态」改为五态派生值 settlementState（{@link com.complex.platform.settlement.SettlementQueryService#transactionState}），移除流水原值与业务时刻；
+     * 未注入结算查询时置空。
+     */
+    private AnalyticsRecords.MetricDetailRows withSettlementState(AnalyticsRecords.MetricDetailRows detail) {
+        for (Map<String, Object> row : detail.rows()) {
+            Instant businessAt = (Instant) row.remove("businessAt");
+            row.remove("settlementStatus");
+            row.put("settlementState", settlementQuery == null || businessAt == null ? null
+                    : settlementQuery.transactionState((String) row.get("projectId"), businessAt));
+        }
+        return detail;
     }
 
     /** 项目级作用域口径说明（全中文）：非 null scope 时在明细页顶部标注数字已限定为调用方可查看的项目。 */

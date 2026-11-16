@@ -1,6 +1,6 @@
 package com.complex.platform.governance.review;
 
-// 文件版本：V0.34
+// 文件版本：V0.35
 
 import com.complex.platform.access.AccessActor;
 import com.complex.platform.access.AuthorizationService;
@@ -138,6 +138,11 @@ public class SupervisorReviewService {
             // 第十八批 Y 段第 181 条 181-R1（ENUM:191「复核环节属业务审批，沿用平台治理地图「全平台审批通用时限」条。」；PGM:528「任一节点驳回则整单退回起草人」）：
             // 对账差异关闭复核，恒阻断、金额下限 0（每笔都进待审）；提交人沿直接上级链到其指定的最终审批人；动作名以 finance. 开头按涉钱 1 个工作日。
             new SupervisorReviewPolicyRecord("finance_reconciliation_difference_close", "finance.reconciliation_difference.close", 0, 1, true,
+                    List.of("reason"), "active", "one_level_up"),
+            // 第十八批 AL 段第 245 条 245-R1（ENUM:190「日结锁定后的补录须上级审批」；PGM:528「发起单据时只需指定该事项的最终审批人，系统按组织层级自动补全……
+            // 逐级审批」；PGM:529 涉钱审批出厂 1 个工作日、超时提醒升级）：日结锁定后补录（金额调整、收付款补录、退款补录），恒阻断、金额下限 0；申请人沿直接
+            // 上级链到其指定的最终审批人；动作名以 finance. 开头按涉钱。第 253 条 253-R2（BSM:1642「须由被影响方之外的主管复核」）：责任人以直接受益人登记。
+            new SupervisorReviewPolicyRecord("finance_locked_backfill_review", "finance.locked_backfill.review", 0, 1, true,
                     List.of("reason"), "active", "one_level_up"),
             // 第十八批 M 段第 117 条 117-R2（BSM:1380「承担方有争议的，工单挂起转上级判定，判定结果与依据留痕后才能结案」；PGM:528）：
             // 恒阻断；提出人沿直接上级链到其指定的最终审批人，审批意见即判定依据（必填）。设施工单与商户服务工单共用（117-R5，裁决 29）。

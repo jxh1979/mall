@@ -1,4 +1,4 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
@@ -8,6 +8,7 @@ import { TraceLink } from "../components/TraceLink";
 import { formatApiErrorDetail } from "../../shared/apiError";
 import { metricDetailFocus, parseMetricDetailFocus } from "../components/MetricDetailEntry";
 import { formatBusinessStatus } from "../i18n/statusLabels";
+import { KEY_VALUE_LABELS } from "../i18n/fieldLabels";
 import type { AdminPageProps, MetricDetailPayload } from "../types";
 
 // 登记指标目录（与后端 MetricRegistry 一致，中文名/口径以接口返回为权威；此处仅供直达选择与面包屑回源）。
@@ -74,13 +75,17 @@ function formatNumber(value: number | string | null | undefined): string {
   return new Intl.NumberFormat("zh-CN", { maximumFractionDigits: 4 }).format(parsed);
 }
 
-function formatCell(value: unknown): string {
+function formatCell(value: unknown, key?: string): string {
   if (value === null || value === undefined || value === "") return "—";
   if (typeof value === "number") return new Intl.NumberFormat("zh-CN", { maximumFractionDigits: 4 }).format(value);
   if (typeof value === "string") {
     // ISO 时间 → 中文本地时间；纯枚举词 → 业务中文（未知码原样，与各域列表页同一字典）。
     if (/^\d{4}-\d{2}-\d{2}T/.test(value)) return new Date(value).toLocaleString("zh-CN", { hour12: false });
-    if (/^[a-z][a-z_]*$/.test(value)) return formatBusinessStatus(value);
+    // 第十八批 AL 段 240-R3：先按列键查按键取值表（列键驼峰转蛇形；同码不同键含义不同，如结算五态 archived「已归档」与通用状态 archived「已存档」），
+    // 查不到再走通用状态字典。
+    if (/^[a-z][a-z_]*$/.test(value)) {
+      return (key ? KEY_VALUE_LABELS[key.replace(/[A-Z]/g, (c) => `_${c.toLowerCase()}`)]?.[value] : undefined) ?? formatBusinessStatus(value);
+    }
     return value;
   }
   return String(value);
@@ -217,7 +222,7 @@ export function MetricDetailPage({ api, setGlobalError, navigateTo, focusObjectI
                       </thead>
                       <tbody>
                         {groups.map((group, index) => (
-                          <tr key={index}>{groupColumns.map((column) => <td key={column.key}>{formatCell(group[column.key])}</td>)}</tr>
+                          <tr key={index}>{groupColumns.map((column) => <td key={column.key}>{formatCell(group[column.key], column.key)}</td>)}</tr>
                         ))}
                       </tbody>
                     </table>
@@ -269,10 +274,10 @@ export function MetricDetailPage({ api, setGlobalError, navigateTo, focusObjectI
                             <td key={column.key}>
                               {columnIndex === 0 && data.traceLinkPageId && traceId ? (
                                 <TraceLink navigateTo={navigateTo} pageId={data.traceLinkPageId} objectId={traceId}>
-                                  {formatCell(row[column.key])}
+                                  {formatCell(row[column.key], column.key)}
                                 </TraceLink>
                               ) : (
-                                formatCell(row[column.key])
+                                formatCell(row[column.key], column.key)
                               )}
                             </td>
                           ))}

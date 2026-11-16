@@ -1,5 +1,5 @@
 package com.complex.platform.analytics;
-// 文件版本：V0.12
+// 文件版本：V0.13
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
 import com.complex.platform.contract.SpaceRentalDerivationSql;
@@ -2974,7 +2974,8 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
                 : pagedRangeParams(start, end, limit, offset), projectScope);
         java.util.List<java.util.Map<String, Object>> rows = jdbcTemplate.query("""
                 SELECT id, transaction_no, project_id, merchant_id, entitlement_type,
-                       verified_count, num_people, verified_amount_cent, settlement_status, created_at
+                       verified_count, num_people, verified_amount_cent, settlement_status, created_at,
+                       COALESCE(business_at, created_at) AS business_at
                   FROM settlement_transactions
                  WHERE transaction_type = 'verification_settled'
                  %s
@@ -3019,6 +3020,8 @@ class JdbcAnalyticsRepository implements AnalyticsRepository {
         row.put("verifiedAmountCent", rs.getLong("verified_amount_cent"));
         row.put("settlementStatus", rs.getString("settlement_status"));
         row.put("createdAt", instant(rs, "created_at"));
+        // 第十八批 AL 段 240-R3：营业日定月用的业务时刻，服务层据此派生五态结算状态后移除（同结算审阅页）。
+        row.put("businessAt", instant(rs, "business_at"));
         return row;
     }
 

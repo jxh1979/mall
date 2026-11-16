@@ -1,4 +1,4 @@
-// 文件版本：V0.06
+// 文件版本：V0.07
 import React from "react";
 import type { AdminPageProps } from "../types";
 import { BarVenueSelect } from "../components/BarVenueSelect";
@@ -9,6 +9,7 @@ import { TablePager } from "../components/TablePager";
 import { useServerPagedRows } from "../hooks/useServerPagedRows";
 import { KEY_VALUE_LABELS } from "../i18n/fieldLabels";
 import { formatBusinessStatus } from "../i18n/statusLabels";
+import { withBase } from "../../basePath";
 import { hasPermissions } from "../security/PermissionGate";
 
 // 第十八批 P 段第 133 条 133-R3（BSM:1668「……最后形成日结和结算依据。」；ENUM:188 对账口径含「按日结」；BSM:1682「按营业日生成日结批次。」；
@@ -23,7 +24,7 @@ import { hasPermissions } from "../security/PermissionGate";
 // 已锁定的行出「归档」二次确认；已归档的行只读（照常看七源汇总与五类标记）。
 // 143-R4（ENUM:190「日结锁定后的补录须上级审批，且不改动已锁定的日结金额：补录金额归入当期，并在补录记录上标明其所属的原营业日；同时在原营业日的
 // 日结锁定表单上关联显示该笔补录的金额与情况，两边互相可查。」；财务 PRD §5.4 日结页面直接展示补录人、补录原因、批准人含时间）：展开已锁定、已归档的行
-// 列出「本日结锁定的台账」（逐行申请补录，二次确认文案为 BSM:2023 原句）与「锁定后补录」（待审批的可批准、驳回）。
+// 列出「本日结锁定的台账」（逐行申请补录，二次确认文案为 BSM:2023 原句）与「锁定后补录」。
 // 第十八批 S 段第 161 条 161-R3（第十八批裁决 35「酒吧逐店逐日查；游乐等按综合体逐日查」）：票务、游乐由综合体的项目范围日结覆盖，
 // 不再单独出日结，平台侧范围类型只有项目、商户、酒吧。
 // 第十八批 Z 段第 186 条 186-R1（ENUM:190「日结锁定后的补录须上级审批，且不改动已锁定的日结金额：补录金额归入当期……」；BSM:2023；
@@ -31,10 +32,14 @@ import { hasPermissions } from "../security/PermissionGate";
 // 「锁定后补录」表列出类型（金额调整／收付款补录）与收付方式。
 // 186-R2（控制席并入，同根；BSM:1323「提出异议期间商户的付款义务不暂停，先按原值付款，异议成立后多退少补」）：应收台账逐行另可「申请退款补录」
 // （金额、原因；收付方式由后端照原收款记录），上级批准后按原收款原路退款；退款只退应收（同退款路径），其余方向不出。
+// 第十八批 AL 段第 245 条 245-R2（ENUM:190「日结锁定后的补录须上级审批」；BSM:1642「补录一律进入主管复核队列，复核通过才生效」；PGM:528「发起单据时只需
+// 指定该事项的最终审批人」）：补录提交后进主管复核，审批通过才生效，本区块不再批准、驳回；每行可填最终审批人（不填默认直接上级），「锁定后补录」表复核单号
+// 链到审批链页。第 253 条（BSM:1642「必须写原因和责任人……补录必须附原始记录凭证」；第十八批裁决 56「三种锁账补录提交时必须上传原始凭证（银行回单、转账截图、
+// 异议处理结论等）并写责任人」）：每行三种申请共用一组原始凭证上传与责任人，缺一不弹确认、不提交；须同时持补录申请与凭证上传权限才出申请；补录表列出责任人与凭证。
 type LockedItem = { id: string; itemNo?: string; direction?: string; amountCent?: number; dueDate?: string };
 type Adjustment = { id: string; itemNo?: string; adjustmentAmountCent?: number; reason?: string; requestedBy?: string; createdAt?: string;
   approvalStatus?: string; approvedBy?: string | null; decidedAt?: string | null; originalBusinessDate?: string | null;
-  kind?: string; paymentMethod?: string | null };
+  kind?: string; paymentMethod?: string | null; reviewId?: string | null; evidenceAttachmentIds?: string[]; responsibleStaffId?: string | null };
 type DailyClose = { id: string; businessDate?: string; scopeType?: string; scopeId?: string; status?: string; confirmedAt?: string | null; lockedAt?: string | null; archivedAt?: string | null; finalMarkCategories?: string[] };
 type Summary = { id: string; sourceStream?: string; amountCent?: number; refundCent?: number; orderCount?: number };
 // 第十八批 Y 段复核修复（BSM:1682「按营业日生成日结批次。」）：180-R1 起对账批次随日结生成，生成成功后回调所在页面（对账差异页据此重读对账批次与差异）。
@@ -61,6 +66,10 @@ const kindLabel = (code?: string) => KEY_VALUE_LABELS.kind?.[code ?? ""] ?? code
 const methodLabel = (code?: string | null) => (code ? KEY_VALUE_LABELS.payment_method?.[code] ?? code : "—");
 const PAYMENT_METHODS = Object.entries(KEY_VALUE_LABELS.payment_method ?? {});
 const EMPTY_PAY = { amount: "", method: "", reason: "" };
+// 245-R2、253：每行三种申请共用的原始凭证（已上传的附件编号与文件名）、责任人与最终审批人。
+const EMPTY_SHARED = { proofs: [] as { id: string; name: string }[], responsible: "", finalApprover: "" };
+const PROOF_ACCEPT = "image/*,.pdf";
+const PROOF_HINT = "请上传原始凭证（银行回单、转账截图、异议处理结论等）";
 
 export function FinanceDailyClosePanel(props: Props) {
   return hasPermissions(props.effectivePermissions, ["finance.daily_close.manage"]) ? <DailyClosePanel {...props} /> : null;
@@ -87,13 +96,13 @@ function DailyClosePanel({ api, user, effectivePermissions, setGlobalError, onGe
   // 143-R4：展开的日结已锁定或已归档时列被它锁定的台账与锁定后补录。
   const lockedOpen = opened && (opened.status === "locked" || opened.status === "archived") ? opened.id : "";
   const canViewArAp = hasPermissions(effectivePermissions, ["finance.ar_ap.view"]);
-  const canRequest = hasPermissions(effectivePermissions, ["finance.locked_backfill.request"]);
-  const canApprove = hasPermissions(effectivePermissions, ["finance.locked_backfill.approve"]);
+  const canRequest = hasPermissions(effectivePermissions, ["finance.locked_backfill.request", "evidence.attachment.create"]);
   const [lockedItems, setLockedItems] = React.useState<LockedItem[]>([]);
   const [adjustments, setAdjustments] = React.useState<Adjustment[]>([]);
   const [drafts, setDrafts] = React.useState<Record<string, { amount: string; reason: string }>>({});
   const [payDrafts, setPayDrafts] = React.useState<Record<string, typeof EMPTY_PAY>>({});
   const [refundDrafts, setRefundDrafts] = React.useState<Record<string, { amount: string; reason: string }>>({});
+  const [shared, setShared] = React.useState<Record<string, typeof EMPTY_SHARED>>({});
   const [backfillRefresh, setBackfillRefresh] = React.useState(0);
 
   React.useEffect(() => {
@@ -142,55 +151,77 @@ function DailyClosePanel({ api, user, effectivePermissions, setGlobalError, onGe
       await loadSummaries(saved.id);
     });
   }
-  // 143-R4：申请补录（调整额按元填、可为负，原因必填）与审批补录。
+  // 143-R4：申请补录（调整额按元填、可为负，原因必填）；第十八批 AL 段 245-R2 起审批在主管复核。
   function backfillReady(item: LockedItem) {
     const draft = drafts[item.id];
     const cent = Math.round(Number(draft?.amount) * 100);
-    if (draft?.reason.trim() && Number.isFinite(cent) && cent !== 0) return true;
+    if (draft?.reason.trim() && Number.isFinite(cent) && cent !== 0) return proofReady(item);
     setError("请填写调整额（元，不为零，可为负）与补录原因"); return false;
   }
-  async function submitBackfill(body: Record<string, unknown>, reset: () => void) {
+  // 253：三种申请都须已上传原始凭证并写责任人（第十八批裁决 56）。
+  function proofReady(item: LockedItem) {
+    const block = shared[item.id] ?? EMPTY_SHARED;
+    if (!block.proofs.length) { setError(PROOF_HINT); return false; }
+    if (!block.responsible.trim()) { setError("请填写责任人"); return false; }
+    return true;
+  }
+  function editShared(id: string, patch: (current: typeof EMPTY_SHARED) => Partial<typeof EMPTY_SHARED>) {
+    setShared((all) => { const current = all[id] ?? EMPTY_SHARED; return { ...all, [id]: { ...current, ...patch(current) } }; });
+  }
+  // 253-R1：凭证走证据上传接口（业务类型 finance_locked_backfill），每传成一份即记一份。
+  async function uploadProofs(item: LockedItem, files: FileList | null) {
+    const picked = Array.from(files ?? []);
+    if (!picked.length) return;
     await run(async () => {
-      const slot = `backfill:${JSON.stringify(body)}`;
-      await api.post("/api/v1/finance/ar-ap-adjustments", { ...body, idempotencyKey: keyFor(slot) });
-      delete keys.current[slot]; reset(); setBackfillRefresh((n) => n + 1);
+      if (!api.postForm) throw new Error("当前客户端不支持凭证上传");
+      for (const file of picked) {
+        const form = new FormData();
+        form.append("file", file);
+        form.append("business_type", "finance_locked_backfill");
+        const saved = await api.postForm<{ id: string; fileName?: string }>("/api/v1/evidence/attachments/upload", form);
+        editShared(item.id, (current) => ({ proofs: [...current.proofs, { id: saved.id, name: saved.fileName ?? file.name }] }));
+      }
+    });
+  }
+  // 245-R2：提交即进主管复核；最终审批人填了才带。253：带原始凭证与责任人。成功后清空该行。
+  async function submitBackfill(item: LockedItem, body: Record<string, unknown>, reset: () => void) {
+    const block = shared[item.id] ?? EMPTY_SHARED;
+    const full = { ...body, evidenceAttachmentIds: block.proofs.map((proof) => proof.id), responsibleStaffId: block.responsible.trim(),
+      ...(block.finalApprover.trim() ? { finalApproverId: block.finalApprover.trim() } : {}) };
+    await run(async () => {
+      const slot = `backfill:${JSON.stringify(full)}`;
+      await api.post("/api/v1/finance/ar-ap-adjustments", { ...full, idempotencyKey: keyFor(slot) });
+      delete keys.current[slot]; reset(); setShared((all) => ({ ...all, [item.id]: EMPTY_SHARED })); setBackfillRefresh((n) => n + 1);
     });
   }
   async function requestBackfill(item: LockedItem) {
     const draft = drafts[item.id] ?? { amount: "", reason: "" };
-    await submitBackfill({ arApItemId: item.id, adjustmentAmountCent: Math.round(Number(draft.amount) * 100), reason: draft.reason.trim() },
+    await submitBackfill(item, { arApItemId: item.id, adjustmentAmountCent: Math.round(Number(draft.amount) * 100), reason: draft.reason.trim() },
       () => setDrafts((all) => ({ ...all, [item.id]: { amount: "", reason: "" } })));
   }
   // 186-R1：申请收付款补录（金额按元填、须大于零，收付方式与原因必填）。
   function paymentBackfillReady(item: LockedItem) {
     const draft = payDrafts[item.id];
     const cent = Math.round(Number(draft?.amount) * 100);
-    if (draft?.reason.trim() && draft.method && Number.isFinite(cent) && cent > 0) return true;
+    if (draft?.reason.trim() && draft.method && Number.isFinite(cent) && cent > 0) return proofReady(item);
     setError("请填写收付金额（元，大于零）、收付方式与补录原因"); return false;
   }
   async function requestPaymentBackfill(item: LockedItem) {
     const draft = payDrafts[item.id] ?? EMPTY_PAY;
-    await submitBackfill({ kind: "payment", arApItemId: item.id, adjustmentAmountCent: Math.round(Number(draft.amount) * 100),
+    await submitBackfill(item, { kind: "payment", arApItemId: item.id, adjustmentAmountCent: Math.round(Number(draft.amount) * 100),
       paymentMethod: draft.method, reason: draft.reason.trim() }, () => setPayDrafts((all) => ({ ...all, [item.id]: EMPTY_PAY })));
   }
   // 186-R2：申请退款补录（金额按元填、须大于零，原因必填）。
   function refundBackfillReady(item: LockedItem) {
     const draft = refundDrafts[item.id];
     const cent = Math.round(Number(draft?.amount) * 100);
-    if (draft?.reason.trim() && Number.isFinite(cent) && cent > 0) return true;
+    if (draft?.reason.trim() && Number.isFinite(cent) && cent > 0) return proofReady(item);
     setError("请填写退款金额（元，大于零）与补录原因"); return false;
   }
   async function requestRefundBackfill(item: LockedItem) {
     const draft = refundDrafts[item.id] ?? { amount: "", reason: "" };
-    await submitBackfill({ kind: "refund", arApItemId: item.id, adjustmentAmountCent: Math.round(Number(draft.amount) * 100),
+    await submitBackfill(item, { kind: "refund", arApItemId: item.id, adjustmentAmountCent: Math.round(Number(draft.amount) * 100),
       reason: draft.reason.trim() }, () => setRefundDrafts((all) => ({ ...all, [item.id]: { amount: "", reason: "" } })));
-  }
-  async function decide(id: string, decision: "approve" | "reject") {
-    await run(async () => {
-      const slot = `decide:${id}:${decision}`;
-      await api.post(`/api/v1/finance/ar-ap-adjustments/${encodeURIComponent(id)}/approve`, { idempotencyKey: keyFor(slot), decision });
-      delete keys.current[slot]; setBackfillRefresh((n) => n + 1);
-    });
   }
   async function act(id: string, action: "confirm" | "lock" | "archive" | "final-marks", category?: string) {
     await run(async () => {
@@ -263,8 +294,9 @@ function DailyClosePanel({ api, user, effectivePermissions, setGlobalError, onGe
     {lockedOpen ? <div className="admin-table-scroll">
       {canViewArAp ? <>
         <div className="admin-section-title">本日结锁定的台账：{lockedOpen}</div>
+        <p className="admin-muted-action">提交后进主管复核，审批通过才生效。</p>
         <table className="admin-table" data-testid="daily-close-locked-items">
-          <thead><tr><th>单号</th><th>方向</th><th>金额（元）</th><th>到期日</th>{canRequest ? <><th>申请补录</th><th>申请收付款补录</th><th>申请退款补录</th></> : null}</tr></thead>
+          <thead><tr><th>单号</th><th>方向</th><th>金额（元）</th><th>到期日</th>{canRequest ? <><th>原始凭证与责任人</th><th>申请补录</th><th>申请收付款补录</th><th>申请退款补录</th></> : null}</tr></thead>
           <tbody>{lockedItems.map((item) => {
             const draft = drafts[item.id] ?? { amount: "", reason: "" };
             const edit = (patch: Partial<typeof draft>) => setDrafts((all) => ({ ...all, [item.id]: { ...draft, ...patch } }));
@@ -272,8 +304,18 @@ function DailyClosePanel({ api, user, effectivePermissions, setGlobalError, onGe
             const editPay = (patch: Partial<typeof pay>) => setPayDrafts((all) => ({ ...all, [item.id]: { ...pay, ...patch } }));
             const back = refundDrafts[item.id] ?? { amount: "", reason: "" };
             const editBack = (patch: Partial<typeof back>) => setRefundDrafts((all) => ({ ...all, [item.id]: { ...back, ...patch } }));
+            const block = shared[item.id] ?? EMPTY_SHARED;
             return <tr key={item.id}>
               <td>{item.itemNo ?? item.id}</td><td>{directionLabel(item.direction)}</td><td>{yuan(item.amountCent)}</td><td>{cnDate(item.dueDate)}</td>
+              {canRequest ? <td>
+                <label>原始凭证（银行回单、转账截图、异议处理结论等）<input type="file" multiple accept={PROOF_ACCEPT} disabled={busy}
+                  data-testid={`daily-close-backfill-proof-${item.id}`} onChange={(e) => { void uploadProofs(item, e.target.files); e.target.value = ""; }} /></label>
+                <ul data-testid={`daily-close-backfill-proofs-${item.id}`}>{block.proofs.map((proof) => <li key={proof.id}>{proof.name}（已上传）</li>)}</ul>
+                <input aria-label="责任人账号" data-testid={`daily-close-backfill-responsible-${item.id}`} value={block.responsible}
+                  onChange={(e) => { const value = e.target.value; editShared(item.id, () => ({ responsible: value })); }} />
+                <input aria-label="最终审批人（可不填，默认直接上级）" data-testid={`daily-close-backfill-final-approver-${item.id}`} value={block.finalApprover}
+                  onChange={(e) => { const value = e.target.value; editShared(item.id, () => ({ finalApprover: value })); }} />
+              </td> : null}
               {canRequest ? <td>
                 <input aria-label="调整额（元）" data-testid={`daily-close-backfill-amount-${item.id}`} value={draft.amount} onChange={(e) => edit({ amount: e.target.value })} />
                 <input aria-label="补录原因" data-testid={`daily-close-backfill-reason-${item.id}`} value={draft.reason} onChange={(e) => edit({ reason: e.target.value })} />
@@ -302,15 +344,15 @@ function DailyClosePanel({ api, user, effectivePermissions, setGlobalError, onGe
       </> : null}
       <div className="admin-section-title">锁定后补录：{lockedOpen}</div>
       <table className="admin-table" data-testid="daily-close-adjustments">
-        <thead><tr><th>台账单号</th><th>类型</th><th>调整额（元）</th><th>收付方式</th><th>原因</th><th>补录人</th><th>申请时间</th><th>状态</th><th>批准人</th><th>批准时间</th><th>原营业日</th>{canApprove ? <th>审批</th> : null}</tr></thead>
+        <thead><tr><th>台账单号</th><th>类型</th><th>调整额（元）</th><th>收付方式</th><th>原因</th><th>补录人</th><th>申请时间</th><th>状态</th><th>批准人</th><th>批准时间</th><th>原营业日</th><th>责任人</th><th>凭证</th><th>复核单号</th></tr></thead>
         <tbody>{adjustments.map((row) => <tr key={row.id}>
           <td>{row.itemNo ?? "—"}</td><td>{kindLabel(row.kind)}</td><td>{yuan(row.adjustmentAmountCent)}</td><td>{methodLabel(row.paymentMethod)}</td><td>{row.reason ?? "—"}</td><td>{row.requestedBy ?? "—"}</td>
           <td>{cnDate(row.createdAt)}</td><td>{formatBusinessStatus(row.approvalStatus)}</td><td>{row.approvedBy ?? "—"}</td>
-          <td>{cnDate(row.decidedAt)}</td><td>{cnDate(row.originalBusinessDate)}</td>
-          {canApprove ? <td>{row.approvalStatus === "pending" ? <>
-            <button type="button" data-testid={`daily-close-adjustment-approve-${row.id}`} disabled={busy} onClick={() => void decide(row.id, "approve")}>批准</button>
-            <button type="button" data-testid={`daily-close-adjustment-reject-${row.id}`} disabled={busy} onClick={() => void decide(row.id, "reject")}>驳回</button>
-          </> : null}</td> : null}
+          <td>{cnDate(row.decidedAt)}</td><td>{cnDate(row.originalBusinessDate)}</td><td>{row.responsibleStaffId ?? "—"}</td>
+          <td>{row.evidenceAttachmentIds?.length ? row.evidenceAttachmentIds.map((id, index) => <a key={id} data-testid={`daily-close-adjustment-proof-${row.id}-${index}`}
+            href={withBase(`/api/v1/evidence/attachments/${encodeURIComponent(id)}/file`)} target="_blank" rel="noreferrer">凭证{index + 1} </a>) : "—"}</td>
+          <td>{row.reviewId ? <a data-testid={`daily-close-adjustment-review-${row.id}`}
+            href={withBase(`/admin/governance/approval-chain?review_id=${encodeURIComponent(row.reviewId)}`)}>{row.reviewId}</a> : "—"}</td>
         </tr>)}</tbody>
       </table>
     </div> : null}

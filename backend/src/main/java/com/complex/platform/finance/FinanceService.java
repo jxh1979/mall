@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.46
+// 文件版本：V0.47
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -9,7 +9,6 @@ import com.complex.platform.common.money.MoneyRounding;
 import com.complex.platform.evidence.AuditEventService;
 import com.complex.platform.evidence.AuditedOperation;
 import com.complex.platform.evidence.AuditedOperationExecutor;
-import com.complex.platform.finance.dto.ArApAdjustmentDecisionRequest;
 import com.complex.platform.finance.dto.ArApAdjustmentRequest;
 import com.complex.platform.finance.dto.ArApItemRequest;
 import com.complex.platform.finance.dto.ArApPaymentRequest;
@@ -109,7 +108,9 @@ public class FinanceService implements TerminationSettlementPort {
     private static final List<String> DAILY_CLOSE_SOURCES = List.of(
             "official_ticket", "channel_ticket", "bar", "amusement", "supply_cost", "thirdparty_reflow", "bar_deposit",
             "low_value_difference");
-    private static final Set<String> ADJUSTMENT_DECISIONS = Set.of("approve", "reject");
+    // 第十八批 AL 段第 245 条 245-R1：锁账补录统一审批的动作名（finance. 开头按涉钱 1 个工作日）与复核摘要里的补录类型中文名。
+    static final String LOCKED_BACKFILL_REVIEW = "finance.locked_backfill.review";
+    private static final Map<String, String> ADJUSTMENT_KIND_LABELS = Map.of("amount", "金额调整", "payment", "收付款补录", "refund", "退款补录");
     private static final Set<String> ADJUSTMENT_KINDS = Set.of("amount", "payment", "refund");
     // P0#7 / R6-D07：对账差异四类枚举（与 V105 chk_frd_difference_type 一致）。
     private static final Set<String> DIFFERENCE_TYPES = Set.of("amount", "count", "status", "missing");
@@ -164,7 +165,9 @@ public class FinanceService implements TerminationSettlementPort {
             Map.entry("contract_parking_monthly", "车位月租"),
             Map.entry("parking_fee", "停车费"),
             // HP-P01 第二组（BSM「停车场」章「消费抵免」条）：城市项目公司对承担商户的停车抵免成本普通内部结算应收。
-            Map.entry("parking_credit_cost", "停车抵免成本"));
+            Map.entry("parking_credit_cost", "停车抵免成本"),
+            // 第十八批 AL 段第 223 条 223-R1（BSM:1751）：对账差异复核通过、按认定结果入账的应收或应付。
+            Map.entry("reconciliation_difference", "对账差异"));
 
     @org.springframework.beans.factory.annotation.Autowired
     private org.springframework.context.ApplicationEventPublisher refundEvents;
@@ -254,6 +257,20 @@ public class FinanceService implements TerminationSettlementPort {
     // 可为 null（单测手工构造）＝按阈值未配置处理（ENUM:191「阈值未配置一律按高价值处理」）。
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     com.complex.platform.inventory.HighValueThresholdPort highValueThresholds;
+
+    // 第十八批 AL 段第 245 条 245-R1（ENUM:190「日结锁定后的补录须上级审批」；PGM:528；PGM:529）：锁账补录进统一审批（建复核单、回读审批链）。
+    // @Lazy 防初始化环；包私有便于单测置位。
+    @org.springframework.beans.factory.annotation.Autowired
+    @org.springframework.context.annotation.Lazy
+    com.complex.platform.governance.review.SupervisorReviewService reviews;
+
+    @org.springframework.beans.factory.annotation.Autowired
+    @org.springframework.context.annotation.Lazy
+    com.complex.platform.governance.review.SupervisorReviewRepository supervisorReviews;
+
+    // 第十八批 AL 段第 253 条 253-R2（BSM:1642「必须写原因和责任人」）：锁账补录责任人核账号存在（同人工补录）。
+    @org.springframework.beans.factory.annotation.Autowired
+    com.complex.platform.access.AccessRepository accessRepository;
 
     /** 往来来源类型中文名（未知值原样）。 */
     public static String sourceTypeLabel(String sourceType) {
@@ -1104,6 +1121,8 @@ public class FinanceService implements TerminationSettlementPort {
                 now,
                 null,
                 null,
+                null,
+                false,
                 null));
 
         // 留痕：executeWrite 已写 finance.reconciliation.difference_created（操作级）。
@@ -1662,24 +1681,6 @@ public class FinanceService implements TerminationSettlementPort {
                 () -> createAdjustment(request));
     }
 
-    @com.complex.platform.gate.GuardedAction(capability = "finance.locked_backfill.approve", admissionAction = "finance.locked_backfill_approve", objectType = "ar_ap_adjustment")
-    @Transactional
-    public ArApAdjustmentRecord approveAdjustment(String adjustmentId, ArApAdjustmentDecisionRequest request) {
-        String id = requireText(adjustmentId, "adjustment_id");
-        String decision = requireEnum(request == null ? null : request.decision(), ADJUSTMENT_DECISIONS, "decision");
-        boolean approve = "approve".equals(decision);
-        return executeWrite(
-                "decideArApAdjustment:" + id,
-                request == null ? null : request.idempotencyKey(),
-                request,
-                ArApAdjustmentRecord.class,
-                approve ? "finance.locked_backfill_approved" : "finance.locked_backfill_rejected",
-                "finance.locked_backfill_decision_failed",
-                "finance.locked_backfill.approve",
-                "ar_ap_adjustment",
-                () -> decideAdjustment(id, approve));
-    }
-
     private ArApAdjustmentRecord createAdjustment(ArApAdjustmentRequest request) {
         ArApAdjustmentRequest actual = requireRequest(request);
         String itemId = requireText(actual.arApItemId(), "ar_ap_item_id");
@@ -1722,59 +1723,74 @@ public class FinanceService implements TerminationSettlementPort {
             paymentMethod = original.paymentMethod();
         }
 
-        Instant now = Instant.now();
-        return repository.saveArApAdjustment(new ArApAdjustmentRecord(
-                "arap_adj_" + stableToken("ar_ap_adjustment", itemId + ":" + actual.idempotencyKey()),
-                itemId,
-                lockedDayCloseId,
-                amountCent,
-                "pending",
-                authorizationService.currentActor().id(),
-                null,
-                reason,
-                now,
-                null,
-                item.itemNo(),
-                // 143-R4（ENUM:190「在补录记录上标明其所属的原营业日」）：锁定该台账的日结的营业日。
-                repository.findDailyCloseById(lockedDayCloseId).map(DailyCloseRecord::businessDate).orElse(null),
-                kind,
-                paymentMethod));
+        // 第十八批 AL 段第 253 条 253-R1（BSM:1642「补录必须附原始记录凭证（微信截图、通话录音等）并经审核」；第十八批裁决 56「三种锁账补录提交时必须上传
+        // 原始凭证（银行回单、转账截图、异议处理结论等）并写责任人；「业务发生后 3 天内」不套。」）：三种补录一律去空去重后至少一份，且须真实存在（同人工补录）。
+        List<String> evidence = actual.evidenceAttachmentIds() == null ? List.of() : actual.evidenceAttachmentIds().stream()
+                .filter(java.util.Objects::nonNull).map(String::trim).filter(id -> !id.isEmpty()).distinct().toList();
+        if (evidence.isEmpty()) {
+            throw ApiException.badRequest("MANUAL_BACKFILL_EVIDENCE_REQUIRED", "补录必须附原始记录凭证（银行回单、转账截图、异议处理结论等）");
+        }
+        refundEvidenceValidator.requireExisting(evidence, "evidence_attachment_ids");
+        // 253-R2（BSM:1642「必须写原因和责任人」）：责任人须为已存在账号（同人工补录，不另核在岗、岗位与权限）。
+        String responsible = requireText(actual.responsibleStaffId(), "responsible_staff_id");
+        if (accessRepository.findUserById(responsible).isEmpty()) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "责任人账号不存在");
+        }
+
+        String id = "arap_adj_" + stableToken("ar_ap_adjustment", itemId + ":" + actual.idempotencyKey());
+        // 143-R4（ENUM:190「在补录记录上标明其所属的原营业日」）：锁定该台账的日结的营业日。
+        LocalDate originalBusinessDate = repository.findDailyCloseById(lockedDayCloseId).map(DailyCloseRecord::businessDate).orElse(null);
+        // 245-R1（ENUM:190「日结锁定后的补录须上级审批」；PGM:528；PGM:529）：提交即进统一审批，申请人沿直接上级链到所指定的最终审批人（不填＝直接上级）逐级
+        // 审批，涉钱按 1 个工作日到期、超时提醒并升级；全部通过才落账（lockedBackfillDecided）。253-R2（BSM:1642「涉及金额……或责任认定的补录，须由被影响方
+        // 之外的主管复核」）：责任人以直接受益人登记，审批链与超时升级都跳过其本人，本人审批被拒。
+        String reviewId = reviews.evaluate(new com.complex.platform.governance.review.SupervisorReviewEvaluateRequest(
+                actual.idempotencyKey() + ":review", reason, evidence, LOCKED_BACKFILL_REVIEW, "ar_ap_adjustment", id, Math.abs(amountCent),
+                "日结锁定后补录：台账 " + item.itemNo() + "，" + ADJUSTMENT_KIND_LABELS.get(kind) + "，金额 "
+                        + java.math.BigDecimal.valueOf(amountCent, 2).toPlainString() + " 元，原营业日 " + originalBusinessDate + "，责任人 " + responsible
+                        + "；原因 " + reason,
+                trimToNull(actual.finalApproverId()), List.of(), responsible)).reviewId();
+        return repository.saveArApAdjustment(new ArApAdjustmentRecord(id, itemId, lockedDayCloseId, amountCent, "pending",
+                authorizationService.currentActor().id(), null, reason, Instant.now(), null, item.itemNo(), originalBusinessDate, kind, paymentMethod,
+                reviewId, evidence, responsible));
     }
 
-    private ArApAdjustmentRecord decideAdjustment(String adjustmentId, boolean approve) {
-        ArApAdjustmentRecord adjustment = repository.findArApAdjustmentByIdForUpdate(adjustmentId)
-                .orElseThrow(() -> ApiException.notFound("ADJUSTMENT_NOT_FOUND", "调整单不存在或已被删除"));
-        if (!"pending".equals(adjustment.approvalStatus())) {
-            throw ApiException.conflict("ADJUSTMENT_ALREADY_DECIDED",
-                    "调整单当前状态已为：" + adjustment.approvalStatus());
+    /**
+     * 第十八批 AL 段第 245 条 245-R1（ENUM:190「日结锁定后的补录须上级审批」；PGM:528「任一节点驳回则整单退回起草人」）：锁账补录复核单的审批结论回写
+     * （照 {@link FinanceReconciliationDifferenceService#decided}）。只认本动作与对象，补录须仍待审且复核单号相符（防重放）；通过即按类型落账（原批准三分支，
+     * 落账失败整笔批准回滚、补录与复核单保持待审），驳回不改账；都记批准人＝终审或驳回节点审批人、决定时刻。审批人身份、申请人与受益人不得审批由统一审批链
+     * 承担，不再另判审批人范围与自审；退款补录的退款分级授权闸照旧按当前操作人（终审人）的退款额度判（控制席判定）。
+     */
+    @org.springframework.context.event.EventListener
+    @Transactional
+    public void lockedBackfillDecided(com.complex.platform.governance.review.SupervisorReviewDecisionRecord decision) {
+        if (!LOCKED_BACKFILL_REVIEW.equals(decision.actionType()) || !"ar_ap_adjustment".equals(decision.objectType())) {
+            return;
+        }
+        boolean approve = "approved".equals(decision.reviewStatus());
+        if (!approve && !"rejected".equals(decision.reviewStatus())) {
+            return;
+        }
+        ArApAdjustmentRecord adjustment = repository.findArApAdjustmentByIdForUpdate(decision.objectId()).orElse(null);
+        if (adjustment == null || !"pending".equals(adjustment.approvalStatus()) || !decision.reviewId().equals(adjustment.reviewId())) {
+            return;
         }
 
         ArApItemRecord item = repository.findArApItemByIdForUpdate(adjustment.arApItemId())
                 .orElseThrow(() -> ApiException.notFound("AR_AP_ITEM_NOT_FOUND", "应收应付款项不存在或已被删除"));
         rejectPayrollMutation(item);
-        requireArApScope(item, "finance.locked_backfill.approve");
 
         Instant now = Instant.now();
         String approver = authorizationService.currentActor().id();
 
-        // F-OPS-07 职责分离（SoD）：补录审批是唯一涉及资金的 finance 审批链（locked backfill：审批通过会写入
-        // ar_ap_items 金额变动）。禁止"发起人 = 审批人"自审自批——无论 approve 还是 reject，决策人都不得是该
-        // 工单的发起人（requested_by），否则发起人可绕过第二人复核自行放行（或自行撤销）资金调整。
-        // 发起人信息可得：requestedBy 在 createAdjustment 时由 currentActor().id() 写入、永不为空。
-        if (approver != null && approver.equals(adjustment.requestedBy())) {
-            throw ApiException.forbidden("SELF_APPROVAL_FORBIDDEN",
-                    "补录调整的申请人不能自行审批，须由其他审批人处理");
-        }
-
         if (approve && "payment".equals(adjustment.kind())) {
             // 186-R1：收付款补录批准即登记收付款，不红冲重述、不发金额变动通知；付款时间取批准时刻（ENUM:190「补录金额归入当期」），台账锁与日结汇总不动。
-            // 审批人范围已由上方 requireArApScope 判过；permission 传 null 只为跳过 requireNotLocked（与裁决 19 的系统落账同一入口），
+            // 审批人由统一审批按组织层级定（第十八批 AL 段 245-R1）；permission 传 null 只为跳过 requireNotLocked（与裁决 19 的系统落账同一入口），
             // 押金退还、积分发行费的到期闸与已冲正闸、采购应付闸仍在 settleArApItem 里照判。
             settleArApItem(item.id(), adjustment.adjustmentAmountCent(), adjustment.paymentMethod(), now, null,
                     "adj_" + adjustment.id(), null);
         } else if (approve && "refund".equals(adjustment.kind())) {
             // 186-R2（控制席并入，同根）：退款补录批准即按所退的原收款走现有原路退款路径建退款待办，台账、台账锁与日结汇总不动。
-            // 审批人范围已由上方 requireArApScope 判过；permission 传 null 只为跳过 requireNotLocked（同 186-R1），
+            // 审批人由统一审批按组织层级定（第十八批 AL 段 245-R1）；permission 传 null 只为跳过 requireNotLocked（同 186-R1），
             // 可退余额、分级授权、只退应收、沿原收款渠道、后收先退各闸仍在 refund 里照判；现场渠道设备闸（控制席判定）不在后台审批时判，
             // 现金、刷卡的待办在退款办理处登记执行与核实时照判。
             refund(new RefundRequest("adj_" + adjustment.id(), null, List.of(), refundBackfillTarget(item.id()).id(),
@@ -1810,21 +1826,35 @@ public class FinanceService implements TerminationSettlementPort {
                     sourceTypeLabel(item.sourceType()) + "调整：" + adjustment.reason(), today(), item.projectId(), adjustment.id());
         }
         // reject：不改账，只标状态。
-        return repository.updateArApAdjustment(new ArApAdjustmentRecord(
-                adjustment.id(),
-                adjustment.arApItemId(),
-                adjustment.lockedDayCloseId(),
-                adjustment.adjustmentAmountCent(),
-                approve ? "approved" : "rejected",
-                adjustment.requestedBy(),
-                approver,
-                adjustment.reason(),
-                adjustment.createdAt(),
-                now,
-                adjustment.itemNo(),
-                adjustment.originalBusinessDate(),
-                adjustment.kind(),
-                adjustment.paymentMethod()));
+        repository.updateArApAdjustment(new ArApAdjustmentRecord(adjustment.id(), adjustment.arApItemId(), adjustment.lockedDayCloseId(),
+                adjustment.adjustmentAmountCent(), approve ? "approved" : "rejected", adjustment.requestedBy(), approver, adjustment.reason(),
+                adjustment.createdAt(), now, adjustment.itemNo(), adjustment.originalBusinessDate(), adjustment.kind(), adjustment.paymentMethod(),
+                adjustment.reviewId(), adjustment.evidenceAttachmentIds(), adjustment.responsibleStaffId()));
+        // 审计事件名沿用旧审批口径；审批码已退役，权限参数记申请码。
+        auditEventService.recordSuccess(approve ? "finance.locked_backfill_approved" : "finance.locked_backfill_rejected",
+                "finance.locked_backfill.request", "ar_ap_adjustment", adjustment.id(), null, null, Map.of("review_id", decision.reviewId()));
+    }
+
+    /**
+     * 第十八批 AL 段第 253 条 253-R1（BSM:1642「补录必须附原始记录凭证……并经审核」）：不带商户编号的账号回读锁账补录原始凭证时，引用该附件的补录里有一笔——
+     * 本人是其复核单链上任一节点审批人或被转发人，或能过按日结查补录的同一道范围闸（finance.daily_close.manage 可触及该日结）——即可看（证据附件回读调；
+     * 照 {@link FinanceReconciliationDifferenceService#canViewStatement}）。
+     */
+    public boolean canViewLockedBackfillEvidence(String attachmentId) {
+        String actorId = authorizationService.currentActor().id();
+        for (ArApAdjustmentRecord adjustment : repository.listArApAdjustmentsByEvidenceAttachment(attachmentId)) {
+            if (adjustment.reviewId() != null && supervisorReviews.listChainNodes(adjustment.reviewId()).stream()
+                    .anyMatch(node -> actorId.equals(node.approverId()) || actorId.equals(node.forwardedTo()))) {
+                return true;
+            }
+            try {
+                requireDailyCloseInScope(adjustment.lockedDayCloseId(), "finance.daily_close.manage");
+                return true;
+            } catch (ApiException outOfScope) {
+                // 不可触及这笔补录的日结：看下一笔。
+            }
+        }
+        return false;
     }
 
     /**
@@ -1981,7 +2011,7 @@ public class FinanceService implements TerminationSettlementPort {
      * ar_ap 台账结算回写公共逻辑（FOR UPDATE 行锁防并发双扣 + 跨商户校验 + 锁定日拦截 + 登记 payment + 回写 paid/unpaid/status）。
      * 供 registerPayment（在线/后台登记收付款）与 F1 confirmOffline（线下确认收款关联应收）共用，保证回款口径一致。
      * permission 为 null 仅限系统按结算清单自动落账（退租押金抵扣销账），不按操作人权限范围复核，也不受日结锁定拦截（见下）；
-     * 第十八批 Z 段 186-R1 锁定后收付款补录经上级批准后也传 null（审批人范围已在 decideAdjustment 判过）。
+     * 第十八批 Z 段 186-R1 锁定后收付款补录经上级批准后也传 null（第十八批 AL 段 245-R1 起审批人由统一审批按组织层级定，见 lockedBackfillDecided）。
      */
     private ArApPaymentResponse settleArApItem(
             String arApItemId, long amountCent, String paymentMethod,
@@ -2615,7 +2645,7 @@ public class FinanceService implements TerminationSettlementPort {
     }
 
     /**
-     * permission 为 null 仅限第十八批 Z 段 186-R2 锁定后退款补录经上级批准（审批人范围已在 decideAdjustment 判过），
+     * permission 为 null 仅限第十八批 Z 段 186-R2 锁定后退款补录经上级批准（第十八批 AL 段 245-R1 起审批人由统一审批按组织层级定，见 lockedBackfillDecided），
      * 只跳过本处范围闸与日结锁定拦截（同 settleArApItem），以及现场渠道设备闸（控制席判定：设备闸管「钱当面退出去」那一步，
      * 补录批准只建退款待办；现金、刷卡的待办登记执行与核实时仍由 requireRefundExecutionAuthority 照判），其余各闸照判。
      */
@@ -3163,6 +3193,16 @@ public class FinanceService implements TerminationSettlementPort {
     }
 
     /**
+     * 第十八批 AL 段第 223 条 223-R1（BSM:1751「高价值差异复核通过才入账、同一差异只入账一次」；ENUM:191「应收应付台账「高价值差异复核通过才入账」按本判定执行。」）：
+     * 对账差异复核通过且提交时勾选入账的，按认定方向向原往来方记一笔应收或应付（source_type=reconciliation_difference，来源＝差异号，往来方、商户、项目同原台账，
+     * 不填冲正原行）。台账号由来源＋差异号摘要确定、与方向无关，按编号覆盖写，同一差异至多一行；调用方（审批结论回写）只在差异真正转已关闭时调一次。
+     */
+    ArApItemRecord postReconciliationDifference(String differenceId, String direction, ArApItemRecord origin, long amountCent) {
+        return persistDerivedArApItem(direction, origin.counterpartyId(), "reconciliation_difference", differenceId, amountCent,
+                derivedKeyDigest(differenceId), origin.merchantId(), null, null, origin.projectId());
+    }
+
+    /**
      * 第十八批 R 段第 142 条 142-R1（BSM:1081「长款当期计入该商户营业外收入并单独留痕可查，不得留存钱箱、不得用于冲抵其他班次的短款」）：
      * 财务复核平账的收银长款记该酒吧内部核算台账（source_type=bar_shift_overage，来源与幂等键＝班次，往来方与归属商户＝该酒吧，
      * 归酒吧所属项目）；内部核算登记即确认，落账日为该酒吧当前营业日即当期。
@@ -3346,21 +3386,21 @@ public class FinanceService implements TerminationSettlementPort {
             if (reversal.amountCent() > 0
                     && !repository.existsArApItemBySource("payable", "turnover_rent_reversal", reversal.refundId())) {
                 persistDerivedArApItem("payable", merchantId, "turnover_rent_reversal", reversal.refundId(), reversal.amountCent(),
-                        turnoverReversalKey(reversal.refundId()), merchantId, period, dueDate, projectId);
+                        derivedKeyDigest(reversal.refundId()), merchantId, period, dueDate, projectId);
             }
         }
     }
 
     /**
-     * 冲正应付的幂等键＝退款单号的定长摘要（SHA-256 十六进制前 17 位）：台账 id 由 slug 截到 40 字符，整单号拼进去时同一酒吧的退款单号
-     * （bill_adjustment_…）只剩首位，多笔冲正会撞同一 id 互相覆盖（ENUM:257「多笔退款逐笔分别冲正」落不住）。
+     * 派生台账幂等键＝来源单号的定长摘要（SHA-256 十六进制前 17 位）：台账 id 由 slug 截到 40 字符，整单号拼进去时同前缀的单号只剩首位，多笔会撞同一 id
+     * 互相覆盖。冲正应付的退款单号（bill_adjustment_…；ENUM:257「多笔退款逐笔分别冲正」）与对账差异入账的差异号（recon_diff_…；第十八批 AL 段 223-R1）同用。
      */
-    private static String turnoverReversalKey(String refundId) {
+    private static String derivedKeyDigest(String sourceId) {
         try {
             return java.util.HexFormat.of().formatHex(java.security.MessageDigest.getInstance("SHA-256")
-                    .digest(refundId.getBytes(java.nio.charset.StandardCharsets.UTF_8))).substring(0, 17);
+                    .digest(sourceId.getBytes(java.nio.charset.StandardCharsets.UTF_8))).substring(0, 17);
         } catch (java.security.NoSuchAlgorithmException e) {
-            throw new IllegalStateException("turnover reversal key hashing unavailable", e);
+            throw new IllegalStateException("derived ar/ap key hashing unavailable", e);
         }
     }
 

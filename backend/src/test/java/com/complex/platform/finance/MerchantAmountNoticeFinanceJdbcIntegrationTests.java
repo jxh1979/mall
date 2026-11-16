@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -15,7 +15,6 @@ import com.complex.platform.access.RoleRecord;
 import com.complex.platform.common.LocalZone;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.crypto.PiiCipher;
-import com.complex.platform.finance.dto.ArApAdjustmentDecisionRequest;
 import com.complex.platform.finance.dto.ArApAdjustmentRequest;
 import com.complex.platform.finance.dto.CloseReconciliationDifferenceRequest;
 import com.complex.platform.finance.dto.IdentifyReconciliationDifferenceRequest;
@@ -61,6 +60,7 @@ class MerchantAmountNoticeFinanceJdbcIntegrationTests {
     @Autowired JdbcFinanceRepository repository;
     @Autowired AccessRepository access;
     @Autowired JdbcTemplate jdbc;
+    @Autowired com.complex.platform.evidence.EvidenceEventService evidenceService;
     @Autowired PiiCipher cipher;
     @Autowired MockMvc mockMvc;
     @Autowired WorkingDayCalendar calendar;
@@ -82,7 +82,7 @@ class MerchantAmountNoticeFinanceJdbcIntegrationTests {
                 """, merchant, project, cipher.encrypt(phone));
         String role = "mamt_role_" + suffix;
         access.createRole(new RoleRecord(role, "金额通知项目财务-" + Long.parseLong(suffix, 16), null, "project", "active", Instant.now(),
-                List.of("finance.ar_ap.view", "finance.deposit.manage", "finance.locked_backfill.request", "finance.locked_backfill.approve",
+                List.of("finance.ar_ap.view", "finance.deposit.manage", "finance.locked_backfill.request", "evidence.attachment.create",
                         "finance.reconciliation.view", "finance.reconciliation.resolve", "governance.supervisor_review.approve"),
                 null, false, List.of()));
         financeA = user(role);
@@ -174,7 +174,7 @@ class MerchantAmountNoticeFinanceJdbcIntegrationTests {
         approvedClose(foreign, "非商户往来");
         actAsPlatformFinance();
         assertThatThrownBy(() -> differences.submitReview(difference,
-                new CloseReconciliationDifferenceRequest(key(), "再次关闭", List.of(), null)))
+                new CloseReconciliationDifferenceRequest(key(), "再次关闭", List.of(), null, null)))
                 .isInstanceOf(ApiException.class).extracting("code").isEqualTo("RECONCILIATION_DIFFERENCE_STATUS_CONFLICT");
 
         assertThat(notices()).singleElement().satisfies(r -> {
@@ -220,9 +220,10 @@ class MerchantAmountNoticeFinanceJdbcIntegrationTests {
 
     private String adjustment(String item, String decision) {
         act(financeA);
-        var requested = finance.requestAdjustment(new ArApAdjustmentRequest(key(), "锁账后补录", List.of(), item, 30L, "核实少记"));
+        var requested = finance.requestAdjustment(new ArApAdjustmentRequest(key(), "锁账后补录",
+                List.of(com.complex.platform.support.LockedBackfillFixture.evidence(evidenceService)), item, 30L, "核实少记", null, null, financeA, null));
         act(financeB);
-        finance.approveAdjustment(requested.id(), new ArApAdjustmentDecisionRequest(key(), "独立复核", List.of(), decision));
+        com.complex.platform.support.LockedBackfillFixture.decide(finance, requested, "approve".equals(decision));
         act(financeA);
         return requested.id();
     }
@@ -256,7 +257,7 @@ class MerchantAmountNoticeFinanceJdbcIntegrationTests {
     private void approvedClose(String difference, String conclusion) {
         actAsPlatformFinance();
         differences.identify(difference, new IdentifyReconciliationDifferenceRequest(key(), "银行流水与渠道对账单逐笔核对"));
-        String reviewId = differences.submitReview(difference, new CloseReconciliationDifferenceRequest(key(), conclusion, List.of(), null))
+        String reviewId = differences.submitReview(difference, new CloseReconciliationDifferenceRequest(key(), conclusion, List.of(), null, null))
                 .reviewId();
         act(financeB);
         reviews.approve(reviewId, new SupervisorReviewApprovalRequest(key(), null, List.of(), null, "approved", "已核对银行流水"));

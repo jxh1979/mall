@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -235,6 +235,24 @@ class FinanceReconciliationDifferenceRegisterJdbcTests {
         uploadFile("statement.xlsm", "application/vnd.ms-excel.sheet.macroEnabled.12").andExpect(status().isBadRequest());
     }
 
+    /**
+     * 第十八批 AL 段第 224 条 224-R1（ENUM:173「交付差异与款项分别跟踪，财务差异按本表「差异处理状态」条处理」；ENUM:202「通过既有三方对账及财务差异流程
+     * 核实真实收款事实和凭证」；第十八批裁决 15「财务核验到账后，这条到账核验记录……就当收款凭证」）：业务单号为已核验的经销到账记录取到账金额；
+     * 待核验的到账记录无平台侧系统取数，仍拒 400 RECONCILIATION_NO_SYSTEM_EXPECTED。
+     */
+    @Test
+    void dealerVerifiedPaymentTakesPlatformSide() throws Exception {
+        String batch = batchOf(barA);
+
+        register(admin, "dv", batch, "amount", dealerPayment("v", "verified", 50000), 49800, List.of())
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.expected_amount_cent").value(50000))
+                .andExpect(jsonPath("$.data.amount_cent").value(200));
+        register(admin, "dp", batch, "amount", dealerPayment("p", "pending_verification", 30000), 29800, List.of())
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.detail_code").value("RECONCILIATION_NO_SYSTEM_EXPECTED"));
+    }
+
     // ---------- helpers ----------
 
     /** 后台日结区块生成该酒吧该营业日日结（随之生成对账批次，180-R1），返回该批次 ID。 */
@@ -324,5 +342,29 @@ class FinanceReconciliationDifferenceRegisterJdbcTests {
                 + "created_at,updated_at) VALUES(?,?,?,?,?,?,?,0,0,?,?,'CNY','paid','settled',0,now(),now())",
                 bill, "FRR-" + bill, order, barA, barA, table, paidCent, paidCent, paidCent);
         return bill;
+    }
+
+    /** 前置态：项目 A 一家经销商的一张订单与一笔到账记录（已核验或待核验），返回到账记录号（dpay_ 前缀，同 DealerOrderService 登记到账）。 */
+    private String dealerPayment(String tag, String paymentStatus, long amountCent) {
+        String dealer = "frr_dl_" + tag + "_" + s;
+        jdbc.update("INSERT INTO dealers(id, project_id, dealer_name, status) VALUES (?, ?, '对账差异经销商', 'approved')", dealer, projectA);
+        String entity = "frr_se_" + tag + "_" + s;
+        jdbc.update("INSERT INTO business_entities(id, entity_name, entity_role, status, created_at, updated_at)"
+                + " VALUES (?, '对账差异经销销售主体', 'project_company', 'active', now(), now())", entity);
+        String warehouse = "frr_wh_" + tag + "_" + s;
+        jdbc.update("INSERT INTO warehouses(id, project_id, warehouse_type, name, status) VALUES (?, ?, 'main', '对账差异经销中心仓', 'active')",
+                warehouse, projectA);
+        String contract = "frr_dc_" + tag + "_" + s;
+        jdbc.update("INSERT INTO dealer_contracts(id, dealer_id, contract_no, sales_entity_id, central_warehouse_id, valid_from, valid_to)"
+                + " VALUES (?, ?, ?, ?, ?, current_date, current_date + 365)", contract, dealer, "FRR-" + contract, entity, warehouse);
+        long applied = "verified".equals(paymentStatus) ? amountCent : 0L;
+        String order = "frr_do_" + tag + "_" + s;
+        jdbc.update("INSERT INTO dealer_orders(id, order_no, dealer_id, dealer_contract_id, sales_entity_id, central_warehouse_id, status,"
+                + " total_amount_cent, paid_amount_cent) VALUES (?, ?, ?, ?, ?, ?, 'payment_verifying', ?, ?)",
+                order, "FRR-" + order, dealer, contract, entity, warehouse, amountCent, applied);
+        String payment = "dpay_frr_" + tag + "_" + s;
+        jdbc.update("INSERT INTO dealer_order_payments(id, order_id, method, amount_cent, received_at, status, applied_cent)"
+                + " VALUES (?, ?, 'bank_transfer', ?, now(), ?, ?)", payment, order, amountCent, paymentStatus, applied);
+        return payment;
     }
 }
