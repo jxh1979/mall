@@ -8,14 +8,14 @@
     "RUNTIME_EVIDENCE_BOUND_TO_SOURCE_FINGERPRINT",
     "RUNTIME_EVIDENCE_DOES_NOT_CLOSE_PRODUCTION_MANIFEST"
   ],
-  "generated_at": "2026-11-16T08:09:57.629Z",
+  "generated_at": "2026-11-16T22:48:19.376Z",
   "git": {
-    "head": "b2d2acc7fddc5e5cd97e7fcc058ae182f6d701d3",
-    "head_short": "b2d2acc7",
-    "branch": "feature/business-code-batch58-20261106",
+    "head": "40c63a2843fb5c7c28fc4699d20db46d94c20ef7",
+    "head_short": "40c63a28",
+    "branch": "feature/business-code-batch59-20261106",
     "worktree_dirty": false,
-    "source_fingerprint": "ca47c22cff2b8327b13b0a5f801d2a7b792d211559d56ec75b79b6cf40772689",
-    "source_fingerprint_file_count": 3424,
+    "source_fingerprint": "23bd3ac22d9f4a529406af51080fd706bf9ec134a13ece0260e762e609c5036c",
+    "source_fingerprint_file_count": 3436,
     "source_fingerprint_paths": [
       "backend/src/main",
       "backend/src/test",
@@ -50,12 +50,12 @@
   },
   "backend_surefire": {
     "path": "backend/target/surefire-reports",
-    "suites": 596,
-    "tests": 6773,
+    "suites": 599,
+    "tests": 6804,
     "failures": 0,
     "errors": 0,
     "skipped": 0,
-    "latest_mtime": "2026-11-16T08:08:05.877Z",
+    "latest_mtime": "2026-11-16T22:46:03.306Z",
     "passed": true
   },
   "web_unit_source": {
@@ -282,6 +282,7 @@
       "apps/web/src/admin/pages/OverviewPage.root04.test.tsx",
       "apps/web/src/admin/pages/OverviewPage.settlepending.test.tsx",
       "apps/web/src/admin/pages/ParkingWorkbenchPage.test.tsx",
+      "apps/web/src/admin/pages/PaymentConfirmationPanel.test.tsx",
       "apps/web/src/admin/pages/PayrollTaxBracketsPage.fullpayroll.test.tsx",
       "apps/web/src/admin/pages/PayrollTaxBracketsPage.guidedcreate.test.tsx",
       "apps/web/src/admin/pages/PayrollTaxBracketsPage.test.tsx",
@@ -397,8 +398,8 @@
       "apps/web/src/dealer/dealerPortalClient.test.ts",
       "apps/web/src/shared/ReplayedNotice.test.tsx"
     ],
-    "file_count": 336,
-    "test_count_from_source": 1756
+    "file_count": 337,
+    "test_count_from_source": 1768
   },
   "web_build": {
     "dist_index_exists": true,
@@ -416,18 +417,18 @@
         "exists": true
       }
     ],
-    "asset_count": 170,
+    "asset_count": 171,
     "main_js_assets": [
       {
-        "path": "apps/web/dist/assets/main-CQJt3t-K.js",
+        "path": "apps/web/dist/assets/main-M2U0Bnv8.js",
         "size_bytes": 4337,
-        "mtime": "2026-11-16T08:08:14.330Z"
+        "mtime": "2026-11-16T22:46:12.290Z"
       }
     ],
     "largest_asset": {
-      "path": "apps/web/dist/assets/vendor-antd-CzvkKKQu.js",
+      "path": "apps/web/dist/assets/vendor-antd-Bh_XtmOr.js",
       "size_bytes": 251112,
-      "mtime": "2026-11-16T08:08:14.333Z"
+      "mtime": "2026-11-16T22:46:12.293Z"
     },
     "no_main_bundle_warning_expected": true
   },
