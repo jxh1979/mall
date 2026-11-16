@@ -8,13 +8,13 @@
     "RUNTIME_EVIDENCE_BOUND_TO_SOURCE_FINGERPRINT",
     "RUNTIME_EVIDENCE_DOES_NOT_CLOSE_PRODUCTION_MANIFEST"
   ],
-  "generated_at": "2026-11-16T07:27:32.828Z",
+  "generated_at": "2026-11-16T08:09:57.629Z",
   "git": {
-    "head": "cd3332dc642b1901c53d911575c47f9640fc8ff1",
-    "head_short": "cd3332dc",
+    "head": "b2d2acc7fddc5e5cd97e7fcc058ae182f6d701d3",
+    "head_short": "b2d2acc7",
     "branch": "feature/business-code-batch58-20261106",
     "worktree_dirty": false,
-    "source_fingerprint": "3203e89c0ef01636a0123efc40cde19809d88864b0d3eca33a5f84b0962167ed",
+    "source_fingerprint": "ca47c22cff2b8327b13b0a5f801d2a7b792d211559d56ec75b79b6cf40772689",
     "source_fingerprint_file_count": 3424,
     "source_fingerprint_paths": [
       "backend/src/main",
@@ -55,7 +55,7 @@
     "failures": 0,
     "errors": 0,
     "skipped": 0,
-    "latest_mtime": "2026-11-16T07:25:37.818Z",
+    "latest_mtime": "2026-11-16T08:08:05.877Z",
     "passed": true
   },
   "web_unit_source": {
@@ -421,13 +421,13 @@
       {
         "path": "apps/web/dist/assets/main-CQJt3t-K.js",
         "size_bytes": 4337,
-        "mtime": "2026-11-16T07:25:46.294Z"
+        "mtime": "2026-11-16T08:08:14.330Z"
       }
     ],
     "largest_asset": {
       "path": "apps/web/dist/assets/vendor-antd-CzvkKKQu.js",
       "size_bytes": 251112,
-      "mtime": "2026-11-16T07:25:46.297Z"
+      "mtime": "2026-11-16T08:08:14.333Z"
     },
     "no_main_bundle_warning_expected": true
   },
