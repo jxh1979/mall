@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.06
+// 文件版本：V0.07
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -229,6 +229,8 @@ class MerchantConcessionDiningSettlementJdbcIntegrationTests {
                 .andExpect(status().isOk());
         String payable = jdbc.queryForObject("SELECT id FROM ar_ap_items WHERE direction = 'payable' AND source_type = 'ticket_distribution'"
                 + " AND counterparty_id = ?", String.class, restaurant);
+        // 第十八批 AM 段第 241 条 241-R1：出款前置——该应付已有通过的付款确认（夹具）。
+        com.complex.platform.support.PaymentConfirmationFixture.approvedArAp(jdbc, payable);
         mockMvc.perform(post("/api/v1/finance/ar-ap-items/" + payable + "/payments").with(session(finance, "platform_admin", "org_1", null))
                         .contentType(MediaType.APPLICATION_JSON).content("""
                                 {"idempotency_key": "c175-pay-%s", "amount_cent": %d, "payment_method": "bank_transfer",

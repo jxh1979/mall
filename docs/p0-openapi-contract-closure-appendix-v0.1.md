@@ -1,4 +1,4 @@
-# P0 OpenAPI 权限、事件、任务追溯收口附录 V0.70
+# P0 OpenAPI 权限、事件、任务追溯收口附录 V0.71
 
 ## 1. 文档定位
 
@@ -14,11 +14,11 @@
 
 | 检查项 | 当前结果 | 执行结论 |
 |---|---:|---|
-| OpenAPI operation 数 | 1368 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
+| OpenAPI operation 数 | 1376 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
 | OpenAPI 权限/通用权限状态数 | 444 | 人工权限矩阵正文未覆盖 343 项；缺口以本文第 3 节补齐 |
-| OpenAPI 成功/失败事件数 | 2736 | 人工事件矩阵正文未覆盖 2687 项；完整事件字典以本文第 4 节为准 |
-| operation 级任务追溯 | 1368 | 人工任务映射正文未逐项覆盖 1362 个 operation；逐 operation 映射以本文第 5 节为准 |
-| 写接口数量 | 841 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
+| OpenAPI 成功/失败事件数 | 2752 | 人工事件矩阵正文未覆盖 2703 项；完整事件字典以本文第 4 节为准 |
+| operation 级任务追溯 | 1376 | 人工任务映射正文未逐项覆盖 1370 个 operation；逐 operation 映射以本文第 5 节为准 |
+| 写接口数量 | 847 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
 
 ## 3. 权限码与认证上下文补充表
 
@@ -33,7 +33,7 @@
 | `access.permission_template.manage` | staff-token | project | 3 | createPermissionTemplate, updatePermissionTemplate, copyPermissionTemplate | 已在权限矩阵正文出现 |
 | `access.permission_template.view` | staff-token | project | 1 | listPermissionTemplates | 已在权限矩阵正文出现 |
 | `access.permission.view` | staff-token | project | 1 | listPermissions | 已在权限矩阵正文出现 |
-| `access.role.assign` | staff-token | project | 15 | assignUserRole, unassignUserRole, listPositionRoleTemplates, createPositionRoleTemplate, updatePositionRoleTemplate, deletePositionRoleTemplate, changePositionRoleTemplateLifecycle, assignUserPosition, changeUserScope, setUserPermissionOverrides, removeUserPermissionOverrides, listApprovalLines ... | OpenAPI 补充，以本附录为准 |
+| `access.role.assign` | staff-token | platform, project | 17 | assignUserRole, unassignUserRole, listPositionRoleTemplates, createPositionRoleTemplate, updatePositionRoleTemplate, deletePositionRoleTemplate, changePositionRoleTemplateLifecycle, assignUserPosition, changeUserScope, setUserPermissionOverrides, removeUserPermissionOverrides, listApprovalLines ... | OpenAPI 补充，以本附录为准 |
 | `access.role.manage` | staff-token | project | 4 | createRole, listRoleProjectOptions, getRoleViewableProjects, updateRoleViewableProjects | 已在权限矩阵正文出现 |
 | `access.role.view` | staff-token | project | 1 | listRoles | 已在权限矩阵正文出现 |
 | `access.staff_level.manage` | staff-token | project | 1 | assignStaffLevel | OpenAPI 补充，以本附录为准 |
@@ -139,7 +139,7 @@
 | `bar.reservation.invitation.manage` | staff-token | project-bar | 2 | issueBarReservationInvitation, revokeBarReservationInvitation | OpenAPI 补充，以本附录为准 |
 | `bar.reservation.manage` | staff-token | project, project-bar | 6 | payBarReservationDeposit, checkInBarReservationDeposit, archiveBarReservation, unarchiveBarReservation, requestDeleteBarReservation, saveBarArrivalReminderPolicy | OpenAPI 补充，以本附录为准 |
 | `bar.reservation.view` | staff-token | project, project-bar, project-bar-table | 3 | listBarReservations, getBarReservationInvitation, getBarArrivalReminderPolicy | 已在权限矩阵正文出现 |
-| `bar.saved_bottle.manage` | staff-token | project-bar-customer, project-bar-table | 20 | listSavedBottles, createSavedBottle, claimSavedBottle, lookupSavedBottlesByPhone, transferSavedBottle, requestSavedBottleVerificationCode, dispenseSavedBottleManualPickup, listSavedBottleRenewals, renewSavedBottle, cancelSavedBottle, disputeSavedBottle, registerSavedBottleRemedy ... | 已在权限矩阵正文出现 |
+| `bar.saved_bottle.manage` | staff-token | project-bar-customer, project-bar-table | 21 | listSavedBottles, createSavedBottle, claimSavedBottle, lookupSavedBottlesByPhone, transferSavedBottle, requestSavedBottleVerificationCode, dispenseSavedBottleManualPickup, listSavedBottleRenewals, renewSavedBottle, cancelSavedBottle, disputeSavedBottle, registerSavedBottleRemedy ... | 已在权限矩阵正文出现 |
 | `bar.saved_bottle.manual_pickup_policy.manage` | staff-token | project | 1 | configureSavedBottleManualPickupPolicy | OpenAPI 补充，以本附录为准 |
 | `bar.saved_bottle.manual_pickup.confirm_marketing` | staff-token | project-bar-customer | 1 | confirmSavedBottleManualPickupMarketing | OpenAPI 补充，以本附录为准 |
 | `bar.saved_bottle.manual_pickup.initiate` | staff-token | project-bar-customer | 1 | initiateSavedBottleManualPickup | OpenAPI 补充，以本附录为准 |
@@ -254,7 +254,7 @@
 | `facility.work_order.view_assigned` | staff-token | platform | 1 | listWorkOrdersAssignedToMe | OpenAPI 补充，以本附录为准 |
 | `finance.ar_ap.export` | staff-token | project-entity | 1 | exportArApItems | OpenAPI 补充，以本附录为准 |
 | `finance.ar_ap.manage` | staff-token | platform, project, project-bar-table, project-entity, project-merchant | 9 | createArApItem, reviewTransferDisposition, writeOffBarOrderSuspension, generateContractRentBill, generateContractPeriodBills, recordFacilityEquipmentScrapFinance, allocatePurchasePrepayment, reviewPurchaseReturnFinance, postPurchasePrepaymentResolution | 已在权限矩阵正文出现 |
-| `finance.ar_ap.view` | staff-token | platform, project-entity, project-merchant, project-order | 7 | listArApItems, listArApPayments, getInternalPayableExecution, listFinanceRefunds, listArOverdueDebtors, getFinanceRefund, queryFinanceRefund | 已在权限矩阵正文出现 |
+| `finance.ar_ap.view` | staff-token | platform, project-entity, project-merchant, project-order | 8 | listArApItems, listArApPayments, listPaymentConfirmations, getInternalPayableExecution, listFinanceRefunds, listArOverdueDebtors, getFinanceRefund, queryFinanceRefund | 已在权限矩阵正文出现 |
 | `finance.daily_close.lock` | staff-token | project-entity | 5 | createDailyClose, confirmDailyClose, lockDailyClose, markDailyCloseFinal, archiveDailyClose | 已在权限矩阵正文出现 |
 | `finance.daily_close.manage` | staff-token | project-bar-table, project-entity | 5 | listDailyCloses, listDailyCloseSummaries, listDailyCloseAdjustments, resolveBarShift, witnessBarShift | OpenAPI 补充，以本附录为准 |
 | `finance.deposit.manage` | staff-token | platform | 1 | recordDepositAction | OpenAPI 补充，以本附录为准 |
@@ -267,8 +267,8 @@
 | `finance.merchant_expense.manage` | staff-token | merchant, platform | 3 | createMerchantExpenseEntry, reverseMerchantExpenseEntry, syncMerchantExpenseAuto | OpenAPI 补充，以本附录为准 |
 | `finance.merchant_expense.view` | staff-token | merchant | 3 | listMerchantExpenses, summarizeMerchantExpenses, listMerchantExpensePeriodLocks | OpenAPI 补充，以本附录为准 |
 | `finance.payment_intent.create` | staff-token | project-bar-table, project-order | 3 | createBarBillPayIntent, createPaymentIntent, createTicketOrderPayIntent | 已在权限矩阵正文出现 |
-| `finance.payment.register` | staff-token | platform, project-bar-table, project-entity, project-merchant, project-order | 8 | settleBarBill, requestBarBillStoredValueSmsCode, createArApPayment, confirmOfflinePayment, initiateInternalPayment, recordInternalPaymentFailure, postponeInternalPaymentForFunds, confirmTicketOrderPayment | 已在权限矩阵正文出现 |
-| `finance.payroll.payment.register` | staff-token | project-entity | 3 | preparePayrollBankPayment, submitPayrollBankPaymentFact, confirmPayrollBankPaymentResult | OpenAPI 补充，以本附录为准 |
+| `finance.payment.register` | staff-token | platform, project-bar-table, project-entity, project-merchant, project-order | 9 | settleBarBill, requestBarBillStoredValueSmsCode, createArApPayment, createArApPaymentConfirmation, confirmOfflinePayment, initiateInternalPayment, recordInternalPaymentFailure, postponeInternalPaymentForFunds, confirmTicketOrderPayment | 已在权限矩阵正文出现 |
+| `finance.payroll.payment.register` | staff-token | project-entity | 4 | preparePayrollBankPayment, createPayrollPaymentConfirmation, submitPayrollBankPaymentFact, confirmPayrollBankPaymentResult | OpenAPI 补充，以本附录为准 |
 | `finance.payroll.view` | staff-token | project-entity | 1 | getPayrollBankPaymentContext | OpenAPI 补充，以本附录为准 |
 | `finance.period_close.execute` | staff-token | project | 2 | listFinancePeriodCloses, closeFinancePeriod | OpenAPI 补充，以本附录为准 |
 | `finance.points_recovery.view` | staff-token | project-merchant | 1 | getPointsRecoveryDetail | OpenAPI 补充，以本附录为准 |
@@ -278,7 +278,7 @@
 | `finance.reconciliation.policy.manage` | staff-token | project | 2 | listFinanceReconciliationStageLimits, saveFinanceReconciliationStageLimit | OpenAPI 补充，以本附录为准 |
 | `finance.reconciliation.resolve` | staff-token | project-entity | 2 | closeFinanceReconciliationDifference, identifyFinanceReconciliationDifference | OpenAPI 补充，以本附录为准 |
 | `finance.reconciliation.view` | staff-token | project-entity | 2 | listReconciliationBatches, listReconciliationDifferences | 已在权限矩阵正文出现 |
-| `finance.refund.create` | staff-token | project-order | 4 | createFinanceRefund, retryFinanceRefund, recordFinanceRefundExecution, confirmFinanceRefundResult | 已在权限矩阵正文出现 |
+| `finance.refund.create` | staff-token | project-order | 5 | createFinanceRefund, retryFinanceRefund, recordFinanceRefundExecution, createFinanceRefundPaymentConfirmation, confirmFinanceRefundResult | 已在权限矩阵正文出现 |
 | `finance.settlement.view` | staff-token | platform | 3 | listSettlementBills, getSettlementBillReview, listSettlementTransactions | OpenAPI 补充，以本附录为准 |
 | `finance.turnover_rent.bill` | staff-token | platform | 2 | billTurnoverRent, createTurnoverRentRule | OpenAPI 补充，以本附录为准 |
 | `floor_plan.import.manage` | staff-token | project-space | 2 | createFloorPlanImport, publishFloorPlanImport | OpenAPI 补充，以本附录为准 |
@@ -451,7 +451,7 @@
 | `ticket.price_variant.view` | staff-token | project-channel | 1 | listTicketPriceRules | 已在权限矩阵正文出现 |
 | `ticket.product.manage` | staff-token | platform, project | 11 | updateTicketQrRefreshConfig, createTicketType, configureTicketTypeMinGiftCups, bindTicketTypeEntitlement, publishTicketType, withdrawTicketTypeRuleVersion, archiveTicketType, unarchiveTicketType, requestDeleteTicketType, updateTicketTypePricing, saveTicketExpiryReminderPolicy | 已在权限矩阵正文出现 |
 | `ticket.product.view` | staff-token | platform, project | 7 | getTicketQrRefreshConfig, listTicketTypes, listTicketTypeGiftCoverage, getTicketTypeMinGiftCups, listTicketTypeRuleVersions, ticketTypePriceCheck, getTicketExpiryReminderPolicy | 已在权限矩阵正文出现 |
-| `ticket.refund.approve` | staff-token | project-order | 4 | confirmTicketRefundPayout, approveTicketRefund, approveTicketSafetyEvent, rejectTicketRefund | 已在权限矩阵正文出现 |
+| `ticket.refund.approve` | staff-token | project-order | 5 | confirmTicketRefundPayout, createTicketRefundPaymentConfirmation, approveTicketRefund, approveTicketSafetyEvent, rejectTicketRefund | 已在权限矩阵正文出现 |
 | `ticket.refund.request` | staff-token | project-order | 2 | requestTicketRefund, requestTicketSafetyEvent | 已在权限矩阵正文出现 |
 | `ticket.refund.view` | staff-token | -, project-order | 3 | listTicketRefunds, listTicketSafetyEvents, listTicketRefundLines | OpenAPI 补充，以本附录为准 |
 | `ticket.reward.config.manage` | staff-token | project-merchant | 2 | submitTicketRewardConfig, publishTicketRewardConfig | OpenAPI 补充，以本附录为准 |
@@ -489,6 +489,7 @@
 | `access.grant_request.reviewed` | success | `reviewAccessGrantRequest` | `POST` | `/api/v1/access/grant-requests/{id}/review` | AUTH-账号权限 | `access.grant_request.review` | 接口级事件，以本附录为准 |
 | `access.grant_request.viewed` | success | `listAccessGrantRequests` | `GET` | `/api/v1/access/grant-requests` | AUTH-账号权限 | `access.grant_request.view` | 接口级事件，以本附录为准 |
 | `access.org_hierarchy.superior_set` | success | `setOrgDirectSuperior` | `PUT` | `/api/v1/access/org-hierarchy/{user_id}` | AUTH-账号权限 | `access.role.assign` | 接口级事件，以本附录为准 |
+| `access.payment_confirmation_flow.saved` | success | `savePaymentConfirmationFlow` | `PUT` | `/api/v1/access/payment-confirmation-flows/{payment_type}` | AUTH-账号权限 | `access.role.assign` | 接口级事件，以本附录为准 |
 | `access.position_role_template.archive` | success | `changePositionRoleTemplateLifecycle` | `POST` | `/api/v1/access/position-role-templates/{id}/lifecycle` | AUTH-账号权限 | `access.role.assign` | 接口级事件，以本附录为准 |
 | `access.position_role_template.lifecycle_failed` | failure | `changePositionRoleTemplateLifecycle` | `POST` | `/api/v1/access/position-role-templates/{id}/lifecycle` | AUTH-账号权限 | `access.role.assign` | 接口级事件，以本附录为准 |
 | `access.position_role_template.save_failed` | failure | `createPositionRoleTemplate` | `POST` | `/api/v1/access/position-role-templates` | AUTH-账号权限 | `access.role.assign` | 接口级事件，以本附录为准 |
@@ -1645,6 +1646,16 @@
 | `finance.inventory_variance.posted` | success | `postInventoryVariance` | `POST` | `/api/v1/finance/inventory-variances/post` | FIN-财务台账 | `finance.inventory_variance.post` | 接口级事件，以本附录为准 |
 | `finance.locked_backfill_request_failed` | failure | `requestArApAdjustment` | `POST` | `/api/v1/finance/ar-ap-adjustments` | FIN-财务台账 | `finance.locked_backfill.request` | 接口级事件，以本附录为准 |
 | `finance.locked_backfill_requested` | success | `requestArApAdjustment` | `POST` | `/api/v1/finance/ar-ap-adjustments` | FIN-财务台账 | `finance.locked_backfill.request` | 接口级事件，以本附录为准 |
+| `finance.payment_confirmation.request_failed` | failure | `createArApPaymentConfirmation` | `POST` | `/api/v1/finance/ar-ap-payment-confirmations` | FIN-财务台账 | `finance.payment.register` | 接口级事件，以本附录为准 |
+| `finance.payment_confirmation.request_failed` | failure | `createFinanceRefundPaymentConfirmation` | `POST` | `/api/v1/finance/refunds/{refund_id}/payment-confirmations` | FIN-财务台账 | `finance.refund.create` | 接口级事件，以本附录为准 |
+| `finance.payment_confirmation.request_failed` | failure | `createPayrollPaymentConfirmation` | `POST` | `/api/v1/finance/payroll/{statementId}/payment-confirmations` | FIN-财务台账 | `finance.payroll.payment.register` | 接口级事件，以本附录为准 |
+| `finance.payment_confirmation.request_failed` | failure | `createSavedBottleRemedyPaymentConfirmation` | `POST` | `/api/v1/inventory/saved-bottles/remedies/{id}/payment-confirmations` | INV-库存存酒 | `bar.saved_bottle.manage` | 接口级事件，以本附录为准 |
+| `finance.payment_confirmation.request_failed` | failure | `createTicketRefundPaymentConfirmation` | `POST` | `/api/v1/ticketing/refunds/{refund_id}/payment-confirmations` | TIC-票务权益 | `ticket.refund.approve` | 接口级事件，以本附录为准 |
+| `finance.payment_confirmation.requested` | success | `createArApPaymentConfirmation` | `POST` | `/api/v1/finance/ar-ap-payment-confirmations` | FIN-财务台账 | `finance.payment.register` | 接口级事件，以本附录为准 |
+| `finance.payment_confirmation.requested` | success | `createFinanceRefundPaymentConfirmation` | `POST` | `/api/v1/finance/refunds/{refund_id}/payment-confirmations` | FIN-财务台账 | `finance.refund.create` | 接口级事件，以本附录为准 |
+| `finance.payment_confirmation.requested` | success | `createPayrollPaymentConfirmation` | `POST` | `/api/v1/finance/payroll/{statementId}/payment-confirmations` | FIN-财务台账 | `finance.payroll.payment.register` | 接口级事件，以本附录为准 |
+| `finance.payment_confirmation.requested` | success | `createSavedBottleRemedyPaymentConfirmation` | `POST` | `/api/v1/inventory/saved-bottles/remedies/{id}/payment-confirmations` | INV-库存存酒 | `bar.saved_bottle.manage` | 接口级事件，以本附录为准 |
+| `finance.payment_confirmation.requested` | success | `createTicketRefundPaymentConfirmation` | `POST` | `/api/v1/ticketing/refunds/{refund_id}/payment-confirmations` | TIC-票务权益 | `ticket.refund.approve` | 接口级事件，以本附录为准 |
 | `finance.payroll.attempts_view_failed` | failure | `getPayrollBankPaymentContext` | `GET` | `/api/v1/finance/payroll/{statementId}/payment-attempts` | FIN-财务台账 | `finance.payroll.view` | 接口级事件，以本附录为准 |
 | `finance.payroll.attempts_viewed` | success | `getPayrollBankPaymentContext` | `GET` | `/api/v1/finance/payroll/{statementId}/payment-attempts` | FIN-财务台账 | `finance.payroll.view` | 接口级事件，以本附录为准 |
 | `finance.payroll.payment_failed` | failure | `confirmPayrollBankPaymentResult` | `POST` | `/api/v1/finance/payroll/payment-attempts/{id}/result` | FIN-财务台账 | `finance.payroll.payment.register` | 接口级事件，以本附录为准 |
@@ -2477,6 +2488,10 @@
 | `not_applicable` | failure | `listParkingStaffVehicles` | `GET` | `/api/v1/parking/staff-vehicles` | P0-待归类 | `parking.vehicle.manage` | 接口级事件，以本附录为准 |
 | `not_applicable` | failure | `listPartnerOrgs` | `GET` | `/api/v1/partner/orgs` | P0-待归类 | `partner.org.view` | 接口级事件，以本附录为准 |
 | `not_applicable` | failure | `listPartnerSubordinates` | `GET` | `/api/v1/partner/subordinates` | P0-待归类 | `partner.subordinate.view` | 接口级事件，以本附录为准 |
+| `not_applicable` | success | `listPaymentConfirmationFlows` | `GET` | `/api/v1/access/payment-confirmation-flows` | AUTH-账号权限 | `access.role.assign` | 接口级事件，以本附录为准 |
+| `not_applicable` | failure | `listPaymentConfirmationFlows` | `GET` | `/api/v1/access/payment-confirmation-flows` | AUTH-账号权限 | `access.role.assign` | 接口级事件，以本附录为准 |
+| `not_applicable` | success | `listPaymentConfirmations` | `GET` | `/api/v1/finance/payment-confirmations` | FIN-财务台账 | `finance.ar_ap.view` | 接口级事件，以本附录为准 |
+| `not_applicable` | failure | `listPaymentConfirmations` | `GET` | `/api/v1/finance/payment-confirmations` | FIN-财务台账 | `finance.ar_ap.view` | 接口级事件，以本附录为准 |
 | `not_applicable` | success | `listPendingSupervisorReviews` | `GET` | `/api/v1/platform/supervisor-review/pending` | GOV-平台治理 | `governance.supervisor_review.view` | 接口级事件，以本附录为准 |
 | `not_applicable` | failure | `listPendingSupervisorReviews` | `GET` | `/api/v1/platform/supervisor-review/pending` | GOV-平台治理 | `governance.supervisor_review.view` | 接口级事件，以本附录为准 |
 | `not_applicable` | failure | `listPermissions` | `GET` | `/api/v1/access/permissions` | AUTH-账号权限 | `access.permission.view` | 接口级事件，以本附录为准 |
@@ -2574,6 +2589,7 @@
 | `not_applicable` | failure | `requestDeleteStaffProfile` | `POST` | `/api/v1/staff/profiles/{id}/delete-request` | AUTH-账号权限 | `staff.profile.review` | 接口级事件，以本附录为准 |
 | `not_applicable` | success | `saveMerchantFeeNotificationRecipient` | `POST` | `/api/v1/merchant-billing/fee-notification-recipients` | P0-待归类 | `merchant.billing.manage` | 接口级事件，以本附录为准 |
 | `not_applicable` | failure | `saveMerchantFeeNotificationRecipient` | `POST` | `/api/v1/merchant-billing/fee-notification-recipients` | P0-待归类 | `merchant.billing.manage` | 接口级事件，以本附录为准 |
+| `not_applicable` | failure | `savePaymentConfirmationFlow` | `PUT` | `/api/v1/access/payment-confirmation-flows/{payment_type}` | AUTH-账号权限 | `access.role.assign` | 接口级事件，以本附录为准 |
 | `not_applicable` | failure | `setOrgDirectSuperior` | `PUT` | `/api/v1/access/org-hierarchy/{user_id}` | AUTH-账号权限 | `access.role.assign` | 接口级事件，以本附录为准 |
 | `not_applicable` | success | `setStaffBaseSalary` | `POST` | `/api/v1/staff/payroll/base` | STAFF-员工 | `staff.payroll.manage` | 接口级事件，以本附录为准 |
 | `not_applicable` | success | `settlementConfigDistributionScheme` | `GET` | `/api/v1/settlement/config/distribution-scheme` | P0-待归类 | `settlement.config.view` | 接口级事件，以本附录为准 |
@@ -3387,6 +3403,7 @@
 | AUTH-账号权限 | `listApprovalLines` | `GET` | `/api/v1/access/approval-lines` | 查询部门和平行审批线配置 | `access.role.assign` | `access.approval_line.listed` / `access.approval_line.list_failed` | web | operation 级补充 |
 | AUTH-账号权限 | `listEmployeeNotices` | `GET` | `/api/v1/staff/notices` | 查询员工通知 | `staff.notice.view` | `staff.notice.viewed` / `not_applicable` | staff_private_phone, web, mobile_admin, staff_work_phone | operation 级补充 |
 | AUTH-账号权限 | `listOrgHierarchy` | `GET` | `/api/v1/access/org-hierarchy` | 查询组织层级（直接上级与所属部门） | `access.role.assign` | `not_applicable` / `not_applicable` | web | operation 级补充 |
+| AUTH-账号权限 | `listPaymentConfirmationFlows` | `GET` | `/api/v1/access/payment-confirmation-flows` | 查询付款确认各支付类型的必带平行线 | `access.role.assign` | `not_applicable` / `not_applicable` | web | operation 级补充 |
 | AUTH-账号权限 | `listPermissions` | `GET` | `/api/v1/access/permissions` | 权限点列表 | `access.permission.view` | `permission.viewed` / `not_applicable` | web | operation 级补充 |
 | AUTH-账号权限 | `listPermissionTemplates` | `GET` | `/api/v1/access/permission-templates` | 权限模板列表 | `access.permission_template.view` | `permission_template.viewed` / `not_applicable` | web | operation 级补充 |
 | AUTH-账号权限 | `listPositionRoleTemplates` | `GET` | `/api/v1/access/position-role-templates` | 岗位角色模板列表 | `access.role.assign` | `access.position_role_template.viewed` / `not_applicable` | web | operation 级补充 |
@@ -3401,6 +3418,7 @@
 | AUTH-账号权限 | `reviewStaffRegistration` | `POST` | `/api/v1/staff/registrations/{id}/review` | 审批员工注册 | `staff.profile.review` | `staff.approved` / `staff.review_failed` | web, mobile_admin | operation 级补充 |
 | AUTH-账号权限 | `revokeStaffDeviceCredential` | `POST` | `/api/v1/staff/device-credentials/{id}/revoke` | 解绑/失效设备凭证 | `staff.device.revoke` | `staff_device.revoked` / `staff_device.revoke_failed` | web, mobile_admin | operation 级补充 |
 | AUTH-账号权限 | `revokeTemporaryGrant` | `POST` | `/api/v1/access/temporary-grants/{id}/revoke` | 撤销临时授权 | `access.temporary_grant.revoke` | `permission_template.revoked` / `temporary_grant.revoke_failed` | web | operation 级补充 |
+| AUTH-账号权限 | `savePaymentConfirmationFlow` | `PUT` | `/api/v1/access/payment-confirmation-flows/{payment_type}` | 设定某支付类型两线之外的必带平行线 | `access.role.assign` | `access.payment_confirmation_flow.saved` / `not_applicable` | web | operation 级补充 |
 | AUTH-账号权限 | `setOrgDirectSuperior` | `PUT` | `/api/v1/access/org-hierarchy/{user_id}` | 设置员工的直接上级与所属部门 | `access.role.assign` | `access.org_hierarchy.superior_set` / `not_applicable` | web | operation 级补充 |
 | AUTH-账号权限 | `setStaffSalesPosition` | `POST` | `/api/v1/staff/profiles/{id}/sales-position` | 设置员工销售岗标识 | `staff.profile.review` | `staff.profile.sales_position_changed` / `staff.profile.sales_position_change_failed` | web, mobile_admin | operation 级补充 |
 | AUTH-账号权限 | `setUserPermissionOverrides` | `POST` | `/api/v1/access/users/{id}/permission-overrides` | 设置员工单独授予或显式拒绝 | `access.role.assign` | `access.user_permission_override.set` / `access.user_permission_override.set_failed` | web | operation 级补充 |
@@ -3705,12 +3723,15 @@
 | FIN-财务台账 | `confirmPayrollBankPaymentResult` | `POST` | `/api/v1/finance/payroll/payment-attempts/{id}/result` | 核实工资银行付款实际结果 | `finance.payroll.payment.register` | `finance.payroll.result` / `finance.payroll.payment_failed` | app, dealer_portal, kiosk, merchant_app, merchant_portal, miniapp, mobile_admin, staff_work_phone, web | operation 级补充 |
 | FIN-财务台账 | `createArApItem` | `POST` | `/api/v1/finance/ar-ap-items` | 手工新增应收应付台账项 | `finance.ar_ap.manage` | `finance_ar_ap.created` / `finance_ar_ap.create_failed` | web | operation 级补充 |
 | FIN-财务台账 | `createArApPayment` | `POST` | `/api/v1/finance/ar-ap-items/{id}/payments` | 应收应付收付款登记 | `finance.payment.register` | `finance_payment.registered` / `finance_payment.register_failed` | web | operation 级补充 |
+| FIN-财务台账 | `createArApPaymentConfirmation` | `POST` | `/api/v1/finance/ar-ap-payment-confirmations` | 应收应付台账勾选款项发起付款确认 | `finance.payment.register` | `finance.payment_confirmation.requested` / `finance.payment_confirmation.request_failed` | web | operation 级补充 |
 | FIN-财务台账 | `createDailyClose` | `POST` | `/api/v1/finance/daily-closes` | 生成日结 | `finance.daily_close.lock` | `finance_daily_close.generated` / `finance_daily_close.generate_failed` | web | operation 级补充 |
 | FIN-财务台账 | `createDividendPlan` | `POST` | `/api/v1/finance/dividends/plans` | 新建分红方案（比例/税率/周期/收入域可配，80/20 仅默认值；销货成本、全部费用与该期税费固定扣减，发放付账日必填） | `finance.dividend.manage` | `dividend.plan_created` / `dividend.plan_create_failed` | web | operation 级补充 |
 | FIN-财务台账 | `createFinanceReconciliationDifference` | `POST` | `/api/v1/finance/reconciliation/differences` | 创建对账差异 | `finance.reconciliation.difference.create` | `finance.reconciliation.difference_created` / `finance.reconciliation.difference_create_failed` | web | operation 级补充 |
 | FIN-财务台账 | `createFinanceRefund` | `POST` | `/api/v1/finance/refunds` | 创建财务退款记录 | `finance.refund.create` | `finance_refund.created` / `finance_refund.create_failed` | web | operation 级补充 |
+| FIN-财务台账 | `createFinanceRefundPaymentConfirmation` | `POST` | `/api/v1/finance/refunds/{refund_id}/payment-confirmations` | 财务退款待办发起付款确认 | `finance.refund.create` | `finance.payment_confirmation.requested` / `finance.payment_confirmation.request_failed` | web | operation 级补充 |
 | FIN-财务台账 | `createMerchantExpenseEntry` | `POST` | `/api/v1/finance/merchant-expenses` | 手工录入商户费用（人工/摊销/其他，理由必填） | `finance.merchant_expense.manage` | `merchant_expense.manual_created` / `merchant_expense.manual_create_failed` | web | operation 级补充 |
 | FIN-财务台账 | `createPaymentIntent` | `POST` | `/api/v1/finance/payment-intents` | 创建聚合支付意图 | `finance.payment_intent.create` | `payment.intent_created` / `payment.intent_failed` | web, kiosk, miniapp, app | operation 级补充 |
+| FIN-财务台账 | `createPayrollPaymentConfirmation` | `POST` | `/api/v1/finance/payroll/{statementId}/payment-confirmations` | 工资应付逐人发起付款确认 | `finance.payroll.payment.register` | `finance.payment_confirmation.requested` / `finance.payment_confirmation.request_failed` | app, dealer_portal, kiosk, merchant_app, merchant_portal, miniapp, mobile_admin, staff_work_phone, web | operation 级补充 |
 | FIN-财务台账 | `createPropertyFeeRate` | `POST` | `/api/v1/finance/property-fee/rates` | 维护物业费费率（项目级、可按期） | `finance.property_fee.manage` | `finance_property_fee.rate_set` / `finance_property_fee.rate_set_failed` | web | operation 级补充 |
 | FIN-财务台账 | `createTurnoverRentRule` | `POST` | `/api/v1/finance/turnover-rent/rules` | 新建营业额抽成规则草案 | `finance.turnover_rent.bill` | `finance_turnover_rent_rule.created` / `finance_turnover_rent_rule.create_failed` | web | operation 级补充 |
 | FIN-财务台账 | `declareEntityTax` | `POST` | `/api/v1/finance/entity-taxes` | 登记税费实际申报金额并提交财务、税务、法务审核与最高确认 | `finance.entity_tax.manage` | `entity_tax.declared` / `entity_tax.declare_failed` | web | operation 级补充 |
@@ -3738,6 +3759,7 @@
 | FIN-财务台账 | `listFinanceRefunds` | `GET` | `/api/v1/finance/refunds` | 读取退款台账及未结状态 | `finance.ar_ap.view` | `finance_refund.listed` / `finance_refund.list_failed` | web | operation 级补充 |
 | FIN-财务台账 | `listMerchantExpensePeriodLocks` | `GET` | `/api/v1/finance/merchant-expenses/period-locks` | 查询某月已关账（分红核算完成、费用台账冻结）的商户清单（前端据此禁用费用录入/冲销） | `finance.merchant_expense.view` | `merchant_expense.period_locks_viewed` / `merchant_expense.period_locks_view_failed` | web | operation 级补充 |
 | FIN-财务台账 | `listMerchantExpenses` | `GET` | `/api/v1/finance/merchant-expenses` | 商户费用归集台账分页查询（分红净利润费用侧） | `finance.merchant_expense.view` | `merchant_expense.listed` / `merchant_expense.list_failed` | web | operation 级补充 |
+| FIN-财务台账 | `listPaymentConfirmations` | `GET` | `/api/v1/finance/payment-confirmations` | 查询付款对象的付款确认与必带平行线 | `finance.ar_ap.view` | `not_applicable` / `not_applicable` | web | operation 级补充 |
 | FIN-财务台账 | `listPropertyFeeRates` | `GET` | `/api/v1/finance/property-fee/rates` | 列出某项目的物业费费率 | `finance.property_fee.manage` | `not_applicable` / `not_applicable` | web | operation 级补充 |
 | FIN-财务台账 | `listReconciliationBatches` | `GET` | `/api/v1/finance/reconciliation/batches` | 查询对账批次 | `finance.reconciliation.view` | `finance.reconciliation_batch.viewed` / `finance.reconciliation_batch.viewed_failed` | web | operation 级补充 |
 | FIN-财务台账 | `listReconciliationDifferences` | `GET` | `/api/v1/finance/reconciliation/differences` | 对账差异 | `finance.reconciliation.view` | `finance_reconciliation.difference_found` / `finance_reconciliation.view_failed` | web | operation 级补充 |
@@ -3745,7 +3767,7 @@
 | FIN-财务台账 | `listRefundAutoRules` | `GET` | `/api/v1/finance/refund-authority/rules` | 查询退款自动放行规则配置 | `refund.authority.view` | `not_applicable` / `not_applicable` | web | operation 级补充 |
 | FIN-财务台账 | `lockDailyClose` | `POST` | `/api/v1/finance/daily-closes/{id}/lock` | 锁定日结 | `finance.daily_close.lock` | `finance_daily_close.locked` / `finance_daily_close.lock_failed` | web | operation 级补充 |
 | FIN-财务台账 | `markDailyCloseFinal` | `POST` | `/api/v1/finance/daily-closes/{id}/final-marks` | 五类数据最终标记 | `finance.daily_close.lock` | `finance_daily_close.final_marked` / `finance_daily_close.final_mark_failed` | web | operation 级补充 |
-| FIN-财务台账 | `markDividendStatementPaid` | `POST` | `/api/v1/finance/dividends/statements/{id}/mark-paid` | 标记发放：approved → paid（实际打款走应收应付台账既有付款确认流程） | `finance.dividend.manage` | `dividend.paid_marked` / `dividend.mark_paid_failed` | web | operation 级补充 |
+| FIN-财务台账 | `markDividendStatementPaid` | `POST` | `/api/v1/finance/dividends/statements/{id}/mark-paid` | 标记发放：approved → paid（实发额大于 0 时，主理人分红应付须先经付款确认并登记付清） | `finance.dividend.manage` | `dividend.paid_marked` / `dividend.mark_paid_failed` | web | operation 级补充 |
 | FIN-财务台账 | `postInventoryVariance` | `POST` | `/api/v1/finance/inventory-variances/post` | 库存差异复核入账为 AR/AP | `finance.inventory_variance.post` | `finance.inventory_variance.posted` / `finance.inventory_variance.post_failed` | web | operation 级补充 |
 | FIN-财务台账 | `postponeInternalPaymentForFunds` | `POST` | `/api/v1/finance/internal-payables/{ar_ap_item_id}/funds-insufficient` | 资金不足顺延至下一个付账日 | `finance.payment.register` | `finance.internal_payment.postponed` / `finance.internal_payment.postpone_failed` | web | operation 级补充 |
 | FIN-财务台账 | `preparePayrollBankPayment` | `POST` | `/api/v1/finance/payroll/{statementId}/payment-attempts` | 准备工资银行付款 | `finance.payroll.payment.register` | `finance.payroll.prepare` / `finance.payroll.payment_failed` | app, dealer_portal, kiosk, merchant_app, merchant_portal, miniapp, mobile_admin, staff_work_phone, web | operation 级补充 |
@@ -3886,6 +3908,7 @@
 | INV-库存存酒 | `createLossStockAdjustment` | `POST` | `/api/v1/inventory/stock-movements/loss` | 报损失（loss）转库存调整 | `inventory.stock.move` | `inventory.counted` / `inventory.adjustment_failed` | web | operation 级补充 |
 | INV-库存存酒 | `createPurchaseRequest` | `POST` | `/api/v1/inventory/purchase-requests` | 创建采购申请 | `inventory.purchase_request.manage` | `inventory.purchase.completed` / `inventory.purchase.failed` | web | operation 级补充 |
 | INV-库存存酒 | `createSavedBottle` | `POST` | `/api/v1/inventory/saved-bottles` | 存酒登记 | `bar.saved_bottle.manage` | `bar.saved_bottle.created` / `bar.saved_bottle.create_failed` | web | operation 级补充 |
+| INV-库存存酒 | `createSavedBottleRemedyPaymentConfirmation` | `POST` | `/api/v1/inventory/saved-bottles/remedies/{id}/payment-confirmations` | 存酒对客赔付发起付款确认 | `bar.saved_bottle.manage` | `finance.payment_confirmation.requested` / `finance.payment_confirmation.request_failed` | web | operation 级补充 |
 | INV-库存存酒 | `createStockAdjustment` | `POST` | `/api/v1/inventory/stock-adjustments` | 盘点差异、报损、报溢 | `inventory.stock.adjust` | `inventory.counted` / `inventory.adjustment_failed` | web, staff_work_phone | operation 级补充 |
 | INV-库存存酒 | `createStockIn` | `POST` | `/api/v1/inventory/stock-in` | 入库 | `inventory.stock.move` | `inventory.inbound_confirmed` / `inventory.inbound_failed` | web, staff_work_phone | operation 级补充 |
 | INV-库存存酒 | `createStockMovement` | `POST` | `/api/v1/inventory/stock-movements` | 库存移动或扣减 | `inventory.stock.move` | `inventory.outbound_verified` / `inventory.stock_movement_failed` | web, staff_work_phone | operation 级补充 |
@@ -4544,6 +4567,7 @@
 | TIC-票务权益 | `createTicketOrder` | `POST` | `/api/v1/ticketing/orders` | 创建票务订单（含一体机辅助售票） | `ticket.order.create` | `ticket_order.created` / `ticket_order.create_failed` | web, kiosk, miniapp, app | operation 级补充 |
 | TIC-票务权益 | `createTicketOrderPayIntent` | `POST` | `/api/v1/ticketing/orders/{order_id}/pay-intents` | 创建票务支付意图（含一体机辅助售票） | `finance.payment_intent.create` | `payment.intent_created` / `payment.intent_failed` | web, kiosk, miniapp, app | operation 级补充 |
 | TIC-票务权益 | `createTicketPriceRule` | `POST` | `/api/v1/ticketing/price-rules` | 创建平日、周末、节假日及派生价规则 | `ticket.price_variant.manage` | `ticket_price_variant.changed` / `ticket_price_variant.change_failed` | web | operation 级补充 |
+| TIC-票务权益 | `createTicketRefundPaymentConfirmation` | `POST` | `/api/v1/ticketing/refunds/{refund_id}/payment-confirmations` | 门票退款发起付款确认（待原路打款） | `ticket.refund.approve` | `finance.payment_confirmation.requested` / `finance.payment_confirmation.request_failed` | web | operation 级补充 |
 | TIC-票务权益 | `createTicketType` | `POST` | `/api/v1/ticketing/ticket-types` | 创建票种 | `ticket.product.manage` | `ticket_product.changed` / `ticket_product.change_failed` | web | operation 级补充 |
 | TIC-票务权益 | `createTicketVerification` | `POST` | `/api/v1/ticketing/verifications` | 正式核销 | `verification.execute` | `verification.succeeded` / `verification.failed` | staff_work_phone, kiosk<br>device: verification-gate | operation 级补充 |
 | TIC-票务权益 | `getTicketCredential` | `GET` | `/api/v1/ticketing/tickets/{ticket_id}/credential` | 获取动态二维码凭证 | `ticket.credential.view` | `ticket_credential.refreshed` / `ticket_credential.refresh_failed` | web, miniapp, app | operation 级补充 |

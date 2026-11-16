@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -32,6 +32,8 @@ class FinanceRefundLifecycleTests {
     private final FinanceRepository repository = mock(FinanceRepository.class);
     private final AuthorizationService authorization = mock(AuthorizationService.class);
     private final PaymentGatewayRouter gateway = mock(PaymentGatewayRouter.class);
+    // 第十八批 AM 段第 241 条 241-R5：付款确认桩——requireApproved 不抛，hasApproved 默认 false（未确认不派发网关），按用例置真。
+    private final PaymentConfirmationService confirmations = mock(PaymentConfirmationService.class);
     private final Map<String, FinanceRefundRecord> refunds = new LinkedHashMap<>();
     private final List<FinanceRefundAttemptRecord> attempts = new ArrayList<>();
     private final Set<String> ready = new HashSet<>();
@@ -47,6 +49,7 @@ class FinanceRefundLifecycleTests {
         service.setRefundTransactionManager(mock(org.springframework.transaction.PlatformTransactionManager.class));
         service.refundAuthorizationService = mock(RefundAuthorizationService.class);
         service.refundEvidenceValidator = mock(EvidenceAttachmentValidator.class);
+        service.paymentConfirmations = confirmations;
         actor("finance");
         when(repository.saveRefund(any())).thenAnswer(invocation -> {
             FinanceRefundRecord refund = invocation.getArgument(0);
@@ -125,6 +128,23 @@ class FinanceRefundLifecycleTests {
                 "success", 3000L, "execution-ref", operator, null);
     }
 
+    /** 第十八批 AM 段第 241 条 241-R5：付款确认通过后经重试派发原单的待派发尝试。 */
+    private FinanceRefundRecord confirmedRetry(FinanceRefundRecord refund) {
+        when(confirmations.hasApproved("finance_refund", refund.id())).thenReturn(true);
+        return service.retryFinanceRefund(refund.id(), operation("confirmed-" + refund.id()));
+    }
+
+    /** 第十八批 AM 段第 241 条 241-R5（第十八批裁决 55）：建单不派发网关、确认通过前重试也不派发；确认通过后重试派发一次。 */
+    @Test
+    void refundIsNotDispatchedUntilPaymentConfirmed() {
+        FinanceRefundRecord refund = service.createRefund(request());
+        assertThat(refund.status()).isEqualTo("requested");
+        service.retryFinanceRefund(refund.id(), operation("unconfirmed"));
+        verify(gateway, never()).refund(any());
+        confirmedRetry(refund);
+        verify(gateway, times(1)).refund(any());
+    }
+
     @Test
     void payableCannotBecomeAnotherOutgoingRefund() {
         itemDirection("payable");
@@ -136,7 +156,7 @@ class FinanceRefundLifecycleTests {
     @Test
     void gatewayFailureRemainsFailedAndUnsettled() {
         when(gateway.refund(any())).thenAnswer(i -> result(PaymentGatewayResult.Status.FAILED, i.getArgument(0)));
-        FinanceRefundRecord refund = service.createRefund(request());
+        FinanceRefundRecord refund = confirmedRetry(service.createRefund(request()));
         assertThat(refund.status()).isEqualTo("failed");
         assertThat(refund.succeededAt()).isNull();
         assertThat(repository.sumRefundedAmountByTargetId("payment")).isEqualTo(3000);
@@ -156,7 +176,7 @@ class FinanceRefundLifecycleTests {
 
     @Test
     void hugeRefundAmountCannotOverflowExistingOutstandingAmountCheck() {
-        service.createRefund(request());
+        confirmedRetry(service.createRefund(request()));
         assertThatThrownBy(() -> service.createRefund(new RefundRequest("overflow", "退款", List.of(),
                 "payment", Long.MAX_VALUE, "超大金额", null, null))).isInstanceOf(ApiException.class)
                 .extracting("code").isEqualTo("VALIDATION_FAILED");
@@ -166,7 +186,7 @@ class FinanceRefundLifecycleTests {
 
     @Test
     void originalPaymentChannelAndReferenceReachGateway() {
-        service.createRefund(request());
+        confirmedRetry(service.createRefund(request()));
         ArgumentCaptor<PaymentGatewayRequest> captor = ArgumentCaptor.forClass(PaymentGatewayRequest.class);
         verify(gateway).refund(captor.capture());
         assertThat(captor.getValue().channel()).isEqualTo("wechat");
@@ -176,13 +196,14 @@ class FinanceRefundLifecycleTests {
 
     @Test
     void reservedGatewayDoesNotMarkRefundAsPaid() {
-        assertThat(service.createRefund(request()).status()).isEqualTo("requested");
+        assertThat(confirmedRetry(service.createRefund(request())).status()).isEqualTo("requested");
+        verify(gateway, times(1)).refund(any());
     }
 
     @Test
     void pendingRefundCannotBeRetriedOrManuallyPaidAgain() {
         when(gateway.refund(any())).thenAnswer(i -> result(PaymentGatewayResult.Status.PENDING, i.getArgument(0)));
-        FinanceRefundRecord refund = service.createRefund(request());
+        FinanceRefundRecord refund = confirmedRetry(service.createRefund(request()));
         assertThatThrownBy(() -> service.retryFinanceRefund(refund.id(), operation("retry"))).isInstanceOf(ApiException.class)
                 .extracting("code").isEqualTo("REFUND_NOT_RETRYABLE");
         assertThatThrownBy(() -> service.recordFinanceRefundExecution(refund.id(), execution("manual"))).isInstanceOf(ApiException.class)
@@ -193,7 +214,7 @@ class FinanceRefundLifecycleTests {
     @Test
     void timeoutWithoutChannelReferenceCanBeQueriedByPersistedAttemptWithoutRepaying() {
         when(gateway.refund(any())).thenThrow(new IllegalStateException("网络超时"));
-        FinanceRefundRecord pending = service.createRefund(request());
+        FinanceRefundRecord pending = confirmedRetry(service.createRefund(request()));
         assertThat(pending.status()).isEqualTo("processing");
         assertThat(pending.gatewayRef()).isNull();
         when(gateway.queryRefund(any(), isNull())).thenAnswer(i -> result(PaymentGatewayResult.Status.SUCCEEDED, i.getArgument(0)));
@@ -207,7 +228,7 @@ class FinanceRefundLifecycleTests {
     @Test
     void failedRetryUsesSameRefundAndNewAttemptAndReplayDoesNotPayTwice() {
         when(gateway.refund(any())).thenAnswer(i -> result(PaymentGatewayResult.Status.FAILED, i.getArgument(0)));
-        FinanceRefundRecord failed = service.createRefund(request());
+        FinanceRefundRecord failed = confirmedRetry(service.createRefund(request()));
         when(gateway.refund(any())).thenAnswer(i -> result(PaymentGatewayResult.Status.SUCCEEDED, i.getArgument(0)));
         FinanceRefundRecord retried = service.retryFinanceRefund(failed.id(), operation("retry"));
         service.retryFinanceRefund(failed.id(), operation("retry"));
@@ -223,7 +244,7 @@ class FinanceRefundLifecycleTests {
     void mismatchedGatewaySuccessCannotCloseRefundOrPoisonReference() {
         when(gateway.refund(any())).thenAnswer(i -> result(PaymentGatewayResult.Status.SUCCEEDED,
                 PaymentGatewayRequest.of("finance_refund", "someone-else", 3000, "wechat")));
-        FinanceRefundRecord refund = service.createRefund(request());
+        FinanceRefundRecord refund = confirmedRetry(service.createRefund(request()));
         assertThat(refund.status()).isEqualTo("processing");
         assertThat(refund.gatewayRef()).isNull();
         assertThat(refund.succeededAt()).isNull();

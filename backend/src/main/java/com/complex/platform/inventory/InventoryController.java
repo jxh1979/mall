@@ -1,6 +1,6 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.13
+// 文件版本：V0.14
 
 import static com.complex.platform.common.api.ApiRequests.requireIdempotencyKey;
 
@@ -389,6 +389,17 @@ public class InventoryController {
         authorizationService.requirePermission("bar.saved_bottle.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.settleSavedBottleRemedy(id, request));
+    }
+
+    /** 第十八批 AM 段第 241 条 241-R6（BSM:1803；第十八批裁决 55、65、68）：存酒对客赔付发起付款确认，权限同结案。 */
+    @PostMapping("/saved-bottles/remedies/{id}/payment-confirmations")
+    public ApiResponse<com.complex.platform.finance.PaymentConfirmationService.Confirmation> createSavedBottleRemedyPaymentConfirmation(
+            @PathVariable String id,
+            @RequestBody com.complex.platform.finance.dto.PaymentConfirmationRequest request
+    ) {
+        authorizationService.requirePermission("bar.saved_bottle.manage");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.requestSavedBottleRemedyPaymentConfirmation(id, request));
     }
 
     @PostMapping("/saved-bottles/remedies/{id}/advance")

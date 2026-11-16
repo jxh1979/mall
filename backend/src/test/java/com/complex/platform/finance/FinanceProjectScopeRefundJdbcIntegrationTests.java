@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -146,6 +146,8 @@ class FinanceProjectScopeRefundJdbcIntegrationTests {
         String payment = paidReceivable(project, merchant, false);
         act(financeA, project);
         FinanceRefundRecord created = finance.createRefund(refund(payment, 60L));
+        // 第十八批 AM 段第 241 条 241-R5：财务执行前须有已通过的付款确认（发起与逐级审批见 PaymentConfirmationPayrollRefundJdbcTests）。
+        com.complex.platform.support.PaymentConfirmationFixture.approvedFinanceRefund(jdbc, created.id());
         String reference = "RF-" + suffix;
         finance.recordFinanceRefundExecution(created.id(), new RefundExecutionRequest(key(), "沿原收款路径执行",
                 List.of(proof(created.id())), reference, null));

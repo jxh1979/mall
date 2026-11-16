@@ -1,4 +1,4 @@
-// 文件版本：V0.12
+// 文件版本：V0.13
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -336,5 +336,117 @@ describe("FinanceArApLedgerPage 登记核销请求体", () => {
     expect(text).not.toContain("bank_transfer");
     expect(text).not.toContain("POS刷卡");
     expect(text).not.toContain("contract_rent");
+  });
+});
+
+// 第十八批 AM 段第 241 条 241-R2、241-R9（BSM:1803 付款确认；第十八批裁决 68「同收款方、同类型、同综合体可勾选合发；工资、退款、赔付按单发起」、
+// 69「付款方是平台主体的应收，登记收款前也须付款确认」）：台账勾选未结清款项合并发起付款确认。
+describe("FinanceArApLedgerPage 付款确认勾选合发", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  const item = (id: string, direction: string, counterparty: string, source: string, unpaid: number, status = "pending_payment") => ({
+    id, item_no: id.toUpperCase(), direction, counterparty_id: counterparty, source_type: source, status,
+    amount_cent: 20000, paid_amount_cent: 20000 - unpaid, unpaid_amount_cent: unpaid, due_date: "2026-11-25" });
+  const ITEMS = [
+    item("ap-a", "payable", "sup-1", "purchase_inbound", 10000),
+    item("ap-b", "payable", "sup-1", "purchase_inbound", 20000),
+    item("ap-c", "payable", "sup-2", "purchase_inbound", 20000),
+    item("ap-d", "payable", "sup-1", "purchase_prepayment", 20000),
+    item("ar-p", "receivable", "bar-1", "pass_domain_share", 5000, "pending_collection"),
+    item("ar-x", "receivable", "sup-1", "contract_rent", 20000, "pending_collection"),
+    item("ap-r", "payable", "sup-1", "purchase_inbound", 20000, "reversed"),
+    item("ap-w", "payable", "usr-owner", "dividend_reserve_withheld", 20000),
+    item("ap-s", "payable", "sup-1", "purchase_inbound", 0, "settled"),
+    item("ap-p", "payable", "usr-1", "staff_payroll", 20000),
+    item("ap-q", "payable", "bar-1", "pass_domain_share", 8000),
+  ];
+
+  function mountLedger(paymentConflict = false) {
+    const posts: { url: string; body: Record<string, unknown> }[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (init?.method === "POST") {
+        posts.push({ url, body: JSON.parse(String(init.body)) as Record<string, unknown> });
+        if (paymentConflict && url.endsWith("/payments")) {
+          return new Response(JSON.stringify({ success: false, code: "CONFLICT", detail_code: "PAYMENT_CONFIRMATION_REQUIRED",
+            message: "该笔付款须先完成付款确认（主线与财务、法务等各条平行线全部审批通过）" }), { status: 409 });
+        }
+        return new Response(JSON.stringify({ success: true, code: "OK", data: { confirmation_id: "pc_1", status: "pending_review" } }));
+      }
+      let data: unknown = {};
+      if (url.includes("/api/v1/finance/ar-ap-items?")) data = { items: ITEMS, total: ITEMS.length, page: 1, page_size: 10 };
+      else if (url.includes("/api/v1/finance/payment-confirmations?")) {
+        data = { payment_type: "purchase_inbound", payment_type_label: "采购入库", required_line_codes: ["finance_review", "legal_review"], confirmations: [] };
+      }
+      return new Response(JSON.stringify({ success: true, code: "OK", data }));
+    }));
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    renderPage(new AdminApi("test"));
+    return posts;
+  }
+
+  // 首行单选回落选中、勾选列已渲染，页面被动 effect 落定后再点。
+  async function settled() {
+    await waitFor(() => {
+      expect((screen.queryByTestId("finance-ledger-select-ap-a") as HTMLInputElement | null)?.checked).toBe(true);
+      expect(screen.queryByTestId("finance-ledger-confirm-ap-a")).not.toBeNull();
+    });
+  }
+  const box = (id: string) => screen.getByTestId(`finance-ledger-confirm-${id}`) as HTMLInputElement;
+
+  it("未结清应付与平台主体付款的应收可勾选；其他应收、冲正、留存待释放、已结清、工资行不可勾选；勾了一行后收款方或来源不同的行不可再勾", async () => {
+    mountLedger();
+    await settled();
+    for (const id of ["ap-a", "ap-b", "ap-c", "ap-d", "ar-p"]) expect(box(id).disabled).toBe(false);
+    for (const id of ["ar-x", "ap-r", "ap-w", "ap-s", "ap-p"]) expect(box(id).disabled).toBe(true);
+    fireEvent.click(box("ap-a"));
+    await waitFor(() => expect(box("ap-c").disabled).toBe(true));
+    expect(box("ap-d").disabled).toBe(true);
+    expect(box("ar-p").disabled).toBe(true);
+    expect(box("ap-b").disabled).toBe(false);
+  });
+
+  it("勾两笔同收款方、同来源的应付合并发起：面板显示笔数与未付合计，请求 ar_ap_item_ids 为所勾各行", async () => {
+    const posts = mountLedger();
+    await settled();
+    fireEvent.click(box("ap-a"));
+    await waitFor(() => expect(box("ap-b").disabled).toBe(false));
+    fireEvent.click(box("ap-b"));
+    await waitFor(() => expect(screen.queryByTestId("payment-confirmation-line-legal_review")).not.toBeNull());
+    const panel = screen.getByTestId("payment-confirmation-panel").textContent ?? "";
+    expect(panel).toContain("2 笔");
+    expect(panel).toContain("300.00");
+    fireEvent.change(screen.getByTestId("payment-confirmation-reason"), { target: { value: "十一月货款" } });
+    fireEvent.change(screen.getByTestId("payment-confirmation-final-approver"), { target: { value: "usr_boss" } });
+    fireEvent.change(screen.getByTestId("payment-confirmation-line-finance_review"), { target: { value: "usr_f" } });
+    fireEvent.change(screen.getByTestId("payment-confirmation-line-legal_review"), { target: { value: "usr_l" } });
+    fireEvent.click(screen.getByTestId("payment-confirmation-submit"));
+    await waitFor(() => expect(posts).toHaveLength(1));
+    expect(posts[0]!.url).toContain("/api/v1/finance/ar-ap-payment-confirmations");
+    expect(posts[0]!.body.ar_ap_item_ids).toEqual(["ap-a", "ap-b"]);
+    expect(posts[0]!.body).toMatchObject({ reason: "十一月货款", final_approver_id: "usr_boss" });
+  });
+
+  // 第十八批裁决 68「同一收款方……的多笔未结清应付」；裁决 69 题面「记成应收的那一行，登记收款就是登记该平台主体的出款」：应收行的收款方是本方，
+  // 不能与同往来方的应付合进一张。
+  it("勾了应付后，同往来方、同来源的平台主体付款应收行不可再勾（合并须同方向）", async () => {
+    mountLedger();
+    await settled();
+    expect(box("ar-p").disabled).toBe(false);
+    fireEvent.click(box("ap-q"));
+    await waitFor(() => expect(box("ap-q").checked).toBe(true));
+    expect(box("ar-p").disabled).toBe(true);
+  });
+
+  it("登记核销被付款确认闸拦下（409）时显示后端中文原因", async () => {
+    mountLedger(true);
+    await settled();
+    fireEvent.change(screen.getByTestId("finance-payment-amount"), { target: { value: "100.00" } });
+    fireEvent.change(screen.getByTestId("finance-payment-method"), { target: { value: "bank_transfer" } });
+    fireEvent.click(screen.getByTestId("finance-payment-submit"));
+    await waitFor(() => expect(screen.queryByTestId("finance-ledger-error")?.textContent ?? "").toContain("须先完成付款确认"));
   });
 });

@@ -1,6 +1,6 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -337,6 +337,8 @@ class SingleBarServiceFeeJdbcIntegrationTests {
                 refund + "_l", refund, order, ticket + "_e");
         jdbc.update("UPDATE issued_entitlements SET status='refunded' WHERE id=?", ticket + "_e");
         jdbc.update("UPDATE ticket_instances SET status='refunded' WHERE id=?", ticket);
+        // 第十八批 AM 段第 241 条 241-R5：门票退款确认拨付前须有已通过的付款确认（发起与逐级审批见 TicketRefundReasonJdbcIntegrationTests）。
+        com.complex.platform.support.PaymentConfirmationFixture.approved(jdbc, "ticket_refund", refund, 70000L, "ticket_refund");
         mockMvc.perform(post("/api/v1/ticketing/refunds/" + refund + "/confirm-payout").with(finance)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"idempotency_key\":\"fs013-payout-" + refund + "\",\"reason\":\"已原路退回客人\"}"))

@@ -1,7 +1,25 @@
-// 文件版本：V0.09
+// 文件版本：V0.10
 // 第十八批 I 段第 87 条（PGM:287「界面全中文（所有终端零英文）」）：主管复核的动作码、对象码、档位码与证据类型中文名，
 // 主管复核页与审批链页（ADM-GOV-009）共用（展示层翻译，提交仍原码）。原表与 formatReviewValue 自 SupervisorReviewPage.tsx 搬入。
 import { formatBusinessStatus } from "./statusLabels";
+
+// 第十八批 AM 段第 241 条 241-R1（第十八批裁决 65「按台账来源逐个分」）：付款确认 40 种支付类型的中文名（同后端 PaymentConfirmationService.PAYMENT_TYPES），
+// 每种一个审批类型（动作码 finance.payment_confirm.＜支付类型＞）。
+export const PAYMENT_TYPE_LABELS: Record<string, string> = {
+  dividend_payout: "持股分红发放", dividend_reserve_released: "分红留存已释放", staff_payroll: "员工工资", deposit_refund: "退租押金退还",
+  deposit_adjustment: "变更押金补退差额", purchase_inbound: "采购入库", purchase_consignment: "寄售结算", purchase_prepayment: "采购预付款",
+  ticket_distribution: "门票分销", platform_incentive_subsidy: "平台激励补贴", single_bar_service_fee: "单店门票综合服务费",
+  compensation_fulfillment: "补偿新增履约结算", pass_domain_share: "通票域间份额", pass_domain_direct_settlement: "通票餐饮零售代付",
+  pass_unverified_attribution: "通票到期未核销归属", dispatch_commission_transfer: "派驻提成月结拨付", bar_payroll_transfer: "酒吧报酬月结拨付",
+  inventory_transfer: "门店要货货款", pass_drink_settlement: "通票酒水结算", media_performance_settlement: "传媒演出结算", refund: "退款",
+  bar_deposit_refund: "订台定金达标退回", stored_value_consume: "平台代收商户卡消费", partner_voucher: "内部价券结算",
+  reconciliation_difference: "对账差异", inventory_difference: "库存差异", turnover_rent_reversal: "营业额抽成冲正", manual: "手工录入",
+  compensation_fulfillment_recovery: "补偿应付已付追收", ticket_distribution_recovery: "通票分账追收", saved_bottle_remedy_recovery: "存酒退出承接垫付追收",
+  finance_refund_ar_ap_payment: "财务退款（原收款退款）", finance_refund_stored_value_account: "财务退款（通用卡储值本金退款）",
+  finance_refund_ticket_payment_rejection: "财务退款（票务拒收待退）", finance_refund_channel_ticket_rejection: "财务退款（渠道回流拒收待退）",
+  finance_refund_dealer_order_refund: "财务退款（经销订单退款）", finance_refund_bar_deposit_rejection: "财务退款（订台定金冲突待退）",
+  finance_refund_bar_scan_order_rejection: "财务退款（扫码点单拒收待退）", ticket_refund: "门票退款打款", saved_bottle_compensation: "存酒对客赔付",
+};
 
 export const REVIEW_LABELS: Record<string, string> = {
   "staff.shift.publish": "发布排班", "staff.payroll.penalty_cap.adjust": "调整工资扣罚上限",
@@ -78,6 +96,9 @@ export const REVIEW_LABELS: Record<string, string> = {
   amusement_maintenance_record: "游乐维修记录", amusement_incident: "游乐事故", amusement_group_booking: "游乐团体预订", bar_order_item: "酒吧订单明细", bar_shift: "酒吧班次",
   ticket_refund: "门票退款单", ticket_dynamic_pricing_rule: "动态定价规则", verification: "核销记录", inventory_stock_adjustment: "库存调整单", saved_bottle: "存酒",
   finance_refund: "财务退款单", finance_offline_payment_confirmation: "线下收款确认单", customer_home_content: "首页内容", position_role_template: "岗位模板",
+  // 第十八批 AM 段第 241 条 241-R1：付款确认的 40 个审批类型与复核对象（付款确认单）。
+  ...Object.fromEntries(Object.entries(PAYMENT_TYPE_LABELS).map(([type, label]) => [`finance.payment_confirm.${type}`, `付款确认（${label}）`])),
+  payment_confirmation: "付款确认单",
 };
 
 export function formatReviewValue(value?: string | null) {

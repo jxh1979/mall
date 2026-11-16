@@ -1,6 +1,6 @@
 package com.complex.platform.dealer;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -1492,6 +1492,8 @@ class DealerOrderPaymentFulfillmentJdbcIntegrationTests {
         assertThat(access.findUserById(executor).orElseThrow().merchantId()).isNull();
         DealerOrderRefundRecord prepared = orders.executeRefund(approved.id(), new DealerRefundExecuteRequest(key()));
         assertThat(financeService.getFinanceRefund(prepared.financeRefundId()).refund().status()).isEqualTo("requested");
+        // 第十八批 AM 段第 241 条 241-R5：财务执行前须有已通过的付款确认（发起与逐级审批见 PaymentConfirmationPayrollRefundJdbcTests）。
+        com.complex.platform.support.PaymentConfirmationFixture.approvedFinanceRefund(jdbc, prepared.financeRefundId());
         String executionEvidence = refundEvidence(prepared.financeRefundId());
         actAsProjectFinance(foreign);
         assertThatThrownBy(() -> isolatedFailure(() -> financeService.recordFinanceRefundExecution(prepared.financeRefundId(),
@@ -1522,6 +1524,8 @@ class DealerOrderPaymentFulfillmentJdbcIntegrationTests {
         String refundProject = jdbc.queryForObject("SELECT project_id FROM warehouses WHERE id=?", String.class, centralWarehouse);
         actAs(warehouse);
         DealerOrderRefundRecord prepared = orders.executeRefund(approved.id(), new DealerRefundExecuteRequest(key()));
+        // 第十八批 AM 段第 241 条 241-R5：财务执行前须有已通过的付款确认（发起与逐级审批见 PaymentConfirmationPayrollRefundJdbcTests）。
+        com.complex.platform.support.PaymentConfirmationFixture.approvedFinanceRefund(jdbc, prepared.financeRefundId());
         financeService.recordFinanceRefundExecution(prepared.financeRefundId(),
                 new com.complex.platform.finance.dto.RefundExecutionRequest(key(), "原经办人执行", List.of(refundEvidence(prepared.financeRefundId())), "MIXED-SCOPE", null));
         String paymentProject = "project_rf_register_" + suffix;
@@ -1536,6 +1540,34 @@ class DealerOrderPaymentFulfillmentJdbcIntegrationTests {
                 .isInstanceOfSatisfying(ApiException.class, error -> assertThat(error.code()).isEqualTo("CROSS_PROJECT_FORBIDDEN"));
         assertThat(jdbc.queryForObject("SELECT status FROM finance_refunds WHERE id=?", String.class, prepared.financeRefundId())).isEqualTo("processing");
         assertThat(jdbc.queryForObject("SELECT status FROM dealer_order_refunds WHERE id=?", String.class, prepared.id())).isEqualTo("processing");
+    }
+
+    /**
+     * 第十八批 AM 段第 241 条 241-R5（BSM:1803；第十八批裁决 55「退款……要设流程」，「不少已有各自的审批（如退款审批……），会重复审批」）：经销退款待办
+     * 财务执行前 409 PAYMENT_CONFIRMATION_REQUIRED；原到账核验人发起付款确认不受执行人分离约束（finance_refund_dealer_order_refund），与既有退款审批
+     * 两道并存；主线（核验人的直接上级）、财务线、法务线通过后才可执行。已有通过的确认（失败重付）不再重审。
+     */
+    private void confirmRefundPayment(DealerOrderRefundRecord prepared) {
+        if (jdbc.queryForObject("SELECT count(*) FROM payment_confirmations WHERE object_type = 'finance_refund' AND object_id = ? AND status = 'approved'",
+                Integer.class, prepared.financeRefundId()) > 0) {
+            return;
+        }
+        actAs(warehouse);
+        assertThatThrownBy(() -> isolatedFailure(() -> financeService.recordFinanceRefundExecution(prepared.financeRefundId(),
+                new com.complex.platform.finance.dto.RefundExecutionRequest(key(), "未经付款确认", List.of(refundEvidence(prepared.financeRefundId())),
+                        "RF-" + key(), null))))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("PAYMENT_CONFIRMATION_REQUIRED"));
+        actAs(finance);
+        var confirmation = financeService.requestRefundPaymentConfirmation(prepared.financeRefundId(),
+                new com.complex.platform.finance.dto.PaymentConfirmationRequest(key(), "经销退款原路退回", refundApprover, List.of(
+                        new com.complex.platform.governance.review.SupervisorReviewEvaluateRequest.ParallelLine("finance_review", reviewer),
+                        new com.complex.platform.governance.review.SupervisorReviewEvaluateRequest.ParallelLine("legal_review", sales))));
+        assertThat(confirmation.paymentType()).isEqualTo("finance_refund_dealer_order_refund");
+        for (String approver : List.of(refundApprover, reviewer, sales)) {
+            actAs(approver);
+            reviews.approve(confirmation.reviewId(), new SupervisorReviewApprovalRequest(key(), "付款确认", List.of(), null, "approved", "同意付款"));
+        }
+        assertThat(reviews.findReview(confirmation.reviewId()).orElseThrow().reviewStatus()).isEqualTo("approved");
     }
 
     private DealerOrderRefundRecord approvedRefundForProjectFinance() {
@@ -1594,6 +1626,7 @@ class DealerOrderPaymentFulfillmentJdbcIntegrationTests {
     }
 
     private void executeAndConfirmRefund(DealerOrderRefundRecord prepared, String status) {
+        confirmRefundPayment(prepared);
         actAs(warehouse);
         String reference = "RF-" + key();
         var execution = financeService.recordFinanceRefundExecution(prepared.financeRefundId(),

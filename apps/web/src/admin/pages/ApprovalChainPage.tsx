@@ -14,7 +14,7 @@ import type { AdminPageProps } from "../types";
 import { cnDate } from "../components/RowDetailDrawer";
 import { withBase } from "../../basePath";
 
-// 文件版本：V0.06
+// 文件版本：V0.07
 
 // M087-A-02（PGM-1.7.1「发起单据时只需指定该事项的最终审批人，系统按组织层级自动补全……逐级审批」「任一节点驳回则整单退回起草人」
 // 「主线与各条平行线全部通过……才生效」）：审批链与节点裁决页——查看某复核单的主线/平行线节点，逐节点通过、驳回或转交；
@@ -64,7 +64,8 @@ const TEXT = {
 
 const KIND_ZH: Record<string, string> = { user: "直接上级", master: "最高权限主会话", role: "指定角色" };
 const STATUS_ZH: Record<string, string> = { pending: "待审", approved: "已通过", rejected: "已驳回", cancelled: "已作废" };
-const LINE_LABELS: Record<string, string> = { business_review: "业务审核线", hr_review: "人力审核线（人力会签）", finance_review: "财务审核线", tax_review: "税务审核线", legal_review: "法务审核线" };
+// 第十八批 AM 段第 241 条 241-R2：付款确认面板（PaymentConfirmationPanel）共用本表。
+export const LINE_LABELS: Record<string, string> = { business_review: "业务审核线", hr_review: "人力审核线（人力会签）", finance_review: "财务审核线", tax_review: "税务审核线", legal_review: "法务审核线" };
 
 const TAX_FIELD_LABELS: Record<string, string> = {
   // 第十八批 E 段第 22 条 证照宽限期申请快照。

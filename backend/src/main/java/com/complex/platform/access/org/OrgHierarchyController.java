@@ -58,4 +58,21 @@ public class OrgHierarchyController {
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.upsertApprovalLine(lineCode, request));
     }
+
+    /** 第十八批 AM 段第 241 条 241-R8（第十八批裁决 67「审批线页设定」）：付款确认各支付类型在财务、法务两线之外的必带线。 */
+    @GetMapping("/payment-confirmation-flows")
+    public ApiResponse<List<com.complex.platform.finance.PaymentConfirmationService.Flow>> listPaymentConfirmationFlows() {
+        authorizationService.requirePermission(OrgHierarchyService.MANAGE_PERMISSION);
+        return ApiResponse.ok(service.listPaymentConfirmationFlows());
+    }
+
+    @PutMapping("/payment-confirmation-flows/{payment_type}")
+    public ApiResponse<com.complex.platform.finance.PaymentConfirmationService.Flow> savePaymentConfirmationFlow(
+            @PathVariable("payment_type") String paymentType,
+            @RequestBody PaymentConfirmationFlowRequest request
+    ) {
+        authorizationService.requirePermission(OrgHierarchyService.MANAGE_PERMISSION);
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.savePaymentConfirmationFlow(paymentType, request));
+    }
 }

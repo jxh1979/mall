@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -234,6 +234,8 @@ class BarReservationNotificationIntegrationTests {
         String itemId = barLedger.createDepositRefundPayable(bars.findReservationById(reservation).orElseThrow());
         assertThat(sends(reservation, "deposit_refunded")).as("只挂退款应付不发").isZero();
 
+        // 第十八批 AM 段第 241 条 241-R1：出款前置——该应付已有通过的付款确认（夹具）。
+        com.complex.platform.support.PaymentConfirmationFixture.approvedArAp(jdbc, itemId);
         finance.registerArApPayment(itemId, new ArApPaymentRequest("sms-pay-" + f.suffix, "原路退回定金", List.of(), 20_000L,
                 "aggregate_pay", Instant.now(), "flow_sms_" + f.suffix, null));
 
@@ -397,6 +399,8 @@ class BarReservationNotificationIntegrationTests {
     private void refundSucceeds(String reservationId, long amountCent) {
         String refundId = jdbc.queryForObject("SELECT id FROM finance_refunds WHERE source_type = 'bar_deposit_rejection'"
                 + " AND target_id = ?", String.class, reservationId);
+        // 第十八批 AM 段第 241 条 241-R5：财务执行前须有已通过的付款确认（发起与逐级审批见 PaymentConfirmationPayrollRefundJdbcTests）。
+        com.complex.platform.support.PaymentConfirmationFixture.approvedFinanceRefund(jdbc, refundId);
         String role = "sms_fin_role_" + f.suffix;
         if (jdbc.queryForObject("SELECT count(*) FROM roles WHERE id = ?", Integer.class, role) == 0) {
             jdbc.update("INSERT INTO contracts(id,merchant_id,contract_subject_id,settlement_subject_id,effective_date,expiry_date,"

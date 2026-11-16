@@ -1,5 +1,5 @@
 package com.complex.platform.dividend;
-// 文件版本：V0.10
+// 文件版本：V0.11
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.BusinessDayResolver;
@@ -903,6 +903,11 @@ public class DividendService {
                 AuditedOperation.of("dividend.paid_marked", "dividend.mark_paid_failed", MANAGE_PERM, STMT_TYPE),
                 (statement, operator, now) -> {
                     requireStatus(statement, "approved", "只有审批通过的单可以标记发放");
+                    // 第十八批 AM 段第 241 条 241-R3（BSM:1787「发放走应付款项」；BSM:1803「审批通过后的发放进入应付款项台账，走付款确认」）：实发额大于 0 时，
+                    // 主理人分红应付须已按付款确认付清才能标记发放。
+                    if (statement.payoutCent() > 0 && payoutPort.arApUnpaidCent(statement.arApItemId()) > 0) {
+                        throw ApiException.conflict("DIVIDEND_PAYOUT_NOT_PAID", "主理人分红应付尚未付清（须先完成付款确认并登记付款），不能标记发放");
+                    }
                     requireTransition(repository.markPaid(statement.id(), operator, now), "标记发放");
                     // 与出单同一张分红单的异议期（自审批通过之日次日起算）。
                     notifyMerchantAmount(statement.merchantId(), "dividend_paid", statement.payoutCent(),

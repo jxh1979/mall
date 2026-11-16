@@ -362,6 +362,8 @@ pass_incentive_applications,direct,project_id,project_id column on pass_incentiv
 pass_pool_snapshot_first_segment,inherited,ticket_instance_id,"ticket_instance_id -> pass_pool_snapshots -> project_id; merchant_id is the first-segment bar frozen at sale, not the row owner",must join through scope path before multi-complex rollout,V0.07,covered
 pass_pool_snapshots,direct,project_id,project_id column on pass_pool_snapshots,ready for project/merchant scoped query enforcement,V0.07,covered
 pass_pool_unit_results,inherited,bill_id,"bill_id -> settlement_bills -> project_id; merchant_id is the beneficiary bar of each settlement unit, not the row owner",must join through scope path before multi-complex rollout,V0.07,covered
+payment_confirmation_flows,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",V0.07,covered
+payment_confirmations,direct,project_id,project_id column on payment_confirmations,ready for project/merchant scoped query enforcement,V0.07,covered
 payroll_tax_assessments,direct,project_id,project_id column on payroll_tax_assessments,ready for project/merchant scoped query enforcement,V0.07,covered
 payroll_tax_brackets,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",V0.07,covered
 payroll_tax_versions,global_reference,global_reference,global reference/configuration table,safe as global reference; tenant-specific overrides require separate scoped table,V0.07,covered

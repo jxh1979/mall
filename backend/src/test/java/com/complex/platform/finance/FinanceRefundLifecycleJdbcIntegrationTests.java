@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -207,9 +207,15 @@ class FinanceRefundLifecycleJdbcIntegrationTests {
                             audit, auth, new BusinessDayResolver(), gateway);
                     service.setRefundTransactionManager(transactionManager);
                     service.refundAuthorizationService = mock(RefundAuthorizationService.class);
+                    // 第十八批 AM 段第 241 条 241-R5：建单不派发网关；本线程的付款确认桩在建单成功后置为已通过，再经重试派发。
+                    PaymentConfirmationService confirmations = mock(PaymentConfirmationService.class);
+                    service.paymentConfirmations = confirmations;
                     try {
-                        return service.createRefund(new RefundRequest(attemptKey, "批准退款", List.of(), paymentId,
+                        FinanceRefundRecord created = service.createRefund(new RefundRequest(attemptKey, "批准退款", List.of(), paymentId,
                                 6000L, "并发原路退款", null, null));
+                        when(confirmations.hasApproved("finance_refund", created.id())).thenReturn(true);
+                        return service.retryFinanceRefund(created.id(), new com.complex.platform.finance.dto.RefundOperationRequest(
+                                attemptKey + "-retry", "付款确认通过后派发", List.of(), null));
                     } catch (com.complex.platform.common.api.ApiException exception) {
                         return exception.code();
                     }
@@ -262,7 +268,14 @@ class FinanceRefundLifecycleJdbcIntegrationTests {
             service.setRefundTransactionManager(transactionManager);
             service.refundAuthorizationService = mock(RefundAuthorizationService.class);
             RefundRequest request = new RefundRequest(key, "批准退款", List.of(), paymentId, 3000L, "核实原路退款", null, null);
-            FinanceRefundRecord refund = service.createRefund(request);
+            // 第十八批 AM 段第 241 条 241-R5：建单不派发网关（仍为待退）；付款确认通过后经重试派发。
+            PaymentConfirmationService confirmations = mock(PaymentConfirmationService.class);
+            service.paymentConfirmations = confirmations;
+            FinanceRefundRecord created = service.createRefund(request);
+            assertThat(created.status()).isEqualTo("requested");
+            when(confirmations.hasApproved("finance_refund", created.id())).thenReturn(true);
+            FinanceRefundRecord refund = service.retryFinanceRefund(created.id(), new com.complex.platform.finance.dto.RefundOperationRequest(
+                    key + "-retry", "付款确认通过后派发", List.of(), null));
             assertThat(refund.status()).isEqualTo("processing");
             assertThat(repository.findRefundById(refund.id(), false).orElseThrow().status()).isEqualTo("processing");
             service.createRefund(request);

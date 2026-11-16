@@ -1,10 +1,11 @@
-// 文件版本：V0.07
+// 文件版本：V0.08
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { HighRiskConfirm } from "../components/HighRiskConfirm";
 import { PermissionButton, useCan } from "../security/Can";
 import { useAdminResource } from "../hooks/useAdminResource";
 import { cnDate } from "../components/RowDetailDrawer";
+import { PaymentConfirmationPanel } from "./PaymentConfirmationPanel";
 import type { AdminPageProps, FinanceLedgerRow, FinanceRefundRow, FinanceRefundDetail, ArApPaymentRow } from "../types";
 
 const CREATE = ["finance.refund.create"];
@@ -170,6 +171,10 @@ export function FinanceRefundPanel({ api, user, effectivePermissions, setActionR
       <h3>退款单 {selected.id}</h3><p>{stateLabel(selected.status)}</p>
       <p>金额：¥{yuan(selected.refundAmountCent)}；原收款流水：{selected.originalPaymentRef ?? "待核实"}；原因：{selected.reason}</p>
       {projectUnresolved ? <p>待核实项目归属</p> : ["ticket_payment_rejection", "channel_ticket_rejection"].includes(selected.sourceType ?? "") ? <p>停售拒收款：先核对原收款和渠道订单，按原渠道办理；真实退款凭证经另一人核实成功后才结清。</p> : merchantCounter ? <p>该商户卡待退本金由发卡商户柜台退卡结清；柜台退卡成功即结清，这里只展示、不办理。</p> : selected.sourceType === "stored_value_account" && !selected.originalPaymentRef ? <p>该笔储值退款须按原收款路径办理并核实结果。</p> : null}
+      {/* 第十八批 AM 段第 241 条 241-R5（BSM:1803；第十八批裁决 55、65、68）：待办理或明确失败的退款，登记执行与重试前须有已通过的付款确认；未确认的不派发。 */}
+      {mayExecute ? <PaymentConfirmationPanel key={selected.id} api={api} effectivePermissions={effectivePermissions} setActionResult={setActionResult}
+        objectType="finance_refund" objectId={selected.id} createPath={`/api/v1/finance/refunds/${encodeURIComponent(selected.id)}/payment-confirmations`}
+        permission={CREATE[0]!} /> : null}
       <fieldset disabled={blocked || closed}>
         <legend>查询、重试与核实</legend>
         <div className="admin-form-row"><label>办理说明<input value={note} onChange={(event) => setNote(event.target.value)} /></label>

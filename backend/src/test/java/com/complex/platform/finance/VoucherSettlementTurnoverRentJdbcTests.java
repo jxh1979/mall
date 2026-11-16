@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -212,6 +212,8 @@ class VoucherSettlementTurnoverRentJdbcTests {
     }
 
     private ResultActions pay(String payable, long amount, String paymentTime) throws Exception {
+        // 第十八批 AM 段第 241 条 241-R1：出款前置——该应付已有通过的付款确认（夹具）。
+        com.complex.platform.support.PaymentConfirmationFixture.approvedArAp(jdbc, payable);
         return mockMvc.perform(post("/api/v1/finance/ar-ap-items/" + payable + "/payments").with(admin).contentType(MediaType.APPLICATION_JSON)
                 .content(json.writeValueAsString(Map.of("idempotency_key", "vst-pay-" + payable, "amount_cent", amount,
                         "payment_method", "bank_transfer", "payment_time", paymentTime))));

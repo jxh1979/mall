@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.*;
 import com.complex.platform.access.*;
@@ -64,7 +64,8 @@ class FinancePayrollJdbcIntegrationTests {
             VALUES(?,?,'2026-01',?,?,?,?,'[]','2026-01-01','2026-01-31',0,'2026-02-05','测试已批准期间','approved',?,now())
             """,facts,user,project,project,scheme,calendar,actor);
         statement(wage,"2026-01","monthly");
-        payroll.ensurePayrollPayable(wage);
+        // 第十八批 AM 段第 241 条 241-R4：准备工资银行付款前须有已通过的付款确认（发起与逐级审批见 PaymentConfirmationPayrollRefundJdbcTests）。
+        com.complex.platform.support.PaymentConfirmationFixture.approvedArAp(jdbc,payroll.ensurePayrollPayable(wage).id());
     }
     @AfterEach void cleanup(){SecurityContextHolder.clearContext();}
 

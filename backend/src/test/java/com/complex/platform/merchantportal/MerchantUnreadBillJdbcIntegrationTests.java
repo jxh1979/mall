@@ -1,6 +1,6 @@
 package com.complex.platform.merchantportal;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.entry;
@@ -198,6 +198,9 @@ class MerchantUnreadBillJdbcIntegrationTests {
         }
         TestSecurityActors.asPlatformAdmin(approver);
         dividends.approve(paid, new DividendActionRequest(UUID.randomUUID().toString(), null));
+        // 第十八批 AM 段第 241 条 241-R3：标记发放前主理人分红应付须已付清（本类只核未读账单，付款确认与登记付款见 PaymentConfirmationCompensationDividendJdbcTests）。
+        jdbc.update("UPDATE ar_ap_items SET paid_amount_cent = amount_cent, unpaid_amount_cent = 0, status = 'settled'"
+                + " WHERE id = (SELECT ar_ap_item_id FROM dividend_statements WHERE id = ?)", paid);
         dividends.markPaid(paid, new DividendActionRequest(UUID.randomUUID().toString(), null));
         dividends.approve(approved, new DividendActionRequest(UUID.randomUUID().toString(), null));
         TestSecurityActors.clear();

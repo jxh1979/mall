@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.05
+// 文件版本：V0.06
 
 import static com.complex.platform.common.api.ApiRequests.requireIdempotencyKey;
 
@@ -445,6 +445,17 @@ public class TicketingController {
         authorizationService.requirePermission("ticket.refund.approve");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.confirmTicketRefundPayout(refundId, request));
+    }
+
+    /** 第十八批 AM 段第 241 条 241-R5（BSM:1803；第十八批裁决 55、65、68）：已通过、待原路打款的门票退款发起付款确认。 */
+    @PostMapping("/ticketing/refunds/{refund_id}/payment-confirmations")
+    public ApiResponse<com.complex.platform.finance.PaymentConfirmationService.Confirmation> createTicketRefundPaymentConfirmation(
+            @PathVariable("refund_id") String refundId,
+            @RequestBody com.complex.platform.finance.dto.PaymentConfirmationRequest request
+    ) {
+        authorizationService.requirePermission("ticket.refund.approve");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.requestTicketRefundPaymentConfirmation(refundId, request));
     }
 
     @GetMapping("/ticketing/refunds")

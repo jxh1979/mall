@@ -1,8 +1,9 @@
-// 文件版本：V0.17
+// 文件版本：V0.18
 import React from "react";
 import { FinancePayrollPaymentPanel } from "./FinancePayrollPaymentPanel";
 import { FinanceRefundPanel } from "./FinanceRefundPanel";
 import { FinanceInternalPayablePanel, INTERNAL_PAYABLE_ROUTES } from "./FinanceInternalPayablePanel";
+import { PaymentConfirmationPanel } from "./PaymentConfirmationPanel";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
 import { HighRiskConfirm } from "../components/HighRiskConfirm";
@@ -50,6 +51,8 @@ const SOURCE_TYPE_LABELS: Record<string, string> = {
   // 第十八批 AI 段 214-R1、214-R2：月结过账挂娱乐平台公司与游乐公司、城市项目公司等之间的组合通票往来；与后端 AR_AP_SOURCE_TYPE_LABELS 同名
   pass_domain_share: "通票域间份额", pass_domain_direct_settlement: "通票餐饮零售代付", pass_unverified_attribution: "通票到期未核销归属",
   reconciliation_difference: "对账差异",   // 第十八批 AL 段 223-R1（BSM:1751）：对账差异复核通过后按认定结果入账；与后端 AR_AP_SOURCE_TYPE_LABELS 同名
+  // 第十八批 AM 段第 241 条 241-R1（第十八批裁决 65「按台账来源逐个分」）：付款确认按台账来源定支付类型；与后端 AR_AP_SOURCE_TYPE_LABELS 同名。
+  inventory_transfer: "门店要货货款", media_performance_settlement: "传媒演出结算", stored_value_consume: "平台代收商户卡消费", partner_voucher: "内部价券结算",
 };
 function sourceTypeLabel(v?: string): string {
   return v ? (SOURCE_TYPE_LABELS[v] ?? v) : "—";
@@ -59,6 +62,20 @@ function sourceTypeLabel(v?: string): string {
 function centToYuan(cent: number | undefined): string {
   if (cent === undefined || cent === null || Number.isNaN(Number(cent))) return "—";
   return new Intl.NumberFormat("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(cent) / 100);
+}
+
+// 第十八批 AM 段第 241 条 241-R9（第十八批裁决 69「付款方是平台主体的应收，登记收款前也须付款确认」）：付款方是平台主体、记成应收的 7 个来源
+// （同后端 PaymentConfirmationService.PLATFORM_PAYER_RECEIVABLE_SOURCES），与应付一样可勾选发起付款确认。
+const PLATFORM_PAYER_RECEIVABLE_SOURCES = new Set(["pass_domain_share", "pass_domain_direct_settlement", "bar_payroll_transfer", "dispatch_commission_transfer",
+  "compensation_fulfillment_recovery", "ticket_distribution_recovery", "saved_bottle_remedy_recovery"]);
+
+// 第十八批 AM 段第 241 条 241-R2（BSM:1803；第十八批裁决 68「同收款方、同类型、同综合体可勾选合发；工资、退款、赔付按单发起」）：未结清、非冲正的
+// 应付可勾选（工资在下方工资面板逐人发起；分红留存待释放不可付），应收只限上述 7 个来源。
+function confirmable(row: FinanceLedgerRow): boolean {
+  if (!((row.unpaidAmountCent ?? 0) > 0) || row.status === "reversed") return false;
+  const source = row.sourceType ?? "";
+  return row.direction === "payable" ? source !== "staff_payroll" && source !== "dividend_reserve_withheld"
+    : row.direction === "receivable" && PLATFORM_PAYER_RECEIVABLE_SOURCES.has(source);
 }
 
 export function FinanceArApLedgerPage({ api, setActionResult, setGlobalError, effectivePermissions, navigateTo, user }: AdminPageProps) {
@@ -72,6 +89,8 @@ export function FinanceArApLedgerPage({ api, setActionResult, setGlobalError, ef
   const [draft, setDraft] = React.useState("");
   // 行明细抽屉：整行可点 → 该单据完整字段（方向/金额/来源/状态/日期，枚举中文·金额¥·日期中文）。
   const [detail, setDetail] = React.useState<{ title: string; fields: RowDetailField[] } | null>(null);
+  // 241-R2：勾选合发付款确认的款项（同方向、同往来方、同来源即同支付类型；同综合体与应收的收款门店由后端核）。
+  const [picked, setPicked] = React.useState<FinanceLedgerRow[]>([]);
 
   const fetchPage = React.useCallback(
     (page: number, size: number, keyword: string): Promise<PagedResult<FinanceLedgerRow>> => {
@@ -104,6 +123,16 @@ export function FinanceArApLedgerPage({ api, setActionResult, setGlobalError, ef
 
   function submitSearch() {
     ledger.search(draft);
+  }
+
+  function togglePick(row: FinanceLedgerRow) {
+    setPicked((current) => (current.some((item) => item.id === row.id) ? current.filter((item) => item.id !== row.id) : [...current, row]));
+  }
+
+  function pickable(row: FinanceLedgerRow) {
+    const first = picked[0];
+    return confirmable(row) && (!first || picked.some((item) => item.id === row.id)
+      || (first.counterpartyId === row.counterpartyId && first.sourceType === row.sourceType && first.direction === row.direction));
   }
 
   function validatePayment() {
@@ -226,6 +255,10 @@ export function FinanceArApLedgerPage({ api, setActionResult, setGlobalError, ef
         {selected?.direction === "payable" && INTERNAL_PAYABLE_ROUTES.has(selected.sourceType ?? "")
           ? <FinanceInternalPayablePanel key={selected.id} api={api} effectivePermissions={effectivePermissions} setActionResult={setActionResult} row={selected} onChanged={ledger.reload} />
           : null}
+        {picked[0] ? <PaymentConfirmationPanel key={picked[0].id} api={api} effectivePermissions={effectivePermissions} setActionResult={setActionResult}
+          objectType="ar_ap_item" objectId={picked[0].id} createPath="/api/v1/finance/ar-ap-payment-confirmations" permission={PAYMENT_PERMISSION}
+          extraBody={{ arApItemIds: picked.map((row) => row.id) }}
+          summary={`已勾选 ${picked.length} 笔，未收/未付合计 ¥${centToYuan(picked.reduce((sum, row) => sum + (row.unpaidAmountCent ?? 0), 0))}`} /> : null}
         {formError ? <div data-testid="finance-ledger-error" className="admin-inline-error">{formError}</div> : null}
         <div className="admin-list-toolbar" data-testid="finance-ledger-filter">
           <input
@@ -244,12 +277,14 @@ export function FinanceArApLedgerPage({ api, setActionResult, setGlobalError, ef
         ) : (
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="finance-ledger-table">
-            <thead><tr><th>选择</th><th className="admin-sort-th" data-testid="finance-ledger-sort-voucher" onClick={() => sort.toggle("voucher")} {...sort.thProps("voucher")}>凭证{sort.indicator("voucher")}</th><th className="admin-sort-th" data-testid="finance-ledger-sort-direction" onClick={() => sort.toggle("direction")} {...sort.thProps("direction")}>方向{sort.indicator("direction")}</th><th>金额（未收 / 总额，元）</th><th className="admin-sort-th" data-testid="finance-ledger-sort-due-date" onClick={() => sort.toggle("dueDate")} {...sort.thProps("dueDate")}>到期日{sort.indicator("dueDate")}</th><th className="admin-sort-th" data-testid="finance-ledger-sort-status" onClick={() => sort.toggle("status")} {...sort.thProps("status")}>状态{sort.indicator("status")}</th><th>详情</th></tr></thead>
+            <thead><tr><th>选择</th><th>付款确认</th><th className="admin-sort-th" data-testid="finance-ledger-sort-voucher" onClick={() => sort.toggle("voucher")} {...sort.thProps("voucher")}>凭证{sort.indicator("voucher")}</th><th className="admin-sort-th" data-testid="finance-ledger-sort-direction" onClick={() => sort.toggle("direction")} {...sort.thProps("direction")}>方向{sort.indicator("direction")}</th><th>金额（未收 / 总额，元）</th><th className="admin-sort-th" data-testid="finance-ledger-sort-due-date" onClick={() => sort.toggle("dueDate")} {...sort.thProps("dueDate")}>到期日{sort.indicator("dueDate")}</th><th className="admin-sort-th" data-testid="finance-ledger-sort-status" onClick={() => sort.toggle("status")} {...sort.thProps("status")}>状态{sort.indicator("status")}</th><th>详情</th></tr></thead>
             <tbody>{sort.sorted.map((row) => (
               <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`finance-ledger-row-${row.id}`}
                 onClick={() => openLedgerDetail(row)}
                 onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openLedgerDetail(row); } }}>
                 <td onClick={(event) => event.stopPropagation()}><input type="radio" aria-label={`选择凭证 ${voucherNo(row)}`} data-testid={`finance-ledger-select-${row.id}`} checked={(selected?.id ?? "") === row.id} onChange={() => setSelectedId(row.id)} /></td>
+                <td onClick={(event) => event.stopPropagation()}><input type="checkbox" aria-label={`勾选凭证 ${voucherNo(row)} 发起付款确认`} data-testid={`finance-ledger-confirm-${row.id}`}
+                  checked={picked.some((item) => item.id === row.id)} disabled={!pickable(row)} onChange={() => togglePick(row)} /></td>
                 <td>{voucherNo(row)}</td>
                 <td>{formatBusinessStatus(row.direction ?? "receivable")}</td>
                 <td className="admin-num" style={{ textAlign: "right" }}>{centToYuan(row.unpaidAmountCent)} / {centToYuan(row.amountCent)}</td>

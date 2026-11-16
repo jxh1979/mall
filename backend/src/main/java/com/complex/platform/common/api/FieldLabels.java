@@ -1,6 +1,6 @@
 package com.complex.platform.common.api;
 
-// 文件版本：V0.44
+// 文件版本：V0.45
 
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -376,6 +376,13 @@ public final class FieldLabels {
         p("trial_result", "逐票种试算结果");
         p("decision_note", "审批意见");
         p("ar_ap_item_id", "应收应付明细");
+        // 第十八批 AM 段第 241 条 241-R1（BSM:1803 付款确认；第十八批裁决 65「按台账来源逐个分」、68 台账勾选合发）。
+        p("ar_ap_item_ids", "应收应付款项");
+        p("payment_type", "支付类型");
+        p("payment_type_label", "支付类型名称");
+        p("confirmation_id", "付款确认单号");
+        p("object_ids", "对象标识列表");
+        p("confirmations", "付款确认记录");
         p("expense_type", "费用类型");
         p("fee_event", "费用事件");
         p("fee_items", "费用总表");
@@ -560,6 +567,8 @@ public final class FieldLabels {
         p("line_code", "审批线");
         p("line_name", "审批线名称");
         p("required_line_codes", "必需审批线");
+        // 第十八批 AM 段第 241 条 241-R8：付款确认流程（两线之外的必带线）。
+        p("line_codes", "必带审批线");
         p("parallel_lines.line_code", "并行审批线");
         p("min_start_rank", "最低起点层级");
         p("entry_user_id", "起点人");

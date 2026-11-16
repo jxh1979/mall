@@ -1,6 +1,6 @@
 package com.complex.platform.governance.review;
 
-// 文件版本：V0.35
+// 文件版本：V0.36
 
 import com.complex.platform.access.AccessActor;
 import com.complex.platform.access.AuthorizationService;
@@ -67,7 +67,7 @@ public class SupervisorReviewService {
     private static final java.util.Set<String> STAFF_SUBJECT_ACTIONS =
             java.util.Set.of(STAFF_EMPLOYMENT_STATUS_ACTION, STAFF_ADJUSTMENT_ACTION, "staff.shift.publish");
 
-    private final List<SupervisorReviewPolicyRecord> policies = List.of(
+    private final List<SupervisorReviewPolicyRecord> policies = java.util.stream.Stream.concat(java.util.stream.Stream.of(
             new SupervisorReviewPolicyRecord("staff_payroll_scheme", "staff.payroll.scheme.change", 0, 3, true,
                     List.of("reason"), "active", ApprovalLevel.HR_THREE_LEVELS_UP.code(), null, List.of(HR_LINE, "finance_review")),
             new SupervisorReviewPolicyRecord("staff_payroll_period", "staff.payroll.period.confirm", 0, 3, true,
@@ -210,7 +210,19 @@ public class SupervisorReviewService {
                     ApprovalLevel.HR_THREE_LEVELS_UP.code(), null, List.of(HR_LINE)),
             new SupervisorReviewPolicyRecord("staff_payroll_adjustment_appeal_hr3", STAFF_ADJUSTMENT_APPEAL_ACTION, 0, 3, true, List.of("reason"), "active",
                     ApprovalLevel.HR_THREE_LEVELS_UP.code(), null, List.of(HR_LINE))
-    );
+    ), paymentConfirmationPolicies()).toList();
+
+    /**
+     * 第十八批 AM 段第 241 条 241-R1（BSM:1803「付款确认按全平台统一的审批模型执行……具体流程按支付类型分别设定」；第十八批裁决 65「按台账来源逐个分」、
+     * 裁决 66「每类必带财务、法务两线；其他部门线由发起人按单另加」；PGM:529 涉钱审批出厂 1 个工作日、按审批类型可配）：付款确认每种支付类型一条恒阻断
+     * 策略，由 PaymentConfirmationService.PAYMENT_TYPES 循环生成；发起人沿直接上级链到其指定的最终审批人，固定财务、法务两线（带固定线即不按名称升档）。
+     */
+    private static java.util.stream.Stream<SupervisorReviewPolicyRecord> paymentConfirmationPolicies() {
+        return com.complex.platform.finance.PaymentConfirmationService.PAYMENT_TYPES.keySet().stream()
+                .map(type -> new SupervisorReviewPolicyRecord("payment_confirm_" + type,
+                        com.complex.platform.finance.PaymentConfirmationService.action(type), 0, 1, true, List.of("reason"), "active",
+                        "one_level_up", null, com.complex.platform.finance.PaymentConfirmationService.REQUIRED_LINES));
+    }
 
     public SupervisorReviewService(
             AuthorizationService authorizationService,
@@ -845,6 +857,11 @@ public class SupervisorReviewService {
                 .filter(policy -> policy.actionType().equals(actionType))
                 .min(Comparator.comparing(SupervisorReviewPolicyRecord::policyCode))
                 .orElseThrow(() -> ApiException.badRequest("UNKNOWN_REVIEW_ACTION", "无法识别的复核操作类型"));
+    }
+
+    /** 第十八批 AM 段第 241 条 241-R1：该审批类型策略固定要求的平行线（付款确认查询回显该类必带线）。未知动作 400 UNKNOWN_REVIEW_ACTION。 */
+    public List<String> parallelLineCodes(String actionType) {
+        return findPolicy(actionType).parallelLineCodes();
     }
 
     /** 评估入口不得自报授出档位；带平行线的事项不得被名称改写成无平行线的最高权限档。 */

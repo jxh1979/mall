@@ -1,4 +1,4 @@
-// 文件版本：V0.08
+// 文件版本：V0.09
 import React from "react";
 import { TechDetails } from "../components/TechDetails";
 import { AdminDataState } from "../components/AdminDataState";
@@ -19,11 +19,12 @@ import { formatBusinessStatus } from "../i18n/statusLabels";
 import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowDetailDrawer";
 import { MetricDetailLink, useMetricKpiValue } from "../components/MetricDetailEntry";
 import { TicketRefundCasesPanel } from "./TicketRefundCasesPanel";
+import { PaymentConfirmationPanel } from "./PaymentConfirmationPanel";
 
 const TEXT = {
   title: "\u51fa\u7968\u4e0e\u6838\u9500\u8ffd\u8e2a",
   description: "\u805a\u5408\u7968\u52a1\u8ba2\u5355\u3001\u652f\u4ed8\u72b6\u6001\u3001\u51fa\u7968\u72b6\u6001\u3001\u6743\u76ca\u548c\u6838\u9500\u9884\u68c0\uff0c\u7528\u4e8e\u5b9a\u4f4d\u672a\u51fa\u7968\u548c\u5f02\u5e38\u6838\u9500\u3002",
-  evidence: "\u63a5\u53e3\u8bc1\u636e\uff1a\u8bfb\u53d6 /api/v1/ticketing/orders\uff1b\u8bfb\u53d6 /api/v1/ticketing/issued-entitlements\uff1b\u8bfb\u53d6 /api/v1/ticketing/verifications\uff1b\u51fa\u7968 POST /api/v1/ticketing/orders/{order_id}/issue\uff1b\u6838\u9500\u9884\u68c0 POST /api/v1/ticketing/verifications/preview；读取 /api/v1/ticketing/refunds；确认拨付 POST /api/v1/ticketing/refunds/{refund_id}/confirm-payout；提起核销异常复核 POST /api/v1/ticketing/verifications/{id}/anomaly；主管处置核销异常 POST /api/v1/ticketing/verification-anomalies/{id}/resolve；发起退款 POST /api/v1/ticketing/refunds；退款审批 POST /api/v1/ticketing/refunds/{refund_id}/approve、/reject；通票安全事件 GET/POST /api/v1/ticketing/safety-events、批准 POST /api/v1/ticketing/safety-events/{safety_event_id}/approve。",
+  evidence: "\u63a5\u53e3\u8bc1\u636e\uff1a\u8bfb\u53d6 /api/v1/ticketing/orders\uff1b\u8bfb\u53d6 /api/v1/ticketing/issued-entitlements\uff1b\u8bfb\u53d6 /api/v1/ticketing/verifications\uff1b\u51fa\u7968 POST /api/v1/ticketing/orders/{order_id}/issue\uff1b\u6838\u9500\u9884\u68c0 POST /api/v1/ticketing/verifications/preview；读取 /api/v1/ticketing/refunds；确认拨付 POST /api/v1/ticketing/refunds/{refund_id}/confirm-payout；提起核销异常复核 POST /api/v1/ticketing/verifications/{id}/anomaly；主管处置核销异常 POST /api/v1/ticketing/verification-anomalies/{id}/resolve；发起退款 POST /api/v1/ticketing/refunds；退款审批 POST /api/v1/ticketing/refunds/{refund_id}/approve、/reject；通票安全事件 GET/POST /api/v1/ticketing/safety-events、批准 POST /api/v1/ticketing/safety-events/{safety_event_id}/approve；退款付款确认 POST /api/v1/ticketing/refunds/{refund_id}/payment-confirmations。",
   loadFailed: "\u7968\u52a1\u8ba2\u5355\u8ffd\u8e2a\u6570\u636e\u8bfb\u53d6\u5931\u8d25",
   actionFailed: "\u7968\u52a1\u8ba2\u5355\u64cd\u4f5c\u5931\u8d25",
   noOrder: "\u5f53\u524d\u6ca1\u6709\u53ef\u51fa\u7968\u8ba2\u5355\u3002",
@@ -195,6 +196,7 @@ export function TicketOrdersPage({ api, setActionResult, setGlobalError, effecti
   const [refundsNotice, setRefundsNotice] = React.useState<string | null>(null);
   const [onlyPendingPayout, setOnlyPendingPayout] = React.useState(true);
   const [payoutResult, setPayoutResult] = React.useState("");
+  const [confirmingRefundId, setConfirmingRefundId] = React.useState("");
   const [anomalyReason, setAnomalyReason] = React.useState("");
   const { selectedId: selectedOrderId, setSelectedId: setSelectedOrderId, selected: selectedOrder } = useSelectedRow(orders);
   const [entitlementCode, setEntitlementCode] = React.useState("ENT-0001");
@@ -613,7 +615,8 @@ export function TicketOrdersPage({ api, setActionResult, setGlobalError, effecti
                           <td>{refund.approvedBy ?? "-"}</td>
                           <td>{cnDate(refund.createdAt)}</td>
                           <td>
-                            {refund.status === "approved" ? (
+                            {refund.status === "approved" ? (<>
+                              <button type="button" data-testid={`ticket-refund-payment-confirmation-${refund.id}`} onClick={() => setConfirmingRefundId(refund.id)}>付款确认</button>
                               <HighRiskConfirm
                                 label={TEXT.refundConfirm}
                                 impact="确认后该笔退款记为「成功」并计入已退金额、冲减当日经营净收入，请务必先确认钱已实际打给客人。"
@@ -624,7 +627,7 @@ export function TicketOrdersPage({ api, setActionResult, setGlobalError, effecti
                                 permissions={["ticket.refund.approve"]}
                                 data-testid={`ticket-refund-confirm-payout-${refund.id}`}
                               />
-                            ) : "—"}
+                            </>) : "—"}
                           </td>
                         </tr>
                       ))}
@@ -632,6 +635,12 @@ export function TicketOrdersPage({ api, setActionResult, setGlobalError, effecti
                   </table>
                 </div>
               )}
+              {/* 第十八批 AM 段第 241 条 241-R5（BSM:1803；第十八批裁决 55、65「门票退款打款」、68）：待原路打款的退款按待打款合计发起付款确认，通过后才能确认拨付。 */}
+              {pendingPayoutRefunds.some((refund) => refund.id === confirmingRefundId) ? (
+                <PaymentConfirmationPanel key={confirmingRefundId} api={api} effectivePermissions={effectivePermissions} setActionResult={setActionResult}
+                  objectType="ticket_refund" objectId={confirmingRefundId} createPath={`/api/v1/ticketing/refunds/${encodeURIComponent(confirmingRefundId)}/payment-confirmations`}
+                  permission="ticket.refund.approve" summary={`门票退款 ${confirmingRefundId}`} />
+              ) : null}
             </>
           )}
         </div>

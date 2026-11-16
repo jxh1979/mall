@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.07
+// 文件版本：V0.08
 
 import com.complex.platform.common.api.PageResponse;
 import com.complex.platform.evidence.AuditedOperationExecutor;
@@ -76,6 +76,7 @@ public class TicketingOperationExecutor {
         if (value instanceof TicketPaymentIntentRecord record) return record.id();
         if (value instanceof TicketRefundRecord record) return record.id();
         if (value instanceof TicketSafetyEventRecord record) return record.id();
+        if (value instanceof com.complex.platform.finance.PaymentConfirmationService.Confirmation confirmation) return confirmation.confirmationId();
         return null;
     }
 }

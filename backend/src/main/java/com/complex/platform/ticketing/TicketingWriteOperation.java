@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.07
+// 文件版本：V0.08
 
 import com.complex.platform.evidence.AuditedOperation;
 
@@ -45,6 +45,9 @@ enum TicketingWriteOperation implements AuditedOperation {
     REJECT_TICKET_REFUND("ticket_refund.rejected", "ticket_refund.reject_failed", "ticket.refund.approve", "ticket_refund"),
     // 退款实际拨付确认（business-enum 退款单状态：只有“成功”才计入已退金额）：approved→success。
     CONFIRM_TICKET_REFUND_PAYOUT("ticket_refund.payout_confirmed", "ticket_refund.payout_confirm_failed", "ticket.refund.approve", "ticket_refund"),
+    // 第十八批 AM 段第 241 条 241-R5（第十八批裁决 55、65、68）：已通过、待原路打款的门票退款发起付款确认，权限同确认拨付；留痕与其他付款确认发起同名。
+    REQUEST_TICKET_REFUND_PAYMENT_CONFIRMATION("finance.payment_confirmation.requested", "finance.payment_confirmation.request_failed",
+            "ticket.refund.approve", "payment_confirmation"),
     // TK-05-R2/R3 通票安全例外（BSM:804）：登记与夜班值班经理及以上批准。
     REQUEST_TICKET_SAFETY_EVENT("ticket_safety_event.requested", "ticket_safety_event.request_failed", "ticket.refund.request", "ticket_safety_event"),
     APPROVE_TICKET_SAFETY_EVENT("ticket_safety_event.approved", "ticket_safety_event.approve_failed", "ticket.refund.approve", "ticket_safety_event"),

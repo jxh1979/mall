@@ -1,4 +1,4 @@
-// 文件版本：V0.07
+// 文件版本：V0.08
 import React from "react";
 import { formatBusinessStatus } from "../i18n/statusLabels";
 import { TechDetails } from "../components/TechDetails";
@@ -13,6 +13,7 @@ import { useSortedRows } from "../components/useSortedRows";
 import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowDetailDrawer";
 import { MetricDetailLink, useMetricKpiValue } from "../components/MetricDetailEntry";
 import type { AdminPageProps, StoredWineRemedyRow, StoredWineRow } from "../types";
+import { PaymentConfirmationPanel } from "./PaymentConfirmationPanel";
 
 // 后端 /saved-bottles 还返回到期/更新/剩余数量等（StoredWineRow 未全量声明），
 // 行明细抽屉就近读取这些字段，不改共享 types.ts。
@@ -65,7 +66,7 @@ function splitIds(value: string) {
 const TEXT = {
   title: "存酒",
   description: "展示客人存酒资产、在线领取核销、证据附件和幂等留痕；高价值酒水保持在线校验，不做离线核销。",
-  evidence: "接口证据：读取 /api/v1/inventory/saved-bottles；按手机号检索 POST /api/v1/inventory/saved-bottles/lookup；发码 POST /api/v1/inventory/saved-bottles/{id}/verification-code（scene=claim|transfer）；领取 POST /api/v1/inventory/saved-bottles/{id}/claim；转让 POST /api/v1/inventory/saved-bottles/{id}/transfer（to_name_or_nickname、to_phone、verification_code）；转存 POST /api/v1/inventory/saved-bottles/{id}/renewals（verification_code）、复核 POST /api/v1/inventory/saved-bottles/renewals/{id}/review（decision=approve|reject，驳回带 reason）、记录 GET /api/v1/inventory/saved-bottles/{id}/renewals；作废 POST /api/v1/inventory/saved-bottles/{id}/cancel（photo/video_attachment_ids）；补存/赔付 POST /api/v1/inventory/saved-bottles/{id}/remedy、记录 GET …/{id}/remedies、审批/结案/垫付/员工责任/追收收回 POST /api/v1/inventory/saved-bottles/remedies/{id}/approve|settle|advance|staff-liability|recovery/settle；门店退出 POST /api/v1/inventory/saved-bottles/exit-notice、交接 POST /api/v1/inventory/saved-bottles/handover。",
+  evidence: "接口证据：读取 /api/v1/inventory/saved-bottles；按手机号检索 POST /api/v1/inventory/saved-bottles/lookup；发码 POST /api/v1/inventory/saved-bottles/{id}/verification-code（scene=claim|transfer）；领取 POST /api/v1/inventory/saved-bottles/{id}/claim；转让 POST /api/v1/inventory/saved-bottles/{id}/transfer（to_name_or_nickname、to_phone、verification_code）；转存 POST /api/v1/inventory/saved-bottles/{id}/renewals（verification_code）、复核 POST /api/v1/inventory/saved-bottles/renewals/{id}/review（decision=approve|reject，驳回带 reason）、记录 GET /api/v1/inventory/saved-bottles/{id}/renewals；作废 POST /api/v1/inventory/saved-bottles/{id}/cancel（photo/video_attachment_ids）；补存/赔付 POST /api/v1/inventory/saved-bottles/{id}/remedy、记录 GET …/{id}/remedies、审批/结案/垫付/员工责任/追收收回 POST /api/v1/inventory/saved-bottles/remedies/{id}/approve|settle|advance|staff-liability|recovery/settle、赔付付款确认 POST /api/v1/inventory/saved-bottles/remedies/{id}/payment-confirmations；门店退出 POST /api/v1/inventory/saved-bottles/exit-notice、交接 POST /api/v1/inventory/saved-bottles/handover。",
   loadFailed: "存酒数据读取失败",
   claimFailed: "存酒领取核销失败",
   transferFailed: "存酒转让失败",
@@ -962,12 +963,16 @@ export function StoredWinePage({ api, setActionResult, setGlobalError, effective
                             data-testid={`stored-wine-remedy-approve-fin-${remedy.id}`} />
                         </>
                       ) : null}
-                      {remedy.customerDeliveryStatus === "approved" ? (
+                      {remedy.customerDeliveryStatus === "approved" ? (<>
+                        {/* 第十八批 AM 段第 241 条 241-R6（BSM:1803；第十八批裁决 55、65「存酒对客赔付」、68）：赔款交付结案前须有已通过的付款确认。 */}
+                        <PaymentConfirmationPanel api={api} effectivePermissions={effectivePermissions} setActionResult={setActionResult} objectType="saved_bottle_remedy"
+                          objectId={remedy.id} createPath={`/api/v1/inventory/saved-bottles/remedies/${encodeURIComponent(remedy.id)}/payment-confirmations`}
+                          permission={STORED_WINE_CLAIM_PERMISSION} />
                         <HighRiskConfirm label={TEXT.remedySettle} impact="赔款实际交付后才结案；记交付/支付凭证与时间并计入经营损失。" disabled={submitting}
                           onConfirm={() => void remedyAction(remedy.id, "settle", { evidence_ids: splitIds(remedyEvidence) })}
                           permissionsState={effectivePermissions} permissions={[STORED_WINE_CLAIM_PERMISSION]}
                           data-testid={`stored-wine-remedy-settle-${remedy.id}`} />
-                      ) : null}
+                      </>) : null}
                       {(remedy.recoveryPartyType ?? "none") === "none" ? (
                         <>
                           <HighRiskConfirm label={TEXT.remedyAdvance} impact="娱乐平台公司审批先垫付，对客结案后向原门店挂追收应收。" disabled={submitting}

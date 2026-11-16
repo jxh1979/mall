@@ -1,6 +1,6 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.19
+// 文件版本：V0.20
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.LocalZone;
@@ -105,6 +105,11 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     @org.springframework.context.annotation.Lazy
     com.complex.platform.finance.FinanceService financeService;
+    // 第十八批 AM 段第 241 条 241-R6（BSM:1803；第十八批裁决 55「所有应付都先走付款确认」、65 存酒对客赔付 saved_bottle_compensation）：赔款交付结案前须有
+    // 已通过的付款确认。字段注入（@Lazy 防初始化环）；手工构造未注入时结案一律 409 PAYMENT_CONFIRMATION_REQUIRED（fail-closed）。
+    @org.springframework.beans.factory.annotation.Autowired
+    @org.springframework.context.annotation.Lazy
+    com.complex.platform.finance.PaymentConfirmationService paymentConfirmations;
     /** 内部结算价（分）：bottle → 目录生效价；未配价为空（对客补存不因此阻断，损失留财务按 R6-D08 补计）。 */
     java.util.function.Function<SavedBottleRecord, Optional<Long>> settlementPriceResolver = bottle -> Optional.empty();
     /** 项目 → 酒吧域归属的娱乐平台公司主体（revenue_stream_attribution，all_pass_ticket 流，与 SettlementExpiryJob 同口径）。 */
@@ -1931,6 +1936,11 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
                     if (!"approved".equals(remedy.customerDeliveryStatus())) {
                         throw ApiException.conflict("SAVED_BOTTLE_REMEDY_NOT_APPROVED", "赔付方案须经门店主管和财务审批后才能支付结案");
                     }
+                    // 第十八批 AM 段第 241 条 241-R6：赔款交付结案前须有已通过的付款确认（同品补存登记即结案、不经此处；平台垫付不出款、不判）。
+                    if (paymentConfirmations == null) {
+                        throw ApiException.conflict("PAYMENT_CONFIRMATION_REQUIRED", "该笔付款须先完成付款确认（主线与财务、法务等各条平行线全部审批通过）");
+                    }
+                    paymentConfirmations.requireApproved("saved_bottle_remedy", remedy.id());
                     Instant now = clock.instant();
                     String lossItemId = postRemedyLoss(remedy.id(), new String[] {remedy.bearerType(), remedy.bearerId()},
                             remedy.merchantId(), remedy.amountCent(), actual.idempotencyKey());
@@ -1939,6 +1949,33 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
                         closed = postRecovery(closed, actual.idempotencyKey(), now);
                     }
                     return repository.saveSavedBottleRemedy(closed);
+                });
+    }
+
+    /**
+     * 第十八批 AM 段第 241 条 241-R6（BSM:1803「付款确认按全平台统一的审批模型执行——发起时指定这条主线的最终审批人……」；BSM:1072「经门店主管和财务审批后
+     * 支付……实物或赔款实际交付后才结案」；第十八批裁决 55、65（存酒对客赔付一个支付类型 saved_bottle_compensation）、68「赔付按单发起」）：赔付单发起付款
+     * 确认，金额取赔付金额，收款方为存酒客人，项目与商户取赔付单。商户范围闸放在幂等之前，写内再判一次；两道审批是否批完不另判（结案闸照旧）。
+     */
+    @com.complex.platform.gate.GuardedAction(capability = "bar.saved_bottle.manage")
+    @Transactional
+    public com.complex.platform.finance.PaymentConfirmationService.Confirmation requestSavedBottleRemedyPaymentConfirmation(String remedyId,
+            com.complex.platform.finance.dto.PaymentConfirmationRequest request) {
+        String id = requireText(remedyId, "remedy_id");
+        return executeWrite("createSavedBottleRemedyPaymentConfirmation:" + id, request == null ? null : request.idempotencyKey(), request,
+                com.complex.platform.finance.PaymentConfirmationService.Confirmation.class, "finance.payment_confirmation.requested",
+                "finance.payment_confirmation.request_failed", "bar.saved_bottle.manage", "payment_confirmation",
+                () -> requireCustody(bottleOf(requireRemedy(id))), () -> {
+                    var actual = requireRequest(request);
+                    SavedBottleRemedyRecord remedy = requireRemedy(id);
+                    SavedBottleRecord bottle = bottleOf(remedy);
+                    requireCustody(bottle);
+                    return paymentConfirmations.request(List.of(new com.complex.platform.finance.PaymentConfirmationService.Target(
+                                    "saved_bottle_compensation", "saved_bottle_remedy", remedy.id(), remedy.amountCent(), remedy.projectId(),
+                                    remedy.merchantId(), bottle.customerId(), null, "存酒 " + bottle.bottleName() + "（" + bottle.id() + "）对客赔付 "
+                                            + java.math.BigDecimal.valueOf(remedy.amountCent(), 2).toPlainString() + " 元，承担方 "
+                                            + ("platform_company".equals(remedy.bearerType()) ? "娱乐平台公司" : "原门店") + "，赔付事由 " + remedy.reason())),
+                            actual.idempotencyKey(), actual.reason(), actual.finalApproverId(), actual.parallelLines());
                 });
     }
 
@@ -4409,6 +4446,9 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
     }
 
     private String businessId(Object response) {
+        if (response instanceof com.complex.platform.finance.PaymentConfirmationService.Confirmation confirmation) {
+            return confirmation.confirmationId();
+        }
         if (response instanceof InventoryItemRecord record) {
             return record.id();
         }

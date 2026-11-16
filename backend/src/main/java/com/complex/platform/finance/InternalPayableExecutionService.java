@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import static com.complex.platform.common.Strings.requireText;
 import static com.complex.platform.common.Strings.trimToNull;
@@ -76,10 +76,11 @@ public class InternalPayableExecutionService {
     private final WorkingDayCalendar calendar;
     private final IdempotencyService idem;
     private final AuditEventService audit;
+    private final PaymentConfirmationService paymentConfirmations;
 
     public InternalPayableExecutionService(JdbcTemplate jdbc, AuthorizationService auth, FinanceRepository repository,
                                            FinanceService finance, WorkingDayCalendar calendar, IdempotencyService idem,
-                                           AuditEventService audit) {
+                                           AuditEventService audit, PaymentConfirmationService paymentConfirmations) {
         this.jdbc = jdbc;
         this.auth = auth;
         this.repository = repository;
@@ -87,6 +88,7 @@ public class InternalPayableExecutionService {
         this.calendar = calendar;
         this.idem = idem;
         this.audit = audit;
+        this.paymentConfirmations = paymentConfirmations;
     }
 
     public Execution execution(String arApItemId) {
@@ -111,6 +113,9 @@ public class InternalPayableExecutionService {
                 if (latest(item.id()).filter(a -> "initiated".equals(a.status())).isPresent()) {
                     throw ApiException.conflict("PAYMENT_IN_TRANSIT", "该笔付款已发起、尚未确认到账且未收到失败结果，属银行在途，不得重付");
                 }
+                // 第十八批 AM 段第 241 条 241-R1（第十八批裁决 55「所有应付都先走付款确认」）：发起付款前须有已通过的付款确认；登记明确失败、
+                // 资金不足顺延不是出款不判，原路重付仍用同一张确认。
+                paymentConfirmations.requireApproved("ar_ap_item", item.id());
                 String change = trimToNull(r.accountChangeId());
                 if (change != null && jdbc.queryForObject(
                         "SELECT count(*) FROM internal_payable_account_changes WHERE id=? AND ar_ap_item_id=?",
