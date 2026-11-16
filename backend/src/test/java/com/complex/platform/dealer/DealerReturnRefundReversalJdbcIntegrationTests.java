@@ -1,6 +1,6 @@
 package com.complex.platform.dealer;
 
-// 文件版本：V0.05
+// 文件版本：V0.06
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
@@ -845,6 +845,7 @@ class DealerReturnRefundReversalJdbcIntegrationTests {
         String executor=returnFinanceStaff("exec",project,project),confirmer=returnFinanceStaff("confirm",project,project);
         actAsStaff(executor);var facts=returnMoney.executeRefunds(ret.id(),new com.complex.platform.dealer.dto.DealerIdempotentRequest(key()));
         var refund=facts.refunds().getFirst();assertThat(refund.financeRefundId()).isNotBlank();
+        com.complex.platform.support.PaymentConfirmationFixture.approvedFinanceRefund(jdbc,refund.financeRefundId()); // 第十八批 AM 段第 241 条 241-R5：财务执行前须有已通过的付款确认（发起与逐级审批见 PaymentConfirmationPayrollRefundJdbcTests）。
         financeService.recordFinanceRefundExecution(refund.financeRefundId(),new com.complex.platform.finance.dto.RefundExecutionRequest(key(),"实际退货原路执行",proof("finance_refund",refund.financeRefundId()),"RETURN-PROJECT-RF",null));
         actAsStaff(confirmer);financeService.confirmFinanceRefundResult(refund.financeRefundId(),new com.complex.platform.finance.dto.RefundResultConfirmRequest(key(),"独立确认",proof("finance_refund",refund.financeRefundId()),"success",refund.amountCent(),"RETURN-PROJECT-RF",executor,null));
         assertThat(returnMoney.get(ret.id()).goodsRefundedCent()).isEqualTo(1_000L);
@@ -865,6 +866,7 @@ class DealerReturnRefundReversalJdbcIntegrationTests {
         var order=signedOrder(2,3_000L);var ret=inspectAcceptedReturn(order.id(),1);approve(ret.refundReviewId());
         String executor=returnFinanceStaff("exec2",project,project);actAsStaff(executor);
         var refund=returnMoney.executeRefunds(ret.id(),new com.complex.platform.dealer.dto.DealerIdempotentRequest(key())).refunds().getFirst();
+        com.complex.platform.support.PaymentConfirmationFixture.approvedFinanceRefund(jdbc,refund.financeRefundId()); // 第十八批 AM 段第 241 条 241-R5：财务执行前须有已通过的付款确认（发起与逐级审批见 PaymentConfirmationPayrollRefundJdbcTests）。
         financeService.recordFinanceRefundExecution(refund.financeRefundId(),new com.complex.platform.finance.dto.RefundExecutionRequest(key(),"实际执行",proof("finance_refund",refund.financeRefundId()),"RETURN-SCOPE-RF",null));
         String other="project_ret_other_"+suffix;jdbc.update("INSERT INTO projects(id,venue_type,name,status,created_at,updated_at) VALUES (?,'complex','仅确认另项目','active',now(),now())",other);
         String confirmer=returnFinanceStaff("confirm2",project,other);actAsStaff(confirmer);
@@ -897,6 +899,7 @@ class DealerReturnRefundReversalJdbcIntegrationTests {
         assertThatThrownBy(()->isolated(()->returnMoney.executeRefunds(setup.returnId(),prepare))).as("准备待办旧key仍须有原款项目授权").isInstanceOf(ApiException.class);
         actAsStaff(executor);
         String reference="CROSS-REAL-"+key();
+        com.complex.platform.support.PaymentConfirmationFixture.approvedFinanceRefund(jdbc,refund.financeRefundId()); // 第十八批 AM 段第 241 条 241-R5：财务执行前须有已通过的付款确认（发起与逐级审批见 PaymentConfirmationPayrollRefundJdbcTests）。
         var execute=new com.complex.platform.finance.dto.RefundExecutionRequest(key(),"按A原款实际退回",proof("finance_refund",refund.financeRefundId()),reference,null);
         for(String user:List.of(onlyA,onlyB)) {
             actAsStaff(user);
@@ -1016,6 +1019,7 @@ class DealerReturnRefundReversalJdbcIntegrationTests {
         actAs(reviewer);return returnMoney.executeRefunds(returnId,new com.complex.platform.dealer.dto.DealerIdempotentRequest(key()));
     }
     private void settle(DealerReturnFinancialRecord.Refund refund,String status) {
+        com.complex.platform.support.PaymentConfirmationFixture.approvedFinanceRefund(jdbc,refund.financeRefundId()); // 第十八批 AM 段第 241 条 241-R5：财务执行前须有已通过的付款确认（发起与逐级审批见 PaymentConfirmationPayrollRefundJdbcTests）。
         actAs(reviewer);String reference="REAL-RF-"+key();
         financeService.recordFinanceRefundExecution(refund.financeRefundId(),new com.complex.platform.finance.dto.RefundExecutionRequest(
                 key(),"按原收款路线实际退款",proof("finance_refund",refund.financeRefundId()),reference,null));

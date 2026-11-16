@@ -56,7 +56,7 @@ scope 类型（与盘点 CSV 的 `scope_type` 对齐）：
 
 <!-- DATA_ISOLATION_SPEC_AUTO_START -->
 ### 3A. 自动迁移隔离基线（由 `npm run docs:data-isolation-spec` 生成）
-> 事实源：`backend/src/main/resources/db/migration`。当前解析到最新迁移 **V628**，发现 **276** 张含 scope 字段的表。不要手工修改本区块；新增迁移后运行 `npm run docs:data-isolation-spec`，提交前运行 `npm run verify:data-isolation-spec`。
+> 事实源：`backend/src/main/resources/db/migration`。当前解析到最新迁移 **V629**，发现 **277** 张含 scope 字段的表。不要手工修改本区块；新增迁移后运行 `npm run docs:data-isolation-spec`，提交前运行 `npm run verify:data-isolation-spec`。
 | 表 | scope 字段 | scope 类型 | 首次出现迁移 | 证据文件 |
 |---|---|---|---|---|
 | `access_grant_requests` | `merchant_id` + `project_id` | direct | V170 | `V170__access_grant_requests.sql` |
@@ -248,6 +248,7 @@ scope 类型（与盘点 CSV 的 `scope_type` 对齐）：
 | `pass_pool_snapshot_first_segment` | `merchant_id` | direct | V556 | `V556__pass_pool_per_ticket_distribution.sql` |
 | `pass_pool_snapshots` | `project_id` | direct | V556 | `V556__pass_pool_per_ticket_distribution.sql` |
 | `pass_pool_unit_results` | `merchant_id` | direct | V556 | `V556__pass_pool_per_ticket_distribution.sql` |
+| `payment_confirmations` | `merchant_id` + `project_id` | direct | V629 | `V629__payment_confirmations.sql` |
 | `payroll_tax_assessments` | `merchant_id` + `project_id` | direct | V477 | `V477__payroll_tax_approved_versions.sql` |
 | `platform_retention_rules` | `project_id` | direct | V223 | `V223__settlement_distribution_configs_batch2.sql` |
 | `points_accrual_rate_configs` | `merchant_id` + `project_id` | direct | V340 | `V340__commission_and_points_rate_configs.sql` |

@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.19
+// 文件版本：V0.20
 
 import com.complex.platform.support.InMemoryAuditEventRepository;
 import com.complex.platform.support.InMemoryIdempotencyRepository;
@@ -84,6 +84,8 @@ class FinanceServiceTests {
         // AUD-007 退款额度闸已 fail-closed 常在：默认给宽松引擎 + 操作者，令既有「额度内退款成功」用例仍过；
         // 具体拒绝/额度场景各用例自行覆盖 refundAuthorizationService/currentActor。
         service.refundAuthorizationService = new RefundAuthorizationService(permissiveRefundRepo());
+        // 第十八批 AM 段第 241 条 241-R1：付款确认出款闸的桩——requireApproved 不抛，hasApproved 默认 false（用例按需自设）。
+        service.paymentConfirmations = mock(PaymentConfirmationService.class);
         when(authorizationService.currentProjectScopeQuietly()).thenAnswer(call->
                 authorizationService.currentMerchantScope().isPresent() ? Optional.of("org_1") : Optional.empty());
         when(authorizationService.currentActor()).thenAnswer(call->new AccessActor("op_default","op_default",

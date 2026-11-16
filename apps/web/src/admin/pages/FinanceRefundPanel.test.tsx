@@ -1,7 +1,9 @@
-// 文件版本：V0.06
+// 文件版本：V0.07
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { FinanceArApLedgerPage } from "./FinanceArApLedgerPage";
+import { FinanceRefundPanel } from "./FinanceRefundPanel";
+import { AdminApi } from "../client/adminClient";
 import type { AdminApiClient, AdminPageProps, EffectivePermissionsState } from "../types";
 
 const grants: EffectivePermissionsState = { status: "ready", value: { grants: [], denies: [], wildcard: true } };
@@ -203,5 +205,43 @@ describe("财务退款完整操作", () => {
     await openRefund();
     expect(screen.getByRole("button", { name: "在原单重试" })).toBeDisabled();
     expect(screen.getByText("该笔储值退款须按原收款路径办理并核实结果。" )).toBeTruthy();
+  });
+});
+
+// 第十八批 AM 段第 241 条 241-R2、241-R5（BSM:1803；第十八批裁决 55、65、68「工资、退款、赔付按单发起」）：待办理的财务退款先发起付款确认，
+// 确认通过前不派发、不登记执行。
+describe("财务退款付款确认", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("待办理的退款显示付款确认面板，发起路径为该退款单的付款确认接口", async () => {
+    const posts: { url: string; body: Record<string, unknown> }[] = [];
+    const row = { id: "refund-9", target_id: "payment-1", refund_amount_cent: 2000, reason: "重复收款", refund_channel: "wechat",
+      refund_direction: "original", status: "requested", created_at: "2026-11-16T08:00:00Z", source_type: "ar_ap_payment", merchant_id: "merchant-1",
+      project_id: "project-1", requested_by: "applicant-1", original_payment_ref: "bank-1" };
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      let data: unknown = [];
+      if (init?.method === "POST") {
+        posts.push({ url, body: JSON.parse(String(init.body)) as Record<string, unknown> });
+        data = { confirmation_id: "pc_9", status: "pending_review" };
+      } else if (url.includes("/api/v1/finance/payment-confirmations?")) {
+        data = { payment_type: "finance_refund_ar_ap_payment", payment_type_label: "财务退款（原收款退款）",
+          required_line_codes: ["finance_review", "legal_review"], confirmations: [] };
+      } else if (url.includes("/api/v1/finance/refunds/refund-9")) data = { refund: row, attempts: [] };
+      return new Response(JSON.stringify({ success: true, code: "OK", data }));
+    }));
+    render(<FinanceRefundPanel api={new AdminApi("test")} user={{ id: "fin-1", username: "财务", accountType: "staff" }} effectivePermissions={grants}
+      setActionResult={vi.fn()} setGlobalError={vi.fn()} ledgerItem={null} onChanged={vi.fn()} initialRefundId="refund-9" />);
+    await waitFor(() => expect(screen.queryByTestId("payment-confirmation-line-legal_review")).not.toBeNull());
+    expect(screen.getByTestId("payment-confirmation-panel").textContent).toContain("财务退款（原收款退款）");
+    fireEvent.change(screen.getByTestId("payment-confirmation-reason"), { target: { value: "重复收款原路退回" } });
+    fireEvent.change(screen.getByTestId("payment-confirmation-final-approver"), { target: { value: "usr_boss" } });
+    fireEvent.change(screen.getByTestId("payment-confirmation-line-finance_review"), { target: { value: "usr_f" } });
+    fireEvent.change(screen.getByTestId("payment-confirmation-line-legal_review"), { target: { value: "usr_l" } });
+    fireEvent.click(screen.getByTestId("payment-confirmation-submit"));
+    await waitFor(() => expect(posts).toHaveLength(1));
+    expect(posts[0]!.url).toContain("/api/v1/finance/refunds/refund-9/payment-confirmations");
+    expect(posts[0]!.body).toMatchObject({ final_approver_id: "usr_boss", parallel_lines: [
+      { line_code: "finance_review", final_approver_id: "usr_f" }, { line_code: "legal_review", final_approver_id: "usr_l" }] });
   });
 });

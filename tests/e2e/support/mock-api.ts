@@ -1,4 +1,4 @@
-// 文件版本：V0.15
+// 文件版本：V0.16
 import type { Page, Route } from "@playwright/test";
 
 type ApiData = Record<string, unknown> | Array<Record<string, unknown>> | null;
@@ -241,6 +241,11 @@ function fixedRows(pathname: string, state: MockState, options: MockOptions = {}
     "/api/v1/ticketing/issued-entitlements": state.issuedEntitlements,
     "/api/v1/ticketing/verifications": state.verifications,
     "/api/v1/finance/ar-ap-items": state.financeItems,
+    // 第十八批 AM 段第 241 条 241-R2、241-R8：付款确认面板读某对象的确认单与必带线（出款前已通过一张），组织层级页读各支付类型的付款确认流程。
+    "/api/v1/finance/payment-confirmations": { object_type: "ar_ap_item", object_id: "bill-1", payment_type: "purchase_inbound", payment_type_label: "采购入库",
+      required_line_codes: ["finance_review", "legal_review"], confirmations: [{ confirmation_id: "pc-1", amount_cent: 9900, status: "approved", review_id: "review-pc-1",
+      requested_by: "user-1", requested_at: now, decided_at: now }] },
+    "/api/v1/access/payment-confirmation-flows": [{ payment_type: "purchase_inbound", payment_type_label: "采购入库", line_codes: [] }],
     "/api/v1/finance/property-fee/rates": [{ id: "pfr-1", projectId: "venue-1", effectivePeriod: null, ratePerSquareMeterCent: 2500, status: "active", createdAt: now, updatedAt: now }],
     "/api/v1/finance/merchant-expenses": { items: [{ id: "mex_m_1", merchantId: "merchant-1", period: "2026-07", expenseType: "labor", amountCent: 500000, source: "manual", sourceRef: null, note: "七月人工", operatorUserId: "usr_admin", createdAt: now }, { id: "mex_ae_1", merchantId: "merchant-1", period: "2026-07", expenseType: "energy", amountCent: 88800, source: "auto_energy", sourceRef: "arap_energy_1", note: "能耗费自动挂接", operatorUserId: "usr_admin", createdAt: now }], page: 1, pageSize: 20, total: 2 },
     "/api/v1/finance/dividends/plans": [{ id: "divp_1", merchantId: "merchant-1", principalUserId: "usr_principal", principalName: "主理人甲", platformShareBps: 8000, taxRateBps: 2000, periodType: "quarterly", revenueDomains: ["bar", "ticket"], includeInventoryCost: true, expenseTypes: ["rent_allocation", "energy", "property_fee", "labor", "amortization", "other"], status: "active", createdAt: now, updatedAt: now }],

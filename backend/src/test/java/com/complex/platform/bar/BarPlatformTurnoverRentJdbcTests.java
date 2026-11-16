@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import static com.complex.platform.support.DailyCloseFixture.markRangeFinal;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -362,6 +362,8 @@ class BarPlatformTurnoverRentJdbcTests {
                 billId, refunderId);
         JsonNode adjustment = data(mockMvc.perform(post("/api/v1/bar/bills/" + billId + "/adjustments").with(refunder)
                 .contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(body))).andExpect(status().isOk()));
+        // 第十八批 AM 段第 241 条 241-R1：出款前置——该应付已有通过的付款确认（夹具）。
+        com.complex.platform.support.PaymentConfirmationFixture.approvedArAp(jdbc, adjustment.path("ar_ap_item_id").asText());
         mockMvc.perform(post("/api/v1/finance/ar-ap-items/" + adjustment.path("ar_ap_item_id").asText() + "/payments").with(refunder)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(json.writeValueAsString(Map.of("idempotency_key", "bpt-refund-pay-" + s, "amount_cent", 4_000,
@@ -653,6 +655,8 @@ class BarPlatformTurnoverRentJdbcTests {
                 billId, refunderId);
         JsonNode adjustment = data(mockMvc.perform(post("/api/v1/bar/bills/" + billId + "/adjustments").with(refunder)
                 .contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(body))).andExpect(status().isOk()));
+        // 第十八批 AM 段第 241 条 241-R1：出款前置——该应付已有通过的付款确认（夹具）。
+        com.complex.platform.support.PaymentConfirmationFixture.approvedArAp(jdbc, adjustment.path("ar_ap_item_id").asText());
         mockMvc.perform(post("/api/v1/finance/ar-ap-items/" + adjustment.path("ar_ap_item_id").asText() + "/payments").with(refunder)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(json.writeValueAsString(Map.of("idempotency_key", key + "-pay", "amount_cent", amountCent,

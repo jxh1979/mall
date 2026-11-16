@@ -1,4 +1,4 @@
-// 文件版本：V0.34
+// 文件版本：V0.35
 // OBS-14-02 后台结果区字段中文名字典（PGM「全局原则 · 界面全中文（所有终端零英文）」）。
 // 键用后端 JSON 的蛇形写法；结果区查表时蛇形与驼峰同查（orderId / order_id 都命中 order_id）。
 // 与后端字段中文名表 FieldLabels.java（common.api 包）同键同名：前段按后端原样抄录，后端改名这里跟着改（门禁会比对）。
@@ -285,6 +285,13 @@ export const FIELD_LABELS: Record<string, string> = {
   settlement_subject_id: "结算主体",
   statement_id: "对账单号",
   ar_ap_item_id: "应收应付明细",
+  // 第十八批 AM 段第 241 条 241-R1（BSM:1803 付款确认）：与后端 FieldLabels 同键同名。
+  ar_ap_item_ids: "应收应付款项",
+  payment_type: "支付类型",
+  payment_type_label: "支付类型名称",
+  confirmation_id: "付款确认单号",
+  object_ids: "对象标识列表",
+  confirmations: "付款确认记录",
   expense_type: "费用类型",
   fee_event: "费用事件",
   fee_items: "费用总表",
@@ -450,6 +457,8 @@ export const FIELD_LABELS: Record<string, string> = {
   line_code: "审批线",
   line_name: "审批线名称",
   required_line_codes: "必需审批线",
+  // 第十八批 AM 段第 241 条 241-R8：付款确认流程（两线之外的必带线），与后端 FieldLabels 同键同名。
+  line_codes: "必带审批线",
   "parallel_lines.line_code": "并行审批线",
   min_start_rank: "最低起点层级",
   entry_user_id: "起点人",
@@ -3174,6 +3183,9 @@ export const VALUE_LABELS: Record<string, string> = {
   merchant_penalty_bounds_saved: "单次扣分上下限已保存",
   org_superior_set: "直接上级已设置",
   approval_line_saved: "审批线已保存",
+  // 第十八批 AM 段第 241 条 241-R2、241-R8：付款确认发起、付款确认流程保存。
+  payment_confirmation_requested: "付款确认已发起，待各线审批",
+  payment_confirmation_flow_saved: "付款确认流程已保存",
   reconciliation_difference_closed: "对账差异已关闭",
   reconciliation_difference_registered: "对账差异已登记",
   reconciliation_difference_identified: "对账差异已识别",
@@ -3536,6 +3548,8 @@ export const KEY_VALUE_LABELS: Record<string, Record<string, string>> = {
     pass_domain_share: "通票域间份额", pass_domain_direct_settlement: "通票餐饮零售代付", pass_unverified_attribution: "通票到期未核销归属",
     // 第十八批 AL 段第 223 条 223-R1（BSM:1751）：对账差异复核通过后按认定结果入账的应收应付（同后端 AR_AP_SOURCE_TYPE_LABELS）。
     reconciliation_difference: "对账差异",
+    // 第十八批 AM 段第 241 条 241-R1（第十八批裁决 65「按台账来源逐个分」）：付款确认按台账来源定支付类型（同后端 AR_AP_SOURCE_TYPE_LABELS）。
+    inventory_transfer: "门店要货货款", media_performance_settlement: "传媒演出结算", stored_value_consume: "平台代收商户卡消费", partner_voucher: "内部价券结算",
   },
 };
 

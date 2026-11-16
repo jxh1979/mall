@@ -1,4 +1,4 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -11,12 +11,26 @@ function raw(data: unknown): Response {
 }
 
 const HIERARCHY = [{ user_id: "usr_a", superior_id: "usr_b", line_code: "finance_review", updated_by: "usr_admin", updated_at: "2026-09-06T02:00:00Z" }];
-const LINES = [{ line_code: "finance_review", line_name: "财务审核线", min_start_rank: 6, entry_user_id: "usr_fin_entry", status: "active" }];
+const LINES = [
+  { line_code: "finance_review", line_name: "财务审核线", min_start_rank: 6, entry_user_id: "usr_fin_entry", status: "active" },
+  { line_code: "legal_review", line_name: "法务审核线", min_start_rank: 5, entry_user_id: null, status: "active" },
+  { line_code: "business_review", line_name: "业务审核线", min_start_rank: 4, entry_user_id: null, status: "active" },
+  { line_code: "tax_review", line_name: "税务审核线", min_start_rank: 4, entry_user_id: null, status: "inactive" },
+];
+// 第十八批 AM 段第 241 条 241-R8：付款确认各支付类型在财务、法务两线之外的必带线。
+const FLOWS = [
+  { payment_type: "purchase_inbound", payment_type_label: "采购入库", line_codes: ["business_review"] },
+  { payment_type: "staff_payroll", payment_type_label: "员工工资", line_codes: [] },
+];
 const USERS = [{ id: "usr_a", username: "a" }, { id: "usr_b", username: "b" }];
 
 function makeApi(): AdminApi {
   vi.stubGlobal("fetch", vi.fn().mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
+    if (url.includes("/payment-confirmation-flows/") && init?.method === "PUT") {
+      return Promise.resolve(raw({ payment_type: "staff_payroll", payment_type_label: "员工工资", line_codes: ["business_review"] }));
+    }
+    if (url.includes("/payment-confirmation-flows")) return Promise.resolve(raw(FLOWS));
     if (url.includes("/org-hierarchy/") && init?.method === "PUT") return Promise.resolve(raw({ user_id: "usr_a", superior_id: "usr_c", line_code: null }));
     if (url.includes("/approval-lines/") && init?.method === "PUT") return Promise.resolve(raw({ line_code: "legal_review", line_name: "法务审核线", min_start_rank: 3, entry_user_id: null, status: "active" }));
     if (url.includes("/org-hierarchy")) return Promise.resolve(raw(HIERARCHY));
@@ -101,5 +115,32 @@ describe("OrgHierarchyPage 组织层级与审批线维护", () => {
     await waitFor(() => expect(screen.getAllByTestId("org-hierarchy-save").length).toBeGreaterThan(0));
     const buttons = screen.getAllByTestId("org-hierarchy-save") as HTMLButtonElement[];
     expect(buttons[buttons.length - 1]?.disabled).toBe(true);
+  });
+
+  // 第十八批 AM 段第 241 条 241-R8（BSM:1803「具体流程按支付类型分别设定」；第十八批裁决 66「每类必带财务、法务两线」、67「审批线页设定」）。
+  it("付款确认流程表显示支付类型中文名与两线之外的必带线；只能勾在用的其他线；保存发 PUT", async () => {
+    const props = renderPage();
+    await waitFor(() => expect(screen.queryByTestId("payment-flow-row-purchase_inbound")).not.toBeNull());
+    const purchase = screen.getByTestId("payment-flow-row-purchase_inbound").textContent ?? "";
+    expect(purchase).toContain("采购入库");
+    expect(purchase).toContain("业务审核线");
+    expect(purchase).not.toContain("business_review");
+    expect(screen.getByTestId("payment-flow-row-staff_payroll").textContent).toContain("员工工资");
+
+    fireEvent.click(screen.getByTestId("payment-flow-select-staff_payroll"));
+    await waitFor(() => expect((screen.getByTestId("payment-flow-type") as HTMLSelectElement).value).toBe("staff_payroll"));
+    expect(screen.queryByTestId("payment-flow-line-finance_review")).toBeNull();
+    expect(screen.queryByTestId("payment-flow-line-legal_review")).toBeNull();
+    expect(screen.queryByTestId("payment-flow-line-tax_review")).toBeNull();
+    fireEvent.click(screen.getByTestId("payment-flow-line-business_review"));
+    fireEvent.click(screen.getByTestId("payment-flow-save"));
+
+    const fetchMock = vi.mocked(globalThis.fetch);
+    const isPut = ([input, init]: unknown[]) => String(input).includes("/payment-confirmation-flows/staff_payroll") && (init as RequestInit | undefined)?.method === "PUT";
+    await waitFor(() => expect(fetchMock.mock.calls.some(isPut)).toBe(true));
+    const body = JSON.parse(String((fetchMock.mock.calls.find(isPut)?.[1] as RequestInit | undefined)?.body));
+    expect(body.line_codes).toEqual(["business_review"]);
+    expect(body.idempotency_key).toBeTruthy();
+    await waitFor(() => expect(props.setActionResult).toHaveBeenCalledWith(expect.stringContaining("员工工资")));
   });
 });

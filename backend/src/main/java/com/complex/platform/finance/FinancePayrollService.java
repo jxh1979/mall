@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static com.complex.platform.common.Strings.requireText;
 import com.complex.platform.access.AuthorizationService;
@@ -48,6 +48,10 @@ public class FinancePayrollService {
             List<Map<String,Object>> pendingCorrections) {}
     @org.springframework.beans.factory.annotation.Autowired
     org.springframework.beans.factory.ObjectProvider<com.complex.platform.access.staff.StaffPayrollService> staffPayroll;
+    // 第十八批 AM 段第 241 条 241-R4（BSM:1803；第十八批裁决 55「所有应付都先走付款确认……工资……要设流程」）：准备工资银行付款前须有已通过的
+    // 付款确认。包私有便于单测置位；手工构造未注入时一律 409 PAYMENT_CONFIRMATION_REQUIRED（fail-closed）。
+    @org.springframework.beans.factory.annotation.Autowired
+    PaymentConfirmationService paymentConfirmations;
     private record Scope(String actorId,String merchant,AuthorizationService.ProjectReach reach) {}
     private record Wage(String id,String user,String month,String project,String merchant,String payer,
             long total,String status,String scheme,String snapshot,LocalDate due,String dueBasis,String payable) {}
@@ -109,6 +113,7 @@ public class FinancePayrollService {
                 Wage w=lockWage(statementId);checkScope(w,scope);
                 staffPayroll.getObject().preparePendingCorrections(statementId);
                 var payable=payable(w);
+                requireConfirmed(payable.id());
                 if(r.amountCent()>payable.unpaidAmountCent())throw invalid("本次金额超过尚未支付工资");
                 if(jdbc.queryForObject("SELECT count(*) FROM finance_payroll_payment_attempts WHERE statement_id=? AND status IN ('prepared','processing','unknown')",Integer.class,statementId)>0)
                     throw invalid("此工资有准备中或结果未明的付款，须先核实原笔，不能重复出款");
@@ -121,6 +126,37 @@ public class FinancePayrollService {
             });
         } catch(RuntimeException e) {
             recordPaymentFailure(statementId,r==null?null:r.idempotencyKey(),e);throw e;
+        }
+    }
+
+    /**
+     * 第十八批 AM 段第 241 条 241-R4（BSM:1803「付款确认按全平台统一的审批模型执行——发起时指定这条主线的最终审批人……」；第十八批裁决 55、65
+     * （支付类型 staff_payroll）、68「工资……按单发起」；PGM:529「申请人与直接受益人不得审批与自己相关的申请」）：工资审批之后、准备银行付款之前，
+     * 逐人发起付款确认：对象为该工资应付，金额取未付工资，受益人为员工本人。范围闸放在幂等之前（同 prepare）；未付 ≤ 0 时 409 AR_AP_ITEM_SETTLED。
+     * 成功与失败按付款确认统一记 finance.payment_confirmation.requested／request_failed。
+     */
+    @Transactional
+    @com.complex.platform.gate.GuardedAction(capability=PAY,objectType="staff_payroll")
+    public PaymentConfirmationService.Confirmation requestConfirmation(String statementId,com.complex.platform.finance.dto.PaymentConfirmationRequest r) {
+        String key=r==null?null:r.idempotencyKey();
+        try {
+            Scope scope=scope(PAY);checkScope(wage(statementId,false),scope);
+            requireText(key,"幂等键");
+            var result=idempotency.execute("payrollFinance:confirm:"+statementId,key,r,()->{
+                Wage w=lockWage(statementId);checkScope(w,scope);var p=payable(w);
+                if(p.unpaidAmountCent()<=0)throw ApiException.conflict("AR_AP_ITEM_SETTLED","该笔工资应付已结清");
+                return paymentConfirmations.request(List.of(new PaymentConfirmationService.Target("staff_payroll","ar_ap_item",p.id(),
+                        p.unpaidAmountCent(),w.project(),w.merchant(),w.user(),w.user(),
+                        w.month()+" 工资（员工 "+w.user()+"，工资单 "+w.id()+"）未付 "+java.math.BigDecimal.valueOf(p.unpaidAmountCent(),2).toPlainString()
+                                +" 元，支付日 "+w.due())),key,r.reason(),r.finalApproverId(),r.parallelLines());
+            },PaymentConfirmationService.Confirmation.class);
+            audit.recordSuccess("finance.payment_confirmation.requested",PAY,"payment_confirmation",result.confirmationId(),null,key,
+                    Map.of("actor_id",scope.actorId(),"statement_id",statementId));
+            return result;
+        } catch(RuntimeException e) {
+            audit.recordFailure("finance.payment_confirmation.request_failed",PAY,"staff_payroll",statementId,null,key,
+                    e instanceof ApiException a?a.code():"INTERNAL_ERROR");
+            throw e;
         }
     }
 
@@ -254,6 +290,11 @@ public class FinancePayrollService {
         var p=finance.findArApItemByIdForUpdate(w.payable()).orElseThrow(()->invalid("工资应付原件不存在"));checkPayable(w,p);
         // 工资支付日独立执行；后续银行事实只追加付款和更新余额，不回改已封日结快照。
         return p;
+    }
+    /** 第十八批 AM 段第 241 条 241-R4：工资应付须有已通过的付款确认；未注入（手工构造）一律拒（fail-closed）。 */
+    private void requireConfirmed(String payableId) {
+        if(paymentConfirmations==null)throw ApiException.conflict("PAYMENT_CONFIRMATION_REQUIRED","该笔付款须先完成付款确认（主线与财务、法务等各条平行线全部审批通过）");
+        paymentConfirmations.requireApproved("ar_ap_item",payableId);
     }
     private void requireApprovedBasis(Wage w) {
         Integer count=jdbc.queryForObject("""

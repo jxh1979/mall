@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.08
+// 文件版本：V0.09
 import static com.complex.platform.common.api.ApiRequests.requireIdempotencyKey;
 
 import com.complex.platform.access.AuthorizationService;
@@ -9,6 +9,7 @@ import com.complex.platform.common.api.ApiResponse;
 import com.complex.platform.common.api.PageResponse;
 import com.complex.platform.finance.dto.ArApAdjustmentRequest;
 import com.complex.platform.finance.dto.ArApItemRequest;
+import com.complex.platform.finance.dto.ArApPaymentConfirmationRequest;
 import com.complex.platform.finance.dto.ArApPaymentRequest;
 import com.complex.platform.finance.dto.DailyCloseActionRequest;
 import com.complex.platform.finance.dto.DailyCloseRequest;
@@ -104,6 +105,16 @@ public class FinanceController implements com.complex.platform.security.ExportFi
         authorizationService.requirePermission("finance.payment.register");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.registerArApPayment(id, request));
+    }
+
+    /** 第十八批 AM 段第 241 条 241-R1（BSM:1803；第十八批裁决 55、68）：台账勾选款项合并发起付款确认。 */
+    @PostMapping("/ar-ap-payment-confirmations")
+    public ApiResponse<PaymentConfirmationService.Confirmation> createArApPaymentConfirmation(
+            @RequestBody ArApPaymentConfirmationRequest request
+    ) {
+        authorizationService.requirePermission("finance.payment.register");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.requestArApPaymentConfirmation(request));
     }
 
     @PostMapping("/daily-closes")
@@ -353,6 +364,15 @@ public class FinanceController implements com.complex.platform.security.ExportFi
         authorizationService.requirePermission("finance.refund.create");
         requireIdempotencyKey(request.idempotencyKey());
         return ApiResponse.ok(service.recordFinanceRefundExecution(id, request));
+    }
+
+    /** 第十八批 AM 段第 241 条 241-R5（BSM:1803；第十八批裁决 55、65、68）：财务退款待办发起付款确认。 */
+    @PostMapping("/refunds/{refund_id}/payment-confirmations")
+    public ApiResponse<PaymentConfirmationService.Confirmation> createFinanceRefundPaymentConfirmation(@PathVariable("refund_id") String id,
+            @RequestBody com.complex.platform.finance.dto.PaymentConfirmationRequest request) {
+        authorizationService.requirePermission("finance.refund.create");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.requestRefundPaymentConfirmation(id, request));
     }
 
     @PostMapping("/refunds/{refund_id}/confirm")

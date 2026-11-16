@@ -1,6 +1,6 @@
 package com.complex.platform.dividend;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
@@ -450,6 +450,12 @@ class DividendJdbcIntegrationTests {
         assertThat(untouched.status()).isEqualTo("approved");
         assertThat(untouched.arApItemId()).isEqualTo(approved.arApItemId());
         assertThat(untouched.approvedBy()).isEqualTo("usr_div_jdbc_approver");
+
+        // 第十八批 AM 段第 241 条 241-R3：标记发放前主理人分红应付须已按付款确认付清（付款确认用夹具，登记付款走真实入口）。
+        com.complex.platform.support.PaymentConfirmationFixture.approvedArAp(jdbcTemplate, approved.arApItemId());
+        authorizePlatformActor("usr_div_jdbc_payer", "finance.payment.register");
+        financeService.registerArApPayment(approved.arApItemId(), new ArApPaymentRequest("div-jdbc-pay-1", "分红发放", List.of(), 11_200L,
+                "bank_transfer", Instant.now(), "bank_flow_div_jdbc"));
 
         // 标记发放收口。
         DividendStatementRecord paid = approverService.markPaid(statement.id(),
@@ -918,6 +924,8 @@ class DividendJdbcIntegrationTests {
         assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM ar_ap_payments WHERE ar_ap_item_id=?",
                 Long.class, withheldId)).isZero();
         authorizePlatformActor("usr_div_real_payer", "finance.payment.register");
+        // 第十八批 AM 段第 241 条 241-R1：出款前置——该应付已有通过的付款确认（夹具）。
+        com.complex.platform.support.PaymentConfirmationFixture.approvedArAp(jdbcTemplate, withheldId);
         var payResp = financeService.registerArApPayment(withheldId, new ArApPaymentRequest(
                 "rel-jdbc-pay1", "释放后发放", List.of(), 16_000L, "bank_transfer",
                 Instant.parse("2026-07-20T01:00:00Z"), "bank_flow_rel_jdbc"));

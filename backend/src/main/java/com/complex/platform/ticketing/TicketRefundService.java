@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.06
+// 文件版本：V0.07
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -67,6 +67,11 @@ public class TicketRefundService {
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     @org.springframework.context.annotation.Lazy
     com.complex.platform.customer.StoredValueService storedValueService;
+
+    // 第十八批 AM 段第 241 条 241-R5（BSM:1803；第十八批裁决 55「所有应付都先走付款确认……退款……」）：确认拨付前须有已通过的付款确认。
+    // 字段注入；手工构造未注入时确认拨付一律 409 PAYMENT_CONFIRMATION_REQUIRED（fail-closed）。
+    @org.springframework.beans.factory.annotation.Autowired
+    com.complex.platform.finance.PaymentConfirmationService paymentConfirmations;
 
     @org.springframework.beans.factory.annotation.Autowired
     public TicketRefundService(
@@ -306,6 +311,11 @@ public class TicketRefundService {
                 .orElseThrow(() -> ApiException.notFound("TICKET_REFUND_NOT_FOUND", "票务退款不存在或已被删除"));
         repository.findTicketOrderById(current.targetId())
                 .ifPresent(order -> enforceMerchantScope(order.merchantId()));
+        // 第十八批 AM 段第 241 条 241-R5：原路打款确认拨付前须有已通过的付款确认（只分到储值笔的退款批准即成功，不经此处）。
+        if (paymentConfirmations == null) {
+            throw ApiException.conflict("PAYMENT_CONFIRMATION_REQUIRED", "该笔付款须先完成付款确认（主线与财务、法务等各条平行线全部审批通过）");
+        }
+        paymentConfirmations.requireApproved("ticket_refund", current.id());
         Instant now = Instant.now();
         if (repository.markTicketRefundSucceeded(current.id(), now, payoutResult) == 0) {
             throw ApiException.conflict("TICKET_REFUND_NOT_PAYOUT_CONFIRMABLE",
@@ -313,6 +323,38 @@ public class TicketRefundService {
         }
         eventPublisher.publishEvent(new TicketRewardFacts.Refunded(current.id()));
         return current.withStatus("success", current.approvedBy(), current.approvedAt(), now).withPayoutResult(payoutResult);
+    }
+
+    /** 第十八批 AM 段第 241 条 241-R5：按调用者商户范围取门票退款（发起付款确认的范围闸，幂等之前与写内各调一次）。 */
+    TicketRefundRecord payoutScoped(String refundId) {
+        TicketRefundRecord refund = repository.findTicketRefundById(requireText(refundId, "refund_id"))
+                .orElseThrow(() -> ApiException.notFound("TICKET_REFUND_NOT_FOUND", "票务退款不存在或已被删除"));
+        repository.findTicketOrderById(refund.targetId()).ifPresent(order -> enforceMerchantScope(order.merchantId()));
+        return refund;
+    }
+
+    /**
+     * 第十八批 AM 段第 241 条 241-R5（BSM:1803；第十八批裁决 55「退款……要设流程」、65（门票退款打款一个支付类型 ticket_refund）、68「退款……按单发起」）：
+     * 已通过、待原路打款的门票退款发起付款确认。金额取待打款各笔合计（储值部分已当场回卡，不计）；待打款金额批准后才有，未批准或没有待打款时
+     * 409 TICKET_REFUND_NOT_PAYOUT_CONFIRMABLE。项目取原订单，收款方为原订单客人。
+     */
+    com.complex.platform.finance.PaymentConfirmationService.Confirmation requestPaymentConfirmation(String refundId,
+            com.complex.platform.finance.dto.PaymentConfirmationRequest request) {
+        var actual = requireRequest(request);
+        TicketRefundRecord refund = payoutScoped(refundId);
+        List<TicketRefundRecord.PayoutItem> payout = refund.payoutItems() == null ? List.of() : refund.payoutItems();
+        if (!"approved".equals(refund.status()) || payout.isEmpty()) {
+            throw ApiException.conflict("TICKET_REFUND_NOT_PAYOUT_CONFIRMABLE", "只有已通过、待原路打款的门票退款才能发起付款确认");
+        }
+        TicketOrderRecord order = repository.findTicketOrderById(refund.targetId())
+                .orElseThrow(() -> ApiException.notFound("TICKET_ORDER_NOT_FOUND", "票务订单不存在或已被删除"));
+        long amount = payout.stream().mapToLong(TicketRefundRecord.PayoutItem::amountCent).sum();
+        String items = String.join("、", payout.stream().map(item -> com.complex.platform.finance.PaymentConfirmationService.channelLabel(item.channel()) + " "
+                + java.math.BigDecimal.valueOf(item.amountCent(), 2).toPlainString() + " 元").toList());
+        return paymentConfirmations.request(List.of(new com.complex.platform.finance.PaymentConfirmationService.Target("ticket_refund",
+                        "ticket_refund", refund.id(), amount, order.projectId(), refund.merchantId(), order.customerId(), null,
+                        "门票退款单 " + refund.id() + "（订单 " + order.orderNo() + "）待原路打款 " + items + "；退款事由 " + refund.reason())),
+                actual.idempotencyKey(), actual.reason(), actual.finalApproverId(), actual.parallelLines());
     }
 
     /**

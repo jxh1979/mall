@@ -1,6 +1,6 @@
 package com.complex.platform.contract;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
@@ -396,6 +396,8 @@ class ContractApprovalChainJdbcIntegrationTests {
         assertThat(depositLedger(change)).hasSize(3);
 
         actAs(drafter);
+        // 第十八批 AM 段第 241 条 241-R1：出款前置——该应付已有通过的付款确认（夹具）。
+        com.complex.platform.support.PaymentConfirmationFixture.approvedArAp(jdbc, refundItem);
         financeService.registerArApPayment(refundItem, payment("p10", 150000L));
         assertThat(settlementStatus(sid)).isEqualTo("settled");
     }

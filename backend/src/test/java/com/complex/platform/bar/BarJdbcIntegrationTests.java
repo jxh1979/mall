@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.06
+// 文件版本：V0.07
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -1098,6 +1098,16 @@ class BarJdbcIntegrationTests {
         assertThat(repository.findReservationById("resv_dps")).get()
                 .extracting(BarReservationRecord::depositStatus).isEqualTo("paid");
 
+        // 第十八批 AM 段第 241 条 241-R5 (c)（第十八批裁决 55「所有应付都先走付款确认……退款……」）：未经付款确认登记实付 409，定金仍为已付。
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> financeService.registerArApPayment(itemId,
+                        new com.complex.platform.finance.dto.ArApPaymentRequest("dps-pay-early", "原路退回定金", List.of(), 20000L, "aggregate_pay",
+                                Instant.now(), "flow_dps_early", null)))
+                .isInstanceOfSatisfying(com.complex.platform.common.api.ApiException.class,
+                        e -> assertThat(e.code()).isEqualTo("PAYMENT_CONFIRMATION_REQUIRED"));
+        assertThat(repository.findReservationById("resv_dps")).get()
+                .extracting(BarReservationRecord::depositStatus).isEqualTo("paid");
+        // 第十八批 AM 段第 241 条 241-R1：出款前置——该应付已有通过的付款确认（夹具）。
+        com.complex.platform.support.PaymentConfirmationFixture.approvedArAp(jdbcTemplate, itemId);
         financeService.registerArApPayment(itemId, new com.complex.platform.finance.dto.ArApPaymentRequest(
                 "dps-pay", "原路退回定金", List.of(), 20000L, "aggregate_pay", Instant.now(), "flow_dps", null));
 

@@ -1,6 +1,6 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.11
+// 文件版本：V0.12
 
 import com.complex.platform.support.InMemoryAuditEventRepository;
 import com.complex.platform.support.InMemoryIdempotencyRepository;
@@ -2707,6 +2707,8 @@ class InventoryServiceTests {
                     call.getArgument(0), call.getArgument(2), call.getArgument(1));
         });
         service.financeService = finance;
+        // 第十八批 AM 段第 241 条 241-R6：赔付结案前须有已通过的付款确认；桩的 requireApproved 不抛（视为已确认），hasApproved 照默认 false。
+        service.paymentConfirmations = org.mockito.Mockito.mock(com.complex.platform.finance.PaymentConfirmationService.class);
     }
 
     private void asMerchantA() {

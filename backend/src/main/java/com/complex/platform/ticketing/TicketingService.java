@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.10
+// 文件版本：V0.11
 
 import com.complex.platform.common.api.ApiException;
 
@@ -1147,6 +1147,26 @@ public class TicketingService {
                             reach.covers(repository.findTicketOrderById(orderId).map(TicketOrderRecord::projectId).orElse(null))))
                             .toList();
                 }
+        );
+    }
+
+    /**
+     * 第十八批 AM 段第 241 条 241-R5（BSM:1803；第十八批裁决 55、65、68）：已通过、待原路打款的门票退款发起付款确认，权限同确认拨付。
+     * 商户范围闸放在幂等之前（先取订单做 enforceMerchantScope），写内再判一次。
+     */
+    @com.complex.platform.gate.GuardedAction(capability = "ticket.refund.approve")
+    @Transactional
+    public com.complex.platform.finance.PaymentConfirmationService.Confirmation requestTicketRefundPaymentConfirmation(String refundId,
+            com.complex.platform.finance.dto.PaymentConfirmationRequest request) {
+        String id = operations.requireText(refundId, "refund_id");
+        refundService.payoutScoped(id);
+        return operations.executeWrite(
+                "createTicketRefundPaymentConfirmation:" + id,
+                request == null ? null : request.idempotencyKey(),
+                request,
+                com.complex.platform.finance.PaymentConfirmationService.Confirmation.class,
+                TicketingWriteOperation.REQUEST_TICKET_REFUND_PAYMENT_CONFIRMATION,
+                () -> refundService.requestPaymentConfirmation(id, request)
         );
     }
 

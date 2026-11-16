@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.catchThrowable;
@@ -77,6 +77,8 @@ class InternalPayableExecutionJdbcIntegrationTests {
                 VALUES(?,'ticket_distribution',?,?,?,?,?,?,?,'ipdr_initial_pay_days','ipdr_fixture_ticket_distribution',10)
                 """, item, project, payee, today.withDayOfMonth(1).minusMonths(1), Timestamp.from(Instant.now().minusSeconds(86400 * 20)),
                 today.minusDays(1), due, due);
+        // 第十八批 AM 段第 241 条 241-R1：出款前置——该应付已有通过的付款确认（夹具）。
+        com.complex.platform.support.PaymentConfirmationFixture.approvedArAp(jdbc, item);
         String headRole = "ipe_head_" + suffix;
         access.createRole(new RoleRecord(headRole, "收款方财务负责人", null, "project", "active", Instant.now(),
                 List.of("merchant.portal.payee_account.approve", "merchant.portal.settlement.view"), null, false, List.of()));

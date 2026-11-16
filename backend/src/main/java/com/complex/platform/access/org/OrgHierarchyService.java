@@ -1,6 +1,6 @@
 package com.complex.platform.access.org;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import com.complex.platform.access.AccessActor;
 import com.complex.platform.access.AccessRepository;
@@ -24,6 +24,7 @@ import static com.complex.platform.common.Strings.requireText;
  * M087-A-01 / A-03（PGM-1.7.1「系统按组织层级自动补全……直接上级节点」「每个部门或业务线须预先设定其平行审批的最低起点层级」；
  * PGM-1.10.1「HR 部门定每个人的层级/职位」）：组织层级（直接上级）与平行审批线的维护入口。
  * 直接上级不得是本人、不得成环；线的最低起点层级为 level_rank 1..30。全部写入留痕。
+ * 第十八批 AM 段第 241 条 241-R8（第十八批裁决 67「审批线页设定」）：付款确认各支付类型在财务、法务两线之外的必带线也在此设定，同一门禁。
  */
 @Service
 public class OrgHierarchyService {
@@ -37,6 +38,10 @@ public class OrgHierarchyService {
     private final AuthorizationService authorizationService;
     private final IdempotencyService idempotencyService;
     private final AuditEventService auditEventService;
+
+    // 第十八批 AM 段第 241 条 241-R8：付款确认流程的存取在付款确认服务；手工构造本服务的单测不涉及，字段注入免改构造。
+    @org.springframework.beans.factory.annotation.Autowired
+    com.complex.platform.finance.PaymentConfirmationService paymentConfirmations;
 
     public OrgHierarchyService(SupervisorReviewRepository reviewRepository, AccessRepository accessRepository,
                                AuthorizationService authorizationService, IdempotencyService idempotencyService,
@@ -209,6 +214,52 @@ public class OrgHierarchyService {
                     exception instanceof ApiException api ? api.code() : exception.getClass().getSimpleName());
             throw exception;
         }
+    }
+
+    /** 第十八批 AM 段第 241 条 241-R8（BSM:1803「具体流程按支付类型分别设定」；裁决 67）：40 个支付类型及各自两线之外的必带线。 */
+    public List<com.complex.platform.finance.PaymentConfirmationService.Flow> listPaymentConfirmationFlows() {
+        authorizationService.requirePermission(MANAGE_PERMISSION);
+        return paymentConfirmations.flows();
+    }
+
+    /**
+     * 第十八批 AM 段第 241 条 241-R8（裁决 66「每类必带财务、法务两线；其他部门线由发起人按单另加」、裁决 67「与各线最低起点层级同一处、同一门禁」）：
+     * 设定某支付类型在两线之外还必带的线。流程是全平台一套、没有关联人员的全局配置，照 canManageLine 对无归属锚点全局线的口径，只许平台管理员或可管理
+     * 全部项目者设定；所列的线须是在用线（不存在或停用 400 APPROVAL_LINE_NOT_CONFIGURED）；已发起的付款确认不受影响（审批链在发起时生成）。
+     */
+    @Transactional
+    public com.complex.platform.finance.PaymentConfirmationService.Flow savePaymentConfirmationFlow(String paymentType,
+            PaymentConfirmationFlowRequest request) {
+        authorizationService.requirePermission(MANAGE_PERMISSION);
+        String type = requireText(paymentType, "payment_type");
+        requireText(request == null ? null : request.idempotencyKey(), "idempotency_key");
+        AccessActor actor = authorizationService.currentActor();
+        ProjectReach reach = authorizationService.projectReach(actor, MANAGE_PERMISSION);
+        if (!reach.platformAdmin() && !reach.allProjects()) {
+            throw ApiException.forbidden("CROSS_ORG_FORBIDDEN", "付款确认流程是全平台配置，须由平台管理员或可管理全部项目的账号设定");
+        }
+        if (!com.complex.platform.finance.PaymentConfirmationService.PAYMENT_TYPES.containsKey(type)) {
+            throw ApiException.notFound("PAYMENT_TYPE_NOT_FOUND", "支付类型不存在：" + type);
+        }
+        return idempotencyService.execute(
+                "paymentConfirmationFlowSave:" + type,
+                request.idempotencyKey(),
+                request,
+                () -> {
+                    List<String> codes = request.lineCodes() == null ? List.of()
+                            : request.lineCodes().stream().map(code -> requireText(code, "line_codes")).distinct().toList();
+                    for (String code : codes) {
+                        if (reviewRepository.findApprovalLine(code).filter(line -> "active".equals(line.status())).isEmpty()) {
+                            throw ApiException.badRequest("APPROVAL_LINE_NOT_CONFIGURED", "平行审批线未配置或已停用：" + code);
+                        }
+                    }
+                    var saved = paymentConfirmations.saveFlow(type, codes, actor.id());
+                    auditEventService.recordSuccess("access.payment_confirmation_flow.saved", MANAGE_PERMISSION, "payment_confirmation_flow",
+                            type, null, request.idempotencyKey(), Map.of("line_codes", codes));
+                    return saved;
+                },
+                com.complex.platform.finance.PaymentConfirmationService.Flow.class
+        );
     }
 
     private void requireUserScope(AccessActor actor, ProjectReach reach, AccessUser user) {

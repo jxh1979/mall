@@ -1,9 +1,10 @@
-// 文件版本：V0.03
+// 文件版本：V0.04
 // FS-017（BSM L1072）：作废后对客补存/赔付——选中已作废行出现补存/赔付面板，选「赔付」填 120 元 → POST …/remedy 蛇形键 amount_cent=12000。
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { StoredWinePage } from "./StoredWinePage";
+import { AdminApi } from "../client/adminClient";
 import type { AdminApiClient, AdminPageProps, EffectivePermissionsState, StoredWineRow } from "../types";
 
 const ADMIN_PERMS: EffectivePermissionsState = { status: "ready", value: { grants: [], denies: [], wildcard: true } };
@@ -68,5 +69,51 @@ describe("StoredWinePage 补存/赔付（FS-017）", () => {
     fireEvent.click(screen.getByTestId("stored-wine-select-w-1"));
     await waitFor(() => expect(screen.queryByTestId("stored-wine-remedy-list")).not.toBeNull());
     expect(screen.queryByTestId("stored-wine-remedy-panel")).toBeNull();
+  });
+});
+
+// 第十八批 AM 段第 241 条 241-R2、241-R6（BSM:1803；第十八批裁决 55、65「存酒对客赔付」、68）：已批准的赔付在登记赔款交付结案前先发起付款确认。
+describe("StoredWinePage 存酒赔付付款确认", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    window.history.replaceState({}, "", "/admin/bar/stored-wine");
+  });
+
+  it("已批准的赔付行显示付款确认面板，发起路径为该赔付单的付款确认接口", async () => {
+    const posts: { url: string; body: Record<string, unknown> }[] = [];
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      let data: unknown = [];
+      if (init?.method === "POST") {
+        posts.push({ url, body: JSON.parse(String(init.body)) as Record<string, unknown> });
+        data = { confirmation_id: "pc_w", status: "pending_review" };
+      } else if (url.includes("/api/v1/finance/payment-confirmations?")) {
+        data = { payment_type: "saved_bottle_compensation", payment_type_label: "存酒对客赔付", required_line_codes: ["finance_review", "legal_review"], confirmations: [] };
+      } else if (url.includes("/saved-bottles/c-1/remedies")) {
+        data = [{ id: "sbr_1", saved_bottle_id: "c-1", remedy_type: "compensation", amount_cent: 12000, bearer_type: "bar",
+          customer_delivery_status: "approved", recovery_party_type: "none", recovery_status: "none" }];
+      } else if (url.endsWith("/api/v1/inventory/saved-bottles")) {
+        data = [
+          { id: "w-1", saved_no: "SW-0001", customer_name: "客户甲", item_name: "威士忌", remaining_quantity: 2, status: "stored", created_at: "2026-07-01" },
+          { id: "c-1", saved_no: "SW-0009", customer_name: "客户乙", item_name: "红酒", remaining_quantity: 1, status: "cancelled", created_at: "2026-07-02" },
+        ];
+      }
+      return new Response(JSON.stringify({ success: true, code: "OK", data }));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    renderPage(new AdminApi("test"));
+    // 首行补存记录请求发出（选中已落定到 w-1）后再点 c-1，同上一用例。
+    await waitFor(() => expect(fetchMock.mock.calls.some(([input]) => String(input).includes("/saved-bottles/w-1/remedies"))).toBe(true), { timeout: 5000 });
+    fireEvent.click(screen.getByTestId("stored-wine-select-c-1"));
+    await waitFor(() => expect(screen.queryByTestId("payment-confirmation-line-legal_review")).not.toBeNull());
+    expect(screen.getByTestId("payment-confirmation-panel").textContent).toContain("存酒对客赔付");
+    fireEvent.change(screen.getByTestId("payment-confirmation-reason"), { target: { value: "作废存酒对客赔款" } });
+    fireEvent.change(screen.getByTestId("payment-confirmation-final-approver"), { target: { value: "usr_boss" } });
+    fireEvent.change(screen.getByTestId("payment-confirmation-line-finance_review"), { target: { value: "usr_f" } });
+    fireEvent.change(screen.getByTestId("payment-confirmation-line-legal_review"), { target: { value: "usr_l" } });
+    fireEvent.click(screen.getByTestId("payment-confirmation-submit"));
+    await waitFor(() => expect(posts).toHaveLength(1));
+    expect(posts[0]!.url).toContain("/api/v1/inventory/saved-bottles/remedies/sbr_1/payment-confirmations");
+    expect(posts[0]!.body).toMatchObject({ reason: "作废存酒对客赔款", final_approver_id: "usr_boss" });
   });
 });

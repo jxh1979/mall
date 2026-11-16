@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.11
+// 文件版本：V0.12
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.groups.Tuple.tuple;
@@ -1274,6 +1274,8 @@ class FinanceJdbcIntegrationTests {
                 String.class, receivable)).containsExactly("bank_transfer:6000");
         assertThat(jdbcTemplate.queryForObject("SELECT payment_time FROM ar_ap_payments WHERE ar_ap_item_id = ?",
                 java.sql.Timestamp.class, receivable).toInstant()).isAfterOrEqualTo(beforeApproval.minusSeconds(1));
+        // 第十八批 AM 段第 241 条 241-R1：出款前置——该应付已有通过的付款确认（夹具）。
+        com.complex.platform.support.PaymentConfirmationFixture.approvedArAp(jdbcTemplate, payable);
         decideBackfill(financeB, payOut, "approve", "dpb-apv2-" + s).andExpect(status().isOk());
         assertThat(itemLedger(payable)).isEqualTo("8000:0:settled:" + close);
         decideBackfill(financeB, rejected, "reject", "dpb-rej-" + s).andExpect(status().isOk());

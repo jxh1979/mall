@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.13
+// 文件版本：V0.14
 
 // 文件版本：V0.03
 
@@ -116,7 +116,7 @@ class TicketingServiceTests {
                 catalogService = new TicketCatalogService(ticketingRepository, barDirectory),
                 pricingService,
                 orderService = new TicketOrderService(ticketingRepository, pricingService, authorizationService, orderEvents::add, barDirectory),
-                new TicketRefundService(ticketingRepository, event -> { }, null, null),
+                withPaymentConfirmationStub(new TicketRefundService(ticketingRepository, event -> { }, null, null)),
                 verificationService,
                 new TicketCredentialService(verificationService, auditEventService),
                 new TicketingOperationExecutor(operations),
@@ -1834,6 +1834,12 @@ class TicketingServiceTests {
                         new StatusChangeRequest("payout-confirm-again", "confirm_payout", "重复确认", List.of())))
                 .isInstanceOfSatisfying(com.complex.platform.common.api.ApiException.class, ex ->
                         assertThat(ex.code()).isEqualTo("TICKET_REFUND_NOT_PAYOUT_CONFIRMABLE"));
+    }
+
+    /** 第十八批 AM 段第 241 条 241-R5：确认拨付前须有已通过的付款确认——单测注入付款确认桩（requireApproved 不抛、hasApproved 默认 false）。 */
+    private static TicketRefundService withPaymentConfirmationStub(TicketRefundService refunds) {
+        refunds.paymentConfirmations = org.mockito.Mockito.mock(com.complex.platform.finance.PaymentConfirmationService.class);
+        return refunds;
     }
 
     @Test

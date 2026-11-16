@@ -1,9 +1,10 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import React from "react";
 import type { AdminPageProps, FinanceLedgerRow } from "../types";
 import { HighRiskConfirm } from "../components/HighRiskConfirm";
 import { useCan } from "../security/Can";
 import { withBase } from "../../basePath";
+import { PaymentConfirmationPanel } from "./PaymentConfirmationPanel";
 
 type Attempt = {
   id: string; statementId: string; amountCent: number; status: string;
@@ -105,6 +106,9 @@ export function FinancePayrollPaymentPanel({ api, effectivePermissions, setActio
     {!canRead ? <p>需要工资财务查看权限才能读取付款记录。</p> : <>
       {related.length ? <div role="status"><h4>同日应发的其他工资单</h4>{related.map(item => <p key={item.id}>工资单 {item.id}，应付台账 {item.arApItemId ?? "尚未形成"}，未付 {money(item.totalCent - item.paidAmountCent)} 元。请在台账选取该单分别办理。</p>)}</div> : null}
       {pending.length ? <div role="status"><h4>仍待核实的撤罚补差</h4>{pending.map(item => <p key={item.id}>{item.originalMonth} 补差 {item.id}：{item.amountCent == null ? "金额待核实" : `${money(item.amountCent)} 元（税额及定格仍待办理）`}。由人事、财务完成原件核实，本单付款不会结清此项。</p>)}</div> : null}
+      {/* 第十八批 AM 段第 241 条 241-R4（BSM:1803；第十八批裁决 55、68「工资……按单发起」）：准备工资付款前逐人发起付款确认，员工本人为直接受益人。 */}
+      {row.sourceId ? <PaymentConfirmationPanel api={api} effectivePermissions={effectivePermissions} setActionResult={setActionResult} objectType="ar_ap_item"
+        objectId={row.id} createPath={`${root}/${encodeURIComponent(row.sourceId)}/payment-confirmations`} permission={PAY} /> : null}
       <div className="admin-form-row"><label>本次工资金额（元）<input aria-label="本次工资金额" inputMode="decimal" value={amount} onChange={e => setAmount(e.target.value)} disabled={busy || active || !canPay} /></label>
         <HighRiskConfirm label="准备工资付款" impact="锁定本次计划支付金额，不代表已经付款。" irreversible={false}
           permissionsState={effectivePermissions} permissions={[PAY]} disabled={busy || active || !row.sourceId || !(row.unpaidAmountCent! > 0)} onConfirm={() => void prepare()} />

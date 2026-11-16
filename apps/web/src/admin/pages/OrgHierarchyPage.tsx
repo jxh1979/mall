@@ -1,4 +1,4 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
@@ -17,13 +17,16 @@ import { cnDate } from "../components/RowDetailDrawer";
 type OrgSuperiorRow = { userId: string; superiorId?: string | null; lineCode?: string | null; updatedBy?: string | null; updatedAt?: string | null };
 type ApprovalLineRow = { lineCode: string; lineName: string; minStartRank: number; entryUserId?: string | null; hrFinalApproverId?: string | null; status: string };
 type UserRow = { id: string; username: string };
+type PaymentFlowRow = { paymentType: string; paymentTypeLabel: string; lineCodes: string[] };
 
 const MANAGE = ["access.role.assign"];
+// 第十八批 AM 段第 241 条 241-R8（第十八批裁决 66「每类必带财务、法务两线」）：付款确认固定带的两线，流程表只设这两线之外的线。
+const FIXED_PAYMENT_LINES = ["finance_review", "legal_review"];
 
 const TEXT = {
   title: "组织层级与审批线",
   description: "维护每名员工的直接上级（审批链按此逐级补全）与各部门/业务线的平行审批最低起点层级。直接上级不得是本人、不得成环；层级未维护的发起人，其单据审批链无法生成、无人可裁决。",
-  evidence: "接口证据：GET/PUT /api/v1/access/org-hierarchy/{user_id}；GET/PUT /api/v1/access/approval-lines/{line_code}。",
+  evidence: "接口证据：GET/PUT /api/v1/access/org-hierarchy/{user_id}；GET/PUT /api/v1/access/approval-lines/{line_code}；GET /api/v1/access/payment-confirmation-flows、PUT /api/v1/access/payment-confirmation-flows/{payment_type}。",
   loadFailed: "组织层级读取失败",
   actionFailed: "组织层级操作失败",
   hierarchy: "直接上级",
@@ -43,6 +46,10 @@ const TEXT = {
   noLines: "尚未配置平行审批线",
   updatedAt: "更新时间",
   updatedBy: "更新人",
+  flows: "付款确认流程",
+  flowsHint: "付款确认每个支付类型固定带财务、法务两线；可在此为某类另设必带的在用审批线（发起人还可按单另加其他线）。改动只影响以后发起的付款确认。",
+  noFlowLines: "无（只带财务、法务两线）",
+  saveFlow: "保存付款确认流程",
 };
 
 function nextKey(prefix: string) {
@@ -54,6 +61,11 @@ function zhStatus(status?: string | null) {
 }
 
 function makeResult(action: string, request: Record<string, unknown>, result: unknown) {
+  if (action === "payment_confirmation_flow_saved") {
+    const label = result && typeof result === "object" && "paymentTypeLabel" in result ? String((result as { paymentTypeLabel?: unknown }).paymentTypeLabel ?? "") : "";
+    const extra = Array.isArray(request.lineCodes) ? request.lineCodes.length : 0;
+    return `已保存付款确认流程「${label || String(request.paymentType ?? "")}」：${extra ? `财务、法务两线之外另需 ${extra} 条线` : "只带财务、法务两线"}`;
+  }
   if (action === "org_superior_set") {
     const superior = String(request.superiorId ?? "").trim();
     return superior ? `已把 ${String(request.userId ?? "")} 的直接上级设为 ${superior}` : `已清除 ${String(request.userId ?? "")} 的直接上级`;
@@ -68,16 +80,20 @@ export function OrgHierarchyPage({ api, setActionResult, setGlobalError, effecti
   const [users, setUsers] = React.useState<UserRow[]>([]);
   const [superiorForm, setSuperiorForm] = React.useState({ userId: "", superiorId: "", lineCode: "", operatorNote: "" });
   const [lineForm, setLineForm] = React.useState({ lineCode: "", lineName: "", minStartRank: "1", entryUserId: "", hrFinalApproverId: "", status: "active" });
+  const [flows, setFlows] = React.useState<PaymentFlowRow[]>([]);
+  const [flowForm, setFlowForm] = React.useState<{ paymentType: string; lineCodes: string[] }>({ paymentType: "", lineCodes: [] });
 
   const { loading, error, reload } = useAdminResource(
     async () => {
-      const [hierarchy, approvalLines, userRows] = await Promise.all([
+      const [hierarchy, approvalLines, userRows, flowRows] = await Promise.all([
         api.get<OrgSuperiorRow[]>("/api/v1/access/org-hierarchy?limit=500"),
         api.get<ApprovalLineRow[]>("/api/v1/access/approval-lines"),
         api.get<UserRow[]>("/api/v1/access/users"),
+        api.get<PaymentFlowRow[]>("/api/v1/access/payment-confirmation-flows"),
       ]);
       setRows(hierarchy ?? []);
       setLines(approvalLines ?? []);
+      setFlows(flowRows ?? []);
       setUsers(userRows ?? []);
       const firstUser = (userRows ?? [])[0]?.id ?? "";
       setSuperiorForm((current) => (current.userId || !firstUser ? current : { ...current, userId: firstUser }));
@@ -141,6 +157,24 @@ export function OrgHierarchyPage({ api, setActionResult, setGlobalError, effecti
     }));
   }
 
+  async function saveFlow() {
+    if (!flowForm.paymentType) {
+      setFormError("请选择支付类型");
+      return;
+    }
+    const request = { idempotencyKey: nextKey("payment-flow"), paymentType: flowForm.paymentType, lineCodes: flowForm.lineCodes };
+    await runAction("payment_confirmation_flow_saved", request, () => api.put(`/api/v1/access/payment-confirmation-flows/${encodeURIComponent(request.paymentType)}`, {
+      idempotencyKey: request.idempotencyKey, lineCodes: request.lineCodes,
+    }));
+  }
+
+  const lineName = (code: string) => lines.find((line) => line.lineCode === code)?.lineName ?? code;
+  const extraLines = lines.filter((line) => line.status === "active" && !FIXED_PAYMENT_LINES.includes(line.lineCode));
+
+  function toggleFlowLine(code: string) {
+    setFlowForm({ ...flowForm, lineCodes: flowForm.lineCodes.includes(code) ? flowForm.lineCodes.filter((item) => item !== code) : [...flowForm.lineCodes, code] });
+  }
+
   function selectLine(row: ApprovalLineRow) {
     setLineForm({ lineCode: row.lineCode, lineName: row.lineName, minStartRank: String(row.minStartRank), entryUserId: row.entryUserId ?? "", hrFinalApproverId: row.hrFinalApproverId ?? "", status: row.status });
   }
@@ -149,7 +183,7 @@ export function OrgHierarchyPage({ api, setActionResult, setGlobalError, effecti
     <section data-testid="org-hierarchy-page">
       <AdminPageHeader title={TEXT.title} description={TEXT.description} />
       <TechDetails><div className="admin-generic-evidence" data-testid="org-hierarchy-evidence">{TEXT.evidence}</div></TechDetails>
-      <AuditTrailHint event="access.org_hierarchy.superior_set / access.approval_line.saved" />
+      <AuditTrailHint event="access.org_hierarchy.superior_set / access.approval_line.saved / access.payment_confirmation_flow.saved" />
       <AdminDataState loading={loading} error={error} empty={false} onRetry={reload}>
         <h3>{TEXT.hierarchy}</h3>
         {rows.length === 0 ? <div className="admin-muted-action" data-testid="org-hierarchy-empty">{TEXT.noHierarchy}</div> : (
@@ -197,6 +231,32 @@ export function OrgHierarchyPage({ api, setActionResult, setGlobalError, effecti
           <input aria-label={TEXT.hrApprover} data-testid="approval-line-hr" placeholder={TEXT.hrApprover} value={lineForm.hrFinalApproverId} onChange={(event) => setLineForm({ ...lineForm, hrFinalApproverId: event.target.value })} />
           <select aria-label={TEXT.status} data-testid="approval-line-status" value={lineForm.status} onChange={(event) => setLineForm({ ...lineForm, status: event.target.value })}><option value="active">启用</option><option value="inactive">停用</option></select>
           <PermissionButton permissionsState={effectivePermissions} permissions={MANAGE} disabled={busyAction !== ""} data-testid="approval-line-save" onClick={() => void saveLine()}>{TEXT.saveLine}</PermissionButton>
+        </div>
+
+        <h3>{TEXT.flows}</h3>
+        <p>{TEXT.flowsHint}</p>
+        <div className="admin-table-scroll">
+          <table className="admin-table" data-testid="payment-flows-table">
+            <thead><tr><th>支付类型</th><th>两线之外必带的审批线</th><th></th></tr></thead>
+            <tbody>{flows.map((row) => (
+              <tr key={row.paymentType} data-testid={`payment-flow-row-${row.paymentType}`}>
+                <td>{row.paymentTypeLabel}</td><td>{row.lineCodes.length ? row.lineCodes.map(lineName).join("、") : TEXT.noFlowLines}</td>
+                <td><button type="button" data-testid={`payment-flow-select-${row.paymentType}`} onClick={() => setFlowForm({ paymentType: row.paymentType, lineCodes: row.lineCodes })}>编辑</button></td>
+              </tr>
+            ))}</tbody>
+          </table>
+        </div>
+        <div className="admin-inline-form" data-testid="payment-flow-form">
+          <select aria-label="支付类型" data-testid="payment-flow-type" value={flowForm.paymentType}
+            onChange={(event) => setFlowForm({ paymentType: event.target.value, lineCodes: flows.find((row) => row.paymentType === event.target.value)?.lineCodes ?? [] })}>
+            <option value="">请选择支付类型</option>
+            {flows.map((row) => <option key={row.paymentType} value={row.paymentType}>{row.paymentTypeLabel}</option>)}
+          </select>
+          {extraLines.map((line) => (
+            <label key={line.lineCode}><input type="checkbox" data-testid={`payment-flow-line-${line.lineCode}`} checked={flowForm.lineCodes.includes(line.lineCode)}
+              onChange={() => toggleFlowLine(line.lineCode)} />{line.lineName}</label>
+          ))}
+          <PermissionButton permissionsState={effectivePermissions} permissions={MANAGE} disabled={busyAction !== ""} data-testid="payment-flow-save" onClick={() => void saveFlow()}>{TEXT.saveFlow}</PermissionButton>
         </div>
         {formError ? <div data-testid="org-hierarchy-error" className="admin-inline-error">{formError}</div> : null}
       </AdminDataState>

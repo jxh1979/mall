@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.47
+// 文件版本：V0.48
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -11,6 +11,7 @@ import com.complex.platform.evidence.AuditedOperation;
 import com.complex.platform.evidence.AuditedOperationExecutor;
 import com.complex.platform.finance.dto.ArApAdjustmentRequest;
 import com.complex.platform.finance.dto.ArApItemRequest;
+import com.complex.platform.finance.dto.ArApPaymentConfirmationRequest;
 import com.complex.platform.finance.dto.ArApPaymentRequest;
 import com.complex.platform.finance.dto.PropertyFeeBillRequest;
 import com.complex.platform.finance.dto.PropertyFeeRateRequest;
@@ -167,7 +168,13 @@ public class FinanceService implements TerminationSettlementPort {
             // HP-P01 第二组（BSM「停车场」章「消费抵免」条）：城市项目公司对承担商户的停车抵免成本普通内部结算应收。
             Map.entry("parking_credit_cost", "停车抵免成本"),
             // 第十八批 AL 段第 223 条 223-R1（BSM:1751）：对账差异复核通过、按认定结果入账的应收或应付。
-            Map.entry("reconciliation_difference", "对账差异"));
+            Map.entry("reconciliation_difference", "对账差异"),
+            // 第十八批 AM 段第 241 条 241-R1（第十八批裁决 65「按台账来源逐个分」）：付款确认按台账来源定支付类型、取本表中文名。采购三项同前端
+            // FinanceArApLedgerPage SOURCE_TYPE_LABELS；其余四项前后端原无中文名，取裁决 65、68 题面用词。
+            Map.entry("purchase_inbound", "采购入库"), Map.entry("purchase_prepayment", "采购预付款"),
+            Map.entry("purchase_consignment", "寄售结算"), Map.entry("inventory_transfer", "门店要货货款"),
+            Map.entry("media_performance_settlement", "传媒演出结算"), Map.entry("stored_value_consume", "平台代收商户卡消费"),
+            Map.entry("partner_voucher", "内部价券结算"));
 
     @org.springframework.beans.factory.annotation.Autowired
     private org.springframework.context.ApplicationEventPublisher refundEvents;
@@ -271,6 +278,11 @@ public class FinanceService implements TerminationSettlementPort {
     // 第十八批 AL 段第 253 条 253-R2（BSM:1642「必须写原因和责任人」）：锁账补录责任人核账号存在（同人工补录）。
     @org.springframework.beans.factory.annotation.Autowired
     com.complex.platform.access.AccessRepository accessRepository;
+
+    // 第十八批 AM 段第 241 条 241-R1（BSM:1803「审批通过后的发放进入应付款项台账，走付款确认」；第十八批裁决 55「所有应付都先走付款确认」）：
+    // 出款闸与台账发起付款确认。包私有便于单测置位；手工构造未注入时出款一律 409 PAYMENT_CONFIRMATION_REQUIRED（fail-closed）。
+    @org.springframework.beans.factory.annotation.Autowired
+    PaymentConfirmationService paymentConfirmations;
 
     /** 往来来源类型中文名（未知值原样）。 */
     public static String sourceTypeLabel(String sourceType) {
@@ -555,6 +567,55 @@ public class FinanceService implements TerminationSettlementPort {
                 "finance.payment.register",
                 "ar_ap_payment",
                 () -> registerPayment(itemId, request)
+        );
+    }
+
+    /**
+     * 第十八批 AM 段第 241 条 241-R1（BSM:1803「付款确认按全平台统一的审批模型执行——发起时指定这条主线的最终审批人……」；第十八批裁决 55、65、68
+     * 「同收款方、同类型、同综合体可勾选合发」）：台账勾选款项合并发起一张付款确认。范围闸放在幂等之前：逐笔沿用登记付款的 requireArApBeforeReplay
+     * （项目与商户范围、工资应付须走工资专用入口、采购应付须为当前有效应付）；写内按单号顺序锁台账行，未付额 ≤ 0 时 409 AR_AP_ITEM_SETTLED（页面
+     * 未刷新时会遇到）。分红应付的直接受益人为主理人（PGM:529「申请人与直接受益人不得审批与自己相关的申请」）。
+     */
+    @com.complex.platform.gate.GuardedAction(capability = "finance.payment.register")
+    @Transactional
+    public PaymentConfirmationService.Confirmation requestArApPaymentConfirmation(ArApPaymentConfirmationRequest request) {
+        String key = request == null ? null : request.idempotencyKey();
+        List<String> ids = request == null || request.arApItemIds() == null ? List.of() : request.arApItemIds().stream()
+                .map(id -> trimToNull(id)).filter(java.util.Objects::nonNull).distinct().sorted().toList();
+        for (String id : ids) {
+            requireArApBeforeReplay(id, "finance.payment.register", "finance.payment_confirmation.request_failed", key);
+        }
+        return executeWrite(
+                "createArApPaymentConfirmation",
+                key,
+                request,
+                PaymentConfirmationService.Confirmation.class,
+                "finance.payment_confirmation.requested",
+                "finance.payment_confirmation.request_failed",
+                "finance.payment.register",
+                "payment_confirmation",
+                () -> {
+                    ArApPaymentConfirmationRequest actual = requireRequest(request);
+                    if (ids.isEmpty()) {
+                        throw ApiException.badRequest("VALIDATION_FAILED", "ar_ap_item_ids is required");
+                    }
+                    List<PaymentConfirmationService.Target> targets = new java.util.ArrayList<>();
+                    for (String id : ids) {
+                        ArApItemRecord item = repository.findArApItemByIdForUpdate(id)
+                                .orElseThrow(() -> ApiException.notFound("AR_AP_ITEM_NOT_FOUND", "应收应付款项不存在或已被删除"));
+                        if (item.unpaidAmountCent() <= 0) {
+                            throw ApiException.conflict("AR_AP_ITEM_SETTLED", "该笔应付已结清");
+                        }
+                        String type = PaymentConfirmationService.arApPaymentType(item.sourceType());
+                        targets.add(new PaymentConfirmationService.Target(type, "ar_ap_item", item.id(), item.unpaidAmountCent(), item.projectId(),
+                                item.merchantId(), item.counterpartyId(), type.startsWith("dividend_") ? item.counterpartyId() : null,
+                                item.itemNo() + "（" + sourceTypeLabel(item.sourceType()) + "）"
+                                        + java.math.BigDecimal.valueOf(item.unpaidAmountCent(), 2).toPlainString() + " 元，到期 " + item.dueDate(),
+                                "receivable".equals(item.direction())));
+                    }
+                    return paymentConfirmations.request(targets, actual.idempotencyKey(), actual.reason(), actual.finalApproverId(),
+                            actual.parallelLines());
+                }
         );
     }
 
@@ -2062,6 +2123,15 @@ public class FinanceService implements TerminationSettlementPort {
             throw ApiException.conflict("DIVIDEND_RESERVE_NOT_RELEASED",
                     "该应付为分红发放保护线留存（待释放），需先释放才能发放给主理人");
         }
+        // 第十八批 AM 段第 241 条 241-R1（第十八批裁决 55「所有应付都先走付款确认」；BSM:1803「主线与各条平行线都通过才完成付款确认」）：应付登记付款前
+        // 须有已通过的付款确认。登记付款、线下确认关联应付、锁账收付款补录批准都经此一处，不看 permission（补录未确认时终审 409、补录与复核单保持待审）。
+        // 241-R9（第十八批裁决 69「付款方是平台主体的应收，登记收款前也须付款确认」）：付款方是平台主体的 7 个来源的应收同样过闸；分红抵欠款、退租押金
+        // 抵扣不是出款，不判。
+        if ("payable".equals(current.direction()) || ("receivable".equals(current.direction())
+                && PaymentConfirmationService.PLATFORM_PAYER_RECEIVABLE_SOURCES.contains(current.sourceType())
+                && !"dividend_offset".equals(paymentMethod) && !DEPOSIT_OFFSET_METHOD.equals(paymentMethod))) {
+            requirePaymentConfirmed("ar_ap_item", current.id());
+        }
         if (amountCent > current.unpaidAmountCent()) {
             throw ApiException.badRequest("VALIDATION_FAILED", "支付金额超过未付金额");
         }
@@ -2766,6 +2836,8 @@ public class FinanceService implements TerminationSettlementPort {
                     FinanceRefundRecord refund = scopedRefund(refundId, true, "finance.refund.create");
                     requireRefundOpenForExecution(refund);
                     requireRefundExecutionAuthority(refund, actual.deviceId());
+                    // 第十八批 AM 段第 241 条 241-R5（第十八批裁决 55「所有应付都先走付款确认……退款……」）：重试派发前须有已通过的付款确认。
+                    requirePaymentConfirmed("finance_refund", refund.id());
                     if (!canDispatchRefund(refund)) {
                         throw ApiException.conflict("REFUND_ROUTE_UNAVAILABLE", "尚无可自动执行的原收款路线，请核实原路退款待办");
                     }
@@ -2779,6 +2851,44 @@ public class FinanceService implements TerminationSettlementPort {
                     return saveRefundState(refundState(refund, "requested", null, null));
                 });
         return dispatchPreparedRefund(prepared);
+    }
+
+    /**
+     * 第十八批 AM 段第 241 条 241-R5（BSM:1803「付款确认按全平台统一的审批模型执行——发起时指定这条主线的最终审批人……」；第十八批裁决 55「退款……
+     * 要设流程」、65（财务退款待办按来源各一个支付类型 finance_refund_＋来源）、68「退款……按单发起」）：财务退款待办发起付款确认，金额取退款金额，
+     * 收款方取原付款方（原收款退款为原应收的付款方，其余为原付款记录）。范围闸放在幂等之前，照 requireDealerRefundBeforeReplay 记失败：按
+     * finance.refund.create 的项目与商户范围取退款单；经销退款另核来源、业务订单与原收款两个项目的办理权限（不带执行人、核实人的职责分离）。
+     */
+    @com.complex.platform.gate.GuardedAction(capability = "finance.refund.create")
+    @Transactional
+    public PaymentConfirmationService.Confirmation requestRefundPaymentConfirmation(String refundId,
+            com.complex.platform.finance.dto.PaymentConfirmationRequest request) {
+        authorizationService.requirePermission("finance.refund.create");
+        String key = request == null ? null : request.idempotencyKey();
+        try {
+            requireDealerRefundSource(scopedRefund(refundId, false, "finance.refund.create"), false, false);
+        } catch (RuntimeException error) {
+            auditEventService.recordFailure("finance.payment_confirmation.request_failed", "finance.refund.create", "finance_refund", refundId,
+                    null, key, error instanceof ApiException api ? api.code() : "INTERNAL_ERROR");
+            throw error;
+        }
+        return executeWrite("createFinanceRefundPaymentConfirmation:" + refundId, key, request,
+                PaymentConfirmationService.Confirmation.class, "finance.payment_confirmation.requested",
+                "finance.payment_confirmation.request_failed", "finance.refund.create", "payment_confirmation", () -> {
+                    var actual = requireRequest(request);
+                    FinanceRefundRecord refund = scopedRefund(refundId, true, "finance.refund.create");
+                    String type = "finance_refund_" + refund.sourceType();
+                    String payer = "ar_ap_payment".equals(refund.sourceType())
+                            ? repository.findArApPaymentById(refund.targetId()).flatMap(payment -> repository.findArApItemById(payment.arApItemId()))
+                                    .map(ArApItemRecord::counterpartyId).orElse(refund.targetId())
+                            : refund.targetId();
+                    return paymentConfirmations.request(List.of(new PaymentConfirmationService.Target(type, "finance_refund", refund.id(),
+                                    refund.refundAmountCent(), refund.projectId(), refund.merchantId(), payer, null,
+                                    "退款单 " + refund.id() + "（" + PaymentConfirmationService.PAYMENT_TYPES.getOrDefault(type, type) + "，原路渠道 "
+                                            + PaymentConfirmationService.channelLabel(refund.refundChannel()) + "）" + java.math.BigDecimal.valueOf(refund.refundAmountCent(), 2).toPlainString()
+                                            + " 元，退款事由 " + refund.reason())),
+                            actual.idempotencyKey(), actual.reason(), actual.finalApproverId(), actual.parallelLines());
+                });
     }
 
     @com.complex.platform.gate.GuardedAction(capability = "finance.ar_ap.view")
@@ -2822,6 +2932,9 @@ public class FinanceService implements TerminationSettlementPort {
                     requireRefundEvidence(refund, actual.evidenceAttachmentIds());
                     String reference = requireText(actual.paymentReference(), "原路执行流水号");
                     requireText(actual.operatorNote(), "执行说明");
+                    // 第十八批 AM 段第 241 条 241-R5（第十八批裁决 55「所有应付都先走付款确认……退款……」）：登记原路执行（现金、刷卡现场退亦然）前
+                    // 须有已通过的付款确认。
+                    requirePaymentConfirmed("finance_refund", refund.id());
                     repository.findReadyRefundAttempt(refund.id()).ifPresent(attempt -> repository.claimRefundAttempt(attempt.id()));
                     String operator = authorizationService.currentActor().id();
                     repository.appendRefundAttempt(new FinanceRefundAttemptRecord(
@@ -3064,7 +3177,8 @@ public class FinanceService implements TerminationSettlementPort {
 
     private FinanceRefundRecord dispatchPreparedRefund(FinanceRefundRecord prepared) {
         // 外层业务未提交时不调用渠道；已提交的原单可经 retry 继续同一个待派发尝试。
-        if (!canDispatchRefund(prepared)
+        // 第十八批 AM 段第 241 条 241-R5（第十八批裁决 55）：付款确认通过之前不派发网关——建单时一律不派，确认通过后经重试派发。
+        if (!canDispatchRefund(prepared) || paymentConfirmations == null || !paymentConfirmations.hasApproved("finance_refund", prepared.id())
                 || org.springframework.transaction.support.TransactionSynchronizationManager.isActualTransactionActive()) return prepared;
         FinanceRefundAttemptRecord claimed = refundTransaction(() -> {
             FinanceRefundRecord current = scopedRefund(prepared.id(), true);
@@ -3566,6 +3680,12 @@ public class FinanceService implements TerminationSettlementPort {
         ArApItemRecord item = persistDerivedArApItem(
                 "payable", principalUserId, "dividend_payout", statementId, netAmountCent, statementId, merchantId, null, dueDate);
         return item.id();
+    }
+
+    /** 第十八批 AM 段第 241 条 241-R3：分红标记发放前读主理人分红应付的未付额；找不到 404 AR_AP_ITEM_NOT_FOUND。 */
+    public long arApUnpaidCent(String itemId) {
+        return repository.findArApItemById(itemId).map(ArApItemRecord::unpaidAmountCent)
+                .orElseThrow(() -> ApiException.notFound("AR_AP_ITEM_NOT_FOUND", "应收应付款项不存在或已被删除"));
     }
 
     /**
@@ -4102,6 +4222,14 @@ public class FinanceService implements TerminationSettlementPort {
         }
     }
 
+    /** 第十八批 AM 段第 241 条 241-R1：出款闸——该付款对象须有已通过的付款确认；未注入（手工构造）一律拒（fail-closed）。 */
+    private void requirePaymentConfirmed(String objectType, String objectId) {
+        if (paymentConfirmations == null) {
+            throw ApiException.conflict("PAYMENT_CONFIRMATION_REQUIRED", "该笔付款须先完成付款确认（主线与财务、法务等各条平行线全部审批通过）");
+        }
+        paymentConfirmations.requireApproved(objectType, objectId);
+    }
+
     private void rejectPayrollMutation(ArApItemRecord item) {
         if ("staff_payroll".equals(item.sourceType())) throw ApiException.conflict("PAYROLL_DEDICATED_WORKFLOW_REQUIRED",
                 "工资须由原工资单形成应付并在工资银行付款入口核实，不能用普通收付、退款或调账改写");
@@ -4296,6 +4424,9 @@ public class FinanceService implements TerminationSettlementPort {
         }
         if (value instanceof PeriodCloseRecord record) {
             return record.id();
+        }
+        if (value instanceof PaymentConfirmationService.Confirmation confirmation) {
+            return confirmation.confirmationId();
         }
         return null;
     }

@@ -1,6 +1,6 @@
 package com.complex.platform.amusement;
 
-// 文件版本：V0.09
+// 文件版本：V0.10
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -614,6 +614,8 @@ class ParkWideFaultCompensationJdbcIntegrationTests {
         List<Map<String, Object>> recoveries = recoveryRows();
         assertThat(recoveries).hasSize(1);
         String recoveryId = (String) recoveries.get(0).get("id");
+        // 第十八批 AM 段第 241 条 241-R9（第十八批裁决 69）：付款方是平台主体的追收应收收回前置——已有通过的付款确认（夹具）。
+        com.complex.platform.support.PaymentConfirmationFixture.approvedArAp(jdbcTemplate, recoveryId);
         AccessActor admin = new AccessActor(financeUser, "u_" + financeUser, "platform_admin", "org_1", null, "active");
         mockMvc.perform(post("/api/v1/finance/ar-ap-items/" + recoveryId + "/payments")
                         .with(request -> {
@@ -652,6 +654,8 @@ class ParkWideFaultCompensationJdbcIntegrationTests {
         String payableId = jdbcTemplate.queryForObject("SELECT id FROM ar_ap_items WHERE source_type = 'compensation_fulfillment'"
                 + " AND project_id = ?", String.class, projectId);
         actAs(financeUser);
+        // 第十八批 AM 段第 241 条 241-R1：出款前置——该应付已有通过的付款确认（夹具）。
+        com.complex.platform.support.PaymentConfirmationFixture.approvedArAp(jdbcTemplate, payableId);
         financeService.registerArApPayment(payableId, new ArApPaymentRequest("fs012-part-pay-" + suffix, null, List.of(), paidCent,
                 "bank_transfer", null, "BANK-CPF-" + suffix));
         TestSecurityActors.asPlatformAdmin();

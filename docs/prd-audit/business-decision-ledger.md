@@ -1,6 +1,6 @@
 # PRD 审计业务裁决台账
 
-文档版本：V0.94
+文档版本：V0.95
 状态：进行中
 迁移日期：2026-07-27
 当前事实源：三份立法 HTML 以既有冻结基线叠加 James 此前 M02 至 M08 的点名批准、全量审计 M001、M002 的逐项批准，以及本轮 2026-10-16 至 2026-10-17 业务 HTML 审计中 Q01 至 Q40 及子题实际明确批准且未被后续替代的裁决，和 2026-10-17 第二批 HTML 业务线推演审计（A–F 六线 64 条、停车章）的逐项批准，并叠加本轮 CG 70 项来源确认与 C01–C09、N01–N03 最终澄清及补全文稿中 F01、W01–W05 的整体修改批准（本文件末节）；本轮最终规则、未采纳或替代关系、现行版本与字节哈希见本文件末节。历史记录保留为各自当时事实，不恢复已被替代的建议。
@@ -3969,6 +3969,11 @@ HTML 的语义补齐与直接引用同步可在本批核验；70项中的业务�
 | 62 | **第 236 条 已上架的非跨域票加别的经营域收费权益变成跨域组合通票**（题面：「【第 236 条·问 1/2】已上架的非跨域票，加了别的经营域的收费权益、变成跨域组合通票时，审批期间停不停售？ 前因：裁决 61 定的是「已上架的跨域组合通票」改动另存草稿版审批、旧版照卖。这里的票改之前不是跨域组合通票，没有获批的跨域旧版可照卖，裁决 61 没覆盖到。 现状：①后台建票只有引导式向导一条路，向导只绑一条权益、建完立即上架。所以做一张跨域组合通票的正常做法是：先用向导建出单权益票（票名、售价往往已按组合定好）并上架，再到「组合式套票配置」加别的经营域的权益——代码注释也把「先建票、再一次性配组合权益」写成正常流程，每做一张新的跨域组合通票都会走到这里。②组合配置一次提交是逐条写入的：先酒吧，再游乐，再餐饮零售。③现行规则：已上架的票加了有价权益后，售价与「各业态价格合计×折扣」差额超出允许误差、或赠酒不够，就退回草稿停售；单权益票再加一条有价权益，售价几乎必然对不上，所以现在这一步本来就会退回草稿。」）—— 操作员选「不许加，另建票种」：已上架的非跨域票一律不许加别的经营域收费权益，要做跨域组合通票就另建票种。好处：规则最简单。坏处：向导建票即上架，常规路径会被直接拦住，还得改向导（先建草稿不立即上架）或另做建草稿票的入口，工作量更大。（未选：「退回草稿停售，发布时审批（推荐）」「照裁决 61：旧版照卖」）（2026-11-12 弹窗；来由：18AJ 只读设计第 236 条待裁题。控制席说明：零元免费权益不参与域间分配（BSM:749），已上架票加别域零元权益不受本裁决限制；「另建票种」的入口按选项原文所列二者之一落地（改向导可先建草稿不立即上架，草稿票配齐组合后经发布入口提交平台权限审批）。） | 待开发清单第 236 条（18AJ） |
 | 63 | **第 236 条 跨域组合通票的派生价与动态价是否经平台审批**（题面：「【第 236 条·问 2/2】跨域组合通票的会员价、新人价、学生价、团体价、渠道价和动态价，要不要也经项目之上的平台权限审批、记入票种规则版本？ 前因：HTML 写「跨域组合通票的定价与域间结算规则由项目之上的平台权限统一审批」；《业务系统地图》写组合通票「售价由各业态价格相加后统一打折得出」、凑整差额「每次发布时……记入票种规则版本」；裁决 61 题面写「审批通过即留一版规则（价格、权益组成、凑整差额、各域分摊）」。另一处 HTML 写「会员价、渠道价、动态价都在对应基础价上按打折/减免/加价/固定额派生；动态价按时段、容量等规则配置，可先试算再发布」。 现状：票种本身有平日、周末、节假日三档基础价和折扣。派生价（会员、新人、学生、团体、渠道）由有票务价格权限的人直接配置；动态价由有发布权限的人发布（可先试算）。订单逐单记下所用的派生价和动态价规则。 分歧：「定价」只指票种本身的价格构成，还是连派生价、动态价也算。决策台账没有答案。」）—— 操作员选「派生价动态价也审批」：跨域组合通票的派生价、动态价规则也要经项目之上的平台权限审批，并记入票种规则版本。好处：跨域组合通票的实际成交价全部受平台管控。坏处：日常调会员价、节假日加价都要等平台审批；需另立条目实现（派生价、动态价都要接审批与版本），工作量大，本段不做。（未选：「只管票种本身价格（推荐）」）（2026-11-12 弹窗；来由：18AJ 只读设计第 236 条待裁题。控制席说明：按选项原文「需另立条目实现……本段不做」，登记待开发清单第 297 条；18AJ 只做票种本身三档价、折扣、权益组成、最低赠酒杯数、凑整差额与各域分摊的审批与版本。） | 待开发清单第 297 条 |
 | 64 | **第 240 条 已封账月份里尚未出账或仍在复核的结算显示哪一态**（题面：「【第 240 条·结算五态】所属综合体该月已封账，但某笔结算还没出账或还在复核中，页面显示哪个状态？ 前因：你定的裁决 54 把五态作为页面统一显示口径，对应关系是：未出结果或未出账→草稿；演出挂起、积分账单有未处理异议→待复核；已出结果或已入账→已确认；被财务调整取代的演出行→已调整；所属综合体该月已封账→已归档。没写两条同时成立时谁优先。 现状：裁决 41 的封账只看该月每天五类数据都已最终、日结都已锁定，不等积分账单出账和异议处理。门票积分月结账单在次月才出账，出账后还有十个工作日异议期；演出履约争议也可能跨月没了结。所以次月初就封账的月份，很可能还有没出账（草稿）或商户异议挂着（待复核）的结算。决策台账里没有答案。」）—— 操作员选「已归档只压已出结果的（推荐）」：只有本身已确认或已调整、且该月已封账的才显示已归档；还没出账的照常显示草稿、还有异议或挂起的照常显示待复核，等出了结果再显示已归档。好处：商户异议还挂着时页面不会显示「已归档」，与裁决 40 总控「结算待确认」卡的计数对得上。坏处：已封账月份里会同时看到已归档和草稿、待复核。（未选：「一封账就全部已归档」）（2026-11-15 弹窗；来由：18AL 只读设计第 240 条待裁题。控制席说明：与 18AL 只读设计 d2-five-states 按推荐读法写的判定次序一致，方案不改。） | 待开发清单第 240 条（18AL） |
+| 65 | **第 241 条 付款确认的支付类型怎么分**（题面：「【第 1/5 题（第 241 条）：付款确认的「支付类型」怎么分】 前因：业务地图 BSM:1803「……主线与各条平行线都通过才完成付款确认；具体流程按支付类型分别设定。」您在裁决 55 选了「所有对外付款都走付款确认，按支付类型分别设流程」，题面点名「退款、工资、货款各类都要设流程」，这三类已定。三份 HTML 都没列其余支付类型怎么分。 现状：对外出款有五条路，现在都没有付款确认：应收应付台账的应付（约 28 种来源）、工资银行付款、财务退款待办（7 种来源）、门票退款打款、存酒对客赔付。每种支付类型会成为一种审批类型；审批时限可在主管复核页按类型配置（PGM:529，涉钱审批出厂 1 个工作日）。另：现金、刷卡现场退款的客人要等付款确认审完才能领到退款（裁决 55 已接受「日常付款会明显变慢」）。 分歧与利弊： ① 按 HTML 已分别写了付款规则的类别分 8 类：分红发放（BSM:1787）；工资（BSM:1683 工资专用规则）；平台内部普通内部结算（通票分账、超池补贴、单店服务费应退、补偿履约、组合通票域间往来、派驻提成拨付、酒吧报酬拨付、门店要货货款、通票免费酒水、传媒演出结算，BSM:1683 三个付账日）；押金退还（BSM:1352）；供应商货款（入库、寄售、预付，BSM:1161）；退款（酒吧账单退款、订台定金退回、财务原路退款与储值本金、经销退款、门票退款，BSM:806）；赔付（存酒对客赔付，BSM:1072）；其他应付（平台代收商户卡消费应付发卡商户、对账差异、营业额抽成冲正、内部价券结算、库存差异、手工应付）。好处：每类对应一套已有付款规则，最贴近题面「退款、工资、货款」的粒度。坏处：「其他」较杂，个别来源归属可商量（如商户卡消费应付发卡商户、传媒演出结算、门店要货货款）。 ② 按台账来源逐个算一类（约 38 类）。好处：不另造分类，系统按来源自动定类。坏处：审批类型和时限清单多约 38 行，多数类流程相同。 ③ 只分退款、工资、货款、其他四类。好处：最少，只留题面点名的三类。坏处：分红、押金退还、内部结算各有自己的付款规则，却共用「其他」一套流程。」）—— 操作员选「按台账来源逐个分」：约 38 类，系统按来源自动定类；时限清单多约 38 行。（未选：「按 8 类分（推荐）」「只分四类」）（2026-11-16 弹窗；来由：18AM 只读设计第 241 条待裁题。控制席说明：旧稿按推荐项写的 8 类作废：台账应付每个来源一种支付类型，工资、财务退款待办各来源、门票退款打款、存酒对客赔付各为一种；连同裁决 69 纳入的三种平台主体追收应收，每种一个审批类型。） | 待开发清单第 241 条（18AM） |
+| 66 | **第 241 条 各类付款确认除财务、法务两线外要不要强制加别的部门线**（题面：「【第 2/5 题（第 241 条）：除财务、法务两线外，各类付款确认要不要强制加别的部门线】 前因：BSM:1803 与 DEC-R5-2026-08-04-08 同句「财务、法务及相关部门作为平行的相关部门线，各指定该部门的最终审批人并同样逐级自动补全至该部门预先设定的最低起点层级」。财务、法务两线每类必带已按字面写进方案；「相关部门」还有哪些，按支付类型没有写。 现状：在用的审批线有五条：财务、法务、税务、人力、业务。各线的最低起点层级和起点人在「组织层级与审批线」页维护。审批引擎支持按审批类型写死必带线，也支持发起人在必带线之外按单另加在用的线。 分歧与利弊： ① 每类只固定带财务、法务两线，其他部门线由发起人按单另加。好处：照原句字面，不替业务拍板；改动最小。坏处：各类实际必带线相同，「按类型分设」只体现在审批类型和时限上。 ② 按类型强制加线（例如供应商货款加业务线、工资加人力线、内部结算加业务线），由您逐类指定。好处：贴合各类业务分工。坏处：要您逐类给出；每笔付款多一条线、更慢。」）—— 操作员选「只固定财务法务（推荐）」：每类必带财务、法务两线；其他部门线由发起人按单另加。（未选：「按类型强制加线」）（2026-11-16 弹窗；来由：18AM 只读设计第 241 条待裁题。控制席说明：与只读设计按推荐读法写的一致；也是裁决 67 设定表的出厂设置（各类无两线之外的必带线）。） | 待开发清单第 241 条（18AM） |
+| 67 | **第 241 条 各类付款确认的流程由谁设定、在哪设定**（题面：「【第 3/5 题（第 241 条）：各类付款确认的流程由谁设定、在哪设定】 前因：原句「具体流程按支付类型分别设定」没写由谁、在哪设定。对照：合同有原句「合同的新建、到期终止、变更分别使用各自配置的审批流程模板」「按综合体后台可配」（BSM:1349），付款确认没有同类原句。PGM:528 写「每个部门或业务线须预先设定其平行审批的最低起点层级」。 现状：统一审批各事项的必带平行线写在代码里；各审批类型的时限已可在主管复核页后台配置；各线最低起点层级和起点人在「组织层级与审批线」页设定（门禁为分配角色权限）。合同模板由持合同审批流程管理权限的人在合同工作台设定。 分歧与利弊： ① 写死在系统里：各类必带线按上一题答复固定，改流程要研发发版；审批时限照旧按类型后台配。好处：不加表、不加页面，最小。坏处：调整某类必带线要改代码。 ② 放在「组织层级与审批线」页，与各线最低起点层级同一处、同一门禁；财务、法务两线仍每类必带，设定的是两线之外各类还带哪些线，上一题答复作出厂设置。好处：不新增权限码。坏处：多一张表、一个配置区、两个接口；设定的人是管审批线的人（偏平台管理员），不是财务。 ③ 同②，但由平台财务在财务页设定，新增「付款确认流程设置」权限码。好处：财务自己定。坏处：在②之外再加权限码，要另定出厂授给哪些岗位，多一道迁移和授权核对。」）—— 操作员选「审批线页设定」：与各线最低起点层级同一处、同一门禁，不新增权限码。（未选：「写死在系统里（推荐）」「财务页设定加新权限码」）（2026-11-16 弹窗；来由：18AM 只读设计第 241 条待裁题。控制席说明：做条件项 241-R8（选项②写法）：组织层级与审批线页加付款确认流程设定，财务、法务两线仍为每类下限。） | 待开发清单第 241 条（18AM） |
+| 68 | **第 241 条 付款确认按笔发起还是可以多笔合并发起**（题面：「【第 4/5 题（第 241 条）：付款确认按笔发起，还是可以多笔合并发起】 前因：BSM:1803「审批通过后的发放进入应付款项台账，走付款确认」，没写一张付款确认管一笔还是多笔；BSM:1683「每一笔应付具体落在哪一个付账日」。裁决 55 已接受「日常付款会明显变慢」。 现状：有几类应付按每次交易逐笔生成：平台代收商户卡每次消费挂一笔应付发卡商户；通票免费酒水每次核销挂一笔应付酒吧；内部价采购券每次核销挂一笔应付第三方；酒吧账单每次退款挂一笔退款应付；营业额抽成冲正一笔退款一行；通票分账按结算单明细逐行挂。这些每个营业日都会产生，笔数随营业量增长。每张付款确认至少走主线加财务、法务两线（涉钱审批出厂时限 1 个工作日）。另：这些逐笔应付的到期日多为当天营业日，日结按到期日锁账；付款确认审完通常已过当日日结，登记付款还要再走一道锁账收付款补录（须附凭证、写责任人，裁决 56）。 分歧与利弊： ① 台账应付可合并发起：同一收款方、同一支付类型、同一综合体的多笔未结清应付，财务勾选后合发一张，审批人一次看到逐笔明细与合计；工资（受益人是员工本人，PGM:529 规定受益人不得审批，只能逐人）、财务退款、门票退款、存酒赔付仍按单发起。好处：逐笔生成的应付不必每笔各走一条审批链。坏处：要多做勾选合并；一张里任一笔有问题，整张驳回后重新发起。 ② 一律逐笔：每笔应付、每张退款单各发一张。好处：最简单，一笔一审。坏处：每次刷卡消费、每次赠饮核销都要走一条完整审批链，审批量随营业量同步增长。」）—— 操作员选「台账应付可合并（推荐）」：同收款方、同类型、同综合体可勾选合发；工资、退款、赔付按单发起。（未选：「一律逐笔发起」）（2026-11-16 弹窗；来由：18AM 只读设计第 241 条待裁题。控制席说明：与只读设计按推荐读法写的一致。按裁决 65，「同一支付类型」即同一台账来源。） | 待开发清单第 241 条（18AM） |
+| 69 | **第 241 条 付款方是平台主体、台账记成应收的一侧登记收款前要不要先付款确认**（题面：「【第 5/5 题（第 241 条）：付款方是平台主体、台账记成应收的那一侧，登记收款前要不要也先付款确认】 前因：裁决 55 的选项名是「所有对外付款都走付款确认」，解释是「所有应付都先走付款确认」；BSM:1683「平台内部各主体之间的普通内部结算应收应付，每月有三个付账日」。三份 HTML 与裁决都没写平台各主体之间的往来记成应收的那一侧怎么办。 现状：台账对平台各主体之间的一笔往来只记一行，同一类往来按金额正负分挂应付或应收：组合通票域间份额正额挂应付、负额改挂应收；酒吧报酬月结拨付正额应付、负额应收；另有通票餐饮零售代付、派驻提成冲回、补偿应付已付追收、通票分账追收、存酒退出承接垫付追收等应收，付款方都是平台主体。记成应收的那一行，登记收款就是登记该平台主体的出款。方案目前按裁决原话只在应付登记付款时设闸。 分歧与利弊： ① 只管台账应付，平台主体付款、记成应收的一侧不过闸。好处：照裁决原话「所有应付」，改动最小。坏处：同一类内部往来按金额正负，一半要付款确认、一半不要。 ② 付款方是平台主体的上述应收，登记收款前也须付款确认。好处：平台各主体的出款口径一致。坏处：多接一类闸、多一批审批；登记的是收款，财务操作上不直观。 （前 4 题已记：支付类型按台账来源逐个分；每类固定财务、法务两线；流程在「组织层级与审批线」页设定；台账应付可合并发起。）」）—— 操作员选「平台主体应收也过闸」：付款方是平台主体的应收，登记收款前也须付款确认。（未选：「只管应付（推荐）」）（2026-11-16 弹窗；来由：18AM 只读设计第 241 条待裁题。控制席说明：做条件项 241-R9。） | 待开发清单第 241 条（18AM） |
 
 第一段转正前最低池额试算与取消结算环节超池待审批：既有缺口，列入待开发清单第 75 条、随 18C 做（ENUM L52、BSM L752）。
 
@@ -7310,3 +7315,239 @@ HTML 的语义补齐与直接引用同步可在本批核验；70项中的业务�
   - 对账差异入账台账编号反查排除派生行：JdbcFinanceRepository 的 listReconciliationDifferences 与 findReconciliationDifferenceById 两处取 posted_ar_ap_item_id 的标量子查询加 a.origin_item_id IS NULL（同 V344 唯一索引 uq_ar_ap_items_direction_source 的条件），只取原入账行；锁账金额补录批准追加的冲正行 arap_rev_、重述行 arap_res_ 沿用原行来源与差异号，原写法下入账行一经金额补录，对账差异列表与按差异号查询（原件回读等）即多行报错。新用例 FinanceReconciliationDifferenceLedgerJdbcTests.amountBackfillOnPostedItemKeepsDifferenceReadable（勾选入账并复核通过 → 锁定入账行营业日的日结 → 对入账行申请锁账金额补录 −4.00 元并经上级在主管复核接口通过 → 差异列表 200、posted_ar_ap_item_id 为原入账行，复核人回读原件 200）。同根扫过本段其余反查 ar_ap_items 的 SQL 与仓储方法（findReconciliationOriginArApItem、入账幂等、短信取往来方、锁账补录取台账、复核单项目反查、门票积分月结单取台账），均按台账编号取，不受派生行影响，未改。依据 BSM:1318「查看与平台口径不一致的对账差异。」；BSM:1751「同一差异只入账一次」；ENUM:190「日结锁定后的补录须上级审批」。
   - 财务 PRD docs/finance-settlement-product-prd-v0.1.md §4C（FS-021 一条）：「锁账补录申请与审批」改为「锁账补录申请」，「补录不得自审、红冲链不变」后补「（第十八批 AL 段第 245 条起锁账补录审批改走统一审批，审批人按组织层级定，见 §5.4）」；不加新规则、不升版（本段已 V0.34）。本段改过的其他 PRD 与下位文档里「锁账补录」「locked_backfill.approve」的现行描述已与现码一致，未改。依据 ENUM:190；PGM:528。
 - 18AL 落地位置补记·运行验收证据、快照、终验文档刷新（无新裁决）：业务提交 cd3332dc 与 CI 跑序误报修正提交 b2d2acc7 之后，按第十八批裁决 25 重刷了运行验收证据：后端全量 6773 测，0 失败 0 错误；apps/web 构建通过；常规界面验收（接口全部 mock）实跑 40 条全过；真实后端界面验收未跑，runtime_ready=false。随后依次重生成闭环当前态快照、生产闭环缺口报告、界面验收报告、无上线指挥台。生成器没改。手改 docs/final-closed-loop-acceptance-audit-v0.1.md 与 docs/code-implementation-acceptance-audit-v0.1.md：前端单测源码计数改为 1756；被核文件行数都没变；后端全量与常规界面验收的数字、日期改为本次实跑值；写入 npm run verify:unit 实跑结果，五个工作区全过。交付门禁于 2026-11-16 08:10 UTC 在工作树逐项实跑子项，NAS 两项现场探测未跑。仍红的有两项：一是 coding-host-protection，它写死主仓路径，在工作树口径下必红，属工具口径，不做；二是 final-closed-loop-audit，如实留 2 条红（integration-ready、business-acceptance-ready），原因是校验器要求终验把联调、业务验收写成「是」，而裁决 25 定了不跑真实后端界面验收、运行验收未就绪，终验写的是「否」。verify:delivery-gates 总链仍是红的。
+
+18AM 落地位置补记（2026-11-16）：第十八批 AM 段（batch59）按 18AM 只读设计实现待开发清单第 241 条（付款确认）；运行验收证据、终验文档在本段最后一个提交刷新；各条落地位置见下。本段追加时，原台账除文档版本 V0.94→V0.95 与第十八批裁决表第 65～69 行（控制席已插入）外，其他历史字节保持。
+
+- 18AM 落地位置补记·控制席判定（2026-11-16）：本段（第十八批 AM 段，batch59）实现待开发清单第 241 条（付款确认；18AM 只读设计 b59-audit/d-241.json，质疑者修订后定稿）。范围按第十八批裁决 55（所有对外付款都走付款确认，按支付类型分别设流程），旧方案「只管分红发放的应付」作废。本段弹窗定第十八批裁决 65～69，插入裁决表第 65～69 行：65 支付类型按台账来源逐个分（台账应付 28 类、平台主体付款应收追收 3 类、财务退款待办 7 类、门票退款打款、存酒对客赔付，共 40 类，每类一个审批类型 finance.payment_confirm.<类型>）；66 每类固定财务、法务两线，其他部门线由发起人按单另加；67 各类两线之外的必带线在「组织层级与审批线」页设定（同一门禁，不新增权限码，出厂无额外线）；68 台账应付可按同一收款方、同一支付类型、同一综合体合并发起，工资、退款、赔付按单发起；69 付款方是平台主体的应收，登记收款前也须付款确认。只读设计范围外旁见另记待开发清单第 310～315 条（待核实），实现期旁见另记第 316、317 条（待核实）。
+- 18AM 落地位置补记·第 241 条 241-R1（付款确认后端核心，A1-core；第十八批裁决 55、65、66、68）：
+  - 改法：
+    - 新迁移 V629 建 payment_confirmations：一行对应一个付款对象，合并发起时多行共用 confirmation_id；payment_type 的 CHECK 为 40 个值，object_type 为 ar_ap_item、finance_refund、ticket_refund、saved_bottle_remedy 四值；部分唯一索引保证一个对象至多一张待审或已通过的确认，不设「已用」状态。同一迁移建 payment_confirmation_flows（payment_type 主键、line_codes，出厂不插行，供 241-R8 用）。
+    - 新建 PaymentConfirmationService，集中放 40 类支付类型清单（payment_type→中文名）。台账来源各一类，payment_type 取 ar_ap_items.source_type 原值，共 28 个可付来源＋3 个平台主体追收来源；财务退款待办 7 个来源各一类（finance_refund_＋来源）；另有 ticket_refund（门票退款打款）、saved_bottle_compensation（存酒对客赔付）。
+    - SupervisorReviewService 策略表由该清单循环生成 40 条恒阻断策略：动作 finance.payment_confirm.＜支付类型＞，主线按直接上级链到发起人指定的最终审批人，固定财务、法务两线；动作名以 finance. 开头，按涉钱出厂 1 个工作日。带固定线时，名称含 dividend 不升最高权限档，含 payroll 的恒阻断对本策略不产生额外影响。
+    - 台账合并发起入口 POST /api/v1/finance/ar-ap-payment-confirmations（finance.payment.register）：范围闸放在幂等之前，逐笔沿用 requireArApBeforeReplay；须同收款方、同支付类型、同综合体；事由与主线最终审批人必填；未付额≤0 时 409 AR_AP_ITEM_SETTLED。查询入口为 GET /api/v1/finance/payment-confirmations。
+    - 出款闸：settleArApItem 对应付一处判（登记付款、线下确认关联应付、锁账收付款补录批准都经过这里；补录未确认时末节点批准 409，补录与复核单保持待审），内部应付「登记已发起付款」另判一次。没有已通过的确认即 409 PAYMENT_CONFIRMATION_REQUIRED。登记明确失败和资金不足顺延不判，原路重付沿用同一张确认。
+    - 复核单项目映射加 payment_confirmation；FieldLabels 与 fieldLabels.ts 同键同名补 ar_ap_item_ids、payment_type、payment_type_label、confirmation_id、object_ids；reviewLabels 补 40 个审批类型与「付款确认单」。台账来源中文名补进 AR_AP_SOURCE_TYPE_LABELS：采购三项同前端台账页，门店要货货款、传媒演出结算、平台代收商户卡消费、内部价券结算四项取裁决 65、68 题面用词。
+  - 落地位置：backend/src/main/resources/db/migration/V629__payment_confirmations.sql；finance/PaymentConfirmationService.java、PaymentConfirmationController.java、dto/ArApPaymentConfirmationRequest.java；FinanceService.java（requestArApPaymentConfirmation、settleArApItem 付款确认闸、requirePaymentConfirmed）；FinanceController.java；InternalPayableExecutionService.java（initiate）；governance/review/SupervisorReviewService.java（paymentConfirmationPolicies、parallelLineCodes）；governance/JdbcPlatformRepository.java（REVIEW_OBJECT_PROJECT_SQL）；common/api/FieldLabels.java；apps/web/src/admin/i18n/fieldLabels.ts、reviewLabels.ts。
+  - 依据：
+    - BSM:1803「连接财务对账，审批通过后的发放进入应付款项台账，走付款确认。付款确认按全平台统一的审批模型执行——发起时指定这条主线的最终审批人（即其授权的最高授权人），系统按组织层级逐级自动补全从发起人到该最终审批人之间的全部直接上级节点并逐级审批；财务、法务及相关部门作为平行的相关部门线，各指定该部门的最终审批人并同样逐级自动补全至该部门预先设定的最低起点层级；主线与各条平行线都通过才完成付款确认；具体流程按支付类型分别设定。」
+    - PGM:528「发起单据时只需指定该事项的最终审批人」。
+    - PGM:529「涉钱审批出厂默认 1 个工作日」「申请人与直接受益人不得审批与自己相关的申请」。
+    - 第十八批裁决 55（决策台账:3962）「所有应付都先走付款确认，按支付类型分别设流程」。
+    - 裁决 65（:3972）「按台账来源逐个分：约 38 类，系统按来源自动定类」。
+    - 裁决 66（:3973）「每类必带财务、法务两线；其他部门线由发起人按单另加」。
+    - 裁决 68（:3975）「同收款方、同类型、同综合体可勾选合发；工资、退款、赔付按单发起」。
+    - DEC-R5-2026-08-04-08「付款审批流按统一审批模型收口」。
+  - 测试：PaymentConfirmationJdbcTests 的 13 个用例，覆盖未确认登记 409、缺线 400 与另带业务线、自审 403 与三线全过才可付可分笔付、驳回后重发、同供应商合发与混合 400、应收不需确认、内部应付发起闸与失败后重付、锁账收付款补录未确认 409 保持待审且确认后再批结清、押金退还未到期仍 409、他项目 403 在幂等之前与工资隔离、确认单与复核单按对象项目可见、40 类涉钱时限与两线策略、名称陷阱不升档。既有 Jdbc 用例补 PaymentConfirmationFixture；FinanceServiceTests 注入付款确认桩（hasApproved 默认 false）；SupervisorReviewServiceTests 策略总数 58→98。后端全量 6786 测 0 红。
+- 18AM 落地位置补记（A2 段）：
+  241-R9（第十八批裁决 69：操作员选「平台主体应收也过闸」——「付款方是平台主体的应收，登记收款前也须付款确认」；BSM:1803「主线与各条平行线都通过才完成付款确认」）
+  - 改法：PaymentConfirmationService 新增 PLATFORM_PAYER_RECEIVABLE_SOURCES（pass_domain_share、pass_domain_direct_settlement、bar_payroll_transfer、dispatch_commission_transfer、compensation_fulfillment_recovery、ticket_distribution_recovery、saved_bottle_remedy_recovery），这些应收的支付类型即来源。FinanceService.settleArApItem 出款闸改为：payable，或 receivable 且来源在该集合内。按 d-241 not_doing「不出款的动作不走：分红抵欠款与退租押金抵扣」，付款方式为 dividend_offset、deposit_offset 时不判。
+  - 落地位置：backend/src/main/java/com/complex/platform/finance/PaymentConfirmationService.java:56-62；FinanceService.java:2126-2134。
+  - 测试：PaymentConfirmationJdbcTests.platformPayerReceivableNeedsConfirmationBeforeCollection。既有用例 ParkWideFaultCompensationJdbcIntegrationTests.compensationRecoveryIsCollectedThroughArApPaymentEndpoint 补 PaymentConfirmationFixture（:617）。
+  241-R8 后端（第十八批裁决 67：操作员选「审批线页设定」——「与各线最低起点层级同一处、同一门禁，不新增权限码」；裁决 66「只固定财务法务」——「每类必带财务、法务两线；其他部门线由发起人按单另加」；BSM:1803「具体流程按支付类型分别设定」；PGM:528「每个部门或业务线须预先设定其平行审批的最低起点层级」）
+  - 改法：
+    - V629 已有的 payment_confirmation_flows 记各类在两线之外的必带线，出厂不插行。
+    - OrgHierarchyController 新增 GET /api/v1/access/payment-confirmation-flows（列 40 类：payment_type、中文名、line_codes）与 PUT /api/v1/access/payment-confirmation-flows/{payment_type}，门禁 access.role.assign。写入按 canManageLine 对全局线的口径，只许平台管理员或可管理全部项目者，否则 403 CROSS_ORG_FORBIDDEN；未知类型 404 PAYMENT_TYPE_NOT_FOUND；线须在用，否则 400 APPROVAL_LINE_NOT_CONFIGURED；留痕 access.payment_confirmation_flow.saved。
+    - PaymentConfirmationService.request 按表逐线核必带线，缺最终审批人 400 APPROVAL_LINE_FINAL_APPROVER_REQUIRED。
+    - GET /api/v1/finance/payment-confirmations 的 required_line_codes 为固定两线加表内的线。
+    - 不新增权限码，没有 V630。
+  - 落地位置：
+    - backend/src/main/java/com/complex/platform/access/org/OrgHierarchyController.java:62-77
+    - OrgHierarchyService.java:219-263
+    - PaymentConfirmationFlowRequest.java（新文件）
+    - PaymentConfirmationService.java:193-199（发起核线）、:308-343（requiredLines、flows、saveFlow、flowLines）
+    - FieldLabels.java 与 apps/web/src/admin/i18n/fieldLabels.ts 新键 line_codes「必带审批线」
+  - 测试：PaymentConfirmationJdbcTests.paymentConfirmationFlowsAreGlobalSettingsOnTheApprovalLinePage、PaymentConfirmationJdbcTests.flowLinesBindNewConfirmationsOnly。
+  - 前端「付款确认流程」表由 C 段做。
+- 【18AM B1 段落地位置补记（第 241 条 241-R4、241-R5）】
+  241-R4 工资付款接入付款确认
+  - 改法：工资审批之后、准备银行付款之前，逐人发起付款确认。支付类型 staff_payroll；对象为该工资应付；金额取未付工资；收款方与直接受益人为员工本人，员工不得审批，也不能被指定为主线最终审批人。范围闸（工资单项目与发薪主体都须可触及）放在幂等之前；未付为 0 时 409 AR_AP_ITEM_SETTLED。准备银行付款时，该工资应付须有已通过的付款确认，否则 409 PAYMENT_CONFIRMATION_REQUIRED。一张确认覆盖到付清，分笔付款、失败后重新准备不必重审。留痕 finance.payment_confirmation.requested 和 request_failed。
+  - 落地位置：
+    - backend/src/main/java/com/complex/platform/finance/FinancePayrollService.java（requestConfirmation、prepare 中的 requireConfirmed、字段 paymentConfirmations）
+    - FinancePayrollController.java（POST /api/v1/finance/payroll/{statementId}/payment-confirmations，createPayrollPaymentConfirmation）
+    - finance/dto/PaymentConfirmationRequest.java
+  - 依据：
+    - 第十八批裁决 55：「所有应付都先走付款确认，按支付类型分别设流程……退款、工资、货款各类都要设流程……不少已有各自的审批（如退款审批、工资审批），会重复审批」
+    - 裁决 65：工资为一种支付类型
+    - 裁决 68：「工资、退款、赔付按单发起」
+    - BSM:1803：「付款确认按全平台统一的审批模型执行——发起时指定这条主线的最终审批人……主线与各条平行线都通过才完成付款确认；具体流程按支付类型分别设定」
+    - PGM:529：「申请人与直接受益人不得审批与自己相关的申请」
+  - 测试：
+    - 新增 PaymentConfirmationPayrollRefundJdbcTests.payrollBankPaymentWaitsForPerEmployeeConfirmation
+    - 既有 FinancePayrollJdbcIntegrationTests、PayrollSafetyJdbcIntegrationTests、PayrollTaxVersionJdbcIntegrationTests 补已通过确认夹具
+  241-R5 退款出款接入付款确认
+  (a) 财务退款待办
+  - 改法：7 类来源按 finance_refund_＋来源各为一种支付类型，单张发起。范围闸放在幂等之前：按 finance.refund.create 取项目与商户范围；经销退款另须业务订单与原收款两个项目的办理权限，发起不受执行人分离约束。登记原路执行（含现金、刷卡现场退）与重试前，须有已通过的付款确认。闸放在设备、额度、凭证等既有校验之后、写入之前。付款确认通过前不派发网关：建单时一律不派，确认通过后经重试派发。核实结果须先经已过闸的执行登记，不另判；商户卡柜台退卡不经此闸。
+  - 落地位置：
+    - FinanceService.java（requestRefundPaymentConfirmation；recordFinanceRefundExecution、retryFinanceRefund 中的 requirePaymentConfirmed；dispatchPreparedRefund 早退条件加 hasApproved）
+    - FinanceController.java（POST /api/v1/finance/refunds/{refund_id}/payment-confirmations，createFinanceRefundPaymentConfirmation）
+  (b) 门票退款打款
+  - 改法：已通过、待原路打款的门票退款，按待打款合计发起付款确认（支付类型 ticket_refund）。未批准或没有待打款时 409 TICKET_REFUND_NOT_PAYOUT_CONFIRMABLE。商户范围闸放在幂等之前。确认拨付前须有已通过的付款确认；只分到储值笔的退款批准即成功，不经此闸。
+  - 落地位置：
+    - TicketRefundService.java（payoutScoped、requestPaymentConfirmation、confirmPayout 闸）
+    - TicketingService.java（requestTicketRefundPaymentConfirmation）
+    - TicketingController.java（POST /api/v1/ticketing/refunds/{refund_id}/payment-confirmations，createTicketRefundPaymentConfirmation）
+    - TicketingWriteOperation.java（REQUEST_TICKET_REFUND_PAYMENT_CONFIRMATION）
+    - TicketingOperationExecutor.java
+  (c) 订台定金达标退回、酒吧账单退款应付
+  - 归 241-R1 台账闸，本项只补用例。
+  依据：
+  - 第十八批裁决 55：「所有应付都先走付款确认……退款、工资、货款各类都要设流程，日常付款会明显变慢；不少已有各自的审批（如退款审批……），会重复审批」
+  - 裁决 65：财务退款待办按来源逐个分，门票退款打款一类
+  - 裁决 66：每类必带财务、法务两线
+  - 裁决 68：退款按单发起
+  - BSM:1803 同上
+  测试：
+  - 新增：
+    - PaymentConfirmationPayrollRefundJdbcTests.financeRefundIsNeitherDispatchedNorExecutedBeforeConfirmation
+    - PaymentConfirmationPayrollRefundJdbcTests.pendingRefundOfEachSourceNeedsItsOwnConfirmation（stored_value_account、ticket_payment_rejection）
+    - TicketRefundReasonJdbcIntegrationTests.payoutWaitsForConfirmationOfPendingPayoutAmount
+    - FinanceRefundLifecycleTests.refundIsNotDispatchedUntilPaymentConfirmed
+    - DealerOrderPaymentFulfillmentJdbcIntegrationTests 的 confirmRefundPayment（经销退款：原到账核验人发起，经真实三线审批，两道审批并存）
+    - BarJdbcIntegrationTests.depositRefundMarkedRefundedOnlyAfterPayableSettled 加未确认 409 断言
+  - 既有用例改为确认后经重试派发：FinanceRefundLifecycleTests、FinanceRefundLifecycleJdbcIntegrationTests
+  - 既有用例补确认夹具：FinanceProjectScopeRefundJdbcIntegrationTests、DealerReturnRefundReversalJdbcIntegrationTests、BarReservationNotificationIntegrationTests、SingleBarServiceFeeJdbcIntegrationTests、TicketingServiceTests
+- 18AM 落地位置补记（B2 段：241-R6、241-R3）
+  241-R6 存酒对客赔付接入付款确认
+  - 改法：
+    - InventoryService 加字段 paymentConfirmations（@Autowired 加 @Lazy；未注入一律 409，fail-closed）。
+    - settleSavedBottleRemedy 在既有 SAVED_BOTTLE_REMEDY_NOT_APPROVED 判断之后加 requireApproved("saved_bottle_remedy", id)，未确认 409 PAYMENT_CONFIRMATION_REQUIRED。
+    - 新增 requestSavedBottleRemedyPaymentConfirmation（@GuardedAction bar.saved_bottle.manage）：范围闸 requireCustody 放在幂等之前，写内再判；支付类型 saved_bottle_compensation，对象 saved_bottle_remedy，金额取赔付金额，收款方为存酒客人，项目、商户取赔付单。
+    - InventoryController 新增 POST /api/v1/inventory/saved-bottles/remedies/{id}/payment-confirmations（createSavedBottleRemedyPaymentConfirmation）。
+    - 同品补存登记即结案、平台垫付不出款，均不判。
+  - 落地位置：backend/src/main/java/com/complex/platform/inventory/InventoryService.java（V0.20：字段约 :108-112，结案闸约 :1939-1943，发起方法约 :1955-1980，businessId 约 :4449）；InventoryController.java（V0.14 约 :394-403）。
+  - 依据：
+    - BSM:1803「连接财务对账，审批通过后的发放进入应付款项台账，走付款确认。……主线与各条平行线都通过才完成付款确认；具体流程按支付类型分别设定。」
+    - BSM:1072「无法替代的，双方确认赔付方案，经门店主管和财务审批后支付。……实物或赔款实际交付后才结案。」
+    - 第十八批裁决 55：「所有对外付款都走付款确认」，所有应付都先走付款确认，按支付类型分别设流程。
+    - 第十八批裁决 65（按台账来源逐个分；存酒对客赔付 saved_bottle_compensation）、66（只固定财务法务）、68（工资、退款、赔付按单发起）。
+  - 测试：PaymentConfirmationCompensationDividendJdbcTests.savedBottleCompensationClosesOnlyAfterPaymentConfirmation；InventoryServiceTests 注入付款确认桩（V0.12）。
+  241-R3 标记分红发放须主理人分红应付已按付款确认付清
+  - 改法：
+    - FinanceService 新增 public long arApUnpaidCent(itemId)（找不到 404 AR_AP_ITEM_NOT_FOUND）。
+    - DividendService.markPaid 在 requireStatus 之后：实发额大于 0 且该应付未付额大于 0 时，409 DIVIDEND_PAYOUT_NOT_PAID，不改状态、不发发放通知。
+    - 实发为 0 的单照旧直接标记；不加迁移、不加字段。
+  - 落地位置：backend/src/main/java/com/complex/platform/finance/FinanceService.java（V0.48，createDividendPayoutPayable 之后）；backend/src/main/java/com/complex/platform/dividend/DividendService.java（V0.11 markPaid 约 :906-910）。
+  - 依据：
+    - BSM:1787「发放走应付款项，落在三个付账日之一……」
+    - BSM:1803「审批通过后的发放进入应付款项台账，走付款确认。」
+    - 第十八批裁决 55（同上）、65（分红按台账来源 dividend_payout、dividend_reserve_released）。
+  - 测试：PaymentConfirmationCompensationDividendJdbcTests.dividendIsMarkedPaidOnlyAfterConfirmedPayoutIsSettled、zeroPayoutMarksPaidDirectlyAndReleasedReserveStillNeedsConfirmation；DividendJdbcIntegrationTests（V0.05）、DividendAmountNoticeJdbcIntegrationTests（V0.03）、MerchantUnreadBillJdbcIntegrationTests（V0.03）在标记发放前补「应付已付清」前提。
+- 18AM 落地位置补记（C 段，第 241 条前端）
+  241-R2（通用付款确认面板与五处接入）
+  改法：
+  - 新建通用面板：先读付款确认列表与该类必带线，读不到（403）就不显示；有待审或已通过的确认时只显示列表与审批链入口，不出表单。
+  - 表单：填付款事由、主线最终审批人，以及各必带线（财务、法务两线加审批线页另设的线）的最终审批人；可另加其他在用线。
+  - 状态显示为待审批、已通过、已驳回，被驳回的可以重新发起。
+  - 五处接入：
+    - 台账：勾选未结清、非冲正的应付（工资与分红留存待释放除外）；同收款方、同来源可多笔合发，同综合体由后端核。
+    - 工资：在「准备工资付款」前逐人发起。
+    - 财务退款：待办理或明确失败时发起；经销订单、经销退货两页复用。
+    - 门票退款：待确认拨付的行发起。
+    - 存酒：已批准赔付在结案前发起。
+  - 出款按钮遇 409 时显示后端中文原因。
+  - 为让后台客户端读得到必带线，后端列表的确认单字段由 items 改名为 confirmations（客户端把 data.items 当分页信封拍平）。
+  落地位置：
+  - apps/web/src/admin/pages/PaymentConfirmationPanel.tsx（新）；
+  - FinanceArApLedgerPage.tsx、FinancePayrollPaymentPanel.tsx、FinanceRefundPanel.tsx、TicketOrdersPage.tsx、StoredWinePage.tsx；
+  - ApprovalChainPage.tsx（LINE_LABELS 导出）；
+  - fieldLabels.ts（动作码 payment_confirmation_requested、来源中文名 4 个、confirmations）；
+  - 页面矩阵 ADM-FIN-001、ADM-TKT-003、ADM-BAR-003、ADM-DLR-002、ADM-DLR-003（V0.32）；
+  - 后端 PaymentConfirmationService.View、FieldLabels.java。
+  依据：
+  - BSM:1803「付款确认按全平台统一的审批模型执行——发起时指定这条主线的最终审批人……财务、法务及相关部门作为平行的相关部门线，各指定该部门的最终审批人……主线与各条平行线都通过才完成付款确认；具体流程按支付类型分别设定」；
+  - 第十八批裁决 55「所有应付都先走付款确认，按支付类型分别设流程」；
+  - 裁决 66「只固定财务法务（推荐）」：每类必带财务、法务两线，其他部门线由发起人按单另加；
+  - 裁决 68「台账应付可合并（推荐）」：同收款方、同类型、同综合体可勾选合发，工资、退款、赔付按单发起。
+  测试：
+  - PaymentConfirmationPanel.test.tsx 4 例：「按 GET 返回的必带线逐线填最终审批人；提交带主线最终审批人、各线与另加线、附加字段，路径为传入的发起路径」「有待审批的确认时不显示发起表单，显示审批链链接」「状态中文名逐键对齐 V629 status 闭集（待审批、已通过、已驳回）；只有已驳回的可重新发起」「读不到（403）整块不显示」；
+  - FinanceArApLedgerPage.test.tsx「付款确认勾选合发」3 例；
+  - FinanceRefundPanel.test.tsx「待办理的退款显示付款确认面板，发起路径为该退款单的付款确认接口」；
+  - TicketOrdersPage.payout.test.tsx「待确认拨付的退款可打开付款确认面板，发起路径为该退款单的付款确认接口」；
+  - StoredWinePage.remedy.test.tsx「已批准的赔付行显示付款确认面板，发起路径为该赔付单的付款确认接口」。
+  241-R9（前端部分：平台主体付款应收可勾选）
+  改法：付款方是平台主体、记成应收的 7 个来源的未结清行，在台账上与应付一样可勾选发起。这 7 个来源是：通票域间份额、通票餐饮零售代付、酒吧报酬月结拨付、派驻提成月结拨付、补偿应付已付追收、通票分账追收、存酒退出承接垫付追收。其他应收不可勾选。
+  落地位置：FinanceArApLedgerPage.tsx 的 PLATFORM_PAYER_RECEIVABLE_SOURCES 与 confirmable。
+  依据：第十八批裁决 69「平台主体应收也过闸」：付款方是平台主体的应收，登记收款前也须付款确认。
+  测试：FinanceArApLedgerPage.test.tsx「未结清应付与平台主体付款的应收可勾选；其他应收、冲正、留存待释放、已结清、工资行不可勾选；勾了一行后收款方或来源不同的行不可再勾」。
+  241-R8（前端部分：付款确认流程表）
+  改法：「组织层级与审批线」页新增「付款确认流程」表，列出 40 个支付类型的中文名及其在财务、法务两线之外必带的线。可为某类勾选在用的其他线保存（PUT），固定两线不在可选之列；改动只影响以后发起的付款确认。
+  落地位置：
+  - OrgHierarchyPage.tsx；
+  - fieldLabels.ts（动作码 payment_confirmation_flow_saved）；
+  - 页面矩阵 ADM-ACC-004。
+  依据：
+  - BSM:1803「具体流程按支付类型分别设定」；
+  - PGM:528「每个部门或业务线须预先设定其平行审批的最低起点层级。」；
+  - 第十八批裁决 67「审批线页设定」：与各线最低起点层级同一处、同一门禁，不新增权限码。
+  测试：OrgHierarchyPage.test.tsx「付款确认流程表显示支付类型中文名与两线之外的必带线；只能勾在用的其他线；保存发 PUT」。
+- 18AM 落地位置补记（K-contract，241-R7 的 OpenAPI 部分）
+  改法：docs/openapi/openapi-p0.yaml 与 openapi-p0.json 同值就地改，不用 YAML 锚点，info.version 收尾再改。操作数 1368→1376。
+  新增 8 个操作：
+  - POST /api/v1/finance/ar-ap-payment-confirmations，createArApPaymentConfirmation，权限 finance.payment.register。
+  - GET /api/v1/finance/payment-confirmations，listPaymentConfirmations，权限 finance.ar_ap.view；any-of 另含 finance.payroll.view、ticket.refund.approve、bar.saved_bottle.manage。
+  - POST /api/v1/finance/payroll/{statementId}/payment-confirmations，createPayrollPaymentConfirmation，权限 finance.payroll.payment.register。
+  - POST /api/v1/finance/refunds/{refund_id}/payment-confirmations，createFinanceRefundPaymentConfirmation，权限 finance.refund.create。
+  - POST /api/v1/ticketing/refunds/{refund_id}/payment-confirmations，createTicketRefundPaymentConfirmation，权限 ticket.refund.approve。
+  - POST /api/v1/inventory/saved-bottles/remedies/{id}/payment-confirmations，createSavedBottleRemedyPaymentConfirmation，权限 bar.saved_bottle.manage。
+  - GET /api/v1/access/payment-confirmation-flows，listPaymentConfirmationFlows。
+  - PUT /api/v1/access/payment-confirmation-flows/{payment_type}，savePaymentConfirmationFlow；与上一条同为 access.role.assign，留痕 access.payment_confirmation_flow.saved。
+  - 发起类留痕：成功 finance.payment_confirmation.requested，失败 finance.payment_confirmation.request_failed。
+  新增 7 个组件：PaymentConfirmationType（40 个值）、PaymentConfirmationRequest、ArApPaymentConfirmationRequest、PaymentConfirmation、PaymentConfirmationItem、PaymentConfirmationList、PaymentConfirmationFlow。
+  既有 14 个操作改说明：
+  - 写明 409 PAYMENT_CONFIRMATION_REQUIRED：createArApPayment、confirmOfflinePayment、initiateInternalPayment、preparePayrollBankPayment、recordFinanceRefundExecution、retryFinanceRefund、confirmTicketRefundPayout、settleSavedBottleRemedy。
+  - createArApPayment、confirmOfflinePayment、requestArApAdjustment 另写 241-R9：付款方是平台主体的 7 个来源的应收同闸。
+  - markDividendStatementPaid：改 summary，补说明；x-failure-codes 补 DIVIDEND_PAYOUT_NOT_PAID、AR_AP_ITEM_NOT_FOUND。
+  - requestArApAdjustment、approveSupervisorReview：收付款补录终审未确认时 409，补录与复核单保持待审；付款确认全部通过转 approved，驳回转 rejected。
+  - executeDealerOrderRefund 删「不新增第二次业务审批」，executeDealerReturnRefunds 删「已批准凭据不再追加相同业务审批」，都改为「财务执行前须付款确认」。
+  - createFinanceRefund：建单不派发网关，付款确认通过后经 retryFinanceRefund 派发。
+  落地位置：
+  - docs/openapi/openapi-p0.yaml、openapi-p0.json。
+  - 新路径插在 /api/v1/finance/ar-ap-items/{id}/payments、/api/v1/finance/refunds/{refund_id}/execution、/api/v1/ticketing/refunds/{refund_id}/confirm-payout、/api/v1/inventory/saved-bottles/remedies/{id}/settle、/api/v1/finance/payroll/{statementId}/payment-attempts、/api/v1/access/approval-lines/{line_code} 之后。
+  - 新组件插在 components.schemas.ApprovalParallelLine 之后。
+  依据：
+  - BSM:1803「连接财务对账，审批通过后的发放进入应付款项台账，走付款确认。付款确认按全平台统一的审批模型执行——发起时指定这条主线的最终审批人……主线与各条平行线都通过才完成付款确认；具体流程按支付类型分别设定。」
+  - BSM:1787「发放走应付款项」
+  - BSM:1072「经门店主管和财务审批后支付……实物或赔款实际交付后才结案」
+  - PGM:529「申请人与直接受益人不得审批与自己相关的申请」
+  - 第十八批裁决 55「所有应付都先走付款确认，按支付类型分别设流程」
+  - 第十八批裁决 65（按台账来源逐个分）、66（每类必带财务、法务两线）、67（审批线页设定）、68（台账应付可合并，工资、退款、赔付按单发起）、69（付款方是平台主体的应收也过闸）
+  验证：node yaml 包深比较 yaml 与 json 一致；npm run verify:openapi、verify:openapi-examples、verify:client-routes、verify:client-openapi、verify:client-payload --strict 全部通过。本段没有新增测试用例。
+- J 段（汇合）。e2e 改动：按各段 e2e 要点逐页核了 tests/e2e。应收应付台账、门票、存酒、主管复核、审批链、组织层级、经销订单各页，以及工资、财务退款面板，现有用例都没有出款前登记应付付款、准备工资付款、退款执行或重试、门票确认拨付、赔付结案、分红标记发放的步骤；ADM-MVP-05 登记的是 merchant_bill 应收，不受 241-R9 闸影响；台账新增的「付款确认」列没有用例按列序取格。因此选择器、断言、步骤都不改，只在 tests/e2e/support/mock-api.ts（V0.15→V0.16）的 fixedRows 补两个按新形状返回的读接口：GET /api/v1/finance/payment-confirmations 返回带财务、法务两条必带线且含一张 approved 确认单的对象（出款前已通过付款确认）；GET /api/v1/access/payment-confirmation-flows 返回一行无另加线的流程。依据：BSM:1803「主线与各条平行线都通过才完成付款确认；具体流程按支付类型分别设定」，第十八批裁决 66、67。门禁结论：镜像先删 backend/target 后跑 --fresh，V629 真迁，后端全量 6798 个用例 0 红；web typecheck 0 错，vitest 337 个文件 1881 个用例全过；customer-app、customer-miniapp、customer-core、merchant-app 单测全过；安卓员工端 gradle test 125 个用例 0 失败，android-app 编译通过；镜像里重生成 data-isolation-spec、domain-ownership-scope、operation-matrix、openapi-closure 四份生成物后，verify:p0-contract 全绿（镜像已恢复）；yaml 与 json 深比较一致，操作数 1376；git diff --check 通过。
+- 241-R7（文档部分，D-docs 组）
+  改法：按现码就地改写 PRD 与下位文档中的付款相关现状句。每份相对 df81d1ba 只升 0.01、修订表加一行，不新增业务规则，人工权限矩阵与契约包不扩表。
+  落地位置：
+  - docs/finance-settlement-product-prd-v0.1.md V0.35
+    - 新增 §4D「付款确认」：范围、40 个支付类型及中文名、审批（动作类型 finance.payment_confirm.<支付类型>，财务、法务两线必带，流程表另设线，涉钱 1 个工作日，直接受益人不得审批）、发起与查询接口、各出款闸、后台页面。
+    - §4B.3a 补 241-R4 实现现状；§4C 补应付与平台主体 7 类应收另须付款确认；§6B.4 补 241-R5 实现现状。
+    - §13.2 补 deposit_refund、deposit_adjustment 登记付款前须确认；§15 补分红应付须确认、标记发放须已付清。
+  - docs/dividend-engine-prd-v0.1.md V0.12
+    - :27「走现有付款通道」与 :267「既有付款确认流程」改为现码：须付款确认，主理人不得审批，留存释放应付同样须确认；mark-paid 实发额大于 0 须应付已付清，否则 409 DIVIDEND_PAYOUT_NOT_PAID。
+  - docs/supply-chain-inventory-product-prd-v0.1.md V0.39
+    - :196「既有付款审批」改为付款确认；§7.4 补 241-R6 存酒对客赔付须按单付款确认的实现现状。
+  - docs/ticketing-entitlement-checkin-product-prd-v0.1.md V0.34
+    - §8.4.1 :498 补拨付前须付款确认、只回储值卡的不经付款确认；§8.4.2 补 241-R5 门票退款付款确认实现现状。
+  - docs/ticketing-pass-entitlement-development-design.md V0.15
+    - §5.6 第 6 步补确认拨付前须付款确认。
+  - docs/platform-governance-prd-v0.1.md V0.86
+    - §2A.5 总则补落地指针；补 241-R1、241-R8 实现现状（40 条复核策略、时限清单多 40 行、「组织层级与审批线」页付款确认流程两接口）。
+    - §12B.3 组织配置范围校验句补流程两入口。
+  依据：
+  - BSM:1803「审批通过后的发放进入应付款项台账，走付款确认。付款确认按全平台统一的审批模型执行——发起时指定这条主线的最终审批人（即其授权的最高授权人），……财务、法务及相关部门作为平行的相关部门线，……主线与各条平行线都通过才完成付款确认；具体流程按支付类型分别设定。」
+  - PGM:529「申请人与直接受益人不得审批与自己相关的申请」。
+  - DEC-R5-2026-08-04-08。
+  - 第十八批裁决 55「所有对外付款都走付款确认」，65「按台账来源逐个分」，66「只固定财务法务」，67「审批线页设定」，68「台账应付可合并」，69「平台主体应收也过闸」。
+  测试：无新增或改动用例。验证为 git diff --check 通过，node tools/verify-full-admin-page-matrix.mjs 通过（117 个页面）。
+- 18AM 收尾复核修正（2026-11-17）：收尾复核成立的六条意见按依据修正，不新增迁移、不新增或删除接口（OpenAPI 仍 1376 个操作、V0.71）。
+  - 台账合并发起须同方向（意见 1～3）：
+    - 改法：PaymentConfirmationService.Target 加 receivable（原 9 参构造默认应付，工资、财务退款、门票退款、存酒赔付入口不变）；request 合并校验在同一支付类型、同一往来方、同一综合体之外加「同为应付或同为应收」，应收（241-R9）另须同一收款门店（merchant_id）；应付不符 400 VALIDATION_FAILED「合并发起须为同一收款方、同一支付类型、同一综合体的应付」，应收不符 400 VALIDATION_FAILED「合并发起须为同一付款方、同一收款方、同一支付类型、同一综合体的应收」；复核摘要对应收写「付款方 ＜往来方＞」，应付照旧写「收款方 ＜往来方＞」。FinanceService.requestArApPaymentConfirmation 按台账行方向传 receivable。前端台账页 pickable 加同方向（台账列表不回传 merchant_id，应收的收款门店由后端核）。契约 createArApPaymentConfirmation 说明、docs/finance-settlement-product-prd-v0.1.md §4D 两句同步。
+    - 落地位置：backend/src/main/java/com/complex/platform/finance/PaymentConfirmationService.java:106-117（Target）、:183-192（合并校验）、:208-210（摘要）；FinanceService.java:610-614；apps/web/src/admin/pages/FinanceArApLedgerPage.tsx:132-136（pickable）；docs/openapi/openapi-p0.yaml、openapi-p0.json（createArApPaymentConfirmation 说明）。
+    - 依据：第十八批裁决 68「台账应付可合并发起：同一收款方、同一支付类型、同一综合体的多笔未结清应付」；裁决 69 题面「同一类往来按金额正负分挂应付或应收」「记成应收的那一行，登记收款就是登记该平台主体的出款」（应收行的往来方是付款方，收款方是本方）。
+    - 测试：PaymentConfirmationJdbcTests.payableAndReceivableOfTheSameCounterpartyCannotMerge、mergeRequiresTheSamePaymentTypeAndProject（补不同支付类型、不同综合体两个分支）、receivablesFromOnePayerToDifferentShopsCannotMerge、receivableConfirmationSummaryNamesThePayer；FinanceArApLedgerPage.test.tsx「勾了应付后，同往来方、同来源的平台主体付款应收行不可再勾（合并须同方向）」。
+  - 复核摘要的渠道写中文名（意见 4）：
+    - 改法：PaymentConfirmationService 加 channelLabel（渠道原码→中文名，名称同后台财务退款面板 FinanceRefundPanel 与 PaymentChannelPolicy 别名表）；财务退款逐笔摘要的「原路渠道」与门票退款待打款明细的渠道改用中文名。渠道回流拒收待退的原收款渠道是第三方销售渠道码（V382 闭集），另收 meituan 美团、dianping 大众点评、douyin 抖音、koubei 口碑、eleme 饿了么（名称同渠道门店映射页 IntegrationChannelMapsPage 与 TicketingService.listTicketChannels）；表外取值（如 internal、unknown，仓内无中文名，不自拟）一律写「其他支付渠道」（同 FinanceRefundPanel 兜底），不写原码。
+    - 落地位置：PaymentConfirmationService.java:119-127；FinanceService.java:2888；backend/src/main/java/com/complex/platform/ticketing/TicketRefundService.java:352。
+    - 依据：PGM:287「全局原则 · 界面全中文（所有终端零英文）」，状态、枚举取值等展示给用户的文字须为中文，可不用中文的只有单据号、设备编号、二维码内容、系统内部标识符四样。
+    - 测试：PaymentConfirmationPayrollRefundJdbcTests.financeRefundIsNeitherDispatchedNorExecutedBeforeConfirmation、TicketRefundReasonJdbcIntegrationTests.payoutWaitsForConfirmationOfPendingPayoutAmount 加复核摘要断言（含中文渠道名、不含原码）；PaymentConfirmationPayrollRefundJdbcTests.pendingRefundOfEachSourceNeedsItsOwnConfirmation 补渠道回流拒收待退（渠道 meituan），断言摘要含「原路渠道 美团」、不含原码。
+  - 契约审计事件按代码现状（意见 5）：openapi-p0.yaml 与 openapi-p0.json 中 listPaymentConfirmations、listPaymentConfirmationFlows 的成功与失败事件，savePaymentConfirmationFlow 的失败事件改为 not_applicable（同 listOrgHierarchy、setOrgDirectSuperior），不加行为；重生成 docs/p0-openapi-operation-acceptance-matrix-v0.1.md、docs/p0-openapi-contract-closure-appendix-v0.1.md；security-scans 两份 md 的 OpenAPI SHA-256 行按最终 openapi-p0.json 改。
+  - 补记行号（意见 6 及同类）：A2 段补记 PaymentConfirmationService.java 发起核线改为 :193-199、requiredLines 至 flowLines 改为 :308-343，FinanceService.java 出款闸改为 :2126-2134（均为本条修正后的现码行号）；其余指向本轮改过文件的补记无行号或行号仍符。
+- 18AM 落地位置补记·运行验收证据、快照、终验文档刷新（无新裁决）：业务提交 40c63a28 之后，按第十八批裁决 25 重刷了运行验收证据：后端全量 6804 测，0 失败 0 错误；apps/web 构建通过；常规界面验收（接口全部 mock）实跑 40 条全过；真实后端界面验收未跑，runtime_ready=false。随后依次重生成闭环当前态快照、生产闭环缺口报告、界面验收报告、无上线指挥台。生成器没改。手改 docs/final-closed-loop-acceptance-audit-v0.1.md 与 docs/code-implementation-acceptance-audit-v0.1.md：前端单测源码计数改为 1768；TicketingService.java 行数由 1285 改为 1305，其余被核文件行数无变化；后端全量与常规界面验收的数字、日期改为本次实跑值；写入 npm run verify:unit 实跑结果，五个工作区全过。交付门禁于 2026-11-16 22:49 UTC 在工作树逐项实跑子项，NAS 两项现场探测未跑。仍红的有两项：一是 coding-host-protection，它写死主仓路径，在工作树口径下必红，属工具口径，不做；二是 final-closed-loop-audit，如实留 2 条红（integration-ready、business-acceptance-ready），原因是校验器要求终验把联调、业务验收写成「是」，而裁决 25 定了不跑真实后端界面验收、运行验收未就绪，终验写的是「否」。verify:delivery-gates 总链仍是红的。

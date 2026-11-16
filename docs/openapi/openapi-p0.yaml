@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: 综合体管理系统 P0 API 契约
-  version: V0.70
+  version: V0.71
   description: P0 首批编码前置契约。本文采用 JSON-compatible YAML，便于与 openapi-p0.json 保持一致。正式后端以 Java 21 + Spring Boot 4.x +
     springdoc-openapi 输出运行时 OpenAPI，并与本契约比对。
 servers:
@@ -4363,7 +4363,7 @@ paths:
         "500":
           $ref: "#/components/responses/Error"
       x-auth-context: staff-token
-      description: 按原台账归属核验 finance.payment.register 的项目范围与商户范围；幂等结果返回前和锁定原单后均核验，查看权限不代替收付款权限。项目公司财务无需绑定商户。押金退还应付(source_type=deposit_refund)：所在地今天或所登记 payment_time 的所在地日期早于应付到期日(＝max(算账完成日, 最后审批完成日＋等待期))时 409 DEPOSIT_REFUND_NOT_DUE，不受三个付账日与账单异议期约束；变更押金补退差额(source_type=deposit_adjustment)每笔实收/实付写押金流水并更新已收押金余额，退还超过当前已收押金余额时 400 DEPOSIT_INSUFFICIENT。已有冲正/重述行回指的原台账项（合同租金/物业费账单因面积/位置变更作废追加冲正行、补录红冲原行）不再是有效款项，409 AR_AP_ITEM_REVERSED。
+      description: 按原台账归属核验 finance.payment.register 的项目范围与商户范围；幂等结果返回前和锁定原单后均核验，查看权限不代替收付款权限。项目公司财务无需绑定商户。押金退还应付(source_type=deposit_refund)：所在地今天或所登记 payment_time 的所在地日期早于应付到期日(＝max(算账完成日, 最后审批完成日＋等待期))时 409 DEPOSIT_REFUND_NOT_DUE，不受三个付账日与账单异议期约束；变更押金补退差额(source_type=deposit_adjustment)每笔实收/实付写押金流水并更新已收押金余额，退还超过当前已收押金余额时 400 DEPOSIT_INSUFFICIENT。已有冲正/重述行回指的原台账项（合同租金/物业费账单因面积/位置变更作废追加冲正行、补录红冲原行）不再是有效款项，409 AR_AP_ITEM_REVERSED。第十八批 AM 段第 241 条 241-R1（BSM:1803「审批通过后的发放进入应付款项台账，走付款确认……主线与各条平行线都通过才完成付款确认」；第十八批裁决 55「所有应付都先走付款确认」）：应付（direction=payable）登记付款前，该台账项须已有通过的付款确认（主线与财务、法务等各条平行线全部审批通过；发起见 createArApPaymentConfirmation），否则 409 PAYMENT_CONFIRMATION_REQUIRED，台账与收付款流水不变；一张已通过的确认覆盖该笔应付直到结清，可分笔付，失败重付不必重新审批。第十八批 AM 段 241-R9（第十八批裁决 69「付款方是平台主体的应收，登记收款前也须付款确认」）：付款方是平台主体的 7 个来源（pass_domain_share、pass_domain_direct_settlement、bar_payroll_transfer、dispatch_commission_transfer、compensation_fulfillment_recovery、ticket_distribution_recovery、saved_bottle_remedy_recovery）的应收，登记收款前同样须已有通过的付款确认，否则 409 PAYMENT_CONFIRMATION_REQUIRED；其余应收不受影响。分红抵欠款、退租押金抵扣不经本接口，不受影响。
     get:
       tags:
         - finance
@@ -4399,6 +4399,127 @@ paths:
             type: string
             description: 当前数据范围内的单据编号。
             maxLength: 64
+  /api/v1/finance/ar-ap-payment-confirmations:
+    post:
+      tags:
+        - finance
+      operationId: createArApPaymentConfirmation
+      summary: 应收应付台账勾选款项发起付款确认
+      description: 第十八批 AM 段第 241 条 241-R1（BSM:1803「付款确认按全平台统一的审批模型执行——发起时指定这条主线的最终审批人……财务、法务及相关部门作为平行的相关部门线，各指定该部门的最终审批人……主线与各条平行线都通过才完成付款确认；具体流程按支付类型分别设定。」；第十八批裁决 55「所有应付都先走付款确认，按支付类型分别设流程」、65「按台账来源逐个分」、66「每类必带财务、法务两线，其他部门线由发起人按单另加」、67「审批线页设定」、68「同收款方、同类型、同综合体可勾选合发」）：在应收应付台账勾选一笔或多笔款项发起一张付款确认。支付类型即台账来源（ar_ap_items.source_type 原值，见 PaymentConfirmationType），来源不在清单内 400 VALIDATION_FAILED；多笔须同一支付类型、同一收款方（往来方）、同一综合体（项目），且同为应付或同为应收（应收的往来方是付款方、收款方是本方门店，另须同一付款方、同一收款门店），否则 400 VALIDATION_FAILED。可发起的为应付，以及第十八批 AM 段 241-R9（第十八批裁决 69「付款方是平台主体的应收，登记收款前也须付款确认」）付款方是平台主体的 7 个来源（pass_domain_share、pass_domain_direct_settlement、bar_payroll_transfer、dispatch_commission_transfer、compensation_fulfillment_recovery、ticket_distribution_recovery、saved_bottle_remedy_recovery）的应收，支付类型同来源。reason（事由）与 final_approver_id（主线最终审批人）必填，否则 400 VALIDATION_FAILED；parallel_lines 须为财务（finance_review）、法务（legal_review）两线，以及该支付类型在「组织层级与审批线」页设定的两线之外的必带线（见 listPaymentConfirmationFlows）各指定最终审批人，否则 400 APPROVAL_LINE_FINAL_APPROVER_REQUIRED；可另带其他在用的线。主线沿发起人直接上级链逐级补全到最终审批人，各平行线逐级补全至该线最低起点层级（最终审批人不在链上等按统一审批引擎 400，如 FINAL_APPROVER_NOT_IN_CHAIN）。复核单 action_type=finance.payment_confirm.＜支付类型＞、object_type=payment_confirmation、object_id=付款确认单号，金额为各笔未付额合计，涉钱审批出厂时限 1 个工作日；分红应付（dividend_payout、dividend_reserve_released）的主理人为直接受益人，不得审批。审批经 approveSupervisorReview：主线与各条平行线全部通过即付款确认通过（approved），任一节点驳回即驳回（rejected），驳回后可重新发起。范围闸在幂等之前，逐笔按 finance.payment.register 核项目与商户范围（他项目 403 CROSS_PROJECT_FORBIDDEN，他商户 403 CROSS_MERCHANT_FORBIDDEN），款项不存在 404 AR_AP_ITEM_NOT_FOUND，工资应付 409 PAYROLL_DEDICATED_WORKFLOW_REQUIRED（工资走 createPayrollPaymentConfirmation），已被更正或红冲的采购应付 409 PURCHASE_PAYABLE_REPLACED；这些失败记 finance.payment_confirmation.request_failed，不占幂等键。写内锁住各台账行：未付额 ≤ 0 时 409 AR_AP_ITEM_SETTLED；任一笔已有待审批或已通过的付款确认 409 PAYMENT_CONFIRMATION_EXISTS。一张已通过的确认覆盖所含各笔直到结清，可分笔付，失败重付不必重新审批；出款闸见 createArApPayment、confirmOfflinePayment、initiateInternalPayment 与 requestArApAdjustment（收付款补录）。同一幂等键重发返回首次结果。成功留痕 finance.payment_confirmation.requested。
+      x-permission: finance.payment.register
+      x-data-scope: project-entity
+      x-terminal-allowed:
+        - web
+      x-auth-context: staff-token
+      x-idempotency-required: true
+      x-audit-event-success: finance.payment_confirmation.requested
+      x-audit-event-failure: finance.payment_confirmation.request_failed
+      x-failure-codes:
+        - VALIDATION_FAILED
+        - APPROVAL_LINE_FINAL_APPROVER_REQUIRED
+        - FINAL_APPROVER_NOT_IN_CHAIN
+        - CROSS_PROJECT_FORBIDDEN
+        - CROSS_MERCHANT_FORBIDDEN
+        - AR_AP_ITEM_NOT_FOUND
+        - PAYROLL_DEDICATED_WORKFLOW_REQUIRED
+        - PURCHASE_PAYABLE_REPLACED
+        - AR_AP_ITEM_SETTLED
+        - PAYMENT_CONFIRMATION_EXISTS
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ArApPaymentConfirmationRequest"
+      responses:
+        "200":
+          description: 返回付款确认（status=pending_review）；重复提交返回首次结果。
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/PaymentConfirmation"
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/finance/payment-confirmations:
+    get:
+      tags:
+        - finance
+      operationId: listPaymentConfirmations
+      summary: 查询付款对象的付款确认与必带平行线
+      description: 第十八批 AM 段第 241 条 241-R1、241-R8（BSM:1803「主线与各条平行线都通过才完成付款确认；具体流程按支付类型分别设定」；第十八批裁决 66「每类必带财务、法务两线」、67「审批线页设定」）：读某付款对象的付款确认（新到旧）与该支付类型必带的平行线，供各付款入口的付款确认面板显示状态与必带线。object_type 取 ar_ap_item（应收应付台账项，含工资应付）、finance_refund（财务退款待办）、ticket_refund（门票退款）、saved_bottle_remedy（存酒补存/赔付单），缺 object_type 或 object_id、或 object_type 取其他值 400 VALIDATION_FAILED。查看权限按对象类型：台账项 finance.ar_ap.view（工资应付为 finance.payroll.view），财务退款待办 finance.ar_ap.view，门票退款 ticket.refund.approve，存酒赔付 bar.saved_bottle.manage，缺 403 PERMISSION_DENIED；台账项不存在 404 AR_AP_ITEM_NOT_FOUND。确认记录按该码可触及的项目过滤，商户账号只看本商户，工资应付须能触及发薪主体（同工资读写），看不到的不返回。data：object_type、object_id、payment_type（支付类型：台账项即来源原值，财务退款待办为 finance_refund_＋来源，门票退款 ticket_refund，存酒赔付 saved_bottle_compensation）、payment_type_label、required_line_codes（固定财务、法务两线加流程设定的线）、confirmations[]（confirmation_id、amount_cent、status、review_id、requested_by、requested_at、decided_at）。
+      x-permission: finance.ar_ap.view
+      x-permissions-any-of:
+        - finance.ar_ap.view
+        - finance.payroll.view
+        - ticket.refund.approve
+        - bar.saved_bottle.manage
+      x-data-scope: project-merchant
+      x-terminal-allowed:
+        - web
+      x-auth-context: staff-token
+      x-idempotency-required: false
+      x-audit-event-success: not_applicable
+      x-audit-event-failure: not_applicable
+      x-failure-codes:
+        - VALIDATION_FAILED
+        - PERMISSION_DENIED
+        - AR_AP_ITEM_NOT_FOUND
+      parameters:
+        - name: object_type
+          in: query
+          required: true
+          schema:
+            type: string
+            enum:
+              - ar_ap_item
+              - finance_refund
+              - ticket_refund
+              - saved_bottle_remedy
+          description: 付款对象类型。
+        - name: object_id
+          in: query
+          required: true
+          schema:
+            type: string
+            maxLength: 64
+          description: 付款对象编号（台账项、财务退款待办、门票退款或存酒补存/赔付单的编号）。
+      responses:
+        "200":
+          description: 返回该付款对象的付款确认与必带平行线。
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/PaymentConfirmationList"
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
   /api/v1/finance/daily-closes:
     get:
       tags:
@@ -4523,6 +4644,7 @@ paths:
         - finance
       operationId: confirmOfflinePayment
       summary: 现金或 POS 线下收款确认
+      description: 第十八批 AM 段第 241 条 241-R1、241-R9（BSM:1803；第十八批裁决 55「所有应付都先走付款确认」、69「付款方是平台主体的应收，登记收款前也须付款确认」）：确认时关联台账项（ar_ap_item_id）的，按该台账项登记收付款，与 createArApPayment 同一付款确认闸——应付，以及付款方是平台主体的 7 个来源的应收，须已有通过的付款确认，否则 409 PAYMENT_CONFIRMATION_REQUIRED；不关联台账项的不受影响。
       x-permission: finance.payment.register
       x-data-scope: project-order
       x-terminal-allowed:
@@ -5007,8 +5129,7 @@ paths:
         - finance
       operationId: initiateInternalPayment
       summary: 登记内部应付已发起付款(银行在途)
-      description: BSM L1683：异议期未届满不进入付款 409 OBJECTION_PERIOD_NOT_EXPIRED；已发起未确认到账且未收到失败结果属在途，再发起 409
-        PAYMENT_IN_TRANSIT；换账户重付须引用收款方财务负责人已审批的 account_change_id(否则 409 ACCOUNT_CHANGE_NOT_APPROVED)；原行已有冲正/重述行回指 409 AR_AP_ITEM_REVERSED(与登记收付款同码)。到账仍走登记收付款，成功才结清。
+      description: BSM L1683：异议期未届满不进入付款 409 OBJECTION_PERIOD_NOT_EXPIRED；已发起未确认到账且未收到失败结果属在途，再发起 409 PAYMENT_IN_TRANSIT；换账户重付须引用收款方财务负责人已审批的 account_change_id(否则 409 ACCOUNT_CHANGE_NOT_APPROVED)；原行已有冲正/重述行回指 409 AR_AP_ITEM_REVERSED(与登记收付款同码)。到账仍走登记收付款，成功才结清。第十八批 AM 段第 241 条 241-R1（BSM:1803；第十八批裁决 55「所有应付都先走付款确认」）：发起付款前该应付须已有通过的付款确认（发起见 createArApPaymentConfirmation），否则 409 PAYMENT_CONFIRMATION_REQUIRED（在途判断之后判）；登记明确失败、资金不足顺延不是出款，不判；失败后原路重付仍用同一张已通过的确认，不必重新审批。
       x-permission: finance.payment.register
       x-data-scope: project-merchant
       x-terminal-allowed:
@@ -5207,8 +5328,7 @@ paths:
         "500":
           $ref: "#/components/responses/Error"
       x-auth-context: staff-token
-      description: 通用财务退款申请；与票务整票退款使用不同 DTO。混合付款按后收先退逐笔办理，失败及未知退款继续占额。
-        经销原路退款以dealer_order_refund关联源单，按原订单真实项目核验权限；执行结果与经销状态同事务同步，登记待办不等于成功。
+      description: 通用财务退款申请；与票务整票退款使用不同 DTO。混合付款按后收先退逐笔办理，失败及未知退款继续占额。 经销原路退款以dealer_order_refund关联源单，按原订单真实项目核验权限；执行结果与经销状态同事务同步，登记待办不等于成功。第十八批 AM 段第 241 条 241-R5（BSM:1803；第十八批裁决 55）：建单不派发网关，付款确认（createFinanceRefundPaymentConfirmation）通过后经原单重试（retryFinanceRefund）派发。
     get:
       tags:
         - finance
@@ -7621,6 +7741,7 @@ paths:
         - "bar"
       operationId: "settleSavedBottleRemedy"
       summary: "赔款实际交付后结案（记交付/支付凭证与时间，赔付金额此时记经营损失；不读任何内部追收字段）"
+      description: 第十八批 AM 段第 241 条 241-R6（BSM:1803；BSM:1072「经门店主管和财务审批后支付……实物或赔款实际交付后才结案」；第十八批裁决 55「所有应付都先走付款确认」、65（存酒对客赔付一个支付类型 saved_bottle_compensation））：赔款交付结案前，该赔付单须已有通过的付款确认（主线与财务、法务等各条平行线全部通过；发起见 createSavedBottleRemedyPaymentConfirmation），否则 409 PAYMENT_CONFIRMATION_REQUIRED；同品补存登记即结案，不经此处。
       x-permission: "bar.saved_bottle.manage"
       x-data-scope: "project-bar-customer"
       x-terminal-allowed:
@@ -7651,6 +7772,69 @@ paths:
         "500":
           $ref: "#/components/responses/Error"
       x-auth-context: "staff-token"
+  /api/v1/inventory/saved-bottles/remedies/{id}/payment-confirmations:
+    post:
+      tags:
+        - inventory
+        - bar
+      operationId: createSavedBottleRemedyPaymentConfirmation
+      summary: 存酒对客赔付发起付款确认
+      description: 第十八批 AM 段第 241 条 241-R6（BSM:1803「付款确认按全平台统一的审批模型执行——发起时指定这条主线的最终审批人……财务、法务及相关部门作为平行的相关部门线，各指定该部门的最终审批人……主线与各条平行线都通过才完成付款确认；具体流程按支付类型分别设定。」；BSM:1072「经门店主管和财务审批后支付……实物或赔款实际交付后才结案」；第十八批裁决 55、65（存酒对客赔付一个支付类型 saved_bottle_compensation）、68「赔付按单发起」）：存酒对客赔付单发起付款确认，权限同结案（settleSavedBottleRemedy），付款确认通过后方可结案。object_type=saved_bottle_remedy，金额取赔付金额，收款方为存酒客人，项目与商户取赔付单。商户范围闸在幂等之前、写内再判一次：商户账号限本店赔付单，否则 403 CROSS_MERCHANT_FORBIDDEN；原瓶已交娱乐平台公司接收的，门店账号不能办理 409 SAVED_BOTTLE_HANDED_OVER；赔付单不存在 404 SAVED_BOTTLE_REMEDY_NOT_FOUND，存酒不存在 404 SAVED_BOTTLE_NOT_FOUND；该赔付单已有待审批或已通过的付款确认 409 PAYMENT_CONFIRMATION_EXISTS。门店主管与财务两道审批是否批完不在发起时判（结案闸照旧）。请求体与审批规则同 createArApPaymentConfirmation：reason（事由）、final_approver_id（主线最终审批人）与幂等键必填，否则 400 VALIDATION_FAILED；parallel_lines 须为财务（finance_review）、法务（legal_review）两线及该支付类型在「组织层级与审批线」页设定的必带线各指定最终审批人，否则 400 APPROVAL_LINE_FINAL_APPROVER_REQUIRED，可另带其他在用的线；最终审批人不在发起人直接上级链上等按统一审批引擎 400（如 FINAL_APPROVER_NOT_IN_CHAIN）。复核单 action_type=finance.payment_confirm.saved_bottle_compensation。同一幂等键重发返回首次结果。成功留痕 finance.payment_confirmation.requested，失败 finance.payment_confirmation.request_failed。
+      x-permission: bar.saved_bottle.manage
+      x-data-scope: project-bar-customer
+      x-terminal-allowed:
+        - web
+      x-auth-context: staff-token
+      x-idempotency-required: true
+      x-audit-event-success: finance.payment_confirmation.requested
+      x-audit-event-failure: finance.payment_confirmation.request_failed
+      x-failure-codes:
+        - VALIDATION_FAILED
+        - APPROVAL_LINE_FINAL_APPROVER_REQUIRED
+        - FINAL_APPROVER_NOT_IN_CHAIN
+        - CROSS_MERCHANT_FORBIDDEN
+        - SAVED_BOTTLE_HANDED_OVER
+        - SAVED_BOTTLE_REMEDY_NOT_FOUND
+        - SAVED_BOTTLE_NOT_FOUND
+        - PAYMENT_CONFIRMATION_EXISTS
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            maxLength: 64
+          description: 存酒补存/赔付单编号。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PaymentConfirmationRequest"
+      responses:
+        "200":
+          description: 返回付款确认（status=pending_review）；重复提交返回首次结果。
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/PaymentConfirmation"
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
   /api/v1/inventory/saved-bottles/remedies/{id}/advance:
     post:
       tags:
@@ -14146,7 +14330,7 @@ paths:
         - ticketing
       operationId: confirmTicketRefundPayout
       summary: 退款确认拨付
-      description: 财务实际打完款后确认兑付，退款单“已通过”→“成功”。组合支付的退款只按 payout_items 所列渠道与金额打款（储值部分批准时已回卡）。业务口径：退款以“成功”为最终完成态，只有“成功”的退款才计入“已退金额”；“已通过”只表示已批准并已发起不可逆兑付。reason 填原路退回结果。第十八批 AH 段 256-R1（BSM:806「系统完整记录……原路退回结果」）：原路退回结果（reason 去首尾空白）写入退款单 payout_result，并记入成功留痕 ticket_refund.payout_confirmed 的 metadata.payout_result；返回的退款单带 payout_result。FS-013：单一酒吧门票整张退款成功即回原计费月重算服务费总额，只登记台账未覆盖的差额：先调减原月应收未收部分(原行不动＋冲正行＋重述行)，超出部分列应退(single_bar_service_fee 应付，source_id=退款单 id)，调整记当前账期、关联原计费月；同一退款不重复登记。
+      description: 财务实际打完款后确认兑付，退款单“已通过”→“成功”。组合支付的退款只按 payout_items 所列渠道与金额打款（储值部分批准时已回卡）。业务口径：退款以“成功”为最终完成态，只有“成功”的退款才计入“已退金额”；“已通过”只表示已批准并已发起不可逆兑付。reason 填原路退回结果。第十八批 AH 段 256-R1（BSM:806「系统完整记录……原路退回结果」）：原路退回结果（reason 去首尾空白）写入退款单 payout_result，并记入成功留痕 ticket_refund.payout_confirmed 的 metadata.payout_result；返回的退款单带 payout_result。FS-013：单一酒吧门票整张退款成功即回原计费月重算服务费总额，只登记台账未覆盖的差额：先调减原月应收未收部分(原行不动＋冲正行＋重述行)，超出部分列应退(single_bar_service_fee 应付，source_id=退款单 id)，调整记当前账期、关联原计费月；同一退款不重复登记。第十八批 AM 段第 241 条 241-R5（BSM:1803；第十八批裁决 55、65（门票退款打款一个支付类型 ticket_refund））：确认拨付前该退款须已有通过的付款确认（发起见 createTicketRefundPaymentConfirmation），否则 409 PAYMENT_CONFIRMATION_REQUIRED；只分到储值笔的退款批准即成功，不经此处。
       x-permission: ticket.refund.approve
       x-data-scope: project-order
       x-terminal-allowed:
@@ -14169,6 +14353,62 @@ paths:
         "500":
           $ref: "#/components/responses/Error"
       x-auth-context: staff-token
+  /api/v1/ticketing/refunds/{refund_id}/payment-confirmations:
+    post:
+      tags:
+        - ticketing
+      operationId: createTicketRefundPaymentConfirmation
+      summary: 门票退款发起付款确认（待原路打款）
+      description: 第十八批 AM 段第 241 条 241-R5（BSM:1803「付款确认按全平台统一的审批模型执行——发起时指定这条主线的最终审批人……财务、法务及相关部门作为平行的相关部门线，各指定该部门的最终审批人……主线与各条平行线都通过才完成付款确认；具体流程按支付类型分别设定。」；第十八批裁决 55、65（门票退款打款一个支付类型 ticket_refund）、68「退款……按单发起」）：已通过、待原路打款的门票退款发起付款确认，权限同确认拨付（confirmTicketRefundPayout），付款确认通过后方可确认拨付。object_type=ticket_refund，金额取待原路打款各笔（payout_items）合计（储值部分批准时已回卡，不计），项目取原订单，收款方为原订单客人。商户范围闸在幂等之前、写内再判一次：商户账号限原订单商户，否则 403 CROSS_MERCHANT_FORBIDDEN；退款不存在 404 TICKET_REFUND_NOT_FOUND；退款未通过或没有待原路打款的笔 409 TICKET_REFUND_NOT_PAYOUT_CONFIRMABLE；原订单不存在 404 TICKET_ORDER_NOT_FOUND；该退款已有待审批或已通过的付款确认 409 PAYMENT_CONFIRMATION_EXISTS。请求体与审批规则同 createArApPaymentConfirmation：reason（事由）、final_approver_id（主线最终审批人）与幂等键必填，否则 400 VALIDATION_FAILED；parallel_lines 须为财务（finance_review）、法务（legal_review）两线及该支付类型在「组织层级与审批线」页设定的必带线各指定最终审批人，否则 400 APPROVAL_LINE_FINAL_APPROVER_REQUIRED，可另带其他在用的线；最终审批人不在发起人直接上级链上等按统一审批引擎 400（如 FINAL_APPROVER_NOT_IN_CHAIN）。复核单 action_type=finance.payment_confirm.ticket_refund。同一幂等键重发返回首次结果。成功留痕 finance.payment_confirmation.requested，失败 finance.payment_confirmation.request_failed。
+      x-permission: ticket.refund.approve
+      x-data-scope: project-order
+      x-terminal-allowed:
+        - web
+      x-auth-context: staff-token
+      x-idempotency-required: true
+      x-audit-event-success: finance.payment_confirmation.requested
+      x-audit-event-failure: finance.payment_confirmation.request_failed
+      x-failure-codes:
+        - VALIDATION_FAILED
+        - APPROVAL_LINE_FINAL_APPROVER_REQUIRED
+        - FINAL_APPROVER_NOT_IN_CHAIN
+        - CROSS_MERCHANT_FORBIDDEN
+        - TICKET_REFUND_NOT_FOUND
+        - TICKET_ORDER_NOT_FOUND
+        - TICKET_REFUND_NOT_PAYOUT_CONFIRMABLE
+        - PAYMENT_CONFIRMATION_EXISTS
+      parameters:
+        - $ref: "#/components/parameters/RefundId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PaymentConfirmationRequest"
+      responses:
+        "200":
+          description: 返回付款确认（status=pending_review）；重复提交返回首次结果。
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/PaymentConfirmation"
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
   /api/v1/ticketing/refunds/{refund_id}/approve:
     post:
       tags:
@@ -15474,10 +15714,7 @@ paths:
         - platform
       operationId: approveSupervisorReview
       summary: 主管审批或驳回复核记录
-      description: 平台治理主管复核与基础定义违规阻断接口，用于高风险业务动作的可验证拦截、审批和留痕。复核单为授权申请（object_type=access_grant_request）且待审时转入授权申请审批，与
-        reviewAccessGrantRequest 同一门禁：access.grant_request.review 与 governance.supervisor_review.approve
-        一次核验（员工显式拒绝优先，最高权限会话同样受约束；同一单次授予来源只消耗一次），缺任一即 403 PERMISSION_DENIED，不推进审批节点、不落地。
-        18E：通过与驳回之前的读取按 governance.supervisor_review.approve 可触及的项目判发起人账号归属（持可跨项目角色的含该角色可查看的项目）；发起人不在其内、又不是当前审批人、被转发人或发起人本人的，403（SUPERVISOR_REVIEW_SCOPE_FORBIDDEN）；最高权限逐笔开放不变。 第十八批 AL 段 223-R1（BSM:1751「高价值差异复核通过才入账、同一差异只入账一次」）：对账差异关闭复核（action_type=finance.reconciliation_difference.close）终审通过、差异转已关闭时，提交时勾选 ledger_entry 的向原往来方入应收应付台账（写 ar_ap_items，source_type=reconciliation_difference，source_id 为差异号）；落账营业日已锁定 409 DAY_CLOSE_LOCKED，整笔审批不生效。第十八批 AL 段 245-R1（ENUM:190「日结锁定后的补录须上级审批」）：日结锁定后补录（action_type=finance.locked_backfill.review，object_type=ar_ap_adjustment）终审通过即按补录类型落账（见 requestArApAdjustment），落账各闸不过整笔审批不生效、补录与复核单保持待审；驳回不改账。
+      description: 平台治理主管复核与基础定义违规阻断接口，用于高风险业务动作的可验证拦截、审批和留痕。复核单为授权申请（object_type=access_grant_request）且待审时转入授权申请审批，与 reviewAccessGrantRequest 同一门禁：access.grant_request.review 与 governance.supervisor_review.approve 一次核验（员工显式拒绝优先，最高权限会话同样受约束；同一单次授予来源只消耗一次），缺任一即 403 PERMISSION_DENIED，不推进审批节点、不落地。 18E：通过与驳回之前的读取按 governance.supervisor_review.approve 可触及的项目判发起人账号归属（持可跨项目角色的含该角色可查看的项目）；发起人不在其内、又不是当前审批人、被转发人或发起人本人的，403（SUPERVISOR_REVIEW_SCOPE_FORBIDDEN）；最高权限逐笔开放不变。 第十八批 AL 段 223-R1（BSM:1751「高价值差异复核通过才入账、同一差异只入账一次」）：对账差异关闭复核（action_type=finance.reconciliation_difference.close）终审通过、差异转已关闭时，提交时勾选 ledger_entry 的向原往来方入应收应付台账（写 ar_ap_items，source_type=reconciliation_difference，source_id 为差异号）；落账营业日已锁定 409 DAY_CLOSE_LOCKED，整笔审批不生效。第十八批 AL 段 245-R1（ENUM:190「日结锁定后的补录须上级审批」）：日结锁定后补录（action_type=finance.locked_backfill.review，object_type=ar_ap_adjustment）终审通过即按补录类型落账（见 requestArApAdjustment），落账各闸不过整笔审批不生效、补录与复核单保持待审；驳回不改账。第十八批 AM 段第 241 条 241-R1（BSM:1803「主线与各条平行线都通过才完成付款确认」）：付款确认（action_type=finance.payment_confirm.＜支付类型＞，object_type=payment_confirmation，object_id 为付款确认单号）全部节点通过即该确认转已通过（approved），任一节点驳回即转已驳回（rejected），驳回后可重新发起。锁账收付款补录终审落账的付款确认闸见 requestArApAdjustment：应付及付款方是平台主体的 7 个来源的应收未确认时 409 PAYMENT_CONFIRMATION_REQUIRED，补录与复核单保持待审。
       x-permission: governance.supervisor_review.approve
       x-data-scope: project-entity
       x-terminal-allowed:
@@ -15967,7 +16204,7 @@ paths:
         - finance
       operationId: requestArApAdjustment
       summary: 锁定后补录审批申请
-      description: 对已锁定日结的应收应付台账发起补录申请（pending），审批全部通过后才真正写入金额变动。第十八批 AL 段第 245 条 245-R1（ENUM:190「日结锁定后的补录须上级审批」；PGM:528「发起单据时只需指定该事项的最终审批人，系统按组织层级自动补全……逐级审批」；PGM:529 涉钱审批出厂 1 个工作日、超时提醒并升级）：提交即进统一审批（action_type finance.locked_backfill.review、object_type ar_ap_adjustment）——沿申请人直接上级链到所指定的最终审批人 final_approver_id（不填为直接上级，不在链上 400 FINAL_APPROVER_NOT_IN_CHAIN）逐级审批，全部通过才落账，任一节点驳回不改账；涉钱出厂 1 个工作日，超时提醒并升级；返回的补录记录带复核单号 review_id，审批经 approveSupervisorReview。第十八批 AL 段第 253 条 253-R1、253-R2（BSM:1642「记录缺失时允许人工补录，但必须写原因和责任人……补录必须附原始记录凭证（微信截图、通话录音等）并经审核」；第十八批裁决 56「三种锁账补录提交时必须上传原始凭证（银行回单、转账截图、异议处理结论等）并写责任人；「业务发生后 3 天内」不套。」）：三种补录一律须附原始凭证 evidence_attachment_ids（business_type=finance_locked_backfill 上传所得，去空去重后至少一个，否则 400 MANUAL_BACKFILL_EVIDENCE_REQUIRED；须真实存在，否则 400 EVIDENCE_ATTACHMENT_NOT_FOUND；须已完成上传，否则 400 EVIDENCE_NOT_UPLOADED）并写责任人 responsible_staff_id（缺 400 VALIDATION_FAILED，账号不存在 400 VALIDATION_FAILED「责任人账号不存在」）；责任人登记为复核单直接受益人，不得审批该单；不套补录时限。返回的补录记录另带 evidence_attachment_ids 与 responsible_staff_id。第十八批 R 段 143-R4：返回的补录记录带 item_no（台账单号）与 original_business_date（原营业日，即锁定该台账的日结的营业日，ENUM:190「在补录记录上标明其所属的原营业日」）；按日结号可查（listDailyCloseAdjustments）。第十八批 Z 段第 186 条 186-R1（ENUM:190「日结锁定后的补录须上级审批，且不改动已锁定的日结金额：补录金额归入当期……」；BSM:2023「已拍板：日结锁定后不能直接补录影响金额，必须上级审批通过后补录。」；第七批裁决 19「人工登记收款仍受锁定拦截。」）：kind 缺省 amount（金额调整，调整额不得为 0）；kind=payment 为收付款补录：adjustment_amount_cent 须为正且不超过台账未收付额（否则 400 VALIDATION_FAILED「支付金额超过未付金额」），payment_method 取 cash、bank_transfer、pos、other（否则 400 VALIDATION_FAILED）；台账未锁定照旧 400 AR_AP_ITEM_NOT_LOCKED。返回的补录记录带 kind 与 payment_method。第十八批 Z 段 186-R2（控制席并入，同根；BSM:1323「提出异议期间商户的付款义务不暂停，先按原值付款，异议成立后多退少补」；ENUM:190「日结锁定后的补录须上级审批……」）：kind=refund 为退款补录：只退应收（否则 400 REFUND_REQUIRES_RECEIVABLE）；所退原收款为该台账最后一笔尚未退完（按退款成功计）的收款，没有可退的收款 400 VALIDATION_FAILED；adjustment_amount_cent 须为正且不超过该笔收款的可退余额（已退及待退都占额，否则 400 VALIDATION_FAILED）；不填 payment_method，记录上的 payment_method 为该笔原收款的收付方式。第十八批 AL 段 245-R1 起原审批接口 approveArApAdjustment 删除，终审通过时按类型落账（原该接口所列各项照旧）：金额调整追加冲正行与重述行入账，沿用原行到期日（第十八批 S 段 160-R1），经营看板的合同应收与净收入按批准当日计补录差额、不改写原营业日（ENUM:190「补录金额归入当期」）；收付款补录按申请的金额与收付方式给该台账登记一笔收付款（付款时间取批准时刻），不追加冲正行与重述行，台账锁与日结七源汇总不动，押金退还、积分发行费的到期闸与已冲正闸照判（409）；退款补录按所退原收款走现有原路退款路径建一笔退款待办（requested，沿原收款渠道），台账、台账锁与日结七源汇总不动，可退余额（400 VALIDATION_FAILED）、分级授权（按终审节点审批人本人的退款额度，超额 403 REFUND_REVIEW_REQUIRED）、只退应收、沿原收款渠道（409 REFUND_CHANNEL_MISMATCH）、后收先退（409 REFUND_LATEST_PAYMENT_FIRST）各闸照判，原收款为现金、刷卡的批准时不判现场设备、只建待办，待办在退款办理处登记执行与核实时仍须带设备（否则 403 DEVICE_CONTEXT_REQUIRED）。落账任一闸不过整笔审批不生效，补录与复核单保持待审。补录记录的 approved_by 记终审或驳回节点审批人、decided_at 记决定时刻；留痕仍记 finance.locked_backfill_approved、finance.locked_backfill_rejected。
+      description: 对已锁定日结的应收应付台账发起补录申请（pending），审批全部通过后才真正写入金额变动。第十八批 AL 段第 245 条 245-R1（ENUM:190「日结锁定后的补录须上级审批」；PGM:528「发起单据时只需指定该事项的最终审批人，系统按组织层级自动补全……逐级审批」；PGM:529 涉钱审批出厂 1 个工作日、超时提醒并升级）：提交即进统一审批（action_type finance.locked_backfill.review、object_type ar_ap_adjustment）——沿申请人直接上级链到所指定的最终审批人 final_approver_id（不填为直接上级，不在链上 400 FINAL_APPROVER_NOT_IN_CHAIN）逐级审批，全部通过才落账，任一节点驳回不改账；涉钱出厂 1 个工作日，超时提醒并升级；返回的补录记录带复核单号 review_id，审批经 approveSupervisorReview。第十八批 AL 段第 253 条 253-R1、253-R2（BSM:1642「记录缺失时允许人工补录，但必须写原因和责任人……补录必须附原始记录凭证（微信截图、通话录音等）并经审核」；第十八批裁决 56「三种锁账补录提交时必须上传原始凭证（银行回单、转账截图、异议处理结论等）并写责任人；「业务发生后 3 天内」不套。」）：三种补录一律须附原始凭证 evidence_attachment_ids（business_type=finance_locked_backfill 上传所得，去空去重后至少一个，否则 400 MANUAL_BACKFILL_EVIDENCE_REQUIRED；须真实存在，否则 400 EVIDENCE_ATTACHMENT_NOT_FOUND；须已完成上传，否则 400 EVIDENCE_NOT_UPLOADED）并写责任人 responsible_staff_id（缺 400 VALIDATION_FAILED，账号不存在 400 VALIDATION_FAILED「责任人账号不存在」）；责任人登记为复核单直接受益人，不得审批该单；不套补录时限。返回的补录记录另带 evidence_attachment_ids 与 responsible_staff_id。第十八批 R 段 143-R4：返回的补录记录带 item_no（台账单号）与 original_business_date（原营业日，即锁定该台账的日结的营业日，ENUM:190「在补录记录上标明其所属的原营业日」）；按日结号可查（listDailyCloseAdjustments）。第十八批 Z 段第 186 条 186-R1（ENUM:190「日结锁定后的补录须上级审批，且不改动已锁定的日结金额：补录金额归入当期……」；BSM:2023「已拍板：日结锁定后不能直接补录影响金额，必须上级审批通过后补录。」；第七批裁决 19「人工登记收款仍受锁定拦截。」）：kind 缺省 amount（金额调整，调整额不得为 0）；kind=payment 为收付款补录：adjustment_amount_cent 须为正且不超过台账未收付额（否则 400 VALIDATION_FAILED「支付金额超过未付金额」），payment_method 取 cash、bank_transfer、pos、other（否则 400 VALIDATION_FAILED）；台账未锁定照旧 400 AR_AP_ITEM_NOT_LOCKED。返回的补录记录带 kind 与 payment_method。第十八批 Z 段 186-R2（控制席并入，同根；BSM:1323「提出异议期间商户的付款义务不暂停，先按原值付款，异议成立后多退少补」；ENUM:190「日结锁定后的补录须上级审批……」）：kind=refund 为退款补录：只退应收（否则 400 REFUND_REQUIRES_RECEIVABLE）；所退原收款为该台账最后一笔尚未退完（按退款成功计）的收款，没有可退的收款 400 VALIDATION_FAILED；adjustment_amount_cent 须为正且不超过该笔收款的可退余额（已退及待退都占额，否则 400 VALIDATION_FAILED）；不填 payment_method，记录上的 payment_method 为该笔原收款的收付方式。第十八批 AL 段 245-R1 起原审批接口 approveArApAdjustment 删除，终审通过时按类型落账（原该接口所列各项照旧）：金额调整追加冲正行与重述行入账，沿用原行到期日（第十八批 S 段 160-R1），经营看板的合同应收与净收入按批准当日计补录差额、不改写原营业日（ENUM:190「补录金额归入当期」）；收付款补录按申请的金额与收付方式给该台账登记一笔收付款（付款时间取批准时刻），不追加冲正行与重述行，台账锁与日结七源汇总不动，押金退还、积分发行费的到期闸与已冲正闸照判（409）；退款补录按所退原收款走现有原路退款路径建一笔退款待办（requested，沿原收款渠道），台账、台账锁与日结七源汇总不动，可退余额（400 VALIDATION_FAILED）、分级授权（按终审节点审批人本人的退款额度，超额 403 REFUND_REVIEW_REQUIRED）、只退应收、沿原收款渠道（409 REFUND_CHANNEL_MISMATCH）、后收先退（409 REFUND_LATEST_PAYMENT_FIRST）各闸照判，原收款为现金、刷卡的批准时不判现场设备、只建待办，待办在退款办理处登记执行与核实时仍须带设备（否则 403 DEVICE_CONTEXT_REQUIRED）。落账任一闸不过整笔审批不生效，补录与复核单保持待审。补录记录的 approved_by 记终审或驳回节点审批人、decided_at 记决定时刻；留痕仍记 finance.locked_backfill_approved、finance.locked_backfill_rejected。第十八批 AM 段第 241 条 241-R1、241-R9（BSM:1803；第十八批裁决 55「所有应付都先走付款确认」、69「付款方是平台主体的应收，登记收款前也须付款确认」）：收付款补录（kind=payment）批准落账时照 createArApPayment 同一付款确认闸判——应付，以及付款方是平台主体的 7 个来源的应收，须已有通过的付款确认，否则终审 409 PAYMENT_CONFIRMATION_REQUIRED、补录与复核单保持待审，付款确认通过后再批即可；申请时不预判。
       x-permission: finance.locked_backfill.request
       x-data-scope: project-entity
       x-terminal-allowed:
@@ -42591,9 +42828,7 @@ paths:
         - dealer
       operationId: executeDealerOrderRefund
       summary: 将已批准经销退款交统一财务办理
-      description: 原收款须已核实且经销退款审批已通过；移交人员须具备 dealer.order.refund.execute 并在原订单真实项目范围内。后续财务执行及结果确认分别按统一财务流程核验相应权限及其项目范围。创建或返回同一
-        finance_refund_id，状态仍为
-        approved；不得仅凭人工流水标记已退。执行、处理中查询、明确失败重试、实际结果独立复核均走既有统一财务流程，不新增第二次业务审批。成功结果在同一事务同步经销退款与订单，处理中或失败不得结清或释放可再次抵用金额。
+      description: 原收款须已核实且经销退款审批已通过；移交人员须具备 dealer.order.refund.execute 并在原订单真实项目范围内。后续财务执行及结果确认分别按统一财务流程核验相应权限及其项目范围。创建或返回同一 finance_refund_id，状态仍为 approved；不得仅凭人工流水标记已退。执行、处理中查询、明确失败重试、实际结果独立复核均走既有统一财务流程；财务执行前须付款确认（第十八批裁决 55；第十八批 AM 段第 241 条 241-R5，发起见 createFinanceRefundPaymentConfirmation，支付类型 finance_refund_dealer_order_refund）。成功结果在同一事务同步经销退款与订单，处理中或失败不得结清或释放可再次抵用金额。
       x-permission: dealer.order.refund.execute
       x-data-scope: project
       x-auth-context: staff-token
@@ -45432,7 +45667,8 @@ paths:
       tags:
         - finance
       operationId: markDividendStatementPaid
-      summary: 标记发放：approved → paid（实际打款走应收应付台账既有付款确认流程）
+      summary: 标记发放：approved → paid（实发额大于 0 时，主理人分红应付须先经付款确认并登记付清）
+      description: 第十八批 AM 段第 241 条 241-R3（BSM:1787「发放走应付款项」；BSM:1803「审批通过后的发放进入应付款项台账，走付款确认」）：实发额大于 0 时，该单主理人分红应付（dividend_payout）须已付清（先经付款确认，再在应收应付台账登记付款），否则 409 DIVIDEND_PAYOUT_NOT_PAID，不标记发放、不发短信；台账项不存在 404 AR_AP_ITEM_NOT_FOUND。实发额为 0 的单不判。
       x-auth-context: staff-token
       x-permission: finance.dividend.manage
       x-data-scope: platform
@@ -45445,6 +45681,8 @@ paths:
         - DIVIDEND_STATEMENT_NOT_FOUND
         - DIVIDEND_STATE_INVALID
         - DIVIDEND_PREVIEW_NOT_APPROVABLE
+        - DIVIDEND_PAYOUT_NOT_PAID
+        - AR_AP_ITEM_NOT_FOUND
       requestBody:
         $ref: "#/components/requestBodies/DividendActionRequest"
       responses:
@@ -50454,8 +50692,7 @@ paths:
       x-idempotency-required: true
       x-audit-event-success: finance_refund.retried
       x-audit-event-failure: finance_refund.retry_failed
-      description: 查询或原单重试；processing 只能查询，requested/failed 可原单重试，储值缺原路事实禁止自动重试。
-        经销原路退款以dealer_order_refund关联源单，按原订单真实项目核验权限；执行结果与经销状态同事务同步，登记待办不等于成功。
+      description: 查询或原单重试；processing 只能查询，requested/failed 可原单重试，储值缺原路事实禁止自动重试。 经销原路退款以dealer_order_refund关联源单，按原订单真实项目核验权限；执行结果与经销状态同事务同步，登记待办不等于成功。第十八批 AM 段第 241 条 241-R5（BSM:1803；第十八批裁决 55）：原单重试派发前，该退款待办须已有通过的付款确认（发起见 createFinanceRefundPaymentConfirmation），否则 409 PAYMENT_CONFIRMATION_REQUIRED；建单时不派发网关（见 createFinanceRefund），付款确认通过后经本接口派发。
       responses:
         "200":
           $ref: "#/components/responses/FinanceRefundResult"
@@ -50493,8 +50730,7 @@ paths:
       x-idempotency-required: true
       x-audit-event-success: finance_refund.execution_recorded
       x-audit-event-failure: finance_refund.execution_failed
-      description: 实际支付经办人本人登录登记真实原路执行凭证；经办人从当前会话取，客户端不能指定他人。仅 requested/failed 可登记；登记后仍 processing，待另一人核实。账户关闭 / 注销为商户卡登记的待退本金事项只能由发卡商户柜台退卡结清，本接口 409 STORED_VALUE_MERCHANT_COUNTER_ONLY。
-        经销原路退款以dealer_order_refund关联源单，按原订单真实项目核验权限；执行结果与经销状态同事务同步，登记待办不等于成功。
+      description: 实际支付经办人本人登录登记真实原路执行凭证；经办人从当前会话取，客户端不能指定他人。仅 requested/failed 可登记；登记后仍 processing，待另一人核实。账户关闭 / 注销为商户卡登记的待退本金事项只能由发卡商户柜台退卡结清，本接口 409 STORED_VALUE_MERCHANT_COUNTER_ONLY。 经销原路退款以dealer_order_refund关联源单，按原订单真实项目核验权限；执行结果与经销状态同事务同步，登记待办不等于成功。第十八批 AM 段第 241 条 241-R5（BSM:1803；第十八批裁决 55「所有应付都先走付款确认……退款、工资、货款各类都要设流程」）：登记原路执行（含现金、刷卡现场退）前，该退款待办须已有通过的付款确认（发起见 createFinanceRefundPaymentConfirmation，支付类型 finance_refund_＋来源），否则 409 PAYMENT_CONFIRMATION_REQUIRED。
       responses:
         "200":
           $ref: "#/components/responses/FinanceRefundResult"
@@ -50518,6 +50754,70 @@ paths:
             type: string
             description: 当前数据范围内的单据编号。
             maxLength: 64
+  /api/v1/finance/refunds/{refund_id}/payment-confirmations:
+    post:
+      tags:
+        - finance
+      operationId: createFinanceRefundPaymentConfirmation
+      summary: 财务退款待办发起付款确认
+      description: 第十八批 AM 段第 241 条 241-R5（BSM:1803「付款确认按全平台统一的审批模型执行——发起时指定这条主线的最终审批人……财务、法务及相关部门作为平行的相关部门线，各指定该部门的最终审批人……主线与各条平行线都通过才完成付款确认；具体流程按支付类型分别设定。」；第十八批裁决 55「所有应付都先走付款确认……退款、工资、货款各类都要设流程」、65（财务退款待办按来源各一个支付类型 finance_refund_＋来源，来源为 ar_ap_payment、stored_value_account、ticket_payment_rejection、channel_ticket_rejection、dealer_order_refund、bar_deposit_rejection、bar_scan_order_rejection）、68「退款……按单发起」）：财务退款待办发起付款确认，object_type=finance_refund，金额取退款金额，收款方为原付款方（原收款退款取原应收的往来方，其余取原付款对象）。付款确认通过之前退款不派发网关、不能登记原路执行（见 createFinanceRefund、retryFinanceRefund、recordFinanceRefundExecution）。范围闸在幂等之前：按 finance.refund.create 的项目与商户范围取退款单（他项目 403 CROSS_PROJECT_FORBIDDEN，他商户 403 CROSS_MERCHANT_FORBIDDEN），不存在 404 REFUND_NOT_FOUND；经销退款（dealer_order_refund）另须 dealer.order.refund.execute 或 dealer.return.refund.execute，且业务订单与原收款两个项目都可触及（否则 403 CROSS_PROJECT_FORBIDDEN），来源关联缺失 409 DEALER_REFUND_SOURCE_MISSING，原审批、原收款与原路信息不符 409 DEALER_REFUND_SOURCE_MISMATCH；这些失败记 finance.payment_confirmation.request_failed，不占幂等键。该退款已有待审批或已通过的付款确认 409 PAYMENT_CONFIRMATION_EXISTS。请求体与审批规则同 createArApPaymentConfirmation：reason（事由）、final_approver_id（主线最终审批人）与幂等键必填，否则 400 VALIDATION_FAILED；parallel_lines 须为财务（finance_review）、法务（legal_review）两线及该支付类型在「组织层级与审批线」页设定的必带线各指定最终审批人，否则 400 APPROVAL_LINE_FINAL_APPROVER_REQUIRED，可另带其他在用的线；最终审批人不在发起人直接上级链上等按统一审批引擎 400（如 FINAL_APPROVER_NOT_IN_CHAIN）。复核单 action_type=finance.payment_confirm.finance_refund_＋来源。同一幂等键重发返回首次结果。成功留痕 finance.payment_confirmation.requested。
+      x-permission: finance.refund.create
+      x-data-scope: project-order
+      x-terminal-allowed:
+        - web
+      x-auth-context: staff-token
+      x-idempotency-required: true
+      x-audit-event-success: finance.payment_confirmation.requested
+      x-audit-event-failure: finance.payment_confirmation.request_failed
+      x-failure-codes:
+        - VALIDATION_FAILED
+        - APPROVAL_LINE_FINAL_APPROVER_REQUIRED
+        - FINAL_APPROVER_NOT_IN_CHAIN
+        - CROSS_PROJECT_FORBIDDEN
+        - CROSS_MERCHANT_FORBIDDEN
+        - REFUND_NOT_FOUND
+        - DEALER_REFUND_SOURCE_MISSING
+        - DEALER_REFUND_SOURCE_MISMATCH
+        - PAYMENT_CONFIRMATION_EXISTS
+      parameters:
+        - name: refund_id
+          in: path
+          required: true
+          schema:
+            type: string
+            description: 当前数据范围内的单据编号。
+            maxLength: 64
+          description: 财务退款待办编号。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PaymentConfirmationRequest"
+      responses:
+        "200":
+          description: 返回付款确认（status=pending_review）；重复提交返回首次结果。
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/PaymentConfirmation"
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
   /api/v1/finance/refunds/{refund_id}/confirm:
     post:
       tags:
@@ -50667,6 +50967,121 @@ paths:
                     - "null"
                   description: 所属部门人事最终会签负责人；空值表示待配置
                   maxLength: 64
+  /api/v1/access/payment-confirmation-flows:
+    get:
+      tags:
+        - access
+      operationId: listPaymentConfirmationFlows
+      summary: 查询付款确认各支付类型的必带平行线
+      description: 第十八批 AM 段第 241 条 241-R8（BSM:1803「具体流程按支付类型分别设定」；第十八批裁决 66「每类必带财务、法务两线，其他部门线由发起人按单另加」、67「审批线页设定」）：列出付款确认全部 40 个支付类型（全平台配置，按 PaymentConfirmationType 顺序，不按项目过滤）及各类在财务（finance_review）、法务（legal_review）两线之外还必带的平行线，供「组织层级与审批线」页「付款确认流程」表。data 为数组，每项 payment_type、payment_type_label（中文名）、line_codes（未设定为空数组，出厂均为空）。缺 access.role.assign 403 PERMISSION_DENIED。
+      x-permission: access.role.assign
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-auth-context: staff-token
+      x-idempotency-required: false
+      x-audit-event-success: not_applicable
+      x-audit-event-failure: not_applicable
+      x-failure-codes:
+        - PERMISSION_DENIED
+      responses:
+        "200":
+          description: 返回 40 个支付类型及各自两线之外的必带线。
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/PaymentConfirmationFlow"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/access/payment-confirmation-flows/{payment_type}:
+    put:
+      tags:
+        - access
+      operationId: savePaymentConfirmationFlow
+      summary: 设定某支付类型两线之外的必带平行线
+      description: 第十八批 AM 段第 241 条 241-R8（BSM:1803「具体流程按支付类型分别设定」；第十八批裁决 66「每类必带财务、法务两线，其他部门线由发起人按单另加」、67「审批线页设定」——与各线最低起点层级同一处、同一门禁，不新增权限码）：设定某支付类型在财务、法务两线之外还必带的平行线，整体覆盖，line_codes 为空数组即清空（只带两线）。门禁 access.role.assign（缺 403 PERMISSION_DENIED）；流程是全平台配置，只许平台管理员或可管理全部项目的账号设定（同 upsertApprovalLine 对无归属全局线的口径），只能到部分项目的账号 403 CROSS_ORG_FORBIDDEN；payment_type 不在 40 个支付类型内 404 PAYMENT_TYPE_NOT_FOUND；缺幂等键 400 VALIDATION_FAILED；以上在幂等之前判。line_codes 每项须为在用的审批线，不存在或已停用 400 APPROVAL_LINE_NOT_CONFIGURED，含空值 400 VALIDATION_FAILED，重复的去重。设定后发起该类付款确认须为这些线各指定最终审批人（否则 400 APPROVAL_LINE_FINAL_APPROVER_REQUIRED），已发起的付款确认不受影响（审批链在发起时生成）。响应 data 为 payment_type、payment_type_label、line_codes。同一幂等键重发返回首次结果。成功留痕 access.payment_confirmation_flow.saved（带 line_codes）。
+      x-permission: access.role.assign
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-auth-context: staff-token
+      x-idempotency-required: true
+      x-audit-event-success: access.payment_confirmation_flow.saved
+      x-audit-event-failure: not_applicable
+      x-failure-codes:
+        - VALIDATION_FAILED
+        - APPROVAL_LINE_NOT_CONFIGURED
+        - PERMISSION_DENIED
+        - CROSS_ORG_FORBIDDEN
+        - PAYMENT_TYPE_NOT_FOUND
+      parameters:
+        - name: payment_type
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/PaymentConfirmationType"
+          description: 支付类型（40 个之一）。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - idempotency_key
+                - line_codes
+              properties:
+                idempotency_key:
+                  type: string
+                  minLength: 1
+                  maxLength: 128
+                  description: 操作幂等键；同一键重发返回首次结果。
+                line_codes:
+                  type: array
+                  items:
+                    type: string
+                    minLength: 1
+                  description: 两线之外该类还必带的在用审批线 line_code；空数组即清空。
+            example:
+              idempotency_key: pcf-purchase-inbound-0001
+              line_codes:
+                - business_review
+      responses:
+        "200":
+          description: 返回保存后的该支付类型流程；重复提交返回首次结果。
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/PaymentConfirmationFlow"
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
   /api/v1/access/org-hierarchy:
     get:
       tags:
@@ -55690,7 +56105,7 @@ paths:
         - dealer
       operationId: executeDealerReturnRefunds
       summary: 登记经销退货统一财务待办
-      description: 只登记/复用待退款，不表示退款成功。实际原路执行与独立结果确认走既有财务接口；验收人与原收款核验人不得兼任执行人，已批准凭据不再追加相同业务审批。
+      description: 只登记/复用待退款，不表示退款成功。实际原路执行与独立结果确认走既有财务接口；验收人与原收款核验人不得兼任执行人；财务执行前须付款确认（第十八批裁决 55；第十八批 AM 段第 241 条 241-R5，发起见 createFinanceRefundPaymentConfirmation，支付类型 finance_refund_dealer_order_refund）。
       x-permission: dealer.return.refund.execute
       x-data-scope: project
       x-auth-context: staff-token
@@ -59880,7 +60295,7 @@ paths:
         - finance
       operationId: preparePayrollBankPayment
       summary: 准备工资银行付款
-      description: 工资付款仅认同员工、项目、商户和发薪主体的已批准工资原件。准备、银行处理中与结果未明不增加已付；真实成功凭证及单笔银行流水核实后追加付款并更新余额，不回改原工资金额或日结快照。此接口登记实际银行事实，不直接调用银行出款。普通收付款、退款、调账不能改写工资。当前客户端为后台Web；服务端沿原终端开关。
+      description: 工资付款仅认同员工、项目、商户和发薪主体的已批准工资原件。准备、银行处理中与结果未明不增加已付；真实成功凭证及单笔银行流水核实后追加付款并更新余额，不回改原工资金额或日结快照。此接口登记实际银行事实，不直接调用银行出款。普通收付款、退款、调账不能改写工资。当前客户端为后台Web；服务端沿原终端开关。第十八批 AM 段第 241 条 241-R4（BSM:1803；第十八批裁决 55「所有应付都先走付款确认」、68「工资……按单发起」）：准备银行付款前，该工资单的工资应付须已有通过的付款确认（逐人发起见 createPayrollPaymentConfirmation，支付类型 staff_payroll），否则 409 PAYMENT_CONFIRMATION_REQUIRED；一张已通过的确认覆盖该笔工资应付直到付清，失败重付不必重新审批。
       x-permission: finance.payroll.payment.register
       x-data-scope: project-entity
       x-terminal-allowed:
@@ -59951,6 +60366,77 @@ paths:
           application/json:
             schema:
               $ref: "#/components/schemas/PayrollBankPrepareRequest"
+  /api/v1/finance/payroll/{statementId}/payment-confirmations:
+    post:
+      tags:
+        - finance
+      operationId: createPayrollPaymentConfirmation
+      summary: 工资应付逐人发起付款确认
+      description: 第十八批 AM 段第 241 条 241-R4（BSM:1803「付款确认按全平台统一的审批模型执行——发起时指定这条主线的最终审批人……财务、法务及相关部门作为平行的相关部门线，各指定该部门的最终审批人……主线与各条平行线都通过才完成付款确认；具体流程按支付类型分别设定。」；第十八批裁决 55「所有应付都先走付款确认……退款、工资、货款各类都要设流程」、65（支付类型 staff_payroll）、68「工资……按单发起」；PGM:529「申请人与直接受益人不得审批与自己相关的申请」）：工资审批之后、准备银行付款（preparePayrollBankPayment）之前，按工资单逐人发起付款确认：对象为该工资单的工资应付（object_type=ar_ap_item），金额取未付工资，收款方与直接受益人为员工本人（员工本人不得审批，被指定为最终审批人时按统一审批引擎 400 FINAL_APPROVER_NOT_IN_CHAIN）。缺 finance.payroll.payment.register 403 PERMISSION_DENIED；范围闸在幂等之前（同 preparePayrollBankPayment）：工资单的项目、商户与发薪主体都须可触及，否则 403 PAYROLL_FINANCE_SCOPE_MISMATCH；工资单不存在 404 PAYROLL_NOT_FOUND。写内锁住工资单：工资尚未生成应付或应付原件不符 409 PAYROLL_PAYMENT_INVALID；未付工资 ≤ 0 时 409 AR_AP_ITEM_SETTLED；该工资应付已有待审批或已通过的付款确认 409 PAYMENT_CONFIRMATION_EXISTS。请求体与审批规则同 createArApPaymentConfirmation：reason（事由）、final_approver_id（主线最终审批人）与幂等键必填，否则 400 VALIDATION_FAILED；parallel_lines 须为财务（finance_review）、法务（legal_review）两线及该支付类型在「组织层级与审批线」页设定的必带线各指定最终审批人，否则 400 APPROVAL_LINE_FINAL_APPROVER_REQUIRED，可另带其他在用的线；最终审批人不在发起人直接上级链上等按统一审批引擎 400（如 FINAL_APPROVER_NOT_IN_CHAIN）。复核单 action_type=finance.payment_confirm.staff_payroll。同一幂等键重发返回首次结果。成功留痕 finance.payment_confirmation.requested，失败（含范围闸）finance.payment_confirmation.request_failed。
+      x-permission: finance.payroll.payment.register
+      x-data-scope: project-entity
+      x-terminal-allowed:
+        - app
+        - dealer_portal
+        - kiosk
+        - merchant_app
+        - merchant_portal
+        - miniapp
+        - mobile_admin
+        - staff_work_phone
+        - web
+      x-auth-context: staff-token
+      x-idempotency-required: true
+      x-audit-event-success: finance.payment_confirmation.requested
+      x-audit-event-failure: finance.payment_confirmation.request_failed
+      x-failure-codes:
+        - VALIDATION_FAILED
+        - APPROVAL_LINE_FINAL_APPROVER_REQUIRED
+        - FINAL_APPROVER_NOT_IN_CHAIN
+        - PERMISSION_DENIED
+        - PAYROLL_FINANCE_SCOPE_MISMATCH
+        - PAYROLL_NOT_FOUND
+        - PAYROLL_PAYMENT_INVALID
+        - AR_AP_ITEM_SETTLED
+        - PAYMENT_CONFIRMATION_EXISTS
+      parameters:
+        - name: statementId
+          in: path
+          required: true
+          schema:
+            type: string
+            maxLength: 64
+          description: 工资单编号。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PaymentConfirmationRequest"
+      responses:
+        "200":
+          description: 返回付款确认（status=pending_review）；重复提交返回首次结果。
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/PaymentConfirmation"
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
   /api/v1/finance/payroll/payment-attempts/{id}/submit:
     post:
       tags:
@@ -76704,6 +77190,315 @@ components:
       required:
         - line_code
         - final_approver_id
+    PaymentConfirmationType:
+      type: string
+      enum:
+        - dividend_payout
+        - dividend_reserve_released
+        - staff_payroll
+        - deposit_refund
+        - deposit_adjustment
+        - purchase_inbound
+        - purchase_consignment
+        - purchase_prepayment
+        - ticket_distribution
+        - platform_incentive_subsidy
+        - single_bar_service_fee
+        - compensation_fulfillment
+        - pass_domain_share
+        - pass_domain_direct_settlement
+        - pass_unverified_attribution
+        - dispatch_commission_transfer
+        - bar_payroll_transfer
+        - inventory_transfer
+        - pass_drink_settlement
+        - media_performance_settlement
+        - refund
+        - bar_deposit_refund
+        - stored_value_consume
+        - partner_voucher
+        - reconciliation_difference
+        - inventory_difference
+        - turnover_rent_reversal
+        - manual
+        - compensation_fulfillment_recovery
+        - ticket_distribution_recovery
+        - saved_bottle_remedy_recovery
+        - finance_refund_ar_ap_payment
+        - finance_refund_stored_value_account
+        - finance_refund_ticket_payment_rejection
+        - finance_refund_channel_ticket_rejection
+        - finance_refund_dealer_order_refund
+        - finance_refund_bar_deposit_rejection
+        - finance_refund_bar_scan_order_rejection
+        - ticket_refund
+        - saved_bottle_compensation
+      description: 付款确认支付类型（第十八批 AM 段第 241 条；第十八批裁决 65「按台账来源逐个分」，共 40 个，系统按付款对象来源自动定类）：台账应付来源 28 个与付款方是平台主体的追收应收来源 3 个（第十八批裁决 69）取 ar_ap_items.source_type 原值（pass_domain_share、pass_domain_direct_settlement、bar_payroll_transfer、dispatch_commission_transfer 的应收与其应付同一类型）；财务退款待办 7 个为 finance_refund_＋退款来源；门票退款打款 ticket_refund；存酒对客赔付 saved_bottle_compensation。每种一个审批类型 finance.payment_confirm.＜支付类型＞。
+    PaymentConfirmationRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - idempotency_key
+        - reason
+        - final_approver_id
+        - parallel_lines
+      properties:
+        idempotency_key:
+          type: string
+          minLength: 1
+          maxLength: 128
+          description: 操作幂等键；同一键重发返回首次结果。
+        reason:
+          type: string
+          minLength: 1
+          description: 付款事由（必填，写进复核单摘要与付款确认记录）。
+        final_approver_id:
+          type: string
+          minLength: 1
+          maxLength: 64
+          description: 主线最终审批人账号（BSM:1803「发起时指定这条主线的最终审批人」）；系统沿发起人直接上级链逐级补全到该人并逐级审批。
+        parallel_lines:
+          type: array
+          items:
+            $ref: "#/components/schemas/ApprovalParallelLine"
+          description: 平行审批线及各线最终审批人：须含财务 finance_review、法务 legal_review 两线（第十八批裁决 66）及该支付类型在「组织层级与审批线」页设定的必带线（第十八批裁决 67，见 listPaymentConfirmations 的 required_line_codes），可另带其他在用的线；各线逐级补全至该线最低起点层级。
+      description: 第十八批 AM 段第 241 条 241-R4、241-R5、241-R6：单个付款对象（工资应付、财务退款待办、门票退款打款、存酒对客赔付）按单发起付款确认（第十八批裁决 68「工资、退款、赔付按单发起」）。
+      example:
+        idempotency_key: pc-refund-20261116-0001
+        reason: 客人原路退款
+        final_approver_id: usr_finance_director
+        parallel_lines:
+          - line_code: finance_review
+            final_approver_id: usr_finance_manager
+          - line_code: legal_review
+            final_approver_id: usr_legal_manager
+    ArApPaymentConfirmationRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - idempotency_key
+        - ar_ap_item_ids
+        - reason
+        - final_approver_id
+        - parallel_lines
+      properties:
+        idempotency_key:
+          type: string
+          minLength: 1
+          maxLength: 128
+          description: 操作幂等键；同一键重发返回首次结果。
+        ar_ap_item_ids:
+          type: array
+          minItems: 1
+          items:
+            type: string
+          description: 勾选的应收应付台账款项（第十八批裁决 68「同收款方、同类型、同综合体可勾选合发」）：多笔须同一支付类型、同一收款方、同一综合体；空值剔除、重复去重，剔除后为空 400 VALIDATION_FAILED。
+        reason:
+          type: string
+          minLength: 1
+          description: 付款事由（必填，写进复核单摘要与付款确认记录）。
+        final_approver_id:
+          type: string
+          minLength: 1
+          maxLength: 64
+          description: 主线最终审批人账号（BSM:1803「发起时指定这条主线的最终审批人」）；系统沿发起人直接上级链逐级补全到该人并逐级审批。
+        parallel_lines:
+          type: array
+          items:
+            $ref: "#/components/schemas/ApprovalParallelLine"
+          description: 平行审批线及各线最终审批人：须含财务 finance_review、法务 legal_review 两线（第十八批裁决 66）及该支付类型在「组织层级与审批线」页设定的必带线（第十八批裁决 67，见 listPaymentConfirmations 的 required_line_codes），可另带其他在用的线；各线逐级补全至该线最低起点层级。
+      description: 第十八批 AM 段第 241 条 241-R1：应收应付台账勾选款项合并发起一张付款确认。
+      example:
+        idempotency_key: pc-arap-20261116-0001
+        ar_ap_item_ids:
+          - arap_purchase_0001
+          - arap_purchase_0002
+        reason: 供应商月结货款付款
+        final_approver_id: usr_finance_director
+        parallel_lines:
+          - line_code: finance_review
+            final_approver_id: usr_finance_manager
+          - line_code: legal_review
+            final_approver_id: usr_legal_manager
+    PaymentConfirmation:
+      type: object
+      additionalProperties: false
+      required:
+        - confirmation_id
+        - payment_type
+        - payment_type_label
+        - object_type
+        - object_ids
+        - amount_cent
+        - status
+        - review_id
+        - requested_by
+        - requested_at
+      properties:
+        confirmation_id:
+          type: string
+          description: 付款确认单号（合并发起时多个对象共用；复核单 object_id 取它）。
+        payment_type:
+          $ref: "#/components/schemas/PaymentConfirmationType"
+        payment_type_label:
+          type: string
+          description: 支付类型中文名。
+        object_type:
+          type: string
+          enum:
+            - ar_ap_item
+            - finance_refund
+            - ticket_refund
+            - saved_bottle_remedy
+          description: 付款对象类型：ar_ap_item 应收应付台账项（含工资应付）、finance_refund 财务退款待办、ticket_refund 门票退款、saved_bottle_remedy 存酒补存/赔付单。
+        object_ids:
+          type: array
+          items:
+            type: string
+          description: 本张确认所含付款对象编号。
+        amount_cent:
+          type: integer
+          format: int64
+          minimum: 1
+          description: 确认金额（分）：各对象发起时金额合计（台账取未付额，工资取未付工资，财务退款取退款金额，门票退款取待原路打款合计，存酒赔付取赔付金额）。
+        status:
+          type: string
+          enum:
+            - pending_review
+            - approved
+            - rejected
+          description: pending_review 待审批；approved 已通过（主线与各条平行线全部通过）；rejected 已驳回（任一节点驳回，可重新发起）。发起即为 pending_review。
+        review_id:
+          type: string
+          description: 统一审批复核单号（action_type=finance.payment_confirm.＜支付类型＞，object_type=payment_confirmation），审批经 approveSupervisorReview。
+        requested_by:
+          type: string
+          description: 发起人账号。
+        requested_at:
+          type: string
+          format: date-time
+          description: 发起时间。
+      example:
+        confirmation_id: pc_0f1e2d3c4b5a69788796a5b4c3d2e1f0
+        payment_type: purchase_inbound
+        payment_type_label: 采购入库
+        object_type: ar_ap_item
+        object_ids:
+          - arap_purchase_0001
+          - arap_purchase_0002
+        amount_cent: 800000
+        status: pending_review
+        review_id: review_example_0001
+        requested_by: usr_finance_clerk
+        requested_at: 2026-11-16T09:30:00Z
+    PaymentConfirmationItem:
+      type: object
+      additionalProperties: false
+      required:
+        - confirmation_id
+        - amount_cent
+        - status
+        - review_id
+        - requested_by
+        - requested_at
+        - decided_at
+      properties:
+        confirmation_id:
+          type: string
+          description: 付款确认单号。
+        amount_cent:
+          type: integer
+          format: int64
+          minimum: 1
+          description: 本对象在该确认中的金额（分）。
+        status:
+          type: string
+          enum:
+            - pending_review
+            - approved
+            - rejected
+          description: pending_review 待审批；approved 已通过；rejected 已驳回。
+        review_id:
+          type: string
+          description: 统一审批复核单号。
+        requested_by:
+          type: string
+          description: 发起人账号。
+        requested_at:
+          type: string
+          format: date-time
+          description: 发起时间。
+        decided_at:
+          type:
+            - string
+            - "null"
+          format: date-time
+          description: 通过或驳回时间；待审批为空。
+    PaymentConfirmationList:
+      type: object
+      additionalProperties: false
+      required:
+        - object_type
+        - object_id
+        - payment_type
+        - payment_type_label
+        - required_line_codes
+        - confirmations
+      properties:
+        object_type:
+          type: string
+          enum:
+            - ar_ap_item
+            - finance_refund
+            - ticket_refund
+            - saved_bottle_remedy
+          description: 付款对象类型（同请求参数）。
+        object_id:
+          type: string
+          description: 付款对象编号（同请求参数）。
+        payment_type:
+          anyOf:
+            - $ref: "#/components/schemas/PaymentConfirmationType"
+            - type: "null"
+          description: 该对象的支付类型；台账款项来源不在支付类型清单内、或财务退款待办不存在时为空。
+        payment_type_label:
+          type:
+            - string
+            - "null"
+          description: 支付类型中文名；支付类型为空时为空。
+        required_line_codes:
+          type: array
+          items:
+            type: string
+          description: 该支付类型发起时必带的平行线：固定财务 finance_review、法务 legal_review 两线（第十八批裁决 66），加该类在「组织层级与审批线」页设定的线（第十八批裁决 67）；支付类型为空时为空数组。
+        confirmations:
+          type: array
+          items:
+            $ref: "#/components/schemas/PaymentConfirmationItem"
+          description: 该对象上的付款确认，新到旧；只含调用者可见的记录。
+    PaymentConfirmationFlow:
+      type: object
+      additionalProperties: false
+      required:
+        - payment_type
+        - payment_type_label
+        - line_codes
+      properties:
+        payment_type:
+          $ref: "#/components/schemas/PaymentConfirmationType"
+        payment_type_label:
+          type: string
+          description: 支付类型中文名。
+        line_codes:
+          type: array
+          items:
+            type: string
+          description: 财务、法务两线之外该类还必带的平行线 line_code；未设定为空数组（出厂均为空，第十八批裁决 66）。
+      example:
+        payment_type: purchase_inbound
+        payment_type_label: 采购入库
+        line_codes:
+          - business_review
     DealerDeliveryRecord:
       type: object
       additionalProperties: false

@@ -1,6 +1,6 @@
 package com.complex.platform.access.staff;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -181,6 +181,9 @@ class PayrollSafetyJdbcIntegrationTests {
     private void payActually(String statement,String employee) {
         jdbcTemplate.update("INSERT INTO role_permissions(role_id,permission_code) SELECT 'role_m010_fixture',permission_code FROM permissions WHERE permission_code LIKE 'finance.payroll.%' OR permission_code='evidence.attachment.create' ON CONFLICT DO NOTHING");
         long total=jdbcTemplate.queryForObject("SELECT total_cent FROM staff_payroll_statements WHERE id=?",Long.class,statement);
+        // 第十八批 AM 段第 241 条 241-R4：准备工资银行付款前须有已通过的付款确认（发起与逐级审批见 PaymentConfirmationPayrollRefundJdbcTests）。
+        com.complex.platform.support.PaymentConfirmationFixture.approvedArAp(jdbcTemplate, jdbcTemplate.queryForObject(
+                "SELECT ar_ap_item_id FROM staff_payroll_statements WHERE id=?",String.class,statement));
         String id=(String)bankPayroll.prepare(statement,new com.complex.platform.finance.FinancePayrollService.PrepareRequest(key(),total)).get("id");
         String proof=evidence.uploadAttachment(new org.springframework.mock.web.MockMultipartFile("file","bank.png","image/png",java.util.Base64.getDecoder().decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jCYQAAAAASUVORK5CYII=")),"staff_payroll_payment",id,"bank_proof").id();
         var at=Instant.now().minusSeconds(60);

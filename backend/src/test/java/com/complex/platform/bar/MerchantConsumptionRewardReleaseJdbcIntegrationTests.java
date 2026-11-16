@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -394,6 +394,8 @@ class MerchantConsumptionRewardReleaseJdbcIntegrationTests {
         ArApPaymentRequest request = snake.readValue("""
                 {"idempotency_key":"mcr2-pay-%s","amount_cent":%d,"payment_method":"bank_transfer","bank_flow_ref":"退款回单-%s"}
                 """.formatted(UUID.randomUUID(), amountCent, s), ArApPaymentRequest.class);
+        // 第十八批 AM 段第 241 条 241-R1：出款前置——该应付已有通过的付款确认（夹具）。
+        com.complex.platform.support.PaymentConfirmationFixture.approvedArAp(jdbc, arApItemId);
         finance.registerArApPayment(arApItemId, request);
     }
 

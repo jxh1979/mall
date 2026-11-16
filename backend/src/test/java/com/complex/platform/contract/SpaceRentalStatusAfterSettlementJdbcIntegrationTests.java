@@ -1,6 +1,6 @@
 package com.complex.platform.contract;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -183,6 +183,8 @@ class SpaceRentalStatusAfterSettlementJdbcIntegrationTests {
 
         String payableId = jdbcTemplate.queryForObject(
                 "SELECT id FROM ar_ap_items WHERE source_type = 'deposit_refund' AND source_id = ?", String.class, opened.id());
+        // 第十八批 AM 段第 241 条 241-R1：出款前置——该应付已有通过的付款确认（夹具）。
+        com.complex.platform.support.PaymentConfirmationFixture.approvedArAp(jdbcTemplate, payableId);
         financeService.registerArApPayment(payableId, new ArApPaymentRequest("cg09-dep-pay-" + suffix, "退押金", List.of(),
                 300000L, "bank_transfer", null, "flow_cg09_" + suffix));
         assertThat(settlementStatus(opened.id())).isEqualTo("settled");

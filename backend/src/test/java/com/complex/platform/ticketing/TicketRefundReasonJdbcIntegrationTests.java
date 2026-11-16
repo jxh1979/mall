@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -13,6 +13,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.complex.platform.access.AccessActor;
 import com.complex.platform.auth.SessionIssuer;
 import com.complex.platform.common.api.ApiException;
+import com.complex.platform.support.PaymentConfirmationFixture;
+import com.complex.platform.support.StaffRequestFixture;
 import com.complex.platform.support.TestSecurityActors;
 import com.complex.platform.ticketing.dto.StatusChangeRequest;
 import com.complex.platform.ticketing.dto.TicketRefundRequest;
@@ -32,6 +34,7 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.test.web.servlet.request.RequestPostProcessor;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -195,6 +198,8 @@ class TicketRefundReasonJdbcIntegrationTests {
                 new StatusChangeRequest("r256-a-" + suffix, "approve", "审批通过", List.of())).status()).isEqualTo("approved");
         RequestPostProcessor finance = financeActor();
         String result = "微信原路退回成功，交易单号 W123";
+        // 第十八批 AM 段第 241 条 241-R5：确认拨付前须有已通过的付款确认（发起与逐级审批见 payoutWaitsForConfirmationOfPendingPayoutAmount）。
+        PaymentConfirmationFixture.approved(jdbcTemplate, "ticket_refund", refund.id(), refund.refundAmountCent(), "ticket_refund");
 
         mockMvc.perform(post("/api/v1/ticketing/refunds/" + refund.id() + "/confirm-payout").with(finance)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -211,6 +216,76 @@ class TicketRefundReasonJdbcIntegrationTests {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.items[?(@.id == '" + refund.id() + "')].payout_result")
                         .value(org.hamcrest.Matchers.contains(result)));
+    }
+
+    /**
+     * 第十八批 AM 段第 241 条 241-R5 (b)（BSM:1803「付款确认按全平台统一的审批模型执行……主线与各条平行线都通过才完成付款确认」；第十八批裁决 55
+     * 「退款……要设流程」、65（门票退款打款一个支付类型 ticket_refund）、66、68「退款……按单发起」）：未批准的退款发起付款确认 409；批准后待原路打款的
+     * 退款确认拨付 409；他商户账号发起 403 且幂等表无该键；按待打款合计发起（审批类型 finance.payment_confirm.ticket_refund），主线、财务线、法务线
+     * 通过后确认拨付 200、退款成功。
+     */
+    @Test
+    void payoutWaitsForConfirmationOfPendingPayoutAmount() throws Exception {
+        StaffRequestFixture staffs = new StaffRequestFixture(jdbcTemplate);
+        String payerId = "usr_r241_f_" + suffix;
+        String mainId = "usr_r241_m_" + suffix;
+        // 确认拨付由平台财务办理（同本类 financeActor）：不挂商户的普通账号过不了门票退款的商户范围闸（既有口径）。
+        RequestPostProcessor payer = staffs.staff(payerId, "platform_admin", "org", null, "ticket.refund.approve", "ticket.refund.view");
+        RequestPostProcessor main = staffs.staff(mainId, "staff", "org", null, "governance.supervisor_review.view",
+                "governance.supervisor_review.approve");
+        RequestPostProcessor finLine = staffs.staff("usr_r241_fl_" + suffix, "staff", "org", null, "governance.supervisor_review.view",
+                "governance.supervisor_review.approve");
+        RequestPostProcessor legalLine = staffs.staff("usr_r241_ll_" + suffix, "staff", "org", null, "governance.supervisor_review.view",
+                "governance.supervisor_review.approve");
+        RequestPostProcessor otherMerchant = staffs.staff("usr_r241_om_" + suffix, "staff", "org", "m_r241_" + suffix, "ticket.refund.approve");
+        jdbcTemplate.update("INSERT INTO org_hierarchy(user_id,superior_id) VALUES(?,?)", payerId, mainId);
+
+        TicketRefundRecord refund = refundService.requestRefund(request("r241-req", "event_cancelled", entityId, instA));
+        paymentConfirmation(payer, refund.id(), "early", mainId).andExpect(status().isConflict())
+                .andExpect(jsonPath("$.detail_code").value("TICKET_REFUND_NOT_PAYOUT_CONFIRMABLE"));
+        TestSecurityActors.asPlatformAdmin("usr_r241_approver");
+        TicketRefundRecord approved = refundService.approveRefund(refund.id(),
+                new StatusChangeRequest("r241-a-" + suffix, "approve", "审批通过", List.of()));
+        long payout = approved.payoutItems().stream().mapToLong(TicketRefundRecord.PayoutItem::amountCent).sum();
+        assertThat(payout).isPositive();
+
+        payoutConfirm(payer, refund.id(), "early").andExpect(status().isConflict())
+                .andExpect(jsonPath("$.detail_code").value("PAYMENT_CONFIRMATION_REQUIRED"));
+        paymentConfirmation(otherMerchant, refund.id(), "om", mainId).andExpect(status().isForbidden());
+        assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM idempotency_records WHERE idempotency_key = ?", Integer.class,
+                "r241-pc-om-" + suffix)).isZero();
+        String reviewId = com.jayway.jsonpath.JsonPath.read(paymentConfirmation(payer, refund.id(), "ok", mainId).andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.payment_type").value("ticket_refund"))
+                .andExpect(jsonPath("$.data.amount_cent").value(payout))
+                .andReturn().getResponse().getContentAsString(java.nio.charset.StandardCharsets.UTF_8), "$.data.review_id");
+        assertThat(jdbcTemplate.queryForObject("SELECT action_type FROM supervisor_review_decisions WHERE review_id = ?", String.class, reviewId))
+                .isEqualTo("finance.payment_confirm.ticket_refund");
+        // 复核摘要的待打款渠道写中文名（PGM:287 界面全中文，枚举取值须为中文）。
+        assertThat(jdbcTemplate.queryForObject("SELECT reason FROM supervisor_review_decisions WHERE review_id = ?", String.class, reviewId))
+                .contains("待原路打款 原支付路径 ").doesNotContain("original");
+        for (RequestPostProcessor approver : List.of(main, finLine, legalLine)) {
+            mockMvc.perform(post("/api/v1/platform/supervisor-review/" + reviewId + "/approve").with(approver)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"idempotency_key\":\"r241-apv-" + UUID.randomUUID() + "\",\"decision\":\"approved\",\"comment\":\"已核对待打款\"}"))
+                    .andExpect(status().isOk());
+        }
+
+        payoutConfirm(payer, refund.id(), "ok").andExpect(status().isOk()).andExpect(jsonPath("$.data.status").value("success"));
+    }
+
+    /** 门票退款打款面板发起付款确认的真实请求：主线最终审批人与财务线、法务线各自的最终审批人。 */
+    private ResultActions paymentConfirmation(RequestPostProcessor who, String refundId, String tag, String mainId) throws Exception {
+        return mockMvc.perform(post("/api/v1/ticketing/refunds/" + refundId + "/payment-confirmations").with(who)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"idempotency_key\":\"r241-pc-" + tag + "-" + suffix + "\",\"reason\":\"门票原路退回客人\",\"final_approver_id\":\""
+                        + mainId + "\",\"parallel_lines\":[{\"line_code\":\"finance_review\",\"final_approver_id\":\"usr_r241_fl_" + suffix
+                        + "\"},{\"line_code\":\"legal_review\",\"final_approver_id\":\"usr_r241_ll_" + suffix + "\"}]}"));
+    }
+
+    private ResultActions payoutConfirm(RequestPostProcessor who, String refundId, String tag) throws Exception {
+        return mockMvc.perform(post("/api/v1/ticketing/refunds/" + refundId + "/confirm-payout").with(who)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"idempotency_key\":\"r241-payout-" + tag + "-" + suffix + "\",\"reason\":\"微信原路退回成功\"}"));
     }
 
     /** 财务人员：角色带确认拨付与查看退款台账两个权限码，走真实授权链。 */

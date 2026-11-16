@@ -1,6 +1,6 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.09
+// 文件版本：V0.10
 
 import static org.assertj.core.api.Assertions.*;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -207,7 +207,7 @@ class PurchaseInboundPayableJdbcIntegrationTests {
  @Test void prepaidAllocationUsesActualPaymentWithoutSecondCashRow(){
   String purchase=ordered("prepaid","ordered",2,10);
   String prepaid=string("SELECT id FROM ar_ap_items WHERE source_type='purchase_prepayment' AND source_id=?",purchase);
-  act(finance);financeService.registerArApPayment(prepaid,payment(key(),1000L));
+  act(finance);confirmedPay(prepaid,payment(key(),1000L));
   String payment=string("SELECT id FROM ar_ap_payments WHERE ar_ap_item_id=?",prepaid);
   act(requestor);receive(purchase,10,10,0,200L);String payable=(String)receipt(purchase).get("payable_id");
   act(finance);
@@ -234,7 +234,7 @@ class PurchaseInboundPayableJdbcIntegrationTests {
  @Test void returnApprovalHandoverAndFinanceAdjustmentRemainSeparateAndOldPaymentIsPreserved(){
   String purchase=ordered("credit_term","each_receipt",30,10);receive(purchase,10,10,0,200L);
   String original=(String)receipt(purchase).get("payable_id");var payment=payment(key(),500L);
-  act(finance);financeService.registerArApPayment(original,payment);act(requestor);
+  act(finance);confirmedPay(original,payment);act(requestor);
   var ret=workflow.proposeReturn(purchase,new PurchaseWorkflowRequests.Return(key(),(String)receipt(purchase).get("id"),3,200L,"质量费用按已核合同承担","退供原件",proof(purchase),manager,List.of(new SupervisorReviewEvaluateRequest.ParallelLine("finance_review",finance)),null,null));
   var originalFacts=workflow.readMap(reviews.findReview((String)ret.get("review_id")).orElseThrow().reason());
   assertThat(originalFacts).containsKeys("purchase","contract_snapshot","receipt","consignment_sale");
@@ -253,7 +253,7 @@ class PurchaseInboundPayableJdbcIntegrationTests {
   assertThat(number("SELECT sum(amount_cent) FROM ar_ap_payments WHERE ar_ap_item_id=?",original)).isEqualTo(500);
   for(String retired:List.of(original,reversal))assertThatThrownBy(()->financeService.registerArApPayment(retired,payment(key(),1L))).isInstanceOf(ApiException.class);
   assertThatThrownBy(()->financeService.registerArApPayment(original,payment)).isInstanceOfSatisfying(ApiException.class,e->assertThat(e.code()).isEqualTo("PURCHASE_PAYABLE_REPLACED"));
-  financeService.registerArApPayment(replacement,payment(key(),900L));
+  confirmedPay(replacement,payment(key(),900L));
   assertThat(number("SELECT unpaid_amount_cent FROM ar_ap_items WHERE id=?",replacement)).isZero();
  }
 
@@ -306,7 +306,7 @@ class PurchaseInboundPayableJdbcIntegrationTests {
  @Test void unusedPrepaymentRefundReservesCashAndClosesOnlyAfterSupplierActuallyPays(){
   String purchase=ordered("prepaid","ordered",2,10);
   String original=string("SELECT id FROM ar_ap_items WHERE source_type='purchase_prepayment' AND source_id=?",purchase);
-  act(finance);financeService.registerArApPayment(original,payment(key(),1000L));
+  act(finance);confirmedPay(original,payment(key(),1000L));
   String cash=string("SELECT id FROM ar_ap_payments WHERE ar_ap_item_id=?",original);
   act(requestor);receive(purchase,10,10,0,200L);
   String target=(String)receipt(purchase).get("payable_id");
@@ -335,7 +335,7 @@ class PurchaseInboundPayableJdbcIntegrationTests {
  @Test void rejectedUnusedPrepaymentRefundReleasesItsReservation(){
   String purchase=ordered("prepaid","ordered",2,10);
   String original=string("SELECT id FROM ar_ap_items WHERE source_type='purchase_prepayment' AND source_id=?",purchase);
-  act(finance);financeService.registerArApPayment(original,payment(key(),1000L));
+  act(finance);confirmedPay(original,payment(key(),1000L));
   String cash=string("SELECT id FROM ar_ap_payments WHERE ar_ap_item_id=?",original);
   act(requestor);receive(purchase,10,10,0,200L);
   var resolution=prepayments.resolve(purchase,new PurchaseWorkflowRequests.PrepaymentResolution(key(),"refund_unused",cash,1000L,today().plusDays(3),
@@ -348,7 +348,7 @@ class PurchaseInboundPayableJdbcIntegrationTests {
  @Test void approvedReductionRetiresOldObligationWithoutRewritingCashHistory(){
   String purchase=ordered("prepaid","ordered",2,10);
   String original=string("SELECT id FROM ar_ap_items WHERE source_type='purchase_prepayment' AND source_id=?",purchase);
-  var paid=payment(key(),400L);act(finance);financeService.registerArApPayment(original,paid);
+  var paid=payment(key(),400L);act(finance);confirmedPay(original,paid);
   String cash=string("SELECT id FROM ar_ap_payments WHERE ar_ap_item_id=?",original);
   act(requestor);
   var resolution=prepayments.resolve(purchase,new PurchaseWorkflowRequests.PrepaymentResolution(key(),"reduce_unpaid",null,300L,null,
@@ -360,7 +360,7 @@ class PurchaseInboundPayableJdbcIntegrationTests {
   assertThat(number("SELECT amount_cent FROM ar_ap_items WHERE id=?",replacement)).isEqualTo(700);
   assertThat(number("SELECT unpaid_amount_cent FROM ar_ap_items WHERE id=?",replacement)).isEqualTo(300);
   assertThat(number("SELECT sum(amount_cent) FROM ar_ap_payments WHERE ar_ap_item_id=?",original)).isEqualTo(400);
-  financeService.registerArApPayment(replacement,payment(key(),300L));
+  confirmedPay(replacement,payment(key(),300L));
   act(requestor);receive(purchase,10,10,0,100L);act(finance);
   workflow.allocate(purchase,new PurchaseWorkflowRequests.Allocation(key(),cash,(String)receipt(purchase).get("payable_id"),400L,proof(purchase)));
   assertThat(number("SELECT sum(amount_cent) FROM ar_ap_payments WHERE ar_ap_item_id IN(?,?)",original,replacement)).isEqualTo(700);
@@ -647,7 +647,7 @@ class PurchaseInboundPayableJdbcIntegrationTests {
  @Test void lockedReceiptCannotBeChangedByNonCashPrepaymentAllocation(){
   String purchase=ordered("prepaid","ordered",2,10);
   String prepaid=string("SELECT id FROM ar_ap_items WHERE source_type='purchase_prepayment' AND source_id=?",purchase);
-  act(finance);financeService.registerArApPayment(prepaid,payment(key(),600L));
+  act(finance);confirmedPay(prepaid,payment(key(),600L));
   String cash=string("SELECT id FROM ar_ap_payments WHERE ar_ap_item_id=?",prepaid);
   act(requestor);receive(purchase,10,10,0,100L);String original=(String)receipt(purchase).get("payable_id");
   lockPayable(original);var before=jdbc.queryForMap("SELECT * FROM ar_ap_items WHERE id=?",original);
@@ -660,7 +660,7 @@ class PurchaseInboundPayableJdbcIntegrationTests {
  @Test void generalBackfillUsesCurrentReceiptForAllocationAndOnlyRemainingCash(){
   String purchase=ordered("prepaid","ordered",2,10);
   String prepaid=string("SELECT id FROM ar_ap_items WHERE source_type='purchase_prepayment' AND source_id=?",purchase);
-  act(finance);financeService.registerArApPayment(prepaid,payment(key(),600L));
+  act(finance);confirmedPay(prepaid,payment(key(),600L));
   String cash=string("SELECT id FROM ar_ap_payments WHERE ar_ap_item_id=?",prepaid);
   var cashBefore=jdbc.queryForMap("SELECT * FROM ar_ap_payments WHERE id=?",cash);
   act(requestor);receive(purchase,10,10,0,100L);String original=(String)receipt(purchase).get("payable_id");
@@ -672,7 +672,7 @@ class PurchaseInboundPayableJdbcIntegrationTests {
   var allocation=new PurchaseWorkflowRequests.Allocation(key(),cash,current,600L,proof(purchase));
   workflow.allocate(purchase,allocation);workflow.allocate(purchase,allocation);
   assertThat(number("SELECT unpaid_amount_cent FROM ar_ap_items WHERE id=?",current)).isEqualTo(500);
-  financeService.registerArApPayment(current,payment(key(),500L));
+  confirmedPay(current,payment(key(),500L));
   assertThat(number("SELECT count(*) FROM purchase_prepayment_allocations WHERE purchase_id=?",purchase)).isEqualTo(1);
   assertThat(number("SELECT sum(p.amount_cent) FROM ar_ap_payments p JOIN ar_ap_items a ON a.id=p.ar_ap_item_id WHERE a.id IN(?,?,?)",prepaid,original,current)).isEqualTo(1100);
   assertThat(jdbc.queryForMap("SELECT * FROM ar_ap_items WHERE id=?",original)).isEqualTo(before);
@@ -687,9 +687,9 @@ class PurchaseInboundPayableJdbcIntegrationTests {
   var originalBefore=jdbc.queryForMap("SELECT * FROM ar_ap_items WHERE id=?",original);
   String current=backfill(original,100L);act(finance);
   var firstRequest=payment(key(),400L);var secondRequest=payment(key(),700L);
-  var first=financeService.registerArApPayment(current,firstRequest);
-  var second=financeService.registerArApPayment(current,secondRequest);
-  financeService.registerArApPayment(current,firstRequest);financeService.registerArApPayment(current,secondRequest);
+  var first=confirmedPay(current,firstRequest);
+  var second=confirmedPay(current,secondRequest);
+  confirmedPay(current,firstRequest);confirmedPay(current,secondRequest);
   assertThat(second.payment().id()).isNotEqualTo(first.payment().id());
   assertThat(number("SELECT count(*) FROM ar_ap_payments WHERE ar_ap_item_id=?",current)).isEqualTo(2);
   assertThat(number("SELECT sum(amount_cent) FROM ar_ap_payments WHERE ar_ap_item_id=?",current)).isEqualTo(1100);
@@ -700,7 +700,7 @@ class PurchaseInboundPayableJdbcIntegrationTests {
 
  @Test void generalBackfillReturnReducesCurrentRestatementRatherThanFrozenOriginal(){
   String purchase=ordered("credit_term","each_receipt",30,10);receive(purchase,10,10,0,100L);
-  String original=(String)receipt(purchase).get("payable_id");act(finance);financeService.registerArApPayment(original,payment(key(),400L));
+  String original=(String)receipt(purchase).get("payable_id");act(finance);confirmedPay(original,payment(key(),400L));
   String cash=string("SELECT id FROM ar_ap_payments WHERE ar_ap_item_id=?",original);
   var cashBefore=jdbc.queryForMap("SELECT * FROM ar_ap_payments WHERE id=?",cash);
   lockPayable(original);var before=jdbc.queryForMap("SELECT * FROM ar_ap_items WHERE id=?",original);String current=backfill(original,100L);
@@ -710,7 +710,7 @@ class PurchaseInboundPayableJdbcIntegrationTests {
   String replacement=string("SELECT replacement_item_id FROM purchase_payable_adjustments WHERE return_id=?",ret);
   assertThat(number("SELECT amount_cent FROM ar_ap_items WHERE id=?",replacement)).isEqualTo(900);
   assertThat(number("SELECT unpaid_amount_cent FROM ar_ap_items WHERE id=?",replacement)).isEqualTo(500);
-  financeService.registerArApPayment(replacement,payment(key(),500L));
+  confirmedPay(replacement,payment(key(),500L));
   assertThat(jdbc.queryForMap("SELECT * FROM ar_ap_items WHERE id=?",original)).isEqualTo(before);
   assertThat(jdbc.queryForMap("SELECT * FROM ar_ap_payments WHERE id=?",cash)).isEqualTo(cashBefore);
   assertThat(number("SELECT sum(amount_cent) FROM ar_ap_payments WHERE ar_ap_item_id IN(?,?,?)",original,current,replacement)).isEqualTo(900);
@@ -719,24 +719,24 @@ class PurchaseInboundPayableJdbcIntegrationTests {
  @Test void generalBackfillBeforePrepaymentReductionKeepsOneCurrentObligation(){
   String purchase=ordered("prepaid","ordered",2,10);
   String original=string("SELECT id FROM ar_ap_items WHERE source_type='purchase_prepayment' AND source_id=?",purchase);
-  act(finance);financeService.registerArApPayment(original,payment(key(),400L));lockPayable(original);
+  act(finance);confirmedPay(original,payment(key(),400L));lockPayable(original);
   String current=backfill(original,100L);String replacement=reducePrepayment(purchase,300L);
   assertThat(string("SELECT original_item_id FROM purchase_prepayment_resolutions WHERE replacement_item_id=?",replacement)).isEqualTo(current);
   assertThat(number("SELECT amount_cent FROM ar_ap_items WHERE id=?",replacement)).isEqualTo(800);
   assertThat(number("SELECT unpaid_amount_cent FROM ar_ap_items WHERE id=?",replacement)).isEqualTo(400);
-  act(finance);financeService.registerArApPayment(replacement,payment(key(),400L));
+  act(finance);confirmedPay(replacement,payment(key(),400L));
   assertThat(number("SELECT sum(p.amount_cent) FROM ar_ap_payments p JOIN ar_ap_items a ON a.id=p.ar_ap_item_id WHERE a.source_type='purchase_prepayment' AND a.source_id=?",purchase)).isEqualTo(800);
  }
 
  @Test void prepaymentReductionThenGeneralBackfillStillAllowsNextApprovedReduction(){
   String purchase=ordered("prepaid","ordered",2,10);
   String original=string("SELECT id FROM ar_ap_items WHERE source_type='purchase_prepayment' AND source_id=?",purchase);
-  act(finance);financeService.registerArApPayment(original,payment(key(),400L));
+  act(finance);confirmedPay(original,payment(key(),400L));
   String first=reducePrepayment(purchase,200L);lockPayable(first);String restated=backfill(first,100L);
   String current=reducePrepayment(purchase,100L);
   assertThat(string("SELECT original_item_id FROM purchase_prepayment_resolutions WHERE replacement_item_id=?",current)).isEqualTo(restated);
   assertThat(number("SELECT amount_cent FROM ar_ap_items WHERE id=?",current)).isEqualTo(800);
-  act(finance);financeService.registerArApPayment(current,payment(key(),400L));
+  act(finance);confirmedPay(current,payment(key(),400L));
   assertThat(number("SELECT sum(p.amount_cent) FROM ar_ap_payments p JOIN ar_ap_items a ON a.id=p.ar_ap_item_id WHERE a.source_type='purchase_prepayment' AND a.source_id=?",purchase)).isEqualTo(800);
  }
 
@@ -928,6 +928,8 @@ class PurchaseInboundPayableJdbcIntegrationTests {
  List<SupervisorReviewEvaluateRequest.ParallelLine> contractLines(){return List.of(new SupervisorReviewEvaluateRequest.ParallelLine("business_review",business),new SupervisorReviewEvaluateRequest.ParallelLine("finance_review",finance),new SupervisorReviewEvaluateRequest.ParallelLine("legal_review",legal));}
  void approve(String review,String user){act(user);reviews.approve(review,new SupervisorReviewApprovalRequest(key(),"核对原件",List.of(),null,"approved","真实组织节点核对"));}
  ArApPaymentRequest payment(String key,long amount){return new ArApPaymentRequest(key,"核实实际银行流水",List.of(),amount,"bank_transfer",Instant.now(),"FLOW-"+key);}
+ // 第十八批 AM 段第 241 条 241-R1：出款前置——该应付已有通过的付款确认（夹具），再按原样登记付款。
+ com.complex.platform.finance.ArApPaymentResponse confirmedPay(String item,ArApPaymentRequest request){com.complex.platform.support.PaymentConfirmationFixture.approvedArAp(jdbc,item);return financeService.registerArApPayment(item,request);}
  void act(String user){act(user,project);}
  void act(String user,String org){SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(new AccessActor(user,user,"staff",org,merchant,"active"),"test",List.of()));}
  long number(String sql,Object...args){Long value=jdbc.queryForObject(sql,Long.class,args);return value==null?0:value;}
