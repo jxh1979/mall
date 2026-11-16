@@ -229,14 +229,22 @@ class LockedBackfillReviewJdbcTests {
         assertThat(rows).doesNotContainKey("finance.locked_backfill_approve");
     }
 
-    /** ⑨ 旧审批权限码退役、授予来源清空，审批入口的超合同范围准入策略停用。 */
+    /**
+     * ⑨ 旧审批权限码退役、授予来源清空，审批入口的超合同范围准入策略停用。
+     * 三张授予表只核 V628 迁移完成前就已存在的来源（迁移负责清的范围）：别的测试夹具在测试期按 LIKE 'finance.%' 新建角色授权时
+     * 会连同已退役码一起授入，那些行不是迁移遗留，按 CI 跑序先跑就会误报。
+     */
     @Test
     void retiredApprovePermissionKeepsNoGrantSources() {
         assertThat(jdbc.queryForObject("SELECT status FROM permissions WHERE permission_code = ?", String.class, APPROVE_RETIRED))
                 .isEqualTo("retired");
-        for (String table : List.of("role_permissions", "permission_template_items", "user_permission_overrides")) {
-            assertThat(jdbc.queryForObject("SELECT count(*) FROM " + table + " WHERE permission_code = ?", Integer.class, APPROVE_RETIRED))
-                    .as(table).isZero();
+        String migrated = "(SELECT installed_on FROM flyway_schema_history WHERE version = '628')";
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM role_permissions rp JOIN roles r ON r.id = rp.role_id"
+                + " WHERE rp.permission_code = ? AND r.created_at <= " + migrated, Integer.class, APPROVE_RETIRED))
+                .as("role_permissions").isZero();
+        for (String table : List.of("permission_template_items", "user_permission_overrides")) {
+            assertThat(jdbc.queryForObject("SELECT count(*) FROM " + table + " WHERE permission_code = ? AND created_at <= " + migrated,
+                    Integer.class, APPROVE_RETIRED)).as(table).isZero();
         }
         assertThat(jdbc.queryForObject("SELECT count(*) FROM temporary_permission_grants WHERE permission_code = ? AND status = 'active'",
                 Integer.class, APPROVE_RETIRED)).isZero();
