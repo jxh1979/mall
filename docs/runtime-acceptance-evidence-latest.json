@@ -8,14 +8,14 @@
     "RUNTIME_EVIDENCE_BOUND_TO_SOURCE_FINGERPRINT",
     "RUNTIME_EVIDENCE_DOES_NOT_CLOSE_PRODUCTION_MANIFEST"
   ],
-  "generated_at": "2026-11-12T11:36:09.173Z",
+  "generated_at": "2026-11-15T16:50:16.649Z",
   "git": {
-    "head": "898bcae5f949dca27d491102669c8290cdf8effb",
-    "head_short": "898bcae5",
-    "branch": "feature/business-code-batch56-20261106",
+    "head": "72c6309d9327db96ada60c96d82004213d96f5c6",
+    "head_short": "72c6309d",
+    "branch": "feature/business-code-batch57-20261106",
     "worktree_dirty": false,
-    "source_fingerprint": "f6b102db3f2be9f0f4d3e33e7e50979cf48cc224d40aa2e0af014e7ea08e1df3",
-    "source_fingerprint_file_count": 3406,
+    "source_fingerprint": "a7f9b3e4f45cbfd4905b7659c742472427c16566d164a3b4fb6ecdcddd95e62c",
+    "source_fingerprint_file_count": 3417,
     "source_fingerprint_paths": [
       "backend/src/main",
       "backend/src/test",
@@ -50,12 +50,12 @@
   },
   "backend_surefire": {
     "path": "backend/target/surefire-reports",
-    "suites": 587,
-    "tests": 6721,
+    "suites": 592,
+    "tests": 6746,
     "failures": 0,
     "errors": 0,
     "skipped": 0,
-    "latest_mtime": "2026-11-12T11:34:18.377Z",
+    "latest_mtime": "2026-11-15T16:48:25.730Z",
     "passed": true
   },
   "web_unit_source": {
@@ -143,11 +143,14 @@
       "apps/web/src/admin/pages/BarPayrollPage.test.tsx",
       "apps/web/src/admin/pages/BarProductsPage.guidedcreate.test.tsx",
       "apps/web/src/admin/pages/BarProductsPage.rowdetail.test.tsx",
+      "apps/web/src/admin/pages/BarProductsPage.soldOut.test.tsx",
       "apps/web/src/admin/pages/BarProductsPage.test.tsx",
       "apps/web/src/admin/pages/BarRefundBreakdownPanel.test.tsx",
       "apps/web/src/admin/pages/BarShiftPanel.test.tsx",
+      "apps/web/src/admin/pages/BarTableSessionsPage.abnormal.test.tsx",
       "apps/web/src/admin/pages/BarTableSessionsPage.backfill.test.tsx",
       "apps/web/src/admin/pages/BarTableSessionsPage.barb14.test.tsx",
+      "apps/web/src/admin/pages/BarTableSessionsPage.cancelReservation.test.tsx",
       "apps/web/src/admin/pages/BarTableSessionsPage.clear.test.tsx",
       "apps/web/src/admin/pages/BarTableSessionsPage.disable.test.tsx",
       "apps/web/src/admin/pages/BarTableSessionsPage.guidedcreate.test.tsx",
@@ -393,8 +396,8 @@
       "apps/web/src/dealer/dealerPortalClient.test.ts",
       "apps/web/src/shared/ReplayedNotice.test.tsx"
     ],
-    "file_count": 332,
-    "test_count_from_source": 1735
+    "file_count": 335,
+    "test_count_from_source": 1747
   },
   "web_build": {
     "dist_index_exists": true,
@@ -415,15 +418,15 @@
     "asset_count": 170,
     "main_js_assets": [
       {
-        "path": "apps/web/dist/assets/main-BdoO04-f.js",
+        "path": "apps/web/dist/assets/main-CRRbRTmv.js",
         "size_bytes": 4337,
-        "mtime": "2026-11-12T11:34:26.960Z"
+        "mtime": "2026-11-15T16:48:34.164Z"
       }
     ],
     "largest_asset": {
       "path": "apps/web/dist/assets/vendor-antd-CzvkKKQu.js",
       "size_bytes": 251112,
-      "mtime": "2026-11-12T11:34:26.963Z"
+      "mtime": "2026-11-15T16:48:34.167Z"
     },
     "no_main_bundle_warning_expected": true
   },
