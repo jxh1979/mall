@@ -1,9 +1,10 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import com.complex.platform.settlement.MediaPerformanceRecords.FulfillmentRecord;
 import com.complex.platform.settlement.MediaPerformanceRecords.SettlementRecord;
+import com.complex.platform.settlement.MediaPerformanceRecords.SettlementView;
 import com.complex.platform.settlement.MediaPerformanceRecords.ShowListItem;
 import com.complex.platform.settlement.MediaPerformanceRecords.ShowRecord;
 import java.sql.ResultSet;
@@ -233,6 +234,22 @@ public class JdbcMediaPerformanceRepository {
     public List<SettlementRecord> listSettlements(String showId) {
         return jdbc.query("SELECT * FROM media_performance_settlements WHERE show_id = :show_id ORDER BY created_at, id",
                 new MapSqlParameterSource("show_id", showId), SETTLEMENT);
+    }
+
+    /**
+     * 第十八批 AL 段 240-R1（第十八批裁决 54、64）：场次详情的结算行带五态。现行已锁定版本上的挂起（{@link #PENDING_SETTLEMENT}，同裁决 40 总控卡）→待复核；
+     * 被新合同版本取代的版本上残留的挂起（183-R2 起不算挂起）→草稿；已出账、已调整的行，该场项目演出月已封账（裁决 41）→已归档，否则已确认、已调整。
+     */
+    public List<SettlementView> listSettlementViews(String showId) {
+        return jdbc.query("SELECT st.*, CASE WHEN " + PENDING_SETTLEMENT + " THEN 'pending_review'"
+                + " WHEN st.status = 'pending' THEN 'draft'"
+                + " WHEN EXISTS (SELECT 1 FROM finance_period_closes fpc WHERE fpc.project_id = s.project_id"
+                + " AND fpc.period_month = date_trunc('month', s.show_date)::date) THEN 'archived'"
+                + " WHEN st.status = 'posted' THEN 'confirmed' WHEN st.status = 'adjusted' THEN 'adjusted' END AS settlement_state"
+                + " FROM media_performance_settlements st JOIN media_performance_shows s ON s.id = st.show_id"
+                + " WHERE st.show_id = :show_id ORDER BY st.created_at, st.id",
+                new MapSqlParameterSource("show_id", showId),
+                (rs, i) -> new SettlementView(SETTLEMENT.mapRow(rs, i), rs.getString("settlement_state")));
     }
 
     // ---------------------------------------------------------------- 结算基数取数

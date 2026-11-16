@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.22
+// 文件版本：V0.23
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -538,9 +538,12 @@ public interface FinanceRepository {
         throw new UnsupportedOperationException("财务仓储未实现对账差异识别");
     }
 
-    /** 181-R1：待处理 → 待复核（写处理结论 close_reason、合并后的原件附件与复核单号）；不在待处理返回 false。 */
+    /**
+     * 181-R1：待处理 → 待复核（写处理结论 close_reason、合并后的原件附件与复核单号）；不在待处理返回 false。第十八批 AL 段 223-R1：同时写是否认定结果入应收应付
+     * 台账（驳回后再提交按新选择覆盖）。
+     */
     default boolean submitReconciliationDifferenceReview(String id, String closeReason, List<String> evidenceAttachmentIds, String reviewId,
-            Instant now) {
+            boolean ledgerEntry, Instant now) {
         throw new UnsupportedOperationException("财务仓储未实现对账差异提交复核");
     }
 
@@ -595,6 +598,14 @@ public interface FinanceRepository {
      */
     default long aggregatePlatformExpectedForBusinessRef(String businessRef) {
         return 0L;
+    }
+
+    /**
+     * 第十八批 AL 段 223-R1：对账差异业务单号对应的原往来台账——收款记录取其所属台账，已核验的经销到账取所属经销订单的应收台账（224-R1）；都不是为空
+     * （票务订单、酒吧账单没有原往来台账）。default 无库替身为空。
+     */
+    default Optional<ArApItemRecord> findReconciliationOriginArApItem(String businessRef) {
+        return Optional.empty();
     }
 
     /** 18Y 复核修复（ENUM:202「复核人须比对原件与录入值后签字」）：原件附件里含该附件编号的对账差异编号（回读原件时按差异过范围闸）。default 无库替身为空。 */
@@ -801,6 +812,11 @@ public interface FinanceRepository {
      * 挂在该日结上的锁定后补录（locked_day_close_id），按申请时间倒序。default 返回空兼容既有测试双子。
      */
     default List<ArApAdjustmentRecord> listAdjustmentsByDailyClose(String dailyCloseId) {
+        return List.of();
+    }
+
+    /** 第十八批 AL 段第 253 条 253-R1：原始凭证里含该附件编号的锁账补录（回读凭证时按补录过范围闸）。default 无库替身为空。 */
+    default List<ArApAdjustmentRecord> listArApAdjustmentsByEvidenceAttachment(String attachmentId) {
         return List.of();
     }
 

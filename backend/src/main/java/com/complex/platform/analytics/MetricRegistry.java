@@ -1,6 +1,6 @@
 package com.complex.platform.analytics;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import com.complex.platform.common.api.ApiException;
 import java.util.Collection;
@@ -1043,7 +1043,8 @@ public final class MetricRegistry {
                 new MetricColumn("verifiedCount", "核销张数"),
                 new MetricColumn("numPeople", "人数"),
                 new MetricColumn("verifiedAmountCent", "核销金额（分）"),
-                new MetricColumn("settlementStatus", "结算状态"),
+                // 第十八批 AL 段 240-R3（ENUM:192；第十八批裁决 54「通票流水（随所属月结单）」）：五态派生值，同结算审阅页。
+                new MetricColumn("settlementState", "结算状态"),
                 new MetricColumn("createdAt", "发生时间"));
     }
 

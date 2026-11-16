@@ -1,7 +1,8 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.10
+// 文件版本：V0.11
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.List;
@@ -507,7 +508,7 @@ public class JdbcSettlementTransactionRepository {
                 SELECT id, transaction_no, project_id, merchant_id, exclusive_merchant_id,
                        ticket_type_id, entitlement_type, beneficiary_type,
                        verified_count, num_people, verified_amount_cent,
-                       settlement_status, created_at,
+                       settlement_status, created_at, COALESCE(business_at, created_at) AS business_at,
                        (SELECT v.settlement_catalog_entry_id FROM ticket_verifications v
                          WHERE v.id = settlement_transactions.verification_id) AS settlement_catalog_entry_id,
                        (SELECT rv.version_no FROM ticket_orders o
@@ -534,7 +535,8 @@ public class JdbcSettlementTransactionRepository {
                         rs.getString("settlement_status"),
                         rs.getTimestamp("created_at").toInstant(),
                         rs.getString("settlement_catalog_entry_id"),
-                        rs.getObject("ticket_type_rule_version_no", Integer.class)));
+                        rs.getObject("ticket_type_rule_version_no", Integer.class),
+                        rs.getTimestamp("business_at").toInstant(), null));
     }
 
     /** 平台侧结算审阅:同筛选条件下的总条数(分页 total)。 */
@@ -571,8 +573,18 @@ public class JdbcSettlementTransactionRepository {
             String settlementCatalogEntryId,
             // 第十八批 AJ 段 236-R6（BSM:1754「每项权益都必须绑定实际提供方和审批版本，避免悬空账。」；BSM:756「订单保存……规则版本」）：
             // 该笔订单下单时生效的票种规则版本号，没有版本的票种为 null（不读成 0）。
-            Integer ticketTypeRuleVersionNo
+            Integer ticketTypeRuleVersionNo,
+            // 第十八批 AL 段 240-R1：营业日定月用的业务时刻 COALESCE(business_at, created_at)（与月窗同口径），不返回前端。
+            @JsonIgnore Instant businessAt,
+            // 第十八批 AL 段 240-R1（ENUM:192；第十八批裁决 54「通票流水（随所属月结单）」、裁决 64）：五态结算状态，
+            // 由 SettlementQueryService.transactionState 按所属月结单派生；仓储读出时为 null。
+            String settlementState
     ) {
+        public SettlementTransactionView withSettlementState(String state) {
+            return new SettlementTransactionView(id, transactionNo, projectId, merchantId, exclusiveMerchantId, ticketTypeId,
+                    entitlementType, beneficiaryType, verifiedCount, numPeople, verifiedAmountCent, settlementStatus, createdAt,
+                    settlementCatalogEntryId, ticketTypeRuleVersionNo, businessAt, state);
+        }
     }
 
     /** 第4步取数投影:已过期未核销权益归项目所需字段。 */

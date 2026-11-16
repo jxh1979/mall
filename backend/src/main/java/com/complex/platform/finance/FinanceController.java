@@ -1,13 +1,12 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.07
+// 文件版本：V0.08
 import static com.complex.platform.common.api.ApiRequests.requireIdempotencyKey;
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.ApiResponse;
 import com.complex.platform.common.api.PageResponse;
-import com.complex.platform.finance.dto.ArApAdjustmentDecisionRequest;
 import com.complex.platform.finance.dto.ArApAdjustmentRequest;
 import com.complex.platform.finance.dto.ArApItemRequest;
 import com.complex.platform.finance.dto.ArApPaymentRequest;
@@ -217,16 +216,6 @@ public class FinanceController implements com.complex.platform.security.ExportFi
         authorizationService.requirePermission("finance.locked_backfill.request");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.requestAdjustment(request));
-    }
-
-    @PostMapping("/ar-ap-adjustments/{id}/approve")
-    public ApiResponse<ArApAdjustmentRecord> approveArApAdjustment(
-            @PathVariable String id,
-            @RequestBody @jakarta.validation.Valid ArApAdjustmentDecisionRequest request
-    ) {
-        authorizationService.requirePermission("finance.locked_backfill.approve");
-        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
-        return ApiResponse.ok(service.approveAdjustment(id, request));
     }
 
     @PostMapping("/payment-intents")

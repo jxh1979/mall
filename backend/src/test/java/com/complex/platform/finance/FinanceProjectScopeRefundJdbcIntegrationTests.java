@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -12,7 +12,6 @@ import com.complex.platform.access.AccessUser;
 import com.complex.platform.access.RoleRecord;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.evidence.EvidenceEventService;
-import com.complex.platform.finance.dto.ArApAdjustmentDecisionRequest;
 import com.complex.platform.finance.dto.ArApAdjustmentRequest;
 import com.complex.platform.finance.dto.RefundExecutionRequest;
 import com.complex.platform.finance.dto.RefundRequest;
@@ -52,6 +51,7 @@ class FinanceProjectScopeRefundJdbcIntegrationTests {
     @Autowired AccessRepository access;
     @Autowired EvidenceEventService evidence;
     @Autowired JdbcTemplate jdbc;
+    @Autowired com.complex.platform.governance.review.SupervisorReviewService reviews;
 
     String suffix, project, otherProject, merchant, otherMerchant, financeA, financeB, outsider, merchantStaff;
 
@@ -77,7 +77,7 @@ class FinanceProjectScopeRefundJdbcIntegrationTests {
         String role = "psr_role_" + suffix;
         access.createRole(new RoleRecord(role, "项目财务", null, "project", "active", Instant.now(),
                 List.of("finance.ar_ap.view", "finance.payment.register", "finance.refund.create",
-                        "finance.locked_backfill.request", "finance.locked_backfill.approve", "evidence.attachment.create"),
+                        "finance.locked_backfill.request", "governance.supervisor_review.approve", "evidence.attachment.create"),
                 null, false, List.of()));
         financeA = user(project, null, role);
         financeB = user(project, null, role);
@@ -161,12 +161,16 @@ class FinanceProjectScopeRefundJdbcIntegrationTests {
     @Test
     void lockedBackfillRequestAndApproveByTwoProjectFinanceUsers() {
         String item = lockedReceivable(project, merchant);
+        // 第十八批 AL 段 245-R1：补录走统一审批，乙是甲的直接上级。
+        jdbc.update("INSERT INTO org_hierarchy(user_id,superior_id) VALUES(?,?)", financeA, financeB);
         act(financeA, project);
         Throwable error = catchThrowable(() -> {
-            var adjustment = finance.requestAdjustment(new ArApAdjustmentRequest(key(), "锁账后补录", List.of(), item, 30L, "核实少记"));
+            var adjustment = finance.requestAdjustment(backfill(item));
             act(financeB, project);
-            assertThat(finance.approveAdjustment(adjustment.id(), new ArApAdjustmentDecisionRequest(key(), "独立复核", List.of(), "approve"))
-                    .approvalStatus()).isEqualTo("approved");
+            reviews.approve(adjustment.reviewId(), new com.complex.platform.governance.review.SupervisorReviewApprovalRequest(key(), null,
+                    List.of(), null, "approved", "独立复核"));
+            assertThat(jdbc.queryForObject("SELECT approval_status FROM ar_ap_adjustments WHERE id=?", String.class, adjustment.id()))
+                    .isEqualTo("approved");
         });
         assertThat(error).as("项目财务无商户编号也能申请与审批本项目锁账补录").isNull();
         assertThat(jdbc.queryForObject("SELECT sum(amount_cent) FROM ar_ap_items WHERE id=? OR origin_item_id=?", Long.class, item, item))
@@ -177,11 +181,11 @@ class FinanceProjectScopeRefundJdbcIntegrationTests {
     void sameUserCannotApproveOwnBackfill() {
         String item = lockedReceivable(project, merchant);
         act(financeA, project);
-        var adjustment = finance.requestAdjustment(new ArApAdjustmentRequest(key(), "锁账后补录", List.of(), item, 30L, "核实少记"));
+        var adjustment = finance.requestAdjustment(backfill(item));
 
-        assertThatThrownBy(() -> finance.approveAdjustment(adjustment.id(),
-                new ArApAdjustmentDecisionRequest(key(), "自审", List.of(), "approve")))
-                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("SELF_APPROVAL_FORBIDDEN"));
+        assertThatThrownBy(() -> reviews.approve(adjustment.reviewId(), new com.complex.platform.governance.review.SupervisorReviewApprovalRequest(
+                key(), null, List.of(), null, "approved", "自审")))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("SUPERVISOR_SELF_REVIEW_FORBIDDEN"));
     }
 
     // ---- helpers ----
@@ -220,6 +224,13 @@ class FinanceProjectScopeRefundJdbcIntegrationTests {
                 VALUES(?,?,'receivable',?,'manual',?,100,0,100,'CNY',current_date,'2026-10','pending_collection',now(),now(),?,?,?)
                 """, item, "PSR-" + item, merchantId, item, merchantId, projectId, close);
         return item;
+    }
+
+    /** 第十八批 AL 段第 253 条：锁账补录请求（当前操作人先上传原始凭证，责任人写申请人本人）。 */
+    private ArApAdjustmentRequest backfill(String item) {
+        String requester = ((AccessActor) SecurityContextHolder.getContext().getAuthentication().getPrincipal()).id();
+        return new ArApAdjustmentRequest(key(), "锁账后补录", List.of(com.complex.platform.support.LockedBackfillFixture.evidence(evidence)), item, 30L,
+                "核实少记", null, null, requester, null);
     }
 
     private String proof(String refundId) {

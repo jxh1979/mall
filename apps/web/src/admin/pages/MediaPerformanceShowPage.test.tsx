@@ -1,4 +1,4 @@
-// 文件版本：V0.03
+// 文件版本：V0.04
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -113,5 +113,29 @@ describe("MediaPerformanceShowPage 演出合同与履约结算(ADM-STL-004)", ()
     await waitFor(() => expect(screen.getByTestId("mps-show-ms_2").textContent).toContain("已锁定；结算待处理 2 项"));
     expect(screen.getByTestId("mps-show-ms_1").textContent).toContain("已被新版本取代");
     expect(screen.getByTestId("mps-show-ms_1").textContent).not.toContain("结算待处理");
+  });
+
+  // 第十八批 AL 段 240-R2（ENUM:192「结算状态 草稿、待复核、已确认、已调整、已归档」；第十八批裁决 54「演出挂起……→待复核；已出结果或已入账→已确认；
+  // 被财务调整取代的演出行→已调整」）：结算表「结算状态」按后端派生的 settlement_state 显示五态中文，挂起行括注原挂起原因。
+  it("结算表「结算状态」按五态中文显示：待复核（括注原因）、已确认、已调整、草稿", async () => {
+    const base = { baseAmountCent: 0, rateBps: null, fixedAmountCent: null, amountCent: 0, payerMerchantId: null, payerEntityId: null,
+      payeeEntityId: null, pendingReason: null, arApItemId: null, adjustsSettlementId: null, adjustReason: null };
+    const settlements = [
+      { ...base, id: "st_p", feeKind: "ticket_share", status: "pending", pendingReason: "unconfirmed", settlementState: "pending_review" },
+      { ...base, id: "st_c", feeKind: "fixed_fee", status: "posted", settlementState: "confirmed" },
+      { ...base, id: "st_a", feeKind: "drink_commission", status: "adjusted", settlementState: "adjusted" },
+      { ...base, id: "st_d", feeKind: "drink_commission", status: "pending", pendingReason: "contract_silent", settlementState: "draft" },
+    ];
+    const get = vi.fn().mockImplementation((path: string) =>
+      Promise.resolve(path === BASE ? [LOCKED] : { show: LOCKED, fulfillment: null, settlements }));
+    renderPage(makeApi(get));
+    await waitFor(() => expect(screen.getByTestId("mps-open-ms_1")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("mps-open-ms_1"));
+    await waitFor(() => expect(screen.getByTestId("mps-settlement-ticket_share-pending").textContent).toContain("待复核（履约事实尚未确认）"));
+    expect(screen.getByTestId("mps-settlement-fixed_fee-posted").textContent).toContain("已确认");
+    expect(screen.getByTestId("mps-settlement-drink_commission-adjusted").textContent).toContain("已调整");
+    expect(screen.getByTestId("mps-settlement-drink_commission-pending").textContent).toContain("草稿");
+    expect(screen.getByTestId("mps-settlement-table").textContent).toContain("结算状态");
+    expect(screen.getByTestId("mps-settlement-table").textContent).not.toContain("待处理");
   });
 });

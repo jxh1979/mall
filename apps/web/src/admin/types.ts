@@ -1,4 +1,4 @@
-// 文件版本：V0.26
+// 文件版本：V0.27
 export type AdminUser = {
   id: string;
   username: string;
@@ -778,6 +778,9 @@ export type ReconciliationDifferenceRow = {
   reviewId?: string | null;
   // 第十八批 Y 段第 181 条 181-R2：本阶段（待识别或待处理）已超时升级的时刻，未升级为空。
   stageEscalatedAt?: string | null;
+  // 第十八批 AL 段第 223 条 223-R1：提交复核时是否认定结果入应收应付台账；复核通过后入账的台账编号，未入账为空。
+  ledgerEntry?: boolean;
+  postedArApItemId?: string | null;
 };
 
 export type MerchantWorkOrderRow = {

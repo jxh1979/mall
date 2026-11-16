@@ -1,6 +1,6 @@
 package com.complex.platform.governance;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -66,6 +66,25 @@ class ReviewObjectProjectLookupJdbcIntegrationTests {
                         ?, 'usr_g83', now())
                 """, backfill, "trs_g83_" + suffix, b, "review_g83_mbf_" + suffix);
         assertThat(repository.reviewObjectProjectIds("manual_backfill", backfill)).containsExactly(b);
+    }
+
+    // 第十八批 AL 段第 245 条 245-R1（18F 操作员裁决补充第 17 条「对象有所属项目的，普通查看人按对象项目判」）：日结锁定后补录单取所补台账的项目。修复前红：返回空
+    @Test
+    void lockedBackfillAdjustmentResolvesItsArApItemProject() {
+        String e = project("e");
+        String close = "dc_g83_" + suffix;
+        jdbc.update("INSERT INTO finance_daily_closes (id, business_date, scope_type, scope_id, status, locked_at, created_at) "
+                + "VALUES (?, current_date, 'project', ?, 'locked', now(), now())", close, e);
+        String item = "arap_g83_" + suffix;
+        jdbc.update("""
+                INSERT INTO ar_ap_items (id, item_no, direction, counterparty_id, source_type, source_id, amount_cent, paid_amount_cent,
+                        unpaid_amount_cent, currency, due_date, status, created_at, updated_at, project_id, locked_day_close_id)
+                VALUES (?, ?, 'receivable', 'cp_g83', 'manual', ?, 100, 0, 100, 'CNY', current_date, 'pending_collection', now(), now(), ?, ?)
+                """, item, "G83-" + item, item, e, close);
+        String adjustment = "arap_adj_g83_" + suffix;
+        jdbc.update("INSERT INTO ar_ap_adjustments (id, ar_ap_item_id, locked_day_close_id, adjustment_amount_cent, requested_by, reason) "
+                + "VALUES (?, ?, ?, 30, 'usr_g83', 'G83 锁账补录')", adjustment, item, close);
+        assertThat(repository.reviewObjectProjectIds("ar_ap_adjustment", adjustment)).containsExactly(e);
     }
 
     private String project(String tag) {

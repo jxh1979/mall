@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.26
+// 文件版本：V0.27
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
@@ -890,6 +890,8 @@ class JdbcFinanceRepository implements FinanceRepository {
         return batch;
     }
 
+    // 18AL 收尾复核修正：入账台账编号只取原入账行（origin_item_id 为空，同 V344 唯一索引）——锁账金额补录追加的冲正行、重述行沿用来源与差异号（V344），
+    // 不排除时标量子查询多行报错；按差异号查询（findReconciliationDifferenceById）同。
     @Override
     public List<ReconciliationDifferenceRecord> listReconciliationDifferences(String merchantId, java.util.Set<String> projectIds) {
         if (projectIds != null && projectIds.isEmpty()) return List.of();
@@ -898,7 +900,11 @@ class JdbcFinanceRepository implements FinanceRepository {
                        d.expected_amount_cent, d.actual_amount_cent, d.source, d.status, d.created_at, d.evidence_attachment_ids,
                        d.responsible_user_id, d.stage_entered_at, d.identified_cause, d.review_id,
                        CASE d.status WHEN 'pending_identification' THEN d.identify_escalated_at
-                                     WHEN 'pending_handling' THEN d.handle_escalated_at END AS stage_escalated_at
+                                     WHEN 'pending_handling' THEN d.handle_escalated_at END AS stage_escalated_at,
+                       d.ledger_entry,
+                       (SELECT a.id FROM ar_ap_items a
+                         WHERE a.source_type = 'reconciliation_difference' AND a.source_id = d.id
+                           AND a.origin_item_id IS NULL) AS posted_ar_ap_item_id
                   FROM finance_reconciliation_differences d
                   JOIN finance_reconciliation_batches b ON b.id = d.batch_id
                 """ + reconciliationScopeWhere(projectIds) + """
@@ -945,9 +951,13 @@ class JdbcFinanceRepository implements FinanceRepository {
                        expected_amount_cent, actual_amount_cent, source, status, created_at, evidence_attachment_ids,
                        responsible_user_id, stage_entered_at, identified_cause, review_id,
                        CASE status WHEN 'pending_identification' THEN identify_escalated_at
-                                   WHEN 'pending_handling' THEN handle_escalated_at END AS stage_escalated_at
-                  FROM finance_reconciliation_differences
-                 WHERE id = :id
+                                   WHEN 'pending_handling' THEN handle_escalated_at END AS stage_escalated_at,
+                       ledger_entry,
+                       (SELECT a.id FROM ar_ap_items a
+                         WHERE a.source_type = 'reconciliation_difference' AND a.source_id = d.id
+                           AND a.origin_item_id IS NULL) AS posted_ar_ap_item_id
+                  FROM finance_reconciliation_differences d
+                 WHERE d.id = :id
                 """, Map.of("id", id), this::mapReconciliationDifference).stream().findFirst();
     }
 
@@ -965,14 +975,15 @@ class JdbcFinanceRepository implements FinanceRepository {
 
     @Override
     public boolean submitReconciliationDifferenceReview(String id, String closeReason, List<String> evidenceAttachmentIds, String reviewId,
-            java.time.Instant now) {
+            boolean ledgerEntry, java.time.Instant now) {
         return jdbcTemplate.update("""
                 UPDATE finance_reconciliation_differences
                    SET status = 'pending_review', close_reason = :close_reason, evidence_attachment_ids = CAST(:evidence AS jsonb),
-                       review_id = :review_id, stage_entered_at = :now
+                       review_id = :review_id, stage_entered_at = :now, ledger_entry = :ledger_entry
                  WHERE id = :id AND status = 'pending_handling'
                 """, new MapSqlParameterSource().addValue("id", id).addValue("close_reason", closeReason)
                 .addValue("evidence", writeJson(evidenceAttachmentIds)).addValue("review_id", reviewId)
+                .addValue("ledger_entry", ledgerEntry)
                 .addValue("now", timestampWithTimeZone(now))) == 1;
     }
 
@@ -1070,14 +1081,28 @@ class JdbcFinanceRepository implements FinanceRepository {
         // 第十八批 Y 段第 180 条 180-R3（ENUM:188「对账口径 按订单、按核销、按合同、按渠道、按日结」）：按订单口径——收款记录查不到再查
         // 已支付票务订单（取订单金额），再查酒吧账单（取已付金额）；三表编号互不相同。18Y 复核修复：票务订单、酒吧账单另认页面上显示的订单号（order_no）、
         // 账单号（bill_no），两列都唯一。
+        // 第十八批 AL 段第 224 条 224-R1（ENUM:173「财务差异按本表「差异处理状态」条处理」；ENUM:188「对账口径 按订单……」；第十八批裁决 15「财务核验到账后，
+        // 这条到账核验记录……就当收款凭证」）：再查已核验的经销到账记录（dpay_ 前缀，与上三类编号不重），取到账全额；待核验、已驳回、迟到的平台尚未确认，不认。
         Long total = jdbcTemplate.queryForObject("""
                 SELECT COALESCE(
                        (SELECT SUM(amount_cent) FROM ar_ap_payments WHERE id = :business_ref),
                        (SELECT amount_cent FROM ticket_orders WHERE (id = :business_ref OR order_no = :business_ref) AND pay_status = 'paid'),
                        (SELECT paid_amount_cent FROM bar_bills WHERE id = :business_ref OR bill_no = :business_ref),
+                       (SELECT amount_cent FROM dealer_order_payments WHERE id = :business_ref AND status = 'verified'),
                        0)
                 """, Map.of("business_ref", businessRef), Long.class);
         return total == null ? 0L : total;
+    }
+
+    /** 223-R1：收款记录取其所属台账，已核验的经销到账取所属经销订单的应收台账（224-R1）；都不是为空。 */
+    @Override
+    public Optional<ArApItemRecord> findReconciliationOriginArApItem(String businessRef) {
+        return jdbcTemplate.query(AR_AP_ITEM_SELECT + """
+                 WHERE id = COALESCE(
+                       (SELECT ar_ap_item_id FROM ar_ap_payments WHERE id = :business_ref),
+                       (SELECT o.ar_ap_item_id FROM dealer_order_payments p JOIN dealer_orders o ON o.id = p.order_id
+                         WHERE p.id = :business_ref AND p.status = 'verified'))
+                """, Map.of("business_ref", businessRef), this::mapArApItem).stream().findFirst();
     }
 
     @Override
@@ -2285,11 +2310,13 @@ class JdbcFinanceRepository implements FinanceRepository {
         jdbcTemplate.update("""
                 INSERT INTO ar_ap_adjustments (
                     id, ar_ap_item_id, locked_day_close_id, adjustment_amount_cent,
-                    approval_status, requested_by, approved_by, reason, created_at, decided_at, kind, payment_method
+                    approval_status, requested_by, approved_by, reason, created_at, decided_at, kind, payment_method,
+                    review_id, evidence_attachment_ids, responsible_staff_id
                 )
                 VALUES (
                     :id, :ar_ap_item_id, :locked_day_close_id, :adjustment_amount_cent,
-                    :approval_status, :requested_by, :approved_by, :reason, :created_at, :decided_at, :kind, :payment_method
+                    :approval_status, :requested_by, :approved_by, :reason, :created_at, :decided_at, :kind, :payment_method,
+                    :review_id, CAST(:evidence_attachment_ids AS jsonb), :responsible_staff_id
                 )
                 ON CONFLICT (id) DO NOTHING
                 """, adjustmentParameters(adjustment));
@@ -2300,7 +2327,7 @@ class JdbcFinanceRepository implements FinanceRepository {
     private static final String ADJUSTMENT_SELECT = """
             SELECT a.id, a.ar_ap_item_id, a.locked_day_close_id, a.adjustment_amount_cent,
                    a.approval_status, a.requested_by, a.approved_by, a.reason, a.created_at, a.decided_at,
-                   a.kind, a.payment_method,
+                   a.kind, a.payment_method, a.review_id, a.evidence_attachment_ids, a.responsible_staff_id,
                    (SELECT i.item_no FROM ar_ap_items i WHERE i.id = a.ar_ap_item_id) AS item_no,
                    (SELECT d.business_date FROM finance_daily_closes d WHERE d.id = a.locked_day_close_id) AS original_business_date
               FROM ar_ap_adjustments a
@@ -2320,6 +2347,14 @@ class JdbcFinanceRepository implements FinanceRepository {
                  WHERE a.locked_day_close_id = :daily_close_id
                  ORDER BY a.created_at DESC, a.id
                 """, Map.of("daily_close_id", dailyCloseId), this::mapAdjustment);
+    }
+
+    /** 第十八批 AL 段第 253 条 253-R1：原始凭证里含该附件编号的锁账补录。 */
+    @Override
+    public List<ArApAdjustmentRecord> listArApAdjustmentsByEvidenceAttachment(String attachmentId) {
+        return jdbcTemplate.query(ADJUSTMENT_SELECT + """
+                 WHERE a.evidence_attachment_ids @> jsonb_build_array(CAST(:attachment_id AS text))
+                """, Map.of("attachment_id", attachmentId), this::mapAdjustment);
     }
 
     @Override
@@ -2347,7 +2382,10 @@ class JdbcFinanceRepository implements FinanceRepository {
                 .addValue("created_at", timestampWithTimeZone(adjustment.createdAt()))
                 .addValue("decided_at", timestampWithTimeZone(adjustment.decidedAt()))
                 .addValue("kind", adjustment.kind())
-                .addValue("payment_method", adjustment.paymentMethod());
+                .addValue("payment_method", adjustment.paymentMethod())
+                .addValue("review_id", adjustment.reviewId())
+                .addValue("evidence_attachment_ids", writeJson(adjustment.evidenceAttachmentIds() == null ? List.of() : adjustment.evidenceAttachmentIds()))
+                .addValue("responsible_staff_id", adjustment.responsibleStaffId());
     }
 
     private DailyCloseRecord mapDailyClose(ResultSet resultSet, int rowNumber) throws SQLException {
@@ -2394,7 +2432,10 @@ class JdbcFinanceRepository implements FinanceRepository {
                 resultSet.getString("item_no"),
                 resultSet.getObject("original_business_date", java.time.LocalDate.class),
                 resultSet.getString("kind"),
-                resultSet.getString("payment_method"));
+                resultSet.getString("payment_method"),
+                resultSet.getString("review_id"),
+                readStringList(resultSet.getString("evidence_attachment_ids")),
+                resultSet.getString("responsible_staff_id"));
     }
 
     private MapSqlParameterSource arApItemParameters(ArApItemRecord item) {
@@ -2596,7 +2637,9 @@ class JdbcFinanceRepository implements FinanceRepository {
                 nullableInstant(resultSet, "stage_entered_at"),
                 resultSet.getString("identified_cause"),
                 resultSet.getString("review_id"),
-                nullableInstant(resultSet, "stage_escalated_at")
+                nullableInstant(resultSet, "stage_escalated_at"),
+                resultSet.getBoolean("ledger_entry"),
+                resultSet.getString("posted_ar_ap_item_id")
         );
     }
 

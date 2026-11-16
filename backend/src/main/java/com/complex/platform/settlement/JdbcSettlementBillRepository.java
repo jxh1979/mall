@@ -1,6 +1,6 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.06
+// 文件版本：V0.07
 
 import com.complex.platform.common.api.ApiException;
 import java.sql.Timestamp;
@@ -1340,6 +1340,12 @@ public class JdbcSettlementBillRepository implements com.complex.platform.ticket
      * (第 75 条:超出部分过账时由娱乐平台公司承担,不设结算期审批)。
      * 第十八批第 2 条（ENUM L52「三者即使同归一个主体，也必须分三栏分别列示」）：未分配池余额、通票未核销减除额（及归属主体）、
      * 尾差三栏分列，另带暂挂待补配金额与第一段超池额。
+     *
+     * <p>第十八批 AL 段 240-R1（ENUM:192「结算状态 草稿、待复核、已确认、已调整、已归档」；第十八批裁决 54「已出结果或已入账→已确认」
+     * 「所属综合体该月已封账（裁决 41）→已归档」；裁决 64「只有本身已确认或已调整、且该月已封账的才显示已归档」）：另带五态 settlement_state
+     * （只是显示口径，不改 status）——算出即已确认（第 75 条）、过账后已结清都算已出结果，所属综合体该月已封账→已归档；其余→草稿。
+     * ponytail: 平台单（project_id 空）的所属综合体取唯一启用综合体（同 TicketDistributionSettlementService.monthWindow），
+     * 启用综合体不止一个时平台单不显示已归档；要逐综合体归档时把平台单按项目拆。</p>
      */
     public List<BillSummary> listBills(String projectId, java.time.LocalDate periodStart, int limit) {
         return jdbcTemplate.query("""
@@ -1353,6 +1359,12 @@ public class JdbcSettlementBillRepository implements com.complex.platform.ticket
                        b.pool_undistributed_cent, b.unverified_deduction_cent, b.unverified_deduction_entity_id,
                        ude.entity_name AS unverified_deduction_entity_name, b.pool_suspended_cent,
                        b.gift_cost_cent,
+                       CASE WHEN b.status NOT IN ('confirmed', 'settled') THEN 'draft'
+                            WHEN EXISTS (SELECT 1 FROM finance_period_closes fpc
+                                          WHERE fpc.project_id = COALESCE(b.project_id,
+                                                (SELECT min(p.id) FROM projects p WHERE p.status = 'active' HAVING count(*) = 1))
+                                            AND fpc.period_month = b.period_start) THEN 'archived'
+                            ELSE 'confirmed' END AS settlement_state,
                        COALESCE(v.paid, 0)     AS gift_actual_paid_cent,
                        COALESCE(v.variance, 0) AS gift_variance_cent
                   FROM settlement_bills b
@@ -1387,7 +1399,7 @@ public class JdbcSettlementBillRepository implements com.complex.platform.ticket
                         rs.getString("unverified_deduction_entity_id"), rs.getString("unverified_deduction_entity_name"),
                         rs.getLong("pool_suspended_cent"),
                         rs.getLong("gift_cost_cent"), rs.getLong("gift_actual_paid_cent"),
-                        rs.getLong("gift_variance_cent")));
+                        rs.getLong("gift_variance_cent"), rs.getString("settlement_state")));
     }
 
     /**
@@ -1409,7 +1421,9 @@ public class JdbcSettlementBillRepository implements com.complex.platform.ticket
                               String unverifiedDeductionEntityName, long poolSuspendedCent,
                               // S7 赠付差额三数:这个月预扣了多少(giftCost)、实际付出去多少(giftActualPaid)、
                               // 差额多少(giftVariance=预扣−实付,一律留娱乐平台公司;18B 复核后裁决第 11 条)。
-                              long giftCostCent, long giftActualPaidCent, long giftVarianceCent) {
+                              long giftCostCent, long giftActualPaidCent, long giftVarianceCent,
+                              // 第十八批 AL 段 240-R1（ENUM:192；第十八批裁决 54、64）：五态结算状态 draft／confirmed／archived（月结单不出待复核、已调整）。
+                              String settlementState) {
     }
 
     /**

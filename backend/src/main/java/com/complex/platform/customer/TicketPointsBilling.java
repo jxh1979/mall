@@ -1,6 +1,6 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import java.time.Instant;
 import java.time.LocalDate;
@@ -22,7 +22,9 @@ public final class TicketPointsBilling {
     public record Bill(String id,LocalDate billingMonth,String billingRuleId,String sellerEntityId,String sellerMerchantId,
             String receiverEntityId,String projectId,long amountCent,Instant visibleAt,LocalDate objectionDeadline,
             LocalDate dueDate,String arApItemId,long paidAmountCent,long unpaidAmountCent,String paymentStatus,
-            int openObjections,String feeKind) {}
+            int openObjections,String feeKind,
+            // 第十八批 AL 段 240-R1（ENUM:192；第十八批裁决 54「积分账单有未处理异议→待复核」、裁决 64）：五态结算状态 draft／pending_review／confirmed／archived。
+            String settlementState) {}
     public record FeeLine(String rewardId,String parentTicketId,int slotIndex,int useIndex,long points,
             java.math.BigDecimal unitPriceCent,long amountCent,String priceVersionId,Instant confirmedAt,String sourceType,String sourceId) {}
 }

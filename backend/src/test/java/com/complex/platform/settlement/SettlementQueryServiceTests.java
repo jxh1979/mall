@@ -1,8 +1,11 @@
 package com.complex.platform.settlement;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
 
+import com.complex.platform.common.BusinessDayResolver;
 import com.complex.platform.common.api.PageResponse;
+import com.complex.platform.finance.FinanceRepository;
 import com.complex.platform.settlement.JdbcSettlementTransactionRepository.SettlementTransactionView;
 import java.time.Instant;
 import java.util.List;
@@ -41,14 +44,14 @@ class SettlementQueryServiceTests {
             this.offset = offset;
             return List.of(new SettlementTransactionView(
                     "st_1", "STX-1", "prj_a", "mch_a", null, "tt_1", "entry", "merchant",
-                    3, 1, 15000L, "settled", Instant.now(), null, null));
+                    3, 1, 15000L, "settled", Instant.now(), null, null, Instant.now(), null));
         }
     }
 
     @Test
     void clampsPageAndSizeAndComputesOffset() {
         CapturingRepo repo = new CapturingRepo();
-        SettlementQueryService service = new SettlementQueryService(repo, null, null);
+        SettlementQueryService service = service(repo);
 
         PageResponse<SettlementTransactionView> page = service.listSettlements("prj_a", null, 3, 20);
 
@@ -58,12 +61,14 @@ class SettlementQueryServiceTests {
         assertThat(page.pageSize()).isEqualTo(20);
         assertThat(page.total()).isEqualTo(42L);
         assertThat(page.items()).hasSize(1);
+        // 第十八批 AL 段 240-R1：所属月结单未出（桩返回无单）→ 五态为草稿。
+        assertThat(page.items().get(0).settlementState()).isEqualTo("draft");
     }
 
     @Test
     void clampsNonPositivePageAndOversizeAndBlankFilters() {
         CapturingRepo repo = new CapturingRepo();
-        SettlementQueryService service = new SettlementQueryService(repo, null, null);
+        SettlementQueryService service = service(repo);
 
         service.listSettlements("  ", "   ", 0, 9999);
 
@@ -71,5 +76,11 @@ class SettlementQueryServiceTests {
         assertThat(repo.offset).isEqualTo(0);  // page clamped to 1
         assertThat(repo.project).isNull();     // blank -> null (no filter)
         assertThat(repo.merchant).isNull();
+    }
+
+    /** 营业日用无库构造（出厂 10:00）；结算单仓储与财务仓储为 Mockito 桩（查不到单、封账一律 false）。 */
+    private static SettlementQueryService service(CapturingRepo repo) {
+        return new SettlementQueryService(repo, mock(JdbcSettlementBillRepository.class), null, new BusinessDayResolver(),
+                mock(FinanceRepository.class));
     }
 }

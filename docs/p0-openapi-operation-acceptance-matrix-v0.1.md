@@ -1,4 +1,4 @@
-# P0 OpenAPI Operation 验收矩阵 V0.69
+# P0 OpenAPI Operation 验收矩阵 V0.70
 
 ## 1. 文档定位
 
@@ -17,7 +17,7 @@
 
 ## 3. Operation 清单
 
-> 当前 `docs/openapi/openapi-p0.json` 共 1369 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
+> 当前 `docs/openapi/openapi-p0.json` 共 1368 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
 
 | 标签 | 方法 | 路径 | operationId | 摘要 | 请求体 | 权限 | 认证上下文 | 数据范围 | 终端/设备能力/调用通道 | 幂等 | 成功事件 | 失败事件 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -431,7 +431,6 @@
 | finance | `GET` | `/api/v1/finance/daily-closes/{id}/summaries` | `listDailyCloseSummaries` | 查询日结七源汇总 | `-` | `finance.daily_close.manage` | `staff-token` | `project-entity` | web, mobile_admin | 否 | `finance.daily_close_summary.viewed` | `finance.daily_close_summary.view_failed` |
 | finance | `GET` | `/api/v1/finance/daily-closes/{id}/adjustments` | `listDailyCloseAdjustments` | 查询日结的锁定后补录 | `-` | `finance.daily_close.manage` | `staff-token` | `project-entity` | web | 否 | `finance.daily_close_adjustment.viewed` | `finance.daily_close_adjustment.view_failed` |
 | finance | `POST` | `/api/v1/finance/ar-ap-adjustments` | `requestArApAdjustment` | 锁定后补录审批申请 | `ArApAdjustmentRequest` | `finance.locked_backfill.request` | `staff-token` | `project-entity` | web, mobile_admin | 是 | `finance.locked_backfill_requested` | `finance.locked_backfill_request_failed` |
-| finance | `POST` | `/api/v1/finance/ar-ap-adjustments/{id}/approve` | `approveArApAdjustment` | 锁定后补录审批决定 | `ArApAdjustmentDecisionRequest` | `finance.locked_backfill.approve` | `staff-token` | `project-entity` | web, mobile_admin | 是 | `finance.locked_backfill_approved` | `finance.locked_backfill_decision_failed` |
 | bar | `POST` | `/api/v1/bar/reservations/{id}/pay-deposit` | `payBarReservationDeposit` | 订台定金支付 | `BarReservationDepositActionRequest` | `bar.reservation.manage` | `staff-token` | `project-bar` | web, kiosk, mobile_admin | 是 | `bar.reservation_deposit_paid` | `bar.reservation_deposit_pay_failed` |
 | bar | `POST` | `/api/v1/bar/reservations/{id}/checkin` | `checkInBarReservationDeposit` | 订台到店登记（定金不抵扣账单，保持已支付待判；达标后原路退回、未达标关台没收） | `BarReservationDepositActionRequest` | `bar.reservation.manage` | `staff-token` | `project-bar` | web, kiosk, mobile_admin | 是 | `bar.reservation_checked_in` | `bar.reservation_checkin_failed` |
 | bar | `POST` | `/api/v1/bar/reservations/{id}/cancel` | `cancelBarReservation` | 人工取消订台/登记爽约（店长；按时限退定金或没收） | `BarReservationCancelRequest` | `bar.reservation.cancel` | `staff-token` | `project-bar` | web, kiosk, mobile_admin | 是 | `bar.reservation.cancelled` | `bar.reservation.cancel_failed` |

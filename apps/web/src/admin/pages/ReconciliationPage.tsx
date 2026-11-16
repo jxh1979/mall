@@ -68,8 +68,12 @@ const TEXT = {
   scope: "范围",
   differenceType: "差异类型",
   businessRef: "业务单号",
-  // 180-R3（ENUM:188「按订单」）：平台侧按收款记录、票务订单或酒吧账单系统取数。
-  businessRefInput: "业务单号（收款记录号、票务订单号或酒吧账单号）",
+  // 180-R3（ENUM:188「按订单」）：平台侧按收款记录、票务订单或酒吧账单系统取数。第十八批 AL 段 224-R1（ENUM:173）：另认已核验的经销到账记录。
+  businessRefInput: "业务单号（收款记录号、票务订单号、酒吧账单号或经销到账记录号）",
+  // 第十八批 AL 段 223-R1（BSM:1751「高价值差异复核通过才入账、同一差异只入账一次」）：提交复核时按认定结果勾选是否入应收应付台账。
+  ledgerEntry: "认定结果入应收应付台账（按实际到账与平台记录之差向原往来方记应收或应付）",
+  ledgerEntryField: "认定结果入应收应付台账",
+  postedItem: "入账台账编号",
   expected: "平台侧金额",
   actual: "第三方侧金额",
   diff: "差额",
@@ -127,6 +131,7 @@ export function ReconciliationPage({ api, user, setActionResult, setGlobalError,
   const [causeNote, setCauseNote] = React.useState("");
   const [reason, setReason] = React.useState("");
   const [finalApprover, setFinalApprover] = React.useState("");
+  const [ledgerEntry, setLedgerEntry] = React.useState(false);
   const [reviewAttachments, setReviewAttachments] = React.useState<{ id: string; fileName: string }[]>([]);
   const [handling, setHandling] = React.useState(false);
   const [formError, setFormError] = React.useState("");
@@ -232,10 +237,12 @@ export function ReconciliationPage({ api, user, setActionResult, setGlobalError,
         closeReason: reason.trim(),
         evidenceAttachmentIds: reviewAttachments.map((item) => item.id),
         finalApproverId: finalApprover.trim() || undefined,
+        ledgerEntry,
       });
       setActionResult({ action: "reconciliation_difference_review_submitted", differenceId: selected.id, status: saved.status, reviewId: saved.reviewId });
       setReason("");
       setFinalApprover("");
+      setLedgerEntry(false);
       setReviewAttachments([]);
       await reload();
     } catch (submitError) {
@@ -380,6 +387,8 @@ export function ReconciliationPage({ api, user, setActionResult, setGlobalError,
         { label: TEXT.responsible, value: item.responsibleUserId ?? "-" },
         { label: TEXT.stageEnteredAt, value: stageTime(item.stageEnteredAt) },
         { label: TEXT.cause, value: item.identifiedCause ?? "-" },
+        { label: TEXT.ledgerEntryField, value: item.ledgerEntry ? "是" : "否" },
+        { label: TEXT.postedItem, value: item.postedArApItemId ?? "-" },
       ],
     });
   }
@@ -436,6 +445,7 @@ export function ReconciliationPage({ api, user, setActionResult, setGlobalError,
           <label>{TEXT.attachment}<input type="file" multiple accept={STATEMENT_ACCEPT} data-testid="reconciliation-review-attachment" disabled={handling} onChange={(event) => { void uploadReviewAttachments(event.target.files); event.target.value = ""; }} /></label>
           <ul data-testid="reconciliation-review-attachments">{reviewAttachments.map((item) => <li key={item.id}>{item.fileName}</li>)}</ul>
           <label>{TEXT.finalApprover}<input data-testid="reconciliation-review-final-approver" value={finalApprover} onChange={(event) => setFinalApprover(event.target.value)} /></label>
+          <label><input type="checkbox" data-testid="reconciliation-review-ledger-entry" checked={ledgerEntry} onChange={(event) => setLedgerEntry(event.target.checked)} />{TEXT.ledgerEntry}</label>
           <button type="button" data-testid="reconciliation-review-submit" disabled={handling} onClick={() => void submitReview()}>{TEXT.submit}</button>
         </div>
       ) : null}

@@ -1,8 +1,9 @@
-// 文件版本：V0.03
+// 文件版本：V0.04
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
 import { PermissionButton } from "../security/Can";
+import { KEY_VALUE_LABELS } from "../i18n/fieldLabels";
 import type { AdminPageProps } from "../types";
 
 // TK-29 传媒逐场演出合同与履约结算（ADM-STL-004）。依据 BSM L1144–L1145：按演出合同可同时存在三种情形（①门票加价分成 ②固定费用 ③酒水提成），
@@ -51,6 +52,8 @@ type Settlement = {
   fixedAmountCent: number | null; amountCent: number; payerMerchantId: string | null; payerEntityId: string | null;
   payeeEntityId: string | null; status: "pending" | "posted" | "adjusted"; pendingReason: string | null; arApItemId: string | null;
   adjustsSettlementId: string | null; adjustReason: string | null;
+  // 第十八批 AL 段 240-R1：五态结算状态（ENUM:192；第十八批裁决 54、64），后端按现行版本挂起、出账、调整与封账派生。
+  settlementState?: string | null;
 };
 type Detail = { show: MediaShow; fulfillment: Fulfillment | null; settlements: Settlement[] };
 
@@ -67,8 +70,8 @@ const EMPTY: Form = {
   fixedOn: false, fixedFeeYuan: "", drinkOn: false, drinkCommissionBps: "", drinkBaseTemplate: "whole_store_session",
 };
 const FEE_LABEL: Record<Settlement["feeKind"], string> = { ticket_share: "①门票加价分成", fixed_fee: "②固定演出费", drink_commission: "③酒水提成" };
-const PENDING_LABEL: Record<string, string> = { unconfirmed: "待处理：履约事实尚未确认", disputed: "待处理：履约事实有争议", contract_silent: "待处理：合同未约定部分履约如何处理" };
-const STATUS_LABEL: Record<string, string> = { draft: "草案", locked: "已锁定", superseded: "已被新版本取代", recorded: "已登记待确认", confirmed: "已确认", disputed: "争议中", resolved: "已裁决", pending: "待处理", posted: "已出账", adjusted: "已调整" };
+const PENDING_LABEL: Record<string, string> = { unconfirmed: "履约事实尚未确认", disputed: "履约事实有争议", contract_silent: "合同未约定部分履约如何处理" };
+const STATUS_LABEL: Record<string, string> = { draft: "草案", locked: "已锁定", superseded: "已被新版本取代", recorded: "已登记待确认", confirmed: "已确认", disputed: "争议中", resolved: "已裁决" };
 
 function yuan(cent: number | null | undefined): string {
   return cent == null ? "-" : (cent / 100).toFixed(2);
@@ -356,7 +359,7 @@ export function MediaPerformanceShowPage({ api, setActionResult, setGlobalError,
             <PermissionButton permissionsState={effectivePermissions} permissions={SETTLE} data-testid="mps-settle" disabled={busy != null} onClick={() => void run("settle", () => api.post(`${BASE}/${selected.id}/settle`, { idempotencyKey: `st-${Date.now()}` }), "media_show_settled")}>按锁定合同结算</PermissionButton>
           </div>
           <table className="admin-table" data-testid="mps-settlement-table">
-            <thead><tr><th>费项</th><th>基数（元）</th><th>比例/金额</th><th>金额（元）</th><th>付方</th><th>收方</th><th>状态</th><th>应付台账</th><th>调整</th></tr></thead>
+            <thead><tr><th>费项</th><th>基数（元）</th><th>比例/金额</th><th>金额（元）</th><th>付方</th><th>收方</th><th>结算状态</th><th>应付台账</th><th>调整</th></tr></thead>
             <tbody>
               {(detail?.settlements ?? []).length === 0 ? <tr><td colSpan={9} data-testid="mps-settlement-empty">尚未结算</td></tr> : detail!.settlements.map((s) => (
                 <tr key={s.id} data-testid={`mps-settlement-${s.feeKind}-${s.status}`}>
@@ -366,7 +369,7 @@ export function MediaPerformanceShowPage({ api, setActionResult, setGlobalError,
                   <td>{yuan(s.amountCent)}</td>
                   <td>{s.payerMerchantId ?? s.payerEntityId ?? "-"}</td>
                   <td>{s.payeeEntityId ?? "-"}</td>
-                  <td>{s.status === "pending" ? PENDING_LABEL[s.pendingReason ?? ""] ?? "待处理" : STATUS_LABEL[s.status]}{s.adjustsSettlementId ? `（调整自 ${s.adjustsSettlementId}：${s.adjustReason ?? ""}）` : ""}</td>
+                  <td>{KEY_VALUE_LABELS.settlement_state?.[s.settlementState ?? ""] ?? "—"}{s.status === "pending" && PENDING_LABEL[s.pendingReason ?? ""] ? `（${PENDING_LABEL[s.pendingReason ?? ""]}）` : ""}{s.adjustsSettlementId ? `（调整自 ${s.adjustsSettlementId}：${s.adjustReason ?? ""}）` : ""}</td>
                   <td>{s.arApItemId ?? "-"}</td>
                   <td>
                     {s.status === "posted" ? (

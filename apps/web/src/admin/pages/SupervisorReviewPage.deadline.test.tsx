@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -25,6 +25,8 @@ const DEADLINES = [
   deadline("bar.bill_waiver", true),
   deadline("bill_waiver", true),
   deadline("contract.new", false),
+  // 第十八批 AL 段第 245 条 245-R1：日结锁定后补录进统一审批（涉钱）。
+  deadline("finance.locked_backfill.review", true),
   deadline("staff.payroll.adjustment.add", true),
 ];
 
@@ -97,6 +99,7 @@ describe("SupervisorReviewPage 第十八批 AD 段 204-R2：审批时限区块",
     expect(cells("staff.payroll.adjustment.add")).toEqual(["员工奖惩入账", "是", "1", "1", "1", "30", "修改"]);
     expect(cells("contract.new")).toEqual(["新建合同", "否", "3", "3", "1", "30", "修改"]);
     expect(cells("bar.bill.unpaid_close").slice(0, 3)).toEqual(["包厢关台未付清确认", "是", "1"]);
+    expect(cells("finance.locked_backfill.review").slice(0, 3)).toEqual(["日结锁定后补录", "是", "1"]);
     expect(cells("amusement.manual_override")[0]).toBe("游乐人工干预");
     expect(cells("access.role_viewable_projects.reduce")[0]).toBe("减少角色可查看项目");
     const table = screen.getByTestId("approval-deadline-table").textContent ?? "";

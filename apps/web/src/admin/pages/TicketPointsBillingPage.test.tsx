@@ -1,4 +1,4 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import { TicketPointsBillingPage } from "./TicketPointsBillingPage";
@@ -42,4 +42,21 @@ it("商户积分发行费账单标明费用类别，明细显示来源消费单�
   await waitFor(()=>expect(screen.getByText(/一号酒吧合同主体/)).toHaveTextContent("商户积分发行费"));
   fireEvent.click(screen.getByText("查看明细和异议"));
   await waitFor(()=>expect(screen.getByText(/消费单据 bill-001/)).toBeInTheDocument());
+});
+
+// 第十八批 AL 段 240-R2（ENUM:192「结算状态 草稿、待复核、已确认、已调整、已归档」；第十八批裁决 54「积分账单有未处理异议→待复核」、裁决 64）：
+// 账单表在原「状态」列前加「结算状态」列，按后端派生的 settlement_state 显示五态中文，原收款进度列不动。
+it("账单表「结算状态」列按五态中文显示：草稿、待复核、已确认、已归档",async()=>{
+  const bill=(id:string,seller:string,settlementState:string)=>({id,billing_month:"2026-09-01",seller_entity_id:seller,receiver_entity_id:"积分中心",project_id:"p1",amount_cent:100,paid_amount_cent:0,unpaid_amount_cent:100,visible_at:"2026-10-01T08:00:00Z",payment_status:"awaiting_objection_period",open_objections:0,settlement_state:settlementState});
+  vi.stubGlobal("fetch",vi.fn(async(input:RequestInfo|URL)=>{
+    const data=String(input).endsWith("/bills")?[bill("b1","甲酒吧","draft"),bill("b2","乙酒吧","pending_review"),bill("b3","丙酒吧","confirmed"),bill("b4","丁酒吧","archived")]:[];
+    return new Response(JSON.stringify({success:true,code:"OK",data}),{headers:{"Content-Type":"application/json"}});
+  }));
+  const props:AdminPageProps={api:new AdminApi("test"),user:{id:"u",username:"merchant",accountType:"merchant"},setActionResult:vi.fn(),setGlobalError:vi.fn(),effectivePermissions:{status:"ready",value:{grants:["ticket.points.billing.view"],denies:[],wildcard:false}}};
+  render(<TicketPointsBillingPage {...props}/>);
+  await waitFor(()=>expect(screen.getByText(/甲酒吧/).closest("tr")?.textContent).toContain("草稿"));
+  expect(screen.getByText(/乙酒吧/).closest("tr")?.textContent).toContain("待复核");
+  expect(screen.getByText(/丙酒吧/).closest("tr")?.textContent).toContain("已确认");
+  expect(screen.getByText(/丁酒吧/).closest("tr")?.textContent).toContain("已归档");
+  expect(screen.getAllByRole("columnheader").map(th=>th.textContent)).toContain("结算状态");
 });

@@ -1,4 +1,4 @@
-// 文件版本：V0.06
+// 文件版本：V0.07
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { FinanceDailyClosePanel } from "./FinanceDailyClosePanel";
@@ -7,7 +7,10 @@ import type { AdminApiClient, AdminUser } from "../types";
 // 第十八批 P 段第 133 条 133-R3（BSM:1668「……最后形成日结和结算依据。」；ENUM:188 对账口径含「按日结」；
 // BSM:1682「按营业日生成日结批次。」；BSM:2023「已拍板：日结锁定后不能直接补录影响金额，必须上级审批通过后补录。」）。
 // 第十八批 R 段第 143 条 143-R1（ENUM:190「待生成、待确认、有差异、已确认、已锁定、已归档」）：生成、确认、锁定三步，查不到即「待生成」。
-// 143-R4：已锁定、已归档的日结展开后列出被它锁定的台账与锁定后补录，可在此申请补录、审批补录。
+// 143-R4：已锁定、已归档的日结展开后列出被它锁定的台账与锁定后补录，可在此申请补录。
+// 第十八批 AL 段第 245 条 245-R2（ENUM:190「日结锁定后的补录须上级审批」；BSM:1642「补录一律进入主管复核队列，复核通过才生效」）：补录提交后进主管复核，
+// 本区块不再有批准、驳回；第 253 条（第十八批裁决 56「三种锁账补录提交时必须上传原始凭证（银行回单、转账截图、异议处理结论等）并写责任人」）：
+// 三种申请都先上传原始凭证、写责任人。
 const CLOSES = [
   { id: "dc1", businessDate: "2026-11-02", scopeType: "bar", scopeId: "bar_a", status: "locked", lockedAt: "2026-11-03T02:00:00Z" },
 ];
@@ -30,7 +33,8 @@ const ADJUSTMENTS = [
     originalBusinessDate: "2026-11-01", kind: "amount", paymentMethod: null },
   { id: "adj2", arApItemId: "it1", itemNo: "AR-0001", lockedDayCloseId: "d3", adjustmentAmountCent: -300, approvalStatus: "pending",
     requestedBy: "财务丙", approvedBy: null, reason: "多记冲减", createdAt: "2026-11-04T02:00:00Z", decidedAt: null,
-    originalBusinessDate: "2026-11-01", kind: "amount", paymentMethod: null },
+    originalBusinessDate: "2026-11-01", kind: "amount", paymentMethod: null, reviewId: "review_adj2", evidenceAttachmentIds: ["att_9"],
+    responsibleStaffId: "责任人丁" },
   // 第十八批 Z 段第 186 条 186-R1：收付款补录（kind=payment），批准后登记收付款。
   { id: "adj3", arApItemId: "it1", itemNo: "AR-0001", lockedDayCloseId: "d3", adjustmentAmountCent: 60000, approvalStatus: "pending",
     requestedBy: "财务丙", approvedBy: null, reason: "到期后补缴", createdAt: "2026-11-05T02:00:00Z", decidedAt: null,
@@ -41,7 +45,8 @@ const ADJUSTMENTS = [
     originalBusinessDate: "2026-11-01", kind: "refund", paymentMethod: "bank_transfer" },
 ];
 const BACKFILL = ["finance.daily_close.manage", "finance.daily_close.lock", "finance.ar_ap.view", "finance.locked_backfill.request",
-  "finance.locked_backfill.approve"];
+  "evidence.attachment.create"];
+const PROOF_HINT = "请上传原始凭证（银行回单、转账截图、异议处理结论等）";
 const SUMMARIES = [
   { id: "sm1", dailyCloseId: "dc1", sourceStream: "bar_deposit", amountCent: 10000, refundCent: 0, orderCount: 1 },
   { id: "sm2", dailyCloseId: "dc1", sourceStream: "bar", amountCent: 25000, refundCent: 500, orderCount: 3 },
@@ -56,17 +61,26 @@ const MERCHANT = { id: "u1", username: "酒吧财务", accountType: "merchant", 
 
 function setup({ grants = ["finance.daily_close.manage", "finance.daily_close.lock"], user = STAFF,
   post = vi.fn().mockResolvedValue({ id: "dc-new", status: "pending_confirm" }), rows = CLOSES as Record<string, unknown>[],
-  current = [] as Record<string, unknown>[] } = {}) {
+  current = [] as Record<string, unknown>[], postForm = vi.fn().mockResolvedValue({ id: "att_1", fileName: "回单.pdf" }) } = {}) {
   const get = vi.fn(async (url: string) => (url.endsWith("/summaries") ? SUMMARIES : url.endsWith("/adjustments") ? ADJUSTMENTS
     : url === "/api/v1/platform/merchants" ? BARS : []));
   // 列表按页读；带营业日与范围的是生成表单查「当前状态」。
   const getPaged = vi.fn(async (url: string) => (url.startsWith("/api/v1/finance/ar-ap-items")
     ? { items: LOCKED_ITEMS, total: LOCKED_ITEMS.length, page: 1, size: 200 } : url.includes("business_date=")
     ? { items: current, total: current.length, page: 1, size: 1 } : { items: rows, total: rows.length, page: 1, size: 20 }));
-  const api = { get, getPaged, post, put: vi.fn(), patch: vi.fn(), delete: vi.fn() } as unknown as AdminApiClient;
+  const api = { get, getPaged, post, postForm, put: vi.fn(), patch: vi.fn(), delete: vi.fn() } as unknown as AdminApiClient;
   render(<FinanceDailyClosePanel api={api} user={user} setGlobalError={vi.fn()}
     effectivePermissions={{ status: "ready", value: { grants, denies: [], wildcard: false } }} />);
-  return { get, getPaged, post };
+  return { get, getPaged, post, postForm };
+}
+
+// 第十八批 AL 段第 253 条：该台账行的补录共用块——上传一份原始凭证（等到已传清单出现）并写责任人账号。
+async function fillProof(itemId: string, responsible = "staff_resp") {
+  await waitFor(() => expect(screen.queryByTestId(`daily-close-backfill-proof-${itemId}`)).not.toBeNull());
+  fireEvent.change(screen.getByTestId(`daily-close-backfill-proof-${itemId}`),
+    { target: { files: [new File(["%PDF-1.4"], "回单.pdf", { type: "application/pdf" })] } });
+  await waitFor(() => expect(screen.getByTestId(`daily-close-backfill-proofs-${itemId}`).textContent).toContain("回单.pdf"));
+  if (responsible) fireEvent.change(screen.getByTestId(`daily-close-backfill-responsible-${itemId}`), { target: { value: responsible } });
 }
 
 // 中文日期选择器：选年 → 选月 → 选日（组件不读环境时钟，默认翻到兜底年月）。
@@ -269,9 +283,9 @@ describe("日结区块", () => {
     expect(get).not.toHaveBeenCalledWith("/api/v1/platform/merchants");
   });
 
-  it("展开已锁定行出「本日结锁定的台账」与「锁定后补录」两张表；申请补录提交调整额（分，可负）与原因，待审批的补录可驳回", async () => {
+  it("展开已锁定行出「本日结锁定的台账」与「锁定后补录」两张表；上传凭证、写责任人后申请补录，提交调整额（分，可负）、原因、凭证与责任人，不填最终审批人不带；没有批准、驳回", async () => {
     const post = vi.fn().mockResolvedValue({ id: "adj3", approvalStatus: "pending" });
-    const { get, getPaged } = setup({ rows: STEPS, post, grants: BACKFILL });
+    const { get, getPaged, postForm } = setup({ rows: STEPS, post, grants: BACKFILL });
     await waitFor(() => expect(screen.queryByTestId("daily-close-open-d3")).not.toBeNull());
     fireEvent.click(screen.getByTestId("daily-close-open-d3"));
     await waitFor(() => expect(screen.queryByTestId("daily-close-locked-items")?.textContent ?? "").toContain("AR-0001"));
@@ -284,20 +298,83 @@ describe("日结区块", () => {
     for (const value of ["财务甲", "财务乙", "2026年11月3日 05:00", "2026年11月1日", "5.00", "-3.00", "已通过", "待处理"]) {
       expect(text).toContain(value);
     }
-    expect(screen.queryByTestId("daily-close-adjustment-reject-adj1")).toBeNull();
+    expect(screen.queryByTestId("daily-close-adjustment-approve-adj2")).toBeNull();
+    expect(screen.queryByTestId("daily-close-adjustment-reject-adj2")).toBeNull();
     await waitFor(() => expect((screen.getByTestId("daily-close-backfill-it1") as HTMLButtonElement).disabled).toBe(false));
     fireEvent.change(screen.getByTestId("daily-close-backfill-amount-it1"), { target: { value: "-5" } });
     fireEvent.change(screen.getByTestId("daily-close-backfill-reason-it1"), { target: { value: "漏记冲减" } });
+    await fillProof("it1");
+    expect(postForm.mock.calls[0]?.[0]).toBe("/api/v1/evidence/attachments/upload");
+    expect((postForm.mock.calls[0]?.[1] as FormData).get("business_type")).toBe("finance_locked_backfill");
+    await waitFor(() => expect((screen.getByTestId("daily-close-backfill-it1") as HTMLButtonElement).disabled).toBe(false));
     const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
     fireEvent.click(screen.getByTestId("daily-close-backfill-it1"));
     expect(confirm.mock.calls[0]?.[0]).toContain("日结锁定后不能直接补录影响金额，必须上级审批通过后补录。");
-    await waitFor(() => expect(post).toHaveBeenCalledWith("/api/v1/finance/ar-ap-adjustments", expect.objectContaining({
-      arApItemId: "it1", adjustmentAmountCent: -500, reason: "漏记冲减", idempotencyKey: expect.any(String) })));
+    await waitFor(() => expect(post).toHaveBeenCalledWith("/api/v1/finance/ar-ap-adjustments", { arApItemId: "it1", adjustmentAmountCent: -500,
+      reason: "漏记冲减", evidenceAttachmentIds: ["att_1"], responsibleStaffId: "staff_resp", idempotencyKey: expect.any(String) }));
     await waitFor(() => expect(get.mock.calls.filter(([url]) => url === "/api/v1/finance/daily-closes/d3/adjustments")).toHaveLength(2));
-    await waitFor(() => expect((screen.getByTestId("daily-close-adjustment-reject-adj2") as HTMLButtonElement).disabled).toBe(false));
-    fireEvent.click(screen.getByTestId("daily-close-adjustment-reject-adj2"));
-    await waitFor(() => expect(post).toHaveBeenCalledWith("/api/v1/finance/ar-ap-adjustments/adj2/approve",
-      expect.objectContaining({ decision: "reject", idempotencyKey: expect.any(String) })));
+    expect(post.mock.calls.some(([url]) => String(url).endsWith("/approve"))).toBe(false);
+  });
+
+  // 第十八批 AL 段第 253 条 253-R1、253-R2：三种申请都要先上传原始凭证、写责任人，缺哪个都提示、不弹确认、不提交。
+  it("三种申请未上传原始凭证都不弹确认、不提交，提示上传原始凭证", async () => {
+    const post = vi.fn();
+    setup({ rows: STEPS, post, grants: BACKFILL });
+    await waitFor(() => expect(screen.queryByTestId("daily-close-open-d3")).not.toBeNull());
+    fireEvent.click(screen.getByTestId("daily-close-open-d3"));
+    await waitFor(() => expect(screen.queryByTestId("daily-close-refund-backfill-it1")).not.toBeNull());
+    await waitFor(() => expect((screen.getByTestId("daily-close-backfill-it1") as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.change(screen.getByTestId("daily-close-backfill-amount-it1"), { target: { value: "5" } });
+    fireEvent.change(screen.getByTestId("daily-close-backfill-reason-it1"), { target: { value: "漏记" } });
+    fireEvent.change(screen.getByTestId("daily-close-payment-backfill-amount-it1"), { target: { value: "600" } });
+    fireEvent.change(screen.getByTestId("daily-close-payment-backfill-method-it1"), { target: { value: "bank_transfer" } });
+    fireEvent.change(screen.getByTestId("daily-close-payment-backfill-reason-it1"), { target: { value: "到期后补缴" } });
+    fireEvent.change(screen.getByTestId("daily-close-refund-backfill-amount-it1"), { target: { value: "200" } });
+    fireEvent.change(screen.getByTestId("daily-close-refund-backfill-reason-it1"), { target: { value: "异议成立多退" } });
+    await waitFor(() => expect(screen.queryByTestId("daily-close-backfill-responsible-it1")).not.toBeNull());
+    fireEvent.change(screen.getByTestId("daily-close-backfill-responsible-it1"), { target: { value: "staff_resp" } });
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+    for (const testId of ["daily-close-backfill-it1", "daily-close-payment-backfill-it1", "daily-close-refund-backfill-it1"]) {
+      fireEvent.click(screen.getByTestId(testId));
+      await waitFor(() => expect(screen.getByRole("alert").textContent).toContain(PROOF_HINT));
+    }
+    expect(confirm).not.toHaveBeenCalled();
+    expect(post).not.toHaveBeenCalled();
+  });
+
+  it("三种申请已传凭证但未填责任人都不弹确认、不提交，提示「请填写责任人」", async () => {
+    const post = vi.fn();
+    setup({ rows: STEPS, post, grants: BACKFILL });
+    await waitFor(() => expect(screen.queryByTestId("daily-close-open-d3")).not.toBeNull());
+    fireEvent.click(screen.getByTestId("daily-close-open-d3"));
+    await waitFor(() => expect(screen.queryByTestId("daily-close-refund-backfill-it1")).not.toBeNull());
+    await waitFor(() => expect((screen.getByTestId("daily-close-backfill-it1") as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.change(screen.getByTestId("daily-close-backfill-amount-it1"), { target: { value: "5" } });
+    fireEvent.change(screen.getByTestId("daily-close-backfill-reason-it1"), { target: { value: "漏记" } });
+    fireEvent.change(screen.getByTestId("daily-close-payment-backfill-amount-it1"), { target: { value: "600" } });
+    fireEvent.change(screen.getByTestId("daily-close-payment-backfill-method-it1"), { target: { value: "bank_transfer" } });
+    fireEvent.change(screen.getByTestId("daily-close-payment-backfill-reason-it1"), { target: { value: "到期后补缴" } });
+    fireEvent.change(screen.getByTestId("daily-close-refund-backfill-amount-it1"), { target: { value: "200" } });
+    fireEvent.change(screen.getByTestId("daily-close-refund-backfill-reason-it1"), { target: { value: "异议成立多退" } });
+    await fillProof("it1", "");
+    await waitFor(() => expect((screen.getByTestId("daily-close-backfill-it1") as HTMLButtonElement).disabled).toBe(false));
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+    for (const testId of ["daily-close-backfill-it1", "daily-close-payment-backfill-it1", "daily-close-refund-backfill-it1"]) {
+      fireEvent.click(screen.getByTestId(testId));
+      await waitFor(() => expect(screen.getByRole("alert").textContent).toContain("请填写责任人"));
+    }
+    expect(confirm).not.toHaveBeenCalled();
+    expect(post).not.toHaveBeenCalled();
+  });
+
+  it("锁定后补录表显示责任人，凭证逐个链到附件回读地址，复核单号链到审批链页", async () => {
+    setup({ rows: STEPS, grants: BACKFILL });
+    await waitFor(() => expect(screen.queryByTestId("daily-close-open-d3")).not.toBeNull());
+    fireEvent.click(screen.getByTestId("daily-close-open-d3"));
+    await waitFor(() => expect(screen.queryByTestId("daily-close-adjustments")?.textContent ?? "").toContain("责任人丁"));
+    expect(screen.getByTestId("daily-close-adjustment-proof-adj2-0").getAttribute("href")).toContain("/api/v1/evidence/attachments/att_9/file");
+    expect(screen.getByTestId("daily-close-adjustment-review-adj2").getAttribute("href"))
+      .toContain("/admin/governance/approval-chain?review_id=review_adj2");
   });
 
   it("本日结锁定的台账方向列显示中文，长款营业外收入台账显示「内部核算」", async () => {
@@ -313,7 +390,7 @@ describe("日结区块", () => {
 
   // 第十八批 Z 段第 186 条 186-R1（ENUM:190「日结锁定后的补录须上级审批，且不改动已锁定的日结金额：补录金额归入当期……」；
   // BSM:2023「已拍板：日结锁定后不能直接补录影响金额，必须上级审批通过后补录。」；第七批裁决 19「人工登记收款仍受锁定拦截。」）。
-  it("本日结锁定的台账可申请收付款补录：提交类型、台账、金额（分）、收付方式、原因与幂等键，补录表显示类型与收付方式中文", async () => {
+  it("本日结锁定的台账可申请收付款补录：提交类型、台账、金额（分）、收付方式、原因、凭证、责任人、最终审批人与幂等键，补录表显示类型与收付方式中文", async () => {
     const post = vi.fn().mockResolvedValue({ id: "adj4", approvalStatus: "pending" });
     const { get } = setup({ rows: STEPS, post, grants: BACKFILL });
     await waitFor(() => expect(screen.queryByTestId("daily-close-open-d3")).not.toBeNull());
@@ -326,11 +403,15 @@ describe("日结区块", () => {
     fireEvent.change(screen.getByTestId("daily-close-payment-backfill-amount-it1"), { target: { value: "600" } });
     fireEvent.change(screen.getByTestId("daily-close-payment-backfill-method-it1"), { target: { value: "bank_transfer" } });
     fireEvent.change(screen.getByTestId("daily-close-payment-backfill-reason-it1"), { target: { value: "到期后补缴" } });
+    await fillProof("it1");
+    fireEvent.change(screen.getByTestId("daily-close-backfill-final-approver-it1"), { target: { value: "boss_s3" } });
+    await waitFor(() => expect((screen.getByTestId("daily-close-payment-backfill-it1") as HTMLButtonElement).disabled).toBe(false));
     const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
     fireEvent.click(screen.getByTestId("daily-close-payment-backfill-it1"));
     expect(confirm.mock.calls[0]?.[0]).toContain("日结锁定后不能直接补录影响金额，必须上级审批通过后补录。");
     await waitFor(() => expect(post).toHaveBeenCalledWith("/api/v1/finance/ar-ap-adjustments", { kind: "payment", arApItemId: "it1",
-      adjustmentAmountCent: 60000, paymentMethod: "bank_transfer", reason: "到期后补缴", idempotencyKey: expect.any(String) }));
+      adjustmentAmountCent: 60000, paymentMethod: "bank_transfer", reason: "到期后补缴", evidenceAttachmentIds: ["att_1"],
+      responsibleStaffId: "staff_resp", finalApproverId: "boss_s3", idempotencyKey: expect.any(String) }));
     await waitFor(() => expect(get.mock.calls.filter(([url]) => url === "/api/v1/finance/daily-closes/d3/adjustments")).toHaveLength(2));
   });
 
@@ -347,11 +428,14 @@ describe("日结区块", () => {
     expect(screen.queryByTestId("daily-close-refund-backfill-it2")).toBeNull();
     fireEvent.change(screen.getByTestId("daily-close-refund-backfill-amount-it1"), { target: { value: "200" } });
     fireEvent.change(screen.getByTestId("daily-close-refund-backfill-reason-it1"), { target: { value: "异议成立多退" } });
+    await fillProof("it1");
+    await waitFor(() => expect((screen.getByTestId("daily-close-refund-backfill-it1") as HTMLButtonElement).disabled).toBe(false));
     const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
     fireEvent.click(screen.getByTestId("daily-close-refund-backfill-it1"));
     expect(confirm.mock.calls[0]?.[0]).toContain("日结锁定后不能直接补录影响金额，必须上级审批通过后补录。");
     await waitFor(() => expect(post).toHaveBeenCalledWith("/api/v1/finance/ar-ap-adjustments", { kind: "refund", arApItemId: "it1",
-      adjustmentAmountCent: 20000, reason: "异议成立多退", idempotencyKey: expect.any(String) }));
+      adjustmentAmountCent: 20000, reason: "异议成立多退", evidenceAttachmentIds: ["att_1"], responsibleStaffId: "staff_resp",
+      idempotencyKey: expect.any(String) }));
     await waitFor(() => expect(get.mock.calls.filter(([url]) => url === "/api/v1/finance/daily-closes/d3/adjustments")).toHaveLength(2));
   });
 
@@ -388,13 +472,16 @@ describe("日结区块", () => {
     expect(get.mock.calls.filter(([url]) => url === "/api/v1/finance/daily-closes/d1/summaries")).toHaveLength(2);
   });
 
-  it("没有补录申请与审批权限：两张表照常显示，不出申请补录、批准、驳回；展开待确认行不出两张表", async () => {
-    setup({ rows: STEPS, grants: ["finance.daily_close.manage", "finance.ar_ap.view"] });
+  // 第十八批 AL 段第 253 条 253-R1：申请三列须同时持补录申请与凭证上传权限才出（照 BarSessionBackfill）。
+  it("有补录申请权限但没有凭证上传权限：两张表照常显示，不出申请补录；展开待确认行不出两张表", async () => {
+    setup({ rows: STEPS, grants: ["finance.daily_close.manage", "finance.ar_ap.view", "finance.locked_backfill.request"] });
     await waitFor(() => expect(screen.queryByTestId("daily-close-open-d3")).not.toBeNull());
     fireEvent.click(screen.getByTestId("daily-close-open-d3"));
     await waitFor(() => expect(screen.queryByTestId("daily-close-adjustments")?.textContent ?? "").toContain("多记冲减"));
     await waitFor(() => expect(screen.queryByTestId("daily-close-locked-items")?.textContent ?? "").toContain("AR-0001"));
     expect(screen.queryByTestId("daily-close-backfill-it1")).toBeNull();
+    expect(screen.queryByTestId("daily-close-payment-backfill-it1")).toBeNull();
+    expect(screen.queryByTestId("daily-close-backfill-proof-it1")).toBeNull();
     expect(screen.queryByTestId("daily-close-adjustment-approve-adj2")).toBeNull();
     expect(screen.queryByTestId("daily-close-adjustment-reject-adj2")).toBeNull();
     await waitFor(() => expect((screen.getByTestId("daily-close-open-d1") as HTMLButtonElement).disabled).toBe(false));
@@ -404,13 +491,13 @@ describe("日结区块", () => {
     expect(screen.queryByTestId("daily-close-locked-items")).toBeNull();
   });
 
-  it("已归档行展开后两张补录表照常显示，申请补录与审批照常可办", async () => {
+  it("已归档行展开后两张补录表照常显示，申请补录照常可办，没有批准、驳回", async () => {
     setup({ rows: [ARCHIVED], grants: BACKFILL });
     await waitFor(() => expect(screen.queryByTestId("daily-close-open-d4")).not.toBeNull());
     fireEvent.click(screen.getByTestId("daily-close-open-d4"));
     await waitFor(() => expect(screen.queryByTestId("daily-close-adjustments")?.textContent ?? "").toContain("漏记收入"));
     await waitFor(() => expect(screen.queryByTestId("daily-close-backfill-it1")).not.toBeNull());
-    expect(screen.queryByTestId("daily-close-adjustment-approve-adj2")).not.toBeNull();
+    expect(screen.queryByTestId("daily-close-adjustment-approve-adj2")).toBeNull();
   });
 
   it("没有锁定权限不出生成表单与确认、锁定按钮，没有日结查看权限整块不渲染", async () => {

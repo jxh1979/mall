@@ -5,7 +5,7 @@ import { ApprovalChainPage } from "./ApprovalChainPage";
 import { AdminApi } from "../client/adminClient";
 import type { AdminPageProps, EffectivePermissionsState } from "../types";
 
-// 文件版本：V0.11
+// 文件版本：V0.12
 
 function raw(data: unknown): Response {
   return new Response(JSON.stringify({ success: true, code: "OK", message: "success", data }), { status: 200, headers: { "content-type": "application/json" } });
@@ -274,11 +274,13 @@ describe("ApprovalChainPage 审批链与节点裁决", () => {
       "parking.release.waive", "ticket.reward.rule", "ticket.reward.national", "ticket.reward.sales_contract", "staff.shift.publish", "staff.attendance.receipt.review",
       "staff.payroll.penalty_cap.adjust", "manual_release", "bill_waiver", "refund", "ar_ap_adjustment", "contract_violation", "base_definition_violation",
       "permission_grant_l3", "finance.tax_rule.adjust", "staff.profile.employment_status.change", "staff.payroll.adjustment.add", "staff.payroll.adjustment.appeal",
-      "bar.table_session.transfer_over_limit", "ticket.type.rule.publish"];
+      "bar.table_session.transfer_over_limit", "ticket.type.rule.publish",
+      // 第十八批 AL 段第 245 条 245-R1：日结锁定后补录改走统一审批（原准入闸 finance.locked_backfill_approve 随旧审批接口停用）。
+      "finance.locked_backfill.review"];
     const admissionActions = ["bar.bill_waiver", "amusement.reopen", "bar.bill_reopen", "amusement.incident_close", "amusement.group_booking_approve",
       "bar.order_item_void", "bar.shift_close", "ticketing.refund_approve", "ticketing.dynamic_pricing_publish", "ticketing.verification_reverse",
       "inventory.stock_adjust", "inventory.purchase_receive", "inventory.saved_bottle_claim", "finance.refund", "finance.offline_payment_confirm",
-      "finance.locked_backfill_approve", "customer.home_content.publish",
+      "customer.home_content.publish",
       // 第十八批 AK 段第 221 条 221-R1⑥（V625 三条恒阻断策略）：临时沽清、长期下架、解除沽清。
       "bar.product_sold_out", "bar.product_delist", "bar.product_sold_out_release"];
     const accessActions = ["access.role_viewable_projects.reduce", "access.position_role_template.delete", "access.scope_change", "access.scope_change.money",

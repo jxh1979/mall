@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static com.complex.platform.support.DailyCloseFixture.closeWithMarks;
 import static com.complex.platform.support.DailyCloseFixture.markRangeFinal;
@@ -74,7 +74,7 @@ class FinancePeriodCloseJdbcIntegrationTests {
                 + " VALUES (?, ?, 'bar', ?, 'active', TIMESTAMPTZ '2026-01-01 00:00:00+08', now())", bar, barName, project);
         staffs = new StaffRequestFixture(jdbc);
         finance = staffs.staff(financeUser, "staff", project, null,
-                "finance.period_close.execute", "finance.daily_close.lock", "finance.locked_backfill.request");
+                "finance.period_close.execute", "finance.daily_close.lock", "finance.locked_backfill.request", "evidence.attachment.create");
     }
 
     /** ①②③④⑤⑦⑧：缺一类 → 未最终；有一天未锁 → 未锁定；未勾四流一致 → 400；勾选 → 封账；再封 → 已封账；列表可查；封账后锁定后补录照常可申请。 */
@@ -123,10 +123,17 @@ class FinancePeriodCloseJdbcIntegrationTests {
                 .andExpect(jsonPath("$.data.items[0].period_month").value("2026-02"))
                 .andExpect(jsonPath("$.data.items[0].closed_by").value(financeUser));
 
-        // ⑧ 封账不另加拦截：该月锁定台账的锁定后补录照常可申请。
+        // ⑧ 封账不另加拦截：该月锁定台账的锁定后补录照常可申请（第十八批 AL 段第 253 条：先上传原始凭证、写责任人）。
+        String evidence = com.jayway.jsonpath.JsonPath.read(mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                        .multipart("/api/v1/evidence/attachments/upload")
+                        .file(new org.springframework.mock.web.MockMultipartFile("file", "bank-receipt.pdf", "application/pdf",
+                                "%PDF-1.4 receipt".getBytes(java.nio.charset.StandardCharsets.UTF_8)))
+                        .param("business_type", "finance_locked_backfill").with(finance))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString(), "$.data.id");
         mockMvc.perform(post("/api/v1/finance/ar-ap-adjustments").with(finance).contentType(MediaType.APPLICATION_JSON)
                         .content(json.writeValueAsString(Map.of("idempotency_key", "fpc-adj-" + s, "ar_ap_item_id", item,
-                                "adjustment_amount_cent", 10, "reason", "封账后补录"))))
+                                "adjustment_amount_cent", 10, "reason", "封账后补录", "evidence_attachment_ids", List.of(evidence),
+                                "responsible_staff_id", financeUser))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.approval_status").value("pending"));
     }

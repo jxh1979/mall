@@ -1,6 +1,6 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import static com.complex.platform.common.Strings.requireText;
 import static com.complex.platform.common.Strings.trimToNull;
@@ -217,7 +217,7 @@ public class MediaPerformanceService {
             ShowRecord show = requireShow(showId);
             requireScope(show, reach(PERM_VIEW));
             ShowDetail detail = new ShowDetail(show, repository.findFulfillmentByShow(show.id()).orElse(null),
-                    repository.listSettlements(show.id()));
+                    repository.listSettlementViews(show.id()));
             auditEventService.recordSuccess("media_show.viewed", PERM_VIEW, BUSINESS_TYPE, show.id(), null, null, Map.of());
             return detail;
         } catch (ApiException failure) {

@@ -1,4 +1,4 @@
-// 文件版本：V0.04
+// 文件版本：V0.05
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
@@ -7,6 +7,7 @@ import { TablePager } from "../components/TablePager";
 import type { AdminPageProps } from "../types";
 import type { PagedResult } from "../client/adminClient";
 import { formatBusinessStatus } from "../i18n/statusLabels";
+import { KEY_VALUE_LABELS } from "../i18n/fieldLabels";
 import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowDetailDrawer";
 import { MetricDetailLink, useMetricKpiValue } from "../components/MetricDetailEntry";
 
@@ -15,6 +16,9 @@ import { MetricDetailLink, useMetricKpiValue } from "../components/MetricDetailE
 // 第 75 条(ENUM 第 52 行「超池的判定与审批一律在事前完成，结算环节不再设“超池待审批”」「超出部分由娱乐平台公司承担」):
 // 本页全只读,超池额单列,过账时由娱乐平台公司承担,不设结算期审批。
 const PAGE_SIZE = 20;
+// 第十八批 AL 段 240-R2（ENUM 第 192 行「结算状态 草稿、待复核、已确认、已调整、已归档」；第十八批裁决 54「通票月结单、通票流水（随所属月结单）……
+//   按五态显示」「顺带修掉流水恒显示草稿」）：流水与月结单的「结算状态」显示后端派生的五态 settlementState。
+const settlementStateLabel = (state?: string | null) => KEY_VALUE_LABELS.settlement_state?.[state ?? ""] ?? "—";
 
 export type SettlementRow = {
   id: string;
@@ -36,6 +40,8 @@ export type SettlementRow = {
   // 第十八批 AJ 段 236-R6（BSM 第 1754 行「每项权益都必须绑定实际提供方和审批版本」；第 756 行「订单保存……规则版本」）：
   //   该笔订单下单时生效的票种规则版本号；没有版本的票种为空。
   ticketTypeRuleVersionNo?: number | null;
+  // 第十八批 AL 段 240-R1：五态结算状态（随所属月结单派生）。
+  settlementState?: string | null;
 };
 
 // S4:月度结算单头(财务对账视角)。金额带符号——负数月 = 冲正多于新核销,当月净追回。
@@ -71,6 +77,8 @@ export type SettlementBillRow = {
   giftCostCent: number;
   giftActualPaidCent: number;
   giftVarianceCent: number;
+  // 第十八批 AL 段 240-R1：五态结算状态（已确认、已归档；未出结果为草稿）。
+  settlementState?: string | null;
 };
 
 // 第十八批 AI 段 237-R3（BSM 第 1754 行「通票结算审阅财务侧设置独立审阅台账，按项目、经营域、责任主体和实际提供方列明第三方渠道费用、
@@ -176,7 +184,7 @@ export function SettlementReviewPage({ api, setGlobalError, navigateTo }: AdminP
         { label: "核销金额", value: `¥${centToYuan(row.verifiedAmountCent)}` },
         { label: "内部结算价版本", value: row.settlementCatalogEntryId ?? "—" },
         { label: "票种规则版本", value: row.ticketTypeRuleVersionNo == null ? "—" : `第 ${row.ticketTypeRuleVersionNo} 版` },
-        { label: "结算状态", value: formatBusinessStatus(row.settlementStatus ?? "—") },
+        { label: "结算状态", value: settlementStateLabel(row.settlementState) },
         { label: "发生时间", value: cnDate(row.createdAt) },
       ],
     });
@@ -231,7 +239,7 @@ export function SettlementReviewPage({ api, setGlobalError, navigateTo }: AdminP
                 <td>{row.merchantId ?? row.exclusiveMerchantId ?? "—"}</td>
                 <td className="admin-num" style={{ textAlign: "right" }}>{row.verifiedCount}</td>
                 <td className="admin-num" style={{ textAlign: "right" }}>{centToYuan(row.verifiedAmountCent)}</td>
-                <td>{formatBusinessStatus(row.settlementStatus ?? "—")}</td>
+                <td>{settlementStateLabel(row.settlementState)}</td>
               <td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看结算流水详情" onClick={(event) => { event.stopPropagation(); openDetail(row); }}>查看详情</button></td></tr>
             ))}</tbody>
           </table>
@@ -247,7 +255,7 @@ export function SettlementReviewPage({ api, setGlobalError, navigateTo }: AdminP
             </p>
             <div className="admin-table-scroll">
               <table className="admin-table" data-testid="settlement-review-bills-table">
-                <thead><tr><th>结算月</th><th>项目</th><th>通票收入（元）</th><th>通路费（元）</th><th>销售渠道费（元）</th><th>综合服务费·池链（元）</th><th>综合服务费·专属（元）</th><th>服务费归属</th><th>赠付预扣（元）</th><th>赠付实付（元）</th><th>赠付差额（元）</th><th>可分配池（元）</th><th>已分配（元）</th><th>分账尾差（元）</th><th>未分配池余额（元）</th><th>通票未核销减除额（归属主体）</th><th>暂挂（元）</th><th>状态</th><th>超池（元，娱乐平台公司承担）</th><th>审阅明细</th></tr></thead>
+                <thead><tr><th>结算月</th><th>项目</th><th>通票收入（元）</th><th>通路费（元）</th><th>销售渠道费（元）</th><th>综合服务费·池链（元）</th><th>综合服务费·专属（元）</th><th>服务费归属</th><th>赠付预扣（元）</th><th>赠付实付（元）</th><th>赠付差额（元）</th><th>可分配池（元）</th><th>已分配（元）</th><th>分账尾差（元）</th><th>未分配池余额（元）</th><th>通票未核销减除额（归属主体）</th><th>暂挂（元）</th><th>结算状态</th><th>超池（元，娱乐平台公司承担）</th><th>审阅明细</th></tr></thead>
                 <tbody>{bills.map((bill) => (
                   <tr key={bill.id} data-testid={`settlement-review-bill-${bill.id}`}>
                     <td>{bill.periodStart?.slice(0, 7) ?? "—"}</td>
@@ -269,7 +277,7 @@ export function SettlementReviewPage({ api, setGlobalError, navigateTo }: AdminP
                       {centToYuan(bill.unverifiedDeductionCent)}（{bill.unverifiedDeductionEntityName ?? bill.unverifiedDeductionEntityId ?? "归属未配置"}）
                     </td>
                     <td className="admin-num" style={{ textAlign: "right" }} data-testid={`settlement-bill-suspended-${bill.id}`}>{centToYuan(bill.poolSuspendedCent)}</td>
-                    <td>{formatBusinessStatus(bill.status ?? "—")}</td>
+                    <td>{settlementStateLabel(bill.settlementState)}</td>
                     <td className="admin-num" style={{ textAlign: "right" }} data-testid={`settlement-bill-overpool-amount-${bill.id}`}>{isOverPool(bill) ? centToYuan(overPoolCent(bill)) : "—"}</td>
                     <td><button type="button" className="admin-row-detail-btn" data-testid={`settlement-bill-review-${bill.id}`} onClick={() => openReview(bill)}>审阅明细</button></td>
                   </tr>

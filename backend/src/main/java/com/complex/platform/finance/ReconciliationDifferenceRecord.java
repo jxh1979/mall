@@ -11,7 +11,9 @@ import java.util.List;
  * 不带原件为空（待补凭证）。第十八批 Y 段第 181 条 181-R1（ENUM:191「待识别、待处理、待复核、已关闭」）：status 为
  * pending_identification、pending_handling、pending_review、closed；responsibleUserId 为当前负责人（登记人、识别人），stageEnteredAt 为进入
  * 本阶段的时刻，identifiedCause 为识别写下的差异原因，reviewId 为待复核时的复核单号。第十八批 Y 段第 181 条 181-R2：stageEscalatedAt 为本阶段
- * （待识别或待处理）已超时升级的时刻，未升级为空（只读，由超时作业写入）。
+ * （待识别或待处理）已超时升级的时刻，未升级为空（只读，由超时作业写入）。第十八批 AL 段第 223 条 223-R1（BSM:1751「高价值差异复核通过才
+ * 入账、同一差异只入账一次」）：ledgerEntry 为提交复核时是否认定结果入应收应付台账；postedArApItemId 为复核通过后入账的台账编号（按台账来源反查，只读），
+ * 未入账为空。
  */
 public record ReconciliationDifferenceRecord(
         String id,
@@ -29,7 +31,9 @@ public record ReconciliationDifferenceRecord(
         Instant stageEnteredAt,
         String identifiedCause,
         String reviewId,
-        Instant stageEscalatedAt
+        Instant stageEscalatedAt,
+        boolean ledgerEntry,
+        String postedArApItemId
 ) {
 
     /**
@@ -46,6 +50,6 @@ public record ReconciliationDifferenceRecord(
             Instant createdAt
     ) {
         this(id, batchId, differenceType, businessRef, amountCent, null, null, "system", status, createdAt, List.of(),
-                null, createdAt, null, null, null);
+                null, createdAt, null, null, null, false, null);
     }
 }

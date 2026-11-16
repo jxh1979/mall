@@ -1,6 +1,6 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import com.fasterxml.jackson.annotation.JsonUnwrapped;
 import java.time.Instant;
@@ -60,6 +60,14 @@ public final class MediaPerformanceRecords {
                                    Instant createdAt, Instant updatedAt) {
     }
 
-    public record ShowDetail(ShowRecord show, FulfillmentRecord fulfillment, List<SettlementRecord> settlements) {
+    /**
+     * 第十八批 AL 段 240-R1（ENUM:192「结算状态 草稿、待复核、已确认、已调整、已归档」；第十八批裁决 54「演出挂起……→待复核；已出结果或已入账→已确认；
+     * 被财务调整取代的演出行→已调整；所属综合体该月已封账（裁决 41）→已归档」；裁决 64）：场次详情里的结算行＝结算行字段平铺，另带五态 settlementState
+     * （只是显示口径，不改 status）。
+     */
+    public record SettlementView(@JsonUnwrapped SettlementRecord settlement, String settlementState) {
+    }
+
+    public record ShowDetail(ShowRecord show, FulfillmentRecord fulfillment, List<SettlementView> settlements) {
     }
 }

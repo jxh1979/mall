@@ -178,3 +178,19 @@ describe("MetricDetailPage 对账差异四态", () => {
     expect(screen.getByTestId("metric-detail-row-rd-4").textContent).toContain("已关闭");
   });
 });
+
+// 第十八批 AL 段 240-R3（ENUM:192「结算状态 草稿、待复核、已确认、已调整、已归档」；第十八批裁决 54「通票流水（随所属月结单）……按五态显示」）：
+// 结算三指标明细的「结算状态」列按列键查五态中文——archived 是「已归档」，不是通用状态表的「已存档」。
+describe("MetricDetailPage 结算五态", () => {
+  it("结算笔数明细：结算状态列 archived 显示已归档、confirmed 显示已确认", async () => {
+    const api = makeApi(() => ({ ...TICKET_PAYLOAD, metricKey: "settlement.transaction_count", name: "结算笔数", unit: "笔", traceLinkPageId: null,
+      traceLinkColumnKey: "id", columns: [{ key: "transactionNo", label: "流水号" }, { key: "settlementState", label: "结算状态" }],
+      rows: [{ id: "st-1", transactionNo: "ST-1", settlementState: "archived" }, { id: "st-2", transactionNo: "ST-2", settlementState: "confirmed" }],
+      totalRows: 2 }));
+    renderPage(api, "settlement.transaction_count||");
+
+    await waitFor(() => expect(screen.queryByTestId("metric-detail-row-st-1")?.textContent).toContain("已归档"));
+    expect(screen.getByTestId("metric-detail-row-st-1").textContent).not.toContain("已存档");
+    expect(screen.getByTestId("metric-detail-row-st-2").textContent).toContain("已确认");
+  });
+});

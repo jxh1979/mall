@@ -1,4 +1,4 @@
-// 文件版本：V0.33
+// 文件版本：V0.34
 // OBS-14-02 后台结果区字段中文名字典（PGM「全局原则 · 界面全中文（所有终端零英文）」）。
 // 键用后端 JSON 的蛇形写法；结果区查表时蛇形与驼峰同查（orderId / order_id 都命中 order_id）。
 // 与后端字段中文名表 FieldLabels.java（common.api 包）同键同名：前段按后端原样抄录，后端改名这里跟着改（门禁会比对）。
@@ -1600,6 +1600,7 @@ export const FIELD_LABELS: Record<string, string> = {
   leave_deduction_cent: "请假扣款",
   leave_mode: "请假方式",
   leave_type: "请假类型",
+  ledger_entry: "认定结果入应收应付台账",
   ledger_item_id: "台账明细",
   ledger_net_cent: "台账净额",
   ledger_type: "台账类型",
@@ -2324,6 +2325,7 @@ export const FIELD_LABELS: Record<string, string> = {
   session_version: "场次版本",
   sessions: "场次",
   settled_at: "结算时间",
+  settlement: "结算",
   settlement_account: "结算账户",
   settlement_company: "结算公司",
   settlement_item_id: "结算明细",
@@ -2331,6 +2333,7 @@ export const FIELD_LABELS: Record<string, string> = {
   settlement_method: "结算方式",
   settlement_price_cent: "结算价",
   settlement_rules: "结算规则",
+  settlement_state: "结算状态",
   settlement_status: "结算状态",
   settlements: "结算",
   severity: "严重度",
@@ -3464,6 +3467,9 @@ export const KEY_VALUE_LABELS: Record<string, Record<string, string>> = {
   source_stream: { official_ticket: "官方售票", channel_ticket: "渠道售票", bar: "酒吧", amusement: "游乐", supply_cost: "供应链成本", thirdparty_reflow: "第三方回流", bar_deposit: "订台定金", low_value_difference: "低价值未关闭差异（含上期带入）" },
   // 第十八批 R 段第 143 条 143-R1：日结状态，与 ENUM:190「待生成、待确认、有差异、已确认、已锁定、已归档」同字（待生成按查不到日结显示，不入库）。
   daily_close_status: { pending_confirm: "待确认", has_difference: "有差异", confirmed: "已确认", locked: "已锁定", archived: "已归档" },
+  // 第十八批 AL 段第 240 条 240-R2：结算状态五态，与 ENUM:192「草稿、待复核、已确认、已调整、已归档」同字（第十八批裁决 54 定为四类结算对象的显示口径）；
+  //   通用状态表 archived 是「已存档」，五态按此键取值。
+  settlement_state: { draft: "草稿", pending_review: "待复核", confirmed: "已确认", adjusted: "已调整", archived: "已归档" },
   // 第十八批 R 段第 143 条 143-R2：日结五类最终标记的数据类别，与 ENUM:190「当日订单与核销记录、当日退款与冲正记录、当日出品与物品交接记录、当日考勤记录、当日异常处置记录」同字。
   final_mark_category: { orders_verifications: "当日订单与核销记录", refunds_reversals: "当日退款与冲正记录", production_handover: "当日出品与物品交接记录", attendance: "当日考勤记录", anomaly_resolutions: "当日异常处置记录" },
   period_type: { quarterly: "按季度", monthly: "按月", semiannual: "按半年", annual: "按年" },
@@ -3528,6 +3534,8 @@ export const KEY_VALUE_LABELS: Record<string, Record<string, string>> = {
     bar_shift_overage: "收银长款（营业外收入）", turnover_rent_reversal: "营业额抽成冲正",
     // 第十八批 AI 段 214-R1、214-R2：组合通票各域份额主体间往来（同 FinanceArApLedgerPage SOURCE_TYPE_LABELS、后端 AR_AP_SOURCE_TYPE_LABELS）。
     pass_domain_share: "通票域间份额", pass_domain_direct_settlement: "通票餐饮零售代付", pass_unverified_attribution: "通票到期未核销归属",
+    // 第十八批 AL 段第 223 条 223-R1（BSM:1751）：对账差异复核通过后按认定结果入账的应收应付（同后端 AR_AP_SOURCE_TYPE_LABELS）。
+    reconciliation_difference: "对账差异",
   },
 };
 

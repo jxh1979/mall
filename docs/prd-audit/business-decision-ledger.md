@@ -1,6 +1,6 @@
 # PRD 审计业务裁决台账
 
-文档版本：V0.93
+文档版本：V0.94
 状态：进行中
 迁移日期：2026-07-27
 当前事实源：三份立法 HTML 以既有冻结基线叠加 James 此前 M02 至 M08 的点名批准、全量审计 M001、M002 的逐项批准，以及本轮 2026-10-16 至 2026-10-17 业务 HTML 审计中 Q01 至 Q40 及子题实际明确批准且未被后续替代的裁决，和 2026-10-17 第二批 HTML 业务线推演审计（A–F 六线 64 条、停车章）的逐项批准，并叠加本轮 CG 70 项来源确认与 C01–C09、N01–N03 最终澄清及补全文稿中 F01、W01–W05 的整体修改批准（本文件末节）；本轮最终规则、未采纳或替代关系、现行版本与字节哈希见本文件末节。历史记录保留为各自当时事实，不恢复已被替代的建议。
@@ -3968,6 +3968,7 @@ HTML 的语义补齐与直接引用同步可在本批核验；70项中的业务�
 | 61 | **第 236 条 已上架的跨域组合通票改价或改组成时停不停售**（题面：「【第 236 条：已上架的跨域组合通票要改价或改组成时，停不停售】前因：你定的裁决 52「两种都要」里，第②种是「票种规则版本」。原句：「跨域组合通票的定价与域间结算规则由项目之上的平台权限统一审批」「每次发布时把凑整差额金额及各域分摊数额记入票种规则版本、发布后不得再改」。设计按原句把审批范围放在跨域组合通票（有价权益分属两个及以上域主管公司的通票）：发布须由项目之上的平台权限审批，审批通过即留一版规则（价格、权益组成、凑整差额、各域分摊）；单一酒吧门票仍由酒吧自己定价，不走这道审批。现状：跨域组合通票发布不审批、不留版本；已上架后可以直接改售价折扣、加有价权益。只有改组成跌破售价误差或最低赠酒杯数时，票才会退回草稿；改售价不改状态。已经卖出的票，权益和金额在出票时已固化，不受后来改动影响。分歧：HTML 和裁决只说「发布后不得再改」「由平台权限审批」，没说已上架的票要调价、加权益、改最低赠酒杯数时，审批期间停不停售、能不能改。决策台账里没有答案。下面三种都合字面，工作量差很多。怎么定？」）—— 操作员选「不停售：旧版照卖，新版获批后再换」：改动另存一份草稿版审批，审批期间照旧版卖，获批后自动换成新版。好处：不影响卖票。坏处：工作量明显更大，下单定价与出票都要改成读「当前生效版」，同一时刻会有两版规则并存。（未选：「改了就退回草稿停售，新版获批后再上架（推荐）」「已上架不许改，要改就另建新票种」。）（2026-11-12 弹窗；来由：18AI 只读设计第 236 条待裁题。控制席说明：裁决 52 的②以该题题面为准（组合通票定价与域间规则由平台权限统一审批；发布时把凑整差额和各域分摊记入票种规则版本、发布后不得再改）；第 2 题选项二的说明「票种（含权益组成、价格、出资方）发布须经审批并留版本」是未被选中选项的说明，18AI 任务书曾误引为选项原文，已按 18AI 设计质疑者意见更正，审批范围按题面收在跨域组合通票。） | 待开发清单第 236 条（236-R3～R6 另开 18AJ） |
 | 62 | **第 236 条 已上架的非跨域票加别的经营域收费权益变成跨域组合通票**（题面：「【第 236 条·问 1/2】已上架的非跨域票，加了别的经营域的收费权益、变成跨域组合通票时，审批期间停不停售？ 前因：裁决 61 定的是「已上架的跨域组合通票」改动另存草稿版审批、旧版照卖。这里的票改之前不是跨域组合通票，没有获批的跨域旧版可照卖，裁决 61 没覆盖到。 现状：①后台建票只有引导式向导一条路，向导只绑一条权益、建完立即上架。所以做一张跨域组合通票的正常做法是：先用向导建出单权益票（票名、售价往往已按组合定好）并上架，再到「组合式套票配置」加别的经营域的权益——代码注释也把「先建票、再一次性配组合权益」写成正常流程，每做一张新的跨域组合通票都会走到这里。②组合配置一次提交是逐条写入的：先酒吧，再游乐，再餐饮零售。③现行规则：已上架的票加了有价权益后，售价与「各业态价格合计×折扣」差额超出允许误差、或赠酒不够，就退回草稿停售；单权益票再加一条有价权益，售价几乎必然对不上，所以现在这一步本来就会退回草稿。」）—— 操作员选「不许加，另建票种」：已上架的非跨域票一律不许加别的经营域收费权益，要做跨域组合通票就另建票种。好处：规则最简单。坏处：向导建票即上架，常规路径会被直接拦住，还得改向导（先建草稿不立即上架）或另做建草稿票的入口，工作量更大。（未选：「退回草稿停售，发布时审批（推荐）」「照裁决 61：旧版照卖」）（2026-11-12 弹窗；来由：18AJ 只读设计第 236 条待裁题。控制席说明：零元免费权益不参与域间分配（BSM:749），已上架票加别域零元权益不受本裁决限制；「另建票种」的入口按选项原文所列二者之一落地（改向导可先建草稿不立即上架，草稿票配齐组合后经发布入口提交平台权限审批）。） | 待开发清单第 236 条（18AJ） |
 | 63 | **第 236 条 跨域组合通票的派生价与动态价是否经平台审批**（题面：「【第 236 条·问 2/2】跨域组合通票的会员价、新人价、学生价、团体价、渠道价和动态价，要不要也经项目之上的平台权限审批、记入票种规则版本？ 前因：HTML 写「跨域组合通票的定价与域间结算规则由项目之上的平台权限统一审批」；《业务系统地图》写组合通票「售价由各业态价格相加后统一打折得出」、凑整差额「每次发布时……记入票种规则版本」；裁决 61 题面写「审批通过即留一版规则（价格、权益组成、凑整差额、各域分摊）」。另一处 HTML 写「会员价、渠道价、动态价都在对应基础价上按打折/减免/加价/固定额派生；动态价按时段、容量等规则配置，可先试算再发布」。 现状：票种本身有平日、周末、节假日三档基础价和折扣。派生价（会员、新人、学生、团体、渠道）由有票务价格权限的人直接配置；动态价由有发布权限的人发布（可先试算）。订单逐单记下所用的派生价和动态价规则。 分歧：「定价」只指票种本身的价格构成，还是连派生价、动态价也算。决策台账没有答案。」）—— 操作员选「派生价动态价也审批」：跨域组合通票的派生价、动态价规则也要经项目之上的平台权限审批，并记入票种规则版本。好处：跨域组合通票的实际成交价全部受平台管控。坏处：日常调会员价、节假日加价都要等平台审批；需另立条目实现（派生价、动态价都要接审批与版本），工作量大，本段不做。（未选：「只管票种本身价格（推荐）」）（2026-11-12 弹窗；来由：18AJ 只读设计第 236 条待裁题。控制席说明：按选项原文「需另立条目实现……本段不做」，登记待开发清单第 297 条；18AJ 只做票种本身三档价、折扣、权益组成、最低赠酒杯数、凑整差额与各域分摊的审批与版本。） | 待开发清单第 297 条 |
+| 64 | **第 240 条 已封账月份里尚未出账或仍在复核的结算显示哪一态**（题面：「【第 240 条·结算五态】所属综合体该月已封账，但某笔结算还没出账或还在复核中，页面显示哪个状态？ 前因：你定的裁决 54 把五态作为页面统一显示口径，对应关系是：未出结果或未出账→草稿；演出挂起、积分账单有未处理异议→待复核；已出结果或已入账→已确认；被财务调整取代的演出行→已调整；所属综合体该月已封账→已归档。没写两条同时成立时谁优先。 现状：裁决 41 的封账只看该月每天五类数据都已最终、日结都已锁定，不等积分账单出账和异议处理。门票积分月结账单在次月才出账，出账后还有十个工作日异议期；演出履约争议也可能跨月没了结。所以次月初就封账的月份，很可能还有没出账（草稿）或商户异议挂着（待复核）的结算。决策台账里没有答案。」）—— 操作员选「已归档只压已出结果的（推荐）」：只有本身已确认或已调整、且该月已封账的才显示已归档；还没出账的照常显示草稿、还有异议或挂起的照常显示待复核，等出了结果再显示已归档。好处：商户异议还挂着时页面不会显示「已归档」，与裁决 40 总控「结算待确认」卡的计数对得上。坏处：已封账月份里会同时看到已归档和草稿、待复核。（未选：「一封账就全部已归档」）（2026-11-15 弹窗；来由：18AL 只读设计第 240 条待裁题。控制席说明：与 18AL 只读设计 d2-five-states 按推荐读法写的判定次序一致，方案不改。） | 待开发清单第 240 条（18AL） |
 
 第一段转正前最低池额试算与取消结算环节超池待审批：既有缺口，列入待开发清单第 75 条、随 18C 做（ENUM L52、BSM L752）。
 
@@ -7132,3 +7133,180 @@ HTML 的语义补齐与直接引用同步可在本批核验；70项中的业务�
   测试：安卓 KioskPaymentApiTest 加 3 例；后端 KioskBarOrderJdbcTests 加 1 例守护用例（同一编号由同商户另一位收银再交，返回第一次的账单并带 replayed，结算流水与留痕各只一条）。
 - 18AK 复核修复补记（无新裁决）：收尾复核改了三处。① 后台商品页沽清被准入闸拦下后，原实现关弹框并清空表单，再点时要重选档位、重填原因；主管的批准只认同样内容的再次提交（M724-F16），原因稍有出入就会再次被拦。改为记下被拦那次的档位与原因，再点同一商品的「沽清」时原样带回，提示语写明档位与原因保持不变；前端补 1 例。② apps/web/src/admin/pages/ApprovalChainPage.test.tsx 与页面矩阵的文件版本漏升，各补 +0.01。③ 酒吧 PRD 缺第 226、230 条与 261-B10-R1 的实现现状，已补（§5、订台定金一节与变更日志）。
 - 18AK 落地位置补记·运行验收证据、快照、终验文档刷新（无新裁决）：业务提交 72c6309d 之后，按第十八批裁决 25 重刷了运行验收证据：后端全量 6746 测，0 失败 0 错误；apps/web 构建通过；常规界面验收（接口全部 mock）实跑 40 条全过；真实后端界面验收未跑，runtime_ready=false。随后依次重生成闭环当前态快照、生产闭环缺口报告、界面验收报告、无上线指挥台。生成器没改。手改 docs/final-closed-loop-acceptance-audit-v0.1.md 与 docs/code-implementation-acceptance-audit-v0.1.md：前端单测源码计数改为 1747；被核文件行数 BarService.java 由 1183 改为 1274、BarOrderService.java 由 1857 改为 1854、BarBillingService.java 由 1112 改为 1132、BarTableSessionService.java 由 1020 改为 1051，其余无变化；后端全量与常规界面验收的数字、日期改为本次实跑值；写入 npm run verify:unit 实跑结果，五个工作区全过。交付门禁于 2026-11-15 16:51 UTC 在工作树逐项实跑子项，NAS 两项现场探测未跑。仍红的有两项：一是 coding-host-protection，它写死主仓路径，在工作树口径下必红，属工具口径，不做；二是 final-closed-loop-audit，如实留 2 条红（integration-ready、business-acceptance-ready），原因是校验器要求终验把联调、业务验收写成「是」，而裁决 25 定了不跑真实后端界面验收、运行验收未就绪，终验写的是「否」。verify:delivery-gates 总链仍是红的。
+
+18AL 落地位置补记（2026-11-15）：第十八批 AL 段（batch58）按 18AL 只读设计实现待开发清单第 223、224、240、245、253 条（财务组）；运行验收证据、终验文档在本段最后一个提交刷新；各条落地位置见下。本段追加时，原台账除文档版本 V0.93→V0.94 与第十八批裁决表第 64 行（控制席已插入）外，其他历史字节保持。
+
+- 18AL 落地位置补记·控制席判定（2026-11-15）：本段（第十八批 AL 段，batch58）实现待开发清单第 223、224、240、245、253 条（财务组；18AL 只读设计 b58-audit/d1-recon.json、d2-five-states.json、d3-lock-supplement.json，质疑者修订版）。18AK 由 Cursor 代理完成（PR #590），本段起由 Claude Code 续做。第 240 条按第十八批裁决 54（五态作页面统一显示口径，不新建结算单、不改各对象现有流转）；本段弹窗定第十八批裁决 64（已归档只压已出结果的：本身已确认或已调整且该月已封账才显示已归档，草稿、待复核照常），插入裁决表第 64 行。第 245、253 条按第十八批裁决 56（三种锁账补录提交时必须上传原始凭证并写责任人，「业务发生后 3 天内」不套）；锁账补录审批改走统一审批，旧审批接口与 finance.locked_backfill.approve 退役。控制席判定：退款补录经统一审批批准时，退款分级授权闸照旧按终审节点审批人本人的退款额度判（三份 HTML 无退款额度分级原句，本段不改）。只读设计范围外旁见另记待开发清单第 305～307 条（待核实），实现期旁见（对账差异号碰撞）另记第 308 条（待核实）。
+- 18AL 落地位置补记·第 224 条 224-R1（对账差异登记认已核验的经销到账记录；无新裁决，引第十八批裁决 15）：
+  224-R1　JdbcFinanceRepository.aggregatePlatformExpectedForBusinessRef 平台侧取数在收款记录、已支付票务订单、酒吧账单之后，再认已核验的经销到账记录（dealer_order_payments.status='verified'），取到账全额 amount_cent；dpay_ 前缀与前三类编号不重。待核验、已驳回、迟到的到账仍无平台侧取数，登记 400 RECONCILIATION_NO_SYSTEM_EXPECTED。后台对账差异页登记表单的业务单号标签改为「业务单号（收款记录号、票务订单号、酒吧账单号或经销到账记录号）」。不加迁移。
+  不做：给经销交付处置单 dealer_delivery_resolutions 加四态与停留时限（处置单已走统一审批 dealer.delivery_resolution 与 PGM:529 通用时限）；另建经销专用财务差异表；认未经财务核验的到账。
+  依据：
+  - ENUM:173「交付差异与款项分别跟踪，财务差异按本表「差异处理状态」条处理，不移用内部结算价或改变外部合同责任归属。」
+  - ENUM:202「外部流水与平台状态不一致时，通过既有三方对账及财务差异流程核实真实收款事实和凭证」
+  - ENUM:188「对账口径 按订单、按核销、按合同、按渠道、按日结」
+  - BSM:1735（三方核对表「资金 对 系统」）「实际到账资金，能否追回到平台系统里的对应单据。」
+  - 第十八批裁决 15「财务核验到账后，这条到账核验记录（订单号、金额、到账时间、核验人）就当收款凭证。」
+  测试：FinanceReconciliationDifferenceRegisterJdbcTests.dealerVerifiedPaymentTakesPlatformSide；前端 ReconciliationPage.test.tsx「登记差异：业务单号标签写明收款记录号、票务订单号、酒吧账单号或经销到账记录号」。
+- 18AL 落地位置补记·第 223 条 223-R1（对账差异复核通过后按认定结果入应收应付台账，同一差异只入一次；无新裁决）：
+  223-R1　迁移 V627__finance_reconciliation_difference_ledger_entry.sql 给 finance_reconciliation_differences 加 ledger_entry（默认否）。
+  - 请求与仓储：CloseReconciliationDifferenceRequest 加 ledger_entry；JdbcFinanceRepository.submitReconciliationDifferenceReview 写该列，驳回后再提交按新选择覆盖。
+  - 提交复核（FinanceReconciliationDifferenceService.submitReview）：勾选的，须差额大于 0，且业务单号能经 findReconciliationOriginArApItem 追到原往来台账（收款记录所属台账，或已核验经销到账所属经销订单的应收台账），否则 400 VALIDATION_FAILED；复核摘要写明入账方向、金额与原台账号。
+  - 审批结论回写（FinanceReconciliationDifferenceService.decided）：只在 closeReconciliationDifference 真正转已关闭时，调 FinanceService.postReconciliationDifference，向原往来方记一笔应收或应付（source_type=reconciliation_difference，source_id＝差异号，往来方、商户、项目同原台账，不填 origin_item_id）。方向规则：实际到账少于平台记录取原台账同方向，否则取反方向。台账号由来源加差异号的 SHA-256 摘要（FinanceService.derivedKeyDigest，原 turnoverReversalKey 改名共用）确定、与方向无关，按编号覆盖写。关闭单句更新只成功一次、审批重放不再发结论事件，所以同一差异只入一次。
+  - 读取：差异列表与按号读带 ledger_entry 与按台账来源反查的 posted_ar_ap_item_id。
+  - 中文名：后端 AR_AP_SOURCE_TYPE_LABELS、前端台账页与 fieldLabels 的 source_type 加「对账差异」；fieldLabels 加 ledger_entry 中文名。
+  - 页面：后台对账差异页提交复核表单加勾选「认定结果入应收应付台账（按实际到账与平台记录之差向原往来方记应收或应付）」，差异详情显示是否入账与入账台账编号；页面矩阵 ADM-FIN-002 补 key_fields。
+  不做：票务订单、酒吧账单类差异入账；第三方差异入账；入账时另按阈值分高低价值（每笔都过复核）；重开后再关闭的防护（无此流转）；加进 SOURCE_TYPES；新增 posted_ar_ap_item_id 列；审计元数据加台账号；入账短信加异议截止日。
+  依据：
+  - BSM:1751「应收应付台账 登记每笔该收该付……；高价值差异复核通过才入账、同一差异只入账一次；差异的高低价值按业务枚举速查表「差异处理状态」条的判定执行。」
+  - ENUM:191「应收应付台账「高价值差异复核通过才入账」按本判定执行。」「由此产生损失的责任方认定另行拍板。」
+  - BSM:1746「三方核对不一致时，核销事实以平台的在线核销记录为准，资金以银行实际到账为准」
+  契约：OpenAPI closeFinanceReconciliationDifference 请求体加 ledger_entry 与两种 400，listReconciliationDifferences 说明补两字段。
+  测试：新类 FinanceReconciliationDifferenceLedgerJdbcTests 6 例（shortfallOnReceivablePostsReceivableOnce、overpaymentOnReceivablePostsPayable、shortfallOnPayablePostsPayable、withoutLedgerEntryNothingIsPosted、ticketOrderDifferenceCannotEnterLedger、verifiedDealerPaymentPostsReceivableToDealer）；既有 MerchantAmountNoticeFinanceJdbcIntegrationTests、FinanceJdbcIntegrationTests 随签名调整；前端 ReconciliationPage.test.tsx「待处理的行提交复核：以蛇形键 POST close 带 close_reason、evidence_attachment_ids、final_approver_id、ledger_entry」与「差异详情显示认定结果入台账与入账台账编号」，FinanceArApLedgerPage.test.tsx「台账详情展示来源类型中文标签（对账差异）」。财务 PRD §5.2 补实现现状。
+- 18AL 落地位置补记·第 240 条（第十八批裁决 54、64）：
+  - 240-R1 改法：四类结算对象各多返回一个派生字段 settlement_state，只是显示口径；不加迁移，不改原状态值与流转。判定按裁决 64：先判草稿或待复核，已出结果（已确认、已调整）的再看所属综合体该月是否封账（finance_period_closes 有行），有则已归档。
+    落地位置：
+    · 通票月结单：settlement.JdbcSettlementBillRepository.listBills 的 CASE 与 BillSummary.settlementState。status 为 confirmed 或 settled 视为已出结果；平台单所属综合体取唯一启用综合体。
+    · 通票流水（随所属月结单）：settlement.SettlementQueryService.transactionState 与 listSettlements；JdbcSettlementTransactionRepository.SettlementTransactionView 的 businessAt（不返回）与 settlementState。按营业日所在月取本项目单，取不到取平台单。
+    · 演出结算：settlement.JdbcMediaPerformanceRepository.listSettlementViews；MediaPerformanceRecords.SettlementView；MediaPerformanceService.getDetail。现行已锁定版本上的挂起为待复核，被取代版本上残留的挂起为草稿，posted 为已确认，adjusted 为已调整。
+    · 积分月结账单：customer.TicketPointsBillingService.SELECT 与 TicketPointsBilling.Bill.settlementState。未公布为草稿，有未处理异议为待复核。
+    依据：ENUM:192「结算状态 草稿、待复核、已确认、已调整、已归档。待复核与已调整由财务复核并作出调整，异议由涉及部门与商户提出」；BSM:1673「凡属电子数据、且计算比例固定的，一律在月结定格时即出结果」；决策台账:3961 第十八批裁决 54 选项原文「不新建结算单、不改各对象现有流转；……通票月结单、通票流水（随所属月结单）、演出结算、积分月结账单按五态显示：未出结果或未出账→草稿；演出挂起、积分账单有未处理异议→待复核；已出结果或已入账→已确认；被财务调整取代的演出行→已调整；所属综合体该月已封账（裁决 41）→已归档」；决策台账:3971 第十八批裁决 64「只有本身已确认或已调整、且该月已封账的才显示已归档；还没出账的照常显示草稿、还有异议或挂起的照常显示待复核」。
+    测试：SettlementFiveStateJdbcIntegrationTests.passBillAndTransactionsFollowBillThenPeriodClose、mediaSettlementRowsCarryFiveStates、ticketPointsBillsCarryFiveStates；SettlementQueryServiceTests.clampsPageAndSizeAndComputesOffset。
+  - 240-R2 改法：三个结算页按中文五态显示结算状态。
+    落地位置：apps/web/src/admin/i18n/fieldLabels.ts 的 KEY_VALUE_LABELS.settlement_state（通用表 archived 是「已存档」，五态按键取「已归档」）与 FIELD_LABELS 的 settlement、settlement_state；SettlementReviewPage（ADM-FIN-005）流水表、流水详情、月结单表「结算状态」；MediaPerformanceShowPage（ADM-STL-004）结算表「结算状态」，挂起行括注原挂起原因；TicketPointsBillingPage（ADM-FIN-008）新增「结算状态」列；页面矩阵三行 key_fields 补 settlement_state。
+    依据：ENUM:192；PGM:291「用户看到的每一处文字都是中文，含状态、枚举、日期、按钮、提示、报错、导出与短信。」；裁决 54「顺带修掉流水恒显示草稿」。
+    测试：SettlementReviewPage.fivestate.test.tsx「流水与月结单的结算状态显示已确认、已归档，不再恒显示草稿，也不出英文码」；MediaPerformanceShowPage.test.tsx「结算表「结算状态」按五态中文显示：待复核（括注原因）、已确认、已调整、草稿」；TicketPointsBillingPage.test.tsx「账单表「结算状态」列按五态中文显示：草稿、待复核、已确认、已归档」。
+  - 240-R3 改法：指标明细页结算三指标的「结算状态」列改为五态派生值。
+    落地位置：analytics.JdbcAnalyticsRepository.settlementTransactionDetail 读 business_at；AnalyticsService.withSettlementState 复用 SettlementQueryService.transactionState，移除 settlementStatus 与 businessAt，未注入时置空；MetricRegistry.settlementColumns 列键改为 settlementState；MetricDetailPage.formatCell 先按列键查 KEY_VALUE_LABELS。
+    依据：ENUM:192；裁决 54「通票流水（随所属月结单）……按五态显示」「顺带修掉流水恒显示草稿」；PGM:291。
+    测试：SettlementFiveStateJdbcIntegrationTests.metricDetailSettlementRowsCarryFiveStates；MetricDetailPage.test.tsx「结算笔数明细：结算状态列 archived 显示已归档、confirmed 显示已确认」；既有 MetricDetailServiceTests 结算三指标用例照常通过。
+- 18AL 落地位置补记（C 段：第 245 条、第 253 条）
+  245-R1 锁账补录审批改走统一审批（后端）
+  - 改法：日结锁定后补录（金额调整、收付款补录、退款补录）提交即进统一审批，动作 finance.locked_backfill.review，对象 ar_ap_adjustment。策略为恒阻断、金额下限 0、one_level_up。
+    - 申请人沿直接上级链到所指定的最终审批人逐级审批；不指定时为直接上级。
+    - 动作名以 finance. 开头，按涉钱出厂 1 个工作日到期，超时提醒并升级到该节点上一级，用 18AD 现成机制。
+    - 全部通过才按原三分支落账：收付款补录登记收款；退款补录建原路退款待办；金额调整红冲加重述，并回调合同域、发金额变动通知。
+    - 任一节点驳回不改账。通过、驳回都记批准人＝当前节点审批人和决定时刻。
+    - 审批人范围与自审改由统一审批链承担；退款分级授权闸照控制席判定，仍按终审人额度判。
+    - 删旧审批接口 POST /api/v1/finance/ar-ap-adjustments/{id}/approve 和 ArApAdjustmentDecisionRequest。
+    - V628：finance.locked_backfill.approve 照 V578 退役并清授予来源；V099 的 finance_locked_approve_over_scope 照 V612 停用；ar_ap_adjustments 加 review_id。
+    - 复核对象项目表加 ar_ap_adjustment，经所补台账取项目（18F 操作员裁决补充第 17 条）。
+  - 落地位置：
+    - V628__finance_locked_backfill_review_evidence.sql。
+    - SupervisorReviewService.java:145（策略 finance_locked_backfill_review）。
+    - JdbcPlatformRepository.java:111。
+    - FinanceService.java：:112 LOCKED_BACKFILL_REVIEW；:265 起统一审批注入；createAdjustment :1684 中 evaluate 在 :1746；lockedBackfillDecided :1765。
+    - FinanceController.java：删 approveArApAdjustment。
+    - ArApAdjustmentRecord、ArApAdjustmentRequest（加 finalApproverId）、JdbcFinanceRepository（:2310 起读写三列）。
+  - 依据：
+    - ENUM:190「日结锁定后的补录须上级审批，且不改动已锁定的日结金额：……」
+    - PGM:528「发起单据时只需指定该事项的最终审批人，系统按组织层级自动补全从发起人到该最终审批人之间的全部直接上级节点，逐级审批；……任一节点驳回则整单退回起草人。」
+    - PGM:529「全平台审批通用时限：任一业务审批节点超过后台配置的时限（……涉钱审批出厂默认 1 个工作日……）未处理的，系统自动提醒并升级到该节点的上一级，不得默认通过，也不得默认拒绝。」
+    - BSM:2023「已拍板：日结锁定后不能直接补录影响金额，必须上级审批通过后补录。」
+  - 测试：
+    - 新类 LockedBackfillReviewJdbcTests：paymentBackfillWalksTheChainToTheNamedFinalApproverBeforeSettling、amountBackfillRestatesTheItemAfterTheDirectSuperiorApproves、refundBackfillCreatesOriginalPathRefundTodoAfterApproval、rejectionByAnyNodeLeavesTheLedgerUntouched、overdueFirstNodeEscalatesToItsSuperiorWithoutDeciding、requesterCannotApproveOwnBackfill、oldApproveEndpointIsGone、approvalDeadlinesListLockedBackfillReviewAsMoney、retiredApprovePermissionKeepsNoGrantSources。
+    - ReviewObjectProjectLookupJdbcIntegrationTests.lockedBackfillAdjustmentResolvesItsArApItemProject。
+    - 随改：SupervisorReviewServiceTests 策略总数 58；ApprovalDeadlineJdbcIntegrationTests.listsEveryApprovalTypeWithFactoryDefaults；FinanceJdbcIntegrationTests 五个锁定后补录用例经主管复核接口审批；FinanceProjectScopeRefund、MerchantAmountNotice、PurchaseInboundPayable、ManualBackfillMetric、FinancePeriodClose、FinanceServiceTests 申请处带凭证与责任人。
+  245-R2 日结区块补录改为到主管复核审批（前端）
+  - 改法：日结区块删「审批」列及批准、驳回按钮，不再调旧审批接口。
+    - 每行可填「最终审批人（可不填，默认直接上级）」，填了才带 finalApproverId。
+    - 「锁定后补录」表加「复核单号」，链到审批链页。
+    - 区块说明「提交后进主管复核，审批通过才生效。」
+    - reviewLabels 加「finance.locked_backfill.review」:「日结锁定后补录」，删「finance.locked_backfill_approve」。
+    - 页面矩阵 ADM-FIN-002 删 finance.locked_backfill.approve、审批接口与动作「审批锁定后补录」。
+  - 落地位置：
+    - FinanceDailyClosePanel.tsx V0.07：:187 submitBackfill；表头与复核单号列。
+    - reviewLabels.ts:28。
+    - full-admin-page-permission-field-matrix-v0.1.csv 第 32 行。
+  - 依据：ENUM:190「日结锁定后的补录须上级审批」；BSM:1642「补录一律进入主管复核队列，复核通过才生效」；PGM:528「发起单据时只需指定该事项的最终审批人」。
+  - 测试：
+    - FinanceDailyClosePanel.test.tsx「展开已锁定行出「本日结锁定的台账」与「锁定后补录」两张表；上传凭证、写责任人后申请补录……不填最终审批人不带；没有批准、驳回」。
+    - 「本日结锁定的台账可申请收付款补录：……最终审批人与幂等键……」。
+    - 「锁定后补录表显示责任人，凭证逐个链到附件回读地址，复核单号链到审批链页」。
+    - 「已归档行展开后两张补录表照常显示，申请补录照常可办，没有批准、驳回」。
+    - SupervisorReviewPage.deadline.test.tsx ①；ApprovalChainPage.test.tsx「待审表动作类型、对象、档位三列覆盖全部复核码……」。
+  253-R1 三种锁账补录必须附原始凭证
+  - 改法：三种补录提交时，evidence_attachment_ids 去空去重后至少一份，否则 400 MANUAL_BACKFILL_EVIDENCE_REQUIRED；附件须真实存在、已上传。
+    - 凭证落库（ar_ap_adjustments.evidence_attachment_ids，V628），随复核单给审批人，按日结查补录时返回。
+    - 新凭证业务类型 finance_locked_backfill：收照片、视频与 pdf/xlsx/csv；只收真实文件，上传意向 400 REAL_UPLOAD_REQUIRED；无商户编号的项目财务可上传。
+    - 回读：不带商户编号的账号须为引用该凭证的补录复核单链上审批人或被转发人，或以 finance.daily_close.manage 可触及该日结；商户账号照旧。
+    - 前端每行共用一组上传，未传即提示「请上传原始凭证（银行回单、转账截图、异议处理结论等）」、不弹确认；申请须同时持 finance.locked_backfill.request 与 evidence.attachment.create；补录表加「凭证」列。
+  - 落地位置：
+    - FinanceService.java:1727-1732；canViewLockedBackfillEvidence :1843。
+    - FinanceRepository.java:819、JdbcFinanceRepository.java:2350。
+    - EvidenceEventService.java :161、:199、:631、:663。
+    - FinanceDailyClosePanel.tsx :162 proofReady、:172 uploadProofs。
+    - 页面矩阵 ADM-FIN-002 权限加 evidence.attachment.create。
+  - 依据：BSM:1642「补录必须附原始记录凭证（微信截图、通话录音等）并经审核」；第十八批裁决 56 所选选项原文「三种锁账补录提交时必须上传原始凭证（银行回单、转账截图、异议处理结论等）并写责任人；「业务发生后 3 天内」不套。」
+  - 测试：
+    - LockedBackfillEvidenceJdbcTests：uploadedEvidenceIsKeptOnTheBackfillAndReadableAlongTheChain、everyKindWithoutEvidenceIsRejected、unknownEvidenceIsRejected、uploadIntentIsRejectedForLockedBackfillEvidence。
+    - FinanceDailyClosePanel.test.tsx：「三种申请未上传原始凭证都不弹确认、不提交，提示上传原始凭证」「有补录申请权限但没有凭证上传权限：……不出申请补录……」。
+  253-R2 三种锁账补录必须写责任人，责任人不得复核
+  - 改法：三种补录 responsible_staff_id 必填，否则 400 VALIDATION_FAILED；账号不存在 400「责任人账号不存在」。
+    - 落库（V628 responsible_staff_id），按日结查补录时返回，写进复核摘要。
+    - 责任人作为复核单直接受益人登记：生成审批链与超时升级都跳过其本人，本人复核 403 SUPERVISOR_SELF_REVIEW_FORBIDDEN。
+    - 前端每行加「责任人账号」，未填即提示「请填写责任人」、不弹确认；补录表加「责任人」列。
+  - 落地位置：
+    - FinanceService.java:1734-1738、:1746（evaluate 第 11 参 beneficiaryId＝责任人）。
+    - FinanceDailyClosePanel.tsx 共用块与「责任人」列。
+    - 页面矩阵 ADM-FIN-002 字段加 responsible_staff_id、final_approver_id。
+  - 依据：BSM:1642「记录缺失时允许人工补录，但必须写原因和责任人。……涉及金额、销售归属、提成或责任认定的补录，须由被影响方之外的主管复核。」；第十八批裁决 56「……并写责任人；「业务发生后 3 天内」不套。」
+  - 测试：
+    - LockedBackfillEvidenceJdbcTests.everyKindNeedsAnExistingResponsibleAccount、responsibleSuperiorIsSkippedAndCannotReview（含 beneficiary_id＝责任人的断言，在 uploadedEvidenceIsKeptOnTheBackfillAndReadableAlongTheChain）。
+    - FinanceDailyClosePanel.test.tsx「三种申请已传凭证但未填责任人都不弹确认、不提交，提示「请填写责任人」」。
+- 【18AL 契约代理（K-contract）】只改 docs/openapi/openapi-p0.yaml 与 .json，两份同值、就地改，操作数 1369→1368，info.version 留待收尾统一升。各条如下：
+  - 223-R1
+    - 改法：closeFinanceReconciliationDifference 请求体加 ledger_entry（boolean，空按否），说明补入账方向规则、两种 400 VALIDATION_FAILED、复核摘要写明入账方向与金额、落账日已锁 409 DAY_CLOSE_LOCKED，以及返回 ledger_entry 与 posted_ar_ap_item_id；listReconciliationDifferences、identifyFinanceReconciliationDifference 说明补这两个返回字段；approveSupervisorReview 说明补 finance.reconciliation_difference.close 终审通过入账（source_type=reconciliation_difference）。
+    - 依据：BSM:1751「高价值差异复核通过才入账、同一差异只入账一次」；ENUM:191「应收应付台账「高价值差异复核通过才入账」按本判定执行。」；BSM:1746「资金以银行实际到账为准」。
+  - 224-R1
+    - 改法：createFinanceReconciliationDifference 的 business_ref 说明补第四种「经销到账记录号」，只认已核验（dpay_ 开头），取到账金额；取数顺序为收款记录→已支付票务订单→酒吧账单→已核验经销到账；待核验、已驳回、迟到的仍 400 RECONCILIATION_NO_SYSTEM_EXPECTED。
+    - 依据：ENUM:173「财务差异按本表「差异处理状态」条处理」；ENUM:188「对账口径 按订单、按核销、按合同、按渠道、按日结」。
+  - 240-R1
+    - 改法：listSettlementBills、listSettlementTransactions、getMediaPerformanceShow、listTicketPointsBills 说明各补 settlement_state 的取值与判定次序（只是显示口径）；TicketPointsBillingBill 加 settlement_state，enum 按现码为 draft、pending_review、confirmed、archived，列入 required。
+    - 依据：ENUM:192「结算状态 草稿、待复核、已确认、已调整、已归档」；第十八批裁决 54；第十八批裁决 64「只有本身已确认或已调整、且该月已封账的才显示已归档」。
+  - 240-R3
+    - 改法：getMetricDetail 说明补一句：结算三指标（settlement.transaction_count、settlement.verified_amount、settlement.verified_count）明细「结算状态」列为 settlementState 五态派生值，不再返回 settlementStatus。
+    - 依据：ENUM:192；第十八批裁决 54「通票流水（随所属月结单）」。
+  - 245-R1
+    - 改法：
+      - 删除 approveArApAdjustment 操作与 ArApAdjustmentDecisionRequest（components.requestBodies、components.schemas）。
+      - requestArApAdjustment 说明改为提交即进统一审批（finance.locked_backfill.review / ar_ap_adjustment），沿上级链到 final_approver_id，不在链上 400 FINAL_APPROVER_NOT_IN_CHAIN；涉钱出厂 1 个工作日，超时提醒升级；返回 review_id。原审批接口所列终审落账效果移到本操作说明，其中退款分级授权按终审节点审批人本人额度。
+      - ArApAdjustmentRequest 加 final_approver_id。
+      - listDailyCloseAdjustments 的 approved_by 改为终审或驳回节点审批人，并加 review_id；archiveDailyClose 去掉 approveArApAdjustment。
+      - listApprovalDeadlines 说明补多 finance.locked_backfill.review、少 finance.locked_backfill_approve。
+      - approveSupervisorReview 说明补锁账补录终审落账。
+    - 依据：ENUM:190「日结锁定后的补录须上级审批」；PGM:528「发起单据时只需指定该事项的最终审批人，系统按组织层级自动补全……逐级审批」；PGM:529 涉钱审批出厂 1 个工作日、超时提醒升级。
+  - 253-R1
+    - 改法：ArApAdjustmentRequest.evidence_attachment_ids 改说明（business_type=finance_locked_backfill 上传所得，至少一个），加 minItems 1，列入 required；requestArApAdjustment 说明补 400 MANUAL_BACKFILL_EVIDENCE_REQUIRED、EVIDENCE_ATTACHMENT_NOT_FOUND、EVIDENCE_NOT_UPLOADED；uploadEvidenceAttachment 补 finance_locked_backfill 收照片、视频、pdf/xlsx/csv，无商户编号可传；readEvidenceAttachmentFile 补回读口径（复核链审批人或被转发人，或 finance.daily_close.manage 可触及该日结）；createEvidenceAttachmentUploadIntent 补 400 REAL_UPLOAD_REQUIRED；listDailyCloseAdjustments 加 evidence_attachment_ids。
+    - 依据：BSM:1642「补录必须附原始记录凭证（微信截图、通话录音等）并经审核」；第十八批裁决 56「三种锁账补录提交时必须上传原始凭证（银行回单、转账截图、异议处理结论等）并写责任人；「业务发生后 3 天内」不套。」
+  - 253-R2
+    - 改法：ArApAdjustmentRequest 加 responsible_staff_id（maxLength 64，列入 required）；说明补缺或账号不存在 400 VALIDATION_FAILED，责任人登记为直接受益人、不得审批；listDailyCloseAdjustments 加 responsible_staff_id；示例补三个键。
+    - 依据：BSM:1642「必须写原因和责任人……须由被影响方之外的主管复核」；第十八批裁决 56。
+  测试：无新增用例（契约文档）。校验命令 verify:openapi、verify:openapi-examples、verify:client-routes、verify:client-openapi、verify:client-payload --strict 均通过，yaml 与 json 深比较一致。
+- 18AL 落地位置补记·J 段汇合（e2e 与门禁）：
+  - e2e：tests/e2e 不用改。逐项核对了以下页面在 spec 与 mock-api 里的选择器和断言：对账差异（full-admin-remaining.spec.ts:228-229、:867-871、:1162-1167，提交复核不勾选入账，带 ledger_entry=false）；通票结算审阅（只做路由可达）；演出结算（:218-223）；门票积分月结（:575-628，断言「1.00／0.40／0.60」不受新增「结算状态」列影响）；指标明细（:339-340）；主管复核（:949-955、:1103-1113）。mock-api 里本来就没有 POST /api/v1/finance/ar-ap-adjustments/{id}/approve 的桩，也没有 finance.locked_backfill.approve 权限，所以不用同步。
+  - 门禁：镜像 scratch-b58 与一次性库 b58_test 上的结果如下。
+    - 后端 --fresh 全量（V627、V628 真实迁移，now at version v628）：tests=6772 failures=0 errors=0 skipped=0；其中本批 16 个新增或改动的测试类共 312 条全绿。
+    - apps/web typecheck 0 错，vitest 336 个文件、1870 条全过。
+    - customer-core 77 条、customer-app 131 条、customer-miniapp 85 条全过。
+    - 安卓员工端 gradle test 125 条全过，android-app :app:compileDebugKotlin 通过。
+    - 在镜像里重生成 docs:operation-matrix 与 docs:openapi-closure（各 1368 个操作）后，npm run verify:p0-contract 八步全过；跑完镜像已恢复成工作树原样。
+    - yaml 与 json 深比较一致，操作数 1368；git diff --check 干净。
+    - 各段之间没有互相波及的问题，没有改动任何文件。
+- D-docs（文档组，2026-11-15）：
+  - 财务 PRD docs/finance-settlement-product-prd-v0.1.md V0.33→V0.34：
+    - §4 180-R3 实现现状末补 224-R1：「按订单」另认已核验经销到账记录，取到账全额；表单标签同改。依据 ENUM:173、ENUM:188、第十八批裁决 15。
+    - §5.2「高价值差异复核通过才入账、同一差异只入账一次」条后加 223-R1 实现现状：提交复核勾选 ledger_entry；复核通过、差异转已关闭时向原往来方记来源「对账差异」的应收或应付；同一差异只入一次；V627。依据 BSM:1751、ENUM:191。
+    - §5.3 表后加 240-R1～R3 实现现状：四类对象五态派生显示，指标明细结算三指标同口径。依据 ENUM:192、第十八批裁决 54、64，封账口径裁决 41。
+    - §5.4 143-R4、186-R1、186-R2 实现现状中的旧审批口径就地改为统一审批：删「持 finance.locked_backfill.approve 的上级批准」「/{id}/approve」「SELF_APPROVAL_FORBIDDEN」；批准人、退款申请人与退款额度改为终审节点审批人。
+    - §5.4 节末加 245-R1、245-R2、253-R1、253-R2 实现现状：附原始凭证、写责任人、统一审批 finance.locked_backfill.review、旧接口删除、V628 退役权限码与停用准入策略、页面变化。依据 ENUM:190、PGM:528、PGM:529、BSM:1642、第十八批裁决 56。
+    - §6C.4 原件格式补 finance_locked_backfill。
+    - 变更日志加 V0.34 行。
+  - 平台治理 PRD docs/platform-governance-prd-v0.1.md V0.84→V0.85：
+    - §2A.5 加 245-R1 实现现状：策略 finance_locked_backfill_review 涉钱出厂 1 个工作日；V628 停用 finance_locked_approve_over_scope；审批时限清单多「日结锁定后补录」、少「锁账后补录审批」。依据 ENUM:190、PGM:528、PGM:529。
+    - 变更日志加一行。
+  - 应收应付台账开发设计 docs/finance-ar-ap-ledger-development-design-v0.1.md V0.11→V0.12：§4.3 F-OPS-07 后补 245-R1 更正，decideAdjustment 已删，职责分离改由统一审批承担（SUPERVISOR_SELF_REVIEW_FORBIDDEN）。
+  - 无测试（纯文档）；verify-full-admin-page-matrix、git diff --check 通过。
+- 18AL 收尾复核修正（2026-11-16）：收尾复核两条成立意见，只修这两条与同根。
+  - 对账差异入账台账编号反查排除派生行：JdbcFinanceRepository 的 listReconciliationDifferences 与 findReconciliationDifferenceById 两处取 posted_ar_ap_item_id 的标量子查询加 a.origin_item_id IS NULL（同 V344 唯一索引 uq_ar_ap_items_direction_source 的条件），只取原入账行；锁账金额补录批准追加的冲正行 arap_rev_、重述行 arap_res_ 沿用原行来源与差异号，原写法下入账行一经金额补录，对账差异列表与按差异号查询（原件回读等）即多行报错。新用例 FinanceReconciliationDifferenceLedgerJdbcTests.amountBackfillOnPostedItemKeepsDifferenceReadable（勾选入账并复核通过 → 锁定入账行营业日的日结 → 对入账行申请锁账金额补录 −4.00 元并经上级在主管复核接口通过 → 差异列表 200、posted_ar_ap_item_id 为原入账行，复核人回读原件 200）。同根扫过本段其余反查 ar_ap_items 的 SQL 与仓储方法（findReconciliationOriginArApItem、入账幂等、短信取往来方、锁账补录取台账、复核单项目反查、门票积分月结单取台账），均按台账编号取，不受派生行影响，未改。依据 BSM:1318「查看与平台口径不一致的对账差异。」；BSM:1751「同一差异只入账一次」；ENUM:190「日结锁定后的补录须上级审批」。
+  - 财务 PRD docs/finance-settlement-product-prd-v0.1.md §4C（FS-021 一条）：「锁账补录申请与审批」改为「锁账补录申请」，「补录不得自审、红冲链不变」后补「（第十八批 AL 段第 245 条起锁账补录审批改走统一审批，审批人按组织层级定，见 §5.4）」；不加新规则、不升版（本段已 V0.34）。本段改过的其他 PRD 与下位文档里「锁账补录」「locked_backfill.approve」的现行描述已与现码一致，未改。依据 ENUM:190；PGM:528。
+- 18AL 落地位置补记·运行验收证据、快照、终验文档刷新（无新裁决）：业务提交 cd3332dc 与 CI 跑序误报修正提交 b2d2acc7 之后，按第十八批裁决 25 重刷了运行验收证据：后端全量 6773 测，0 失败 0 错误；apps/web 构建通过；常规界面验收（接口全部 mock）实跑 40 条全过；真实后端界面验收未跑，runtime_ready=false。随后依次重生成闭环当前态快照、生产闭环缺口报告、界面验收报告、无上线指挥台。生成器没改。手改 docs/final-closed-loop-acceptance-audit-v0.1.md 与 docs/code-implementation-acceptance-audit-v0.1.md：前端单测源码计数改为 1756；被核文件行数都没变；后端全量与常规界面验收的数字、日期改为本次实跑值；写入 npm run verify:unit 实跑结果，五个工作区全过。交付门禁于 2026-11-16 08:10 UTC 在工作树逐项实跑子项，NAS 两项现场探测未跑。仍红的有两项：一是 coding-host-protection，它写死主仓路径，在工作树口径下必红，属工具口径，不做；二是 final-closed-loop-audit，如实留 2 条红（integration-ready、business-acceptance-ready），原因是校验器要求终验把联调、业务验收写成「是」，而裁决 25 定了不跑真实后端界面验收、运行验收未就绪，终验写的是「否」。verify:delivery-gates 总链仍是红的。

@@ -1,6 +1,6 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.08
+// 文件版本：V0.09
 
 import static org.assertj.core.api.Assertions.*;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -16,7 +16,6 @@ import com.complex.platform.finance.FinanceService;
 import com.complex.platform.finance.dto.ArApPaymentRequest;
 import com.complex.platform.finance.dto.DailyCloseRequest;
 import com.complex.platform.finance.dto.ArApAdjustmentRequest;
-import com.complex.platform.finance.dto.ArApAdjustmentDecisionRequest;
 import com.complex.platform.governance.review.*;
 import com.complex.platform.inventory.dto.*;
 import java.time.*;
@@ -80,7 +79,7 @@ class PurchaseInboundPayableJdbcIntegrationTests {
     INSERT INTO role_permissions(role_id,permission_code) SELECT ?,permission_code FROM permissions WHERE permission_code IN(
     'inventory.purchase_request.view','inventory.purchase_request.manage','inventory.purchase.approve',
     'inventory.supply_contract.manage','inventory.cost.view','finance.ar_ap.manage','finance.ar_ap.view','finance.payment.register',
-    'finance.daily_close.lock','finance.locked_backfill.request','finance.locked_backfill.approve',
+    'finance.daily_close.lock','finance.locked_backfill.request',
     'evidence.attachment.create','evidence.timeline.view','governance.supervisor_review.view','governance.supervisor_review.approve','governance.supervisor_review.evaluate')
     """,role);
   for(String user:List.of(requestor,manager,finance,business,legal)){
@@ -820,7 +819,7 @@ class PurchaseInboundPayableJdbcIntegrationTests {
  @Test void alreadyRestatedPurchaseCannotRequestAnotherBackfillAgainstRetiredOriginal(){
   String purchase=ordered("credit_term","each_receipt",30,10);receive(purchase,10,10,0,100L);
   String original=(String)receipt(purchase).get("payable_id");lockPayable(original);String current=backfill(original,100L);act(finance);
-  assertThatThrownBy(()->financeService.requestAdjustment(new ArApAdjustmentRequest(key(),"旧原件再次补录",List.of(),original,50L,"重复引用原单")))
+  assertThatThrownBy(()->financeService.requestAdjustment(lockedBackfill(original,50L,"重复引用原单")))
    .isInstanceOfSatisfying(ApiException.class,e->assertThat(e.code()).isEqualTo("PURCHASE_PAYABLE_REPLACED"));
   assertThat(number("SELECT count(*) FROM ar_ap_adjustments WHERE ar_ap_item_id=?",original)).isEqualTo(1);
   assertThat(number("SELECT amount_cent FROM ar_ap_items WHERE id=?",current)).isEqualTo(1100);
@@ -828,10 +827,10 @@ class PurchaseInboundPayableJdbcIntegrationTests {
  @Test void twoPendingBackfillsCannotBothCreateCurrentPurchaseObligations(){
   String purchase=ordered("credit_term","each_receipt",30,10);receive(purchase,10,10,0,100L);
   String original=(String)receipt(purchase).get("payable_id");lockPayable(original);act(finance);
-  var first=financeService.requestAdjustment(new ArApAdjustmentRequest(key(),"第一份差额",List.of(),original,100L,"第一份供应商确认"));
-  var second=financeService.requestAdjustment(new ArApAdjustmentRequest(key(),"第二份差额",List.of(),original,50L,"第二份供应商确认"));
-  act(manager);financeService.approveAdjustment(first.id(),new ArApAdjustmentDecisionRequest(key(),"独立确认第一份",List.of(),"approve"));
-  assertThatThrownBy(()->financeService.approveAdjustment(second.id(),new ArApAdjustmentDecisionRequest(key(),"原件已被替代",List.of(),"approve")))
+  var first=financeService.requestAdjustment(lockedBackfill(original,100L,"第一份供应商确认"));
+  var second=financeService.requestAdjustment(lockedBackfill(original,50L,"第二份供应商确认"));
+  act(manager);com.complex.platform.support.LockedBackfillFixture.decide(financeService,first,true);
+  assertThatThrownBy(()->com.complex.platform.support.LockedBackfillFixture.decide(financeService,second,true))
    .isInstanceOfSatisfying(ApiException.class,e->assertThat(e.code()).isEqualTo("PURCHASE_PAYABLE_REPLACED"));
   assertThat(string("SELECT approval_status FROM ar_ap_adjustments WHERE id=?",second.id())).isEqualTo("pending");
   assertThat(number("SELECT count(*) FROM ar_ap_items WHERE adjustment_id=? AND amount_cent>0",second.id())).isZero();
@@ -875,9 +874,14 @@ class PurchaseInboundPayableJdbcIntegrationTests {
   assertThat(string("SELECT locked_day_close_id FROM ar_ap_items WHERE id=?",id)).isNotNull();
  }
  String backfill(String id,long change){
-  act(finance);var adjustment=financeService.requestAdjustment(new ArApAdjustmentRequest(key(),"锁账后补录",List.of(),id,change,"供应商原件复核确认差额"));
-  act(manager);var approved=financeService.approveAdjustment(adjustment.id(),new ArApAdjustmentDecisionRequest(key(),"独立复核补录",List.of(),"approve"));
-  assertThat(approved.approvalStatus()).isEqualTo("approved");return "arap_res_"+adjustment.id();
+  act(finance);var adjustment=financeService.requestAdjustment(lockedBackfill(id,change,"供应商原件复核确认差额"));
+  act(manager);com.complex.platform.support.LockedBackfillFixture.decide(financeService,adjustment,true);
+  assertThat(string("SELECT approval_status FROM ar_ap_adjustments WHERE id=?",adjustment.id())).isEqualTo("approved");return "arap_res_"+adjustment.id();
+ }
+ /** 第十八批 AL 段第 253 条：财务（当前操作人）先上传原始凭证、责任人写本人，再申请锁账补录。 */
+ ArApAdjustmentRequest lockedBackfill(String id,long change,String reason){
+  return new ArApAdjustmentRequest(key(),"锁账后补录",List.of(com.complex.platform.support.LockedBackfillFixture.evidence(evidence)),id,change,reason,
+    null,null,finance,null);
  }
  String approvedReturn(String purchase,int quantity,long price){
   act(requestor);var ret=workflow.proposeReturn(purchase,new PurchaseWorkflowRequests.Return(key(),(String)receipt(purchase).get("id"),quantity,price,

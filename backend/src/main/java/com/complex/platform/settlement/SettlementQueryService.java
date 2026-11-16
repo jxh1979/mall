@@ -1,7 +1,12 @@
 package com.complex.platform.settlement;
 
+import com.complex.platform.common.BusinessDayResolver;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.PageResponse;
+import com.complex.platform.finance.FinanceRepository;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.YearMonth;
 import org.springframework.stereotype.Service;
 
 /**
@@ -16,13 +21,19 @@ public class SettlementQueryService {
     private final JdbcSettlementTransactionRepository repository;
     private final JdbcSettlementBillRepository billRepository;
     private final TicketDistributionSettlementService distribution;
+    private final BusinessDayResolver businessDays;
+    private final FinanceRepository finance;
 
     public SettlementQueryService(JdbcSettlementTransactionRepository repository,
                                   JdbcSettlementBillRepository billRepository,
-                                  TicketDistributionSettlementService distribution) {
+                                  TicketDistributionSettlementService distribution,
+                                  BusinessDayResolver businessDays,
+                                  FinanceRepository finance) {
         this.repository = repository;
         this.billRepository = billRepository;
         this.distribution = distribution;
+        this.businessDays = businessDays;
+        this.finance = finance;
     }
 
     public PageResponse<JdbcSettlementTransactionRepository.SettlementTransactionView> listSettlements(
@@ -32,8 +43,31 @@ public class SettlementQueryService {
         String project = blankToNull(projectId);
         String merchant = blankToNull(merchantId);
         long total = repository.countVerificationSettled(project, merchant);
-        var items = repository.listVerificationSettled(project, merchant, safeSize, (safePage - 1) * safeSize);
+        // ponytail: 逐行至多三次索引查询（页长上限 100）；慢了再按（项目, 月）去重。
+        var items = repository.listVerificationSettled(project, merchant, safeSize, (safePage - 1) * safeSize).stream()
+                .map(row -> row.withSettlementState(transactionState(row.projectId(), row.businessAt())))
+                .toList();
         return new PageResponse<>(items, safePage, safeSize, total);
+    }
+
+    /**
+     * 第十八批 AL 段 240-R1（ENUM:192「结算状态 草稿、待复核、已确认、已调整、已归档」；第十八批裁决 54「通票流水（随所属月结单）……
+     * 未出结果或未出账→草稿；……已出结果或已入账→已确认；……所属综合体该月已封账（裁决 41）→已归档」；裁决 64「只有本身已确认或已调整、
+     * 且该月已封账的才显示已归档」）：一笔通票核销结算流水的五态结算状态，随所属月结单——营业日所在月（与月窗同口径）的本项目单，
+     * 取不到再取平台单；单未出或不是已确认、已结清→草稿；否则该综合体该月已封账→已归档，未封账→已确认。只是显示口径，不改流水原状态。
+     * 指标明细页结算三指标（240-R3）共用。
+     */
+    public String transactionState(String projectId, Instant businessAt) {
+        YearMonth month = YearMonth.from(businessDays.businessDate(projectId, null, businessAt));
+        LocalDate start = month.atDay(1);
+        String status = billRepository.findBillStatusByPeriod(projectId, start, month.atEndOfMonth());
+        if (status == null && projectId != null) {
+            status = billRepository.findBillStatusByPeriod(null, start, month.atEndOfMonth());
+        }
+        if (!"confirmed".equals(status) && !"settled".equals(status)) {
+            return "draft";
+        }
+        return finance.periodCloseExists(projectId, start) ? "archived" : "confirmed";
     }
 
     /**

@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.18
+// 文件版本：V0.19
 
 import com.complex.platform.support.InMemoryAuditEventRepository;
 import com.complex.platform.support.InMemoryIdempotencyRepository;
@@ -1325,14 +1325,13 @@ class FinanceServiceTests {
 
     @Test
     void longOriginalItemKeepsDistinctBackfillRequestsAndPersistedAmounts() {
+        stubLockedBackfill();
         ArApItemRecord item = service.createArApItem(itemRequest(
                 "long-original-1234567890123456789012345678901234567890", "receivable", 100000L));
         DailyCloseFixture.lock(service, financeRepository, new DailyCloseRequest("long-backfill-close", "lock", List.of(),
                 LocalDate.parse("2026-06-30"), "project", "project_bf"));
-        ArApAdjustmentRecord first = service.requestAdjustment(new com.complex.platform.finance.dto.ArApAdjustmentRequest(
-                "first-adjustment", "补录一", List.of(), item.id(), 1000L, "原件一"));
-        ArApAdjustmentRecord second = service.requestAdjustment(new com.complex.platform.finance.dto.ArApAdjustmentRequest(
-                "second-adjustment", "补录二", List.of(), item.id(), 2000L, "原件二"));
+        ArApAdjustmentRecord first = service.requestAdjustment(backfill("first-adjustment", item.id(), 1000L, "原件一"));
+        ArApAdjustmentRecord second = service.requestAdjustment(backfill("second-adjustment", item.id(), 2000L, "原件二"));
         assertThat(second.id()).isNotEqualTo(first.id());
         assertThat(financeRepository.findArApAdjustmentByIdForUpdate(first.id()).orElseThrow().adjustmentAmountCent()).isEqualTo(1000L);
         assertThat(financeRepository.findArApAdjustmentByIdForUpdate(second.id()).orElseThrow().adjustmentAmountCent()).isEqualTo(2000L);
@@ -1341,22 +1340,21 @@ class FinanceServiceTests {
     @Test
     void backfillApprovalAppliesAmountChangeAndRejectDoesNot() {
         stubActor("staff_finance_1");
+        stubLockedBackfill();
         ArApItemRecord item = service.createArApItem(itemRequest("arap-backfill", "receivable", 100000L));
         DailyCloseFixture.lock(service, financeRepository, new DailyCloseRequest(
                 "daily-close-backfill", "lock", List.of(),
                 LocalDate.parse("2026-06-30"), "project", "project_bf"));
 
         // 申请补录 +5000。
-        ArApAdjustmentRecord requested = service.requestAdjustment(new com.complex.platform.finance.dto.ArApAdjustmentRequest(
-                "adj-req-1", "backfill", List.of(), item.id(), 5000L, "late invoice"));
+        ArApAdjustmentRecord requested = service.requestAdjustment(backfill("adj-req-1", item.id(), 5000L, "late invoice"));
         assertThat(requested.approvalStatus()).isEqualTo("pending");
+        assertThat(requested.reviewId()).isEqualTo("review_" + requested.id());
 
-        // P0 B-01 职责分离：审批人必须不同于发起人。
+        // 第十八批 AL 段 245-R1：审批走统一审批（申请人与受益人不得审批由审批链保证），终审通过的结论回写才入账。
         stubActor("staff_finance_supervisor");
-        // 审批通过：金额变动入账。
-        ArApAdjustmentRecord approved = service.approveAdjustment(requested.id(),
-                new com.complex.platform.finance.dto.ArApAdjustmentDecisionRequest("adj-dec-1", "ok", List.of(), "approve"));
-        assertThat(approved.approvalStatus()).isEqualTo("approved");
+        com.complex.platform.support.LockedBackfillFixture.decide(service, requested, true);
+        assertThat(financeRepository.findArApAdjustmentByIdForUpdate(requested.id()).orElseThrow().approvalStatus()).isEqualTo("approved");
         // P0-B（V344）红冲：原行金额分文未动。
         assertThat(financeRepository.findArApItemById(item.id()).orElseThrow().amountCent()).isEqualTo(100000L);
         // 追加一条严格取反的冲正行（原行三个金额列全部取反）。
@@ -1399,59 +1397,35 @@ class FinanceServiceTests {
     @Test
     void backfillApprovalNotifiesSettlementProgressWithRestatedRow() {
         stubActor("staff_finance_cb");
+        stubLockedBackfill();
         ArApItemRecord item = service.createArApItem(itemRequest("arap-backfill-cb", "receivable", 100000L));
         DailyCloseFixture.lock(service, financeRepository, new DailyCloseRequest(
                 "daily-close-backfill-cb", "lock", List.of(),
                 LocalDate.parse("2026-06-30"), "project", "project_cb"));
-        ArApAdjustmentRecord requested = service.requestAdjustment(new com.complex.platform.finance.dto.ArApAdjustmentRequest(
-                "adj-req-cb", "backfill", List.of(), item.id(), -40000L, "异议成立调减"));
+        ArApAdjustmentRecord requested = service.requestAdjustment(backfill("adj-req-cb", item.id(), -40000L, "异议成立调减"));
         stubActor("staff_finance_cb_reviewer");
         settlementProgress.clear();
-        service.approveAdjustment(requested.id(),
-                new com.complex.platform.finance.dto.ArApAdjustmentDecisionRequest("adj-dec-cb", "ok", List.of(), "approve"));
+        com.complex.platform.support.LockedBackfillFixture.decide(service, requested, true);
         assertThat(settlementProgress).extracting(ArApItemRecord::id).containsExactly("arap_res_" + requested.id());
         assertThat(settlementProgress.get(0).unpaidAmountCent()).isEqualTo(60000L);
     }
 
     @Test
-    void backfillSelfDecisionForbiddenBySeparationOfDuties() {
-        stubActor("staff_finance_self");
-        ArApItemRecord item = service.createArApItem(itemRequest("arap-backfill-sod", "receivable", 100000L));
-        DailyCloseFixture.lock(service, financeRepository, new DailyCloseRequest(
-                "daily-close-backfill-sod", "lock", List.of(),
-                LocalDate.parse("2026-06-30"), "project", "project_sod"));
-        ArApAdjustmentRecord requested = service.requestAdjustment(new com.complex.platform.finance.dto.ArApAdjustmentRequest(
-                "adj-req-sod", "backfill", List.of(), item.id(), 5000L, "self decision attempt"));
-
-        // F-OPS-07 / B-01：发起人既不能自审批、也不能自拒绝（A 版 SoD：无论 approve 还是 reject）。
-        assertThatThrownBy(() -> service.approveAdjustment(requested.id(),
-                new com.complex.platform.finance.dto.ArApAdjustmentDecisionRequest("adj-dec-sod-a", "ok", List.of(), "approve")))
-                .isInstanceOf(ApiException.class)
-                .extracting("code").isEqualTo("SELF_APPROVAL_FORBIDDEN");
-        assertThatThrownBy(() -> service.approveAdjustment(requested.id(),
-                new com.complex.platform.finance.dto.ArApAdjustmentDecisionRequest("adj-dec-sod-r", "no", List.of(), "reject")))
-                .isInstanceOf(ApiException.class)
-                .extracting("code").isEqualTo("SELF_APPROVAL_FORBIDDEN");
-        // 两次自决策均被拒，金额未变。
-        assertThat(financeRepository.findArApItemById(item.id()).orElseThrow().amountCent()).isEqualTo(100000L);
-    }
-
-    @Test
     void backfillRejectDoesNotChangeLedger() {
         stubActor("staff_finance_2");
+        stubLockedBackfill();
         ArApItemRecord item = service.createArApItem(itemRequest("arap-backfill-rej", "receivable", 100000L));
         DailyCloseFixture.lock(service, financeRepository, new DailyCloseRequest(
                 "daily-close-backfill-rej", "lock", List.of(),
                 LocalDate.parse("2026-06-30"), "project", "project_bfr"));
 
-        ArApAdjustmentRecord requested = service.requestAdjustment(new com.complex.platform.finance.dto.ArApAdjustmentRequest(
-                "adj-req-2", "backfill", List.of(), item.id(), 7000L, "disputed"));
-        // F-OPS-07 SoD（A 版）拦 approve+reject：拒绝人也必须不同于发起人。
+        ArApAdjustmentRecord requested = service.requestAdjustment(backfill("adj-req-2", item.id(), 7000L, "disputed"));
         stubActor("staff_finance_2_reviewer");
-        ArApAdjustmentRecord rejected = service.approveAdjustment(requested.id(),
-                new com.complex.platform.finance.dto.ArApAdjustmentDecisionRequest("adj-dec-2", "no", List.of(), "reject"));
+        com.complex.platform.support.LockedBackfillFixture.decide(service, requested, false);
 
+        ArApAdjustmentRecord rejected = financeRepository.findArApAdjustmentByIdForUpdate(requested.id()).orElseThrow();
         assertThat(rejected.approvalStatus()).isEqualTo("rejected");
+        assertThat(rejected.approvedBy()).isEqualTo("staff_finance_2_reviewer");
         assertThat(financeRepository.findArApItemById(item.id()).orElseThrow().amountCent()).isEqualTo(100000L);
     }
 
@@ -1460,11 +1434,34 @@ class FinanceServiceTests {
         stubActor("staff_finance_3");
         ArApItemRecord item = service.createArApItem(itemRequest("arap-not-locked", "receivable", 100000L));
 
-        assertThatThrownBy(() -> service.requestAdjustment(new com.complex.platform.finance.dto.ArApAdjustmentRequest(
-                "adj-req-3", "backfill", List.of(), item.id(), 1000L, "no lock")))
+        assertThatThrownBy(() -> service.requestAdjustment(backfill("adj-req-3", item.id(), 1000L, "no lock")))
                 .isInstanceOf(ApiException.class)
                 .extracting("code")
                 .isEqualTo("AR_AP_ITEM_NOT_LOCKED");
+    }
+
+    /** 第十八批 AL 段第 253 条：锁账补录请求（带一份原始凭证与责任人）。 */
+    private static com.complex.platform.finance.dto.ArApAdjustmentRequest backfill(String key, String itemId, long amountCent, String reason) {
+        return new com.complex.platform.finance.dto.ArApAdjustmentRequest(key, "backfill", List.of("att_" + key), itemId, amountCent, reason,
+                null, null, "staff_responsible", null);
+    }
+
+    /**
+     * 第十八批 AL 段 245-R1、253：锁账补录进统一审批（复核单号按补录号派生为 review_{补录号}），凭证存在与责任人账号存在置桩
+     * （审批链、凭证与责任人校验另由 LockedBackfillReviewJdbcTests、LockedBackfillEvidenceJdbcTests 走真库）。
+     */
+    private void stubLockedBackfill() {
+        service.reviews = mock(com.complex.platform.governance.review.SupervisorReviewService.class);
+        when(service.reviews.evaluate(any())).thenAnswer(call -> {
+            String adjustmentId = ((com.complex.platform.governance.review.SupervisorReviewEvaluateRequest) call.getArgument(0)).objectId();
+            return new com.complex.platform.governance.review.SupervisorReviewDecisionRecord("review_" + adjustmentId,
+                    "finance_locked_backfill_review", "finance.locked_backfill.review", "ar_ap_adjustment", adjustmentId, true, "pending_review",
+                    1, null, "blocked", null, List.of(), Instant.now(), "op", "one_level_up", null);
+        });
+        service.refundEvidenceValidator = mock(com.complex.platform.evidence.EvidenceAttachmentValidator.class);
+        service.accessRepository = mock(com.complex.platform.access.AccessRepository.class);
+        when(service.accessRepository.findUserById(any())).thenAnswer(call -> Optional.of(new com.complex.platform.access.AccessUser(
+                call.getArgument(0), call.getArgument(0), "staff", "org_1", null, "active", Instant.now())));
     }
 
     private void stubActor(String id) {

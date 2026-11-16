@@ -1,6 +1,6 @@
-# 应收应付台账开发设计 V0.11
+# 应收应付台账开发设计 V0.12
 
-> 版本：V0.11 ｜ 最后更新：2026-11-12（第十八批 AI 段补 `pass_domain_share`、`pass_domain_direct_settlement`、`pass_unverified_attribution` 来源，`single_bar_service_fee` 计费月改按该酒吧营业日；第九批补 `saved_bottle_remedy`、`saved_bottle_remedy_recovery` 来源；第八批补 `compensation_fulfillment`、`compensation_fulfillment_recovery`、`single_bar_service_fee`、`ticket_distribution_recovery` 来源）｜ 覆盖迁移基线：见各小节迁移号（最新 V124）｜ 状态：现行
+> 版本：V0.12 ｜ 最后更新：2026-11-15（第十八批 AL 段：§4.3 F-OPS-07 补更正，锁定后补录审批改走统一审批；第十八批 AI 段补 `pass_domain_share`、`pass_domain_direct_settlement`、`pass_unverified_attribution` 来源，`single_bar_service_fee` 计费月改按该酒吧营业日；第九批补 `saved_bottle_remedy`、`saved_bottle_remedy_recovery` 来源；第八批补 `compensation_fulfillment`、`compensation_fulfillment_recovery`、`single_bar_service_fee`、`ticket_distribution_recovery` 来源）｜ 覆盖迁移基线：见各小节迁移号（最新 V124）｜ 状态：现行
 > 新功能承接见 docs/v099-v124-feature-implementation-and-acceptance-spec-v0.1.md
 > <!-- 文档goalP3(2026-06-20)：补版本/日期/覆盖迁移头，未改正文 -->
 
@@ -111,7 +111,7 @@ P0 不替代正式财务软件的总账、凭证、报税和复杂税票自动�
 | `reviewed_at` | timestamp | 否 | 复核时间 |
 | `created_by` | uuid | 是 | 创建人 |
 
-> **✅ 已实现修复（F-OPS-07，2026-06-22，已在 .160 编译通过）**：补录/调整审批 `decideAdjustment`（finance 域唯一涉资金审批链）落地**职责分离（SoD）**——审批人 `approver`（写入 `reviewer_id`）**不得等于**发起人 `requested_by`（`created_by`），**自审自批抛 `SELF_APPROVAL_FORBIDDEN`**。与 §7「发起调整 / 审批调整」分属不同权限、§8 反模式「日结锁定后直接改金额→走调整/冲正审批」一致：影响金额的调整必须经第二人复核，发起人不能给自己的调整单放行。
+> **✅ 已实现修复（F-OPS-07，2026-06-22，已在 .160 编译通过）**：补录/调整审批 `decideAdjustment`（finance 域唯一涉资金审批链）落地**职责分离（SoD）**——审批人 `approver`（写入 `reviewer_id`）**不得等于**发起人 `requested_by`（`created_by`），**自审自批抛 `SELF_APPROVAL_FORBIDDEN`**。与 §7「发起调整 / 审批调整」分属不同权限、§8 反模式「日结锁定后直接改金额→走调整/冲正审批」一致：影响金额的调整必须经第二人复核，发起人不能给自己的调整单放行。**第十八批 AL 段第 245 条 245-R1 更正（2026-11-15）**：`decideAdjustment` 与旧审批接口已删，锁定后补录提交即进统一审批（动作类型 `finance.locked_backfill.review`），审批结论由 `FinanceService.lockedBackfillDecided` 回写；职责分离改由统一审批承担——申请人不能审批自己发起的复核单，补录责任人登记为直接受益人、不得审批（均 403 `SUPERVISOR_SELF_REVIEW_FORBIDDEN`），不再抛 `SELF_APPROVAL_FORBIDDEN`；批准人写 `approved_by`（终审或驳回节点审批人）。详见 `finance-settlement-product-prd-v0.1.md` §5.4。
 
 | 状态 | 含义 | 可进入条件 |
 |---|---|---|
