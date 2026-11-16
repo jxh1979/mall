@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.45
+// 文件版本：V0.46
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -478,7 +478,7 @@ public class FinanceService implements TerminationSettlementPort {
                 "finance_ar_ap.create_failed",
                 "finance.ar_ap.manage",
                 "ar_ap_item",
-                () -> createItem(request, false, null)
+                () -> createItem(request, false, null, null)
         );
     }
 
@@ -497,7 +497,28 @@ public class FinanceService implements TerminationSettlementPort {
                 "finance_ar_ap.create_failed",
                 "finance.ar_ap.manage",
                 "ar_ap_item",
-                () -> createItem(request, true, explicitProjectId)
+                () -> createItem(request, true, explicitProjectId, null)
+        );
+    }
+
+    /**
+     * 第十八批 AK 段第 225 条 225-R1（PGM:664「单店层面的财务工作——……异常单据处置……——由该酒吧对应的财务 BP 负责」）：显式商户与项目归属过账。
+     * 没有商户号的平台侧财务 BP 处置酒吧账单异常「作废并冲正」挂退款应付时用——按账单所属酒吧及其综合体落账、判锁，与商户侧主管办理时
+     * 落的归属相同；不取过账人的商户范围（其没有商户号，取即 403 MERCHANT_SCOPE_REQUIRED）。准入闸、审计、幂等同 createArApItem(request)。
+     */
+    @com.complex.platform.gate.GuardedAction(capability = "finance.ar_ap.manage", admissionAction = "finance.locked_backfill", objectType = "ar_ap_item")
+    @Transactional
+    public ArApItemRecord createArApItem(ArApItemRequest request, String explicitMerchantId, String explicitProjectId) {
+        return executeWrite(
+                "createArApItem",
+                request == null ? null : request.idempotencyKey(),
+                request,
+                ArApItemRecord.class,
+                "finance_ar_ap.created",
+                "finance_ar_ap.create_failed",
+                "finance.ar_ap.manage",
+                "ar_ap_item",
+                () -> createItem(request, true, explicitProjectId, requireText(explicitMerchantId, "merchant_id"))
         );
     }
 
@@ -1879,7 +1900,8 @@ public class FinanceService implements TerminationSettlementPort {
         return value;
     }
 
-    private ArApItemRecord createItem(ArApItemRequest request, boolean overrideProjectScope, String overrideProjectId) {
+    private ArApItemRecord createItem(ArApItemRequest request, boolean overrideProjectScope, String overrideProjectId,
+            String overrideMerchantId) {
         ArApItemRequest actual = requireRequest(request);
         String direction = requireEnum(actual.direction(), DIRECTIONS, "direction");
         String sourceType = optionalEnum(actual.sourceType(), SOURCE_TYPES, "source_type");
@@ -1887,7 +1909,9 @@ public class FinanceService implements TerminationSettlementPort {
         LocalDate dueDate = requireDate(actual.dueDate(), "due_date");
         // F-OPS-09：用本条目将落账的 merchant scope 判锁，与下方 ArApItemRecord.merchantId 同口径——
         // 商户 scope 仅受本商户封账约束，平台口径受任一封账约束。
-        Optional<String> scope = authorizationService.currentMerchantScope();
+        // 225-R1：调用方显式给了落账商户的（平台侧财务 BP 处置酒吧账单异常），按它落账、判锁，不取过账人的商户范围。
+        Optional<String> scope = overrideMerchantId != null
+                ? Optional.of(overrideMerchantId) : authorizationService.currentMerchantScope();
         // P1-A：落账即写入综合体维度(与 merchantId 同来源=创建方 token 的 scope),历史行由 V243 回填。
         // 🔴 P2(2026-07-21):调用方可显式指定项目归属覆盖 token 项目域——结算过账按 source_type 派生
         //   (ticket_distribution=bill.projectId、platform_incentive_subsidy=平台域 NULL),不再继承过账人 token 域,

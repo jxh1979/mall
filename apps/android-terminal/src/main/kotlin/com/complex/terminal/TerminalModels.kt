@@ -1,6 +1,6 @@
 package com.complex.terminal
 
-// 文件版本：V0.19
+// 文件版本：V0.20
 
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
@@ -631,12 +631,14 @@ fun barTableTypeZh(type: String?): String = when (type) {
  * 第十八批 AA 段第 206 条 206-R3（ENUM:100「桌台/卡座/吧台位状态｜空闲、已预留、已开台、待清台、停用、异常」；
  * 「台位未被占用——既无有效预留也未开台——时即可再次接受预订」）：一体机订台与员工代订列表的台位状态，有效预留显示「已订」，
  * 其余按台位状态显示，中文名同后台卡座表（206-R2）。
+ * 第十八批 AK 段第 226 条 226-R3（PGM:287「界面全中文（所有终端零英文）」）：异常（abnormal）显示「异常」。
  */
 fun barTableBookingLabel(row: BarTableAvailabilityRow): String = if (row.reserved == true) "已订" else when (row.status) {
   "active" -> "空闲"
   "opened" -> "已开台"
   "pending_clear" -> "待清台"
   "disabled" -> "停用"
+  "abnormal" -> "异常"
   else -> row.status ?: "-"
 }
 

@@ -8,7 +8,19 @@ import type { AdminPageProps, BarProductRow, BarProductCategoryRow, InventoryIte
 import { PermissionButton } from "../security/Can";
 import { RowActions, type RowAction } from "../components/RowActions";
 import { GuidedFlowModal } from "../components/GuidedFlowModal";
+import { FormModal } from "../components/FormModal";
 import { BarVenueSelect } from "../components/BarVenueSelect";
+import { ApiError } from "../../shared/apiError";
+
+// 第十八批 AK 段第 221 条 221-R3（ENUM:111「沽清分两档：临时沽清（本营业日有效，营业日切换时点自动恢复在售）与长期下架（须主管审批解除后才恢复）」；
+// PGM:287 状态全中文）：沽清档位中文名，状态列、行详情与送审提示共用。
+type SoldOutType = "temporary" | "long_term";
+const SOLD_OUT_TYPE_LABELS: Record<string, string> = { temporary: "临时沽清", long_term: "长期下架" };
+/** 商品状态：已沽清的按档位显示，在售的按商品状态显示。 */
+function productStatusLabel(row: BarProductRow): string {
+  if (!row.soldOut) return formatBusinessStatus(row.status);
+  return (row.soldOutType ? SOLD_OUT_TYPE_LABELS[row.soldOutType] : undefined) ?? "沽清";
+}
 
 // 商品类别码 → 中文（零英文强制；不进共享码表，就近页级映射）。未知码原样返回。
 // 说明：这是既有的 product_type 兼容字段（粗类别）；V256 起「可配置分类」走 categoryId，两者并存展示。
@@ -74,7 +86,7 @@ const EMPTY_CATEGORY_FORM: CategoryForm = { barId: "", categoryName: "", sortOrd
  *   ② 给商品挂分类、上传图片（本地存储，同 image_url 先例）；
  *   ③ 录入售价/内部结算价（原有能力保留）。
  * product_type（粗类别，历史兼容）保留展示；categoryId 为新的可配置精分类。
- * 查看需 bar.product.view；商品录入/改需 bar.product.manage；分类维护需 bar.category.manage。
+ * 查看需 bar.product.view；商品录入/改需 bar.product.manage；分类维护需 bar.category.manage；沽清与解除沽清需 bar.product.sold_out（第十八批 AK 段第 221 条）。
  */
 export function BarProductsPage({ api, setActionResult, setGlobalError, effectivePermissions, reportViewedObjects }: AdminPageProps) {
   const [rows, setRows] = React.useState<BarProductRow[]>([]);
@@ -94,6 +106,14 @@ export function BarProductsPage({ api, setActionResult, setGlobalError, effectiv
   // 引导式流程 phase-3：新建商品/新建分类收起为主按钮，点击弹出分步引导（GuidedFlowModal）。
   const [productOpen, setProductOpen] = React.useState(false);
   const [categoryOpen, setCategoryOpen] = React.useState(false);
+  // 第十八批 AK 段第 221 条 221-R3：沽清弹框（要沽清的商品、档位、原因）与送主管复核后的提示。
+  const [soldOutTarget, setSoldOutTarget] = React.useState<BarProductRow | null>(null);
+  const [soldOutType, setSoldOutType] = React.useState<SoldOutType | "">("");
+  const [soldOutReason, setSoldOutReason] = React.useState("");
+  const [soldOutError, setSoldOutError] = React.useState<string | null>(null);
+  const [soldOutSubmitting, setSoldOutSubmitting] = React.useState(false);
+  const [soldOutNote, setSoldOutNote] = React.useState("");
+  const [soldOutBlocked, setSoldOutBlocked] = React.useState<{ productId: string; type: SoldOutType; reason: string } | null>(null);
 
   const categoryName = React.useCallback(
     (id: string | null | undefined): string => {
@@ -119,7 +139,7 @@ export function BarProductsPage({ api, setActionResult, setGlobalError, effectiv
         { label: "库存商品规格", value: row.inventoryItemId ? (inventoryItems.find((item) => item.id === row.inventoryItemId)?.itemName ?? row.inventoryItemId) : "未挂" },
         { label: "库位", value: row.stockLocationId ?? "未挂" },
         { label: "标准出酒量（毫升）", value: row.standardPourVolume ? String(row.standardPourVolume) : "未填（按瓶）" },
-        { label: "状态", value: row.soldOut ? "沽清" : formatBusinessStatus(row.status) },
+        { label: "状态", value: productStatusLabel(row) },
       ],
     });
   }
@@ -208,7 +228,56 @@ export function BarProductsPage({ api, setActionResult, setGlobalError, effectiv
     }
   }
 
-  function catalogActions(kind: "products" | "categories", row: { id: string; archivedAt?: string | null; deleteStatus?: string }) {
+  // 第十八批 AK 段第 221 条 221-R3（BSM:1069「沽清（卖完、临时下架）均需主管审批留痕」；ENUM:111「沽清与解除同样须审批留痕」「库存归零不自动沽清，由现场按实际发起。」）：
+  // 沽清（type 为档位）与解除沽清（type 为 null）发同一接口；首次提交被准入闸拦下（ADMISSION_BLOCKED）并生成主管复核单，主管批准后再点一次才生效。
+  // 返回 null＝已办结或已送主管复核；否则返回中文失败原因。
+  async function postSoldOut(row: BarProductRow, type: SoldOutType | null, reason: string): Promise<string | null> {
+    setSoldOutNote("");
+    try {
+      await api.post(`/api/v1/bar/products/${row.id}/sold-out`, type ? { soldOut: true, soldOutType: type, reason: reason || undefined } : { soldOut: false });
+      setActionResult({ action: type === null ? "bar_product_sold_out_released" : type === "long_term" ? "bar_product_delisted" : "bar_product_sold_out", productId: row.id });
+      if (type) setSoldOutBlocked(null);
+      await reload();
+      return null;
+    } catch (e) {
+      const message = e instanceof Error ? e.message : type ? "沽清失败" : "解除沽清失败";
+      setGlobalError(message);
+      if (e instanceof ApiError && e.detailCode === "ADMISSION_BLOCKED") {
+        // 主管的批准只能被「被拦下的那次提交的同样内容」用掉：记下这次的档位与原因，再点「沽清」时原样带回弹框。
+        if (type) setSoldOutBlocked({ productId: row.id, type, reason });
+        setSoldOutNote(`已提交主管审批：主管在「主管复核」页批准后，请对「${row.productName ?? row.id}」原样再点一次${type ? `「沽清」（档位「${SOLD_OUT_TYPE_LABELS[type]}」与原因保持不变）` : "「解除沽清」"}。`);
+        return null;
+      }
+      return message;
+    }
+  }
+
+  function openSoldOut(row: BarProductRow) {
+    const blocked = soldOutBlocked?.productId === row.id ? soldOutBlocked : null;
+    setSoldOutType(blocked ? blocked.type : "");
+    setSoldOutReason(blocked ? blocked.reason : "");
+    setSoldOutError(null);
+    setSoldOutTarget(row);
+  }
+
+  async function submitSoldOut() {
+    if (!soldOutTarget || !soldOutType) return;
+    setSoldOutError(null);
+    setSoldOutSubmitting(true);
+    const failure = await postSoldOut(soldOutTarget, soldOutType, soldOutReason.trim());
+    setSoldOutSubmitting(false);
+    if (failure) setSoldOutError(failure);
+    else setSoldOutTarget(null);
+  }
+
+  /** 在售商品给「沽清」，已沽清的给「解除沽清」。 */
+  function soldOutAction(row: BarProductRow): RowAction {
+    return row.soldOut
+      ? { key: "sold-out-release", label: "解除沽清", permissions: ["bar.product.sold_out"], onClick: () => void postSoldOut(row, null, ""), testId: `bar-product-sold-out-release-${row.id}` }
+      : { key: "sold-out", label: "沽清", permissions: ["bar.product.sold_out"], onClick: () => openSoldOut(row), testId: `bar-product-sold-out-${row.id}` };
+  }
+
+  function catalogActions(kind: "products" | "categories", row: { id: string; archivedAt?: string | null; deleteStatus?: string }, activeExtra: RowAction[] = []) {
     const manage = kind === "products" ? ["bar.product.manage"] : ["bar.category.manage"];
     const approve = kind === "products" ? ["bar.product.approve"] : ["bar.category.approve"];
     const prefix = kind === "products" ? "bar-product" : "bar-category";
@@ -224,6 +293,7 @@ export function BarProductsPage({ api, setActionResult, setGlobalError, effectiv
         ]
       : [
           { key: "archive", label: "存档", permissions: manage, onClick: () => void archiveEntity(kind, row.id, true), testId: `${prefix}-archive-${row.id}` },
+          ...activeExtra,
         ];
     return <RowActions actions={actions} permissionsState={effectivePermissions} testId={`${prefix}-actions-${row.id}`} />;
   }
@@ -497,6 +567,27 @@ export function BarProductsPage({ api, setActionResult, setGlobalError, effectiv
         <input type="checkbox" checked={showArchived} onChange={(e) => setShowArchived(e.target.checked)} />
         显示已存档分类与商品
       </label>
+      {soldOutNote ? <div className="admin-state" data-testid="bar-product-sold-out-note">{soldOutNote}</div> : null}
+      <FormModal
+        open={soldOutTarget !== null}
+        title={`沽清 · ${soldOutTarget?.productName ?? soldOutTarget?.id ?? ""}`}
+        description="沽清须主管审批：首次提交生成主管复核单，主管在「主管复核」页批准后，再点一次「沽清」并选同一档位才生效。"
+        testId="bar-product-sold-out-modal"
+        submitTestId="bar-product-sold-out-submit"
+        submitLabel="提交沽清"
+        submitting={soldOutSubmitting}
+        error={soldOutError ?? undefined}
+        validate={() => (soldOutType ? null : "请选择沽清档位")}
+        onClose={() => setSoldOutTarget(null)}
+        onSubmit={() => void submitSoldOut()}
+      >
+        <label><span>沽清档位</span><select data-testid="bar-product-sold-out-type" value={soldOutType} onChange={(e) => setSoldOutType(e.target.value as SoldOutType | "")}>
+          <option value="">请选择档位</option>
+          <option value="temporary">临时沽清（本营业日有效，营业日切换自动恢复）</option>
+          <option value="long_term">长期下架（须主管审批解除）</option>
+        </select></label>
+        <label><span>原因</span><input data-testid="bar-product-sold-out-reason" value={soldOutReason} onChange={(e) => setSoldOutReason(e.target.value)} placeholder="例如：今日已售完" /></label>
+      </FormModal>
 
       <AdminDataState loading={loading} error={error} empty={rows.length === 0} onRetry={reload}>
         <div className="admin-table-scroll">
@@ -549,9 +640,9 @@ export function BarProductsPage({ api, setActionResult, setGlobalError, effectiv
                       onChange={(e) => { const f = e.target.files?.[0]; if (f) void uploadImage(row, f); }}
                     />
                   </td>
-                  <td>{row.soldOut ? "沽清" : formatBusinessStatus(row.status)}</td>
+                  <td data-testid={`bar-product-status-${row.id}`}>{productStatusLabel(row)}</td>
                   <td data-testid={`bar-product-archive-label-${row.id}`}>{archiveLabel(row)}</td>
-                  <td onClick={(e) => e.stopPropagation()}>{catalogActions("products", row)}</td>
+                  <td onClick={(e) => e.stopPropagation()}>{catalogActions("products", row, [soldOutAction(row)])}</td>
                 <td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看商品详情" onClick={(event) => { event.stopPropagation(); openProductDetail(row); }}>查看详情</button></td></tr>
               ))}
             </tbody>

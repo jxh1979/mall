@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.10
+// 文件版本：V0.11
 
 import com.complex.platform.evidence.AuditedOperation;
 
@@ -16,7 +16,8 @@ enum BarWriteOperation implements AuditedOperation {
     PAY_RESERVATION_DEPOSIT("bar.reservation_deposit_paid", "bar.reservation_deposit_pay_failed", "bar.reservation.manage", "bar_reservation"),
     // 第十批 TK-24-R1：到店只留痕、定金不再抵扣（原 bar.reservation_deposit_deducted 事件停用）。
     CHECK_IN_RESERVATION_DEPOSIT("bar.reservation_checked_in", "bar.reservation_checkin_failed", "bar.reservation.manage", "bar_reservation"),
-    CANCEL_RESERVATION("bar.reservation.cancelled", "bar.reservation.cancel_failed", "bar.reservation.manage", "bar_reservation"),
+    // 第十八批 AK 段第 230 条 230-R1（BSM:1058「店长及以上可人工取消预留，必须填原因并留痕。」）：人工取消订台改用单独的权限码。
+    CANCEL_RESERVATION("bar.reservation.cancelled", "bar.reservation.cancel_failed", "bar.reservation.cancel", "bar_reservation"),
     CREATE_DEPOSIT_RULE("bar.deposit_rule.created", "bar.deposit_rule.create_failed", "bar.deposit_rule.manage", "bar_deposit_rule"),
     CREATE_TABLE("bar.table.changed", "bar.table.change_failed", "bar.table.manage", "bar_table"),
     ASSIGN_TABLE_SPACE("bar.table_space.assigned", "bar.table_space.assign_failed", "bar.table.manage", "bar_table"),
@@ -26,6 +27,9 @@ enum BarWriteOperation implements AuditedOperation {
     // 第十八批 AA 段第 206 条 206-R1：台位停用与恢复（ENUM:100、BSM:1058「台位停用与恢复由店长及以上操作，填原因留痕」）。
     DISABLE_TABLE("bar.table.disabled", "bar.table.disable_failed", "bar.table.disable", "bar_table"),
     ENABLE_TABLE("bar.table.enabled", "bar.table.enable_failed", "bar.table.disable", "bar_table"),
+    // 第十八批 AK 段第 226 条 226-R1：台位登记异常与当班主管确认恢复（ENUM:100、BSM:1058「异常由系统告警或人工登记进入，处置完成后由当班主管确认恢复，全程留痕。」）。
+    MARK_TABLE_ABNORMAL("bar.table.abnormal_marked", "bar.table.abnormal_mark_failed", "bar.table.open_close", "bar_table"),
+    RESOLVE_TABLE_ABNORMAL("bar.table.abnormal_resolved", "bar.table.abnormal_resolve_failed", "bar.table.open_close", "bar_table"),
     CREATE_TABLE_SESSION("bar.table_session.create", "bar.table_session.create_failed", "bar.table_session.create", "bar_table_session"),
     TRANSFER_TABLE_SESSION("bar.table.transferred", "bar.table_session.transfer_failed", "bar.table_session.transfer", "bar_table_session_adjustment"),
     // 第十八批 AB 段第 190 条 190-R3：撤销转台（BSM:1079「每次……撤销转台均须留痕」），沿用转台权限。
@@ -61,7 +65,10 @@ enum BarWriteOperation implements AuditedOperation {
             "bar_order_suspension"),
     DECIDE_SUSPENSION_CANCEL("bar.order_suspension_cancel_decided", "bar.order_suspension_cancel_decide_failed", "bar.bill.hang_cancel",
             "bar_order_suspension"),
+    // 第十八批 AK 段第 221 条 221-R1（ENUM:111「沽清分两档……沽清与解除同样须审批留痕」）：临时沽清、长期下架、解除沽清各记各的事件。
     MARK_PRODUCT_SOLD_OUT("bar.product_sold_out", "bar.product_sold_out_failed", "bar.product.sold_out", "bar_product"),
+    DELIST_PRODUCT("bar.product_delisted", "bar.product_delist_failed", "bar.product.sold_out", "bar_product"),
+    RELEASE_PRODUCT_SOLD_OUT("bar.product_sold_out_released", "bar.product_sold_out_release_failed", "bar.product.sold_out", "bar_product"),
     ADD_BILL_TIP("bar.bill_tip_added", "bar.bill_tip_failed", "bar.bill.tip", "bar_bill"),
     OPEN_SHIFT("bar.shift_opened", "bar.shift_open_failed", "bar.shift.manage", "bar_shift"),
     CLOSE_SHIFT("bar.shift_closed", "bar.shift_close_failed", "bar.shift.close", "bar_shift"),
@@ -76,6 +83,16 @@ enum BarWriteOperation implements AuditedOperation {
     ISSUE_INVITATION("bar.reservation_invitation_issued", "bar.reservation_invitation_issue_failed", "bar.reservation.invitation.manage", "bar_reservation"),
     REVOKE_INVITATION("bar.reservation_invitation_revoked", "bar.reservation_invitation_revoke_failed", "bar.reservation.invitation.manage", "bar_reservation"),
     ENTER_INVITATION("bar.reservation_invitation_entered", "bar.reservation_invitation_entry_failed", "bar.table.guest_checkin", "bar_reservation"),
+    // 第十八批 AK 段第 248 条 248-R1（PGM:966「所有有过程的业务动作都必须留痕」；BSM:576「存档及删除都需要填写理由」）：分类、商品、套餐与订台的
+    // 存档、取消存档各落成功与失败事件，存档事件记理由。
+    ARCHIVE_BAR_CATEGORY("bar.category.archived", "bar.category.archive_failed", "bar.category.manage", "bar_product_category"),
+    UNARCHIVE_BAR_CATEGORY("bar.category.unarchived", "bar.category.unarchive_failed", "bar.category.manage", "bar_product_category"),
+    ARCHIVE_BAR_PRODUCT("bar.product.archived", "bar.product.archive_failed", "bar.product.manage", "bar_product"),
+    UNARCHIVE_BAR_PRODUCT("bar.product.unarchived", "bar.product.unarchive_failed", "bar.product.manage", "bar_product"),
+    ARCHIVE_BAR_COMBO("bar.combo.archived", "bar.combo.archive_failed", "bar.combo.manage", "bar_combo"),
+    UNARCHIVE_BAR_COMBO("bar.combo.unarchived", "bar.combo.unarchive_failed", "bar.combo.manage", "bar_combo"),
+    ARCHIVE_BAR_RESERVATION("bar.reservation.archived", "bar.reservation.archive_failed", "bar.reservation.manage", "bar_reservation"),
+    UNARCHIVE_BAR_RESERVATION("bar.reservation.unarchived", "bar.reservation.unarchive_failed", "bar.reservation.manage", "bar_reservation"),
     REQUEST_DELETE_BAR_CATEGORY("bar.category.delete_requested", "bar.category.delete_request_failed", "bar.category.manage", "bar_product_category"),
     APPROVE_DELETE_BAR_CATEGORY("bar.category.delete_approved", "bar.category.delete_approve_failed", "bar.category.approve", "bar_product_category"),
     REQUEST_DELETE_BAR_PRODUCT("bar.product.delete_requested", "bar.product.delete_request_failed", "bar.product.manage", "bar_product"),

@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.11
+// 文件版本：V0.12
 
 import static com.complex.platform.bar.BarValidation.*;
 
@@ -134,6 +134,37 @@ public class BarTableSessionService {
             throw ApiException.conflict("BAR_TABLE_NOT_DISABLED", "该台位未停用，不能恢复");
         }
         String after = disable ? "disabled" : "active";
+        detail.put("reason", reason);
+        detail.put("status_before", table.status());
+        detail.put("status_after", after);
+        return repository.saveTable(tableWithStatus(table, after, Instant.now()));
+    }
+
+    /**
+     * 第十八批 AK 段第 226 条 226-R1（ENUM:100、BSM:1058「异常由系统告警或人工登记进入，处置完成后由当班主管确认恢复，全程留痕。」「已预留只能经
+     * 取消订台、超时释放、到店开台三条路径退出」；第十八批裁决 53）：登记只收空闲（active 且没有被有效预留占着）或待清台的台位；确认恢复只收异常台位、
+     * 回空闲，确认人须为当班主管（第十批裁决 6：本酒吧账号、此刻有排班；开关台权限由入口把关）。先锁台位行，与订台占台（holdTable）串行。
+     * 开台、转入、订台本就只认 active，异常台位自然不可用。
+     */
+    BarTableRecord changeTableAbnormal(String tableId, BarTableStatusChangeRequest request, boolean mark, Map<String, Object> detail) {
+        String reason = requireText(requireRequest(request).reason(), "reason");
+        repository.lockTable(tableId);
+        BarTableRecord table = requireTableInScope(tableId);
+        if (mark) {
+            boolean idle = "active".equals(table.status()) && repository.findHeldReservationId(tableId).isEmpty();
+            if (!idle && !"pending_clear".equals(table.status())) {
+                throw ApiException.conflict("BAR_TABLE_NOT_ABNORMALIZABLE",
+                        "只有空闲或待清台的台位可以登记异常；已预留的须先取消订台，已开台的请先转台或关台后再登记");
+            }
+        } else {
+            if (!"abnormal".equals(table.status())) {
+                throw ApiException.conflict("BAR_TABLE_NOT_ABNORMAL", "该台位不在异常状态，不能确认恢复");
+            }
+            if (!repository.isStaffOnDutyAtBar(authorizationService.currentActor().id(), table.barId(), Instant.now())) {
+                throw ApiException.forbidden("BAR_TABLE_RESOLVER_NOT_ON_DUTY", "只有当班主管可以确认恢复");
+            }
+        }
+        String after = mark ? "abnormal" : "active";
         detail.put("reason", reason);
         detail.put("status_before", table.status());
         detail.put("status_after", after);

@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -210,7 +210,108 @@ class BarOnTheSpotPaymentJdbcIntegrationTests {
         assertThat(orders(loose)).isEqualTo(1);
     }
 
+    /**
+     * 第十八批 AK 段第 222 条 222-R1（PGM:303「同一次操作重复提交时，返回第一次的结果并提示已完成。」；PGM:528「⑤同一笔操作重复提交不重复生效」）：
+     * 同一订单已开出未作废账单后，后台「生成账单」成功后再点（换新请求编号）——返回已开出的那张并提示已完成，不再开一张全额账单，
+     * 服务费与留款抵用也不再算一遍。
+     */
+    @Test
+    void secondBillRequestWithNewKeyReturnsTheIssuedBill() throws Exception {
+        // 本营业日收费规则：服务费率 10%。
+        jdbc.update("""
+                INSERT INTO bar_payroll_rules(id, rule_kind, project_id, merchant_id, effective_from, version, rule_json, reason, status,
+                    platform_company_id, created_by)
+                VALUES (?, 'charge', ?, NULL, ?, 'V0.02', ?::jsonb, '服务费 10%', 'approved', ?, 'usr_spot')
+                """, "bpr_spot_fee_" + s, "prj_spot_" + s, java.sql.Date.valueOf(LocalDate.now()),
+                json.writeValueAsString(new BarPayrollRequests.RuleValues(1000, 0, 2000, null, null, null, List.of())), "ent_spot_" + s);
+        String table = table("dup", "card_seat", 0L);
+        openSession("dup", table, 0L);
+        // 同一开台会话里先前一张账单留有低消留款 200，待后续账单抵用。
+        String priorBill = bill(orderId(order(table, snack, 1).andExpect(status().isOk())), "prior").andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        bars.saveBillAdjustment(new BarBillAdjustmentRecord("adj_spot_retained_" + s, json.readTree(priorBill).at("/data/id").asText(),
+                "min_spend_retained", 200L, 330L, 330L, "退款留款（低消）", "usr_spot_staff_" + s, true, "applied", "spot-retained-" + s,
+                List.of(), null, "{}", Instant.now(), null));
+
+        String order = orderId(order(table, beer, 1).andExpect(status().isOk()));
+        String first = data(bill(order, "k1").andExpect(status().isOk())
+                .andExpect(jsonPath("$.replayed").doesNotExist())
+                .andExpect(jsonPath("$.data.payable_amount_cent").value(350)), "$.data.id");
+
+        bill(order, "k2").andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.id").value(first))
+                .andExpect(jsonPath("$.replayed").value(true))
+                .andExpect(jsonPath("$.message").value(com.complex.platform.common.api.ApiResponse.REPLAYED_MESSAGE));
+        assertThat(jdbc.queryForList("SELECT id FROM bar_bills WHERE order_id = ? AND settlement_status <> 'void'", String.class, order))
+                .containsExactly(first);
+        assertThat(adjustments(order, "service_fee")).isEqualTo(1);
+        assertThat(adjustments(order, "min_spend_retained_applied")).isEqualTo(1);
+    }
+
+    /**
+     * 222-R1：客人扫码已付单在成单时就随单记了一张已结清账单；后台再点「生成账单」返回这张已结清账单、不新增未付账单，
+     * 散台出品不被 BAR_ORDER_PAYMENT_REQUIRED 拦。
+     */
+    @Test
+    void staffBillRequestOnPaidScanOrderReturnsItsSettledBill() throws Exception {
+        String table = table("paid", "loose_table", 0L);
+        openSession("paid", table, 0L);
+        ResultActions created = scanOrder(table, 1).andExpect(status().isOk());
+        f.markPaid(data(created, "$.data.payment_intent_id"));
+        String confirmKey = "spot-scan-confirm-" + UUID.randomUUID();
+        String order = data(mockMvc.perform(post("/api/v1/customer/bar-tables/" + table + "/scan-orders/"
+                        + data(created, "$.data.scan_order_id") + "/confirm")
+                .header("X-Terminal-Type", "miniapp").header("Idempotency-Key", confirmKey)
+                .contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(Map.of("idempotency_key", confirmKey))))
+                .andExpect(status().isOk()), "$.data.bar_order_id");
+        String settled = jdbc.queryForObject("SELECT id FROM bar_bills WHERE order_id = ?", String.class, order);
+
+        bill(order, "paid").andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.id").value(settled))
+                .andExpect(jsonPath("$.data.settlement_status").value("settled"))
+                .andExpect(jsonPath("$.replayed").value(true));
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM bar_bills WHERE order_id = ?", Integer.class, order)).isEqualTo(1);
+        deliver(order, "paid").andExpect(status().isOk());
+        assertThat(stock()).isEqualTo(9);
+    }
+
+    /** 222-R1：已作废账单不算已开——账单经主管「作废并冲正」后再生成账单，开出新账单（不是重复提交，不提示已完成）。 */
+    @Test
+    void billCanBeIssuedAgainAfterTheFirstIsVoidedAndReversed() throws Exception {
+        String table = table("void", "loose_table", 0L);
+        openSession("void", table, 0L);
+        String order = orderId(order(table, beer, 1).andExpect(status().isOk()));
+        String first = data(bill(order, "v1").andExpect(status().isOk()), "$.data.id");
+        RequestPostProcessor supervisor = new StaffRequestFixture(jdbc).staff("usr_spot_sup_" + s, "staff", "prj_spot_" + s, bar,
+                "bar.bill.adjust", "bar.bill.anomaly.resolve");
+        mockMvc.perform(post("/api/v1/bar/bills/" + first + "/anomaly").with(supervisor).contentType(MediaType.APPLICATION_JSON)
+                .content(json.writeValueAsString(Map.of("idempotency_key", "spot-raise-" + s, "reason", "客人称整单记错台位"))))
+                .andExpect(status().isOk());
+        mockMvc.perform(post("/api/v1/bar/bills/" + first + "/anomaly/resolve").with(supervisor).contentType(MediaType.APPLICATION_JSON)
+                .content(json.writeValueAsString(Map.of("idempotency_key", "spot-void-" + s, "resolution", "voided_reversed",
+                        "reason", "核实整单记错，作废并冲正"))))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.settlement_status").value("void"));
+
+        String second = data(bill(order, "v2").andExpect(status().isOk())
+                .andExpect(jsonPath("$.replayed").doesNotExist())
+                .andExpect(jsonPath("$.data.settlement_status").value("unsettled")), "$.data.id");
+        assertThat(second).isNotEqualTo(first);
+        assertThat(jdbc.queryForList("SELECT id FROM bar_bills WHERE order_id = ? AND settlement_status <> 'void'", String.class, order))
+                .containsExactly(second);
+    }
+
     // ---------- helpers ----------
+
+    /** 后台订单页「生成账单」：idempotency_key、operator_note。 */
+    private ResultActions bill(String order, String tag) throws Exception {
+        return mockMvc.perform(post("/api/v1/bar/orders/" + order + "/bill").with(staff).contentType(MediaType.APPLICATION_JSON)
+                .content(json.writeValueAsString(Map.of("idempotency_key", "spot-bill-" + tag + "-" + s, "operator_note", "生成账单"))));
+    }
+
+    private int adjustments(String order, String type) {
+        return jdbc.queryForObject("SELECT count(*) FROM bar_bill_adjustments a JOIN bar_bills b ON b.id = a.bill_id"
+                + " WHERE b.order_id = ? AND a.adjustment_type = ?", Integer.class, order, type);
+    }
 
     private String table(String tag, String type, long minConsumptionCent) {
         String id = "table_spot_" + tag + "_" + s;

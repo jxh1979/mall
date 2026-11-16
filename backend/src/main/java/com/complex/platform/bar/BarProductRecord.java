@@ -34,7 +34,11 @@ public record BarProductRecord(
         String deleteStatus,
         String deleteRequestedBy,
         Instant deleteRequestedAt,
-        String deleteReason
+        String deleteReason,
+        // V625（第十八批 AK 段第 221 条 221-R1，ENUM:111「沽清分两档」）：沽清档位 temporary（临时沽清）/ long_term（长期下架），未沽清为空；
+        // 临时沽清到期时间＝该酒吧本营业日结束时刻，长期下架与未沽清为空。
+        String soldOutType,
+        Instant soldOutUntil
 ) implements BarCatalogLifecycle<BarProductRecord> {
 
     /** 内部结算价按权限脱敏:无 bar.internal_settlement_price.view 权限的读端返回副本内部价置 null。 */
@@ -43,7 +47,55 @@ public record BarProductRecord(
                 inventoryItemId, stockLocationId, stockDeductionRequired, status, createdAt, updatedAt,
                 standardPourVolume, pourVolumeUnit, lossThreshold, soldOut, soldOutAt, soldOutReason,
                 null, categoryId, imageUrl, archivedAt, archivedBy, deleteStatus, deleteRequestedBy,
-                deleteRequestedAt, deleteReason);
+                deleteRequestedAt, deleteReason, soldOutType, soldOutUntil);
+    }
+
+    /** 221-R1：沽清五列的字段更新辅助（未沽清五列皆空），其余字段原样保留。 */
+    public BarProductRecord withSoldOut(String soldOutType, Instant soldOutAt, String soldOutReason, Instant soldOutUntil,
+            Instant updatedAt) {
+        return new BarProductRecord(id, barId, merchantId, productName, productType, priceCent, currency,
+                inventoryItemId, stockLocationId, stockDeductionRequired, status, createdAt, updatedAt,
+                standardPourVolume, pourVolumeUnit, lossThreshold, soldOutType != null, soldOutAt, soldOutReason,
+                internalSettlementPriceCent, categoryId, imageUrl, archivedAt, archivedBy, deleteStatus, deleteRequestedBy,
+                deleteRequestedAt, deleteReason, soldOutType, soldOutUntil);
+    }
+
+    /** 向后兼容构造器（V625 沽清档位前签名）：既有调用方零改动，沽清档位与到期时间默认空。 */
+    public BarProductRecord(
+            String id,
+            String barId,
+            String merchantId,
+            String productName,
+            String productType,
+            long priceCent,
+            String currency,
+            String inventoryItemId,
+            String stockLocationId,
+            boolean stockDeductionRequired,
+            String status,
+            Instant createdAt,
+            Instant updatedAt,
+            Integer standardPourVolume,
+            String pourVolumeUnit,
+            Integer lossThreshold,
+            boolean soldOut,
+            Instant soldOutAt,
+            String soldOutReason,
+            Long internalSettlementPriceCent,
+            String categoryId,
+            String imageUrl,
+            Instant archivedAt,
+            String archivedBy,
+            String deleteStatus,
+            String deleteRequestedBy,
+            Instant deleteRequestedAt,
+            String deleteReason
+    ) {
+        this(id, barId, merchantId, productName, productType, priceCent, currency,
+                inventoryItemId, stockLocationId, stockDeductionRequired, status,
+                createdAt, updatedAt, standardPourVolume, pourVolumeUnit, lossThreshold,
+                soldOut, soldOutAt, soldOutReason, internalSettlementPriceCent, categoryId, imageUrl,
+                archivedAt, archivedBy, deleteStatus, deleteRequestedBy, deleteRequestedAt, deleteReason, null, null);
     }
 
     /** 向后兼容构造器（V262 存档/删除前签名）：既有调用方零改动，默认未存档 + delete_status=none。 */
@@ -113,7 +165,7 @@ public record BarProductRecord(
                 inventoryItemId, stockLocationId, stockDeductionRequired, status, createdAt, updatedAt,
                 standardPourVolume, pourVolumeUnit, lossThreshold, soldOut, soldOutAt, soldOutReason,
                 internalSettlementPriceCent, categoryId, imageUrl,
-                archivedAt, archivedBy, deleteStatus, deleteRequestedBy, deleteRequestedAt, deleteReason);
+                archivedAt, archivedBy, deleteStatus, deleteRequestedBy, deleteRequestedAt, deleteReason, soldOutType, soldOutUntil);
     }
 
     public BarProductRecord withDelete(String deleteStatus, String deleteRequestedBy,
@@ -122,6 +174,6 @@ public record BarProductRecord(
                 inventoryItemId, stockLocationId, stockDeductionRequired, status, createdAt, updatedAt,
                 standardPourVolume, pourVolumeUnit, lossThreshold, soldOut, soldOutAt, soldOutReason,
                 internalSettlementPriceCent, categoryId, imageUrl,
-                archivedAt, archivedBy, deleteStatus, deleteRequestedBy, deleteRequestedAt, deleteReason);
+                archivedAt, archivedBy, deleteStatus, deleteRequestedBy, deleteRequestedAt, deleteReason, soldOutType, soldOutUntil);
     }
 }

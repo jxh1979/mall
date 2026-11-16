@@ -1,4 +1,4 @@
-// 文件版本：V0.20
+// 文件版本：V0.21
 import React from "react";
 import { QRCodeSVG } from "qrcode.react";
 import { buildCustomerLink } from "@complex/customer-core/links";
@@ -14,7 +14,7 @@ import { loadSecondary, loadSecondaryIfPermitted, useAdminResource } from "../ho
 import { hasPermissions } from "../security/PermissionGate";
 import { BarVenueSelect } from "../components/BarVenueSelect";
 import { useSelectedRow } from "../hooks/useSelectedRow";
-import { PermissionButton } from "../security/Can";
+import { Can, PermissionButton } from "../security/Can";
 import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowDetailDrawer";
 import { GuidedFlowModal } from "../components/GuidedFlowModal";
 import { firstSubmitTime, forgetSubmitTime } from "../../shared/operationKey";
@@ -46,7 +46,10 @@ const BAR_STAFF_BOOKING_RESTORE_PERMISSION = "bar.staff_booking.restore";
 // 第十八批 AA 段第 206 条 206-R2（ENUM:100「台位停用与恢复由店长及以上操作，填原因留痕」）。
 const BAR_TABLE_DISABLE_PERMISSION = "bar.table.disable";
 // 同上（ENUM:100「桌台/卡座/吧台位状态｜空闲、已预留、已开台、待清台、停用、异常」，PGM:287 状态全中文）：台位状态按 ENUM 名称显示。
-const TABLE_STATUS_LABELS: Record<string, string> = { active: "空闲", opened: "已开台", pending_clear: "待清台", disabled: "停用" };
+// 第十八批 AK 段第 226 条 226-R2：加「异常」（ENUM:100「异常由系统告警或人工登记进入，处置完成后由当班主管确认恢复，全程留痕。」）。
+const TABLE_STATUS_LABELS: Record<string, string> = { active: "空闲", opened: "已开台", pending_clear: "待清台", disabled: "停用", abnormal: "异常" };
+// 第十八批 AK 段第 230 条 230-R2（BSM:1058「店长及以上可人工取消预留，必须填原因并留痕。」）。
+const BAR_RESERVATION_CANCEL_PERMISSION = "bar.reservation.cancel";
 function tableStatusLabel(row: BarTableRow) {
   if (row.heldReservationId) return "已预留";
   return (row.status ? TABLE_STATUS_LABELS[row.status] : undefined) ?? formatBusinessStatus(row.status);
@@ -90,6 +93,8 @@ export function BarTableSessionsPage({ api, setActionResult, setGlobalError, eff
   // 第十八批 AB 段第 190 条（控制席并入；BSM:1079「记录内容包括操作类型、原因、操作人、时间……」）：转/合/拆原因不预填，由操作人如实填写。
   const [actionReason, setActionReason] = React.useState("");
   const [invitationMemberId, setInvitationMemberId] = React.useState("");
+  // 第十八批 AK 段第 230 条 230-R2：人工取消订台的原因（必填，不预填）。
+  const [cancelReason, setCancelReason] = React.useState("");
   const [invitationCopyNotice, setInvitationCopyNotice] = React.useState<{ link: string; text: string } | null>(null);
   const [barError, setBarError] = React.useState("");
   const [submitting, setSubmitting] = React.useState(false);
@@ -285,6 +290,34 @@ export function BarTableSessionsPage({ api, setActionResult, setGlobalError, eff
     }
   }
 
+  // 第十八批 AK 段第 226 条 226-R2（ENUM:100、BSM:1058；第十八批裁决 53）：空闲或待清台的台位登记异常、异常台位由当班主管确认恢复，
+  // 原因必填（空则不发）；能否登记、谁能确认由服务端判。
+  async function changeTableAbnormal(table: BarTableRow, mark: boolean) {
+    const label = mark ? "登记异常" : "确认恢复";
+    const reason = window.prompt(`${label}原因（必填）：`)?.trim();
+    if (!reason) {
+      setBarError(`${label}须填写原因。`);
+      return;
+    }
+    const action = mark ? "bar_table_abnormal_marked" : "bar_table_abnormal_resolved";
+    setSubmitting(true);
+    setGlobalError(null);
+    try {
+      const tableId = encodeURIComponent(table.id);
+      const result = await api.post(mark ? `/api/v1/bar/tables/${tableId}/abnormal` : `/api/v1/bar/tables/${tableId}/abnormal/resolve`, { reason });
+      setActionResult({ action, status: mark ? "abnormal" : "restored", tableId: table.id, result });
+      setBarError("");
+      await reload();
+    } catch (actionError) {
+      const message = actionError instanceof Error ? actionError.message : `${label}失败`;
+      setBarError(message);
+      setGlobalError(message);
+      setActionResult({ action, status: "failed", message });
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   // 新建卡座：只录可进人数一个数，即邀请函名额（第十八批 Q 段 151-R2，BSM:1036、ENUM:105）；低消按元填、后端按分存。
   // 返回中文错误文案则校验不过，null=放行（供弹窗步内校验 + 提交双保险共用）。
   function newTableValidationMessage(): string | null {
@@ -425,6 +458,32 @@ export function BarTableSessionsPage({ api, setActionResult, setGlobalError, eff
       setBarError(message);
       setGlobalError(message);
       setActionResult({ action: "bar_table_session_create", status: "failed", message });
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  // 第十八批 AK 段第 230 条 230-R2（BSM:1058「店长及以上可人工取消预留，必须填原因并留痕。」）：取消选中的已预订订台，原因必填（空则不弹确认、不发请求）。
+  function validateCancelReservation() {
+    if (!cancelReason.trim()) return fail("取消订台须填写原因。");
+    setBarError("");
+    return true;
+  }
+
+  async function cancelReservation(reservationId: string) {
+    setSubmitting(true);
+    setGlobalError(null);
+    try {
+      const result = await api.post(`/api/v1/bar/reservations/${encodeURIComponent(reservationId)}/cancel`, { reason: cancelReason.trim() });
+      setActionResult({ action: "bar_reservation_cancelled", status: "cancelled", reservationId, result });
+      setBarError("");
+      setCancelReason("");
+      await reload();
+    } catch (actionError) {
+      const message = actionError instanceof Error ? actionError.message : "取消订台失败";
+      setBarError(message);
+      setGlobalError(message);
+      setActionResult({ action: "bar_reservation_cancelled", status: "failed", message });
     } finally {
       setSubmitting(false);
     }
@@ -667,6 +726,16 @@ export function BarTableSessionsPage({ api, setActionResult, setGlobalError, eff
         </div>
 
         <h3>订台预定</h3>
+        {/* 第十八批 AK 段第 230 条 230-R2（BSM:1058）：选中行为已预订、且持人工取消订台权限才出现。 */}
+        {selectedReservation?.status === "reserved" ? (
+          <Can permissionsState={effectivePermissions} permissions={[BAR_RESERVATION_CANCEL_PERMISSION]}>
+            <div className="admin-form-row" data-testid="bar-reservation-cancel-form">
+              <span>选中订台：{selectedReservation.id}（卡座 {selectedReservation.tableId ?? "—"}）</span>
+              <label>取消原因<input data-testid="bar-reservation-cancel-reason" value={cancelReason} onChange={(event) => setCancelReason(event.target.value)} placeholder="必填，留痕用" /></label>
+              <HighRiskConfirm label="取消订台" impact={`将取消订台 ${selectedReservation.id} 并释放所占台位，邀请函随即失效，定金按本酒吧取消规则处理。`} disabled={submitting} precheck={() => validateCancelReservation()} onConfirm={() => void cancelReservation(selectedReservation.id)} permissionsState={effectivePermissions} permissions={[BAR_RESERVATION_CANCEL_PERMISSION]} data-testid="bar-reservation-cancel-submit" />
+            </div>
+          </Can>
+        ) : null}
         {reservationNotice ? (
           <div className="admin-state" data-testid="bar-reservations-degraded">{reservationNotice}</div>
         ) : (
@@ -704,7 +773,13 @@ export function BarTableSessionsPage({ api, setActionResult, setGlobalError, eff
               </> : "—"}</td>
               <td onClick={(event) => event.stopPropagation()}>{(row.status === "active" && !row.heldReservationId) || row.status === "disabled"
                 ? <PermissionButton permissionsState={effectivePermissions} permissions={[BAR_TABLE_DISABLE_PERMISSION]} disabled={submitting} onClick={() => void changeTableStatus(row, row.status === "active")} data-testid={`bar-table-${row.status === "active" ? "disable" : "enable"}-${row.id}`}>{row.status === "active" ? "停用" : "恢复"}</PermissionButton>
-                : "—"}</td>
+                : null}
+                {/* 第十八批 AK 段第 226 条 226-R2：空闲、待清台行「登记异常」，异常行「确认恢复」。 */}
+                {(row.status === "active" && !row.heldReservationId) || row.status === "pending_clear"
+                  ? <PermissionButton permissionsState={effectivePermissions} permissions={[BAR_TABLE_OPEN_CLOSE_PERMISSION]} disabled={submitting} onClick={() => void changeTableAbnormal(row, true)} data-testid={`bar-table-abnormal-mark-${row.id}`}>登记异常</PermissionButton>
+                  : row.status === "abnormal"
+                    ? <PermissionButton permissionsState={effectivePermissions} permissions={[BAR_TABLE_OPEN_CLOSE_PERMISSION]} disabled={submitting} onClick={() => void changeTableAbnormal(row, false)} data-testid={`bar-table-abnormal-resolve-${row.id}`}>确认恢复</PermissionButton>
+                    : row.status === "disabled" ? null : "—"}</td>
               <td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看卡座详情" onClick={(event) => { event.stopPropagation(); openTableDetail(row); }}>查看详情</button>
                 {row.tableType === "loose_table" ? <button type="button" className="admin-row-detail-btn" data-testid={`bar-table-qr-${row.id}`} onClick={(event) => { event.stopPropagation(); setQrTableId(qrTableId === row.id ? "" : row.id); }}>桌台二维码</button> : null}</td></tr>)}</tbody>
           </table>

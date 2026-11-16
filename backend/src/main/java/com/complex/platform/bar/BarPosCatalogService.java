@@ -4,6 +4,7 @@ import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.function.BiConsumer;
@@ -251,7 +252,8 @@ public class BarPosCatalogService {
 
     @Transactional
     public BarProductCategoryRecord archiveCategory(String id, boolean archive, String reason) {
-        return archiveEntity(categoryKind, id, archive, reason);
+        return operations.auditedWrite(archive ? BarWriteOperation.ARCHIVE_BAR_CATEGORY : BarWriteOperation.UNARCHIVE_BAR_CATEGORY,
+                archiveDetail(archive, reason), () -> archiveEntity(categoryKind, id, archive, reason));
     }
 
     @Transactional
@@ -270,7 +272,8 @@ public class BarPosCatalogService {
 
     @Transactional
     public BarProductRecord archiveProduct(String id, boolean archive, String reason) {
-        return archiveEntity(productKind, id, archive, reason);
+        return operations.auditedWrite(archive ? BarWriteOperation.ARCHIVE_BAR_PRODUCT : BarWriteOperation.UNARCHIVE_BAR_PRODUCT,
+                archiveDetail(archive, reason), () -> archiveEntity(productKind, id, archive, reason));
     }
 
     @Transactional
@@ -289,7 +292,8 @@ public class BarPosCatalogService {
 
     @Transactional
     public BarComboRecord archiveCombo(String id, boolean archive, String reason) {
-        return archiveEntity(comboKind, id, archive, reason);
+        return operations.auditedWrite(archive ? BarWriteOperation.ARCHIVE_BAR_COMBO : BarWriteOperation.UNARCHIVE_BAR_COMBO,
+                archiveDetail(archive, reason), () -> archiveEntity(comboKind, id, archive, reason));
     }
 
     @Transactional
@@ -320,6 +324,14 @@ public class BarPosCatalogService {
             BiConsumer<String, String> setArchiveReason,
             ToLongFunction<String> countReferences, LongFunction<String> inUseMessage,
             Consumer<String> physicalDelete) {
+    }
+
+    /**
+     * 第十八批 AK 段第 248 条 248-R1（PGM:966「所有有过程的业务动作都必须留痕」；BSM:576「存档及删除都需要填写理由」）：存档事件的明细带理由；
+     * 取消存档不另带明细（操作人、时间由审计上下文记，原存档人、时间、理由已在存档事件里）。
+     */
+    static Map<String, Object> archiveDetail(boolean archive, String reason) {
+        return archive && reason != null ? Map.of("reason", reason.trim()) : Map.of();
     }
 
     private <T extends BarCatalogLifecycle<T>> T archiveEntity(CatalogKind<T> kind, String id, boolean archive, String reason) {

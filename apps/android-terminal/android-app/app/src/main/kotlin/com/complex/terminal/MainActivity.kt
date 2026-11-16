@@ -1,6 +1,6 @@
 package com.complex.terminal
 
-// 文件版本：V0.25
+// 文件版本：V0.26
 
 import android.app.Activity
 import android.content.Intent
@@ -971,9 +971,12 @@ class MainActivity : Activity() {
    * 线上扫码支付待支付渠道开通（第 41 条），只写明、不放按钮；现金 / POS 由授权员工登记（[registerKioskPayment]）。
    * [signedIn] 为空时先请授权员工当场登录、登记完即登出；售票流程传入已登录的服务人员，由售票流程结束时登出。
    * 第十八批 S 段第 169 条（BSM:1066「POS（记流水号+收款人）」）：酒吧账单（169-R1）与订台定金（169-R2）POS 收款必填 POS 流水号，没填不进员工登录与提交；票务订单仍可不填。
+   * 第十八批 AK 段第 261 条 261-B09-R1（PGM:303「同一次操作重复提交时，返回第一次的结果并提示已完成。」）：本步持有登记编号（[KioskPaymentKey]），
+   * 酒吧账单登记没拿到结果再按时沿用；服务端返回的是第一次的结果时显示它的「已完成」提示，再照成功往下走。
    */
   private fun kioskPayStep(title: String, amountCent: Long, target: KioskPayTarget, signedIn: LoginResponse?,
       onPaid: (BarReservationRecord?) -> Unit) {
+    val stepKey = KioskPaymentKey()
     val amount = "¥${"%.2f".format(amountCent / 100.0)}"
     val status = statusText("应付金额：$amount\n线上扫码支付待支付渠道开通，请由工作人员收取现金或 POS")
     val cash = android.widget.RadioButton(this).apply { text = "现金"; id = View.generateViewId() }
@@ -993,8 +996,15 @@ class MainActivity : Activity() {
       fun submit(staff: LoginResponse, signOut: Boolean) {
         status.text = "正在登记收款…"
         runBackground(
-          action = { api.registerKioskPayment(target, amountCent, ch, staff, no, signOut) },
-          onSuccess = { onPaid(it) },
+          action = { api.registerKioskPayment(target, amountCent, ch, staff, no, signOut, stepKey) },
+          onSuccess = {
+            // 提示同时用浮层显示：onPaid 随即换到结果屏，只写本屏状态行看不到。
+            stepKey.completedNotice?.let { notice ->
+              status.text = notice
+              android.widget.Toast.makeText(this, notice, android.widget.Toast.LENGTH_LONG).show()
+            }
+            onPaid(it)
+          },
           onError = { status.text = "登记失败：${friendly(it)}" },
         )
       }

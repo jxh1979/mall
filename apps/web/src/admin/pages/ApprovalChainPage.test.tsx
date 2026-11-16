@@ -5,7 +5,7 @@ import { ApprovalChainPage } from "./ApprovalChainPage";
 import { AdminApi } from "../client/adminClient";
 import type { AdminPageProps, EffectivePermissionsState } from "../types";
 
-// 文件版本：V0.10
+// 文件版本：V0.11
 
 function raw(data: unknown): Response {
   return new Response(JSON.stringify({ success: true, code: "OK", message: "success", data }), { status: 200, headers: { "content-type": "application/json" } });
@@ -278,7 +278,9 @@ describe("ApprovalChainPage 审批链与节点裁决", () => {
     const admissionActions = ["bar.bill_waiver", "amusement.reopen", "bar.bill_reopen", "amusement.incident_close", "amusement.group_booking_approve",
       "bar.order_item_void", "bar.shift_close", "ticketing.refund_approve", "ticketing.dynamic_pricing_publish", "ticketing.verification_reverse",
       "inventory.stock_adjust", "inventory.purchase_receive", "inventory.saved_bottle_claim", "finance.refund", "finance.offline_payment_confirm",
-      "finance.locked_backfill_approve", "customer.home_content.publish"];
+      "finance.locked_backfill_approve", "customer.home_content.publish",
+      // 第十八批 AK 段第 221 条 221-R1⑥（V625 三条恒阻断策略）：临时沽清、长期下架、解除沽清。
+      "bar.product_sold_out", "bar.product_delist", "bar.product_sold_out_release"];
     const accessActions = ["access.role_viewable_projects.reduce", "access.position_role_template.delete", "access.scope_change", "access.scope_change.money",
       "access.grant_request", "access.grant_request.money"];
     const objectTypes = ["staff_profile", "staff_payroll_adjustment", "staff_payroll_adjustment_appeal", "contract", "bar_bill", "access_grant_request",
@@ -292,7 +294,7 @@ describe("ApprovalChainPage 审批链与节点裁决", () => {
       "payroll_tax_assessment", "staff_shift_batch", "staff_penalty_cap", "bar_payroll_rule", "bar_business_day_config", "inspection",
       "amusement_maintenance_record", "amusement_incident", "amusement_group_booking", "bar_order_item", "bar_shift", "ticket_refund",
       "ticket_dynamic_pricing_rule", "verification", "inventory_stock_adjustment", "saved_bottle", "finance_refund", "finance_offline_payment_confirmation",
-      "customer_home_content", "position_role_template", "bar_table_transfer_limit_approval", "ticket_type_rule_version"];
+      "customer_home_content", "position_role_template", "bar_table_transfer_limit_approval", "ticket_type_rule_version", "bar_product"];
     const levels = ["one_level_up", "two_levels_up", "top_authority", "specific_role", "hr_three_levels_up"];
     const actions = [...evaluateActions, ...admissionActions, ...accessActions];
     const rows = actions.map((action, i) => ({ decision: { review_id: `rv87_${i}`, action_type: action, object_type: objectTypes[i % objectTypes.length],
@@ -316,6 +318,12 @@ describe("ApprovalChainPage 审批链与节点裁决", () => {
     expect(cells(`rv87_${actions.indexOf("ticket.type.rule.publish")}`)[1]).toBe("跨域组合通票规则审批");
     const ruleVersion = objectTypes.indexOf("ticket_type_rule_version");
     expect(cells(`rv87_${ruleVersion}`)[2]).toBe(`票种规则版本 / obj_${ruleVersion}`);
+    // 第十八批 AK 段第 221 条 221-R1⑥：沽清三动作各有中文名，主管从动作名看出批的是哪一种。
+    expect(cells(`rv87_${actions.indexOf("bar.product_sold_out")}`)[1]).toBe("酒吧商品临时沽清");
+    expect(cells(`rv87_${actions.indexOf("bar.product_delist")}`)[1]).toBe("酒吧商品长期下架");
+    expect(cells(`rv87_${actions.indexOf("bar.product_sold_out_release")}`)[1]).toBe("酒吧商品解除沽清");
+    const barProduct = objectTypes.indexOf("bar_product");
+    expect(cells(`rv87_${barProduct}`)[2]).toBe(`酒吧商品 / obj_${barProduct}`);
     const licence = objectTypes.indexOf("compliance_expiry_item");
     expect(cells(`rv87_${licence}`)[2]).toBe(`证照 / obj_${licence}`);
     expect(cells("review_c1")[2]).toBe("合同 / c1");

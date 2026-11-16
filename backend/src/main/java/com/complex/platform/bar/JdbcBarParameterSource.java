@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.05
+// 文件版本：V0.06
 
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
@@ -129,6 +129,8 @@ final class JdbcBarParameterSource {
                 .addValue("sold_out", product.soldOut())
                 .addValue("sold_out_at", timestampWithTimeZone(product.soldOutAt()))
                 .addValue("sold_out_reason", product.soldOutReason())
+                .addValue("sold_out_type", product.soldOutType())
+                .addValue("sold_out_until", timestampWithTimeZone(product.soldOutUntil()))
                 .addValue("internal_settlement_price_cent", product.internalSettlementPriceCent())
                 .addValue("category_id", product.categoryId())
                 .addValue("image_url", product.imageUrl());

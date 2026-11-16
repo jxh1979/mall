@@ -1,6 +1,6 @@
 package com.complex.platform.common.api;
 
-// 文件版本：V0.43
+// 文件版本：V0.44
 
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -864,6 +864,9 @@ public final class FieldLabels {
         p("stage_escalated_at", "本阶段超时升级时刻");
         // 第十八批 Y 段第 183 条 183-R2 复核修复：演出场次列表逐行结算待处理条数（同前端 fieldLabels.ts）。
         p("pending_settlement_count", "结算待处理条数");
+        // 第十八批 AK 段第 221 条 221-R1 酒吧商品沽清两档（ENUM:111；同前端 fieldLabels.ts）。
+        p("sold_out_type", "沽清档位");
+        p("sold_out_until", "临时沽清到期时间");
     }
 
     /** 字段键（snake 或 camel）→ 中文业务名；认不出返回 null。 */

@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.05
+// 文件版本：V0.06
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -268,7 +268,8 @@ class BarInvitationCustomerJdbcIntegrationTests {
         confirm(friendToken, 3, signature).andExpect(status().isOk());
         mockMvc.perform(post("/api/v1/bar/reservations/" + reservationId + "/cancel").with(platformAdmin())
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(json.writeValueAsString(Map.of("idempotency_key", "inv-cancel-" + suffix, "no_show", false))))
+                        .content(json.writeValueAsString(Map.of("idempotency_key", "inv-cancel-" + suffix, "no_show", false,
+                                "reason", "客人来电取消"))))
                 .andExpect(status().isOk());
         assertThat(jdbc.queryForObject("SELECT invitation_status FROM bar_reservations WHERE id = ?", String.class, reservationId))
                 .isEqualTo("revoked");
@@ -528,7 +529,8 @@ class BarInvitationCustomerJdbcIntegrationTests {
             String role = "role_" + userId;
             jdbc.update("INSERT INTO roles (id, role_name, description, data_scope, status, created_at)"
                     + " VALUES (?, ?, '订台回归', 'platform', 'active', now())", role, role);
-            for (String code : List.of("bar.reservation.create", "bar.reservation.manage", "bar.reservation.view",
+            // 第十八批 AK 段第 230 条 230-R1：人工取消订台改用 bar.reservation.cancel。
+            for (String code : List.of("bar.reservation.create", "bar.reservation.manage", "bar.reservation.view", "bar.reservation.cancel",
                     "bar.reservation.invitation.manage", "bar.table.guest_checkin", "bar.table.manage")) {
                 jdbc.update("INSERT INTO role_permissions (role_id, permission_code) VALUES (?, ?)", role, code);
             }

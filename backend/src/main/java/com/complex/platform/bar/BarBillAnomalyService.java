@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.05
+// 文件版本：V0.06
 
 import static com.complex.platform.bar.BarValidation.requireRequest;
 import static com.complex.platform.bar.BarValidation.requireText;
@@ -82,6 +82,25 @@ public class BarBillAnomalyService {
         return repository.findBillById(bill.id()).orElseThrow();
     }
 
+    /**
+     * 第十八批 AK 段第 225 条 225-R1（PGM:664「单店层面的财务工作——日结确认与锁定、商户费用账单出账、差异认定、异常单据处置、报损物品的财务确认——
+     * 由该酒吧对应的财务 BP 负责」；照 142-R1 {@link BarShiftService#requireFinanceScope}，在幂等之前）：处置范围闸。有商户号的（本店商户侧主管，
+     * 含派驻口径）只能处置本商户的账单；没有商户号的平台侧账号（财务 BP）须按处置权限码可触及该酒吧所属综合体。
+     */
+    void requireResolveScope(String billId) {
+        BarBillRecord bill = repository.findBillById(billId)
+                .orElseThrow(() -> ApiException.notFound("BAR_BILL_NOT_FOUND", "账单不存在或已被删除"));
+        Optional<String> merchant = authorizationService.currentMerchantIdQuietly();
+        if (merchant.isPresent()) {
+            if (!merchant.get().equals(bill.merchantId())) {
+                throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN", "无权操作其他商户的数据");
+            }
+        } else if (!authorizationService.canReachProject(authorizationService.currentActor(),
+                businessDays.projectOfMerchant(bill.barId()), "bar.bill.anomaly.resolve")) {
+            throw ApiException.forbidden("CROSS_PROJECT_FORBIDDEN", "无权处置该酒吧的账单异常");
+        }
+    }
+
     BarBillRecord resolve(String billId, BarBillAnomalyResolveRequest request) {
         BarBillAnomalyResolveRequest actual = requireRequest(request);
         String resolution = requireText(actual.resolution(), "resolution");
@@ -89,7 +108,9 @@ public class BarBillAnomalyService {
             throw ApiException.badRequest("VALIDATION_FAILED", "处置方式只能是更正后恢复或作废并冲正");
         }
         requireText(actual.reason(), "reason");
-        BarBillRecord bill = lockedBill(billId);
+        // 225-R1：范围已由 requireResolveScope 在幂等之前判过，这里只锁账单行。
+        BarBillRecord bill = repository.findBillByIdForUpdate(billId)
+                .orElseThrow(() -> ApiException.notFound("BAR_BILL_NOT_FOUND", "账单不存在或已被删除"));
         if (!"abnormal".equals(bill.paymentStatus())) {
             throw ApiException.conflict("BAR_BILL_NOT_ABNORMAL", "账单不在异常中，无需处置");
         }

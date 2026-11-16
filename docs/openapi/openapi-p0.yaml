@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: 综合体管理系统 P0 API 契约
-  version: V0.68
+  version: V0.69
   description: P0 首批编码前置契约。本文采用 JSON-compatible YAML，便于与 openapi-p0.json 保持一致。正式后端以 Java 21 + Spring Boot 4.x +
     springdoc-openapi 输出运行时 OpenAPI，并与本契约比对。
 servers:
@@ -2634,6 +2634,7 @@ paths:
       x-failure-codes:
         - CONTRACT_SCOPE_VIOLATION
         - BAR_TABLE_DISABLED
+        - BAR_TABLE_ABNORMAL
       summary: 点单
       description: 订单销售取该台位当前开台会话的销售归属，不由请求指定、不取下单人（第十八批 I 段第 86 条，BSM 第 1070 行「只归帮该客人预订的那个人」）；没有开台会话（吧台直点）的订单无销售。第十八批 N 段第 120 条 120-R4（BSM:1611「订单从哪里来，是官方 App/小程序、第三方、销售人员、一体机还是现场工作台。」；BSM:1004「……一体机的下单、领取、状态检查和异常提示都要记录设备、点位和时间。」）：订单创建终端 created_terminal 取请求的可信终端（没有即 web），可信终端是一体机时订单来源 order_source 记 kiosk（其余 staff），有可信设备号即记 device_id；一体机吧台买酒按本机酒吧的吧台位下单（吧台位不建出品票），再经 POST /api/v1/bar/orders/{order_id}/bill 生成待支付账单。第十八批 T 段第 157 条 157-R1（BSM:1064、ENUM:117「最低消费是下单的前置条件：客人在该台位下单时，本次下单后的累计消费金额必须达到该台位适用的最低消费，未达到的不允许提交订单。」）：凡该台位适用的最低消费大于 0（不论台位类型），有开台会话按台组阈值与累计进度、无会话按台位低消对本单金额判，本次下单后累计未达到即 409 BAR_MIN_CONSUMPTION_NOT_MET，整单不落；散台、卡座须下单当场付款（第十八批裁决 37），本单账单付清后才能出品（见 POST /api/v1/bar/orders/{order_id}/deliver）。
       x-permission: bar.order.create
@@ -2685,7 +2686,7 @@ paths:
         - bar
       operationId: createBarOrderBill
       summary: 创建酒吧订单账单
-      description: 用于创建酒吧订单账单。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
+      description: 用于创建酒吧订单账单。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。第十八批 AK 段第 222 条 222-R1（PGM:303「同一次操作重复提交时，返回第一次的结果并提示已完成。」；PGM:528「⑤同一笔操作重复提交不重复生效」）：同一订单已开出未作废账单时再生成账单（含换新请求编号再提交、客人扫码已付单成单时已随单记账的），返回已开出的最早一张未作废账单并提示已完成（响应 replayed=true），不新开账单、不重复计服务费与留款抵用，也不再记 bar.bill.created；已作废的账单不算已开，作废并冲正后可再生成。
       x-permission: bar.order.create
       x-data-scope: project
       x-terminal-allowed:
@@ -3244,6 +3245,111 @@ paths:
                   type: string
                   maxLength: 1000
                   description: 恢复原因（必填，进入审计留痕）。
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/bar/tables/{table_id}/abnormal:
+    post:
+      tags:
+        - bar
+      operationId: markBarTableAbnormal
+      summary: 登记台位异常
+      description: 第十八批 AK 段第 226 条 226-R1（ENUM:100「异常由系统告警或人工登记进入，处置完成后由当班主管确认恢复，全程留痕。」「已预留只能经取消订台、超时释放、到店开台三条路径退出」；BSM:1058 同句；第十八批裁决 53）：只收空闲（active 且没有被有效预留占着）或待清台（pending_clear）的台位，已预留、已开台、停用的 409 BAR_TABLE_NOT_ABNORMALIZABLE（已预留的须先取消订台，已开台的先转台或关台）；成功后台位为异常（abnormal），不能开台、转入、被订台，客人订台选项不再出现，吧台位下单 409 BAR_TABLE_ABNORMAL。原因必填，成功留痕带原因与前后状态；别的商户的台位 403 CROSS_MERCHANT_FORBIDDEN，且不占请求编号。
+      x-auth-context: staff-token
+      x-permission: bar.table.open_close
+      x-data-scope: project-bar
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: bar.table.abnormal_marked
+      x-audit-event-failure: bar.table.abnormal_mark_failed
+      x-failure-codes:
+        - BAR_TABLE_NOT_ABNORMALIZABLE
+        - CROSS_MERCHANT_FORBIDDEN
+      parameters:
+        - $ref: "#/components/parameters/TableId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - idempotency_key
+                - reason
+              properties:
+                idempotency_key:
+                  type: string
+                  maxLength: 128
+                  description: 操作幂等键；重复提交返回第一次的结果。
+                reason:
+                  type: string
+                  maxLength: 1000
+                  description: 登记异常的原因（必填，进入审计留痕）。
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/bar/tables/{table_id}/abnormal/resolve:
+    post:
+      tags:
+        - bar
+      operationId: resolveBarTableAbnormal
+      summary: 确认异常台位恢复（当班主管）
+      description: 第十八批 AK 段第 226 条 226-R1（ENUM:100「异常由系统告警或人工登记进入，处置完成后由当班主管确认恢复，全程留痕。」；BSM:1058 同句；第十八批裁决 53；第十批裁决 6）：只收异常（abnormal）台位，否则 409 BAR_TABLE_NOT_ABNORMAL；确认人须为当班主管——本酒吧账号、此刻落在自己的排班时段内、持 bar.table.open_close，否则 403 BAR_TABLE_RESOLVER_NOT_ON_DUTY；成功后台位回空闲（active），可再开台、被订台、下单。原因必填，成功留痕带原因与前后状态；别的商户的台位 403 CROSS_MERCHANT_FORBIDDEN，且不占请求编号。
+      x-auth-context: staff-token
+      x-permission: bar.table.open_close
+      x-data-scope: project-bar
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: bar.table.abnormal_resolved
+      x-audit-event-failure: bar.table.abnormal_resolve_failed
+      x-failure-codes:
+        - BAR_TABLE_NOT_ABNORMAL
+        - BAR_TABLE_RESOLVER_NOT_ON_DUTY
+        - CROSS_MERCHANT_FORBIDDEN
+      parameters:
+        - $ref: "#/components/parameters/TableId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - idempotency_key
+                - reason
+              properties:
+                idempotency_key:
+                  type: string
+                  maxLength: 128
+                  description: 操作幂等键；重复提交返回第一次的结果。
+                reason:
+                  type: string
+                  maxLength: 1000
+                  description: 确认恢复的原因（必填，进入审计留痕）。
       responses:
         "200":
           $ref: "#/components/responses/Success"
@@ -15926,7 +16032,7 @@ paths:
       tags:
         - bar
       operationId: payBarReservationDeposit
-      description: "第十八批 N 段第 123 条 123-R2（BSM:1630「核销、收款、退款、放行等敏感操作，操作设备定位落在该项目综合体授权范围之外时一律拒绝并留痕」；BSM:1876「Web 端同样适用」）：本操作属敏感操作定位闸的现场动作闭集（第十八批裁决 31）。操作对象所属项目已配授权范围（123-R1）时须带请求头 X-Geo-Latitude、X-Geo-Longitude（设备当下定位，WGS-84 十进制度）：没带或解析不了按范围外处理（裁决 30）返回 403 SENSITIVE_OPERATION_LOCATION_REQUIRED，到圆心距离超过授权半径返回 403 SENSITIVE_OPERATION_OUT_OF_RANGE，拒绝在独立事务里留痕 sensitive_operation.location_rejected（business_id 为本 operationId，业务回滚不丢）；项目没配授权范围不查位置（裁决 32）；判定在幂等之前，重放不能绕过；通过时不存位置。第十八批 N 段第 120 条 120-R3（BSM:1058「……客人自助订台支付定金成功……该台位即进入已预留……冲突时先支付定金者得……」）：从未占过台的订台（一体机订台、客人自助订台）登记定金即占台；台位已被先付定金者占着或已开台、待清台、停用时本订台取消、不占台，已收定金按登记的渠道记原路待退并留痕 bar.reservation_deposit_refund_on_conflict，返回 200 与取消后的订台记录（status=cancelled）。第十八批 O 段第 126 条 126-R2（BSM:1029「现场必须允许现金和 POS 机支付，但要进入账单、日结、员工责任链和财务对账。」）：登记员工记为定金收款人（bar_reservations.deposit_collector_staff_id），交班对账按其把本笔定金按渠道计入现金或 POS 应收。第十八批 S 段第 169 条 169-R2（BSM:1066「POS（记流水号+收款人）」）：channel=pos 时必填 pos_transaction_no，缺失 400 VALIDATION_FAILED、整笔不登记；流水号记入 bar_reservations.deposit_pos_transaction_no。"
+      description: "第十八批 N 段第 123 条 123-R2（BSM:1630「核销、收款、退款、放行等敏感操作，操作设备定位落在该项目综合体授权范围之外时一律拒绝并留痕」；BSM:1876「Web 端同样适用」）：本操作属敏感操作定位闸的现场动作闭集（第十八批裁决 31）。操作对象所属项目已配授权范围（123-R1）时须带请求头 X-Geo-Latitude、X-Geo-Longitude（设备当下定位，WGS-84 十进制度）：没带或解析不了按范围外处理（裁决 30）返回 403 SENSITIVE_OPERATION_LOCATION_REQUIRED，到圆心距离超过授权半径返回 403 SENSITIVE_OPERATION_OUT_OF_RANGE，拒绝在独立事务里留痕 sensitive_operation.location_rejected（business_id 为本 operationId，业务回滚不丢）；项目没配授权范围不查位置（裁决 32）；判定在幂等之前，重放不能绕过；通过时不存位置。第十八批 N 段第 120 条 120-R3（BSM:1058「……客人自助订台支付定金成功……该台位即进入已预留……冲突时先支付定金者得……」）：从未占过台的订台（一体机订台、客人自助订台）登记定金即占台；台位已被先付定金者占着或已开台、待清台、停用时本订台取消、不占台，已收定金按登记的渠道记原路待退并留痕 bar.reservation_deposit_refund_on_conflict，返回 200 与取消后的订台记录（status=cancelled）。第十八批 O 段第 126 条 126-R2（BSM:1029「现场必须允许现金和 POS 机支付，但要进入账单、日结、员工责任链和财务对账。」）：登记员工记为定金收款人（bar_reservations.deposit_collector_staff_id），交班对账按其把本笔定金按渠道计入现金或 POS 应收。第十八批 S 段第 169 条 169-R2（BSM:1066「POS（记流水号+收款人）」）：channel=pos 时必填 pos_transaction_no，缺失 400 VALIDATION_FAILED、整笔不登记；流水号记入 bar_reservations.deposit_pos_transaction_no。第十八批 AK 段第 261 条 261-B10-R1（PGM:303「同一次操作重复提交时，返回第一次的结果并提示已完成。」；PGM:528「⑤同一笔操作重复提交不重复生效」）：每个订台只登记一次定金，按订台认重复提交——定金已登记过的订台（deposit_paid_at 有值，含抢台失败已取消、待原路退的）再提交（一体机没拿到结果再点会换新请求编号），返回当前订台并提示已完成（响应 replayed=true），不再记支付、不改收款人与 POS 流水号、不动占台、不再登记原路待退；从未支付过的（免收、已超时释放）照旧 409 BAR_DEPOSIT_NOT_PAYABLE；别的商户的订台照旧 403 CROSS_MERCHANT_FORBIDDEN。"
       summary: 订台定金支付
       x-permission: bar.reservation.manage
       x-data-scope: project-bar
@@ -15992,9 +16098,9 @@ paths:
       tags:
         - bar
       operationId: cancelBarReservation
-      summary: 订台取消/爽约（按时限退定金或没收）
-      description: 取消即退出占台。订台取消（含超时释放作业）时已签发的邀请函一并吊销（invitation_status=revoked）：未接受的不能再接受、已接受的取不到动态入场码、门口核验 409 BAR_INVITATION_NOT_ACTIVE（ENUM 第 105 行邀请函名额随卡座而在）。超时释放时未付定金记 deposit_status=timeout_released（已超时释放，ENUM 第 103 行），已付定金按爽约没收。第十四批 OBS-13-03（BSM 第 1062 行「退款处理中的记录继续关联原付款，只有实际退款成功才记为已退」；BSM 第 1596 行）：已付定金在免费时限内取消只按原付款渠道登记原路待退（finance_refunds.source_type=bar_deposit_rejection），定金保持 deposit_status=paid（退款处理中），财务核实退款成功后才置 settled/refunded 并发定金原路退回短信；取消后发订台取消确认短信，没收时发定金没收短信。
-      x-permission: bar.reservation.manage
+      summary: 人工取消订台/登记爽约（店长；按时限退定金或没收）
+      description: 第十八批 AK 段第 230 条 230-R1（BSM:1058「已预留只能经取消订台、超时释放、到店开台三条路径退出；店长及以上可人工取消预留，必须填原因并留痕。」）：人工取消订台须持 bar.reservation.cancel（V626 新增，由运营分配给店长及以上角色），只持 bar.reservation.manage 的 403；reason 必填，缺失或空白 400 VALIDATION_FAILED、整笔不取消，成功留痕 bar.reservation.cancelled 带取消原因（reason）与是否按爽约（no_show）；订台不存在 404 BAR_RESERVATION_NOT_FOUND，属其他商户 403 BAR_MERCHANT_SCOPE 且不占请求编号；已取消的 409 BAR_RESERVATION_ALREADY_CANCELLED，定金已结算的 409 BAR_DEPOSIT_ALREADY_SETTLED。超时释放由作业办理，不经本接口、不要求原因。取消即退出占台。订台取消（含超时释放作业）时已签发的邀请函一并吊销（invitation_status=revoked）：未接受的不能再接受、已接受的取不到动态入场码、门口核验 409 BAR_INVITATION_NOT_ACTIVE（ENUM 第 105 行邀请函名额随卡座而在）。超时释放时未付定金记 deposit_status=timeout_released（已超时释放，ENUM 第 103 行），已付定金按爽约没收。第十四批 OBS-13-03（BSM 第 1062 行「退款处理中的记录继续关联原付款，只有实际退款成功才记为已退」；BSM 第 1596 行）：已付定金在免费时限内取消只按原付款渠道登记原路待退（finance_refunds.source_type=bar_deposit_rejection），定金保持 deposit_status=paid（退款处理中），财务核实退款成功后才置 settled/refunded 并发定金原路退回短信；取消后发订台取消确认短信，没收时发定金没收短信。
+      x-permission: bar.reservation.cancel
       x-data-scope: project-bar
       x-terminal-allowed:
         - web
@@ -16003,6 +16109,12 @@ paths:
       x-idempotency-required: true
       x-audit-event-success: bar.reservation.cancelled
       x-audit-event-failure: bar.reservation.cancel_failed
+      x-failure-codes:
+        - VALIDATION_FAILED
+        - BAR_MERCHANT_SCOPE
+        - BAR_RESERVATION_NOT_FOUND
+        - BAR_RESERVATION_ALREADY_CANCELLED
+        - BAR_DEPOSIT_ALREADY_SETTLED
       parameters:
         - $ref: "#/components/parameters/Id"
           description: 订台预约唯一标识；必须按 OpenAPI 类型和必填规则校验。
@@ -16012,6 +16124,10 @@ paths:
         "200":
           $ref: "#/components/responses/Success"
         "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
           $ref: "#/components/responses/Error"
         "409":
           $ref: "#/components/responses/Error"
@@ -16024,15 +16140,15 @@ paths:
         - bar
       operationId: archiveBarReservation
       summary: "存档卡座预订（订台记录）"
-      description: "第十八批 AE 段第 201 条 201-R1（BSM:577「卡座预订这类业务记录，现在也支持存档、以及审批后删除（同样带删前占用检查：还被业务在用的删不掉）」；BSM:576「存档及删除都需要填写理由」）：把订台记录标为已存档，记存档时间、存档人与理由（reason）；订台列表默认不再列出（include_archived=true 仍可查）。只改存档标记，不改订台状态与定金。reason 必填，缺失或空白 400 VALIDATION_FAILED；订台记录不存在或已删除 404 BAR_RESERVATION_NOT_FOUND，属其他商户 403 BAR_MERCHANT_SCOPE。本操作不写审计事件。"
+      description: "第十八批 AE 段第 201 条 201-R1（BSM:577「卡座预订这类业务记录，现在也支持存档、以及审批后删除（同样带删前占用检查：还被业务在用的删不掉）」；BSM:576「存档及删除都需要填写理由」）：把订台记录标为已存档，记存档时间、存档人与理由（reason）；订台列表默认不再列出（include_archived=true 仍可查）。只改存档标记，不改订台状态与定金。reason 必填，缺失或空白 400 VALIDATION_FAILED；订台记录不存在或已删除 404 BAR_RESERVATION_NOT_FOUND，属其他商户 403 BAR_MERCHANT_SCOPE。第十八批 AK 段第 248 条 248-R1（PGM:966「所有有过程的业务动作都必须留痕」）：成功落 bar.reservation.archived（business_id 为对象编号，明细记存档理由 reason），失败（含缺理由、越权）落 bar.reservation.archive_failed。"
       x-auth-context: staff-token
       x-permission: bar.reservation.manage
       x-data-scope: project-bar
       x-terminal-allowed:
         - web
       x-idempotency-required: false
-      x-audit-event-success: not_applicable
-      x-audit-event-failure: not_applicable
+      x-audit-event-success: bar.reservation.archived
+      x-audit-event-failure: bar.reservation.archive_failed
       x-failure-codes:
         - VALIDATION_FAILED
         - BAR_RESERVATION_NOT_FOUND
@@ -16069,15 +16185,15 @@ paths:
         - bar
       operationId: unarchiveBarReservation
       summary: "取消存档卡座预订（订台记录）"
-      description: "第十八批 AE 段第 201 条 201-R1（BSM:569 存档可恢复：「取消存档」）：清空订台记录的存档时间、存档人与理由，恢复在订台列表中显示；有待审批的删除申请时一并撤回（delete_status 回 none）。无请求体。订台记录不存在或已删除 404 BAR_RESERVATION_NOT_FOUND，属其他商户 403 BAR_MERCHANT_SCOPE。本操作不写审计事件。"
+      description: "第十八批 AE 段第 201 条 201-R1（BSM:569 存档可恢复：「取消存档」）：清空订台记录的存档时间、存档人与理由，恢复在订台列表中显示；有待审批的删除申请时一并撤回（delete_status 回 none）。无请求体。订台记录不存在或已删除 404 BAR_RESERVATION_NOT_FOUND，属其他商户 403 BAR_MERCHANT_SCOPE。第十八批 AK 段第 248 条 248-R1（PGM:966「所有有过程的业务动作都必须留痕」）：成功落 bar.reservation.unarchived（business_id 为对象编号；原存档人、时间与理由见存档事件），失败（含越权）落 bar.reservation.unarchive_failed。"
       x-auth-context: staff-token
       x-permission: bar.reservation.manage
       x-data-scope: project-bar
       x-terminal-allowed:
         - web
       x-idempotency-required: false
-      x-audit-event-success: not_applicable
-      x-audit-event-failure: not_applicable
+      x-audit-event-success: bar.reservation.unarchived
+      x-audit-event-failure: bar.reservation.unarchive_failed
       x-failure-codes:
         - BAR_RESERVATION_NOT_FOUND
         - BAR_MERCHANT_SCOPE
@@ -19779,7 +19895,7 @@ paths:
         - bar
       operationId: resolveBarBillAnomaly
       summary: 主管处置异常账单
-      description: 第十六批第 16 条（ENUM「异常状态的统一出口」：主管在系统内选择「更正后恢复」或「作废并冲正」两种方式之一处置，填写原因并留痕；恢复后回到进入异常之前的那个状态）：restored——payment_status 回到进入异常前的状态，已结账单再按已成功退款额重算部分退款／已退款；voided_reversed——账单 payment_status 与 settlement_status 置 void（已作废），已登记的收款流水按反结同一做法冲正（reversed，不再计入营收与对账），作废后收款返回 409 BAR_BILL_VOIDED，关台不再把它算作未结清。第十七批（操作员裁决补充第 1 条「全部自动冲回」）voided_reversed 同一事务内：实收减已成功登记退款的部分按收款倒序逐笔原路待退——储值部分当场回原卡，其余渠道合并挂一笔退款应付（direction=payable、source_type=refund、source_id=账单 ID）由财务实付结清，不另记账单退款调整；本单商户消费积分与成长值按有效消费为 0 全额冲回（待确认积分取消，已可用的扣回、不足挂待追回，成长值冲回后按当前滚动成长值重新定级）；本单销售提成置 void，工资单不再挂「酒吧账单尚未确认结算」（此前工资单记下的该项待定当即结清），已计入定格工资的在原期补发中以负额冲回；派驻／营销人员的该单提成已随提成月结拨付所属主体的，向所属主体追加一笔应收（direction=receivable、source_type=dispatch_commission_transfer、source_id=提成 ID）冲回，原月结不改；作废后计提成返回 409 BAR_BILL_VOIDED。本单低消留款（min_spend_retained）与留款抵用（min_spend_retained_applied）置 reversed：留款含在实收里随作废退回、不再作台组抵用额，本单占用的台组留款回到台组余额。同一幂等键重放返回第一次结果、不重复退款。作废前已办过退款的只冲正未退部分的收款：收款流水整体置 reversed 后，被已退额（按退款原路同序、后收的先退）占用的部分按原收款时点、渠道另记一笔不冲正的留存流水，已退款仍在退款营业日冲减，作废账单在日结、分红与经营分析各期合计为 0；挂账账单（on_account）冲销挂账挂出的应收（追加一行 origin_item_id 回指原行、未收金额取反、status=reversed），原行之后登记收款 409 AR_AP_ITEM_REVERSED，原行已由财务收回的部分并入退款应付原路待退；本单收进的小费、服务费分项按全额退款处理，酒吧报酬月结出负额分配冲回；未退部分的退款应付实付结清后停车消费抵免同样重核。voided_reversed 与反结同一做法：结账营业日已锁定日结的 409 DAY_CLOSE_LOCKED（走补录调整流程），账单仍在异常；账单不在异常 409 BAR_BILL_NOT_ABNORMAL；账单不存在 404 BAR_BILL_NOT_FOUND；跨商户 403 CROSS_MERCHANT_FORBIDDEN；resolution、reason 必填，随成功审计留痕。第十八批 T 段第 157 条 157-R2（BSM:1107「已出品挂起订单取消须经理审批」；BSM:1109「不可回库的已出品商品不得走普通取消」）：账单所属订单挂起未结清（已挂起待付款、取消审批中，含合单后改指本账单的挂起）时 voided_reversed 返回 409 BAR_ORDER_SUSPENDED_USE_CANCEL（须走经理审批取消或确认坏账），账单仍在异常；restored 不受影响。
+      description: 第十六批第 16 条（ENUM「异常状态的统一出口」：主管在系统内选择「更正后恢复」或「作废并冲正」两种方式之一处置，填写原因并留痕；恢复后回到进入异常之前的那个状态）：restored——payment_status 回到进入异常前的状态，已结账单再按已成功退款额重算部分退款／已退款；voided_reversed——账单 payment_status 与 settlement_status 置 void（已作废），已登记的收款流水按反结同一做法冲正（reversed，不再计入营收与对账），作废后收款返回 409 BAR_BILL_VOIDED，关台不再把它算作未结清。第十七批（操作员裁决补充第 1 条「全部自动冲回」）voided_reversed 同一事务内：实收减已成功登记退款的部分按收款倒序逐笔原路待退——储值部分当场回原卡，其余渠道合并挂一笔退款应付（direction=payable、source_type=refund、source_id=账单 ID）由财务实付结清，不另记账单退款调整；本单商户消费积分与成长值按有效消费为 0 全额冲回（待确认积分取消，已可用的扣回、不足挂待追回，成长值冲回后按当前滚动成长值重新定级）；本单销售提成置 void，工资单不再挂「酒吧账单尚未确认结算」（此前工资单记下的该项待定当即结清），已计入定格工资的在原期补发中以负额冲回；派驻／营销人员的该单提成已随提成月结拨付所属主体的，向所属主体追加一笔应收（direction=receivable、source_type=dispatch_commission_transfer、source_id=提成 ID）冲回，原月结不改；作废后计提成返回 409 BAR_BILL_VOIDED。本单低消留款（min_spend_retained）与留款抵用（min_spend_retained_applied）置 reversed：留款含在实收里随作废退回、不再作台组抵用额，本单占用的台组留款回到台组余额。同一幂等键重放返回第一次结果、不重复退款。作废前已办过退款的只冲正未退部分的收款：收款流水整体置 reversed 后，被已退额（按退款原路同序、后收的先退）占用的部分按原收款时点、渠道另记一笔不冲正的留存流水，已退款仍在退款营业日冲减，作废账单在日结、分红与经营分析各期合计为 0；挂账账单（on_account）冲销挂账挂出的应收（追加一行 origin_item_id 回指原行、未收金额取反、status=reversed），原行之后登记收款 409 AR_AP_ITEM_REVERSED，原行已由财务收回的部分并入退款应付原路待退；本单收进的小费、服务费分项按全额退款处理，酒吧报酬月结出负额分配冲回；未退部分的退款应付实付结清后停车消费抵免同样重核。voided_reversed 与反结同一做法：结账营业日已锁定日结的 409 DAY_CLOSE_LOCKED（走补录调整流程），账单仍在异常；账单不在异常 409 BAR_BILL_NOT_ABNORMAL；账单不存在 404 BAR_BILL_NOT_FOUND；跨商户 403 CROSS_MERCHANT_FORBIDDEN；resolution、reason 必填，随成功审计留痕。第十八批 T 段第 157 条 157-R2（BSM:1107「已出品挂起订单取消须经理审批」；BSM:1109「不可回库的已出品商品不得走普通取消」）：账单所属订单挂起未结清（已挂起待付款、取消审批中，含合单后改指本账单的挂起）时 voided_reversed 返回 409 BAR_ORDER_SUSPENDED_USE_CANCEL（须走经理审批取消或确认坏账），账单仍在异常；restored 不受影响。第十八批 AK 段第 225 条 225-R1（PGM:664「单店层面的财务工作——日结确认与锁定、商户费用账单出账、差异认定、异常单据处置、报损物品的财务确认——由该酒吧对应的财务 BP 负责」）：处置范围闸在幂等之前——有商户号的账号（本店商户侧主管）只能处置本商户的账单，否则 403 CROSS_MERCHANT_FORBIDDEN；没有商户号的平台侧账号（财务 BP）按 bar.bill.anomaly.resolve 可触及该酒吧所属综合体即可办理，不可触及 403 CROSS_PROJECT_FORBIDDEN；账单不存在 404 BAR_BILL_NOT_FOUND；被范围闸拒绝的不落幂等记录。平台侧财务 BP 办理 voided_reversed 时，退款应付按账单所属酒吧及其综合体落账。
       x-permission: bar.bill.anomaly.resolve
       x-data-scope: project-bar-table
       x-terminal-allowed:
@@ -19787,6 +19903,10 @@ paths:
       x-idempotency-required: true
       x-audit-event-success: bar.bill_anomaly_resolved
       x-audit-event-failure: bar.bill_anomaly_resolve_failed
+      x-failure-codes:
+        - CROSS_PROJECT_FORBIDDEN
+        - CROSS_MERCHANT_FORBIDDEN
+        - BAR_BILL_NOT_FOUND
       x-auth-context: staff-token
       parameters:
         - $ref: "#/components/parameters/BillId"
@@ -19864,6 +19984,7 @@ paths:
         - bar
       operationId: markBarProductSoldOut
       summary: 商品沽清/恢复
+      description: "第十八批 AK 段第 221 条 221-R1（BSM:1069「反结（重开已结账单）、沽清（卖完、临时下架）均需主管审批留痕」；ENUM:111「沽清分两档：临时沽清（本营业日有效，营业日切换时点自动恢复在售）与长期下架（须主管审批解除后才恢复）；沽清与解除同样须审批留痕，作用范围为本酒吧。」）：sold_out=true 置沽清，须带档位 sold_out_type——temporary 临时沽清（到期时间 sold_out_until 取该酒吧本营业日结束时刻，营业日切换由定时作业自动恢复在售）、long_term 长期下架（没有到期时间，须经解除才恢复）；缺档位或档位非法 400 VALIDATION_FAILED。sold_out=false 解除沽清，清空沽清标记、时间、原因、档位与到期时间。临时沽清、长期下架、解除沽清各是一种主管复核动作（bar.product_sold_out、bar.product_delist、bar.product_sold_out_release，对象类型 bar_product）：首次提交 409 ADMISSION_BLOCKED 建主管复核单、不生效，主管批准后按原内容再提交才生效，批准只放行所批的那一种、只用一次。沽清状态与档位都没有变化 409 BAR_PRODUCT_SOLD_OUT_UNCHANGED（临时沽清改长期下架是改档，按长期下架的审批办）。成功留痕各记一条并带档位、到期时间与原因：临时沽清 bar.product_sold_out、长期下架 bar.product_delisted、解除 bar.product_sold_out_released；失败分别记 bar.product_sold_out_failed、bar.product_delist_failed、bar.product_sold_out_release_failed。沽清后该商品下单 409 PRODUCT_SOLD_OUT，已下单未出品部分的出品与结算不受影响。响应的商品记录带 sold_out_type、sold_out_until。"
       x-permission: bar.product.sold_out
       x-data-scope: project-bar-table
       x-terminal-allowed:
@@ -19871,6 +19992,9 @@ paths:
       x-idempotency-required: true
       x-audit-event-success: bar.product_sold_out
       x-audit-event-failure: bar.product_sold_out_failed
+      x-failure-codes:
+        - ADMISSION_BLOCKED
+        - VALIDATION_FAILED
       x-auth-context: staff-token
       parameters:
         - $ref: "#/components/parameters/ProductId"
@@ -39011,15 +39135,15 @@ paths:
         - bar
       operationId: archiveBarProductCategory
       summary: "存档酒吧商品分类"
-      description: "第十八批 AE 段第 201 条 201-R1（BSM:569「就从各处的选择列表里隐藏，不再被新业务选用；但历史照样能查、能对账」；BSM:576「存档及删除都需要填写理由」）：把商品分类标为已存档，记存档时间、存档人与理由（reason）；默认分类列表与点单 POS 不再列出（includeArchived=true 仍可查），商品不能再归入该分类（409 BAR_CATEGORY_NOT_ASSIGNABLE）。reason 必填，缺失或空白 400 VALIDATION_FAILED；商品分类不存在或已删除 404 BAR_CATEGORY_NOT_FOUND，属其他商户 403 BAR_MERCHANT_SCOPE。本操作不写审计事件。"
+      description: "第十八批 AE 段第 201 条 201-R1（BSM:569「就从各处的选择列表里隐藏，不再被新业务选用；但历史照样能查、能对账」；BSM:576「存档及删除都需要填写理由」）：把商品分类标为已存档，记存档时间、存档人与理由（reason）；默认分类列表与点单 POS 不再列出（includeArchived=true 仍可查），商品不能再归入该分类（409 BAR_CATEGORY_NOT_ASSIGNABLE）。reason 必填，缺失或空白 400 VALIDATION_FAILED；商品分类不存在或已删除 404 BAR_CATEGORY_NOT_FOUND，属其他商户 403 BAR_MERCHANT_SCOPE。第十八批 AK 段第 248 条 248-R1（PGM:966「所有有过程的业务动作都必须留痕」）：成功落 bar.category.archived（business_id 为对象编号，明细记存档理由 reason），失败（含缺理由、越权）落 bar.category.archive_failed。"
       x-auth-context: staff-token
       x-permission: bar.category.manage
       x-data-scope: project
       x-terminal-allowed:
         - web
       x-idempotency-required: false
-      x-audit-event-success: not_applicable
-      x-audit-event-failure: not_applicable
+      x-audit-event-success: bar.category.archived
+      x-audit-event-failure: bar.category.archive_failed
       x-failure-codes:
         - VALIDATION_FAILED
         - BAR_CATEGORY_NOT_FOUND
@@ -39056,15 +39180,15 @@ paths:
         - bar
       operationId: unarchiveBarProductCategory
       summary: "取消存档酒吧商品分类"
-      description: "第十八批 AE 段第 201 条 201-R1（BSM:569 存档可恢复：「取消存档」）：清空商品分类的存档时间、存档人与理由，恢复为可选用；有待审批的删除申请时一并撤回（delete_status 回 none）。无请求体。商品分类不存在或已删除 404 BAR_CATEGORY_NOT_FOUND，属其他商户 403 BAR_MERCHANT_SCOPE。本操作不写审计事件。"
+      description: "第十八批 AE 段第 201 条 201-R1（BSM:569 存档可恢复：「取消存档」）：清空商品分类的存档时间、存档人与理由，恢复为可选用；有待审批的删除申请时一并撤回（delete_status 回 none）。无请求体。商品分类不存在或已删除 404 BAR_CATEGORY_NOT_FOUND，属其他商户 403 BAR_MERCHANT_SCOPE。第十八批 AK 段第 248 条 248-R1（PGM:966「所有有过程的业务动作都必须留痕」）：成功落 bar.category.unarchived（business_id 为对象编号；原存档人、时间与理由见存档事件），失败（含越权）落 bar.category.unarchive_failed。"
       x-auth-context: staff-token
       x-permission: bar.category.manage
       x-data-scope: project
       x-terminal-allowed:
         - web
       x-idempotency-required: false
-      x-audit-event-success: not_applicable
-      x-audit-event-failure: not_applicable
+      x-audit-event-success: bar.category.unarchived
+      x-audit-event-failure: bar.category.unarchive_failed
       x-failure-codes:
         - BAR_CATEGORY_NOT_FOUND
         - BAR_MERCHANT_SCOPE
@@ -39259,15 +39383,15 @@ paths:
         - bar
       operationId: archiveBarProduct
       summary: "存档酒吧商品"
-      description: "第十八批 AE 段第 201 条 201-R1（BSM:569「就从各处的选择列表里隐藏，不再被新业务选用；但历史照样能查、能对账」；BSM:576「存档及删除都需要填写理由」）：把商品标为已存档，记存档时间、存档人与理由（reason）；点单 POS 菜单不再列出；按 BSM:573「已存档的票种、商品等，不能再被拿去下单、配价、组套餐」，不能再被下单（409 BAR_PRODUCT_NOT_SELLABLE）或组进套餐（409 BAR_PRODUCT_NOT_ASSIGNABLE）。reason 必填，缺失或空白 400 VALIDATION_FAILED；商品不存在或已删除 404 BAR_PRODUCT_NOT_FOUND，属其他商户 403 BAR_MERCHANT_SCOPE。本操作不写审计事件。"
+      description: "第十八批 AE 段第 201 条 201-R1（BSM:569「就从各处的选择列表里隐藏，不再被新业务选用；但历史照样能查、能对账」；BSM:576「存档及删除都需要填写理由」）：把商品标为已存档，记存档时间、存档人与理由（reason）；点单 POS 菜单不再列出；按 BSM:573「已存档的票种、商品等，不能再被拿去下单、配价、组套餐」，不能再被下单（409 BAR_PRODUCT_NOT_SELLABLE）或组进套餐（409 BAR_PRODUCT_NOT_ASSIGNABLE）。reason 必填，缺失或空白 400 VALIDATION_FAILED；商品不存在或已删除 404 BAR_PRODUCT_NOT_FOUND，属其他商户 403 BAR_MERCHANT_SCOPE。第十八批 AK 段第 248 条 248-R1（PGM:966「所有有过程的业务动作都必须留痕」）：成功落 bar.product.archived（business_id 为对象编号，明细记存档理由 reason），失败（含缺理由、越权）落 bar.product.archive_failed。"
       x-auth-context: staff-token
       x-permission: bar.product.manage
       x-data-scope: project
       x-terminal-allowed:
         - web
       x-idempotency-required: false
-      x-audit-event-success: not_applicable
-      x-audit-event-failure: not_applicable
+      x-audit-event-success: bar.product.archived
+      x-audit-event-failure: bar.product.archive_failed
       x-failure-codes:
         - VALIDATION_FAILED
         - BAR_PRODUCT_NOT_FOUND
@@ -39304,15 +39428,15 @@ paths:
         - bar
       operationId: unarchiveBarProduct
       summary: "取消存档酒吧商品"
-      description: "第十八批 AE 段第 201 条 201-R1（BSM:569 存档可恢复：「取消存档」）：清空商品的存档时间、存档人与理由，恢复为可选用；有待审批的删除申请时一并撤回（delete_status 回 none）。无请求体。商品不存在或已删除 404 BAR_PRODUCT_NOT_FOUND，属其他商户 403 BAR_MERCHANT_SCOPE。本操作不写审计事件。"
+      description: "第十八批 AE 段第 201 条 201-R1（BSM:569 存档可恢复：「取消存档」）：清空商品的存档时间、存档人与理由，恢复为可选用；有待审批的删除申请时一并撤回（delete_status 回 none）。无请求体。商品不存在或已删除 404 BAR_PRODUCT_NOT_FOUND，属其他商户 403 BAR_MERCHANT_SCOPE。第十八批 AK 段第 248 条 248-R1（PGM:966「所有有过程的业务动作都必须留痕」）：成功落 bar.product.unarchived（business_id 为对象编号；原存档人、时间与理由见存档事件），失败（含越权）落 bar.product.unarchive_failed。"
       x-auth-context: staff-token
       x-permission: bar.product.manage
       x-data-scope: project
       x-terminal-allowed:
         - web
       x-idempotency-required: false
-      x-audit-event-success: not_applicable
-      x-audit-event-failure: not_applicable
+      x-audit-event-success: bar.product.unarchived
+      x-audit-event-failure: bar.product.unarchive_failed
       x-failure-codes:
         - BAR_PRODUCT_NOT_FOUND
         - BAR_MERCHANT_SCOPE
@@ -39488,15 +39612,15 @@ paths:
         - bar
       operationId: archiveBarCombo
       summary: "存档酒吧套餐"
-      description: "第十八批 AE 段第 201 条 201-R1（BSM:569「就从各处的选择列表里隐藏，不再被新业务选用；但历史照样能查、能对账」；BSM:576「存档及删除都需要填写理由」）：把套餐标为已存档，记存档时间、存档人与理由（reason）；默认套餐列表与点单 POS 不再列出（includeArchived=true 仍可查），不能再被下单（409 BAR_COMBO_NOT_SELLABLE）。reason 必填，缺失或空白 400 VALIDATION_FAILED；套餐不存在或已删除 404 BAR_COMBO_NOT_FOUND，属其他商户 403 BAR_MERCHANT_SCOPE。本操作不写审计事件。"
+      description: "第十八批 AE 段第 201 条 201-R1（BSM:569「就从各处的选择列表里隐藏，不再被新业务选用；但历史照样能查、能对账」；BSM:576「存档及删除都需要填写理由」）：把套餐标为已存档，记存档时间、存档人与理由（reason）；默认套餐列表与点单 POS 不再列出（includeArchived=true 仍可查），不能再被下单（409 BAR_COMBO_NOT_SELLABLE）。reason 必填，缺失或空白 400 VALIDATION_FAILED；套餐不存在或已删除 404 BAR_COMBO_NOT_FOUND，属其他商户 403 BAR_MERCHANT_SCOPE。第十八批 AK 段第 248 条 248-R1（PGM:966「所有有过程的业务动作都必须留痕」）：成功落 bar.combo.archived（business_id 为对象编号，明细记存档理由 reason），失败（含缺理由、越权）落 bar.combo.archive_failed。"
       x-auth-context: staff-token
       x-permission: bar.combo.manage
       x-data-scope: project
       x-terminal-allowed:
         - web
       x-idempotency-required: false
-      x-audit-event-success: not_applicable
-      x-audit-event-failure: not_applicable
+      x-audit-event-success: bar.combo.archived
+      x-audit-event-failure: bar.combo.archive_failed
       x-failure-codes:
         - VALIDATION_FAILED
         - BAR_COMBO_NOT_FOUND
@@ -39533,15 +39657,15 @@ paths:
         - bar
       operationId: unarchiveBarCombo
       summary: "取消存档酒吧套餐"
-      description: "第十八批 AE 段第 201 条 201-R1（BSM:569 存档可恢复：「取消存档」）：清空套餐的存档时间、存档人与理由，恢复为可选用；有待审批的删除申请时一并撤回（delete_status 回 none）。无请求体。套餐不存在或已删除 404 BAR_COMBO_NOT_FOUND，属其他商户 403 BAR_MERCHANT_SCOPE。本操作不写审计事件。"
+      description: "第十八批 AE 段第 201 条 201-R1（BSM:569 存档可恢复：「取消存档」）：清空套餐的存档时间、存档人与理由，恢复为可选用；有待审批的删除申请时一并撤回（delete_status 回 none）。无请求体。套餐不存在或已删除 404 BAR_COMBO_NOT_FOUND，属其他商户 403 BAR_MERCHANT_SCOPE。第十八批 AK 段第 248 条 248-R1（PGM:966「所有有过程的业务动作都必须留痕」）：成功落 bar.combo.unarchived（business_id 为对象编号；原存档人、时间与理由见存档事件），失败（含越权）落 bar.combo.unarchive_failed。"
       x-auth-context: staff-token
       x-permission: bar.combo.manage
       x-data-scope: project
       x-terminal-allowed:
         - web
       x-idempotency-required: false
-      x-audit-event-success: not_applicable
-      x-audit-event-failure: not_applicable
+      x-audit-event-success: bar.combo.unarchived
+      x-audit-event-failure: bar.combo.unarchive_failed
       x-failure-codes:
         - BAR_COMBO_NOT_FOUND
         - BAR_MERCHANT_SCOPE
@@ -70563,6 +70687,8 @@ components:
       type: object
       description: 请求载荷 `BarReservationCancelRequest`；订台取消/爽约，按免没收时限决定退定金或没收。
       additionalProperties: false
+      required:
+        - reason
       properties:
         idempotency_key:
           type: string
@@ -70573,7 +70699,7 @@ components:
           description: 是否爽约；true 表示爽约，定金直接没收。
         reason:
           type: string
-          description: 取消原因。
+          description: 取消原因（必填，进入审计留痕）。
           maxLength: 500
     BarDepositRuleRequest:
       type: object
@@ -71365,7 +71491,7 @@ components:
           maxLength: 500
     BarProductSoldOutRequest:
       type: object
-      description: 请求载荷 `BarProductSoldOutRequest`（V091 沽清/估清 86）；soldOut=true 置沽清，false 恢复供应；沽清后下单该品被拒。
+      description: 请求载荷 `BarProductSoldOutRequest`（V091 沽清/估清 86）；soldOut=true 置沽清，false 恢复供应；沽清后下单该品被拒。第十八批 AK 段第 221 条 221-R1（ENUM:111「沽清分两档」）：置沽清须带档位 sold_out_type。
       additionalProperties: false
       properties:
         idempotency_key:
@@ -71374,7 +71500,13 @@ components:
           maxLength: 128
         sold_out:
           type: boolean
-          description: true=置沽清(86)，false=恢复供应；省略默认置沽清。
+          description: true=置沽清(86)，false=解除沽清；省略默认置沽清。
+        sold_out_type:
+          type: string
+          description: 沽清档位；置沽清时必填，解除时不填。temporary=临时沽清（本营业日有效，营业日切换自动恢复在售），long_term=长期下架（须主管审批解除后才恢复）。
+          enum:
+            - temporary
+            - long_term
         reason:
           type: string
           description: 沽清/恢复原因；进入审计留痕。

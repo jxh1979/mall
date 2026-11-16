@@ -1,4 +1,4 @@
-// 文件版本：V0.25
+// 文件版本：V0.26
 export type AdminUser = {
   id: string;
   username: string;
@@ -456,6 +456,9 @@ export type BarProductRow = {
   currency?: string;
   status?: string;
   soldOut?: boolean;
+  /** 第十八批 AK 段第 221 条（ENUM:111 沽清两档）：temporary 临时沽清 / long_term 长期下架，在售为空；临时沽清另带到期时间（本营业日结束时刻）。 */
+  soldOutType?: string | null;
+  soldOutUntil?: string | null;
   /** V152 内部结算价（分）：平台↔酒吧成本结算价基；null/未录入=不参与结算/提成扣减。 */
   internalSettlementPriceCent?: number | null;
   /** V256 图形化点单 POS：分类 FK（null=未分类）+ 商品图片相对路径。 */

@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.13
+// 文件版本：V0.14
 
 import static com.complex.platform.bar.BarValidation.*;
 
@@ -223,6 +223,10 @@ public class BarOrderService {
         // 第十八批 AA 段第 206 条 206-R1（ENUM:100 桌台/卡座/吧台位状态「停用」）：吧台位不经开台直接下单，停用的台位在下单核心一处拦下（各下单入口都经此）。
         if ("disabled".equals(table.status())) {
             throw ApiException.conflict("BAR_TABLE_DISABLED", "该台位已停用，请选择其他台位");
+        }
+        // 第十八批 AK 段第 226 条 226-R1（ENUM:100 桌台/卡座/吧台位状态「异常」）：异常处置中的台位同样在下单核心拦下。
+        if ("abnormal".equals(table.status())) {
+            throw ApiException.conflict("BAR_TABLE_ABNORMAL", "该台位异常处置中，请选择其他台位");
         }
         BarReservationRecord reservation = null;
         if (trimToNull(actual.reservationId()) != null) {
@@ -1025,49 +1029,39 @@ public class BarOrderService {
     // ========================================================================
     // V091 沽清（86/估清）：置沽清 / 恢复供应；下单时 requireProductSellable 拦截。
     // ========================================================================
-    BarProductRecord markSoldOut(String productId, BarProductSoldOutRequest request) {
+    // 第十八批 AK 段第 221 条 221-R1（ENUM:111「沽清分两档：临时沽清（本营业日有效，营业日切换时点自动恢复在售）与长期下架（须主管审批解除后才
+    // 恢复）」）：soldOutType＝目标档位，空＝解除沽清（五列清空）。临时沽清的到期时间取该酒吧本营业日结束时刻；长期下架没有到期时间。
+    // 「没有变化」按是否沽清与档位同时相同判——临时沽清改长期下架是改档，按目标档的审批办。成功留痕由 BarService 统一记一条，明细填入 detail。
+    BarProductRecord markSoldOut(String productId, BarProductSoldOutRequest request, String soldOutType, Map<String, Object> detail) {
         BarProductSoldOutRequest actual = requireRequest(request);
         BarProductRecord product = repository.findProductById(requireText(productId, "product_id"))
                 .orElseThrow(() -> ApiException.notFound("BAR_PRODUCT_NOT_FOUND", "酒吧商品不存在或已被删除"));
         checkMerchantOwnership(product.merchantId());
-        boolean targetSoldOut = actual.soldOut() == null || Boolean.TRUE.equals(actual.soldOut());
-        if (targetSoldOut == product.soldOut()) {
+        boolean targetSoldOut = soldOutType != null;
+        if (targetSoldOut == product.soldOut() && java.util.Objects.equals(soldOutType, product.soldOutType())) {
             throw ApiException.conflict("BAR_PRODUCT_SOLD_OUT_UNCHANGED", "商品沽清状态没有变化");
         }
         Instant now = Instant.now();
-        BarProductRecord updated = new BarProductRecord(
-                product.id(),
-                product.barId(),
-                product.merchantId(),
-                product.productName(),
-                product.productType(),
-                product.priceCent(),
-                product.currency(),
-                product.inventoryItemId(),
-                product.stockLocationId(),
-                product.stockDeductionRequired(),
-                product.status(),
-                product.createdAt(),
-                now,
-                product.standardPourVolume(),
-                product.pourVolumeUnit(),
-                product.lossThreshold(),
-                targetSoldOut,
-                targetSoldOut ? now : null,
-                targetSoldOut ? trimToDefault(actual.reason(), "marked sold out") : null,
-                product.internalSettlementPriceCent()
-        );
-        BarProductRecord saved = repository.saveProduct(updated);
-        auditEventService.recordSuccess(
-                targetSoldOut ? "bar.product_sold_out" : "bar.product_restored",
-                targetSoldOut ? "bar.product.sold_out" : "bar.product.restore",
-                "bar_product",
-                product.id(),
-                null,
-                actual.idempotencyKey(),
-                Map.of("product_id", product.id(), "sold_out", targetSoldOut));
+        Instant until = "temporary".equals(soldOutType)
+                ? businessDays.end(null, product.barId(), businessDays.businessDate(null, product.barId(), now)) : null;
+        String reason = trimToNull(actual.reason());
+        BarProductRecord saved = repository.saveProduct(
+                product.withSoldOut(soldOutType, targetSoldOut ? now : null, targetSoldOut ? reason : null, until, now));
+        if (soldOutType != null) {
+            detail.put("sold_out_type", soldOutType);
+        }
+        if (until != null) {
+            detail.put("sold_out_until", until.toString());
+        }
+        if (reason != null) {
+            detail.put("reason", reason);
+        }
         return saved;
     }
+
+    // 221-R1：临时沽清的到期时间按该酒吧的营业日取（字段注入免改构造点；单测未注入即出厂营业日口径）。
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    com.complex.platform.common.BusinessDayResolver businessDays = new com.complex.platform.common.BusinessDayResolver();
 
     private void requireProductSellable(BarProductRecord product) {
         if (product.soldOut()) {
@@ -1604,7 +1598,8 @@ public class BarOrderService {
 
         // 2/3) 账单 + 退款应付回滚：void 减过应付 → 加回应付并落反向 adjustment；已结退款过账则对冲。
         if (current.billAdjustmentId() != null && current.billId() != null && current.amountCent() > 0) {
-            BarBillRecord bill = repository.findBillById(current.billId()).orElse(null);
+            // 261-B12-R1（PGM:303「同时操作以先成功为准」）：先锁账单行再判结账状态，与结账同时发生时按结账后的账单处理。
+            BarBillRecord bill = repository.findBillByIdForUpdate(current.billId()).orElse(null);
             if (bill != null) {
                 checkMerchantOwnership(bill.merchantId());
                 // 第十批 TK-25：驳回退品时留款一并作废（status→reversed，不再计入低消进度与留款余额）；
@@ -1716,7 +1711,9 @@ public class BarOrderService {
         if (billId == null || item.amountCent() <= 0) {
             return null;
         }
-        BarBillRecord bill = repository.findBillById(billId).orElse(null);
+        // 第十八批 AK 段第 261 条 261-B12-R1（PGM:303「同时操作以先成功为准」；结账 BarBillingService.settleBill 同式）：先锁账单行再判结账状态——
+        // 与收银端结账同时发生时等结账提交，按结账后的账单处理（已结即走退款），不把已结账单整行写回未结。
+        BarBillRecord bill = repository.findBillByIdForUpdate(billId).orElse(null);
         if (bill == null) {
             return null;
         }

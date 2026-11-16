@@ -1,4 +1,4 @@
-# P0 OpenAPI 权限、事件、任务追溯收口附录 V0.68
+# P0 OpenAPI 权限、事件、任务追溯收口附录 V0.69
 
 ## 1. 文档定位
 
@@ -14,11 +14,11 @@
 
 | 检查项 | 当前结果 | 执行结论 |
 |---|---:|---|
-| OpenAPI operation 数 | 1367 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
-| OpenAPI 权限/通用权限状态数 | 444 | 人工权限矩阵正文未覆盖 343 项；缺口以本文第 3 节补齐 |
-| OpenAPI 成功/失败事件数 | 2734 | 人工事件矩阵正文未覆盖 2685 项；完整事件字典以本文第 4 节为准 |
-| operation 级任务追溯 | 1367 | 人工任务映射正文未逐项覆盖 1361 个 operation；逐 operation 映射以本文第 5 节为准 |
-| 写接口数量 | 840 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
+| OpenAPI operation 数 | 1369 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
+| OpenAPI 权限/通用权限状态数 | 445 | 人工权限矩阵正文未覆盖 344 项；缺口以本文第 3 节补齐 |
+| OpenAPI 成功/失败事件数 | 2738 | 人工事件矩阵正文未覆盖 2689 项；完整事件字典以本文第 4 节为准 |
+| operation 级任务追溯 | 1369 | 人工任务映射正文未逐项覆盖 1363 个 operation；逐 operation 映射以本文第 5 节为准 |
+| 写接口数量 | 842 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
 
 ## 3. 权限码与认证上下文补充表
 
@@ -134,9 +134,10 @@
 | `bar.production_ticket.manage` | staff-token | project-bar-table | 1 | transitionBarProductionTicket | OpenAPI 补充，以本附录为准 |
 | `bar.production_ticket.view` | staff-token | project-bar-table | 1 | listBarProductionTicketEvents | OpenAPI 补充，以本附录为准 |
 | `bar.reservation.approve` | staff-token | project-bar | 1 | approveDeleteBarReservation | OpenAPI 补充，以本附录为准 |
+| `bar.reservation.cancel` | staff-token | project-bar | 1 | cancelBarReservation | OpenAPI 补充，以本附录为准 |
 | `bar.reservation.create` | staff-token | project-bar, project-merchant-space | 2 | createBarReservation, listBarTableAvailability | 已在权限矩阵正文出现 |
 | `bar.reservation.invitation.manage` | staff-token | project-bar | 2 | issueBarReservationInvitation, revokeBarReservationInvitation | OpenAPI 补充，以本附录为准 |
-| `bar.reservation.manage` | staff-token | project, project-bar | 7 | payBarReservationDeposit, checkInBarReservationDeposit, cancelBarReservation, archiveBarReservation, unarchiveBarReservation, requestDeleteBarReservation, saveBarArrivalReminderPolicy | OpenAPI 补充，以本附录为准 |
+| `bar.reservation.manage` | staff-token | project, project-bar | 6 | payBarReservationDeposit, checkInBarReservationDeposit, archiveBarReservation, unarchiveBarReservation, requestDeleteBarReservation, saveBarArrivalReminderPolicy | OpenAPI 补充，以本附录为准 |
 | `bar.reservation.view` | staff-token | project, project-bar, project-bar-table | 3 | listBarReservations, getBarReservationInvitation, getBarArrivalReminderPolicy | 已在权限矩阵正文出现 |
 | `bar.saved_bottle.manage` | staff-token | project-bar-customer, project-bar-table | 20 | listSavedBottles, createSavedBottle, claimSavedBottle, lookupSavedBottlesByPhone, transferSavedBottle, requestSavedBottleVerificationCode, dispenseSavedBottleManualPickup, listSavedBottleRenewals, renewSavedBottle, cancelSavedBottle, disputeSavedBottle, registerSavedBottleRemedy ... | 已在权限矩阵正文出现 |
 | `bar.saved_bottle.manual_pickup_policy.manage` | staff-token | project | 1 | configureSavedBottleManualPickupPolicy | OpenAPI 补充，以本附录为准 |
@@ -159,7 +160,7 @@
 | `bar.table.disable` | staff-token | project-bar | 2 | disableBarTable, enableBarTable | OpenAPI 补充，以本附录为准 |
 | `bar.table.guest_checkin` | staff-token | project-bar | 1 | verifyBarReservationInvitationEntry | 已在权限矩阵正文出现 |
 | `bar.table.manage` | staff-token | project-bar, project-bar-table | 3 | createBarTable, assignBarTableSpace, listBarTablesWithoutSpace | 已在权限矩阵正文出现 |
-| `bar.table.open_close` | staff-token | project-bar, project-merchant | 3 | openBarTable, clearBarTable, closeBarServiceResponsibility | 已在权限矩阵正文出现 |
+| `bar.table.open_close` | staff-token | project-bar, project-merchant | 5 | openBarTable, clearBarTable, markBarTableAbnormal, resolveBarTableAbnormal, closeBarServiceResponsibility | 已在权限矩阵正文出现 |
 | `bar.table.view` | staff-token | project-bar | 1 | listBarTables | 已在权限矩阵正文出现 |
 | `compliance.contract_key_date.manage` | staff-token | - | 1 | createContractKeyDate | OpenAPI 补充，以本附录为准 |
 | `compliance.contract_key_date.view` | staff-token | - | 1 | listContractKeyDates | OpenAPI 补充，以本附录为准 |
@@ -797,18 +798,26 @@
 | `bar.business_day.viewed` | success | `listBarBusinessDayConfigs` | `GET` | `/api/v1/bar-business-day-configs` | BAR-酒吧经营 | `bar.business_day.view` | 接口级事件，以本附录为准 |
 | `bar.catalog.image_uploaded` | success | `uploadBarCatalogImage` | `POST` | `/api/v1/bar/catalog/images` | BAR-酒吧经营 | `bar.product.manage` | 接口级事件，以本附录为准 |
 | `bar.catalog.image_uploaded_failed` | failure | `uploadBarCatalogImage` | `POST` | `/api/v1/bar/catalog/images` | BAR-酒吧经营 | `bar.product.manage` | 接口级事件，以本附录为准 |
+| `bar.category.archive_failed` | failure | `archiveBarProductCategory` | `POST` | `/api/v1/bar/catalog/categories/{id}/archive` | BAR-酒吧经营 | `bar.category.manage` | 接口级事件，以本附录为准 |
+| `bar.category.archived` | success | `archiveBarProductCategory` | `POST` | `/api/v1/bar/catalog/categories/{id}/archive` | BAR-酒吧经营 | `bar.category.manage` | 接口级事件，以本附录为准 |
 | `bar.category.delete_approve_failed` | failure | `approveDeleteBarProductCategory` | `POST` | `/api/v1/bar/catalog/categories/{id}/delete-approve` | BAR-酒吧经营 | `bar.category.approve` | 接口级事件，以本附录为准 |
 | `bar.category.delete_approved` | success | `approveDeleteBarProductCategory` | `POST` | `/api/v1/bar/catalog/categories/{id}/delete-approve` | BAR-酒吧经营 | `bar.category.approve` | 接口级事件，以本附录为准 |
 | `bar.category.delete_request_failed` | failure | `requestDeleteBarProductCategory` | `POST` | `/api/v1/bar/catalog/categories/{id}/delete-request` | BAR-酒吧经营 | `bar.category.manage` | 接口级事件，以本附录为准 |
 | `bar.category.delete_requested` | success | `requestDeleteBarProductCategory` | `POST` | `/api/v1/bar/catalog/categories/{id}/delete-request` | BAR-酒吧经营 | `bar.category.manage` | 接口级事件，以本附录为准 |
 | `bar.category.saved` | success | `saveBarProductCategory` | `POST` | `/api/v1/bar/catalog/categories` | BAR-酒吧经营 | `bar.category.manage` | 接口级事件，以本附录为准 |
 | `bar.category.saved_failed` | failure | `saveBarProductCategory` | `POST` | `/api/v1/bar/catalog/categories` | BAR-酒吧经营 | `bar.category.manage` | 接口级事件，以本附录为准 |
+| `bar.category.unarchive_failed` | failure | `unarchiveBarProductCategory` | `POST` | `/api/v1/bar/catalog/categories/{id}/unarchive` | BAR-酒吧经营 | `bar.category.manage` | 接口级事件，以本附录为准 |
+| `bar.category.unarchived` | success | `unarchiveBarProductCategory` | `POST` | `/api/v1/bar/catalog/categories/{id}/unarchive` | BAR-酒吧经营 | `bar.category.manage` | 接口级事件，以本附录为准 |
+| `bar.combo.archive_failed` | failure | `archiveBarCombo` | `POST` | `/api/v1/bar/catalog/combos/{id}/archive` | BAR-酒吧经营 | `bar.combo.manage` | 接口级事件，以本附录为准 |
+| `bar.combo.archived` | success | `archiveBarCombo` | `POST` | `/api/v1/bar/catalog/combos/{id}/archive` | BAR-酒吧经营 | `bar.combo.manage` | 接口级事件，以本附录为准 |
 | `bar.combo.delete_approve_failed` | failure | `approveDeleteBarCombo` | `POST` | `/api/v1/bar/catalog/combos/{id}/delete-approve` | BAR-酒吧经营 | `bar.combo.approve` | 接口级事件，以本附录为准 |
 | `bar.combo.delete_approved` | success | `approveDeleteBarCombo` | `POST` | `/api/v1/bar/catalog/combos/{id}/delete-approve` | BAR-酒吧经营 | `bar.combo.approve` | 接口级事件，以本附录为准 |
 | `bar.combo.delete_request_failed` | failure | `requestDeleteBarCombo` | `POST` | `/api/v1/bar/catalog/combos/{id}/delete-request` | BAR-酒吧经营 | `bar.combo.manage` | 接口级事件，以本附录为准 |
 | `bar.combo.delete_requested` | success | `requestDeleteBarCombo` | `POST` | `/api/v1/bar/catalog/combos/{id}/delete-request` | BAR-酒吧经营 | `bar.combo.manage` | 接口级事件，以本附录为准 |
 | `bar.combo.saved` | success | `saveBarCombo` | `POST` | `/api/v1/bar/catalog/combos` | BAR-酒吧经营 | `bar.combo.manage` | 接口级事件，以本附录为准 |
 | `bar.combo.saved_failed` | failure | `saveBarCombo` | `POST` | `/api/v1/bar/catalog/combos` | BAR-酒吧经营 | `bar.combo.manage` | 接口级事件，以本附录为准 |
+| `bar.combo.unarchive_failed` | failure | `unarchiveBarCombo` | `POST` | `/api/v1/bar/catalog/combos/{id}/unarchive` | BAR-酒吧经营 | `bar.combo.manage` | 接口级事件，以本附录为准 |
+| `bar.combo.unarchived` | success | `unarchiveBarCombo` | `POST` | `/api/v1/bar/catalog/combos/{id}/unarchive` | BAR-酒吧经营 | `bar.combo.manage` | 接口级事件，以本附录为准 |
 | `bar.deposit_rule.create_failed` | failure | `createBarDepositRule` | `POST` | `/api/v1/bar/deposit-rules` | BAR-酒吧经营 | `bar.deposit_rule.manage` | 接口级事件，以本附录为准 |
 | `bar.deposit_rule.created` | success | `createBarDepositRule` | `POST` | `/api/v1/bar/deposit-rules` | BAR-酒吧经营 | `bar.deposit_rule.manage` | 接口级事件，以本附录为准 |
 | `bar.entitlement_redeem_failed` | failure | `redeemBarDrinkEntitlement` | `POST` | `/api/v1/bar/entitlement-redemptions/drink` | BAR-酒吧经营 | `bar.entitlement.redeem` | 接口级事件，以本附录为准 |
@@ -857,6 +866,8 @@
 | `bar.payroll.read_failed` | failure | `listBarPayrollRuns` | `GET` | `/api/v1/bar/payroll-runs` | BAR-酒吧经营 | `bar.payroll.view` | 接口级事件，以本附录为准 |
 | `bar.product_sold_out` | success | `markBarProductSoldOut` | `POST` | `/api/v1/bar/products/{product_id}/sold-out` | BAR-酒吧经营 | `bar.product.sold_out` | 接口级事件，以本附录为准 |
 | `bar.product_sold_out_failed` | failure | `markBarProductSoldOut` | `POST` | `/api/v1/bar/products/{product_id}/sold-out` | BAR-酒吧经营 | `bar.product.sold_out` | 接口级事件，以本附录为准 |
+| `bar.product.archive_failed` | failure | `archiveBarProduct` | `POST` | `/api/v1/bar/catalog/products/{id}/archive` | BAR-酒吧经营 | `bar.product.manage` | 接口级事件，以本附录为准 |
+| `bar.product.archived` | success | `archiveBarProduct` | `POST` | `/api/v1/bar/catalog/products/{id}/archive` | BAR-酒吧经营 | `bar.product.manage` | 接口级事件，以本附录为准 |
 | `bar.product.category_assigned` | success | `assignBarProductCategory` | `POST` | `/api/v1/bar/catalog/products/{product_id}/category` | BAR-酒吧经营 | `bar.product.manage` | 接口级事件，以本附录为准 |
 | `bar.product.category_assigned_failed` | failure | `assignBarProductCategory` | `POST` | `/api/v1/bar/catalog/products/{product_id}/category` | BAR-酒吧经营 | `bar.product.manage` | 接口级事件，以本附录为准 |
 | `bar.product.created` | success | `createBarProduct` | `POST` | `/api/v1/bar/products` | BAR-酒吧经营 | `bar.product.manage` | 接口级事件，以本附录为准 |
@@ -865,6 +876,8 @@
 | `bar.product.delete_approved` | success | `approveDeleteBarProduct` | `POST` | `/api/v1/bar/catalog/products/{id}/delete-approve` | BAR-酒吧经营 | `bar.product.approve` | 接口级事件，以本附录为准 |
 | `bar.product.delete_request_failed` | failure | `requestDeleteBarProduct` | `POST` | `/api/v1/bar/catalog/products/{id}/delete-request` | BAR-酒吧经营 | `bar.product.manage` | 接口级事件，以本附录为准 |
 | `bar.product.delete_requested` | success | `requestDeleteBarProduct` | `POST` | `/api/v1/bar/catalog/products/{id}/delete-request` | BAR-酒吧经营 | `bar.product.manage` | 接口级事件，以本附录为准 |
+| `bar.product.unarchive_failed` | failure | `unarchiveBarProduct` | `POST` | `/api/v1/bar/catalog/products/{id}/unarchive` | BAR-酒吧经营 | `bar.product.manage` | 接口级事件，以本附录为准 |
+| `bar.product.unarchived` | success | `unarchiveBarProduct` | `POST` | `/api/v1/bar/catalog/products/{id}/unarchive` | BAR-酒吧经营 | `bar.product.manage` | 接口级事件，以本附录为准 |
 | `bar.product.viewed` | success | `listBarProducts` | `GET` | `/api/v1/bar/products` | BAR-酒吧经营 | `bar.product.view` | 接口级事件，以本附录为准 |
 | `bar.product.viewed_failed` | failure | `listBarProducts` | `GET` | `/api/v1/bar/products` | BAR-酒吧经营 | `bar.product.view` | 接口级事件，以本附录为准 |
 | `bar.production_ticket_event.list` | success | `listBarProductionTicketEvents` | `GET` | `/api/v1/bar/production-tickets/{ticket_id}/events` | BAR-酒吧经营 | `bar.production_ticket.view` | 接口级事件，以本附录为准 |
@@ -885,14 +898,18 @@
 | `bar.reservation_invitation_issued` | success | `issueBarReservationInvitation` | `POST` | `/api/v1/bar/reservations/{id}/invitation` | BAR-酒吧经营 | `bar.reservation.invitation.manage` | 接口级事件，以本附录为准 |
 | `bar.reservation_invitation_revoke_failed` | failure | `revokeBarReservationInvitation` | `POST` | `/api/v1/bar/reservations/{id}/invitation/revoke` | BAR-酒吧经营 | `bar.reservation.invitation.manage` | 接口级事件，以本附录为准 |
 | `bar.reservation_invitation_revoked` | success | `revokeBarReservationInvitation` | `POST` | `/api/v1/bar/reservations/{id}/invitation/revoke` | BAR-酒吧经营 | `bar.reservation.invitation.manage` | 接口级事件，以本附录为准 |
-| `bar.reservation.cancel_failed` | failure | `cancelBarReservation` | `POST` | `/api/v1/bar/reservations/{id}/cancel` | BAR-酒吧经营 | `bar.reservation.manage` | 接口级事件，以本附录为准 |
-| `bar.reservation.cancelled` | success | `cancelBarReservation` | `POST` | `/api/v1/bar/reservations/{id}/cancel` | BAR-酒吧经营 | `bar.reservation.manage` | 接口级事件，以本附录为准 |
+| `bar.reservation.archive_failed` | failure | `archiveBarReservation` | `POST` | `/api/v1/bar/reservations/{id}/archive` | BAR-酒吧经营 | `bar.reservation.manage` | 接口级事件，以本附录为准 |
+| `bar.reservation.archived` | success | `archiveBarReservation` | `POST` | `/api/v1/bar/reservations/{id}/archive` | BAR-酒吧经营 | `bar.reservation.manage` | 接口级事件，以本附录为准 |
+| `bar.reservation.cancel_failed` | failure | `cancelBarReservation` | `POST` | `/api/v1/bar/reservations/{id}/cancel` | BAR-酒吧经营 | `bar.reservation.cancel` | 接口级事件，以本附录为准 |
+| `bar.reservation.cancelled` | success | `cancelBarReservation` | `POST` | `/api/v1/bar/reservations/{id}/cancel` | BAR-酒吧经营 | `bar.reservation.cancel` | 接口级事件，以本附录为准 |
 | `bar.reservation.create_failed` | failure | `createBarReservation` | `POST` | `/api/v1/bar/reservations` | BAR-酒吧经营 | `bar.reservation.create` | 接口级事件，以本附录为准 |
 | `bar.reservation.created` | success | `createBarReservation` | `POST` | `/api/v1/bar/reservations` | BAR-酒吧经营 | `bar.reservation.create` | 接口级事件，以本附录为准 |
 | `bar.reservation.delete_approve_failed` | failure | `approveDeleteBarReservation` | `POST` | `/api/v1/bar/reservations/{id}/delete-approve` | BAR-酒吧经营 | `bar.reservation.approve` | 接口级事件，以本附录为准 |
 | `bar.reservation.delete_approved` | success | `approveDeleteBarReservation` | `POST` | `/api/v1/bar/reservations/{id}/delete-approve` | BAR-酒吧经营 | `bar.reservation.approve` | 接口级事件，以本附录为准 |
 | `bar.reservation.delete_request_failed` | failure | `requestDeleteBarReservation` | `POST` | `/api/v1/bar/reservations/{id}/delete-request` | BAR-酒吧经营 | `bar.reservation.manage` | 接口级事件，以本附录为准 |
 | `bar.reservation.delete_requested` | success | `requestDeleteBarReservation` | `POST` | `/api/v1/bar/reservations/{id}/delete-request` | BAR-酒吧经营 | `bar.reservation.manage` | 接口级事件，以本附录为准 |
+| `bar.reservation.unarchive_failed` | failure | `unarchiveBarReservation` | `POST` | `/api/v1/bar/reservations/{id}/unarchive` | BAR-酒吧经营 | `bar.reservation.manage` | 接口级事件，以本附录为准 |
+| `bar.reservation.unarchived` | success | `unarchiveBarReservation` | `POST` | `/api/v1/bar/reservations/{id}/unarchive` | BAR-酒吧经营 | `bar.reservation.manage` | 接口级事件，以本附录为准 |
 | `bar.reservation.view_failed` | failure | `listBarReservations` | `GET` | `/api/v1/bar/reservations` | BAR-酒吧经营 | `bar.reservation.view` | 接口级事件，以本附录为准 |
 | `bar.reservation.viewed` | success | `listBarReservations` | `GET` | `/api/v1/bar/reservations` | BAR-酒吧经营 | `bar.reservation.view` | 接口级事件，以本附录为准 |
 | `bar.saved_bottle_picked_up` | success | `claimSavedBottle` | `POST` | `/api/v1/inventory/saved-bottles/{id}/claim` | INV-库存存酒 | `bar.saved_bottle.manage` | 已在事件矩阵正文出现 |
@@ -1003,6 +1020,10 @@
 | `bar.table_space_backlog.viewed` | success | `listBarTablesWithoutSpace` | `GET` | `/api/v1/bar/tables/without-space` | BAR-酒吧经营 | `bar.table.manage` | 接口级事件，以本附录为准 |
 | `bar.table_space.assign_failed` | failure | `assignBarTableSpace` | `PUT` | `/api/v1/bar/tables/{table_id}/space` | BAR-酒吧经营 | `bar.table.manage` | 接口级事件，以本附录为准 |
 | `bar.table_space.assigned` | success | `assignBarTableSpace` | `PUT` | `/api/v1/bar/tables/{table_id}/space` | BAR-酒吧经营 | `bar.table.manage` | 接口级事件，以本附录为准 |
+| `bar.table.abnormal_mark_failed` | failure | `markBarTableAbnormal` | `POST` | `/api/v1/bar/tables/{table_id}/abnormal` | BAR-酒吧经营 | `bar.table.open_close` | 接口级事件，以本附录为准 |
+| `bar.table.abnormal_marked` | success | `markBarTableAbnormal` | `POST` | `/api/v1/bar/tables/{table_id}/abnormal` | BAR-酒吧经营 | `bar.table.open_close` | 接口级事件，以本附录为准 |
+| `bar.table.abnormal_resolve_failed` | failure | `resolveBarTableAbnormal` | `POST` | `/api/v1/bar/tables/{table_id}/abnormal/resolve` | BAR-酒吧经营 | `bar.table.open_close` | 接口级事件，以本附录为准 |
+| `bar.table.abnormal_resolved` | success | `resolveBarTableAbnormal` | `POST` | `/api/v1/bar/tables/{table_id}/abnormal/resolve` | BAR-酒吧经营 | `bar.table.open_close` | 接口级事件，以本附录为准 |
 | `bar.table.change_failed` | failure | `createBarTable` | `POST` | `/api/v1/bar/tables` | BAR-酒吧经营 | `bar.table.manage` | 接口级事件，以本附录为准 |
 | `bar.table.changed` | success | `createBarTable` | `POST` | `/api/v1/bar/tables` | BAR-酒吧经营 | `bar.table.manage` | 接口级事件，以本附录为准 |
 | `bar.table.clear_failed` | failure | `clearBarTable` | `POST` | `/api/v1/bar/tables/{table_id}/clear` | BAR-酒吧经营 | `bar.table.open_close` | 接口级事件，以本附录为准 |
@@ -2106,14 +2127,6 @@
 | `not_applicable` | failure | `approveDeleteMerchantServiceWorkOrder` | `POST` | `/api/v1/merchant-service/work-orders/{id}/delete-approve` | P0-待归类 | `merchant.service_work_order.approve` | 接口级事件，以本附录为准 |
 | `not_applicable` | failure | `approveDeleteSpaceType` | `POST` | `/api/v1/platform/space-types/{id}/delete-approve` | GOV-平台治理 | `authenticated` | 接口级事件，以本附录为准 |
 | `not_applicable` | failure | `approveDeleteStaffProfile` | `POST` | `/api/v1/staff/profiles/{id}/delete-approve` | AUTH-账号权限 | `staff.profile.approve` | 接口级事件，以本附录为准 |
-| `not_applicable` | success | `archiveBarCombo` | `POST` | `/api/v1/bar/catalog/combos/{id}/archive` | BAR-酒吧经营 | `bar.combo.manage` | 接口级事件，以本附录为准 |
-| `not_applicable` | failure | `archiveBarCombo` | `POST` | `/api/v1/bar/catalog/combos/{id}/archive` | BAR-酒吧经营 | `bar.combo.manage` | 接口级事件，以本附录为准 |
-| `not_applicable` | success | `archiveBarProduct` | `POST` | `/api/v1/bar/catalog/products/{id}/archive` | BAR-酒吧经营 | `bar.product.manage` | 接口级事件，以本附录为准 |
-| `not_applicable` | failure | `archiveBarProduct` | `POST` | `/api/v1/bar/catalog/products/{id}/archive` | BAR-酒吧经营 | `bar.product.manage` | 接口级事件，以本附录为准 |
-| `not_applicable` | success | `archiveBarProductCategory` | `POST` | `/api/v1/bar/catalog/categories/{id}/archive` | BAR-酒吧经营 | `bar.category.manage` | 接口级事件，以本附录为准 |
-| `not_applicable` | failure | `archiveBarProductCategory` | `POST` | `/api/v1/bar/catalog/categories/{id}/archive` | BAR-酒吧经营 | `bar.category.manage` | 接口级事件，以本附录为准 |
-| `not_applicable` | success | `archiveBarReservation` | `POST` | `/api/v1/bar/reservations/{id}/archive` | BAR-酒吧经营 | `bar.reservation.manage` | 接口级事件，以本附录为准 |
-| `not_applicable` | failure | `archiveBarReservation` | `POST` | `/api/v1/bar/reservations/{id}/archive` | BAR-酒吧经营 | `bar.reservation.manage` | 接口级事件，以本附录为准 |
 | `not_applicable` | failure | `archiveFacilityEquipment` | `POST` | `/api/v1/facility/equipment/{equipment_id}/archive` | P0-待归类 | `facility.equipment.manage` | 接口级事件，以本附录为准 |
 | `not_applicable` | failure | `archiveMerchantServiceWorkOrder` | `POST` | `/api/v1/merchant-service/work-orders/{id}/archive` | P0-待归类 | `merchant.service_work_order.close` | 接口级事件，以本附录为准 |
 | `not_applicable` | failure | `archiveSpaceType` | `POST` | `/api/v1/platform/space-types/{id}/archive` | GOV-平台治理 | `governance.space.manage` | 接口级事件，以本附录为准 |
@@ -2578,14 +2591,6 @@
 | `not_applicable` | failure | `submitDataCleanupJob` | `POST` | `/api/v1/ops/data-cleanup/jobs/{id}/submit` | OPS-生产前置 | `data.cleanup.request` | 接口级事件，以本附录为准 |
 | `not_applicable` | success | `ticketTypePriceCheck` | `GET` | `/api/v1/ticketing/ticket-types/{id}/price-check` | TIC-票务权益 | `ticket.product.view` | 接口级事件，以本附录为准 |
 | `not_applicable` | failure | `ticketTypePriceCheck` | `GET` | `/api/v1/ticketing/ticket-types/{id}/price-check` | TIC-票务权益 | `ticket.product.view` | 接口级事件，以本附录为准 |
-| `not_applicable` | success | `unarchiveBarCombo` | `POST` | `/api/v1/bar/catalog/combos/{id}/unarchive` | BAR-酒吧经营 | `bar.combo.manage` | 接口级事件，以本附录为准 |
-| `not_applicable` | failure | `unarchiveBarCombo` | `POST` | `/api/v1/bar/catalog/combos/{id}/unarchive` | BAR-酒吧经营 | `bar.combo.manage` | 接口级事件，以本附录为准 |
-| `not_applicable` | success | `unarchiveBarProduct` | `POST` | `/api/v1/bar/catalog/products/{id}/unarchive` | BAR-酒吧经营 | `bar.product.manage` | 接口级事件，以本附录为准 |
-| `not_applicable` | failure | `unarchiveBarProduct` | `POST` | `/api/v1/bar/catalog/products/{id}/unarchive` | BAR-酒吧经营 | `bar.product.manage` | 接口级事件，以本附录为准 |
-| `not_applicable` | success | `unarchiveBarProductCategory` | `POST` | `/api/v1/bar/catalog/categories/{id}/unarchive` | BAR-酒吧经营 | `bar.category.manage` | 接口级事件，以本附录为准 |
-| `not_applicable` | failure | `unarchiveBarProductCategory` | `POST` | `/api/v1/bar/catalog/categories/{id}/unarchive` | BAR-酒吧经营 | `bar.category.manage` | 接口级事件，以本附录为准 |
-| `not_applicable` | success | `unarchiveBarReservation` | `POST` | `/api/v1/bar/reservations/{id}/unarchive` | BAR-酒吧经营 | `bar.reservation.manage` | 接口级事件，以本附录为准 |
-| `not_applicable` | failure | `unarchiveBarReservation` | `POST` | `/api/v1/bar/reservations/{id}/unarchive` | BAR-酒吧经营 | `bar.reservation.manage` | 接口级事件，以本附录为准 |
 | `not_applicable` | failure | `unarchiveFacilityEquipment` | `POST` | `/api/v1/facility/equipment/{equipment_id}/unarchive` | P0-待归类 | `facility.equipment.manage` | 接口级事件，以本附录为准 |
 | `not_applicable` | failure | `unarchiveMerchantServiceWorkOrder` | `POST` | `/api/v1/merchant-service/work-orders/{id}/unarchive` | P0-待归类 | `merchant.service_work_order.close` | 接口级事件，以本附录为准 |
 | `not_applicable` | failure | `unarchiveSpaceType` | `POST` | `/api/v1/platform/space-types/{id}/unarchive` | GOV-平台治理 | `governance.space.manage` | 接口级事件，以本附录为准 |
@@ -3417,15 +3422,15 @@
 | BAR-酒吧经营 | `approveDeleteBarProduct` | `POST` | `/api/v1/bar/catalog/products/{id}/delete-approve` | 审批酒吧商品删除申请 | `bar.product.approve` | `bar.product.delete_approved` / `bar.product.delete_approve_failed` | web | operation 级补充 |
 | BAR-酒吧经营 | `approveDeleteBarProductCategory` | `POST` | `/api/v1/bar/catalog/categories/{id}/delete-approve` | 审批酒吧商品分类删除申请 | `bar.category.approve` | `bar.category.delete_approved` / `bar.category.delete_approve_failed` | web | operation 级补充 |
 | BAR-酒吧经营 | `approveDeleteBarReservation` | `POST` | `/api/v1/bar/reservations/{id}/delete-approve` | 审批卡座预订（订台记录）删除申请 | `bar.reservation.approve` | `bar.reservation.delete_approved` / `bar.reservation.delete_approve_failed` | web | operation 级补充 |
-| BAR-酒吧经营 | `archiveBarCombo` | `POST` | `/api/v1/bar/catalog/combos/{id}/archive` | 存档酒吧套餐 | `bar.combo.manage` | `not_applicable` / `not_applicable` | web | operation 级补充 |
-| BAR-酒吧经营 | `archiveBarProduct` | `POST` | `/api/v1/bar/catalog/products/{id}/archive` | 存档酒吧商品 | `bar.product.manage` | `not_applicable` / `not_applicable` | web | operation 级补充 |
-| BAR-酒吧经营 | `archiveBarProductCategory` | `POST` | `/api/v1/bar/catalog/categories/{id}/archive` | 存档酒吧商品分类 | `bar.category.manage` | `not_applicable` / `not_applicable` | web | operation 级补充 |
-| BAR-酒吧经营 | `archiveBarReservation` | `POST` | `/api/v1/bar/reservations/{id}/archive` | 存档卡座预订（订台记录） | `bar.reservation.manage` | `not_applicable` / `not_applicable` | web | operation 级补充 |
+| BAR-酒吧经营 | `archiveBarCombo` | `POST` | `/api/v1/bar/catalog/combos/{id}/archive` | 存档酒吧套餐 | `bar.combo.manage` | `bar.combo.archived` / `bar.combo.archive_failed` | web | operation 级补充 |
+| BAR-酒吧经营 | `archiveBarProduct` | `POST` | `/api/v1/bar/catalog/products/{id}/archive` | 存档酒吧商品 | `bar.product.manage` | `bar.product.archived` / `bar.product.archive_failed` | web | operation 级补充 |
+| BAR-酒吧经营 | `archiveBarProductCategory` | `POST` | `/api/v1/bar/catalog/categories/{id}/archive` | 存档酒吧商品分类 | `bar.category.manage` | `bar.category.archived` / `bar.category.archive_failed` | web | operation 级补充 |
+| BAR-酒吧经营 | `archiveBarReservation` | `POST` | `/api/v1/bar/reservations/{id}/archive` | 存档卡座预订（订台记录） | `bar.reservation.manage` | `bar.reservation.archived` / `bar.reservation.archive_failed` | web | operation 级补充 |
 | BAR-酒吧经营 | `archiveBarVoidReasonCode` | `POST` | `/api/v1/bar/void-reason-codes/{code}/archive` | 下线退酒原因（软删留理由） | `bar.order_item.void_decide` | `bar.void_reason_code.archived` / `bar.void_reason_code.archive_failed` | web | operation 级补充 |
 | BAR-酒吧经营 | `assignBarProductCategory` | `POST` | `/api/v1/bar/catalog/products/{product_id}/category` | 给酒吧商品设分类 | `bar.product.manage` | `bar.product.category_assigned` / `bar.product.category_assigned_failed` | web | operation 级补充 |
 | BAR-酒吧经营 | `assignBarTableSpace` | `PUT` | `/api/v1/bar/tables/{table_id}/space` | 卡座/桌台空间指派（回填） | `bar.table.manage` | `bar.table_space.assigned` / `bar.table_space.assign_failed` | web | operation 级补充 |
 | BAR-酒吧经营 | `calculateBarTableCommission` | `POST` | `/api/v1/bar/bills/{bill_id}/commissions/calculate` | 卡座销售提成计算 | `bar.table_commission.calculate` | `bar.table_commission.calculated` / `bar.table_commission.calculate_failed` | web | operation 级补充 |
-| BAR-酒吧经营 | `cancelBarReservation` | `POST` | `/api/v1/bar/reservations/{id}/cancel` | 订台取消/爽约（按时限退定金或没收） | `bar.reservation.manage` | `bar.reservation.cancelled` / `bar.reservation.cancel_failed` | web, kiosk, mobile_admin | operation 级补充 |
+| BAR-酒吧经营 | `cancelBarReservation` | `POST` | `/api/v1/bar/reservations/{id}/cancel` | 人工取消订台/登记爽约（店长；按时限退定金或没收） | `bar.reservation.cancel` | `bar.reservation.cancelled` / `bar.reservation.cancel_failed` | web, kiosk, mobile_admin | operation 级补充 |
 | BAR-酒吧经营 | `checkInBarReservationDeposit` | `POST` | `/api/v1/bar/reservations/{id}/checkin` | 订台到店登记（定金不抵扣账单，保持已支付待判；达标后原路退回、未达标关台没收） | `bar.reservation.manage` | `bar.reservation_checked_in` / `bar.reservation_checkin_failed` | web, kiosk, mobile_admin | operation 级补充 |
 | BAR-酒吧经营 | `clearBarTable` | `POST` | `/api/v1/bar/tables/{table_id}/clear` | 清台登记恢复空闲 | `bar.table.open_close` | `bar.table.cleared` / `bar.table.clear_failed` | web | operation 级补充 |
 | BAR-酒吧经营 | `closeBarPayrollMonth` | `POST` | `/api/v1/bar/payroll-runs/close` | 按实际来源生成不可变月结及差额 | `bar.payroll.manage` | `bar.payroll.month_processed` / `bar.payroll.month_processed_failed` | web | operation 级补充 |
@@ -3480,6 +3485,7 @@
 | BAR-酒吧经营 | `listBarTablesWithoutSpace` | `GET` | `/api/v1/bar/tables/without-space` | 未回填空间的卡座/桌台清单 | `bar.table.manage` | `bar.table_space_backlog.viewed` / `bar.table_space_backlog.view_failed` | web | operation 级补充 |
 | BAR-酒吧经营 | `listBarVoidReasonCodes` | `GET` | `/api/v1/bar/void-reason-codes` | 列退酒原因（中文下拉数据源） | `bar.order_item.void` | `not_applicable` / `not_applicable` | web | operation 级补充 |
 | BAR-酒吧经营 | `markBarProductSoldOut` | `POST` | `/api/v1/bar/products/{product_id}/sold-out` | 商品沽清/恢复 | `bar.product.sold_out` | `bar.product_sold_out` / `bar.product_sold_out_failed` | web | operation 级补充 |
+| BAR-酒吧经营 | `markBarTableAbnormal` | `POST` | `/api/v1/bar/tables/{table_id}/abnormal` | 登记台位异常 | `bar.table.open_close` | `bar.table.abnormal_marked` / `bar.table.abnormal_mark_failed` | web | operation 级补充 |
 | BAR-酒吧经营 | `mergeBarBill` | `POST` | `/api/v1/bar/bills/{bill_id}/merge` | 合并酒水账单 | `bar.bill.split_merge` | `bar.bill.merge` / `bar.bill.merge_failed` | web | operation 级补充 |
 | BAR-酒吧经营 | `mergeBarTableSession` | `POST` | `/api/v1/bar/table-sessions/{session_id}/merge` | 合并酒水台位会话 | `bar.table_session.merge` | `bar.table_session.merge` / `bar.table_session.merge_failed` | web | operation 级补充 |
 | BAR-酒吧经营 | `openBarShift` | `POST` | `/api/v1/bar/shifts/open` | 开班 | `bar.shift.manage` | `bar.shift_opened` / `bar.shift_open_failed` | web | operation 级补充 |
@@ -3499,6 +3505,7 @@
 | BAR-酒吧经营 | `requestDeleteBarReservation` | `POST` | `/api/v1/bar/reservations/{id}/delete-request` | 申请删除卡座预订（订台记录） | `bar.reservation.manage` | `bar.reservation.delete_requested` / `bar.reservation.delete_request_failed` | web | operation 级补充 |
 | BAR-酒吧经营 | `resolveBarBillAnomaly` | `POST` | `/api/v1/bar/bills/{bill_id}/anomaly/resolve` | 主管处置异常账单 | `bar.bill.anomaly.resolve` | `bar.bill_anomaly_resolved` / `bar.bill_anomaly_resolve_failed` | web | operation 级补充 |
 | BAR-酒吧经营 | `resolveBarShift` | `POST` | `/api/v1/bar/shifts/{shift_id}/resolve` | 交班复核平账 | `finance.daily_close.manage` | `bar.shift_resolved` / `bar.shift_resolve_failed` | web | operation 级补充 |
+| BAR-酒吧经营 | `resolveBarTableAbnormal` | `POST` | `/api/v1/bar/tables/{table_id}/abnormal/resolve` | 确认异常台位恢复（当班主管） | `bar.table.open_close` | `bar.table.abnormal_resolved` / `bar.table.abnormal_resolve_failed` | web | operation 级补充 |
 | BAR-酒吧经营 | `restoreBarStaffBookingSuspension` | `POST` | `/api/v1/bar/staff-booking-suspensions/{id}/restore` | 店长复核恢复员工代订权限 | `bar.staff_booking.restore` | `bar.staff_booking_restored` / `bar.staff_booking_restore_failed` | web | operation 级补充 |
 | BAR-酒吧经营 | `revokeBarReservationInvitation` | `POST` | `/api/v1/bar/reservations/{id}/invitation/revoke` | 吊销订卡邀请函 | `bar.reservation.invitation.manage` | `bar.reservation_invitation_revoked` / `bar.reservation_invitation_revoke_failed` | web | operation 级补充 |
 | BAR-酒吧经营 | `saveBarArrivalReminderPolicy` | `PUT` | `/api/v1/bar/arrival-reminder-policies/{project_id}` | 配置最晚到店时间前提醒提前分钟数及上下限（按项目） | `bar.reservation.manage` | `bar.arrival_reminder_policy_updated` / `bar.arrival_reminder_policy_update_failed` | web | operation 级补充 |
@@ -3516,10 +3523,10 @@
 | BAR-酒吧经营 | `suspendBarOrder` | `POST` | `/api/v1/bar/orders/{order_id}/suspend` | 挂起包厢未付款订单 | `bar.bill.hang` | `bar.order_suspended` / `bar.order_suspend_failed` | web | operation 级补充 |
 | BAR-酒吧经营 | `transferBarTableSession` | `POST` | `/api/v1/bar/table-sessions/{session_id}/transfer` | 转台（台位会话转移） | `bar.table_session.transfer` | `bar.table.transferred` / `bar.table_session.transfer_failed` | web | operation 级补充 |
 | BAR-酒吧经营 | `transitionBarProductionTicket` | `POST` | `/api/v1/bar/production-tickets/{ticket_id}/transition` | 流转出品工单状态 | `bar.production_ticket.manage` | `bar.production_ticket.transition` / `bar.production_ticket.transition_failed` | web | operation 级补充 |
-| BAR-酒吧经营 | `unarchiveBarCombo` | `POST` | `/api/v1/bar/catalog/combos/{id}/unarchive` | 取消存档酒吧套餐 | `bar.combo.manage` | `not_applicable` / `not_applicable` | web | operation 级补充 |
-| BAR-酒吧经营 | `unarchiveBarProduct` | `POST` | `/api/v1/bar/catalog/products/{id}/unarchive` | 取消存档酒吧商品 | `bar.product.manage` | `not_applicable` / `not_applicable` | web | operation 级补充 |
-| BAR-酒吧经营 | `unarchiveBarProductCategory` | `POST` | `/api/v1/bar/catalog/categories/{id}/unarchive` | 取消存档酒吧商品分类 | `bar.category.manage` | `not_applicable` / `not_applicable` | web | operation 级补充 |
-| BAR-酒吧经营 | `unarchiveBarReservation` | `POST` | `/api/v1/bar/reservations/{id}/unarchive` | 取消存档卡座预订（订台记录） | `bar.reservation.manage` | `not_applicable` / `not_applicable` | web | operation 级补充 |
+| BAR-酒吧经营 | `unarchiveBarCombo` | `POST` | `/api/v1/bar/catalog/combos/{id}/unarchive` | 取消存档酒吧套餐 | `bar.combo.manage` | `bar.combo.unarchived` / `bar.combo.unarchive_failed` | web | operation 级补充 |
+| BAR-酒吧经营 | `unarchiveBarProduct` | `POST` | `/api/v1/bar/catalog/products/{id}/unarchive` | 取消存档酒吧商品 | `bar.product.manage` | `bar.product.unarchived` / `bar.product.unarchive_failed` | web | operation 级补充 |
+| BAR-酒吧经营 | `unarchiveBarProductCategory` | `POST` | `/api/v1/bar/catalog/categories/{id}/unarchive` | 取消存档酒吧商品分类 | `bar.category.manage` | `bar.category.unarchived` / `bar.category.unarchive_failed` | web | operation 级补充 |
+| BAR-酒吧经营 | `unarchiveBarReservation` | `POST` | `/api/v1/bar/reservations/{id}/unarchive` | 取消存档卡座预订（订台记录） | `bar.reservation.manage` | `bar.reservation.unarchived` / `bar.reservation.unarchive_failed` | web | operation 级补充 |
 | BAR-酒吧经营 | `undoBarTableTransfer` | `POST` | `/api/v1/bar/table-sessions/{session_id}/transfer-undo` | 撤销最近一次转台 | `bar.table_session.transfer` | `bar.table.transfer_undone` / `bar.table_session.transfer_undo_failed` | web | operation 级补充 |
 | BAR-酒吧经营 | `uploadBarCatalogImage` | `POST` | `/api/v1/bar/catalog/images` | 上传酒吧商品/套餐图片 | `bar.product.manage` | `bar.catalog.image_uploaded` / `bar.catalog.image_uploaded_failed` | web | operation 级补充 |
 | BAR-酒吧经营 | `verifyBarReservationInvitationEntry` | `POST` | `/api/v1/bar/reservations/{id}/invitation/entry-verify` | 订卡邀请函入场核验 | `bar.table.guest_checkin` | `bar.reservation_invitation_entered` / `bar.reservation_invitation_entry_failed` | staff_work_phone, web | operation 级补充 |

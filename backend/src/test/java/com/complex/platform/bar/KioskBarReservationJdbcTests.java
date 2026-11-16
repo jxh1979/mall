@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -165,6 +165,113 @@ class KioskBarReservationJdbcTests {
                 .containsEntry("deposit_settlement", "forfeited").containsEntry("no_show_at", null);
     }
 
+    /**
+     * 第十八批 AK 段第 261 条 261-B10-R1（PGM:303「同一次操作重复提交时，返回第一次的结果并提示已完成。」；PGM:528「⑤同一笔操作重复提交不重复生效
+     * （重复点击、网络重发、渠道重复回调都只算一次）」；PGM:662）：一体机收款步骤每次提交都换新请求编号，没拿到结果再点——定金已登记的订台返回
+     * 已登记的订台并提示已完成，不再记支付、不改收款人与 POS 流水号、不动占台。
+     */
+    @Test
+    void repeatedDepositRegistrationWithNewKeyReturnsTheRegisteredReservation() throws Exception {
+        String booking = CustomerTicketPaymentFixture.read(reserve(kiosk(staff), "replay", table, phone(7), null)
+                .andExpect(status().isOk()), "$.data.id");
+        payDeposit(booking, "replay-k1").andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.deposit_status").value("paid"))
+                .andExpect(jsonPath("$.replayed").doesNotExist());
+        Map<String, Object> registered = depositRow(booking);
+        assertThat(registered).containsEntry("deposit_collector_staff_id", staffId).containsEntry("deposit_channel", "cash")
+                .containsEntry("deposit_pos_transaction_no", null).containsEntry("hold_status", "held");
+        // 登记成功一次落两条同名留痕（业务登记一条、写操作成功事件一条，既有行为）；重复提交后条数不得再增加。
+        int paidEvents = events(booking, "bar.reservation_deposit_paid");
+        assertThat(paidEvents).isPositive();
+
+        // 没拿到结果再点：同内容、新请求编号。
+        payDeposit(booking, "replay-k2").andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.id").value(booking))
+                .andExpect(jsonPath("$.data.deposit_status").value("paid"))
+                .andExpect(jsonPath("$.data.hold_status").value("held"))
+                .andExpect(jsonPath("$.replayed").value(true))
+                .andExpect(jsonPath("$.message").value("该操作已完成（重复提交，返回首次结果）"));
+        // 同酒吧另一位授权员工改按 POS 再登记：仍返回已登记的订台，收款人、渠道与 POS 流水号不变。
+        RequestPostProcessor other = new StaffRequestFixture(jdbc).staff("usr_kbr_staff2_" + s, "staff", f.projectId, bar,
+                "bar.reservation.manage");
+        mockMvc.perform(post("/api/v1/bar/reservations/" + booking + "/pay-deposit").with(kiosk(other))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json.writeValueAsString(Map.of("idempotency_key", "kbr-pay-replay-k3-" + s, "channel", "pos",
+                                "pos_transaction_no", "POS-" + s))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.id").value(booking))
+                .andExpect(jsonPath("$.replayed").value(true));
+
+        assertThat(depositRow(booking)).isEqualTo(registered);
+        assertThat(events(booking, "bar.reservation_deposit_paid")).isEqualTo(paidEvents);
+    }
+
+    /** 261-B10-R1：抢台失败、已取消并登记原路待退的订台再提交，返回已取消的订台并提示已完成，原路待退只登记一笔。 */
+    @Test
+    void repeatedDepositRegistrationOnReservationCancelledByConflictReturnsItWithoutSecondRefund() throws Exception {
+        String first = CustomerTicketPaymentFixture.read(reserve(kiosk(staff), "win", table, phone(8), null)
+                .andExpect(status().isOk()), "$.data.id");
+        String second = CustomerTicketPaymentFixture.read(reserve(kiosk(staff), "lose", table, phone(9), null)
+                .andExpect(status().isOk()), "$.data.id");
+        payDeposit(first, "win").andExpect(status().isOk()).andExpect(jsonPath("$.data.hold_status").value("held"));
+        payDeposit(second, "lose-k1").andExpect(status().isOk()).andExpect(jsonPath("$.data.status").value("cancelled"));
+        int paidEvents = events(second, "bar.reservation_deposit_paid");
+        assertThat(paidEvents).isPositive();
+
+        payDeposit(second, "lose-k2").andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.id").value(second))
+                .andExpect(jsonPath("$.data.status").value("cancelled"))
+                .andExpect(jsonPath("$.replayed").value(true))
+                .andExpect(jsonPath("$.message").value("该操作已完成（重复提交，返回首次结果）"));
+
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM finance_refunds WHERE source_type = 'bar_deposit_rejection' AND target_id = ?",
+                Integer.class, second)).isEqualTo(1);
+        assertThat(events(second, "bar.reservation_deposit_paid")).isEqualTo(paidEvents);
+        assertThat(events(second, "bar.reservation_deposit_refund_on_conflict")).isEqualTo(1);
+        assertThat(row(first)).containsEntry("hold_status", "held");
+        assertThat(row(second)).containsEntry("status", "cancelled").containsEntry("hold_status", null);
+    }
+
+    /**
+     * 261-B10-R1 守护：从未支付过的订台（员工代订免收、未付定金已超时释放）照旧 409，不提示已完成；别家酒吧的员工拿已付定金的订台来登记，
+     * 照旧按商户范围拒绝并留失败痕，拿不到这笔订台。
+     */
+    @Test
+    void neverPaidReservationsStayRejectedAndOtherMerchantCannotReadPaidReservation() throws Exception {
+        String waived = CustomerTicketPaymentFixture.read(reserve(staff, "waived", table("b"), phone(10), null)
+                .andExpect(status().isOk()), "$.data.id");
+        payDeposit(waived, "waived").andExpect(status().isConflict())
+                .andExpect(jsonPath("$.detail_code").value("BAR_DEPOSIT_NOT_PAYABLE"))
+                .andExpect(jsonPath("$.replayed").doesNotExist());
+
+        String late = CustomerTicketPaymentFixture.read(reserve(kiosk(staff), "unpaid-late", table, phone(11), null)
+                .andExpect(status().isOk()), "$.data.id");
+        jdbc.update("UPDATE bar_reservations SET latest_arrival_at = now() - interval '1 minute' WHERE id = ?", late);
+        timeoutJob.releaseOverdue();
+        assertThat(row(late)).containsEntry("status", "cancelled").containsEntry("deposit_status", "timeout_released");
+        payDeposit(late, "unpaid-late").andExpect(status().isConflict())
+                .andExpect(jsonPath("$.detail_code").value("BAR_DEPOSIT_NOT_PAYABLE"))
+                .andExpect(jsonPath("$.replayed").doesNotExist());
+
+        String paid = CustomerTicketPaymentFixture.read(reserve(kiosk(staff), "paid", table, phone(12), null)
+                .andExpect(status().isOk()), "$.data.id");
+        payDeposit(paid, "paid").andExpect(status().isOk());
+        String otherBar = "bar_kbr_other_" + s;
+        jdbc.update("INSERT INTO merchants (id, merchant_name, merchant_type, status, created_at, updated_at, project_id)"
+                + " VALUES (?, '隔壁酒吧', 'bar', 'active', now(), now(), ?)", otherBar, f.projectId);
+        RequestPostProcessor outsider = new StaffRequestFixture(jdbc).staff("usr_kbr_outsider_" + s, "staff", f.projectId, otherBar,
+                "bar.reservation.manage");
+        String crossKey = "kbr-pay-cross-" + s;
+        mockMvc.perform(post("/api/v1/bar/reservations/" + paid + "/pay-deposit").with(kiosk(outsider))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json.writeValueAsString(Map.of("idempotency_key", crossKey, "channel", "cash"))))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.detail_code").value("CROSS_MERCHANT_FORBIDDEN"))
+                .andExpect(jsonPath("$.data").doesNotExist());
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM audit_events WHERE event_name = 'bar.reservation_deposit_pay_failed'"
+                + " AND idempotency_key = ?", Integer.class, crossKey)).isEqualTo(1);
+    }
+
     // ---------- helpers ----------
 
     /** 一体机真实形状：一体机终端头＋登记设备号（不签名，默认 grace）。 */
@@ -219,5 +326,16 @@ class KioskBarReservationJdbcTests {
     private Map<String, Object> row(String reservationId) {
         return jdbc.queryForMap("SELECT order_source, created_terminal, device_id, sales_staff_id, status, deposit_status, deposit_amount_cent,"
                 + " deposit_channel, hold_status, remark FROM bar_reservations WHERE id = ?", reservationId);
+    }
+
+    private int events(String reservationId, String eventName) {
+        return jdbc.queryForObject("SELECT count(*) FROM audit_events WHERE event_name = ? AND business_id = ?", Integer.class,
+                eventName, reservationId);
+    }
+
+    /** 定金登记落库的各列（收款人、渠道、POS 流水号、支付时间、占台）。 */
+    private Map<String, Object> depositRow(String reservationId) {
+        return jdbc.queryForMap("SELECT status, deposit_status, deposit_channel, deposit_paid_at, deposit_collector_staff_id,"
+                + " deposit_pos_transaction_no, hold_status FROM bar_reservations WHERE id = ?", reservationId);
     }
 }

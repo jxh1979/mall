@@ -1,4 +1,4 @@
-# P0 OpenAPI Operation 验收矩阵 V0.68
+# P0 OpenAPI Operation 验收矩阵 V0.69
 
 ## 1. 文档定位
 
@@ -17,7 +17,7 @@
 
 ## 3. Operation 清单
 
-> 当前 `docs/openapi/openapi-p0.json` 共 1367 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
+> 当前 `docs/openapi/openapi-p0.json` 共 1369 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
 
 | 标签 | 方法 | 路径 | operationId | 摘要 | 请求体 | 权限 | 认证上下文 | 数据范围 | 终端/设备能力/调用通道 | 幂等 | 成功事件 | 失败事件 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -123,6 +123,8 @@
 | bar | `POST` | `/api/v1/bar/tables/{table_id}/clear` | `clearBarTable` | 清台登记恢复空闲 | `object` | `bar.table.open_close` | `staff-token` | `project-bar` | web | 是 | `bar.table.cleared` | `bar.table.clear_failed` |
 | bar | `POST` | `/api/v1/bar/tables/{table_id}/disable` | `disableBarTable` | 停用台位（店长） | `object` | `bar.table.disable` | `staff-token` | `project-bar` | web | 是 | `bar.table.disabled` | `bar.table.disable_failed` |
 | bar | `POST` | `/api/v1/bar/tables/{table_id}/enable` | `enableBarTable` | 恢复停用台位（店长） | `object` | `bar.table.disable` | `staff-token` | `project-bar` | web | 是 | `bar.table.enabled` | `bar.table.enable_failed` |
+| bar | `POST` | `/api/v1/bar/tables/{table_id}/abnormal` | `markBarTableAbnormal` | 登记台位异常 | `object` | `bar.table.open_close` | `staff-token` | `project-bar` | web | 是 | `bar.table.abnormal_marked` | `bar.table.abnormal_mark_failed` |
+| bar | `POST` | `/api/v1/bar/tables/{table_id}/abnormal/resolve` | `resolveBarTableAbnormal` | 确认异常台位恢复（当班主管） | `object` | `bar.table.open_close` | `staff-token` | `project-bar` | web | 是 | `bar.table.abnormal_resolved` | `bar.table.abnormal_resolve_failed` |
 | customer | `POST` | `/api/v1/customer/auth/phone-login` | `customerPhoneLogin` | 客人手机号登录 | `CustomerPhoneLoginRequest` | `public` | `public` | `customer` | miniapp, app | 否 | `customer.auth.login` | `customer.auth.login_failed` |
 | customer | `POST` | `/api/v1/customer/auth/sms-codes` | `requestCustomerLoginSmsCode` | 客人登录取短信验证码 | `CustomerLoginSmsCodeRequest` | `public` | `public` | `customer` | miniapp, app, kiosk | 否 | `customer.otp_requested` | `customer.otp_request_failed` |
 | customer | `POST` | `/api/v1/customer/auth/register` | `registerCustomerMember` | 客人注册会员（短信验证＋生日＋满 18 周岁＋同意当前会员条款与隐私条款） | `CustomerRegisterRequest` | `public` | `public` | `customer` | miniapp, app | 否 | `customer.registered` | `customer.register_failed` |
@@ -432,9 +434,9 @@
 | finance | `POST` | `/api/v1/finance/ar-ap-adjustments/{id}/approve` | `approveArApAdjustment` | 锁定后补录审批决定 | `ArApAdjustmentDecisionRequest` | `finance.locked_backfill.approve` | `staff-token` | `project-entity` | web, mobile_admin | 是 | `finance.locked_backfill_approved` | `finance.locked_backfill_decision_failed` |
 | bar | `POST` | `/api/v1/bar/reservations/{id}/pay-deposit` | `payBarReservationDeposit` | 订台定金支付 | `BarReservationDepositActionRequest` | `bar.reservation.manage` | `staff-token` | `project-bar` | web, kiosk, mobile_admin | 是 | `bar.reservation_deposit_paid` | `bar.reservation_deposit_pay_failed` |
 | bar | `POST` | `/api/v1/bar/reservations/{id}/checkin` | `checkInBarReservationDeposit` | 订台到店登记（定金不抵扣账单，保持已支付待判；达标后原路退回、未达标关台没收） | `BarReservationDepositActionRequest` | `bar.reservation.manage` | `staff-token` | `project-bar` | web, kiosk, mobile_admin | 是 | `bar.reservation_checked_in` | `bar.reservation_checkin_failed` |
-| bar | `POST` | `/api/v1/bar/reservations/{id}/cancel` | `cancelBarReservation` | 订台取消/爽约（按时限退定金或没收） | `BarReservationCancelRequest` | `bar.reservation.manage` | `staff-token` | `project-bar` | web, kiosk, mobile_admin | 是 | `bar.reservation.cancelled` | `bar.reservation.cancel_failed` |
-| bar | `POST` | `/api/v1/bar/reservations/{id}/archive` | `archiveBarReservation` | 存档卡座预订（订台记录） | `object` | `bar.reservation.manage` | `staff-token` | `project-bar` | web | 否 | `not_applicable` | `not_applicable` |
-| bar | `POST` | `/api/v1/bar/reservations/{id}/unarchive` | `unarchiveBarReservation` | 取消存档卡座预订（订台记录） | `-` | `bar.reservation.manage` | `staff-token` | `project-bar` | web | 否 | `not_applicable` | `not_applicable` |
+| bar | `POST` | `/api/v1/bar/reservations/{id}/cancel` | `cancelBarReservation` | 人工取消订台/登记爽约（店长；按时限退定金或没收） | `BarReservationCancelRequest` | `bar.reservation.cancel` | `staff-token` | `project-bar` | web, kiosk, mobile_admin | 是 | `bar.reservation.cancelled` | `bar.reservation.cancel_failed` |
+| bar | `POST` | `/api/v1/bar/reservations/{id}/archive` | `archiveBarReservation` | 存档卡座预订（订台记录） | `object` | `bar.reservation.manage` | `staff-token` | `project-bar` | web | 否 | `bar.reservation.archived` | `bar.reservation.archive_failed` |
+| bar | `POST` | `/api/v1/bar/reservations/{id}/unarchive` | `unarchiveBarReservation` | 取消存档卡座预订（订台记录） | `-` | `bar.reservation.manage` | `staff-token` | `project-bar` | web | 否 | `bar.reservation.unarchived` | `bar.reservation.unarchive_failed` |
 | bar | `POST` | `/api/v1/bar/reservations/{id}/delete-request` | `requestDeleteBarReservation` | 申请删除卡座预订（订台记录） | `object` | `bar.reservation.manage` | `staff-token` | `project-bar` | web | 否 | `bar.reservation.delete_requested` | `bar.reservation.delete_request_failed` |
 | bar | `POST` | `/api/v1/bar/reservations/{id}/delete-approve` | `approveDeleteBarReservation` | 审批卡座预订（订台记录）删除申请 | `object` | `bar.reservation.approve` | `staff-token` | `project-bar` | web | 否 | `bar.reservation.delete_approved` | `bar.reservation.delete_approve_failed` |
 | bar | `GET` | `/api/v1/bar/staff-booking-suspensions` | `listBarStaffBookingSuspensions` | 查询代订权限停用中的经手员工 | `-` | `bar.staff_booking.restore` | `staff-token` | `project-bar` | web | 否 | `bar.staff_booking_suspension.viewed` | `bar.staff_booking_suspension.view_failed` |
@@ -945,20 +947,20 @@
 | service | `POST` | `/api/v1/services/pay-config` | `setServicePayConfig` | 配置公司统一收款码 | `object` | `service.catalog.manage` | `staff-token` | `platform` | web | 是 | `service.pay_config.saved` | `service.pay_config.save_failed` |
 | bar | `GET` | `/api/v1/bar/catalog/categories` | `listBarProductCategories` | 查询酒吧商品分类 | `-` | `bar.category.view` | `staff-token` | `project` | web, tablet, kiosk | 否 | `not_applicable` | `not_applicable` |
 | bar | `POST` | `/api/v1/bar/catalog/categories` | `saveBarProductCategory` | 新增或修改酒吧商品分类 | `BarProductCategoryRequest` | `bar.category.manage` | `staff-token` | `project` | web | 否 | `bar.category.saved` | `bar.category.saved_failed` |
-| bar | `POST` | `/api/v1/bar/catalog/categories/{id}/archive` | `archiveBarProductCategory` | 存档酒吧商品分类 | `object` | `bar.category.manage` | `staff-token` | `project` | web | 否 | `not_applicable` | `not_applicable` |
-| bar | `POST` | `/api/v1/bar/catalog/categories/{id}/unarchive` | `unarchiveBarProductCategory` | 取消存档酒吧商品分类 | `-` | `bar.category.manage` | `staff-token` | `project` | web | 否 | `not_applicable` | `not_applicable` |
+| bar | `POST` | `/api/v1/bar/catalog/categories/{id}/archive` | `archiveBarProductCategory` | 存档酒吧商品分类 | `object` | `bar.category.manage` | `staff-token` | `project` | web | 否 | `bar.category.archived` | `bar.category.archive_failed` |
+| bar | `POST` | `/api/v1/bar/catalog/categories/{id}/unarchive` | `unarchiveBarProductCategory` | 取消存档酒吧商品分类 | `-` | `bar.category.manage` | `staff-token` | `project` | web | 否 | `bar.category.unarchived` | `bar.category.unarchive_failed` |
 | bar | `POST` | `/api/v1/bar/catalog/categories/{id}/delete-request` | `requestDeleteBarProductCategory` | 申请删除酒吧商品分类 | `object` | `bar.category.manage` | `staff-token` | `project` | web | 否 | `bar.category.delete_requested` | `bar.category.delete_request_failed` |
 | bar | `POST` | `/api/v1/bar/catalog/categories/{id}/delete-approve` | `approveDeleteBarProductCategory` | 审批酒吧商品分类删除申请 | `object` | `bar.category.approve` | `staff-token` | `project` | web | 否 | `bar.category.delete_approved` | `bar.category.delete_approve_failed` |
 | bar | `POST` | `/api/v1/bar/catalog/products/{product_id}/category` | `assignBarProductCategory` | 给酒吧商品设分类 | `BarProductCategoryAssignRequest` | `bar.product.manage` | `staff-token` | `project` | web | 否 | `bar.product.category_assigned` | `bar.product.category_assigned_failed` |
 | bar | `GET` | `/api/v1/bar/catalog/products` | `listBarProductsByCategory` | 按分类查询酒吧商品 | `-` | `bar.product.view` | `staff-token` | `project` | web, tablet, kiosk | 否 | `not_applicable` | `not_applicable` |
-| bar | `POST` | `/api/v1/bar/catalog/products/{id}/archive` | `archiveBarProduct` | 存档酒吧商品 | `object` | `bar.product.manage` | `staff-token` | `project` | web | 否 | `not_applicable` | `not_applicable` |
-| bar | `POST` | `/api/v1/bar/catalog/products/{id}/unarchive` | `unarchiveBarProduct` | 取消存档酒吧商品 | `-` | `bar.product.manage` | `staff-token` | `project` | web | 否 | `not_applicable` | `not_applicable` |
+| bar | `POST` | `/api/v1/bar/catalog/products/{id}/archive` | `archiveBarProduct` | 存档酒吧商品 | `object` | `bar.product.manage` | `staff-token` | `project` | web | 否 | `bar.product.archived` | `bar.product.archive_failed` |
+| bar | `POST` | `/api/v1/bar/catalog/products/{id}/unarchive` | `unarchiveBarProduct` | 取消存档酒吧商品 | `-` | `bar.product.manage` | `staff-token` | `project` | web | 否 | `bar.product.unarchived` | `bar.product.unarchive_failed` |
 | bar | `POST` | `/api/v1/bar/catalog/products/{id}/delete-request` | `requestDeleteBarProduct` | 申请删除酒吧商品 | `object` | `bar.product.manage` | `staff-token` | `project` | web | 否 | `bar.product.delete_requested` | `bar.product.delete_request_failed` |
 | bar | `POST` | `/api/v1/bar/catalog/products/{id}/delete-approve` | `approveDeleteBarProduct` | 审批酒吧商品删除申请 | `object` | `bar.product.approve` | `staff-token` | `project` | web | 否 | `bar.product.delete_approved` | `bar.product.delete_approve_failed` |
 | bar | `GET` | `/api/v1/bar/catalog/combos` | `listBarCombos` | 查询酒吧套餐 | `-` | `bar.combo.view` | `staff-token` | `project` | web, tablet, kiosk | 否 | `not_applicable` | `not_applicable` |
 | bar | `POST` | `/api/v1/bar/catalog/combos` | `saveBarCombo` | 新增或修改酒吧套餐 | `BarComboRequest` | `bar.combo.manage` | `staff-token` | `project` | web | 否 | `bar.combo.saved` | `bar.combo.saved_failed` |
-| bar | `POST` | `/api/v1/bar/catalog/combos/{id}/archive` | `archiveBarCombo` | 存档酒吧套餐 | `object` | `bar.combo.manage` | `staff-token` | `project` | web | 否 | `not_applicable` | `not_applicable` |
-| bar | `POST` | `/api/v1/bar/catalog/combos/{id}/unarchive` | `unarchiveBarCombo` | 取消存档酒吧套餐 | `-` | `bar.combo.manage` | `staff-token` | `project` | web | 否 | `not_applicable` | `not_applicable` |
+| bar | `POST` | `/api/v1/bar/catalog/combos/{id}/archive` | `archiveBarCombo` | 存档酒吧套餐 | `object` | `bar.combo.manage` | `staff-token` | `project` | web | 否 | `bar.combo.archived` | `bar.combo.archive_failed` |
+| bar | `POST` | `/api/v1/bar/catalog/combos/{id}/unarchive` | `unarchiveBarCombo` | 取消存档酒吧套餐 | `-` | `bar.combo.manage` | `staff-token` | `project` | web | 否 | `bar.combo.unarchived` | `bar.combo.unarchive_failed` |
 | bar | `POST` | `/api/v1/bar/catalog/combos/{id}/delete-request` | `requestDeleteBarCombo` | 申请删除酒吧套餐 | `object` | `bar.combo.manage` | `staff-token` | `project` | web | 否 | `bar.combo.delete_requested` | `bar.combo.delete_request_failed` |
 | bar | `POST` | `/api/v1/bar/catalog/combos/{id}/delete-approve` | `approveDeleteBarCombo` | 审批酒吧套餐删除申请 | `object` | `bar.combo.approve` | `staff-token` | `project` | web | 否 | `bar.combo.delete_approved` | `bar.combo.delete_approve_failed` |
 | bar | `POST` | `/api/v1/bar/catalog/images` | `uploadBarCatalogImage` | 上传酒吧商品/套餐图片 | `object` | `bar.product.manage` | `staff-token` | `project` | web | 否 | `bar.catalog.image_uploaded` | `bar.catalog.image_uploaded_failed` |

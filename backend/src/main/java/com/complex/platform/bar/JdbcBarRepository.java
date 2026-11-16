@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.15
+// 文件版本：V0.16
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
 import com.complex.platform.common.crypto.PiiCipher;
@@ -515,6 +515,18 @@ class JdbcBarRepository implements BarRepository {
                 (rs, rowNum) -> rs.getString("id"));
     }
 
+    // 第十八批 AK 段第 226 条 226-R1：排班条件与待清台超时提醒的收件人同一口径（BarPendingClearAlertJob）。
+    @Override
+    public boolean isStaffOnDutyAtBar(String userId, String barId, Instant now) {
+        return Boolean.TRUE.equals(jdbcTemplate.queryForObject("""
+                SELECT EXISTS (SELECT 1 FROM access_users u
+                                WHERE u.id = :user AND u.status = 'active' AND u.merchant_id = :bar
+                                  AND EXISTS (SELECT 1 FROM staff_shift_schedules s
+                                               WHERE s.user_id = u.id AND s.start_at <= :now AND s.end_at > :now))
+                """, new MapSqlParameterSource().addValue("user", userId).addValue("bar", barId)
+                        .addValue("now", java.sql.Timestamp.from(now)), Boolean.class));
+    }
+
     // 第十八批 T 段第 167 条 167-R3a：并台期间新发出的邀请及其成员的原台分配（V603）。
     @Override
     public void setInvitationMergeState(String reservationId, boolean pending) {
@@ -675,7 +687,7 @@ class JdbcBarRepository implements BarRepository {
                     status, created_at, updated_at,
                     standard_pour_volume, pour_volume_unit, loss_threshold,
                     sold_out, sold_out_at, sold_out_reason, internal_settlement_price_cent,
-                    category_id, image_url
+                    category_id, image_url, sold_out_type, sold_out_until
                 )
                 VALUES (
                     :id, :bar_id, :merchant_id, :product_name, :product_type, :price_cent, :currency,
@@ -683,7 +695,7 @@ class JdbcBarRepository implements BarRepository {
                     :status, :created_at, :updated_at,
                     :standard_pour_volume, :pour_volume_unit, :loss_threshold,
                     :sold_out, :sold_out_at, :sold_out_reason, :internal_settlement_price_cent,
-                    :category_id, :image_url
+                    :category_id, :image_url, :sold_out_type, :sold_out_until
                 )
                 ON CONFLICT (id) DO UPDATE SET
                     bar_id = EXCLUDED.bar_id,
@@ -705,7 +717,9 @@ class JdbcBarRepository implements BarRepository {
                     sold_out_reason = EXCLUDED.sold_out_reason,
                     internal_settlement_price_cent = EXCLUDED.internal_settlement_price_cent,
                     category_id = EXCLUDED.category_id,
-                    image_url = EXCLUDED.image_url
+                    image_url = EXCLUDED.image_url,
+                    sold_out_type = EXCLUDED.sold_out_type,
+                    sold_out_until = EXCLUDED.sold_out_until
                 """, parameterSource.productParameters(product));
         return product;
     }
