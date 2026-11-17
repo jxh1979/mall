@@ -8,14 +8,14 @@
     "RUNTIME_EVIDENCE_BOUND_TO_SOURCE_FINGERPRINT",
     "RUNTIME_EVIDENCE_DOES_NOT_CLOSE_PRODUCTION_MANIFEST"
   ],
-  "generated_at": "2026-11-17T06:28:14.583Z",
+  "generated_at": "2026-11-17T21:09:40.274Z",
   "git": {
-    "head": "fa98002a06c3ce7bbd2d0823fefad91a7b528951",
-    "head_short": "fa98002a",
-    "branch": "feature/business-code-batch62-20261106",
+    "head": "c5a442b0b9326864b2669c713c249e5eeeda146d",
+    "head_short": "c5a442b0",
+    "branch": "feature/business-code-batch60-20261106",
     "worktree_dirty": false,
-    "source_fingerprint": "f57104f70846fd1748c1f2a35b9f7eabae02aeb78d87e63662cf649c7b085a9d",
-    "source_fingerprint_file_count": 3462,
+    "source_fingerprint": "7a0e21767070868aec38b5c8a1d3004cf4a791c4a980c3b4453c7533e161441d",
+    "source_fingerprint_file_count": 3468,
     "source_fingerprint_paths": [
       "backend/src/main",
       "backend/src/test",
@@ -50,12 +50,12 @@
   },
   "backend_surefire": {
     "path": "backend/target/surefire-reports",
-    "suites": 612,
-    "tests": 6866,
+    "suites": 615,
+    "tests": 6880,
     "failures": 0,
     "errors": 0,
     "skipped": 0,
-    "latest_mtime": "2026-11-17T06:24:58.451Z",
+    "latest_mtime": "2026-11-17T21:07:56.255Z",
     "passed": true
   },
   "web_unit_source": {
@@ -328,6 +328,7 @@
       "apps/web/src/admin/pages/StaffPayrollLeavePage.metricdetail.test.tsx",
       "apps/web/src/admin/pages/StaffPayrollLeavePage.revoke.test.tsx",
       "apps/web/src/admin/pages/StaffPayrollLeavePage.robustness.test.tsx",
+      "apps/web/src/admin/pages/StaffProfilesPage.devices.test.tsx",
       "apps/web/src/admin/pages/StaffProfilesPage.test.tsx",
       "apps/web/src/admin/pages/StaffShiftAttendancePage.batchshift.test.tsx",
       "apps/web/src/admin/pages/StaffShiftAttendancePage.cover.test.tsx",
@@ -398,6 +399,7 @@
       "apps/web/src/admin/pages/WorkOrderSlaPage.kpi.test.tsx",
       "apps/web/src/admin/pages/WorkOrderSlaPage.robustness.test.tsx",
       "apps/web/src/admin/pages/barSalesRole.test.ts",
+      "apps/web/src/admin/pages/noApiPathOnScreen.test.tsx",
       "apps/web/src/admin/pages/objectCellsChinese.test.tsx",
       "apps/web/src/admin/security/PermissionGate.test.ts",
       "apps/web/src/admin/security/terminalGate.test.ts",
@@ -406,8 +408,8 @@
       "apps/web/src/dealer/dealerPortalClient.test.ts",
       "apps/web/src/shared/ReplayedNotice.test.tsx"
     ],
-    "file_count": 345,
-    "test_count_from_source": 1832
+    "file_count": 347,
+    "test_count_from_source": 1850
   },
   "web_build": {
     "dist_index_exists": true,
@@ -425,18 +427,18 @@
         "exists": true
       }
     ],
-    "asset_count": 171,
+    "asset_count": 170,
     "main_js_assets": [
       {
-        "path": "apps/web/dist/assets/main-CVKtypKE.js",
+        "path": "apps/web/dist/assets/main-D7SuR_Ll.js",
         "size_bytes": 4337,
-        "mtime": "2026-11-17T06:25:07.213Z"
+        "mtime": "2026-11-17T21:08:04.848Z"
       }
     ],
     "largest_asset": {
       "path": "apps/web/dist/assets/vendor-antd-Bh_XtmOr.js",
       "size_bytes": 251112,
-      "mtime": "2026-11-17T06:25:07.218Z"
+      "mtime": "2026-11-17T21:08:04.851Z"
     },
     "no_main_bundle_warning_expected": true
   },
