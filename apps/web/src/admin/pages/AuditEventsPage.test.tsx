@@ -159,6 +159,20 @@ describe("AuditEventsPage 操作日志反查（audit_events）", () => {
     { id: "a4", occurredAt: "2026-07-05T10:03:00Z", eventName: "contract.expired", eventResult: "success", actorType: "system", actorId: "job", terminal: null, businessType: "contract", businessId: "c1" },
   ];
 
+  // 227-R2：操作日志视图另取一次标签字典（客户端已转驼峰）；按路径分派假响应。227-R3：补 OP_ROWS 用到的事件名。
+  const OP_LABELS = {
+    businessTypes: [{ code: "contract", name: "合同" }],
+    actorTypes: [{ code: "staff", name: "普通员工" }],
+    eventNames: [
+      { code: "contract.activated", name: "合同生效" },
+      { code: "contract.expired", name: "合同到期" },
+      { code: "contract.updated", name: "修改合同" },
+      { code: "voucher.redeemed", name: "统一核销" },
+    ],
+    permissions: [],
+  };
+  const byPath = (path: string) => Promise.resolve(path.includes("/api/v1/audit/labels") ? OP_LABELS : OP_ROWS);
+
   function renderWithFocus(api: AdminApiClient, focusObjectId?: string) {
     const fullProps: AdminPageProps = {
       api,
@@ -174,7 +188,7 @@ describe("AuditEventsPage 操作日志反查（audit_events）", () => {
 
   it("对象反查（focus=contract:c1）→ 切操作日志视图并按 business_type/business_id 服务端过滤", async () => {
     const api = makeApi();
-    (api.get as ReturnType<typeof vi.fn>).mockResolvedValue(OP_ROWS);
+    (api.get as ReturnType<typeof vi.fn>).mockImplementation(byPath);
     renderWithFocus(api, "contract:c1");
     // 关键逻辑：对象引用 → 操作日志服务端过滤参数传递。
     await waitFor(() =>
@@ -183,18 +197,21 @@ describe("AuditEventsPage 操作日志反查（audit_events）", () => {
       ),
     );
     const calls = (api.get as ReturnType<typeof vi.fn>).mock.calls;
-    const calledWith = String(calls[0]?.[0] ?? "");
+    const calledWith = String(calls.find((call) => String(call[0]).includes("/api/v1/audit/operation-events"))?.[0] ?? "");
     expect(calledWith).toContain("business_type=contract");
     expect(calledWith).toContain("business_id=c1");
-    // 呈现真操作留痕行（谁/做了什么/对象）。
-    expect(screen.getByTestId("audit-events-operations-table").textContent).toContain("contract.activated");
-    expect(screen.getByTestId("audit-events-operations-focus-banner").textContent).toContain("contract:c1");
+    // 呈现真操作留痕行（谁/做了什么/对象）；227-R3：「操作」列显示事件名中文名，不显示原码。
+    await waitFor(() => expect(screen.getByTestId("audit-events-operations-table").textContent).toContain("合同生效"));
+    expect(screen.getByTestId("audit-events-operations-table").textContent).not.toContain("contract.activated");
+    // 227-R2：反查横幅显示业务类型中文名与业务编号。
+    await waitFor(() => expect(screen.getByTestId("audit-events-operations-focus-banner").textContent).toContain("合同：c1"));
+    expect(screen.getByTestId("audit-events-operations-focus-banner").textContent).not.toContain("contract:");
   });
 
   // 第十八批 N 段第 122 条 122-R2（PGM:745「受控的十一类终端：……」）：终端列与明细按终端中文名显示，没有终端信息的显示「—」。
   it("终端列与明细按终端中文名显示", async () => {
     const api = makeApi();
-    (api.get as ReturnType<typeof vi.fn>).mockResolvedValue(OP_ROWS);
+    (api.get as ReturnType<typeof vi.fn>).mockImplementation(byPath);
     renderWithFocus(api, "contract:c1");
     const terminalCell = (index: number) => screen.getByTestId(`audit-events-op-row-${index}`).children[5]?.textContent;
     // 等两路被动加载（证据分页、操作日志）都落定再看、再点。
@@ -367,5 +384,222 @@ describe("AuditEventsPage 导出登记请求体", () => {
     expect(body).not.toHaveProperty("operator_note");
     expect(body).not.toHaveProperty("evidence_attachment_ids");
     expect(body.events[0]?.summary).toBe("季度审计抽查导出");
+  });
+});
+
+// 第十八批 AN 段第 227 条 227-R1（PGM:287「……展示给用户的一切文字……必须全部为中文，不得出现任何英文……」；PGM:299）：
+// 证据事件类型与分类按中文名显示，页内筛选认页面上看到的中文名；导出后结果区不放英文留痕事件名；操作日志明细的分类显示中文名。
+// 真实页面经真实客户端，只桩网络层；证据事件按后端 EvidenceEventRecord 形状（正常业务只有网页两种导出登记）。
+describe("AuditEventsPage 证据事件类型与分类中文名", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    window.history.replaceState({}, "", "/admin/audit/events");
+  });
+
+  const AT = "2026-11-16T02:00:00Z";
+  const EVIDENCE_ITEMS = [
+    { id: "ev-1", device_code: "web-admin", staff_id: "u1", event_type: "merchant.admission.audit_exported", event_category: "governance", result: "success", summary: "年度复核导出", payload: {}, occurred_at: AT, received_at: AT },
+    { id: "ev-2", device_code: "web-admin", staff_id: "u1", event_type: "audit_events_exported", event_category: "audit", result: "success", summary: "季度审计抽查导出", payload: {}, occurred_at: AT, received_at: AT },
+  ];
+  const OPERATION_ITEMS = [
+    { id: "op-1", occurred_at: AT, event_name: "points.earned", event_result: "success", actor_type: "staff", actor_id: "u2", terminal: "web", business_type: "customer_points", business_id: "cp-1", permission_code: "not_applicable", request_id: "rq-1", event_category: "loyalty" },
+  ];
+
+  function stubFetch() {
+    const posts: string[] = [];
+    vi.stubGlobal("fetch", vi.fn().mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+      let data: unknown = { items: EVIDENCE_ITEMS, page: 1, page_size: 10, total: 2 };
+      if ((init?.method ?? "GET").toUpperCase() === "POST") {
+        posts.push(String(init?.body));
+        data = { accepted: 1, received_at: AT };
+      } else if (String(input).includes("/api/v1/audit/operation-events")) {
+        data = OPERATION_ITEMS;
+      }
+      return Promise.resolve(new Response(JSON.stringify({ success: true, code: "OK", message: "success", data }),
+        { status: 200, headers: { "content-type": "application/json" } }));
+    }));
+    return posts;
+  }
+
+  function renderReal(setActionResult = vi.fn()) {
+    render(<AuditEventsPage api={new AdminApi("test-token")} user={{ id: "u1", username: "admin", accountType: "platform_admin" }}
+      setActionResult={setActionResult} setGlobalError={vi.fn()} effectivePermissions={ADMIN_PERMS} />);
+  }
+
+  it("表格、行明细与查看详情显示中文事件类型与分类，按中文名可筛中", async () => {
+    stubFetch();
+    renderReal();
+    await waitFor(() => {
+      const text = screen.getByTestId("audit-events-table").textContent ?? "";
+      expect(text).toContain("准入审计已导出");
+      expect(text).toContain("治理");
+      expect(text).toContain("审计事件已导出");
+      expect(text).toContain("审计");
+    }, { timeout: 3000 });
+    expect(screen.getByTestId("audit-events-table").textContent).not.toMatch(/[A-Za-z]/);
+    expect(screen.getByTestId("audit-events-controls").textContent).not.toMatch(/[A-Za-z]/);
+    expect(screen.getByTestId("audit-events-boundary").textContent).not.toMatch(/[A-Za-z]/);
+
+    fireEvent.click(screen.getByTestId("audit-events-row-0"));
+    const drawer = screen.getByTestId("row-detail-drawer");
+    expect(drawer.textContent).toContain("准入审计已导出");
+    expect(drawer.textContent).toContain("治理");
+    expect(drawer.textContent).not.toMatch(/[A-Za-z]/);
+    fireEvent.keyDown(window, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByTestId("row-detail-drawer")).toBeNull());
+
+    fireEvent.click(screen.getByTestId("audit-events-show-detail"));
+    const detail = screen.getByTestId("audit-events-detail").textContent ?? "";
+    expect(detail).toContain("准入审计已导出");
+    expect(detail).not.toContain("merchant.admission.audit_exported");
+
+    fireEvent.change(screen.getByTestId("audit-events-search"), { target: { value: "准入" } });
+    expect(screen.getByTestId("audit-events-row-0").textContent).toContain("年度复核导出");
+    expect(screen.queryByTestId("audit-events-row-1")).toBeNull();
+  });
+
+  it("导出登记成功后结果区不放留痕事件名", async () => {
+    const posts = stubFetch();
+    const setActionResult = vi.fn();
+    renderReal(setActionResult);
+    await waitFor(() => expect(screen.getByTestId("audit-events-table").textContent).toContain("季度审计抽查导出"), { timeout: 3000 });
+    // 第十八批 AP 段 229-R5：导出原因不预填，人填。
+    fireEvent.change(screen.getByTestId("audit-events-export-reason"), { target: { value: "季度审计抽查导出" } });
+    fireEvent.click(screen.getByTestId("audit-events-export"));
+    await waitFor(() => expect(setActionResult).toHaveBeenCalledWith(expect.objectContaining({ action: "audit_events_exported" })), { timeout: 3000 });
+    expect(posts).toHaveLength(1);
+    expect(setActionResult.mock.calls.at(-1)?.[0]).not.toHaveProperty("audit");
+  });
+
+  it("操作日志明细的分类显示中文名，请求编号标签为中文", async () => {
+    stubFetch();
+    renderReal();
+    await waitFor(() => expect(screen.getByTestId("audit-events-table").textContent).toContain("年度复核导出"), { timeout: 3000 });
+    fireEvent.click(screen.getByTestId("audit-events-view-operations"));
+    await waitFor(() => expect(screen.getByTestId("audit-events-op-row-0").textContent).toContain("u2"), { timeout: 3000 });
+    fireEvent.click(screen.getByTestId("audit-events-op-row-0"));
+    const drawer = screen.getByTestId("row-detail-drawer");
+    expect(within(drawer).getByText("分类").nextElementSibling?.textContent).toBe("会员积分");
+    expect(drawer.textContent).not.toContain("loyalty");
+    expect(within(drawer).getByText("请求编号").nextElementSibling?.textContent).toBe("rq-1");
+  });
+});
+
+// 第十八批 AN 段第 227 条 227-R2（PGM:287「……字段名、状态、枚举取值……必须全部为中文……不得以“这是标识”为由保留英文。」；
+// 决策台账 194-R2「能力手填框改为下拉（显示中文、提交原码）」）：操作日志视图的业务类型、操作人类型、权限按标签接口显示中文名，
+// 业务类型筛选为下拉（显示中文、提交原码）。真实页面经真实客户端，只桩网络层，假响应按后端蛇形键。
+describe("AuditEventsPage 操作日志业务类型、操作人类型、权限中文名", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    window.history.replaceState({}, "", "/admin/audit/events");
+  });
+
+  const AT = "2026-11-16T02:00:00Z";
+  const OPERATION_ITEMS = [
+    { id: "op-1", occurred_at: AT, event_name: "staff_device.rebound", event_result: "success", actor_type: "staff", actor_id: "u3", terminal: "web", business_type: "staff_device_credential", business_id: "cred-1", permission_code: "staff.device.review", request_id: "rq-1" },
+    { id: "op-2", occurred_at: AT, event_name: "points.earned", event_result: "success", actor_type: "customer", actor_id: "c9", terminal: "web", business_type: "customer_points", business_id: "cp-1", permission_code: "not_applicable", request_id: "rq-2", event_category: "loyalty" },
+  ];
+  const LABELS = {
+    business_types: [{ code: "customer_points", name: "客人积分" }, { code: "staff_device_credential", name: "员工私人手机绑定" }],
+    actor_types: [{ code: "customer", name: "客人" }, { code: "staff", name: "普通员工" }],
+    event_names: [],
+    permissions: [{ code: "not_applicable", name: "无需员工权限" }, { code: "staff.device.review", name: "审核员工设备" }],
+  };
+
+  function stubFetch() {
+    const gets: string[] = [];
+    vi.stubGlobal("fetch", vi.fn().mockImplementation((input: RequestInfo | URL) => {
+      const url = String(input);
+      gets.push(url);
+      let data: unknown = { items: [{ id: "ev-1", device_code: "web-admin", staff_id: "u1", event_type: "audit_events_exported", event_category: "audit", result: "success", summary: "季度审计抽查导出", payload: {}, occurred_at: AT, received_at: AT }], page: 1, page_size: 10, total: 1 };
+      if (url.includes("/api/v1/audit/operation-events")) data = OPERATION_ITEMS;
+      else if (url.includes("/api/v1/audit/labels")) data = LABELS;
+      return Promise.resolve(new Response(JSON.stringify({ success: true, code: "OK", message: "success", data }),
+        { status: 200, headers: { "content-type": "application/json" } }));
+    }));
+    return gets;
+  }
+
+  it("表格与明细显示业务类型、操作人类型、权限中文名，业务类型下拉提交原码", async () => {
+    const gets = stubFetch();
+    render(<AuditEventsPage api={new AdminApi("test-token")} user={{ id: "u1", username: "admin", accountType: "platform_admin" }}
+      setActionResult={vi.fn()} setGlobalError={vi.fn()} effectivePermissions={ADMIN_PERMS} />);
+    await waitFor(() => expect(screen.getByTestId("audit-events-table").textContent).toContain("季度审计抽查导出"), { timeout: 3000 });
+    fireEvent.click(screen.getByTestId("audit-events-view-operations"));
+    await waitFor(() => {
+      const text = screen.getByTestId("audit-events-operations-table").textContent ?? "";
+      expect(text).toContain("员工私人手机绑定");
+      expect(text).toContain("客人积分");
+    }, { timeout: 3000 });
+    const table = screen.getByTestId("audit-events-operations-table").textContent ?? "";
+    expect(table).not.toContain("staff_device_credential");
+    expect(table).not.toContain("customer_points");
+
+    fireEvent.click(screen.getByTestId("audit-events-op-row-1"));
+    const drawer = screen.getByTestId("row-detail-drawer");
+    expect(within(drawer).getByText("操作人").nextElementSibling?.textContent).toBe("客人 / c9");
+    expect(within(drawer).getByText("业务类型").nextElementSibling?.textContent).toBe("客人积分");
+    expect(within(drawer).getByText("权限").nextElementSibling?.textContent).toBe("无需员工权限");
+    expect(drawer.textContent).not.toContain("not_applicable");
+    fireEvent.keyDown(window, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByTestId("row-detail-drawer")).toBeNull());
+
+    const select = screen.getByTestId("audit-events-op-business-type") as HTMLSelectElement;
+    expect(select.tagName).toBe("SELECT");
+    expect(within(select).getByText("员工私人手机绑定")).toBeTruthy();
+    fireEvent.change(select, { target: { value: "staff_device_credential" } });
+    fireEvent.click(screen.getByTestId("audit-events-op-query"));
+    await waitFor(() => expect(gets.filter((url) => url.includes("/api/v1/audit/operation-events")).at(-1)).toContain("business_type=staff_device_credential"), { timeout: 3000 });
+  });
+});
+
+// 第十八批 AN 段第 227 条 227-R3（PGM:287「……展示给用户的一切文字……必须全部为中文，不得出现任何英文……」）：
+// 操作日志视图「操作」列、明细标题与「操作」字段按标签接口 event_names 显示事件名中文名，未登记的显示「其他操作」。
+// 真实页面经真实客户端，只桩网络层，假响应按后端蛇形键。
+describe("AuditEventsPage 操作日志事件名中文名", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    window.history.replaceState({}, "", "/admin/audit/events");
+  });
+
+  const AT = "2026-11-16T02:00:00Z";
+  const OPERATION_ITEMS = [
+    { id: "op-1", occurred_at: AT, event_name: "device.policy_violation", event_result: "success", actor_type: "staff", actor_id: "u3", terminal: "web", business_type: "mdm_policy_violation", business_id: "dev-1", permission_code: "terminal.device.lifecycle", request_id: "rq-1" },
+    { id: "op-2", occurred_at: AT, event_name: "unlisted.event_code", event_result: "failure", actor_type: "staff", actor_id: "u4", terminal: "web", business_type: "mdm_policy_violation", business_id: "dev-2", permission_code: "terminal.device.lifecycle", request_id: "rq-2" },
+  ];
+  const LABELS = {
+    business_types: [{ code: "mdm_policy_violation", name: "设备管控违规" }],
+    actor_types: [{ code: "staff", name: "普通员工" }],
+    event_names: [{ code: "device.policy_violation", name: "记录设备违规" }],
+    permissions: [{ code: "terminal.device.lifecycle", name: "终端设备生命周期管理" }],
+  };
+
+  function stubFetch() {
+    vi.stubGlobal("fetch", vi.fn().mockImplementation((input: RequestInfo | URL) => {
+      const url = String(input);
+      let data: unknown = { items: [{ id: "ev-1", device_code: "web-admin", staff_id: "u1", event_type: "audit_events_exported", event_category: "audit", result: "success", summary: "季度审计抽查导出", payload: {}, occurred_at: AT, received_at: AT }], page: 1, page_size: 10, total: 1 };
+      if (url.includes("/api/v1/audit/operation-events")) data = OPERATION_ITEMS;
+      else if (url.includes("/api/v1/audit/labels")) data = LABELS;
+      return Promise.resolve(new Response(JSON.stringify({ success: true, code: "OK", message: "success", data }),
+        { status: 200, headers: { "content-type": "application/json" } }));
+    }));
+  }
+
+  it("「操作」列、明细标题与字段显示事件名中文名，未登记的显示「其他操作」", async () => {
+    stubFetch();
+    render(<AuditEventsPage api={new AdminApi("test-token")} user={{ id: "u1", username: "admin", accountType: "platform_admin" }}
+      setActionResult={vi.fn()} setGlobalError={vi.fn()} effectivePermissions={ADMIN_PERMS} />);
+    await waitFor(() => expect(screen.getByTestId("audit-events-table").textContent).toContain("季度审计抽查导出"), { timeout: 3000 });
+    fireEvent.click(screen.getByTestId("audit-events-view-operations"));
+    await waitFor(() => expect(screen.getByTestId("audit-events-op-row-0").children[0]?.textContent).toBe("记录设备违规"), { timeout: 3000 });
+    expect(screen.getByTestId("audit-events-op-row-1").children[0]?.textContent).toBe("其他操作");
+    expect(screen.getByTestId("audit-events-operations-table").textContent).not.toContain("device.policy_violation");
+
+    fireEvent.click(screen.getByTestId("audit-events-op-row-0"));
+    const drawer = screen.getByTestId("row-detail-drawer");
+    expect(screen.getByTestId("row-detail-title").textContent).toBe("操作日志明细 · 记录设备违规");
+    expect(within(drawer).getByText("操作").nextElementSibling?.textContent).toBe("记录设备违规");
+    expect(document.body.textContent).not.toContain("device.policy_violation");
+    expect(document.body.textContent).not.toContain("unlisted.event_code");
   });
 });

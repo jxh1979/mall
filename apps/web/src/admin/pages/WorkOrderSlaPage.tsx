@@ -1,7 +1,6 @@
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
-import { AuditTrailHint } from "../components/AuditTrailHint";
 import { usePagedRows, TablePager } from "../components/TablePager";
 import { loadSecondary, useAdminResource } from "../hooks/useAdminResource";
 import type { AdminPageProps } from "../types";
@@ -102,7 +101,6 @@ export function WorkOrderSlaPage({ api, setGlobalError, navigateTo }: AdminPageP
   return (
     <section data-testid="wo-sla-page">
       <AdminPageHeader title={TEXT.title} description={TEXT.description} />
-      <AuditTrailHint event="analytics.dashboard_domain.viewed / analytics.overdue_work_orders.viewed" />
       <AdminDataState loading={loading} error={error} empty={false} onRetry={reload}>
         <div className="admin-muted-action" data-testid="wo-sla-freshness">数据截至经营日:{dashboard?.businessDate ?? "—"}(快照口径,超时明细为实时同口径)</div>
         <h3>设施工单(物业报修/保洁)</h3>

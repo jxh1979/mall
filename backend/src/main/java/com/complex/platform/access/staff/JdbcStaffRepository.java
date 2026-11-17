@@ -2,7 +2,7 @@ package com.complex.platform.access.staff;
 
 import com.complex.platform.common.api.ApiException;
 
-// 文件版本：V0.26
+// 文件版本：V0.27
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
@@ -1542,6 +1542,12 @@ public class JdbcStaffRepository {
                 credentialSelect() + " WHERE staff_profile_id = :staff_profile_id AND bind_status = 'active'",
                 Map.of("staff_profile_id", staffProfileId), this::mapCredential);
         return result.isEmpty() ? Optional.empty() : Optional.of(result.get(0));
+    }
+
+    /** 第十八批 AN 段 257-R1：按绑定状态列员工私人手机凭证（后台列表只取 active、pending_review）。 */
+    public List<StaffDeviceCredentialRecord> listCredentialsByStatus(java.util.Collection<String> statuses) {
+        return jdbcTemplate.query(credentialSelect() + " WHERE bind_status IN (:statuses) ORDER BY created_at",
+                Map.of("statuses", statuses), this::mapCredential);
     }
 
     private String credentialSelect() {

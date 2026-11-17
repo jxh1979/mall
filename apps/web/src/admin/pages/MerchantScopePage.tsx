@@ -1,9 +1,7 @@
-// 文件版本：V0.04
+// 文件版本：V0.05
 import React from "react";
-import { TechDetails } from "../components/TechDetails";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
-import { AuditTrailHint } from "../components/AuditTrailHint";
 import { useAdminResource } from "../hooks/useAdminResource";
 import type { AdminPageProps } from "../types";
 import { formatBusinessStatus } from "../i18n/statusLabels";
@@ -17,7 +15,6 @@ type BillRow = { id: string; merchantId?: string; billNo?: string; totalAmountCe
 const TEXT = {
   title: "商户授权工作台",
   description: "商户侧只查看已授权业务范围内的工单和账单；平台治理、财务总账、第三方配置等跨主体能力继续由权限网关拦截。",
-  evidence: "接口证据：读取 /api/v1/merchant-service/work-orders、/api/v1/merchant-billing/bills；权限由 merchant.service_work_order.view、merchant.billing.view 控制。",
   boundary: "商户角色不得访问平台治理、财务总账、第三方配置和其它商户数据；真实多商户隔离仍以后端权限和数据范围策略为准，本页只展示当前授权范围。",
   empty: "暂无授权商户数据",
   loadFailed: "商户授权数据读取失败",
@@ -184,8 +181,6 @@ export function MerchantScopePage({ api, user, setGlobalError }: AdminPageProps)
   return (
     <section data-testid="merchant-scope-page">
       <AdminPageHeader title={TEXT.title} description={TEXT.description} />
-      <TechDetails><div className="admin-generic-evidence" data-testid="merchant-scope-evidence">{TEXT.evidence}</div></TechDetails>
-      <AuditTrailHint event="merchant_service.listMerchantServiceWorkOrders.succeeded / merchant_billing.bill.viewed" />
       <AdminDataState loading={loading} error={error} empty={false} onRetry={reload}>
         {!hasRows ? <div className="admin-state admin-empty" data-testid="merchant-scope-empty">{TEXT.empty}</div> : kpiFocus ? (
           <>

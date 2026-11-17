@@ -1,11 +1,10 @@
-// 文件版本：V0.10
+// 文件版本：V0.11
 import React from "react";
 import { payrollDetailFields } from "./StaffPayrollDetail";
 import type { PayrollStatementDetail } from "./staffPayrollTypes";
 import { AdminDataState } from "../components/AdminDataState";
 import { CnDatePicker } from "../components/CnDatePicker";
 import { AdminPageHeader } from "../components/AdminPageHeader";
-import { AuditTrailHint } from "../components/AuditTrailHint";
 import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowDetailDrawer";
 import { StaffPayrollBasisPanel } from "./StaffPayrollBasisPanel";
 import { loadSecondaryIfPermitted, useAdminResource } from "../hooks/useAdminResource";
@@ -256,7 +255,6 @@ export function StaffPayrollLeavePage({ api, user, setGlobalError, setActionResu
         </fieldset> : null}
       </> : null}
       {capMessage ? <p role="status">{capMessage}</p> : null}
-      <AuditTrailHint event="staff.payroll.settle / staff.payroll.adjustment_added / staff.leave.reviewed" />
       <div className="admin-toolbar">
         <label>月份:<CnDatePicker mode="month" data-testid="payroll-month" value={month} onChange={(v) => setMonth(v || currentMonth())} /></label>
         <a href="#payroll-approved-basis">按批准依据核算工资</a>

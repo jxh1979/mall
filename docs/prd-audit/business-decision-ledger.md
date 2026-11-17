@@ -1,6 +1,6 @@
 # PRD 审计业务裁决台账
 
-文档版本：V0.97
+文档版本：V0.98
 状态：进行中
 迁移日期：2026-07-27
 当前事实源：三份立法 HTML 以既有冻结基线叠加 James 此前 M02 至 M08 的点名批准、全量审计 M001、M002 的逐项批准，以及本轮 2026-10-16 至 2026-10-17 业务 HTML 审计中 Q01 至 Q40 及子题实际明确批准且未被后续替代的裁决，和 2026-10-17 第二批 HTML 业务线推演审计（A–F 六线 64 条、停车章）的逐项批准，并叠加本轮 CG 70 项来源确认与 C01–C09、N01–N03 最终澄清及补全文稿中 F01、W01–W05 的整体修改批准（本文件末节）；本轮最终规则、未采纳或替代关系、现行版本与字节哈希见本文件末节。历史记录保留为各自当时事实，不恢复已被替代的建议。
@@ -3974,6 +3974,7 @@ HTML 的语义补齐与直接引用同步可在本批核验；70项中的业务�
 | 67 | **第 241 条 各类付款确认的流程由谁设定、在哪设定**（题面：「【第 3/5 题（第 241 条）：各类付款确认的流程由谁设定、在哪设定】 前因：原句「具体流程按支付类型分别设定」没写由谁、在哪设定。对照：合同有原句「合同的新建、到期终止、变更分别使用各自配置的审批流程模板」「按综合体后台可配」（BSM:1349），付款确认没有同类原句。PGM:528 写「每个部门或业务线须预先设定其平行审批的最低起点层级」。 现状：统一审批各事项的必带平行线写在代码里；各审批类型的时限已可在主管复核页后台配置；各线最低起点层级和起点人在「组织层级与审批线」页设定（门禁为分配角色权限）。合同模板由持合同审批流程管理权限的人在合同工作台设定。 分歧与利弊： ① 写死在系统里：各类必带线按上一题答复固定，改流程要研发发版；审批时限照旧按类型后台配。好处：不加表、不加页面，最小。坏处：调整某类必带线要改代码。 ② 放在「组织层级与审批线」页，与各线最低起点层级同一处、同一门禁；财务、法务两线仍每类必带，设定的是两线之外各类还带哪些线，上一题答复作出厂设置。好处：不新增权限码。坏处：多一张表、一个配置区、两个接口；设定的人是管审批线的人（偏平台管理员），不是财务。 ③ 同②，但由平台财务在财务页设定，新增「付款确认流程设置」权限码。好处：财务自己定。坏处：在②之外再加权限码，要另定出厂授给哪些岗位，多一道迁移和授权核对。」）—— 操作员选「审批线页设定」：与各线最低起点层级同一处、同一门禁，不新增权限码。（未选：「写死在系统里（推荐）」「财务页设定加新权限码」）（2026-11-16 弹窗；来由：18AM 只读设计第 241 条待裁题。控制席说明：做条件项 241-R8（选项②写法）：组织层级与审批线页加付款确认流程设定，财务、法务两线仍为每类下限。） | 待开发清单第 241 条（18AM） |
 | 68 | **第 241 条 付款确认按笔发起还是可以多笔合并发起**（题面：「【第 4/5 题（第 241 条）：付款确认按笔发起，还是可以多笔合并发起】 前因：BSM:1803「审批通过后的发放进入应付款项台账，走付款确认」，没写一张付款确认管一笔还是多笔；BSM:1683「每一笔应付具体落在哪一个付账日」。裁决 55 已接受「日常付款会明显变慢」。 现状：有几类应付按每次交易逐笔生成：平台代收商户卡每次消费挂一笔应付发卡商户；通票免费酒水每次核销挂一笔应付酒吧；内部价采购券每次核销挂一笔应付第三方；酒吧账单每次退款挂一笔退款应付；营业额抽成冲正一笔退款一行；通票分账按结算单明细逐行挂。这些每个营业日都会产生，笔数随营业量增长。每张付款确认至少走主线加财务、法务两线（涉钱审批出厂时限 1 个工作日）。另：这些逐笔应付的到期日多为当天营业日，日结按到期日锁账；付款确认审完通常已过当日日结，登记付款还要再走一道锁账收付款补录（须附凭证、写责任人，裁决 56）。 分歧与利弊： ① 台账应付可合并发起：同一收款方、同一支付类型、同一综合体的多笔未结清应付，财务勾选后合发一张，审批人一次看到逐笔明细与合计；工资（受益人是员工本人，PGM:529 规定受益人不得审批，只能逐人）、财务退款、门票退款、存酒赔付仍按单发起。好处：逐笔生成的应付不必每笔各走一条审批链。坏处：要多做勾选合并；一张里任一笔有问题，整张驳回后重新发起。 ② 一律逐笔：每笔应付、每张退款单各发一张。好处：最简单，一笔一审。坏处：每次刷卡消费、每次赠饮核销都要走一条完整审批链，审批量随营业量同步增长。」）—— 操作员选「台账应付可合并（推荐）」：同收款方、同类型、同综合体可勾选合发；工资、退款、赔付按单发起。（未选：「一律逐笔发起」）（2026-11-16 弹窗；来由：18AM 只读设计第 241 条待裁题。控制席说明：与只读设计按推荐读法写的一致。按裁决 65，「同一支付类型」即同一台账来源。） | 待开发清单第 241 条（18AM） |
 | 69 | **第 241 条 付款方是平台主体、台账记成应收的一侧登记收款前要不要先付款确认**（题面：「【第 5/5 题（第 241 条）：付款方是平台主体、台账记成应收的那一侧，登记收款前要不要也先付款确认】 前因：裁决 55 的选项名是「所有对外付款都走付款确认」，解释是「所有应付都先走付款确认」；BSM:1683「平台内部各主体之间的普通内部结算应收应付，每月有三个付账日」。三份 HTML 与裁决都没写平台各主体之间的往来记成应收的那一侧怎么办。 现状：台账对平台各主体之间的一笔往来只记一行，同一类往来按金额正负分挂应付或应收：组合通票域间份额正额挂应付、负额改挂应收；酒吧报酬月结拨付正额应付、负额应收；另有通票餐饮零售代付、派驻提成冲回、补偿应付已付追收、通票分账追收、存酒退出承接垫付追收等应收，付款方都是平台主体。记成应收的那一行，登记收款就是登记该平台主体的出款。方案目前按裁决原话只在应付登记付款时设闸。 分歧与利弊： ① 只管台账应付，平台主体付款、记成应收的一侧不过闸。好处：照裁决原话「所有应付」，改动最小。坏处：同一类内部往来按金额正负，一半要付款确认、一半不要。 ② 付款方是平台主体的上述应收，登记收款前也须付款确认。好处：平台各主体的出款口径一致。坏处：多接一类闸、多一批审批；登记的是收款，财务操作上不直观。 （前 4 题已记：支付类型按台账来源逐个分；每类固定财务、法务两线；流程在「组织层级与审批线」页设定；台账应付可合并发起。）」）—— 操作员选「平台主体应收也过闸」：付款方是平台主体的应收，登记收款前也须付款确认。（未选：「只管应付（推荐）」）（2026-11-16 弹窗；来由：18AM 只读设计第 241 条待裁题。控制席说明：做条件项 241-R9。） | 待开发清单第 241 条（18AM） |
+| 70 | **第 257 条 员工换手机「先解绑旧手机，再绑定新手机」怎么算做到**（题面：「【第 1/2 题（第 257 条，18AN）：员工换手机「先解绑旧手机，再绑定新手机」怎么算做到】 前因：PGM:585「员工换手机必须先解绑旧手机，再绑定新手机。」（BSM:937 同句）。原句只定了先后，没说「绑定新手机」指员工在新手机上发起绑定，还是新手机正式生效。第 257 条要给后台补上「解绑」和「批准换机」入口（现在后台没有任何入口）。 现状：员工在新手机上发起绑定时，即使旧手机还有效也接受，新手机进入「待批准换机」；后台批准那一刻，系统先把旧手机作废、再让新手机生效，同一员工任何时刻只有一台有效手机。仓内两份研发设计稿说法不一（员工凭证表设计稿认定现做法符合原句；安卓设备终端设计稿写旧手机没先解绑就拒绝新手机发起），都不是业务裁决，决策台账里也没答过。 分歧与利弊： ① 按现做法：新手机可以先发起，后台批准换机时系统自动先作废旧手机、再让新手机生效。好处：后台只批一次；批准前旧手机照常能用，员工不会有一段时间手机端用不了；丢手机的仍可先在后台解绑旧手机。坏处：员工发起时旧手机还没解绑，「先解绑」体现在批准那一刻。 ② 旧手机必须先解绑，新手机才能发起：旧手机还有效时新手机发起一律拒绝并提示「请先解绑旧手机」。好处：与原句字面先后完全一致。坏处：每次换机后台要办两次（先解绑、再批准）；从解绑到批准这段时间员工名下没有有效的私人手机；要改现有绑定规则。」）—— 操作员选「批准时先废旧再生效（推荐）」：新手机可先发起；后台批准换机时系统先作废旧手机、再让新手机生效（现做法）。（未选：「旧手机须先解绑才能发起」）（2026-11-16 弹窗；来由：18AN 只读设计第 257 条待裁题。控制席说明：257 只做 R1、R2，不做条件项 257-R3（现有绑定规则与 approveRebind 不改）。） | 待开发清单第 257 条（18AN） |
 | 71 | **第 249 条 酒吧商品、分类、套餐删除只认最高权限审批后最高权限在这几页能看到什么**（题面：「【第 2/2 题（第 249 条，18AO）：酒吧商品、分类、套餐的删除改为只认最高权限审批后，最高权限在这几页能看到什么】 前因：BSM:576「删除一律须由具备最高权限的人审批通过后执行，不设例外，申请人不得审批自己的申请；持授权 U 盘密钥的最高权限本人发起的操作，不需要经过任何审批。」；PGM:528「第④类看不到别的商户和别的项目的数据，持授权 U 盘密钥的最高权限可以逐笔开放，每次只对当前这一笔生效并留痕。」HTML 没写最高权限查看别家酒吧目录的范围。 现状：酒吧的商品、分类、套餐按酒吧（商户）隔离，最高权限账号不挂商户，现在打开这几页会提示「此操作必须在商户范围内进行」、一条看不到（读代码推断）。本条落地后，店长存档并申请删除配错的商品，只有最高权限能批，但最高权限看不到这条申请，会一直挂着。系统里已有两种做法：待复核清单里最高权限只看到轮到自己审批的单子，别的要按编号逐笔打开并留痕；门票退款单列表对最高权限全部放开。票种、价格规则、服务目录、数据清理，最高权限现在就看得到，不受本题影响。 分歧与利弊： ① 只列待批的那几条：只看到各酒吧待审批删除的条目，逐条批准或驳回并留痕；其他目录照旧看不到。好处：与待复核清单同一做法，符合「逐笔开放」字面，改动最小。坏处：批的时候看不到同店其他商品作参照。 ② 看全部酒吧目录：和门票退款单列表一样对最高权限全放开，最高权限也可以自己发起删除、即时生效。好处：信息最全。坏处：等于整类打开商户隔离，与「每次只对当前这一笔生效」字面不符。 ③ 改走待复核清单：酒吧目录的删除申请生成一张须最高权限审批的复核单，在待复核清单里批。好处：须最高权限批的事集中在一处。坏处：改动大，和员工档案、设施设备等已做对象的审批方式不一致。」）—— 操作员选「看全部酒吧目录」：操作员弹窗先选「只列待批的（推荐）」，随即追加原话改定：「既然是最高权限，不应该什么都能看到吗？……这是你的代码库，不会发生的，没有必要的，实际场景当中不存在的，你又不需要问。有些东西你应该能推导出来的。」——即选项②：最高权限打开酒吧商品、分类、套餐页看到全部酒吧的全部目录，也可以自己发起删除、即时生效（BSM:576「持授权 U 盘密钥的最高权限本人发起的操作，不需要经过任何审批」）。（未选：「只列待批的（推荐）」（弹窗所选，已被追加原话改定）「改走待复核清单」）（2026-11-16 弹窗；来由：18AO 只读设计第 249 条待裁题。控制席说明：按 18AO 只读设计 d-gov-b 选项②的写法做：249-R1⑤、249-R8⑤ 并入同批，249-R9 去掉待批过滤（最高权限看全部酒吧目录）。） | 待开发清单第 249 条（18AO） |
 
 第一段转正前最低池额试算与取消结算环节超池待审批：既有缺口，列入待开发清单第 75 条、随 18C 做（ENUM L52、BSM L752）。
@@ -8098,3 +8099,199 @@ HTML 的语义补齐与直接引用同步可在本批核验；70项中的业务�
   - ⑥ 酒吧 PRD 修订表第十八批 AP 段一行：「254-R3：后台存酒页加登记块」改为「254-R3：补存面板加补存瓶人工备注、删领取备注默认值；254-R4：后台存酒页加登记块」。
   - ⑦ 变基到 c6a4f2f9 后统一重做：OpenAPI info.version V0.72→V0.73（yaml、json），操作 1381；security-scans 两份 md 计数与 SHA 行按最终 openapi-p0.json 重算；README、入口文档按 node tools/refresh-entry-doc-baseline.mjs 回填，数据隔离规格与契约生成物重生成；本段补记的版本号、操作数改为最终值，契约补记去掉 yaml/json 行号只写 operationId 与 schema 名，补「收尾」一条。
 - 18AP 落地位置补记·运行验收证据、快照、终验文档刷新（无新裁决）：业务提交 fa98002a 之后，按第十八批裁决 25 重刷了运行验收证据：后端全量 6866 测，0 失败 0 错误；apps/web 构建通过；常规界面验收（接口全部 mock）实跑 40 条全过；真实后端界面验收未跑，runtime_ready=false。随后依次重生成闭环当前态快照、生产闭环缺口报告、界面验收报告、无上线指挥台。生成器没改。手改 docs/final-closed-loop-acceptance-audit-v0.1.md 与 docs/code-implementation-acceptance-audit-v0.1.md：前端单测源码计数改为 1832；被核文件行数都没变；后端全量与常规界面验收的数字、日期改为本次实跑值；写入 npm run verify:unit 实跑结果，五个工作区全过。交付门禁于 2026-11-17 06:29 UTC 在工作树逐项实跑子项，NAS 两项现场探测未跑。仍红的有两项：一是 coding-host-protection，它写死主仓路径，在工作树口径下必红，属工具口径，不做；二是 final-closed-loop-audit，如实留 2 条红（integration-ready、business-acceptance-ready），原因是校验器要求终验把联调、业务验收写成「是」，而裁决 25 定了不跑真实后端界面验收、运行验收未就绪，终验写的是「否」。verify:delivery-gates 总链仍是红的。
+
+18AN 落地位置补记（2026-11-17）：第十八批 AN 段（batch60）按 18AN 只读设计实现待开发清单第 227、228、231、235、257、258 条（界面文案组）；运行验收证据、终验文档在本段最后一个提交刷新；各条落地位置见下。本段追加时，原台账除文档版本升一版与第十八批裁决表第 70 行（控制席已插入）外，其他历史字节保持。
+
+- 18AN 落地位置补记·控制席判定（2026-11-17）：本段（第十八批 AN 段，batch60）实现待开发清单第 227、228、231、235、257、258 条（界面文案组；18AN 只读设计 b60-audit/d-uitext-a.json、d-uitext-b.json，两轮质疑者修订后定稿）。2026-11-16 操作员准许 4 段并行（「可以多跑3段」），本段与 18AM、18AO、18AP 同时开工，实现后变基到含 18AM 付款确认（PR #592）的 origin/main。第 257 条一题（员工换手机「先解绑旧手机，再绑定新手机」怎么算做到）控制席弹窗，操作员选「批准时先废旧再生效（推荐）」，记为第十八批裁决 70，插入裁决表第 70 行，257-R3 不做。实现期旁见另记待开发清单第 324 条（待核实）。
+- 18AN 落地位置补记·第 235 条 235-R1（整块删去后台「技术详情」「操作留痕」折叠块与经销三页的接口证据段）
+  - 改法：删除 apps/web/src/admin/components/TechDetails.tsx。AuditTrailHint.tsx 删去 AuditTrailHint 组件与 Props 类型，只留对象详情里的「操作审计」反查字段 auditTraceField（及 auditFocusToken）。
+  - 落地位置：
+    - 59 页删去全部 35 处 <TechDetails> 与 54 处 <AuditTrailHint>，以及只为它们存在的 TEXT.evidence（26 页）和 AuditEventsPage 的 TEXT.opsEvidence。59 页为：AbandonedEntitlementRevenue、AdmissionAudits、AmusementFaultCompensation、AmusementGroupBookings、AmusementParkWideFault、AmusementSafety、AmusementSessions、AmusementVerificationRecords、ApprovalChain、AuditEvents、BarCommissions、BarOrders、BusinessAnalytics、ComplianceReminders、DealerAdmissionCatalog、DealerOrderFulfillment、DealerReturnInvoice、DynamicPricing、EnergyAnalytics、FinanceDividends、FinanceMerchantExpense、FinancePropertyFee、FloorPlanImport、GovernanceTopology、IntegrationEvents、InventoryLedger、InventoryTransferWorkbench、LeasingWorkbench、MerchantScope、MerchantWorkOrders、MerchantZoneBills、MerchantZoneContracts、MerchantZoneDividends、MerchantZoneFeeRecipients、MerchantZoneSettlements、MerchantZoneWorkOrders、MonthlyComparison、OccupancyAnalytics、OrgHierarchy、OrganizationMerchant、ReceivablesAnalytics、Reconciliation、RiskAlerts、ServiceOrders、StaffPayrollLeave、StaffProfiles、StaffShiftAttendance、StoredWine、SubjectBindings、SupervisorReview、T3AReadonlyAnalytics、TicketOrders、VendorInspections、VendorSiteEntries、VendorWorkOrders、VenueBusinessHours、VoucherLedger、WecomComplianceReview、WorkOrderSla（apps/web/src/admin/pages/*Page.tsx）。
+    - 经销三页 DealerAdmissionCatalogPage、DealerOrderFulfillmentPage、DealerReturnInvoicePage 删去直接显示的「接口证据：GET/POST /api/v1/dealers…」段。
+    - 块里只有接口路径与英文事件名，没有业务内容，按 193-R2 同一读法整块删除，不换成中文说明。
+  - 依据：
+    - PGM:287「……可以不用中文的只有四样，没有第五样：单据号、设备编号、二维码内容、系统内部标识符。这四样之外，凡是展示给人看的文字一律中文，不得以“这是标识”为由保留英文。」
+    - DEC-R3B-2026-08-04-12「全中文原则的例外改为闭集：单据号、设备编号、二维码内容、系统内部标识符；不得以「这是标识」为由保留英文」
+    - 193-R2「网页端读取失败的「技术详情」折叠块只显示状态码（如「状态码 500」），接口路径、request_id、原始响应体不上屏」
+    - 无新裁决。
+  - 测试：
+    - apps/web/src/admin/pages/noApiPathOnScreen.test.tsx：「后台源码不再有接口证据、操作留痕字样与两个折叠组件」「合规到期提醒台账页」「审计事件页证据视图与操作日志视图」「经销订单与履约页」。
+    - apps/web/src/admin/pages/MerchantScopePage.test.tsx：「不显示接口证据与操作留痕事件名」。
+    - tests/e2e/full-admin-remaining.spec.ts 删去 36 行 *-evidence 断言，full-admin-visual 两张移动端截图基线重生成（汇合段做）。
+- 18AN 落地位置补记·第 227 条 227-R1（证据事件视图事件类型、分类改中文，本页英文文案与结果区英文事件名去掉；无新裁决）：
+  - 改法：apps/web/src/admin/i18n/fieldLabels.ts 的 KEY_VALUE_LABELS 新增 event_type 一节，只收正常业务里会进证据事件表的网页两种：audit_events_exported「审计事件已导出」、merchant.admission.audit_exported「准入审计已导出」，名称同 VALUE_LABELS。event_category 补 loyalty「会员积分」。安卓员工端十四种事件只记本机、不上传，不收。
+  - 审计事件页（apps/web/src/admin/pages/AuditEventsPage.tsx）：
+    - 新增 eventTypeLabel（未登记显示「其他事件」）与 eventCategoryLabel（先查按键取值表，再查状态码表）。
+    - 证据表格与行明细的事件类型、分类，以及操作日志明细的分类，都按中文名显示。
+    - 页内筛选能按中文名筛中。
+    - 筛选框标签、边界说明、「请求 ID」改为中文：「本页内筛选追踪号／事件／对象／摘要」「审计事件只能追加和导出；每次导出另记一条导出留痕，页面不提供编辑、删除、覆盖历史记录。」「请求编号」。
+  - 结果区：审计事件页导出、经营分析页（BusinessAnalyticsPage）复盘锁定与异常处置三处，不再放英文留痕事件名（删 audit 键）。
+  - 依据：PGM:287「……展示给用户的一切文字，包括菜单、页面标题、字段名、状态、枚举取值、按钮、提示、报错……必须全部为中文，不得出现任何英文……」；PGM:299「只有单据号、设备编号、二维码内容、系统内部标识符四样可保留原样，其余展示给人看的文字一律中文。」
+  - 测试：AuditEventsPage.test.tsx「AuditEventsPage 证据事件类型与分类中文名」三例；BusinessAnalyticsPage.guidedcreate.test.tsx「入口→步进→提交：POST /review-locks 带业务域与说明，成功后关闭弹窗」与 BusinessAnalyticsPage.disposition.test.tsx「非终态异常显示处置入口,标记已阅走 POST /dispose(带幂等键)」补断言：结果区不含 audit 键。
+- 18AN 落地位置补记·第 228 条 228-R1（第三方开关页关闭口径、开启要求、接入状态与页头说明改中文；无新裁决）：
+  - 改法：apps/web/src/admin/pages/IntegrationSwitchesPage.tsx 九个能力的关闭口径与开启要求、接入状态两句、页头说明逐处替换：
+    - SDK 改「开发包」，API 改「接口」，并写处改「接口或开发包」。
+    - credential_ref 改「凭证引用」；Webhook/轮询 改「回调/轮询」；SKU 改「商品规格」。
+    - fail-closed 判龄 改「判龄失败一律拒绝」；evidence_link 改「人工填写的证据链接」。
+  - 「餐饮 POS」「零售 POS」「线下 POS」保留：POS 是 HTML 自身用词，同 194-R3 保留 HTML 终端名的先例（df81d1ba 决策台账:5378）。
+  - 能力名、后端与契约不改。
+  - 依据：PGM:287（同上）；ENUM:79「业务文件与所有界面上一律叫“商品规格”，不使用英文缩写代替」；ENUM:208「接入的外部系统……餐饮 POS、零售 POS……」；BSM:990「允许现场现金和 POS 机支付……」。
+  - 测试：IntegrationSwitchesPage.test.tsx「九个第三方开关的关闭口径、开启要求、接入状态与页头说明全中文」。
+- 18AN 落地位置补记·第 231 条 231-R1（运维上线准备页按契约读写：标记已验证发 passed 与必填项，页面与默认项名称改中文；无新裁决）：
+  - 读：apps/web/src/admin/types.ts 的 ReadinessItemRow 改用后端 ProductionReadinessItemResponse 的键。OpsReadinessPage 表格与明细显示阻断项名称、责任部门、责任人、状态、证据引用、目标日期。
+  - 写：
+    - 新增责任人输入，选中行变化时带出该行责任人，为空则拦截并提示「必须填写责任人。」。
+    - 「标记已验证」按契约发 status=passed、evidence_link、owner_person，并把 owner_department、target_date、blocking_scope、fallback_mode 从该行原样带回；幂等键由客户端补。
+    - 不再发 verified 与 evidence_ref；修复前每次都在请求解析阶段 400。
+    - 结果区只放动作、状态与阻断项名称。
+  - 名称：页头标题与菜单名（adminRoutes.ts）改「生产阻断项与证据」，页头说明与提示中的 blocker、NAS、JWT 改中文。ProductionReadinessService.defaultItems 十二项默认名称改中文（如「网络存储恢复演练」「160 服务器运行环境」），默认责任部门「IT」改「信息技术部」。默认方案、降级方式、下一步不上屏，不改。
+  - 页面矩阵 ADM-OPS-001 按现控制器与页面改了：页名、权限（view;manage）、接口（GET items;PUT items/{id}）、动作、关键字段、状态流 pending_info->passed、留痕 PRODUCTION_READINESS_VIEWED;PRODUCTION_READINESS_UPDATED。
+  - 依据：契约 ProductionReadinessItemUpdateRequest，required 为 idempotency_key、status、owner_department、owner_person、target_date、blocking_scope、fallback_mode；status 闭集没有 verified；owner_person「不得用空值替代责任人」。另依据 PGM:287「……菜单、页面标题、字段名、状态、枚举取值、按钮、提示、报错……必须全部为中文……」。
+  - 测试：后端 ProductionReadinessJdbcIntegrationTests.defaultItemsAreChineseAndPageShapedPassedUpdateIsSavedThroughPostgres；前端 OpsReadinessPage.test.tsx「OpsReadinessPage 按契约读写」与改期望的既有用例。
+- 18AN 落地位置补记·第 258 条（合规提醒页扫描、补录合同关键日期、补录证照三处写入接真实后端每次 400；无迁移、无新接口、无新裁决；OpenAPI 只改三个操作的请求结构，操作数不变）：
+  - 258-R1 扫描：
+    - 改法：ComplianceService.validateScanRequest 删去 scan_date 与 operator_user_id 必填；scanRemindersOnce 在 scan_date 为空时按 LocalDate.now(LocalZone.ID)，同每日任务 ComplianceReminderScanJob。ComplianceReminderScanRequest 的 operatorUserId 分量保留、不再读取，留痕操作人取登录人。页面不改（基准日框已写「留空=今日」）。
+    - 契约：scanComplianceReminders 删 operator_user_id 属性，scan_date 说明改为可留空按当天。docs/p1-contract-compliance-expiry-api-contract-v0.1.md 3.6 示例删 operator_user_id，并写明 scan_date 可留空。
+    - 依据：PGM:531「管理证照、资质、保险和合同关键日期的到期预警与到期阻断……」；BSM:940「……一律按执行该动作的设备绑定与该次登录会话定位到操作人并留痕……」；先例 18AE 198-R3「后端不改，DTO 分量保留；服务端操作人一律取登录人」（决策台账 :5983）。
+    - 测试：ComplianceManualEntryJdbcIntegrationTests.scanWithoutDateOrOperatorUsesTodayAndRecordsLoggedInOperator、.scanWithDateUsesGivenDate；ComplianceRemindersPage.test.tsx「扫描表单不再有「操作备注」框，请求体不含 operator_note」加 operator_user_id 断言。
+  - 258-R2 补录合同关键日期：
+    - 后端：ComplianceRepository 与 JdbcComplianceRepository 加 findContractMerchantId（SELECT merchant_id FROM contracts WHERE id = :id）。createContractKeyDateOnce 由合同带出商户：合同不存在 400 VALIDATION_FAILED「关联合同不存在」；带出的商户经原有 resolveMerchantScopedId，商户账号用别家商户的合同照旧 403 CROSS_MERCHANT_FORBIDDEN。validateContractKeyDateRequest 删 merchant_id 必填；ContractKeyDateRequest 的 merchantId 分量保留、不再读取。
+    - 网页：ComplianceRemindersPage.tsx 的 DATE_TYPE_LABELS 对齐后端闭集（contract_start 合同开始、contract_end 合同到期、renewal_notice 续约通知、deposit_return 押金退还、rent_free_end 免租期结束、custom 其他），默认 renewal_notice。到期日必填，提示「关联合同、标题、到期日必填」。请求体加 owner_user_id 为登录人，不发 merchant_id。
+    - 契约：createContractKeyDate 的 required 加 contract_id、date_type、title、due_date、owner_user_id、human_confirmed，删 merchant_id 属性，date_type 补六个取值。契约文档 3.2 示例删 merchant_id 并写明商户由合同带出，文档 V0.12→V0.13。
+    - 依据：PGM:531 同句；PGM:287「……字段名、状态、枚举取值……必须全部为中文，不得出现任何英文……」。
+    - 测试：ComplianceManualEntryJdbcIntegrationTests.contractKeyDateTakesMerchantFromContract、.contractKeyDateRejections；ComplianceServiceTests.createContractKeyDateRejectsContractOfAnotherMerchant（原 …RejectsBodyMerchantIdDifferentFromScope）、.createContractKeyDateRequiresCoreFieldsAndWritesFailureAudit（改为空标题触发）；ComplianceRemindersPage.test.tsx「合同关键日期：列表与下拉按后端六类显示中文；不填到期日拦截；提交带登录人为责任人、不带商户」；ComplianceRemindersPage.guidedcreate.test.tsx「入口→填写→提交携带合同关键日期字段」。
+  - 258-R3 补录证照：
+    - 改法：只改网页，后端不改。ComplianceRemindersPage.tsx 在 allSettled 里加读 GET /api/v1/platform/merchants（读失败为空），证照补录表单加「商户」下拉，选项文字取商户名称。商户、证照名称、有效期止任一未填不发请求，提示「商户、证照名称、有效期止必填」。请求体 subject_id、merchant_id 都等于所选商户，owner_user_id 为登录人。
+    - 落地位置：页面矩阵 ADM-COMP-001 行 permissions 加 merchant.profile.view，primary_apis 加 GET /api/v1/platform/merchants。
+    - 契约：createComplianceExpiryItem 的 required 加 subject_type、subject_id、merchant_id、item_type、item_name、valid_to、owner_user_id、human_confirmed。
+    - 依据：PGM:531「……预警同时送达商户侧，商户在商户专区可查看本商户全部证照的到期情况。」
+    - 测试：ComplianceRemindersPage.test.tsx「证照：下拉列出商户；未选商户不发请求并提示；选商户后主体与商户都是所选商户、责任人为登录人」；ComplianceManualEntryJdbcIntegrationTests.expiryItemFromPageShapePersistsMerchantAsSubject。
+  - 不做（方案 not_doing）：不加责任人选择框；关联合同不改下拉；证照主体只做商户；SOURCE_LABELS 不补 ai_suggestion、imported；定时扫描、续期、宽限配置不改。「到期动作」列与提醒「来源」的英文显示由控制席按旁见登记。
+- 18AN 落地位置补记·第 257 条（第十八批裁决 70 选「批准时先废旧再生效（推荐）」，所以只做 257-R1、257-R2，不做 257-R3；现有绑定规则与 approveRebind 先作废旧凭证再生效的分支不改，无新裁决）。
+  257-R1
+  - 改法：后端新增 GET /api/v1/staff/device-credentials（后台员工私人手机凭证列表）。
+    - 持 staff.device.review 或 staff.device.revoke 任一即可；两者都没有按 staff.device.review 返回标准 403（PERMISSION_DENIED）。
+    - 只列 bind_status 为 active、pending_review 的凭证。所属档案在任一所持码的可触及范围内即返回，不按状态拆可见性。
+    - 范围判断复用原规则：requireProfileInScope、requireRegistrationScope 拆出不抛异常的 profileScopeViolation、registrationScopeViolation，原入口取到非 null 即抛，错误码与提示不变。
+  - 落地位置：StaffController.listCredentials；StaffService.listCredentials、profileScopeViolation、registrationScopeViolation；JdbcStaffRepository.listCredentialsByStatus。设计稿同步：docs/r5-spec-T1-staff-tables-dev-design-20260618.md V0.19 的接口表。
+  - 依据：PGM:585「员工换手机必须先解绑旧手机，再绑定新手机。」；BSM:937「员工换手机时必须先解绑旧手机，再绑定新手机。」
+  - 测试：StaffDeviceCredentialListJdbcIntegrationTests.listShowsActiveAndPendingWithinReachOfEitherPermission。
+  257-R2
+  - 改法（页面）：员工档案页按 staff.device.review／staff.device.revoke 读凭证。两码都没有时不读，也不显示「私人手机」列。每名员工显示「生效中／待批准换机」，没有则显示「—」。
+    - 生效中的凭证旁放「解绑」：权限 staff.device.revoke，原因取「改动事由」并且必填，为空提示「解绑须填写原因。」。员工手机丢失或更换时从这里先解绑旧手机。
+    - 待批准换机的凭证旁只放「批准换机」：权限 staff.device.review。批准时系统先作废旧手机、再让新手机生效。
+  - 改法（后端）：approveRebind 批准成功后给该员工发一条 approval_result 通知，标题「换机已批准」，正文「您的新手机已生效，旧手机已解绑。」，员工私人手机的公告里可以看到。
+  - 落地位置：apps/web/src/admin/pages/StaffProfilesPage.tsx 的 changeDevice 与「私人手机」列；StaffService.approveRebind；页面矩阵 ADM-STF-004 行。安卓不改。
+  - 依据：PGM:585（同上句）；PGM:906「员工注册审批、设备绑定、换机解绑重绑。」；PGM:899「平台治理层要保证每个重要动作能追溯。谁发起、谁销售、谁服务、谁第一个处理异常、为什么、谁审批、结果是什么，都要能查到。」；BSM:938「私人手机 App 可收发通知、查看状态和审批结果……」；第十八批裁决 70「操作员选「批准时先废旧再生效（推荐）」：新手机可先发起；后台批准换机时系统先作废旧手机、再让新手机生效（现做法）。」
+  - 测试：StaffDeviceCredentialListJdbcIntegrationTests.approveRebindNotifiesEmployeeAndRevokeKeepsReason；StaffProfilesPage.devices.test.tsx 共 5 条：
+    - 员工行显示生效中与待批准换机；待批准换机那条只有批准、没有解绑
+    - 批准换机：提交到该凭证的 approve-rebind，带请求编号，结果写明旧手机已解绑、新手机已生效
+    - 解绑：事由为空不发请求并提示；填好后提交原因
+    - 没有批准换机与解绑权限：不读凭证、不显示私人手机列
+    - 只持批准换机权限：批准换机可点，解绑不可点
+- 18AN 落地位置补记（第 227 条 227-R2）：
+  - 依据：
+    - PGM:287「全局原则 · 界面全中文（所有终端零英文）：平台所有终端……展示给用户的一切文字，包括菜单、页面标题、字段名、状态、枚举取值……必须全部为中文……不得以“这是标识”为由保留英文。」
+    - PGM:299「只有单据号、设备编号、二维码内容、系统内部标识符四样可保留原样，其余展示给人看的文字一律中文。」
+    - 决策台账 194-R2 落地补记（现 :5364）「能力手填框改为下拉（显示中文、提交原码）」。
+  - 改法与落地位置：
+    - ① 新增操作留痕标签字典 backend/src/main/resources/audit/audit-labels.json，四节「码→中文名」：business_types 现 427 个（门禁扫到的留痕写入点取值，加上门禁追不到的写入点按来源登记的取值：227-R2 落 401 个，227-R3 补 purchase_return，变基时补进 18AM 的 payment_confirmation、payment_confirmation_flow，收尾复核补 22 个，合并前再变基补进 18AP 的 saved_bottle_registration 1 个，18AO 无缺项）、actor_types 现 10 个（227-R2 落 9 个，收尾复核补 master_authority）、event_names 留给 227-R3、extra_permissions 12 个（权限表外的权限状态与伪码，如 auth.login 登录、not_applicable 无需员工权限、public 公开访问）。读取类为 backend/src/main/java/com/complex/platform/evidence/AuditLabels.java。
+    - ② 新增接口 GET /api/v1/audit/labels（AuditController.labels，权限 audit.operation_log.view，只读、不落留痕），返回 business_types、actor_types、event_names、permissions 四节 [{code, name}] 列表；权限节取权限表启用码中文名，并入字典里权限表没有的码。
+    - ③ apps/web/src/admin/pages/AuditEventsPage.tsx 操作日志视图：第一次进入时取一次标签，表格业务类型列、明细的操作人类型、业务类型、权限显示中文名，未登记的显示「其他」；「权限码」标签改为「权限」；业务类型筛选改为下拉（显示中文、提交原码）；反查横幅显示「业务类型中文名：业务编号」。
+    - ④ 新门禁 tools/verify-audit-labels.mjs（npm run verify:audit-labels，已并入 verify:predeploy）：从 record*( 第三参、AuditedOperation.of( 第四参、AuditedOperation 枚举第四参收业务类型（字面量、常量、同文件形参最多追三层），字典缺一个即红，并核中文名不含英文字母。
+    - ⑤ FieldLabels.java 与 fieldLabels.ts 同键补 business_types、actor_types、event_names、permissions 四个中文名。
+    - ⑥ 页面矩阵 ADM-EVD-001 补权限 audit.operation_log.view，补接口 GET /api/v1/audit/operation-events、GET /api/v1/audit/labels。
+  - 回归：
+    - AuditOperationLabelsJdbcIntegrationTests.operationRowsOfARealUpdateHaveChineseLabels、staffWithoutOperationLogViewCannotReadLabels；
+    - AuditEventsPage.test.tsx「AuditEventsPage 操作日志业务类型、操作人类型、权限中文名 › 表格与明细显示业务类型、操作人类型、权限中文名，业务类型下拉提交原码」；
+    - 同文件「对象反查（focus=contract:c1）…」横幅断言改为「合同：c1」。
+- 第十八批 AN 段第 227 条 227-R3（操作留痕事件名中文字典补全并入门禁）。
+  改法：
+  - 后台审计事件页操作日志视图的「操作」列、明细标题和「操作」字段，原样显示英文留痕事件名（如 device.policy_violation）；现改为按标签字典显示中文名，未登记的显示「其他操作」。
+  - 门禁加扫事件名：留痕事件名不在字典即红。
+  落地位置：
+  - backend/src/main/resources/audit/audit-labels.json 的 event_names 现 2345 个（227-R3 落 2333 个；变基时补进 18AM 的 access.payment_confirmation_flow.saved、finance.payment_confirmation.requested、finance.payment_confirmation.request_failed 3 个；收尾复核补 analytics.metric_anomaly.disposition_recorded 1 个；合并前再变基补进 18AP 存酒组 8 个，18AO 无缺项）。227-R3 的 2333 个：
+    - OpenAPI 各操作 x-audit-event-success/failure 2092 个，与代码留痕写入点 2197 个取并集，共 2314 个；
+    - 另 19 个按 d.reviewStatus()、跨文件 success()、岗位模板 switch 动作拼出的取值，手工登记。
+  - 中文名取法：
+    - 先取 docs/operation-traceability-and-terminal-switch-prd-v0.1.md §4.1 已登记含义，43 个；
+    - 再取 OpenAPI 操作 summary（失败事件加「失败」、去括号口径说明），1835 个；
+    - 多 summary、含英文与代码独有的 455 个人工定名；
+    - 均不含英文字母。
+  - 门禁追到的业务类型 purchase_return 补「采购退货」。
+  - apps/web/src/admin/pages/AuditEventsPage.tsx 按 GET /api/v1/audit/labels 的 event_names 显示事件名中文。
+  - tools/verify-audit-labels.mjs（npm run verify:audit-labels，已在 verify:predeploy）加扫事件名。扫描来源：
+    - OpenAPI 全部 x-audit-event-success/failure（not_applicable 除外）；
+    - recordSuccess/recordFailure/recordSuccessIndependently 的第一参、AuditedOperation.of 的第一二参、AuditedOperation 枚举常量的第一二参；取值含字面量、常量、三元两支、拼接组合，以及同文件形参与局部变量追溯；
+    - 缺一个即红。
+  依据：
+  - PGM:287「全局原则 · 界面全中文（所有终端零英文）：平台所有终端——后台管理端、客人手机端、现场平板与设备端、安卓终端——展示给用户的一切文字，包括菜单、页面标题、字段名、状态、枚举取值、按钮、提示、报错、导出文件表头与内容、短信与通知、日期时间等，必须全部为中文，不得出现任何英文……」
+  - PGM:299「只有单据号、设备编号、二维码内容、系统内部标识符四样可保留原样，其余展示给人看的文字一律中文。」
+  - 无新裁决。
+  测试：
+  - AuditOperationLabelsJdbcIntegrationTests.operationEventNamesOfARealUpdateHaveChineseLabels；
+  - AuditEventsPage.test.tsx「AuditEventsPage 操作日志事件名中文名」与「对象反查（focus=contract:c1）→ 切操作日志视图并按 business_type/business_id 服务端过滤」；
+  - TraceLinkDrilldown.test.tsx「审计事件页带 focusObjectId(类型:id) → 切操作日志视图并按业务类型/对象服务端反查」；
+  - 门禁自测：从 event_names 删 production_readiness.update_failed 后退出码 1，恢复后为 0。
+- 18AN 落地位置补记（契约，K-contract）：
+  - 257-R1：docs/openapi/openapi-p0.yaml 与 .json 新增 GET /api/v1/staff/device-credentials（listStaffDeviceCredentials）。
+    - x-permission staff.device.review，description 写明持 staff.device.review 或 staff.device.revoke 任一即可；x-data-scope project；终端 web、mobile_admin；两个留痕事件都是 not_applicable；x-auth-context staff-token。
+    - 响应用 Page，items 是新 schema StaffDeviceCredentialRecord。
+    - 依据：PGM:585「员工换手机必须先解绑旧手机，再绑定新手机。」；第十八批裁决 70（批准时先废旧再生效）。
+    - 测试：StaffDeviceCredentialListJdbcIntegrationTests（X4 段）。
+  - 257-R2：approveStaffDeviceRebind 的 description 补「批准后给员工发一条审批结果通知（approval_result「换机已批准」）」。依据：BSM:938。
+  - 227-R2、227-R3：新增 GET /api/v1/audit/labels（getAuditLabels）。
+    - x-permission audit.operation_log.view；x-data-scope platform；终端 web；两个留痕事件都是 not_applicable。
+    - 响应 data 是新 schema AuditLabelsResponse，四节 business_types、actor_types、event_names、permissions 都是 AuditLabel{code, name} 数组。
+    - 依据：PGM:287。测试：AuditOperationLabelsJdbcIntegrationTests（X5、X6 段）。
+  - 258-R1：scanComplianceReminders 删掉 operator_user_id 属性；scan_date 改为可空，留空按当天（北京时间）；补 description。依据：PGM:531、BSM:940。
+  - 258-R2：createContractKeyDate 删掉 merchant_id 属性（商户由合同带出）；required 补齐 contract_id、date_type、title、due_date、owner_user_id、human_confirmed；date_type 的说明补六个取值和中文名；补 description（合同不存在 400、商户账号用别家商户的合同 403 CROSS_MERCHANT_FORBIDDEN）。依据：PGM:531、PGM:287。测试：ComplianceManualEntryJdbcIntegrationTests（X3 段）。
+  - 258-R3：createComplianceExpiryItem 的 required 照现码校验，改为 idempotency_key、subject_type、subject_id、merchant_id、item_type、item_name、valid_to、owner_user_id、human_confirmed。依据：PGM:531。
+  - OpenAPI 操作数 1381→1383（变基到 a890a1ac 后按提交树计），info.version V0.74。
+- 18AN 汇合段（e2e 与门禁）：
+  按 227-R1、231-R1、235-R1、257-R1、258-R1 的 e2e 要点改了 tests/e2e，只改断言、步骤与假数据，不改用例意图。
+  - full-admin-remaining.spec.ts（V0.23）：删 36 行 *-evidence 折叠块断言（235-R1）；ADM-EVD-001 改为筛「准入」、断言「准入审计已导出」，结果区的 evidence.events_reported 与 analytics.review.locked 改为不得出现（227-R1）。
+  - support/mock-api.ts（V0.18）：证据事件改为网页两种事件，登记回包改为 {accepted, receivedAt}（227-R1）；上线准备项改为后端响应形状，PUT 读 status、evidence_link、owner_person（231-R1）；合同关键日期 date_type 改为 renewal_notice（258）；补员工私人手机凭证空列表（257）。
+  - full-admin-mvp.spec.ts（V0.10）ADM-MVP-07：加填责任人，断言「状态：已通过」（231-R1）。
+  - full-admin-visual.spec.ts：标题改为「生产阻断项与证据」，「NAS」改为「网络存储」（231-R1）。
+  - 截图基线：用 flock 包住 playwright --update-snapshots 重生成三张：bar-orders-mobile、dynamic-pricing-mobile（235-R1 删折叠块，整页变矮）和 ops-readiness-desktop（231-R1 页面改中文、加责任人框）。overview 不变。
+  门禁结论（变基前实现阶段在 df81d1ba 基线上的实跑结果）：后端全量 6784 例 0 红；前端 typecheck 0 错，vitest 1888 例全过；客人三个工作区 77、131、85 例全过；安卓员工端 125 例全过，android-app 编译通过；chromium 五份后台 e2e 33 例全过；四类生成物重生成后 verify:p0-contract 通过（当时 1370 个操作；变基后为 1383 个）；yaml 与 json 一致，git diff --check 通过。
+  依据：第十八批裁决 25（e2e 只用假接口，不跑真实后端界面验收）、PGM:287。
+- 18AN 文档组（D-docs）落地补记：按本段代码与契约改动，就地同步下位文档的现状句，不新增业务规则、不扩表。
+  ① docs/operation-traceability-and-terminal-switch-prd-v0.1.md 升 V0.15，对应 227-R1～R3：§4.2 加实现现状，内容是后台审计事件页的证据事件类型与分类，以及操作日志的操作、业务类型、操作人类型、权限都显示中文名（GET /api/v1/audit/labels，字典 backend/src/main/resources/audit/audit-labels.json，未登记的显示「其他事件」「其他操作」「其他」）；门禁 verify:audit-labels 已并入 verify:predeploy。变更日志加一行。依据 PGM:287「全局原则 · 界面全中文（所有终端零英文）」。
+  ② docs/platform-governance-prd-v0.1.md 升 V0.88：
+    - §6.9 第 7 步加 257-R1、257-R2 实现现状：员工档案页（ADM-STF-004）按 GET /api/v1/staff/device-credentials 显示私人手机，可解绑生效中的、批准待批准换机的；批准时先作废旧手机、再让新手机生效，并通知「换机已批准」。依据 PGM:585「员工换手机必须先解绑旧手机，再绑定新手机。」、PGM:906、BSM:938、第十八批裁决 70。
+    - §7.5.1 加 258 实现现状：扫描基准日可留空、按当天；补录合同关键日期时商户由合同带出，到期日必填，责任人取登录人；补录证照时选商户。依据 PGM:531「管理证照、资质、保险和合同关键日期的到期预警与到期阻断……」。
+    - 变更日志加一行。
+  ③ docs/android-device-terminal-development-design.md：§13.5.3 流程图与先后条、§13.5.7 验收，按第十八批裁决 70「批准时先废旧再生效」改写，删去「旧凭证不解绑则新凭证不予绑定」；变更日志追加一行。文档版本为 V0.x，不升。
+  ④ docs/full-admin-mvp-coding-package-v0.1.md 升 V0.11：AuditTrailHint.tsx 用途改为「对象详情里的操作审计反查字段」。对应 235-R1，依据 PGM:287。
+  ⑤ docs/pending-development-backlog-v0.1.md 的 A3「审计反查入口」改写：反查入口现为 auditTraceField（服务单、组织与商户、合同工作台三页）；原「48/84 页已接」指的是只显示英文事件名的折叠块，已由 235-R1 删去，原口径作废。该表没有版本号。
+  回归：node tools/verify-full-admin-page-matrix.mjs 通过（117 页）；git diff --check 0。
+- 18AN 收尾复核修正（2026-11-17）：按 18AN 收尾复核意见修正；无新裁决、无迁移，OpenAPI 操作数不变。
+  - 留痕字典补漏（PGM:287「……展示给用户的一切文字，包括菜单、页面标题、字段名、状态、枚举取值……必须全部为中文……不得以“这是标识”为由保留英文。」；227-R2 ①「business_types 收全 backend main 下留痕调用的业务类型」）：
+    - 门禁 tools/verify-audit-labels.mjs：写入点扫描并入 AuditedOperationExecutor 的 recordingFailure、recordDetail（第一参事件名、第三参业务类型）；业务类型、操作人类型取自变量、配置组码、请求或路径、跨文件传参的写入点，在 DECLARED 按来源文件:行逐个登记取值，字典缺项同样报红。登记的写入点：结算配置转正默认分支与下线表名（SettlementConfigWriteService）、结算配置转正与下线失败（SettlementConfigController）、员工业务交接（StaffHandoverRepository.Kind）、采购预付处理（PurchaseWorkflowService.write，PurchasePrepaymentService 传入）、附件上传失败与证据时间线查看（EvidenceEventService）、开放平台停车读取（IntegrationService.openRead）、工单承担方争议判定（WorkOrderMaterialService）、工资配置与个税审批结果（StaffPayrollConfigurationService、PayrollTaxService）、酒吧工资规则（BarPayrollRuleService）、最高权限账号类型（ProductionAuthService）。修正前跑门禁红 24 处：缺业务类型 22、事件名 1、操作人类型 1。
+    - audit-labels.json：business_types 补 22 个，中文名照现有叫法——distribution_method、merchant_rate、comprehensive_service_fee、combo_discount、channel_fee、commission_rate、points_accrual_rate、pass_gift_cost、high_value_threshold、internal_price_item 照结算配置页 GROUP_LABELS；turnover_rent_rules 同 turnover_rent_rule「流水租金规则」；approval_node、facility_inspection、merchant_work_order、integration_difference 照 StaffHandoverRepository.Kind 的 label；purchase_prepayment_resolution「预付余额处理事项」；dealer_admission「经销商准入资料」、dealer_overpayment「经销商订单多付款」、ticket_sales_contract「门票销售合同」、bar_order_bad_debt「酒吧订单转坏账」、finance_locked_backfill「锁定后补录」照所在页面；parking_config「停车下发配置」照 getOpenParkingConfig 摘要。event_names 补 analytics.metric_anomaly.disposition_recorded「记录指标异常处置历史」（AnalyticsService 注释「处置历史留痕」）。actor_types 补 master_authority「最高权限」（PGM:658「敏感动作可要求上一级、上两级或最高权限审批。」）。现 business_types 427、actor_types 10、event_names 2345（合并前再变基后的实数）。
+    - 测试：AuditOperationLabelsJdbcIntegrationTests.activatedConfigDraftRowHasChineseBusinessTypeLabel（财务甲落卡座提成费率草案，财务乙经 POST /api/v1/settlement/config/commission_rate/{id}/activate 转正，留痕业务类型 commission_rate 有中文名）、.masterAuthorityRowHasChineseActorTypeLabel（最高权限会话查看上线准备项，留痕操作人类型 master_authority 的中文名为「最高权限」）；修正前两条断言失败，修正后通过。
+  - package.json documentVersion V0.05→V0.06（本段新增 verify:audit-labels 并改 verify:predeploy）。
+  - html-prd-coverage.csv PGM-0153：改为只写 257-R2 新增的审批结果通知（approval_result「换机已批准」，StaffService.approveRebind），并注明批准换机原已留痕 staff_device.rebound。
+  - 本补记按变基后事实改正：OpenAPI 操作数 1381→1383、info.version V0.74；194-R2 原句行号 :5364、198-R3 原句行号 :5983；mock-api V0.18、平台治理 PRD V0.88；汇合段门禁结论注明为变基前实现阶段结果；字典个数改为实数，并写明变基时补进 18AM 的 2 个业务类型、3 个事件名。
+  - 回归：node tools/verify-audit-labels.mjs 绿（业务类型 427、事件名 2345、操作人类型 10）；后端 AuditOperationLabelsJdbcIntegrationTests、AuditControllerTests 8 例全过；前端 AuditEventsPage、noApiPathOnScreen 定向全过；verify:p0-contract（1383 个操作）、verify:html-ledger-sync、verify:entry-anchors、verify:entry-doc-baseline、verify:security-baseline、verify:predeploy 通过；git diff --check 通过。
+- 18AN 合并前再变基（2026-11-17）：本分支从 77ff82da 再变基到 origin/main a890a1ac（含 18AO PR #593 治理组、18AP PR #594 存酒组），以 a890a1ac 为基线重做下列各处；无新裁决、无迁移（仍到 V632，597 个迁移）。
+  - 文件头版本：主干同改并已升版、变基时被同一版本号静默合并的 18 个文件再 +0.01——apps/web/src/admin/pages 下 AdmissionAuditsPage V0.07、AmusementGroupBookingsPage V0.05、AmusementSessionsPage V0.07、ApprovalChainPage V0.09、AuditEventsPage V0.05、BarOrdersPage V0.16、IntegrationEventsPage V0.05、InventoryLedgerPage V0.08、LeasingWorkbenchPage V0.09、ServiceOrdersPage V0.03、SupervisorReviewPage V0.13、TicketOrdersPage V0.11、VendorSiteEntriesPage V0.04、VendorWorkOrdersPage V0.03，FieldLabels.java V0.47，tests/e2e/full-admin-mvp.spec.ts V0.10、full-admin-remaining.spec.ts V0.23、support/mock-api.ts V0.18。其余有版本头的改动基线文件相对 a890a1ac 恰好 +0.01；README.md、docs/00-current-effective-document-entry-v0.1.md（refresh-entry-doc-baseline 回填计数行）、security-scans 两份 md（只改计数与 SHA 两行）、docs/production-readiness-evidence/security-baseline-latest.json（只改 openapi_operation_count）、docs/partial-requirement-mock-coverage-v0.1.md 与 -latest.json（生成物）、docs/prd-audit/html-prd-coverage.csv（版本在各行 document_version 列，仍为 V0.02）、docs/android-device-terminal-development-design.md（版本头为 V0.x）照主干惯例不升版；新文件 V0.01（backend/src/main/resources/audit/audit-labels.json 为纯数据 JSON，无版本头），决策台账 V0.98。
+  - 契约与生成物：docs/openapi/openapi-p0.yaml、.json 的 info.version V0.73→V0.74（就地替换），操作数 1381→1383。node tools/refresh-entry-doc-baseline.mjs 回填 README.md 与 docs/00-current-effective-document-entry-v0.1.md（1383 个操作、V632）；重生成 docs/p0-openapi-contract-closure-appendix-v0.1.md（V0.74，事件 2766）与 docs/p0-openapi-operation-acceptance-matrix-v0.1.md（V0.74，1383 个操作）；数据隔离规格、领域归属范围重生成无变化。security-scans 两份 md 只改操作数与 SHA-256 两行（1383，按最终 openapi-p0.json）；docs/production-readiness-evidence/security-baseline-latest.json 只改 openapi_operation_count 为 1383。
+  - 留痕字典（227-R2、227-R3 门禁；PGM:287「……展示给用户的一切文字……必须全部为中文，不得出现任何英文……」）：变基后 node tools/verify-audit-labels.mjs 红 8 处，都是 18AP 存酒组新增的事件名。另外 18AP 新加两个上传框，所传业务类型走附件上传失败留痕（EvidenceEventService.uploadAttachment）：AmusementSafetyPage 的 amusement_safety_inspection（字典已有）、StoredWinePage 存酒登记的 saved_bottle_registration；两者补登到门禁 DECLARED 后，门禁再红 1 处（saved_bottle_registration）。
+    - audit-labels.json 的 event_names 补 8 个，中文名照各操作 summary 去括号口径说明、失败事件加「失败」（同 227-R3 取法）：bar.saved_bottle.manual_pickup_viewed「该瓶存酒的人工例外取酒申请」、bar.saved_bottle.manual_pickup_policy_viewed「读人工例外取酒消费历史条件」、bar.saved_bottle.renewal_policy_viewed「读存酒有效期、转存次数上限与顺延期限」、bar.saved_bottle.dispute_dismissed「存酒争议不成立，门店主管恢复为存酒中」，以及对应的 manual_pickup_view_failed、manual_pickup_policy_view_failed、renewal_policy_view_failed、dispute_dismiss_failed。
+    - business_types 补 saved_bottle_registration「存酒登记」（存酒页 TEXT.register）。
+    - 18AO 没有缺项；操作人类型、权限表外伪码没有缺项。现 business_types 427、actor_types 10、event_names 2345、extra_permissions 12。
+    - 测试：AuditOperationLabelsJdbcIntegrationTests.savedBottleRowsFromRebasedMainHaveChineseLabels（员工经 GET /api/v1/inventory/saved-bottles/renewal-policy 读存酒有效期、转存次数上限与顺延期限，再以 business_type=saved_bottle_registration 上传空登记照片失败；两笔留痕的事件名与业务类型在 GET /api/v1/audit/labels 里都有中文名）。补字典前断言失败（业务类型 saved_bottle_registration 的中文名为 null），补后通过。
+  - 前端单测：变基带入 18AP 229-R5（审计事件页导出原因不预填，人填）后，227-R1 的 AuditEventsPage.test.tsx「导出登记成功后结果区不放留痕事件名」不填原因就点导出，导出被拦、断言失败；改为先填导出原因再点导出，用例意图不变。
+  - 第 235 条复核：git grep apps/web/src 与 tests/e2e，18AO、18AP 新加或改动的页面没有 <TechDetails>、<AuditTrailHint>、「接口证据」「操作留痕：」，也没有上屏的接口路径；tests/e2e 没有新增 *-evidence 折叠块断言；不用改。
+  - 截图基线：用 flock 包住 playwright 跑 full-admin-visual，只有 full-admin-dynamic-pricing-mobile 不符。主干那张含「技术详情」「操作留痕」两个折叠块，本段 235-R1 已删去，整页高度由 1447 像素变为 1367 像素，所以按现页面重拍这一张。bar-orders-mobile、ops-readiness-desktop、overview-desktop 与现页面一致，不动。
+  - 本段补记的数字同步改为最终值：OpenAPI 1381→1383、info.version V0.74、变基基线 a890a1ac；mock-api V0.18、full-admin-remaining V0.23、full-admin-mvp V0.10；操作追溯 PRD V0.15、平台治理 PRD V0.88；194-R2 原句 :5364、198-R3 原句 :5983（主干在前面插入了裁决表第 71 行，整体后移一行）；字典个数如上。
+  - 回归：
+    - node tools/verify-audit-labels.mjs 绿（业务类型 427、事件名 2345、操作人类型 10）。
+    - 后端 --fresh 跑 AuditOperationLabelsJdbcIntegrationTests、AuditControllerTests、StaffDeviceCredentialListJdbcIntegrationTests、ComplianceControllerTests、ComplianceManualEntryJdbcIntegrationTests、ComplianceServiceTests、ProductionReadinessJdbcIntegrationTests，共 36 例全过。
+    - 前端 typecheck 0 错，vitest 347 个文件 1964 例全过。
+    - chromium 五份后台 e2e（mvp、ui-hardening、property-fee-evidence、visual、remaining）33 例全过。
+    - verify:p0-contract（1383 个操作）、verify:html-ledger-sync、verify:entry-anchors、verify:entry-doc-baseline、verify:security-baseline、verify:data-isolation-spec、verify:domain-ownership-scope、verify:partial-requirement-mock-coverage、verify:audit-labels、verify:predeploy、verify-admin-result-labels、verify-full-admin-page-matrix 通过；git diff --check 通过。
+- 18AN 落地位置补记·运行验收证据、快照、终验文档刷新（无新裁决）：业务提交 c5a442b0 之后，按第十八批裁决 25 重刷了运行验收证据：后端全量 6880 测，0 失败 0 错误；apps/web 构建通过；常规界面验收（接口全部 mock）实跑 40 条全过；真实后端界面验收未跑，runtime_ready=false。随后依次重生成闭环当前态快照、生产闭环缺口报告、界面验收报告、无上线指挥台。生成器没改。手改 docs/final-closed-loop-acceptance-audit-v0.1.md 与 docs/code-implementation-acceptance-audit-v0.1.md：前端单测源码计数改为 1850；被核文件行数都没变；后端全量与常规界面验收的数字、日期改为本次实跑值；写入 npm run verify:unit 实跑结果，五个工作区全过。交付门禁于 2026-11-17 21:09 UTC 在工作树逐项实跑子项，NAS 两项现场探测未跑。仍红的有两项：一是 coding-host-protection，它写死主仓路径，在工作树口径下必红，属工具口径，不做；二是 final-closed-loop-audit，如实留 2 条红（integration-ready、business-acceptance-ready），原因是校验器要求终验把联调、业务验收写成「是」，而裁决 25 定了不跑真实后端界面验收、运行验收未就绪，终验写的是「否」。verify:delivery-gates 总链仍是红的。

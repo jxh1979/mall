@@ -1,8 +1,6 @@
 import React from "react";
-import { TechDetails } from "../components/TechDetails";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
-import { AuditTrailHint } from "../components/AuditTrailHint";
 import { Sparkline, MiniBars } from "../components/MiniChart";
 import { loadSecondary, loadSecondaryIfPermitted, useAdminResource } from "../hooks/useAdminResource";
 import { hasPermissions } from "../security/PermissionGate";
@@ -16,7 +14,6 @@ import { formatBusinessStatus } from "../i18n/statusLabels";
 const TEXT = {
   title: "经营分析",
   description: "把收入、票务、酒吧、游乐、商户健康和风险指标沉淀成可复盘经营视图；当前以正式指标快照、指标定义和异常接口为准，不伪造预测或生产 BI。",
-  evidence: "接口证据：读取 /api/v1/analytics/business-metric-snapshots、/api/v1/analytics/traffic-hourly、/api/v1/analytics/metric-definitions、/api/v1/analytics/metric-anomalies（定义=代码目录每日同步，异常=日环比突变检测，阈值在经营参数页可调）。",
   loadFailed: "经营分析数据读取失败",
   totalMetrics: "指标快照",
   upward: "上升趋势",
@@ -342,7 +339,6 @@ export function BusinessAnalyticsPage({ api, setActionResult, setGlobalError, na
       const saved = await api.post<BusinessReviewLockRow>("/api/v1/analytics/review-locks", request);
       setActionResult({
         action: "business_snapshot_locked",
-        audit: "analytics.review.locked",
         operatorNote: lockNote,
         domain: domainFilter,
         metricCount: filteredSnapshots.length,
@@ -405,7 +401,6 @@ export function BusinessAnalyticsPage({ api, setActionResult, setGlobalError, na
       );
       setActionResult({
         action: "metric_anomaly_disposed",
-        audit: "analytics.metric_anomaly.disposed",
         anomalyId: disposeTarget.id,
         disposition: disposeAction,
         note: disposeNote.trim() || null,
@@ -425,8 +420,6 @@ export function BusinessAnalyticsPage({ api, setActionResult, setGlobalError, na
   return (
     <section data-testid="business-analytics-page">
       <AdminPageHeader title={TEXT.title} description={TEXT.description} />
-      <TechDetails><div className="admin-generic-evidence" data-testid="business-analytics-evidence">{TEXT.evidence}</div></TechDetails>
-      <AuditTrailHint event="analytics_business_metric_snapshot.viewed.success / analytics.review.locked" />
       <AdminDataState loading={loading} error={error} empty={false} onRetry={reload}>
         {snapshots.length === 0 ? <div className="admin-state admin-empty" data-testid="business-analytics-empty">{TEXT.empty}</div> : (
           <>

@@ -1,4 +1,4 @@
-# P0 OpenAPI Operation 验收矩阵 V0.73
+# P0 OpenAPI Operation 验收矩阵 V0.74
 
 ## 1. 文档定位
 
@@ -17,7 +17,7 @@
 
 ## 3. Operation 清单
 
-> 当前 `docs/openapi/openapi-p0.json` 共 1381 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
+> 当前 `docs/openapi/openapi-p0.json` 共 1383 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
 
 | 标签 | 方法 | 路径 | operationId | 摘要 | 请求体 | 权限 | 认证上下文 | 数据范围 | 终端/设备能力/调用通道 | 幂等 | 成功事件 | 失败事件 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -463,6 +463,7 @@
 | access | `POST` | `/api/v1/staff/profiles/{id}/unarchive` | `unarchiveStaffProfile` | 取消存档员工档案 | `-` | `staff.profile.submit` | `staff-token` | `project` | web | 否 | `staff.profile.unarchived` | `not_applicable` |
 | access | `POST` | `/api/v1/staff/profiles/{id}/delete-request` | `requestDeleteStaffProfile` | 申请删除员工档案 | `object` | `staff.profile.review` | `staff-token` | `project` | web | 否 | `staff.profile.delete_requested` | `not_applicable` |
 | access | `POST` | `/api/v1/staff/profiles/{id}/delete-approve` | `approveDeleteStaffProfile` | 审批员工档案删除申请 | `object` | `staff.profile.approve` | `staff-token` | `project` | web | 否 | `staff.profile.delete_approved` | `not_applicable` |
+| access | `GET` | `/api/v1/staff/device-credentials` | `listStaffDeviceCredentials` | 员工私人手机凭证列表 | `-` | `staff.device.review` | `staff-token` | `project` | web, mobile_admin | 否 | `not_applicable` | `not_applicable` |
 | access | `POST` | `/api/v1/staff/device-credentials` | `bindStaffDeviceCredential` | 绑定/换机申请员工设备凭证 | `StaffDeviceBindRequest` | `staff.device.bind` | `staff-token` | `project` | staff_private_phone, web | 是 | `staff_device.bound` | `staff_device.bind_failed` |
 | access | `POST` | `/api/v1/staff/device-credentials/{id}/approve-rebind` | `approveStaffDeviceRebind` | 审批换机生效 | `StaffDeviceRebindDecisionRequest` | `staff.device.review` | `staff-token` | `project` | web, mobile_admin | 是 | `staff_device.rebound` | `staff_device.rebind_failed` |
 | access | `POST` | `/api/v1/staff/device-credentials/{id}/report-integrity` | `reportStaffDeviceIntegrity` | 端侧完整性上报 | `StaffDeviceIntegrityReportRequest` | `staff.device.bind` | `device-credential` | `project` | staff_private_phone | 是 | `staff_device.integrity_reported` | `staff_device.integrity_report_failed` |
@@ -836,6 +837,7 @@
 | customer | `POST` | `/api/v1/loyalty/stored-value/merchant-refund-rules` | `configureStoredValueMerchantRefundRule` | 配置商户级储值卡退款规则（发卡商户自设可否退/比例） | `StoredValueMerchantRefundRuleRequest` | `customer.stored_value.refund` | `staff-token` | `merchant` | web | 否 | `stored_value.merchant_refund_rule_configured` | `stored_value.merchant_refund_rule_failed` |
 | customer | `GET` | `/api/v1/loyalty/stored-value/merchant-refund-rules/{merchant_id}` | `getStoredValueMerchantRefundRule` | 查询商户级储值卡退款规则 | `-` | `customer.stored_value.refund` | `staff-token` | `merchant` | web | 否 | `not_applicable` | `not_applicable` |
 | customer | `POST` | `/api/v1/loyalty/stored-value/merchant-card-config` | `configureStoredValueMerchantCard` | 配置商户储值卡（仅平台）：发卡资格 + 资金模式（预收/代收）+ 消费扣款顺序 | `StoredValueMerchantCardConfigRequest` | `customer.stored_value.refund` | `staff-token` | `platform` | web | 否 | `stored_value.merchant_card_configured` | `stored_value.merchant_card_config_failed` |
+| audit | `GET` | `/api/v1/audit/labels` | `getAuditLabels` | 读取操作留痕标签中文名 | `-` | `audit.operation_log.view` | `staff-token` | `platform` | web | 否 | `not_applicable` | `not_applicable` |
 | audit | `GET` | `/api/v1/audit/operation-events` | `queryAuditOperationEvents` | 跨对象查询操作留痕 | `-` | `audit.operation_log.view` | `staff-token` | `platform` | web | 否 | `not_applicable` | `not_applicable` |
 | audit | `GET` | `/api/v1/audit/operation-events/export` | `exportAuditOperationEvents` | 导出操作留痕（敏感） | `-` | `audit.operation_log.export` | `staff-token` | `platform` | web | 否 | `audit.operation_log.exported` | `audit.operation_log.export_failed` |
 | platform | `GET` | `/api/v1/platform/space-types` | `listSpaceTypes` | 空间类型字典列表 | `-` | `governance.space.view` | `staff-token` | `platform` | web | 否 | `space_type.viewed` | `not_applicable` |

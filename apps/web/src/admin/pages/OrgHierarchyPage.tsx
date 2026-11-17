@@ -1,9 +1,7 @@
-// 文件版本：V0.03
+// 文件版本：V0.04
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
-import { AuditTrailHint } from "../components/AuditTrailHint";
-import { TechDetails } from "../components/TechDetails";
 import { PermissionButton } from "../security/Can";
 import { useAdminAction } from "../hooks/useAdminAction";
 import { useAdminResource } from "../hooks/useAdminResource";
@@ -26,7 +24,6 @@ const FIXED_PAYMENT_LINES = ["finance_review", "legal_review"];
 const TEXT = {
   title: "组织层级与审批线",
   description: "维护每名员工的直接上级（审批链按此逐级补全）与各部门/业务线的平行审批最低起点层级。直接上级不得是本人、不得成环；层级未维护的发起人，其单据审批链无法生成、无人可裁决。",
-  evidence: "接口证据：GET/PUT /api/v1/access/org-hierarchy/{user_id}；GET/PUT /api/v1/access/approval-lines/{line_code}；GET /api/v1/access/payment-confirmation-flows、PUT /api/v1/access/payment-confirmation-flows/{payment_type}。",
   loadFailed: "组织层级读取失败",
   actionFailed: "组织层级操作失败",
   hierarchy: "直接上级",
@@ -182,8 +179,6 @@ export function OrgHierarchyPage({ api, setActionResult, setGlobalError, effecti
   return (
     <section data-testid="org-hierarchy-page">
       <AdminPageHeader title={TEXT.title} description={TEXT.description} />
-      <TechDetails><div className="admin-generic-evidence" data-testid="org-hierarchy-evidence">{TEXT.evidence}</div></TechDetails>
-      <AuditTrailHint event="access.org_hierarchy.superior_set / access.approval_line.saved / access.payment_confirmation_flow.saved" />
       <AdminDataState loading={loading} error={error} empty={false} onRetry={reload}>
         <h3>{TEXT.hierarchy}</h3>
         {rows.length === 0 ? <div className="admin-muted-action" data-testid="org-hierarchy-empty">{TEXT.noHierarchy}</div> : (

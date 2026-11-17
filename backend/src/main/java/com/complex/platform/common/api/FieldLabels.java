@@ -1,6 +1,6 @@
 package com.complex.platform.common.api;
 
-// 文件版本：V0.46
+// 文件版本：V0.47
 
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -743,6 +743,11 @@ public final class FieldLabels {
         p("subject_entity_id", "主体");
         p("actor_id", "操作人");
         p("event_name", "事件名称");
+        // 第十八批 AN 段第 227 条 227-R2 操作留痕标签接口的各节（同前端 fieldLabels.ts）。
+        p("business_types", "业务类型");
+        p("actor_types", "操作人类型");
+        p("event_names", "事件名称");
+        p("permissions", "权限");
         p("from", "起始");
         p("to", "截止");
         p("limit", "条数上限");

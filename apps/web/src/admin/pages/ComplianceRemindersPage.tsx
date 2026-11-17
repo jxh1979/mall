@@ -2,8 +2,6 @@ import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
 import { Tabs } from "antd";
-import { AuditTrailHint } from "../components/AuditTrailHint";
-import { TechDetails } from "../components/TechDetails";
 import { useAdminResource } from "../hooks/useAdminResource";
 import { PermissionButton } from "../security/Can";
 import { formatBusinessStatus } from "../i18n/statusLabels";
@@ -11,11 +9,12 @@ import { RowDetailDrawer, type RowDetailField, cnDate } from "../components/RowD
 import { GuidedFlowModal } from "../components/GuidedFlowModal";
 import { FormModal } from "../components/FormModal";
 import { COMPLIANCE_ITEM_TYPE_LABELS, COMPLIANCE_REMINDER_TYPE_LABELS } from "../i18n/complianceLabels";
-import type { AdminPageProps } from "../types";
+import type { AdminPageProps, MerchantAdmissionRow } from "../types";
 
 // 合规到期台账域内枚举中文（全局状态表未含的日期类型/来源/严重度，页内映射；状态码走全局表兜底）。
+// 第十八批 AN 段 258-R2：日期类型对齐后端闭集（ComplianceService CONTRACT_DATE_TYPES、V028 chk_contract_key_dates_type）。
 const DATE_TYPE_LABELS: Record<string, string> = {
-  rent_review: "租金调整", renewal: "续约", expiry: "到期", payment: "付款", inspection: "复检", other: "其它",
+  contract_start: "合同开始", contract_end: "合同到期", renewal_notice: "续约通知", deposit_return: "押金退还", rent_free_end: "免租期结束", custom: "其他",
 };
 // 第十八批 E 段第 22 条：证照类型对齐后端九类闭集（与商户专区「我的证照」共用一份）。
 const ITEM_TYPE_LABELS = COMPLIANCE_ITEM_TYPE_LABELS;
@@ -37,7 +36,7 @@ const bounds = (value?: number | null, min?: number | null, max?: number | null,
   value == null ? "未配置" : `${value}${unit}${min != null && max != null ? `（${min}～${max}）` : "（出厂值，上下限未配置）"}`;
 type Reminder = { id: string; sourceType?: string; sourceId?: string; reminderType?: string; dueDate?: string; reminderAt?: string; severity?: string; status?: string; blockingSuggested?: boolean; message?: string };
 
-type ComplianceData = { reminders: Reminder[]; keyDates: ContractKeyDate[]; expiryItems: ExpiryItem[]; typeConfigs: TypeConfig[] };
+type ComplianceData = { reminders: Reminder[]; keyDates: ContractKeyDate[]; expiryItems: ExpiryItem[]; typeConfigs: TypeConfig[]; merchants: MerchantAdmissionRow[] };
 
 const KEY_DATE_MANAGE = ["compliance.contract_key_date.manage"];
 const EXPIRY_MANAGE = ["compliance.expiry_item.manage"];
@@ -48,6 +47,8 @@ const complianceApiPaths = [
   "/api/v1/compliance/contract-key-dates",
   "/api/v1/compliance/expiry-items",
   "/api/v1/compliance/item-type-configs",
+  // 第十八批 AN 段 258-R3：补录证照选商户（读失败为空，同本页 allSettled 降级）。
+  "/api/v1/platform/merchants",
 ];
 
 /** PageResponse / 裸数组 双兼容取行。 */
@@ -63,11 +64,11 @@ function asRows<T>(value: unknown): T[] {
  * 三张表整行可点 → 行明细抽屉（日期/枚举/严重度中文化溯源）；两处人工补录（合同关键日期 / 证照到期项）。
  * 某读接口权限不足（如只有 reminder.view 无 key_date.view）时 allSettled 局部降级，不整页崩。
  */
-export function ComplianceRemindersPage({ api, setActionResult, setGlobalError, effectivePermissions }: AdminPageProps) {
+export function ComplianceRemindersPage({ api, user, setActionResult, setGlobalError, effectivePermissions }: AdminPageProps) {
   const [data, setData] = React.useState<ComplianceData | null>(null);
   const [scanForm, setScanForm] = React.useState({ scanDate: "", lookaheadDays: "30" });
-  const [keyDateForm, setKeyDateForm] = React.useState({ contractId: "", title: "", dateType: "renewal", dueDate: "" });
-  const [expiryForm, setExpiryForm] = React.useState({ itemType: "business_license", itemName: "", documentNo: "", validTo: "" });
+  const [keyDateForm, setKeyDateForm] = React.useState({ contractId: "", title: "", dateType: "renewal_notice", dueDate: "" });
+  const [expiryForm, setExpiryForm] = React.useState({ merchantId: "", itemType: "business_license", itemName: "", documentNo: "", validTo: "" });
   const [detail, setDetail] = React.useState<{ title: string; fields: RowDetailField[] } | null>(null);
   // 引导式流程 phase-4：主创建流=合同关键日期补录，收起为主按钮 + 分步引导弹窗（扫描、证照到期补录不变）。
   const [keyDateOpen, setKeyDateOpen] = React.useState(false);
@@ -91,6 +92,7 @@ export function ComplianceRemindersPage({ api, setActionResult, setGlobalError, 
         keyDates: asRows<ContractKeyDate>(at(1)),
         expiryItems: asRows<ExpiryItem>(at(2)),
         typeConfigs: asRows<TypeConfig>(at(3)),
+        merchants: asRows<MerchantAdmissionRow>(at(4)),
       });
     },
     { onError: setGlobalError, fallbackMessage: "合规到期台账读取失败", onStart: () => setGlobalError(null) },
@@ -110,14 +112,15 @@ export function ComplianceRemindersPage({ api, setActionResult, setGlobalError, 
 
   const createKeyDate = async () => {
     setKeyDateError(null);
-    if (!keyDateForm.contractId.trim() || !keyDateForm.title.trim()) {
-      setKeyDateError("关联合同、标题必填");
+    if (!keyDateForm.contractId.trim() || !keyDateForm.title.trim() || !keyDateForm.dueDate) {
+      setKeyDateError("关联合同、标题、到期日必填");
       return;
     }
     try {
       await api.post("/api/v1/compliance/contract-key-dates", {
         idempotency_key: `ckd-${Date.now()}`, contract_id: keyDateForm.contractId, title: keyDateForm.title,
-        date_type: keyDateForm.dateType, due_date: keyDateForm.dueDate || null, source_type: "manual", human_confirmed: true,
+        // 第十八批 AN 段 258-R2：商户由后端按合同带出，责任人取登录人（页面无责任人选择）。
+        date_type: keyDateForm.dateType, due_date: keyDateForm.dueDate, source_type: "manual", human_confirmed: true, owner_user_id: user.id,
       });
       setActionResult({ action: "compliance_key_date_created", title: keyDateForm.title });
       setKeyDateOpen(false);
@@ -130,11 +133,16 @@ export function ComplianceRemindersPage({ api, setActionResult, setGlobalError, 
   };
 
   const createExpiryItem = async () => {
+    if (!expiryForm.merchantId || !expiryForm.itemName.trim() || !expiryForm.validTo) {
+      setGlobalError("商户、证照名称、有效期止必填");
+      return;
+    }
     try {
+      // 第十八批 AN 段 258-R3（PGM:531）：证照主体即所选商户，责任人取登录人。
       await api.post("/api/v1/compliance/expiry-items", {
-        idempotency_key: `cei-${Date.now()}`, subject_type: "merchant", item_type: expiryForm.itemType,
-        item_name: expiryForm.itemName, document_no: expiryForm.documentNo, valid_to: expiryForm.validTo || null,
-        source_type: "manual", human_confirmed: true,
+        idempotency_key: `cei-${Date.now()}`, subject_type: "merchant", subject_id: expiryForm.merchantId, merchant_id: expiryForm.merchantId,
+        item_type: expiryForm.itemType, item_name: expiryForm.itemName, document_no: expiryForm.documentNo, valid_to: expiryForm.validTo,
+        source_type: "manual", human_confirmed: true, owner_user_id: user.id,
       });
       setActionResult({ action: "compliance_expiry_item_created", itemName: expiryForm.itemName });
       reload();
@@ -240,13 +248,12 @@ export function ComplianceRemindersPage({ api, setActionResult, setGlobalError, 
   const keyDates = data?.keyDates ?? [];
   const expiryItems = data?.expiryItems ?? [];
   const typeConfigs = data?.typeConfigs ?? [];
+  const merchants = data?.merchants ?? [];
   const blockingCount = reminders.filter((r) => r.blockingSuggested).length;
 
   return (
     <section data-testid="compliance-reminders-page">
       <AdminPageHeader title="合规到期提醒台账" description="合规到期台账：汇总合同关键日期、合规证照到期与到期提醒。可依合同/证照滚动扫描生成到期提醒（幂等），并人工补录关键日期与证照。" />
-      <AuditTrailHint event="compliance.reminder_scanned / compliance.key_date_created / compliance.expiry_item_created" />
-      <TechDetails><div className="admin-generic-evidence" data-testid="compliance-reminders-evidence">/api/v1/compliance</div></TechDetails>
       <AdminDataState loading={loading} error={error} empty={false} onRetry={reload}>
         <div className="admin-kpi-grid" data-testid="compliance-reminders-summary">
           <div className="admin-kpi-card"><span>到期提醒</span><strong data-testid="compliance-reminder-count">{reminders.length}</strong><small>建议阻断 {blockingCount}</small></div>
@@ -303,7 +310,7 @@ export function ComplianceRemindersPage({ api, setActionResult, setGlobalError, 
             {
               title: "关键日期信息",
               description: "填写关联合同、标题、日期类型与到期日。",
-              validate: () => (keyDateForm.contractId.trim() && keyDateForm.title.trim() ? null : "关联合同、标题必填"),
+              validate: () => (keyDateForm.contractId.trim() && keyDateForm.title.trim() && keyDateForm.dueDate ? null : "关联合同、标题、到期日必填"),
               content: (
                 <>
                   <label>关联合同<input data-testid="compliance-key-date-contract" value={keyDateForm.contractId} onChange={(e) => setKeyDateForm({ ...keyDateForm, contractId: e.target.value })} /></label>
@@ -345,6 +352,12 @@ export function ComplianceRemindersPage({ api, setActionResult, setGlobalError, 
           { key: "licenses", label: "③ 合规证照到期", forceRender: true, children: (<>
         <h3>合规证照到期</h3>
         <div className="admin-form-grid" data-testid="compliance-expiry-form">
+          <label>商户
+            <select data-testid="compliance-expiry-merchant" value={expiryForm.merchantId} onChange={(e) => setExpiryForm({ ...expiryForm, merchantId: e.target.value })}>
+              <option value="">请选择商户</option>
+              {merchants.map((merchant) => <option key={merchant.id} value={merchant.id}>{merchant.merchantName ?? merchant.id}</option>)}
+            </select>
+          </label>
           <label>证照类型
             <select data-testid="compliance-expiry-type" value={expiryForm.itemType} onChange={(e) => setExpiryForm({ ...expiryForm, itemType: e.target.value })}>
               {Object.entries(ITEM_TYPE_LABELS).map(([code, label]) => <option key={code} value={code}>{label}</option>)}

@@ -2,7 +2,6 @@ import React from "react";
 import { isMerchantAppMode } from "../client/adminClient";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
-import { AuditTrailHint } from "../components/AuditTrailHint";
 import { usePagedRows, TablePager } from "../components/TablePager";
 import { useAdminResource } from "../hooks/useAdminResource";
 import { useAdminAction } from "../hooks/useAdminAction";
@@ -221,7 +220,6 @@ export function MerchantZoneWorkOrdersPage({ api, setActionResult, setGlobalErro
   return (
     <section data-testid="merchant-zone-work-orders-page">
       <AdminPageHeader title={TEXT.title} description={TEXT.description} />
-      <AuditTrailHint event="merchant_service.listMerchantServiceWorkOrders.succeeded / merchant_service.createMerchantServiceWorkOrder.succeeded / merchant_service.work_order.merchant_confirmed / merchant_service.work_order.cancelled" />
       <div className="admin-form-row" data-testid="merchant-zone-work-order-form">
         <PermissionButton
           permissionsState={effectivePermissions}

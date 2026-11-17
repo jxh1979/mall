@@ -1,5 +1,6 @@
 package com.complex.platform.evidence;
 
+import com.complex.platform.access.AccessRepository;
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.LocalZone;
 import com.complex.platform.common.api.ApiException;
@@ -11,6 +12,7 @@ import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.TreeMap;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -28,11 +30,36 @@ public class AuditController implements ExportFileService.Source {
     private final AuditEventService service;
     private final AuthorizationService authorizationService;
     private final ExportFileService exportFiles;
+    private final AuditLabels labels;
+    private final AccessRepository accessRepository;
 
-    public AuditController(AuditEventService service, AuthorizationService authorizationService, ExportFileService exportFiles) {
+    public AuditController(AuditEventService service, AuthorizationService authorizationService, ExportFileService exportFiles,
+            AuditLabels labels, AccessRepository accessRepository) {
         this.service = service;
         this.authorizationService = authorizationService;
         this.exportFiles = exportFiles;
+        this.labels = labels;
+        this.accessRepository = accessRepository;
+    }
+
+    /** 第十八批 AN 段第 227 条 227-R2：操作日志视图显示用的业务类型、操作人类型、事件名与权限中文名，每节「码、中文名」列表。 */
+    public record AuditLabelsResponse(List<AuditLabels.AuditLabel> businessTypes, List<AuditLabels.AuditLabel> actorTypes,
+            List<AuditLabels.AuditLabel> eventNames, List<AuditLabels.AuditLabel> permissions) {
+    }
+
+    /**
+     * 第十八批 AN 段第 227 条 227-R2（PGM:287「……字段名、状态、枚举取值……必须全部为中文……」）：读标签字典，权限取权限表里启用码的中文名，
+     * 再并入字典里权限表没有的权限状态与伪码（登录、无需员工权限等）。只读字典，不落留痕（不走 AccessService.listPermissions，那会落查看权限留痕）。
+     */
+    @GetMapping("/labels")
+    public ApiResponse<AuditLabelsResponse> labels() {
+        authorizationService.requirePermission("audit.operation_log.view");
+        Map<String, String> permissions = new TreeMap<>();
+        labels.list("extra_permissions").forEach(label -> permissions.put(label.code(), label.name()));
+        accessRepository.listPermissions().forEach(permission -> permissions.put(permission.permissionCode(), permission.permissionName()));
+        return ApiResponse.ok(new AuditLabelsResponse(labels.list("business_types"), labels.list("actor_types"),
+                labels.list("event_names"),
+                permissions.entrySet().stream().map(entry -> new AuditLabels.AuditLabel(entry.getKey(), entry.getValue())).toList()));
     }
 
     @GetMapping("/operation-events")

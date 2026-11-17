@@ -1,14 +1,12 @@
-// 文件版本：V0.07
+// 文件版本：V0.08
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
-import { AuditTrailHint } from "../components/AuditTrailHint";
 import { formatBusinessStatus } from "../i18n/statusLabels";
 import { FormModal } from "../components/FormModal";
 import { HighRiskConfirm } from "../components/HighRiskConfirm";
 import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowDetailDrawer";
 import { TablePager, usePagedRows } from "../components/TablePager";
-import { TechDetails } from "../components/TechDetails";
 import { TraceLink } from "../components/TraceLink";
 import { useAdminResource } from "../hooks/useAdminResource";
 import { useSelectedRow } from "../hooks/useSelectedRow";
@@ -113,8 +111,6 @@ const TEXT = {
   title: "跨主体调拨与借调",
   description:
     "平台供货公司送货给商户（调拨）、商户之间借/调（借调）的流转单在这里建单、发货、扫码收货、归还与取消；每一单的货值与应付挂账凭证同屏可查，可直接下钻应收应付台账。",
-  evidence:
-    "接口证据：读取 /api/v1/inventory/transfer-orders、/api/v1/inventory/transfer-orders/{order_id}、/api/v1/inventory/transfer-orders/{order_id}/dispositions、/api/v1/inventory/supply-entities、/api/v1/inventory/items、/api/v1/inventory/warehouses、/api/v1/platform/merchants、/api/v1/platform/merchants/{merchant_id}/operating-projects、/api/v1/finance/ar-ap-items；写入 POST /api/v1/inventory/transfer-orders 及其 /submit、/lines、/supplier-review、/pick、/ship、/deliver、/receive、/dispositions、/dispositions/{disposition_id}/review、/return、/unreturnable、/dispositions/{disposition_id}/confirm、/dispositions/{disposition_id}/disposal-completed、/cancel，上传 /api/v1/evidence/attachments/upload。",
   loadFailed: "跨主体流转单读取失败",
 };
 
@@ -938,10 +934,6 @@ export function InventoryTransferWorkbenchPage({
   return (
     <section data-testid="inventory-transfer-page">
       <AdminPageHeader title={TEXT.title} description={TEXT.description} />
-      <TechDetails>
-        <div className="admin-generic-evidence" data-testid="inventory-transfer-evidence">{TEXT.evidence}</div>
-      </TechDetails>
-      <AuditTrailHint event="inventory.transfer_order_created / inventory.transfer_order_submitted / inventory.transfer_order_supplier_reviewed / inventory.transfer_order_picked / inventory.transfer_order_shipped / inventory.transfer_order_delivered / inventory.transfer_order_received / inventory.transfer_disposition_registered / inventory.transfer_disposition_reviewed / inventory.transfer_order_returned / inventory.transfer_unreturnable_registered / inventory.transfer_unreturnable_confirmed / inventory.transfer_disposal_completed / inventory.transfer_order_cancelled" />
       <AdminDataState loading={loading} error={error} empty={orders.length === 0} onRetry={reload}>
         {kpiFocus ? (
           <div className="admin-state" data-testid="inventory-transfer-kpi-focus-banner">

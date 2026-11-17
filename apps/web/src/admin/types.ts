@@ -1,4 +1,4 @@
-// 文件版本：V0.27
+// 文件版本：V0.28
 export type AdminUser = {
   id: string;
   username: string;
@@ -1377,14 +1377,17 @@ export type SubjectBindingRow = {
   changeReason?: string;
 };
 
+// 第十八批 AN 段第 231 条 231-R1：按后端 ProductionReadinessItemResponse 取页面用到的键（经客户端转驼峰）。
 export type ReadinessItemRow = {
   id: string;
-  blockerCode?: string;
-  title?: string;
-  owner?: string;
+  itemName?: string;
+  ownerDepartment?: string;
+  ownerPerson?: string | null;
   status?: string;
-  evidenceRef?: string | null;
-  dueAt?: string | null;
+  targetDate?: string | null;
+  evidenceLink?: string | null;
+  blockingScope?: string | null;
+  fallbackMode?: string | null;
 };
 
 // 集中数据清理作业（Tier-D 集中清理工具；对应后端 DataCleanupJobRecord）。

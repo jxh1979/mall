@@ -1,4 +1,4 @@
-// 文件版本：V0.04
+// 文件版本：V0.05
 package com.complex.platform.compliance;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -78,7 +78,6 @@ class ComplianceControllerTests {
                         .content("""
                                 {
                                   "contract_id": "contract_1",
-                                  "merchant_id": "merchant_1",
                                   "date_type": "contract_end",
                                   "title": "Contract end",
                                   "due_date": "2026-07-01",
@@ -103,7 +102,6 @@ class ComplianceControllerTests {
                                   "operator_note": "record contract end date",
                                   "evidence_attachment_ids": ["att-contract"],
                                   "contract_id": "contract_1",
-                                  "merchant_id": "merchant_1",
                                   "date_type": "contract_end",
                                   "title": "Contract end",
                                   "due_date": "2026-07-01",
@@ -162,8 +160,7 @@ class ComplianceControllerTests {
                                   "idempotency_key": "scan-20260614",
                                   "operator_note": "daily scan",
                                   "scan_date": "2026-06-14",
-                                  "default_lookahead_days": 30,
-                                  "operator_user_id": "staff_ops"
+                                  "default_lookahead_days": 30
                                 }
                                 """))
                 .andExpect(status().isOk())

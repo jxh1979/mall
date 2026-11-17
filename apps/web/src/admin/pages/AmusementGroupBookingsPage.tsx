@@ -1,12 +1,10 @@
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import React from "react";
 import { formatActionResult } from "../components/ActionResultView";
-import { TechDetails } from "../components/TechDetails";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
 import { usePagedRows, TablePager } from "../components/TablePager";
-import { AuditTrailHint } from "../components/AuditTrailHint";
 import { HighRiskConfirm } from "../components/HighRiskConfirm";
 import { useAdminResource } from "../hooks/useAdminResource";
 import { useSelectedRow } from "../hooks/useSelectedRow";
@@ -22,7 +20,6 @@ const GROUP_BOOKING_MANAGE_PERMISSION = "amusement.group_booking.manage";
 const TEXT = {
   title: "团体/包场",
   description: "查看团体及包场预约人数，取消预约时保留操作原因。",
-  evidence: "接口证据：读取 /api/v1/amusement/group-bookings；释放调用 /api/v1/amusement/group-bookings/{id}/release。",
   boundary: "预约人数不计入实际在场人数；取消预约须写明原因并保留核销证据。",
   loadFailed: "团体/包场读取失败",
   reasonRequired: "释放原因不能为空。",
@@ -176,8 +173,6 @@ export function AmusementGroupBookingsPage({ api, setActionResult, setGlobalErro
   return (
     <section data-testid="amusement-group-bookings-page">
       <AdminPageHeader title={TEXT.title} description={TEXT.description} />
-      <TechDetails><div className="admin-generic-evidence" data-testid="amusement-group-bookings-evidence">{TEXT.evidence}</div></TechDetails>
-      <AuditTrailHint event="amusement_group_booking.viewed / amusement_group_booking.released" />
       {formError ? <div className="admin-inline-error" data-testid="amusement-group-bookings-form-error">{formError}</div> : null}
       <AdminDataState loading={loading} error={error} empty={bookings.length === 0} onRetry={reload}>
         {kpiFocus ? (

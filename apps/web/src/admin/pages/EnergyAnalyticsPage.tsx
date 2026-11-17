@@ -1,7 +1,6 @@
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
-import { AuditTrailHint } from "../components/AuditTrailHint";
 import { usePagedRows, TablePager } from "../components/TablePager";
 import { loadSecondary, useAdminResource } from "../hooks/useAdminResource";
 import { MetricDetailLink, useMetricKpiValue } from "../components/MetricDetailEntry";
@@ -96,7 +95,6 @@ export function EnergyAnalyticsPage({ api, setGlobalError, navigateTo }: AdminPa
   return (
     <section data-testid="energy-analytics-page">
       <AdminPageHeader title={TEXT.title} description={TEXT.description} />
-      <AuditTrailHint event="analytics.dashboard_domain.viewed / analytics.abnormal_readings.viewed" />
       <AdminDataState loading={loading} error={error} empty={false} onRetry={reload}>
         <div className="admin-muted-action" data-testid="energy-freshness">数据截至经营日:{dashboard?.businessDate ?? "—"}(快照口径,异常明细为实时同口径;环比/同比随快照逐日积累后自动可比)</div>
         <div className="admin-kpi-grid" data-testid="energy-summary">

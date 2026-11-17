@@ -425,11 +425,17 @@ public class ComplianceService {
     }
 
     private ContractKeyDateRecord createContractKeyDateOnce(ContractKeyDateRequest request) {
+        String contractId = requireText(request.contractId(), "contract_id");
+        // 第十八批 AN 段 258-R2（PGM:531）：商户由合同带出，请求体的 merchant_id 不再读取；商户账号用别家商户的合同照旧 403。
+        String contractMerchantId = repository.findContractMerchantId(contractId);
+        if (contractMerchantId == null) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "关联合同不存在");
+        }
         Instant now = Instant.now();
         ContractKeyDateRecord record = repository.saveContractKeyDate(new ContractKeyDateRecord(
                 "ckd_" + UUID.randomUUID(),
-                requireText(request.contractId(), "contract_id"),
-                resolveMerchantScopedId(request.merchantId()),
+                contractId,
+                resolveMerchantScopedId(contractMerchantId),
                 normalizeAllowed(request.dateType(), "date_type", CONTRACT_DATE_TYPES),
                 requireText(request.title(), "title"),
                 requireDate(request.dueDate(), "due_date"),
@@ -492,7 +498,8 @@ public class ComplianceService {
     }
 
     private ComplianceReminderScanResult scanRemindersOnce(ComplianceReminderScanRequest request) {
-        LocalDate scanDate = requireDate(request.scanDate(), "scan_date");
+        // 第十八批 AN 段 258-R1：基准日留空按当天（同每日任务 ComplianceReminderScanJob）。
+        LocalDate scanDate = request.scanDate() == null ? LocalDate.now(LocalZone.ID) : request.scanDate();
         int defaultLookaheadDays = request.defaultLookaheadDays() == null ? 30 : request.defaultLookaheadDays();
         if (defaultLookaheadDays < 0 || defaultLookaheadDays > 366) {
             throw ApiException.badRequest("VALIDATION_FAILED", "默认提前提醒天数必须在 0 到 366 之间");
@@ -661,7 +668,6 @@ public class ComplianceService {
         }
         requireText(request.idempotencyKey(), "idempotency_key");
         requireText(request.contractId(), "contract_id");
-        requireText(request.merchantId(), "merchant_id");
         normalizeAllowed(request.dateType(), "date_type", CONTRACT_DATE_TYPES);
         requireText(request.title(), "title");
         requireDate(request.dueDate(), "due_date");
@@ -699,8 +705,7 @@ public class ComplianceService {
             throw ApiException.badRequest("VALIDATION_FAILED", "请求内容不能为空");
         }
         requireText(request.idempotencyKey(), "idempotency_key");
-        requireDate(request.scanDate(), "scan_date");
-        requireText(request.operatorUserId(), "operator_user_id");
+        // 第十八批 AN 段 258-R1：scan_date 可留空；操作人取登录人（留痕），请求体 operator_user_id 不再读取。
     }
 
     private <T> T executeWrite(

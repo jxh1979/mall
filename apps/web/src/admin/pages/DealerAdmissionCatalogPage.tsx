@@ -1,8 +1,7 @@
-// 文件版本：V0.05
+// 文件版本：V0.06
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
-import { AuditTrailHint } from "../components/AuditTrailHint";
 import { useAdminResource } from "../hooks/useAdminResource";
 import { PermissionButton, useCan } from "../security/Can";
 import { shortId } from "../format/ids";
@@ -327,8 +326,6 @@ export function DealerAdmissionCatalogPage({ api, user, setGlobalError, setActio
         title="经销商准入与价格目录"
         description="经销商准入五态：待提交、审核中、已通过、已驳回、已停用；企业资料、合同、开票和银行资料四项审核通过后才启用独立经销商门户。每份经销合同使用独立、可版本化的合同销售价格目录，不复用内部结算价，编辑人与审批人不得同人；已定合同价商品可下单，未定价商品只能询价，报价审批通过后才能订购。对外库存只显示有货、紧张、缺货、预计交期。"
       />
-      <AuditTrailHint event="dealer.created / dealer.reviewed / dealer.deactivated / dealer.price_catalog.decided / dealer.inquiry.decided" />
-      <p className="admin-muted-action" data-testid="dealer-evidence">接口证据：GET/POST /api/v1/dealers；POST /api/v1/dealers/{"{id}"}/review；POST /api/v1/dealers/contracts/{"{id}"}/price-catalogs；GET /api/v1/dealers/contracts/{"{id}"}/external-stock。</p>
       {formError ? <div data-testid="dealer-error" className="admin-inline-error">{formError}</div> : null}
 
       <h3>经销商建档</h3>

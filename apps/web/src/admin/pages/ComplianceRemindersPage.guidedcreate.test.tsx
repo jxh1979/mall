@@ -37,12 +37,16 @@ describe("ComplianceRemindersPage 引导式补录合同关键日期", () => {
     fireEvent.click(screen.getByTestId("compliance-key-date-create-open"));
     fireEvent.change(screen.getByTestId("compliance-key-date-contract"), { target: { value: "contract-9" } });
     fireEvent.change(screen.getByTestId("compliance-key-date-title"), { target: { value: "续约提醒" } });
+    fireEvent.change(screen.getByTestId("compliance-key-date-due"), { target: { value: "2027-01-31" } });
     // 单步表单，直接到确认步
     fireEvent.click(screen.getByTestId("compliance-key-date-guided-next"));
     fireEvent.click(screen.getByTestId("compliance-key-date-create"));
     await waitFor(() => expect(post.mock.calls.some((c) => c[0] === "/api/v1/compliance/contract-key-dates")).toBe(true));
     const call = post.mock.calls.find((c) => c[0] === "/api/v1/compliance/contract-key-dates");
-    expect(call?.[1]).toMatchObject({ contract_id: "contract-9", title: "续约提醒", date_type: "renewal", source_type: "manual" });
+    // 第十八批 AN 段 258-R2：日期类型按后端闭集默认续约通知；责任人取登录人；不带商户（由合同带出）。
+    expect(call?.[1]).toMatchObject({ contract_id: "contract-9", title: "续约提醒", date_type: "renewal_notice", due_date: "2027-01-31",
+      owner_user_id: "u1", source_type: "manual" });
+    expect(call?.[1]).not.toHaveProperty("merchant_id");
     await waitFor(() => expect(screen.queryByTestId("compliance-key-date-guided")).toBeNull());
   });
 

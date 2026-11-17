@@ -1,15 +1,13 @@
-// 文件版本：V0.04
+// 文件版本：V0.05
 import React from "react";
 import { formatActionResult } from "../components/ActionResultView";
-import { TechDetails } from "../components/TechDetails";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
-import { AuditTrailHint } from "../components/AuditTrailHint";
 import { useServerPagedRows } from "../hooks/useServerPagedRows";
 import { TablePager } from "../components/TablePager";
 import type { AdminPageProps, AuditEventRow, AuditOperationEventRow } from "../types";
 import { formatBusinessStatus } from "../i18n/statusLabels";
-import { TERMINAL_LABELS } from "../i18n/fieldLabels";
+import { KEY_VALUE_LABELS, TERMINAL_LABELS } from "../i18n/fieldLabels";
 import type { PagedResult } from "../client/adminClient";
 import { PermissionButton } from "../security/Can";
 import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowDetailDrawer";
@@ -20,23 +18,34 @@ const OPERATION_LIMIT = 200;
 
 // 第十八批 N 段第 122 条 122-R2（PGM:745）：终端列按终端中文名显示；没有终端信息的显示「—」。
 const terminalLabel = (terminal?: string | null) => (terminal ? (TERMINAL_LABELS[terminal] ?? terminal) : "—");
+// 第十八批 AN 段第 227 条 227-R1（PGM:287、PGM:299）：证据事件类型与分类按中文名显示。事件类型未登记的显示「其他事件」；
+// 分类先查按键取值表，查不到再走状态码表（security→安防 等既有映射不变）。
+const eventTypeLabel = (code?: string | null) => KEY_VALUE_LABELS.event_type?.[code ?? ""] ?? "其他事件";
+const eventCategoryLabel = (code?: string | null) => KEY_VALUE_LABELS.event_category?.[code ?? ""] ?? formatBusinessStatus(code);
+// 第十八批 AN 段第 227 条 227-R2（PGM:287「……字段名、状态、枚举取值……必须全部为中文……」；194-R2「显示中文、提交原码」）：
+// 操作日志视图的业务类型、操作人类型、权限按 GET /api/v1/audit/labels 显示中文名，未登记的显示「其他」。
+// 227-R3（PGM:287「……展示给用户的一切文字……必须全部为中文，不得出现任何英文……」）：「操作」列、明细标题与「操作」字段按同一接口的
+// 事件名中文名显示，未登记的显示「其他操作」。
+type OperationLabels = { businessTypes: Map<string, string>; actorTypes: Map<string, string>; eventNames: Map<string, string>; permissions: Map<string, string> };
+const labelMap = (list: unknown) =>
+  new Map((Array.isArray(list) ? (list as Array<{ code?: string; name?: string }>) : []).map((item) => [String(item.code), String(item.name)]));
+const labelOf = (labels: Map<string, string>, code?: string | null, other = "其他") => (code ? (labels.get(code) ?? other) : "-");
 
 const TEXT = {
   title: "审计事件",
   description: "统一查询员工、客户、第三方、财务和生产操作留痕；审计事件只能追加和导出留痕，不允许在业务后台编辑或删除历史事件。",
-  evidence: "接口证据：读取/追加 /api/v1/evidence/events（服务端分页 page/size，可翻更早历史）；导出动作本身通过 EventBatchRequest 写入 evidence.events_reported 留痕。",
   loadFailed: "审计事件读取失败",
   exportFailed: "审计事件导出留痕失败",
   total: "事件总数",
   success: "本页成功",
   failed: "本页失败/阻断",
   categories: "本页分类",
-  search: "本页内筛选 trace / 事件 / 对象 / 摘要",
+  search: "本页内筛选追踪号／事件／对象／摘要",
   exportReason: "导出原因",
   export: "导出并留痕",
   detail: "查看详情",
   noMatch: "无匹配审计事件",
-  boundary: "审计事件 append-only；导出必须产生新的 evidence event，页面不提供编辑、删除、覆盖历史记录能力。",
+  boundary: "审计事件只能追加和导出；每次导出另记一条导出留痕，页面不提供编辑、删除、覆盖历史记录。",
   eventType: "事件类型",
   category: "分类",
   result: "结果",
@@ -50,9 +59,9 @@ const TEXT = {
   // 操作日志视图（真 audit_events）
   viewEvidence: "证据事件",
   viewOperations: "操作日志",
-  opsEvidence: "接口证据：读取 /api/v1/audit/operation-events（服务端按业务类型/业务对象/操作人过滤真操作留痕 audit_events）。",
   opsLoadFailed: "操作日志读取失败",
   opsBusinessType: "业务类型",
+  opsAllBusinessTypes: "全部",
   opsBusinessId: "业务对象",
   opsActor: "操作人",
   opsQuery: "查询",
@@ -60,8 +69,8 @@ const TEXT = {
   opsEventName: "操作",
   opsActorCol: "操作人",
   opsTerminal: "终端",
-  opsPermission: "权限码",
-  opsRequestId: "请求 ID",
+  opsPermission: "权限",
+  opsRequestId: "请求编号",
 };
 
 // KPI 聚焦视图（照 OrganizationMerchantPage 样板）：?kpi=events[&status=<success|failed>]；点 KPI 数字=带参重进本页只渲染事件表（对应子集，本页内）。
@@ -101,9 +110,10 @@ function eventObject(row: AuditEventRow) {
 }
 
 // ponytail: 后端 evidence/events 只支持 page/size（无 keyword），故筛选仅作用于当前服务端页。
+// 227-R1：按页面上看到的事件类型、分类中文名也能筛中（原码仍在内）。
 function matches(row: AuditEventRow, keyword: string) {
   if (!keyword.trim()) return true;
-  const haystack = [row.eventType, row.event_type, row.eventCategory, row.event_category, row.summary, row.result, row.riskLevel, row.risk_level, eventTrace(row), eventObject(row)].map(textValue).join(" ").toLowerCase();
+  const haystack = [row.eventType, row.event_type, eventTypeLabel(row.eventType ?? row.event_type), row.eventCategory, row.event_category, eventCategoryLabel(row.eventCategory ?? row.event_category), row.summary, row.result, row.riskLevel, row.risk_level, eventTrace(row), eventObject(row)].map(textValue).join(" ").toLowerCase();
   return haystack.includes(keyword.trim().toLowerCase());
 }
 
@@ -150,6 +160,8 @@ export function AuditEventsPage({ api, user, setActionResult, setGlobalError, ef
   const [opRows, setOpRows] = React.useState<AuditOperationEventRow[]>([]);
   const [opLoading, setOpLoading] = React.useState(false);
   const [opError, setOpError] = React.useState<string | null>(null);
+  const [opLabels, setOpLabels] = React.useState<OperationLabels>(() => ({ businessTypes: new Map(), actorTypes: new Map(), eventNames: new Map(), permissions: new Map() }));
+  const labelsRequested = React.useRef(false);
 
   React.useEffect(() => {
     const onPopState = () => setKpiFocus(readKpiFocusFromUrl());
@@ -212,7 +224,15 @@ export function AuditEventsPage({ api, user, setActionResult, setGlobalError, ef
 
   // 进入操作日志视图（含对象反查跳入）即自动拉取一次；后续手动改条件点「查询」。
   React.useEffect(() => {
-    if (view === "operations") void loadOperations();
+    if (view !== "operations") return;
+    void loadOperations();
+    // 227-R2：首次进入操作日志视图时取一次标签字典；取不到按无标签处理（显示「其他」）。
+    if (labelsRequested.current) return;
+    labelsRequested.current = true;
+    api.get<{ businessTypes?: unknown; actorTypes?: unknown; eventNames?: unknown; permissions?: unknown } | null>("/api/v1/audit/labels").then(
+      (labels) => setOpLabels({ businessTypes: labelMap(labels?.businessTypes), actorTypes: labelMap(labels?.actorTypes), eventNames: labelMap(labels?.eventNames), permissions: labelMap(labels?.permissions) }),
+      () => undefined,
+    );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [view]);
 
@@ -279,7 +299,7 @@ export function AuditEventsPage({ api, user, setActionResult, setGlobalError, ef
     try {
       const result = await api.post("/api/v1/evidence/events", request);
       forgetSubmitTime(operation);
-      setActionResult({ action: "audit_events_exported", audit: "evidence.events_reported", request, result });
+      setActionResult({ action: "audit_events_exported", request, result });
       events.reload();
     } catch (exportError) {
       const message = exportError instanceof Error ? exportError.message : TEXT.exportFailed;
@@ -295,8 +315,8 @@ export function AuditEventsPage({ api, user, setActionResult, setGlobalError, ef
     setDetail({
       title: `${TEXT.title}明细 · ${eventTrace(row)}`,
       fields: [
-        { label: TEXT.eventType, value: row.eventType ?? row.event_type ?? "-" },
-        { label: TEXT.category, value: formatBusinessStatus(row.eventCategory ?? row.event_category) },
+        { label: TEXT.eventType, value: eventTypeLabel(row.eventType ?? row.event_type) },
+        { label: TEXT.category, value: eventCategoryLabel(row.eventCategory ?? row.event_category) },
         { label: TEXT.result, value: formatBusinessStatus(row.result) },
         { label: TEXT.risk, value: formatBusinessStatus(row.riskLevel ?? row.risk_level) },
         { label: TEXT.source, value: formatBusinessStatus(row.sourceType ?? row.source_type) },
@@ -308,25 +328,27 @@ export function AuditEventsPage({ api, user, setActionResult, setGlobalError, ef
     });
   }
 
+  const eventNameLabel = (code?: string | null) => labelOf(opLabels.eventNames, code, "其他操作");
+
   function openOperationDetail(row: AuditOperationEventRow) {
     setDetail({
-      title: `操作日志明细 · ${row.eventName ?? row.id ?? "-"}`,
+      title: `操作日志明细 · ${eventNameLabel(row.eventName)}`,
       fields: [
-        { label: TEXT.opsEventName, value: row.eventName ?? "-" },
+        { label: TEXT.opsEventName, value: eventNameLabel(row.eventName) },
         { label: TEXT.result, value: formatBusinessStatus(row.eventResult) },
-        { label: TEXT.opsActorCol, value: `${formatBusinessStatus(row.actorType)} / ${row.actorId ?? "-"}` },
-        { label: TEXT.opsBusinessType, value: formatBusinessStatus(row.businessType) },
+        { label: TEXT.opsActorCol, value: `${labelOf(opLabels.actorTypes, row.actorType)} / ${row.actorId ?? "-"}` },
+        { label: TEXT.opsBusinessType, value: labelOf(opLabels.businessTypes, row.businessType) },
         { label: TEXT.opsBusinessId, value: row.businessId ?? "-" },
         { label: TEXT.opsTerminal, value: terminalLabel(row.terminal) },
-        { label: TEXT.opsPermission, value: row.permissionCode ?? "-" },
+        { label: TEXT.opsPermission, value: labelOf(opLabels.permissions, row.permissionCode) },
         { label: TEXT.opsRequestId, value: row.requestId ?? "-" },
-        { label: TEXT.category, value: formatBusinessStatus(row.eventCategory) },
+        { label: TEXT.category, value: eventCategoryLabel(row.eventCategory) },
         { label: TEXT.occurredAt, value: cnDate(row.occurredAt) },
       ],
     });
   }
 
-  const focusObjectLabel = focusObject ? `${focusObject.businessType}:${focusObject.businessId}` : "";
+  const focusObjectLabel = focusObject ? `${labelOf(opLabels.businessTypes, focusObject.businessType)}：${focusObject.businessId}` : "";
 
   return (
     <section data-testid="audit-events-page">
@@ -338,14 +360,17 @@ export function AuditEventsPage({ api, user, setActionResult, setGlobalError, ef
 
       {view === "operations" ? (
         <div data-testid="audit-events-operations">
-          <TechDetails><div className="admin-generic-evidence" data-testid="audit-events-operations-evidence">{TEXT.opsEvidence}</div></TechDetails>
           {focusObject ? (
             <div className="admin-state" data-testid="audit-events-operations-focus-banner">
               {TEXT.opsFocusHint}：{focusObjectLabel}（{opRows.length}）
             </div>
           ) : null}
           <div className="admin-form-grid" data-testid="audit-events-operations-controls">
-            <label>{TEXT.opsBusinessType}<input data-testid="audit-events-op-business-type" value={opBusinessType} onChange={(event) => setOpBusinessType(event.target.value)} /></label>
+            <label>{TEXT.opsBusinessType}<select data-testid="audit-events-op-business-type" value={opBusinessType} onChange={(event) => setOpBusinessType(event.target.value)}>
+              <option value="">{TEXT.opsAllBusinessTypes}</option>
+              {opBusinessType && !opLabels.businessTypes.has(opBusinessType) ? <option value={opBusinessType}>其他</option> : null}
+              {[...opLabels.businessTypes].map(([code, name]) => <option key={code} value={code}>{name}</option>)}
+            </select></label>
             <label>{TEXT.opsBusinessId}<input data-testid="audit-events-op-business-id" value={opBusinessId} onChange={(event) => setOpBusinessId(event.target.value)} /></label>
             <label>{TEXT.opsActor}<input data-testid="audit-events-op-actor-id" value={opActorId} onChange={(event) => setOpActorId(event.target.value)} /></label>
           </div>
@@ -360,10 +385,10 @@ export function AuditEventsPage({ api, user, setActionResult, setGlobalError, ef
                   <tr key={`${row.id ?? row.requestId ?? "op"}-${index}`} className="admin-row-clickable" tabIndex={0} data-testid={`audit-events-op-row-${index}`}
                     onClick={() => openOperationDetail(row)}
                     onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openOperationDetail(row); } }}>
-                    <td>{row.eventName ?? "-"}</td>
+                    <td>{eventNameLabel(row.eventName)}</td>
                     <td>{formatBusinessStatus(row.eventResult)}</td>
                     <td>{row.actorId ?? "-"}</td>
-                    <td>{formatBusinessStatus(row.businessType)}</td>
+                    <td>{labelOf(opLabels.businessTypes, row.businessType)}</td>
                     <td>{row.businessId ?? "-"}</td>
                     <td>{terminalLabel(row.terminal)}</td>
                     <td>{cnDate(row.occurredAt)}</td>
@@ -375,8 +400,6 @@ export function AuditEventsPage({ api, user, setActionResult, setGlobalError, ef
         </div>
       ) : (
       <>
-      <TechDetails><div className="admin-generic-evidence" data-testid="audit-events-evidence">{TEXT.evidence}</div></TechDetails>
-      <AuditTrailHint event="evidence.event_viewed / evidence.events_reported" />
       <AdminDataState loading={events.loading} error={events.error} empty={events.total === 0} onRetry={events.reload}>
         {kpiFocus ? (
         <div className="admin-state" data-testid="audit-events-kpi-focus-banner">
@@ -416,8 +439,8 @@ export function AuditEventsPage({ api, user, setActionResult, setGlobalError, ef
                   onClick={() => openEventDetail(row)}
                   onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openEventDetail(row); } }}>
                   <td onClick={(event) => event.stopPropagation()}><input type="radio" aria-label={`选择第 ${index + 1} 条审计事件`} data-testid={`audit-events-select-${index}`} checked={selected === row} onChange={() => setSelectedIndex(index)} /></td>
-                  <td>{row.eventType ?? row.event_type ?? "-"}</td>
-                  <td>{formatBusinessStatus(row.eventCategory ?? row.event_category)}</td>
+                  <td>{eventTypeLabel(row.eventType ?? row.event_type)}</td>
+                  <td>{eventCategoryLabel(row.eventCategory ?? row.event_category)}</td>
                   <td>{formatBusinessStatus(row.result)}</td>
                   <td>{formatBusinessStatus(row.riskLevel ?? row.risk_level)}</td>
                   <td>{formatBusinessStatus(row.sourceType ?? row.source_type)}</td>

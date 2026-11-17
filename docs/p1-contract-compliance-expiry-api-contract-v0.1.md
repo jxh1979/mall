@@ -1,4 +1,4 @@
-# P1 合同关键日期与证照到期 API 合同 V0.12
+# P1 合同关键日期与证照到期 API 合同 V0.13
 
 ## 1. 定位与边界
 
@@ -43,7 +43,6 @@ AI 辅助识别只作为后续输入来源保留：可记录 `source_type=ai_sug
   "idempotency_key": "contract-date-create",
   "evidence_attachment_ids": ["att-contract"],
   "contract_id": "contract_1",
-  "merchant_id": "merchant_1",
   "date_type": "contract_end",
   "title": "Contract end",
   "due_date": "2026-07-01",
@@ -56,6 +55,8 @@ AI 辅助识别只作为后续输入来源保留：可记录 `source_type=ai_sug
 ```
 
 `date_type`：`contract_start`、`contract_end`、`renewal_notice`、`deposit_return`、`rent_free_end`、`custom`。
+
+商户由 `contract_id` 对应的合同带出，请求体不传 `merchant_id`；合同不存在返回 400「关联合同不存在」，商户账号用别家商户的合同返回 403 `CROSS_MERCHANT_FORBIDDEN`。`due_date`、`owner_user_id` 必填，后台页面的责任人取登录人（第十八批 AN 段 258-R2）。
 
 `source_type`：`manual`、`ai_suggestion`、`imported`。
 
@@ -119,10 +120,11 @@ AI 辅助识别只作为后续输入来源保留：可记录 `source_type=ai_sug
 {
   "idempotency_key": "scan-20260614",
   "scan_date": "2026-06-14",
-  "default_lookahead_days": 30,
-  "operator_user_id": "staff_ops"
+  "default_lookahead_days": 30
 }
 ```
+
+`scan_date` 为扫描基准日，可留空，留空按当天（北京时间）；操作人取登录人留痕，请求体不传操作人（第十八批 AN 段 258-R1）。
 
 扫描规则：
 

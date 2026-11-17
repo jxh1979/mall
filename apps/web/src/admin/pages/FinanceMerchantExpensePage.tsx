@@ -1,7 +1,6 @@
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
-import { AuditTrailHint } from "../components/AuditTrailHint";
 import { GuidedFlowModal } from "../components/GuidedFlowModal";
 import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowDetailDrawer";
 import { TablePager } from "../components/TablePager";
@@ -312,7 +311,6 @@ export function FinanceMerchantExpensePage({ api, setActionResult, setGlobalErro
   return (
     <section data-testid="finance-merchant-expense-page">
       <AdminPageHeader title={TEXT.title} description={TEXT.description} />
-      <AuditTrailHint event="merchant_expense.manual_created / merchant_expense.reversed / merchant_expense.auto_synced" />
 
       {/* ── 筛选 + 动作 ─────────────────────────────────────── */}
       <div className="admin-form-row" data-testid="merchant-expense-filter">

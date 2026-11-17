@@ -1,10 +1,8 @@
 import React from "react";
-import { TechDetails } from "../components/TechDetails";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
 import { usePagedRows, TablePager } from "../components/TablePager";
 import { formatBusinessStatus } from "../i18n/statusLabels";
-import { AuditTrailHint } from "../components/AuditTrailHint";
 import { useAdminResource } from "../hooks/useAdminResource";
 import { useAdminAction } from "../hooks/useAdminAction";
 import { useSelectedRow } from "../hooks/useSelectedRow";
@@ -18,7 +16,6 @@ import { MetricDetailLink, useMetricKpiValue } from "../components/MetricDetailE
 const TEXT = {
   title: "安全巡检/事故",
   description: "覆盖游乐项目开放前安全巡检、提交、整改、复检和重开审批；事故工单深度闭环需由后续正式事故接口页承载。",
-  evidence: "接口证据：读取/创建 /api/v1/amusement/safety-inspections；提交 POST /api/v1/amusement/safety-inspections/{id}/submit；整改 POST /api/v1/amusement/safety-inspections/{id}/rectify；复检 POST /api/v1/amusement/safety-inspections/{id}/recheck；审批重开 POST /api/v1/amusement/safety-inspections/{id}/approve-reopen。",
   loadFailed: "安全巡检数据读取失败",
   actionFailed: "安全巡检操作失败",
   noInspection: "当前没有可操作巡检。",
@@ -422,8 +419,6 @@ export function AmusementSafetyPage({ api, setActionResult, setGlobalError, effe
   return (
     <section data-testid="amusement-safety-page">
       <AdminPageHeader title={TEXT.title} description={TEXT.description} />
-      <TechDetails><div className="admin-generic-evidence" data-testid="amusement-safety-evidence">{TEXT.evidence}</div></TechDetails>
-      <AuditTrailHint event="amusement.safety_inspection.viewed / created / submitted / rectification_submitted / rechecked / reopened" />
       <AdminDataState loading={loading} error={error} empty={rows.length === 0} onRetry={reload}>
         {kpiFocus ? (
           <>

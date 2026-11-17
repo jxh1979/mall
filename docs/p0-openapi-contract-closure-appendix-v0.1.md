@@ -1,4 +1,4 @@
-# P0 OpenAPI 权限、事件、任务追溯收口附录 V0.73
+# P0 OpenAPI 权限、事件、任务追溯收口附录 V0.74
 
 ## 1. 文档定位
 
@@ -14,10 +14,10 @@
 
 | 检查项 | 当前结果 | 执行结论 |
 |---|---:|---|
-| OpenAPI operation 数 | 1381 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
+| OpenAPI operation 数 | 1383 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
 | OpenAPI 权限/通用权限状态数 | 444 | 人工权限矩阵正文未覆盖 343 项；缺口以本文第 3 节补齐 |
-| OpenAPI 成功/失败事件数 | 2762 | 人工事件矩阵正文未覆盖 2713 项；完整事件字典以本文第 4 节为准 |
-| operation 级任务追溯 | 1381 | 人工任务映射正文未逐项覆盖 1375 个 operation；逐 operation 映射以本文第 5 节为准 |
+| OpenAPI 成功/失败事件数 | 2766 | 人工事件矩阵正文未覆盖 2717 项；完整事件字典以本文第 4 节为准 |
+| operation 级任务追溯 | 1383 | 人工任务映射正文未逐项覆盖 1377 个 operation；逐 operation 映射以本文第 5 节为准 |
 | 写接口数量 | 849 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
 
 ## 3. 权限码与认证上下文补充表
@@ -100,7 +100,7 @@
 | `analytics.risk_alert.manage` | staff-token | project | 3 | generateLocalLlmAiQualitySuggestion, createRiskAlert, resolveRiskAlert | 已在权限矩阵正文出现 |
 | `analytics.risk_alert.view` | staff-token | project | 8 | listAiQualityResults, listAiQualityTasks, listCustomerIntents, listMetricAnomalies, listMetricAnomalyTimeline, listRiskAlerts, listRiskRules, listStaffServiceScores | 已在权限矩阵正文出现 |
 | `audit.operation_log.export` | staff-token | platform, project-bar-table | 2 | exportBarSuspendedOrders, exportAuditOperationEvents | OpenAPI 补充，以本附录为准 |
-| `audit.operation_log.view` | staff-token | platform | 1 | queryAuditOperationEvents | OpenAPI 补充，以本附录为准 |
+| `audit.operation_log.view` | staff-token | platform | 2 | getAuditLabels, queryAuditOperationEvents | OpenAPI 补充，以本附录为准 |
 | `authenticated` | staff-token | current-session, merchant, platform, self | 9 | logout, refreshToken, getEffectivePermissions, approveDeleteSpaceType, listManualBackfills, recordPageView, listMyExports, requestEditableExportCopy, downloadEditableExportCopy | 已在权限矩阵正文出现 |
 | `bar.bill.adjust` | staff-token | project-bar-table | 2 | raiseBarBillAnomaly, adjustBarBill | OpenAPI 补充，以本附录为准 |
 | `bar.bill.anomaly.resolve` | staff-token | project-bar-table | 1 | resolveBarBillAnomaly | OpenAPI 补充，以本附录为准 |
@@ -413,7 +413,7 @@
 | `staff.attendance.punch` | staff-token | platform, self | 4 | punchStaffAttendance, issueStaffPhoneTimeAnchor, recordStaffPhoneReceipt, getCurrentStaffWorkPhoneContext | OpenAPI 补充，以本附录为准 |
 | `staff.attendance.view` | staff-token | platform | 1 | listStaffAttendance | OpenAPI 补充，以本附录为准 |
 | `staff.device.bind` | device-credential, staff-token | project | 2 | bindStaffDeviceCredential, reportStaffDeviceIntegrity | OpenAPI 补充，以本附录为准 |
-| `staff.device.review` | staff-token | project | 1 | approveStaffDeviceRebind | OpenAPI 补充，以本附录为准 |
+| `staff.device.review` | staff-token | project | 2 | listStaffDeviceCredentials, approveStaffDeviceRebind | OpenAPI 补充，以本附录为准 |
 | `staff.device.revoke` | staff-token | project | 1 | revokeStaffDeviceCredential | OpenAPI 补充，以本附录为准 |
 | `staff.leave.submit` | staff-token | platform | 3 | submitStaffLeave, listMyStaffLeaves, requestStaffLeaveRevoke | OpenAPI 补充，以本附录为准 |
 | `staff.notice.view` | staff-token | project | 2 | listEmployeeNotices, acknowledgeEmployeeNotice | OpenAPI 补充，以本附录为准 |
@@ -2196,6 +2196,8 @@
 | `not_applicable` | failure | `getAmusementCompensationPolicy` | `GET` | `/api/v1/amusement/compensation-policies/{project_id}` | AMU-游乐安全 | `amusement.park_fault.view` | 接口级事件，以本附录为准 |
 | `not_applicable` | success | `getAnomalyConfig` | `GET` | `/api/v1/analytics/anomaly-config` | ANA-风控分析 | `analytics.dashboard.view` | 接口级事件，以本附录为准 |
 | `not_applicable` | failure | `getAnomalyConfig` | `GET` | `/api/v1/analytics/anomaly-config` | ANA-风控分析 | `analytics.dashboard.view` | 接口级事件，以本附录为准 |
+| `not_applicable` | success | `getAuditLabels` | `GET` | `/api/v1/audit/labels` | P0-待归类 | `audit.operation_log.view` | 接口级事件，以本附录为准 |
+| `not_applicable` | failure | `getAuditLabels` | `GET` | `/api/v1/audit/labels` | P0-待归类 | `audit.operation_log.view` | 接口级事件，以本附录为准 |
 | `not_applicable` | success | `getBarArrivalReminderPolicy` | `GET` | `/api/v1/bar/arrival-reminder-policies/{project_id}` | BAR-酒吧经营 | `bar.reservation.view` | 接口级事件，以本附录为准 |
 | `not_applicable` | failure | `getBarArrivalReminderPolicy` | `GET` | `/api/v1/bar/arrival-reminder-policies/{project_id}` | BAR-酒吧经营 | `bar.reservation.view` | 接口级事件，以本附录为准 |
 | `not_applicable` | success | `getBarCatalogImage` | `GET` | `/api/v1/bar/catalog/images/{name}` | BAR-酒吧经营 | `bar.product.view` | 接口级事件，以本附录为准 |
@@ -2544,6 +2546,8 @@
 | `not_applicable` | success | `listStaffAttendance` | `GET` | `/api/v1/staff/attendance` | STAFF-员工 | `staff.attendance.view` | 接口级事件，以本附录为准 |
 | `not_applicable` | failure | `listStaffAttendance` | `GET` | `/api/v1/staff/attendance` | STAFF-员工 | `staff.attendance.view` | 接口级事件，以本附录为准 |
 | `not_applicable` | failure | `listStaffCommissionSettlements` | `GET` | `/api/v1/staff/commission-settlements` | STAFF-员工 | `staff.payroll.manage` | 接口级事件，以本附录为准 |
+| `not_applicable` | success | `listStaffDeviceCredentials` | `GET` | `/api/v1/staff/device-credentials` | AUTH-账号权限 | `staff.device.review` | 接口级事件，以本附录为准 |
+| `not_applicable` | failure | `listStaffDeviceCredentials` | `GET` | `/api/v1/staff/device-credentials` | AUTH-账号权限 | `staff.device.review` | 接口级事件，以本附录为准 |
 | `not_applicable` | failure | `listStaffDispatches` | `GET` | `/api/v1/staff/dispatches` | STAFF-员工 | `staff.profile.view` | 接口级事件，以本附录为准 |
 | `not_applicable` | success | `listStaffLeaves` | `GET` | `/api/v1/staff/leaves` | STAFF-员工 | `staff.shift.manage` | 接口级事件，以本附录为准 |
 | `not_applicable` | failure | `listStaffLeaves` | `GET` | `/api/v1/staff/leaves` | STAFF-员工 | `staff.shift.manage` | 接口级事件，以本附录为准 |
@@ -3419,6 +3423,7 @@
 | AUTH-账号权限 | `listPositionRoleTemplates` | `GET` | `/api/v1/access/position-role-templates` | 岗位角色模板列表 | `access.role.assign` | `access.position_role_template.viewed` / `not_applicable` | web | operation 级补充 |
 | AUTH-账号权限 | `listRoleProjectOptions` | `GET` | `/api/v1/access/role-project-options` | 角色可查看项目候选清单 | `access.role.manage` | `access.role_project_options.viewed` / `not_applicable` | web | operation 级补充 |
 | AUTH-账号权限 | `listRoles` | `GET` | `/api/v1/access/roles` | 角色列表 | `access.role.view` | `role.viewed` / `not_applicable` | web | operation 级补充 |
+| AUTH-账号权限 | `listStaffDeviceCredentials` | `GET` | `/api/v1/staff/device-credentials` | 员工私人手机凭证列表 | `staff.device.review` | `not_applicable` / `not_applicable` | web, mobile_admin | operation 级补充 |
 | AUTH-账号权限 | `listStaffLevels` | `GET` | `/api/v1/access/staff-levels` | 查询职级目录 | `access.staff_level.view` | `access.staff_level.viewed` / `not_applicable` | web | operation 级补充 |
 | AUTH-账号权限 | `listStaffProfiles` | `GET` | `/api/v1/staff/profiles` | 查询员工档案 | `staff.profile.view` | `staff.profile.viewed` / `not_applicable` | web, mobile_admin | operation 级补充 |
 | AUTH-账号权限 | `removeUserPermissionOverrides` | `POST` | `/api/v1/access/users/{id}/permission-overrides/remove` | 解除员工单独授予或显式拒绝 | `access.role.assign` | `access.user_permission_override.remove` / `access.user_permission_override.remove_failed` | web | operation 级补充 |
@@ -4160,6 +4165,7 @@
 | P0-待归类 | `generateContractPeriodBills` | `POST` | `/api/v1/contracts/{contract_id}/period-bills` | 某期全费目挂账(租金+物业费+能源费) | `finance.ar_ap.manage` | `contract.fee_billed` / `contract.period_bill_failed` | web | operation 级补充 |
 | P0-待归类 | `generateContractRentBill` | `POST` | `/api/v1/contracts/{contract_id}/rent-bills` | 生成某期合同租金应收(base+递增−免租) | `finance.ar_ap.manage` | `contract.rent_billed` / `contract.rent_bill_failed` | web | operation 级补充 |
 | P0-待归类 | `generateSettlementInvoiceItems` | `POST` | `/api/v1/settlement/invoice-items/generate` | 按结算单生成开票清单 | `settlement.invoice.manage` | `settlement.invoice.generated` / `settlement.invoice.generate_failed` | web | operation 级补充 |
+| P0-待归类 | `getAuditLabels` | `GET` | `/api/v1/audit/labels` | 读取操作留痕标签中文名 | `audit.operation_log.view` | `not_applicable` / `not_applicable` | web | operation 级补充 |
 | P0-待归类 | `getComplaintFollowup` | `GET` | `/api/v1/complaint-followups/{chain}/{work_order_id}` | 读取客诉跟进 | `facility.work_order.manage` | `not_applicable` / `not_applicable` | web | operation 级补充 |
 | P0-待归类 | `getContractDepositMonths` | `GET` | `/api/v1/contracts/deposit-months` | 查押金收取月数(全平台统一) | `contract.deposit_months.manage` | `not_applicable` / `not_applicable` | web | operation 级补充 |
 | P0-待归类 | `getContractDepositRefundWait` | `GET` | `/api/v1/contracts/deposit-refund-wait` | 查押金退还等待期(按项目) | `contract.deposit_refund_wait.manage` | `not_applicable` / `not_applicable` | web | operation 级补充 |

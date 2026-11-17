@@ -1,4 +1,4 @@
-// 文件版本：V0.07
+// 文件版本：V0.08
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
@@ -19,7 +19,7 @@ const DISPATCHES = [
 
 function makeApi() {
   return {
-    get: vi.fn(async (url: string) => (url.startsWith("/api/v1/staff/dispatches") ? DISPATCHES : PROFILES)),
+    get: vi.fn(async (url: string) => (url.startsWith("/api/v1/staff/device-credentials") ? [] : url.startsWith("/api/v1/staff/dispatches") ? DISPATCHES : PROFILES)),
     getPaged: vi.fn().mockResolvedValue({ items: [], total: 0, page: 1, size: 10 }),
     post: vi.fn().mockResolvedValue({}),
     put: vi.fn().mockResolvedValue({}),
@@ -231,6 +231,7 @@ describe("StaffProfilesPage 生效时间与原业务交接", () => {
     vi.mocked(api.get).mockImplementation(async (url: string) => {
       if (url.endsWith("/handover")) return { businessAccessStopped: true, revisions: [], pending: transferred ? [] : [pending,
         { ...pending, businessId: "unknown", assignable: false, holdReason: "原业务项目或商户归属待核实" }], history: [] } as never;
+      if (url.startsWith("/api/v1/staff/device-credentials")) return [] as never;
       return (url.includes("dispatches") ? DISPATCHES : PROFILES) as never;
     });
     vi.mocked(api.post).mockImplementation(async () => { transferred = true; return {} as never; });

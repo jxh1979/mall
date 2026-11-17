@@ -35,8 +35,8 @@ test.describe("full admin visual and responsive acceptance", () => {
 
     await page.getByTestId("admin-nav-ADM-OPS-001").click();
     await expect(page).toHaveURL(/\/admin\/ops\/readiness$/);
-    await expect(page.getByTestId("admin-page-title")).toContainText("生产 blocker 与证据");
-    await expect(page.getByTestId("ops-readiness-page")).toContainText("NAS");
+    await expect(page.getByTestId("admin-page-title")).toContainText("生产阻断项与证据");
+    await expect(page.getByTestId("ops-readiness-page")).toContainText("网络存储");
     await expectNoDocumentOverflow(page);
     await expect(page).toHaveScreenshot("full-admin-ops-readiness-desktop.png", {
       fullPage: true,

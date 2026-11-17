@@ -1,9 +1,7 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
-import { AuditTrailHint } from "../components/AuditTrailHint";
-import { TechDetails } from "../components/TechDetails";
 import { useAdminResource } from "../hooks/useAdminResource";
 import { PermissionButton } from "../security/Can";
 import { formatBusinessStatus } from "../i18n/statusLabels";
@@ -160,8 +158,6 @@ export function WecomComplianceReviewPage({ api, user, setActionResult, setGloba
   return (
     <section data-testid="wecom-compliance-review-page">
       <AdminPageHeader title="企微会话合规监察" description="企微会话永久保存，违规命中按权限复核；清理须最高权限本人逐次授权。命中片段已脱敏展示，原文调阅另需高敏授权。" />
-      <AuditTrailHint event="wecom.risk.hit_reviewed / wecom.cleanup_executed" />
-      <TechDetails><div className="admin-generic-evidence" data-testid="wecom-compliance-evidence">/api/v1/compliance/wecom</div></TechDetails>
       <AdminDataState loading={loading} error={error} empty={false} onRetry={reload}>
         <div className="admin-kpi-grid" data-testid="wecom-compliance-summary">
           <div className="admin-kpi-card"><span>违规命中</span><strong data-testid="wecom-risk-hit-count">{riskHits.length}</strong><small>待复核 {openCount}</small></div>

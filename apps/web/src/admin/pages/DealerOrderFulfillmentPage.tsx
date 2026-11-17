@@ -1,11 +1,10 @@
-// 文件版本：V0.07
+// 文件版本：V0.08
 import React from "react";
 import { DealerDeliveryPanel } from "../../dealer/DealerDeliveryPanel";
 import { CounterpartyConfirmationPanel, CounterpartyConfirmationPick } from "../../dealer/CounterpartyConfirmation";
 import { FinanceRefundPanel } from "./FinanceRefundPanel";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
-import { AuditTrailHint } from "../components/AuditTrailHint";
 import { useAdminResource } from "../hooks/useAdminResource";
 import { PermissionButton, useCan } from "../security/Can";
 import type { AdminPageProps } from "../types";
@@ -273,8 +272,6 @@ export function DealerOrderFulfillmentPage({ api, user, setGlobalError, setActio
         title="经销订单与履约"
         description="订单先审核合同、价格、库存和交期，通过后才通知付款并按中心仓预留库存；只支持对公转账和平台线上支付，禁止现金和个人账户收款；财务核验首付款达到合同门槛后才能出库，未约定账期须全款到账；订单审核、到账核验、仓库出库不得由同一人完成全链；取消审批与到账核验只能有一项先完成；首付款截止未达门槛的订单自动取消并按既有退款审批原路退回；已出库尾款逾期转逾期并暂停该经销商新增账期订单；超收单独记录、用途确认后才可用。"
       />
-      <AuditTrailHint event="dealer.order.reviewed / dealer.order.payment_verified / dealer.order.shipped / dealer.order.deadline_cancelled / dealer.order.refund_executed" />
-      <p className="admin-muted-action" data-testid="dealer-orders-evidence">接口证据：GET/POST /api/v1/dealers/{"{id}"}/orders；POST /api/v1/dealers/orders/{"{id}"}/review；POST /api/v1/dealers/payments/{"{id}"}/verify；POST /api/v1/dealers/orders/{"{id}"}/ship；POST /api/v1/dealers/refunds/{"{id}"}/execute。</p>
       {formError ? <div data-testid="dealer-orders-error" className="admin-inline-error">{formError}</div> : null}
 
       <AdminDataState loading={loading} error={error} empty={dealers.length === 0} onRetry={reload}>

@@ -1,10 +1,9 @@
-// 文件版本：V0.04
+// 文件版本：V0.05
 import React from "react";
 import { CounterpartyConfirmationPick } from "../../dealer/CounterpartyConfirmation";
 import { DealerReturnFinancialPanel, DealerInvoiceActions, ReturnEvidenceUpload } from "./DealerReturnFinancialPanel";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
-import { AuditTrailHint } from "../components/AuditTrailHint";
 import { useAdminResource } from "../hooks/useAdminResource";
 import { PermissionButton } from "../security/Can";
 import type { AdminPageProps } from "../types";
@@ -179,8 +178,6 @@ export function DealerReturnInvoicePage(props: AdminPageProps) {
         title="经销退货与开票"
         description="合同期限内仅未拆封可复售或质量问题商品可申请退货；审批通过后收货验收，按实际验收数量与原成交价确认退货金额；退货金额先冲减原订单未收货款，超出部分经既有退款审批原路退还；可复售品回可用库存、质量问题隔离禁售；已开票退货先全额红冲再按最新未退金额重开，全部退货不重开；订单签收后才可按最终未退金额申请电子发票；退货验收与退款执行不同人。"
       />
-      <AuditTrailHint event="dealer.return.requested / dealer.return.decided / dealer.return.inspected / dealer.invoice.reversal_result_recorded / dealer.return.refund_result_recorded / dealer.invoice.issued" />
-      <p className="admin-muted-action" data-testid="dealer-returns-evidence">接口证据：GET/POST /api/v1/dealers/orders/{"{id}"}/returns；POST /api/v1/dealers/returns/{"{id}"}/decision｜receive｜inspection｜invoice-reversal｜freight-confirmation｜refunds/execute；GET/POST /api/v1/dealers/orders/{"{id}"}/invoices；POST /api/v1/dealers/invoices/{"{id}"}/issue</p>
       {formError ? <div data-testid="dealer-returns-error" className="admin-inline-error">{formError}</div> : null}
 
       <AdminDataState loading={loading} error={error} empty={dealers.length === 0} onRetry={reload}>

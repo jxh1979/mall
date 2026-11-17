@@ -1,8 +1,7 @@
-// 文件版本：V0.05
+// 文件版本：V0.06
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
-import { AuditTrailHint } from "../components/AuditTrailHint";
 import { GuidedFlowModal } from "../components/GuidedFlowModal";
 import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowDetailDrawer";
 import { TablePager } from "../components/TablePager";
@@ -548,7 +547,6 @@ export function FinanceDividendsPage({ api, setActionResult, setGlobalError, eff
   return (
     <section data-testid="finance-dividends-page">
       <AdminPageHeader title={TEXT.title} description={TEXT.description} />
-      <AuditTrailHint event="dividend.plan_created / dividend.computed / dividend.legal_confirmed / dividend.approved / dividend.paid_marked" />
 
       {/* ── 分红方案配置 ─────────────────────────────────────── */}
       <h3>分红方案</h3>

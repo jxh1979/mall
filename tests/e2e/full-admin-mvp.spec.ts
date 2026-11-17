@@ -1,4 +1,4 @@
-// 文件版本：V0.09
+// 文件版本：V0.10
 import { expect, test } from "@playwright/test";
 import { installMockApi } from "./support/mock-api";
 
@@ -176,8 +176,10 @@ test.describe("full admin MVP acceptance", () => {
     await expect(page.getByTestId("ops-readiness-error")).toContainText("证据引用");
 
     await page.getByTestId("ops-evidence-ref").fill("evidence://nas/restore-drill/20260616");
+    // 第 231 条 231-R1：按契约须填责任人，标记后状态为已通过。
+    await page.getByTestId("ops-owner-person").fill("张工");
     await page.getByTestId("ops-verify-blocker").click();
-    await expect(page.getByTestId("admin-action-result")).toContainText("状态：已核验");
+    await expect(page.getByTestId("admin-action-result")).toContainText("状态：已通过");
   });
 
   test("ADM-MVP-08 role permission and mobile layout are enforceable", async ({ page }) => {

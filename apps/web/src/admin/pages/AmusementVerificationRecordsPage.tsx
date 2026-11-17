@@ -1,12 +1,10 @@
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import React from "react";
 import { formatActionResult } from "../components/ActionResultView";
-import { TechDetails } from "../components/TechDetails";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
 import { usePagedRows, TablePager } from "../components/TablePager";
-import { AuditTrailHint } from "../components/AuditTrailHint";
 import { loadSecondary, loadSecondaryIfPermitted, useAdminResource } from "../hooks/useAdminResource";
 import { hasPermissions } from "../security/PermissionGate";
 import { formatBusinessStatus } from "../i18n/statusLabels";
@@ -28,8 +26,6 @@ import type {
 const TEXT = {
   title: "游乐核销记录",
   description: "游乐入场/出场核销记录、在场容量看板与通票交叉对账，全部只读。",
-  evidence:
-    "接口证据：读取 /api/v1/amusement/verifications（支持 projectId/sessionId/direction/dateFrom/dateTo 筛选，含关联通票号）、/api/v1/amusement/capacity-snapshots、/api/v1/amusement/projects、/api/v1/amusement/sessions。",
   loadFailed: "游乐核销记录读取失败",
 };
 
@@ -350,8 +346,6 @@ export function AmusementVerificationRecordsPage({ api, setGlobalError, navigate
   return (
     <section data-testid="amusement-verification-records-page">
       <AdminPageHeader title={TEXT.title} description={TEXT.description} />
-      <TechDetails><div className="admin-generic-evidence" data-testid="amu-verif-evidence">{TEXT.evidence}</div></TechDetails>
-      <AuditTrailHint event="amusement.verification.viewed" />
 
       <div className="admin-tabs" data-testid="amu-verif-tabs" role="tablist">
         <button type="button" role="tab" aria-selected={tab === "records"} data-testid="amu-verif-tab-records" className={tab === "records" ? "is-active" : ""} onClick={() => setTab("records")}>核销记录</button>

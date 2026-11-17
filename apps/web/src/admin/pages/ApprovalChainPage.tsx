@@ -4,9 +4,7 @@ import { COMPLIANCE_ITEM_TYPE_LABELS } from "../i18n/complianceLabels";
 import { formatReviewValue } from "../i18n/reviewLabels";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
-import { AuditTrailHint } from "../components/AuditTrailHint";
 import { HighRiskConfirm } from "../components/HighRiskConfirm";
-import { TechDetails } from "../components/TechDetails";
 import { PermissionButton } from "../security/Can";
 import { useAdminAction } from "../hooks/useAdminAction";
 import { useAdminResource } from "../hooks/useAdminResource";
@@ -14,7 +12,7 @@ import type { AdminPageProps } from "../types";
 import { cnDate } from "../components/RowDetailDrawer";
 import { withBase } from "../../basePath";
 
-// 文件版本：V0.08
+// 文件版本：V0.09
 
 // M087-A-02（PGM-1.7.1「发起单据时只需指定该事项的最终审批人，系统按组织层级自动补全……逐级审批」「任一节点驳回则整单退回起草人」
 // 「主线与各条平行线全部通过……才生效」）：审批链与节点裁决页——查看某复核单的主线/平行线节点，逐节点通过、驳回或转交；
@@ -36,7 +34,6 @@ const APPROVE_PERMISSION = "governance.supervisor_review.approve";
 const TEXT = {
   title: "审批链与节点裁决",
   description: "每张复核单按组织层级生成主线节点（发起人的直接上级逐级到最终审批人），需要平行线的另有各部门线节点；逐节点裁决，全部通过才生效，任一节点驳回整单退回起草人。组织层级未维护的单据链未生成，须先维护直接上级再重生成。",
-  evidence: "接口证据：GET /api/v1/platform/supervisor-review/pending；GET /api/v1/platform/supervisor-review/{review_id}/chain；POST …/approve、…/forward、…/chain/regenerate。",
   loadFailed: "审批链读取失败",
   actionFailed: "审批链操作失败",
   pending: "待复核单据",
@@ -292,8 +289,6 @@ export function ApprovalChainPage({ api, setActionResult, setGlobalError, effect
   return (
     <section data-testid="approval-chain-page">
       <AdminPageHeader title={TEXT.title} description={TEXT.description} />
-      <TechDetails><div className="admin-generic-evidence" data-testid="approval-chain-evidence">{TEXT.evidence}</div></TechDetails>
-      <AuditTrailHint event="governance.supervisor_review.chain_generated / node_decided / forwarded / chain_regenerated" />
       <AdminDataState loading={loading} error={error} empty={false} onRetry={reload}>
         <h3>{TEXT.pending}</h3>
         {pendingRows.length === 0 ? <div className="admin-muted-action" data-testid="approval-chain-pending-empty">{TEXT.noPending}</div> : (

@@ -1,9 +1,7 @@
-// 文件版本：V0.03
+// 文件版本：V0.04
 import React from "react";
-import { TechDetails } from "../components/TechDetails";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
-import { AuditTrailHint } from "../components/AuditTrailHint";
 import { HighRiskConfirm } from "../components/HighRiskConfirm";
 import { useServerPagedRows } from "../hooks/useServerPagedRows";
 import { TablePager } from "../components/TablePager";
@@ -43,7 +41,6 @@ function formatBindingStatus(code?: string | null) {
 const TEXT = {
   title: "四类主体绑定",
   description: "展示经营对象、运营主体、合同主体和结算主体的唯一绑定关系；变更时须选择状态并填写原因。",
-  evidence: "接口证据：读取 /api/v1/platform/business-entity-bindings；变更调用 /api/v1/platform/business-entity-bindings/{id}/change。",
   boundary: "四类主体绑定是合同、结算、利润报表和责任归属的基础口径；同一业务对象必须唯一绑定，历史合同和流程留痕不得被覆盖。",
   empty: "暂无主体绑定",
   loadFailed: "主体绑定读取失败",
@@ -187,8 +184,6 @@ export function SubjectBindingsPage({ api, setActionResult, setGlobalError, effe
   return (
     <section data-testid="subject-bindings-page">
       <AdminPageHeader title={TEXT.title} description={TEXT.description} />
-      <TechDetails><div className="admin-generic-evidence" data-testid="subject-bindings-evidence">{TEXT.evidence}</div></TechDetails>
-      <AuditTrailHint event="entity_binding.viewed / entity_binding.changed" />
       {error ? <div className="admin-inline-error" data-testid="subject-bindings-error">{error.message}</div> : null}
       <AdminDataState loading={loading} error={error} empty={false} onRetry={reload}>
         {bindingRows.total === 0 ? <div className="admin-state admin-empty" data-testid="subject-bindings-empty">{TEXT.empty}</div> : (

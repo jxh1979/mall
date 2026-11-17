@@ -1,4 +1,4 @@
-# T1 员工三表 可编码开发规格 V0.18（2026-06-18）
+# T1 员工三表 可编码开发规格 V0.19（2026-06-18）
 
 > **任务**：R5 backlog **T1（员工档案/设备凭证/通知三表）**，W0 底座，**解锁 T9（Android 设备凭证）**。
 > **裁决依据**：R5 裁决⑨——员工三表 + Android 端凭证本期 P0；MDM 自有侧字段暂缓。
@@ -155,6 +155,7 @@ CREATE INDEX IF NOT EXISTS idx_employee_notices_staff ON employee_notices(staff_
 | POST | /api/v1/staff/device-credentials/{id}/approve-rebind | staff.device.review | 审批换机生效 |
 | POST | /api/v1/staff/device-credentials/{id}/report-integrity | （端侧鉴权）| Root/调试上报 |
 | POST | /api/v1/staff/device-credentials/{id}/revoke | staff.device.revoke | 解绑/失效 |
+| GET | /api/v1/staff/device-credentials | staff.device.review 或 staff.device.revoke（任一） | 后台员工档案页私人手机列表：只列生效中与待批准换机，所属档案在任一所持码可触及范围内即返回；两码都没有 403 |
 | GET | /api/v1/staff/notices | staff.notice.view | 通知/同意列表 |
 | POST | /api/v1/staff/notices/{id}/acknowledge | staff.notice.view | 确认/同意 |
 | POST | /api/v1/staff/shifts | staff.shift.manage | 主管排班（单个班次，同员工同开始时刻幂等覆盖）|
@@ -229,3 +230,4 @@ CG-12：`staff.profile.employment_status_change_requested`（发起）→ `staff
 | 2026-10-18 | 第六批复核修复：V492 `staff_leave_requests` 增 status=revoked（已销假）与 `revoked_by`/`revoked_at`/`revoke_reason`（销假留痕；`reviewed_by`/`review_note` 保留原审批），销假前取 staff-payroll:<user> 员工锁再判已定格月份 | BSM L1481「销假或撤销发生在已月结定格月份之后的，在当期薪资单冲正并注明来源，不回改已定格月份。只有主管批准的请假才参与扣薪」 |
 | 2026-10-18 | 版本升 V0.17；第六批第二轮（取代上一行「主管直接销」）：V492 就地改为 V0.03——`staff_leave_requests` status 集增 `revoke_requested`（待销假审批）/`revoked`（已销假）；申请留痕三列 `revoke_requested_by`/`revoke_requested_at`/`revoke_request_reason`（员工本人；驳回后保留为最近一次申请痕迹，再次申请时覆盖），批准留痕 `revoked_by`/`revoked_at`/`revoke_reason`；`reviewed_by`/`review_note` 原审批留痕不覆盖。入口：`POST /api/v1/staff/leaves/{id}/revoke-request`（员工本人对自己已批准的假申请销假，理由必填，`staff.leave.submit`）与 `POST /api/v1/staff/leaves/{id}/revoke`（排班主管 decision=approve/reject，`staff.shift.manage`，仅对 revoke_requested 办理）；批准即生效：取 staff-payroll:<user> 员工锁后转 revoked，事假已计入定格月份的发 `leave_revoked` 补差在当期薪资单冲正并注明来源；驳回回到 approved、假仍有效 | 2026-10-18 操作员裁决补充第 1 条「销假：本人申请＋主管批准……原审批留痕不覆盖」；BSM L1481「只有主管批准的请假才参与扣薪」 |
 | 2026-10-29 | 版本升 V0.18；第十八批 G 段第 82 条（82a-R2、82a-R3）：提成月结拨付清单与月结按码 `staff.payroll.manage` 同一范围——平台管理员全部；商户账号只本商户（酒吧）；其余人员本公司人事按收款主体（company_id）为本公司、经可跨项目角色持有本码的按派驻项目（project_id）在可触及项目内；月结只结范围内的组，范围外的组留给有权的人结；`JdbcStaffRepository.listCommissionSettlements` 去掉项目参数、只按月取，由服务层过滤 | `decisions/2026-10-18-cg-pending-decisions.md` 第 20 条；M738-iter1 所选选项原文一；XM-M001-D 答复 3 第 10 条；PGM L659；BSM L1143 |
+| 2026-11-16 | 版本升 V0.19；第十八批 AN 段第 257 条（257-R1、257-R2）：新增 `GET /api/v1/staff/device-credentials`（持 `staff.device.review` 或 `staff.device.revoke` 任一，列所持码可触及范围内员工的生效中与待批准换机凭证），员工档案页据此显示「私人手机」列并提供「解绑」「批准换机」；批准换机后给员工发一条 `approval_result` 通知「换机已批准」 | PGM:585；PGM:906；BSM:938；第十八批裁决 70 |

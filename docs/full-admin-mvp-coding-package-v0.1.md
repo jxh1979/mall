@@ -1,9 +1,9 @@
-# 完整后台首批 MVP 页面开发包 V0.1
+# 完整后台首批 MVP 页面开发包 V0.11
 
 **来源矩阵**：`docs/full-admin-page-permission-field-matrix-v0.1.csv`
 **关联 SRS**：`docs/full-admin-srs-v0.1.md`
 **关联 UI 验收**：`docs/full-admin-ui-acceptance-matrix-v0.1.md`
-**版本**：V0.1
+**版本**：V0.11（2026-11-16 第十八批 AN 段第 235 条 235-R1：`AuditTrailHint.tsx` 用途改为对象详情里的操作审计反查字段）
 **日期**：2026-06-16
 **状态**：可进入编码计划拆分，尚未代表页面已实现
 
@@ -56,7 +56,7 @@
 | `apps/web/src/admin/security/PermissionGate.tsx` | 页面、按钮、字段级权限守卫，前端只做体验层拦截 |
 | `apps/web/src/admin/components/AdminPageHeader.tsx` | 页面标题、状态、刷新、导出和主操作区 |
 | `apps/web/src/admin/components/AdminDataState.tsx` | 加载、空、错误、部分失败、重试状态 |
-| `apps/web/src/admin/components/AuditTrailHint.tsx` | 显示操作将产生的审计事件和 trace 入口 |
+| `apps/web/src/admin/components/AuditTrailHint.tsx` | 对象详情里的操作审计反查字段 |
 | `apps/web/src/admin/components/HighRiskConfirm.tsx` | 禁用、发布、核销、补偿、证据验证等二次确认 |
 | `apps/web/src/admin/pages/OverviewPage.tsx` | `ADM-OV-001` |
 | `apps/web/src/admin/pages/AccessUsersPage.tsx` | `ADM-ACC-001` |

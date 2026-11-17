@@ -89,10 +89,13 @@ describe("全链下钻 P1-A：目标页按 ?focus= 定位", () => {
 
   it("审计事件页带 focusObjectId(类型:id) → 切操作日志视图并按业务类型/对象服务端反查", async () => {
     // 反查升级：对象引用(类型:id)不再只做证据视图页内筛选，而是切到操作日志视图按 business_type/business_id 服务端过滤真 audit_events。
+    // 第十八批 AN 段第 227 条 227-R3：操作日志视图另取标签字典（客户端已转驼峰），按路径分派假响应。
+    const rows = [
+      { id: "a1", occurredAt: "2026-07-05T10:00:00Z", eventName: "merchant.updated", eventResult: "success", actorType: "staff", actorId: "u1", terminal: "web", businessType: "merchant", businessId: "m-42" },
+    ];
+    const labels = { businessTypes: [{ code: "merchant", name: "商户" }], actorTypes: [], eventNames: [{ code: "merchant.updated", name: "创建或修改商户" }], permissions: [] };
     const api = {
-      get: vi.fn().mockResolvedValue([
-        { id: "a1", occurredAt: "2026-07-05T10:00:00Z", eventName: "merchant.updated", eventResult: "success", actorType: "staff", actorId: "u1", terminal: "web", businessType: "merchant", businessId: "m-42" },
-      ]),
+      get: vi.fn().mockImplementation((path: string) => Promise.resolve(path.includes("/api/v1/audit/labels") ? labels : rows)),
       getPaged: vi.fn().mockResolvedValue({ items: [], total: 0, page: 1, size: 10 }),
       post: vi.fn().mockResolvedValue({}),
       put: vi.fn(), patch: vi.fn(), delete: vi.fn(),
@@ -102,7 +105,9 @@ describe("全链下钻 P1-A：目标页按 ?focus= 定位", () => {
     const calledWith = String((api.get as ReturnType<typeof vi.fn>).mock.calls[0]?.[0] ?? "");
     expect(calledWith).toContain("business_type=merchant");
     expect(calledWith).toContain("business_id=m-42");
-    expect(screen.getByTestId("audit-events-operations-table").textContent).toContain("merchant.updated");
+    // 227-R3（PGM:287）：「操作」列显示事件名中文名，不显示原码。
+    await waitFor(() => expect(screen.getByTestId("audit-events-operations-table").textContent).toContain("创建或修改商户"));
+    expect(screen.getByTestId("audit-events-operations-table").textContent).not.toContain("merchant.updated");
   });
 
   it("治理拓扑带 focusObjectId(merchantId) → 高亮该商户行", async () => {

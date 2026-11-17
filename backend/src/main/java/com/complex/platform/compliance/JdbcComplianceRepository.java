@@ -73,6 +73,12 @@ class JdbcComplianceRepository implements ComplianceRepository {
     }
 
     @Override
+    public String findContractMerchantId(String contractId) {
+        return jdbcTemplate.query("SELECT merchant_id FROM contracts WHERE id = :id", new MapSqlParameterSource("id", contractId),
+                rs -> rs.next() ? rs.getString(1) : null);
+    }
+
+    @Override
     public List<ComplianceExpiryItemRecord> findAllExpiryItems() {
         return jdbcTemplate.query("""
                 SELECT id, subject_type, subject_id, merchant_id, item_type, item_name, document_no,

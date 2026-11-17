@@ -1,12 +1,10 @@
-// 文件版本：V0.15
+// 文件版本：V0.16
 import React from "react";
 import { BarRefundBreakdownPanel } from "./BarRefundBreakdownPanel";
 import { BarShiftPanel } from "./BarShiftPanel";
 import { BarSuspendedOrdersBoard } from "./BarSuspendedOrdersBoard";
-import { TechDetails } from "../components/TechDetails";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
-import { AuditTrailHint } from "../components/AuditTrailHint";
 import { HighRiskConfirm } from "../components/HighRiskConfirm";
 import { useAdminResource } from "../hooks/useAdminResource";
 import { useSelectedRow } from "../hooks/useSelectedRow";
@@ -34,7 +32,6 @@ const TEXT = {
   billRequired: "\u9700\u5148\u751f\u6210\u8d26\u5355\u540e\u624d\u80fd\u7ed3\u7b97\u3002",
   title: "\u8ba2\u5355/\u51fa\u54c1/\u8d26\u5355",
   description: "\u628a\u9152\u5427\u70b9\u5355\u3001\u51fa\u54c1\u3001\u8d26\u5355\u3001\u7ed3\u7b97\u548c\u9500\u552e\u63d0\u6210\u53e3\u5f84\u653e\u5728\u540c\u4e00\u64cd\u4f5c\u9762\uff1b\u62c6\u5355\u3001\u5408\u5355\u3001\u6302\u8d26\u7ee7\u7eed\u6309\u589e\u5f3a POS \u80fd\u529b\u6269\u5c55\u3002",
-  evidence: "\u63a5\u53e3\u8bc1\u636e\uff1a\u8bfb\u53d6 /api/v1/bar/orders\uff1b\u751f\u6210\u8d26\u5355 POST /api/v1/bar/orders/{order_id}/bill\uff1b\u51fa\u54c1 POST /api/v1/bar/orders/{order_id}/deliver\uff1b\u7ed3\u7b97 POST /api/v1/bar/bills/{bill_id}/settle\uff1b反结 POST /api/v1/bar/bills/{bill_id}/reopen\u3002",
   orderCount: "\u8ba2\u5355\u6570",
   currentRows: "\u5f53\u524d\u5217\u8868\u8bb0\u5f55",
   openOrders: "\u672a\u5b8c\u7ed3",
@@ -660,8 +657,6 @@ export function BarOrdersPage({ api, user, setActionResult, setGlobalError, effe
   return (
     <section data-testid="bar-orders-page">
       <AdminPageHeader title={TEXT.title} description={TEXT.description} />
-      <TechDetails><div className="admin-generic-evidence" data-testid="bar-orders-evidence">{TEXT.evidence}</div></TechDetails>
-      <AuditTrailHint event="bar.order.read / bar.order.bill / bar.order.deliver / bar.bill.settle" />
       {/* 第十八批 P 段第 133 条 133-R1：收银交班对账区块放在订单列表的读取／空态之外——当日第一张单之前就要能开班。 */}
       <BarShiftPanel api={api} user={user} effectivePermissions={effectivePermissions} setActionResult={setActionResult} setGlobalError={setGlobalError} />
       {/* 第十八批 T 段第 157 条 157-R7：挂起订单风险看板（BSM:1113），同样放在订单列表的读取／空态之外。 */}

@@ -1,4 +1,4 @@
-// 文件版本：V0.37
+// 文件版本：V0.38
 // OBS-14-02 后台结果区字段中文名字典（PGM「全局原则 · 界面全中文（所有终端零英文）」）。
 // 键用后端 JSON 的蛇形写法；结果区查表时蛇形与驼峰同查（orderId / order_id 都命中 order_id）。
 // 与后端字段中文名表 FieldLabels.java（common.api 包）同键同名：前段按后端原样抄录，后端改名这里跟着改（门禁会比对）。
@@ -785,6 +785,11 @@ export const FIELD_LABELS: Record<string, string> = {
   actor_id: "操作人",
   actor_role: "操作人角色",
   actor_type: "操作人类型",
+  // 第十八批 AN 段第 227 条 227-R2 操作留痕标签接口（GET /api/v1/audit/labels）的各节（同后端 FieldLabels.java）。
+  business_types: "业务类型",
+  actor_types: "操作人类型",
+  event_names: "事件名称",
+  permissions: "权限",
   actual_arrival_date: "实际到货日期",
   actual_at: "实际时间",
   actual_end_at: "实际结束时间",
@@ -3484,7 +3489,10 @@ export const KEY_VALUE_LABELS: Record<string, Record<string, string>> = {
   overall_result: { pass: "通过", fail: "不通过", pending_rectification: "待整改" },
   // 第十八批 AP 段第 229 条 229-R6：游乐安全复检结论可选不通过（同页内复检结论下拉）。
   action_result: { pass: "通过", fail: "不通过", rectified: "已整改" },
-  event_category: { audit: "审计", governance: "治理", ticketing: "票务" },
+  // 第十八批 AN 段第 227 条 227-R1（PGM:287）：证据事件类型只收正常业务会进证据事件表的网页两种（审计事件页、商户准入审计页的导出登记），
+  //   名称同 VALUE_LABELS 的 audit_events_exported、admission_audit_exported；分类补操作留痕唯一的类目字面量 loyalty（会员积分留痕）。
+  event_type: { audit_events_exported: "审计事件已导出", "merchant.admission.audit_exported": "准入审计已导出" },
+  event_category: { audit: "审计", governance: "治理", ticketing: "票务", loyalty: "会员积分" },
   disposition: { acknowledge: "标记已阅", false_positive: "标记误报", escalate: "转告警" },
   category: { bar: "酒吧", ticketing: "门票销售", amusement: "游乐", catering: "餐饮", retail: "零售", service: "服务", entertainment: "娱乐", spirit: "烈酒", wine: "葡萄酒", beer: "啤酒", cocktail: "鸡尾酒", soft_drink: "软饮", mixer: "调饮", tea: "茶饮", snack: "小吃" },
   scope_type: { archived_bar_products: "已存档的酒吧商品", archived_entitlement_templates: "已存档的通票权益模板", archived_merchants: "已存档的商户档案", archived_ticket_types: "已存档的票种", archived_ticket_price_rules: "已存档的票价规则", archived_bar_product_categories: "已存档的酒吧商品分类", archived_bar_combos: "已存档的酒吧套餐", project: "项目", merchant: "商户", bar: "酒吧", ticketing: "票务", amusement: "游乐" },

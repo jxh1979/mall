@@ -1,4 +1,4 @@
-// 文件版本：V0.17
+// 文件版本：V0.18
 import type { Page, Route } from "@playwright/test";
 
 type ApiData = Record<string, unknown> | Array<Record<string, unknown>> | null;
@@ -115,9 +115,9 @@ function createState(empty = false) {
     ...fillRows(11, (i) => ({ id: `risk-fill-${i + 2}`, ruleId: "risk-rule-1", alertType: "customer_risk", riskLevel: i % 2 ? "suspicious" : "high", objectType: "ticket_order", objectId: `order-${i + 2}`, summary: `Filler risk ${i + 2}`, ownerUserId: "ops-1", status: "open", evidenceAttachmentIds: [] as string[], createdAt: now, updatedAt: now, resolvedAt: null as string | null })),
   ];
   const evidenceEvents = empty ? [] : [
-    { id: "event-1", eventType: "ticket.order.created", eventCategory: "ticketing", sourceType: "web", result: "success", riskLevel: "normal", traceId: "event-trace-1", objectType: "ticket_order", objectId: "ticket-order-1", summary: "ticket order created", beforeAfter: { before: {}, after: { status: "created" } }, occurredAt: now },
-    { id: "event-2", eventType: "finance.adjustment.blocked", eventCategory: "finance", sourceType: "web", result: "blocked", riskLevel: "high", traceId: "event-trace-2", objectType: "finance_item", objectId: "bill-1", summary: "adjustment blocked without reason", beforeAfter: { before: { status: "pending" }, after: { status: "pending" } }, occurredAt: now },
-    ...fillRows(10, (i) => ({ id: `event-fill-${i + 3}`, eventType: "bar.order.settled", eventCategory: "bar", sourceType: "web", result: "success", riskLevel: "normal", traceId: `event-trace-fill-${i + 3}`, objectType: "bar_order", objectId: `order-${i + 3}`, summary: `bar order settled ${i + 3}`, beforeAfter: { before: {}, after: { status: "settled" } }, occurredAt: now })),
+    { id: "event-1", eventType: "audit_events_exported", eventCategory: "audit", sourceType: "web", result: "success", riskLevel: "normal", traceId: "event-trace-1", objectType: "ticket_order", objectId: "ticket-order-1", summary: "ticket order created", beforeAfter: { before: {}, after: { status: "created" } }, occurredAt: now },
+    { id: "event-2", eventType: "merchant.admission.audit_exported", eventCategory: "governance", sourceType: "web", result: "blocked", riskLevel: "high", traceId: "event-trace-2", objectType: "finance_item", objectId: "bill-1", summary: "adjustment blocked without reason", beforeAfter: { before: { status: "pending" }, after: { status: "pending" } }, occurredAt: now },
+    ...fillRows(10, (i) => ({ id: `event-fill-${i + 3}`, eventType: "audit_events_exported", eventCategory: "audit", sourceType: "web", result: "success", riskLevel: "normal", traceId: `event-trace-fill-${i + 3}`, objectType: "bar_order", objectId: `order-${i + 3}`, summary: `bar order settled ${i + 3}`, beforeAfter: { before: {}, after: { status: "settled" } }, occurredAt: now })),
   ];
   const merchantWorkOrders = empty ? [] : [{ id: "mswo-1", merchantId: "merchant-1", spaceId: "area-1", contractId: "contract-1", workOrderType: "repair", priority: "high", status: "created", title: "\u7a7a调漏水", description: "\u5546户报修空调漏水", reportedByUserId: "staff_reporter", reportedChannel: "web", ownerDepartment: "", ownerUserId: "", dueAt: "2026-06-16T10:00:00.000Z", evidenceAttachmentIds: ["att-photo-1"], authorizedScope: "merchant-1:work-orders", auditEvidenceRef: "audit://merchant-scope/work-order-1", createdAt: now, updatedAt: now }];
   const merchantZoneFeeRecipients = empty ? [] : [{ id: "mfnr-1", merchantId: "merchant-1", feeEvent: "rent", recipientName: "财务小张", recipientPhone: "15577000001", status: "active", createdAt: now, updatedAt: now }];
@@ -187,7 +187,7 @@ function createState(empty = false) {
     permissionTemplates: empty ? [] : [{ id: "template-basic", templateName: "普通员工", templateType: "base", status: "active", validUntil: null, singleUse: false, permissions: ["analytics.dashboard.view"] }],
     // 对齐后端 ArApItemRecord 真实字段：item_no/amount_cent/paid_amount_cent/unpaid_amount_cent/due_date。
     financeItems: empty ? [] : [{ id: "bill-1", itemNo: "BILL-1", sourceType: "merchant_bill", sourceId: "SO-1", counterparty: "Main Merchant", direction: "receivable", amountCent: 9900, paidAmountCent: 0, unpaidAmountCent: 9900, currency: "CNY", dueDate: "2026-07-15", status: "pending", createdAt: now }],
-    readinessItems: empty ? [] : [{ id: "blocker-1", blockerCode: "SEC-P0-OPS-RECOVERY-001", title: "NAS 恢复演练", owner: "IT", status: "open", evidenceRef: null, dueAt: "2026-06-30" }],
+    readinessItems: empty ? [] : [{ id: "blocker-1", category: "nas_backup", itemName: "网络存储恢复演练", ownerDepartment: "信息技术部", ownerPerson: null as string | null, status: "pending_info", targetDate: "2026-06-30", evidenceLink: null as string | null, blockingScope: "Run restore drill before claiming production recoverability", fallbackMode: "mock only" }],
   };
 }
 
@@ -378,6 +378,7 @@ function fixedRows(pathname: string, state: MockState, options: MockOptions = {}
     "/api/v1/staff/profiles": [
       { id: "profile-navigation-1", user_id: "usr_staff_1", name: "示例员工", merchant_id: null, registration_status: "approved", employment_status: "employed", status: "active", sales_position: true, archived_at: null, delete_status: "none" },
     ],
+    "/api/v1/staff/device-credentials": [],
     "/api/v1/staff/payroll": [
       { id: "pay-e2e-1", user_id: "usr_staff_1", month: "2026-07", base_cent: 800000, commission_cent: 120000,
         bonus_cent: 50000, penalty_cent: 20000, tax_cent: 0, total_cent: 950000 },
@@ -469,7 +470,7 @@ function fixedRows(pathname: string, state: MockState, options: MockOptions = {}
     "/api/v1/facility/site-entry-reports": assignedRows(state.siteEntryReports, options, "vendorUserId"),
     "/api/v1/analytics/metric-anomalies": state.metricAnomalies,
     "/api/v1/compliance/reminders": { items: [{ id: "crm-1", reminder_type: "upcoming", source_type: "contract", source_id: "contract-1", due_date: "2026-08-01", reminder_at: "2026-07-15", severity: "high", status: "open", blocking_suggested: true, message: "示例到期提醒" }] },
-    "/api/v1/compliance/contract-key-dates": { items: [{ id: "ckd-1", contract_id: "contract-1", merchant_id: "merchant-1", date_type: "renewal", title: "示例续约日", due_date: "2026-08-01", status: "open", source_type: "contract", human_confirmed: false }] },
+    "/api/v1/compliance/contract-key-dates": { items: [{ id: "ckd-1", contract_id: "contract-1", merchant_id: "merchant-1", date_type: "renewal_notice", title: "示例续约日", due_date: "2026-08-01", status: "open", source_type: "contract", human_confirmed: false }] },
     "/api/v1/compliance/expiry-items": { items: [{ id: "cei-1", subject_type: "merchant", subject_id: "merchant-1", merchant_id: "merchant-1", item_type: "business_license", item_name: "示例营业执照", document_no: "BL-001", issuing_authority: "市监局", valid_from: "2025-01-01", valid_to: "2026-12-31", expiry_action: "block", status: "active", source_type: "manual", human_confirmed: true }] },
     "/api/v1/compliance/wecom/risk-hits": { items: [{ hit_id: "wrh-1", conversation_id: "conv-1", message_id: "msg-1", rule_code: "PRIVATE_CONTACT", risk_level: "high", matched_snippet: "示例脱敏片段", status: "open", reviewer_id: null, review_note: null, project_id: "project_1" }] },
     "/api/v1/compliance/wecom/retention-policies": { items: [{ id: "wrp-1", scope_type: "global", scope_id: null, retention_days: 180, expiry_action: "archive", enabled: true, updated_at: "2026-06-15T12:00:00.000Z" }] },
@@ -948,7 +949,7 @@ async function handleWrite(route: Route, pathname: string, state: MockState, opt
       occurredAt: String((event as Record<string, unknown>).occurred_at ?? now),
     }));
     state.evidenceEvents.push(...created);
-    return json(route, { status: "evidence.events_reported", events: created, evidenceAttachmentIds: bodyValue(body, "evidenceAttachmentIds", "evidence_attachment_ids") ?? [] });
+    return json(route, { accepted: created.length, receivedAt: now });
   }
   if (pathname === "/api/v1/integration/provider-adapters") {
     const adapter = providerAdapter(`adapter-${state.providerAdapters.length + 1}`, `provider-${state.providerAdapters.length + 1}`, String(bodyValue(body, "adapterType", "adapter_type") ?? "reservation_resource"));
@@ -1076,10 +1077,11 @@ async function handleWrite(route: Route, pathname: string, state: MockState, opt
   if (/^\/api\/v1\/ops\/production-readiness\/items\/[^/]+$/.test(pathname)) {
     const item = state.readinessItems[0];
     if (item) {
-      item.status = String(bodyValue(body, "status") ?? "verified");
-      item.evidenceRef = String(bodyValue(body, "evidenceRef", "evidence_ref") ?? "evidence://mock");
+      item.status = String(bodyValue(body, "status") ?? "passed");
+      item.evidenceLink = String(bodyValue(body, "evidenceLink", "evidence_link") ?? "evidence://mock");
+      item.ownerPerson = String(bodyValue(body, "ownerPerson", "owner_person") ?? "");
     }
-    return json(route, item ?? { id: "blocker-1", status: "verified" });
+    return json(route, item ?? { id: "blocker-1", status: "passed" });
   }
   // 第 23 条 23-R2：外壳每进一页登记一次打开，返回暗纹码。
   if (pathname === "/api/v1/security/page-views") return json(route, { code: "MOCKWM23", opened_at: now });

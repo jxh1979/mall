@@ -1,10 +1,8 @@
-// 文件版本：V0.04
+// 文件版本：V0.05
 import React from "react";
-import { TechDetails } from "../components/TechDetails";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
 import { formatBusinessStatus } from "../i18n/statusLabels";
-import { AuditTrailHint } from "../components/AuditTrailHint";
 import { HighRiskConfirm } from "../components/HighRiskConfirm";
 import { useAdminResource } from "../hooks/useAdminResource";
 import { rowMatchesKeyword } from "../components/rowSearch";
@@ -27,7 +25,6 @@ const ENDPOINTS = [
 const TEXT = {
   title: "回调/轮询/补偿",
   description: "统一查看第三方 Webhook、定时轮询、重试任务、补偿任务、订单同步和券核销回流；立即重试和补偿处理只更新平台任务状态与审计，不代表真实供应商生产补偿已执行。",
-  evidence: "接口证据：读取 /api/v1/integration/retry-tasks、/api/v1/integration/compensation-tasks、/api/v1/integration/order-syncs、/api/v1/integration/voucher-verifications。",
   loadFailed: "第三方回调/轮询数据读取失败",
   total: "事件总数",
   pending: "待处理",
@@ -262,8 +259,6 @@ export function IntegrationEventsPage({ api, setActionResult, setGlobalError, ef
   return (
     <section data-testid="integration-events-page">
       <AdminPageHeader title={TEXT.title} description={TEXT.description} />
-      <TechDetails><div className="admin-generic-evidence" data-testid="integration-events-evidence">{TEXT.evidence}</div></TechDetails>
-      <AuditTrailHint event="integration.retry_task.viewed / integration.compensation_task.viewed / integration.order_sync.viewed / integration.voucher_verification.viewed / local.integration_polling_checked" />
       <AdminDataState loading={loading} error={error} empty={rows.length === 0} onRetry={reload}>
         {kpiFocus ? (
           <div className="admin-state" data-testid="integration-events-kpi-focus-banner">
