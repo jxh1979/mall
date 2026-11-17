@@ -1,14 +1,12 @@
-// 文件版本：V0.07
+// 文件版本：V0.08
 import React from "react";
 import { InventoryQuarantinePanel } from "./InventoryQuarantinePanel";
 import { InventoryWarehousePanel } from "./InventoryWarehousePanel";
-import { TechDetails } from "../components/TechDetails";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
 import { formatBusinessStatus } from "../i18n/statusLabels";
 import { formatLocation, KNOWN_LOCATIONS } from "../i18n/locationLabels";
 import { KEY_VALUE_LABELS } from "../i18n/fieldLabels";
-import { AuditTrailHint } from "../components/AuditTrailHint";
 import { HighRiskConfirm } from "../components/HighRiskConfirm";
 import { FormModal } from "../components/FormModal";
 import { GuidedFlowModal } from "../components/GuidedFlowModal";
@@ -31,7 +29,6 @@ const TRACE_CODE_REGISTER_PERMISSION = "inventory.trace_code.register";
 const TEXT = {
   title: "库存台账",
   description: "集中查看物料、库存余额和库存流水，支持按 OpenAPI 契约登记库存移动；负库存禁止，高价值酒水保持在线核销。",
-  evidence: "接口证据：读取 /api/v1/inventory/items、/api/v1/inventory/stock-balances、/api/v1/inventory/stock-movements、/api/v1/inventory/cost-summary；吧台消耗统计 GET /api/v1/inventory/bar-consumption-stats；登记 POST /api/v1/inventory/stock-movements；新建库存商品规格 POST /api/v1/inventory/items；修改安全库存 POST /api/v1/inventory/items/{id}/safety-stock；库房 GET/POST /api/v1/inventory/warehouses（列表与新建）；登记物品码 POST /api/v1/inventory/trace-codes。",
   loadFailed: "库存台账读取失败",
   actionFailed: "库存移动登记失败",
   quantityInvalid: "移动数量必须大于 0，禁止负库存调整。",
@@ -618,8 +615,6 @@ export function InventoryLedgerPage({ api, setActionResult, setGlobalError, effe
   return (
     <section data-testid="inventory-ledger-page">
       <AdminPageHeader title={TEXT.title} description={TEXT.description} />
-      <TechDetails><div className="admin-generic-evidence" data-testid="inventory-ledger-evidence">{TEXT.evidence}</div></TechDetails>
-      <AuditTrailHint event="inventory.item.viewed / inventory.stock_balance.viewed / inventory.outbound_verified" />
       <InventoryQuarantinePanel api={api} canRead={canReadQuarantine} canManage={canManageQuarantine} onChanged={error ? undefined : reload} />
       {canManageWarehouse ? <InventoryWarehousePanel api={api} setActionResult={setActionResult} /> : null}
       <AdminDataState loading={loading} error={error} empty={items.length === 0 && balances.length === 0 && movements.length === 0} onRetry={reload}>

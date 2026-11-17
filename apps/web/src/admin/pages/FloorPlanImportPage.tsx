@@ -1,8 +1,6 @@
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
-import { AuditTrailHint } from "../components/AuditTrailHint";
-import { TechDetails } from "../components/TechDetails";
 import { loadSecondaryIfPermitted, useAdminResource } from "../hooks/useAdminResource";
 import { Can, PermissionButton } from "../security/Can";
 import { hasPermissions } from "../security/PermissionGate";
@@ -249,8 +247,6 @@ export function FloorPlanImportPage({ api, setActionResult, setGlobalError, effe
   return (
     <section data-testid="floor-plan-import-page">
       <AdminPageHeader title="商场平面图导入" description="上传商场平面图，解析出候选区域，人工复核候选与错误后发布到正式平面图。发布为高危动作，需二次确认。" />
-      <AuditTrailHint event="floor_plan.created / floor_plan.import_published" />
-      <TechDetails><div className="admin-generic-evidence" data-testid="floor-plan-evidence">/api/v1/floor-plans</div></TechDetails>
       <AdminDataState loading={loading} error={error} empty={false} onRetry={reload}>
         <div className="admin-form-row" data-testid="floor-plan-create-form">
           <PermissionButton

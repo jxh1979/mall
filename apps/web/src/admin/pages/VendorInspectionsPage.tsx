@@ -1,6 +1,5 @@
 import React from "react";
 import { formatBusinessStatus } from "../i18n/statusLabels";
-import { TechDetails } from "../components/TechDetails";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
 import { useAdminAction } from "../hooks/useAdminAction";
@@ -243,7 +242,6 @@ export function VendorInspectionsPage({ api, setActionResult, setGlobalError, ef
   return (
     <section data-testid="vendor-inspections-page">
       <AdminPageHeader title="外包巡检任务" description="安保/保洁外包人员只能查看派给自己的巡检任务、模板要求，并提交现场开始、记录与异常上报。" />
-      <TechDetails><div className="admin-generic-evidence" data-testid="vendor-inspections-evidence">接口证据：GET /api/v1/facility/inspections/tasks；GET /api/v1/facility/inspections/templates；POST /api/v1/facility/inspections/tasks/{"{task_id}"}/start；POST /records；POST /report-exception。</div></TechDetails>
       <AdminDataState loading={loading} error={error} empty={rows.length === 0} onRetry={reload}>
         {kpiFocus ? (
           <>

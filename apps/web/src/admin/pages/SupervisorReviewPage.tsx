@@ -1,11 +1,9 @@
-// 文件版本：V0.12
+// 文件版本：V0.13
 import React from "react";
 import { withBase } from "../../basePath";
 import { formatReviewValue } from "../i18n/reviewLabels";
-import { TechDetails } from "../components/TechDetails";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
-import { AuditTrailHint } from "../components/AuditTrailHint";
 import { HighRiskConfirm } from "../components/HighRiskConfirm";
 import { PermissionButton } from "../security/Can";
 import { useAdminAction } from "../hooks/useAdminAction";
@@ -17,7 +15,6 @@ import { ManualBackfillPolicySection } from "./ManualBackfillPolicySection";
 const TEXT = {
   title: "主管复核与违规阻断",
   description: "覆盖高风险业务动作的默认阻断、主管复核评估和审批放行留痕；放行动作必须带幂等键和审批意见，按策略提供证据附件。",
-  evidence: "接口证据：读取主管复核策略、提交评估、提交审批。路径为系统内部接口。",
   loadFailed: "主管复核策略读取失败",
   actionFailed: "主管复核操作失败",
   total: "策略总数",
@@ -423,8 +420,6 @@ export function SupervisorReviewPage({ api, user, setActionResult, setGlobalErro
   return (
     <section data-testid="supervisor-review-page">
       <AdminPageHeader title={TEXT.title} description={TEXT.description} />
-      <TechDetails><div className="admin-generic-evidence" data-testid="supervisor-review-evidence">{TEXT.evidence}</div></TechDetails>
-      <AuditTrailHint event="governance.supervisor_review.policy_read / evaluated / approved" />
       <AdminDataState loading={loading} error={error} empty={rows.length === 0} onRetry={reload}>
         {kpiFocus ? (
           <>

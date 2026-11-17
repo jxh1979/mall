@@ -1,9 +1,7 @@
 import React from "react";
 import { formatBusinessStatus } from "../i18n/statusLabels";
-import { TechDetails } from "../components/TechDetails";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
-import { AuditTrailHint } from "../components/AuditTrailHint";
 import { HighRiskConfirm } from "../components/HighRiskConfirm";
 import { FormModal } from "../components/FormModal";
 import { useAdminResource } from "../hooks/useAdminResource";
@@ -23,7 +21,6 @@ const CLOSED_STATUSES = ["resolved", "dismissed", "ignored"];
 const TEXT = {
   title: "风控预警",
   description: "集中处理高风险客户、员工行为、第三方异常和生产风险预警；创建、调查、解决和关闭都必须带原因和幂等键。",
-  evidence: "接口证据：读取/创建 /api/v1/analytics/risk-alerts；处理 POST /api/v1/analytics/risk-alerts/{id}/resolve。",
   loadFailed: "风控预警读取失败",
   actionFailed: "风控预警操作失败",
   noAlert: "当前没有可处理预警。",
@@ -240,8 +237,6 @@ export function RiskAlertsPage({ api, setActionResult, setGlobalError, effective
   return (
     <section data-testid="risk-alerts-page">
       <AdminPageHeader title={TEXT.title} description={TEXT.description} />
-      <TechDetails><div className="admin-generic-evidence" data-testid="risk-alerts-evidence">{TEXT.evidence}</div></TechDetails>
-      <AuditTrailHint event="risk_alert.viewed / risk_alert.created / analytics.risk_alert.resolved" />
       <AdminDataState loading={loading} error={error} empty={rows.length === 0} onRetry={reload}>
         {kpiFocus ? (
           <>

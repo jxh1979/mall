@@ -1,6 +1,6 @@
 package com.complex.platform.access.staff;
 
-// 文件版本：V0.13
+// 文件版本：V0.14
 import static com.complex.platform.common.api.ApiRequests.requireIdempotencyKey;
 
 import com.complex.platform.access.staff.dto.EmployeeNoticeAcknowledgeRequest;
@@ -127,6 +127,12 @@ public class StaffController {
             @PathVariable String id,
             @RequestBody(required = false) com.complex.platform.access.staff.dto.StaffProfileDeleteApprovalRequest request) {
         return ApiResponse.ok(service.approveDeleteProfile(id, request));
+    }
+
+    /** 第十八批 AN 段 257-R1（PGM:585）：后台员工档案页读员工私人手机凭证（生效中、待批准换机）。 */
+    @GetMapping("/device-credentials")
+    public ApiResponse<PageResponse<StaffDeviceCredentialRecord>> listCredentials() {
+        return ApiResponse.ok(service.listCredentials());
     }
 
     @PostMapping("/device-credentials")

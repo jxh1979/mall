@@ -1,7 +1,6 @@
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
-import { AuditTrailHint } from "../components/AuditTrailHint";
 import { loadSecondary, useAdminResource } from "../hooks/useAdminResource";
 import { useAdminAction } from "../hooks/useAdminAction";
 import { PermissionButton } from "../security/Can";
@@ -210,7 +209,6 @@ export function FinancePropertyFeePage({ api, setActionResult, setGlobalError, e
   return (
     <section data-testid="finance-property-fee-page">
       <AdminPageHeader title={TEXT.title} description={TEXT.description} />
-      <AuditTrailHint event="finance_property_fee.rate_set / finance_property_fee.billed" />
 
       {/* ── 费率设置 ───────────────────────────────────────────── */}
       {/* 项目公司选择器留在页面（既是下方费率表的筛选，也是新增费率的归属，弹窗内复用同一 projectId）。 */}

@@ -2,7 +2,6 @@ import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { CnDatePicker } from "../components/CnDatePicker";
 import { AdminPageHeader } from "../components/AdminPageHeader";
-import { AuditTrailHint } from "../components/AuditTrailHint";
 import { useAdminResource } from "../hooks/useAdminResource";
 import { hasPermissions } from "../security/PermissionGate";
 import { RowDetailDrawer, type RowDetailField } from "../components/RowDetailDrawer";
@@ -187,7 +186,6 @@ export function MonthlyComparisonPage({ api, setActionResult, setGlobalError, ef
   return (
     <section data-testid="monthly-comparison-page">
       <AdminPageHeader title={TEXT.title} description={TEXT.description} />
-      <AuditTrailHint event="analytics.monthly_comparison.viewed / analytics.monthly_report.exported" />
       <div className="admin-toolbar">
         <label>
           月份:

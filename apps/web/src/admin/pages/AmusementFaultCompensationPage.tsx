@@ -1,8 +1,7 @@
-// 文件版本：V0.07
+// 文件版本：V0.08
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
-import { AuditTrailHint } from "../components/AuditTrailHint";
 import { cnDate } from "../components/RowDetailDrawer";
 import { useAdminResource } from "../hooks/useAdminResource";
 import { useCan } from "../security/Can";
@@ -173,7 +172,6 @@ export function AmusementFaultCompensationPage({ api, setActionResult, setGlobal
         title="全园故障补偿"
         description="只有整个游乐园发生故障并影响整体履约时，才可以向受影响客人发放补偿通票。补偿不重新售票，仍在原票下办理：故障发生时已完成入场核销且本场次履约受影响的人份，另补一次完整票面权益（含酒水、礼品）；故障期间没入场的持票人不延期，原票照原有效期使用。同一故障同一人份只补偿一次；批量发放前须由游乐公司负责人和工程或安全岗位共同确认。"
       />
-      <AuditTrailHint event="amusement.fault_compensation.batch_initiated / amusement.fault_compensation.batch_issued / amusement.fault_compensation.policy_configured" />
       <div className="admin-form-row" data-testid="compensation-fault-row">
         <label>补偿事件（全园故障 / 场次提前结束）
           <select aria-label="补偿事件" data-testid="compensation-fault" value={faultId}

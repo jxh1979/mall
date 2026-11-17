@@ -1,8 +1,7 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
-import { AuditTrailHint } from "../components/AuditTrailHint";
 import { cnDate } from "../components/RowDetailDrawer";
 import { useAdminResource } from "../hooks/useAdminResource";
 import { useCan } from "../security/Can";
@@ -137,7 +136,6 @@ export function AmusementParkWideFaultPage({ api, setActionResult, setGlobalErro
         title="全园故障状态"
         description="全园故障（全部游乐项目均不可运行，或供电、消防、入口系统等公共关键设施故障导致游乐园必须整体关闭）由游乐公司负责人和工程或安全岗位共同确认后生效，一经生效立即停止所有纯游乐门票和所有包含游乐权益的通票的新销售；解除同样由两岗位共同确认，解除后恢复销售。局部设备或单个项目故障不在本页处理。"
       />
-      <AuditTrailHint event="amusement.park_fault.initiated / amusement.park_fault.activated / amusement.park_fault.lift_initiated / amusement.park_fault.lifted" />
       <div className="admin-form-row" data-testid="park-fault-query-row">
         <label>综合体项目编号
           <input aria-label="综合体项目编号" data-testid="park-fault-project" value={projectId}

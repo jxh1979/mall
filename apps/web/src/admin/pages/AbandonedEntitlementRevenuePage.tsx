@@ -1,7 +1,6 @@
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
-import { AuditTrailHint } from "../components/AuditTrailHint";
 import { CnDatePicker } from "../components/CnDatePicker";
 import { useAdminResource } from "../hooks/useAdminResource";
 import type { AdminPageProps } from "../types";
@@ -63,7 +62,6 @@ export function AbandonedEntitlementRevenuePage({ api, setGlobalError }: AdminPa
   return (
     <section data-testid="abandoned-entitlement-revenue-page">
       <AdminPageHeader title={TEXT.title} description={TEXT.description} />
-      <AuditTrailHint event="analytics.abandoned_entitlement_revenue.viewed" />
       <div className="admin-form-row" style={{ display: "flex", gap: 12, alignItems: "flex-end", flexWrap: "wrap" }}>
         <label>起始日期(含)
           <CnDatePicker value={start} onChange={setStart} data-testid="abandoned-start" aria-label="起始日期" today={firstOfMonth(now)} />

@@ -71,6 +71,8 @@ describe("BusinessAnalyticsPage 引导式新建复盘锁(phase-9)", () => {
     ));
     await waitFor(() => expect(screen.queryByTestId("business-analytics-lock-guided")).toBeNull());
     expect(setActionResult).toHaveBeenCalledWith(expect.objectContaining({ action: "business_snapshot_locked" }));
+    // 第十八批 AN 段第 227 条 227-R1（PGM:287）：结果区不放英文留痕事件名。
+    expect(setActionResult.mock.calls.at(-1)?.[0]).not.toHaveProperty("audit");
   });
 
   it("步内校验拦截：复盘说明清空则不进下一步、不提交", async () => {

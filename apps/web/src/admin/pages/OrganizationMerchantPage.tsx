@@ -1,7 +1,6 @@
-// 文件版本：V0.14
+// 文件版本：V0.15
 import React from "react";
 import { formatActionResult } from "../components/ActionResultView";
-import { TechDetails } from "../components/TechDetails";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
 import { auditTraceField } from "../components/AuditTrailHint";
@@ -35,7 +34,6 @@ function formatProjectStatus(code?: string | null) {
 const TEXT = {
   title: "组织与商户档案",
   description: "维护经营主体、商户和项目档案，确保运营主体、合同主体和结算主体后续可以唯一绑定、可追溯。",
-  evidence: "接口证据：读取 /api/v1/platform/business-entities、/api/v1/platform/merchants、/api/v1/platform/projects；创建商户调用 /api/v1/platform/merchants。",
   boundary: "组织与商户档案只维护基础档案，不在本页替代四类主体绑定；运营主体、合同主体和结算主体必须在绑定和合同流程中统一留痕。",
   loadFailed: "组织与商户档案读取失败",
   merchantNameRequired: "商户名称不能为空。",
@@ -639,7 +637,6 @@ export function OrganizationMerchantPage({ api, user, setActionResult, setGlobal
             : "当前列表尚未定位到该商户，请检查筛选或翻页"}
         </div>
       )}
-      <TechDetails><div className="admin-generic-evidence" data-testid="organization-merchant-evidence">{TEXT.evidence}</div></TechDetails>
       {formError ? <div className="admin-inline-error" data-testid="organization-merchant-form-error">{formError}</div> : null}
       <AdminDataState loading={loading} error={error} empty={false} onRetry={reload}>
         {entityRows.total === 0 && merchantRows.total === 0 && projectRows.total === 0 ? (

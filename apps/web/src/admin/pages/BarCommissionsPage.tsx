@@ -1,9 +1,7 @@
 import React from "react";
-import { TechDetails } from "../components/TechDetails";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
 import { formatBusinessStatus } from "../i18n/statusLabels";
-import { AuditTrailHint } from "../components/AuditTrailHint";
 import { useAdminResource } from "../hooks/useAdminResource";
 import { useSelectedRow } from "../hooks/useSelectedRow";
 import { PermissionButton } from "../security/Can";
@@ -17,7 +15,6 @@ const CALC_PERM = ["bar.table_commission.calculate"];
 const TEXT = {
   title: "销售提成",
   description: "按卡座销售口径核算业务提成：计提档按员工岗位判（员工档案里标了「销售岗」的按销售人员费率，其余按非销售人员费率），费率在「结算配置中心 → 提成与积分」维护。本页比例列显示的是提成台账里的真实计提比例，不含通票金额，不在本页直接发放薪酬。",
-  evidence: "接口证据：读取 /api/v1/bar/orders；计算 POST /api/v1/bar/bills/{bill_id}/commissions/calculate。",
   loadFailed: "销售提成数据读取失败",
   actionFailed: "销售提成计算失败",
   noBill: "当前订单没有可计提账单。",
@@ -179,8 +176,6 @@ export function BarCommissionsPage({ api, setActionResult, setGlobalError, effec
   return (
     <section data-testid="bar-commissions-page">
       <AdminPageHeader title={TEXT.title} description={TEXT.description} />
-      <TechDetails><div className="admin-generic-evidence" data-testid="bar-commissions-evidence">{TEXT.evidence}</div></TechDetails>
-      <AuditTrailHint event="bar.commission.read / bar.commission.calculated" />
       <AdminDataState loading={loading} error={error} empty={orders.length === 0} onRetry={reload}>
         {kpiFocus ? (
           <div className="admin-state" data-testid="bar-commissions-kpi-focus-banner">

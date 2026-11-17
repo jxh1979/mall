@@ -1,11 +1,9 @@
-// 文件版本：V0.06
+// 文件版本：V0.07
 import React from "react";
 import { formatActionResult } from "../components/ActionResultView";
-import { TechDetails } from "../components/TechDetails";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
 import { usePagedRows, TablePager } from "../components/TablePager";
-import { AuditTrailHint } from "../components/AuditTrailHint";
 import { useAdminResource } from "../hooks/useAdminResource";
 import { formatBusinessStatus } from "../i18n/statusLabels";
 import { PermissionButton } from "../security/Can";
@@ -25,7 +23,6 @@ const ENTITLEMENT_APPROVE = ["amusement.project_entitlement.approve"];
 const TEXT = {
   title: "项目与场次",
   description: "管理项目安全容量、场次时间及实际清场结束。",
-  evidence: "接口证据：读取 /api/v1/amusement/projects、/api/v1/amusement/sessions、/api/v1/amusement/projects/{id}/entitlements；新建项目调用 /api/v1/amusement/projects；新增场次调用 /api/v1/amusement/sessions；权益绑定停用/恢复/申请删除/审批删除调用 /api/v1/amusement/projects/{id}/entitlements/{权益类型}/archive|unarchive|delete-request|delete-approve。",
   boundary: "项目与场次是预约、核销和安全规则的基础资源；本页只维护项目/场次资源，不替代安全巡检和事故闭环。",
   loadFailed: "游乐项目与场次读取失败",
   nameRequired: "场次名称不能为空。",
@@ -492,8 +489,6 @@ export function AmusementSessionsPage({ api, setActionResult, setGlobalError, ef
   return (
     <section data-testid="amusement-sessions-page">
       <AdminPageHeader title={TEXT.title} description={TEXT.description} />
-      <TechDetails><div className="admin-generic-evidence" data-testid="amusement-sessions-evidence">{TEXT.evidence}</div></TechDetails>
-      <AuditTrailHint event="amusement_project.viewed / amusement_session.created" />
       {formError ? <div className="admin-inline-error" data-testid="amusement-sessions-form-error">{formError}</div> : null}
       <AdminDataState loading={loading} error={error} empty={false} onRetry={reload}>
         {kpiFocus ? (

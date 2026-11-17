@@ -1,9 +1,7 @@
 import React from "react";
 import { formatBusinessStatus } from "../i18n/statusLabels";
-import { TechDetails } from "../components/TechDetails";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
-import { AuditTrailHint } from "../components/AuditTrailHint";
 import { useAdminResource } from "../hooks/useAdminResource";
 import { useAdminAction } from "../hooks/useAdminAction";
 import { useSelectedRow } from "../hooks/useSelectedRow";
@@ -43,7 +41,6 @@ type MerchantWorkOrderPolicyRow = { workOrderType: string; priority: string; han
 const TEXT = {
   title: "商户服务工单",
   description: "商户在商户专区自助提报修、保洁、投诉和其他服务请求；本页派单、处理、关闭并配置处理时限与关单方式",
-  evidence: "接口证据：读取 /api/v1/merchant-service/work-orders；负责人候选 GET /api/v1/merchant-service/work-orders/{id}/owner-candidates；派单 POST /api/v1/merchant-service/work-orders/{id}/assign；处理 POST /api/v1/merchant-service/work-orders/{id}/actions；关闭 POST /api/v1/merchant-service/work-orders/{id}/close；取消 POST /api/v1/merchant-service/work-orders/{id}/staff-cancel；客诉跟进 GET /api/v1/complaint-followups/merchant_service/{id}、POST …/loop-confirm；用料 GET/POST /api/v1/merchant-service/work-orders/{id}/materials、POST /api/v1/merchant-service/work-orders/{id}/cost-bearer、POST /api/v1/merchant-service/work-orders/{id}/bearer-dispute；关单方式 GET/PUT /api/v1/merchant-service/work-order-close-methods。",
   loadFailed: "商户服务工单读取失败",
   actionFailed: "商户服务工单操作失败",
   noWorkOrder: "当前没有可操作工单。",
@@ -348,8 +345,6 @@ export function MerchantWorkOrdersPage({ api, setActionResult, setGlobalError, e
   return (
     <section data-testid="merchant-work-orders-page">
       <AdminPageHeader title={TEXT.title} description={TEXT.description} />
-      <TechDetails><div className="admin-generic-evidence" data-testid="merchant-work-orders-evidence">{TEXT.evidence}</div></TechDetails>
-      <AuditTrailHint event="merchant_service.listMerchantServiceWorkOrders.succeeded / assignMerchantServiceWorkOrder.succeeded / addMerchantServiceWorkOrderAction.succeeded / closeMerchantServiceWorkOrder.succeeded / work_order.cancelled / work_order_close_method_saved / complaint.loop_confirmed" />
       <AdminDataState loading={loading} error={error} empty={rows.length === 0} onRetry={reload}>
         {kpiFocus ? (
         <div className="admin-state" data-testid="merchant-work-orders-kpi-focus-banner">

@@ -63,12 +63,12 @@ class ComplianceServiceTests {
     void createContractKeyDateRequiresCoreFieldsAndWritesFailureAudit() {
         assertThatThrownBy(() -> service.createContractKeyDate(new ContractKeyDateRequest(
                 "contract-date-missing",
-                "missing merchant",
+                "missing title",
                 List.of(),
                 "contract_1",
-                " ",
+                "merchant_1",
                 "contract_end",
-                "Contract end",
+                " ",
                 LocalDate.parse("2026-07-01"),
                 List.of(90, 30, 7),
                 "active",
@@ -187,16 +187,16 @@ class ComplianceServiceTests {
         assertThat(forOther.items()).isEmpty();
     }
 
-    // P1: merchant ownership must come from caller scope, not the request body
+    // P1 / 258-R2: merchant ownership comes from the contract (body merchant_id is not read); another merchant's contract is rejected
     @Test
-    void createContractKeyDateRejectsBodyMerchantIdDifferentFromScope() {
-        // caller is merchant_1 (setUp); planting a record under merchant_2 via the body must be rejected
+    void createContractKeyDateRejectsContractOfAnotherMerchant() {
+        // caller is merchant_1 (setUp); contract_2 belongs to merchant_2
         assertThatThrownBy(() -> service.createContractKeyDate(new ContractKeyDateRequest(
                         "date-xmerchant",
                         "record contract end date",
                         List.of("att-contract"),
-                        "contract_1",
-                        "merchant_2",
+                        "contract_2",
+                        "merchant_1",
                         "contract_end",
                         "Contract end",
                         LocalDate.parse("2026-06-20"),
@@ -303,6 +303,7 @@ class ComplianceServiceTests {
         private final Map<String, ComplianceExpiryItemRecord> expiryItems = new LinkedHashMap<>();
         private final List<ComplianceReminderRecord> reminders = new ArrayList<>();
         int contractDateSaveCount;
+        private final Map<String, String> contractMerchants = Map.of("contract_1", "merchant_1", "contract_2", "merchant_2");
 
         @Override
         public List<ContractKeyDateRecord> findAllContractKeyDates() {
@@ -321,6 +322,11 @@ class ComplianceServiceTests {
             contractKeyDates.put(record.id(), record);
             contractDateSaveCount++;
             return record;
+        }
+
+        @Override
+        public String findContractMerchantId(String contractId) {
+            return contractMerchants.get(contractId);
         }
 
         @Override

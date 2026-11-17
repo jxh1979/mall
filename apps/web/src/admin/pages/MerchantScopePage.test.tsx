@@ -1,4 +1,4 @@
-// 文件版本：V0.03
+// 文件版本：V0.04
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -169,16 +169,14 @@ describe("MerchantScopePage 按后端真实字段展示（M023-001/002/003/005�
     expect(screen.queryByTestId("merchant-scope-confirm")).toBeNull();
   });
 
-  it("接口证据写真实权限码与真实留痕事件", async () => {
+  // 第 235 条 235-R1（PGM:287 界面全中文；决策台账 193-R2 接口路径不上屏）：不再显示接口证据与英文留痕事件名。
+  it("不显示接口证据与操作留痕事件名", async () => {
     renderPage();
     await waitFor(() => expect(screen.getByTestId("merchant-scope-summary")).toBeTruthy());
-    const evidence = screen.getByTestId("merchant-scope-evidence").textContent ?? "";
-    expect(evidence).toContain("merchant.service_work_order.view");
-    expect(evidence).toContain("merchant.billing.view");
-    expect(evidence).not.toContain("merchant.portal.read");
+    expect(screen.queryByTestId("merchant-scope-evidence")).toBeNull();
     const page = screen.getByTestId("merchant-scope-page").textContent ?? "";
-    expect(page).toContain("merchant_billing.bill.viewed");
-    expect(page).not.toContain("merchant.scope_confirmed");
+    expect(page).not.toContain("merchant_billing.bill.viewed");
+    expect(page).not.toContain("/api/v1");
   });
 
   it("商户号为纯文本，不渲染点了没反应的下钻按钮", async () => {

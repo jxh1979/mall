@@ -1,9 +1,7 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
-import { AuditTrailHint } from "../components/AuditTrailHint";
-import { TechDetails } from "../components/TechDetails";
 import { loadSecondary, useAdminResource } from "../hooks/useAdminResource";
 import type { AdminPageProps, GovernanceSpaceRow } from "../types";
 import { PermissionButton } from "../security/Can";
@@ -146,12 +144,6 @@ export function VenueBusinessHoursPage({ api, setActionResult, setGlobalError, e
         description="按场地配每个星期几的开业和歇业时刻。歇业时刻早于开业时刻表示营业到次日凌晨（如 20:00 至次日 02:00）。"
       />
       <CustomerHomeContentSection api={api} setActionResult={setActionResult} setGlobalError={setGlobalError} effectivePermissions={effectivePermissions} />
-      <TechDetails>
-        <div className="admin-generic-evidence" data-testid="venue-business-hours-evidence">
-          接口证据：读取 /api/v1/platform/venue-business-hours；读取 /api/v1/platform/spaces；保存 POST /api/v1/platform/venue-business-hours。
-        </div>
-      </TechDetails>
-      <AuditTrailHint event="venue_business_hours.viewed / venue_business_hours.updated" />
       <AdminDataState loading={loading} error={error} empty={false} onRetry={reload}>
         <div className="admin-kpi-grid" data-testid="venue-business-hours-summary">
           <div className="admin-kpi-card"><span>已配营业时间的场地</span><strong data-testid="venue-business-hours-kpi-venues">{configuredVenues}</strong><small>至少配了一天且未停用</small></div>

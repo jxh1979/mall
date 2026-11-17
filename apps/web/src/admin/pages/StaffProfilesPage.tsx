@@ -1,9 +1,8 @@
-// 文件版本：V0.10
+// 文件版本：V0.11
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
-import { AuditTrailHint } from "../components/AuditTrailHint";
-import { useAdminResource } from "../hooks/useAdminResource";
+import { loadSecondaryIfPermitted, useAdminResource } from "../hooks/useAdminResource";
 import { formatBusinessStatus } from "../i18n/statusLabels";
 import { PermissionButton, useCan } from "../security/Can";
 import type { AdminPageProps } from "../types";
@@ -35,6 +34,13 @@ type StaffDispatchRow = {
   note?: string | null;
 };
 
+// 第 257 条 257-R2：员工私人手机凭证（后台只读到生效中、待批准换机两种）。
+type StaffDeviceCredentialRow = {
+  id: string;
+  staffProfileId?: string;
+  bindStatus?: string;
+};
+
 type HandoverOverview = {
   businessAccessStopped: boolean;
   revisions: { reviewId: string; beforeStatus: string; afterStatus: string; reason: string; reviewStatus: string; effectiveAt: string; appliedAt?: string | null }[];
@@ -46,6 +52,10 @@ const EMPLOYMENT = { pending_entry: "待入职", employed: "在职", trial: "试
 const DISPATCH_STATUS: Record<string, string> = { active: "进行中", ended: "已结束" };
 const todayIso = () => new Date().toISOString().slice(0, 10);
 const MANAGE = ["staff.profile.review"];
+// 第 257 条 257-R2（PGM:585「员工换手机必须先解绑旧手机，再绑定新手机。」；第十八批裁决 70 批准时先废旧再生效）。
+const DEVICE_REVIEW = ["staff.device.review"];
+const DEVICE_REVOKE = ["staff.device.revoke"];
+const DEVICE_STATUS: Record<string, string> = { active: "生效中", pending_review: "待批准换机" };
 
 /**
  * 员工档案页（ADM-STF-004，V349）。
@@ -58,6 +68,11 @@ const MANAGE = ["staff.profile.review"];
  */
 export function StaffProfilesPage({ api, user, setActionResult, setGlobalError, effectivePermissions, reportViewedObjects }: AdminPageProps) {
   const canManage = useCan(effectivePermissions, MANAGE);
+  const canReviewDevice = useCan(effectivePermissions, DEVICE_REVIEW);
+  const canRevokeDevice = useCan(effectivePermissions, DEVICE_REVOKE);
+  // 两个码都没有时不读凭证、不显示「私人手机」列，免得整列「—」被误读为员工没有手机。
+  const canSeeDevices = canReviewDevice || canRevokeDevice;
+  const [credentials, setCredentials] = React.useState<StaffDeviceCredentialRow[]>([]);
   const canDispatch = canManage && !user.merchantId && !["merchant", "merchant_admin", "outsourced_vendor"].includes(user.accountType);
   const [rows, setRows] = React.useState<StaffProfileRow[]>([]);
   // 第 23 条 23-R5：敏感页这一次看到的对象（PGM:687「哪个客人、哪个商户、哪些单据」）。
@@ -87,12 +102,14 @@ export function StaffProfilesPage({ api, user, setActionResult, setGlobalError, 
 
   const { loading, error, reload } = useAdminResource(
     async () => {
-      const [items, dispatchItems] = await Promise.all([
+      const [items, dispatchItems, deviceCredentials] = await Promise.all([
         api.get<StaffProfileRow[]>(includeArchivedRef.current ? "/api/v1/staff/profiles?include_archived=true" : "/api/v1/staff/profiles"),
         api.get<StaffDispatchRow[]>("/api/v1/staff/dispatches"),
+        loadSecondaryIfPermitted(canSeeDevices, () => api.get<StaffDeviceCredentialRow[]>("/api/v1/staff/device-credentials"), []),
       ]);
       setRows(items ?? []);
       setDispatches(Array.isArray(dispatchItems) ? dispatchItems : []);
+      setCredentials(Array.isArray(deviceCredentials.data) ? deviceCredentials.data : []);
     },
     { onError: setGlobalError, fallbackMessage: "员工档案读取失败" },
   );
@@ -114,6 +131,22 @@ export function StaffProfilesPage({ api, user, setActionResult, setGlobalError, 
       await reload();
     } catch (error) {
       setFormError(error instanceof Error ? error.message : "员工档案操作失败");
+    } finally { setSubmittingId(""); }
+  }
+
+  // 第 257 条 257-R2：解绑生效中的私人手机（员工手机丢失或更换时先解绑旧手机，原因取「改动事由」）；批准待批准换机（系统先作废旧手机、再让新手机生效）。
+  async function changeDevice(row: StaffProfileRow, credential: StaffDeviceCredentialRow, action: "revoke" | "approve-rebind") {
+    if (action === "revoke" && !reason.trim()) { setFormError("解绑须填写原因。"); return; }
+    setFormError("");
+    setSubmittingId(credential.id);
+    try {
+      await api.post(`/api/v1/staff/device-credentials/${encodeURIComponent(credential.id)}/${action}`,
+        action === "revoke" ? { reason: reason.trim() } : {});
+      setActionResult({ 结果: action === "revoke" ? "私人手机已解绑" : "换机已批准，旧手机已解绑、新手机已生效", 员工档案: row.id });
+      if (action === "revoke") setReason("");
+      await reload();
+    } catch (error) {
+      setFormError(error instanceof Error ? error.message : "私人手机操作失败");
     } finally { setSubmittingId(""); }
   }
 
@@ -234,7 +267,6 @@ export function StaffProfilesPage({ api, user, setActionResult, setGlobalError, 
         title="员工档案"
         description="办理员工注册审批、档案存档及删除。员工状态（待入职/在职/试岗/停岗/离职）的任何变更都只是发起复核：须经 人力会签与该员工直属起共三个组织层级全部通过且到生效时间才生效。停岗、离职生效即停止业务权限与原会话，未交接事项继续由有权人员承接；设备交接、工资结清继续办理。销售岗员工卖出卡座按销售人员费率计提提成，其余按非销售人员费率；两档费率在「结算配置中心 → 提成与积分」维护。销售岗改动只影响此后新开的账单，不回算历史提成。"
       />
-      <AuditTrailHint event="staff.profile.employment_status_change_requested / staff.profile.employment_status_changed / staff.profile.sales_position_changed" />
       <label><input type="checkbox" data-testid="staff-profiles-include-archived" checked={includeArchived} onChange={(event) => { includeArchivedRef.current = event.target.checked; setIncludeArchived(event.target.checked); void reload(); }} />显示已存档</label>
       <AdminDataState loading={loading} error={error} empty={visibleRows.length === 0} onRetry={reload}>
         {rows.some((row) => row.registrationStatus === "submitted") ? <label>注册审批初始密码
@@ -259,7 +291,7 @@ export function StaffProfilesPage({ api, user, setActionResult, setGlobalError, 
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="staff-profiles-table">
             <thead>
-              <tr><th>姓名</th><th>手机号</th><th>所属商户</th><th>员工账号</th><th>注册状态</th><th>员工状态</th><th>销售岗</th><th>操作</th></tr>
+              <tr><th>姓名</th><th>手机号</th><th>所属商户</th><th>员工账号</th><th>注册状态</th><th>员工状态</th><th>销售岗</th>{canSeeDevices ? <th>私人手机</th> : null}<th>操作</th></tr>
             </thead>
             <tbody>
               {visibleRows.map((row) => (
@@ -277,6 +309,19 @@ export function StaffProfilesPage({ api, user, setActionResult, setGlobalError, 
                     </select>
                   </td>
                   <td data-testid={`staff-profile-sales-position-${row.id}`}>{row.salesPosition ? "是" : "否"}</td>
+                  {canSeeDevices ? <td data-testid={`staff-profile-devices-${row.id}`}>
+                    {credentials.some((credential) => credential.staffProfileId === row.id) ? credentials
+                      .filter((credential) => credential.staffProfileId === row.id)
+                      .map((credential) => <div key={credential.id}>
+                        {DEVICE_STATUS[credential.bindStatus ?? ""]}
+                        {credential.bindStatus === "active" ? <PermissionButton permissionsState={effectivePermissions} permissions={DEVICE_REVOKE}
+                          data-testid={`staff-device-revoke-${credential.id}`} disabled={!!submittingId}
+                          onClick={() => void changeDevice(row, credential, "revoke")}>解绑</PermissionButton>
+                          : <PermissionButton permissionsState={effectivePermissions} permissions={DEVICE_REVIEW}
+                            data-testid={`staff-device-approve-${credential.id}`} disabled={!!submittingId}
+                            onClick={() => void changeDevice(row, credential, "approve-rebind")}>批准换机</PermissionButton>}
+                      </div>) : "—"}
+                  </td> : null}
                   <td>
                     {row.userId ? <PermissionButton permissionsState={effectivePermissions} permissions={MANAGE}
                       data-testid={`staff-profile-handover-${row.id}`} disabled={!!submittingId || handoverLoading}

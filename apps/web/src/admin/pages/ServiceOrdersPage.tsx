@@ -1,9 +1,9 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { CnDatePicker } from "../components/CnDatePicker";
 import { AdminPageHeader } from "../components/AdminPageHeader";
-import { AuditTrailHint, auditTraceField } from "../components/AuditTrailHint";
+import { auditTraceField } from "../components/AuditTrailHint";
 import { loadSecondary, useAdminResource } from "../hooks/useAdminResource";
 import { TraceLink } from "../components/TraceLink";
 import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowDetailDrawer";
@@ -287,7 +287,6 @@ export function ServiceOrdersPage({ api, user, setGlobalError, setActionResult, 
   return (
     <section data-testid="service-orders-page">
       <AdminPageHeader title={TEXT.title} description={TEXT.description} />
-      <AuditTrailHint event="service.catalog.saved / service.order.created / service.order.cancelled" />
       <h3>服务目录(固定参考价)</h3>
       <div className="admin-form-row" data-testid="service-catalog-editor">
         <button type="button" data-testid="svc-catalog-create-open" onClick={() => { setCatalogError(""); setCatalogOpen(true); }}>＋ 新增服务目录</button>

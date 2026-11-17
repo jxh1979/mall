@@ -234,19 +234,20 @@ public class ProductionReadinessService {
     private List<ProductionReadinessItem> defaultItems() {
         Instant now = Instant.now();
         LocalDate targetDate = LocalDate.of(2026, 6, 30);
+        // 第十八批 AN 段第 231 条 231-R1（PGM:287）：默认项名称与责任部门上屏，用中文；默认方案、降级方式、下一步不上屏，照旧。
         return List.of(
-                defaultItem("mdm-device-enrollment", "mdm", "MDM device enrollment", "Use local/test terminal flow until Android Enterprise data is complete", targetDate, now),
-                defaultItem("mdm-policy-push", "mdm", "MDM policy push", "Record supplier prerequisites and keep smoke devices on controlled local profile", targetDate, now),
-                defaultItem("payment-channel-contract", "payment", "Payment channel contract", "Use mock/offline registration until production payment credentials are approved", targetDate, now),
-                defaultItem("payment-callback-reconciliation", "payment", "Payment callback reconciliation", "Keep callback and reconciliation in mock mode until provider callback data is available", targetDate, now),
-                defaultItem("age-verification-policy", "age_verification", "Age verification policy", "Block real age-gated flow until human review and supplier capability are confirmed", targetDate, now),
-                defaultItem("nas-backup-plan", "nas_backup", "NAS backup plan", "Keep documented backup runbook and block production recovery claims until NAS is validated", targetDate, now),
-                defaultItem("nas-restore-drill", "nas_backup", "NAS restore drill", "Run restore drill before claiming production recoverability", targetDate, now),
-                defaultItem("credential-rotation-runbook", "credential_rotation", "Credential rotation runbook", "Store credential references only and rotate real secrets outside the API", targetDate, now),
-                defaultItem("wecom-notification", "wecom", "WeCom notification", "Use internal mock notification until enterprise app material is complete", targetDate, now),
-                defaultItem("third-party-provider-mock", "third_party", "Third-party provider mock", "Keep SDK/API calls mocked until supplier contracts and sandboxes are confirmed", targetDate, now),
-                defaultItem("server-160-runtime", "server_160", "Server 160 runtime", "Use 160 smoke and environment scripts as coding acceptance gate", targetDate, now),
-                defaultItem("https-domain-binding", "https_domain", "HTTPS domain binding", "Track public production HTTPS binding as a production reminder, not an internal coding blocker", targetDate, now)
+                defaultItem("mdm-device-enrollment", "mdm", "设备管控：设备纳管登记", "Use local/test terminal flow until Android Enterprise data is complete", targetDate, now),
+                defaultItem("mdm-policy-push", "mdm", "设备管控：策略下发", "Record supplier prerequisites and keep smoke devices on controlled local profile", targetDate, now),
+                defaultItem("payment-channel-contract", "payment", "支付渠道签约", "Use mock/offline registration until production payment credentials are approved", targetDate, now),
+                defaultItem("payment-callback-reconciliation", "payment", "支付回调与对账", "Keep callback and reconciliation in mock mode until provider callback data is available", targetDate, now),
+                defaultItem("age-verification-policy", "age_verification", "年龄核验策略", "Block real age-gated flow until human review and supplier capability are confirmed", targetDate, now),
+                defaultItem("nas-backup-plan", "nas_backup", "网络存储备份方案", "Keep documented backup runbook and block production recovery claims until NAS is validated", targetDate, now),
+                defaultItem("nas-restore-drill", "nas_backup", "网络存储恢复演练", "Run restore drill before claiming production recoverability", targetDate, now),
+                defaultItem("credential-rotation-runbook", "credential_rotation", "凭证轮换操作手册", "Store credential references only and rotate real secrets outside the API", targetDate, now),
+                defaultItem("wecom-notification", "wecom", "企业微信通知", "Use internal mock notification until enterprise app material is complete", targetDate, now),
+                defaultItem("third-party-provider-mock", "third_party", "第三方服务商模拟", "Keep SDK/API calls mocked until supplier contracts and sandboxes are confirmed", targetDate, now),
+                defaultItem("server-160-runtime", "server_160", "160 服务器运行环境", "Use 160 smoke and environment scripts as coding acceptance gate", targetDate, now),
+                defaultItem("https-domain-binding", "https_domain", "加密访问域名绑定", "Track public production HTTPS binding as a production reminder, not an internal coding blocker", targetDate, now)
         );
     }
 
@@ -263,7 +264,7 @@ public class ProductionReadinessService {
                 category,
                 itemName,
                 defaultSolution,
-                "IT",
+                "信息技术部",
                 null,
                 null,
                 ProductionReadinessStatus.PENDING_INFO,

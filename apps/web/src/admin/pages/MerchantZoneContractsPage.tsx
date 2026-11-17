@@ -1,8 +1,7 @@
-// 文件版本：V0.03
+// 文件版本：V0.04
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
-import { AuditTrailHint } from "../components/AuditTrailHint";
 import { usePagedRows, TablePager } from "../components/TablePager";
 import { useAdminResource } from "../hooks/useAdminResource";
 import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowDetailDrawer";
@@ -150,7 +149,6 @@ export function MerchantZoneContractsPage({ api, setGlobalError, setActionResult
   return (
     <section data-testid="merchant-zone-contracts-page">
       <AdminPageHeader title={TEXT.title} description={TEXT.description} />
-      <AuditTrailHint event="merchant_portal.contract.viewed" />
       <AdminDataState loading={loading} error={error} empty={rows.length === 0} onRetry={reload}>
         {kpiFocus ? (
           <>

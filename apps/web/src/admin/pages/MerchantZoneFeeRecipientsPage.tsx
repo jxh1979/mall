@@ -1,7 +1,6 @@
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
-import { AuditTrailHint } from "../components/AuditTrailHint";
 import { useAdminResource } from "../hooks/useAdminResource";
 import { useAdminAction } from "../hooks/useAdminAction";
 import { PermissionButton } from "../security/Can";
@@ -182,7 +181,6 @@ export function MerchantZoneFeeRecipientsPage({ api, setActionResult, setGlobalE
   return (
     <section data-testid="merchant-zone-fee-recipients-page">
       <AdminPageHeader title={TEXT.title} description={TEXT.description} />
-      <AuditTrailHint event="merchant_billing.fee_recipient.upserted / merchant_billing.fee_recipient.deactivated" />
       <div className="admin-form-row" data-testid="merchant-zone-fee-recipient-form">
         <PermissionButton
           permissionsState={effectivePermissions}

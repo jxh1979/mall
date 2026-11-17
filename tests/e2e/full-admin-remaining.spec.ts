@@ -1,4 +1,4 @@
-// 文件版本：V0.22
+// 文件版本：V0.23
 import { expect, test } from "@playwright/test";
 import { installMockApi } from "./support/mock-api";
 import { fillCnDate } from "./support/cn-date";
@@ -693,43 +693,35 @@ test.describe("full admin remaining pages acceptance", () => {
       }
       if (spec.pageId === "ADM-FLR-001") {
         await expect(page.getByTestId("floor-plan-import-page")).toBeVisible();
-        await expect(page.getByTestId("floor-plan-evidence")).toContainText("/api/v1/floor-plans");
         await expect(page.getByTestId("floor-plans-table")).toContainText("示例平面图");
         continue;
       }
       if (spec.pageId === "ADM-COMP-001") {
         await expect(page.getByTestId("compliance-reminders-page")).toBeVisible();
-        await expect(page.getByTestId("compliance-reminders-evidence")).toContainText("/api/v1/compliance");
         await expect(page.getByTestId("compliance-reminders-summary")).toBeVisible();
         await expect(page.getByTestId("compliance-reminders-table")).toContainText("到期预警");
         continue;
       }
       if (spec.pageId === "ADM-DLR-003") {
         await expect(page.getByTestId("dealer-returns-page")).toBeVisible();
-        await expect(page.getByTestId("dealer-returns-evidence")).toContainText("/api/v1/dealers");
         continue;
       }
       if (spec.pageId === "ADM-DLR-002") {
         await expect(page.getByTestId("dealer-orders-page")).toBeVisible();
-        await expect(page.getByTestId("dealer-orders-evidence")).toContainText("/api/v1/dealers");
         continue;
       }
       if (spec.pageId === "ADM-DLR-001") {
         await expect(page.getByTestId("dealer-admission-page")).toBeVisible();
-        await expect(page.getByTestId("dealer-evidence")).toContainText("/api/v1/dealers");
         await expect(page.getByTestId("dealer-create-form")).toBeVisible();
         continue;
       }
       if (spec.pageId === "ADM-COMP-002") {
         await expect(page.getByTestId("wecom-compliance-review-page")).toBeVisible();
-        await expect(page.getByTestId("wecom-compliance-evidence")).toContainText("/api/v1/compliance/wecom");
         await expect(page.getByTestId("wecom-review-note")).toContainText("先选中一条命中");
         await expect(page.getByTestId("wecom-risk-hits-table")).toContainText("PRIVATE_CONTACT");
         continue;
       }
       if (spec.pageId === "ADM-GOV-001") {
-        await expect(page.getByTestId("governance-topology-evidence")).toContainText("/api/v1/platform/business-entities");
-        await expect(page.getByTestId("governance-topology-evidence")).toContainText("/api/v1/platform/spaces");
         await expect(page.getByTestId("governance-topology-summary")).toContainText("经营主体");
         await expect(page.getByTestId("governance-topology-summary")).toContainText("商户");
         await expect(page.getByTestId("governance-topology-table")).toContainText("Platform Org");
@@ -740,8 +732,6 @@ test.describe("full admin remaining pages acceptance", () => {
         continue;
       }
       if (spec.pageId === "ADM-GOV-002") {
-        await expect(page.getByTestId("organization-merchant-evidence")).toContainText("/api/v1/platform/business-entities");
-        await expect(page.getByTestId("organization-merchant-evidence")).toContainText("/api/v1/platform/merchants");
         await expect(page.getByTestId("organization-merchant-summary")).toContainText("商户档案");
         await expect(page.getByTestId("organization-entities-table")).toContainText("Platform Org");
         await expect(page.getByTestId("organization-merchants-table")).toContainText("Main Merchant");
@@ -750,7 +740,6 @@ test.describe("full admin remaining pages acceptance", () => {
         continue;
       }
       if (spec.pageId === "ADM-GOV-003") {
-        await expect(page.getByTestId("subject-bindings-evidence")).toContainText("/api/v1/platform/business-entity-bindings");
         await expect(page.getByTestId("subject-bindings-summary")).toContainText("唯一绑定");
         await expect(page.getByTestId("subject-bindings-table")).toContainText("merchant-1");
         await expect(page.getByTestId("subject-bindings-table")).toContainText("contract-entity-1");
@@ -759,7 +748,6 @@ test.describe("full admin remaining pages acceptance", () => {
         continue;
       }
       if (spec.pageId === "ADM-BAR-002") {
-        await expect(page.getByTestId("bar-orders-evidence")).toContainText("/api/v1/bar/orders");
         const barOrdersTable = page.getByTestId("bar-orders-table");
         await expect(barOrdersTable).toBeVisible();
         await expect(barOrdersTable).toContainText("order-1");
@@ -767,7 +755,6 @@ test.describe("full admin remaining pages acceptance", () => {
         continue;
       }
       if (spec.pageId === "ADM-TKT-002") {
-        await expect(page.getByTestId("dynamic-pricing-evidence")).toContainText("/api/v1/ticketing/dynamic-pricing-rules");
         const dynamicPricingTable = page.getByTestId("dynamic-pricing-table");
         await expect(dynamicPricingTable).toBeVisible();
         await expect(dynamicPricingTable).toContainText("Weekend Boost");
@@ -776,7 +763,6 @@ test.describe("full admin remaining pages acceptance", () => {
         continue;
       }
       if (spec.pageId === "ADM-TKT-003") {
-        await expect(page.getByTestId("ticket-orders-evidence")).toContainText("/api/v1/ticketing/orders");
         const ticketOrdersTable = page.getByTestId("ticket-orders-table");
         await expect(ticketOrdersTable).toBeVisible();
         await expect(ticketOrdersTable).toContainText("TO-MOCK-1");
@@ -786,7 +772,6 @@ test.describe("full admin remaining pages acceptance", () => {
         continue;
       }
       if (spec.pageId === "ADM-BAR-003") {
-        await expect(page.getByTestId("stored-wine-evidence")).toContainText("/api/v1/inventory/saved-bottles");
         await expect(page.getByTestId("stored-wine-summary")).toContainText("在线校验");
         const storedWineTable = page.getByTestId("stored-wine-table");
         await expect(storedWineTable).toBeVisible();
@@ -795,7 +780,6 @@ test.describe("full admin remaining pages acceptance", () => {
         continue;
       }
       if (spec.pageId === "ADM-BAR-004") {
-        await expect(page.getByTestId("bar-commissions-evidence")).toContainText("/api/v1/bar/bills/{bill_id}/commissions/calculate");
         await expect(page.getByTestId("bar-commissions-summary")).toContainText("按销售人员费率");
         await expect(page.getByTestId("bar-commissions-summary")).toContainText("按非销售人员费率");
         await expect(page.getByTestId("bar-commissions-boundary")).toContainText("不含通票");
@@ -806,8 +790,6 @@ test.describe("full admin remaining pages acceptance", () => {
         continue;
       }
       if (spec.pageId === "ADM-AMU-001") {
-        await expect(page.getByTestId("amusement-sessions-evidence")).toContainText("/api/v1/amusement/projects");
-        await expect(page.getByTestId("amusement-sessions-evidence")).toContainText("/api/v1/amusement/sessions");
         await expect(page.getByTestId("amusement-sessions-summary")).toContainText("场次");
         await expect(page.getByTestId("amusement-projects-table")).toContainText("Adventure");
         await expect(page.getByTestId("amusement-sessions-table")).toContainText("Morning Session");
@@ -815,7 +797,6 @@ test.describe("full admin remaining pages acceptance", () => {
         continue;
       }
       if (spec.pageId === "ADM-AMU-002") {
-        await expect(page.getByTestId("amusement-group-bookings-evidence")).toContainText("/api/v1/amusement/group-bookings");
         await expect(page.getByTestId("amusement-group-bookings-summary")).toContainText("团体");
         await expect(page.getByTestId("amusement-group-bookings-table")).toContainText("Team A");
         await expect(page.getByTestId("amusement-group-bookings-table")).toContainText("已通过");
@@ -823,7 +804,6 @@ test.describe("full admin remaining pages acceptance", () => {
         continue;
       }
       if (spec.pageId === "ADM-INV-001") {
-        await expect(page.getByTestId("inventory-ledger-evidence")).toContainText("/api/v1/inventory/stock-movements");
         await expect(page.getByTestId("inventory-ledger-summary")).toContainText("负库存禁止");
         await expect(page.getByTestId("inventory-ledger-items-table")).toContainText("WINE");
         await expect(page.getByTestId("inventory-ledger-balances-table")).toContainText("10");
@@ -865,21 +845,18 @@ test.describe("full admin remaining pages acceptance", () => {
         continue;
       }
       if (spec.pageId === "ADM-FIN-002") {
-        await expect(page.getByTestId("reconciliation-evidence")).toContainText("/api/v1/finance/reconciliation/differences");
         await expect(page.getByTestId("reconciliation-summary")).toContainText("未处理: 1");
         await expect(page.getByTestId("reconciliation-differences-table")).toContainText("DIFF-1");
         await expect(page.getByTestId("reconciliation-boundary")).toContainText("复核通过才关闭");
         continue;
       }
       if (spec.pageId === "ADM-MER-001") {
-        await expect(page.getByTestId("merchant-work-orders-evidence")).toContainText("/api/v1/merchant-service/work-orders");
         await expect(page.getByTestId("merchant-work-orders-summary")).toContainText("待处理");
         await expect(page.getByTestId("merchant-work-orders-table")).toContainText("空调漏水");
         await expect(page.getByTestId("merchant-work-orders-boundary")).toContainText("商户服务工单由商户在商户专区发起");
         continue;
       }
       if (spec.pageId === "ADM-AMU-003") {
-        await expect(page.getByTestId("amusement-safety-evidence")).toContainText("/api/v1/amusement/safety-inspections");
         await expect(page.getByTestId("amusement-safety-summary")).toContainText("待整改");
         await expect(page.getByTestId("amusement-safety-table")).toContainText("SAFE-1");
         await expect(page.getByTestId("amusement-safety-boundary")).toContainText("事故工单深度闭环");
@@ -930,9 +907,6 @@ test.describe("full admin remaining pages acceptance", () => {
         continue;
       }
       if (spec.pageId === "ADM-GOV-005") {
-        await expect(page.getByTestId("admission-audits-evidence")).toContainText("/api/v1/platform/merchants");
-        await expect(page.getByTestId("admission-audits-evidence")).toContainText("/api/v1/platform/business-entity-bindings");
-        await expect(page.getByTestId("admission-audits-evidence")).toContainText("/api/v1/contracts");
         await expect(page.getByTestId("admission-audits-summary")).toContainText("三类资料关联");
         await expect(page.getByTestId("admission-audits-summary")).toContainText("不代表审批通过");
         await expect(page.getByTestId("admission-audits-merchants-table")).toContainText("Main Merchant");
@@ -946,7 +920,6 @@ test.describe("full admin remaining pages acceptance", () => {
       }
       if (spec.pageId === "ADM-GOV-006") {
         expect(await supervisorPolicyResponse).not.toBeNull();
-        await expect(page.getByTestId("supervisor-review-evidence")).toContainText("读取主管复核策略、提交评估、提交审批");
         await expect(page.getByTestId("supervisor-review-summary")).toContainText("默认阻断");
         await expect(page.getByTestId("supervisor-review-table")).toContainText("contract_violation");
         await expect(page.getByTestId("supervisor-review-table")).toContainText("base_definition_violation");
@@ -956,15 +929,12 @@ test.describe("full admin remaining pages acceptance", () => {
         continue;
       }
       if (spec.pageId === "ADM-RISK-001") {
-        await expect(page.getByTestId("risk-alerts-evidence")).toContainText("/api/v1/analytics/risk-alerts");
         await expect(page.getByTestId("risk-alerts-summary")).toContainText("高风险");
         await expect(page.getByTestId("risk-alerts-table")).toContainText("Mock risk");
         await expect(page.getByTestId("risk-alerts-boundary")).toContainText("忽略高风险预警需审批");
         continue;
       }
       if (spec.pageId === "ADM-INT-002") {
-        await expect(page.getByTestId("integration-events-evidence")).toContainText("/api/v1/integration/retry-tasks");
-        await expect(page.getByTestId("integration-events-evidence")).toContainText("/api/v1/integration/voucher-verifications");
         await expect(page.getByTestId("integration-events-summary")).toContainText("待处理");
         await expect(page.getByTestId("integration-events-table")).toContainText("RT-1");
         await expect(page.getByTestId("integration-events-table")).toContainText("CP-1");
@@ -976,8 +946,6 @@ test.describe("full admin remaining pages acceptance", () => {
         continue;
       }
       if (spec.pageId === "ADM-MER-002") {
-        await expect(page.getByTestId("merchant-scope-evidence")).toContainText("/api/v1/merchant-service/work-orders");
-        await expect(page.getByTestId("merchant-scope-evidence")).toContainText("/api/v1/merchant-billing/bills");
         // 平台测试账号无merchantId，当前页面必须明确拒绝商户数据读取。
         await expect(page.getByTestId("global-error")).toContainText("当前账号缺少商户授权范围，无法展示任何商户数据，请联系管理员配置。");
         await expect(page.getByTestId("merchant-scope-work-orders-table")).toHaveCount(0);
@@ -985,11 +953,11 @@ test.describe("full admin remaining pages acceptance", () => {
         continue;
       }
       if (spec.pageId === "ADM-EVD-001") {
-        await expect(page.getByTestId("audit-events-evidence")).toContainText("/api/v1/evidence/events");
         await expect(page.getByTestId("audit-events-summary")).toContainText("本页成功");
         await expect(page.getByTestId("audit-events-table")).toContainText("event-trace-1");
-        await page.getByTestId("audit-events-search").fill("ticket");
-        await expect(page.getByTestId("audit-events-table")).toContainText("ticket.order.created");
+        // 第 227 条 227-R1（PGM:287）：事件类型显示中文，按页面上看到的中文筛选。
+        await page.getByTestId("audit-events-search").fill("准入");
+        await expect(page.getByTestId("audit-events-table")).toContainText("准入审计已导出");
         await page.getByTestId("audit-events-search").fill("no-match");
         await expect(page.getByTestId("audit-events-filter-empty")).toContainText("无匹配审计事件");
         await page.getByTestId("audit-events-search").fill("event-trace-1");
@@ -998,12 +966,10 @@ test.describe("full admin remaining pages acceptance", () => {
         await page.getByTestId("audit-events-export-reason").fill("验收导出审计事件");
         await page.getByTestId("audit-events-export").click();
         await expect(page.getByTestId("admin-action-result")).toContainText("审计事件已导出");
-        await expect(page.getByTestId("admin-action-result")).toContainText("evidence.events_reported");
+        await expect(page.getByTestId("admin-action-result")).not.toContainText("evidence.events_reported");
         continue;
       }
       if (spec.pageId === "ADM-ANA-001") {
-        await expect(page.getByTestId("business-analytics-evidence")).toContainText("/api/v1/analytics/business-metric-snapshots");
-        await expect(page.getByTestId("business-analytics-evidence")).toContainText("日环比突变检测");
         await expect(page.getByTestId("business-analytics-summary")).toContainText("上升");
         await expect(page.getByTestId("business-analytics-table")).toContainText("gmv_amount_cents");
         await expect(page.getByTestId("business-analytics-definitions-table")).toContainText("gmv_amount_cents");
@@ -1018,8 +984,8 @@ test.describe("full admin remaining pages acceptance", () => {
         await page.getByTestId("business-analytics-lock-guided-next").click();
         await page.getByTestId("business-analytics-lock-snapshot").click();
         await expect(page.getByTestId("admin-action-result")).toContainText("经营复盘已锁定");
-        // V216 复盘锁真落库后不再返回 management_review_ready 状态,以审计键为准
-        await expect(page.getByTestId("admin-action-result")).toContainText("analytics.review.locked");
+        // 第 227 条 227-R1（PGM:287）：结果区不再带英文留痕事件名。
+        await expect(page.getByTestId("admin-action-result")).not.toContainText("analytics.review.locked");
         continue;
       }
       if (spec.pageId === "ADM-ANA-002") {
@@ -1340,7 +1306,6 @@ test.describe("full admin remaining pages acceptance", () => {
         await expect(page.getByTestId("vendor-work-orders-table")).toContainText("VND-WO-1");
         await expect(page.getByTestId("vendor-work-orders-table")).toContainText("vendor-user");
         await expect(page.getByTestId("vendor-work-order-accept")).toHaveCount(0);
-        await expect(page.getByTestId("vendor-work-orders-evidence")).toContainText("/api/v1/facility/equipment");
         await expect(page.getByTestId("vendor-work-order-equipment-table")).toContainText("空调主机");
       }
       if (spec.pageId === "ADM-VND-002") {

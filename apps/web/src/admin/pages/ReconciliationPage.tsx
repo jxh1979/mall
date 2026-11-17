@@ -1,9 +1,7 @@
 import React from "react";
-import { TechDetails } from "../components/TechDetails";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
 import { usePagedRows, TablePager } from "../components/TablePager";
-import { AuditTrailHint } from "../components/AuditTrailHint";
 import { useAdminResource } from "../hooks/useAdminResource";
 import { useSelectedRow } from "../hooks/useSelectedRow";
 import { MetricDetailLink, useMetricKpiValue } from "../components/MetricDetailEntry";
@@ -42,7 +40,6 @@ const limitText = (limits: StageLimit[]) => limits.map((item) => `${labelOf(LIMI
 const TEXT = {
   title: "对账差异",
   description: "查看对账批次和差异、登记差异；差异按待识别、待处理、待复核、已关闭推进：识别写差异原因，处理后填处理结论提交复核，主管复核通过才关闭。平台侧金额由系统取数；第三方侧接入前可人工录入，须同时上传渠道对账单原件。",
-  evidence: "接口证据：读取 batches/differences；登记差异调用 POST /api/v1/finance/reconciliation/differences；识别调用 POST /api/v1/finance/reconciliation/differences/{id}/identify；提交复核调用 POST /api/v1/finance/reconciliation/differences/{id}/close。",
   loadFailed: "对账数据读取失败",
   reasonRequired: "提交复核必须填写处理结论。",
   causeRequired: "识别必须填写差异原因。",
@@ -477,8 +474,6 @@ export function ReconciliationPage({ api, user, setActionResult, setGlobalError,
       <div className="admin-state" data-testid="reconciliation-no-manual-notice">
         对账金额口径：平台侧金额<strong>由系统取数</strong>；第三方侧接入前可人工录入，须同时上传渠道对账单原件。
       </div>
-      <TechDetails><div className="admin-generic-evidence" data-testid="reconciliation-evidence">{TEXT.evidence}</div></TechDetails>
-      <AuditTrailHint event="finance.reconciliation_batch.viewed / finance_reconciliation.difference_found / finance.reconciliation.difference_identified / finance.reconciliation.difference_review_submitted" />
       <AdminDataState loading={loading} error={error} empty={batches.length === 0 && differences.length === 0} onRetry={reload}>
         {kpiFocus ? (
           <>

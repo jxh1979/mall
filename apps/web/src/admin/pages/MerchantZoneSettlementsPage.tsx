@@ -1,8 +1,7 @@
-// 文件版本：V0.08
+// 文件版本：V0.09
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
-import { AuditTrailHint } from "../components/AuditTrailHint";
 import { usePagedRows, TablePager } from "../components/TablePager";
 import { useAdminResource } from "../hooks/useAdminResource";
 import { useAdminAction } from "../hooks/useAdminAction";
@@ -417,7 +416,6 @@ export function MerchantZoneSettlementsPage({ api, setActionResult, setGlobalErr
   return (
     <section data-testid="merchant-zone-settlements-page">
       <AdminPageHeader title={TEXT.title} description={TEXT.description} />
-      <AuditTrailHint event="merchant_portal.settlement.viewed / merchant_portal.settlement.disputed / merchant_portal.settlement.resolution_rejected" />
       <NoticesSection api={api} />
       <AdminDataState loading={loading} error={error} empty={rows.length === 0} onRetry={reload}>
         {kpiFocus ? (

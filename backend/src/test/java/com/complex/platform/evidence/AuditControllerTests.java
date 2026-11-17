@@ -19,7 +19,8 @@ class AuditControllerTests {
     private final AuditEventService service = mock(AuditEventService.class);
     private final AuthorizationService authz = mock(AuthorizationService.class);
     private final com.complex.platform.security.ExportFileService exportFiles = mock(com.complex.platform.security.ExportFileService.class);
-    private final AuditController controller = new AuditController(service, authz, exportFiles);
+    private final AuditController controller = new AuditController(service, authz, exportFiles, mock(AuditLabels.class),
+            mock(com.complex.platform.access.AccessRepository.class));
 
     @Test
     void queryRequiresViewPermissionAndPassesFilters() {

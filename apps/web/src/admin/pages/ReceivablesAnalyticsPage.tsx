@@ -1,7 +1,6 @@
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
-import { AuditTrailHint } from "../components/AuditTrailHint";
 import { usePagedRows, TablePager } from "../components/TablePager";
 import { loadSecondary, useAdminResource } from "../hooks/useAdminResource";
 import { TraceLink } from "../components/TraceLink";
@@ -114,7 +113,6 @@ export function ReceivablesAnalyticsPage({ api, setGlobalError, navigateTo }: Ad
   return (
     <section data-testid="receivables-analytics-page">
       <AdminPageHeader title={TEXT.title} description={TEXT.description} />
-      <AuditTrailHint event="analytics.dashboard_domain.viewed / analytics.ar_debtors.viewed" />
       <AdminDataState loading={loading} error={error} empty={false} onRetry={reload}>
         <div className="admin-muted-action" data-testid="receivables-freshness">数据截至经营日:{dashboard?.businessDate ?? "—"}(每日快照,约 5 分钟刷新)</div>
         <div className="admin-kpi-grid" data-testid="receivables-summary">

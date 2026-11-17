@@ -1,9 +1,8 @@
-// 文件版本：V0.03
+// 文件版本：V0.04
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { CnDatePicker } from "../components/CnDatePicker";
 import { AdminPageHeader } from "../components/AdminPageHeader";
-import { AuditTrailHint } from "../components/AuditTrailHint";
 import { useAdminResource } from "../hooks/useAdminResource";
 import { GuidedFlowModal } from "../components/GuidedFlowModal";
 import { RowDetailDrawer, type RowDetailField } from "../components/RowDetailDrawer";
@@ -261,7 +260,6 @@ export function StaffShiftAttendancePage({ api, setGlobalError, setActionResult,
   return (
     <section data-testid="staff-shift-page">
       <AdminPageHeader title={TEXT.title} description={TEXT.description} />
-      <AuditTrailHint event="staff.shift.saved / staff.attendance.punched" />
       <div className="admin-toolbar">
         <label>日期:<CnDatePicker data-testid="shift-date" value={date} onChange={(v) => setDate(v || today())} /></label>
       </div>

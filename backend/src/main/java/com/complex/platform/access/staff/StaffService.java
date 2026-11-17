@@ -1,6 +1,6 @@
 package com.complex.platform.access.staff;
 
-// 文件版本：V0.32
+// 文件版本：V0.33
 
 import com.complex.platform.access.AccessActor;
 import com.complex.platform.access.AccessRepository;
@@ -525,11 +525,34 @@ public class StaffService {
         }
     }
 
+    /**
+     * 第十八批 AN 段 257-R1（PGM:585「员工换手机必须先解绑旧手机，再绑定新手机。」）：后台员工档案页的私人手机列表。
+     * 持 staff.device.review 或 staff.device.revoke 任一即可（两者都没有按 staff.device.review 标准 403）；
+     * 只列生效中与待批准换机，所属档案在任一所持码的可触及范围内即返回，不按状态拆可见性（批准、解绑按钮再各按自己的码放行）。
+     */
+    public PageResponse<StaffDeviceCredentialRecord> listCredentials() {
+        boolean canReview = authorizationService.currentActorHasPermission("staff.device.review");
+        boolean canRevoke = authorizationService.currentActorHasPermission("staff.device.revoke");
+        if (!canReview && !canRevoke) {
+            authorizationService.requirePermission("staff.device.review");
+        }
+        AuthorizationService.ProjectReach reviewReach = canReview ? reachOf("staff.device.review") : null;
+        AuthorizationService.ProjectReach revokeReach = canRevoke ? reachOf("staff.device.revoke") : null;
+        // ponytail: 每条凭证查一次档案；员工多到成为负担时改成一次 IN 查询
+        return page(repository.listCredentialsByStatus(List.of("active", "pending_review")).stream()
+                .filter(credential -> repository.findProfileById(credential.staffProfileId())
+                        .filter(profile -> (reviewReach != null && profileScopeViolation(profile, reviewReach) == null)
+                                || (revokeReach != null && profileScopeViolation(profile, revokeReach) == null))
+                        .isPresent())
+                .toList());
+    }
+
     @GuardedAction(permission = "staff.device.review")
     public StaffDeviceCredentialRecord approveRebind(String credId, StaffDeviceRebindDecisionRequest request) {
         try {
             // 第十八批 E 段 19-R1（移植 M738）：范围在幂等之前判
             StaffDeviceCredentialRecord credential = requireCredentialInScope(credId, reachOf("staff.device.review"));
+            AccessActor actor = authorizationService.currentActor();
             return idempotencyService.execute(
                     "approveStaffDeviceRebind:" + credId,
                     request.idempotencyKey(),
@@ -552,6 +575,9 @@ public class StaffService {
                                 credential.integrityStatus(), null, now, null,
                                 credential.createdAt(), now);
                         StaffDeviceCredentialRecord saved = repository.saveCredential(activated);
+                        // 第十八批 AN 段 257-R2（BSM:938「私人手机 App 可收发通知、查看状态和审批结果」）：批准结果通知员工本人。
+                        createNotice(saved.staffProfileId(), "approval_result", "换机已批准",
+                                "您的新手机已生效，旧手机已解绑。", false, actorIdOrSystem(actor));
                         auditEventService.recordSuccess("staff_device.rebound", "staff.device.review",
                                 "staff_device_credential", saved.id(), null, request.idempotencyKey(),
                                 Map.of("staff_profile_id", saved.staffProfileId()));
@@ -1225,15 +1251,21 @@ public class StaffService {
     private StaffProfileRecord requireProfileInScope(String id, AuthorizationService.ProjectReach reach) {
         StaffProfileRecord profile = repository.findProfileById(id)
                 .orElseThrow(() -> ApiException.notFound("STAFF_NOT_FOUND", "员工档案不存在：" + id));
-        var actor = authorizationService.currentActor();
-        if (!authorizationService.isPlatformAdmin(actor) && trimToNull(actor.merchantId()) == null) {
-            if (!profileReachable(reach, actor, profile)) {
-                throw ApiException.forbidden("CROSS_ORG_FORBIDDEN", "该员工不在当前公司范围内");
-            }
-        } else {
-            requireRegistrationScope(profile.projectId(), profile.merchantId(), reach);
+        ApiException violation = profileScopeViolation(profile, reach);
+        if (violation != null) {
+            throw violation;
         }
         return profile;
+    }
+
+    /** 第十八批 AN 段 257-R1：档案不在 reach 内时返回原错误码与提示的异常（不抛），在范围内返回 null；供列表逐条过滤复用。 */
+    private ApiException profileScopeViolation(StaffProfileRecord profile, AuthorizationService.ProjectReach reach) {
+        var actor = authorizationService.currentActor();
+        if (!authorizationService.isPlatformAdmin(actor) && trimToNull(actor.merchantId()) == null) {
+            return profileReachable(reach, actor, profile) ? null
+                    : ApiException.forbidden("CROSS_ORG_FORBIDDEN", "该员工不在当前公司范围内");
+        }
+        return registrationScopeViolation(profile.projectId(), profile.merchantId(), reach);
     }
 
     private StaffProfileRecord requireOwnProfile(String id) {
@@ -1247,14 +1279,22 @@ public class StaffService {
     }
 
     private void requireRegistrationScope(String projectId, String merchantId, AuthorizationService.ProjectReach reach) {
+        ApiException violation = registrationScopeViolation(projectId, merchantId, reach);
+        if (violation != null) {
+            throw violation;
+        }
+    }
+
+    private ApiException registrationScopeViolation(String projectId, String merchantId, AuthorizationService.ProjectReach reach) {
         AccessActor actor = authorizationService.currentActor();
-        if (authorizationService.isPlatformAdmin(actor)) return;
+        if (authorizationService.isPlatformAdmin(actor)) return null;
         if (!reach.covers(projectId)) {
-            throw ApiException.forbidden("CROSS_ORG_FORBIDDEN", "不能处理其他公司的员工登记");
+            return ApiException.forbidden("CROSS_ORG_FORBIDDEN", "不能处理其他公司的员工登记");
         }
         if (trimToNull(actor.merchantId()) != null && !actor.merchantId().equals(trimToNull(merchantId))) {
-            throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN", "不能处理其他商户的员工登记");
+            return ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN", "不能处理其他商户的员工登记");
         }
+        return null;
     }
 
     private StaffDeviceCredentialRecord requireCredentialInScope(String credId, AuthorizationService.ProjectReach reach) {

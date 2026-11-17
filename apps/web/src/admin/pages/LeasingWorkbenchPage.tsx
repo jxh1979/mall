@@ -1,10 +1,8 @@
-// 文件版本：V0.08
+// 文件版本：V0.09
 import React from "react";
-import { TechDetails } from "../components/TechDetails";
 import { CnDatePicker } from "../components/CnDatePicker";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
-import { AuditTrailHint } from "../components/AuditTrailHint";
 import { useAdminResource } from "../hooks/useAdminResource";
 import { useAdminAction } from "../hooks/useAdminAction";
 import { useSelectedRow } from "../hooks/useSelectedRow";
@@ -78,7 +76,6 @@ interface LeasingFollowUpRow {
 const TEXT = {
   title: "招商工作台",
   description: "招商获客前漏斗：线索建档 → 跟进 → 租赁意向推进 → 签约转商户合同草稿；品牌库与黑名单维护。超过约定天数没跟进的线索在页首直接提醒（天数在「提醒与留存天数配置」页可改）。所有写动作带幂等键，签约直接生成合同草稿进入合同生命周期。",
-  evidence: "接口证据：线索 /api/v1/leasing/leads（含 assign/status/follow-up-due）；意向 /api/v1/leasing/intents（advance/sign→合同草稿）；品牌 /api/v1/leasing/brands（blacklist）；跟进 /api/v1/leasing/follow-ups。",
   loadFailed: "招商前漏斗读取失败",
   actionFailed: "招商前漏斗操作失败",
   noLead: "请先选中一条线索。",
@@ -709,8 +706,6 @@ export function LeasingWorkbenchPage({ api, user, setActionResult, setGlobalErro
   return (
     <section data-testid="leasing-workbench-page">
       <AdminPageHeader title={TEXT.title} description={TEXT.description} />
-      <TechDetails><div className="admin-generic-evidence" data-testid="leasing-evidence">{TEXT.evidence}</div></TechDetails>
-      <AuditTrailHint event="leasing.lead.created / assigned / status_changed · follow_up.added · intent.created / advanced / signed · brand.created / blacklisted" />
       <AdminDataState loading={loading} error={error} empty={leads.length === 0 && intents.length === 0 && brands.length === 0} onRetry={reload}>
         {kpiFocus ? (
           <>

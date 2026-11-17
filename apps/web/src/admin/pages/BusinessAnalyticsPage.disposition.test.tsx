@@ -37,20 +37,22 @@ function makeApi(get = getResolver(), post = vi.fn().mockResolvedValue({ id: "an
 const ADMIN_PERMS: EffectivePermissionsState = { status: "ready", value: { grants: [], denies: [], wildcard: true } };
 
 function renderPage(api: AdminApiClient) {
+  const setActionResult = vi.fn();
   const fullProps: AdminPageProps = {
     api,
     user: { id: "u1", username: "admin", accountType: "platform_admin" },
-    setActionResult: vi.fn(),
+    setActionResult,
     setGlobalError: vi.fn(),
     effectivePermissions: ADMIN_PERMS,
   };
   render(<BusinessAnalyticsPage {...fullProps} />);
+  return { setActionResult };
 }
 
 describe("BusinessAnalyticsPage 异常处置流转(V306)", () => {
   it("非终态异常显示处置入口,标记已阅走 POST /dispose(带幂等键)", async () => {
     const post = vi.fn().mockResolvedValue({ id: "ano_open", status: "acknowledged" });
-    renderPage(makeApi(getResolver(), post));
+    const { setActionResult } = renderPage(makeApi(getResolver(), post));
     await waitFor(() => expect(screen.getByTestId("business-analytics-anomaly-dispose-ano_open")).toBeTruthy());
     // 终态(resolved)异常不给处置按钮。
     expect(screen.queryByTestId("business-analytics-anomaly-dispose-ano_done")).toBeNull();
@@ -64,6 +66,9 @@ describe("BusinessAnalyticsPage 异常处置流转(V306)", () => {
       "/api/v1/analytics/metric-anomalies/ano_open/dispose",
       expect.objectContaining({ action: "acknowledge", idempotencyKey: expect.stringContaining("anomaly-dispose-ano_open-") }),
     ));
+    // 第十八批 AN 段第 227 条 227-R1（PGM:287）：结果区不放英文留痕事件名。
+    await waitFor(() => expect(setActionResult).toHaveBeenCalledWith(expect.objectContaining({ action: "metric_anomaly_disposed" })));
+    expect(setActionResult.mock.calls.at(-1)?.[0]).not.toHaveProperty("audit");
   });
 
   it("状态筛选按处置状态过滤异常行", async () => {

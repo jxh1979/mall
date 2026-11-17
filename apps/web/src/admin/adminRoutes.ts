@@ -1,4 +1,4 @@
-// 文件版本：V0.16
+// 文件版本：V0.17
 import type { AdminAccountForm, AdminNavGroup, AdminRoute, PermissionDefinitionRow } from "./types";
 
 export const adminRoutes: AdminRoute[] = [
@@ -12,7 +12,7 @@ export const adminRoutes: AdminRoute[] = [
   { pageId: "ADM-FIN-001", label: "应收应付台账", module: "财务", group: "finance", route: "/admin/finance/ar-ap-ledger", requiredPermissions: ["finance.ar_ap.view"] },
   { pageId: "ADM-FIN-005", label: "通票结算审阅", module: "财务", group: "finance", route: "/admin/finance/settlement-review", requiredPermissions: ["finance.settlement.view"] },
   { pageId: "ADM-INT-001", label: "供应商适配器", module: "第三方", group: "integration", route: "/admin/integrations/adapters", requiredPermissions: ["integration.provider_adapter.view"] },
-  { pageId: "ADM-OPS-001", label: "生产 blocker 与证据", module: "运维", group: "ops", route: "/admin/ops/readiness", requiredPermissions: ["ops.production_readiness.view"] },
+  { pageId: "ADM-OPS-001", label: "生产阻断项与证据", module: "运维", group: "ops", route: "/admin/ops/readiness", requiredPermissions: ["ops.production_readiness.view"] },
   { pageId: "ADM-OPS-002", label: "数据清理工具", module: "运维", group: "ops", route: "/admin/ops/data-cleanup", requiredPermissions: ["data.cleanup.request"] },
   { pageId: "ADM-GOV-001", label: "集团/综合体拓扑", module: "治理", group: "governance", route: "/admin/governance/topology", requiredPermissions: ["governance.project.view", "governance.space.view", "merchant.profile.view"] },
   { pageId: "ADM-GOV-002", label: "组织与商户档案", module: "治理", group: "governance", route: "/admin/governance/organizations", requiredPermissions: ["merchant.profile.view", "governance.project.view"] },

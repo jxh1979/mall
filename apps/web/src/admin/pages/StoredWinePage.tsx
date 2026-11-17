@@ -1,10 +1,8 @@
-// 文件版本：V0.09
+// 文件版本：V0.10
 import React from "react";
 import { formatBusinessStatus } from "../i18n/statusLabels";
-import { TechDetails } from "../components/TechDetails";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
-import { AuditTrailHint } from "../components/AuditTrailHint";
 import { HighRiskConfirm } from "../components/HighRiskConfirm";
 import { useAdminResource } from "../hooks/useAdminResource";
 import { useSelectedRow } from "../hooks/useSelectedRow";
@@ -96,7 +94,6 @@ function splitIds(value: string) {
 const TEXT = {
   title: "存酒",
   description: "展示客人存酒资产、在线领取核销、证据附件和幂等留痕；高价值酒水保持在线校验，不做离线核销。",
-  evidence: "接口证据：读取 /api/v1/inventory/saved-bottles；按手机号检索 POST /api/v1/inventory/saved-bottles/lookup；发码 POST /api/v1/inventory/saved-bottles/{id}/verification-code（scene=claim|transfer）；领取 POST /api/v1/inventory/saved-bottles/{id}/claim；转让 POST /api/v1/inventory/saved-bottles/{id}/transfer（to_name_or_nickname、to_phone、verification_code）；转存 POST /api/v1/inventory/saved-bottles/{id}/renewals（verification_code）、复核 POST /api/v1/inventory/saved-bottles/renewals/{id}/review（decision=approve|reject，驳回带 reason）、记录 GET /api/v1/inventory/saved-bottles/{id}/renewals；作废 POST /api/v1/inventory/saved-bottles/{id}/cancel（photo/video_attachment_ids）；补存/赔付 POST /api/v1/inventory/saved-bottles/{id}/remedy、记录 GET …/{id}/remedies、审批/结案/垫付/员工责任/追收收回 POST /api/v1/inventory/saved-bottles/remedies/{id}/approve|settle|advance|staff-liability|recovery/settle、赔付付款确认 POST /api/v1/inventory/saved-bottles/remedies/{id}/payment-confirmations；门店退出 POST /api/v1/inventory/saved-bottles/exit-notice、交接 POST /api/v1/inventory/saved-bottles/handover。",
   loadFailed: "存酒数据读取失败",
   claimFailed: "存酒领取核销失败",
   transferFailed: "存酒转让失败",
@@ -1083,8 +1080,6 @@ export function StoredWinePage({ api, user, setActionResult, setGlobalError, eff
   return (
     <section data-testid="stored-wine-page">
       <AdminPageHeader title={TEXT.title} description={TEXT.description} />
-      <TechDetails><div className="admin-generic-evidence" data-testid="stored-wine-evidence">{TEXT.evidence}</div></TechDetails>
-      <AuditTrailHint event="bar.saved_bottle.viewed / bar.saved_bottle_picked_up" />
       {kpiFocus ? null : merchantId ? (
         <div data-testid="stored-wine-register">
           <strong>{TEXT.register}</strong>

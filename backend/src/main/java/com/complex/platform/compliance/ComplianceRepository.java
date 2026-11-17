@@ -12,6 +12,9 @@ public interface ComplianceRepository {
 
     ContractKeyDateRecord saveContractKeyDate(ContractKeyDateRecord record);
 
+    /** 第十八批 AN 段 258-R2：合同所属商户；合同不存在返回 null。 */
+    String findContractMerchantId(String contractId);
+
     List<ComplianceExpiryItemRecord> findAllExpiryItems();
 
     List<ComplianceExpiryItemRecord> findExpiryItemsByMerchant(String merchantId);

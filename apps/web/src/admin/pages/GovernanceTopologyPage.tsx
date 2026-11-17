@@ -1,7 +1,6 @@
-// 文件版本：V0.05
+// 文件版本：V0.06
 import React from "react";
 import { formatActionResult } from "../components/ActionResultView";
-import { TechDetails } from "../components/TechDetails";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
 import { useAdminResource } from "../hooks/useAdminResource";
@@ -36,7 +35,6 @@ function formatSpaceStatus(code: string | null | undefined) {
 const TEXT = {
   title: "集团/综合体拓扑",
   description: "展示集团、综合体、商户、项目和空间点位之间的治理关系，作为权限、合同、结算和运营责任归属的入口。",
-  evidence: "接口证据：读取 /api/v1/platform/business-entities、/api/v1/platform/merchants、/api/v1/platform/projects、/api/v1/platform/spaces、/api/v1/platform/space-types。",
   boundary: "集团、综合体、商户、项目和空间点位必须用同一套拓扑口径承接权限、合同、结算和审计；拓扑页只展示关系，不做主体变更。",
   loadFailed: "治理拓扑读取失败",
   focusClear: "清除筛选，返回全部",
@@ -241,7 +239,6 @@ export function GovernanceTopologyPage({ api, setGlobalError, focusObjectId, nav
   return (
     <section data-testid="governance-topology-page">
       <AdminPageHeader title={TEXT.title} description={TEXT.description} />
-      <TechDetails><div className="admin-generic-evidence" data-testid="governance-topology-evidence">{TEXT.evidence}</div></TechDetails>
       <AdminDataState loading={loading} error={error} empty={false} onRetry={reload}>
         {entityRows.total === 0 && merchantRows.total === 0 && projectRows.total === 0 && spaceRows.total === 0 ? (
           <div className="admin-state admin-empty" data-testid="governance-topology-empty">暂无治理拓扑数据</div>

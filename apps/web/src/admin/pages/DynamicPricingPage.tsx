@@ -1,8 +1,6 @@
 import React from "react";
-import { TechDetails } from "../components/TechDetails";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
-import { AuditTrailHint } from "../components/AuditTrailHint";
 import { HighRiskConfirm } from "../components/HighRiskConfirm";
 import { useAdminResource } from "../hooks/useAdminResource";
 import { formatBusinessStatus } from "../i18n/statusLabels";
@@ -18,7 +16,6 @@ const DYNAMIC_PUBLISH_PERMISSION = "ticket.dynamic_pricing.publish";
 const TEXT = {
   title: "\u52a8\u6001\u5b9a\u4ef7",
   description: "P2 \u52a8\u6001\u5b9a\u4ef7\u7528\u4e8e\u89c4\u5219\u8349\u7a3f\u3001\u4ef7\u683c\u4eff\u771f\u548c\u53d1\u5e03\u5ba1\u8ba1\uff1bP0 \u4ecd\u4ee5\u5e73\u65e5/\u5468\u672b/\u8282\u5047\u65e5\u57fa\u7840\u4ef7\u4e3a\u4e3b\u3002",
-  evidence: "\u63a5\u53e3\u8bc1\u636e\uff1a\u8bfb\u53d6 /api/v1/ticketing/dynamic-pricing-rules\uff1b\u521b\u5efa\u8349\u7a3f POST /api/v1/ticketing/dynamic-pricing-rules\uff1b\u4eff\u771f POST /api/v1/ticketing/dynamic-pricing/simulations\uff1b\u53d1\u5e03 POST /api/v1/ticketing/dynamic-pricing-rules/{id}/publish\u3002",
   loadFailed: "\u52a8\u6001\u5b9a\u4ef7\u89c4\u5219\u8bfb\u53d6\u5931\u8d25",
   actionFailed: "\u52a8\u6001\u5b9a\u4ef7\u64cd\u4f5c\u5931\u8d25",
   ruleRequired: "\u8bf7\u5148\u9009\u62e9\u8981\u53d1\u5e03\u7684\u89c4\u5219\u3002",
@@ -230,8 +227,6 @@ export function DynamicPricingPage({ api, setActionResult, setGlobalError, effec
   return (
     <section data-testid="dynamic-pricing-page">
       <AdminPageHeader title={TEXT.title} description={TEXT.description} />
-      <TechDetails><div className="admin-generic-evidence" data-testid="dynamic-pricing-evidence">{TEXT.evidence}</div></TechDetails>
-      <AuditTrailHint event="ticket_dynamic_pricing.viewed.success / created.success / simulated.success / published.success" />
       <AdminDataState loading={loading} error={error} empty={rules.length === 0} onRetry={reloadResource}>
         {kpiFocus ? (
           <div className="admin-state" data-testid="dynamic-pricing-kpi-focus-banner">
