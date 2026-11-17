@@ -266,6 +266,7 @@ describe("AuditEventsPage 导出留痕没拿到结果再点", () => {
     render(<AuditEventsPage {...fullProps} />);
 
     await waitFor(() => expect(screen.getByTestId("audit-events-export")).toBeTruthy(), { timeout: 5000 });
+    fireEvent.change(screen.getByTestId("audit-events-export-reason"), { target: { value: "季度审计抽查导出" } });
     fireEvent.click(screen.getByTestId("audit-events-export"));
     await waitFor(() => expect(screen.getByTestId("audit-events-form-error").textContent).toContain("Failed to fetch"), { timeout: 5000 });
     expect(posts).toHaveLength(1);
@@ -357,6 +358,8 @@ describe("AuditEventsPage 导出登记请求体", () => {
     render(<AuditEventsPage api={new AdminApi("test-token")} user={{ id: "u1", username: "admin", accountType: "platform_admin" }}
       setActionResult={vi.fn()} setGlobalError={vi.fn()} effectivePermissions={ADMIN_PERMS} />);
     await waitFor(() => expect(screen.getByTestId("audit-events-table").textContent).toContain("登录成功"), { timeout: 5000 });
+    // 第十八批 AP 段第 229 条 229-R5（PGM:685）：导出原因不预填「验收导出审计事件」，人填。
+    expect((screen.getByTestId("audit-events-export-reason") as HTMLInputElement).value).toBe("");
     fireEvent.change(screen.getByTestId("audit-events-export-reason"), { target: { value: "季度审计抽查导出" } });
     fireEvent.click(screen.getByTestId("audit-events-export"));
     await waitFor(() => expect(posts).toHaveLength(1), { timeout: 5000 });

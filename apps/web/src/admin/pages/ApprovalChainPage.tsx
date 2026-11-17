@@ -14,7 +14,7 @@ import type { AdminPageProps } from "../types";
 import { cnDate } from "../components/RowDetailDrawer";
 import { withBase } from "../../basePath";
 
-// 文件版本：V0.07
+// 文件版本：V0.08
 
 // M087-A-02（PGM-1.7.1「发起单据时只需指定该事项的最终审批人，系统按组织层级自动补全……逐级审批」「任一节点驳回则整单退回起草人」
 // 「主线与各条平行线全部通过……才生效」）：审批链与节点裁决页——查看某复核单的主线/平行线节点，逐节点通过、驳回或转交；
@@ -182,7 +182,7 @@ export function ApprovalChainPage({ api, setActionResult, setGlobalError, effect
   const [reviewId, setReviewId] = React.useState<string>(() => focusObjectId || readReviewIdFromUrl());
   const [nodes, setNodes] = React.useState<ChainNode[]>([]);
   const [chainLoaded, setChainLoaded] = React.useState(false);
-  const [comment, setComment] = React.useState("证据齐备，同意");
+  const [comment, setComment] = React.useState("");
   const [forwardTarget, setForwardTarget] = React.useState("");
   const [original, setOriginal] = React.useState<PendingRow["decision"] | null>(null);
   const [originalError, setOriginalError] = React.useState<string | null>(null);

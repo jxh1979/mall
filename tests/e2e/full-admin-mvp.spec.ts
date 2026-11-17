@@ -1,4 +1,4 @@
-// 文件版本：V0.08
+// 文件版本：V0.09
 import { expect, test } from "@playwright/test";
 import { installMockApi } from "./support/mock-api";
 
@@ -43,6 +43,7 @@ test.describe("full admin MVP acceptance", () => {
     // 两条路径：员工默认走注册申请（BSM:1463）；外部协作机构账号由管理员开通并赋权（PGM:681）。
     await page.getByTestId("access-user-create-open").click();
     await page.getByTestId("access-user-name").fill("张三");
+    await page.getByTestId("access-user-org").fill("org-1");
     await page.getByTestId("access-user-flow-next").click();
     await page.getByTestId("access-user-create").click();
     await expect(page.getByTestId("admin-action-result")).toContainText("员工注册申请已提交");

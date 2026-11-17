@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: 综合体管理系统 P0 API 契约
-  version: V0.72
+  version: V0.73
   description: P0 首批编码前置契约。本文采用 JSON-compatible YAML，便于与 openapi-p0.json 保持一致。正式后端以 Java 21 + Spring Boot 4.x +
     springdoc-openapi 输出运行时 OpenAPI，并与本契约比对。
 servers:
@@ -7095,6 +7095,7 @@ paths:
         - bar
       operationId: createSavedBottle
       summary: 存酒登记
+      description: "BSM L1072「存酒登记先取隐私同意，记手机号/姓名昵称/瓶底标签数值/照片，并记录存入时间与到期时间。」、BSM L1170「存酒登记必须拍照、填写人工备注，并留取客人手机号和姓名/昵称。」：bar_id、items、bottle_label_value、registration_photo_refs、customer_name_or_nickname、customer_phone、manual_note、verification_code 必填，缺项 400 VALIDATION_FAILED。到期日不收请求：服务端按酒吧所属项目的存酒有效期（saved_bottle_renewal_policy 的 validity_days，project:<项目 id> 缺行回落 global 出厂行，出厂默认 30 天）在登记时固化为登记时刻加有效期天数，后续改配置不追溯已登记的存酒（BSM L1072）。隐私同意按第十八批裁决 57 取客人短信验证码：其余字段齐全后核验客人报出的验证码（由 POST /api/v1/inventory/saved-bottles/deposit-consent-code 发送，scene=deposit），验证码不正确或已过期 409 CUSTOMER_OTP_INVALID、短信服务未配置 409 CUSTOMER_OTP_PROVIDER_UNAVAILABLE、同一手机号尝试过频 429 CUSTOMER_OTP_RATE_LIMITED，均不建存酒记录；核验通过才建存酒记录，存酒记录的 created_at 与登记成功审计 bar.saved_bottle.created（操作人、时间）即取得同意的凭证。"
       x-permission: bar.saved_bottle.manage
       x-data-scope: project-bar-customer
       x-terminal-allowed:
@@ -7110,6 +7111,8 @@ paths:
         "400":
           $ref: "#/components/responses/Error"
         "409":
+          $ref: "#/components/responses/Error"
+        "429":
           $ref: "#/components/responses/Error"
         "500":
           $ref: "#/components/responses/Error"
@@ -7235,6 +7238,37 @@ paths:
         "500":
           $ref: "#/components/responses/Error"
       x-auth-context: "staff-token"
+  /api/v1/inventory/saved-bottles/deposit-consent-code:
+    post:
+      tags:
+        - "inventory"
+        - "bar"
+      operationId: "requestSavedBottleDepositConsentCode"
+      summary: "存酒登记前向客人手机发送隐私同意短信验证码（scene=deposit；客人报出的验证码随登记提交核验）"
+      description: "BSM L1072「存酒登记先取隐私同意……」；第十八批裁决 57「短信验证码或者小程序，这个点击同意都可以。」（取短信验证码一种）：酒吧员工在存酒登记前向客人手机发送短信验证码，按手机号限速；客人报出的验证码随 POST /api/v1/inventory/saved-bottles 的 verification_code 提交，核验通过才建存酒记录。缺幂等键或 customer_phone 400 VALIDATION_FAILED；短信服务未配置 409 CUSTOMER_OTP_PROVIDER_UNAVAILABLE；同一手机号尝试过频 429 CUSTOMER_OTP_RATE_LIMITED。返回回执 saved_bottle_id（登记前尚无存酒编号，恒为空）、scene=deposit、requested_at，不含手机号明文；成功与失败审计沿用 bar.saved_bottle.verification_code_requested / bar.saved_bottle.verification_code_request_failed（业务编号 deposit_consent）。"
+      x-permission: "bar.saved_bottle.manage"
+      x-data-scope: "project-bar-customer"
+      x-terminal-allowed:
+        - "web"
+      x-idempotency-required: true
+      x-audit-event-success: "bar.saved_bottle.verification_code_requested"
+      x-audit-event-failure: "bar.saved_bottle.verification_code_request_failed"
+      requestBody:
+        $ref: "#/components/requestBodies/SavedBottleDepositConsentCodeRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "429":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: "staff-token"
   /api/v1/inventory/saved-bottles/{id}/manual-pickups:
     post:
       tags:
@@ -7263,6 +7297,33 @@ paths:
         "403":
           $ref: "#/components/responses/Error"
         "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: "staff-token"
+    get:
+      tags:
+        - "inventory"
+        - "bar"
+      operationId: "listSavedBottleManualPickups"
+      summary: "该瓶存酒的人工例外取酒申请（按创建时间倒序；存酒页据此按状态办理四步）"
+      description: "BSM L1073 人工例外取酒四项（店长发起 → 另一主管复核 → 营销确认 → 本人到场放酒）：列出该存酒的人工例外取酒申请（saved_bottle_manual_pickups），按 created_at 倒序。每条含 id、saved_bottle_id、project_id、customer_id、reason（发起原因）、history_condition（命中的消费历史条件：orders_within_1m | orders_within_3m | orders_total）、initiated_by、initiated_at、reviewed_by、reviewed_at、marketing_confirmed_by、marketing_confirm_basis、marketing_confirmed_at、dispensed_by、dispensed_at、claim_id、status（initiated | reviewed | marketing_confirmed | dispensed）、evidence_attachment_ids、created_at、updated_at；不下发 phone_hash、merchant_id。只能读本店存酒：别家商户 403 CROSS_MERCHANT_FORBIDDEN；存酒不存在 404 SAVED_BOTTLE_NOT_FOUND。"
+      x-permission: "bar.saved_bottle.manage"
+      x-data-scope: "project-bar-customer"
+      x-terminal-allowed:
+        - "web"
+      x-idempotency-required: false
+      x-audit-event-success: "bar.saved_bottle.manual_pickup_viewed"
+      x-audit-event-failure: "bar.saved_bottle.manual_pickup_view_failed"
+      parameters:
+        - $ref: "#/components/parameters/Id"
+          description: "存酒记录 ID。"
+      responses:
+        "200":
+          $ref: "#/components/responses/Page"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
           $ref: "#/components/responses/Error"
         "500":
           $ref: "#/components/responses/Error"
@@ -7485,14 +7546,36 @@ paths:
         "500":
           $ref: "#/components/responses/Error"
       x-auth-context: "staff-token"
+    get:
+      tags:
+        - "inventory"
+        - "bar"
+      operationId: "listSavedBottleManualPickupPolicies"
+      summary: "读人工例外取酒消费历史条件（出厂行与各项目行）"
+      description: "BSM L1073 ②「申请手机号在本项目内满足后台配置的任一消费历史条件（安全阈值，按项目可配，调整须最高权限审批并留痕……须同时配置上下限）」：列出 saved_bottle_manual_pickup_policy 各行，按 project_id 排序；每行含 project_id（global 出厂行 | 项目 id）、orders_within1m（近 1 个月笔数）、orders_within3m（近 3 个月笔数）、orders_total（历史累计笔数）、min_orders、max_orders（上下限，出厂行留空）；没单独配置的项目沿用出厂行（出厂默认 2 / 3 / 5 笔）。商户账号 403 PLATFORM_SCOPE_REQUIRED；非平台管理员只返回出厂行与 bar.saved_bottle.manual_pickup_policy.manage 可触及项目（含可跨项目角色勾选的项目）的行（PGM L528「④看不到别的商户和别的项目的数据」）。最高权限本人（可不挂项目）读全部行（第十八批裁决 71「既然是最高权限，不应该什么都能看到吗？」）。"
+      x-permission: "bar.saved_bottle.manual_pickup_policy.manage"
+      x-data-scope: "project"
+      x-terminal-allowed:
+        - "web"
+      x-idempotency-required: false
+      x-audit-event-success: "bar.saved_bottle.manual_pickup_policy_viewed"
+      x-audit-event-failure: "bar.saved_bottle.manual_pickup_policy_view_failed"
+      responses:
+        "200":
+          $ref: "#/components/responses/Page"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: "staff-token"
   /api/v1/inventory/saved-bottles/renewal-policy:
     put:
       tags:
         - "inventory"
         - "bar"
       operationId: "configureSavedBottleRenewalPolicy"
-      summary: "配置存酒转存次数上限（按项目）与顺延期限（按酒吧）（须同时配置上下限；每次保存 version+1 并留痕）"
-      description: "ENUM L120 / BSM L1072「转存次数……按项目可配，出厂默认 2 次，须同时配置上下限」「顺延……该酒吧当前配置的期限，按酒吧可配，出厂默认 30 天，须同时配置上下限」：policy_key=max_renewals（scope_id=global|project:<id>）或 extension_days（scope_id=global|bar:<id>）；value 与 min_value/max_value 须同时填写、value 在上下限内（顺延期限 ≥ 1 天），否则 400 VALIDATION_FAILED；带商户范围的操作者只能配置本酒吧的顺延期限（403 CROSS_MERCHANT_FORBIDDEN）；落 saved_bottle_renewal_policy，已有行 version+1、留痕 updated_by/updated_at，转存流水固化当时的配置版本。"
+      summary: "配置存酒有效期、转存次数上限（按项目）与顺延期限（按酒吧）（须同时配置上下限；每次保存 version+1 并留痕）"
+      description: "ENUM L120 / BSM L1072「客户存酒有效期（业务参数，按项目可配，出厂默认 30 天，须同时配置上下限）」「转存次数……按项目可配，出厂默认 2 次，须同时配置上下限」「顺延……该酒吧当前配置的期限，按酒吧可配，出厂默认 30 天，须同时配置上下限」：policy_key=max_renewals 或 validity_days（scope_id=global|project:<id>）或 extension_days（scope_id=global|bar:<id>）；value 与 min_value/max_value 须同时填写、value 在上下限内（顺延期限、存酒有效期 ≥ 1 天），否则 400 VALIDATION_FAILED；带商户范围的操作者只能配置本酒吧的顺延期限（403 CROSS_MERCHANT_FORBIDDEN）；落 saved_bottle_renewal_policy，已有行 version+1、留痕 updated_by/updated_at，转存流水固化当时的配置版本；存酒有效期在登记时按酒吧所属项目取值（缺行回落 global 出厂行）固化到期日，改配置不追溯已登记的存酒。"
       x-permission: "bar.saved_bottle.renewal_policy.manage"
       x-data-scope: "project"
       x-terminal-allowed:
@@ -7510,6 +7593,28 @@ paths:
         "403":
           $ref: "#/components/responses/Error"
         "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: "staff-token"
+    get:
+      tags:
+        - "inventory"
+        - "bar"
+      operationId: "listSavedBottleRenewalPolicies"
+      summary: "读存酒有效期、转存次数上限（按项目）与顺延期限（按酒吧）（出厂行与各项目、酒吧行）"
+      description: "BSM L1072「客户存酒有效期（业务参数，按项目可配，出厂默认 30 天，须同时配置上下限）」「转存次数不得超过后台配置的上限（业务参数，按项目可配，出厂默认 2 次，须同时配置上下限）」「顺延该酒吧当前配置的期限（业务参数，按酒吧可配，出厂默认 30 天，须同时配置上下限）」：列出 saved_bottle_renewal_policy 各行，按 policy_key、scope_id 排序；每行含 policy_key（validity_days 存酒有效期天数 | max_renewals 转存次数上限 | extension_days 每次顺延天数）、scope_id（global 出厂行 | project:<项目 id> | bar:<酒吧商户 id>）、numeric_value、min_value、max_value（出厂行上下限留空）、version。商户账号 403 PLATFORM_SCOPE_REQUIRED；非平台管理员只返回出厂行、bar.saved_bottle.renewal_policy.manage 可触及项目的 project: 行与所属项目可触及的酒吧的 bar: 行（PGM L528「④看不到别的商户和别的项目的数据」）。最高权限本人（可不挂项目）读全部行（第十八批裁决 71「既然是最高权限，不应该什么都能看到吗？」）。"
+      x-permission: "bar.saved_bottle.renewal_policy.manage"
+      x-data-scope: "project"
+      x-terminal-allowed:
+        - "web"
+      x-idempotency-required: false
+      x-audit-event-success: "bar.saved_bottle.renewal_policy_viewed"
+      x-audit-event-failure: "bar.saved_bottle.renewal_policy_view_failed"
+      responses:
+        "200":
+          $ref: "#/components/responses/Page"
+        "403":
           $ref: "#/components/responses/Error"
         "500":
           $ref: "#/components/responses/Error"
@@ -7549,7 +7654,7 @@ paths:
         - "bar"
       operationId: "listSavedBottleReminderPolicies"
       summary: "读存酒到期提醒节点（出厂行与各项目行；出厂默认到期前第 14、7、3、1 天）"
-      description: "BSM L1072「到期前按后台配置的提醒节点各发一次短信提醒（业务参数，按项目可配，出厂默认到期前第 14 天、第 7 天、第 3 天、第 1 天）」：列出 saved_bottle_reminder_policy 的 scope_id（global 出厂行 | project:<id>）与 reminder_days（到期前第 N 天，降序）；没单独配置的项目沿用出厂行。商户账号 403 PLATFORM_SCOPE_REQUIRED；非平台管理员只返回出厂行与该码可触及项目（含可跨项目角色勾选的项目）的行，没有项目归属 403 PROJECT_SCOPE_REQUIRED（范围闸在读之前）。"
+      description: "BSM L1072「到期前按后台配置的提醒节点各发一次短信提醒（业务参数，按项目可配，出厂默认到期前第 14 天、第 7 天、第 3 天、第 1 天）」：列出 saved_bottle_reminder_policy 的 scope_id（global 出厂行 | project:<id>）与 reminder_days（到期前第 N 天，降序）；没单独配置的项目沿用出厂行。商户账号 403 PLATFORM_SCOPE_REQUIRED；非平台管理员只返回出厂行与该码可触及项目（含可跨项目角色勾选的项目）的行，没有项目归属 403 PROJECT_SCOPE_REQUIRED（范围闸在读之前）。最高权限本人（可不挂项目）读全部行（第十八批裁决 71「既然是最高权限，不应该什么都能看到吗？」）。"
       x-permission: "bar.saved_bottle.reminder_policy.manage"
       x-data-scope: "project"
       x-terminal-allowed:
@@ -7572,6 +7677,7 @@ paths:
         - bar
       operationId: cancelSavedBottle
       summary: 存酒作废(高价值→照片+视频双证据建复核;非高价值直接作废)
+      description: "BSM L1940「……存酒作废、异常调拨都可能产生责任争议，必须记录原因、员工、时间、点位、照片、视频和主管复核结果。」：作废原因 reason 必填（缺失 400 VALIDATION_FAILED），高价值与非高价值两路都落存酒行 cancel_reason 并进成功审计 bar.saved_bottle.cancelled 元数据 reason，高价值复核单的复核对象摘要显示该原因。可作废源态 stored | pending_identity_review | disputed，其余 409 SAVED_BOTTLE_NOT_CANCELLABLE；源态为 disputed（争议成立转作废，第十八批裁决 58）时须另持门店主管码 inventory.high_value.review，否则 403。别家商户 403 CROSS_MERCHANT_FORBIDDEN；存酒不存在 404 SAVED_BOTTLE_NOT_FOUND。"
       x-permission: bar.saved_bottle.manage
       x-data-scope: project-bar-customer
       x-terminal-allowed:
@@ -7596,6 +7702,7 @@ paths:
               additionalProperties: false
               required:
                 - idempotency_key
+                - reason
               properties:
                 idempotency_key:
                   type: string
@@ -7603,7 +7710,7 @@ paths:
                   maxLength: 128
                 reason:
                   type: string
-                  description: 作废原因
+                  description: "作废原因，必填；落存酒行 cancel_reason 并进成功审计元数据 reason，高价值复核页显示。"
                   maxLength: 255
                 photo_attachment_ids:
                   type: array
@@ -8034,7 +8141,7 @@ paths:
         - inventory
       operationId: listHighValueReviews
       summary: 查询库存域高价值复核单(报损/盘点差异/存酒作废)
-      description: 第十八批第 24 条 24-R2：后台高价值复核页（ADM-INV-004）门店主管与财务共用——持 inventory.high_value.review 或 finance.ar_ap.manage 任一可列；只持财务码、不持主管复核码的账号只列 subject_type=saved_bottle_stock_disposal（存酒库房存货处置，财务那一道）。每行带只读 subject_summary（报损/盘点差异/存酒库房处置取调整单的 item_name、quantity、unit、location_id、adjustment_type、reason；存酒作废取 saved_bottle_id、item_name 与剩余量）。
+      description: 第十八批第 24 条 24-R2：后台高价值复核页（ADM-INV-004）门店主管与财务共用——持 inventory.high_value.review 或 finance.ar_ap.manage 任一可列；只持财务码、不持主管复核码的账号只列 subject_type=saved_bottle_stock_disposal（存酒库房存货处置，财务那一道）。每行带只读 subject_summary（报损/盘点差异/存酒库房处置取调整单的 item_name、quantity、unit、location_id、adjustment_type、reason；存酒作废取 saved_bottle_id、item_name、剩余量与作废原因 reason）。
       x-permission: inventory.high_value.review
       x-data-scope: project-warehouse-bar
       x-terminal-allowed:
@@ -24757,6 +24864,7 @@ paths:
         - inventory
       operationId: disputeSavedBottle
       summary: 受理存酒争议
+      description: "BSM L1171「管理存酒取酒、转让、作废、争议和异常处理。」：把存酒中（stored）或待身份复核（pending_identity_review）的存酒置争议中（disputed），其余 409 SAVED_BOTTLE_NOT_DISPUTABLE；争议原因 reason 必填（缺失 400 VALIDATION_FAILED）并进成功审计 bar.saved_bottle.dispute 元数据 reason。按第十八批裁决 58 由门店主管（inventory.high_value.review）核实后了结：争议不成立走 POST /api/v1/inventory/saved-bottles/{id}/dispute-dismissal 恢复为存酒中，争议成立走 POST /api/v1/inventory/saved-bottles/{id}/cancel 转作废（高价值须照片＋视频＋主管复核）。"
       x-auth-context: staff-token
       x-permission: bar.saved_bottle.manage
       x-data-scope: project-bar-table
@@ -24798,6 +24906,57 @@ paths:
         "400":
           $ref: "#/components/responses/Error"
         "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/inventory/saved-bottles/{id}/dispute-dismissal:
+    post:
+      tags:
+        - "inventory"
+        - "bar"
+      operationId: "dismissSavedBottleDispute"
+      summary: "存酒争议不成立，门店主管恢复为存酒中"
+      description: "第十八批裁决 58「门店主管核实后二选一：争议不成立，恢复为存酒中、照常可取；争议成立，走现有存酒作废……」：门店主管（inventory.high_value.review）把争议中（disputed）的存酒恢复为存酒中（stored），剩余量与到期日不变，恢复后照常可取；争议成立转作废走 POST /api/v1/inventory/saved-bottles/{id}/cancel。商户范围闸在幂等之前（同号重放也先过它）：别家商户的存酒 403 CROSS_MERCHANT_FORBIDDEN；存酒不存在 404 SAVED_BOTTLE_NOT_FOUND；不在争议中 409 SAVED_BOTTLE_NOT_DISPUTED；缺幂等键 400 VALIDATION_FAILED。成功返回恢复后的存酒记录。"
+      x-auth-context: "staff-token"
+      x-permission: "inventory.high_value.review"
+      x-data-scope: "project-bar-customer"
+      x-terminal-allowed:
+        - "web"
+      x-idempotency-required: true
+      x-audit-event-success: "bar.saved_bottle.dispute_dismissed"
+      x-audit-event-failure: "bar.saved_bottle.dispute_dismiss_failed"
+      parameters:
+        - name: "id"
+          in: "path"
+          required: true
+          schema:
+            type: "string"
+            maxLength: 64
+          description: "存酒记录 ID。"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: "object"
+              additionalProperties: false
+              required:
+                - "idempotency_key"
+              properties:
+                idempotency_key:
+                  type: "string"
+                  description: "操作幂等键；重复提交必须返回同一处理结果，避免重复写入。"
+                  maxLength: 128
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
           $ref: "#/components/responses/Error"
         "409":
           $ref: "#/components/responses/Error"
@@ -63412,6 +63571,12 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/SavedBottleVerificationCodeRequest"
+    SavedBottleDepositConsentCodeRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/SavedBottleDepositConsentCodeRequest"
     SavedBottleManualPickupRequest:
       required: true
       content:
@@ -67719,6 +67884,8 @@ components:
         - registration_photo_refs
         - customer_name_or_nickname
         - customer_phone
+        - manual_note
+        - verification_code
       properties:
         idempotency_key:
           type: string
@@ -67745,10 +67912,6 @@ components:
           items:
             type: object
           maxItems: 200
-        expire_at:
-          type: string
-          description: "`expire_at` 时间字段；使用 ISO 8601 格式。"
-          format: date-time
         customer_name_or_nickname:
           type: string
           description: 客户姓名或昵称；散客无 customer_id 时落此，作取酒核身比对项之一。修正(2026-06-19 R5业务HTML缺口审计 F4/F7)。
@@ -67766,13 +67929,17 @@ components:
           maxItems: 50
         manual_note:
           type: string
-          description: 人工备注；区别于通用备注。修正(2026-06-19 R5业务HTML缺口审计 F4/F7)。
+          description: "人工备注；登记必填（BSM L1170「存酒登记必须拍照、填写人工备注……」），缺失 400 VALIDATION_FAILED；区别于通用备注。修正(2026-06-19 R5业务HTML缺口审计 F4/F7)。"
           maxLength: 1000
         customer_phone:
           type: string
           description: 客户手机号；登记必填（BSM L1072 记手机号），取酒/转让按当前持有人手机短信核验；保存和展示必须遵守脱敏规则。
           maxLength: 20
           pattern: ^\+?[0-9]{6,20}$
+        verification_code:
+          type: string
+          description: "客人本人手机收到的隐私同意短信验证码（由 POST /api/v1/inventory/saved-bottles/deposit-consent-code 发送，scene=deposit）；核验通过才登记，即视为取得隐私同意（第十八批裁决 57）。"
+          maxLength: 128
     SavedBottleClaimRequest:
       type: object
       description: 请求载荷 `SavedBottleClaimRequest`；字段、必填项和枚举用于生成 DTO、校验和契约测试。
@@ -67877,6 +68044,23 @@ components:
             - "transfer"
             - "claim"
             - "renew"
+    SavedBottleDepositConsentCodeRequest:
+      type: "object"
+      description: "存酒登记前向客人手机发送隐私同意短信验证码（第十八批裁决 57）。"
+      additionalProperties: false
+      required:
+        - "idempotency_key"
+        - "customer_phone"
+      properties:
+        idempotency_key:
+          type: "string"
+          description: "操作幂等键；重复提交时必须返回同一处理结果。"
+          maxLength: 128
+        customer_phone:
+          type: "string"
+          maxLength: 20
+          pattern: "^\\+?[0-9]{6,20}$"
+          description: "客人手机号；须与随后登记请求的 customer_phone 一致（登记时按该手机号核验验证码）。"
     SavedBottleManualPickupRequest:
       type: "object"
       description: "人工例外取酒（BSM L1073 四项）：店长发起 / 另一主管复核 / 营销确认 共用请求体；发起时 reason 必填。"
@@ -68014,7 +68198,7 @@ components:
             minimum: 1
     SavedBottleRenewalPolicyRequest:
       type: "object"
-      description: "存酒转存业务参数配置（ENUM L120）：policy_key=max_renewals（scope_id=global|project:<id>）或 extension_days（scope_id=global|bar:<id>）；value 与上下限须同时填写。"
+      description: "存酒转存业务参数配置（ENUM L120）：policy_key=max_renewals 或 validity_days（scope_id=global|project:<id>）或 extension_days（scope_id=global|bar:<id>）；value 与上下限须同时填写。"
       additionalProperties: false
       required:
         - "policy_key"
@@ -68029,13 +68213,14 @@ components:
           maxLength: 128
         policy_key:
           type: "string"
-          description: "max_renewals=转存次数上限（按项目）；extension_days=每次顺延天数（按酒吧）。"
+          description: "max_renewals=转存次数上限（按项目）；validity_days=存酒有效期天数（按项目，登记时固化到期日）；extension_days=每次顺延天数（按酒吧）。"
           enum:
             - "max_renewals"
             - "extension_days"
+            - "validity_days"
         scope_id:
           type: "string"
-          description: "global，或 project:<项目 id>（仅 max_renewals）、bar:<酒吧商户 id>（仅 extension_days）。"
+          description: "global，或 project:<项目 id>（仅 max_renewals、validity_days）、bar:<酒吧商户 id>（仅 extension_days）。"
           maxLength: 128
         value:
           type: "integer"
@@ -68051,7 +68236,7 @@ components:
           minimum: 0
     SavedBottleRemedyRequest:
       type: "object"
-      description: "存酒作废后对客补存/赔付登记（BSM L1072）：replacement 须带新瓶底标签值、登记照片与出库库位；compensation 须带 amount_cent。"
+      description: "存酒作废后对客补存/赔付登记（BSM L1072）：replacement 须带新瓶底标签值、登记照片、出库库位与补存新瓶的人工备注 operator_note；compensation 须带 amount_cent。"
       additionalProperties: false
       required:
         - "remedy_type"
@@ -68062,7 +68247,7 @@ components:
           maxLength: 128
         operator_note:
           type: "string"
-          description: 操作备注；同品同量补存（replacement）时存为补存新瓶的人工备注，赔付不读；不写入审计事件。
+          description: "同品同量补存（replacement）时为补存新瓶的人工备注，必填（BSM L1170「存酒登记必须拍照、填写人工备注……」），缺失 400 VALIDATION_FAILED；赔付不读；不写入审计事件。"
           maxLength: 1000
         remedy_type:
           type: "string"
@@ -74277,12 +74462,11 @@ components:
           maxLength: 1000
     FacilityInspectionRecordSubmitRequest:
       type: object
-      description: 巡检记录提交请求。abnormal 结果必须填写 abnormal_note。
+      description: "巡检记录提交请求。abnormal 结果必须填写 abnormal_note。巡检人取提交账号，不由请求体指定。"
       additionalProperties: false
       required:
         - idempotency_key
         - result
-        - inspector_id
       properties:
         idempotency_key:
           type: string
@@ -74331,10 +74515,6 @@ components:
           type: string
           description: 异常说明。
           maxLength: 1000
-        inspector_id:
-          type: string
-          description: 巡检人 user_id。
-          maxLength: 64
     EnergyMeterRequest:
       type: object
       description: 能源表计新建/更新请求。

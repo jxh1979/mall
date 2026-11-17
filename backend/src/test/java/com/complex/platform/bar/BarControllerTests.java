@@ -1,4 +1,4 @@
-// 文件版本：V0.08
+// 文件版本：V0.09
 package com.complex.platform.bar;
 
 import static org.mockito.ArgumentMatchers.any;
@@ -211,12 +211,13 @@ class BarControllerTests {
     void deliverAcceptsSnakeCaseDeliveredItemsFromAdminWeb() throws Exception {
         // 第十批 TK-26-R2：后台 adminClient.mapKeys 蛇形体 delivered_items[].order_item_id（按明细勾选送达）；
         // 部分明细送达时服务层不置整单已送达（BarServiceTests.partialDeliveryKeepsOrderAndTicketUndelivered），接口原样返回在途状态。
+        // 第十八批 AP 段第 229 条 229-R3③：网页送达不再带写死的验收备注 operator_note 与假送达照片 delivery_photo_attachment_ids。
         when(service.deliverOrder(eq("order_1"), any(BarOrderDeliveryRequest.class))).thenReturn(order());
         mockMvc.perform(post("/api/v1/bar/orders/order_1/deliver")
                         .with(user("bar").roles("P0_SMOKE"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"idempotency_key":"deliver-web-partial","operator_note":"完整后台验收出品","delivery_photo_attachment_ids":["att-admin-delivery-1"],"delivered_items":[{"order_item_id":"item_1","quantity":2}]}
+                                {"idempotency_key":"deliver-web-partial","delivered_items":[{"order_item_id":"item_1","quantity":2}]}
                                 """))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.status").value("created"));

@@ -1,4 +1,4 @@
-// 文件版本：V0.07
+// 文件版本：V0.08
 import React from "react";
 import { withBase } from "../../basePath";
 import { AdminDataState } from "../components/AdminDataState";
@@ -212,12 +212,13 @@ export function FacilityWorkbenchPage({ api, user, setActionResult, setGlobalErr
   // 第十八批 G 段 82b-R2（PGM:659「角色能查看哪些项目，持有这类角色的员工就能在哪些项目新建记录」）：建工单、巡检模板、巡检任务可选所属项目，
   // 能看到本人项目以外的项目就显示（复核：角色只勾了 B、只看得到 B 一个时也显示），默认不选（后端按设备、空间或模板所在项目，否则本人项目），选了才提交 projectId。
   const [workOrderForm, setWorkOrderForm] = React.useState({ workOrderType: "repair", priority: "normal", title: "", equipmentId: "", spaceId: "", reporterId: "", reporterType: "staff", source: "platform", projectId: "" });
-  const [workOrderAction, setWorkOrderAction] = React.useState({ assigneeId: "", resolution: "现场处理完成", satisfaction: "5", note: "", confirmerId: "", reassignReason: "", customerFeedback: "" });
+  const [workOrderAction, setWorkOrderAction] = React.useState({ assigneeId: "", resolution: "", satisfaction: "5", note: "", confirmerId: "", reassignReason: "", customerFeedback: "" });
   const [policyForm, setPolicyForm] = React.useState({ workOrderType: "repair", priority: "normal", responseMinutes: "60", handleMinutes: "720", requiresAcceptance: true, acceptanceBy: "supervisor", active: true });
   const [templateForm, setTemplateForm] = React.useState({ name: "", inspectionType: "security", cycleDays: "7", abnormalMode: "light", checklist: "现场照片,关键设备状态", scopeNote: "", projectId: "" });
   const [taskForm, setTaskForm] = React.useState({ templateId: "", inspectionType: "security", title: "", scheduleMode: "manual", assigneeId: "", scheduledDate: "", dueDate: "", spaceId: "", projectId: "" });
   const [selectedTaskId, setSelectedTaskId] = React.useState("");
-  const [recordForm, setRecordForm] = React.useState({ result: "normal", inspectorId: "", note: "", abnormalNote: "" });
+  // 第十八批 AP 段第 229 条 229-R8（BSM:940「……一律按执行该动作的设备绑定与该次登录会话定位到操作人并留痕……」）：巡检人由服务端取提交账号，代录不再手填。
+  const [recordForm, setRecordForm] = React.useState({ result: "normal", note: "", abnormalNote: "" });
   // 行明细抽屉：本页 8 张业务表整行可点 → 该行完整字段（枚举中文·日期 cnDate·人员 TraceLink）。一个 detail state 复用。
   const [detail, setDetail] = React.useState<{ title: string; fields: RowDetailField[] } | null>(null);
   // 引导式流程 phase-2：新增设备收起为主按钮，点击弹出分步引导（GuidedFlowModal）。仅改设备创建主流程。
@@ -540,6 +541,10 @@ export function FacilityWorkbenchPage({ api, user, setActionResult, setGlobalErr
       setGlobalError("退回返工须在备注里填写不通过原因");
       return;
     }
+    if (action === "complete" && !workOrderAction.resolution.trim()) {
+      setGlobalError("处理结果不能为空。");
+      return;
+    }
     // ROOT-03 clients-R8（BSM 第 1379 行「客户关怀部记录问题解决方案及客人反馈后可以关闭」）：关闭客人投诉须填客人反馈；满意度由客人本人评（R26）。
     const customerComplaint = source === "customer";
     const customerFeedback = workOrderAction.customerFeedback.trim();
@@ -548,7 +553,7 @@ export function FacilityWorkbenchPage({ api, user, setActionResult, setGlobalErr
       return;
     }
     await api.post(`/api/v1/facility/work-orders/${encodeURIComponent(id)}/${action}`, {
-      resolution: action === "complete" ? workOrderAction.resolution.trim() || "已处理" : undefined,
+      resolution: action === "complete" ? workOrderAction.resolution.trim() : undefined,
       satisfaction: !customerComplaint && (action === "accept" || action === "review") ? positiveInt(workOrderAction.satisfaction) : undefined,
       note: workOrderAction.note.trim() || undefined,
       customerFeedback: customerComplaint && customerFeedback ? customerFeedback : undefined,
@@ -645,13 +650,12 @@ export function FacilityWorkbenchPage({ api, user, setActionResult, setGlobalErr
   }
 
   async function submitInspectionRecord() {
-    if (!selectedTaskId.trim() || !recordForm.inspectorId.trim()) {
-      setGlobalError("提交巡检记录需选择任务并填写巡检人");
+    if (!selectedTaskId.trim()) {
+      setGlobalError("提交巡检记录需选择任务");
       return;
     }
     await api.post(`/api/v1/facility/inspections/tasks/${encodeURIComponent(selectedTaskId.trim())}/records`, {
       result: recordForm.result,
-      inspectorId: recordForm.inspectorId.trim(),
       note: recordForm.note.trim() || undefined,
       abnormalNote: recordForm.result === "abnormal" ? recordForm.abnormalNote.trim() : undefined,
       checklistResult: [],
@@ -1065,7 +1069,6 @@ export function FacilityWorkbenchPage({ api, user, setActionResult, setGlobalErr
         <div className="admin-inline-form" data-testid="facility-inspection-record-form">
           <input data-testid="facility-inspection-record-task-id" aria-label="巡检任务 id" placeholder="任务 id" value={selectedTaskId} onChange={(event) => setSelectedTaskId(event.target.value)} />
           <select data-testid="facility-inspection-record-result" aria-label="巡检结果" value={recordForm.result} onChange={(event) => setRecordForm({ ...recordForm, result: event.target.value })}><option value="normal">正常</option><option value="abnormal">异常</option></select>
-          <input data-testid="facility-inspection-record-inspector" aria-label="巡检人 id" placeholder="巡检人 id" value={recordForm.inspectorId} onChange={(event) => setRecordForm({ ...recordForm, inspectorId: event.target.value })} />
           <input data-testid="facility-inspection-record-note" aria-label="记录备注" placeholder="备注" value={recordForm.note} onChange={(event) => setRecordForm({ ...recordForm, note: event.target.value })} />
           <input data-testid="facility-inspection-record-abnormal-note" aria-label="异常说明" placeholder="异常说明" value={recordForm.abnormalNote} onChange={(event) => setRecordForm({ ...recordForm, abnormalNote: event.target.value })} />
           <PermissionButton permissionsState={effectivePermissions} permissions={INSPECTION} data-testid="facility-inspection-record-submit" onClick={() => void submitInspectionRecord()}>提交记录</PermissionButton>

@@ -1,4 +1,4 @@
-// 文件版本：V0.03
+// 文件版本：V0.04
 import React from "react";
 import { formatActionResult } from "../components/ActionResultView";
 import { TechDetails } from "../components/TechDetails";
@@ -134,7 +134,7 @@ export function AuditEventsPage({ api, user, setActionResult, setGlobalError, ef
   // 反查（对象带 类型:id）默认进操作日志视图；否则保持证据事件视图。
   const [view, setView] = React.useState<"evidence" | "operations">(focusObject ? "operations" : "evidence");
   const [query, setQuery] = React.useState(() => focusKeyword(focusObjectId));
-  const [exportReason, setExportReason] = React.useState("验收导出审计事件");
+  const [exportReason, setExportReason] = React.useState("");
   const [selectedIndex, setSelectedIndex] = React.useState(0);
   const [showDetail, setShowDetail] = React.useState(false);
   const [formError, setFormError] = React.useState("");

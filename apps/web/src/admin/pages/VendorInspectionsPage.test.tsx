@@ -150,3 +150,55 @@ describe("VendorInspectionsPage 副资源降级（AUD-032）", () => {
     expect(props.setGlobalError).not.toHaveBeenCalledWith(expect.any(String));
   });
 });
+
+// 第十八批 AP 段第 229 条 229-R2（PGM:846「运营细则（已确认）：……现场留痕支持拍照、扫二维码、定位三种……」——写死的照片编号与二维码冒充的正是这里的现场留痕；
+// 先例第 32 条删而不补）与 229-R8（BSM:940「……一律按执行该动作的设备绑定与该次登录会话定位到操作人并留痕……」）：说明不预填，巡检人取登录账号、页面不再手填。
+describe("VendorInspectionsPage 记录与异常上报不写死留痕、巡检人取登录人（第 229 条）", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    window.history.replaceState({}, "", "/admin/vendor/inspections");
+  });
+
+  function posts(action: string) {
+    return vi.mocked(globalThis.fetch).mock.calls.filter(([input, init]) => (init as RequestInit | undefined)?.method === "POST" && String(input).endsWith(`/${action}`));
+  }
+
+  function body(call: unknown[]): Record<string, unknown> {
+    return JSON.parse(String((call[1] as RequestInit).body)) as Record<string, unknown>;
+  }
+
+  async function click(testId: string, action: string, count: number) {
+    await waitFor(() => expect((screen.getByTestId(testId) as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.click(screen.getByTestId(testId));
+    await waitFor(() => expect(posts(action)).toHaveLength(count));
+  }
+
+  it("无巡检人输入框、说明两框初始为空；开始与记录请求体不含 note、inspector_id、photos、qr_code", async () => {
+    renderPage();
+    await waitFor(() => expect((screen.queryByTestId("vendor-inspection-select-it-1") as HTMLInputElement | null)?.checked).toBe(true));
+    expect(screen.queryByTestId("vendor-inspection-inspector")).toBeNull();
+    expect((screen.getByTestId("vendor-inspection-note") as HTMLInputElement).value).toBe("");
+    expect((screen.getByTestId("vendor-inspection-exception-note") as HTMLInputElement).value).toBe("");
+
+    await click("vendor-inspection-start", "start", 1);
+    expect(body(posts("start")[0]!)).not.toHaveProperty("note");
+    await click("vendor-inspection-record", "records", 1);
+    const record = body(posts("records")[0]!);
+    for (const key of ["note", "inspector_id", "photos", "qr_code"]) expect(record).not.toHaveProperty(key);
+  });
+
+  it("异常上报说明为空不发请求；填写后上报请求体不含 inspector_id、photos、qr_code", async () => {
+    renderPage();
+    await waitFor(() => expect((screen.queryByTestId("vendor-inspection-select-it-1") as HTMLInputElement | null)?.checked).toBe(true));
+    await waitFor(() => expect((screen.getByTestId("vendor-inspection-exception-note") as HTMLInputElement).value).toBe(""));
+    fireEvent.click(screen.getByTestId("vendor-inspection-report-exception"));
+    await waitFor(() => expect(screen.queryByTestId("vendor-inspection-error")?.textContent).toBe("异常说明不能为空"));
+    expect(posts("report-exception")).toHaveLength(0);
+
+    fireEvent.change(screen.getByTestId("vendor-inspection-exception-note"), { target: { value: "消防门闭门器损坏" } });
+    await click("vendor-inspection-report-exception", "report-exception", 1);
+    const report = body(posts("report-exception")[0]!);
+    expect(report.abnormal_note).toBe("消防门闭门器损坏");
+    for (const key of ["inspector_id", "photos", "qr_code"]) expect(report).not.toHaveProperty(key);
+  });
+});

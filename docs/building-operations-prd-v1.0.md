@@ -1,4 +1,4 @@
-# 楼宇运营业务域 PRD（V1.15·据需求重建）
+# 楼宇运营业务域 PRD（V1.16·据需求重建）
 
 > **锚点口径（2026-08-05 R7·GAP-36 锚点重建）**：本文引用三份业务 HTML（BSM＝`business-system-map-for-operations-v0.1.html`／PGM＝`platform-governance-map-for-operations-v0.1.html`／ENUM＝`business-enum-quick-reference-v0.1.html`）时，一律采用**「条目名主锚点 + 行号辅助」**；标注「实测 L…」的行号为 **2026-08-05** 按现行 HTML `sed -n 'Np'` 逐条实测值，**以条目名为主锚点**，行号漂移不影响条目效力。变更日志章及既有「锚点复核」块内的历史行号为当时记录，一律不改写。
 
@@ -167,7 +167,7 @@
 - 巡检模板记录类型、周期、异常模式、检查清单、范围说明；`cycle_days` 为正数才参与自动排程。
 - 三种排程方式：`template` 需要 `template_id`；`manual` 手动创建任务；`route` 必须提供 `route_points`。
 - 定时排程由 `FacilityInspectionScheduleJob` 承担，开关为 `facility.inspection.scheduled.enabled=true`，默认固定延迟 `${facility.inspection.scheduled.fixed-delay-ms:300000}`。
-- 现场留痕落 `facility_inspection_records`：照片 `photos`、二维码 `qr_code`、GPS `gps_lat/gps_lng`、检查清单结果 `checklist_result`、备注、异常说明、巡检人、记录时间。
+- 现场留痕落 `facility_inspection_records`：照片 `photos`、二维码 `qr_code`、GPS `gps_lat/gps_lng`、检查清单结果 `checklist_result`、备注、异常说明、巡检人（取提交账号，请求体不收巡检人；第十八批 AP 段第 229 条 229-R8）、记录时间。
 - 正常记录：任务从 `in_progress` 写 `normal` 后立即 `closed`。
 - 异常记录必须填 `abnormal_note`。模板 `abnormal_mode=light` 时写 `abnormal` 后直接 `closed`；`to_work_order` 时写 `abnormal` → `rectifying`，发布 `FacilityInspectionAbnormalEvent` 自动生成整改工单，整改完成后 `recheck` → `rechecked`，主管确认 `supervisor-confirm` → `closed`。
 - 巡检闭环与游乐安全巡检分离；本域只覆盖楼宇安防/消防/设施设备/环境卫生。
@@ -294,3 +294,4 @@
 | 2026-11-01 | 改 | §3、§6 M | V1.15（续）：第十八批 M 段第 111 条 111-R4——客诉周报每周一自动生成，按接收码报送门店账号（本店）与平台员工（可触及项目），客人投诉自选涉及门店、客户关怀部可更正（第十八批裁决 28）；第 118 条 118-R1——客户关怀部认定投诉类别，一个月内同类三个不同提出人即通知持上升接收码的负责人（V586 续写：`store_merchant_id`、两个接收码） | 待开发清单 2026-10-25 第 111、118 条；第十八批裁决 28；BSM:1385；BSM:869；DEC-R4-2026-08-04-12 |
 | 2026-11-01 | 改 | §3、§6 L | V1.15（续）：第十八批 M 段第 117 条 117-R1、117-R2——设施工单登记用料即从本项目平台库房库位出库、按移动加权均价计成本；按工单标费用承担方，用了物料须先标承担方才能完工；商户承担的结案生成一笔工单用料费应收进综合账单并短信；承担方争议挂起转一级上级判定，意见即判定依据，判定前不能恢复（V587） | BSM「派单到具体人员或班组」条（L1380）；BSM:1165、1597、1598；ENUM:256；PGM:528 |
 | 2026-11-01 | 改 | §3、§6 L | V1.15（续）：第十八批 M 段第 117 条 117-R3、117-R5——楼宇运营工作台工单行「用料」面板；商户服务工单同样登记用料、标承担方、完工闸与结案应收；承担方争议表与审批策略改两类工单共用（`work_order_bearer_disputes`、策略 `work_order_bearer_dispute`、错误码 `WORK_ORDER_BEARER_DISPUTE_PENDING`），商户服务工单争议停在原状态转上级判定，判定前不能转已处理待关闭、不能关闭（V587） | BSM「派单到具体人员或班组」条（L1380）、L1372；第十八批裁决 29 |
+| 2026-11-16 | 改 | 版本、§4 楼宇巡检现场留痕 | 版本升至 V1.16：第十八批 AP 段第 229 条 229-R8——外包巡检记录 `POST /api/v1/facility/inspections/tasks/{task_id}/records` 的巡检人取提交账号（同异常上报），请求体不再收 `inspector_id`（契约删该属性与必填）；外包巡检页与楼宇运营工作台巡检记录区删巡检人输入框 | BSM:940 |

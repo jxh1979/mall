@@ -70,10 +70,11 @@ export function VendorInspectionsPage({ api, setActionResult, setGlobalError, ef
   const [templatesNotice, setTemplatesNotice] = React.useState<string | null>(null);
   const [selectedId, setSelectedId] = React.useState("");
   const [result, setResult] = React.useState("normal");
-  const [note, setNote] = React.useState("现场巡检记录正常");
+  // 第十八批 AP 段第 229 条 229-R2（PGM:966「已拍板：所有有过程的业务动作都必须留痕……」）：说明不预填，照片编号与二维码不再写死（先例第 32 条删而不补）；
+  // 229-R8（BSM:940「……一律按执行该动作的设备绑定与该次登录会话定位到操作人并留痕……」）：巡检人由服务端取登录账号，页面不再手填。
+  const [note, setNote] = React.useState("");
   const [abnormalNote, setAbnormalNote] = React.useState("");
-  const [exceptionNote, setExceptionNote] = React.useState("巡检发现异常，待物业跟进");
-  const [inspectorId, setInspectorId] = React.useState("vendor-user");
+  const [exceptionNote, setExceptionNote] = React.useState("");
   const [kpiFocus, setKpiFocus] = React.useState<KpiFocus | null>(readKpiFocusFromUrl);
   // 行明细抽屉：整行可点 → 该巡检任务/模板完整字段（枚举中文·时间中文·处理人可溯源）。
   const [detail, setDetail] = React.useState<{ title: string; fields: RowDetailField[] } | null>(null);
@@ -136,7 +137,7 @@ export function VendorInspectionsPage({ api, setActionResult, setGlobalError, ef
       setFormError("请选择一条巡检任务");
       return;
     }
-    const request = { idempotencyKey: nextKey("vendor-inspection-start"), note };
+    const request = { idempotencyKey: nextKey("vendor-inspection-start"), note: note.trim() || undefined };
     await runAction("vendor_inspection_started", request, () => api.post(`/api/v1/facility/inspections/tasks/${encodeURIComponent(selected.id)}/start`, request));
   }
 
@@ -145,17 +146,11 @@ export function VendorInspectionsPage({ api, setActionResult, setGlobalError, ef
       setFormError("请选择一条巡检任务");
       return;
     }
-    if (!inspectorId.trim()) {
-      setFormError("巡检人不能为空");
-      return;
-    }
     const request = {
       idempotencyKey: nextKey("vendor-inspection-record"),
       result,
-      note,
+      note: note.trim() || undefined,
       abnormalNote: result === "abnormal" ? abnormalNote : undefined,
-      inspectorId: inspectorId.trim(),
-      photos: ["att-vendor-inspection"],
       checklistResult: [],
     };
     await runAction("vendor_inspection_recorded", request, () => api.post(`/api/v1/facility/inspections/tasks/${encodeURIComponent(selected.id)}/records`, request));
@@ -166,20 +161,17 @@ export function VendorInspectionsPage({ api, setActionResult, setGlobalError, ef
       setFormError("请选择一条巡检任务");
       return;
     }
-    if (!inspectorId.trim() || !exceptionNote.trim()) {
-      setFormError("巡检人和异常说明不能为空");
+    if (!exceptionNote.trim()) {
+      setFormError("异常说明不能为空");
       return;
     }
     const request = {
       idempotencyKey: nextKey("vendor-inspection-exception"),
-      photos: ["att-vendor-inspection-exception"],
-      qrCode: "QR-EXCEPTION",
       gpsLat: null,
       gpsLng: null,
       checklistResult: [{ item: selected.title ?? selected.id, result: "abnormal" }],
-      note,
+      note: note.trim() || undefined,
       abnormalNote: exceptionNote.trim(),
-      inspectorId: inspectorId.trim(),
     };
     await runAction("vendor_inspection_exception_reported", request, () => api.post(`/api/v1/facility/inspections/tasks/${encodeURIComponent(selected.id)}/report-exception`, request));
   }
@@ -270,7 +262,6 @@ export function VendorInspectionsPage({ api, setActionResult, setGlobalError, ef
             </div>
 
             <div className="admin-form-grid" data-testid="vendor-inspection-record-form">
-              <label>巡检人<input data-testid="vendor-inspection-inspector" value={inspectorId} onChange={(event) => setInspectorId(event.target.value)} /></label>
               <label>结果<select data-testid="vendor-inspection-result" value={result} onChange={(event) => setResult(event.target.value)}><option value="normal">正常</option><option value="abnormal">异常</option></select></label>
               <label>记录说明<input data-testid="vendor-inspection-note" value={note} onChange={(event) => setNote(event.target.value)} /></label>
               <label>异常说明<input data-testid="vendor-inspection-abnormal-note" value={abnormalNote} onChange={(event) => setAbnormalNote(event.target.value)} /></label>

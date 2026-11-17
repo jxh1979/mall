@@ -1,5 +1,7 @@
-// 文件版本：V0.04
+// 文件版本：V0.05
 // FS-017（BSM L1072）：作废后对客补存/赔付——选中已作废行出现补存/赔付面板，选「赔付」填 120 元 → POST …/remedy 蛇形键 amount_cent=12000。
+// 第十八批 AP 段 254-R3（BSM:1170「存酒登记必须拍照、填写人工备注……」）：同品补存须填补存瓶人工备注，作为 operator_note 发出；
+// 赔付不发 operator_note；领取表单不再有备注框与「完整后台验收领取」默认值。
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -57,8 +59,36 @@ describe("StoredWinePage 补存/赔付（FS-017）", () => {
     fireEvent.click(screen.getByTestId("stored-wine-remedy-submit"));
     await waitFor(() => expect(api.post).toHaveBeenCalledWith(
       "/api/v1/inventory/saved-bottles/c-1/remedy",
-      // 第十八批 AF 段 198-R5：补救登记服务端读 operator_note，本页备注框照发。
-      expect.objectContaining({ remedy_type: "compensation", amount_cent: 12000, operator_note: expect.any(String) }),
+      expect.objectContaining({ remedy_type: "compensation", amount_cent: 12000 }),
+    ));
+    // 254-R3：赔付不读备注，不发 operator_note。
+    expect(vi.mocked(api.post).mock.calls.find(([path]) => path === "/api/v1/inventory/saved-bottles/c-1/remedy")![1])
+      .not.toHaveProperty("operator_note");
+  });
+
+  it("254-R3：同品补存缺人工备注 → 提示且不发请求；填写后 operator_note 等于所填；领取表单无备注框与验收默认值", async () => {
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+    const api = makeApi();
+    renderPage(api);
+    await waitFor(() => expect(api.get).toHaveBeenCalledWith("/api/v1/inventory/saved-bottles/w-1/remedies"), { timeout: 5000 });
+    expect(screen.queryByTestId("stored-wine-claim-note")).toBeNull();
+    expect(screen.getByTestId("stored-wine-page").textContent).not.toContain("完整后台验收领取");
+    fireEvent.click(screen.getByTestId("stored-wine-select-c-1"));
+    await waitFor(() => expect(screen.queryByTestId("stored-wine-remedy-panel")).not.toBeNull());
+    await waitFor(() => expect(api.get).toHaveBeenCalledWith("/api/v1/inventory/saved-bottles/c-1/remedies"));
+    fireEvent.change(screen.getByTestId("stored-wine-remedy-photos"), { target: { value: "att_p1" } });
+    fireEvent.change(screen.getByTestId("stored-wine-remedy-label"), { target: { value: "LBL-NEW" } });
+    fireEvent.change(screen.getByTestId("stored-wine-remedy-location"), { target: { value: "store-1" } });
+    fireEvent.click(screen.getByTestId("stored-wine-remedy-submit"));
+    await waitFor(() => expect(screen.getByTestId("stored-wine-remedy-error").textContent).toContain("人工备注"));
+    expect(confirmSpy).not.toHaveBeenCalled();
+    expect(vi.mocked(api.post).mock.calls.filter(([path]) => path === "/api/v1/inventory/saved-bottles/c-1/remedy")).toHaveLength(0);
+
+    fireEvent.change(screen.getByTestId("stored-wine-remedy-note"), { target: { value: "补存新瓶，客人确认" } });
+    fireEvent.click(screen.getByTestId("stored-wine-remedy-submit"));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith(
+      "/api/v1/inventory/saved-bottles/c-1/remedy",
+      expect.objectContaining({ remedy_type: "replacement", operator_note: "补存新瓶，客人确认", registration_photo_refs: ["att_p1"] }),
     ));
   });
 

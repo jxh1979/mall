@@ -1,4 +1,4 @@
-// 文件版本：V0.14
+// 文件版本：V0.15
 import React from "react";
 import { BarRefundBreakdownPanel } from "./BarRefundBreakdownPanel";
 import { BarShiftPanel } from "./BarShiftPanel";
@@ -62,7 +62,6 @@ const TEXT = {
   paidAt: "\u652f\u4ed8\u65f6\u95f4",
   noBill: "\u672a\u751f\u6210",
   billNote: "\u5b8c\u6574\u540e\u53f0\u9a8c\u6536\u8d26\u5355",
-  deliverNote: "\u5b8c\u6574\u540e\u53f0\u9a8c\u6536\u51fa\u54c1",
   settleNote: "\u5b8c\u6574\u540e\u53f0\u9a8c\u6536\u7ed3\u7b97",
   focusClear: "\u6e05\u9664\u7b5b\u9009\uff0c\u8fd4\u56de\u5168\u90e8",
 };
@@ -361,8 +360,6 @@ export function BarOrdersPage({ api, user, setActionResult, setGlobalError, effe
       return;
     }
     await runOrderAction("bar_order_delivered", () => api.post(`/api/v1/bar/orders/${selectedOrder!.id}/deliver`, {
-      operatorNote: TEXT.deliverNote,
-      deliveryPhotoAttachmentIds: ["att-admin-delivery-1"],
       deliveredItems: selectedItems.map((item) => ({ orderItemId: item.id, quantity: item.quantity ?? 1 })),
     }));
   }

@@ -1,6 +1,6 @@
 package com.complex.platform.common.api;
 
-// 文件版本：V0.45
+// 文件版本：V0.46
 
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -227,6 +227,7 @@ public final class FieldLabels {
         p("dispatch_id", "派驻记录");
         p("station_code", "工位编码");
         p("registration_photo_refs", "登记照片");
+        p("manual_note", "人工备注");   // 第十八批 AP 段 254-R1（BSM:1170「填写人工备注」）
         p("consent_type", "授权类型");
 
         // ── 订单 / 账单 / 支付 ───────────────────────────────────────
@@ -268,6 +269,7 @@ public final class FieldLabels {
         p("saved_bottle_id", "存酒记录");
         p("renewal_id", "转存记录");
         p("manual_pickup_id", "人工例外取酒申请");
+        p("present_in_person", "客户本人到场");   // 18AP 收尾复核修正：人工例外取酒放酒请求键
         p("remedy_id", "补存/赔付记录");
         p("remedy_type", "补存/赔付方式");
         p("bearer_type", "承担方类型");

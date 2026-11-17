@@ -22,7 +22,7 @@ const CLOSED_STATUSES = ["resolved", "dismissed", "ignored"];
 
 const TEXT = {
   title: "风控预警",
-  description: "集中处理高风险客户、员工行为、第三方异常和生产风险预警；创建、调查、解决和关闭都必须带原因、幂等键和证据附件。",
+  description: "集中处理高风险客户、员工行为、第三方异常和生产风险预警；创建、调查、解决和关闭都必须带原因和幂等键。",
   evidence: "接口证据：读取/创建 /api/v1/analytics/risk-alerts；处理 POST /api/v1/analytics/risk-alerts/{id}/resolve。",
   loadFailed: "风控预警读取失败",
   actionFailed: "风控预警操作失败",
@@ -33,7 +33,7 @@ const TEXT = {
   highRisk: "高风险",
   open: "待处理",
   selected: "选中预警",
-  boundary: "忽略高风险预警需审批；重复预警必须合并，处理动作不得绕过证据附件、幂等键和审计留痕。",
+  boundary: "忽略高风险预警需审批；重复预警必须合并，处理动作不得绕过幂等键和审计留痕。",
   alertType: "预警类型",
   riskLevel: "风险等级",
   objectType: "对象类型",
@@ -86,9 +86,9 @@ export function RiskAlertsPage({ api, setActionResult, setGlobalError, effective
   const [alertType, setAlertType] = React.useState("staff_behavior");
   const [riskLevel, setRiskLevel] = React.useState("high");
   const [objectType, setObjectType] = React.useState("bar_order");
-  const [objectId, setObjectId] = React.useState("order-1");
-  const [summary, setSummary] = React.useState("员工异常折扣触发高风险预警");
-  const [resolutionReason, setResolutionReason] = React.useState("已复核订单、员工和支付证据，确认关闭");
+  const [objectId, setObjectId] = React.useState("");
+  const [summary, setSummary] = React.useState("");
+  const [resolutionReason, setResolutionReason] = React.useState("");
   const [query, setQuery] = React.useState("");
   const [kpiFocus, setKpiFocus] = React.useState<KpiFocus | null>(readKpiFocusFromUrl);
   // 行明细抽屉：整行可点 → 该预警完整字段（枚举中文·时间中文·证据附件展开）。
@@ -172,8 +172,6 @@ export function RiskAlertsPage({ api, setActionResult, setGlobalError, effective
     const request = {
       idempotencyKey: nextKey("risk-alert-create"),
       operatorNote: "完整后台创建风控预警",
-      evidenceAttachmentIds: ["att-risk-alert-create"],
-      ruleId: "risk-rule-1",
       alertType,
       riskLevel,
       objectType,
@@ -208,7 +206,6 @@ export function RiskAlertsPage({ api, setActionResult, setGlobalError, effective
     const request = {
       idempotencyKey: nextKey("risk-alert-resolve"),
       operatorNote: "完整后台处理风控预警",
-      evidenceAttachmentIds: ["att-risk-alert-resolve"],
       action: "resolved",
       reason: resolutionReason,
     };

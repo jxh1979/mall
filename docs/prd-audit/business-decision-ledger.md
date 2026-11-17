@@ -1,6 +1,6 @@
 # PRD 审计业务裁决台账
 
-文档版本：V0.96
+文档版本：V0.97
 状态：进行中
 迁移日期：2026-07-27
 当前事实源：三份立法 HTML 以既有冻结基线叠加 James 此前 M02 至 M08 的点名批准、全量审计 M001、M002 的逐项批准，以及本轮 2026-10-16 至 2026-10-17 业务 HTML 审计中 Q01 至 Q40 及子题实际明确批准且未被后续替代的裁决，和 2026-10-17 第二批 HTML 业务线推演审计（A–F 六线 64 条、停车章）的逐项批准，并叠加本轮 CG 70 项来源确认与 C01–C09、N01–N03 最终澄清及补全文稿中 F01、W01–W05 的整体修改批准（本文件末节）；本轮最终规则、未采纳或替代关系、现行版本与字节哈希见本文件末节。历史记录保留为各自当时事实，不恢复已被替代的建议。
@@ -7723,3 +7723,377 @@ HTML 的语义补齐与直接引用同步可在本批核验；70项中的业务�
   - 三份 PRD 修订表行序（控制席补充）：docs/platform-governance-prd-v0.1.md、docs/supply-chain-inventory-product-prd-v0.1.md、docs/ticketing-entitlement-checkin-product-prd-v0.1.md 本段那行挪到 18AM 那行之上，两行内容不改。
   - 文件版本：上述文件本段都已升过，不再升；无新文件、无迁移、无契约改动。
 - 18AO 落地位置补记·运行验收证据、快照、终验文档刷新（无新裁决）：业务提交 fcfd104d 之后，按第十八批裁决 25 重刷了运行验收证据：后端全量 6835 测，0 失败 0 错误；apps/web 构建通过；常规界面验收（接口全部 mock）实跑 40 条全过；真实后端界面验收未跑，runtime_ready=false。随后依次重生成闭环当前态快照、生产闭环缺口报告、界面验收报告、无上线指挥台。生成器没改。手改 docs/final-closed-loop-acceptance-audit-v0.1.md 与 docs/code-implementation-acceptance-audit-v0.1.md：前端单测源码计数改为 1782；TicketingService.java 行数由 1305 改为 1351、BarService.java 行数由 1274 改为 1276、BarOrderService.java 行数由 1854 改为 1859，其余被核文件行数无变化；后端全量与常规界面验收的数字、日期改为本次实跑值；写入 npm run verify:unit 实跑结果，五个工作区全过。交付门禁于 2026-11-17 04:49 UTC 在工作树逐项实跑子项，NAS 两项现场探测未跑。仍红的有两项：一是 coding-host-protection，它写死主仓路径，在工作树口径下必红，属工具口径，不做；二是 final-closed-loop-audit，如实留 2 条红（integration-ready、business-acceptance-ready），原因是校验器要求终验把联调、业务验收写成「是」，而裁决 25 定了不跑真实后端界面验收、运行验收未就绪，终验写的是「否」。verify:delivery-gates 总链仍是红的。
+
+18AP 落地位置补记（2026-11-17）：第十八批 AP 段（batch62）按 18AP 只读设计实现待开发清单第 229、252、254 条（存酒组）；运行验收证据、终验文档在本段最后一个提交刷新；各条落地位置见下。本段追加时，原台账除文档版本升一版外，其他历史字节保持。
+
+- 18AP 落地位置补记·控制席判定（2026-11-17）：本段（第十八批 AP 段，batch62）实现待开发清单第 229、252、254 条（存酒组；18AP 只读设计 b62-audit/d-wine-a.json、d-wine-b.json，两轮质疑者修订后定稿，无待裁题）。2026-11-16 操作员准许 4 段并行（「可以多跑3段」），本段与 18AM、18AN、18AO 同时开工，实现后变基到含 18AM 付款确认（PR #592）的 origin/main，合并前再变基到含 18AO（PR #593）的 origin/main c6a4f2f9；下文版本号、操作数为变基到 c6a4f2f9 后的最终值。第 254 条按第十八批裁决 57（存酒登记隐私同意的取得方式）、58（存酒争议怎么了结）所选选项原文落实；存酒赔付结案处的付款确认闸属 18AM，本段不碰。实现期旁见另记待开发清单第 318、325 条（待核实）。
+- 18AP 落地位置补记·第 229 条 229-R3（八处写死假附件直接删，送达的验收残留备注一并删）：照先例待开发清单第 32 条（第十六批 b13edeee）删键、不补上传，后端与契约不动（服务端按空列表照常落库）。落地位置：
+  - apps/web/src/admin/pages/IntegrationEventsPage.tsx 轮询校验、处理补偿删 evidence_attachment_ids；
+  - BarOrdersPage.tsx 送达删 operatorNote 与 deliveryPhotoAttachmentIds，常量 TEXT.deliverNote（「完整后台验收出品」）一并删；
+  - AmusementGroupBookingsPage.tsx 释放删 evidenceAttachmentIds，结果区回显一并去掉；
+  - RiskAlertsPage.tsx 新建、处理删 evidenceAttachmentIds；
+  - MerchantWorkOrdersPage.tsx 派单、处理、关闭删 evidenceAttachmentIds；
+  - StoredWinePage.tsx 领取删 evidence_attachment_ids（领取请求其余问题属第 268 条）；
+  - InventoryLedgerPage.tsx 库存移动删 evidence_attachment_ids。
+  依据：PGM:966「已拍板：所有有过程的业务动作都必须留痕，酒水和可追责物品从库房到客人的全过程必须可追溯。」；BSM:1633「人工只在异常、退款、免单、调账、补录时填写原因、照片、视频或复核意见。」；BSM:1073「取酒核验、对应标签、取用前后剩余量、操作员工和时间必须留痕。」；先例第 32 条。
+  测试：
+  - IntegrationEventsPage.rowdetail.test.tsx「三个说明框初始为空；填写轮询校验说明后登记，请求体不带写死附件」「处理补偿不带 operator_user_id」；
+  - BarOrdersPage.deliver.test.tsx「默认勾选全部未上菜明细，取消一条后只提交勾选明细」；
+  - AmusementGroupBookingsPage.test.tsx「释放原因初始为空；填写后释放，请求体与结果不带附件编号」；
+  - RiskAlertsPage.guidedcreate.test.tsx「入口→一屏填→提交：POST /risk-alerts 且成功后关闭弹窗」「处理原因初始为空；填写后处理，请求体不带写死附件」；
+  - MerchantWorkOrdersPage.test.tsx「198-R3①、229-R3⑥：派单、处理、关闭三次请求体都不含 operator_user_id 与写死附件」；
+  - StoredWinePage.holder.test.tsx「198-R3②／198-R5／229-R3⑦：领取请求体不含 claim_by_phone、operator_note 与写死附件」；
+  - InventoryLedgerPage.guidedcreate.test.tsx「入口→一屏填→提交：POST /stock-movements 带选中物料，成功后关弹窗」；
+  - 后端 IntegrationOperatorJdbcIntegrationTests.pollingCheckWithoutEvidenceIsRecordedAndRetryWithoutReasonIsRejected、SavedBottleStockDisposalJdbcIntegrationTests.ordinaryOutboundWithoutTraceCodeOrEvidenceKeepsBothEmpty、BarControllerTests.deliverAcceptsSnakeCaseDeliveredItemsFromAdminWeb（网页形状删 operator_note、delivery_photo_attachment_ids）。
+- 18AP 落地位置补记·第 229 条 229-R4（写死原因：线索转流失、搁置改人填；后台出票的验收残留改如实固定文案）：
+  - apps/web/src/admin/pages/LeasingWorkbenchPage.tsx 线索状态下拉旁加「原因」输入（leasing-lead-status-reason）。目标为已流失、已搁置且原因为空时拦下，提示「转为已流失或已搁置必须填写原因。」；只在这两态发 reason，其余状态不发，服务端随之不把流失原因写到跟进中的线索上。
+  - apps/web/src/admin/pages/TicketOrdersPage.tsx TEXT.issueNote 改为「后台出票」（18AE 199-R1 定的固定出票原因，HTML 对后台出票无填写原因要求），不加输入框。
+  依据：PGM:502「招商线索在已签约前，可从待跟进、跟进中、已转意向或洽谈中转为已流失或已搁置；转换时必须填写原因，……」；PGM:899「平台治理层要保证每个重要动作能追溯。谁发起、谁销售、谁服务、谁第一个处理异常、为什么、谁审批、结果是什么，都要能查到。」。
+  测试：
+  - LeasingWorkbenchPage.test.tsx「线索转已流失不填原因不发请求；填了带 reason；转跟进中原因框留有文字也不发 reason」「改线索状态为已搁置、已流失后结果区按 ENUM 原文显示」；
+  - TicketOrdersPage.issue.test.tsx「选订单、点出票并确认后按契约发 reason，不发 operatorNote」；
+  - 后端 LeasingIntentGateJdbcIntegrationTests.leadStatusReasonOnlyForLostOrOnHoldAndBlacklistNeedsReason、KioskTicketSaleJdbcTests.adminWebIssueWithPageBodyReasonIssuesAndOperatorNoteOnlyIsRejected（网页形状原因改「后台出票」）。
+- 18AP 落地位置补记·第 229 条 229-R5（清空输入框预填的断言事实与验收残留文本，含楼宇工单处理结果）：下列 useState 初值改空串。服务端必填而页面没拦的补空值提示，服务端可空的空着不发该键。落地位置：
+  - IntegrationEventsPage.tsx 轮询校验说明、重试原因、补偿处理说明。重试、补偿在高危确认前的 validateRetry、validateCompensation 拦，提示「重试原因不能为空。」「补偿处理说明不能为空。」。
+  - VendorWorkOrdersPage.tsx 处理备注（空不发 note）、完成说明（完成时为空拦下，提示「完成说明不能为空。」）。
+  - VendorSiteEntriesPage.tsx 提交备注（空不发 note）、完工说明。
+  - AmusementGroupBookingsPage.tsx 释放原因。
+  - LeasingWorkbenchPage.tsx 拉黑原因、跟进内容，补「拉黑原因不能为空。」「跟进内容不能为空。」。
+  - RiskAlertsPage.tsx 预警摘要、处理原因；MerchantWorkOrdersPage.tsx 处理说明、处理结论。
+  - AdmissionAuditsPage.tsx、AuditEventsPage.tsx 导出原因；BusinessAnalyticsPage.tsx 复盘说明；ApprovalChainPage.tsx 审批意见；AmusementSessionsPage.tsx 场次名。
+  - InventoryLedgerPage.tsx 库存移动备注（空不发 operator_note）。
+  - FacilityWorkbenchPage.tsx 楼宇工单处理结果初值改空、删兜底「已处理」，完成时为空拦下，提示「处理结果不能为空。」；满意度初值不在本条。
+  依据：PGM:968「已拍板：留痕优先自动生成，……人工只补原因和证据。」；PGM:685「……导出须单独授权、逐次留痕……」；PGM:899；PGM:966；代码内先例 M012-006「不预填验收默认值」。
+  测试：
+  - IntegrationEventsPage.rowdetail.test.tsx「重试原因、补偿处理说明为空：不发请求，提示必填」；
+  - VendorWorkOrdersPage.test.tsx「两框初始为空；完成说明为空不发请求；填写后完成，备注空着不带 note」；
+  - VendorSiteEntriesPage.guidedcreate.test.tsx「提交备注、完工说明初始为空；提交备注空着提交不带 note（第 229 条 229-R5）」；
+  - FacilityWorkbenchPage.reassign.test.tsx「处理结果初始为空；为空点完成不发请求，填写后按所填提交」；
+  - LeasingWorkbenchPage.test.tsx「新建线索联系人与手机号、拉黑原因、跟进内容初始为空」「跟进内容、拉黑原因为空不发请求，提示必填」；
+  - AdmissionAuditsPage.test.tsx、AuditEventsPage.test.tsx、BusinessAnalyticsPage.guidedcreate.test.tsx、ApprovalChainPage.test.tsx、AmusementSessionsPage.guidedcreate.test.tsx 的初值为空断言；
+  - 后端 IntegrationOperatorJdbcIntegrationTests.pollingCheckWithoutEvidenceIsRecordedAndRetryWithoutReasonIsRejected（立即重试不带原因 400）、CustomerComplaintJdbcIntegrationTests.completeWithoutResolutionIsRejected、LeasingIntentGateJdbcIntegrationTests.leadStatusReasonOnlyForLostOrOnHoldAndBlacklistNeedsReason（拉黑不带原因 400）。
+- 18AP 落地位置补记·第 229 条 229-R9（库存移动表单删预填假库位与假溯源码；待开发清单第 229 条补充⑤）：apps/web/src/admin/pages/InventoryLedgerPage.tsx 出库位置、入库位置、追踪码初值改空。出库位置为空时 FormModal validate 与 submitMovement 都拦下，提示「请填写出库位置。」；入库位置、追踪码填了才发 to_location_id、trace_code；datalist 候选不动。
+  依据：PGM:966「已拍板：所有有过程的业务动作都必须留痕，酒水和可追责物品从库房到客人的全过程必须可追溯。」。
+  测试：
+  - InventoryLedgerPage.guidedcreate.test.tsx「入口→一屏填→提交：POST /stock-movements 带选中物料，成功后关弹窗」（三框为空、只发出库位置与数量）「出库位置为空提交被拦、不发请求（第 229 条 229-R9）」；
+  - 后端 SavedBottleStockDisposalJdbcIntegrationTests.ordinaryOutboundWithoutTraceCodeOrEvidenceKeepsBothEmpty。
+- 18AP 落地位置补记·第 229 条 229-R10（后台表单预填或写死的假编号、假手机号、假人名与固定日期；补充⑥及同根漏项⑦⑧，VendorInspectionsPage 巡检人并在 229-R8）。落地位置（apps/web/src/admin/pages/）：
+  - LeasingWorkbenchPage.tsx 新建线索联系人「张经理」、手机号 13800000000 改空；签约生效日、到期日 2026-07-01、2027-06-30 改空，signIntent 补「请填写合同生效日和到期日。」。
+  - PermissionTemplatesPage.tsx 套模板目标员工 user-1 改空，删掉员工列表一到就换成第一人的 effect。
+  - TicketOrdersPage.tsx 核销预检权益码 ENT-0001 改空，由首条真实权益码回填。
+  - RiskAlertsPage.tsx 对象编号 order-1 改空，删写死 ruleId risk-rule-1。
+  - SupervisorReviewPage.tsx 对象编号 contract-1 改空，evaluateViolation 补「对象编号不能为空。」。
+  - AccessUsersPage.tsx 所属组织 org-1 改空。
+  - VendorSiteEntriesPage.tsx 进场报备计划起止日、人数、联系人「王工」、电话改空，删人数 `|| 1` 兜底；第二步 validate 与 createEntry 补「计划日期、人数、联系人和电话不能为空。」。
+  依据：PGM:899「平台治理层要保证每个重要动作能追溯。谁发起、谁销售、谁服务、谁第一个处理异常、为什么、谁审批、结果是什么，都要能查到。」；PGM:966。
+  测试：
+  - LeasingWorkbenchPage.test.tsx「新建线索联系人与手机号、拉黑原因、跟进内容初始为空」「签约生效日、到期日初始为空，空时不发签约，选好后随签约提交」；
+  - PermissionTemplatesPage.test.tsx「员工列表加载后目标员工仍为空，空时点应用不发请求并提示」；
+  - TicketOrdersPage.issue.test.tsx「有已出权益：带出第一条真实权益码」「没有已出权益：权益码为空」；
+  - RiskAlertsPage.guidedcreate.test.tsx「入口→一屏填→提交：POST /risk-alerts 且成功后关闭弹窗」；
+  - SupervisorReviewPage.test.tsx「对象编号不预填；为空点评估不发请求并提示（第 229 条 229-R10⑤）」；
+  - M006AccessRegistration.test.tsx「第 229 条 229-R10⑥：所属组织为空点下一步被拦，不发注册申请」；
+  - VendorSiteEntriesPage.guidedcreate.test.tsx「计划日期、人数、联系人、电话初始为空；只填三必填点下一步被拦（第 229 条 229-R10⑦）」；
+  - 后端 RiskAlertManualCreateJdbcIntegrationTests.manualAlertWithoutRuleOrObjectIdIsCreatedWithBothEmpty、SupervisorReviewEvaluateObjectIdJdbcIntegrationTests.evaluateWithoutObjectIdIsRejected。
+- 18AP 落地位置补记·第 229 条批 2、批 3（229-R1、229-R6、229-R2、229-R8；无新裁决）：
+  229-R1　游乐安全巡检页（apps/web/src/admin/pages/AmusementSafetyPage.tsx）
+  - 删除五处写死附件：新建、提交、整改、复检、审批重开的 att-amusement-safety-*。改为页内 uploadEvidence 真实上传：
+    - 接口 POST /api/v1/evidence/attachments/upload，business_type＝amusement_safety_inspection，attachment_role 按文件类型取 photo 或 video。
+    - 新建弹窗里上传不带 business_id；动作区上传带选中巡检编号。
+  - 附件清空：动作成功或换选巡检时清空动作区已传附件；弹窗关闭或新建成功时清空新建附件。没传附件就不发该键。
+  - 拦截：合格巡检没传附件，拦下提示「检查通过必须上传证据附件。」；复检通过没传附件，拦下提示「复检通过必须上传证据附件。」。
+  - 提交说明如实写「提交巡检」；整改说明不预填。
+  - 检修不合格时不再兜底「设备异常待整改」，异常说明为空就拦下，提示「检查不通过时必须填写异常说明。」。
+  - 页面矩阵 ADM-AMU-003：permissions 补 evidence.attachment.create，primary_apis 补上传接口。
+  - 依据：PGM:966「已拍板：所有有过程的业务动作都必须留痕，酒水和可追责物品从库房到客人的全过程必须可追溯。」；PGM:968「已拍板：留痕优先自动生成……人工只补原因和证据。」；BSM:1269「工程师可在一体机上填写定期检修记录，记录检修单位、检修人员、结果和异常原因。」
+  - 测试：
+    - 新文件 AmusementSafetyPage.evidence.test.tsx，含「新建选合格、不上传 → 引导拦下」「新建弹窗上传后新建 → 上传不带 business_id，新建带真实附件编号、不带巡检时间」「动作区上传带选中巡检编号；改选另一行后已传文件清空」「提交巡检请求体 comment 为「提交巡检」，不带附件编号」「整改说明初始为空；为空点提交整改不发请求」「检修选不合格不填异常说明 → 不发请求」「各请求体都不含写死的 att-amusement 编号」。
+    - 后端新类 AmusementSafetyEvidenceUpload229Tests.passInspectionCarriesUploadedEvidenceAndIsRejectedWithoutIt。
+    - AmusementSafetySubmitWebShape198R5Tests 随网页形状同改。
+  229-R6　同页
+  - 删写死巡检时间 inspectedAt，由服务端取提交时刻。
+  - 复检结论改为人选（通过、不通过），未选拦下提示「请选择复检结论。」；选不通过不发说明。
+  - 检修来源 source_terminal 由 kiosk 改为 web。
+  - fieldLabels.ts 的 KEY_VALUE_LABELS.action_result 补 fail「不通过」。
+  - 依据：PGM:973「已拍板：物品与履约全链凡是"有时间属性"的环节都必须记录该时间……」；BSM:1298「……当日无合格巡检或有未复检阻断项则拒绝核销。」；PGM:846「……整改后复检、主管确认闭环……」；BSM:1269。
+  - 测试：vitest「复检须选结论：未选不发；选通过不上传拦下；选不通过不上传 → action_result=fail、无 comment 与附件」「检修提交来源记网页 source_terminal=web」；后端 AmusementSafetyEvidenceUpload229Tests 的 inspectionWithoutInspectedAtTakesSubmitTime、recheckCanRecordFail、maintenanceFromWebIsRecordedAsWeb。
+  229-R2　外包巡检页（apps/web/src/admin/pages/VendorInspectionsPage.tsx）
+  - 删写死照片编号 att-vendor-inspection、att-vendor-inspection-exception，删写死二维码 QR-EXCEPTION。删而不补上传，同先例第 32 条。
+  - 记录说明、异常上报说明不预填；说明为空时开始、记录、上报都不发 note。
+  - 依据：PGM:966；PGM:846「运营细则（已确认）：……现场留痕支持拍照、扫二维码、定位三种……」（写死值冒充的正是这里的拍照与扫码留痕）。
+  - 测试：VendorInspectionsPage.test.tsx「无巡检人输入框、说明两框初始为空；开始与记录请求体不含 note、inspector_id、photos、qr_code」「异常上报说明为空不发请求；填写后上报请求体不含 inspector_id、photos、qr_code」；后端新类 FacilityInspectionWebShape229Tests.outsourcedExceptionReportKeepsNoFabricatedEvidence。
+  229-R8　外包巡检记录的巡检人取登录人
+  - FacilityInspectionService.submitRecord 的巡检人取 actor.id()，请求体 inspector_id 不再读取；DTO 分量保留不读。
+  - VendorInspectionsPage 删巡检人输入（原默认值 vendor-user）；FacilityWorkbenchPage 巡检记录代录删「巡检人 id」输入与校验。
+  - 页面矩阵 ADM-VND-002：「记录人不能为空」改为「巡检人取登录账号」。
+  - 契约：FacilityInspectionRecordSubmitRequest 删 inspector_id 属性与必填，由契约组做。
+  - 依据：BSM:940「……收银、核销、收款、放行等现场动作，一律按执行该动作的设备绑定与该次登录会话定位到操作人并留痕……」；PGM:899「平台治理层要保证每个重要动作能追溯。谁发起、谁销售、谁服务、谁第一个处理异常、为什么、谁审批、结果是什么，都要能查到。」
+  - 测试：
+    - FacilityInspectionServiceTests.outsourcedCanRecordOwnInspectionButCannotRecordOthersOrRecheck 补巡检人断言；该文件平台侧 mock 加 platformAuth()，currentActor 返回平台员工。
+    - FacilityInspectionWebShape229Tests 的 outsourcedRecordTakesLoginAccountAsInspector、platformAccountRecordTakesItsOwnId。
+    - FacilityWorkbenchPage.reassign.test.tsx「无巡检人输入框；选任务不填巡检人即可提交，请求不带巡检人」。
+  页面矩阵第 2 行文件版本 V0.32→V0.33，是第 229 条批 2～4 合并的一次。
+- 18AP 落地位置补记·第 229 条 229-R7（批 4，动态定价页）
+  改法：
+  - 新建规则引导第一步加「票种」下拉，读 GET /api/v1/ticketing/ticket-types?includeArchived=false，必选，未选提示「请选择票种。」。
+  - 第二步加「生效开始」「生效结束」两个日期框（CnDatePicker）。可以不填，不填就不发；服务端开始日缺省当天，结束日缺省同开始日。确认页列出票种与生效期。
+  - 草稿请求删掉写死值：票种 ticket-1、生效期 2026-06-01～2026-06-30、最低最高价 9900/15000、条件 inventory_level=low、备注「完整后台验收动态定价草稿」、附件 att-dynamic-admin-1。价格上下限不加输入框。
+  - 试算：票种取选中规则，不再回落 ticket-1；删掉写死条件；到访日初值从 2026-06-20 改成空，空就不发，服务端取票种当前营业日。
+  - 发布：原因改为「后台发布」，删掉附件 att-dynamic-publish-1。发布流程不动，第 297 条另做。
+  - 页面矩阵 ADM-TKT-002 行补接口 GET /api/v1/ticketing/ticket-types 和权限 ticket.product.view。
+  - OpenAPI、后端主代码不变。
+  - 方案里「试算未选规则拦下」没有做：没有规则时试算按钮不渲染，有规则时一定选中首条，这个情形不会发生。
+  落地位置：
+  - apps/web/src/admin/pages/DynamicPricingPage.tsx：TEXT 常量、加载函数、createDraft、simulate、publishRule、新建规则引导弹窗。
+  - docs/full-admin-page-permission-field-matrix-v0.1.csv：ADM-TKT-002 行。第 2 行文件版本随 229-R1 已是 V0.33，不另加。
+  依据：
+  - BSM:782「……动态价按时段、容量等规则配置，可先试算再发布。」
+  - BSM:756「会员价和动态定价均为 P0：先按日期、时段、场次和容量算动态公开价……」
+  - PGM:966「已拍板：所有有过程的业务动作都必须留痕……」
+  - 待开发清单第 229 条补充③。无新裁决。
+  测试：
+  - 前端 apps/web/src/admin/pages/DynamicPricingPage.guidedcreate.test.tsx：
+    - 「入口→选票种→步进→提交调用建规则接口」
+    - 「未选票种 → 提示「请选择票种。」，不建规则」
+    - 「填生效开始与结束 → 确认页列出票种与生效期，请求体带所填日期」
+    - 「试算 → 票种取选中规则，不带写死条件，到访日空则不发」
+    - 「发布 → 原因「后台发布」，不带写死附件」
+  - 后端 backend/src/test/java/com/complex/platform/ticketing/DynamicPricingWebShape229Tests.java：webShapeDraftWithoutConditionIsMatchedBySimulationAndPublishes。
+- 18AP 落地位置补记·第 252 条 252-R1
+  条目：存酒作废原因必填、落存酒行、进成功审计并在主管复核页显示。
+  依据：BSM:1940「因为高价值酒水报损、盘点差异、存酒作废、异常调拨都可能产生责任争议，必须记录原因、员工、时间、点位、照片、视频和主管复核结果。」；PGM:899「平台治理层要保证每个重要动作能追溯。谁发起、谁销售、谁服务、谁第一个处理异常、为什么、谁审批、结果是什么，都要能查到。」第十八批裁决 14 只管照片、视频与复核，原因对所有存酒作废都记。
+  落地位置：
+  - 迁移 V631：saved_bottles.cancel_reason VARCHAR(255)，与契约 maxLength 一致，不回填。
+  - InventoryService V0.22：
+    - cancelSavedBottle 的原因 requireText 必填，空就 400 VALIDATION_FAILED；
+    - 高价值（置 disputed_frozen、建复核单）与低价值（直接 cancelled）两路作废后都 updateSavedBottleCancelReason 落库；
+    - 成功事件 bar.saved_bottle.cancelled 元数据加 reason；
+    - executeWrite 新增带附加元数据的核心重载，值为空的键不放；原两个重载签名不变、转调核心，既有调用点不改。
+  - InventoryRepository V0.16：加 updateSavedBottleCancelReason。
+  - JdbcInventoryRepository V0.20：
+    - 单列 UPDATE，整行 upsert 不含此列；
+    - listHighValueReviews 摘要原因改为 COALESCE(a.reason, sb.cancel_reason)。
+  - InventoryHighValueReviewRecord V0.03：只改 SubjectSummary 注释。
+  - 不动的：交接毁损短少共用的 applyCancel；低价值作废照旧不要照片视频（第十八批裁决 14「低价值的维持现状，即时生效」）。
+  - 前端 StoredWinePage：作废原因为空时提示「作废须填写作废原因」、不发请求。
+  - 契约与文档（收尾补）：openapi-p0 yaml/json 的 cancelSavedBottle requestBody required 加 reason，说明改「作废原因，必填」；listHighValueReviews 说明补「与作废原因 reason」；酒吧 PRD §7.6.4、供应链 PRD §7.4 补实现现状。
+  回归：
+  - SavedBottleCancelDisputeJdbcIntegrationTests.lowValueCancelRequiresReasonPersistsItAndAuditsIt
+  - SavedBottleCancelDisputeJdbcIntegrationTests.highValueCancelReasonShowsOnSupervisorReviewList
+  - InventoryServiceTests.cancelSavedBottleWithoutReasonIsRejected
+  - vitest StoredWinePage.cancel.test.tsx「252-R1：作废原因为空 → 不发请求并提示「作废须填写作废原因」；填写后请求体 reason 等于所填」
+- 18AP 落地位置补记·第 254 条 254-R6
+  条目：存酒争议入口——原因进审计，按第十八批裁决 58 由主管核实后恢复或转作废。
+  依据：
+  - BSM:1171「管理存酒取酒、转让、作废、争议和异常处理。存酒可转让给他人，转让须经出让人手机短信验证码确认。」
+  - PGM:966「已拍板：所有有过程的业务动作都必须留痕，酒水和可追责物品从库房到客人的全过程必须可追溯。」
+  - 第十八批裁决 58，操作员选「主管核实后可恢复或转作废（推荐）」，原文「门店主管核实后二选一：争议不成立，恢复为存酒中、照常可取；争议成立，走现有存酒作废（高价值的要照片＋视频＋主管复核，裁决 14），作废后按现有补存或赔付处理。」
+  落地位置：
+  - InventoryService V0.22：
+    - disputeSavedBottle：成功事件 bar.saved_bottle.dispute 的元数据加 reason。
+    - 新增 dismissSavedBottleDispute：
+      - 挂 @GuardedAction(capability=bar.saved_bottle.manage)；
+      - 商户范围闸 requireOwnMerchant(lockSavedBottle) 在幂等之前；
+      - 只收 disputed，否则 409 SAVED_BOTTLE_NOT_DISPUTED；
+      - 置 stored，剩余量与到期日不变；
+      - 事件 bar.saved_bottle.dispute_dismissed／bar.saved_bottle.dispute_dismiss_failed，业务类型 saved_bottle。
+    - cancelSavedBottle：源态集合加 disputed，源态为 disputed 时再核门店主管码 inventory.high_value.review；其余照现有作废，高价值仍要照片＋视频＋主管复核；作废后补存或赔付走既有 registerSavedBottleRemedy，不改。
+  - InventoryController V0.15：新增 POST /api/v1/inventory/saved-bottles/{id}/dispute-dismissal，核 inventory.high_value.review 与幂等键。
+  - 新 DTO dto/SavedBottleDisputeDismissRequest V0.01：只收 idempotency_key。
+  - 前端 StoredWinePage：
+    - 选中存酒中、待核身复核时出「登记争议」块：争议原因必填，空则提示「登记争议须填写争议原因」；幂等键带时刻。
+    - 选中争议中时出「争议不成立，恢复存酒」：持 inventory.high_value.review 可点；幂等键带时刻。
+    - 作废允许争议中，争议中的作废按钮须同持 bar.saved_bottle.manage 与 inventory.high_value.review。
+  - fieldLabels.ts：补动作码 stored_wine_disputed、stored_wine_dispute_dismissed。
+  - 页面矩阵 ADM-BAR-003 行：接口列补 POST …/{id}/dispute、POST …/{id}/dispute-dismissal，权限列补 inventory.high_value.review。
+  - 契约与文档（收尾补）：openapi-p0 yaml/json 新增 dismissSavedBottleDispute（操作数＋1）；cancelSavedBottle 说明补「源态含 disputed（争议成立转作废，须门店主管码）」；disputeSavedBottle 说明补「原因进成功审计；了结走 dispute-dismissal 或作废」；酒吧 PRD §7.6.4 补争议了结。
+  回归：
+  - SavedBottleCancelDisputeJdbcIntegrationTests.disputeReasonAuditedAndSupervisorDismissalRestoresClaimableBottle：店员与别家商户主管了结 403；门店主管恢复 200；同号重放返回首次结果；随后照常核码取酒。
+  - SavedBottleCancelDisputeJdbcIntegrationTests.disputedBottleCancelNeedsStoreSupervisor：店员作废争议中的存酒 403；门店主管作废后 cancelled，原因落库。
+  - InventoryServiceTests.disputeSavedBottleMovesToDisputedState：补审计元数据 reason 断言。
+  - vitest StoredWinePage.dispute.test.tsx 三条：登记争议原因必填且两次幂等键不同；持门店主管码可恢复；无门店主管码时恢复与作废都不可点。
+- 【18AP 落地位置补记 · P2（254-R1～R4）】
+  - 254-R1 存酒登记与补存新瓶的人工备注改必填
+    - 改法：createSavedBottle 的人工备注由可空改为 requireText(manual_note)；registerSavedBottleRemedy 同品补存分支在出库前 requireText(operator_note)，作为新瓶 manual_note；赔付不读。
+    - 落地位置：
+      - backend/src/main/java/com/complex/platform/inventory/InventoryService.java（createSavedBottle、registerSavedBottleRemedy）；
+      - common/api/FieldLabels.java 补 manual_note「人工备注」；
+      - apps/web/src/admin/i18n/fieldLabels.ts manual_note 改「人工备注」。
+    - 依据：BSM:1170「存酒登记必须拍照、填写人工备注，并留取客人手机号和姓名/昵称。」
+    - 测试：
+      - SavedBottleDepositJdbcIntegrationTests.registrationRequiresManualNoteAndCustomerSmsCode；
+      - InventoryServiceTests.replacementRemedyRequiresManualNoteForNewBottle。
+  - 254-R2 存酒有效期按项目可配，登记时由服务端固化到期日
+    - 改法：
+      - 迁移 V632：放宽 chk_saved_bottle_renewal_policy_key，加 validity_days（global 或 project:，≥1）；种出厂行 (validity_days, global, 30)；权限 bar.saved_bottle.renewal_policy.manage 中文名改「配置存酒有效期、转存次数上限与顺延期限」。
+      - createSavedBottle 不收请求 expire_at，按 bar_id 所属项目取 validity_days（缺行回落 global），到期日＝登记时刻＋天数。
+      - configureRenewalPolicy 接受 validity_days，下限地板 1。
+      - SavedBottleRequest 删 expireAt 与 7 参兼容构造。
+    - 落地位置：
+      - backend/src/main/resources/db/migration/V632__saved_bottle_validity_days.sql；
+      - InventoryService.java（createSavedBottle、configureRenewalPolicy、SAVED_BOTTLE_VALIDITY_DAYS）；
+      - dto/SavedBottleRequest.java；
+      - dto/SavedBottleRenewalPolicyRequest.java（注释）。
+    - 依据：BSM:1072「……客户存酒有效期（业务参数，按项目可配，出厂默认 30 天，须同时配置上下限），登记时即固化本次适用的有效期与到期日，后续改配置不追溯已登记的存酒……」；决策台账 §26「客户存酒默认有效期为 30 天」。
+    - 测试：
+      - SavedBottleDepositJdbcIntegrationTests.consentCodeThenRegistrationFixesExpiryAtFactoryValidity；
+      - SavedBottleDepositJdbcIntegrationTests.projectValidityDaysAppliesToNewRegistrationsOnly。
+  - 254-R3 网页补存新瓶人工备注
+    - 改法：删领取表单备注框、TEXT.auditNote「完整后台验收领取」与 TEXT.note；同品补存面板加「补存瓶人工备注」（必填、空默认），只在同品补存时发 operator_note。
+    - 落地位置：apps/web/src/admin/pages/StoredWinePage.tsx。
+    - 依据：BSM:1170「存酒登记必须拍照、填写人工备注……」；PGM:966「已拍板：所有有过程的业务动作都必须留痕……」。
+    - 测试：StoredWinePage.remedy.test.tsx 中两例：
+      - 「254-R3：同品补存缺人工备注 → 提示且不发请求；填写后 operator_note 等于所填；领取表单无备注框与验收默认值」；
+      - 赔付用例断言请求体无 operator_note。
+  - 254-R4 网页存酒页新增登记入口（拍照上传、人工备注必填、短信验证码取隐私同意）
+    - 改法：
+      - 后端新接口 POST /api/v1/inventory/saved-bottles/deposit-consent-code（bar.saved_bottle.manage＋幂等键）向客人手机发隐私同意验证码；
+      - createSavedBottle 在其余字段校验之后核客人报出的验证码，核验不过整笔不建行；存酒行 created_at 与登记成功审计即同意凭证，不加列。
+      - 网页存酒页加「存酒登记」块，只对酒吧员工账号显示，酒吧取本账号商户：酒水下拉、数量、瓶底标签值、手机号、姓名/昵称、登记照片真实上传、人工备注、发码、验证码；不发到期日。
+    - 落地位置：
+      - InventoryController.java（requestSavedBottleDepositConsentCode）；
+      - InventoryService.java（requestSavedBottleDepositConsentCode、createSavedBottle 核码、businessId 回落 deposit_consent）；
+      - dto/SavedBottleDepositConsentCodeRequest.java；
+      - SavedBottleVerificationCodeReceipt.java（注释）；
+      - apps/web/src/admin/pages/StoredWinePage.tsx；
+      - fieldLabels.ts（stored_wine_registered、stored_wine_deposit_consent_code_sent）；
+      - docs/full-admin-page-permission-field-matrix-v0.1.csv ADM-BAR-003 行。
+    - 依据：BSM:1037「客人喝不完的酒可以转入存酒管理，登记手机号、姓名/昵称、瓶底标签数值、照片和人工备注。」；BSM:1072「存酒登记先取隐私同意，记手机号/姓名昵称/瓶底标签数值/照片，并记录存入时间与到期时间。……」；第十八批裁决 57 答复「短信验证码或者小程序，这个点击同意都可以。」（取短信验证码一种）。
+    - 测试：
+      - SavedBottleDepositJdbcIntegrationTests.consentCodeThenRegistrationFixesExpiryAtFactoryValidity；
+      - SavedBottleDepositJdbcIntegrationTests.registrationRequiresManualNoteAndCustomerSmsCode；
+      - StoredWinePage.register.test.tsx 两例（「酒吧员工：缺照片、缺人工备注、缺验证码逐项提示不发请求；发码后提交…不带到期日」「非商户账号（平台账号）不出登记表单…」）。
+- 18AP 落地位置补记·第 254 条 254-R5、254-R7（无新裁决）：
+  - 254-R5 改法：后端补「按瓶列人工例外取酒申请」的读接口；网页存酒页加「人工例外取酒」块，按申请状态只给一个动作，办理四步。
+    落地位置：
+    · 后端：
+      inventory.InventoryRepository.listSavedBottleManualPickups（默认抛不支持）。
+      JdbcInventoryRepository.listSavedBottleManualPickups：saved_bottle_manual_pickups 按 saved_bottle_id 取，created_at、id 倒序；走 V512 索引 idx_saved_bottle_manual_pickups_bottle；行映射复用 JdbcInventoryRowMapper.mapSavedBottleManualPickup。
+      InventoryService.listSavedBottleManualPickups：readPage，事件 bar.saved_bottle.manual_pickup_viewed / bar.saved_bottle.manual_pickup_view_failed，权限 bar.saved_bottle.manage；先 requireOwnMerchant(lockSavedBottle)，别家商户 403 CROSS_MERCHANT_FORBIDDEN。
+      InventoryController：GET /api/v1/inventory/saved-bottles/{id}/manual-pickups。
+      响应为 SavedBottleManualPickupRecord，phone_hash、merchant_id 不出。
+    · 网页 apps/web/src/admin/pages/StoredWinePage.tsx（ADM-BAR-003）：选中存酒后读该瓶申请，「人工例外取酒」块按状态办理：
+      存酒中才出「店长发起人工例外取酒」：原因必填；权限 bar.saved_bottle.manual_pickup.initiate＋customer.account.manage。
+      已发起 → 另一主管复核（bar.saved_bottle.manual_pickup.review）。
+      已复核 → 营销人员确认（bar.saved_bottle.manual_pickup.confirm_marketing）。
+      营销已确认 → 放酒数量（默认 1）、勾「客户本人到场」后才可点「本人到场放酒」（bar.saved_bottle.manage）；请求体 claim_items[{saved_bottle_id, quantity}]、present_in_person true。
+      四步的幂等键都带时刻；命中条件按页内中文表显示；服务端拒绝原样上屏。
+    · 动作码 stored_wine_manual_pickup_initiated、_reviewed、_marketing_confirmed、_dispensed 补进 apps/web/src/admin/i18n/fieldLabels.ts 的 VALUE_LABELS。
+    · 页面矩阵 ADM-BAR-003 行：接口补 GET/POST …/saved-bottles/{id}/manual-pickups、POST …/saved-bottles/manual-pickups/{id}/review、/confirm-marketing、/dispense；权限补 bar.saved_bottle.manual_pickup.initiate、bar.saved_bottle.manual_pickup.review、bar.saved_bottle.manual_pickup.confirm_marketing、customer.account.manage。
+    依据：BSM:1073「……人工例外取酒仅在客户手机遗失、停机等无法获取验证码或动态取酒码时适用，须同时满足四项：①由店长发起并经另一名主管复核，普通员工不得单独放酒；②申请手机号在本项目内满足后台配置的任一消费历史条件……③由该客户对应的营销人员确认身份与取酒申请；④只允许存酒客户本人到场办理，不允许他人代领。……」
+    测试：
+      SavedBottleManualPickupPolicyReadJdbcIntegrationTests.manualPickupsOfOneBottleNewestFirstWithoutPhoneHash、manualPickupsRejectOtherMerchantAndMissingPermission；
+      StoredWinePage.manualpickup.test.tsx「按瓶列出申请：各状态只出对应的一个动作，命中条件与状态显示中文」「发起：原因为空不发请求并提示；填写后 POST …/manual-pickups 只带 idempotency_key 与 reason，两次发起幂等键不同」「复核、营销确认只带 idempotency_key；放酒须勾本人到场，请求体 claim_items 用 quantity 键、present_in_person 为 true」「服务端拒绝（如自审）原文上屏」。
+  - 254-R7 改法：两项策略补读接口；网页提醒与留存天数配置页加两个配置区块，各按权限码显示。
+    落地位置：
+    · 后端：
+      InventoryRepository.listSavedBottleManualPickupPolicies、listSavedBottleRenewalPolicies（默认返回空表）。
+      JdbcInventoryRepository 同名实现：分别 ORDER BY project_id、ORDER BY policy_key, scope_id；行映射抽成 mapManualPickupPolicy、mapRenewalPolicy，与 find* 共用。
+      InventoryService.listManualPickupPolicies、listRenewalPolicies：readPage＋requirePlatformScope＋policyReadReach（最高权限看全部，其余账号照 projectReach，见下「18AP 落地位置补记·收尾」d）。消费历史条件返回出厂行与可触及项目的行；转存参数平台管理员看全部，其余人只看 global、可触及项目的 project: 行、merchants.project_id 可触及的 bar: 行。审计事件 bar.saved_bottle.manual_pickup_policy_viewed / _view_failed、bar.saved_bottle.renewal_policy_viewed / _view_failed。
+      InventoryController：GET /api/v1/inventory/saved-bottles/manual-pickup-policy（bar.saved_bottle.manual_pickup_policy.manage）、GET /api/v1/inventory/saved-bottles/renewal-policy（bar.saved_bottle.renewal_policy.manage）。
+    · 网页 apps/web/src/admin/pages/NotificationWindowsPage.tsx（ADM-ANA-011）：
+      SavedBottleManualPickupPolicySection：表格列出厂行与项目行；按项目改三个条件值与上下限，前端校验同服务端；PUT 请求体用 orders_within1m / orders_within3m（全局蛇形命名，170-R4）；区块写明调整须最高权限本人办理。
+      SavedBottleRenewalPolicySection：参数下拉为存酒有效期天数（按项目）、转存次数上限（按项目）、转存顺延天数（按酒吧）；范围按参数拼 project:<id> 或 bar:<id>；值与上下限同时填写。
+    · 动作码 saved_bottle_manual_pickup_policy_saved、saved_bottle_renewal_policy_saved 补进 fieldLabels.ts。
+    · 页面矩阵 ADM-ANA-011 行：接口补 GET/PUT /api/v1/inventory/saved-bottles/manual-pickup-policy、GET/PUT /api/v1/inventory/saved-bottles/renewal-policy；权限补 bar.saved_bottle.manual_pickup_policy.manage、bar.saved_bottle.renewal_policy.manage。
+    依据：
+      BSM:1073「……②申请手机号在本项目内满足后台配置的任一消费历史条件（安全阈值，按项目可配，调整须最高权限审批并留痕……须同时配置上下限）……」；
+      BSM:1072「……客户存酒有效期（业务参数，按项目可配，出厂默认 30 天，须同时配置上下限）……转存（延期）：每份存酒的转存次数不得超过后台配置的上限（业务参数，按项目可配，出厂默认 2 次，须同时配置上下限）……每次从当前到期日起顺延该酒吧当前配置的期限（业务参数，按酒吧可配，出厂默认 30 天，须同时配置上下限）……」；
+      PGM:528「……④看不到别的商户和别的项目的数据……」。
+    测试：
+      SavedBottleManualPickupPolicyReadJdbcIntegrationTests.platformAdminReadsFactoryRowsOfBothPolicies、savedValuesShowUpInTheListsAndOnlyMasterChangesPickupPolicy、merchantAccountCannotReadPolicies、projectStaffSeesOnlyReachableProjectRows；
+      NotificationWindowsPage.test.tsx「读出两项策略出厂行；缺上下限不发请求；按项目、按酒吧提交蛇形请求体」「服务端拒绝（非最高权限）文案上屏」「两区块按权限显示：只持消费历史条件码只出该区块，只持提醒节点码两区块都不出」。
+- 18AP 落地位置补记·契约（K-contract；docs/openapi/openapi-p0.yaml 与 .json 同值，变基到 c6a4f2f9 后操作数 1376→1381，info.version V0.72→V0.73）：
+  - 252-R1：
+    - 改法：cancelSavedBottle 的请求体 required 加 reason；reason 说明改为「作废原因，必填；落存酒行 cancel_reason 并进成功审计元数据 reason，高价值复核页显示。」；补 description，写原因必填、高价值与非高价值两路都落 cancel_reason、错误码。
+    - 依据：BSM:1940「……存酒作废、异常调拨都可能产生责任争议，必须记录原因、员工、时间、点位、照片、视频和主管复核结果。」
+    - 实现用例：SavedBottleCancelDisputeJdbcIntegrationTests。
+  - 254-R1：
+    - 改法：SavedBottleRequest 的 required 加 manual_note，说明改为登记必填；SavedBottleRemedyRequest 的 schema 说明与 operator_note 说明改为补存（replacement）时人工备注必填、赔付不读。
+    - 依据：BSM:1170「存酒登记必须拍照、填写人工备注，并留取客人手机号和姓名/昵称。」
+    - 实现用例：SavedBottleDepositJdbcIntegrationTests、InventoryServiceTests。
+  - 254-R2：
+    - 改法：SavedBottleRequest 删除 expire_at 属性；createSavedBottle 补 description，写明到期日由服务端按酒吧所属项目的 validity_days 在登记时固化、缺行回落 global；configureSavedBottleRenewalPolicy 的 summary 与 description 加存酒有效期；SavedBottleRenewalPolicyRequest 的 policy_key 枚举加 validity_days，schema、policy_key、scope_id 说明同步改。
+    - 依据：BSM:1072「……客户存酒有效期（业务参数，按项目可配，出厂默认 30 天，须同时配置上下限），登记时即固化本次适用的有效期与到期日，后续改配置不追溯已登记的存酒……」
+    - 实现用例：SavedBottleDepositJdbcIntegrationTests。
+  - 254-R4：
+    - 改法：新增操作 POST /api/v1/inventory/saved-bottles/deposit-consent-code，即 requestSavedBottleDepositConsentCode；新增 requestBodies 与 schemas 的 SavedBottleDepositConsentCodeRequest；SavedBottleRequest 的 required 加 verification_code，并新增 verification_code 属性；createSavedBottle 响应加 429（CUSTOMER_OTP_RATE_LIMITED），验证码不正确与短信服务未配置走已声明的 409（CUSTOMER_OTP_INVALID、CUSTOMER_OTP_PROVIDER_UNAVAILABLE；见下「18AP 收尾复核修正」①）。
+    - 依据：BSM:1072「存酒登记先取隐私同意，记手机号/姓名昵称/瓶底标签数值/照片，并记录存入时间与到期时间。」；第十八批裁决 57「短信验证码或者小程序，这个点击同意都可以。」
+    - 实现用例：SavedBottleDepositJdbcIntegrationTests。
+  - 254-R5：
+    - 改法：新增操作 GET /api/v1/inventory/saved-bottles/{id}/manual-pickups，即 listSavedBottleManualPickups。
+    - 依据：BSM:1073「……须同时满足四项：①由店长发起并经另一名主管复核……」
+    - 实现用例：SavedBottleManualPickupPolicyReadJdbcIntegrationTests。
+  - 254-R6：
+    - 改法：新增操作 POST /api/v1/inventory/saved-bottles/{id}/dispute-dismissal，即 dismissSavedBottleDispute；disputeSavedBottle 补 description，写原因进审计、按裁决 58 了结；cancelSavedBottle 的 description 写明源态可为 disputed，此时须门店主管码 inventory.high_value.review。
+    - 依据：第十八批裁决 58「门店主管核实后二选一：争议不成立，恢复为存酒中、照常可取；争议成立，走现有存酒作废（高价值的要照片＋视频＋主管复核，裁决 14），作废后按现有补存或赔付处理。」
+    - 实现用例：SavedBottleCancelDisputeJdbcIntegrationTests。
+  - 254-R7：
+    - 改法：新增操作 GET /api/v1/inventory/saved-bottles/manual-pickup-policy，即 listSavedBottleManualPickupPolicies；新增操作 GET /api/v1/inventory/saved-bottles/renewal-policy，即 listSavedBottleRenewalPolicies。
+    - 依据：BSM:1073「……②申请手机号在本项目内满足后台配置的任一消费历史条件（安全阈值，按项目可配，调整须最高权限审批并留痕……须同时配置上下限）……」；BSM:1072；PGM:528「④看不到别的商户和别的项目的数据」。
+    - 实现用例：SavedBottleManualPickupPolicyReadJdbcIntegrationTests。
+  - 229-R8：
+    - 改法：FacilityInspectionRecordSubmitRequest 删除 inspector_id 属性与 required 项，说明补「巡检人取提交账号，不由请求体指定。」；操作数不变。
+    - 依据：BSM:940「……一律按执行该动作的设备绑定与该次登录会话定位到操作人并留痕……」
+    - 实现用例：FacilityInspectionWebShape229Tests。
+  - 核验：npm run verify:openapi、verify:openapi-examples、verify:client-routes、verify:client-openapi、verify:client-payload 全部 PASS；yaml 与 json 整份深比较一致。
+- 18AP 汇合段 J（e2e 与门禁）：
+  一、改法与落地位置（tests/e2e 跟随各段页面去掉写死值与预填，只改断言、步骤和 mock）：
+  - tests/e2e/support/mock-api.ts V0.17：
+    - 229-R7：动态定价规则与试算按请求体票种回显，发布按路径里的规则编号回显。
+    - 229-R1：补 POST /api/v1/evidence/attachments/upload 路由，新建游乐巡检不再回落 att-amusement-safety-create。
+    - 229-R2：异常上报不再回落 QR-EXCEPTION。
+    - 229-R8：巡检人取登录账号。
+  - tests/e2e/full-admin-remaining.spec.ts V0.22：
+    - 229-R10：主管复核先填对象编号。
+    - 229-R7：动态定价新建先选票种。
+    - 229-R9：出入库先填出库位置。
+    - 229-R1、229-R6：游乐复检先选结论并真实上传照片。
+    - 229-R3：风险告警、轮询校验、补偿三处断言改为不含 att-。
+    - 229-R2：外包巡检异常上报先填异常说明。
+  - tests/e2e/full-admin-mvp.spec.ts V0.09：229-R10，员工注册先填所属组织。
+  - 视觉基线：full-admin-dynamic-pricing-mobile-chromium-linux.png 按现页面重拍（229-R7 去掉了到访日期预填）；其余三张逐字节未变。
+  二、依据：同各 rid 设计（d-wine-a.json 229-R1～R10 的 e2e 条目）。
+  三、测试：五份后台 e2e spec 33 passed。
+  四、门禁结论：
+  - 后端全量 6802 条 0 红（V631、V632 已迁）。
+  - 前端 typecheck 0 错；vitest 1918 条全过；客人与商户工作区 297 条全过。
+  - 安卓 125 条全过，android-app 编译通过。
+  - 四个 docs:* 在镜像重生成后 verify:p0-contract 通过。
+  - yaml 与 json 一致，操作 1381。
+  - git diff --check 通过。
+- 18AP 落地位置补记·文档组（D-docs）。改法：按 18AP 各段实现，把下位文档的现状句就地改成现码实情，不新增业务规则；每份文档相对 c6a4f2f9 只升一版，修订表各加一行。
+  落地位置：
+  ① 酒吧 PRD（docs/bar-business-operations-product-prd-v0.1.md，V0.36→V0.37）
+  - §4 客人存酒对象、§7.6 新增订正段与流程图、§8 客人存酒页、§9 存酒登记验收：按第十八批裁决 57 改为「员工向客人手机发隐私同意短信验证码，客人报码、核验通过才建存酒记录，不写 consent_records」（254-R4）。
+  - §7.6.1 补 254-R2：有效期按项目 validity_days（V632，出厂 30 天），由服务端在登记时固化到期日。
+  - §7.6.3 补 254-R5、254-R7：存酒页按瓶列出人工例外申请并办理四步；提醒与留存天数配置页加消费历史条件、有效期与转存参数两个区块。
+  - §7.6.4 补 252-R1（V631 作废原因落库、进审计、复核页摘要显示）与 254-R6（争议不成立经 dispute-dismissal 恢复存酒中，争议成立走作废，须门店主管码）。
+  ② 供应链 PRD（V0.40→V0.41）：§7.4 登记处与作废处各补一条实现现状。
+  ③ 合规文档（V0.02→V0.03）：§3.2 后补存酒登记同意的实现现状。
+  ④ 楼宇运营 PRD（V1.15→V1.16）：§4 巡检人取提交账号，请求体不收（229-R8）。
+  ⑤ 酒吧开发设计（V0.13→V0.14）：§5.3.1 第 6 条人工备注由可选改为必填（254-R1）。
+  ⑥ 页面矩阵（第 2 行已是 V0.33）：ADM-RISK-001 校验列删「和证据附件」（第 229 条批 1）；ADM-BAR-003、ADM-ANA-011 实现状态列补本段入口。
+  依据：
+  - BSM:940「……收银、核销、收款、放行等现场动作，一律按执行该动作的设备绑定与该次登录会话定位到操作人并留痕……」
+  - BSM:1072「存酒登记先取隐私同意，记手机号/姓名昵称/瓶底标签数值/照片，并记录存入时间与到期时间。……」
+  - BSM:1170「存酒登记必须拍照、填写人工备注，并留取客人手机号和姓名/昵称。」
+  - BSM:1171「管理存酒取酒、转让、作废、争议和异常处理」
+  - BSM:1940「……必须记录原因、员工、时间、点位、照片、视频和主管复核结果。」
+  - 第十八批裁决 57 答复原文「短信验证码或者小程序，这个点击同意都可以。」
+  - 第十八批裁决 58 所选「主管核实后可恢复或转作废（推荐）」：门店主管核实后二选一，争议不成立恢复为存酒中、照常可取；争议成立走现有存酒作废，作废后按现有补存或赔付处理。
+  测试：文档改动无单测；node tools/verify-full-admin-page-matrix.mjs 通过（117 个页面），git diff --check 通过。
+- 18AP 落地位置补记·收尾（控制席判定 c、d、e、f、g；无新裁决）：
+  - c　第 229 条同根：apps/web/src/admin/pages/RiskAlertsPage.tsx 页面说明、边界文案删「证据附件」，改为「创建、调查、解决和关闭都必须带原因和幂等键」「处理动作不得绕过幂等键和审计留痕」（229-R3⑤ 已删风险预警新建、处理的写死附件）；页面矩阵 ADM-RISK-001 行「处理必须带幂等键和证据附件」改为「处理必须带幂等键」。没有用例断言旧句。
+  - d　第 254 条同根：InventoryService 新增 policyReadReach，读三张存酒策略表——提醒节点（既有接口 GET /api/v1/inventory/saved-bottles/reminder-policy，listSavedBottleReminderPolicies）、人工例外消费历史条件（listSavedBottleManualPickupPolicies）、有效期与转存参数（listSavedBottleRenewalPolicies）——时，最高权限本人（isMasterAuthority，可不挂项目）读全部行，其余账号照 projectReach，不挂项目仍 403 PROJECT_SCOPE_REQUIRED；写法同 IntegrationController.listChannelStoreMaps。三个 GET 的契约说明与酒吧 PRD §7.6.3（「既有提醒节点读取同此」）同步。依据：第十八批裁决 71 操作员追加原话「既然是最高权限，不应该什么都能看到吗？……」；254-R7 BSM:1073「……调整须最高权限审批并留痕……」，最高权限读不到就办不了。测试：SavedBottleManualPickupPolicyReadJdbcIntegrationTests.masterWithoutProjectReadsAllThreePoliciesButOrdinaryAccountWithoutProjectCannot。
+  - e　部分需求覆盖标记：229-R3 删了 BarOrdersPage 的 deliveryPhotoAttachmentIds、InventoryLedgerPage 的 evidence_attachment_ids，tools/generate-partial-requirement-mock-coverage.mjs 的页面标记按现行写法改为 deliveredItems、evidence.attachment.create，npm run docs:partial-requirement-mock-coverage 重生成 docs/partial-requirement-mock-coverage-latest.json 与 docs/partial-requirement-mock-coverage-v0.1.md，没有往页面里加标记。门禁：verify:partial-requirement-mock-coverage。
+  - f　版本补升：18AM 与本段从同一基线各加 0.01、变基时被当成同一改动合并的文件各再 +0.01（fieldLabels.ts、StoredWinePage.remedy.test.tsx、TicketOrdersPage.tsx、FieldLabels.java、InventoryController.java、InventoryService.java、InventoryServiceTests.java、mock-api.ts），版本头核对另核出 ApprovalChainPage.tsx、ApprovalChainPage.test.tsx 两处一并改正；再变基到 c6a4f2f9 后 fieldLabels.ts、InventoryService.java 与 18AO 同改，又各 +0.01。最终相对 c6a4f2f9 均恰好 +0.01：fieldLabels.ts V0.37、InventoryService.java V0.22、InventoryController.java V0.15、FieldLabels.java V0.46、mock-api.ts V0.17，其余以文件头为准。
+  - g　截图基线：flock 包住 playwright 跑 tests/e2e/full-admin-visual.spec.ts，只有 full-admin-dynamic-pricing-mobile-chromium-linux.png 因 229-R7 去掉到访日期预填按现页面重拍，其余基线逐字节未变。
+- 18AP 收尾复核修正（2026-11-17）：收尾复核成立的意见与变基后统一重做，逐项如下。
+  - ① 员工侧核客人短信验证码失败不再回 401（存酒登记输错验证码被当成会话失效踢回登录页、已填内容与照片丢失；同根：领取、转让、代办转存共用的持有人核码）：InventoryService 新增 verifyCustomerSmsForStaff，存酒登记（createSavedBottle）与员工代客办理的持有人核码（verifyHolderSms）验证码不正确或已过期 409 CUSTOMER_OTP_INVALID「短信验证码不正确或已过期」，短信服务未配置 409 CUSTOMER_OTP_PROVIDER_UNAVAILABLE（与发码接口一致）；客人端自助转存改走 verifyHolderSmsByCustomer，客人端口径不变。契约 createSavedBottle 说明 401 改 409，删 401 响应。依据：BSM:1072「存酒登记先取隐私同意，记手机号/姓名昵称/瓶底标签数值/照片，并记录存入时间与到期时间。」；第十八批裁决 57「短信验证码或者小程序，这个点击同意都可以。」。测试：SavedBottleDepositJdbcIntegrationTests.registrationRequiresManualNoteAndCustomerSmsCode（错码断言改 409）、holderSmsWrongCodeIsConflictNotUnauthorized（新）；StoredWinePage.register.test.tsx「客人报错验证码：真实 AdminApi 收到 409 CUSTOMER_OTP_INVALID 不当会话失效，登记块显示中文原因，已填内容与照片仍在」（新）。
+  - ② 存酒新动作结果区英文：apps/web/src/admin/i18n/fieldLabels.ts 的 KEY_VALUE_LABELS.scene 补 deposit「存酒登记隐私同意」，新增 history_condition、marketing_confirm_basis、policy_key 取值表（用词同 StoredWinePage、NotificationWindowsPage 页内中文）；FIELD_LABELS 与 common/api/FieldLabels.java 补 present_in_person「客户本人到场」。依据：PGM:287「全局原则 · 界面全中文（所有终端零英文）……枚举取值……」。测试：StoredWinePage.manualpickup.test.tsx「发隐私同意验证码、人工例外取酒发起与营销确认与放酒、保存有效期与转存参数：不出英文码，也不出「其他信息」」（新）。
+  - ③ 存酒页领取按钮旁边界文案：StoredWinePage.tsx TEXT.boundary 删「附件证据」，与同按钮高危确认文案一致（229-R3⑦ 领取已不带附件）。依据：BSM:1073「……取酒核验、对应标签、取用前后剩余量、操作员工和时间必须留痕。……」。
+  - ④ listHighValueReviews 契约说明（yaml、json）改为「存酒作废取 saved_bottle_id、item_name、剩余量与作废原因 reason」，与 252-R1 补记一致。
+  - ⑤ 最高权限读三张存酒策略表的依据：InventoryService.policyReadReach 注释、SavedBottleManualPickupPolicyReadJdbcIntegrationTests 注释、三个 GET 的契约说明改引第十八批裁决 71 原话「既然是最高权限，不应该什么都能看到吗？」，行为不变。
+  - ⑥ 酒吧 PRD 修订表第十八批 AP 段一行：「254-R3：后台存酒页加登记块」改为「254-R3：补存面板加补存瓶人工备注、删领取备注默认值；254-R4：后台存酒页加登记块」。
+  - ⑦ 变基到 c6a4f2f9 后统一重做：OpenAPI info.version V0.72→V0.73（yaml、json），操作 1381；security-scans 两份 md 计数与 SHA 行按最终 openapi-p0.json 重算；README、入口文档按 node tools/refresh-entry-doc-baseline.mjs 回填，数据隔离规格与契约生成物重生成；本段补记的版本号、操作数改为最终值，契约补记去掉 yaml/json 行号只写 operationId 与 schema 名，补「收尾」一条。

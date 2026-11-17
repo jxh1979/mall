@@ -1,6 +1,6 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import java.time.Instant;
 import java.util.List;
@@ -38,7 +38,7 @@ public record InventoryHighValueReviewRecord(
         String financeApprovedBy,
         SubjectSummary subjectSummary
 ) {
-    /** 复核对象摘要：报损、盘点差异、存酒库房处置取调整单的物品、数量、单位、库位、调整类型与原因；存酒作废取存酒编号、物品与剩余量。 */
+    /** 复核对象摘要：报损、盘点差异、存酒库房处置取调整单的物品、数量、单位、库位、调整类型与原因；存酒作废取存酒编号、物品、剩余量与作废原因（第十八批 AP 段 252-R1）。 */
     public record SubjectSummary(String itemName, Integer quantity, String unit, String locationId, String adjustmentType,
             String reason, String savedBottleId) {
     }

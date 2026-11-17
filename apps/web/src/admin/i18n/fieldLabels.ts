@@ -1,4 +1,4 @@
-// 文件版本：V0.36
+// 文件版本：V0.37
 // OBS-14-02 后台结果区字段中文名字典（PGM「全局原则 · 界面全中文（所有终端零英文）」）。
 // 键用后端 JSON 的蛇形写法；结果区查表时蛇形与驼峰同查（orderId / order_id 都命中 order_id）。
 // 与后端字段中文名表 FieldLabels.java（common.api 包）同键同名：前段按后端原样抄录，后端改名这里跟着改（门禁会比对）。
@@ -1661,7 +1661,7 @@ export const FIELD_LABELS: Record<string, string> = {
   mall_block_code: "区块",
   management_status: "管理状态",
   manual_high_value: "人工认定高价值",
-  manual_note: "人工说明",
+  manual_note: "人工备注",
   manual_review_required: "需要人工复核",
   marketing_confirm_basis: "营销确认依据",
   marketing_confirmed_at: "营销确认时间",
@@ -1972,6 +1972,7 @@ export const FIELD_LABELS: Record<string, string> = {
   postponements: "延期记录",
   pour_volume_unit: "出酒量单位",
   prepayment_balance_cent: "预付款余额",
+  present_in_person: "客户本人到场",
   prev_month: "上月",
   prev_reading_value: "上期读数",
   preview_count: "预览数量",
@@ -3014,6 +3015,8 @@ export const VALUE_LABELS: Record<string, string> = {
   stored_value_exit_notice_policy_saved: "储值退出公示规则已保存",
   ticket_expiry_reminder_policy_saved: "门票到期提醒规则已保存",
   saved_bottle_reminder_policy_saved: "存酒到期提醒节点已保存",
+  saved_bottle_manual_pickup_policy_saved: "人工例外取酒消费历史条件已保存",
+  saved_bottle_renewal_policy_saved: "存酒有效期与转存参数已保存",
   merchant_card_exit_notice_published: "商户储值卡退出公示已发布",
   customer_home_content_published: "客人端首页内容已发布",
   data_cleanup_preview: "数据清理已预览",
@@ -3227,6 +3230,8 @@ export const VALUE_LABELS: Record<string, string> = {
   stored_wine_renewed: "存酒已续存",
   stored_wine_renewal_reviewed: "存酒续存已审批",
   stored_wine_cancelled: "存酒已作废",
+  stored_wine_disputed: "存酒争议已登记",
+  stored_wine_dispute_dismissed: "存酒争议不成立，已恢复存酒",
   stored_wine_remedy_registered: "存酒补存或赔付已登记",
   stored_wine_remedy_approve: "存酒补存或赔付已审批",
   stored_wine_remedy_settle: "存酒补存或赔付已结清",
@@ -3236,6 +3241,12 @@ export const VALUE_LABELS: Record<string, string> = {
   stored_wine_exit_noticed: "存酒退出通知已发送",
   stored_wine_handed_over: "存酒已交平台保管",
   stored_wine_claimed: "存酒已领取",
+  stored_wine_registered: "存酒已登记",
+  stored_wine_deposit_consent_code_sent: "存酒隐私同意验证码已发送",
+  stored_wine_manual_pickup_initiated: "人工例外取酒已发起",
+  stored_wine_manual_pickup_reviewed: "人工例外取酒已复核",
+  stored_wine_manual_pickup_marketing_confirmed: "人工例外取酒营销已确认",
+  stored_wine_manual_pickup_dispensed: "人工例外取酒已放酒",
   subject_binding_change_submitted: "主体绑定变更已提交",
   supervisor_review_evaluated: "主管复核已评估",
   supervisor_review_forwarded: "主管复核已转交",
@@ -3471,7 +3482,8 @@ export const KEY_VALUE_LABELS: Record<string, Record<string, string>> = {
   alarm_type: { elevator: "电梯扶梯", hvac: "暖通空调", power: "配电供电", water_fire: "给排水消防" },
   result: { pass: "通过", fail: "不通过" },
   overall_result: { pass: "通过", fail: "不通过", pending_rectification: "待整改" },
-  action_result: { pass: "通过", rectified: "已整改" },
+  // 第十八批 AP 段第 229 条 229-R6：游乐安全复检结论可选不通过（同页内复检结论下拉）。
+  action_result: { pass: "通过", fail: "不通过", rectified: "已整改" },
   event_category: { audit: "审计", governance: "治理", ticketing: "票务" },
   disposition: { acknowledge: "标记已阅", false_positive: "标记误报", escalate: "转告警" },
   category: { bar: "酒吧", ticketing: "门票销售", amusement: "游乐", catering: "餐饮", retail: "零售", service: "服务", entertainment: "娱乐", spirit: "烈酒", wine: "葡萄酒", beer: "啤酒", cocktail: "鸡尾酒", soft_drink: "软饮", mixer: "调饮", tea: "茶饮", snack: "小吃" },
@@ -3508,7 +3520,11 @@ export const KEY_VALUE_LABELS: Record<string, Record<string, string>> = {
   decision: { approve: "批准", reject: "驳回" },
   fund_ownership: { merchant_prepaid: "商户预收", platform_collect: "平台代收" },
   consume_order: { principal_first: "先扣本金、后扣赠送金", bonus_first: "先扣赠送金、后扣本金" },
-  scene: { claim: "在线领取核销", transfer: "转让给他人", renew: "转存（延期）" },
+  scene: { claim: "在线领取核销", transfer: "转让给他人", renew: "转存（延期）", deposit: "存酒登记隐私同意" },
+  // 18AP 收尾复核修正：人工例外取酒命中的消费历史条件、营销确认依据（StoredWinePage 同名用词）、存酒有效期与转存参数键（NotificationWindowsPage 同名用词）。
+  history_condition: { orders_within_1m: "近 1 个月笔数达标", orders_within_3m: "近 3 个月笔数达标", orders_total: "累计笔数达标" },
+  marketing_confirm_basis: { attributed_marketer: "该客户对应的营销人员确认", marketer_supervisor: "营销已离职，由其直接上级确认", on_duty_marketing_supervisor: "无归属营销，由当班营销主管确认" },
+  policy_key: { validity_days: "存酒有效期天数（按项目）", max_renewals: "转存次数上限（按项目）", extension_days: "转存顺延天数（按酒吧）" },
   remedy_type: { replacement: "同品同量补存", compensation: "赔付" },
   action_type: { bill_waiver: "免单", refund: "退款", ar_ap_adjustment: "调账" },
   variant_type: { new_customer: "新人票", student: "学生票", group: "多人票", channel: "渠道价", member: "会员价" },

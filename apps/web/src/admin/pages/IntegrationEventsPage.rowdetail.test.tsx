@@ -1,4 +1,4 @@
-// 文件版本：V0.03
+// 文件版本：V0.04
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -131,6 +131,7 @@ describe("IntegrationEventsPage 处理补偿请求体", () => {
     const api = makeApi();
     renderPage({ api });
     await waitFor(() => expect(screen.getByTestId("integration-event-row-comp-1")).toBeTruthy());
+    fireEvent.change(screen.getByTestId("integration-events-compensation-note"), { target: { value: "已核对订单和券核销回流，处理补偿任务" } });
 
     fireEvent.click(screen.getByTestId("integration-events-resolve-compensation"));
 
@@ -139,5 +140,44 @@ describe("IntegrationEventsPage 处理补偿请求体", () => {
     const body = vi.mocked(api.post).mock.calls.find(([path]) => path === resolve)?.[1];
     expect(body).toMatchObject({ status: "resolved", resolution_note: "已核对订单和券核销回流，处理补偿任务" });
     expect(body).not.toHaveProperty("operator_user_id");
+    expect(body).not.toHaveProperty("evidence_attachment_ids");
+  });
+});
+
+// 第十八批 AP 段第 229 条 229-R3①②、229-R5（PGM:968「……人工只补原因和证据。……」；先例第 32 条删假附件、不补上传）：
+// 轮询校验说明、重试原因、补偿处理说明不再预填；轮询校验与处理补偿不再带写死附件；重试原因、补偿处理说明为空拦下不发请求。
+describe("IntegrationEventsPage 不预填、不写死附件（第 229 条）", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it("三个说明框初始为空；填写轮询校验说明后登记，请求体不带写死附件", async () => {
+    const api = makeApi();
+    renderPage({ api });
+    await waitFor(() => expect(screen.getByTestId("integration-event-row-retry-1")).toBeTruthy());
+    for (const id of ["integration-events-polling-note", "integration-events-retry-reason", "integration-events-compensation-note"]) {
+      expect((screen.getByTestId(id) as HTMLInputElement).value).toBe("");
+    }
+    fireEvent.change(screen.getByTestId("integration-events-polling-note"), { target: { value: "夜间核对回调与轮询" } });
+    fireEvent.click(screen.getByTestId("integration-events-log-polling"));
+
+    const polling = "/api/v1/integration/polling-checks";
+    await waitFor(() => expect(vi.mocked(api.post).mock.calls.some(([path]) => path === polling)).toBe(true));
+    const body = vi.mocked(api.post).mock.calls.find(([path]) => path === polling)?.[1];
+    expect(body).toMatchObject({ operator_note: "夜间核对回调与轮询" });
+    expect(body).not.toHaveProperty("evidence_attachment_ids");
+  });
+
+  it("重试原因、补偿处理说明为空：不发请求，提示必填", async () => {
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    const api = makeApi();
+    renderPage({ api });
+    await waitFor(() => expect(screen.getByTestId("integration-event-row-comp-1")).toBeTruthy());
+    fireEvent.change(screen.getByTestId("integration-events-retry-reason"), { target: { value: "" } });
+    fireEvent.change(screen.getByTestId("integration-events-compensation-note"), { target: { value: "" } });
+
+    fireEvent.click(screen.getByTestId("integration-events-run-retry"));
+    expect(screen.getByTestId("integration-events-error").textContent).toBe("重试原因不能为空。");
+    fireEvent.click(screen.getByTestId("integration-events-resolve-compensation"));
+    expect(screen.getByTestId("integration-events-error").textContent).toBe("补偿处理说明不能为空。");
+    expect(api.post).not.toHaveBeenCalled();
   });
 });

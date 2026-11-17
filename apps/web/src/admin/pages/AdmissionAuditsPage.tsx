@@ -1,4 +1,4 @@
-// 文件版本：V0.05
+// 文件版本：V0.06
 import React from "react";
 import { formatActionResult } from "../components/ActionResultView";
 import { TechDetails } from "../components/TechDetails";
@@ -69,7 +69,7 @@ export function AdmissionAuditsPage({ api, user, setActionResult, setGlobalError
   const [totals, setTotals] = React.useState({ merchants: 0, bindings: 0, contracts: 0 });
   const [bindings, setBindings] = React.useState<SubjectBindingRow[]>([]);
   const [contracts, setContracts] = React.useState<ContractRow[]>([]);
-  const [exportReason, setExportReason] = React.useState("完整后台准入流水导出");
+  const [exportReason, setExportReason] = React.useState("");
   const [formError, setFormError] = React.useState("");
   const [kpiFocus, setKpiFocus] = React.useState<KpiFocus | null>(readKpiFocusFromUrl);
   // 行明细抽屉：整行可点 → 该行完整字段（枚举中文·日期中文·引用 TraceLink）。

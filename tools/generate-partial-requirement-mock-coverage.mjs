@@ -10,7 +10,7 @@ const mdPath = "docs/partial-requirement-mock-coverage-v0.1.md";
 
 const map = {
   "REQ-17": ["酒吧桌台/卡座/最低消费/点酒/赠饮/账单/异常/存酒 mock 验收闭环；真实支付、人脸、对象存储和供应商凭证仍按生产证据回填。", [
-    ["admin_ui", "apps/web/src/admin/pages/BarOrdersPage.tsx", ["bar-orders-page", "deliveryPhotoAttachmentIds"]],
+    ["admin_ui", "apps/web/src/admin/pages/BarOrdersPage.tsx", ["bar-orders-page", "deliveredItems"]],
     ["admin_ui", "apps/web/src/admin/pages/StoredWinePage.tsx", ["stored-wine-page", "claim_items"]],
     ["admin_ui", "apps/web/src/admin/pages/BarCommissionsPage.tsx", ["bar-commissions-page", "bar-commissions-kpi-sales", "bar-commissions-kpi-non-sales"]],
     ["ui_e2e", "tests/e2e/full-admin-remaining.spec.ts", ["ADM-BAR-002", "ADM-BAR-003", "ADM-BAR-004"]],
@@ -37,7 +37,7 @@ const map = {
     ["openapi_contract", "docs/p0-openapi-operation-acceptance-matrix-v0.1.md", ["/api/v1/bar/reservations", "/api/v1/customer/bar-reservations"]],
   ]],
   "REQ-32": ["高价值报损、盘点差异、存酒作废和照片/视频留证用附件 ID、库存流水、主管复核和 mock 事件验收；真实对象存储、视频平台和设备证据仍待回填。", [
-    ["admin_ui", "apps/web/src/admin/pages/InventoryLedgerPage.tsx", ["inventory-ledger-page", "evidence_attachment_ids"]],
+    ["admin_ui", "apps/web/src/admin/pages/InventoryLedgerPage.tsx", ["inventory-ledger-page", "evidence.attachment.create"]],
     ["admin_ui", "apps/web/src/admin/pages/StoredWinePage.tsx", ["evidence_attachment_ids", "在线校验"]],
     ["backend_unit", "backend/src/test/java/com/complex/platform/bar/BarServiceTests.java", ["deliveryPersistsEvidenceAndPhotoAttachmentsOnTicketEventAndStockMovement", "att_delivery_photo"]],
     ["ui_e2e", "tests/e2e/full-admin-remaining.spec.ts", ["ADM-INV-001", "ADM-GOV-006", "evidence"]],
@@ -59,7 +59,7 @@ const map = {
   ]],
   "REQ-44": ["机器人或人工配送交接扫码留痕用库存移动、出品/送达、设备事件和集成 mock 验收；真实机器人/设备 API 与 MDM 纳管证据仍阻塞生产声明。", [
     ["admin_ui", "apps/web/src/admin/pages/InventoryLedgerPage.tsx", ["stock-movements", "出库"]],
-    ["admin_ui", "apps/web/src/admin/pages/BarOrdersPage.tsx", ["delivery", "deliveryPhotoAttachmentIds"]],
+    ["admin_ui", "apps/web/src/admin/pages/BarOrdersPage.tsx", ["delivery", "deliveredItems"]],
     ["backend_unit", "backend/src/test/java/com/complex/platform/bar/BarServiceTests.java", ["deliveryRejectsOrderItemFromAnotherOrderAndKeepsBothOrdersPending", "deliveryMarksProductionTicketDeliveredWithoutOverwritingCancelledTicket"]],
     ["mock_api", "tests/e2e/support/mock-api.ts", ["robot/task-events", "mock-video"]],
     ["supplier_boundary", "docs/android-terminal-breakdown.md", ["机器人交接", "inventory.handover_to_robot"]],

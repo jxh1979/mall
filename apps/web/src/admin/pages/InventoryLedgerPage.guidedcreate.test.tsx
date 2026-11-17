@@ -53,6 +53,12 @@ describe("InventoryLedgerPage 单页表单登记库存移动", () => {
     fireEvent.click(screen.getByTestId("inventory-movement-open"));
 
     await waitFor(() => expect(screen.getByTestId("inventory-movement-quantity")).toBeTruthy());
+    // 第十八批 AP 段第 229 条 229-R9、229-R5（PGM:966「……酒水和可追责物品从库房到客人的全过程必须可追溯。」）：
+    // 出库位置、入库位置、追踪码、备注不预填；只填出库位置与数量时不发空的入库位置、追踪码、备注，也不带写死附件。
+    for (const id of ["inventory-movement-from", "inventory-movement-to", "inventory-movement-trace", "inventory-movement-note"]) {
+      expect((screen.getByTestId(id) as HTMLInputElement).value).toBe("");
+    }
+    fireEvent.change(screen.getByTestId("inventory-movement-from"), { target: { value: "bar-main" } });
     fireEvent.change(screen.getByTestId("inventory-movement-quantity"), { target: { value: "2" } });
     fireEvent.click(screen.getByTestId("inventory-movement-submit"));
 
@@ -62,6 +68,8 @@ describe("InventoryLedgerPage 单页表单登记库存移动", () => {
     expect(call[1]).toEqual(expect.objectContaining({
       items: [expect.objectContaining({ item_id: "i-1", quantity: 2 })],
     }));
+    expect(call[1]).toMatchObject({ from_location_id: "bar-main" });
+    for (const key of ["to_location_id", "trace_code", "operator_note", "evidence_attachment_ids"]) expect(call[1]).not.toHaveProperty(key);
     await waitFor(() => expect(screen.queryByTestId("inventory-movement-guided")).toBeNull());
   });
 
@@ -74,6 +82,18 @@ describe("InventoryLedgerPage 单页表单登记库存移动", () => {
     fireEvent.change(screen.getByTestId("inventory-movement-quantity"), { target: { value: "0" } });
     fireEvent.click(screen.getByTestId("inventory-movement-submit"));
     expect(screen.getByTestId("inventory-movement-guided-error").textContent).toBeTruthy();
+    expect(post).not.toHaveBeenCalled();
+  });
+
+  it("出库位置为空提交被拦、不发请求（第 229 条 229-R9）", async () => {
+    const post = vi.fn().mockResolvedValue({});
+    renderPage(makeApi(post));
+    await waitFor(() => expect(screen.getByTestId("inventory-movement-open")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("inventory-movement-open"));
+    await waitFor(() => expect(screen.getByTestId("inventory-movement-from")).toBeTruthy());
+    fireEvent.change(screen.getByTestId("inventory-movement-from"), { target: { value: "" } });
+    fireEvent.click(screen.getByTestId("inventory-movement-submit"));
+    expect(screen.getByTestId("inventory-movement-guided-error").textContent).toBe("请填写出库位置。");
     expect(post).not.toHaveBeenCalled();
   });
 });

@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -58,6 +58,7 @@ describe("SupervisorReviewPage 指定最终审批人与审批链入口", () => {
     await waitFor(() => expect(screen.getByTestId("supervisor-review-form")).toBeTruthy());
     fireEvent.change(screen.getByTestId("supervisor-review-violation-summary"), { target: { value: "合同主体不一致" } });
     fireEvent.change(screen.getByTestId("supervisor-review-final-approver"), { target: { value: approver } });
+    fireEvent.change(screen.getByTestId("supervisor-review-object-id"), { target: { value: "ct-2026-018" } });
     fireEvent.click(screen.getByTestId("supervisor-review-evaluate"));
     const fetchMock = vi.mocked(globalThis.fetch);
     await waitFor(() => expect(fetchMock.mock.calls.some(([input]) => String(input).includes("/supervisor-review/evaluate"))).toBe(true));

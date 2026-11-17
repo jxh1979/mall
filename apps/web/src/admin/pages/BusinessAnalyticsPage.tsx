@@ -142,7 +142,7 @@ export function BusinessAnalyticsPage({ api, setActionResult, setGlobalError, na
   const [definitions, setDefinitions] = React.useState<MetricDefinitionRow[]>([]);
   const [anomalies, setAnomalies] = React.useState<MetricAnomalyRow[]>([]);
   const [domainFilter, setDomainFilter] = React.useState("all");
-  const [lockNote, setLockNote] = React.useState("总控周会复盘锁定");
+  const [lockNote, setLockNote] = React.useState("");
   const [formError, setFormError] = React.useState("");
   // T4.3 分时段客流：traffic-hourly 端点的 24 桶（hour/count）。
   const [hourly, setHourly] = React.useState<Array<{ hour: number; count: number }>>([]);

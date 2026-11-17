@@ -48,7 +48,7 @@
 - 生产边界：covered_by_disabled_integration_switches；仍阻塞生产声明=否
 - 生产证据 item：
 - mock/测试/页面文件：
-  - admin_ui: `apps/web/src/admin/pages/BarOrdersPage.tsx`，markers=`bar-orders-page`, `deliveryPhotoAttachmentIds`
+  - admin_ui: `apps/web/src/admin/pages/BarOrdersPage.tsx`，markers=`bar-orders-page`, `deliveredItems`
   - admin_ui: `apps/web/src/admin/pages/StoredWinePage.tsx`，markers=`stored-wine-page`, `claim_items`
   - admin_ui: `apps/web/src/admin/pages/BarCommissionsPage.tsx`，markers=`bar-commissions-page`, `bar-commissions-kpi-sales`, `bar-commissions-kpi-non-sales`
   - ui_e2e: `tests/e2e/full-admin-remaining.spec.ts`，markers=`ADM-BAR-002`, `ADM-BAR-003`, `ADM-BAR-004`
@@ -99,7 +99,7 @@
 - 生产边界：covered_by_disabled_integration_switches；仍阻塞生产声明=否
 - 生产证据 item：
 - mock/测试/页面文件：
-  - admin_ui: `apps/web/src/admin/pages/InventoryLedgerPage.tsx`，markers=`inventory-ledger-page`, `evidence_attachment_ids`
+  - admin_ui: `apps/web/src/admin/pages/InventoryLedgerPage.tsx`，markers=`inventory-ledger-page`, `evidence.attachment.create`
   - admin_ui: `apps/web/src/admin/pages/StoredWinePage.tsx`，markers=`evidence_attachment_ids`, `在线校验`
   - backend_unit: `backend/src/test/java/com/complex/platform/bar/BarServiceTests.java`，markers=`deliveryPersistsEvidenceAndPhotoAttachmentsOnTicketEventAndStockMovement`, `att_delivery_photo`
   - ui_e2e: `tests/e2e/full-admin-remaining.spec.ts`，markers=`ADM-INV-001`, `ADM-GOV-006`, `evidence`
@@ -139,7 +139,7 @@
 - 生产证据 item：
 - mock/测试/页面文件：
   - admin_ui: `apps/web/src/admin/pages/InventoryLedgerPage.tsx`，markers=`stock-movements`, `出库`
-  - admin_ui: `apps/web/src/admin/pages/BarOrdersPage.tsx`，markers=`delivery`, `deliveryPhotoAttachmentIds`
+  - admin_ui: `apps/web/src/admin/pages/BarOrdersPage.tsx`，markers=`delivery`, `deliveredItems`
   - backend_unit: `backend/src/test/java/com/complex/platform/bar/BarServiceTests.java`，markers=`deliveryRejectsOrderItemFromAnotherOrderAndKeepsBothOrdersPending`, `deliveryMarksProductionTicketDeliveredWithoutOverwritingCancelledTicket`
   - mock_api: `tests/e2e/support/mock-api.ts`，markers=`robot/task-events`, `mock-video`
   - supplier_boundary: `docs/android-terminal-breakdown.md`，markers=`机器人交接`, `inventory.handover_to_robot`

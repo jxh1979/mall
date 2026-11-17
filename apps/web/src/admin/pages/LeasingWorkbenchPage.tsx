@@ -1,4 +1,4 @@
-// 文件版本：V0.07
+// 文件版本：V0.08
 import React from "react";
 import { TechDetails } from "../components/TechDetails";
 import { CnDatePicker } from "../components/CnDatePicker";
@@ -176,13 +176,14 @@ export function LeasingWorkbenchPage({ api, user, setActionResult, setGlobalErro
   const brand = useSelectedRow(brands);
 
   // 线索表单
-  const [contactName, setContactName] = React.useState("张经理");
-  const [contactPhone, setContactPhone] = React.useState("13800000000");
+  const [contactName, setContactName] = React.useState("");
+  const [contactPhone, setContactPhone] = React.useState("");
   const [source, setSource] = React.useState("exhibition");
   const [intendedBusinessType, setIntendedBusinessType] = React.useState("retail");
   const [intendedSpaceId, setIntendedSpaceId] = React.useState("");
   const [ownerUserId, setOwnerUserId] = React.useState("");
   const [leadStatus, setLeadStatus] = React.useState("following_up");
+  const [leadStatusReason, setLeadStatusReason] = React.useState("");
   // 意向表单
   const [intentSpaceId, setIntentSpaceId] = React.useState("");
   const [targetStage, setTargetStage] = React.useState("requirement_confirmed");
@@ -201,18 +202,18 @@ export function LeasingWorkbenchPage({ api, user, setActionResult, setGlobalErro
   const [merchantList, setMerchantList] = React.useState<Array<{ id: string; displayName?: string; companyName?: string; merchantName?: string }>>([]);
   const [entities, setEntities] = React.useState<BusinessEntityRow[]>([]);
   const [salesUsers, setSalesUsers] = React.useState<AccessUserRow[]>([]);
-  const [signEffectiveDate, setSignEffectiveDate] = React.useState("2026-07-01");
-  const [signExpiryDate, setSignExpiryDate] = React.useState("2027-06-30");
+  const [signEffectiveDate, setSignEffectiveDate] = React.useState("");
+  const [signExpiryDate, setSignExpiryDate] = React.useState("");
   // 第三轮裁决第 1 条「纯提成合同的押金由招商按合同约定金额直接录入」：选中纯提成意向时签约表单录入约定押金（元）。
   const [signDepositYuan, setSignDepositYuan] = React.useState("");
   // 品牌表单
   const [brandName, setBrandName] = React.useState("");
   const [brandType, setBrandType] = React.useState("intentional");
   const [brandBusinessType, setBrandBusinessType] = React.useState("retail");
-  const [blacklistReason, setBlacklistReason] = React.useState("资质异常");
+  const [blacklistReason, setBlacklistReason] = React.useState("");
   // 跟进表单
   const [followMethod, setFollowMethod] = React.useState("phone");
-  const [followContent, setFollowContent] = React.useState("已电话沟通，客户意向较强");
+  const [followContent, setFollowContent] = React.useState("");
   const [query, setQuery] = React.useState("");
   const [kpiFocus, setKpiFocus] = React.useState<KpiFocus | null>(readKpiFocusFromUrl);
   // 引导式创建流（一期范式）：新建线索收起为主按钮 → 分步弹窗 → 确认创建。
@@ -450,13 +451,23 @@ export function LeasingWorkbenchPage({ api, user, setActionResult, setGlobalErro
       setFormError("已签约的线索不能回退状态。");
       return;
     }
-    const request = { idempotencyKey: nextKey("leasing-lead-status"), status: leadStatus, reason: "完整后台推进线索状态" };
+    // PGM:502「……转为已流失或已搁置；转换时必须填写原因……」：只有这两态由人填原因并发送，其余状态不发。
+    const needsReason = leadStatus === "lost" || leadStatus === "on_hold";
+    if (needsReason && !leadStatusReason.trim()) {
+      setFormError("转为已流失或已搁置必须填写原因。");
+      return;
+    }
+    const request = { idempotencyKey: nextKey("leasing-lead-status"), status: leadStatus, ...(needsReason ? { reason: leadStatusReason.trim() } : {}) };
     await runAction("leasing_lead_status_changed", request, () => api.post(`/api/v1/leasing/leads/${lead.selected!.id}/status`, request));
   }
 
   async function addFollowUp() {
     if (!lead.selected) {
       setFormError(TEXT.noLead);
+      return;
+    }
+    if (!followContent.trim()) {
+      setFormError("跟进内容不能为空。");
       return;
     }
     const request = {
@@ -534,6 +545,7 @@ export function LeasingWorkbenchPage({ api, user, setActionResult, setGlobalErro
     if (!signMerchantId) { setFormError("请选择签约商户。"); return; }
     if (!signSubjectId) { setFormError("请选择合同主体（经营主体），不能用商户 id 顶替。"); return; }
     if (signTurnoverOnly && !(Number(signDepositYuan) > 0)) { setFormError("纯提成合同须填写合同约定押金（元），不得为零。"); return; }
+    if (!signEffectiveDate || !signExpiryDate) { setFormError("请填写合同生效日和到期日。"); return; }
     const request = {
       idempotencyKey: nextKey("leasing-intent-sign"),
       merchantId: signMerchantId,
@@ -561,6 +573,10 @@ export function LeasingWorkbenchPage({ api, user, setActionResult, setGlobalErro
   async function blacklistBrand() {
     if (!brand.selected) {
       setFormError(TEXT.noBrand);
+      return;
+    }
+    if (!blacklistReason.trim()) {
+      setFormError("拉黑原因不能为空。");
       return;
     }
     const request = { idempotencyKey: nextKey("leasing-brand-blacklist"), blacklist: true, reason: blacklistReason };
@@ -732,6 +748,7 @@ export function LeasingWorkbenchPage({ api, user, setActionResult, setGlobalErro
             <div className="admin-form-grid" data-testid="leasing-lead-action-form">
               <label>负责人<select data-testid="leasing-lead-owner" value={ownerUserId} onChange={(e) => setOwnerUserId(e.target.value)}><option value="">请选择负责人（可空）</option>{salesUsers.map((x) => <option key={x.id} value={x.id}>{(x.username ?? x.id)}（{shortId(x.id)}）</option>)}</select></label>
               <label>线索状态<select data-testid="leasing-lead-status" value={leadStatus} onChange={(e) => setLeadStatus(e.target.value)}><option value="following_up">跟进中</option><option value="converted_to_intent">已转意向</option><option value="negotiating">洽谈中</option><option value="lost">已流失</option><option value="on_hold">已搁置</option></select></label>
+              <label>原因<input data-testid="leasing-lead-status-reason" value={leadStatusReason} placeholder="转为已流失或已搁置必填" onChange={(e) => setLeadStatusReason(e.target.value)} /></label>
               <label>跟进方式<select data-testid="leasing-follow-method" value={followMethod} onChange={(e) => setFollowMethod(e.target.value)}><option value="phone">电话</option><option value="visit">拜访</option><option value="wechat">微信</option></select></label>
               <label>跟进内容<input data-testid="leasing-follow-content" value={followContent} onChange={(e) => setFollowContent(e.target.value)} /></label>
             </div>

@@ -66,10 +66,17 @@ describe("RiskAlertsPage 单页表单创建预警", () => {
 
     // 单页表单：所有字段一屏，填摘要后直接提交
     await waitFor(() => expect(screen.getByTestId("risk-alert-summary-input")).toBeTruthy());
+    // 第十八批 AP 段第 229 条 229-R5、229-R10④：对象编号、摘要不预填。
+    expect((screen.getByTestId("risk-alert-object-id") as HTMLInputElement).value).toBe("");
+    expect((screen.getByTestId("risk-alert-summary-input") as HTMLInputElement).value).toBe("");
     fireEvent.change(screen.getByTestId("risk-alert-summary-input"), { target: { value: "复核异常折扣" } });
     fireEvent.click(screen.getByTestId("risk-alert-create"));
 
     await waitFor(() => expect(postCalls(fetchMock).length).toBe(1));
+    // 第 229 条 229-R3⑤、229-R10④：新建预警不带写死附件、不挂写死规则编号。
+    const body = JSON.parse(String(postCalls(fetchMock)[0]![1].body)) as Record<string, unknown>;
+    expect(body).not.toHaveProperty("evidence_attachment_ids");
+    expect(body).not.toHaveProperty("rule_id");
     await waitFor(() => expect(screen.queryByTestId("risk-alert-guided")).toBeNull());
   });
 
@@ -82,5 +89,30 @@ describe("RiskAlertsPage 单页表单创建预警", () => {
     fireEvent.click(screen.getByTestId("risk-alert-create"));
     expect(screen.getByTestId("risk-alert-guided-error").textContent).toBeTruthy();
     expect(postCalls(fetchMock).length).toBe(0);
+  });
+});
+
+// 第十八批 AP 段第 229 条 229-R3⑤、229-R5：处理原因不预填；处理请求不带写死附件。
+describe("RiskAlertsPage 处理不预填、不写死附件（第 229 条）", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+    window.history.replaceState({}, "", "/admin/risk/alerts");
+  });
+
+  it("处理原因初始为空；填写后处理，请求体不带写死附件", async () => {
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    const { fetchMock } = renderPage();
+    await waitFor(() => expect(screen.getByTestId("risk-alert-select-ra-1")).toBeTruthy());
+    expect((screen.getByTestId("risk-alert-resolution-reason") as HTMLInputElement).value).toBe("");
+    fireEvent.click(screen.getByTestId("risk-alert-select-ra-1"));
+    fireEvent.change(screen.getByTestId("risk-alert-resolution-reason"), { target: { value: "复核后确认误报" } });
+    fireEvent.click(screen.getByTestId("risk-alert-resolve"));
+
+    const resolveCalls = () => fetchMock.mock.calls.filter((c) => String(c[0]).includes("/risk-alerts/ra-1/resolve"));
+    await waitFor(() => expect(resolveCalls()).toHaveLength(1));
+    const body = JSON.parse(String(resolveCalls()[0]![1].body)) as Record<string, unknown>;
+    expect(body).toMatchObject({ reason: "复核后确认误报" });
+    expect(body).not.toHaveProperty("evidence_attachment_ids");
   });
 });

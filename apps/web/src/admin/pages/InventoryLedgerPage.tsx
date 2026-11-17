@@ -1,4 +1,4 @@
-// 文件版本：V0.06
+// 文件版本：V0.07
 import React from "react";
 import { InventoryQuarantinePanel } from "./InventoryQuarantinePanel";
 import { InventoryWarehousePanel } from "./InventoryWarehousePanel";
@@ -36,6 +36,7 @@ const TEXT = {
   actionFailed: "库存移动登记失败",
   quantityInvalid: "移动数量必须大于 0，禁止负库存调整。",
   noItem: "当前没有可操作库存物料。",
+  fromLocationRequired: "请填写出库位置。",
   items: "物料",
   balances: "余额",
   movements: "流水",
@@ -154,11 +155,11 @@ export function InventoryLedgerPage({ api, setActionResult, setGlobalError, effe
   const pagedBalances = usePagedRows(balances, 10, balances.length);
   const pagedMovements = usePagedRows(movements, 10, movements.length);
   const { selectedId: selectedItemId, setSelectedId: setSelectedItemId, selected: selectedItem } = useSelectedRow(items);
-  const [fromLocation, setFromLocation] = React.useState("bar-main");
-  const [toLocation, setToLocation] = React.useState("warehouse-main");
+  const [fromLocation, setFromLocation] = React.useState("");
+  const [toLocation, setToLocation] = React.useState("");
   const [quantity, setQuantity] = React.useState("1");
-  const [traceCode, setTraceCode] = React.useState("TRACE-ADMIN-001");
-  const [operatorNote, setOperatorNote] = React.useState("完整后台验收库存移动");
+  const [traceCode, setTraceCode] = React.useState("");
+  const [operatorNote, setOperatorNote] = React.useState("");
   const [formError, setFormError] = React.useState("");
   const [submitting, setSubmitting] = React.useState(false);
   const [createOpen, setCreateOpen] = React.useState(false);
@@ -260,6 +261,10 @@ export function InventoryLedgerPage({ api, setActionResult, setGlobalError, effe
       setFormError(TEXT.noItem);
       return;
     }
+    if (!fromLocation.trim()) {
+      setFormError(TEXT.fromLocationRequired);
+      return;
+    }
     const movementQuantity = Number(quantity);
     if (!Number.isFinite(movementQuantity) || movementQuantity <= 0) {
       setFormError(TEXT.quantityInvalid);
@@ -267,12 +272,11 @@ export function InventoryLedgerPage({ api, setActionResult, setGlobalError, effe
     }
     const requestBody = {
       idempotency_key: `admin-stock-movement-${selectedItem.id}-${movementQuantity}`,
-      operator_note: operatorNote,
-      evidence_attachment_ids: ["att-stock-movement-1"],
+      ...(operatorNote.trim() ? { operator_note: operatorNote } : {}),
       from_location_id: fromLocation,
-      to_location_id: toLocation,
+      ...(toLocation.trim() ? { to_location_id: toLocation } : {}),
       items: [{ item_id: selectedItem.id, quantity: movementQuantity, unit: selectedItem.unit ?? "unit" }],
-      trace_code: traceCode,
+      ...(traceCode.trim() ? { trace_code: traceCode } : {}),
     };
     setSubmitting(true);
     setFormError("");
@@ -459,6 +463,7 @@ export function InventoryLedgerPage({ api, setActionResult, setGlobalError, effe
         validate={() => {
           const q = Number(quantity);
           if (!selectedItem) return TEXT.noItem;
+          if (!fromLocation.trim()) return TEXT.fromLocationRequired;
           return !Number.isFinite(q) || q <= 0 ? TEXT.quantityInvalid : null;
         }}
         onClose={() => setCreateOpen(false)}

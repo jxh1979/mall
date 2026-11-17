@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -187,5 +187,40 @@ describe("VendorWorkOrdersPage 故障处置规则确认（HP-F01）", () => {
 
     await waitFor(() => expect(fetchMock.mock.calls.some(([url, init]) => String(url).endsWith("/api/v1/facility/fault-rules/ffr-1/confirm")
       && (init as RequestInit | undefined)?.method === "POST")).toBe(true));
+  });
+});
+
+// 第十八批 AP 段第 229 条 229-R5（PGM:968「……人工只补原因和证据。……」）：处理备注、完成说明不预填；完成说明为空拦下，处理备注空着不发。
+describe("VendorWorkOrdersPage 不预填处理备注与完成说明（第 229 条）", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("两框初始为空；完成说明为空不发请求；填写后完成，备注空着不带 note", async () => {
+    const posts: Array<{ url: string; body: Record<string, unknown> }> = [];
+    vi.stubGlobal("fetch", vi.fn().mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if ((init?.method ?? "GET").toUpperCase() === "POST") {
+        posts.push({ url, body: JSON.parse(String(init?.body)) as Record<string, unknown> });
+        return Promise.resolve(envelope([]));
+      }
+      if (url.includes("/equipment")) return Promise.resolve(envelope(EQUIPMENT));
+      if (url.includes("/work-orders")) return Promise.resolve(envelope(WORK_ORDERS));
+      return Promise.resolve(envelope([]));
+    }));
+    render(<VendorWorkOrdersPage api={new AdminApi("test-token")} user={{ id: "u1", username: "vendor", accountType: "outsourced_vendor" }}
+      setActionResult={vi.fn()} setGlobalError={vi.fn()} effectivePermissions={ADMIN_PERMS} />);
+    await waitFor(() => expect(screen.getByTestId("vendor-work-order-select-wo-1")).toBeTruthy());
+    expect((screen.getByTestId("vendor-work-order-note") as HTMLInputElement).value).toBe("");
+    expect((screen.getByTestId("vendor-work-order-resolution") as HTMLInputElement).value).toBe("");
+    fireEvent.click(screen.getByTestId("vendor-work-order-select-wo-1"));
+    fireEvent.click(screen.getByTestId("vendor-work-order-complete"));
+    expect(screen.getByTestId("vendor-work-order-error").textContent).toBe("完成说明不能为空。");
+    expect(posts).toHaveLength(0);
+
+    fireEvent.change(screen.getByTestId("vendor-work-order-resolution"), { target: { value: "更换压缩机电容" } });
+    fireEvent.click(screen.getByTestId("vendor-work-order-complete"));
+    await waitFor(() => expect(posts).toHaveLength(1));
+    expect(posts[0]!.url).toContain("/api/v1/facility/work-orders/wo-1/complete");
+    expect(posts[0]!.body).toMatchObject({ resolution: "更换压缩机电容" });
+    expect(posts[0]!.body).not.toHaveProperty("note");
   });
 });

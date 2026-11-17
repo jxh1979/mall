@@ -24,6 +24,12 @@ const TEXT = {
   noInspection: "当前没有可操作巡检。",
   createTitleRequired: "创建巡检必须填写检查项说明。",
   rectifyNoteRequired: "整改必须填写说明和证据。",
+  passEvidenceRequired: "检查通过必须上传证据附件。",
+  recheckResultRequired: "请选择复检结论。",
+  recheckEvidenceRequired: "复检通过必须上传证据附件。",
+  maintenanceExceptionRequired: "检查不通过时必须填写异常说明。",
+  evidenceUpload: "现场照片/视频",
+  recheckResult: "复检结论",
   total: "巡检总数",
   pendingRectification: "待整改",
   recheckPending: "待复检/审批",
@@ -70,6 +76,13 @@ function nextKey(prefix: string) {
   return `${prefix}-${Date.now()}`;
 }
 
+type EvidenceFile = { id: string; fileName: string };
+
+// 已上传的真实附件编号；一个都没有就不发该键。
+function evidenceIds(files: EvidenceFile[]) {
+  return files.length > 0 ? files.map((file) => file.id) : undefined;
+}
+
 function evidenceList(row: AmusementSafetyInspectionRow) {
   return (row.evidenceAttachmentIds ?? row.attachmentIds ?? []).join(", ") || "-";
 }
@@ -113,7 +126,15 @@ export function AmusementSafetyPage({ api, setActionResult, setGlobalError, effe
   const [createForm, setCreateForm] = React.useState({ projectId: "", deviceId: "", templateId: "", overallResult: "pass" });
   const [maintRows, setMaintRows] = React.useState<Array<{ id: string; projectId?: string; deviceId?: string; result?: string; status?: string }>>([]);
   const [maintForm, setMaintForm] = React.useState({ projectId: "", deviceId: "", vendorId: "", engineerName: "", result: "pass", exceptionNote: "" });
-  const [rectifyNote, setRectifyNote] = React.useState("已更换防护垫并上传照片");
+  const [rectifyNote, setRectifyNote] = React.useState("");
+  // 第十八批 AP 段第 229 条 229-R1（PGM:966「已拍板：所有有过程的业务动作都必须留痕……」；PGM:968「……人工只补原因和证据。……」）：
+  // 证据由现场拍照或录像后真实上传、取回附件编号，不再写死；新建弹窗与动作区各一份，换选巡检时清空动作区已传的，免得随下一条提交。
+  const [createEvidence, setCreateEvidence] = React.useState<EvidenceFile[]>([]);
+  const [actionEvidence, setActionEvidence] = React.useState<EvidenceFile[]>([]);
+  const [uploading, setUploading] = React.useState(false);
+  React.useEffect(() => setActionEvidence([]), [selected?.id]);
+  // 229-R6（PGM:846「……整改后复检、主管确认闭环……」）：复检结论由人选（通过或不通过），不再写死通过。
+  const [recheckResult, setRecheckResult] = React.useState("");
   // 行明细抽屉：整行可点 → 该巡检完整字段（结果/状态中文·时间中文·引用可溯源）。
   const [detail, setDetail] = React.useState<{ title: string; fields: RowDetailField[] } | null>(null);
   // 引导式流程 phase-4：新建巡检收起为主按钮 + 分步引导弹窗（提交/整改/复检/审批动作表单不变）。
@@ -187,6 +208,31 @@ export function AmusementSafetyPage({ api, setActionResult, setGlobalError, effe
     fallbackMessage: TEXT.actionFailed,
   });
 
+  /** 现场拍的照片、视频直接上传，取回真实附件编号；巡检尚未建立时不带业务编号。 */
+  async function uploadEvidence(files: FileList | null, businessId: string | undefined, onUploaded: (rows: EvidenceFile[]) => void) {
+    if (!files || files.length === 0) return;
+    setUploading(true);
+    setFormError("");
+    try {
+      const uploaded: EvidenceFile[] = [];
+      for (const file of Array.from(files)) {
+        const form = new FormData();
+        form.append("file", file);
+        form.append("business_type", "amusement_safety_inspection");
+        form.append("attachment_role", file.type.startsWith("video") ? "video" : "photo");
+        if (businessId) form.append("business_id", businessId);
+        if (!api.postForm) throw new Error("当前客户端不支持文件上传。");
+        const saved = await api.postForm<{ id: string; fileName?: string }>("/api/v1/evidence/attachments/upload", form);
+        uploaded.push({ id: saved.id, fileName: saved.fileName ?? file.name });
+      }
+      onUploaded(uploaded);
+    } catch (uploadError) {
+      setFormError(uploadError instanceof Error ? uploadError.message : "证据上传失败。");
+    } finally {
+      setUploading(false);
+    }
+  }
+
   async function createInspection() {
     if (!createForm.projectId) {
       setFormError("请先选择巡检项目。");
@@ -197,25 +243,37 @@ export function AmusementSafetyPage({ api, setActionResult, setGlobalError, effe
       return;
     }
     const pass = createForm.overallResult === "pass";
+    // 合格必须带证据(后端 SAFETY_INSPECTION_EVIDENCE_REQUIRED);不合格/待整改可不带。
+    if (pass && createEvidence.length === 0) {
+      setFormError(TEXT.passEvidenceRequired);
+      return;
+    }
+    // 229-R6（PGM:973「……状态流转不得只记状态不记时间……」）：巡检时间不再写死，由服务端取提交时刻。
     const request = {
       idempotencyKey: nextKey("amusement-safety-create"),
       operatorNote: "开放前安全巡检",
-      // 合格必须带证据(后端 SAFETY_INSPECTION_EVIDENCE_REQUIRED);不合格/待整改可不带。
-      evidenceAttachmentIds: pass ? ["att-amusement-safety-create"] : [],
+      evidenceAttachmentIds: evidenceIds(createEvidence),
       projectId: createForm.projectId,
       deviceId: createForm.deviceId.trim() || undefined,
       templateId: createForm.templateId || undefined,
       overallResult: createForm.overallResult,
-      inspectedAt: "2026-06-16T10:00:00.000Z",
       items: [{ itemCode: "guardrail", itemName: createTitle, result: pass ? "pass" : "fail", severity: "high" }],
     };
     const ok = await runAction("amusement_safety_inspection_created", request, () => api.post("/api/v1/amusement/safety-inspections", request));
-    if (ok) setCreateOpen(false);
+    if (ok) {
+      setCreateOpen(false);
+      setCreateEvidence([]);
+    }
   }
 
   async function submitMaintenance() {
     if (!maintForm.projectId || !maintForm.vendorId.trim()) {
       setGlobalError("提交检修需选择项目并填写维保供应商 id。");
+      return;
+    }
+    // 229-R1（BSM:1269「……记录检修单位、检修人员、结果和异常原因。」）：不合格须如实写异常说明，不再兜底。
+    if (maintForm.result === "fail" && !maintForm.exceptionNote.trim()) {
+      setGlobalError(TEXT.maintenanceExceptionRequired);
       return;
     }
     const request = {
@@ -225,8 +283,9 @@ export function AmusementSafetyPage({ api, setActionResult, setGlobalError, effe
       maintenanceVendorId: maintForm.vendorId.trim(),
       engineerName: maintForm.engineerName.trim() || undefined,
       result: maintForm.result,
-      exceptionNote: maintForm.result === "fail" ? (maintForm.exceptionNote.trim() || "设备异常待整改") : undefined,
-      sourceTerminal: "kiosk",
+      exceptionNote: maintForm.result === "fail" ? maintForm.exceptionNote.trim() : undefined,
+      // 229-R6：本页是后台网页，来源如实记 web。
+      sourceTerminal: "web",
     };
     const ok = await runAction("amusement_maintenance_submitted", request, () => api.post("/api/v1/amusement/maintenance-records", request));
     if (ok) reload();
@@ -246,11 +305,11 @@ export function AmusementSafetyPage({ api, setActionResult, setGlobalError, effe
     }
     const request = {
       idempotencyKey: nextKey("amusement-safety-submit"),
-      attachmentIds: ["att-amusement-safety-submit"],
+      attachmentIds: evidenceIds(actionEvidence),
       actionResult: "submitted",
-      comment: "发现高风险项，进入整改",
+      comment: "提交巡检",
     };
-    await runAction("amusement_safety_inspection_submitted", request, () => api.post(`/api/v1/amusement/safety-inspections/${selected.id}/submit`, request));
+    if (await runAction("amusement_safety_inspection_submitted", request, () => api.post(`/api/v1/amusement/safety-inspections/${selected.id}/submit`, request))) setActionEvidence([]);
   }
 
   async function rectifyInspection() {
@@ -264,11 +323,11 @@ export function AmusementSafetyPage({ api, setActionResult, setGlobalError, effe
     }
     const request = {
       idempotencyKey: nextKey("amusement-safety-rectify"),
-      attachmentIds: ["att-amusement-safety-rectify"],
+      attachmentIds: evidenceIds(actionEvidence),
       actionResult: "rectified",
       comment: rectifyNote,
     };
-    await runAction("amusement_safety_rectified", request, () => api.post(`/api/v1/amusement/safety-inspections/${selected.id}/rectify`, request));
+    if (await runAction("amusement_safety_rectified", request, () => api.post(`/api/v1/amusement/safety-inspections/${selected.id}/rectify`, request))) setActionEvidence([]);
   }
 
   async function recheckInspection() {
@@ -276,13 +335,23 @@ export function AmusementSafetyPage({ api, setActionResult, setGlobalError, effe
       setFormError(TEXT.noInspection);
       return;
     }
+    if (!recheckResult) {
+      setFormError(TEXT.recheckResultRequired);
+      return;
+    }
+    const pass = recheckResult === "pass";
+    if (pass && actionEvidence.length === 0) {
+      setFormError(TEXT.recheckEvidenceRequired);
+      return;
+    }
     const request = {
       idempotencyKey: nextKey("amusement-safety-recheck"),
-      attachmentIds: ["att-amusement-safety-recheck"],
-      actionResult: "pass",
-      comment: "复检通过，提交重开审批",
+      attachmentIds: evidenceIds(actionEvidence),
+      actionResult: recheckResult,
+      // 不通过不发说明：服务端保留原巡检说明，动作记录结果为不通过。
+      comment: pass ? "复检通过，提交重开审批" : undefined,
     };
-    await runAction("amusement_safety_rechecked", request, () => api.post(`/api/v1/amusement/safety-inspections/${selected.id}/recheck`, request));
+    if (await runAction("amusement_safety_rechecked", request, () => api.post(`/api/v1/amusement/safety-inspections/${selected.id}/recheck`, request))) setActionEvidence([]);
   }
 
   async function approveReopen() {
@@ -294,9 +363,9 @@ export function AmusementSafetyPage({ api, setActionResult, setGlobalError, effe
       idempotencyKey: nextKey("amusement-safety-approve-reopen"),
       action: "approve",
       reason: "整改复检通过，同意恢复开放",
-      evidenceAttachmentIds: ["att-amusement-safety-approve"],
+      evidenceAttachmentIds: evidenceIds(actionEvidence),
     };
-    await runAction("amusement_safety_reopen_approved", request, () => api.post(`/api/v1/amusement/safety-inspections/${selected.id}/approve-reopen`, request));
+    if (await runAction("amusement_safety_reopen_approved", request, () => api.post(`/api/v1/amusement/safety-inspections/${selected.id}/approve-reopen`, request))) setActionEvidence([]);
   }
 
   function kpiFocusTitle(): string {
@@ -384,13 +453,14 @@ export function AmusementSafetyPage({ api, setActionResult, setGlobalError, effe
               submitLabel={TEXT.create}
               submitting={busyAction !== ""}
               error={formError || undefined}
-              onClose={() => setCreateOpen(false)}
+              onClose={() => { setCreateOpen(false); setCreateEvidence([]); }}
               onSubmit={() => void createInspection()}
               steps={[
                 {
                   title: "巡检项",
                   description: "填写开放前安全巡检的检查项说明。",
-                  validate: () => (!createForm.projectId ? "请先选择巡检项目。" : createTitle.trim() ? null : TEXT.createTitleRequired),
+                  validate: () => (!createForm.projectId ? "请先选择巡检项目。" : !createTitle.trim() ? TEXT.createTitleRequired
+                    : createForm.overallResult === "pass" && createEvidence.length === 0 ? TEXT.passEvidenceRequired : null),
                   content: (
                     <>
                       <label>巡检项目<select data-testid="amusement-safety-create-project" value={createForm.projectId} onChange={(e) => setCreateForm({ ...createForm, projectId: e.target.value })}>
@@ -408,6 +478,8 @@ export function AmusementSafetyPage({ api, setActionResult, setGlobalError, effe
                         <option value="pending_rectification">待整改</option>
                       </select></label>
                       <label>{TEXT.createTitle}<input data-testid="amusement-safety-create-title" value={createTitle} onChange={(event) => setCreateTitle(event.target.value)} /></label>
+                      <label>{TEXT.evidenceUpload}<input type="file" multiple accept="image/*,video/*" data-testid="amusement-safety-create-evidence-upload" disabled={uploading} onChange={(e) => void uploadEvidence(e.target.files, undefined, (rows) => setCreateEvidence((prev) => [...prev, ...rows]))} /></label>
+                      {createEvidence.length > 0 ? <span data-testid="amusement-safety-create-evidence-files">{createEvidence.map((file) => file.fileName).join("、")}</span> : null}
                     </>
                   ),
                 },
@@ -416,6 +488,13 @@ export function AmusementSafetyPage({ api, setActionResult, setGlobalError, effe
             />
             <div className="admin-form-grid" data-testid="amusement-safety-action-form">
               <label>{TEXT.rectifyNote}<input data-testid="amusement-safety-rectify-note" value={rectifyNote} onChange={(event) => setRectifyNote(event.target.value)} /></label>
+              <label>{TEXT.evidenceUpload}<input type="file" multiple accept="image/*,video/*" data-testid="amusement-safety-action-evidence-upload" disabled={uploading} onChange={(e) => void uploadEvidence(e.target.files, selected?.id, (rows) => setActionEvidence((prev) => [...prev, ...rows]))} /></label>
+              {actionEvidence.length > 0 ? <span data-testid="amusement-safety-action-evidence-files">{actionEvidence.map((file) => file.fileName).join("、")}</span> : null}
+              <label>{TEXT.recheckResult}<select data-testid="amusement-safety-recheck-result" value={recheckResult} onChange={(event) => setRecheckResult(event.target.value)}>
+                <option value="">请选择</option>
+                <option value="pass">通过</option>
+                <option value="fail">不通过</option>
+              </select></label>
             </div>
             <div className="admin-form-row" data-testid="amusement-safety-actions">
               <PermissionButton permissionsState={effectivePermissions} permissions={["amusement.safety_inspection.submit"]} data-testid="amusement-safety-submit" disabled={busyAction !== ""} onClick={() => void submitInspection()}>{TEXT.submit}</PermissionButton>

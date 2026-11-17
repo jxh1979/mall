@@ -1,4 +1,4 @@
-// 文件版本：V0.03
+// 文件版本：V0.04
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -120,6 +120,9 @@ describe("AdmissionAuditsPage KPI 聚焦视图", () => {
     expect(summary).toContain("按本页");
 
     fireEvent.click(screen.getByTestId("admission-audits-create-open"));
+    // 第十八批 AP 段第 229 条 229-R5（PGM:685「……导出须单独授权、逐次留痕……」）：导出原因不预填，人填。
+    expect((screen.getByTestId("admission-audits-export-reason") as HTMLInputElement).value).toBe("");
+    fireEvent.change(screen.getByTestId("admission-audits-export-reason"), { target: { value: "季度准入流水复核" } });
     fireEvent.click(screen.getByTestId("admission-audits-guided-next"));
     await waitFor(() => expect(screen.getByTestId("admission-audits-guided-summary").textContent).toContain("610 户"));
     expect(screen.getByTestId("admission-audits-guided-summary").textContent).toMatch(/本页 \d+ 户/);
@@ -131,7 +134,7 @@ describe("AdmissionAuditsPage KPI 聚焦视图", () => {
     expect(body.evidence_attachment_ids).toBeUndefined();
     // 第 198 条 198-R3⑥：不带 operator_note（服务端不读），导出原因记在 events[0].summary。
     expect(body.operator_note).toBeUndefined();
-    expect(body.events[0]?.summary).toBe("完整后台准入流水导出");
+    expect(body.events[0]?.summary).toBe("季度准入流水复核");
     expect(body.events[0]?.payload).toMatchObject({ merchant_count: 610, binding_count: 620, contract_count: 630 });
   });
 
@@ -260,6 +263,7 @@ describe("AdmissionAuditsPage 登记导出留痕没拿到结果再点", () => {
 
     await waitFor(() => expect(screen.getByTestId("admission-audits-create-open")).toBeTruthy(), { timeout: 5000 });
     fireEvent.click(screen.getByTestId("admission-audits-create-open"));
+    fireEvent.change(screen.getByTestId("admission-audits-export-reason"), { target: { value: "响应丢了再登记" } });
     fireEvent.click(screen.getByTestId("admission-audits-guided-next"));
     await waitFor(() => expect(screen.getByTestId("admission-audits-guided-summary")).toBeTruthy(), { timeout: 5000 });
 

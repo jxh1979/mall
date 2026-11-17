@@ -1,5 +1,5 @@
-// 文件版本：V0.01
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+// 文件版本：V0.02
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { VendorSiteEntriesPage } from "./VendorSiteEntriesPage";
@@ -44,6 +44,13 @@ function makeApi(): AdminApi {
 
 const ADMIN_PERMS: EffectivePermissionsState = { status: "ready", value: { grants: [], denies: [], wildcard: true } };
 
+// 中文日期选择器：无值时打开到兜底年月（组件不读环境时钟），点某日即取值并收起。
+function pickDay(testId: string, day: string) {
+  const trigger = screen.getByTestId(testId);
+  fireEvent.click(trigger);
+  fireEvent.click(within(trigger.parentElement as HTMLElement).getByRole("button", { name: day }));
+}
+
 function renderPage() {
   const setActionResult = vi.fn();
   const props: AdminPageProps = {
@@ -80,6 +87,12 @@ describe("VendorSiteEntriesPage 引导式新建进场报备(phase-11)", () => {
     fireEvent.change(screen.getByTestId("vendor-site-entry-project"), { target: { value: "venue-9" } });
     fireEvent.change(screen.getByTestId("vendor-site-entry-space"), { target: { value: "area-9" } });
     fireEvent.change(screen.getByTestId("vendor-site-entry-scope"), { target: { value: "外立面清洗" } });
+    // 第十八批 AP 段第 229 条 229-R10⑦（PGM:899）：计划日期、人数、联系人、电话不预填，须填写。
+    pickDay("vendor-site-entry-start", "20");
+    pickDay("vendor-site-entry-end", "22");
+    fireEvent.change(screen.getByTestId("vendor-site-entry-crew"), { target: { value: "3" } });
+    fireEvent.change(screen.getByTestId("vendor-site-entry-contact"), { target: { value: "李工" } });
+    fireEvent.change(screen.getByTestId("vendor-site-entry-phone"), { target: { value: "13900001111" } });
     fireEvent.click(screen.getByTestId("vendor-site-entry-create-guided-next")); // 步2→确认
     await waitFor(() => expect(screen.getByTestId("vendor-site-entry-create-guided-summary")).toBeTruthy());
     fireEvent.click(screen.getByTestId("vendor-site-entry-create"));
@@ -89,6 +102,8 @@ describe("VendorSiteEntriesPage 引导式新建进场报备(phase-11)", () => {
     expect((lastPostBody as { project_id: string }).project_id).toBe("venue-9");
     expect((lastPostBody as { space_id: string }).space_id).toBe("area-9");
     expect((lastPostBody as { work_scope: string }).work_scope).toBe("外立面清洗");
+    expect(lastPostBody).toMatchObject({ planned_start_date: "2025-01-20", planned_end_date: "2025-01-22", crew_count: 3,
+      contact_name: "李工", contact_phone: "13900001111" });
     await waitFor(() => expect(screen.queryByTestId("vendor-site-entry-create-guided")).toBeNull());
     expect(setActionResult).toHaveBeenCalledWith(expect.objectContaining({ action: "vendor_site_entry_created" }));
   });
@@ -102,5 +117,35 @@ describe("VendorSiteEntriesPage 引导式新建进场报备(phase-11)", () => {
     expect(screen.getByTestId("vendor-site-entry-create-guided-error").textContent).toContain("不能为空");
     expect(screen.queryByTestId("vendor-site-entry-create-guided-summary")).toBeNull();
     expect(lastPostBody).toBeNull();
+  });
+
+  it("计划日期、人数、联系人、电话初始为空；只填三必填点下一步被拦（第 229 条 229-R10⑦）", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("vendor-site-entry-create-open")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("vendor-site-entry-create-open"));
+    expect(screen.getByTestId("vendor-site-entry-start").textContent).toContain("选择日期");
+    expect(screen.getByTestId("vendor-site-entry-end").textContent).toContain("选择日期");
+    for (const id of ["vendor-site-entry-crew", "vendor-site-entry-contact", "vendor-site-entry-phone"]) {
+      expect((screen.getByTestId(id) as HTMLInputElement).value).toBe("");
+    }
+    fireEvent.change(screen.getByTestId("vendor-site-entry-project"), { target: { value: "venue-9" } });
+    fireEvent.change(screen.getByTestId("vendor-site-entry-space"), { target: { value: "area-9" } });
+    fireEvent.change(screen.getByTestId("vendor-site-entry-scope"), { target: { value: "外立面清洗" } });
+    fireEvent.click(screen.getByTestId("vendor-site-entry-create-guided-next"));
+    expect(screen.getByTestId("vendor-site-entry-create-guided-error").textContent).toBe("计划日期、人数、联系人和电话不能为空。");
+    expect(screen.queryByTestId("vendor-site-entry-create-guided-summary")).toBeNull();
+    expect(lastPostBody).toBeNull();
+  });
+
+  it("提交备注、完工说明初始为空；提交备注空着提交不带 note（第 229 条 229-R5）", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("vendor-site-entry-submit-note")).toBeTruthy());
+    expect((screen.getByTestId("vendor-site-entry-submit-note") as HTMLInputElement).value).toBe("");
+    expect((screen.getByTestId("vendor-site-entry-completion-note") as HTMLInputElement).value).toBe("");
+    fireEvent.click(screen.getByTestId("vendor-site-entry-submit"));
+    const submits = () => vi.mocked(fetch).mock.calls.filter(([url, init]) => (init as RequestInit | undefined)?.method === "POST"
+      && String(url).endsWith("/site-entry-reports/se-1/submit"));
+    await waitFor(() => expect(submits()).toHaveLength(1));
+    expect(JSON.parse(String((submits()[0]![1] as RequestInit).body))).not.toHaveProperty("note");
   });
 });

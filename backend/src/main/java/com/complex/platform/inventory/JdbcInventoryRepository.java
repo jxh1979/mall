@@ -1,6 +1,6 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.19
+// 文件版本：V0.20
 
 import com.complex.platform.common.crypto.PiiCipher;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -1441,6 +1441,12 @@ class JdbcInventoryRepository implements InventoryRepository {
     }
 
     @Override
+    public void updateSavedBottleCancelReason(String savedBottleId, String reason) {
+        jdbcTemplate.update("UPDATE saved_bottles SET cancel_reason = :reason WHERE id = :id",
+                Map.of("id", savedBottleId, "reason", reason));
+    }
+
+    @Override
     public SavedBottleManualPickupRecord saveSavedBottleManualPickup(SavedBottleManualPickupRecord request) {
         jdbcTemplate.update("""
                 INSERT INTO saved_bottle_manual_pickups (
@@ -1498,6 +1504,13 @@ class JdbcInventoryRepository implements InventoryRepository {
         return jdbcTemplate.query("""
                 SELECT * FROM saved_bottle_manual_pickups WHERE id = :id FOR UPDATE
                 """, Map.of("id", id), rowMapper::mapSavedBottleManualPickup).stream().findFirst();
+    }
+
+    @Override
+    public List<SavedBottleManualPickupRecord> listSavedBottleManualPickups(String savedBottleId) {
+        return jdbcTemplate.query("""
+                SELECT * FROM saved_bottle_manual_pickups WHERE saved_bottle_id = :saved_bottle_id ORDER BY created_at DESC, id DESC
+                """, Map.of("saved_bottle_id", savedBottleId), rowMapper::mapSavedBottleManualPickup);
     }
 
     @Override
@@ -1586,10 +1599,19 @@ class JdbcInventoryRepository implements InventoryRepository {
     public Optional<SavedBottleRenewalPolicyRecord> findSavedBottleRenewalPolicy(String policyKey, String scopeId) {
         return jdbcTemplate.query("""
                 SELECT * FROM saved_bottle_renewal_policy WHERE policy_key = :policy_key AND scope_id = :scope_id
-                """, Map.of("policy_key", policyKey, "scope_id", scopeId), (rs, n) -> new SavedBottleRenewalPolicyRecord(
-                        rs.getString("policy_key"), rs.getString("scope_id"), rs.getInt("numeric_value"),
-                        rs.getObject("min_value", Integer.class), rs.getObject("max_value", Integer.class), rs.getInt("version")))
+                """, Map.of("policy_key", policyKey, "scope_id", scopeId), JdbcInventoryRepository::mapRenewalPolicy)
                 .stream().findFirst();
+    }
+
+    @Override
+    public List<SavedBottleRenewalPolicyRecord> listSavedBottleRenewalPolicies() {
+        return jdbcTemplate.query("SELECT * FROM saved_bottle_renewal_policy ORDER BY policy_key, scope_id", Map.of(),
+                JdbcInventoryRepository::mapRenewalPolicy);
+    }
+
+    private static SavedBottleRenewalPolicyRecord mapRenewalPolicy(java.sql.ResultSet rs, int n) throws java.sql.SQLException {
+        return new SavedBottleRenewalPolicyRecord(rs.getString("policy_key"), rs.getString("scope_id"), rs.getInt("numeric_value"),
+                rs.getObject("min_value", Integer.class), rs.getObject("max_value", Integer.class), rs.getInt("version"));
     }
 
     @Override
@@ -1611,11 +1633,20 @@ class JdbcInventoryRepository implements InventoryRepository {
     public Optional<SavedBottleManualPickupPolicyRecord> findSavedBottleManualPickupPolicy(String projectId) {
         return jdbcTemplate.query("""
                 SELECT * FROM saved_bottle_manual_pickup_policy WHERE project_id = :project_id
-                """, Map.of("project_id", projectId), (rs, n) -> new SavedBottleManualPickupPolicyRecord(
-                        rs.getString("project_id"), rs.getInt("orders_within_1m"), rs.getInt("orders_within_3m"),
-                        rs.getInt("orders_total"), rs.getObject("min_orders", Integer.class),
-                        rs.getObject("max_orders", Integer.class)))
+                """, Map.of("project_id", projectId), JdbcInventoryRepository::mapManualPickupPolicy)
                 .stream().findFirst();
+    }
+
+    @Override
+    public List<SavedBottleManualPickupPolicyRecord> listSavedBottleManualPickupPolicies() {
+        return jdbcTemplate.query("SELECT * FROM saved_bottle_manual_pickup_policy ORDER BY project_id", Map.of(),
+                JdbcInventoryRepository::mapManualPickupPolicy);
+    }
+
+    private static SavedBottleManualPickupPolicyRecord mapManualPickupPolicy(java.sql.ResultSet rs, int n) throws java.sql.SQLException {
+        return new SavedBottleManualPickupPolicyRecord(rs.getString("project_id"), rs.getInt("orders_within_1m"),
+                rs.getInt("orders_within_3m"), rs.getInt("orders_total"), rs.getObject("min_orders", Integer.class),
+                rs.getObject("max_orders", Integer.class));
     }
 
     @Override
@@ -2451,6 +2482,7 @@ class JdbcInventoryRepository implements InventoryRepository {
     @Override
     public List<InventoryHighValueReviewRecord> listHighValueReviews() {
         // 第十八批第 24 条 24-R2：后台复核页列表连表取复核对象摘要（报损/盘点差异/存酒库房处置连调整单与物品，存酒作废连存酒）。
+        // 第十八批 AP 段 252-R1：存酒作废的摘要原因取存酒行的作废原因。
         return jdbcTemplate.query("""
                 SELECT r.id, r.subject_type, r.subject_id, r.photo_attachment_ids, r.video_attachment_ids,
                        r.review_status, r.reviewer_user_id, r.reason, r.created_at, r.reviewed_at, r.merchant_id,
@@ -2460,7 +2492,7 @@ class JdbcInventoryRepository implements InventoryRepository {
                        COALESCE(ai.unit, sb.unit) AS summary_unit,
                        a.location_id AS summary_location_id,
                        a.adjustment_type AS summary_adjustment_type,
-                       a.reason AS summary_reason,
+                       COALESCE(a.reason, sb.cancel_reason) AS summary_reason,
                        sb.id AS summary_saved_bottle_id
                   FROM inventory_high_value_reviews r
                   LEFT JOIN inventory_stock_adjustments a

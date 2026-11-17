@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -8,15 +8,17 @@ import type { AdminApiClient, AdminPageProps, EffectivePermissionsState } from "
 
 // 第十八批 W 段 199-R1（契约 TicketIssueRequest：必填 idempotency_key、reason，additionalProperties false）：
 // 后台出票按契约发固定出票原因 reason，不再发后端不认的 operatorNote（原先每次 400「原因未填写」）。
+// 第十八批 AP 段第 229 条 229-R4②：固定出票原因如实写「后台出票」，不再是验收残留文案。
 const ORDERS = [
   { id: "o1", orderNo: "TO-1", payStatus: "paid", issueStatus: "issued" },
   { id: "o2", orderNo: "TO-2", payStatus: "paid", issueStatus: "not_issued" },
 ];
 
-function renderPage(post: ReturnType<typeof vi.fn>) {
+function renderPage(post: ReturnType<typeof vi.fn>, entitlements: unknown[] = []) {
   const api = {
     get: vi.fn().mockImplementation((url: string) => {
       if (url.includes("/ticketing/orders")) return Promise.resolve(ORDERS);
+      if (url.includes("/ticketing/issued-entitlements")) return Promise.resolve(entitlements);
       return Promise.resolve([]);
     }),
     getPaged: vi.fn().mockResolvedValue({ items: [], total: 0, page: 1, size: 10 }),
@@ -44,6 +46,20 @@ describe("TicketOrdersPage 出票请求体（199-R1）", () => {
     await waitFor(() => expect((screen.getByTestId("ticket-order-select-o2") as HTMLInputElement).checked).toBe(true));
 
     await userEvent.click(screen.getByTestId("ticket-order-issue"));
-    await waitFor(() => expect(post).toHaveBeenCalledWith("/api/v1/ticketing/orders/o2/issue", { reason: "完整后台验收出票" }));
+    await waitFor(() => expect(post).toHaveBeenCalledWith("/api/v1/ticketing/orders/o2/issue", { reason: "后台出票" }));
+  });
+});
+
+// 第十八批 AP 段第 229 条 229-R10③（PGM:899）：核销预检权益码不再预填写死的 ENT-0001——有已出权益时带出第一条真实权益码，没有时留空。
+describe("TicketOrdersPage 核销预检权益码（第 229 条）", () => {
+  it("有已出权益：带出第一条真实权益码", async () => {
+    renderPage(vi.fn(), [{ id: "e-1", entitlementCode: "ENT-REAL-9" }]);
+    await waitFor(() => expect((screen.getByTestId("ticket-entitlement-code") as HTMLInputElement).value).toBe("ENT-REAL-9"));
+  });
+
+  it("没有已出权益：权益码为空", async () => {
+    renderPage(vi.fn());
+    await waitFor(() => expect((screen.queryByTestId("ticket-order-select-o1") as HTMLInputElement | null)?.checked).toBe(true));
+    expect((screen.getByTestId("ticket-entitlement-code") as HTMLInputElement).value).toBe("");
   });
 });

@@ -1,6 +1,6 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.12
+// 文件版本：V0.13
 
 import com.complex.platform.support.InMemoryAuditEventRepository;
 import com.complex.platform.support.InMemoryIdempotencyRepository;
@@ -136,6 +136,9 @@ class InventoryServiceTests {
         );
         service.otpVerifier = lenientOtp();
         service.pickupCodeWindowSeconds = () -> 20;
+        // 第十八批 AP 段 254-R2：存酒有效期出厂行（V632 global 30 天），登记时按它固化到期日。
+        inventoryRepository.renewalPolicies.put("validity_days|global",
+                new SavedBottleRenewalPolicyRecord("validity_days", "global", 30, null, null, 1));
     }
 
     private com.complex.platform.customer.CustomerOtpVerifier lenientOtp() {
@@ -173,10 +176,24 @@ class InventoryServiceTests {
 
     private SavedBottleRecord registerBottle(String key, String customerId, String barId, String phone, String name, String label, int qty) {
         InventoryItemRecord item = createItem("item-" + key);
-        return service.createSavedBottle(new SavedBottleRequest(
+        SavedBottleRecord bottle = service.createSavedBottle(new SavedBottleRequest(
                 key, null, List.of(), customerId, barId,
                 List.of(Map.of("item_id", item.id(), "quantity", qty, "bottle_name", "Whisky", "unit", "bottle")),
-                Instant.now().plusSeconds(3600), label, name, phone, List.of("reg_photo"), null));
+                label, name, phone, List.of("reg_photo"), "吧台登记", "000000"));
+        // 第十八批 AP 段 254-R4：登记核码会记入宽松桩，既有断言只认后续动作的核码；254-R2：到期前提按原来的 1 小时后回填。
+        otpCalls.clear();
+        return withExpireAt(bottle, Instant.now().plusSeconds(3600));
+    }
+
+    /** 第十八批 AP 段 254-R2：到期日改由服务端按有效期固化，既有用例的到期前提登记后回填内存仓。 */
+    private SavedBottleRecord withExpireAt(SavedBottleRecord b, Instant expireAt) {
+        return inventoryRepository.saveSavedBottle(new SavedBottleRecord(b.id(), b.customerId(), b.barProjectId(), b.itemId(),
+                b.bottleName(), b.initialQuantity(), b.remainingQuantity(), b.unit(), expireAt, b.status(),
+                b.evidenceAttachmentIds(), b.createdAt(), b.updatedAt(), b.merchantId(), b.isHighValue(),
+                b.highValueThresholdCents(), b.bottleLabelValue(), b.customerNameOrNickname(), b.customerPhone(),
+                b.customerPhoneHash(), b.registrationPhotoRefs(), b.manualNote(), b.transferredAt(),
+                b.transferToNameOrNickname(), b.transferToPhone(), b.transferToPhoneHash(), b.remedyOfSavedBottleId(),
+                b.custodianEntityId(), b.pickupLocation(), b.handedOverAt(), b.handoverId()));
     }
 
     private SavedBottleTransferRequest transferTo(String key, String toName, String toPhone, Integer qty, String code) {
@@ -501,7 +518,7 @@ class InventoryServiceTests {
         assertThatThrownBy(() -> service.createSavedBottle(new SavedBottleRequest(
                 "saved-no-phone", null, List.of(), null, "bar_1",
                 List.of(Map.of("item_id", item.id(), "quantity", 1, "bottle_name", "Gin", "unit", "bottle")),
-                Instant.now().plusSeconds(3600), "LBL", "散客张", null, List.of("reg_photo"), null)))
+                "LBL", "散客张", null, List.of("reg_photo"), "吧台登记", "000000")))
                 .isInstanceOf(ApiException.class).extracting("code").isEqualTo("VALIDATION_FAILED");
     }
 
@@ -976,9 +993,8 @@ class InventoryServiceTests {
                 "customer_1",
                 "bar_1",
                 List.of(Map.of("item_id", item.id(), "quantity", 1, "bottle_name", "Vodka", "unit", "bottle")),
-                Instant.now().plusSeconds(3600),
                 "123456", "客人甲", "13800138000",
-                List.of("reg_photo"), null
+                List.of("reg_photo"), "吧台登记", "000000"
         ));
 
         assertThatThrownBy(() -> service.claimSavedBottle(savedBottle.id(), new SavedBottleClaimRequest(
@@ -1005,9 +1021,8 @@ class InventoryServiceTests {
                 "customer_1",
                 "bar_1",
                 List.of(Map.of("item_id", item.id(), "quantity", 2, "bottle_name", "Vodka", "unit", "bottle")),
-                Instant.now().plusSeconds(3600),
                 "123456", "客人甲", "13800138000",
-                List.of("reg_photo"), null
+                List.of("reg_photo"), "吧台登记", "000000"
         ));
         SavedBottleClaimRequest firstClaim = new SavedBottleClaimRequest(
                 "claim-once",
@@ -1288,9 +1303,8 @@ class InventoryServiceTests {
         SavedBottleRecord savedBottle = service.createSavedBottle(new SavedBottleRequest(
                 "saved-identity", null, List.of(), "customer_1", "bar_1",
                 List.of(Map.of("item_id", item.id(), "quantity", 2, "bottle_name", "Whisky", "unit", "bottle")),
-                Instant.now().plusSeconds(3600),
                 "LABEL-XYZ", "张三", "13800138000",
-                List.of("reg_photo"), null));
+                List.of("reg_photo"), "吧台登记", "000000"));
 
         SavedBottleClaimRecord review = service.claimSavedBottle(savedBottle.id(), new SavedBottleClaimRequest(
                 "claim-mismatch", null, List.of(), List.of(Map.of("quantity", 1)), "13800138000", "WRONG-LABEL"));
@@ -1309,9 +1323,8 @@ class InventoryServiceTests {
         SavedBottleRecord bottle = service.createSavedBottle(new SavedBottleRequest(
                 "saved-walkin", null, List.of(), null /* 散客无 customer_id */, "bar_1",
                 List.of(Map.of("item_id", item.id(), "quantity", 1, "bottle_name", "Gin", "unit", "bottle")),
-                Instant.now().plusSeconds(3600),
                 "LBL-WALKIN", "散客张", "13800138000",
-                List.of("reg_photo_1"), "前台手填"));
+                List.of("reg_photo_1"), "前台手填", "000000"));
 
         assertThat(bottle.customerId()).isNull();
         assertThat(bottle.status()).isEqualTo("stored");
@@ -1328,15 +1341,13 @@ class InventoryServiceTests {
         assertThatThrownBy(() -> service.createSavedBottle(new SavedBottleRequest(
                 "saved-reg-miss", null, List.of(), null, "bar_1",
                 List.of(Map.of("item_id", item.id(), "quantity", 1, "bottle_name", "Gin", "unit", "bottle")),
-                Instant.now().plusSeconds(3600),
-                null, "散客张", null, List.of("reg_photo"), null)))
+                null, "散客张", null, List.of("reg_photo"), "吧台登记", "000000")))
                 .isInstanceOf(ApiException.class).extracting("code").isEqualTo("VALIDATION_FAILED");
 
         assertThatThrownBy(() -> service.createSavedBottle(new SavedBottleRequest(
                 "saved-reg-miss2", null, List.of(), null, "bar_1",
                 List.of(Map.of("item_id", item.id(), "quantity", 1, "bottle_name", "Gin", "unit", "bottle")),
-                Instant.now().plusSeconds(3600),
-                "LBL", "散客张", null, List.of() /* 无登记照片 */, null)))
+                "LBL", "散客张", null, List.of() /* 无登记照片 */, "吧台登记", "000000")))
                 .isInstanceOf(ApiException.class).extracting("code").isEqualTo("VALIDATION_FAILED");
     }
 
@@ -1347,8 +1358,7 @@ class InventoryServiceTests {
         SavedBottleRecord bottle = service.createSavedBottle(new SavedBottleRequest(
                 "saved-idok", null, List.of(), null, "bar_1",
                 List.of(Map.of("item_id", item.id(), "quantity", 2, "bottle_name", "Rum", "unit", "bottle")),
-                Instant.now().plusSeconds(3600),
-                "LBL-OK", "李四", "13800138000", List.of("reg_photo"), null));
+                "LBL-OK", "李四", "13800138000", List.of("reg_photo"), "吧台登记", "000000"));
 
         SavedBottleClaimRecord ok = service.claimSavedBottle(bottle.id(), new SavedBottleClaimRequest(
                 "claim-ok", null, List.of(), List.of(Map.of("quantity", 1)), "13800138000", "x",
@@ -1363,8 +1373,7 @@ class InventoryServiceTests {
         SavedBottleRecord bottle = service.createSavedBottle(new SavedBottleRequest(
                 "saved-idbad", null, List.of(), null, "bar_1",
                 List.of(Map.of("item_id", item.id(), "quantity", 2, "bottle_name", "Rum", "unit", "bottle")),
-                Instant.now().plusSeconds(3600),
-                "LBL-OK", "李四", "13800138000", List.of("reg_photo"), null));
+                "LBL-OK", "李四", "13800138000", List.of("reg_photo"), "吧台登记", "000000"));
 
         SavedBottleClaimRecord review = service.claimSavedBottle(bottle.id(), new SavedBottleClaimRequest(
                 "claim-name-bad", null, List.of(), List.of(Map.of("quantity", 1)), "13800138000", "x",
@@ -1380,13 +1389,33 @@ class InventoryServiceTests {
         SavedBottleRecord bottle = service.createSavedBottle(new SavedBottleRequest(
                 "saved-dispute", null, List.of(), "customer_1", "bar_1",
                 List.of(Map.of("item_id", item.id(), "quantity", 1, "bottle_name", "Brandy", "unit", "bottle")),
-                Instant.now().plusSeconds(3600),
-                "LBL-DP", "客", "13800138000", List.of("reg_photo"), null));
+                "LBL-DP", "客", "13800138000", List.of("reg_photo"), "吧台登记", "000000"));
 
         SavedBottleRecord disputed = service.disputeSavedBottle(bottle.id(), new SavedBottleCancelRequest(
                 "dispute-1", null, List.of(), "客人质疑酒量", List.of(), List.of()));
         assertThat(disputed.status()).isEqualTo("disputed");
         assertThat(auditEventRepository.events).extracting(AuditEvent::eventName).contains("bar.saved_bottle.dispute");
+        // 第十八批 AP 段 254-R6：争议原因进成功审计元数据。
+        assertThat(auditEventRepository.events)
+                .filteredOn(event -> "bar.saved_bottle.dispute".equals(event.eventName()))
+                .singleElement()
+                .satisfies(event -> assertThat(event.metadata()).containsEntry("reason", "客人质疑酒量"));
+    }
+
+    // 第十八批 AP 段 252-R1（BSM:1940「……存酒作废……必须记录原因……」）：作废不带原因 → 400，存酒不动。
+    @Test
+    void cancelSavedBottleWithoutReasonIsRejected() {
+        InventoryItemRecord item = createItem("cancel-noreason-item");
+        SavedBottleRecord bottle = service.createSavedBottle(new SavedBottleRequest(
+                "saved-cancel-noreason", null, List.of(), "customer_1", "bar_1",
+                List.of(Map.of("item_id", item.id(), "quantity", 1, "bottle_name", "House", "unit", "bottle")),
+                "LBL-NR", "客", "13800138000", List.of("reg_photo"), "吧台登记", "000000"));
+
+        assertThatThrownBy(() -> service.cancelSavedBottle(bottle.id(), new SavedBottleCancelRequest(
+                "cancel-noreason", null, List.of(), " ", List.of(), List.of())))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("VALIDATION_FAILED"));
+        assertThat(inventoryRepository.savedBottleById(bottle.id()).orElseThrow().status()).isEqualTo("stored");
+        assertThat(inventoryRepository.savedBottleCancelReasons).doesNotContainKey(bottle.id());
     }
 
     // R5 T6: 高价值存酒作废缺视频（仅照片）→ 拒（双证据须分类）
@@ -1396,8 +1425,8 @@ class InventoryServiceTests {
         SavedBottleRecord bottle = service.createSavedBottle(new SavedBottleRequest(
                 "saved-hv", null, List.of(), "customer_1", "bar_1",
                 List.of(Map.of("item_id", item.id(), "quantity", 1, "bottle_name", "Rare", "unit", "bottle")),
-                Instant.now().plusSeconds(3600), "LBL-HV", "客", "13800138000",
-                List.of("reg_photo"), null));
+                "LBL-HV", "客", "13800138000",
+                List.of("reg_photo"), "吧台登记", "000000"));
 
         // 仅照片、缺视频 → 拒。
         assertThatThrownBy(() -> service.cancelSavedBottle(bottle.id(), new SavedBottleCancelRequest(
@@ -1423,8 +1452,8 @@ class InventoryServiceTests {
         SavedBottleRecord bottle = service.createSavedBottle(new SavedBottleRequest(
                 "saved-hv-wording", null, List.of(), "customer_1", "bar_1",
                 List.of(Map.of("item_id", item.id(), "quantity", 1, "bottle_name", "Rare", "unit", "bottle")),
-                Instant.now().plusSeconds(3600), "LBL-HVW", "客", "13800138000",
-                List.of("reg_photo"), null));
+                "LBL-HVW", "客", "13800138000",
+                List.of("reg_photo"), "吧台登记", "000000"));
 
         assertThatThrownBy(() -> service.cancelSavedBottle(bottle.id(), new SavedBottleCancelRequest(
                 "cancel-hv-wording", null, List.of(), "broken", List.of(), List.of("att_video"))))
@@ -1442,8 +1471,8 @@ class InventoryServiceTests {
         SavedBottleRecord bottle = service.createSavedBottle(new SavedBottleRequest(
                 "saved-hv-approve", null, List.of(), "customer_1", "bar_1",
                 List.of(Map.of("item_id", item.id(), "quantity", 1, "bottle_name", "Rare", "unit", "bottle")),
-                Instant.now().plusSeconds(3600), "LBL-HVA", "客", "13800138000",
-                List.of("reg_photo"), null));
+                "LBL-HVA", "客", "13800138000",
+                List.of("reg_photo"), "吧台登记", "000000"));
 
         SavedBottleRecord frozen = service.cancelSavedBottle(bottle.id(), new SavedBottleCancelRequest(
                 "cancel-hv-approve", null, List.of(), "broken", List.of("att_photo"), List.of("att_video")));
@@ -1464,7 +1493,7 @@ class InventoryServiceTests {
         SavedBottleRecord bottle = service.createSavedBottle(new SavedBottleRequest(
                 "saved-hv-lost", null, List.of(), "customer_1", "bar_1",
                 List.of(Map.of("item_id", item.id(), "quantity", 1, "bottle_name", "Rare", "unit", "bottle")),
-                Instant.now().plusSeconds(3600), "LBL-LOST", "客", "13800138000", List.of("reg_photo"), null));
+                "LBL-LOST", "客", "13800138000", List.of("reg_photo"), "吧台登记", "000000"));
         service.cancelSavedBottle(bottle.id(), new SavedBottleCancelRequest(
                 "cancel-hv-lost", null, List.of(), "broken", List.of("att_photo"), List.of("att_video")));
         String reviewId = inventoryRepository.listHighValueReviews().getFirst().id();
@@ -1483,8 +1512,8 @@ class InventoryServiceTests {
         SavedBottleRecord bottle = service.createSavedBottle(new SavedBottleRequest(
                 "saved-hv-reject", null, List.of(), "customer_1", "bar_1",
                 List.of(Map.of("item_id", item.id(), "quantity", 1, "bottle_name", "Rare", "unit", "bottle")),
-                Instant.now().plusSeconds(3600), "LBL-HVR", "客", "13800138000",
-                List.of("reg_photo"), null));
+                "LBL-HVR", "客", "13800138000",
+                List.of("reg_photo"), "吧台登记", "000000"));
 
         service.cancelSavedBottle(bottle.id(), new SavedBottleCancelRequest(
                 "cancel-hv-reject", null, List.of(), "broken", List.of("att_photo"), List.of("att_video")));
@@ -1505,8 +1534,8 @@ class InventoryServiceTests {
         SavedBottleRecord bottle = service.createSavedBottle(new SavedBottleRequest(
                 "saved-hv-fakeatt", null, List.of(), "customer_1", "bar_1",
                 List.of(Map.of("item_id", item.id(), "quantity", 1, "bottle_name", "Rare", "unit", "bottle")),
-                Instant.now().plusSeconds(3600), "LBL-FAKE", "客", "13800138000",
-                List.of("reg_photo"), null));
+                "LBL-FAKE", "客", "13800138000",
+                List.of("reg_photo"), "吧台登记", "000000"));
 
         assertThatThrownBy(() -> service.cancelSavedBottle(bottle.id(), new SavedBottleCancelRequest(
                 "cancel-hv-fakeatt", null, List.of(), "broken",
@@ -1524,8 +1553,8 @@ class InventoryServiceTests {
         SavedBottleRecord bottle = service.createSavedBottle(new SavedBottleRequest(
                 "saved-hv-kind", null, List.of(), "customer_1", "bar_1",
                 List.of(Map.of("item_id", item.id(), "quantity", 1, "bottle_name", "Rare", "unit", "bottle")),
-                Instant.now().plusSeconds(3600), "LBL-KIND", "客", "13800138000",
-                List.of("reg_photo"), null));
+                "LBL-KIND", "客", "13800138000",
+                List.of("reg_photo"), "吧台登记", "000000"));
 
         assertThatThrownBy(() -> service.cancelSavedBottle(bottle.id(), new SavedBottleCancelRequest(
                 "cancel-hv-kind", null, List.of(), "broken",
@@ -1541,8 +1570,8 @@ class InventoryServiceTests {
         SavedBottleRecord bottle = service.createSavedBottle(new SavedBottleRequest(
                 "saved-non-hv", null, List.of(), "customer_1", "bar_1",
                 List.of(Map.of("item_id", item.id(), "quantity", 1, "bottle_name", "House", "unit", "bottle")),
-                Instant.now().plusSeconds(3600), "LBL-NHV", "客", "13800138000",
-                List.of("reg_photo"), null));
+                "LBL-NHV", "客", "13800138000",
+                List.of("reg_photo"), "吧台登记", "000000"));
 
         SavedBottleRecord cancelled = service.cancelSavedBottle(bottle.id(), new SavedBottleCancelRequest(
                 "cancel-non-hv", null, List.of(), "broken", List.of(), List.of()));
@@ -1792,9 +1821,8 @@ class InventoryServiceTests {
                 "customer_1",
                 "bar_1",
                 List.of(Map.of("item_id", item.id(), "quantity", 1, "bottle_name", "Vodka", "unit", "bottle")),
-                Instant.now().plusSeconds(3600),
                 "VERIFY-XYZ", "客人甲", "13800138000",
-                List.of("reg_photo"), null
+                List.of("reg_photo"), "吧台登记", "000000"
         ));
 
         assertThatThrownBy(() -> service.claimSavedBottle(savedBottle.id(), new SavedBottleClaimRequest(
@@ -2239,8 +2267,8 @@ class InventoryServiceTests {
         SavedBottleRecord bottle = service.createSavedBottle(new SavedBottleRequest(
                 "saved-hv-xm", null, List.of(), "customer_1", "bar_1",
                 List.of(Map.of("item_id", item.id(), "quantity", 1, "bottle_name", "Rare", "unit", "bottle")),
-                Instant.now().plusSeconds(3600), "LBL-HVXM", "客", "13800138000",
-                List.of("reg_photo"), null));
+                "LBL-HVXM", "客", "13800138000",
+                List.of("reg_photo"), "吧台登记", "000000"));
         service.cancelSavedBottle(bottle.id(), new SavedBottleCancelRequest(
                 "cancel-hv-xm", null, List.of(), "broken", List.of("att_photo"), List.of("att_video")));
         String reviewId = inventoryRepository.listHighValueReviews().getFirst().id();
@@ -2722,9 +2750,11 @@ class InventoryServiceTests {
     }
 
     private SavedBottleRecord storedBottle(String key, InventoryItemRecord item, int qty, Instant expireAt) {
-        return service.createSavedBottle(new SavedBottleRequest("saved-" + key, null, List.of(), "customer_1", "bar_1",
+        SavedBottleRecord bottle = service.createSavedBottle(new SavedBottleRequest("saved-" + key, null, List.of(), "customer_1", "bar_1",
                 List.of(Map.of("item_id", item.id(), "quantity", qty, "bottle_name", "Vodka", "unit", "bottle")),
-                expireAt, "LBL-" + key, "甲", HOLDER_PHONE, List.of("reg_photo"), null));
+                "LBL-" + key, "甲", HOLDER_PHONE, List.of("reg_photo"), "吧台登记", "000000"));
+        // 第十八批 AP 段 254-R2：到期日改由服务端固化；补存、交接、退出用例的到期前提登记后回填。
+        return withExpireAt(bottle, expireAt);
     }
 
     /** 非高价值瓶直接作废 → cancelled（补存/赔付登记前置状态）。 */
@@ -2741,7 +2771,8 @@ class InventoryServiceTests {
     }
 
     private static SavedBottleRemedyRequest replacement(String key, String location) {
-        return new SavedBottleRemedyRequest(key, null, "replacement", null, "同品补存", List.of("reg_photo_2"), "LBL-NEW-" + key, location);
+        // 第十八批 AP 段 254-R1：同品补存新瓶的人工备注必填。
+        return new SavedBottleRemedyRequest(key, "补存瓶吧台登记", "replacement", null, "同品补存", List.of("reg_photo_2"), "LBL-NEW-" + key, location);
     }
 
     private static SavedBottleRemedyRequest compensation(String key, long amountCent) {
@@ -2854,6 +2885,33 @@ class InventoryServiceTests {
         assertThat(lossPosts).hasSize(1);
         assertThat(auditEventRepository.events).extracting(AuditEvent::eventName)
                 .contains("bar.saved_bottle.remedy_loss_unpriced");
+    }
+
+    // 第十八批 AP 段 254-R1（BSM:1170「存酒登记必须拍照、填写人工备注，并留取客人手机号和姓名/昵称。」）：同品补存新瓶照登记口径，
+    // 人工备注必填——缺则 400，库存不出、无新瓶、无补救记录；带上则落新瓶 manual_note。
+    // 赔付不读备注：compensationRemedyClosesOnlyAfterBothApprovalsAndSettle 不带备注照常登记。
+    @Test
+    void replacementRemedyRequiresManualNoteForNewBottle() {
+        wireFinanceStub();
+        asMerchantA();
+        InventoryItemRecord item = createItem("rm-note");
+        seedStock(item.id(), "store_1", 5);
+        SavedBottleRecord bottle = cancelledBottle("rm-note", item, 2);
+        int stockBefore = inventoryRepository.findStockBalance(item.id(), "store_1").orElseThrow().availableQuantity();
+        int bottlesBefore = inventoryRepository.savedBottles.size();
+
+        assertThatThrownBy(() -> service.registerSavedBottleRemedy(bottle.id(), new SavedBottleRemedyRequest(
+                "remedy-rm-note-blank", " ", "replacement", null, "同品补存", List.of("reg_photo_2"), "LBL-NEW-RM", "store_1")))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("VALIDATION_FAILED"));
+        assertThat(inventoryRepository.findStockBalance(item.id(), "store_1").orElseThrow().availableQuantity()).isEqualTo(stockBefore);
+        assertThat(inventoryRepository.savedBottles).hasSize(bottlesBefore);
+        assertThat(inventoryRepository.listSavedBottleRemedies(bottle.id())).isEmpty();
+
+        SavedBottleRemedyRecord remedy = service.registerSavedBottleRemedy(bottle.id(), new SavedBottleRemedyRequest(
+                "remedy-rm-note", "新瓶吧台登记：同品同量补存", "replacement", null, "同品补存", List.of("reg_photo_2"), "LBL-NEW-RM",
+                "store_1"));
+        assertThat(inventoryRepository.savedBottleById(remedy.replacementSavedBottleId()).orElseThrow().manualNote())
+                .isEqualTo("新瓶吧台登记：同品同量补存");
     }
 
     // R1：赔付须门店主管 + 财务两方审批后才能结案；审批人≠登记人；结案才记损失行。
@@ -3653,6 +3711,14 @@ class InventoryServiceTests {
         public SavedBottleRecord saveSavedBottle(SavedBottleRecord savedBottle) {
             savedBottles.put(savedBottle.id(), savedBottle);
             return savedBottle;
+        }
+
+        // 第十八批 AP 段 252-R1：作废原因单列（库内 saved_bottles.cancel_reason）。
+        final Map<String, String> savedBottleCancelReasons = new HashMap<>();
+
+        @Override
+        public void updateSavedBottleCancelReason(String savedBottleId, String reason) {
+            savedBottleCancelReasons.put(savedBottleId, reason);
         }
 
         public Optional<SavedBottleRecord> savedBottleById(String id) {

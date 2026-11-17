@@ -1,4 +1,4 @@
-// 文件版本：V0.09
+// 文件版本：V0.10
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -84,6 +84,7 @@ function renderPage(effectivePermissions: EffectivePermissionsState = ADMIN_PERM
 
 async function evaluateOnce() {
   await waitFor(() => expect(screen.getByTestId("supervisor-review-form")).toBeTruthy());
+  fireEvent.change(screen.getByTestId("supervisor-review-object-id"), { target: { value: "ct-2026-018" } });
   fireEvent.change(screen.getByTestId("supervisor-review-violation-summary"), { target: { value: "合同主体不一致" } });
   fireEvent.click(screen.getByTestId("supervisor-review-evaluate"));
   await waitFor(() => expect(screen.getByTestId("supervisor-review-current-review").textContent).toContain("review_1"));
@@ -240,6 +241,17 @@ describe("SupervisorReviewPage 结果提示全中文 + 审批权限点", () => {
     fireEvent.change(screen.getByTestId("supervisor-review-final-approver"), { target: { value: "usr_benef" } });
     fireEvent.click(screen.getByTestId("supervisor-review-evaluate"));
     expect(screen.getByTestId("supervisor-review-error").textContent).toContain("不能指定直接受益人为最终审批人");
+    const fetchMock = vi.mocked(globalThis.fetch);
+    expect(fetchMock.mock.calls.some(([input]) => String(input).includes("/evaluate"))).toBe(false);
+  });
+
+  it("对象编号不预填；为空点评估不发请求并提示（第 229 条 229-R10⑤）", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("supervisor-review-form")).toBeTruthy());
+    expect((screen.getByTestId("supervisor-review-object-id") as HTMLInputElement).value).toBe("");
+    fireEvent.change(screen.getByTestId("supervisor-review-violation-summary"), { target: { value: "合同主体不一致" } });
+    fireEvent.click(screen.getByTestId("supervisor-review-evaluate"));
+    expect(screen.getByTestId("supervisor-review-error").textContent).toContain("对象编号不能为空。");
     const fetchMock = vi.mocked(globalThis.fetch);
     expect(fetchMock.mock.calls.some(([input]) => String(input).includes("/evaluate"))).toBe(false);
   });
@@ -412,6 +424,7 @@ describe("M043 真实审批信封与既有规则", () => {
     await waitFor(() => expect(screen.getByTestId("supervisor-review-action-type")).toBeTruthy());
     fireEvent.change(screen.getByTestId("supervisor-review-action-type"), { target: { value: action } });
     fireEvent.change(screen.getByTestId("supervisor-review-violation-summary"), { target: { value: "已核对业务原因" } });
+    fireEvent.change(screen.getByTestId("supervisor-review-object-id"), { target: { value: "ct-2026-018" } });
     fireEvent.click(screen.getByTestId("supervisor-review-evaluate"));
     expect(screen.getByTestId("supervisor-review-error").textContent).toContain("请填写直接受益人用户编号");
     expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url).includes("/evaluate"))).toBe(false);

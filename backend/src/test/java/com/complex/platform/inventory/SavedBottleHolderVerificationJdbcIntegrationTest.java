@@ -1,6 +1,6 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -92,7 +92,7 @@ class SavedBottleHolderVerificationJdbcIntegrationTest {
         SavedBottleRecord bottle = inventoryService.createSavedBottle(new SavedBottleRequest(
                 prefix + "_create", null, List.of(), null, "bar_hv",
                 List.of(Map.of("item_id", prefix + "_item", "quantity", 2, "bottle_name", "Holder Whisky", "unit", "bottle")),
-                Instant.now().plusSeconds(86400), "LBL-HV", "甲", HOLDER_PHONE, List.of("reg_photo"), null));
+                "LBL-HV", "甲", HOLDER_PHONE, List.of("reg_photo"), "吧台登记", "000000"));
 
         inventoryService.transferSavedBottle(bottle.id(), new SavedBottleTransferRequest(
                 prefix + "_transfer", null, List.of(), "乙", TRANSFEREE_PHONE, null, "转让", "000000"));
@@ -132,7 +132,7 @@ class SavedBottleHolderVerificationJdbcIntegrationTest {
         SavedBottleRecord bottle = inventoryService.createSavedBottle(new SavedBottleRequest(
                 prefix + "_create2", null, List.of(), customerId, "bar_hv",
                 List.of(Map.of("item_id", prefix + "_item", "quantity", 1, "bottle_name", "Holder Whisky", "unit", "bottle")),
-                Instant.now().plusSeconds(86400), "LBL-HV", "甲", HOLDER_PHONE, List.of("reg_photo"), null));
+                "LBL-HV", "甲", HOLDER_PHONE, List.of("reg_photo"), "吧台登记", "000000"));
 
         SavedBottlePickupCodeResponse code = inventoryService.issueSavedBottlePickupCode(bottle.id(), customerId, HOLDER_PHONE);
         Integer configured = jdbcTemplate.queryForObject(
@@ -200,7 +200,7 @@ class SavedBottleHolderVerificationJdbcIntegrationTest {
         SavedBottleRecord bottle = inventoryService.createSavedBottle(new SavedBottleRequest(
                 prefix + "_mp_create", null, List.of(), customerId, barId,
                 List.of(Map.of("item_id", prefix + "_item", "quantity", 1, "bottle_name", "Holder Whisky", "unit", "bottle")),
-                Instant.now().plusSeconds(86400), "LBL-MP", "甲", "15500020004", List.of("reg_photo"), null));
+                "LBL-MP", "甲", "15500020004", List.of("reg_photo"), "吧台登记", "000000"));
 
         assertThatThrownBy(() -> inventoryService.configureManualPickupPolicy(
                 new SavedBottleManualPickupPolicyRequest(prefix + "_cfg0", projectId, 2, 3, 5, 1, 10, "首次配置")))
@@ -272,7 +272,7 @@ class SavedBottleHolderVerificationJdbcIntegrationTest {
         return inventoryService.createSavedBottle(new SavedBottleRequest(
                 prefix + customerSuffix + "_create", null, List.of(), customerId, barId,
                 List.of(Map.of("item_id", prefix + "_item", "quantity", 1, "bottle_name", "Holder Whisky", "unit", "bottle")),
-                Instant.now().plusSeconds(86400), "LBL-MP", "甲", phone, List.of("reg_photo"), null));
+                "LBL-MP", "甲", phone, List.of("reg_photo"), "吧台登记", "000000"));
     }
 
     private void asPlatformAdminWithCustomerLookupPermission() {
@@ -280,7 +280,7 @@ class SavedBottleHolderVerificationJdbcIntegrationTest {
         String roleId = prefix + "_role";
         jdbcTemplate.update("INSERT INTO access_users (id, username, account_type, organization_id, merchant_id, status, created_at)"
                 + " VALUES (?, ?, 'platform_admin', 'org_1', NULL, 'active', now())", userId, prefix + "_u");
-        jdbcTemplate.update("INSERT INTO roles (id, role_name, created_at) VALUES (?, ?, now())", roleId, "存酒人工例外测试角色" + prefix);
+        jdbcTemplate.update("INSERT INTO roles (id, role_name, created_at) VALUES (?, ?, now())", roleId, "存酒人工例外测试角色" + System.nanoTime());
         jdbcTemplate.update("INSERT INTO role_permissions (role_id, permission_code) VALUES (?, ?)", roleId, "customer.account.manage");
         jdbcTemplate.update("INSERT INTO user_roles (user_id, role_id) VALUES (?, ?)", userId, roleId);
         AccessActor actor = new AccessActor(userId, prefix + "_u", "platform_admin", "org_1", null, "active");

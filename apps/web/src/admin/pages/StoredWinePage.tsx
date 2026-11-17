@@ -1,4 +1,4 @@
-// 文件版本：V0.08
+// 文件版本：V0.09
 import React from "react";
 import { formatBusinessStatus } from "../i18n/statusLabels";
 import { TechDetails } from "../components/TechDetails";
@@ -12,7 +12,7 @@ import { usePagedRows, TablePager } from "../components/TablePager";
 import { useSortedRows } from "../components/useSortedRows";
 import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowDetailDrawer";
 import { MetricDetailLink, useMetricKpiValue } from "../components/MetricDetailEntry";
-import type { AdminPageProps, StoredWineRemedyRow, StoredWineRow } from "../types";
+import type { AdminPageProps, InventoryItemRow, StoredWineRemedyRow, StoredWineRow } from "../types";
 import { PaymentConfirmationPanel } from "./PaymentConfirmationPanel";
 
 // 后端 /saved-bottles 还返回到期/更新/剩余数量等（StoredWineRow 未全量声明），
@@ -39,13 +39,40 @@ type StoredWineRenewalRow = {
   createdAt?: string;
 };
 
+// 第十八批 AP 段 254-R5：人工例外取酒申请（GET /saved-bottles/{id}/manual-pickups；adminClient 驼峰化）
+type StoredWineManualPickupRow = {
+  id: string;
+  status?: string;
+  historyCondition?: string;
+  reason?: string;
+  initiatedBy?: string;
+  initiatedAt?: string;
+  reviewedBy?: string;
+  reviewedAt?: string;
+  marketingConfirmedBy?: string;
+  marketingConfirmedAt?: string;
+  dispensedBy?: string;
+  dispensedAt?: string;
+};
+
 // 后端写权限码（InventoryController：/saved-bottles/{id}/claim、/transfer、/verification-code）
 const STORED_WINE_CLAIM_PERMISSION = "bar.saved_bottle.manage";
 // FS-025 员工代办转存的营销主管复核权限码（InventoryService.RENEWAL_REVIEW）
 const STORED_WINE_RENEWAL_REVIEW_PERMISSION = "bar.saved_bottle.renewal.review";
 // FS-017 赔付方案审批：门店主管用高价值复核码、财务用既有应收应付管理码（InventoryService.REMEDY_*_APPROVE）。
+// 第十八批 AP 段 254-R6（第十八批裁决 58）：争议不成立恢复存酒、争议中的存酒作废同用门店主管码。
 const STORED_WINE_REMEDY_SUPERVISOR_PERMISSION = "inventory.high_value.review";
 const STORED_WINE_REMEDY_FINANCE_PERMISSION = "finance.ar_ap.manage";
+// 第十八批 AP 段 254-R5：人工例外取酒各步权限码（InventoryService.MANUAL_PICKUP_*；发起时服务端另核客人查询专门通道码 customer.account.manage；放酒用存酒管理码）。
+const STORED_WINE_MANUAL_PICKUP_INITIATE_PERMISSIONS = ["bar.saved_bottle.manual_pickup.initiate", "customer.account.manage"];
+const STORED_WINE_MANUAL_PICKUP_REVIEW_PERMISSION = "bar.saved_bottle.manual_pickup.review";
+const STORED_WINE_MANUAL_PICKUP_CONFIRM_MARKETING_PERMISSION = "bar.saved_bottle.manual_pickup.confirm_marketing";
+// 命中的消费历史条件（服务端按 BSM:1073 原句顺序取第一个满足的）。
+const MANUAL_PICKUP_CONDITION_LABELS: Record<string, string> = {
+  orders_within_1m: "近 1 个月笔数达标",
+  orders_within_3m: "近 3 个月笔数达标",
+  orders_total: "累计笔数达标",
+};
 
 // FS-017 状态中文（对客交付 / 内部追收 / 承担方 / 接收状态）。
 const REMEDY_DELIVERY_LABELS: Record<string, string> = { pending_approval: "待审批", approved: "已审批待交付", closed: "已结案" };
@@ -58,6 +85,9 @@ const HANDOVER_CONDITIONS: Array<{ value: string; label: string }> = [
   { value: "damaged", label: "毁损" },
   { value: "short", label: "短少" },
 ];
+
+// 第十八批 AP 段 254-R4：存酒登记表单初值（数量默认 1）。
+const EMPTY_REGISTER = { itemId: "", quantity: "1", label: "", phone: "", name: "", note: "", code: "" };
 
 function splitIds(value: string) {
   return value.split(/[\s,，;；]+/).map((item) => item.trim()).filter(Boolean);
@@ -108,15 +138,13 @@ const TEXT = {
   claim: "在线领取核销",
   code: "短信验证码 / 动态取酒码",
   quantity: "领取数量",
-  note: "备注",
-  boundary: "领取会写入幂等键、核验码、附件证据和审计事件；重复提交必须返回同一处理结果，避免重复扣减客户资产。",
+  boundary: "领取会写入幂等键、核验码和审计事件；重复提交必须返回同一处理结果，避免重复扣减客户资产。",
   select: "选择",
   savedNo: "存酒号",
   customer: "客户",
   item: "酒水",
   status: "状态",
   createdAt: "时间",
-  auditNote: "完整后台验收领取",
   totalBottlesHelp: "存酒记录总数",
   storedHelp: "在线可领取",
   totalQuantityHelp: "剩余可领数量",
@@ -127,20 +155,31 @@ const TEXT = {
   cancelPhotos: "照片证据 id（逗号分隔）",
   cancelVideos: "视频证据 id（逗号分隔）",
   cancelRequired: "作废须填写照片与视频证据 id（照片+视频双证据+主管复核）。",
-  cancelNotCancellable: "仅存酒中或待核身复核的存酒可作废。",
+  cancelNotCancellable: "仅存酒中、待核身复核或争议中的存酒可作废。",
   cancelBoundary: "存酒作废需照片+视频双证据+主管复核；高价值存酒先冻结待主管复核通过后才作废，作废后在下方登记补存或赔付。",
   cancelFailed: "存酒作废失败",
+  // 第十八批 AP 段 252-R1（BSM:1940）、254-R6（第十八批裁决 58）
+  cancelReasonRequired: "作废须填写作废原因",
+  dispute: "登记争议",
+  disputeReason: "争议原因",
+  disputeReasonRequired: "登记争议须填写争议原因",
+  disputeBoundary: "登记后停止取酒、转让与转存，原持有人的动态取酒码立即作废；由门店主管核实后恢复存酒或作废。",
+  disputeFailed: "存酒争议登记失败",
+  disputeDismiss: "争议不成立，恢复存酒",
+  disputeDismissBoundary: "门店主管核实争议不成立：恢复为存酒中、照常可取，剩余量与到期日不变；争议成立请在下方作废。",
+  disputeDismissFailed: "恢复存酒失败",
   remedy: "补存/赔付",
   remedyType: "方式",
   remedyAmount: "赔付金额（元）",
   remedyPhotos: "补存瓶登记照片 id（逗号分隔）",
   remedyLabel: "补存瓶底标签值",
   remedyLocation: "出库库位",
+  remedyNote: "补存瓶人工备注",
   remedySubmit: "登记补存/赔付",
   remedyBoundary: "作废后由该酒吧为客人以同品、同等剩余量补存，到期日不变，补酒成本计入经营损失；无法补存的登记赔付方案，经门店主管和财务审批后支付，赔款实际交付后才结案。对客交付与内部追收分别记录，员工未赔付不阻止对客交付。",
   remedyNotCancelled: "仅已作废的存酒可登记补存/赔付。",
   remedyAmountInvalid: "赔付金额必须大于 0。",
-  remedyReplacementRequired: "补存须填写登记照片 id、补存瓶底标签值与出库库位。",
+  remedyReplacementRequired: "补存须填写登记照片 id、补存瓶底标签值、出库库位与补存瓶人工备注。",
   remedyFailed: "补存/赔付登记失败",
   remedyList: "补存/赔付记录",
   remedyEmpty: "该存酒暂无补存/赔付记录。",
@@ -170,6 +209,43 @@ const TEXT = {
   handoverRequired: "交接须填写退出门店 id 与指定领取地点。",
   handoverBoundary: "门店退出后由所属娱乐平台公司接收有效期内未结存酒实物和记录，指定领取地点，继续按原有效期与原取酒规则处理；接收时已存在的毁损、短少仍由原门店承担，可经审批先垫付并向原门店追收。",
   handoverFailed: "存酒交接失败",
+  // 第十八批 AP 段 254-R4（BSM:1037、BSM:1170；BSM:1072「存酒登记先取隐私同意……」；第十八批裁决 57 取短信验证码）
+  register: "存酒登记",
+  registerItem: "酒水",
+  registerItemPlaceholder: "选择酒水",
+  registerQuantity: "数量",
+  registerLabel: "瓶底标签值",
+  registerPhone: "客人手机号",
+  registerName: "客人姓名/昵称",
+  registerPhotos: "登记照片（拍照上传）",
+  registerNote: "人工备注",
+  registerSendCode: "向客人发送隐私同意验证码",
+  registerCode: "客人报出的验证码",
+  registerConsent: "已向客人说明隐私政策，客人报出短信验证码即视为同意。",
+  registerSubmit: "登记存酒",
+  registerCodeSent: "隐私同意验证码已发送至客人手机",
+  registerItemRequired: "请选择存酒酒水并填写大于 0 的数量。",
+  registerFieldsRequired: "存酒登记须填写瓶底标签值、客人手机号与姓名/昵称。",
+  registerPhotoRequired: "存酒登记须拍照上传至少一张登记照片。",
+  registerNoteRequired: "存酒登记须填写人工备注。",
+  registerCodeRequired: "须填写客人报出的隐私同意短信验证码。",
+  registerPhoneRequired: "发送验证码前须填写客人手机号。",
+  registerFailed: "存酒登记失败",
+  registerUploadFailed: "登记照片上传失败",
+  registerMerchantOnly: "存酒登记须由酒吧员工账号办理。",
+  // 第十八批 AP 段 254-R5（BSM:1073 人工例外取酒须同时满足四项）
+  manualPickup: "人工例外取酒",
+  manualPickupBoundary: "仅在客人手机遗失、停机等无法获取验证码或动态取酒码时适用：店长发起（申请手机号须在本项目内满足任一消费历史条件）→ 另一名主管复核 → 该客户对应的营销人员确认 → 客人本人到场放酒，不允许他人代领。",
+  manualPickupReason: "发起原因",
+  manualPickupReasonRequired: "发起人工例外取酒须填写原因",
+  manualPickupInitiate: "店长发起人工例外取酒",
+  manualPickupReview: "另一主管复核",
+  manualPickupConfirmMarketing: "营销人员确认",
+  manualPickupQuantity: "放酒数量",
+  manualPickupInPerson: "客户本人到场",
+  manualPickupDispense: "本人到场放酒",
+  manualPickupEmpty: "该存酒暂无人工例外取酒申请。",
+  manualPickupFailed: "人工例外取酒办理失败",
   custody: "保管方/领取地点",
   custodyOriginal: "原店",
 };
@@ -187,7 +263,7 @@ function numberValue(value: unknown, fallback = 0) {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
-export function StoredWinePage({ api, setActionResult, setGlobalError, effectivePermissions, navigateTo, reportViewedObjects }: AdminPageProps) {
+export function StoredWinePage({ api, user, setActionResult, setGlobalError, effectivePermissions, navigateTo, reportViewedObjects }: AdminPageProps) {
   const [rows, setRows] = React.useState<StoredWineRow[]>([]);
   // 第 23 条 23-R5：敏感页这一次看到的对象（PGM:687「哪个客人、哪个商户、哪些单据」）。
   React.useEffect(() => reportViewedObjects?.("saved_bottle", rows), [rows, reportViewedObjects]);
@@ -204,11 +280,20 @@ export function StoredWinePage({ api, setActionResult, setGlobalError, effective
   const [renewals, setRenewals] = React.useState<StoredWineRenewalRow[]>([]);
   const [renewalRejectReason, setRenewalRejectReason] = React.useState<Record<string, string>>({});
   const [codeNotice, setCodeNotice] = React.useState("");
+  // 第十八批 AP 段 254-R5：人工例外取酒（该瓶申请列表、发起原因、放酒数量与本人到场勾选）。
+  const [manualPickups, setManualPickups] = React.useState<StoredWineManualPickupRow[]>([]);
+  const [manualPickupReason, setManualPickupReason] = React.useState("");
+  const [manualPickupQuantity, setManualPickupQuantity] = React.useState("1");
+  const [manualPickupInPerson, setManualPickupInPerson] = React.useState(false);
+  const [manualPickupError, setManualPickupError] = React.useState("");
   // FS-017 作废（照片+视频双证据）/ 补存赔付 / 门店退出清点与交接。
   const [cancelReason, setCancelReason] = React.useState("");
   const [cancelPhotos, setCancelPhotos] = React.useState("");
   const [cancelVideos, setCancelVideos] = React.useState("");
   const [cancelError, setCancelError] = React.useState("");
+  // 第十八批 AP 段 254-R6：登记争议（原因必填、进审计）。
+  const [disputeReason, setDisputeReason] = React.useState("");
+  const [disputeError, setDisputeError] = React.useState("");
   const [remedyType, setRemedyType] = React.useState("replacement");
   const [remedyAmount, setRemedyAmount] = React.useState("");
   const [remedyPhotos, setRemedyPhotos] = React.useState("");
@@ -226,8 +311,16 @@ export function StoredWinePage({ api, setActionResult, setGlobalError, effective
   const [handoverVideos, setHandoverVideos] = React.useState("");
   const [handoverItems, setHandoverItems] = React.useState<Record<string, { quantity: string; condition: string }>>({});
   const [claimQuantity, setClaimQuantity] = React.useState("1");
-  // 第十八批 AF 段 198-R5：备注只随补救登记提交（服务端读作补存新瓶的人工备注）；其余请求服务端不读，不发。
-  const [operatorNote, setOperatorNote] = React.useState(TEXT.auditNote);
+  // 第十八批 AP 段 254-R3（BSM:1170「存酒登记必须拍照、填写人工备注……」）：补存新瓶的人工备注，空默认，只在同品补存时作为 operator_note 发出。
+  const [remedyNote, setRemedyNote] = React.useState("");
+  // 第十八批 AP 段 254-R4：存酒登记只对酒吧员工账号开放，酒吧＝本账号商户（平台账号登记会落空商户）。
+  const merchantId = user.merchantId ?? "";
+  const [register, setRegister] = React.useState(EMPTY_REGISTER);
+  const [registerPhotos, setRegisterPhotos] = React.useState<Array<{ id: string; fileName: string }>>([]);
+  const [registerItems, setRegisterItems] = React.useState<InventoryItemRow[]>([]);
+  const [registerError, setRegisterError] = React.useState("");
+  const [registerNotice, setRegisterNotice] = React.useState("");
+  const [uploading, setUploading] = React.useState(false);
   const [formError, setFormError] = React.useState("");
   const [submitting, setSubmitting] = React.useState(false);
   const [query, setQuery] = React.useState("");
@@ -253,6 +346,12 @@ export function StoredWinePage({ api, setActionResult, setGlobalError, effective
       ],
     });
   }
+
+  React.useEffect(() => {
+    if (!merchantId) return;
+    api.get<InventoryItemRow[]>("/api/v1/inventory/items")
+      .then((data) => setRegisterItems(Array.isArray(data) ? data : []), () => setRegisterItems([]));
+  }, [api, merchantId]);
 
   React.useEffect(() => {
     const onPopState = () => setKpiFocus(readKpiFocusFromUrl());
@@ -423,6 +522,23 @@ export function StoredWinePage({ api, setActionResult, setGlobalError, effective
     void loadRenewals(selectedId);
   }, [selectedId, loadRenewals]);
 
+  const loadManualPickups = React.useCallback(async (savedBottleId: string) => {
+    try {
+      const data = await api.get<StoredWineManualPickupRow[]>(`/api/v1/inventory/saved-bottles/${savedBottleId}/manual-pickups`);
+      setManualPickups(Array.isArray(data) ? data : []);
+    } catch {
+      setManualPickups([]);
+    }
+  }, [api]);
+
+  React.useEffect(() => {
+    if (!selectedId) {
+      setManualPickups([]);
+      return;
+    }
+    void loadManualPickups(selectedId);
+  }, [selectedId, loadManualPickups]);
+
   function validateRenewal() {
     if (!selected) {
       setRenewalError(TEXT.noBottle);
@@ -500,14 +616,82 @@ export function StoredWinePage({ api, setActionResult, setGlobalError, effective
     }
   }
 
+  // ===== 第十八批 AP 段 254-R5：人工例外取酒四步（店长发起 → 另一主管复核 → 营销确认 → 本人到场放酒）=====
+  // 各步幂等键带时刻：停在某步的申请可重新发起；服务端拒绝（自审、营销不符、消费历史不满足等）原文上屏。
+  function validateManualPickup() {
+    if (!manualPickupReason.trim()) {
+      setManualPickupError(TEXT.manualPickupReasonRequired);
+      return false;
+    }
+    setManualPickupError("");
+    return true;
+  }
+
+  function validateManualPickupQuantity() {
+    const quantity = Number(manualPickupQuantity);
+    if (!Number.isInteger(quantity) || quantity <= 0) {
+      setManualPickupError(TEXT.quantityInvalid);
+      return false;
+    }
+    setManualPickupError("");
+    return true;
+  }
+
+  async function manualPickupAction(action: string, path: string, body: Record<string, unknown>) {
+    if (!selected) {
+      return;
+    }
+    setSubmitting(true);
+    setManualPickupError("");
+    setGlobalError(null);
+    try {
+      const result = await api.post(`/api/v1/inventory/saved-bottles/${path}`, body);
+      setActionResult({ action, savedBottleId: selected.id, requestBody: body, result });
+      setManualPickupReason("");
+      setManualPickupInPerson(false);
+      await loadManualPickups(selected.id);
+      await reload();
+    } catch (pickupErr) {
+      const message = pickupErr instanceof Error ? pickupErr.message : TEXT.manualPickupFailed;
+      setManualPickupError(message);
+      setGlobalError(message);
+      setActionResult({ action, savedBottleId: selected.id, status: "failed", message });
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  function initiateManualPickup() {
+    if (!selected) {
+      return;
+    }
+    void manualPickupAction("stored_wine_manual_pickup_initiated", `${selected.id}/manual-pickups`,
+      { idempotency_key: `admin-saved-bottle-manual-pickup-${selected.id}-${Date.now()}`, reason: manualPickupReason.trim() });
+  }
+
+  function dispenseManualPickup(pickupId: string) {
+    if (!selected) {
+      return;
+    }
+    void manualPickupAction("stored_wine_manual_pickup_dispensed", `manual-pickups/${pickupId}/dispense`, {
+      idempotency_key: `admin-saved-bottle-manual-pickup-dispense-${pickupId}-${Date.now()}`,
+      present_in_person: true,
+      claim_items: [{ saved_bottle_id: selected.id, quantity: Number(manualPickupQuantity) }],
+    });
+  }
+
   // ===== FS-017 作废 / 补存赔付 / 门店退出 =====
   function validateCancel() {
     if (!selected) {
       setCancelError(TEXT.noBottle);
       return false;
     }
-    if (!["stored", "pending_identity_review"].includes(selected.status ?? "")) {
+    if (!["stored", "pending_identity_review", "disputed"].includes(selected.status ?? "")) {
       setCancelError(TEXT.cancelNotCancellable);
+      return false;
+    }
+    if (!cancelReason.trim()) {
+      setCancelError(TEXT.cancelReasonRequired);
       return false;
     }
     if (splitIds(cancelPhotos).length === 0 || splitIds(cancelVideos).length === 0) {
@@ -544,6 +728,54 @@ export function StoredWinePage({ api, setActionResult, setGlobalError, effective
     }
   }
 
+  // 第十八批 AP 段 254-R6（第十八批裁决 58）：登记争议（原因必填）；争议不成立由门店主管恢复存酒中，争议成立走上面的作废。
+  // 幂等键带时刻：服务端操作号按瓶固定，恢复后再次登记争议若沿用同号会被当成重交。
+  function validateDispute() {
+    if (!disputeReason.trim()) {
+      setDisputeError(TEXT.disputeReasonRequired);
+      return false;
+    }
+    setDisputeError("");
+    return true;
+  }
+
+  async function submitDisputeAction(action: string, path: string, body: Record<string, unknown>, fallback: string) {
+    if (!selected) {
+      return;
+    }
+    setSubmitting(true);
+    setGlobalError(null);
+    try {
+      const result = await api.post(`/api/v1/inventory/saved-bottles/${selected.id}/${path}`, body);
+      setActionResult({ action, savedBottleId: selected.id, requestBody: body, result });
+      setDisputeReason("");
+      await reload();
+    } catch (disputeErr) {
+      const message = disputeErr instanceof Error ? disputeErr.message : fallback;
+      setDisputeError(message);
+      setGlobalError(message);
+      setActionResult({ action, savedBottleId: selected.id, status: "failed", message });
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  function disputeStoredWine() {
+    if (!selected || !validateDispute()) {
+      return;
+    }
+    void submitDisputeAction("stored_wine_disputed", "dispute",
+      { idempotency_key: `admin-saved-bottle-dispute-${selected.id}-${Date.now()}`, reason: disputeReason.trim() }, TEXT.disputeFailed);
+  }
+
+  function dismissDispute() {
+    if (!selected) {
+      return;
+    }
+    void submitDisputeAction("stored_wine_dispute_dismissed", "dispute-dismissal",
+      { idempotency_key: `admin-saved-bottle-dispute-dismissal-${selected.id}-${Date.now()}` }, TEXT.disputeDismissFailed);
+  }
+
   const loadRemedies = React.useCallback(async (savedBottleId: string) => {
     try {
       const data = await api.get<StoredWineRemedyRow[]>(`/api/v1/inventory/saved-bottles/${savedBottleId}/remedies`);
@@ -576,7 +808,7 @@ export function StoredWinePage({ api, setActionResult, setGlobalError, effective
         setRemedyError(TEXT.remedyAmountInvalid);
         return false;
       }
-    } else if (splitIds(remedyPhotos).length === 0 || !remedyLabel.trim() || !remedyLocation.trim()) {
+    } else if (splitIds(remedyPhotos).length === 0 || !remedyLabel.trim() || !remedyLocation.trim() || !remedyNote.trim()) {
       setRemedyError(TEXT.remedyReplacementRequired);
       return false;
     }
@@ -593,7 +825,7 @@ export function StoredWinePage({ api, setActionResult, setGlobalError, effective
     try {
       const body = {
         idempotency_key: `admin-saved-bottle-remedy-${selected.id}-${Date.now()}`,
-        operator_note: operatorNote,
+        ...(remedyType === "replacement" ? { operator_note: remedyNote.trim() } : {}),
         remedy_type: remedyType,
         amount_cent: remedyType === "compensation" ? Math.round(Number(remedyAmount) * 100) : undefined,
         reason: cancelReason.trim() || undefined,
@@ -737,7 +969,6 @@ export function StoredWinePage({ api, setActionResult, setGlobalError, effective
     try {
       const body = {
         idempotency_key: `admin-saved-bottle-claim-${selected.id}-${quantity}`,
-        evidence_attachment_ids: ["att-saved-bottle-claim-1"],
         claim_items: [{ saved_bottle_id: selected.id, item_name: selected.itemName ?? selected.savedNo ?? selected.id, claim_quantity: quantity }],
         verification_code: verificationCode,
       };
@@ -754,11 +985,145 @@ export function StoredWinePage({ api, setActionResult, setGlobalError, effective
     }
   }
 
+  // ===== 第十八批 AP 段 254-R4：存酒登记（酒吧员工账号，酒吧＝本账号商户；照片真实上传；客人报隐私同意短信验证码）=====
+  function setRegisterField(field: keyof typeof EMPTY_REGISTER, value: string) {
+    setRegister((current) => ({ ...current, [field]: value }));
+  }
+
+  async function uploadRegisterPhotos(files: FileList | null) {
+    if (!files || files.length === 0) return;
+    setUploading(true);
+    setRegisterError("");
+    try {
+      const uploaded: Array<{ id: string; fileName: string }> = [];
+      for (const file of Array.from(files)) {
+        const form = new FormData();
+        form.append("file", file);
+        form.append("business_type", "saved_bottle_registration");
+        form.append("attachment_role", "photo");
+        if (!api.postForm) throw new Error("当前客户端不支持文件上传。");
+        const saved = await api.postForm<{ id: string; fileName?: string }>("/api/v1/evidence/attachments/upload", form);
+        uploaded.push({ id: saved.id, fileName: saved.fileName ?? file.name });
+      }
+      setRegisterPhotos((current) => [...current, ...uploaded]);
+    } catch (uploadError) {
+      setRegisterError(uploadError instanceof Error ? uploadError.message : TEXT.registerUploadFailed);
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  async function sendDepositConsentCode() {
+    const phone = register.phone.trim();
+    if (!phone) {
+      setRegisterError(TEXT.registerPhoneRequired);
+      return;
+    }
+    setRegisterError("");
+    setRegisterNotice("");
+    setGlobalError(null);
+    try {
+      // 幂等键带时刻：客人没收到可重发。
+      const body = { idempotency_key: `admin-saved-bottle-deposit-consent-${Date.now()}`, customer_phone: phone };
+      const result = await api.post("/api/v1/inventory/saved-bottles/deposit-consent-code", body);
+      setActionResult({ action: "stored_wine_deposit_consent_code_sent", requestBody: body, result });
+      setRegisterNotice(TEXT.registerCodeSent);
+    } catch (sendError) {
+      const message = sendError instanceof Error ? sendError.message : TEXT.sendCodeFailed;
+      setRegisterError(message);
+      setGlobalError(message);
+    }
+  }
+
+  function validateRegister() {
+    const quantity = Number(register.quantity);
+    const error = !register.itemId || !Number.isInteger(quantity) || quantity <= 0 ? TEXT.registerItemRequired
+      : !register.label.trim() || !register.phone.trim() || !register.name.trim() ? TEXT.registerFieldsRequired
+      : registerPhotos.length === 0 ? TEXT.registerPhotoRequired
+      : !register.note.trim() ? TEXT.registerNoteRequired
+      : !register.code.trim() ? TEXT.registerCodeRequired
+      : "";
+    setRegisterError(error);
+    return !error;
+  }
+
+  async function registerStoredWine() {
+    const item = registerItems.find((row) => row.id === register.itemId);
+    // 到期日不发：服务端按本项目存酒有效期在登记时固化（254-R2）；存酒编号由幂等键派生。
+    const body = {
+      idempotency_key: `admin-saved-bottle-register-${Date.now()}`,
+      bar_id: merchantId,
+      items: [{ item_id: register.itemId, quantity: Number(register.quantity), unit: item?.unit, bottle_name: item?.itemName }],
+      bottle_label_value: register.label.trim(),
+      customer_phone: register.phone.trim(),
+      customer_name_or_nickname: register.name.trim(),
+      registration_photo_refs: registerPhotos.map((photo) => photo.id),
+      manual_note: register.note.trim(),
+      verification_code: register.code.trim(),
+    };
+    setSubmitting(true);
+    setGlobalError(null);
+    try {
+      const result = await api.post("/api/v1/inventory/saved-bottles", body);
+      setActionResult({ action: "stored_wine_registered", requestBody: body, result });
+      setRegister(EMPTY_REGISTER);
+      setRegisterPhotos([]);
+      setRegisterNotice("");
+      await reload();
+    } catch (registerErr) {
+      const message = registerErr instanceof Error ? registerErr.message : TEXT.registerFailed;
+      setRegisterError(message);
+      setGlobalError(message);
+      setActionResult({ action: "stored_wine_registered", status: "failed", message });
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   return (
     <section data-testid="stored-wine-page">
       <AdminPageHeader title={TEXT.title} description={TEXT.description} />
       <TechDetails><div className="admin-generic-evidence" data-testid="stored-wine-evidence">{TEXT.evidence}</div></TechDetails>
       <AuditTrailHint event="bar.saved_bottle.viewed / bar.saved_bottle_picked_up" />
+      {kpiFocus ? null : merchantId ? (
+        <div data-testid="stored-wine-register">
+          <strong>{TEXT.register}</strong>
+          <div className="admin-form-grid" data-testid="stored-wine-register-form">
+            <label>{TEXT.registerItem}
+              <select data-testid="stored-wine-register-item" value={register.itemId} onChange={(event) => setRegisterField("itemId", event.target.value)}>
+                <option value="">{TEXT.registerItemPlaceholder}</option>
+                {registerItems.map((row) => <option key={row.id} value={row.id}>{row.itemName ?? row.id}</option>)}
+              </select>
+            </label>
+            <label>{TEXT.registerQuantity}<input data-testid="stored-wine-register-quantity" type="number" min="1" value={register.quantity} onChange={(event) => setRegisterField("quantity", event.target.value)} /></label>
+            <label>{TEXT.registerLabel}<input data-testid="stored-wine-register-label" value={register.label} onChange={(event) => setRegisterField("label", event.target.value)} /></label>
+            <label>{TEXT.registerPhone}<input data-testid="stored-wine-register-phone" inputMode="tel" value={register.phone} onChange={(event) => setRegisterField("phone", event.target.value)} /></label>
+            <label>{TEXT.registerName}<input data-testid="stored-wine-register-name" value={register.name} onChange={(event) => setRegisterField("name", event.target.value)} /></label>
+            <label>{TEXT.registerPhotos}<input data-testid="stored-wine-register-photo-upload" type="file" multiple accept="image/*" disabled={uploading} onChange={(event) => void uploadRegisterPhotos(event.target.files)} /></label>
+            <label>{TEXT.registerNote}<input data-testid="stored-wine-register-note" value={register.note} onChange={(event) => setRegisterField("note", event.target.value)} /></label>
+            <button type="button" className="admin-secondary-button" data-testid="stored-wine-register-send-code" onClick={() => void sendDepositConsentCode()}>{TEXT.registerSendCode}</button>
+            <label>{TEXT.registerCode}<input data-testid="stored-wine-register-code" value={register.code} onChange={(event) => setRegisterField("code", event.target.value)} /></label>
+          </div>
+          {registerPhotos.length > 0 ? <div className="admin-muted-action" data-testid="stored-wine-register-photos">{registerPhotos.map((photo) => photo.fileName).join("、")}</div> : null}
+          <div className="admin-form-row">
+            <HighRiskConfirm
+              label={TEXT.registerSubmit}
+              impact={TEXT.registerConsent}
+              disabled={submitting || uploading}
+              precheck={validateRegister}
+              onConfirm={() => void registerStoredWine()}
+              permissionsState={effectivePermissions}
+              permissions={[STORED_WINE_CLAIM_PERMISSION]}
+              data-testid="stored-wine-register-submit"
+            />
+            <span className="admin-muted-action" data-testid="stored-wine-register-consent">{TEXT.registerConsent}</span>
+          </div>
+          {registerNotice ? <div className="admin-muted-action" data-testid="stored-wine-register-notice">{registerNotice}</div> : null}
+          {registerError ? <div className="admin-inline-error" data-testid="stored-wine-register-error">{registerError}</div> : null}
+        </div>
+      ) : (
+        <div className="admin-muted-action" data-testid="stored-wine-register-merchant-only">{TEXT.registerMerchantOnly}</div>
+      )}
       <AdminDataState loading={loading} error={error} empty={rows.length === 0} onRetry={reload}>
         {kpiFocus ? (
           <div className="admin-state" data-testid="stored-wine-kpi-focus-banner">
@@ -779,7 +1144,6 @@ export function StoredWinePage({ api, setActionResult, setGlobalError, effective
           <label>{TEXT.code}<input data-testid="stored-wine-claim-code" value={verificationCode} onChange={(event) => setVerificationCode(event.target.value)} /></label>
           <button type="button" className="admin-secondary-button" data-testid="stored-wine-claim-send-code" disabled={!selected} onClick={() => void sendVerificationCode("claim")}>{TEXT.sendCode}</button>
           <label>{TEXT.quantity}<input data-testid="stored-wine-claim-quantity" type="number" min="1" value={claimQuantity} onChange={(event) => setClaimQuantity(event.target.value)} /></label>
-          <label>{TEXT.note}<input data-testid="stored-wine-claim-note" value={operatorNote} onChange={(event) => setOperatorNote(event.target.value)} /></label>
         </div>
         <div className="admin-form-row">
           <HighRiskConfirm
@@ -877,6 +1241,119 @@ export function StoredWinePage({ api, setActionResult, setGlobalError, effective
           </div>
         ) : null}
 
+        {selected ? (
+          <div data-testid="stored-wine-manual-pickup">
+            <strong>{TEXT.manualPickup}</strong>
+            <span className="admin-muted-action" data-testid="stored-wine-manual-pickup-boundary">{TEXT.manualPickupBoundary}</span>
+            {selected.status === "stored" ? (
+              <div className="admin-form-row">
+                <label>{TEXT.manualPickupReason}<input data-testid="stored-wine-manual-pickup-reason" value={manualPickupReason} onChange={(event) => setManualPickupReason(event.target.value)} /></label>
+                <HighRiskConfirm
+                  label={TEXT.manualPickupInitiate}
+                  impact={TEXT.manualPickupBoundary}
+                  disabled={submitting}
+                  precheck={validateManualPickup}
+                  onConfirm={initiateManualPickup}
+                  permissionsState={effectivePermissions}
+                  permissions={STORED_WINE_MANUAL_PICKUP_INITIATE_PERMISSIONS}
+                  data-testid="stored-wine-manual-pickup-initiate"
+                />
+              </div>
+            ) : null}
+            {manualPickups.length === 0 ? (
+              <div className="admin-muted-action" data-testid="stored-wine-manual-pickup-empty">{TEXT.manualPickupEmpty}</div>
+            ) : (
+              <ul className="admin-plain-list">
+                {manualPickups.map((pickup) => (
+                  <li key={pickup.id} data-testid={`stored-wine-manual-pickup-row-${pickup.id}`}>
+                    {formatBusinessStatus(pickup.status)} · {MANUAL_PICKUP_CONDITION_LABELS[pickup.historyCondition ?? ""] ?? "-"} · {TEXT.manualPickupReason} {pickup.reason ?? "-"} · 发起 {pickup.initiatedBy ?? "-"} {cnDate(pickup.initiatedAt)}
+                    {pickup.reviewedBy ? ` · 复核 ${pickup.reviewedBy} ${cnDate(pickup.reviewedAt)}` : ""}
+                    {pickup.marketingConfirmedBy ? ` · 营销确认 ${pickup.marketingConfirmedBy} ${cnDate(pickup.marketingConfirmedAt)}` : ""}
+                    {pickup.dispensedBy ? ` · 放酒 ${pickup.dispensedBy} ${cnDate(pickup.dispensedAt)}` : ""}
+                    {pickup.status === "initiated" ? (
+                      <HighRiskConfirm
+                        label={TEXT.manualPickupReview}
+                        impact="复核人不得是发起人；复核通过后交该客户对应的营销人员确认。"
+                        disabled={submitting}
+                        onConfirm={() => void manualPickupAction("stored_wine_manual_pickup_reviewed", `manual-pickups/${pickup.id}/review`,
+                          { idempotency_key: `admin-saved-bottle-manual-pickup-review-${pickup.id}-${Date.now()}` })}
+                        permissionsState={effectivePermissions}
+                        permissions={[STORED_WINE_MANUAL_PICKUP_REVIEW_PERMISSION]}
+                        data-testid={`stored-wine-manual-pickup-review-${pickup.id}`}
+                      />
+                    ) : null}
+                    {pickup.status === "reviewed" ? (
+                      <HighRiskConfirm
+                        label={TEXT.manualPickupConfirmMarketing}
+                        impact="由该客户对应的营销人员确认身份与取酒申请；营销已离职的由其直接上级确认，无归属营销的由当班营销主管确认。"
+                        disabled={submitting}
+                        onConfirm={() => void manualPickupAction("stored_wine_manual_pickup_marketing_confirmed", `manual-pickups/${pickup.id}/confirm-marketing`,
+                          { idempotency_key: `admin-saved-bottle-manual-pickup-confirm-marketing-${pickup.id}-${Date.now()}` })}
+                        permissionsState={effectivePermissions}
+                        permissions={[STORED_WINE_MANUAL_PICKUP_CONFIRM_MARKETING_PERMISSION]}
+                        data-testid={`stored-wine-manual-pickup-confirm-marketing-${pickup.id}`}
+                      />
+                    ) : null}
+                    {pickup.status === "marketing_confirmed" ? (
+                      <>
+                        <input aria-label={`${TEXT.manualPickupQuantity} ${pickup.id}`} data-testid={`stored-wine-manual-pickup-quantity-${pickup.id}`} type="number" min="1" value={manualPickupQuantity} onChange={(event) => setManualPickupQuantity(event.target.value)} />
+                        <label><input type="checkbox" data-testid={`stored-wine-manual-pickup-in-person-${pickup.id}`} checked={manualPickupInPerson} onChange={(event) => setManualPickupInPerson(event.target.checked)} />{TEXT.manualPickupInPerson}</label>
+                        <HighRiskConfirm
+                          label={TEXT.manualPickupDispense}
+                          impact="只允许存酒客户本人到场办理，不允许他人代领；放酒后扣减剩余量并留取酒流水。"
+                          disabled={submitting || !manualPickupInPerson}
+                          precheck={validateManualPickupQuantity}
+                          onConfirm={() => dispenseManualPickup(pickup.id)}
+                          permissionsState={effectivePermissions}
+                          permissions={[STORED_WINE_CLAIM_PERMISSION]}
+                          data-testid={`stored-wine-manual-pickup-dispense-${pickup.id}`}
+                        />
+                      </>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+            )}
+            {manualPickupError ? <div className="admin-inline-error" data-testid="stored-wine-manual-pickup-error">{manualPickupError}</div> : null}
+          </div>
+        ) : null}
+
+        {selected && ["stored", "pending_identity_review"].includes(selected.status ?? "") ? (
+          <>
+            <div className="admin-form-grid" data-testid="stored-wine-dispute-form">
+              <label>{TEXT.disputeReason}<input data-testid="stored-wine-dispute-reason" value={disputeReason} onChange={(event) => setDisputeReason(event.target.value)} /></label>
+            </div>
+            <div className="admin-form-row">
+              <HighRiskConfirm
+                label={TEXT.dispute}
+                impact={TEXT.disputeBoundary}
+                disabled={submitting}
+                precheck={validateDispute}
+                onConfirm={disputeStoredWine}
+                permissionsState={effectivePermissions}
+                permissions={[STORED_WINE_CLAIM_PERMISSION]}
+                data-testid="stored-wine-dispute"
+              />
+              <span className="admin-muted-action" data-testid="stored-wine-dispute-boundary">{TEXT.disputeBoundary}</span>
+            </div>
+          </>
+        ) : null}
+        {selected?.status === "disputed" ? (
+          <div className="admin-form-row">
+            <HighRiskConfirm
+              label={TEXT.disputeDismiss}
+              impact={TEXT.disputeDismissBoundary}
+              disabled={submitting}
+              onConfirm={dismissDispute}
+              permissionsState={effectivePermissions}
+              permissions={[STORED_WINE_REMEDY_SUPERVISOR_PERMISSION]}
+              data-testid="stored-wine-dispute-dismiss"
+            />
+            <span className="admin-muted-action" data-testid="stored-wine-dispute-dismiss-boundary">{TEXT.disputeDismissBoundary}</span>
+          </div>
+        ) : null}
+        {disputeError ? <div data-testid="stored-wine-dispute-error" className="admin-inline-error">{disputeError}</div> : null}
+
         <div className="admin-form-grid" data-testid="stored-wine-cancel-form">
           <label>{TEXT.cancelReason}<input data-testid="stored-wine-cancel-reason" value={cancelReason} onChange={(event) => setCancelReason(event.target.value)} /></label>
           <label>{TEXT.cancelPhotos}<input data-testid="stored-wine-cancel-photos" value={cancelPhotos} onChange={(event) => setCancelPhotos(event.target.value)} /></label>
@@ -890,7 +1367,9 @@ export function StoredWinePage({ api, setActionResult, setGlobalError, effective
             precheck={validateCancel}
             onConfirm={() => void cancelStoredWine()}
             permissionsState={effectivePermissions}
-            permissions={[STORED_WINE_CLAIM_PERMISSION]}
+            permissions={selected?.status === "disputed"
+              ? [STORED_WINE_CLAIM_PERMISSION, STORED_WINE_REMEDY_SUPERVISOR_PERMISSION]
+              : [STORED_WINE_CLAIM_PERMISSION]}
             data-testid="stored-wine-cancel"
           />
           <span className="admin-muted-action" data-testid="stored-wine-cancel-boundary">{TEXT.cancelBoundary}</span>
@@ -913,6 +1392,7 @@ export function StoredWinePage({ api, setActionResult, setGlobalError, effective
                   <label>{TEXT.remedyPhotos}<input data-testid="stored-wine-remedy-photos" value={remedyPhotos} onChange={(event) => setRemedyPhotos(event.target.value)} /></label>
                   <label>{TEXT.remedyLabel}<input data-testid="stored-wine-remedy-label" value={remedyLabel} onChange={(event) => setRemedyLabel(event.target.value)} /></label>
                   <label>{TEXT.remedyLocation}<input data-testid="stored-wine-remedy-location" value={remedyLocation} onChange={(event) => setRemedyLocation(event.target.value)} /></label>
+                  <label>{TEXT.remedyNote}<input data-testid="stored-wine-remedy-note" value={remedyNote} onChange={(event) => setRemedyNote(event.target.value)} /></label>
                 </>
               )}
             </div>

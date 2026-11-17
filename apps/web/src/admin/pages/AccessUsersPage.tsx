@@ -1,4 +1,4 @@
-// 文件版本：V0.04
+// 文件版本：V0.05
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
@@ -36,7 +36,7 @@ export function AccessUsersPage({ api, setActionResult, setGlobalError, effectiv
   const [accountType, setAccountType] = React.useState("staff");
   const [consentReference, setConsentReference] = React.useState("");
   const [evidenceAttachmentIds, setEvidenceAttachmentIds] = React.useState("");
-  const [organizationId, setOrganizationId] = React.useState("org-1");
+  const [organizationId, setOrganizationId] = React.useState("");
   const [merchantId, setMerchantId] = React.useState("");
   const [merchants, setMerchants] = React.useState<Array<{ id: string; displayName?: string; companyName?: string }>>([]);
   // AUD-033: 账号绑外部协作机构(此前 partner_org_id 无任何后台入口,顶层外包账号绑不到机构)。

@@ -1,6 +1,6 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -96,7 +96,9 @@ class SavedBottleRenewalJdbcIntegrationTest {
         SavedBottleRecord bottle = inventoryService.createSavedBottle(new SavedBottleRequest(
                 prefix + "_create", null, List.of(), prefix + "_customer", "bar_rn",
                 List.of(Map.of("item_id", prefix + "_item", "quantity", 1, "bottle_name", "Renewal Whisky", "unit", "bottle")),
-                expireAt, "LBL-RN", "甲", HOLDER_PHONE, List.of("reg_photo"), null));
+                "LBL-RN", "甲", HOLDER_PHONE, List.of("reg_photo"), "吧台登记", "000000"));
+        // 第十八批 AP 段 254-R2：到期日改由服务端按有效期固化；本用例的转存前提（5 天后到期）登记后回填。
+        jdbcTemplate.update("UPDATE saved_bottles SET expire_at = ? WHERE id = ?", java.sql.Timestamp.from(expireAt), bottle.id());
 
         SavedBottleRenewalRecord renewal = inventoryService.renewSavedBottleByCustomer(
                 bottle.id(), prefix + "_customer", HOLDER_PHONE, new CustomerSavedBottleRenewRequest(prefix + "_renew1", "000000"));

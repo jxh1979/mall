@@ -38,7 +38,7 @@
           "path": "apps/web/src/admin/pages/BarOrdersPage.tsx",
           "markers": [
             "bar-orders-page",
-            "deliveryPhotoAttachmentIds"
+            "deliveredItems"
           ]
         },
         {
@@ -279,7 +279,7 @@
           "path": "apps/web/src/admin/pages/InventoryLedgerPage.tsx",
           "markers": [
             "inventory-ledger-page",
-            "evidence_attachment_ids"
+            "evidence.attachment.create"
           ]
         },
         {
@@ -477,7 +477,7 @@
           "path": "apps/web/src/admin/pages/BarOrdersPage.tsx",
           "markers": [
             "delivery",
-            "deliveryPhotoAttachmentIds"
+            "deliveredItems"
           ]
         },
         {

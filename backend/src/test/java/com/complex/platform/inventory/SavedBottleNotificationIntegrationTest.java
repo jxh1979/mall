@@ -1,6 +1,6 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -76,17 +76,12 @@ class SavedBottleNotificationIntegrationTest {
         insertCustomer(customerId, DEPOSIT_PHONE);
         insertInventoryItem(itemId, prefix + "_sku", "Deposit Merlot");
 
-        // 到期日取相对未来时刻（now+30天，截断到秒避免 DB 微秒精度回读漂移）：硬编码 2026-07-10 一旦成为过去，
-        // 后续 claimSavedBottle 因 expireAt 已过而抛 SAVED_BOTTLE_EXPIRED（InventoryService 552-553），本用例即 flaky。
-        Instant expireAt = Instant.now()
-                .plus(java.time.Duration.ofDays(30))
-                .truncatedTo(java.time.temporal.ChronoUnit.SECONDS);
+        // 第十八批 AP 段 254-R2：到期日由服务端按出厂有效期在登记时固化，短信里的到期日对登记回读值。
         SavedBottleRecord bottle = inventoryService.createSavedBottle(savedBottleRequest(
                 prefix + "_create",
                 customerId,
                 itemId,
-                "Deposit Merlot",
-                expireAt
+                "Deposit Merlot"
         ));
 
         assertThat(logCount("deposit", DEPOSIT_PHONE)).isEqualTo(1);
@@ -98,7 +93,7 @@ class SavedBottleNotificationIntegrationTest {
         // 客人看到的是中文北京日期(如 2026年8月3日),不是 Instant.toString() 的 2026-08-02T18:00:00Z。
         assertThat(logParam("deposit", DEPOSIT_PHONE, "expireAt")).isEqualTo(
                 java.time.format.DateTimeFormatter.ofPattern("yyyy年M月d日")
-                        .format(expireAt.atZone(com.complex.platform.common.LocalZone.ID)));
+                        .format(bottle.expireAt().atZone(com.complex.platform.common.LocalZone.ID)));
 
         jdbcTemplate.update("UPDATE customers SET phone = ?, masked_phone = ?, updated_at = now() WHERE id = ?",
                 piiCipher.encrypt(CLAIM_PHONE), maskPhone(CLAIM_PHONE), customerId);
@@ -294,8 +289,7 @@ class SavedBottleNotificationIntegrationTest {
                 prefix + "_create",
                 customerId,
                 itemId,
-                "Switch Off Malbec",
-                Instant.parse("2026-07-10T00:00:00Z")
+                "Switch Off Malbec"
         ));
 
         assertThat(logCount("deposit", SWITCH_OFF_PHONE)).isEqualTo(1);
@@ -307,8 +301,7 @@ class SavedBottleNotificationIntegrationTest {
             String idempotencyKey,
             String customerId,
             String itemId,
-            String bottleName,
-            Instant expireAt
+            String bottleName
     ) {
         return new SavedBottleRequest(
                 idempotencyKey,
@@ -317,12 +310,11 @@ class SavedBottleNotificationIntegrationTest {
                 customerId,
                 "bar_notif",
                 List.of(Map.of("item_id", itemId, "quantity", 1, "bottle_name", bottleName, "unit", "bottle")),
-                expireAt,
                 "LABEL-001",
                 "Guest A",
                 DEPOSIT_PHONE,
                 List.of("registration-photo"),
-                null
+                "吧台登记", "000000"
         );
     }
 

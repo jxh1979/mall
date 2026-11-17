@@ -1,6 +1,6 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static com.complex.platform.support.CustomerProjectSwitchRequests.keyed;
 import static com.complex.platform.support.CustomerProjectSwitchRequests.rejected;
@@ -15,7 +15,6 @@ import com.complex.platform.support.CustomerProjectSwitchRequests;
 import com.complex.platform.support.CustomerTicketPaymentFixture;
 import com.complex.platform.support.TestSecurityActors;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -339,7 +338,7 @@ class CustomerWalletProjectSwitchJdbcIntegrationTests {
         try {
             return inventoryService.createSavedBottle(new SavedBottleRequest("b16-bottle-" + f.suffix, null, List.of(), f.customerId, bar,
                     List.of(Map.of("item_id", item, "quantity", 1, "bottle_name", "存酒测试威士忌", "unit", "bottle")),
-                    Instant.now().plus(Duration.ofDays(5)), "LBL-B16", "甲", f.phone, List.of("reg_photo"), null)).id();
+                    "LBL-B16", "甲", f.phone, List.of("reg_photo"), "吧台登记", "000000")).id();
         } finally {
             TestSecurityActors.clear();
         }
