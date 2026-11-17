@@ -1,4 +1,4 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
@@ -13,7 +13,9 @@ const ADMIN_PERMS: EffectivePermissionsState = { status: "ready", value: { grant
 
 function renderWithPreview(previewResult: Record<string, unknown>) {
   const get = vi.fn().mockImplementation((url: string) =>
-    Promise.resolve(url.includes("/ticketing/orders") ? ORDERS : []));
+    Promise.resolve(url.includes("/ticketing/orders") ? ORDERS
+      // 第 229 条 229-R10③：权益码不再预填写死值，由已出权益的首条真实权益码回填。
+      : url.includes("/ticketing/issued-entitlements") ? [{ id: "e-1", entitlementCode: "ENT-0001" }] : []));
   const post = vi.fn().mockResolvedValue(previewResult);
   const api = {
     get,

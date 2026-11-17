@@ -1,6 +1,6 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.14
+// 文件版本：V0.15
 
 import static com.complex.platform.common.api.ApiRequests.requireIdempotencyKey;
 
@@ -215,6 +215,16 @@ public class InventoryController {
         return ApiResponse.ok(service.requestSavedBottleVerificationCode(id, request));
     }
 
+    /** 第十八批 AP 段 254-R4（第十八批裁决 57）：存酒登记前向客人手机发隐私同意验证码。 */
+    @PostMapping("/saved-bottles/deposit-consent-code")
+    public ApiResponse<SavedBottleVerificationCodeReceipt> requestSavedBottleDepositConsentCode(
+            @RequestBody @jakarta.validation.Valid com.complex.platform.inventory.dto.SavedBottleDepositConsentCodeRequest request
+    ) {
+        authorizationService.requirePermission("bar.saved_bottle.manage");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.requestSavedBottleDepositConsentCode(request));
+    }
+
     // FS-016 人工例外取酒四步（BSM L1073）：店长发起 → 另一主管复核 → 营销确认 → 本人到场放酒。
     @PostMapping("/saved-bottles/{id}/manual-pickups")
     public ApiResponse<SavedBottleManualPickupRecord> initiateManualPickup(
@@ -256,6 +266,13 @@ public class InventoryController {
         return ApiResponse.ok(service.dispenseManualPickup(id, request));
     }
 
+    // 第十八批 AP 段 254-R5：该瓶的人工例外取酒申请（存酒页按状态办理四步）。
+    @GetMapping("/saved-bottles/{id}/manual-pickups")
+    public ApiResponse<PageResponse<SavedBottleManualPickupRecord>> listSavedBottleManualPickups(@PathVariable String id) {
+        authorizationService.requirePermission("bar.saved_bottle.manage");
+        return ApiResponse.ok(service.listSavedBottleManualPickups(id));
+    }
+
     // FS-025 存酒转存（延期）（ENUM L120 / BSM L1072）：员工代办（客人本人短信确认）→ 当班营销主管复核生效；转存流水列表。
     @PostMapping("/saved-bottles/{id}/renewals")
     public ApiResponse<SavedBottleRenewalRecord> renewSavedBottle(
@@ -281,6 +298,20 @@ public class InventoryController {
     public ApiResponse<PageResponse<SavedBottleRenewalRecord>> listSavedBottleRenewals(@PathVariable String id) {
         authorizationService.requirePermission("bar.saved_bottle.manage");
         return ApiResponse.ok(service.listSavedBottleRenewals(id));
+    }
+
+    /** 第十八批 AP 段 254-R7：读人工例外取酒消费历史条件（出厂行与各项目行；商户账号不可读，非平台管理员只看出厂行与可触及项目）。 */
+    @GetMapping("/saved-bottles/manual-pickup-policy")
+    public ApiResponse<PageResponse<SavedBottleManualPickupPolicyRecord>> listManualPickupPolicies() {
+        authorizationService.requirePermission(InventoryService.MANUAL_PICKUP_POLICY_MANAGE);
+        return ApiResponse.ok(service.listManualPickupPolicies());
+    }
+
+    /** 第十八批 AP 段 254-R7：读存酒有效期、转存次数上限（按项目）与顺延期限（按酒吧）（出厂行与可触及项目、酒吧的行）。 */
+    @GetMapping("/saved-bottles/renewal-policy")
+    public ApiResponse<PageResponse<SavedBottleRenewalPolicyRecord>> listRenewalPolicies() {
+        authorizationService.requirePermission(InventoryService.RENEWAL_POLICY_MANAGE);
+        return ApiResponse.ok(service.listRenewalPolicies());
     }
 
     /** FS-016：配置人工例外取酒消费历史条件（BSM L1073：按项目可配，调整须最高权限审批并留痕，须同时配置上下限）。 */
@@ -349,6 +380,17 @@ public class InventoryController {
         authorizationService.requirePermission("bar.saved_bottle.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.disputeSavedBottle(id, request));
+    }
+
+    // 第十八批 AP 段 254-R6：存酒争议不成立，门店主管恢复存酒中（第十八批裁决 58）。
+    @PostMapping("/saved-bottles/{id}/dispute-dismissal")
+    public ApiResponse<SavedBottleRecord> dismissSavedBottleDispute(
+            @PathVariable String id,
+            @RequestBody @jakarta.validation.Valid com.complex.platform.inventory.dto.SavedBottleDisputeDismissRequest request
+    ) {
+        authorizationService.requirePermission(InventoryService.REMEDY_SUPERVISOR_APPROVE);
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.dismissSavedBottleDispute(id, request));
     }
 
     // ── FS-017 存酒作废后对客补存/赔付、门店退出清点通知与交接、责任归属与内部追收（BSM L1072 ①②③④）──

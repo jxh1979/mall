@@ -1,6 +1,5 @@
 package com.complex.platform.inventory.dto;
 
-import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 
@@ -11,7 +10,6 @@ public record SavedBottleRequest(
         String customerId,
         String barId,
         List<Map<String, Object>> items,
-        Instant expireAt,
         String bottleLabelValue,
         String customerNameOrNickname,
         String customerPhone,
@@ -21,19 +19,10 @@ public record SavedBottleRequest(
         // 存酒作废的主管复核形同虚设。
         // P0#4 散客存酒登记扩展（openapi-p0.json F4/F7）：登记照片证据 + 人工备注。
         List<String> registrationPhotoRefs,
-        String manualNote
+        // 第十八批 AP 段 254-R1：人工备注登记必填（BSM:1170）。
+        String manualNote,
+        // 第十八批 AP 段 254-R4：客人本人手机短信验证码，核验通过才登记，即视为取得隐私同意（第十八批裁决 57）。
+        // 254-R2：到期日不再收请求，由服务端按项目存酒有效期在登记时固化（BSM:1072）。
+        String verificationCode
 ) {
-    /** 向后兼容构造器（不含 A1 存酒登记扩展字段 REQ-30/32）：既有调用方零改动。 */
-    public SavedBottleRequest(
-            String idempotencyKey,
-            String operatorNote,
-            List<String> evidenceAttachmentIds,
-            String customerId,
-            String barId,
-            List<Map<String, Object>> items,
-            Instant expireAt
-    ) {
-        this(idempotencyKey, operatorNote, evidenceAttachmentIds, customerId, barId, items, expireAt,
-                null, null, null, null, null);
-    }
 }

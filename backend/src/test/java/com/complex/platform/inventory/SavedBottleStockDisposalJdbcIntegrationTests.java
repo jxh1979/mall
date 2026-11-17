@@ -1,6 +1,6 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -205,6 +205,21 @@ class SavedBottleStockDisposalJdbcIntegrationTests {
                 .isEqualTo("completed");
     }
 
+    // 第十八批 AP 段第 229 条 229-R9、229-R3⑧（PGM:966「……酒水和可追责物品从库房到客人的全过程必须可追溯。」）：网页库存移动不再预填假溯源码、
+    // 不再带写死附件——非存酒库位出库不带追踪码与附件照常即时扣减，流水追踪码为空、附件为空。
+    @Test
+    void ordinaryOutboundWithoutTraceCodeOrEvidenceKeepsBothEmpty() throws Exception {
+        jdbc.update("INSERT INTO inventory_stock_balances(id,item_id,location_id,quantity,reserved_quantity,available_quantity,merchant_id,project_id,warehouse_id,updated_at) VALUES(?,?,?,?,0,?,?,?,?,now())",
+                "o1302_bbal_" + suffix, item, barWarehouse, 3, 3, merchant, project, barWarehouse);
+        mockMvc.perform(post("/api/v1/inventory/stock-movements").with(staff).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"idempotency_key\":\"" + UUID.randomUUID() + "\",\"from_location_id\":\"" + barWarehouse + "\","
+                                + "\"items\":[{\"item_id\":\"" + item + "\",\"quantity\":1,\"unit\":\"瓶\"}]}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.trace_code").doesNotExist())
+                .andExpect(jsonPath("$.data.evidence_attachment_ids").isEmpty());
+        assertThat(balance(barWarehouse)).isEqualTo(2);
+    }
+
     // R2：任一方驳回 → 不扣库存，调整单置驳回。
     @Test
     void rejectedSavedBottleStockDisposalKeepsStock() throws Exception {
@@ -333,11 +348,11 @@ class SavedBottleStockDisposalJdbcIntegrationTests {
                         + "\",\"role\":\"" + role + "\",\"reason\":\"核对无误\"}"));
     }
 
-    /** 后台库存台账「登记出库」的真实请求形状（InventoryLedgerPage.submitMovement，蛇形键）。 */
+    /** 后台库存台账「登记出库」的真实请求形状（InventoryLedgerPage.submitMovement，蛇形键；第 229 条起入库位置、追踪码空着不发，不带附件）。 */
     private String outboundBody(String from, String note) {
         return "{\"idempotency_key\":\"" + UUID.randomUUID() + "\",\"operator_note\":\"" + note + "\","
-                + "\"evidence_attachment_ids\":[],\"from_location_id\":\"" + from + "\",\"to_location_id\":\"\","
-                + "\"items\":[{\"item_id\":\"" + item + "\",\"quantity\":1,\"unit\":\"瓶\"}],\"trace_code\":\"\"}";
+                + "\"from_location_id\":\"" + from + "\","
+                + "\"items\":[{\"item_id\":\"" + item + "\",\"quantity\":1,\"unit\":\"瓶\"}]}";
     }
 
     private String reviewId() {

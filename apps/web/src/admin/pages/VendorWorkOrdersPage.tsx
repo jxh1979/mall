@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import React from "react";
 import { formatBusinessStatus } from "../i18n/statusLabels";
 import { TechDetails } from "../components/TechDetails";
@@ -74,8 +74,8 @@ export function VendorWorkOrdersPage({ api, setActionResult, setGlobalError, eff
   const [equipmentRows, setEquipmentRows] = React.useState<VendorEquipmentRow[]>([]);
   const [equipmentNotice, setEquipmentNotice] = React.useState<string | null>(null);
   const [selectedId, setSelectedId] = React.useState("");
-  const [note, setNote] = React.useState("外包维保现场处理");
-  const [resolution, setResolution] = React.useState("已完成维保并上传现场记录");
+  const [note, setNote] = React.useState("");
+  const [resolution, setResolution] = React.useState("");
   const [kpiFocus, setKpiFocus] = React.useState<KpiFocus | null>(readKpiFocusFromUrl);
   // 行明细抽屉：整行可点 → 该工单/设备完整字段（枚举中文·时间中文·处理人可溯源）。
   const [detail, setDetail] = React.useState<{ title: string; fields: RowDetailField[] } | null>(null);
@@ -146,9 +146,13 @@ export function VendorWorkOrdersPage({ api, setActionResult, setGlobalError, eff
       setFormError("请选择一条工单");
       return;
     }
+    if (action === "complete" && !resolution.trim()) {
+      setFormError("完成说明不能为空。");
+      return;
+    }
     const request = {
       idempotencyKey: nextKey(`vendor-work-order-${action}`),
-      note,
+      note: note.trim() ? note : undefined,
       resolution: action === "complete" ? resolution : undefined,
     };
     await runAction(`vendor_work_order_${action}`, request, () => api.post(`/api/v1/facility/work-orders/${encodeURIComponent(selected.id)}/${action}`, request));

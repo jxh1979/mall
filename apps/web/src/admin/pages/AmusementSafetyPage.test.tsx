@@ -191,11 +191,12 @@ describe("AmusementSafetyPage 巡检动作停发操作备注", () => {
     window.history.replaceState({}, "", "/admin/amusement/safety");
   });
 
+  // 第十八批 AP 段第 229 条：整改说明不再预填、复检结论改由人选（229-R1、229-R6），点按钮前先填说明、选结论；复检不通过不发 comment。
   it.each([
-    ["提交巡检", "amusement-safety-submit", "submit"],
-    ["整改", "amusement-safety-rectify", "rectify"],
-    ["复检", "amusement-safety-recheck", "recheck"],
-  ])("%s请求体不含 operator_note", async (_label, testId, action) => {
+    ["提交巡检", "amusement-safety-submit", "submit", "", ""],
+    ["整改", "amusement-safety-rectify", "rectify", "amusement-safety-rectify-note", "已更换防护垫"],
+    ["复检", "amusement-safety-recheck", "recheck", "amusement-safety-recheck-result", "fail"],
+  ])("%s请求体不含 operator_note", async (_label, testId, action, fieldTestId, fieldValue) => {
     const fetchMock = vi.fn().mockImplementation((input: RequestInfo | URL) => {
       const url = String(input);
       if (url.includes("/amusement/safety-inspections")) return Promise.resolve(envelope(ROWS));
@@ -206,6 +207,10 @@ describe("AmusementSafetyPage 巡检动作停发操作备注", () => {
       setActionResult={vi.fn()} setGlobalError={vi.fn()} effectivePermissions={ADMIN_PERMS} />);
     await waitFor(() => expect(screen.getByTestId("amusement-safety-row-i-1")).toBeTruthy());
     await waitFor(() => expect((screen.getByTestId(testId) as HTMLButtonElement).disabled).toBe(false));
+    if (fieldTestId) {
+      await waitFor(() => expect(screen.queryByTestId(fieldTestId)).not.toBeNull());
+      fireEvent.change(screen.getByTestId(fieldTestId), { target: { value: fieldValue } });
+    }
 
     fireEvent.click(screen.getByTestId(testId));
 
@@ -215,6 +220,6 @@ describe("AmusementSafetyPage 巡检动作停发操作备注", () => {
     expect(String(url)).toContain(`/api/v1/amusement/safety-inspections/i-1/${action}`);
     const body = JSON.parse(String((init as RequestInit).body)) as Record<string, unknown>;
     expect(body).not.toHaveProperty("operator_note");
-    expect(body).toHaveProperty("comment");
+    if (action !== "recheck") expect(body).toHaveProperty("comment");
   });
 });

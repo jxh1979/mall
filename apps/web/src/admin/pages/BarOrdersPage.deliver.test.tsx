@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { BarOrdersPage } from "./BarOrdersPage";
@@ -46,5 +46,8 @@ describe("酒吧订单按明细勾选送达", () => {
     await waitFor(() => expect(post).toHaveBeenCalledWith("/api/v1/bar/orders/ord-2/deliver",
       expect.objectContaining({ deliveredItems: [{ orderItemId: "i1", quantity: 2 }] })));
     expect((post.mock.calls[0]?.[1] as { deliveredItems: unknown[] }).deliveredItems).toHaveLength(1);
+    // 第十八批 AP 段第 229 条 229-R3③（PGM:973 送达只要求记时间；先例第 32 条删假附件、不补上传）：送达不再带写死的验收备注与假送达照片。
+    expect(post.mock.calls[0]?.[1]).not.toHaveProperty("operatorNote");
+    expect(post.mock.calls[0]?.[1]).not.toHaveProperty("deliveryPhotoAttachmentIds");
   });
 });

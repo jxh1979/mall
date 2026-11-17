@@ -1,4 +1,4 @@
-// 文件版本：V0.16
+// 文件版本：V0.17
 import type { Page, Route } from "@playwright/test";
 
 type ApiData = Record<string, unknown> | Array<Record<string, unknown>> | null;
@@ -770,16 +770,16 @@ async function handleWrite(route: Route, pathname: string, state: MockState, opt
     return json(route, verification);
   }
   if (pathname === "/api/v1/ticketing/dynamic-pricing-rules") {
-    const rule = dynamicRule(`rule-${state.dynamicPricingRules.length + 1}`, state.tickets[0]?.id ?? "ticket-1", "Weekend Boost", "draft");
+    const rule = dynamicRule(`rule-${state.dynamicPricingRules.length + 1}`, String(bodyValue(body, "ticketTypeId", "ticket_type_id") ?? ""), "Weekend Boost", "draft");
     state.dynamicPricingRules.push(rule);
     return json(route, rule);
   }
   if (/^\/api\/v1\/ticketing\/dynamic-pricing-rules\/[^/]+\/publish$/.test(pathname)) {
-    const rule = state.dynamicPricingRules[0] ?? dynamicRule("rule-1", "ticket-1", "Weekend Boost", "draft");
+    const rule = state.dynamicPricingRules.find((item) => item.id === pathname.split("/").at(-2)) ?? state.dynamicPricingRules[0] ?? dynamicRule("rule-1", "ticket-1", "Weekend Boost", "draft");
     rule.status = "published";
     return json(route, rule);
   }
-  if (pathname === "/api/v1/ticketing/dynamic-pricing/simulations") return json(route, { ticketTypeId: state.tickets[0]?.id ?? "ticket-1", visitDate: "2026-06-20", salesChannel: "web", basePriceCent: 9900, adjustmentCent: 990, finalPriceCent: 10890, matchedRuleId: state.dynamicPricingRules[0]?.id, explanation: "mock dynamic pricing simulation" });
+  if (pathname === "/api/v1/ticketing/dynamic-pricing/simulations") return json(route, { ticketTypeId: bodyValue(body, "ticketTypeId", "ticket_type_id"), visitDate: bodyValue(body, "visitDate", "visit_date") ?? now.slice(0, 10), salesChannel: "web", basePriceCent: 9900, adjustmentCent: 990, finalPriceCent: 10890, matchedRuleId: state.dynamicPricingRules[0]?.id, explanation: "mock dynamic pricing simulation" });
   if (pathname === "/api/v1/ticketing/orders") {
     const rule = state.dynamicPricingRules.find((item) => item.status === "published");
     return json(route, { id: "ticket-order-1", orderNo: "TO-MOCK-1", ticketTypeId: state.tickets[0]?.id ?? "ticket-1", quantity: 1, visitDate: "2026-06-20", salesChannel: "web", amountCent: rule ? 10890 : 9900, dynamicPricingRuleId: rule?.id, baseAmountCent: 9900, dynamicAdjustmentCent: rule ? 990 : 0, payStatus: "unpaid", issueStatus: "not_issued", status: "created" });
@@ -805,6 +805,7 @@ async function handleWrite(route: Route, pathname: string, state: MockState, opt
   if (pathname === "/api/v1/amusement/sessions") return json(route, { id: "session-created", projectId: "amuse-created", sessionName: "P0 Web Session", startsAt: now, endsAt: now, capacity: 10, usedCapacity: 0, lockedCapacity: 0, status: "scheduled" });
   if (pathname === "/api/v1/amusement/verifications") return json(route, { id: "amuse-ver-1", status: "success" });
   if (pathname === "/api/v1/amusement/group-bookings") return json(route, { id: "gb-created", bookingStatus: "pending" });
+  if (pathname === "/api/v1/evidence/attachments/upload") return json(route, { id: "evidence-upload-1" });
   if (pathname === "/api/v1/amusement/safety-inspections") {
     const inspection = {
       id: `safety-${state.safetyInspections.length + 1}`,
@@ -816,7 +817,7 @@ async function handleWrite(route: Route, pathname: string, state: MockState, opt
       inspectionStatus: "created",
       rectificationStatus: "pending",
       reopenStatus: "pending",
-      evidenceAttachmentIds: bodyValue(body, "evidenceAttachmentIds", "evidence_attachment_ids") as string[] | undefined ?? ["att-amusement-safety-create"],
+      evidenceAttachmentIds: bodyValue(body, "evidenceAttachmentIds", "evidence_attachment_ids") as string[] | undefined ?? [],
       inspectedAt: String(bodyValue(body, "inspectedAt", "inspected_at") ?? now),
       createdAt: now,
       updatedAt: now,
@@ -985,7 +986,7 @@ async function handleWrite(route: Route, pathname: string, state: MockState, opt
       task.status = "completed";
       task.updatedAt = now;
     }
-    return json(route, { id: `fir-${state.facilityInspectionRecords.length + 1}`, taskId, result: String(bodyValue(body, "result") ?? "normal"), photos: bodyValue(body, "photos") ?? [], checklistResult: bodyValue(body, "checklistResult", "checklist_result") ?? [], note: bodyValue(body, "note"), abnormalNote: bodyValue(body, "abnormalNote", "abnormal_note"), inspectorId: String(bodyValue(body, "inspectorId", "inspector_id") ?? "vendor-user"), recordedAt: now, createdAt: now });
+    return json(route, { id: `fir-${state.facilityInspectionRecords.length + 1}`, taskId, result: String(bodyValue(body, "result") ?? "normal"), photos: bodyValue(body, "photos") ?? [], checklistResult: bodyValue(body, "checklistResult", "checklist_result") ?? [], note: bodyValue(body, "note"), abnormalNote: bodyValue(body, "abnormalNote", "abnormal_note"), inspectorId: options.user?.id ?? "vendor-user", recordedAt: now, createdAt: now });
   }
   const facilityInspectionException = pathname.match(/^\/api\/v1\/facility\/inspections\/tasks\/([^/]+)\/report-exception$/);
   if (facilityInspectionException) {
@@ -1001,13 +1002,13 @@ async function handleWrite(route: Route, pathname: string, state: MockState, opt
       taskId,
       result: "abnormal",
       photos: bodyValue(body, "photos") ?? [],
-      qrCode: bodyValue(body, "qrCode", "qr_code") ?? "QR-EXCEPTION",
+      qrCode: bodyValue(body, "qrCode", "qr_code") ?? null,
       gpsLat: bodyValue(body, "gpsLat", "gps_lat") ?? null,
       gpsLng: bodyValue(body, "gpsLng", "gps_lng") ?? null,
       checklistResult: bodyValue(body, "checklistResult", "checklist_result") ?? [],
       note: bodyValue(body, "note"),
       abnormalNote: bodyValue(body, "abnormalNote", "abnormal_note"),
-      inspectorId: String(bodyValue(body, "inspectorId", "inspector_id") ?? "vendor-user"),
+      inspectorId: options.user?.id ?? "vendor-user",
       recordedAt: now,
       createdAt: now,
     };

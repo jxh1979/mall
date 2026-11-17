@@ -1,6 +1,6 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.15
+// 文件版本：V0.16
 
 import java.time.Instant;
 import java.util.List;
@@ -224,11 +224,21 @@ public interface InventoryRepository {
         throw new UnsupportedOperationException("saved bottle pickup codes not supported");
     }
 
+    /** 第十八批 AP 段 252-R1：存酒作废原因单列写入（整行保存 saveSavedBottle 按列 SET、不含此列，之后不会冲掉）。 */
+    default void updateSavedBottleCancelReason(String savedBottleId, String reason) {
+        throw new UnsupportedOperationException("saved bottle cancel reason not supported");
+    }
+
     default SavedBottleManualPickupRecord saveSavedBottleManualPickup(SavedBottleManualPickupRecord request) {
         throw new UnsupportedOperationException("saved bottle manual pickups not supported");
     }
 
     default Optional<SavedBottleManualPickupRecord> findSavedBottleManualPickupByIdForUpdate(String id) {
+        throw new UnsupportedOperationException("saved bottle manual pickups not supported");
+    }
+
+    /** 第十八批 AP 段 254-R5：该瓶全部人工例外取酒申请，按创建时间倒序（存酒页按状态办理四步）。 */
+    default List<SavedBottleManualPickupRecord> listSavedBottleManualPickups(String savedBottleId) {
         throw new UnsupportedOperationException("saved bottle manual pickups not supported");
     }
 
@@ -255,6 +265,11 @@ public interface InventoryRepository {
     /** 配置人工例外消费历史条件（按项目 upsert，留痕 updated_by/updated_at；BSM L1073「调整须最高权限审批并留痕」）。 */
     default void saveSavedBottleManualPickupPolicy(SavedBottleManualPickupPolicyRecord policy, String actorId) {
         throw new UnsupportedOperationException("saved bottle manual pickup policy not supported");
+    }
+
+    /** 第十八批 AP 段 254-R7：人工例外消费历史条件全部行（global 出厂行与各项目行）；无库替身返回空表。 */
+    default List<SavedBottleManualPickupPolicyRecord> listSavedBottleManualPickupPolicies() {
+        return List.of();
     }
 
     /** 存酒到期提醒节点：scope_id（global | project:&lt;id&gt;）→ 到期前第 N 天（降序）；无配置返回空 → 不发到期提醒。 */
@@ -314,6 +329,11 @@ public interface InventoryRepository {
     /** 配置转存业务参数（upsert；已有行 version+1，留痕 updated_by/updated_at）；返回落库后的行（含新 version）。 */
     default SavedBottleRenewalPolicyRecord saveSavedBottleRenewalPolicy(SavedBottleRenewalPolicyRecord policy, String actorId) {
         throw new UnsupportedOperationException("saved bottle renewal policy not supported");
+    }
+
+    /** 第十八批 AP 段 254-R7：转存业务参数全部行（存酒有效期、转存次数上限、顺延期限）；无库替身返回空表。 */
+    default List<SavedBottleRenewalPolicyRecord> listSavedBottleRenewalPolicies() {
+        return List.of();
     }
 
     // ===== FS-017 存酒作废后补存/赔付、门店退出交接（default 实现只为不改动 NYI 桩仓；Jdbc 与单测内存仓各自实现） =====

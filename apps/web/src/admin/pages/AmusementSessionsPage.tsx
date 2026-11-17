@@ -1,4 +1,4 @@
-// 文件版本：V0.05
+// 文件版本：V0.06
 import React from "react";
 import { formatActionResult } from "../components/ActionResultView";
 import { TechDetails } from "../components/TechDetails";
@@ -113,7 +113,7 @@ export function AmusementSessionsPage({ api, setActionResult, setGlobalError, ef
   const [projects, setProjects] = React.useState<AmusementProjectRow[]>([]);
   const [sessions, setSessions] = React.useState<AmusementSessionRow[]>([]);
   const [verifications, setVerifications] = React.useState<AmusementVerificationRow[]>([]);
-  const [sessionName, setSessionName] = React.useState("验收场次");
+  const [sessionName, setSessionName] = React.useState("");
   const [sessionProjectId, setSessionProjectId] = React.useState("");
   const [startsAt, setStartsAt] = React.useState("");
   const [endsAt, setEndsAt] = React.useState("");

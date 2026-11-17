@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -72,6 +72,8 @@ describe("AmusementSessionsPage 引导式新增场次(phase-7)", () => {
     await waitFor(() => expect(screen.getByTestId("amusement-session-create-open")).toBeTruthy());
     fireEvent.click(screen.getByTestId("amusement-session-create-open"));
 
+    // 第十八批 AP 段第 229 条 229-R5：场次名不预填「验收场次」。
+    expect((screen.getByTestId("amusement-session-name") as HTMLInputElement).value).toBe("");
     fireEvent.change(screen.getByTestId("amusement-session-name"), { target: { value: "验收场次" } });
     fireEvent.change(screen.getByTestId("amusement-session-project"), { target: { value: "amuse-1" } });
     fireEvent.change(screen.getByTestId("amusement-session-start"), { target: { value: "2026-10-18T10:00" } });

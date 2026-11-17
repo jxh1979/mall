@@ -1,4 +1,4 @@
-// 文件版本：V0.03
+// 文件版本：V0.04
 import React from "react";
 import { TechDetails } from "../components/TechDetails";
 import { AdminDataState } from "../components/AdminDataState";
@@ -94,9 +94,9 @@ function nextKey() {
 
 export function IntegrationEventsPage({ api, setActionResult, setGlobalError, effectivePermissions, navigateTo }: AdminPageProps) {
   const [rows, setRows] = React.useState<LoadedEventRow[]>([]);
-  const [pollingNote, setPollingNote] = React.useState("已完成 Webhook 与定时轮询一致性校验");
-  const [retryReason, setRetryReason] = React.useState("供应商超时后人工触发重试");
-  const [compensationNote, setCompensationNote] = React.useState("已核对订单和券核销回流，处理补偿任务");
+  const [pollingNote, setPollingNote] = React.useState("");
+  const [retryReason, setRetryReason] = React.useState("");
+  const [compensationNote, setCompensationNote] = React.useState("");
   const [formError, setFormError] = React.useState("");
   const [busyAction, setBusyAction] = React.useState("");
   const [query, setQuery] = React.useState("");
@@ -175,7 +175,6 @@ export function IntegrationEventsPage({ api, setActionResult, setGlobalError, ef
     const request = {
       idempotency_key: nextKey(),
       operator_note: pollingNote,
-      evidence_attachment_ids: ["att-integration-polling"],
       checked_endpoints: ENDPOINTS.map((endpoint) => endpoint.endpoint),
       pending_count: pendingCount,
       source_count: ENDPOINTS.length,
@@ -188,12 +187,20 @@ export function IntegrationEventsPage({ api, setActionResult, setGlobalError, ef
       setFormError(TEXT.noRetry);
       return false;
     }
+    if (!retryReason.trim()) {
+      setFormError("重试原因不能为空。");
+      return false;
+    }
     return true;
   }
 
   function validateCompensation() {
     if (!selectedCompensation?.id) {
       setFormError(TEXT.noCompensation);
+      return false;
+    }
+    if (!compensationNote.trim()) {
+      setFormError("补偿处理说明不能为空。");
       return false;
     }
     return true;
@@ -220,7 +227,6 @@ export function IntegrationEventsPage({ api, setActionResult, setGlobalError, ef
       idempotency_key: `integration-compensation-${Date.now()}`,
       status: "resolved",
       resolution_note: compensationNote,
-      evidence_attachment_ids: ["att-integration-compensation"],
     };
     await runAction("integration_compensation_resolved", request, () => api.post(`/api/v1/integration/compensation-tasks/${selectedCompensation.id}/resolve`, request));
   }

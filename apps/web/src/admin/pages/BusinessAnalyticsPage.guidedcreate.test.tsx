@@ -57,6 +57,8 @@ describe("BusinessAnalyticsPage 引导式新建复盘锁(phase-9)", () => {
     const { setActionResult } = renderPage(makeApi(getResolver(), post));
     await waitFor(() => expect(screen.getByTestId("business-analytics-lock-open")).toBeTruthy());
     fireEvent.click(screen.getByTestId("business-analytics-lock-open"));
+    // 第十八批 AP 段第 229 条 229-R5：复盘说明不预填「总控周会复盘锁定」，人填。
+    expect((screen.getByTestId("business-analytics-lock-note") as HTMLInputElement).value).toBe("");
 
     fireEvent.change(screen.getByTestId("business-analytics-lock-note"), { target: { value: "月度复盘锁定" } });
     fireEvent.click(screen.getByTestId("business-analytics-lock-guided-next"));

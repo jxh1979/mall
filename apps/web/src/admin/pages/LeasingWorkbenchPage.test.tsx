@@ -1,5 +1,5 @@
-// 文件版本：V0.06
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+// 文件版本：V0.07
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { LeasingWorkbenchPage } from "./LeasingWorkbenchPage";
@@ -60,6 +60,13 @@ function makeApi(contactPhone: () => Response = fullPhone): AdminApi {
 
 const ADMIN_PERMS: EffectivePermissionsState = { status: "ready", value: { grants: [], denies: [], wildcard: true } };
 
+// 中文日期选择器：无值时打开到兜底年月（组件不读环境时钟），点某日即取值并收起。
+function pickDay(testId: string, day: string) {
+  const trigger = screen.getByTestId(testId);
+  fireEvent.click(trigger);
+  fireEvent.click(within(trigger.parentElement as HTMLElement).getByRole("button", { name: day }));
+}
+
 function renderPage(overrides: Partial<AdminPageProps> = {}, contactPhone?: () => Response) {
   const fullProps: AdminPageProps = {
     api: makeApi(contactPhone),
@@ -116,6 +123,7 @@ describe("LeasingWorkbenchPage 新建线索与品牌选所属项目", () => {
     await waitFor(() => expect(screen.getByTestId("leasing-lead-create-open")).toBeTruthy());
     fireEvent.click(screen.getByTestId("leasing-lead-create-open"));
     await waitFor(() => expect(screen.queryByTestId("leasing-lead-project")).not.toBeNull());
+    fireEvent.change(screen.getByTestId("leasing-lead-contact-name"), { target: { value: "王经理" } });
     fireEvent.change(screen.getByTestId("leasing-lead-project"), { target: { value: "p-2" } });
     fireEvent.click(screen.getByTestId("leasing-lead-flow-next"));
     fireEvent.click(screen.getByTestId("leasing-lead-create"));
@@ -139,6 +147,7 @@ describe("LeasingWorkbenchPage 新建线索与品牌选所属项目", () => {
     await waitFor(() => expect(screen.getByTestId("leasing-lead-create-open")).toBeTruthy());
     fireEvent.click(screen.getByTestId("leasing-lead-create-open"));
     await waitFor(() => expect(screen.queryByTestId("leasing-lead-project")).not.toBeNull());
+    fireEvent.change(screen.getByTestId("leasing-lead-contact-name"), { target: { value: "王经理" } });
     fireEvent.change(screen.getByTestId("leasing-lead-project"), { target: { value: "p-2" } });
     fireEvent.click(screen.getByTestId("leasing-lead-flow-next"));
     fireEvent.click(screen.getByTestId("leasing-lead-create"));
@@ -292,6 +301,7 @@ describe("LeasingWorkbenchPage KPI 聚焦视图", () => {
       setActionResult.mockClear();
       await waitFor(() => expect((screen.getByTestId("leasing-lead-status-update") as HTMLButtonElement).disabled).toBe(false));
       fireEvent.change(screen.getByTestId("leasing-lead-status"), { target: { value: code } });
+      fireEvent.change(screen.getByTestId("leasing-lead-status-reason"), { target: { value: "品牌方暂停扩店" } });
       fireEvent.click(screen.getByTestId("leasing-lead-status-update"));
       await waitFor(() => expect(setActionResult).toHaveBeenCalledWith(expect.objectContaining({ action: "leasing_lead_status_changed" })));
       const shown = formatActionResult(setActionResult.mock.calls.find((call) => call[0]?.action === "leasing_lead_status_changed")![0]);
@@ -466,8 +476,109 @@ describe("LeasingWorkbenchPage 纯提成签约押金", () => {
     await waitFor(() => expect(screen.getByTestId("leasing-error").textContent).toContain("押金"));
     expect(posts.some((p) => p.url.includes("/sign"))).toBe(false);
     fireEvent.change(screen.getByTestId("leasing-sign-deposit"), { target: { value: "5000" } });
+    pickDay("leasing-sign-effective-date", "1");
+    pickDay("leasing-sign-expiry-date", "28");
     fireEvent.click(screen.getByTestId("leasing-intent-sign"));
     await waitFor(() => expect(posts.some((p) => p.url.includes("/leasing/intents/in-tov/sign"))).toBe(true));
     expect(posts.find((p) => p.url.includes("/leasing/intents/in-tov/sign"))!.body.deposit_cent).toBe(500000);
+  });
+});
+
+// 第十八批 AP 段第 229 条（PGM:502「……转为已流失或已搁置；转换时必须填写原因……」；PGM:899）：229-R4① 线索改状态的原因由人填，
+// 只在转已流失、已搁置时发；229-R5 拉黑原因、跟进内容不预填、为空拦下；229-R10① 新建线索联系人与手机号不预填；
+// 229-R10⑧ 签约生效日、到期日不预填、为空拦下。
+describe("LeasingWorkbenchPage 不预填、原因人填（第 229 条）", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    window.history.replaceState({}, "", "/admin/leasing/workbench");
+  });
+
+  function posted(path: string): Array<Record<string, unknown>> {
+    return vi.mocked(fetch).mock.calls
+      .filter(([url, init]) => (init as RequestInit | undefined)?.method === "POST" && String(url).endsWith(path))
+      .map(([, init]) => JSON.parse(String((init as RequestInit).body)) as Record<string, unknown>);
+  }
+
+  it("新建线索联系人与手机号、拉黑原因、跟进内容初始为空", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("leasing-lead-select-l-1")).toBeTruthy());
+    expect((screen.getByTestId("leasing-brand-blacklist-reason") as HTMLInputElement).value).toBe("");
+    expect((screen.getByTestId("leasing-follow-content") as HTMLInputElement).value).toBe("");
+    fireEvent.click(screen.getByTestId("leasing-lead-create-open"));
+    expect((screen.getByTestId("leasing-lead-contact-name") as HTMLInputElement).value).toBe("");
+    expect((screen.getByTestId("leasing-lead-contact-phone") as HTMLInputElement).value).toBe("");
+  });
+
+  it("线索转已流失不填原因不发请求；填了带 reason；转跟进中原因框留有文字也不发 reason", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("leasing-lead-select-l-1")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("leasing-lead-select-l-1"));
+    await waitFor(() => expect((screen.getByTestId("leasing-lead-status-update") as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.change(screen.getByTestId("leasing-lead-status"), { target: { value: "lost" } });
+    fireEvent.click(screen.getByTestId("leasing-lead-status-update"));
+    expect(screen.getByTestId("leasing-error").textContent).toContain("转为已流失或已搁置必须填写原因。");
+    expect(posted("/leasing/leads/l-1/status")).toHaveLength(0);
+
+    fireEvent.change(screen.getByTestId("leasing-lead-status-reason"), { target: { value: "品牌方暂停扩店" } });
+    fireEvent.click(screen.getByTestId("leasing-lead-status-update"));
+    await waitFor(() => expect(posted("/leasing/leads/l-1/status")).toHaveLength(1));
+    expect(posted("/leasing/leads/l-1/status")[0]).toMatchObject({ status: "lost", reason: "品牌方暂停扩店" });
+
+    await waitFor(() => expect((screen.getByTestId("leasing-lead-status-update") as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.change(screen.getByTestId("leasing-lead-status"), { target: { value: "following_up" } });
+    fireEvent.click(screen.getByTestId("leasing-lead-status-update"));
+    await waitFor(() => expect(posted("/leasing/leads/l-1/status")).toHaveLength(2));
+    expect(posted("/leasing/leads/l-1/status")[1]).toMatchObject({ status: "following_up" });
+    expect(posted("/leasing/leads/l-1/status")[1]).not.toHaveProperty("reason");
+  });
+
+  it("跟进内容、拉黑原因为空不发请求，提示必填", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("leasing-brand-select-br-1")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("leasing-lead-select-l-1"));
+    fireEvent.change(screen.getByTestId("leasing-follow-content"), { target: { value: "" } });
+    fireEvent.click(screen.getByTestId("leasing-follow-add"));
+    expect(screen.getByTestId("leasing-error").textContent).toContain("跟进内容不能为空。");
+    fireEvent.click(screen.getByTestId("leasing-brand-select-br-1"));
+    fireEvent.change(screen.getByTestId("leasing-brand-blacklist-reason"), { target: { value: "" } });
+    fireEvent.click(screen.getByTestId("leasing-brand-blacklist"));
+    expect(screen.getByTestId("leasing-error").textContent).toContain("拉黑原因不能为空。");
+    expect(posted("/leasing/follow-ups")).toHaveLength(0);
+    expect(posted("/leasing/brands/br-1/blacklist")).toHaveLength(0);
+  });
+
+  it("签约生效日、到期日初始为空，空时不发签约，选好后随签约提交", async () => {
+    const posts: Array<{ url: string; body: Record<string, unknown> }> = [];
+    vi.stubGlobal("fetch", vi.fn().mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (init?.method === "POST") {
+        posts.push({ url, body: JSON.parse(String(init.body ?? "{}")) as Record<string, unknown> });
+        return Promise.resolve(envelope([]));
+      }
+      if (url.includes("/leasing/leads")) return Promise.resolve(envelope(LEADS));
+      if (url.includes("/leasing/intents")) return Promise.resolve(envelope([{ id: "in-fix", lead_id: "l-1", stage: "pending_signing",
+        rent_terms: { rentBillingMode: "fixed_only", baseRentCent: 100000 } }]));
+      if (url.includes("/platform/merchants")) return Promise.resolve(envelope([{ id: "mch-1", display_name: "测试商户" }]));
+      if (url.includes("/platform/business-entities")) return Promise.resolve(envelope([{ id: "ent-1", entity_name: "测试主体" }]));
+      return Promise.resolve(envelope([]));
+    }));
+    render(<LeasingWorkbenchPage api={new AdminApi("test-token")} user={{ id: "u1", username: "admin", accountType: "platform_admin" }}
+      setActionResult={vi.fn()} setGlobalError={vi.fn()} effectivePermissions={ADMIN_PERMS} />);
+    await waitFor(() => expect((screen.getByTestId("leasing-intent-select-in-fix") as HTMLInputElement).checked).toBe(true));
+    await waitFor(() => expect(screen.getByRole("option", { name: /测试商户/ })).toBeTruthy());
+    await waitFor(() => expect(screen.getByRole("option", { name: /测试主体/ })).toBeTruthy());
+    expect(screen.getByTestId("leasing-sign-effective-date").textContent).toContain("选择日期");
+    expect(screen.getByTestId("leasing-sign-expiry-date").textContent).toContain("选择日期");
+    fireEvent.change(screen.getByTestId("leasing-sign-merchant"), { target: { value: "mch-1" } });
+    fireEvent.change(screen.getByTestId("leasing-sign-subject"), { target: { value: "ent-1" } });
+    fireEvent.click(screen.getByTestId("leasing-intent-sign"));
+    expect(screen.getByTestId("leasing-error").textContent).toContain("请填写合同生效日和到期日。");
+    expect(posts.some((p) => p.url.includes("/sign"))).toBe(false);
+
+    pickDay("leasing-sign-effective-date", "1");
+    pickDay("leasing-sign-expiry-date", "28");
+    fireEvent.click(screen.getByTestId("leasing-intent-sign"));
+    await waitFor(() => expect(posts.some((p) => p.url.includes("/leasing/intents/in-fix/sign"))).toBe(true));
+    expect(posts.find((p) => p.url.includes("/leasing/intents/in-fix/sign"))!.body).toMatchObject({ effective_date: "2025-01-01", expiry_date: "2025-01-28" });
   });
 });

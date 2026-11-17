@@ -61,6 +61,7 @@ describe("BusinessAnalyticsPage 复盘锁定真落库(V216)", () => {
     // 引导式 phase-9：先点主按钮开弹窗，翻到确认页再点提交（默认复盘说明已带值）。
     await waitFor(() => expect(screen.getByTestId("business-analytics-lock-open")).toBeTruthy());
     fireEvent.click(screen.getByTestId("business-analytics-lock-open"));
+    fireEvent.change(screen.getByTestId("business-analytics-lock-note"), { target: { value: "总控周会复盘" } });
     fireEvent.click(screen.getByTestId("business-analytics-lock-guided-next"));
     await waitFor(() => expect(screen.getByTestId("business-analytics-lock-guided-summary")).toBeTruthy());
     fireEvent.click(screen.getByTestId("business-analytics-lock-snapshot"));

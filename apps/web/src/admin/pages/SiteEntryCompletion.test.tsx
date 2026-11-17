@@ -1,4 +1,4 @@
-// 文件版本：V0.03
+// 文件版本：V0.04
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup } from "@testing-library/react";
@@ -31,6 +31,8 @@ describe("施工整改闭环", () => {
     const fileInput = screen.getByTestId("vendor-site-entry-completion-attachments");
     const file = new File(["actual-image"], "completion.png", { type: "image/png" });
     fireEvent.change(fileInput, { target: { files: [file] } });
+    // 第十八批 AP 段第 229 条 229-R5：完工说明不再预填，先填再提交。
+    fireEvent.change(screen.getByTestId("vendor-site-entry-completion-note"), { target: { value: "已整改并补拍现场照片" } });
     fireEvent.click(screen.getByTestId("vendor-site-entry-completion-upload"));
     await waitFor(() => expect(p.api.post).toHaveBeenCalled());
     expect(p.api.postForm).toHaveBeenCalledWith("/api/v1/facility/site-entry-reports/report-a/attachments", expect.any(FormData));

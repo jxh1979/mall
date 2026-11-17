@@ -1,6 +1,6 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -10,7 +10,6 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.complex.platform.support.StaffRequestFixture;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jayway.jsonpath.JsonPath;
-import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -77,11 +76,13 @@ class SavedBottleTransferWebShape198R5Tests {
         create.put("idempotency_key", "b52sw-create-" + s);
         create.put("bar_id", merchant);
         create.put("items", List.of(Map.of("item_id", item, "quantity", 2, "bottle_name", "存酒形状威士忌", "unit", "bottle")));
-        create.put("expire_at", Instant.now().plusSeconds(30L * 86400).toString());
         create.put("bottle_label_value", "LBL-B52SW");
         create.put("customer_name_or_nickname", "出让人");
         create.put("customer_phone", "155" + digits);
         create.put("registration_photo_refs", List.of("reg_photo_b52sw"));
+        // 第十八批 AP 段 254-R1、254-R4：登记人工备注必填、客人报隐私同意短信验证码（测试环境固定码）；254-R2：到期日服务端固化，不再发。
+        create.put("manual_note", "吧台登记");
+        create.put("verification_code", "000000");
         String bottleId = JsonPath.read(call("/api/v1/inventory/saved-bottles", create).andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString(), "$.data.id");
 

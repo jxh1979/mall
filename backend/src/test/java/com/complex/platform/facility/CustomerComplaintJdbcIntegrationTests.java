@@ -1,6 +1,6 @@
 package com.complex.platform.facility;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -188,6 +188,25 @@ class CustomerComplaintJdbcIntegrationTests {
     void cannotRateBeforeResolution() throws Exception {
         String id = read(submit(token, "排队太久", List.of()).andExpect(status().isOk()), "$.data.work_order_id");
         rate(token, id, 3).andExpect(status().isConflict()).andExpect(jsonPath("$.detail_code").value("COMPLAINT_NOT_RESOLVED"));
+    }
+
+    /**
+     * 第十八批 AP 段第 229 条 229-R5（PGM:968「……人工只补原因和证据。……」）：完成工单不带处理结果 400、工单仍在处理中——
+     * 网页处理结果不再预填「现场处理完成」、也不再兜底「已处理」，空着点完成由网页拦下。
+     */
+    @Test
+    void completeWithoutResolutionIsRejected() throws Exception {
+        String id = read(submit(token, "包厢灯不亮", List.of()).andExpect(status().isOk()), "$.data.work_order_id");
+        String handler = "usr_cc_handler_" + suffix;
+        grant(handler, "facility.work_order.manage");
+        staffPost(staff("usr_cc_care_" + suffix, "facility.work_order.manage"), "/api/v1/facility/work-orders/" + id + "/assign",
+                Map.of("assignee_id", handler)).andExpect(status().isOk());
+        RequestPostProcessor worker = staff(handler, "facility.work_order.manage");
+        staffPost(worker, "/api/v1/facility/work-orders/" + id + "/start", Map.of()).andExpect(status().isOk());
+        staffPost(worker, "/api/v1/facility/work-orders/" + id + "/complete", Map.of())
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.detail_code").value("VALIDATION_FAILED"));
+        assertThat(jdbc.queryForObject("SELECT status FROM facility_work_orders WHERE id = ?", String.class, id)).isEqualTo("processing");
     }
 
     // ---------- helpers ----------

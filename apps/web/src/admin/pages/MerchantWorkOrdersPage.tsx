@@ -144,9 +144,9 @@ export function MerchantWorkOrdersPage({ api, setActionResult, setGlobalError, e
   const [complaintFollowup, setComplaintFollowup] = React.useState<MerchantWorkOrderRow | null>(null);
   // 第十八批 M 段第 117 条 117-R5：选中工单的「用料」面板（BSM:1380；承担方争议按第十八批裁决 29 停在原状态转上级判定）。
   const [materialsOpen, setMaterialsOpen] = React.useState(false);
-  const [processNote, setProcessNote] = React.useState("已到场处理，等待商户确认");
+  const [processNote, setProcessNote] = React.useState("");
   const [targetStatus, setTargetStatus] = React.useState("processing");
-  const [resolution, setResolution] = React.useState("已维修完成并确认关闭");
+  const [resolution, setResolution] = React.useState("");
   // 102-R2：不替提单方默认评分（BSM:1385「满意度在回访/验收时由提单方评分」），不填发 null。
   const [satisfactionScore, setSatisfactionScore] = React.useState("");
   const [query, setQuery] = React.useState("");
@@ -245,7 +245,6 @@ export function MerchantWorkOrdersPage({ api, setActionResult, setGlobalError, e
     const request = {
       idempotencyKey: nextKey("merchant-work-order-assign"),
       operatorNote: "完整后台商户工单派单",
-      evidenceAttachmentIds: ["att-merchant-work-order-assign"],
       ownerDepartment,
       ownerUserId,
     };
@@ -264,7 +263,6 @@ export function MerchantWorkOrdersPage({ api, setActionResult, setGlobalError, e
     const request = {
       idempotencyKey: nextKey("merchant-work-order-process"),
       operatorNote: processNote,
-      evidenceAttachmentIds: ["att-merchant-work-order-process"],
       targetStatus,
     };
     await runAction("merchant_work_order_processed", request, () => api.post(`/api/v1/merchant-service/work-orders/${selected.id}/actions`, request));
@@ -286,7 +284,6 @@ export function MerchantWorkOrdersPage({ api, setActionResult, setGlobalError, e
     const request = {
       idempotencyKey: nextKey("merchant-work-order-close"),
       operatorNote: "完整后台关闭商户服务工单",
-      evidenceAttachmentIds: ["att-merchant-work-order-close"],
       resolution,
       satisfactionScore: satisfactionScore.trim() ? Number(satisfactionScore) : null,
       ...(closeReason.trim() ? { closeReason: closeReason.trim() } : {}),

@@ -1,4 +1,4 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 // FS-017（BSM L1072「存酒作废需照片+视频双证据+主管复核」）：作废表单缺视频 id 时 precheck 拦截并提示；填齐后 POST …/cancel 含双证据。
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -61,5 +61,27 @@ describe("StoredWinePage 作废（FS-017）", () => {
     ));
     // 第十八批 AF 段 198-R5：服务端不读 operator_note，请求体不再带（本页备注框只随补救登记提交）。
     expect(vi.mocked(api.post).mock.calls.find(([path]) => path === "/api/v1/inventory/saved-bottles/w-1/cancel")![1]).not.toHaveProperty("operator_note");
+  });
+
+  // 第十八批 AP 段第 252 条 252-R1（BSM:1940「……存酒作废……必须记录原因、员工、时间、点位、照片、视频和主管复核结果。」）：作废原因必填。
+  it("252-R1：作废原因为空 → 不发请求并提示「作废须填写作废原因」；填写后请求体 reason 等于所填", async () => {
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+    const api = makeApi();
+    renderPage(api);
+    await waitFor(() => expect(screen.queryByTestId("stored-wine-cancel-form")).not.toBeNull());
+    await waitFor(() => expect(api.get).toHaveBeenCalledWith("/api/v1/inventory/saved-bottles/w-1/remedies"), { timeout: 5000 });
+    fireEvent.change(screen.getByTestId("stored-wine-cancel-photos"), { target: { value: "att_photo" } });
+    fireEvent.change(screen.getByTestId("stored-wine-cancel-videos"), { target: { value: "att_video" } });
+    fireEvent.click(screen.getByTestId("stored-wine-cancel"));
+    await waitFor(() => expect(screen.getByTestId("stored-wine-cancel-error").textContent).toContain("作废须填写作废原因"));
+    expect(confirmSpy).not.toHaveBeenCalled();
+    expect(api.post).not.toHaveBeenCalledWith(expect.stringContaining("/cancel"), expect.anything());
+
+    fireEvent.change(screen.getByTestId("stored-wine-cancel-reason"), { target: { value: " 酒瓶破损 " } });
+    fireEvent.click(screen.getByTestId("stored-wine-cancel"));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith(
+      "/api/v1/inventory/saved-bottles/w-1/cancel",
+      expect.objectContaining({ reason: "酒瓶破损" }),
+    ));
   });
 });

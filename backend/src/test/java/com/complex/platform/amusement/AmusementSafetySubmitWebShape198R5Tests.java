@@ -1,6 +1,6 @@
 package com.complex.platform.amusement;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -22,7 +22,8 @@ import org.springframework.transaction.annotation.Transactional;
  * 第十八批 AF 段第 198 条 198-R5（集成、游乐、合规与证据）：契约删去 AmusementSafetyActionRequest 的 operator_note
  * （AmusementInspectionService.submitSafetyInspectionInternal 只读 comment、attachment_ids、evidence_attachment_ids）、游乐安全页
  * （AmusementSafetyPage）提交巡检停发写死备注后，按停发后的网页形状——idempotency_key、attachment_ids、action_result、comment——
- * 走真实 HTTP、真实授权链提交巡检。attachment_ids 照网页现发的写死值（被读取，留给第 229 条）。入口未改，本类只锁现行为，不先红。
+ * 走真实 HTTP、真实授权链提交巡检。第十八批 AP 段第 229 条 229-R1（PGM:968「……人工只补原因和证据。……」）：网页停发写死的附件编号（没上传就不带 attachment_ids），
+ * 提交说明改为如实的「提交巡检」。入口未改，本类只锁现行为，不先红。
  */
 @SpringBootTest(properties = {
         "spring.datasource.url=${SETTLE_TEST_DB_URL:jdbc:postgresql://127.0.0.1:5432/complex_test}",
@@ -62,12 +63,12 @@ class AmusementSafetySubmitWebShape198R5Tests {
         // 巡检提交走 currentMerchantScope：由该游乐项目所属商户的员工提交。
         RequestPostProcessor inspector = new StaffRequestFixture(jdbc)
                 .staff("usr_b52ws_insp_" + digits, "staff", project, merchant, "amusement.safety_inspection.submit");
-        String comment = "发现高风险项，进入整改";
+        String comment = "提交巡检";
 
         mockMvc.perform(post("/api/v1/amusement/safety-inspections/" + inspection + "/submit").with(inspector)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"idempotency_key\":\"amusement-safety-submit-b52ws-" + digits + "\","
-                                + "\"attachment_ids\":[\"att-amusement-safety-submit\"],\"action_result\":\"submitted\",\"comment\":\"" + comment + "\"}"))
+                                + "\"action_result\":\"submitted\",\"comment\":\"" + comment + "\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.inspection_status").value("submitted"))
                 .andExpect(jsonPath("$.data.rectification_status").value("pending"));

@@ -1,6 +1,6 @@
 package com.complex.platform.leasing;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -277,7 +277,7 @@ class LeasingIntentGateJdbcIntegrationTests {
 
         jdbc.update("UPDATE leasing_leads SET status='signed' WHERE id=?", lead);
         String statusKey = "lls_" + UUID.randomUUID();
-        send(mgr, "/api/v1/leasing/leads/" + lead + "/status", "{\"status\":\"negotiating\",\"reason\":\"完整后台推进线索状态\","
+        send(mgr, "/api/v1/leasing/leads/" + lead + "/status", "{\"status\":\"negotiating\",\"reason\":\"已约第二轮洽谈\","
                 + "\"idempotency_key\":\"" + statusKey + "\"}")
                 .andExpect(status().isConflict()).andExpect(jsonPath("$.detail_code").value("LEASING_LEAD_ALREADY_SIGNED"));
         assertThat(failureCodes("leasing.lead.status_change_failed", statusKey)).containsExactly("LEASING_LEAD_ALREADY_SIGNED");
@@ -287,6 +287,29 @@ class LeasingIntentGateJdbcIntegrationTests {
                 + "\"content\":\"\",\"idempotency_key\":\"" + followUpKey + "\"}")
                 .andExpect(status().isBadRequest());
         assertThat(failureCodes("leasing.follow_up.create_failed", followUpKey)).containsExactly("VALIDATION_FAILED");
+    }
+
+    /**
+     * 第十八批 AP 段第 229 条 229-R4①、229-R5（PGM:502「……转为已流失或已搁置；转换时必须填写原因……」）：线索转已流失不带原因 400，
+     * 同一线索带原因转已流失落所填原因；另一线索转跟进中不带原因照常、不留流失原因；拉黑不带原因 400。
+     * 网页只在转已流失、已搁置时发人填的原因，拉黑原因不再预填。
+     */
+    @Test
+    void leadStatusReasonOnlyForLostOrOnHoldAndBlacklistNeedsReason() throws Exception {
+        String lead = lead(null);
+        send(mgr, "/api/v1/leasing/leads/" + lead + "/status", "{\"status\":\"lost\",\"idempotency_key\":\"lls_" + UUID.randomUUID() + "\"}")
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.detail_code").value("VALIDATION_FAILED"));
+        send(mgr, "/api/v1/leasing/leads/" + lead + "/status", "{\"status\":\"lost\",\"reason\":\"品牌方暂停扩店\","
+                + "\"idempotency_key\":\"lls_" + UUID.randomUUID() + "\"}")
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.lost_or_hold_reason").value("品牌方暂停扩店"));
+
+        String other = lead(null);
+        send(mgr, "/api/v1/leasing/leads/" + other + "/status", "{\"status\":\"following_up\",\"idempotency_key\":\"lls_" + UUID.randomUUID() + "\"}")
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.status").value("following_up"))
+                .andExpect(jsonPath("$.data.lost_or_hold_reason").doesNotExist());
+
+        send(mgr, "/api/v1/leasing/brands/" + brand() + "/blacklist", "{\"blacklist\":true,\"idempotency_key\":\"bl_" + UUID.randomUUID() + "\"}")
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.detail_code").value("VALIDATION_FAILED"));
     }
 
     /** 90-R3（PGM L738、L502「须由具备单独授予的黑名单例外放行权限人员操作」）：没有放行权限的人申请被拒，落 request_failed，不新增放行单。 */

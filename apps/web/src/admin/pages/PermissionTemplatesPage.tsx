@@ -76,7 +76,7 @@ export function PermissionTemplatesPage({ api, setActionResult, setGlobalError, 
   const [validUntil, setValidUntil] = React.useState("");
   const [singleUse, setSingleUse] = React.useState(false);
   const [selectedPermissionCodes, setSelectedPermissionCodes] = React.useState<string[]>([]);
-  const [targetUsersText, setTargetUsersText] = React.useState("user-1");
+  const [targetUsersText, setTargetUsersText] = React.useState("");
   const [copyName, setCopyName] = React.useState("普通员工01");
   const [formError, setFormError] = React.useState("");
   const [submitting, setSubmitting] = React.useState(false);
@@ -141,12 +141,6 @@ export function PermissionTemplatesPage({ api, setActionResult, setGlobalError, 
     setSelectedPermissionCodes(templatePermissionCodes(next));
     setCopyName(`${displayTemplateName(next)}01`);
   }, [mode, rows, selectedId]);
-
-  React.useEffect(() => {
-    if (users.length > 0 && targetUsersText === "user-1") {
-      setTargetUsersText(users[0]?.id ?? "user-1");
-    }
-  }, [targetUsersText, users]);
 
   // 权限分组与左侧菜单对应（分组逻辑与访问治理工作台新建角色共用，见 adminRoutes）。
   const groupedPermissions = React.useMemo(() => groupPermissionsByMenuModule(permissions), [permissions]);

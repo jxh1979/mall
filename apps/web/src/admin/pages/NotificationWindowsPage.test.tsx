@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -10,7 +10,7 @@ const WINDOWS = [
   { windowKey: "contract.renewal", days: 30, description: "商户合同续约提醒提前天数" },
   { windowKey: "leasing.lead_follow_up", days: 3, description: "招商线索未跟进提醒天数" },
 ];
-function makeApi(get = vi.fn().mockImplementation(async (path: string) => (path.includes("reminder-policy") ? [] : WINDOWS)), post = vi.fn().mockResolvedValue({})): AdminApiClient {
+function makeApi(get = vi.fn().mockImplementation(async (path: string) => (path.includes("saved-bottles") ? [] : WINDOWS)), post = vi.fn().mockResolvedValue({})): AdminApiClient {
   return { get, getPaged: vi.fn().mockResolvedValue({ items: [], total: 0, page: 1, size: 10 }), post, put: vi.fn().mockResolvedValue({}), patch: vi.fn().mockResolvedValue({}), delete: vi.fn().mockResolvedValue({}) };
 }
 const ADMIN_PERMS: EffectivePermissionsState = { status: "ready", value: { grants: [], denies: [], wildcard: true } };
@@ -21,7 +21,7 @@ function renderPage(api: AdminApiClient) {
 
 describe("NotificationWindowsPage 提醒窗配置(V219)", () => {
   it("读回提醒窗并展示中文描述", async () => {
-    const get = vi.fn().mockImplementation(async (path: string) => (path.includes("reminder-policy") ? [] : WINDOWS));
+    const get = vi.fn().mockImplementation(async (path: string) => (path.includes("saved-bottles") ? [] : WINDOWS));
     renderPage(makeApi(get));
     await waitFor(() => expect(get).toHaveBeenCalledWith("/api/v1/analytics/notification-windows"));
     await waitFor(() => expect(screen.getByTestId("notification-windows-table").textContent).toContain("续约"));
@@ -55,5 +55,110 @@ describe("NotificationWindowsPage 存酒到期提醒节点", () => {
     expect(sent[0]!.url).toContain("/api/v1/inventory/saved-bottles/reminder-policy");
     expect(sent[0]!.body).toMatchObject({ scope_id: "project:prj_a", reminder_days: [10, 5, 1] });
     expect(sent[0]!.body).toHaveProperty("idempotency_key");
+  });
+});
+
+// 第十八批 AP 段第 254 条 254-R7（BSM:1073「……②申请手机号在本项目内满足后台配置的任一消费历史条件（安全阈值，按项目可配，调整须最高权限审批并留痕……
+// 须同时配置上下限）……」；BSM:1072「……客户存酒有效期（业务参数，按项目可配……须同时配置上下限）……转存次数不得超过后台配置的上限（业务参数，按项目可配……）
+// ……顺延该酒吧当前配置的期限（业务参数，按酒吧可配……）……」）：两项策略各一区块，按权限显示；读出出厂行；缺上下限不发请求；请求体蛇形键。
+describe("NotificationWindowsPage 人工例外取酒消费历史条件与存酒有效期、转存参数（254-R7）", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it("读出两项策略出厂行；缺上下限不发请求；按项目、按酒吧提交蛇形请求体", async () => {
+    const sent: { method: string; url: string; body: Record<string, unknown> }[] = [];
+    vi.stubGlobal("fetch", vi.fn().mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const method = (init?.method ?? "GET").toUpperCase();
+      if (method !== "GET") sent.push({ method, url, body: JSON.parse(String(init?.body)) });
+      const page = (items: unknown[]) => ({ items, page: 1, page_size: items.length, total: items.length });
+      const data = method !== "GET" ? {}
+        : url.includes("/saved-bottles/manual-pickup-policy")
+          ? page([{ project_id: "global", orders_within1m: 2, orders_within3m: 3, orders_total: 5, min_orders: null, max_orders: null }])
+          : url.includes("/saved-bottles/renewal-policy")
+            ? page([
+              { policy_key: "extension_days", scope_id: "global", numeric_value: 30, min_value: null, max_value: null, version: 1 },
+              { policy_key: "max_renewals", scope_id: "global", numeric_value: 2, min_value: null, max_value: null, version: 1 },
+              { policy_key: "validity_days", scope_id: "global", numeric_value: 30, min_value: null, max_value: null, version: 1 },
+            ])
+            : page([]);
+      return Promise.resolve(new Response(JSON.stringify({ success: true, code: "OK", message: "success", data }), { status: 200, headers: { "content-type": "application/json" } }));
+    }));
+    renderPage(new AdminApi("test-token"));
+    await waitFor(() => expect(screen.queryByTestId("saved-bottle-manual-pickup-policy-table")?.textContent ?? "").toContain("出厂默认"));
+    await waitFor(() => expect(screen.queryByTestId("saved-bottle-renewal-policy-table")?.textContent ?? "").toContain("存酒有效期天数（按项目）"));
+    expect(screen.getByTestId("saved-bottle-manual-pickup-policy-table").textContent).toContain("2");
+    expect(screen.getByTestId("saved-bottle-renewal-policy-table").textContent).toContain("转存顺延天数（按酒吧）");
+
+    fireEvent.change(screen.getByLabelText("消费历史条件项目 id"), { target: { value: "prj_a" } });
+    fireEvent.change(screen.getByLabelText("近 1 个月笔数"), { target: { value: "2" } });
+    fireEvent.change(screen.getByLabelText("近 3 个月笔数"), { target: { value: "3" } });
+    fireEvent.change(screen.getByLabelText("累计笔数"), { target: { value: "5" } });
+    fireEvent.change(screen.getByLabelText("笔数下限"), { target: { value: "1" } });
+    fireEvent.click(screen.getByTestId("saved-bottle-manual-pickup-policy-save"));
+    await waitFor(() => expect(screen.getByTestId("saved-bottle-manual-pickup-policy-error").textContent).toContain("须同时填写三个条件值与上下限"));
+    expect(sent).toHaveLength(0);
+
+    fireEvent.change(screen.getByLabelText("笔数上限"), { target: { value: "10" } });
+    fireEvent.click(screen.getByTestId("saved-bottle-manual-pickup-policy-save"));
+    await waitFor(() => expect(sent).toHaveLength(1));
+    expect(sent[0]!.method).toBe("PUT");
+    expect(sent[0]!.url).toContain("/api/v1/inventory/saved-bottles/manual-pickup-policy");
+    expect(sent[0]!.body).toMatchObject({ project_id: "prj_a", orders_within1m: 2, orders_within3m: 3, orders_total: 5, min_orders: 1, max_orders: 10 });
+    expect(sent[0]!.body).toHaveProperty("idempotency_key");
+
+    fireEvent.change(screen.getByLabelText("转存参数"), { target: { value: "validity_days" } });
+    fireEvent.change(screen.getByLabelText("参数范围 id"), { target: { value: "prj_a" } });
+    fireEvent.change(screen.getByLabelText("参数值"), { target: { value: "45" } });
+    fireEvent.change(screen.getByLabelText("参数下限"), { target: { value: "7" } });
+    fireEvent.click(screen.getByTestId("saved-bottle-renewal-policy-save"));
+    await waitFor(() => expect(screen.getByTestId("saved-bottle-renewal-policy-error").textContent).toContain("须同时填写参数值及上下限"));
+    expect(sent).toHaveLength(1);
+
+    fireEvent.change(screen.getByLabelText("参数上限"), { target: { value: "90" } });
+    fireEvent.click(screen.getByTestId("saved-bottle-renewal-policy-save"));
+    await waitFor(() => expect(sent).toHaveLength(2));
+    expect(sent[1]!.url).toContain("/api/v1/inventory/saved-bottles/renewal-policy");
+    expect(sent[1]!.body).toMatchObject({ policy_key: "validity_days", scope_id: "project:prj_a", value: 45, min_value: 7, max_value: 90 });
+    expect(sent[1]!.body).toHaveProperty("idempotency_key");
+
+    fireEvent.change(screen.getByLabelText("转存参数"), { target: { value: "extension_days" } });
+    fireEvent.change(screen.getByLabelText("参数范围 id"), { target: { value: "bar_1" } });
+    fireEvent.change(screen.getByLabelText("参数值"), { target: { value: "20" } });
+    fireEvent.change(screen.getByLabelText("参数下限"), { target: { value: "7" } });
+    fireEvent.change(screen.getByLabelText("参数上限"), { target: { value: "60" } });
+    fireEvent.click(screen.getByTestId("saved-bottle-renewal-policy-save"));
+    await waitFor(() => expect(sent).toHaveLength(3));
+    expect(sent[2]!.body).toMatchObject({ policy_key: "extension_days", scope_id: "bar:bar_1", value: 20, min_value: 7, max_value: 60 });
+  });
+
+  it("服务端拒绝（非最高权限）文案上屏", async () => {
+    const put = vi.fn().mockRejectedValue(new Error("人工例外取酒消费历史条件的调整须由最高权限本人审批"));
+    const api = { ...makeApi(), put };
+    renderPage(api);
+    await waitFor(() => expect(screen.queryByTestId("saved-bottle-manual-pickup-policy")).not.toBeNull());
+    await waitFor(() => expect(api.get).toHaveBeenCalledWith("/api/v1/inventory/saved-bottles/manual-pickup-policy"));
+    fireEvent.change(screen.getByLabelText("消费历史条件项目 id"), { target: { value: "prj_a" } });
+    for (const [label, value] of [["近 1 个月笔数", "2"], ["近 3 个月笔数", "3"], ["累计笔数", "5"], ["笔数下限", "1"], ["笔数上限", "10"]] as const) {
+      fireEvent.change(screen.getByLabelText(label), { target: { value } });
+    }
+    fireEvent.click(screen.getByTestId("saved-bottle-manual-pickup-policy-save"));
+    await waitFor(() => expect(screen.getByTestId("saved-bottle-manual-pickup-policy-error").textContent).toContain("须由最高权限本人审批"));
+  });
+
+  it("两区块按权限显示：只持消费历史条件码只出该区块，只持提醒节点码两区块都不出", async () => {
+    const only = (grants: string[]): EffectivePermissionsState => ({ status: "ready", value: { grants, denies: [], wildcard: false } });
+    const props = (grants: string[]): AdminPageProps => ({ api: makeApi(), user: { id: "u1", username: "admin", accountType: "platform_admin" }, setActionResult: vi.fn(), setGlobalError: vi.fn(), effectivePermissions: only(grants) });
+    const first = render(<NotificationWindowsPage {...props(["bar.saved_bottle.manual_pickup_policy.manage"])} />);
+    await waitFor(() => expect(screen.queryByTestId("saved-bottle-manual-pickup-policy")).not.toBeNull());
+    expect(screen.queryByTestId("saved-bottle-renewal-policy")).toBeNull();
+    first.unmount();
+
+    render(<NotificationWindowsPage {...props(["bar.saved_bottle.reminder_policy.manage"])} />);
+    await waitFor(() => expect(screen.queryByTestId("saved-bottle-reminder-policy")).not.toBeNull());
+    expect(screen.queryByTestId("saved-bottle-manual-pickup-policy")).toBeNull();
+    expect(screen.queryByTestId("saved-bottle-renewal-policy")).toBeNull();
   });
 });

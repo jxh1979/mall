@@ -1,6 +1,6 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.21
+// 文件版本：V0.22
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.LocalZone;
@@ -135,6 +135,8 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
     private static final Set<String> HANDOVER_CONDITIONS = Set.of("intact", "damaged", "short");
     private static final String PICKUP_CODE_PREFIX = "swp_";
     private static final String OTP_SCENE_PREFIX = "inventory.saved_bottle.";
+    /** 第十八批 AP 段 254-R4：存酒登记隐私同意验证码场景（第十八批裁决 57「短信验证码或者小程序，这个点击同意都可以。」）。 */
+    private static final String DEPOSIT_SCENE = "deposit";
     static final String MANUAL_PICKUP_INITIATE = "bar.saved_bottle.manual_pickup.initiate";
     static final String MANUAL_PICKUP_REVIEW = "bar.saved_bottle.manual_pickup.review";
     static final String MANUAL_PICKUP_CONFIRM_MARKETING = "bar.saved_bottle.manual_pickup.confirm_marketing";
@@ -460,6 +462,18 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
                     if (registrationPhotoRefs.isEmpty()) {
                         throw ApiException.badRequest("VALIDATION_FAILED", "registration_photo_refs is required");
                     }
+                    // 第十八批 AP 段 254-R1（BSM:1170「存酒登记必须拍照、填写人工备注，并留取客人手机号和姓名/昵称。」）：人工备注必填。
+                    String manualNote = requireText(actual.manualNote(), "manual_note");
+                    String barId = requireText(actual.barId(), "bar_id");
+                    String code = requireText(actual.verificationCode(), "verification_code");
+                    // 254-R2（BSM:1072「……客户存酒有效期（业务参数，按项目可配，出厂默认 30 天……），登记时即固化本次适用的有效期与到期日，
+                    // 后续改配置不追溯已登记的存酒……」）：按酒吧所属项目取有效期（缺行回落出厂行），到期日＝登记时刻＋有效期天数，不收请求里的到期日。
+                    String projectId = repository.findBarProjectId(barId).orElse(null);
+                    Instant expireAt = now.plus(Duration.ofDays(renewalPolicy(SAVED_BOTTLE_VALIDITY_DAYS,
+                            projectId == null ? null : "project:" + projectId).numericValue()));
+                    // 254-R4（第十八批裁决 57）：其余字段齐全后核客人报出的隐私同意验证码，核验不过整笔不建行；
+                    // 核验通过才建的存酒行（created_at）与登记成功审计（操作人、时间）即取得同意的凭证。
+                    verifyCustomerSmsForStaff(customerPhone, code, DEPOSIT_SCENE);
                     // V350 归一：登记当刻按全平台唯一口径判一次，落库作快照（不再收前端传的布尔）。
                     // 作废时以 cancelSavedBottle 里的实时重判为准——阈值/进货价会随运营变，快照只为事后举证。
                     HighValueDecisionService.HighValueDecision registrationDecision =
@@ -467,13 +481,13 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
                     SavedBottleRecord savedBottle = repository.saveSavedBottle(new SavedBottleRecord(
                             "saved_" + slug(actual.idempotencyKey()),
                             customerId,
-                            requireText(actual.barId(), "bar_id"),
+                            barId,
                             itemId,
                             trimToDefault(textFromItem(item, "bottle_name"), itemId),
                             quantity,
                             quantity,
                             trimToDefault(textFromItem(item, "unit"), "bottle"),
-                            actual.expireAt(),
+                            expireAt,
                             "stored",
                             safeList(actual.evidenceAttachmentIds()),
                             now,
@@ -486,7 +500,7 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
                             customerPhone,
                             phoneHash(customerPhone),
                             registrationPhotoRefs,
-                            trimToNull(actual.manualNote()),
+                            manualNote,
                             null,
                             null,
                             null,
@@ -953,6 +967,33 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
     }
 
     /**
+     * 第十八批 AP 段 254-R4（BSM:1072「存酒登记先取隐私同意……」；第十八批裁决 57「短信验证码或者小程序，这个点击同意都可以。」）：
+     * 存酒登记前员工向客人手机发隐私同意验证码，按手机号限速；客人报出验证码随登记提交核验。
+     */
+    @Transactional
+    public SavedBottleVerificationCodeReceipt requestSavedBottleDepositConsentCode(
+            com.complex.platform.inventory.dto.SavedBottleDepositConsentCodeRequest request) {
+        return executeWrite(
+                "requestSavedBottleDepositConsentCode",
+                request == null ? null : request.idempotencyKey(),
+                request,
+                SavedBottleVerificationCodeReceipt.class,
+                "bar.saved_bottle.verification_code_requested",
+                "bar.saved_bottle.verification_code_request_failed",
+                "bar.saved_bottle.manage",
+                "saved_bottle",
+                () -> {
+                    String phone = requireText(requireRequest(request).customerPhone(), "customer_phone");
+                    if (otpVerifier == null) {
+                        throw ApiException.conflict("CUSTOMER_OTP_PROVIDER_UNAVAILABLE", "短信服务未配置，请联系管理员");
+                    }
+                    enforceOtpRateLimit(phone);
+                    otpVerifier.requestCode(phone, OTP_SCENE_PREFIX + DEPOSIT_SCENE);
+                    return new SavedBottleVerificationCodeReceipt(null, DEPOSIT_SCENE, clock.instant());
+                });
+    }
+
+    /**
      * FS-016 客人端签发官方动态取酒码（BSM L867/L1073）：只对当前持有人签发（customer_id 本人，或登记/受让手机哈希为本人手机）；
      * 窗口 = 全场统一刷新间隔；一瓶同时只一枚有效码，签发前旧码作废；明文只回给客人，库里只存 SHA-256。
      */
@@ -1024,6 +1065,8 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
     private static final String RENEWAL_SCENE = "renew";
     private static final String RENEWAL_POLICY_LIMIT = "max_renewals";
     private static final String RENEWAL_POLICY_DAYS = "extension_days";
+    /** 第十八批 AP 段 254-R2：存酒有效期天数（BSM:1072「按项目可配，出厂默认 30 天」），与转存参数同表（V632）。 */
+    private static final String SAVED_BOTTLE_VALIDITY_DAYS = "validity_days";
 
     /** 员工代办转存：客人本人短信验证码确认 → pending_review；到期日在营销主管复核通过时才顺延。 */
     @com.complex.platform.gate.GuardedAction(capability = "bar.saved_bottle.manage", admissionAction = "inventory.saved_bottle_claim", objectType = "saved_bottle")
@@ -1140,7 +1183,7 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
                     SavedBottleRecord bottle = lockSavedBottle(id);
                     requireCurrentHolder(bottle, customer, customerPhone);
                     RenewalTerms terms = renewalTerms(bottle);
-                    String holderPhone = verifyHolderSms(bottle, code, RENEWAL_SCENE);
+                    String holderPhone = verifyHolderSmsByCustomer(bottle, code, RENEWAL_SCENE);
                     Instant now = clock.instant();
                     repository.saveSavedBottle(savedBottleWithExpireAt(bottle, terms.newExpireAt(), now));
                     return repository.saveSavedBottleRenewal(newRenewal("rnw_" + slug(actual.idempotencyKey()), bottle, terms,
@@ -1248,8 +1291,7 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
         return readPage("bar.saved_bottle.reminder_policy_viewed", "bar.saved_bottle.reminder_policy_view_failed",
                 REMINDER_POLICY_MANAGE, "saved_bottle_reminder_policy", () -> {
                     authorizationService.requirePlatformScope();
-                    AuthorizationService.ProjectReach reach =
-                            authorizationService.projectReach(authorizationService.currentActor(), REMINDER_POLICY_MANAGE);
+                    AuthorizationService.ProjectReach reach = policyReadReach(REMINDER_POLICY_MANAGE);
                     return repository.listSavedBottleReminderPolicies().entrySet().stream()
                             .filter(e -> reach.platformAdmin() || "global".equals(e.getKey())
                                     || (e.getKey().startsWith("project:") && reach.covers(e.getKey().substring("project:".length()))))
@@ -1257,6 +1299,50 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
                             .sorted(java.util.Comparator.comparing(SavedBottleReminderPolicyRecord::scopeId))
                             .toList();
                 });
+    }
+
+    /**
+     * 第十八批 AP 段 254-R7：读人工例外取酒消费历史条件（BSM L1073「……按项目可配……」）：出厂行（global）与各项目行。商户账号不可读；
+     * 非平台管理员只看出厂行与 bar.saved_bottle.manual_pickup_policy.manage 可触及的项目（PGM:528「④看不到别的商户和别的项目的数据」）。
+     */
+    public PageResponse<SavedBottleManualPickupPolicyRecord> listManualPickupPolicies() {
+        return readPage("bar.saved_bottle.manual_pickup_policy_viewed", "bar.saved_bottle.manual_pickup_policy_view_failed",
+                MANUAL_PICKUP_POLICY_MANAGE, "saved_bottle_manual_pickup_policy", () -> {
+                    authorizationService.requirePlatformScope();
+                    AuthorizationService.ProjectReach reach = policyReadReach(MANUAL_PICKUP_POLICY_MANAGE);
+                    return repository.listSavedBottleManualPickupPolicies().stream()
+                            .filter(p -> MANUAL_PICKUP_POLICY_FACTORY.equals(p.projectId()) || reach.covers(p.projectId()))
+                            .toList();
+                });
+    }
+
+    /**
+     * 第十八批 AP 段 254-R7：读转存业务参数（BSM L1072 存酒有效期、转存次数上限按项目，顺延期限按酒吧）：商户账号不可读；非平台管理员只看出厂行、
+     * 可触及项目的项目行与所属项目可触及的酒吧行（PGM:528 ④）。
+     */
+    public PageResponse<SavedBottleRenewalPolicyRecord> listRenewalPolicies() {
+        return readPage("bar.saved_bottle.renewal_policy_viewed", "bar.saved_bottle.renewal_policy_view_failed",
+                RENEWAL_POLICY_MANAGE, "saved_bottle_renewal_policy", () -> {
+                    authorizationService.requirePlatformScope();
+                    AuthorizationService.ProjectReach reach = policyReadReach(RENEWAL_POLICY_MANAGE);
+                    return repository.listSavedBottleRenewalPolicies().stream()
+                            .filter(p -> reach.platformAdmin() || "global".equals(p.scopeId())
+                                    || (p.scopeId().startsWith("project:") && reach.covers(p.scopeId().substring("project:".length())))
+                                    || (p.scopeId().startsWith("bar:") && repository.findBarProjectId(p.scopeId().substring("bar:".length()))
+                                            .filter(reach::covers).isPresent()))
+                            .toList();
+                });
+    }
+
+    /**
+     * 第十八批裁决 71「既然是最高权限，不应该什么都能看到吗？」：读三张存酒策略表（提醒节点、消费历史条件、有效期与转存参数）时，最高权限（可不挂项目）看全部，
+     * 同 IntegrationController.listChannelStoreMaps 的最高权限写法——254-R7 消费历史条件「调整须最高权限本人办理」，读不到就办不了；其余账号照 projectReach。
+     */
+    private AuthorizationService.ProjectReach policyReadReach(String permissionCode) {
+        var actor = authorizationService.currentActor();
+        return authorizationService.isMasterAuthority(actor)
+                ? new AuthorizationService.ProjectReach(true, true, actor.organizationId(), true, java.util.Set.of())
+                : authorizationService.projectReach(actor, permissionCode);
     }
 
     /**
@@ -1295,7 +1381,8 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
 
     /**
      * 配置转存业务参数（ENUM L120）：max_renewals 按项目（scope_id=global|project:&lt;id&gt;），extension_days 按酒吧
-     * （scope_id=global|bar:&lt;id&gt;）；值与上下限须同时填写、值在上下限内（顺延期限至少 1 天）；每次保存 version+1、留痕 updated_by。
+     * （scope_id=global|bar:&lt;id&gt;）；第十八批 AP 段 254-R2 加存酒有效期 validity_days，按项目（scope_id=global|project:&lt;id&gt;，BSM:1072）；
+     * 值与上下限须同时填写、值在上下限内（顺延期限、有效期至少 1 天）；每次保存 version+1、留痕 updated_by。
      * 带商户 scope 的操作者只能配置本酒吧的顺延期限。
      */
     @Transactional
@@ -1306,13 +1393,14 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
                     com.complex.platform.inventory.dto.SavedBottleRenewalPolicyRequest actual = requireRequest(request);
                     String key = requireText(actual.policyKey(), "policy_key");
                     String scope = requireText(actual.scopeId(), "scope_id");
-                    boolean keyOk = RENEWAL_POLICY_LIMIT.equals(key) || RENEWAL_POLICY_DAYS.equals(key);
+                    boolean projectKey = RENEWAL_POLICY_LIMIT.equals(key) || SAVED_BOTTLE_VALIDITY_DAYS.equals(key);
+                    boolean keyOk = projectKey || RENEWAL_POLICY_DAYS.equals(key);
                     boolean scopeOk = "global".equals(scope)
-                            || (RENEWAL_POLICY_LIMIT.equals(key) && scope.startsWith("project:"))
+                            || (projectKey && scope.startsWith("project:"))
                             || (RENEWAL_POLICY_DAYS.equals(key) && scope.startsWith("bar:"));
                     if (!keyOk || !scopeOk) {
                         throw ApiException.badRequest("VALIDATION_FAILED",
-                                "policy_key 须为 max_renewals（scope_id=global|project:<id>）或 extension_days（scope_id=global|bar:<id>）");
+                                "policy_key 须为 max_renewals、validity_days（scope_id=global|project:<id>）或 extension_days（scope_id=global|bar:<id>）");
                     }
                     Optional<String> merchantScope = authorizationService.currentMerchantScope();
                     if (merchantScope.isPresent() && !scope.equals("bar:" + merchantScope.get())) {
@@ -1321,7 +1409,7 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
                     Integer value = actual.value();
                     Integer min = actual.minValue();
                     Integer max = actual.maxValue();
-                    int floor = RENEWAL_POLICY_DAYS.equals(key) ? 1 : 0;
+                    int floor = RENEWAL_POLICY_LIMIT.equals(key) ? 0 : 1;
                     if (value == null || min == null || max == null || min < floor || value < min || value > max) {
                         throw ApiException.badRequest("VALIDATION_FAILED", "转存业务参数须同时填写参数值及上下限，参数值须在上下限内");
                     }
@@ -1553,6 +1641,20 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
                 });
     }
 
+    /** 第十八批 AP 段 254-R5：该瓶的人工例外取酒申请（按创建时间倒序），供存酒页按状态办理四步；本店存酒才可读。 */
+    public PageResponse<SavedBottleManualPickupRecord> listSavedBottleManualPickups(String savedBottleId) {
+        String id = requireText(savedBottleId, "saved_bottle_id");
+        return readPage(
+                "bar.saved_bottle.manual_pickup_viewed",
+                "bar.saved_bottle.manual_pickup_view_failed",
+                "bar.saved_bottle.manage",
+                "saved_bottle_manual_pickup",
+                () -> {
+                    requireOwnMerchant(lockSavedBottle(id));
+                    return repository.listSavedBottleManualPickups(id);
+                });
+    }
+
     // ===== FS-016 helpers =====
 
     private SavedBottleManualPickupRecord requireManualPickup(String id, String expectedStatus) {
@@ -1607,8 +1709,15 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
         return holderPhone;
     }
 
-    /** 当前持有人短信核验（fail-closed：无短信端口即拒）；返回被核验的持有人手机号。 */
+    /** 员工代客办理（领取、转让、代办转存）的当前持有人短信核验；返回被核验的持有人手机号。 */
     private String verifyHolderSms(SavedBottleRecord bottle, String code, String scene) {
+        String holderPhone = requireHolderPhone(bottle);
+        verifyCustomerSmsForStaff(holderPhone, code, scene);
+        return holderPhone;
+    }
+
+    /** 客人端自助转存的本人短信核验（fail-closed：无短信端口即拒）；客人端口径不变。返回被核验的持有人手机号。 */
+    private String verifyHolderSmsByCustomer(SavedBottleRecord bottle, String code, String scene) {
         String holderPhone = requireHolderPhone(bottle);
         if (otpVerifier == null) {
             throw ApiException.unauthorized("CUSTOMER_OTP_PROVIDER_UNAVAILABLE", "短信服务未配置，请联系管理员");
@@ -1616,6 +1725,25 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
         enforceOtpRateLimit(holderPhone);
         otpVerifier.verify(holderPhone, code, OTP_SCENE_PREFIX + scene);
         return holderPhone;
+    }
+
+    /**
+     * 员工侧核客人报出的短信验证码（存酒登记隐私同意、领取、转让、代办转存），fail-closed：短信服务未配置 409 CUSTOMER_OTP_PROVIDER_UNAVAILABLE
+     * （与发码接口一致），验证码不正确或已过期 409 CUSTOMER_OTP_INVALID。不回 401：401 只表示员工自己的登录会话失效，后台网页收到会续期重放后送回登录页。
+     */
+    private void verifyCustomerSmsForStaff(String phone, String code, String scene) {
+        if (otpVerifier == null) {
+            throw ApiException.conflict("CUSTOMER_OTP_PROVIDER_UNAVAILABLE", "短信服务未配置，请联系管理员");
+        }
+        enforceOtpRateLimit(phone);
+        try {
+            otpVerifier.verify(phone, code, OTP_SCENE_PREFIX + scene);
+        } catch (ApiException exception) {
+            if (!"CUSTOMER_OTP_INVALID".equals(exception.code())) {
+                throw exception;
+            }
+            throw ApiException.conflict("CUSTOMER_OTP_INVALID", "短信验证码不正确或已过期");
+        }
     }
 
     private SavedBottlePickupCodeRecord requireActivePickupCode(SavedBottleRecord bottle, String code) {
@@ -1700,6 +1828,11 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
      *
      * <p>中间态选用 {@code disputed_frozen}（V061 既有状态："争议冻结/待人工复核"语义，已在可作废源态集内），
      * 因本期无新迁移、{@code saved_bottles.status} CHECK 不含 pending_review。
+     *
+     * <p>第十八批 AP 段 252-R1（BSM:1940「……存酒作废、异常调拨都可能产生责任争议，必须记录原因、员工、时间、点位、照片、视频和主管复核结果。」）：
+     * 作废原因必填，高价值与低价值两路都落 {@code saved_bottles.cancel_reason}，并进成功审计元数据 reason。
+     * 254-R6（第十八批裁决 58「争议成立，走现有存酒作废（高价值的要照片＋视频＋主管复核，裁决 14），作废后按现有补存或赔付处理。」）：
+     * 争议中（disputed）的存酒也可作废，须门店主管码 {@code inventory.high_value.review}（门店主管核实后转作废）。
      */
     @com.complex.platform.gate.GuardedAction(capability = "bar.saved_bottle.manage", admissionAction = "inventory.saved_bottle_cancel", objectType = "saved_bottle")
     @Transactional
@@ -1714,8 +1847,11 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
                 "bar.saved_bottle.cancel_failed",
                 "bar.saved_bottle.manage",
                 "saved_bottle",
+                () -> { },
+                java.util.Collections.singletonMap("reason", request == null ? null : trimToNull(request.reason())),
                 () -> {
                     SavedBottleCancelRequest actual = requireRequest(request);
+                    String reason = requireText(actual.reason(), "reason");
                     SavedBottleRecord savedBottle = repository.findSavedBottleByIdForUpdate(id)
                             .orElseThrow(() -> ApiException.notFound("SAVED_BOTTLE_NOT_FOUND", "存酒记录不存在或已被删除"));
                     Optional<String> scope = authorizationService.currentMerchantScope();
@@ -1723,10 +1859,16 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
                         throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN",
                                 "该存酒记录不属于当前商户");
                     }
-                    if (!List.of("stored", "pending_identity_review").contains(savedBottle.status())) {
+                    if (!List.of("stored", "pending_identity_review", "disputed").contains(savedBottle.status())) {
                         throw ApiException.conflict("SAVED_BOTTLE_NOT_CANCELLABLE", "该存酒当前不可作废");
                     }
-                    return applyCancel(savedBottle, actual.idempotencyKey(), actual.photoAttachmentIds(), actual.videoAttachmentIds());
+                    if ("disputed".equals(savedBottle.status())) {
+                        authorizationService.requirePermission(REMEDY_SUPERVISOR_APPROVE);
+                    }
+                    SavedBottleRecord cancelled = applyCancel(savedBottle, actual.idempotencyKey(),
+                            actual.photoAttachmentIds(), actual.videoAttachmentIds());
+                    repository.updateSavedBottleCancelReason(id, reason);
+                    return cancelled;
                 }
         );
     }
@@ -1756,7 +1898,9 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
 
     /**
      * P0#4 争议受理（R6-D05）：将 stored/pending_identity_review 存酒置 {@code disputed} 态，进争议处理流程
-     * （区别于高价值作废的 disputed_frozen）。受理后停止取酒/转赠，待线下核实后由作废/复核流程收口。
+     * （区别于高价值作废的 disputed_frozen）。受理后停止取酒/转赠；争议原因必填并进成功审计元数据 reason。
+     * 第十八批 AP 段 254-R6 按第十八批裁决 58「门店主管核实后二选一：争议不成立，恢复为存酒中、照常可取；争议成立，走现有存酒作废……」了结：
+     * 争议不成立走 {@link #dismissSavedBottleDispute}，争议成立走 {@link #cancelSavedBottle}（均须门店主管码）。
      */
     @com.complex.platform.gate.GuardedAction(capability = "bar.saved_bottle.manage", admissionAction = "inventory.saved_bottle_dispute", objectType = "saved_bottle")
     @Transactional
@@ -1771,6 +1915,8 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
                 "bar.saved_bottle.dispute_failed",
                 "bar.saved_bottle.manage",
                 "saved_bottle",
+                () -> { },
+                java.util.Collections.singletonMap("reason", request == null ? null : trimToNull(request.reason())),
                 () -> {
                     SavedBottleCancelRequest actual = requireRequest(request);
                     requireText(actual.reason(), "reason");
@@ -1787,6 +1933,38 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
                     repository.revokeActiveSavedBottlePickupCodes(savedBottle.id());
                     return repository.saveSavedBottle(savedBottleWith(
                             savedBottle, "disputed", savedBottle.remainingQuantity(), Instant.now()));
+                }
+        );
+    }
+
+    /**
+     * 第十八批 AP 段 254-R6 争议不成立（第十八批裁决 58「门店主管核实后二选一：争议不成立，恢复为存酒中、照常可取……」）：
+     * 门店主管（{@code inventory.high_value.review}，控制器核）把争议中的存酒恢复为存酒中，剩余量与到期日不变；
+     * 商户范围闸在幂等之前（同号重放也先过它）。
+     */
+    @com.complex.platform.gate.GuardedAction(capability = "bar.saved_bottle.manage")
+    @Transactional
+    public SavedBottleRecord dismissSavedBottleDispute(
+            String savedBottleId, com.complex.platform.inventory.dto.SavedBottleDisputeDismissRequest request) {
+        String id = requireText(savedBottleId, "saved_bottle_id");
+        return executeWrite(
+                "dismissSavedBottleDispute:" + id,
+                request == null ? null : request.idempotencyKey(),
+                request,
+                SavedBottleRecord.class,
+                "bar.saved_bottle.dispute_dismissed",
+                "bar.saved_bottle.dispute_dismiss_failed",
+                REMEDY_SUPERVISOR_APPROVE,
+                "saved_bottle",
+                () -> requireOwnMerchant(lockSavedBottle(id)),
+                () -> {
+                    requireRequest(request);
+                    SavedBottleRecord savedBottle = lockSavedBottle(id);
+                    if (!"disputed".equals(savedBottle.status())) {
+                        throw ApiException.conflict("SAVED_BOTTLE_NOT_DISPUTED", "该存酒当前不在争议中");
+                    }
+                    return repository.saveSavedBottle(savedBottleWith(
+                            savedBottle, "stored", savedBottle.remainingQuantity(), Instant.now()));
                 }
         );
     }
@@ -1845,13 +2023,15 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
                                 null, null, null, null, "pending_approval", null, List.of(), reason, "none", null, null, "none",
                                 null, null, null, List.of(), actor, now, now));
                     }
-                    // 同品、同等剩余量补存：新瓶照 createSavedBottle 口径登记（新标签值 + 登记照片必填），持有人/到期日复制原瓶。
+                    // 同品、同等剩余量补存：新瓶照 createSavedBottle 口径登记（新标签值 + 登记照片 + 人工备注必填），持有人/到期日复制原瓶。
                     List<String> photos = safeList(actual.registrationPhotoRefs());
                     if (photos.isEmpty()) {
                         throw ApiException.badRequest("VALIDATION_FAILED", "registration_photo_refs is required");
                     }
                     String label = requireText(actual.bottleLabelValue(), "bottle_label_value");
                     String locationId = requireText(actual.locationId(), "location_id");
+                    // 第十八批 AP 段 254-R1（BSM:1170「存酒登记必须拍照、填写人工备注……」）：补存新瓶的人工备注必填，出库前校验；赔付不读。
+                    String manualNote = requireText(actual.operatorNote(), "operator_note");
                     int qty = remedyQuantity(bottle);
                     // 存酒是客户资产、不算可售库存（BSM L1198）：补存瓶从该酒吧库存出库同品同量（outbound 流水，reference=remedy）。
                     if (repository.atomicDecreaseStockBalance(bottle.itemId(), locationId, qty,
@@ -1870,7 +2050,7 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
                             bottle.itemId(), bottle.bottleName(), qty, qty, bottle.unit(), bottle.expireAt(), "stored", List.of(),
                             now, now, bottle.merchantId(), decision.highValue(), decision.thresholdCent(), label,
                             bottle.customerNameOrNickname(), bottle.customerPhone(), bottle.customerPhoneHash(), photos,
-                            trimToNull(actual.operatorNote()), null, null, null, null,
+                            manualNote, null, null, null, null,
                             bottle.id(), bottle.custodianEntityId(), bottle.pickupLocation(), bottle.handedOverAt(), bottle.handoverId()));
                     Long loss = settlementPriceResolver.apply(bottle).map(price -> price * qty).orElse(null);
                     String lossItemId = postRemedyLoss(remedyId, bearer, bottle.merchantId(), loss, actual.idempotencyKey());
@@ -4402,7 +4582,7 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
             Supplier<T> action
     ) {
         return executeWrite(operationId, idempotencyKey, request, responseType, successEvent, failureEvent, permissionCode,
-                businessType, () -> { }, action);
+                businessType, () -> { }, Map.of(), action);
     }
 
     /** 复核（范围闸在幂等之前）：gate 在幂等之前跑，同号重放也先过它；失败照常留痕。 */
@@ -4418,6 +4598,31 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
             Runnable gate,
             Supplier<T> action
     ) {
+        return executeWrite(operationId, idempotencyKey, request, responseType, successEvent, failureEvent, permissionCode,
+                businessType, gate, Map.of(), action);
+    }
+
+    /** 第十八批 AP 段 252-R1：成功事件元数据＝operation_id＋附加项（值为空的键不放）。 */
+    private <T> T executeWrite(
+            String operationId,
+            String idempotencyKey,
+            Object request,
+            Class<T> responseType,
+            String successEvent,
+            String failureEvent,
+            String permissionCode,
+            String businessType,
+            Runnable gate,
+            Map<String, Object> extraMetadata,
+            Supplier<T> action
+    ) {
+        Map<String, Object> metadata = new LinkedHashMap<>();
+        metadata.put("operation_id", operationId);
+        extraMetadata.forEach((key, value) -> {
+            if (value != null) {
+                metadata.put(key, value);
+            }
+        });
         try {
             gate.run();
             return idempotencyService.execute(
@@ -4433,7 +4638,7 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
                                 businessId(response),
                                 null,
                                 idempotencyKey,
-                                Map.of("operation_id", operationId)
+                                metadata
                         );
                         return response;
                     },
@@ -4491,7 +4696,8 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
             return record.id();
         }
         if (response instanceof SavedBottleVerificationCodeReceipt record) {
-            return record.savedBottleId();
+            // 第十八批 AP 段 254-R4：登记隐私同意验证码发生在建行之前，回执无存酒编号。
+            return record.savedBottleId() == null ? "deposit_consent" : record.savedBottleId();
         }
         if (response instanceof StockMovementRecord record) {
             return record.id();

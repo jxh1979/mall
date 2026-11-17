@@ -272,6 +272,7 @@ describe("MerchantWorkOrdersPage 第 102 条 派单负责人与关单", () => {
       if (!woP.checked) fireEvent.click(woP);
       expect(woP.checked).toBe(true);
     });
+    fireEvent.change(screen.getByTestId("merchant-work-order-resolution"), { target: { value: "已协调商户降噪" } });
     fireEvent.click(screen.getByTestId("merchant-work-order-close"));
     await waitFor(() => expect(screen.getByTestId("merchant-work-order-error").textContent).toContain("投诉工单由客户关怀部关闭须填写关闭缘由。"));
     expect(posts(fetchMock, "/wo-p/close")).toHaveLength(0);
@@ -301,9 +302,14 @@ describe("MerchantWorkOrdersPage 第 102 条 派单负责人与关单", () => {
 
   // 第十八批 AE 段第 198 条 198-R3①（BSM:940「收银、核销、收款、放行等现场动作，一律按执行该动作的设备绑定与该次登录会话定位到操作人并留痕」）：
   // 派单、处理、关闭的请求体都不再带写死的 operator_user_id，操作人由服务端取登录人。
-  it("198-R3①：派单、处理、关闭三次请求体都不含 operator_user_id", async () => {
+  // 第十八批 AP 段第 229 条 229-R3⑥、229-R5：处理说明、处理结论不预填（先填再提交），三次请求体都不带写死附件。
+  it("198-R3①、229-R3⑥：派单、处理、关闭三次请求体都不含 operator_user_id 与写死附件", async () => {
     const fetchMock = mockFetch();
     await waitFor(() => expect(screen.getByTestId("merchant-work-order-owner-user").textContent).toContain("张师傅（usr_pa）"));
+    expect((screen.getByTestId("merchant-work-order-process-note") as HTMLInputElement).value).toBe("");
+    expect((screen.getByTestId("merchant-work-order-resolution") as HTMLInputElement).value).toBe("");
+    fireEvent.change(screen.getByTestId("merchant-work-order-process-note"), { target: { value: "已到场排查" } });
+    fireEvent.change(screen.getByTestId("merchant-work-order-resolution"), { target: { value: "已更换灯管" } });
     fireEvent.change(screen.getByTestId("merchant-work-order-owner-user"), { target: { value: "usr_pa" } });
     fireEvent.click(screen.getByTestId("merchant-work-order-assign"));
     await waitFor(() => expect(posts(fetchMock, "/wo-c/assign")).toHaveLength(1));
@@ -315,6 +321,7 @@ describe("MerchantWorkOrdersPage 第 102 条 派单负责人与关单", () => {
     await waitFor(() => expect(posts(fetchMock, "/wo-c/close")).toHaveLength(1));
     for (const suffix of ["/wo-c/assign", "/wo-c/actions", "/wo-c/close"]) {
       expect(JSON.parse(String(posts(fetchMock, suffix)[0]![1].body))).not.toHaveProperty("operator_user_id");
+      expect(JSON.parse(String(posts(fetchMock, suffix)[0]![1].body))).not.toHaveProperty("evidence_attachment_ids");
     }
   });
 });

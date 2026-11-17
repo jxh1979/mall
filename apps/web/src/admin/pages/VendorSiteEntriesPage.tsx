@@ -1,4 +1,4 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 import React from "react";
 import { SiteEntryHistory, type SiteEntryHistoryRow } from "./SiteEntryHistory";
 import { formatBusinessStatus } from "../i18n/statusLabels";
@@ -55,6 +55,8 @@ function readKpiFocusFromUrl(): KpiFocus | null {
   return { subset: params.get("subset") === "enterable" ? "enterable" : "all" };
 }
 
+const PLAN_REQUIRED = "计划日期、人数、联系人和电话不能为空。";
+
 export function VendorSiteEntriesPage({ api, user, setActionResult, setGlobalError, effectivePermissions, reportViewedObjects }: AdminPageProps) {
   const [rows, setRows] = React.useState<VendorSiteEntryRow[]>([]);
   // 第 23 条 23-R5：敏感页这一次看到的对象（PGM:687「哪个客人、哪个商户、哪些单据」）。
@@ -65,15 +67,15 @@ export function VendorSiteEntriesPage({ api, user, setActionResult, setGlobalErr
     projectId: "",
     spaceId: "",
     workScope: "",
-    plannedStartDate: "2026-06-20",
-    plannedEndDate: "2026-06-22",
-    crewCount: "4",
-    contactName: "王工",
-    contactPhone: "13800000000",
+    plannedStartDate: "",
+    plannedEndDate: "",
+    crewCount: "",
+    contactName: "",
+    contactPhone: "",
   });
   const [createOpen, setCreateOpen] = React.useState(false);
-  const [submitNote, setSubmitNote] = React.useState("进场施工");
-  const [completionNote, setCompletionNote] = React.useState("施工已完工，材料已上传");
+  const [submitNote, setSubmitNote] = React.useState("");
+  const [completionNote, setCompletionNote] = React.useState("");
   const [completionFiles, setCompletionFiles] = React.useState<File[]>([]);
   const [history, setHistory] = React.useState<SiteEntryHistoryRow[]>([]);
   const [historyError, setHistoryError] = React.useState("");
@@ -138,6 +140,8 @@ export function VendorSiteEntriesPage({ api, user, setActionResult, setGlobalErr
     fallbackMessage: "外包进场报备操作失败",
   });
 
+  const planMissing = !form.plannedStartDate || !form.plannedEndDate || !form.crewCount.trim() || !form.contactName.trim() || !form.contactPhone.trim();
+
   function setField(key: keyof typeof form, value: string) {
     setForm((current) => ({ ...current, [key]: value }));
   }
@@ -148,6 +152,10 @@ export function VendorSiteEntriesPage({ api, user, setActionResult, setGlobalErr
       setFormError("项目、空间和施工范围不能为空");
       return;
     }
+    if (planMissing) {
+      setFormError(PLAN_REQUIRED);
+      return;
+    }
     const request = {
       idempotencyKey: nextKey("vendor-site-entry-create"),
       projectId: form.projectId.trim(),
@@ -155,7 +163,7 @@ export function VendorSiteEntriesPage({ api, user, setActionResult, setGlobalErr
       workScope: form.workScope.trim(),
       plannedStartDate: form.plannedStartDate,
       plannedEndDate: form.plannedEndDate,
-      crewCount: Number(form.crewCount || 1),
+      crewCount: Number(form.crewCount),
       contactName: form.contactName.trim(),
       contactPhone: form.contactPhone.trim(),
     };
@@ -168,7 +176,7 @@ export function VendorSiteEntriesPage({ api, user, setActionResult, setGlobalErr
       setFormError("请选择一条进场报备");
       return;
     }
-    const request = { idempotencyKey: nextKey("vendor-site-entry-submit"), note: submitNote };
+    const request = { idempotencyKey: nextKey("vendor-site-entry-submit"), note: submitNote.trim() ? submitNote : undefined };
     await runAction("vendor_site_entry_submitted", request, () => api.post(`/api/v1/facility/site-entry-reports/${encodeURIComponent(selected.id)}/submit`, request));
   }
 
@@ -327,6 +335,7 @@ export function VendorSiteEntriesPage({ api, user, setActionResult, setGlobalErr
           {
             title: "计划与联系人",
             description: "计划日期、人数与现场联系人。",
+            validate: () => (planMissing ? PLAN_REQUIRED : null),
             content: (
               <>
                 <label>开始日期<CnDatePicker data-testid="vendor-site-entry-start" value={form.plannedStartDate} onChange={(v) => setField("plannedStartDate", v)} /></label>

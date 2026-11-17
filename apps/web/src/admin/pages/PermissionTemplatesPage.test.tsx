@@ -238,6 +238,7 @@ describe("M038-011 权限模板页复制/应用防连点", () => {
     vi.spyOn(window, "confirm").mockReturnValue(true);
     const { posts, ok } = renderPending();
     await waitFor(() => expect((screen.getByTestId("permission-template-apply") as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.change(screen.getByTestId("permission-template-target-users"), { target: { value: "u-1" } });
     fireEvent.click(screen.getByTestId("permission-template-apply"));
     fireEvent.click(screen.getByTestId("permission-template-apply"));
     await waitFor(() => expect(posts).toHaveLength(1));
@@ -258,6 +259,7 @@ describe("M038-011 权限模板页复制/应用防连点", () => {
       expect((screen.getByTestId("permission-template-edit-name") as HTMLInputElement).value).toBe("基础员工");
       expect((screen.getByTestId("permission-template-apply") as HTMLButtonElement).disabled).toBe(false);
     }, { timeout: 5000 });
+    fireEvent.change(screen.getByTestId("permission-template-target-users"), { target: { value: "u-1" } });
     fireEvent.click(screen.getByTestId("permission-template-edit-single-use"));
     fireEvent.click(screen.getByTestId("permission-template-apply"));
     await waitFor(() => expect(bodies).toHaveLength(1));
@@ -275,5 +277,24 @@ describe("M038-011 权限模板页复制/应用防连点", () => {
     expect(JSON.parse(bodies[1]!)).not.toHaveProperty("operator_note");
     expect(bodies.map((body) => JSON.parse(body).mode).every((mode: string) => ["append", "merge", "single_use"].includes(mode))).toBe(true);
     ok();
+  });
+});
+
+// 第十八批 AP 段第 229 条 229-R10②（PGM:899）：套模板目标员工不预填、不在员工列表到达后自动换成第一人；空着点应用不发请求。
+describe("PermissionTemplatesPage 套模板目标员工不预填（第 229 条）", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it("员工列表加载后目标员工仍为空，空时点应用不发请求并提示", async () => {
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    renderPage();
+    await waitFor(() => expect((screen.getByTestId("permission-template-edit-name") as HTMLInputElement).value).toBe("基础员工"));
+    await waitFor(() => expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url).includes("access/users"))).toBe(true));
+    expect((screen.getByTestId("permission-template-target-users") as HTMLInputElement).value).toBe("");
+    fireEvent.click(screen.getByTestId("permission-template-apply"));
+    expect(screen.getByTestId("permission-templates-error").textContent).toBe("至少输入一个目标员工编号。");
+    expect(vi.mocked(fetch).mock.calls.some(([, init]) => (init as RequestInit | undefined)?.method === "POST")).toBe(false);
   });
 });

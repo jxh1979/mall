@@ -3,6 +3,7 @@ package com.complex.platform.facility;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 import com.complex.platform.access.AccessActor;
 import com.complex.platform.access.AuthorizationService;
@@ -41,7 +42,14 @@ class FacilityInspectionServiceTests {
         inspections = new InMemoryInspectionRepository();
         events = new ArrayList<>();
         service = new FacilityInspectionService(inspections, mock(AuditEventService.class),
-                FacilityWorkOrderServiceTests.anyProjectAuth(), events::add);
+                platformAuth(), events::add);
+    }
+
+    // 第十八批 AP 段第 229 条 229-R8：提交巡检记录的巡检人取登录账号，平台侧用例的登录账号即原请求体所填的 usr_inspector。
+    private static AuthorizationService platformAuth() {
+        AuthorizationService auth = FacilityWorkOrderServiceTests.anyProjectAuth();
+        when(auth.currentActor()).thenReturn(new AccessActor("usr_inspector", "usr_inspector", "staff", "proj_1", null, "active"));
+        return auth;
     }
 
     @AfterEach
@@ -131,6 +139,8 @@ class FacilityInspectionServiceTests {
 
         assertThat(started.status()).isEqualTo("in_progress");
         assertThat(record.taskId()).isEqualTo("task_own");
+        // 第十八批 AP 段第 229 条 229-R8（BSM:940「……该次登录会话定位到操作人并留痕……」）：巡检人取提交账号，请求体所填（usr_inspector）不采信。
+        assertThat(record.inspectorId()).isEqualTo("usr_vendor_s");
         assertThat(inspections.tasks.get("task_own").status()).isEqualTo("closed");
         assertThatThrownBy(() -> scoped.submitRecord("task_other_started", submit("normal", null, "k_submit_other")))
                 .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("FORBIDDEN"));
@@ -183,7 +193,7 @@ class FacilityInspectionServiceTests {
                 new FacilityWorkOrderServiceTests.InMemoryFacilityRepository(), mock(AuditEventService.class),
                 FacilityWorkOrderServiceTests.anyProjectAuth(), inspections);
         service = new FacilityInspectionService(inspections, mock(AuditEventService.class),
-                FacilityWorkOrderServiceTests.anyProjectAuth(), event -> workOrderService.onInspectionAbnormal((FacilityInspectionAbnormalEvent) event));
+                platformAuth(), event -> workOrderService.onInspectionAbnormal((FacilityInspectionAbnormalEvent) event));
 
         FacilityInspectionTemplateRecord template =
                 service.createTemplate(templateReq("fire", 1, "to_work_order", true));

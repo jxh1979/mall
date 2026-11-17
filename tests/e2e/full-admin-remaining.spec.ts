@@ -1,4 +1,4 @@
-// 文件版本：V0.21
+// 文件版本：V0.22
 import { expect, test } from "@playwright/test";
 import { installMockApi } from "./support/mock-api";
 import { fillCnDate } from "./support/cn-date";
@@ -1101,6 +1101,7 @@ test.describe("full admin remaining pages acceptance", () => {
 
     await openAdminRoute(page, remainingRoutes.find((item) => item.pageId === "ADM-GOV-006")!);
     await expect(page.getByTestId("supervisor-review-approve")).toBeDisabled();
+    await page.getByTestId("supervisor-review-object-id").fill("contract-1");
     await page.getByTestId("supervisor-review-violation-summary").fill("合同主体与基础定义不一致");
     await page.getByTestId("supervisor-review-evaluate").click();
     await expect(page.getByTestId("admin-action-result")).toContainText("已生成待复核记录：review-demo");
@@ -1118,6 +1119,8 @@ test.describe("full admin remaining pages acceptance", () => {
     await expect(page.getByTestId("admin-action-result")).toContainText("最终价格");
     // 引导式流程 phase-3:新建定价规则改弹窗(规则名默认周末上浮/调整率默认10,均有效)→翻页→提交。
     await page.getByTestId("dynamic-pricing-create-open").click();
+    // 第 229 条 229-R7：票种不再写死，引导第一步先选票种。
+    await page.getByTestId("dynamic-pricing-ticket-type").selectOption("ticket-1");
     await page.getByTestId("dynamic-pricing-guided-next").click();
     await page.getByTestId("dynamic-pricing-create").click();
     await expect(page.getByTestId("admin-action-result")).toContainText("草稿");
@@ -1153,6 +1156,7 @@ test.describe("full admin remaining pages acceptance", () => {
 
     await openAdminRoute(page, remainingRoutes.find((item) => item.pageId === "ADM-INV-001")!);
     await page.getByTestId("inventory-movement-open").click();
+    await page.getByTestId("inventory-movement-from").fill("bar-main");
     await page.getByTestId("inventory-movement-quantity").fill("1");
     await page.getByTestId("inventory-movement-submit").click();
     await expect(page.getByTestId("admin-action-result")).toContainText("出入库已登记");
@@ -1198,6 +1202,10 @@ test.describe("full admin remaining pages acceptance", () => {
     await page.getByTestId("amusement-safety-rectify-note").fill("已更换防护垫并上传照片");
     await page.getByTestId("amusement-safety-rectify").click();
     await expect(page.getByTestId("admin-action-result")).toContainText("安全整改已登记");
+    // 第 229 条 229-R1、229-R6：复检结论由人选，选通过须先真实上传现场照片。
+    await page.getByTestId("amusement-safety-recheck-result").selectOption("pass");
+    await page.getByTestId("amusement-safety-action-evidence-upload").setInputFiles({ name: "recheck.png", mimeType: "image/png", buffer: Buffer.from("e2e-recheck") });
+    await expect(page.getByTestId("amusement-safety-action-evidence-files")).toContainText("recheck.png");
     await page.getByTestId("amusement-safety-recheck").click();
     await expect(page.getByTestId("admin-action-result")).toContainText("安全复查已登记");
     await page.getByTestId("amusement-safety-approve-reopen").click();
@@ -1228,7 +1236,7 @@ test.describe("full admin remaining pages acceptance", () => {
     await page.getByTestId("risk-alert-summary-input").fill("员工异常折扣触发高风险预警");
     await page.getByTestId("risk-alert-create").click();
     await expect(page.getByTestId("admin-action-result")).toContainText("风险告警已创建");
-    await expect(page.getByTestId("admin-action-result")).toContainText("att-risk-alert-create");
+    await expect(page.getByTestId("admin-action-result")).not.toContainText("att-risk-alert-create");
     await page.getByTestId("risk-alert-resolution-reason").fill("已复核订单、员工和支付证据，确认关闭");
     await page.getByTestId("risk-alert-resolve").click();
     await expect(page.getByTestId("admin-action-result")).toContainText("风险告警已处理");
@@ -1241,7 +1249,7 @@ test.describe("full admin remaining pages acceptance", () => {
     // 该页已从通用页升级为专属 IntegrationEventsPage：登记轮询校验 POST /integration/polling-checks，
     // 回显真实结果（status=recorded + 反伪造边界），不再是旧通用配置的 webhook_plus_polling_verified 占位。
     await expect(page.getByTestId("admin-action-result")).toContainText("platform_task_status_only_not_supplier_execution");
-    await expect(page.getByTestId("admin-action-result")).toContainText("att-integration-polling");
+    await expect(page.getByTestId("admin-action-result")).not.toContainText("att-integration-polling");
     await page.getByTestId("integration-events-retry-reason").fill("供应商超时后人工触发重试");
     await page.getByTestId("integration-events-run-retry").click();
     await expect(page.getByTestId("admin-action-result")).toContainText("接入重试已立即执行");
@@ -1250,7 +1258,7 @@ test.describe("full admin remaining pages acceptance", () => {
     await page.getByTestId("integration-events-resolve-compensation").click();
     await expect(page.getByTestId("admin-action-result")).toContainText("接入补偿已处理");
     await expect(page.getByTestId("admin-action-result")).toContainText("已解决");
-    await expect(page.getByTestId("admin-action-result")).toContainText("att-integration-compensation");
+    await expect(page.getByTestId("admin-action-result")).not.toContainText("att-integration-compensation");
 
     await openAdminRoute(page, remainingRoutes.find((item) => item.pageId === "ADM-EVD-001")!);
     // 错误翻译层：正文给业务话术；第 193 条 193-R2（PGM:287）技术详情只留状态码，接口路径、request_id、原始报文不上屏。
@@ -1340,6 +1348,7 @@ test.describe("full admin remaining pages acceptance", () => {
         await expect(page.getByTestId("vendor-inspections-table")).toContainText("vendor-user");
         await expect(page.getByTestId("vendor-inspection-templates-table")).toContainText("夜间安保模板");
         await expect(page.getByTestId("vendor-inspection-report-exception")).toBeVisible();
+        await page.getByTestId("vendor-inspection-exception-note").fill("巡检发现异常，待物业跟进");
         await page.getByTestId("vendor-inspection-report-exception").click();
         await expect(page.getByTestId("admin-action-result")).toContainText("外包巡检异常已上报");
       }

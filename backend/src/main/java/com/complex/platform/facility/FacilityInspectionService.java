@@ -153,10 +153,12 @@ public class FacilityInspectionService {
         validateGps(r.gpsLat(), r.gpsLng());
 
         Instant now = Instant.now();
+        // 第十八批 AP 段第 229 条 229-R8（BSM:940「……一律按执行该动作的设备绑定与该次登录会话定位到操作人并留痕……」）：
+        // 巡检人取提交账号（同异常上报），请求体 inspector_id 不再读取。
         FacilityInspectionRecordRecord rec = new FacilityInspectionRecordRecord(
                 "firec_" + UUID.randomUUID(), cur.id(), result, stringsOrEmpty(r.photos()), trimToNull(r.qrCode()),
                 r.gpsLat(), r.gpsLng(), listOrEmpty(r.checklistResult()), trimToNull(r.note()), abnormalNote,
-                requireText(r.inspectorId(), "inspector_id"), now, now);
+                actor.id(), now, now);
         repository.insertRecord(rec);
 
         String finalStatus = applySubmitTransition(cur, rec, now);

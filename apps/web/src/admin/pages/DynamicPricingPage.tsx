@@ -9,6 +9,7 @@ import { formatBusinessStatus } from "../i18n/statusLabels";
 import { useSelectedRow } from "../hooks/useSelectedRow";
 import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowDetailDrawer";
 import { GuidedFlowModal } from "../components/GuidedFlowModal";
+import { CnDatePicker } from "../components/CnDatePicker";
 import type { AdminPageProps, TicketDynamicPricingRuleRow, TicketDynamicPricingSimulationResult } from "../types";
 
 // 后端写权限码（TicketingController：/dynamic-pricing-rules/{id}/publish）
@@ -41,8 +42,11 @@ const TEXT = {
   adjustment: "\u8c03\u6574",
   status: "\u72b6\u6001",
   effective: "\u751f\u6548\u671f",
-  createNote: "\u5b8c\u6574\u540e\u53f0\u9a8c\u6536\u52a8\u6001\u5b9a\u4ef7\u8349\u7a3f",
-  publishReason: "\u5b8c\u6574\u540e\u53f0\u9a8c\u6536\u53d1\u5e03",
+  publishReason: "\u540e\u53f0\u53d1\u5e03",
+  ticketType: "\u7968\u79cd",
+  ticketTypeRequired: "\u8bf7\u9009\u62e9\u7968\u79cd\u3002",
+  effectiveFrom: "\u751f\u6548\u5f00\u59cb",
+  effectiveTo: "\u751f\u6548\u7ed3\u675f",
   ruleCountHelp: "\u89c4\u5219\u603b\u6570",
   draftHelp: "\u8349\u7a3f\u89c4\u5219",
   publishedHelp: "\u5df2\u53d1\u5e03\u89c4\u5219",
@@ -77,13 +81,20 @@ function adjustmentTypeLabel(type: string | undefined): string {
   return ADJUSTMENT_TYPE_LABELS[type] ?? type;
 }
 
+// 第 229 条 229-R7：票种下拉项（GET /api/v1/ticketing/ticket-types 的元素，本页只用 id 与票名）。
+type TicketTypeOption = { id: string; ticketName?: string };
+
 export function DynamicPricingPage({ api, setActionResult, setGlobalError, effectivePermissions }: AdminPageProps) {
   const [rules, setRules] = React.useState<TicketDynamicPricingRuleRow[]>([]);
   const { selectedId: selectedRuleId, setSelectedId: setSelectedRuleId, selected: selectedRule } = useSelectedRow(rules);
   const [ruleName, setRuleName] = React.useState("周末上浮");
   const [salesChannel, setSalesChannel] = React.useState("web");
   const [adjustmentRate, setAdjustmentRate] = React.useState("10");
-  const [visitDate, setVisitDate] = React.useState("2026-06-20");
+  const [visitDate, setVisitDate] = React.useState("");
+  const [ticketTypes, setTicketTypes] = React.useState<TicketTypeOption[]>([]);
+  const [ticketTypeId, setTicketTypeId] = React.useState("");
+  const [effectiveFrom, setEffectiveFrom] = React.useState("");
+  const [effectiveTo, setEffectiveTo] = React.useState("");
   const [simulation, setSimulation] = React.useState<TicketDynamicPricingSimulationResult | null>(null);
   const [formError, setFormError] = React.useState("");
   const [busyAction, setBusyAction] = React.useState("");
@@ -133,7 +144,13 @@ export function DynamicPricingPage({ api, setActionResult, setGlobalError, effec
 
   const { loading, error, reload: reloadResource } = useAdminResource(
     async () => {
-      setRules(await api.get<TicketDynamicPricingRuleRow[]>("/api/v1/ticketing/dynamic-pricing-rules"));
+      // 票种与规则同读；票种读失败回空列表，不挡规则列表（真实接口回分页信封，两种形状都认）。
+      const [ruleRows, typeRows] = await Promise.all([
+        api.get<TicketDynamicPricingRuleRow[]>("/api/v1/ticketing/dynamic-pricing-rules"),
+        api.get<TicketTypeOption[] | { items?: TicketTypeOption[] }>("/api/v1/ticketing/ticket-types?includeArchived=false").catch(() => []),
+      ]);
+      setRules(ruleRows);
+      setTicketTypes(Array.isArray(typeRows) ? typeRows : typeRows?.items ?? []);
     },
     { onError: setGlobalError, fallbackMessage: TEXT.loadFailed, onStart: () => setGlobalError(null) },
   );
@@ -170,29 +187,23 @@ export function DynamicPricingPage({ api, setActionResult, setGlobalError, effec
       return;
     }
     const result = await runAction("ticket_dynamic_rule_created", () => api.post("/api/v1/ticketing/dynamic-pricing-rules", {
-      ticketTypeId: "ticket-1",
+      ticketTypeId,
       ruleName,
       priority: 10,
-      effectiveFrom: "2026-06-01",
-      effectiveTo: "2026-06-30",
+      ...(effectiveFrom ? { effectiveFrom } : {}),
+      ...(effectiveTo ? { effectiveTo } : {}),
       salesChannel,
       adjustmentType: "percent_delta",
       adjustmentRate: Number(adjustmentRate),
-      minPriceCent: 9900,
-      maxPriceCent: 15000,
-      conditionRule: { inventory_level: "low" },
-      operatorNote: TEXT.createNote,
-      evidenceAttachmentIds: ["att-dynamic-admin-1"],
     }));
     if (result) setCreateOpen(false);
   }
 
   async function simulate() {
     const result = await runAction("ticket_dynamic_pricing_simulated", () => api.post<TicketDynamicPricingSimulationResult>("/api/v1/ticketing/dynamic-pricing/simulations", {
-      ticketTypeId: selectedRule?.ticketTypeId ?? "ticket-1",
-      visitDate,
+      ticketTypeId: selectedRule?.ticketTypeId,
+      ...(visitDate ? { visitDate } : {}),
       salesChannel,
-      context: { inventory_level: "low" },
     }), false);
     if (result) setSimulation(result as TicketDynamicPricingSimulationResult);
   }
@@ -213,7 +224,6 @@ export function DynamicPricingPage({ api, setActionResult, setGlobalError, effec
     await runAction("ticket_dynamic_rule_published", () => api.post(`/api/v1/ticketing/dynamic-pricing-rules/${selectedRule.id}/publish`, {
       action: "publish",
       reason: TEXT.publishReason,
-      evidenceAttachmentIds: ["att-dynamic-publish-1"],
     }));
   }
 
@@ -268,10 +278,11 @@ export function DynamicPricingPage({ api, setActionResult, setGlobalError, effec
           steps={[
             {
               title: "基本信息",
-              description: "填写规则名称与适用渠道。",
-              validate: () => (ruleName.trim() ? null : TEXT.nameRequired),
+              description: "选择票种，填写规则名称与适用渠道。",
+              validate: () => (!ticketTypeId ? TEXT.ticketTypeRequired : ruleName.trim() ? null : TEXT.nameRequired),
               content: (
                 <>
+                  <label><span>{TEXT.ticketType}</span><select data-testid="dynamic-pricing-ticket-type" value={ticketTypeId} onChange={(event) => setTicketTypeId(event.target.value)}><option value="">请选择票种</option>{ticketTypes.map((type) => <option key={type.id} value={type.id}>{type.ticketName ?? type.id}</option>)}</select></label>
                   <label><span>{TEXT.ruleName}</span><input data-testid="dynamic-pricing-rule-name" value={ruleName} onChange={(event) => setRuleName(event.target.value)} placeholder={TEXT.ruleName} /></label>
                   <label><span>{TEXT.channel}</span><input data-testid="dynamic-pricing-guided-channel" value={salesChannel} onChange={(event) => setSalesChannel(event.target.value)} placeholder={TEXT.channel} /></label>
                 </>
@@ -279,17 +290,24 @@ export function DynamicPricingPage({ api, setActionResult, setGlobalError, effec
             },
             {
               title: "调价",
-              description: "百分比调整幅度（正值上浮、负值下调）。",
+              description: "百分比调整幅度（正值上浮、负值下调）；生效期可空，不填开始为当天，不填结束同开始日。",
               validate: () => (Number.isFinite(Number(adjustmentRate)) ? null : "百分比调整必须为数字。"),
               content: (
-                <label><span>{TEXT.adjustmentRate}</span><input data-testid="dynamic-pricing-adjustment-rate" value={adjustmentRate} onChange={(event) => setAdjustmentRate(event.target.value)} placeholder={TEXT.adjustmentRate} /></label>
+                <>
+                  <label><span>{TEXT.adjustmentRate}</span><input data-testid="dynamic-pricing-adjustment-rate" value={adjustmentRate} onChange={(event) => setAdjustmentRate(event.target.value)} placeholder={TEXT.adjustmentRate} /></label>
+                  <label><span>{TEXT.effectiveFrom}</span><CnDatePicker data-testid="dynamic-pricing-effective-from" value={effectiveFrom} onChange={setEffectiveFrom} /></label>
+                  <label><span>{TEXT.effectiveTo}</span><CnDatePicker data-testid="dynamic-pricing-effective-to" value={effectiveTo} onChange={setEffectiveTo} /></label>
+                </>
               ),
             },
           ]}
           summary={[
+            { label: TEXT.ticketType, value: ticketTypes.find((type) => type.id === ticketTypeId)?.ticketName ?? (ticketTypeId || "未填写") },
             { label: TEXT.ruleName, value: ruleName.trim() || "未填写" },
             { label: TEXT.channel, value: salesChannel.trim() || "未填写" },
             { label: TEXT.adjustmentRate, value: adjustmentRate.trim() || "未填写" },
+            { label: TEXT.effectiveFrom, value: effectiveFrom ? cnDate(effectiveFrom) : "未填写" },
+            { label: TEXT.effectiveTo, value: effectiveTo ? cnDate(effectiveTo) : "未填写" },
           ]}
         />
         {formError ? <div data-testid="dynamic-pricing-error" className="admin-inline-error">{formError}</div> : null}

@@ -138,3 +138,38 @@ describe("AmusementGroupBookingsPage 行明细抽屉", () => {
     await waitFor(() => expect(screen.queryByTestId("row-detail-drawer")).toBeNull());
   });
 });
+
+// 第十八批 AP 段第 229 条 229-R3④、229-R5（先例第 32 条删假附件、不补上传）：释放原因不预填；释放请求与结果区不带写死附件。
+describe("AmusementGroupBookingsPage 释放不预填、不写死附件（第 229 条）", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it("释放原因初始为空；填写后释放，请求体与结果不带附件编号", async () => {
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    const posts: Array<Record<string, unknown>> = [];
+    vi.stubGlobal("fetch", vi.fn().mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+      if ((init?.method ?? "GET").toUpperCase() === "POST") {
+        posts.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+        return Promise.resolve(new Response(JSON.stringify({ success: true, code: "OK", message: "success", data: { id: "b-1", booking_status: "released" } }),
+          { status: 200, headers: { "content-type": "application/json" } }));
+      }
+      return Promise.resolve(envelope(String(input).includes("/amusement/group-bookings") ? BOOKINGS : []));
+    }));
+    const setActionResult = vi.fn();
+    render(<AmusementGroupBookingsPage api={new AdminApi("test-token")} user={{ id: "u1", username: "admin", accountType: "platform_admin" }}
+      setActionResult={setActionResult} setGlobalError={vi.fn()} effectivePermissions={ADMIN_PERMS} />);
+    await waitFor(() => expect(screen.getByTestId("amusement-group-booking-select-b-1")).toBeTruthy());
+    expect((screen.getByTestId("amusement-group-booking-release-reason") as HTMLInputElement).value).toBe("");
+    fireEvent.click(screen.getByTestId("amusement-group-booking-select-b-1"));
+    fireEvent.change(screen.getByTestId("amusement-group-booking-release-reason"), { target: { value: "团体临时取消" } });
+    fireEvent.click(screen.getByTestId("amusement-group-booking-release"));
+
+    await waitFor(() => expect(posts).toHaveLength(1));
+    expect(posts[0]).toMatchObject({ reason: "团体临时取消" });
+    expect(posts[0]).not.toHaveProperty("evidence_attachment_ids");
+    await waitFor(() => expect(setActionResult).toHaveBeenCalledWith(expect.objectContaining({ action: "group_booking_released" })));
+    expect(setActionResult.mock.calls[0]?.[0]).not.toHaveProperty("evidenceAttachmentIds");
+  });
+});

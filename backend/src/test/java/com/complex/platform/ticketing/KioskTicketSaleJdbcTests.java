@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -201,16 +201,17 @@ class KioskTicketSaleJdbcTests {
     void adminWebIssueWithPageBodyReasonIssuesAndOperatorNoteOnlyIsRejected() throws Exception {
         // 第十八批 W 段 199-R1（契约 TicketIssueRequest：必填 idempotency_key、reason，additionalProperties false）：后台网页出票页按页面请求体
         // （adminClient 转蛇形后两键 idempotency_key、reason）出票；原先页面发 operator_note，后端不认、reason 为空，每次 400「原因未填写」。
+        // 第十八批 AP 段第 229 条 229-R4②：页面发的固定出票原因改为如实的「后台出票」。
         String orderId = CustomerTicketPaymentFixture.read(order(platformSeller, "kts-admin-web-" + s, ticketA, barA, "admin", f.phone, null)
                 .andExpect(status().isOk()), "$.data.id");
         mockMvc.perform(post("/api/v1/ticketing/orders/" + orderId + "/issue").with(platformSeller)
                         .contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(Map.of(
-                                "idempotency_key", "kts-admin-issue-note-" + s, "operator_note", "完整后台验收出票"))))
+                                "idempotency_key", "kts-admin-issue-note-" + s, "operator_note", "后台出票"))))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.message").value("原因未填写"));
         mockMvc.perform(post("/api/v1/ticketing/orders/" + orderId + "/issue").with(platformSeller)
                         .contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(Map.of(
-                                "idempotency_key", "kts-admin-issue-" + s, "reason", "完整后台验收出票"))))
+                                "idempotency_key", "kts-admin-issue-" + s, "reason", "后台出票"))))
                 .andExpect(status().isOk());
         assertThat(jdbc.queryForObject("SELECT issue_status FROM ticket_orders WHERE id = ?", String.class, orderId)).isEqualTo("issued");
     }

@@ -1,6 +1,6 @@
 package com.complex.platform.integration;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -47,8 +47,8 @@ class IntegrationOperatorJdbcIntegrationTests {
     @Test
     void compensationTaskResolveRecordsTheLoggedInOperator() throws Exception {
         RequestPostProcessor ops = ops("integration.compensation.manage");
-        String withOther = createCompensationTask(ops, "a");
-        String withoutKey = createCompensationTask(ops, "b");
+        String withOther = createTask(ops, "compensation-tasks", "a");
+        String withoutKey = createTask(ops, "compensation-tasks", "b");
 
         resolveTask(ops, withOther, "a", ",\"operator_user_id\":\"someone_else\"").andExpect(status().isOk());
         resolveTask(ops, withoutKey, "b", "").andExpect(status().isOk());
@@ -121,15 +121,36 @@ class IntegrationOperatorJdbcIntegrationTests {
                 externalBusinessId)).isZero();
     }
 
+    /**
+     * 第十八批 AP 段第 229 条 229-R3①、229-R5（PGM:968「……人工只补原因和证据。……」；先例第 32 条删假附件、不补上传）：
+     * 网页登记轮询校验不再带写死附件——不带证据照常登记、证据为空；立即重试不带原因 400（网页同口径拦空、不再预填原因）。
+     */
+    @Test
+    void pollingCheckWithoutEvidenceIsRecordedAndRetryWithoutReasonIsRejected() throws Exception {
+        RequestPostProcessor ops = ops("integration.retry.manage");
+        mockMvc.perform(post(BASE + "/polling-checks").with(ops).contentType(MediaType.APPLICATION_JSON).content("""
+                        {"idempotency_key":"polling-229-%s","operator_note":"夜间核对回调与轮询",
+                         "checked_endpoints":["/api/v1/integration/retry-tasks"],"pending_count":0,"source_count":1}
+                        """.formatted(digits)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.evidence_attachment_ids").isEmpty());
+
+        String retryTask = createTask(ops, "retry-tasks", "r");
+        mockMvc.perform(post(BASE + "/retry-tasks/" + retryTask + "/run-now").with(ops)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"idempotency_key\":\"retry-229-" + digits + "\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.detail_code").value("VALIDATION_FAILED"));
+    }
+
     private RequestPostProcessor ops(String... permissions) {
         return new StaffRequestFixture(jdbc).staff(userId, "staff", null, null, permissions);
     }
 
-    private String createCompensationTask(RequestPostProcessor who, String tag) throws Exception {
-        return JsonPath.read(mockMvc.perform(post(BASE + "/compensation-tasks").with(who).contentType(MediaType.APPLICATION_JSON).content("""
-                        {"idempotency_key":"compensation-255-%s-%s","provider_code":"mock-255","task_type":"manual_adjustment",
+    private String createTask(RequestPostProcessor who, String kind, String tag) throws Exception {
+        return JsonPath.read(mockMvc.perform(post(BASE + "/" + kind).with(who).contentType(MediaType.APPLICATION_JSON).content("""
+                        {"idempotency_key":"%s-255-%s-%s","provider_code":"mock-255","task_type":"manual_adjustment",
                          "business_type":"catering","external_business_id":"ext-255-%s-%s","status":"open"}
-                        """.formatted(tag, digits, tag, digits)))
+                        """.formatted(kind, tag, digits, tag, digits)))
                 .andExpect(status().isOk()).andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8), "$.data.id");
     }
 

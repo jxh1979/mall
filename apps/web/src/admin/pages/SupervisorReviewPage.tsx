@@ -1,4 +1,4 @@
-// 文件版本：V0.11
+// 文件版本：V0.12
 import React from "react";
 import { withBase } from "../../basePath";
 import { formatReviewValue } from "../i18n/reviewLabels";
@@ -130,7 +130,7 @@ export function SupervisorReviewPage({ api, user, setActionResult, setGlobalErro
   const [latestReviewId, setLatestReviewId] = React.useState("");
   const [actionType, setActionType] = React.useState("contract_violation");
   const [objectType, setObjectType] = React.useState("合同");
-  const [objectId, setObjectId] = React.useState("contract-1");
+  const [objectId, setObjectId] = React.useState("");
   const [amountCent, setAmountCent] = React.useState("0");
   const [violationSummary, setViolationSummary] = React.useState("");
   const [beneficiaryId, setBeneficiaryId] = React.useState("");
@@ -221,6 +221,10 @@ export function SupervisorReviewPage({ api, user, setActionResult, setGlobalErro
     }
     if (finalApprover && beneficiary && finalApprover === beneficiary) {
       setFormError("不能指定直接受益人为最终审批人");
+      return;
+    }
+    if (!objectId.trim()) {
+      setFormError("对象编号不能为空。");
       return;
     }
     const request = {

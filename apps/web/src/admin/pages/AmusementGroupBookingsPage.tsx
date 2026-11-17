@@ -1,4 +1,4 @@
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import React from "react";
 import { formatActionResult } from "../components/ActionResultView";
@@ -53,7 +53,7 @@ export function AmusementGroupBookingsPage({ api, setActionResult, setGlobalErro
   // 第 23 条 23-R5：敏感页这一次看到的对象（PGM:687「哪个客人、哪个商户、哪些单据」）。
   React.useEffect(() => reportViewedObjects?.("amusement_group_booking", bookings), [bookings, reportViewedObjects]);
   const { setSelectedId, selected } = useSelectedRow(bookings);
-  const [releaseReason, setReleaseReason] = React.useState("完整后台验收释放");
+  const [releaseReason, setReleaseReason] = React.useState("");
   const [formError, setFormError] = React.useState("");
   const [submitting, setSubmitting] = React.useState(false);
   const [kpiFocus, setKpiFocus] = React.useState<KpiFocus | null>(readKpiFocusFromUrl);
@@ -116,10 +116,10 @@ export function AmusementGroupBookingsPage({ api, setActionResult, setGlobalErro
     setFormError("");
     setGlobalError(null);
     setSubmitting(true);
-    const request = { idempotencyKey: `group-booking-release-${selected.id}-${Date.now()}`, reason: releaseReason, evidenceAttachmentIds: ["att-group-booking-release"] };
+    const request = { idempotencyKey: `group-booking-release-${selected.id}-${Date.now()}`, reason: releaseReason };
     try {
       const result = await api.post<unknown>(`/api/v1/amusement/group-bookings/${encodeURIComponent(selected.id)}/release`, request);
-      setActionResult({ action: "group_booking_released", bookingId: selected.id, evidenceAttachmentIds: request.evidenceAttachmentIds, request, result });
+      setActionResult({ action: "group_booking_released", bookingId: selected.id, request, result });
       await reload();
     } catch (actionError) {
       const message = actionError instanceof Error ? actionError.message : "团体/包场释放失败";

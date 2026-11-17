@@ -1,4 +1,4 @@
-// 文件版本：V0.09
+// 文件版本：V0.10
 import React from "react";
 import { TechDetails } from "../components/TechDetails";
 import { AdminDataState } from "../components/AdminDataState";
@@ -51,7 +51,7 @@ const TEXT = {
   status: "\u72b6\u6001",
   createdAt: "\u4e0b\u5355\u65f6\u95f4",
   paidAt: "\u652f\u4ed8\u65f6\u95f4",
-  issueNote: "\u5b8c\u6574\u540e\u53f0\u9a8c\u6536\u51fa\u7968",
+  issueNote: "\u540e\u53f0\u51fa\u7968",
   ordersHelp: "\u8ba2\u5355\u603b\u6570",
   paidHelp: "\u5df2\u652f\u4ed8\u8ba2\u5355",
   pendingIssueHelp: "\u672a\u51fa\u7968\u8ba2\u5355",
@@ -199,7 +199,7 @@ export function TicketOrdersPage({ api, setActionResult, setGlobalError, effecti
   const [confirmingRefundId, setConfirmingRefundId] = React.useState("");
   const [anomalyReason, setAnomalyReason] = React.useState("");
   const { selectedId: selectedOrderId, setSelectedId: setSelectedOrderId, selected: selectedOrder } = useSelectedRow(orders);
-  const [entitlementCode, setEntitlementCode] = React.useState("ENT-0001");
+  const [entitlementCode, setEntitlementCode] = React.useState("");
   const [formError, setFormError] = React.useState("");
   const [busyAction, setBusyAction] = React.useState("");
   const [query, setQuery] = React.useState("");

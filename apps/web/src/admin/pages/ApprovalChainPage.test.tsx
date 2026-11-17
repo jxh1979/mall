@@ -5,7 +5,7 @@ import { ApprovalChainPage } from "./ApprovalChainPage";
 import { AdminApi } from "../client/adminClient";
 import type { AdminPageProps, EffectivePermissionsState } from "../types";
 
-// 文件版本：V0.12
+// 文件版本：V0.13
 
 function raw(data: unknown): Response {
   return new Response(JSON.stringify({ success: true, code: "OK", message: "success", data }), { status: 200, headers: { "content-type": "application/json" } });
@@ -118,13 +118,16 @@ describe("ApprovalChainPage 审批链与节点裁决", () => {
     const props = renderPage(ADMIN_PERMS, "review_c1");
     await waitFor(() => expect(screen.getByTestId("approval-chain-nodes")).toBeTruthy());
     vi.spyOn(window, "confirm").mockReturnValue(true);
+    // 第十八批 AP 段第 229 条 229-R5：审批意见不预填「证据齐备，同意」，人填。
+    expect((screen.getByTestId("approval-chain-comment") as HTMLInputElement).value).toBe("");
+    fireEvent.change(screen.getByTestId("approval-chain-comment"), { target: { value: "单据核对无误，同意" } });
     fireEvent.click(screen.getByTestId("approval-chain-approve"));
     const fetchMock = vi.mocked(globalThis.fetch);
     await waitFor(() => expect(fetchMock.mock.calls.some(([input]) => String(input).includes("/review_c1/approve"))).toBe(true));
     const call = fetchMock.mock.calls.find(([input]) => String(input).includes("/review_c1/approve"));
     const body = JSON.parse(String((call?.[1] as RequestInit | undefined)?.body));
     expect(body.decision).toBe("approved");
-    expect(body.comment).toBe("证据齐备，同意");
+    expect(body.comment).toBe("单据核对无误，同意");
     expect(body.evidence_attachment_ids).toEqual([]);
     expect(body).not.toHaveProperty("reviewer_level");
     await waitFor(() => expect(props.setActionResult).toHaveBeenCalledWith("复核单 review_c1 当前节点已通过，等待后续节点审批"));
@@ -201,6 +204,7 @@ describe("ApprovalChainPage 审批链与节点裁决", () => {
     expect(screen.getByTestId("approval-chain-original").textContent).toContain("1500");
     expect(screen.getByRole("link", { name: "查看原始凭证 1" })).toHaveAttribute("href", "/api/v1/evidence/attachments/proof%20tax%2F1/file");
     vi.spyOn(window, "confirm").mockReturnValue(true);
+    fireEvent.change(screen.getByTestId("approval-chain-comment"), { target: { value: "单据核对无误，同意" } });
     fireEvent.click(screen.getByTestId("approval-chain-approve"));
     const fetchMock = vi.mocked(globalThis.fetch);
     await waitFor(() => expect(fetchMock.mock.calls.some(([url]) => String(url).includes("/review_tax/approve"))).toBe(true));
@@ -230,6 +234,7 @@ describe("ApprovalChainPage 审批链与节点裁决", () => {
     expect(screen.getByTestId("approval-chain-original").textContent).toContain("专业适用依据原文");
     await waitFor(() => expect(screen.getByTestId("approval-chain-approve")).not.toBeDisabled());
     vi.spyOn(window, "confirm").mockReturnValue(true);
+    fireEvent.change(screen.getByTestId("approval-chain-comment"), { target: { value: "单据核对无误，同意" } });
     fireEvent.click(screen.getByTestId("approval-chain-approve"));
     await waitFor(() => expect(vi.mocked(globalThis.fetch).mock.calls.some(([url]) => String(url).endsWith("/review_master/approve"))).toBe(true));
   });
