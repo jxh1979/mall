@@ -1,6 +1,6 @@
 # PRD 审计业务裁决台账
 
-文档版本：V0.98
+文档版本：V0.99
 状态：进行中
 迁移日期：2026-07-27
 当前事实源：三份立法 HTML 以既有冻结基线叠加 James 此前 M02 至 M08 的点名批准、全量审计 M001、M002 的逐项批准，以及本轮 2026-10-16 至 2026-10-17 业务 HTML 审计中 Q01 至 Q40 及子题实际明确批准且未被后续替代的裁决，和 2026-10-17 第二批 HTML 业务线推演审计（A–F 六线 64 条、停车章）的逐项批准，并叠加本轮 CG 70 项来源确认与 C01–C09、N01–N03 最终澄清及补全文稿中 F01、W01–W05 的整体修改批准（本文件末节）；本轮最终规则、未采纳或替代关系、现行版本与字节哈希见本文件末节。历史记录保留为各自当时事实，不恢复已被替代的建议。
@@ -8295,3 +8295,161 @@ HTML 的语义补齐与直接引用同步可在本批核验；70项中的业务�
     - chromium 五份后台 e2e（mvp、ui-hardening、property-fee-evidence、visual、remaining）33 例全过。
     - verify:p0-contract（1383 个操作）、verify:html-ledger-sync、verify:entry-anchors、verify:entry-doc-baseline、verify:security-baseline、verify:data-isolation-spec、verify:domain-ownership-scope、verify:partial-requirement-mock-coverage、verify:audit-labels、verify:predeploy、verify-admin-result-labels、verify-full-admin-page-matrix 通过；git diff --check 通过。
 - 18AN 落地位置补记·运行验收证据、快照、终验文档刷新（无新裁决）：业务提交 c5a442b0 之后，按第十八批裁决 25 重刷了运行验收证据：后端全量 6880 测，0 失败 0 错误；apps/web 构建通过；常规界面验收（接口全部 mock）实跑 40 条全过；真实后端界面验收未跑，runtime_ready=false。随后依次重生成闭环当前态快照、生产闭环缺口报告、界面验收报告、无上线指挥台。生成器没改。手改 docs/final-closed-loop-acceptance-audit-v0.1.md 与 docs/code-implementation-acceptance-audit-v0.1.md：前端单测源码计数改为 1850；被核文件行数都没变；后端全量与常规界面验收的数字、日期改为本次实跑值；写入 npm run verify:unit 实跑结果，五个工作区全过。交付门禁于 2026-11-17 21:09 UTC 在工作树逐项实跑子项，NAS 两项现场探测未跑。仍红的有两项：一是 coding-host-protection，它写死主仓路径，在工作树口径下必红，属工具口径，不做；二是 final-closed-loop-audit，如实留 2 条红（integration-ready、business-acceptance-ready），原因是校验器要求终验把联调、业务验收写成「是」，而裁决 25 定了不跑真实后端界面验收、运行验收未就绪，终验写的是「否」。verify:delivery-gates 总链仍是红的。
+
+18AS 落地位置补记（2026-11-17）：第十八批 AS 段（batch65）按 18AS 只读设计实现待开发清单第 297 条（跨域组合通票派生价与动态价走平台审批）；运行验收证据、终验文档在本段最后一个提交刷新；各条落地位置见下。本段追加时，原台账除文档版本升一版外，其他历史字节保持。
+
+- 18AS 落地位置补记·控制席判定（2026-11-17）：本段（第十八批 AS 段，batch65）实现待开发清单第 297 条（跨域组合通票的派生价与动态价走平台审批并记入票种规则版本；18AS 只读设计 b65-audit/d-297.json，两轮质疑者修订后定稿，无待裁题）。按第十八批裁决 63 所选选项原文落实；297-R3 最高权限本人提交票种规则版本即生效，依 BSM:576 与第十八批裁决 71。本段与 18AN、18AQ、18AR 并行开工，实现后变基到含 18AN 界面文案组（PR #595）的 origin/main 7b830e40。设计旁见另记待开发清单第 334、335 条，实现期旁见另记第 336、337 条（待核实）。
+- 【18AS 落地位置补记 · S1（297-R1、297-R2）】
+  - 297-R1 票种规则版本加派生价、动态价两份清单。
+    - 改法：
+      - 迁移 V640 给 ticket_type_rule_versions 加 price_rules、dynamic_pricing_rules 两列（JSONB，默认空数组）。
+      - 版本记该票种全部派生价（会员、新人、学生、团体、渠道，含已存档、不含已删）与已发布动态价。首次发布取现表；已上架的草稿版由现表起稿后逐条累加。
+      - 两份清单随提交写入，复核单摘要逐条写中文「派生价：会员价 · 按基础价 90%」与「动态价：规则名 · 起～止 · 渠道 · 加价/减价 · 优先级」。
+      - 获批时与票种本身价格、组成同一事务：版本里现表没有的派生价写入现表在售，仍是草稿的动态价置已发布。
+    - 落地位置：
+      - backend/src/main/resources/db/migration/V640__ticket_type_rule_version_price_rules.sql
+      - TicketTypeRuleVersionView.java：PriceRule、DynamicPricingRule
+      - TicketTypeRuleVersionService.java：writeOpen、decided→apply、summary、map
+      - TicketCatalogService.java：RuleSnapshot、snapshot、tablePriceRules、tableDynamicRules、withEntry、Draft、openDraft、draftOf 与五处快照调用
+    - 依据：
+      - 第十八批裁决 63「跨域组合通票的派生价、动态价规则也要经项目之上的平台权限审批，并记入票种规则版本。」
+      - ENUM:32「跨域组合通票的定价与域间结算规则由项目之上的平台权限统一审批」
+      - BSM:782「会员价、渠道价、动态价都在对应基础价上按打折/减免/加价/固定额派生；动态价按时段、容量等规则配置，可先试算再发布。」
+      - BSM:569「逐条存档属日常操作，不用审批」（存档不进审批，版本含已存档）
+      - PGM:287「界面全中文（所有终端零英文）」（摘要中文）
+    - 测试：TicketTypePriceRuleVersionJdbcIntegrationTests.firstPublishRecordsPriceRulesAndDynamicRulesInRuleVersion、sameDomainPassAndSingleBarTicketPriceRulesTakeEffectDirectly。
+  - 297-R2 已上架跨域组合通票新建派生价、发布动态价进草稿版，待审 409。
+    - 改法：
+      - 新建派生价入口先锁票种行，待审即 409 TICKET_RULE_VERSION_PENDING。
+      - 已上架跨域组合通票的新派生价只存进该票种唯一一份草稿版，不进现表，返回 status draft。
+      - 发布动态价时同样只存进草稿版：表内仍是草稿，可试算、不参与售价，返回 status draft；待审 409。
+      - 旧版照卖，下单仍按生效版；带草稿派生价下单 404 PRICE_RULE_NOT_FOUND。
+      - 获批后自动生效。撤回后草稿派生价作废、动态价仍为草稿可再发布。
+      - 非跨域与未上架照现行直接生效；存档即时生效、不起新版。
+      - 留痕补记 rule_version_id、rule_version_status。
+    - 落地位置：
+      - TicketCatalogService.java：createPriceRule、stageDynamicPricingRule
+      - TicketingService.java：createTicketPriceRule、publishDynamicPricingRule（带 trail 的 executeWrite）
+    - 依据：
+      - 第十八批裁决 63（同上）
+      - 第十八批裁决 61「改动另存一份草稿版审批，审批期间照旧版卖，获批后自动换成新版」
+      - BSM:782「可先试算再发布」
+      - BSM:521「已发生的业务一律按当时生效的版本计算」
+    - 测试：TicketTypePriceRuleVersionJdbcIntegrationTests.publishedComboPassPriceRuleAndDynamicPublishGoIntoDraftVersionAndTakeEffectOnApproval、withdrawnDraftVersionDropsStagedPriceRuleAndDynamicRuleCanBeStagedAgain。
+- 18AS 落地位置补记·第 297 条 297-R3（最高权限本人提交票种规则版本即生效）：
+  - 改法：
+    - TicketTypeRuleVersionService.submit 开头判断当前账号是否最高权限本人（AuthorizationService.isMasterAuthority(currentActor)）。
+    - 是则不要求最终审批人，不跑「能看全部项目」的审批人校验，不建复核单。
+    - 仍先查待审，有待审 409 TICKET_RULE_VERSION_PENDING。
+    - 写入版本后同一事务立即生效：原生效版改为已被取代，本版生效，并套回现表（三档价、折扣、上架、补插绑定、最低赠酒杯数、派生价入表、动态价置已发布）。
+    - 留痕 ticket_type.rule_version.approved，元数据 ticket_type_id、version_no、master_self_initiated=true。
+    - TicketCatalogService.publishTicketType 两处提交后改为重读现表返回，最高权限首次发布响应即为已上架。
+    - 非最高权限照旧：须填最终审批人，缺则 400 VALIDATION_FAILED。
+  - 范围：票种规则版本只有一道提交闸。18AJ 已有的首次发布，以及改价、加权益、改最低赠酒杯数的草稿版，对最高权限本人同样即生效。按版本内容另分情形属自加条件（18AS 只读设计 d-297 notes ⑦）。
+  - 落地位置：
+    - backend/src/main/java/com/complex/platform/ticketing/TicketTypeRuleVersionService.java（submit）
+    - backend/src/main/java/com/complex/platform/ticketing/TicketCatalogService.java（publishTicketType）
+  - 依据：
+    - BSM:576「持授权 U 盘密钥的最高权限本人发起的操作，不需要经过任何审批。」
+    - 第十八批裁决 71「即选项②：最高权限打开酒吧商品、分类、套餐页看到全部酒吧的全部目录，也可以自己发起删除、即时生效（BSM:576「持授权 U 盘密钥的最高权限本人发起的操作，不需要经过任何审批」）。」
+  - 测试：TicketTypePriceRuleVersionJdbcIntegrationTests.masterFirstPublishOfComboPassTakesEffectWithoutApproval、masterSubmitOfDraftVersionWithPriceRuleTakesEffectAtOnce。
+- 18AS 落地位置补记·第 297 条 297-R4（后台规则版本表显示派生价与动态价，草稿版提示按是否即生效分别显示，报错中文）：
+  - 改法：
+    - 票务策略页规则版本表在「权益组成」后加两行：
+      - 「派生价规则」：人群名 · 按基础价 x% 或固定价平日/周末/节假日 · 渠道（空为全部渠道）。
+      - 「动态价规则」：规则名 · 生效起～止 · 渠道或全部渠道 · 加价/减价 x% 或 ¥x · 优先级。
+      - 清单为空写「无」。
+    - 新建派生价改为 try/catch：后端回草稿时提示「已上架的跨域组合通票改动存入草稿版，旧版照常售卖，提交审批获批后自动换成新版；请在「② 组合式套票配置」选这张票，到规则版本区提交审批」；失败（含待审 409）显示后端中文报错。
+    - 动态定价页发布回草稿时提示「这张票是已上架的跨域组合通票：动态价已存入规则草稿版，旧版照常售卖；请到票务策略② 组合式套票配置提交审批，获批后生效」。
+    - 规则版本区提交审批：最高权限本人提示「最高权限本人发起，新版已直接生效」，其余照旧「已提交审批，获批后自动换成新版」。
+    - 后台字段中文名补 price_rules 派生价规则、dynamic_pricing_rules 动态价规则，以及动作 ticket_price_rule_staged、ticket_dynamic_rule_staged、ticket_type_rule_version_applied。
+  - 落地位置：
+    - apps/web/src/admin/pages/TicketingPoliciesPage.tsx（RuleVersionRow、dynamicAdjustment、createRule、submitRuleVersion、ruleVersionTable）
+    - apps/web/src/admin/pages/DynamicPricingPage.tsx（publishRule）
+    - apps/web/src/admin/i18n/fieldLabels.ts
+  - 依据：
+    - PGM:287「界面全中文（所有终端零英文）」
+    - BSM:782「会员价、渠道价、动态价都在对应基础价上按打折/减免/加价/固定额派生；动态价按时段、容量等规则配置，可先试算再发布。」
+    - 第十八批裁决 61「改动另存一份草稿版审批，审批期间照旧版卖，获批后自动换成新版」
+    - 第十八批裁决 63「跨域组合通票的派生价、动态价规则也要经项目之上的平台权限审批，并记入票种规则版本。」
+    - BSM:576「持授权 U 盘密钥的最高权限本人发起的操作，不需要经过任何审批。」
+  - 测试：
+    - TicketingPoliciesPage.ruleversions.test.tsx「TicketingPoliciesPage 297-R4 规则版本里的派生价与动态价」四例：规则版本表列出派生价与动态价，空清单写「无」；已上架跨域组合通票新建派生价：后端回 status draft → 提示已存入草稿版、去「② 组合式套票配置」提交审批；待审期间新建派生价：后端 409 → 显示中文报错，不报成功；最高权限本人提交草稿版：不填最终审批人，提示新版已直接生效。
+    - DynamicPricingPage.guidedcreate.test.tsx「发布回 status draft → 提示动态价已存入规则草稿版」。
+- 297-R5（契约部分，K-contract）：
+  - 改法：docs/openapi/openapi-p0.yaml 与 .json 同值就地改，操作数 1383 不变，info.version 收尾统一改。
+    - createTicketPriceRule 补中文说明：已上架跨域组合通票新建派生价只存进票种规则草稿版、返回 status draft、不进现表，经 publishTicketType 提交项目之上的平台权限审批，获批写入现表（active）；待审期间（含首次发布待审）409 TICKET_RULE_VERSION_PENDING；成功留痕元数据可带 rule_version_id、rule_version_status。
+    - publishTicketDynamicPricingRule 说明改为中文：已上架跨域组合通票的草稿动态价存进草稿版、表内仍 draft、返回 status draft，获批置 published；待审 409 TICKET_RULE_VERSION_PENDING；404 DYNAMIC_PRICING_RULE_NOT_FOUND。
+    - publishTicketType 说明补：版本另记 price_rules 与 dynamic_pricing_rules，随提交审批、获批写入或发布；最高权限本人提交可不填 final_approver_id、不建复核单、即生效，留痕 ticket_type.rule_version.approved（master_self_initiated=true）。x-audit-event-success 只能填一个字符串，所以这条事件写在说明里。
+    - listTicketTypeRuleVersions、withdrawTicketTypeRuleVersion 说明各补一句。
+    - TicketTypePublishRequest 与 final_approver_id 说明补「最高权限本人提交可不填」。
+    - TicketTypeRuleVersionView 加 required 数组 price_rules、dynamic_pricing_rules，items 逐字段写出、additionalProperties false；review_id 说明补「最高权限本人提交即生效的为空」。
+  - 落地位置：docs/openapi/openapi-p0.yaml 中 createTicketPriceRule、publishTicketDynamicPricingRule、publishTicketType、listTicketTypeRuleVersions、withdrawTicketTypeRuleVersion、components.schemas.TicketTypePublishRequest、components.schemas.TicketTypeRuleVersionView；openapi-p0.json 同位置。
+  - 依据：
+    - 第十八批裁决 63「跨域组合通票的派生价、动态价规则也要经项目之上的平台权限审批，并记入票种规则版本。」
+    - 裁决 61「改动另存一份草稿版审批，审批期间照旧版卖，获批后自动换成新版」
+    - BSM:576「持授权 U 盘密钥的最高权限本人发起的操作，不需要经过任何审批。」
+    - 第十八批裁决 71
+    - ENUM:32「跨域组合通票的定价与域间结算规则由项目之上的平台权限统一审批」
+  - 测试：契约本身无单元测试，npm run verify:openapi、verify:openapi-examples、verify:client-routes、verify:client-openapi、verify:client-payload --strict 全过；yaml 与 json 深比较 0 处值差异。对应的行为测试是 TicketTypePriceRuleVersionJdbcIntegrationTests（297-R1～R3 实现段所写）。
+- 297（18AS 汇合段 J）：
+  - e2e：tests/e2e 不改。mock-api.ts 的 POST price-rules 回 active、动态价 publish 回 published、ticket-types/{id}/publish 回 published，rule-versions 没有专门 mock（页面按空列表处理）。页面新增的 draft 分支和派生价、动态价两列都不会被触发；视觉基线 full-admin-dynamic-pricing-mobile.png 对应的渲染不变，没有重拍。
+  - 门禁结论（变基前实现阶段在 a890a1ac 基线加 18AS 各段改动上的实跑结果）：
+    - 后端 --fresh 全量 6872 个用例 0 红，V640 真迁
+    - 前端 typecheck 0 错，vitest 345 个文件 1951 个用例全部通过
+    - 客人 customer-core 77、customer-app 131、customer-miniapp 85，全部通过
+    - 安卓员工端 125 个用例全部通过，android-app 编译通过
+    - 五份后台 e2e（full-admin-mvp、full-admin-remaining、full-admin-ui-hardening、full-admin-visual、property-fee-evidence）33 个全部通过
+    - docs:operation-matrix、docs:openapi-closure、docs:data-isolation-spec、docs:domain-ownership-scope 在镜像重生成后，verify:p0-contract 全绿
+    - openapi yaml 与 json 深比较一致，操作数 1381（变基到 7b830e40 后为 1383）
+    - git diff --check 通过
+- 297-R5 文档部分（18AS D-docs 组）：
+  - 改了什么：票务 PRD（docs/ticketing-entitlement-checkin-product-prd-v0.1.md）从 V0.35 升到 V0.36。
+  - 落地位置：
+    - §5 第 100 行「跨域组合通票实现现状」段，末句「跨域组合通票的派生价、动态价审批与版本（第十八批裁决 63）尚未实现。」就地改写为 297-R1～R4 的实现现状：
+      - 票种规则版本另记派生价与动态价两份清单（V640 的 price_rules、dynamic_pricing_rules），随提交审批，获批后写入并生效；
+      - 已上架的跨域组合通票新建派生价、发布动态价存进规则草稿版，返回 draft，旧版照卖；
+      - 待审期间 409 TICKET_RULE_VERSION_PENDING；
+      - 撤回时新建的派生价作废，动态价仍为草稿；
+      - 最高权限本人提交首次发布或草稿版即生效；
+      - 后台规则版本表与两个页面的结果提示。
+    - §12A.2 补一条实现现状。
+    - §14 变更日志加 V0.36 行。
+  - 依据：
+    - 第十八批裁决 63「跨域组合通票的派生价、动态价规则也要经项目之上的平台权限审批，并记入票种规则版本。」
+    - ENUM:32「跨域组合通票的定价与域间结算规则由项目之上的平台权限统一审批」
+    - BSM:782「会员价、渠道价、动态价都在对应基础价上按打折/减免/加价/固定额派生；动态价按时段、容量等规则配置，可先试算再发布。」
+    - BSM:576「持授权 U 盘密钥的最高权限本人发起的操作，不需要经过任何审批。」
+    - 第十八批裁决 61、71
+  - 测试：只改了文档，没有新增用例。node tools/verify-full-admin-page-matrix.mjs 通过，git diff --check 通过。
+- 18AS 收尾（N30，组间文档与门禁收口；无新裁决、无新迁移，OpenAPI 操作数不变）：
+  - 297-R3、297-R4 同根的页面遗留（S2 段 not_done 所报，控制席判定照改）：
+    - 票务策略页票种行「发布」的最终审批人提示与规则版本区「最终审批人」输入框，对最高权限本人改为「最高权限本人发起可不填，提交即生效」，与后端一致；其他账号的必填提示与校验不动。
+    - 规则版本区提交成功后，除重读规则版本外，按页面现有取数方法一并重读派生价列表、票种列表（价格与状态）与定价核算；最高权限本人提交即生效会改现表，原先要手动刷新页面才看得到。
+    - 落地位置：apps/web/src/admin/pages/TicketingPoliciesPage.tsx（publishDraftTicket、submitRuleVersion、规则版本区「最终审批人」输入框）；票务 PRD §5 第 100 行现状句同步（仍为 V0.36）。
+    - 依据：BSM:576「持授权 U 盘密钥的最高权限本人发起的操作，不需要经过任何审批。」；第十八批裁决 71。
+    - 测试：TicketingPoliciesPage.ruleversions.test.tsx「TicketingPoliciesPage 297-R4 规则版本里的派生价与动态价」另加三例：最高权限本人：票种行「发布」的最终审批人提示写可不填、提交即生效；最高权限本人：规则版本区「最终审批人」输入框写可不填、提交即生效；最高权限本人提交即生效后：派生价列表、票种列表与定价核算一并重读。改前三例均为断言失败，改后通过。
+  - 文件头版本（以 7b830e40 为基线）：apps/web/src/admin/i18n/fieldLabels.ts 18AN 与本段都从 V0.37 各加 0.01，变基后为 V0.38，再升为 V0.39；其余有版本头的改动基线文件恰好 +0.01，新文件 V0.01；DynamicPricingPage.tsx 与 DynamicPricingPage.guidedcreate.test.tsx 原本没有版本头，不加；决策台账 V0.98→V0.99。
+  - 契约与生成物：OpenAPI info.version V0.74→V0.75（yaml、json 就地替换），操作数 1383 不变，yaml 与 json 逐路径、逐 schema 一致；控制器有、契约无的入口 0。security-scans 两份 md 只改 OpenAPI SHA-256 一行（按最终 openapi-p0.json），计数行仍 1383；security-baseline-latest.json 不改。node tools/refresh-entry-doc-baseline.mjs 回填 README.md 与 docs/00-current-effective-document-entry-v0.1.md（1383 个操作、V640，598 个迁移）；数据隔离规格最新迁移 V640（含 scope 字段的表仍 277 张），领域归属范围无变化，契约收口附录与操作验收矩阵 V0.75。
+  - 覆盖表 html-prd-coverage.csv：BSM-0058 FULL→PARTIAL（写第 297 条落地现状；派生价折扣单位见待开发清单第 334 条，动态价固定额入口见第 335 条）；BSM-0770 PARTIAL→FULL（派生价与动态价已随票种规则版本审批）；BEQ-0123、BSM-0010 补第 297 条落地现状，仍 PARTIAL。
+  - 页面矩阵与截图：本段无新接口、无新页面，页面矩阵不改，界面验收报告校验通过、无需重生成。镜像里用 flock 包住 playwright 跑 full-admin-visual，2 例全过，四张基线与现页面一致，没有重拍。
+  - 回归：后端 --fresh 定向 TicketTypePriceRuleVersionJdbcIntegrationTests、AccessJdbcIntegrationTests 共 157 例全过（新测试类建的角色名、权益模板名都是中文加纯数字后缀，不用改）；前端 typecheck 0 错，vitest 347 个文件 1972 例全过；verify:predeploy、verify:partial-requirement-mock-coverage、verify:entry-doc-baseline、verify:security-baseline、verify:entry-anchors、verify:html-ledger-sync、verify:ui-experience-acceptance、verify:p0-contract（1383 个操作）、verify:tenant-isolation、verify:migration-version-order、verify:matrix-vs-migration、verify:data-isolation-spec、verify:domain-ownership-scope、verify:external-dependency-gates、verify:t3d-local-llm-ai-quality、verify-admin-result-labels、verify-full-admin-page-matrix 通过；git diff --check 通过。
+- 18AS 收尾复核修正（2026-11-17）：收尾复核三条意见经核实成立，照改；无新裁决、无新迁移，OpenAPI 与契约不改，改动文件的版本头本段已升过、不再升。
+  - 意见 1（之前被驳回过的版本，最高权限本人再提交即生效后 review_id 仍是那张已驳回的复核单）：
+    - 做法：TicketTypeRuleVersionService.submit 的最高权限分支在套回现表（apply）之前，把该版本 review_id 置空。被平台驳回、退回草稿时按 18AJ 设计保留的复核单号随之清空，契约两处说法成立：openapi-p0.yaml TicketTypeRuleVersionView.review_id「最高权限本人提交即生效的为空」、listTicketTypeRuleVersions「最高权限本人提交的版本 review_id 为空、直接为 effective」。非最高权限重新提交照旧换成新复核单号。
+    - 同根排查：本段与 18AJ 里最高权限本人即生效、会写票种规则版本或复核单的分支只有这一处（首次发布与已上架票草稿版都经 publishTicketType 进 submit）；票务包里其余最高权限分支（退款、安全例外、删除审批）不写票种规则版本，不涉及。
+    - 落地位置：backend/src/main/java/com/complex/platform/ticketing/TicketTypeRuleVersionService.java（submit）。
+    - 依据：BSM:576「持授权 U 盘密钥的最高权限本人发起的操作，不需要经过任何审批。」；第十八批裁决 71。
+    - 测试：TicketTypePriceRuleVersionJdbcIntegrationTests.masterSubmitAfterRejectionLeavesNoReviewId。首次发布与已上架票草稿版各走一遍「非最高权限提交并填最终审批人 → 平台驳回，版本退回草稿、保留复核单号 → 最高权限本人提交」，断言该版本生效、review_id 为空。改前断言失败，改后通过。
+  - 意见 2（在「⑤ 派生价规则」新建派生价存入草稿版后，「② 组合式套票配置」已选同一张票时规则版本表不刷新，「提交审批」按钮出不来）：
+    - 做法：票务策略页 createRule 在后端回 draft 的分支里，结果提示之后补一句：派生票种就是 ② 所选的票时重读规则版本，写法同 publishDraftTicket。
+    - 同根排查：本页会让后端新建或改动草稿版的动作逐个核过。票种行「发布」、改售价与折扣、改最低赠酒杯数、组合配置、规则版本区提交与放弃草稿，原已重读。「④ 通票组装」绑定权益（已上架跨域组合通票只存进草稿版）漏了，同样补。派生价存档、取消存档、删除申请与删除审批不进草稿版，不用补。动态定价页没有规则版本区，不补。
+    - 落地位置：apps/web/src/admin/pages/TicketingPoliciesPage.tsx（createRule、bindEntitlement）。
+    - 依据：第十八批裁决 63「跨域组合通票的派生价、动态价规则也要经项目之上的平台权限审批，并记入票种规则版本。」；第十八批裁决 61「改动另存一份草稿版审批，审批期间照旧版卖，获批后自动换成新版」。
+    - 测试：TicketingPoliciesPage.ruleversions.test.tsx 另加两例：「② 已选这张票时在⑤新建派生价存入草稿版：规则版本区当场重读，第 2 版草稿与提交审批出现」「② 已选这张票时在④绑定权益：规则版本区当场重读，草稿版与提交审批出现」。改前均为断言失败，改后通过。
+  - 意见 3（最高权限本人提交即生效后，没有重读「最低赠酒杯数」和「票面赠酒清单」，页面显示旧值）：
+    - 做法：submitRuleVersion 成功分支补重读最低赠酒杯数与票面赠酒清单，写法同组合配置与撤回处。
+    - 落地位置：apps/web/src/admin/pages/TicketingPoliciesPage.tsx（submitRuleVersion）；票务 PRD 第 100 行现状句「并重读……」随改为「并重读派生价列表、票种列表、定价核算、最低赠酒杯数与票面赠酒清单」（仍为 V0.36）。
+    - 依据：BSM:576「持授权 U 盘密钥的最高权限本人发起的操作，不需要经过任何审批。」；第十八批裁决 61「获批后自动换成新版」。
+    - 测试：TicketingPoliciesPage.ruleversions.test.tsx 另加一例「最高权限本人提交即生效后：最低赠酒杯数与票面赠酒清单一并重读」。改前断言失败，改后通过。
+  - 回归：后端 --fresh 定向 TicketTypePriceRuleVersionJdbcIntegrationTests、TicketTypeRuleVersionJdbcIntegrationTests 共 17 例全过；前端 typecheck 0 错，vitest 过滤 TicketingPoliciesPage、DynamicPricingPage 8 个文件 68 例全过。

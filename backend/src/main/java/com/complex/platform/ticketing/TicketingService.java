@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.12
+// 文件版本：V0.13
 
 import com.complex.platform.common.api.ApiException;
 
@@ -358,14 +358,21 @@ public class TicketingService {
     @Transactional
     public TicketDynamicPricingRuleRecord publishDynamicPricingRule(String ruleId, StatusChangeRequest request) {
         String id = operations.requireText(ruleId, "dynamic_pricing_rule_id");
+        java.util.Map<String, Object> trail = new java.util.LinkedHashMap<>();
         return operations.executeWrite(
                 "publishTicketDynamicPricingRule:" + id,
                 request == null ? null : request.idempotencyKey(),
                 request,
                 TicketDynamicPricingRuleRecord.class,
                 TicketingWriteOperation.PUBLISH_DYNAMIC_PRICING_RULE,
-                () -> pricingService.publishDynamicPricingRule(id, request)
-        );
+                () -> {
+                    // 第十八批 AS 段 297-R2：已上架跨域组合通票的动态价只存进草稿版，其余照现行发布。
+                    TicketDynamicPricingRuleRecord saved = catalogService.stageDynamicPricingRule(id, request)
+                            .orElseGet(() -> pricingService.publishDynamicPricingRule(id, request));
+                    trail.putAll(catalogService.ruleVersionTrail(saved.ticketTypeId()));
+                    return saved;
+                },
+                trail);
     }
 
     @Transactional
@@ -452,14 +459,19 @@ public class TicketingService {
     @com.complex.platform.gate.GuardedAction(capability = "ticket.price_variant.manage")
     @Transactional
     public TicketPriceRuleRecord createTicketPriceRule(TicketPriceRuleRequest request) {
+        java.util.Map<String, Object> trail = new java.util.LinkedHashMap<>();
         return operations.executeWrite(
                 "createTicketPriceRule",
                 request == null ? null : request.idempotencyKey(),
                 request,
                 TicketPriceRuleRecord.class,
                 TicketingWriteOperation.CREATE_TICKET_PRICE_RULE,
-                () -> catalogService.createPriceRule(request)
-        );
+                () -> {
+                    TicketPriceRuleRecord saved = catalogService.createPriceRule(request);
+                    trail.putAll(catalogService.ruleVersionTrail(saved.ticketTypeId())); // 297-R2：这次只存进了草稿版时记下版本
+                    return saved;
+                },
+                trail);
     }
 
     /** 持授权 U 盘密钥的最高权限本人；无鉴权上下文（测试/内部调用）按非最高权限。 */

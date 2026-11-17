@@ -1,12 +1,13 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.05
+// 文件版本：V0.06
 
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.governance.MerchantRecord;
 import com.complex.platform.ticketing.dto.EntitlementTemplateRequest;
 import com.complex.platform.ticketing.dto.EntitlementTemplateDeleteRequest;
 import com.complex.platform.ticketing.dto.EntitlementTemplateDeleteApprovalRequest;
+import com.complex.platform.ticketing.dto.StatusChangeRequest;
 import com.complex.platform.ticketing.dto.TicketTypePublishRequest;
 import com.complex.platform.ticketing.dto.TicketPriceRuleRequest;
 import com.complex.platform.ticketing.dto.TicketTypeEntitlementRequest;
@@ -137,7 +138,7 @@ public class TicketCatalogService {
         if (toDraftVersion(current, bindings)) {
             Draft draft = openDraft(current, bindings);
             requirePriceWithinTolerance(updated, draft.bindings());
-            ruleVersions.saveOpen(current.id(), snapshot(updated, draft.bindings(), draft.floor()));
+            ruleVersions.saveOpen(current.id(), snapshot(updated, draft.bindings(), draft.floor(), draft.priceRules(), draft.dynamicRules()));
             return current;
         }
         requirePriceWithinTolerance(updated, bindings);
@@ -167,6 +168,8 @@ public class TicketCatalogService {
     TicketPriceRuleRecord createPriceRule(TicketPriceRuleRequest request) {
         TicketPriceRuleRequest actual = requireRequest(request);
         String ticketTypeId = requireText(actual.ticketTypeId(), "ticket_type_id");
+        // 第十八批 AS 段 297-R2：待审期间不许再配派生价（须先撤回提交）。
+        requireNoPendingRuleVersion(ticketTypeId);
         TicketTypeRecord ruleTicketType = repository.findTicketTypeById(ticketTypeId)
                 .orElseThrow(() -> ApiException.notFound("TICKET_TYPE_NOT_FOUND", "票种不存在或已被删除"));
         // 复核§3(V260)：已存档/待删除票种不可再配派生价规则——否则"存档=软下线"名存实亡，
@@ -193,7 +196,11 @@ public class TicketCatalogService {
         validateNonNegative(actual.weekendPriceCent(), "weekend_price_cent");
         validateNonNegative(actual.holidayPriceCent(), "holiday_price_cent");
         Instant now = Instant.now();
-        return repository.savePriceRule(new TicketPriceRuleRecord(
+        // 第十八批 AS 段 297-R2（第十八批裁决 63「跨域组合通票的派生价、动态价规则也要经项目之上的平台权限审批，并记入票种规则版本。」；裁决 61「改动另存一份
+        //   草稿版审批，审批期间照旧版卖，获批后自动换成新版」）：已上架跨域组合通票新建派生价只存进草稿版、返回草稿态，不进现表，获批时写入。
+        java.util.List<TicketTypeEntitlementRecord> bindings = repository.listTicketTypeEntitlements(ticketTypeId);
+        boolean staged = toDraftVersion(ruleTicketType, bindings);
+        TicketPriceRuleRecord rule = new TicketPriceRuleRecord(
                 "price_rule_" + slug(actual.idempotencyKey()),
                 ticketTypeId,
                 variantType,
@@ -204,11 +211,42 @@ public class TicketCatalogService {
                 actual.discountRate(),
                 trimToNull(actual.channelId()),
                 CURRENCY_CNY,
-                "active",
+                staged ? "draft" : "active",
                 actual.eligibilityRule() == null ? Map.of() : Map.copyOf(actual.eligibilityRule()),
                 now,
                 now
-        ));
+        );
+        if (staged) {
+            Draft d = openDraft(ruleTicketType, bindings);
+            ruleVersions.saveOpen(ticketTypeId, snapshot(d.type(), d.bindings(), d.floor(),
+                    withEntry(d.priceRules(), TicketTypeRuleVersionView.PriceRule.of(rule), TicketTypeRuleVersionView.PriceRule::id),
+                    d.dynamicRules()));
+            return rule;
+        }
+        return repository.savePriceRule(rule);
+    }
+
+    /**
+     * 第十八批 AS 段 297-R2（第十八批裁决 63、裁决 61）：发布动态价时，已上架跨域组合通票的草稿动态价只存进草稿版（表内仍为草稿、不参与售价，获批时置已发布），
+     * 返回该规则；待审期间 409；其余（非跨域、未上架、规则已不是草稿）返回空，由调用方照现行发布。
+     */
+    java.util.Optional<TicketDynamicPricingRuleRecord> stageDynamicPricingRule(String ruleId, StatusChangeRequest request) {
+        if (ruleVersions == null) {
+            return java.util.Optional.empty();
+        }
+        requireText(requireRequest(request).reason(), "reason");
+        TicketDynamicPricingRuleRecord rule = repository.findDynamicPricingRuleById(ruleId)
+                .orElseThrow(() -> ApiException.notFound("DYNAMIC_PRICING_RULE_NOT_FOUND", "动态定价规则不存在或已被删除"));
+        requireNoPendingRuleVersion(rule.ticketTypeId());
+        TicketTypeRecord ticketType = requireTicketTypeRecord(rule.ticketTypeId());
+        java.util.List<TicketTypeEntitlementRecord> bindings = repository.listTicketTypeEntitlements(ticketType.id());
+        if (!"draft".equals(rule.status()) || !toDraftVersion(ticketType, bindings)) {
+            return java.util.Optional.empty();
+        }
+        Draft d = openDraft(ticketType, bindings);
+        ruleVersions.saveOpen(ticketType.id(), snapshot(d.type(), d.bindings(), d.floor(), d.priceRules(),
+                withEntry(d.dynamicRules(), TicketTypeRuleVersionView.DynamicPricingRule.of(rule), TicketTypeRuleVersionView.DynamicPricingRule::id)));
+        return java.util.Optional.of(rule);
     }
 
     EntitlementTemplateRecord createEntitlementTemplate(EntitlementTemplateRequest request) {
@@ -548,7 +586,8 @@ public class TicketCatalogService {
         // 第十八批 AJ 段 236-R7（第十八批裁决 61）：已上架跨域组合通票加权益只存进该票种唯一一份草稿版，现表与售卖不变，获批后自动换成新版。
         if (ruleVersions != null && crossDomain) {
             Draft draft = openDraft(ticketType, current);
-            ruleVersions.saveOpen(ticketType.id(), snapshot(draft.type(), withBinding(draft.bindings(), binding), draft.floor()));
+            ruleVersions.saveOpen(ticketType.id(), snapshot(draft.type(), withBinding(draft.bindings(), binding), draft.floor(), draft.priceRules(),
+                    draft.dynamicRules()));
             return binding;
         }
         // V369：已上架的票被改了组成（加权益／改票面原价）后，售价若已经对不上新的业态构成，就把票退回草稿。
@@ -627,18 +666,19 @@ public class TicketCatalogService {
             Draft draft = draftOf(current, open);
             requirePublishable(draft.type(), draft.bindings(), () -> barGiftCoverageViolation(current.barId(),
                     providerRows(draft.bindings()), draft.floor() == null ? FACTORY_MIN_GIFT_CUPS : draft.floor().minGiftCups()));
-            ruleVersions.submit(current, snapshot(draft.type(), draft.bindings(), draft.floor()), actual.reason(),
+            ruleVersions.submit(current, snapshot(draft.type(), draft.bindings(), draft.floor(), draft.priceRules(), draft.dynamicRules()), actual.reason(),
                     actual.finalApproverId(), actual.idempotencyKey());
-            return current;
+            return requireTicketTypeRecord(current.id()); // 297-R3：最高权限本人提交已即时换成新版，重读现表
         }
         java.util.List<TicketTypeEntitlementRecord> bindings = repository.listTicketTypeEntitlements(current.id());
         requirePublishable(current, bindings, () -> barGiftCoverageViolation(current));
         // 第十八批 AJ 段 236-R3（第十八批裁决 52 ②；ENUM:32「跨域组合通票的定价与域间结算规则由项目之上的平台权限统一审批」；BSM:754）：
         //   未上架的跨域组合通票闸全过后提交平台权限审批、留一版规则，票仍为草稿（ENUM:30「草稿（规则未发布）」），获批即上架。
         if (ruleVersions != null && !"published".equals(current.status()) && crossDomain(current, bindings)) {
-            ruleVersions.submit(current, snapshot(current, bindings, repository.findGiftFloor(current.id()).orElse(null)),
+            ruleVersions.submit(current, snapshot(current, bindings, repository.findGiftFloor(current.id()).orElse(null),
+                    tablePriceRules(current.id()), tableDynamicRules(current.id())),
                     actual.reason(), actual.finalApproverId(), actual.idempotencyKey());
-            return current;
+            return requireTicketTypeRecord(current.id()); // 297-R3：最高权限本人提交已即时上架，重读现表
         }
         // 发布只翻状态，其余（库存/已售/分类/可退/酒吧归属/折扣）一律原样带过，避免被置空/清零。
         return repository.saveTicketType(current.withStatus("published", Instant.now()));
@@ -790,7 +830,7 @@ public class TicketCatalogService {
         //   现表与售卖不变；草稿赠酒够不够数在提交审批时由发布闸点名。
         if (toDraftVersion(ticketType, bindings)) {
             Draft draft = openDraft(ticketType, bindings);
-            ruleVersions.saveOpen(ticketType.id(), snapshot(draft.type(), draft.bindings(), floor));
+            ruleVersions.saveOpen(ticketType.id(), snapshot(draft.type(), draft.bindings(), floor, draft.priceRules(), draft.dynamicRules()));
             return floor;
         }
         repository.saveGiftFloor(floor);
@@ -1024,11 +1064,15 @@ public class TicketCatalogService {
 
     // ================= 第十八批 AJ 段 236-R3 跨域组合通票票种规则版本（第十八批裁决 52 ②、裁决 61） =================
 
-    /** 版本内容快照：三档价、折扣、最低赠酒杯数（三者同空＝没配过）、权益组成、合计与算出售价、凑整差额与各域分摊。 */
+    /**
+     * 版本内容快照：三档价、折扣、最低赠酒杯数（三者同空＝没配过）、权益组成、合计与算出售价、凑整差额与各域分摊；297-R1 另记派生价（含已存档）与动态价。
+     */
     record RuleSnapshot(Long weekdayPriceCent, Long weekendPriceCent, Long holidayPriceCent, BigDecimal comboDiscountRate,
             Integer minGiftCups, Integer minGiftCupsLower, Integer minGiftCupsUpper,
             java.util.List<TicketTypeRuleVersionView.Entitlement> entitlements, long componentTotalCent, long computedPriceCent,
-            Long roundingDiffCent, java.util.List<TicketTypeRuleVersionView.DomainAllocation> domainAllocations) {
+            Long roundingDiffCent, java.util.List<TicketTypeRuleVersionView.DomainAllocation> domainAllocations,
+            java.util.List<TicketTypeRuleVersionView.PriceRule> priceRules,
+            java.util.List<TicketTypeRuleVersionView.DynamicPricingRule> dynamicPricingRules) {
     }
 
     /**
@@ -1067,7 +1111,9 @@ public class TicketCatalogService {
      * 算出售价拆到每份权益再按域归堆：折扣分摊＝满额－按算出价所得，凑整分摊＝按填价所得－按算出价所得。只按平日价算（同凑整误差闸）；
      * 只列业态价格合计大于 0 的域；平日价未填则不分摊。
      */
-    RuleSnapshot snapshot(TicketTypeRecord ticketType, java.util.List<TicketTypeEntitlementRecord> bindings, TicketTypeGiftFloor floor) {
+    RuleSnapshot snapshot(TicketTypeRecord ticketType, java.util.List<TicketTypeEntitlementRecord> bindings, TicketTypeGiftFloor floor,
+            java.util.List<TicketTypeRuleVersionView.PriceRule> priceRules,
+            java.util.List<TicketTypeRuleVersionView.DynamicPricingRule> dynamicRules) {
         TicketTypePriceCheck check = priceCheck(ticketType, bindings, 0L);
         Map<String, TicketingRepository.TemplateProvider> providers = providers(bindings);
         Long filled = ticketType.weekdayPriceCent();
@@ -1108,7 +1154,32 @@ public class TicketCatalogService {
         return new RuleSnapshot(ticketType.weekdayPriceCent(), ticketType.weekendPriceCent(), ticketType.holidayPriceCent(),
                 check.comboDiscountRate(), floor == null ? null : floor.minGiftCups(), floor == null ? null : floor.minGiftCupsLower(),
                 floor == null ? null : floor.minGiftCupsUpper(), entitlements, check.componentTotalCent(), check.computedPriceCent(),
-                filled == null ? null : filled - check.computedPriceCent(), allocations);
+                filled == null ? null : filled - check.computedPriceCent(), allocations, priceRules, dynamicRules);
+    }
+
+    /** 297-R1：现表里该票种全部派生价（含已存档，不含已删）。 */
+    private java.util.List<TicketTypeRuleVersionView.PriceRule> tablePriceRules(String ticketTypeId) {
+        return repository.listPriceRules(true).stream().filter(rule -> ticketTypeId.equals(rule.ticketTypeId()))
+                .map(TicketTypeRuleVersionView.PriceRule::of).toList();
+    }
+
+    /** 297-R1：现表里该票种已发布的动态价（草稿不参与售价，不记）。 */
+    private java.util.List<TicketTypeRuleVersionView.DynamicPricingRule> tableDynamicRules(String ticketTypeId) {
+        return repository.listDynamicPricingRules().stream()
+                .filter(rule -> ticketTypeId.equals(rule.ticketTypeId()) && "published".equals(rule.status()))
+                .map(TicketTypeRuleVersionView.DynamicPricingRule::of).toList();
+    }
+
+    /** 清单里按编号替换这一条，没有就追加（同 withBinding）。 */
+    private static <T> java.util.List<T> withEntry(java.util.List<T> list, T entry, java.util.function.Function<T, String> id) {
+        java.util.List<T> merged = new java.util.ArrayList<>();
+        for (T existing : list) {
+            if (!id.apply(existing).equals(id.apply(entry))) {
+                merged.add(existing);
+            }
+        }
+        merged.add(entry);
+        return merged;
     }
 
     /** 票种规则版本，新版在前；票种已上架时其未结版本另附定价核算（草稿价、草稿组成与现行允许误差）。 */
@@ -1178,8 +1249,10 @@ public class TicketCatalogService {
 
     // ================= 第十八批 AJ 段 236-R7 已上架跨域组合通票的草稿版（第十八批裁决 61） =================
 
-    /** 草稿版内容：草稿价（票种其余字段取现表）、草稿组成、草稿最低赠酒杯数（空＝没配过）。 */
-    private record Draft(TicketTypeRecord type, java.util.List<TicketTypeEntitlementRecord> bindings, TicketTypeGiftFloor floor) {
+    /** 草稿版内容：草稿价（票种其余字段取现表）、草稿组成、草稿最低赠酒杯数（空＝没配过）、草稿派生价与动态价（297-R1）。 */
+    private record Draft(TicketTypeRecord type, java.util.List<TicketTypeEntitlementRecord> bindings, TicketTypeGiftFloor floor,
+            java.util.List<TicketTypeRuleVersionView.PriceRule> priceRules,
+            java.util.List<TicketTypeRuleVersionView.DynamicPricingRule> dynamicRules) {
     }
 
     /** 改价、加权益、改最低赠酒杯数的去向：已上架的跨域组合通票（按现表即当前生效版判）存进草稿版，其余照现行写现表。 */
@@ -1190,7 +1263,8 @@ public class TicketCatalogService {
     /** 该票种唯一一份未结版本（草稿版）的内容；没有就由现表起一份。调用方已持票种锁且已排除待审。 */
     private Draft openDraft(TicketTypeRecord ticketType, java.util.List<TicketTypeEntitlementRecord> current) {
         return ruleVersions.findOpen(ticketType.id()).map(open -> draftOf(ticketType, open))
-                .orElseGet(() -> new Draft(ticketType, current, repository.findGiftFloor(ticketType.id()).orElse(null)));
+                .orElseGet(() -> new Draft(ticketType, current, repository.findGiftFloor(ticketType.id()).orElse(null),
+                        tablePriceRules(ticketType.id()), tableDynamicRules(ticketType.id())));
     }
 
     private static Draft draftOf(TicketTypeRecord ticketType, TicketTypeRuleVersionView version) {
@@ -1201,7 +1275,8 @@ public class TicketCatalogService {
                         e.entitlementTemplateId(), e.quantity(), e.totalTimes(), e.valueAmountCent(), e.effectiveRule(), e.numPeople(),
                         e.componentPriceCent(), e.costBearer(), e.createdAt(), e.createdAt())).toList(),
                 version.minGiftCups() == null ? null : new TicketTypeGiftFloor(ticketType.id(), version.minGiftCups(),
-                        version.minGiftCupsLower(), version.minGiftCupsUpper(), version.updatedBy(), version.updatedAt()));
+                        version.minGiftCupsLower(), version.minGiftCupsUpper(), version.updatedBy(), version.updatedAt()),
+                version.priceRules(), version.dynamicPricingRules());
     }
 
     /** 草稿组成的提供方行（同现表 listTicketTypeProviderEntitlements 口径：已存档模板不算票面内容）。 */

@@ -1,4 +1,4 @@
-// 文件版本：V0.10
+// 文件版本：V0.11
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
@@ -159,6 +159,11 @@ type RuleVersionRow = {
   computedPriceCent: number;
   roundingDiffCent: number | null;
   domainAllocations: Array<{ domain: string; domainName: string | null; componentTotalCent: number; discountShareCent: number; roundingShareCent: number }>;
+  // 第十八批 AS 段 297-R4（第十八批裁决 63「跨域组合通票的派生价、动态价规则也要经项目之上的平台权限审批，并记入票种规则版本。」）：版本另记的两份清单。
+  priceRules: Array<{ id: string; variantType: string; priceMode: string; weekdayPriceCent: number | null; weekendPriceCent: number | null;
+    holidayPriceCent: number | null; discountRate: number | string | null; channelId: string | null }>;
+  dynamicPricingRules: Array<{ id: string; ruleName: string; priority: number; effectiveFrom: string; effectiveTo: string; salesChannel: string | null;
+    adjustmentType: string; adjustmentRate: number | string | null; adjustmentAmountCent: number | null }>;
   reviewId: string | null;
   // 票种已上架时其未结版本的定价核算（草稿价、草稿组成）；其余为空。
   priceCheck: PriceCheckRow | null;
@@ -170,6 +175,15 @@ const FORMAT_COMPANIES: Record<string, string> = {
   bar: "entertainment_platform_company", amusement: "amusement_company", media: "media_company",
   catering: "city_project_company", retail: "city_project_company",
 };
+// 297-R4 规则版本表里动态价的调整：按比例写「加价/减价 x%」，按固定额写「加价/减价 ¥x」（同后端复核单摘要）。
+function dynamicAdjustment(d: RuleVersionRow["dynamicPricingRules"][number]): string {
+  if (d.adjustmentType === "fixed_delta") {
+    const amount = d.adjustmentAmountCent ?? 0;
+    return `${amount < 0 ? "减价" : "加价"} ¥${yuan(Math.abs(amount))}`;
+  }
+  const rate = Number(d.adjustmentRate ?? 0);
+  return `${rate < 0 ? "减价" : "加价"} ${Math.abs(rate)}%`;
+}
 // 236-R5④⑩（第十八批裁决 61「审批期间照旧版卖，获批后自动换成新版」）：已上架跨域组合通票的改价、加权益、改最低赠酒杯数存入草稿版。
 const DRAFT_VERSION_NOTE = "已上架的跨域组合通票改动存入草稿版，旧版照常售卖，提交审批获批后自动换成新版";
 
@@ -459,7 +473,9 @@ export function TicketingPoliciesPage({ api, user, setActionResult, setGlobalErr
     const reason = window.prompt("发布理由：");
     if (reason === null) return;
     if (!reason.trim()) { setGlobalError("发布理由必填"); return; }
-    const approver = window.prompt("最终审批人用户编号（跨域组合通票必填，其余留空）：");
+    // 297-R3（BSM:576）：最高权限本人发起不要求最终审批人、提交即生效。
+    const approver = window.prompt(isMaster ? "最终审批人用户编号（最高权限本人发起可不填，提交即生效）："
+      : "最终审批人用户编号（跨域组合通票必填，其余留空）：");
     if (approver === null) return;
     setGlobalError(null);
     try {
@@ -612,6 +628,8 @@ export function TicketingPoliciesPage({ api, user, setActionResult, setGlobalErr
         cost_bearer: bindForm.costBearer || null,
       });
       setActionResult({ action: "ticket_entitlement_bound", ticketTypeId: bindForm.ticketTypeId, note: DRAFT_VERSION_NOTE });
+      // 已上架跨域组合通票加权益存进草稿版：② 已选这张票时当场重读规则版本。
+      if (bindForm.ticketTypeId === comboTicketId) void loadRuleVersions(comboTicketId);
       reload();
     } catch (err) {
       setGlobalError(err instanceof Error ? err.message : "绑定权益失败");
@@ -628,18 +646,30 @@ export function TicketingPoliciesPage({ api, user, setActionResult, setGlobalErr
       setGlobalError("固定价模式必须填价格（元）");
       return;
     }
-    await api.post("/api/v1/ticketing/price-rules", {
-      idempotency_key: crypto.randomUUID(),
-      ticket_type_id: ruleForm.ticketTypeId,
-      variant_type: ruleForm.variantType,
-      price_mode: ruleForm.priceMode,
-      discount_rate: fixed ? null : Number(ruleForm.discount) || null,
-      weekday_price_cent: fixed ? Math.round(Number(ruleForm.fixedYuan) * 100) : null,
-      weekend_price_cent: fixed ? Math.round(Number(ruleForm.fixedYuan) * 100) : null,
-      holiday_price_cent: fixed ? Math.round(Number(ruleForm.fixedYuan) * 100) : null,
-    });
-    setActionResult({ action: "ticket_price_rule_created", variantType: ruleForm.variantType });
-    reload();
+    try {
+      const saved = await api.post<{ status?: string }>("/api/v1/ticketing/price-rules", {
+        idempotency_key: crypto.randomUUID(),
+        ticket_type_id: ruleForm.ticketTypeId,
+        variant_type: ruleForm.variantType,
+        price_mode: ruleForm.priceMode,
+        discount_rate: fixed ? null : Number(ruleForm.discount) || null,
+        weekday_price_cent: fixed ? Math.round(Number(ruleForm.fixedYuan) * 100) : null,
+        weekend_price_cent: fixed ? Math.round(Number(ruleForm.fixedYuan) * 100) : null,
+        holiday_price_cent: fixed ? Math.round(Number(ruleForm.fixedYuan) * 100) : null,
+      });
+      // 第十八批 AS 段 297-R4（第十八批裁决 63、61）：已上架跨域组合通票的派生价只存进规则草稿版（后端回 draft），提交审批获批后生效。
+      if (saved?.status === "draft") {
+        setActionResult({ action: "ticket_price_rule_staged", ticketTypeId: ruleForm.ticketTypeId,
+          note: `${DRAFT_VERSION_NOTE}；请在「② 组合式套票配置」选这张票，到规则版本区提交审批` });
+        // ② 已选这张票时当场重读规则版本（重选同一项不触发 change），草稿版与「提交审批」随即出现。
+        if (ruleForm.ticketTypeId === comboTicketId) void loadRuleVersions(comboTicketId);
+      } else {
+        setActionResult({ action: "ticket_price_rule_created", variantType: ruleForm.variantType });
+      }
+      reload();
+    } catch (err) {
+      setGlobalError(err instanceof Error ? err.message : "新建派生价失败");
+    }
   }
 
   // ---- 组合式配置策略编排 ----
@@ -989,9 +1019,17 @@ export function TicketingPoliciesPage({ api, user, setActionResult, setGlobalErr
         reason: ruleSubmitReason.trim(),
         final_approver_id: ruleSubmitApprover.trim() || null,
       });
-      setActionResult({ action: "ticket_type_rule_version_submitted", ticketTypeId: comboTicketId, note: "已提交审批，获批后自动换成新版" });
+      // 297-R4（BSM:576「持授权 U 盘密钥的最高权限本人发起的操作，不需要经过任何审批。」）：最高权限本人提交即生效。
+      setActionResult(isMaster
+        ? { action: "ticket_type_rule_version_applied", ticketTypeId: comboTicketId, note: "最高权限本人发起，新版已直接生效" }
+        : { action: "ticket_type_rule_version_submitted", ticketTypeId: comboTicketId, note: "已提交审批，获批后自动换成新版" });
       setRuleSubmitReason("");
       await loadRuleVersions(comboTicketId);
+      // 297-R3：最高权限本人提交即生效会改现表，派生价列表、票种价格与状态、定价核算、最低赠酒杯数与票面赠酒清单一并重读。
+      void loadPriceCheck(comboTicketId);
+      void loadGiftFloor(comboTicketId);
+      void loadGiftCoverage(comboTicketId);
+      reload();
     } catch (err) {
       setGlobalError(err instanceof Error ? err.message : "提交审批失败");
     }
@@ -1036,6 +1074,16 @@ export function TicketingPoliciesPage({ api, user, setActionResult, setGlobalErr
           + `${e.quantity} 份、每份 ${e.totalTimes} 次、${e.numPeople} 人，业态价格 ¥${yuan(e.componentPriceCent)}，`
           + `出资方 ${COST_BEARER_OPTIONS.find((o) => o.value === e.costBearer)?.label.split("（")[0] ?? "—"}）`}</div>
       ))],
+      // 297-R4：派生价（人群 · 按基础价折扣或固定价三档 · 渠道）与动态价（规则名 · 生效期 · 渠道 · 加减 · 优先级），空写「无」。
+      ["派生价规则", (v) => (v.priceRules.length === 0 ? "无" : v.priceRules.map((p) => (
+        <div key={p.id}>{`${VARIANT_LABELS[p.variantType] ?? p.variantType} · ${p.priceMode === "fixed_price"
+          ? `固定价 平日 ¥${yuan(p.weekdayPriceCent)}、周末 ¥${yuan(p.weekendPriceCent)}、节假日 ¥${yuan(p.holidayPriceCent)}`
+          : `按基础价 ${String(p.discountRate ?? "—")}%`} · ${p.channelId ? formatBusinessStatus(p.channelId) : "全部渠道"}`}</div>
+      )))],
+      ["动态价规则", (v) => (v.dynamicPricingRules.length === 0 ? "无" : v.dynamicPricingRules.map((d) => (
+        <div key={d.id}>{`${d.ruleName} · ${d.effectiveFrom}～${d.effectiveTo} · ${d.salesChannel ? formatBusinessStatus(d.salesChannel) : "全部渠道"} · `
+          + `${dynamicAdjustment(d)} · 优先级 ${d.priority}`}</div>
+      )))],
       ["最低赠酒杯数", (v) => (v.minGiftCups == null ? "出厂 1 杯"
         : `${v.minGiftCups} 杯（下限 ${v.minGiftCupsLower ?? "—"} 杯、上限 ${v.minGiftCupsUpper ?? "—"} 杯）`)],
     ];
@@ -1311,7 +1359,8 @@ export function TicketingPoliciesPage({ api, user, setActionResult, setGlobalErr
                   </label>
                   <label>最终审批人（用户编号）
                     <input aria-label="最终审批人" data-testid="rule-version-submit-approver" value={ruleSubmitApprover}
-                      placeholder="项目之上的平台权限审批人，不是登录名" onChange={(event) => setRuleSubmitApprover(event.target.value)} />
+                      placeholder={isMaster ? "最高权限本人发起可不填，提交即生效" : "项目之上的平台权限审批人，不是登录名"}
+                      onChange={(event) => setRuleSubmitApprover(event.target.value)} />
                   </label>
                   <PermissionButton permissionsState={effectivePermissions} permissions={MANAGE} data-testid="rule-version-submit"
                     onClick={() => void submitRuleVersion()}>提交审批</PermissionButton>
