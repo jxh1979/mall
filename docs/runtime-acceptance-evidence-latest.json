@@ -8,14 +8,14 @@
     "RUNTIME_EVIDENCE_BOUND_TO_SOURCE_FINGERPRINT",
     "RUNTIME_EVIDENCE_DOES_NOT_CLOSE_PRODUCTION_MANIFEST"
   ],
-  "generated_at": "2026-11-17T04:48:00.879Z",
+  "generated_at": "2026-11-17T06:28:14.583Z",
   "git": {
-    "head": "fcfd104de91e0da9e629c655bb75d786b62d7f8c",
-    "head_short": "fcfd104d",
-    "branch": "feature/business-code-batch61-20261106",
+    "head": "fa98002a06c3ce7bbd2d0823fefad91a7b528951",
+    "head_short": "fa98002a",
+    "branch": "feature/business-code-batch62-20261106",
     "worktree_dirty": false,
-    "source_fingerprint": "e8b715e6f90933d0dbb7d9d40cbba3fbbd16f13a0168cb384306eeb1faefe2d2",
-    "source_fingerprint_file_count": 3446,
+    "source_fingerprint": "f57104f70846fd1748c1f2a35b9f7eabae02aeb78d87e63662cf649c7b085a9d",
+    "source_fingerprint_file_count": 3462,
     "source_fingerprint_paths": [
       "backend/src/main",
       "backend/src/test",
@@ -50,12 +50,12 @@
   },
   "backend_surefire": {
     "path": "backend/target/surefire-reports",
-    "suites": 604,
-    "tests": 6835,
+    "suites": 612,
+    "tests": 6866,
     "failures": 0,
     "errors": 0,
     "skipped": 0,
-    "latest_mtime": "2026-11-17T04:44:29.801Z",
+    "latest_mtime": "2026-11-17T06:24:58.451Z",
     "passed": true
   },
   "web_unit_source": {
@@ -105,6 +105,7 @@
       "apps/web/src/admin/pages/AmusementInspectionTasksPage.test.tsx",
       "apps/web/src/admin/pages/AmusementParkWideFaultPage.test.tsx",
       "apps/web/src/admin/pages/AmusementProjects.guidedcreate.test.tsx",
+      "apps/web/src/admin/pages/AmusementSafetyPage.evidence.test.tsx",
       "apps/web/src/admin/pages/AmusementSafetyPage.guidedcreate.test.tsx",
       "apps/web/src/admin/pages/AmusementSafetyPage.metricdetail.test.tsx",
       "apps/web/src/admin/pages/AmusementSafetyPage.test.tsx",
@@ -336,12 +337,15 @@
       "apps/web/src/admin/pages/StaffShiftAttendancePage.test.tsx",
       "apps/web/src/admin/pages/StoredValueRulesPage.test.tsx",
       "apps/web/src/admin/pages/StoredWinePage.cancel.test.tsx",
+      "apps/web/src/admin/pages/StoredWinePage.dispute.test.tsx",
       "apps/web/src/admin/pages/StoredWinePage.exitnotice.test.tsx",
       "apps/web/src/admin/pages/StoredWinePage.handover.test.tsx",
       "apps/web/src/admin/pages/StoredWinePage.holder.test.tsx",
       "apps/web/src/admin/pages/StoredWinePage.kpi.test.tsx",
+      "apps/web/src/admin/pages/StoredWinePage.manualpickup.test.tsx",
       "apps/web/src/admin/pages/StoredWinePage.metricdetail.test.tsx",
       "apps/web/src/admin/pages/StoredWinePage.recovery.test.tsx",
+      "apps/web/src/admin/pages/StoredWinePage.register.test.tsx",
       "apps/web/src/admin/pages/StoredWinePage.remedy.test.tsx",
       "apps/web/src/admin/pages/StoredWinePage.renewal.test.tsx",
       "apps/web/src/admin/pages/StoredWinePage.rowdetail.test.tsx",
@@ -402,8 +406,8 @@
       "apps/web/src/dealer/dealerPortalClient.test.ts",
       "apps/web/src/shared/ReplayedNotice.test.tsx"
     ],
-    "file_count": 341,
-    "test_count_from_source": 1782
+    "file_count": 345,
+    "test_count_from_source": 1832
   },
   "web_build": {
     "dist_index_exists": true,
@@ -424,15 +428,15 @@
     "asset_count": 171,
     "main_js_assets": [
       {
-        "path": "apps/web/dist/assets/main-DsNpI0JD.js",
+        "path": "apps/web/dist/assets/main-CVKtypKE.js",
         "size_bytes": 4337,
-        "mtime": "2026-11-17T04:44:39.828Z"
+        "mtime": "2026-11-17T06:25:07.213Z"
       }
     ],
     "largest_asset": {
       "path": "apps/web/dist/assets/vendor-antd-Bh_XtmOr.js",
       "size_bytes": 251112,
-      "mtime": "2026-11-17T04:44:39.832Z"
+      "mtime": "2026-11-17T06:25:07.218Z"
     },
     "no_main_bundle_warning_expected": true
   },
