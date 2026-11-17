@@ -1,6 +1,6 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.08
+// 文件版本：V0.09
 
 import static com.complex.platform.common.Strings.requireText;
 import static com.complex.platform.common.Strings.trimToNull;
@@ -718,6 +718,20 @@ public class InventoryTransferFlowService {
         requireStoreProject(o, permission);
     }
 
+    /**
+     * 第十八批 AO 段第 250 条 250-R1（PGM:659「所有业务数据默认按项目隔离，普通岗位没有跨项目查看权」「一个商户在两个或更多项目中有经营的，
+     * 看到的是每一个项目内他经营的商户」；第十八批裁决 18 单上记所属项目）：调拨单列表与详情谁能看——商户账号只看本商户为出让方或接收方的单；
+     * 非商户账号按该入口权限码能触及单上的所属项目（平台管理员恒可）。可触及范围只取一次，列表逐行套用。
+     */
+    java.util.function.Predicate<InventoryTransferOrderRecord> visibleTo(String permission) {
+        String merchant = auth.currentMerchantIdQuietly().orElse(null);
+        if (merchant != null) {
+            return o -> merchant.equals(o.fromOwnerId()) || merchant.equals(o.toOwnerId());
+        }
+        AuthorizationService.ProjectReach reach = auth.projectReach(auth.currentActor(), permission);
+        return o -> reach.covers(o.projectId());
+    }
+
     private String merchantOf(String userId) {
         return jdbc.queryForList("SELECT merchant_id FROM access_users WHERE id=?", String.class, userId).stream().findFirst().orElse(null);
     }
@@ -858,6 +872,14 @@ public class InventoryTransferFlowService {
             throw ApiException.notFound("TRANSFER_ORDER_NOT_FOUND", "调拨单不存在或已被删除");
         }
         return new Locked(reload(orderId), rows.getFirst());
+    }
+
+    /**
+     * 第十八批 AO 段第 261 条 261-B04-R2（第十八批裁决 50；PGM:303「两个操作同时发生冲突时，一律以“先处理成功”的那个为准」）：借调单发货与取消
+     * 先锁单据行再判状态，后到者等先到者提交后按提交后的状态判；单不存在 404 TRANSFER_ORDER_NOT_FOUND。
+     */
+    InventoryTransferOrderRecord lockForUpdate(String orderId) {
+        return lockRow(orderId).order();
     }
 
     private Locked lock(String orderId) {

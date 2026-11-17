@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.governance.MerchantRecord;
@@ -348,8 +348,7 @@ public class TicketCatalogService {
                 repository::countTicketTypeReferences, repository::deleteTicketType,
                 () -> ApiException.badRequest("TICKET_TYPE_DELETE_NOT_PENDING", "该票种没有待审批的删除申请"),
                 () -> ApiException.forbidden("TICKET_TYPE_SELF_APPROVE_FORBIDDEN", "删除申请发起人不能审批自己的申请"),
-                refs -> ApiException.conflict("TICKET_TYPE_IN_USE",
-                        "票种仍被 " + refs + " 条业务记录引用（订单/权益/价格规则/结算等），不可删除"));
+                TicketCatalogService::ticketTypeInUse);
         return new TicketTypeDeleteDecision(id, deleted ? "approved" : "rejected", deleted);
     }
 
@@ -371,8 +370,29 @@ public class TicketCatalogService {
                 repository::countPriceRuleReferences, repository::deletePriceRule,
                 () -> ApiException.badRequest("TICKET_PRICE_RULE_DELETE_NOT_PENDING", "该价格规则没有待审批的删除申请"),
                 () -> ApiException.forbidden("TICKET_PRICE_RULE_SELF_APPROVE_FORBIDDEN", "删除申请发起人不能审批自己的申请"),
-                refs -> ApiException.conflict("TICKET_PRICE_RULE_IN_USE", "价格规则仍被 " + refs + " 条订单记录引用，不可删除"));
+                TicketCatalogService::priceRuleInUse);
         return new TicketPriceRuleDeleteDecision(id, deleted ? "approved" : "rejected", deleted);
+    }
+
+    /** 第十八批 AO 段第 249 条 249-R4：最高权限本人发起的票种删除不经审批，删前占用检查照走（BSM:576、BSM:572）。 */
+    void executeDeleteTicketType(String id) {
+        executeDeleteCatalogRecord(id, repository::countTicketTypeReferences, repository::deleteTicketType,
+                TicketCatalogService::ticketTypeInUse);
+    }
+
+    /** 同上，价格规则。 */
+    void executeDeletePriceRule(String id) {
+        executeDeleteCatalogRecord(id, repository::countPriceRuleReferences, repository::deletePriceRule,
+                TicketCatalogService::priceRuleInUse);
+    }
+
+    private static ApiException ticketTypeInUse(long refs) {
+        return ApiException.conflict("TICKET_TYPE_IN_USE",
+                "票种仍被 " + refs + " 条业务记录引用（订单/权益/价格规则/结算等），不可删除");
+    }
+
+    private static ApiException priceRuleInUse(long refs) {
+        return ApiException.conflict("TICKET_PRICE_RULE_IN_USE", "价格规则仍被 " + refs + " 条订单记录引用，不可删除");
     }
 
     /**
@@ -432,12 +452,18 @@ public class TicketCatalogService {
             return false;
         }
         // approved：先校验无活引用（票种绑定/已发放权益/订单等），有则拒绝硬删。
+        executeDeleteCatalogRecord(id, countReferences, physicalDelete, inUse);
+        return true;
+    }
+
+    /** 删前查占用，无占用即删除；审批通过与最高权限本人发起即删共用（第十八批 AO 段第 249 条 249-R4）。 */
+    private static void executeDeleteCatalogRecord(String id, ToLongFunction<String> countReferences,
+            Consumer<String> physicalDelete, LongFunction<ApiException> inUse) {
         long refs = countReferences.applyAsLong(id);
         if (refs > 0) {
             throw inUse.apply(refs);
         }
         physicalDelete.accept(id);
-        return true;
     }
 
     private TicketTypeRecord requireTicketTypeRecord(String id) {

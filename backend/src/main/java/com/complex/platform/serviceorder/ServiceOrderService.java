@@ -1,6 +1,6 @@
 package com.complex.platform.serviceorder;
 
-// 文件版本：V0.06
+// 文件版本：V0.07
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -250,6 +250,12 @@ public class ServiceOrderService {
         });
     }
 
+    /**
+     * 第十八批 AO 段第 249 条 249-R6：持授权 U 盘密钥的最高权限本人发起即删除（BSM:576「持授权 U 盘密钥的最高权限本人发起的操作，
+     * 不需要经过任何审批。」），占用检查照走，返回删除前的记录（之后 find 已滤掉）。加事务：最高权限发起遇占用 409 时连同待审批
+     * 与申请成功事件整笔回滚，目录项不会卡在本人发起的待审批状态；失败事件独立事务照样保留。
+     */
+    @org.springframework.transaction.annotation.Transactional
     public ServiceCatalogItemRecord requestDeleteCatalogItem(String id, String reason) {
         return withFailureAudit("service.catalog.delete_request_failed", "service.catalog.manage", "service_catalog_item", id, null, () -> {
             authorizationService.requirePermission("service.catalog.manage");
@@ -259,23 +265,44 @@ public class ServiceOrderService {
             var actor = authorizationService.currentActor();
             repository.requestDeleteCatalogItem(id, reason.trim(), actor == null ? null : actor.id());
             auditEventService.recordSuccess("service.catalog.delete_requested", "service.catalog.manage", "service_catalog_item", id, null, null, Map.of());
-            return repository.findCatalogItem(id).orElseThrow();
+            var pending = repository.findCatalogItem(id).orElseThrow();
+            if (isMaster()) {
+                executeDeleteCatalogItem(id);
+            }
+            return pending;
         });
     }
 
     public ServiceCatalogItemRecord approveDeleteCatalogItem(String id, String decision) {
         return withFailureAudit("service.catalog.delete_approve_failed", "service.catalog.approve", "service_catalog_item", id, null, () -> {
             authorizationService.requirePermission("service.catalog.approve");
+            // 第十八批 AO 段第 249 条 249-R6（BSM:576「删除一律须由具备最高权限的人审批通过后执行，不设例外」）。
+            if (!isMaster()) throw ApiException.forbidden("MASTER_APPROVAL_REQUIRED", "服务目录删除须由最高权限本人批准");
             var item = repository.findCatalogItem(id).orElseThrow(() -> ApiException.notFound("NOT_FOUND", "服务目录项不存在或已被删除"));
             if (!"pending".equals(item.deleteStatus())) throw ApiException.badRequest("VALIDATION_FAILED", "该项无待审批删除");
             var actor = authorizationService.currentActor();
             if (actor != null && actor.id() != null && actor.id().equals(item.deleteRequestedBy()))
                 throw ApiException.forbidden("SELF_APPROVAL_FORBIDDEN", "不能审批自己发起的删除申请");
-            boolean approved = "approved".equals(decision);
-            repository.approveDeleteCatalogItem(id, approved);
-            auditEventService.recordSuccess("service.catalog.delete_" + (approved ? "approved" : "rejected"), "service.catalog.approve", "service_catalog_item", id, null, null, Map.of());
+            if ("approved".equals(decision)) {
+                executeDeleteCatalogItem(id);
+            } else {
+                repository.approveDeleteCatalogItem(id, false);
+                auditEventService.recordSuccess("service.catalog.delete_rejected", "service.catalog.approve", "service_catalog_item", id, null, null, Map.of());
+            }
             return item;
         });
+    }
+
+    /** 249-R6：删前查点单占用、不分点单状态（BSM:572「只要还有占用就拦住不让删，避免删出一堆「找不到主人」的记录」），无占用即删除。 */
+    private void executeDeleteCatalogItem(String id) {
+        long refs = repository.countOrdersByCatalogItem(id);
+        if (refs > 0) throw ApiException.conflict("SERVICE_CATALOG_IN_USE", "该服务项目仍被 " + refs + " 张点单引用，不能删除");
+        repository.approveDeleteCatalogItem(id, true);
+        auditEventService.recordSuccess("service.catalog.delete_approved", "service.catalog.approve", "service_catalog_item", id, null, null, Map.of());
+    }
+
+    private boolean isMaster() {
+        return authorizationService.isMasterAuthority(authorizationService.currentActor());
     }
 
     /** 口径④:履约人录入自己的固定收款码(存二维码内容链接,App 端重绘 QR)。 */

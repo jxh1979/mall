@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.14
+// 文件版本：V0.15
 
 import static com.complex.platform.bar.BarValidation.*;
 
@@ -660,7 +660,7 @@ public class BarOrderService {
                 String inventoryItemId = requireText(product.inventoryItemId(), "inventory_item_id");
                 String stockLocationId = requireText(product.stockLocationId(), "stock_location_id");
                 if (product.standardPourVolume() == null) {
-                    atomicDecreaseStock(inventoryItemId, stockLocationId, quantity, order.id(), deliveryEvidenceAttachmentIds);
+                    atomicDecreaseStock(inventoryItemId, stockLocationId, quantity, order.id(), item.id(), deliveryEvidenceAttachmentIds);
                 } else {
                     // 第十八批 I 段第 76 条（BSM:1065「按杯按标准出酒量扣库存、超出记损耗」；BSM:1168「按杯消耗按标准容量扣减，
                     // 超出部分进入损耗」）：出酒量＝标准×杯数（配设备实采少于标准仍扣标准），连同损耗一并按容量扣库。
@@ -976,13 +976,18 @@ public class BarOrderService {
                 )));
     }
 
-    private void atomicDecreaseStock(String itemId, String locationId, int quantity, String orderId, List<String> evidenceAttachmentIds) {
+    /**
+     * 按瓶出品扣整瓶并记一条出库流水。第十八批 AO 段第 261 条 261-B04-R1（第十八批裁决 50；BSM:1194 库存流水「出库」「销售消耗」）：
+     * 流水号按订单＋订单明细（同按杯），同一张单里同一库存物料的多行（套餐展开的明细与单点同一瓶）各记一条，不再撞号被当成重复读回。
+     */
+    private void atomicDecreaseStock(String itemId, String locationId, int quantity, String orderId, String orderItemId,
+            List<String> evidenceAttachmentIds) {
         boolean decreased = repository.atomicDecreaseStock(itemId, locationId, quantity);
         if (!decreased) {
             throw ApiException.conflict("STOCK_INSUFFICIENT", "可用库存不足");
         }
         repository.saveStockMovement(new StockMovementSnapshot(
-                "movement_" + slug(orderId + ":" + itemId + ":" + quantity),
+                "movement_" + slug(orderId + ":" + orderItemId),
                 "outbound",
                 itemId,
                 locationId,

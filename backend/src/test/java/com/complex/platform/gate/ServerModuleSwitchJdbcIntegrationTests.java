@@ -1,9 +1,10 @@
-// 文件版本：V0.03
+// 文件版本：V0.04
 package com.complex.platform.gate;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -151,6 +152,150 @@ class ServerModuleSwitchJdbcIntegrationTests {
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.detail_code").value("TERMINAL_DISABLED"));
         assertThat(moduleRejections("governance")).isEqualTo(before + 1);
+    }
+
+    /** 第十八批 AO 段第 247 条 247-R1 (i)（PGM:737「关闭后菜单不可见或不可点，接口也要拒绝业务动作。」；PGM:744）：治理模块关闭——
+     *  商户页独用的转台次数上限（路径中间带商户号）403 并按 governance 留痕；被几组共用的商户列表照常不判。 */
+    @Test
+    void governanceModuleOffRejectsMerchantTableTransferLimit() throws Exception {
+        account(staff, "staff", null, "merchant.profile.view", "merchant.profile.manage");
+        Cookie[] session = webSession(staff);
+        close("tcs_web_mod_governance");
+        int before = moduleRejections("governance");
+
+        mockMvc.perform(withBody(web(put("/api/v1/platform/merchants/mch_b61sm_" + suffix + "/table-transfer-limit"), session, "web"),
+                        Map.of("idempotency_key", "b61sm-ttl-" + suffix, "value_count", 10, "min_count", 1, "max_count", 20)))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.detail_code").value("TERMINAL_DISABLED"));
+        assertThat(moduleRejections("governance")).isEqualTo(before + 1);
+        notModuleGated(web(get("/api/v1/platform/merchants"), session, "web"));
+    }
+
+    /** 247-R1 (j)：商户专区模块关闭——商户在「我的工单」自助取消（路径中间带工单号，只有商户专区用）403，工单仍待派单。 */
+    @Test
+    void merchantZoneModuleOffRejectsMerchantSelfCancelWorkOrder() throws Exception {
+        String merchant = "mch_b61sm_" + suffix;
+        String shop = "usr_b61ms_" + suffix;
+        String workOrder = "mswo_b61sm_" + suffix;
+        account(shop, "staff", merchant, "merchant.service_work_order.create");
+        jdbc.update("""
+                INSERT INTO merchant_service_work_orders (id, merchant_id, work_order_type, priority, status, title, description,
+                    reported_by_user_id, reported_channel, created_at, updated_at)
+                VALUES (?, ?, 'repair', 'medium', 'created', '空调报修', '空调不制冷', ?, 'web', now(), now())
+                """, workOrder, merchant, shop);
+        Cookie[] session = webSession(shop);
+        close("tcs_mp_mod_merchant");
+
+        mockMvc.perform(withBody(web(post("/api/v1/merchant-service/work-orders/" + workOrder + "/cancel"), session, "merchant_portal"),
+                        Map.of("idempotency_key", "b61sm-cancel-" + suffix, "reason", "重复提交")))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.detail_code").value("TERMINAL_DISABLED"));
+        assertThat(jdbc.queryForObject("SELECT status FROM merchant_service_work_orders WHERE id = ?", String.class, workOrder))
+                .isEqualTo("created");
+    }
+
+    /** 18AO 收尾复核意见 2（PGM:737「关闭后菜单不可见或不可点，接口也要拒绝业务动作。」；PGM:744）：商户专区模块关闭——商户在「我的工单」
+     *  点「确认已解决」、新建工单，在「我的证照」申请宽限（都只有商户专区用）一律 403，工单不被关闭、不新增；治理组商户页也用的工单列表照常不判。 */
+    @Test
+    void merchantZoneModuleOffRejectsMerchantConfirmCreateAndGraceRequest() throws Exception {
+        String merchant = "mch_b61mc_" + suffix;
+        String shop = "usr_b61mc_" + suffix;
+        String workOrder = "mswo_b61mc_" + suffix;
+        account(shop, "staff", merchant, "merchant.service_work_order.create", "compliance.grace_period.request");
+        jdbc.update("""
+                INSERT INTO merchant_service_work_orders (id, merchant_id, work_order_type, priority, status, title, description,
+                    reported_by_user_id, reported_channel, created_at, updated_at)
+                VALUES (?, ?, 'complaint', 'medium', 'resolved', '噪音投诉', '隔壁装修噪音', ?, 'web', now(), now())
+                """, workOrder, merchant, shop);
+        Cookie[] session = webSession(shop);
+        close("tcs_mp_mod_merchant");
+
+        mockMvc.perform(withBody(web(post("/api/v1/merchant-service/work-orders/" + workOrder + "/merchant-confirm"), session, "merchant_portal"),
+                        Map.of("idempotency_key", "b61mc-confirm-" + suffix, "satisfaction_score", 5)))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.detail_code").value("TERMINAL_DISABLED"));
+        assertThat(jdbc.queryForObject("SELECT status FROM merchant_service_work_orders WHERE id = ?", String.class, workOrder))
+                .isEqualTo("resolved");
+        mockMvc.perform(withBody(web(post("/api/v1/merchant-service/work-orders"), session, "merchant_portal"),
+                        Map.of("idempotency_key", "b61mc-create-" + suffix, "operator_note", "商户专区自助提交工单",
+                                "work_order_type", "repair", "priority", "medium", "title", "后门门锁损坏",
+                                "description", "后门门锁打不开", "reported_channel", "merchant_portal")))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.detail_code").value("TERMINAL_DISABLED"));
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM merchant_service_work_orders WHERE merchant_id = ?", Integer.class, merchant))
+                .isEqualTo(1);
+        mockMvc.perform(withBody(web(post("/api/v1/compliance/expiry-items/cei_b61mc_" + suffix + "/grace-requests"), session, "merchant_portal"),
+                        Map.of("idempotency_key", "b61mc-grace-" + suffix, "reason", "年检已预约，等待出证")))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.detail_code").value("TERMINAL_DISABLED"));
+        notModuleGated(web(get("/api/v1/merchant-service/work-orders"), session, "merchant_portal"));
+    }
+
+    /** 247-R2 (k)：运维模块关闭——楼宇工单派单（只有设施工作台用）403；与外包页共用的工单列表照常不判。 */
+    @Test
+    void opsModuleOffRejectsFacilityWorkOrderAssign() throws Exception {
+        account(staff, "staff", null, "facility.work_order.view_assigned", "facility.work_order.manage");
+        Cookie[] session = webSession(staff);
+        close("tcs_web_mod_ops");
+
+        mockMvc.perform(withBody(web(post("/api/v1/facility/work-orders/fwo_b61sm_" + suffix + "/assign"), session, "web"),
+                        Map.of("assignee_id", staff)))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.detail_code").value("TERMINAL_DISABLED"));
+        notModuleGated(web(get("/api/v1/facility/work-orders"), session, "web"));
+    }
+
+    /** 247-R3 (l)（PGM:719「开关关闭时，端或模块就不能用；开关打开后，也还要继续看员工权限……」）：酒吧模块关闭——财务对账页也用的
+     *  收银交班列表照常可用（只持日结管理码的项目财务由 BarController 放行、按可触及项目列）；开班只有酒吧收银页用，403。 */
+    @Test
+    void barModuleOffKeepsShiftListForFinanceButRejectsOpenShift() throws Exception {
+        String cashier = "usr_b61cs_" + suffix;
+        projectAccount(staff, "proj_1", "finance.daily_close.manage");
+        account(cashier, "staff", null, "bar.shift.manage");
+        Cookie[] finance = webSession(staff);
+        Cookie[] bar = webSession(cashier);
+        close("tcs_web_mod_bar");
+
+        mockMvc.perform(web(get("/api/v1/bar/shifts"), finance, "web")).andExpect(status().isOk());
+        mockMvc.perform(withBody(web(post("/api/v1/bar/shifts/open"), bar, "web"), Map.of("idempotency_key", "b61sm-open-" + suffix,
+                        "bar_id", "bar_b61sm_" + suffix, "cashier_user_id", cashier, "opening_cash_cent", 50000)))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.detail_code").value("TERMINAL_DISABLED"));
+    }
+
+    /** 247-R3 (m)：财务模块关闭——总控驾驶舱也用的日结列表、门票积分月结列表照常可用；生成日结（只有对账页用，同路径写方法照判）与锁定 403，不落日结。 */
+    @Test
+    void financeModuleOffKeepsSharedListsButRejectsDailyCloseWrites() throws Exception {
+        projectAccount(staff, "proj_1", "finance.daily_close.manage", "finance.daily_close.lock", "ticket.points.billing.view");
+        Cookie[] session = webSession(staff);
+        close("tcs_web_mod_finance");
+
+        mockMvc.perform(web(get("/api/v1/finance/daily-closes?business_date=2026-11-16"), session, "web")).andExpect(status().isOk());
+        notModuleGated(web(get("/api/v1/loyalty/ticket-points-billing/bills"), session, "web"));
+        int closes = dailyCloses();
+        mockMvc.perform(withBody(web(post("/api/v1/finance/daily-closes"), session, "web"), Map.of("idempotency_key", "b61sm-close-" + suffix,
+                        "business_date", "2026-11-16", "scope_type", "project", "scope_id", "proj_1")))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.detail_code").value("TERMINAL_DISABLED"));
+        assertThat(dailyCloses()).isEqualTo(closes);
+        mockMvc.perform(withBody(web(post("/api/v1/finance/daily-closes/fdc_b61sm_" + suffix + "/lock"), session, "web"),
+                        Map.of("idempotency_key", "b61sm-lock-" + suffix)))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.detail_code").value("TERMINAL_DISABLED"));
+    }
+
+    /** 247-R4 (n)：酒吧模块关闭——商品分类（只有酒吧商品页用）403；票务页也用的分类下商品列表照常不判。 */
+    @Test
+    void barModuleOffRejectsCatalogCategoriesButKeepsSharedProductList() throws Exception {
+        account(staff, "staff", null, "bar.category.manage", "bar.product.view");
+        Cookie[] session = webSession(staff);
+        close("tcs_web_mod_bar");
+
+        mockMvc.perform(withBody(web(post("/api/v1/bar/catalog/categories"), session, "web"),
+                        Map.of("bar_id", "bar_b61sm_" + suffix, "category_name", "精酿啤酒", "sort_order", 1)))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.detail_code").value("TERMINAL_DISABLED"));
+        notModuleGated(web(get("/api/v1/bar/catalog/products?bar_id=bar_b61sm_" + suffix), session, "web"));
     }
 
     /** 100-R1 (d)：商户专区模块关闭——商户账号不带模块头、改报别的模块都 403；外壳的未读账单提醒同样不给；异议被拒、不落异议，加 X-Forwarded-Prefix 头也一样。 */
@@ -307,6 +452,19 @@ class ServerModuleSwitchJdbcIntegrationTests {
         return request.cookie(session).header("X-XSRF-TOKEN", session[1].getValue()).header("X-Terminal-Type", claimed);
     }
 
+    private MockHttpServletRequestBuilder withBody(MockHttpServletRequestBuilder request, Map<String, ?> body) throws Exception {
+        return request.contentType(MediaType.APPLICATION_JSON).content(json(body));
+    }
+
+    /** 共用接口不受模块开关约束：响应不是 TERMINAL_DISABLED（权限、范围等其他结果不在本用例范围）。 */
+    private void notModuleGated(MockHttpServletRequestBuilder request) throws Exception {
+        assertThat(mockMvc.perform(request).andReturn().getResponse().getContentAsString()).doesNotContain("TERMINAL_DISABLED");
+    }
+
+    private int dailyCloses() {
+        return jdbc.queryForObject("SELECT count(*) FROM finance_daily_closes", Integer.class);
+    }
+
     private MockHttpServletRequestBuilder saveVoidReason(Cookie[] session, String claimed) throws Exception {
         return web(post(VOID_REASONS), session, claimed)
                 .contentType(MediaType.APPLICATION_JSON)
@@ -314,8 +472,18 @@ class ServerModuleSwitchJdbcIntegrationTests {
                         "label_zh", "测试原因", "sort_order", 99)));
     }
 
+    /** 项目侧员工（所属项目即组织）：日结列表、交班复核列表按该码可触及的项目读，无所属项目的员工本就 403。 */
+    private void projectAccount(String userId, String projectId, String... permissions) {
+        accounts.staff(userId, "staff", projectId, null, permissions);
+        credential(userId);
+    }
+
     private void account(String userId, String accountType, String merchantId, String... permissions) {
         accounts.staff(userId, accountType, null, merchantId, permissions);
+        credential(userId);
+    }
+
+    private void credential(String userId) {
         jdbc.update("""
                 INSERT INTO auth_credentials (user_id, password_hash, password_algo, failed_attempt_count, locked_until,
                                               password_changed_at, status, created_at, updated_at)

@@ -83,7 +83,7 @@ final class GateRequestContext {
     }
 
     /**
-     * 当前请求的 module_code：Web 前端与商户网页门户按所调接口定（第 100 条 100-R1），其他终端取 X-Module-Code 头；无=null。
+     * 当前请求的 module_code：Web 前端与商户网页门户按所调接口与请求方法定（第 100 条 100-R1；第 247 条 247-R1），其他终端取 X-Module-Code 头；无=null。
      * 按应用内路径定（与 Spring MVC 路由同一口径，去掉 contextPath 含 X-Forwarded-Prefix 转发前缀），不用原始 getRequestURI()，
      * 否则客户端加一个 X-Forwarded-Prefix 头就能让模块开关不判。
      */
@@ -92,7 +92,8 @@ final class GateRequestContext {
         if ("web".equals(terminal) || "merchant_portal".equals(terminal)) {
             HttpServletRequest request = currentRequest();
             return request == null ? null
-                    : ServerModuleRoutes.moduleOf(terminal, UrlPathHelper.defaultInstance.getPathWithinApplication(request));
+                    : ServerModuleRoutes.moduleOf(terminal, request.getMethod(),
+                            UrlPathHelper.defaultInstance.getPathWithinApplication(request));
         }
         return blankToNull(header("X-Module-Code"));
     }

@@ -1,6 +1,6 @@
 # PRD 审计业务裁决台账
 
-文档版本：V0.95
+文档版本：V0.96
 状态：进行中
 迁移日期：2026-07-27
 当前事实源：三份立法 HTML 以既有冻结基线叠加 James 此前 M02 至 M08 的点名批准、全量审计 M001、M002 的逐项批准，以及本轮 2026-10-16 至 2026-10-17 业务 HTML 审计中 Q01 至 Q40 及子题实际明确批准且未被后续替代的裁决，和 2026-10-17 第二批 HTML 业务线推演审计（A–F 六线 64 条、停车章）的逐项批准，并叠加本轮 CG 70 项来源确认与 C01–C09、N01–N03 最终澄清及补全文稿中 F01、W01–W05 的整体修改批准（本文件末节）；本轮最终规则、未采纳或替代关系、现行版本与字节哈希见本文件末节。历史记录保留为各自当时事实，不恢复已被替代的建议。
@@ -3974,6 +3974,7 @@ HTML 的语义补齐与直接引用同步可在本批核验；70项中的业务�
 | 67 | **第 241 条 各类付款确认的流程由谁设定、在哪设定**（题面：「【第 3/5 题（第 241 条）：各类付款确认的流程由谁设定、在哪设定】 前因：原句「具体流程按支付类型分别设定」没写由谁、在哪设定。对照：合同有原句「合同的新建、到期终止、变更分别使用各自配置的审批流程模板」「按综合体后台可配」（BSM:1349），付款确认没有同类原句。PGM:528 写「每个部门或业务线须预先设定其平行审批的最低起点层级」。 现状：统一审批各事项的必带平行线写在代码里；各审批类型的时限已可在主管复核页后台配置；各线最低起点层级和起点人在「组织层级与审批线」页设定（门禁为分配角色权限）。合同模板由持合同审批流程管理权限的人在合同工作台设定。 分歧与利弊： ① 写死在系统里：各类必带线按上一题答复固定，改流程要研发发版；审批时限照旧按类型后台配。好处：不加表、不加页面，最小。坏处：调整某类必带线要改代码。 ② 放在「组织层级与审批线」页，与各线最低起点层级同一处、同一门禁；财务、法务两线仍每类必带，设定的是两线之外各类还带哪些线，上一题答复作出厂设置。好处：不新增权限码。坏处：多一张表、一个配置区、两个接口；设定的人是管审批线的人（偏平台管理员），不是财务。 ③ 同②，但由平台财务在财务页设定，新增「付款确认流程设置」权限码。好处：财务自己定。坏处：在②之外再加权限码，要另定出厂授给哪些岗位，多一道迁移和授权核对。」）—— 操作员选「审批线页设定」：与各线最低起点层级同一处、同一门禁，不新增权限码。（未选：「写死在系统里（推荐）」「财务页设定加新权限码」）（2026-11-16 弹窗；来由：18AM 只读设计第 241 条待裁题。控制席说明：做条件项 241-R8（选项②写法）：组织层级与审批线页加付款确认流程设定，财务、法务两线仍为每类下限。） | 待开发清单第 241 条（18AM） |
 | 68 | **第 241 条 付款确认按笔发起还是可以多笔合并发起**（题面：「【第 4/5 题（第 241 条）：付款确认按笔发起，还是可以多笔合并发起】 前因：BSM:1803「审批通过后的发放进入应付款项台账，走付款确认」，没写一张付款确认管一笔还是多笔；BSM:1683「每一笔应付具体落在哪一个付账日」。裁决 55 已接受「日常付款会明显变慢」。 现状：有几类应付按每次交易逐笔生成：平台代收商户卡每次消费挂一笔应付发卡商户；通票免费酒水每次核销挂一笔应付酒吧；内部价采购券每次核销挂一笔应付第三方；酒吧账单每次退款挂一笔退款应付；营业额抽成冲正一笔退款一行；通票分账按结算单明细逐行挂。这些每个营业日都会产生，笔数随营业量增长。每张付款确认至少走主线加财务、法务两线（涉钱审批出厂时限 1 个工作日）。另：这些逐笔应付的到期日多为当天营业日，日结按到期日锁账；付款确认审完通常已过当日日结，登记付款还要再走一道锁账收付款补录（须附凭证、写责任人，裁决 56）。 分歧与利弊： ① 台账应付可合并发起：同一收款方、同一支付类型、同一综合体的多笔未结清应付，财务勾选后合发一张，审批人一次看到逐笔明细与合计；工资（受益人是员工本人，PGM:529 规定受益人不得审批，只能逐人）、财务退款、门票退款、存酒赔付仍按单发起。好处：逐笔生成的应付不必每笔各走一条审批链。坏处：要多做勾选合并；一张里任一笔有问题，整张驳回后重新发起。 ② 一律逐笔：每笔应付、每张退款单各发一张。好处：最简单，一笔一审。坏处：每次刷卡消费、每次赠饮核销都要走一条完整审批链，审批量随营业量同步增长。」）—— 操作员选「台账应付可合并（推荐）」：同收款方、同类型、同综合体可勾选合发；工资、退款、赔付按单发起。（未选：「一律逐笔发起」）（2026-11-16 弹窗；来由：18AM 只读设计第 241 条待裁题。控制席说明：与只读设计按推荐读法写的一致。按裁决 65，「同一支付类型」即同一台账来源。） | 待开发清单第 241 条（18AM） |
 | 69 | **第 241 条 付款方是平台主体、台账记成应收的一侧登记收款前要不要先付款确认**（题面：「【第 5/5 题（第 241 条）：付款方是平台主体、台账记成应收的那一侧，登记收款前要不要也先付款确认】 前因：裁决 55 的选项名是「所有对外付款都走付款确认」，解释是「所有应付都先走付款确认」；BSM:1683「平台内部各主体之间的普通内部结算应收应付，每月有三个付账日」。三份 HTML 与裁决都没写平台各主体之间的往来记成应收的那一侧怎么办。 现状：台账对平台各主体之间的一笔往来只记一行，同一类往来按金额正负分挂应付或应收：组合通票域间份额正额挂应付、负额改挂应收；酒吧报酬月结拨付正额应付、负额应收；另有通票餐饮零售代付、派驻提成冲回、补偿应付已付追收、通票分账追收、存酒退出承接垫付追收等应收，付款方都是平台主体。记成应收的那一行，登记收款就是登记该平台主体的出款。方案目前按裁决原话只在应付登记付款时设闸。 分歧与利弊： ① 只管台账应付，平台主体付款、记成应收的一侧不过闸。好处：照裁决原话「所有应付」，改动最小。坏处：同一类内部往来按金额正负，一半要付款确认、一半不要。 ② 付款方是平台主体的上述应收，登记收款前也须付款确认。好处：平台各主体的出款口径一致。坏处：多接一类闸、多一批审批；登记的是收款，财务操作上不直观。 （前 4 题已记：支付类型按台账来源逐个分；每类固定财务、法务两线；流程在「组织层级与审批线」页设定；台账应付可合并发起。）」）—— 操作员选「平台主体应收也过闸」：付款方是平台主体的应收，登记收款前也须付款确认。（未选：「只管应付（推荐）」）（2026-11-16 弹窗；来由：18AM 只读设计第 241 条待裁题。控制席说明：做条件项 241-R9。） | 待开发清单第 241 条（18AM） |
+| 71 | **第 249 条 酒吧商品、分类、套餐删除只认最高权限审批后最高权限在这几页能看到什么**（题面：「【第 2/2 题（第 249 条，18AO）：酒吧商品、分类、套餐的删除改为只认最高权限审批后，最高权限在这几页能看到什么】 前因：BSM:576「删除一律须由具备最高权限的人审批通过后执行，不设例外，申请人不得审批自己的申请；持授权 U 盘密钥的最高权限本人发起的操作，不需要经过任何审批。」；PGM:528「第④类看不到别的商户和别的项目的数据，持授权 U 盘密钥的最高权限可以逐笔开放，每次只对当前这一笔生效并留痕。」HTML 没写最高权限查看别家酒吧目录的范围。 现状：酒吧的商品、分类、套餐按酒吧（商户）隔离，最高权限账号不挂商户，现在打开这几页会提示「此操作必须在商户范围内进行」、一条看不到（读代码推断）。本条落地后，店长存档并申请删除配错的商品，只有最高权限能批，但最高权限看不到这条申请，会一直挂着。系统里已有两种做法：待复核清单里最高权限只看到轮到自己审批的单子，别的要按编号逐笔打开并留痕；门票退款单列表对最高权限全部放开。票种、价格规则、服务目录、数据清理，最高权限现在就看得到，不受本题影响。 分歧与利弊： ① 只列待批的那几条：只看到各酒吧待审批删除的条目，逐条批准或驳回并留痕；其他目录照旧看不到。好处：与待复核清单同一做法，符合「逐笔开放」字面，改动最小。坏处：批的时候看不到同店其他商品作参照。 ② 看全部酒吧目录：和门票退款单列表一样对最高权限全放开，最高权限也可以自己发起删除、即时生效。好处：信息最全。坏处：等于整类打开商户隔离，与「每次只对当前这一笔生效」字面不符。 ③ 改走待复核清单：酒吧目录的删除申请生成一张须最高权限审批的复核单，在待复核清单里批。好处：须最高权限批的事集中在一处。坏处：改动大，和员工档案、设施设备等已做对象的审批方式不一致。」）—— 操作员选「看全部酒吧目录」：操作员弹窗先选「只列待批的（推荐）」，随即追加原话改定：「既然是最高权限，不应该什么都能看到吗？……这是你的代码库，不会发生的，没有必要的，实际场景当中不存在的，你又不需要问。有些东西你应该能推导出来的。」——即选项②：最高权限打开酒吧商品、分类、套餐页看到全部酒吧的全部目录，也可以自己发起删除、即时生效（BSM:576「持授权 U 盘密钥的最高权限本人发起的操作，不需要经过任何审批」）。（未选：「只列待批的（推荐）」（弹窗所选，已被追加原话改定）「改走待复核清单」）（2026-11-16 弹窗；来由：18AO 只读设计第 249 条待裁题。控制席说明：按 18AO 只读设计 d-gov-b 选项②的写法做：249-R1⑤、249-R8⑤ 并入同批，249-R9 去掉待批过滤（最高权限看全部酒吧目录）。） | 待开发清单第 249 条（18AO） |
 
 第一段转正前最低池额试算与取消结算环节超池待审批：既有缺口，列入待开发清单第 75 条、随 18C 做（ENUM L52、BSM L752）。
 
@@ -7551,3 +7552,174 @@ HTML 的语义补齐与直接引用同步可在本批核验；70项中的业务�
   - 契约审计事件按代码现状（意见 5）：openapi-p0.yaml 与 openapi-p0.json 中 listPaymentConfirmations、listPaymentConfirmationFlows 的成功与失败事件，savePaymentConfirmationFlow 的失败事件改为 not_applicable（同 listOrgHierarchy、setOrgDirectSuperior），不加行为；重生成 docs/p0-openapi-operation-acceptance-matrix-v0.1.md、docs/p0-openapi-contract-closure-appendix-v0.1.md；security-scans 两份 md 的 OpenAPI SHA-256 行按最终 openapi-p0.json 改。
   - 补记行号（意见 6 及同类）：A2 段补记 PaymentConfirmationService.java 发起核线改为 :193-199、requiredLines 至 flowLines 改为 :308-343，FinanceService.java 出款闸改为 :2126-2134（均为本条修正后的现码行号）；其余指向本轮改过文件的补记无行号或行号仍符。
 - 18AM 落地位置补记·运行验收证据、快照、终验文档刷新（无新裁决）：业务提交 40c63a28 之后，按第十八批裁决 25 重刷了运行验收证据：后端全量 6804 测，0 失败 0 错误；apps/web 构建通过；常规界面验收（接口全部 mock）实跑 40 条全过；真实后端界面验收未跑，runtime_ready=false。随后依次重生成闭环当前态快照、生产闭环缺口报告、界面验收报告、无上线指挥台。生成器没改。手改 docs/final-closed-loop-acceptance-audit-v0.1.md 与 docs/code-implementation-acceptance-audit-v0.1.md：前端单测源码计数改为 1768；TicketingService.java 行数由 1285 改为 1305，其余被核文件行数无变化；后端全量与常规界面验收的数字、日期改为本次实跑值；写入 npm run verify:unit 实跑结果，五个工作区全过。交付门禁于 2026-11-16 22:49 UTC 在工作树逐项实跑子项，NAS 两项现场探测未跑。仍红的有两项：一是 coding-host-protection，它写死主仓路径，在工作树口径下必红，属工具口径，不做；二是 final-closed-loop-audit，如实留 2 条红（integration-ready、business-acceptance-ready），原因是校验器要求终验把联调、业务验收写成「是」，而裁决 25 定了不跑真实后端界面验收、运行验收未就绪，终验写的是「否」。verify:delivery-gates 总链仍是红的。
+
+18AO 落地位置补记（2026-11-17）：第十八批 AO 段（batch61）按 18AO 只读设计实现待开发清单第 246、247、249、250、251 条与第 261 条 B04 批（治理组）；运行验收证据、终验文档在本段最后一个提交刷新；各条落地位置见下。本段追加时，原台账除文档版本 V0.95→V0.96 与第十八批裁决表第 71 行（控制席已插入）外，其他历史字节保持。
+
+- 18AO 落地位置补记·控制席判定（2026-11-17）：本段（第十八批 AO 段，batch61）实现待开发清单第 246、247、249、250、251 条与第 261 条 B04 批（治理组；18AO 只读设计 b61-audit/d-gov-a.json、d-gov-b.json、d-b04.json，两轮质疑者修订后定稿）。2026-11-16 操作员准许 4 段并行（「可以多跑3段」），本段与 18AM、18AN、18AP 同时开工，实现后变基到含 18AM 付款确认（PR #592）的 origin/main 77ff82da。第 249 条一题（最高权限在酒吧商品、分类、套餐页能看到什么）控制席弹窗，操作员先选「只列待批的（推荐）」，随即追加原话「既然是最高权限，不应该什么都能看到吗？……」改定为最高权限看全部酒吧目录、本人发起删除即时生效，记为第十八批裁决 71，插入裁决表第 71 行。第 261 条 B04 批按第十八批裁决 50 在现主干重写，B12 已由 18AK 做完。实现期旁见另记待开发清单第 319～323 条（待核实）。
+- 18AO 落地位置补记·第 247 条（模块路由，无新裁决号）：
+  - 247-R1 路由表支持路径变量段与按方法的键，补登 18L 之后新增的独用接口。
+    - 改法：backend/src/main/java/com/complex/platform/gate/ServerModuleRoutes.java（V0.04）的表键可写控制器原样的变量段（如 {merchant_id}），以左花括号开头的键段匹配任一段；键可带「方法＋空格」前缀，只在请求方法相同时命中。类加载时编成 Route 列表，取段数最多的键，段数相同带方法的优先、再取变量段少的。moduleOf(terminalType, method, uri) 加了 method 参数；GateRequestContext.moduleCode 传入 request.getMethod()。
+    - web 表新增：/api/v1/platform/merchants/{merchant_id}/table-transfer-limit 归 governance；/api/v1/platform/projects/{project_id}/sensitive-operation-range、/api/v1/settlement/media-shows/pending-settlement-count 归 overview；/api/v1/facility/work-orders/{work_order_id}/materials、/cost-bearer、/bearer-dispute 归 ops；/api/v1/ticketing/ticket-types/{id} 归 ticketing。
+    - merchant_portal 表新增：/api/v1/merchant-service/work-orders/{id}/cancel 归 merchant。
+    - 依据：PGM:737「关闭后菜单不可见或不可点，接口也要拒绝业务动作。」；PGM:744「前端隐藏只是辅助，后端接口必须独立校验。」；ServerModuleRoutes 类注释（18L 100-R1）「只有某个菜单组（且该组在该端有模块行）的页面独用的接口才定模块」。
+    - 测试：ServerModuleRoutesTests.variableSegmentKeysCoverExclusiveApisAddedAfter18L、ServerModuleSwitchJdbcIntegrationTests.governanceModuleOffRejectsMerchantTableTransferLimit、ServerModuleSwitchJdbcIntegrationTests.merchantZoneModuleOffRejectsMerchantSelfCancelWorkOrder。
+  - 247-R2 补登 18L 前已有的单组独用接口（同文件 web 表）。
+    - ops：/api/v1/facility/equipment/maintenance-due；/api/v1/facility/equipment/{equipment_id} 下的 status、maintenance-done、scrap-requests；/api/v1/facility/fault-rules/{rule_id}/retire；/api/v1/facility/inspections/tasks/{task_id} 下的 recheck、supervisor-confirm；/api/v1/facility/site-entry-reports/{report_id} 下的 review、accept；/api/v1/facility/work-orders 下的 overdue、mark-overdue、policies；/api/v1/facility/work-orders/{work_order_id} 下的 assign、reassign、confirmer、customer-media、accept、review、rework、suspend、resume。
+    - vendor：/api/v1/facility/inspections/tasks/{task_id}/report-exception；/api/v1/facility/site-entry-reports/{report_id} 下的 submit、completion、attachments。
+    - 不判（NONE）：/api/v1/facility/site-entry-reports/{report_id}/attachments/{attachment_id}/file，物业进场审批页与外包页共用。
+    - governance：/api/v1/loyalty/stored-value/merchant-card-config、/merchant-refund-rules；/api/v1/platform/merchants/{merchant_id} 下的 archive、unarchive、delete-request、delete-approve、pending-clear-alert、pour-loss-rate、staff-booking-no-show-limit。
+    - 依据：PGM:737「关闭后菜单不可见或不可点，接口也要拒绝业务动作。」；类注释同上。
+    - 测试：ServerModuleRoutesTests.exclusiveApisFromBefore18LAreRegistered、ServerModuleSwitchJdbcIntegrationTests.opsModuleOffRejectsFacilityWorkOrderAssign。
+  - 247-R3 18L 之后变成跨组共用的三处改判（同文件 web 表）。
+    - /api/v1/bar/shifts 改为 NONE（财务对账页 reviewOnly 也调）；/api/v1/bar/shifts/open、/{shift_id}/close、/join、/sign 归 bar；/{shift_id}/resolve、/witness 归 finance。
+    - /api/v1/finance/daily-closes 改为 NONE（总控驾驶舱也调）；带方法的键 POST /api/v1/finance/daily-closes 归 finance（生成日结只有对账页调）；/api/v1/finance/daily-closes/{id} 归 finance。
+    - /api/v1/loyalty/ticket-points-billing/bills 改为 NONE（总控驾驶舱也调）；/bills/{id} 归 finance。
+    - 依据：PGM:719「开关关闭时，端或模块就不能用；开关打开后，也还要继续看员工权限、商户范围和设备状态。」；PGM:737「关闭后菜单不可见或不可点，接口也要拒绝业务动作。」。
+    - 测试：ServerModuleRoutesTests.listsSharedAfter18LAreNotGatedButExclusiveSubpathsAndWritesAre、ServerModuleSwitchJdbcIntegrationTests.barModuleOffKeepsShiftListForFinanceButRejectsOpenShift、ServerModuleSwitchJdbcIntegrationTests.financeModuleOffKeepsSharedListsButRejectsDailyCloseWrites。
+  - 247-R4 第 247 条补充段：写 NONE 的前缀下，单组独用的子路径照判（同文件 web 表）。
+    - bar：/api/v1/bar/catalog/categories、/combos、/images、/products/{id}。
+    - access：/api/v1/access/users/{id}/position、/scope、/permission-overrides。
+    - amusement：/api/v1/amusement/projects/{id}/entitlements/{entitlementType}。
+    - inventory：/api/v1/inventory/items/{id}。
+    - finance：/api/v1/finance/ar-ap-items/export。
+    - /api/v1/staff/registrations 由 NONE 改为 access（该路径只有 POST）；/api/v1/staff/registrations/{id} 归 ops。
+    - 存酒一族 /api/v1/inventory/saved-bottles 本段不动，与 18AP 相撞。
+    - 依据：PGM:737「关闭后菜单不可见或不可点，接口也要拒绝业务动作。」；类注释「只有某个菜单组（且该组在该端有模块行）的页面独用的接口才定模块」。
+    - 测试：ServerModuleRoutesTests.exclusiveSubpathsUnderNonePrefixesAreRegistered、ServerModuleSwitchJdbcIntegrationTests.barModuleOffRejectsCatalogCategoriesButKeepsSharedProductList。
+  - 变基后重扫（第 247 条同根；含 18AO 收尾复核补登，同文件）。
+    - web 表：/api/v1/finance/payment-confirmations 改为 NONE。付款确认面板读确认单的列表被票务订单（ADM-TKT-003）、应收应付台账（ADM-FIN-001）、经销（ADM-DLR-002、ADM-DLR-003）、存酒（ADM-BAR-003）页共用；77ff82da 上它随 /api/v1/finance 前缀归 finance，关财务模块后票务、存酒等页的付款确认面板读到 403 TERMINAL_DISABLED 整块隐藏。18AM 新增的其余付款确认接口只有一组页面调或随已有不判前缀，照前缀判，不另登记。
+    - merchant_portal 表新增归 merchant：/api/v1/merchant-service/work-orders/{id}/merchant-confirm（「我的工单」确认已解决）；带方法的键 POST /api/v1/merchant-service/work-orders（商户建单；同路径列表治理组商户服务工单页、商户授权工作台也调，照旧不判）；/api/v1/compliance/expiry-items/{id}/grace-requests（「我的证照」宽限申请）。三处都只有商户专区页调（MerchantZoneWorkOrdersPage、MerchantZoneLicensesPage）。另加 POST /api/v1/merchant-service/work-orders/{id} 为 NONE：工单其余写方法（派单、处理、关单、员工取消、用料等）只有治理组商户服务工单页调，不被建单键按前缀带走。
+    - 依据：PGM:737「关闭后菜单不可见或不可点，接口也要拒绝业务动作。」；PGM:744「前端隐藏只是辅助，后端接口必须独立校验。」；PGM:719「开关关闭时，端或模块就不能用；开关打开后，也还要继续看员工权限、商户范围和设备状态。」（共用接口不判）。
+    - 测试：ServerModuleRoutesTests.paymentConfirmationListSharedAcrossGroupsIsNotGated、ServerModuleRoutesTests.merchantZoneExclusiveWritesAreGatedOnMerchantPortal、ServerModuleSwitchJdbcIntegrationTests.merchantZoneModuleOffRejectsMerchantConfirmCreateAndGraceRequest。
+- 18AO 落地位置补记·第 246 条 246-R1（审批时限按节点起算；无新裁决）：
+  - 改法：
+    - 迁移 V630 给 supervisor_review_nodes 加 due_at（可空，不回填，UD-07）。
+    - ApprovalChainNode 末位加 dueAt，新增 withDue；其余 with 方法都带上 dueAt。
+    - SupervisorReviewService.generateChain 加 actionType 参数，生成时各线首节点取 deadlineFrom(审批类型, 发起时刻)，其余节点为空。
+    - approve() 在链上仍有待审节点时，给本线刚接手、到期为空的下一节点自此起算；其他线当前节点的到期不动。
+    - escalateOverdue 只处理已到期的当前节点：升级的节点和只催办的节点都自该时起重新计时；未到期的节点不升级、不催办，也不进 escalated_nodes、reminded_nodes。
+    - 复核单 due_at 经 refreshSupervisorReviewDue 取各待审节点到期中最早的（还没轮到的节点不参与）。链没生成的单据照旧整单顺延。
+    - 转发、离职交接改审批人都不重新计时。
+  - 落地位置：
+    - backend/src/main/resources/db/migration/V630__supervisor_review_node_due_at.sql
+    - governance/chain/ApprovalChainNode.java、ApprovalChainService.java（node() 补参）
+    - governance/review/SupervisorReviewRepository.java（默认空实现）
+    - governance/JdbcPlatformRepository.java（节点读写带 due_at；refreshSupervisorReviewDue）
+    - governance/review/SupervisorReviewService.java（generateChain、approve、escalateOverdue）
+  - 依据：
+    - PGM:529「任一业务审批节点超过后台配置的时限（业务参数，按审批类型可配，出厂默认 3 个工作日，涉钱审批出厂默认 1 个工作日，须同时配置上下限）未处理的，系统自动提醒并升级到该节点的上一级，不得默认通过，也不得默认拒绝。」
+    - PGM:536「任一审批节点超过后台配置的时限（业务参数，按合同类型可配，出厂默认 3 个工作日，须同时配置上下限）未处理的，系统自动提醒并升级到该节点的上一级，不得默认通过」
+    - PGM:536「主线与各条平行线全部通过合同才生效，任一节点驳回则整单退回起草。」
+  - 测试：
+    - 新增 ApprovalNodeDeadlineJdbcIntegrationTests.nextNodeDeadlineStartsAtHandoverWhileParallelLineKeepsItsOwn：首节点用尽时限后才通过，下一节点自接手时起算、不被立即升级；HR 会签线仍按发起时起算；单据到期取较早者；审批链接口每个节点带 due_at，未轮到的 S3 为空。
+    - 新增 ApprovalNodeDeadlineJdbcIntegrationTests.onlyTheOverdueNodeIsRemindedAndMainLineNodeIsUntouched：只有 HR 线到期时，只催办该节点并重新计时，主线 S1 不动，reminded_nodes 只含 HR 节点。
+    - 已有用例 LockedBackfillReviewJdbcTests、ApprovalDeadlineJdbcIntegrationTests 的超时夹具同时把当前节点到期改早。
+    - ApprovalChainNodeConcurrencyJdbcTests、M006SecurityRegressionTests 补构造参数。
+- 18AO 落地位置补记·第 250 条 250-R1（调拨单列表与详情按所属项目和当事商户过滤）：
+  改法：InventoryTransferFlowService 加包内方法 visibleTo(permission)（:721-733）：商户账号只认本商户为出让方或接收方（from_owner_id／to_owner_id）；非商户账号按 inventory.transfer_order.view 的可触及项目判单上 project_id（AuthorizationService.projectReach(...).covers，与 canReachProject 同口径，平台管理员恒可）；可触及范围只取一次、列表逐行套用。InventoryService.getTransferOrder（:3540-3552）取单后看不到即 403：商户账号 CROSS_MERCHANT_FORBIDDEN「只能查看本商户为出让方或接收方的调拨单」，非商户账号 CROSS_PROJECT_FORBIDDEN（PROJECT_OUT_OF_REACH 文案）；listTransferOrders（:3554-3560）按 visibleTo 过滤，总数按过滤后条数，仓储 SQL 不改。requireParty 不动，前端不改（详情读失败已回落列表行）。无迁移，无新错误码。
+  依据：
+  - PGM:659「所有业务数据默认按项目隔离，普通岗位没有跨项目查看权」「数据的项目与商户隔离不提供关闭开关」「一个商户在两个或更多项目中有经营的，看到的是每一个项目内他经营的商户。」
+  - 第十八批裁决 18（决策台账裁决表第 18 行，:3925）「要货单、借用单建单时记所属项目（在 m 的经营项目里选，只有一个时自动带），之后办理、赔偿应付、逾期工单都按单上的项目」
+  测试：InventoryTransferOrderProjectJdbcIntegrationTests.listAndDetailOnlyShowOrdersOfTheOwnMerchantOrAReachableProject
+- 18AO 落地位置补记·第 261 条 261-B04-R2（借调单发货与取消先锁单据行；第十八批裁决 50）：
+  改法：InventoryTransferFlowService 加包内方法 lockForUpdate(orderId)（:877-883，复用 lockRow：SELECT … FOR UPDATE 后重读，单不存在仍 404 TRANSFER_ORDER_NOT_FOUND）；InventoryService.shipTransferOrder（:3265）与 cancelTransferOrder（:3523）读单由无锁的 findTransferOrderById 改为 transferFlow.lockForUpdate(id)，锁随幂等层同一事务持到提交。后到者等先到者提交后按提交后的状态判：先取消后发货，发货 409 TRANSFER_ORDER_NOT_CREATED、不扣库存不写流水；先发货后取消，取消 409 TRANSFER_SHIPPED_REQUIRES_RETURN_OR_LOSS。收货、归还、建单不改，不加办理方校验（第 276 条）。无迁移，接口与错误码不变。InventoryTransferLifecycleTests 给 mock 的 transferFlow 补了 lockForUpdate 桩。
+  依据：
+  - PGM:303「两个操作同时发生冲突时，一律以“先处理成功”的那个为准」
+  - BSM:1201「借出时间取借出方交货扫码的时刻」
+  - BSM:1194「借出（跨主体借调中不可消费物品交付给借入方）」
+  测试：InventoryTransferShipCancelLockJdbcIntegrationTests.shipWaitingOnCancellationIsRejectedAndDeductsNothing、cancellationWaitingOnShipmentIsRejectedAndTheOrderStaysShipped
+- 18AO 落地位置补记·第 261 条 261-B04-R1（按瓶出品按订单明细各记一条出库流水；第十八批裁决 50）：
+  改法：BarOrderService.atomicDecreaseStock（:983）加参数 orderItemId，流水号由 movement_＋slug(订单:库存物料:数量) 改为 movement_＋slug(订单:订单明细)（:990，同按杯 decreaseStockByVolume）；deliverOrder 的按瓶调用（:663）传 item.id()。同一张单里同一库存物料的多行（套餐展开的明细与单点同一瓶、两个套餐含同一瓶）各记一条，不再撞号被当成同号重放读回而少记流水、少计出库成本。共用层同号读回不改，BarOrderSuspensionService.itemCost 不改。无迁移，接口契约不变。
+  依据：
+  - BSM:1194「库存流水入库、出库、……销售消耗……」
+  - BSM:1165「商户领用或出库时就按这个平均单价计成本」
+  测试：BarPourVolumeStockJdbcIntegrationTests.byBottleDeliveryOfTwoLinesOfTheSameItemRecordsOneOutboundMovementPerOrderItem（方案用例 ②「分两次送达」未写，原因是既有部分送达 500 缺陷，已作旁见另报）
+- 251-R1（停用理由进入成功事件：门店映射与票种映射）
+  - 改法：渠道门店映射停用（archiveChannelStoreMap）和渠道票种映射停用（archiveChannelTicketTypeMap）先取停用理由（去首尾空白，没有就取空串）。成功事件元数据由只记 operation_id 改为同时记 reason，成功事件 integration.channel_store_map.archived 和 integration.channel_ticket_type_map.archived 都带上所填理由。理由必填仍由执行体里的 validateStatusChange 拦，缺填回 400 VALIDATION_FAILED，不写成功事件。映射表不加列，没有迁移。
+  - 落地位置：backend/src/main/java/com/complex/platform/integration/IntegrationOrderSyncService.java 的 archiveChannelStoreMap、archiveChannelTicketTypeMap（V0.06）。
+  - 依据：BSM:576「存档及删除都需要填写理由」；PGM:966「已拍板：所有有过程的业务动作都必须留痕」。
+  - 测试：ChannelStoreMapMaintenanceEntryJdbcTests.saveListArchiveWithContractBodies（加 reason 断言）、ChannelStoreMapMaintenanceEntryJdbcTests.ticketTypeMapArchiveRecordsReasonInSuccessEvent（新增）。
+- 251-R2（停用时由操作人填写理由，不再写死）
+  - 改法：后台渠道映射维护页（ADM-INT-005）点「停用」时先弹窗「停用理由：」。取消就不提交；去空白后为空，页上显示「停用理由不能为空」，也不提交；否则把所填理由作为 reason 提交。删掉写死的「后台停用渠道映射（停用后该渠道对应回流按未配置处理）」。门店和票种两个停用按钮共用这一个函数。
+  - 落地位置：apps/web/src/admin/pages/IntegrationChannelMapsPage.tsx 的 archive()。
+  - 依据：BSM:576「存档及删除都需要填写理由」。
+  - 测试：IntegrationChannelMapsPage.test.tsx 的「停用票种映射：弹窗填的理由随 archive 请求提交」「停用弹窗取消：不提交」「停用理由为空白：提示必填、不提交」「停用门店映射：弹窗填的理由随 archive 请求提交」。
+- 18AO 落地位置补记·第 249 条 249-R1、R2、R4、R6、R7、R8、R9（多类对象删除只认最高权限审批、最高权限本人发起即生效；第十八批裁决 71 选②「看全部酒吧目录」）：
+  249-R1　酒吧分类、商品、套餐：BarPosCatalogService.doApproveDelete 第一句加最高权限闸，非最高权限（含申请人本人）403 MASTER_APPROVAL_REQUIRED「酒吧{分类/商品/套餐}删除须由最高权限本人批准」，被拒照落 bar.*.delete_approve_failed；审批不再按商户范围取记录，自审闸保留。doRequestDelete 加审批操作参数：最高权限本人发起时不按商户范围，落待审批后经 auditedWrite(APPROVE_DELETE_BAR_*) 调新抽出的 executeDelete 当场删除，另落 bar.*.delete_approved，返回 delete_status=approved；有占用 409 *_IN_USE，整笔回滚。
+  249-R2　套餐删前查占用：JdbcBarPosCatalogRepository 加 countComboReferences（bar_order_items.combo_id，不分订单状态），套餐有引用 409 BAR_COMBO_IN_USE「该套餐仍被 N 条订单明细引用」。
+  249-R9　最高权限看全部酒吧目录（裁决 71）：BarPosCatalogService.listCategories、listCombos 与 BarService.listProducts 对最高权限取空商户范围，includeArchived、bar_id 照常过滤；其他人照旧按本店。接口与权限码不变。
+  249-R4　票种、价格规则：TicketingService 审批包装第一句过 requireMasterApproval（403 MASTER_APPROVAL_REQUIRED，先于自审闸）；申请包装在最高权限时调 TicketCatalogService.executeDeleteTicketType／executeDeletePriceRule（与审批共用新抽出的 executeDeleteCatalogRecord），经 TicketingOperationExecutor.recordSuccess 补记 ticket_product.delete_approved 或 ticket_price_variant.delete_approved，返回 delete_status=approved；有占用 409，整笔回滚。权益模板不改。
+  249-R6　服务目录：ServiceOrderService.approveDeleteCatalogItem 在权限码校验后加最高权限闸（403 MASTER_APPROVAL_REQUIRED「服务目录删除须由最高权限本人批准」）；批准分支改走 executeDeleteCatalogItem，先经 JdbcServiceOrderRepository.countOrdersByCatalogItem 查点单占用（不分点单状态），有引用 409 SERVICE_CATALOG_IN_USE「该服务项目仍被 N 张点单引用，不能删除」。requestDeleteCatalogItem 加事务：最高权限本人发起即删除，返回删除前那一行；遇占用整笔回滚，不卡在待审批。
+  249-R7　集中数据清理：DataCleanupService.approveAndExecute 开头加最高权限闸（批准与驳回都过，403 MASTER_APPROVAL_REQUIRED「数据清理须由最高权限本人批准」）；submitForApproval 在最高权限本人提交时同一事务内执行，落 data.cleanup.executed，返回 executed。
+  249-R8　页面文案：
+  - 票务政策、服务点单、酒吧商品、酒吧套餐四页：删除理由提示，其他人「删除理由（提交后需最高权限审批）：」，最高权限本人「删除理由（最高权限本人发起即删除）：」。已存档行按钮，最高权限显示「直接删除」，其他人仍是「申请删除」。最高权限成功后的结果键为 ticket_type/price_rule_delete_approved、service_catalog_delete_approved、bar_${kind}_delete_approved、bar_combo_delete_approved，都带 deleted: true。
+  - 数据清理页：提交后返回 executed 时，结果为 data_cleanup_decide「数据清理审批已处理」。页头说明由「……每次清理都要先预览、再由另一位有权限的同事审批后才真正删除，全程留痕可追溯。」改为「……每次清理都要先预览、再由最高权限审批后才真正删除（最高权限本人提交的直接执行），全程留痕可追溯。」
+  - fieldLabels.ts 补 service_catalog_delete_approved「服务目录删除已批准」、service_catalog_delete_rejected「服务目录删除已驳回」。
+  - 按钮显隐、页面矩阵不变。
+  测试工具：TestSecurityActors 加 asMasterAuthority()。
+  不做：订台、商户服务工单、权益模板的删除审批（三者都没有客户端入口，随各自入口条目做，见第 265、301 条与 d-gov-b notes②）；按是否最高权限隐藏批准、驳回按钮；放开最高权限对酒吧目录的存档与取消存档；「已存档内容」页；数据清理提交与驳回落事件（第 275 条）；酒吧商品列表不滤已删除行（d-gov-b notes③，旁见，交控制席定）。
+  依据：
+  - BSM:570「删除（走审批·软删除）：要删除，得先存档，再"申请删除"、填写删除理由，由具备最高权限的人审批通过后执行（申请人不能审批自己的申请）。删除走审批、要留痕。」
+  - BSM:572「删前自动查占用：系统会自动检查这条数据还有没有被业务在用（合同、账单、结算、订单、已发权益、库存等），只要还有占用就拦住不让删，避免删出一堆"找不到主人"的记录。」
+  - BSM:576「提交→由具备最高权限的人审批→批量清理，全程留痕、绝不碰在用的活数据」；同行「删除一律须由具备最高权限的人审批通过后执行，不设例外，申请人不得审批自己的申请；持授权 U 盘密钥的最高权限本人发起的操作，不需要经过任何审批。」
+  - PGM:528「第④类看不到别的商户和别的项目的数据，持授权 U 盘密钥的最高权限可以逐笔开放，每次只对当前这一笔生效并留痕。」
+  - 决策台账 DEC-R3-2026-08-04-41「删除审批「由另一个人审批」统一改为最高权限审批；持授权 U 盘密钥的最高权限本人发起的操作不需要经过任何审批」。
+  - 第十八批裁决 71（操作员改定选「看全部酒吧目录」：最高权限打开酒吧商品、分类、套餐页看到全部酒吧的全部目录，也可以自己发起删除、即时生效）。
+  契约：OpenAPI 17 个操作改说明与失败码（酒吧审批 3、酒吧申请 3、酒吧列表 3、票务 4、服务目录 2、数据清理 2），approveDeleteBarCombo 加 409；操作数不变。
+  测试：
+  - 新类 BarCatalogMasterDeleteJdbcIntegrationTests 4 例（masterDeleteRequestOnAnotherBarsArchivedProductTakesEffectAtOnce、masterDeleteRequestOnProductStillOrderedIsRejectedAndRolledBack、comboStillOrderedCannotBeDeletedWhileUnorderedComboCan、masterSeesEveryBarsCatalogWhileBarStaffSeeOnlyTheirOwn）。
+  - 新类 TicketCatalogMasterDeleteJdbcIntegrationTests 2 例（masterDeleteRequestOnArchivedPriceRuleTakesEffectAtOnce、masterDeleteRequestOnPriceRuleStillOnOrdersIsRejectedAndRolledBack）。
+  - 新类 ServiceCatalogMasterDeleteJdbcIntegrationTests 3 例（onlyMasterMayApproveAndItemStillOrderedIsKept、masterDeleteRequestTakesEffectAtOnce、masterDeleteRequestOnItemStillOrderedIsRejectedAndRolledBack）。
+  - DataCleanupDryRunApprovalJdbcIntegrationTests 新增 masterApprovalExecutesTheCleanup、masterSubmissionExecutesWithoutApproval。
+  - 改既有用例：BarCategoryArchiveDeleteEntryJdbcIntegrationTests.deleteRequestAndApprovalFollowContractAndRejectSelfApproval、BarPosCatalogJdbcIntegrationTests（审批人改最高权限，deleteRequestInitiatorCannotApprove 改断言）、TicketArchiveDeleteAndDistributionRateJdbcIntegrationTests.ticketTypeArchiveNeedsReasonAndDeleteRequesterCannotApproveOwnRequest、DataCleanupDryRunApprovalJdbcIntegrationTests.submitNeedsReasonAndSelfApprovalIsForbiddenAndRejectionWritesNoCleanupEvent、DataCleanupServiceTests（3 例审批人改最高权限，initiatorCannotApproveOwnRequest 改断言）。
+  - 前端新文件 TicketingPoliciesPage.delete.test.tsx、ServiceOrdersPage.delete.test.tsx、BarProductsPage.delete.test.tsx、BarCombosPage.delete.test.tsx 各 2 例（TicketingPoliciesPage.delete.test.tsx 收尾复核另加 2 例，见段末）；DataCleanupPage.test.tsx 新增 1 例、补 1 处断言。
+- 18AO 落地位置补记·契约（OpenAPI，docs/openapi/openapi-p0.yaml 与 .json 同值；操作数仍 1376，info.version 由 77ff82da 的 V0.71 升为 V0.72）：
+  - 第 246 条 246-R1（PGM:529「任一业务审批节点超过后台配置的时限……未处理的，系统自动提醒并升级到该节点的上一级」）：
+    - getSupervisorReviewChain（yaml:15825／json:21201）说明补每个节点的 due_at 口径（自接手时起按该审批类型时限计；各线首节点自发起时起算，前一节点通过后下一节点起算，超时升级或催办后重新计时；还没轮到的节点为空）。
+    - updateApprovalDeadline（yaml:15578／json:20869）改为「此后该类型复核单各审批节点接手时按新时限计到期，超时升级或催办后的重新计时同样按新时限」。
+    - listPendingSupervisorReviews（yaml:15691／json:21025）到期时间补注「单据到期取各当前节点中最早的」。
+  - 第 250 条 250-R1（PGM:659「所有业务数据默认按项目隔离，普通岗位没有跨项目查看权」）：
+    - listTransferOrders（yaml:8499／json:11052）说明改为按单上所属项目与当事商户过滤、总数按过滤后条数。
+    - getTransferOrder（yaml:8523／json:11085）补同一口径，以及 403 CROSS_MERCHANT_FORBIDDEN「只能查看本商户为出让方或接收方的调拨单」、403 CROSS_PROJECT_FORBIDDEN「所选项目不在本权限可触及的项目范围内」；x-failure-codes 加这两个码。
+  - 第 251 条 251-R1（BSM:576「存档及删除都需要填写理由」）：archiveIntegrationChannelStoreMap（yaml:49819／json:66910）、archiveIntegrationChannelTicketTypeMap（yaml:49778／json:66853）说明补「停用理由必填，去首尾空白后记入成功事件元数据 reason」；reason 属性说明改为「停用理由，必填；记入成功事件元数据 reason。」
+  - 第 261 条 261-B04-R1、R2：不改契约（d-b04 方案「不改契约、不加错误码」），shipTransferOrder、cancelTransferOrder 已列的失败码照旧。
+  - 第 249 条，依据 BSM:576「删除一律须由具备最高权限的人审批通过后执行，不设例外，申请人不得审批自己的申请；持授权 U 盘密钥的最高权限本人发起的操作，不需要经过任何审批。」、BSM:572「只要还有占用就拦住不让删」、第十八批裁决 71（看全部酒吧目录）：
+    - 249-R1、R2：
+      - 审批操作 approveDeleteBarProductCategory（yaml:39462）、approveDeleteBarProduct（yaml:39711）、approveDeleteBarCombo（yaml:39941）说明写明只认最高权限本人、不按商户范围取记录；x-failure-codes 去 BAR_MERCHANT_SCOPE、加 MASTER_APPROVAL_REQUIRED。
+      - approveDeleteBarCombo 删「套餐不做删前占用检查」，改为查订单明细；加 BAR_COMBO_IN_USE 与 409 响应。
+      - 申请操作 requestDeleteBarProductCategory（yaml:39412）、requestDeleteBarProduct（yaml:39661）、requestDeleteBarCombo（yaml:39891）补最高权限本人发起即删、仍查占用、整笔回滚、另留痕 bar.*.delete_approved；分别加 BAR_CATEGORY_IN_USE、BAR_PRODUCT_IN_USE、BAR_COMBO_IN_USE。
+    - 249-R9：listBarProducts（yaml:2808）、listBarProductCategories（yaml:39287）、listBarCombos（yaml:39764）说明补「最高权限本人看全部酒吧，不按商户范围」。
+    - 249-R4：requestDeleteTicketType（yaml:15067）、requestDeleteTicketPriceRule（yaml:14102）补最高权限本人发起即删，加 TICKET_TYPE_IN_USE、TICKET_PRICE_RULE_IN_USE；approveDeleteTicketType（yaml:15125）、approveDeleteTicketPriceRule（yaml:14160）补只认最高权限本人，加 MASTER_APPROVAL_REQUIRED。
+    - 249-R6：requestDeleteServiceCatalogItem（yaml:38621）补最高权限本人发起即删、查点单占用，加 SERVICE_CATALOG_IN_USE；approveDeleteServiceCatalogItem（yaml:38676）补只认最高权限本人与占用 409，加 MASTER_APPROVAL_REQUIRED、SERVICE_CATALOG_IN_USE。
+    - 249-R7：submitDataCleanupJob（yaml:11433）补最高权限本人提交即执行、落 data.cleanup.executed；approveDataCleanupJob（yaml:11480）补只认最高权限本人，加 MASTER_APPROVAL_REQUIRED。
+  - 第 247 条：不改契约。
+  - 测试：yaml 与 json 深比较一致（1376 个操作），npm run verify:openapi、verify:openapi-examples、verify:client-routes、verify:client-openapi、verify:client-payload --strict 全过。
+- 18AO 汇合组（J）：tests/e2e 不用改。各段的 e2e 要点都是「无」。full-admin-remaining.spec.ts 只查本段 6 个页面可见，不点删除、停用或提交按钮。mock-api.ts 第 59～60 行的登录用户不是最高权限账号，第 551 行对所有 prompt 统一回非空理由。视觉基线只有 overview、ops-readiness、bar-orders、dynamic-pricing 四张，都不是本段改的页面，一张没重拍。门禁结论如下（契约一项变基到 77ff82da 后已重核，其余各项为变基前在 df81d1ba 上实跑）：
+  - 后端：--fresh 全量（V630 真迁）tests=6801，0 红。第一次跑出的 1 条红是 FinanceService.java:2024 的既有同毫秒撞号偶发缺陷，单独重跑后通过。
+  - 前端：typecheck 0 错，vitest 340 个文件 1882 条全部通过。
+  - 客人三个工作区（customer-app 131、customer-miniapp 85、customer-core 77）全部通过。
+  - 安卓：员工端 125 条通过，android-app 编译通过。
+  - e2e：五份后台 spec 用 chromium 跑，33 条全部通过。
+  - 契约：verify:p0-contract 通过。yaml 与 json 深比较一致，操作数 1376。
+  - 生成物：只有 data-isolation spec 要随 V630 重生成，其余三份内容不变。
+  - git diff --check：干净。
+- **18AO 落地位置补记·文档组（D-docs）**：按第 247、246、250、251、249 条与第 261 条 B04 批各段的代码与契约现状，就地改 PRD 与下位文档，不新增业务规则。每份相对 77ff82da 只升一版并加一行变更记录；商户专区 PRD 没有变更表，只改版本行。
+  ① docs/operation-traceability-and-terminal-switch-prd-v0.1.md V0.14，§5.4「模块关闭」：100-R1 现状句补「键可带路径变量段与请求方法」，商户网页门户模块行补商户自助取消工单（收尾复核另补确认已解决、商户建单与证照宽限申请）；新增 247-R1～R4 现状段，写明匹配规则、按模块补登的清单和改为不判的路径（四个，变基后重扫补付款确认单列表）。
+  ② docs/merchant-portal-zone-prd-v0.1.md V0.26，§10「终端」行：补商户自助取消工单按商户专区模块开关判（收尾复核另补确认已解决、商户建单与证照宽限申请）。
+  ③ docs/platform-governance-prd-v0.1.md V0.87：§2A.5 加 246-R1 现状（节点自接手时起计时、节点表 due_at 迁移 V630、超时扫描只处理已到期的当前节点并自该时起重新计时、复核单到期取各当前节点中最早的、链节点接口带 due_at）；§15C.3 加 249-R7、R8 现状（清理审批只认最高权限本人，最高权限本人提交即执行、落 data.cleanup.executed）。
+  ④ docs/supply-chain-inventory-product-prd-v0.1.md V0.40：§7.2 加 250-R1 实装现状；§10.1「跨主体借调」行补 261-B04-R2；「权限与数据隔离」行改为流转详情与列表的现状。
+  ⑤ docs/bar-business-operations-product-prd-v0.1.md V0.36：§11 已确认第 11 条（249-R1、R2、R8、R9，第十八批裁决 71）；§11A.1 补 261-B04-R1。
+  ⑥ docs/third-party-business-access-product-prd-v0.1.md V0.13：§11 已确认第 3 条加 251-R1、R2 现状。
+  ⑦ docs/ticketing-entitlement-checkin-product-prd-v0.1.md V0.35：§12 已确认第 11 条（249-R4、R8）。
+  ⑧ docs/service-order-product-prd-v0.1.md V0.10：§3 末（249-R6、R8）。
+  ⑨ docs/supply-chain-inventory-development-design-v0.1.md V0.27：§12 GAP「合同/流转隔离」行改为流转列表与详情按单上 project_id 与当事商户过滤。
+  依据：PGM:737「关闭后菜单不可见或不可点，接口也要拒绝业务动作。」；PGM:744「前端隐藏只是辅助，后端接口必须独立校验。」；PGM:719；PGM:529；PGM:659；PGM:303；PGM:966；BSM:570；BSM:572；BSM:576；BSM:1194；第十八批裁决 18、50、71。
+  校验：node tools/verify-full-admin-page-matrix.mjs 通过（117 个页面）；node tools/verify-entry-anchors.mjs PASS；git diff --check 无输出。本组没有测试改动。
+- 18AO 收尾复核修正（2026-11-17）：
+  - 票务政策页删除被后端拒绝时无提示（意见 5）：apps/web/src/admin/pages/TicketingPoliciesPage.tsx 的 requestDeleteCatalog、approveDeleteCatalog 加 try/catch，被拒时 setGlobalError(e.message)，兜底「删除申请失败」「删除审批失败」，写法同 BarProductsPage.tsx 的 requestDeleteEntity、approveDeleteEntity。非最高权限批准、驳回被 403 MASTER_APPROVAL_REQUIRED 时页面显示后台统一错误翻译「当前账号无权进行此操作」；最高权限「直接删除」遇订单引用 409 TICKET_TYPE_IN_USE／TICKET_PRICE_RULE_IN_USE 时显示「操作冲突：」加后端原句；都不记成功结果。新用例 TicketingPoliciesPage.delete.test.tsx「非最高权限点「批准删除」被 403：报中文原因，不记删除已批准」「最高权限「直接删除」仍被订单引用的票种被 409：报后端原句，不记已删除」。同根核过本段改过的酒吧商品与分类（BarProductsPage）、酒吧套餐（BarCombosPage）、服务点单（ServiceOrdersPage）、数据清理（DataCleanupPage）、渠道映射维护（IntegrationChannelMapsPage）页：删除申请、批准、驳回、直接删除与停用都已接住错误，未改。依据：PGM:291「用户看到的每一处文字都是中文，含状态、枚举、日期、按钮、提示、报错、导出与短信。」；待开发清单第 209 条先例。
+  - 商户专区「我的工单」确认已解决未按商户专区模块判（意见 2）及同根：按 g247c_routes.py（加端参数）对商户网页门户端逐接口重扫、逐个核前端实际调用处，只有商户专区一组页面调、仍未登记的是确认已解决、商户建单、「我的证照」宽限申请三处，补登进 ServerModuleRoutes 的 merchant_portal 表，并加 POST /api/v1/merchant-service/work-orders/{id} 不判（见上「第 247 条·变基后重扫」）。新用例 ServerModuleRoutesTests.merchantZoneExclusiveWritesAreGatedOnMerchantPortal、ServerModuleSwitchJdbcIntegrationTests.merchantZoneModuleOffRejectsMerchantConfirmCreateAndGraceRequest。
+  - 付款确认单列表改为不判漏记（意见 1、8、10）：docs/operation-traceability-and-terminal-switch-prd-v0.1.md §5.4 第 247 条现状段「改为不判」补 /api/v1/finance/payment-confirmations；100-R1 现状句与 247 现状段的商户网页门户模块行补上条三处新登记接口；V0.14 变更行同步。docs/merchant-portal-zone-prd-v0.1.md §10「终端」行、docs/prd-audit/html-prd-coverage.csv PGM-0108 行同步三处新登记接口。本台账第 247 条补记加「变基后重扫」一条。
+  - 本段补记按变基后的事实改正（意见 3、4、6、7、9）：操作数 1368 改为 1376，写明 info.version 为 V0.72；契约补记的 yaml/json 行号、InventoryService 与 FinanceService 行号、汇合组 tests/e2e/support/mock-api.ts 行号按现文件重取（InventoryTransferFlowService、BarOrderService 行号与现码一致，未改）；文档组「相对 df81d1ba」改为「相对 77ff82da」，③④⑦ 版本改为 V0.87、V0.40、V0.35；汇合组门禁结论注明除契约外为变基前在 df81d1ba 上实跑；249-R8 数据清理页补页头说明的改法。
+  - 三份 PRD 修订表行序（控制席补充）：docs/platform-governance-prd-v0.1.md、docs/supply-chain-inventory-product-prd-v0.1.md、docs/ticketing-entitlement-checkin-product-prd-v0.1.md 本段那行挪到 18AM 那行之上，两行内容不改。
+  - 文件版本：上述文件本段都已升过，不再升；无新文件、无迁移、无契约改动。
+- 18AO 落地位置补记·运行验收证据、快照、终验文档刷新（无新裁决）：业务提交 fcfd104d 之后，按第十八批裁决 25 重刷了运行验收证据：后端全量 6835 测，0 失败 0 错误；apps/web 构建通过；常规界面验收（接口全部 mock）实跑 40 条全过；真实后端界面验收未跑，runtime_ready=false。随后依次重生成闭环当前态快照、生产闭环缺口报告、界面验收报告、无上线指挥台。生成器没改。手改 docs/final-closed-loop-acceptance-audit-v0.1.md 与 docs/code-implementation-acceptance-audit-v0.1.md：前端单测源码计数改为 1782；TicketingService.java 行数由 1305 改为 1351、BarService.java 行数由 1274 改为 1276、BarOrderService.java 行数由 1854 改为 1859，其余被核文件行数无变化；后端全量与常规界面验收的数字、日期改为本次实跑值；写入 npm run verify:unit 实跑结果，五个工作区全过。交付门禁于 2026-11-17 04:49 UTC 在工作树逐项实跑子项，NAS 两项现场探测未跑。仍红的有两项：一是 coding-host-protection，它写死主仓路径，在工作树口径下必红，属工具口径，不做；二是 final-closed-loop-audit，如实留 2 条红（integration-ready、business-acceptance-ready），原因是校验器要求终验把联调、业务验收写成「是」，而裁决 25 定了不跑真实后端界面验收、运行验收未就绪，终验写的是「否」。verify:delivery-gates 总链仍是红的。

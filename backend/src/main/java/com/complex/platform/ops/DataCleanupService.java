@@ -86,12 +86,22 @@ public class DataCleanupService {
         }
         String reason = requireText(request == null ? null : request.reason(), "reason");
         Instant now = Instant.now();
-        return repository.updateStatus(withStatus(job, "pending_approval", reason, null, null, null, null, now));
+        DataCleanupJobRecord pending = repository.updateStatus(withStatus(job, "pending_approval", reason, null, null, null, null, now));
+        if (!isMaster()) {
+            return pending;
+        }
+        // 第十八批 AO 段第 249 条 249-R7（BSM:576「持授权 U 盘密钥的最高权限本人发起的操作，不需要经过任何审批。」）：提交即执行。
+        return operations.readSingle(CLEANUP_EXECUTED, () -> doExecute(pending, actorId(), now), r -> ((DataCleanupJobRecord) r).id());
     }
 
     /** ③ 审批并执行：禁自审；approved 才真删（审计留痕），rejected 则驳回。 */
     @Transactional
     public DataCleanupJobRecord approveAndExecute(String jobId, DataCleanupApprovalRequest request) {
+        // 第十八批 AO 段第 249 条 249-R7（BSM:576「提交→由具备最高权限的人审批→批量清理」「删除一律须由具备最高权限的人审批通过后执行，
+        // 不设例外」）：批准与驳回都只认最高权限本人。
+        if (!isMaster()) {
+            throw ApiException.forbidden("MASTER_APPROVAL_REQUIRED", "数据清理须由最高权限本人批准");
+        }
         DataCleanupJobRecord job = require(jobId);
         if (!"pending_approval".equals(job.status())) {
             throw ApiException.conflict("DATA_CLEANUP_NOT_PENDING", "该任务不在待审批状态");
@@ -167,6 +177,10 @@ public class DataCleanupService {
             throw ApiException.forbidden("DATA_CLEANUP_SELF_APPROVE_FORBIDDEN",
                     "清理申请的发起人不能审批自己的申请");
         }
+    }
+
+    private boolean isMaster() {
+        return authorizationService.isMasterAuthority(authorizationService.currentActor());
     }
 
     private String actorId() {

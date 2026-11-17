@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { AdminApi } from "../client/adminClient";
 import { DataCleanupPage } from "./DataCleanupPage";
 import type {
   AdminApiClient,
@@ -89,7 +90,7 @@ describe("DataCleanupPage 预览→提交流程", () => {
       .mockResolvedValueOnce(previewJob)
       .mockResolvedValueOnce({ ...previewJob, status: "pending_approval" });
     const api = makeApi({ post });
-    renderPage({ api });
+    const { setActionResult } = renderPage({ api });
 
     await screen.findByTestId("data-cleanup-preview-button");
     fireEvent.click(screen.getByTestId("data-cleanup-preview-button"));
@@ -102,6 +103,10 @@ describe("DataCleanupPage 预览→提交流程", () => {
       "/api/v1/ops/data-cleanup/jobs/cleanup_preview/submit",
       { reason: "废弃配置清理" },
     ));
+    // 249-R8④：返回待审批时结果仍为「数据清理已提交审批」。
+    await waitFor(() => expect(setActionResult).toHaveBeenCalledWith(
+      expect.objectContaining({ action: "data_cleanup_submit", status: "pending_approval" }),
+    ));
   });
 
   it("未先预览就提交被拦截并提示", async () => {
@@ -109,6 +114,44 @@ describe("DataCleanupPage 预览→提交流程", () => {
     await screen.findByTestId("data-cleanup-preview-button");
     // 预览结果区未出现，提交按钮不存在；直接点预览按钮的旁路无效，验证提交区未渲染。
     expect(screen.queryByTestId("data-cleanup-submit-button")).toBeNull();
+  });
+});
+
+// 第十八批 AO 段第 249 条 249-R8④（BSM:576「持授权 U 盘密钥的最高权限本人发起的操作，不需要经过任何审批。」）：最高权限本人提交即执行，
+// 页面按返回的状态给结果，不再说「已提交审批」。真实 AdminApi（蛇形键响应经客户端转驼峰），假响应用文本体。
+describe("DataCleanupPage 249-R8 最高权限本人提交即执行", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  function okBody(data: string): Response {
+    return new Response(`{"success":true,"code":"OK","message":"success","data":${data}}`,
+      { status: 200, headers: { "content-type": "application/json" } });
+  }
+
+  it("提交返回已执行：结果为「数据清理审批已处理」并带隐藏条数，不再报「已提交审批」", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (init?.method === "POST" && url.endsWith("/api/v1/ops/data-cleanup/preview")) {
+        return okBody('{"id":"cleanup_m","scope_type":"archived_bar_products","status":"dry_run","preview_count":2}');
+      }
+      if (init?.method === "POST" && url.endsWith("/api/v1/ops/data-cleanup/jobs/cleanup_m/submit")) {
+        return okBody('{"id":"cleanup_m","scope_type":"archived_bar_products","status":"executed","preview_count":2,"deleted_count":2}');
+      }
+      return okBody("[]");
+    }));
+    const setActionResult = vi.fn();
+    render(<DataCleanupPage api={new AdminApi()} setActionResult={setActionResult} setGlobalError={vi.fn()} effectivePermissions={ADMIN_PERMS}
+      user={{ id: "usr_master_authority", username: "master-authority", accountType: "master_authority" }} />);
+
+    await waitFor(() => expect(screen.getByTestId("data-cleanup-preview-button")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("data-cleanup-preview-button"));
+    await waitFor(() => expect(screen.getByTestId("data-cleanup-preview-result")).toHaveTextContent("仅预览，尚未删除"));
+    fireEvent.change(screen.getByTestId("data-cleanup-reason"), { target: { value: "最高权限清理旧商品" } });
+    fireEvent.click(screen.getByTestId("data-cleanup-submit-button"));
+
+    await waitFor(() => expect(setActionResult).toHaveBeenCalledWith(
+      expect.objectContaining({ action: "data_cleanup_decide", jobId: "cleanup_m", status: "executed", deletedCount: 2 }),
+    ));
+    expect(setActionResult).not.toHaveBeenCalledWith(expect.objectContaining({ action: "data_cleanup_submit" }));
   });
 });
 

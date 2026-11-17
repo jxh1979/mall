@@ -97,13 +97,13 @@ class DataCleanupServiceTests {
         var pending = service.submitForApproval(dryRun.id(), new DataCleanupSubmitRequest("清理测试期废弃商品"));
         assertThat(pending.status()).isEqualTo("pending_approval");
 
-        // 换一个审批人执行。
-        TestSecurityActors.asPlatformAdmin("usr_approver");
+        // 审批只认最高权限本人（第十八批 AO 段第 249 条 249-R7；BSM:576）。
+        TestSecurityActors.asMasterAuthority();
         var executed = service.approveAndExecute(pending.id(), new DataCleanupApprovalRequest("approved"));
 
         assertThat(executed.status()).isEqualTo("executed");
         assertThat(executed.deletedCount()).isEqualTo(1); // deleted_count 语义已改为隐藏条数
-        assertThat(executed.approvedBy()).isEqualTo("usr_approver");
+        assertThat(executed.approvedBy()).isEqualTo("usr_master_authority");
         // 软删：只隐藏了已存档超期的那条，行仍在库（可恢复），仅被前台读取过滤隐藏。
         assertThat(exists("prod_del")).isTrue();   // 行仍在数据库里（不物理删）
         assertThat(hidden("prod_del")).isTrue();   // 已置 delete_status='approved' → 前台隐藏
@@ -121,7 +121,7 @@ class DataCleanupServiceTests {
         var dryRun = service.preview(new DataCleanupPreviewRequest(SCOPE, 30));
         var pending = service.submitForApproval(dryRun.id(), new DataCleanupSubmitRequest("试探"));
 
-        TestSecurityActors.asPlatformAdmin("usr_approver");
+        TestSecurityActors.asMasterAuthority();
         var rejected = service.approveAndExecute(pending.id(), new DataCleanupApprovalRequest("rejected"));
 
         assertThat(rejected.status()).isEqualTo("rejected");
@@ -136,10 +136,10 @@ class DataCleanupServiceTests {
         var dryRun = service.preview(new DataCleanupPreviewRequest(SCOPE, 30));
         var pending = service.submitForApproval(dryRun.id(), new DataCleanupSubmitRequest("自审试探"));
 
-        // 同一账号审批自己的申请 → 禁自审。
+        // 同一账号（非最高权限）审批自己的申请 → 最高权限闸先拦下（249-R7）。
         assertThatThrownBy(() -> service.approveAndExecute(pending.id(), new DataCleanupApprovalRequest("approved")))
                 .isInstanceOf(ApiException.class)
-                .hasFieldOrPropertyWithValue("code", "DATA_CLEANUP_SELF_APPROVE_FORBIDDEN");
+                .hasFieldOrPropertyWithValue("code", "MASTER_APPROVAL_REQUIRED");
         assertThat(exists("prod_self")).isTrue();
     }
 
@@ -159,7 +159,7 @@ class DataCleanupServiceTests {
         TestSecurityActors.asPlatformAdmin("usr_requester");
         var dryRun = service.preview(new DataCleanupPreviewRequest(SCOPE, 30));
         var pending = service.submitForApproval(dryRun.id(), new DataCleanupSubmitRequest("引用测试"));
-        TestSecurityActors.asPlatformAdmin("usr_approver");
+        TestSecurityActors.asMasterAuthority();
         var executed = service.approveAndExecute(pending.id(), new DataCleanupApprovalRequest("approved"));
 
         assertThat(executed.deletedCount()).isZero();

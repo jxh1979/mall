@@ -1,6 +1,6 @@
 package com.complex.platform.serviceorder;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import java.time.Instant;
 import java.time.LocalDate;
@@ -83,6 +83,13 @@ class JdbcServiceOrderRepository {
                 UPDATE service_catalog_items SET delete_status = :status, updated_at = now()
                  WHERE id = :id AND delete_status = 'pending'
                 """, new MapSqlParameterSource().addValue("id", id).addValue("status", approved ? "approved" : "none"));
+    }
+
+    /** 第十八批 AO 段第 249 条 249-R6：引用该目录项的点单数，不分点单状态。 */
+    public long countOrdersByCatalogItem(String id) {
+        Long count = jdbcTemplate.queryForObject("SELECT COUNT(1) FROM service_orders WHERE catalog_item_id = :id",
+                new MapSqlParameterSource().addValue("id", id), Long.class);
+        return count == null ? 0L : count;
     }
 
     public Optional<ServiceCatalogItemRecord> findCatalogItem(String id) {

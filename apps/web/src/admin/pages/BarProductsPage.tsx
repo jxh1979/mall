@@ -88,7 +88,9 @@ const EMPTY_CATEGORY_FORM: CategoryForm = { barId: "", categoryName: "", sortOrd
  * product_type（粗类别，历史兼容）保留展示；categoryId 为新的可配置精分类。
  * 查看需 bar.product.view；商品录入/改需 bar.product.manage；分类维护需 bar.category.manage；沽清与解除沽清需 bar.product.sold_out（第十八批 AK 段第 221 条）。
  */
-export function BarProductsPage({ api, setActionResult, setGlobalError, effectivePermissions, reportViewedObjects }: AdminPageProps) {
+export function BarProductsPage({ api, user, setActionResult, setGlobalError, effectivePermissions, reportViewedObjects }: AdminPageProps) {
+  // 第十八批 AO 段第 249 条 249-R8：持授权 U 盘密钥的最高权限本人发起的删除不需要审批（BSM:576），按钮与提示照员工档案页判最高权限。
+  const isMaster = user.id === "usr_master_authority" && user.username === "master-authority";
   const [rows, setRows] = React.useState<BarProductRow[]>([]);
   // 第 23 条 23-R5：敏感页这一次看到的对象（PGM:687「哪个客人、哪个商户、哪些单据」）。
   React.useEffect(() => reportViewedObjects?.("bar_product", rows), [rows, reportViewedObjects]);
@@ -205,13 +207,14 @@ export function BarProductsPage({ api, setActionResult, setGlobalError, effectiv
   }
 
   async function requestDeleteEntity(kind: "products" | "categories", id: string) {
-    const reason = window.prompt("删除理由（提交后需上级审批）：");
+    const reason = window.prompt(isMaster ? "删除理由（最高权限本人发起即删除）：" : "删除理由（提交后需最高权限审批）：");
     if (reason === null) {
       return; // 用户点「取消」= 中止申请。
     }
     try {
       await api.post(`/api/v1/bar/catalog/${kind}/${id}/delete-request`, { reason });
-      setActionResult({ action: `bar_${kind}_delete_requested`, id });
+      if (isMaster) setActionResult({ action: `bar_${kind}_delete_approved`, id, deleted: true });
+      else setActionResult({ action: `bar_${kind}_delete_requested`, id });
       await reload();
     } catch (e) {
       setGlobalError(e instanceof Error ? e.message : "删除申请失败");
@@ -289,7 +292,7 @@ export function BarProductsPage({ api, setActionResult, setGlobalError, effectiv
       : row.archivedAt
       ? [
           { key: "unarchive", label: "取消存档", permissions: manage, onClick: () => void archiveEntity(kind, row.id, false), testId: `${prefix}-unarchive-${row.id}` },
-          { key: "delete-request", label: "申请删除", permissions: manage, danger: true, onClick: () => void requestDeleteEntity(kind, row.id), testId: `${prefix}-delete-request-${row.id}` },
+          { key: "delete-request", label: isMaster ? "直接删除" : "申请删除", permissions: manage, danger: true, onClick: () => void requestDeleteEntity(kind, row.id), testId: `${prefix}-delete-request-${row.id}` },
         ]
       : [
           { key: "archive", label: "存档", permissions: manage, onClick: () => void archiveEntity(kind, row.id, true), testId: `${prefix}-archive-${row.id}` },

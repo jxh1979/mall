@@ -1,6 +1,6 @@
 package com.complex.platform.governance.chain;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -209,6 +209,6 @@ public class ApprovalChainService {
 
     private static ApprovalChainNode node(String reviewId, String lineCode, int seq, String kind, String approverId) {
         return new ApprovalChainNode("node_" + UUID.randomUUID(), reviewId, lineCode, seq, kind, approverId,
-                ApprovalChainNode.PENDING, null, null, null, null, 0);
+                ApprovalChainNode.PENDING, null, null, null, null, 0, null);
     }
 }

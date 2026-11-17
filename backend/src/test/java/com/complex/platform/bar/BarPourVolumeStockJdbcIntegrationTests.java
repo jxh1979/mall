@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -235,6 +235,29 @@ class BarPourVolumeStockJdbcIntegrationTests {
                 .containsEntry("quantity", 9).containsEntry("opened_volume_ml", 647);
     }
 
+    /**
+     * 第十八批 AO 段第 261 条 261-B04-R1（第十八批裁决 50；BSM:1194 库存流水「出库」「销售消耗」；BSM:1165「商户领用或出库时就按这个平均单价计成本」；
+     * BSM:1168「支持按杯、按瓶、按套餐或其他形式统计」）：同一张单两行同一按瓶商品各 2 份（对应套餐展开的明细与单点同一瓶），按订单明细各记一条
+     * 出库流水——一次送达两行是两条、合计 4 瓶，与余额扣减一致；已送达的明细换新请求编号再送 409，余额与流水不动。
+     * （分两次送达未写：只送一部分明细时现主干记部分送达的责任链状态 partial 被库约束 chk_srr_status 拒、回 500，属既有缺陷，另报。）
+     * 修复前红：流水号按订单＋物料＋数量撞号，第二行被当成同号重放读回，余额扣 4 瓶、流水只有 1 条 2 瓶。
+     */
+    @Test
+    void byBottleDeliveryOfTwoLinesOfTheSameItemRecordsOneOutboundMovementPerOrderItem() throws Exception {
+        String bottle = product("bottle", false);
+
+        String order = twoLineOrder("together", bottle);
+        deliverLines(order, "together", line("together", 1), line("together", 2)).andExpect(status().isOk());
+        assertThat(balanceRow()).containsEntry("quantity", 6);
+        assertThat(outboundQuantities(order)).containsExactly(2, 2);
+
+        // 第二次还能过吗：已送达的明细换新请求编号再送 409，余额与流水不动。
+        deliverLines(order, "again", line("together", 1)).andExpect(status().isConflict())
+                .andExpect(jsonPath("$.detail_code").value("BAR_ORDER_ITEM_ALREADY_DELIVERED"));
+        assertThat(balanceRow()).containsEntry("quantity", 6);
+        assertThat(outboundQuantities(order)).containsExactly(2, 2);
+    }
+
     // ---------- helpers ----------
 
     /** 酒吧商品按蛇形键建：挂本吧台库存行扣库；按杯的标准出酒量 25ml。 */
@@ -270,6 +293,39 @@ class BarPourVolumeStockJdbcIntegrationTests {
                         {"idempotency_key":"pvs-deliver-%s","operator_note":"已送达","delivery_photo_attachment_ids":[],
                          "delivered_items":[{"order_item_id":"%s","quantity":2%s}]}
                         """.formatted(order, itemId, pour)));
+    }
+
+    /** 同一张单落两条同一商品、各 2 份的待出品明细（对应套餐展开的明细与单点同一瓶），明细号见 {@link #line}。 */
+    private String twoLineOrder(String tag, String product) {
+        Instant now = Instant.now();
+        String order = "pvs_order_" + tag + "_" + s;
+        barRepository.saveOrder(new BarOrderRecord(order, bar, bar, "pvs_table_" + s, null, null, "staff", "created", 20_000L, "CNY",
+                "web", null, null, now, now, "standard", null));
+        for (int n = 1; n <= 2; n++) {
+            barRepository.saveOrderItem(new BarOrderItemRecord(line(tag, n), order, product, "威士忌", 2, 5_000L, 10_000L,
+                    "pending", now, now, null, 0L, false, null, null, null, false, false, null));
+        }
+        return order;
+    }
+
+    private String line(String tag, int n) {
+        return "pvs_oi_" + tag + "_" + n + "_" + s;
+    }
+
+    /** 后台订单页「登记送达」可一次勾多条明细（delivered_items 各 2 份），请求编号按 tag 区分。 */
+    private ResultActions deliverLines(String order, String tag, String... lines) throws Exception {
+        String items = String.join(",", java.util.Arrays.stream(lines)
+                .map(line -> "{\"order_item_id\":\"" + line + "\",\"quantity\":2}").toList());
+        return mockMvc.perform(post("/api/v1/bar/orders/" + order + "/deliver").with(staff())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"idempotency_key\":\"pvs-deliver-" + tag + "-" + s + "\",\"operator_note\":\"已送达\","
+                        + "\"delivery_photo_attachment_ids\":[],\"delivered_items\":[" + items + "]}"));
+    }
+
+    /** 该订单的出库流水各条数量。 */
+    private List<Integer> outboundQuantities(String order) {
+        return jdbc.queryForList("SELECT quantity FROM inventory_stock_movements WHERE business_type = 'bar_order' AND business_id = ?"
+                + " AND movement_type = 'outbound'", Integer.class, order);
     }
 
     private Map<String, Object> balanceRow() {

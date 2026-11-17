@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -9,6 +9,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.complex.platform.access.AccessActor;
+import com.complex.platform.auth.SessionIssuer;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
@@ -88,8 +89,10 @@ class BarCategoryArchiveDeleteEntryJdbcIntegrationTests {
     }
 
     /**
-     * 申请删除须先存档（400 BAR_CATEGORY_NOT_ARCHIVED）；存档后带 reason 申请 200 进入待审批；申请人审批自己的申请 403
-     * BAR_CATALOG_SELF_APPROVE_FORBIDDEN；另一位持 bar.category.approve 的人 decision=approved 200 删除；删除后取消存档 404。
+     * 申请删除须先存档（400 BAR_CATEGORY_NOT_ARCHIVED）；存档后带 reason 申请 200 进入待审批。第十八批 AO 段第 249 条 249-R1
+     * （BSM:576「删除一律须由具备最高权限的人审批通过后执行，不设例外」）：申请人本人与另一位持 bar.category.approve 的非最高权限
+     * 审批人都 403 MASTER_APPROVAL_REQUIRED、仍待审批；最高权限本人（不挂商户，PGM:528 逐笔开放）decision=approved 200 删除；
+     * 删除后取消存档 404。
      */
     @Test
     void deleteRequestAndApprovalFollowContractAndRejectSelfApproval() throws Exception {
@@ -109,8 +112,13 @@ class BarCategoryArchiveDeleteEntryJdbcIntegrationTests {
 
         mockMvc.perform(post("/api/v1/bar/catalog/categories/" + id + "/delete-approve").with(manager).contentType(MediaType.APPLICATION_JSON)
                         .content("{\"decision\":\"approved\"}"))
-                .andExpect(status().isForbidden()).andExpect(jsonPath("$.detail_code").value("BAR_CATALOG_SELF_APPROVE_FORBIDDEN"));
+                .andExpect(status().isForbidden()).andExpect(jsonPath("$.detail_code").value("MASTER_APPROVAL_REQUIRED"));
         mockMvc.perform(post("/api/v1/bar/catalog/categories/" + id + "/delete-approve").with(approver).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"decision\":\"approved\"}"))
+                .andExpect(status().isForbidden()).andExpect(jsonPath("$.detail_code").value("MASTER_APPROVAL_REQUIRED"));
+        assertThat(jdbc.queryForObject("SELECT delete_status FROM bar_product_categories WHERE id = ?", String.class, id))
+                .isEqualTo("pending");
+        mockMvc.perform(post("/api/v1/bar/catalog/categories/" + id + "/delete-approve").with(master()).contentType(MediaType.APPLICATION_JSON)
                         .content("{\"decision\":\"approved\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.decision").value("approved"))
@@ -123,9 +131,13 @@ class BarCategoryArchiveDeleteEntryJdbcIntegrationTests {
         assertThat(rows("bar.category.delete_requested", "mgr"))
                 .containsExactly("success|bar_product_category|bar.category.manage|");
         assertThat(rows("bar.category.delete_approve_failed", "mgr"))
-                .containsExactly("failure|bar_product_category|bar.category.approve|BAR_CATALOG_SELF_APPROVE_FORBIDDEN");
-        assertThat(rows("bar.category.delete_approved", "apv"))
-                .containsExactly("success|bar_product_category|bar.category.approve|");
+                .containsExactly("failure|bar_product_category|bar.category.approve|MASTER_APPROVAL_REQUIRED");
+        assertThat(rows("bar.category.delete_approve_failed", "apv"))
+                .containsExactly("failure|bar_product_category|bar.category.approve|MASTER_APPROVAL_REQUIRED");
+        assertThat(jdbc.queryForList("SELECT event_result || '|' || permission_code FROM audit_events"
+                        + " WHERE event_name = 'bar.category.delete_approved' AND actor_id = ? AND business_id = ?",
+                String.class, SessionIssuer.MASTER_USER_ID, id))
+                .containsExactly("success|bar.category.approve");
     }
 
     private String createCategory(RequestPostProcessor manager, String n) throws Exception {
@@ -142,6 +154,17 @@ class BarCategoryArchiveDeleteEntryJdbcIntegrationTests {
 
     private String userId(String tag) {
         return "r201bar_" + tag + "_" + s;
+    }
+
+    /** 最高权限本人（保留超管账号，组织 platform-company、无商户），经后台 Web 终端。 */
+    private RequestPostProcessor master() {
+        AccessActor actor = new AccessActor(SessionIssuer.MASTER_USER_ID, SessionIssuer.MASTER_USERNAME,
+                SessionIssuer.MASTER_ACCOUNT_TYPE, "platform-company", null, "active");
+        return request -> {
+            request.addHeader("X-Terminal-Type", "web");
+            return authentication(new UsernamePasswordAuthenticationToken(actor, null,
+                    List.of(new SimpleGrantedAuthority("ROLE_P0_STAFF")))).postProcessRequest(request);
+        };
     }
 
     /** 本酒吧员工（后台 Web 终端），经一个普通角色持有给定权限码。 */

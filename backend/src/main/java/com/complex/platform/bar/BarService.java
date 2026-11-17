@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.15
+// 文件版本：V0.16
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.PageResponse;
@@ -239,7 +239,9 @@ public class BarService {
         return operations.readPage(
                 BarReadOperation.LIST_PRODUCTS,
                 // V262：列表默认排除已存档商品；includeArchived=true 才带出（内存过滤，商品目录量级小）。
-                () -> repository.listProducts(authorizationService.currentMerchantScope()).stream()
+                // 第十八批裁决 71（第 249 条 249-R9）：最高权限看全部酒吧的商品，不按商户范围。
+                () -> repository.listProducts(authorizationService.isMasterAuthority(authorizationService.currentActor())
+                                ? java.util.Optional.empty() : authorizationService.currentMerchantScope()).stream()
                         .filter(p -> includeArchived || p.archivedAt() == null)
                         .toList()
         );

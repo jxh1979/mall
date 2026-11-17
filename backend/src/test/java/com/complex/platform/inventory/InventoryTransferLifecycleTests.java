@@ -1,6 +1,6 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -103,6 +103,8 @@ class InventoryTransferLifecycleTests {
                 null,
                 financeRepository, null, null, null);
         service.transferFlow = mock(InventoryTransferFlowService.class);
+        // 第十八批 AO 段 261-B04-R2：发货与取消改为经 transferFlow 加锁读单，按内存表返回。
+        when(service.transferFlow.lockForUpdate(anyString())).thenAnswer(inv -> orders.get(inv.<String>getArgument(0)));
     }
 
     // FS-019 R2（BSM L1201「实际归还时间取借出方收货扫码的时刻」）：借出方扫齐两码归还 → 保管主体翻回 m_a、所有权始终 m_a、置 returned。

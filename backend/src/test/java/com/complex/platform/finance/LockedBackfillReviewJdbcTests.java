@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -182,6 +182,9 @@ class LockedBackfillReviewJdbcTests {
         String reviewId = JsonPath.read(body, "$.data.review_id");
         // 超时扫描按到期时刻排序、一次最多 200 张：夹具单排到最前（同 ApprovalDeadlineJdbcIntegrationTests 写法）。
         jdbc.update("UPDATE supervisor_review_decisions SET due_at = TIMESTAMPTZ '2000-01-01 00:00:00+00' WHERE review_id = ?", reviewId);
+        // 第十八批 AO 段 246-R1：节点各自计时，当前节点一并到期（不动还没轮到的节点）。
+        jdbc.update("UPDATE supervisor_review_nodes SET due_at = TIMESTAMPTZ '2000-01-01 00:00:00+00' WHERE review_id = ? AND status = 'pending'"
+                + " AND due_at IS NOT NULL", reviewId);
 
         reviews.escalateOverdue(Instant.now());
 

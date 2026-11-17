@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: 综合体管理系统 P0 API 契约
-  version: V0.71
+  version: V0.72
   description: P0 首批编码前置契约。本文采用 JSON-compatible YAML，便于与 openapi-p0.json 保持一致。正式后端以 Java 21 + Spring Boot 4.x +
     springdoc-openapi 输出运行时 OpenAPI，并与本契约比对。
 servers:
@@ -2807,7 +2807,7 @@ paths:
         - bar
       operationId: listBarProducts
       summary: 查询酒吧商品
-      description: 用于查询酒吧商品。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
+      description: 用于查询酒吧商品。持授权 U 盘密钥的最高权限本人看全部酒吧的商品，不按商户范围；其他人照旧按当前商户范围（第十八批裁决 71，第十八批 AO 段第 249 条 249-R9）。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
       x-permission: bar.product.view
       x-data-scope: project
       x-terminal-allowed:
@@ -8498,7 +8498,7 @@ paths:
         - inventory
       operationId: listTransferOrders
       summary: "跨主体调拨与借调单列表"
-      description: "第十八批 AE 段第 201 条 201-R6（照现码补契约）：列出调拨（supply）与借调（lending）单，按建单时间倒序返回全部；列表不带明细行，明细见 GET /api/v1/inventory/transfer-orders/{order_id}。只读，不落审计事件。无 inventory.transfer_order.view 权限 403 PERMISSION_DENIED。"
+      description: "第十八批 AE 段第 201 条 201-R6（照现码补契约）：列出调拨（supply）与借调（lending）单，按建单时间倒序，按单上所属项目与当事商户过滤（第十八批 AO 段第 250 条 250-R1）：商户账号只见本商户为出让方或接收方的单；非商户账号只见按 inventory.transfer_order.view 可触及项目的单（平台管理员全部）；总数按过滤后的条数；列表不带明细行，明细见 GET /api/v1/inventory/transfer-orders/{order_id}。只读，不落审计事件。无 inventory.transfer_order.view 权限 403 PERMISSION_DENIED。"
       x-auth-context: staff-token
       x-permission: inventory.transfer_order.view
       x-data-scope: project
@@ -8522,7 +8522,7 @@ paths:
         - inventory
       operationId: getTransferOrder
       summary: "调拨与借调单详情"
-      description: "第十八批 AE 段第 201 条 201-R6（照现码补契约）：按单号读取一张调拨或借调单及其明细行（lines）。单号不存在 404 TRANSFER_ORDER_NOT_FOUND。只读，不落审计事件。无 inventory.transfer_order.view 权限 403 PERMISSION_DENIED。"
+      description: "第十八批 AE 段第 201 条 201-R6（照现码补契约）：按单号读取一张调拨或借调单及其明细行（lines）。单号不存在 404 TRANSFER_ORDER_NOT_FOUND。按单上所属项目与当事商户判可见（第十八批 AO 段第 250 条 250-R1，口径同 listTransferOrders）：商户账号看非本商户为出让方或接收方的单 403 CROSS_MERCHANT_FORBIDDEN「只能查看本商户为出让方或接收方的调拨单」；非商户账号看按 inventory.transfer_order.view 不可触及项目的单 403 CROSS_PROJECT_FORBIDDEN「所选项目不在本权限可触及的项目范围内」（平台管理员全部可看）。只读，不落审计事件。无 inventory.transfer_order.view 权限 403 PERMISSION_DENIED。"
       x-auth-context: staff-token
       x-permission: inventory.transfer_order.view
       x-data-scope: project
@@ -8534,6 +8534,8 @@ paths:
       x-failure-codes:
         - PERMISSION_DENIED
         - TRANSFER_ORDER_NOT_FOUND
+        - CROSS_MERCHANT_FORBIDDEN
+        - CROSS_PROJECT_FORBIDDEN
       parameters:
         - $ref: "#/components/parameters/OrderId"
       responses:
@@ -11430,7 +11432,7 @@ paths:
         - ops
       operationId: submitDataCleanupJob
       summary: 提交数据清理申请
-      description: "第十八批 AE 段第 201 条 201-R7（BSM:576「提交→由具备最高权限的人审批→批量清理」；契约与代码一致，照决策台账 171-R1 先例补契约）：把一条试运行作业提交审批：只有 dry_run 作业能提交，否则 409 DATA_CLEANUP_NOT_DRY_RUN；reason 必填，缺了 400 VALIDATION_FAILED；作业不存在 404 DATA_CLEANUP_JOB_NOT_FOUND。提交后状态为 pending_approval、记下事由；发起人仍记试运行时的登录人，提交不改。须持 data.cleanup.request，否则 403 PERMISSION_DENIED。无审计事件写点。"
+      description: "第十八批 AE 段第 201 条 201-R7（BSM:576「提交→由具备最高权限的人审批→批量清理」；契约与代码一致，照决策台账 171-R1 先例补契约）：把一条试运行作业提交审批：只有 dry_run 作业能提交，否则 409 DATA_CLEANUP_NOT_DRY_RUN；reason 必填，缺了 400 VALIDATION_FAILED；作业不存在 404 DATA_CLEANUP_JOB_NOT_FOUND。提交后状态为 pending_approval、记下事由；发起人仍记试运行时的登录人，提交不改。持授权 U 盘密钥的最高权限本人提交的不经审批当场执行（第十八批 AO 段第 249 条 249-R7；BSM:576「持授权 U 盘密钥的最高权限本人发起的操作，不需要经过任何审批。」）：同一事务里照 approveDataCleanupJob 批准后的执行段，以提交时刻重算截止时间并标记删除，审批人记本人，作业改 executed，落 data.cleanup.executed（失败 data.cleanup.execute_failed）。须持 data.cleanup.request，否则 403 PERMISSION_DENIED。除上述最高权限本人提交即执行的执行事件外，无审计事件写点。"
       x-permission: data.cleanup.request
       x-data-scope: platform
       x-terminal-allowed:
@@ -11477,7 +11479,7 @@ paths:
         - ops
       operationId: approveDataCleanupJob
       summary: 审批并执行数据清理
-      description: "第十八批 AE 段第 201 条 201-R7（BSM:576「批量清理，全程留痕、绝不碰在用的活数据」；契约与代码一致，照决策台账 171-R1 先例补契约）：审批一条待审批的清理申请。作业不存在 404 DATA_CLEANUP_JOB_NOT_FOUND；不在 pending_approval 409 DATA_CLEANUP_NOT_PENDING；审批人是该作业发起人 403 DATA_CLEANUP_SELF_APPROVE_FORBIDDEN；decision 只收 approved、rejected（去首尾空白、不分大小写），其他值或不填 400 VALIDATION_FAILED。rejected：状态改 rejected、记审批人与时间。approved：在同一事务里按作业的 older_than_days 以审批时刻重算截止时间，把该范围内已存档超期、尚未删除且没有活引用的行标为已删除（delete_status=approved，行保留可查，有活引用的跳过），作业改 executed，deleted_count 为本次标记条数。只有批准后的执行段落审计事件：成功 data.cleanup.executed，失败 data.cleanup.execute_failed；驳回、上述 404、409、403、400 拒绝都不落事件。须持 data.cleanup.approve，否则 403 PERMISSION_DENIED。"
+      description: "第十八批 AE 段第 201 条 201-R7（BSM:576「批量清理，全程留痕、绝不碰在用的活数据」；契约与代码一致，照决策台账 171-R1 先例补契约）：审批一条待审批的清理申请。只认持授权 U 盘密钥的最高权限本人（第十八批 AO 段第 249 条 249-R7；BSM:576「删除一律须由具备最高权限的人审批通过后执行，不设例外」），其他人批准、驳回都 403 MASTER_APPROVAL_REQUIRED「数据清理须由最高权限本人批准」。作业不存在 404 DATA_CLEANUP_JOB_NOT_FOUND；不在 pending_approval 409 DATA_CLEANUP_NOT_PENDING；审批人是该作业发起人 403 DATA_CLEANUP_SELF_APPROVE_FORBIDDEN；decision 只收 approved、rejected（去首尾空白、不分大小写），其他值或不填 400 VALIDATION_FAILED。rejected：状态改 rejected、记审批人与时间。approved：在同一事务里按作业的 older_than_days 以审批时刻重算截止时间，把该范围内已存档超期、尚未删除且没有活引用的行标为已删除（delete_status=approved，行保留可查，有活引用的跳过），作业改 executed，deleted_count 为本次标记条数。只有批准后的执行段落审计事件：成功 data.cleanup.executed，失败 data.cleanup.execute_failed；驳回、上述 404、409、403、400 拒绝都不落事件。须持 data.cleanup.approve，否则 403 PERMISSION_DENIED。"
       x-permission: data.cleanup.approve
       x-data-scope: platform
       x-terminal-allowed:
@@ -11490,6 +11492,7 @@ paths:
         - DATA_CLEANUP_JOB_NOT_FOUND
         - DATA_CLEANUP_NOT_PENDING
         - DATA_CLEANUP_SELF_APPROVE_FORBIDDEN
+        - MASTER_APPROVAL_REQUIRED
       parameters:
         - $ref: "#/components/parameters/Id"
       requestBody:
@@ -14098,7 +14101,7 @@ paths:
         - ticketing
       operationId: requestDeleteTicketPriceRule
       summary: 发起价格规则删除申请
-      description: 第十八批 AE 段第 201 条 201-R2（BSM:576「存档及删除都需要填写理由」）：对已存档的价格规则发起删除申请，记申请人、申请时间与删除理由，状态置待审批（pending）。价格规则不存在 404 TICKET_PRICE_RULE_NOT_FOUND；未存档 400 TICKET_PRICE_RULE_NOT_ARCHIVED；已有待审批的删除申请 409 TICKET_PRICE_RULE_DELETE_ALREADY_PENDING；reason 必填，缺失 400 VALIDATION_FAILED。
+      description: 第十八批 AE 段第 201 条 201-R2（BSM:576「存档及删除都需要填写理由」）：对已存档的价格规则发起删除申请，记申请人、申请时间与删除理由，状态置待审批（pending）。价格规则不存在 404 TICKET_PRICE_RULE_NOT_FOUND；未存档 400 TICKET_PRICE_RULE_NOT_ARCHIVED；已有待审批的删除申请 409 TICKET_PRICE_RULE_DELETE_ALREADY_PENDING；reason 必填，缺失 400 VALIDATION_FAILED。持授权 U 盘密钥的最高权限本人发起的不经审批当场删除（第十八批 AO 段第 249 条 249-R4；BSM:576「持授权 U 盘密钥的最高权限本人发起的操作，不需要经过任何审批。」）：照样先查占用，仍被订单记录引用 409 TICKET_PRICE_RULE_IN_USE，整笔回滚（仍为已存档、未申请删除）；删除成功另留痕 ticket_price_variant.delete_approved，返回 delete_status=approved 的记录。
       x-permission: ticket.price_variant.manage
       x-data-scope: project-channel
       x-terminal-allowed:
@@ -14111,6 +14114,7 @@ paths:
         - TICKET_PRICE_RULE_NOT_FOUND
         - TICKET_PRICE_RULE_NOT_ARCHIVED
         - TICKET_PRICE_RULE_DELETE_ALREADY_PENDING
+        - TICKET_PRICE_RULE_IN_USE
       parameters:
         - name: id
           in: path
@@ -14155,7 +14159,7 @@ paths:
         - ticketing
       operationId: approveDeleteTicketPriceRule
       summary: 审批价格规则删除申请
-      description: 第十八批 AE 段第 201 条 201-R2（BSM:576「申请人不得审批自己的申请」）：审批价格规则删除申请。decision 为 approved 且无活引用即删除（软删除：delete_status 置 approved，行保留、各处不再显示），rejected 回到未申请；返回 price_rule_id、decision 与 deleted（是否已删除）。价格规则不存在 404 TICKET_PRICE_RULE_NOT_FOUND；没有待审批的删除申请 400 TICKET_PRICE_RULE_DELETE_NOT_PENDING；decision 不是 approved 或 rejected 400 VALIDATION_FAILED；审批人是删除申请人本人 403 TICKET_PRICE_RULE_SELF_APPROVE_FORBIDDEN；仍被订单记录引用 409 TICKET_PRICE_RULE_IN_USE（不删除）。
+      description: 第十八批 AE 段第 201 条 201-R2（BSM:576「申请人不得审批自己的申请」）：审批价格规则删除申请。只认持授权 U 盘密钥的最高权限本人（第十八批 AO 段第 249 条 249-R4；BSM:576「删除一律须由具备最高权限的人审批通过后执行，不设例外」），其他人批准、驳回都 403 MASTER_APPROVAL_REQUIRED「价格规则删除须由最高权限本人批准」。decision 为 approved 且无活引用即删除（软删除：delete_status 置 approved，行保留、各处不再显示），rejected 回到未申请；返回 price_rule_id、decision 与 deleted（是否已删除）。价格规则不存在 404 TICKET_PRICE_RULE_NOT_FOUND；没有待审批的删除申请 400 TICKET_PRICE_RULE_DELETE_NOT_PENDING；decision 不是 approved 或 rejected 400 VALIDATION_FAILED；审批人是删除申请人本人 403 TICKET_PRICE_RULE_SELF_APPROVE_FORBIDDEN；仍被订单记录引用 409 TICKET_PRICE_RULE_IN_USE（不删除）。
       x-permission: ticket.price_rule.approve
       x-data-scope: project-channel
       x-terminal-allowed:
@@ -14169,6 +14173,7 @@ paths:
         - TICKET_PRICE_RULE_DELETE_NOT_PENDING
         - TICKET_PRICE_RULE_SELF_APPROVE_FORBIDDEN
         - TICKET_PRICE_RULE_IN_USE
+        - MASTER_APPROVAL_REQUIRED
       parameters:
         - name: id
           in: path
@@ -15061,7 +15066,7 @@ paths:
         - ticketing
       operationId: requestDeleteTicketType
       summary: 发起票种删除申请
-      description: 第十八批 AE 段第 201 条 201-R2（BSM:576「存档及删除都需要填写理由」）：对已存档的票种发起删除申请，记申请人、申请时间与删除理由，状态置待审批（pending）。票种不存在 404 TICKET_TYPE_NOT_FOUND；未存档 400 TICKET_TYPE_NOT_ARCHIVED；已有待审批的删除申请 409 TICKET_TYPE_DELETE_ALREADY_PENDING；reason 必填，缺失 400 VALIDATION_FAILED。
+      description: 第十八批 AE 段第 201 条 201-R2（BSM:576「存档及删除都需要填写理由」）：对已存档的票种发起删除申请，记申请人、申请时间与删除理由，状态置待审批（pending）。票种不存在 404 TICKET_TYPE_NOT_FOUND；未存档 400 TICKET_TYPE_NOT_ARCHIVED；已有待审批的删除申请 409 TICKET_TYPE_DELETE_ALREADY_PENDING；reason 必填，缺失 400 VALIDATION_FAILED。持授权 U 盘密钥的最高权限本人发起的不经审批当场删除（第十八批 AO 段第 249 条 249-R4；BSM:576「持授权 U 盘密钥的最高权限本人发起的操作，不需要经过任何审批。」）：照样先查占用，仍被订单、权益、价格规则、结算等业务记录引用 409 TICKET_TYPE_IN_USE，整笔回滚（仍为已存档、未申请删除）；删除成功另留痕 ticket_product.delete_approved，返回 delete_status=approved 的记录。
       x-permission: ticket.product.manage
       x-data-scope: project
       x-terminal-allowed:
@@ -15074,6 +15079,7 @@ paths:
         - TICKET_TYPE_NOT_FOUND
         - TICKET_TYPE_NOT_ARCHIVED
         - TICKET_TYPE_DELETE_ALREADY_PENDING
+        - TICKET_TYPE_IN_USE
       parameters:
         - name: id
           in: path
@@ -15118,7 +15124,7 @@ paths:
         - ticketing
       operationId: approveDeleteTicketType
       summary: 审批票种删除申请
-      description: 第十八批 AE 段第 201 条 201-R2（BSM:576「申请人不得审批自己的申请」）：审批票种删除申请。decision 为 approved 且无活引用即删除（软删除：delete_status 置 approved，行保留、各处不再显示），rejected 回到未申请；返回 ticket_type_id、decision 与 deleted（是否已删除）。票种不存在 404 TICKET_TYPE_NOT_FOUND；没有待审批的删除申请 400 TICKET_TYPE_DELETE_NOT_PENDING；decision 不是 approved 或 rejected 400 VALIDATION_FAILED；审批人是删除申请人本人 403 TICKET_TYPE_SELF_APPROVE_FORBIDDEN；仍被订单、权益、价格规则、结算等业务记录引用 409 TICKET_TYPE_IN_USE（不删除）。
+      description: 第十八批 AE 段第 201 条 201-R2（BSM:576「申请人不得审批自己的申请」）：审批票种删除申请。只认持授权 U 盘密钥的最高权限本人（第十八批 AO 段第 249 条 249-R4；BSM:576「删除一律须由具备最高权限的人审批通过后执行，不设例外」），其他人批准、驳回都 403 MASTER_APPROVAL_REQUIRED「票种删除须由最高权限本人批准」。decision 为 approved 且无活引用即删除（软删除：delete_status 置 approved，行保留、各处不再显示），rejected 回到未申请；返回 ticket_type_id、decision 与 deleted（是否已删除）。票种不存在 404 TICKET_TYPE_NOT_FOUND；没有待审批的删除申请 400 TICKET_TYPE_DELETE_NOT_PENDING；decision 不是 approved 或 rejected 400 VALIDATION_FAILED；审批人是删除申请人本人 403 TICKET_TYPE_SELF_APPROVE_FORBIDDEN；仍被订单、权益、价格规则、结算等业务记录引用 409 TICKET_TYPE_IN_USE（不删除）。
       x-permission: ticket.type.approve
       x-data-scope: project
       x-terminal-allowed:
@@ -15132,6 +15138,7 @@ paths:
         - TICKET_TYPE_DELETE_NOT_PENDING
         - TICKET_TYPE_SELF_APPROVE_FORBIDDEN
         - TICKET_TYPE_IN_USE
+        - MASTER_APPROVAL_REQUIRED
       parameters:
         - name: id
           in: path
@@ -15570,7 +15577,7 @@ paths:
         - platform
       operationId: updateApprovalDeadline
       summary: 配置一种审批类型的审批时限（时限与上下限同配）
-      description: 第十八批 AD 段第 204 条 204-R1（PGM:529「后台配置的时限（业务参数，按审批类型可配，出厂默认 3 个工作日，涉钱审批出厂默认 1 个工作日，须同时配置上下限）」）：配置该审批类型的时限与上下限（工作日），与授权政策写口同一权限 admission.policy.manage；action_type 不在审批时限清单里的 404 APPROVAL_TYPE_NOT_FOUND「没有这种审批类型」；三值须同时填写且 1 ≤ min_working_days ≤ deadline_working_days ≤ max_working_days，否则 400 VALIDATION_FAILED「审批时限须在上下限之间，下限不小于 1 个工作日」；同一类型再保存即覆盖。成功记 governance.approval_deadline.changed（前后值），任一步失败（权限、提交编号、类型、校验）记 governance.approval_deadline.change_failed。此后新发起的该类型复核单按新时限计到期，超时升级后的顺延同样按新时限；包厢关台未付清待办登记时按 bar.bill.unpaid_close 的时限定期限。
+      description: 第十八批 AD 段第 204 条 204-R1（PGM:529「后台配置的时限（业务参数，按审批类型可配，出厂默认 3 个工作日，涉钱审批出厂默认 1 个工作日，须同时配置上下限）」）：配置该审批类型的时限与上下限（工作日），与授权政策写口同一权限 admission.policy.manage；action_type 不在审批时限清单里的 404 APPROVAL_TYPE_NOT_FOUND「没有这种审批类型」；三值须同时填写且 1 ≤ min_working_days ≤ deadline_working_days ≤ max_working_days，否则 400 VALIDATION_FAILED「审批时限须在上下限之间，下限不小于 1 个工作日」；同一类型再保存即覆盖。成功记 governance.approval_deadline.changed（前后值），任一步失败（权限、提交编号、类型、校验）记 governance.approval_deadline.change_failed。此后该类型复核单各审批节点接手时按新时限计到期，超时升级或催办后的重新计时同样按新时限（第十八批 AO 段第 246 条 246-R1）；包厢关台未付清待办登记时按 bar.bill.unpaid_close 的时限定期限。
       x-auth-context: staff-token
       x-permission: admission.policy.manage
       x-data-scope: platform
@@ -15683,12 +15690,7 @@ paths:
         - platform
       operationId: listPendingSupervisorReviews
       summary: 待复核清单（到期与升级、转交状态）
-      description: 第十八批 AE 段第 201 条 201-R5（PGM:528「系统按组织层级自动补全从发起人到该最终审批人之间的全部直接上级节点，逐级审批」）：列出最近 200
-        张待复核单及其排期（直接受益人、到期时间、升级次数与时间、转交对象）。平台管理员看全部，并记
-        governance.supervisor_review.pending_listed_cross_scope（跨范围查看留痕）；其余查看人（持密钥最高权限也一样，不整表）的可见范围与
-        readSupervisorReviewOriginal（GET /api/v1/platform/supervisor-review/{review_id}）相同：按
-        governance.supervisor_review.view 可触及的项目判，当前节点审批人、被转发人、发起人本人照旧可见，看不到的单据不列出。无 governance.supervisor_review.view
-        403 PERMISSION_DENIED。其余查看不落审计事件。
+      description: 第十八批 AE 段第 201 条 201-R5（PGM:528「系统按组织层级自动补全从发起人到该最终审批人之间的全部直接上级节点，逐级审批」）：列出最近 200 张待复核单及其排期（直接受益人、到期时间（单据到期取各当前节点中最早的，第十八批 AO 段第 246 条 246-R1）、升级次数与时间、转交对象）。平台管理员看全部，并记 governance.supervisor_review.pending_listed_cross_scope（跨范围查看留痕）；其余查看人（持密钥最高权限也一样，不整表）的可见范围与 readSupervisorReviewOriginal（GET /api/v1/platform/supervisor-review/{review_id}）相同：按 governance.supervisor_review.view 可触及的项目判，当前节点审批人、被转发人、发起人本人照旧可见，看不到的单据不列出。无 governance.supervisor_review.view 403 PERMISSION_DENIED。其余查看不落审计事件。
       x-failure-codes:
         - PERMISSION_DENIED
       x-permission: governance.supervisor_review.view
@@ -15822,12 +15824,7 @@ paths:
         - platform
       operationId: getSupervisorReviewChain
       summary: 查看复核单的审批链节点
-      description: 第十八批 AE 段第 201 条
-        201-R5（PGM:528「系统按组织层级自动补全从发起人到该最终审批人之间的全部直接上级节点，逐级审批」）：返回复核单的审批链节点（主线与各平行线，按线与序号；含审批人、转交对象、状态与裁决人）。可见范围与
-        readSupervisorReviewOriginal（GET /api/v1/platform/supervisor-review/{review_id}）相同：按
-        governance.supervisor_review.view 可触及的项目判，当前节点审批人、被转发人、发起人本人照旧可见，看不到的 403
-        SUPERVISOR_REVIEW_SCOPE_FORBIDDEN；持密钥最高权限查看范围外单据逐笔放行并记 governance.supervisor_review.viewed_cross_scope。单据不存在 404
-        SUPERVISOR_REVIEW_NOT_FOUND。其余查看不落审计事件。
+      description: 第十八批 AE 段第 201 条 201-R5（PGM:528「系统按组织层级自动补全从发起人到该最终审批人之间的全部直接上级节点，逐级审批」）：返回复核单的审批链节点（主线与各平行线，按线与序号；含审批人、转交对象、状态与裁决人）。可见范围与 readSupervisorReviewOriginal（GET /api/v1/platform/supervisor-review/{review_id}）相同：按 governance.supervisor_review.view 可触及的项目判，当前节点审批人、被转发人、发起人本人照旧可见，看不到的 403 SUPERVISOR_REVIEW_SCOPE_FORBIDDEN；持密钥最高权限查看范围外单据逐笔放行并记 governance.supervisor_review.viewed_cross_scope。单据不存在 404 SUPERVISOR_REVIEW_NOT_FOUND。其余查看不落审计事件。每个节点带 due_at（第十八批 AO 段第 246 条 246-R1）：该节点自接手时起按该审批类型时限的到期时刻（各线首节点自发起时起算，前一节点通过后下一节点起算，超时升级或催办后自该时起重新计时）；还没轮到的节点为空。
       x-failure-codes:
         - SUPERVISOR_REVIEW_NOT_FOUND
         - SUPERVISOR_REVIEW_SCOPE_FORBIDDEN
@@ -38623,10 +38620,11 @@ paths:
         - service
       operationId: requestDeleteServiceCatalogItem
       summary: 申请删除服务目录项
-      description: 第 201 条 201-R4（BSM:577「员工档案、设施设备、商户服务工单、卡座预订这类业务记录，现在也支持存档、以及审批后删除」「存档及删除都需要填写理由」）：对已存档的服务目录项发起删除申请，记申请人、时间与理由，进入待审批（delete_status=pending）。未存档 400 VALIDATION_FAILED；理由必填，缺或空白 400 VALIDATION_FAILED；目录项不存在或已删除 404 NOT_FOUND。成功落 service.catalog.delete_requested；失败（含无权限）落 service.catalog.delete_request_failed。
+      description: 第 201 条 201-R4（BSM:577「员工档案、设施设备、商户服务工单、卡座预订这类业务记录，现在也支持存档、以及审批后删除」「存档及删除都需要填写理由」）：对已存档的服务目录项发起删除申请，记申请人、时间与理由，进入待审批（delete_status=pending）。未存档 400 VALIDATION_FAILED；理由必填，缺或空白 400 VALIDATION_FAILED；目录项不存在或已删除 404 NOT_FOUND。持授权 U 盘密钥的最高权限本人发起的不经审批当场删除（第十八批 AO 段第 249 条 249-R6；BSM:576「持授权 U 盘密钥的最高权限本人发起的操作，不需要经过任何审批。」）：照样先查占用，仍被点单引用（不分点单状态）409 SERVICE_CATALOG_IN_USE「该服务项目仍被 N 张点单引用，不能删除」，整笔回滚（仍为已存档、未申请删除）；删除成功另落 service.catalog.delete_approved，返回删除前的目录项（delete_status=pending）。成功落 service.catalog.delete_requested；失败（含无权限）落 service.catalog.delete_request_failed。
       x-failure-codes:
         - VALIDATION_FAILED
         - NOT_FOUND
+        - SERVICE_CATALOG_IN_USE
       x-permission: service.catalog.manage
       x-data-scope: platform
       x-terminal-allowed:
@@ -38677,11 +38675,13 @@ paths:
         - service
       operationId: approveDeleteServiceCatalogItem
       summary: 审批服务目录项删除申请
-      description: 第 201 条 201-R4（BSM:577「员工档案、设施设备、商户服务工单、卡座预订这类业务记录，现在也支持存档、以及审批后删除」「存档及删除都需要填写理由」）：审批服务目录项删除申请：decision 为 approved 即删除（delete_status 置 approved）；其他值（含不传、大小写不同）一律按驳回处理、回到未申请态，不报 400。删除为软删除：转入后台留存、各处不再显示。没有待审批申请 400 VALIDATION_FAILED；删除申请发起人不能审批自己的申请（批准、驳回都不行）403 SELF_APPROVAL_FORBIDDEN；目录项不存在或已删除 404 NOT_FOUND。返回审批前的目录项。批准落 service.catalog.delete_approved，驳回落 service.catalog.delete_rejected；失败（含无权限）落 service.catalog.delete_approve_failed。
+      description: 第 201 条 201-R4（BSM:577「员工档案、设施设备、商户服务工单、卡座预订这类业务记录，现在也支持存档、以及审批后删除」「存档及删除都需要填写理由」）：审批服务目录项删除申请，只认持授权 U 盘密钥的最高权限本人（第十八批 AO 段第 249 条 249-R6；BSM:576「删除一律须由具备最高权限的人审批通过后执行，不设例外」），其他人批准、驳回都 403 MASTER_APPROVAL_REQUIRED「服务目录删除须由最高权限本人批准」：decision 为 approved 且没有点单引用该目录项（不分点单状态）即删除（delete_status 置 approved），仍被点单引用 409 SERVICE_CATALOG_IN_USE「该服务项目仍被 N 张点单引用，不能删除」（不删除）；其他值（含不传、大小写不同）一律按驳回处理、回到未申请态，不报 400。删除为软删除：转入后台留存、各处不再显示。没有待审批申请 400 VALIDATION_FAILED；删除申请发起人不能审批自己的申请（批准、驳回都不行）403 SELF_APPROVAL_FORBIDDEN；目录项不存在或已删除 404 NOT_FOUND。返回审批前的目录项。批准落 service.catalog.delete_approved，驳回落 service.catalog.delete_rejected；失败（含无权限）落 service.catalog.delete_approve_failed。
       x-failure-codes:
         - VALIDATION_FAILED
         - SELF_APPROVAL_FORBIDDEN
         - NOT_FOUND
+        - MASTER_APPROVAL_REQUIRED
+        - SERVICE_CATALOG_IN_USE
       x-permission: service.catalog.approve
       x-data-scope: platform
       x-terminal-allowed:
@@ -39286,7 +39286,7 @@ paths:
         - bar
       operationId: listBarProductCategories
       summary: 查询酒吧商品分类
-      description: 图形化点单 POS 可配置分类目录，供按分类分屏列菜。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
+      description: 图形化点单 POS 可配置分类目录，供按分类分屏列菜。持授权 U 盘密钥的最高权限本人看全部酒吧的商品分类，不按商户范围；其他人照旧按当前商户范围（第十八批裁决 71，第十八批 AO 段第 249 条 249-R9）。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
       x-permission: bar.category.view
       x-data-scope: project
       x-terminal-allowed:
@@ -39411,7 +39411,7 @@ paths:
         - bar
       operationId: requestDeleteBarProductCategory
       summary: "申请删除酒吧商品分类"
-      description: "第十八批 AE 段第 201 条 201-R1（BSM:570「要删除，得先存档」「填写删除理由」；BSM:576「存档及删除都需要填写理由」）：对已存档的商品分类发起删除申请，进入待审批删除（delete_status=pending），记申请人、申请时间与理由（reason），由持 bar.category.approve 的人审批（approveDeleteBarProductCategory）。未存档 400 BAR_CATEGORY_NOT_ARCHIVED；已有待审批的删除申请 409 BAR_CATEGORY_DELETE_ALREADY_PENDING；reason 必填，缺失或空白 400 VALIDATION_FAILED；商品分类不存在或已删除 404 BAR_CATEGORY_NOT_FOUND，属其他商户 403 BAR_MERCHANT_SCOPE。成功留痕 bar.category.delete_requested，以上拒绝留痕 bar.category.delete_request_failed（带错误码）。"
+      description: "第十八批 AE 段第 201 条 201-R1（BSM:570「要删除，得先存档」「填写删除理由」；BSM:576「存档及删除都需要填写理由」）：对已存档的商品分类发起删除申请，进入待审批删除（delete_status=pending），记申请人、申请时间与理由（reason），由持授权 U 盘密钥的最高权限本人审批（approveDeleteBarProductCategory，第十八批 AO 段第 249 条 249-R1）。未存档 400 BAR_CATEGORY_NOT_ARCHIVED；已有待审批的删除申请 409 BAR_CATEGORY_DELETE_ALREADY_PENDING；reason 必填，缺失或空白 400 VALIDATION_FAILED；商品分类不存在或已删除 404 BAR_CATEGORY_NOT_FOUND，属其他商户 403 BAR_MERCHANT_SCOPE。持授权 U 盘密钥的最高权限本人发起的不按商户范围、不经审批当场删除（第十八批裁决 71；BSM:576「持授权 U 盘密钥的最高权限本人发起的操作，不需要经过任何审批。」）：照样先查占用，该分类下仍有商品（含已存档商品） 409 BAR_CATEGORY_IN_USE，整笔回滚（仍为已存档、未申请删除）；删除成功另留痕 bar.category.delete_approved，返回 delete_status=approved 的记录。成功留痕 bar.category.delete_requested，以上拒绝留痕 bar.category.delete_request_failed（带错误码）。"
       x-auth-context: staff-token
       x-permission: bar.category.manage
       x-data-scope: project
@@ -39426,6 +39426,7 @@ paths:
         - VALIDATION_FAILED
         - BAR_CATEGORY_NOT_FOUND
         - BAR_MERCHANT_SCOPE
+        - BAR_CATEGORY_IN_USE
       parameters:
         - $ref: "#/components/parameters/Id"
       requestBody:
@@ -39460,7 +39461,7 @@ paths:
         - bar
       operationId: approveDeleteBarProductCategory
       summary: "审批酒吧商品分类删除申请"
-      description: "第十八批 AE 段第 201 条 201-R1（BSM:570「申请人不能审批自己的申请」；BSM:571「前台各处不再显示，数据始终留在库里可查、可审计、可恢复」；BSM:572「只要还有占用就拦住不让删」）：审批商品分类的待审批删除申请。decision=approved 且该分类下已没有任何商品（含已存档商品）即删除（delete_status=approved，各处查询不再返回、库里保留），返回 deleted=true；rejected 撤回申请（delete_status 回 none），商品分类仍为已存档，返回 deleted=false。没有待审批的删除申请 400 BAR_CATEGORY_DELETE_NOT_PENDING；decision 不是 approved 或 rejected 400 VALIDATION_FAILED；申请人审批自己的申请 403 BAR_CATALOG_SELF_APPROVE_FORBIDDEN；仍有商品挂在该分类下 409 BAR_CATEGORY_IN_USE；商品分类不存在或已删除 404 BAR_CATEGORY_NOT_FOUND，属其他商户 403 BAR_MERCHANT_SCOPE。通过与驳回都留痕 bar.category.delete_approved，以上拒绝留痕 bar.category.delete_approve_failed（带错误码）。"
+      description: "第十八批 AE 段第 201 条 201-R1（BSM:570「申请人不能审批自己的申请」；BSM:571「前台各处不再显示，数据始终留在库里可查、可审计、可恢复」；BSM:572「只要还有占用就拦住不让删」）：审批商品分类的待审批删除申请。只认持授权 U 盘密钥的最高权限本人，不按商户范围取记录（第十八批 AO 段第 249 条 249-R1；BSM:576「删除一律须由具备最高权限的人审批通过后执行，不设例外」），其他人批准、驳回都 403 MASTER_APPROVAL_REQUIRED「酒吧分类删除须由最高权限本人批准」。decision=approved 且该分类下已没有任何商品（含已存档商品）即删除（delete_status=approved，各处查询不再返回、库里保留），返回 deleted=true；rejected 撤回申请（delete_status 回 none），商品分类仍为已存档，返回 deleted=false。没有待审批的删除申请 400 BAR_CATEGORY_DELETE_NOT_PENDING；decision 不是 approved 或 rejected 400 VALIDATION_FAILED；申请人审批自己的申请 403 BAR_CATALOG_SELF_APPROVE_FORBIDDEN；仍有商品挂在该分类下 409 BAR_CATEGORY_IN_USE；商品分类不存在或已删除 404 BAR_CATEGORY_NOT_FOUND。通过与驳回都留痕 bar.category.delete_approved，以上拒绝留痕 bar.category.delete_approve_failed（带错误码）。"
       x-auth-context: staff-token
       x-permission: bar.category.approve
       x-data-scope: project
@@ -39475,7 +39476,7 @@ paths:
         - BAR_CATALOG_SELF_APPROVE_FORBIDDEN
         - BAR_CATEGORY_IN_USE
         - BAR_CATEGORY_NOT_FOUND
-        - BAR_MERCHANT_SCOPE
+        - MASTER_APPROVAL_REQUIRED
       parameters:
         - $ref: "#/components/parameters/Id"
       requestBody:
@@ -39659,7 +39660,7 @@ paths:
         - bar
       operationId: requestDeleteBarProduct
       summary: "申请删除酒吧商品"
-      description: "第十八批 AE 段第 201 条 201-R1（BSM:570「要删除，得先存档」「填写删除理由」；BSM:576「存档及删除都需要填写理由」）：对已存档的商品发起删除申请，进入待审批删除（delete_status=pending），记申请人、申请时间与理由（reason），由持 bar.product.approve 的人审批（approveDeleteBarProduct）。未存档 400 BAR_PRODUCT_NOT_ARCHIVED；已有待审批的删除申请 409 BAR_PRODUCT_DELETE_ALREADY_PENDING；reason 必填，缺失或空白 400 VALIDATION_FAILED；商品不存在或已删除 404 BAR_PRODUCT_NOT_FOUND，属其他商户 403 BAR_MERCHANT_SCOPE。成功留痕 bar.product.delete_requested，以上拒绝留痕 bar.product.delete_request_failed（带错误码）。"
+      description: "第十八批 AE 段第 201 条 201-R1（BSM:570「要删除，得先存档」「填写删除理由」；BSM:576「存档及删除都需要填写理由」）：对已存档的商品发起删除申请，进入待审批删除（delete_status=pending），记申请人、申请时间与理由（reason），由持授权 U 盘密钥的最高权限本人审批（approveDeleteBarProduct，第十八批 AO 段第 249 条 249-R1）。未存档 400 BAR_PRODUCT_NOT_ARCHIVED；已有待审批的删除申请 409 BAR_PRODUCT_DELETE_ALREADY_PENDING；reason 必填，缺失或空白 400 VALIDATION_FAILED；商品不存在或已删除 404 BAR_PRODUCT_NOT_FOUND，属其他商户 403 BAR_MERCHANT_SCOPE。持授权 U 盘密钥的最高权限本人发起的不按商户范围、不经审批当场删除（第十八批裁决 71；BSM:576「持授权 U 盘密钥的最高权限本人发起的操作，不需要经过任何审批。」）：照样先查占用，仍被订单明细或套餐明细引用 409 BAR_PRODUCT_IN_USE，整笔回滚（仍为已存档、未申请删除）；删除成功另留痕 bar.product.delete_approved，返回 delete_status=approved 的记录。成功留痕 bar.product.delete_requested，以上拒绝留痕 bar.product.delete_request_failed（带错误码）。"
       x-auth-context: staff-token
       x-permission: bar.product.manage
       x-data-scope: project
@@ -39674,6 +39675,7 @@ paths:
         - VALIDATION_FAILED
         - BAR_PRODUCT_NOT_FOUND
         - BAR_MERCHANT_SCOPE
+        - BAR_PRODUCT_IN_USE
       parameters:
         - $ref: "#/components/parameters/Id"
       requestBody:
@@ -39708,7 +39710,7 @@ paths:
         - bar
       operationId: approveDeleteBarProduct
       summary: "审批酒吧商品删除申请"
-      description: "第十八批 AE 段第 201 条 201-R1（BSM:570「申请人不能审批自己的申请」；BSM:571「前台各处不再显示，数据始终留在库里可查、可审计、可恢复」；BSM:572「只要还有占用就拦住不让删」）：审批商品的待审批删除申请。decision=approved 且没有订单明细或套餐明细引用该商品即删除（delete_status=approved，各处查询不再返回、库里保留），返回 deleted=true；rejected 撤回申请（delete_status 回 none），商品仍为已存档，返回 deleted=false。没有待审批的删除申请 400 BAR_PRODUCT_DELETE_NOT_PENDING；decision 不是 approved 或 rejected 400 VALIDATION_FAILED；申请人审批自己的申请 403 BAR_CATALOG_SELF_APPROVE_FORBIDDEN；仍被订单明细或套餐明细引用 409 BAR_PRODUCT_IN_USE；商品不存在或已删除 404 BAR_PRODUCT_NOT_FOUND，属其他商户 403 BAR_MERCHANT_SCOPE。通过与驳回都留痕 bar.product.delete_approved，以上拒绝留痕 bar.product.delete_approve_failed（带错误码）。"
+      description: "第十八批 AE 段第 201 条 201-R1（BSM:570「申请人不能审批自己的申请」；BSM:571「前台各处不再显示，数据始终留在库里可查、可审计、可恢复」；BSM:572「只要还有占用就拦住不让删」）：审批商品的待审批删除申请。只认持授权 U 盘密钥的最高权限本人，不按商户范围取记录（第十八批 AO 段第 249 条 249-R1；BSM:576「删除一律须由具备最高权限的人审批通过后执行，不设例外」），其他人批准、驳回都 403 MASTER_APPROVAL_REQUIRED「酒吧商品删除须由最高权限本人批准」。decision=approved 且没有订单明细或套餐明细引用该商品即删除（delete_status=approved，各处查询不再返回、库里保留），返回 deleted=true；rejected 撤回申请（delete_status 回 none），商品仍为已存档，返回 deleted=false。没有待审批的删除申请 400 BAR_PRODUCT_DELETE_NOT_PENDING；decision 不是 approved 或 rejected 400 VALIDATION_FAILED；申请人审批自己的申请 403 BAR_CATALOG_SELF_APPROVE_FORBIDDEN；仍被订单明细或套餐明细引用 409 BAR_PRODUCT_IN_USE；商品不存在或已删除 404 BAR_PRODUCT_NOT_FOUND。通过与驳回都留痕 bar.product.delete_approved，以上拒绝留痕 bar.product.delete_approve_failed（带错误码）。"
       x-auth-context: staff-token
       x-permission: bar.product.approve
       x-data-scope: project
@@ -39723,7 +39725,7 @@ paths:
         - BAR_CATALOG_SELF_APPROVE_FORBIDDEN
         - BAR_PRODUCT_IN_USE
         - BAR_PRODUCT_NOT_FOUND
-        - BAR_MERCHANT_SCOPE
+        - MASTER_APPROVAL_REQUIRED
       parameters:
         - $ref: "#/components/parameters/Id"
       requestBody:
@@ -39761,7 +39763,7 @@ paths:
         - bar
       operationId: listBarCombos
       summary: 查询酒吧套餐
-      description: 图形化点单 POS 套餐目录（含组合明细与内部结算价）。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
+      description: 图形化点单 POS 套餐目录（含组合明细与内部结算价）。持授权 U 盘密钥的最高权限本人看全部酒吧的套餐，不按商户范围；其他人照旧按当前商户范围（第十八批裁决 71，第十八批 AO 段第 249 条 249-R9）。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
       x-permission: bar.combo.view
       x-data-scope: project
       x-terminal-allowed:
@@ -39888,7 +39890,7 @@ paths:
         - bar
       operationId: requestDeleteBarCombo
       summary: "申请删除酒吧套餐"
-      description: "第十八批 AE 段第 201 条 201-R1（BSM:570「要删除，得先存档」「填写删除理由」；BSM:576「存档及删除都需要填写理由」）：对已存档的套餐发起删除申请，进入待审批删除（delete_status=pending），记申请人、申请时间与理由（reason），由持 bar.combo.approve 的人审批（approveDeleteBarCombo）。未存档 400 BAR_COMBO_NOT_ARCHIVED；已有待审批的删除申请 409 BAR_COMBO_DELETE_ALREADY_PENDING；reason 必填，缺失或空白 400 VALIDATION_FAILED；套餐不存在或已删除 404 BAR_COMBO_NOT_FOUND，属其他商户 403 BAR_MERCHANT_SCOPE。成功留痕 bar.combo.delete_requested，以上拒绝留痕 bar.combo.delete_request_failed（带错误码）。"
+      description: "第十八批 AE 段第 201 条 201-R1（BSM:570「要删除，得先存档」「填写删除理由」；BSM:576「存档及删除都需要填写理由」）：对已存档的套餐发起删除申请，进入待审批删除（delete_status=pending），记申请人、申请时间与理由（reason），由持授权 U 盘密钥的最高权限本人审批（approveDeleteBarCombo，第十八批 AO 段第 249 条 249-R1）。未存档 400 BAR_COMBO_NOT_ARCHIVED；已有待审批的删除申请 409 BAR_COMBO_DELETE_ALREADY_PENDING；reason 必填，缺失或空白 400 VALIDATION_FAILED；套餐不存在或已删除 404 BAR_COMBO_NOT_FOUND，属其他商户 403 BAR_MERCHANT_SCOPE。持授权 U 盘密钥的最高权限本人发起的不按商户范围、不经审批当场删除（第十八批裁决 71；BSM:576「持授权 U 盘密钥的最高权限本人发起的操作，不需要经过任何审批。」）：照样先查占用，仍被订单明细引用 409 BAR_COMBO_IN_USE，整笔回滚（仍为已存档、未申请删除）；删除成功另留痕 bar.combo.delete_approved，返回 delete_status=approved 的记录。成功留痕 bar.combo.delete_requested，以上拒绝留痕 bar.combo.delete_request_failed（带错误码）。"
       x-auth-context: staff-token
       x-permission: bar.combo.manage
       x-data-scope: project
@@ -39903,6 +39905,7 @@ paths:
         - VALIDATION_FAILED
         - BAR_COMBO_NOT_FOUND
         - BAR_MERCHANT_SCOPE
+        - BAR_COMBO_IN_USE
       parameters:
         - $ref: "#/components/parameters/Id"
       requestBody:
@@ -39937,7 +39940,7 @@ paths:
         - bar
       operationId: approveDeleteBarCombo
       summary: "审批酒吧套餐删除申请"
-      description: "第十八批 AE 段第 201 条 201-R1（BSM:570「申请人不能审批自己的申请」；BSM:571「前台各处不再显示，数据始终留在库里可查、可审计、可恢复」）：审批套餐的待审批删除申请。decision=approved（套餐不做删前占用检查）即删除（delete_status=approved，各处查询不再返回、库里保留），返回 deleted=true；rejected 撤回申请（delete_status 回 none），套餐仍为已存档，返回 deleted=false。没有待审批的删除申请 400 BAR_COMBO_DELETE_NOT_PENDING；decision 不是 approved 或 rejected 400 VALIDATION_FAILED；申请人审批自己的申请 403 BAR_CATALOG_SELF_APPROVE_FORBIDDEN；套餐不存在或已删除 404 BAR_COMBO_NOT_FOUND，属其他商户 403 BAR_MERCHANT_SCOPE。通过与驳回都留痕 bar.combo.delete_approved，以上拒绝留痕 bar.combo.delete_approve_failed（带错误码）。"
+      description: "第十八批 AE 段第 201 条 201-R1（BSM:570「申请人不能审批自己的申请」；BSM:571「前台各处不再显示，数据始终留在库里可查、可审计、可恢复」）：审批套餐的待审批删除申请。只认持授权 U 盘密钥的最高权限本人，不按商户范围取记录（第十八批 AO 段第 249 条 249-R1；BSM:576「删除一律须由具备最高权限的人审批通过后执行，不设例外」），其他人批准、驳回都 403 MASTER_APPROVAL_REQUIRED「酒吧套餐删除须由最高权限本人批准」。decision=approved 且没有订单明细引用该套餐（套餐下单展开的明细记 combo_id，不分订单状态；249-R2）即删除（delete_status=approved，各处查询不再返回、库里保留），返回 deleted=true；rejected 撤回申请（delete_status 回 none），套餐仍为已存档，返回 deleted=false。没有待审批的删除申请 400 BAR_COMBO_DELETE_NOT_PENDING；decision 不是 approved 或 rejected 400 VALIDATION_FAILED；申请人审批自己的申请 403 BAR_CATALOG_SELF_APPROVE_FORBIDDEN；仍被订单明细引用 409 BAR_COMBO_IN_USE「该套餐仍被 N 条订单明细引用」；套餐不存在或已删除 404 BAR_COMBO_NOT_FOUND。通过与驳回都留痕 bar.combo.delete_approved，以上拒绝留痕 bar.combo.delete_approve_failed（带错误码）。"
       x-auth-context: staff-token
       x-permission: bar.combo.approve
       x-data-scope: project
@@ -39951,7 +39954,8 @@ paths:
         - VALIDATION_FAILED
         - BAR_CATALOG_SELF_APPROVE_FORBIDDEN
         - BAR_COMBO_NOT_FOUND
-        - BAR_MERCHANT_SCOPE
+        - MASTER_APPROVAL_REQUIRED
+        - BAR_COMBO_IN_USE
       parameters:
         - $ref: "#/components/parameters/Id"
       requestBody:
@@ -39978,6 +39982,8 @@ paths:
         "403":
           $ref: "#/components/responses/Error"
         "404":
+          $ref: "#/components/responses/Error"
+        "409":
           $ref: "#/components/responses/Error"
         "500":
           $ref: "#/components/responses/Error"
@@ -49771,7 +49777,7 @@ paths:
         - integration
       operationId: archiveIntegrationChannelTicketTypeMap
       summary: 停用渠道票种映射
-      description: 软删（status=inactive）；停用后该渠道商品回流按未配置处理（拒收），可重录复活。
+      description: 软删（status=inactive）；停用后该渠道商品回流按未配置处理（拒收），可重录复活。停用理由必填，去首尾空白后记入成功事件 integration.channel_ticket_type_map.archived 的元数据 reason（第十八批 AO 段第 251 条 251-R1）。
       x-auth-context: staff-token
       x-permission: integration.channel_store_map.manage
       x-data-scope: platform
@@ -49797,7 +49803,7 @@ paths:
                   maxLength: 128
                 reason:
                   type: string
-                  description: 停用理由；进入审计。
+                  description: 停用理由，必填；记入成功事件元数据 reason。
                   maxLength: 500
       responses:
         "200":
@@ -49812,7 +49818,7 @@ paths:
         - integration
       operationId: archiveIntegrationChannelStoreMap
       summary: "停用渠道门店映射"
-      description: "第十八批 AE 段第 201 条 201-R6（照现码补契约）：软停用（status=inactive）：停用后该门店号的渠道回流按未映射处理、留作未归属；同一门店号重新登记即恢复启用。reason 缺填 400 VALIDATION_FAILED；映射不存在 404 INTEGRATION_CHANNEL_STORE_MAP_NOT_FOUND。"
+      description: "第十八批 AE 段第 201 条 201-R6（照现码补契约）：软停用（status=inactive）：停用后该门店号的渠道回流按未映射处理、留作未归属；同一门店号重新登记即恢复启用。reason 缺填 400 VALIDATION_FAILED；映射不存在 404 INTEGRATION_CHANNEL_STORE_MAP_NOT_FOUND。停用理由必填，去首尾空白后记入成功事件 integration.channel_store_map.archived 的元数据 reason（第十八批 AO 段第 251 条 251-R1）。"
       x-auth-context: staff-token
       x-permission: integration.channel_store_map.manage
       x-data-scope: platform
@@ -49845,7 +49851,7 @@ paths:
                 reason:
                   type: string
                   maxLength: 500
-                  description: "停用理由，必填。"
+                  description: "停用理由，必填；记入成功事件元数据 reason。"
       responses:
         "200":
           $ref: "#/components/responses/Success"

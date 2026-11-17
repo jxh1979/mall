@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { CnDatePicker } from "../components/CnDatePicker";
@@ -56,7 +56,9 @@ function today() {
   return new Date().toISOString().slice(0, 10);
 }
 
-export function ServiceOrdersPage({ api, setGlobalError, setActionResult, navigateTo, effectivePermissions }: AdminPageProps) {
+export function ServiceOrdersPage({ api, user, setGlobalError, setActionResult, navigateTo, effectivePermissions }: AdminPageProps) {
+  // 第十八批 AO 段第 249 条 249-R8：持授权 U 盘密钥的最高权限本人发起的删除不需要审批（BSM:576），按钮与提示照员工档案页判最高权限。
+  const isMaster = user.id === "usr_master_authority" && user.username === "master-authority";
   const [date, setDate] = React.useState(today);
   const [catalog, setCatalog] = React.useState<CatalogRow[]>([]);
   const [catalogNotice, setCatalogNotice] = React.useState<string | null>(null);
@@ -137,11 +139,12 @@ export function ServiceOrdersPage({ api, setGlobalError, setActionResult, naviga
     } catch (e) { setGlobalError(e instanceof Error ? e.message : "操作失败"); }
   }
   async function catalogRequestDelete(id: string) {
-    const reason = window.prompt("删除理由（提交后需上级审批）：");
+    const reason = window.prompt(isMaster ? "删除理由（最高权限本人发起即删除）：" : "删除理由（提交后需最高权限审批）：");
     if (reason === null) return;
     try {
       await api.post(`/api/v1/services/catalog/${id}/delete-request`, { reason });
-      setActionResult({ action: "service_catalog_delete_requested", id });
+      if (isMaster) setActionResult({ action: "service_catalog_delete_approved", id, deleted: true });
+      else setActionResult({ action: "service_catalog_delete_requested", id });
       reload();
     } catch (e) { setGlobalError(e instanceof Error ? e.message : "操作失败"); }
   }
@@ -368,7 +371,7 @@ export function ServiceOrdersPage({ api, setGlobalError, setActionResult, naviga
                       acts.push({ key: "reject", label: "驳回", permissions: ["service.catalog.approve"], danger: true, onClick: () => void catalogApproveDelete(row.id, "rejected"), testId: `svc-catalog-delete-reject-${row.id}` });
                     } else if (row.archivedAt) {
                       acts.push({ key: "unarchive", label: "取消存档", permissions: ["service.catalog.manage"], onClick: () => void catalogArchive(row.id, false), testId: `svc-catalog-unarchive-${row.id}` });
-                      acts.push({ key: "delete-request", label: "申请删除", permissions: ["service.catalog.manage"], danger: true, onClick: () => void catalogRequestDelete(row.id), testId: `svc-catalog-delete-request-${row.id}` });
+                      acts.push({ key: "delete-request", label: isMaster ? "直接删除" : "申请删除", permissions: ["service.catalog.manage"], danger: true, onClick: () => void catalogRequestDelete(row.id), testId: `svc-catalog-delete-request-${row.id}` });
                     } else {
                       // TK-23-R3：已有目录项的管理费只能走「提交草案 → 他人复核转正 → 指定生效日版本」，没有直接保存入口。
                       acts.push({ key: "fee-draft", label: "提交管理费草案", permissions: ["service.catalog.manage"], onClick: () => { setFeeDraftFor(row.id); setDraftMode(row.mgmtFeeMode ?? "percent"); }, testId: `svc-fee-draft-${row.id}` });
