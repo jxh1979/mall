@@ -8,14 +8,14 @@
     "RUNTIME_EVIDENCE_BOUND_TO_SOURCE_FINGERPRINT",
     "RUNTIME_EVIDENCE_DOES_NOT_CLOSE_PRODUCTION_MANIFEST"
   ],
-  "generated_at": "2026-11-16T22:48:19.376Z",
+  "generated_at": "2026-11-17T04:48:00.879Z",
   "git": {
-    "head": "40c63a2843fb5c7c28fc4699d20db46d94c20ef7",
-    "head_short": "40c63a28",
-    "branch": "feature/business-code-batch59-20261106",
+    "head": "fcfd104de91e0da9e629c655bb75d786b62d7f8c",
+    "head_short": "fcfd104d",
+    "branch": "feature/business-code-batch61-20261106",
     "worktree_dirty": false,
-    "source_fingerprint": "23bd3ac22d9f4a529406af51080fd706bf9ec134a13ece0260e762e609c5036c",
-    "source_fingerprint_file_count": 3436,
+    "source_fingerprint": "e8b715e6f90933d0dbb7d9d40cbba3fbbd16f13a0168cb384306eeb1faefe2d2",
+    "source_fingerprint_file_count": 3446,
     "source_fingerprint_paths": [
       "backend/src/main",
       "backend/src/test",
@@ -50,12 +50,12 @@
   },
   "backend_surefire": {
     "path": "backend/target/surefire-reports",
-    "suites": 599,
-    "tests": 6804,
+    "suites": 604,
+    "tests": 6835,
     "failures": 0,
     "errors": 0,
     "skipped": 0,
-    "latest_mtime": "2026-11-16T22:46:03.306Z",
+    "latest_mtime": "2026-11-17T04:44:29.801Z",
     "passed": true
   },
   "web_unit_source": {
@@ -120,6 +120,7 @@
       "apps/web/src/admin/pages/AnalyticsKpiFocus.test.tsx",
       "apps/web/src/admin/pages/ApprovalChainPage.test.tsx",
       "apps/web/src/admin/pages/AuditEventsPage.test.tsx",
+      "apps/web/src/admin/pages/BarCombosPage.delete.test.tsx",
       "apps/web/src/admin/pages/BarCombosPage.test.tsx",
       "apps/web/src/admin/pages/BarCommissionsPage.calculate.test.tsx",
       "apps/web/src/admin/pages/BarCommissionsPage.kpi.test.tsx",
@@ -141,6 +142,7 @@
       "apps/web/src/admin/pages/BarOrdersPage.void.test.tsx",
       "apps/web/src/admin/pages/BarOrdersPage.voucher.test.tsx",
       "apps/web/src/admin/pages/BarPayrollPage.test.tsx",
+      "apps/web/src/admin/pages/BarProductsPage.delete.test.tsx",
       "apps/web/src/admin/pages/BarProductsPage.guidedcreate.test.tsx",
       "apps/web/src/admin/pages/BarProductsPage.rowdetail.test.tsx",
       "apps/web/src/admin/pages/BarProductsPage.soldOut.test.tsx",
@@ -302,6 +304,7 @@
       "apps/web/src/admin/pages/RiskAlertsPage.guidedcreate.test.tsx",
       "apps/web/src/admin/pages/RiskAlertsPage.test.tsx",
       "apps/web/src/admin/pages/RowDetailDrawer.test.tsx",
+      "apps/web/src/admin/pages/ServiceOrdersPage.delete.test.tsx",
       "apps/web/src/admin/pages/ServiceOrdersPage.guidedcreate.test.tsx",
       "apps/web/src/admin/pages/ServiceOrdersPage.kpi.test.tsx",
       "apps/web/src/admin/pages/ServiceOrdersPage.robustness.test.tsx",
@@ -366,6 +369,7 @@
       "apps/web/src/admin/pages/TicketPointsBillingPage.test.tsx",
       "apps/web/src/admin/pages/TicketRewardConfigPage.test.tsx",
       "apps/web/src/admin/pages/TicketingPoliciesPage.combo.test.tsx",
+      "apps/web/src/admin/pages/TicketingPoliciesPage.delete.test.tsx",
       "apps/web/src/admin/pages/TicketingPoliciesPage.guidedcreate.test.tsx",
       "apps/web/src/admin/pages/TicketingPoliciesPage.kpi.test.tsx",
       "apps/web/src/admin/pages/TicketingPoliciesPage.pricing.test.tsx",
@@ -398,8 +402,8 @@
       "apps/web/src/dealer/dealerPortalClient.test.ts",
       "apps/web/src/shared/ReplayedNotice.test.tsx"
     ],
-    "file_count": 337,
-    "test_count_from_source": 1768
+    "file_count": 341,
+    "test_count_from_source": 1782
   },
   "web_build": {
     "dist_index_exists": true,
@@ -420,15 +424,15 @@
     "asset_count": 171,
     "main_js_assets": [
       {
-        "path": "apps/web/dist/assets/main-M2U0Bnv8.js",
+        "path": "apps/web/dist/assets/main-DsNpI0JD.js",
         "size_bytes": 4337,
-        "mtime": "2026-11-16T22:46:12.290Z"
+        "mtime": "2026-11-17T04:44:39.828Z"
       }
     ],
     "largest_asset": {
       "path": "apps/web/dist/assets/vendor-antd-Bh_XtmOr.js",
       "size_bytes": 251112,
-      "mtime": "2026-11-16T22:46:12.293Z"
+      "mtime": "2026-11-17T04:44:39.832Z"
     },
     "no_main_bundle_warning_expected": true
   },
