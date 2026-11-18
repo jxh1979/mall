@@ -1,4 +1,4 @@
-# P0 OpenAPI Operation 验收矩阵 V0.76
+# P0 OpenAPI Operation 验收矩阵 V0.77
 
 ## 1. 文档定位
 
@@ -17,7 +17,7 @@
 
 ## 3. Operation 清单
 
-> 当前 `docs/openapi/openapi-p0.json` 共 1388 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
+> 当前 `docs/openapi/openapi-p0.json` 共 1393 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
 
 | 标签 | 方法 | 路径 | operationId | 摘要 | 请求体 | 权限 | 认证上下文 | 数据范围 | 终端/设备能力/调用通道 | 幂等 | 成功事件 | 失败事件 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -682,6 +682,11 @@
 | finance | `POST` | `/api/v1/finance/property-fee/bills` | `billPropertyFee` | 物业费按期计费（每平米固定单价 × 面积，不退不补） | `PropertyFeeBillRequest` | `finance.property_fee.manage` | `staff-token` | `platform` | web | 是 | `finance_property_fee.billed` | `finance_property_fee.bill_failed` |
 | finance | `GET` | `/api/v1/finance/entity-taxes` | `listEntityTaxDeclarations` | 税费申报登记分页查询（按经营主体、所属月、税种、状态筛选） | `-` | `finance.entity_tax.view` | `staff-token` | `platform` | web | 否 | `entity_tax.listed` | `entity_tax.list_failed` |
 | finance | `POST` | `/api/v1/finance/entity-taxes` | `declareEntityTax` | 登记税费实际申报金额并提交财务、税务、法务审核与最高确认 | `EntityTaxDeclarationRequest` | `finance.entity_tax.manage` | `staff-token` | `platform` | web | 是 | `entity_tax.declared` | `entity_tax.declare_failed` |
+| finance | `GET` | `/api/v1/finance/entity-taxes/rates` | `listEntityTaxRates` | 税率版本列表（按经营主体 × 收入类型 × 税种，含待审批与已驳回） | `-` | `finance.entity_tax.view` | `staff-token` | `platform` | web | 否 | `entity_tax.rates_listed` | `entity_tax.rates_list_failed` |
+| finance | `POST` | `/api/v1/finance/entity-taxes/rates` | `submitEntityTaxRate` | 提交税率版本（存为草案并提交财务、税务、法务审核与最高确认，批准后按生效起始日期起用） | `EntityTaxRateRequest` | `finance.entity_tax.manage` | `staff-token` | `platform` | web | 是 | `entity_tax.rate_submitted` | `entity_tax.rate_submit_failed` |
+| finance | `GET` | `/api/v1/finance/entity-taxes/profits` | `getEntityTaxProfit` | 经营主体所属期收入、成本与利润汇总 | `-` | `finance.entity_tax.view` | `staff-token` | `platform` | web | 否 | `entity_tax.profit_viewed` | `entity_tax.profit_view_failed` |
+| finance | `POST` | `/api/v1/finance/entity-taxes/{id}/payments` | `registerEntityTaxPayment` | 已生效申报登记实际缴纳金额并提交财务、税务、法务审核与最高确认 | `EntityTaxPaymentRequest` | `finance.entity_tax.manage` | `staff-token` | `platform` | web | 是 | `entity_tax.payment_registered` | `entity_tax.payment_register_failed` |
+| finance | `POST` | `/api/v1/finance/entity-taxes/{id}/adjustments` | `registerEntityTaxAdjustment` | 已生效申报生成关联原所属期的差异调整单并提交财务、税务、法务审核与最高确认 | `EntityTaxAdjustmentRequest` | `finance.entity_tax.manage` | `staff-token` | `platform` | web | 是 | `entity_tax.adjustment_registered` | `entity_tax.adjustment_register_failed` |
 | finance | `GET` | `/api/v1/finance/merchant-expenses` | `listMerchantExpenses` | 商户费用归集台账分页查询（分红净利润费用侧） | `-` | `finance.merchant_expense.view` | `staff-token` | `merchant` | web | 否 | `merchant_expense.listed` | `merchant_expense.list_failed` |
 | finance | `POST` | `/api/v1/finance/merchant-expenses` | `createMerchantExpenseEntry` | 手工录入商户费用（人工/摊销/其他，理由必填） | `MerchantExpenseEntryRequest` | `finance.merchant_expense.manage` | `staff-token` | `merchant` | web | 是 | `merchant_expense.manual_created` | `merchant_expense.manual_create_failed` |
 | finance | `GET` | `/api/v1/finance/merchant-expenses/summary` | `summarizeMerchantExpenses` | 商户费用期间汇总（按商户+月份分类型合计，分红引擎费用侧取数点） | `-` | `finance.merchant_expense.view` | `staff-token` | `merchant` | web | 否 | `merchant_expense.summary_viewed` | `merchant_expense.summary_view_failed` |

@@ -209,7 +209,9 @@ entitlement_day_activations,single_complex_default,P0_SINGLE_COMPLEX,single-comp
 entitlement_entry_records,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",V0.07,covered
 entitlement_sessions,direct,project_id,project_id column on entitlement_sessions,ready for project/merchant scoped query enforcement,V0.07,covered
 entitlement_templates,direct,venue_id,venue_id column on entitlement_templates,ready for project/merchant scoped query enforcement,V0.07,covered
+entity_tax_adjustments,direct,business_entity_id,business_entity_id column on entity_tax_adjustments,ready for project/merchant scoped query enforcement,V0.07,covered
 entity_tax_declarations,direct,business_entity_id,business_entity_id column on entity_tax_declarations,ready for project/merchant scoped query enforcement,V0.07,covered
+entity_tax_payments,direct,business_entity_id,business_entity_id column on entity_tax_payments,ready for project/merchant scoped query enforcement,V0.07,covered
 evidence_attachments,direct,merchant_id,merchant_id column on evidence_attachments,ready for project/merchant scoped query enforcement,V0.07,covered
 evidence_events,direct,merchant_id,merchant_id column on evidence_events,ready for project/merchant scoped query enforcement,V0.07,covered
 evidence_reviews,direct,merchant_id,merchant_id column on evidence_reviews,ready for project/merchant scoped query enforcement,V0.07,covered
@@ -426,7 +428,7 @@ settlement_item_recoveries,single_complex_default,P0_SINGLE_COMPLEX,single-compl
 settlement_items,direct,merchant_id,merchant_id column on settlement_items,ready for project/merchant scoped query enforcement,V0.07,covered
 settlement_objection_period_policy,direct,project_id,project_id column on settlement_objection_period_policy,ready for project/merchant scoped query enforcement,V0.07,covered
 settlement_reconciliation_status,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",V0.07,covered
-settlement_tax_configs,direct,project_id,project_id column on settlement_tax_configs,ready for project/merchant scoped query enforcement,V0.07,covered
+settlement_tax_configs,direct,business_entity_id,business_entity_id column on settlement_tax_configs,ready for project/merchant scoped query enforcement,V0.07,covered
 settlement_transactions,direct,project_id,project_id column on settlement_transactions,ready for project/merchant scoped query enforcement,V0.07,covered
 single_bar_service_fee_adjustments,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",V0.07,covered
 single_bar_service_fee_months,direct,project_id,project_id column on single_bar_service_fee_months,ready for project/merchant scoped query enforcement,V0.07,covered

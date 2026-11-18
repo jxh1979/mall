@@ -1,9 +1,10 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -280,6 +281,67 @@ class PassDomainShareInterEntityPostingJdbcTests {
         }
         assertThat(postings(june)).as("新钱路缺付账日规则，整单不过账").isZero();
         assertThat(billStatus(june)).isEqualTo("confirmed");
+    }
+
+    /**
+     * 第十八批 AR 段第 233 条收尾复核（决策台账 FS-021「单独列追收、按原月重算」；BSM:1760「已封账历史账单不回改，跨月退款和调整在当期生成冲正」；
+     * 第十八批裁决 60「收入＝按收入归属配置归到该主体的各类收入（含税实收）……利润＝收入−成本」）：6 月单过账后，7 月撤销组合通票的酒吧入场与有价餐饮两次核销，
+     * 经后台「主体收入成本利润」页签按 7 月查，冲减与 6 月计入同一口径（份额毛额扣门票综合服务费与赠送权益预估成本）：城市项目公司收入冲回餐饮份额毛额 3000
+     * （域间份额追收 2730＋已扣的销售渠道费与通路费 270），成本冲回代付额 2000（同行同单）与渠道费 270；娱乐平台公司门票收入冲回 6 月酒吧份额毛额（连同门票
+     * 综合服务费、赠送权益预估成本之差），渠道费冲回酒吧份额的销售渠道费与通路费。修复前只冲净额、渠道费不冲：断言红。
+     */
+    @Test
+    void reversalMonthEntityProfitsCutShareIncomeTogetherWithCost() throws Exception {
+        String company = cityCompany("城市项目公司戊");
+        String viewer = "usr_c214_fin_" + suffix;
+        user(viewer, "platform_admin", "org_1", null, "主体利润查看" + n, List.of("finance.entity_tax.view"));
+        String combo = sell("a", comboType, 8000L);
+        String entry = verify(code(combo, entryTpl), barStaff, bar, barDevice);
+        String dining = verify(code(combo, diningTpl), staff, restaurant, device);
+        moveToMidMonth(combo);
+        String june = settlement.settleMonth(project, MONTH);
+        postBill(june).andExpect(status().isOk());
+        Map<String, Object> barShare = formatShare(june, "bar");
+        String platform = (String) barShare.get("beneficiary_entity_id");
+        long barGross = num(barShare, "gross_revenue_cent");
+        long barChannel = num(barShare, "channel_fee_cent") + num(barShare, "route_fee_cent");
+        assertThat(platform).isNotNull();
+        assertThat(barChannel).isPositive();
+
+        for (String verification : List.of(entry, dining)) {
+            mockMvc.perform(post("/api/v1/ticketing/verifications/" + verification + "/reverse").with(session(admin, "platform_admin", "org_1", null))
+                            .contentType(MediaType.APPLICATION_JSON).content("""
+                                    {"idempotency_key": "c214-rev-%s", "reason": "核销有误撤销"}
+                                    """.formatted(UUID.randomUUID())))
+                    .andExpect(status().isOk());
+        }
+        AppendOnlyTestBypass.update(jdbc, "UPDATE settlement_transactions SET business_at = ? WHERE order_id = ?"
+                + " AND transaction_type = 'verification_reversed'", Timestamp.from(MID_MONTH.plusSeconds(30L * 86_400)), combo);
+        settlement.settleMonth(project, MONTH.plusMonths(1));
+
+        String cityBody = profits(viewer, company).andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+        assertThat(items(cityBody, "revenue_items", "income_type")).as("餐饮份额毛额冲回").isEqualTo(Map.of("catering", -3000L));
+        assertThat(items(cityBody, "cost_items", "cost_type")).as("代付额与渠道费同冲")
+                .isEqualTo(Map.of("exclusive_direct_settlement", -2000L, "channel_fee", -270L));
+        String platformBody = profits(viewer, platform).andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+        assertThat(items(platformBody, "revenue_items", "income_type")).as("酒吧份额毛额连同门票综合服务费、赠送权益预估成本之差冲回")
+                .isEqualTo(Map.of("ticket", -barGross));
+        assertThat(items(platformBody, "cost_items", "cost_type")).as("酒吧份额销售渠道费与通路费冲回").containsEntry("channel_fee", -barChannel);
+    }
+
+    /** 后台「主体收入成本利润」页签按 7 月查的真实请求形状（蛇形键）。 */
+    private ResultActions profits(String viewer, String entity) throws Exception {
+        String month = MONTH.plusMonths(1).toString();
+        return mockMvc.perform(get("/api/v1/finance/entity-taxes/profits").param("business_entity_id", entity).param("start_month", month)
+                        .param("end_month", month).with(session(viewer, "platform_admin", "org_1", null)))
+                .andExpect(status().isOk());
+    }
+
+    /** 收入或成本分项按类型取金额。 */
+    private static Map<String, Long> items(String body, String field, String key) throws Exception {
+        Map<String, Long> out = new java.util.HashMap<>();
+        new ObjectMapper().readTree(body).path("data").path(field).forEach(row -> out.merge(row.path(key).asText(), row.path("amount_cent").asLong(), Long::sum));
+        return out;
     }
 
     private ResultActions postBill(String bill) throws Exception {

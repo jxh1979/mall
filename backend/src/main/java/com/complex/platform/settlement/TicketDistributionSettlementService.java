@@ -1,6 +1,6 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.07
+// 文件版本：V0.08
 
 import com.complex.platform.common.money.MoneyRounding;
 import com.complex.platform.finance.FinanceService;
@@ -243,12 +243,7 @@ public class TicketDistributionSettlementService {
         java.util.LinkedHashMap<String, RecoveryCalc> out = new java.util.LinkedHashMap<>();
         // 业态 → {域间份额之差, 应直付额之差}
         java.util.Map<String, long[]> formatDiffs = new java.util.LinkedHashMap<>();
-        // 189-R1：原月＝原核销业务时刻所属营业日的月（与月窗同一套营业日）。
-        java.util.TreeSet<YearMonth> originals = new java.util.TreeSet<>();
-        for (Instant at : repository.findRecoveredOriginalTimes(projectId, windowStart, windowEnd)) {
-            originals.add(YearMonth.from(businessDays.businessDate(dayProject(projectId), null, at)));
-        }
-        for (YearMonth original : originals) {
+        for (YearMonth original : originalMonths(projectId, windowStart, windowEnd)) {
             String originalBillId = repository.findBillId(projectId, original.atDay(1), original.atEndOfMonth());
             MonthCalc beforeCalc = compute(projectId, original, windowStart);
             MonthCalc afterCalc = compute(projectId, original, windowEnd);
@@ -282,6 +277,51 @@ public class TicketDistributionSettlementService {
         }
         formatDiffs.values().removeIf(d -> d[0] == 0L && d[1] == 0L);
         return new Recoveries(new ArrayList<>(out.values()), formatDiffs);
+    }
+
+    /**
+     * 第十八批 AR 段第 233 条收尾复核（决策台账 FS-021「单独列追收、按原月重算」；BSM:1760「已封账历史账单不回改，跨月退款和调整在当期生成冲正」）：本窗内
+     * 被撤销核销所属的原月，按 {@link #recoveries} 同样两次重算，给出份额行追收列没覆盖的差，与主体收入原月计入同一口径（份额毛额扣门票综合服务费与赠送权益
+     * 预估成本）：recovery_net_cent 只记域间份额，这里各业态给「毛额−门票综合服务费−赠送权益预估成本−域间份额」之差（与 recovery_net_cent 相加即该业态原月
+     * 计入额之差，含酒吧份额、游乐传媒归属主体自收票与已扣的销售渠道费、通路费），另 fee 为门票综合服务费（两支）之差、gift 为赠送权益预估成本之差，
+     * channel:业态 为该业态销售渠道费与通路费之差。按原月结算单 id 分组，负＝当期冲减。只读，供主体收入归集（finance.EntityIncomeService）与收入成本利润
+     * 的渠道费（finance.EntityProfitService）在撤销所在月冲减。
+     */
+    public Map<String, Map<String, Long>> uncoveredRecoveryDiffs(String projectId, YearMonth month) {
+        Instant[] window = monthWindow(projectId, month);
+        Map<String, Map<String, Long>> out = new LinkedHashMap<>();
+        for (YearMonth original : originalMonths(projectId, window[0], window[1])) {
+            String originalBillId = repository.findBillId(projectId, original.atDay(1), original.atEndOfMonth());
+            if (originalBillId == null) {
+                continue;
+            }
+            MonthCalc before = compute(projectId, original, window[0]);
+            MonthCalc after = compute(projectId, original, window[1]);
+            Map<String, Long> diffs = out.computeIfAbsent(originalBillId, k -> new LinkedHashMap<>());
+            Set<String> formats = new java.util.LinkedHashSet<>(before.formatShares().keySet());
+            formats.addAll(after.formatShares().keySet());
+            for (String format : formats) {
+                FormatShare b = before.formatShares().getOrDefault(format, new FormatShare(format, 0L, 0L));
+                FormatShare a = after.formatShares().getOrDefault(format, new FormatShare(format, 0L, 0L));
+                diffs.merge(format, a.grossCent() - a.compServiceFeeCent() - a.giftCostCent() - a.interEntityNetCent()
+                        - (b.grossCent() - b.compServiceFeeCent() - b.giftCostCent() - b.interEntityNetCent()), Long::sum);
+                diffs.merge("channel:" + format, a.channelFeeCent() + a.routeFeeCent() - b.channelFeeCent() - b.routeFeeCent(), Long::sum);
+                diffs.merge("fee", a.compServiceFeeCent() - b.compServiceFeeCent(), Long::sum);
+                diffs.merge("gift", a.giftCostCent() - b.giftCostCent(), Long::sum);
+            }
+            diffs.merge("fee", after.bill().compServiceFeeExclusiveCent() - before.bill().compServiceFeeExclusiveCent(), Long::sum);
+            diffs.values().removeIf(v -> v == 0L);
+        }
+        return out;
+    }
+
+    /** 189-R1：本窗内被撤销核销所属的原月＝原核销业务时刻所属营业日的月（与月窗同一套营业日）。 */
+    private java.util.TreeSet<YearMonth> originalMonths(String projectId, Instant windowStart, Instant windowEnd) {
+        java.util.TreeSet<YearMonth> originals = new java.util.TreeSet<>();
+        for (Instant at : repository.findRecoveredOriginalTimes(projectId, windowStart, windowEnd)) {
+            originals.add(YearMonth.from(businessDays.businessDate(dayProject(projectId), null, at)));
+        }
+        return originals;
     }
 
     /** 份额归娱乐平台公司之外的域主管公司的业态：游乐、传媒（ENUM:32）与餐饮、零售（ENUM:49「餐饮域与零售域 → 城市项目公司」）。 */

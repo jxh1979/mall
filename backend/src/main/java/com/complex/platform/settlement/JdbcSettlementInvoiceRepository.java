@@ -1,6 +1,6 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import java.time.LocalDate;
 import java.util.List;
@@ -12,7 +12,7 @@ import org.springframework.stereotype.Repository;
  * 批 4b 开票清单数据访问(V362:invoice_subject_rules + settlement_invoice_items)。
  *
  * <p>只做取数与落库,规则/税率解析复用既有两张配置表(见 {@link SettlementInvoiceService}):
- * 主体走 {@code revenue_stream_attribution}、费率走 {@code settlement_tax_configs}。
+ * 主体走 {@code revenue_stream_attribution}、费率走 {@code settlement_tax_configs}(第十八批 AR 段第 233 条 233-R2 起按开票主体与业务日期取版本)。
  */
 @Repository
 public class JdbcSettlementInvoiceRepository {
@@ -70,24 +70,38 @@ public class JdbcSettlementInvoiceRepository {
     }
 
     // ------------------------------------------------------------------
-    // 税率(settlement_tax_configs):同 项目特例 > 平台默认 解析口径
+    // 税率(settlement_tax_configs,V646):主体特例 > 平台默认,取业务日期当时生效的版本(第十八批 AR 段第 233 条 233-R2)
     // ------------------------------------------------------------------
 
-    /** 某收入类型某税种的生效费率;{@code applicable=false} 或未配置返回 null(= 不计这笔费用)。 */
-    public Integer findTaxRateBps(String projectId, String incomeType, String taxType) {
+    /**
+     * 某主体某收入类型某税种在业务日期当时生效的税率版本:主体特例优先,再取生效日不晚于该日的最新已生效版本(BSM:521「已发生的业务一律按当时生效的
+     * 版本计算」);出厂种子生效日为空,排在有生效日的版本之后(NULLS LAST)。条件里不滤 applicable:新版本关掉这笔费用时不得退回旧版本。未配置返回 null。
+     */
+    public TaxRate findTaxRateVersion(String entityId, String incomeType, String taxType, LocalDate date) {
         String sql = """
-                SELECT rate_bps FROM settlement_tax_configs
+                SELECT id, applicable, rate_bps, effective_from FROM settlement_tax_configs
                  WHERE income_type = :income_type AND tax_type = :tax_type
-                   AND applicable = TRUE AND status = 'active' AND is_draft = FALSE
-                   AND (project_id = :project_id OR project_id IS NULL)
-                 ORDER BY (project_id IS NOT NULL) DESC
+                   AND status = 'active' AND is_draft = FALSE
+                   AND (effective_from IS NULL OR effective_from <= :date)
+                   AND (business_entity_id = :entity_id OR business_entity_id IS NULL)
+                 ORDER BY (business_entity_id IS NOT NULL) DESC, effective_from DESC NULLS LAST
                  LIMIT 1
                 """;
         var params = new MapSqlParameterSource()
-                .addValue("project_id", projectId)
+                .addValue("entity_id", entityId)
                 .addValue("income_type", incomeType)
-                .addValue("tax_type", taxType);
-        return jdbcTemplate.query(sql, params, rs -> rs.next() ? rs.getInt("rate_bps") : null);
+                .addValue("tax_type", taxType)
+                .addValue("date", date);
+        return jdbcTemplate.query(sql, params, rs -> rs.next()
+                ? new TaxRate(rs.getString("id"), rs.getBoolean("applicable"), rs.getInt("rate_bps"),
+                        rs.getObject("effective_from", LocalDate.class))
+                : null);
+    }
+
+    /** 同上;取到的版本「没有这笔费用」或未配置返回 null(= 不计这笔费用)。返回的 id 供计算依据固化所用版本(BSM:521「把所用配置版本固化在单上」)。 */
+    public TaxRate findTaxRate(String entityId, String incomeType, String taxType, LocalDate date) {
+        TaxRate version = findTaxRateVersion(entityId, incomeType, taxType, date);
+        return version == null || !version.applicable() ? null : version;
     }
 
     // ------------------------------------------------------------------
@@ -374,6 +388,10 @@ public class JdbcSettlementInvoiceRepository {
     // ------------------------------------------------------------------
     // 投影
     // ------------------------------------------------------------------
+
+    /** 税率版本(settlement_tax_configs 一行):applicable 有没有这笔费用;rateBps 万分比;effectiveFrom 为空=出厂种子、自始有效。 */
+    public record TaxRate(String id, boolean applicable, int rateBps, LocalDate effectiveFrom) {
+    }
 
     /** 开票映射规则(invoice_subject_rules 一行)。 */
     public record InvoiceSubjectRule(String incomeType, String revenueStream, String invoiceItemName,
