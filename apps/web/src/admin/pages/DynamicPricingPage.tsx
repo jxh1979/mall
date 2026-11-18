@@ -218,10 +218,15 @@ export function DynamicPricingPage({ api, setActionResult, setGlobalError, effec
       setFormError(TEXT.ruleRequired);
       return;
     }
-    await runAction("ticket_dynamic_rule_published", () => api.post(`/api/v1/ticketing/dynamic-pricing-rules/${selectedRule.id}/publish`, {
+    const result = await runAction("ticket_dynamic_rule_published", () => api.post(`/api/v1/ticketing/dynamic-pricing-rules/${selectedRule.id}/publish`, {
       action: "publish",
       reason: TEXT.publishReason,
     }));
+    // 第十八批 AS 段 297-R4（第十八批裁决 63、61）：已上架跨域组合通票的动态价只存进规则草稿版（后端回 draft），提交审批获批后生效。
+    if ((result as { status?: string } | null)?.status === "draft") {
+      setActionResult({ action: "ticket_dynamic_rule_staged",
+        note: "这张票是已上架的跨域组合通票：动态价已存入规则草稿版，旧版照常售卖；请到票务策略② 组合式套票配置提交审批，获批后生效" });
+    }
   }
 
   return (

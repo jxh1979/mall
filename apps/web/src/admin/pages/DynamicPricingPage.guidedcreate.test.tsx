@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { AdminApi } from "../client/adminClient";
 import { DynamicPricingPage } from "./DynamicPricingPage";
 import type { AdminApiClient, AdminPageProps, EffectivePermissionsState, TicketDynamicPricingRuleRow } from "../types";
 
@@ -122,6 +123,32 @@ describe("DynamicPricingPage 引导式新建定价规则", () => {
     await waitFor(() => expect(post.mock.calls.some((c) => c[0] === "/api/v1/ticketing/dynamic-pricing-rules/r-1/publish")).toBe(true));
     expect(postBody(post, "/api/v1/ticketing/dynamic-pricing-rules/r-1/publish")).toEqual({ action: "publish", reason: "后台发布" });
     confirmSpy.mockRestore();
+  });
+
+  // 第十八批 AS 段 297-R4（第十八批裁决 63；裁决 61「改动另存一份草稿版审批，审批期间照旧版卖，获批后自动换成新版」）：已上架跨域组合通票的动态价
+  //   发布只存进规则草稿版、后端回 status draft，提示去票务策略提交审批。真实 AdminApi，假响应用文本体。
+  it("发布回 status draft → 提示动态价已存入规则草稿版", async () => {
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+    const ok = (data: string) => new Response(`{"success":true,"code":"OK","message":"success","data":${data}}`,
+      { status: 200, headers: { "content-type": "application/json" } });
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if ((init?.method ?? "GET") === "POST" && url.endsWith("/dynamic-pricing-rules/r-1/publish")) {
+        return ok('{"id":"r-1","ticket_type_id":"tt-eff","rule_name":"现有规则","status":"draft"}');
+      }
+      if (url.includes("/ticketing/ticket-types")) return ok('{"items":[{"id":"tt-eff","ticket_name":"已上架跨域组合通票"}]}');
+      return ok('[{"id":"r-1","rule_name":"现有规则","sales_channel":"web","priority":10,"adjustment_type":"percent_delta","adjustment_rate":10,'
+        + '"status":"draft","effective_from":"2026-11-01","effective_to":"2026-11-30","ticket_type_id":"tt-eff"}]');
+    }));
+    const props: AdminPageProps = { api: new AdminApi(), user: { id: "u1", username: "admin", accountType: "platform_admin" },
+      setActionResult: vi.fn(), setGlobalError: vi.fn(), effectivePermissions: ADMIN_PERMS };
+    render(<DynamicPricingPage {...props} />);
+    await waitFor(() => expect((screen.queryByTestId("dynamic-pricing-select-r-1") as HTMLInputElement | null)?.checked).toBe(true));
+    fireEvent.click(screen.getByTestId("dynamic-pricing-publish"));
+    await waitFor(() => expect(props.setActionResult).toHaveBeenCalledWith(expect.objectContaining({
+      action: "ticket_dynamic_rule_staged", note: expect.stringContaining("动态价已存入规则草稿版") })));
+    confirmSpy.mockRestore();
+    vi.unstubAllGlobals();
   });
 
   it("规则名为空 → 步内校验拦截，不建规则", async () => {

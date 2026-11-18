@@ -1,4 +1,4 @@
-// 文件版本：V0.38
+// 文件版本：V0.39
 // OBS-14-02 后台结果区字段中文名字典（PGM「全局原则 · 界面全中文（所有终端零英文）」）。
 // 键用后端 JSON 的蛇形写法；结果区查表时蛇形与驼峰同查（orderId / order_id 都命中 order_id）。
 // 与后端字段中文名表 FieldLabels.java（common.api 包）同键同名：前段按后端原样抄录，后端改名这里跟着改（门禁会比对）。
@@ -2916,6 +2916,9 @@ export const FIELD_LABELS: Record<string, string> = {
   rule_version_status: "规则版本状态",
   rounding_diff_cent: "凑整差额",
   domain_allocations: "各域分摊",
+  // 第十八批 AS 段 297-R4：票种规则版本另记的派生价与动态价两份清单（第十八批裁决 63）。
+  price_rules: "派生价规则",
+  dynamic_pricing_rules: "动态价规则",
   domain_name: "经营域",
   discount_share_cent: "折扣分摊",
   rounding_share_cent: "凑整分摊",
@@ -3030,6 +3033,7 @@ export const VALUE_LABELS: Record<string, string> = {
   ticket_dynamic_rule_created: "动态定价规则已创建",
   ticket_dynamic_pricing_simulated: "动态定价已试算",
   ticket_dynamic_rule_published: "动态定价规则已发布",
+  ticket_dynamic_rule_staged: "动态价已存入规则草稿版",
   energy_meter_saved: "表计已保存",
   energy_reading_recorded: "抄表已录入",
   energy_reading_reviewed: "抄表已复核",
@@ -3292,6 +3296,9 @@ export const VALUE_LABELS: Record<string, string> = {
   ticket_type_publish_submitted: "票种发布已提交审批",
   ticket_type_rule_version_submitted: "票种规则草稿版已提交审批",
   ticket_type_rule_version_withdrawn: "票种规则版本已撤回",
+  // 第十八批 AS 段 297-R4：已上架跨域组合通票新建派生价存入草稿版；最高权限本人提交即生效（BSM:576）。
+  ticket_price_rule_staged: "派生价已存入规则草稿版",
+  ticket_type_rule_version_applied: "票种规则新版已直接生效",
   ticket_type_draft_created: "票种草稿已保存",
   price_rule_archived: "票价规则已存档",
   price_rule_unarchived: "票价规则已取消存档",

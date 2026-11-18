@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -28,7 +28,8 @@ const PRICE_CHECK = '{"ticket_type_id":"tt-x","component_total_cent":20500,"comb
 const DRAFT_CHECK = '{"ticket_type_id":"tt-eff","component_total_cent":25500,"combo_discount_rate":85,"computed_price_cent":21675,'
   + '"filled_price_cent":21800,"diff_cent":125,"tolerance_cent":500,"within_tolerance":true,"rounding_suggested":21800}';
 
-function version(no: number, status: string, extra: string): string {
+// 第十八批 AS 段 297-R4：版本另记派生价与动态价两份清单（第十八批裁决 63），默认为空。
+function version(no: number, status: string, extra: string, rules = '"price_rules":[],"dynamic_pricing_rules":[]'): string {
   return `{"id":"rv-${no}","ticket_type_id":"tt-eff","project_id":"prj-1","version_no":${no},"status":"${status}",`
     + '"weekday_price_cent":17800,"weekend_price_cent":19800,"holiday_price_cent":19800,"combo_discount_rate":85,'
     + '"min_gift_cups":null,"min_gift_cups_lower":null,"min_gift_cups_upper":null,'
@@ -46,10 +47,18 @@ function version(no: number, status: string, extra: string): string {
     + '"discount_share_cent":1200,"rounding_share_cent":146,"share_cent":6946},'
     + '{"domain":"amusement_company","domain_name":"游乐域（游乐公司）","component_total_cent":12500,"discount_share_cent":1875,'
     + '"rounding_share_cent":229,"share_cent":10854}],'
-    + `"reason":"首发","created_by":"u1","updated_by":"u1","submitted_by":"u1","created_at":"2026-11-01T00:00:00Z",`
+    + `${rules},"reason":"首发","created_by":"u1","updated_by":"u1","submitted_by":"u1","created_at":"2026-11-01T00:00:00Z",`
     + `"updated_at":"2026-11-01T00:00:00Z","submitted_at":null,"decided_at":null,${extra}}`;
 }
 const EFFECTIVE = version(1, "effective", '"review_id":"review_1","price_check":null');
+// 297-R4：草稿版里的会员价九折与网页端每张加 10 元的动态价。
+const PRICED_RULES = '"price_rules":[{"id":"pr-1","variant_type":"member","price_mode":"derive_from_calendar_price","weekday_price_cent":null,'
+  + '"weekend_price_cent":null,"holiday_price_cent":null,"discount_rate":90,"channel_id":null,"eligibility_rule":{},"created_at":"2026-11-01T00:00:00Z"}],'
+  + '"dynamic_pricing_rules":[{"id":"dp-1","rule_name":"旺季加价","priority":10,"effective_from":"2026-11-01","effective_to":"2026-11-30",'
+  + '"sales_channel":"web","adjustment_type":"fixed_delta","adjustment_rate":null,"adjustment_amount_cent":1000,"min_price_cent":null,'
+  + '"max_price_cent":null,"condition_rule":{}}]';
+// 297-R4：持授权 U 盘密钥的最高权限本人（BSM:576）。
+const MASTER = { id: "usr_master_authority", username: "master-authority", accountType: "master_authority" };
 
 function okBody(data: string): Response {
   return new Response(`{"success":true,"code":"OK","message":"success","data":${data}}`,
@@ -61,7 +70,8 @@ function failBody(status: number, code: string, message: string): Response {
     { status, headers: { "content-type": "application/json" } });
 }
 
-function stubBackend(sent: Sent[], options: { versions?: Record<string, string>; reply?: (url: string, method: string) => Response | null } = {}) {
+function stubBackend(sent: Sent[], options: { versions?: Record<string, string>; reply?: (url: string, method: string) => Response | null;
+  user?: { id: string; username: string; accountType: string } } = {}) {
   vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
     const method = init?.method ?? "GET";
@@ -79,7 +89,7 @@ function stubBackend(sent: Sent[], options: { versions?: Record<string, string>;
     if (/\/ticketing\/ticket-types(\?|$)/.test(url)) return okBody(TICKETS);
     return okBody('{"items":[]}');
   }));
-  const props = { api: new AdminApi(), user: { id: "u1", username: "admin", accountType: "platform_admin" },
+  const props = { api: new AdminApi(), user: options.user ?? { id: "u1", username: "admin", accountType: "platform_admin" },
     setActionResult: vi.fn(), setGlobalError: vi.fn(), effectivePermissions: ADMIN_PERMS } as unknown as AdminPageProps;
   render(<TicketingPoliciesPage {...props} />);
   return props;
@@ -225,6 +235,143 @@ describe("TicketingPoliciesPage 236-R5②③ 规则版本区", () => {
   });
 });
 
+// 第十八批 AS 段第 297 条 297-R4（第十八批裁决 63「跨域组合通票的派生价、动态价规则也要经项目之上的平台权限审批，并记入票种规则版本。」；
+//   第十八批裁决 61；BSM:576「持授权 U 盘密钥的最高权限本人发起的操作，不需要经过任何审批。」；PGM:287「界面全中文」）。
+describe("TicketingPoliciesPage 297-R4 规则版本里的派生价与动态价", () => {
+  afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
+
+  // 规则版本表按行标题取该行各版本格（生效版在前、未结版本在后）。
+  function versionCells(label: string): string[] {
+    const row = Array.from(screen.getByTestId("rule-versions-table").querySelectorAll("tr"))
+      .find((tr) => tr.querySelector("th")?.textContent === label);
+    return Array.from(row?.querySelectorAll("td") ?? []).map((td) => td.textContent ?? "");
+  }
+
+  async function createPriceRule(ticketTypeId: string) {
+    await waitFor(() => expect(screen.queryByTestId("price-rule-form")?.querySelector(`option[value="${ticketTypeId}"]`) ?? null).not.toBeNull());
+    fireEvent.change(within(screen.getByTestId("price-rule-form")).getByLabelText("派生票种"), { target: { value: ticketTypeId } });
+    fireEvent.click(screen.getByTestId("price-rule-create"));
+  }
+
+  it("规则版本表列出派生价与动态价，空清单写「无」", async () => {
+    const sent: Sent[] = [];
+    const draft = version(2, "draft", `"review_id":null,"price_check":${DRAFT_CHECK}`, PRICED_RULES);
+    stubBackend(sent, { versions: { "tt-eff": `${draft},${EFFECTIVE}` } });
+    await selectCombo("tt-eff");
+    await waitFor(() => expect(screen.queryByTestId("rule-versions-table")?.textContent ?? "").toContain("派生价规则"));
+    expect(versionCells("派生价规则")).toEqual(["无", "会员价 · 按基础价 90% · 全部渠道"]);
+    expect(versionCells("动态价规则")).toEqual(["无", "旺季加价 · 2026-11-01～2026-11-30 · 网页端 · 加价 ¥10.00 · 优先级 10"]);
+  });
+
+  it("已上架跨域组合通票新建派生价：后端回 status draft → 提示已存入草稿版、去「② 组合式套票配置」提交审批", async () => {
+    const sent: Sent[] = [];
+    const props = stubBackend(sent, { reply: (url, method) => method === "POST" && url.endsWith("/ticketing/price-rules")
+      ? okBody('{"id":"pr-9","ticket_type_id":"tt-eff","variant_type":"new_customer","status":"draft"}') : null });
+    await createPriceRule("tt-eff");
+    await waitFor(() => expect(props.setActionResult).toHaveBeenCalledWith(expect.objectContaining({
+      action: "ticket_price_rule_staged", note: expect.stringContaining("② 组合式套票配置") })));
+    expect(props.setActionResult).not.toHaveBeenCalledWith(expect.objectContaining({ action: "ticket_price_rule_created" }));
+  });
+
+  it("待审期间新建派生价：后端 409 → 显示中文报错，不报成功", async () => {
+    const sent: Sent[] = [];
+    const props = stubBackend(sent, { reply: (url, method) => method === "POST" && url.endsWith("/ticketing/price-rules")
+      ? failBody(409, "TICKET_RULE_VERSION_PENDING", "这张票的规则已提交审批，须先撤回提交再改") : null });
+    await createPriceRule("tt-eff");
+    await waitFor(() => expect(props.setGlobalError).toHaveBeenCalledWith(expect.stringContaining("须先撤回提交")));
+    expect(props.setActionResult).not.toHaveBeenCalled();
+  });
+
+  // 收尾复核（第十八批裁决 63、61）：② 已选同一张票时，⑤ 新建派生价存入草稿版后规则版本区当场重读，草稿版与「提交审批」随即出现。
+  it("② 已选这张票时在⑤新建派生价存入草稿版：规则版本区当场重读，第 2 版草稿与提交审批出现", async () => {
+    const sent: Sent[] = [];
+    const versions: Record<string, string> = { "tt-eff": EFFECTIVE };
+    const draft = version(2, "draft", `"review_id":null,"price_check":${DRAFT_CHECK}`, PRICED_RULES);
+    stubBackend(sent, { versions, reply: (url, method) => {
+      if (method !== "POST" || !url.endsWith("/ticketing/price-rules")) return null;
+      versions["tt-eff"] = `${draft},${EFFECTIVE}`;
+      return okBody('{"id":"pr-1","ticket_type_id":"tt-eff","variant_type":"member","status":"draft"}');
+    } });
+    await selectCombo("tt-eff");
+    await waitFor(() => expect(screen.queryByTestId("rule-versions-table")?.textContent ?? "").toContain("第 1 版"));
+    expect(screen.queryByTestId("rule-version-submit")).toBeNull();
+    await createPriceRule("tt-eff");
+    await waitFor(() => expect(screen.queryByTestId("rule-version-submit")).not.toBeNull());
+    expect(versionCells("派生价规则")).toEqual(["无", "会员价 · 按基础价 90% · 全部渠道"]);
+  });
+
+  it("最高权限本人提交草稿版：不填最终审批人，提示新版已直接生效", async () => {
+    const sent: Sent[] = [];
+    const draft = version(2, "draft", `"review_id":null,"price_check":${DRAFT_CHECK}`, PRICED_RULES);
+    const props = stubBackend(sent, { versions: { "tt-eff": `${draft},${EFFECTIVE}` }, user: MASTER });
+    await selectCombo("tt-eff");
+    await waitFor(() => expect(screen.queryByTestId("rule-version-submit")).not.toBeNull());
+    fireEvent.change(screen.getByTestId("rule-version-submit-reason"), { target: { value: "本人核对后换新版" } });
+    fireEvent.click(screen.getByTestId("rule-version-submit"));
+    await waitFor(() => expect(props.setActionResult).toHaveBeenCalledWith(expect.objectContaining({
+      action: "ticket_type_rule_version_applied", note: expect.stringContaining("新版已直接生效") })));
+    expect(posts(sent, "/ticket-types/tt-eff/publish")[0]?.body).toMatchObject({ reason: "本人核对后换新版", final_approver_id: null });
+  });
+
+  // 297-R3、297-R4 同根：最高权限本人不要求最终审批人、提交即生效，页面说法与后端一致（其他账号的必填提示不动）。
+  it("最高权限本人：票种行「发布」的最终审批人提示写可不填、提交即生效", async () => {
+    const sent: Sent[] = [];
+    const props = stubBackend(sent, { user: MASTER, reply: (url, method) => method === "POST" && url.endsWith("/ticket-types/tt-draft/publish")
+      ? okBody('{"id":"tt-draft","ticket_name":"草稿组合票","status":"published"}') : null });
+    await waitFor(() => expect(screen.queryByTestId("ticket-type-actions-tt-draft")).not.toBeNull());
+    const prompt = vi.spyOn(window, "prompt").mockReturnValueOnce("本人核对后上架").mockReturnValueOnce("");
+    fireEvent.click(screen.getByTestId("ticket-type-actions-tt-draft"));
+    await waitFor(() => expect(screen.queryByTestId("ticket-type-publish-tt-draft")).not.toBeNull());
+    fireEvent.click(screen.getByTestId("ticket-type-publish-tt-draft"));
+    await waitFor(() => expect(props.setActionResult).toHaveBeenCalledWith(expect.objectContaining({ action: "ticket_type_published" })));
+    expect(prompt.mock.calls[1]?.[0]).toContain("最高权限本人发起可不填，提交即生效");
+    expect(prompt.mock.calls[1]?.[0]).not.toContain("必填");
+  });
+
+  it("最高权限本人：规则版本区「最终审批人」输入框写可不填、提交即生效", async () => {
+    const sent: Sent[] = [];
+    const draft = version(2, "draft", `"review_id":null,"price_check":${DRAFT_CHECK}`, PRICED_RULES);
+    stubBackend(sent, { versions: { "tt-eff": `${draft},${EFFECTIVE}` }, user: MASTER });
+    await selectCombo("tt-eff");
+    await waitFor(() => expect(screen.queryByTestId("rule-version-submit-approver")).not.toBeNull());
+    expect(screen.getByTestId("rule-version-submit-approver").getAttribute("placeholder")).toContain("最高权限本人发起可不填，提交即生效");
+  });
+
+  it("最高权限本人提交即生效后：派生价列表、票种列表与定价核算一并重读", async () => {
+    const sent: Sent[] = [];
+    const draft = version(2, "draft", `"review_id":null,"price_check":${DRAFT_CHECK}`, PRICED_RULES);
+    const props = stubBackend(sent, { versions: { "tt-eff": `${draft},${EFFECTIVE}` }, user: MASTER });
+    await selectCombo("tt-eff");
+    await waitFor(() => expect(screen.queryByTestId("rule-version-submit")).not.toBeNull());
+    const gets = (path: string) => vi.mocked(globalThis.fetch).mock.calls
+      .filter(([url, init]) => (init?.method ?? "GET") === "GET" && String(url).includes(path)).length;
+    const before = { rules: gets("/ticketing/price-rules?"), tickets: gets("/ticketing/ticket-types?"), check: gets("/ticket-types/tt-eff/price-check") };
+    fireEvent.change(screen.getByTestId("rule-version-submit-reason"), { target: { value: "本人核对后换新版" } });
+    fireEvent.click(screen.getByTestId("rule-version-submit"));
+    await waitFor(() => expect(props.setActionResult).toHaveBeenCalledWith(expect.objectContaining({ action: "ticket_type_rule_version_applied" })));
+    await waitFor(() => expect(gets("/ticketing/price-rules?")).toBeGreaterThan(before.rules));
+    expect(gets("/ticketing/ticket-types?")).toBeGreaterThan(before.tickets);
+    expect(gets("/ticket-types/tt-eff/price-check")).toBeGreaterThan(before.check);
+  });
+
+  // 收尾复核（BSM:576；第十八批裁决 61「获批后自动换成新版」）：本人提交即生效会补插绑定、写入最低赠酒杯数，最低赠酒杯数与票面赠酒清单当场重读。
+  it("最高权限本人提交即生效后：最低赠酒杯数与票面赠酒清单一并重读", async () => {
+    const sent: Sent[] = [];
+    const draft = version(2, "draft", `"review_id":null,"price_check":${DRAFT_CHECK}`, PRICED_RULES);
+    const props = stubBackend(sent, { versions: { "tt-eff": `${draft},${EFFECTIVE}` }, user: MASTER });
+    const gets = (path: string) => vi.mocked(globalThis.fetch).mock.calls
+      .filter(([url, init]) => (init?.method ?? "GET") === "GET" && String(url).includes(path)).length;
+    const giftReads = () => [gets("/ticket-types/tt-eff/min-gift-cups"), gets("/ticket-types/tt-eff/gift-coverage")];
+    await selectCombo("tt-eff");
+    await waitFor(() => expect(screen.queryByTestId("rule-version-submit")).not.toBeNull());
+    await waitFor(() => expect(giftReads()).toEqual([1, 1]));
+    fireEvent.change(screen.getByTestId("rule-version-submit-reason"), { target: { value: "本人核对后换新版" } });
+    fireEvent.click(screen.getByTestId("rule-version-submit"));
+    await waitFor(() => expect(props.setActionResult).toHaveBeenCalledWith(expect.objectContaining({ action: "ticket_type_rule_version_applied" })));
+    await waitFor(() => expect(giftReads()).toEqual([2, 2]));
+  });
+});
+
 describe("TicketingPoliciesPage 236-R5⑧ 组合配置防绕过（第十八批裁决 62）", () => {
   afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
@@ -290,11 +437,11 @@ describe("TicketingPoliciesPage 236-R5⑧ 组合配置防绕过（第十八批�
 describe("TicketingPoliciesPage 236-R5⑩「④ 通票组装」报错显示", () => {
   afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
-  async function bindAmusement() {
+  async function bindAmusement(ticketTypeId = "tt-pub") {
     const form = within(screen.getByTestId("ticket-bind-form"));
-    await waitFor(() => expect((form.getByLabelText("票种") as HTMLSelectElement).querySelector('option[value="tt-pub"]')).not.toBeNull());
+    await waitFor(() => expect((form.getByLabelText("票种") as HTMLSelectElement).querySelector(`option[value="${ticketTypeId}"]`)).not.toBeNull());
     await waitFor(() => expect((form.getByLabelText("权益模板") as HTMLSelectElement).querySelector('option[value="tpl-amu"]')).not.toBeNull());
-    fireEvent.change(form.getByLabelText("票种"), { target: { value: "tt-pub" } });
+    fireEvent.change(form.getByLabelText("票种"), { target: { value: ticketTypeId } });
     fireEvent.change(form.getByLabelText("权益模板"), { target: { value: "tpl-amu" } });
     fireEvent.change(screen.getByTestId("ticket-bind-component-price"), { target: { value: "120" } });
     fireEvent.click(screen.getByTestId("ticket-bind-submit"));
@@ -316,5 +463,21 @@ describe("TicketingPoliciesPage 236-R5⑩「④ 通票组装」报错显示", ()
     await waitFor(() => expect(props.setActionResult).toHaveBeenCalledWith(expect.objectContaining({
       action: "ticket_entitlement_bound", note: expect.stringContaining("草稿版") })));
     expect(posts(sent, "/ticket-types/tt-pub/entitlements")[0]?.body.component_price_cent).toBe(12000);
+  });
+
+  // 收尾复核同根（第十八批裁决 61）：已上架跨域组合通票在④绑定权益只存进草稿版，② 已选同一张票时规则版本区当场重读。
+  it("② 已选这张票时在④绑定权益：规则版本区当场重读，草稿版与提交审批出现", async () => {
+    const sent: Sent[] = [];
+    const versions: Record<string, string> = { "tt-eff": EFFECTIVE };
+    stubBackend(sent, { versions, reply: (url, method) => {
+      if (method !== "POST" || !url.endsWith("/ticket-types/tt-eff/entitlements")) return null;
+      versions["tt-eff"] = `${version(2, "draft", `"review_id":null,"price_check":${DRAFT_CHECK}`)},${EFFECTIVE}`;
+      return okBody("{}");
+    } });
+    await selectCombo("tt-eff");
+    await waitFor(() => expect(screen.queryByTestId("rule-versions-table")?.textContent ?? "").toContain("第 1 版"));
+    expect(screen.queryByTestId("rule-version-submit")).toBeNull();
+    await bindAmusement("tt-eff");
+    await waitFor(() => expect(screen.queryByTestId("rule-version-submit")).not.toBeNull());
   });
 });

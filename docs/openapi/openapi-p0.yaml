@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: 综合体管理系统 P0 API 契约
-  version: V0.74
+  version: V0.75
   description: P0 首批编码前置契约。本文采用 JSON-compatible YAML，便于与 openapi-p0.json 保持一致。正式后端以 Java 21 + Spring Boot 4.x +
     springdoc-openapi 输出运行时 OpenAPI，并与本契约比对。
 servers:
@@ -13514,8 +13514,7 @@ paths:
         - ticketing
       operationId: publishTicketDynamicPricingRule
       summary: Publish P2 ticket dynamic pricing rule
-      description: Publish P2 ticket dynamic pricing rule. Must follow formal OpenAPI schema, permission, data scope,
-        idempotency and audit event requirements.
+      description: "发布动态定价规则：发布后命中的规则参与正式下单定价，草稿规则只供试算。reason 必填，缺失 400 VALIDATION_FAILED；规则不存在 404 DYNAMIC_PRICING_RULE_NOT_FOUND。须遵守正式 OpenAPI 结构、权限、数据范围、幂等与审计事件要求。第十八批 AS 段第 297 条 297-R2（第十八批裁决 63「跨域组合通票的派生价、动态价规则也要经项目之上的平台权限审批，并记入票种规则版本。」；裁决 61「改动另存一份草稿版审批，审批期间照旧版卖，获批后自动换成新版」）：已上架的跨域组合通票（判定同 publishTicketType）的草稿动态价不直接发布，只存进该票种唯一一份票种规则草稿版（没有就由现行规则起一份），表内仍为 draft、不参与售价，返回该规则、status 为 draft；经 publishTicketType 提交项目之上的平台权限审批，获批后在审批同一事务里置 published；撤回草稿版或撤回提交后仍为草稿、可再发布进新草稿版。最高权限本人发布同样先存进草稿版，经 publishTicketType 提交即生效。该票种规则已提交审批、尚无结论时（含首次发布待审）409 TICKET_RULE_VERSION_PENDING「这张票的规则已提交审批，须先撤回提交再改」。规则已不是草稿、票种未上架或非跨域的照现行直接发布、返回 status 为 published。成功留痕 ticket_dynamic_pricing.published.success 在这次存进草稿版时元数据另带 rule_version_id、rule_version_status（draft）。"
       x-permission: ticket.dynamic_pricing.publish
       x-data-scope: project-channel
       x-terminal-allowed:
@@ -14078,6 +14077,7 @@ paths:
         - ticketing
       operationId: createTicketPriceRule
       summary: 创建平日、周末、节假日及派生价规则
+      description: "第十八批 AS 段第 297 条 297-R2（第十八批裁决 63「跨域组合通票的派生价、动态价规则也要经项目之上的平台权限审批，并记入票种规则版本。」；裁决 61「改动另存一份草稿版审批，审批期间照旧版卖，获批后自动换成新版」）：已上架的跨域组合通票（判定同 publishTicketType）新建派生价不写入现表，只存进该票种唯一一份票种规则草稿版（没有就由现行规则起一份），返回该条派生价记录、status 为 draft，此时不参与售价；经 publishTicketType 提交项目之上的平台权限审批，获批后在审批同一事务里写入现表、status 为 active；撤回草稿版或撤回提交（withdrawTicketTypeRuleVersion）后该条作废。最高权限本人新建同样先存进草稿版，经 publishTicketType 提交即生效。该票种规则已提交审批、尚无结论时（含首次发布待审）409 TICKET_RULE_VERSION_PENDING「这张票的规则已提交审批，须先撤回提交再改」。未上架或非跨域的票种照旧直接写入现表、返回 status 为 active；未上架的跨域组合通票首次发布时，该票种全部派生价（含已存档）随版本一并审批。成功留痕 ticket_price_variant.changed 在这次存进草稿版时元数据另带 rule_version_id、rule_version_status（draft）。"
       x-permission: ticket.price_variant.manage
       x-data-scope: project-channel
       x-terminal-allowed:
@@ -14913,7 +14913,7 @@ paths:
         - ticketing
       operationId: publishTicketType
       summary: 发布票种
-      description: "第十八批 AH 段 215-R1（ENUM「通票赠酒下限」条「一张酒吧通票或跨域组合通票覆盖的每一家酒吧，赠酒杯数不得低于后台配置的最低赠酒杯数（业务参数，按票种可配，出厂默认 1 杯，须同时配置上下限），各酒吧分别赠几杯在售票时写明票面，低于该下限的票种不得发布上架」「该最低赠酒杯数属于票面强制要求提供的权益，一律记为域主管公司出资」）：bar_id 为空的通票，覆盖的每家酒吧（绑定了该吧入场类权益的酒吧）赠饮杯数（票面价 0 的 gift_drink，份数×次数）不得少于最低杯数×max(1, 该吧入场次数)，否则 409 PASS_BAR_GIFT_COVERAGE_INSUFFICIENT（点名还差的酒吧）；带票面价的兑换券不计；不含赠酒的通票不再放行；单店票（bar_id 非空）不套。最低杯数以内的赠饮须平台出资型（cost_bearer platform_funded），否则 409 PASS_BAR_GIFT_FLOOR_NOT_PLATFORM_FUNDED；超出部分可标商户让利。最低杯数见 GET /api/v1/ticketing/ticket-types/{id}/min-gift-cups（没配过为出厂 1 杯）。 第十八批 AI 段 236-R2（第十八批裁决 52 ①；ENUM:54「任何商户在没有获批内部结算价之前，不得为其开通需要该价格结算的权益或券。」；BSM:1754「每项权益都必须绑定实际提供方和审批版本，避免悬空账。」）：票内须提供方兑付、核销时按内部结算价结算的权益（赠饮、实物、专属直付；专属直付且商户让利型的除外），其提供方（模板商户，空则专属商户）在内部结算价目录里没有获批生效价（目录草案须他人复核转正）的，409 TICKET_ENTITLEMENT_PRICE_NOT_APPROVED 拒绝发布并点名权益；这道闸在赠酒下限闸之后、凑整误差闸之前。 第十八批 AJ 段 236-R3（第十八批裁决 52 ②；ENUM:32「跨域组合通票的定价与域间结算规则由项目之上的平台权限统一审批」；BSM:754「每次发布时把凑整差额金额及各域分摊数额记入票种规则版本、发布后不得再改」）：请求体为 TicketTypePublishRequest（idempotency_key、reason 必填，final_approver_id 可空）。跨域组合通票＝bar_id 为空、有价权益（component_price_cent 大于 0）的提供方按业态折成域主管公司（酒吧归娱乐平台公司，游乐归游乐公司，演出传媒归传媒公司，餐饮与零售归城市项目公司，其他业态按商户档案主管公司）后分属两家及以上，零元权益不计（BSM:749）。未上架的跨域组合通票闸全过后不直接上架：把三档价、折扣、权益组成、最低赠酒杯数、凑整差额与各域分摊记成一版票种规则（见 listTicketTypeRuleVersions），提交项目之上的平台权限审批（复核策略 ticket.type.rule.publish，specific_role，最终审批人须经角色持有 ticket.product.publish.approve；出厂按涉钱审批时限 1 个工作日），返回 status 仍为 draft；审批通过即在同一事务里上架（status published、该版 effective）；驳回则该版退回草稿（保留 review_id）、票仍为草稿，可改后再发布或撤回。final_approver_id 为最终审批人用户 id，跨域组合通票必填：未填 400 VALIDATION_FAILED「跨域组合通票须指定最终审批人（项目之上的平台权限）」；该人不存在或已停用 400 VALIDATION_FAILED；该人须能看全部项目（平台管理员，或经勾了「可以查看全部项目」的角色持有 ticket.product.publish.approve），否则 400 VALIDATION_FAILED「跨域组合通票的定价与域间结算规则须由项目之上的平台权限审批，最终审批人须能看全部项目」；须经角色持有 ticket.product.publish.approve，否则 400 FINAL_APPROVER_LACKS_ROLE；须在提交人的直接上级链上，否则 400 FINAL_APPROVER_NOT_IN_CHAIN（系统补全从提交人到该人之间的全部直接上级节点逐级审批，PGM:528）；提交人不得自批（审批时 403 SUPERVISOR_SELF_REVIEW_FORBIDDEN）。该票规则已提交审批、尚无结论时再发布 409 TICKET_RULE_VERSION_PENDING「这张票的规则已提交审批，须先撤回提交再改」（须先经 withdrawTicketTypeRuleVersion 撤回）；复核未进入待审 409 TICKET_RULE_APPROVAL_REQUIRED「票种规则须进入审批，不得直接生效」。非跨域票种（单店门票、酒吧通票、纯游乐票、演出票等）照旧闸全过即上架，不填 final_approver_id、不建版本。成功留痕 ticket_price.published 在这次提交了审批时元数据另带 rule_version_id、rule_version_status（pending_review）。 第十八批 AJ 段 236-R7（第十八批裁决 61「改动另存一份草稿版审批，审批期间照旧版卖，获批后自动换成新版」）：已上架跨域组合通票有草稿版时，用草稿内容（草稿价、草稿组成、草稿最低赠酒杯数）跑全部发布闸（失败码同现行发布闸：TICKET_TYPE_ENTITLEMENT_REQUIRED、TICKET_COMPONENT_PRICE_REQUIRED、TICKET_COST_BEARER_REQUIRED、PASS_BAR_GIFT_COVERAGE_INSUFFICIENT、PASS_BAR_GIFT_FLOOR_NOT_PLATFORM_FUNDED、TICKET_ENTITLEMENT_PRICE_NOT_APPROVED、TICKET_PRICE_OUT_OF_TOLERANCE 等）后提交同一审批（须带 final_approver_id，审批人要求同上），返回票种仍为 published、现表与售卖不变；获批后在审批同一事务里自动换成新版（三档价、折扣、草稿新增权益、最低赠酒杯数套回现表，原生效版置 superseded），无需再发布。已上架且没有草稿版的票种再发布照现行。"
+      description: "第十八批 AH 段 215-R1（ENUM「通票赠酒下限」条「一张酒吧通票或跨域组合通票覆盖的每一家酒吧，赠酒杯数不得低于后台配置的最低赠酒杯数（业务参数，按票种可配，出厂默认 1 杯，须同时配置上下限），各酒吧分别赠几杯在售票时写明票面，低于该下限的票种不得发布上架」「该最低赠酒杯数属于票面强制要求提供的权益，一律记为域主管公司出资」）：bar_id 为空的通票，覆盖的每家酒吧（绑定了该吧入场类权益的酒吧）赠饮杯数（票面价 0 的 gift_drink，份数×次数）不得少于最低杯数×max(1, 该吧入场次数)，否则 409 PASS_BAR_GIFT_COVERAGE_INSUFFICIENT（点名还差的酒吧）；带票面价的兑换券不计；不含赠酒的通票不再放行；单店票（bar_id 非空）不套。最低杯数以内的赠饮须平台出资型（cost_bearer platform_funded），否则 409 PASS_BAR_GIFT_FLOOR_NOT_PLATFORM_FUNDED；超出部分可标商户让利。最低杯数见 GET /api/v1/ticketing/ticket-types/{id}/min-gift-cups（没配过为出厂 1 杯）。 第十八批 AI 段 236-R2（第十八批裁决 52 ①；ENUM:54「任何商户在没有获批内部结算价之前，不得为其开通需要该价格结算的权益或券。」；BSM:1754「每项权益都必须绑定实际提供方和审批版本，避免悬空账。」）：票内须提供方兑付、核销时按内部结算价结算的权益（赠饮、实物、专属直付；专属直付且商户让利型的除外），其提供方（模板商户，空则专属商户）在内部结算价目录里没有获批生效价（目录草案须他人复核转正）的，409 TICKET_ENTITLEMENT_PRICE_NOT_APPROVED 拒绝发布并点名权益；这道闸在赠酒下限闸之后、凑整误差闸之前。 第十八批 AJ 段 236-R3（第十八批裁决 52 ②；ENUM:32「跨域组合通票的定价与域间结算规则由项目之上的平台权限统一审批」；BSM:754「每次发布时把凑整差额金额及各域分摊数额记入票种规则版本、发布后不得再改」）：请求体为 TicketTypePublishRequest（idempotency_key、reason 必填，final_approver_id 可空）。跨域组合通票＝bar_id 为空、有价权益（component_price_cent 大于 0）的提供方按业态折成域主管公司（酒吧归娱乐平台公司，游乐归游乐公司，演出传媒归传媒公司，餐饮与零售归城市项目公司，其他业态按商户档案主管公司）后分属两家及以上，零元权益不计（BSM:749）。未上架的跨域组合通票闸全过后不直接上架：把三档价、折扣、权益组成、最低赠酒杯数、凑整差额与各域分摊记成一版票种规则（见 listTicketTypeRuleVersions），提交项目之上的平台权限审批（复核策略 ticket.type.rule.publish，specific_role，最终审批人须经角色持有 ticket.product.publish.approve；出厂按涉钱审批时限 1 个工作日），返回 status 仍为 draft；审批通过即在同一事务里上架（status published、该版 effective）；驳回则该版退回草稿（保留 review_id）、票仍为草稿，可改后再发布或撤回。final_approver_id 为最终审批人用户 id，跨域组合通票必填：未填 400 VALIDATION_FAILED「跨域组合通票须指定最终审批人（项目之上的平台权限）」；该人不存在或已停用 400 VALIDATION_FAILED；该人须能看全部项目（平台管理员，或经勾了「可以查看全部项目」的角色持有 ticket.product.publish.approve），否则 400 VALIDATION_FAILED「跨域组合通票的定价与域间结算规则须由项目之上的平台权限审批，最终审批人须能看全部项目」；须经角色持有 ticket.product.publish.approve，否则 400 FINAL_APPROVER_LACKS_ROLE；须在提交人的直接上级链上，否则 400 FINAL_APPROVER_NOT_IN_CHAIN（系统补全从提交人到该人之间的全部直接上级节点逐级审批，PGM:528）；提交人不得自批（审批时 403 SUPERVISOR_SELF_REVIEW_FORBIDDEN）。该票规则已提交审批、尚无结论时再发布 409 TICKET_RULE_VERSION_PENDING「这张票的规则已提交审批，须先撤回提交再改」（须先经 withdrawTicketTypeRuleVersion 撤回）；复核未进入待审 409 TICKET_RULE_APPROVAL_REQUIRED「票种规则须进入审批，不得直接生效」。非跨域票种（单店门票、酒吧通票、纯游乐票、演出票等）照旧闸全过即上架，不填 final_approver_id、不建版本。成功留痕 ticket_price.published 在这次提交了审批时元数据另带 rule_version_id、rule_version_status（pending_review）。 第十八批 AJ 段 236-R7（第十八批裁决 61「改动另存一份草稿版审批，审批期间照旧版卖，获批后自动换成新版」）：已上架跨域组合通票有草稿版时，用草稿内容（草稿价、草稿组成、草稿最低赠酒杯数）跑全部发布闸（失败码同现行发布闸：TICKET_TYPE_ENTITLEMENT_REQUIRED、TICKET_COMPONENT_PRICE_REQUIRED、TICKET_COST_BEARER_REQUIRED、PASS_BAR_GIFT_COVERAGE_INSUFFICIENT、PASS_BAR_GIFT_FLOOR_NOT_PLATFORM_FUNDED、TICKET_ENTITLEMENT_PRICE_NOT_APPROVED、TICKET_PRICE_OUT_OF_TOLERANCE 等）后提交同一审批（须带 final_approver_id，审批人要求同上），返回票种仍为 published、现表与售卖不变；获批后在审批同一事务里自动换成新版（三档价、折扣、草稿新增权益、最低赠酒杯数套回现表，原生效版置 superseded），无需再发布。已上架且没有草稿版的票种再发布照现行。 第十八批 AS 段第 297 条 297-R1（第十八批裁决 63「跨域组合通票的派生价、动态价规则也要经项目之上的平台权限审批，并记入票种规则版本。」）：版本另记派生价与动态价两份清单——price_rules 为该票种全部派生价（含已存档，不含已删），dynamic_pricing_rules 为已发布的动态价与本版经 publishTicketDynamicPricingRule 存入的草稿动态价——随提交一并审批；获批时版本里现表没有的派生价写入现表（status active），版本里仍为草稿的动态价置 published。派生价存档与取消存档、动态价新建草稿与试算不进审批。297-R3（BSM:576「持授权 U 盘密钥的最高权限本人发起的操作，不需要经过任何审批。」；第十八批裁决 71）：持授权 U 盘密钥的最高权限本人提交跨域组合通票首次发布或规则草稿版时，不必填 final_approver_id（填了也不用）、不建复核单，本版立即生效（首次发布即上架，响应 status 为 published；已上架的即换成新版），留痕 ticket_type.rule_version.approved（业务类型 ticket_type_rule_version，对象为该版本，元数据 ticket_type_id、version_no、master_self_initiated=true），此时成功留痕 ticket_price.published 不带 rule_version_id；其余账号照旧须填，缺则 400 VALIDATION_FAILED。"
       x-permission: ticket.product.manage
       x-data-scope: project
       x-terminal-allowed:
@@ -14952,7 +14952,7 @@ paths:
         - ticketing
       operationId: listTicketTypeRuleVersions
       summary: "票种规则版本（跨域组合通票）"
-      description: "第十八批 AJ 段 236-R3（第十八批裁决 52 ②；ENUM:32「跨域组合通票的定价与域间结算规则由项目之上的平台权限统一审批」；BSM:754「每次发布时把凑整差额金额及各域分摊数额记入票种规则版本、发布后不得再改」）：列出该票种的全部票种规则版本（跨域组合通票提交发布审批或已上架后改动才有，其余票种为空），新版在前，一次返回全部、不分页。每版记三档价、折扣、最低赠酒杯数（三者为空＝没配过、按出厂 1 杯）、权益组成（含提供方、业态、经营域、业态价格、出资方）、各业态价格合计、系统算出售价、凑整差额（填的平日价－算出售价）与各域分摊（与出票拆分同一算法；零元权益不计），只按平日价算；状态 draft 草稿、pending_review 待审批、effective 生效中、superseded 已被新版本取代、withdrawn 已撤回，生效起内容不再改。每个票种至多一份生效版与一份未结版本（draft 或 pending_review）；票种已上架时其未结版本另附 price_check（按草稿价、草稿组成与现行允许误差），其余为 null。票种不存在 404 TICKET_TYPE_NOT_FOUND。"
+      description: "第十八批 AJ 段 236-R3（第十八批裁决 52 ②；ENUM:32「跨域组合通票的定价与域间结算规则由项目之上的平台权限统一审批」；BSM:754「每次发布时把凑整差额金额及各域分摊数额记入票种规则版本、发布后不得再改」）：列出该票种的全部票种规则版本（跨域组合通票提交发布审批或已上架后改动才有，其余票种为空），新版在前，一次返回全部、不分页。每版记三档价、折扣、最低赠酒杯数（三者为空＝没配过、按出厂 1 杯）、权益组成（含提供方、业态、经营域、业态价格、出资方）、各业态价格合计、系统算出售价、凑整差额（填的平日价－算出售价）与各域分摊（与出票拆分同一算法；零元权益不计），只按平日价算；状态 draft 草稿、pending_review 待审批、effective 生效中、superseded 已被新版本取代、withdrawn 已撤回，生效起内容不再改。每个票种至多一份生效版与一份未结版本（draft 或 pending_review）；票种已上架时其未结版本另附 price_check（按草稿价、草稿组成与现行允许误差），其余为 null。票种不存在 404 TICKET_TYPE_NOT_FOUND。 第十八批 AS 段第 297 条：每版另记 price_rules（该票种全部派生价，含已存档）与 dynamic_pricing_rules（已发布的与本版存入的动态价），字段见 TicketTypeRuleVersionView。最高权限本人提交的版本 review_id 为空、直接为 effective。"
       x-permission: ticket.product.view
       x-data-scope: project
       x-terminal-allowed:
@@ -14999,7 +14999,7 @@ paths:
         - ticketing
       operationId: withdrawTicketTypeRuleVersion
       summary: "撤回票种规则草稿版或待审提交（跨域组合通票）"
-      description: "第十八批 AJ 段 236-R7（第十八批裁决 61「改动另存一份草稿版审批，审批期间照旧版卖，获批后自动换成新版」）：撤回该票种唯一一份未结版本——草稿版（放弃草稿）或待审提交（撤回提交）。待审的先作废复核单（复核单置驳回、待审节点取消，从审批人待办消失、不能再批准），再把版本置 withdrawn、reason 记撤回理由；现表不变、旧版照卖。撤回后再改价、加权益或改最低赠酒杯数由现表另起新草稿（版本号续增）；首次发布待审的票撤回后仍为草稿，可改可再发布。reason 必填，缺失或幂等键缺失、超过 128 个字符 400 VALIDATION_FAILED；票种不存在 404 TICKET_TYPE_NOT_FOUND；没有草稿或待审版本（含撤回前已获批）409 TICKET_RULE_VERSION_NOT_OPEN「这张票没有可撤回的草稿或待审批版本」。成功留痕 ticket_type.rule_version.withdrawn（业务类型 ticket_type_rule_version，对象为该版本），失败留痕 ticket_type.rule_version.withdraw_failed。"
+      description: "第十八批 AJ 段 236-R7（第十八批裁决 61「改动另存一份草稿版审批，审批期间照旧版卖，获批后自动换成新版」）：撤回该票种唯一一份未结版本——草稿版（放弃草稿）或待审提交（撤回提交）。待审的先作废复核单（复核单置驳回、待审节点取消，从审批人待办消失、不能再批准），再把版本置 withdrawn、reason 记撤回理由；现表不变、旧版照卖。撤回后再改价、加权益或改最低赠酒杯数由现表另起新草稿（版本号续增）；首次发布待审的票撤回后仍为草稿，可改可再发布。reason 必填，缺失或幂等键缺失、超过 128 个字符 400 VALIDATION_FAILED；票种不存在 404 TICKET_TYPE_NOT_FOUND；没有草稿或待审版本（含撤回前已获批）409 TICKET_RULE_VERSION_NOT_OPEN「这张票没有可撤回的草稿或待审批版本」。成功留痕 ticket_type.rule_version.withdrawn（业务类型 ticket_type_rule_version，对象为该版本），失败留痕 ticket_type.rule_version.withdraw_failed。 第十八批 AS 段第 297 条 297-R2：撤回后，草稿版里新建的派生价随之作废（从未写入现表），草稿版里存入的动态价仍为草稿、可再发布（再进新草稿版）。"
       x-permission: ticket.product.manage
       x-data-scope: project
       x-terminal-allowed:
@@ -69809,7 +69809,7 @@ components:
           description: 最后修改时间；没配过为空。
     TicketTypePublishRequest:
       type: object
-      description: "第十八批 AJ 段 236-R3 票种发布请求：前四项同 StatusChangeRequest；跨域组合通票须另带最终审批人 final_approver_id（ENUM:32「项目之上的平台权限统一审批」；PGM:528「发起单据时只需指定该事项的最终审批人」），其余票种不填。"
+      description: "第十八批 AJ 段 236-R3 票种发布请求：前四项同 StatusChangeRequest；跨域组合通票须另带最终审批人 final_approver_id（ENUM:32「项目之上的平台权限统一审批」；PGM:528「发起单据时只需指定该事项的最终审批人」），持授权 U 盘密钥的最高权限本人提交可不填（第十八批 AS 段 297-R3），其余票种不填。"
       required:
         - idempotency_key
         - reason
@@ -69837,10 +69837,10 @@ components:
           type: string
           nullable: true
           maxLength: 64
-          description: "最终审批人用户 id：跨域组合通票必填（须能看全部项目、经角色持有 ticket.product.publish.approve、在提交人的直接上级链上），其余票种不填或填空。"
+          description: "最终审批人用户 id：跨域组合通票必填（项目之上的平台权限审批人：须能看全部项目、经角色持有 ticket.product.publish.approve、在提交人的直接上级链上）；持授权 U 盘密钥的最高权限本人提交可不填；其余票种不填或填空。"
     TicketTypeRuleVersionView:
       type: object
-      description: "第十八批 AJ 段 236-R3 跨域组合通票票种规则版本（ENUM:32「跨域组合通票的定价与域间结算规则由项目之上的平台权限统一审批」；BSM:754「每次发布时把凑整差额金额及各域分摊数额记入票种规则版本、发布后不得再改」）：三档价、折扣、最低赠酒杯数、权益组成、各业态价格合计与算出售价、凑整差额与各域分摊，只按平日价算（同凑整误差闸）。生效（effective）起内容不再改；每个票种至多一份生效版与一份未结版本（draft 或 pending_review）。"
+      description: "第十八批 AJ 段 236-R3 跨域组合通票票种规则版本（ENUM:32「跨域组合通票的定价与域间结算规则由项目之上的平台权限统一审批」；BSM:754「每次发布时把凑整差额金额及各域分摊数额记入票种规则版本、发布后不得再改」）：三档价、折扣、最低赠酒杯数、权益组成、各业态价格合计与算出售价、凑整差额与各域分摊，只按平日价算（同凑整误差闸）。生效（effective）起内容不再改；每个票种至多一份生效版与一份未结版本（draft 或 pending_review）。 第十八批 AS 段 297-R1（第十八批裁决 63「跨域组合通票的派生价、动态价规则也要经项目之上的平台权限审批，并记入票种规则版本。」）：另记派生价（price_rules）与动态价（dynamic_pricing_rules）两份清单。"
       additionalProperties: false
       required:
         - id
@@ -69852,6 +69852,8 @@ components:
         - component_total_cent
         - computed_price_cent
         - domain_allocations
+        - price_rules
+        - dynamic_pricing_rules
         - created_at
         - updated_at
       properties:
@@ -70032,6 +70034,136 @@ components:
                 format: int64
                 description: "该域按填的平日价所得（分）。"
           description: "各域分摊；只列业态价格合计大于 0 的域，平日价为空时为空数组。"
+        price_rules:
+          type: array
+          items:
+            type: object
+            description: "版本里的一条派生价（会员、新人、学生、团体、渠道价）；获批时现表没有的按此 id 写入现表（已删的为软删、不会补回）。"
+            additionalProperties: false
+            required:
+              - id
+              - variant_type
+              - price_mode
+              - eligibility_rule
+              - created_at
+            properties:
+              id:
+                type: string
+                description: "派生价规则 id（price_rule_ 开头）。"
+              variant_type:
+                type: string
+                enum:
+                  - group
+                  - new_customer
+                  - student
+                  - channel
+                  - member
+                description: "人群：member 会员价、new_customer 新人价、student 学生价、group 团体价、channel 渠道价。"
+              price_mode:
+                type: string
+                enum:
+                  - derive_from_calendar_price
+                  - fixed_price
+                description: "定价方式：derive_from_calendar_price 按基础价打折、fixed_price 固定价。"
+              weekday_price_cent:
+                type: integer
+                format: int64
+                nullable: true
+                description: "固定价的平日价（分）；按基础价打折时可空。"
+              weekend_price_cent:
+                type: integer
+                format: int64
+                nullable: true
+                description: "固定价的周末价（分，可空）。"
+              holiday_price_cent:
+                type: integer
+                format: int64
+                nullable: true
+                description: "固定价的节假日价（分，可空）。"
+              discount_rate:
+                type: number
+                nullable: true
+                description: "折扣（百分数，90＝按基础价 90%）；固定价时可空。"
+              channel_id:
+                type: string
+                nullable: true
+                description: "渠道 id（渠道价用，可空）。"
+              eligibility_rule:
+                type: object
+                additionalProperties: true
+                description: "资格条件（原样记下，没填为空对象）。"
+              created_at:
+                type: string
+                format: date-time
+                description: "建立时间；获批写入现表时沿用。"
+          description: "派生价规则：该票种全部派生价（含已存档，不含已删）；没有为空数组。"
+        dynamic_pricing_rules:
+          type: array
+          items:
+            type: object
+            description: "版本里的一条动态价规则；获批时表内仍为草稿的置 published。"
+            additionalProperties: false
+            required:
+              - id
+              - rule_name
+              - priority
+              - effective_from
+              - effective_to
+              - adjustment_type
+              - condition_rule
+            properties:
+              id:
+                type: string
+                description: "动态定价规则 id。"
+              rule_name:
+                type: string
+                description: "规则名。"
+              priority:
+                type: integer
+                format: int32
+                description: "优先级（多条命中时大者优先）。"
+              effective_from:
+                type: string
+                format: date
+                description: "生效起（到访日）。"
+              effective_to:
+                type: string
+                format: date
+                description: "生效止（到访日）。"
+              sales_channel:
+                type: string
+                nullable: true
+                description: "销售渠道：admin、kiosk、miniapp、app、web、channel；空为全部渠道。"
+              adjustment_type:
+                type: string
+                enum:
+                  - percent_delta
+                  - fixed_delta
+                description: "调整方式：percent_delta 按比例加减、fixed_delta 按固定额加减。"
+              adjustment_rate:
+                type: number
+                nullable: true
+                description: "加减比例（百分数，负数为减价）；按固定额时可空。"
+              adjustment_amount_cent:
+                type: integer
+                format: int64
+                nullable: true
+                description: "加减金额（分，负数为减价）；按比例时可空。"
+              min_price_cent:
+                type: integer
+                format: int64
+                nullable: true
+                description: "最低价（分，可空）。"
+              max_price_cent:
+                type: integer
+                format: int64
+                nullable: true
+                description: "最高价（分，可空）。"
+              condition_rule:
+                type: object
+                additionalProperties: true
+                description: "匹配条件（原样记下，没填为空对象）。"
+          description: "动态价规则：已发布的与本版存入的草稿动态价；没有为空数组。"
         reason:
           type: string
           nullable: true
@@ -70039,7 +70171,7 @@ components:
         review_id:
           type: string
           nullable: true
-          description: "复核单 id；提交审批后有值，被驳回退回草稿后保留。"
+          description: "复核单 id；提交审批后有值，被驳回退回草稿后保留；最高权限本人提交即生效的为空。"
         created_by:
           type: string
           description: "创建人。"

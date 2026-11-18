@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static com.complex.platform.common.Strings.trimToNull;
 
@@ -42,6 +42,10 @@ import org.springframework.transaction.annotation.Transactional;
  *
  * <p>现表即当前生效版，草稿版与待审版只存本表；每票种至多 1 份生效＋1 份未结。锁序统一为「复核单→票种行」：审批回写在 approve 锁复核单之后才锁票种行，
  * 其余写由调用方（TicketingService 的 @Transactional 写方法）先锁票种行。
+ *
+ * <p>第十八批 AS 段 297-R1（第十八批裁决 63「跨域组合通票的派生价、动态价规则也要经项目之上的平台权限审批，并记入票种规则版本。」）：版本另记派生价与动态价
+ * 两份清单，随提交审批；获批时草稿版里新建的派生价写入现表、发布的动态价置已发布。297-R3（BSM:576「持授权 U 盘密钥的最高权限本人发起的操作，
+ * 不需要经过任何审批。」；第十八批裁决 71）：最高权限本人提交即生效。
  */
 @Service
 public class TicketTypeRuleVersionService {
@@ -52,6 +56,14 @@ public class TicketTypeRuleVersionService {
     private static final String MANAGE_PERMISSION = "ticket.product.manage";
     private static final TypeReference<List<TicketTypeRuleVersionView.Entitlement>> ENTITLEMENTS = new TypeReference<>() { };
     private static final TypeReference<List<TicketTypeRuleVersionView.DomainAllocation>> DOMAINS = new TypeReference<>() { };
+    private static final TypeReference<List<TicketTypeRuleVersionView.PriceRule>> PRICE_RULES = new TypeReference<>() { };
+    private static final TypeReference<List<TicketTypeRuleVersionView.DynamicPricingRule>> DYNAMIC_RULES = new TypeReference<>() { };
+    /** 复核单摘要用的人群中文名（PGM:287「界面全中文」；同后台票务策略页派生价人群）。 */
+    private static final Map<String, String> VARIANT_NAMES = Map.of("member", "会员价", "new_customer", "新人价", "student", "学生价",
+            "group", "团体价", "channel", "渠道价");
+    /** 复核单摘要用的销售渠道中文名（动态价渠道取值同 TicketPricingService.SALES_CHANNELS，空为全部渠道）。 */
+    private static final Map<String, String> CHANNEL_NAMES = Map.of("admin", "后台", "kiosk", "触摸屏一体机", "miniapp", "小程序",
+            "app", "客人手机应用", "web", "网页", "channel", "第三方渠道");
 
     private final JdbcTemplate jdbc;
     private final ObjectMapper json;
@@ -103,19 +115,32 @@ public class TicketTypeRuleVersionService {
     /**
      * 提交项目之上的平台权限审批：调用方已持票种锁、已跑全部发布闸。最终审批人须持跨域组合通票票种规则审批权限（复核策略 specific_role 把关）、
      * 能看全部项目，并在提交人的直接上级链上（审批链补全时把关）；提交人不得自批（复核时把关）。
+     *
+     * <p>297-R3：最高权限本人提交不指定最终审批人、不建复核单，本版立即生效并套回现表（同审批通过）。
      */
     TicketTypeRuleVersionView submit(TicketTypeRecord ticketType, TicketCatalogService.RuleSnapshot snapshot, String reason,
             String finalApproverId, String idempotencyKey) {
+        boolean master = auth.isMasterAuthority(auth.currentActor());
         String approver = trimToNull(finalApproverId);
-        if (approver == null) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "跨域组合通票须指定最终审批人（项目之上的平台权限）");
+        if (!master) {
+            if (approver == null) {
+                throw ApiException.badRequest("VALIDATION_FAILED", "跨域组合通票须指定最终审批人（项目之上的平台权限）");
+            }
+            requirePlatformApprover(approver);
         }
-        requirePlatformApprover(approver);
         if (findOpen(ticketType.id()).filter(open -> "pending_review".equals(open.status())).isPresent()) {
             throw pendingConflict();
         }
         String id = writeOpen(ticketType.id(), snapshot, "pending_review", reason);
         TicketTypeRuleVersionView version = find(id);
+        if (master) {
+            // 不建复核单：此前被驳回、退回草稿时保留的复核单号一并清空，最高权限本人提交即生效的版本 review_id 为空。
+            jdbc.update("UPDATE ticket_type_rule_versions SET review_id = NULL WHERE id = ?", id);
+            apply(ticketType.id(), version, Instant.now());
+            audit.recordSuccess("ticket_type.rule_version.approved", APPROVE_PERMISSION, OBJECT_TYPE, id, null, idempotencyKey,
+                    Map.of("ticket_type_id", ticketType.id(), "version_no", version.versionNo(), "master_self_initiated", true));
+            return find(id);
+        }
         SupervisorReviewDecisionRecord review = reviews.evaluate(new SupervisorReviewEvaluateRequest(idempotencyKey + ":review", reason,
                 List.of(), ACTION_TYPE, OBJECT_TYPE, id, 0L, summary(ticketType, version), approver, List.of()));
         if (!"pending_review".equals(review.reviewStatus())) {
@@ -173,6 +198,16 @@ public class TicketTypeRuleVersionService {
             audit.recordSuccess("ticket_type.rule_version.returned", APPROVE_PERMISSION, OBJECT_TYPE, version.id(), null, null, trail);
             return;
         }
+        apply(ticketTypeId, version, now);
+        audit.recordSuccess("ticket_type.rule_version.approved", APPROVE_PERMISSION, OBJECT_TYPE, version.id(), null, null, trail);
+    }
+
+    /**
+     * 本版生效并套回现表（同一事务、票种行已锁）：三档价、折扣、上架、补插现表没有的绑定、最低赠酒杯数；297-R1 另把版本里现表没有的派生价写入现表
+     * （已删派生价为软删、行仍在，不会被补回）、把版本里仍是草稿的动态价置已发布。
+     */
+    private void apply(String ticketTypeId, TicketTypeRuleVersionView version, Instant now) {
+        Timestamp at = Timestamp.from(now);
         // 部分唯一索引不可延迟：先把原生效版降为已被取代，再把本版升为生效。
         jdbc.update("UPDATE ticket_type_rule_versions SET status = 'superseded', updated_at = ? WHERE ticket_type_id = ? AND status = 'effective'",
                 at, ticketTypeId);
@@ -194,7 +229,17 @@ public class TicketTypeRuleVersionService {
             repository.saveGiftFloor(new TicketTypeGiftFloor(ticketTypeId, version.minGiftCups(), version.minGiftCupsLower(),
                     version.minGiftCupsUpper(), version.submittedBy(), now));
         }
-        audit.recordSuccess("ticket_type.rule_version.approved", APPROVE_PERMISSION, OBJECT_TYPE, version.id(), null, null, trail);
+        for (TicketTypeRuleVersionView.PriceRule r : version.priceRules()) {
+            if (repository.findPriceRuleById(r.id()).isEmpty()) {
+                // 建立时间用版本所记原值。
+                repository.savePriceRule(new TicketPriceRuleRecord(r.id(), ticketTypeId, r.variantType(), r.priceMode(), r.weekdayPriceCent(),
+                        r.weekendPriceCent(), r.holidayPriceCent(), r.discountRate(), r.channelId(), "CNY", "active",
+                        r.eligibilityRule() == null ? Map.of() : r.eligibilityRule(), r.createdAt(), now));
+            }
+        }
+        for (TicketTypeRuleVersionView.DynamicPricingRule r : version.dynamicPricingRules()) {
+            jdbc.update("UPDATE ticket_dynamic_pricing_rules SET status = 'published', updated_at = ? WHERE id = ? AND status = 'draft'", at, r.id());
+        }
     }
 
     /** 未结版本写入（插入或覆盖内容）；提交时另记提交人、时间、理由与票种所属项目（恰属一个项目才填）。 */
@@ -208,10 +253,10 @@ public class TicketTypeRuleVersionService {
         jdbc.update("""
                 INSERT INTO ticket_type_rule_versions (id, ticket_type_id, project_id, version_no, status, weekday_price_cent, weekend_price_cent,
                     holiday_price_cent, combo_discount_rate, min_gift_cups, min_gift_cups_lower, min_gift_cups_upper, entitlements,
-                    component_total_cent, computed_price_cent, rounding_diff_cent, domain_allocations, reason, created_by, updated_by,
-                    submitted_by, created_at, updated_at, submitted_at)
+                    component_total_cent, computed_price_cent, rounding_diff_cent, domain_allocations, price_rules, dynamic_pricing_rules,
+                    reason, created_by, updated_by, submitted_by, created_at, updated_at, submitted_at)
                 VALUES (?, ?, ?, (SELECT COALESCE(MAX(version_no), 0) + 1 FROM ticket_type_rule_versions WHERE ticket_type_id = ?), ?, ?, ?,
-                    ?, ?, ?, ?, ?, ?::jsonb, ?, ?, ?, ?::jsonb, ?, ?, ?, ?, ?, ?, ?)
+                    ?, ?, ?, ?, ?, ?::jsonb, ?, ?, ?, ?::jsonb, ?::jsonb, ?::jsonb, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT (id) DO UPDATE SET project_id = EXCLUDED.project_id, status = EXCLUDED.status,
                     weekday_price_cent = EXCLUDED.weekday_price_cent, weekend_price_cent = EXCLUDED.weekend_price_cent,
                     holiday_price_cent = EXCLUDED.holiday_price_cent, combo_discount_rate = EXCLUDED.combo_discount_rate,
@@ -219,13 +264,15 @@ public class TicketTypeRuleVersionService {
                     min_gift_cups_upper = EXCLUDED.min_gift_cups_upper, entitlements = EXCLUDED.entitlements,
                     component_total_cent = EXCLUDED.component_total_cent, computed_price_cent = EXCLUDED.computed_price_cent,
                     rounding_diff_cent = EXCLUDED.rounding_diff_cent, domain_allocations = EXCLUDED.domain_allocations,
+                    price_rules = EXCLUDED.price_rules, dynamic_pricing_rules = EXCLUDED.dynamic_pricing_rules,
                     reason = EXCLUDED.reason, updated_by = EXCLUDED.updated_by, updated_at = EXCLUDED.updated_at,
                     submitted_by = EXCLUDED.submitted_by, submitted_at = EXCLUDED.submitted_at
                 """,
                 id, ticketTypeId, projects.size() == 1 ? projects.getFirst() : null, ticketTypeId, status,
                 s.weekdayPriceCent(), s.weekendPriceCent(), s.holidayPriceCent(), s.comboDiscountRate(),
                 s.minGiftCups(), s.minGiftCupsLower(), s.minGiftCupsUpper(), encode(s.entitlements()),
-                s.componentTotalCent(), s.computedPriceCent(), s.roundingDiffCent(), encode(s.domainAllocations()), reason,
+                s.componentTotalCent(), s.computedPriceCent(), s.roundingDiffCent(), encode(s.domainAllocations()),
+                encode(s.priceRules()), encode(s.dynamicPricingRules()), reason,
                 actor, actor, submitting ? actor : null, now, now, submitting ? now : null);
         return id;
     }
@@ -269,8 +316,36 @@ public class TicketTypeRuleVersionService {
                 text.append(" · ").append(TicketTypeEntitlementRecord.COST_BEARER_PLATFORM_FUNDED.equals(e.costBearer()) ? "平台出资" : "商户让利");
             }
         }
+        for (TicketTypeRuleVersionView.PriceRule r : v.priceRules()) {
+            text.append("\n派生价：").append(VARIANT_NAMES.getOrDefault(r.variantType(), r.variantType())).append(" · ")
+                    .append("fixed_price".equals(r.priceMode())
+                            ? "固定价 平日 " + yuan(r.weekdayPriceCent()) + "，周末 " + yuan(r.weekendPriceCent()) + "，节假日 " + yuan(r.holidayPriceCent())
+                            : "按基础价 " + r.discountRate().stripTrailingZeros().toPlainString() + "%");
+        }
+        for (TicketTypeRuleVersionView.DynamicPricingRule r : v.dynamicPricingRules()) {
+            text.append("\n动态价：").append(r.ruleName()).append(" · ").append(r.effectiveFrom()).append("～").append(r.effectiveTo())
+                    .append(" · ").append(r.salesChannel() == null ? "全部渠道" : CHANNEL_NAMES.getOrDefault(r.salesChannel(), r.salesChannel()))
+                    .append(" · ").append(adjustment(r));
+            if (r.minPriceCent() != null) {
+                text.append(" · 最低 ").append(yuan(r.minPriceCent()));
+            }
+            if (r.maxPriceCent() != null) {
+                text.append(" · 最高 ").append(yuan(r.maxPriceCent()));
+            }
+            text.append(" · 优先级 ").append(r.priority());
+        }
         return text.append("\n最低赠酒杯数：").append(v.minGiftCups() == null ? "出厂 1 杯"
                 : v.minGiftCups() + " 杯（下限 " + v.minGiftCupsLower() + "，上限 " + v.minGiftCupsUpper() + "）").toString();
+    }
+
+    /** 动态价调整：按比例写「加价/减价 x%」，按固定额写「加价/减价 x 元」。 */
+    private static String adjustment(TicketTypeRuleVersionView.DynamicPricingRule r) {
+        if ("fixed_delta".equals(r.adjustmentType())) {
+            long amount = r.adjustmentAmountCent() == null ? 0L : r.adjustmentAmountCent();
+            return (amount < 0 ? "减价 " : "加价 ") + yuan(Math.abs(amount));
+        }
+        BigDecimal rate = r.adjustmentRate() == null ? BigDecimal.ZERO : r.adjustmentRate();
+        return (rate.signum() < 0 ? "减价 " : "加价 ") + rate.abs().stripTrailingZeros().toPlainString() + "%";
     }
 
     private static String yuan(Long cent) {
@@ -290,7 +365,8 @@ public class TicketTypeRuleVersionService {
                     rs.getObject("min_gift_cups_lower", Integer.class), rs.getObject("min_gift_cups_upper", Integer.class),
                     json.readValue(rs.getString("entitlements"), ENTITLEMENTS), rs.getLong("component_total_cent"),
                     rs.getLong("computed_price_cent"), rs.getObject("rounding_diff_cent", Long.class),
-                    json.readValue(rs.getString("domain_allocations"), DOMAINS), rs.getString("reason"), rs.getString("review_id"),
+                    json.readValue(rs.getString("domain_allocations"), DOMAINS), json.readValue(rs.getString("price_rules"), PRICE_RULES),
+                    json.readValue(rs.getString("dynamic_pricing_rules"), DYNAMIC_RULES), rs.getString("reason"), rs.getString("review_id"),
                     rs.getString("created_by"), rs.getString("updated_by"), rs.getString("submitted_by"), instant(rs, "created_at"),
                     instant(rs, "updated_at"), instant(rs, "submitted_at"), instant(rs, "decided_at"), null);
         } catch (java.io.IOException e) {
