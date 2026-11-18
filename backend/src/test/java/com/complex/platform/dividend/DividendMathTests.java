@@ -1,6 +1,6 @@
 package com.complex.platform.dividend;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -550,5 +550,31 @@ class DividendMathTests {
         assertThat(d.principalGrossCent()).isEqualTo(2L);
         assertThat(d.roundingResidualCent()).isEqualTo(-1L);
         assertThat(d.otherGrossCents()).isEmpty();
+    }
+
+    /**
+     * 第十八批 AX 段 273-R2（BSM:1785「当期可分配利润必须先偿还全部到期借款本息，剩余部分才可用于分红」；BSM:1778「再按比例分配」）：到期未还 10,300 元在依法
+     * 核定额 45,000 元取小之后先偿，余 34,700 元再按 80%／20% 劈分。
+     */
+    @Test
+    void loanRepaymentReducesDistributableBeforeSplit() {
+        DividendMath.Distribution d = DividendMath.compute(5_000_000L, 8000, 2000, false, 0L, false, 0L, new long[0], false, 0, 0L, 4_500_000L,
+                new int[0], new boolean[0], 2000, 1_030_000L);
+        assertThat(d.loanRepaymentCent()).isEqualTo(1_030_000L);
+        assertThat(d.distributableCent()).isEqualTo(3_470_000L);
+        assertThat(d.platformShareCent()).isEqualTo(2_776_000L);
+        assertThat(d.principalGrossCent()).isEqualTo(694_000L);
+        assertThat(d.payoutCent()).isEqualTo(694_000L - 138_800L);
+    }
+
+    /** 273-R2：到期本息超过可分配额只偿到可分配额为止，不透支，各方与实发都为 0。 */
+    @Test
+    void loanRepaymentCappedAtDistributable() {
+        DividendMath.Distribution d = DividendMath.compute(5_000_000L, 8000, 2000, false, 0L, false, 0L, new long[0], false, 0, 0L, null,
+                new int[0], new boolean[0], 2000, 6_000_000L);
+        assertThat(d.loanRepaymentCent()).isEqualTo(5_000_000L);
+        assertThat(d.distributableCent()).isZero();
+        assertThat(d.platformShareCent()).isZero();
+        assertThat(d.payoutCent()).isZero();
     }
 }

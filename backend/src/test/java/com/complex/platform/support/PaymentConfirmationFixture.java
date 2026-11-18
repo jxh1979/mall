@@ -1,6 +1,6 @@
 package com.complex.platform.support;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import java.util.List;
 import java.util.UUID;
@@ -20,7 +20,7 @@ public final class PaymentConfirmationFixture {
             "single_bar_service_fee", "compensation_fulfillment", "pass_domain_share", "pass_domain_direct_settlement",
             "pass_unverified_attribution", "dispatch_commission_transfer", "bar_payroll_transfer", "inventory_transfer",
             "pass_drink_settlement", "media_performance_settlement", "refund", "bar_deposit_refund", "stored_value_consume",
-            "partner_voucher", "reconciliation_difference", "inventory_difference", "turnover_rent_reversal", "manual",
+            "partner_voucher", "reconciliation_difference", "inventory_difference", "turnover_rent_reversal", "manual", "bar_loan",
             "compensation_fulfillment_recovery", "ticket_distribution_recovery", "saved_bottle_remedy_recovery");
 
     private PaymentConfirmationFixture() {

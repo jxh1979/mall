@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.50
+// 文件版本：V0.51
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -135,6 +135,8 @@ public class FinanceService implements TerminationSettlementPort {
             Map.entry("pass_drink_settlement", "通票酒水结算"), Map.entry("ticket_distribution", "门票分销"),
             Map.entry("dividend_payout", "持股分红发放"), Map.entry("dividend_reserve_withheld", "分红留存待释放"),
             Map.entry("dividend_reserve_released", "分红留存已释放"), Map.entry("dealer_order", "经销订单"),
+            // 第十八批 AX 段第 273 条 273-R1（PGM:436）：公司向酒吧借款登记后挂的酒吧应付（归还本息），付款确认支付类型同名。
+            Map.entry("bar_loan", "借款还款"),
             Map.entry("termination_penalty", "退租违约金"), Map.entry("deposit_refund", "退租押金退还"),
             Map.entry("platform_incentive_subsidy", "平台激励补贴"),
             Map.entry("bar_deposit_refund", "订台定金达标退回"),
@@ -3786,20 +3788,23 @@ public class FinanceService implements TerminationSettlementPort {
                 .filter(i -> "receivable".equals(i.direction()) && i.unpaidAmountCent() > 0 && !corrected.contains(i.id()))
                 .sorted(java.util.Comparator.comparing(ArApItemRecord::createdAt)
                         .thenComparing(ArApItemRecord::id))
-                .map(i -> new DividendArrearsItem(i.id(), i.itemNo(), i.unpaidAmountCent()))
+                .map(i -> new DividendArrearsItem(i.id(), i.itemNo(), i.unpaidAmountCent(), i.counterpartyId()))
                 .toList();
     }
 
     /**
-     * V303 欠款抵扣：审批时按冻结抵扣额对该商户未清应收逐项结算（先欠先抵，dividend_offset 收款）。
+     * V303 欠款抵扣：审批时按冻结抵扣额对主理人本人欠该酒吧公司的未清应收（该商户台账里往来方为 principalUserId 的未清应收）逐项结算（先欠先抵，
+     * dividend_offset 收款）。第十八批 AX 段第 330 条 330-R1（BSM:1781「主理人这期该得的钱，按有效协议先抵其对相应法律主体尚未结清的欠款」）：
+     * 酒吧公司自己的租金等应收、客人挂账应收不抵。
      * 逐项复用 settleArApItem（FOR UPDATE 行锁 + 跨商户/项目校验 + 锁定拦截 + 登记收款 + 回写 paid/unpaid/status）。
      * 返回实际结算总额；调用方（DividendService.approve）在同一事务内断言 == 冻结抵扣额，不等则回滚并要求作废重算。
      */
-    public long applyDividendOffsetToReceivables(String merchantId, long offsetCent, String statementId) {
+    public long applyDividendOffsetToReceivables(String merchantId, String principalUserId, long offsetCent, String statementId) {
         if (offsetCent <= 0) {
             return 0L;
         }
-        List<DividendArrearsItem> items = listOutstandingReceivables(merchantId);
+        List<DividendArrearsItem> items = listOutstandingReceivables(merchantId).stream()
+                .filter(item -> principalUserId.equals(item.counterpartyId())).toList();
         long available = items.stream().mapToLong(DividendArrearsItem::unpaidCent).sum();
         // 原子性 by construction：当前未清应收不足冻结抵扣额（抵扣期间被并发清偿）时一分不结算，直接返回实况，
         // 由调用方抛 DIVIDEND_ARREARS_CHANGED 干净回退——不依赖事务回滚就不会留半结（executeWrite 非独立事务）。
@@ -3828,8 +3833,8 @@ public class FinanceService implements TerminationSettlementPort {
     public record DividendReserveReleaseRef(String arApItemId, long reserveCent, String principalUserId, String merchantId) {
     }
 
-    /** 未清应收明细(供逐项留痕):台账项 id / 单号 / 未清额(分)。 */
-    public record DividendArrearsItem(String arApItemId, String itemNo, long unpaidCent) {
+    /** 未清应收明细(供逐项留痕):台账项 id / 单号 / 未清额(分) / 往来方(330-R1 欠款抵扣只取往来方为主理人账户的项)。 */
+    public record DividendArrearsItem(String arApItemId, String itemNo, long unpaidCent, String counterpartyId) {
     }
 
     /** 批3:内部价采购券核销回流 -> 按内部结算价给第三方挂应付(payable, counterparty=partnerId)。 */

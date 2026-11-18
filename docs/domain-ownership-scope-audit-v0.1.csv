@@ -179,6 +179,7 @@ dealer_return_lines,single_complex_default,P0_SINGLE_COMPLEX,single-complex defa
 dealer_returns,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",V0.07,covered
 dealers,direct,project_id,project_id column on dealers,ready for project/merchant scoped query enforcement,V0.07,covered
 deposit_ledger,direct,merchant_id,merchant_id column on deposit_ledger,ready for project/merchant scoped query enforcement,V0.07,covered
+dividend_bar_loans,direct,merchant_id,merchant_id column on dividend_bar_loans,ready for project/merchant scoped query enforcement,V0.07,covered
 dividend_closeout_items,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",V0.07,covered
 dividend_closeouts,direct,merchant_id,merchant_id column on dividend_closeouts,ready for project/merchant scoped query enforcement,V0.07,covered
 dividend_deduction_items,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",V0.07,covered
@@ -189,6 +190,7 @@ dividend_plans,direct,merchant_id,merchant_id column on dividend_plans,ready for
 dividend_reserve_releases,direct,merchant_id,merchant_id column on dividend_reserve_releases,ready for project/merchant scoped query enforcement,V0.07,covered
 dividend_statement_lines,direct,merchant_id,merchant_id column on dividend_statement_lines,ready for project/merchant scoped query enforcement,V0.07,covered
 dividend_statements,direct,merchant_id,merchant_id column on dividend_statements,ready for project/merchant scoped query enforcement,V0.07,covered
+dividend_tax_rate_versions,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",V0.07,covered
 employee_notices,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",V0.07,covered
 energy_actual_charges,direct,project_id,project_id column on energy_actual_charges,ready for project/merchant scoped query enforcement,V0.07,covered
 energy_anomaly_escalations,inherited,reading_id,reading_id -> energy_meter_readings -> energy_meters -> project_id/merchant_id,must join through scope path before multi-complex rollout,V0.07,covered

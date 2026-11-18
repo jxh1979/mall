@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static com.complex.platform.common.Strings.requireText;
 
@@ -505,8 +505,11 @@ public class EntityTaxService {
         return list;
     }
 
-    /** 照 PayrollTaxService.submitReview：三条线须配真实部门起点（在用、具正式审批角色），再进 finance.tax_rule.adjust 复核链。 */
-    private SupervisorReviewDecisionRecord submitReview(String idempotencyKey, List<String> evidenceIds,
+    /**
+     * 照 PayrollTaxService.submitReview：三条线须配真实部门起点（在用、具正式审批角色），再进 finance.tax_rule.adjust 复核链。
+     * 第十八批 AX 段第 271 条 271-R1 起分红代扣税率版本（DividendTaxRateService）同用本链。
+     */
+    public SupervisorReviewDecisionRecord submitReview(String idempotencyKey, List<String> evidenceIds,
             List<SupervisorReviewEvaluateRequest.ParallelLine> parallelLines, String objectType,
             String id, String reason, String summary) {
         for (String code : List.of("finance_review", "tax_review", "legal_review")) {

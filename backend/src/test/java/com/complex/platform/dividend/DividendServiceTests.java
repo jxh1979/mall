@@ -1,6 +1,6 @@
 package com.complex.platform.dividend;
 
-// 文件版本：V0.07
+// 文件版本：V0.08
 
 import com.complex.platform.support.InMemoryIdempotencyRepository;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -88,7 +88,7 @@ class DividendServiceTests {
         /** 装填自定义扣除项（读路径镜像 jdbc mapPlan：从子表读回附到方案记录）。 */
         private DividendPlanRecord enrich(DividendPlanRecord p) {
             return new DividendPlanRecord(p.id(), p.merchantId(), p.principalUserId(), p.principalName(),
-                    p.platformShareBps(), p.taxRateBps(), p.periodType(), p.revenueDomains(),
+                    p.platformShareBps(), p.periodType(), p.revenueDomains(),
                     p.includeInventoryCost(), p.expenseTypes(), p.effectiveFrom(), p.status(), p.note(),
                     p.updatedBy(), p.createdAt(), p.updatedAt(), p.lossCarryforwardEnabled(),
                     p.arrearsOffsetEnabled(), p.payoutFloorEnabled(), p.payoutFloorBps(), p.payoutFloorFixedCent(),
@@ -439,8 +439,8 @@ class DividendServiceTests {
                 .thenReturn("arap_div_1");
         // V303 默认：无未清应收；欠款抵扣默认足额结算（返回请求的抵扣额）。
         when(payoutPort.listOutstandingReceivables(anyString())).thenReturn(List.of());
-        when(payoutPort.applyDividendOffsetToReceivables(anyString(), anyLong(), anyString()))
-                .thenAnswer(inv -> (long) inv.getArgument(1));
+        when(payoutPort.applyDividendOffsetToReceivables(anyString(), anyString(), anyLong(), anyString()))
+                .thenAnswer(inv -> (long) inv.getArgument(2));
         when(payoutPort.createDividendReserveWithholdingPayable(anyString(), anyString(), anyLong(), anyString()))
                 .thenReturn("arap_reserve_1");
         // V304 释放：finance re-tag 待释放留存应付（幂等）——默认返回该计算单留存额的释放引用；
@@ -457,17 +457,25 @@ class DividendServiceTests {
                 new IdempotencyService(new InMemoryIdempotencyRepository(), new ObjectMapper()),
                 mock(AuditEventService.class));
         service = new DividendService(repository, inventoryRepository, new BusinessDayResolver(),
-                authorizationService, operations, payoutPort, payDays);
+                authorizationService, operations, payoutPort, payDays, factoryTaxRate(), mock(DividendLoanService.class));
     }
 
-    /** 211-R2 建方案必填发放付账日：既有用例统一取第一个付账日。234-R1 提交版本必填生效起始日（未给取次日）与理由。244-R1 周期上下限取月～年。 */
+    /** 211-R2 建方案必填发放付账日：既有用例统一取第一个付账日。234-R1 提交版本必填生效起始日（未给取次日）与理由。244-R1 周期上下限取月～年。272-R1 平台比例上下限取 0%～100%。 */
     private static DividendPlanRequest slot(DividendPlanRequest r) {
         return new DividendPlanRequest(r.idempotencyKey(), r.merchantId(), r.principalUserId(), r.principalName(),
-                r.platformShareBps(), r.taxRateBps(), r.periodType(), r.revenueDomains(), r.includeInventoryCost(),
+                r.platformShareBps(), r.periodType(), r.revenueDomains(), r.includeInventoryCost(),
                 r.expenseTypes(), r.effectiveFrom() == null ? daysAhead(1) : r.effectiveFrom(), r.status(), r.note(),
                 r.lossCarryforwardEnabled(), r.arrearsOffsetEnabled(), r.payoutFloorEnabled(), r.payoutFloorBps(),
                 r.payoutFloorFixedCent(), r.reserveReleaseMode(), r.reserveReleaseDelayPeriods(), r.principalType(),
-                r.customDeductions(), 1, r.reason() == null ? "按工商登记持股比例" : r.reason(), 1, 12);
+                r.customDeductions(), 1, r.reason() == null ? "按工商登记持股比例" : r.reason(), 1, 12, r.otherShareholders(), 0, 10000);
+    }
+
+    /** 第十八批 AX 段 271-R1：代扣税率取全平台统一出厂版本 20%（纯内存单测不触数据库）。 */
+    private static DividendTaxRateService factoryTaxRate() {
+        DividendTaxRateService rates = mock(DividendTaxRateService.class);
+        when(rates.inForce(any())).thenReturn(new DividendTaxRateService.Version("dtrv_factory", 2000, null, null, null, "approved",
+                "出厂默认 20%", null, null, null));
+        return rates;
     }
 
     private static String daysAhead(int days) {
@@ -477,8 +485,7 @@ class DividendServiceTests {
     /** 234-R1 夹具：在 p 的基础上改 id、生效起始日、状态、复核单号与亏损结转开关得到另一版本行。 */
     private static DividendPlanRecord version(DividendPlanRecord p, String id, java.time.LocalDate from, String status,
             String reviewId, boolean lossCarryforward) {
-        return new DividendPlanRecord(id, p.merchantId(), p.principalUserId(), p.principalName(), p.platformShareBps(),
-                p.taxRateBps(), p.periodType(), p.revenueDomains(), p.includeInventoryCost(), p.expenseTypes(), from, status,
+        return new DividendPlanRecord(id, p.merchantId(), p.principalUserId(), p.principalName(), p.platformShareBps(), p.periodType(), p.revenueDomains(), p.includeInventoryCost(), p.expenseTypes(), from, status,
                 p.note(), p.updatedBy(), p.createdAt(), p.updatedAt(), lossCarryforward, p.arrearsOffsetEnabled(),
                 p.payoutFloorEnabled(), p.payoutFloorBps(), p.payoutFloorFixedCent(), p.reserveReleaseMode(),
                 p.reserveReleaseDelayPeriods(), p.principalType(), p.customDeductions(), p.payoutPaySlot(), p.stopRequested(),
@@ -499,7 +506,7 @@ class DividendServiceTests {
     /** 季度方案（多数用例按 2026-Q3 出单）；默认周期见 {@link #createPlanDefaultsToSemiannualPeriod}。 */
     private DividendPlanRecord createDefaultPlan() {
         return createApproved(slot(new DividendPlanRequest("plan-key-1", MERCHANT, "usr_principal", "主理人甲",
-                null, null, "quarterly", null, null, null, null, null, null, null, null, null, null, null)));
+                null, "quarterly", null, null, null, null, null, null, null, null, null, null, null)));
     }
 
     private DividendStatementRecord computeOfficialQuarter() {
@@ -514,7 +521,6 @@ class DividendServiceTests {
         DividendPlanRecord plan = createDefaultPlan();
         // 默认口径：80/20、股息红利 20%、收入域 bar+ticket、扣成本、费用全类别、三扣除全关（周期默认见下一用例）。
         assertThat(plan.platformShareBps()).isEqualTo(8000);
-        assertThat(plan.taxRateBps()).isEqualTo(2000);
         assertThat(plan.revenueDomains()).containsExactly("bar", "ticket");
         assertThat(plan.includeInventoryCost()).isTrue();
         assertThat(plan.expenseTypes()).containsExactly(
@@ -527,7 +533,7 @@ class DividendServiceTests {
         assertThat(plan.payoutFloorFixedCent()).isZero();
         // 同商户第二个生效方案被拒（一个商户同一时期只允许一个生效中方案）。
         assertThatThrownBy(() -> service.createPlan(slot(new DividendPlanRequest("plan-key-2", MERCHANT,
-                "usr_other", null, null, null, null, null, null, null, null, null, null, null, null, null, null, null))))
+                "usr_other", null, null, null, null, null, null, null, null, null, null, null, null, null, null))))
                 .isInstanceOf(ApiException.class)
                 .satisfies(e -> assertThat(((ApiException) e).code()).isEqualTo("DIVIDEND_PLAN_EXISTS"));
     }
@@ -536,7 +542,7 @@ class DividendServiceTests {
     @Test
     void createPlanDefaultsToSemiannualPeriod() {
         DividendPlanRecord plan = createApproved(slot(new DividendPlanRequest("plan-default-period", "merchant_semi",
-                "usr_p_semi", null, null, null, null, null, null, null, null, null, null, null, null, null, null, null)));
+                "usr_p_semi", null, null, null, null, null, null, null, null, null, null, null, null, null, null)));
         assertThat(plan.periodType()).isEqualTo("semiannual");
     }
 
@@ -547,9 +553,9 @@ class DividendServiceTests {
     @Test
     void semiannualAndAnnualPlansComputeByMatchingLabelsAndGetMonthlyPreview() {
         createApproved(slot(new DividendPlanRequest("plan-semi", "merchant_semi", "usr_p_semi", null,
-                null, null, "semiannual", null, null, null, null, null, null, null, null, null, null, null)));
+                null, "semiannual", null, null, null, null, null, null, null, null, null, null, null)));
         createApproved(slot(new DividendPlanRequest("plan-annual", "merchant_annual", "usr_p_annual", null,
-                null, null, "annual", null, null, null, null, null, null, null, null, null, null, null)));
+                null, "annual", null, null, null, null, null, null, null, null, null, null, null)));
 
         DividendComputeResultRecord half = service.compute(
                 new DividendComputeRequest("semi-h2", "2026-H2", "official", null));
@@ -576,17 +582,17 @@ class DividendServiceTests {
     @Test
     void createPlanValidatesBpsAndTokens() {
         assertThatThrownBy(() -> service.createPlan(slot(new DividendPlanRequest("bad-bps", MERCHANT,
-                "usr_p", null, 10001, null, null, null, null, null, null, null, null, null, null, null, null, null))))
+                "usr_p", null, 10001, null, null, null, null, null, null, null, null, null, null, null, null))))
                 .isInstanceOf(ApiException.class)
                 .satisfies(e -> assertThat(((ApiException) e).code()).isEqualTo("VALIDATION_FAILED"));
         assertThatThrownBy(() -> service.createPlan(slot(new DividendPlanRequest("bad-domain", MERCHANT,
-                "usr_p", null, null, null, null, List.of("bar", "karaoke"), null, null, null, null, null,
+                "usr_p", null, null, null, List.of("bar", "karaoke"), null, null, null, null, null,
                 null, null, null, null, null))))
                 .isInstanceOf(ApiException.class)
                 .satisfies(e -> assertThat(((ApiException) e).code()).isEqualTo("VALIDATION_FAILED"));
         // V303 保护线固定额负值被拒。
         assertThatThrownBy(() -> service.createPlan(slot(new DividendPlanRequest("bad-floor", MERCHANT,
-                "usr_p", null, null, null, null, null, null, null, null, null, null, null, null, true, 0, -1L))))
+                "usr_p", null, null, null, null, null, null, null, null, null, null, null, true, 0, -1L))))
                 .isInstanceOf(ApiException.class)
                 .satisfies(e -> assertThat(((ApiException) e).code()).isEqualTo("VALIDATION_FAILED"));
     }
@@ -606,20 +612,19 @@ class DividendServiceTests {
                 "pending_review", 3, null, "blocked", null, List.of(), Instant.now(), "usr_admin", "top_authority", null));
         service.supervisorReviews = reviews;
         DividendPlanRecord updated = service.updatePlan(plan.id(), slot(new DividendPlanRequest("upd-key-1", null,
-                null, null, 7000, 0, null, null, null, null, null, null, "比例调整为 70/30，免税试点",
+                null, null, 7000, null, null, null, null, null, null, "比例调整为 70/30，免税试点",
                 null, null, null, null, null)));
         assertThat(updated.id()).isNotEqualTo(plan.id());
         assertThat(updated.status()).isEqualTo("pending_review");
         assertThat(updated.reviewId()).isEqualTo("review_plan_1");
         assertThat(updated.platformShareBps()).isEqualTo(7000);
-        assertThat(updated.taxRateBps()).isZero();
         assertThat(updated.principalUserId()).isEqualTo("usr_principal");
         assertThat(repository.findPlanById(plan.id()).orElseThrow().platformShareBps()).isEqualTo(8000);
         verify(reviews).evaluate(org.mockito.ArgumentMatchers.argThat(r -> "finance.dividend.plan.change".equals(r.actionType())
                 && "dividend_plan".equals(r.objectType()) && updated.id().equals(r.objectId())
                 && r.operatorNote().contains("平台比例：80% → 70%")));
         assertThatThrownBy(() -> service.updatePlan(plan.id(), slot(new DividendPlanRequest("upd-key-2",
-                "merchant_b", null, null, null, null, null, null, null, null, null, null, null,
+                "merchant_b", null, null, null, null, null, null, null, null, null, null,
                 null, null, null, null, null))))
                 .isInstanceOf(ApiException.class)
                 .satisfies(e -> assertThat(((ApiException) e).code()).isEqualTo("VALIDATION_FAILED"));
@@ -651,7 +656,7 @@ class DividendServiceTests {
         };
         service = new DividendService(repository, inventoryRepository, noonBar, authorizationService,
                 new AuditedOperationExecutor(new IdempotencyService(new InMemoryIdempotencyRepository(), new ObjectMapper()),
-                        mock(AuditEventService.class)), payoutPort, payDays);
+                        mock(AuditEventService.class)), payoutPort, payDays, factoryTaxRate(), mock(DividendLoanService.class));
         createDefaultPlan();
         computeOfficialQuarter();
         Instant from = Instant.parse("2026-07-01T04:00:00Z");
@@ -795,7 +800,7 @@ class DividendServiceTests {
         // 本批前已审批、有保护线留存但无核定的旧单：手动与定时释放都核原合法分配依据，缺失不释放。
         repository.legalDefault = false;
         createApproved(slot(new DividendPlanRequest("plan-old-rel", MERCHANT, "usr_principal", null,
-                8000, 2000, "quarterly", List.of("bar"), null, null, null, null, null,
+                8000, "quarterly", List.of("bar"), null, null, null, null, null,
                 null, null, true, 1000, null, "next_period", null)));
         repository.barRevenue.put(MERCHANT, 1_000_000L);
         DividendStatementRecord old = service.compute(
@@ -835,7 +840,7 @@ class DividendServiceTests {
     void computeRespectsRevenueDomainsAndDeductsAllCostsAndExpenses() {
         // 只计酒吧收入；扣销货成本与全部费用类别。
         createApproved(slot(new DividendPlanRequest("plan-key-cfg", MERCHANT, "usr_principal", null,
-                5000, 1000, "quarterly", List.of("bar"), null, null, null, null, null,
+                5000, "quarterly", List.of("bar"), null, null, null, null, null,
                 null, null, null, null, null)));
         repository.barRevenue.put(MERCHANT, 500_000L);
         repository.ticketSettled.put(MERCHANT, 999_999L);
@@ -970,7 +975,7 @@ class DividendServiceTests {
                 new IdempotencyService(new InMemoryIdempotencyRepository(), new ObjectMapper()),
                 mock(AuditEventService.class));
         DividendService guardedService = new DividendService(guarded, inventoryRepository,
-                new BusinessDayResolver(), authorizationService, operations, payoutPort, payDays);
+                new BusinessDayResolver(), authorizationService, operations, payoutPort, payDays, factoryTaxRate(), mock(DividendLoanService.class));
         repository = guarded;
         service = guardedService;
         createDefaultPlan();
@@ -1060,7 +1065,7 @@ class DividendServiceTests {
         // 159-R6 月末营业日五类标齐事件：季度方案出 preview 单（系统操作人，不可审批），月度方案不出。
         createDefaultPlan(); // 季度方案（MERCHANT）
         createApproved(slot(new DividendPlanRequest("plan-monthly", "merchant_monthly", "usr_p2", null,
-                null, null, "monthly", null, null, null, null, null, null, null, null, null, null, null)));
+                null, "monthly", null, null, null, null, null, null, null, null, null, null, null)));
         repository.barRevenue.put(MERCHANT, 1_000_000L);
 
         service.onMonthEndBusinessDayFinal(new FinanceService.MonthEndBusinessDayFinal(MERCHANT, null, YearMonth.of(2026, 7)));
@@ -1084,7 +1089,7 @@ class DividendServiceTests {
     @Test
     void lossCarryforwardOffsetsPriorLossAcrossPeriods() {
         createApproved(slot(new DividendPlanRequest("lcf-plan", MERCHANT, "usr_principal", null,
-                8000, 2000, "quarterly", List.of("bar"), null, null, null, null, null,
+                8000, "quarterly", List.of("bar"), null, null, null, null, null,
                 true, null, null, null, null))); // 开亏损结转，费用置空
         // Q1 亏损 300000：只有酒吧退款无收入。
         repository.barRefund.put(MERCHANT, 300_000L);
@@ -1117,13 +1122,13 @@ class DividendServiceTests {
     @Test
     void arrearsOffsetReducesPayoutAndSettlesReceivablesAtApprove() {
         createApproved(slot(new DividendPlanRequest("arr-plan", MERCHANT, "usr_principal", null,
-                8000, 2000, "quarterly", List.of("bar"), null, null, null, null, null,
+                8000, "quarterly", List.of("bar"), null, null, null, null, null,
                 null, true, null, null, null))); // 开欠款抵扣
         repository.barRevenue.put(MERCHANT, 1_000_000L); // 税后应得 160000
         // 未清应收两笔合计 100000。
         when(payoutPort.listOutstandingReceivables(MERCHANT)).thenReturn(List.of(
-                new DividendArrearsItem("arap_r1", "AR-001", 60_000L),
-                new DividendArrearsItem("arap_r2", "AR-002", 40_000L)));
+                new DividendArrearsItem("arap_r1", "AR-001", 60_000L, "usr_principal"),
+                new DividendArrearsItem("arap_r2", "AR-002", 40_000L, "usr_principal")));
         DividendStatementRecord s = service.compute(
                 new DividendComputeRequest("arr-c1", "2026-Q3", "official", null)).computed().get(0);
         assertThat(s.principalNetCent()).isEqualTo(160_000L);
@@ -1137,7 +1142,7 @@ class DividendServiceTests {
         service.submit(s.id(), new DividendActionRequest("arr-s1", null));
         actorId[0] = "usr_approver";
         service.approve(s.id(), new DividendActionRequest("arr-a1", null));
-        verify(payoutPort).applyDividendOffsetToReceivables(MERCHANT, 100_000L, s.id());
+        verify(payoutPort).applyDividendOffsetToReceivables(MERCHANT, "usr_principal", 100_000L, s.id());
         verify(payoutPort).createDividendPayoutPayable("usr_principal", MERCHANT, 60_000L, s.id(), PAY_DAY);
     }
 
@@ -1145,16 +1150,16 @@ class DividendServiceTests {
     @Test
     void arrearsOffsetConflictsWhenReceivablesChangedAtApprove() {
         createApproved(slot(new DividendPlanRequest("arr-plan2", MERCHANT, "usr_principal", null,
-                8000, 2000, "quarterly", List.of("bar"), null, null, null, null, null,
+                8000, "quarterly", List.of("bar"), null, null, null, null, null,
                 null, true, null, null, null)));
         repository.barRevenue.put(MERCHANT, 1_000_000L);
         when(payoutPort.listOutstandingReceivables(MERCHANT)).thenReturn(List.of(
-                new DividendArrearsItem("arap_r1", "AR-001", 100_000L)));
+                new DividendArrearsItem("arap_r1", "AR-001", 100_000L, "usr_principal")));
         DividendStatementRecord s = service.compute(
                 new DividendComputeRequest("arr2-c1", "2026-Q3", "official", null)).computed().get(0);
         assertThat(s.arrearsOffsetCent()).isEqualTo(100_000L);
         // 抵扣期间应收被清偿：只结算得 40000 < 冻结 100000。
-        when(payoutPort.applyDividendOffsetToReceivables(anyString(), anyLong(), anyString())).thenReturn(40_000L);
+        when(payoutPort.applyDividendOffsetToReceivables(anyString(), anyString(), anyLong(), anyString())).thenReturn(40_000L);
         service.submit(s.id(), new DividendActionRequest("arr2-s1", null));
         actorId[0] = "usr_approver";
         assertThatThrownBy(() -> service.approve(s.id(), new DividendActionRequest("arr2-a1", null)))
@@ -1168,7 +1173,7 @@ class DividendServiceTests {
     @Test
     void payoutFloorWithholdsReserveAndPaysNetOfReserve() {
         createApproved(slot(new DividendPlanRequest("floor-plan", MERCHANT, "usr_principal", null,
-                8000, 2000, "quarterly", List.of("bar"), null, null, null, null, null,
+                8000, "quarterly", List.of("bar"), null, null, null, null, null,
                 null, null, true, 1000, null))); // 开保护线，留 10%
         repository.barRevenue.put(MERCHANT, 1_000_000L); // 税后应得 160000
         DividendStatementRecord s = service.compute(
@@ -1194,7 +1199,7 @@ class DividendServiceTests {
     void lossCarryforwardAccumulatesWhilePausedThenResumes() {
         // 季度方案：只计酒吧收入、不扣成本、无费用；亏损结转开。
         DividendPlanRecord plan = createApproved(slot(new DividendPlanRequest("lcf-pause", MERCHANT,
-                "usr_principal", null, 8000, 2000, "quarterly", List.of("bar"), null, null,
+                "usr_principal", null, 8000, "quarterly", List.of("bar"), null, null,
                 null, null, null, true, null, null, null, null)));
         // 234-R1：开关不同的已批准版本按期直插——Q2 起关闭亏损结转、Q3 起再开（每期出单取期末日已生效的版本）。
         repository.plans.put("lcf-v2", version(plan, "lcf-v2", java.time.LocalDate.of(2026, 4, 1), "active", null, false));
@@ -1239,7 +1244,7 @@ class DividendServiceTests {
     @Test
     void allThreeDeductionsComposeOnOneStatement() {
         createApproved(slot(new DividendPlanRequest("combo-plan", MERCHANT, "usr_principal", null,
-                8000, 2000, "quarterly", List.of("bar"), null, null, null, null, null,
+                8000, "quarterly", List.of("bar"), null, null, null, null, null,
                 true, true, true, 1000, null)));
         // 先造 Q1 亏损 200000 并审批，形成期初累计。
         repository.barRefund.put(MERCHANT, 200_000L);
@@ -1253,7 +1258,7 @@ class DividendServiceTests {
         repository.barRefund.put(MERCHANT, 0L);
         repository.barRevenue.put(MERCHANT, 1_000_000L);
         when(payoutPort.listOutstandingReceivables(MERCHANT)).thenReturn(List.of(
-                new DividendArrearsItem("arap_r1", "AR-001", 28_000L)));
+                new DividendArrearsItem("arap_r1", "AR-001", 28_000L, "usr_principal")));
         DividendStatementRecord q2 = service.compute(
                 new DividendComputeRequest("combo-q2", "2026-Q2", "official", null)).computed().get(0);
         assertThat(q2.distributableCent()).isEqualTo(800_000L);
@@ -1272,7 +1277,7 @@ class DividendServiceTests {
     private DividendStatementRecord approvedReserveStatement(
             String merchant, String planKey, String releaseMode, String period, String key) {
         createApproved(slot(new DividendPlanRequest(planKey, merchant, "usr_principal_" + merchant, null,
-                8000, 2000, "quarterly", List.of("bar"), null, null, null, null, null,
+                8000, "quarterly", List.of("bar"), null, null, null, null, null,
                 null, null, true, 1000, null, releaseMode, null)));
         repository.barRevenue.put(merchant, 1_000_000L); // 税后应得 160000，留 10% = 16000
         DividendStatementRecord s = service.compute(
@@ -1325,7 +1330,7 @@ class DividendServiceTests {
     void releaseRequiresApprovedOrPaidWithReserve() {
         // draft 单不可释放。
         createApproved(slot(new DividendPlanRequest("rel-plan4", MERCHANT, "usr_principal", null,
-                8000, 2000, "quarterly", List.of("bar"), null, null, null, null, null,
+                8000, "quarterly", List.of("bar"), null, null, null, null, null,
                 null, null, true, 1000, null, "manual", null)));
         repository.barRevenue.put(MERCHANT, 1_000_000L);
         DividendStatementRecord draft = service.compute(
@@ -1335,7 +1340,7 @@ class DividendServiceTests {
                 .satisfies(e -> assertThat(((ApiException) e).code()).isEqualTo("DIVIDEND_STATE_INVALID"));
         // 无留存（未开保护线）的已审批单 → DIVIDEND_RESERVE_NONE。
         createApproved(slot(new DividendPlanRequest("rel-plan5", "merchant_nr", "usr_p", null,
-                8000, 2000, "quarterly", List.of("bar"), null, null, null, null, null,
+                8000, "quarterly", List.of("bar"), null, null, null, null, null,
                 null, null, false, null, null, "manual", null)));
         repository.barRevenue.put("merchant_nr", 1_000_000L);
         DividendStatementRecord noReserve = service.compute(
@@ -1389,7 +1394,7 @@ class DividendServiceTests {
     @Test
     void companyPrincipalWithholdsNoTaxAndPaysGross() {
         createApproved(slot(new DividendPlanRequest("co-key", MERCHANT, "usr_co", "公司主理人甲",
-                null, null, "quarterly", null, null, null, null, null, null,
+                null, "quarterly", null, null, null, null, null, null,
                 null, null, null, null, null, null, null, "company", null)));
         repository.barRevenue.put(MERCHANT, 1_000_000L);
         DividendStatementRecord s = computeOfficialQuarter();
@@ -1425,7 +1430,7 @@ class DividendServiceTests {
     @Test
     void customDeductionsReducePayoutWithSnapshotAndLines() {
         createApproved(slot(new DividendPlanRequest("cd-key", MERCHANT, "usr_principal", "主理人甲",
-                null, null, "quarterly", null, null, null, null, null, null,
+                null, "quarterly", null, null, null, null, null, null,
                 null, null, null, null, null, null, null, null,
                 List.of(
                         new DividendPlanRequest.CustomDeductionItem("固定管理费", "fixed", 30_000L, null, null, true),
@@ -1451,14 +1456,14 @@ class DividendServiceTests {
      * R-7（2026-07-28 裁决口径）：<b>自定义扣除项按比例算的原始额改四舍五入</b>（旧整除截断，
      * 扣除方恒少扣、差额白留主理人且不留痕）。本例取恰好 .5 的边界证明进位。
      *
-     * <p>净利 1000 分、平台 0%、税 0% → 税后应得 1000（隔离出扣除这一步单独验）；
+     * <p>净利 1000 分、平台 0%、公司股东主理人不代扣（第十八批 AX 段 271-R1 起税率全平台统一、不在方案上）→ 税后应得 1000（隔离出扣除这一步单独验）；
      * 比例 12.55% × 净利 1000 = <b>125.5 分</b> → 旧整除截断 125，新四舍五入 <b>126</b>；实发 874（旧 875）。
      */
     @Test
     void customDeductionRatioRoundsHalfUpAtExactHalfBoundary() {
         createApproved(slot(new DividendPlanRequest("cd-halfup", MERCHANT, "usr_principal", null,
-                0, 0, "quarterly", null, null, null, null, null, null,
-                null, null, null, null, null, null, null, null,
+                0, "quarterly", null, null, null, null, null, null,
+                null, null, null, null, null, null, null, "company",
                 List.of(new DividendPlanRequest.CustomDeductionItem(
                         "比例扣除", "ratio", null, 1255, "net_profit", true)))));
         repository.barRevenue.put(MERCHANT, 1000L);
@@ -1476,8 +1481,8 @@ class DividendServiceTests {
     @Test
     void customDeductionRatioOnRevenueBasisAlsoRoundsHalfUp() {
         createApproved(slot(new DividendPlanRequest("cd-halfup-rev", MERCHANT, "usr_principal", null,
-                0, 0, "quarterly", null, null, null, null, null, null,
-                null, null, null, null, null, null, null, null,
+                0, "quarterly", null, null, null, null, null, null,
+                null, null, null, null, null, null, null, "company",
                 List.of(new DividendPlanRequest.CustomDeductionItem(
                         "营收比例扣除", "ratio", null, 1255, "revenue", true)))));
         repository.barRevenue.put(MERCHANT, 3000L);
@@ -1498,8 +1503,8 @@ class DividendServiceTests {
     @Test
     void customDeductionRatioUnchangedWhenDivisionIsExact() {
         createApproved(slot(new DividendPlanRequest("cd-exact", MERCHANT, "usr_principal", null,
-                0, 0, "quarterly", null, null, null, null, null, null,
-                null, null, null, null, null, null, null, null,
+                0, "quarterly", null, null, null, null, null, null,
+                null, null, null, null, null, null, null, "company",
                 List.of(new DividendPlanRequest.CustomDeductionItem(
                         "整除比例", "ratio", null, 1000, "net_profit", true)))));
         repository.barRevenue.put(MERCHANT, 1000L);
@@ -1521,7 +1526,7 @@ class DividendServiceTests {
     @Test
     void customDeductionHalfUpKeepsFullChainConservation() {
         createApproved(slot(new DividendPlanRequest("cd-conserve", MERCHANT, "usr_principal", null,
-                8000, 1255, "quarterly", null, null, null, null, null, null,
+                8000, "quarterly", null, null, null, null, null, null,
                 null, null, true, 1255, 0L, null, null, null,
                 List.of(
                         new DividendPlanRequest.CustomDeductionItem("比例扣除", "ratio", null, 1255, "net_profit", true),
@@ -1549,7 +1554,7 @@ class DividendServiceTests {
     @Test
     void customDeductionsClampToAvailableAndNeverNegativePayout() {
         createApproved(slot(new DividendPlanRequest("cd-clamp", MERCHANT, "usr_principal", null,
-                null, null, "quarterly", null, null, null, null, null, null,
+                null, "quarterly", null, null, null, null, null, null,
                 null, null, null, null, null, null, null, null,
                 List.of(new DividendPlanRequest.CustomDeductionItem(
                         "超额扣除", "fixed", 999_999_999L, null, null, true)))));
@@ -1564,12 +1569,12 @@ class DividendServiceTests {
     @Test
     void updatePlanReplacesCustomDeductionsButNullPreserves() {
         DividendPlanRecord plan = createApproved(slot(new DividendPlanRequest("u-cd", MERCHANT, "usr_principal", null,
-                null, null, null, null, null, null, null, null, null,
+                null, null, null, null, null, null, null, null,
                 null, null, null, null, null, null, null, null,
                 List.of(new DividendPlanRequest.CustomDeductionItem("原扣除", "fixed", 10_000L, null, null, true)))));
         assertThat(plan.customDeductions()).hasSize(1);
         DividendPlanRecord copied = service.updatePlan(plan.id(), slot(new DividendPlanRequest("u-cd-2", null,
-                null, null, 7000, null, null, null, null, null, null, null, "只改比例",
+                null, null, 7000, null, null, null, null, null, null, "只改比例",
                 null, null, null, null, null, null, null, null, null)));
         assertThat(copied.id()).isNotEqualTo(plan.id());
         assertThat(copied.customDeductions()).singleElement().satisfies(item -> {
@@ -1578,7 +1583,7 @@ class DividendServiceTests {
             assertThat(item.id()).isNotEqualTo(plan.customDeductions().get(0).id());
         });
         DividendPlanRecord cleared = service.updatePlan(copied.id(), slot(new DividendPlanRequest("u-cd-3", null,
-                null, null, null, null, null, null, null, null, daysAhead(2), null, null,
+                null, null, null, null, null, null, null, daysAhead(2), null, null,
                 null, null, null, null, null, null, null, null, List.of())));
         assertThat(cleared.customDeductions()).isEmpty();
         assertThat(repository.findPlanById(plan.id()).orElseThrow().customDeductions()).singleElement()
@@ -1589,7 +1594,7 @@ class DividendServiceTests {
     @Test
     void customDeductionValidatesSourceType() {
         assertThatThrownBy(() -> service.createPlan(slot(new DividendPlanRequest("bad-src", MERCHANT, "usr_p", null,
-                null, null, null, null, null, null, null, null, null,
+                null, null, null, null, null, null, null, null,
                 null, null, null, null, null, null, null, null,
                 List.of(new DividendPlanRequest.CustomDeductionItem("坏来源", "percent", null, 100, null, true))))))
                 .isInstanceOf(ApiException.class)

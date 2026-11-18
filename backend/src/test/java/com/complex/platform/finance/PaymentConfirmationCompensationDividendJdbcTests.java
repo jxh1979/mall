@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.tuple;
@@ -309,7 +309,7 @@ class PaymentConfirmationCompensationDividendJdbcTests {
         if (dividends.findPlanById(plan).isEmpty()) {
             Instant now = Instant.now();
             dividends.insertPlan(new DividendRecords.DividendPlanRecord(plan, merchant, principal, "主理人甲",
-                    8000, 2000, "monthly", List.of("bar", "ticket"), true, List.of("labor"),
+                    8000, "monthly", List.of("bar", "ticket"), true, List.of("labor"),
                     java.time.LocalDate.of(2000, 1, 1), "active", null, "usr_pcc_div_" + s, now, now, false, false, false, 0, 0L));
             jdbc.update("UPDATE dividend_plans SET payout_pay_slot = 1 WHERE id = ?", plan);
         }

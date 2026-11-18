@@ -1,9 +1,10 @@
 package com.complex.platform.dividend;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static com.complex.platform.support.DailyCloseFixture.markRangeFinal;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.containsString;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -122,6 +123,7 @@ class DividendPlanVersionJdbcIntegrationTests {
         mockMvc.perform(post(PLANS).with(finance).contentType(MediaType.APPLICATION_JSON)
                         .content("{\"idempotency_key\":\"dpv-2f-" + s + "\",\"merchant_id\":\"" + bar + "\",\"principal_user_id\":\"usr_dpv_principal\","
                                 + "\"period_type\":\"monthly\",\"period_min_months\":1,\"period_max_months\":12,\"payout_pay_slot\":1,"
+                                + "\"platform_share_min_bps\":5000,\"platform_share_max_bps\":9000,"
                                 + "\"effective_from\":\"" + tomorrow() + "\",\"reason\":\"重复新建\"}"))
                 .andExpect(status().isConflict()).andExpect(jsonPath("$.detail_code").value("DIVIDEND_PLAN_EXISTS"));
         assertThat(versions()).isEqualTo(2);
@@ -203,6 +205,24 @@ class DividendPlanVersionJdbcIntegrationTests {
                 .andExpect(jsonPath("$.data.computed[0].plan_id").value(v2));
     }
 
+    /**
+     * ⑦ 第十八批 AX 段第 332 条 332-R1（BSM:1777「分红按所配周期一期一分配」；BSM:1775「修改不能追溯已经确认或发放的分红」）：改周期类型的新版本，生效起始日
+     * 须为新旧两种周期共同的期初——V1 月度改半年、生效日取季初而非半年初 400；周期不变只改平台比例、生效日取下月 15 日 200；月度改半年、生效日取半年初 200。
+     * 三次都由最高权限本人提交（直接落已批准版本，不留待审版本）。修复前生效日只要求晚于当前营业日：第一次即 200，断言红。
+     */
+    @Test
+    void periodTypeChangeMustStartOnCommonPeriodStart() throws Exception {
+        submit(master(), v1, periodBody("dpv-7a-" + s, "semiannual", firstDayOnOrAfter(tomorrow(), 4, 10)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.detail_code").value("VALIDATION_FAILED"))
+                .andExpect(jsonPath("$.message").value(containsString("共同的期初")));
+        submit(master(), v1, body("dpv-7b-" + s, 7000, today().plusMonths(1).withDayOfMonth(15), "主理人增资，平台比例调为七成"))
+                .andExpect(status().isOk());
+        submit(master(), v1, periodBody("dpv-7c-" + s, "semiannual", firstDayOnOrAfter(tomorrow(), 1, 7)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.period_type").value("semiannual"));
+    }
+
     /** ⑧ 分红方案调整进审批时限清单，按涉钱出厂 1 个工作日（PGM:529）。修复前清单无此类型：断言红。 */
     @Test
     void planChangeIsMoneyApprovalTypeInDeadlineList() throws Exception {
@@ -215,11 +235,12 @@ class DividendPlanVersionJdbcIntegrationTests {
 
     // ---------- helpers ----------
 
-    /** 已批准版本夹具（月度、上下限月～年、只计酒吧收入、扣销货成本与全部费用、第一个付账日）。 */
+    /** 已批准版本夹具（月度、上下限月～年、平台比例上下限 50%～90%、只计酒吧收入、扣销货成本与全部费用、第一个付账日）。 */
     private void version(String id, String effectiveFrom, String status, int platformShareBps) {
         jdbc.update("INSERT INTO dividend_plans (id, merchant_id, principal_user_id, platform_share_bps, period_type, revenue_domains,"
-                + " include_inventory_cost, status, payout_pay_slot, effective_from, reason, period_min_months, period_max_months)"
-                + " VALUES (?, ?, 'usr_dpv_principal', ?, 'monthly', 'bar', TRUE, ?, 1, ?::date, '工商登记持股比例', 1, 12)",
+                + " include_inventory_cost, status, payout_pay_slot, effective_from, reason, period_min_months, period_max_months,"
+                + " platform_share_min_bps, platform_share_max_bps)"
+                + " VALUES (?, ?, 'usr_dpv_principal', ?, 'monthly', 'bar', TRUE, ?, 1, ?::date, '工商登记持股比例', 1, 12, 5000, 9000)",
                 id, bar, platformShareBps, status, effectiveFrom);
     }
 
@@ -235,6 +256,24 @@ class DividendPlanVersionJdbcIntegrationTests {
     private static String body(String key, int platformShareBps, LocalDate effectiveFrom, String reason) {
         return "{\"idempotency_key\":\"" + key + "\",\"platform_share_bps\":" + platformShareBps + ",\"payout_pay_slot\":1,"
                 + "\"status\":\"active\",\"effective_from\":\"" + effectiveFrom + "\",\"reason\":\"" + reason + "\"}";
+    }
+
+    /** 332-R1：分红页方案弹窗只改分红周期的提交（蛇形键）。 */
+    private static String periodBody(String key, String periodType, LocalDate effectiveFrom) {
+        return "{\"idempotency_key\":\"" + key + "\",\"period_type\":\"" + periodType + "\",\"payout_pay_slot\":1,"
+                + "\"status\":\"active\",\"effective_from\":\"" + effectiveFrom + "\",\"reason\":\"改为按半年分红\"}";
+    }
+
+    /** from 当天或之后第一个落在所给月份的 1 日。 */
+    private static LocalDate firstDayOnOrAfter(LocalDate from, int... months) {
+        LocalDate day = from.getDayOfMonth() == 1 ? from : from.withDayOfMonth(1).plusMonths(1);
+        while (true) {
+            int month = day.getMonthValue();
+            if (java.util.stream.IntStream.of(months).anyMatch(m -> m == month)) {
+                return day;
+            }
+            day = day.plusMonths(1);
+        }
     }
 
     private ResultActions submit(RequestPostProcessor who, String planId, String body) throws Exception {

@@ -241,9 +241,9 @@ class MerchantExpenseJdbcIntegrationTests {
         Instant now = Instant.parse("2026-07-18T00:00:00Z");
         // 先落一张生效方案（statements.plan_id FK），再落一张 approved 全零单（满足五条恒等 CHECK）覆盖 2026-07。
         jdbcTemplate.update("""
-                INSERT INTO dividend_plans (id, merchant_id, principal_user_id, platform_share_bps, tax_rate_bps,
+                INSERT INTO dividend_plans (id, merchant_id, principal_user_id, platform_share_bps,
                     period_type, revenue_domains, include_inventory_cost, expense_types, status, payout_pay_slot, effective_from)
-                VALUES ('divp_lock_jdbc', 'merchant_locked', 'usr_p', 8000, 2000, 'quarterly',
+                VALUES ('divp_lock_jdbc', 'merchant_locked', 'usr_p', 8000, 'quarterly',
                     'bar,ticket', TRUE, 'labor', 'active', 1, DATE '2000-01-01')
                 ON CONFLICT (id) DO NOTHING
                 """);

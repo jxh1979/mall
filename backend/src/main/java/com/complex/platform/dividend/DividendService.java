@@ -1,5 +1,5 @@
 package com.complex.platform.dividend;
-// 文件版本：V0.13
+// 文件版本：V0.14
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.BusinessDayResolver;
@@ -58,7 +58,7 @@ import static com.complex.platform.common.Strings.requireText;
  * − 期间销货成本（V296 sumOutboundCost 同谓词，可配开关；经理已确认坏账的酒吧订单出库成本另列冲回不计，第十八批裁决 38）
  * − 期间费用（V297 费用归集台账净额，计入类别可配）
  * = 净利润 → 本次分配 = min(经营口径可分配额, 财务登记的依法可分配金额)（FS-014，正式单未登记不得提交/审批）
- * → 按持股比例劈分（平台、各其他股东与主理人各自四舍五入，尾差单列） → 主理人应得 → 代扣股息红利个税（税率可配，默认 20%，
+ * → 先偿出单当日已到期未还的借款本息（第十八批 AX 段 273-R2，PGM:436；有逾期未还借款不得提交/审批） → 按持股比例劈分（平台、各其他股东与主理人各自四舍五入，尾差单列） → 主理人应得 → 代扣股息红利个税（全平台统一税率版本，出厂 20%，第十八批 AX 段 271-R1；
  * 平台分成/风险准备金四舍五入、代扣个税整除截断对齐税局——2026-07-28 用户拍板） → 净发放额。
  *
  * <p>时窗：BusinessDayResolver 方案商户的营业日窗（名下唯一酒吧按该酒吧，否则按其所属综合体；成本汇总同窗）——三来源同窗才能恒等；
@@ -75,7 +75,7 @@ import static com.complex.platform.common.Strings.requireText;
  * 每期出单取该期期末日已生效的版本，计算单 plan_id 固化所用版本。
  *
  * <p>234-R2 其他股东（BSM:1775「娱乐平台公司、主理人和其他股东按每家酒吧工商登记的真实持股比例分配」）：名单挂在方案版本上；平台、各其他股东与主理人
- * 各自四舍五入、尾差单列由该酒吧公司承担（BSM:1757）；个人股东按方案税率代扣、公司股东不代扣（BSM:1776）；审批通过后每位其他股东另挂一笔分红应付，
+ * 各自四舍五入、尾差单列由该酒吧公司承担（BSM:1757）；个人股东按全平台统一代扣税率代扣、公司股东不代扣（BSM:1776）；审批通过后每位其他股东另挂一笔分红应付，
  * 全部付清才能标记发放（BSM:1787、BSM:1803）。
  */
 @Service
@@ -111,10 +111,11 @@ public class DividendService {
     /** 234-R1 审批摘要逐项（改前 → 改后）。 */
     private static final List<java.util.Map.Entry<String, java.util.function.Function<DividendPlanRecord, String>>> SUMMARY_FIELDS = List.of(
             java.util.Map.entry("平台比例", plan -> percent(plan.platformShareBps())),
+            java.util.Map.entry("平台比例上下限", plan -> plan.platformShareMinBps() == null ? "未配"
+                    : percent(plan.platformShareMinBps()) + "～" + percent(plan.platformShareMaxBps())),
             java.util.Map.entry("其他股东", DividendService::shareholdersText),
             java.util.Map.entry("主理人账户", DividendPlanRecord::principalUserId),
             java.util.Map.entry("主理人类型", plan -> "company".equals(plan.principalType()) ? "公司股东" : "个人股东"),
-            java.util.Map.entry("代扣税率", plan -> percent(plan.taxRateBps())),
             java.util.Map.entry("分红周期", plan -> PERIOD_TYPE_LABELS.get(plan.periodType()) + "（上下限 "
                     + PERIOD_BOUND_LABELS.get(plan.periodMinMonths()) + "～" + PERIOD_BOUND_LABELS.get(plan.periodMaxMonths()) + "）"),
             java.util.Map.entry("发放付账日", plan -> "第 " + plan.payoutPaySlot() + " 个付账日"),
@@ -156,7 +157,6 @@ public class DividendService {
 
     // 默认口径（仅新建方案时的默认值，全部可配）。
     private static final int DEFAULT_PLATFORM_SHARE_BPS = 8000;
-    private static final int DEFAULT_TAX_RATE_BPS = 2000;
     /** BSM L1777「分红按所配周期一期一分配，默认周期为半年」。 */
     private static final String DEFAULT_PERIOD_TYPE = "semiannual";
     private static final List<String> DEFAULT_REVENUE_DOMAINS = List.of("bar", "ticket");
@@ -170,6 +170,8 @@ public class DividendService {
     private final AuditedOperationExecutor operations;
     private final FinanceService payoutPort;
     private final InternalPayDayService payDays;
+    private final DividendTaxRateService taxRates;
+    private final DividendLoanService loans;
 
     // 第十八批第 13 条（BSM 第 1597 行「分红出单与发放」，第 1598 行不可关闭）：业务提交后通知商户。@Lazy 防初始化环；为 null（单测手工构造）＝不发。
     @org.springframework.beans.factory.annotation.Autowired(required = false)
@@ -208,7 +210,9 @@ public class DividendService {
             AuthorizationService authorizationService,
             AuditedOperationExecutor operations,
             FinanceService payoutPort,
-            InternalPayDayService payDays) {
+            InternalPayDayService payDays,
+            DividendTaxRateService taxRates,
+            DividendLoanService loans) {
         this.repository = repository;
         this.inventoryRepository = inventoryRepository;
         this.businessDayResolver = businessDayResolver;
@@ -216,6 +220,8 @@ public class DividendService {
         this.operations = operations;
         this.payoutPort = payoutPort;
         this.payDays = payDays;
+        this.taxRates = taxRates;
+        this.loans = loans;
     }
 
     // ── 方案配置 ──────────────────────────────────────────────
@@ -268,7 +274,7 @@ public class DividendService {
                 java.util.Map.of());
     }
 
-    /** 调整方案（比例/税率/周期/主理人/扣除项/停用）：在已批准版本上提交新版本；历史分红单按单内所记版本追溯。 */
+    /** 调整方案（比例/周期/主理人/扣除项/停用）：在已批准版本上提交新版本；历史分红单按单内所记版本追溯。 */
     @Transactional
     public DividendPlanRecord updatePlan(String planId, DividendPlanRequest request) {
         authorizationService.requirePermission(MANAGE_PERM);
@@ -306,13 +312,12 @@ public class DividendService {
         requireFullDeductions(request);
         String merchantId = base != null ? base.merchantId() : requireText(request.merchantId(), "merchant_id");
         DividendPlanRecord prev = base != null ? base : new DividendPlanRecord(null, merchantId, null, null,
-                DEFAULT_PLATFORM_SHARE_BPS, DEFAULT_TAX_RATE_BPS, DEFAULT_PERIOD_TYPE, DEFAULT_REVENUE_DOMAINS, true,
+                DEFAULT_PLATFORM_SHARE_BPS, DEFAULT_PERIOD_TYPE, DEFAULT_REVENUE_DOMAINS, true,
                 DEFAULT_EXPENSE_TYPES, null, "active", null, null, null, null, false, false, false, 0, 0L,
                 DEFAULT_RESERVE_RELEASE_MODE, 1, DEFAULT_PRINCIPAL_TYPE, List.of(), null);
         String id = "divp_" + stableToken(request.idempotencyKey());
         String principalUserId = requireText(orDefault(request.principalUserId(), prev.principalUserId()), "principal_user_id");
         int platformShareBps = requireBps(orDefault(request.platformShareBps(), prev.platformShareBps()), "platform_share_bps");
-        int taxRateBps = requireBps(orDefault(request.taxRateBps(), prev.taxRateBps()), "tax_rate_bps");
         String periodType = requireEnum(orDefault(request.periodType(), prev.periodType()), PERIOD_TYPES, "period_type");
         List<String> revenueDomains = requireTokens(orDefault(request.revenueDomains(), prev.revenueDomains()), REVENUE_DOMAINS,
                 "revenue_domains");
@@ -330,6 +335,15 @@ public class DividendService {
         Integer periodMinMonths = orDefault(request.periodMinMonths(), prev.periodMinMonths());
         Integer periodMaxMonths = orDefault(request.periodMaxMonths(), prev.periodMaxMonths());
         requirePeriodBounds(periodType, periodMinMonths, periodMaxMonths);
+        // 第十八批 AX 段第 272 条 272-R1（BSM:1775「新酒吧可预填 80%／20%（业务参数，按经营主体可配，须同时配置上下限）建议值」；BSM:521「超出该区间的配置
+        // 一律拒绝生效，未填写上下限的参数不得上线」）：平台（参股方）比例上下限随方案版本一起审批，不填沿用改前版本（新建必填），下限不大于上限，平台比例须在
+        // 其间；不预置出厂数值（DEC-R3-2026-08-04-30）。
+        Integer shareMinBps = orDefault(request.platformShareMinBps(), prev.platformShareMinBps());
+        Integer shareMaxBps = orDefault(request.platformShareMaxBps(), prev.platformShareMaxBps());
+        if (shareMinBps == null || shareMaxBps == null || shareMinBps < 0 || shareMinBps > shareMaxBps
+                || shareMaxBps > DividendMath.BPS_DENOMINATOR || platformShareBps < shareMinBps || platformShareBps > shareMaxBps) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "平台（参股方）比例须同时配置上下限，且比例须在上下限之内");
+        }
         String status = requireEnum(orDefault(request.status(), prev.status()), PLAN_STATUSES, "status");
         // V309 自定义扣除项：请求给了按请求落；没给照改前版本逐项复制到新版本名下（主键重新取）。
         List<DividendRecords.DividendCustomDeductionRecord> deductions = request.customDeductions() != null
@@ -368,12 +382,24 @@ public class DividendService {
         if (versions.stream().anyMatch(plan -> APPROVED_PLAN_STATUSES.contains(plan.status()) && effectiveFrom.equals(plan.effectiveFrom()))) {
             throw versionConflict();
         }
+        // 第十八批 AX 段第 332 条 332-R1（BSM:1777「分红按所配周期一期一分配」；BSM:1775「修改不能追溯已经确认或发放的分红」）：改周期类型时生效起始日须为
+        // 新旧两种周期共同的期初（1、3、6、12 个月逐级整除，即较长一种的期初），以免已按旧周期分过的月份被新周期再分、或新旧之间留空；被接替的是新生效日
+        // 前一日已生效的版本，周期不变不限。
+        Optional<DividendPlanRecord> prior = repository.findPlanInForce(merchantId, effectiveFrom.minusDays(1));
+        if (prior.isPresent() && !prior.get().periodType().equals(periodType)) {
+            String longer = DividendPeriod.MONTHS_PER_PERIOD.get(prior.get().periodType()) > DividendPeriod.MONTHS_PER_PERIOD.get(periodType)
+                    ? prior.get().periodType() : periodType;
+            if (!DividendPeriod.parse(DividendPeriod.labelOf(effectiveFrom, longer)).start().equals(effectiveFrom)) {
+                throw ApiException.badRequest("VALIDATION_FAILED", "改分红周期时，生效起始日须为新旧两种周期共同的期初（如季度与半年之间为 1 月 1 日或"
+                        + " 7 月 1 日，涉及年度为 1 月 1 日），以免已分配期间重复分配或留空");
+            }
+        }
 
         boolean master = authorizationService.isMasterAuthority(authorizationService.currentActor());
         String operator = currentOperator();
         DividendPlanRecord plan = new DividendPlanRecord(id, merchantId, principalUserId,
                 request.principalName() == null ? prev.principalName() : blankToNull(request.principalName()),
-                platformShareBps, taxRateBps, periodType, revenueDomains,
+                platformShareBps, periodType, revenueDomains,
                 request.includeInventoryCost() == null ? prev.includeInventoryCost() : request.includeInventoryCost(),
                 expenseTypes, effectiveFrom, master ? status : "pending_review",
                 request.note() == null ? prev.note() : blankToNull(request.note()), operator, now, now,
@@ -382,7 +408,8 @@ public class DividendService {
                 orDefault(request.payoutFloorEnabled(), prev.payoutFloorEnabled()),
                 payoutFloorBps, payoutFloorFixedCent, reserveReleaseMode, reserveReleaseDelayPeriods, principalType,
                 deductions, payoutPaySlot, "ended".equals(status), reason, null,
-                master ? operator : null, master ? now : null, null, periodMinMonths, periodMaxMonths, shareholders);
+                master ? operator : null, master ? now : null, null, periodMinMonths, periodMaxMonths, shareholders,
+                shareMinBps, shareMaxBps);
         if (!repository.insertPlan(plan)) {
             throw base == null ? ApiException.conflict("DIVIDEND_PLAN_EXISTS", "该商户已有分红方案，请在现有方案上提交新版本")
                     : pendingExists();
@@ -709,18 +736,21 @@ public class DividendService {
      * 手动出预览与月末自动生成同闸。
      * 第十八批 AQ 段第 243 条 243-R1（ENUM:190；BSM:1787「酒吧关闭须完成关停结算，依法核清本次分红」）：有关停结算登记的酒吧，正式单只查期初至
      * min（期末日，关店最后营业日），停用、存档后照查；关店后的营业日不计。
+     * 第十八批 AX 段第 333 条 333-R1（ENUM:190；BSM:1777「数据未全部标记最终之前不得生成预览」）：酒吧一律按店查，不看在营与存档——正式单查期初至
+     * min（期末日，关店最后营业日），预览只查该日（未登记关停结算即期末日）；非酒吧商户照旧按所属综合体查。
      */
     private String nonFinalReason(String kind, DividendPeriod period, DividendPlanRecord plan, LocalDate closedDay) {
         boolean preview = "preview".equals(kind);
-        List<String> lines = !preview && closedDay != null
-                ? payoutPort.nonFinalDaysOfBar(plan.merchantId(), period.start(), planDate(period, closedDay),
+        LocalDate upTo = planDate(period, closedDay);
+        List<String> lines = businessDayResolver.barOfMerchant(plan.merchantId()) != null
+                ? payoutPort.nonFinalDaysOfBar(plan.merchantId(), preview ? upTo : period.start(), upTo,
                         FinanceService.FINAL_MARK_CATEGORIES.keySet())
                 : payoutPort.nonFinalDays(plan.merchantId(), null, preview ? period.end() : period.start(), period.end(),
                         FinanceService.FINAL_MARK_CATEGORIES.keySet());
         if (lines.isEmpty()) {
             return null;
         }
-        return (preview ? "该月最后一个营业日（" + period.end() + "）的五类数据尚未全部标记为最终，不得生成预览："
+        return (preview ? "该月最后一个营业日（" + upTo + "）的五类数据尚未全部标记为最终，不得生成预览："
                 : "以下营业日数据尚未标记为最终，不能出正式分红单：") + FinanceService.describeNonFinalDays(lines);
     }
 
@@ -821,14 +851,22 @@ public class DividendService {
         // V303 扣除项三开关（默认全关时逐分等于 V299 现状）。
         // 亏损结转累计恒结转：无论本期开关都读往期累计（关闭期不扣但不清零，用户 2026-07-19 拍板）。
         long carryIn = repository.priorLossCarryforwardCent(merchantId, period.start());
+        // 330-R1（BSM:1781「主理人这期该得的钱，按有效协议先抵其对相应法律主体尚未结清的欠款」）：只取主理人本人欠本酒吧公司的未清应收
+        // （本酒吧台账里往来方为方案主理人账户的项），酒吧公司自己的租金等应收、客人挂账应收不抵。
         List<FinanceService.DividendArrearsItem> arrearsItems = plan.arrearsOffsetEnabled()
-                ? payoutPort.listOutstandingReceivables(merchantId) : List.of();
+                ? payoutPort.listOutstandingReceivables(merchantId).stream()
+                        .filter(item -> plan.principalUserId().equals(item.counterpartyId())).toList()
+                : List.of();
         long arrearsOutstanding = arrearsItems.stream()
                 .mapToLong(FinanceService.DividendArrearsItem::unpaidCent).sum();
 
-        // V308 主理人类型分支：公司股东不代扣个税（生效税率强制 0，全额发放）；个人股东按方案税率代扣。
+        // V308 主理人类型分支：公司股东不代扣个税（生效税率强制 0，全额发放）；个人股东代扣。
+        // 第十八批 AX 段第 271 条 271-R1（BSM:1776「全平台统一可配」「按发放时有效」；BSM:521「每一笔单据在生成时就把所用配置版本固化在单上」）：
+        // 税率取出单当日营业日已生效的全平台统一版本，主理人与其他个人股东同用，版本号固化在单上。
         boolean isCompany = "company".equals(plan.principalType());
-        int effectiveTaxBps = isCompany ? 0 : plan.taxRateBps();
+        LocalDate issueDay = businessDayResolver.merchantBusinessDate(null, merchantId, now);
+        DividendTaxRateService.Version taxRate = taxRates.inForce(issueDay);
+        int effectiveTaxBps = isCompany ? 0 : taxRate.rateBps();
 
         // V309 自定义扣除项：取启用项（仓储已按 sort_order 排序），逐项解析原始扣除额（fixed 固定额 / ratio 比例）。
         List<DividendRecords.DividendCustomDeductionRecord> customItems = plan.customDeductions().stream()
@@ -843,7 +881,7 @@ public class DividendService {
                 ? repository.findLegalConfirmation(merchantId, period.label()).orElse(null) : null;
         Long legalCap = legal == null ? null : legal.legalDistributableCent();
 
-        // 234-R2（BSM:1775、BSM:1776）：其他股东按名单比例各自四舍五入；个人股东按方案税率代扣（不随主理人类型变），公司股东不代扣。
+        // 234-R2（BSM:1775、BSM:1776）：其他股东按名单比例各自四舍五入；个人股东按同一全平台统一税率代扣（不随主理人类型变），公司股东不代扣。
         List<DividendRecords.DividendShareholderRecord> shareholders = plan.otherShareholders();
         int[] otherBps = shareholders.stream().mapToInt(DividendRecords.DividendShareholderRecord::shareBps).toArray();
         boolean[] otherCompany = new boolean[shareholders.size()];
@@ -851,13 +889,18 @@ public class DividendService {
             otherCompany[i] = "company".equals(shareholders.get(i).shareholderType());
         }
 
+        // 第十八批 AX 段第 273 条 273-R2（BSM:1785「当期可分配利润必须先偿还全部到期借款本息，剩余部分才可用于分红」；PGM:436；BSM:1778「关着时仍须满足
+        // 法定可分配额与借款清偿前置，再按比例分配」）：出单当日营业日已到期未还的借款本息（按还款顺序、到期日）在依法可分配上限之后、劈分之前先偿；预览同一算式。
+        List<DividendLoanService.Loan> dueLoans = loans.dueUnpaid(merchantId, issueDay);
+        long loanDue = dueLoans.stream().mapToLong(DividendLoanService.Loan::outstandingCent).sum();
+
         DividendMath.Distribution dist = DividendMath.compute(
                 netProfit, plan.platformShareBps(), effectiveTaxBps,
                 plan.lossCarryforwardEnabled(), carryIn,
                 plan.arrearsOffsetEnabled(), arrearsOutstanding,
                 customRaws,
                 plan.payoutFloorEnabled(), plan.payoutFloorBps(), plan.payoutFloorFixedCent(), legalCap,
-                otherBps, otherCompany, plan.taxRateBps());
+                otherBps, otherCompany, taxRate.rateBps(), loanDue);
 
         addLine(lines, statementId, merchantId, seq, "net_profit", netProfit,
                 "净利润 = 收入 − 销货成本 − 费用 − 税费（亏损期可分配额为 0，不倒扣主理人）", now);
@@ -872,11 +915,24 @@ public class DividendService {
         }
         if (legal != null) {
             long operating = Math.max(netProfit - dist.carryAppliedCent(), 0L);
+            // 二者较小即先偿借款之前的额（BSM:1785 先取依法上限、再先偿到期借款本息，273-R2 起 distributableCent 为偿后余额，借款清偿由下行单列）。
             addLine(lines, statementId, merchantId, seq, "legal_cap", legal.legalDistributableCent(),
                     "依法可分配金额（财务核定）：财税核算依据「" + legal.taxAccountingRef() + "」，分配决议「"
                             + legal.resolutionRef() + "」" + (legal.note() == null ? "" : "，说明：" + legal.note())
-                            + "；经营口径可分配额 " + operating + " 分，本次分配取二者较小 " + dist.distributableCent()
+                            + "；经营口径可分配额 " + operating + " 分，本次分配取二者较小 " + (dist.distributableCent() + dist.loanRepaymentCent())
                             + " 分（已在核定额中扣除的事项不重复扣除；被压下部分留在公司，以后不单独补分）", now);
+        }
+        // 273-R2：逐笔留痕（先按还款顺序偿，到可分配额为止）；还款本身走该借款应付的付款确认与登记付款。
+        long loanLeft = dist.loanRepaymentCent();
+        for (DividendLoanService.Loan loan : dueLoans) {
+            long applied = Math.min(loanLeft, loan.outstandingCent());
+            if (applied <= 0) {
+                break;
+            }
+            loanLeft -= applied;
+            addLine(lines, statementId, merchantId, seq, "loan_repayment", -applied,
+                    "借款清偿（分红前置）：出借方 " + loan.lenderName() + "，到期 " + loan.dueDate() + "，未还本息 " + yuan(loan.outstandingCent())
+                            + "，本期先偿 " + yuan(applied) + "（台账 " + loan.itemNo() + "）", now);
         }
         addLine(lines, statementId, merchantId, seq, "platform_share", dist.platformShareCent(),
                 "平台分成（" + plan.platformShareBps() + " 万分比，四舍五入到分）", now);
@@ -890,7 +946,7 @@ public class DividendService {
             addLine(lines, statementId, merchantId, seq, "shareholder_tax_withheld", -tax,
                     otherCompany[i]
                             ? "公司股东不代扣个税，按约定全额发放（代扣 0 分）"
-                            : "代扣股息红利个税（个人股东，税率 " + plan.taxRateBps() + " 万分比，整除截断·对齐税局申报口径）", now);
+                            : "代扣股息红利个税（个人股东，税率 " + taxRate.rateBps() + " 万分比，整除截断·对齐税局申报口径）", now);
             addLine(lines, statementId, merchantId, seq, "shareholder_payout", gross - tax,
                     "其他股东「" + holder.shareholderName() + "」实发 = 应得 − 代扣；审批通过后按此额挂应付", now);
         }
@@ -918,7 +974,8 @@ public class DividendService {
                 long applied = Math.min(remaining, item.unpaidCent());
                 remaining -= applied;
                 addLine(lines, statementId, merchantId, seq, "arrears_offset", -applied,
-                        "欠款抵扣：应收 " + item.itemNo() + "（未清 " + item.unpaidCent() + " 分）抵扣 " + applied + " 分", now);
+                        "欠款抵扣：主理人本人欠本酒吧公司（债务人主理人账户 " + plan.principalUserId() + "，债权人本酒吧公司）应收 "
+                                + item.itemNo() + "（未清 " + item.unpaidCent() + " 分）抵扣 " + applied + " 分", now);
             }
         }
         // V309 自定义扣除项逐项留痕：与 DividendMath 同源 clampDeductions，对 (税后应得 − 欠款抵扣) 余额封顶扣减。
@@ -955,7 +1012,8 @@ public class DividendService {
                 plan.lossCarryforwardEnabled(), dist.carryInCent(), dist.carryAppliedCent(),
                 dist.carryAfterCent(), dist.arrearsOffsetCent(), dist.reserveWithheldCent(), dist.payoutCent(),
                 plan.principalType(), dist.customDeductionCent(), legalCap, periodTax,
-                dist.otherGrossCents().stream().mapToLong(Long::longValue).sum(), dist.roundingResidualCent());
+                dist.otherGrossCents().stream().mapToLong(Long::longValue).sum(), dist.roundingResidualCent(), taxRate.id(),
+                dist.loanRepaymentCent());
         repository.insertStatement(statement);
         for (DividendStatementLineRecord line : lines) {
             repository.insertLine(line);
@@ -1063,6 +1121,8 @@ public class DividendService {
                 (statement, operator, now) -> {
                     requireStatus(statement, "draft", "只有草稿单可以提交审阅");
                     requireLegalAmount(statement);
+                    // 273-R2（PGM:436「存在逾期未还借款的一律不得分红」）：该酒吧有逾期未还借款即 409。
+                    loans.requireNoOverdue(statement.merchantId(), businessDayResolver.merchantBusinessDate(null, statement.merchantId(), now));
                     requireTransition(repository.markSubmitted(statement.id(), operator, now), "提交审阅");
                 });
     }
@@ -1083,14 +1143,16 @@ public class DividendService {
                         throw ApiException.forbidden("SELF_APPROVAL_FORBIDDEN",
                                 "分红计算单的提交人不能审批自己提交的单；请由另一位审批人处理");
                     }
-                    // V303 欠款抵扣：先按冻结抵扣额对该商户未清应收逐项结算（先欠先抵，dividend_offset 收款）。
+                    // 273-R2（PGM:436）：审批时同样不得有逾期未还借款。
+                    loans.requireNoOverdue(statement.merchantId(), businessDayResolver.merchantBusinessDate(null, statement.merchantId(), now));
+                    // V303 欠款抵扣：先按冻结抵扣额对主理人本人欠本酒吧公司的未清应收逐项结算（先欠先抵，dividend_offset 收款；330-R1）。
                     // 实结 != 冻结额 = 抵扣期间应收被并发清偿——@Transactional 回滚，要求作废重算（快照冻结口径）。
                     if (statement.arrearsOffsetCent() > 0) {
                         long settled = payoutPort.applyDividendOffsetToReceivables(
-                                statement.merchantId(), statement.arrearsOffsetCent(), statement.id());
+                                statement.merchantId(), statement.principalUserId(), statement.arrearsOffsetCent(), statement.id());
                         if (settled != statement.arrearsOffsetCent()) {
                             throw ApiException.conflict("DIVIDEND_ARREARS_CHANGED",
-                                    "欠款抵扣期间该商户未清应收发生变化（当前可抵 " + settled + " 分，单据冻结 "
+                                    "欠款抵扣期间主理人本人的未清欠款发生变化（当前可抵 " + settled + " 分，单据冻结 "
                                             + statement.arrearsOffsetCent() + " 分）；请作废重算后再审批");
                         }
                     }

@@ -17,6 +17,7 @@ import {
   DIVIDEND_KIND_LABELS,
   DIVIDEND_LINE_LABELS,
   DIVIDEND_STATUS_LABELS,
+  PERIOD_TYPE_LABELS,
   RESERVE_RELEASE_MODE_LABELS,
   shareSplitText,
   shareholdersDetailText,
@@ -112,7 +113,7 @@ export function MerchantZoneDividendsPage({ api, setGlobalError }: AdminPageProp
 
       {activePlan ? (
         <div className="admin-form-row" data-testid="merchant-dividend-plan-summary">
-          <span>当前方案：{shareSplitText(activePlan.platformShareBps, activePlan.otherShareholders)}，代扣税率 {bpsToPercentText(activePlan.taxRateBps)}，{activePlan.periodType === "monthly" ? "月度出正式单" : "季度出正式单 + 月度预览"}。</span>
+          <span>当前方案：{shareSplitText(activePlan.platformShareBps, activePlan.otherShareholders)}，{PERIOD_TYPE_LABELS[activePlan.periodType ?? ""] ?? activePlan.periodType}。</span>
           {activePlan.payoutFloorEnabled ? (
             <span className="admin-muted-action" data-testid="merchant-dividend-reserve-hint">发放保护线：部分留存暂扣待释放（欠你、非平台白拿），{RESERVE_RELEASE_MODE_LABELS[activePlan.reserveReleaseMode ?? "manual"] ?? "手动释放"}后全额返还。</span>
           ) : null}

@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -11,7 +11,8 @@ import type { AdminPageProps, EffectivePermissionsState } from "../types";
 // 其他股东合计；明细抽屉按该单所用版本列各方比例，并显示其他股东应得、代扣、实发与分配尾差四类明细行。
 const MERCHANTS = [{ id: "merchant-1", merchant_name: "酒吧甲", status: "active" }];
 const PLAN = {
-  id: "divp_now", merchant_id: "merchant-1", principal_user_id: "usr_principal", platform_share_bps: 8000, tax_rate_bps: 2000,
+  id: "divp_now", merchant_id: "merchant-1", principal_user_id: "usr_principal", platform_share_bps: 8000,
+  platform_share_min_bps: 5000, platform_share_max_bps: 9000,
   period_type: "semiannual", period_min_months: 3, period_max_months: 12, revenue_domains: ["bar"], payout_pay_slot: 1,
   status: "active", reason: "按工商登记持股比例", effective_from: "2026-01-01", version_state: "in_force",
   other_shareholders: [{ id: "dps_c", plan_id: "divp_now", shareholder_name: "丙公司", shareholder_type: "company", share_bps: 500, sort_order: 0 }],

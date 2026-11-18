@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.contains;
@@ -329,7 +329,7 @@ class PaymentConfirmationJdbcTests {
         mockMvc.perform(get("/api/v1/platform/supervisor-review/" + reviewId).with(otherViewer)).andExpect(status().isForbidden());
     }
 
-    /** l. 审批时限清单含 40 个付款确认审批类型，涉钱、出厂 1 个工作日；策略各带财务、法务两线、主线按直接上级链。 */
+    /** l. 审批时限清单含 41 个付款确认审批类型（第十八批 AX 段 273-R1 加酒吧借款还款），涉钱、出厂 1 个工作日；策略各带财务、法务两线、主线按直接上级链。 */
     @Test
     void fortyPaymentTypesAreMoneyApprovalTypesWithFinanceAndLegalLines() throws Exception {
         List<Map<String, Object>> deadlines = JsonPath.read(mockMvc.perform(get("/api/v1/platform/approval-deadlines").with(main))
@@ -343,7 +343,7 @@ class PaymentConfirmationJdbcTests {
         List<Map<String, Object>> policies = JsonPath.read(mockMvc.perform(get("/api/v1/platform/supervisor-review-policies").with(main))
                 .andExpect(status().isOk()).andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8),
                 "$.data.items[?(@.policy_code =~ /payment_confirm_.*/)]");
-        assertThat(policies).hasSize(40).allSatisfy(row -> assertThat(row)
+        assertThat(policies).hasSize(41).allSatisfy(row -> assertThat(row)
                 .containsEntry("approval_level", "one_level_up").containsEntry("parallel_line_codes", List.of("finance_review", "legal_review")));
     }
 
@@ -385,7 +385,7 @@ class PaymentConfirmationJdbcTests {
     }
 
     /**
-     * 241-R8（第十八批裁决 67「审批线页设定」、66「每类必带财务、法务两线」）：组织层级与审批线页列出 40 个支付类型（中文名、两线之外的必带线，出厂为空）；
+     * 241-R8（第十八批裁决 67「审批线页设定」、66「每类必带财务、法务两线」）：组织层级与审批线页列出 41 个支付类型（中文名、两线之外的必带线，出厂为空）；
      * 无门禁码 403、只能到本项目的账号改全局流程 403、未知支付类型 404、含停用线 400；平台管理员保存后留痕。
      */
     @Test
@@ -520,7 +520,7 @@ class PaymentConfirmationJdbcTests {
             "single_bar_service_fee", "compensation_fulfillment", "pass_domain_share", "pass_domain_direct_settlement",
             "pass_unverified_attribution", "dispatch_commission_transfer", "bar_payroll_transfer", "inventory_transfer",
             "pass_drink_settlement", "media_performance_settlement", "refund", "bar_deposit_refund", "stored_value_consume",
-            "partner_voucher", "reconciliation_difference", "inventory_difference", "turnover_rent_reversal", "manual",
+            "partner_voucher", "reconciliation_difference", "inventory_difference", "turnover_rent_reversal", "manual", "bar_loan",
             "compensation_fulfillment_recovery", "ticket_distribution_recovery", "saved_bottle_remedy_recovery",
             "finance_refund_ar_ap_payment", "finance_refund_stored_value_account", "finance_refund_ticket_payment_rejection",
             "finance_refund_channel_ticket_rejection", "finance_refund_dealer_order_refund", "finance_refund_bar_deposit_rejection",

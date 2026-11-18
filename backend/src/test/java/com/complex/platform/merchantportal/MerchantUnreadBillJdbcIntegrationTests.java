@@ -1,6 +1,6 @@
 package com.complex.platform.merchantportal;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.entry;
@@ -180,7 +180,7 @@ class MerchantUnreadBillJdbcIntegrationTests {
         String plan = "ubh_plan_" + sfx;
         Instant now = Instant.now();
         dividendRepository.insertPlan(new DividendRecords.DividendPlanRecord(plan, m, "usr_principal_" + sfx, "主理人甲",
-                8000, 2000, "monthly", List.of("bar", "ticket"), true, List.of("labor"),
+                8000, "monthly", List.of("bar", "ticket"), true, List.of("labor"),
                 java.time.LocalDate.of(2000, 1, 1), "active", null, "usr_div_" + sfx, now, now, false, false, false, 0, 0L));
         jdbc.update("UPDATE dividend_plans SET payout_pay_slot = 1 WHERE id = ?", plan);   // 211-R2 发放付账日
         String role = "ubh_role_" + sfx;
