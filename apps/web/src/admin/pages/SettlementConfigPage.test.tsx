@@ -1,4 +1,4 @@
-// 文件版本：V0.06
+// 文件版本：V0.07
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -97,6 +97,57 @@ describe("SettlementConfigPage 结算配置中心(ADM-STL-001)", () => {
       "/api/v1/settlement/config/combo-discount",
       expect.objectContaining({ discountBearer: "platform_absorb", idempotencyKey: expect.any(String) }),
     ));
+  });
+
+  // 第十八批 AT 段 292-R2（BSM:754「尾数落在后台配置的允许尾数集合内——业务参数，全平台统一可配，出厂默认 8、9、0」）。
+  async function openComboDiscount(get: ReturnType<typeof vi.fn>) {
+    await waitFor(() => expect(get).toHaveBeenCalledWith("/api/v1/settlement/config/overview"));
+    fireEvent.click(await screen.findByTestId("settlement-config-edit-combo_discount"));
+    await waitFor(() => expect(screen.queryByLabelText("尾数 8")).not.toBeNull());
+  }
+
+  it("全平台默认的套票折扣可配凑整允许尾数：默认勾 8、9、0，改选后按集合提交", async () => {
+    const get = vi.fn().mockResolvedValue(OVERVIEW_NO_DRAFT);
+    const post = vi.fn().mockResolvedValue({});
+    renderPage(makeApi(get, post));
+    await openComboDiscount(get);
+    for (const d of ["0", "8", "9"]) expect((screen.getByLabelText(`尾数 ${d}`) as HTMLInputElement).checked).toBe(true);
+    expect((screen.getByLabelText("尾数 5") as HTMLInputElement).checked).toBe(false);
+
+    fireEvent.click(screen.getByLabelText("尾数 8"));
+    fireEvent.click(screen.getByLabelText("尾数 5"));
+    fireEvent.click(screen.getByTestId("settlement-config-guided-next"));
+    await waitFor(() => expect(screen.getByText("0、5、9")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("settlement-config-submit"));
+    await waitFor(() => expect(post).toHaveBeenCalledWith("/api/v1/settlement/config/combo-discount", expect.anything()));
+    const body = post.mock.calls[0]?.[1] as { roundingAllowedEndings: number[] };
+    expect([...body.roundingAllowedEndings].sort((a, b) => a - b)).toEqual([0, 5, 9]);
+  });
+
+  it("套票折扣填了项目时不显示允许尾数、请求体不带该键", async () => {
+    const get = vi.fn().mockResolvedValue(OVERVIEW_NO_DRAFT);
+    const post = vi.fn().mockResolvedValue({});
+    renderPage(makeApi(get, post));
+    await openComboDiscount(get);
+    fireEvent.change(screen.getByTestId("settlement-config-field-projectId"), { target: { value: "proj_9" } });
+    await waitFor(() => expect(screen.queryByLabelText("尾数 8")).toBeNull());
+
+    fireEvent.click(screen.getByTestId("settlement-config-guided-next"));
+    fireEvent.click(await screen.findByTestId("settlement-config-submit"));
+    await waitFor(() => expect(post).toHaveBeenCalledWith("/api/v1/settlement/config/combo-discount", expect.anything()));
+    expect(post.mock.calls[0]?.[1]).not.toHaveProperty("roundingAllowedEndings");
+  });
+
+  it("允许尾数全部取消时不发请求并提示至少选一个", async () => {
+    const get = vi.fn().mockResolvedValue(OVERVIEW_NO_DRAFT);
+    const post = vi.fn().mockResolvedValue({});
+    renderPage(makeApi(get, post));
+    await openComboDiscount(get);
+    for (const d of ["0", "8", "9"]) fireEvent.click(screen.getByLabelText(`尾数 ${d}`));
+
+    fireEvent.click(screen.getByTestId("settlement-config-guided-next"));
+    await waitFor(() => expect(screen.getByText(/至少选一个允许尾数/)).toBeTruthy());
+    expect(post).not.toHaveBeenCalled();
   });
 
   it("草案队列:merchant_rate 转正走泛化端点、下线走 archive 端点(带原因)", async () => {

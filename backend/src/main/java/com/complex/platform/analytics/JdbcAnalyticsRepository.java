@@ -1,5 +1,5 @@
 package com.complex.platform.analytics;
-// 文件版本：V0.13
+// 文件版本：V0.14
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
 import com.complex.platform.contract.SpaceRentalDerivationSql;
@@ -37,7 +37,7 @@ import org.springframework.jdbc.core.namedparam.SqlParameterSource;
 import org.springframework.stereotype.Repository;
 
 @Repository
-class JdbcAnalyticsRepository implements AnalyticsRepository {
+class JdbcAnalyticsRepository implements AnalyticsRepository, com.complex.platform.ticketing.HolidayCalendarPort {
 
     @org.springframework.beans.factory.annotation.Autowired
     private AmusementBusinessDayAnalytics amusementDays;

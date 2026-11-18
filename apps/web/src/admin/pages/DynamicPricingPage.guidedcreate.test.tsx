@@ -72,8 +72,8 @@ describe("DynamicPricingPage 引导式新建定价规则", () => {
     fireEvent.click(screen.getByTestId("dynamic-pricing-create"));
     await waitFor(() => expect(post.mock.calls.some((c) => c[0] === "/api/v1/ticketing/dynamic-pricing-rules")).toBe(true));
     const body = postBody(post, "/api/v1/ticketing/dynamic-pricing-rules");
-    expect(body).toMatchObject({ ticketTypeId: "tt_real", ruleName: "低库存加价", adjustmentRate: 15 });
-    for (const key of ["effectiveFrom", "effectiveTo", "minPriceCent", "maxPriceCent", "conditionRule", "operatorNote", "evidenceAttachmentIds"]) {
+    expect(body).toMatchObject({ ticketTypeId: "tt_real", ruleName: "低库存加价", adjustmentType: "percent_delta", adjustmentRate: 15 });
+    for (const key of ["adjustmentAmountCent", "effectiveFrom", "effectiveTo", "minPriceCent", "maxPriceCent", "conditionRule", "operatorNote", "evidenceAttachmentIds"]) {
       expect(body).not.toHaveProperty(key);
     }
   });
@@ -162,5 +162,52 @@ describe("DynamicPricingPage 引导式新建定价规则", () => {
     await waitFor(() => expect(screen.getByTestId("dynamic-pricing-guided-error")).toBeTruthy());
     expect(screen.queryByTestId("dynamic-pricing-create")).toBeNull();
     expect(post.mock.calls.some((c) => c[0] === "/api/v1/ticketing/dynamic-pricing-rules")).toBe(false);
+  });
+});
+
+// 第十八批 AT 段 335-R1（BSM:782「会员价、渠道价、动态价都在对应基础价上按打折/减免/加价/固定额派生；动态价按时段、容量等规则配置，可先试算再发布。」；
+//   PGM:287「界面全中文」）：调整列按后端取值 percent_delta、fixed_delta 显示中文加减价；引导可按固定金额调价。
+describe("DynamicPricingPage 335-R1 按固定金额调价", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    window.history.replaceState({}, "", "/admin/ticketing/dynamic-pricing");
+  });
+
+  it("调整列：按固定金额显示「减价 ¥5.00」、按比例显示「加价 10%」，不出英文取值", async () => {
+    const ok = (data: string) => new Response(`{"success":true,"code":"OK","message":"success","data":${data}}`,
+      { status: 200, headers: { "content-type": "application/json" } });
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input).includes("/ticketing/ticket-types")) return ok('{"items":[]}');
+      return ok('[{"id":"dp-fix","rule_name":"淡季减价","sales_channel":"web","priority":10,"adjustment_type":"fixed_delta","adjustment_rate":null,'
+        + '"adjustment_amount_cent":-500,"status":"draft","effective_from":"2026-11-01","effective_to":"2026-11-30","ticket_type_id":"tt-1"},'
+        + '{"id":"dp-pct","rule_name":"旺季加价","sales_channel":"web","priority":5,"adjustment_type":"percent_delta","adjustment_rate":10,'
+        + '"adjustment_amount_cent":null,"status":"published","effective_from":"2026-11-01","effective_to":"2026-11-30","ticket_type_id":"tt-1"}]');
+    }));
+    const props: AdminPageProps = { api: new AdminApi(), user: { id: "u1", username: "admin", accountType: "platform_admin" },
+      setActionResult: vi.fn(), setGlobalError: vi.fn(), effectivePermissions: ADMIN_PERMS };
+    render(<DynamicPricingPage {...props} />);
+    await waitFor(() => expect(screen.queryByTestId("dynamic-pricing-row-dp-fix")?.textContent ?? "").toContain("减价 ¥5.00"));
+    const fixedRow = screen.getByTestId("dynamic-pricing-row-dp-fix").textContent ?? "";
+    expect(fixedRow).not.toContain("fixed_delta");
+    expect(fixedRow).not.toContain("absolute_delta");
+    expect(screen.getByTestId("dynamic-pricing-row-dp-pct").textContent ?? "").toContain("加价 10%");
+  });
+
+  it("调价方式选按固定金额填 -5 → 确认页「减价 ¥5.00」，请求体 fixed_delta、adjustmentAmountCent -500，不带 adjustmentRate", async () => {
+    const post = vi.fn().mockResolvedValue({ id: "rule-new" });
+    renderPage(makeApi(post));
+    await openCreateWithTicketTypes();
+    await waitFor(() => expect(screen.queryByTestId("dynamic-pricing-adjustment-type")).not.toBeNull());
+    fireEvent.change(screen.getByTestId("dynamic-pricing-ticket-type"), { target: { value: "tt_real" } });
+    fireEvent.change(screen.getByTestId("dynamic-pricing-adjustment-type"), { target: { value: "fixed_delta" } });
+    expect(screen.queryByTestId("dynamic-pricing-adjustment-rate")).toBeNull();
+    fireEvent.change(screen.getByTestId("dynamic-pricing-adjustment-amount"), { target: { value: "-5" } });
+    fireEvent.click(screen.getByTestId("dynamic-pricing-guided-next"));
+    expect(screen.getByTestId("dynamic-pricing-guided-summary").textContent ?? "").toContain("减价 ¥5.00");
+    fireEvent.click(screen.getByTestId("dynamic-pricing-create"));
+    await waitFor(() => expect(post.mock.calls.some((c) => c[0] === "/api/v1/ticketing/dynamic-pricing-rules")).toBe(true));
+    const body = postBody(post, "/api/v1/ticketing/dynamic-pricing-rules");
+    expect(body).toMatchObject({ ticketTypeId: "tt_real", adjustmentType: "fixed_delta", adjustmentAmountCent: -500 });
+    expect(body).not.toHaveProperty("adjustmentRate");
   });
 });

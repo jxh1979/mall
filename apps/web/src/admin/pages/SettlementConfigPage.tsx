@@ -1,4 +1,4 @@
-// 文件版本：V0.07
+// 文件版本：V0.08
 import React from "react";
 import { Tabs } from "antd";
 import { AdminDataState } from "../components/AdminDataState";
@@ -202,6 +202,8 @@ type Form = {
   splitPlatformBps: string;
   // V369：综合／联合通票凑整允许误差（元，提交时换算成分）。
   roundingToleranceYuan: string;
+  // 第十八批 AT 段 292-R2：通票凑整允许尾数（升序数字串，如 "089"；全平台统一，只在全平台默认里提交）。
+  roundingAllowedEndings: string;
   revenueStream: string;
   managementEntityId: string;
   beneficiaryKind: string;
@@ -222,7 +224,7 @@ const EMPTY_FORM: Form = {
   specialApprovalTermValue: "3", specialApprovalTermUnit: "month", specialApprovalTermMinValue: "", specialApprovalTermMaxValue: "",
   merchantId: "",
   perGuestCent: "", fixedAmountCent: "", monthlyCapAmountCent: "", ticketTypeId: "", feeLayer: "route", channel: "", feeBps: "",
-  discountBearer: "platform_absorb", splitPlatformBps: "0", roundingToleranceYuan: "5", revenueStream: "all_pass_ticket", managementEntityId: "",
+  discountBearer: "platform_absorb", splitPlatformBps: "0", roundingToleranceYuan: "5", roundingAllowedEndings: "089", revenueStream: "all_pass_ticket", managementEntityId: "",
   beneficiaryKind: "entity",
   roleType: "sales", rateBp: "", amountCentPerPoint: "",
   predeductMode: "by_ticket_amount", ticketGiftAmountYuan: "",
@@ -664,8 +666,22 @@ function editSteps(
         <label>通票凑整允许误差（元）<input data-testid="settlement-config-field-roundingToleranceYuan" type="number" min={0} step="0.01" value={form.roundingToleranceYuan} onChange={setField("roundingToleranceYuan")} /></label>
         <div style={{ fontSize: 12 }} data-testid="settlement-config-rounding-tolerance-hint">
           运营为了好卖会把系统算出的 197.50 填成 199（上调下调都行），这属于凑整；填成 179 就是填错了。
-          这个数就是「差多少还算凑整」的界线，超出的票直接拒绝发布。填 5 元够凑到最近的尾数 8/9/0，又拦得住一次真正的填错。
-        </div></>);
+          这个数就是「差多少还算凑整」的界线，超出的票直接拒绝发布。填 5 元够凑到最近的允许尾数，又拦得住一次真正的填错。
+        </div>
+        {/* 第十八批 AT 段 292-R2（BSM:754「尾数落在后台配置的允许尾数集合内——业务参数，全平台统一可配，出厂默认 8、9、0」）：
+            只在全平台默认里配；勾选框的 value 放切换后的尾数串，沿用 setField 取 e.target.value。 */}
+        {form.projectId.trim() === "" ? (
+          <fieldset data-testid="settlement-config-field-roundingAllowedEndings">
+            <legend>通票凑整允许尾数（全平台统一）</legend>
+            {"0123456789".split("").map((d) => (
+              <label key={d} style={{ marginRight: 8 }}>
+                <input type="checkbox" aria-label={`尾数 ${d}`} checked={form.roundingAllowedEndings.includes(d)}
+                  value={form.roundingAllowedEndings.includes(d) ? form.roundingAllowedEndings.replace(d, "") : [...form.roundingAllowedEndings, d].sort().join("")}
+                  onChange={setField("roundingAllowedEndings")} />{d}
+              </label>
+            ))}
+          </fieldset>
+        ) : null}</>);
       break;
     case "channel_fee":
       content = (<>{projectField}
@@ -760,7 +776,8 @@ function editSummary(key: EditKey, form: Form, ticketTypes: TicketTypeOption[]):
       { label: "按票计整额", value: form.predeductMode === "by_ticket_amount" ? `${form.ticketGiftAmountYuan || "0"} 元` : "由票面推导" },
       { label: "每月封顶（分）", value: form.monthlyCapAmountCent.trim() || "不封顶" },
       { label: "差额处理", value: VARIANCE_FIXED_LABEL }];
-    case "combo_discount": return [scope, { label: "折扣归属", value: BEARER_OPTIONS.find(([v]) => v === form.discountBearer)?.[1] ?? form.discountBearer }, { label: "平台分摊万分比", value: form.splitPlatformBps || "0" }, { label: "通票凑整允许误差", value: `${form.roundingToleranceYuan || "0"} 元` }];
+    case "combo_discount": return [scope, { label: "折扣归属", value: BEARER_OPTIONS.find(([v]) => v === form.discountBearer)?.[1] ?? form.discountBearer }, { label: "平台分摊万分比", value: form.splitPlatformBps || "0" }, { label: "通票凑整允许误差", value: `${form.roundingToleranceYuan || "0"} 元` },
+      ...(form.projectId.trim() === "" ? [{ label: "通票凑整允许尾数", value: form.roundingAllowedEndings.split("").join("、") }] : [])];
     case "channel_fee": return [scope, { label: "费用层", value: FEE_LAYER_OPTIONS.find(([v]) => v === form.feeLayer)?.[1] ?? form.feeLayer },
       { label: form.feeLayer === "route" ? "支付通路" : "销售渠道", value: form.channel.trim() || (form.feeLayer === "route" ? "—" : "第三方通用") },
       { label: "费率万分比", value: form.feeBps || "—" },
@@ -805,6 +822,7 @@ function validate(key: EditKey, form: Form): string | null {
     }
     case "combo_discount":
       if (!isIntInRange(form.splitPlatformBps || "0", 0, 10000)) return "平台分摊万分比需为 0~10000 的整数。";
+      if (form.projectId.trim() === "" && form.roundingAllowedEndings === "") return "至少选一个允许尾数。";
       return Number(form.roundingToleranceYuan) >= 0 && Number.isFinite(Number(form.roundingToleranceYuan))
         ? null : "通票凑整允许误差需为不小于 0 的金额（元）。";
     case "channel_fee": {
@@ -872,7 +890,9 @@ function buildBody(key: EditKey, form: Form, idempotencyKey: string): Record<str
       };
     case "combo_discount":
       return { idempotencyKey, projectId: project, discountBearer: form.discountBearer, splitPlatformBps: Number(form.splitPlatformBps || "0"),
-        roundingToleranceCent: Math.round(Number(form.roundingToleranceYuan || "0") * 100) };
+        roundingToleranceCent: Math.round(Number(form.roundingToleranceYuan || "0") * 100),
+        // 第十八批 AT 段 292-R2：允许尾数全平台统一，只在全平台默认里提交。
+        ...(project === undefined ? { roundingAllowedEndings: form.roundingAllowedEndings.split("").map(Number) } : {}) };
     case "channel_fee":
       return {
         idempotencyKey, projectId: project, feeLayer: form.feeLayer, channel: orUndef(form.channel) ?? null,

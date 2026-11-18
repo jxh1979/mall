@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.ticketing.dto.StatusChangeRequest;
@@ -26,9 +26,12 @@ public class TicketPricingService {
     private static final Set<String> DYNAMIC_ADJUSTMENT_TYPES = Set.of("percent_delta", "fixed_delta");
 
     private final TicketingRepository repository;
+    // 第十八批 AT 段 298-R1：节假日日历（经营参数页维护，BSM:1832），到访日在日历内取节假日价。
+    private final HolidayCalendarPort holidays;
 
-    public TicketPricingService(TicketingRepository repository) {
+    public TicketPricingService(TicketingRepository repository, HolidayCalendarPort holidays) {
         this.repository = repository;
+        this.holidays = holidays;
     }
 
     TicketDynamicPricingRuleRecord createDynamicPricingRule(TicketDynamicPricingRuleRequest request) {
@@ -148,7 +151,18 @@ public class TicketPricingService {
     }
 
     long resolveUnitPrice(TicketTypeRecord ticketType, TicketPriceRuleRecord priceRule, LocalDate visitDate) {
-        Long base = switch (visitDate.getDayOfWeek()) {
+        // 第十八批 AT 段 298-R1（BSM:776「按日期平日票、周末票、节假日票（基础价，优先级最高）。」）：到访日在节假日日历内
+        // 取节假日价，节假日价空时回落周末价、平日价；不在日历内照星期取（日历只记放假区间，调休上班的周末仍按周末价）。
+        return resolveUnitPrice(ticketType, priceRule, visitDate, holidays.isWithinHoliday(visitDate));
+    }
+
+    // 第十八批 AT 段收尾复核修正：lowestUnitPriceCent 的周一、周六代表日传 false，仍取工作日、周末价，不受节假日日历影响
+    // （ENUM:52「按当前赠送权益预估成本与当前最低实付价组合计算」）。
+    private long resolveUnitPrice(TicketTypeRecord ticketType, TicketPriceRuleRecord priceRule, LocalDate visitDate,
+            boolean holiday) {
+        Long base = holiday
+                ? firstNonNull(ticketType.holidayPriceCent(), ticketType.weekendPriceCent(), ticketType.weekdayPriceCent())
+                : switch (visitDate.getDayOfWeek()) {
             case SATURDAY, SUNDAY -> firstNonNull(ticketType.weekendPriceCent(), ticketType.weekdayPriceCent(), ticketType.holidayPriceCent());
             default -> firstNonNull(ticketType.weekdayPriceCent(), ticketType.weekendPriceCent(), ticketType.holidayPriceCent());
         };
@@ -158,7 +172,9 @@ public class TicketPricingService {
         if (priceRule == null) {
             return base;
         }
-        Long fixed = switch (visitDate.getDayOfWeek()) {
+        Long fixed = holiday
+                ? firstNonNull(priceRule.holidayPriceCent(), priceRule.weekendPriceCent(), priceRule.weekdayPriceCent())
+                : switch (visitDate.getDayOfWeek()) {
             case SATURDAY, SUNDAY -> firstNonNull(priceRule.weekendPriceCent(), priceRule.weekdayPriceCent(), priceRule.holidayPriceCent());
             default -> firstNonNull(priceRule.weekdayPriceCent(), priceRule.weekendPriceCent(), priceRule.holidayPriceCent());
         };
@@ -220,11 +236,11 @@ public class TicketPricingService {
         List<Long> bases = new java.util.ArrayList<>();
         for (LocalDate day : List.of(today.with(java.time.temporal.TemporalAdjusters.nextOrSame(java.time.DayOfWeek.MONDAY)),
                 today.with(java.time.temporal.TemporalAdjusters.nextOrSame(java.time.DayOfWeek.SATURDAY)))) {
-            bases.add(resolveUnitPrice(ticketType, null, day));
+            bases.add(resolveUnitPrice(ticketType, null, day, false));
             for (TicketPriceRuleRecord rule : repository.listPriceRules()) {
                 if (ticketTypeId.equals(rule.ticketTypeId()) && "active".equals(rule.status()) && rule.archivedAt() == null
                         && "none".equals(rule.deleteStatus())) {
-                    bases.add(resolveUnitPrice(ticketType, rule, day));
+                    bases.add(resolveUnitPrice(ticketType, rule, day, false));
                 }
             }
         }

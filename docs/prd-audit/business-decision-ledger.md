@@ -1,6 +1,6 @@
 # PRD 审计业务裁决台账
 
-文档版本：V1.01
+文档版本：V1.02
 状态：进行中
 迁移日期：2026-07-27
 当前事实源：三份立法 HTML 以既有冻结基线叠加 James 此前 M02 至 M08 的点名批准、全量审计 M001、M002 的逐项批准，以及本轮 2026-10-16 至 2026-10-17 业务 HTML 审计中 Q01 至 Q40 及子题实际明确批准且未被后续替代的裁决，和 2026-10-17 第二批 HTML 业务线推演审计（A–F 六线 64 条、停车章）的逐项批准，并叠加本轮 CG 70 项来源确认与 C01–C09、N01–N03 最终澄清及补全文稿中 F01、W01–W05 的整体修改批准（本文件末节）；本轮最终规则、未采纳或替代关系、现行版本与字节哈希见本文件末节。历史记录保留为各自当时事实，不恢复已被替代的建议。
@@ -8905,3 +8905,89 @@ HTML 的语义补齐与直接引用同步可在本批核验；70项中的业务�
   - 统一重做：两边都从同一基线 +0.01、被 git 当同一改动合并的版本递增再 +0.01——reviewLabels.ts V0.12、FieldLabels.java V0.49、DividendService.java V0.13、JdbcDividendRepository.java V0.07、DividendFinalSnapshotGateJdbcIntegrationTests.java V0.05；OpenAPI yaml 与 json 的 info.version 就地由 V0.76 改为 V0.77（深比较一致，操作各 1393）；refresh-entry-doc-baseline 回填 README 与入口文档为「V647（605 个迁移）」「OpenAPI 1393」；重生成数据隔离规格（最新 V647、277 张含 scope 字段的表）、domain-ownership-scope（无变化）、验收矩阵（V0.77、共 1393 个 operation）、收口附录（V0.77、1393 operations、2786 events、写接口 856、finance.entity_tax.manage 4 个、finance.entity_tax.view 3 个，补回 registerEntityTaxAdjustment、registerEntityTaxPayment 两行）；security-scans 两份 md 只改「OpenAPI operation count: 1393」与 SHA 行 2859c0b20e55a2f3a34c7c718b6a54d4111ae316dbcb20e85053852eba00d233；security-baseline-latest.json 只改 openapi_operation_count 为 1393。运行验收证据随指纹变化已过时，由合并前证据链按提交树重刷，本轮不动。
   - 本轮实测（1ca51465 基线）：清掉镜像 finance、dividend、settlement、governance、ticketing、common/api 包的 classes 与 test-classes 后，b64_test.sh --fresh 定向 7 类 124 条 0 红（EntityTaxJdbcIntegrationTests 18、DividendFinalSnapshotGateJdbcIntegrationTests 13、DividendJdbcIntegrationTests 24、DividendPlanVersionJdbcIntegrationTests 7、DividendOtherShareholdersJdbcIntegrationTests 5、SupervisorReviewServiceTests 53、PassDomainShareInterEntityPostingJdbcTests 4；一次性库迁到 V647）；b64_web.sh EntityTaxDeclarationsPage FinanceDividends：typecheck 0 错、9 个文件 35 条全过；共用锁下 chromium 跑 tests/e2e/full-admin-visual.spec.ts 2 条全过、无截图差异，不重拍；门禁 verify:p0-contract、verify:html-ledger-sync、verify:entry-anchors、verify:entry-doc-baseline、verify:security-baseline、verify:data-isolation-spec、verify:domain-ownership-scope、verify:migration-version-order、verify:production-readiness-evidence、verify-audit-labels（业务类型 431、事件名 2346，0 处缺失）、verify-full-admin-page-matrix（117 页）、verify-admin-result-labels、git diff --check 全绿，改动文件无 CRLF、无 BOM；共用锁下 npm run verify:predeploy 退出码 0。
 - 18AR 落地位置补记·运行验收证据、快照、终验文档刷新（无新裁决）：业务提交 e4d341eb 之后，按第十八批裁决 25 重刷了运行验收证据：后端全量 6924 测，0 失败 0 错误；apps/web 构建通过；常规界面验收（接口全部 mock）实跑 40 条全过；真实后端界面验收未跑，runtime_ready=false。随后依次重生成闭环当前态快照、生产闭环缺口报告、界面验收报告、无上线指挥台。生成器没改。手改 docs/final-closed-loop-acceptance-audit-v0.1.md 与 docs/code-implementation-acceptance-audit-v0.1.md：前端单测源码计数改为 1877；被核文件行数都没变；后端全量与常规界面验收的数字、日期改为本次实跑值；写入 npm run verify:unit 实跑结果，五个工作区全过。交付门禁于 2026-11-18 16:30 UTC 在工作树逐项实跑子项，NAS 两项现场探测未跑。仍红的有两项：一是 coding-host-protection，它写死主仓路径，在工作树口径下必红，属工具口径，不做；二是 final-closed-loop-audit，如实留 2 条红（integration-ready、business-acceptance-ready），原因是校验器要求终验把联调、业务验收写成「是」，而裁决 25 定了不跑真实后端界面验收、运行验收未就绪，终验写的是「否」。verify:delivery-gates 总链仍是红的。
+
+18AT 落地位置补记（2026-11-18）：第十八批 AT 段（batch66）按 18AT 只读设计实现待开发清单第 334、335、336、337、298、292 条（票务定价组）；运行验收证据、终验文档在本段最后一个提交刷新；各条落地位置见下。本段追加时，原台账除文档版本升一版外，其他历史字节保持。
+
+- 18AT 落地位置补记·控制席判定（2026-11-18）：本段（第十八批 AT 段，batch66）实现待开发清单第 334、335、336、337、298、292 条（18AT 只读设计 b66-audit/d-tkt-price.json，两轮质疑者修订后定稿，无待裁题）。控制席按常理定：337-R1 一并把动态定价同组 listTicketDynamicPricingRules、createTicketDynamicPricingRule、simulateTicketDynamicPricing 三个操作的英文 summary 与 simulate 的英文 description 改中文，其余操作的英文 summary 不在本段。本段实现代理按控制席 2026-11-17 定的写法不改各文件头版本行，收尾按最终主干统一 +0.01。本段从 81a87894 开工，实现后先变基到含 18AQ 分红组（PR #597）的 origin/main 1ca51465，合并前再变基到又含 18AR 税务组（PR #598）的 origin/main 75873362（见本段末「18AT 合并前再变基」条）。设计旁见另记待开发清单第 338～341 条（待核实）。
+- 18AT 落地位置补记（段 1）：
+  - 334-R1（严重）
+    - 改法：票务策略页派生价折扣改为按百分数录入、提交和显示。默认值由 0.8 改为 80；输入 0～100、步长 0.01，提示「折扣率（%，80＝8 折，100＝不打折）」；列表与明细「折扣/价格」不再乘 100，直接显示「80%」；后端口径不变（TicketCatalogService 0～100，TicketPricingService 基础价×折扣÷100）。
+    - 落地位置：apps/web/src/admin/pages/TicketingPoliciesPage.tsx（ruleForm 默认值、折扣输入、openRuleDetail「折扣/价格」、派生价列表折扣列）。
+    - 依据：BSM:782「会员价、渠道价、动态价都在对应基础价上按打折/减免/加价/固定额派生；动态价按时段、容量等规则配置，可先试算再发布。」
+    - 测试：TicketingPoliciesPage.kpi.test.tsx「点派生价规则行 -> 抽屉含中文人群+折扣+票种下钻 TraceLink」（夹具 80，行与抽屉含 80%、不含 8000）；TicketingPoliciesPage.ruleversions.test.tsx「已上架跨域组合通票新建派生价：后端回 status draft → 提示已存入草稿版、去「② 组合式套票配置」提交审批」（提交 discount_rate 为 80）。
+  - 335-R1
+    - 改法：动态定价页调价方式映射改用后端取值，percent_delta「按比例」、fixed_delta「按固定金额」（删 absolute_delta）。新建引导加「调价方式」下拉：按比例只带 adjustmentRate，按固定金额只带 adjustmentAmountCent（元×100）。列表「调整」列、明细、确认页统一显示「加价/减价 x%」「加价/减价 ¥x」。dynamicAdjustment 从票务策略页挪到动态定价页导出，两页共用；前端类型 TicketDynamicPricingRuleRow 加 adjustmentAmountCent。
+    - 落地位置：apps/web/src/admin/pages/DynamicPricingPage.tsx、apps/web/src/admin/pages/TicketingPoliciesPage.tsx（改为 import）、apps/web/src/admin/types.ts。
+    - 依据：BSM:782 同上句。
+    - 测试：DynamicPricingPage.kpi.test.tsx「KPI 子标签与状态列为中文，不含 draft/published 英文码」；DynamicPricingPage.guidedcreate.test.tsx「入口→选票种→步进→提交调用建规则接口」「调整列：按固定金额显示「减价 ¥5.00」、按比例显示「加价 10%」，不出英文取值」「调价方式选按固定金额填 -5 → 确认页「减价 ¥5.00」，请求体 fixed_delta、adjustmentAmountCent -500，不带 adjustmentRate」。
+  - 336-R1
+    - 改法：共用码表售票渠道段补 admin「后台」，与后端 TicketTypeRuleVersionService CHANNEL_NAMES 用字相同；票务订单页、动态定价页、规则版本表、客人端经 formatBusinessStatus 一并生效。
+    - 落地位置：packages/customer-core/src/statusLabels.ts。
+    - 依据：PGM:287「界面全中文（所有终端零英文）」。
+    - 测试：packages/customer-core/src/statusLabels.test.ts「风险预警/主管复核/售票渠道翻中文」（admin 为「后台」）。
+  - 337-R1
+    - 改法：契约补声明 createTicketPriceRule 的 403、404 与 publishTicketType 的 404（TICKET_TYPE_NOT_FOUND），动态定价同组四个操作的 summary 与 simulate 的 description 改中文（契约代理落 docs/openapi/openapi-p0.yaml 与 .json）；代码不改，后端追加两条真实 HTTP 用例锁现行为。
+    - 落地位置：docs/openapi/openapi-p0.yaml、openapi-p0.json（契约代理）；backend/src/test/java/com/complex/platform/ticketing/TicketPriceRuleCreateWebShape198R5Tests.java。
+    - 依据：无 HTML 原句，依据为契约与现码一致（待开发清单第 337 条，同第 322 条）；同组三个操作并入为 18AT 控制席按常理定（设计旁见④）。
+    - 测试：TicketPriceRuleCreateWebShape198R5Tests.createTicketPriceRule_unknownTicketType_404、publishTicketType_unknownTicketType_404。
+- 第十八批 AT 段落地位置补记（段 2：298-R1、292-R1、292-R2）：
+  - 298-R1（到访日在节假日日历内取节假日价）。
+    - 改法：票务域新建 HolidayCalendarPort（isWithinHoliday），分析域 JdbcAnalyticsRepository 在类声明实现它（复用已有 isWithinHoliday，查 V209 holiday_calendar，经营参数页维护）。TicketPricingService 构造器注入该端口，resolveUnitPrice 先判到访日在不在日历内：在内，基础价与派生固定价都按节假日价→周末价→平日价取第一个非空；不在内照现行按星期取（日历只记放假区间，调休上班的周末仍按周末价）。
+    - 落地位置：backend/src/main/java/com/complex/platform/ticketing/HolidayCalendarPort.java；analytics/JdbcAnalyticsRepository.java:40；ticketing/TicketPricingService.java 构造器与 resolveUnitPrice。下单、客人价、试算共用这一处；最低实付价仍按工作日、周末代表日取，不受节假日日历影响。无迁移，契约不变。
+    - 依据：BSM:776「按日期平日票、周末票、节假日票（基础价，优先级最高）。」；ENUM:29「票种平日票、周末票、节假日票（基础价）」；BSM:1832「节假日日历可给网址自动抓取，也可手工维护」。
+    - 测试：TicketingServiceTests.holidayCalendarDatesTakeHolidayPriceWhateverTheWeekday；TicketHolidayPriceWeb298R1Tests.simulate_visitDateInHolidayCalendar_takesHolidayPrice_plainSaturdayTakesWeekendPrice。
+  - 292-R1（凑整允许尾数集合入库，凑整建议按全平台默认行算）。
+    - 改法：迁移 V648 给 ticket_combo_discount_configs 加 rounding_allowed_endings（升序去重的尾数数字串，出厂 '089'，CHECK ^[0-9]{1,10}$）。票务端口 ComboPriceToleranceConfigPort 改为 findComboRounding，一次返回误差与尾数：误差照旧按项目取，尾数只取全平台默认行。TicketCatalogService.roundToNiceEnding 按尾数集合找最近的整元候选，priceCheck 各取端口处一并取尾数；版本快照与端口未注入时用误差 0、尾数 089。
+    - 改法（写入与总览）：结算配置写入 saveComboDiscount 收 rounding_allowed_endings，规则如下。
+      - 不填＝出厂 8、9、0。
+      - 每项 0～9、至少一个，否则 400 VALIDATION_FAILED。
+      - 去重升序后写入草案，留痕元数据另记该值。
+      - 待转正摘要末尾追加「允许尾数 x、x」。
+      - 结算配置总览「通票分账」加「通票凑整允许尾数」一项。
+      - FieldLabels.java 与 fieldLabels.ts 加 rounding_allowed_endings「凑整允许尾数」。
+    - 落地位置（迁移与票务）：backend/src/main/resources/db/migration/V648__combo_rounding_allowed_endings.sql；ticketing/ComboPriceToleranceConfigPort.java（ComboRounding、FACTORY_ALLOWED_ENDINGS）；ticketing/TicketCatalogService.java（priceCheck、roundToNiceEnding 与 :155、:908、:935、:1123、:1201 各取值处）；ticketing/TicketTypePriceCheck.java 注释。
+    - 落地位置（结算与字段名）：settlement/JdbcSettlementBillRepository.java（findComboDiscountConfig、findComboRounding、ComboDiscountConfig）；settlement/SettlementConfigWriteRequests.java（ComboDiscountRequest）；settlement/SettlementConfigWriteService.java saveComboDiscount；settlement/JdbcSettlementConfigWriteRepository.java（upsertComboDiscountDraft、待转正摘要）；settlement/SettlementConfigService.java 总览；common/api/FieldLabels.java；apps/web/src/admin/i18n/fieldLabels.ts。
+    - 依据：BSM:754「运营可在此基础上填一个近似售价用于凑整（使最终售价为整数，且尾数落在后台配置的允许尾数集合内——业务参数，全平台统一可配，出厂默认 8、9、0）」；ENUM:193「最终售价为整数且尾数落在后台配置的允许尾数集合内（业务参数，全平台统一可配，出厂默认 8/9/0）」。集合型参数不配上下限，依据决策台账 DEC-P1I-01 的范围推导（business-decision-ledger.md:2388）。
+    - 测试：SettlementComboRoundingEndingsWeb292R1Tests.platformDefaultEndings_activated_showInOverview_andDriveRoundingForAnyProject、.endingsOmitted_factoryEightNineZero、.endingsOutOfRangeOrEmpty_400；TicketingServiceTests.niceEndingSuggestionPicksTheNearestEightNineOrZero（追加尾数 5）、.comboPassSellingPriceIsComputedFromFormatFacePricesTimesDiscount（追加尾数 5）。
+  - 292-R2（结算配置页可配允许尾数，写死的 8/9/0 文案改为按后台配置）。
+    - 改法：结算配置页「套票折扣归属 + 通票凑整允许误差」表单在项目为空（全平台默认）时显示 0～9 勾选框（默认勾 0、8、9），至少勾一个（否则步内提示「至少选一个允许尾数。」）。确认摘要列出所选尾数，只在全平台默认时提交 roundingAllowedEndings；填了项目时不显示、不提交。误差说明改为「凑到最近的允许尾数」。票务策略页定价说明改为「尾数按后台配置」，凑整建议格改为「（整元、尾数落在后台配置的允许尾数内）」。页面矩阵不改（接口与权限码不变）。
+    - 落地位置：apps/web/src/admin/pages/SettlementConfigPage.tsx（Form、EMPTY_FORM、套票折扣表单、validate、editSummary、buildBody）；apps/web/src/admin/pages/TicketingPoliciesPage.tsx（定价核算说明与凑整建议格两处文案）。
+    - 依据：BSM:754「尾数落在后台配置的允许尾数集合内——业务参数，全平台统一可配，出厂默认 8、9、0」。
+    - 测试：SettlementConfigPage.test.tsx「全平台默认的套票折扣可配凑整允许尾数：默认勾 8、9、0，改选后按集合提交」「套票折扣填了项目时不显示允许尾数、请求体不带该键」「允许尾数全部取消时不发请求并提示至少选一个」；TicketingPoliciesPage.pricing.test.tsx「凑整建议与定价说明按后台配置的允许尾数，不写死 8/9/0」。
+- 18AT 落地位置补记（契约部分）：
+  - 337-R1（依据：契约与现码一致，无 HTML 原句，同待开发清单第 322 条一类；控制席判定「337-R1 一并把动态定价同组 listTicketDynamicPricingRules、createTicketDynamicPricingRule、simulateTicketDynamicPricing 三个操作的英文 summary 与 simulate 的英文 description 改中文」）。
+    改法：docs/openapi/openapi-p0.yaml 与 .json 同步改。① createTicketPriceRule 的 responses 补 403、404，description 末尾补「无 ticket.price_variant.manage 权限 403；票种不存在 404 TICKET_TYPE_NOT_FOUND（票种不存在或已被删除）。」② publishTicketType 的 responses 补 404，description 末尾补「票种不存在 404 TICKET_TYPE_NOT_FOUND。」③ summary 改中文：publishTicketDynamicPricingRule「发布动态定价规则」、listTicketDynamicPricingRules「查询动态定价规则列表」、createTicketDynamicPricingRule「创建动态定价规则草稿」、simulateTicketDynamicPricing「试算动态定价（不建订单）」。④ simulate 的 description 改为「动态定价试算：可命中草稿与已发布规则，只返回计算结果，不创建订单、不产生应收。」
+    落地位置：TicketingController.java:169-174、:112-119；TicketCatalogService.java:172-177、:657-663。
+    测试：TicketPriceRuleCreateWebShape198R5Tests 两条 404 用例（段 1 所加）；契约校验 verify:openapi 绿。
+  - 292-R1 契约部分（依据：BSM:754「尾数落在后台配置的允许尾数集合内——业务参数，全平台统一可配，出厂默认 8、9、0」）。
+    改法：settlementConfigUpsertComboDiscount 的请求体加 rounding_allowed_endings（integer 0～9 的数组，minItems 1，uniqueItems，nullable，不进 required；不填为出厂 8、9、0，每项须为 0～9、至少一个，否则 400 VALIDATION_FAILED，去重后升序保存，只取全平台默认行的值）；操作说明补「成功留痕元数据另带 rounding_allowed_endings」。ticketTypePriceCheck 的说明与 TicketTypePriceCheck.rounding_suggested 的说明里，「整元且尾数 8/9/0」改为「整元且尾数落在后台配置的允许尾数集合内（出厂 8、9、0）」。操作数不变，仍为 1393。
+    落地位置：SettlementConfigController.java:104-111、SettlementConfigWriteService.java:199-224。
+    测试：SettlementComboRoundingEndingsWeb292R1Tests（段 2 所加）；契约校验 verify:openapi、verify:client-payload 绿。
+- 18AT 落地位置补记·汇合段 J（e2e 与门禁）：
+  - e2e 改动：
+    - 按 335-R1（BSM:782「会员价、渠道价、动态价都在对应基础价上按打折/减免/加价/固定额派生」）调整列的新写法，把 tests/e2e/full-admin-remaining.spec.ts:761（ADM-TKT-002）的断言由 toContainText("百分比调整") 改为 toContainText("加价 10%")，用例意图不变。
+    - 按现页面只重拍了 full-admin-visual.spec.ts-snapshots/full-admin-dynamic-pricing-mobile-chromium-linux.png 一张基线：变化只在动态定价表「调整」列由「百分比调整 10」变成「加价 10%」，其余三张基线哈希不变。
+    - mock-api.ts 与其余 spec 未改：grep tests/e2e 后，没有用例断言「8/9/0」、凑整建议、折扣率或 admin 渠道。
+  - 门禁结论（实现阶段、变基前，工作树基线 81a87894；下列操作数 1383、info.version V0.75 都是变基前的值，变基到 75873362 后操作数为 1393（本段不增不删）、info.version 随收尾升至 V0.78）：
+    - 后端全量（整删 target 后 --fresh，V648 真迁）：6894 测，0 失败 0 错误。
+    - 前端：typecheck 0 错；vitest 347 个文件、1981 测全过。
+    - 客人工作区：customer-core 77 测、customer-app 131 测、customer-miniapp 85 测，全过。
+    - 安卓：员工端 gradle test 125 测全过；android-app compileDebugKotlin 通过。
+    - 五份后台 e2e：chromium 33 条全过。
+    - 生成物与契约：在镜像里重生成 operation matrix、openapi closure、data-isolation spec、domain-ownership-scope 后，整条 verify:p0-contract 全绿；yaml 与 json 深比较一致，操作数 1383，info.version V0.75；git diff --check 无输出。
+    - 生成物当时未写回工作树，已由收尾按最终主干 75873362 重生成写回。
+- 第十八批 AT 段文档组（D-docs，2026-11-18）：
+  - 改法：把各段的「文档要点」按现码核过后，就地补成实现现状。
+  - 落地位置一：docs/ticketing-entitlement-checkin-product-prd-v0.1.md，V0.36 升 V0.37。
+    - §5 票务策略表下方补 298-R1 现状句：节假日日历内取节假日价，空时依次回落周末价、平日价；日历外照星期取价；下单、客人价、动态试算同一口径。依据 BSM:776「按日期平日票、周末票、节假日票（基础价，优先级最高）。」、BSM:1832「节假日日历可给网址自动抓取，也可手工维护」。
+    - §5 票种发布上架闸补 292-R1、292-R2 现状句：允许尾数在结算配置页全平台默认里勾选，复核转正后生效，凑整建议按它算，不作发布闸。依据 BSM:754「尾数落在后台配置的允许尾数集合内——业务参数，全平台统一可配，出厂默认 8、9、0」。
+    - §12A.2 补 334-R1、335-R1、336-R1 现状句：派生价折扣按百分数；动态定价可按固定金额调价，调整显示中文；admin 显示「后台」。依据 BSM:782「会员价、渠道价、动态价都在对应基础价上按打折/减免/加价/固定额派生；动态价按时段、容量等规则配置，可先试算再发布。」、PGM:287「界面全中文（所有终端零英文）」。
+    - §14 变更日志加 V0.37 一行，含 337-R1 的契约简记。
+  - 落地位置二：docs/finance-settlement-product-prd-v0.1.md，V0.37 升 V0.38。§3A「凑整与允许误差」（:46）补 292 实现现状：V648 rounding_allowed_endings，只取全平台默认行，接口校验为每项 0～9、至少一个，否则 400 VALIDATION_FAILED；变更日志加一行。依据 BSM:754 同上句。
+  - 测试名：无（只改文档）。门禁为 node tools/verify-full-admin-page-matrix.mjs 通过、git diff --check 无输出。
+- 18AT 收尾复核修正（2026-11-18）：收尾复核指出，298-R1 让 lowestUnitPriceCent 的周一、周六代表日落在节假日日历内时取成节假日价，最低实付价被抬高，第一段池试算闸（DistributionSchemeService 复核转正，不通过回 409 POOL_TRIAL_FAILED）在假期里被放宽。
+  - 改法：backend/src/main/java/com/complex/platform/ticketing/TicketPricingService.java 给 resolveUnitPrice 加私有重载（多一个 boolean holiday 参数）；原三参版传 holidays.isWithinHoliday(visitDate)，下单、客人价、试算各入口的节假日取价不变；lowestUnitPriceCent 的周一、周六两个代表日传 false，仍取工作日价、周末价（方法注释「基础价取日历价（工作日、周末各一）」）。不顺延取样日，不加节假日候选。无迁移，契约不变。
+  - 依据：ENUM:52「第一段的固定金额或固定单价在配置生效之前，必须先按该票种在当前各项配置下的最低可能可分配池金额试算（即最不利的一张票：……按当前赠送权益预估成本与当前最低实付价组合计算）……试算不通过的配置无效、不得生效」；DEC-R8-48（business-decision-ledger.md:1587）「不得只算一个代表值」。
+  - 测试：TicketingServiceTests.lowestUnitPriceKeepsWeekdayAndWeekendSamplesWhenHolidayCalendarCoversThem（节假日日历含下一个周六、周一时，最低实付价仍为平日价 9900；加一条学生固定价规则后为其平日档 6900）。
+- 18AT 合并前再变基（2026-11-18）：18AR 税务组（PR #598）合并后，本段从 1ca51465 再变基到 origin/main 75873362（含迁移 V645～V647、OpenAPI 1393、info.version V0.77、决策台账 V1.01 与 18AR 补记）。冲突 7 处及解法：README.md、docs/00-current-effective-document-entry-v0.1.md、docs/data-isolation-and-tenant-scope-security-spec-v0.1.md、security-scans 两份 md 取主干一侧，再按最终树回填与重生成；财务 PRD 变更日志两行都留，18AT 一行改记 V0.38、排在 18AR 一行之上，文首升 V0.38；本台账 18AR 补记在前、空一行接 18AT 补记，文档版本 V1.02。两边都从同一基线 +0.01、被 git 当同一改动静默合并的版本递增再 +0.01：apps/web/src/admin/i18n/fieldLabels.ts V0.42、apps/web/src/admin/pages/SettlementConfigPage.tsx V0.08、common/api/FieldLabels.java V0.50；OpenAPI yaml 与 json 的 info.version 就地由 V0.77 改为 V0.78（深比较一致，操作各 1393，本段不增不删）。统一重做：refresh-entry-doc-baseline 回填 README 与入口文档为「V648（606 个迁移）」「OpenAPI 1393」；重生成数据隔离规格（最新 V648、277 张含 scope 字段的表）、domain-ownership-scope（无变化）、验收矩阵与收口附录（只改文件头为 V0.78；1393 operations、444 permissions、2786 events）；security-scans 两份 md 只改 SHA 行为 de42944e77b60eb89f29574e2ce862b593bc7a3a2f90d59f918190dc7fcea9d6（计数 1393 不变）；security-baseline-latest.json 不改（计数仍 1393）。
+  - 本轮实测（75873362 基线）：清掉镜像 ticketing、settlement、common/api 包的 classes 与 test-classes 后，b66_test.sh --fresh 定向 6 类 171 条 0 红（TicketingServiceTests 143、SettlementDistributionSchemeJdbcIntegrationTests 13、SettlementPoolTrialJdbcIntegrationTests 8、SettlementComboRoundingEndingsWeb292R1Tests 3、TicketPriceRuleCreateWebShape198R5Tests 3、TicketHolidayPriceWeb298R1Tests 1；一次性库迁到 V648，606 个迁移）；b66_web.sh TicketingPoliciesPage DynamicPricingPage SettlementConfigPage：typecheck 0 错、9 个文件 98 条全过；共用锁下 chromium 跑 tests/e2e/full-admin-visual.spec.ts 2 条全过、无截图差异，不重拍；门禁 verify:p0-contract、verify:html-ledger-sync、verify:entry-anchors、verify:entry-doc-baseline、verify:security-baseline、verify:data-isolation-spec、verify:domain-ownership-scope（572 张表）、verify:migration-version-order（新增 1 个迁移，排在主干最大号 V647 之后）、verify-audit-labels（业务类型 431、事件名 2346，0 处缺失）、verify-full-admin-page-matrix（117 页）、verify-admin-result-labels、git diff --check 全绿，改动文件无 CRLF、无 BOM；共用锁下 npm run verify:predeploy 退出码 0。

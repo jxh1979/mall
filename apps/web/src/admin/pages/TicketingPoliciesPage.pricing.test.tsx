@@ -65,6 +65,15 @@ describe("TicketingPoliciesPage 通票定价核算（V369）", () => {
     expect(screen.getByTestId("price-check-suggested").textContent).toContain("178.00");
   });
 
+  // 第十八批 AT 段 292-R2（BSM:754「尾数落在后台配置的允许尾数集合内——业务参数，全平台统一可配」）：文案不再写死 8/9/0。
+  it("凑整建议与定价说明按后台配置的允许尾数，不写死 8/9/0", async () => {
+    renderPage(vi.fn());
+    await selectPass();
+
+    expect(screen.getByTestId("price-check-suggested").textContent).toContain("后台配置的允许尾数");
+    expect(document.body.textContent).not.toContain("8/9/0");
+  });
+
   it("填的近似售价在允许误差内：当场提示差多少、还在误差内", async () => {
     renderPage(vi.fn());
     await selectPass();

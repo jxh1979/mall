@@ -22,7 +22,9 @@ const TEXT = {
   nameRequired: "\u89c4\u5219\u540d\u79f0\u5fc5\u586b\u3002",
   ruleName: "\u89c4\u5219\u540d\u79f0",
   channel: "\u6e20\u9053",
-  adjustmentRate: "\u767e\u5206\u6bd4\u8c03\u6574",
+  adjustmentRate: "调整比例（%，正数加价、负数减价）",
+  adjustmentType: "调价方式",
+  adjustmentAmount: "调整金额（元，正数加价、负数减价）",
   visitDate: "\u5230\u8bbf\u65e5\u671f",
   createDraft: "\u521b\u5efa\u8349\u7a3f",
   simulate: "\u4ef7\u683c\u4eff\u771f",
@@ -68,14 +70,21 @@ function ruleLabel(rule: TicketDynamicPricingRuleRow | undefined) {
   return rule?.ruleName ?? rule?.id ?? "-";
 }
 
-// 调价方式页内映射（percent_delta/absolute_delta 属定价域专有词，不进全局码表）。
+// 第十八批 AT 段 335-R1（BSM:782「会员价、渠道价、动态价都在对应基础价上按打折/减免/加价/固定额派生」）：调价方式页内映射，
+//   键同后端取值（TicketPricingService：percent_delta、fixed_delta），属定价域专有词，不进全局码表。
 const ADJUSTMENT_TYPE_LABELS: Record<string, string> = {
-  percent_delta: "百分比调整",
-  absolute_delta: "定额调整",
+  percent_delta: "按比例",
+  fixed_delta: "按固定金额",
 };
-function adjustmentTypeLabel(type: string | undefined): string {
-  if (!type) return "-";
-  return ADJUSTMENT_TYPE_LABELS[type] ?? type;
+
+// 动态价的调整：按比例写「加价/减价 x%」，按固定金额写「加价/减价 ¥x」（同后端复核单摘要）；票务策略页规则版本表共用。
+export function dynamicAdjustment(d: { adjustmentType?: string; adjustmentRate?: number | string | null; adjustmentAmountCent?: number | null }): string {
+  if (d.adjustmentType === "fixed_delta") {
+    const amount = d.adjustmentAmountCent ?? 0;
+    return `${amount < 0 ? "减价" : "加价"} ¥${(Math.abs(amount) / 100).toFixed(2)}`;
+  }
+  const rate = Number(d.adjustmentRate ?? 0);
+  return `${rate < 0 ? "减价" : "加价"} ${Math.abs(rate)}%`;
 }
 
 // 第 229 条 229-R7：票种下拉项（GET /api/v1/ticketing/ticket-types 的元素，本页只用 id 与票名）。
@@ -87,6 +96,9 @@ export function DynamicPricingPage({ api, setActionResult, setGlobalError, effec
   const [ruleName, setRuleName] = React.useState("周末上浮");
   const [salesChannel, setSalesChannel] = React.useState("web");
   const [adjustmentRate, setAdjustmentRate] = React.useState("10");
+  const [adjustmentType, setAdjustmentType] = React.useState("percent_delta");
+  const [adjustmentYuan, setAdjustmentYuan] = React.useState("");
+  const fixedAmount = adjustmentType === "fixed_delta";
   const [visitDate, setVisitDate] = React.useState("");
   const [ticketTypes, setTicketTypes] = React.useState<TicketTypeOption[]>([]);
   const [ticketTypeId, setTicketTypeId] = React.useState("");
@@ -108,7 +120,7 @@ export function DynamicPricingPage({ api, setActionResult, setGlobalError, effec
         { label: "规则名称", value: rule.ruleName ?? rule.id },
         { label: "渠道", value: formatBusinessStatus(rule.salesChannel) },
         { label: "优先级", value: rule.priority ?? "—" },
-        { label: "调整", value: `${adjustmentTypeLabel(rule.adjustmentType)} ${rule.adjustmentRate ?? ""}`.trim() },
+        { label: "调整", value: dynamicAdjustment(rule) },
         { label: "状态", value: formatBusinessStatus(rule.status) },
         { label: "生效期", value: `${cnDate(rule.effectiveFrom)} ~ ${cnDate(rule.effectiveTo)}` },
         { label: "规则编号", value: rule.id },
@@ -190,8 +202,8 @@ export function DynamicPricingPage({ api, setActionResult, setGlobalError, effec
       ...(effectiveFrom ? { effectiveFrom } : {}),
       ...(effectiveTo ? { effectiveTo } : {}),
       salesChannel,
-      adjustmentType: "percent_delta",
-      adjustmentRate: Number(adjustmentRate),
+      adjustmentType,
+      ...(fixedAmount ? { adjustmentAmountCent: Math.round(Number(adjustmentYuan) * 100) } : { adjustmentRate: Number(adjustmentRate) }),
     }));
     if (result) setCreateOpen(false);
   }
@@ -290,11 +302,16 @@ export function DynamicPricingPage({ api, setActionResult, setGlobalError, effec
             },
             {
               title: "调价",
-              description: "百分比调整幅度（正值上浮、负值下调）；生效期可空，不填开始为当天，不填结束同开始日。",
-              validate: () => (Number.isFinite(Number(adjustmentRate)) ? null : "百分比调整必须为数字。"),
+              description: "按比例或按固定金额调整（正数加价、负数减价）；生效期可空，不填开始为当天，不填结束同开始日。",
+              validate: () => (fixedAmount
+                ? (adjustmentYuan.trim() && Number.isFinite(Number(adjustmentYuan)) ? null : "调整金额必须为数字。")
+                : (Number.isFinite(Number(adjustmentRate)) ? null : "调整比例必须为数字。")),
               content: (
                 <>
-                  <label><span>{TEXT.adjustmentRate}</span><input data-testid="dynamic-pricing-adjustment-rate" value={adjustmentRate} onChange={(event) => setAdjustmentRate(event.target.value)} placeholder={TEXT.adjustmentRate} /></label>
+                  <label><span>{TEXT.adjustmentType}</span><select data-testid="dynamic-pricing-adjustment-type" value={adjustmentType} onChange={(event) => setAdjustmentType(event.target.value)}>{Object.entries(ADJUSTMENT_TYPE_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
+                  {fixedAmount
+                    ? <label><span>{TEXT.adjustmentAmount}</span><input data-testid="dynamic-pricing-adjustment-amount" value={adjustmentYuan} onChange={(event) => setAdjustmentYuan(event.target.value)} placeholder={TEXT.adjustmentAmount} /></label>
+                    : <label><span>{TEXT.adjustmentRate}</span><input data-testid="dynamic-pricing-adjustment-rate" value={adjustmentRate} onChange={(event) => setAdjustmentRate(event.target.value)} placeholder={TEXT.adjustmentRate} /></label>}
                   <label><span>{TEXT.effectiveFrom}</span><CnDatePicker data-testid="dynamic-pricing-effective-from" value={effectiveFrom} onChange={setEffectiveFrom} /></label>
                   <label><span>{TEXT.effectiveTo}</span><CnDatePicker data-testid="dynamic-pricing-effective-to" value={effectiveTo} onChange={setEffectiveTo} /></label>
                 </>
@@ -305,7 +322,7 @@ export function DynamicPricingPage({ api, setActionResult, setGlobalError, effec
             { label: TEXT.ticketType, value: ticketTypes.find((type) => type.id === ticketTypeId)?.ticketName ?? (ticketTypeId || "未填写") },
             { label: TEXT.ruleName, value: ruleName.trim() || "未填写" },
             { label: TEXT.channel, value: salesChannel.trim() || "未填写" },
-            { label: TEXT.adjustmentRate, value: adjustmentRate.trim() || "未填写" },
+            { label: TEXT.adjustment, value: dynamicAdjustment({ adjustmentType, adjustmentRate, adjustmentAmountCent: Math.round(Number(adjustmentYuan) * 100) }) },
             { label: TEXT.effectiveFrom, value: effectiveFrom ? cnDate(effectiveFrom) : "未填写" },
             { label: TEXT.effectiveTo, value: effectiveTo ? cnDate(effectiveTo) : "未填写" },
           ]}
@@ -328,7 +345,7 @@ export function DynamicPricingPage({ api, setActionResult, setGlobalError, effec
                   <td>{rule.ruleName ?? rule.id}</td>
                   <td>{formatBusinessStatus(rule.salesChannel)}</td>
                   <td>{rule.priority ?? "-"}</td>
-                  <td>{adjustmentTypeLabel(rule.adjustmentType)} {rule.adjustmentRate ?? ""}</td>
+                  <td>{dynamicAdjustment(rule)}</td>
                   <td>{formatBusinessStatus(rule.status)}</td>
                   <td>{cnDate(rule.effectiveFrom)} ~ {cnDate(rule.effectiveTo)}</td>
                 <td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看动态定价规则详情" onClick={(event) => { event.stopPropagation(); openRuleDetail(rule); }}>查看详情</button></td></tr>

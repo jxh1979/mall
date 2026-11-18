@@ -1,4 +1,4 @@
-// 文件版本：V0.23
+// 文件版本：V0.24
 import { expect, test } from "@playwright/test";
 import { installMockApi } from "./support/mock-api";
 import { fillCnDate } from "./support/cn-date";
@@ -758,7 +758,7 @@ test.describe("full admin remaining pages acceptance", () => {
         const dynamicPricingTable = page.getByTestId("dynamic-pricing-table");
         await expect(dynamicPricingTable).toBeVisible();
         await expect(dynamicPricingTable).toContainText("Weekend Boost");
-        await expect(dynamicPricingTable).toContainText("百分比调整");
+        await expect(dynamicPricingTable).toContainText("加价 10%"); // 335-R1：调整列按比例写「加价/减价 x%」
         await expect(dynamicPricingTable).toContainText("草稿");
         continue;
       }

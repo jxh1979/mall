@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.14
+// 文件版本：V0.15
 
 // 文件版本：V0.03
 
@@ -74,14 +74,19 @@ class TicketingServiceTests {
     // V369 凑整允许误差配置端口测试双子。默认不挂到服务上——既有用例不受误差闸影响；
     //   要测误差闸的用例自己 catalogService.comboPriceToleranceConfigPort = toleranceStub。
     private StubComboPriceToleranceConfigPort toleranceStub;
+    // 第十八批 AT 段 298-R1：节假日日历端口测试双子（默认空集＝没有节假日，既有用例照星期取价）。
+    private final java.util.Set<LocalDate> holidays = new java.util.HashSet<>();
+    private TicketPricingService pricingService;
 
     /** V369 凑整允许误差配置端口测试双子（出厂种子 500 分 = 5 元）。 */
     private static final class StubComboPriceToleranceConfigPort implements ComboPriceToleranceConfigPort {
         private long toleranceCent = 500L;
+        // 第十八批 AT 段 292-R1：允许尾数（出厂 8、9、0）。
+        private String allowedEndings = FACTORY_ALLOWED_ENDINGS;
 
         @Override
-        public long findRoundingToleranceCent(String projectId) {
-            return toleranceCent;
+        public ComboRounding findComboRounding(String projectId) {
+            return new ComboRounding(toleranceCent, allowedEndings);
         }
     }
 
@@ -106,7 +111,7 @@ class TicketingServiceTests {
         AuditEventService auditEventService = new AuditEventService(auditEventRepository);
         IdempotencyService idempotencyService = new IdempotencyService(new InMemoryIdempotencyRepository(), new ObjectMapper());
         AuditedOperationExecutor operations = new AuditedOperationExecutor(idempotencyService, auditEventService);
-        TicketPricingService pricingService = new TicketPricingService(ticketingRepository);
+        pricingService = new TicketPricingService(ticketingRepository, holidays::contains);
         TicketVerificationService verificationService = new TicketVerificationService(ticketingRepository, publishedEvents::add, null, null, null, null);
         AuthorizationService authorizationService = new AuthorizationService(null);
         bars = new java.util.HashMap<>();
@@ -4812,6 +4817,9 @@ class TicketingServiceTests {
         assertThat(check.diffCent()).isEqualTo(375L);               // 上调 3.75 元凑成 178
         assertThat(check.withinTolerance()).isTrue();
         assertThat(check.roundingSuggested()).isEqualTo(17800L);    // 整元且尾数 8
+        // 第十八批 AT 段 292-R1（BSM:754「尾数落在后台配置的允许尾数集合内」）：后台把允许尾数改成 5，凑整建议跟着变成 175 元。
+        toleranceStub.allowedEndings = "5";
+        assertThat(service.ticketTypePriceCheck(pass.id()).roundingSuggested()).isEqualTo(17500L);
     }
 
     @Test
@@ -4961,12 +4969,55 @@ class TicketingServiceTests {
     }
 
     @Test
+    void holidayCalendarDatesTakeHolidayPriceWhateverTheWeekday() {
+        // 第十八批 AT 段 298-R1（BSM:776「按日期平日票、周末票、节假日票（基础价，优先级最高）。」）：到访日在节假日日历内
+        // 取节假日价，不论周几；不在日历内照星期取周末价、平日价；派生固定价同一口径。
+        TicketTypeRecord ticketType = createTicketType("holiday-price");   // 平日 99、周末 119、节假日 129 元
+        TicketPriceRuleRecord fixed = service.createTicketPriceRule(new TicketPriceRuleRequest(
+                "holiday-price-rule", "student fixed", List.of(), ticketType.id(), "student", "fixed_price",
+                6900L, 7900L, 8900L, null, "miniapp", Map.of("student", "verified")));
+        LocalDate holidayWednesday = LocalDate.parse("2026-06-24");
+        LocalDate holidaySaturday = LocalDate.parse("2026-06-27");
+        LocalDate plainWednesday = LocalDate.parse("2026-07-01");
+        LocalDate plainSaturday = LocalDate.parse("2026-07-04");
+        holidays.add(holidayWednesday);
+        holidays.add(holidaySaturday);
+
+        assertThat(pricingService.resolveUnitPrice(ticketType, null, holidayWednesday)).isEqualTo(12900L);
+        assertThat(pricingService.resolveUnitPrice(ticketType, null, holidaySaturday)).isEqualTo(12900L);
+        assertThat(pricingService.resolveUnitPrice(ticketType, null, plainSaturday)).isEqualTo(11900L);
+        assertThat(pricingService.resolveUnitPrice(ticketType, null, plainWednesday)).isEqualTo(9900L);
+        assertThat(pricingService.resolveUnitPrice(ticketType, fixed, holidayWednesday)).isEqualTo(8900L);
+        assertThat(pricingService.resolveUnitPrice(ticketType, fixed, holidaySaturday)).isEqualTo(8900L);
+        assertThat(pricingService.resolveUnitPrice(ticketType, fixed, plainSaturday)).isEqualTo(7900L);
+        assertThat(pricingService.resolveUnitPrice(ticketType, fixed, plainWednesday)).isEqualTo(6900L);
+    }
+
+    @Test
+    void lowestUnitPriceKeepsWeekdayAndWeekendSamplesWhenHolidayCalendarCoversThem() {
+        // 第十八批 AT 段收尾复核修正（ENUM:52「按当前赠送权益预估成本与当前最低实付价组合计算」、DEC-R8-48「不得只算一个代表值」）：
+        // 最低实付价仍按工作日、周末代表日取，下一个周一、周六落在节假日日历内也不取节假日价，否则最低池被抬高、第一段试算闸放宽。
+        TicketTypeRecord ticketType = createTicketType("holiday-lowest");   // 平日 99、周末 119、节假日 129 元
+        LocalDate today = LocalDate.parse("2026-09-29");                    // 周二：下一个周六 10-03、周一 10-05
+        holidays.add(LocalDate.parse("2026-10-03"));
+        holidays.add(LocalDate.parse("2026-10-05"));
+
+        assertThat(pricingService.lowestUnitPriceCent(ticketType.id(), today)).isEqualTo(9900L);
+        service.createTicketPriceRule(new TicketPriceRuleRequest(
+                "holiday-lowest-rule", "student fixed", List.of(), ticketType.id(), "student", "fixed_price",
+                6900L, 7900L, 8900L, null, "miniapp", Map.of("student", "verified")));
+        assertThat(pricingService.lowestUnitPriceCent(ticketType.id(), today)).isEqualTo(6900L);
+    }
+
+    @Test
     void niceEndingSuggestionPicksTheNearestEightNineOrZero() {
-        // 凑整建议只是给运营的一个数（尾数 8/9/0），不强制——真正拒绝发布的只有「超出允许误差」这一条。
-        assertThat(TicketCatalogService.roundToNiceEnding(17425L)).isEqualTo(17800L);
-        assertThat(TicketCatalogService.roundToNiceEnding(19100L)).isEqualTo(19000L);
-        assertThat(TicketCatalogService.roundToNiceEnding(19300L)).isEqualTo(19000L);
-        assertThat(TicketCatalogService.roundToNiceEnding(19600L)).isEqualTo(19800L);
-        assertThat(TicketCatalogService.roundToNiceEnding(0L)).isEqualTo(0L);
+        // 凑整建议只是给运营的一个数（尾数按后台配置的允许尾数集合，出厂 8/9/0），不强制——真正拒绝发布的只有「超出允许误差」这一条。
+        assertThat(TicketCatalogService.roundToNiceEnding(17425L, "089")).isEqualTo(17800L);
+        assertThat(TicketCatalogService.roundToNiceEnding(19100L, "089")).isEqualTo(19000L);
+        assertThat(TicketCatalogService.roundToNiceEnding(19300L, "089")).isEqualTo(19000L);
+        assertThat(TicketCatalogService.roundToNiceEnding(19600L, "089")).isEqualTo(19800L);
+        assertThat(TicketCatalogService.roundToNiceEnding(0L, "089")).isEqualTo(0L);
+        // 第十八批 AT 段 292-R1：允许尾数改成 5，174.25 元凑到 175 元。
+        assertThat(TicketCatalogService.roundToNiceEnding(17425L, "5")).isEqualTo(17500L);
     }
 }

@@ -1,6 +1,6 @@
 package com.complex.platform.common.api;
 
-// 文件版本：V0.49
+// 文件版本：V0.50
 
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -905,6 +905,8 @@ public final class FieldLabels {
         // 第十八批 AK 段第 221 条 221-R1 酒吧商品沽清两档（ENUM:111；同前端 fieldLabels.ts）。
         p("sold_out_type", "沽清档位");
         p("sold_out_until", "临时沽清到期时间");
+        // 第十八批 AT 段第 292 条 292-R1 通票凑整允许尾数（BSM:754；同前端 fieldLabels.ts）。
+        p("rounding_allowed_endings", "凑整允许尾数");
     }
 
     /** 字段键（snake 或 camel）→ 中文业务名；认不出返回 null。 */

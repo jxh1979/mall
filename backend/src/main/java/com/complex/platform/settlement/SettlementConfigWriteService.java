@@ -1,6 +1,6 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.08
+// 文件版本：V0.09
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.analytics.OperatingParamsService;
@@ -199,13 +199,29 @@ public class SettlementConfigWriteService {
         // V369 凑整允许误差(分):留空=沿用出厂 500 分;非空必须 ≥0(对齐 chk_tcdc_rounding_tolerance)。
         long tolerance = req.roundingToleranceCent() == null ? 500L : req.roundingToleranceCent();
         requireNonNegative(tolerance, "rounding_tolerance_cent");
+        // 第十八批 AT 段 292-R1（BSM:754「尾数落在后台配置的允许尾数集合内——业务参数，全平台统一可配，出厂默认 8、9、0」）：
+        // 留空＝出厂 8、9、0；每项须为 0～9、至少一个；去重升序存成数字串。取值只认全平台默认行。
+        String endings = com.complex.platform.ticketing.ComboPriceToleranceConfigPort.FACTORY_ALLOWED_ENDINGS;
+        if (req.roundingAllowedEndings() != null) {
+            java.util.TreeSet<Integer> digits = new java.util.TreeSet<>();
+            for (Integer digit : req.roundingAllowedEndings()) {
+                if (digit == null || digit < 0 || digit > 9) {
+                    throw ApiException.badRequest("VALIDATION_FAILED", "rounding_allowed_endings 每项须为 0 到 9 的整数");
+                }
+                digits.add(digit);
+            }
+            if (digits.isEmpty()) {
+                throw ApiException.badRequest("VALIDATION_FAILED", "rounding_allowed_endings 至少选一个尾数");
+            }
+            endings = digits.stream().map(String::valueOf).collect(java.util.stream.Collectors.joining());
+        }
         String scopeKey = defaultScope(req.projectId());
         String landedId = writeRepository.upsertComboDiscountDraft(draftId("tcdc_d_", scopeKey, idem),
-                req.projectId(), bearer, split, tolerance, actorId);
+                req.projectId(), bearer, split, tolerance, endings, actorId);
         audit("settlement.config.ticket_combo_discount_configs.updated",
                 "ticket_combo_discount_configs", landedId, idem,
                 Map.of("project_scope", scopeKey, "discount_bearer", bearer, "split_platform_bps", String.valueOf(split),
-                        "rounding_tolerance_cent", String.valueOf(tolerance)));
+                        "rounding_tolerance_cent", String.valueOf(tolerance), "rounding_allowed_endings", endings));
     }
 
     public void saveChannelFee(ChannelFeeRequest request, String actorId) {

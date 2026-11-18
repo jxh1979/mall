@@ -1,4 +1,4 @@
-// 文件版本：V0.06
+// 文件版本：V0.07
 import { describe, it, expect } from "vitest";
 import { formatBusinessStatus } from "./statusLabels";
 
@@ -20,6 +20,8 @@ describe("formatBusinessStatus 新增枚举域中文化", () => {
     expect(formatBusinessStatus("web")).toBe("网页端");
     expect(formatBusinessStatus("miniapp")).toBe("小程序");
     expect(formatBusinessStatus("channel")).toBe("第三方渠道");
+    // 第十八批 AT 段 336-R1（PGM:287「界面全中文」）：后台渠道，同后端复核单摘要 CHANNEL_NAMES。
+    expect(formatBusinessStatus("admin")).toBe("后台");
   });
 
   it("我的订单来源渠道翻中文（官方手机应用、一体机与第三方团购）", () => {
