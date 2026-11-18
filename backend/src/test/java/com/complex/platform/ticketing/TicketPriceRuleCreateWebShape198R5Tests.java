@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -79,5 +79,42 @@ class TicketPriceRuleCreateWebShape198R5Tests {
                 .containsEntry("weekday_price_cent", 3000L)
                 .containsEntry("holiday_price_cent", 3000L)
                 .containsEntry("discount_rate", null);
+    }
+
+    // 第十八批 AT 段 337-R1（契约与现码一致）：票种不存在时建派生价回 404 TICKET_TYPE_NOT_FOUND（蛇形键、折扣按百分数 80）。
+    @Test
+    void createTicketPriceRule_unknownTicketType_404() throws Exception {
+        String project = "prj_b66tp_" + s;
+        jdbc.update("INSERT INTO projects (id, venue_type, name, status, created_at, updated_at)"
+                + " VALUES (?, 'complex', '派生价缺票种综合体', 'active', now(), now())", project);
+        RequestPostProcessor manager = new StaffRequestFixture(jdbc).staff("usr_b66tp_" + s, "staff", project, null,
+                "ticket.price_variant.manage");
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("idempotency_key", "b66tp-rule-" + s);
+        body.put("ticket_type_id", "tt_b66tp_none_" + s);
+        body.put("variant_type", "member");
+        body.put("price_mode", "derive_from_calendar_price");
+        body.put("discount_rate", 80);
+        mockMvc.perform(post("/api/v1/ticketing/price-rules").with(manager)
+                        .contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(body)))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.detail_code").value("TICKET_TYPE_NOT_FOUND"));
+    }
+
+    // 第十八批 AT 段 337-R1（契约与现码一致）：票种不存在时发布票种回 404 TICKET_TYPE_NOT_FOUND。
+    @Test
+    void publishTicketType_unknownTicketType_404() throws Exception {
+        String project = "prj_b66tpp_" + s;
+        jdbc.update("INSERT INTO projects (id, venue_type, name, status, created_at, updated_at)"
+                + " VALUES (?, 'complex', '发布缺票种综合体', 'active', now(), now())", project);
+        RequestPostProcessor manager = new StaffRequestFixture(jdbc).staff("usr_b66tpp_" + s, "staff", project, null,
+                "ticket.product.manage");
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("idempotency_key", "b66tp-publish-" + s);
+        body.put("reason", "组合配齐，提交上架");
+        mockMvc.perform(post("/api/v1/ticketing/ticket-types/tt_b66tp_none_" + s + "/publish").with(manager)
+                        .contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(body)))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.detail_code").value("TICKET_TYPE_NOT_FOUND"));
     }
 }

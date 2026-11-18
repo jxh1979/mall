@@ -1,6 +1,6 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.07
+// 文件版本：V0.08
 
 import com.complex.platform.common.api.ApiException;
 import java.sql.Timestamp;
@@ -941,7 +941,8 @@ public class JdbcSettlementBillRepository implements com.complex.platform.ticket
      */
     public ComboDiscountConfig findComboDiscountConfig(String projectId) {
         ComboDiscountConfig cfg = jdbcTemplate.query("""
-                SELECT discount_bearer, split_platform_bps, rounding_tolerance_cent FROM ticket_combo_discount_configs
+                SELECT discount_bearer, split_platform_bps, rounding_tolerance_cent, rounding_allowed_endings
+                  FROM ticket_combo_discount_configs
                  WHERE status = 'active' AND is_draft = FALSE
                    AND COALESCE(project_id, '__DEFAULT__') IN (COALESCE(:project_id, '__DEFAULT__'), '__DEFAULT__')
                  ORDER BY (project_id IS NOT NULL) DESC
@@ -949,18 +950,20 @@ public class JdbcSettlementBillRepository implements com.complex.platform.ticket
                 """, new MapSqlParameterSource().addValue("project_id", projectId),
                 rs -> rs.next()
                         ? new ComboDiscountConfig(rs.getString("discount_bearer"), rs.getInt("split_platform_bps"),
-                                rs.getLong("rounding_tolerance_cent"))
+                                rs.getLong("rounding_tolerance_cent"), rs.getString("rounding_allowed_endings"))
                         : null);
         return requireConfigured(cfg, "ticket_combo_discount_configs", projectId);
     }
 
     /**
-     * V369 凑整允许误差(分),实现票务域声明的 {@link com.complex.platform.ticketing.ComboPriceToleranceConfigPort}。
+     * V369 凑整允许误差(分)与 V648 允许尾数,实现票务域声明的 {@link com.complex.platform.ticketing.ComboPriceToleranceConfigPort}。
      * 与折扣归属同一行配置、同一套草案转正闸;缺配置时沿用 requireConfigured 的 fail-loud(不静默给 0)。
      */
     @Override
-    public long findRoundingToleranceCent(String projectId) {
-        return findComboDiscountConfig(projectId).roundingToleranceCent();
+    public com.complex.platform.ticketing.ComboPriceToleranceConfigPort.ComboRounding findComboRounding(String projectId) {
+        // 第十八批 AT 段 292-R1：误差照旧按项目取；允许尾数只认全平台默认行（BSM:754「全平台统一可配」）。
+        return new com.complex.platform.ticketing.ComboPriceToleranceConfigPort.ComboRounding(findComboDiscountConfig(projectId).roundingToleranceCent(),
+                findComboDiscountConfig(null).roundingAllowedEndings());
     }
 
     /**
@@ -1472,8 +1475,10 @@ public class JdbcSettlementBillRepository implements com.complex.platform.ticket
      * V268 套票折扣归属配置读投影(§7.4)。splitPlatformBps 仅 split_by_ratio 用。
      * V369 roundingToleranceCent:综合/联合通票「凑整允许误差」(分)——运营填的近似售价与系统算出售价的差额上限,
      * 超出即拒绝发布。刻意与折扣归属同表同行:凑整差额走的就是这条折扣承担口径,运营只在一处维护。
+     * V648 roundingAllowedEndings:凑整允许尾数(升序去重数字串,出厂 089),只取全平台默认行(第十八批 AT 段 292-R1,BSM:754)。
      */
-    public record ComboDiscountConfig(String discountBearer, int splitPlatformBps, long roundingToleranceCent) {
+    public record ComboDiscountConfig(String discountBearer, int splitPlatformBps, long roundingToleranceCent,
+                                      String roundingAllowedEndings) {
     }
 
     /** V268 综合服务费配置读投影(§7.2):fixedAmountCent 非空=用固定额,否则用 feeBps 比例。

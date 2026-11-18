@@ -58,6 +58,9 @@ public class SettlementConfigService {
         // 差多少就是填错了——超出这个数的票一律不许开卖。与折扣归属同一行配置(凑整差额走同一条承担口径)。
         defaults.add(new ConfigItem("通票分账", "rounding_tolerance_cent", "通票凑整允许误差(分)",
                 String.valueOf(combo.roundingToleranceCent())));
+        // 第十八批 AT 段 292-R1（BSM:754「尾数落在后台配置的允许尾数集合内——业务参数，全平台统一可配，出厂默认 8、9、0」）。
+        defaults.add(new ConfigItem("通票分账", "rounding_allowed_endings", "通票凑整允许尾数",
+                String.join("、", combo.roundingAllowedEndings().split(""))));
         // V340(P0-D/CFG-01):提成/积分两条原写死口径纳入总览「当前生效值」,与其它配置同源(只读生效行)。
         defaults.add(new ConfigItem("提成与积分", "commission_rate_sales", "卡座提成率·销售人员(万分比)",
                 String.valueOf(commissionPointsConfigRepository.findCommissionRateBp(null, null, "sales"))));

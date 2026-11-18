@@ -1,4 +1,4 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -271,6 +271,8 @@ describe("TicketingPoliciesPage 297-R4 规则版本里的派生价与动态价",
     await waitFor(() => expect(props.setActionResult).toHaveBeenCalledWith(expect.objectContaining({
       action: "ticket_price_rule_staged", note: expect.stringContaining("② 组合式套票配置") })));
     expect(props.setActionResult).not.toHaveBeenCalledWith(expect.objectContaining({ action: "ticket_price_rule_created" }));
+    // 第十八批 AT 段 334-R1：派生价折扣按百分数提交（后端 0～100），默认 80＝八折。
+    expect(posts(sent, "/ticketing/price-rules")[0]?.body.discount_rate).toBe(80);
   });
 
   it("待审期间新建派生价：后端 409 → 显示中文报错，不报成功", async () => {

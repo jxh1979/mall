@@ -8,7 +8,7 @@ const ADMIN_PERMS: EffectivePermissionsState = { status: "ready", value: { grant
 
 const TICKETS = [{ id: "t-1", ticketName: "通票甲", weekdayPriceCent: 9900, weekendPriceCent: 12900, holidayPriceCent: 15900, status: "active", stockQuantity: null }];
 const TEMPLATES = [{ id: "tpl-1", name: "入园1次", entitlementType: "entry", status: "active" }];
-const RULES = [{ id: "pr-1", ticketTypeId: "t-1", variantType: "student", priceMode: "derive_from_calendar_price", discountRate: 0.8, weekdayPriceCent: null, status: "active" }];
+const RULES = [{ id: "pr-1", ticketTypeId: "t-1", variantType: "student", priceMode: "derive_from_calendar_price", discountRate: 80, weekdayPriceCent: null, status: "active" }];
 
 function makeApi(): AdminApiClient {
   return {
@@ -84,6 +84,9 @@ describe("TicketingPoliciesPage 行明细抽屉（三业务表整行可点·零�
   it("点派生价规则行 -> 抽屉含中文人群+折扣+票种下钻 TraceLink", async () => {
     renderPage({ navigateTo: vi.fn() });
     await waitFor(() => expect(screen.getByTestId("price-rule-pr-1")).toBeTruthy());
+    // 第十八批 AT 段 334-R1（BSM:782「会员价、渠道价、动态价都在对应基础价上按打折/减免/加价/固定额派生」；后端按百分数计）：折扣列按百分数显示。
+    expect(screen.getByTestId("price-rule-pr-1").textContent ?? "").toContain("80%");
+    expect(screen.getByTestId("price-rule-pr-1").textContent ?? "").not.toContain("8000");
     fireEvent.click(screen.getByTestId("price-rule-pr-1"));
     const drawer = screen.getByTestId("row-detail-drawer");
     const text = drawer.textContent ?? "";

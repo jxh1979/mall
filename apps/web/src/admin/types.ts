@@ -1,4 +1,4 @@
-// 文件版本：V0.29
+// 文件版本：V0.30
 export type AdminUser = {
   id: string;
   username: string;
@@ -269,6 +269,7 @@ export type TicketDynamicPricingRuleRow = {
   salesChannel?: string;
   adjustmentType?: string;
   adjustmentRate?: number;
+  adjustmentAmountCent?: number;
   minPriceCent?: number;
   maxPriceCent?: number;
   status?: string;

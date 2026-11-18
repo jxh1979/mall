@@ -1,6 +1,6 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import java.util.List;
 
@@ -52,14 +52,24 @@ public final class SettlementConfigWriteRequests {
      * <p>V369 roundingToleranceCent:综合/联合通票「凑整允许误差」(分,≥0,留空=不改沿用 500 出厂值)。
      * 运营给通票填的近似售价与系统按各业态票面原价×折扣算出的售价,差额超过这个数就不许开卖。
      * 和折扣归属同填一处,因为凑整多出/少收的那点钱走的正是这条折扣承担口径。
+     *
+     * <p>第十八批 AT 段 292-R1 roundingAllowedEndings:通票凑整允许尾数(每项 0～9、至少一个,留空=出厂 8、9、0);
+     * BSM:754「尾数落在后台配置的允许尾数集合内——业务参数,全平台统一可配」,取值只认全平台默认行(前端只在全平台默认里提交)。
      */
     public record ComboDiscountRequest(String idempotencyKey, String projectId, String discountBearer,
-                                       Integer splitPlatformBps, Long roundingToleranceCent) {
+                                       Integer splitPlatformBps, Long roundingToleranceCent,
+                                       List<Integer> roundingAllowedEndings) {
 
         /** V369 前的 4 参签名(无 roundingToleranceCent)→ null=沿用出厂 500 分。 */
         public ComboDiscountRequest(String idempotencyKey, String projectId, String discountBearer,
                                     Integer splitPlatformBps) {
-            this(idempotencyKey, projectId, discountBearer, splitPlatformBps, null);
+            this(idempotencyKey, projectId, discountBearer, splitPlatformBps, null, null);
+        }
+
+        /** V648 前的 5 参签名(无 roundingAllowedEndings)→ null=出厂 8、9、0。 */
+        public ComboDiscountRequest(String idempotencyKey, String projectId, String discountBearer,
+                                    Integer splitPlatformBps, Long roundingToleranceCent) {
+            this(idempotencyKey, projectId, discountBearer, splitPlatformBps, roundingToleranceCent, null);
         }
     }
 

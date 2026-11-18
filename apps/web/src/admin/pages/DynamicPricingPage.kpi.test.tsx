@@ -8,7 +8,7 @@ const ADMIN_PERMS: EffectivePermissionsState = { status: "ready", value: { grant
 
 const RULES: TicketDynamicPricingRuleRow[] = [
   { id: "r-1", ruleName: "草稿规则", salesChannel: "web", priority: 10, adjustmentType: "percent_delta", adjustmentRate: 10, status: "draft", effectiveFrom: "2026-06-01", effectiveTo: "2026-06-30", ticketTypeId: "t-1" },
-  { id: "r-2", ruleName: "已发布规则", salesChannel: "miniapp", priority: 5, adjustmentType: "absolute_delta", adjustmentRate: 200, status: "published", effectiveFrom: "2026-06-01", effectiveTo: "2026-06-30", ticketTypeId: "t-1" },
+  { id: "r-2", ruleName: "已发布规则", salesChannel: "miniapp", priority: 5, adjustmentType: "fixed_delta", adjustmentAmountCent: 200, status: "published", effectiveFrom: "2026-06-01", effectiveTo: "2026-06-30", ticketTypeId: "t-1" },
 ];
 
 function makeApi(): AdminApiClient {
@@ -78,8 +78,8 @@ describe("DynamicPricingPage KPI 聚焦视图", () => {
     expect(summary).not.toContain("published");
     const table = screen.getByTestId("dynamic-pricing-table").textContent ?? "";
     expect(table).not.toContain("percent_delta");
-    expect(table).not.toContain("absolute_delta");
-    expect(table).toContain("百分比调整");
+    expect(table).not.toContain("fixed_delta");
+    expect(table).toContain("加价 ¥2.00");
     expect(table).toContain("草稿");
     expect(table).toContain("已上架");
   });

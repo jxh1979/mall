@@ -16,7 +16,7 @@ import java.math.BigDecimal;
  * @param diffCent           填的 − 算出的（带符号：正=上调、负=下调）；未填价为 null
  * @param toleranceCent      后台可配的允许误差（分）
  * @param withinTolerance    是否在允许误差内（未填价视为不通过）
- * @param roundingSuggested  按「整元且尾数 8/9/0」建议的凑整售价（分），供前端提示运营填哪个数好卖
+ * @param roundingSuggested  按「整元且尾数落在后台配置的允许尾数集合内」建议的凑整售价（分，出厂尾数 8、9、0），供前端提示运营填哪个数好卖
  */
 public record TicketTypePriceCheck(
         String ticketTypeId,

@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.06
+// 文件版本：V0.07
 
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.governance.MerchantRecord;
@@ -58,6 +58,9 @@ public class TicketCatalogService {
     // 为 null（旧构造/未注入的单测）= 不做误差校验，与 barDirectory 同范式。
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     ComboPriceToleranceConfigPort comboPriceToleranceConfigPort;
+    // 第十八批 AT 段 292-R1：端口未注入（旧构造、单测）与版本快照用——误差 0、尾数取出厂 8、9、0。
+    private static final ComboPriceToleranceConfigPort.ComboRounding ZERO_TOLERANCE_FACTORY_ENDINGS =
+            new ComboPriceToleranceConfigPort.ComboRounding(0L, ComboPriceToleranceConfigPort.FACTORY_ALLOWED_ENDINGS);
 
     // V369：解析当前登录人的项目公司作用域，用于按项目取允许误差。为 null 时取全局默认作用域。
     @org.springframework.beans.factory.annotation.Autowired(required = false)
@@ -149,9 +152,9 @@ public class TicketCatalogService {
     TicketTypePriceCheck priceCheck(String ticketTypeId) {
         TicketTypeRecord ticketType = repository.findTicketTypeById(requireText(ticketTypeId, "ticket_type_id"))
                 .orElseThrow(() -> ApiException.notFound("TICKET_TYPE_NOT_FOUND", "票种不存在或已被删除"));
-        long tolerance = comboPriceToleranceConfigPort == null
-                ? 0L : comboPriceToleranceConfigPort.findRoundingToleranceCent(currentProjectId());
-        return priceCheck(ticketType, repository.listTicketTypeEntitlements(ticketType.id()), tolerance);
+        ComboPriceToleranceConfigPort.ComboRounding rounding = comboPriceToleranceConfigPort == null
+                ? ZERO_TOLERANCE_FACTORY_ENDINGS : comboPriceToleranceConfigPort.findComboRounding(currentProjectId());
+        return priceCheck(ticketType, repository.listTicketTypeEntitlements(ticketType.id()), rounding);
     }
 
     /** V369：票种折扣（百分数）校验，可空=100 不打折；越界拒（DB 另有 CHECK 兜底）。 */
@@ -902,7 +905,7 @@ public class TicketCatalogService {
             return; // 未注入（旧构造/单测）：不校验。生产由 Spring 恒注入，端口自身缺配置时 fail-loud。
         }
         TicketTypePriceCheck check = priceCheck(ticketType, bindings,
-                comboPriceToleranceConfigPort.findRoundingToleranceCent(currentProjectId()));
+                comboPriceToleranceConfigPort.findComboRounding(currentProjectId()));
         if (check.withinTolerance()) {
             return;
         }
@@ -929,16 +932,16 @@ public class TicketCatalogService {
             return true;
         }
         return priceCheck(ticketType, bindings,
-                comboPriceToleranceConfigPort.findRoundingToleranceCent(currentProjectId())).withinTolerance();
+                comboPriceToleranceConfigPort.findComboRounding(currentProjectId())).withinTolerance();
     }
 
     /**
      * V369 定价核算：算出售价、与填的价差多少、超没超。前端实时提示与发布闸用的是同一份计算。
      *
-     * @param toleranceCent 后台可配的允许误差（分）
+     * @param rounding 后台可配的允许误差（分）与允许尾数集合（第十八批 AT 段 292-R1）
      */
     TicketTypePriceCheck priceCheck(TicketTypeRecord ticketType,
-            java.util.List<TicketTypeEntitlementRecord> bindings, long toleranceCent) {
+            java.util.List<TicketTypeEntitlementRecord> bindings, ComboPriceToleranceConfigPort.ComboRounding rounding) {
         // 各业态票面原价相加：每条绑定按【份数】计（一条 3 杯赠酒的绑定，票面上就是 3 份的价）。
         // 免费权益票面原价为 0 → 自然不计入价值（HTML:741「免费的（价格为 0）不计入价值」）；
         // NULL=没配价，发布前已被 requireComponentPrices 拦下，此处按 0 读、绝不回退均摊。
@@ -954,22 +957,25 @@ public class TicketCatalogService {
                 BigDecimal.valueOf(componentTotal).multiply(rate).divide(MAX_DISCOUNT_RATE));
         Long filled = ticketType.weekdayPriceCent();
         Long diff = filled == null ? null : filled - computed;
-        boolean within = diff != null && Math.abs(diff) <= toleranceCent;
+        boolean within = diff != null && Math.abs(diff) <= rounding.toleranceCent();
         return new TicketTypePriceCheck(ticketType.id(), componentTotal, rate, computed,
-                filled, diff, toleranceCent, within, roundToNiceEnding(computed));
+                filled, diff, rounding.toleranceCent(), within, roundToNiceEnding(computed, rounding.allowedEndings()));
     }
 
     /**
-     * 凑整建议：离算出售价最近的「整元、且元位尾数是 8/9/0」的价（HTML:741 括号里那句）。
-     * 只是给运营的建议数，不强制——真正拒绝发布的只有「超出允许误差」这一条。
+     * 凑整建议：离算出售价最近的「整元、且元位尾数落在后台配置的允许尾数集合内」的价（BSM:754 括号里那句；第十八批 AT 段 292-R1
+     * 起按后台配置，出厂 8、9、0）。只是给运营的建议数，不强制——真正拒绝发布的只有「超出允许误差」这一条。
+     * 候选为算出价上下各 10 元共 21 个连续整数，任一尾数都必有候选。
+     *
+     * @param allowedEndings 允许尾数数字串（如 "089"）
      */
-    static long roundToNiceEnding(long computedCent) {
+    static long roundToNiceEnding(long computedCent, String allowedEndings) {
         long bestCent = 0L;
         long bestGap = Long.MAX_VALUE;
         long yuan = computedCent / 100;
         for (long candidate = Math.max(0, yuan - 10); candidate <= yuan + 10; candidate++) {
             long lastDigit = candidate % 10;
-            if (lastDigit != 8 && lastDigit != 9 && lastDigit != 0) {
+            if (allowedEndings.indexOf((char) ('0' + lastDigit)) < 0) {
                 continue;
             }
             long gap = Math.abs(candidate * 100 - computedCent);
@@ -1114,7 +1120,7 @@ public class TicketCatalogService {
     RuleSnapshot snapshot(TicketTypeRecord ticketType, java.util.List<TicketTypeEntitlementRecord> bindings, TicketTypeGiftFloor floor,
             java.util.List<TicketTypeRuleVersionView.PriceRule> priceRules,
             java.util.List<TicketTypeRuleVersionView.DynamicPricingRule> dynamicRules) {
-        TicketTypePriceCheck check = priceCheck(ticketType, bindings, 0L);
+        TicketTypePriceCheck check = priceCheck(ticketType, bindings, ZERO_TOLERANCE_FACTORY_ENDINGS);
         Map<String, TicketingRepository.TemplateProvider> providers = providers(bindings);
         Long filled = ticketType.weekdayPriceCent();
         boolean allocate = filled != null && check.componentTotalCent() > 0L;
@@ -1192,14 +1198,14 @@ public class TicketCatalogService {
         if (!"published".equals(ticketType.status())) {
             return versions;
         }
-        long tolerance = comboPriceToleranceConfigPort == null
-                ? 0L : comboPriceToleranceConfigPort.findRoundingToleranceCent(currentProjectId());
+        ComboPriceToleranceConfigPort.ComboRounding rounding = comboPriceToleranceConfigPort == null
+                ? ZERO_TOLERANCE_FACTORY_ENDINGS : comboPriceToleranceConfigPort.findComboRounding(currentProjectId());
         return versions.stream().map(version -> {
             if (!version.open()) {
                 return version;
             }
             Draft draft = draftOf(ticketType, version);
-            return version.withPriceCheck(priceCheck(draft.type(), draft.bindings(), tolerance));
+            return version.withPriceCheck(priceCheck(draft.type(), draft.bindings(), rounding));
         }).toList();
     }
 
