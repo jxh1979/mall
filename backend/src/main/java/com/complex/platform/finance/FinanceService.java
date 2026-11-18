@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.48
+// 文件版本：V0.49
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -2253,6 +2253,14 @@ public class FinanceService implements TerminationSettlementPort {
                 .flatMap(unit -> unitNonFinalDays(unit, from, to, categories).stream()).toList();
     }
 
+    /**
+     * 第十八批 AQ 段第 243 条 243-R1（ENUM:190；BSM:1787「酒吧关闭须完成关停结算，依法核清本次分红」）：已登记关停结算的酒吧按该店查 from～to 的
+     * 未最终营业日，停用、存档后照查（{@link #nonFinalDays} 只认在营未存档的酒吧）；逐日同 {@link #unitNonFinalDays}。
+     */
+    public List<String> nonFinalDaysOfBar(String barId, LocalDate from, LocalDate to, java.util.Collection<String> categories) {
+        return repository.findBarFinalMarkUnit(barId).map(unit -> unitNonFinalDays(unit, from, to, categories)).orElse(List.of());
+    }
+
     /** 159-R1：未最终营业日的提示文案——各行以「；」连接，最多列 10 行，超出时末尾加「等，共 N 条」。 */
     public static String describeNonFinalDays(List<String> lines) {
         String shown = String.join("；", lines.subList(0, Math.min(lines.size(), 10)));
@@ -3686,6 +3694,21 @@ public class FinanceService implements TerminationSettlementPort {
     public long arApUnpaidCent(String itemId) {
         return repository.findArApItemById(itemId).map(ArApItemRecord::unpaidAmountCent)
                 .orElseThrow(() -> ApiException.notFound("AR_AP_ITEM_NOT_FOUND", "应收应付款项不存在或已被删除"));
+    }
+
+    /**
+     * 第十八批 AQ 段第 234 条 234-R2：其他股东分红应付（payable，应付对方与来源都是计算单股东实发行 id，source_type='dividend_payout'，部分唯一索引
+     * 按行防重挂）。派生 id 的 slug 只取前 40 字符，而股东实发行 id＝计算单 id 加序号、与主理人那笔（键＝计算单 id）前 40 字符相同会撞成同一行，
+     * 故幂等键取行 id 的稳定散列：各行各挂一笔、不与主理人那笔撞号。
+     */
+    public String createShareholderDividendPayable(String lineId, String merchantId, long amountCent, LocalDate dueDate) {
+        String key = UUID.nameUUIDFromBytes(lineId.getBytes(java.nio.charset.StandardCharsets.UTF_8)).toString().replace("-", "");
+        return persistDerivedArApItem("payable", lineId, "dividend_payout", lineId, amountCent, key, merchantId, null, dueDate).id();
+    }
+
+    /** 第十八批 AQ 段第 234 条 234-R2：分红标记发放前读其他股东分红应付（来源＝计算单股东实发行 id）的未付额合计。 */
+    public long unpaidDividendPayoutCent(List<String> sourceIds) {
+        return repository.sumUnpaidArApBySources("payable", "dividend_payout", sourceIds);
     }
 
     /**

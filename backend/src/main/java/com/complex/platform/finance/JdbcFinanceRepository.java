@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.27
+// 文件版本：V0.28
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
@@ -279,6 +279,22 @@ class JdbcFinanceRepository implements FinanceRepository {
                 .addValue("source_type", sourceType)
                 .addValue("source_id", sourceId), Boolean.class);
         return Boolean.TRUE.equals(exists);
+    }
+
+    @Override
+    public long sumUnpaidArApBySources(String direction, String sourceType, java.util.Collection<String> sourceIds) {
+        // 234-R2：按 (direction, source_type) 与来源集合求未付额合计（标记分红发放前查其他股东分红应付）。
+        if (sourceIds.isEmpty()) {
+            return 0L;
+        }
+        Long sum = jdbcTemplate.queryForObject("""
+                SELECT COALESCE(SUM(unpaid_amount_cent), 0) FROM ar_ap_items
+                 WHERE direction = :direction AND source_type = :source_type AND source_id IN (:source_ids)
+                """, new MapSqlParameterSource()
+                .addValue("direction", direction)
+                .addValue("source_type", sourceType)
+                .addValue("source_ids", sourceIds), Long.class);
+        return sum == null ? 0L : sum;
     }
 
     @Override
@@ -1223,6 +1239,14 @@ class JdbcFinanceRepository implements FinanceRepository {
                 Map.of(), (rs, i) -> new FinalMarkUnit(null, rs.getString(1), rs.getString(2), rs.getString(1),
                         rs.getTimestamp(3).toInstant())));
         return units;
+    }
+
+    /** 第十八批 AQ 段第 243 条 243-R1：某酒吧的检查单位（同 {@link #listFinalMarkUnits} 第一条 SQL，不限在营与存档）。 */
+    @Override
+    public java.util.Optional<FinalMarkUnit> findBarFinalMarkUnit(String barId) {
+        return jdbcTemplate.query("SELECT id, merchant_name, project_id, created_at FROM merchants WHERE id = :id AND merchant_type = 'bar'",
+                Map.of("id", barId), (rs, i) -> new FinalMarkUnit(rs.getString(1), rs.getString(1), rs.getString(2), rs.getString(3),
+                        rs.getTimestamp(4).toInstant())).stream().findFirst();
     }
 
     /** 159-R1：酒吧取 bar、merchant 范围日结，否则取 project 范围日结；同日多张取并集，没有标记的营业日没有键。 */

@@ -1,6 +1,6 @@
 package com.complex.platform.dividend;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import com.complex.platform.common.api.ApiException;
 import java.time.LocalDate;
@@ -46,6 +46,20 @@ public record DividendPeriod(String label, LocalDate start, LocalDate end, List<
             return "semiannual";
         }
         return YEAR.matcher(label).matches() ? "annual" : null;
+    }
+
+    /**
+     * 第十八批 AQ 段第 243 条 243-R1：某一天所在期的标签（月 yyyy-MM、季 yyyy-Qn、半年 yyyy-H1/H2、年 yyyy，与 {@link #periodTypeOf} 同格式）；
+     * 关停结算按关店最后营业日求关店所在期。
+     */
+    public static String labelOf(LocalDate date, String periodType) {
+        int month = date.getMonthValue();
+        return switch (periodType) {
+            case "monthly" -> YearMonth.from(date).toString();
+            case "quarterly" -> date.getYear() + "-Q" + ((month - 1) / 3 + 1);
+            case "semiannual" -> date.getYear() + "-H" + (month <= 6 ? 1 : 2);
+            default -> String.valueOf(date.getYear());
+        };
     }
 
     /** 解析期间标签；非法格式抛 VALIDATION_FAILED。 */

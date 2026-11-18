@@ -1,8 +1,10 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.tuple;
+import static org.hamcrest.Matchers.containsString;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -97,6 +99,8 @@ class PaymentConfirmationCompensationDividendJdbcTests {
         legalLine = staffs.staff(legalLineId, "staff", project, null, "governance.supervisor_review.view", "governance.supervisor_review.approve");
         jdbc.update("INSERT INTO org_hierarchy(user_id,superior_id) VALUES(?,?)", storeId, mainId);
         jdbc.update("INSERT INTO org_hierarchy(user_id,superior_id) VALUES(?,?)", payerId, mainId);
+        // 243-R1：平台财务提交关停结算核实，主线沿直接上级到最终审批人。
+        jdbc.update("INSERT INTO org_hierarchy(user_id,superior_id) VALUES(?,?)", "usr_pcc_ds_" + s, mainId);
     }
 
     /**
@@ -188,6 +192,83 @@ class PaymentConfirmationCompensationDividendJdbcTests {
                 .andExpect(jsonPath("$.detail_code").value("PAYMENT_CONFIRMATION_REQUIRED"));
     }
 
+    /**
+     * 第十八批 AQ 段第 243 条 243-R1（BSM:1787「酒吧关闭须完成关停结算，依法核清本次分红、已算未发分红与发放保护线待释放款项」「已确认应付及待释款项的
+     * 法律性质和处理由财务、法务核实，不因关店自动核销或一概改为剩余财产分配；相关款项须按核实结果处理并留痕后才能结案。」；PGM:528「需要平行线审批的
+     * （如法务、财务），另行指定该条线的最终审批人」；PGM:529「申请人与直接受益人不得审批与自己相关的申请」）：7 月单审批通过挂主理人应付 120 元与留存
+     * 40 元，6 月单留草稿；平台财务登记关停结算（关店最后营业日 2026-08-20），列出本次分红（8 月正式单未出）、已算未发分红（6 月草稿、7 月主理人应付）与
+     * 保护线待释放（7 月留存）；8 月单未出不能提交核实，出单后逐条填法律性质与处理方式提交，进统一审批（主线＋财务、法务两线，受益人为主理人）；驳回退回可
+     * 再提交，全线通过后逐条登记处理才能结案；全程不动分红应付与计算单。按后台真实请求形状（蛇形键）走真实入口与授权链。修复前关停结算接口不存在：登记断言红。
+     */
+    @Test
+    void barCloseoutIsVerifiedByFinanceAndLegalAndClosedOnlyAfterEveryItemIsHandled() throws Exception {
+        String july = statement("2026-07", 4_000L, 12_000L);
+        submitAndApprove(july);
+        String june = statement("2026-06", 0L, 16_000L);
+        String payout = jdbc.queryForObject("SELECT ar_ap_item_id FROM dividend_statements WHERE id = ?", String.class, july);
+        String reserve = jdbc.queryForObject("SELECT id FROM ar_ap_items WHERE source_type = 'dividend_reserve_withheld' AND source_id = ?",
+                String.class, july);
+        List<Map<String, Object>> ledger = dividendLedger();
+
+        String closeout = JsonPath.read(registerCloseout("first", merchant).andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("open"))
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8), "$.data.id");
+        registerCloseout("again", merchant).andExpect(status().isConflict())
+                .andExpect(jsonPath("$.detail_code").value("DIVIDEND_CLOSEOUT_EXISTS"));
+        String catering = "pcc_cat_" + s;
+        jdbc.update("INSERT INTO merchants(id,merchant_name,merchant_type,status,created_at,updated_at)"
+                + " VALUES(?,'付款确认餐饮商户','catering','active',now(),now())", catering);
+        registerCloseout("catering", catering).andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("关停结算只适用于酒吧"));
+        assertThat(closeoutItems(closeout))
+                .extracting(item -> item.get("item_type"), item -> item.get("statement_id"), item -> item.get("ar_ap_item_id"),
+                        item -> ((Number) item.get("amount_cent")).longValue())
+                .containsExactly(tuple("current_period", null, null, 0L), tuple("unpaid_dividend", june, null, 16_000L),
+                        tuple("unpaid_dividend", july, payout, 12_000L), tuple("reserve_pending", july, reserve, 4_000L));
+
+        submitCloseout(closeout, "early", filled(closeoutItems(closeout))).andExpect(status().isConflict())
+                .andExpect(jsonPath("$.detail_code").value("DIVIDEND_CLOSEOUT_CURRENT_STATEMENT_MISSING"));
+        String august = statement("2026-08", 0L, 16_000L);
+        List<Map<String, Object>> items = closeoutItems(closeout);
+        assertThat(items.get(0)).containsEntry("item_type", "current_period").containsEntry("statement_id", august)
+                .containsEntry("period_label", "2026-08").containsEntry("amount_cent", 16_000);
+
+        List<Map<String, Object>> missing = filled(items);
+        missing.get(2).remove("legal_nature");
+        submitCloseout(closeout, "missing", missing).andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value(containsString("法律性质")));
+        String firstReview = reviewOf(submitCloseout(closeout, "first", filled(items)).andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("pending_review")));
+        assertThat(jdbc.queryForMap("SELECT action_type, object_type, object_id, beneficiary_id FROM supervisor_review_decisions WHERE review_id = ?",
+                firstReview)).containsEntry("action_type", "finance.dividend.closeout.verify").containsEntry("object_type", "dividend_closeout")
+                .containsEntry("object_id", closeout).containsEntry("beneficiary_id", principal);
+        assertThat(jdbc.queryForList("SELECT DISTINCT line_code FROM supervisor_review_nodes WHERE review_id = ?", String.class, firstReview))
+                .contains("finance_review", "legal_review");
+        closeCloseout(closeout, "early").andExpect(status().isConflict())
+                .andExpect(jsonPath("$.detail_code").value("DIVIDEND_CLOSEOUT_NOT_VERIFIED"));
+
+        decide(main, firstReview, "co-reject", "rejected").andExpect(status().isOk());
+        assertThat(jdbc.queryForMap("SELECT status, review_id FROM dividend_closeouts WHERE id = ?", closeout))
+                .containsEntry("status", "open").containsEntry("review_id", null);
+        String secondReview = reviewOf(submitCloseout(closeout, "second", filled(closeoutItems(closeout))).andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("pending_review")));
+        approveAll(secondReview, "co");
+        items = closeoutItems(closeout);
+        assertThat(items).hasSize(4).allSatisfy(item -> assertThat(item).containsEntry("legal_nature", "已确认的股东分红应付"));
+        closeCloseout(closeout, "pending").andExpect(status().isConflict())
+                .andExpect(jsonPath("$.detail_code").value("DIVIDEND_CLOSEOUT_ITEMS_PENDING"));
+        for (Map<String, Object> item : items) {
+            handleItem(closeout, (String) item.get("id"), "h-" + item.get("id")).andExpect(status().isOk());
+        }
+        handleItem(closeout, (String) items.get(0).get("id"), "again").andExpect(status().isConflict())
+                .andExpect(jsonPath("$.detail_code").value("DIVIDEND_CLOSEOUT_ITEM_HANDLED"));
+        closeCloseout(closeout, "done").andExpect(status().isOk()).andExpect(jsonPath("$.data.status").value("closed"));
+
+        assertThat(dividendLedger()).isEqualTo(ledger);
+        assertThat(jdbc.queryForList("SELECT status FROM dividend_statements WHERE id IN (?, ?, ?) ORDER BY period_label", String.class,
+                june, july, august)).containsExactly("draft", "approved", "draft");
+    }
+
     // ---------- helpers ----------
 
     /** 本酒吧一瓶已作废的存酒（BSM:1072 ②③ 作废后才登记补存或赔付），返回存酒编号。 */
@@ -229,10 +310,11 @@ class PaymentConfirmationCompensationDividendJdbcTests {
             Instant now = Instant.now();
             dividends.insertPlan(new DividendRecords.DividendPlanRecord(plan, merchant, principal, "主理人甲",
                     8000, 2000, "monthly", List.of("bar", "ticket"), true, List.of("labor"),
-                    null, "active", null, "usr_pcc_div_" + s, now, now, false, false, false, 0, 0L));
+                    java.time.LocalDate.of(2000, 1, 1), "active", null, "usr_pcc_div_" + s, now, now, false, false, false, 0, 0L));
             jdbc.update("UPDATE dividend_plans SET payout_pay_slot = 1 WHERE id = ?", plan);
         }
-        String id = "pcc_s_" + month + "_" + s;
+        // 派生台账 id 只取「来源类型＋计算单号」前 40 字符：唯一后缀放在月份前，免得留存应付（来源类型 26 字符）跨用例、跨轮撞号沿用旧商户。
+        String id = "pcs" + s.substring(s.length() - 9) + "_" + month;
         YearMonth ym = YearMonth.parse(month);
         Instant now = Instant.now();
         dividends.insertStatement(new DividendRecords.DividendStatementRecord(id, merchant, plan, "official", month, ym.atDay(1),
@@ -296,6 +378,70 @@ class PaymentConfirmationCompensationDividendJdbcTests {
         approve(main, reviewId, tag + "-main").andExpect(status().isOk());
         approve(finLine, reviewId, tag + "-fin").andExpect(status().isOk());
         approve(legalLine, reviewId, tag + "-legal").andExpect(status().isOk());
+    }
+
+    // ---------- 243-R1 关停结算 ----------
+
+    /** 持股分红页「关停结算登记」的真实请求（关店最后营业日 2026-08-20）。 */
+    private ResultActions registerCloseout(String tag, String merchantId) throws Exception {
+        return mockMvc.perform(post("/api/v1/finance/dividends/closeouts").with(submitter).contentType(MediaType.APPLICATION_JSON)
+                .content(json.writeValueAsString(Map.of("idempotency_key", "pcc-co-" + tag + "-" + s, "merchant_id", merchantId,
+                        "closed_business_date", "2026-08-20", "reason", "租约到期退场关店"))));
+    }
+
+    /** 关停结算列表里本商户那条登记的款项。 */
+    private List<Map<String, Object>> closeoutItems(String closeout) throws Exception {
+        String body = mockMvc.perform(get("/api/v1/finance/dividends/closeouts").param("merchant_id", merchant).with(submitter))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data[0].id").value(closeout))
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+        return JsonPath.read(body, "$.data[0].closeout_items");
+    }
+
+    /** 逐条填法律性质与处理方式（照页面提交形状：类别、计算单号、台账号对上列出的那一条）。 */
+    private static List<Map<String, Object>> filled(List<Map<String, Object>> items) {
+        return items.stream().map(item -> {
+            Map<String, Object> row = new java.util.LinkedHashMap<>();
+            row.put("item_type", item.get("item_type"));
+            row.put("statement_id", item.get("statement_id"));
+            row.put("ar_ap_item_id", item.get("ar_ap_item_id"));
+            row.put("legal_nature", "已确认的股东分红应付");
+            row.put("handling", "按原分配依据付清");
+            return row;
+        }).toList();
+    }
+
+    /** 「提交财务法务核实」的真实请求（主线最终审批人＋财务、法务两线）。 */
+    private ResultActions submitCloseout(String closeout, String tag, List<Map<String, Object>> items) throws Exception {
+        return mockMvc.perform(post("/api/v1/finance/dividends/closeouts/" + closeout + "/submit").with(submitter)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(json.writeValueAsString(Map.of("idempotency_key", "pcc-cos-" + tag + "-" + s, "final_approver_id", mainId,
+                        "parallel_lines", lines(), "items", items))));
+    }
+
+    /** 「登记处理」的真实请求。 */
+    private ResultActions handleItem(String closeout, String item, String tag) throws Exception {
+        return mockMvc.perform(post("/api/v1/finance/dividends/closeouts/" + closeout + "/items/" + item + "/handle").with(submitter)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(json.writeValueAsString(Map.of("idempotency_key", "pcc-coh-" + tag + "-" + s, "handled_note", "已按核实结果付清并留存凭证"))));
+    }
+
+    /** 「结案」的真实请求。 */
+    private ResultActions closeCloseout(String closeout, String tag) throws Exception {
+        return mockMvc.perform(post("/api/v1/finance/dividends/closeouts/" + closeout + "/close").with(submitter)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(json.writeValueAsString(Map.of("idempotency_key", "pcc-coc-" + tag + "-" + s))));
+    }
+
+    /** 本商户台账行（来源、状态、未付额），核关停结算不动应付。 */
+    private List<Map<String, Object>> dividendLedger() {
+        return jdbc.queryForList("SELECT id, source_type, status, unpaid_amount_cent FROM ar_ap_items WHERE merchant_id = ? ORDER BY id", merchant);
+    }
+
+    private ResultActions decide(RequestPostProcessor who, String reviewId, String tag, String decision) throws Exception {
+        return mockMvc.perform(post("/api/v1/platform/supervisor-review/" + reviewId + "/approve").with(who)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(json.writeValueAsString(Map.of("idempotency_key", "pcc-apv-" + tag + "-" + s, "decision", decision,
+                        "comment", "款项法律性质需补充核实"))));
     }
 
     private static String reviewOf(ResultActions result) throws Exception {

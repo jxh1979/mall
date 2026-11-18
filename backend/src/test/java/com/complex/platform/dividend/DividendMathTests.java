@@ -1,6 +1,6 @@
 package com.complex.platform.dividend;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -15,6 +15,7 @@ import org.junit.jupiter.api.Test;
  * <p><b>混用取整口径（2026-07-28 用户拍板）</b>：平台分成与风险准备金留存走
  * {@link com.complex.platform.common.money.MoneyRounding} <b>四舍五入 HALF_UP</b>（R-7/D15.1）；
  * <b>代扣个税保持整除截断</b>（与税局申报口径对齐，与薪资税表 V217 同口径）。
+ * <p>234-R2（BSM:1775、BSM:1757）：平台、主理人与各其他股东按持股比例各自四舍五入，尾差带符号单列，守恒式一律连尾差一起算。
  */
 class DividendMathTests {
 
@@ -51,7 +52,7 @@ class DividendMathTests {
 
     @Test
     void splitIdentityHoldsForArbitraryAmounts() {
-        // 恒等式：platform + gross = distributable；net = gross − tax（抽样多组奇异值）。
+        // 恒等式（234-R2 各方各自四舍五入）：platform + gross + 尾差 = distributable；net = gross − tax（抽样多组奇异值，含 5000 与奇数分）。
         long[] samples = {1L, 3L, 7L, 99L, 101L, 12_345L, 999_999L, 1_000_001L, 987_654_321L};
         int[] shares = {1, 3333, 5000, 8000, 9999};
         int[] taxes = {0, 1, 2000, 4567, 9999};
@@ -59,7 +60,7 @@ class DividendMathTests {
             for (int share : shares) {
                 for (int tax : taxes) {
                     DividendMath.Split split = DividendMath.split(net, share, tax);
-                    assertThat(split.platformShareCent() + split.principalGrossCent())
+                    assertThat(split.platformShareCent() + split.principalGrossCent() + split.roundingResidualCent())
                             .as("split identity net=%d share=%d", net, share)
                             .isEqualTo(split.distributableCent());
                     assertThat(split.principalNetCent())
@@ -99,7 +100,7 @@ class DividendMathTests {
         assertThat(split.principalGrossCent()).isZero();
         assertThat(split.taxCent()).isZero();
         assertThat(split.principalNetCent()).isZero();
-        assertThat(split.platformShareCent() + split.principalGrossCent())
+        assertThat(split.platformShareCent() + split.principalGrossCent() + split.roundingResidualCent())
                 .isEqualTo(split.distributableCent());
     }
 
@@ -373,11 +374,10 @@ class DividendMathTests {
 
     /**
      * <b>混用口径下的资金守恒（核心）</b>：平台分成(HALF_UP) + 代扣个税(截断) + 欠款抵扣 +
-     * 自定义扣除 + 风险准备金(HALF_UP) + 主理人实得 ≡ 分红基数(可分配额)，逐分严格相等。
+     * 自定义扣除 + 风险准备金(HALF_UP) + 主理人实得 + 尾差 ≡ 分红基数(可分配额)，逐分严格相等。
      *
-     * <p>成立原因：链上每一步的另一半都取<b>补数</b>定义（principalGross := distributable − platformShare、
-     * principalNet := principalGross − tax、payout := afterCustom − reserve …），
-     * 故各步用什么取整口径都不影响总额恒等 —— 两种口径混用<b>不破坏守恒</b>。
+     * <p>成立原因：234-R2 起平台与主理人按持股比例各自四舍五入，差额单列为尾差（带符号）；主理人应得之后每一步的另一半都取<b>补数</b>定义
+     * （principalNet := principalGross − tax、payout := afterCustom − reserve …），故各步用什么取整口径都不影响总额恒等。
      */
     @Test
     void mixedRoundingConservesTotalAcrossAllParties() {
@@ -393,7 +393,7 @@ class DividendMathTests {
                                 net, share, tax, false, 0L, true, 37L,
                                 new long[] {13L}, true, reserve, 0L);
                         long sum = d.platformShareCent() + d.taxCent() + d.arrearsOffsetCent()
-                                + d.customDeductionCent() + d.reserveWithheldCent() + d.payoutCent();
+                                + d.customDeductionCent() + d.reserveWithheldCent() + d.payoutCent() + d.roundingResidualCent();
                         assertThat(sum)
                                 .as("守恒 net=%d share=%d tax=%d reserve=%d", net, share, tax, reserve)
                                 .isEqualTo(d.distributableCent());
@@ -402,8 +402,8 @@ class DividendMathTests {
                         assertThat(d.taxCent()).isBetween(0L, d.principalGrossCent());
                         assertThat(d.reserveWithheldCent()).isGreaterThanOrEqualTo(0L);
                         assertThat(d.payoutCent()).isGreaterThanOrEqualTo(0L);
-                        // V299 两条 DB CHECK 恒等式仍成立(平台分成改 HALF_UP 后不破)
-                        assertThat(d.platformShareCent() + d.principalGrossCent())
+                        // 劈分恒等式连尾差（V643 chk_ds_split_identity）与税后恒等式
+                        assertThat(d.platformShareCent() + d.principalGrossCent() + d.roundingResidualCent())
                                 .isEqualTo(d.distributableCent());
                         assertThat(d.principalNetCent())
                                 .isEqualTo(d.principalGrossCent() - d.taxCent());
@@ -414,30 +414,22 @@ class DividendMathTests {
     }
 
     /**
-     * 按 R-7 既有尾差范式实算：分红链<b>尾差恒为 0</b>，故无需单列留痕列。
-     * （分账那边尾差会非 0 是因为各家份额<b>各自独立</b>按比例算；分红链每一步的另一半取补数，结构上不产生尾差。）
+     * 234-R2（BSM:1757「多方分配产生的非涉税尾差单独留痕，并由该笔业务实际承担结算责任的主体承担」）：按通票分账同范式实算，平台、主理人与各其他股东
+     * 各自四舍五入后的尾差单列（与 MoneyRounding.residual 同值），四方加尾差恒等于可分配额。
      */
     @Test
-    void dividendChainProducesZeroRoundingResidualSoNothingToRecord() {
+    void dividendChainRecordsRoundingResidualSeparately() {
         long[] nets = {1L, 3L, 99L, 100L, 999L, 1000L, 123_457L};
-        int[] shares = {1255, 3333, 5000, 8000};
-        int[] taxes = {1255, 2000};
-        int[] reserves = {1255, 5000};
+        int[] shares = {1255, 3333, 5000, 6000};
         for (long net : nets) {
             for (int share : shares) {
-                for (int tax : taxes) {
-                    for (int reserve : reserves) {
-                        DividendMath.Distribution d = DividendMath.compute(
-                                net, share, tax, false, 0L, false, 0L, true, reserve, 0L);
-                        long residual = MoneyRounding.residual(
-                                BigDecimal.valueOf(d.distributableCent()),
-                                d.platformShareCent(), d.taxCent(), d.arrearsOffsetCent(),
-                                d.customDeductionCent(), d.reserveWithheldCent(), d.payoutCent());
-                        assertThat(residual)
-                                .as("分红链尾差必须恒 0（补数式拆分）net=%d share=%d", net, share)
-                                .isZero();
-                    }
-                }
+                DividendMath.Distribution d = DividendMath.compute(net, share, 2000, false, 0L, false, 0L, new long[0],
+                        true, 1255, 0L, null, new int[] {1000, 555}, new boolean[] {false, true}, 2000);
+                long residual = MoneyRounding.residual(BigDecimal.valueOf(d.distributableCent()),
+                        d.platformShareCent(), d.principalGrossCent(), d.otherGrossCents().get(0), d.otherGrossCents().get(1));
+                assertThat(d.roundingResidualCent()).as("尾差单列 net=%d share=%d", net, share).isEqualTo(residual);
+                assertThat(d.platformShareCent() + d.principalGrossCent() + d.otherGrossCents().get(0) + d.otherGrossCents().get(1)
+                        + d.roundingResidualCent()).isEqualTo(d.distributableCent());
             }
         }
     }
@@ -452,7 +444,7 @@ class DividendMathTests {
     void legalCapLowersDistributableAndKeepsConservation() {
         DividendMath.Distribution d = withLegalCap(1_000_000L, false, 0L, 900_000L);
         assertThat(d.distributableCent()).isEqualTo(900_000L);
-        assertThat(d.platformShareCent() + d.principalGrossCent()).isEqualTo(900_000L);
+        assertThat(d.platformShareCent() + d.principalGrossCent() + d.roundingResidualCent()).isEqualTo(900_000L);
         // 核定额高于经营候选额：仍按经营候选额（取小）。
         assertThat(withLegalCap(1_000_000L, false, 0L, 1_200_000L).distributableCent()).isEqualTo(1_000_000L);
     }
@@ -485,5 +477,78 @@ class DividendMathTests {
             }
             assertThat(DividendMath.split(net, 10000, 0).platformShareCent()).isEqualTo(net);
         }
+    }
+
+    // ── 234-R2 其他股东（BSM:1775 按工商登记比例分配；BSM:1757 尾差单列；BSM:1776 个人代扣、公司不代扣）──────────
+
+    private static DividendMath.Distribution withOthers(long net, int platformBps, int principalTaxBps, int[] otherBps,
+            boolean[] company, int otherTaxBps) {
+        return DividendMath.compute(net, platformBps, principalTaxBps, false, 0L, false, 0L, new long[0], false, 0, 0L, null,
+                otherBps, company, otherTaxBps);
+    }
+
+    /** 多方守恒：平台 + 主理人 + 各其他股东 + 尾差 ≡ 可分配额，各方按自己的比例四舍五入；尾差绝对值不超过方数一半向下取整；合计超过 100% 拒绝。 */
+    @Test
+    void multiPartySplitConservesWithResidualBoundedByHalfThePartyCount() {
+        long[] nets = {1L, 3L, 5L, 7L, 99L, 101L, 12_345L, 1_000_006L, 987_654_321L};
+        int[][] others = {{}, {1000}, {1000, 500}, {1, 3333, 1255}, {2500, 2500, 2500}};
+        int[] platforms = {0, 1255, 2500, 5000, 6000};
+        for (long net : nets) {
+            for (int[] other : others) {
+                for (int platform : platforms) {
+                    if (platform + java.util.Arrays.stream(other).sum() > 10000) {
+                        continue;
+                    }
+                    DividendMath.Distribution d = withOthers(net, platform, 2000, other, new boolean[other.length], 2000);
+                    long othersSum = d.otherGrossCents().stream().mapToLong(Long::longValue).sum();
+                    assertThat(d.otherGrossCents()).as("各股东按比例 net=%d others=%s", net, java.util.Arrays.toString(other))
+                            .containsExactlyElementsOf(java.util.Arrays.stream(other)
+                                    .mapToObj(bps -> MoneyRounding.bpsOf(d.distributableCent(), bps)).toList());
+                    assertThat(d.platformShareCent() + d.principalGrossCent() + othersSum + d.roundingResidualCent())
+                            .as("多方守恒 net=%d platform=%d others=%s", net, platform, java.util.Arrays.toString(other))
+                            .isEqualTo(d.distributableCent());
+                    assertThat(Math.abs(d.roundingResidualCent())).isLessThanOrEqualTo((2L + other.length) / 2);
+                    assertThat(d.principalGrossCent()).isGreaterThanOrEqualTo(0L);
+                }
+            }
+        }
+        assertThatThrownBy(() -> withOthers(100L, 9000, 2000, new int[] {1001}, new boolean[] {false}, 2000))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    /** 负尾差：D=5 分，平台 60%、个人其他股东 10%、主理人 30% → 3、1、2 分，合计多 1 分，尾差 −1（由酒吧公司承担）。 */
+    @Test
+    void roundedSharesExceedingDistributableLeaveNegativeResidual() {
+        DividendMath.Distribution d = withOthers(5L, 6000, 2000, new int[] {1000}, new boolean[] {false}, 2000);
+        assertThat(d.platformShareCent()).isEqualTo(3L);
+        assertThat(d.otherGrossCents()).containsExactly(1L);
+        assertThat(d.principalGrossCent()).isEqualTo(2L);
+        assertThat(d.roundingResidualCent()).isEqualTo(-1L);
+    }
+
+    /** 公司股东不代扣（BSM:1776「股东为公司股东的，不代扣个人所得税，按约定全额发放」）；个人股东按方案税率整除截断（100,001 × 20% = 20,000.2 → 20,000）。 */
+    @Test
+    void companyShareholderIsNotWithheldAndIndividualIsTruncated() {
+        DividendMath.Distribution d = withOthers(1_000_006L, 6000, 2000, new int[] {1000, 500}, new boolean[] {false, true}, 2000);
+        assertThat(d.otherGrossCents()).containsExactly(100_001L, 50_000L);
+        assertThat(d.otherTaxCents()).containsExactly(20_000L, 0L);
+    }
+
+    /** 主理人为公司股东（服务层传主理人生效税率 0）时，个人其他股东仍按方案税率代扣。 */
+    @Test
+    void companyPrincipalStillWithholdsIndividualShareholderAtPlanRate() {
+        DividendMath.Distribution d = withOthers(1_000_006L, 6000, 0, new int[] {1000}, new boolean[] {false}, 2000);
+        assertThat(d.taxCent()).isZero();
+        assertThat(d.otherTaxCents()).containsExactly(20_000L);
+    }
+
+    /** 无其他股东时也各自四舍五入：D=5 分、平台 70% → 平台 4、主理人 2，尾差 −1（旧补数口径主理人取 1、无尾差）。 */
+    @Test
+    void halfCentWithoutOtherShareholdersLeavesNegativeResidual() {
+        DividendMath.Distribution d = DividendMath.compute(5L, 7000, 0, false, 0L, false, 0L, false, 0, 0L);
+        assertThat(d.platformShareCent()).isEqualTo(4L);
+        assertThat(d.principalGrossCent()).isEqualTo(2L);
+        assertThat(d.roundingResidualCent()).isEqualTo(-1L);
+        assertThat(d.otherGrossCents()).isEmpty();
     }
 }

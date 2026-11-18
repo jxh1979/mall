@@ -1,6 +1,6 @@
 package com.complex.platform.common.api;
 
-// 文件版本：V0.47
+// 文件版本：V0.48
 
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -349,6 +349,9 @@ public final class FieldLabels {
         p("settlement_amount_cent", "结算金额");
         p("payout_cent", "结算金额");
         p("payout_pay_slot", "发放付账日");   // 211-R2 分红方案发放付账日（BSM:1787）
+        p("effective_from", "生效起");   // 234-R1 分红方案版本生效起始日期（BSM:521），与前端字典同名
+        p("period_min_months", "周期下限");   // 244-R1 分红周期下限（ENUM:299「须同时配置上下限」）
+        p("period_max_months", "周期上限");   // 244-R1 分红周期上限
         p("price_cent", "价格");
         p("price_mode", "计价方式");
         p("base_calendar_price_mode", "基础日历定价方式");
@@ -785,6 +788,10 @@ public final class FieldLabels {
         p("content_type", "内容类型");
         p("content_version", "内容版本");
         p("custom_deduction.name", "自定义扣减项名称");
+        p("other_shareholders", "其他股东");   // 234-R2 分红方案其他股东（BSM:1775）
+        p("other_shareholders.shareholder_name", "其他股东名称");
+        p("other_shareholders.shareholder_type", "股东类型");
+        p("other_shareholders.share_bps", "持股比例");
         p("expected_entry.amount_cent", "预期分录金额");
         p("expected_entry.external_business_id", "预期分录外部单号");
         p("attachment_id", "附件");
@@ -840,6 +847,12 @@ public final class FieldLabels {
         p("hold_type", "登记类别");
         p("negotiation_result", "协商结果");
         p("lift_result", "恢复协商结果");
+        // 第十八批 AQ 段第 243 条 243-R1 酒吧关停结算（BSM:1787，同前端 fieldLabels.ts）。
+        p("closeout_id", "关停结算登记");
+        p("closed_business_date", "关店最后营业日");
+        p("legal_nature", "法律性质");
+        p("handling", "处理方式");
+        p("handled_note", "处理说明");
         // ── 第十三批 B 段 ROOT-03-R3：会员注册 ───────────────
         p("birth_date", "生日");
         p("member_terms_version", "会员条款版本");

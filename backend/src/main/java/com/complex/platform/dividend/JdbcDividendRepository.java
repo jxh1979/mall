@@ -1,5 +1,5 @@
 package com.complex.platform.dividend;
-// 文件版本：V0.05
+// 文件版本：V0.06
 
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
@@ -33,7 +33,8 @@ class JdbcDividendRepository implements DividendRepository {
             + "revenue_domains, include_inventory_cost, expense_types, effective_from, status, note, updated_by, "
             + "created_at, updated_at, "
             + "loss_carryforward_enabled, arrears_offset_enabled, payout_floor_enabled, payout_floor_bps, "
-            + "payout_floor_fixed_cent, reserve_release_mode, reserve_release_delay_periods, principal_type, payout_pay_slot";
+            + "payout_floor_fixed_cent, reserve_release_mode, reserve_release_delay_periods, principal_type, payout_pay_slot, "
+            + "stop_requested, reason, review_id, decided_by, decided_at, period_min_months, period_max_months";
 
     private static final String STMT_COLS =
             "id, merchant_id, plan_id, kind, period_label, period_start, period_end, principal_user_id, "
@@ -44,7 +45,8 @@ class JdbcDividendRepository implements DividendRepository {
             + "created_at, updated_at, "
             + "loss_carryforward_enabled, loss_carryforward_in_cent, loss_carryforward_applied_cent, "
             + "loss_carryforward_after_cent, arrears_offset_cent, reserve_withheld_cent, payout_cent, "
-            + "principal_type, custom_deduction_cent, legal_distributable_cent, period_tax_cent";
+            + "principal_type, custom_deduction_cent, legal_distributable_cent, period_tax_cent, "
+            + "other_shareholders_gross_cent, rounding_residual_cent";
 
     private final NamedParameterJdbcTemplate jdbcTemplate;
 
@@ -87,17 +89,21 @@ class JdbcDividendRepository implements DividendRepository {
     }
 
     @Override
-    public Optional<DividendPlanRecord> findActivePlanByMerchant(String merchantId) {
+    public Optional<DividendPlanRecord> findPlanInForce(String merchantId, LocalDate date) {
         return jdbcTemplate.query(
-                "SELECT " + PLAN_COLS + " FROM dividend_plans WHERE merchant_id = :merchant_id AND status = 'active'",
-                new MapSqlParameterSource("merchant_id", merchantId), this::mapPlan).stream().findFirst();
+                "SELECT " + PLAN_COLS + " FROM dividend_plans WHERE merchant_id = :merchant_id"
+                        + " AND status IN ('active', 'ended') AND effective_from <= :date ORDER BY effective_from DESC LIMIT 1",
+                new MapSqlParameterSource().addValue("merchant_id", merchantId).addValue("date", date, Types.DATE),
+                this::mapPlan).stream().filter(plan -> "active".equals(plan.status())).findFirst();
     }
 
     @Override
-    public List<DividendPlanRecord> listActivePlans() {
+    public List<DividendPlanRecord> listPlansInForce(LocalDate date) {
         return jdbcTemplate.query(
-                "SELECT " + PLAN_COLS + " FROM dividend_plans WHERE status = 'active' ORDER BY merchant_id, id",
-                new MapSqlParameterSource(), this::mapPlan);
+                "SELECT * FROM (SELECT DISTINCT ON (merchant_id) " + PLAN_COLS + " FROM dividend_plans"
+                        + " WHERE status IN ('active', 'ended') AND effective_from <= :date"
+                        + " ORDER BY merchant_id, effective_from DESC) v WHERE status = 'active' ORDER BY merchant_id",
+                new MapSqlParameterSource().addValue("date", date, Types.DATE), this::mapPlan);
     }
 
     @Override
@@ -110,58 +116,59 @@ class JdbcDividendRepository implements DividendRepository {
                         status, note, updated_by, created_at, updated_at,
                         loss_carryforward_enabled, arrears_offset_enabled, payout_floor_enabled,
                         payout_floor_bps, payout_floor_fixed_cent,
-                        reserve_release_mode, reserve_release_delay_periods, principal_type, payout_pay_slot)
+                        reserve_release_mode, reserve_release_delay_periods, principal_type, payout_pay_slot,
+                        stop_requested, reason, review_id, decided_by, decided_at, period_min_months, period_max_months)
                     VALUES (:id, :merchant_id, :principal_user_id, :principal_name, :platform_share_bps,
                             :tax_rate_bps, :period_type, :revenue_domains, :include_inventory_cost, :expense_types,
                             :effective_from, :status, :note, :updated_by, :created_at, :updated_at,
                             :loss_carryforward_enabled, :arrears_offset_enabled, :payout_floor_enabled,
                             :payout_floor_bps, :payout_floor_fixed_cent,
-                            :reserve_release_mode, :reserve_release_delay_periods, :principal_type, :payout_pay_slot)
+                            :reserve_release_mode, :reserve_release_delay_periods, :principal_type, :payout_pay_slot,
+                            :stop_requested, :reason, :review_id, :decided_by, :decided_at, :period_min_months, :period_max_months)
                     ON CONFLICT (id) DO NOTHING
-                    """, planParams(plan)) > 0;
+                    """, planParams(plan)) > 0 && insertShareholders(plan);
         } catch (DuplicateKeyException conflict) {
-            // uq_dividend_plans_active_merchant：同商户已有生效中方案。
+            // 234-R1 uq_dividend_plans_effective（同商户同一生效起始日已有已批准版本）或 uq_dividend_plans_pending（同商户已有待审批版本）。
             return false;
         }
+    }
+
+    /** 234-R2 版本行的其他股东名单随版本行一起落（只插不删）。 */
+    private boolean insertShareholders(DividendPlanRecord plan) {
+        for (DividendRecords.DividendShareholderRecord item : plan.otherShareholders()) {
+            jdbcTemplate.update("INSERT INTO dividend_plan_shareholders (id, plan_id, shareholder_name, shareholder_type, share_bps, sort_order)"
+                    + " VALUES (:id, :plan_id, :shareholder_name, :shareholder_type, :share_bps, :sort_order)", new MapSqlParameterSource()
+                    .addValue("id", item.id())
+                    .addValue("plan_id", plan.id())
+                    .addValue("shareholder_name", item.shareholderName())
+                    .addValue("shareholder_type", item.shareholderType())
+                    .addValue("share_bps", item.shareBps())
+                    .addValue("sort_order", item.sortOrder()));
+        }
+        return true;
+    }
+
+    private List<DividendRecords.DividendShareholderRecord> listShareholders(String planId) {
+        return jdbcTemplate.query("SELECT id, plan_id, shareholder_name, shareholder_type, share_bps, sort_order"
+                        + " FROM dividend_plan_shareholders WHERE plan_id = :plan_id ORDER BY sort_order, id",
+                new MapSqlParameterSource("plan_id", planId),
+                (rs, n) -> new DividendRecords.DividendShareholderRecord(rs.getString("id"), rs.getString("plan_id"),
+                        rs.getString("shareholder_name"), rs.getString("shareholder_type"), rs.getInt("share_bps"),
+                        rs.getInt("sort_order")));
     }
 
     @Override
-    public boolean updatePlan(DividendPlanRecord plan) {
-        try {
-            return doUpdatePlan(plan) > 0;
-        } catch (DuplicateKeyException conflict) {
-            // uq_dividend_plans_active_merchant：ended 改回 active 时同商户已有另一生效方案。
-            return false;
-        }
+    public void setPlanReviewId(String id, String reviewId) {
+        jdbcTemplate.update("UPDATE dividend_plans SET review_id = :review_id WHERE id = :id",
+                new MapSqlParameterSource().addValue("id", id).addValue("review_id", reviewId));
     }
 
-    private int doUpdatePlan(DividendPlanRecord plan) {
-        return jdbcTemplate.update("""
-                UPDATE dividend_plans SET
-                    principal_user_id = :principal_user_id,
-                    principal_name = :principal_name,
-                    platform_share_bps = :platform_share_bps,
-                    tax_rate_bps = :tax_rate_bps,
-                    period_type = :period_type,
-                    revenue_domains = :revenue_domains,
-                    include_inventory_cost = :include_inventory_cost,
-                    expense_types = :expense_types,
-                    effective_from = :effective_from,
-                    status = :status,
-                    note = :note,
-                    updated_by = :updated_by,
-                    updated_at = :updated_at,
-                    loss_carryforward_enabled = :loss_carryforward_enabled,
-                    arrears_offset_enabled = :arrears_offset_enabled,
-                    payout_floor_enabled = :payout_floor_enabled,
-                    payout_floor_bps = :payout_floor_bps,
-                    payout_floor_fixed_cent = :payout_floor_fixed_cent,
-                    reserve_release_mode = :reserve_release_mode,
-                    reserve_release_delay_periods = :reserve_release_delay_periods,
-                    principal_type = :principal_type,
-                    payout_pay_slot = :payout_pay_slot
-                 WHERE id = :id
-                """, planParams(plan));
+    @Override
+    public int decidePlan(String id, String reviewId, String status, String decidedBy, Instant decidedAt) {
+        return jdbcTemplate.update("UPDATE dividend_plans SET status = :status, decided_by = :decided_by, decided_at = :decided_at,"
+                        + " updated_at = :decided_at WHERE id = :id AND status = 'pending_review' AND review_id = :review_id",
+                new MapSqlParameterSource().addValue("id", id).addValue("review_id", reviewId).addValue("status", status)
+                        .addValue("decided_by", decidedBy).addValue("decided_at", timestampWithTimeZone(decidedAt)));
     }
 
     private static MapSqlParameterSource planParams(DividendPlanRecord plan) {
@@ -190,11 +197,18 @@ class JdbcDividendRepository implements DividendRepository {
                 .addValue("reserve_release_mode", plan.reserveReleaseMode())
                 .addValue("reserve_release_delay_periods", plan.reserveReleaseDelayPeriods())
                 .addValue("principal_type", plan.principalType())
-                .addValue("payout_pay_slot", plan.payoutPaySlot(), Types.SMALLINT);
+                .addValue("payout_pay_slot", plan.payoutPaySlot(), Types.SMALLINT)
+                .addValue("stop_requested", plan.stopRequested())
+                .addValue("reason", plan.reason(), Types.VARCHAR)
+                .addValue("review_id", plan.reviewId(), Types.VARCHAR)
+                .addValue("decided_by", plan.decidedBy(), Types.VARCHAR)
+                .addValue("decided_at", timestampWithTimeZone(plan.decidedAt()), Types.TIMESTAMP_WITH_TIMEZONE)
+                .addValue("period_min_months", plan.periodMinMonths(), Types.SMALLINT)
+                .addValue("period_max_months", plan.periodMaxMonths(), Types.SMALLINT);
     }
 
     private DividendPlanRecord mapPlan(ResultSet rs, int rowNum) throws SQLException {
-        // ponytail: 每行一次子查询装填自定义扣除项（N+1，方案数量小=每商户一张生效方案，可接受）；
+        // ponytail: 每行各一次子查询装填自定义扣除项与其他股东（N+1，方案数量小=每商户少量版本行，可接受）；
         // 若方案量级增大改批量 IN 装填。
         return new DividendPlanRecord(
                 rs.getString("id"),
@@ -222,7 +236,16 @@ class JdbcDividendRepository implements DividendRepository {
                 rs.getInt("reserve_release_delay_periods"),
                 rs.getString("principal_type"),
                 listCustomDeductions(rs.getString("id")),
-                rs.getObject("payout_pay_slot", Integer.class));
+                rs.getObject("payout_pay_slot", Integer.class),
+                rs.getBoolean("stop_requested"),
+                rs.getString("reason"),
+                rs.getString("review_id"),
+                rs.getString("decided_by"),
+                nullableInstant(rs, "decided_at"),
+                null,
+                rs.getObject("period_min_months", Integer.class),
+                rs.getObject("period_max_months", Integer.class),
+                listShareholders(rs.getString("id")));
     }
 
     // ── V309 自定义扣除项 ──────────────────────────────────────
@@ -343,7 +366,8 @@ class JdbcDividendRepository implements DividendRepository {
                     paid_at, created_at, updated_at,
                     loss_carryforward_enabled, loss_carryforward_in_cent, loss_carryforward_applied_cent,
                     loss_carryforward_after_cent, arrears_offset_cent, reserve_withheld_cent, payout_cent,
-                    principal_type, custom_deduction_cent, legal_distributable_cent, period_tax_cent)
+                    principal_type, custom_deduction_cent, legal_distributable_cent, period_tax_cent,
+                    other_shareholders_gross_cent, rounding_residual_cent)
                 VALUES (:id, :merchant_id, :plan_id, :kind, :period_label, :period_start, :period_end,
                     :principal_user_id, :platform_share_bps, :tax_rate_bps, :revenue_domains,
                     :include_inventory_cost, :expense_types, :revenue_cent, :cost_cent, :expense_cent,
@@ -352,7 +376,8 @@ class JdbcDividendRepository implements DividendRepository {
                     :computed_by, NULL, NULL, NULL, NULL, NULL, NULL, :created_at, :updated_at,
                     :loss_carryforward_enabled, :loss_carryforward_in_cent, :loss_carryforward_applied_cent,
                     :loss_carryforward_after_cent, :arrears_offset_cent, :reserve_withheld_cent, :payout_cent,
-                    :principal_type, :custom_deduction_cent, :legal_distributable_cent, :period_tax_cent)
+                    :principal_type, :custom_deduction_cent, :legal_distributable_cent, :period_tax_cent,
+                    :other_shareholders_gross_cent, :rounding_residual_cent)
                 """, new MapSqlParameterSource()
                 .addValue("id", s.id())
                 .addValue("merchant_id", s.merchantId())
@@ -393,7 +418,9 @@ class JdbcDividendRepository implements DividendRepository {
                 .addValue("principal_type", s.principalType())
                 .addValue("custom_deduction_cent", s.customDeductionCent())
                 .addValue("legal_distributable_cent", s.legalDistributableCent(), Types.BIGINT)
-                .addValue("period_tax_cent", s.periodTaxCent()));
+                .addValue("period_tax_cent", s.periodTaxCent())
+                .addValue("other_shareholders_gross_cent", s.otherShareholdersGrossCent())
+                .addValue("rounding_residual_cent", s.roundingResidualCent()));
     }
 
     @Override
@@ -533,7 +560,9 @@ class JdbcDividendRepository implements DividendRepository {
                 rs.getString("principal_type"),
                 rs.getLong("custom_deduction_cent"),
                 rs.getObject("legal_distributable_cent", Long.class),
-                rs.getLong("period_tax_cent"));
+                rs.getLong("period_tax_cent"),
+                rs.getLong("other_shareholders_gross_cent"),
+                rs.getLong("rounding_residual_cent"));
     }
 
     // ── V304 发放保护线留存·释放 ──────────────────────────────
@@ -865,6 +894,13 @@ class JdbcDividendRepository implements DividendRepository {
     public List<DividendRecords.DividendPeriodHoldRecord> listHolds() {
         return jdbcTemplate.query("SELECT " + HOLD_COLS + " FROM dividend_period_holds ORDER BY recorded_at DESC, id",
                 new MapSqlParameterSource(), this::mapHold);
+    }
+
+    @Override
+    public java.util.Map<String, LocalDate> closeoutClosedDates() {
+        return jdbcTemplate.query("SELECT merchant_id, closed_business_date FROM dividend_closeouts", new MapSqlParameterSource(),
+                        (rs, i) -> java.util.Map.entry(rs.getString(1), rs.getObject(2, LocalDate.class)))
+                .stream().collect(java.util.stream.Collectors.toMap(java.util.Map.Entry::getKey, java.util.Map.Entry::getValue));
     }
 
     private DividendRecords.DividendPeriodHoldRecord mapHold(ResultSet rs, int rowNum) throws SQLException {

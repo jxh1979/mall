@@ -1,4 +1,4 @@
-// 文件版本：V0.04
+// 文件版本：V0.05
 package com.complex.platform.serviceorder;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -356,8 +356,13 @@ class ServiceOrderSafetyTests {
         staffUser("svp_rs_" + tag, "active", "inactive", resignedPhone, true);
         staffUser("svp_pr_" + tag, "active", "active", principalPhone, false);
         staffUser("svp_hi_" + tag, "active", "active", historyPhone, false);
-        jdbcTemplate.update("INSERT INTO dividend_plans(id,merchant_id,principal_user_id,principal_name,status,payout_pay_slot) VALUES(?,?,?,'主理人','active',1)",
+        jdbcTemplate.update("INSERT INTO dividend_plans(id,merchant_id,principal_user_id,principal_name,status,payout_pay_slot,effective_from) VALUES(?,?,?,'主理人','active',1,DATE '2000-01-02')",
                 "dp_feentf_" + tag, bar, "svp_pr_" + tag);
+        // 第十八批 AQ 段 234-R1（第十八批裁决 10「主理人取该酒吧分红方案里的主理人」；BSM:521 已发生的业务按当时生效的版本）：同店已被新版本取代的旧版本主理人不收。
+        String oldPrincipalPhone = phone(tag, 7);
+        staffUser("svp_op_" + tag, "active", "active", oldPrincipalPhone, false);
+        jdbcTemplate.update("INSERT INTO dividend_plans(id,merchant_id,principal_user_id,principal_name,status,payout_pay_slot,effective_from) VALUES(?,?,?,'旧主理人','active',1,DATE '2000-01-01')",
+                "dp_feentf_old_" + tag, bar, "svp_op_" + tag);
         // 历史履约人(无 service.order.perform 权限)在该酒吧做过该服务:旧口径会通告,新口径不通告。
         service.createOrder(new com.complex.platform.serviceorder.dto.ServiceOrderCreateRequest(
                 key(), itemId, "svp_hi_" + tag, bar, null, null));
@@ -374,7 +379,8 @@ class ServiceOrderSafetyTests {
         assertThat(feeNotified(resignedPhone)).as("离职员工不收").isZero();
         assertThat(feeNotified(barPhone)).as("商户档案联系电话不再收").isZero();
         assertThat(feeNotified(historyPhone)).as("无权限的历史履约人不再收").isZero();
-        jdbcTemplate.update("UPDATE dividend_plans SET status='ended' WHERE id=?", "dp_feentf_" + tag);
+        assertThat(feeNotified(oldPrincipalPhone)).as("已被新版本取代的旧版本主理人不收").isZero();
+        jdbcTemplate.update("UPDATE dividend_plans SET status='ended' WHERE merchant_id=?", bar);
     }
 
     private void staffUser(String userId, String userStatus, String profileStatus, String phone, boolean withPerform) {

@@ -1,4 +1,4 @@
-// 文件版本：V0.28
+// 文件版本：V0.29
 export type AdminUser = {
   id: string;
   username: string;
@@ -1139,6 +1139,26 @@ export type DividendPlanRow = {
   reserveReleaseDelayPeriods?: number;
   // 211-R2 发放付账日：全平台统一每月三个付账日中的第几个（1～3）。
   payoutPaySlot?: number | null;
+  // 244-R1 分红周期上下限（按月数 1、3、6、12，ENUM:299「须同时配置上下限」）。
+  periodMinMonths?: number | null;
+  periodMaxMonths?: number | null;
+  // 234-R1 版本化（BSM:521）：调整理由、复核单号、待审期间是否申请停用；versionState 为后端按营业日判的版本状态
+  // （pending/scheduled/in_force/superseded/rejected/expired）。
+  reason?: string | null;
+  reviewId?: string | null;
+  stopRequested?: boolean;
+  versionState?: string;
+  // 234-R2 其他股东名单（BSM:1775 按工商登记比例分配；主理人比例＝100% − 平台 − 其他股东合计）。
+  otherShareholders?: DividendShareholderRow[];
+};
+
+// 234-R2 方案版本上的其他股东：shareholderType individual 个人股东（代扣）/ company 公司股东（不代扣）；shareBps 持股比例（万分比）。
+export type DividendShareholderRow = {
+  id?: string;
+  shareholderName?: string;
+  shareholderType?: string;
+  shareBps?: number;
+  sortOrder?: number;
 };
 
 // 211-R1 整期暂不分红／暂缓分红登记行（第十八批裁决 43）：holdType skip 暂不分红 / defer 暂缓分红；lifted* 与 liftResult 为暂缓分红恢复登记。
@@ -1154,6 +1174,41 @@ export type DividendHoldRow = {
   liftedBy?: string | null;
   liftedAt?: string | null;
   liftResult?: string | null;
+};
+
+// 第十八批 AQ 段第 243 条 243-R1 酒吧关停结算（BSM:1787）：款项（itemType current_period 本次分红 / unpaid_dividend 已算未发分红 /
+// reserve_pending 保护线待释放；id 与法律性质、处理方式、处理留痕在提交核实后才有）与登记（status open / pending_review / verified / closed）。
+export type DividendCloseoutItem = {
+  id?: string | null;
+  itemType: string;
+  periodLabel?: string | null;
+  statementId?: string | null;
+  statementStatus?: string | null;
+  holdType?: string | null;
+  arApItemId?: string | null;
+  sourceType?: string | null;
+  amountCent: number;
+  legalNature?: string | null;
+  handling?: string | null;
+  handledNote?: string | null;
+  handledBy?: string | null;
+  handledAt?: string | null;
+};
+
+export type DividendCloseoutRow = {
+  id: string;
+  merchantId: string;
+  closedBusinessDate: string;
+  reason: string;
+  status: string;
+  reviewId?: string | null;
+  createdBy?: string | null;
+  createdAt?: string | null;
+  submittedBy?: string | null;
+  submittedAt?: string | null;
+  closedBy?: string | null;
+  closedAt?: string | null;
+  closeoutItems?: DividendCloseoutItem[] | null;
 };
 
 // V304 发放保护线留存·待释放/已释放台账行。
@@ -1213,6 +1268,9 @@ export type DividendStatementRow = {
   legalDistributableCent?: number | null;
   // 210-R3 该期税费：已生效税费实际申报金额合计（净利润已扣；逐税种见 tax_period 明细行）。
   periodTaxCent?: number;
+  // 234-R2 其他股东应得合计；多方各自四舍五入的尾差（带符号，由该酒吧公司承担）。
+  otherShareholdersGrossCent?: number;
+  roundingResidualCent?: number;
 };
 
 export type DividendStatementLineRow = {

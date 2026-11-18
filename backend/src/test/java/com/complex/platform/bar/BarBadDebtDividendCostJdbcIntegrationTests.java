@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -99,7 +99,7 @@ class BarBadDebtDividendCostJdbcIntegrationTests {
                 now, now, null, null, null, false, null, null, null));
         // 分红方案：月度、只计酒吧收入、扣销货成本。
         jdbc.update("INSERT INTO dividend_plans (id, merchant_id, principal_user_id, period_type, revenue_domains, include_inventory_cost, status,"
-                + " payout_pay_slot) VALUES (?, ?, 'usr_bdd_principal', 'monthly', 'bar', TRUE, 'active', 1)", "divp_bdd_" + s, bar);
+                + " payout_pay_slot, effective_from) VALUES (?, ?, 'usr_bdd_principal', 'monthly', 'bar', TRUE, 'active', 1, DATE '2000-01-01')", "divp_bdd_" + s, bar);
         // 210-R3 第十八批裁决 42 出单闸前提：经营主体各月已有生效税费登记。
         com.complex.platform.support.EntityTaxFixture.taxDeclaredForAllMonths(jdbc, bar);
         StaffRequestFixture staffs = new StaffRequestFixture(jdbc);

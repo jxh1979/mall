@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.07
+// 文件版本：V0.08
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -304,7 +304,8 @@ class BarBillAnomalyJdbcIntegrationTests {
         String company = "bba_co_" + suffix;
         String zone = LocalZone.ID.getId();
         jdbc.update("INSERT INTO staff_dispatch_records(id,user_id,company_id,merchant_id,project_id,start_date,status)"
-                + " VALUES(?,'bba_sales',?,?,?,(now() AT TIME ZONE ?)::date,'active')", "bba_dsp_" + suffix, company, merchant, project, zone);
+                + " VALUES(?,'bba_sales',?,?,?,?,'active')", "bba_dsp_" + suffix, company, merchant, project,
+                java.sql.Date.valueOf(businessDays.merchantBusinessDate(null, merchant, Instant.now())));
         jdbc.update("INSERT INTO bar_commission_settlements(id,month,merchant_id,company_id,project_id,amount_cent,calculation_count,staff_count,"
                 + "due_date,created_at) VALUES(?,?,?,?,?,4500,1,1,(now() AT TIME ZONE ?)::date + 10,now())",
                 "bcs_bba_" + suffix, java.time.YearMonth.from(businessDays.businessDate(null, merchant, Instant.now())).toString(),
@@ -355,6 +356,45 @@ class BarBillAnomalyJdbcIntegrationTests {
                         "status", "pending_collection"));
         assertThat(jdbc.queryForObject("SELECT amount_cent FROM bar_commission_settlements WHERE id=?", Long.class, "bcs_bba_" + suffix))
                 .isEqualTo(4_500L);
+    }
+
+    /**
+     * 第十八批 AQ 段第 242 条 242-R1（第十八批裁决 46「凡判断是否在派驻期内都按酒吧营业日：结束日当天的夜班过零点后、到营业日结束前仍算派驻期内。
+     * ……派驻提成归集也改按计提时所属营业日。」）：派驻结束日当晚过零点后、营业日结束前计提的提成已随月结拨付所属主体，账单作废并冲正时
+     * 同样向所属主体追加应收冲回（派驻期按计提时点所属该酒吧营业日判，与月结归集同口径）。
+     */
+    @Test
+    void voidReversedReversesDispatchCommissionAccruedAfterMidnightOfLastDispatchDay() throws Exception {
+        String bill = deliveredBill(memberWithCard());
+        call(cashier, bill + "/settle", "{\"payment_id\":\"pcs_%s\",\"payment_channel\":\"cash\",\"idempotency_key\":\"scs_%s\"}")
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.payment_status").value("paid"));
+        LocalDate day = businessDays.merchantBusinessDate(null, merchant, Instant.now());
+        // 计提时点：营业日 day 起点前 60 秒——自然日已是 day，营业日仍属 day 前一天（派驻结束日），即结束日当晚夜班过零点后。
+        Instant accruedAt = businessDays.start(businessDays.projectOfMerchant(merchant), businessDays.barOfMerchant(merchant), day)
+                .minusSeconds(60);
+        String commission = "bba_cm_" + suffix;
+        jdbc.update("INSERT INTO bar_commission_calculations(id,bill_id,sales_staff_id,sales_role_type,commission_base_cent,commission_rate_bp,"
+                + "commission_amount_cent,status,created_at) VALUES(?,?,'bba_sales','sales',30000,1500,4500,'calculated',?)",
+                commission, bill, Timestamp.from(accruedAt));
+        String company = "bba_co_" + suffix;
+        jdbc.update("INSERT INTO staff_dispatch_records(id,user_id,company_id,merchant_id,project_id,start_date,end_date,status)"
+                + " VALUES(?,'bba_sales',?,?,?,?,?,'ended')", "bba_dsp_" + suffix, company, merchant, project,
+                java.sql.Date.valueOf(day.minusDays(30)), java.sql.Date.valueOf(day.minusDays(1)));
+        // 本月提成已月结拨付所属主体（月结在作废之前、在计提之后）。
+        jdbc.update("INSERT INTO bar_commission_settlements(id,month,merchant_id,company_id,project_id,amount_cent,calculation_count,staff_count,"
+                + "due_date,created_at) VALUES(?,?,?,?,?,4500,1,1,?,clock_timestamp())", "bcs_bba_" + suffix,
+                java.time.YearMonth.from(businessDays.barBillBusinessDate(bill)).toString(), merchant, company, project,
+                java.sql.Date.valueOf(day.plusDays(10)));
+
+        call(cashier, bill + "/anomaly", "{\"reason\":\"客人称整单不是本桌消费\",\"idempotency_key\":\"rv_%s\"}").andExpect(status().isOk());
+        call(supervisor, bill + "/anomaly/resolve",
+                "{\"resolution\":\"voided_reversed\",\"reason\":\"核实整单记错，作废并退款\",\"idempotency_key\":\"vv_%s\"}")
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.payment_status").value("void"));
+
+        assertThat(jdbc.queryForList("SELECT direction, counterparty_id, amount_cent, status FROM ar_ap_items"
+                + " WHERE source_type='dispatch_commission_transfer' AND source_id=?", commission))
+                .containsExactly(Map.of("direction", "receivable", "counterparty_id", company, "amount_cent", 4_500L,
+                        "status", "pending_collection"));
     }
 
     /** 本商户会员及其本商户储值卡（余额 8000）；商户入册，配全国参数与酒吧业态积分（每 10 元 1 分）、成长值（每 1 元 1 点）规则。 */

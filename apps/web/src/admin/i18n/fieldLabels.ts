@@ -1,4 +1,4 @@
-// 文件版本：V0.39
+// 文件版本：V0.40
 // OBS-14-02 后台结果区字段中文名字典（PGM「全局原则 · 界面全中文（所有终端零英文）」）。
 // 键用后端 JSON 的蛇形写法；结果区查表时蛇形与驼峰同查（orderId / order_id 都命中 order_id）。
 // 与后端字段中文名表 FieldLabels.java（common.api 包）同键同名：前段按后端原样抄录，后端改名这里跟着改（门禁会比对）。
@@ -656,6 +656,10 @@ export const FIELD_LABELS: Record<string, string> = {
   content_type: "内容类型",
   content_version: "内容版本",
   "custom_deduction.name": "自定义扣减项名称",
+  other_shareholders: "其他股东",   // 234-R2 分红方案其他股东（BSM:1775）
+  "other_shareholders.shareholder_name": "其他股东名称",
+  "other_shareholders.shareholder_type": "股东类型",
+  "other_shareholders.share_bps": "持股比例",
   "expected_entry.amount_cent": "预期分录金额",
   "expected_entry.external_business_id": "预期分录外部单号",
   attachment_id: "附件",
@@ -709,6 +713,14 @@ export const FIELD_LABELS: Record<string, string> = {
   hold_type: "登记类别",
   negotiation_result: "协商结果",
   lift_result: "恢复协商结果",
+  // 第十八批 AQ 段第 243 条 243-R1 酒吧关停结算（BSM:1787，同后端 FieldLabels.java）。
+  closeout_id: "关停结算登记",
+  closeout_items: "关停结算款项",
+  closed_business_date: "关店最后营业日",
+  legal_nature: "法律性质",
+  handling: "处理方式",
+  handled_by: "处理登记人",
+  handled_at: "处理登记时间",
   lifted_by: "解除人",
   birth_date: "生日",
   member_terms_version: "会员条款版本",
@@ -1842,6 +1854,7 @@ export const FIELD_LABELS: Record<string, string> = {
   outbound_total_cost_cent: "出库总成本",
   outcome: "结果",
   outstanding_cent: "未清金额",
+  other_shareholders_gross_cent: "其他股东应得合计",   // 234-R2
   over_issued: "超发",
   over_issued_cent: "超发金额",
   overall_result: "总体结果",
@@ -1906,6 +1919,8 @@ export const FIELD_LABELS: Record<string, string> = {
   payout_items: "结算明细",
   payout_result: "原路退回结果",
   payout_pay_slot: "发放付账日",
+  period_min_months: "周期下限",   // 244-R1 分红周期下限（ENUM:299「须同时配置上下限」）
+  period_max_months: "周期上限",   // 244-R1 分红周期上限
   payroll_calculation_id: "工资计算单",
   payroll_inserted: "工资单月结人工成本已挂接",
   payroll_month: "工资月份",
@@ -2356,7 +2371,9 @@ export const FIELD_LABELS: Record<string, string> = {
   share_bps: "分成比例（万分比）",
   share_count: "份数",
   share_units: "份额",
+  shareholder_name: "股东名称",   // 234-R2 分红方案其他股东
   shareholder_ratio_for_report: "报表用持股比例",
+  shareholder_type: "股东类型",   // 234-R2 个人股东 / 公司股东
   shift_end_at: "班次结束时间",
   shift_start_at: "班次开始时间",
   shift_updated_at: "班次更新时间",
@@ -2644,6 +2661,8 @@ export const FIELD_LABELS: Record<string, string> = {
   verified_value: "核实值",
   version: "版本",
   version_id: "版本",
+  version_state: "版本状态",   // 234-R1 分红方案版本状态
+  stop_requested: "申请停用",   // 234-R1 分红方案版本待审期间申请停用
   versions: "版本",
   video_attachment_ids: "视频附件",
   view_all_projects: "可以查看全部项目",
@@ -3081,6 +3100,10 @@ export const VALUE_LABELS: Record<string, string> = {
   dividend_legal_confirmed: "依法可分配金额已确认",
   dividend_hold_recorded: "暂不分红或暂缓分红已登记",
   dividend_hold_lifted: "暂缓分红已恢复",
+  dividend_closeout_registered: "关停结算已登记",
+  dividend_closeout_submitted: "关停结算已提交财务法务核实",
+  dividend_closeout_item_handled: "关停结算款项处理已登记",
+  dividend_closeout_closed: "关停结算已结案",
   merchant_expense_created: "商户费用已登记",
   entity_tax_declared: "税费申报已登记并提交审批",
   merchant_expense_reversed: "商户费用已冲回",
@@ -3490,6 +3513,8 @@ export const KEY_VALUE_LABELS: Record<string, Record<string, string>> = {
   tax_type: { vat: "增值税", cultural_fee: "文化事业建设费", surcharge: "附加税", corporate_income: "企业所得税", other: "其他税费" },
   // 第十八批 AC 段第 211 条 211-R1：暂不分红／暂缓分红登记类别（同后端 dividend_period_holds.chk_dph_hold_type）。
   hold_type: { skip: "暂不分红", defer: "暂缓分红" },
+  // 第十八批 AQ 段第 243 条 243-R1：酒吧关停结算款项类别（同后端 dividend_closeout_items.chk_dcoi_item_type）。
+  item_type: { current_period: "本次分红", unpaid_dividend: "已算未发分红", reserve_pending: "保护线待释放" },
   duty_role: { primary: "主接", backup: "备用", supervisor: "物业主管", project_lead: "项目负责人", specialist: "专业处置人员" },
   alarm_type: { elevator: "电梯扶梯", hvac: "暖通空调", power: "配电供电", water_fire: "给排水消防" },
   result: { pass: "通过", fail: "不通过" },

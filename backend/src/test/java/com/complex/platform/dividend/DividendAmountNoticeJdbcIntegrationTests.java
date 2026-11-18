@@ -1,6 +1,6 @@
 package com.complex.platform.dividend;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -56,7 +56,7 @@ class DividendAmountNoticeJdbcIntegrationTests {
         Instant now = Instant.now();
         repository.insertPlan(new DividendRecords.DividendPlanRecord(plan, merchant, "usr_principal_" + suffix, "主理人甲",
                 8000, 2000, "monthly", List.of("bar", "ticket"), true, List.of("labor"),
-                null, "active", null, "usr_div_" + suffix, now, now, false, false, false, 0, 0L));
+                java.time.LocalDate.of(2000, 1, 1), "active", null, "usr_div_" + suffix, now, now, false, false, false, 0, 0L));
         jdbc.update("UPDATE dividend_plans SET payout_pay_slot = 1 WHERE id = ?", plan);   // 211-R2 发放付账日
         String role = "dan_role_" + suffix;
         access.createRole(new RoleRecord(role, "分红通知审批-" + Long.parseLong(suffix, 16), null, "platform", "active", now,

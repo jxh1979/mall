@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "综合体管理系统 P0 API 契约",
-    "version": "V0.75",
+    "version": "V0.76",
     "description": "P0 首批编码前置契约。本文采用 JSON-compatible YAML，便于与 openapi-p0.json 保持一致。正式后端以 Java 21 + Spring Boot 4.x + springdoc-openapi 输出运行时 OpenAPI，并与本契约比对。"
   },
   "servers": [
@@ -20926,7 +20926,7 @@
         ],
         "operationId": "listApprovalDeadlines",
         "summary": "查询各审批类型的审批时限",
-        "description": "第十八批 AD 段第 204 条 204-R1（PGM:529「任一业务审批节点超过后台配置的时限（业务参数，按审批类型可配，出厂默认 3 个工作日，涉钱审批出厂默认 1 个工作日，须同时配置上下限）未处理的，系统自动提醒并升级到该节点的上一级」；PGM:536「按合同类型可配，出厂默认 3 个工作日，须同时配置上下限」）：审批类型＝被审批的动作类型，清单为代码内复核策略的动作类型（不含授权档位模板 permission_grant_l1～l3）、准入闸策略表启用中的阻断策略的动作类型、授权侧 access.grant_request.money、access.scope_change、access.scope_change.money、access.role_viewable_projects.reduce 与包厢关台未付清确认 bar.bill.unpaid_close，按 action_type 排序；每项含 action_type、money（出厂是否按涉钱）、factory_working_days（出厂默认，涉钱 1、其余 3）、deadline_working_days、min_working_days、max_working_days（工作日）、customized（后台是否改过）。没改过的时限取出厂默认、上下限 1～30。出厂按涉钱的另含 bar.bill.unpaid_close（第十八批裁决 37）、parking.release.waive（BSM:1438）、bar.bill_reopen（第十八批裁决 39）、ticket.type.rule.publish（第十八批 AJ 段 236-R3，跨域组合通票票种规则发布）。第十八批 AL 段 245-R1：清单含锁账补录统一审批 finance.locked_backfill.review（以 finance. 开头按涉钱，出厂 1 个工作日）；准入闸策略 finance_locked_approve_over_scope 由 V628 停用，清单不再含其动作类型 finance.locked_backfill_approve。",
+        "description": "第十八批 AD 段第 204 条 204-R1（PGM:529「任一业务审批节点超过后台配置的时限（业务参数，按审批类型可配，出厂默认 3 个工作日，涉钱审批出厂默认 1 个工作日，须同时配置上下限）未处理的，系统自动提醒并升级到该节点的上一级」；PGM:536「按合同类型可配，出厂默认 3 个工作日，须同时配置上下限」）：审批类型＝被审批的动作类型，清单为代码内复核策略的动作类型（不含授权档位模板 permission_grant_l1～l3）、准入闸策略表启用中的阻断策略的动作类型、授权侧 access.grant_request.money、access.scope_change、access.scope_change.money、access.role_viewable_projects.reduce 与包厢关台未付清确认 bar.bill.unpaid_close，按 action_type 排序；每项含 action_type、money（出厂是否按涉钱）、factory_working_days（出厂默认，涉钱 1、其余 3）、deadline_working_days、min_working_days、max_working_days（工作日）、customized（后台是否改过）。没改过的时限取出厂默认、上下限 1～30。出厂按涉钱的另含 bar.bill.unpaid_close（第十八批裁决 37）、parking.release.waive（BSM:1438）、bar.bill_reopen（第十八批裁决 39）、ticket.type.rule.publish（第十八批 AJ 段 236-R3，跨域组合通票票种规则发布）。第十八批 AL 段 245-R1：清单含锁账补录统一审批 finance.locked_backfill.review（以 finance. 开头按涉钱，出厂 1 个工作日）；准入闸策略 finance_locked_approve_over_scope 由 V628 停用，清单不再含其动作类型 finance.locked_backfill_approve。第十八批 AQ 段：清单含分红方案调整 finance.dividend.plan.change（234-R1）与酒吧关停结算核实 finance.dividend.closeout.verify（243-R1），均以 finance. 开头按涉钱，出厂 1 个工作日。",
         "x-auth-context": "staff-token",
         "x-permission": "governance.supervisor_review.view",
         "x-data-scope": "platform",
@@ -60796,6 +60796,7 @@
         ],
         "operationId": "listDividendPlans",
         "summary": "分红方案列表（商户 scope 账号只见本商户）",
+        "description": "第十八批 AQ 段第 234 条 234-R1（BSM:521）：返回全部方案版本（含待审批、已驳回、已过期与已被新版本取代的），新建在前；元素字段同 createDividendPlan 响应，另带 version_state（只在列表里填，按各商户当前营业日计）：pending 待审批、scheduled 已批准待生效、in_force 当前生效（status=ended 即已停用）、superseded 已被新版本取代、rejected 已驳回、expired 审批时已过生效日。",
         "x-auth-context": "staff-token",
         "x-permission": "finance.dividend.view",
         "x-data-scope": "merchant",
@@ -60839,7 +60840,8 @@
           "finance"
         ],
         "operationId": "createDividendPlan",
-        "summary": "新建分红方案（比例/税率/周期/收入域可配，80/20 仅默认值；销货成本、全部费用与该期税费固定扣减，发放付账日必填）",
+        "summary": "新建分红方案：提交该商户第一个方案版本，最高权限审批，自生效起始日起生效；最高权限本人提交直接生效（比例/税率/周期/收入域可配，80/20 仅默认值；销货成本、全部费用与该期税费固定扣减，发放付账日与分红周期上下限必填）",
+        "description": "第十八批 AQ 段第 234 条 234-R1（BSM:521「所有涉及钱的配置一律版本化：每次改动生成新版本，必须填写生效起始日期，并先存为草案、经高敏权限“转正”审批通过后按指定日期生效，不即改即生效」；PGM:666「持股分红的方案配置、算单、审批和发放属于资金类高危动作，由最高权限审批，提交人不能审批自己的单据」；BSM:576「持授权 U 盘密钥的最高权限本人发起的操作，不需要经过任何审批」）：新建即提交该商户的第一个方案版本，空缺字段按默认口径补齐；effective_from（生效起始日，须晚于该商户当前营业日）与 reason（调整理由）必填，否则 400 VALIDATION_FAILED。最高权限本人提交直接落已批准版本（status 按请求 active 或 ended）；其他人提交落待审批版本（status=pending_review），进统一审批：action_type=finance.dividend.plan.change、object_type=dividend_plan、object_id=方案版本 ID，策略 dividend_plan_change（最高权限审批，提交人不能审批自己的单），以 finance. 开头按涉钱出厂时限 1 个工作日；审批摘要含调整理由、商户、生效起始日与改前到改后的变化。审批通过时生效起始日仍晚于该商户当前营业日的按申请落 active 或 ended，已不晚于的落 expired（须重新提交）；驳回落 rejected。该商户已有已批准或待审批版本返回 409 DIVIDEND_PLAN_EXISTS（请在现有方案上用 updateDividendPlan 提交新版本）。第十八批 AQ 段第 244 条 244-R1（ENUM:299「分红周期可配置（业务参数，按经营主体可配，酒吧商户作为独立经营主体同样适用，须同时配置上下限）」）：period_min_months、period_max_months 必填，下限不大于上限，period_type 对应月数须落在上下限之内，否则 400 VALIDATION_FAILED。第十八批 AQ 段第 234 条 234-R2（BSM:1775「娱乐平台公司、主理人和其他股东按每家酒吧工商登记的真实持股比例分配」）：other_shareholders 不填即无其他股东；平台与其他股东合计不超过 10000 万分比，主理人为余下部分，否则 400 VALIDATION_FAILED。响应 data 为方案版本记录：除请求字段外含 id、status（pending_review 待审批、active、ended、rejected 已驳回、expired 审批时已过生效日）、stop_requested（是否申请停用）、reason（调整理由）、review_id（复核单号）、decided_by、decided_at（审批人与审批时间，最高权限本人提交时即本人与提交时间）、period_min_months、period_max_months（可空）、other_shareholders（数组，元素 id、plan_id、shareholder_name、shareholder_type、share_bps、sort_order）。",
         "x-auth-context": "staff-token",
         "x-permission": "finance.dividend.manage",
         "x-data-scope": "platform",
@@ -60883,7 +60885,8 @@
           "finance"
         ],
         "operationId": "updateDividendPlan",
-        "summary": "修改分红方案（改动审计留痕；历史分红单按单内快照追溯，不受影响）",
+        "summary": "修改分红方案：提交新版本，最高权限审批，自生效起始日起生效；最高权限本人提交直接生效（历史分红单按单内所记版本追溯，不受影响）",
+        "description": "第十八批 AQ 段第 234 条 234-R1（BSM:521；BSM:1775「必须以获批登记版本生效，修改不能追溯已经确认或发放的分红」；PGM:666；BSM:576）：路径 id 为改前版本，须为已批准版本（status 为 active 或 ended），否则 409 DIVIDEND_PLAN_NOT_EDITABLE；不改原版本，另落一个新版本：取值＝改前版本各字段叠加请求里非空的字段，custom_deductions、other_shareholders 不填照改前版本复制、给了按请求整份替换，period_min_months、period_max_months 不填沿用改前版本。merchant_id 不可变更（400 VALIDATION_FAILED）。effective_from（须晚于该商户当前营业日）与 reason 必填，否则 400 VALIDATION_FAILED；status=ended 表示本版本自生效起始日起停用。该商户已有待审批版本返回 409 DIVIDEND_PLAN_PENDING_EXISTS（审批结束后再提交）；同一生效起始日已有已批准版本返回 409 DIVIDEND_PLAN_VERSION_CONFLICT。审批与生效、周期上下限（244-R1）与其他股东（234-R2）校验同 createDividendPlan。响应 data 为方案版本记录：除请求字段外含 id、status（pending_review 待审批、active、ended、rejected 已驳回、expired 审批时已过生效日）、stop_requested（是否申请停用）、reason（调整理由）、review_id（复核单号）、decided_by、decided_at（审批人与审批时间，最高权限本人提交时即本人与提交时间）、period_min_months、period_max_months（可空）、other_shareholders（数组，元素 id、plan_id、shareholder_name、shareholder_type、share_bps、sort_order）。",
         "x-auth-context": "staff-token",
         "x-permission": "finance.dividend.manage",
         "x-data-scope": "platform",
@@ -60895,7 +60898,9 @@
         "x-audit-event-failure": "dividend.plan_update_failed",
         "x-failure-codes": [
           "DIVIDEND_PLAN_NOT_FOUND",
-          "DIVIDEND_PLAN_EXISTS"
+          "DIVIDEND_PLAN_NOT_EDITABLE",
+          "DIVIDEND_PLAN_PENDING_EXISTS",
+          "DIVIDEND_PLAN_VERSION_CONFLICT"
         ],
         "requestBody": {
           "$ref": "#/components/requestBodies/DividendPlanRequest"
@@ -60929,7 +60934,7 @@
               "type": "string",
               "maxLength": 64
             },
-            "description": "分红方案 ID。"
+            "description": "改前的分红方案版本 ID（须为已批准版本）。"
           }
         ]
       }
@@ -60940,8 +60945,8 @@
           "finance"
         ],
         "operationId": "computeDividendStatements",
-        "summary": "期间分红作业：对每个生效中方案出计算单（净利润=收入−成本−费用−税费；幂等可重跑，草稿/预览/驳回作废重算，进入审批流跳过）",
-        "description": "第十八批 V 段第 159 条（ENUM:190「非最终快照的数据一律不得进入结算、分红、正式提成计算和对账关账」）：159-R5 正式单（kind=official）——方案商户检查单位（酒吧按该店，其他商户按所属综合体；建档前的营业日不计）期间内任一营业日五类数据未全部标记为最终的，该方案不出单、记入 skipped（reason「以下营业日数据尚未标记为最终，不能出正式分红单：」后列「yyyy-MM-dd 单位名：类别原词、类别原词」，最多 10 行），旧草稿不作废。159-R6 预览（kind=preview；BSM:1777、DEC-R8-45）只判该月最后一个营业日的五类，未齐的方案记入 skipped（reason「该月最后一个营业日（yyyy-MM-dd）的五类数据尚未全部标记为最终，不得生成预览：」后接同样的列表）；某单位该日五类标齐时由 markDailyCloseFinal 提交后自动出预览，不设定时作业。跳过不是错误码，照常返回 200。159-R10：预览单不计尚未月结定格的服务费扣留数（revenue_bar 明细说明注明「预览：尚未月结定格的服务费扣留数暂不计」），正式单照旧要求月结定格，未定格 409 BAR_REVENUE_PENDING。第十八批 AC 段第 210 条 210-R3（BSM:1774「以及该期间的各项税费（含增值税、所得税及其他应由该主体承担的税费）」；BSM:1801「连接税务处理，拿到这期的各项税费，算出净利润」；第十八批裁决 42）：净利润再减该期税费——取方案商户经营主体（生效绑定的运营主体，否则商户档案上的经营主体）已生效（status=approved）、所属期末月落在本期内的税费实际申报金额（按季申报的整季计入季末那个月所在的那一期），逐税种落 tax_period 负额明细行，合计回显于计算单 period_tax_cent（net_profit_cent = revenue_cent − cost_cent − expense_cent − period_tax_cent）。正式单另判出单闸（第十八批裁决 42「正式单出单前本期每个月都要有已生效的税费登记，缺的不出单并写跳过原因」）：本期每个月都须被该经营主体至少一条已生效申报登记的所属期（period_start_month～period_end_month）覆盖，缺的该方案不出单、旧单不作废，记入 skipped（reason「本期 yyyy-MM、yyyy-MM 尚无已生效的税费申报登记，请先登记并审批通过后再出正式单」）；登记依法可分配金额后的重算同闸（不出单时 409 DIVIDEND_STATE_INVALID，message 即该原因）；预览照扣已生效税费、不判此闸。第十八批 AC 段第 211 条 211-R1（BSM:1777；第十八批裁决 43「「暂不分红」该期不出正式单、利润不补分；「暂缓分红」等协商恢复后由财务登记恢复，再照常出单；月度预览照常」）：正式单在期间标签校验之后、出单闸之前先判暂不分红／暂缓分红登记，该商户该期有未恢复登记的不出单、记入 skipped（reason「本期经协商暂不分红（或暂缓分红），不出正式单（原因：…；协商结果：…）」）；预览不判。",
+        "summary": "期间分红作业：对期末日已生效的方案版本各算一张计算单（净利润=收入−成本−费用−税费；幂等可重跑，草稿/预览/驳回作废重算，进入审批流跳过）",
+        "description": "第十八批 V 段第 159 条（ENUM:190「非最终快照的数据一律不得进入结算、分红、正式提成计算和对账关账」）：159-R5 正式单（kind=official）——方案商户检查单位（酒吧按该店，其他商户按所属综合体；建档前的营业日不计）期间内任一营业日五类数据未全部标记为最终的，该方案不出单、记入 skipped（reason「以下营业日数据尚未标记为最终，不能出正式分红单：」后列「yyyy-MM-dd 单位名：类别原词、类别原词」，最多 10 行），旧草稿不作废。159-R6 预览（kind=preview；BSM:1777、DEC-R8-45）只判该月最后一个营业日的五类，未齐的方案记入 skipped（reason「该月最后一个营业日（yyyy-MM-dd）的五类数据尚未全部标记为最终，不得生成预览：」后接同样的列表）；某单位该日五类标齐时由 markDailyCloseFinal 提交后自动出预览，不设定时作业。跳过不是错误码，照常返回 200。159-R10：预览单不计尚未月结定格的服务费扣留数（revenue_bar 明细说明注明「预览：尚未月结定格的服务费扣留数暂不计」），正式单照旧要求月结定格，未定格 409 BAR_REVENUE_PENDING。第十八批 AC 段第 210 条 210-R3（BSM:1774「以及该期间的各项税费（含增值税、所得税及其他应由该主体承担的税费）」；BSM:1801「连接税务处理，拿到这期的各项税费，算出净利润」；第十八批裁决 42）：净利润再减该期税费——取方案商户经营主体（生效绑定的运营主体，否则商户档案上的经营主体）已生效（status=approved）、所属期末月落在本期内的税费实际申报金额（按季申报的整季计入季末那个月所在的那一期），逐税种落 tax_period 负额明细行，合计回显于计算单 period_tax_cent（net_profit_cent = revenue_cent − cost_cent − expense_cent − period_tax_cent）。正式单另判出单闸（第十八批裁决 42「正式单出单前本期每个月都要有已生效的税费登记，缺的不出单并写跳过原因」）：本期每个月都须被该经营主体至少一条已生效申报登记的所属期（period_start_month～period_end_month）覆盖，缺的该方案不出单、旧单不作废，记入 skipped（reason「本期 yyyy-MM、yyyy-MM 尚无已生效的税费申报登记，请先登记并审批通过后再出正式单」）；登记依法可分配金额后的重算同闸（不出单时 409 DIVIDEND_STATE_INVALID，message 即该原因）；预览照扣已生效税费、不判此闸。第十八批 AC 段第 211 条 211-R1（BSM:1777；第十八批裁决 43「「暂不分红」该期不出正式单、利润不补分；「暂缓分红」等协商恢复后由财务登记恢复，再照常出单；月度预览照常」）：正式单在期间标签校验之后、出单闸之前先判暂不分红／暂缓分红登记，该商户该期有未恢复登记的不出单、记入 skipped（reason「本期经协商暂不分红（或暂缓分红），不出正式单（原因：…；协商结果：…）」）；预览不判。第十八批 AQ 段第 234 条 234-R1（BSM:521「已发生的业务一律按当时生效的版本计算」）：每个商户取期末日已生效的方案版本（已批准、生效起始日不晚于期末日的最新一个；该版本 status=ended 即停用、不出单）出单；指定 merchant_id 找不到时 404 DIVIDEND_PLAN_NOT_FOUND（「该商户在 yyyy-MM-dd 没有已生效的分红方案」）。第十八批 AQ 段第 234 条 234-R2（BSM:1775；BSM:1757「多方分配产生的非涉税尾差单独留痕，并由该笔业务实际承担结算责任的主体承担」）：平台、各其他股东与主理人（10000 − 平台 − 其他股东合计）按持股比例各自四舍五入到分，可分配额减各方合计为尾差（带符号，由该酒吧公司承担、不发给任何一方）；个人股东按方案税率代扣（整除截断），公司股东不代扣；每位其他股东落 shareholder_gross（应得）、shareholder_tax_withheld（代扣，负数）、shareholder_payout（实发）三行明细，尾差不为 0 另落 rounding_residual 行；计算单（computed[]）新增 other_shareholders_gross_cent（其他股东应得合计，不小于 0）与 rounding_residual_cent（尾差，带符号）。第十八批 AQ 段第 243 条 243-R1（BSM:1787「酒吧关闭须完成关停结算，依法核清本次分红」；18AQ 控制席判定）：有关停结算登记的商户取 min（期末日，关店最后营业日）已生效的版本，指定商户找不到时 404 提示里的日期即取该日；关店所在期正式单的五类最终标记只查期初到关店最后营业日，停用、存档后照查；整期在关店最后营业日之后的记入 skipped（reason「该酒吧已于 yyyy-MM-dd 关店（已登记关停结算），关店后的期间不再分红」）。",
         "x-auth-context": "staff-token",
         "x-permission": "finance.dividend.manage",
         "x-data-scope": "platform",
@@ -60987,7 +60992,7 @@
         ],
         "operationId": "listDividendStatements",
         "summary": "分红计算单分页（商户 scope 账号只见本商户，主理人视图同入口）",
-        "description": "商户 scope 账号读到即记本页审批通过(含已发放)的分红单已读(首页未读账单提醒，第 92 条，BSM L1597)；平台账号看列表不记已读。",
+        "description": "商户 scope 账号读到即记本页审批通过(含已发放)的分红单已读(首页未读账单提醒，第 92 条，BSM L1597)；平台账号看列表不记已读。第十八批 AQ 段第 234 条 234-R2：每条计算单另带 other_shareholders_gross_cent 与 rounding_residual_cent（见 getDividendStatement）。",
         "x-auth-context": "staff-token",
         "x-permission": "finance.dividend.view",
         "x-data-scope": "merchant",
@@ -61098,6 +61103,7 @@
         ],
         "operationId": "getDividendStatement",
         "summary": "分红计算单详情（头 + 算式明细行，逐项可追溯到三个来源台账）",
+        "description": "第十八批 AQ 段第 234 条 234-R2：计算单头含 other_shareholders_gross_cent（其他股东应得合计，不小于 0）与 rounding_residual_cent（多方各自四舍五入的尾差，带符号，由该酒吧公司承担）；明细行 line_type 另有 shareholder_gross、shareholder_tax_withheld、shareholder_payout（每位其他股东各一行）与 rounding_residual（尾差不为 0 时）。",
         "x-auth-context": "staff-token",
         "x-permission": "finance.dividend.view",
         "x-data-scope": "merchant",
@@ -61271,6 +61277,7 @@
         ],
         "operationId": "approveDividendStatement",
         "summary": "审批通过：pending_review → approved；净发放额>0 时给主理人挂应付（source_type=dividend_payout，一单一挂）；提交人不得审批自己提交的单",
+        "description": "第十八批 AQ 段第 234 条 234-R2（BSM:1787「分红由该酒吧公司自己从其对公账户支付给主理人与其他股东……发放走应付款项」）：除主理人应付外，每位其他股东实发（shareholder_payout 明细行）大于 0 的另挂一笔应付（source_type=dividend_payout），应付对方与 source_id 均为该股东实发行 ID，到期日同为方案发放付账日；登记付款前同样须经付款确认（第十八批裁决 55、65）。",
         "x-auth-context": "staff-token",
         "x-permission": "finance.dividend.manage",
         "x-data-scope": "platform",
@@ -61391,7 +61398,7 @@
         ],
         "operationId": "markDividendStatementPaid",
         "summary": "标记发放：approved → paid（实发额大于 0 时，主理人分红应付须先经付款确认并登记付清）",
-        "description": "第十八批 AM 段第 241 条 241-R3（BSM:1787「发放走应付款项」；BSM:1803「审批通过后的发放进入应付款项台账，走付款确认」）：实发额大于 0 时，该单主理人分红应付（dividend_payout）须已付清（先经付款确认，再在应收应付台账登记付款），否则 409 DIVIDEND_PAYOUT_NOT_PAID，不标记发放、不发短信；台账项不存在 404 AR_AP_ITEM_NOT_FOUND。实发额为 0 的单不判。",
+        "description": "第十八批 AM 段第 241 条 241-R3（BSM:1787「发放走应付款项」；BSM:1803「审批通过后的发放进入应付款项台账，走付款确认」）：实发额大于 0 时，该单主理人分红应付（dividend_payout）须已付清（先经付款确认，再在应收应付台账登记付款），否则 409 DIVIDEND_PAYOUT_NOT_PAID，不标记发放、不发短信；台账项不存在 404 AR_AP_ITEM_NOT_FOUND。实发额为 0 的单不判。第十八批 AQ 段第 234 条 234-R2：其他股东的分红应付（应付对方为各股东实发行）也须已付清，否则同样 409 DIVIDEND_PAYOUT_NOT_PAID。",
         "x-auth-context": "staff-token",
         "x-permission": "finance.dividend.manage",
         "x-data-scope": "platform",
@@ -61623,7 +61630,7 @@
         ],
         "operationId": "recordDividendPeriodHold",
         "summary": "登记整期暂不分红或暂缓分红（原因、协商结果必填，不另走审批；该期正式草稿随登记作废）",
-        "description": "第十八批 AC 段第 211 条 211-R1（BSM:1777「若因特殊情况需要整期暂不分红或暂缓分红的，须由主理人与娱乐平台公司协商一致后执行，并记录原因与协商结果」；第十八批裁决 43）：平台财务按商户、按期登记。该商户须有生效中的分红方案（否则 404 DIVIDEND_PLAN_NOT_FOUND），期间标签须与方案周期一致（否则 400 VALIDATION_FAILED）；该期正式单已提交审批、已审批或已发放的返回 409 DIVIDEND_STATE_INVALID；该期草稿或已驳回的正式单随登记作废；同一商户同一期间已有未恢复的登记返回 409 DIVIDEND_HOLD_EXISTS。登记后该期正式单不出（computeDividendStatements 记入 skipped）：暂不分红该期不出正式单、利润不补分；暂缓分红登记恢复后照常出单；月度预览照常。响应 data 为登记记录（字段同列表元素）。",
+        "description": "第十八批 AC 段第 211 条 211-R1（BSM:1777「若因特殊情况需要整期暂不分红或暂缓分红的，须由主理人与娱乐平台公司协商一致后执行，并记录原因与协商结果」；第十八批裁决 43）：平台财务按商户、按期登记。该商户须有该期期末日已生效的分红方案版本（第十八批 AQ 段 234-R1；否则 404 DIVIDEND_PLAN_NOT_FOUND，「该商户在 yyyy-MM-dd 没有已生效的分红方案」），期间标签须与方案周期一致（否则 400 VALIDATION_FAILED）；该期正式单已提交审批、已审批或已发放的返回 409 DIVIDEND_STATE_INVALID；该期草稿或已驳回的正式单随登记作废；同一商户同一期间已有未恢复的登记返回 409 DIVIDEND_HOLD_EXISTS。登记后该期正式单不出（computeDividendStatements 记入 skipped）：暂不分红该期不出正式单、利润不补分；暂缓分红登记恢复后照常出单；月度预览照常。响应 data 为登记记录（字段同列表元素）。",
         "x-auth-context": "staff-token",
         "x-permission": "finance.dividend.manage",
         "x-data-scope": "platform",
@@ -61717,6 +61724,285 @@
               "maxLength": 64
             },
             "description": "暂不分红／暂缓分红登记 ID。"
+          }
+        ]
+      }
+    },
+    "/api/v1/finance/dividends/closeouts": {
+      "get": {
+        "tags": [
+          "finance"
+        ],
+        "operationId": "listDividendCloseouts",
+        "summary": "酒吧关停结算登记列表（平台财务持股分红页用，最近登记在前）",
+        "description": "第十八批 AQ 段第 243 条 243-R1（BSM:1787「酒吧关闭须完成关停结算，依法核清本次分红、已算未发分红与发放保护线待释放款项」）：响应 data 为数组，元素 id、merchant_id、closed_business_date（关店最后营业日）、reason（关店原因）、status（open 待提交核实、pending_review 财务法务核实中、verified 已核实待处理、closed 已结案）、review_id（复核单号）、created_by、created_at、submitted_by、submitted_at、closed_by、closed_at、closeout_items（款项数组：待提交核实时现查，其余取提交核实时的快照；顺序为本次分红一行在前，再列已算未发分红，最后是保护线待释放）。closeout_items 元素：id（快照编号，待提交核实时为空）、item_type（current_period 本次分红＝关店所在期正式单；unpaid_dividend 已算未发分红＝其余草稿、已驳回、待审批的正式单与未付清的分红应付；reserve_pending 保护线待释放＝未付的留存应付）、period_label、statement_id、statement_status、hold_type（本次分红该期没有正式单时的暂不分红 skip 或暂缓分红 defer 登记）、ar_ap_item_id、source_type（台账来源）、amount_cent、legal_nature、handling、handled_note、handled_by、handled_at。merchant_id 非空只看该商户。商户账号返回 403 PLATFORM_SCOPE_REQUIRED。",
+        "x-auth-context": "staff-token",
+        "x-permission": "finance.dividend.view",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "dividend.closeouts_listed",
+        "x-audit-event-failure": "dividend.closeouts_list_failed",
+        "parameters": [
+          {
+            "name": "merchant_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            },
+            "description": "商户 ID 筛选（选填）。"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "finance"
+        ],
+        "operationId": "registerDividendCloseout",
+        "summary": "登记酒吧关停结算（关店最后营业日、原因必填，一家酒吧一条；不改商户状态、不动应付）",
+        "description": "第十八批 AQ 段第 243 条 243-R1（BSM:1787「酒吧关闭须完成关停结算，依法核清本次分红、已算未发分红与发放保护线待释放款项；门店关停结算与公司依法解散清算分别办理」）：平台财务按酒吧登记。merchant_id 须为酒吧商户，否则 400 VALIDATION_FAILED；closed_business_date 须为日期（如 2026-08-20），否则 400 VALIDATION_FAILED；该商户在关店最后营业日须有已生效的分红方案版本，否则 404 DIVIDEND_PLAN_NOT_FOUND（「该商户在 yyyy-MM-dd 没有已生效的分红方案」）；该酒吧已登记过返回 409 DIVIDEND_CLOSEOUT_EXISTS。登记后 status=open（待提交核实），款项见 listDividendCloseouts；此后 computeDividendStatements 对该商户按 min（期末日，关店最后营业日）取方案版本，关店后的期间不再分红。不因关店自动核销，不改应付与计算单。商户账号返回 403 PLATFORM_SCOPE_REQUIRED。响应 data 为登记记录（字段同 listDividendCloseouts 元素）。",
+        "x-auth-context": "staff-token",
+        "x-permission": "finance.dividend.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "dividend.closeout_registered",
+        "x-audit-event-failure": "dividend.closeout_register_failed",
+        "x-failure-codes": [
+          "VALIDATION_FAILED",
+          "DIVIDEND_PLAN_NOT_FOUND",
+          "DIVIDEND_CLOSEOUT_EXISTS"
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/DividendCloseoutRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/finance/dividends/closeouts/{id}/submit": {
+      "post": {
+        "tags": [
+          "finance"
+        ],
+        "operationId": "submitDividendCloseout",
+        "summary": "关停结算提交财务、法务核实（本次分红出单后逐条填法律性质与处理方式，进统一审批）",
+        "description": "第十八批 AQ 段第 243 条 243-R1（BSM:1787「已确认应付及待释款项的法律性质和处理由财务、法务核实，不因关店自动核销或一概改为剩余财产分配」；PGM:528「需要平行线审批的（如法务、财务），另行指定该条线的最终审批人」）：只认待提交核实（status=open）的登记，否则 409 DIVIDEND_STATE_INVALID；关店所在期正式分红单尚未出单（且该期没有暂不分红登记）返回 409 DIVIDEND_CLOSEOUT_CURRENT_STATEMENT_MISSING。final_approver_id 必填，否则 400 VALIDATION_FAILED；items 须逐条对上现查的每一条款项（item_type、statement_id、ar_ap_item_id 三者相同），每条 legal_nature（法律性质）与 handling（处理方式）必填，缺的返回 400 VALIDATION_FAILED（提示第几条款项须填写法律性质或处理方式）。通过后写款项快照（驳回后再提交整份重写），进统一审批：action_type=finance.dividend.closeout.verify、object_type=dividend_closeout、object_id=登记 ID，策略 dividend_closeout_verify（发起人沿直接上级链到 final_approver_id，固定财务 finance_review、法务 legal_review 两条平行线，parallel_lines 须为两线各指定最终审批人，否则 400 APPROVAL_LINE_FINAL_APPROVER_REQUIRED；最终审批人不在发起人直接上级链上等按统一审批引擎 400，如 FINAL_APPROVER_NOT_IN_CHAIN），金额为各款项合计，以 finance. 开头按涉钱出厂时限 1 个工作日；受益人为该酒吧关店最后营业日已生效方案版本的主理人，不得审批。该日没有已生效方案版本 404 DIVIDEND_PLAN_NOT_FOUND，登记不存在 404 DIVIDEND_CLOSEOUT_NOT_FOUND。提交后 status=pending_review；审批通过转 verified（已核实待处理），驳回退回 open，可改后再提交。商户账号返回 403 PLATFORM_SCOPE_REQUIRED。响应 data 为登记记录（字段同 listDividendCloseouts 元素）。",
+        "x-auth-context": "staff-token",
+        "x-permission": "finance.dividend.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "dividend.closeout_submitted",
+        "x-audit-event-failure": "dividend.closeout_submit_failed",
+        "x-failure-codes": [
+          "VALIDATION_FAILED",
+          "APPROVAL_LINE_FINAL_APPROVER_REQUIRED",
+          "FINAL_APPROVER_NOT_IN_CHAIN",
+          "DIVIDEND_CLOSEOUT_NOT_FOUND",
+          "DIVIDEND_PLAN_NOT_FOUND",
+          "DIVIDEND_STATE_INVALID",
+          "DIVIDEND_CLOSEOUT_CURRENT_STATEMENT_MISSING"
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/DividendCloseoutSubmitRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            },
+            "description": "关停结算登记 ID。"
+          }
+        ]
+      }
+    },
+    "/api/v1/finance/dividends/closeouts/{id}/items/{item_id}/handle": {
+      "post": {
+        "tags": [
+          "finance"
+        ],
+        "operationId": "handleDividendCloseoutItem",
+        "summary": "按核实结果登记一条关停结算款项的处理（处理说明必填，每条一次）",
+        "description": "第十八批 AQ 段第 243 条 243-R1（BSM:1787「相关款项须按核实结果处理并留痕后才能结案」）：只在核实通过（status=verified）后，否则 409 DIVIDEND_CLOSEOUT_NOT_VERIFIED；handled_note（处理说明）必填，否则 400 VALIDATION_FAILED；每条款项只登记一次，已登记 409 DIVIDEND_CLOSEOUT_ITEM_HANDLED；登记或款项不存在 404 DIVIDEND_CLOSEOUT_NOT_FOUND。只留痕处理人、时间与说明（handled_by、handled_at、handled_note），不改应付与计算单。商户账号返回 403 PLATFORM_SCOPE_REQUIRED。响应 data 为登记记录（字段同 listDividendCloseouts 元素）。",
+        "x-auth-context": "staff-token",
+        "x-permission": "finance.dividend.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "dividend.closeout_item_handled",
+        "x-audit-event-failure": "dividend.closeout_item_handle_failed",
+        "x-failure-codes": [
+          "VALIDATION_FAILED",
+          "DIVIDEND_CLOSEOUT_NOT_FOUND",
+          "DIVIDEND_CLOSEOUT_NOT_VERIFIED",
+          "DIVIDEND_CLOSEOUT_ITEM_HANDLED"
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/DividendCloseoutHandleRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            },
+            "description": "关停结算登记 ID。"
+          },
+          {
+            "name": "item_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            },
+            "description": "关停结算款项 ID（提交核实时的快照编号，即 closeout_items[].id）。"
+          }
+        ]
+      }
+    },
+    "/api/v1/finance/dividends/closeouts/{id}/close": {
+      "post": {
+        "tags": [
+          "finance"
+        ],
+        "operationId": "closeDividendCloseout",
+        "summary": "关停结算结案（核实通过且每条款项都已登记处理）",
+        "description": "第十八批 AQ 段第 243 条 243-R1（BSM:1787「相关款项须按核实结果处理并留痕后才能结案」）：只在核实通过（status=verified）后，否则 409 DIVIDEND_CLOSEOUT_NOT_VERIFIED；还有款项未登记处理返回 409 DIVIDEND_CLOSEOUT_ITEMS_PENDING（提示还有几条）；登记不存在 404 DIVIDEND_CLOSEOUT_NOT_FOUND。结案后 status=closed，记 closed_by、closed_at。请求体复用 DividendActionRequest，note 不读。商户账号返回 403 PLATFORM_SCOPE_REQUIRED。响应 data 为登记记录（字段同 listDividendCloseouts 元素）。",
+        "x-auth-context": "staff-token",
+        "x-permission": "finance.dividend.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "dividend.closeout_closed",
+        "x-audit-event-failure": "dividend.closeout_close_failed",
+        "x-failure-codes": [
+          "DIVIDEND_CLOSEOUT_NOT_FOUND",
+          "DIVIDEND_CLOSEOUT_NOT_VERIFIED",
+          "DIVIDEND_CLOSEOUT_ITEMS_PENDING"
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/DividendActionRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            },
+            "description": "关停结算登记 ID。"
           }
         ]
       }
@@ -90611,6 +90897,36 @@
           }
         }
       },
+      "DividendCloseoutRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/DividendCloseoutRequest"
+            }
+          }
+        }
+      },
+      "DividendCloseoutSubmitRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/DividendCloseoutSubmitRequest"
+            }
+          }
+        }
+      },
+      "DividendCloseoutHandleRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/DividendCloseoutHandleRequest"
+            }
+          }
+        }
+      },
       "VoucherDefinitionRequest": {
         "required": true,
         "content": {
@@ -103852,10 +104168,12 @@
       },
       "DividendPlanRequest": {
         "type": "object",
-        "description": "请求载荷 `DividendPlanRequest`（分红方案新建/修改共用）：比例/税率/周期/计入收入域可调，销货成本与全部费用类别固定扣减（BSM:1774），新建须指定发放付账日，空缺按默认口径补齐（平台 80%、股息红利 20%、季度+月度预览、净利润全项）。修改时 merchant_id 不可变更；status=ended 停用方案。一个商户同一时期只允许一个生效中方案。",
+        "description": "请求载荷 `DividendPlanRequest`（分红方案新建/修改共用；第十八批 AQ 段 234-R1 起新建与修改都是提交一个新版本）：比例/税率/周期/计入收入域可调，销货成本与全部费用类别固定扣减（BSM:1774），新建须指定发放付账日与分红周期上下限，空缺按默认口径补齐（平台 80%、股息红利 20%、季度+月度预览、净利润全项）；修改时空缺字段沿用改前版本。effective_from 与 reason 必填。修改时 merchant_id 不可变更；status=ended 表示本版本自生效起始日起停用。",
         "additionalProperties": false,
         "required": [
-          "idempotency_key"
+          "idempotency_key",
+          "effective_from",
+          "reason"
         ],
         "properties": {
           "idempotency_key": {
@@ -103882,7 +104200,7 @@
             "type": "integer",
             "minimum": 0,
             "maximum": 10000,
-            "description": "平台分成比例（万分比，默认 8000=80%；主理人=10000−平台）。"
+            "description": "平台分成比例（万分比，默认 8000=80%；主理人=10000−平台−其他股东合计）。"
           },
           "tax_rate_bps": {
             "type": "integer",
@@ -103939,7 +104257,7 @@
           "effective_from": {
             "type": "string",
             "format": "date",
-            "description": "生效起始日（选填，ISO 日期）。"
+            "description": "生效起始日（必填，ISO 日期）：须晚于该商户当前营业日，否则 400 VALIDATION_FAILED；本版本自该日起生效（审批通过后；最高权限本人提交直接按该日生效）。"
           },
           "status": {
             "type": "string",
@@ -103947,7 +104265,7 @@
               "active",
               "ended"
             ],
-            "description": "方案状态（修改时可置 ended 停用，不再出单）。"
+            "description": "本版本状态：active＝本版本自生效起始日起继续出单；ended＝本版本自生效起始日起停用，不再出单。不填沿用改前版本（新建为 active）。"
           },
           "note": {
             "type": "string",
@@ -104046,6 +104364,65 @@
                 }
               }
             }
+          },
+          "reason": {
+            "type": "string",
+            "description": "调整理由（必填），写进审批摘要。",
+            "maxLength": 1000
+          },
+          "period_min_months": {
+            "type": "integer",
+            "enum": [
+              1,
+              3,
+              6,
+              12
+            ],
+            "description": "分红周期下限（按月数：1 月、3 季、6 半年、12 年；第十八批 AQ 段 244-R1，ENUM:299「须同时配置上下限」）。新建必填，修改不填沿用改前版本；下限不大于上限，period_type 对应月数（monthly 1、quarterly 3、semiannual 6、annual 12）须落在上下限之内，否则 400 VALIDATION_FAILED（「分红周期须同时填写上下限（月、季、半年、年）」「分红周期上下限须取月、季、半年、年之一，且下限不大于上限」「分红周期须在所配上下限之内」）。"
+          },
+          "period_max_months": {
+            "type": "integer",
+            "enum": [
+              1,
+              3,
+              6,
+              12
+            ],
+            "description": "分红周期上限（按月数：1 月、3 季、6 半年、12 年）；规则同 period_min_months。"
+          },
+          "other_shareholders": {
+            "type": "array",
+            "description": "其他股东（第十八批 AQ 段 234-R2，BSM:1775 工商登记在册的真实股东）：新建不填即无其他股东；修改不填即照改前版本复制；给了就整份替换。平台加其他股东合计不超过 10000 万分比，主理人为余下部分。名称为空、类型不认、比例越界、合计超过 100% 都返回 400 VALIDATION_FAILED。",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "shareholder_name",
+                "shareholder_type",
+                "share_bps"
+              ],
+              "properties": {
+                "shareholder_name": {
+                  "type": "string",
+                  "description": "股东名称（必填）。",
+                  "maxLength": 200
+                },
+                "shareholder_type": {
+                  "type": "string",
+                  "enum": [
+                    "individual",
+                    "company"
+                  ],
+                  "description": "股东类型：individual 个人股东（按方案税率代扣股息红利个税）／company 公司股东（不代扣）。"
+                },
+                "share_bps": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 10000,
+                  "description": "持股比例（万分比，1～10000）。"
+                }
+              }
+            }
           }
         }
       },
@@ -104124,7 +104501,7 @@
           },
           "merchant_id": {
             "type": "string",
-            "description": "商户 ID（须有生效中的分红方案）。",
+            "description": "商户 ID（须有该期期末日已生效的分红方案版本）。",
             "maxLength": 64
           },
           "period_label": {
@@ -104209,6 +104586,151 @@
             "type": "string",
             "description": "说明（选填，如已提取公积、已弥补亏损的情况）。",
             "maxLength": 1000
+          }
+        }
+      },
+      "DividendCloseoutRequest": {
+        "type": "object",
+        "description": "请求载荷 `DividendCloseoutRequest`（第十八批 AQ 段 243-R1 登记酒吧关停结算，BSM:1787）：酒吧商户、关店最后营业日与关店原因必填；一家酒吧一条。",
+        "additionalProperties": false,
+        "required": [
+          "idempotency_key",
+          "merchant_id",
+          "closed_business_date",
+          "reason"
+        ],
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "description": "操作幂等键；同键同载荷重放返回首次响应。",
+            "maxLength": 128
+          },
+          "merchant_id": {
+            "type": "string",
+            "description": "酒吧商户 ID（须为酒吧，且关店最后营业日有已生效的分红方案版本）。",
+            "maxLength": 64
+          },
+          "closed_business_date": {
+            "type": "string",
+            "format": "date",
+            "description": "关店最后营业日（ISO 日期，如 2026-08-20）。"
+          },
+          "reason": {
+            "type": "string",
+            "description": "关店原因（必填）。"
+          }
+        }
+      },
+      "DividendCloseoutSubmitRequest": {
+        "type": "object",
+        "description": "请求载荷 `DividendCloseoutSubmitRequest`（第十八批 AQ 段 243-R1 提交财务、法务核实，PGM:528）：主线最终审批人、财务与法务两条平行线的最终审批人，以及逐条款项的法律性质与处理方式。",
+        "additionalProperties": false,
+        "required": [
+          "idempotency_key",
+          "final_approver_id"
+        ],
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "description": "操作幂等键；同键同载荷重放返回首次响应。",
+            "maxLength": 128
+          },
+          "final_approver_id": {
+            "type": "string",
+            "description": "主线最终审批人（必填）；系统沿发起人直接上级链逐级补全到该人。",
+            "maxLength": 64
+          },
+          "parallel_lines": {
+            "type": "array",
+            "description": "平行审批线及各线最终审批人：须含财务 finance_review、法务 legal_review 两线，缺任一返回 400 APPROVAL_LINE_FINAL_APPROVER_REQUIRED。",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "line_code",
+                "final_approver_id"
+              ],
+              "properties": {
+                "line_code": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "平行审批线代码（finance_review、legal_review）。"
+                },
+                "final_approver_id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "该线最终审批人。"
+                }
+              }
+            }
+          },
+          "items": {
+            "type": "array",
+            "description": "逐条款项的法律性质与处理方式：按 item_type、statement_id、ar_ap_item_id 对上 listDividendCloseouts 现查的每一条款项（closeout_items），每条都须给出，缺的返回 400 VALIDATION_FAILED。",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "item_type",
+                "legal_nature",
+                "handling"
+              ],
+              "properties": {
+                "item_type": {
+                  "type": "string",
+                  "enum": [
+                    "current_period",
+                    "unpaid_dividend",
+                    "reserve_pending"
+                  ],
+                  "description": "款项类别：current_period 本次分红／unpaid_dividend 已算未发分红／reserve_pending 保护线待释放。"
+                },
+                "statement_id": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "maxLength": 64,
+                  "description": "所对计算单 ID（与列表里该款项的 statement_id 一致；没有为空）。"
+                },
+                "ar_ap_item_id": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "maxLength": 64,
+                  "description": "所对应收应付台账项 ID（与列表里该款项的 ar_ap_item_id 一致；没有为空）。"
+                },
+                "legal_nature": {
+                  "type": "string",
+                  "description": "法律性质（必填，财务、法务核实）。"
+                },
+                "handling": {
+                  "type": "string",
+                  "description": "处理方式（必填，财务、法务核实）。"
+                }
+              }
+            }
+          }
+        }
+      },
+      "DividendCloseoutHandleRequest": {
+        "type": "object",
+        "description": "请求载荷 `DividendCloseoutHandleRequest`（第十八批 AQ 段 243-R1 按核实结果登记一条款项的处理，BSM:1787）：处理说明必填。",
+        "additionalProperties": false,
+        "required": [
+          "idempotency_key",
+          "handled_note"
+        ],
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "description": "操作幂等键；同键同载荷重放返回首次响应。",
+            "maxLength": 128
+          },
+          "handled_note": {
+            "type": "string",
+            "description": "处理说明（必填），留痕后不能再改。"
           }
         }
       },

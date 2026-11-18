@@ -1,4 +1,4 @@
-# P0 OpenAPI Operation 验收矩阵 V0.75
+# P0 OpenAPI Operation 验收矩阵 V0.76
 
 ## 1. 文档定位
 
@@ -17,7 +17,7 @@
 
 ## 3. Operation 清单
 
-> 当前 `docs/openapi/openapi-p0.json` 共 1383 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
+> 当前 `docs/openapi/openapi-p0.json` 共 1388 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
 
 | 标签 | 方法 | 路径 | operationId | 摘要 | 请求体 | 权限 | 认证上下文 | 数据范围 | 终端/设备能力/调用通道 | 幂等 | 成功事件 | 失败事件 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -1064,9 +1064,9 @@
 | inventory | `GET` | `/api/v1/inventory/cost-summary` | `getInventoryCostSummary` | 期间出库成本汇总（分红成本侧取数点） | `-` | `inventory.cost.view` | `staff-token` | `project-warehouse` | web, staff_work_phone | 否 | `inventory.cost_summary.viewed` | `inventory.cost_summary.view_failed` |
 | inventory | `GET` | `/api/v1/inventory/bar-consumption-stats` | `listBarConsumptionStats` | 期间吧台消耗统计（按杯、按瓶、套餐） | `-` | `inventory.stock.view` | `staff-token` | `project-warehouse` | web | 否 | `inventory.bar_consumption_stats.viewed` | `inventory.bar_consumption_stats.view_failed` |
 | finance | `GET` | `/api/v1/finance/dividends/plans` | `listDividendPlans` | 分红方案列表（商户 scope 账号只见本商户） | `-` | `finance.dividend.view` | `staff-token` | `merchant` | web, merchant_portal, merchant_app | 否 | `dividend.plans_listed` | `dividend.plans_list_failed` |
-| finance | `POST` | `/api/v1/finance/dividends/plans` | `createDividendPlan` | 新建分红方案（比例/税率/周期/收入域可配，80/20 仅默认值；销货成本、全部费用与该期税费固定扣减，发放付账日必填） | `DividendPlanRequest` | `finance.dividend.manage` | `staff-token` | `platform` | web | 是 | `dividend.plan_created` | `dividend.plan_create_failed` |
-| finance | `PUT` | `/api/v1/finance/dividends/plans/{id}` | `updateDividendPlan` | 修改分红方案（改动审计留痕；历史分红单按单内快照追溯，不受影响） | `DividendPlanRequest` | `finance.dividend.manage` | `staff-token` | `platform` | web | 是 | `dividend.plan_updated` | `dividend.plan_update_failed` |
-| finance | `POST` | `/api/v1/finance/dividends/statements/compute` | `computeDividendStatements` | 期间分红作业：对每个生效中方案出计算单（净利润=收入−成本−费用−税费；幂等可重跑，草稿/预览/驳回作废重算，进入审批流跳过） | `DividendComputeRequest` | `finance.dividend.manage` | `staff-token` | `platform` | web | 是 | `dividend.computed` | `dividend.compute_failed` |
+| finance | `POST` | `/api/v1/finance/dividends/plans` | `createDividendPlan` | 新建分红方案：提交该商户第一个方案版本，最高权限审批，自生效起始日起生效；最高权限本人提交直接生效（比例/税率/周期/收入域可配，80/20 仅默认值；销货成本、全部费用与该期税费固定扣减，发放付账日与分红周期上下限必填） | `DividendPlanRequest` | `finance.dividend.manage` | `staff-token` | `platform` | web | 是 | `dividend.plan_created` | `dividend.plan_create_failed` |
+| finance | `PUT` | `/api/v1/finance/dividends/plans/{id}` | `updateDividendPlan` | 修改分红方案：提交新版本，最高权限审批，自生效起始日起生效；最高权限本人提交直接生效（历史分红单按单内所记版本追溯，不受影响） | `DividendPlanRequest` | `finance.dividend.manage` | `staff-token` | `platform` | web | 是 | `dividend.plan_updated` | `dividend.plan_update_failed` |
+| finance | `POST` | `/api/v1/finance/dividends/statements/compute` | `computeDividendStatements` | 期间分红作业：对期末日已生效的方案版本各算一张计算单（净利润=收入−成本−费用−税费；幂等可重跑，草稿/预览/驳回作废重算，进入审批流跳过） | `DividendComputeRequest` | `finance.dividend.manage` | `staff-token` | `platform` | web | 是 | `dividend.computed` | `dividend.compute_failed` |
 | finance | `GET` | `/api/v1/finance/dividends/statements` | `listDividendStatements` | 分红计算单分页（商户 scope 账号只见本商户，主理人视图同入口） | `-` | `finance.dividend.view` | `staff-token` | `merchant` | web, merchant_portal, merchant_app | 否 | `dividend.statements_listed` | `dividend.statements_list_failed` |
 | finance | `GET` | `/api/v1/finance/dividends/statements/{id}` | `getDividendStatement` | 分红计算单详情（头 + 算式明细行，逐项可追溯到三个来源台账） | `-` | `finance.dividend.view` | `staff-token` | `merchant` | web, merchant_portal, merchant_app | 否 | `dividend.statement_viewed` | `dividend.statement_view_failed` |
 | finance | `POST` | `/api/v1/finance/dividends/statements/{id}/legal-confirmation` | `confirmDividendLegalAmount` | 财务登记依法可分配金额（仅正式草稿/已驳回单；本次分配取经营口径与核定额较小者并重算） | `DividendLegalConfirmationRequest` | `finance.dividend.manage` | `staff-token` | `platform` | web | 是 | `dividend.legal_confirmed` | `dividend.legal_confirm_failed` |
@@ -1079,6 +1079,11 @@
 | finance | `GET` | `/api/v1/finance/dividends/holds` | `listDividendPeriodHolds` | 整期暂不分红／暂缓分红登记列表（平台财务持股分红页用，最近登记在前） | `-` | `finance.dividend.view` | `staff-token` | `platform` | web | 否 | `dividend.holds_listed` | `dividend.holds_list_failed` |
 | finance | `POST` | `/api/v1/finance/dividends/holds` | `recordDividendPeriodHold` | 登记整期暂不分红或暂缓分红（原因、协商结果必填，不另走审批；该期正式草稿随登记作废） | `DividendHoldRequest` | `finance.dividend.manage` | `staff-token` | `platform` | web | 是 | `dividend.hold_recorded` | `dividend.hold_record_failed` |
 | finance | `POST` | `/api/v1/finance/dividends/holds/{hold_id}/lift` | `liftDividendPeriodHold` | 恢复暂缓分红（登记恢复的协商结果，之后该期照常出正式单） | `DividendHoldLiftRequest` | `finance.dividend.manage` | `staff-token` | `platform` | web | 是 | `dividend.hold_lifted` | `dividend.hold_lift_failed` |
+| finance | `GET` | `/api/v1/finance/dividends/closeouts` | `listDividendCloseouts` | 酒吧关停结算登记列表（平台财务持股分红页用，最近登记在前） | `-` | `finance.dividend.view` | `staff-token` | `platform` | web | 否 | `dividend.closeouts_listed` | `dividend.closeouts_list_failed` |
+| finance | `POST` | `/api/v1/finance/dividends/closeouts` | `registerDividendCloseout` | 登记酒吧关停结算（关店最后营业日、原因必填，一家酒吧一条；不改商户状态、不动应付） | `DividendCloseoutRequest` | `finance.dividend.manage` | `staff-token` | `platform` | web | 是 | `dividend.closeout_registered` | `dividend.closeout_register_failed` |
+| finance | `POST` | `/api/v1/finance/dividends/closeouts/{id}/submit` | `submitDividendCloseout` | 关停结算提交财务、法务核实（本次分红出单后逐条填法律性质与处理方式，进统一审批） | `DividendCloseoutSubmitRequest` | `finance.dividend.manage` | `staff-token` | `platform` | web | 是 | `dividend.closeout_submitted` | `dividend.closeout_submit_failed` |
+| finance | `POST` | `/api/v1/finance/dividends/closeouts/{id}/items/{item_id}/handle` | `handleDividendCloseoutItem` | 按核实结果登记一条关停结算款项的处理（处理说明必填，每条一次） | `DividendCloseoutHandleRequest` | `finance.dividend.manage` | `staff-token` | `platform` | web | 是 | `dividend.closeout_item_handled` | `dividend.closeout_item_handle_failed` |
+| finance | `POST` | `/api/v1/finance/dividends/closeouts/{id}/close` | `closeDividendCloseout` | 关停结算结案（核实通过且每条款项都已登记处理） | `DividendActionRequest` | `finance.dividend.manage` | `staff-token` | `platform` | web | 是 | `dividend.closeout_closed` | `dividend.closeout_close_failed` |
 | customer | `GET` | `/api/v1/vouchers/definitions` | `listVoucherDefinitions` | 券定义列表（统一台账模板：类型/核销方式/结算口径；内部结算价按 voucher.internal_price.view 权限脱敏；每行带只读 merchant_type＝券定义商户业态） | `-` | `customer.voucher.view` | `staff-token` | `merchant` | web | 否 | `voucher.definitions_viewed` | `voucher.definitions_view_failed` |
 | customer | `POST` | `/api/v1/vouchers/definitions` | `createVoucherDefinition` | 新建券定义（商户折扣券/店内实物券；外部伙伴券仍配置在通票权益模板 V282） | `VoucherDefinitionRequest` | `customer.voucher.manage` | `staff-token` | `merchant` | web | 是 | `voucher.definition_created` | `voucher.definition_create_failed` |
 | customer | `GET` | `/api/v1/vouchers/instances` | `listVoucherInstances` | 券实例台账（收编积分兑换券＋营销赠券；状态机 issued→redeemed/expired/revoked） | `-` | `customer.voucher.view` | `staff-token` | `merchant` | web | 否 | `voucher.instances_viewed` | `voucher.instances_view_failed` |

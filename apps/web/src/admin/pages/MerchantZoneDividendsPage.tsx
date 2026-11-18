@@ -18,6 +18,8 @@ import {
   DIVIDEND_LINE_LABELS,
   DIVIDEND_STATUS_LABELS,
   RESERVE_RELEASE_MODE_LABELS,
+  shareSplitText,
+  shareholdersDetailText,
 } from "./FinanceDividendsPage";
 
 // 商户专区 · 我的分红（主理人只读视图）：本商户每期分红计算单（基数/比例/扣税/实发/状态）+
@@ -47,7 +49,7 @@ export function MerchantZoneDividendsPage({ api, setGlobalError }: AdminPageProp
 
   const plansResource = useAdminResource(
     async () => {
-      // 后端按商户 scope 强制过滤，本商户通常至多一个生效中方案。
+      // 后端按商户 scope 强制过滤，返回本商户方案的全部版本（234-R1）；摘要取当前生效中的那一版。
       setPlans(await api.get<DividendPlanRow[]>("/api/v1/finance/dividends/plans"));
     },
     { onError: setGlobalError, fallbackMessage: TEXT.loadFailed, onStart: () => setGlobalError(null) },
@@ -75,19 +77,21 @@ export function MerchantZoneDividendsPage({ api, setGlobalError }: AdminPageProp
     fallbackMessage: TEXT.loadFailed,
   });
 
-  const activePlan = plans.find((plan) => plan.status === "active");
+  const activePlan = plans.find((plan) => plan.versionState === "in_force" && plan.status === "active");
 
   async function openDetail(row: DividendStatementRow) {
     try {
       const data = await api.get<DividendStatementDetail>(
         `/api/v1/finance/dividends/statements/${encodeURIComponent(row.id)}`);
       const statement = data.statement ?? row;
+      // 234-R2：按该单所用方案版本列平台、主理人与各其他股东的比例（BSM:1795 主理人可见全部经营数据）。
+      const version = plans.find((plan) => plan.id === statement.planId);
       setDetail({
         title: `分红明细 · ${statement.periodLabel ?? statement.id}`,
         fields: [
           { label: "期间", value: `${statement.periodLabel ?? "—"}（${cnDate(statement.periodStart)} ~ ${cnDate(statement.periodEnd)}）` },
           { label: "类别 / 状态", value: `${DIVIDEND_KIND_LABELS[statement.kind ?? ""] ?? statement.kind} / ${DIVIDEND_STATUS_LABELS[statement.status ?? ""] ?? statement.status}` },
-          { label: "分成比例（平台/主理人）", value: `${bpsToPercentText(statement.platformShareBps)} / ${bpsToPercentText(statement.platformShareBps === undefined ? undefined : 10000 - statement.platformShareBps)}` },
+          { label: "分成比例", value: version ? shareholdersDetailText(version) : shareSplitText(statement.platformShareBps, []) },
           { label: "代扣税率（股息红利）", value: bpsToPercentText(statement.taxRateBps) },
           ...(data.lines ?? []).map((line) => ({
             label: DIVIDEND_LINE_LABELS[line.lineType ?? ""] ?? line.lineType ?? "—",
@@ -108,7 +112,7 @@ export function MerchantZoneDividendsPage({ api, setGlobalError }: AdminPageProp
 
       {activePlan ? (
         <div className="admin-form-row" data-testid="merchant-dividend-plan-summary">
-          <span>当前方案：平台 {bpsToPercentText(activePlan.platformShareBps)} / 主理人 {bpsToPercentText(activePlan.platformShareBps === undefined ? undefined : 10000 - activePlan.platformShareBps)}，代扣税率 {bpsToPercentText(activePlan.taxRateBps)}，{activePlan.periodType === "monthly" ? "月度出正式单" : "季度出正式单 + 月度预览"}。</span>
+          <span>当前方案：{shareSplitText(activePlan.platformShareBps, activePlan.otherShareholders)}，代扣税率 {bpsToPercentText(activePlan.taxRateBps)}，{activePlan.periodType === "monthly" ? "月度出正式单" : "季度出正式单 + 月度预览"}。</span>
           {activePlan.payoutFloorEnabled ? (
             <span className="admin-muted-action" data-testid="merchant-dividend-reserve-hint">发放保护线：部分留存暂扣待释放（欠你、非平台白拿），{RESERVE_RELEASE_MODE_LABELS[activePlan.reserveReleaseMode ?? "manual"] ?? "手动释放"}后全额返还。</span>
           ) : null}
