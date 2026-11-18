@@ -1,4 +1,4 @@
-// 文件版本：V0.30
+// 文件版本：V0.31
 export type AdminUser = {
   id: string;
   username: string;
@@ -321,6 +321,9 @@ export type BarReservationRow = {
   invitationSignature?: string | null;
   invitationCapacity?: number | null;
   invitationStatus?: string | null;
+  // 第十八批 AU 段第 265 条 265-R2（BSM:577）：存档时点（空＝未存档）与删除审批状态（none/pending）。
+  archivedAt?: string | null;
+  deleteStatus?: string;
 };
 
 /** 第十八批 C 段第 15 条：员工代订权限停用记录（GET /api/v1/bar/staff-booking-suspensions）。 */
@@ -368,10 +371,17 @@ export type BarBillRow = {
   salesRoleType?: "sales" | "non_sales";
   commissionRateBp?: number | null;
   commissionAmountCent?: number | null;
+  // 第十八批 AU 段第 282 条 282-R1：账单应付、已付、小费金额（分）；第 283 条 283-R1：未结账单的低消差额（分，0＝已达标；已结、已并单、作废为空）。
+  payableAmountCent?: number;
+  paidAmountCent?: number;
+  tipAmountCent?: number;
+  minSpendGapCent?: number | null;
 };
 
 export type BarOrderRow = {
   id: string;
+  // 第十八批 AU 段第 282 条 282-R2：后端 BarOrderView.bar_id，合单下拉只列同一酒吧的账单。
+  barId?: string;
   tableId?: string;
   // 后端 BarOrderRecord.sales_staff_id（adminClient 已 snake->camel）= 这单的销售归属人（员工 user_id）。
   // 注意：有归属人 ≠ 按销售人员费率计提——费率档看的是该员工在员工档案里有没有「销售岗」标识（G/V349），

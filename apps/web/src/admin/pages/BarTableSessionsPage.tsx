@@ -1,10 +1,11 @@
-// 文件版本：V0.21
+// 文件版本：V0.22
 import React from "react";
 import { QRCodeSVG } from "qrcode.react";
 import { buildCustomerLink } from "@complex/customer-core/links";
 import { customerLinkHost } from "../client/adminClient";
 import { BarServiceResponsibilityPanel } from "./BarServiceResponsibilityPanel";
 import { BarSalesBackfillPanel, guestSourceLabel } from "./BarSessionBackfill";
+import { BarReservationLifecycleActions, reservationArchiveLabel } from "./BarReservationLifecycleActions";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
 import { usePagedRows, TablePager } from "../components/TablePager";
@@ -67,10 +68,13 @@ function normalizedPhone(value: string) {
   return value.replace(/[\s-]/g, "");
 }
 
-export function BarTableSessionsPage({ api, setActionResult, setGlobalError, effectivePermissions, focusObjectId, reportViewedObjects }: AdminPageProps) {
+export function BarTableSessionsPage({ api, user, setActionResult, setGlobalError, effectivePermissions, focusObjectId, reportViewedObjects }: AdminPageProps) {
   const [tables, setTables] = React.useState<BarTableRow[]>([]);
   const [reservations, setReservations] = React.useState<BarReservationRow[]>([]);
   const [reservationNotice, setReservationNotice] = React.useState<string | null>(null);
+  // 第十八批 AU 段第 265 条 265-R2（BSM:569「想恢复点「取消存档」即可」）：默认不列已存档订台，勾选后带 include_archived=true 重新拉取（同员工档案页）。
+  const [includeArchivedReservations, setIncludeArchivedReservations] = React.useState(false);
+  const includeArchivedReservationsRef = React.useRef(false);
   const [sessions, setSessions] = React.useState<BarTableSessionRow[]>([]);
   // 第 23 条 23-R5：敏感页这一次看到的对象（PGM:687「哪个客人、哪个商户、哪些单据」）。
   React.useEffect(() => reportViewedObjects?.("bar_reservation", reservations), [reservations, reportViewedObjects]);
@@ -167,7 +171,8 @@ export function BarTableSessionsPage({ api, setActionResult, setGlobalError, eff
       // 原第四个 /bar/orders 拉取结果从未被使用却会拖垮整页（一失败即整页白屏），已删除。
       const [tableRows, reservationRes, sessionRows, suspensionRes] = await Promise.all([
         api.get<BarTableRow[]>("/api/v1/bar/tables"),
-        loadSecondary(() => api.get<BarReservationRow[]>("/api/v1/bar/reservations"), [] as BarReservationRow[]),
+        loadSecondary(() => api.get<BarReservationRow[]>(includeArchivedReservationsRef.current
+          ? "/api/v1/bar/reservations?include_archived=true" : "/api/v1/bar/reservations"), [] as BarReservationRow[]),
         api.get<BarTableSessionRow[]>("/api/v1/bar/table-sessions"),
         loadSecondaryIfPermitted(canRestoreStaffBooking,
           () => api.get<BarStaffBookingSuspensionRow[]>("/api/v1/bar/staff-booking-suspensions"), [] as BarStaffBookingSuspensionRow[]),
@@ -726,6 +731,7 @@ export function BarTableSessionsPage({ api, setActionResult, setGlobalError, eff
         </div>
 
         <h3>订台预定</h3>
+        <label><input type="checkbox" data-testid="bar-reservations-include-archived" checked={includeArchivedReservations} onChange={(event) => { includeArchivedReservationsRef.current = event.target.checked; setIncludeArchivedReservations(event.target.checked); void reload(); }} />显示已存档订台</label>
         {/* 第十八批 AK 段第 230 条 230-R2（BSM:1058）：选中行为已预订、且持人工取消订台权限才出现。 */}
         {selectedReservation?.status === "reserved" ? (
           <Can permissionsState={effectivePermissions} permissions={[BAR_RESERVATION_CANCEL_PERMISSION]}>
@@ -741,9 +747,9 @@ export function BarTableSessionsPage({ api, setActionResult, setGlobalError, eff
         ) : (
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="bar-reservations-table">
-            <thead><tr><th>选择</th><th>预定号</th><th>卡座</th><th>人数</th><th>订台备注</th><th>定金状态</th><th>状态</th><th>详情</th></tr></thead>
+            <thead><tr><th>选择</th><th>预定号</th><th>卡座</th><th>人数</th><th>订台备注</th><th>定金状态</th><th>状态</th><th>操作</th><th>详情</th></tr></thead>
             <tbody>{reservations.length === 0 ? (
-              <tr><td colSpan={8} className="admin-muted-action">暂无订台预定</td></tr>
+              <tr><td colSpan={9} className="admin-muted-action">暂无订台预定</td></tr>
             ) : pagedReservations.pageRows.map((row) => (
               <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`bar-reservation-row-${row.id}`}
                 onClick={() => openReservationDetail(row)}
@@ -754,7 +760,8 @@ export function BarTableSessionsPage({ api, setActionResult, setGlobalError, eff
                 <td>{row.guestCount ?? "-"}</td>
                 <td>{row.remark ?? "-"}</td>
                 <td>{formatBusinessStatus(row.depositStatus)}</td>
-                <td>{formatBusinessStatus(row.status)}</td>
+                <td>{reservationArchiveLabel(row) ?? formatBusinessStatus(row.status)}</td>
+                <td onClick={(event) => event.stopPropagation()}><BarReservationLifecycleActions api={api} user={user} effectivePermissions={effectivePermissions} setActionResult={setActionResult} setGlobalError={setGlobalError} row={row} onChanged={reload} /></td>
               <td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看订台预定详情" onClick={(event) => { event.stopPropagation(); openReservationDetail(row); }}>查看详情</button></td></tr>
             ))}</tbody>
           </table>

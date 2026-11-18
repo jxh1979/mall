@@ -1,4 +1,4 @@
-// 文件版本：V0.14
+// 文件版本：V0.15
 // 3.8 业务枚举中文化：展示层把后端状态码翻成中文业务口径；提交/请求仍用原码。
 // 未知码原样返回（不阻断展示），新增码逐步补此表即可。
 const STATUS_LABELS: Record<string, string> = {
@@ -14,6 +14,8 @@ const STATUS_LABELS: Record<string, string> = {
   // 第十六批第 16 条（ENUM L101 酒吧账单状态「部分退款」）
   partial_refunded: "部分退款",
   refunding: "退款中",
+  // 第十八批 AU 段收尾复核（PGM:287「界面全中文（所有终端零英文）」；BSM:1079「账单合并称为“合单”」）：被合入主单的酒吧副单状态，同后台字典 VALUE_LABELS。
+  merged: "已合并",
   // AUD-077 门票转赠
   transferring: "转赠中",
   claimed: "已领取",

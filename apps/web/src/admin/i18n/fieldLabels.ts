@@ -1,4 +1,4 @@
-// 文件版本：V0.42
+// 文件版本：V0.43
 // OBS-14-02 后台结果区字段中文名字典（PGM「全局原则 · 界面全中文（所有终端零英文）」）。
 // 键用后端 JSON 的蛇形写法；结果区查表时蛇形与驼峰同查（orderId / order_id 都命中 order_id）。
 // 与后端字段中文名表 FieldLabels.java（common.api 包）同键同名：前段按后端原样抄录，后端改名这里跟着改（门禁会比对）。
@@ -214,6 +214,9 @@ export const FIELD_LABELS: Record<string, string> = {
   unit: "单位",
   variant_type: "人群/渠道",
   tip_amount_cent: "小费金额",
+  // 第十八批 AU 段第 282 条 282-R2 小费按比例请求体键；第 283 条 283-R1 订单列表账单摘要的低消差额。
+  tip_ratio_bps: "小费比例（万分比）",
+  min_spend_gap_cent: "低消差额",
   minimum_spend_cent: "最低消费",
   additional_min_consumption_cent: "追加最低消费",
   additional_deposit_amount_cent: "追加押金",
@@ -2431,9 +2434,9 @@ export const FIELD_LABELS: Record<string, string> = {
   snapshot: "快照",
   snapshot_id: "快照",
   snapshot_json: "快照内容",
-  sold_out: "已售罄",
-  sold_out_at: "售罄时间",
-  sold_out_reason: "售罄原因",
+  sold_out: "已沽清",
+  sold_out_at: "沽清时间",
+  sold_out_reason: "沽清原因",
   // 第十八批 AK 段第 221 条（ENUM:111「沽清分两档：临时沽清……与长期下架」）：与后端 FieldLabels.java 同键同名。
   sold_out_type: "沽清档位",
   sold_out_until: "临时沽清到期时间",
@@ -3037,6 +3040,12 @@ export const VALUE_LABELS: Record<string, string> = {
   bar_reservation_create: "新建订台",
   // 第十八批 AK 段第 230 条 230-R2：人工取消订台（BSM:1058）。
   bar_reservation_cancelled: "订台已取消",
+  // 第十八批 AU 段第 265 条 265-R2（BSM:577）：订台存档、取消存档、申请删除、批准与驳回删除。
+  bar_reservation_archived: "订台已存档",
+  bar_reservation_unarchived: "订台已取消存档",
+  bar_reservation_delete_requested: "订台删除申请已提交",
+  bar_reservation_delete_approved: "订台删除已批准",
+  bar_reservation_delete_rejected: "订台删除已驳回",
   bar_table_session_create: "开台",
   bar_table_session_transfer: "转台",
   // 第十八批 AB 段第 190 条 190-R3：撤销最近一次转台（BSM:1079）。
@@ -3402,6 +3411,11 @@ export const VALUE_LABELS: Record<string, string> = {
   transfer_undone: "已撤销转台",
   merged: "已合并",
   split: "已拆分",
+  // 第十八批 AU 段收尾复核（PGM:287；BSM:1064「不足最低消费的要补足」）：账单操作区结果里的未结清账单（同 settled「已结清」）、
+  // 非销售岗档（同 barSalesRole、SettlementConfigPage）与补足低消调整（同该区「补足低消差额」按钮）。
+  unsettled: "未结清",
+  non_sales: "非销售人员",
+  min_spend_top_up: "补足低消差额",
   cleared: "已清台",
   opened: "已开台",
   partial: "部分收付",
@@ -3639,6 +3653,8 @@ export const KEY_VALUE_LABELS: Record<string, Record<string, string>> = {
   // 第十八批 L 段 102-R3（第十八批裁决 26）：报修、其他服务请求的关单方式（同 MerchantWorkOrdersPage CLOSE_METHOD_LABELS）。
   close_method: { handler: "处理人完成即结束", staff_acceptance: "员工验收后关闭", merchant_confirm: "须商户确认" },
   currency: { CNY: "人民币" },
+  // 第十八批 AU 段收尾复核（BSM:1079「账单合并称为“合单”」）：酒吧账单操作记录的合单（与 split「已拆分」对称）；merge 另是并台调整类型与模板套用方式，按键收。
+  operation_type: { merge: "已合单" },
   // 18W 复核修复（PGM:287）：应收应付台账「登记核销」结果区的收付方式与来源类型，与 FinanceArApLedgerPage 的 PAYMENT_METHODS、SOURCE_TYPE_LABELS 同名。
   payment_method: { cash: "现金", bank_transfer: "银行转账", pos: "刷卡", other: "其他" },
   source_type: {

@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "综合体管理系统 P0 API 契约",
-    "version": "V0.78",
+    "version": "V0.79",
     "description": "P0 首批编码前置契约。本文采用 JSON-compatible YAML，便于与 openapi-p0.json 保持一致。正式后端以 Java 21 + Spring Boot 4.x + springdoc-openapi 输出运行时 OpenAPI，并与本契约比对。"
   },
   "servers": [
@@ -3501,7 +3501,8 @@
           "VOUCHER_REVOKED",
           "MEMBER_NOT_FOUND",
           "SENSITIVE_OPERATION_LOCATION_REQUIRED",
-          "SENSITIVE_OPERATION_OUT_OF_RANGE"
+          "SENSITIVE_OPERATION_OUT_OF_RANGE",
+          "CUSTOMER_OTP_INVALID"
         ],
         "x-permission": "finance.payment.register",
         "x-data-scope": "project-bar-table",
@@ -3544,7 +3545,7 @@
           }
         },
         "x-auth-context": "staff-token",
-        "description": "第十八批 N 段第 123 条 123-R2（BSM:1630「核销、收款、退款、放行等敏感操作，操作设备定位落在该项目综合体授权范围之外时一律拒绝并留痕」；BSM:1876「Web 端同样适用」）：本操作属敏感操作定位闸的现场动作闭集（第十八批裁决 31）。操作对象所属项目已配授权范围（123-R1）时须带请求头 X-Geo-Latitude、X-Geo-Longitude（设备当下定位，WGS-84 十进制度）：没带或解析不了按范围外处理（裁决 30）返回 403 SENSITIVE_OPERATION_LOCATION_REQUIRED，到圆心距离超过授权半径返回 403 SENSITIVE_OPERATION_OUT_OF_RANGE，拒绝在独立事务里留痕 sensitive_operation.location_rejected（business_id 为本 operationId，业务回滚不丢）；项目没配授权范围不查位置（裁决 32）；判定在幂等之前，重放不能绕过；通过时不存位置。第十八批 O 段第 127 条 127-R3：收款人（cashier_staff_id，各支付渠道）取执行结账的那一次登录会话的操作人，不收请求填写，交班对账按它归入收银员（BSM 第 940、1066、1081 行）。第十八批 T 段第 157 条 157-R2：本次结账使挂起订单的账单（本单除并单、作废外的全部账单，含合单后改指本账单的挂起）全部结清时，同一事务内挂起置已结清（settled）并写审计 bar.order_suspension_settled；应付为 0 的关单同样联动。第十八批 T 段第 157 条 157-R6（BSM:1108「取消后迟到到账进入待退款，不得恢复订单或继续出品」；DEC-R8-94-37「迟到到账须进入待退款并按原支付路径退款」）：账单所属订单的挂起已取消（cancelled）或已待退款（pending_refund）时为迟到到账——不判低消与账单状态，照常落该笔收款流水（payment_channel、POS 必填 pos_transaction_no、收款人同正常结账；settlement_amount_cent 必填且大于 0，否则 400 VALIDATION_FAILED），同一事务按作废并冲正同一口径（后收的先退、储值部分回原卡，其余挂一笔退款应付，source_id 为该笔收款流水编号）原路待退并把该笔流水置冲正；账单不改（仍作废）、不进营业额与分红；挂起置待退款（pending_refund），记 refund_ar_ap_item_id，审计 bar.order_suspension_late_payment；返回仍作废的账单。"
+        "description": "第十八批 N 段第 123 条 123-R2（BSM:1630「核销、收款、退款、放行等敏感操作，操作设备定位落在该项目综合体授权范围之外时一律拒绝并留痕」；BSM:1876「Web 端同样适用」）：本操作属敏感操作定位闸的现场动作闭集（第十八批裁决 31）。操作对象所属项目已配授权范围（123-R1）时须带请求头 X-Geo-Latitude、X-Geo-Longitude（设备当下定位，WGS-84 十进制度）：没带或解析不了按范围外处理（裁决 30）返回 403 SENSITIVE_OPERATION_LOCATION_REQUIRED，到圆心距离超过授权半径返回 403 SENSITIVE_OPERATION_OUT_OF_RANGE，拒绝在独立事务里留痕 sensitive_operation.location_rejected（business_id 为本 operationId，业务回滚不丢）；项目没配授权范围不查位置（裁决 32）；判定在幂等之前，重放不能绕过；通过时不存位置。第十八批 O 段第 127 条 127-R3：收款人（cashier_staff_id，各支付渠道）取执行结账的那一次登录会话的操作人，不收请求填写，交班对账按它归入收银员（BSM 第 940、1066、1081 行）。第十八批 T 段第 157 条 157-R2：本次结账使挂起订单的账单（本单除并单、作废外的全部账单，含合单后改指本账单的挂起）全部结清时，同一事务内挂起置已结清（settled）并写审计 bar.order_suspension_settled；应付为 0 的关单同样联动。第十八批 T 段第 157 条 157-R6（BSM:1108「取消后迟到到账进入待退款，不得恢复订单或继续出品」；DEC-R8-94-37「迟到到账须进入待退款并按原支付路径退款」）：账单所属订单的挂起已取消（cancelled）或已待退款（pending_refund）时为迟到到账——不判低消与账单状态，照常落该笔收款流水（payment_channel、POS 必填 pos_transaction_no、收款人同正常结账；settlement_amount_cent 必填且大于 0，否则 400 VALIDATION_FAILED），同一事务按作废并冲正同一口径（后收的先退、储值部分回原卡，其余挂一笔退款应付，source_id 为该笔收款流水编号）原路待退并把该笔流水置冲正；账单不改（仍作废）、不进营业额与分红；挂起置待退款（pending_refund），记 refund_ar_ap_item_id，审计 bar.order_suspension_late_payment；返回仍作废的账单。第十八批 AU 段第 328 条 328-R1：payment_channel=stored_value 时手机号不是会员或短信验证码不正确、已过期 409 CUSTOMER_OTP_INVALID（员工侧核客人验证码不回 401，401 只表示员工自己的登录会话失效），不扣储值、账单不变。"
       }
     },
     "/api/v1/bar/bills/{bill_id}/stored-value/sms": {
@@ -3555,7 +3556,7 @@
         ],
         "operationId": "requestBarBillStoredValueSmsCode",
         "summary": "酒吧账单储值付款短信验证码",
-        "description": "第十八批 S 段第 171 条 171-R1（BSM:1066「储值卡（通用卡先扣本金后扣赠送金且不可配置……）」；BSM:1563「验证码下发与送达结果、失败原因（用于新人判定、注册登录和关键操作验证）」）：收银为本账单的储值付款，给付款客人手机号发验证码（customer.stored_value.consume 场景）。手机号须是已注册会员，不是会员 401 CUSTOMER_OTP_INVALID，账号已封禁或已注销 403 CUSTOMER_BLACKLISTED / CUSTOMER_DEREGISTERED；账单所挂订单有客人时须是该客人的登记手机号，不一致 403 STORED_VALUE_CUSTOMER_MISMATCH；按手机号限频，超限 429 CUSTOMER_OTP_RATE_LIMITED；账单不存在 404 BAR_BILL_NOT_FOUND，他商户 403 CROSS_MERCHANT_FORBIDDEN，已结账 409 BAR_BILL_ALREADY_SETTLED；短信服务未配置 409 CUSTOMER_OTP_PROVIDER_UNAVAILABLE，不假成功；下发失败 409 CUSTOMER_OTP_SEND_FAILED。验证码随结账（payment_channel=stored_value 时的 phone、sms_code）核验。成功返回 message。",
+        "description": "第十八批 S 段第 171 条 171-R1（BSM:1066「储值卡（通用卡先扣本金后扣赠送金且不可配置……）」；BSM:1563「验证码下发与送达结果、失败原因（用于新人判定、注册登录和关键操作验证）」）：收银为本账单的储值付款，给付款客人手机号发验证码（customer.stored_value.consume 场景）。手机号须是已注册会员，不是会员 409 CUSTOMER_OTP_INVALID（第十八批 AU 段第 328 条 328-R1：员工侧核客人手机号不回 401，401 只表示员工自己的登录会话失效），账号已封禁或已注销 403 CUSTOMER_BLACKLISTED / CUSTOMER_DEREGISTERED；账单所挂订单有客人时须是该客人的登记手机号，不一致 403 STORED_VALUE_CUSTOMER_MISMATCH；按手机号限频，超限 429 CUSTOMER_OTP_RATE_LIMITED；账单不存在 404 BAR_BILL_NOT_FOUND，他商户 403 CROSS_MERCHANT_FORBIDDEN，已结账 409 BAR_BILL_ALREADY_SETTLED；短信服务未配置 409 CUSTOMER_OTP_PROVIDER_UNAVAILABLE，不假成功；下发失败 409 CUSTOMER_OTP_SEND_FAILED。验证码随结账（payment_channel=stored_value 时的 phone、sms_code）核验。成功返回 message。",
         "x-failure-codes": [
           "CUSTOMER_OTP_INVALID",
           "CUSTOMER_BLACKLISTED",
@@ -3607,9 +3608,6 @@
             "$ref": "#/components/responses/Success"
           },
           "400": {
-            "$ref": "#/components/responses/Error"
-          },
-          "401": {
             "$ref": "#/components/responses/Error"
           },
           "403": {
@@ -3700,7 +3698,7 @@
           }
         },
         "x-auth-context": "staff-token",
-        "description": "用于查询酒吧订单。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。第十八批 T 段第 157 条 157-R2：每单另带 table_type（台位类型，vip＝包厢，只有包厢能挂起）、suspension_status（挂起状态英码 hanging_unpaid/settled/cancel_pending_approval/cancelled/pending_refund/bad_debt_processing/written_off_closed，未挂起为空）与 suspension_amount_cent（挂起金额，分；未挂起为空）。第十八批 T 段第 157 条 157-R3：另带 suspension（本单挂起记录全文，未挂起为空；确认坏账后带 bad_debt_reason、bad_debt_confirmed_by、bad_debt_confirmed_at、unpaid_price_cent、inventory_cost_cent、compensation_lines〔每项 order_item_id、responsible_user_id（空＝门店损耗）、cost_cent〕，核销结案后带 written_off_by、written_off_at）。第十八批 T 段第 157 条 157-R6：suspension 另带取消申请与经理审批 cancel_item_ids、cancel_reason、cancel_reason_code、cancel_evidence_attachment_ids、cancel_requested_by、cancel_requested_at、cancel_decided_by、cancel_decided_at、cancel_decision_reason，取消后迟到到账带 refund_ar_ap_item_id（原路退款应付台账项）。第十八批 T 段第 157 条 157-R5：另带 unpaid_close_escalated_at（本单账单或挂起改指的主单关台未付清待办的升级时间，未升级为空；已升级的，被升级的店长与此刻在班的夜班值班经理也可确认坏账）。18T 复核修复⑤（照 142-R3 班次列表）：非平台管理员、无商户号的项目侧账号（如项目财务）按 bar.order.view 可触及的项目列订单，与挂起订单风险看板的项目口径一致；商户账号只看本商户、平台管理员看全部，读法不改。"
+        "description": "用于查询酒吧订单。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。第十八批 T 段第 157 条 157-R2：每单另带 table_type（台位类型，vip＝包厢，只有包厢能挂起）、suspension_status（挂起状态英码 hanging_unpaid/settled/cancel_pending_approval/cancelled/pending_refund/bad_debt_processing/written_off_closed，未挂起为空）与 suspension_amount_cent（挂起金额，分；未挂起为空）。第十八批 T 段第 157 条 157-R3：另带 suspension（本单挂起记录全文，未挂起为空；确认坏账后带 bad_debt_reason、bad_debt_confirmed_by、bad_debt_confirmed_at、unpaid_price_cent、inventory_cost_cent、compensation_lines〔每项 order_item_id、responsible_user_id（空＝门店损耗）、cost_cent〕，核销结案后带 written_off_by、written_off_at）。第十八批 T 段第 157 条 157-R6：suspension 另带取消申请与经理审批 cancel_item_ids、cancel_reason、cancel_reason_code、cancel_evidence_attachment_ids、cancel_requested_by、cancel_requested_at、cancel_decided_by、cancel_decided_at、cancel_decision_reason，取消后迟到到账带 refund_ar_ap_item_id（原路退款应付台账项）。第十八批 T 段第 157 条 157-R5：另带 unpaid_close_escalated_at（本单账单或挂起改指的主单关台未付清待办的升级时间，未升级为空；已升级的，被升级的店长与此刻在班的夜班值班经理也可确认坏账）。18T 复核修复⑤（照 142-R3 班次列表）：非平台管理员、无商户号的项目侧账号（如项目财务）按 bar.order.view 可触及的项目列订单，与挂起订单风险看板的项目口径一致；商户账号只看本商户、平台管理员看全部，读法不改。第十八批 AU 段第 282 条 282-R1：bills[] 每张账单摘要另带 payable_amount_cent（应付，分）、paid_amount_cent（已付，分）、tip_amount_cent（小费，分）。第十八批 AU 段第 283 条 283-R1：另带 min_spend_gap_cent（未结账单的低消差额，分；与结账闸同一算法：有开台会话按台组阈值减累计进度，无会话按台位低消减本账单消费与补足，无台位为 0；0＝已达标；已结、已并单、作废的账单为空）。"
       }
     },
     "/api/v1/bar/orders/{order_id}/bill": {
@@ -3882,7 +3880,7 @@
         ],
         "operationId": "listBarProducts",
         "summary": "查询酒吧商品",
-        "description": "用于查询酒吧商品。持授权 U 盘密钥的最高权限本人看全部酒吧的商品，不按商户范围；其他人照旧按当前商户范围（第十八批裁决 71，第十八批 AO 段第 249 条 249-R9）。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。",
+        "description": "用于查询酒吧商品。持授权 U 盘密钥的最高权限本人看全部酒吧的商品，不按商户范围；其他人照旧按当前商户范围（第十八批裁决 71，第十八批 AO 段第 249 条 249-R9）。已审批删除的商品任何情况下都不返回；includeArchived=true 只带出已存档未删除的（第十八批 AU 段第 320 条 320-R1；BSM:571「前台各处不再显示」）。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。",
         "x-permission": "bar.product.view",
         "x-data-scope": "project",
         "x-terminal-allowed": [
@@ -4018,7 +4016,7 @@
           }
         },
         "x-auth-context": "staff-token",
-        "description": "用于查询酒吧预约。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。"
+        "description": "用于查询酒吧预约。持授权 U 盘密钥的最高权限本人看全部酒吧的订台，不按商户范围；其他人照旧按当前商户范围（第十八批裁决 71，第十八批 AU 段第 265 条 265-R1）。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。"
       }
     },
     "/api/v1/bar/reservations/{id}/invitation": {
@@ -4221,7 +4219,7 @@
         ],
         "operationId": "listBarTables",
         "summary": "查询桌台或卡座",
-        "description": "台位列表随行返回 held_reservation_id：ROOT-03-R19（ENUM 第 100 行「一个台位同一时刻只能存在一笔有效预留（排他锁，不是展示标记）」）正被有效预留占着该台位的订台号，后台显示「已预留」，员工到店开台须带上它；没有为空。",
+        "description": "台位列表随行返回 held_reservation_id：ROOT-03-R19（ENUM 第 100 行「一个台位同一时刻只能存在一笔有效预留（排他锁，不是展示标记）」）正被有效预留占着该台位的订台号，后台显示「已预留」，员工到店开台须带上它；没有为空。持授权 U 盘密钥的最高权限本人看全部酒吧的台位，不按商户范围；其他人照旧按当前商户范围（第十八批裁决 71，第十八批 AU 段第 265 条 265-R1）。",
         "x-permission": "bar.table.view",
         "x-data-scope": "project-bar",
         "x-terminal-allowed": [
@@ -22130,7 +22128,7 @@
         ],
         "operationId": "requestDeleteBarReservation",
         "summary": "申请删除卡座预订（订台记录）",
-        "description": "第十八批 AE 段第 201 条 201-R1（BSM:577「卡座预订这类业务记录，现在也支持存档、以及审批后删除（同样带删前占用检查：还被业务在用的删不掉）」；BSM:576「存档及删除都需要填写理由」）：对已存档的订台记录发起删除申请，进入待审批删除（delete_status=pending），记申请人、申请时间与理由（reason），由持 bar.reservation.approve 的人审批（approveDeleteBarReservation）。未存档 400 BAR_RESERVATION_NOT_ARCHIVED；已有待审批的删除申请 409 BAR_RESERVATION_DELETE_ALREADY_PENDING；reason 必填，缺失或空白 400 VALIDATION_FAILED；订台记录不存在或已删除 404 BAR_RESERVATION_NOT_FOUND，属其他商户 403 BAR_MERCHANT_SCOPE。成功留痕 bar.reservation.delete_requested，以上拒绝留痕 bar.reservation.delete_request_failed（带错误码）。",
+        "description": "第十八批 AE 段第 201 条 201-R1（BSM:577「卡座预订这类业务记录，现在也支持存档、以及审批后删除（同样带删前占用检查：还被业务在用的删不掉）」；BSM:576「存档及删除都需要填写理由」）：对已存档的订台记录发起删除申请，进入待审批删除（delete_status=pending），记申请人、申请时间与理由（reason），由持授权 U 盘密钥的最高权限本人审批（approveDeleteBarReservation，第十八批 AU 段第 265 条 265-R1）。未存档 400 BAR_RESERVATION_NOT_ARCHIVED；已有待审批的删除申请 409 BAR_RESERVATION_DELETE_ALREADY_PENDING；reason 必填，缺失或空白 400 VALIDATION_FAILED；订台记录不存在或已删除 404 BAR_RESERVATION_NOT_FOUND，属其他商户 403 BAR_MERCHANT_SCOPE。持授权 U 盘密钥的最高权限本人发起的不按商户范围、不经审批当场删除（第十八批裁决 71；BSM:577「持授权 U 盘密钥的最高权限本人发起的操作，不需要经过任何审批。」）：照样先查占用，订台仍在预留中（未经取消、超时释放或到店开台；第十八批 AU 段收尾复核，ENUM:100「已预留只能经取消订台、超时释放、到店开台三条路径退出」）或仍有订单、账单、开台会话或邀请函成员挂在该订台上 409 BAR_RESERVATION_IN_USE，整笔回滚（仍为已存档、未申请删除）；删除成功另留痕 bar.reservation.delete_approved，返回 delete_status=approved 的记录。成功留痕 bar.reservation.delete_requested，以上拒绝留痕 bar.reservation.delete_request_failed（带错误码）。",
         "x-auth-context": "staff-token",
         "x-permission": "bar.reservation.manage",
         "x-data-scope": "project-bar",
@@ -22145,7 +22143,8 @@
           "BAR_RESERVATION_DELETE_ALREADY_PENDING",
           "VALIDATION_FAILED",
           "BAR_RESERVATION_NOT_FOUND",
-          "BAR_MERCHANT_SCOPE"
+          "BAR_MERCHANT_SCOPE",
+          "BAR_RESERVATION_IN_USE"
         ],
         "parameters": [
           {
@@ -22201,7 +22200,7 @@
         ],
         "operationId": "approveDeleteBarReservation",
         "summary": "审批卡座预订（订台记录）删除申请",
-        "description": "第十八批 AE 段第 201 条 201-R1（BSM:577「卡座预订这类业务记录，现在也支持存档、以及审批后删除（同样带删前占用检查：还被业务在用的删不掉）」；BSM:570「申请人不能审批自己的申请」；BSM:571「前台各处不再显示，数据始终留在库里可查、可审计、可恢复」）：审批订台记录的待审批删除申请。decision=approved 且没有订单、账单、开台会话或邀请函成员挂在该订台上即删除（delete_status=approved，各处查询不再返回、库里保留），返回 deleted=true；rejected 撤回申请（delete_status 回 none），订台记录仍为已存档，返回 deleted=false。没有待审批的删除申请 400 BAR_RESERVATION_DELETE_NOT_PENDING；decision 不是 approved 或 rejected 400 VALIDATION_FAILED；申请人审批自己的申请 403 BAR_RESERVATION_SELF_APPROVE_FORBIDDEN；仍有订单、账单、开台会话或邀请函成员挂在该订台上 409 BAR_RESERVATION_IN_USE；订台记录不存在或已删除 404 BAR_RESERVATION_NOT_FOUND，属其他商户 403 BAR_MERCHANT_SCOPE。通过与驳回都留痕 bar.reservation.delete_approved，以上拒绝留痕 bar.reservation.delete_approve_failed（带错误码）。",
+        "description": "第十八批 AE 段第 201 条 201-R1（BSM:577「卡座预订这类业务记录，现在也支持存档、以及审批后删除（同样带删前占用检查：还被业务在用的删不掉）」；BSM:570「申请人不能审批自己的申请」；BSM:571「前台各处不再显示，数据始终留在库里可查、可审计、可恢复」）：审批订台记录的待审批删除申请。只认持授权 U 盘密钥的最高权限本人，不按商户范围取记录（第十八批 AU 段第 265 条 265-R1；BSM:577「删除一律须由具备最高权限的人审批通过后执行，不设例外」），其他人批准、驳回都 403 MASTER_APPROVAL_REQUIRED「卡座预订删除须由最高权限本人批准」。decision=approved 且订台不在预留中、没有订单、账单、开台会话或邀请函成员挂在该订台上即删除（delete_status=approved，各处查询不再返回、库里保留），返回 deleted=true；rejected 撤回申请（delete_status 回 none），订台记录仍为已存档，返回 deleted=false。没有待审批的删除申请 400 BAR_RESERVATION_DELETE_NOT_PENDING；decision 不是 approved 或 rejected 400 VALIDATION_FAILED；申请人审批自己的申请 403 BAR_RESERVATION_SELF_APPROVE_FORBIDDEN；订台仍在预留中（未经取消、超时释放或到店开台；第十八批 AU 段收尾复核，ENUM:100「已预留只能经取消订台、超时释放、到店开台三条路径退出」）或仍有订单、账单、开台会话或邀请函成员挂在该订台上 409 BAR_RESERVATION_IN_USE；订台记录不存在或已删除 404 BAR_RESERVATION_NOT_FOUND。通过与驳回都留痕 bar.reservation.delete_approved，以上拒绝留痕 bar.reservation.delete_approve_failed（带错误码）。",
         "x-auth-context": "staff-token",
         "x-permission": "bar.reservation.approve",
         "x-data-scope": "project-bar",
@@ -22217,7 +22216,7 @@
           "BAR_RESERVATION_SELF_APPROVE_FORBIDDEN",
           "BAR_RESERVATION_IN_USE",
           "BAR_RESERVATION_NOT_FOUND",
-          "BAR_MERCHANT_SCOPE"
+          "MASTER_APPROVAL_REQUIRED"
         ],
         "parameters": [
           {
@@ -22277,7 +22276,7 @@
         ],
         "operationId": "listBarStaffBookingSuspensions",
         "summary": "查询代订权限停用中的经手员工",
-        "description": "第十八批 C 段第 15 条（BSM L1468「客人超过最晚到店时间未到店的，系统自动释放该台位，并记一笔爽约到经手员工名下……经手员工的爽约率超过后台配置的上限时……自动停用其代订权限，由店长复核后恢复」）：列出代订权限停用中（status=suspended）的记录，按商户范围过滤；含统计月份 stat_month（第十八批裁决 3 按自然月，按营业日归月）、爽约笔数 no_show_count、代订笔数 booking_count、上限 limit_pct。",
+        "description": "第十八批 C 段第 15 条（BSM L1468「客人超过最晚到店时间未到店的，系统自动释放该台位，并记一笔爽约到经手员工名下……经手员工的爽约率超过后台配置的上限时……自动停用其代订权限，由店长复核后恢复」）：列出代订权限停用中（status=suspended）的记录，按商户范围过滤；含统计月份 stat_month（第十八批裁决 3 按自然月，按营业日归月）、爽约笔数 no_show_count、代订笔数 booking_count、上限 limit_pct。持授权 U 盘密钥的最高权限本人看全部酒吧的记录，不按商户范围；其他人照旧按当前商户范围（第十八批裁决 71，第十八批 AU 段第 265 条 265-R1）。",
         "x-permission": "bar.staff_booking.restore",
         "x-data-scope": "project-bar",
         "x-terminal-allowed": [
@@ -25877,7 +25876,7 @@
         ],
         "operationId": "decideBarOrderSuspensionCancel",
         "summary": "经理审批取消挂起订单",
-        "description": "第十八批 T 段第 157 条 157-R6（PGM:699「经理审批取消」；BSM:1107「经理审批不能替代既有高价值审批链」；BSM:1108「取消审批生效与付款成功只能有一项先完成，先完成者生效；取消生效时作废未完成付款；取消后迟到到账进入待退款，不得恢复订单或继续出品。」）：经理批准（decision=approve）或驳回（decision=reject）挂起订单的取消，reason 为审批意见（选填），记 cancel_decided_by、cancel_decided_at、cancel_decision_reason。驳回即回到已挂起待付款。批准即对所列每项以取消发起人为申请人、带发起时的原因、原因码与证据走既有退菜退酒（回库、冲减本单账单）：低价值的即时回库并冲减账单，该退菜退酒单由本次审批经理记为审批人置已批准；高价值的进既有先审后行、等 POST /api/v1/bar/order-item-voids/{void_id}/decision 审批（经理批准不替代）。随后重判：所列仍有待审的高价值退品保持取消审批中；本单已无未作废明细即转已取消（cancelled）——本单未结清账单在同一事务内作废并冲正（已收原路待退、收款流水冲正、提成作废、低消留款冲正、积分成长值冲回，同异常处置作废并冲正），这些账单待支付（created）的支付意向置 cancelled，审计 bar.order_suspension_cancelled；否则回到已挂起待付款（审计 bar.order_suspension_cancel_decided）。之后该订单加菜与出品 409 BAR_ORDER_SUSPENSION_CANCELLED，迟到到账见 POST /api/v1/bar/bills/{bill_id}/settle。返回挂起记录全文。成功审计 bar.order_suspension_cancel_decided 带审批结论与意见。挂起不在取消审批中或已由经理审批过（含付款已先结清、挂起已置已结清）409 BAR_SUSPENSION_NOT_CANCEL_PENDING；审批人是取消发起人 409 BAR_SUSPENSION_CANCEL_SELF_APPROVAL；decision 不是 approve 或 reject 400 VALIDATION_FAILED；订单不存在 404 BAR_ORDER_NOT_FOUND；跨商户 403 CROSS_MERCHANT_FORBIDDEN（在幂等之前判，不占幂等键）；同一幂等键重放返回第一次结果。",
+        "description": "第十八批 T 段第 157 条 157-R6（PGM:699「经理审批取消」；BSM:1107「经理审批不能替代既有高价值审批链」；BSM:1108「取消审批生效与付款成功只能有一项先完成，先完成者生效；取消生效时作废未完成付款；取消后迟到到账进入待退款，不得恢复订单或继续出品。」）：经理批准（decision=approve）或驳回（decision=reject）挂起订单的取消，reason 为审批意见（选填），记 cancel_decided_by、cancel_decided_at、cancel_decision_reason。驳回即回到已挂起待付款。批准即对所列每项以取消发起人为申请人、带发起时的原因、原因码与证据走既有退菜退酒（回库、冲减本单账单）：低价值的即时回库并冲减账单，该退菜退酒单由本次审批经理记为审批人置已批准；高价值的进既有先审后行、等 POST /api/v1/bar/order-item-voids/{void_id}/decision 审批（经理批准不替代）。随后重判：所列仍有待审的高价值退品保持取消审批中；本单已无未作废明细即转已取消（cancelled）——本单未结清账单在同一事务内作废并冲正（已收原路待退、收款流水冲正、提成作废、低消留款冲正、积分成长值冲回，同异常处置作废并冲正），这些账单待支付（created）的支付意向置 cancelled，审计 bar.order_suspension_cancelled；否则回到已挂起待付款（审计 bar.order_suspension_cancel_decided）。之后该订单加菜与出品 409 BAR_ORDER_SUSPENSION_CANCELLED，迟到到账见 POST /api/v1/bar/bills/{bill_id}/settle。返回挂起记录全文。成功审计 bar.order_suspension_cancel_decided 带审批结论与意见。挂起不在取消审批中或已由经理审批过（含付款已先结清、挂起已置已结清）409 BAR_SUSPENSION_NOT_CANCEL_PENDING；审批人是取消发起人 409 BAR_SUSPENSION_CANCEL_SELF_APPROVAL；decision 不是 approve 或 reject 400 VALIDATION_FAILED；订单不存在 404 BAR_ORDER_NOT_FOUND；跨商户 403 CROSS_MERCHANT_FORBIDDEN（在幂等之前判，不占幂等键）；同一幂等键重放返回第一次结果。第十八批 AU 段第 277 条 277-R1（BSM:1108「取消审批生效与付款成功只能有一项先完成，先完成者生效」）：与结账同时发生时先锁本单账单行（含拆出的账单与合单后改指的主单）再锁挂起行，与结账同序，不再互等成死锁；结账先成功的，等到账单锁后看到挂起已结清，回 409 BAR_SUSPENSION_NOT_CANCEL_PENDING。",
         "x-permission": "bar.bill.hang_cancel",
         "x-data-scope": "project-bar-table",
         "x-terminal-allowed": [
@@ -26366,6 +26365,7 @@
         ],
         "operationId": "addBarBillTip",
         "summary": "账单加小费",
+        "description": "第十八批 AU 段第 282 条 282-R1（PGM:303「两个操作同时发生冲突时，一律以“先处理成功”的那个为准」）：先锁账单行再判，与结账同时发生时按结账后的账单处理，已结账或已并单 409 BAR_BILL_NOT_TIPPABLE。",
         "x-permission": "bar.bill.tip",
         "x-data-scope": "project-bar-table",
         "x-terminal-allowed": [
@@ -29097,6 +29097,7 @@
         ],
         "operationId": "listBarTableSessions",
         "summary": "查询酒水台位会话列表",
+        "description": "持授权 U 盘密钥的最高权限本人看全部酒吧的开台会话，不按商户范围；其他人照旧按当前商户范围（第十八批裁决 71，第十八批 AU 段第 265 条 265-R1）。",
         "x-auth-context": "staff-token",
         "x-permission": "bar.table_session.view",
         "x-data-scope": "project-bar-table",
@@ -30046,7 +30047,7 @@
         ],
         "operationId": "mergeBarBill",
         "summary": "合并酒水账单",
-        "description": "第十八批 T 段第 157 条 157-R2：副单所属订单的挂起改指主单（挂起记录 bill_id 改为主单），主单结清时该挂起同样置已结清。",
+        "description": "第十八批 T 段第 157 条 157-R2：副单所属订单的挂起改指主单（挂起记录 bill_id 改为主单），主单结清时该挂起同样置已结清。第十八批 AU 段第 282 条 282-R1（PGM:303「两个操作同时发生冲突时，一律以“先处理成功”的那个为准」）：先依次锁主单、副单账单行再判，与结账同时发生时按结账后的账单处理，任一已有支付、已结或已并单 409 BAR_BILL_NOT_MERGEABLE。",
         "x-auth-context": "staff-token",
         "x-permission": "bar.bill.split_merge",
         "x-data-scope": "project-bar-table",
@@ -30135,6 +30136,7 @@
         ],
         "operationId": "splitBarBill",
         "summary": "拆分酒水账单",
+        "description": "第十八批 AU 段第 282 条 282-R1（PGM:303「两个操作同时发生冲突时，一律以“先处理成功”的那个为准」）：先锁账单行再判，与结账同时发生时按结账后的账单处理，已有支付、已结或已并单 409 BAR_BILL_NOT_SPLITTABLE。",
         "x-auth-context": "staff-token",
         "x-permission": "bar.bill.split_merge",
         "x-data-scope": "project-bar-table",

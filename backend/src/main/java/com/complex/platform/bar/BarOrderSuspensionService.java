@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static com.complex.platform.bar.BarValidation.requireRequest;
 import static com.complex.platform.bar.BarValidation.requireText;
@@ -382,6 +382,10 @@ public class BarOrderSuspensionService implements BarOrderBadDebtReviewPort {
         if (!"approve".equals(decision) && !"reject".equals(decision)) {
             throw ApiException.badRequest("VALIDATION_FAILED", "审批结论只能是批准（approve）或驳回（reject）");
         }
+        // 第十八批 AU 段第 277 条 277-R1（BSM:1108「先完成者生效」；PGM:303「其余自动失效并提示」）：与结账同序，先锁本单账单行（含拆出的账单与
+        // 合单后改指的主单）再锁挂起行，不再与结账互等成死锁；结账先成功的，这里等到账单锁后看到挂起已结清，落下面的 409。
+        find(orderId).ifPresent(row -> jdbc.queryForList("SELECT id FROM bar_bills WHERE order_id = ? OR id = ? ORDER BY id FOR UPDATE",
+                String.class, orderId, row.billId()));
         Suspension suspension = lock(orderId)
                 .filter(row -> "cancel_pending_approval".equals(row.status()) && row.cancelDecidedAt() == null)
                 .orElseThrow(() -> ApiException.conflict("BAR_SUSPENSION_NOT_CANCEL_PENDING",

@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -81,6 +81,15 @@ class BarCatalogMasterDeleteJdbcIntegrationTests {
 
         assertThat(jdbc.queryForObject("SELECT delete_status FROM bar_products WHERE id = ?", String.class, id)).isEqualTo("approved");
         assertThat(masterEvents(id)).containsExactlyInAnyOrder("bar.product.delete_requested|success", "bar.product.delete_approved|success");
+
+        // 第十八批 AU 段第 320 条 320-R1（BSM:570「删除（走审批·软删除）」；BSM:571「前台各处不再显示」）：已删除的商品勾「显示已存档」也不再列出，
+        // 最高权限与甲店员工都一样；只存档、未删除的照旧带出、仍是已存档。修复前红：商品列表不排除已删除行，被标成「已存档」列出。
+        String kept = product(barA, "kept", true);
+        RequestPostProcessor staffA = staff("archiveda", barA, "酒吧商品查看回归角色", "bar.product.view");
+        assertThat(ids(master(), "/api/v1/bar/products?includeArchived=true", "$.data.items[*].id")).contains(kept).doesNotContain(id);
+        assertThat(ids(staffA, "/api/v1/bar/products?includeArchived=true", "$.data.items[*].id")).contains(kept).doesNotContain(id);
+        assertThat(ids(staffA, "/api/v1/bar/products?includeArchived=true", "$.data.items[?(@.id == '" + kept + "')].archived_at"))
+                .hasSize(1).doesNotContainNull();
     }
 
     /** 249-R1⑤：商品仍被订单明细引用，最高权限发起删除 409，整笔回滚——仍为已存档、未申请删除，成功事件一条也不留。 */

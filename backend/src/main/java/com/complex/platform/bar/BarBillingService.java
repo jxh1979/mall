@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.17
+// 文件版本：V0.18
 
 import static com.complex.platform.bar.BarBillRecords.*;
 import static com.complex.platform.bar.BarValidation.*;
@@ -230,7 +230,26 @@ public class BarBillingService {
         if (customerService == null) {
             throw ApiException.conflict("CUSTOMER_OTP_PROVIDER_UNAVAILABLE", "短信验证服务不可用");
         }
-        customerService.requestStoredValueCode(resolveBillCustomerId(bill), phone);
+        staffSideOtp(() -> {
+            customerService.requestStoredValueCode(resolveBillCustomerId(bill), phone);
+            return null;
+        });
+    }
+
+    /**
+     * 第十八批 AU 段第 328 条 328-R1（BSM:1066 支付方式「储值卡」；PGM:287「……提示、报错……必须全部为中文」）：员工侧核客人报出的储值手机号与验证码
+     * （储值发码、储值结账），手机号非会员或验证码不正确、已过期 409 CUSTOMER_OTP_INVALID（文案照原文）。不回 401：401 只表示员工自己的登录会话失效，
+     * 后台网页收到会续期重放后送回登录页（同 18AP 存酒员工侧核码）。客人自助场景仍走 CustomerService 原口径。
+     */
+    private static <T> T staffSideOtp(java.util.function.Supplier<T> call) {
+        try {
+            return call.get();
+        } catch (ApiException exception) {
+            if (!"CUSTOMER_OTP_INVALID".equals(exception.code())) {
+                throw exception;
+            }
+            throw ApiException.conflict("CUSTOMER_OTP_INVALID", exception.getMessage());
+        }
     }
 
     BarBillRecord settleBill(String billId, BarBillSettleRequest request) {
@@ -251,26 +270,10 @@ public class BarBillingService {
         // 低消基数 = 实际消费 subtotal + 已补差 min_spend_top_up（运营补足低消的手段），不含 tip/deposit/service_fee。
         // 第十批 TK-24-R2（BSM L1079 并台合计 / 转台结转；DEC-SEAT-MERGE-001、DEC-R8-95）：有开台会话归属的账单按台组
         // （当前有效并台链）合计阈值与累计进度判；无会话归属的账单沿用台位口径（subtotal + 补足）。
-        if (bill.tableId() != null) {
-            Optional<String> sessionId = bill.orderId() == null
-                    ? Optional.empty() : repository.findSessionIdByOrderId(bill.orderId());
-            long threshold;
-            long consumed;
-            if (sessionId.isPresent()) {
-                threshold = BarMinSpend.thresholdCent(repository, sessionId.get());
-                consumed = BarMinSpend.consumedCent(repository, sessionId.get());
-            } else {
-                BarTableRecord table = repository.findTableById(bill.tableId()).orElse(null);
-                threshold = table == null ? 0L : table.minConsumptionCent();
-                consumed = bill.subtotalAmountCent() + repository.listBillAdjustments(bill.id()).stream()
-                        .filter(a -> "min_spend_top_up".equals(a.adjustmentType()))
-                        .mapToLong(BarBillAdjustmentRecord::amountCent)
-                        .sum();
-            }
-            if (threshold > 0 && consumed < threshold) {
-                throw ApiException.conflict("BAR_MIN_CONSUMPTION_NOT_MET",
-                        "未达到订台最低消费，请先加购消费或补足低消差额再结账");
-            }
+        // 第十八批 AU 段第 283 条 283-R1：阈值与进度的算法移入 BarMinSpend.gapCent，与订单列表账单摘要的低消差额共用。
+        if (BarMinSpend.gapCent(repository, bill) > 0) {
+            throw ApiException.conflict("BAR_MIN_CONSUMPTION_NOT_MET",
+                    "未达到订台最低消费，请先加购消费或补足低消差额再结账");
         }
         requireText(actual.paymentId(), "payment_id");
         // 第十一批 TK-04-R2（BSM L822「POS、现金等其他付款方式，由收银在收款时现场录入会员号累计」；PGM L878）：
@@ -368,8 +371,9 @@ public class BarBillingService {
             if (customerService == null) {
                 throw ApiException.conflict("CUSTOMER_OTP_PROVIDER_UNAVAILABLE", "短信验证服务不可用");
             }
-            String svCustomerId = customerService.verifyStoredValueCustomer(
-                    resolveBillCustomerId(bill), actual.phone(), actual.smsCode()).id();
+            BarBillRecord payingBill = bill;
+            String svCustomerId = staffSideOtp(() -> customerService.verifyStoredValueCustomer(
+                    resolveBillCustomerId(payingBill), actual.phone(), actual.smsCode())).id();
             storedValueService.consumeInternal(svCustomerId, null, bill.merchantId(), settlementAmount,
                     "酒吧结账-储值支付 账单" + bill.id(), "barsv_" + slug(actual.idempotencyKey()));
             if (memberPhone == null && merchantRewards != null) {
@@ -698,7 +702,9 @@ public class BarBillingService {
 
     BarBillOperationRecord splitBill(String billId, BarBillSplitRequest request) {
         BarBillSplitRequest actual = requireRequest(request);
-        BarBillRecord source = repository.findBillById(billId)
+        // 第十八批 AU 段第 282 条 282-R1（PGM:303「两个操作同时发生冲突时，一律以“先处理成功”的那个为准」）：行锁读取账单（同 settleBill），
+        // 与结账同时发生时按结账后的账单处理，不把已结账单整行写回未结。
+        BarBillRecord source = repository.findBillByIdForUpdate(billId)
                 .orElseThrow(() -> ApiException.notFound("BAR_BILL_NOT_FOUND", "账单不存在或已被删除"));
         checkMerchantOwnership(source.merchantId());
         requireBillMovable(source, "BAR_BILL_NOT_SPLITTABLE");
@@ -770,10 +776,12 @@ public class BarBillingService {
         if (billId.equals(secondaryBillId)) {
             throw ApiException.conflict("BAR_BILL_MERGE_SAME_BILL", "账单不能与自身合并");
         }
-        BarBillRecord primary = repository.findBillById(billId)
+        // 第十八批 AU 段第 282 条 282-R1（PGM:303「两个操作同时发生冲突时，一律以“先处理成功”的那个为准」）：行锁读取账单（同 settleBill），
+        // 与结账同时发生时按结账后的账单处理，不把已结账单整行写回未结。
+        BarBillRecord primary = repository.findBillByIdForUpdate(billId)
                 .orElseThrow(() -> ApiException.notFound("BAR_BILL_NOT_FOUND", "主账单不存在或已被删除"));
         checkMerchantOwnership(primary.merchantId());
-        BarBillRecord secondary = repository.findBillById(secondaryBillId)
+        BarBillRecord secondary = repository.findBillByIdForUpdate(secondaryBillId)
                 .orElseThrow(() -> ApiException.notFound("BAR_BILL_NOT_FOUND", "副账单不存在或已被删除"));
         checkMerchantOwnership(secondary.merchantId());
         requireBillMovable(primary, "BAR_BILL_NOT_MERGEABLE");
@@ -871,6 +879,9 @@ public class BarBillingService {
                     // 第十批 TK-25-R2（Q28「不重复收款、收入或奖励」）：留款抵用部分原账单已计提，不再计入本单基数。
                     case "waiver", "refund", "min_spend_retained_applied" -> a.amountCent();
                     case "waiver_reversal", "refund_reversal" -> -a.amountCent();
+                    // 第十八批 AU 段收尾复核（BSM:1064「结账补足的差额按普通消费计入该商户营业额、营业额抽成基数与销售提成基数」；ENUM:117；
+                    // 决策台账 B-08「补足差额按普通消费计入营业额、抽成和提成基数」）：补足额不在 subtotal 里，在此加回提成基数。
+                    case "min_spend_top_up" -> -a.amountCent();
                     default -> 0L;
                 })
                 .sum();
@@ -1027,7 +1038,9 @@ public class BarBillingService {
     // ========================================================================
     BarBillRecord addTip(String billId, BarBillTipRequest request) {
         BarBillTipRequest actual = requireRequest(request);
-        BarBillRecord bill = repository.findBillById(billId)
+        // 第十八批 AU 段第 282 条 282-R1（PGM:303「两个操作同时发生冲突时，一律以“先处理成功”的那个为准」）：行锁读取账单（同 settleBill），
+        // 与结账同时发生时按结账后的账单处理，不把已结账单整行写回未结。
+        BarBillRecord bill = repository.findBillByIdForUpdate(billId)
                 .orElseThrow(() -> ApiException.notFound("BAR_BILL_NOT_FOUND", "账单不存在或已被删除"));
         checkMerchantOwnership(bill.merchantId());
         if ("settled".equals(bill.settlementStatus()) || "merged".equals(bill.settlementStatus())) {
