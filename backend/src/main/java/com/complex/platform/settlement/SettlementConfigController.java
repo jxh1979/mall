@@ -1,6 +1,6 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiResponse;
@@ -45,18 +45,21 @@ public class SettlementConfigController {
     private final SettlementConfigWriteService writeService;
     private final DistributionSchemeService schemeService;
     private final com.complex.platform.evidence.AuditEventService audit;
+    private final InternalPriceScope internalPriceScope;
     private static final String INCENTIVE_APPROVE = "settlement.bill.special_approve";
 
     public SettlementConfigController(AuthorizationService authorizationService,
                                       SettlementConfigService settlementConfigService,
                                       SettlementConfigWriteService writeService,
                                       DistributionSchemeService schemeService,
-                                      com.complex.platform.evidence.AuditEventService audit) {
+                                      com.complex.platform.evidence.AuditEventService audit,
+                                      InternalPriceScope internalPriceScope) {
         this.authorizationService = authorizationService;
         this.settlementConfigService = settlementConfigService;
         this.writeService = writeService;
         this.schemeService = schemeService;
         this.audit = audit;
+        this.internalPriceScope = internalPriceScope;
     }
 
     /** 「看全局」总览:平台默认生效配置 + 待复核草案队列(须 settlement.config.view + 平台域)。 */
@@ -170,14 +173,17 @@ public class SettlementConfigController {
 
     /**
      * 批10/E:内部结算 SKU 目录条目落草案(新建与改价同一入口)。返回落地 item_code ——
-     * 业务页「就地新建」拿它立刻建立引用;条目须他人复核转正后才有生效价(此前引用方解析 fail-closed)。
+     * 业务页「就地新建」拿它立刻建立引用;条目须对应域主管公司的人复核转正后才有生效价(此前引用方解析 fail-closed)。
+     * 第十八批 AW 段 291-R2（ENUM:54「实际提供商品或服务的主体提交」）：只能由实际提供方提交（settlement.internal_price.submit，
+     * 商户账号只报本商户、经营主体人员只报本公司），最高权限本人提交即生效。
      */
     @PostMapping("/internal-price-item")
     public ApiResponse<String> saveInternalPriceItem(
             @RequestBody SettlementConfigWriteRequests.InternalPriceItemRequest request) {
-        return ApiResponse.ok(auditFailure("settlement.config.internal_price_catalog.update_failed", "settlement.config.manage",
+        return ApiResponse.ok(auditFailure("settlement.config.internal_price_catalog.update_failed", InternalPriceScope.SUBMIT,
                 "internal_price_catalog", null, request == null ? null : request.idempotencyKey(),
-                () -> writeService.saveInternalPriceItem(request, requireManageActor())));
+                () -> writeService.saveInternalPriceItem(request, authorizationService.currentActor().id(),
+                        internalPriceScope.requireSubmitter(request))));
     }
 
     /**

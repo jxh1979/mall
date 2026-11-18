@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "综合体管理系统 P0 API 契约",
-    "version": "V0.81",
+    "version": "V0.82",
     "description": "P0 首批编码前置契约。本文采用 JSON-compatible YAML，便于与 openapi-p0.json 保持一致。正式后端以 Java 21 + Spring Boot 4.x + springdoc-openapi 输出运行时 OpenAPI，并与本契约比对。"
   },
   "servers": [
@@ -5525,7 +5525,8 @@
         ],
         "operationId": "createCustomerTicketOrder",
         "x-failure-codes": [
-          "CONTRACT_SCOPE_VIOLATION"
+          "CONTRACT_SCOPE_VIOLATION",
+          "TICKET_TYPE_NOT_SELLABLE"
         ],
         "summary": "客人自助购票下单",
         "x-permission": "not_applicable",
@@ -5558,7 +5559,7 @@
           }
         },
         "x-auth-context": "customer-token",
-        "description": "客人通过官方 App/小程序/Web 自助购票；售票型一体机不使用本客人端下单路径，而使用票务侧 staff-token 路径由授权服务人员辅助到店购票。 订单保存 project_id 项目快照，含游乐权益的票必须先确定唯一项目；储值付款仅允许平台通用卡或与原订单项目一致的项目通用卡。 ROOT-03-R27（BSM 第 733 行「符合后台规则时系统自动判断可用」、第 756 行「多种资格价不叠加，选择最终价格最低的一项」）：价格由系统按客人资格自动判定，请求不收 price_rule_id（带即 400 VALIDATION_FAILED）；会员价对全部会员、新人价仅本账户无已付门票订单且不是注销后一年内重新注册、学生价须学生资格、团体价与渠道价不对客人自助开放，与动态公开价一起取最低；订单 price_rule_id＝选中的资格价规则（公开价最低时为空），全部命中资格价见我的订单 price_hits。 PGM 第 744 行「前端隐藏只是辅助，后端接口必须独立校验」：按综合体的客人端终端开关以票种所属综合体在服务端判（不取客户端自报的 X-Project-Id），该综合体客人端已关→403 TERMINAL_DISABLED，不建单。"
+        "description": "客人通过官方 App/小程序/Web 自助购票；售票型一体机不使用本客人端下单路径，而使用票务侧 staff-token 路径由授权服务人员辅助到店购票。 订单保存 project_id 项目快照，含游乐权益的票必须先确定唯一项目；储值付款仅允许平台通用卡或与原订单项目一致的项目通用卡。 ROOT-03-R27（BSM 第 733 行「符合后台规则时系统自动判断可用」、第 756 行「多种资格价不叠加，选择最终价格最低的一项」）：价格由系统按客人资格自动判定，请求不收 price_rule_id（带即 400 VALIDATION_FAILED）；会员价对全部会员、新人价仅本账户无已付门票订单且不是注销后一年内重新注册、学生价须学生资格、团体价与渠道价不对客人自助开放，与动态公开价一起取最低；订单 price_rule_id＝选中的资格价规则（公开价最低时为空），全部命中资格价见我的订单 price_hits。 PGM 第 744 行「前端隐藏只是辅助，后端接口必须独立校验」：按综合体的客人端终端开关以票种所属综合体在服务端判（不取客户端自报的 X-Project-Id），该综合体客人端已关→403 TERMINAL_DISABLED，不建单。 第十八批 AW 段第 299 条 299-R1（ENUM:30）：只有售卖中的票种可下单，否则 409 TICKET_TYPE_NOT_SELLABLE，报文按情形为「该票种已下线（存档/待删除），不可下单」「该票种未发布，不可下单」「该票种暂停售卖，不可下单」「该票种尚未开售，不可下单」「该票种售卖已结束，不可下单」；已建的待付订单不受影响。"
       }
     },
     "/api/v1/customer/ticket-products": {
@@ -5568,7 +5569,7 @@
         ],
         "operationId": "listCustomerTicketProducts",
         "summary": "客人可购票种和票价",
-        "description": "ROOT-03-R27：带有效客人会话（X-Customer-Token 或 Bearer）时每个票种另给 my_price_cent（今日按本人资格系统判定的最低价）与 my_price_basis（会员价／新人价／学生价；动态公开价最低时为空）；匿名或会话失效时两者为空。 ROOT-03 clients-R9（BSM 第 858 行「购票前须以门票守则的形式向客人告知该票的规则，包括能否退款、有效期、年龄限制与可使用范围」；第 879 行「展示……赠饮权益」）：每个票种带 refundable、validity_days、usage_scope（单店票＝所属酒吧名，通票＝综合体通票）、entitlements（所含权益名称）、age_limit_text（全场 18 岁以上方可入场）；带客人会话时另给 my_price_cent 与 my_price_basis。 PGM 第 736 行「可以按全局、综合体、商户、业务系统、模块、版本/设备、灰度开关」：每个票种带 project_id（所属综合体，与下单确定订单综合体同一口径；关联多个或无法确定时为空），客人端购票请求带 X-Project-Id 取该值，后端按综合体的终端开关拒绝。 PGM 第 744 行「前端隐藏只是辅助，后端接口必须独立校验」：匿名可调、终端类型自报，带 bar_id 时按综合体的客人端终端开关以该酒吧所属综合体在服务端判（不取客户端自报的 X-Project-Id），该综合体客人端已关→403 TERMINAL_DISABLED；不带 bar_id 的公共列表跨综合体，不判。",
+        "description": "ROOT-03-R27：带有效客人会话（X-Customer-Token 或 Bearer）时每个票种另给 my_price_cent（今日按本人资格系统判定的最低价）与 my_price_basis（会员价／新人价／学生价；动态公开价最低时为空）；匿名或会话失效时两者为空。 ROOT-03 clients-R9（BSM 第 858 行「购票前须以门票守则的形式向客人告知该票的规则，包括能否退款、有效期、年龄限制与可使用范围」；第 879 行「展示……赠饮权益」）：每个票种带 refundable、validity_days、usage_scope（单店票＝所属酒吧名，通票＝综合体通票）、entitlements（所含权益名称）、age_limit_text（全场 18 岁以上方可入场）；带客人会话时另给 my_price_cent 与 my_price_basis。 PGM 第 736 行「可以按全局、综合体、商户、业务系统、模块、版本/设备、灰度开关」：每个票种带 project_id（所属综合体，与下单确定订单综合体同一口径；关联多个或无法确定时为空），客人端购票请求带 X-Project-Id 取该值，后端按综合体的终端开关拒绝。 PGM 第 744 行「前端隐藏只是辅助，后端接口必须独立校验」：匿名可调、终端类型自报，带 bar_id 时按综合体的客人端终端开关以该酒吧所属综合体在服务端判（不取客户端自报的 X-Project-Id），该综合体客人端已关→403 TERMINAL_DISABLED；不带 bar_id 的公共列表跨综合体，不判。 第十八批 AW 段第 299 条 299-R1（ENUM:30）：只列售卖中（已上架、未暂停、已到开售且未到停售）的票种。",
         "security": [],
         "x-permission": "public",
         "x-data-scope": "public-project",
@@ -17841,7 +17842,7 @@
         ],
         "operationId": "createTicketDynamicPricingRule",
         "summary": "创建动态定价规则草稿",
-        "description": "Create P2 ticket dynamic pricing rule draft. Must follow formal OpenAPI schema, permission, data scope, idempotency and audit event requirements.",
+        "description": "Create P2 ticket dynamic pricing rule draft. Must follow formal OpenAPI schema, permission, data scope, idempotency and audit event requirements. 第十八批 AW 段第 338 条 338-R2：adjustment_type 另有 fixed_price（按固定价，adjustment_amount_cent 为固定价、必填且 ≥ 0）。",
         "x-permission": "ticket.dynamic_pricing.manage",
         "x-data-scope": "project-channel",
         "x-terminal-allowed": [
@@ -17928,7 +17929,7 @@
         ],
         "operationId": "simulateTicketDynamicPricing",
         "summary": "试算动态定价（不建订单）",
-        "description": "动态定价试算：可命中草稿与已发布规则，只返回计算结果，不创建订单、不产生应收。",
+        "description": "动态定价试算：可命中草稿与已发布规则，只返回计算结果，不创建订单、不产生应收。 第十八批 AW 段第 338 条 338-R2：命中 adjustment_type=fixed_price 的规则时，调整后价格即该固定价，再按最低价、最高价夹值。",
         "x-permission": "ticket.dynamic_pricing.simulate",
         "x-data-scope": "project-channel",
         "x-terminal-allowed": [
@@ -18330,7 +18331,8 @@
         "x-failure-codes": [
           "CONTRACT_SCOPE_VIOLATION",
           "PARK_WIDE_FAULT_SALES_SUSPENDED",
-          "KIOSK_TICKETING_DISABLED"
+          "KIOSK_TICKETING_DISABLED",
+          "TICKET_TYPE_NOT_SELLABLE"
         ],
         "summary": "创建票务订单（含一体机辅助售票）",
         "x-permission": "ticket.order.create",
@@ -18371,7 +18373,7 @@
           }
         },
         "x-auth-context": "staff-token",
-        "description": "Create a ticket order. If a published dynamic pricing rule matches ticket_type_id, visit_date, sales_channel and dynamic_pricing_context, the order amount is adjusted and price trace fields are persisted. Draft rules only participate in simulation. 当 sales_channel=kiosk 时，仅用于授权服务人员在售票一体机上辅助到店客人购票；服务端必须按设备绑定点位过滤可售票种，酒吧门口/前台只能售卖本酒吧单店门票，不得售卖综合体通票。 CG-08a（ENUM「全园故障与补偿通票」）：所属综合体全园故障状态生效中（含待第二岗位确认解除阶段）时，含任一游乐类权益（entitlement_type 以 amusement 开头）的票种——纯游乐门票与含游乐权益的通票——下单返回 409 PARK_WIDE_FAULT_SALES_SUSPENDED（置于库存扣减前，拒单零副作用）；酒吧票、演出票等不含游乐权益的票种不受影响；解除确认后恢复。 订单保存 project_id 项目快照，按原票种商户和权益点位确定，冲突时不能用操作人项目覆盖；含游乐权益而项目不明时拒绝售票。普通订单更新不改变原项目。 ROOT-03-R29（BSM 第 986 行「客人用手机号短信验证绑定，在官方 App/小程序查看门票」）：sales_channel=kiosk 必填 buyer_phone 与 sms_code（先经 POST /api/v1/ticketing/kiosk-bind-codes 发码），缺失 400 VALIDATION_FAILED、验证码不对 401 CUSTOMER_OTP_INVALID，核验在扣库存之前；该手机号已注册会员的订单直接归本人，未注册的注册时按手机号归集。第三方渠道回流订单（sales_channel 为渠道码）的购票手机号已是会员的直接归本人。 第十八批 N 段 120-R2（BSM:980「……其中只有启用售票能力的一体机，才允许授权服务人员在到店服务场景下辅助客人购票。」；BSM:999；BSM:1947）：可信终端是一体机或 sales_channel=kiosk 时两者须同时成立，且本机是已启用售票的售票型一体机（设备台账 kiosk_mode=ticketing，后台为本机开了 terminal_type=kiosk、capability_code=ticketing、scope_id=设备号的开关行），否则 403 KIOSK_TICKETING_DISABLED；须填 operator_note（售票原因），缺失 400 VALIDATION_FAILED；本机所属商户是酒吧时只能售卖该酒吧单店门票，综合体通票或他店单店票 403 BAR_SCOPE_FORBIDDEN；以上判定在短信核验与扣库存之前。一体机售票的 ticket_order.created 留痕 metadata 记 sale_reason（售票原因）、terminal_type、device_id、point_id（设备绑定点位）。"
+        "description": "Create a ticket order. If a published dynamic pricing rule matches ticket_type_id, visit_date, sales_channel and dynamic_pricing_context, the order amount is adjusted and price trace fields are persisted. Draft rules only participate in simulation. 当 sales_channel=kiosk 时，仅用于授权服务人员在售票一体机上辅助到店客人购票；服务端必须按设备绑定点位过滤可售票种，酒吧门口/前台只能售卖本酒吧单店门票，不得售卖综合体通票。 CG-08a（ENUM「全园故障与补偿通票」）：所属综合体全园故障状态生效中（含待第二岗位确认解除阶段）时，含任一游乐类权益（entitlement_type 以 amusement 开头）的票种——纯游乐门票与含游乐权益的通票——下单返回 409 PARK_WIDE_FAULT_SALES_SUSPENDED（置于库存扣减前，拒单零副作用）；酒吧票、演出票等不含游乐权益的票种不受影响；解除确认后恢复。 订单保存 project_id 项目快照，按原票种商户和权益点位确定，冲突时不能用操作人项目覆盖；含游乐权益而项目不明时拒绝售票。普通订单更新不改变原项目。 ROOT-03-R29（BSM 第 986 行「客人用手机号短信验证绑定，在官方 App/小程序查看门票」）：sales_channel=kiosk 必填 buyer_phone 与 sms_code（先经 POST /api/v1/ticketing/kiosk-bind-codes 发码），缺失 400 VALIDATION_FAILED、验证码不对 401 CUSTOMER_OTP_INVALID，核验在扣库存之前；该手机号已注册会员的订单直接归本人，未注册的注册时按手机号归集。第三方渠道回流订单（sales_channel 为渠道码）的购票手机号已是会员的直接归本人。 第十八批 N 段 120-R2（BSM:980「……其中只有启用售票能力的一体机，才允许授权服务人员在到店服务场景下辅助客人购票。」；BSM:999；BSM:1947）：可信终端是一体机或 sales_channel=kiosk 时两者须同时成立，且本机是已启用售票的售票型一体机（设备台账 kiosk_mode=ticketing，后台为本机开了 terminal_type=kiosk、capability_code=ticketing、scope_id=设备号的开关行），否则 403 KIOSK_TICKETING_DISABLED；须填 operator_note（售票原因），缺失 400 VALIDATION_FAILED；本机所属商户是酒吧时只能售卖该酒吧单店门票，综合体通票或他店单店票 403 BAR_SCOPE_FORBIDDEN；以上判定在短信核验与扣库存之前。一体机售票的 ticket_order.created 留痕 metadata 记 sale_reason（售票原因）、terminal_type、device_id、point_id（设备绑定点位）。 第十八批 AW 段第 299 条 299-R1（ENUM:30）：只有售卖中的票种可下单，否则 409 TICKET_TYPE_NOT_SELLABLE，报文按情形为「该票种已下线（存档/待删除），不可下单」「该票种未发布，不可下单」「该票种暂停售卖，不可下单」「该票种尚未开售，不可下单」「该票种售卖已结束，不可下单」；已建的待付订单不受影响。"
       }
     },
     "/api/v1/ticketing/orders/{order_id}/issue": {
@@ -18637,6 +18639,7 @@
         ],
         "operationId": "listTicketPriceRules",
         "summary": "查询平日、周末、节假日及派生价规则",
+        "description": "第十八批 AW 段第 338 条 338-R1（BSM:782）：price_mode 另有 amount_delta（按基础价加减金额）；每条规则另带 adjustment_amount_cent（分，带符号：负数为减免、正数为加价），只在 price_mode=amount_delta 时有值，其余为空。",
         "x-permission": "ticket.price_variant.view",
         "x-data-scope": "project-channel",
         "x-terminal-allowed": [
@@ -18664,7 +18667,7 @@
         ],
         "operationId": "createTicketPriceRule",
         "summary": "创建平日、周末、节假日及派生价规则",
-        "description": "第十八批 AS 段第 297 条 297-R2（第十八批裁决 63「跨域组合通票的派生价、动态价规则也要经项目之上的平台权限审批，并记入票种规则版本。」；裁决 61「改动另存一份草稿版审批，审批期间照旧版卖，获批后自动换成新版」）：已上架的跨域组合通票（判定同 publishTicketType）新建派生价不写入现表，只存进该票种唯一一份票种规则草稿版（没有就由现行规则起一份），返回该条派生价记录、status 为 draft，此时不参与售价；经 publishTicketType 提交项目之上的平台权限审批，获批后在审批同一事务里写入现表、status 为 active；撤回草稿版或撤回提交（withdrawTicketTypeRuleVersion）后该条作废。最高权限本人新建同样先存进草稿版，经 publishTicketType 提交即生效。该票种规则已提交审批、尚无结论时（含首次发布待审）409 TICKET_RULE_VERSION_PENDING「这张票的规则已提交审批，须先撤回提交再改」。未上架或非跨域的票种照旧直接写入现表、返回 status 为 active；未上架的跨域组合通票首次发布时，该票种全部派生价（含已存档）随版本一并审批。成功留痕 ticket_price_variant.changed 在这次存进草稿版时元数据另带 rule_version_id、rule_version_status（draft）。无 ticket.price_variant.manage 权限 403；票种不存在 404 TICKET_TYPE_NOT_FOUND（票种不存在或已被删除）。",
+        "description": "第十八批 AS 段第 297 条 297-R2（第十八批裁决 63「跨域组合通票的派生价、动态价规则也要经项目之上的平台权限审批，并记入票种规则版本。」；裁决 61「改动另存一份草稿版审批，审批期间照旧版卖，获批后自动换成新版」）：已上架的跨域组合通票（判定同 publishTicketType）新建派生价不写入现表，只存进该票种唯一一份票种规则草稿版（没有就由现行规则起一份），返回该条派生价记录、status 为 draft，此时不参与售价；经 publishTicketType 提交项目之上的平台权限审批，获批后在审批同一事务里写入现表、status 为 active；撤回草稿版或撤回提交（withdrawTicketTypeRuleVersion）后该条作废。最高权限本人新建同样先存进草稿版，经 publishTicketType 提交即生效。该票种规则已提交审批、尚无结论时（含首次发布待审）409 TICKET_RULE_VERSION_PENDING「这张票的规则已提交审批，须先撤回提交再改」。未上架或非跨域的票种照旧直接写入现表、返回 status 为 active；未上架的跨域组合通票首次发布时，该票种全部派生价（含已存档）随版本一并审批。成功留痕 ticket_price_variant.changed 在这次存进草稿版时元数据另带 rule_version_id、rule_version_status（draft）。无 ticket.price_variant.manage 权限 403；票种不存在 404 TICKET_TYPE_NOT_FOUND（票种不存在或已被删除）。 第十八批 AW 段第 338 条 338-R1（BSM:782「按打折/减免/加价/固定额派生」）：price_mode=amount_delta 按基础价加减金额，adjustment_amount_cent 必填且不为 0（负数为减免、正数为加价），缺或为 0 返回 400 VALIDATION_FAILED「按金额加减须填加减金额（负数为减免）」；取价＝到访日对应的基础价（平日、周末或节假日）＋该金额，最低 0。返回的规则记录另带 adjustment_amount_cent（只在 amount_delta 时有值）。",
         "x-permission": "ticket.price_variant.manage",
         "x-data-scope": "project-channel",
         "x-terminal-allowed": [
@@ -19565,6 +19568,7 @@
         ],
         "operationId": "listTicketTypes",
         "summary": "票种查询",
+        "description": "第十八批 AW 段第 299 条 299-R1（ENUM:30 票务策略状态；R14 裁决 20：待启用、已结束按生效时间派生、不存储）：每个票种另带 sale_starts_at（开售时间）、sale_ends_at（停售时间）、sale_paused_at（暂停售卖时刻），均为 date-time、可空（时间空即不限，暂停时刻空即未暂停），只由 updateTicketTypeSaleSettings 写；另带只读派生的 sale_status：archived 归档（已存档或待删除）、draft 草稿（未发布）、paused 暂停售卖、pending_activation 待启用（未到开售）、ended 已结束（已到停售）、on_sale 售卖中，按此次序判，不存储。返回票种的各写操作 data 同此结构。",
         "x-permission": "ticket.product.view",
         "x-data-scope": "project",
         "x-terminal-allowed": [
@@ -19821,7 +19825,7 @@
         ],
         "operationId": "bindTicketTypeEntitlement",
         "summary": "绑定票类型权益",
-        "description": "用于绑定票类型权益。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。第十八批 AH 段 215-R1（ENUM「通票赠酒下限」条「低于该下限的票种不得发布上架」）：已上架的通票（bar_id 为空）改组成后跌破最低赠酒杯数（判定同 publishTicketType 的 PASS_BAR_GIFT_COVERAGE_INSUFFICIENT、PASS_BAR_GIFT_FLOOR_NOT_PLATFORM_FUNDED）即退回草稿（draft），本次绑定照常保存，补齐后重新发布。 第十八批 AI 段 236-R2（ENUM:54「任何商户在没有获批内部结算价之前，不得为其开通需要该价格结算的权益或券。」）：只在票种已上架时检查本次新绑定——须按内部结算价结算的权益（判据同 publishTicketType）其提供方没有获批生效价的，409 TICKET_ENTITLEMENT_PRICE_NOT_APPROVED，绑定不落库、票种不退回草稿。 第十八批 AJ 段 236-R7（第十八批裁决 62「已上架的非跨域票一律不许加别的经营域收费权益，要做跨域组合通票就另建票种」）：票种已上架且现不是跨域组合通票时，本次绑定为有价权益（component_price_cent 大于 0）且加上后成为跨域组合通票（有价权益分属两个及以上域主管公司，判定同 publishTicketType）的，409 TICKET_CROSS_DOMAIN_NEW_TYPE_REQUIRED「已上架的票不能加别的经营域收费权益；要做跨域组合通票请另建票种（新建票种时勾选「先存为草稿、不立即上架」，配齐组合后在票种行点「发布」提交审批）」，绑定不落库、票种不退回草稿；要做跨域组合通票须另建票种（建票后先不发布，配齐组合后经 publishTicketType 提交审批）；零元权益与草稿票种不受此限；这道判定在 236-R2 内部结算价闸与 V369、215-R1 退回草稿判定之前。第十八批裁决 61：已上架的跨域组合通票加权益存入该票种唯一一份草稿版（不写现表、不退回草稿），审批通过前现表与售卖不变，经 publishTicketType 提交审批、获批后自动换成新版；返回本条绑定（尚未进现表，获批时按原绑定 id 与创建时间插入）。第十八批 AJ 段 236-R3：该票规则已提交审批、尚无结论时 409 TICKET_RULE_VERSION_PENDING「这张票的规则已提交审批，须先撤回提交再改」，须先经 withdrawTicketTypeRuleVersion 撤回。票种已上架且有未结版本时，成功留痕 ticket_product_entitlement.bound 元数据另带 rule_version_id、rule_version_status（draft 存入草稿版）。",
+        "description": "用于绑定票类型权益。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。第十八批 AH 段 215-R1（ENUM「通票赠酒下限」条「低于该下限的票种不得发布上架」）：已上架的通票（bar_id 为空）改组成后跌破最低赠酒杯数（判定同 publishTicketType 的 PASS_BAR_GIFT_COVERAGE_INSUFFICIENT、PASS_BAR_GIFT_FLOOR_NOT_PLATFORM_FUNDED）即退回草稿（draft），本次绑定照常保存，补齐后重新发布。 第十八批 AI 段 236-R2（ENUM:54「任何商户在没有获批内部结算价之前，不得为其开通需要该价格结算的权益或券。」）：只在票种已上架时检查本次新绑定——须按内部结算价结算的权益（判据同 publishTicketType）其提供方没有获批生效价的，409 TICKET_ENTITLEMENT_PRICE_NOT_APPROVED，绑定不落库、票种不退回草稿。 第十八批 AJ 段 236-R7（第十八批裁决 62「已上架的非跨域票一律不许加别的经营域收费权益，要做跨域组合通票就另建票种」）：票种已上架且现不是跨域组合通票时，本次绑定为有价权益（component_price_cent 大于 0）且加上后成为跨域组合通票（有价权益分属两个及以上域主管公司，判定同 publishTicketType）的，409 TICKET_CROSS_DOMAIN_NEW_TYPE_REQUIRED「已上架的票不能加别的经营域收费权益；要做跨域组合通票请另建票种（新建票种时勾选「先存为草稿、不立即上架」，配齐组合后在票种行点「发布」提交审批）」，绑定不落库、票种不退回草稿；要做跨域组合通票须另建票种（建票后先不发布，配齐组合后经 publishTicketType 提交审批）；零元权益与草稿票种不受此限；这道判定在 236-R2 内部结算价闸与 V369、215-R1 退回草稿判定之前。第十八批裁决 61：已上架的跨域组合通票加权益存入该票种唯一一份草稿版（不写现表、不退回草稿），审批通过前现表与售卖不变，经 publishTicketType 提交审批、获批后自动换成新版；返回本条绑定（尚未进现表，获批时按原绑定 id 与创建时间插入）。第十八批 AJ 段 236-R3：该票规则已提交审批、尚无结论时 409 TICKET_RULE_VERSION_PENDING「这张票的规则已提交审批，须先撤回提交再改」，须先经 withdrawTicketTypeRuleVersion 撤回。票种已上架且有未结版本时，成功留痕 ticket_product_entitlement.bound 元数据另带 rule_version_id、rule_version_status（draft 存入草稿版）。 第十八批 AW 段第 341 条 341-R1：已上架的票改组成后，填的平日价超出允许误差、或在误差内但不等于算出价且不是整元或尾数不在允许尾数集合内（TICKET_PRICE_ENDING_NOT_ALLOWED 的情形），票退回草稿，改价后重新发布。",
         "x-permission": "ticket.product.manage",
         "x-data-scope": "project",
         "x-terminal-allowed": [
@@ -19866,7 +19870,7 @@
         ],
         "operationId": "publishTicketType",
         "summary": "发布票种",
-        "description": "第十八批 AH 段 215-R1（ENUM「通票赠酒下限」条「一张酒吧通票或跨域组合通票覆盖的每一家酒吧，赠酒杯数不得低于后台配置的最低赠酒杯数（业务参数，按票种可配，出厂默认 1 杯，须同时配置上下限），各酒吧分别赠几杯在售票时写明票面，低于该下限的票种不得发布上架」「该最低赠酒杯数属于票面强制要求提供的权益，一律记为域主管公司出资」）：bar_id 为空的通票，覆盖的每家酒吧（绑定了该吧入场类权益的酒吧）赠饮杯数（票面价 0 的 gift_drink，份数×次数）不得少于最低杯数×max(1, 该吧入场次数)，否则 409 PASS_BAR_GIFT_COVERAGE_INSUFFICIENT（点名还差的酒吧）；带票面价的兑换券不计；不含赠酒的通票不再放行；单店票（bar_id 非空）不套。最低杯数以内的赠饮须平台出资型（cost_bearer platform_funded），否则 409 PASS_BAR_GIFT_FLOOR_NOT_PLATFORM_FUNDED；超出部分可标商户让利。最低杯数见 GET /api/v1/ticketing/ticket-types/{id}/min-gift-cups（没配过为出厂 1 杯）。 第十八批 AI 段 236-R2（第十八批裁决 52 ①；ENUM:54「任何商户在没有获批内部结算价之前，不得为其开通需要该价格结算的权益或券。」；BSM:1754「每项权益都必须绑定实际提供方和审批版本，避免悬空账。」）：票内须提供方兑付、核销时按内部结算价结算的权益（赠饮、实物、专属直付；专属直付且商户让利型的除外），其提供方（模板商户，空则专属商户）在内部结算价目录里没有获批生效价（目录草案须他人复核转正）的，409 TICKET_ENTITLEMENT_PRICE_NOT_APPROVED 拒绝发布并点名权益；这道闸在赠酒下限闸之后、凑整误差闸之前。 第十八批 AJ 段 236-R3（第十八批裁决 52 ②；ENUM:32「跨域组合通票的定价与域间结算规则由项目之上的平台权限统一审批」；BSM:754「每次发布时把凑整差额金额及各域分摊数额记入票种规则版本、发布后不得再改」）：请求体为 TicketTypePublishRequest（idempotency_key、reason 必填，final_approver_id 可空）。跨域组合通票＝bar_id 为空、有价权益（component_price_cent 大于 0）的提供方按业态折成域主管公司（酒吧归娱乐平台公司，游乐归游乐公司，演出传媒归传媒公司，餐饮与零售归城市项目公司，其他业态按商户档案主管公司）后分属两家及以上，零元权益不计（BSM:749）。未上架的跨域组合通票闸全过后不直接上架：把三档价、折扣、权益组成、最低赠酒杯数、凑整差额与各域分摊记成一版票种规则（见 listTicketTypeRuleVersions），提交项目之上的平台权限审批（复核策略 ticket.type.rule.publish，specific_role，最终审批人须经角色持有 ticket.product.publish.approve；出厂按涉钱审批时限 1 个工作日），返回 status 仍为 draft；审批通过即在同一事务里上架（status published、该版 effective）；驳回则该版退回草稿（保留 review_id）、票仍为草稿，可改后再发布或撤回。final_approver_id 为最终审批人用户 id，跨域组合通票必填：未填 400 VALIDATION_FAILED「跨域组合通票须指定最终审批人（项目之上的平台权限）」；该人不存在或已停用 400 VALIDATION_FAILED；该人须能看全部项目（平台管理员，或经勾了「可以查看全部项目」的角色持有 ticket.product.publish.approve），否则 400 VALIDATION_FAILED「跨域组合通票的定价与域间结算规则须由项目之上的平台权限审批，最终审批人须能看全部项目」；须经角色持有 ticket.product.publish.approve，否则 400 FINAL_APPROVER_LACKS_ROLE；须在提交人的直接上级链上，否则 400 FINAL_APPROVER_NOT_IN_CHAIN（系统补全从提交人到该人之间的全部直接上级节点逐级审批，PGM:528）；提交人不得自批（审批时 403 SUPERVISOR_SELF_REVIEW_FORBIDDEN）。该票规则已提交审批、尚无结论时再发布 409 TICKET_RULE_VERSION_PENDING「这张票的规则已提交审批，须先撤回提交再改」（须先经 withdrawTicketTypeRuleVersion 撤回）；复核未进入待审 409 TICKET_RULE_APPROVAL_REQUIRED「票种规则须进入审批，不得直接生效」。非跨域票种（单店门票、酒吧通票、纯游乐票、演出票等）照旧闸全过即上架，不填 final_approver_id、不建版本。成功留痕 ticket_price.published 在这次提交了审批时元数据另带 rule_version_id、rule_version_status（pending_review）。 第十八批 AJ 段 236-R7（第十八批裁决 61「改动另存一份草稿版审批，审批期间照旧版卖，获批后自动换成新版」）：已上架跨域组合通票有草稿版时，用草稿内容（草稿价、草稿组成、草稿最低赠酒杯数）跑全部发布闸（失败码同现行发布闸：TICKET_TYPE_ENTITLEMENT_REQUIRED、TICKET_COMPONENT_PRICE_REQUIRED、TICKET_COST_BEARER_REQUIRED、PASS_BAR_GIFT_COVERAGE_INSUFFICIENT、PASS_BAR_GIFT_FLOOR_NOT_PLATFORM_FUNDED、TICKET_ENTITLEMENT_PRICE_NOT_APPROVED、TICKET_PRICE_OUT_OF_TOLERANCE 等）后提交同一审批（须带 final_approver_id，审批人要求同上），返回票种仍为 published、现表与售卖不变；获批后在审批同一事务里自动换成新版（三档价、折扣、草稿新增权益、最低赠酒杯数套回现表，原生效版置 superseded），无需再发布。已上架且没有草稿版的票种再发布照现行。 第十八批 AS 段第 297 条 297-R1（第十八批裁决 63「跨域组合通票的派生价、动态价规则也要经项目之上的平台权限审批，并记入票种规则版本。」）：版本另记派生价与动态价两份清单——price_rules 为该票种全部派生价（含已存档，不含已删），dynamic_pricing_rules 为已发布的动态价与本版经 publishTicketDynamicPricingRule 存入的草稿动态价——随提交一并审批；获批时版本里现表没有的派生价写入现表（status active），版本里仍为草稿的动态价置 published。派生价存档与取消存档、动态价新建草稿与试算不进审批。297-R3（BSM:576「持授权 U 盘密钥的最高权限本人发起的操作，不需要经过任何审批。」；第十八批裁决 71）：持授权 U 盘密钥的最高权限本人提交跨域组合通票首次发布或规则草稿版时，不必填 final_approver_id（填了也不用）、不建复核单，本版立即生效（首次发布即上架，响应 status 为 published；已上架的即换成新版），留痕 ticket_type.rule_version.approved（业务类型 ticket_type_rule_version，对象为该版本，元数据 ticket_type_id、version_no、master_self_initiated=true），此时成功留痕 ticket_price.published 不带 rule_version_id；其余账号照旧须填，缺则 400 VALIDATION_FAILED。票种不存在 404 TICKET_TYPE_NOT_FOUND。",
+        "description": "第十八批 AH 段 215-R1（ENUM「通票赠酒下限」条「一张酒吧通票或跨域组合通票覆盖的每一家酒吧，赠酒杯数不得低于后台配置的最低赠酒杯数（业务参数，按票种可配，出厂默认 1 杯，须同时配置上下限），各酒吧分别赠几杯在售票时写明票面，低于该下限的票种不得发布上架」「该最低赠酒杯数属于票面强制要求提供的权益，一律记为域主管公司出资」）：bar_id 为空的通票，覆盖的每家酒吧（绑定了该吧入场类权益的酒吧）赠饮杯数（票面价 0 的 gift_drink，份数×次数）不得少于最低杯数×max(1, 该吧入场次数)，否则 409 PASS_BAR_GIFT_COVERAGE_INSUFFICIENT（点名还差的酒吧）；带票面价的兑换券不计；不含赠酒的通票不再放行；单店票（bar_id 非空）不套。最低杯数以内的赠饮须平台出资型（cost_bearer platform_funded），否则 409 PASS_BAR_GIFT_FLOOR_NOT_PLATFORM_FUNDED；超出部分可标商户让利。最低杯数见 GET /api/v1/ticketing/ticket-types/{id}/min-gift-cups（没配过为出厂 1 杯）。 第十八批 AI 段 236-R2（第十八批裁决 52 ①；ENUM:54「任何商户在没有获批内部结算价之前，不得为其开通需要该价格结算的权益或券。」；BSM:1754「每项权益都必须绑定实际提供方和审批版本，避免悬空账。」）：票内须提供方兑付、核销时按内部结算价结算的权益（赠饮、实物、专属直付；专属直付且商户让利型的除外），其提供方（模板商户，空则专属商户）在内部结算价目录里没有获批生效价（目录草案须他人复核转正）的，409 TICKET_ENTITLEMENT_PRICE_NOT_APPROVED 拒绝发布并点名权益；这道闸在赠酒下限闸之后、凑整误差闸之前。 第十八批 AJ 段 236-R3（第十八批裁决 52 ②；ENUM:32「跨域组合通票的定价与域间结算规则由项目之上的平台权限统一审批」；BSM:754「每次发布时把凑整差额金额及各域分摊数额记入票种规则版本、发布后不得再改」）：请求体为 TicketTypePublishRequest（idempotency_key、reason 必填，final_approver_id 可空）。跨域组合通票＝bar_id 为空、有价权益（component_price_cent 大于 0）的提供方按业态折成域主管公司（酒吧归娱乐平台公司，游乐归游乐公司，演出传媒归传媒公司，餐饮与零售归城市项目公司，其他业态按商户档案主管公司）后分属两家及以上，零元权益不计（BSM:749）。未上架的跨域组合通票闸全过后不直接上架：把三档价、折扣、权益组成、最低赠酒杯数、凑整差额与各域分摊记成一版票种规则（见 listTicketTypeRuleVersions），提交项目之上的平台权限审批（复核策略 ticket.type.rule.publish，specific_role，最终审批人须经角色持有 ticket.product.publish.approve；出厂按涉钱审批时限 1 个工作日），返回 status 仍为 draft；审批通过即在同一事务里上架（status published、该版 effective）；驳回则该版退回草稿（保留 review_id）、票仍为草稿，可改后再发布或撤回。final_approver_id 为最终审批人用户 id，跨域组合通票必填：未填 400 VALIDATION_FAILED「跨域组合通票须指定最终审批人（项目之上的平台权限）」；该人不存在或已停用 400 VALIDATION_FAILED；该人须能看全部项目（平台管理员，或经勾了「可以查看全部项目」的角色持有 ticket.product.publish.approve），否则 400 VALIDATION_FAILED「跨域组合通票的定价与域间结算规则须由项目之上的平台权限审批，最终审批人须能看全部项目」；须经角色持有 ticket.product.publish.approve，否则 400 FINAL_APPROVER_LACKS_ROLE；须在提交人的直接上级链上，否则 400 FINAL_APPROVER_NOT_IN_CHAIN（系统补全从提交人到该人之间的全部直接上级节点逐级审批，PGM:528）；提交人不得自批（审批时 403 SUPERVISOR_SELF_REVIEW_FORBIDDEN）。该票规则已提交审批、尚无结论时再发布 409 TICKET_RULE_VERSION_PENDING「这张票的规则已提交审批，须先撤回提交再改」（须先经 withdrawTicketTypeRuleVersion 撤回）；复核未进入待审 409 TICKET_RULE_APPROVAL_REQUIRED「票种规则须进入审批，不得直接生效」。非跨域票种（单店门票、酒吧通票、纯游乐票、演出票等）照旧闸全过即上架，不填 final_approver_id、不建版本。成功留痕 ticket_price.published 在这次提交了审批时元数据另带 rule_version_id、rule_version_status（pending_review）。 第十八批 AJ 段 236-R7（第十八批裁决 61「改动另存一份草稿版审批，审批期间照旧版卖，获批后自动换成新版」）：已上架跨域组合通票有草稿版时，用草稿内容（草稿价、草稿组成、草稿最低赠酒杯数）跑全部发布闸（失败码同现行发布闸：TICKET_TYPE_ENTITLEMENT_REQUIRED、TICKET_TYPE_SERVICE_FEE_REQUIRED、TICKET_COMPONENT_PRICE_REQUIRED、TICKET_COST_BEARER_REQUIRED、PASS_BAR_GIFT_COVERAGE_INSUFFICIENT、PASS_BAR_GIFT_FLOOR_NOT_PLATFORM_FUNDED、TICKET_ENTITLEMENT_PRICE_NOT_APPROVED、TICKET_PRICE_OUT_OF_TOLERANCE、TICKET_PRICE_ENDING_NOT_ALLOWED 等）后提交同一审批（须带 final_approver_id，审批人要求同上），返回票种仍为 published、现表与售卖不变；获批后在审批同一事务里自动换成新版（三档价、折扣、草稿新增权益、最低赠酒杯数套回现表，原生效版置 superseded），无需再发布。已上架且没有草稿版的票种再发布照现行。 第十八批 AS 段第 297 条 297-R1（第十八批裁决 63「跨域组合通票的派生价、动态价规则也要经项目之上的平台权限审批，并记入票种规则版本。」）：版本另记派生价与动态价两份清单——price_rules 为该票种全部派生价（含已存档，不含已删），dynamic_pricing_rules 为已发布的动态价与本版经 publishTicketDynamicPricingRule 存入的草稿动态价——随提交一并审批；获批时版本里现表没有的派生价写入现表（status active），版本里仍为草稿的动态价置 published。派生价存档与取消存档、动态价新建草稿与试算不进审批。297-R3（BSM:576「持授权 U 盘密钥的最高权限本人发起的操作，不需要经过任何审批。」；第十八批裁决 71）：持授权 U 盘密钥的最高权限本人提交跨域组合通票首次发布或规则草稿版时，不必填 final_approver_id（填了也不用）、不建复核单，本版立即生效（首次发布即上架，响应 status 为 published；已上架的即换成新版），留痕 ticket_type.rule_version.approved（业务类型 ticket_type_rule_version，对象为该版本，元数据 ticket_type_id、version_no、master_self_initiated=true），此时成功留痕 ticket_price.published 不带 rule_version_id；其余账号照旧须填，缺则 400 VALIDATION_FAILED。票种不存在 404 TICKET_TYPE_NOT_FOUND。 第十八批 AW 段第 294 条 294-R1（BSM:755「票种发布前必须先选定按比例还是按固定金额并填入数值，未选定或未填写的票种不得发布上架」）：单一酒吧门票（bar_id 非空）的每个售卖项目都须有本项目、本酒吧、票种为空或为本票种、生效且已转正的综合服务费行（结算配置中心；项目默认行与全平台默认行不算），否则 409 TICKET_TYPE_SERVICE_FEE_REQUIRED（点名缺的项目）；这道闸在至少一个权益（TICKET_TYPE_ENTITLEMENT_REQUIRED）之后、各业态价格（TICKET_COMPONENT_PRICE_REQUIRED）之前。第十八批 AW 段第 341 条 341-R1（BSM:754「使最终售价为整数，且尾数落在后台配置的允许尾数集合内」）：凑整误差闸另查尾数——在允许误差内、填的平日价不等于算出价，且不是整元或元位尾数不在后台配置的允许尾数集合内时 400 TICKET_PRICE_ENDING_NOT_ALLOWED，报文如「凑整后的售价须为整元且尾数为 0、8、9 之一（按后台配置），票不能开卖：填的是 175.00 元，凑整可填 178.00 元」；只卡平日价。",
         "x-permission": "ticket.product.manage",
         "x-data-scope": "project",
         "x-terminal-allowed": [
@@ -20077,6 +20081,255 @@
                 }
               }
             }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
+    },
+    "/api/v1/ticketing/ticket-types/{id}/refundable-enable-requests": {
+      "post": {
+        "tags": [
+          "ticketing"
+        ],
+        "operationId": "requestTicketRefundableEnable",
+        "summary": "申请开启票种可退（逐个票种、经审批）",
+        "description": "第十八批 AW 段第 295 条 295-R1（BSM:785「要让某一个票种可以退款，必须逐个票种单独开启，每次开启都须经高敏权限审批并留痕」；BSM:576「持授权 U 盘密钥的最高权限本人发起的操作，不需要经过任何审批。」）：建票一律不可退，本接口逐个票种申请开启可退。reason 必填，缺 400 VALIDATION_FAILED「请填写开启可退的理由」；票种不存在 404 TICKET_TYPE_NOT_FOUND；已存档或待删除 409 TICKET_TYPE_NOT_CONFIGURABLE；已可退 409 TICKET_TYPE_ALREADY_REFUNDABLE；该票种已有待审批的申请 409 TICKET_REFUNDABLE_REQUEST_PENDING。走复核策略 ticket_type_refundable_enable（action_type ticket.type.refundable.enable，object_type ticket_type，specific_role）：final_approver_id 最高权限本人以外必填，缺 400 VALIDATION_FAILED「开启可退须指定最终审批人（持票种开启可退审批权限）」；最终审批人须经角色持有 ticket.product.refundable.approve（票种开启可退审批），否则 400 FINAL_APPROVER_LACKS_ROLE；须在申请人的直接上级链上，否则 400 FINAL_APPROVER_NOT_IN_CHAIN（系统补全中间各级逐级审批，PGM:528）；申请人不得自批（审批时 403 SUPERVISOR_SELF_REVIEW_FORBIDDEN）；复核未进入待审 409 TICKET_REFUNDABLE_APPROVAL_REQUIRED「票种开启可退须进入审批，不得直接生效」。待审时返回 review_status 为 pending_review、refundable 为 false；获批即在审批同一事务里置可退，留痕 ticket_type.refundable_enabled（元数据 review_id）；驳回留痕 ticket_type.refundable_enable.rejected，票种不动。最高权限本人申请即生效：不建复核单，返回 review_id 为空、review_status 为 approved、refundable 为 true，留痕 ticket_type.refundable_enabled（元数据 master_self_initiated=true、reason）。",
+        "x-permission": "ticket.product.manage",
+        "x-data-scope": "project",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "ticket_type.refundable_enable.submitted",
+        "x-audit-event-failure": "ticket_type.refundable_enable.submit_failed",
+        "x-failure-codes": [
+          "VALIDATION_FAILED",
+          "FINAL_APPROVER_LACKS_ROLE",
+          "FINAL_APPROVER_NOT_IN_CHAIN",
+          "TICKET_TYPE_NOT_FOUND",
+          "TICKET_TYPE_NOT_CONFIGURABLE",
+          "TICKET_TYPE_ALREADY_REFUNDABLE",
+          "TICKET_REFUNDABLE_REQUEST_PENDING",
+          "TICKET_REFUNDABLE_APPROVAL_REQUIRED"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "票种 id。"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "idempotency_key",
+                  "reason"
+                ],
+                "properties": {
+                  "idempotency_key": {
+                    "type": "string",
+                    "maxLength": 128,
+                    "description": "操作幂等键；重复提交返回第一次的结果。"
+                  },
+                  "reason": {
+                    "type": "string",
+                    "description": "开启可退的理由（必填），记入复核单；最高权限本人申请即生效时记入留痕元数据 reason。"
+                  },
+                  "final_approver_id": {
+                    "type": "string",
+                    "nullable": true,
+                    "description": "最终审批人用户 id；最高权限本人以外必填，须经角色持有 ticket.product.refundable.approve（票种开启可退审批）且在申请人的直接上级链上。"
+                  }
+                }
+              },
+              "example": {
+                "idempotency_key": "ticket-refundable-enable-20261118-000001",
+                "reason": "演出场次票按主办方要求允许退票",
+                "final_approver_id": "user_000123"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "已提交审批或已生效；data 为申请结果。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SuccessResponse"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "required": [
+                            "ticket_type_id",
+                            "review_status",
+                            "refundable"
+                          ],
+                          "properties": {
+                            "ticket_type_id": {
+                              "type": "string",
+                              "description": "票种 id。"
+                            },
+                            "review_id": {
+                              "type": "string",
+                              "nullable": true,
+                              "description": "复核单 id；最高权限本人申请即生效时为空。"
+                            },
+                            "review_status": {
+                              "type": "string",
+                              "enum": [
+                                "pending_review",
+                                "approved"
+                              ],
+                              "description": "pending_review 待审批；approved 最高权限本人申请即生效。"
+                            },
+                            "refundable": {
+                              "type": "boolean",
+                              "description": "票种现在是否可退；待审批时为 false。"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
+      }
+    },
+    "/api/v1/ticketing/ticket-types/{id}/sale-settings": {
+      "put": {
+        "tags": [
+          "ticketing"
+        ],
+        "operationId": "updateTicketTypeSaleSettings",
+        "summary": "修改票种售卖设置（暂停售卖、开售与停售时间）",
+        "description": "第十八批 AW 段第 299 条 299-R1（ENUM:30「票务策略状态为：草稿（规则未发布）、待启用（规则已配置但未到生效时间）、售卖中（当前可售卖）、暂停售卖（临时停止售卖）、已结束（售卖周期结束）、归档（历史策略）。」；R14 裁决 20：待启用、已结束按生效时间派生、不存储）：票种售卖设置整体替换——暂停售卖（sale_paused）、开售时间（sale_starts_at）、停售时间（sale_ends_at），时间空即不限。暂停中再次暂停保留原暂停时刻；草稿票也可设，不重跑发布闸、不走审批；只拦新下单（createTicketOrder、createCustomerTicketOrder 报 409 TICKET_TYPE_NOT_SELLABLE），已建的待付订单照常付款。缺 sale_paused 400 VALIDATION_FAILED「暂停售卖未填写」；停售不晚于开售 400 VALIDATION_FAILED「停售时间须晚于开售时间」；票种不存在 404 TICKET_TYPE_NOT_FOUND「票种不存在或已被删除」；已存档或待删除 409 TICKET_TYPE_NOT_CONFIGURABLE「已存档或待删除的票种不可改售卖设置」。返回 data 为该票种（同 listTicketTypes 行结构，含 sale_status）。成功留痕元数据记改前改后：sale_paused_before、sale_paused（布尔），sale_starts_at_before、sale_starts_at、sale_ends_at_before、sale_ends_at（ISO 时刻，空即不记），reason（有填才记）。",
+        "x-permission": "ticket.product.manage",
+        "x-data-scope": "project",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "ticket_product.sale_settings_changed",
+        "x-audit-event-failure": "ticket_product.sale_settings_change_failed",
+        "x-failure-codes": [
+          "VALIDATION_FAILED",
+          "TICKET_TYPE_NOT_FOUND",
+          "TICKET_TYPE_NOT_CONFIGURABLE"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "票种 id。"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "idempotency_key",
+                  "sale_paused"
+                ],
+                "properties": {
+                  "idempotency_key": {
+                    "type": "string",
+                    "maxLength": 128,
+                    "description": "操作幂等键；重复提交返回第一次的结果。"
+                  },
+                  "reason": {
+                    "type": "string",
+                    "nullable": true,
+                    "description": "理由（可空）；有填即记入成功事件元数据 reason。"
+                  },
+                  "sale_paused": {
+                    "type": "boolean",
+                    "description": "是否暂停售卖（必填）：true 暂停（暂停中再次暂停保留原暂停时刻），false 恢复。"
+                  },
+                  "sale_starts_at": {
+                    "type": "string",
+                    "format": "date-time",
+                    "nullable": true,
+                    "description": "开售时间；空（不传或 null）即不限。未到开售时为待启用。"
+                  },
+                  "sale_ends_at": {
+                    "type": "string",
+                    "format": "date-time",
+                    "nullable": true,
+                    "description": "停售时间；空（不传或 null）即不限。两端都填时须晚于开售时间；到停售时为已结束。"
+                  }
+                }
+              },
+              "example": {
+                "idempotency_key": "ticket-sale-settings-20261118-000001",
+                "reason": "设备检修临时停售",
+                "sale_paused": true,
+                "sale_starts_at": null,
+                "sale_ends_at": "2026-12-31T16:00:00Z"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
           },
           "400": {
             "$ref": "#/components/responses/Error"
@@ -64321,7 +64574,7 @@
         ],
         "operationId": "settlementConfigOverview",
         "summary": "结算配置中心总览",
-        "description": "平台默认生效配置 + 待复核草案队列(全部结算配置表 UNION)。",
+        "description": "平台默认生效配置 + 待复核草案队列(全部结算配置表 UNION)。 第十八批 AW 段第 293 条 293-R1、第 339 条 339-R1：platform_defaults 不再有 combo_discount_bearer（套票折扣归属）；key 为 rounding_tolerance_cent 的一项 label 为「通票凑整允许误差」，value 为「x 元（下限 a 元～上限 b 元）」，上下限未配置时为「x 元（上下限未配置）」；草案队列 config_group 为 combo_discount 的 summary 为「project=__DEFAULT__ 凑整允许误差 N分（下限 a分～上限 b分） 允许尾数 …」，上下限未配置处显示 —。",
         "x-auth-context": "staff-token",
         "x-permission": "settlement.config.view",
         "x-data-scope": "platform",
@@ -64641,8 +64894,8 @@
           "settlement"
         ],
         "operationId": "settlementConfigUpsertComboDiscount",
-        "summary": "维护套票折扣归属(草案)",
-        "description": "结算配置中心批1:落草案(is_draft=TRUE,不动生效行),须经差人复核转正后生效。 第十八批 AT 段第 292 条 292-R1：成功留痕元数据另带 rounding_allowed_endings（升序去重的尾数数字串，如 089）。",
+        "summary": "维护通票凑整参数（全平台，草案）",
+        "description": "结算配置中心批1:落草案(is_draft=TRUE,不动生效行),须经差人复核转正后生效。 第十八批 AT 段第 292 条 292-R1：成功留痕元数据另带 rounding_allowed_endings（升序去重的尾数数字串，如 089）。 第十八批 AW 段第 293 条 293-R1、第 339 条 339-R1（BSM:754「允许误差可配（业务参数，全平台统一可配，出厂默认 5 元，须同时配置上下限）」）：不再有套票折扣归属（discount_bearer、split_platform_bps 已删，折扣与凑整差额按各业态价格比例由各域承担）；只配全平台一行，project_id 须空、非空 400 VALIDATION_FAILED；rounding_tolerance_cent、rounding_tolerance_min_cent、rounding_tolerance_max_cent 三项必填（分），须 0 ≤ 下限 ≤ 允许误差 ≤ 上限，缺一或不满足 400 VALIDATION_FAILED。成功留痕元数据为 project_scope、rounding_tolerance_cent、rounding_tolerance_min_cent、rounding_tolerance_max_cent、rounding_allowed_endings。",
         "x-auth-context": "staff-token",
         "x-permission": "settlement.config.manage",
         "x-data-scope": "platform",
@@ -64662,19 +64915,26 @@
                     "type": "string"
                   },
                   "project_id": {
-                    "type": "string"
-                  },
-                  "discount_bearer": {
-                    "type": "string"
-                  },
-                  "split_platform_bps": {
-                    "type": "integer"
+                    "type": "string",
+                    "description": "须空：通票凑整参数全平台统一配置，不按项目；非空 400 VALIDATION_FAILED。"
                   },
                   "rounding_tolerance_cent": {
                     "type": "integer",
                     "format": "int64",
-                    "description": "凑整允许误差（分；可空，空则沿用 500 分）。",
+                    "description": "凑整允许误差（分，必填）；出厂 500 分，须 0 ≤ 下限 ≤ 本值 ≤ 上限。",
                     "minimum": 0
+                  },
+                  "rounding_tolerance_min_cent": {
+                    "type": "integer",
+                    "format": "int64",
+                    "minimum": 0,
+                    "description": "凑整允许误差下限（分，必填；BSM:754「须同时配置上下限」）；不得大于允许误差。"
+                  },
+                  "rounding_tolerance_max_cent": {
+                    "type": "integer",
+                    "format": "int64",
+                    "minimum": 0,
+                    "description": "凑整允许误差上限（分，必填）；不得小于允许误差。"
                   },
                   "rounding_allowed_endings": {
                     "type": "array",
@@ -64691,8 +64951,9 @@
                 },
                 "required": [
                   "idempotency_key",
-                  "discount_bearer",
-                  "split_platform_bps"
+                  "rounding_tolerance_cent",
+                  "rounding_tolerance_min_cent",
+                  "rounding_tolerance_max_cent"
                 ]
               }
             }
@@ -65602,7 +65863,7 @@
         ],
         "operationId": "settlementConfigActivateDraft",
         "summary": "复核转正:单行/归属/归因规则草案转正",
-        "description": "差人复核(执行人≠起草人否则403);Path 2 换行(旧生效行软替换 status→inactive)。营业额租金规则已有已复核版本时，变更统一从实际批准月份的次月1日生效，当月沿用旧版，草案手填起日不决定变更日期；初始规则保留填写起日。按系统业务时区判定批准月份；结束日早于实际生效起日时拒绝转正，不改变原规则。第十八批第 24 条：configType=high_value_threshold 一律 403 HIGH_VALUE_THRESHOLD_TOP_AUTHORITY_REQUIRED（高价值判定阈值只经最高权限审批生效，不在此转正）。",
+        "description": "差人复核(执行人≠起草人否则403);Path 2 换行(旧生效行软替换 status→inactive)。营业额租金规则已有已复核版本时，变更统一从实际批准月份的次月1日生效，当月沿用旧版，草案手填起日不决定变更日期；初始规则保留填写起日。按系统业务时区判定批准月份；结束日早于实际生效起日时拒绝转正，不改变原规则。第十八批第 24 条：configType=high_value_threshold 一律 403 HIGH_VALUE_THRESHOLD_TOP_AUTHORITY_REQUIRED（高价值判定阈值只经最高权限审批生效，不在此转正）。 第十八批 AW 段第 291 条 291-R1（ENUM:54；PGM:432）：configType=internal_price_item 时审批人须属该条目的域主管公司——提供方为商户的按商户业态定：酒吧归娱乐平台公司（收入归属 all_pass_ticket 的管理主体），游乐归游乐公司（amusement_ticket），演出传媒归传媒公司（performance_ticket），餐饮、零售归本项目城市项目公司（须恰好一家，否则 409 CITY_PROJECT_COMPANY_MISSING），业态为其他的归商户档案上的主管公司；提供方是经营主体的，由该主体内部另一人审批。审批人不属该公司 403 INTERNAL_PRICE_APPROVER_SCOPE（点名应审批的公司）；定不出域主管公司（收入归属或商户档案主管公司未配置）409 REVENUE_STREAM_ATTRIBUTION_MISSING。最高权限不受此限。",
         "x-auth-context": "staff-token",
         "x-permission": "settlement.config.manage",
         "x-data-scope": "platform",
@@ -65612,6 +65873,12 @@
         "x-idempotency-required": false,
         "x-audit-event-success": "settlement.config.draft.activated",
         "x-audit-event-failure": "settlement.config.draft.activate_failed",
+        "x-failure-codes": [
+          "HIGH_VALUE_THRESHOLD_TOP_AUTHORITY_REQUIRED",
+          "INTERNAL_PRICE_APPROVER_SCOPE",
+          "CITY_PROJECT_COMPANY_MISSING",
+          "REVENUE_STREAM_ATTRIBUTION_MISSING"
+        ],
         "responses": {
           "200": {
             "$ref": "#/components/responses/Success"
@@ -67104,7 +67371,7 @@
         ],
         "operationId": "ticketTypePriceCheck",
         "summary": "票种定价核算（系统算出售价 vs 填的售价）",
-        "description": "综合／联合通票的售价由各业态价格（原称「票面原价」）相加后按票种折扣自动算出。本接口返回各业态价格合计、折扣、系统算出售价、 运营现在填的售价、两者差额、后台可配的允许误差、是否超限，以及按「整元且尾数落在后台配置的允许尾数集合内（出厂 8、9、0）」建议的凑整售价。 建票／改票页据此实时提示，发布闸拒绝时报的是同一份计算。",
+        "description": "综合／联合通票的售价由各业态价格（原称「票面原价」）相加后按票种折扣自动算出。本接口返回各业态价格合计、折扣、系统算出售价、 运营现在填的售价、两者差额、后台可配的允许误差、是否超限，以及按「整元且尾数落在后台配置的允许尾数集合内（出厂 8、9、0）」建议的凑整售价。 建票／改票页据此实时提示，发布闸拒绝时报的是同一份计算。 第十八批 AW 段第 341 条 341-R1（BSM:754）：另返回 ending_allowed（填的平日价未凑整——未填或等于算出价——或为整元且元位尾数在允许尾数集合内；false 时不能保存与上架）与 rounding_allowed_endings（后台配置的允许尾数，0～9 整数升序）。误差内但 ending_allowed 为 false 时，updateTicketTypePricing、publishTicketType 报 400 TICKET_PRICE_ENDING_NOT_ALLOWED；已上架的票经 bindTicketTypeEntitlement 改组成后出现这种情况退回草稿。允许误差与允许尾数都取全平台一行（第十八批 AW 段 339-R1）。",
         "x-permission": "ticket.product.view",
         "x-data-scope": "project",
         "x-terminal-allowed": [
@@ -67143,7 +67410,7 @@
         ],
         "operationId": "updateTicketTypePricing",
         "summary": "改票种售价／折扣（凑整误差闸）",
-        "description": "设置票种折扣与凑整后的售价。保存当场比对：填的售价与系统按各业态价格（原称「票面原价」）×折扣算出的售价， 差额超过后台可配的允许误差即拒绝（不等到发布才报错）。只动定价三档与折扣，其余字段一律不动。 第十八批 AJ 段 236-R7（第十八批裁决 61「改动另存一份草稿版审批，审批期间照旧版卖，获批后自动换成新版」）：已上架的跨域组合通票（判定同 publishTicketType）改价存入该票种唯一一份草稿版（同样当场按草稿组成过误差闸），审批通过前现表与售卖不变，经 publishTicketType 提交审批、获批后自动换成新版；返回现表票种（生效版价格不变）。第十八批 AJ 段 236-R3：该票规则已提交审批、尚无结论时 409 TICKET_RULE_VERSION_PENDING「这张票的规则已提交审批，须先撤回提交再改」，须先经 withdrawTicketTypeRuleVersion 撤回（首次发布待审的草稿票同样 409）。票种已上架且有未结版本时，成功留痕 ticket_product.pricing_changed 元数据另带 rule_version_id、rule_version_status（draft 存入草稿版）。",
+        "description": "设置票种折扣与凑整后的售价。保存当场比对：填的售价与系统按各业态价格（原称「票面原价」）×折扣算出的售价， 差额超过后台可配的允许误差即拒绝（不等到发布才报错）。只动定价三档与折扣，其余字段一律不动。 第十八批 AJ 段 236-R7（第十八批裁决 61「改动另存一份草稿版审批，审批期间照旧版卖，获批后自动换成新版」）：已上架的跨域组合通票（判定同 publishTicketType）改价存入该票种唯一一份草稿版（同样当场按草稿组成过误差闸），审批通过前现表与售卖不变，经 publishTicketType 提交审批、获批后自动换成新版；返回现表票种（生效版价格不变）。第十八批 AJ 段 236-R3：该票规则已提交审批、尚无结论时 409 TICKET_RULE_VERSION_PENDING「这张票的规则已提交审批，须先撤回提交再改」，须先经 withdrawTicketTypeRuleVersion 撤回（首次发布待审的草稿票同样 409）。票种已上架且有未结版本时，成功留痕 ticket_product.pricing_changed 元数据另带 rule_version_id、rule_version_status（draft 存入草稿版）。 第十八批 AW 段第 341 条 341-R1（BSM:754）：在允许误差内、填的平日价不等于算出价，且不是整元或元位尾数不在后台配置的允许尾数集合内时 400 TICKET_PRICE_ENDING_NOT_ALLOWED（报文同 publishTicketType），只卡平日价。",
         "x-permission": "ticket.product.manage",
         "x-data-scope": "project",
         "x-terminal-allowed": [
@@ -67550,16 +67817,21 @@
         ],
         "operationId": "settlementConfigUpsertInternalPriceItem",
         "summary": "维护内部结算SKU目录条目(草案)",
-        "description": "批10/E(V379/V380)：内部结算价唯一可编辑处。条目硬绑提供商家(业态随商家带出)并归入品类；item_code 留空=新建(返回条目编码,业务页「就地新建」拿它建立引用)、非空=对既有条目改价/改名/改类(绑定商户不可改)。落草案(is_draft=TRUE,不动生效行),须经差人复核转正后生效并同步四处业务快照(酒吧商品/套餐/权益模板/券)。价格 0 为商户让利型合法价。提供商家业态为其他且档案未指定主管公司 → 409 MERCHANT_SUPERVISING_COMPANY_MISSING（ENUM 商户业态条，FS-024）。HP-P01：提供方可为经营主体（城市项目公司经营停车，品类 parking_credit「停车抵免（每小时）」），provider_entity_id 与 merchant_id 恰填其一，绑定的提供方不可改。",
+        "description": "批10/E(V379/V380)：内部结算价唯一可编辑处。条目硬绑提供商家(业态随商家带出)并归入品类；item_code 留空=新建(返回条目编码,业务页「就地新建」拿它建立引用)、非空=对既有条目改价/改名/改类(绑定商户不可改)。落草案(is_draft=TRUE,不动生效行),须经差人复核转正后生效并同步四处业务快照(酒吧商品/套餐/权益模板/券)。价格 0 为商户让利型合法价。提供商家业态为其他且档案未指定主管公司 → 409 MERCHANT_SUPERVISING_COMPANY_MISSING（ENUM 商户业态条，FS-024）。HP-P01：提供方可为经营主体（城市项目公司经营停车，品类 parking_credit「停车抵免（每小时）」），provider_entity_id 与 merchant_id 恰填其一，绑定的提供方不可改。 第十八批 AW 段第 291 条 291-R2（ENUM:54；BSM:576「持授权 U 盘密钥的最高权限本人发起的操作，不需要经过任何审批。」）：权限码为 settlement.internal_price.submit（内部结算价提交，高敏、授出前审批），只能由实际提供方提交——商户账号只能报本商户（merchant_id＝本人商户，不填 provider_entity_id），非商户账号只能报本人所属公司（provider_entity_id＝本人所属公司，merchant_id 为空），否则 403 INTERNAL_PRICE_SUBMITTER_SCOPE；最高权限不受此限。最高权限本人提交即生效：落草案后在同一事务里转正，0 价且有券引用仍 400 CATALOG_PRICE_ZERO_VOUCHER_REF 且不留草案，另记 settlement.config.draft.activated（元数据 config_group=internal_price_catalog、master_self_initiated=true）。其余账号落的草案须由对应域主管公司的人经 settlementConfigActivateDraft 转正。",
         "x-auth-context": "staff-token",
-        "x-permission": "settlement.config.manage",
-        "x-data-scope": "platform",
+        "x-permission": "settlement.internal_price.submit",
+        "x-data-scope": "provider-self",
         "x-terminal-allowed": [
           "web"
         ],
         "x-idempotency-required": true,
         "x-audit-event-success": "settlement.config.internal_price_catalog.updated",
         "x-audit-event-failure": "settlement.config.internal_price_catalog.update_failed",
+        "x-failure-codes": [
+          "INTERNAL_PRICE_SUBMITTER_SCOPE",
+          "MERCHANT_SUPERVISING_COMPANY_MISSING",
+          "CATALOG_PRICE_ZERO_VOUCHER_REF"
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -67931,7 +68203,7 @@
         ],
         "operationId": "archiveIntegrationChannelTicketTypeMap",
         "summary": "停用渠道票种映射",
-        "description": "软删（status=inactive）；停用后该渠道商品回流按未配置处理（拒收），可重录复活。停用理由必填，去首尾空白后记入成功事件 integration.channel_ticket_type_map.archived 的元数据 reason（第十八批 AO 段第 251 条 251-R1）。",
+        "description": "软删（status=inactive）；停用后该渠道商品回流按未配置处理（拒收），可重录复活。停用理由必填，去首尾空白后记入成功事件 integration.channel_ticket_type_map.archived 的元数据 reason（第十八批 AO 段第 251 条 251-R1）。 第十八批 AW 段第 322 条 322-R1（照现码补契约）：reason 缺填 400 VALIDATION_FAILED；映射不存在 404 INTEGRATION_CHANNEL_TICKET_MAP_NOT_FOUND。",
         "x-auth-context": "staff-token",
         "x-permission": "integration.channel_store_map.manage",
         "x-data-scope": "platform",
@@ -67941,6 +68213,16 @@
         "x-idempotency-required": true,
         "x-audit-event-success": "integration.channel_ticket_type_map.archived",
         "x-audit-event-failure": "integration.channel_ticket_type_map.archive_failed",
+        "x-failure-codes": [
+          "PERMISSION_DENIED",
+          "VALIDATION_FAILED",
+          "INTEGRATION_CHANNEL_TICKET_MAP_NOT_FOUND"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Id"
+          }
+        ],
         "requestBody": {
           "required": true,
           "content": {
@@ -67972,7 +68254,16 @@
           "200": {
             "$ref": "#/components/responses/Success"
           },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
           "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
             "$ref": "#/components/responses/Error"
           },
           "500": {
@@ -93848,7 +94139,7 @@
           },
           "refundable": {
             "type": "boolean",
-            "description": "方案2/规则2：该票种是否可退票（可空=不可退，默认最安全）。true 才允许客人申请整票退款；到期未核销一律作废，任何票种都不自动退。"
+            "description": "方案2/规则2：该票种是否可退票。第十八批 AW 段第 295 条 295-R1（BSM:785）：建票一律不可退，只能为空或 false；为 true 400 VALIDATION_FAILED「票种开启可退须建票后逐个票种申请并经审批」，开启走 requestTicketRefundableEnable（POST /api/v1/ticketing/ticket-types/{id}/refundable-enable-requests）逐个票种申请并经审批。到期未核销一律作废，任何票种都不自动退。"
           },
           "validity_days": {
             "type": "integer",
@@ -93926,10 +94217,11 @@
           },
           "price_mode": {
             "type": "string",
-            "description": "派生票定价方式；可基于基础日历价折扣，也可输入固定价格。",
+            "description": "派生票定价方式；可基于基础日历价折扣，也可输入固定价格。第十八批 AW 段第 338 条 338-R1（BSM:782「按打折/减免/加价/固定额派生」）：amount_delta 按基础价加减金额（见 adjustment_amount_cent）。",
             "enum": [
               "derive_from_calendar_price",
-              "fixed_price"
+              "fixed_price",
+              "amount_delta"
             ],
             "maxLength": 64
           },
@@ -93967,6 +94259,12 @@
           "eligibility_rule": {
             "type": "object",
             "description": "TicketPriceRuleRequest.eligibility_rule 字段；必须按本 schema 的类型、必填项、枚举、长度、单位和对应 PRD 规则校验。"
+          },
+          "adjustment_amount_cent": {
+            "type": "integer",
+            "description": "第十八批 AW 段第 338 条 338-R1：按基础价加减的金额（分，带符号：负数为减免、正数为加价）；price_mode=amount_delta 时必填且不为 0，缺或为 0 返回 400 VALIDATION_FAILED「按金额加减须填加减金额（负数为减免）」；取价＝到访日对应的基础价＋本金额，最低 0；其余定价方式不保存本字段。",
+            "minimum": -999999999999,
+            "maximum": 999999999999
           }
         }
       },
@@ -97739,9 +98037,10 @@
                   "type": "string",
                   "enum": [
                     "derive_from_calendar_price",
-                    "fixed_price"
+                    "fixed_price",
+                    "amount_delta"
                   ],
-                  "description": "定价方式：derive_from_calendar_price 按基础价打折、fixed_price 固定价。"
+                  "description": "定价方式：derive_from_calendar_price 按基础价打折、fixed_price 固定价、amount_delta 按基础价加减金额（第十八批 AW 段 338-R1）。"
                 },
                 "weekday_price_cent": {
                   "type": "integer",
@@ -97780,6 +98079,12 @@
                   "type": "string",
                   "format": "date-time",
                   "description": "建立时间；获批写入现表时沿用。"
+                },
+                "adjustment_amount_cent": {
+                  "type": "integer",
+                  "format": "int64",
+                  "nullable": true,
+                  "description": "按基础价加减的金额（分，带符号：负数为减免、正数为加价）；只在 price_mode=amount_delta 时有值（第十八批 AW 段 338-R1）。"
                 }
               }
             },
@@ -97833,9 +98138,10 @@
                   "type": "string",
                   "enum": [
                     "percent_delta",
-                    "fixed_delta"
+                    "fixed_delta",
+                    "fixed_price"
                   ],
-                  "description": "调整方式：percent_delta 按比例加减、fixed_delta 按固定额加减。"
+                  "description": "调整方式：percent_delta 按比例加减、fixed_delta 按固定额加减、fixed_price 按固定价（第十八批 AW 段 338-R2）。"
                 },
                 "adjustment_rate": {
                   "type": "number",
@@ -97846,7 +98152,7 @@
                   "type": "integer",
                   "format": "int64",
                   "nullable": true,
-                  "description": "加减金额（分，负数为减价）；按比例时可空。"
+                  "description": "加减金额（分，负数为减价）；按固定价时为固定价（分）；按比例时可空。"
                 },
                 "min_price_cent": {
                   "type": "integer",
@@ -97962,6 +98268,19 @@
                 "type": "integer",
                 "format": "int64",
                 "description": "按「整元且尾数落在后台配置的允许尾数集合内（出厂 8、9、0）」建议的凑整售价（分）。"
+              },
+              "ending_allowed": {
+                "type": "boolean",
+                "description": "第十八批 AW 段 341-R1：填的平日价未凑整（未填或等于算出价），或为整元且元位尾数在允许尾数集合内；为 false 时不能保存与上架（TICKET_PRICE_ENDING_NOT_ALLOWED）。"
+              },
+              "rounding_allowed_endings": {
+                "type": "array",
+                "items": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9
+                },
+                "description": "后台配置的通票凑整允许尾数（0～9 升序，出厂 0、8、9）。"
               }
             }
           }
@@ -98288,7 +98607,7 @@
           },
           "sales_channel": {
             "type": "string",
-            "description": "Sales channel filter; null means all channels.",
+            "description": "Sales channel filter; null means all channels. 第十八批 AW 段第 340 条 340-R1：空（不传、null 或空串，后端去首尾空白后为空）即全部渠道；后台动态定价页选「全部渠道」时发空串。",
             "maxLength": 64,
             "enum": [
               "admin",
@@ -98301,11 +98620,12 @@
           },
           "adjustment_type": {
             "type": "string",
-            "description": "Adjustment calculation mode.",
+            "description": "Adjustment calculation mode. 第十八批 AW 段第 338 条 338-R2（BSM:782）：percent_delta 按比例加减、fixed_delta 按固定额加减、fixed_price 按固定价（命中即最终价为该固定价）。",
             "maxLength": 64,
             "enum": [
               "percent_delta",
-              "fixed_delta"
+              "fixed_delta",
+              "fixed_price"
             ]
           },
           "adjustment_rate": {
@@ -98318,7 +98638,7 @@
           },
           "adjustment_amount_cent": {
             "type": "integer",
-            "description": "Fixed delta amount in cents; required when adjustment_type is fixed_delta.",
+            "description": "Fixed delta amount in cents; required when adjustment_type is fixed_delta. 第十八批 AW 段第 338 条 338-R2：adjustment_type=fixed_price 时为固定价（分），必填且 ≥ 0，否则 400 VALIDATION_FAILED「按固定价须填固定价（不能为负数）」；命中即最终价为该固定价，再按 min_price_cent、max_price_cent 夹值。",
             "minimum": -999999999999,
             "maximum": 999999999999
           },

@@ -1,6 +1,6 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.05
+// 文件版本：V0.06
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -207,10 +207,13 @@ class SettlementConfigWriteJdbcIntegrationTests {
                 draftRowId("comprehensive_service_fee_configs"), APPROVER);
         assertThat(billRepository.findComprehensiveServiceFee(PROJECT, null, null).feeBps()).isEqualTo(250);
 
-        writeService.saveComboDiscount(new ComboDiscountRequest("b1", PROJECT, "merchant_absorb", 0), DRAFTER);
-        assertThat(billRepository.findComboDiscountConfig(PROJECT).discountBearer()).isEqualTo("platform_absorb");
-        writeService.activateDraft("combo_discount", draftRowId("ticket_combo_discount_configs"), APPROVER);
-        assertThat(billRepository.findComboDiscountConfig(PROJECT).discountBearer()).isEqualTo("merchant_absorb");
+        // 第十八批 AW 段 339-R1：通票凑整参数只配全平台一行，误差与上下限同填。
+        writeService.saveComboDiscount(new ComboDiscountRequest("b1", null, 300L, 100L, 800L, null), DRAFTER);
+        assertThat(billRepository.findComboDiscountConfig().roundingToleranceCent()).isEqualTo(500L);
+        writeService.activateDraft("combo_discount", jdbcTemplate.queryForObject("SELECT id FROM ticket_combo_discount_configs"
+                + " WHERE project_id IS NULL AND is_draft = TRUE AND status = 'active'", String.class), APPROVER);
+        assertThat(billRepository.findComboDiscountConfig().roundingToleranceCent()).isEqualTo(300L);
+        assertThat(billRepository.findComboDiscountConfig().roundingToleranceMaxCent()).isEqualTo(800L);
     }
 
     /** V336 综合服务费月度封顶写侧往返:写(含封顶)→ 转正 → 读侧 monthlyCapAmountCent 落库(草案期不生效)。 */
@@ -404,7 +407,7 @@ class SettlementConfigWriteJdbcIntegrationTests {
         assertThat(billRepository.findDistributionMethod(null)).isEqualTo("by_rank_tier");
         // V370 等价保值种子:全局默认综合服务费率 = 原留存率 2000。
         assertThat(billRepository.findComprehensiveServiceFee(null, null, null).feeBps()).isEqualTo(2000);
-        assertThat(billRepository.findComboDiscountConfig(null).discountBearer()).isEqualTo("platform_absorb");
+        assertThat(billRepository.findComboDiscountConfig().roundingToleranceCent()).isEqualTo(500L);
 
         jdbcTemplate.update("DELETE FROM channel_fee_configs");
         assertMissing(() -> billRepository.findChannelFee(null));
@@ -413,7 +416,7 @@ class SettlementConfigWriteJdbcIntegrationTests {
         jdbcTemplate.update("DELETE FROM comprehensive_service_fee_configs");
         assertMissing(() -> billRepository.findComprehensiveServiceFee(null, null, null));
         jdbcTemplate.update("DELETE FROM ticket_combo_discount_configs");
-        assertMissing(() -> billRepository.findComboDiscountConfig(null));
+        assertMissing(() -> billRepository.findComboDiscountConfig());
     }
 
     /** 转正软替换留档:旧生效行不是物理删,而是 status→inactive,转正后仍可查回(项6;S4 起样本=综合服务费)。 */

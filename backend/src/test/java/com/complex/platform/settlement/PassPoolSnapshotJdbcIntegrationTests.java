@@ -1,6 +1,6 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -149,6 +149,24 @@ class PassPoolSnapshotJdbcIntegrationTests {
         assertThat(num(s, "pool_cent")).isEqualTo(6_652L);
         assertThat(s.get("scheme_version_id")).isEqualTo("tdsv_factory");
         assertThat(covered(ticket)).containsExactlyInAnyOrder(barA, barB);
+    }
+
+    /**
+     * 第十八批 AW 段 293-R1（BSM:754「凑整产生的差额按各业态价格比例，与折扣一并分摊到各域，由各域主管公司按份额各自承担或取得」；
+     * BSM:752「池金额，是该票扣完通路费、第三方渠道费用后拆出的酒吧份额」）：打八折售出的票，池快照酒吧毛额就是酒吧实付份额，不加回折扣。
+     */
+    @Test
+    void discountedTicketPoolIsBarPaidShareWithoutDiscountAddBack() {
+        String order = order("app", SOLD);
+        String ticket = ticketWithBarsAndPark(order);
+        jdbc.update("UPDATE issued_entitlements SET component_full_price_cent = allocated_revenue_cent * 5 / 4 WHERE parent_ticket_id = ?",
+                ticket);
+
+        events.publishEvent(new TicketRewardFacts.Issued(order));
+
+        Map<String, Object> s = jdbc.queryForMap("SELECT * FROM pass_pool_snapshots WHERE ticket_instance_id = ?", ticket);
+        assertThat(num(s, "bar_gross_cent")).as("酒吧实付份额 5000＋3000，不加回折扣").isEqualTo(8_000L);
+        assertThat(num(s, "platform_borne_cent")).isZero();
     }
 
     /** 第三方渠道（meituan，销售渠道费 10%）：在通路费之上再按酒吧份额扣一层销售渠道费 800。 */

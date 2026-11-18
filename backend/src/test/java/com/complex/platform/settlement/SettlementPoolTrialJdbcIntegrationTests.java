@@ -1,6 +1,6 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -93,8 +93,8 @@ class SettlementPoolTrialJdbcIntegrationTests {
 
     /**
      * 最不利的一张票逐项取值（409 消息里逐票种写明）：最低实付价＝会员价 9000 叠动态 −20% 后被最低价夹到 75.00 元（不是 72.00）；
-     * 最不利一份池 44.73 元＝按 60bps（费率最高的支付通路，不是 30bps 的 44.86）、销售渠道费取 meituan 固定额 600（大于比例 450）、
-     * 综合服务费 10% 足额 600（不套 1 分的月封顶）、赠送 300。
+     * 最不利一份池 31.23 元＝按 60bps（费率最高的支付通路，不是 30bps 的 31.36）、销售渠道费取 meituan 固定额 600（大于比例 450）、
+     * 综合服务费 10% 足额 450（不套 1 分的月封顶）、赠送 300。
      */
     @Test
     void lowestPoolTakesHighestRouteHighestSalesFullServiceFeeAndLowestPrice() throws Exception {
@@ -107,7 +107,7 @@ class SettlementPoolTrialJdbcIntegrationTests {
         assertThat(rejected.getResponse().getStatus()).isEqualTo(409);
         assertThat(json.readTree(rejected.getResponse().getContentAsString(java.nio.charset.StandardCharsets.UTF_8))
                 .path("message").asText())
-                .contains("最低实付价 75.00 元，最不利一份可分配池 44.73 元，第一段应分合计 50.00 元，超出 5.27 元");
+                .contains("最低实付价 75.00 元，最不利一份可分配池 31.23 元，第一段应分合计 50.00 元，超出 18.77 元");
     }
 
     /**

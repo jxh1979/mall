@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.06
+// 文件版本：V0.07
 
 import static com.complex.platform.common.api.ApiRequests.requireIdempotencyKey;
 
@@ -41,10 +41,13 @@ public class TicketingController {
 
     private final TicketingService service;
     private final AuthorizationService authorizationService;
+    private final TicketTypeSaleService saleService;
 
-    public TicketingController(TicketingService service, AuthorizationService authorizationService) {
+    public TicketingController(TicketingService service, AuthorizationService authorizationService,
+            TicketTypeSaleService saleService) {
         this.service = service;
         this.authorizationService = authorizationService;
+        this.saleService = saleService;
     }
 
     @GetMapping("/ticketing/ticket-types")
@@ -299,6 +302,15 @@ public class TicketingController {
         return ApiResponse.ok(service.withdrawTicketTypeRuleVersion(id, request));
     }
 
+    /** 第十八批 AW 段 295-R1（BSM:785「要让某一个票种可以退款，必须逐个票种单独开启，每次开启都须经高敏权限审批并留痕」）：申请开启该票种可退。 */
+    @PostMapping("/ticketing/ticket-types/{id}/refundable-enable-requests")
+    public ApiResponse<TicketRefundableEnableService.TicketRefundableEnableResult> requestTicketRefundableEnable(
+            @PathVariable("id") String id, @RequestBody TicketRefundableEnableService.Request request) {
+        authorizationService.requirePermission("ticket.product.manage");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.requestTicketRefundableEnable(id, request));
+    }
+
     /** 第十八批 AH 段 215-R2 票种最低赠酒杯数（ENUM:34「按票种可配，出厂默认 1 杯，须同时配置上下限」）。 */
     @GetMapping("/ticketing/ticket-types/{id}/min-gift-cups")
     public ApiResponse<TicketTypeGiftFloor> getTicketTypeMinGiftCups(@PathVariable("id") String id) {
@@ -314,6 +326,16 @@ public class TicketingController {
         authorizationService.requirePermission("ticket.product.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.configureGiftFloor(id, request));
+    }
+
+    /** 第十八批 AW 段 299-R1（ENUM:30「暂停售卖（临时停止售卖）」「待启用」「已结束」）：票种售卖设置（暂停售卖、开售与停售时间，整体替换）。 */
+    @PutMapping("/ticketing/ticket-types/{id}/sale-settings")
+    public ApiResponse<TicketTypeRecord> updateTicketTypeSaleSettings(
+            @PathVariable("id") String id,
+            @RequestBody com.complex.platform.ticketing.dto.TicketTypeSaleSettingsRequest request) {
+        authorizationService.requirePermission("ticket.product.manage");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(saleService.updateSaleSettings(id, request));
     }
 
     // 批10/E：原「改虚拟权益签约价」端点(配置中心批5/PR#274)已下线——内部结算价唯一可编辑处收编为

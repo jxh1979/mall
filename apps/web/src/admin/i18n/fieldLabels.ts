@@ -1,4 +1,4 @@
-// 文件版本：V0.45
+// 文件版本：V0.46
 // OBS-14-02 后台结果区字段中文名字典（PGM「全局原则 · 界面全中文（所有终端零英文）」）。
 // 键用后端 JSON 的蛇形写法；结果区查表时蛇形与驼峰同查（orderId / order_id 都命中 order_id）。
 // 与后端字段中文名表 FieldLabels.java（common.api 包）同键同名：前段按后端原样抄录，后端改名这里跟着改（门禁会比对）。
@@ -2336,6 +2336,16 @@ export const FIELD_LABELS: Record<string, string> = {
   rounding_suggested: "建议取整",
   // 第十八批 AT 段第 292 条 292-R1 通票凑整允许尾数（BSM:754；同后端 FieldLabels.java）。
   rounding_allowed_endings: "凑整允许尾数",
+  // 第十八批 AW 段第 341 条 341-R1 定价核算：凑整后的价是否整元且尾数在允许集合内（BSM:754）。
+  ending_allowed: "尾数合规",
+  // 第十八批 AW 段第 339 条 339-R1 通票凑整允许误差上下限（BSM:754；同后端 FieldLabels.java）。
+  rounding_tolerance_min_cent: "凑整允许误差下限",
+  rounding_tolerance_max_cent: "凑整允许误差上限",
+  // 第十八批 AW 段第 299 条 299-R1 票种售卖设置（ENUM:30；同后端 FieldLabels.java）。
+  sale_starts_at: "开售时间",
+  sale_ends_at: "停售时间",
+  sale_paused: "暂停售卖",
+  sale_paused_at: "暂停售卖时间",
   route: "路线",
   route_points: "路线点位",
   row_count: "行数",
@@ -3374,6 +3384,11 @@ export const VALUE_LABELS: Record<string, string> = {
   ticket_type_publish_submitted: "票种发布已提交审批",
   ticket_type_rule_version_submitted: "票种规则草稿版已提交审批",
   ticket_type_rule_version_withdrawn: "票种规则版本已撤回",
+  // 第十八批 AW 段 295-R2（BSM:785「每次开启都须经高敏权限审批并留痕」）：票种行申请开启可退（最高权限本人提交即生效）。
+  ticket_type_refundable_enable_submitted: "票种开启可退已提交审批",
+  ticket_type_refundable_enabled: "票种已开启可退",
+  // 第十八批 AW 段 299-R2（ENUM:30）：票种行「售卖设置」保存暂停售卖与开售、停售时间。
+  ticket_type_sale_settings_changed: "票种售卖设置已保存",
   // 第十八批 AS 段 297-R4：已上架跨域组合通票新建派生价存入草稿版；最高权限本人提交即生效（BSM:576）。
   ticket_price_rule_staged: "派生价已存入规则草稿版",
   ticket_type_rule_version_applied: "票种规则新版已直接生效",
@@ -3700,6 +3715,9 @@ export const KEY_VALUE_LABELS: Record<string, Record<string, string>> = {
     // 第十八批 AX 段 273-R1（PGM:436）：公司向酒吧借款登记后挂的酒吧应付（同后端 AR_AP_SOURCE_TYPE_LABELS）。
     bar_loan: "借款还款",
   },
+  // 18AW 收尾复核修正（PGM:287「展示给用户的一切文字，包括……状态、枚举取值……必须全部为中文，不得出现任何英文」）：动态定价规则的调整类型
+  //   （同后端 TicketPricingService.DYNAMIC_ADJUSTMENT_TYPES），用语同 DynamicPricingPage ADJUSTMENT_TYPE_LABELS。
+  adjustment_type: { percent_delta: "按比例", fixed_delta: "按固定金额", fixed_price: "固定价" },
 };
 
 // 终端码 → 中文名（PGM:745 受控的十一类终端）：终端开关矩阵与审计页「终端」列共用（第十八批 N 段第 122 条 122-R2）。

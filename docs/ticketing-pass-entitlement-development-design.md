@@ -1,10 +1,10 @@
-# 票务通票、权益、核销与结算开发设计 V0.15
+# 票务通票、权益、核销与结算开发设计 V0.16
 
 > **核销口径**：核销记录只有成功／拒绝（规则不允许）／失败（设备或网络原因）／已冲正／待复核／异常六态。检票环节内部扫码即核销，不设先校验、后确认的两次操作，也不设中间态；系统不提供人工放行。
 
 > **口径修订（2026-08-06 R10）：「场次容量」已废止**——BSM「容量控制」条 明确「**只按单个游乐项目的实时在玩人数控制容量，不再按场次/时段或点位/设备另设容量；排队人数不占用容量**」（DEC-R5-2026-08-04-04；R8 用户裁决 D-02）。本文原「场次容量」一律改称「**项目容量（实时在玩人数）**」；双阈值不变（运营容量软上限告警放行、安全容量硬上限阻断并自动停运）。仍按场次/时段或点位/设备维度罗列的页面、接口、组件与字段只作历史结构参考，容量口径一律以本条为准，相关字段待代码轮下线，期间不得据以新增受控维度。
 
-> 版本：V0.15 ｜ 最后更新：2026-11-16 ｜ 覆盖迁移基线：见各小节迁移号（当前仓库最新 V385）｜ 状态：现行
+> 版本：V0.16 ｜ 最后更新：2026-11-18 ｜ 覆盖迁移基线：见各小节迁移号（当前仓库最新 V385）｜ 状态：现行
 > 新功能承接见 docs/v099-v124-feature-implementation-and-acceptance-spec-v0.1.md
 > <!-- 文档goalP3(2026-06-20)：补版本/日期/覆盖迁移头，未改正文 -->
 
@@ -145,7 +145,7 @@ erDiagram
 
 ### 4.1A 票务策略状态
 
-票务策略状态为：草稿（规则未发布）、待启用（规则已配置但未到生效时间）、售卖中（当前可售卖）、暂停售卖（临时停止售卖）、已结束（售卖周期结束）、归档（历史策略）。该六态属于票务策略对象，不得与上节 `ticket_types` 的四种现行技术状态混为一套状态机；当前 `ticket_price_rules.status` 尚未完整承载六态，属于实现缺口。
+票务策略状态为：草稿（规则未发布）、待启用（规则已配置但未到生效时间）、售卖中（当前可售卖）、暂停售卖（临时停止售卖）、已结束（售卖周期结束）、归档（历史策略）。按 R14 裁决 20（`docs/prd-audit/rounds/r14/rulings-b02.md:11`「不设独立状态机，复用票种 4 态（草稿/上架/暂停/归档）；「待启用」「已结束」按生效时间派生、不存储」），六态落在票种上，由草稿、上架、暂停、归档加开售、停售时间派生，不存储、不另设状态机，`ticket_price_rules` 不承载六态；原写「六态属于票务策略对象、`ticket_price_rules.status` 尚未承载属实现缺口」作废。**实现现状（第十八批 AW 段第 299 条 299-R1，2026-11-18，V665）**：`ticket_types` 加 `sale_starts_at`、`sale_ends_at`、`sale_paused_at` 三列（空即不限或未暂停），只由售卖设置 `PUT /api/v1/ticketing/ticket-types/{id}/sale-settings` 整体替换写入（`JdbcTicketTypeSaleRepository`）；暂停单独成列、不改 `status`（`status` 现值只有 `draft`、`published`，存档另记 `archived_at` 与 `delete_status`），以免暂停中的跨域组合通票绕过按 `published` 判定的草稿版审批。`TicketTypeRecord#saleStatus` 按次序派生 `archived`、`draft`、`paused`、`pending_activation`、`ended`、`on_sale`，票种响应只读带 `sale_status`；下单售卖闸（`TicketOrderService`）与客人票种列表都按它判，只有 `on_sale` 可下单、可露出。
 
 ### 4.2 订单状态
 
@@ -556,12 +556,13 @@ Java/Flyway 主链已经存在；本节只记录现行表的字段缺口，以�
 | `id` | varchar | 主键 |
 | `ticket_type_id` | varchar | 适用票种 |
 | `variant_type` | varchar | 当前价格变体分类 |
-| `price_mode` | varchar | 当前价格计算方式 |
+| `price_mode` | varchar | 当前价格计算方式：`derive_from_calendar_price`（按基础价打折）、`fixed_price`（固定价）、`amount_delta`（按基础价加减金额，第十八批 AW 段 338-R1） |
 | `weekday_price_cent` / `weekend_price_cent` / `holiday_price_cent` | bigint | 三类基础日历价，单位分 |
 | `discount_rate` | numeric | 折扣率，可为空 |
+| `adjustment_amount_cent` | bigint | 按基础价加减金额（分，带符号：负数为减免、正数为加价），只在 `amount_delta` 时有值（V664） |
 | `channel_id` | varchar | 渠道，可为空 |
 | `eligibility_rule` | jsonb | 资格规则；须覆盖并保留全部命中资格，不得把资格压成一个互斥类型 |
-| `status` | varchar | 规则状态；业务票务策略六态见 §4.1A，当前物理状态映射仍须收口 |
+| `status` | varchar | 规则状态；不承载票务策略六态（六态落在票种上派生，见 §4.1A） |
 
 现行 `ticket_orders` 通过 `price_rule_id`、`dynamic_pricing_rule_id`、`base_amount_cent`、`dynamic_adjustment_cent`、`amount_cent` 和 `sales_channel` 留痕，仓库已删除 `ticket_order_items`，不存在 `ticket_order_items.snapshot_json`。目标价格快照还必须保存最终选中价、规则版本以及多人、新人、学生、会员、渠道、动态等全部命中资格；当前字段不足，须明确作为实现缺口，不能虚构已落地快照列。
 
@@ -1366,6 +1367,7 @@ com.complex.ticketing
 
 | 日期 | 类型 | 位置 | 内容 | 原因/依据 |
 |---|---|---|---|---|
+| 2026-11-18 | 改 | §4.1A、§6.2.1.0/全文版本 | 版本升至 V0.16；第十八批 AW 段第 299 条 299-R1、299-R3：票务策略六态按 R14 裁决 20 落在票种上派生（V665 开售、停售时间与暂停售卖三列，售卖设置接口），`ticket_price_rules.status` 不承载六态；第 338 条 338-R1：`ticket_price_rules` 加 `adjustment_amount_cent`、`price_mode` 加 `amount_delta`（V664） | ENUM:30；R14 裁决 20（`docs/prd-audit/rounds/r14/rulings-b02.md:11`）；BSM:782 |
 | 2026-11-16 | 改 | §5.6/全文版本 | 版本升至 V0.15；第十八批 AM 段第 241 条 241-R5：确认拨付前须已有通过的付款确认（按待打款合计发起） | BSM:1803；第十八批裁决 55 |
 | 2026-11-11 | 改 | §4.2 门票到期生命周期、§5.6、§7.2/全文版本 | 版本升至 V0.14；第十八批 AH 段第 239 条 239-R2：到期作废作业剔除父票本场已检票的权益，场次结束后下一轮再处理；第 256 条 256-R1：确认拨付的原路退回结果写入退款单 `payout_result` 并记入成功留痕，退款台账每行返回 `payout_result`（V620） | ENUM:46「……一经完成检票环节……该票即绑定至当前场次，其全部权益的可用窗口收窄为该场次……」；BSM:806「系统完整记录……原路退回结果……」 |
 | 2026-11-03 | 改 | §4.5/全文版本 | 版本升至 V0.13；第十八批 P 段第 134 条同步：CG-05 已落地说明改为在线规则拒绝落 rejected 记录（业务回滚后另起事务写入、不扣次），规则拒绝码补 `VENUE_NOT_IN_SESSION`、`ENTRY_PASS_PAST_SESSION_VOID`、`AMUSEMENT_NO_OPEN_SESSION` | docs/decisions/2026-10-18-cg-pending-decisions.md 第 46 项「正常在线核销的业务规则拒绝也记录为rejected并留痕；既有在线核销原则不变。」 |

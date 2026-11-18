@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.16
+// 文件版本：V0.17
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.List;
@@ -145,6 +145,8 @@ class JdbcTicketingRepository implements TicketingRepository {
                     :refundable, :bar_id, :combo_discount_rate
                 )
                 -- bar_id（酒吧归属）建票时定，不可变（AUD-076“挂错不许改”），故不在 ON CONFLICT SET。
+                -- 299-R1：售卖设置三列（sale_starts_at、sale_ends_at、sale_paused_at）只由 JdbcTicketTypeSaleRepository 写，
+                --   此处不写，免得发布、改价、存档等整行回写把它们覆盖。
                 ON CONFLICT (id) DO UPDATE SET
                     ticket_name = EXCLUDED.ticket_name,
                     base_calendar_price_mode = EXCLUDED.base_calendar_price_mode,
@@ -177,7 +179,7 @@ class JdbcTicketingRepository implements TicketingRepository {
                        holiday_price_cent, stock_required, status, validity_days, refresh_interval_seconds,
                        stock_quantity, sold_quantity, ticket_category, created_at, updated_at,
                        archived_at, archived_by, delete_status, delete_requested_by, delete_requested_at, delete_reason,
-                       refundable, bar_id, combo_discount_rate
+                       refundable, bar_id, combo_discount_rate, sale_starts_at, sale_ends_at, sale_paused_at
                   FROM ticket_types
                  WHERE (:include_archived OR archived_at IS NULL)
                    AND delete_status <> 'approved'
@@ -231,7 +233,7 @@ class JdbcTicketingRepository implements TicketingRepository {
                        holiday_price_cent, stock_required, status, validity_days, refresh_interval_seconds,
                        stock_quantity, sold_quantity, ticket_category, created_at, updated_at,
                        archived_at, archived_by, delete_status, delete_requested_by, delete_requested_at, delete_reason,
-                       refundable, bar_id, combo_discount_rate
+                       refundable, bar_id, combo_discount_rate, sale_starts_at, sale_ends_at, sale_paused_at
                   FROM ticket_types
                  WHERE id = :id
                 """, Map.of("id", id), rowMapper::mapTicketType).stream().findFirst();
@@ -926,13 +928,15 @@ class JdbcTicketingRepository implements TicketingRepository {
                     id, ticket_type_id, variant_type, price_mode, weekday_price_cent, weekend_price_cent,
                     holiday_price_cent, discount_rate, channel_id, currency, status, eligibility_rule,
                     created_at, updated_at,
-                    archived_at, archived_by, delete_status, delete_requested_by, delete_requested_at, delete_reason
+                    archived_at, archived_by, delete_status, delete_requested_by, delete_requested_at, delete_reason,
+                    adjustment_amount_cent
                 )
                 VALUES (
                     :id, :ticket_type_id, :variant_type, :price_mode, :weekday_price_cent, :weekend_price_cent,
                     :holiday_price_cent, :discount_rate, :channel_id, :currency, :status, CAST(:eligibility_rule AS jsonb),
                     :created_at, :updated_at,
-                    :archived_at, :archived_by, :delete_status, :delete_requested_by, :delete_requested_at, :delete_reason
+                    :archived_at, :archived_by, :delete_status, :delete_requested_by, :delete_requested_at, :delete_reason,
+                    :adjustment_amount_cent
                 )
                 ON CONFLICT (id) DO UPDATE SET
                     ticket_type_id = EXCLUDED.ticket_type_id,
@@ -952,6 +956,7 @@ class JdbcTicketingRepository implements TicketingRepository {
                     delete_requested_by = EXCLUDED.delete_requested_by,
                     delete_requested_at = EXCLUDED.delete_requested_at,
                     delete_reason = EXCLUDED.delete_reason,
+                    adjustment_amount_cent = EXCLUDED.adjustment_amount_cent,
                     updated_at = EXCLUDED.updated_at
                 """, parameterSource.priceRuleParameters(rule));
         return rule;
@@ -963,7 +968,8 @@ class JdbcTicketingRepository implements TicketingRepository {
                 SELECT id, ticket_type_id, variant_type, price_mode, weekday_price_cent, weekend_price_cent,
                        holiday_price_cent, discount_rate, channel_id, currency, status,
                        eligibility_rule::text AS eligibility_rule, created_at, updated_at,
-                       archived_at, archived_by, delete_status, delete_requested_by, delete_requested_at, delete_reason
+                       archived_at, archived_by, delete_status, delete_requested_by, delete_requested_at, delete_reason,
+                       adjustment_amount_cent
                   FROM ticket_price_rules
                  WHERE (:include_archived OR archived_at IS NULL)
                    AND delete_status <> 'approved'
@@ -982,7 +988,8 @@ class JdbcTicketingRepository implements TicketingRepository {
                 SELECT id, ticket_type_id, variant_type, price_mode, weekday_price_cent, weekend_price_cent,
                        holiday_price_cent, discount_rate, channel_id, currency, status,
                        eligibility_rule::text AS eligibility_rule, created_at, updated_at,
-                       archived_at, archived_by, delete_status, delete_requested_by, delete_requested_at, delete_reason
+                       archived_at, archived_by, delete_status, delete_requested_by, delete_requested_at, delete_reason,
+                       adjustment_amount_cent
                   FROM ticket_price_rules
                  WHERE id = :id
                 """, Map.of("id", id), rowMapper::mapPriceRule).stream().findFirst();

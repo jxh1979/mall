@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -98,11 +98,13 @@ public record TicketTypeRuleVersionView(
             BigDecimal discountRate,
             String channelId,
             Map<String, Object> eligibilityRule,
-            Instant createdAt
+            Instant createdAt,
+            // 第十八批 AW 段 338-R1：按基础价加减金额（分，带符号），只在 amount_delta 时有值。
+            Long adjustmentAmountCent
     ) {
         static PriceRule of(TicketPriceRuleRecord r) {
             return new PriceRule(r.id(), r.variantType(), r.priceMode(), r.weekdayPriceCent(), r.weekendPriceCent(), r.holidayPriceCent(),
-                    r.discountRate(), r.channelId(), r.eligibilityRule(), r.createdAt());
+                    r.discountRate(), r.channelId(), r.eligibilityRule(), r.createdAt(), r.adjustmentAmountCent());
         }
     }
 

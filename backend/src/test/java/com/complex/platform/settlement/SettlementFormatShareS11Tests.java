@@ -1,5 +1,5 @@
 package com.complex.platform.settlement;
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -319,11 +319,11 @@ class SettlementFormatShareS11Tests {
     // ---------------------------------------------------------------- ④ 折扣补回扩到所有业态
 
     /**
-     * §20.4：平台承担折扣时，<b>每个业态</b>都按满额算 —— 不能酒吧按满额、游乐餐饮按折后，
-     * 那等于同一张票里各家用两套口径分钱，谁吃亏谁占便宜全看自己是什么业态。
+     * 第十八批 AW 段 293-R1（BSM:754「凑整产生的差额按各业态价格比例，与折扣一并分摊到各域，由各域主管公司按份额各自承担或取得」）：
+     * 打折售出的酒吧＋游乐组合通票，各业态份额就是出票时按业态价格占比拆出的实付份额——折扣按份额由各域承担，不再加回成满额。
      */
     @Test
-    void platformBorneDiscountIsAddedBackToEveryFormat() {
+    void discountIsBorneByEachFormatShareWithoutAddBack() {
         String pid = newProject();
         setRankTier(pid, 1, 9, 10000);
         seedMerchant("m_dis_bar", "bar");
@@ -335,24 +335,12 @@ class SettlementFormatShareS11Tests {
         Map<String, Object> b = bill(pid);
         Map<String, Map<String, Object>> shares = formatShares(billId);
 
-        // 默认口径 platform_absorb：项目公司把折扣补上，两个业态一视同仁地按满额分。
-        assertThat(shares.get("bar").get("platform_borne_discount_cent")).isEqualTo(20000L);
-        assertThat(shares.get("bar").get("gross_revenue_cent")).isEqualTo(100000L);
-        assertThat(shares.get("amusement").get("platform_borne_discount_cent")).isEqualTo(5000L);
-        assertThat(shares.get("amusement").get("gross_revenue_cent")).isEqualTo(35000L);
-        assertThat(b.get("combo_discount_cent")).isEqualTo(25000L);
-        assertThat(b.get("ticket_revenue_cent")).isEqualTo(135000L);
-        assertThat(shares.get("bar").get("net_revenue_cent")).as("酒吧净份额只拿酒吧那份的满额").isEqualTo(100000L);
-
-        // 改成商户自担：两个业态一样都按折后净额，仍然是同一套口径。
-        setDiscountBearer(pid, "merchant_absorb");
-        settlementService.settleMonth(pid, MONTH);
-        Map<String, Map<String, Object>> after = formatShares(billId);
-        assertThat(after.get("bar").get("platform_borne_discount_cent")).isEqualTo(0L);
-        assertThat(after.get("bar").get("gross_revenue_cent")).isEqualTo(80000L);
-        assertThat(after.get("amusement").get("platform_borne_discount_cent")).isEqualTo(0L);
-        assertThat(after.get("amusement").get("gross_revenue_cent")).isEqualTo(30000L);
-        assertThat(bill(pid).get("combo_discount_cent")).isEqualTo(0L);
+        assertThat(shares.get("bar").get("gross_revenue_cent")).as("酒吧份额＝酒吧实付份额").isEqualTo(80000L);
+        assertThat(shares.get("amusement").get("gross_revenue_cent")).as("游乐份额＝游乐实付份额").isEqualTo(30000L);
+        assertThat(shares.get("bar").get("platform_borne_discount_cent")).isEqualTo(0L);
+        assertThat(shares.get("amusement").get("platform_borne_discount_cent")).isEqualTo(0L);
+        assertThat(b.get("combo_discount_cent")).as("没有另由项目公司承担的折扣").isEqualTo(0L);
+        assertThat(b.get("ticket_revenue_cent")).isEqualTo(110000L);
     }
 
     // ---------------------------------------------------------------- 幂等
@@ -455,14 +443,6 @@ class SettlementFormatShareS11Tests {
                 VALUES (?, ?, ?, 1, 'meituan', 0, 'CNY', 'paid', 'issued', 'created', now(), now(), ?)""",
                 orderId, orderId, type, projectId);
         routeFeeShares.fixSalesChannelFee(orderId);
-    }
-
-    private void setDiscountBearer(String projectId, String bearer) {
-        jdbcTemplate.update("""
-                INSERT INTO ticket_combo_discount_configs (id, project_id, discount_bearer, split_platform_bps, status, is_draft)
-                VALUES (?, ?, ?, 0, 'active', FALSE)
-                ON CONFLICT (id) DO UPDATE SET discount_bearer = EXCLUDED.discount_bearer
-                """, "tcdc_" + projectId, projectId, bearer);
     }
 
     private void seedVerified(String projectId, String merchantId, int verifiedCount, int numPeople, long cent) {

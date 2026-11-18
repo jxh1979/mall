@@ -1,6 +1,6 @@
 package com.complex.platform.parking;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -290,7 +290,13 @@ class ParkingCreditJdbcIntegrationTests {
                 .andExpect(jsonPath("$.detail_code").value("PARKING_CREDIT_PRICE_MISSING"));
         String draft = jdbc.queryForObject("SELECT id FROM internal_price_catalog WHERE item_code=? AND is_draft AND status='active'",
                 String.class, code);
-        catalog.activateDraft("internal_price_item", draft, "pk_approver_" + f.suffix);
+        // 第十八批 AW 段 291-R1（PGM:432「由公司内部提交人与审批人分离审批」）：提供主体自己的另一位员工复核。
+        String approver = "pk_approver_" + f.suffix;
+        jdbc.update("INSERT INTO access_users (id, username, account_type, organization_id, status, created_at)"
+                + " VALUES (?, ?, 'staff', ?, 'active', now())", approver, approver, company);
+        com.complex.platform.support.TestSecurityActors.asPlatformAdmin(approver);
+        catalog.activateDraft("internal_price_item", draft, approver);
+        com.complex.platform.support.TestSecurityActors.clear();
         pay(session, "ac_" + f.suffix).andExpect(status().isOk()).andExpect(jsonPath("$.data.status").value("paid"));
         assertThat(jdbc.queryForObject("SELECT hour_price_cent FROM parking_credits WHERE customer_id=?", Long.class, customer)).isEqualTo(800L);
     }

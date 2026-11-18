@@ -1,6 +1,6 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.05
+// 文件版本：V0.06
 
 import com.complex.platform.ticketing.SettlementSettledEvent;
 import java.time.YearMonth;
@@ -150,9 +150,8 @@ public class SettlementSettledConsumer {
                 && !singleBarServiceFees.accruedAtSale(event.parentTicketId())) {
             var svcFee = billRepository.findComprehensiveServiceFee(
                     event.projectId(), exclusiveMerchantId, event.ticketTypeId());
-            long platformBorne = ComprehensiveServiceFee.platformBorneCent(
-                    billRepository.findComboDiscountConfig(event.projectId()), discountIncrement);
-            long perTicket = ComprehensiveServiceFee.perTicketCent(svcFee, verified + platformBorne, 1);
+            // 第十八批 AW 段 293-R1（BSM:754）：折扣按份额由各域承担，服务费基数即本笔实付份额，不加回折扣。
+            long perTicket = ComprehensiveServiceFee.perTicketCent(svcFee, verified, 1);
             if (perTicket > 0L && svcFee.fixedAmountCent() != null
                     && billRepository.sumTicketServiceFeeCent(event.parentTicketId()) != 0L) {
                 perTicket = 0L; // 这张票已经收过这一道固定额了

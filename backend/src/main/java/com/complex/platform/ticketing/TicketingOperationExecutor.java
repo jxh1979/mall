@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.09
+// 文件版本：V0.10
 
 import com.complex.platform.common.api.PageResponse;
 import com.complex.platform.evidence.AuditedOperationExecutor;
@@ -67,6 +67,7 @@ public class TicketingOperationExecutor {
     private String businessId(Object value) {
         if (value instanceof TicketTypeRecord record) return record.id();
         if (value instanceof TicketTypeGiftFloor floor) return floor.ticketTypeId();
+        if (value instanceof TicketRefundableEnableService.TicketRefundableEnableResult result) return result.ticketTypeId();
         if (value instanceof TicketTypeRuleVersionView version) return version.id();
         if (value instanceof EntitlementTemplateRecord record) return record.id();
         if (value instanceof TicketTypeEntitlementRecord record) return record.id();

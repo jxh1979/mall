@@ -1,4 +1,4 @@
-// 文件版本：V0.03
+// 文件版本：V0.04
 package com.complex.platform.ticketing;
 
 import static org.mockito.ArgumentMatchers.any;
@@ -537,7 +537,7 @@ class TicketingControllerTests {
                         2380L,
                         14280L,
                         "dyn_rule_1",
-                        "matched dynamic pricing rule"
+                        "命中规则：Summer uplift"
                 ));
 
         mockMvc.perform(get("/api/v1/ticketing/dynamic-pricing-rules")
@@ -658,6 +658,12 @@ class TicketingControllerTests {
         @Bean
         AuthorizationService authorizationService() {
             return Mockito.mock(AuthorizationService.class);
+        }
+
+        // 第十八批 AW 段 299-R1：控制器构造注入票种售卖设置服务。
+        @Bean
+        TicketTypeSaleService ticketTypeSaleService() {
+            return Mockito.mock(TicketTypeSaleService.class);
         }
 
         @Bean

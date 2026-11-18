@@ -1,6 +1,6 @@
 package com.complex.platform.governance.review;
 
-// 文件版本：V0.39
+// 文件版本：V0.40
 
 import com.complex.platform.access.AccessActor;
 import com.complex.platform.access.AuthorizationService;
@@ -197,6 +197,10 @@ public class SupervisorReviewService {
             // （能看全部项目由 TicketTypeRuleVersionService 提交时核）。
             new SupervisorReviewPolicyRecord("ticket_type_rule_publish", "ticket.type.rule.publish", 0, 1, true,
                     List.of("reason"), "active", "specific_role", "ticket.product.publish.approve"),
+            // 第十八批 AW 段第 295 条 295-R1（BSM:785「要让某一个票种可以退款，必须逐个票种单独开启，每次开启都须经高敏权限审批并留痕」；PGM:528）：
+            // 票种开启可退，恒阻断；申请人沿直接上级链到其指定的最终审批人，末节点须经角色持有票种开启可退审批权限。
+            new SupervisorReviewPolicyRecord("ticket_type_refundable_enable", "ticket.type.refundable.enable", 0, 1, true,
+                    List.of("reason"), "active", "specific_role", "ticket.product.refundable.approve"),
             new SupervisorReviewPolicyRecord("staff_shift_publish", "staff.shift.publish", 0, 1, true, List.of("reason"), "active", "one_level_up"),
             new SupervisorReviewPolicyRecord("staff_attendance_receipt_review", "staff.attendance.receipt.review", 0, 1, true, List.of("reason"), "active", "one_level_up"),
             new SupervisorReviewPolicyRecord("staff_penalty_cap_adjust", "staff.payroll.penalty_cap.adjust", 0, 3, true,

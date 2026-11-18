@@ -1,4 +1,4 @@
-// 文件版本：V0.04
+// 文件版本：V0.05
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -66,6 +66,8 @@ describe("TicketingPoliciesPage 引导式新建票种", () => {
     fireEvent.click(screen.getByTestId("ticket-create-open"));
     // 第一步:名称有默认值。只填平日/周末,缺节假日 → 下一步触发校验,弹窗留开显错。
     expect(screen.getByTestId("ticket-name")).toBeTruthy();
+    // 第十八批 AW 段 295-R2（BSM:785「必须逐个票种单独开启」）：向导里不再有「可退票」勾选。
+    expect(screen.queryByTestId("ticket-refundable")).toBeNull();
     fireEvent.change(screen.getByTestId("ticket-weekday-price"), { target: { value: "100" } });
     fireEvent.change(screen.getByTestId("ticket-weekend-price"), { target: { value: "120" } });
     fireEvent.click(screen.getByTestId("ticket-policy-next"));
@@ -90,14 +92,14 @@ describe("TicketingPoliciesPage 引导式新建票种", () => {
       expect(posted.some((p) => p.includes("/ticket-types/tt-new/entitlements"))).toBe(true);
       expect(posted.some((p) => p.includes("/ticket-types/tt-new/publish"))).toBe(true);
     });
-    // 建票载荷:不再传 status(服务端固定 draft),带有效期/刷新/可退/单店字段。
+    // 建票载荷:不再传 status(服务端固定 draft),带有效期/单店字段;295-R2 起不带可退（建票后逐个票种申请开启）。
     const createCall = postSpy.mock.calls.find((c) => String(c[0]).endsWith("/ticketing/ticket-types"));
     const createBody = (createCall?.[1] ?? {}) as Record<string, unknown>;
     expect(createBody.status).toBeUndefined();
     expect(createBody.validity_days).toBe(1);
     // #172：刷新间隔不再随建票按票种下发（改为全场统一配置端点）。
     expect(createBody.refresh_interval_seconds).toBeUndefined();
-    expect(createBody.refundable).toBe(false);
+    expect(createBody).not.toHaveProperty("refundable");
     // 发布载荷带必填理由。
     const publishCall = postSpy.mock.calls.find((c) => String(c[0]).includes("/publish"));
     expect(((publishCall?.[1] ?? {}) as Record<string, unknown>).reason).toBe("暑期档新票上架");

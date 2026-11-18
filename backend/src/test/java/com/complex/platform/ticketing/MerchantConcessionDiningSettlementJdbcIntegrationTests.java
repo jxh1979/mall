@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.07
+// 文件版本：V0.08
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -81,6 +81,7 @@ class MerchantConcessionDiningSettlementJdbcIntegrationTests {
     private final String device = "dev_c156_" + suffix;
     private final String typeId = "tt_c156_" + suffix;
     private final String catalogCode = "sku_c156_" + suffix;
+    private final String city = "be_c156_city_" + suffix;
     private final List<String> templateIds = new ArrayList<>();
     private final List<String> codes = new ArrayList<>();
 
@@ -107,6 +108,8 @@ class MerchantConcessionDiningSettlementJdbcIntegrationTests {
     @AfterEach
     void cleanup() {
         SecurityContextHolder.clearContext();
+        jdbc.update("DELETE FROM business_entity_projects WHERE business_entity_id = ?", city);
+        jdbc.update("DELETE FROM business_entities WHERE id = ?", city);
         jdbc.update("DELETE FROM amusement_compensation_fulfillments WHERE project_id = ?", project);
         jdbc.update("DELETE FROM amusement_fault_compensation_items WHERE project_id = ?", project);
         jdbc.update("DELETE FROM amusement_fault_compensation_batches WHERE project_id = ?", project);
@@ -334,10 +337,15 @@ class MerchantConcessionDiningSettlementJdbcIntegrationTests {
         String pricer = "usr_c236_price_" + suffix;
         String reviewer = "usr_c236_review_" + suffix;
         String viewer = "usr_c236_view_" + suffix;
-        user(pricer, "platform_admin", "org_1", null, "内部结算价提交" + n, List.of("settlement.config.manage"));
-        user(reviewer, "platform_admin", "org_1", null, "内部结算价复核" + n, List.of("settlement.config.manage"));
+        // 第十八批 AW 段 291-R2（ENUM:54「实际提供商品或服务的主体提交」）：餐厅自己的账号提交。
+        user(pricer, "staff", project, restaurant, "内部结算价提交" + n, List.of("settlement.internal_price.submit"));
+        // 第十八批 AW 段 291-R1（ENUM:54「餐饮与零售商户……统一由城市项目公司审批」）：复核人是本项目城市项目公司的员工。
+        jdbc.update("INSERT INTO business_entities (id, entity_name, entity_role, status, created_at, updated_at)"
+                + " VALUES (?, ?, 'project_company', 'active', now(), now())", city, "让利结算城市项目公司" + n);
+        jdbc.update("INSERT INTO business_entity_projects (business_entity_id, project_id) VALUES (?, ?)", city, project);
+        user(reviewer, "staff", city, null, "内部结算价复核" + n, List.of("settlement.config.manage"));
         user(viewer, "platform_admin", "org_1", null, "结算审阅查看" + n, List.of("finance.settlement.view"));
-        mockMvc.perform(post("/api/v1/settlement/config/internal-price-item").with(session(pricer, "platform_admin", "org_1", null))
+        mockMvc.perform(post("/api/v1/settlement/config/internal-price-item").with(session(pricer, "staff", project, restaurant))
                         .contentType(MediaType.APPLICATION_JSON).content("""
                                 {"idempotency_key": "c236-price-%s", "item_code": "%s", "merchant_id": "%s", "category": "dining",
                                  "item_name": "套餐", "price_cent": 3500}
@@ -346,7 +354,7 @@ class MerchantConcessionDiningSettlementJdbcIntegrationTests {
         String draft = jdbc.queryForObject("SELECT id FROM internal_price_catalog WHERE item_code = ? AND is_draft = TRUE",
                 String.class, catalogCode);
         mockMvc.perform(post("/api/v1/settlement/config/internal_price_item/" + draft + "/activate")
-                        .with(session(reviewer, "platform_admin", "org_1", null)))
+                        .with(session(reviewer, "staff", city, null)))
                 .andExpect(status().isOk());
 
         verify(after);

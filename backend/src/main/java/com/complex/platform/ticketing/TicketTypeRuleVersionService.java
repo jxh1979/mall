@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static com.complex.platform.common.Strings.trimToNull;
 
@@ -234,7 +234,8 @@ public class TicketTypeRuleVersionService {
                 // 建立时间用版本所记原值。
                 repository.savePriceRule(new TicketPriceRuleRecord(r.id(), ticketTypeId, r.variantType(), r.priceMode(), r.weekdayPriceCent(),
                         r.weekendPriceCent(), r.holidayPriceCent(), r.discountRate(), r.channelId(), "CNY", "active",
-                        r.eligibilityRule() == null ? Map.of() : r.eligibilityRule(), r.createdAt(), now));
+                        r.eligibilityRule() == null ? Map.of() : r.eligibilityRule(), r.createdAt(), now,
+                        null, null, "none", null, null, null, r.adjustmentAmountCent()));
             }
         }
         for (TicketTypeRuleVersionView.DynamicPricingRule r : version.dynamicPricingRules()) {
@@ -320,6 +321,8 @@ public class TicketTypeRuleVersionService {
             text.append("\n派生价：").append(VARIANT_NAMES.getOrDefault(r.variantType(), r.variantType())).append(" · ")
                     .append("fixed_price".equals(r.priceMode())
                             ? "固定价 平日 " + yuan(r.weekdayPriceCent()) + "，周末 " + yuan(r.weekendPriceCent()) + "，节假日 " + yuan(r.holidayPriceCent())
+                            : "amount_delta".equals(r.priceMode()) // 第十八批 AW 段 338-R1
+                            ? "按基础价" + (r.adjustmentAmountCent() < 0 ? "减 " : "加 ") + yuan(Math.abs(r.adjustmentAmountCent()))
                             : "按基础价 " + r.discountRate().stripTrailingZeros().toPlainString() + "%");
         }
         for (TicketTypeRuleVersionView.DynamicPricingRule r : v.dynamicPricingRules()) {
@@ -338,8 +341,11 @@ public class TicketTypeRuleVersionService {
                 : v.minGiftCups() + " 杯（下限 " + v.minGiftCupsLower() + "，上限 " + v.minGiftCupsUpper() + "）").toString();
     }
 
-    /** 动态价调整：按比例写「加价/减价 x%」，按固定额写「加价/减价 x 元」。 */
+    /** 动态价调整：按比例写「加价/减价 x%」，按固定额写「加价/减价 x 元」，按固定价写「固定价 x 元」（第十八批 AW 段 338-R2）。 */
     private static String adjustment(TicketTypeRuleVersionView.DynamicPricingRule r) {
+        if ("fixed_price".equals(r.adjustmentType())) {
+            return "固定价 " + yuan(r.adjustmentAmountCent());
+        }
         if ("fixed_delta".equals(r.adjustmentType())) {
             long amount = r.adjustmentAmountCent() == null ? 0L : r.adjustmentAmountCent();
             return (amount < 0 ? "减价 " : "加价 ") + yuan(Math.abs(amount));

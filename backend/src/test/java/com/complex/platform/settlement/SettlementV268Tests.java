@@ -242,21 +242,23 @@ class SettlementV268Tests {
         assertThat(exclusiveAmount(pid, "barA")).isEqualTo(185000L);           // 200000 - 15000
     }
 
-    /** 套票折扣归属:默认 platform_absorb;项目特例可覆盖为 merchant_absorb。 */
+    /**
+     * 第十八批 AW 段 339-R1（BSM:754「全平台统一可配，出厂默认 5 元，须同时配置上下限」）：通票凑整参数只有全平台一行，出厂 5 元、上下限留空；
+     * 不能再按项目另配一行。
+     */
     @Test
-    void comboDiscountConfig_defaultAndProjectOverride() {
-        // 全局默认(无项目特例)
-        var def = billRepository.findComboDiscountConfig("no_such_project_zzz");
-        assertThat(def.discountBearer()).isEqualTo("platform_absorb");
+    void comboRoundingConfig_platformRowOnly() {
+        var def = billRepository.findComboDiscountConfig();
+        assertThat(def.roundingToleranceCent()).isEqualTo(500L);
+        assertThat(def.roundingToleranceMinCent()).isNull();
+        assertThat(def.roundingToleranceMaxCent()).isNull();
 
         String pid = newProject();
         String cid = "tcdc_test_" + Long.toHexString(System.nanoTime());
         discountConfigIds.add(cid);
-        jdbcTemplate.update(
-                "INSERT INTO ticket_combo_discount_configs (id, project_id, discount_bearer, split_platform_bps, is_draft)"
-                        + " VALUES (?, ?, 'merchant_absorb', 0, FALSE)", cid, pid);
-        var override = billRepository.findComboDiscountConfig(pid);
-        assertThat(override.discountBearer()).isEqualTo("merchant_absorb");
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> jdbcTemplate.update(
+                        "INSERT INTO ticket_combo_discount_configs (id, project_id, is_draft) VALUES (?, ?, FALSE)", cid, pid))
+                .isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class);
     }
 
     // ---- helpers ----
@@ -280,11 +282,8 @@ class SettlementV268Tests {
             String ticketTypeId = (String) r.get("ticket_type_id");
             long verified = ((Number) r.get("verified_amount_cent")).longValue();
             int count = ((Number) r.get("verified_count")).intValue();
-            long discount = ((Number) r.get("discount_amount_cent")).longValue();
             var cfg = billRepository.findComprehensiveServiceFee(projectId, merchant, ticketTypeId);
-            long platformBorne = ComprehensiveServiceFee.platformBorneCent(
-                    billRepository.findComboDiscountConfig(projectId), discount);
-            long fee = ComprehensiveServiceFee.perTicketCent(cfg, verified + platformBorne, count);
+            long fee = ComprehensiveServiceFee.perTicketCent(cfg, verified, count);
             String cfgId = null;
             if (fee > 0L) {
                 if (cfg.monthlyCapAmountCent() != null) {

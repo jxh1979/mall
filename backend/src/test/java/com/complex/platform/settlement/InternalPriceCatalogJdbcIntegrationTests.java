@@ -52,6 +52,7 @@ class InternalPriceCatalogJdbcIntegrationTests {
 
     @AfterEach
     void cleanup() {
+        com.complex.platform.support.TestSecurityActors.clear();
         if (suffix == null) {
             return;
         }
@@ -132,7 +133,10 @@ class InternalPriceCatalogJdbcIntegrationTests {
         assertThat(itemCode).startsWith("sku_");
         assertThat(priceResolver.resolve(null, merchant, itemCode)).isEmpty();
 
-        // ② 他人复核转正 → 生效价 6000。
+        // ② 他人复核转正 → 生效价 6000（第十八批 AW 段 291-R1：酒吧商户由娱乐平台公司的人审批）。
+        jdbcTemplate.update("INSERT INTO access_users (id, username, account_type, organization_id, status, created_at)"
+                + " VALUES (?, ?, 'staff', 'be_ent_platform', 'active', now()) ON CONFLICT (id) DO NOTHING", APPROVER, APPROVER);
+        com.complex.platform.support.TestSecurityActors.asPlatformAdmin();
         writeService.activateDraft("internal_price_item", draftId(itemCode), APPROVER);
         assertThat(priceResolver.require(null, merchant, itemCode)).isEqualTo(6000L);
 

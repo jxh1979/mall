@@ -1,6 +1,6 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -67,8 +67,7 @@ class SettlementComboRoundingEndingsWeb292R1Tests {
         activateDraft();
 
         assertThat(overviewValue()).isEqualTo("5");
-        assertThat(roundingPort.findComboRounding(project).allowedEndings()).isEqualTo("5");
-        assertThat(roundingPort.findComboRounding(null).allowedEndings()).isEqualTo("5");
+        assertThat(roundingPort.findComboRounding().allowedEndings()).isEqualTo("5");
     }
 
     @Test
@@ -90,8 +89,10 @@ class SettlementComboRoundingEndingsWeb292R1Tests {
     private ResultActions save(List<Integer> endings, String key) throws Exception {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("idempotency_key", "b66end-" + key + "-" + s);
-        body.put("discount_bearer", "platform_absorb");
-        body.put("split_platform_bps", 0);
+        // 第十八批 AW 段 293-R1、339-R1：不再有套票折扣归属；误差与上下限同填。
+        body.put("rounding_tolerance_cent", 500);
+        body.put("rounding_tolerance_min_cent", 0);
+        body.put("rounding_tolerance_max_cent", 1000);
         if (endings != null) {
             body.put("rounding_allowed_endings", endings);
         }

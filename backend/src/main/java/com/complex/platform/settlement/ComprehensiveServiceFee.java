@@ -36,22 +36,4 @@ final class ComprehensiveServiceFee {
                 ? Math.min(cfg.fixedAmountCent() * verifiedCount, grossCent)
                 : MoneyRounding.bpsOf(grossCent, cfg.feeBps());
     }
-
-    /**
-     * 项目承担的套票折扣额(D6):platform_absorb=全额、split_by_ratio=平台份额、merchant_absorb/未知=0。
-     * 综合服务费的毛额 = 净收入 + 本项(与 settleMonth 同口径:项目承担折扣使商户拿满额,fee 在满额毛额上算)。
-     *
-     * <p>R-7:split_by_ratio 改 HALF_UP(与 {@code TicketDistributionSettlementService.platformBorneDiscount}
-     * 同一入口同一口径,防两处漂移);HALF_UP 对 0 对称 → 冲正(discountCent 为负)时逐分精确对消不变。
-     */
-    static long platformBorneCent(JdbcSettlementBillRepository.ComboDiscountConfig cfg, long discountCent) {
-        if (cfg == null) {
-            return 0L;
-        }
-        return switch (cfg.discountBearer()) {
-            case "platform_absorb" -> discountCent;
-            case "split_by_ratio" -> MoneyRounding.bpsOf(discountCent, cfg.splitPlatformBps());
-            default -> 0L;
-        };
-    }
 }

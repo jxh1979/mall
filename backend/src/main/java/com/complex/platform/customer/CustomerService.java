@@ -1,6 +1,6 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.15
+// 文件版本：V0.16
 
 import com.complex.platform.bar.BarDepositRuleRecord;
 import com.complex.platform.bar.BarRepository;
@@ -413,7 +413,8 @@ public class CustomerService implements com.complex.platform.ticketing.KioskBuye
                 "ticket_product",
                 () -> ticketingService.listTicketTypes().items().stream()
                         // AUD-015：公开列表只认已发布（过了权益绑定发布闸）的票种；历史 active 行由 V293 一次性归位。
-                        .filter(ticketType -> "published".equals(ticketType.status()))
+                        // 第十八批 AW 段 299-R1（ENUM:30）：只列售卖中，暂停售卖、待启用、已结束的不露出。
+                        .filter(ticketType -> "on_sale".equals(ticketType.saleStatus()))
                         .filter(ticketType -> barFilter == null || barFilter.equals(ticketType.barId()))
                         .map(ticketType -> toTicketProduct(ticketType, eligible == null ? null
                                 : ticketingService.quoteCustomerPrice(ticketType.id(), null, terminal, eligible)))

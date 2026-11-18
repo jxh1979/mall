@@ -17,6 +17,9 @@ import java.math.BigDecimal;
  * @param toleranceCent      后台可配的允许误差（分）
  * @param withinTolerance    是否在允许误差内（未填价视为不通过）
  * @param roundingSuggested  按「整元且尾数落在后台配置的允许尾数集合内」建议的凑整售价（分，出厂尾数 8、9、0），供前端提示运营填哪个数好卖
+ * @param endingAllowed      第十八批 AW 段 341-R1（BSM:754「使最终售价为整数，且尾数落在后台配置的允许尾数集合内」）：填的价未凑整（未填或等于算出价），
+ *                           或为整元且元位尾数在允许尾数集合内；为 false 时不能保存与上架
+ * @param roundingAllowedEndings 后台配置的允许尾数（升序），供前端实时提示
  */
 public record TicketTypePriceCheck(
         String ticketTypeId,
@@ -27,6 +30,8 @@ public record TicketTypePriceCheck(
         Long diffCent,
         long toleranceCent,
         boolean withinTolerance,
-        long roundingSuggested
+        long roundingSuggested,
+        boolean endingAllowed,
+        java.util.List<Integer> roundingAllowedEndings
 ) {
 }

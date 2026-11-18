@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -128,6 +128,7 @@ class TicketTypeRuleVersionJdbcIntegrationTests {
     @AfterEach
     void cleanup() {
         PassPoolFixtures.deleteByProject(jdbc, project);
+        jdbc.update("DELETE FROM comprehensive_service_fee_configs WHERE project_id = ?", project);
         for (String order : orders) {
             AppendOnlyTestBypass.update(jdbc, "DELETE FROM settlement_transactions WHERE order_id = ?", order);
             jdbc.update("DELETE FROM ticket_credentials WHERE entitlement_id IN (SELECT id FROM issued_entitlements WHERE order_id = ?)", order);
@@ -301,6 +302,9 @@ class TicketTypeRuleVersionJdbcIntegrationTests {
 
         String single = createTicketType("e2", 5000L, 100, bar);
         bind(single, template(bar, "单店入场", "entry", null), 5000L, null).andExpect(status().isOk());
+        // 第十八批 AW 段 294-R1（BSM:755）：单店票发布前本项目本酒吧须有已转正的综合服务费。
+        jdbc.update("INSERT INTO comprehensive_service_fee_configs (id, project_id, merchant_id, fee_bps, status, is_draft)"
+                + " VALUES (?, ?, ?, 500, 'active', FALSE)", "csfc_" + suffix, project, bar);
         publish(single, null).andExpect(status().isOk()).andExpect(jsonPath("$.data.status").value("published"));
         assertThat(JsonPath.<Integer>read(versions(single), "$.data.items.length()")).isZero();
     }

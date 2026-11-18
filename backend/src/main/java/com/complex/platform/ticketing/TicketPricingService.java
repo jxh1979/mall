@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.ticketing.dto.StatusChangeRequest;
@@ -23,7 +23,8 @@ public class TicketPricingService {
 
     private static final BigDecimal MAX_DISCOUNT_RATE = BigDecimal.valueOf(100);
     private static final Set<String> SALES_CHANNELS = Set.of("admin", "kiosk", "miniapp", "app", "web", "channel");
-    private static final Set<String> DYNAMIC_ADJUSTMENT_TYPES = Set.of("percent_delta", "fixed_delta");
+    // 第十八批 AW 段 338-R2（BSM:782「动态价都在对应基础价上按打折/减免/加价/固定额派生」）：fixed_price＝按固定价（同派生价 fixed_price 口径）。
+    private static final Set<String> DYNAMIC_ADJUSTMENT_TYPES = Set.of("percent_delta", "fixed_delta", "fixed_price");
 
     private final TicketingRepository repository;
     // 第十八批 AT 段 298-R1：节假日日历（经营参数页维护，BSM:1832），到访日在日历内取节假日价。
@@ -50,6 +51,9 @@ public class TicketPricingService {
         }
         if ("fixed_delta".equals(adjustmentType) && actual.adjustmentAmountCent() == null) {
             throw ApiException.badRequest("VALIDATION_FAILED", "adjustment_amount_cent is required");
+        }
+        if ("fixed_price".equals(adjustmentType) && (actual.adjustmentAmountCent() == null || actual.adjustmentAmountCent() < 0L)) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "按固定价须填固定价（不能为负数）");
         }
         validateNonNegative(actual.minPriceCent(), "min_price_cent");
         validateNonNegative(actual.maxPriceCent(), "max_price_cent");
@@ -124,6 +128,7 @@ public class TicketPricingService {
                 context,
                 Set.of("draft", "published")
         );
+        // 18AW 收尾复核修正（PGM:287「展示给用户的一切文字……必须全部为中文，不得出现任何英文」）：试算说明在后台结果区上屏，用中文。
         if (matched == null) {
             return new TicketDynamicPricingSimulationResponse(
                     ticketType.id(),
@@ -133,7 +138,7 @@ public class TicketPricingService {
                     0L,
                     basePrice,
                     null,
-                    "no matching dynamic pricing rule"
+                    "未命中动态定价规则"
             );
         }
         long rawAdjustment = dynamicAdjustment(basePrice, matched);
@@ -146,7 +151,7 @@ public class TicketPricingService {
                 finalPrice - basePrice,
                 finalPrice,
                 matched.id(),
-                "matched " + matched.ruleName()
+                "命中规则：" + matched.ruleName()
         );
     }
 
@@ -183,6 +188,10 @@ public class TicketPricingService {
                 throw ApiException.badRequest("VALIDATION_FAILED", "必须填写固定价格");
             }
             return fixed;
+        }
+        if ("amount_delta".equals(priceRule.priceMode())) {
+            // 第十八批 AW 段 338-R1（BSM:782「按打折/减免/加价/固定额派生」）：对应日基础价加减金额（负数为减免、正数为加价），最低 0 元。
+            return Math.max(0L, base + (priceRule.adjustmentAmountCent() == null ? 0L : priceRule.adjustmentAmountCent()));
         }
         BigDecimal discountRate = priceRule.discountRate() == null ? MAX_DISCOUNT_RATE : priceRule.discountRate();
         return BigDecimal.valueOf(base)
@@ -313,6 +322,10 @@ public class TicketPricingService {
     }
 
     private long dynamicAdjustment(long basePrice, TicketDynamicPricingRuleRecord rule) {
+        if ("fixed_price".equals(rule.adjustmentType())) {
+            // 338-R2：按固定价——最终价即该固定价（调用方再按最低价、最高价夹值）。
+            return (rule.adjustmentAmountCent() == null ? basePrice : rule.adjustmentAmountCent()) - basePrice;
+        }
         if ("fixed_delta".equals(rule.adjustmentType())) {
             return rule.adjustmentAmountCent() == null ? 0L : rule.adjustmentAmountCent();
         }

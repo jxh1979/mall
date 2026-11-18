@@ -1,6 +1,6 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.09
+// 文件版本：V0.10
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.analytics.OperatingParamsService;
@@ -71,6 +71,7 @@ public class SettlementConfigWriteService {
     private final SupervisorReviewRepository reviewRepository;
     private final AuthorizationService auth;
     private final ObjectMapper json;
+    private final InternalPriceScope internalPriceScope;
 
     public SettlementConfigWriteService(JdbcSettlementConfigWriteRepository writeRepository,
                                         RevenueStreamAttributionRepository attributionRepository,
@@ -80,7 +81,8 @@ public class SettlementConfigWriteService {
                                         SupervisorReviewService reviews,
                                         SupervisorReviewRepository reviewRepository,
                                         AuthorizationService auth,
-                                        ObjectMapper json) {
+                                        ObjectMapper json,
+                                        InternalPriceScope internalPriceScope) {
         this.writeRepository = writeRepository;
         this.attributionRepository = attributionRepository;
         this.operatingParamsService = operatingParamsService;
@@ -90,6 +92,7 @@ public class SettlementConfigWriteService {
         this.reviewRepository = reviewRepository;
         this.auth = auth;
         this.json = json;
+        this.internalPriceScope = internalPriceScope;
     }
 
     // ================= §2 落草案(audit business_id 用仓储 RETURNING 的真实落地 id)=================
@@ -192,13 +195,20 @@ public class SettlementConfigWriteService {
     public void saveComboDiscount(ComboDiscountRequest request, String actorId) {
         ComboDiscountRequest req = requireRequest(request);
         String idem = requireText(req.idempotencyKey(), "idempotency_key");
-        rejectSentinel(req.projectId(), "project_id");
-        String bearer = requireOneOf(req.discountBearer(), "discount_bearer",
-                "platform_absorb", "merchant_absorb", "split_by_ratio");
-        int split = requireBps(req.splitPlatformBps(), "split_platform_bps");
-        // V369 凑整允许误差(分):留空=沿用出厂 500 分;非空必须 ≥0(对齐 chk_tcdc_rounding_tolerance)。
-        long tolerance = req.roundingToleranceCent() == null ? 500L : req.roundingToleranceCent();
-        requireNonNegative(tolerance, "rounding_tolerance_cent");
+        // 第十八批 AW 段 339-R1（BSM:754「允许误差可配（业务参数，全平台统一可配，出厂默认 5 元，须同时配置上下限）」）：
+        //   只配全平台一行；误差与上下限三者必填、0 ≤ 下限 ≤ 误差 ≤ 上限（单位：分）。293-R1 起不再有套票折扣归属。
+        if (trimToNull(req.projectId()) != null) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "通票凑整参数全平台统一配置，不按项目");
+        }
+        Long tolerance = req.roundingToleranceCent();
+        Long toleranceMin = req.roundingToleranceMinCent();
+        Long toleranceMax = req.roundingToleranceMaxCent();
+        if (tolerance == null || toleranceMin == null || toleranceMax == null
+                || toleranceMin < 0 || toleranceMin > tolerance || tolerance > toleranceMax) {
+            throw ApiException.badRequest("VALIDATION_FAILED",
+                    "凑整允许误差须同时填写上下限，且 0 ≤ 下限 ≤ 允许误差 ≤ 上限（rounding_tolerance_cent、rounding_tolerance_min_cent、"
+                            + "rounding_tolerance_max_cent，单位：分）");
+        }
         // 第十八批 AT 段 292-R1（BSM:754「尾数落在后台配置的允许尾数集合内——业务参数，全平台统一可配，出厂默认 8、9、0」）：
         // 留空＝出厂 8、9、0；每项须为 0～9、至少一个；去重升序存成数字串。取值只认全平台默认行。
         String endings = com.complex.platform.ticketing.ComboPriceToleranceConfigPort.FACTORY_ALLOWED_ENDINGS;
@@ -215,13 +225,14 @@ public class SettlementConfigWriteService {
             }
             endings = digits.stream().map(String::valueOf).collect(java.util.stream.Collectors.joining());
         }
-        String scopeKey = defaultScope(req.projectId());
+        String scopeKey = defaultScope(null);
         String landedId = writeRepository.upsertComboDiscountDraft(draftId("tcdc_d_", scopeKey, idem),
-                req.projectId(), bearer, split, tolerance, endings, actorId);
+                tolerance, toleranceMin, toleranceMax, endings, actorId);
         audit("settlement.config.ticket_combo_discount_configs.updated",
                 "ticket_combo_discount_configs", landedId, idem,
-                Map.of("project_scope", scopeKey, "discount_bearer", bearer, "split_platform_bps", String.valueOf(split),
-                        "rounding_tolerance_cent", String.valueOf(tolerance), "rounding_allowed_endings", endings));
+                Map.of("project_scope", scopeKey, "rounding_tolerance_cent", String.valueOf(tolerance),
+                        "rounding_tolerance_min_cent", String.valueOf(toleranceMin),
+                        "rounding_tolerance_max_cent", String.valueOf(toleranceMax), "rounding_allowed_endings", endings));
     }
 
     public void saveChannelFee(ChannelFeeRequest request, String actorId) {
@@ -488,6 +499,16 @@ public class SettlementConfigWriteService {
      * 价基整体划给 B 家,引用它的对象一夜之间全部跨商户 —— 要换提供方,请新建条目重新引用。
      */
     public String saveInternalPriceItem(InternalPriceItemRequest request, String actorId) {
+        return saveInternalPriceItem(request, actorId, false);
+    }
+
+    /**
+     * 第十八批 AW 段 291-R2（BSM:576「持授权 U 盘密钥的最高权限本人发起的操作，不需要经过任何审批」）：提交人范围由
+     * {@link InternalPriceScope#requireSubmitter} 前置校验；最高权限本人提交即生效——落草案后同一事务转正，0 价有券引用守卫照旧，
+     * 只跳过他人复核，审计记 master_self_initiated。
+     */
+    @Transactional
+    public String saveInternalPriceItem(InternalPriceItemRequest request, String actorId, boolean masterSelfInitiated) {
         InternalPriceItemRequest req = requireRequest(request);
         String idem = requireText(req.idempotencyKey(), "idempotency_key");
         // HP-P01：提供方可为经营主体（城市项目公司经营停车，BSM「内部结算价目录」「实际提供商品或服务的主体提交价格」），与商户二选一。
@@ -525,9 +546,13 @@ public class SettlementConfigWriteService {
         }
         String landedId = writeRepository.upsertInternalPriceItemDraft(
                 draftId("ipc_d_", itemCode, idem), itemCode, merchantId, providerEntityId, category, itemName, price, actorId);
-        audit("settlement.config.internal_price_catalog.updated", "internal_price_catalog", landedId, idem,
+        auditEventService.recordSuccess("settlement.config.internal_price_catalog.updated", InternalPriceScope.SUBMIT,
+                "internal_price_catalog", landedId, null, idem,
                 Map.of("item_code", itemCode, merchantId != null ? "merchant_id" : "provider_entity_id", provider, "category", category,
                         "item_name", itemName, "price_cent", String.valueOf(price)));
+        if (masterSelfInitiated) {
+            activateCatalogDraft(writeRepository.findCatalogDraftById(landedId), actorId, true);
+        }
         return itemCode;
     }
 
@@ -548,14 +573,27 @@ public class SettlementConfigWriteService {
         if (draft == null) {
             throw ApiException.badRequest("DRAFT_NOT_ACTIVATABLE", "草案不存在或非草案态,无法转正");
         }
+        // 第十八批 AW 段 291-R1（ENUM:54「对应域主管公司审批」）：审批人须属该条目的域主管公司（提供主体自己提供的由该主体内部差人审批）。
+        internalPriceScope.requireApprover(draft, actorId);
+        activateCatalogDraft(draft, actorId, false);
+    }
+
+    /** 目录草案转正主体：0 价有券引用守卫 → 转正 + 快照传播 → 审计（复核转正与最高权限本人提交即生效共用）。 */
+    private void activateCatalogDraft(JdbcSettlementConfigWriteRepository.CatalogEntryRow draft, String actorId,
+                                      boolean masterSelfInitiated) {
         if (draft.priceCent() == 0 && writeRepository.countVoucherRefs(draft.itemCode()) > 0) {
             throw ApiException.badRequest("CATALOG_PRICE_ZERO_VOUCHER_REF",
                     "该条目已被实物券引用,内部结算价不可转正为 0(券口径要求内部价 >0);请先解除券引用或改为正价");
         }
         // 转正 + 快照传播在仓储侧同一事务(activateInternalPriceItemDraft @Transactional,经代理调用)。
         requireActivated(writeRepository.activateInternalPriceItemDraft(
-                id, draft.itemCode(), draft.priceCent(), actorId, Instant.now()));
-        auditActivated("internal_price_catalog", draft.itemCode());
+                draft.id(), draft.itemCode(), draft.priceCent(), actorId, Instant.now()));
+        if (masterSelfInitiated) {
+            auditEventService.recordSuccess("settlement.config.draft.activated", PERM, "internal_price_catalog", draft.itemCode(),
+                    null, null, Map.of("config_group", "internal_price_catalog", "master_self_initiated", true));
+        } else {
+            auditActivated("internal_price_catalog", draft.itemCode());
+        }
     }
 
     // ================= §3 复核转正(差人守卫 + Path 2 软替换)=================

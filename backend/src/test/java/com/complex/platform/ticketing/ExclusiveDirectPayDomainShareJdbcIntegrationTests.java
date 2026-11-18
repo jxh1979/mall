@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -330,6 +330,40 @@ class ExclusiveDirectPayDomainShareJdbcIntegrationTests {
                 + " WHERE order_id = ? AND transaction_type = 'unverified_expired'", second);
         assertThat(num(expired, "channel_fee_cent")).as("乙票月结已按首笔核销扣过固定额，到期不再扣").isZero();
         assertThat(num(expired, "channel_fee_residual_cent")).isZero();
+    }
+
+    @Test
+    void fixedAmountSalesFeeIsTakenAgainWhenTheOnlyEntryIsReversedAndTheGuestEntersAgain() throws Exception {
+        // 第十八批 AW 段 289-R1（ENUM:51「任何票种经第三方渠道售出时，销售渠道费一律先从整单扣除且只扣一次」）：每张固定 300 的单店票，
+        // 酒吧员工检票入场后平台撤销这次核销，客人再入场——这张票仍有有效核销，月结照扣一道 300。
+        jdbc.update("UPDATE channel_fee_configs SET fee_bps = 0, fixed_amount_cent = 300 WHERE id = ?", "cfc_c176s_" + suffix);
+        publishSingleBarTicket(1);
+        channelMaps();
+        String order = reflowSingleBar("d");
+        reverse(verify(code(order, barEntryTpl), barStaff, bar, barDevice));
+        verify(code(order, barEntryTpl), barStaff, bar, barDevice);
+        moveToMidMonthKeepingOrder(order);
+
+        Map<String, Object> item = exclusiveItem(settlement.settleMonth(project, MONTH), "exclusive_full");
+        assertThat(num(item, "single_bar_channel_fee_cent")).as("撤销后再入场，固定额照扣一道").isEqualTo(300L);
+    }
+
+    @Test
+    void fixedAmountSalesFeeIsTakenAtExpiryWhenTheOnlyEntryWasReversed() throws Exception {
+        // 289-R1：入场被撤销、客人此后没再来，票到期——这张票没有有效核销，到期作业照扣固定额 300。
+        jdbc.update("UPDATE channel_fee_configs SET fee_bps = 0, fixed_amount_cent = 300 WHERE id = ?", "cfc_c176s_" + suffix);
+        publishSingleBarTicket(1);
+        channelMaps();
+        String order = reflowSingleBar("e");
+        reverse(verify(code(order, barEntryTpl), barStaff, bar, barDevice));
+        jdbc.update("UPDATE issued_entitlements SET valid_to = ? WHERE order_id = ?",
+                Timestamp.from(Instant.now().minusSeconds(2L * 86_400)), order);
+        expiryJob.expireUnverified(Instant.now());
+
+        Map<String, Object> expired = jdbc.queryForMap("SELECT channel_fee_cent, channel_fee_residual_cent FROM settlement_transactions"
+                + " WHERE order_id = ? AND transaction_type = 'unverified_expired'", order);
+        assertThat(num(expired, "channel_fee_cent") + num(expired, "channel_fee_residual_cent"))
+                .as("唯一一次核销已撤销，到期扣固定额").isEqualTo(300L);
     }
 
     @Test
@@ -776,6 +810,22 @@ class ExclusiveDirectPayDomainShareJdbcIntegrationTests {
         settledConsumer.onSettlementSettled(new SettlementSettledEvent("vf_c176amu_" + order, at, (String) ride.get("id"), order,
                 (String) ride.get("ticket_type_id"), "amusement", park, 1, 1, 1, num(ride, "allocated_revenue_cent"),
                 at.plusSeconds(86_400), null, null, null, project, (String) ride.get("parent_ticket_id")));
+    }
+
+    /** 平台管理员按后台真实请求撤销核销。 */
+    private void reverse(String verification) throws Exception {
+        mockMvc.perform(post("/api/v1/ticketing/verifications/" + verification + "/reverse").with(session(admin, "platform_admin", "org_1", null))
+                        .contentType(MediaType.APPLICATION_JSON).content("""
+                                {"idempotency_key": "c289-rev-%s", "reason": "扫错票撤销"}
+                                """.formatted(UUID.randomUUID())))
+                .andExpect(status().isOk());
+    }
+
+    /** 289-R1：本单结算事实移到月中、保持各行先后（撤销与再核销的先后决定票数）。 */
+    private void moveToMidMonthKeepingOrder(String order) {
+        AppendOnlyTestBypass.update(jdbc, "UPDATE settlement_transactions SET business_at = CAST(? AS timestamptz)"
+                + " + (created_at - (SELECT min(created_at) FROM settlement_transactions WHERE order_id = ?)) WHERE order_id = ?",
+                Timestamp.from(MID_MONTH), order, order);
     }
 
     private void moveToMidMonth(String order) {

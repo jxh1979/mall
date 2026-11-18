@@ -1,6 +1,6 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import java.time.Instant;
 
@@ -33,7 +33,7 @@ public record SettlementTransactionRecord(
         // AUD-012 结算状态机重构：业务发生时刻（核销/冲正/到期），account 按此落月窗（取代首插 created_at）。
         Instant businessAt,
         // D6 套票折扣额增量（分）：本笔核销的 满额−净额（核销行 >=0；冲正行取原行反 <=0；到期归项目=0）。
-        //   下传 append-only 账本，结算引擎按 discount_bearer 归属应用。守 V331 资金守恒 CHECK（配对天然净 0）。
+        //   下传 append-only 账本留痕；第十八批 AW 段 293-R1 起折扣按份额由各域承担、引擎不再据它加回。守 V331 资金守恒 CHECK（配对天然净 0）。
         long discountAmountCent,
         // P6 综合服务费实收(分):核销行=每笔增量封顶后实收(>=0);冲正行=取原 ST-VS 行 fee 之反(<=0);无专属/无费率=0。
         //   settleMonth 线性求和替代月末重算 → 固定额/封顶/比例三模式跨月红冲全守恒(每笔实收精确对冲)。

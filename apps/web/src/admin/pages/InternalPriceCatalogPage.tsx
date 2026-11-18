@@ -1,4 +1,4 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
@@ -8,12 +8,14 @@ import type { AdminPageProps } from "../types";
 // 内部结算价目录（内部结算 SKU 目录，ADM-STL-003）—— 批10/E（V379/V380），业务 HTML「内部结算价目录」节。
 // 平台所有内部结算价集中在这里维护，是成本侧唯一真源、唯一可改价处：
 //   条目硬绑提供商家（业态随商家带出）+ 归入品类，商家/业态/品类三维筛选；
-//   新建/改价先落草案 → 具备高敏权限的他人复核转正 → 只对之后的核销/结算生效，转正同时同步四处业务快照；
+//   新建/改价先落草案 → 对应域主管公司的他人复核转正 → 只对之后的核销/结算生效，转正同时同步四处业务快照；
+//   第十八批 AW 段 291-R2（ENUM:54「实际提供商品或服务的主体提交」）：提交单列 settlement.internal_price.submit，转正、下线仍为结算配置维护码；
 //   核销/结算发生时当时价固化到流水，此后改价不影响已发生的账；条目可下线归档，不影响历史引用。
 // 敏感：内部结算价仅授权后台人员可见（读端权限闸在后端，无权限直接 403）。
 // HP-P01：提供方可为经营主体（城市项目公司经营停车，品类 parking_credit「停车抵免（每小时）」），提供商家与提供主体二选一。
 const BASE = "/api/v1/settlement/config";
 const MANAGE = ["settlement.config.manage"];
+const SUBMIT = ["settlement.internal_price.submit"];
 
 type CatalogRow = {
   id: string;
@@ -190,7 +192,7 @@ export function InternalPriceCatalogPage({ api, setActionResult, setGlobalError,
       <h3>新建条目 / 对既有条目改价（先落草案）</h3>
       <p style={{ color: "var(--adm-text-3)", fontSize: 13 }}>
         条目编码留空＝新建（保存后返回编码，业务页「就地新建」拿它建立引用）；填既有编码＝对该条目改价/改名/改类。
-        草案不生效：须由另一位具备高敏权限的人在下方草案队列「复核转正」，才对之后的核销/结算生效，同时系统把四处业务快照同步为新价。绑定商户不可更改——要换提供方请新建条目。
+        草案不生效：须由对应域主管公司的另一位人员在下方草案队列「复核转正」，才对之后的核销/结算生效，同时系统把四处业务快照同步为新价。绑定商户不可更改——要换提供方请新建条目。
       </p>
       <div className="admin-inline-form" data-testid="ipc-create-form">
         <label><span>条目编码（留空=新建）</span><input data-testid="ipc-form-code" value={form.itemCode} onChange={(e) => setForm({ ...form, itemCode: e.target.value })} /></label>
@@ -199,7 +201,7 @@ export function InternalPriceCatalogPage({ api, setActionResult, setGlobalError,
         <label><span>品类</span><input data-testid="ipc-form-category" value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} placeholder="如 spirit / combo / dining" /></label>
         <label><span>条目名称</span><input data-testid="ipc-form-name" value={form.itemName} onChange={(e) => setForm({ ...form, itemName: e.target.value })} /></label>
         <label><span>内部结算价（元）</span><input data-testid="ipc-form-price" inputMode="decimal" value={form.priceYuan} onChange={(e) => setForm({ ...form, priceYuan: e.target.value })} placeholder="0=商户让利型" /></label>
-        <PermissionButton permissionsState={effectivePermissions} permissions={MANAGE} data-testid="ipc-form-submit" disabled={busy === "save"} onClick={() => void submitDraft()}>
+        <PermissionButton permissionsState={effectivePermissions} permissions={SUBMIT} data-testid="ipc-form-submit" disabled={busy === "save"} onClick={() => void submitDraft()}>
           保存草案
         </PermissionButton>
       </div>
@@ -207,7 +209,7 @@ export function InternalPriceCatalogPage({ api, setActionResult, setGlobalError,
 
       <AdminDataState loading={loading} error={error} onRetry={() => void load()}>
         <h3>草案复核队列（{drafts.length}）</h3>
-        <p style={{ color: "var(--adm-text-3)", fontSize: 13 }}>草案本身不生效；不能自行转正自己起草的改动，须另一位具备高敏权限的人复核批准。</p>
+        <p style={{ color: "var(--adm-text-3)", fontSize: 13 }}>草案本身不生效；不能自行转正自己起草的改动，须对应域主管公司的另一位人员复核批准。</p>
         <table className="admin-table" data-testid="ipc-draft-table">
           <thead><tr><th>条目编码</th><th>提供商家</th><th>业态</th><th>品类</th><th>名称</th><th>草案价（元）</th><th>起草人</th><th>操作</th></tr></thead>
           <tbody>

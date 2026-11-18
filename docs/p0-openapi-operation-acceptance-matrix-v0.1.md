@@ -1,4 +1,4 @@
-# P0 OpenAPI Operation 验收矩阵 V0.81
+# P0 OpenAPI Operation 验收矩阵 V0.82
 
 ## 1. 文档定位
 
@@ -17,7 +17,7 @@
 
 ## 3. Operation 清单
 
-> 当前 `docs/openapi/openapi-p0.json` 共 1397 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
+> 当前 `docs/openapi/openapi-p0.json` 共 1399 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
 
 | 标签 | 方法 | 路径 | operationId | 摘要 | 请求体 | 权限 | 认证上下文 | 数据范围 | 终端/设备能力/调用通道 | 幂等 | 成功事件 | 失败事件 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -403,6 +403,8 @@
 | ticketing | `POST` | `/api/v1/ticketing/ticket-types/{id}/publish` | `publishTicketType` | 发布票种 | `TicketTypePublishRequest` | `ticket.product.manage` | `staff-token` | `project` | web | 是 | `ticket_price.published` | `ticket_price.publish_failed` |
 | ticketing | `GET` | `/api/v1/ticketing/ticket-types/{id}/rule-versions` | `listTicketTypeRuleVersions` | 票种规则版本（跨域组合通票） | `-` | `ticket.product.view` | `staff-token` | `project` | web | 否 | `ticket_product.viewed` | `ticket_product.view_failed` |
 | ticketing | `POST` | `/api/v1/ticketing/ticket-types/{id}/rule-versions/withdraw` | `withdrawTicketTypeRuleVersion` | 撤回票种规则草稿版或待审提交（跨域组合通票） | `object` | `ticket.product.manage` | `staff-token` | `project` | web | 是 | `ticket_type.rule_version.withdrawn` | `ticket_type.rule_version.withdraw_failed` |
+| ticketing | `POST` | `/api/v1/ticketing/ticket-types/{id}/refundable-enable-requests` | `requestTicketRefundableEnable` | 申请开启票种可退（逐个票种、经审批） | `object` | `ticket.product.manage` | `staff-token` | `project` | web | 是 | `ticket_type.refundable_enable.submitted` | `ticket_type.refundable_enable.submit_failed` |
+| ticketing | `PUT` | `/api/v1/ticketing/ticket-types/{id}/sale-settings` | `updateTicketTypeSaleSettings` | 修改票种售卖设置（暂停售卖、开售与停售时间） | `object` | `ticket.product.manage` | `staff-token` | `project` | web | 是 | `ticket_product.sale_settings_changed` | `ticket_product.sale_settings_change_failed` |
 | ticketing | `POST` | `/api/v1/ticketing/ticket-types/{id}/archive` | `archiveTicketType` | 存档票种 | `object` | `ticket.product.manage` | `staff-token` | `project` | web | 是 | `ticket_product.archived` | `ticket_product.archive_failed` |
 | ticketing | `POST` | `/api/v1/ticketing/ticket-types/{id}/unarchive` | `unarchiveTicketType` | 取消存档票种 | `object` | `ticket.product.manage` | `staff-token` | `project` | web | 是 | `ticket_product.unarchived` | `ticket_product.unarchive_failed` |
 | ticketing | `POST` | `/api/v1/ticketing/ticket-types/{id}/delete-request` | `requestDeleteTicketType` | 发起票种删除申请 | `object` | `ticket.product.manage` | `staff-token` | `project` | web | 是 | `ticket_product.delete_requested` | `ticket_product.delete_request_failed` |
@@ -1126,7 +1128,7 @@
 | settlement | `POST` | `/api/v1/settlement/config/distribution-method` | `settlementConfigUpsertDistributionMethod` | 维护通票分配方式(草案) | `object` | `settlement.config.manage` | `staff-token` | `platform` | web | 是 | `settlement.config.ticket_distribution_configs.updated` | `settlement.config.ticket_distribution_configs.update_failed` |
 | settlement | `POST` | `/api/v1/settlement/config/merchant-rate` | `settlementConfigUpsertMerchantRate` | 维护每客单价/固定额(草案) | `object` | `settlement.config.manage` | `staff-token` | `platform` | web | 是 | `settlement.config.ticket_distribution_merchant_rates.updated` | `settlement.config.ticket_distribution_merchant_rates.update_failed` |
 | settlement | `POST` | `/api/v1/settlement/config/comprehensive-service-fee` | `settlementConfigUpsertComprehensiveServiceFee` | 维护门票综合服务费(草案) | `object` | `settlement.config.manage` | `staff-token` | `platform` | web | 是 | `settlement.config.comprehensive_service_fee_configs.updated` | `settlement.config.comprehensive_service_fee_configs.update_failed` |
-| settlement | `POST` | `/api/v1/settlement/config/combo-discount` | `settlementConfigUpsertComboDiscount` | 维护套票折扣归属(草案) | `object` | `settlement.config.manage` | `staff-token` | `platform` | web | 是 | `settlement.config.ticket_combo_discount_configs.updated` | `settlement.config.ticket_combo_discount_configs.update_failed` |
+| settlement | `POST` | `/api/v1/settlement/config/combo-discount` | `settlementConfigUpsertComboDiscount` | 维护通票凑整参数（全平台，草案） | `object` | `settlement.config.manage` | `staff-token` | `platform` | web | 是 | `settlement.config.ticket_combo_discount_configs.updated` | `settlement.config.ticket_combo_discount_configs.update_failed` |
 | settlement | `POST` | `/api/v1/settlement/config/channel-fee` | `settlementConfigUpsertChannelFee` | 维护渠道费用(通路费/销售渠道费,草案) | `object` | `settlement.config.manage` | `staff-token` | `platform` | web | 是 | `settlement.config.channel_fee_configs.updated` | `settlement.config.channel_fee_configs.update_failed` |
 | settlement | `POST` | `/api/v1/settlement/config/commission-rate` | `settlementConfigUpsertCommissionRate` | 维护卡座销售提成费率(草案) | `object` | `settlement.config.manage` | `staff-token` | `platform` | web | 是 | `settlement.config.bar_commission_rate_configs.updated` | `settlement.config.bar_commission_rate_configs.update_failed` |
 | settlement | `POST` | `/api/v1/settlement/config/points-accrual-rate` | `settlementConfigUpsertPointsAccrualRate` | 维护积分累计率(草案) | `object` | `settlement.config.manage` | `staff-token` | `platform` | web | 是 | `settlement.config.points_accrual_rate_configs.updated` | `settlement.config.points_accrual_rate_configs.update_failed` |
@@ -1170,7 +1172,7 @@
 | settlement | `POST` | `/api/v1/settlement/internal-pay-days/rules/{rule_id}/decision` | `decideInternalPayDayRule` | 审批付账日配置(提交人不得自审) | `object` | `settlement.config.manage` | `staff-token` | `platform` | web | 是 | `settlement.internal_pay_day_rule.approved` | `settlement.internal_pay_day_rule.decision_failed` |
 | settlement | `GET` | `/api/v1/settlement/internal-pay-days/objection-period` | `getSettlementObjectionPeriod` | 查非积分商户账单异议期(按项目) | `-` | `settlement.config.view` | `staff-token` | `project` | web | 否 | `not_applicable` | `not_applicable` |
 | settlement | `POST` | `/api/v1/settlement/internal-pay-days/objection-period` | `saveSettlementObjectionPeriod` | 配置非积分商户账单异议期及上下限(按项目) | `object` | `settlement.config.manage` | `staff-token` | `project` | web | 是 | `settlement.objection_period.configured` | `settlement.objection_period.config_failed` |
-| settlement | `POST` | `/api/v1/settlement/config/internal-price-item` | `settlementConfigUpsertInternalPriceItem` | 维护内部结算SKU目录条目(草案) | `object` | `settlement.config.manage` | `staff-token` | `platform` | web | 是 | `settlement.config.internal_price_catalog.updated` | `settlement.config.internal_price_catalog.update_failed` |
+| settlement | `POST` | `/api/v1/settlement/config/internal-price-item` | `settlementConfigUpsertInternalPriceItem` | 维护内部结算SKU目录条目(草案) | `object` | `settlement.internal_price.submit` | `staff-token` | `provider-self` | web | 是 | `settlement.config.internal_price_catalog.updated` | `settlement.config.internal_price_catalog.update_failed` |
 | settlement | `GET` | `/api/v1/settlement/config/internal-price-items` | `settlementConfigListInternalPriceItems` | 内部结算SKU目录三维筛选列表 | `-` | `settlement.config.view` | `staff-token` | `platform` | web | 否 | `not_applicable` | `not_applicable` |
 | integration | `GET` | `/api/v1/integration/channel-store-maps` | `listIntegrationChannelStoreMaps` | 查询渠道门店映射 | `-` | `integration.channel_store_map.view` | `staff-token` | `project-merchant` | web | 否 | `integration.channel_store_map.viewed` | `integration.channel_store_map.view_failed` |
 | integration | `POST` | `/api/v1/integration/channel-store-maps` | `saveIntegrationChannelStoreMap` | 登记/改绑渠道门店映射 | `object` | `integration.channel_store_map.manage` | `staff-token` | `platform` | web | 是 | `integration.channel_store_map.saved` | `integration.channel_store_map.save_failed` |

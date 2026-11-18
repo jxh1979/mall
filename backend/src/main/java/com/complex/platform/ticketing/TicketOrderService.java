@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.11
+// 文件版本：V0.12
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -172,8 +172,15 @@ public class TicketOrderService {
             throw ApiException.conflict("TICKET_TYPE_NOT_SELLABLE", "该票种已下线（存档/待删除），不可下单");
         }
         // AUD-015：只有已发布（=过了权益绑定发布闸）的票种可下单——draft/未发布票直传 id 也拒，杜绝收钱不出票。
-        if (!"published".equals(ticketType.status())) {
-            throw ApiException.conflict("TICKET_TYPE_NOT_SELLABLE", "该票种未发布，不可下单");
+        // 第十八批 AW 段 299-R1（ENUM:30）：按派生的票务策略状态判，暂停售卖、待启用、已结束同样拒新下单（已建的待付订单不动）。
+        String saleStatus = ticketType.saleStatus(Instant.now());
+        if (!"on_sale".equals(saleStatus)) {
+            throw ApiException.conflict("TICKET_TYPE_NOT_SELLABLE", switch (saleStatus) {
+                case "paused" -> "该票种暂停售卖，不可下单";
+                case "pending_activation" -> "该票种尚未开售，不可下单";
+                case "ended" -> "该票种售卖已结束，不可下单";
+                default -> "该票种未发布，不可下单";
+            });
         }
         // AUD-076 单店票挂酒吧：校验酒吧归属并算出快照 bar_id（服务端真源），置于库存扣减前——拒单零副作用。
         String orderBarId = resolveOrderBarId(ticketType, actual.barId(), actual.salesChannel());

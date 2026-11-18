@@ -1,10 +1,10 @@
-# 游乐设施运营系统开发设计文档 V0.18
+# 游乐设施运营系统开发设计文档 V0.19
 
 > **口径修订（2026-08-06 R10）：「人工放行」已废止**——ENUM「核销记录状态」条 明确「**系统不提供人工放行：核销要么成功、要么拒绝或失败，任何岗位、任何权限都不能以人工方式让一笔不满足规则的核销通过**」（DEC-CFG-2026-08-03-12 / DEC-R6-08）。本文原有的「人工放行」流程（§6.5）、表 `AmusementManualOverride`、状态取值 `manual_override`、端点 `/api/v1/amusement/manual-overrides`、权限点 `amusement.verification.override`、事件 `amusement.verification_overridden`、指标与页面入口**一律废止**，废止处就地标注；已实现的表、端点与取值待代码轮下线，期间不得新增调用、不得新写入。
 
 > **口径修订（2026-08-06 R10）：「场次容量／三维度容量」已废止**——BSM「容量控制」条 明确「**只按单个游乐项目的实时在玩人数控制容量，不再按场次/时段或点位/设备另设容量；排队人数不占用容量**」（DEC-R5-2026-08-04-04；R8 用户裁决 D-02）。本文原「按项目 + 场次/时段 + 点位/设备三维度取最小可放行余量」的容量判定口径**整体废止**，一律改为「**项目容量（实时在玩人数）**」单维；双阈值不变（运营容量软上限告警放行、安全容量硬上限阻断并自动停运）。`amusement_capacity_config`、`amusement_capacity_snapshot` 的场次维与点位/设备维字段待代码轮下线，期间不得据以新增受控维度。
 
-> 版本：V0.18 ｜ 最后更新：2026-11-11 ｜ 迁移证据：保留历史迁移记录；TK-17/18 新增 V483/V484/V487 ｜ 状态：现行；本批同步单项目容量、营业日配置与实际结束实现，未完成项仍单列。
+> 版本：V0.19 ｜ 最后更新：2026-11-18 ｜ 迁移证据：保留历史迁移记录；TK-17/18 新增 V483/V484/V487 ｜ 状态：现行；本批同步单项目容量、营业日配置与实际结束实现，未完成项仍单列。
 > 新功能承接见 docs/v099-v124-feature-implementation-and-acceptance-spec-v0.1.md
 > <!-- 文档goalP3(2026-06-20)：补版本/日期/覆盖迁移头，未改正文 -->
 >
@@ -1207,7 +1207,7 @@ com.complex.amusement
 
 - **表**：`amusement_compensation_policies`（project_id PK、validity_days、min_days、max_days；出厂行 `__global__` 365 天；CHECK 1 ≤ min ≤ value ≤ max ≤ 3650，V461）；`amusement_fault_compensation_batches`（fault_id、status pending_confirmation|issued、reason、bearer_company_id＝决定发放补偿的域主管公司法律主体、validity_days、window_from/to＝故障生效→解除（未解除取发起时点）、valid_until、发起/确认的人与岗位、计数；部分唯一索引同故障只一个待确认批次）；`amusement_fault_compensation_items`（entitlement_id＝原票受影响游乐权益行即一个人份、order/ticket_type/parent_ticket/slot/customer、kind extend|full_reissue、share_count、original_session_id、original_entry_verification_id、original_valid_to、status pending|issued|used、new_valid_to、compensation_entitlement_ids、fulfilled_verification_id/at/settlement_price_cent；唯一键 (fault_id, entitlement_id)）；`issued_entitlements.compensation_item_id`。 **业务约束**：有效期允许范围为 1～3650 天、默认一年；TK-12 已由 V461、服务校验和页面整数校验共同保证范围，1 与3650可配置，0／3651／非整数不能提交有效配置。
 - **既有候选快照实现（发起时）**：① 已入场核销受影响：`amusement_verifications`（entry、success）所在场次与故障时间窗相交、故障前未出场，取游乐类权益行 → full_reissue；② 未核销有效期内：游乐类权益 active、剩余次数>0、故障生效时点在 [valid_from, valid_to] → extend。两者均排除补偿补发行与同故障已补偿人份；综合体口径：场次所属游乐项目/票种归属商户的 `merchants.project_id` 为空或等于故障项目。 **最新资格承接**：候选快照不是最终资格。按本次受影响原人份/次份的原入场事实，故障解除后才原入场者取消该事件下资格及未核延期；不能仅凭故障时有效未核记录维持资格。已原入场受影响者解除后使用补偿不在取消范围。发放与使用链须承接该判断，不能用补偿本身的使用时点误判原入场。
-- **既有发放实现（确认时，须先承接最新资格）**：extend → `valid_to = GREATEST(valid_to, 发放日 + validity_days)`，次数不变；full_reissue → 按票种绑定逐模板补发权益行（各 1 次、allocated_revenue 0、同订单/父票/座次、`compensation_item_id`）。 只对仍符合 §6.8 资格的原份额执行，不通过改写原成功核销或原结算消除资格差异。
+- **既有发放实现（确认时，须先承接最新资格）**：extend → `valid_to = GREATEST(valid_to, 发放日 + validity_days)`，次数不变；full_reissue → 按原票该人份售出时所发权益（同父票同座次、非补偿补发行，场次终结作废的与已用完的照样算）逐行补发（次数按 TK-10 单次份折算、allocated_revenue 0、同订单/父票/座次、`compensation_item_id`；第十八批 AW 段第 296 条 296-R1 起不读票种现绑定，售出后票种再加或改的权益不补给早先售出的票）。 只对仍符合 §6.8 资格的原份额执行，不通过改写原成功核销或原结算消除资格差异。
 - **核销挂钩**（`TicketVerificationService`）：补偿行成功核销 → 不发 `PointsConfirmRequestedEvent`、`sumOrderUnits` 排除补偿行；经 `ticketing.CompensationFulfillmentPort`（amusement 实现 `AmusementCompensationFulfillmentAdapter`）把核销记录、时点、结算价锁定到补偿记录（issued → used，一次）。 本段不重复计分只适用于完整补发机会；仍符合资格、仅延长原核销权的未核票首次使用，继续按原票务积分及成长值规则处理。
 - **双岗位**：发起/确认沿用 V446 两个岗位权限码与 `requireSecondPerson`（同一人 403、同岗位 409）。
 - **端点**：`GET/POST /api/v1/amusement/compensation-policies/{project_id}`、`GET/POST /api/v1/amusement/park-wide-faults/{fault_id}/compensation-batches`、`POST /api/v1/amusement/compensation-batches/{batch_id}/confirm`、`GET /api/v1/amusement/compensation-batches/{batch_id}/items`。后台页 ADM-AMU-007。
@@ -1258,6 +1258,7 @@ P0 完成时必须满足：
 
 | 日期 | 类型 | 位置 | 内容 | 原因/依据 |
 |---|---|---|---|---|
+| 2026-11-18 | 改 | 抬头、§15B | V0.19：第十八批 AW 段第 296 条 296-R1：full_reissue 改按原票该人份售出时所发权益逐行补发，不读票种现绑定 | ENUM:148；待开发清单第 296 条 |
 | 2026-11-11 | 改 | 抬头、文首已落地清单、§6.4.2、§7.7 索引 | V0.18：第十八批 AH 段第 219 条 219-R1：票内游乐消费与预览扣次前判本场已检票、一份封顶；第 239 条 239-R1：游乐侧有效期闸只拦未生效，票面到期由票务侧按本场已检票例外复核；第 219 条补充：V619 删除 `uk_amusement_verifications_active_entry`，§7.7 索引清单删去该行 | BSM:800「该票所含的各项权益（各酒吧入场、酒水赠饮、游乐、餐饮券、零售券等），只能在完成检票环节所在的那一个场次内核销……」；ENUM:46；BSM:780「按可用次数逐次核销（每用一次扣一次，剩余为 0 才算用完）」；V619 迁移 |
 | 2026-11-11 | 改 | 抬头、§7.15、§7.16 | V0.17：第十八批 AG 段第 255 条 255-R3：游乐事故上报人（`amusement_incidents.reported_by_user_id`）与事故处置动作操作人（`amusement_incident_actions.operator_user_id`，含新建、追加处置、关闭）改取登录人，请求体里的 `reported_by_user_id`、`operator_user_id`、`closed_by_user_id` 不再读；系统超容事故上报人仍记 `system` | PGM:899「谁发起、谁销售、谁服务、谁第一个处理异常、为什么、谁审批、结果是什么，都要能查到。」；决策台账 18AE 198-R3「服务端操作人一律取登录人」先例；AmusementSafetyService 现码 |
 | 2026-11-04 | 改 | 抬头、§8.5 | V0.16：第十八批 Q 段第 146 条安卓工作手机「游乐核销」屏改走票务核销入口 `POST /api/v1/ticketing/verifications`，删去「场次（可选）」输入、补扫码核销，不再调游乐直连入口；项目由入口点位或设备定位，场次取当前开放场次，员工不选项目与场次 | BSM:552「进场之后，工作手机扫客人二维码核销各酒吧入场、赠饮、游乐等场内权益」；BSM:766「和游乐相连，票里的游乐权益到项目入口核销。」 |

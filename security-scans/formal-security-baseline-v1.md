@@ -3,8 +3,8 @@
 > 本报告由 `tools/generate-formal-security-baseline.mjs` 生成，覆盖当前 Java 21 + Spring Boot 4.x + PostgreSQL + Flyway 首批 P0 编码状态。
 
 - Generated from deterministic workspace inputs; execution time is captured by the verification logs.
-- OpenAPI operation count: 1397
-- OpenAPI SHA-256: `b0336fd3596e197049cccea2f7373d64389761e772bcb862fb8c65ea0f817607`
+- OpenAPI operation count: 1399
+- OpenAPI SHA-256: `6809a92c7576a905220018916a837c5857c40faee198f4731d4aafa0e541c16a`
 - Java version: `21`
 - Spring Boot version: `4.1.0`
 - springdoc-openapi version: `3.0.3`

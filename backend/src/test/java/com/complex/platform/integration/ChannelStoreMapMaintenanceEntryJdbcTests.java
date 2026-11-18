@@ -1,6 +1,6 @@
 package com.complex.platform.integration;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -34,6 +34,8 @@ import org.springframework.transaction.annotation.Transactional;
  * 停用缺理由 400 VALIDATION_FAILED、映射不存在 404 INTEGRATION_CHANNEL_STORE_MAP_NOT_FOUND。入口已存在，本类只锁现行为。
  * 第十八批 AO 段第 251 条 251-R1（BSM:576「存档及删除都需要填写理由」；PGM:966「已拍板：所有有过程的业务动作都必须留痕」）：
  * 门店映射与票种映射停用时所填理由记入成功事件元数据 reason。
+ * 第十八批 AW 段第 322 条 322-R1（决策台账 18G 82c-R4「以代码和权威字典为准，只改契约」）：票种映射停用契约照现码补失败码后，
+ * 把两种失败钉在现码上：缺理由 400 VALIDATION_FAILED、映射不存在 404 INTEGRATION_CHANNEL_TICKET_MAP_NOT_FOUND。
  */
 @SpringBootTest(properties = {
         "spring.datasource.url=${SETTLE_TEST_DB_URL:jdbc:postgresql://127.0.0.1:5432/complex_test}",
@@ -122,6 +124,30 @@ class ChannelStoreMapMaintenanceEntryJdbcTests {
         send(MAPS + "/csme_missing_" + s + "/archive", Map.of("idempotency_key", "csme-missing-" + s, "reason", "门店闭店，停用映射"))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.detail_code").value("INTEGRATION_CHANNEL_STORE_MAP_NOT_FOUND"));
+    }
+
+    @Test
+    void ticketTypeMapArchiveRejectsMissingReasonAndUnknownMap() throws Exception {
+        String ticketType = "csme_tt_" + s;
+        Instant now = Instant.now();
+        ticketing.saveTicketType(new TicketTypeRecord(
+                ticketType, "渠道映射回归票", "fixed", 8800L, 8800L, 8800L,
+                false, "published", 2, null, now, now, null, 0, null, false, null, TicketTypeRecord.NO_COMBO_DISCOUNT));
+        String id = json.readTree(send("/api/v1/integration/channel-ticket-type-maps", Map.of("idempotency_key", "csme-tt-save2-" + s,
+                        "provider_code", "csme-pos", "channel", "meituan", "external_product_id", "mt-prod2-" + s, "ticket_type_id", ticketType))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString()).path("data").path("id").asText();
+
+        send("/api/v1/integration/channel-ticket-type-maps/" + id + "/archive", Map.of("idempotency_key", "csme-tt-noreason-" + s))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.detail_code").value("VALIDATION_FAILED"));
+        assertThat(jdbc.queryForObject("SELECT status FROM integration_channel_ticket_type_map WHERE id = ?", String.class, id))
+                .isEqualTo("active");
+
+        send("/api/v1/integration/channel-ticket-type-maps/csme_tt_missing_" + s + "/archive",
+                Map.of("idempotency_key", "csme-tt-missing-" + s, "reason", "渠道商品下架"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.detail_code").value("INTEGRATION_CHANNEL_TICKET_MAP_NOT_FOUND"));
     }
 
     private ResultActions send(String path, Map<String, Object> body) throws Exception {

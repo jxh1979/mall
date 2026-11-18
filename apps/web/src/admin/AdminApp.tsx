@@ -1,4 +1,4 @@
-// 文件版本：V0.19
+// 文件版本：V0.20
 import React from "react";
 import { ConfigProvider, theme } from "antd";
 import zhCN from "antd/es/locale/zh_CN";
@@ -668,7 +668,9 @@ export default function AdminApp() {
     // 营业日配置页综合体与酒吧两套共用（ENUM:187 按每个项目、每家酒吧可配）：持有其中一个查看码即可进入，都没有照旧拒绝。
     // 第十八批第 24 条：高价值复核页门店主管与财务共用，持主管复核码或财务应收应付管理码任一即可进入。
     // 第 123 条 123-R1：经营参数页另放敏感操作授权范围区块，持看板查看码或授权范围配置码任一即可进入。
-    if (target.pageId === "ADM-AMU-008" || target.pageId === "ADM-INV-004" || target.pageId === "ADM-ANA-003") {
+    // 第十八批 AW 段 291-R2（PGM:660「查看、导出和修改分别授权」）：内部结算价目录持查看码或提交码任一即可进入。
+    if (target.pageId === "ADM-AMU-008" || target.pageId === "ADM-INV-004" || target.pageId === "ADM-ANA-003"
+      || target.pageId === "ADM-STL-003") {
       const held = target.requiredPermissions.find((code) => hasPermissions(effectivePermissions, [code]));
       return held ? [held] : target.requiredPermissions;
     }
