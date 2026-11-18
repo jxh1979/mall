@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -229,7 +229,7 @@ class TicketRefundReasonJdbcIntegrationTests {
         StaffRequestFixture staffs = new StaffRequestFixture(jdbcTemplate);
         String payerId = "usr_r241_f_" + suffix;
         String mainId = "usr_r241_m_" + suffix;
-        // 确认拨付由平台财务办理（同本类 financeActor）：不挂商户的普通账号过不了门票退款的商户范围闸（既有口径）。
+        // 确认拨付由平台财务办理（同本类 financeActor）；不挂商户的项目财务按可触及订单所属项目办理，见 projectFinanceWithoutMerchantHandlesRefundsOfReachableProject。
         RequestPostProcessor payer = staffs.staff(payerId, "platform_admin", "org", null, "ticket.refund.approve", "ticket.refund.view");
         RequestPostProcessor main = staffs.staff(mainId, "staff", "org", null, "governance.supervisor_review.view",
                 "governance.supervisor_review.approve");
@@ -271,6 +271,73 @@ class TicketRefundReasonJdbcIntegrationTests {
         }
 
         payoutConfirm(payer, refund.id(), "ok").andExpect(status().isOk()).andExpect(jsonPath("$.data.status").value("success"));
+    }
+
+    /**
+     * 第十八批 AV 段第 316 条 316-R2（BSM:1673「所有数据默认按项目隔离，只有项目之上的获授权岗位可以跨项目汇总」；PGM:664「跨主体与平台层面的财务工作
+     * ——……付款执行……——由财务中心负责」）：项目 P 的门票订单（商户 M），不挂商户的 P 项目财务批准待审退款、确认拨付、对另一笔已批准退款发起付款确认
+     * 都 200；Q 项目财务确认拨付 403 CROSS_PROJECT_FORBIDDEN；别家商户员工 403 CROSS_MERCHANT_FORBIDDEN。
+     */
+    @Test
+    void projectFinanceWithoutMerchantHandlesRefundsOfReachableProject() throws Exception {
+        String projectP = "prj_r316_p_" + suffix;
+        String projectQ = "prj_r316_q_" + suffix;
+        String merchantM = "mch_r316_" + suffix;
+        for (String p : List.of(projectP, projectQ)) {
+            jdbcTemplate.update("INSERT INTO projects(id,venue_type,name,status,created_at,updated_at) VALUES(?,'complex','门票退款范围项目','active',now(),now())", p);
+        }
+        jdbcTemplate.update("INSERT INTO merchants(id,merchant_name,merchant_type,status,created_at,updated_at) VALUES(?,'门票退款范围商户','bar','active',now(),now())",
+                merchantM);
+        jdbcTemplate.update("UPDATE ticket_orders SET project_id = ?, merchant_id = ? WHERE id = ?", projectP, merchantM, orderId);
+        String secondOrder = paidOrder("2", projectP, merchantM);
+        StaffRequestFixture staffs = new StaffRequestFixture(jdbcTemplate);
+        String financeId = "usr_r316_pf_" + suffix;
+        String mainId = "usr_r241_m_" + suffix;
+        RequestPostProcessor financeP = staffs.staff(financeId, "staff", projectP, null, "ticket.refund.approve", "ticket.refund.view");
+        RequestPostProcessor financeQ = staffs.staff("usr_r316_qf_" + suffix, "staff", projectQ, null, "ticket.refund.approve");
+        RequestPostProcessor otherMerchant = staffs.staff("usr_r316_om_" + suffix, "staff", projectP, "m_r316_o_" + suffix, "ticket.refund.approve");
+        for (String approver : List.of(mainId, "usr_r241_fl_" + suffix, "usr_r241_ll_" + suffix)) {
+            staffs.staff(approver, "staff", projectP, null, "governance.supervisor_review.view", "governance.supervisor_review.approve");
+        }
+        jdbcTemplate.update("INSERT INTO org_hierarchy(user_id,superior_id) VALUES(?,?)", financeId, mainId);
+
+        TicketRefundRecord refund = refundService.requestRefund(request("r316-req", "event_cancelled", entityId, instA));
+        mockMvc.perform(post("/api/v1/ticketing/refunds/" + refund.id() + "/approve").with(financeP)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"idempotency_key\":\"r316-approve-" + suffix + "\",\"reason\":\"核对活动取消公告后批准\"}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.status").value("approved"));
+        PaymentConfirmationFixture.approved(jdbcTemplate, "ticket_refund", refund.id(), refund.refundAmountCent(), "ticket_refund");
+        payoutConfirm(financeQ, refund.id(), "q").andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.detail_code").value("CROSS_PROJECT_FORBIDDEN"));
+        payoutConfirm(otherMerchant, refund.id(), "om").andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.detail_code").value("CROSS_MERCHANT_FORBIDDEN"));
+        payoutConfirm(financeP, refund.id(), "p").andExpect(status().isOk()).andExpect(jsonPath("$.data.status").value("success"));
+
+        TestSecurityActors.asPlatformAdmin("usr_tk05r1_requester");
+        TicketRefundRecord another = refundService.requestRefund(new TicketRefundRequest("r316-req2-" + suffix, "refund", List.of(), secondOrder,
+                null, "活动取消退票", "original", null, null, "event_cancelled", entityId));
+        TestSecurityActors.asPlatformAdmin("usr_r316_approver");
+        refundService.approveRefund(another.id(), new StatusChangeRequest("r316-a2-" + suffix, "approve", "审批通过", List.of()));
+        paymentConfirmation(financeP, another.id(), "p316", mainId).andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.payment_type").value("ticket_refund"));
+    }
+
+    /** 316-R2：另一张已付款、已出票的门票订单（一张未核销的票），挂给定项目与商户；返回订单编号。 */
+    private String paidOrder(String tag, String projectId, String merchantId) {
+        String order = "o_r316_" + tag + "_" + suffix;
+        String instance = "inst_r316_" + tag + "_" + suffix;
+        String ticketTypeId = "tt_tk05r1_" + suffix;
+        repository.saveTicketOrder(new TicketOrderRecord(
+                order, "TO-" + tag + "-" + suffix, null, ticketTypeId, null,
+                1, java.time.LocalDate.now().plusDays(3), "miniapp", "13900000000",
+                9900L, null, 9900L, 0L, "CNY", "paid", "issued", "created", now, now, merchantId, now, null, projectId));
+        repository.saveTicketInstance(new TicketInstanceRecord(
+                instance, "TN-" + tag + "-" + suffix, order, ticketTypeId, 1, 1, 1, null, null, "active", null, null, now, now));
+        repository.saveIssuedEntitlement(new IssuedEntitlementRecord(
+                "ent_r316_" + tag + "_" + suffix, "E" + tag + "-" + suffix, ticketTypeId, order, "tpl_tk05r1_" + suffix, "entry",
+                null, null, null, 1, 0, 9900L, "active", now, now.plusSeconds(86400), now, now, 1, 9900L,
+                null, null, null, null, instance, 1, null, null));
+        return order;
     }
 
     /** 门票退款打款面板发起付款确认的真实请求：主线最终审批人与财务线、法务线各自的最终审批人。 */

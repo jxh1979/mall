@@ -1,4 +1,4 @@
-// 文件版本：V0.43
+// 文件版本：V0.44
 // OBS-14-02 后台结果区字段中文名字典（PGM「全局原则 · 界面全中文（所有终端零英文）」）。
 // 键用后端 JSON 的蛇形写法；结果区查表时蛇形与驼峰同查（orderId / order_id 都命中 order_id）。
 // 与后端字段中文名表 FieldLabels.java（common.api 包）同键同名：前段按后端原样抄录，后端改名这里跟着改（门禁会比对）。
@@ -3655,7 +3655,7 @@ export const KEY_VALUE_LABELS: Record<string, Record<string, string>> = {
   currency: { CNY: "人民币" },
   // 第十八批 AU 段收尾复核（BSM:1079「账单合并称为“合单”」）：酒吧账单操作记录的合单（与 split「已拆分」对称）；merge 另是并台调整类型与模板套用方式，按键收。
   operation_type: { merge: "已合单" },
-  // 18W 复核修复（PGM:287）：应收应付台账「登记核销」结果区的收付方式与来源类型，与 FinanceArApLedgerPage 的 PAYMENT_METHODS、SOURCE_TYPE_LABELS 同名。
+  // 18W 复核修复（PGM:287）：应收应付台账「登记核销」结果区的收付方式与来源类型；收付方式与 FinanceArApLedgerPage 的 PAYMENT_METHODS 同名，来源类型第十八批 AV 段 317-R1 起由台账页与登记核销结果区共用、与后端 AR_AP_SOURCE_TYPE_LABELS 同名。
   payment_method: { cash: "现金", bank_transfer: "银行转账", pos: "刷卡", other: "其他" },
   source_type: {
     termination_penalty: "退租违约金", deposit_refund: "退租押金退还", deposit: "押金",
@@ -3668,12 +3668,22 @@ export const KEY_VALUE_LABELS: Record<string, Record<string, string>> = {
     single_bar_service_fee: "单店门票综合服务费", ticket_distribution_recovery: "通票分账追收",
     contract_parking_monthly: "车位月租", parking_fee: "停车费", parking_credit_cost: "停车抵免成本",
     bar_shift_overage: "收银长款（营业外收入）", turnover_rent_reversal: "营业额抽成冲正",
-    // 第十八批 AI 段 214-R1、214-R2：组合通票各域份额主体间往来（同 FinanceArApLedgerPage SOURCE_TYPE_LABELS、后端 AR_AP_SOURCE_TYPE_LABELS）。
+    // 第十八批 AI 段 214-R1、214-R2：组合通票各域份额主体间往来（同后端 AR_AP_SOURCE_TYPE_LABELS）。
     pass_domain_share: "通票域间份额", pass_domain_direct_settlement: "通票餐饮零售代付", pass_unverified_attribution: "通票到期未核销归属",
     // 第十八批 AL 段第 223 条 223-R1（BSM:1751）：对账差异复核通过后按认定结果入账的应收应付（同后端 AR_AP_SOURCE_TYPE_LABELS）。
     reconciliation_difference: "对账差异",
     // 第十八批 AM 段第 241 条 241-R1（第十八批裁决 65「按台账来源逐个分」）：付款确认按台账来源定支付类型（同后端 AR_AP_SOURCE_TYPE_LABELS）。
     inventory_transfer: "门店要货货款", media_performance_settlement: "传媒演出结算", stored_value_consume: "平台代收商户卡消费", partner_voucher: "内部价券结算",
+    // 第十八批 AV 段第 317 条 317-R1（PGM:287「界面全中文（所有终端零英文）」）：后端 AR_AP_SOURCE_TYPE_LABELS 有、此前缺的 20 项，中文名逐字同后端。
+    contract: "合同", order: "订单", refund: "退款", manual: "手工录入", settlement: "结算", employee_commission: "员工提成",
+    inventory_difference: "库存差异", cam: "公共区域维护费", property_fee: "物业费", pass_drink_settlement: "通票酒水结算",
+    ticket_distribution: "门票分销", dividend_reserve_withheld: "分红留存待释放", dividend_reserve_released: "分红留存已释放",
+    dealer_order: "经销订单", platform_incentive_subsidy: "平台激励补贴", bar_deposit_refund: "订台定金达标退回",
+    ticket_points_issuance: "门票积分发行月结", saved_bottle_remedy: "存酒补存/赔付损失",
+    saved_bottle_remedy_recovery: "存酒退出承接垫付追收", work_order_material: "工单用料费（商户承担）",
+    // 第十八批 AV 段收尾复核（PGM:287）：正常业务写进台账、此前前后端都缺的五个来源，中文名逐字同后端 AR_AP_SOURCE_TYPE_LABELS。
+    facility_equipment_scrap: "楼宇设备报废残值", facility_equipment_scrap_loss: "楼宇设备报废损失",
+    stored_value_topup: "通用卡储值充值", ticket_order: "票务订单", service_order: "服务点单",
   },
 };
 

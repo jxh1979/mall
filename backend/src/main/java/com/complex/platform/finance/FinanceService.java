@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.49
+// 文件版本：V0.50
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -174,7 +174,15 @@ public class FinanceService implements TerminationSettlementPort {
             Map.entry("purchase_inbound", "采购入库"), Map.entry("purchase_prepayment", "采购预付款"),
             Map.entry("purchase_consignment", "寄售结算"), Map.entry("inventory_transfer", "门店要货货款"),
             Map.entry("media_performance_settlement", "传媒演出结算"), Map.entry("stored_value_consume", "平台代收商户卡消费"),
-            Map.entry("partner_voucher", "内部价券结算"));
+            Map.entry("partner_voucher", "内部价券结算"),
+            // 第十八批 AV 段第 317 条 317-R1（PGM:287「界面全中文（所有终端零英文）」）：合同租金、合同物业费、能源费与采购两类退款，与前端 KEY_VALUE_LABELS.source_type 同名。
+            Map.entry("contract_rent", "合同租金"), Map.entry("contract_property_fee", "物业费"), Map.entry("energy_fee", "能源费"),
+            Map.entry("purchase_return_refund", "供应商退货退款"), Map.entry("purchase_prepayment_refund", "采购未用预付款退款"),
+            // 第十八批 AV 段收尾复核（PGM:287「……枚举取值……导出文件表头与内容……必须全部为中文」）：正常业务写进台账、此前前后端都缺的五个来源，
+            // 与前端 KEY_VALUE_LABELS.source_type 同名——楼宇设备报废残值应收与损失内部核算（BSM:1408「残值或损失由财务记录并关联原设备」）、
+            // 通用卡充值与票务订单在线付款的内部核算行（recordInternalAccountingRevenue 以支付意图业务类型作来源）、服务点单收款（同 ParkingWorkbenchPage）。
+            Map.entry("facility_equipment_scrap", "楼宇设备报废残值"), Map.entry("facility_equipment_scrap_loss", "楼宇设备报废损失"),
+            Map.entry("stored_value_topup", "通用卡储值充值"), Map.entry("ticket_order", "票务订单"), Map.entry("service_order", "服务点单"));
 
     @org.springframework.beans.factory.annotation.Autowired
     private org.springframework.context.ApplicationEventPublisher refundEvents;
@@ -254,6 +262,10 @@ public class FinanceService implements TerminationSettlementPort {
 
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     com.complex.platform.evidence.EvidenceAttachmentValidator refundEvidenceValidator;
+
+    // 第十八批 AV 段第 305 条 305-R1：登记对账差异时取业务单号的平台侧归属（同包仓储，本类只加注入）；包内可见便于单测置桩。
+    @org.springframework.beans.factory.annotation.Autowired
+    JdbcReconciliationBusinessRefRepository reconciliationBusinessRefs;
 
     // 第十八批第 13 条（BSM 第 1597、1598 行）：商户应收应付金额变化短信（业务提交后发）。@Lazy 防初始化环；可为 null（单测手工构造）＝不发。
     @org.springframework.beans.factory.annotation.Autowired(required = false)
@@ -1147,6 +1159,17 @@ public class FinanceService implements TerminationSettlementPort {
             refundEvidenceValidator.requireExisting(evidenceAttachmentIds, "evidence_attachment_ids");
         }
 
+        // 第十八批 AV 段第 305 条 305-R1（PGM:528「④看不到别的商户和别的项目的数据」；PGM:664「差异认定……由该酒吧对应的财务 BP 负责」；ENUM:191「高价值差异
+        // 所涉营业日的日结不得确认锁定」）：业务单号在平台侧查得到的须属所选批次的日结范围（口径同 161-R2），否则拒且不回显金额；查不到的照旧按取数为 0 处理。
+        var owner = reconciliationBusinessRefs.findOwner(businessRef);
+        if (owner.isPresent()) {
+            ReconciliationBatchRecord batch = repository.findReconciliationBatchById(batchId).orElseThrow();
+            if (!owner.get().within(batch.scopeType(), batch.scopeId())) {
+                throw ApiException.badRequest("RECONCILIATION_BUSINESS_REF_OUT_OF_BATCH",
+                        "业务单号 " + businessRef + " 不属于所选对账批次的范围，请在该单号所属酒吧或综合体的对账批次下登记");
+            }
+        }
+
         // 平台侧 expected 一律系统取数（不接受请求体手填）。0=无系统取数支撑。
         long expectedAmountCent = repository.aggregatePlatformExpectedForBusinessRef(businessRef);
         if (expectedAmountCent <= 0 && !(missing && actualAmountCent > 0)) {
@@ -1167,7 +1190,9 @@ public class FinanceService implements TerminationSettlementPort {
 
         Instant now = Instant.now();
         ReconciliationDifferenceRecord saved = repository.saveReconciliationDifference(new ReconciliationDifferenceRecord(
-                "recon_diff_" + slug(batchId + "_" + actual.idempotencyKey()),
+                // 第十八批 AV 段第 308 条 308-R1（ENUM:191「待识别、待处理、待复核、已关闭」；BSM:1751「同一差异只入账一次」）：批次号已 44 位，旧写法截到 40 位后
+                // 同批次各笔同号、后登记覆盖先登记；改用定长摘要，同批次多笔各自独立，同幂等键重放仍返回首次结果。
+                "recon_diff_" + stableToken("reconciliation_difference", batchId + ":" + actual.idempotencyKey()),
                 batchId,
                 differenceType,
                 businessRef,
@@ -2019,9 +2044,11 @@ public class FinanceService implements TerminationSettlementPort {
         Instant now = Instant.now();
         String slug = slug(actual.idempotencyKey());
         String id = "arap_" + slug;
+        // 第十八批 AV 段 321-R1：item_no 取完整 slug（≤40，ARAP＋毫秒＋-＋slug 不超 varchar(128)），同派生入账 persistDerivedArApItem：
+        // 只取前 12 字符时幂等键前缀相同的两笔（如结算过账 settle-td-＋摘要）在同一毫秒写入即撞 ar_ap_items_item_no_key。
         ArApItemRecord item = new ArApItemRecord(
                 id,
-                "ARAP" + now.toEpochMilli() + "-" + slug.substring(0, Math.min(12, slug.length())),
+                "ARAP" + now.toEpochMilli() + "-" + slug,
                 direction,
                 requireText(actual.counterpartyId(), "counterparty_id"),
                 sourceType,
@@ -3815,17 +3842,19 @@ public class FinanceService implements TerminationSettlementPort {
     /**
      * 退租应退押金落台账（#3② 多合同超退根治）：FOR UPDATE 锁定权威余额（并发退租串行化）→ 按锁定余额封顶（race-safe）→
      * 挂 ar_ap 应付（source_type='deposit_refund'）+ 写 deposit_ledger refund 行扣减余额，使同一商户后续合同读到已减余额、不叠加超退。
-     * 幂等键=结算单 id；返回实退值（≤ 请求净额）。
+     * 幂等键=结算单 id；返回实退值（≤ 请求净额）。第十八批 AV 段 310-R0：台账行挂出租合同所属项目（BSM:1673）。
      */
     @Override
-    public long createDepositRefundPayable(String merchantId, long netRefundCent, String settlementId, LocalDate dueDate) {
+    public long createDepositRefundPayable(String merchantId, long netRefundCent, String settlementId, LocalDate dueDate,
+            String projectId) {
         long lockedBalance = repository.currentDepositBalanceForUpdate(merchantId);
         long effectiveRefund = Math.min(Math.max(0L, netRefundCent), Math.max(0L, lockedBalance));
         if (effectiveRefund <= 0) {
             return 0L;   // 余额已被其它合同退租消费殆尽：不挂应付、不写台账
         }
         ArApItemRecord item = persistDerivedArApItem(
-                "payable", merchantId, "deposit_refund", settlementId, effectiveRefund, settlementId, merchantId, null, dueDate);
+                "payable", merchantId, "deposit_refund", settlementId, effectiveRefund, settlementId, merchantId, null, dueDate,
+                projectId);
         repository.saveDepositLedger(new DepositLedgerRecord(
                 "deposit_refund_" + slug(settlementId), merchantId, "refund", effectiveRefund,
                 lockedBalance - effectiveRefund, item.id(), "退租应退押金结算", Instant.now()));

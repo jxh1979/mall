@@ -1,4 +1,4 @@
-// 文件版本：V0.13
+// 文件版本：V0.14
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -76,7 +76,11 @@ describe("FinanceArApLedgerPage 来源类型（退租相关可辨识）", () => 
       { id: "ar-dr", itemNo: "AR-DR-1", direction: "payable", status: "pending_payment", amountCent: 200000, unpaidAmountCent: 200000, dueDate: "2026-08-01", sourceType: "deposit_refund" },
     ];
     const getPaged = vi.fn().mockResolvedValue({ items: rows, total: 1, page: 1, size: 10 });
-    renderPage(makeApi(getPaged));
+    const api = makeApi(getPaged);
+    // 第十八批 AV 段 310-R1：押金退还应付选中即带出内部应付执行面板（同下方执行状态用例的假响应形状）。
+    (api.get as ReturnType<typeof vi.fn>).mockImplementation((path: string) =>
+      Promise.resolve(path.includes("/internal-payables/") ? { executionStatus: "pending", inTransit: false, attempts: [], postponements: [] } : []));
+    renderPage(api);
     await waitFor(() => expect(getPaged).toHaveBeenCalled());
     fireEvent.click(screen.getByTestId("finance-ledger-row-ar-dr"));
     await waitFor(() => expect(screen.getByText("来源类型")).toBeTruthy());
@@ -205,6 +209,51 @@ describe("FinanceArApLedgerPage 通票域间往来来源", () => {
   });
 });
 
+// 第十八批 AV 段第 317 条 317-R1（PGM:287「界面全中文（所有终端零英文）」）：台账来源中文名按后端 AR_AP_SOURCE_TYPE_LABELS 同名补齐，
+// 详情抽屉不再显示原码。
+describe("FinanceArApLedgerPage 来源中文名与后端同名补齐", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("分红留存已释放、工单用料费（商户承担）、存酒补存/赔付损失、手工录入显中文，不显原码", async () => {
+    const row = (id: string, direction: string, sourceType: string, status: string) => ({ id, item_no: `ARAP-${id}`, direction,
+      source_type: sourceType, status, amount_cent: 1000, paid_amount_cent: 0, unpaid_amount_cent: 1000, due_date: "2026-12-05" });
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      let data: unknown = {};
+      if (url.includes("/api/v1/finance/ar-ap-items?")) {
+        data = { items: [row("ap-drr", "payable", "dividend_reserve_released", "pending_payment"),
+          row("ar-wom", "receivable", "work_order_material", "pending_collection"),
+          row("ia-sbr", "internal_accounting", "saved_bottle_remedy", "settled"),
+          row("ar-man", "receivable", "manual", "pending_collection"),
+          // 第十八批 AV 段收尾复核：正常业务写进台账、此前前后端都缺的五个来源（楼宇设备报废残值与损失、通用卡充值与票务订单的内部核算行、服务点单收款）。
+          row("ar-fes", "receivable", "facility_equipment_scrap", "pending_collection"),
+          row("ia-fesl", "internal_accounting", "facility_equipment_scrap_loss", "settled"),
+          row("ia-svt", "internal_accounting", "stored_value_topup", "settled"),
+          row("ia-tko", "internal_accounting", "ticket_order", "settled"),
+          row("ar-svo", "receivable", "service_order", "paid")], total: 9, page: 1, page_size: 10 };
+      } else if (url.includes("/api/v1/finance/internal-payables/")) {
+        data = { ar_ap_item_id: "ap-drr", direction: "payable", source_type: "dividend_reserve_released", amount_cent: 1000, unpaid_amount_cent: 1000,
+          execution_status: "pending", in_transit: false, attempts: [], postponements: [] };
+      }
+      return new Response(JSON.stringify({ success: true, code: "OK", data }));
+    }));
+    renderPage(new AdminApi("test"));
+    await waitFor(() => expect(screen.queryByTestId("finance-ledger-row-ar-man")).not.toBeNull());
+    await waitFor(() => expect(screen.getByTestId("finance-ledger-filter-count").textContent).toContain("9"));
+    for (const [id, code, label] of [["ap-drr", "dividend_reserve_released", "分红留存已释放"],
+      ["ar-wom", "work_order_material", "工单用料费（商户承担）"], ["ia-sbr", "saved_bottle_remedy", "存酒补存/赔付损失"],
+      ["ar-man", "manual", "手工录入"], ["ar-fes", "facility_equipment_scrap", "楼宇设备报废残值"],
+      ["ia-fesl", "facility_equipment_scrap_loss", "楼宇设备报废损失"], ["ia-svt", "stored_value_topup", "通用卡储值充值"],
+      ["ia-tko", "ticket_order", "票务订单"], ["ar-svo", "service_order", "服务点单"]] as const) {
+      fireEvent.click(screen.getByTestId(`finance-ledger-row-${id}`));
+      await waitFor(() => expect(screen.queryByText(label)).not.toBeNull());
+      expect(screen.queryByText(code)).toBeNull();
+    }
+  });
+});
+
 // FS-021-R5（BSM L1683；ENUM L253）：选中普通内部结算应付 → 显示执行状态与付款时点，可登记已发起付款（在途）。
 describe("FinanceArApLedgerPage 内部应付执行状态", () => {
   const PAYABLE: FinanceLedgerRow = { id: "ap-td", itemNo: "ARAP-TD-1", direction: "payable", status: "pending_payment", amountCent: 5000, unpaidAmountCent: 5000, dueDate: "2026-11-25", sourceType: "ticket_distribution" };
@@ -256,6 +305,35 @@ describe("FinanceArApLedgerPage 内部应付执行状态", () => {
     await waitFor(() => expect(screen.queryByTestId("finance-ledger-select-ap-pds")).not.toBeNull());
     fireEvent.click(screen.getByTestId("finance-ledger-select-ap-pds"));
     await waitFor(() => expect(screen.queryByTestId("internal-payable-panel")).not.toBeNull());
+  });
+});
+
+// 第十八批 AV 段 310-R1（ENUM:252「押金退还付款状态按「内部应付执行状态」条执行」「押金退还支付不受三个付账日与账单异议期约束」）：
+// 退租押金退还应付同样出付款执行面板（登记已发起、明确失败），但不适用资金不足顺延至下一个付账日。
+describe("FinanceArApLedgerPage 退租押金退还付款执行", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("选中退租押金退还应付显示执行面板与登记已发起按钮，没有资金不足顺延按钮", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      let data: unknown = {};
+      if (url.includes("/api/v1/finance/ar-ap-items?")) {
+        data = { items: [{ id: "ap-dr", item_no: "ARAP-DR-1", direction: "payable", source_type: "deposit_refund", status: "pending_payment",
+          amount_cent: 200000, paid_amount_cent: 0, unpaid_amount_cent: 200000, due_date: "2026-11-18" }], total: 1, page: 1, page_size: 10 };
+      } else if (url.includes("/api/v1/finance/internal-payables/ap-dr")) {
+        data = { ar_ap_item_id: "ap-dr", direction: "payable", source_type: "deposit_refund", amount_cent: 200000, unpaid_amount_cent: 200000,
+          visible_at: "2026-11-18T01:00:00Z", objection_deadline: null, designated_pay_day: null, due_date: "2026-11-18",
+          execution_status: "pending", in_transit: false, failure_reason: null, expected_repay_date: null, attempts: [], postponements: [] };
+      }
+      return new Response(JSON.stringify({ success: true, code: "OK", data }));
+    }));
+    renderPage(new AdminApi("test"));
+    await waitFor(() => expect(screen.queryByTestId("internal-payable-status")?.textContent ?? "").toContain("待付"));
+    expect(screen.queryByTestId("internal-payable-initiate")).not.toBeNull();
+    expect(screen.getByTestId("internal-payable-panel").textContent).toContain("2026年11月18日");
+    expect(screen.queryByTestId("internal-payable-funds-insufficient")).toBeNull();
   });
 });
 

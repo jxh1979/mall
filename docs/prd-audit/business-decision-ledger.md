@@ -1,6 +1,6 @@
 # PRD 审计业务裁决台账
 
-文档版本：V1.03
+文档版本：V1.04
 状态：进行中
 迁移日期：2026-07-27
 当前事实源：三份立法 HTML 以既有冻结基线叠加 James 此前 M02 至 M08 的点名批准、全量审计 M001、M002 的逐项批准，以及本轮 2026-10-16 至 2026-10-17 业务 HTML 审计中 Q01 至 Q40 及子题实际明确批准且未被后续替代的裁决，和 2026-10-17 第二批 HTML 业务线推演审计（A–F 六线 64 条、停车章）的逐项批准，并叠加本轮 CG 70 项来源确认与 C01–C09、N01–N03 最终澄清及补全文稿中 F01、W01–W05 的整体修改批准（本文件末节）；本轮最终规则、未采纳或替代关系、现行版本与字节哈希见本文件末节。历史记录保留为各自当时事实，不恢复已被替代的建议。
@@ -9082,3 +9082,175 @@ HTML 的语义补齐与直接引用同步可在本批核验；70项中的业务�
   - 统一重做：两边都从同一基线 +0.01、被 git 当同一改动静默合并的版本递增再 +0.01——apps/web/src/admin/types.ts V0.31、packages/customer-core/src/statusLabels.ts V0.15、页面矩阵 CSV 第 2 行 implementation_status 中的文件版本 V0.37；OpenAPI yaml 与 json 的 info.version 就地由 V0.78 改为 V0.79（深比较一致，操作各 1393，无锚点；两份另有 12 处对象键顺序不同，1ca51465、ff08d988 上就有，不动）；其余改动文件的版本头逐个对 ff08d988 核过，改动的基线文件恰好 +0.01，新文件 V0.01，两份 PRD 与酒吧开发设计文档各只升一次；refresh-entry-doc-baseline 无漂移（README 与入口文档仍为「V648（606 个迁移）」「OpenAPI 1393」）；重生成数据隔离规格与 domain-ownership-scope 无变化，验收矩阵与收口附录只改文件头为 V0.79（1393 operations、444 permissions、2786 events）；security-scans 两份 md 只改 SHA 行为 29e6e2e5aeaef2cac1aefb0ffb672b0c141d10da6acb64abb98a390baa00f56d（计数 1393 不变）；security-baseline-latest.json 不改（计数仍 1393）。运行验收证据随指纹变化已过时，由合并前证据链按提交树重刷，本轮不动。
   - 本轮实测（ff08d988 基线）：清掉镜像 bar、common/api 包的 classes 与 test-classes 后，b67_test.sh --fresh 定向 6 类 24 条 0 红（KioskBarOrderJdbcTests 8、BarMinSpendTopUpJdbcIntegrationTests 2、BarReservationMasterDeleteJdbcIntegrationTests 6、BarOrderVoidRestFulfillmentJdbcIntegrationTests 1、BarOrderSuspensionCancelSettleLockJdbcIntegrationTests 1、BarOrderItemVoidBillLockJdbcIntegrationTests 6；一次性库迁到 V648，606 个迁移）；b67_web.sh BarOrdersPage BarBillCheckoutPanel BarTableSessionsPage：typecheck 0 错、34 个文件 114 条全过；packages/customer-core 工作区 8 个文件 77 条全过；共用锁下 chromium 跑 tests/e2e/full-admin-visual.spec.ts 2 条全过、无截图差异，不重拍；门禁 verify:p0-contract、verify:html-ledger-sync、verify:entry-anchors、verify:entry-doc-baseline、verify:security-baseline、verify:data-isolation-spec、verify:domain-ownership-scope（572 张表）、verify:migration-version-order（本分支未新增迁移，主干最大号 V648）、verify-audit-labels（业务类型 431、事件名 2346，0 处缺失）、verify-full-admin-page-matrix（117 页）、verify-admin-result-labels、git diff --check 全绿，改动文件无 CRLF、无 BOM；共用锁下 npm run verify:predeploy 退出码 0。
 - 18AU 落地位置补记·运行验收证据、快照、终验文档刷新（无新裁决）：业务提交 56cc03b5 之后，按第十八批裁决 25 重刷了运行验收证据：后端全量 6949 测，0 失败 0 错误；apps/web 构建通过；常规界面验收（接口全部 mock）实跑 40 条全过；真实后端界面验收未跑，runtime_ready=false。随后依次重生成闭环当前态快照、生产闭环缺口报告、界面验收报告、无上线指挥台。生成器没改。手改 docs/final-closed-loop-acceptance-audit-v0.1.md 与 docs/code-implementation-acceptance-audit-v0.1.md：前端单测源码计数改为 1898；BarService.java 行数由 1276 改为 1325、BarOrderService.java 行数由 1859 改为 1800、BarBillingService.java 行数由 1132 改为 1145，其余被核文件行数无变化；后端全量与常规界面验收的数字、日期改为本次实跑值；写入 npm run verify:unit 实跑结果，五个工作区全过。交付门禁于 2026-11-18 20:00 UTC 在工作树逐项实跑子项，NAS 两项现场探测未跑。仍红的有两项：一是 coding-host-protection，它写死主仓路径，在工作树口径下必红，属工具口径，不做；二是 final-closed-loop-audit，如实留 2 条红（integration-ready、business-acceptance-ready），原因是校验器要求终验把联调、业务验收写成「是」，而裁决 25 定了不跑真实后端界面验收、运行验收未就绪，终验写的是「否」。verify:delivery-gates 总链仍是红的。
+
+18AV 落地位置补记（2026-11-18）：第十八批 AV 段（batch68）按 18AV 只读设计实现待开发清单第 321、262、307、316、310、308、305、306、313、317 条（财务应收应付与对账组）；运行验收证据、终验文档在本段最后一个提交刷新；各条落地位置见下。本段追加时，原台账除文档版本升一版外，其他历史字节保持。
+
+- 18AV 落地位置补记·控制席判定（2026-11-18）：本段（第十八批 AV 段，batch68）实现待开发清单第 321、262、307、316、310、308、305、306、313、317 条（18AV 只读设计 b68-audit/d-fin-a.json、d-fin-b.json，两轮质疑者修订后定稿，无待裁题）；第 302、311、312 条核实为正常业务不会遇到，不做。控制席按常理定：317-R1 一并把后端 AR_AP_SOURCE_TYPE_LABELS 缺的 contract_rent、contract_property_fee、energy_fee、purchase_return_refund、purchase_prepayment_refund 五项补上，中文名同前端；308-R1 与 321-R1 编号写法统一（321 取完整 slug、308 用定长 stableToken）。本段实现代理不改各文件头版本行，收尾按最终主干统一 +0.01。本段从 ff08d988 开工，实现后变基到含 18AU 酒吧组（PR #600）的 origin/main ff83ee69。设计旁见另记待开发清单第 349～353 条（待核实），最高权限回读证据附件 403 并入第 344 条补记。
+- 18AV 落地位置补记（段一：321-R1、262-R1）：
+  - 321-R1
+    - 改法：通用入口登记应收应付（createItem）的台账编号由「ARAP＋毫秒＋-＋幂等键 slug 前 12 位」改为「ARAP＋毫秒＋-＋完整 slug」（slug 不超过 40，总长不超过 58，未超 varchar(128)），和派生入账 persistDerivedArApItem 写法一样。幂等键前缀相同的两笔（如结算过账 settle-td-＋摘要）同一毫秒挂账时，不再撞 ar_ap_items.item_no 唯一键报 DUPLICATE_KEY。无迁移，不回填存量（UD-07），接口不变。
+    - 落地位置：backend/src/main/java/com/complex/platform/finance/FinanceService.java（createItem 的 item_no 一处，附注释）。
+    - 依据：PGM:528「⑤同一笔操作重复提交不重复生效（重复点击、网络重发、渠道重复回调都只算一次）」。反面是不同的两笔不得因编号相同互相顶替或报错。
+    - 测试：FinanceJdbcIntegrationTests.manualArApItemsSharingKeyPrefixGetDistinctItemNos。平台财务按后台真实请求形状（蛇形键）登记两笔幂等键前 12 位相同的应付，两个编号各带完整 slug、互不相同。SettlementOverPoolNoSettlementApprovalTests、PassDomainShareInterEntityPostingJdbcTests、SettlementBatch2E2ETests 定向复跑为绿。
+  - 262-R1
+    - 改法：补偿新增履约应付、以及撤销时已付部分的追收应收，会计期间与付账日推算的义务月由「北京自然月」改为「实际提供方营业日所在月」（BusinessDayResolver.merchantBusinessDate：提供方是酒吧按该酒吧，否则按综合体；按常理定，同第 213 条）。夜场凌晨履约或撤销归前一营业日所在月。无迁移，无接口变化，不回改已落库账期（UD-07）。
+    - 落地位置：backend/src/main/java/com/complex/platform/amusement/AmusementCompensationFulfillmentAdapter.java（构造器注入 BusinessDayResolver；recordFulfillment、reverseFulfillment 两处定月；类注释）。
+    - 依据：BSM:1682「全系统的钱账统一按「营业日」归集：营业日从当日上午 10:00 起算，至次日上午 10:00 止」；BSM:804「再次入场提供完整票面权益，酒水、礼品重新提供」。
+    - 测试：ParkWideFaultCompensationJdbcIntegrationTests.compensationPayableAfterMidnightBooksProviderBusinessDayMonth（下月 1 日 02:30 由酒吧提供方履约，平台财务真实 HTTP 查台账，账期为本月，到期日等于固化付账日）、compensationRecoveryAfterMidnightBooksProviderBusinessDayMonth（下月 1 日 01:00 撤销，追收应收账期为本月）。既有 everyReissuedEntitlementFulfillmentIsRecordedWithLockedCatalogVersion、partiallyPaidCompensationPayableReversalRecoversPaidPartFromProvider 的账期断言改为按提供方营业日取月。
+- 第十八批 AV 段落地位置补记（段 2：307-R1、316-R1、316-R2）：
+  - 307-R1（人工补录凭证：无商户号账号可上传，回读按复核链上审批人或可查看该补录对象放行）。
+    - 改法：证据附件范围闸在默认商户闸之前加 manual_backfill 一支。上传时不论有无商户编号都放行，附件记当前商户编号（无则空）。回读时商户账号照旧按本商户；不带商户编号的账号，须是引用该附件的某笔补录复核单链上任一节点的审批人或被转发人，或过得了该补录对象的查看范围闸，否则照旧 403 MERCHANT_SCOPE_REQUIRED。回读按附件编号定界（上传时不带业务编号），写法同锁账补录凭证 253-R1。补录服务新增 canViewEvidence，查 manual_backfills.evidence_attachment_ids 含该附件的补录单；复核链节点经字段注入的 SupervisorReviewRepository 读取，构造器不改。提交补录时，对象范围闸照旧把关。
+    - 落地位置：backend/src/main/java/com/complex/platform/evidence/EvidenceEventService.java:89（注入）、:202（回读按附件编号定界）、:640-646（manual_backfill 分支）；evidence/ManualBackfillService.java:95（注入）、:191（canViewEvidence）。无迁移、无新权限码、无新失败码。
+    - 依据：BSM:1642「补录必须附原始记录凭证（微信截图、通话录音等）并经审核」；PGM:528「系统按组织层级自动补全从发起人到该最终审批人之间的全部直接上级节点，逐级审批」。
+    - 测试：BarServiceBackfillJdbcTests.unattachedSuperiorUploadsAndReadsManualBackfillEvidence。
+  - 316-R1（财务退款凭证：除经销退款外的全部来源按退款所属项目与商户办理）。
+    - 改法：财务退款凭证分支的项目口径，由"来源为原收款退款（ar_ap_payment）"扩到经销退款以外的全部来源（stored_value_account、ticket_payment_rejection、channel_ticket_rejection、bar_deposit_rejection、bar_scan_order_rejection）。
+      - 上传须持 finance.refund.create 和 evidence.attachment.create，并可触及退款所属项目，否则 403 CROSS_PROJECT_FORBIDDEN。
+      - 回读须持 finance.ar_ap.view 和 evidence.timeline.view。商户账号只按商户判；不带商户编号的账号须可触及退款所属项目。
+      - 商户账号只限退款商户为本商户，否则 403 CROSS_MERCHANT_FORBIDDEN。通用卡储值本金退款不挂商户，商户账号一律 403。
+      - 与 FinanceService.scopedRefund 同口径。
+    - 落地位置：evidence/EvidenceEventService.java:611，条件改为 refund 非空（经销退款在前一支已先返回）。PaymentConfirmationPayrollRefundJdbcTests 的 platformFinance 注释随之改一句，测试账号不改。无迁移、无新权限码、无新失败码。
+    - 依据：BSM:806「系统完整记录退款原因、责任主体、发起人、审批人、适用规则版本、原路退回结果以及对应财务、积分、成长值和权益冲正」；BSM:1673「所有数据默认按项目隔离，只有项目之上的获授权岗位可以跨项目汇总」；ENUM:86「余额管理与退款均由长沙项目公司负责」。
+    - 测试：FinanceProjectScopeRefundJdbcIntegrationTests.storedValueRefundEvidenceFollowsRefundProject、FinanceProjectScopeRefundJdbcIntegrationTests.ticketRejectionRefundEvidenceFollowsRefundMerchantAndProject。
+  - 316-R2（门票退款五个动作的范围闸：商户账号限本商户，无商户号账号按可触及订单所属项目）。
+    - 改法：TicketRefundService 的商户闸 enforceMerchantScope(merchantId) 改为 enforceOrderScope(order, permission)。
+      - 最高权限放行。
+      - 商户账号（含派驻）须等于原订单商户，否则 403 CROSS_MERCHANT_FORBIDDEN（文案沿用原文）。
+      - 不挂商户的账号（平台管理员与项目侧人员）须以该动作权限码可触及原订单所属项目，否则 403 CROSS_PROJECT_FORBIDDEN「无权处理其他项目的票务退款」。平台管理员恒可触及；原订单无项目按不可触及，与退款台账同口径。
+      - 发起传 ticket.refund.request；批准、驳回、确认拨付、发起付款确认传 ticket.refund.approve，与控制器所判权限码一致。
+      - 原订单缺失时照旧不判归属。
+    - 落地位置：backend/src/main/java/com/complex/platform/ticketing/TicketRefundService.java:100（闸）；五处调用在 :128、:236、:272、:321、:340。无迁移、无新权限码。TicketRefundReasonJdbcIntegrationTests 既有用例 payoutWaitsForConfirmationOfPendingPayoutAmount 的一句注释随之改写，测试账号不改。
+    - 依据：BSM:1673「所有数据默认按项目隔离，只有项目之上的获授权岗位可以跨项目汇总」；PGM:664「跨主体与平台层面的财务工作——三方对账、分账复核、封账、开票、付款执行、守恒校验不通过时的追查——由财务中心负责」。
+    - 测试：TicketRefundReasonJdbcIntegrationTests.projectFinanceWithoutMerchantHandlesRefundsOfReachableProject。
+- 第十八批 AV 段落地位置补记（段三：310-R0、310-R1、310-R2）：
+  - 310-R0（退租押金退还应付挂出租合同所属项目）：
+    - 改法：退租结算落账端口 TerminationSettlementPort.createDepositRefundPayable 加末参 projectId。FinanceService.createDepositRefundPayable 把它写进台账行的 project_id，原来为空。合同域 ContractService.postTerminationLedger 传出租合同的 contract.projectId()。锁账判定、到期日、押金台账写法都不变，不回填存量（UD-07）。
+    - 落地位置：backend/.../finance/TerminationSettlementPort.java、finance/FinanceService.java（createDepositRefundPayable）、contract/ContractService.java（postTerminationLedger 一处实参）。
+    - 依据：BSM:1673「所有数据默认按项目隔离，只有项目之上的获授权岗位可以跨项目汇总。」；ENUM:252「押金退还付款状态按「内部应付执行状态」条执行」。按常理定：出租方是该合同所在综合体（PGM:420 租赁归城市项目公司），项目取合同所属项目。
+    - 测试：SpaceRentalStatusAfterSettlementJdbcIntegrationTests.depositRefundPayableBelongsToContractProjectAndListedForProjectFinance。
+  - 310-R1（内部应付执行状态对押金退还应付可用，后台面板显示）：
+    - 改法：InternalPayableExecutionService 对没有付款时点固化行的押金退还应付（payable＋deposit_refund）按「挂账即可查看、无异议截止与指定付账日」出执行状态，可登记已发起（在途不重付）与明确失败。
+      - 发起付款不判异议期，判所在地今天不早于到期日，否则 409 DEPOSIT_REFUND_NOT_DUE，与登记付款同码；
+      - 预计重付日只须不早于今天，不设下一个付账日上限；
+      - 资金不足顺延对押金退还 409 INTERNAL_PAYABLE_NOT_SCHEDULED；
+      - 后台付款执行面板认 deposit_refund，不出资金不足顺延按钮。
+    - 落地位置：backend/.../finance/InternalPayableExecutionService.java（schedule、initiate、fail、fundsInsufficient、approveAccountChange）、apps/web/src/admin/pages/FinanceInternalPayablePanel.tsx（INTERNAL_PAYABLE_ROUTES、资金不足顺延块）。
+    - 依据：ENUM:252「押金退还支付不受三个付账日与账单异议期约束」「以退租结算算账完成为准执行支付，且不早于等待期届满」「押金退还付款状态按「内部应付执行状态」条执行」（末句为 D-05 补入）；ENUM:253「内部应付执行状态待付（含已发起、尚未确认到账且未收到失败结果的银行在途，在途不重付）、付款失败待处理、已结清（……失败不属三种顺延，普通内部结算款项重付不迟于下一个付账日）」。重付日上限只管普通内部结算款项，按字面定。
+    - 测试：InternalPayableExecutionJdbcIntegrationTests.depositRefundPaymentExecutionOverHttp、InternalPayableExecutionJdbcIntegrationTests.depositRefundInitiateBeforeDueDateRejectedOverHttp；FinanceArApLedgerPage.test.tsx「选中退租押金退还应付显示执行面板与登记已发起按钮，没有资金不足顺延按钮」。
+  - 310-R2（商户专区可见押金退还付款执行状态，付款失败后由商户财务负责人审批更换收款账户）：
+    - 改法：商户专区往来列表 merchantTicketSettlements 并入本商户为往来方的退租押金退还应付（不含冲正、重述行），同样出执行状态、记已读。审批更换收款账户时，押金退还按台账行项目判定本人范围。页面款项名加「退租押金退还」，区标题改「门票分账与押金退还」，说明补押金退还付款日口径。
+    - 落地位置：backend/.../finance/InternalPayableExecutionService.java（merchantTicketSettlements、requirePayee）、apps/web/src/admin/pages/MerchantZoneSettlementsPage.tsx（TICKET_ROUTE_LABELS、区标题与说明）。
+    - 依据：BSM:1683「系统标记为“付款失败待处理”状态，对收款方可见并注明失败原因与预计重付时间」「更换收款账户须经收款方所属公司财务负责人审批」；ENUM:252「押金退还付款状态按「内部应付执行状态」条执行」。
+    - 测试：InternalPayableExecutionJdbcIntegrationTests.merchantZoneShowsDepositRefundFailureAndPayeeHeadApprovesAccountChangeOverHttp；MerchantZoneSettlementsPage.test.tsx「退租押金退还显示款项名与付款失败待处理（原因与预计重付日），区标题含押金退还」。
+- 18AV 落地位置补记·段四：
+  - 308-R1 改法：对账差异号由「recon_diff_」+slug(批次号_幂等键)（截 40 位，44 位批次号截断后同批同号、后登记覆盖先登记）改为「recon_diff_」+stableToken("reconciliation_difference", 批次号:幂等键)，同批次多笔各自独立；同幂等键重放返回首次结果。不修存量重号（UD-07）。
+    - 落地位置：backend/src/main/java/com/complex/platform/finance/FinanceService.java createDifference。
+    - 依据：ENUM:191「差异处理状态待识别、待处理、待复核、已关闭」「各阶段由财务岗全程负责」；BSM:1751「高价值差异复核通过才入账、同一差异只入账一次」。
+    - 测试：FinanceReconciliationDifferenceRegisterJdbcTests.differencesInSameBatchGetDistinctIds、FinanceReconciliationDifferenceFlowJdbcTests.laterDifferenceInSameBatchDoesNotOverwriteClosedOne。
+  - 305-R1 改法：登记对账差异时，业务单号在平台侧查得到的（收款记录、已付票务订单、酒吧账单、已核验经销到账），须属所选批次的日结范围，否则拒 400 RECONCILIATION_BUSINESS_REF_OUT_OF_BATCH，不回显平台侧金额；查不到的照旧；平台管理员与最高权限同样核。
+    - 范围口径同 161-R2：酒吧或商户批次认该商户的单，含绑定该酒吧的单店票；综合体批次认该综合体里酒吧以外的单。收款记录按所属台账的项目与商户判。
+    - 落地位置：新建 backend/src/main/java/com/complex/platform/finance/JdbcReconciliationBusinessRefRepository.java（findOwner、Owner.within）；FinanceService.java 加字段注入 reconciliationBusinessRefs，createDifference 在取平台侧金额前核对。
+    - 依据：PGM:528「④看不到别的商户和别的项目的数据」；PGM:664「单店层面的财务工作——日结确认与锁定、商户费用账单出账、差异认定、异常单据处置、报损物品的财务确认——由该酒吧对应的财务 BP 负责」；ENUM:191「差异未关闭期间，高价值差异所涉营业日的日结不得确认锁定」。
+    - 测试：FinanceReconciliationDifferenceRegisterJdbcTests.businessRefMustBelongToBatchScope；随改夹具的 readsAndRegistrationFollowBatchScope、dealerVerifiedPaymentTakesPlatformSide、FinanceReconciliationDifferenceLedgerJdbcTests.ticketOrderDifferenceCannotEnterLedger、verifiedDealerPaymentPostsReceivableToDealer。
+  - 306-R1 改法：整单终态复核单的凭证改为提交时凭证并上审批人所附凭证，去重保序，不覆盖；通过与驳回同，主管复核页、审批链页及内部调用一并覆盖。
+    - 落地位置：backend/src/main/java/com/complex/platform/governance/review/SupervisorReviewService.java approve。
+    - 依据：PGM:899「谁发起、谁销售、谁服务、谁第一个处理异常、为什么、谁审批、结果是什么，都要能查到。」；ENUM:202「复核人须比对原件与录入值后签字」。
+    - 测试：FinanceReconciliationDifferenceFlowJdbcTests.finalDecisionOnSupervisorReviewPageKeepsSubmittedEvidence。
+  - 313-R1 改法：页面矩阵 ADM-FIN-001 行权限列删去后端已不存在的 finance.ledger.write、finance.adjust.approve；接口列「GET/POST /api/v1/finance/ar-ap-items」改为「GET /api/v1/finance/ar-ap-items」（本页不调 createArApItem）。
+    - 落地位置：docs/full-admin-page-permission-field-matrix-v0.1.csv 第 31 行。
+    - 依据：无 HTML 原句（文档与代码一致性）；任务书「新页面或页面新调用的接口同步页面矩阵对应页面行（接口与权限码）」。
+    - 测试：node tools/verify-full-admin-page-matrix.mjs 通过；npm run verify:predeploy 绿。
+  - 317-R1 改法：
+    - 前端台账来源中文名按后端 AR_AP_SOURCE_TYPE_LABELS 同名补齐 20 项（合同、订单、退款、手工录入、结算、员工提成、库存差异、公共区域维护费、物业费、通票酒水结算、门票分销、分红留存待释放、分红留存已释放、经销订单、平台激励补贴、订台定金达标退回、门票积分发行月结、存酒补存/赔付损失、存酒退出承接垫付追收、工单用料费（商户承担））。
+    - 台账页删掉本地来源表，改读字段值表 KEY_VALUE_LABELS.source_type，两张表并成一张。
+    - 控制席判定：后端 AR_AP_SOURCE_TYPE_LABELS 一并补 contract_rent 合同租金、contract_property_fee 物业费、energy_fee 能源费、purchase_return_refund 供应商退货退款、purchase_prepayment_refund 采购未用预付款退款。
+    - 页面矩阵 ADM-FIN-001 行 implementation_status 补一句。
+    - 落地位置：apps/web/src/admin/i18n/fieldLabels.ts（KEY_VALUE_LABELS.source_type）、apps/web/src/admin/pages/FinanceArApLedgerPage.tsx（sourceTypeLabel）、backend/src/main/java/com/complex/platform/finance/FinanceService.java（AR_AP_SOURCE_TYPE_LABELS）、docs/full-admin-page-permission-field-matrix-v0.1.csv 第 31 行。
+    - 依据：PGM:287「界面全中文（所有终端零英文）」「展示给用户的一切文字，包括菜单、页面标题、字段名、状态、枚举取值……必须全部为中文」；待开发清单第 317 条修法「前端按后端同名补齐」；18AV 控制席判定（后端五项同一张来源表、同一条）。
+    - 测试：FinanceArApLedgerPage.test.tsx「FinanceArApLedgerPage 来源中文名与后端同名补齐 › 分红留存已释放、工单用料费（商户承担）、存酒补存/赔付损失、手工录入显中文，不显原码」；FinanceServiceTests.contractEnergyAndPurchaseRefundSourcesHaveChineseLabels。
+- 契约落地（K-contract）：docs/openapi/openapi-p0.yaml 与 .json 同值就地改，操作数仍 1393，info.version 由收尾升至 V0.80，各操作 x-data-scope、x-auth-context、x-terminal-allowed、x-audit-event 不变。
+  - 307-R1：
+    - 改法：uploadEvidenceAttachment 说明补 manual_backfill 人工补录凭证，不带商户编号的账号也可上传、merchant_id 记空、商户账号照旧记本商户；readEvidenceAttachmentFile 说明在 253-R1 句后补回读口径：不带商户归属的账号，是补录复核链上任一节点的审批人或被转发人，或可查看该补录对象，即可看，否则照旧 403 MERCHANT_SCOPE_REQUIRED。
+    - 依据：BSM:1642「补录必须附原始记录凭证（微信截图、通话录音等）并经审核」。
+  - 316-R1：
+    - 改法：同两个操作补 finance_refund 口径，经销退款以外的全部来源（ar_ap_payment、stored_value_account、ticket_payment_rejection、channel_ticket_rejection、bar_deposit_rejection、bar_scan_order_rejection）按退款所属项目与商户办理。上传须持 finance.refund.create，回读须持 finance.ar_ap.view；403 CROSS_PROJECT_FORBIDDEN、CROSS_MERCHANT_FORBIDDEN；通用卡退款商户账号一律 403。uploadEvidenceAttachment 旧句「其他来源保持原范围规则」改为「其他来源见下文第十八批 AV 段 316-R1」。
+    - 依据：BSM:806「原路退回结果」；BSM:1673「所有数据默认按项目隔离」。
+  - 316-R2：
+    - 改法：requestTicketRefund、approveTicketRefund、rejectTicketRefund 新增说明，confirmTicketRefundPayout 补说明，统一写范围口径：最高权限不限；商户账号限原订单商户，否则 403 CROSS_MERCHANT_FORBIDDEN；不挂商户的账号须以该操作权限码可触及原订单项目，否则 403 CROSS_PROJECT_FORBIDDEN。createTicketRefundPaymentConfirmation 在商户闸句后接上不挂商户那一句，x-failure-codes 补 CROSS_PROJECT_FORBIDDEN。
+    - 依据：BSM:1673「所有数据默认按项目隔离」。
+  - 310-R1：
+    - 改法：getInternalPayableExecution 补 deposit_refund 可查，visible_at＝挂账时刻，异议截止与指定付账日为空；initiateInternalPayment 补押金退还不判异议期、早于到期日 409 DEPOSIT_REFUND_NOT_DUE（与 createArApPayment 同码）；recordInternalPaymentFailure 补预计重付时间只须不早于今天，否则 400 REPAY_AFTER_NEXT_PAY_DAY；postponeInternalPaymentForFunds 补押金退还不适用资金不足顺延，409 INTERNAL_PAYABLE_NOT_SCHEDULED。
+    - 依据：ENUM:252「押金退还支付不受三个付账日与账单异议期约束」；ENUM:253「普通内部结算款项重付不迟于下一个付账日」。
+  - 310-R2：
+    - 改法：listMerchantPortalTicketSettlements 补并入本商户为往来方的押金退还应付，不含冲正、重述行，按挂账时刻倒序，同样记已读；approveMerchantPortalPayeeAccountChange 补押金退还付款失败待处理同样可审批，项目按台账行项目（出租合同所属项目）判定。
+    - 依据：BSM:1683「对收款方可见并注明失败原因与预计重付时间」。
+  - 305-R1：
+    - 改法：createFinanceReconciliationDifference 说明补业务单号须属所选批次的日结范围，否则 400 RECONCILIATION_BUSINESS_REF_OUT_OF_BATCH、不回显金额；平台管理员与最高权限同样核；平台侧查不到的照旧。
+    - 依据：PGM:528「④看不到别的商户和别的项目的数据」；ENUM:191「差异未关闭期间，高价值差异所涉营业日的日结不得确认锁定」。
+  - 306-R1：
+    - 改法：approveSupervisorReview 说明补整单终态 evidence_attachment_ids 为提交时凭证并上审批人所附凭证，去重保序、不覆盖。
+    - 依据：PGM:899「谁发起、谁销售、谁服务、谁第一个处理异常、为什么、谁审批、结果是什么，都要能查到。」
+  - 321-R1、262-R1、308-R1、313-R1、317-R1：契约无改动。
+  - 验证：npm run verify:openapi、verify:openapi-examples、verify:client-routes、verify:client-openapi、verify:client-payload --strict 全部 PASS；yaml 与 json 深比较一致。
+- 18AV 汇合段 J（e2e 与门禁）：tests/e2e 不需要改。grep 过本段三个改动页面：应收应付台账，ADM-MVP-05/08、UI-HARDEN-01/02、ADM-REM-04 只断言表头、登记核销、导出、权限不足；商户专区「我的对账」，ADM-MER-005 只断言页面可见；以及 403、对账差异、主管复核、凭证上传相关的选择器、断言与 mock，没有依赖本段改动的。四张视觉基线（overview 桌面、ops-readiness 桌面、bar-orders 移动、dynamic-pricing 移动）本段没有有意改动，不重拍。门禁结论（变基前，在 ff08d988 基线上实跑）：
+  - 后端全量 --fresh：6948 条，0 红。
+  - 前端：typecheck 0 错；vitest 2000/2000（第一遍 BarTableSessionsPage.cancelReservation 一条满载超时偶发，非本段，单独重跑与全量第二遍都绿）。
+  - 客人三工作区：77/131/85 全过。
+  - 安卓员工端：125/125；android-app 编译通过。
+  - 后台五份 e2e：33 passed。
+  - docs:operation-matrix、openapi-closure、data-isolation-spec、domain-ownership-scope 四类重生成后与工作树无差异；verify:p0-contract 全过。
+  - openapi yaml 与 json：深比较一致，1393 个操作，info.version 当时 V0.78（收尾升至 V0.80）。
+  - git diff --check：干净。
+- 18AV 落地位置补记·文档组（PRD 与下位文档现状句，无新裁决）：
+  - 改法：七份文档相对 ff83ee69 各升一版。前五份的变更日志各加一行；商户专区 PRD 与应收应付台账开发设计没有修订表，改抬头的版本与最后更新行。只写各段代码与契约已做到的现状，不新增业务规则。
+    - 财务 PRD V0.39；
+    - 游乐 PRD V0.17；
+    - 票务 PRD V0.38；
+    - 留痕 PRD V0.08；
+    - 平台治理 PRD V0.91；
+    - 商户专区 PRD V0.27；
+    - 应收应付台账开发设计 V0.13。
+  - 262-R1（依据：BSM:1682「全系统的钱账统一按「营业日」归集」）：补偿应付与追收应收的会计期间及付账日推算所据的月份，按实际提供方的营业日定（提供方是酒吧按该酒吧，否则按综合体），夜场凌晨履约或撤销归前一营业日所在月。
+    - 落地位置：docs/finance-settlement-product-prd-v0.1.md:326；docs/amusement-business-operations-product-prd-v0.1.md:383；docs/ticketing-entitlement-checkin-product-prd-v0.1.md:471；docs/finance-ar-ap-ledger-development-design-v0.1.md:74（两处「会计期间=履约月／撤销月」改为按提供方营业日定月）。
+    - 测试：ParkWideFaultCompensationJdbcIntegrationTests.compensationPayableAfterMidnightBooksProviderBusinessDayMonth、compensationRecoveryAfterMidnightBooksProviderBusinessDayMonth（段一所加）。
+  - 307-R1（依据：BSM:1642「补录必须附原始记录凭证（微信截图、通话录音等）并经审核」）：人工补录凭证不带商户编号的账号也可上传；回读按引用该凭证的补录单判，复核链上的审批人或被转发人、或能查看该补录对象的才可看，否则照旧按商户范围判。
+    - 落地位置：docs/evidence-risk-control-product-prd-v0.1.md:194。
+    - 测试：BarServiceBackfillJdbcTests（段二所加）。
+  - 316-R1（依据：BSM:806「原路退回结果」；ENUM:86「余额管理与退款均由长沙项目公司负责」）：退款凭证上传与查看的项目口径扩到经销退款以外的全部来源；通用卡储值本金退款不挂商户，商户账号不能上传与查看；注明「储值退款沿用原口径」不再适用于这类凭证。
+    - 落地位置：docs/finance-settlement-product-prd-v0.1.md:385。
+    - 测试：FinanceProjectScopeRefundJdbcIntegrationTests（段二所加）。
+  - 316-R2（依据：BSM:1673「所有数据默认按项目隔离」；PGM:664「……付款执行、守恒校验不通过时的追查——由财务中心负责」）：门票退款五个动作共用一个范围闸，不挂商户的账号按该动作的权限码可触及原订单所属项目办理，他项目 403 CROSS_PROJECT_FORBIDDEN。
+    - 落地位置：docs/ticketing-entitlement-checkin-product-prd-v0.1.md:530（付款确认句补一句）、:531（新增现状行）。
+    - 测试：TicketRefundReasonJdbcIntegrationTests（段二所加）。
+  - 310-R0～R2（依据：ENUM:252「押金退还支付不受三个付账日与账单异议期约束」「押金退还付款状态按「内部应付执行状态」条执行」；ENUM:253；BSM:1673）：
+    - 押金退还应付挂出租合同所属项目；
+    - 登记内部应付执行状态：不判异议期而判到期日（409 DEPOSIT_REFUND_NOT_DUE）；预计重付时间只须不早于今天；不适用资金不足顺延；
+    - 商户专区块名改「门票分账与押金退还」，块内可见、可审批换账户；首页未读计数不计押金退还。
+    - 落地位置：docs/finance-settlement-product-prd-v0.1.md:1094、:326（块名）；docs/merchant-portal-zone-prd-v0.1.md:112、:132；docs/platform-governance-prd-v0.1.md:692（第 18E 补记块名）。
+    - 测试：InternalPayableExecutionJdbcIntegrationTests、SpaceRentalStatusAfterSettlementJdbcIntegrationTests、MerchantZoneSettlementsPage.test.tsx、FinanceArApLedgerPage.test.tsx（段三所加）。
+  - 308-R1、305-R1：
+    - 依据：ENUM:191「待识别、待处理、待复核、已关闭」「差异未关闭期间，高价值差异所涉营业日的日结不得确认锁定」；BSM:1751「同一差异只入账一次」；PGM:528「④看不到别的商户和别的项目的数据」。
+    - 改法：差异号由批次号与幂等键摘要派生，同批次互不覆盖；业务单号在平台侧查得到的须属所选批次的日结范围（口径同 161-R2），否则 400 RECONCILIATION_BUSINESS_REF_OUT_OF_BATCH，不回显金额。
+    - 落地位置：docs/finance-settlement-product-prd-v0.1.md:607。
+    - 测试：FinanceReconciliationDifferenceRegisterJdbcTests、FinanceReconciliationDifferenceFlowJdbcTests（段四所加）。
+  - 306-R1（依据：PGM:899「谁发起、谁销售、谁服务、谁第一个处理异常、为什么、谁审批、结果是什么，都要能查到。」）：整单终审的凭证为提交时凭证在前、并上审批人所附凭证，不覆盖。
+    - 落地位置：docs/platform-governance-prd-v0.1.md:139。
+    - 测试：FinanceReconciliationDifferenceFlowJdbcTests（段四所加）。
+  - 317-R1（依据：PGM:287「界面全中文（所有终端零英文）」）：台账页来源中文名与后端 AR_AP_SOURCE_TYPE_LABELS 逐字同名（55 项），后端补五项中文名。
+    - 落地位置：docs/finance-settlement-product-prd-v0.1.md:327（页面矩阵 ADM-FIN-001 由段四改）。
+    - 测试：FinanceArApLedgerPage.test.tsx（段四所加）。
+  - 321-R1、313-R1：
+    - 321-R1：没有文档写 item_no 格式，不改文档。
+    - 313-R1：只改页面矩阵，由段四完成，本组只核对。
+  - 门禁：verify-full-admin-page-matrix 通过（117 页）；git diff --check 干净；verify:entry-anchors、verify:html-ledger-sync、verify:entry-doc-baseline 都 PASS。
+- 18AV 收尾复核修正（2026-11-18）：
+  - 台账来源中文名（317-R1 同根）：正常业务会写进台账、此前前后端两张表都缺的五个来源，后端 AR_AP_SOURCE_TYPE_LABELS 与前端 KEY_VALUE_LABELS.source_type 同键同名补上，两表由 55 项变为 60 项：
+    - facility_equipment_scrap 楼宇设备报废残值、facility_equipment_scrap_loss 楼宇设备报废损失：设施工作台「财务登记残值/损失」写入（BSM:1408「残值或损失由财务记录并关联原设备」）；
+    - stored_value_topup 通用卡储值充值：客人通用卡在线充值成功后的内部核算行（BSM:1704「通用卡充值预收」）；
+    - ticket_order 票务订单：客人在线付门票成功后的内部核算行（BSM:1946「票务系统提交票务订单」）；
+    - service_order 服务点单：服务点单付款时的收款行（同 ParkingWorkbenchPage 已有中文名）。
+    - 依据：PGM:287「展示给用户的一切文字，包括……枚举取值……导出文件表头与内容……必须全部为中文」。
+    - 同根全扫：写进 ar_ap_items 的各路径逐个核过，其余来源两表都已有中文名；通用支付意图接口 POST /api/v1/finance/payment-intents 没有前端或终端调用，不另补。其他页面各自的来源表不改。
+    - 落地位置：backend/src/main/java/com/complex/platform/finance/FinanceService.java（AR_AP_SOURCE_TYPE_LABELS）、apps/web/src/admin/i18n/fieldLabels.ts（KEY_VALUE_LABELS.source_type）、docs/finance-settlement-product-prd-v0.1.md:327（共 60 项）。
+    - 测试：FinanceServiceTests.contractEnergyAndPurchaseRefundSourcesHaveChineseLabels 补五个来源的断言；FinanceArApLedgerPage.test.tsx「FinanceArApLedgerPage 来源中文名与后端同名补齐 › 分红留存已释放、工单用料费（商户承担）、存酒补存/赔付损失、手工录入显中文，不显原码」补五行，详情抽屉显中文、不显原码。
+  - 票务定价用例改稳（只改测试）：TicketingPoliciesPage.pricing.test.tsx 选中通票后先等售价回显落定，输入后等输入框的值落定再断言；不改页面代码、不改用例意图与业务断言。

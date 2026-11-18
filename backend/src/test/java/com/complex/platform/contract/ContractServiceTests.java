@@ -1,6 +1,6 @@
 package com.complex.platform.contract;
 
-// 文件版本：V0.25
+// 文件版本：V0.26
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
@@ -826,7 +826,8 @@ class ContractServiceTests {
         LocalDate depositDueDate;   // HP-C06：最近一次押金退还应付到期日
 
         @Override
-        public long createDepositRefundPayable(String merchantId, long netRefundCent, String settlementId, LocalDate dueDate) {
+        public long createDepositRefundPayable(String merchantId, long netRefundCent, String settlementId, LocalDate dueDate,
+                String projectId) {
             depositDueDate = dueDate;
             long eff = depositBalance == null ? netRefundCent : Math.min(netRefundCent, Math.max(0L, depositBalance));
             if (depositBalance != null) {

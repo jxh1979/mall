@@ -1,8 +1,8 @@
 package com.complex.platform.amusement;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
-import com.complex.platform.common.LocalZone;
+import com.complex.platform.common.BusinessDayResolver;
 import com.complex.platform.finance.ArApItemRecord;
 import com.complex.platform.finance.ArApItemSourceRecord;
 import com.complex.platform.finance.FinanceRepository;
@@ -24,6 +24,8 @@ import org.springframework.stereotype.Service;
  * 部分；已付出的部分另挂一笔对提供方的追收应收，单独收回）→ 已付部分再追加重述行承接（三行净额＝已付、未付归零），并对提供方另挂追收应收
  * （source_type=compensation_fulfillment_recovery，幂等键取该次冲正 id，到期日按该钱路付账日规则推算并固化，经统一回写点 settleArApItem 收回）；
  * 全部未付时只追加冲正行。
+ * 第十八批 AV 段 262-R1（BSM:1682「全系统的钱账统一按「营业日」归集」）：补偿应付与追收应收的会计期间及付账日推算的账期按实际提供方的
+ * 营业日定月（提供方是酒吧按该酒吧，否则按综合体），夜场凌晨履约或撤销归前一营业日所在月。
  */
 @Service
 public class AmusementCompensationFulfillmentAdapter implements CompensationFulfillmentPort {
@@ -34,12 +36,14 @@ public class AmusementCompensationFulfillmentAdapter implements CompensationFulf
     private final JdbcAmusementFaultCompensationRepository repository;
     private final FinanceRepository finance;
     private final InternalPayDayService payDays;
+    private final BusinessDayResolver businessDays;
 
     public AmusementCompensationFulfillmentAdapter(JdbcAmusementFaultCompensationRepository repository, FinanceRepository finance,
-            InternalPayDayService payDays) {
+            InternalPayDayService payDays, BusinessDayResolver businessDays) {
         this.repository = repository;
         this.finance = finance;
         this.payDays = payDays;
+        this.businessDays = businessDays;
     }
 
     @Override
@@ -55,7 +59,7 @@ public class AmusementCompensationFulfillmentAdapter implements CompensationFulf
         if (priceCent != null && priceCent > 0 && providerMerchantId != null
                 && !batch.bearerCompanyId().equals(repository.findMerchantBusinessEntity(providerMerchantId).orElse(null))) {
             payable = "arap_cpf_" + id;
-            YearMonth month = YearMonth.from(fulfilledAt.atZone(LocalZone.ID));
+            YearMonth month = YearMonth.from(businessDays.merchantBusinessDate(batch.projectId(), providerMerchantId, fulfilledAt));
             var schedule = payDays.schedule(SOURCE_TYPE, batch.projectId(), month.atDay(1), fulfilledAt);
             // merchant_id 不填：承担方是批次承担主体（域主管公司的法律主体）而非任一商户，挂在提供方账本上会让提供方给欠自己的款登记付款。
             ArApItemRecord row = new ArApItemRecord(payable, "ARAP-CPF-" + id.substring(4), "payable", providerMerchantId,
@@ -90,9 +94,10 @@ public class AmusementCompensationFulfillmentAdapter implements CompensationFulf
                             origin.dueDate(), origin.accountingPeriod(), "settled", reversedAt, reversedAt, origin.merchantId(),
                             origin.projectId(), origin.id(), null));
                     // 「已付出的部分另挂一笔对提供方的追收应收，单独收回」：往来方＝原提供方，来源＝该次冲正行（幂等），
-                    // 会计期间＝撤销月，到期日按该钱路财务指定付账日规则推算并固化（同 FS-021-R4）。
+                    // 会计期间＝撤销时刻所属提供方营业日的月，到期日按该钱路财务指定付账日规则推算并固化（同 FS-021-R4）。
                     String recovery = "arap_cpr_" + fulfillment.id();
-                    YearMonth month = YearMonth.from(reversedAt.atZone(LocalZone.ID));
+                    YearMonth month = YearMonth.from(businessDays.merchantBusinessDate(origin.projectId(), origin.counterpartyId(),
+                            reversedAt));
                     var schedule = payDays.schedule(RECOVERY_SOURCE_TYPE, origin.projectId(), month.atDay(1), reversedAt);
                     ArApItemRecord row = new ArApItemRecord(recovery, "ARAP-CPR-" + fulfillment.id().substring(4), "receivable",
                             origin.counterpartyId(), RECOVERY_SOURCE_TYPE, reversal, paid, 0L, paid, origin.currency(), schedule.dueDate(),

@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -99,7 +99,7 @@ class PaymentConfirmationPayrollRefundJdbcTests {
         legalLine = staffs.staff(legalLineId, "staff", project, null, "governance.supervisor_review.view", "governance.supervisor_review.approve");
         registerOnly = staffs.staff("usr_pcp_ro_" + s, "staff", project, null, "finance.payment.register", "finance.ar_ap.view");
         otherPayrollViewer = staffs.staff("usr_pcp_ov_" + s, "staff", otherProject, null, FinancePayrollService.VIEW);
-        // 储值本金、票务拒收等非原收款来源的退款凭证由平台财务上传（项目财务无商户编号时按商户范围拒，既有口径）。
+        // 本类非原收款来源用例沿用平台财务上传凭证；项目财务无商户编号时按退款所属项目办理（第十八批 AV 段 316-R1）。
         platformFinance = staffs.staff("usr_pcp_pf_" + s, "platform_admin", null, null, "finance.refund.create", "finance.ar_ap.view",
                 "evidence.attachment.create");
         for (String user : List.of(financeId, verifierId, "usr_pcp_pf_" + s)) {

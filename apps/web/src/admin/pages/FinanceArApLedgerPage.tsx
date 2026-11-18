@@ -1,4 +1,4 @@
-// 文件版本：V0.18
+// 文件版本：V0.19
 import React from "react";
 import { FinancePayrollPaymentPanel } from "./FinancePayrollPaymentPanel";
 import { FinanceRefundPanel } from "./FinanceRefundPanel";
@@ -14,6 +14,7 @@ import { useSortedRows } from "../components/useSortedRows";
 import type { AdminPageProps, FinanceLedgerRow } from "../types";
 import { saveDownloadedFile, type PagedResult } from "../client/adminClient";
 import { formatBusinessStatus } from "../i18n/statusLabels";
+import { KEY_VALUE_LABELS } from "../i18n/fieldLabels";
 import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowDetailDrawer";
 import { MetricDetailLink, useMetricKpiValue } from "../components/MetricDetailEntry";
 
@@ -31,31 +32,10 @@ function voucherNo(row: FinanceLedgerRow): string {
   return row.itemNo ?? row.billNo ?? row.sourceDoc ?? row.id;
 }
 
-// ar_ap 来源类型中文标签（含退租相关）；未知值原样回显不吞值。
-const SOURCE_TYPE_LABELS: Record<string, string> = {
-  termination_penalty: "退租违约金", deposit_refund: "退租押金退还", deposit: "押金",
-  contract_rent: "合同租金", contract_property_fee: "物业费", energy_fee: "能源费",
-  turnover_rent: "营业额抽成租金", dividend_payout: "持股分红发放", bar_bill: "酒吧账单",
-  dispatch_commission_transfer: "派驻提成月结拨付", bar_payroll_transfer: "酒吧报酬月结拨付", staff_payroll: "员工工资",
-  purchase_inbound: "采购入库", purchase_prepayment: "采购预付款", purchase_consignment: "寄售结算",
-  purchase_return_refund: "供应商退货退款", purchase_prepayment_refund: "采购未用预付款退款",
-  deposit_adjustment: "变更押金补退差额",   // HP-C03：面积/位置变更子合同押金补缴应收／退还应付
-  compensation_fulfillment: "补偿新增履约结算",   // FS-012：补偿批次承担主体对实际提供方的补偿应付
-  compensation_fulfillment_recovery: "补偿应付已付追收",   // 裁决 2026-10-19 第二轮第 5 条：已付部分在核销撤销后对提供方的追收应收
-  single_bar_service_fee: "单店门票综合服务费",   // FS-013：按计费月汇总后单独挂酒吧应收；退款重算的应退同来源（应付）
-  ticket_distribution_recovery: "通票分账追收",   // FS-021-R1：负额结算明细单独挂向酒吧的追收应收，不与应付轧差
-  contract_parking_monthly: "车位月租", parking_fee: "停车费",   // HP-P01：合同车位月租应收；客人停车费（内部核算，归城市项目公司）
-  parking_credit_cost: "停车抵免成本",   // HP-P01：城市项目公司对承担商户的停车消费抵免成本普通内部结算应收（按月）
-  bar_shift_overage: "收银长款（营业外收入）",   // 第十八批 R 段 142-R1：长款复核平账计该酒吧营业外收入（内部核算），与后端 AR_AP_SOURCE_TYPE_LABELS 同名
-  turnover_rent_reversal: "营业额抽成冲正",   // 第十八批 U 段第 155 条 155-R2：跨期退款按原账期档位费率冲回的营业额抽成，挂商户应付；与后端 AR_AP_SOURCE_TYPE_LABELS 同名
-  // 第十八批 AI 段 214-R1、214-R2：月结过账挂娱乐平台公司与游乐公司、城市项目公司等之间的组合通票往来；与后端 AR_AP_SOURCE_TYPE_LABELS 同名
-  pass_domain_share: "通票域间份额", pass_domain_direct_settlement: "通票餐饮零售代付", pass_unverified_attribution: "通票到期未核销归属",
-  reconciliation_difference: "对账差异",   // 第十八批 AL 段 223-R1（BSM:1751）：对账差异复核通过后按认定结果入账；与后端 AR_AP_SOURCE_TYPE_LABELS 同名
-  // 第十八批 AM 段第 241 条 241-R1（第十八批裁决 65「按台账来源逐个分」）：付款确认按台账来源定支付类型；与后端 AR_AP_SOURCE_TYPE_LABELS 同名。
-  inventory_transfer: "门店要货货款", media_performance_settlement: "传媒演出结算", stored_value_consume: "平台代收商户卡消费", partner_voucher: "内部价券结算",
-};
+// ar_ap 来源类型中文标签：第十八批 AV 段 317-R1 起与登记核销结果区共用字段值表 KEY_VALUE_LABELS.source_type（与后端 AR_AP_SOURCE_TYPE_LABELS 同名），
+// 只维护一处；未知值原样回显不吞值。
 function sourceTypeLabel(v?: string): string {
-  return v ? (SOURCE_TYPE_LABELS[v] ?? v) : "—";
+  return v ? (KEY_VALUE_LABELS.source_type?.[v] ?? v) : "—";
 }
 
 // 金额列：分转元两位小数（等宽数字由 tabular-nums 保证），缺失不伪造。

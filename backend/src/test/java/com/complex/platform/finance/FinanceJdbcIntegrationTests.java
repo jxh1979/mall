@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.12
+// 文件版本：V0.13
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.groups.Tuple.tuple;
@@ -1539,6 +1539,38 @@ class FinanceJdbcIntegrationTests {
         return mockMvc.perform(post("/api/v1/finance/daily-closes/" + dailyCloseId + "/final-marks").with(who)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"idempotency_key\":\"" + key + "\",\"category\":\"" + category + "\"}"));
+    }
+
+    // ─── 第十八批 AV 段第 321 条 321-R1：手工登记台账编号取完整 slug ─────────────────────
+    /**
+     * PGM:528「⑤同一笔操作重复提交不重复生效（重复点击、网络重发、渠道重复回调都只算一次）」的反面：不同的两笔不得因编号相同互相顶替或报错。
+     * 两笔幂等键前 12 位相同（c321_same_pr），编号各带完整 slug、互不相同；旧写法只取前 12 位，两笔编号同尾、同一毫秒即撞 item_no 唯一键。
+     * 平台财务按后台真实请求形状（蛇形键）登记。
+     */
+    @Test
+    void manualArApItemsSharingKeyPrefixGetDistinctItemNos() throws Exception {
+        String s = suffix();
+        String project = "project_c321_" + s;
+        String bar = "bar_c321_" + s;
+        insertProject(project);
+        insertBar(bar, project);
+        RequestPostProcessor admin = new StaffRequestFixture(jdbcTemplate).staff("usr_c321_" + s, "platform_admin", project, null,
+                "finance.ar_ap.manage");
+        LocalDate due = LocalDate.now(com.complex.platform.common.LocalZone.ID).plusDays(400);
+        String a = createManualItem(admin, "c321-same-prefix-a-" + s, bar, due);
+        String b = createManualItem(admin, "c321-same-prefix-b-" + s, bar, due);
+        assertThat(a).endsWith("-c321_same_prefix_a_" + s);
+        assertThat(b).endsWith("-c321_same_prefix_b_" + s).isNotEqualTo(a);
+    }
+
+    private String createManualItem(RequestPostProcessor who, String key, String counterparty, LocalDate due) throws Exception {
+        return JsonPath.read(mockMvc.perform(post("/api/v1/finance/ar-ap-items").with(who)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"idempotency_key\":\"" + key + "\",\"direction\":\"payable\",\"counterparty_id\":\""
+                                + counterparty + "\",\"source_type\":\"manual\",\"source_id\":\"" + key
+                                + "\",\"amount_cent\":1000,\"due_date\":\"" + due + "\"}"))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString(), "$.data.item_no");
     }
 
     private static String suffix() {

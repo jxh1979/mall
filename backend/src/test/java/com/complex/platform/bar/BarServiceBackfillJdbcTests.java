@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.containsString;
@@ -221,14 +221,56 @@ class BarServiceBackfillJdbcTests {
         assertThat(jdbc.queryForObject("SELECT status FROM manual_backfills WHERE review_id=?", String.class, second)).isEqualTo("pending");
     }
 
+    /**
+     * 第十八批 AV 段第 307 条 307-R1（BSM:1642「补录必须附原始记录凭证（微信截图、通话录音等）并经审核」；PGM:528「系统按组织层级自动补全从发起人到
+     * 该最终审批人之间的全部直接上级节点，逐级审批」）：不挂单店的上级（无商户号）可上传人工补录凭证；本店员工提交的服务责任补录逐级上一级到他，
+     * 他能回读该补录所附凭证；他综合体、不在链上的无商户号员工回读 403 MERCHANT_SCOPE_REQUIRED，别家酒吧员工 403 CROSS_MERCHANT_FORBIDDEN；
+     * 本店员工上传与回读照旧；他用自己上传的凭证也能提交补录。
+     */
+    @Test
+    void unattachedSuperiorUploadsAndReadsManualBackfillEvidence() throws Exception {
+        String otherProject = "prj_bsv_q_" + suffix;
+        String otherBar = "mch_bsv_o_" + suffix;
+        jdbc.update("INSERT INTO projects (id, venue_type, name, status, created_at, updated_at) VALUES (?, 'complex', ?, 'active', now(), now())",
+                otherProject, "服务补录他项目 " + suffix);
+        jdbc.update("INSERT INTO merchants(id,merchant_name,merchant_type,business_entity_id,contract_entity_id,settlement_entity_id,project_id,status,"
+                + "created_at,updated_at) VALUES(?,'别家酒吧','bar',?,?,?,?,'active',now(),now())", otherBar, company, company, company, project);
+        String superiorRole = role("ar", "'bar.table_session.transfer','evidence.attachment.create','evidence.timeline.view',"
+                + "'governance.supervisor_review.view','governance.supervisor_review.approve'");
+        String readerRole = role("rd", "'bar.table_session.transfer','bar.payroll.view','evidence.attachment.create','evidence.timeline.view'");
+        RequestPostProcessor area = account("area", superiorRole, project, null);
+        RequestPostProcessor lead = account("lead", readerRole, project, merchant);
+        RequestPostProcessor stranger = account("stranger", readerRole, otherProject, null);
+        RequestPostProcessor rival = account("rival", readerRole, project, otherBar);
+        jdbc.update("INSERT INTO org_hierarchy(user_id,superior_id) VALUES(?,?)", user("lead"), user("area"));
+        Instant opened = Instant.now().minus(Duration.ofHours(1)).truncatedTo(ChronoUnit.SECONDS);
+        String s = session(opened, null, null, LocalDate.now(LocalZone.ID));
+
+        String areaFile = idOf(upload(area, "area.png").andExpect(status().isOk()));
+        String leadFile = idOf(upload(lead, "lead.png").andExpect(status().isOk()));
+        assertThat(jdbc.queryForObject("SELECT merchant_id FROM evidence_attachments WHERE id=?", String.class, areaFile)).isNull();
+        assertThat(jdbc.queryForObject("SELECT merchant_id FROM evidence_attachments WHERE id=?", String.class, leadFile)).isEqualTo(merchant);
+        reviewOf(submit(lead, s, "lead", opened, opened.plus(Duration.ofMinutes(20)), leadFile));
+
+        readFile(area, leadFile).andExpect(status().isOk());
+        readFile(stranger, leadFile).andExpect(status().isForbidden()).andExpect(jsonPath("$.detail_code").value("MERCHANT_SCOPE_REQUIRED"));
+        readFile(rival, leadFile).andExpect(status().isForbidden()).andExpect(jsonPath("$.detail_code").value("CROSS_MERCHANT_FORBIDDEN"));
+        readFile(lead, leadFile).andExpect(status().isOk());
+        reviewOf(submit(area, s, "area", opened.plus(Duration.ofMinutes(20)), opened.plus(Duration.ofMinutes(40)), areaFile));
+    }
+
     // ── 夹具 ─────────────────────────────────────────────────────────────────────────────────────
 
     private ResultActions submit(String session, String key, Instant start, Instant end, String file) throws Exception {
+        return submit(clerk, session, key, start, end, file);
+    }
+
+    private ResultActions submit(RequestPostProcessor who, String session, String key, Instant start, Instant end, String file) throws Exception {
         String body = "{\"idempotency_key\":\"bsv-" + key + "-" + suffix + "\",\"user_id\":\"" + user("waiter") + "\""
                 + ",\"started_at\":\"" + start + "\",\"ended_at\":\"" + end + "\""
                 + ",\"reason\":\"开台时未登记服务员，实际由该服务员接待\",\"responsible_staff_id\":\"" + user("clerk") + "\""
                 + ",\"evidence_attachment_ids\":[\"" + file + "\"]}";
-        return mockMvc.perform(post("/api/v1/bar/table-sessions/" + session + "/service-backfill").with(clerk)
+        return mockMvc.perform(post("/api/v1/bar/table-sessions/" + session + "/service-backfill").with(who)
                 .contentType(MediaType.APPLICATION_JSON).content(body));
     }
 
@@ -238,11 +280,21 @@ class BarServiceBackfillJdbcTests {
     }
 
     private String upload(String fileName) throws Exception {
-        String body = mockMvc.perform(multipart("/api/v1/evidence/attachments/upload")
-                        .file(new MockMultipartFile("file", fileName, "application/octet-stream", new byte[]{1, 2, 3}))
-                        .param("business_type", "manual_backfill").with(clerk))
-                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
-        return JsonPath.read(body, "$.data.id");
+        return idOf(upload(clerk, fileName).andExpect(status().isOk()));
+    }
+
+    private ResultActions upload(RequestPostProcessor who, String fileName) throws Exception {
+        return mockMvc.perform(multipart("/api/v1/evidence/attachments/upload")
+                .file(new MockMultipartFile("file", fileName, "application/octet-stream", new byte[]{1, 2, 3}))
+                .param("business_type", "manual_backfill").with(who));
+    }
+
+    private ResultActions readFile(RequestPostProcessor who, String attachmentId) throws Exception {
+        return mockMvc.perform(get("/api/v1/evidence/attachments/" + attachmentId + "/file").with(who));
+    }
+
+    private static String idOf(ResultActions result) throws Exception {
+        return JsonPath.read(result.andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8), "$.data.id");
     }
 
     private ResultActions approve(RequestPostProcessor who, String review) throws Exception {
@@ -318,12 +370,17 @@ class BarServiceBackfillJdbcTests {
     }
 
     private RequestPostProcessor account(String tag, String role) {
+        return account(tag, role, project, merchant);
+    }
+
+    /** 第十八批 AV 段 307-R1：指定所属综合体与商户号（null＝不挂商户）的员工账号。 */
+    private RequestPostProcessor account(String tag, String role, String organization, String merchantId) {
         String userId = user(tag);
         jdbc.update("INSERT INTO access_users(id,username,account_type,organization_id,merchant_id,status,created_at) VALUES(?,?,'staff',?,?,'active',now())",
-                userId, userId, project, merchant);
+                userId, userId, organization, merchantId);
         jdbc.update("INSERT INTO user_roles(user_id,role_id) VALUES(?,?)", userId, role);
-        jdbc.update("INSERT INTO staff_level_assignments(user_id,staff_level_id,organization_id) VALUES(?,'lvl_m3_upper',?)", userId, project);
-        AccessActor actor = new AccessActor(userId, userId, "staff", project, merchant, "active");
+        jdbc.update("INSERT INTO staff_level_assignments(user_id,staff_level_id,organization_id) VALUES(?,'lvl_m3_upper',?)", userId, organization);
+        AccessActor actor = new AccessActor(userId, userId, "staff", organization, merchantId, "active");
         return request -> {
             request.addHeader("X-Terminal-Type", "web");
             return authentication(new UsernamePasswordAuthenticationToken(actor, null,

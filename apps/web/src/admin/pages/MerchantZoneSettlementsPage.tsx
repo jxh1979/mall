@@ -1,4 +1,4 @@
-// 文件版本：V0.09
+// 文件版本：V0.10
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
@@ -134,6 +134,8 @@ function focusTitle(subset: KpiFocus["subset"]): string {
 // BSM L1597「异议期自该账单在商户专区可查看之日的次日起算」；BSM L1683「上述顺延一律不另行通知收款方，但该笔款项的待付状态须在系统中
 // 对收款方可见……付款失败待处理……注明失败原因与预计重付时间……更换收款账户须经收款方所属公司财务负责人审批」。
 // 对数字有异议走投诉与异议统一通道（BSM L1323，提出异议期间付款义务不暂停）。
+// 第十八批 AV 段 310-R2（ENUM:252「押金退还支付不受三个付账日与账单异议期约束」「押金退还付款状态按「内部应付执行状态」条执行」）：
+// 本商户的退租押金退还应付同表显示执行状态，付款失败后同样由财务负责人审批更换收款账户。
 const PAYEE_PERMS = ["merchant.portal.payee_account.approve"];
 const TICKET_ROUTE_LABELS: Record<string, string> = {
   ticket_distribution: "通票分账应付",
@@ -142,6 +144,7 @@ const TICKET_ROUTE_LABELS: Record<string, string> = {
   single_bar_service_fee: "单店门票综合服务费",
   compensation_fulfillment: "补偿新增履约结算",
   compensation_fulfillment_recovery: "补偿应付已付追收",
+  deposit_refund: "退租押金退还",
 };
 type TicketSettlementRow = {
   arApItemId: string; direction?: string; sourceType?: string; amountCent?: number; unpaidAmountCent?: number;
@@ -192,8 +195,8 @@ function TicketSettlementsSection({ api, effectivePermissions, setActionResult }
 
   return (
     <div data-testid="merchant-zone-ticket-settlements">
-      <h3>门票分账</h3>
-      <p className="admin-muted-action">异议截止日按账单在商户专区可查看之日次日起算；付款日为财务指定付账日（异议期未满、节假日或资金不足依规则顺延），顺延不另行通知，以此处状态为准。对数字有异议请通过投诉与异议通道提出，异议期间付款义务不暂停。</p>
+      <h3>门票分账与押金退还</h3>
+      <p className="admin-muted-action">异议截止日按账单在商户专区可查看之日次日起算；付款日为财务指定付账日（异议期未满、节假日或资金不足依规则顺延），顺延不另行通知，以此处状态为准。对数字有异议请通过投诉与异议通道提出，异议期间付款义务不暂停。退租押金退还不受付账日与异议期约束，付款日为等待期届满或退租结算算账完成之日。</p>
       {rows.length === 0 ? <p className="admin-muted-action" data-testid="merchant-zone-ticket-empty">暂无门票分账往来。</p> : (
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="merchant-zone-ticket-table">

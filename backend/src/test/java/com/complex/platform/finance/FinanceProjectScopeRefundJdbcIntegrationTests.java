@@ -1,10 +1,15 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.catchThrowable;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.complex.platform.access.AccessActor;
 import com.complex.platform.access.AccessRepository;
@@ -25,10 +30,15 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.ResultActions;
+import org.springframework.test.web.servlet.request.RequestPostProcessor;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
@@ -41,6 +51,7 @@ import org.springframework.transaction.annotation.Transactional;
         "spring.datasource.username=${COMPLEX_DATABASE_USERNAME:complex}",
         "spring.datasource.password=${COMPLEX_DATABASE_PASSWORD:complex_dev_pwd}"
 })
+@AutoConfigureMockMvc
 @Transactional
 class FinanceProjectScopeRefundJdbcIntegrationTests {
 
@@ -52,6 +63,7 @@ class FinanceProjectScopeRefundJdbcIntegrationTests {
     @Autowired EvidenceEventService evidence;
     @Autowired JdbcTemplate jdbc;
     @Autowired com.complex.platform.governance.review.SupervisorReviewService reviews;
+    @Autowired MockMvc mockMvc;
 
     String suffix, project, otherProject, merchant, otherMerchant, financeA, financeB, outsider, merchantStaff;
 
@@ -190,6 +202,36 @@ class FinanceProjectScopeRefundJdbcIntegrationTests {
                 .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("SUPERVISOR_SELF_REVIEW_FORBIDDEN"));
     }
 
+    /**
+     * 第十八批 AV 段第 316 条 316-R1（BSM:806「系统完整记录……原路退回结果」；BSM:1673「所有数据默认按项目隔离」；ENUM:86「余额管理与退款均由长沙项目公司负责」）：
+     * 通用卡储值本金待退（不挂商户、挂卡所属项目）的退款凭证按退款所属项目办理——本项目财务（无商户编号）上传、回读 200；他项目财务上传 403
+     * CROSS_PROJECT_FORBIDDEN；酒吧商户员工上传 403 CROSS_MERCHANT_FORBIDDEN。请求按财务退款面板真实形状（multipart，business_type=finance_refund）。
+     */
+    @Test
+    void storedValueRefundEvidenceFollowsRefundProject() throws Exception {
+        String role = proofRole();
+        String refund = pendingRefund("stored_value_account", null);
+        RequestPostProcessor own = staff(project, null, role);
+        String file = com.jayway.jsonpath.JsonPath.read(uploadProof(own, refund).andExpect(status().isOk()).andReturn().getResponse()
+                .getContentAsString(java.nio.charset.StandardCharsets.UTF_8), "$.data.id");
+        mockMvc.perform(get("/api/v1/evidence/attachments/" + file + "/file").with(own)).andExpect(status().isOk());
+        uploadProof(staff(otherProject, null, role), refund).andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.detail_code").value("CROSS_PROJECT_FORBIDDEN"));
+        uploadProof(staff(project, otherMerchant, role), refund).andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.detail_code").value("CROSS_MERCHANT_FORBIDDEN"));
+    }
+
+    /** 316-R1：票务拒收待退（挂商户、挂项目）的退款凭证，本商户员工与本项目财务（无商户编号）都可上传；别家商户员工 403 CROSS_MERCHANT_FORBIDDEN。 */
+    @Test
+    void ticketRejectionRefundEvidenceFollowsRefundMerchantAndProject() throws Exception {
+        String role = proofRole();
+        String refund = pendingRefund("ticket_payment_rejection", merchant);
+        uploadProof(staff(project, merchant, role), refund).andExpect(status().isOk());
+        uploadProof(staff(project, null, role), refund).andExpect(status().isOk());
+        uploadProof(staff(project, otherMerchant, role), refund).andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.detail_code").value("CROSS_MERCHANT_FORBIDDEN"));
+    }
+
     // ---- helpers ----
 
     private RefundRequest refund(String payment, long amount) {
@@ -238,6 +280,44 @@ class FinanceProjectScopeRefundJdbcIntegrationTests {
     private String proof(String refundId) {
         return evidence.uploadAttachment(new MockMultipartFile("file", "原路退款凭证.png", "image/png", PNG),
                 "finance_refund", refundId, "payment_receipt").id();
+    }
+
+    /** 316-R1：退款凭证上传、回读所需权限码（财务退款面板办理执行与核实）。 */
+    private String proofRole() {
+        String role = "psr_proof_" + suffix;
+        access.createRole(new RoleRecord(role, "项目财务退款凭证", null, "project", "active", Instant.now(),
+                List.of("finance.refund.create", "finance.ar_ap.view", "evidence.attachment.create", "evidence.timeline.view"),
+                null, false, List.of()));
+        return role;
+    }
+
+    /** 316-R1：原路待退（夹具直落，同 PaymentConfirmationPayrollRefundJdbcTests）：来源、商户按给定，项目为本项目。 */
+    private String pendingRefund(String source, String merchantId) {
+        String id = "psr_rf_" + UUID.randomUUID().toString().substring(0, 12);
+        jdbc.update("""
+                INSERT INTO finance_refunds (id, target_id, refund_amount_cent, reason, refund_channel, refund_direction, status, created_at,
+                    source_type, merchant_id, project_id, requested_by, original_payment_ref, updated_at)
+                VALUES (?, ?, 5000, '原路待退', 'wechat', 'original', 'requested', now(), ?, ?, ?, 'system', ?, now())
+                """, id, "target_" + id, source, merchantId, project, "orig_" + id);
+        return id;
+    }
+
+    private ResultActions uploadProof(RequestPostProcessor who, String refundId) throws Exception {
+        return mockMvc.perform(multipart("/api/v1/evidence/attachments/upload")
+                .file(new MockMultipartFile("file", "原路退款凭证.png", "image/png", PNG))
+                .param("business_type", "finance_refund").param("business_id", refundId).param("attachment_role", "payment_receipt")
+                .with(who));
+    }
+
+    /** 后台网页真实请求形状（X-Terminal-Type: web）的员工账号。 */
+    private RequestPostProcessor staff(String projectId, String merchantId, String role) {
+        String id = user(projectId, merchantId, role);
+        AccessActor actor = new AccessActor(id, id, "staff", projectId, merchantId, "active");
+        return request -> {
+            request.addHeader("X-Terminal-Type", "web");
+            return authentication(new UsernamePasswordAuthenticationToken(actor, null,
+                    List.of(new SimpleGrantedAuthority("ROLE_P0_STAFF")))).postProcessRequest(request);
+        };
     }
 
     private String user(String projectId, String merchantId, String role) {

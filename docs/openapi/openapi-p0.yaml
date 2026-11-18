@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: 综合体管理系统 P0 API 契约
-  version: V0.79
+  version: V0.80
   description: P0 首批编码前置契约。本文采用 JSON-compatible YAML，便于与 openapi-p0.json 保持一致。正式后端以 Java 21 + Spring Boot 4.x +
     springdoc-openapi 输出运行时 OpenAPI，并与本契约比对。
 servers:
@@ -4715,7 +4715,7 @@ paths:
         - finance
       operationId: createFinanceReconciliationDifference
       summary: 创建对账差异
-      description: 第十八批 Y 段第 180 条 180-R2（BSM:1746「平台侧金额必须系统自动取数、不许手填；第三方侧接入前可人工录入但须标记并强制复核」；ENUM:202「渠道接入前的人工录入必须同时上传渠道提供的对账单原件作为凭证……无原件的录入不得进入对账结论，只能挂为待补凭证。」；ENUM:189「金额差异、数量差异、状态差异、缺失差异（单边缺失）」）：差异挂在 batch_id 所指的对账批次下（无则 404 RECONCILIATION_BATCH_NOT_FOUND），在幂等之前按该批次范围过范围闸——商户账号不得登记（本商户范围 403 RECONCILIATION_PLATFORM_ONLY，别的商户 403 CROSS_MERCHANT_FORBIDDEN），其余账号按 finance.reconciliation.difference.create 可触及的项目覆盖批次所属综合体，否则 403 CROSS_PROJECT_FORBIDDEN。平台侧金额 expected_amount_cent 按 business_ref 系统取数；第十八批 Y 段第 181 条 181-R1（ENUM:191「待识别、待处理、待复核、已关闭」）：登记不论来源一律进待识别 pending_identification，负责人 responsible_user_id 为登记人。actual_amount_cent 只有缺失差异可为 0；非缺失差异平台侧为 0、缺失差异两边都为 0 拒 400 RECONCILIATION_NO_SYSTEM_EXPECTED；金额差异两边相等拒 400 RECONCILIATION_NO_DIFFERENCE，数量、状态差异两边金额可以相等。evidence_attachment_ids 为渠道对账单原件，须真实存在（否则 400 EVIDENCE_ATTACHMENT_NOT_FOUND），随差异落库并在返回中带回；不带原件照收（待补凭证）。
+      description: 第十八批 Y 段第 180 条 180-R2（BSM:1746「平台侧金额必须系统自动取数、不许手填；第三方侧接入前可人工录入但须标记并强制复核」；ENUM:202「渠道接入前的人工录入必须同时上传渠道提供的对账单原件作为凭证……无原件的录入不得进入对账结论，只能挂为待补凭证。」；ENUM:189「金额差异、数量差异、状态差异、缺失差异（单边缺失）」）：差异挂在 batch_id 所指的对账批次下（无则 404 RECONCILIATION_BATCH_NOT_FOUND），在幂等之前按该批次范围过范围闸——商户账号不得登记（本商户范围 403 RECONCILIATION_PLATFORM_ONLY，别的商户 403 CROSS_MERCHANT_FORBIDDEN），其余账号按 finance.reconciliation.difference.create 可触及的项目覆盖批次所属综合体，否则 403 CROSS_PROJECT_FORBIDDEN。平台侧金额 expected_amount_cent 按 business_ref 系统取数；第十八批 Y 段第 181 条 181-R1（ENUM:191「待识别、待处理、待复核、已关闭」）：登记不论来源一律进待识别 pending_identification，负责人 responsible_user_id 为登记人。actual_amount_cent 只有缺失差异可为 0；非缺失差异平台侧为 0、缺失差异两边都为 0 拒 400 RECONCILIATION_NO_SYSTEM_EXPECTED；金额差异两边相等拒 400 RECONCILIATION_NO_DIFFERENCE，数量、状态差异两边金额可以相等。evidence_attachment_ids 为渠道对账单原件，须真实存在（否则 400 EVIDENCE_ATTACHMENT_NOT_FOUND），随差异落库并在返回中带回；不带原件照收（待补凭证）。第十八批 AV 段第 305 条 305-R1（PGM:528「④看不到别的商户和别的项目的数据」；ENUM:191「差异未关闭期间，高价值差异所涉营业日的日结不得确认锁定」）：business_ref 在平台侧查得到的（收款记录、已付票务订单、酒吧账单、已核验经销到账，取数次序同 expected_amount_cent）须属所选批次的日结范围——酒吧或商户批次认该商户的单（含单店票的绑定酒吧），综合体批次认该综合体里酒吧以外的单——否则 400 RECONCILIATION_BUSINESS_REF_OUT_OF_BATCH，不回显金额；平台管理员与最高权限同样核；平台侧查不到的照旧按取数为 0 处理。
       x-auth-context: staff-token
       x-permission: finance.reconciliation.difference.create
       x-data-scope: project-entity
@@ -5096,7 +5096,7 @@ paths:
       operationId: getInternalPayableExecution
       summary: 查普通内部结算往来的付款时点与执行状态
       description: ENUM L253 内部应付执行状态：pending=待付(含银行在途 in_transit=true)、failed_pending=付款失败待处理(注明 failure_reason 与
-        expected_repay_date)、settled=已结清、reversed=已冲正(原行已有冲正/重述行回指，不再是有效款项)；同时返回可查看时刻、异议截止、财务指定付账日、当前到期日、逐次付款与顺延记录。按项目范围与商户交集。 18E（20-R3）：商户账号只按商户过滤，看得到各经营项目里本商户的数据（写入口仍只到本人项目）。
+        expected_repay_date)、settled=已结清、reversed=已冲正(原行已有冲正/重述行回指，不再是有效款项)；同时返回可查看时刻、异议截止、财务指定付账日、当前到期日、逐次付款与顺延记录。按项目范围与商户交集。 18E（20-R3）：商户账号只按商户过滤，看得到各经营项目里本商户的数据（写入口仍只到本人项目）。第十八批 AV 段 310-R1（ENUM:252「押金退还支付不受三个付账日与账单异议期约束」）：退租押金退还应付（source_type=deposit_refund）同样可查；它没有付款时点固化，可查看时刻 visible_at＝挂账时刻，异议截止 objection_deadline 与财务指定付账日 designated_pay_day 为空。
       x-permission: finance.ar_ap.view
       x-data-scope: project-merchant
       x-terminal-allowed:
@@ -5128,7 +5128,7 @@ paths:
         - finance
       operationId: initiateInternalPayment
       summary: 登记内部应付已发起付款(银行在途)
-      description: BSM L1683：异议期未届满不进入付款 409 OBJECTION_PERIOD_NOT_EXPIRED；已发起未确认到账且未收到失败结果属在途，再发起 409 PAYMENT_IN_TRANSIT；换账户重付须引用收款方财务负责人已审批的 account_change_id(否则 409 ACCOUNT_CHANGE_NOT_APPROVED)；原行已有冲正/重述行回指 409 AR_AP_ITEM_REVERSED(与登记收付款同码)。到账仍走登记收付款，成功才结清。第十八批 AM 段第 241 条 241-R1（BSM:1803；第十八批裁决 55「所有应付都先走付款确认」）：发起付款前该应付须已有通过的付款确认（发起见 createArApPaymentConfirmation），否则 409 PAYMENT_CONFIRMATION_REQUIRED（在途判断之后判）；登记明确失败、资金不足顺延不是出款，不判；失败后原路重付仍用同一张已通过的确认，不必重新审批。
+      description: BSM L1683：异议期未届满不进入付款 409 OBJECTION_PERIOD_NOT_EXPIRED；已发起未确认到账且未收到失败结果属在途，再发起 409 PAYMENT_IN_TRANSIT；换账户重付须引用收款方财务负责人已审批的 account_change_id(否则 409 ACCOUNT_CHANGE_NOT_APPROVED)；原行已有冲正/重述行回指 409 AR_AP_ITEM_REVERSED(与登记收付款同码)。到账仍走登记收付款，成功才结清。第十八批 AM 段第 241 条 241-R1（BSM:1803；第十八批裁决 55「所有应付都先走付款确认」）：发起付款前该应付须已有通过的付款确认（发起见 createArApPaymentConfirmation），否则 409 PAYMENT_CONFIRMATION_REQUIRED（在途判断之后判）；登记明确失败、资金不足顺延不是出款，不判；失败后原路重付仍用同一张已通过的确认，不必重新审批。第十八批 AV 段 310-R1（ENUM:252「押金退还支付不受三个付账日与账单异议期约束」）：退租押金退还应付（source_type=deposit_refund）不判异议期，所在地今天早于其到期日（等待期届满或退租结算算账完成之日）409 DEPOSIT_REFUND_NOT_DUE（与 createArApPayment 同码）；在途、付款确认、换账户照旧。
       x-permission: finance.payment.register
       x-data-scope: project-merchant
       x-terminal-allowed:
@@ -5185,7 +5185,7 @@ paths:
       operationId: recordInternalPaymentFailure
       summary: 登记内部应付付款明确失败(付款失败待处理)
       description: BSM L1683：收到银行拒付、账户错误或冻结、款项退回等明确失败结果，标付款失败待处理并注明原因与预计重付时间；预计重付时间须在今天至下一个付账日之间，否则 400
-        REPAY_AFTER_NEXT_PAY_DAY；只有在途那次可登记 409 ATTEMPT_NOT_IN_TRANSIT；原行已有冲正/重述行回指 409 AR_AP_ITEM_REVERSED。
+        REPAY_AFTER_NEXT_PAY_DAY；只有在途那次可登记 409 ATTEMPT_NOT_IN_TRANSIT；原行已有冲正/重述行回指 409 AR_AP_ITEM_REVERSED。第十八批 AV 段 310-R1（ENUM:252「押金退还支付不受三个付账日与账单异议期约束」；ENUM:253 重付不迟于下一个付账日只管普通内部结算款项）：退租押金退还应付的预计重付时间只须不早于今天，否则 400 REPAY_AFTER_NEXT_PAY_DAY，不设下一个付账日上限。
       x-permission: finance.payment.register
       x-data-scope: project-merchant
       x-terminal-allowed:
@@ -5250,7 +5250,7 @@ paths:
         - finance
       operationId: postponeInternalPaymentForFunds
       summary: 资金不足顺延至下一个付账日
-      description: BSM L1683 顺延三：账上资金不足的，该笔付款顺延至下一个付账日(遇非银行工作日再顺延)，逐次留痕，不另行通知收款方，待付状态对收款方可见；在途的不属资金不足 409 PAYMENT_IN_TRANSIT；原行已有冲正/重述行回指 409 AR_AP_ITEM_REVERSED。
+      description: BSM L1683 顺延三：账上资金不足的，该笔付款顺延至下一个付账日(遇非银行工作日再顺延)，逐次留痕，不另行通知收款方，待付状态对收款方可见；在途的不属资金不足 409 PAYMENT_IN_TRANSIT；原行已有冲正/重述行回指 409 AR_AP_ITEM_REVERSED。第十八批 AV 段 310-R1（ENUM:252「押金退还支付不受三个付账日与账单异议期约束」）：退租押金退还应付不适用资金不足顺延，409 INTERNAL_PAYABLE_NOT_SCHEDULED。
       x-permission: finance.payment.register
       x-data-scope: project-merchant
       x-terminal-allowed:
@@ -14417,6 +14417,7 @@ paths:
         - ticketing
       operationId: requestTicketRefund
       summary: 退款或撤销申请
+      description: 第十八批 AV 段 316-R2（BSM:1673「所有数据默认按项目隔离」）：按原订单范围办理——最高权限不限；商户账号（含派驻）限原订单商户，否则 403 CROSS_MERCHANT_FORBIDDEN；不挂商户的账号（平台管理员与项目侧财务）须以 ticket.refund.request 可触及原订单所属项目，否则 403 CROSS_PROJECT_FORBIDDEN（平台管理员恒可触及；原订单没有项目按不可触及）。
       x-permission: ticket.refund.request
       x-data-scope: project-order
       x-terminal-allowed:
@@ -14444,7 +14445,7 @@ paths:
         - ticketing
       operationId: confirmTicketRefundPayout
       summary: 退款确认拨付
-      description: 财务实际打完款后确认兑付，退款单“已通过”→“成功”。组合支付的退款只按 payout_items 所列渠道与金额打款（储值部分批准时已回卡）。业务口径：退款以“成功”为最终完成态，只有“成功”的退款才计入“已退金额”；“已通过”只表示已批准并已发起不可逆兑付。reason 填原路退回结果。第十八批 AH 段 256-R1（BSM:806「系统完整记录……原路退回结果」）：原路退回结果（reason 去首尾空白）写入退款单 payout_result，并记入成功留痕 ticket_refund.payout_confirmed 的 metadata.payout_result；返回的退款单带 payout_result。FS-013：单一酒吧门票整张退款成功即回原计费月重算服务费总额，只登记台账未覆盖的差额：先调减原月应收未收部分(原行不动＋冲正行＋重述行)，超出部分列应退(single_bar_service_fee 应付，source_id=退款单 id)，调整记当前账期、关联原计费月；同一退款不重复登记。第十八批 AM 段第 241 条 241-R5（BSM:1803；第十八批裁决 55、65（门票退款打款一个支付类型 ticket_refund））：确认拨付前该退款须已有通过的付款确认（发起见 createTicketRefundPaymentConfirmation），否则 409 PAYMENT_CONFIRMATION_REQUIRED；只分到储值笔的退款批准即成功，不经此处。
+      description: 财务实际打完款后确认兑付，退款单“已通过”→“成功”。组合支付的退款只按 payout_items 所列渠道与金额打款（储值部分批准时已回卡）。业务口径：退款以“成功”为最终完成态，只有“成功”的退款才计入“已退金额”；“已通过”只表示已批准并已发起不可逆兑付。reason 填原路退回结果。第十八批 AH 段 256-R1（BSM:806「系统完整记录……原路退回结果」）：原路退回结果（reason 去首尾空白）写入退款单 payout_result，并记入成功留痕 ticket_refund.payout_confirmed 的 metadata.payout_result；返回的退款单带 payout_result。FS-013：单一酒吧门票整张退款成功即回原计费月重算服务费总额，只登记台账未覆盖的差额：先调减原月应收未收部分(原行不动＋冲正行＋重述行)，超出部分列应退(single_bar_service_fee 应付，source_id=退款单 id)，调整记当前账期、关联原计费月；同一退款不重复登记。第十八批 AM 段第 241 条 241-R5（BSM:1803；第十八批裁决 55、65（门票退款打款一个支付类型 ticket_refund））：确认拨付前该退款须已有通过的付款确认（发起见 createTicketRefundPaymentConfirmation），否则 409 PAYMENT_CONFIRMATION_REQUIRED；只分到储值笔的退款批准即成功，不经此处。第十八批 AV 段 316-R2（BSM:1673「所有数据默认按项目隔离」）：按原订单范围办理——最高权限不限；商户账号（含派驻）限原订单商户，否则 403 CROSS_MERCHANT_FORBIDDEN；不挂商户的账号（平台管理员与项目侧财务）须以 ticket.refund.approve 可触及原订单所属项目，否则 403 CROSS_PROJECT_FORBIDDEN（平台管理员恒可触及；原订单没有项目按不可触及）。
       x-permission: ticket.refund.approve
       x-data-scope: project-order
       x-terminal-allowed:
@@ -14473,7 +14474,7 @@ paths:
         - ticketing
       operationId: createTicketRefundPaymentConfirmation
       summary: 门票退款发起付款确认（待原路打款）
-      description: 第十八批 AM 段第 241 条 241-R5（BSM:1803「付款确认按全平台统一的审批模型执行——发起时指定这条主线的最终审批人……财务、法务及相关部门作为平行的相关部门线，各指定该部门的最终审批人……主线与各条平行线都通过才完成付款确认；具体流程按支付类型分别设定。」；第十八批裁决 55、65（门票退款打款一个支付类型 ticket_refund）、68「退款……按单发起」）：已通过、待原路打款的门票退款发起付款确认，权限同确认拨付（confirmTicketRefundPayout），付款确认通过后方可确认拨付。object_type=ticket_refund，金额取待原路打款各笔（payout_items）合计（储值部分批准时已回卡，不计），项目取原订单，收款方为原订单客人。商户范围闸在幂等之前、写内再判一次：商户账号限原订单商户，否则 403 CROSS_MERCHANT_FORBIDDEN；退款不存在 404 TICKET_REFUND_NOT_FOUND；退款未通过或没有待原路打款的笔 409 TICKET_REFUND_NOT_PAYOUT_CONFIRMABLE；原订单不存在 404 TICKET_ORDER_NOT_FOUND；该退款已有待审批或已通过的付款确认 409 PAYMENT_CONFIRMATION_EXISTS。请求体与审批规则同 createArApPaymentConfirmation：reason（事由）、final_approver_id（主线最终审批人）与幂等键必填，否则 400 VALIDATION_FAILED；parallel_lines 须为财务（finance_review）、法务（legal_review）两线及该支付类型在「组织层级与审批线」页设定的必带线各指定最终审批人，否则 400 APPROVAL_LINE_FINAL_APPROVER_REQUIRED，可另带其他在用的线；最终审批人不在发起人直接上级链上等按统一审批引擎 400（如 FINAL_APPROVER_NOT_IN_CHAIN）。复核单 action_type=finance.payment_confirm.ticket_refund。同一幂等键重发返回首次结果。成功留痕 finance.payment_confirmation.requested，失败 finance.payment_confirmation.request_failed。
+      description: 第十八批 AM 段第 241 条 241-R5（BSM:1803「付款确认按全平台统一的审批模型执行——发起时指定这条主线的最终审批人……财务、法务及相关部门作为平行的相关部门线，各指定该部门的最终审批人……主线与各条平行线都通过才完成付款确认；具体流程按支付类型分别设定。」；第十八批裁决 55、65（门票退款打款一个支付类型 ticket_refund）、68「退款……按单发起」）：已通过、待原路打款的门票退款发起付款确认，权限同确认拨付（confirmTicketRefundPayout），付款确认通过后方可确认拨付。object_type=ticket_refund，金额取待原路打款各笔（payout_items）合计（储值部分批准时已回卡，不计），项目取原订单，收款方为原订单客人。商户范围闸在幂等之前、写内再判一次：商户账号限原订单商户，否则 403 CROSS_MERCHANT_FORBIDDEN；不挂商户的账号（平台管理员与项目侧财务）须以 ticket.refund.approve 可触及原订单所属项目，否则 403 CROSS_PROJECT_FORBIDDEN（第十八批 AV 段 316-R2；平台管理员恒可触及，原订单没有项目按不可触及）；退款不存在 404 TICKET_REFUND_NOT_FOUND；退款未通过或没有待原路打款的笔 409 TICKET_REFUND_NOT_PAYOUT_CONFIRMABLE；原订单不存在 404 TICKET_ORDER_NOT_FOUND；该退款已有待审批或已通过的付款确认 409 PAYMENT_CONFIRMATION_EXISTS。请求体与审批规则同 createArApPaymentConfirmation：reason（事由）、final_approver_id（主线最终审批人）与幂等键必填，否则 400 VALIDATION_FAILED；parallel_lines 须为财务（finance_review）、法务（legal_review）两线及该支付类型在「组织层级与审批线」页设定的必带线各指定最终审批人，否则 400 APPROVAL_LINE_FINAL_APPROVER_REQUIRED，可另带其他在用的线；最终审批人不在发起人直接上级链上等按统一审批引擎 400（如 FINAL_APPROVER_NOT_IN_CHAIN）。复核单 action_type=finance.payment_confirm.ticket_refund。同一幂等键重发返回首次结果。成功留痕 finance.payment_confirmation.requested，失败 finance.payment_confirmation.request_failed。
       x-permission: ticket.refund.approve
       x-data-scope: project-order
       x-terminal-allowed:
@@ -14487,6 +14488,7 @@ paths:
         - APPROVAL_LINE_FINAL_APPROVER_REQUIRED
         - FINAL_APPROVER_NOT_IN_CHAIN
         - CROSS_MERCHANT_FORBIDDEN
+        - CROSS_PROJECT_FORBIDDEN
         - TICKET_REFUND_NOT_FOUND
         - TICKET_ORDER_NOT_FOUND
         - TICKET_REFUND_NOT_PAYOUT_CONFIRMABLE
@@ -14529,6 +14531,7 @@ paths:
         - ticketing
       operationId: approveTicketRefund
       summary: 退款审批
+      description: 第十八批 AV 段 316-R2（BSM:1673「所有数据默认按项目隔离」）：按原订单范围办理——最高权限不限；商户账号（含派驻）限原订单商户，否则 403 CROSS_MERCHANT_FORBIDDEN；不挂商户的账号（平台管理员与项目侧财务）须以 ticket.refund.approve 可触及原订单所属项目，否则 403 CROSS_PROJECT_FORBIDDEN（平台管理员恒可触及；原订单没有项目按不可触及）。
       x-permission: ticket.refund.approve
       x-data-scope: project-order
       x-terminal-allowed:
@@ -15827,7 +15830,7 @@ paths:
         - platform
       operationId: approveSupervisorReview
       summary: 主管审批或驳回复核记录
-      description: 平台治理主管复核与基础定义违规阻断接口，用于高风险业务动作的可验证拦截、审批和留痕。复核单为授权申请（object_type=access_grant_request）且待审时转入授权申请审批，与 reviewAccessGrantRequest 同一门禁：access.grant_request.review 与 governance.supervisor_review.approve 一次核验（员工显式拒绝优先，最高权限会话同样受约束；同一单次授予来源只消耗一次），缺任一即 403 PERMISSION_DENIED，不推进审批节点、不落地。 18E：通过与驳回之前的读取按 governance.supervisor_review.approve 可触及的项目判发起人账号归属（持可跨项目角色的含该角色可查看的项目）；发起人不在其内、又不是当前审批人、被转发人或发起人本人的，403（SUPERVISOR_REVIEW_SCOPE_FORBIDDEN）；最高权限逐笔开放不变。 第十八批 AL 段 223-R1（BSM:1751「高价值差异复核通过才入账、同一差异只入账一次」）：对账差异关闭复核（action_type=finance.reconciliation_difference.close）终审通过、差异转已关闭时，提交时勾选 ledger_entry 的向原往来方入应收应付台账（写 ar_ap_items，source_type=reconciliation_difference，source_id 为差异号）；落账营业日已锁定 409 DAY_CLOSE_LOCKED，整笔审批不生效。第十八批 AL 段 245-R1（ENUM:190「日结锁定后的补录须上级审批」）：日结锁定后补录（action_type=finance.locked_backfill.review，object_type=ar_ap_adjustment）终审通过即按补录类型落账（见 requestArApAdjustment），落账各闸不过整笔审批不生效、补录与复核单保持待审；驳回不改账。第十八批 AM 段第 241 条 241-R1（BSM:1803「主线与各条平行线都通过才完成付款确认」）：付款确认（action_type=finance.payment_confirm.＜支付类型＞，object_type=payment_confirmation，object_id 为付款确认单号）全部节点通过即该确认转已通过（approved），任一节点驳回即转已驳回（rejected），驳回后可重新发起。锁账收付款补录终审落账的付款确认闸见 requestArApAdjustment：应付及付款方是平台主体的 7 个来源的应收未确认时 409 PAYMENT_CONFIRMATION_REQUIRED，补录与复核单保持待审。
+      description: 平台治理主管复核与基础定义违规阻断接口，用于高风险业务动作的可验证拦截、审批和留痕。复核单为授权申请（object_type=access_grant_request）且待审时转入授权申请审批，与 reviewAccessGrantRequest 同一门禁：access.grant_request.review 与 governance.supervisor_review.approve 一次核验（员工显式拒绝优先，最高权限会话同样受约束；同一单次授予来源只消耗一次），缺任一即 403 PERMISSION_DENIED，不推进审批节点、不落地。 18E：通过与驳回之前的读取按 governance.supervisor_review.approve 可触及的项目判发起人账号归属（持可跨项目角色的含该角色可查看的项目）；发起人不在其内、又不是当前审批人、被转发人或发起人本人的，403（SUPERVISOR_REVIEW_SCOPE_FORBIDDEN）；最高权限逐笔开放不变。 第十八批 AL 段 223-R1（BSM:1751「高价值差异复核通过才入账、同一差异只入账一次」）：对账差异关闭复核（action_type=finance.reconciliation_difference.close）终审通过、差异转已关闭时，提交时勾选 ledger_entry 的向原往来方入应收应付台账（写 ar_ap_items，source_type=reconciliation_difference，source_id 为差异号）；落账营业日已锁定 409 DAY_CLOSE_LOCKED，整笔审批不生效。第十八批 AL 段 245-R1（ENUM:190「日结锁定后的补录须上级审批」）：日结锁定后补录（action_type=finance.locked_backfill.review，object_type=ar_ap_adjustment）终审通过即按补录类型落账（见 requestArApAdjustment），落账各闸不过整笔审批不生效、补录与复核单保持待审；驳回不改账。第十八批 AM 段第 241 条 241-R1（BSM:1803「主线与各条平行线都通过才完成付款确认」）：付款确认（action_type=finance.payment_confirm.＜支付类型＞，object_type=payment_confirmation，object_id 为付款确认单号）全部节点通过即该确认转已通过（approved），任一节点驳回即转已驳回（rejected），驳回后可重新发起。锁账收付款补录终审落账的付款确认闸见 requestArApAdjustment：应付及付款方是平台主体的 7 个来源的应收未确认时 409 PAYMENT_CONFIRMATION_REQUIRED，补录与复核单保持待审。第十八批 AV 段第 306 条 306-R1（PGM:899「谁发起、谁销售、谁服务、谁第一个处理异常、为什么、谁审批、结果是什么，都要能查到。」）：整单终态（通过或驳回）的 evidence_attachment_ids 为提交时凭证在前、并上审批人本次所附凭证（去重保序），不覆盖提交时凭证。
       x-permission: governance.supervisor_review.approve
       x-data-scope: project-entity
       x-terminal-allowed:
@@ -36136,7 +36139,7 @@ paths:
       summary: 商户专区·门票分账(本商户内部结算往来与待付状态)
       description: BSM
         L1597/L1683：本商户作为对方、已在商户专区可查看的通票分账应付、追收、单店服务费与补偿新增履约结算往来(项目范围按付款时点固化的项目判定)，含金额、异议截止日、财务指定付账日、当前付款日与执行状态(待付/付款失败待处理及原因与预计重付时间/已结清)；顺延不逐笔通知，以状态可见代替。无商户归属
-        403 MERCHANT_SCOPE_REQUIRED。 18E（20-R3）：商户账号只按商户过滤，看得到各经营项目里本商户的数据（写入口仍只到本人项目）。商户账号读到即记所列往来已读(首页未读账单提醒，第 92 条)。
+        403 MERCHANT_SCOPE_REQUIRED。 18E（20-R3）：商户账号只按商户过滤，看得到各经营项目里本商户的数据（写入口仍只到本人项目）。商户账号读到即记所列往来已读(首页未读账单提醒，第 92 条)。第十八批 AV 段 310-R2（BSM:1683「对收款方可见并注明失败原因与预计重付时间」）：并入本商户为往来方的退租押金退还应付（source_type=deposit_refund，不含冲正、重述行），以挂账时刻作可查看时刻、与其他往来一起按可查看时刻倒序，没有异议截止与指定付账日；同样记已读。
       x-permission: merchant.portal.settlement.view
       x-data-scope: merchant
       x-terminal-allowed:
@@ -36163,7 +36166,7 @@ paths:
       operationId: approveMerchantPortalPayeeAccountChange
       summary: 收款方财务负责人审批更换收款账户
       description: BSM L1683「更换收款账户须经收款方所属公司财务负责人审批」：由收款方持该权限的人登记新收款账户即为审批；非本商户 403 CROSS_MERCHANT_FORBIDDEN，付款时点固化的项目不在本人范围 403 CROSS_PROJECT_FORBIDDEN；只有付款失败待处理的款项可换账户
-        409 ACCOUNT_CHANGE_NOT_ALLOWED。
+        409 ACCOUNT_CHANGE_NOT_ALLOWED。第十八批 AV 段 310-R2：退租押金退还应付（source_type=deposit_refund）付款失败待处理同样可审批；它没有付款时点固化，项目范围按台账行项目（出租合同所属项目）判定。
       x-permission: merchant.portal.payee_account.approve
       x-data-scope: merchant
       x-terminal-allowed:
@@ -40561,6 +40564,7 @@ paths:
         - ticketing
       operationId: rejectTicketRefund
       summary: 退款驳回
+      description: 第十八批 AV 段 316-R2（BSM:1673「所有数据默认按项目隔离」）：按原订单范围办理——最高权限不限；商户账号（含派驻）限原订单商户，否则 403 CROSS_MERCHANT_FORBIDDEN；不挂商户的账号（平台管理员与项目侧财务）须以 ticket.refund.approve 可触及原订单所属项目，否则 403 CROSS_PROJECT_FORBIDDEN（平台管理员恒可触及；原订单没有项目按不可触及）。
       x-permission: ticket.refund.approve
       x-data-scope: project-order
       x-terminal-allowed:
@@ -49518,9 +49522,9 @@ paths:
       description: 证据文件本地存储（同商品图片先例，不上云）；content_type 由服务端按扩展名判定，不信客户端自报。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3
         深度能力不得反向扩大 P0 范围。 dealer_admission 准入资料须同时具备 dealer.manage 与
         evidence.attachment.create，并处于两者授权项目交集；绑定同时核验原附件及目标经销商，拒绝上传时不写文件。
-        dealer_overpayment用途凭证须绑定真实超收记录，同时满足经销到账核验与证据上传权限以及原收款订单真实项目范围。finance_refund仅在来源为dealer_order_refund时允许对应平台项目范围办理；其他来源保持原范围规则。文件须实际上传且来源绑定一致，登记元数据不能替代真实凭证。
+        dealer_overpayment用途凭证须绑定真实超收记录，同时满足经销到账核验与证据上传权限以及原收款订单真实项目范围。finance_refund仅在来源为dealer_order_refund时允许对应平台项目范围办理；其他来源见下文第十八批 AV 段 316-R1。文件须实际上传且来源绑定一致，登记元数据不能替代真实凭证。
         本轮dealer_delivery、inventory_quarantine、facility_site_entry_report、ticket_sales_contract只能上传真实文件；禁止意向/绑定/完成元数据模拟上传，业务类型先去首尾空格再核验，按实际业务项目、货权及对应权限交集校验。
-        18F：business_type=manual_backfill（人工补录凭证，BSM 第 1642 行「微信截图、通话录音等」）另收语音 m4a/aac/mp3/amr/wav，且只能上传真实文件。 18Y：business_type=finance_reconciliation_difference（渠道对账单原件，ENUM:202「上传渠道提供的对账单原件」）照片、视频之外另收 pdf、xlsx、csv，这三种另要求客户端报的内容类型与扩展名一致（csv 另认 application/vnd.ms-excel），不符 400 VALIDATION_FAILED，不收 xlsm 等带宏格式；平台侧不带商户归属的员工也可上传。 第十八批 AL 段 253-R1（第十八批裁决 56「三种锁账补录提交时必须上传原始凭证（银行回单、转账截图、异议处理结论等）」）：business_type=finance_locked_backfill（锁账补录原始凭证，上传时不带业务编号）同 finance_reconciliation_difference——收照片 jpg、jpeg、png、webp、heic，视频 mp4、mov、webm，另收 pdf、xlsx、csv（同样要求内容类型与扩展名一致），只能上传真实文件；不带商户归属的员工也可上传，merchant_id 记空。 18I：工作手机（staff_work_phone）签名上传时，签名量第 6 行取部件规范串的 SHA-256——参数按名排序逐行 p:<名>=<值>，再文件按字段名排序逐行 f:<名>:<原文件名>:<文件字节 SHA-256>，换行连接；文件名用 ASCII；体积上限同不签名上传（Spring multipart 上限），不受 JSON 签名体 1MB 限制。
+        18F：business_type=manual_backfill（人工补录凭证，BSM 第 1642 行「微信截图、通话录音等」）另收语音 m4a/aac/mp3/amr/wav，且只能上传真实文件。 18Y：business_type=finance_reconciliation_difference（渠道对账单原件，ENUM:202「上传渠道提供的对账单原件」）照片、视频之外另收 pdf、xlsx、csv，这三种另要求客户端报的内容类型与扩展名一致（csv 另认 application/vnd.ms-excel），不符 400 VALIDATION_FAILED，不收 xlsm 等带宏格式；平台侧不带商户归属的员工也可上传。 第十八批 AL 段 253-R1（第十八批裁决 56「三种锁账补录提交时必须上传原始凭证（银行回单、转账截图、异议处理结论等）」）：business_type=finance_locked_backfill（锁账补录原始凭证，上传时不带业务编号）同 finance_reconciliation_difference——收照片 jpg、jpeg、png、webp、heic，视频 mp4、mov、webm，另收 pdf、xlsx、csv（同样要求内容类型与扩展名一致），只能上传真实文件；不带商户归属的员工也可上传，merchant_id 记空。 18I：工作手机（staff_work_phone）签名上传时，签名量第 6 行取部件规范串的 SHA-256——参数按名排序逐行 p:<名>=<值>，再文件按字段名排序逐行 f:<名>:<原文件名>:<文件字节 SHA-256>，换行连接；文件名用 ASCII；体积上限同不签名上传（Spring multipart 上限），不受 JSON 签名体 1MB 限制。 第十八批 AV 段 307-R1（BSM:1642「补录必须附原始记录凭证（微信截图、通话录音等）并经审核」）：business_type=manual_backfill 的人工补录凭证，不带商户编号的账号也可上传，merchant_id 记空；商户账号照旧记本商户。第十八批 AV 段 316-R1（BSM:806「原路退回结果」；BSM:1673「所有数据默认按项目隔离」）：business_type=finance_refund 时，经销退款（dealer_order_refund）以外的全部来源（ar_ap_payment、stored_value_account、ticket_payment_rejection、channel_ticket_rejection、bar_deposit_rejection、bar_scan_order_rejection）按退款所属项目与商户办理——须持 finance.refund.create 并可触及退款所属项目，否则 403 CROSS_PROJECT_FORBIDDEN；商户账号只限本商户的退款，否则 403 CROSS_MERCHANT_FORBIDDEN（通用卡储值本金退款不挂商户，商户账号一律 403）。
       x-permission: evidence.attachment.create
       x-data-scope: merchant
       x-terminal-allowed:
@@ -49575,7 +49579,7 @@ paths:
         - evidence
       operationId: readEvidenceAttachmentFile
       summary: 回读证据文件
-      description: 主管复核要看得见照片/视频，否则「双证据」只是两串 id；跨商户读取一律拒绝。18Y：business_type=finance_reconciliation_difference 的渠道对账单原件（上传时不带业务编号）回读时，不带商户归属的账号按引用该附件的对账差异判——本人是其中一笔当前关闭复核单链上的审批人或被转发人，或持 finance.reconciliation.view 且可触及其所属批次，即可看；都不满足的照旧（非平台管理员 403 MERCHANT_SCOPE_REQUIRED）；商户账号照旧按本商户判。第十八批 AL 段 253-R1（BSM:1642「补录必须附原始记录凭证……并经审核」）：business_type=finance_locked_backfill 的锁账补录原始凭证（上传时不带业务编号）回读时，不带商户归属的账号按引用该附件的锁账补录判——本人是其中一笔复核单链上任一节点的审批人或被转发人，或以 finance.daily_close.manage 可触及该补录所属日结，即可看；都不满足的照旧（非平台管理员 403 MERCHANT_SCOPE_REQUIRED）；商户账号照旧按本商户判。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
+      description: 主管复核要看得见照片/视频，否则「双证据」只是两串 id；跨商户读取一律拒绝。18Y：business_type=finance_reconciliation_difference 的渠道对账单原件（上传时不带业务编号）回读时，不带商户归属的账号按引用该附件的对账差异判——本人是其中一笔当前关闭复核单链上的审批人或被转发人，或持 finance.reconciliation.view 且可触及其所属批次，即可看；都不满足的照旧（非平台管理员 403 MERCHANT_SCOPE_REQUIRED）；商户账号照旧按本商户判。第十八批 AL 段 253-R1（BSM:1642「补录必须附原始记录凭证……并经审核」）：business_type=finance_locked_backfill 的锁账补录原始凭证（上传时不带业务编号）回读时，不带商户归属的账号按引用该附件的锁账补录判——本人是其中一笔复核单链上任一节点的审批人或被转发人，或以 finance.daily_close.manage 可触及该补录所属日结，即可看；都不满足的照旧（非平台管理员 403 MERCHANT_SCOPE_REQUIRED）；商户账号照旧按本商户判。第十八批 AV 段 307-R1（BSM:1642「补录必须附原始记录凭证（微信截图、通话录音等）并经审核」）：business_type=manual_backfill 的人工补录凭证（上传时不带业务编号）回读时，不带商户归属的账号按引用该附件的补录单判——本人是其中一笔补录复核单链上任一节点的审批人或被转发人，或可查看该补录对象（按各补录对象的查看范围闸），即可看；都不满足的照旧（非平台管理员 403 MERCHANT_SCOPE_REQUIRED）；商户账号照旧按本商户判。第十八批 AV 段 316-R1（BSM:806「原路退回结果」）：business_type=finance_refund 的退款凭证，经销退款（dealer_order_refund）以外的全部来源回读须持 finance.ar_ap.view；商户账号只按本商户判（否则 403 CROSS_MERCHANT_FORBIDDEN），不带商户编号的账号须可触及退款所属项目，否则 403 CROSS_PROJECT_FORBIDDEN。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
         dealer_admission 准入资料须同时具备 dealer.view 与 evidence.timeline.view，并处于两者授权项目交集；允许获授权的项目内部人员无商户身份办理。
       x-permission: evidence.timeline.view
       x-data-scope: merchant

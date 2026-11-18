@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import java.time.LocalDate;
 import java.util.List;
@@ -16,8 +16,9 @@ public interface TerminationSettlementPort {
      * 应退押金净额（押金抵未清应收与违约金后&gt;0）落台账：FOR UPDATE 锁定权威余额 → 按锁定余额封顶（race-safe）→
      * 挂 ar_ap 应付 + 写 deposit_ledger refund 行扣减余额。返回实退值（≤ 请求净额；余额被其它退租消费则更低）。
      * HP-C06：dueDate＝合同域按 max(算账完成日, 最后审批完成日＋等待期) 算好的所在地日期，原样作应付到期日（不推到付账日）。
+     * 第十八批 AV 段 310-R0（BSM:1673「所有数据默认按项目隔离」）：projectId＝出租合同所属项目，台账行挂该项目，供项目财务查看与付款。
      */
-    long createDepositRefundPayable(String merchantId, long netRefundCent, String settlementId, LocalDate dueDate);
+    long createDepositRefundPayable(String merchantId, long netRefundCent, String settlementId, LocalDate dueDate, String projectId);
 
     /** 提前退租违约金挂应收：direction=receivable, source_type='termination_penalty'。返回台账项 id。 */
     String createTerminationPenaltyReceivable(String merchantId, long penaltyCent, String settlementId);
