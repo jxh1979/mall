@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.23
+// 文件版本：V0.24
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -357,6 +357,16 @@ public interface FinanceRepository {
                         && sourceId.equals(i.sourceId()));
     }
 
+    /**
+     * 第十八批 AQ 段第 234 条 234-R2：给定方向、来源类型与来源 id 集合的未付额合计（标记分红发放前查其他股东分红应付）。
+     * default 兜底内存 filter 供测试双子；真 Jdbc @Override 为 SUM 查询。
+     */
+    default long sumUnpaidArApBySources(String direction, String sourceType, java.util.Collection<String> sourceIds) {
+        return listArApItems().stream()
+                .filter(i -> direction.equals(i.direction()) && sourceType.equals(i.sourceType()) && sourceIds.contains(i.sourceId()))
+                .mapToLong(ArApItemRecord::unpaidAmountCent).sum();
+    }
+
     ArApPaymentRecord saveArApPayment(ArApPaymentRecord payment);
 
     Optional<ArApPaymentRecord> findArApPaymentById(String id);
@@ -650,6 +660,11 @@ public interface FinanceRepository {
     /** 159-R1：检查单位——在营未存档的酒吧，再加启用的综合体（逾期待办与下游闸同一集合）。default 返回空兼容既有测试双子。 */
     default List<FinalMarkUnit> listFinalMarkUnits() {
         return List.of();
+    }
+
+    /** 第十八批 AQ 段第 243 条 243-R1：某酒吧的检查单位，不论在营、停用或存档（已登记关停结算的关店所在期照查）。default 返回空兼容既有测试双子。 */
+    default java.util.Optional<FinalMarkUnit> findBarFinalMarkUnit(String barId) {
+        return java.util.Optional.empty();
     }
 
     /**

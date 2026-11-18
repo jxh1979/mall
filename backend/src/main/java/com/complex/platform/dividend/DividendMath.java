@@ -1,8 +1,10 @@
 package com.complex.platform.dividend;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import com.complex.platform.common.money.MoneyRounding;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * 持股分红纯算法（整数分）。
@@ -16,19 +18,20 @@ import com.complex.platform.common.money.MoneyRounding;
  *       <b>此处不得改用 MoneyRounding</b>。</li>
  * </ul>
  *
- * <p><b>混用不破坏守恒</b>：链上每一步的另一半都取<b>补数</b>定义
- * （{@code principalGross := distributable − platformShare}、{@code principalNet := principalGross − tax}、
- * {@code payout := afterCustom − reserve} …），故各步用什么取整口径都不影响总额恒等：
- * {@code 平台分成 + 代扣个税 + 欠款抵扣 + 自定义扣除 + 风险准备金 + 主理人实得 ≡ 可分配额}，逐分严格相等。
- * 由此分红链的<b>舍入尾差恒为 0</b>（与通票分账不同——那边各家份额各自独立按比例算才会产生尾差），
- * 无尾差可单列，故不设 residual 列。见 {@code DividendMathTests#mixedRoundingConservesTotalAcrossAllParties}。
+ * <p><b>多方各自四舍五入、尾差单列</b>（第十八批 AQ 段第 234 条 234-R2；BSM:1775「娱乐平台公司、主理人和其他股东按每家酒吧工商登记的真实持股比例
+ * 分配」；BSM:1757「多方分配产生的非涉税尾差单独留痕，并由该笔业务实际承担结算责任的主体承担」；分红 PRD:93「须按通票分账同范式单列尾差列」）：
+ * 平台、各其他股东与主理人（10000 − 平台 − 其他股东合计）按持股比例各自四舍五入到分，可分配额减各方合计即尾差（带符号，
+ * {@link MoneyRounding#residual}，由该酒吧公司承担、不发给任何一方）。主理人应得之后的链每一步的另一半仍取<b>补数</b>
+ * （{@code principalNet := principalGross − tax}、{@code payout := afterCustom − reserve} …），故
+ * {@code 平台分成 + 其他股东应得合计 + 尾差 + 代扣个税 + 欠款抵扣 + 自定义扣除 + 风险准备金 + 主理人实得 ≡ 可分配额}，逐分严格相等。
+ * 其他股东代扣：个人股东按方案税率整除截断（与主理人同口径），公司股东 0。见 {@code DividendMathTests#mixedRoundingConservesTotalAcrossAllParties}。
  *
  * <p>V299 恒等式（与 dividend_statements 的 DB CHECK 一一对应）：
  * <ul>
  *   <li>distributable = max(netProfit − applied, 0)（applied=本期结转弥补额；关闭期 applied=0，退化为 max(netProfit,0)）；
  *       V507 FS-014 财务已登记依法可分配金额时再与之取小（BSM L1785「本次分配不得超出该金额」；裁决 2026-10-19 第 1 条
  *       「取小、不补」），结转链不动——取小不叠加扣减，已在核定额中扣除的亏损不重复扣</li>
- *   <li>platformShare + principalGross = distributable（余数归主理人，劈分不丢分）</li>
+ *   <li>platformShare + principalGross + Σ其他股东应得 + 尾差 = distributable（234-R2 起各方各自四舍五入，尾差带符号单列）</li>
  *   <li>principalNet = principalGross − tax（tax = principalGross * taxRateBps / 10000，<b>整除截断·对齐税局</b>）</li>
  * </ul>
  *
@@ -47,13 +50,14 @@ public final class DividendMath {
 
     static final int BPS_DENOMINATOR = 10000;
 
-    /** V299 劈分结果（全部整数分，非负）。 */
+    /** V299 劈分结果（整数分；尾差带符号，234-R2）。 */
     public record Split(
             long distributableCent,
             long platformShareCent,
             long principalGrossCent,
             long taxCent,
-            long principalNetCent) {
+            long principalNetCent,
+            long roundingResidualCent) {
     }
 
     /** V303 完整分配结果：V299 劈分链 + 亏损结转 + 欠款抵扣 + V309 自定义扣除 + 发放保护线（全部整数分，非负）。 */
@@ -69,14 +73,20 @@ public final class DividendMath {
             long arrearsOffsetCent,
             long customDeductionCent,
             long reserveWithheldCent,
-            long payoutCent) {
+            long payoutCent,
+            // 234-R2 其他股东（与入参同序）：各自应得（四舍五入到分）、代扣（个人股东按方案税率整除截断，公司股东 0）；多方各自四舍五入的尾差（带符号）。
+            List<Long> otherGrossCents,
+            List<Long> otherTaxCents,
+            long roundingResidualCent) {
 
         Split toSplit() {
-            return new Split(distributableCent, platformShareCent, principalGrossCent, taxCent, principalNetCent);
+            return new Split(distributableCent, platformShareCent, principalGrossCent, taxCent, principalNetCent, roundingResidualCent);
         }
     }
 
     private static final long[] NO_CUSTOM_DEDUCTIONS = new long[0];
+    private static final int[] NO_OTHER_SHARES = new int[0];
+    private static final boolean[] NO_OTHER_TYPES = new boolean[0];
 
     private DividendMath() {
     }
@@ -163,9 +173,38 @@ public final class DividendMath {
             boolean arrearsOffset, long arrearsOutstandingCent,
             long[] customDeductionRawCents,
             boolean payoutFloor, int reserveBps, long reserveFixedCent, Long legalCapCent) {
+        return compute(netProfitCent, platformShareBps, taxRateBps, lossCarryforward, carryInCent,
+                arrearsOffset, arrearsOutstandingCent, customDeductionRawCents,
+                payoutFloor, reserveBps, reserveFixedCent, legalCapCent, NO_OTHER_SHARES, NO_OTHER_TYPES, 0);
+    }
+
+    /**
+     * 234-R2 完整分配（V507 + 其他股东）。otherShareBps 为空时只有平台与主理人两方。
+     *
+     * @param taxRateBps      主理人生效代扣税率（主理人为公司股东时服务层传 0）
+     * @param otherShareBps   各其他股东持股比例（万分比，按名单顺序；与平台合计不超过 10000，主理人为余下部分）
+     * @param otherIsCompany  各其他股东是否公司股东（公司股东不代扣）
+     * @param otherTaxRateBps 其他个人股东代扣税率（方案税率，不随主理人类型变）
+     */
+    public static Distribution compute(
+            long netProfitCent, int platformShareBps, int taxRateBps,
+            boolean lossCarryforward, long carryInCent,
+            boolean arrearsOffset, long arrearsOutstandingCent,
+            long[] customDeductionRawCents,
+            boolean payoutFloor, int reserveBps, long reserveFixedCent, Long legalCapCent,
+            int[] otherShareBps, boolean[] otherIsCompany, int otherTaxRateBps) {
         requireBps(platformShareBps, "platformShareBps");
         requireBps(taxRateBps, "taxRateBps");
         requireBps(reserveBps, "reserveBps");
+        requireBps(otherTaxRateBps, "otherTaxRateBps");
+        int otherTotalBps = 0;
+        for (int bps : otherShareBps) {
+            requireBps(bps, "otherShareBps");
+            otherTotalBps += bps;
+        }
+        if (platformShareBps + otherTotalBps > BPS_DENOMINATOR) {
+            throw new IllegalArgumentException("platformShareBps + otherShareBps must not exceed 10000, was " + (platformShareBps + otherTotalBps));
+        }
 
         // 亏损结转累计恒结转：开关只控「本期扣不扣可分配额」，关闭期不清零累计（用户 2026-07-19 拍板）。
         // carryIn 恒取往期累计；applied 仅开启期扣减（=min(累计, 本期盈利)）；after 恒按累计式（关闭期把老累计+本期新亏损带下去）。
@@ -178,9 +217,21 @@ public final class DividendMath {
         long carryAfter = carryIn - carryApplied + Math.max(-netProfitCent, 0L);
 
         // R-7(2026-07-28 拍板):平台分成【四舍五入】——旧整除截断平台恒少收、差额白送主理人且不留痕。
-        //   bps≤10000 且 distributable≥0 ⇒ platformShare ≤ distributable ⇒ principalGross ≥ 0(补数非负)。
+        // 234-R2(BSM:1775、BSM:1757):平台、各其他股东、主理人(10000 − 平台 − 其他股东合计)按持股比例各自四舍五入到分,可分配额减各方合计即尾差
+        //   (带符号,MoneyRounding.residual,由该酒吧公司承担);其他股东代扣:个人按方案税率整除截断(与下方主理人同口径),公司 0。
         long platformShare = MoneyRounding.bpsOf(distributable, platformShareBps);
-        long principalGross = distributable - platformShare;
+        List<Long> otherGross = new ArrayList<>();
+        List<Long> otherTax = new ArrayList<>();
+        for (int i = 0; i < otherShareBps.length; i++) {
+            long gross = MoneyRounding.bpsOf(distributable, otherShareBps[i]);
+            otherGross.add(gross);
+            otherTax.add(otherIsCompany[i] ? 0L : gross * otherTaxRateBps / BPS_DENOMINATOR);
+        }
+        long principalGross = MoneyRounding.bpsOf(distributable, BPS_DENOMINATOR - platformShareBps - otherTotalBps);
+        List<Long> parts = new ArrayList<>(otherGross);
+        parts.add(platformShare);
+        parts.add(principalGross);
+        long residual = MoneyRounding.residual(java.math.BigDecimal.valueOf(distributable), parts);
         // 🔴 代扣个税【保持整除截断】(2026-07-28 用户拍板):与税局申报口径对齐,改四舍五入会使代扣申报对不上。
         //   此行【不得】改用 MoneyRounding;与 JdbcStaffRepository 薪资个税税表整除链同口径。
         long tax = principalGross * taxRateBps / BPS_DENOMINATOR;
@@ -205,7 +256,8 @@ public final class DividendMath {
         long payout = afterCustom - reserve;
 
         return new Distribution(carryIn, carryApplied, carryAfter, distributable, platformShare,
-                principalGross, tax, principalNet, arrears, custom, reserve, payout);
+                principalGross, tax, principalNet, arrears, custom, reserve, payout,
+                List.copyOf(otherGross), List.copyOf(otherTax), residual);
     }
 
     private static void requireBps(int bps, String name) {

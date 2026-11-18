@@ -1,5 +1,5 @@
 package com.complex.platform.dividend;
-// 文件版本：V0.11
+// 文件版本：V0.12
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.BusinessDayResolver;
@@ -27,6 +27,8 @@ import com.complex.platform.evidence.AuditedOperation;
 import com.complex.platform.evidence.AuditedOperationExecutor;
 import com.complex.platform.finance.EntityTaxService;
 import com.complex.platform.finance.FinanceService;
+import com.complex.platform.governance.review.SupervisorReviewDecisionRecord;
+import com.complex.platform.governance.review.SupervisorReviewEvaluateRequest;
 import com.complex.platform.inventory.InventoryCostSummaryRecord;
 import com.complex.platform.inventory.InventoryRepository;
 import com.complex.platform.settlement.InternalPayDayService;
@@ -36,9 +38,11 @@ import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -54,7 +58,7 @@ import static com.complex.platform.common.Strings.requireText;
  * − 期间销货成本（V296 sumOutboundCost 同谓词，可配开关；经理已确认坏账的酒吧订单出库成本另列冲回不计，第十八批裁决 38）
  * − 期间费用（V297 费用归集台账净额，计入类别可配）
  * = 净利润 → 本次分配 = min(经营口径可分配额, 财务登记的依法可分配金额)（FS-014，正式单未登记不得提交/审批）
- * → 按方案比例劈分（余数归主理人） → 主理人应得 → 代扣股息红利个税（税率可配，默认 20%，
+ * → 按持股比例劈分（平台、各其他股东与主理人各自四舍五入，尾差单列） → 主理人应得 → 代扣股息红利个税（税率可配，默认 20%，
  * 平台分成/风险准备金四舍五入、代扣个税整除截断对齐税局——2026-07-28 用户拍板） → 净发放额。
  *
  * <p>时窗：BusinessDayResolver 方案商户的营业日窗（名下唯一酒吧按该酒吧，否则按其所属综合体；成本汇总同窗）——三来源同窗才能恒等；
@@ -66,6 +70,13 @@ import static com.complex.platform.common.Strings.requireText;
  *
  * <p>写路径统一走 {@link AuditedOperationExecutor#executeWrite}（同键不同载荷抛 IDEMPOTENCY_CONFLICT）。
  * 审批要求 finance.dividend.manage（V299 仅授 role_platform_admin=最高权限审批现状口径）。
+ *
+ * <p>234-R1 方案版本化（BSM:521）：dividend_plans 每行是一个版本，新版本经最高权限审批后自生效起始日起用（最高权限本人提交直接生效）；
+ * 每期出单取该期期末日已生效的版本，计算单 plan_id 固化所用版本。
+ *
+ * <p>234-R2 其他股东（BSM:1775「娱乐平台公司、主理人和其他股东按每家酒吧工商登记的真实持股比例分配」）：名单挂在方案版本上；平台、各其他股东与主理人
+ * 各自四舍五入、尾差单列由该酒吧公司承担（BSM:1757）；个人股东按方案税率代扣、公司股东不代扣（BSM:1776）；审批通过后每位其他股东另挂一笔分红应付，
+ * 全部付清才能标记发放（BSM:1787、BSM:1803）。
  */
 @Service
 public class DividendService {
@@ -87,6 +98,33 @@ public class DividendService {
             "semiannual", "半年方案的正式单需按半年标签（如 2026-H1）出单，跳过",
             "annual", "年度方案的正式单需按年度标签（如 2026）出单，跳过");
     private static final Set<String> PLAN_STATUSES = Set.of("active", "ended");
+    /** 234-R1 分红方案调整的审批动作（统一审批策略表 top_authority；动作名以 finance. 开头按涉钱出厂 1 个工作日）。 */
+    static final String PLAN_CHANGE_ACTION = "finance.dividend.plan.change";
+    /** 234-R1 已批准版本：active＝自生效起始日起照此出单，ended＝自生效起始日起停用。 */
+    private static final Set<String> APPROVED_PLAN_STATUSES = Set.of("active", "ended");
+    private static final java.util.Map<String, String> PERIOD_TYPE_LABELS = java.util.Map.of(
+            "monthly", "月度", "quarterly", "季度", "semiannual", "半年", "annual", "年度");
+    /** 244-R1 分红周期上下限中文名（按月数，与周期同一粒度）。 */
+    private static final java.util.Map<Integer, String> PERIOD_BOUND_LABELS = java.util.Map.of(1, "月", 3, "季", 6, "半年", 12, "年");
+    private static final java.util.Map<String, String> RELEASE_MODE_LABELS = java.util.Map.of(
+            "manual", "手动释放", "next_period", "下期返还", "fixed_delay", "固定延后", "annual", "年度末清算");
+    /** 234-R1 审批摘要逐项（改前 → 改后）。 */
+    private static final List<java.util.Map.Entry<String, java.util.function.Function<DividendPlanRecord, String>>> SUMMARY_FIELDS = List.of(
+            java.util.Map.entry("平台比例", plan -> percent(plan.platformShareBps())),
+            java.util.Map.entry("其他股东", DividendService::shareholdersText),
+            java.util.Map.entry("主理人账户", DividendPlanRecord::principalUserId),
+            java.util.Map.entry("主理人类型", plan -> "company".equals(plan.principalType()) ? "公司股东" : "个人股东"),
+            java.util.Map.entry("代扣税率", plan -> percent(plan.taxRateBps())),
+            java.util.Map.entry("分红周期", plan -> PERIOD_TYPE_LABELS.get(plan.periodType()) + "（上下限 "
+                    + PERIOD_BOUND_LABELS.get(plan.periodMinMonths()) + "～" + PERIOD_BOUND_LABELS.get(plan.periodMaxMonths()) + "）"),
+            java.util.Map.entry("发放付账日", plan -> "第 " + plan.payoutPaySlot() + " 个付账日"),
+            java.util.Map.entry("亏损结转", plan -> plan.lossCarryforwardEnabled() ? "开" : "关"),
+            java.util.Map.entry("欠款抵扣", plan -> plan.arrearsOffsetEnabled() ? "开" : "关"),
+            java.util.Map.entry("发放保护线", plan -> plan.payoutFloorEnabled()
+                    ? "开（留存 " + percent(plan.payoutFloorBps()) + " 或 " + yuan(plan.payoutFloorFixedCent()) + " 取大，"
+                            + RELEASE_MODE_LABELS.get(plan.reserveReleaseMode()) + "）" : "关"),
+            java.util.Map.entry("本版本自生效起始日起", plan -> plan.stopRequested() || "ended".equals(plan.status())
+                    ? "停用（不再出单）" : "继续出单"));
     private static final Set<String> KINDS = Set.of("official", "preview");
     private static final Set<String> STATEMENT_STATUSES = Set.of(
             "preview", "draft", "pending_review", "approved", "paid", "rejected", "voided");
@@ -108,6 +146,8 @@ public class DividendService {
     private static final String DEFAULT_RESERVE_RELEASE_MODE = "manual";
     /** V308 主理人类型：individual 个人（代扣股息红利个税）/ company 公司（不代扣、全额发放）。 */
     static final Set<String> PRINCIPAL_TYPES = Set.of("individual", "company");
+    /** 234-R2 其他股东类型中文名（与主理人类型同取值：个人股东代扣、公司股东不代扣）。 */
+    private static final java.util.Map<String, String> SHAREHOLDER_TYPE_LABELS = java.util.Map.of("individual", "个人股东", "company", "公司股东");
     private static final String DEFAULT_PRINCIPAL_TYPE = "individual";
     /** V309 自定义扣除项来源类型 / 比例基数可选值。 */
     static final Set<String> DEDUCTION_SOURCE_TYPES = Set.of("fixed", "ratio");
@@ -141,6 +181,15 @@ public class DividendService {
     @org.springframework.context.annotation.Lazy
     com.complex.platform.merchantportal.MerchantUnreadBillService merchantUnreadBills;
 
+    // 234-R1（PGM:666「持股分红的方案配置……由最高权限审批」）：方案新版本进统一审批。@Lazy 防初始化环；手工构造的单测走非最高权限提交时须赋桩。
+    @org.springframework.beans.factory.annotation.Autowired
+    @org.springframework.context.annotation.Lazy
+    com.complex.platform.governance.review.SupervisorReviewService supervisorReviews;
+
+    @org.springframework.beans.factory.annotation.Autowired
+    @org.springframework.context.annotation.Lazy
+    com.complex.platform.governance.review.SupervisorReviewRepository reviewRepository;
+
     private void notifyMerchantAmount(String merchantId, String event, long amountCent, String reason, Instant visibleAt, String refKey) {
         if (merchantAmountNotifier != null) {
             merchantAmountNotifier.notifyAfterCommit(merchantId, event, amountCent, reason, null,
@@ -171,16 +220,38 @@ public class DividendService {
 
     // ── 方案配置 ──────────────────────────────────────────────
 
-    /** 方案列表。商户 scope 账号强制只看自己（覆盖请求参数）。 */
+    /** 方案列表（全部版本，新建在前）。商户 scope 账号强制只看自己（覆盖请求参数）。 */
     public List<DividendPlanRecord> listPlans(String merchantId) {
         authorizationService.requirePermission(VIEW_PERM);
         return operations.readSingle(
                 AuditedOperation.of("dividend.plans_listed", "dividend.plans_list_failed", VIEW_PERM, PLAN_TYPE),
-                () -> repository.listPlans(blankToNull(scopeMerchant(merchantId))),
+                () -> withVersionStates(repository.listPlans(blankToNull(scopeMerchant(merchantId)))),
                 result -> "all");
     }
 
-    /** 新建分红方案：一个商户同一时期只允许一个生效中方案；空缺字段按默认口径补齐。 */
+    /**
+     * 234-R1：按各商户当前营业日给每个版本填版本状态——pending 待审批、rejected 已驳回、expired 审批时已过生效日、scheduled 已批准待生效、
+     * in_force 生效起始日不晚于今天的已批准版本里最新的一个（status 为 ended 即已停用）、superseded 已被新版本取代。
+     */
+    private List<DividendPlanRecord> withVersionStates(List<DividendPlanRecord> plans) {
+        Instant now = Instant.now();
+        java.util.Map<String, LocalDate> today = new java.util.HashMap<>();
+        java.util.Map<String, LocalDate> inForce = new java.util.HashMap<>();
+        for (DividendPlanRecord plan : plans) {
+            LocalDate date = today.computeIfAbsent(plan.merchantId(), m -> businessDayResolver.merchantBusinessDate(null, m, now));
+            if (APPROVED_PLAN_STATUSES.contains(plan.status()) && !plan.effectiveFrom().isAfter(date)) {
+                inForce.merge(plan.merchantId(), plan.effectiveFrom(), (a, b) -> a.isAfter(b) ? a : b);
+            }
+        }
+        return plans.stream().map(plan -> plan.withVersionState(switch (plan.status()) {
+            case "pending_review" -> "pending";
+            case "rejected", "expired" -> plan.status();
+            default -> plan.effectiveFrom().isAfter(today.get(plan.merchantId())) ? "scheduled"
+                    : plan.effectiveFrom().equals(inForce.get(plan.merchantId())) ? "in_force" : "superseded";
+        })).toList();
+    }
+
+    /** 新建分红方案：提交该商户的第一个版本（已有已批准或待审批版本的商户 409）；空缺字段按默认口径补齐。 */
     @Transactional
     public DividendPlanRecord createPlan(DividendPlanRequest request) {
         authorizationService.requirePermission(MANAGE_PERM);
@@ -192,62 +263,12 @@ public class DividendService {
                 request,
                 DividendPlanRecord.class,
                 AuditedOperation.of("dividend.plan_created", "dividend.plan_create_failed", MANAGE_PERM, PLAN_TYPE),
-                () -> createPlanInternal(request),
+                () -> submitVersion(null, request),
                 DividendService::businessId,
                 java.util.Map.of());
     }
 
-    private DividendPlanRecord createPlanInternal(DividendPlanRequest request) {
-        requireFullDeductions(request);
-        String merchantId = requireText(request.merchantId(), "merchant_id");
-        String principalUserId = requireText(request.principalUserId(), "principal_user_id");
-        Instant now = Instant.now();
-        DividendPlanRecord plan = new DividendPlanRecord(
-                "divp_" + stableToken(request.idempotencyKey()),
-                merchantId,
-                principalUserId,
-                blankToNull(request.principalName()),
-                requireBps(orDefault(request.platformShareBps(), DEFAULT_PLATFORM_SHARE_BPS), "platform_share_bps"),
-                requireBps(orDefault(request.taxRateBps(), DEFAULT_TAX_RATE_BPS), "tax_rate_bps"),
-                requireEnum(orDefault(request.periodType(), DEFAULT_PERIOD_TYPE), PERIOD_TYPES, "period_type"),
-                requireTokens(orDefault(request.revenueDomains(), DEFAULT_REVENUE_DOMAINS), REVENUE_DOMAINS,
-                        "revenue_domains"),
-                request.includeInventoryCost() == null || request.includeInventoryCost(),
-                requireTokens(orDefault(request.expenseTypes(), DEFAULT_EXPENSE_TYPES), EXPENSE_TYPES,
-                        "expense_types"),
-                parseDate(request.effectiveFrom(), "effective_from"),
-                "active",
-                blankToNull(request.note()),
-                currentOperator(),
-                now,
-                now,
-                // V303 扣除项三开关（默认全关=不改 V299 口径）+ 保护线参数。
-                Boolean.TRUE.equals(request.lossCarryforwardEnabled()),
-                Boolean.TRUE.equals(request.arrearsOffsetEnabled()),
-                Boolean.TRUE.equals(request.payoutFloorEnabled()),
-                requireBps(orDefault(request.payoutFloorBps(), 0), "payout_floor_bps"),
-                requireNonNegLong(orDefault(request.payoutFloorFixedCent(), 0L), "payout_floor_fixed_cent"),
-                // V304 留存释放规则（默认手动=不自动释放）。
-                requireEnum(orDefault(request.reserveReleaseMode(), DEFAULT_RESERVE_RELEASE_MODE),
-                        RESERVE_RELEASE_MODES, "reserve_release_mode"),
-                requirePositiveInt(orDefault(request.reserveReleaseDelayPeriods(), 1),
-                        "reserve_release_delay_periods"),
-                // V308 主理人类型（默认个人=代扣个税）；V309 自定义扣除项另表持久化，插入记录先占空。
-                requireEnum(orDefault(request.principalType(), DEFAULT_PRINCIPAL_TYPE),
-                        PRINCIPAL_TYPES, "principal_type"),
-                List.of(),
-                requirePaySlot(request.payoutPaySlot()));
-        if (!repository.insertPlan(plan)) {
-            throw ApiException.conflict("DIVIDEND_PLAN_EXISTS",
-                    "该商户已有生效中的分红方案；请修改现有方案或先停用再新建");
-        }
-        // V309 自定义扣除项：新建时按请求整表落地（空/缺省=无自定义扣除）。
-        repository.replaceCustomDeductions(plan.id(), parseCustomDeductions(plan.id(), request.customDeductions()));
-        return repository.findPlanById(plan.id())
-                .orElseThrow(() -> ApiException.conflict("DIVIDEND_PLAN_EXISTS", "分红方案创建时发生并发冲突，请重试"));
-    }
-
-    /** 修改方案配置（比例/税率/周期/基数构成开关/停用）；改动经审计事件留痕，历史分红单按单内快照追溯。 */
+    /** 调整方案（比例/税率/周期/主理人/扣除项/停用）：在已批准版本上提交新版本；历史分红单按单内所记版本追溯。 */
     @Transactional
     public DividendPlanRecord updatePlan(String planId, DividendPlanRequest request) {
         authorizationService.requirePermission(MANAGE_PERM);
@@ -260,72 +281,181 @@ public class DividendService {
                 request,
                 DividendPlanRecord.class,
                 AuditedOperation.of("dividend.plan_updated", "dividend.plan_update_failed", MANAGE_PERM, PLAN_TYPE),
-                () -> updatePlanInternal(id, request),
+                () -> submitVersion(id, request),
                 DividendService::businessId,
                 java.util.Map.of());
     }
 
-    private DividendPlanRecord updatePlanInternal(String planId, DividendPlanRequest request) {
-        DividendPlanRecord existing = repository.findPlanById(planId)
-                .orElseThrow(() -> ApiException.notFound("DIVIDEND_PLAN_NOT_FOUND",
-                        "分红方案不存在：" + planId));
-        if (request.merchantId() != null && !request.merchantId().isBlank()
-                && !existing.merchantId().equals(request.merchantId().trim())) {
-            throw ApiException.badRequest("VALIDATION_FAILED", "分红方案的所属商户不能变更");
+    /**
+     * 第十八批 AQ 段第 234 条 234-R1（BSM:521「每次改动生成新版本，必须填写生效起始日期，并先存为草案、经高敏权限“转正”审批通过后按指定日期生效，
+     * 不即改即生效」；BSM:1775「必须以获批登记版本生效」；PGM:666「持股分红的方案配置……由最高权限审批，提交人不能审批自己的单据」；PGM:899「为什么……
+     * 都要能查到」；BSM:576「持授权 U 盘密钥的最高权限本人发起的操作，不需要经过任何审批」）：新建与修改都落一个新版本行，取值＝改前版本（新建取默认口径）
+     * 各字段叠加请求里非空的字段，自定义扣除项没给就照改前版本复制。生效起始日须晚于该商户当前营业日，理由必填。最高权限本人提交直接落已批准版本；
+     * 其他人提交落待审批版本并进最高权限审批（结果见 {@link #onPlanChangeDecided}）。
+     */
+    private DividendPlanRecord submitVersion(String basePlanId, DividendPlanRequest request) {
+        DividendPlanRecord base = null;
+        if (basePlanId != null) {
+            base = repository.findPlanById(basePlanId)
+                    .orElseThrow(() -> ApiException.notFound("DIVIDEND_PLAN_NOT_FOUND", "分红方案不存在：" + basePlanId));
+            if (request.merchantId() != null && !request.merchantId().isBlank()
+                    && !base.merchantId().equals(request.merchantId().trim())) {
+                throw ApiException.badRequest("VALIDATION_FAILED", "分红方案的所属商户不能变更");
+            }
         }
         requireFullDeductions(request);
-        DividendPlanRecord updated = new DividendPlanRecord(
-                existing.id(),
-                existing.merchantId(),
-                request.principalUserId() == null || request.principalUserId().isBlank()
-                        ? existing.principalUserId() : request.principalUserId().trim(),
-                request.principalName() == null ? existing.principalName() : blankToNull(request.principalName()),
-                requireBps(orDefault(request.platformShareBps(), existing.platformShareBps()), "platform_share_bps"),
-                requireBps(orDefault(request.taxRateBps(), existing.taxRateBps()), "tax_rate_bps"),
-                requireEnum(orDefault(request.periodType(), existing.periodType()), PERIOD_TYPES, "period_type"),
-                requireTokens(orDefault(request.revenueDomains(), existing.revenueDomains()), REVENUE_DOMAINS,
-                        "revenue_domains"),
-                request.includeInventoryCost() == null ? existing.includeInventoryCost()
-                        : request.includeInventoryCost(),
-                requireTokens(orDefault(request.expenseTypes(), existing.expenseTypes()), EXPENSE_TYPES,
-                        "expense_types"),
-                request.effectiveFrom() == null ? existing.effectiveFrom()
-                        : parseDate(request.effectiveFrom(), "effective_from"),
-                requireEnum(orDefault(request.status(), existing.status()), PLAN_STATUSES, "status"),
-                request.note() == null ? existing.note() : blankToNull(request.note()),
-                currentOperator(),
-                existing.createdAt(),
-                Instant.now(),
-                request.lossCarryforwardEnabled() == null
-                        ? existing.lossCarryforwardEnabled() : request.lossCarryforwardEnabled(),
-                request.arrearsOffsetEnabled() == null
-                        ? existing.arrearsOffsetEnabled() : request.arrearsOffsetEnabled(),
-                request.payoutFloorEnabled() == null
-                        ? existing.payoutFloorEnabled() : request.payoutFloorEnabled(),
-                requireBps(orDefault(request.payoutFloorBps(), existing.payoutFloorBps()), "payout_floor_bps"),
-                requireNonNegLong(orDefault(request.payoutFloorFixedCent(), existing.payoutFloorFixedCent()),
-                        "payout_floor_fixed_cent"),
-                // V304 留存释放规则（可空=不改现值）。
-                requireEnum(orDefault(request.reserveReleaseMode(), existing.reserveReleaseMode()),
-                        RESERVE_RELEASE_MODES, "reserve_release_mode"),
-                request.reserveReleaseDelayPeriods() == null ? existing.reserveReleaseDelayPeriods()
-                        : requirePositiveInt(request.reserveReleaseDelayPeriods(), "reserve_release_delay_periods"),
-                // V308 主理人类型（可空=不改现值）；V309 自定义扣除项另表持久化，更新记录先占空。
-                requireEnum(orDefault(request.principalType(), existing.principalType()),
-                        PRINCIPAL_TYPES, "principal_type"),
-                List.of(),
-                requirePaySlot(orDefault(request.payoutPaySlot(), existing.payoutPaySlot())));
-        if (!repository.updatePlan(updated)) {
-            // ended 改回 active 撞同商户唯一生效索引（uq_dividend_plans_active_merchant）→ 业务 409 非 500。
-            throw ApiException.conflict("DIVIDEND_PLAN_EXISTS",
-                    "该商户已有另一生效中的分红方案，无法再启用本方案；请先停用另一方案");
+        String merchantId = base != null ? base.merchantId() : requireText(request.merchantId(), "merchant_id");
+        DividendPlanRecord prev = base != null ? base : new DividendPlanRecord(null, merchantId, null, null,
+                DEFAULT_PLATFORM_SHARE_BPS, DEFAULT_TAX_RATE_BPS, DEFAULT_PERIOD_TYPE, DEFAULT_REVENUE_DOMAINS, true,
+                DEFAULT_EXPENSE_TYPES, null, "active", null, null, null, null, false, false, false, 0, 0L,
+                DEFAULT_RESERVE_RELEASE_MODE, 1, DEFAULT_PRINCIPAL_TYPE, List.of(), null);
+        String id = "divp_" + stableToken(request.idempotencyKey());
+        String principalUserId = requireText(orDefault(request.principalUserId(), prev.principalUserId()), "principal_user_id");
+        int platformShareBps = requireBps(orDefault(request.platformShareBps(), prev.platformShareBps()), "platform_share_bps");
+        int taxRateBps = requireBps(orDefault(request.taxRateBps(), prev.taxRateBps()), "tax_rate_bps");
+        String periodType = requireEnum(orDefault(request.periodType(), prev.periodType()), PERIOD_TYPES, "period_type");
+        List<String> revenueDomains = requireTokens(orDefault(request.revenueDomains(), prev.revenueDomains()), REVENUE_DOMAINS,
+                "revenue_domains");
+        List<String> expenseTypes = requireTokens(orDefault(request.expenseTypes(), prev.expenseTypes()), EXPENSE_TYPES,
+                "expense_types");
+        int payoutFloorBps = requireBps(orDefault(request.payoutFloorBps(), prev.payoutFloorBps()), "payout_floor_bps");
+        long payoutFloorFixedCent = requireNonNegLong(orDefault(request.payoutFloorFixedCent(), prev.payoutFloorFixedCent()),
+                "payout_floor_fixed_cent");
+        String reserveReleaseMode = requireEnum(orDefault(request.reserveReleaseMode(), prev.reserveReleaseMode()),
+                RESERVE_RELEASE_MODES, "reserve_release_mode");
+        int reserveReleaseDelayPeriods = requirePositiveInt(
+                orDefault(request.reserveReleaseDelayPeriods(), prev.reserveReleaseDelayPeriods()), "reserve_release_delay_periods");
+        String principalType = requireEnum(orDefault(request.principalType(), prev.principalType()), PRINCIPAL_TYPES, "principal_type");
+        Integer payoutPaySlot = requirePaySlot(orDefault(request.payoutPaySlot(), prev.payoutPaySlot()));
+        Integer periodMinMonths = orDefault(request.periodMinMonths(), prev.periodMinMonths());
+        Integer periodMaxMonths = orDefault(request.periodMaxMonths(), prev.periodMaxMonths());
+        requirePeriodBounds(periodType, periodMinMonths, periodMaxMonths);
+        String status = requireEnum(orDefault(request.status(), prev.status()), PLAN_STATUSES, "status");
+        // V309 自定义扣除项：请求给了按请求落；没给照改前版本逐项复制到新版本名下（主键重新取）。
+        List<DividendRecords.DividendCustomDeductionRecord> deductions = request.customDeductions() != null
+                ? parseCustomDeductions(id, request.customDeductions())
+                : prev.customDeductions().stream().map(item -> new DividendRecords.DividendCustomDeductionRecord(
+                        "divd_" + UUID.randomUUID().toString().replace("-", ""), id, item.name(), item.sourceType(),
+                        item.amountCent(), item.ratioBps(), item.ratioBasis(), item.enabled(), item.sortOrder())).toList();
+        // 234-R2 其他股东：请求给了按请求整份落新版本；没给照改前版本逐项复制（主键重新取）。平台与其他股东合计不超过 100%，主理人为余下部分。
+        List<DividendRecords.DividendShareholderRecord> shareholders = request.otherShareholders() != null
+                ? parseShareholders(id, request.otherShareholders())
+                : prev.otherShareholders().stream().map(item -> new DividendRecords.DividendShareholderRecord(
+                        "dps_" + UUID.randomUUID().toString().replace("-", ""), id, item.shareholderName(), item.shareholderType(),
+                        item.shareBps(), item.sortOrder())).toList();
+        if (platformShareBps + shareholders.stream().mapToInt(DividendRecords.DividendShareholderRecord::shareBps).sum()
+                > DividendMath.BPS_DENOMINATOR) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "平台与其他股东持股比例合计不能超过 100%（主理人比例为余下部分）");
         }
-        // V309 自定义扣除项：请求提供 customDeductions 才整表替换（null=不改现值，历史配置保留）。
-        if (request.customDeductions() != null) {
-            repository.replaceCustomDeductions(planId, parseCustomDeductions(planId, request.customDeductions()));
+        LocalDate effectiveFrom = parseDate(requireText(request.effectiveFrom(), "effective_from"), "effective_from");
+        Instant now = Instant.now();
+        if (!effectiveFrom.isAfter(businessDayResolver.merchantBusinessDate(null, merchantId, now))) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "生效起始日期须晚于今天（按营业日）");
         }
-        return repository.findPlanById(planId)
+        String reason = requireText(request.reason(), "reason");
+
+        List<DividendPlanRecord> versions = repository.listPlans(merchantId);
+        if (base == null && versions.stream().anyMatch(plan ->
+                APPROVED_PLAN_STATUSES.contains(plan.status()) || "pending_review".equals(plan.status()))) {
+            throw ApiException.conflict("DIVIDEND_PLAN_EXISTS", "该商户已有分红方案，请在现有方案上提交新版本");
+        }
+        if (base != null && !APPROVED_PLAN_STATUSES.contains(base.status())) {
+            throw ApiException.conflict("DIVIDEND_PLAN_NOT_EDITABLE", "只能在已批准的方案版本上提交新版本");
+        }
+        if (versions.stream().anyMatch(plan -> "pending_review".equals(plan.status()))) {
+            throw pendingExists();
+        }
+        if (versions.stream().anyMatch(plan -> APPROVED_PLAN_STATUSES.contains(plan.status()) && effectiveFrom.equals(plan.effectiveFrom()))) {
+            throw versionConflict();
+        }
+
+        boolean master = authorizationService.isMasterAuthority(authorizationService.currentActor());
+        String operator = currentOperator();
+        DividendPlanRecord plan = new DividendPlanRecord(id, merchantId, principalUserId,
+                request.principalName() == null ? prev.principalName() : blankToNull(request.principalName()),
+                platformShareBps, taxRateBps, periodType, revenueDomains,
+                request.includeInventoryCost() == null ? prev.includeInventoryCost() : request.includeInventoryCost(),
+                expenseTypes, effectiveFrom, master ? status : "pending_review",
+                request.note() == null ? prev.note() : blankToNull(request.note()), operator, now, now,
+                orDefault(request.lossCarryforwardEnabled(), prev.lossCarryforwardEnabled()),
+                orDefault(request.arrearsOffsetEnabled(), prev.arrearsOffsetEnabled()),
+                orDefault(request.payoutFloorEnabled(), prev.payoutFloorEnabled()),
+                payoutFloorBps, payoutFloorFixedCent, reserveReleaseMode, reserveReleaseDelayPeriods, principalType,
+                deductions, payoutPaySlot, "ended".equals(status), reason, null,
+                master ? operator : null, master ? now : null, null, periodMinMonths, periodMaxMonths, shareholders);
+        if (!repository.insertPlan(plan)) {
+            throw base == null ? ApiException.conflict("DIVIDEND_PLAN_EXISTS", "该商户已有分红方案，请在现有方案上提交新版本")
+                    : pendingExists();
+        }
+        repository.replaceCustomDeductions(id, deductions);
+        if (!master) {
+            String summary = planChangeSummary(base, plan);
+            SupervisorReviewDecisionRecord decision = supervisorReviews.evaluate(new SupervisorReviewEvaluateRequest(
+                    request.idempotencyKey() + ":review", summary, List.of(), PLAN_CHANGE_ACTION, PLAN_TYPE, id, 0L, summary,
+                    null, List.of()));
+            repository.setPlanReviewId(id, decision.reviewId());
+        }
+        return repository.findPlanById(id)
                 .orElseThrow(() -> ApiException.notFound("DIVIDEND_PLAN_NOT_FOUND", "分红方案已被并发修改，请刷新后重试"));
+    }
+
+    /**
+     * 234-R1 审批结果（照 BarBusinessDayService.decided）：先核复核表持久化终态与对象一致，只改复核单号相符的待审批版本。驳回落 rejected；通过时生效起始日
+     * 已不晚于该商户当前营业日的落 expired（BSM:521「审批通过后按指定日期生效」，须重新提交）；同商户同一生效起始日已有已批准版本 409 整笔回滚；其余按是否
+     * 申请停用落 ended 或 active。提交人不能审批自己的单由统一审批的自审闸负责（PGM:666）。
+     */
+    @EventListener
+    @Transactional
+    public void onPlanChangeDecided(SupervisorReviewDecisionRecord decision) {
+        if (!PLAN_TYPE.equals(decision.objectType()) || !PLAN_CHANGE_ACTION.equals(decision.actionType())
+                || !List.of("approved", "rejected").contains(decision.reviewStatus())) {
+            return;
+        }
+        SupervisorReviewDecisionRecord persisted = reviewRepository.findSupervisorReviewById(decision.reviewId()).orElse(null);
+        if (persisted == null || !Objects.equals(persisted.objectId(), decision.objectId())
+                || !Objects.equals(persisted.reviewStatus(), decision.reviewStatus())) {
+            return;
+        }
+        DividendPlanRecord plan = repository.findPlanById(decision.objectId()).orElse(null);
+        if (plan == null || !"pending_review".equals(plan.status()) || !Objects.equals(plan.reviewId(), decision.reviewId())) {
+            return;
+        }
+        Instant now = Instant.now();
+        String status = "rejected";
+        if ("approved".equals(decision.reviewStatus())) {
+            if (!plan.effectiveFrom().isAfter(businessDayResolver.merchantBusinessDate(null, plan.merchantId(), now))) {
+                status = "expired";
+            } else if (repository.listPlans(plan.merchantId()).stream().anyMatch(other ->
+                    APPROVED_PLAN_STATUSES.contains(other.status()) && plan.effectiveFrom().equals(other.effectiveFrom()))) {
+                throw versionConflict();
+            } else {
+                status = plan.stopRequested() ? "ended" : "active";
+            }
+        }
+        repository.decidePlan(plan.id(), decision.reviewId(), status, currentOperator(), now);
+    }
+
+    private static ApiException pendingExists() {
+        return ApiException.conflict("DIVIDEND_PLAN_PENDING_EXISTS", "该商户已有待审批的方案版本，请等审批结束后再提交");
+    }
+
+    private static ApiException versionConflict() {
+        return ApiException.conflict("DIVIDEND_PLAN_VERSION_CONFLICT", "该商户这一生效起始日已有已批准的方案版本，请换一个日期");
+    }
+
+    /** 234-R1 审批摘要（PGM:899）：理由、商户、生效起始日与改前到改后的变化，审批人在复核单里看。 */
+    private static String planChangeSummary(DividendPlanRecord before, DividendPlanRecord after) {
+        StringBuilder text = new StringBuilder("调整理由：" + after.reason() + "\n商户：" + after.merchantId()
+                + "\n生效起始日：" + after.effectiveFrom());
+        for (java.util.Map.Entry<String, java.util.function.Function<DividendPlanRecord, String>> field : SUMMARY_FIELDS) {
+            text.append('\n').append(field.getKey()).append('：')
+                    .append(before == null ? "（新建）" : field.getValue().apply(before)).append(" → ").append(field.getValue().apply(after));
+        }
+        return text.toString();
+    }
+
+    private static String percent(int bps) {
+        return java.math.BigDecimal.valueOf(bps, 2).stripTrailingZeros().toPlainString() + "%";
     }
 
     /**
@@ -351,6 +481,51 @@ public class DividendService {
             throw ApiException.badRequest("VALIDATION_FAILED", "payout_pay_slot 须为第一、第二、第三个付账日之一（1～3）");
         }
         return slot;
+    }
+
+    /**
+     * 第十八批 AQ 段第 244 条 244-R1（ENUM:299「分红周期可配置（业务参数，按经营主体可配，酒吧商户作为独立经营主体同样适用，须同时配置上下限）」；
+     * BSM:521「超出该区间的配置一律拒绝生效，未填写上下限的参数不得上线」）：上下限按月数、与周期同一粒度（月、季、半年、年＝1、3、6、12），
+     * 两个都要填，下限不大于上限，分红周期须落在上下限之内。不预置出厂数值（DEC-R3-2026-08-04-30「具体数值留到落地时逐个定」）。
+     */
+    private static void requirePeriodBounds(String periodType, Integer min, Integer max) {
+        if (min == null || max == null) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "分红周期须同时填写上下限（月、季、半年、年）");
+        }
+        if (!PERIOD_BOUND_LABELS.containsKey(min) || !PERIOD_BOUND_LABELS.containsKey(max) || min > max) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "分红周期上下限须取月、季、半年、年之一，且下限不大于上限");
+        }
+        int months = DividendPeriod.MONTHS_PER_PERIOD.get(periodType);
+        if (months < min || months > max) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "分红周期须在所配上下限之内");
+        }
+    }
+
+    /** 234-R2 其他股东请求项 → 校验 + 落地记录（sort_order＝输入序）：名称必填，类型个人股东或公司股东，持股比例 1～10000 万分比。 */
+    private static List<DividendRecords.DividendShareholderRecord> parseShareholders(
+            String planId, List<DividendPlanRequest.OtherShareholderItem> items) {
+        List<DividendRecords.DividendShareholderRecord> parsed = new ArrayList<>();
+        for (DividendPlanRequest.OtherShareholderItem item : items) {
+            if (item == null) {
+                throw ApiException.badRequest("VALIDATION_FAILED", "其他股东不能为空");
+            }
+            String name = requireText(item.shareholderName(), "other_shareholders.shareholder_name");
+            String type = requireEnum(item.shareholderType(), PRINCIPAL_TYPES, "other_shareholders.shareholder_type");
+            if (item.shareBps() == null || item.shareBps() < 1 || item.shareBps() > DividendMath.BPS_DENOMINATOR) {
+                throw ApiException.badRequest("VALIDATION_FAILED", "other_shareholders.share_bps 必须在 1 到 10000 之间");
+            }
+            parsed.add(new DividendRecords.DividendShareholderRecord(
+                    "dps_" + UUID.randomUUID().toString().replace("-", ""), planId, name, type, item.shareBps(), parsed.size()));
+        }
+        return parsed;
+    }
+
+    /** 234-R2 其他股东名单中文摘要（审批摘要改前、改后两份名单）。 */
+    private static String shareholdersText(DividendPlanRecord plan) {
+        return plan.otherShareholders().isEmpty() ? "无" : plan.otherShareholders().stream()
+                .map(item -> item.shareholderName() + "（" + SHAREHOLDER_TYPE_LABELS.get(item.shareholderType()) + " "
+                        + percent(item.shareBps()) + "）")
+                .collect(java.util.stream.Collectors.joining("、"));
     }
 
     /** V309 请求项 → 校验 + 落地记录（sort_order=输入序）。fixed 用固定额；ratio 用比例+基数。 */
@@ -406,15 +581,29 @@ public class DividendService {
             throw ApiException.badRequest("VALIDATION_FAILED",
                     "月度预览只支持月份期间标签（如 2026-07）");
         }
+        // 234-R1（BSM:521「已发生的业务一律按当时生效的版本计算」）：每期出单取该期期末日已生效的版本。243-R1（18AQ 控制席判定）：有关停结算登记的商户
+        // 取 min（期末日，关店最后营业日）已生效的版本——关店后的期间不再分红，与关停结算按关店最后营业日取周期同口径。
+        java.util.Map<String, LocalDate> closed = repository.closeoutClosedDates();
         List<DividendPlanRecord> plans;
         if (request.merchantId() != null && !request.merchantId().isBlank()) {
-            plans = List.of(repository.findActivePlanByMerchant(request.merchantId().trim())
+            String merchantId = request.merchantId().trim();
+            LocalDate asOf = planDate(period, closed.get(merchantId));
+            plans = List.of(repository.findPlanInForce(merchantId, asOf)
                     .orElseThrow(() -> ApiException.notFound("DIVIDEND_PLAN_NOT_FOUND",
-                            "该商户没有生效中的分红方案: " + request.merchantId())));
+                            "该商户在 " + asOf + " 没有已生效的分红方案")));
         } else {
-            plans = repository.listActivePlans();
+            plans = java.util.stream.Stream.concat(
+                            repository.listPlansInForce(period.end()).stream().filter(plan -> !closed.containsKey(plan.merchantId())),
+                            closed.entrySet().stream().flatMap(entry ->
+                                    repository.findPlanInForce(entry.getKey(), planDate(period, entry.getValue())).stream()))
+                    .sorted(java.util.Comparator.comparing(DividendPlanRecord::merchantId)).toList();
         }
         return runCompute(plans, kind, period, currentOperator());
+    }
+
+    /** 243-R1：出单取方案版本的日期——期末日，有关停结算登记且关店最后营业日更早的取关店最后营业日。 */
+    private static LocalDate planDate(DividendPeriod period, LocalDate closedDay) {
+        return closedDay != null && closedDay.isBefore(period.end()) ? closedDay : period.end();
     }
 
     /**
@@ -427,9 +616,10 @@ public class DividendService {
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void onMonthEndBusinessDayFinal(FinanceService.MonthEndBusinessDayFinal event) {
+        LocalDate monthEnd = event.month().atEndOfMonth();
         List<DividendPlanRecord> plans = event.barId() != null
-                ? repository.findActivePlanByMerchant(event.barId()).stream().toList()
-                : repository.listActivePlans().stream().filter(plan -> businessDayResolver.barOfMerchant(plan.merchantId()) == null
+                ? repository.findPlanInForce(event.barId(), monthEnd).stream().toList()
+                : repository.listPlansInForce(monthEnd).stream().filter(plan -> businessDayResolver.barOfMerchant(plan.merchantId()) == null
                         && event.projectId().equals(businessDayResolver.projectOfMerchant(plan.merchantId()))).toList();
         if (!plans.isEmpty()) {
             runCompute(plans, "preview", DividendPeriod.parse(event.month().toString()), SYSTEM_OPERATOR);
@@ -442,7 +632,15 @@ public class DividendService {
         List<DividendStatementRecord> computed = new ArrayList<>();
         List<DividendComputeSkipRecord> skipped = new ArrayList<>();
         Instant now = Instant.now();
+        java.util.Map<String, LocalDate> closed = repository.closeoutClosedDates();
         for (DividendPlanRecord plan : plans) {
+            // 243-R1（18AQ 控制席判定「关店后的期间不再分红」）：整期在关店最后营业日之后的不出单。
+            LocalDate closedDay = closed.get(plan.merchantId());
+            if (closedDay != null && closedDay.isBefore(period.start())) {
+                skipped.add(new DividendComputeSkipRecord(plan.merchantId(),
+                        "该酒吧已于 " + closedDay + " 关店（已登记关停结算），关店后的期间不再分红"));
+                continue;
+            }
             String mismatch = periodMismatchReason(kind, period, plan);
             if (mismatch != null) {
                 skipped.add(new DividendComputeSkipRecord(plan.merchantId(), mismatch));
@@ -466,7 +664,7 @@ public class DividendService {
                         + " 尚无已生效的税费申报登记，请先登记并审批通过后再出正式单"));
                 continue;
             }
-            String notFinal = nonFinalReason(kind, period, plan);
+            String notFinal = nonFinalReason(kind, period, plan, closedDay);
             if (notFinal != null) {
                 skipped.add(new DividendComputeSkipRecord(plan.merchantId(), notFinal));
                 continue;
@@ -509,11 +707,16 @@ public class DividendService {
      * 所属综合体，建档前营业日不计）期间内每个营业日五类数据都已标记为最终；未齐返回跳过原因（列营业日与缺的类别），在作废旧单之前判，旧草稿不作废。
      * 159-R6（BSM:1777「数据未全部标记最终之前不得生成预览」；DEC-R8-45「未全部标记最终之前不得生成」）：preview 只判该月最后一个营业日的五类，
      * 手动出预览与月末自动生成同闸。
+     * 第十八批 AQ 段第 243 条 243-R1（ENUM:190；BSM:1787「酒吧关闭须完成关停结算，依法核清本次分红」）：有关停结算登记的酒吧，正式单只查期初至
+     * min（期末日，关店最后营业日），停用、存档后照查；关店后的营业日不计。
      */
-    private String nonFinalReason(String kind, DividendPeriod period, DividendPlanRecord plan) {
+    private String nonFinalReason(String kind, DividendPeriod period, DividendPlanRecord plan, LocalDate closedDay) {
         boolean preview = "preview".equals(kind);
-        List<String> lines = payoutPort.nonFinalDays(plan.merchantId(), null, preview ? period.end() : period.start(), period.end(),
-                FinanceService.FINAL_MARK_CATEGORIES.keySet());
+        List<String> lines = !preview && closedDay != null
+                ? payoutPort.nonFinalDaysOfBar(plan.merchantId(), period.start(), planDate(period, closedDay),
+                        FinanceService.FINAL_MARK_CATEGORIES.keySet())
+                : payoutPort.nonFinalDays(plan.merchantId(), null, preview ? period.end() : period.start(), period.end(),
+                        FinanceService.FINAL_MARK_CATEGORIES.keySet());
         if (lines.isEmpty()) {
             return null;
         }
@@ -640,12 +843,21 @@ public class DividendService {
                 ? repository.findLegalConfirmation(merchantId, period.label()).orElse(null) : null;
         Long legalCap = legal == null ? null : legal.legalDistributableCent();
 
+        // 234-R2（BSM:1775、BSM:1776）：其他股东按名单比例各自四舍五入；个人股东按方案税率代扣（不随主理人类型变），公司股东不代扣。
+        List<DividendRecords.DividendShareholderRecord> shareholders = plan.otherShareholders();
+        int[] otherBps = shareholders.stream().mapToInt(DividendRecords.DividendShareholderRecord::shareBps).toArray();
+        boolean[] otherCompany = new boolean[shareholders.size()];
+        for (int i = 0; i < otherCompany.length; i++) {
+            otherCompany[i] = "company".equals(shareholders.get(i).shareholderType());
+        }
+
         DividendMath.Distribution dist = DividendMath.compute(
                 netProfit, plan.platformShareBps(), effectiveTaxBps,
                 plan.lossCarryforwardEnabled(), carryIn,
                 plan.arrearsOffsetEnabled(), arrearsOutstanding,
                 customRaws,
-                plan.payoutFloorEnabled(), plan.payoutFloorBps(), plan.payoutFloorFixedCent(), legalCap);
+                plan.payoutFloorEnabled(), plan.payoutFloorBps(), plan.payoutFloorFixedCent(), legalCap,
+                otherBps, otherCompany, plan.taxRateBps());
 
         addLine(lines, statementId, merchantId, seq, "net_profit", netProfit,
                 "净利润 = 收入 − 销货成本 − 费用 − 税费（亏损期可分配额为 0，不倒扣主理人）", now);
@@ -668,8 +880,27 @@ public class DividendService {
         }
         addLine(lines, statementId, merchantId, seq, "platform_share", dist.platformShareCent(),
                 "平台分成（" + plan.platformShareBps() + " 万分比，四舍五入到分）", now);
+        for (int i = 0; i < shareholders.size(); i++) {
+            DividendRecords.DividendShareholderRecord holder = shareholders.get(i);
+            long gross = dist.otherGrossCents().get(i);
+            long tax = dist.otherTaxCents().get(i);
+            addLine(lines, statementId, merchantId, seq, "shareholder_gross", gross,
+                    "其他股东「" + holder.shareholderName() + "」（" + SHAREHOLDER_TYPE_LABELS.get(holder.shareholderType()) + "，持股 "
+                            + holder.shareBps() + " 万分比）应得，四舍五入到分", now);
+            addLine(lines, statementId, merchantId, seq, "shareholder_tax_withheld", -tax,
+                    otherCompany[i]
+                            ? "公司股东不代扣个税，按约定全额发放（代扣 0 分）"
+                            : "代扣股息红利个税（个人股东，税率 " + plan.taxRateBps() + " 万分比，整除截断·对齐税局申报口径）", now);
+            addLine(lines, statementId, merchantId, seq, "shareholder_payout", gross - tax,
+                    "其他股东「" + holder.shareholderName() + "」实发 = 应得 − 代扣；审批通过后按此额挂应付", now);
+        }
+        if (dist.roundingResidualCent() != 0) {
+            addLine(lines, statementId, merchantId, seq, "rounding_residual", dist.roundingResidualCent(),
+                    "多方按持股比例分配的舍入尾差，由本酒吧公司承担，不发给任何一方", now);
+        }
         addLine(lines, statementId, merchantId, seq, "principal_gross", dist.principalGrossCent(),
-                "主理人应得（可分配额 − 平台分成，余数归主理人）", now);
+                "主理人应得（持股 " + (DividendMath.BPS_DENOMINATOR - plan.platformShareBps() - java.util.Arrays.stream(otherBps).sum())
+                        + " 万分比，四舍五入到分）", now);
         addLine(lines, statementId, merchantId, seq, "tax_withheld", -dist.taxCent(),
                 isCompany
                         ? "公司股东不代扣个税，按约定全额发放（代扣 0 分）"
@@ -723,7 +954,8 @@ public class DividendService {
                 null, null, operator, null, null, null, null, null, null, now, now,
                 plan.lossCarryforwardEnabled(), dist.carryInCent(), dist.carryAppliedCent(),
                 dist.carryAfterCent(), dist.arrearsOffsetCent(), dist.reserveWithheldCent(), dist.payoutCent(),
-                plan.principalType(), dist.customDeductionCent(), legalCap, periodTax);
+                plan.principalType(), dist.customDeductionCent(), legalCap, periodTax,
+                dist.otherGrossCents().stream().mapToLong(Long::longValue).sum(), dist.roundingResidualCent());
         repository.insertStatement(statement);
         for (DividendStatementLineRecord line : lines) {
             repository.insertLine(line);
@@ -875,6 +1107,13 @@ public class DividendService {
                                 statement.principalUserId(), statement.merchantId(),
                                 statement.reserveWithheldCent(), statement.id());
                     }
+                    // 234-R2（BSM:1787「分红由该酒吧公司自己从其对公账户支付给主理人与其他股东……发放走应付款项」）：每位其他股东实发 > 0 另挂一笔
+                    // dividend_payout 应付，应付对方与来源都是该股东实发行（不要求平台账户，按单查得到是谁），到期日同为方案发放付账日；
+                    // 登记付款同样过付款确认（第十八批裁决 55、65）。
+                    for (DividendStatementLineRecord line : shareholderPayouts(statement)) {
+                        payoutPort.createShareholderDividendPayable(line.id(), statement.merchantId(), line.amountCent(),
+                                payoutDueDate(statement, now));
+                    }
                     requireTransition(repository.markApproved(statement.id(), operator, arApItemId, now), "审批通过");
                     // 审批通过这一步才挂应付、抵欠款（草稿与月度预览会重算作废，不发）。
                     notifyMerchantAmount(statement.merchantId(), "dividend_issued", statement.payoutCent(),
@@ -882,6 +1121,12 @@ public class DividendService {
                                     + yuan(statement.arrearsOffsetCent()) + "，留存 " + yuan(statement.reserveWithheldCent()),
                             now, statement.id());
                 });
+    }
+
+    /** 234-R2 本单金额大于 0 的其他股东实发行（各挂一笔分红应付，来源＝行 id）。 */
+    private List<DividendStatementLineRecord> shareholderPayouts(DividendStatementRecord statement) {
+        return repository.listLines(statement.id(), null).stream()
+                .filter(line -> "shareholder_payout".equals(line.lineType()) && line.amountCent() > 0).toList();
     }
 
     /** 驳回：pending_review → rejected，理由必填；驳回后可重算（旧单作废+新单）。 */
@@ -907,6 +1152,11 @@ public class DividendService {
                     // 主理人分红应付须已按付款确认付清才能标记发放。
                     if (statement.payoutCent() > 0 && payoutPort.arApUnpaidCent(statement.arApItemId()) > 0) {
                         throw ApiException.conflict("DIVIDEND_PAYOUT_NOT_PAID", "主理人分红应付尚未付清（须先完成付款确认并登记付款），不能标记发放");
+                    }
+                    // 234-R2：其他股东分红应付也须都已按付款确认付清。
+                    List<String> shareholderSources = shareholderPayouts(statement).stream().map(DividendStatementLineRecord::id).toList();
+                    if (!shareholderSources.isEmpty() && payoutPort.unpaidDividendPayoutCent(shareholderSources) > 0) {
+                        throw ApiException.conflict("DIVIDEND_PAYOUT_NOT_PAID", "其他股东分红应付尚未付清（须先完成付款确认并登记付款），不能标记发放");
                     }
                     requireTransition(repository.markPaid(statement.id(), operator, now), "标记发放");
                     // 与出单同一张分红单的异议期（自审批通过之日次日起算）。
@@ -1182,9 +1432,9 @@ public class DividendService {
         String holdType = requireEnum(request.holdType(), HOLD_LABELS.keySet(), "hold_type");
         String reason = requireText(request.reason(), "reason");
         String negotiationResult = requireText(request.negotiationResult(), "negotiation_result");
-        DividendPlanRecord plan = repository.findActivePlanByMerchant(merchantId)
-                .orElseThrow(() -> ApiException.notFound("DIVIDEND_PLAN_NOT_FOUND", "该商户没有生效中的分红方案: " + merchantId));
         DividendPeriod period = DividendPeriod.parse(request.periodLabel());
+        DividendPlanRecord plan = repository.findPlanInForce(merchantId, period.end())
+                .orElseThrow(() -> ApiException.notFound("DIVIDEND_PLAN_NOT_FOUND", "该商户在 " + period.end() + " 没有已生效的分红方案"));
         String mismatch = periodMismatchReason("official", period, plan);
         if (mismatch != null) {
             throw ApiException.badRequest("VALIDATION_FAILED", mismatch.replace("，跳过", ""));

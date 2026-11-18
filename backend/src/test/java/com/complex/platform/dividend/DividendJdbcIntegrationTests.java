@@ -1,6 +1,6 @@
 package com.complex.platform.dividend;
 
-// 文件版本：V0.05
+// 文件版本：V0.06
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
@@ -123,6 +123,8 @@ class DividendJdbcIntegrationTests {
         when(authorizationService.currentMerchantScope()).thenReturn(Optional.empty());
         when(authorizationService.currentActor()).thenReturn(
                 new AccessActor(actorId, "platform_admin_user", "platform_admin", "org_1", null, "active"));
+        // 234-R1：按最高权限本人提交方案版本（直接生效，不进审批）。
+        when(authorizationService.isMasterAuthority(org.mockito.ArgumentMatchers.any())).thenReturn(true);
         return new DividendService(repository, inventoryRepository, businessDayResolver,
                 authorizationService, operations, payoutPort, payDays);
     }
@@ -157,10 +159,11 @@ class DividendJdbcIntegrationTests {
                 false, false, false, 0, 0L));
     }
 
-    /** 211-R2 方案发放付账日（夹具取第一个付账日）：审批挂主理人应付按它推算到期日。 */
+    /** 211-R2 方案发放付账日（夹具取第一个付账日）：审批挂主理人应付按它推算到期日。234-R1：未给生效起始日的夹具版本自 2000-01-01 起生效。 */
     private static DividendPlanRecord slotted(DividendPlanRecord p) {
         return new DividendPlanRecord(p.id(), p.merchantId(), p.principalUserId(), p.principalName(), p.platformShareBps(),
-                p.taxRateBps(), p.periodType(), p.revenueDomains(), p.includeInventoryCost(), p.expenseTypes(), p.effectiveFrom(),
+                p.taxRateBps(), p.periodType(), p.revenueDomains(), p.includeInventoryCost(), p.expenseTypes(),
+                p.effectiveFrom() == null ? LocalDate.of(2000, 1, 1) : p.effectiveFrom(),
                 p.status(), p.note(), p.updatedBy(), p.createdAt(), p.updatedAt(), p.lossCarryforwardEnabled(),
                 p.arrearsOffsetEnabled(), p.payoutFloorEnabled(), p.payoutFloorBps(), p.payoutFloorFixedCent(),
                 p.reserveReleaseMode(), p.reserveReleaseDelayPeriods(), p.principalType(), p.customDeductions(), 1);
@@ -194,6 +197,31 @@ class DividendJdbcIntegrationTests {
                 gross, tax, net, 0L, "draft", null, null, "usr_div_jdbc", null, null, null, null, null, null,
                 now, now, lcfEnabled, lcfIn, lcfApplied, lcfAfter, arrearsOffset, reserve, payout,
                 "individual", 0L);
+    }
+
+    /** 234-R1：预期被部分唯一索引拒绝的方案版本插入放在 savepoint 里（失败后回滚到 savepoint，事务不中止）。 */
+    private boolean insertInSavepoint(DividendPlanRecord plan) {
+        Connection connection = DataSourceUtils.getConnection(dataSource);
+        try {
+            Savepoint savepoint = connection.setSavepoint();
+            boolean inserted = repository.insertPlan(plan);
+            connection.rollback(savepoint);
+            connection.releaseSavepoint(savepoint);
+            return inserted;
+        } catch (java.sql.SQLException e) {
+            throw new IllegalStateException(e);
+        } finally {
+            DataSourceUtils.releaseConnection(connection, dataSource);
+        }
+    }
+
+    /** 234-R1 夹具：同商户另一版本行（改生效起始日与状态）。 */
+    private static DividendPlanRecord version(DividendPlanRecord p, LocalDate from, String status) {
+        return new DividendPlanRecord(p.id(), p.merchantId(), p.principalUserId(), p.principalName(), p.platformShareBps(),
+                p.taxRateBps(), p.periodType(), p.revenueDomains(), p.includeInventoryCost(), p.expenseTypes(), from, status,
+                p.note(), p.updatedBy(), p.createdAt(), p.updatedAt(), p.lossCarryforwardEnabled(), p.arrearsOffsetEnabled(),
+                p.payoutFloorEnabled(), p.payoutFloorBps(), p.payoutFloorFixedCent(), p.reserveReleaseMode(),
+                p.reserveReleaseDelayPeriods(), p.principalType(), p.customDeductions(), p.payoutPaySlot());
     }
 
     /** 唯一索引/CHECK 冲突 INSERT 用事务绑定连接上的手动 savepoint 吸收，25P02 不外溢（V297 同款）。 */
@@ -230,16 +258,18 @@ class DividendJdbcIntegrationTests {
         DividendService service = serviceWithPlatformActor("usr_div_jdbc");
         com.complex.platform.dividend.dto.DividendPlanRequest annual = objectMapper.readValue("""
                 {"idempotency_key":"annual-jdbc","merchant_id":"merchant_div_annual","principal_user_id":"usr_principal_jdbc",
-                 "principal_name":"主理人乙","period_type":"annual","payout_pay_slot":1}
-                """, com.complex.platform.dividend.dto.DividendPlanRequest.class);
+                 "principal_name":"主理人乙","period_type":"annual","period_min_months":6,"period_max_months":12,"payout_pay_slot":1,
+                 "effective_from":"%s","reason":"按工商登记持股比例"}
+                """.formatted(LocalDate.now(com.complex.platform.common.LocalZone.ID).plusDays(1)),
+                com.complex.platform.dividend.dto.DividendPlanRequest.class);
         assertThatCode(() -> service.createPlan(annual)).doesNotThrowAnyException();
         assertThat(jdbcTemplate.queryForList(
                 "SELECT period_type FROM dividend_plans WHERE merchant_id = 'merchant_div_annual' AND status = 'active'",
                 String.class)).containsExactly("annual");
 
         jdbcTemplate.update("""
-                INSERT INTO dividend_plans (id, merchant_id, principal_user_id)
-                VALUES ('divp_jdbc_default_period', 'merchant_div_default', 'usr_p')
+                INSERT INTO dividend_plans (id, merchant_id, principal_user_id, effective_from)
+                VALUES ('divp_jdbc_default_period', 'merchant_div_default', 'usr_p', DATE '2000-01-01')
                 """);
         assertThat(jdbcTemplate.queryForObject(
                 "SELECT period_type FROM dividend_plans WHERE id = 'divp_jdbc_default_period'", String.class))
@@ -301,18 +331,12 @@ class DividendJdbcIntegrationTests {
     @Test
     void uniqueActiveStatementPerPeriodAndPlanPerMerchant() {
         repository.insertPlan(plan("divp_jdbc_uq", "monthly"));
-        // 同商户第二个 active 方案：部分唯一索引拒绝（insertPlan 吞 DuplicateKeyException 返回 false）。
-        Connection connection = DataSourceUtils.getConnection(dataSource);
-        try {
-            Savepoint savepoint = connection.setSavepoint();
-            assertThat(repository.insertPlan(plan("divp_jdbc_uq_2", "monthly"))).isFalse();
-            connection.rollback(savepoint);
-            connection.releaseSavepoint(savepoint);
-        } catch (java.sql.SQLException e) {
-            throw new IllegalStateException(e);
-        } finally {
-            DataSourceUtils.releaseConnection(connection, dataSource);
-        }
+        // 234-R1：同商户同一生效起始日的第二个已批准版本（uq_dividend_plans_effective）、同商户第二个待审批版本（uq_dividend_plans_pending）
+        // 被部分唯一索引拒绝（insertPlan 吞 DuplicateKeyException 返回 false）；换一个生效起始日的已批准版本、第一个待审批版本可落。
+        assertThat(insertInSavepoint(plan("divp_jdbc_uq_2", "monthly"))).isFalse();
+        assertThat(repository.insertPlan(version(plan("divp_jdbc_uq_v2", "monthly"), LocalDate.of(2026, 9, 1), "active"))).isTrue();
+        assertThat(repository.insertPlan(version(plan("divp_jdbc_uq_p1", "monthly"), LocalDate.of(2026, 12, 1), "pending_review"))).isTrue();
+        assertThat(insertInSavepoint(version(plan("divp_jdbc_uq_p2", "monthly"), LocalDate.of(2027, 1, 1), "pending_review"))).isFalse();
         repository.insertStatement(statement("divs_jdbc_uq_1", "divp_jdbc_uq",
                 100L, 0L, 0L, 100L, 100L, 80L, 20L, 4L, 16L));
         // 同期同商户同类别第二张未作废单：uq_dividend_statements_period 拒绝。
@@ -511,10 +535,12 @@ class DividendJdbcIntegrationTests {
         java.time.OffsetDateTime ts = java.time.OffsetDateTime.parse("2026-07-15T12:00:00Z");
         seedTicketRevenue("co", 1_000_000L, ts);
         DividendService service = serviceWithPlatformActor("usr_div_jdbc");
-        service.createPlan(new com.complex.platform.dividend.dto.DividendPlanRequest(
-                "co-jdbc", MERCHANT, "usr_principal_jdbc", "公司主理人",
-                null, null, "monthly", List.of("ticket"), null, null,
-                null, null, null, null, null, null, null, null, null, null, "company", null, 1));
+        // 234-R1：出历史期间单用直接落的已批准版本（自 2000-01-01 起，公司主理人、默认口径）。
+        repository.insertPlan(slotted(new DividendRecords.DividendPlanRecord("divp_jdbc_co", MERCHANT, "usr_principal_jdbc", "公司主理人",
+                8000, 2000, "monthly", List.of("ticket"), true,
+                List.of("rent_allocation", "energy", "property_fee", "labor", "amortization", "other"),
+                null, "active", null, "usr_div_jdbc", Instant.now(), Instant.now(),
+                false, false, false, 0, 0L, "manual", 1, "company", List.of())));
         DividendStatementRecord s = service.compute(
                 new DividendComputeRequest("co-jdbc-c", "2026-07", "official", MERCHANT)).computed().get(0);
         assertThat(s.principalType()).isEqualTo("company");

@@ -1,4 +1,4 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -12,9 +12,10 @@ const PLANS = [
     id: "divp_1", merchant_id: "merchant-1", principal_user_id: "usr_principal", principal_name: "主理人甲",
     platform_share_bps: 8000, tax_rate_bps: 2000, period_type: "quarterly",
     revenue_domains: ["bar", "ticket"], include_inventory_cost: true, expense_types: ["labor"],
-    status: "active", payout_floor_enabled: true, reserve_release_mode: "next_period",
+    status: "active", payout_floor_enabled: true, reserve_release_mode: "next_period", version_state: "in_force",
   },
 ];
+let currentPlans: unknown[] = PLANS;
 const RESERVES = [
   {
     statement_id: "divs_q2", merchant_id: "merchant-1", principal_user_id: "usr_principal",
@@ -75,7 +76,7 @@ function makeApi(): AdminApi {
       if (url.includes("/dividends/statements")) {
         return Promise.resolve(envelope({ items: STATEMENTS, page: 1, page_size: 10, total: STATEMENTS.length }));
       }
-      if (url.includes("/dividends/plans")) return Promise.resolve(envelope(PLANS));
+      if (url.includes("/dividends/plans")) return Promise.resolve(envelope(currentPlans));
       return Promise.resolve(envelope([]));
     }),
   );
@@ -101,6 +102,29 @@ function renderPage() {
 describe("MerchantZoneDividendsPage 我的分红", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
+    currentPlans = PLANS;
+  });
+
+  it("方案摘要取生效中的版本，不取待生效的新版本（234-R1，BSM:521）", async () => {
+    currentPlans = [
+      { ...PLANS[0], id: "divp_2", platform_share_bps: 7000, effective_from: "2026-12-01", version_state: "scheduled" },
+      { ...PLANS[0], effective_from: "2026-01-01" },
+    ];
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("merchant-dividend-plan-summary").textContent).toContain("平台 80%"));
+    expect(screen.getByTestId("merchant-dividend-plan-summary").textContent).not.toContain("70%");
+  });
+
+  it("方案摘要按工商登记比例列平台、主理人与其他股东（234-R2，BSM:1775、BSM:1795）", async () => {
+    currentPlans = [{
+      ...PLANS[0], platform_share_bps: 6000, other_shareholders: [
+        { id: "dps_b", shareholder_name: "股东乙", shareholder_type: "individual", share_bps: 1000, sort_order: 0 },
+        { id: "dps_c", shareholder_name: "丙公司", shareholder_type: "company", share_bps: 500, sort_order: 1 },
+      ],
+    }];
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("merchant-dividend-plan-summary").textContent)
+      .toContain("平台 60% / 主理人 25% / 其他股东 15%（2 人）"));
   });
 
   it("列表展示每期金额与状态 + 当前方案摘要；只读无写动作", async () => {

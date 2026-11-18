@@ -1,6 +1,6 @@
 package com.complex.platform.access.staff;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static com.complex.platform.access.staff.StaffPayrollModels.*;
 import static com.complex.platform.support.DailyCloseFixture.markRangeFinal;
@@ -80,8 +80,8 @@ class MerchantExpensePayrollAttachJdbcIntegrationTests {
         for (String bar : List.of(barA, barB)) {
             jdbc.update("INSERT INTO merchants (id, merchant_name, merchant_type, business_entity_id, project_id, status, created_at, updated_at)"
                     + " VALUES (?, ?, 'bar', ?, ?, 'active', TIMESTAMPTZ '2024-01-01 00:00:00+08', now())", bar, "人工挂接酒吧" + bar, entity, project);
-            jdbc.update("INSERT INTO dividend_plans (id, merchant_id, principal_user_id, period_type, revenue_domains, payout_pay_slot, status)"
-                    + " VALUES (?, ?, 'usr_mep_principal', 'monthly', 'bar', 1, 'active')", "divp_" + bar, bar);
+            jdbc.update("INSERT INTO dividend_plans (id, merchant_id, principal_user_id, period_type, revenue_domains, payout_pay_slot, status, effective_from)"
+                    + " VALUES (?, ?, 'usr_mep_principal', 'monthly', 'bar', 1, 'active', DATE '2000-01-01')", "divp_" + bar, bar);
         }
         // 210-R3 第十八批裁决 42 出单闸前提：经营主体 E 各月已有生效税费登记。
         com.complex.platform.support.EntityTaxFixture.taxDeclaredForAllMonths(jdbc, barA);

@@ -1,12 +1,11 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.06
+// 文件版本：V0.07
 
 import static com.complex.platform.bar.BarValidation.requireRequest;
 import static com.complex.platform.bar.BarValidation.requireText;
 
 import com.complex.platform.access.AuthorizationService;
-import com.complex.platform.common.LocalZone;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.finance.ArApItemRecord;
 import com.complex.platform.finance.ArApItemSourceRecord;
@@ -166,32 +165,39 @@ public class BarBillAnomalyService {
      * BSM L1142/L1143（营销、派驻人员促成订单的提成「由该酒吧按月拨付给…所属主体」）：本单提成作废前已随提成月结
      * （StaffService 提成月结，bar_commission_settlements）拨付所属主体的，按作废提成额向所属主体追加一笔应收冲回
      * （同酒吧报酬月结负额单列应收，不轧差、不改原月结）；月结之后才计提的不在原月结内，不冲。提成所属月结按本单开台或下单时点所属
-     * 营业日的月份（ENUM:187，同工资单与提成月结）。
+     * 营业日的月份（ENUM:187，同工资单与提成月结）。第十八批 AQ 段第 242 条 242-R1（第十八批裁决 46「凡判断是否在派驻期内都按酒吧营业日：
+     * 结束日当天的夜班过零点后、到营业日结束前仍算派驻期内。……派驻提成归集也改按计提时所属营业日。」）：派驻起止按计提时点所属该酒吧营业日判，
+     * 与提成月结归集（JdbcStaffRepository#aggregateDispatchedCommissions）同口径。
      */
     private void reverseDispatchedCommissionTransfers(String billId) {
-        String zone = LocalZone.ID.getId();
         Instant now = Instant.now();
-        for (Map<String, Object> row : jdbc.queryForList("""
-                SELECT c.id, c.commission_amount_cent, s.month, s.merchant_id, s.company_id, s.project_id, s.due_date
-                  FROM bar_commission_calculations c
-                  JOIN bar_bills b ON b.id = c.bill_id
-                  JOIN staff_dispatch_records d ON d.user_id = c.sales_staff_id AND d.merchant_id = COALESCE(b.merchant_id, b.bar_id)
-                   AND d.start_date <= (c.created_at AT TIME ZONE ?)::date
-                   AND (d.end_date IS NULL OR d.end_date >= (c.created_at AT TIME ZONE ?)::date)
-                  JOIN bar_commission_settlements s ON s.month = ?
-                   AND s.merchant_id = COALESCE(b.merchant_id, b.bar_id) AND s.company_id = d.company_id AND s.created_at >= c.created_at
+        String month = java.time.YearMonth.from(businessDays.barBillBusinessDate(billId)).toString();
+        for (Object[] accrual : jdbc.query("""
+                SELECT c.id, c.created_at, COALESCE(b.merchant_id, b.bar_id) AS merchant_id
+                  FROM bar_commission_calculations c JOIN bar_bills b ON b.id = c.bill_id
                  WHERE c.bill_id = ? AND c.status NOT IN ('void', 'cancelled') AND c.commission_amount_cent > 0
-                   AND b.settlement_status = 'settled'""", zone, zone,
-                java.time.YearMonth.from(businessDays.barBillBusinessDate(billId)).toString(), billId)) {
-            String commission = (String) row.get("id");
-            long amount = ((Number) row.get("commission_amount_cent")).longValue();
-            String key = UUID.nameUUIDFromBytes(commission.getBytes(StandardCharsets.UTF_8)).toString().replace("-", "");
-            String item = "arap_dcr_" + key;
-            finance.appendArApItem(new ArApItemRecord(item, "ARAP-DCR-" + key, "receivable", (String) row.get("company_id"),
-                    "dispatch_commission_transfer", commission, amount, 0L, amount, "CNY", ((java.sql.Date) row.get("due_date")).toLocalDate(),
-                    (String) row.get("month"), "pending_collection", now, now, (String) row.get("merchant_id"), (String) row.get("project_id")));
-            finance.saveArApItemSource(new ArApItemSourceRecord("arap_src_" + item, item, "dispatch_commission_transfer", commission,
-                    amount, now));
+                   AND b.settlement_status = 'settled'""", (rs, n) -> new Object[] {rs.getString("id"), java.sql.Date.valueOf(
+                businessDays.merchantBusinessDate(null, rs.getString("merchant_id"), rs.getTimestamp("created_at").toInstant()))}, billId)) {
+            for (Map<String, Object> row : jdbc.queryForList("""
+                    SELECT c.id, c.commission_amount_cent, s.month, s.merchant_id, s.company_id, s.project_id, s.due_date
+                      FROM bar_commission_calculations c
+                      JOIN bar_bills b ON b.id = c.bill_id
+                      JOIN staff_dispatch_records d ON d.user_id = c.sales_staff_id AND d.merchant_id = COALESCE(b.merchant_id, b.bar_id)
+                       AND d.start_date <= CAST(? AS date) AND (d.end_date IS NULL OR d.end_date >= CAST(? AS date))
+                      JOIN bar_commission_settlements s ON s.month = ?
+                       AND s.merchant_id = COALESCE(b.merchant_id, b.bar_id) AND s.company_id = d.company_id AND s.created_at >= c.created_at
+                     WHERE c.id = ?""", accrual[1], accrual[1], month, accrual[0])) {
+                String commission = (String) row.get("id");
+                long amount = ((Number) row.get("commission_amount_cent")).longValue();
+                String key = UUID.nameUUIDFromBytes(commission.getBytes(StandardCharsets.UTF_8)).toString().replace("-", "");
+                String item = "arap_dcr_" + key;
+                finance.appendArApItem(new ArApItemRecord(item, "ARAP-DCR-" + key, "receivable", (String) row.get("company_id"),
+                        "dispatch_commission_transfer", commission, amount, 0L, amount, "CNY",
+                        ((java.sql.Date) row.get("due_date")).toLocalDate(), (String) row.get("month"), "pending_collection", now, now,
+                        (String) row.get("merchant_id"), (String) row.get("project_id")));
+                finance.saveArApItemSource(new ArApItemSourceRecord("arap_src_" + item, item, "dispatch_commission_transfer", commission,
+                        amount, now));
+            }
         }
     }
 

@@ -1,6 +1,6 @@
 package com.complex.platform.dividend;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import com.complex.platform.common.api.PageResponse;
 import com.complex.platform.dividend.DividendRecords.DividendPlanRecord;
@@ -18,15 +18,23 @@ public interface DividendRepository {
 
     Optional<DividendPlanRecord> findPlanById(String id);
 
-    Optional<DividendPlanRecord> findActivePlanByMerchant(String merchantId);
+    /**
+     * 234-R1（BSM:521「已发生的业务一律按当时生效的版本计算」）：该商户在 date 已生效的版本——已批准（active/ended）且生效起始日不晚于 date 的版本里
+     * 生效起始日最大的一个；它是 active 才返回（ended＝自那天起停用）。
+     */
+    Optional<DividendPlanRecord> findPlanInForce(String merchantId, java.time.LocalDate date);
 
-    List<DividendPlanRecord> listActivePlans();
+    /** 234-R1：各商户在 date 已生效且未停用的版本（同 {@link #findPlanInForce} 口径），按商户排序。 */
+    List<DividendPlanRecord> listPlansInForce(java.time.LocalDate date);
 
-    /** 插入方案；同商户已有 active 方案时（部分唯一索引冲突）返回 false。 */
+    /** 插入方案版本；撞同商户同一生效起始日的已批准版本或同商户已有待审批版本（部分唯一索引）返回 false。 */
     boolean insertPlan(DividendPlanRecord plan);
 
-    /** 更新方案；ended 改回 active 撞同商户唯一生效索引时返回 false（insertPlan 同口径）。 */
-    boolean updatePlan(DividendPlanRecord plan);
+    /** 234-R1：待审批版本写回复核单号。 */
+    void setPlanReviewId(String id, String reviewId);
+
+    /** 234-R1：审批结果落版本行；只改待审批且复核单号相符的行，返回行数。版本行批准后不再改。 */
+    int decidePlan(String id, String reviewId, String status, String decidedBy, Instant decidedAt);
 
     // ── V309 自定义扣除项（方案级配置，随方案整表替换）────────────────────────
     /** 某方案的自定义扣除项（按 sort_order 升序）；供读方案与算式取数。 */
@@ -150,4 +158,10 @@ public interface DividendRepository {
 
     /** 全部登记，最近登记在前。 */
     List<DividendRecords.DividendPeriodHoldRecord> listHolds();
+
+    // ── V644 243-R1 酒吧关停结算（BSM:1787）──
+    /** 已登记关停结算的商户与其关店最后营业日（出单按此取方案版本、查五类最终标记）。default 返回空兼容既有测试双子。 */
+    default java.util.Map<String, java.time.LocalDate> closeoutClosedDates() {
+        return java.util.Map.of();
+    }
 }

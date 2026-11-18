@@ -1,6 +1,6 @@
 package com.complex.platform.dividend;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import com.complex.platform.common.api.ApiResponse;
 import com.complex.platform.common.api.PageResponse;
@@ -12,6 +12,7 @@ import com.complex.platform.dividend.DividendRecords.DividendReserveReleaseRecor
 import com.complex.platform.dividend.DividendRecords.DividendStatementDetailRecord;
 import com.complex.platform.dividend.DividendRecords.DividendStatementRecord;
 import com.complex.platform.dividend.dto.DividendActionRequest;
+import com.complex.platform.dividend.dto.DividendCloseoutRequest;
 import com.complex.platform.dividend.dto.DividendComputeRequest;
 import com.complex.platform.dividend.dto.DividendHoldRequest;
 import com.complex.platform.dividend.dto.DividendPlanRequest;
@@ -31,9 +32,11 @@ import org.springframework.web.bind.annotation.RestController;
 public class DividendController {
 
     private final DividendService service;
+    private final DividendCloseoutService closeouts;
 
-    public DividendController(DividendService service) {
+    public DividendController(DividendService service, DividendCloseoutService closeouts) {
         this.service = service;
+        this.closeouts = closeouts;
     }
 
     @GetMapping("/plans")
@@ -145,5 +148,42 @@ public class DividendController {
     public ApiResponse<DividendPeriodHoldRecord> liftHold(
             @PathVariable("hold_id") String holdId, @RequestBody DividendHoldRequest.Lift request) {
         return ApiResponse.ok(service.liftHold(holdId, request));
+    }
+
+    // ── 第十八批 AQ 段第 243 条 243-R1 酒吧关停结算（BSM:1787）──────────
+
+    /** 关停结算列表（finance.dividend.view，平台口径）；merchant_id 非空只看该商户。待提交核实的款项现查，其余取提交核实时的快照。 */
+    @GetMapping("/closeouts")
+    public ApiResponse<List<DividendCloseoutService.Closeout>> listCloseouts(
+            @RequestParam(value = "merchant_id", required = false) String merchantId) {
+        return ApiResponse.ok(closeouts.list(merchantId));
+    }
+
+    /** 登记关停结算（finance.dividend.manage；只适用于酒吧，一家酒吧一条；不改商户状态、不动应付）。 */
+    @PostMapping("/closeouts")
+    public ApiResponse<DividendCloseoutService.Closeout> registerCloseout(@RequestBody DividendCloseoutRequest request) {
+        return ApiResponse.ok(closeouts.register(request));
+    }
+
+    /** 提交财务、法务核实（finance.dividend.manage；本次分红出单后，逐条填法律性质与处理方式，进统一审批）。 */
+    @PostMapping("/closeouts/{id}/submit")
+    public ApiResponse<DividendCloseoutService.Closeout> submitCloseout(
+            @PathVariable("id") String closeoutId, @RequestBody DividendCloseoutRequest.Submit request) {
+        return ApiResponse.ok(closeouts.submit(closeoutId, request));
+    }
+
+    /** 按核实结果登记一条款项的处理（finance.dividend.manage；核实通过后，每条一次）。 */
+    @PostMapping("/closeouts/{id}/items/{item_id}/handle")
+    public ApiResponse<DividendCloseoutService.Closeout> handleCloseoutItem(
+            @PathVariable("id") String closeoutId, @PathVariable("item_id") String itemId,
+            @RequestBody DividendCloseoutRequest.Handle request) {
+        return ApiResponse.ok(closeouts.handle(closeoutId, itemId, request));
+    }
+
+    /** 结案（finance.dividend.manage；核实通过且每条款项都已登记处理）。 */
+    @PostMapping("/closeouts/{id}/close")
+    public ApiResponse<DividendCloseoutService.Closeout> closeCloseout(
+            @PathVariable("id") String closeoutId, @RequestBody DividendActionRequest request) {
+        return ApiResponse.ok(closeouts.close(closeoutId, request));
     }
 }

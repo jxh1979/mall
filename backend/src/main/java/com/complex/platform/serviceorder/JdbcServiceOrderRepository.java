@@ -1,6 +1,6 @@
 package com.complex.platform.serviceorder;
 
-// 文件版本：V0.05
+// 文件版本：V0.06
 
 import java.time.Instant;
 import java.time.LocalDate;
@@ -143,12 +143,17 @@ class JdbcServiceOrderRepository {
                         rs.getString("account_type"), rs.getString("organization_id"), rs.getString("merchant_id"), rs.getString("status")));
     }
 
-    /** 该目录项服务单发生过的酒吧的主理人:各酒吧当前有效分红方案(status='active',每商户至多一条)的 principal_user_id。 */
+    /**
+     * 该目录项服务单发生过的酒吧的主理人:各酒吧当天已生效的分红方案版本的 principal_user_id(第十八批裁决 10「主理人取该酒吧分红方案里的主理人」;
+     * 234-R1 方案按版本:已批准且生效起始日不晚于今天的最新一版,它未停用才算,已被取代的旧版本主理人不收)。
+     */
     public List<String> listBarPrincipalUserIds(String catalogItemId) {
         return jdbcTemplate.query("""
                 SELECT DISTINCT dp.principal_user_id
                   FROM service_orders o
-                  JOIN dividend_plans dp ON dp.merchant_id = o.bar_id AND dp.status = 'active'
+                  JOIN LATERAL (SELECT p.principal_user_id, p.status FROM dividend_plans p
+                                 WHERE p.merchant_id = o.bar_id AND p.status IN ('active', 'ended') AND p.effective_from <= CURRENT_DATE
+                                 ORDER BY p.effective_from DESC LIMIT 1) dp ON dp.status = 'active'
                  WHERE o.catalog_item_id = :item
                 """, new MapSqlParameterSource().addValue("item", catalogItemId),
                 (rs, n) -> rs.getString("principal_user_id"));

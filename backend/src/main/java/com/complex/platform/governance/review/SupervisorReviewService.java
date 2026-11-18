@@ -1,6 +1,6 @@
 package com.complex.platform.governance.review;
 
-// 文件版本：V0.37
+// 文件版本：V0.38
 
 import com.complex.platform.access.AccessActor;
 import com.complex.platform.access.AuthorizationService;
@@ -86,6 +86,15 @@ public class SupervisorReviewService {
                     List.of("reason", "before_after"), "active", "top_authority"),
             new SupervisorReviewPolicyRecord("bar_business_day", "bar.business_day.configure", 0, 3, true,
                     List.of("reason", "before_after"), "active", "top_authority"),
+            // 第十八批 AQ 段第 234 条 234-R1（PGM:666「持股分红的方案配置……由最高权限审批，提交人不能审批自己的单据」；BSM:521 涉钱配置新版本审批通过后按
+            // 指定日期生效；PGM:529 按审批类型可配时限）：分红方案调整，恒阻断、最高权限审批；动作名以 finance. 开头按涉钱出厂 1 个工作日。
+            new SupervisorReviewPolicyRecord("dividend_plan_change", "finance.dividend.plan.change", 0, 3, true,
+                    List.of("reason", "before_after"), "active", "top_authority"),
+            // 第十八批 AQ 段第 243 条 243-R1（BSM:1787「已确认应付及待释款项的法律性质和处理由财务、法务核实」；PGM:528「发起单据时只需指定该事项的最终
+            // 审批人……需要平行线审批的（如法务、财务），另行指定该条线的最终审批人」）：酒吧关停结算核实，发起人沿直接上级到指定的最终审批人，固定财务、
+            // 法务两线（带固定线即不按动作名含 dividend 升最高权限档）；动作名以 finance. 开头按涉钱出厂 1 个工作日。
+            new SupervisorReviewPolicyRecord("dividend_closeout_verify", "finance.dividend.closeout.verify", 0, 1, true,
+                    List.of("reason"), "active", "one_level_up", null, List.of("finance_review", "legal_review")),
             // 第十八批第 24 条（ENUM:164 高价值判定阈值「全平台统一可配，调整须最高权限审批并留痕」）。
             new SupervisorReviewPolicyRecord("settlement_high_value_threshold", "settlement.high_value_threshold.configure", 0, 3, true,
                     List.of("reason", "before_after"), "active", "top_authority"),

@@ -1,4 +1,4 @@
-// 文件版本：V0.10
+// 文件版本：V0.11
 // 第十八批 I 段第 87 条（PGM:287「界面全中文（所有终端零英文）」）：主管复核的动作码、对象码、档位码与证据类型中文名，
 // 主管复核页与审批链页（ADM-GOV-009）共用（展示层翻译，提交仍原码）。原表与 formatReviewValue 自 SupervisorReviewPage.tsx 搬入。
 import { formatBusinessStatus } from "./statusLabels";
@@ -99,6 +99,10 @@ export const REVIEW_LABELS: Record<string, string> = {
   // 第十八批 AM 段第 241 条 241-R1：付款确认的 40 个审批类型与复核对象（付款确认单）。
   ...Object.fromEntries(Object.entries(PAYMENT_TYPE_LABELS).map(([type, label]) => [`finance.payment_confirm.${type}`, `付款确认（${label}）`])),
   payment_confirmation: "付款确认单",
+  // 第十八批 AQ 段第 234 条 234-R1（PGM:666）：分红方案调整的审批动作与复核对象（方案版本）。
+  "finance.dividend.plan.change": "分红方案调整", dividend_plan: "分红方案",
+  // 第十八批 AQ 段第 243 条 243-R1（BSM:1787「由财务、法务核实」）：酒吧关停结算核实的审批动作与复核对象。
+  "finance.dividend.closeout.verify": "酒吧关停结算核实", dividend_closeout: "酒吧关停结算",
 };
 
 export function formatReviewValue(value?: string | null) {

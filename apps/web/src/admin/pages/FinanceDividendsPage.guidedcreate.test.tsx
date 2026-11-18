@@ -1,4 +1,4 @@
-// 文件版本：V0.04
+// 文件版本：V0.05
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -11,10 +11,10 @@ const MERCHANTS = [{ id: "merchant-1", merchant_name: "酒吧甲", status: "acti
 const PLANS = [
   {
     id: "divp_1", merchant_id: "merchant-1", principal_user_id: "usr_principal", principal_name: "主理人甲",
-    platform_share_bps: 8000, tax_rate_bps: 2000, period_type: "quarterly",
+    platform_share_bps: 8000, tax_rate_bps: 2000, period_type: "quarterly", period_min_months: 1, period_max_months: 12,
     revenue_domains: ["bar", "ticket"], include_inventory_cost: true,
     expense_types: ["rent_allocation", "energy", "property_fee", "labor", "amortization", "other"], payout_pay_slot: 2,
-    status: "active", created_at: "2026-07-18T00:00:00Z", updated_at: "2026-07-18T00:00:00Z",
+    status: "active", created_at: "2026-07-18T00:00:00Z", updated_at: "2026-07-18T00:00:00Z", version_state: "in_force",
   },
 ];
 const STATEMENTS = [
@@ -87,6 +87,14 @@ function makeApi(): AdminApi {
 
 const ADMIN_PERMS: EffectivePermissionsState = { status: "ready", value: { grants: [], denies: [], wildcard: true } };
 
+/** 234-R1（BSM:521）：提交方案版本必填生效起始日期与调整理由。244-R1（ENUM:299）：新建必选周期上下限（季～年，默认半年在其间）。 */
+function fillVersion() {
+  fireEvent.change(screen.getByTestId("dividend-plan-period-min"), { target: { value: "3" } });
+  fireEvent.change(screen.getByTestId("dividend-plan-period-max"), { target: { value: "12" } });
+  fireEvent.change(screen.getByTestId("dividend-plan-effective-from"), { target: { value: "2026-12-01" } });
+  fireEvent.change(screen.getByTestId("dividend-plan-reason"), { target: { value: "按工商登记持股比例" } });
+}
+
 function renderPage() {
   const setActionResult = vi.fn();
   const props: AdminPageProps = {
@@ -138,6 +146,7 @@ describe("FinanceDividendsPage 持股分红", () => {
     expect(screen.queryByTestId("dividend-plan-include-cost")).toBeNull();
     expect(screen.queryByTestId("dividend-plan-expense-labor")).toBeNull();
     fireEvent.change(screen.getByTestId("dividend-plan-pay-slot"), { target: { value: "1" } });
+    fillVersion();
     fireEvent.click(screen.getByTestId("dividend-plan-guided-next"));
 
     await waitFor(() => expect(screen.getByTestId("dividend-plan-guided-summary")).toBeTruthy());
@@ -183,11 +192,40 @@ describe("FinanceDividendsPage 持股分红", () => {
     fireEvent.click(screen.getByTestId("dividend-plan-guided-next"));
     expect(screen.getByTestId("dividend-plan-guided-error").textContent).toContain("发放付账日");
     fireEvent.change(select, { target: { value: "2" } });
+    fillVersion();
     fireEvent.click(screen.getByTestId("dividend-plan-guided-next"));
     await waitFor(() => expect(screen.getByTestId("dividend-plan-guided-summary").textContent).toContain("第二个付账日"));
     fireEvent.click(screen.getByTestId("dividend-plan-save"));
     await waitFor(() => expect(lastWriteBody).toBeTruthy());
     expect((lastWriteBody as Record<string, unknown>).payout_pay_slot).toBe(2);
+  });
+
+  it("分红周期上下限（ENUM:299「须同时配置上下限」、BSM:521「超出该区间的配置一律拒绝生效」）：方案表显示上下限；不选拦截；周期不在区间拦截；选季与年后载荷带月数", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("dividend-plan-row-divp_1").textContent).toContain("季（月～年）"));
+    fireEvent.click(screen.getByTestId("dividend-plan-create-open"));
+    await waitFor(() => expect(screen.getByTestId("dividend-plan-guided").textContent).toContain("周期下限"));
+    expect(screen.getByTestId("dividend-plan-guided").textContent).toContain("周期上限");
+    fireEvent.change(screen.getByTestId("dividend-plan-principal"), { target: { value: "usr_p_bounds" } });
+    fireEvent.change(screen.getByTestId("dividend-plan-pay-slot"), { target: { value: "1" } });
+    fireEvent.change(screen.getByTestId("dividend-plan-effective-from"), { target: { value: "2026-12-01" } });
+    fireEvent.change(screen.getByTestId("dividend-plan-reason"), { target: { value: "按工商登记持股比例" } });
+    fireEvent.click(screen.getByTestId("dividend-plan-guided-next"));
+    expect(screen.getByTestId("dividend-plan-guided-error").textContent).toContain("请同时选择分红周期的下限与上限");
+
+    fireEvent.change(screen.getByTestId("dividend-plan-period-min"), { target: { value: "3" } });
+    fireEvent.change(screen.getByTestId("dividend-plan-period-max"), { target: { value: "12" } });
+    fireEvent.change(screen.getByTestId("dividend-plan-period-type"), { target: { value: "monthly" } });
+    fireEvent.click(screen.getByTestId("dividend-plan-guided-next"));
+    expect(screen.getByTestId("dividend-plan-guided-error").textContent).toContain("分红周期须在下限与上限之内");
+    expect(lastWriteBody).toBeNull();
+
+    fireEvent.change(screen.getByTestId("dividend-plan-period-type"), { target: { value: "semiannual" } });
+    fireEvent.click(screen.getByTestId("dividend-plan-guided-next"));
+    await waitFor(() => expect(screen.getByTestId("dividend-plan-guided-summary").textContent).toContain("半年（季～年）"));
+    fireEvent.click(screen.getByTestId("dividend-plan-save"));
+    await waitFor(() => expect(lastWriteBody).toBeTruthy());
+    expect(lastWriteBody).toMatchObject({ period_type: "semiannual", period_min_months: 3, period_max_months: 12 });
   });
 
   it("期间作业：填期间标签生成计算单；驳回走理由必填弹窗", async () => {
@@ -220,6 +258,7 @@ describe("FinanceDividendsPage 持股分红", () => {
     fireEvent.click(screen.getByTestId("dividend-plan-create-open"));
     fireEvent.change(screen.getByTestId("dividend-plan-principal"), { target: { value: "usr_p_default" } });
     fireEvent.change(screen.getByTestId("dividend-plan-pay-slot"), { target: { value: "1" } });
+    fillVersion();
     // 三开关默认渲染为未勾选，保护线参数输入未展开。
     expect((screen.getByTestId("dividend-plan-loss-carryforward") as HTMLInputElement).checked).toBe(false);
     expect((screen.getByTestId("dividend-plan-arrears-offset") as HTMLInputElement).checked).toBe(false);
@@ -243,6 +282,7 @@ describe("FinanceDividendsPage 持股分红", () => {
     fireEvent.click(screen.getByTestId("dividend-plan-create-open"));
     fireEvent.change(screen.getByTestId("dividend-plan-principal"), { target: { value: "usr_p_ded" } });
     fireEvent.change(screen.getByTestId("dividend-plan-pay-slot"), { target: { value: "1" } });
+    fillVersion();
     fireEvent.click(screen.getByTestId("dividend-plan-loss-carryforward"));
     fireEvent.click(screen.getByTestId("dividend-plan-arrears-offset"));
     fireEvent.click(screen.getByTestId("dividend-plan-payout-floor"));

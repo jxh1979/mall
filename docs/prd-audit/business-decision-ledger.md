@@ -1,6 +1,6 @@
 # PRD 审计业务裁决台账
 
-文档版本：V0.99
+文档版本：V1.00
 状态：进行中
 迁移日期：2026-07-27
 当前事实源：三份立法 HTML 以既有冻结基线叠加 James 此前 M02 至 M08 的点名批准、全量审计 M001、M002 的逐项批准，以及本轮 2026-10-16 至 2026-10-17 业务 HTML 审计中 Q01 至 Q40 及子题实际明确批准且未被后续替代的裁决，和 2026-10-17 第二批 HTML 业务线推演审计（A–F 六线 64 条、停车章）的逐项批准，并叠加本轮 CG 70 项来源确认与 C01–C09、N01–N03 最终澄清及补全文稿中 F01、W01–W05 的整体修改批准（本文件末节）；本轮最终规则、未采纳或替代关系、现行版本与字节哈希见本文件末节。历史记录保留为各自当时事实，不恢复已被替代的建议。
@@ -8454,3 +8454,224 @@ HTML 的语义补齐与直接引用同步可在本批核验；70项中的业务�
     - 测试：TicketingPoliciesPage.ruleversions.test.tsx 另加一例「最高权限本人提交即生效后：最低赠酒杯数与票面赠酒清单一并重读」。改前断言失败，改后通过。
   - 回归：后端 --fresh 定向 TicketTypePriceRuleVersionJdbcIntegrationTests、TicketTypeRuleVersionJdbcIntegrationTests 共 17 例全过；前端 typecheck 0 错，vitest 过滤 TicketingPoliciesPage、DynamicPricingPage 8 个文件 68 例全过。
 - 18AS 落地位置补记·运行验收证据、快照、终验文档刷新（无新裁决）：业务提交 4229b672 之后，按第十八批裁决 25 重刷了运行验收证据：后端全量 6887 测，0 失败 0 错误；apps/web 构建通过；常规界面验收（接口全部 mock）实跑 40 条全过；真实后端界面验收未跑，runtime_ready=false。随后依次重生成闭环当前态快照、生产闭环缺口报告、界面验收报告、无上线指挥台。生成器没改。手改 docs/final-closed-loop-acceptance-audit-v0.1.md 与 docs/code-implementation-acceptance-audit-v0.1.md：前端单测源码计数改为 1861；TicketingService.java 行数由 1351 改为 1363，其余被核文件行数无变化；后端全量与常规界面验收的数字、日期改为本次实跑值；写入 npm run verify:unit 实跑结果，五个工作区全过。交付门禁于 2026-11-18 05:57 UTC 在工作树逐项实跑子项，NAS 两项现场探测未跑。仍红的有两项：一是 coding-host-protection，它写死主仓路径，在工作树口径下必红，属工具口径，不做；二是 final-closed-loop-audit，如实留 2 条红（integration-ready、business-acceptance-ready），原因是校验器要求终验把联调、业务验收写成「是」，而裁决 25 定了不跑真实后端界面验收、运行验收未就绪，终验写的是「否」。verify:delivery-gates 总链仍是红的。
+
+18AQ 落地位置补记（2026-11-17）：第十八批 AQ 段（batch63）按 18AQ 只读设计实现待开发清单第 234、242、243、244 条（分红组：方案版本化、其他股东、周期上下限、关停结算、作废冲回按营业日）；运行验收证据、终验文档在本段最后一个提交刷新；各条落地位置见下。本段追加时，原台账除文档版本升一版外，其他历史字节保持。
+
+- 18AQ 落地位置补记·控制席判定（2026-11-17）：本段（第十八批 AQ 段，batch63）实现待开发清单第 234、242、243、244 条（18AQ 只读设计 b63-audit/d-div-a.json、d-div-b.json，两轮质疑者修订后定稿，无待裁题）。控制席按常理定：243-R1 落地后，有关停登记的商户出单取方案按 min（期末日，关店最后营业日）已生效的版本——关店后的期间不再分红，与 243-R1 按关店最后营业日取周期类型同口径。迁移原预留 V633～V636，合并顺序定为 18AS→18AQ→18AR（V640 归 18AS），变基时顺延为 V641～V644。本段与 18AN、18AR、18AS 并行开工，实现后变基到含 18AP 存酒组（PR #594）、18AN 界面文案组（PR #595）与 18AS 第 297 条（PR #596）的 origin/main 81a87894。设计旁见另记待开发清单第 330～333 条（待核实）。
+- 18AQ 落地位置补记·第 242 条（第十八批裁决 46 补齐作废冲回处，18AB 遗漏）：
+  - 242-R1 账单作废冲回派驻提成拨付时，派驻期改按计提时点所属该酒吧营业日判，与提成月结拨付归集同口径。
+    - 改法：backend/src/main/java/com/complex/platform/bar/BarBillAnomalyService.java（V0.07）的 reverseDispatchedCommissionTransfers。先查本账单未作废、未取消、金额大于 0、账单已结清的提成，逐笔用 BusinessDayResolver.merchantBusinessDate(null, 商户, 计提时点) 求计提营业日，与 JdbcStaffRepository.dispatchDay 同一算法。再按该笔提成 id 跑原 JOIN 查询，派驻起止由 (c.created_at AT TIME ZONE ?)::date 改为该营业日。以下不变：月结月份仍按账单营业日、月结须在计提之后、应收与来源行写法。去掉不再用的 LocalZone。走到这里的路径：异常处置「作废并冲正」。157-R6 挂起订单取消生效也调 voidAndReverse，但只处理未结清账单，冲回查询不出行，不受影响。JdbcMerchantExpenseRepository (b) 段原样镜像应收应付，不改，费用台账随之跟对。
+    - 依据：第十八批裁决 46「凡判断是否在派驻期内都按酒吧营业日：结束日当天的夜班过零点后、到营业日结束前仍算派驻期内。……派驻提成归集也改按计提时所属营业日。」；ENUM:187「销售提成月份，一律以开台或下单时点所属的营业日为准，不按自然日切分」；BSM:1143「除此之外的一切费用一律由使用方酒吧承担——包括但不限于该人员在该酒吧促成订单产生的提成」。
+    - 测试：backend/src/test/java/com/complex/platform/bar/BarBillAnomalyJdbcIntegrationTests.java（V0.08）新增 voidReversedReversesDispatchCommissionAccruedAfterMidnightOfLastDispatchDay，覆盖派驻结束日当晚过零点后、营业日结束前计提，已随月结拨付，作废并冲正后向所属主体追加一笔应收冲回。同类既有用例 voidReversedRefundsCollectionsAlongOriginalRoutesAndReversesRewardsAndCommission 的派驻开始日改按营业日取。
+    - 文档：酒吧 PRD docs/bar-business-operations-product-prd-v0.1.md（V0.38）:129「作废并冲正」实现现状第③项已补「派驻期按计提时点所属该酒吧营业日判（第十八批裁决 46）」。
+- 【18AQ 落地位置补记 · 234-R1 分红方案版本化】
+  改法：
+  - dividend_plans 每行就是一个版本。
+    - active＝已批准，自生效起始日起照此出单；ended＝已批准，自生效起始日起停用。
+    - pending_review＝待最高权限审批；rejected＝已驳回；expired＝审批通过时生效起始日已到，作废，须重新提交。
+  - 新建与修改都提交一个新版本，生效起始日期（须晚于该商户当前营业日）与调整理由必填。
+    - 新版本的取值是改前版本各字段叠加请求里非空的字段；自定义扣除项没给就照复制。
+    - 不设单独草稿态，提交即待审批。
+  - 非最高权限提交的进统一审批，动作 finance.dividend.plan.change，档位 top_authority；审批摘要写理由、商户、生效起始日，以及改前到改后的变化。
+    - 提交人不能审批自己的单，由统一审批的自审闸负责。
+    - 审批通过时生效起始日已到的记 expired；同商户同一生效起始日已有已批准版本的返回 409。
+  - 持授权 U 盘密钥的最高权限本人提交，直接按是否停用落已批准版本，不建复核单。
+  - 每期出单（含月末五类标齐后自动生成的预览、暂不分红或暂缓分红登记）取该期期末日已生效的版本；计算单 plan_id 固化所用版本。
+  - 方案列表返回全部版本，按各商户当前营业日判版本状态：待审批、待生效、生效中、已停用、已被新版本取代、已驳回、审批时已过生效日。
+  - 服务单改价通告的主理人，取当天已生效版本的主理人。
+  - 分红方案调整进审批时限清单，按涉钱出厂 1 个工作日。
+  落地位置：
+  - 迁移：V641__dividend_plan_versions.sql。
+  - 后端：
+    - DividendService：submitVersion、onPlanChangeDecided、withVersionStates、computeInternal、onMonthEndBusinessDayFinal、recordHoldInternal。
+    - DividendRepository 与 JdbcDividendRepository：findPlanInForce、listPlansInForce、setPlanReviewId、decidePlan。
+    - DividendRecords.DividendPlanRecord；dto/DividendPlanRequest。
+    - SupervisorReviewService 策略表 dividend_plan_change 行。
+    - JdbcServiceOrderRepository.listBarPrincipalUserIds。
+    - FieldLabels.java 的 effective_from。
+  - 前端：
+    - FinanceDividendsPage.tsx：方案表版本列、生效起始日期与理由输入、提交最高权限审批、查看审批原件。
+    - MerchantZoneDividendsPage.tsx：摘要取生效中版本。
+    - types.ts、reviewLabels.ts、fieldLabels.ts。
+  依据：
+  - BSM:521「所有涉及钱的配置一律版本化：每次改动生成新版本，必须填写生效起始日期，并先存为草案、经高敏权限“转正”审批通过后按指定日期生效，不即改即生效。新版本只对生效日之后发生的业务适用，已发生的业务一律按当时生效的版本计算；每一笔单据在生成时就把所用配置版本固化在单上」
+  - BSM:1775「必须以获批登记版本生效，修改不能追溯已经确认或发放的分红」
+  - PGM:666「持股分红的方案配置、算单、审批和发放属于资金类高危动作，由最高权限审批，提交人不能审批自己的单据。」
+  - PGM:529（审批时限按审批类型可配，涉钱审批出厂默认 1 个工作日）
+  - PGM:899「谁发起……为什么、谁审批、结果是什么，都要能查到。」
+  - BSM:576「持授权 U 盘密钥的最高权限本人发起的操作，不需要经过任何审批。」
+  - 第十八批裁决 71；第十八批裁决 10「主理人取该酒吧分红方案里的主理人」。
+  - d-div-a.json notes「按字面或常理定」①②④⑧⑨⑪。
+  测试名：
+  - DividendPlanVersionJdbcIntegrationTests 七例：
+    - financeSubmitsNewVersionIntoTopAuthorityReviewLeavingCurrentVersionInForce
+    - versionSubmissionValidatesDateReasonAndVersionState
+    - topAuthorityApprovalAppliesVersionAndSubmitterCannotApprove
+    - approvalAfterEffectiveDateExpiresVersion
+    - masterSubmissionTakesEffectWithoutReviewAndSameDateConflicts
+    - statementUsesVersionInForceAtPeriodEnd
+    - planChangeIsMoneyApprovalTypeInDeadlineList
+  - ServiceOrderSafetyTests.feeActivationNotifiesPerformersWithPermissionAndBarPrincipal（旧版本主理人不收）。
+  - DividendServiceTests.updatePlanChangesRatioButNotMerchant、updatePlanReplacesCustomDeductionsButNullPreserves。
+  - DividendJdbcIntegrationTests.uniqueActiveStatementPerPeriodAndPlanPerMerchant。
+  - SupervisorReviewServiceTests.listPoliciesReturnsBlockingCatalogAndWritesAudit。
+  - 前端：FinanceDividendsPage.version.test.tsx；MerchantZoneDividendsPage.test.tsx「方案摘要取生效中的版本，不取待生效的新版本（234-R1，BSM:521）」。
+- 18AQ 落地位置补记·第 244 条 244-R1（分红周期上下限）
+  - 改法：分红方案加周期下限、上限，按月数取 1、3、6、12（月、季、半年、年），与周期同一粒度。新建必填；修改不填沿用改前版本。下限不大于上限，分红周期须落在上下限之内，否则 400 VALIDATION_FAILED。上下限列在方案版本行上，随 234-R1 的版本一起提交最高权限审批（审批摘要「分红周期」一项带上下限），在已批准版本上提交新版本时复制过去。不预置出厂数值。期间切分与出单方式不变。
+  - 落地位置：
+    - 迁移 V642__dividend_plan_period_bounds.sql：dividend_plans.period_min_months、period_max_months，CHECK chk_dp_period_min_months、chk_dp_period_max_months、chk_dp_period_bounds。
+    - 后端：DividendService.submitVersion 取值、新方法 requirePeriodBounds、SUMMARY_FIELDS「分红周期」项；DividendRecords.DividendPlanRecord 与 dto/DividendPlanRequest 末尾加 periodMinMonths、periodMaxMonths；JdbcDividendRepository 列清单、insert、参数、映射；FieldLabels.java 加 period_min_months「周期下限」、period_max_months「周期上限」。
+    - 前端：FinanceDividendsPage 方案弹窗「周期下限」「周期上限」两个下拉、校验、载荷、方案表与确认区显示如「半年（季～年）」；types.ts 的 DividendPlanRow；fieldLabels.ts 同键同名。
+    - 页面矩阵 CSV：ADM-FIN-007 字段列补两键。
+  - 依据：
+    - ENUM:299「分红周期可配置（业务参数，按经营主体可配，酒吧商户作为独立经营主体同样适用，须同时配置上下限）」
+    - BSM:521「超出该区间的配置一律拒绝生效，未填写上下限的参数不得上线」
+    - BSM:1777「分红周期一律取月及月的整数倍粒度（如月、季、半年、年），不使用周粒度」
+    - 决策台账 DEC-R3-2026-08-04-30「全部可配参数须同时写明取值上下限，超区间拒绝生效，未填上下限的参数不得上线（具体数值留到落地时逐个定）」
+    - DEC-P1I-01（三份 HTML 区间型可配参数括注补「须同时配置上下限」）
+    - 第十八批裁决 44（只加「发放付账日」配置，期间切分与出单方式不变）
+  - 测试：
+    - 新增 DividendFinalSnapshotGateJdbcIntegrationTests.planPeriodMustFallWithinRequiredBounds，以及 FinanceDividendsPage.guidedcreate.test.tsx「分红周期上下限（ENUM:299…）」。
+    - 同步：planRequiresPayoutPaySlotAndCannotDropCostOrExpenses、planPeriodTypeAcceptsAnnualAndDefaultsToSemiannualInDb、DividendPlanVersionJdbcIntegrationTests 的 version() 夹具与 versionSubmissionValidatesDateReasonAndVersionState、DividendServiceTests 的 slot()/enrich()/version()、guidedcreate 的 fillVersion() 与 PLANS、FinanceDividendsPage.version.test.tsx 的 BASE。
+- 18AQ 落地位置补记 · 第 234 条 234-R2（其他股东按工商登记比例分配）
+  改法：
+  - 方案版本行挂其他股东名单（名称、个人股东或公司股东、持股比例），随版本一起审批。修改时不给名单，就照改前版本复制。平台加其他股东合计不超过 100%，主理人为余下部分。
+  - 出单时，平台、各其他股东、主理人按持股比例各自四舍五入到分。尾差带符号单列，由该酒吧公司承担。
+  - 其他个人股东按方案税率整除截断代扣，不随主理人类型变；公司股东不代扣。
+  - 每位其他股东落应得、代扣、实发三行；尾差不为 0 时落一行尾差。
+  - 审批通过后，每位实发大于 0 的其他股东另挂一笔 dividend_payout 应付。应付对方与来源都是该股东实发行，到期日为方案发放付账日。登记付款前须付款确认（裁决 55、65 的现有闸）。
+  - 主理人与全部其他股东的分红应付都付清，才能标记发放，否则 409 DIVIDEND_PAYOUT_NOT_PAID。
+  - 欠款抵扣、发放保护线、自定义扣除只作用于主理人。娱乐平台公司的份额不挂应付。
+  落地位置：
+  - 迁移 V643__dividend_other_shareholders.sql：新表 dividend_plan_shareholders；dividend_statements 加 other_shareholders_gross_cent、rounding_residual_cent；劈分恒等式 chk_ds_split_identity 含其他股东与尾差；明细行类型加 shareholder_gross、shareholder_tax_withheld、shareholder_payout、rounding_residual。
+  - DividendMath：15 参 compute，各自四舍五入，尾差用 MoneyRounding.residual。
+  - DividendService：
+    - submitVersion、parseShareholders：名单校验与复制。
+    - SUMMARY_FIELDS「其他股东」：审批摘要列改前、改后两份名单。
+    - computeStatement：股东三行与尾差行。
+    - approve 与 shareholderPayouts：逐行挂应付。
+    - markPaid：查其他股东应付未付额。
+  - FinanceService：
+    - createShareholderDividendPayable：幂等键取行 id 的稳定散列。原因是派生应付 id 的 slug 只取前 40 字符，用行 id 作键会与主理人那笔撞成同一行。
+    - unpaidDividendPayoutCent。
+  - FinanceRepository、JdbcFinanceRepository：sumUnpaidArApBySources。
+  - JdbcDividendRepository：insertPlan 随版本落名单，mapPlan 装填名单。
+  - DividendRecords：DividendShareholderRecord；方案记录与计算单记录各加字段。
+  - dto/DividendPlanRequest：OtherShareholderItem。
+  - FieldLabels.java、fieldLabels.ts：中文名。
+  - FinanceDividendsPage.tsx：方案弹窗其他股东行、主理人比例实时显示、超限拦住；方案表与确认页「持股比例」列；明细抽屉按版本列各方比例、四个行标签、两项合计。
+  - MerchantZoneDividendsPage.tsx：摘要与明细比例。
+  - types.ts。
+  依据：
+  - BSM:1775「娱乐平台公司、主理人和其他股东按每家酒吧工商登记的真实持股比例分配」
+  - BSM:1757「多方分配产生的非涉税尾差单独留痕，并由该笔业务实际承担结算责任的主体承担」
+  - BSM:1776「股东为公司股东的，不代扣个人所得税，按约定全额发放」
+  - BSM:1787「分红由该酒吧公司自己从其对公账户支付给主理人与其他股东……发放走应付款项」
+  - BSM:1803「审批通过后的发放进入应付款项台账，走付款确认」
+  - BSM:1781「欠款抵扣：主理人这期该得的钱」；BSM:1786「欠主理人」；BSM:1795「主理人是该商户的股东，本商户的全部经营数据对其完全可见」
+  - 第十八批裁决 55（决策台账:3962）「所有应付都先走付款确认，按支付类型分别设流程」；裁决 65「按台账来源逐个分」
+  - d-div-a notes「按字面或常理定」③⑤⑥⑦⑩
+  测试名：
+  - DividendOtherShareholdersJdbcIntegrationTests：
+    - officialStatementSplitsAmongAllShareholdersWithSignedResidual
+    - companyPrincipalDoesNotZeroIndividualShareholderWithholding
+    - approvalHangsOnePayablePerShareholderAndArrearsOffsetOnlyReducesPrincipal
+    - markPaidWaitsForEveryShareholderPayableSettledThroughPaymentConfirmation
+    - planVersionValidatesShareholdersAndCopiesListToNextVersion
+  - DividendMathTests：
+    - multiPartySplitConservesWithResidualBoundedByHalfThePartyCount
+    - roundedSharesExceedingDistributableLeaveNegativeResidual
+    - companyShareholderIsNotWithheldAndIndividualIsTruncated
+    - companyPrincipalStillWithholdsIndividualShareholderAtPlanRate
+    - halfCentWithoutOtherShareholdersLeavesNegativeResidual
+    - dividendChainRecordsRoundingResidualSeparately
+  - 前端：
+    - FinanceDividendsPage.shareholders.test.tsx 两例
+    - MerchantZoneDividendsPage.test「方案摘要按工商登记比例列平台、主理人与其他股东（234-R2，BSM:1775、BSM:1795）」
+- 18AQ 落地位置补记·243-R1（酒吧关停结算）：
+  - 改法：
+    - 迁移 V644 新建 dividend_closeouts（一家酒吧一条，状态为待提交核实 open、财务法务核实中 pending_review、已核实待处理 verified、已结案 closed）和 dividend_closeout_items（提交核实时的款项快照，含法律性质、处理方式、处理留痕）。
+    - 平台财务在持股分红页登记：只适用于酒吧，关店最后营业日、原因必填，须有该日已生效的分红方案；不改商户状态、不动应付。
+    - 系统现查三类款项：本次分红＝按关店最后营业日已生效方案的周期取关店所在期正式单，该期登记了暂不分红的列 0；已算未发分红＝其余草稿、已驳回、待审批的正式单，加上未付清的主理人、其他股东分红应付和已释放留存应付；保护线待释放＝未付的留存应付。
+    - 本次分红出单（或该期已登记暂不分红）后才能提交核实。逐条填法律性质与处理方式，进统一审批：动作 finance.dividend.closeout.verify，策略 dividend_closeout_verify，发起人沿直接上级到指定的主线最终审批人，固定财务、法务两线，受益人为方案主理人。驳回退回待提交核实，可改后再提交；核实通过后逐条登记处理说明，全部登记后才能结案。全程不改 ar_ap_items 与 dividend_statements。
+    - 出单：有关停结算登记的商户按 min（期末日，关店最后营业日）取已生效的方案版本；关店所在期正式单只查期初到关店最后营业日的五类最终标记，停用、存档后照查；整期在关店最后营业日之后的不出单，跳过原因写「该酒吧已于 X 关店（已登记关停结算），关店后的期间不再分红」。
+  - 落地位置：
+    - 后端：backend/src/main/resources/db/migration/V644__dividend_closeouts.sql；backend/src/main/java/com/complex/platform/dividend/DividendCloseoutService.java（list、register、submit、decided、handle、close、liveItems）；dto/DividendCloseoutRequest.java；DividendController.java（5 个端点）；DividendPeriod.labelOf；DividendService 的 computeInternal、planDate、runCompute、nonFinalReason；DividendRepository.closeoutClosedDates 及其 Jdbc 实现；FinanceService.nonFinalDaysOfBar；FinanceRepository.findBarFinalMarkUnit 及其 Jdbc 实现；SupervisorReviewService 策略表 dividend_closeout_verify；FieldLabels.java。
+    - 前端：apps/web/src/admin/pages/FinanceDividendCloseoutPanel.tsx（挂在 FinanceDividendsPage 末尾）、types.ts、i18n/fieldLabels.ts、i18n/reviewLabels.ts。
+    - 文档：docs/full-admin-page-permission-field-matrix-v0.1.csv 的 ADM-FIN-007 行。
+  - 依据：
+    - BSM:1787「酒吧关闭须完成关停结算，依法核清本次分红、已算未发分红与发放保护线待释放款项；门店关停结算与公司依法解散清算分别办理。」「已确认应付及待释款项的法律性质和处理由财务、法务核实，不因关店自动核销或一概改为剩余财产分配；相关款项须按核实结果处理并留痕后才能结案。」
+    - ENUM:190「非最终快照的数据一律不得进入结算、分红、正式提成计算和对账关账」
+    - ENUM:302「门店关停结算与公司依法解散清算分别办理」
+    - PGM:436「本平台只作记录、不设规则」
+    - PGM:528「需要平行线审批的（如法务、财务），另行指定该条线的最终审批人」
+    - PGM:529「申请人与直接受益人不得审批与自己相关的申请」
+    - 决策台账 F01「门店关停不等于公司法定清算，清算按依法确认方案和顺序办理。」
+    - 18AQ 控制席判定「有关停登记的商户出单取方案按 min（期末日，关店最后营业日）已生效的版本——关店后的期间不再分红」
+  - 测试名：
+    - PaymentConfirmationCompensationDividendJdbcTests.barCloseoutIsVerifiedByFinanceAndLegalAndClosedOnlyAfterEveryItemIsHandled
+    - DividendFinalSnapshotGateJdbcIntegrationTests.closedBarOfficialDividendChecksFinalMarksUpToClosingDayEvenAfterDeactivation
+    - SupervisorReviewServiceTests.listPoliciesReturnsBlockingCatalogAndWritesAudit（策略总数改为 100）
+    - apps/web FinanceDividendCloseoutPanel.test.tsx 三个用例
+- 契约（K-contract，第十八批 AQ 段收口）：docs/openapi/openapi-p0.yaml 与 .json 同值就地改，不重排、不用锚点。操作数 1383→1388（只有 243-R1 新增 5 个）；info.version 随收尾升至 V0.76（变基到 81a87894 后）。
+  - 242-R1：无契约改动。
+  - 234-R1
+    - 改法：createDividendPlan、updateDividendPlan 的 summary 与 description 改为「提交新版本，最高权限审批，自生效起始日起生效；最高权限本人提交直接生效」。统一审批写明 action_type=finance.dividend.plan.change、object_type=dividend_plan、策略 dividend_plan_change（top_authority，涉钱 1 个工作日），以及审批通过落 active 或 ended、过期落 expired、驳回落 rejected。updateDividendPlan 的 x-failure-codes 改为 DIVIDEND_PLAN_NOT_FOUND、DIVIDEND_PLAN_NOT_EDITABLE、DIVIDEND_PLAN_PENDING_EXISTS、DIVIDEND_PLAN_VERSION_CONFLICT；createDividendPlan 保留 DIVIDEND_PLAN_EXISTS。DividendPlanRequest：required 加 effective_from、reason；新增 reason（maxLength 1000）；删去「一个商户同一时期只允许一个生效中方案」；effective_from、status 说明改为版本语义。listDividendPlans 说明写明返回全部版本、新建在前，以及 version_state（pending、scheduled、in_force、superseded、rejected、expired）。computeDividendStatements 与 recordDividendPeriodHold 改为按期末日取已生效版本，404 提示原文写进说明。listApprovalDeadlines 补 finance.dividend.plan.change。
+    - 依据：BSM:521「所有涉及钱的配置一律版本化：每次改动生成新版本，必须填写生效起始日期，并先存为草案、经高敏权限“转正”审批通过后按指定日期生效，不即改即生效」；PGM:666「持股分红的方案配置、算单、审批和发放属于资金类高危动作，由最高权限审批，提交人不能审批自己的单据」；BSM:576「持授权 U 盘密钥的最高权限本人发起的操作，不需要经过任何审批」。
+  - 244-R1
+    - 改法：DividendPlanRequest 加 period_min_months、period_max_months（integer，enum 1、3、6、12，不进 required），三条 400 VALIDATION_FAILED 提示原文写进说明；方案响应回显这两项。
+    - 依据：ENUM:299「分红周期可配置（业务参数，按经营主体可配，酒吧商户作为独立经营主体同样适用，须同时配置上下限）」。
+  - 234-R2
+    - 改法：DividendPlanRequest 加 other_shareholders（元素必填 shareholder_name maxLength 200、shareholder_type individual/company、share_bps 1～10000）；platform_share_bps 说明改为「主理人=10000−平台−其他股东合计」。computeDividendStatements、getDividendStatement、listDividendStatements 写明计算单新字段 other_shareholders_gross_cent、rounding_residual_cent，以及明细行 shareholder_gross、shareholder_tax_withheld、shareholder_payout、rounding_residual。approveDividendStatement 写明其他股东另挂 dividend_payout 应付（对方与 source_id 为实发行 ID）。markDividendStatementPaid 写明其他股东应付未付清同样 409 DIVIDEND_PAYOUT_NOT_PAID。
+    - 依据：BSM:1775「娱乐平台公司、主理人和其他股东按每家酒吧工商登记的真实持股比例分配」；BSM:1757「多方分配产生的非涉税尾差单独留痕，并由该笔业务实际承担结算责任的主体承担」；BSM:1787「分红由该酒吧公司自己从其对公账户支付给主理人与其他股东……发放走应付款项」。
+  - 243-R1
+    - 改法：新增 listDividendCloseouts（GET /api/v1/finance/dividends/closeouts，finance.dividend.view）。新增 registerDividendCloseout、submitDividendCloseout、handleDividendCloseoutItem、closeDividendCloseout，分别是 POST /closeouts、/closeouts/{id}/submit、/closeouts/{id}/items/{item_id}/handle、/closeouts/{id}/close，权限码 finance.dividend.manage，x-data-scope platform，x-terminal-allowed web，审计事件 dividend.closeout_*。新增 requestBodies 与 schemas：DividendCloseoutRequest、DividendCloseoutSubmitRequest、DividendCloseoutHandleRequest。新错误码 DIVIDEND_CLOSEOUT_EXISTS、DIVIDEND_CLOSEOUT_NOT_FOUND、DIVIDEND_CLOSEOUT_CURRENT_STATEMENT_MISSING、DIVIDEND_CLOSEOUT_NOT_VERIFIED、DIVIDEND_CLOSEOUT_ITEMS_PENDING、DIVIDEND_CLOSEOUT_ITEM_HANDLED。统一审批写明 finance.dividend.closeout.verify、dividend_closeout、策略 dividend_closeout_verify（one_level_up，固定 finance_review、legal_review 两线）。computeDividendStatements 补按 min（期末日，关店最后营业日）取版本、关店所在期只查到关店最后营业日、关店后整期记入 skipped。listApprovalDeadlines 补 finance.dividend.closeout.verify。
+    - 依据：BSM:1787「酒吧关闭须完成关停结算，依法核清本次分红、已算未发分红与发放保护线待释放款项……已确认应付及待释款项的法律性质和处理由财务、法务核实，不因关店自动核销或一概改为剩余财产分配；相关款项须按核实结果处理并留痕后才能结案」；PGM:528「需要平行线审批的（如法务、财务），另行指定该条线的最终审批人」；18AQ 控制席判定「关店后的期间不再分红」。
+  - 核验：verify:openapi（含 json/yaml 深等价）、verify:openapi-examples、verify:client-routes、verify:client-openapi、verify:client-payload --strict 全过。
+- 18AQ 汇合段 J：
+  e2e 改动只有一处：tests/e2e/support/mock-api.ts（V0.18 升到 V0.19）。
+  - 分红方案假数据补 effectiveFrom、versionState: "in_force"、reason（234-R1），periodMinMonths: 1、periodMaxMonths: 12（244-R1），otherShareholders: []（234-R2）。
+  - 计算单假数据补 otherShareholdersGrossCent: 0、roundingResidualCent: 0（234-R2）。
+  - 关停结算列表靠 mock 的 GET 兜底返回 []，和前端要的形状一致，没加路由（243-R1）。
+  - 用例断言与视觉基线都没改。视觉基线四张都不是本段页面，没重拍。
+  门禁结论（变基前（基线 c6a4f2f9，迁移 V633～V636，操作数 1381）在实现阶段的实跑结果，镜像 scratch-b63，2026-11-18 01:44～02:03 UTC；变基到 81a87894 后的实测见本节「18AQ 合并前再变基」条）：
+  - 后端全量：删 target 后 --fresh 跑 6855 例，0 红，V633～V636 都真迁了。
+  - 前端：typecheck 0 错，vitest 344 个文件、1905 例全过。
+  - 客人工作区：customer-core 77 例、customer-app 131 例、customer-miniapp 85 例，全过。
+  - 安卓：员工端 125 例全过，android-app 编译通过。
+  - e2e：五份后台 spec 跑 chromium，33 例全过。
+  - 契约：四类生成物重生成后 verify:p0-contract 通过；yaml 与 json 深比较一致，操作数 1381；git diff --check 通过。
+- D-docs（18AQ 文档组，按现码同步文档）：
+  - 分红 PRD docs/dividend-engine-prd-v0.1.md V0.13：
+    - 234-R1：§3 方案版本缺口段改为实现现状（V641，提交即待最高权限审批、最高权限本人直接生效、审批时已过生效日记 expired、每期按期末日已生效版本出单、version_state 六态），§3 状态与字段、§4、§4A 第 4 条、§8、验收第 2 条同步。
+    - 244-R1：§2#3 补周期上下限实现现状（V642），§3、§8 同步。
+    - 234-R2：§3 多股东缺口与「尾差恒为 0」作废改为实现现状（V643，各方各自四舍五入、尾差单列、其他个人股东按方案税率代扣、每位股东另挂应付并须付清才能标记发放），§5、§5B、§6、§8 同步。
+    - 243-R1：§5B 补酒吧关停结算实现现状（V644，5 个接口、三类款项、财务法务核实、逐条处理后结案），§4 五类标记闸补「有关停登记的酒吧按 min（期末日，关店最后营业日）取版本、只查到关店最后营业日、关店后期间不出单」。
+  - 酒吧 PRD V0.38：§6「作废并冲正」实现现状第③项补 242-R1「派驻期按计提时点所属该酒吧营业日判」（裁决 46）。
+  - 财务 PRD V0.36：§4D 出款闸与 §15 补其他股东分红应付须付款确认、付清才能标记发放（234-R2）。
+  - 平台治理 PRD V0.89：§2A.5 补 dividend_plan_change、dividend_closeout_verify 两条复核策略及审批时限清单多两行（234-R1、243-R1）。
+  - 统一口径基准 V0.02：D15.1 补数式拆分的例子改为「分红主理人应得之后的扣除链」，补三方劈分尾差单列（234-R2）。
+  - 页面矩阵 ADM-FIN-007：补版本、上下限、其他股东字段与校验。
+  - 依据：BSM:521、576、1757、1775、1776、1787，ENUM:299，PGM:436、528、529、666，第十八批裁决 44、46，18AQ 控制席判定。不新增业务规则；纯文档，无测试。
+- 18AQ 合并前再变基（2026-11-18）：本段暂存提交从 origin/main 7b830e40 再变基到 81a87894（含 18AS 第 297 条 PR #596：V640、OpenAPI info.version V0.75、决策台账 V0.99 与 18AS 补记）。无新裁决、无新迁移，代码不改。
+  - 冲突与解法：
+    - 冲突 6 个文件。README.md、docs/00-current-effective-document-entry-v0.1.md、docs/data-isolation-and-tenant-scope-security-spec-v0.1.md、security-scans/findings-register-v1.md、security-scans/formal-security-baseline-v1.md 五个生成物整份取主干，再按最终文件重生成或重算（见下）。
+    - 决策台账：18AS 各段在前、18AQ 各段在后，文档版本 V0.99→V1.00（相对 81a87894 只升这一次）。
+    - 自动合并、无冲突的：apps/web/src/admin/i18n/fieldLabels.ts、docs/openapi/openapi-p0.yaml 与 .json、操作验收矩阵、契约收口附录、docs/prd-audit/html-prd-coverage.csv。其中两处版本递增被静默合并：fieldLabels.ts 两边都是 V0.38→V0.39，OpenAPI info.version 两边都是 V0.74→V0.75。
+  - 统一重做：
+    - 被吞的版本递增再 +0.01：fieldLabels.ts V0.39→V0.40；OpenAPI info.version V0.75→V0.76（yaml、json 就地替换）；操作验收矩阵与契约收口附录标题随之重生成为 V0.76。其余有版本头的改动基线文件相对 81a87894 恰好 +0.01，新文件 V0.01，PRD 各升一次（酒吧 V0.38、分红 V0.13、财务 V0.36、平台治理 V0.89、统一口径基准 V0.02）。
+    - 计数与 SHA：操作数 1388（主干 1383 加本段 5 个）。security-scans 两份 md 只改计数 1388 与 OpenAPI SHA-256 两行，SHA 按最终 openapi-p0.json。security-baseline-latest.json 的 openapi_operation_count 为 1388，openapi_sha256 照主干惯例不动。
+    - 生成物：node tools/refresh-entry-doc-baseline.mjs 回填 README.md 与入口文档（1388 个操作、V644，602 个迁移）。数据隔离规格重生成：最新迁移 V644，含 scope 字段的表 278 张，补回 dividend_closeouts 行。docs:domain-ownership-scope 重跑无变化（dividend_closeouts、dividend_closeout_items、dividend_plan_shareholders 三行已在）。操作验收矩阵、契约收口附录各 1388 个操作。
+  - 本轮实测（镜像 scratch-b63，2026-11-18 09:00～09:20 UTC，工作树 HEAD 4c4e8b5b 加本步改动）：
+    - 定向：删镜像 dividend、bar、governance 包的 target/classes 与 test-classes（改号前的 V633～V636 无残留）后 --fresh 跑 DividendPlanVersionJdbcIntegrationTests、DividendOtherShareholdersJdbcIntegrationTests、DividendFinalSnapshotGateJdbcIntegrationTests、DividendJdbcIntegrationTests、BarBillAnomalyJdbcIntegrationTests、SupervisorReviewServiceTests，共 115 例，0 红。前端 typecheck 0 错，vitest 过滤 FinanceDividends 8 个文件 26 例全过。
+    - 后端全量：删 target 后 --fresh 跑 6907 例，0 红；Flyway 共 602 个迁移，V641～V644 都真迁了，库到 v644。
+    - 前端：typecheck 0 错，vitest 350 个文件、1984 例全过。
+    - 客人与商户工作区：customer-core 77 例、customer-app 131 例、customer-miniapp 85 例、merchant-app 4 例，全过。
+    - 安卓：员工端 125 例全过，android-app 编译通过。
+    - e2e：五份后台 spec（full-admin-mvp、full-admin-remaining、full-admin-ui-hardening、full-admin-visual、property-fee-evidence）在锁内跑 chromium，33 例全过。full-admin-visual 两例的四张基线都与现页面一致：18AS 改过的票务策略页不在视觉基线里，动态定价页 full-admin-dynamic-pricing-mobile.png 无差异。没有重拍。
+    - 门禁：verify:p0-contract（1388 个操作）、verify:html-ledger-sync、verify:entry-anchors、verify:entry-doc-baseline、verify:security-baseline、verify:data-isolation-spec、verify:domain-ownership-scope、verify:migration-version-order（本分支 4 个迁移排在主干最大号 V640 之后）、verify-audit-labels、verify-full-admin-page-matrix 通过；锁内 verify:predeploy 通过；git diff --check 通过，改动文件无 CRLF、无 BOM。
+- 18AQ 收尾复核修正（2026-11-18）：收尾复核三条意见经核实成立，只改本节补记。无新裁决、无新迁移，代码不改。
+  - 意见 1、2：第 242 条补记「文档」一项仍写「待文档组补」，契约 K 条仍写「info.version 由收尾升」。这两句是实现代理交付时的原话，追加进台账时没按最终状态改。现改为已落写法：第 242 条「文档」一项写酒吧 PRD V0.38 第 129 行「作废并冲正」实现现状第③项已补；契约 K 条写「info.version 随收尾升至 V0.76（变基到 81a87894 后）」。
+  - 意见 3：汇合段 J 的门禁结论把变基前的实跑数字与变基后的迁移号、操作数拼成了一次运行。现如实标明是变基前（基线 c6a4f2f9，迁移 V633～V636，操作数 1381）在实现阶段的实跑结果，原数字保留（后端 6855 例，vitest 344 个文件 1905 例等），迁移号与操作数还原为当时的 V633～V636、1381。变基后的实测见「18AQ 合并前再变基」条。
+  - 控制席判定条的基线随之改写为 81a87894（含 18AS 第 297 条 PR #596）。
+  - 依据：PGM:899「谁发起、谁销售、谁服务、谁第一个处理异常、为什么、谁审批、结果是什么，都要能查到。」
