@@ -1,5 +1,5 @@
 package com.complex.platform.dividend;
-// 文件版本：V0.06
+// 文件版本：V0.07
 
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
@@ -828,13 +828,25 @@ class JdbcDividendRepository implements DividendRepository {
                 new MapSqlParameterSource("merchant_id", merchantId), String.class);
     }
 
+    /**
+     * 第十八批 AR 段第 233 条 233-R3（BSM:1760「原期间已经关账、开票或申报的，只能在当前开放期间生成关联原期间的差异调整单」「所有税费一律计入税费成本」）：
+     * 同一条 SQL 再 UNION ALL 已生效的 period_difference 差异调整单（同主体、计入月份落在本期内，按税种），每税种申报与调整单各成一行；调整单的 periods
+     * 写成「原所属期 更正（差异调整单，计入 M）」。补提、冲回调整单与实缴登记不进（实缴不混入税费成本）。
+     */
     @Override
     public List<DividendRecords.PeriodTaxSumRecord> sumEntityTaxByType(String merchantId, List<String> months) {
-        return jdbcTemplate.query("SELECT tax_type, SUM(declared_amount_cent) AS total_cent,"
+        return jdbcTemplate.query("SELECT tax_type, total_cent, periods FROM ("
+                        + "SELECT tax_type, 0 AS src, SUM(declared_amount_cent) AS total_cent,"
                         + " string_agg(CASE WHEN period_start_month = period_end_month THEN period_start_month"
                         + " ELSE period_start_month || '～' || period_end_month END, '、' ORDER BY period_end_month, period_start_month) AS periods"
                         + " FROM entity_tax_declarations WHERE status = 'approved' AND period_end_month IN (:months)"
-                        + " AND business_entity_id = :business_entity_id GROUP BY tax_type ORDER BY tax_type",
+                        + " AND business_entity_id = :business_entity_id GROUP BY tax_type"
+                        + " UNION ALL SELECT tax_type, 1 AS src, SUM(amount_cent) AS total_cent,"
+                        + " string_agg(CASE WHEN origin_period_start_month = origin_period_end_month THEN origin_period_start_month"
+                        + " ELSE origin_period_start_month || '～' || origin_period_end_month END || ' 更正（差异调整单，计入 ' || accounting_month || '）',"
+                        + " '、' ORDER BY accounting_month, origin_period_end_month, origin_period_start_month, id) AS periods"
+                        + " FROM entity_tax_adjustments WHERE status = 'approved' AND kind = 'period_difference' AND accounting_month IN (:months)"
+                        + " AND business_entity_id = :business_entity_id GROUP BY tax_type) t ORDER BY tax_type, src",
                 new MapSqlParameterSource().addValue("business_entity_id", merchantEntityId(merchantId)).addValue("months", months),
                 (rs, n) -> new DividendRecords.PeriodTaxSumRecord(rs.getString("tax_type"), rs.getLong("total_cent"), rs.getString("periods")));
     }

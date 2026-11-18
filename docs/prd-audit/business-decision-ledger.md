@@ -1,6 +1,6 @@
 # PRD 审计业务裁决台账
 
-文档版本：V1.00
+文档版本：V1.01
 状态：进行中
 迁移日期：2026-07-27
 当前事实源：三份立法 HTML 以既有冻结基线叠加 James 此前 M02 至 M08 的点名批准、全量审计 M001、M002 的逐项批准，以及本轮 2026-10-16 至 2026-10-17 业务 HTML 审计中 Q01 至 Q40 及子题实际明确批准且未被后续替代的裁决，和 2026-10-17 第二批 HTML 业务线推演审计（A–F 六线 64 条、停车章）的逐项批准，并叠加本轮 CG 70 项来源确认与 C01–C09、N01–N03 最终澄清及补全文稿中 F01、W01–W05 的整体修改批准（本文件末节）；本轮最终规则、未采纳或替代关系、现行版本与字节哈希见本文件末节。历史记录保留为各自当时事实，不恢复已被替代的建议。
@@ -8676,3 +8676,231 @@ HTML 的语义补齐与直接引用同步可在本批核验；70项中的业务�
   - 控制席判定条的基线随之改写为 81a87894（含 18AS 第 297 条 PR #596）。
   - 依据：PGM:899「谁发起、谁销售、谁服务、谁第一个处理异常、为什么、谁审批、结果是什么，都要能查到。」
 - 18AQ 落地位置补记·运行验收证据、快照、终验文档刷新（无新裁决）：业务提交 fa06b1d9 之后，按第十八批裁决 25 重刷了运行验收证据：后端全量 6907 测，0 失败 0 错误；apps/web 构建通过；常规界面验收（接口全部 mock）实跑 40 条全过；真实后端界面验收未跑，runtime_ready=false。随后依次重生成闭环当前态快照、生产闭环缺口报告、界面验收报告、无上线指挥台。生成器没改。手改 docs/final-closed-loop-acceptance-audit-v0.1.md 与 docs/code-implementation-acceptance-audit-v0.1.md：前端单测源码计数改为 1870；被核文件行数都没变；后端全量与常规界面验收的数字、日期改为本次实跑值；写入 npm run verify:unit 实跑结果，五个工作区全过。交付门禁于 2026-11-18 11:44 UTC 在工作树逐项实跑子项，NAS 两项现场探测未跑。仍红的有两项：一是 coding-host-protection，它写死主仓路径，在工作树口径下必红，属工具口径，不做；二是 final-closed-loop-audit，如实留 2 条红（integration-ready、business-acceptance-ready），原因是校验器要求终验把联调、业务验收写成「是」，而裁决 25 定了不跑真实后端界面验收、运行验收未就绪，终验写的是「否」。verify:delivery-gates 总链仍是红的。
+
+18AR 落地位置补记（2026-11-17）：第十八批 AR 段（batch64）按 18AR 只读设计实现待开发清单第 233 条（税务组）；运行验收证据、终验文档在本段最后一个提交刷新；各条落地位置见下。本段追加时，原台账除文档版本升一版外，其他历史字节保持。
+
+- 18AR 落地位置补记·控制席判定（2026-11-17）：本段（第十八批 AR 段，batch64）实现待开发清单第 233 条（18AR 只读设计 b64-audit/d-tax.json，两轮质疑者修订后定稿，无待裁题），按第十八批裁决 59、60 所选选项原文落实。迁移原预留 V637～V639，合并顺序定为 18AS→18AQ→18AR（V640 归 18AS、V641～V644 归 18AQ），变基时顺延为 V645～V647，排在主干最新 V644 之后。契约代理首轮把改动写进工作树后连接中断、没交报告，按「子代理失败必须重跑」单独重跑一次补交报告，并补正 computeDividendStatements、listSettlementInvoiceItems 两处既有操作说明。本段与 18AN、18AQ、18AS 并行开工，实现后先变基到含 18AP 存酒组（PR #594）与 18AN 界面文案组（PR #595）的 origin/main 7b830e40，合并前再变基到又含 18AS 第 297 条（PR #596）与 18AQ 分红组（PR #597）的 origin/main 1ca51465（见本段末「18AR 合并前再变基」条）。
+- 18AR 落地位置补记（A 段，233-R1、233-R3）：
+  233-R1 实际缴纳金额登记，缴税差异按五类处理。
+  - 改法：已生效申报可登记「截至本次累计实际缴纳金额」，登记即提交，走 finance.tax_rule.adjust 复核链：财务、税务、法务三线加最高确认，提交人不能自审。缴税差异＝实际缴纳−更正后的实际申报金额（申报额＋已生效差异调整单），落库后不改。差异不为 0 时按未缴、预缴、多缴、抵扣、待退分配，每类至多一行，合计等于差额绝对值；为 0 时不填。同一申报至多一条待审批；批准后可再登记补缴，当前实缴取最近一条已生效登记，旧登记留作历史。实缴不进分红、不生成应付、不走付款确认。
+  - 落地位置：
+    - 迁移 V645__entity_tax_payments_and_adjustments.sql 第 1 节 entity_tax_payments（部分唯一索引 uq_etp_declaration_pending）；
+    - EntityTaxService.registerPayment、lockApproved、correctedDeclared、requireBreakdown，decided 按对象类型分派（对象 entity_tax_payment）；
+    - EntityTaxController POST /api/v1/finance/entity-taxes/{id}/payments；
+    - 列表每行加 paid_amount_cent、payment_difference_cent、payment_breakdown、payment_pending；
+    - 后台「税费申报登记」页 ADM-FIN-010（EntityTaxDeclarationsPage.tsx）已生效行「登记实际缴纳」弹窗，列表「实际缴纳金额」「缴税差异」两列；
+    - reviewLabels.ts entity_tax_payment；fieldLabels.ts 与 FieldLabels.java 同键同名补字段。
+  - 依据：BSM:1760「税费金额分三个阶段分别保存、互不覆盖：系统计算金额、实际申报金额、实际缴纳金额」「缴税差异等于实际缴纳金额减实际申报金额」「实缴与申报不一致的部分先按未缴、预缴、多缴、抵扣或待退分别处理，不得直接混入税费成本」「平台只接收专业财税软件回传的数据，或保存经授权人员手工填写并通过审批的数据」「所有税费规则和税费调整均须经过财务审核、税务审核、法务审核，再由顶层平台公司的老板最终确认后生效，提交人不得审批自己提交的调整」。
+  - 测试：EntityTaxJdbcIntegrationTests 的 paymentTakesEffectAfterFullApprovalAndListShowsLatestPaidAmountWithDifferenceCategories、paymentAndAdjustmentRequireApprovedDeclarationAndConsistentAmounts、periodDifferenceAdjustmentKeepsOriginalDeclarationAndCountsInApprovalMonth（按更正后申报额登记，差异为 0）；DividendFinalSnapshotGateJdbcIntegrationTests.periodDifferenceAdjustmentIsDeductedInApprovalMonthWhilePaymentStaysOutOfTaxCost（实缴批准后正式单税费仍等于申报额）；EntityTaxDeclarationsPage.test.tsx「已生效行显示实际缴纳金额与缴税差异分类，登记实际缴纳按更正后申报额算差额、五类中文、蛇形键提交」。
+  233-R3 原期间已申报的更正：在当前开放期间生成关联原期间的差异调整单。
+  - 改法：已生效申报生成 period_difference 差异调整单（更正差额可正可负，不为 0），关联原所属期，登记即提交，同一复核链。批准时同一条 UPDATE 写入计入月份＝批准当日北京时间所在月（当前开放期间），原申报行一律不改；同期再登记申报仍返回 409。分红在 sumEntityTaxByType 同一条 SQL 里 UNION ALL 已生效 period_difference，按计入月份落在本期内、按税种扣，说明写成「原所属期 更正（差异调整单，计入 M）」。补提、冲回两值同表一次建好，留给 233-R5。
+  - 落地位置：
+    - 迁移 V645 第 2 节 entity_tax_adjustments（chk_eta_kind 三值、chk_eta_amount）；
+    - EntityTaxService.registerPeriodDifference，decided 写 accounting_month；
+    - EntityTaxController POST /api/v1/finance/entity-taxes/{id}/adjustments；
+    - 列表每行加 adjustments；
+    - JdbcDividendRepository.sumEntityTaxByType；
+    - ADM-FIN-010 已生效行「生成差异调整单」弹窗，列表「差异调整单」列（种类中文、关联原所属期、计入月份）；
+    - reviewLabels.ts entity_tax_adjustment；fieldLabels.ts 的 kind 值表加补提调整单、冲回调整单、差异调整单。
+  - 依据：BSM:1760「原期间已经关账、开票或申报的，只能在当前开放期间生成关联原期间的差异调整单」「所有税费一律计入税费成本」「所有税费规则和税费调整均须经过财务审核、税务审核、法务审核，再由顶层平台公司的老板最终确认后生效」；ENUM:201「原期间已经关账、开票或申报的，不得修改历史数据，只能在当前开放期间生成关联原期间的差异调整单」。
+  - 测试：EntityTaxJdbcIntegrationTests.periodDifferenceAdjustmentKeepsOriginalDeclarationAndCountsInApprovalMonth、paymentAndAdjustmentRequireApprovedDeclarationAndConsistentAmounts；DividendFinalSnapshotGateJdbcIntegrationTests.periodDifferenceAdjustmentIsDeductedInApprovalMonthWhilePaymentStaysOutOfTaxCost；EntityTaxDeclarationsPage.test.tsx「已生效行下挂差异调整单（种类中文、关联原所属期、计入月份），生成差异调整单负数正确转分」。
+- 第十八批 AR 段第 233 条 233-R2（B 段）落地位置补记
+  改法：税率按「主体 × 收入类型 × 税种」在后台版本化维护，走财税法三审加最高确认，补附加税与企业所得税比例。
+  【迁移 V646__entity_tax_rate_versions.sql】
+  - settlement_tax_configs 删 project_id，加 business_entity_id（为空表示平台默认）。
+  - 加 reason、review_id、evidence_attachment_ids、created_by。
+  - chk_stc_tax 加 corporate_income。
+  - 新唯一索引 uq_stc_version：同主体、同收入类型、同税种、同生效日至多一条待审或已生效版本。
+  - 种子不动，生效日为空表示自始有效。
+  【服务与接口】
+  - EntityTaxService.submitRate 与 listRates；decided 加 entity_tax_rate 分支：批准置 is_draft=FALSE 按生效日起用，驳回置 inactive 留痕。
+  - EntityTaxController 加 GET 与 POST /api/v1/finance/entity-taxes/rates。
+  - EntityTaxDeclaration 加 Rate、RateRequest 两个记录。
+  - 校验规则：
+    - 增值税、文化事业建设费、附加税按 11 类收入分别配，本条新增 goods 供货货款、parking 停车费、retail 零售。
+    - 企业所得税只配全部收入 all。
+    - 其他税费不配比例。
+  【读取口径】
+  - JdbcSettlementInvoiceRepository.findTaxRate 与 findTaxRateVersion 取代 findTaxRateBps。
+  - 取数顺序：主体特例优先，再取生效日不晚于业务日期的最新已生效版本，NULLS LAST；条件里不滤 applicable。
+  - SettlementInvoiceService.tax 按开票主体与开票期间末日取版本（积分账单用月末日）。
+  【页面与字典】
+  - 页面 EntityTaxDeclarationsPage 加「税率配置」页签，点开才加载；「提交税率版本」弹窗比例按百分数转万分比。
+  - SettlementConfigPage 删去「税费、」。
+  - 字典：
+    - FieldLabels.java 加 income_type。
+    - fieldLabels.ts 加 applicable、income_type 值表、entity_tax_rate_submitted。
+    - reviewLabels.ts 加 entity_tax_rate。
+  - 矩阵 CSV ADM-FIN-010 行补全。
+  【依据】
+  - ENUM:201「每个主体 × 每类收入 × 每种税（增值税/文化事业建设费/附加税）后台各自配“有没有这笔费用 + 收多少”」。
+  - BSM:521「所有涉及钱的配置一律版本化：每次改动生成新版本，必须填写生效起始日期，并先存为草案、经高敏权限“转正”审批通过后按指定日期生效」。
+  - BSM:1760「企业所得税等税种：系统内配置税率比例」「所有税费规则和税费调整均须经过财务审核、税务审核、法务审核，再由顶层平台公司的老板最终确认后生效，提交人不得审批自己提交的调整」「税率、税目、发票对象和红冲流程由系统按有效规则配置并保留凭证关联」。
+  - BSM:1722「场地租金｜对应城市项目公司」，BSM:1723「向商户供货的货款｜中央餐饮公司｜停车费｜城市项目公司」。
+  - 第十八批裁决 59：其他税费按季与财税软件核对、以财税软件为准拉平，不配比例。
+  【测试名】
+  - 后端 EntityTaxJdbcIntegrationTests：
+    - entityRateVersionAppliesFromEffectiveDateOnlyAfterFullApproval
+    - rateVersionRejectsOtherTaxMismatchedIncomeTypeDuplicateDateAndMissingRouting
+    - inapplicableNewVersionStopsCulturalFeeWithoutFallingBackToOlderVersion
+    - platformDefaultVersionOverridesSeedFromEffectiveDate
+  - 前端 EntityTaxDeclarationsPage.test.tsx：「税率配置页签点开才加载、列表全中文，提交税率版本按百分数转万分比、蛇形键提交」。
+- 18AR 落地位置补记（C 段）
+  233-R4 按主体、按月、按收入类型归集含税收入
+  - 改法：finance 包新建只读类 EntityIncomeService.income(主体, 月)，不建表、不单出接口。
+    - 先核该月有已确认或已结清的月度分账单，否则返回 409 TICKET_SETTLEMENT_PENDING。
+    - 主体名下有酒吧商户的（经营主体取生效绑定的运营主体，否则取商户档案上的经营主体），按持股分红口径逐店取：
+      - catering：整单已确认商品收入减已退成商品分项；
+      - nonstd_service：月结定格的服务费扣留；
+      - ticket／spv_service：已确认月度分账单本店专属直付与其余分账。
+      - 来源未定返回 409 BAR_REVENUE_PENDING。
+    - 其余主体按平台口径取归到本主体的部分：
+      - 组合通票业态份额：毛额扣出门票综合服务费与赠送权益预估成本；
+      - 单头门票综合服务费、赠送权益预估成本：按收款主体快照计；
+      - 到期未核销票款；
+      - 单一酒吧门票综合服务费：按 ticket_service_fee 收入归属；
+      - 传媒演出结算：posted，按出账营业日取月；
+      - 场地租金：按 venue_rent 收入归属；
+      - 停车费：缴费收款主体，车位月租与停车抵免成本按唯一城市项目公司；
+      - 门店要货货款：只取 transfer_type=supply，按 supply_goods 收入归属。
+  - 落地位置：
+    - backend/src/main/java/com/complex/platform/finance/EntityIncomeService.java（新）
+    - backend/src/main/java/com/complex/platform/settlement/SingleBarServiceFeeService.java：新增 monthTotals 与 ProjectTotal
+  - 依据：
+    - ENUM:201「每个主体 × 每类收入 × 每种税（增值税/文化事业建设费/附加税）后台各自配“有没有这笔费用 + 收多少”」
+    - BSM:1760「娱乐平台公司、游乐公司、传媒公司、中央餐饮公司、城市项目公司五家主体各自的收入、成本与利润，由平台汇总计算；其中涉税的正式核算数据由专业财税软件回传关键信息，平台据此与自身的内部结算数据合并计算」
+    - BSM:1713「到期未核销部分按票种所属经营域归娱乐平台公司」
+    - BSM:1716「相应门票综合服务费归娱乐平台公司且不得封顶」
+    - BSM:1721「演出票｜传媒公司」
+    - BSM:1722「场地租金｜对应城市项目公司」
+    - BSM:1723「向商户供货的货款｜中央餐饮公司｜停车费｜城市项目公司」
+    - 第十八批裁决 60（决策台账:3967）：操作员选「按上面的口径自动汇总（推荐）」，即收入＝按收入归属配置归到该主体的各类收入（含税实收），酒吧经营主体沿用持股分红的税前口径。
+  - 测试：EntityTaxJdbcIntegrationTests.entityIncomeCollectsEachSourceIntoItsEntityAndWaitsForConfirmedMonthlySettlement
+  233-R5 增值税、文化事业建设费、附加税生成系统计算金额，按申报差异出补提或冲回调整单
+  - 改法：
+    - 迁移 V647 给 entity_tax_declarations 加 system_calculated_amount_cent、calculation_basis。
+    - 登记申报时，在提交审批前按所属期每月、每类收入与主体在月末日当时生效的税率版本现算，结果随登记落库，之后不改：
+      - 增值税＝含税收入×r÷(10000+r)；
+      - 文化事业建设费＝含税收入×r；
+      - 附加税以同期系统计算增值税为基数；
+      - 没配记 0；
+      - 计算依据逐月、逐收入类型写比例、所用税率版本 id 与税额。
+    - 复核摘要写明系统计算金额与申报差异。
+    - 申报批准且确实改到 1 行时，同事务生成补提（申报高于系统计算）或冲回（低于）调整单：金额为差额绝对值，计入批准当月，随申报同一复核单生效。差额为 0 或驳回不出单。
+    - 补提、冲回调整单不进分红，分红仍扣申报额。
+    - 列表加系统计算金额、申报差异、差异处理（vat、cultural_fee、surcharge 为补提／冲回调整单；corporate_income、other 为按季核对拉平）和计算依据。
+    - 前端列表加三列，可展开看计算依据。
+  - 落地位置：
+    - backend/src/main/resources/db/migration/V647__entity_tax_system_calculated_amount.sql
+    - EntityTaxService.declare、calculate、decided、row
+    - EntityTaxDeclaration（4 个新字段与 CalculationBasis）
+    - apps/web/src/admin/pages/EntityTaxDeclarationsPage.tsx
+    - apps/web/src/admin/i18n/fieldLabels.ts
+    - docs/full-admin-page-permission-field-matrix-v0.1.csv ADM-FIN-010 行
+  - 依据：
+    - BSM:1760「税费金额分三个阶段分别保存、互不覆盖：系统计算金额、实际申报金额、实际缴纳金额；申报差异等于实际申报金额减系统计算金额……申报金额高于系统计算金额的生成补提调整单、低于的生成冲回调整单。两套差异机制按税种互斥适用、不得叠加：增值税、文化事业建设费等流转税按申报差异生成补提／冲回调整单，差异保留、不做拉平；企业所得税等税种按季度与财税软件核对拉平（以财税软件为准）。同一税种只能走其中一套」
+    - BSM:521「每一笔单据在生成时就把所用配置版本固化在单上」
+    - 第十八批裁决 59（决策台账:3966）：操作员选「附加税出调整单，其他税费按季拉平（推荐）」，即附加税跟流转税走补提或冲回调整单；其他税费和企业所得税一样，按季与财税软件核对、以财税软件为准拉平。
+  - 测试：
+    - EntityTaxJdbcIntegrationTests.transferTaxSystemAmountDrivesSupplementOrReversalAdjustmentOnApproval
+    - EntityTaxDeclarationsPage.test.tsx「列表显示系统计算金额、申报差异与差异处理，展开计算依据显示月份、收入类型中文、收入、比例与税额」
+- 18AR 落地位置补记（D 段）
+  233-R6 五家主体与酒吧经营主体汇总收入、成本与利润
+  - 改法：
+    - finance 包新建 EntityProfitService（只读、不建表），profit(主体, 起月, 止月) 返回收入分项、成本分项、利润与口径（platform/dividend）。
+    - 收入：233-R4 EntityIncomeService 逐月相加，数据未定 409。
+    - 口径分流：主体名下有酒吧商户的走持股分红税前口径（EntityIncomeService.bars 抽出共用）。
+    - 平台主体成本：与收入同源的项取所属期内已确认或已结清的同一批月度分账单，共 9 项——
+      - 工资单税前应发（发薪主体为本主体，total+tax−tip−service_fee）；
+      - 通票分账池内分配（付方＝同单 bar 份额行的归属主体）；
+      - 专属直付按内部结算价应直付额、渠道费（通路费＋销售渠道费），计份额行归属主体；
+      - 赠送权益兑付实付（计单头赠送权益收款主体）；
+      - 游乐故障补偿履约（应付减追收，计承担主体）；
+      - 提成与报酬拨付冲回（平台主体付款的应收）；
+      - 传媒演出门票分成（付方，按应付到期日）；
+      - 积分发行费（合同销售方）。
+    - 代收后转付、单店直付、外部采购不计。
+    - 酒吧经营主体成本：逐店取销货成本（扣坏账订单出库成本）、费用台账六类（DividendService.EXPENSE_TYPES 改 public）、单一酒吧门票综合服务费，不扣税费。
+  - 落地位置：
+    - 后端：backend/src/main/java/com/complex/platform/finance/EntityProfitService.java；EntityTaxService.profit；EntityTaxController GET /api/v1/finance/entity-taxes/profits（view，平台口径，三参数必填，留痕 entity_tax.profit_viewed/entity_tax.profit_view_failed）。
+    - 前端：EntityTaxDeclarationsPage「主体收入成本利润」页签；fieldLabels.ts 加 cost_type、basis 取值表与 revenue_items、cost_items、profit_cent 等键；FieldLabels.java 与 fieldLabels.ts 加 start_month、end_month。
+    - 页面矩阵 ADM-FIN-010 行。
+  - 依据：
+    - BSM:1760「娱乐平台公司、游乐公司、传媒公司、中央餐饮公司、城市项目公司五家主体各自的收入、成本与利润，由平台汇总计算；其中涉税的正式核算数据由专业财税软件回传关键信息，平台据此与自身的内部结算数据合并计算」；
+    - BSM:749「渠道费用分两层……通路费……销售渠道费」「作为合同销售方自身成本单独列支」；
+    - 第十八批裁决 60「按上面的口径自动汇总（推荐）」，题面口径「成本＝该主体在平台内作为付款方的内部结算应付（提成拨付、渠道费、赠送权益兑付等）＋该主体作为发放主体的工资单税前应发；利润＝收入−成本……酒吧经营主体沿用持股分红的税前口径（收入−销货成本−费用）」。
+  - 测试：
+    - EntityTaxJdbcIntegrationTests.entityProfitSumsPlatformInternalSettlementCostsAndBarEntityFollowsDividendPretaxBasis
+    - EntityTaxDeclarationsPage.test.tsx「主体收入成本利润页签点开才加载，选主体与起止月份后收入、成本分项与利润全中文」
+  233-R7 企业所得税与其他税费按季与财税软件核对、以财税软件结果拉平
+  - 改法：
+    - 登记企业所得税时现算系统计算金额＝max(0, 所属期利润)×主体在所属期末月月末日生效的企业所得税比例（收入类型 all），没配记 0。
+    - 计算依据一行带收入、利润与成本分项、比例与所用税率版本 id。
+    - 其他税费没有系统计算。
+    - 复核摘要写「按季核对：系统计算 X 元，财税软件结果（本次申报）Y 元，差异 Z 元，以财税软件结果为准拉平；差异原因见登记理由」。
+    - 批准后不出补提或冲回调整单。
+    - 列表对企业所得税、其他税费已生效行给 aligned_amount_cent＝申报额＋已生效差异调整单。
+    - 分红仍扣申报额。
+  - 落地位置：
+    - 后端：EntityTaxService.calculate 企业所得税分支、Calculation.summary、row；EntityTaxDeclaration.alignedAmountCent、CalculationBasis.profit。
+    - 前端：EntityTaxDeclarationsPage「差异处理」列「按季核对拉平，以财税软件结果为准：X 元」、计算依据「以利润 X 元为基数」；fieldLabels.ts 加 aligned_amount_cent、profit。
+  - 依据：
+    - BSM:1760「企业所得税等税种：系统内配置税率比例并据以生成一版计算结果；月初完成上月数据的整理，分别填入税务系统与本平台系统；两套数据须核对，以财税软件的结果为准，出现误差的须查明原因、调整本平台的相关数据，最终保证两套一致。税务按季度处理」「同一税种只能走其中一套」；
+    - 第十八批裁决 59「其他税费和企业所得税一样，按季与财税软件核对、以财税软件为准拉平」；
+    - 第十八批裁决 60 题面「企业所得税系统计算＝利润×配置比例」。
+  - 测试：
+    - EntityTaxJdbcIntegrationTests.corporateIncomeAlignsToTaxSoftwareResultWithoutSupplementOrReversal
+    - EntityTaxDeclarationsPage.test.tsx「企业所得税行显示按季核对拉平后金额，计算依据显示以利润为基数」
+- 18AR 契约（第 233 条，233-R1～R7 汇总）：
+  - 新增 5 个操作，OpenAPI 相对主干 1388→1393，落在 docs/openapi/openapi-p0.yaml 与 .json，两份同值：
+    - GET /api/v1/finance/entity-taxes/rates（listEntityTaxRates，finance.entity_tax.view，entity_tax.rates_listed／entity_tax.rates_list_failed）
+    - POST /api/v1/finance/entity-taxes/rates（submitEntityTaxRate，finance.entity_tax.manage，entity_tax.rate_submitted／entity_tax.rate_submit_failed，请求体 EntityTaxRateRequest）
+    - GET /api/v1/finance/entity-taxes/profits（getEntityTaxProfit，view，entity_tax.profit_viewed／entity_tax.profit_view_failed）
+    - POST /api/v1/finance/entity-taxes/{id}/payments（registerEntityTaxPayment，manage，entity_tax.payment_registered／entity_tax.payment_register_failed，请求体 EntityTaxPaymentRequest）
+    - POST /api/v1/finance/entity-taxes/{id}/adjustments（registerEntityTaxAdjustment，manage，entity_tax.adjustment_registered／entity_tax.adjustment_register_failed，请求体 EntityTaxAdjustmentRequest）
+    - 5 个操作都是 x-auth-context staff-token、x-data-scope platform、x-terminal-allowed web；写操作 x-idempotency-required true。
+  - 改说明的既有操作 4 个：
+    - listEntityTaxDeclarations 的 items：加 paid_amount_cent、payment_difference_cent、payment_breakdown、payment_pending、adjustments、system_calculated_amount_cent、declaration_difference_cent、difference_mechanism、calculation_basis、aligned_amount_cent。
+    - declareEntityTax：补系统计算口径与补提、冲回调整单生成规则；x-failure-codes 加 TICKET_SETTLEMENT_PENDING、BAR_REVENUE_PENDING。
+    - computeDividendStatements：补「已生效 period_difference 差异调整单按计入月份一并扣减、逐税种各成一行 tax_period；补提、冲回调整单与实缴登记不扣」（233-R3，照 JdbcDividendRepository.sumEntityTaxByType 现码）。
+    - listSettlementInvoiceItems：补「税率按开票主体、开票期间末日当时生效的税率版本取」（233-R2，照 SettlementInvoiceService.tax 现码）。
+  - 依据：第十八批裁决 59「附加税跟流转税走补提或冲回调整单；其他税费和企业所得税一样，按季与财税软件核对、以财税软件为准拉平」；第十八批裁决 60「按上面的口径自动汇总」；各操作说明里引的 BSM:1760、BSM:521、ENUM:201。
+  - 收尾已完成：info.version 升到 V0.77（yaml 与 json 同值），docs/production-readiness-evidence/security-baseline-latest.json 的 openapi_operation_count 为 1393，仓根 security-scans 两份 md 的计数与 SHA 两行按最终 openapi-p0.json 改，operation-matrix、openapi-closure、data-isolation-spec、domain-ownership-scope 四份生成物已重生成。
+  - 校验：verify:openapi、verify:openapi-examples、verify:client-routes、verify:client-openapi、verify:client-payload 全绿；yaml 与 json 深比较值一致。
+- 18AR 汇合段 J（第 233 条）：e2e 不改。tests/e2e/full-admin-remaining.spec.ts:176-177（entity-tax-page、entity-tax-table）与 :205-211（结算配置中心 testid）断言不受影响；mock-api.ts:253 空列表照旧可用；四张视觉基线页面都不在本段改动范围，不重拍。门禁结论（变基前在 c6a4f2f9 基线上实跑，当时迁移为 V637～V639、OpenAPI 1381 个操作）：后端全量 --fresh 6847 条 0 红（V637～V639 真迁；BarBusinessDayWindowsJdbcIntegrationTests 时段跳过 2 条，定向补跑 8 条 0 红）；前端 typecheck 0 错、vitest 341 个文件 1902 条全过；customer-core、customer-app、customer-miniapp、merchant-app 单测全过；安卓员工端 125 条全过，android-app 编译通过；chromium e2e 33 条全过；镜像重生成 operation-matrix、openapi-closure、data-isolation-spec、domain-ownership-scope 后 verify:p0-contract 全绿；OpenAPI yaml 与 json 一致，1381 个操作。变基后迁移顺延为 V645～V647、OpenAPI 相对主干 1388→1393；收尾已把 info.version 升到 V0.77、security-baseline 计数改为 1393、security-scans 两份 md 的计数与 SHA 两行按最终 json 改、四份生成物重生成；domain-ownership-scope CSV 的 settlement_tax_configs 行范围列改为 business_entity_id，由收尾改生成器 tools/generate-domain-ownership-scope-audit.mjs（V0.13→V0.14，classify 里给 settlement_tax_configs 加表名特例，同该处 V558 特例写法；V646 删了 project_id，建表定义里仍有该列文字，生成器不处理 DROP COLUMN）。
+- D-docs（文档组，第 233 条 233-R1～R7 文档现状同步）：
+  - 财务 PRD V0.37：§6D.8 补全七项实现现状，包括：
+    - 税率版本 V646 与「税率配置」页签；
+    - 系统计算金额与计算依据 V647，流转税三项出补提或冲回调整单；
+    - 企业所得税与其他税费按季拉平（aligned_amount_cent）；
+    - 主体收入成本利润汇总（GET /api/v1/finance/entity-taxes/profits）；
+    - 实际缴纳登记与五类缴税差异、原期间已申报的差异调整单（V645）；
+    - 「仍无承载」收窄为财税软件回传通道。
+  - 财务 PRD §6D.3 已裁决框中「税种到机制的映射须在税费配置中显式维护，未映射的税种一律拦下不自动处置」改为第十八批裁决 59 固定映射，删「当前无承载」句。
+  - 财务 PRD §6A 开票清单落地对应补：税率按开票主体、开票期间末日生效版本取。
+  - 分红 PRD V0.14：§2#1、§5 该期税费补「已生效 period_difference 差异调整单按计入月扣进该月所在期，每税种与申报各成一行 tax_period；补提、冲回与实缴不进分红」。
+  - 结算重构 PRD V1.17：附录 B.1 两处「后台可改」「已在 ADM-STL-001 可改」改为「税率按主体与生效日版本化，在 ADM-FIN-010「税率配置」页签维护，经财务、税务、法务审核与最高确认」。
+  - 依据：
+    - BSM:1760「税费金额分三个阶段分别保存、互不覆盖：系统计算金额、实际申报金额、实际缴纳金额」「同一税种只能走其中一套」；
+    - ENUM:201「每个主体 × 每类收入 × 每种税（增值税/文化事业建设费/附加税）后台各自配“有没有这笔费用 + 收多少”」；
+    - BSM:521「所有涉及钱的配置一律版本化」；
+    - 第十八批裁决 59「附加税跟流转税走补提或冲回调整单；其他税费和企业所得税一样，按季与财税软件核对、以财税软件为准拉平」；
+    - 第十八批裁决 60。
+  - 只改文档，无测试；门禁 verify-full-admin-page-matrix 117 页通过，git diff --check 干净。
+- 18AR 收尾复核修正（2026-11-18）：收尾复核成立的 10 条意见与同根问题按下列修正，台账版本不改：
+  - 传媒演出结算跨月调整（意见 1）：finance/EntityIncomeService 收入项 d) 改按应收应付台账取（来源 media_performance_settlement、应付、往来方＝本主体、到期日落在本月），原应付留在原月，调整追加的冲正行与新应付都落调整当日，当期计新额−原额；finance/EntityProfitService ⑦ media_ticket_share 同口径按台账取（冲正行来源回指原结算行，按其门票分成与付方主体认）。依据 BSM:1760「已封账历史账单不回改，跨月退款和调整在当期生成冲正」、BSM:1145「已形成结算需要调整时，关联原记录并按既有历史调整规则办理，不覆盖原结果」。新用例 EntityTaxJdbcIntegrationTests.mediaSettlementAdjustedNextMonthKeepsOriginalMonthAndCountsDifferenceInAdjustmentMonth（原月登记申报后下月调整：原月收入不变、调整月收入为新额−原额，成本侧同断言）。
+  - 门店要货货款调整后的付款（意见 2）：收入项 g) 递归沿 origin_item_id 红冲链回到签收时的根行，用根行的来源记录认 transfer_type＝supply 的要货单；库存模块不改。依据 BSM:1723「向商户供货的货款｜中央餐饮公司」、第十八批裁决 60「收入＝按收入归属配置归到该主体的各类收入（含税实收）」。新用例 supplyPaymentsOnRestatedPayablesAfterPaymentAdjustmentsCountAsGoodsIncome（两次调减，两条重述行上的付款合计计入）。
+  - 跨月撤销核销收支同冲（意见 3、6）：收入项 a) 份额行并入同行 recovery_net_cent（与成本侧 recovery_internal_settled_cent 同行同单）。核现码：酒吧份额（娱乐平台公司）与游乐、传媒自收票的月窗都不计原核销早于窗起点的冲正，份额行追收只记域间份额（recoveries 只比游乐、传媒、餐饮、零售业态的域间份额），两类当期都没有冲正；酒吧经营主体口径取 settlement_items.final_amount_cent，已带追收明细，不改。确未含的两类不另造口径：settlement/TicketDistributionSettlementService（V0.08）加只读方法 uncoveredRecoveryDiffs，与月结追收 recoveries 同一原月两次重算（共用抽出的 originalMonths），与原月计入同一口径（份额毛额扣门票综合服务费与赠送权益预估成本）：各业态给「毛额−门票综合服务费−赠送权益预估成本−域间份额」之差（与 recovery_net_cent 相加即该业态原月计入额之差，含已扣的销售渠道费与通路费），另给门票综合服务费、赠送权益预估成本之差与各业态销售渠道费、通路费之差；EntityIncomeService（抽出 recoveryDiffs 供收入、成本两处共用）收入项 a2) 按原月结算单该业态份额行的归属主体与单头两个收款主体，在撤销所在月冲减；EntityProfitService 渠道费 channel_fee 按同一批重算的销售渠道费、通路费之差，在撤销所在月冲减原月份额行归属主体，收支同冲、利润冲净。依据 BSM:1760 同上、决策台账 FS-021「单独列追收、按原月重算」、第十八批裁决 60「利润＝收入−成本」。新用例 EntityTaxJdbcIntegrationTests.crossMonthRecoveriesCutShareIncomeWithCostAndKeepSingleBarRecoveryOutOfPoolCost、PassDomainShareInterEntityPostingJdbcTests.reversalMonthEntityProfitsCutShareIncomeTogetherWithCost（V0.02：真实售票、核销、月结、过账，下月撤销酒吧入场与有价餐饮核销后，经 GET /api/v1/finance/entity-taxes/profits 查撤销月：城市项目公司收入 −3000（餐饮份额毛额：域间份额追收 2730＋已扣的销售渠道费与通路费 270）、成本 exclusive_direct_settlement −2000 与 channel_fee −270；娱乐平台公司门票收入冲回原月酒吧份额毛额（连同门票综合服务费、赠送权益预估成本之差），channel_fee 冲回酒吧份额的销售渠道费与通路费）。
+  - 池内分配不计单店直付追收（意见 5）：EntityProfitService ② 条件改为 distribution_method NOT IN ('exclusive_full', 'exclusive_recovery')，分池追收 pooled_recovery 与续算 pooled_resume 照旧计入。依据 BSM:1713「娱乐平台公司不取得已核销门票的收入」、第十八批裁决 60「成本＝该主体在平台内作为付款方的内部结算应付……」、方案 233-R6「不计的项……单店直付明细」。断言在 crossMonthRecoveries… 用例；233-R7 企业所得税随利润的既有用例 corporateIncomeAlignsToTaxSoftwareResultWithoutSupplementOrReversal 照旧通过。同根：酒吧经营主体口径的分账明细分类同样只认 exclusive_full，单一酒吧门票直付的追收 exclusive_recovery 改同归门票收入 ticket（原归 spv_service），新用例 barEntitySingleBarTicketRecoveryStaysInTicketIncome。
+  - 差异调整单列（意见 4）：apps/web EntityTaxDeclarationsPage.tsx 的 adjustmentText 只对 period_difference 按正负带符号，补提、冲回调整单不带，与同行「差异处理」列一致。依据 BSM:1760「申报金额高于系统计算金额的生成补提调整单、低于的生成冲回调整单」。新用例「冲回调整单在差异调整单列不带加号，与差异处理列写法一致」。
+  - 契约两处说明（意见 8）：declareEntityTax 复核摘要改为「增值税、文化事业建设费、附加税追加系统计算金额与申报差异；企业所得税写按季核对的系统计算、财税软件结果与差异、以财税软件结果为准拉平；其他税费不追加」，listEntityTaxDeclarations 的 rate_version_id 改为「没配或该版本没有这笔费用为空、比例记 0」，同根 finance/EntityTaxDeclaration.java 的 CalculationBasis 说明同改（V0.02 不再升）；yaml 与 json 同值就地改，info.version 不再升（V0.77），操作数 1393 不变；security-scans 两份 md 的 SHA 行按最终 openapi-p0.json 改为 2859c0b20e55a2f3a34c7c718b6a54d4111ae316dbcb20e85053852eba00d233（变基前为 74cdcb5d…）；重生成 operation-matrix、openapi-closure，refresh-entry-doc-baseline 无漂移。依据第十八批裁决 59「其他税费没有系统计算基数」、BSM:1760「税费金额分三个阶段分别保存、互不覆盖」。
+  - 页面矩阵（意见 9）：ADM-FIN-010 行校验说明补企业所得税（登记时该月月度分账单未确认或酒吧收入来源未定不能登记），矩阵版本不再升、列数 15。依据第十八批裁决 60「企业所得税系统计算＝利润×配置比例」。
+  - V647 注释（意见 10）：calculation_basis 键名改为 tax_amount_cent、vat_amount_cent，补企业所得税一项另带 profit；迁移未合并，就地改注释，文件版本 V0.01 不变，未开新迁移。依据 BSM:521「每一笔单据在生成时就把所用配置版本固化在单上」。
+  - 台账（意见 7）：本段 J 段写明 6847 条那次是变基前在 c6a4f2f9 基线上实跑（当时 V637～V639、1381 个操作），删已完成的待收尾项，补记生成器改动；契约段改为收尾已完成。依据操作员长期规则「不得谎报，按实际执行如实写」。
+  - 财务 PRD §6D（V0.37 不再升）收入一句补跨月冲正口径（撤销核销按原月计入的同一口径冲减），成本一句补单店直付追收不计、传媒演出门票分成按台账取月、撤销核销在撤销所在月冲减渠道费。不改 settlement-rebuild PRD 附录 B.1（控制席取驳回结论）。
+  - 验证（变基前，在 7b830e40 基线上实跑）：先 RED（断言失败）——后端 4 条新用例与同根 1 条都红（如 revenue_cent 期望 −12000 实为 0、goods 期望 35000 实为 {}、ticket 期望 8000 实为 10000）；前端新用例红（行文本含「冲回调整单 +100.00 元」）。再 GREEN——b64_test.sh --fresh：EntityTaxJdbcIntegrationTests 18、DividendFinalSnapshotGateJdbcIntegrationTests 11、PassDomainShareInterEntityPostingJdbcTests 4 共 33 条 0 红；另 --fresh 跑 SettlementStateMachineJdbcIntegrationTests 14、ExclusiveDirectPayDomainShareJdbcIntegrationTests 11 （追收共用 originalMonths）0 红；b64_web.sh EntityTaxDeclarationsPage 9 条全过、typecheck 0 错。门禁 verify:p0-contract、verify:html-ledger-sync、verify:entry-anchors、verify:entry-doc-baseline、verify:security-baseline、verify:domain-ownership-scope、verify:data-isolation-spec、verify-audit-labels、verify-full-admin-page-matrix、verify-admin-result-labels、git diff --check 全绿，改动文件无 CRLF、无 BOM；flock 共用锁下 npm run verify:predeploy 退出码 0。复核再修正（同日；独立核实指出意见 3、6 原月按毛额计入、撤销月只冲净额，销售渠道费与通路费残留在收入里；意见 8② 同根漏改 EntityTaxDeclaration 说明）：PassDomainShareInterEntityPostingJdbcTests.reversalMonthEntityProfitsCutShareIncomeTogetherWithCost 改断言后先红（[餐饮份额毛额冲回] 期望 {catering=-3000} 实为 {catering=-2730}）；只改收入侧后再红（[代付额与渠道费同冲] 期望 {channel_fee=-270, exclusive_direct_settlement=-2000} 实为 {exclusive_direct_settlement=-2000}）；补成本侧后绿。b64_test.sh --fresh：EntityTaxJdbcIntegrationTests 18、DividendFinalSnapshotGateJdbcIntegrationTests 11、PassDomainShareInterEntityPostingJdbcTests 4、SettlementStateMachineJdbcIntegrationTests 14、ExclusiveDirectPayDomainShareJdbcIntegrationTests 11 共 58 条 0 红；b64_web.sh EntityTaxDeclarationsPage 9 条全过、typecheck 0 错；OpenAPI 未改（SHA 仍为 74cdcb5d…）；门禁同上各项与 flock 共用锁下 npm run verify:predeploy 全绿。
+- 18AR 合并前再变基（2026-11-18）：本段从 origin/main 7b830e40 再变基到 1ca51465（又含 18AS 第 297 条 PR #596：迁移 V640、info.version V0.75；18AQ 分红组 PR #597：迁移 V641～V644、OpenAPI 1383→1388、info.version V0.76；决策台账 V1.00 与 18AS、18AQ 落地位置补记）。本段迁移 V645～V647 排在主干最新 V644 之后，迁移共 605 个（主干 602）；OpenAPI 相对主干 1388→1393，info.version V0.77。
+  - 冲突与解法（14 个文件）：README、入口文档、数据隔离规格、验收矩阵、收口附录与 security-scans 两份 md 共 7 个生成物，冲突块取主干，再按下文整体重生成或只改计数与 SHA 两行；openapi-p0.yaml 与 .json 的 info.version 冲突取主干后统一升版，computeDividendStatements 的 summary 只有主干改过、取主干，description 两边补句位置不重叠，按基线逐字三方合并（本段 233-R3 句留在 210-R3 税费句之后的原位置，主干 18AQ 234-R1、234-R2、243-R1 三段在末尾），其余操作由 git 自动合入；fieldLabels.ts 只有版本行冲突，定 V0.41，两边新增键已自动并集、无同键异名；分红 PRD 标题定 V0.14，版本说明保留主干 V0.13 句后接本段 V0.14 句，修订表本段行放在主干 V0.13 行之上，§5 本段标记随版本改为 V0.14；财务 PRD 标题定 V0.37，修订表本段行放在主干 V0.36 行之上；页面矩阵 CSV 冲突的三行逐行对基线：ADM-FIN-007、ADM-MER-008 只有主干改过取主干，ADM-FIN-010 只有本段改过取本段，第 2 行版本定 V0.36；决策台账版本定 V1.01，文末先放主干 18AS、18AQ 补记，再接本段 18AR 补记。
+  - 自动合并代码核对：本段没有改 FinanceService、SupervisorReviewService（相对 1ca51465 无差异），SupervisorReviewService 策略表与 SupervisorReviewServiceTests 照主干；两边都改、由 git 自动合并的 Java 只有 FieldLabels.java、DividendService.java、JdbcDividendRepository.java、DividendFinalSnapshotGateJdbcIntegrationTests.java，逐行比对两边改动都在、无重复方法；分红计算里 18AQ 的方案版本、其他股东与本段的税费扣减（含差异调整单按计入月扣）并存；audit-labels.json 两边新增行都在。未改业务逻辑。
+  - 统一重做：两边都从同一基线 +0.01、被 git 当同一改动合并的版本递增再 +0.01——reviewLabels.ts V0.12、FieldLabels.java V0.49、DividendService.java V0.13、JdbcDividendRepository.java V0.07、DividendFinalSnapshotGateJdbcIntegrationTests.java V0.05；OpenAPI yaml 与 json 的 info.version 就地由 V0.76 改为 V0.77（深比较一致，操作各 1393）；refresh-entry-doc-baseline 回填 README 与入口文档为「V647（605 个迁移）」「OpenAPI 1393」；重生成数据隔离规格（最新 V647、277 张含 scope 字段的表）、domain-ownership-scope（无变化）、验收矩阵（V0.77、共 1393 个 operation）、收口附录（V0.77、1393 operations、2786 events、写接口 856、finance.entity_tax.manage 4 个、finance.entity_tax.view 3 个，补回 registerEntityTaxAdjustment、registerEntityTaxPayment 两行）；security-scans 两份 md 只改「OpenAPI operation count: 1393」与 SHA 行 2859c0b20e55a2f3a34c7c718b6a54d4111ae316dbcb20e85053852eba00d233；security-baseline-latest.json 只改 openapi_operation_count 为 1393。运行验收证据随指纹变化已过时，由合并前证据链按提交树重刷，本轮不动。
+  - 本轮实测（1ca51465 基线）：清掉镜像 finance、dividend、settlement、governance、ticketing、common/api 包的 classes 与 test-classes 后，b64_test.sh --fresh 定向 7 类 124 条 0 红（EntityTaxJdbcIntegrationTests 18、DividendFinalSnapshotGateJdbcIntegrationTests 13、DividendJdbcIntegrationTests 24、DividendPlanVersionJdbcIntegrationTests 7、DividendOtherShareholdersJdbcIntegrationTests 5、SupervisorReviewServiceTests 53、PassDomainShareInterEntityPostingJdbcTests 4；一次性库迁到 V647）；b64_web.sh EntityTaxDeclarationsPage FinanceDividends：typecheck 0 错、9 个文件 35 条全过；共用锁下 chromium 跑 tests/e2e/full-admin-visual.spec.ts 2 条全过、无截图差异，不重拍；门禁 verify:p0-contract、verify:html-ledger-sync、verify:entry-anchors、verify:entry-doc-baseline、verify:security-baseline、verify:data-isolation-spec、verify:domain-ownership-scope、verify:migration-version-order、verify:production-readiness-evidence、verify-audit-labels（业务类型 431、事件名 2346，0 处缺失）、verify-full-admin-page-matrix（117 页）、verify-admin-result-labels、git diff --check 全绿，改动文件无 CRLF、无 BOM；共用锁下 npm run verify:predeploy 退出码 0。

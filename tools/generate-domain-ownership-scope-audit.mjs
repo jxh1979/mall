@@ -1,4 +1,4 @@
-// 文件版本：V0.13
+// 文件版本：V0.14
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { readdirSync } from "node:fs";
 import { join } from "node:path";
@@ -209,6 +209,12 @@ function classify(table, definition) {
   };
   const overridden = ANALYTICS_SCOPE_OVERRIDES.get(table);
   if (overridden) return overridden;
+  // 第十八批 AR 段第 233 条：V646 删了 project_id、改按经营主体（建表定义里仍有该列文字），范围列为 business_entity_id。
+  if (table === "settlement_tax_configs") return {
+    scope_type: "direct", scope_source: "business_entity_id",
+    scope_path: "business_entity_id column on settlement_tax_configs",
+    multi_complex_note: "ready for project/merchant scoped query enforcement",
+  };
   // 第十八批第 12 条：V558 删了 project_id（建表定义里仍有该列文字），按全平台一套的参考表登记。
   if (["customer_member_levels", "customer_birthday_rules"].includes(table)) return {
     scope_type: "global_reference",

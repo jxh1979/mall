@@ -1,4 +1,4 @@
-// 文件版本：V0.40
+// 文件版本：V0.41
 // OBS-14-02 后台结果区字段中文名字典（PGM「全局原则 · 界面全中文（所有终端零英文）」）。
 // 键用后端 JSON 的蛇形写法；结果区查表时蛇形与驼峰同查（orderId / order_id 都命中 order_id）。
 // 与后端字段中文名表 FieldLabels.java（common.api 包）同键同名：前段按后端原样抄录，后端改名这里跟着改（门禁会比对）。
@@ -1949,6 +1949,34 @@ export const FIELD_LABELS: Record<string, string> = {
   period_end_month: "所属期末月",
   period_start: "期初",
   period_start_month: "所属期首月",
+  // 第十八批 AR 段第 233 条 233-R1、233-R3：税费实际缴纳登记与差异调整单（V645 entity_tax_payments、entity_tax_adjustments；前三键同 FieldLabels.java）。
+  payment_difference_cent: "缴税差异",
+  difference_breakdown: "缴税差异分类",
+  accounting_month: "计入月份",
+  payment_breakdown: "缴税差异分类",
+  payment_pending: "实际缴纳登记待审批",
+  adjustments: "差异调整单",
+  declaration_id: "关联申报登记",
+  origin_period_start_month: "原所属期首月",
+  origin_period_end_month: "原所属期末月",
+  // 第十八批 AR 段第 233 条 233-R2：税率版本（V646 settlement_tax_configs；ENUM:201「有没有这笔费用 + 收多少」）。
+  applicable: "有没有这笔费用",
+  // 第十八批 AR 段第 233 条 233-R5：系统计算金额、申报差异、差异处理与计算依据各行（V647；calculation_basis 沿用既有「计税依据」）。
+  system_calculated_amount_cent: "系统计算金额",
+  declaration_difference_cent: "申报差异",
+  difference_mechanism: "差异处理",
+  rate_version_id: "所用税率版本",
+  tax_amount_cent: "税额",
+  vat_rate_version_id: "所用增值税率版本",
+  // 第十八批 AR 段第 233 条 233-R6：主体收入、成本与利润（起止月份两键同 FieldLabels.java）；233-R7：按季核对拉平后金额。
+  start_month: "起始月份",
+  end_month: "截止月份",
+  revenue_items: "收入分项",
+  cost_items: "成本分项",
+  cost_type: "成本类型",
+  profit_cent: "利润",
+  profit: "利润计算",
+  aligned_amount_cent: "拉平后金额",
   permission_code: "权限",
   permission_codes: "权限点",
   permission_name: "权限名称",
@@ -3106,6 +3134,9 @@ export const VALUE_LABELS: Record<string, string> = {
   dividend_closeout_closed: "关停结算已结案",
   merchant_expense_created: "商户费用已登记",
   entity_tax_declared: "税费申报已登记并提交审批",
+  entity_tax_payment_registered: "税费实际缴纳已登记并提交审批",
+  entity_tax_adjustment_registered: "税费差异调整单已生成并提交审批",
+  entity_tax_rate_submitted: "税率版本已提交审批",
   merchant_expense_reversed: "商户费用已冲回",
   merchant_expense_auto_synced: "商户费用已自动同步",
   payroll_bank_fact: "工资银行付款已登记",
@@ -3511,6 +3542,19 @@ export const VALUE_LABELS: Record<string, string> = {
 export const KEY_VALUE_LABELS: Record<string, Record<string, string>> = {
   // 第十八批 AC 段第 210 条 210-R2：税费申报登记的税种（同后端 entity_tax_declarations.chk_etd_tax_type）。
   tax_type: { vat: "增值税", cultural_fee: "文化事业建设费", surcharge: "附加税", corporate_income: "企业所得税", other: "其他税费" },
+  // 第十八批 AR 段第 233 条 233-R2：税率版本的收入类型（同后端 EntityTaxService.INCOME_LABELS，开票清单页同码同名；goods、parking、retail 为本条新增，
+  // all 只用于企业所得税）。
+  income_type: { ticket: "平台通票 / 门票综合服务费", spv_service: "通票可分配池分账", nonstd_service: "非散台服务费", catering: "订台低消 / 二次消费 / 额外酒水",
+    retail: "零售", game: "游乐收入", show: "演出票", rent: "商业租赁 / 市集摊位", parking: "停车费", points_issuance: "积分发行费", goods: "供货货款", all: "全部收入" },
+  // 第十八批 AR 段第 233 条 233-R5：差异处理（第十八批裁决 59：增值税、文化事业建设费、附加税出补提或冲回调整单，企业所得税与其他税费按季核对拉平）。
+  difference_mechanism: { adjustment: "补提／冲回调整单", alignment: "按季核对拉平" },
+  // 第十八批 AR 段第 233 条 233-R6：成本分项（平台主体按第十八批裁决 60；酒吧经营主体同持股分红明细行类型与中文名）与汇总口径。
+  cost_type: { payroll: "工资单税前应发", pool_distribution: "通票分账池内分配", exclusive_direct_settlement: "专属直付按内部结算价应直付",
+    channel_fee: "渠道费（通路费与销售渠道费）", gift_redemption: "赠送权益兑付", compensation_fulfillment: "游乐故障补偿履约",
+    commission_transfer_reversal: "提成与报酬拨付冲回", media_ticket_share: "传媒演出门票分成", points_issuance: "积分发行费",
+    cost_inventory: "销货成本", expense_rent_allocation: "费用·房租分摊", expense_energy: "费用·能耗", expense_property_fee: "费用·物业费",
+    expense_labor: "费用·人工", expense_amortization: "费用·摊销", expense_other: "费用·其他", expense_ticket_service_fee: "费用·门票综合服务费（单店门票）" },
+  basis: { platform: "平台主体口径", dividend: "持股分红税前口径" },
   // 第十八批 AC 段第 211 条 211-R1：暂不分红／暂缓分红登记类别（同后端 dividend_period_holds.chk_dph_hold_type）。
   hold_type: { skip: "暂不分红", defer: "暂缓分红" },
   // 第十八批 AQ 段第 243 条 243-R1：酒吧关停结算款项类别（同后端 dividend_closeout_items.chk_dcoi_item_type）。
@@ -3526,7 +3570,9 @@ export const KEY_VALUE_LABELS: Record<string, Record<string, string>> = {
   event_type: { audit_events_exported: "审计事件已导出", "merchant.admission.audit_exported": "准入审计已导出" },
   event_category: { audit: "审计", governance: "治理", ticketing: "票务", loyalty: "会员积分" },
   disposition: { acknowledge: "标记已阅", false_positive: "标记误报", escalate: "转告警" },
-  category: { bar: "酒吧", ticketing: "门票销售", amusement: "游乐", catering: "餐饮", retail: "零售", service: "服务", entertainment: "娱乐", spirit: "烈酒", wine: "葡萄酒", beer: "啤酒", cocktail: "鸡尾酒", soft_drink: "软饮", mixer: "调饮", tea: "茶饮", snack: "小吃" },
+  category: { bar: "酒吧", ticketing: "门票销售", amusement: "游乐", catering: "餐饮", retail: "零售", service: "服务", entertainment: "娱乐", spirit: "烈酒", wine: "葡萄酒", beer: "啤酒", cocktail: "鸡尾酒", soft_drink: "软饮", mixer: "调饮", tea: "茶饮", snack: "小吃",
+    // 第十八批 AR 段第 233 条 233-R1：缴税差异分类（BSM:1760「未缴、预缴、多缴、抵扣或待退」）。
+    unpaid: "未缴", prepaid: "预缴", overpaid: "多缴", offset: "抵扣", refund_pending: "待退" },
   scope_type: { archived_bar_products: "已存档的酒吧商品", archived_entitlement_templates: "已存档的通票权益模板", archived_merchants: "已存档的商户档案", archived_ticket_types: "已存档的票种", archived_ticket_price_rules: "已存档的票价规则", archived_bar_product_categories: "已存档的酒吧商品分类", archived_bar_combos: "已存档的酒吧套餐", project: "项目", merchant: "商户", bar: "酒吧", ticketing: "票务", amusement: "游乐" },
   // 第十八批 P 段第 133 条 133-R3：日结范围类型（上一行末五项）与日结七源（名称取自 OpenAPI listDailyCloseSummaries 描述）。
   // 第十八批 Y 段第 182 条 182-R1（ENUM:191「低价值差异单独列示带账进入下期」）：低价值未关闭差异 low_value_difference。
@@ -3541,7 +3587,9 @@ export const KEY_VALUE_LABELS: Record<string, Record<string, string>> = {
   period_type: { quarterly: "按季度", monthly: "按月", semiannual: "按半年", annual: "按年" },
   reserve_release_mode: { manual: "手动释放", next_period: "下期返还", fixed_delay: "固定延后若干期", annual: "年度末清算" },
   // 第十八批 Z 段第 186 条 186-R1：锁定后补录类型（ar_ap_adjustments.kind）金额调整 amount、收付款补录 payment；186-R2 退款补录 refund。
-  kind: { official: "正式单", preview: "月度预览", app: "预装软件", site: "网站白名单", amount: "金额调整", payment: "收付款补录", refund: "退款补录" },
+  kind: { official: "正式单", preview: "月度预览", app: "预装软件", site: "网站白名单", amount: "金额调整", payment: "收付款补录", refund: "退款补录",
+    // 第十八批 AR 段第 233 条（V645 entity_tax_adjustments.chk_eta_kind）：补提、冲回、差异调整单。
+    supplement: "补提调整单", reversal: "冲回调整单", period_difference: "差异调整单" },
   matter_type: { delivery_receipt: "签收", return_request: "退货申请", freight_confirmation: "运费确认", delivery_resolution: "交付差异", overpayment_use: "超收用途", result_delivery: "结果交付" },
   expense_type: { labor: "人工", rent_allocation: "房租分摊", energy: "能耗费", property_fee: "物业费", amortization: "摊销" },
   unit: { unit: "未填单位" },

@@ -1,6 +1,6 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.PageResponse;
@@ -139,7 +139,7 @@ public class SettlementInvoiceService {
             subjectName = fallbackName;
         }
 
-        Tax tax = tax(source.projectId(), incomeType, invoiceable);
+        Tax tax = tax(subjectEntityId, incomeType, invoiceable, source.periodEnd());
         repository.insert(new SettlementInvoiceItemRecord(
                 buildId(source.billId(), incomeType, settlementItemId),
                 source.billId(), settlementItemId, source.projectId(),
@@ -176,11 +176,12 @@ public class SettlementInvoiceService {
         if (invoiceable <= 0) {
             return 0;
         }
-        Tax tax = tax(source.projectId(), INCOME_POINTS_ISSUANCE, invoiceable);
+        LocalDate monthEnd = source.billingMonth().withDayOfMonth(source.billingMonth().lengthOfMonth());
+        Tax tax = tax(source.receiverEntityId(), INCOME_POINTS_ISSUANCE, invoiceable, monthEnd);
         repository.insert(new SettlementInvoiceItemRecord(
                 // 积分账单号本身已较长,条目 id 不再拼来源,免超 64 位;来源由 points_bill_id 列承载。
                 "sii_pts_" + java.util.UUID.randomUUID().toString().replace("-", ""), null, null, source.projectId(),
-                source.billingMonth(), source.billingMonth().withDayOfMonth(source.billingMonth().lengthOfMonth()),
+                source.billingMonth(), monthEnd,
                 INCOME_POINTS_ISSUANCE, source.receiverEntityId(), repository.findEntityName(source.receiverEntityId()),
                 rule.invoiceItemName(), rule.taxCategory(), rule.evidenceRequired(),
                 invoiceable, tax.vatRateBps(), tax.vatCent(),
@@ -195,14 +196,17 @@ public class SettlementInvoiceService {
 
     /**
      * 税额:含税额 × 率 ÷ (10000 + 率),四舍五入到分(全局金额口径 D15.1);文化事业建设费计费依据 = 取得的全部含税价款
-     * (财税〔2016〕25 号),最终认定权留财务,费率后台可配。未配即 0。
+     * (财税〔2016〕25 号),最终认定权留财务,费率后台可配。未配即 0。第十八批 AR 段第 233 条 233-R2:税率按开票主体、按业务日期(开票期间末日)
+     * 当时生效的版本取(ENUM:201「每个主体 × 每类收入 × 每种税」;BSM:521「已发生的业务一律按当时生效的版本计算」)。
      */
-    private Tax tax(String projectId, String incomeType, long amountCent) {
-        int vatRateBps = orZero(repository.findTaxRateBps(projectId, incomeType, "vat"));
+    private Tax tax(String subjectEntityId, String incomeType, long amountCent, LocalDate date) {
+        var vat = repository.findTaxRate(subjectEntityId, incomeType, "vat", date);
+        int vatRateBps = vat == null ? 0 : vat.rateBps();
         long vatCent = MoneyRounding.prorate(amountCent, vatRateBps, MoneyRounding.BPS_DENOMINATOR + vatRateBps);
-        Integer culturalRate = repository.findTaxRateBps(projectId, incomeType, "cultural_fee");
-        boolean culturalApplicable = culturalRate != null && culturalRate > 0;
-        return new Tax(vatRateBps, vatCent, culturalApplicable, culturalApplicable ? culturalRate : 0,
+        var cultural = repository.findTaxRate(subjectEntityId, incomeType, "cultural_fee", date);
+        int culturalRate = cultural == null ? 0 : cultural.rateBps();
+        boolean culturalApplicable = culturalRate > 0;
+        return new Tax(vatRateBps, vatCent, culturalApplicable, culturalRate,
                 culturalApplicable ? MoneyRounding.bpsOf(amountCent, culturalRate) : 0L);
     }
 
@@ -216,10 +220,6 @@ public class SettlementInvoiceService {
     private static String buildId(String billId, String incomeType, String settlementItemId) {
         String source = settlementItemId != null ? settlementItemId : billId;
         return "sii_" + incomeType + "_" + source + "_" + java.util.UUID.randomUUID().toString().substring(0, 8);
-    }
-
-    private static int orZero(Integer v) {
-        return v == null ? 0 : v;
     }
 
     // ------------------------------------------------------------------

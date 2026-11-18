@@ -56,7 +56,7 @@ scope 类型（与盘点 CSV 的 `scope_type` 对齐）：
 
 <!-- DATA_ISOLATION_SPEC_AUTO_START -->
 ### 3A. 自动迁移隔离基线（由 `npm run docs:data-isolation-spec` 生成）
-> 事实源：`backend/src/main/resources/db/migration`。当前解析到最新迁移 **V644**，发现 **278** 张含 scope 字段的表。不要手工修改本区块；新增迁移后运行 `npm run docs:data-isolation-spec`，提交前运行 `npm run verify:data-isolation-spec`。
+> 事实源：`backend/src/main/resources/db/migration`。当前解析到最新迁移 **V647**，发现 **277** 张含 scope 字段的表。不要手工修改本区块；新增迁移后运行 `npm run docs:data-isolation-spec`，提交前运行 `npm run verify:data-isolation-spec`。
 | 表 | scope 字段 | scope 类型 | 首次出现迁移 | 证据文件 |
 |---|---|---|---|---|
 | `access_grant_requests` | `merchant_id` + `project_id` | direct | V170 | `V170__access_grant_requests.sql` |
@@ -276,7 +276,6 @@ scope 类型（与盘点 CSV 的 `scope_type` 对齐）：
 | `settlement_invoice_items` | `project_id` | direct | V362 | `V362__settlement_invoice_list.sql` |
 | `settlement_items` | `merchant_id` | direct | V224 | `V224__settlement_bills_batch2.sql` |
 | `settlement_objection_period_policy` | `project_id` | direct | V508 | `V508__internal_settlement_pay_days_and_recovery.sql` |
-| `settlement_tax_configs` | `project_id` | direct | V223 | `V223__settlement_distribution_configs_batch2.sql` |
 | `settlement_transactions` | `merchant_id` + `project_id` | direct | V222 | `V222__settlement_transactions_batch1.sql` |
 | `single_bar_service_fee_months` | `project_id` | direct | V506 | `V506__single_bar_service_fee_months.sql` |
 | `site_entry_reports` | `project_id` + `space_id` | direct | V179 | `V179__site_entry_reports.sql` |

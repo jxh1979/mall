@@ -1,6 +1,6 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import com.complex.platform.common.BusinessDayResolver;
 import com.complex.platform.finance.ArApItemRecord;
@@ -135,6 +135,16 @@ public class SingleBarServiceFeeService {
                                  WHERE month_id = m.id AND refund_id IS NULL) s
                  WHERE m.id = ?
                 """, Long.class, monthId);
+    }
+
+    /** 第十八批 AR 段第 233 条 233-R4：某计费月各项目的月应收总额（同 {@link #monthTotal}），供经营主体收入按 ticket_service_fee 收入归属定主体。 */
+    public List<ProjectTotal> monthTotals(LocalDate billingMonth) {
+        return jdbc.queryForList("SELECT id, project_id FROM single_bar_service_fee_months WHERE billing_month = ? ORDER BY id", billingMonth).stream()
+                .map(row -> new ProjectTotal((String) row.get("project_id"), monthTotal((String) row.get("id")))).toList();
+    }
+
+    /** 一个计费月行的项目与月应收总额。 */
+    public record ProjectTotal(String projectId, long amountCent) {
     }
 
     /** FS-015 分红费用口径（BSM L1774 分红基数扣门票综合服务费）：该酒吧计费月落在 [from, to] 的各月应收总额之和。 */

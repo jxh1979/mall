@@ -1,6 +1,6 @@
 package com.complex.platform.dividend;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import static com.complex.platform.support.DailyCloseFixture.markRangeFinal;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -22,6 +22,7 @@ import com.jayway.jsonpath.JsonPath;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.YearMonth;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -338,6 +339,9 @@ class DividendFinalSnapshotGateJdbcIntegrationTests {
         approved(declare("vat", "2026-01", "2026-01", 12_345L));
         approved(declare("corporate_income", "2026-01", "2026-03", 50_000L));
         declare("surcharge", "2026-02", "2026-02", 7_000L);
+        // 233-R5：登记增值税前该月月度分账单须已确认（TICKET_SETTLEMENT_PENDING），补上 4 月的。
+        jdbc.update("INSERT INTO settlement_bills (id, project_id, period_start, period_end, status, created_at, updated_at)"
+                + " VALUES (?, ?, DATE '2026-04-01', DATE '2026-04-30', 'confirmed', now(), now())", "sb_dfg_tax_4_" + s, project);
         approved(declare("vat", "2026-04", "2026-04", 9_000L));
 
         String statement = JsonPath.read(computePeriod(bar, "2026-Q1", "official", "dfg-tax-c-" + s)
@@ -356,6 +360,59 @@ class DividendFinalSnapshotGateJdbcIntegrationTests {
         assertThat((String) taxLines.get(1).get("detail")).contains("增值税", "实际申报金额", "2026-01").doesNotContain("2026-04");
         assertThat(jdbc.queryForObject("SELECT amount_cent FROM dividend_statement_lines WHERE statement_id = ? AND line_type = 'net_profit'",
                 Long.class, statement)).isEqualTo(907_655L);
+    }
+
+    /**
+     * 第十八批 AR 段第 233 条 233-R3（BSM:1760「原期间已经关账、开票或申报的，只能在当前开放期间生成关联原期间的差异调整单」「所有税费一律计入税费成本」）与
+     * 233-R1（BSM:1760「实缴与申报不一致的部分……不得直接混入税费成本」）：季度方案商户的经营主体 1 月增值税 5000 元、一季度企业所得税 500 元已生效，先出
+     * 2026-Q1 正式单；财务按前端蛇形键登记实缴 4500 元（未缴 500 元）与 +300 元差异调整单，都经三线与最高确认逐级批准。原申报不变，原单与重出的 2026-Q1
+     * 正式单税费仍是 5500 元；调整单计入批准当月，补齐该月所在季度的五类最终标记、月度分账与税费登记后出的正式单多一行增值税 tax_period −300 元，
+     * 说明写明原所属期与计入月份。修复前没有登记入口：404，状态断言红。
+     */
+    @Test
+    void periodDifferenceAdjustmentIsDeductedInApprovalMonthWhilePaymentStaysOutOfTaxCost() throws Exception {
+        String bar = taxBar("dfg_adj_" + s);
+        String review = declare("vat", "2026-01", "2026-01", 500_000L);
+        approved(review);
+        approved(declare("corporate_income", "2026-01", "2026-03", 50_000L));
+        String declaration = jdbc.queryForObject("SELECT id FROM entity_tax_declarations WHERE review_id = ?", String.class, review);
+        String q1 = JsonPath.read(computePeriod(bar, "2026-Q1", "official", "dfg-adj-c1-" + s)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.computed[0].period_tax_cent").value(550_000))
+                .andReturn().getResponse().getContentAsString(), "$.data.computed[0].id");
+
+        approved(entityTax(declaration, "payments", "{\"idempotency_key\":\"dfg-pay-" + s + "\",\"paid_amount_cent\":450000,"
+                + "\"difference_breakdown\":[{\"category\":\"unpaid\",\"amount_cent\":50000}],\"reason\":\"按完税凭证登记\","));
+        approved(entityTax(declaration, "adjustments", "{\"idempotency_key\":\"dfg-adj-" + s + "\",\"amount_cent\":30000,\"reason\":\"更正申报表\","));
+        String month = jdbc.queryForObject("SELECT accounting_month FROM entity_tax_adjustments WHERE declaration_id = ?"
+                + " AND kind = 'period_difference'", String.class, declaration);
+
+        assertThat(jdbc.queryForObject("SELECT declared_amount_cent FROM entity_tax_declarations WHERE id = ?", Long.class, declaration))
+                .isEqualTo(500_000L);
+        assertThat(jdbc.queryForObject("SELECT period_tax_cent FROM dividend_statements WHERE id = ?", Long.class, q1)).isEqualTo(550_000L);
+        computePeriod(bar, "2026-Q1", "official", "dfg-adj-c2-" + s)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.computed[0].period_tax_cent").value(550_000));
+
+        YearMonth quarterStart = YearMonth.parse(month).withMonth((YearMonth.parse(month).getMonthValue() - 1) / 3 * 3 + 1);
+        EntityTaxFixture.taxDeclaredForAllMonths(jdbc, bar);
+        markRangeFinal(jdbc, "bar", bar, quarterStart.atDay(1), quarterStart.plusMonths(2).atEndOfMonth());
+        for (int i = 0; i < 3; i++) {
+            YearMonth m = quarterStart.plusMonths(i);
+            jdbc.update("INSERT INTO settlement_bills (id, project_id, period_start, period_end, status, created_at, updated_at)"
+                    + " VALUES (?, ?, ?, ?, 'confirmed', now(), now())", "sb_dfg_adj_" + i + "_" + s, project, m.atDay(1), m.atEndOfMonth());
+        }
+        String label = quarterStart.getYear() + "-Q" + ((quarterStart.getMonthValue() + 2) / 3);
+        String current = JsonPath.read(computePeriod(bar, label, "official", "dfg-adj-c3-" + s)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.computed.length()").value(1))
+                .andExpect(jsonPath("$.data.computed[0].period_tax_cent").value(30_000))
+                .andReturn().getResponse().getContentAsString(), "$.data.computed[0].id");
+        List<Map<String, Object>> taxLines = jdbc.queryForList("SELECT amount_cent, detail FROM dividend_statement_lines"
+                + " WHERE statement_id = ? AND line_type = 'tax_period' ORDER BY seq", current);
+        assertThat(taxLines).extracting(row -> ((Number) row.get("amount_cent")).longValue()).containsExactly(-30_000L);
+        assertThat((String) taxLines.get(0).get("detail"))
+                .isEqualTo("增值税实际申报金额（已生效登记，所属期 2026-01 更正（差异调整单，计入 " + month + "））");
     }
 
     /**
@@ -574,6 +631,16 @@ class DividendFinalSnapshotGateJdbcIntegrationTests {
                                 + "\",\"declared_amount_cent\":" + cent + ",\"reason\":\"按税务申报表登记\",\"evidence_attachment_ids\":[],"
                                 + "\"parallel_lines\":[{\"line_code\":\"finance_review\",\"final_approver_id\":\"" + financeApprover + "\"},"
                                 + "{\"line_code\":\"tax_review\",\"final_approver_id\":\"" + taxApprover + "\"},"
+                                + "{\"line_code\":\"legal_review\",\"final_approver_id\":\"" + legalApprover + "\"}]}"))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString(), "$.data.review_id");
+    }
+
+    /** 233-R1、233-R3 已生效行弹窗的真实请求形状（蛇形键；head 为本操作字段，这里补证据与三条线）；返回复核单号。 */
+    private String entityTax(String declaration, String action, String head) throws Exception {
+        return JsonPath.read(mockMvc.perform(post("/api/v1/finance/entity-taxes/" + declaration + "/" + action).with(taxFinance)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(head + "\"evidence_attachment_ids\":[],\"parallel_lines\":[{\"line_code\":\"finance_review\",\"final_approver_id\":\""
+                                + financeApprover + "\"},{\"line_code\":\"tax_review\",\"final_approver_id\":\"" + taxApprover + "\"},"
                                 + "{\"line_code\":\"legal_review\",\"final_approver_id\":\"" + legalApprover + "\"}]}"))
                 .andExpect(status().isOk()).andReturn().getResponse().getContentAsString(), "$.data.review_id");
     }

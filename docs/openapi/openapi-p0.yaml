@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: 综合体管理系统 P0 API 契约
-  version: V0.76
+  version: V0.77
   description: P0 首批编码前置契约。本文采用 JSON-compatible YAML，便于与 openapi-p0.json 保持一致。正式后端以 Java 21 + Spring Boot 4.x +
     springdoc-openapi 输出运行时 OpenAPI，并与本契约比对。
 servers:
@@ -27545,7 +27545,7 @@ paths:
         - finance
       operationId: listEntityTaxDeclarations
       summary: 税费申报登记分页查询（按经营主体、所属月、税种、状态筛选）
-      description: 第十八批 AC 段第 210 条 210-R2（第十八批裁决 42）：经营主体税费实际申报金额登记列表，month 筛所属期覆盖该月的登记。响应 data 为分页：items（id、business_entity_id、entity_name、tax_type、period_start_month、period_end_month、declared_amount_cent、reason、evidence_attachment_ids、status、review_id、created_by、created_at、approved_at）、page、page_size、total。status：pending_review 待财务、税务、法务审核与最高确认 / approved 已生效 / rejected 已驳回。商户账号返回 403 PLATFORM_SCOPE_REQUIRED。
+      description: 第十八批 AC 段第 210 条 210-R2（第十八批裁决 42）：经营主体税费实际申报金额登记列表，month 筛所属期覆盖该月的登记。响应 data 为分页：items（id、business_entity_id、entity_name、tax_type、period_start_month、period_end_month、declared_amount_cent、reason、evidence_attachment_ids、status、review_id、created_by、created_at、approved_at、paid_amount_cent、payment_difference_cent、payment_breakdown、payment_pending、adjustments、system_calculated_amount_cent、declaration_difference_cent、difference_mechanism、calculation_basis、aligned_amount_cent）、page、page_size、total。status：pending_review 待财务、税务、法务审核与最高确认 / approved 已生效 / rejected 已驳回。第十八批 AR 段第 233 条 233-R1、233-R3：paid_amount_cent（int64，可空）为最近一条已生效实际缴纳登记的实际缴纳金额，没有已生效实缴时为空；payment_difference_cent（int64，可空）为该登记的缴税差异（实际缴纳−登记时更正后的实际申报金额，即申报额＋已生效 period_difference 差异调整单）；payment_breakdown（可空数组，每项 category、amount_cent）为该登记的差异分类，category 为 unpaid 未缴 / prepaid 预缴 / overpaid 多缴 / offset 抵扣 / refund_pending 待退，差异为 0 时为空数组；payment_pending（布尔）为有待审批的实缴登记；adjustments 为关联本申报的全部差异调整单（含待审批与已驳回，按创建时间排序），每项 id、declaration_id、kind（period_difference 差异调整单 / supplement 补提调整单 / reversal 冲回调整单）、amount_cent（int64；period_difference 可正可负，supplement、reversal 大于 0）、origin_period_start_month、origin_period_end_month（原所属期）、accounting_month（计入月份，年-月，批准当日北京时间所在月，待审批或已驳回为空）、reason、status、review_id；supplement、reversal 由申报批准时自动生成（status 直接 approved，review_id 同申报复核单）。233-R5、233-R7：system_calculated_amount_cent（int64，可空）为登记时现算的系统计算金额，其他税费为空；declaration_difference_cent（int64，可空）＝申报−系统计算；difference_mechanism 按税种固定映射（第十八批裁决 59）：adjustment（增值税、文化事业建设费、附加税，按申报差异生成补提或冲回调整单、差异保留不拉平）/ alignment（企业所得税、其他税费，按季与财税软件核对、以财税软件为准拉平）；calculation_basis（可空数组）为计算依据，每项 month（年-月）、income_type（同税率版本闭集）、income_cent、rate_bps、rate_version_id（所用税率版本 id，没配或该版本没有这笔费用为空、比例记 0）、tax_amount_cent，附加税另带 vat_amount_cent、vat_rate_bps、vat_rate_version_id（以同期系统计算增值税为基数），企业所得税为一项（month 为所属期末月、income_type 为 all、income_cent 为所属期收入合计、税额＝max(0, 利润)×比例）另带 profit（结构同 GET /api/v1/finance/entity-taxes/profits 的 data），其余各项这四键为空；aligned_amount_cent（int64，可空）只对已生效的企业所得税、其他税费给出，＝申报额＋已生效 period_difference 差异调整单（本平台该税该期以财税软件结果为准）。商户账号返回 403 PLATFORM_SCOPE_REQUIRED。
       x-auth-context: staff-token
       x-permission: finance.entity_tax.view
       x-data-scope: platform
@@ -27622,7 +27622,7 @@ paths:
         - finance
       operationId: declareEntityTax
       summary: 登记税费实际申报金额并提交财务、税务、法务审核与最高确认
-      description: 第十八批 AC 段第 210 条 210-R2（第十八批裁决 42；BSM:1760）：财务按经营主体、税种、所属期登记实际申报金额，登记即提交审批（不设草稿）。须先配置财务、税务、法务三条线的真实部门起点（在用且具正式审批角色），否则 409 TAX_DEPARTMENT_ROUTING_REQUIRED；各线最终审批人由 parallel_lines 逐线指定；复核动作 finance.tax_rule.adjust，终点为最高权限确认，提交人不能审批自己的登记。全部通过才生效（status=approved，记 approved_at），任一节点驳回即 rejected，驳回后可重新登记。同一经营主体、税种、所属期已有待审批或已生效登记返回 409 ENTITY_TAX_DECLARATION_DUPLICATE；经营主体不存在返回 404 BUSINESS_ENTITY_NOT_FOUND。响应 data 为登记记录（字段同列表 items）。
+      description: 第十八批 AC 段第 210 条 210-R2（第十八批裁决 42；BSM:1760）：财务按经营主体、税种、所属期登记实际申报金额，登记即提交审批（不设草稿）。须先配置财务、税务、法务三条线的真实部门起点（在用且具正式审批角色），否则 409 TAX_DEPARTMENT_ROUTING_REQUIRED；各线最终审批人由 parallel_lines 逐线指定；复核动作 finance.tax_rule.adjust，终点为最高权限确认，提交人不能审批自己的登记。全部通过才生效（status=approved，记 approved_at），任一节点驳回即 rejected，驳回后可重新登记。同一经营主体、税种、所属期已有待审批或已生效登记返回 409 ENTITY_TAX_DECLARATION_DUPLICATE；经营主体不存在返回 404 BUSINESS_ENTITY_NOT_FOUND。第十八批 AR 段第 233 条 233-R5、233-R7（第十八批裁决 59、60）：提交审批前现算系统计算金额并随登记落库、之后不改：增值税、文化事业建设费、附加税按所属期各月、各收入类型的含税收入与该月月末日当时生效的税率版本计算（附加税以同期系统计算增值税为基数），企业所得税＝max(0, 所属期利润)×企业所得税比例（全部收入，取所属期末月月末日生效的版本，没配记 0），其他税费没有系统计算金额；复核摘要：增值税、文化事业建设费、附加税追加系统计算金额与申报差异；企业所得税写按季核对的系统计算、财税软件结果与差异、以财税软件结果为准拉平；其他税费不追加。增值税、文化事业建设费、附加税、企业所得税在所属期内任一月没有已确认或已结清的月度分账单返回 409 TICKET_SETTLEMENT_PENDING，主体名下酒吧收入、退款或服务费扣留来源未定返回 409 BAR_REVENUE_PENDING，登记不落库。增值税、文化事业建设费、附加税的登记批准时，申报高于系统计算生成补提调整单、低于生成冲回调整单（金额＝差额绝对值，计入批准当月，status 直接 approved，review_id 同本复核单），差额为 0 或驳回不出单；企业所得税、其他税费批准后不出调整单。响应 data 为登记记录（字段同列表 items）。
       x-auth-context: staff-token
       x-permission: finance.entity_tax.manage
       x-data-scope: platform
@@ -27650,6 +27650,192 @@ paths:
         - TAX_DEPARTMENT_ROUTING_REQUIRED
         - ENTITY_TAX_DECLARATION_DUPLICATE
         - BUSINESS_ENTITY_NOT_FOUND
+        - TICKET_SETTLEMENT_PENDING
+        - BAR_REVENUE_PENDING
+  /api/v1/finance/entity-taxes/rates:
+    get:
+      tags:
+        - finance
+      operationId: listEntityTaxRates
+      summary: 税率版本列表（按经营主体 × 收入类型 × 税种，含待审批与已驳回）
+      description: 第十八批 AR 段第 233 条 233-R2（ENUM:201；BSM:521）：列 settlement_tax_configs 的全部税率版本（含待审批与已驳回），平台默认在前，再按主体名、收入类型、税种、生效起始日期倒序（出厂种子排在有生效日的版本之后）。无查询参数。响应 data 为数组，每项 id、business_entity_id（可空，空＝平台默认）、entity_name（可空）、income_type、tax_type（vat 增值税 / cultural_fee 文化事业建设费 / surcharge 附加税 / corporate_income 企业所得税）、applicable（布尔，有没有这笔费用）、rate_bps（int32，万分比 0～10000）、effective_from（日期，可空，空＝出厂种子、自始有效）、reason（可空）、status（pending_review 待财务、税务、法务审核与最高确认 / approved 已生效 / rejected 已驳回）、review_id（可空）。income_type：ticket 平台通票 / 门票综合服务费、spv_service 通票可分配池分账、nonstd_service 非散台服务费、catering 订台低消 / 二次消费 / 额外酒水、retail 零售、game 游乐收入、show 演出票、rent 商业租赁 / 市集摊位、parking 停车费、points_issuance 积分发行费、goods 供货货款、all 全部收入（只用于企业所得税）。取用口径（系统计算金额与开票清单）：主体特例优先，否则平台默认；取生效起始日期不晚于业务日期的最新已生效版本，该版本 applicable=false 即不计这笔费用，未配置记 0。商户账号返回 403 PLATFORM_SCOPE_REQUIRED。
+      x-auth-context: staff-token
+      x-permission: finance.entity_tax.view
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: entity_tax.rates_listed
+      x-audit-event-failure: entity_tax.rates_list_failed
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+    post:
+      tags:
+        - finance
+      operationId: submitEntityTaxRate
+      summary: 提交税率版本（存为草案并提交财务、税务、法务审核与最高确认，批准后按生效起始日期起用）
+      description: 第十八批 AR 段第 233 条 233-R2（ENUM:201；BSM:521；BSM:1760）：按经营主体 × 收入类型 × 税种提交一个税率版本（有没有这笔费用、比例、生效起始日期），存为草案并提交审批（复核动作 finance.tax_rule.adjust，复核对象类型 entity_tax_rate，摘要列原生效版本 → 新版本与生效日，终点为最高权限确认，提交人不能审批自己的提交）；批准后按 effective_from 起用（此前发生的业务仍按原版本），驳回留痕。business_entity_id 省略＝平台默认。增值税、文化事业建设费、附加税按收入类型分别配（income_type 不收 all）；企业所得税只配全部收入（income_type=all）；其他税费没有系统计算基数、不配比例（第十八批裁决 59）。tax_type=other、收入类型与税种不配、rate_bps 越出 0～10000、缺 applicable、缺 effective_from 或缺 reason 返回 400 VALIDATION_FAILED；经营主体不存在返回 404 BUSINESS_ENTITY_NOT_FOUND；同主体、同收入类型、同税种、同生效起始日期已有待审批或已生效版本返回 409 TAX_RATE_VERSION_CONFLICT；三条线未配真实部门起点返回 409 TAX_DEPARTMENT_ROUTING_REQUIRED。响应 data 为税率版本（字段同 GET /api/v1/finance/entity-taxes/rates 的数组元素，status=pending_review）。商户账号返回 403 PLATFORM_SCOPE_REQUIRED。
+      x-auth-context: staff-token
+      x-permission: finance.entity_tax.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: entity_tax.rate_submitted
+      x-audit-event-failure: entity_tax.rate_submit_failed
+      requestBody:
+        $ref: "#/components/requestBodies/EntityTaxRateRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-failure-codes:
+        - TAX_RATE_VERSION_CONFLICT
+        - TAX_DEPARTMENT_ROUTING_REQUIRED
+        - TAX_APPROVAL_REQUIRED
+        - BUSINESS_ENTITY_NOT_FOUND
+  /api/v1/finance/entity-taxes/profits:
+    get:
+      tags:
+        - finance
+      operationId: getEntityTaxProfit
+      summary: 经营主体所属期收入、成本与利润汇总
+      description: 第十八批 AR 段第 233 条 233-R6（BSM:1760；第十八批裁决 60）：按经营主体与起止月份现算收入、成本与利润，只读、不落库。收入为按收入归属配置归到该主体的各类含税收入（与系统计算金额同一收入归集）；成本：平台主体（basis=platform）取该主体在平台内作为付款方的内部结算应付与作为发放主体的工资单税前应发，名下有酒吧商户的主体（basis=dividend）沿用持股分红税前口径取销货成本与费用，不扣税费；利润＝收入−成本，可为负。三个查询参数都必填（服务层校验）：缺参数、月份不是年-月格式、截止月份早于起始月份返回 400 VALIDATION_FAILED；所属期内任一月没有已确认或已结清的月度分账单返回 409 TICKET_SETTLEMENT_PENDING，主体名下酒吧收入、退款或服务费扣留来源未定返回 409 BAR_REVENUE_PENDING。响应 data：revenue_cent（int64）、revenue_items（数组，每项 income_type、amount_cent，income_type 同税率版本闭集）、cost_cent（int64）、cost_items（数组，每项 cost_type、amount_cent）、profit_cent（int64）、basis（platform 平台主体口径 / dividend 持股分红税前口径）；金额为 0 的分项不列。cost_type：平台主体 payroll 工资单税前应发、pool_distribution 通票分账池内分配、exclusive_direct_settlement 专属直付按内部结算价应直付、channel_fee 渠道费（通路费与销售渠道费）、gift_redemption 赠送权益兑付、compensation_fulfillment 游乐故障补偿履约、commission_transfer_reversal 提成与报酬拨付冲回、media_ticket_share 传媒演出门票分成、points_issuance 积分发行费；酒吧经营主体 cost_inventory 销货成本、expense_rent_allocation 房租分摊、expense_energy 能耗、expense_property_fee 物业费、expense_labor 人工、expense_amortization 摊销、expense_other 其他费用、expense_ticket_service_fee 单一酒吧门票综合服务费。商户账号返回 403 PLATFORM_SCOPE_REQUIRED。
+      x-auth-context: staff-token
+      x-permission: finance.entity_tax.view
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: entity_tax.profit_viewed
+      x-audit-event-failure: entity_tax.profit_view_failed
+      parameters:
+        - name: business_entity_id
+          in: query
+          required: true
+          schema:
+            type: string
+            maxLength: 64
+          description: 经营主体 ID（主体档案）。
+        - name: start_month
+          in: query
+          required: true
+          schema:
+            type: string
+            maxLength: 7
+          description: 起始月份（年-月，如 2026-01）。
+        - name: end_month
+          in: query
+          required: true
+          schema:
+            type: string
+            maxLength: 7
+          description: 截止月份（年-月，不早于起始月份）。
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-failure-codes:
+        - TICKET_SETTLEMENT_PENDING
+        - BAR_REVENUE_PENDING
+  /api/v1/finance/entity-taxes/{id}/payments:
+    post:
+      tags:
+        - finance
+      operationId: registerEntityTaxPayment
+      summary: 已生效申报登记实际缴纳金额并提交财务、税务、法务审核与最高确认
+      description: 第十八批 AR 段第 233 条 233-R1（BSM:1760 缴税差异等于实际缴纳金额减实际申报金额，实缴与申报不一致的部分先按未缴、预缴、多缴、抵扣或待退分别处理，不得直接混入税费成本）：对已生效的申报登记该申报截至本次的累计实际缴纳金额，登记即提交审批（复核动作 finance.tax_rule.adjust，复核对象类型 entity_tax_payment，终点为最高权限确认，提交人不能审批自己的登记）。缴税差异＝paid_amount_cent−更正后的实际申报金额（申报额＋该申报已生效 period_difference 差异调整单），登记时算定、之后不改。同一申报可多次登记（如未缴部分后来补缴），列表的当前实际缴纳取最近一条已生效登记，旧登记留作历史。实缴不进分红、不生成应收应付、不登记出款。申报不存在返回 404 ENTITY_TAX_DECLARATION_NOT_FOUND；申报未生效返回 409 ENTITY_TAX_DECLARATION_NOT_APPROVED；该申报已有待审批的实缴登记返回 409 ENTITY_TAX_PAYMENT_PENDING；paid_amount_cent 缺或为负、差异分类不符（差异不为 0 时未按五类分配、合计不等于差异绝对值、类别重复或金额不大于 0，差异为 0 时仍填写）、缺 reason 返回 400 VALIDATION_FAILED；三条线未配真实部门起点返回 409 TAX_DEPARTMENT_ROUTING_REQUIRED。响应 data：id、declaration_id、paid_amount_cent、payment_difference_cent、difference_breakdown（数组，每项 category、amount_cent）、reason、status（pending_review 待审批 / approved 已生效 / rejected 已驳回）、review_id。商户账号返回 403 PLATFORM_SCOPE_REQUIRED。
+      x-auth-context: staff-token
+      x-permission: finance.entity_tax.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: entity_tax.payment_registered
+      x-audit-event-failure: entity_tax.payment_register_failed
+      parameters:
+        - $ref: "#/components/parameters/Id"
+          description: 税费申报登记 ID（已生效）。
+      requestBody:
+        $ref: "#/components/requestBodies/EntityTaxPaymentRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-failure-codes:
+        - ENTITY_TAX_DECLARATION_NOT_FOUND
+        - ENTITY_TAX_DECLARATION_NOT_APPROVED
+        - ENTITY_TAX_PAYMENT_PENDING
+        - TAX_DEPARTMENT_ROUTING_REQUIRED
+        - TAX_APPROVAL_REQUIRED
+  /api/v1/finance/entity-taxes/{id}/adjustments:
+    post:
+      tags:
+        - finance
+      operationId: registerEntityTaxAdjustment
+      summary: 已生效申报生成关联原所属期的差异调整单并提交财务、税务、法务审核与最高确认
+      description: 第十八批 AR 段第 233 条 233-R3（BSM:1760；ENUM:201）：原所属期已生效申报的更正只能在当前开放期间生成关联原所属期的差异调整单（kind=period_difference），原申报行一律不改；登记即提交审批（复核动作 finance.tax_rule.adjust，复核对象类型 entity_tax_adjustment，终点为最高权限确认，提交人不能审批自己的登记）。批准后 accounting_month 记批准当日北京时间所在月，计入该月所在期持股分红应扣税费；待审或驳回时 accounting_month 为空。申报不存在返回 404 ENTITY_TAX_DECLARATION_NOT_FOUND；申报未生效返回 409 ENTITY_TAX_DECLARATION_NOT_APPROVED；amount_cent 缺或为 0、缺 reason 返回 400 VALIDATION_FAILED；三条线未配真实部门起点返回 409 TAX_DEPARTMENT_ROUTING_REQUIRED。响应 data：id、declaration_id、kind（period_difference）、amount_cent、origin_period_start_month、origin_period_end_month（原所属期）、accounting_month（年-月，待审时为空）、reason、status（pending_review 待审批 / approved 已生效 / rejected 已驳回）、review_id。商户账号返回 403 PLATFORM_SCOPE_REQUIRED。
+      x-auth-context: staff-token
+      x-permission: finance.entity_tax.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: entity_tax.adjustment_registered
+      x-audit-event-failure: entity_tax.adjustment_register_failed
+      parameters:
+        - $ref: "#/components/parameters/Id"
+          description: 税费申报登记 ID（已生效）。
+      requestBody:
+        $ref: "#/components/requestBodies/EntityTaxAdjustmentRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-failure-codes:
+        - ENTITY_TAX_DECLARATION_NOT_FOUND
+        - ENTITY_TAX_DECLARATION_NOT_APPROVED
+        - TAX_DEPARTMENT_ROUTING_REQUIRED
+        - TAX_APPROVAL_REQUIRED
   /api/v1/finance/merchant-expenses:
     get:
       tags:
@@ -45638,7 +45824,7 @@ paths:
         - finance
       operationId: computeDividendStatements
       summary: 期间分红作业：对期末日已生效的方案版本各算一张计算单（净利润=收入−成本−费用−税费；幂等可重跑，草稿/预览/驳回作废重算，进入审批流跳过）
-      description: 第十八批 V 段第 159 条（ENUM:190「非最终快照的数据一律不得进入结算、分红、正式提成计算和对账关账」）：159-R5 正式单（kind=official）——方案商户检查单位（酒吧按该店，其他商户按所属综合体；建档前的营业日不计）期间内任一营业日五类数据未全部标记为最终的，该方案不出单、记入 skipped（reason「以下营业日数据尚未标记为最终，不能出正式分红单：」后列「yyyy-MM-dd 单位名：类别原词、类别原词」，最多 10 行），旧草稿不作废。159-R6 预览（kind=preview；BSM:1777、DEC-R8-45）只判该月最后一个营业日的五类，未齐的方案记入 skipped（reason「该月最后一个营业日（yyyy-MM-dd）的五类数据尚未全部标记为最终，不得生成预览：」后接同样的列表）；某单位该日五类标齐时由 markDailyCloseFinal 提交后自动出预览，不设定时作业。跳过不是错误码，照常返回 200。159-R10：预览单不计尚未月结定格的服务费扣留数（revenue_bar 明细说明注明「预览：尚未月结定格的服务费扣留数暂不计」），正式单照旧要求月结定格，未定格 409 BAR_REVENUE_PENDING。第十八批 AC 段第 210 条 210-R3（BSM:1774「以及该期间的各项税费（含增值税、所得税及其他应由该主体承担的税费）」；BSM:1801「连接税务处理，拿到这期的各项税费，算出净利润」；第十八批裁决 42）：净利润再减该期税费——取方案商户经营主体（生效绑定的运营主体，否则商户档案上的经营主体）已生效（status=approved）、所属期末月落在本期内的税费实际申报金额（按季申报的整季计入季末那个月所在的那一期），逐税种落 tax_period 负额明细行，合计回显于计算单 period_tax_cent（net_profit_cent = revenue_cent − cost_cent − expense_cent − period_tax_cent）。正式单另判出单闸（第十八批裁决 42「正式单出单前本期每个月都要有已生效的税费登记，缺的不出单并写跳过原因」）：本期每个月都须被该经营主体至少一条已生效申报登记的所属期（period_start_month～period_end_month）覆盖，缺的该方案不出单、旧单不作废，记入 skipped（reason「本期 yyyy-MM、yyyy-MM 尚无已生效的税费申报登记，请先登记并审批通过后再出正式单」）；登记依法可分配金额后的重算同闸（不出单时 409 DIVIDEND_STATE_INVALID，message 即该原因）；预览照扣已生效税费、不判此闸。第十八批 AC 段第 211 条 211-R1（BSM:1777；第十八批裁决 43「「暂不分红」该期不出正式单、利润不补分；「暂缓分红」等协商恢复后由财务登记恢复，再照常出单；月度预览照常」）：正式单在期间标签校验之后、出单闸之前先判暂不分红／暂缓分红登记，该商户该期有未恢复登记的不出单、记入 skipped（reason「本期经协商暂不分红（或暂缓分红），不出正式单（原因：…；协商结果：…）」）；预览不判。第十八批 AQ 段第 234 条 234-R1（BSM:521「已发生的业务一律按当时生效的版本计算」）：每个商户取期末日已生效的方案版本（已批准、生效起始日不晚于期末日的最新一个；该版本 status=ended 即停用、不出单）出单；指定 merchant_id 找不到时 404 DIVIDEND_PLAN_NOT_FOUND（「该商户在 yyyy-MM-dd 没有已生效的分红方案」）。第十八批 AQ 段第 234 条 234-R2（BSM:1775；BSM:1757「多方分配产生的非涉税尾差单独留痕，并由该笔业务实际承担结算责任的主体承担」）：平台、各其他股东与主理人（10000 − 平台 − 其他股东合计）按持股比例各自四舍五入到分，可分配额减各方合计为尾差（带符号，由该酒吧公司承担、不发给任何一方）；个人股东按方案税率代扣（整除截断），公司股东不代扣；每位其他股东落 shareholder_gross（应得）、shareholder_tax_withheld（代扣，负数）、shareholder_payout（实发）三行明细，尾差不为 0 另落 rounding_residual 行；计算单（computed[]）新增 other_shareholders_gross_cent（其他股东应得合计，不小于 0）与 rounding_residual_cent（尾差，带符号）。第十八批 AQ 段第 243 条 243-R1（BSM:1787「酒吧关闭须完成关停结算，依法核清本次分红」；18AQ 控制席判定）：有关停结算登记的商户取 min（期末日，关店最后营业日）已生效的版本，指定商户找不到时 404 提示里的日期即取该日；关店所在期正式单的五类最终标记只查期初到关店最后营业日，停用、存档后照查；整期在关店最后营业日之后的记入 skipped（reason「该酒吧已于 yyyy-MM-dd 关店（已登记关停结算），关店后的期间不再分红」）。
+      description: 第十八批 V 段第 159 条（ENUM:190「非最终快照的数据一律不得进入结算、分红、正式提成计算和对账关账」）：159-R5 正式单（kind=official）——方案商户检查单位（酒吧按该店，其他商户按所属综合体；建档前的营业日不计）期间内任一营业日五类数据未全部标记为最终的，该方案不出单、记入 skipped（reason「以下营业日数据尚未标记为最终，不能出正式分红单：」后列「yyyy-MM-dd 单位名：类别原词、类别原词」，最多 10 行），旧草稿不作废。159-R6 预览（kind=preview；BSM:1777、DEC-R8-45）只判该月最后一个营业日的五类，未齐的方案记入 skipped（reason「该月最后一个营业日（yyyy-MM-dd）的五类数据尚未全部标记为最终，不得生成预览：」后接同样的列表）；某单位该日五类标齐时由 markDailyCloseFinal 提交后自动出预览，不设定时作业。跳过不是错误码，照常返回 200。159-R10：预览单不计尚未月结定格的服务费扣留数（revenue_bar 明细说明注明「预览：尚未月结定格的服务费扣留数暂不计」），正式单照旧要求月结定格，未定格 409 BAR_REVENUE_PENDING。第十八批 AC 段第 210 条 210-R3（BSM:1774「以及该期间的各项税费（含增值税、所得税及其他应由该主体承担的税费）」；BSM:1801「连接税务处理，拿到这期的各项税费，算出净利润」；第十八批裁决 42）：净利润再减该期税费——取方案商户经营主体（生效绑定的运营主体，否则商户档案上的经营主体）已生效（status=approved）、所属期末月落在本期内的税费实际申报金额（按季申报的整季计入季末那个月所在的那一期），逐税种落 tax_period 负额明细行，合计回显于计算单 period_tax_cent（net_profit_cent = revenue_cent − cost_cent − expense_cent − period_tax_cent）。第十八批 AR 段第 233 条 233-R3：同一经营主体已生效、计入月份（accounting_month）落在本期内的差异调整单（kind=period_difference，可正可负）一并扣减，逐税种与申报金额各成一行 tax_period（所属期写「原所属期 更正（差异调整单，计入 yyyy-MM）」）；补提、冲回调整单与实际缴纳登记不扣。正式单另判出单闸（第十八批裁决 42「正式单出单前本期每个月都要有已生效的税费登记，缺的不出单并写跳过原因」）：本期每个月都须被该经营主体至少一条已生效申报登记的所属期（period_start_month～period_end_month）覆盖，缺的该方案不出单、旧单不作废，记入 skipped（reason「本期 yyyy-MM、yyyy-MM 尚无已生效的税费申报登记，请先登记并审批通过后再出正式单」）；登记依法可分配金额后的重算同闸（不出单时 409 DIVIDEND_STATE_INVALID，message 即该原因）；预览照扣已生效税费、不判此闸。第十八批 AC 段第 211 条 211-R1（BSM:1777；第十八批裁决 43「「暂不分红」该期不出正式单、利润不补分；「暂缓分红」等协商恢复后由财务登记恢复，再照常出单；月度预览照常」）：正式单在期间标签校验之后、出单闸之前先判暂不分红／暂缓分红登记，该商户该期有未恢复登记的不出单、记入 skipped（reason「本期经协商暂不分红（或暂缓分红），不出正式单（原因：…；协商结果：…）」）；预览不判。第十八批 AQ 段第 234 条 234-R1（BSM:521「已发生的业务一律按当时生效的版本计算」）：每个商户取期末日已生效的方案版本（已批准、生效起始日不晚于期末日的最新一个；该版本 status=ended 即停用、不出单）出单；指定 merchant_id 找不到时 404 DIVIDEND_PLAN_NOT_FOUND（「该商户在 yyyy-MM-dd 没有已生效的分红方案」）。第十八批 AQ 段第 234 条 234-R2（BSM:1775；BSM:1757「多方分配产生的非涉税尾差单独留痕，并由该笔业务实际承担结算责任的主体承担」）：平台、各其他股东与主理人（10000 − 平台 − 其他股东合计）按持股比例各自四舍五入到分，可分配额减各方合计为尾差（带符号，由该酒吧公司承担、不发给任何一方）；个人股东按方案税率代扣（整除截断），公司股东不代扣；每位其他股东落 shareholder_gross（应得）、shareholder_tax_withheld（代扣，负数）、shareholder_payout（实发）三行明细，尾差不为 0 另落 rounding_residual 行；计算单（computed[]）新增 other_shareholders_gross_cent（其他股东应得合计，不小于 0）与 rounding_residual_cent（尾差，带符号）。第十八批 AQ 段第 243 条 243-R1（BSM:1787「酒吧关闭须完成关停结算，依法核清本次分红」；18AQ 控制席判定）：有关停结算登记的商户取 min（期末日，关店最后营业日）已生效的版本，指定商户找不到时 404 提示里的日期即取该日；关店所在期正式单的五类最终标记只查期初到关店最后营业日，停用、存档后照查；整期在关店最后营业日之后的记入 skipped（reason「该酒吧已于 yyyy-MM-dd 关店（已登记关停结算），关店后的期间不再分红」）。
       x-auth-context: staff-token
       x-permission: finance.dividend.manage
       x-data-scope: platform
@@ -49404,7 +49590,7 @@ paths:
         - settlement
       operationId: listSettlementInvoiceItems
       summary: 开票清单列表
-      description: 按结算单及积分发行费月账单生成的开票清单条目分页列表(开票主体/发票项目/税率/税额/凭证要件/开票状态)。积分发行费行(income_type=points_issuance)按该账单已收额生成,开票主体为账单收款方,points_bill_id 为来源积分月账单、buyer_entity_id/buyer_name 为购方(合同销售方),bill_id 为空;结算单行 points_bill_id、buyer_entity_id、buyer_name 为空。系统只生成清单交财务,不自建开票引擎。
+      description: 按结算单及积分发行费月账单生成的开票清单条目分页列表(开票主体/发票项目/税率/税额/凭证要件/开票状态)。积分发行费行(income_type=points_issuance)按该账单已收额生成,开票主体为账单收款方,points_bill_id 为来源积分月账单、buyer_entity_id/buyer_name 为购方(合同销售方),bill_id 为空;结算单行 points_bill_id、buyer_entity_id、buyer_name 为空。税率按开票主体、开票期间末日当时生效的税率版本取(主体特例优先,否则平台默认;未配置或该版本没有这笔费用记 0;第十八批 AR 段第 233 条 233-R2)。系统只生成清单交财务,不自建开票引擎。
       x-auth-context: staff-token
       x-permission: settlement.invoice.view
       x-data-scope: platform
@@ -64730,6 +64916,24 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/EntityTaxDeclarationRequest"
+    EntityTaxRateRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/EntityTaxRateRequest"
+    EntityTaxPaymentRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/EntityTaxPaymentRequest"
+    EntityTaxAdjustmentRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/EntityTaxAdjustmentRequest"
     MerchantExpenseEntryRequest:
       required: true
       content:
@@ -73325,6 +73529,207 @@ components:
         reason:
           type: string
           description: 登记原因（如按哪一期申报表登记）；必填，存进税费申报登记，不写入审计事件。
+          maxLength: 1000
+        evidence_attachment_ids:
+          type: array
+          items:
+            type: string
+          description: 可选：已上传的证据附件 ID，随复核单给审批人查看。
+        parallel_lines:
+          type: array
+          description: 财务（finance_review）、税务（tax_review）、法务（legal_review）三条线各自的最终审批人，须逐线给齐。
+          items:
+            type: object
+            properties:
+              line_code:
+                type: string
+                minLength: 1
+                description: 平行审批线代码
+              final_approver_id:
+                type: string
+                minLength: 1
+                description: 该线最终审批人
+            required:
+              - line_code
+              - final_approver_id
+            additionalProperties: false
+    EntityTaxRateRequest:
+      type: object
+      description: 请求载荷 `EntityTaxRateRequest`（税率版本，第十八批 AR 段第 233 条 233-R2）：按经营主体 × 收入类型 × 税种提交一个税率版本（有没有这笔费用、比例、生效起始日期），存为草案并提交财务、税务、法务审核与最高确认，批准后按生效起始日期起用。
+      additionalProperties: false
+      required:
+        - idempotency_key
+        - income_type
+        - tax_type
+        - applicable
+        - rate_bps
+        - effective_from
+        - reason
+        - parallel_lines
+      properties:
+        idempotency_key:
+          type: string
+          description: 操作幂等键；同键同载荷重放返回同一版本，不重复提交审批。
+          maxLength: 128
+        business_entity_id:
+          type: string
+          description: 可选：经营主体 ID（主体档案）；省略表示平台默认。
+          maxLength: 64
+        income_type:
+          type: string
+          description: 收入类型：ticket 平台通票 / 门票综合服务费、spv_service 通票可分配池分账、nonstd_service 非散台服务费、catering 订台低消 / 二次消费 / 额外酒水、retail 零售、game 游乐收入、show 演出票、rent 商业租赁 / 市集摊位、parking 停车费、points_issuance 积分发行费、goods 供货货款（增值税、文化事业建设费、附加税只收这 11 类）；all 全部收入（企业所得税只收 all）。
+          enum:
+            - ticket
+            - spv_service
+            - nonstd_service
+            - catering
+            - retail
+            - game
+            - show
+            - rent
+            - parking
+            - points_issuance
+            - goods
+            - all
+        tax_type:
+          type: string
+          description: 税种：vat 增值税 / cultural_fee 文化事业建设费 / surcharge 附加税 / corporate_income 企业所得税；其他税费没有系统计算基数，不配比例（第十八批裁决 59）。
+          enum:
+            - vat
+            - cultural_fee
+            - surcharge
+            - corporate_income
+        applicable:
+          type: boolean
+          description: 有没有这笔费用；false 表示自生效起始日期起不计这项税费。
+        rate_bps:
+          type: integer
+          format: int32
+          minimum: 0
+          maximum: 10000
+          description: 比例（万分比 0～10000；页面按百分数输入后转换）。
+        effective_from:
+          type: string
+          format: date
+          description: 生效起始日期（年-月-日）；批准后自该日起按本版本计算，此前发生的业务仍按原版本。
+        reason:
+          type: string
+          description: 调整原因；必填，存进税率版本，随复核单给审批人查看。
+          maxLength: 1000
+        evidence_attachment_ids:
+          type: array
+          items:
+            type: string
+          description: 可选：已上传的证据附件 ID，随复核单给审批人查看。
+        parallel_lines:
+          type: array
+          description: 财务（finance_review）、税务（tax_review）、法务（legal_review）三条线各自的最终审批人，须逐线给齐。
+          items:
+            type: object
+            properties:
+              line_code:
+                type: string
+                minLength: 1
+                description: 平行审批线代码
+              final_approver_id:
+                type: string
+                minLength: 1
+                description: 该线最终审批人
+            required:
+              - line_code
+              - final_approver_id
+            additionalProperties: false
+    EntityTaxPaymentRequest:
+      type: object
+      description: 请求载荷 `EntityTaxPaymentRequest`（已生效申报的实际缴纳金额登记，第十八批 AR 段第 233 条 233-R1）：登记该申报截至本次的累计实际缴纳金额，缴税差异不为 0 时按未缴、预缴、多缴、抵扣、待退分别列明，登记即提交财务、税务、法务审核与最高确认。
+      additionalProperties: false
+      required:
+        - idempotency_key
+        - paid_amount_cent
+        - reason
+        - parallel_lines
+      properties:
+        idempotency_key:
+          type: string
+          description: 操作幂等键；同键同载荷重放返回同一登记，不重复提交审批。
+          maxLength: 128
+        paid_amount_cent:
+          type: integer
+          format: int64
+          minimum: 0
+          description: 实际缴纳金额（分）：截至本次该申报累计实际缴纳，不能为负数。
+        difference_breakdown:
+          type: array
+          description: 缴税差异分类（缴税差异＝实际缴纳−更正后的实际申报金额，即申报额＋已生效差异调整单）：差异不为 0 时必填，每类至多一行、金额大于 0、合计等于差异绝对值；差异为 0 时须为空。
+          items:
+            type: object
+            properties:
+              category:
+                type: string
+                description: 差异分类：unpaid 未缴 / prepaid 预缴 / overpaid 多缴 / offset 抵扣 / refund_pending 待退。
+                enum:
+                  - unpaid
+                  - prepaid
+                  - overpaid
+                  - offset
+                  - refund_pending
+              amount_cent:
+                type: integer
+                format: int64
+                minimum: 1
+                description: 该类金额（分），大于 0。
+            required:
+              - category
+              - amount_cent
+            additionalProperties: false
+        reason:
+          type: string
+          description: 登记原因；必填，存进实际缴纳登记，随复核单给审批人查看。
+          maxLength: 1000
+        evidence_attachment_ids:
+          type: array
+          items:
+            type: string
+          description: 可选：已上传的证据附件 ID，随复核单给审批人查看。
+        parallel_lines:
+          type: array
+          description: 财务（finance_review）、税务（tax_review）、法务（legal_review）三条线各自的最终审批人，须逐线给齐。
+          items:
+            type: object
+            properties:
+              line_code:
+                type: string
+                minLength: 1
+                description: 平行审批线代码
+              final_approver_id:
+                type: string
+                minLength: 1
+                description: 该线最终审批人
+            required:
+              - line_code
+              - final_approver_id
+            additionalProperties: false
+    EntityTaxAdjustmentRequest:
+      type: object
+      description: 请求载荷 `EntityTaxAdjustmentRequest`（差异调整单，第十八批 AR 段第 233 条 233-R3）：原所属期已生效申报的更正差额，在当前开放期间生成关联原所属期的差异调整单，原申报不改，登记即提交财务、税务、法务审核与最高确认。
+      additionalProperties: false
+      required:
+        - idempotency_key
+        - amount_cent
+        - reason
+        - parallel_lines
+      properties:
+        idempotency_key:
+          type: string
+          description: 操作幂等键；同键同载荷重放返回同一调整单，不重复提交审批。
+          maxLength: 128
+        amount_cent:
+          type: integer
+          format: int64
+          description: 更正差额（分）：原所属期应补申报的填正数，多申报的填负数；不能为 0。
+        reason:
+          type: string
+          description: 更正原因；必填，存进差异调整单，随复核单给审批人查看。
           maxLength: 1000
         evidence_attachment_ids:
           type: array

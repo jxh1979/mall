@@ -1,6 +1,6 @@
 package com.complex.platform.common.api;
 
-// 文件版本：V0.48
+// 文件版本：V0.49
 
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -741,6 +741,15 @@ public final class FieldLabels {
         p("period_start_month", "所属期首月");
         p("period_end_month", "所属期末月");
         p("declared_amount_cent", "实际申报金额");
+        // 第十八批 AR 段第 233 条 233-R1、233-R3 实际缴纳登记与差异调整单（同前端 fieldLabels.ts）。
+        p("payment_difference_cent", "缴税差异");
+        p("difference_breakdown", "缴税差异分类");
+        p("accounting_month", "计入月份");
+        // 233-R2 税率版本（同前端 fieldLabels.ts）。
+        p("income_type", "收入类型");
+        // 233-R6 主体收入成本利润的起止月（同前端 fieldLabels.ts）。
+        p("start_month", "起始月份");
+        p("end_month", "截止月份");
         p("sale_form", "销售形式");
         p("pour_volume_ml", "出酒量（毫升）");
         p("subject_entity_id", "主体");

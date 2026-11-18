@@ -1,4 +1,4 @@
-// 文件版本：V0.06
+// 文件版本：V0.07
 import React from "react";
 import { Tabs } from "antd";
 import { AdminDataState } from "../components/AdminDataState";
@@ -393,7 +393,7 @@ export function SettlementConfigPage({ api, setGlobalError, effectivePermissions
         </table>
       </div>
       <p className="admin-muted-action">
-        税费、地产费用、分红、内部结算价等各组的可视化维护将随后续批次接入本页。
+        地产费用、分红、内部结算价等各组的可视化维护将随后续批次接入本页。
       </p>
     </>
   );

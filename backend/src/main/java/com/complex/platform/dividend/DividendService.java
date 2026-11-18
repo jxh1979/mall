@@ -1,5 +1,5 @@
 package com.complex.platform.dividend;
-// 文件版本：V0.12
+// 文件版本：V0.13
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.BusinessDayResolver;
@@ -87,7 +87,7 @@ public class DividendService {
     private static final String STMT_TYPE = "dividend_statement";
 
     static final Set<String> REVENUE_DOMAINS = Set.of("bar", "ticket");
-    static final Set<String> EXPENSE_TYPES = Set.of(
+    public static final Set<String> EXPENSE_TYPES = Set.of(
             "rent_allocation", "energy", "property_fee", "labor", "amortization", "other");
     /** BSM L1777「分红周期一律取月及月的整数倍粒度（如月、季、半年、年）」。 */
     private static final Set<String> PERIOD_TYPES = DividendPeriod.MONTHS_PER_PERIOD.keySet();
