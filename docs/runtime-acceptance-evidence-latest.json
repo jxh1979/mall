@@ -8,14 +8,14 @@
     "RUNTIME_EVIDENCE_BOUND_TO_SOURCE_FINGERPRINT",
     "RUNTIME_EVIDENCE_DOES_NOT_CLOSE_PRODUCTION_MANIFEST"
   ],
-  "generated_at": "2026-11-18T11:42:46.515Z",
+  "generated_at": "2026-11-18T16:25:56.735Z",
   "git": {
-    "head": "fa06b1d9cef4a33737bec5d0dee9e59cb47f9052",
-    "head_short": "fa06b1d9",
-    "branch": "feature/business-code-batch63-20261106",
+    "head": "e4d341ebb752da112ef6a4eadbbb31f812e13f8c",
+    "head_short": "e4d341eb",
+    "branch": "feature/business-code-batch64-20261106",
     "worktree_dirty": false,
-    "source_fingerprint": "249e1a7cdf2e5e7f3e610db227cc6eb2a86055ec767b66e44f3d291e1331a0eb",
-    "source_fingerprint_file_count": 3482,
+    "source_fingerprint": "b9c2212dfc6f134c811fc80c2c78c5c4b33c8c435b0604d436aba4ce78f5edc9",
+    "source_fingerprint_file_count": 3487,
     "source_fingerprint_paths": [
       "backend/src/main",
       "backend/src/test",
@@ -51,11 +51,11 @@
   "backend_surefire": {
     "path": "backend/target/surefire-reports",
     "suites": 618,
-    "tests": 6907,
+    "tests": 6924,
     "failures": 0,
     "errors": 0,
     "skipped": 0,
-    "latest_mtime": "2026-11-18T11:40:35.911Z",
+    "latest_mtime": "2026-11-18T16:24:13.875Z",
     "passed": true
   },
   "web_unit_source": {
@@ -412,7 +412,7 @@
       "apps/web/src/shared/ReplayedNotice.test.tsx"
     ],
     "file_count": 350,
-    "test_count_from_source": 1870
+    "test_count_from_source": 1877
   },
   "web_build": {
     "dist_index_exists": true,
@@ -433,15 +433,15 @@
     "asset_count": 170,
     "main_js_assets": [
       {
-        "path": "apps/web/dist/assets/main-B4vKKUKR.js",
+        "path": "apps/web/dist/assets/main-_4OMnGdS.js",
         "size_bytes": 4337,
-        "mtime": "2026-11-18T11:40:46.750Z"
+        "mtime": "2026-11-18T16:24:22.671Z"
       }
     ],
     "largest_asset": {
       "path": "apps/web/dist/assets/vendor-antd-Bh_XtmOr.js",
       "size_bytes": 251112,
-      "mtime": "2026-11-18T11:40:46.753Z"
+      "mtime": "2026-11-18T16:24:22.674Z"
     },
     "no_main_bundle_warning_expected": true
   },
