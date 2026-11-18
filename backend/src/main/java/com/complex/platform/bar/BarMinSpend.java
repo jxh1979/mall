@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import java.util.List;
 import java.util.Optional;
@@ -48,6 +48,31 @@ final class BarMinSpend {
     static long retainedBalanceCent(BarRepository repository, String sessionId) {
         return Math.max(0L, adjustmentsCent(repository,
                 repository.listOrderIdsBySessionIds(repository.familySessionIds(rootSessionId(repository, sessionId), true)), false));
+    }
+
+    /**
+     * 第十八批 AU 段第 283 条 283-R1（BSM:1064「不足最低消费的要补足」；BSM:1079「各结果台显示差额并按既有规则继续消费或结账补足」）：账单的低消差额（分）
+     * ＝ max(0, 阈值 − 进度)，结账闸与订单列表账单摘要共用（原结账闸算法原样搬入）。有开台会话归属的账单按台组阈值与累计进度；
+     * 无会话归属的按台位低消对本账单 subtotal＋本账单补足；无台位为 0。
+     */
+    static long gapCent(BarRepository repository, BarBillRecord bill) {
+        if (bill.tableId() == null) {
+            return 0L;
+        }
+        Optional<String> sessionId = bill.orderId() == null ? Optional.empty() : repository.findSessionIdByOrderId(bill.orderId());
+        long threshold;
+        long consumed;
+        if (sessionId.isPresent()) {
+            threshold = thresholdCent(repository, sessionId.get());
+            consumed = consumedCent(repository, sessionId.get());
+        } else {
+            threshold = repository.findTableById(bill.tableId()).map(BarTableRecord::minConsumptionCent).orElse(0L);
+            consumed = bill.subtotalAmountCent() + repository.listBillAdjustments(bill.id()).stream()
+                    .filter(a -> "min_spend_top_up".equals(a.adjustmentType()))
+                    .mapToLong(BarBillAdjustmentRecord::amountCent)
+                    .sum();
+        }
+        return threshold > 0 ? Math.max(0L, threshold - consumed) : 0L;
     }
 
     /** 当前有效并台链根：被并（merged）/ 整体转台前旧链（merged_transferred）会话沿 source_session_id 上溯到链根。 */

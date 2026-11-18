@@ -1,5 +1,6 @@
-// 文件版本：V0.16
+// 文件版本：V0.17
 import React from "react";
+import { BarBillCheckoutPanel } from "./BarBillCheckoutPanel";
 import { BarRefundBreakdownPanel } from "./BarRefundBreakdownPanel";
 import { BarShiftPanel } from "./BarShiftPanel";
 import { BarSuspendedOrdersBoard } from "./BarSuspendedOrdersBoard";
@@ -31,7 +32,7 @@ const TEXT = {
   actionFailed: "\u9152\u5427\u8ba2\u5355\u64cd\u4f5c\u5931\u8d25",
   billRequired: "\u9700\u5148\u751f\u6210\u8d26\u5355\u540e\u624d\u80fd\u7ed3\u7b97\u3002",
   title: "\u8ba2\u5355/\u51fa\u54c1/\u8d26\u5355",
-  description: "\u628a\u9152\u5427\u70b9\u5355\u3001\u51fa\u54c1\u3001\u8d26\u5355\u3001\u7ed3\u7b97\u548c\u9500\u552e\u63d0\u6210\u53e3\u5f84\u653e\u5728\u540c\u4e00\u64cd\u4f5c\u9762\uff1b\u62c6\u5355\u3001\u5408\u5355\u3001\u6302\u8d26\u7ee7\u7eed\u6309\u589e\u5f3a POS \u80fd\u529b\u6269\u5c55\u3002",
+  description: "把酒吧点单、出品、账单、结算和销售提成口径放在同一操作面。",
   orderCount: "\u8ba2\u5355\u6570",
   currentRows: "\u5f53\u524d\u5217\u8868\u8bb0\u5f55",
   openOrders: "\u672a\u5b8c\u7ed3",
@@ -47,7 +48,8 @@ const TEXT = {
   createBill: "\u751f\u6210\u8d26\u5355",
   deliver: "登记送达（已选明细）",
   settle: "\u7ed3\u7b97\u8d26\u5355",
-  posBoundary: "\u62c6\u5355 / \u5408\u5355 / \u6302\u8d26 / \u4f4e\u6d88\u8865\u9f50\uff1aP1 \u589e\u5f3a POS\uff0c\u5f53\u524d\u9875\u4fdd\u7559\u8d26\u5355\u95ed\u73af\u5165\u53e3",
+  // 第十八批 AU 段第 282 条 282-R2：拆单、合单、小费与补足低消已有入口（键名保留，tools/generate-partial-requirement-mock-coverage.mjs 以它作标记）。
+  posBoundary: "拆单、合单、小费与补足低消在下方「账单操作」区办理",
   select: "\u9009\u62e9",
   orderNo: "\u8ba2\u5355\u53f7",
   table: "\u5361\u5ea7",
@@ -97,10 +99,6 @@ const REWARD_STATUS: Record<string, string> = { pending: "待确认", confirmed:
 
 function firstBill(order: BarOrderRow | undefined): BarBillRow | undefined {
   return latestBill(order);
-}
-
-function firstBillId(order: BarOrderRow | undefined) {
-  return firstBill(order)?.id ?? "";
 }
 
 // V345（BAR-VOID-A1）退酒审批闸：先审后行 = 审批通过前不动库存/账单；即时生效 = 发起即生效、审批为事后抽检。
@@ -230,7 +228,11 @@ export function BarOrdersPage({ api, user, setActionResult, setGlobalError, effe
   const [cancelReasonCode, setCancelReasonCode] = React.useState("");
   const [cancelEvidence, setCancelEvidence] = React.useState<{ id: string; fileName: string; video: boolean }[]>([]);
   const [cancelDecisionReason, setCancelDecisionReason] = React.useState("");
-  const selectedBill = firstBill(selectedOrder);
+  // 第十八批 AU 段第 282 条 282-R2（BSM:1079「按金额拆出子账单供客人分别付款」）：按本单所选账单办理（拆单后原账单与子账单都要能结），换订单回到最新一张。
+  const [billPick, setBillPick] = React.useState<{ orderId: string; billId: string }>({ orderId: "", billId: "" });
+  const selectedBill = (billPick.orderId === selectedOrder?.id ? selectedOrder?.bills?.find((bill) => bill.id === billPick.billId) : undefined)
+    ?? firstBill(selectedOrder);
+  const selectedBillId = selectedBill?.id ?? "";
   const orderItems: BarOrderItemRow[] = selectedOrder?.items ?? [];
   const cancelableItems = orderItems.filter((item) => item.deliveryStatus === "delivered");
   // 157-R5 ⑥：关台未付清待办已升级的单不要求权限码（被升级的店长、夜班值班经理等能进本页的用户都可点，由后端按 bar.bill.hang_escalation 或夜班值班经理排班鉴权）；
@@ -366,7 +368,7 @@ export function BarOrdersPage({ api, user, setActionResult, setGlobalError, effe
       setFormError(TEXT.noOrder);
       return false;
     }
-    if (!firstBillId(selectedOrder)) {
+    if (!selectedBillId) {
       setFormError(TEXT.billRequired);
       return false;
     }
@@ -388,7 +390,7 @@ export function BarOrdersPage({ api, user, setActionResult, setGlobalError, effe
   }
 
   async function requestStoredValueCode() {
-    const billId = firstBillId(selectedOrder);
+    const billId = selectedBillId;
     if (!billId || !paymentPhone.trim()) {
       setFormError("请先选择账单并填写付款手机号。");
       return;
@@ -406,7 +408,7 @@ export function BarOrdersPage({ api, user, setActionResult, setGlobalError, effe
   }
 
   async function settleBill() {
-    const billId = firstBillId(selectedOrder);
+    const billId = selectedBillId;
     if (!billId) {
       setFormError(TEXT.billRequired);
       return;
@@ -554,7 +556,7 @@ export function BarOrdersPage({ api, user, setActionResult, setGlobalError, effe
         reasonCode: voidReasonCode || undefined,
         evidenceAttachmentIds: voidEvidence.map((e) => e.id),
         returnToStock: voidReturnToStock,
-        billId: firstBillId(selectedOrder) || undefined,
+        billId: selectedBillId || undefined,
       },
     ));
   }
@@ -678,6 +680,11 @@ export function BarOrdersPage({ api, user, setActionResult, setGlobalError, effe
           <div className="admin-kpi-card"><span>{TEXT.selectedOrder}</span><strong className="admin-kpi-value--text" title={selectedOrder?.id ?? "-"}>{selectedOrder?.id ?? "-"}</strong><small>{selectedOrder?.tableId ?? TEXT.noTable}</small></div>
         </div>
 
+        <div className="admin-form-row"><label>办理账单<select data-testid="bar-order-bill-select" value={selectedBillId} onChange={(e) => setBillPick({ orderId: selectedOrder?.id ?? "", billId: e.target.value })}>
+          {(selectedOrder?.bills ?? []).map((bill) => (
+            <option key={bill.id} value={bill.id}>{`${bill.billNo ?? bill.id} · ${formatBusinessStatus(bill.status)} · 应付 ${formatAmount(bill.payableAmountCent)} · 已付 ${formatAmount(bill.paidAmountCent)} · 小费 ${formatAmount(bill.tipAmountCent)}`}</option>
+          ))}
+        </select></label></div>
         <div className="admin-form-grid" data-testid="bar-settle-payment-form">
           <label>本次收款金额（元，可留空结清）<input aria-label="本次收款金额" inputMode="decimal" value={paymentAmount} onChange={e => setPaymentAmount(e.target.value)} /></label>
           {paymentChannel !== "stored_value" ? <label>本次付款凭据编号<input aria-label="本次付款凭据编号" value={paymentReference} onChange={e => setPaymentReference(e.target.value)} /></label> : null}
@@ -719,6 +726,7 @@ export function BarOrdersPage({ api, user, setActionResult, setGlobalError, effe
           />
           <span className="admin-muted-action" data-testid="bar-order-pos-boundary">{TEXT.posBoundary}</span>
         </div>
+        <BarBillCheckoutPanel api={api} effectivePermissions={effectivePermissions} setActionResult={setActionResult} setGlobalError={setGlobalError} order={selectedOrder} bill={selectedBill} orders={orders} onChanged={reload} />
         <div className="admin-table-scroll" data-testid="bar-order-items">
           <table className="admin-table">
             <thead><tr><th>本次送达</th><th>物品</th><th>数量</th><th>金额</th><th>上菜状态</th></tr></thead>
@@ -735,7 +743,7 @@ export function BarOrdersPage({ api, user, setActionResult, setGlobalError, effe
             ))}</tbody>
           </table>
         </div>
-        <BarRefundBreakdownPanel api={api} effectivePermissions={effectivePermissions} setActionResult={setActionResult} setGlobalError={setGlobalError} billId={firstBillId(selectedOrder)} onChanged={reload} />
+        <BarRefundBreakdownPanel api={api} effectivePermissions={effectivePermissions} setActionResult={setActionResult} setGlobalError={setGlobalError} billId={selectedBillId} onChanged={reload} />
         <div className="admin-section-title">账单争议与异常处置</div>
         <p className="admin-muted-action" data-testid="bar-bill-anomaly-hint">客人对账单提出争议时，填写争议原因后登记，账单即为「异常」，异常期间不能收款、不能反结；之后由主管选「更正后恢复」（回到登记前的状态）或「作废并冲正」（账单作废、已登记的收款冲正），两种处置都须填写原因并留痕。</p>
         <div className="admin-form-row" data-testid="bar-bill-anomaly-form">

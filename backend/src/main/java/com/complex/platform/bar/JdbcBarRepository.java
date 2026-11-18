@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.16
+// 文件版本：V0.17
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
 import com.complex.platform.common.crypto.PiiCipher;
@@ -726,10 +726,12 @@ class JdbcBarRepository implements BarRepository {
 
     @Override
     public List<BarProductRecord> listProducts(Optional<String> merchantScope) {
+        // 第十八批 AU 段第 320 条 320-R1（BSM:571「前台各处不再显示」）：已审批删除的商品不列出，与分类、套餐列表同口径。
         if (merchantScope.isEmpty()) {
             return jdbcTemplate.query("""
                     SELECT *
                       FROM bar_products
+                     WHERE delete_status <> 'approved'
                      ORDER BY created_at DESC, id
                     """, rowMapper::mapProduct);
         }
@@ -737,6 +739,7 @@ class JdbcBarRepository implements BarRepository {
                 SELECT *
                   FROM bar_products
                  WHERE merchant_id = :merchant_id
+                   AND delete_status <> 'approved'
                  ORDER BY created_at DESC, id
                 """, Map.of("merchant_id", merchantScope.get()), rowMapper::mapProduct);
     }

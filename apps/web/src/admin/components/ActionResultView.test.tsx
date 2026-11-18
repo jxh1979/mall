@@ -1,6 +1,7 @@
-// 文件版本：V0.03
+// 文件版本：V0.04
 import { render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
+import { FIELD_LABELS } from "../i18n/fieldLabels";
 import { ActionResultView, formatActionResult } from "./ActionResultView";
 
 // OBS-14-02（PGM「全局原则 · 界面全中文（所有终端零英文）」）：结果区按「中文键名：可读值」逐行展示。
@@ -62,6 +63,16 @@ describe("后台结果区中文展示", () => {
     await waitFor(() => expect(screen.getByTestId("admin-action-result").textContent).toBe(
       ["操作：商户工单已创建", "结果：", "  工单类型：其他服务请求"].join("\n"),
     ));
+  });
+
+  // 第十八批 AU 段第 303 条 303-R1（ENUM:111「沽清分两档」；BSM:1069「沽清（卖完、临时下架）」）：酒吧商品留痕里的沽清字段按 HTML 用词叫「沽清」，字段名不出「售罄」。
+  it("酒吧商品沽清字段显示为「已沽清」「沽清时间」「沽清原因」，字段名里没有「售罄」", async () => {
+    render(<ActionResultView value={{ sold_out: true, sold_out_at: "2026-11-18T10:00:00Z", sold_out_reason: "今日已售完" }} />);
+    await waitFor(() => expect(screen.getByTestId("admin-action-result").textContent).toContain("已沽清：是"));
+    expect(screen.getByTestId("admin-action-result").textContent).toContain("沽清时间：");
+    expect(screen.getByTestId("admin-action-result").textContent).toContain("沽清原因：今日已售完");
+    expect(screen.queryByText(/售罄/)).toBeNull();
+    expect(Object.values(FIELD_LABELS).filter((name) => name.includes("售罄"))).toEqual([]);
   });
 
   it("页面已给中文键名的原样用；字符串结果照旧；字典外的英文字段名不上屏，编号类键原样", () => {

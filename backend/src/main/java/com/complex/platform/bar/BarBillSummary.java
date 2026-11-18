@@ -12,6 +12,12 @@ package com.complex.platform.bar;
  *       页面显示「未计提」而不是编一个百分比。运营在结算配置中心把费率改成 20%，页面跟着显示 20%；</li>
  *   <li>{@code commissionAmountCent} —— 已计提提成额（分）；未计提为 null。</li>
  * </ul>
+ *
+ * <p>第十八批 AU 段第 282 条 282-R1（BSM:1079「按金额拆出子账单供客人分别付款」；BSM:1077 小费「结账可录」）：带出应付、已付、小费金额（分），
+ * 后台订单页按所选账单显示并办理结账、小费、拆单、合单。
+ *
+ * <p>第十八批 AU 段第 283 条 283-R1（BSM:1079「各结果台显示差额并按既有规则继续消费或结账补足」）：{@code minSpendGapCent} 未结账单的低消差额（分，
+ * 与结账闸同一算法，0＝已达标）；已结、已并单、作废的账单为 null。
  */
 public record BarBillSummary(
         String id,
@@ -19,6 +25,10 @@ public record BarBillSummary(
         String status,
         String salesRoleType,
         Integer commissionRateBp,
-        Long commissionAmountCent
+        Long commissionAmountCent,
+        long payableAmountCent,
+        long paidAmountCent,
+        long tipAmountCent,
+        Long minSpendGapCent
 ) {
 }

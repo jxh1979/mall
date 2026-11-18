@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -239,7 +239,7 @@ class BarPourVolumeStockJdbcIntegrationTests {
      * 第十八批 AO 段第 261 条 261-B04-R1（第十八批裁决 50；BSM:1194 库存流水「出库」「销售消耗」；BSM:1165「商户领用或出库时就按这个平均单价计成本」；
      * BSM:1168「支持按杯、按瓶、按套餐或其他形式统计」）：同一张单两行同一按瓶商品各 2 份（对应套餐展开的明细与单点同一瓶），按订单明细各记一条
      * 出库流水——一次送达两行是两条、合计 4 瓶，与余额扣减一致；已送达的明细换新请求编号再送 409，余额与流水不动。
-     * （分两次送达未写：只送一部分明细时现主干记部分送达的责任链状态 partial 被库约束 chk_srr_status 拒、回 500，属既有缺陷，另报。）
+     * （分两次送达见 {@link #partialDeliveryOfOneLineThenTheRestSucceedsAndRecordsServiceInProgress}。）
      * 修复前红：流水号按订单＋物料＋数量撞号，第二行被当成同号重放读回，余额扣 4 瓶、流水只有 1 条 2 瓶。
      */
     @Test
@@ -256,6 +256,29 @@ class BarPourVolumeStockJdbcIntegrationTests {
                 .andExpect(jsonPath("$.detail_code").value("BAR_ORDER_ITEM_ALREADY_DELIVERED"));
         assertThat(balanceRow()).containsEntry("quantity", 6);
         assertThat(outboundQuantities(order)).containsExactly(2, 2);
+    }
+
+    /**
+     * 第十八批 AU 段第 319 条 319-R1（BSM:1025「分别标注已上菜与未上菜」；BSM:1613「谁送达」）：后台订单页按明细勾选本次送达，只送一部分时
+     * 服务责任记录记 active（服务进行中），整单未送达；再送其余明细后整单已送达、另记 completed；已送达的明细换新请求编号再送 409。
+     * 修复前红：部分送达把服务责任记录状态写成 partial，被库约束 chk_srr_status 拒，整笔 500。
+     */
+    @Test
+    void partialDeliveryOfOneLineThenTheRestSucceedsAndRecordsServiceInProgress() throws Exception {
+        String bottle = product("partial", false);
+
+        String order = twoLineOrder("partial", bottle);
+        deliverLines(order, "partial-1", line("partial", 1)).andExpect(status().isOk());
+        assertThat(orderStatus(order)).isNotEqualTo("delivered");
+        assertThat(serviceStatuses(order)).containsExactly("active");
+
+        deliverLines(order, "partial-2", line("partial", 2)).andExpect(status().isOk());
+        assertThat(orderStatus(order)).isEqualTo("delivered");
+        assertThat(serviceStatuses(order)).containsExactlyInAnyOrder("active", "completed");
+
+        // 第二次还能过吗：已送达的明细换新请求编号再送 409。
+        deliverLines(order, "partial-again", line("partial", 1)).andExpect(status().isConflict())
+                .andExpect(jsonPath("$.detail_code").value("BAR_ORDER_ITEM_ALREADY_DELIVERED"));
     }
 
     // ---------- helpers ----------
@@ -326,6 +349,15 @@ class BarPourVolumeStockJdbcIntegrationTests {
     private List<Integer> outboundQuantities(String order) {
         return jdbc.queryForList("SELECT quantity FROM inventory_stock_movements WHERE business_type = 'bar_order' AND business_id = ?"
                 + " AND movement_type = 'outbound'", Integer.class, order);
+    }
+
+    private String orderStatus(String order) {
+        return jdbc.queryForObject("SELECT status FROM bar_orders WHERE id = ?", String.class, order);
+    }
+
+    /** 该订单的服务责任记录各条状态（不按时间取最新一行：同一事务内时间可能相同）。 */
+    private List<String> serviceStatuses(String order) {
+        return jdbc.queryForList("SELECT status FROM service_responsibility_records WHERE order_id = ?", String.class, order);
     }
 
     private Map<String, Object> balanceRow() {

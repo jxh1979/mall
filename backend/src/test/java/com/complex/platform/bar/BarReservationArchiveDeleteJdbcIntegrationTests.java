@@ -49,12 +49,16 @@ class BarReservationArchiveDeleteJdbcIntegrationTests {
                 """, TABLE, BAR, java.sql.Timestamp.from(now), java.sql.Timestamp.from(now));
     }
 
+    /**
+     * 已取消的订台（第十八批 AU 段收尾复核：仍在预留中的订台不能删，BSM:572「只要还有占用就拦住不让删」、ENUM:100「已预留只能经取消订台、超时释放、
+     * 到店开台三条路径退出」，删除用例的订台须已退出预留）。
+     */
     private BarReservationRecord seedReservation(String id) {
         seedTable();
         Instant now = Instant.now();
         return repository.saveReservation(new BarReservationRecord(
                 id, BAR, MERCHANT, TABLE, null, now, 4, 0, 0L, "not_required", "staff", null,
-                "reserved", "web", null, List.of(), now, now, null));
+                "cancelled", "web", null, List.of(), now, now, null));
     }
 
     @Test
@@ -63,7 +67,8 @@ class BarReservationArchiveDeleteJdbcIntegrationTests {
         seedReservation("barresv_del");
         service.archiveReservation("barresv_del", true, "测试存档理由");
         service.requestDeleteReservation("barresv_del", new BarCatalogDeleteRequest("取消"));
-        TestSecurityActors.asPlatformAdmin("usr_approver");
+        // 第十八批 AU 段第 265 条 265-R1（BSM:577「删除一律须由具备最高权限的人审批通过后执行」）：审批人为最高权限本人。
+        TestSecurityActors.asMasterAuthority();
         BarCatalogDeleteDecision decision = service.approveDeleteReservation(
                 "barresv_del", new BarCatalogDeleteApprovalRequest("approved", null));
         assertThat(decision.deleted()).isTrue();
@@ -92,13 +97,17 @@ class BarReservationArchiveDeleteJdbcIntegrationTests {
                     total_amount_cent, created_at, updated_at)
                 VALUES ('barorder_use', ?, ?, 'barresv_use', 'staff', 'open', 0, ?, ?)
                 """, BAR, TABLE, java.sql.Timestamp.from(now), java.sql.Timestamp.from(now));
-        TestSecurityActors.asPlatformAdmin("usr_approver");
+        TestSecurityActors.asMasterAuthority();
         assertThatThrownBy(() -> service.approveDeleteReservation("barresv_use",
                 new BarCatalogDeleteApprovalRequest("approved", null)))
                 .isInstanceOf(ApiException.class)
                 .hasMessageContaining("引用");
     }
 
+    /**
+     * 第十八批 AU 段第 265 条 265-R1：平台管理员审批自己的申请，先被「只认最高权限」拦下（最高权限本人申请即当场删除，构造不出最高权限自审；
+     * 禁止自审代码保留）。
+     */
     @Test
     void selfApproveForbidden() {
         TestSecurityActors.asPlatformAdmin("usr_same");
@@ -108,6 +117,22 @@ class BarReservationArchiveDeleteJdbcIntegrationTests {
         assertThatThrownBy(() -> service.approveDeleteReservation("barresv_self",
                 new BarCatalogDeleteApprovalRequest("approved", null)))
                 .isInstanceOf(ApiException.class)
-                .hasMessageContaining("发起人");
+                .hasFieldOrPropertyWithValue("code", "MASTER_APPROVAL_REQUIRED");
+    }
+
+    /** 第十八批 AU 段第 265 条 265-R1（BSM:577「删除一律须由具备最高权限的人审批通过后执行，不设例外」）：平台管理员审批他人申请也 403，仍待审批。 */
+    @Test
+    void platformAdminCannotApproveOthersDeleteRequest() {
+        TestSecurityActors.asPlatformAdmin("usr_initiator");
+        seedReservation("barresv_admin");
+        service.archiveReservation("barresv_admin", true, "测试存档理由");
+        service.requestDeleteReservation("barresv_admin", new BarCatalogDeleteRequest("x"));
+        TestSecurityActors.asPlatformAdmin("usr_approver");
+        assertThatThrownBy(() -> service.approveDeleteReservation("barresv_admin",
+                new BarCatalogDeleteApprovalRequest("approved", null)))
+                .isInstanceOf(ApiException.class)
+                .hasFieldOrPropertyWithValue("code", "MASTER_APPROVAL_REQUIRED");
+        assertThat(repository.findReservationById("barresv_admin")).get()
+                .extracting(BarReservationRecord::deleteStatus).isEqualTo("pending");
     }
 }

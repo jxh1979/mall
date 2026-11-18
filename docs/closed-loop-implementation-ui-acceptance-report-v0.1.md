@@ -11,7 +11,7 @@
 - VISUAL_REGRESSION_BASELINES_TRACKED
 - NO_STALE_UI_ACCEPTANCE_COUNTS
 
-更新时间：2026-11-18T17:55:57.284Z
+更新时间：2026-11-18T19:59:08.109Z
 执行位置：192.168.88.160，`/home/james/complex-management`
 
 ## 1. 本轮闭环结论
@@ -23,8 +23,8 @@
 | 需求矩阵完整实现 | 88/97 | `docs/closed-loop-current-state-snapshot-latest.json` |
 | 完整后台 MVP | 9/9 | `docs/full-admin-mvp-requirements-code-matrix-v0.1.csv` |
 | 完整后台非首批 | 22/22 | `docs/full-admin-remaining-requirements-code-matrix-v0.1.csv` |
-| 后端测试 | 6932 | `backend/target/surefire-reports` |
-| Web 单元测试定义 | 1883 | `apps/web/src/**/*.test.*` |
+| 后端测试 | 6949 | `backend/target/surefire-reports` |
+| Web 单元测试定义 | 1898 | `apps/web/src/**/*.test.*` |
 | Playwright 常规 UI | 47 | `playwright-report/index.html` |
 | Playwright 真实后端 UI | 3（报告缺失，未跑） | `playwright-report-real-backend/index.html` |
 | 视觉回归截图基线 | 4 | `tests/e2e/**/*-snapshots/*.png` |
@@ -37,7 +37,7 @@
 
 | 项目 | 当前值 |
 |---|---:|
-| main JS | apps/web/dist/assets/main-6DXoVyiF.js，4337 bytes |
+| main JS | apps/web/dist/assets/main-CM5kJZjk.js，4337 bytes |
 | largest asset | apps/web/dist/assets/vendor-antd-Bh_XtmOr.js，251112 bytes |
 | main bundle warning | 不预期出现 |
 | dist index | 存在 |
@@ -113,9 +113,9 @@
 | --- | ---: |
 | apps/web/src/main.tsx | 50 |
 | backend/src/main/java/com/complex/platform/ticketing/TicketingService.java | 1363 |
-| backend/src/main/java/com/complex/platform/bar/BarService.java | 1276 |
-| backend/src/main/java/com/complex/platform/bar/BarOrderService.java | 1859 |
-| backend/src/main/java/com/complex/platform/bar/BarBillingService.java | 1132 |
+| backend/src/main/java/com/complex/platform/bar/BarService.java | 1325 |
+| backend/src/main/java/com/complex/platform/bar/BarOrderService.java | 1800 |
+| backend/src/main/java/com/complex/platform/bar/BarBillingService.java | 1145 |
 | backend/src/main/java/com/complex/platform/bar/BarTableSessionService.java | 1051 |
 
 ## 6. 可复跑命令

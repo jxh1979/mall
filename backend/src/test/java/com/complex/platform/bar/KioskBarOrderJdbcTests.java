@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.07
+// 文件版本：V0.08
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.containsString;
@@ -8,10 +8,13 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.complex.platform.customer.CustomerRecord;
+import com.complex.platform.customer.CustomerRepository;
 import com.complex.platform.support.StaffRequestFixture;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.nio.charset.StandardCharsets;
+import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -48,6 +51,7 @@ class KioskBarOrderJdbcTests {
     @Autowired private MockMvc mockMvc;
     @Autowired private JdbcTemplate jdbc;
     @Autowired private ObjectMapper json;
+    @Autowired private CustomerRepository customers;
 
     private final String s = UUID.randomUUID().toString().replace("-", "").substring(0, 10);
     private final String project = "kbo_prj_" + s;
@@ -325,7 +329,8 @@ class KioskBarOrderJdbcTests {
     /**
      * 第十八批 S 段第 171 条 171-R1（BSM:1066「储值卡（通用卡先扣本金后扣赠送金且不可配置……）」；BSM:1563「验证码……（用于新人判定、注册登录和关键操作验证）」）：
      * 契约补声明的 POST /api/v1/bar/bills/{bill_id}/stored-value/sms 按网页收银员真实请求（蛇形键 phone）走真实入口与真实授权链——
-     * phone 被读取并按会员核对（非会员 401 CUSTOMER_OTP_INVALID），缺 phone 400 VALIDATION_FAILED，已结账 409 BAR_BILL_ALREADY_SETTLED。
+     * phone 被读取并按会员核对（非会员 409 CUSTOMER_OTP_INVALID，第十八批 AU 段第 328 条 328-R1 由 401 改 409），缺 phone 400 VALIDATION_FAILED，
+     * 已结账 409 BAR_BILL_ALREADY_SETTLED。
      */
     @Test
     void webCashierStoredValueSmsReadsPhoneAndRejectsMissingPhoneAndSettledBill() throws Exception {
@@ -338,7 +343,7 @@ class KioskBarOrderJdbcTests {
         String stranger = "198" + String.format("%08d", Math.floorMod(s.hashCode(), 100_000_000));
         mockMvc.perform(post(sms).with(webCashier).contentType(MediaType.APPLICATION_JSON)
                         .content(json.writeValueAsString(Map.of("phone", stranger))))
-                .andExpect(status().isUnauthorized())
+                .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.detail_code").value("CUSTOMER_OTP_INVALID"));
         mockMvc.perform(post(sms).with(webCashier).contentType(MediaType.APPLICATION_JSON).content("{}"))
                 .andExpect(status().isBadRequest())
@@ -354,6 +359,39 @@ class KioskBarOrderJdbcTests {
                         .content(json.writeValueAsString(Map.of("phone", stranger))))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.detail_code").value("BAR_BILL_ALREADY_SETTLED"));
+    }
+
+    /**
+     * 第十八批 AU 段第 328 条 328-R1（BSM:1066 支付方式「储值卡」；PGM:287「……提示、报错……必须全部为中文」）：网页收银员按后台订单页真实请求
+     * （蛇形键 payment_id「stored-value:账单编号」、phone、sms_code）储值结账，会员报错短信验证码回 409 CUSTOMER_OTP_INVALID 与中文原因，
+     * 不回 401（401 会被后台网页当成员工登录失效送回登录页）；账单仍未付、该会员没有储值消费流水。
+     */
+    @Test
+    void webCashierStoredValueSettleWithWrongSmsCodeConflictsNotUnauthorized() throws Exception {
+        String member = "kbo_member_" + s;
+        String phone = "197" + String.format("%08d", Math.floorMod((s + "member").hashCode(), 100_000_000));
+        Instant now = Instant.now();
+        customers.saveCustomer(new CustomerRecord(member, phone, "197****" + phone.substring(7), "active", null, null, now, now));
+        String order = data(order(webCashier, "svwrong").andExpect(status().isOk())).path("id").asText();
+        String billId = data(mockMvc.perform(post("/api/v1/bar/orders/" + order + "/bill").with(webCashier)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json.writeValueAsString(Map.of("idempotency_key", "kbo-svwrongbill-" + s))))
+                .andExpect(status().isOk())).path("id").asText();
+
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("idempotency_key", "kbo-svwrong-" + s);
+        body.put("payment_id", "stored-value:" + billId);
+        body.put("phone", phone);
+        body.put("sms_code", "999999");
+        body.put("payment_channel", "stored_value");
+        mockMvc.perform(post("/api/v1/bar/bills/" + billId + "/settle").with(webCashier).contentType(MediaType.APPLICATION_JSON)
+                        .content(json.writeValueAsString(body)))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.detail_code").value("CUSTOMER_OTP_INVALID"))
+                .andExpect(jsonPath("$.message").value("短信验证码不正确或已过期"));
+        assertThat(jdbc.queryForObject("SELECT payment_status FROM bar_bills WHERE id = ?", String.class, billId)).isEqualTo("unpaid");
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM customer_stored_value_transactions WHERE customer_id = ?", Integer.class, member))
+                .isZero();
     }
 
     // ---------- helpers ----------

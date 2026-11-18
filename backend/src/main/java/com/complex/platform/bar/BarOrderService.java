@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.15
+// 文件版本：V0.16
 
 import static com.complex.platform.bar.BarValidation.*;
 
@@ -693,44 +693,20 @@ public class BarOrderService {
             ));
         }
         // 第十批 TK-26-R1（BSM L1025「分别标注已上菜与未上菜」；ENUM L112 出品票据状态流转；BSM L823「整笔……全部实际
-        // 履约完成的时点」；W01）：非撤单明细全部送达，整单与出品票据才置已送达；部分送达只在票据事件上记在途留痕。
-        boolean allDelivered = repository.listOrderItems(order.id()).stream()
-                .filter(item -> !"voided".equals(item.deliveryStatus()))
-                .allMatch(item -> "delivered".equals(item.deliveryStatus()));
-        if (!allDelivered) {
-            recordPartialDelivery(order, actual, actorId, deliveryEvidenceAttachmentIds, now);
-            traceabilityService.recordResponsibility(new TraceabilityResponsibilityRecord(
-                    null, order.id(), order.tableId(), order.customerId(), null,
-                    actorId, List.of(), order.salesStaffId(), null, null, null, null,
-                    actorId, null, null, null, null, null, "partial"));
-            return repository.findOrderById(order.id()).orElse(order);
+        // 履约完成的时点」；W01）：非撤单明细全部送达，整单与出品票据才置已送达（收尾见 BarOrderFulfillment，与退菜退酒生效共用）；
+        // 部分送达只在票据事件上记在途留痕。
+        Optional<BarOrderRecord> closed = BarOrderFulfillment.closeIfFulfilled(repository, traceabilityService, merchantRewards, order,
+                actorId, actual.idempotencyKey(), actual.operatorNote(), deliveryEvidenceAttachmentIds, now);
+        if (closed.isPresent()) {
+            return closed.get();
         }
-        BarOrderRecord deliveredOrder = repository.saveOrder(new BarOrderRecord(
-                order.id(),
-                order.barId(),
-                order.merchantId(),
-                order.tableId(),
-                order.reservationId(),
-                order.customerId(),
-                order.orderSource(),
-                "delivered",
-                order.totalAmountCent(),
-                order.currency(),
-                order.createdTerminal(),
-                order.deviceId(),
-                order.salesStaffId(),
-                order.createdAt(),
-                now
-        ));
-        markProductionTicketDelivered(order.id(), actual, actorId, deliveryEvidenceAttachmentIds, now);
-        // 第十一批 TK-04-R3（BSM L823「按整笔有效消费全部实际履约完成的时点统一起算」）：最后一项送达后，已结清账单生成待确认积分与成长值。
-        if (merchantRewards != null) merchantRewards.tryCreateForBarOrder(order.id());
-        // B1 留痕接线（REQ-34/37）：出品送达写服务责任链记录（merchant 由 token 注入）。
+        recordPartialDelivery(order, actual, actorId, deliveryEvidenceAttachmentIds, now);
+        // 第十八批 AU 段第 319 条 319-R1（BSM:1613「谁送达」）：部分送达记服务进行中 active（V059 chk_srr_status 不收 partial，原先整笔 500）。
         traceabilityService.recordResponsibility(new TraceabilityResponsibilityRecord(
                 null, order.id(), order.tableId(), order.customerId(), null,
                 actorId, List.of(), order.salesStaffId(), null, null, null, null,
-                actorId, null, null, null, null, null, "completed"));
-        return deliveredOrder;
+                actorId, null, null, null, null, null, "active"));
+        return repository.findOrderById(order.id()).orElse(order);
     }
 
     /**
@@ -905,47 +881,6 @@ public class BarOrderService {
                     "BAR_ORDER_PARTIAL_DELIVERY_UNSUPPORTED",
                     "暂不支持部分出品");
         }
-    }
-
-    private void markProductionTicketDelivered(
-            String orderId,
-            BarOrderDeliveryRequest request,
-            String actorId,
-            List<String> deliveryEvidenceAttachmentIds,
-            Instant now
-    ) {
-        repository.findProductionTicketByOrderId(orderId)
-                .filter(ticket -> !"cancelled".equals(ticket.ticketStatus()))
-                .filter(ticket -> !"exception".equals(ticket.ticketStatus()))
-                .filter(ticket -> !"delivered".equals(ticket.ticketStatus()))
-                .ifPresent(ticket -> {
-                    BarOrderDeliveryRequest actual = requireRequest(request);
-                    String idempotencyKey = requireText(actual.idempotencyKey(), "idempotency_key");
-                    repository.saveProductionTicket(new BarProductionTicketRecord(
-                            ticket.id(),
-                            ticket.orderId(),
-                            ticket.barId(),
-                            ticket.merchantId(),
-                            "delivered",
-                            ticket.createdAt(),
-                            now
-                    ));
-                    repository.saveProductionTicketEvent(new BarProductionTicketEventRecord(
-                            "production_event_" + slug(ticket.id() + ":delivered:" + idempotencyKey),
-                            ticket.id(),
-                            ticket.orderId(),
-                            ticket.barId(),
-                            "deliver",
-                            ticket.ticketStatus(),
-                            "delivered",
-                            null,
-                            actorId,
-                            trimToDefault(actual.operatorNote(), "delivered by service staff"),
-                            idempotencyKey,
-                            deliveryEvidenceAttachmentIds,
-                            now
-                    ));
-                });
     }
 
     /** 第十批 TK-26-R1：部分明细送达——票据状态不动，只追加一条 partial_deliver 事件（已取消/异常/已送达票据不写）。 */
@@ -1406,6 +1341,12 @@ public class BarOrderService {
                 returnToStock,
                 item.isGift(),
                 item.deliveredAt()));
+        // 第十八批 AU 段收尾复核（BSM:823「已取消或已退款部分按原规则从有效消费中排除」；ENUM:112「按实际送达、既有退撤……处理并留痕」）：
+        // 先送一部分、再退掉其余未送明细后剩下的已全部送达，与送达接口同一收尾（即时与审批通过两条路都经此处）。
+        if (!"delivered".equals(order.status())) {
+            BarOrderFulfillment.closeIfFulfilled(repository, traceabilityService, merchantRewards, order, actorId, idempotencyKey, null,
+                    List.of(), now);
+        }
         return new VoidSideEffects(inventoryMovementId, billAdjustmentId);
     }
 

@@ -1,8 +1,9 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -89,7 +90,7 @@ class BarOrderItemVoidBillLockJdbcIntegrationTests {
         bars.saveTable(new BarTableRecord(table, bar, bar, "B-" + s, "吧台位", "bar_counter", 2, 0, 0L, "CNY", "active", now, now));
         StaffRequestFixture staffs = new StaffRequestFixture(jdbc);
         cashier = staffs.staff("bvl_cashier_" + s, "staff", project, bar, "bar.order.create", "finance.payment.register",
-                "bar.order_item.void", "bar.bill.refund");
+                "bar.order_item.void", "bar.bill.refund", "bar.bill.tip", "bar.bill.split_merge", "bar.order.view");
         decider = staffs.staff("bvl_sup_" + s, "staff", project, bar, "bar.order_item.void_decide");
     }
 
@@ -145,7 +146,79 @@ class BarOrderItemVoidBillLockJdbcIntegrationTests {
         assertThat(billState(concurrent.id())).isEqualTo(before);
     }
 
+    /**
+     * 第十八批 AU 段第 282 条 282-R1（PGM:303「两个操作同时发生冲突时，一律以“先处理成功”的那个为准」；BSM:1077 小费「结账可录」）：先到者现金结清账单
+     * （持锁未提交），后到者给该账单加小费：先锁账单行，结账提交后按已结账单处理回 409，账单仍已结、已付等于应付、小费未变。
+     */
+    @Test
+    void tipWaitingOnSettlementSeesTheSettledBill() throws Exception {
+        Bill bill = withServiceSession(deliveredBill("tip"));
+        firstHoldsThenSecond(settle(bill, "tip", 1500L), staffPost("/api/v1/bar/bills/" + bill.id() + "/tip", cashier,
+                Map.of("idempotency_key", "bvl-tip-" + s, "tip_amount_cent", 5000)))
+                .andExpect(status().isConflict()).andExpect(jsonPath("$.detail_code").value("BAR_BILL_NOT_TIPPABLE"));
+        assertSettledUntouched(bill);
+    }
+
+    /** 282-R1（BSM:1079「按金额拆出子账单供客人分别付款」只对未支付、未结算账单）：后到者对正被结账的账单拆单，结账提交后 409，不拆出账单。 */
+    @Test
+    void splitWaitingOnSettlementSeesTheSettledBill() throws Exception {
+        Bill bill = deliveredBill("split");
+        firstHoldsThenSecond(settle(bill, "split", 1500L), staffPost("/api/v1/bar/bills/" + bill.id() + "/split", cashier,
+                Map.of("idempotency_key", "bvl-split-" + s, "split_amount_cent", 500, "reason", "客人分开付")))
+                .andExpect(status().isConflict()).andExpect(jsonPath("$.detail_code").value("BAR_BILL_NOT_SPLITTABLE"));
+        assertSettledUntouched(bill);
+    }
+
+    /** 282-R1（BSM:1079「将同一酒吧内另一张未支付、未结算账单合入主账单」）：后到者把正被结账的账单并入另一张未付账单，结账提交后 409，副单不置已并单。 */
+    @Test
+    void mergeWaitingOnSettlementSeesTheSettledBill() throws Exception {
+        Bill primary = deliveredBill("mrg-main");
+        Bill bill = deliveredBill("mrg");
+        String primaryBefore = billState(primary.id());
+        firstHoldsThenSecond(settle(bill, "mrg", 1500L), staffPost("/api/v1/bar/bills/" + primary.id() + "/merge", cashier,
+                Map.of("idempotency_key", "bvl-merge-" + s, "merged_bill_id", bill.id(), "reason", "客人一起付")))
+                .andExpect(status().isConflict()).andExpect(jsonPath("$.detail_code").value("BAR_BILL_NOT_MERGEABLE"));
+        assertSettledUntouched(bill);
+        assertThat(billState(primary.id())).isEqualTo(primaryBefore);
+    }
+
+    /** 282-R1：订单列表账单摘要带应付、已付、小费金额（分），供后台订单页按所选账单显示与办理。 */
+    @Test
+    void orderListBillSummaryCarriesPayablePaidAndTip() throws Exception {
+        Bill bill = withServiceSession(deliveredBill("sum"));
+        perform(staffPost("/api/v1/bar/bills/" + bill.id() + "/tip", cashier,
+                Map.of("idempotency_key", "bvl-sum-tip-" + s, "tip_amount_cent", 300))).andExpect(status().isOk());
+        perform(settle(bill, "sum", 1000L)).andExpect(status().isOk());
+        var orders = json.readTree(mockMvc.perform(get("/api/v1/bar/orders").with(cashier)).andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString()).at("/data/items");
+        var summary = java.util.stream.StreamSupport.stream(orders.spliterator(), false)
+                .filter(order -> bill.order().equals(order.path("id").asText())).findFirst().orElseThrow().at("/bills/0");
+        assertThat(summary.path("id").asText()).isEqualTo(bill.id());
+        assertThat(summary.path("payable_amount_cent").isNumber()).isTrue();
+        assertThat(summary.path("payable_amount_cent").asLong()).isEqualTo(1500L);
+        assertThat(summary.path("paid_amount_cent").asLong()).isEqualTo(1000L);
+        assertThat(summary.path("tip_amount_cent").asLong()).isEqualTo(300L);
+    }
+
     // ---------- helpers ----------
+
+    /** 小费按落单时锁定的服务场次归属（BSM:1077「归属该桌台的主责服务提供人」）：给本单补一条已关台的服务场次与订单归属。 */
+    private Bill withServiceSession(Bill bill) {
+        String session = "bvl_sess_" + bill.order();
+        jdbc.update("INSERT INTO bar_table_sessions(id,bar_id,merchant_id,business_date,table_id,service_staff_id,status,opened_at,closed_at,created_at,updated_at)"
+                + " VALUES(?,?,?,current_date,?,?,'closed',now(),now(),now(),now())", session, bar, bar, table, "bvl_cashier_" + s);
+        jdbc.update("INSERT INTO bar_order_service_sources(order_id,session_id,table_id,project_id,merchant_id,business_date) VALUES(?,?,?,?,?,current_date)",
+                bill.order(), session, table, "bvl_prj_" + s, bar);
+        return bill;
+    }
+
+    /** 被结账单仍已结、已付等于应付（1500）、小费 0，本单没有拆出的账单。 */
+    private void assertSettledUntouched(Bill bill) {
+        assertThat(jdbc.queryForMap("SELECT settlement_status, payment_status, paid_amount_cent, payable_amount_cent, tip_amount_cent FROM bar_bills WHERE id = ?",
+                bill.id())).containsEntry("settlement_status", "settled").containsEntry("payment_status", "paid")
+                .containsEntry("paid_amount_cent", 1500L).containsEntry("payable_amount_cent", 1500L).containsEntry("tip_amount_cent", 0L);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM bar_bills WHERE order_id = ?", Integer.class, bill.order())).isEqualTo(1);
+    }
 
     private record Bill(String id, String order, String smallItem) {
     }

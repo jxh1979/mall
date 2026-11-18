@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.16
+// 文件版本：V0.17
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.PageResponse;
@@ -89,7 +89,10 @@ public class BarService {
                                                         bill.id(), bill.billNo(), bill.paymentStatus(),
                                                         bill.salesRoleType(),
                                                         commission == null ? null : commission.commissionRateBp(),
-                                                        commission == null ? null : commission.commissionAmountCent());
+                                                        commission == null ? null : commission.commissionAmountCent(),
+                                                        bill.payableAmountCent(), bill.paidAmountCent(), bill.tipAmountCent(),
+                                                        java.util.Set.of("settled", "merged", "void").contains(bill.settlementStatus())
+                                                                ? null : BarMinSpend.gapCent(repository, bill));
                                             },
                                             Collectors.toList())));
                     // 第十八批 T 段第 157 条 157-R2：带出台位类型（只有包厢能挂起）与本单挂起状态、金额。
@@ -268,11 +271,23 @@ public class BarService {
     public PageResponse<BarReservationRecord> listReservations(boolean includeArchived) {
         return operations.readPage(
                 BarReadOperation.LIST_RESERVATIONS,
-                () -> repository.listReservations(authorizationService.currentMerchantScope(), includeArchived)
+                () -> repository.listReservations(listScope(), includeArchived)
         );
     }
 
     // ================= V264 卡座预订：存档与审批后删除 =================
+
+    private boolean isMaster() {
+        return authorizationService.isMasterAuthority(authorizationService.currentActor());
+    }
+
+    /**
+     * 第十八批 AU 段第 265 条 265-R1（第十八批裁决 71「最高权限什么都能看」）：「卡座与订台」页读取的卡座、开台会话、订台、代订停用四个列表，
+     * 最高权限看全部酒吧（不按商户范围）；其他人照旧按当前商户范围。
+     */
+    private java.util.Optional<String> listScope() {
+        return isMaster() ? java.util.Optional.empty() : authorizationService.currentMerchantScope();
+    }
 
     /** 当前操作者 id（存档/删除留痕 + 自审校验）；无鉴权上下文（测试/内部）回退 null。 */
     private String reservationActorId() {
@@ -284,10 +299,15 @@ public class BarService {
     }
 
     private BarReservationRecord requireReservationInScope(String id) {
+        return requireReservationInScope(id, false);
+    }
+
+    /** master=true：最高权限本人办理删除，不按商户范围取记录（第十八批 AU 段第 265 条 265-R1，同 BarPosCatalogService 酒吧目录删除）。 */
+    private BarReservationRecord requireReservationInScope(String id, boolean master) {
         BarReservationRecord reservation = repository.findReservationById(operations.requireText(id, "reservation_id"))
                 .orElseThrow(() -> com.complex.platform.common.api.ApiException.notFound(
                         "BAR_RESERVATION_NOT_FOUND", "订台记录不存在或已被删除"));
-        authorizationService.currentMerchantScope().ifPresent(scope -> {
+        (master ? java.util.Optional.<String>empty() : authorizationService.currentMerchantScope()).ifPresent(scope -> {
             if (!scope.equals(reservation.merchantId())) {
                 throw com.complex.platform.common.api.ApiException.forbidden(
                         "BAR_MERCHANT_SCOPE", "该订台记录属于其他商户");
@@ -324,8 +344,14 @@ public class BarService {
                 () -> doRequestDeleteReservation(reservationId, request));
     }
 
+    /**
+     * 第十八批 AU 段第 265 条 265-R1（BSM:577「持授权 U 盘密钥的最高权限本人发起的操作，不需要经过任何审批。」；第十八批裁决 71）：
+     * 最高权限本人发起的删除不按商户范围，落待审批后当场执行：占用检查照走，另落一条 bar.reservation.delete_approved；
+     * 有占用 409 BAR_RESERVATION_IN_USE，外层事务整笔回滚。findReservationById 已滤掉删除的行，返回值在内存里构造。
+     */
     private BarReservationRecord doRequestDeleteReservation(String reservationId, BarCatalogDeleteRequest request) {
-        BarReservationRecord reservation = requireReservationInScope(reservationId);
+        boolean master = isMaster();
+        BarReservationRecord reservation = requireReservationInScope(reservationId, master);
         if (reservation.archivedAt() == null) {
             throw com.complex.platform.common.api.ApiException.badRequest(
                     "BAR_RESERVATION_NOT_ARCHIVED", "订台记录须先存档才能申请删除");
@@ -336,8 +362,13 @@ public class BarService {
         }
         java.time.Instant now = java.time.Instant.now();
         String reason = requireText(request == null ? null : request.reason(), "reason");
-        return repository.saveReservation(reservation.withDelete("pending", reservationActorId(), now,
+        BarReservationRecord saved = repository.saveReservation(reservation.withDelete("pending", reservationActorId(), now,
                 reason, now));
+        if (master) {
+            operations.auditedWrite(BarWriteOperation.APPROVE_DELETE_BAR_RESERVATION, () -> executeReservationDelete(reservation));
+            return saved.withDelete("approved", reservationActorId(), now, reason, now);
+        }
+        return saved;
     }
 
     @com.complex.platform.gate.GuardedAction(capability = "bar.reservation.approve")
@@ -348,7 +379,12 @@ public class BarService {
     }
 
     private BarCatalogDeleteDecision doApproveDeleteReservation(String reservationId, BarCatalogDeleteApprovalRequest request) {
-        BarReservationRecord reservation = requireReservationInScope(reservationId);
+        // 第十八批 AU 段第 265 条 265-R1（BSM:577「删除一律须由具备最高权限的人审批通过后执行，不设例外」）：审批只认最高权限本人。
+        if (!isMaster()) {
+            throw com.complex.platform.common.api.ApiException.forbidden(
+                    "MASTER_APPROVAL_REQUIRED", "卡座预订删除须由最高权限本人批准");
+        }
+        BarReservationRecord reservation = requireReservationInScope(reservationId, true);
         if (!"pending".equals(reservation.deleteStatus())) {
             throw com.complex.platform.common.api.ApiException.badRequest(
                     "BAR_RESERVATION_DELETE_NOT_PENDING", "没有待审批的删除申请");
@@ -367,6 +403,19 @@ public class BarService {
         if ("rejected".equals(decision)) {
             repository.saveReservation(reservation.withDelete("none", null, null, null, java.time.Instant.now()));
             return new BarCatalogDeleteDecision(reservationId, "rejected", false);
+        }
+        return executeReservationDelete(reservation);
+    }
+
+    /** 删前查占用（BSM:577「同样带删前占用检查：还被业务在用的删不掉」），无占用即软删。 */
+    private BarCatalogDeleteDecision executeReservationDelete(BarReservationRecord reservation) {
+        String reservationId = reservation.id();
+        // 第十八批 AU 段收尾复核（BSM:572「只要还有占用就拦住不让删」；ENUM:100「一个台位同一时刻只能存在一笔有效预留……已预留只能经取消订台、
+        // 超时释放、到店开台三条路径退出」）：订台本身仍在预留中（hold_status=held 员工代订已占台、NULL 一体机待付定金）也算占用；取消与超时释放
+        // 改 status=cancelled，到店开台只把 hold_status 改 released（status 仍为 reserved），后者不在此列、由下面的开台会话引用拦。
+        if ("reserved".equals(reservation.status()) && !"released".equals(reservation.holdStatus())) {
+            throw com.complex.platform.common.api.ApiException.conflict(
+                    "BAR_RESERVATION_IN_USE", "订台仍在预留中，请先取消订台");
         }
         long refs = repository.countReservationReferences(reservationId);
         if (refs > 0) {
@@ -401,7 +450,7 @@ public class BarService {
     public PageResponse<BarStaffBookingSuspensionRecord> listStaffBookingSuspensions() {
         return operations.readPage(
                 BarReadOperation.LIST_STAFF_BOOKING_SUSPENSIONS,
-                () -> repository.listStaffBookingSuspensions(authorizationService.currentMerchantScope())
+                () -> repository.listStaffBookingSuspensions(listScope())
         );
     }
 
@@ -586,7 +635,7 @@ public class BarService {
     public PageResponse<BarTableRecord> listTables() {
         return operations.readPage(
                 BarReadOperation.LIST_TABLES,
-                () -> repository.listTables(authorizationService.currentMerchantScope())
+                () -> repository.listTables(listScope())
         );
     }
 
@@ -715,7 +764,7 @@ public class BarService {
     public PageResponse<BarTableSessionRecord> listTableSessions() {
         return operations.readPage(
                 BarReadOperation.LIST_TABLE_SESSIONS,
-                () -> repository.listTableSessions(authorizationService.currentMerchantScope())
+                () -> repository.listTableSessions(listScope())
         );
     }
 
