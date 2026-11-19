@@ -1,8 +1,9 @@
 package com.complex.platform.amusement;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.nullValue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -73,7 +74,7 @@ class AmusementSafetyEvidenceUpload229Tests {
         // 巡检、复检、检修与上传都走 currentMerchantScope：由该游乐项目所属商户的员工办理。
         staff = new StaffRequestFixture(jdbc).staff("usr_a229_" + digits, "staff", project, merchant,
                 "amusement.safety_inspection.create", "amusement.safety_inspection.recheck", "amusement.maintenance.submit",
-                "evidence.attachment.create");
+                "evidence.attachment.create", "amusement.safety_inspection.submit");
     }
 
     // 229-R1：先真实上传（不带业务编号，巡检尚未建立），再带回附件编号新建合格巡检；不带证据的合格巡检 400。
@@ -94,6 +95,43 @@ class AmusementSafetyEvidenceUpload229Tests {
         create("a229-pass-none-" + digits, "pass", null)
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.detail_code").value("SAFETY_INSPECTION_EVIDENCE_REQUIRED"));
+    }
+
+    // 第十八批 BB 段第 318 条 318-R1（PGM:528「②当天没有做过合格巡检的设施不得开放」；BSM:1300「开放前巡检 + 营业中抽检 + 定期检修」）：
+    // 页面「选择模板（可空）」不选就不传 template_id；新建合格巡检 200、库内模板为空，随后提交 200；填了不存在的模板仍 404。
+    @Test
+    void inspectionWithoutTemplateIsCreatedAndSubmitted() throws Exception {
+        String uploaded = mockMvc.perform(multipart("/api/v1/evidence/attachments/upload")
+                        .file(new MockMultipartFile("file", "guardrail.jpg", "image/jpeg", new byte[]{1, 2, 3}))
+                        .param("business_type", "amusement_safety_inspection").param("attachment_role", "photo").with(staff))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+        String attachment = json.readTree(uploaded).path("data").path("id").asText();
+        Map<String, Object> request = new HashMap<>(Map.of(
+                "idempotency_key", "a318-none-" + digits, "project_id", amusement, "overall_result", "pass",
+                "evidence_attachment_ids", List.of(attachment),
+                "items", List.of(Map.of("item_code", "guardrail", "item_name", "开放前护栏检查", "result", "pass", "severity", "high"))));
+        String body = mockMvc.perform(post("/api/v1/amusement/safety-inspections").with(staff)
+                        .contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(request)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.template_id").value(nullValue()))
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+        String id = json.readTree(body).path("data").path("id").asText();
+        assertThat(jdbc.queryForObject("SELECT template_id FROM amusement_safety_inspections WHERE id = ?", String.class, id)).isNull();
+
+        mockMvc.perform(post("/api/v1/amusement/safety-inspections/" + id + "/submit").with(staff)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json.writeValueAsString(Map.of("idempotency_key", "a318-submit-" + digits, "attachment_ids", List.of(),
+                                "action_result", "submitted", "comment", "提交巡检"))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.inspection_status").value("submitted"));
+
+        request.put("idempotency_key", "a318-missing-" + digits);
+        request.put("template_id", "tpl_a318_missing_" + digits);
+        mockMvc.perform(post("/api/v1/amusement/safety-inspections").with(staff)
+                        .contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(request)))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.detail_code").value("SAFETY_TEMPLATE_NOT_FOUND"));
     }
 
     // 229-R6：不带巡检时间新建，巡检时间取提交时刻。

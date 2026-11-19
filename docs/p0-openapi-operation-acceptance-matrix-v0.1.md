@@ -1,4 +1,4 @@
-# P0 OpenAPI Operation 验收矩阵 V0.82
+# P0 OpenAPI Operation 验收矩阵 V0.83
 
 ## 1. 文档定位
 
@@ -17,7 +17,7 @@
 
 ## 3. Operation 清单
 
-> 当前 `docs/openapi/openapi-p0.json` 共 1399 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
+> 当前 `docs/openapi/openapi-p0.json` 共 1400 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
 
 | 标签 | 方法 | 路径 | operationId | 摘要 | 请求体 | 权限 | 认证上下文 | 数据范围 | 终端/设备能力/调用通道 | 幂等 | 成功事件 | 失败事件 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -375,8 +375,8 @@
 | ticketing | `POST` | `/api/v1/ticketing/orders` | `createTicketOrder` | 创建票务订单（含一体机辅助售票） | `TicketOrderRequest` | `ticket.order.create` | `staff-token` | `project-channel` | web, kiosk, miniapp, app | 是 | `ticket_order.created` | `ticket_order.create_failed` |
 | ticketing | `POST` | `/api/v1/ticketing/orders/{order_id}/issue` | `issueTicket` | 出票（含一体机辅助售票） | `TicketIssueRequest` | `ticket.ticket.issue` | `staff-token` | `project-order` | web, kiosk, miniapp, app | 是 | `ticket.issued` | `ticket.issue_failed` |
 | ticketing | `POST` | `/api/v1/ticketing/orders/{order_id}/pay-intents` | `createTicketOrderPayIntent` | 创建票务支付意图（含一体机辅助售票） | `PaymentIntentRequest` | `finance.payment_intent.create` | `staff-token` | `project-order` | web, kiosk, miniapp, app | 是 | `payment.intent_created` | `payment.intent_failed` |
-| ticketing | `POST` | `/api/v1/ticketing/partner-vouchers/configs` | `createPartnerVoucherConfig` | 配置通票合作方券结算口径 | `object` | `ticket.entitlement.manage` | `staff-token` | `project` | web | 否 | `not_applicable` | `not_applicable` |
-| ticketing | `POST` | `/api/v1/ticketing/partner-vouchers/redemptions` | `importPartnerVoucherRedemption` | 导入合作方券核销回流 | `object` | `verification.execute` | `staff-token` | `project` | web | 否 | `not_applicable` | `not_applicable` |
+| ticketing | `POST` | `/api/v1/ticketing/partner-vouchers/configs` | `createPartnerVoucherConfig` | 配置通票合作方券结算口径 | `object` | `ticket.entitlement.manage` | `staff-token` | `project` | web | 否 | `ticket.partner_voucher_config.saved` | `ticket.partner_voucher_config.save_failed` |
+| ticketing | `POST` | `/api/v1/ticketing/partner-vouchers/redemptions` | `importPartnerVoucherRedemption` | 导入合作方券核销回流 | `object` | `verification.execute` | `staff-token` | `project` | web | 否 | `ticket.partner_voucher_redemption.imported` | `ticket.partner_voucher_redemption.import_failed` |
 | ticketing | `GET` | `/api/v1/ticketing/price-rules` | `listTicketPriceRules` | 查询平日、周末、节假日及派生价规则 | `-` | `ticket.price_variant.view` | `staff-token` | `project-channel` | web | 否 | `ticket_price_variant.viewed` | `ticket_price_variant.view_failed` |
 | ticketing | `POST` | `/api/v1/ticketing/price-rules` | `createTicketPriceRule` | 创建平日、周末、节假日及派生价规则 | `TicketPriceRuleRequest` | `ticket.price_variant.manage` | `staff-token` | `project-channel` | web | 是 | `ticket_price_variant.changed` | `ticket_price_variant.change_failed` |
 | ticketing | `POST` | `/api/v1/ticketing/price-rules/{id}/archive` | `archiveTicketPriceRule` | 存档价格规则 | `object` | `ticket.price_variant.manage` | `staff-token` | `project-channel` | web | 是 | `ticket_price_variant.archived` | `ticket_price_variant.archive_failed` |
@@ -469,6 +469,7 @@
 | access | `POST` | `/api/v1/staff/device-credentials` | `bindStaffDeviceCredential` | 绑定/换机申请员工设备凭证 | `StaffDeviceBindRequest` | `staff.device.bind` | `staff-token` | `project` | staff_private_phone, web | 是 | `staff_device.bound` | `staff_device.bind_failed` |
 | access | `POST` | `/api/v1/staff/device-credentials/{id}/approve-rebind` | `approveStaffDeviceRebind` | 审批换机生效 | `StaffDeviceRebindDecisionRequest` | `staff.device.review` | `staff-token` | `project` | web, mobile_admin | 是 | `staff_device.rebound` | `staff_device.rebind_failed` |
 | access | `POST` | `/api/v1/staff/device-credentials/{id}/report-integrity` | `reportStaffDeviceIntegrity` | 端侧完整性上报 | `StaffDeviceIntegrityReportRequest` | `staff.device.bind` | `device-credential` | `project` | staff_private_phone | 是 | `staff_device.integrity_reported` | `staff_device.integrity_report_failed` |
+| access | `POST` | `/api/v1/staff/device-credentials/report-integrity` | `reportMyStaffDeviceIntegrity` | 私人手机上报本机完整性 | `StaffDeviceIntegrityReportRequest` | `staff.device.bind` | `device-credential` | `project` | staff_private_phone | 是 | `staff_device.integrity_reported` | `staff_device.integrity_report_failed` |
 | access | `POST` | `/api/v1/staff/device-credentials/{id}/revoke` | `revokeStaffDeviceCredential` | 解绑/失效设备凭证 | `StaffDeviceRevokeRequest` | `staff.device.revoke` | `staff-token` | `project` | web, mobile_admin | 是 | `staff_device.revoked` | `staff_device.revoke_failed` |
 | access | `GET` | `/api/v1/staff/notices` | `listEmployeeNotices` | 查询员工通知 | `-` | `staff.notice.view` | `staff-token` | `project` | staff_private_phone, web, mobile_admin, staff_work_phone | 否 | `staff.notice.viewed` | `not_applicable` |
 | access | `POST` | `/api/v1/staff/notices/{id}/acknowledge` | `acknowledgeEmployeeNotice` | 确认/同意员工通知 | `EmployeeNoticeAcknowledgeRequest` | `staff.notice.view` | `staff-token` | `project` | staff_private_phone, web, staff_work_phone | 是 | `staff.notice_acknowledged` | `staff.notice_acknowledge_failed` |

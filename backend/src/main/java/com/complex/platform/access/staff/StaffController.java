@@ -1,6 +1,6 @@
 package com.complex.platform.access.staff;
 
-// 文件版本：V0.14
+// 文件版本：V0.15
 import static com.complex.platform.common.api.ApiRequests.requireIdempotencyKey;
 
 import com.complex.platform.access.staff.dto.EmployeeNoticeAcknowledgeRequest;
@@ -33,6 +33,8 @@ public class StaffController {
     private StaffRegistrationService registrations;
     @org.springframework.beans.factory.annotation.Autowired
     private StaffLockerService lockers;
+    @org.springframework.beans.factory.annotation.Autowired
+    private StaffDeviceIntegrityReportService integrityReports;
 
     private final AuditedOperationExecutor operations;
 
@@ -157,6 +159,15 @@ public class StaffController {
     ) {
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.reportIntegrity(id, request));
+    }
+
+    /** 第十八批 BB 段 266-R1（PGM:586）：私人手机按当前登录员工上报本机完整性（App 拿不到凭证编号）。 */
+    @PostMapping("/device-credentials/report-integrity")
+    public ApiResponse<StaffDeviceCredentialRecord> reportMyIntegrity(
+            @RequestBody @jakarta.validation.Valid StaffDeviceIntegrityReportRequest request
+    ) {
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(integrityReports.reportMine(request));
     }
 
     @PostMapping("/device-credentials/{id}/revoke")

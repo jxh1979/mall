@@ -1,6 +1,6 @@
 package com.complex.terminal
 
-// 文件版本：V0.09
+// 文件版本：V0.10
 
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
@@ -257,9 +257,11 @@ class TerminalFieldWorkflowTest {
           assertTrue("\"idempotency_key\"" in req.body)
           okJson("""{"id":"cred-1","bind_status":"active"}""")
         }
-        "/api/v1/staff/device-credentials/cred-1/report-integrity" -> {
-          assertTrue("\"integrity_status\":\"compromised\"" in req.body)
-          okJson("""{"id":"cred-1","bind_status":"active","integrity_status":"compromised"}""")
+        // 第十八批 BB 段 266-R2：App 拿不到凭证编号，按登录人上报本机完整性。
+        "/api/v1/staff/device-credentials/report-integrity" -> {
+          assertTrue("\"idempotency_key\"" in req.body)
+          assertTrue("\"integrity_status\":\"abnormal\"" in req.body)
+          okJson("""{"id":"cred-1","bind_status":"revoked","integrity_status":"abnormal"}""")
         }
         else -> error("unexpected path ${req.path}")
       }
@@ -277,19 +279,56 @@ class TerminalFieldWorkflowTest {
     val approved = workflow.approveStaffDeviceRebind(bound.id)
     assertEquals("active", approved.bindStatus)
 
-    val reported = workflow.reportStaffDeviceIntegrity(bound.id, integrityStatus = "compromised")
-    assertEquals("compromised", reported.integrityStatus)
+    val reported = workflow.reportStaffDeviceIntegrity(integrityStatus = "abnormal")
+    assertEquals("abnormal", reported.integrityStatus)
+    assertEquals(1, store.pendingEvents().count { it.eventType == "terminal.staff_device.integrity_reported" })
     assertEquals(
       listOf(
         "/api/v1/staff/device-credentials",
         "/api/v1/staff/device-credentials/cred-1/approve-rebind",
-        "/api/v1/staff/device-credentials/cred-1/report-integrity",
+        "/api/v1/staff/device-credentials/report-integrity",
       ),
       paths,
     )
     // 第十八批 AF 段第 198 条 198-R5：绑定设备凭证、批准换机、完整性上报，服务端都不读 operator_note，终端不再发。
     assertEquals(3, bodies.size)
     bodies.forEach { (path, body) -> assertFalse("operator_note" in body, path) }
+  }
+
+  /**
+   * 第十八批 BB 段收尾复核（266-R2 补全；PGM:586「检测到手机被破解、篡改或处于异常环境时，私人手机 App 失效并复核。」）：未声明身份的手机在
+   * 「员工设备凭证」首次绑定（无历史凭证，直接生效）后当场采用私人手机身份，本机检测不可信即以私人手机身份签名上报，服务端吊销本人凭证。
+   * 采用身份、本机采集与退回登录页在 MainActivity.showStaffDevice（Activity 层，android-app 没有 JVM 单测），这里核判定与上报这一层。
+   */
+  @Test
+  fun firstBindThenUntrustedPhoneReportsIntegrityAsPrivatePhone() {
+    val seen = mutableListOf<StubHttpClient.Captured>()
+    val api = newApi { req ->
+      seen += req
+      when (req.path) {
+        "/api/v1/staff/device-credentials" -> okJson("""{"id":"cred-1","bind_status":"active"}""")
+        "/api/v1/staff/device-credentials/report-integrity" ->
+          okJson("""{"id":"cred-1","bind_status":"revoked","integrity_status":"root_detected"}""")
+        else -> error("unexpected path ${req.path}")
+      }
+    }
+    api.deviceSigner = { "sig" }
+    val workflow = TerminalWorkflow(api, storeWithSessionAndBinding())
+
+    val bound = workflow.bindStaffDeviceCredential(staffProfileId = "profile-1", devicePublicKey = "pub", deviceFingerprintHash = "fp-1")
+    assertEquals("active", bound.bindStatus)
+    // MainActivity.showStaffDevice 绑定成功分支：本机未声明身份时以凭证指纹作设备编号、采用私人手机身份。
+    api.deviceId = "fp-1"
+    api.terminalType = STAFF_PRIVATE_PHONE
+    val integrity = DeviceIntegrityVerdict.of(suPresent = true, debuggerAttached = false, testKeys = false, emulator = false, hookFramework = false)
+    val reported = workflow.reportStaffDeviceIntegrity(integrity)
+
+    assertEquals("revoked", reported.bindStatus)
+    val report = seen.single { it.path == "/api/v1/staff/device-credentials/report-integrity" }
+    assertTrue("\"integrity_status\":\"root_detected\"" in report.body)
+    assertEquals(listOf(STAFF_PRIVATE_PHONE), report.headers["X-Terminal-Type"])
+    assertEquals(listOf("fp-1"), report.headers["X-Device-Id"])
+    assertEquals(listOf("sig"), report.headers["X-Device-Signature"])
   }
 
   @Test
@@ -518,7 +557,7 @@ class TerminalFieldWorkflowTest {
 private class StubHttpClient(
   private val handler: Handler,
 ) : HttpClient() {
-  data class Captured(val path: String, val body: String, val method: String)
+  data class Captured(val path: String, val body: String, val method: String, val headers: Map<String, List<String>> = emptyMap())
 
   fun interface Handler {
     fun handle(captured: Captured): HttpResponse<String>
@@ -531,7 +570,7 @@ private class StubHttpClient(
   ): HttpResponse<T> {
     val body = extractBody(request)
     val path = request.uri().path + (request.uri().query?.let { "?$it" } ?: "")
-    val captured = Captured(path = path, body = body, method = request.method())
+    val captured = Captured(path = path, body = body, method = request.method(), headers = request.headers().map())
     return handler.handle(captured) as HttpResponse<T>
   }
 

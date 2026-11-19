@@ -1,6 +1,6 @@
 package com.complex.terminal
 
-// 文件版本：V0.07
+// 文件版本：V0.08
 
 import java.util.UUID
 
@@ -429,15 +429,12 @@ class TerminalWorkflow(
     return record
   }
 
-  fun reportStaffDeviceIntegrity(
-    credentialId: String,
-    integrityStatus: String,
-  ): StaffDeviceCredentialRecord {
+  /** 第十八批 BB 段 266-R2（PGM:586）：私人手机按登录人上报本机完整性；服务端取本人生效中的凭证，非 trusted 即吊销。 */
+  fun reportStaffDeviceIntegrity(integrityStatus: String): StaffDeviceCredentialRecord {
     requireOnline()
     val record = api.reportStaffDeviceIntegrity(
-      credentialId,
       StaffDeviceIntegrityReportRequest(
-        idempotencyKey = stableIdempotencyKey("staff-device-integrity", credentialId, integrityStatus),
+        idempotencyKey = stableIdempotencyKey("staff-device-integrity", integrityStatus),
         integrityStatus = integrityStatus,
       ),
     )
@@ -445,7 +442,7 @@ class TerminalWorkflow(
       TerminalEvent(
         eventType = "terminal.staff_device.integrity_reported",
         summary = "员工设备完整性上报",
-        payload = mapOf("credentialId" to credentialId, "integrityStatus" to (record.integrityStatus ?: integrityStatus)),
+        payload = mapOf("integrityStatus" to (record.integrityStatus ?: integrityStatus)),
         occurredAt = nowIso(),
       ),
     )

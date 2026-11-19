@@ -1,6 +1,6 @@
 package com.complex.terminal
 
-// 文件版本：V0.20
+// 文件版本：V0.21
 
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
@@ -435,6 +435,7 @@ data class StaffDeviceRebindDecisionRequest(
 )
 
 // 设备完整性上报 POST .../device-credentials/{id}/report-integrity
+// 私人手机按登录人上报 POST .../device-credentials/report-integrity（reportMyStaffDeviceIntegrity）也用这个请求体。
 @Serializable
 data class StaffDeviceIntegrityReportRequest(
   val idempotencyKey: String,

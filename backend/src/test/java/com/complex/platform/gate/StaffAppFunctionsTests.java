@@ -1,6 +1,6 @@
 package com.complex.platform.gate;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -22,7 +22,9 @@ class StaffAppFunctionsTests {
                 {"POST", "/api/v1/bar/reservations"},
                 {"POST", "/api/v1/facility/work-orders/w1/review"},
                 {"GET", "/api/v1/merchant-service/work-orders/assigned-to-me"},
-                {"POST", "/api/v1/staff/lockers/scan-token"}}) {
+                {"POST", "/api/v1/staff/lockers/scan-token"},
+                // 第十八批 BB 段 266-R1（PGM:586）：私人手机按登录人上报本机完整性。
+                {"POST", "/api/v1/staff/device-credentials/report-integrity"}}) {
             assertThat(StaffAppFunctions.allows("staff_private_phone", call[0], call[1])).as(call[0] + " " + call[1]).isTrue();
         }
     }

@@ -1,6 +1,6 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.22
+// 文件版本：V0.23
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.LocalZone;
@@ -3342,8 +3342,12 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
         return executeWrite("createTransferOrder", request == null ? null : request.idempotencyKey(), request,
                 InventoryTransferOrderRecord.class, "inventory.transfer_order_created", "inventory.transfer_order_create_failed",
                 "inventory.transfer_order.manage", "inventory_transfer_order",
-                // 复核：所属项目闸在幂等之前（同号重放也先过它）；体内照旧再取一次落库用的项目
-                () -> transferOrderProject(requireText(requireRequest(request).toOwnerId(), "to_owner_id"), trimToNull(request.projectId())),
+                // 复核：所属项目闸在幂等之前（同号重放也先过它）；体内照旧再取一次落库用的项目。
+                // 第十八批 BB 段控制席并入①：商户账号须为出让方或接收方之一（同在幂等之前）。
+                () -> {
+                    transferOrderProject(requireText(requireRequest(request).toOwnerId(), "to_owner_id"), trimToNull(request.projectId()));
+                    transferFlow.requireCreatorParty(trimToNull(request.fromOwnerId()), trimToNull(request.toOwnerId()));
+                },
                 () -> {
                     com.complex.platform.inventory.dto.CreateTransferOrderRequest actual = requireRequest(request);
                     String transferType = requireText(actual.transferType(), "transfer_type");
@@ -3529,6 +3533,8 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
         return executeWrite("receiveTransferOrder:" + id, request == null ? null : request.idempotencyKey(), request,
                 InventoryTransferOrderRecord.class, "inventory.transfer_order_received", "inventory.transfer_order_receive_failed",
                 "inventory.transfer_order.manage", "inventory_transfer_order",
+                // 第十八批 BB 段 276-R1：借调单收货只认借入方，闸在幂等之前。
+                () -> transferFlow.requireLendingHandler(id, true),
                 () -> {
                     InventoryTransferOrderRecord o = repository.findTransferOrderById(id).orElseThrow(() ->
                             ApiException.notFound("TRANSFER_ORDER_NOT_FOUND", "调拨单不存在或已被删除"));
@@ -3698,6 +3704,8 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
         return executeWrite("cancelTransferOrder:" + id, request == null ? null : request.idempotencyKey(), request,
                 InventoryTransferOrderRecord.class, "inventory.transfer_order_cancelled",
                 "inventory.transfer_order_cancel_failed", "inventory.transfer_order.manage", "inventory_transfer_order",
+                // 第十八批 BB 段 276-R1：借调单取消只认借出方或借入方（非商户账号按单上项目），闸在幂等之前。
+                () -> transferFlow.requireLendingHandler(id, false),
                 () -> {
                     // 第十八批 AO 段 261-B04-R2：先锁单据行再判状态，与发货同时发生只认先提交的一笔。
                     InventoryTransferOrderRecord o = transferFlow.lockForUpdate(id);

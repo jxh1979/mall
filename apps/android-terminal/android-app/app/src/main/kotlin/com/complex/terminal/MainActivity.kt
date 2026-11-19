@@ -1,6 +1,6 @@
 package com.complex.terminal
 
-// 文件版本：V0.26
+// 文件版本：V0.27
 
 import android.app.Activity
 import android.content.Intent
@@ -270,7 +270,9 @@ class MainActivity : Activity() {
     val password = editText("密码").apply {
       inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
     }
-    val status = statusText("请使用员工账号登录")
+    // 第十八批 BB 段 266-R2（PGM:586）：私人手机本机检测异常时，登录页说明 App 已失效的原因。
+    val status = statusText(if (api.terminalType == STAFF_PRIVATE_PHONE && PrivatePhoneIntegrity.status() != "trusted")
+      PrivatePhoneIntegrity.INVALIDATED_NOTICE else "请使用员工账号登录")
 
     val loginButton = button("登录") {
       val u = username.text.toString().trim()
@@ -285,7 +287,13 @@ class MainActivity : Activity() {
         onSuccess = { session ->
           status.text = "登录成功：${session.username}"
           flushWorkPhoneReceipts()
-          if (api.deviceId != null) showHome() else showDeviceBinding()
+          // 第十八批 BB 段 266-R2（PGM:586「检测到手机被破解、篡改或处于异常环境时，私人手机 App 失效并复核。」）：私人手机每次登录在本机检测，
+          // 异常即上报（服务端吊销本人凭证、通知并留痕，换绑须审批复核）并退回登录页，不进首页；上报失败也照样退回。
+          val integrity = if (api.terminalType == STAFF_PRIVATE_PHONE) PrivatePhoneIntegrity.status() else "trusted"
+          if (integrity != "trusted") {
+            runBackground(action = { workflow.reportStaffDeviceIntegrity(integrity) },
+              onSuccess = { logoutAndRestart() }, onError = { logoutAndRestart() })
+          } else if (api.deviceId != null) showHome() else showDeviceBinding()
         },
         onError = { status.text = "登录失败：${friendly(it)}" },
       )
@@ -1379,6 +1387,13 @@ class MainActivity : Activity() {
             getSharedPreferences("private_phone", MODE_PRIVATE).edit().putString("device_id", fingerprint).apply()
             api.deviceId = fingerprint
             api.terminalType = STAFF_PRIVATE_PHONE
+            // 第十八批 BB 段收尾复核（266-R2 补全；PGM:586「检测到手机被破解、篡改或处于异常环境时，私人手机 App 失效并复核。」）：首次绑定当场采用
+            // 私人手机身份，同登录一样在本机检测，异常即上报（服务端吊销本人凭证、通知并留痕）并退回登录页；上报失败也照样退回。
+            val integrity = PrivatePhoneIntegrity.status()
+            if (integrity != "trusted") {
+              runBackground(action = { workflow.reportStaffDeviceIntegrity(integrity) },
+                onSuccess = { logoutAndRestart() }, onError = { logoutAndRestart() })
+            }
           }
           status.text = "凭证绑定：${rec.id}（状态 ${statusZh(rec.bindStatus)}）"
         },

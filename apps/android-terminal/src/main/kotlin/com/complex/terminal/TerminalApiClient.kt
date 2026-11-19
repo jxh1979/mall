@@ -1,6 +1,6 @@
 package com.complex.terminal
 
-// 文件版本：V0.15
+// 文件版本：V0.16
 
 import java.net.URI
 import java.net.URLEncoder
@@ -375,14 +375,9 @@ class TerminalApiClient(
     return post("/api/v1/staff/device-credentials/${credentialSeg}/approve-rebind", request)
   }
 
-  // 员工设备凭证：完整性上报
-  fun reportStaffDeviceIntegrity(
-    credentialId: String,
-    request: StaffDeviceIntegrityReportRequest,
-  ): StaffDeviceCredentialRecord {
-    val credentialSeg = urlEncode(credentialId)
-    return post("/api/v1/staff/device-credentials/${credentialSeg}/report-integrity", request)
-  }
+  // 员工设备凭证：私人手机按登录人上报本机完整性（第十八批 BB 段 266-R2；App 拿不到凭证编号）
+  fun reportStaffDeviceIntegrity(request: StaffDeviceIntegrityReportRequest): StaffDeviceCredentialRecord =
+    post("/api/v1/staff/device-credentials/report-integrity", request)
 
   // 票务核销冲正
   fun reverseVerification(verificationId: String, request: VerificationReverseRequest): VerificationResponse {

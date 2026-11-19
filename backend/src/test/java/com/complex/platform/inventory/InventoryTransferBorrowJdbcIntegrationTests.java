@@ -1,6 +1,6 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -396,6 +396,56 @@ class InventoryTransferBorrowJdbcIntegrationTests {
         assertThat(custodian(codeA)).isEqualTo(borrower);
         mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get(BASE + "/" + id + "/dispositions").with(lenderStaff))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.data.lines[0].outstanding_quantity").value(2));
+    }
+
+    // 第十八批 BB 段第 276 条 276-R1（PGM:528「④看不到别的商户和别的项目的数据」；PGM:744「前端隐藏只是辅助，后端接口必须独立校验。」；
+    // BSM:1201「借用期间保管人变更为借入方并在溯源码上登记」）：借用单收货只认借入方——借出方扫齐码点收货、第三家商户收货都 403，
+    // 单仍是已发货、保管方未被翻成借入方；借入方收货照常。修复前红：借出方收货 200、保管方被改成借入方
+    @Test
+    void onlyTheBorrowerCanReceiveTheLendingOrder() throws Exception {
+        String id = createBorrow(2, List.of(codeA, codeB));
+        String scanned = "{\"scanned_trace_codes\":[\"" + codeA + "\",\"" + codeB + "\"]}";
+        step(lenderStaff, id, "ship", scanned, "shipped");
+        call(lenderStaff, id, "receive", scanned).andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.detail_code").value("STORE_RECEIPT_ONLY"));
+        call(thirdStaff, id, "receive", scanned).andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.detail_code").value("STORE_RECEIPT_ONLY"));
+        assertThat(orderStatus(id)).isEqualTo("shipped");
+        assertThat(jdbc.queryForMap("SELECT custodian_id,lending_order_id FROM inventory_trace_codes WHERE trace_code=?", codeA))
+                .containsEntry("custodian_id", null).containsEntry("lending_order_id", null);
+        step(borrowerStaff, id, "receive", scanned, "received");
+    }
+
+    // 276-R1：借调单取消只认借出方或借入方——第三家商户 403、单仍是新建；借出方取消照常。修复前红：第三家商户取消 200
+    @Test
+    void onlyTheLenderOrBorrowerCanCancelTheLendingOrder() throws Exception {
+        String id = createBorrow(2, List.of(codeA, codeB));
+        call(thirdStaff, id, "cancel", "{}").andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.detail_code").value("CROSS_MERCHANT_FORBIDDEN"));
+        assertThat(orderStatus(id)).isEqualTo("created");
+        step(lenderStaff, id, "cancel", "{}", "cancelled");
+    }
+
+    // 276-R1：取消的办理方闸在幂等之前——借入方用键 K 取消后，第三家商户拿同一个 K 重放 403。修复前红：幂等层 409 IDEMPOTENCY_KEY_USED
+    @Test
+    void cancelHandlerGateRunsBeforeIdempotency() throws Exception {
+        String id = createBorrow(2, List.of(codeA, codeB));
+        String body = "{\"idempotency_key\":\"b276-cancel-" + suffix + "\"}";
+        mockMvc.perform(post(BASE + "/" + id + "/cancel").with(borrowerStaff).contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.status").value("cancelled"));
+        mockMvc.perform(post(BASE + "/" + id + "/cancel").with(thirdStaff).contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isForbidden()).andExpect(jsonPath("$.detail_code").value("CROSS_MERCHANT_FORBIDDEN"));
+    }
+
+    // 第十八批 BB 段控制席并入①（PGM:528「④看不到别的商户和别的项目的数据」；PGM:744）：建借调单时商户账号须为出让方或接收方之一——
+    // 第三家商户替借出方、借入方建单 403 且不落单；借出方本商户账号建单照常。修复前红：第三家商户建单 200
+    @Test
+    void merchantAccountCanOnlyCreateTransferOrdersItIsPartyTo() throws Exception {
+        mockMvc.perform(post(BASE).with(thirdStaff).contentType(MediaType.APPLICATION_JSON).content(borrowBody(device, 2, List.of(codeA, codeB), DUE)))
+                .andExpect(status().isForbidden()).andExpect(jsonPath("$.detail_code").value("CROSS_MERCHANT_FORBIDDEN"));
+        assertThat(count("SELECT count(*) FROM inventory_transfer_orders WHERE from_owner_id=?", lender)).isZero();
+        mockMvc.perform(post(BASE).with(lenderStaff).contentType(MediaType.APPLICATION_JSON).content(borrowBody(device, 2, List.of(codeA, codeB), DUE)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.status").value("created"));
     }
 
     // ── 夹具 ──

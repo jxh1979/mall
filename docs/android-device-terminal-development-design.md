@@ -1155,9 +1155,11 @@ active(生效中)
 
 #### 13.5.4 Root / 调试 / 异常环境检测 → 凭证失效 → 进复核
 
-- **检测项：** Root（su/Magisk 特征、`ro.debuggable`）、开发者调试（USB 调试/可调试构建/附加调试器）、Keystore 完整性异常、`device_key_fingerprint` 或 `device_fingerprint_hash` 与已绑定值 **mismatch**。
-- **命中处置：** 命中任一项时端侧**立即将本机凭证置失效（invalidated）并停用 App 现场能力**，同时上报 `device_credential.invalidated`，后端将该 `staff_device_credentials` 记录置复核态进入**人工复核**（与 §13.4.1 `STAFF_DEVICE_ABNORMAL`、§13.1 私人手机条目联动）。
-- **恢复：** 复核确认环境恢复可信后方可重新绑定（走 §13.5.2 流程或解锁旧凭证），高风险（Root/指纹 mismatch）建议双人复核，不允许端侧自助解除。
+> **按实际做法改写（2026-11-19 第十八批 BB 段第 266 条 266-R1、266-R2；PGM:586「检测到手机被破解、篡改或处于异常环境时，私人手机 App 失效并复核。」）**：下列三条为现行实现。
+
+- **检测时机与检测项：** 私人手机 App 每次登录成功后（以及在「员工设备凭证」首次绑定、当场采用私人手机身份时）在本机按特征检测（采集在 `PrivatePhoneIntegrity`，判定在共享库 `DeviceIntegrityVerdict`）：常见 su 路径或 `/data/adb/magisk` 存在 → `root_detected`；调试器已连接或等待调试器 → `debug_detected`；系统为 test-keys 构建、模拟器（`Build.FINGERPRINT` 以 generic 开头或含 emulator、`Build.HARDWARE` 为 goldfish／ranchu、`Build.PRODUCT` 含 sdk）、Xposed 或 Frida 挂钩任一成立 → `abnormal`；都没有 → `trusted`。不查开发者选项与 USB 调试（正常员工手机常开，会误伤），不按构建类型豁免，不接第三方设备证明服务；原列的 `ro.debuggable`、Keystore 完整性异常与指纹 mismatch 不在端侧检测项内。
+- **命中处置：** 非 `trusted` 时 App 调 `POST /api/v1/staff/device-credentials/report-integrity`（`reportMyStaffDeviceIntegrity`，按当前登录员工取本人生效中的设备凭证；App 拿不到凭证编号，按编号上报的旧入口保留但 App 不调），后端吊销该凭证（`bind_status=revoked`）、给员工发通知并留痕 `staff_device.integrity_failed`；端侧不另发 `device_credential.invalidated`（§13.5.6 该事件与 §13.5.7 对应验收以本条为准），只记本地事件 `terminal.staff_device.integrity_reported`。上报后（失败也一样）App 退出登录回登录页，登录页提示「本机被检测到已被破解、篡改或处于异常环境，私人手机 App 已失效；请联系主管复核后重新绑定。」，不进首页。
+- **恢复：** 复核走换绑审批：员工重新绑定后为待批准换机，经持 `staff.device.review` 的审批人批准（`approveRebind`）才生效；不允许端侧自助解除。
 
 #### 13.5.5 端侧 UI 屏：注册 / 绑定 / 解绑 / 状态
 
@@ -1562,3 +1564,4 @@ Android P0 启动前，后端至少需要提供：
 | 2026-06-18 D10 MDM 收口【待业务最终确认】 | 增 | §13.1.1 | 新增 D10 "未纳管禁用" 收口口径：本期 MDM 自有侧暂缓，"未纳管设备禁用高风险动作"由终端开关+人工准入代偿，验收降级须签字责任人；`mdm.policy_checked` 标注"依赖外部 MDM，本期以终端开关代偿，纳管后恢复硬禁用"；MDM 白名单/预装清单/AMAPI 拦截留痕字段 P1。与 `p0-action-event-evidence-matrix §3.1` 同一口径 | 消解与 p0-action-event-evidence-matrix `mdm.policy_checked` 的矛盾 |
 | 2026-06-18 D10 MDM 收口定稿 | 改 | §8 业务裁决、§13.1.1 | 验收降级签字责任人由【待业务最终确认】定稿为"IT 安全负责人（2026-06-18 业务确认）"；其余 MDM 代偿口径（终端开关+人工准入代偿、白名单/预装清单/AMAPI 留痕字段 P1）不变，与 `p0-action-event-evidence-matrix §3.1` 同一口径 | 业务已拍板，去除待确认标记 |
 | 2026-11-16 | 改 | §13.5.3、§13.5.7 | 第十八批 AN 段第 257 条：换机先后按第十八批裁决 70 改写——新手机可先发起绑定（待批准换机），后台批准时先作废旧凭证、再让新凭证生效；删去「旧凭证不解绑则新凭证不予绑定」与对应验收（与现行 StaffService.bindCredential、approveRebind 一致） | PGM:585；BSM:937；第十八批裁决 70 |
+| 2026-11-19 | 改 | §13.5.4 | 第十八批 BB 段第 266 条 266-R1、266-R2：检测项、命中处置与恢复按实际做法改写——登录时本机特征检测（su 与 Magisk 痕迹、test-keys、调试器已连接、模拟器、Xposed 与 Frida 挂钩），不查开发者选项与 USB 调试；命中即调本人上报入口 `reportMyStaffDeviceIntegrity`，由后端吊销凭证（端侧不另发 `device_credential.invalidated`）；复核走换绑审批 | PGM:586「检测到手机被破解、篡改或处于异常环境时，私人手机 App 失效并复核。」；BSM:938；待开发清单第 266 条 |

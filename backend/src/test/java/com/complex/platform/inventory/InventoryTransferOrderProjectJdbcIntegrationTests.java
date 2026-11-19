@@ -1,6 +1,6 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -224,6 +224,16 @@ class InventoryTransferOrderProjectJdbcIntegrationTests {
         read(admin, x).andExpect(status().isOk()).andExpect(jsonPath("$.data.id").value(x));
     }
 
+    // 第十八批 BB 段第 276 条 276-R1（第十八批裁决 18「之后办理……都按单上的项目」；PGM:744「前端隐藏只是辅助，后端接口必须独立校验。」）：
+    // 借用单取消对非商户账号按单上项目判——只能触及 A 的员工取消记 B 的借用单 403，单仍是新建。修复前红：取消 200
+    @Test
+    void lendingCancelByNonMerchantFollowsTheOrderProject() throws Exception {
+        String id = createBorrowInB();
+        call(staffA, id, "cancel", "{}").andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.detail_code").value("CROSS_PROJECT_FORBIDDEN"));
+        assertThat(jdbc.queryForObject("SELECT status FROM inventory_transfer_orders WHERE id=?", String.class, id)).isEqualTo("created");
+    }
+
     // ── 夹具 ──
 
     private String supplyBody(String to, String project) {
@@ -235,17 +245,22 @@ class InventoryTransferOrderProjectJdbcIntegrationTests {
 
     /** m2 借给 m 的两码借用单，记 B：按蛇形键建单 → 借出方交货扫码 → 借入方（B 门店）收货扫码。 */
     private String lentOut() throws Exception {
-        String body = """
-                {"idempotency_key":"%s","transfer_type":"lending","lending_mode":"borrow","from_owner_type":"merchant","from_owner_id":"%s",
-                 "to_owner_type":"merchant","to_owner_id":"%s","from_location_id":"%s","return_due_at":"%s","project_id":"%s",
-                 "lines":[{"item_id":"%s","quantity":2,"unit_price_cent":80000,"trace_codes":["%s","%s"]}]}
-                """.formatted(key(), lender, merchant, location, DUE, projectB, device, codeA, codeB);
-        String id = id(create(admin, body).andExpect(status().isOk()));
+        String id = createBorrowInB();
         call(lenderStaff, id, "ship", "{\"scanned_trace_codes\":[\"" + codeA + "\",\"" + codeB + "\"]}")
                 .andExpect(status().isOk()).andExpect(jsonPath("$.data.status").value("shipped"));
         call(storeB, id, "receive", "{\"scanned_trace_codes\":[\"" + codeA + "\",\"" + codeB + "\"]}")
                 .andExpect(status().isOk()).andExpect(jsonPath("$.data.status").value("received"));
         return id;
+    }
+
+    /** m2 借给 m 的两码借用单，记 B，按蛇形键建单（新建）。 */
+    private String createBorrowInB() throws Exception {
+        String body = """
+                {"idempotency_key":"%s","transfer_type":"lending","lending_mode":"borrow","from_owner_type":"merchant","from_owner_id":"%s",
+                 "to_owner_type":"merchant","to_owner_id":"%s","from_location_id":"%s","return_due_at":"%s","project_id":"%s",
+                 "lines":[{"item_id":"%s","quantity":2,"unit_price_cent":80000,"trace_codes":["%s","%s"]}]}
+                """.formatted(key(), lender, merchant, location, DUE, projectB, device, codeA, codeB);
+        return id(create(admin, body).andExpect(status().isOk()));
     }
 
     /** 后台调拨工作台列表：返回列出的单号。 */

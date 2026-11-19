@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: 综合体管理系统 P0 API 契约
-  version: V0.82
+  version: V0.83
   description: P0 首批编码前置契约。本文采用 JSON-compatible YAML，便于与 openapi-p0.json 保持一致。正式后端以 Java 21 + Spring Boot 4.x +
     springdoc-openapi 输出运行时 OpenAPI，并与本契约比对。
 servers:
@@ -8479,7 +8479,7 @@ paths:
       - inventory
       operationId: createTransferOrder
       summary: 新建跨主体流转单
-      description: V277 调拨（supply：平台供货主体→商户）与借调（lending：商户→商户，lending_mode 为 borrow 借用或 purchase 买断）建单。FS-019（BSM L1201「「借」只转移保管责任、不转移所有权（仅适用于不可消费物品；可消费物品的借用实质是调，交付时所有权随之转移）」「不可消费物品（设备、器具等）的借用必须约定归还时间」）：借用须带 return_due_at（应归还期限），否则 400 VALIDATION_FAILED；借用明细物料须为不可消费物品（inventory_items.non_consumable），可消费物品只能买断，否则 400 VALIDATION_FAILED。第十八批第 18 条（ENUM:162 库存流水「调拨」「借出」）：借调（lending，借用与买断）须带 from_location_id（出让方本商户出货库位，交货时从此扣库存），缺填 400 VALIDATION_FAILED。第十八批 G 段 82-R18a（第十八批裁决 18「要货单、借用单建单时记所属项目（在 m 的经营项目里选，只有一个时自动带），之后办理、赔偿应付、逾期工单都按单上的项目」）：project_id 为所属项目，须为接收方商户的经营项目（主项目或已批准的经营项目），不带且只有一个时自动带，否则 400 VALIDATION_FAILED；须在建单人按 inventory.transfer_order.manage 可触及的项目范围内，否则 403 CROSS_PROJECT_FORBIDDEN。门店要货建单为草稿（draft），借调为 created。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现。
+      description: V277 调拨（supply：平台供货主体→商户）与借调（lending：商户→商户，lending_mode 为 borrow 借用或 purchase 买断）建单。FS-019（BSM L1201「「借」只转移保管责任、不转移所有权（仅适用于不可消费物品；可消费物品的借用实质是调，交付时所有权随之转移）」「不可消费物品（设备、器具等）的借用必须约定归还时间」）：借用须带 return_due_at（应归还期限），否则 400 VALIDATION_FAILED；借用明细物料须为不可消费物品（inventory_items.non_consumable），可消费物品只能买断，否则 400 VALIDATION_FAILED。第十八批第 18 条（ENUM:162 库存流水「调拨」「借出」）：借调（lending，借用与买断）须带 from_location_id（出让方本商户出货库位，交货时从此扣库存），缺填 400 VALIDATION_FAILED。第十八批 G 段 82-R18a（第十八批裁决 18「要货单、借用单建单时记所属项目（在 m 的经营项目里选，只有一个时自动带），之后办理、赔偿应付、逾期工单都按单上的项目」）：project_id 为所属项目，须为接收方商户的经营项目（主项目或已批准的经营项目），不带且只有一个时自动带，否则 400 VALIDATION_FAILED；须在建单人按 inventory.transfer_order.manage 可触及的项目范围内，否则 403 CROSS_PROJECT_FORBIDDEN。门店要货建单为草稿（draft），借调为 created。第十八批 BB 段（控制席并入第 276 条；PGM:528「④看不到别的商户和别的项目的数据」；PGM:744「前端隐藏只是辅助，后端接口必须独立校验。」）：商户账号建单须为出让方（from_owner_id）或接收方（to_owner_id）之一，否则 403 CROSS_MERCHANT_FORBIDDEN；非商户账号照上按所属项目判。该校验与所属项目闸都在幂等之前，同号重放也先判。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现。
       x-permission: inventory.transfer_order.manage
       x-data-scope: project
       x-terminal-allowed:
@@ -8600,6 +8600,7 @@ paths:
       - SUPPLY_ENTITY_NOT_FOUND
       - INVENTORY_ITEM_NOT_FOUND
       - CROSS_PROJECT_FORBIDDEN
+      - CROSS_MERCHANT_FORBIDDEN
     get:
       tags:
         - inventory
@@ -8809,7 +8810,7 @@ paths:
         - inventory
       operationId: cancelTransferOrder
       summary: "取消调拨／要货单"
-      description: "取消流转单：已发货（shipped，借调单）一律 409 TRANSFER_SHIPPED_REQUIRES_RETURN_OR_LOSS（BSM L1212「已出库数量须实际退回验收，或经复核完成损失处理，不能仅点取消就回库」），不再冲销应付；借调单 created 直接取消；FS-011 门店要货（supply）草稿直接取消，已提交未出库（pending_supplier_review/pending_picking/pending_outbound）须填 operator_note 发起审批（BSM L1212「未出库数量可经审批取消」），返回单据状态不变，审批批准后置 cancelled（写留痕、操作者为终审人）、驳回照常流转，审批中其他步骤 409 TRANSFER_CANCEL_PENDING；已出库（in_delivery/pending_receipt/discrepancy）409 TRANSFER_SHIPPED_REQUIRES_RETURN_OR_LOSS，须经 .../dispositions 差异处理；已完成或已取消 409 TRANSFER_ORDER_NOT_CANCELLABLE。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现。"
+      description: "取消流转单：已发货（shipped，借调单）一律 409 TRANSFER_SHIPPED_REQUIRES_RETURN_OR_LOSS（BSM L1212「已出库数量须实际退回验收，或经复核完成损失处理，不能仅点取消就回库」），不再冲销应付；借调单 created 直接取消；FS-011 门店要货（supply）草稿直接取消，已提交未出库（pending_supplier_review/pending_picking/pending_outbound）须填 operator_note 发起审批（BSM L1212「未出库数量可经审批取消」），返回单据状态不变，审批批准后置 cancelled（写留痕、操作者为终审人）、驳回照常流转，审批中其他步骤 409 TRANSFER_CANCEL_PENDING；已出库（in_delivery/pending_receipt/discrepancy）409 TRANSFER_SHIPPED_REQUIRES_RETURN_OR_LOSS，须经 .../dispositions 差异处理；已完成或已取消 409 TRANSFER_ORDER_NOT_CANCELLABLE。第十八批 BB 段第 276 条 276-R1（PGM:528「④看不到别的商户和别的项目的数据」；PGM:744「前端隐藏只是辅助，后端接口必须独立校验。」）：借调单（lending）由借出方或借入方商户账号办理，否则 403 CROSS_MERCHANT_FORBIDDEN；非商户账号须能按 inventory.transfer_order.manage 触及单上所属项目，否则 403 CROSS_PROJECT_FORBIDDEN（平台管理员恒可）；该校验在幂等之前，同号重放也先判。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现。"
       x-permission: inventory.transfer_order.manage
       x-data-scope: project
       x-terminal-allowed:
@@ -9178,7 +9179,7 @@ paths:
         - "inventory"
       operationId: "receiveTransferOrder"
       summary: "调拨收货／门店要货签收"
-      description: "FS-011（BSM L1212「签收分别记录实收、合格接收、拒收和短少数量；合格接收部分转移货权、计入门店库存，并按已锁定内部结算价形成货款」；台账 §25）：门店要货（supply）仅在待签收（pending_receipt）签收，lines 须逐行覆盖本单每一行：实收 arrived_quantity＝合格 accepted_quantity＋拒收 rejected_quantity 且不超过发货数，短少＝发货数－实收由服务算出并留存；有随货溯源码的行 accepted_trace_codes 逐件扫码（个数＝合格数、只能是本行的码，否则 400 TRACE_CODE_MISMATCH），合格码归属转到门店（合格码未登记的，按本行物品登记到门店；已登记的，归属商户与登记物料随转为门店和本行物品；第十八批 N 段第 121 条，BSM 第 1166、1197、1201 行），拒收与短少码仍归供货主体；合格数量计入 warehouse_id/location_id（须为本门店在用仓库，400 TRANSFER_RECEIVE_WAREHOUSE_INVALID）并写调拨流水（movement_type=transfer，business_type=inventory_transfer；第十八批第 18 条 BSM:1201「平台级供货主体（如中央餐饮）向商户送货（调拨）」）；按合格数量×明细锁定单价形成一笔门店应付供货主体的应付（source_type=inventory_transfer，来源记录回指要货单），出库时不挂账；各行合格数都等于发货数→已完成（completed），否则→差异处理中（discrepancy）。签收只由门店本商户（to_owner_id）账号办理（平台管理员除外），他商户 403 CROSS_MERCHANT_FORBIDDEN、供货侧非商户账号 403 STORE_RECEIPT_ONLY；非待签收 409 TRANSFER_ORDER_NOT_PENDING_RECEIPT。借调单仍为已发货→已收货、须扫齐随货溯源码；借调买断在收货时按货款形成应付（不再于发货时挂账）；第十八批第 18 条（BSM:1201「「调」是买断，成交时所有权转移给接收方」）：买断收货须由接收方（to_owner_id）本商户账号办理（平台管理员除外，否则 403 STORE_RECEIPT_ONLY），带 warehouse_id（接收方在用仓库，否则 400 TRANSFER_RECEIVE_WAREHOUSE_INVALID，盘点冻结 409）、location_id 与逐行 lines[].item_id（接收方本商户物品；缺行、不存在或不属接收方 400 VALIDATION_FAILED），全部数量入该库位并写调拨流水（transfer，单价＝明细锁定内部结算价）。第十八批 M 段第 112 条（BSM 第 1201 行「买断时溯源码归属从原主体变更到接收主体」）：买断收货时随货溯源码的归属商户与登记物料随转为接收方及其逐行所选物品。FS-019（BSM L1201「借用期间保管人变更为借入方并在溯源码上登记」「借出方始终是这批货的所有权人」）：借用型（lending/borrow）收货只改溯源码当前保管主体（custodian）与在借单（lending_order_id）并记保管台账，所有权不动；买断型才翻转所有权。第十八批 M 段第 119 条（BSM:1936「……库房、库位……都要先在基础管理中定义清楚。」）：门店要货签收与借调买断收货的 location_id 须为该仓库下已建档的库位，否则 400 TRANSFER_RECEIVE_WAREHOUSE_INVALID。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现。"
+      description: "FS-011（BSM L1212「签收分别记录实收、合格接收、拒收和短少数量；合格接收部分转移货权、计入门店库存，并按已锁定内部结算价形成货款」；台账 §25）：门店要货（supply）仅在待签收（pending_receipt）签收，lines 须逐行覆盖本单每一行：实收 arrived_quantity＝合格 accepted_quantity＋拒收 rejected_quantity 且不超过发货数，短少＝发货数－实收由服务算出并留存；有随货溯源码的行 accepted_trace_codes 逐件扫码（个数＝合格数、只能是本行的码，否则 400 TRACE_CODE_MISMATCH），合格码归属转到门店（合格码未登记的，按本行物品登记到门店；已登记的，归属商户与登记物料随转为门店和本行物品；第十八批 N 段第 121 条，BSM 第 1166、1197、1201 行），拒收与短少码仍归供货主体；合格数量计入 warehouse_id/location_id（须为本门店在用仓库，400 TRANSFER_RECEIVE_WAREHOUSE_INVALID）并写调拨流水（movement_type=transfer，business_type=inventory_transfer；第十八批第 18 条 BSM:1201「平台级供货主体（如中央餐饮）向商户送货（调拨）」）；按合格数量×明细锁定单价形成一笔门店应付供货主体的应付（source_type=inventory_transfer，来源记录回指要货单），出库时不挂账；各行合格数都等于发货数→已完成（completed），否则→差异处理中（discrepancy）。签收只由门店本商户（to_owner_id）账号办理（平台管理员除外），他商户 403 CROSS_MERCHANT_FORBIDDEN、供货侧非商户账号 403 STORE_RECEIPT_ONLY；非待签收 409 TRANSFER_ORDER_NOT_PENDING_RECEIPT。借调单仍为已发货→已收货、须扫齐随货溯源码；借调买断在收货时按货款形成应付（不再于发货时挂账）；第十八批第 18 条（BSM:1201「「调」是买断，成交时所有权转移给接收方」）：买断收货须由接收方（to_owner_id）本商户账号办理（平台管理员除外，否则 403 STORE_RECEIPT_ONLY），带 warehouse_id（接收方在用仓库，否则 400 TRANSFER_RECEIVE_WAREHOUSE_INVALID，盘点冻结 409）、location_id 与逐行 lines[].item_id（接收方本商户物品；缺行、不存在或不属接收方 400 VALIDATION_FAILED），全部数量入该库位并写调拨流水（transfer，单价＝明细锁定内部结算价）。第十八批 M 段第 112 条（BSM 第 1201 行「买断时溯源码归属从原主体变更到接收主体」）：买断收货时随货溯源码的归属商户与登记物料随转为接收方及其逐行所选物品。FS-019（BSM L1201「借用期间保管人变更为借入方并在溯源码上登记」「借出方始终是这批货的所有权人」）：借用型（lending/borrow）收货只改溯源码当前保管主体（custodian）与在借单（lending_order_id）并记保管台账，所有权不动；买断型才翻转所有权。第十八批 M 段第 119 条（BSM:1936「……库房、库位……都要先在基础管理中定义清楚。」）：门店要货签收与借调买断收货的 location_id 须为该仓库下已建档的库位，否则 400 TRANSFER_RECEIVE_WAREHOUSE_INVALID。第十八批 BB 段第 276 条 276-R1（BSM:1201「借用期间保管人变更为借入方并在溯源码上登记」；PGM:744「前端隐藏只是辅助，后端接口必须独立校验。」）：借用型收货与买断型相同，只由借入方（to_owner_id）本商户账号办理（平台管理员除外），借出方、他商户或非商户账号 403 STORE_RECEIPT_ONLY；借调单的这一校验在幂等之前，同号重放也先判。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现。"
       x-permission: "inventory.transfer_order.manage"
       x-data-scope: "project"
       x-terminal-allowed:
@@ -13935,17 +13936,18 @@ paths:
         - ticketing
       operationId: createPartnerVoucherConfig
       summary: 配置通票合作方券结算口径
-      description: 第十八批 AE 段第 201 条 201-R2（契约与代码一致，照决策台账 171-R1 先例补登）：把一个票务权益模板配置为合作方券并定结算口径，同一模板再次提交即覆盖原配置。settlement_mode 为 free_marketing（免费营销券，核销不结算）或 internal_purchased（内部价采购券，核销按内部结算价给合作方挂应付）；partner_kind 为 merchant（入驻商户）或 external_partner（外部合作方）。entitlement_template_id、settlement_mode、partner_kind、partner_id 必填，缺失或取值不在上述范围 400 VALIDATION_FAILED；internal_purchased 须填大于 0 的 internal_price_cent，否则 400 VALIDATION_FAILED；权益模板不存在 404 ENTITLEMENT_TEMPLATE_NOT_FOUND。
+      description: 第十八批 AE 段第 201 条 201-R2（契约与代码一致，照决策台账 171-R1 先例补登）：把一个票务权益模板配置为合作方券并定结算口径，同一模板再次提交即覆盖原配置。settlement_mode 为 free_marketing（免费营销券，核销不结算）或 internal_purchased（内部价采购券，核销按内部结算价给合作方挂应付）；partner_kind 为 merchant（入驻商户）或 external_partner（外部合作方）。entitlement_template_id、settlement_mode、partner_kind、partner_id 必填，缺失或取值不在上述范围 400 VALIDATION_FAILED；internal_purchased 须填大于 0 的 internal_price_cent，否则 400 VALIDATION_FAILED；权益模板不存在 404 ENTITLEMENT_TEMPLATE_NOT_FOUND。第十八批 BB 段（控制席并入第 279、280 条；PGM:966「已拍板：所有有过程的业务动作都必须留痕」；PGM:659「所有业务数据默认按项目隔离」）：配置人与时间记入操作留痕，成功记 ticket.partner_voucher_config.saved，失败（含权限、范围、校验与模板不存在）记 ticket.partner_voucher_config.save_failed；权益模板按其提供方商户所在的项目（主项目与经营项目）判范围，操作人须按 ticket.entitlement.manage 能触及其中之一，否则 403 CROSS_PROJECT_FORBIDDEN；平台管理员恒可，模板没有提供方的只有平台管理员能配。
       x-permission: ticket.entitlement.manage
       x-data-scope: project
       x-terminal-allowed:
         - web
       x-idempotency-required: false
-      x-audit-event-success: not_applicable
-      x-audit-event-failure: not_applicable
+      x-audit-event-success: ticket.partner_voucher_config.saved
+      x-audit-event-failure: ticket.partner_voucher_config.save_failed
       x-failure-codes:
         - VALIDATION_FAILED
         - ENTITLEMENT_TEMPLATE_NOT_FOUND
+        - CROSS_PROJECT_FORBIDDEN
       requestBody:
         required: true
         content:
@@ -13999,20 +14001,21 @@ paths:
         - ticketing
       operationId: importPartnerVoucherRedemption
       summary: 导入合作方券核销回流
-      description: 第十八批 AE 段第 201 条 201-R2（契约与代码一致，照决策台账 171-R1 先例补登）：接收合作方（餐厅自己的系统）核销后经对账文件回流的一条核销：按券码找到已发权益并扣一次，内部价采购券同时按内部结算价给合作方挂应付（source_type=partner_voucher），免费营销券不结算。同一合作方同一 external_redemption_ref 再次导入直接返回原记录，不重复扣次、不重复挂账。entitlement_code 必填，缺失 400 VALIDATION_FAILED；redeemed_at 不填取当前时间；source 不填记 reconciliation_file。券码没有对应权益 404 ENTITLEMENT_NOT_FOUND；该权益不是合作方券 400 NOT_PARTNER_VOUCHER；剩余次数已用完、权益不在生效中或所属父票不在生效中 409 ENTITLEMENT_USED_UP；挂应付时落账营业日已封账 409 DAY_CLOSE_LOCKED。
+      description: 第十八批 AE 段第 201 条 201-R2（契约与代码一致，照决策台账 171-R1 先例补登）：接收合作方（餐厅自己的系统）核销后经对账文件回流的一条核销：按券码找到已发权益并扣一次，内部价采购券同时按内部结算价给合作方挂应付（source_type=partner_voucher），免费营销券不结算。同一合作方同一 external_redemption_ref 再次导入直接返回原记录，不重复扣次、不重复挂账。entitlement_code 必填，缺失 400 VALIDATION_FAILED；redeemed_at 不填取当前时间；source 不填记 reconciliation_file。券码没有对应权益 404 ENTITLEMENT_NOT_FOUND；该权益不是合作方券 400 NOT_PARTNER_VOUCHER；剩余次数已用完、权益不在生效中或所属父票不在生效中 409 ENTITLEMENT_USED_UP；挂应付时落账营业日已封账 409 DAY_CLOSE_LOCKED。第十八批 BB 段第 279 条 279-R1（PGM:966「已拍板：所有有过程的业务动作都必须留痕」）：导入人与时间记入操作留痕，成功与按同一外部单号重复导入都记 ticket.partner_voucher_redemption.imported（重复导入 metadata.duplicate=true），失败（含权限、范围、校验与状态冲突）记 ticket.partner_voucher_redemption.import_failed；留痕的幂等键栏记 external_redemption_ref（本接口按合作方加外部核销单号去重，不按 idempotency_key）。第 280 条 280-R1（PGM:528「④看不到别的商户和别的项目的数据」；PGM:659「数据的项目与商户隔离不提供关闭开关，与导出脱敏同例。」）：券码所属订单的项目须在操作人按 verification.execute 可触及的范围内，否则 403 CROSS_PROJECT_FORBIDDEN；订单没有所属项目的只有平台管理员能导入；同一外部单号重放也先判。
       x-permission: verification.execute
       x-data-scope: project
       x-terminal-allowed:
         - web
       x-idempotency-required: false
-      x-audit-event-success: not_applicable
-      x-audit-event-failure: not_applicable
+      x-audit-event-success: ticket.partner_voucher_redemption.imported
+      x-audit-event-failure: ticket.partner_voucher_redemption.import_failed
       x-failure-codes:
         - VALIDATION_FAILED
         - ENTITLEMENT_NOT_FOUND
         - NOT_PARTNER_VOUCHER
         - ENTITLEMENT_USED_UP
         - DAY_CLOSE_LOCKED
+        - CROSS_PROJECT_FORBIDDEN
       requestBody:
         required: true
         content:
@@ -17854,6 +17857,39 @@ paths:
       parameters:
         - $ref: "#/components/parameters/Id"
           description: 设备凭证 staff_device_credential id。
+      requestBody:
+        $ref: "#/components/requestBodies/StaffDeviceIntegrityReportRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: device-credential
+  /api/v1/staff/device-credentials/report-integrity:
+    post:
+      tags:
+        - access
+      operationId: reportMyStaffDeviceIntegrity
+      summary: 私人手机上报本机完整性
+      description: "第十八批 BB 段第 266 条 266-R1（PGM:586「检测到手机被破解、篡改或处于异常环境时，私人手机 App 失效并复核。」）：私人手机 App 拿不到本人凭证编号，按当前登录员工取本人生效中的设备凭证上报；非 trusted（root_detected/debug_detected/abnormal）即吊销该凭证、通知并留痕（staff_device.integrity_failed），换绑须经审批复核；trusted 只刷新完整性标记（staff_device.integrity_reported）。缺 idempotency_key 或 integrity_status 不在上述取值 400 VALIDATION_FAILED；没有生效中凭证 404 CREDENTIAL_NOT_FOUND（记 staff_device.integrity_report_failed）。按编号上报的 reportStaffDeviceIntegrity 保留。由端侧鉴权调用。"
+      x-permission: staff.device.bind
+      x-data-scope: project
+      x-terminal-allowed:
+        - staff_private_phone
+      x-idempotency-required: true
+      x-audit-event-success: staff_device.integrity_reported
+      x-audit-event-failure: staff_device.integrity_report_failed
+      x-failure-codes:
+        - VALIDATION_FAILED
+        - CREDENTIAL_NOT_FOUND
       requestBody:
         $ref: "#/components/requestBodies/StaffDeviceIntegrityReportRequest"
       responses:
@@ -69551,7 +69587,6 @@ components:
       additionalProperties: false
       required:
         - project_id
-        - template_id
         - items
       properties:
         idempotency_key:
@@ -69575,7 +69610,7 @@ components:
           maxLength: 64
         template_id:
           type: string
-          description: 业务对象唯一标识；必须引用当前数据范围内存在且允许访问的记录。
+          description: 巡检模板（可空）；填写时须为已登记的安检模板，否则 404 SAFETY_TEMPLATE_NOT_FOUND。
           maxLength: 64
         items:
           type: array
