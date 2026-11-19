@@ -1,4 +1,4 @@
-// 文件版本：V0.24
+// 文件版本：V0.25
 import { expect, test } from "@playwright/test";
 import { installMockApi } from "./support/mock-api";
 import { fillCnDate } from "./support/cn-date";
@@ -45,6 +45,7 @@ const remainingRoutes: RouteSpec[] = [
   { pageId: "ADM-CUS-002", label: "券台账管理", route: "/admin/customers/vouchers" },
   { pageId: "ADM-CUS-004", label: "会员等级与忠诚度", route: "/admin/customers/loyalty-config" },
   { pageId: "ADM-CUS-005", label: "储值规则配置", route: "/admin/customers/stored-value-rules" },
+  { pageId: "ADM-CUS-006", label: "储值退卡", route: "/admin/customers/stored-value-refunds" },
   { pageId: "ADM-STL-001", label: "结算配置中心", route: "/admin/settlement/config" },
   { pageId: "ADM-STL-003", label: "内部结算价目录", route: "/admin/settlement/internal-price-catalog" },
   { pageId: "ADM-STL-004", label: "演出合同与履约结算", route: "/admin/settlement/media-shows" },
@@ -201,6 +202,11 @@ async function openAdminRoute(page: import("@playwright/test").Page, spec: Route
   } else if (spec.pageId === "ADM-CUS-005") {
     await expect(page.getByTestId("stored-value-rules-page")).toBeVisible();
     await expect(page.getByTestId("stored-value-empty-hint")).toBeVisible();
+  } else if (spec.pageId === "ADM-CUS-006") {
+    // 第十八批 AZ 段 278-R2：储值退卡页按手机号查卡（手机号走请求体）。
+    await expect(page.getByTestId("stored-value-refund-page")).toBeVisible();
+    await expect(page.getByTestId("stored-value-refund-search")).toBeVisible();
+    await expect(page.getByLabel("客人手机号")).toBeVisible();
   } else if (spec.pageId === "ADM-STL-001") {
     await expect(page.getByTestId("settlement-config-page")).toBeVisible();
     await expect(page.getByTestId("settlement-config-defaults-table")).toBeVisible();

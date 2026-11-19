@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "综合体管理系统 P0 API 契约",
-    "version": "V0.84",
+    "version": "V0.85",
     "description": "P0 首批编码前置契约。本文采用 JSON-compatible YAML，便于与 openapi-p0.json 保持一致。正式后端以 Java 21 + Spring Boot 4.x + springdoc-openapi 输出运行时 OpenAPI，并与本契约比对。"
   },
   "servers": [
@@ -5959,7 +5959,7 @@
           }
         },
         "x-auth-context": "staff-token",
-        "description": "按 finance.ar_ap.view 获批的项目范围查询；项目公司财务无需绑定商户，商户人员仍同时受商户范围限制。分页结果与 total 使用相同范围条件，普通人员不可读取缺少项目归属的台账。 18E（20-R3）：商户账号只按商户过滤，看得到各经营项目里本商户的数据（写入口仍只到本人项目）。 第十八批 R 段第 143 条 143-R4：可选查询参数 locked_day_close_id 只列被该日结锁定的台账（日结页面「本日结锁定的台账」），范围与分页条件不变。"
+        "description": "按 finance.ar_ap.view 获批的项目范围查询；项目公司财务无需绑定商户，商户人员仍同时受商户范围限制。分页结果与 total 使用相同范围条件，普通人员不可读取缺少项目归属的台账。 18E（20-R3）：商户账号只按商户过滤，看得到各经营项目里本商户的数据（写入口仍只到本人项目）。 第十八批 R 段第 143 条 143-R4：可选查询参数 locked_day_close_id 只列被该日结锁定的台账（日结页面「本日结锁定的台账」），范围与分页条件不变。第十八批 AZ 段第 285 条 285-R1：来源 contract_deposit（合同押金，应收）由合同生效挂出（见 activateContract），挂合同所属项目。第十八批 AZ 段第 352 条 352-R1（BSM:1673「所有数据默认按项目隔离，只有项目之上的获授权岗位可以跨项目汇总。」）：退租违约金应收（termination_penalty）挂出租合同所属项目，变更押金补退差额（deposit_adjustment）挂原合同所属项目，项目财务按项目范围可见。"
       },
       "post": {
         "tags": [
@@ -6044,7 +6044,7 @@
           }
         },
         "x-auth-context": "staff-token",
-        "description": "按原台账归属核验 finance.payment.register 的项目范围与商户范围；幂等结果返回前和锁定原单后均核验，查看权限不代替收付款权限。项目公司财务无需绑定商户。押金退还应付(source_type=deposit_refund)：所在地今天或所登记 payment_time 的所在地日期早于应付到期日(＝max(算账完成日, 最后审批完成日＋等待期))时 409 DEPOSIT_REFUND_NOT_DUE，不受三个付账日与账单异议期约束；变更押金补退差额(source_type=deposit_adjustment)每笔实收/实付写押金流水并更新已收押金余额，退还超过当前已收押金余额时 400 DEPOSIT_INSUFFICIENT。已有冲正/重述行回指的原台账项（合同租金/物业费账单因面积/位置变更作废追加冲正行、补录红冲原行）不再是有效款项，409 AR_AP_ITEM_REVERSED。第十八批 AM 段第 241 条 241-R1（BSM:1803「审批通过后的发放进入应付款项台账，走付款确认……主线与各条平行线都通过才完成付款确认」；第十八批裁决 55「所有应付都先走付款确认」）：应付（direction=payable）登记付款前，该台账项须已有通过的付款确认（主线与财务、法务等各条平行线全部审批通过；发起见 createArApPaymentConfirmation），否则 409 PAYMENT_CONFIRMATION_REQUIRED，台账与收付款流水不变；一张已通过的确认覆盖该笔应付直到结清，可分笔付，失败重付不必重新审批。第十八批 AM 段 241-R9（第十八批裁决 69「付款方是平台主体的应收，登记收款前也须付款确认」）：付款方是平台主体的 7 个来源（pass_domain_share、pass_domain_direct_settlement、bar_payroll_transfer、dispatch_commission_transfer、compensation_fulfillment_recovery、ticket_distribution_recovery、saved_bottle_remedy_recovery）的应收，登记收款前同样须已有通过的付款确认，否则 409 PAYMENT_CONFIRMATION_REQUIRED；其余应收不受影响。分红抵欠款、退租押金抵扣不经本接口，不受影响。"
+        "description": "按原台账归属核验 finance.payment.register 的项目范围与商户范围；幂等结果返回前和锁定原单后均核验，查看权限不代替收付款权限。项目公司财务无需绑定商户。押金退还应付(source_type=deposit_refund)：所在地今天或所登记 payment_time 的所在地日期早于应付到期日(＝max(算账完成日, 最后审批完成日＋等待期))时 409 DEPOSIT_REFUND_NOT_DUE，不受三个付账日与账单异议期约束；变更押金补退差额(source_type=deposit_adjustment)每笔实收/实付写押金流水并更新已收押金余额，退还超过当前已收押金余额时 400 DEPOSIT_INSUFFICIENT。已有冲正/重述行回指的原台账项（合同租金/物业费账单因面积/位置变更作废追加冲正行、补录红冲原行）不再是有效款项，409 AR_AP_ITEM_REVERSED。第十八批 AM 段第 241 条 241-R1（BSM:1803「审批通过后的发放进入应付款项台账，走付款确认……主线与各条平行线都通过才完成付款确认」；第十八批裁决 55「所有应付都先走付款确认」）：应付（direction=payable）登记付款前，该台账项须已有通过的付款确认（主线与财务、法务等各条平行线全部审批通过；发起见 createArApPaymentConfirmation），否则 409 PAYMENT_CONFIRMATION_REQUIRED，台账与收付款流水不变；一张已通过的确认覆盖该笔应付直到结清，可分笔付，失败重付不必重新审批。第十八批 AM 段 241-R9（第十八批裁决 69「付款方是平台主体的应收，登记收款前也须付款确认」）：付款方是平台主体的 8 个来源（pass_domain_share、pass_domain_direct_settlement、bar_payroll_transfer、dispatch_commission_transfer、compensation_fulfillment_recovery、ticket_distribution_recovery、saved_bottle_remedy_recovery、general_card_consume）的应收，登记收款前同样须已有通过的付款确认，否则 409 PAYMENT_CONFIRMATION_REQUIRED；其余应收不受影响。分红抵欠款、退租押金抵扣不经本接口，不受影响。第十八批 AZ 段第 285 条 285-R1（BSM:1353「实际收款或退款成功后才更新已收押金余额」）：来源 contract_deposit（合同押金应收）每笔收款同变更押金补退差额写押金台账 collect 行（备注「合同押金实收」）并更新已收押金余额，部分收款逐笔累加；押金应收的来源单号不带「合同号|」前缀，不计入退租欠费。第十八批 AZ 段第 352 条 352-R1（BSM:1673）：termination_penalty、deposit_adjustment 台账挂合同所属项目，收付款照原台账项目范围核验。"
       },
       "get": {
         "tags": [
@@ -6103,7 +6103,7 @@
         ],
         "operationId": "createArApPaymentConfirmation",
         "summary": "应收应付台账勾选款项发起付款确认",
-        "description": "第十八批 AM 段第 241 条 241-R1（BSM:1803「付款确认按全平台统一的审批模型执行——发起时指定这条主线的最终审批人……财务、法务及相关部门作为平行的相关部门线，各指定该部门的最终审批人……主线与各条平行线都通过才完成付款确认；具体流程按支付类型分别设定。」；第十八批裁决 55「所有应付都先走付款确认，按支付类型分别设流程」、65「按台账来源逐个分」、66「每类必带财务、法务两线，其他部门线由发起人按单另加」、67「审批线页设定」、68「同收款方、同类型、同综合体可勾选合发」）：在应收应付台账勾选一笔或多笔款项发起一张付款确认。支付类型即台账来源（ar_ap_items.source_type 原值，见 PaymentConfirmationType），来源不在清单内 400 VALIDATION_FAILED；多笔须同一支付类型、同一收款方（往来方）、同一综合体（项目），且同为应付或同为应收（应收的往来方是付款方、收款方是本方门店，另须同一付款方、同一收款门店），否则 400 VALIDATION_FAILED。可发起的为应付，以及第十八批 AM 段 241-R9（第十八批裁决 69「付款方是平台主体的应收，登记收款前也须付款确认」）付款方是平台主体的 7 个来源（pass_domain_share、pass_domain_direct_settlement、bar_payroll_transfer、dispatch_commission_transfer、compensation_fulfillment_recovery、ticket_distribution_recovery、saved_bottle_remedy_recovery）的应收，支付类型同来源。reason（事由）与 final_approver_id（主线最终审批人）必填，否则 400 VALIDATION_FAILED；parallel_lines 须为财务（finance_review）、法务（legal_review）两线，以及该支付类型在「组织层级与审批线」页设定的两线之外的必带线（见 listPaymentConfirmationFlows）各指定最终审批人，否则 400 APPROVAL_LINE_FINAL_APPROVER_REQUIRED；可另带其他在用的线。主线沿发起人直接上级链逐级补全到最终审批人，各平行线逐级补全至该线最低起点层级（最终审批人不在链上等按统一审批引擎 400，如 FINAL_APPROVER_NOT_IN_CHAIN）。复核单 action_type=finance.payment_confirm.＜支付类型＞、object_type=payment_confirmation、object_id=付款确认单号，金额为各笔未付额合计，涉钱审批出厂时限 1 个工作日；分红应付（dividend_payout、dividend_reserve_released）的主理人为直接受益人，不得审批。审批经 approveSupervisorReview：主线与各条平行线全部通过即付款确认通过（approved），任一节点驳回即驳回（rejected），驳回后可重新发起。范围闸在幂等之前，逐笔按 finance.payment.register 核项目与商户范围（他项目 403 CROSS_PROJECT_FORBIDDEN，他商户 403 CROSS_MERCHANT_FORBIDDEN），款项不存在 404 AR_AP_ITEM_NOT_FOUND，工资应付 409 PAYROLL_DEDICATED_WORKFLOW_REQUIRED（工资走 createPayrollPaymentConfirmation），已被更正或红冲的采购应付 409 PURCHASE_PAYABLE_REPLACED；这些失败记 finance.payment_confirmation.request_failed，不占幂等键。写内锁住各台账行：未付额 ≤ 0 时 409 AR_AP_ITEM_SETTLED；任一笔已有待审批或已通过的付款确认 409 PAYMENT_CONFIRMATION_EXISTS。一张已通过的确认覆盖所含各笔直到结清，可分笔付，失败重付不必重新审批；出款闸见 createArApPayment、confirmOfflinePayment、initiateInternalPayment 与 requestArApAdjustment（收付款补录）。同一幂等键重发返回首次结果。成功留痕 finance.payment_confirmation.requested。",
+        "description": "第十八批 AM 段第 241 条 241-R1（BSM:1803「付款确认按全平台统一的审批模型执行——发起时指定这条主线的最终审批人……财务、法务及相关部门作为平行的相关部门线，各指定该部门的最终审批人……主线与各条平行线都通过才完成付款确认；具体流程按支付类型分别设定。」；第十八批裁决 55「所有应付都先走付款确认，按支付类型分别设流程」、65「按台账来源逐个分」、66「每类必带财务、法务两线，其他部门线由发起人按单另加」、67「审批线页设定」、68「同收款方、同类型、同综合体可勾选合发」）：在应收应付台账勾选一笔或多笔款项发起一张付款确认。支付类型即台账来源（ar_ap_items.source_type 原值，见 PaymentConfirmationType），来源不在清单内 400 VALIDATION_FAILED；多笔须同一支付类型、同一收款方（往来方）、同一综合体（项目），且同为应付或同为应收（应收的往来方是付款方、收款方是本方门店，另须同一付款方、同一收款门店），否则 400 VALIDATION_FAILED。可发起的为应付，以及第十八批 AM 段 241-R9（第十八批裁决 69「付款方是平台主体的应收，登记收款前也须付款确认」）付款方是平台主体的 8 个来源（pass_domain_share、pass_domain_direct_settlement、bar_payroll_transfer、dispatch_commission_transfer、compensation_fulfillment_recovery、ticket_distribution_recovery、saved_bottle_remedy_recovery、general_card_consume）的应收，支付类型同来源。reason（事由）与 final_approver_id（主线最终审批人）必填，否则 400 VALIDATION_FAILED；parallel_lines 须为财务（finance_review）、法务（legal_review）两线，以及该支付类型在「组织层级与审批线」页设定的两线之外的必带线（见 listPaymentConfirmationFlows）各指定最终审批人，否则 400 APPROVAL_LINE_FINAL_APPROVER_REQUIRED；可另带其他在用的线。主线沿发起人直接上级链逐级补全到最终审批人，各平行线逐级补全至该线最低起点层级（最终审批人不在链上等按统一审批引擎 400，如 FINAL_APPROVER_NOT_IN_CHAIN）。复核单 action_type=finance.payment_confirm.＜支付类型＞、object_type=payment_confirmation、object_id=付款确认单号，金额为各笔未付额合计，涉钱审批出厂时限 1 个工作日；分红应付（dividend_payout、dividend_reserve_released）的主理人为直接受益人，不得审批。审批经 approveSupervisorReview：主线与各条平行线全部通过即付款确认通过（approved），任一节点驳回即驳回（rejected），驳回后可重新发起。范围闸在幂等之前，逐笔按 finance.payment.register 核项目与商户范围（他项目 403 CROSS_PROJECT_FORBIDDEN，他商户 403 CROSS_MERCHANT_FORBIDDEN），款项不存在 404 AR_AP_ITEM_NOT_FOUND，工资应付 409 PAYROLL_DEDICATED_WORKFLOW_REQUIRED（工资走 createPayrollPaymentConfirmation），已被更正或红冲的采购应付 409 PURCHASE_PAYABLE_REPLACED；这些失败记 finance.payment_confirmation.request_failed，不占幂等键。写内锁住各台账行：未付额 ≤ 0 时 409 AR_AP_ITEM_SETTLED；任一笔已有待审批或已通过的付款确认 409 PAYMENT_CONFIRMATION_EXISTS。一张已通过的确认覆盖所含各笔直到结清，可分笔付，失败重付不必重新审批；出款闸见 createArApPayment、confirmOfflinePayment、initiateInternalPayment 与 requestArApAdjustment（收付款补录）。同一幂等键重发返回首次结果。成功留痕 finance.payment_confirmation.requested。",
         "x-permission": "finance.payment.register",
         "x-data-scope": "project-entity",
         "x-terminal-allowed": [
@@ -6444,7 +6444,7 @@
         ],
         "operationId": "confirmOfflinePayment",
         "summary": "现金或 POS 线下收款确认",
-        "description": "第十八批 AM 段第 241 条 241-R1、241-R9（BSM:1803；第十八批裁决 55「所有应付都先走付款确认」、69「付款方是平台主体的应收，登记收款前也须付款确认」）：确认时关联台账项（ar_ap_item_id）的，按该台账项登记收付款，与 createArApPayment 同一付款确认闸——应付，以及付款方是平台主体的 7 个来源的应收，须已有通过的付款确认，否则 409 PAYMENT_CONFIRMATION_REQUIRED；不关联台账项的不受影响。",
+        "description": "第十八批 AM 段第 241 条 241-R1、241-R9（BSM:1803；第十八批裁决 55「所有应付都先走付款确认」、69「付款方是平台主体的应收，登记收款前也须付款确认」）：确认时关联台账项（ar_ap_item_id）的，按该台账项登记收付款，与 createArApPayment 同一付款确认闸——应付，以及付款方是平台主体的 8 个来源（含第十八批 AZ 段第 350 条 350-R1通用卡消费结算 general_card_consume）的应收，须已有通过的付款确认，否则 409 PAYMENT_CONFIRMATION_REQUIRED；不关联台账项的不受影响。",
         "x-permission": "finance.payment.register",
         "x-data-scope": "project-order",
         "x-terminal-allowed": [
@@ -6856,7 +6856,7 @@
         ],
         "operationId": "closeFinancePeriod",
         "summary": "封账（按综合体＋月份）",
-        "description": "第十八批 Z 段第 188 条 188-R1（BSM:1803「封账由财务部门执行，条件是账目已算清楚、经确认无误、四流一致。」；PGM:664「跨主体与平台层面的财务工作——三方对账、分账复核、封账、开票、付款执行、守恒校验不通过时的追查——由财务中心负责。」；ENUM:190「非最终快照的数据一律不得进入结算、分红、正式提成计算和对账关账」；第十八批裁决 41「财务中心按综合体＋月份在平台办理；只放行该月每天五类数据都已最终、日结都已锁定的月份；四流一致由财务核对后勾选确认留痕；封账不能撤销，不另加拦截」）：按综合体＋月份封账。范围（在幂等之前校验）：商户账号 403 CROSS_MERCHANT_FORBIDDEN；其余账号按 finance.period_close.execute 可触及的项目覆盖该综合体，否则 403 CROSS_PROJECT_FORBIDDEN。依次拦：four_flows_confirmed 不为 true、period_month 不是 YYYY-MM 拒 400 VALIDATION_FAILED；该月检查单位（该综合体与其下在营未存档的酒吧，跳过建档之前的营业日）有营业日五类数据未全部标记为最终拒 409 PERIOD_CLOSE_DATA_NOT_FINAL（提示逐行列出营业日、单位与缺的类别）；有营业日没有已锁定或已归档的日结拒 409 PERIOD_CLOSE_DAY_NOT_LOCKED（提示逐行列出营业日与单位）；该综合体该月已封账拒 409 PERIOD_ALREADY_CLOSED。成功返回封账记录（id、project_id、period_month、closed_by、closed_at）。不提供撤销，也不另加写入拦截：该月营业日已全部锁定，之后的锁定后补录照常走上级审批、归入当期。",
+        "description": "第十八批 Z 段第 188 条 188-R1（BSM:1803「封账由财务部门执行，条件是账目已算清楚、经确认无误、四流一致。」；PGM:664「跨主体与平台层面的财务工作——三方对账、分账复核、封账、开票、付款执行、守恒校验不通过时的追查——由财务中心负责。」；ENUM:190「非最终快照的数据一律不得进入结算、分红、正式提成计算和对账关账」；第十八批裁决 41「财务中心按综合体＋月份在平台办理；只放行该月每天五类数据都已最终、日结都已锁定的月份；四流一致由财务核对后勾选确认留痕；封账不能撤销，不另加拦截」）：按综合体＋月份封账。范围（在幂等之前校验）：商户账号 403 CROSS_MERCHANT_FORBIDDEN；其余账号按 finance.period_close.execute 可触及的项目覆盖该综合体，否则 403 CROSS_PROJECT_FORBIDDEN。依次拦：four_flows_confirmed 不为 true、period_month 不是 YYYY-MM 拒 400 VALIDATION_FAILED；该月检查单位（该综合体与其下各酒吧（第十八批 AZ 段第 356 条 356-R1：酒吧不论在营、停用或存档都是检查单位，存档时刻所在营业日之后、关停结算最后营业日之后的营业日不再要求标记与锁定日结，停用照在营口径），跳过建档之前的营业日）有营业日五类数据未全部标记为最终拒 409 PERIOD_CLOSE_DATA_NOT_FINAL（提示逐行列出营业日、单位与缺的类别）；有营业日没有已锁定或已归档的日结拒 409 PERIOD_CLOSE_DAY_NOT_LOCKED（提示逐行列出营业日与单位）；该综合体该月已封账拒 409 PERIOD_ALREADY_CLOSED。成功返回封账记录（id、project_id、period_month、closed_by、closed_at）。不提供撤销，也不另加写入拦截：该月营业日已全部锁定，之后的锁定后补录照常走上级审批、归入当期。",
         "x-auth-context": "staff-token",
         "x-permission": "finance.period_close.execute",
         "x-data-scope": "project",
@@ -7068,7 +7068,7 @@
         ],
         "operationId": "getInternalPayableExecution",
         "summary": "查普通内部结算往来的付款时点与执行状态",
-        "description": "ENUM L253 内部应付执行状态：pending=待付(含银行在途 in_transit=true)、failed_pending=付款失败待处理(注明 failure_reason 与 expected_repay_date)、settled=已结清、reversed=已冲正(原行已有冲正/重述行回指，不再是有效款项)；同时返回可查看时刻、异议截止、财务指定付账日、当前到期日、逐次付款与顺延记录。按项目范围与商户交集。 18E（20-R3）：商户账号只按商户过滤，看得到各经营项目里本商户的数据（写入口仍只到本人项目）。第十八批 AV 段 310-R1（ENUM:252「押金退还支付不受三个付账日与账单异议期约束」）：退租押金退还应付（source_type=deposit_refund）同样可查；它没有付款时点固化，可查看时刻 visible_at＝挂账时刻，异议截止 objection_deadline 与财务指定付账日 designated_pay_day 为空。",
+        "description": "ENUM L253 内部应付执行状态：pending=待付(含银行在途 in_transit=true)、failed_pending=付款失败待处理(注明 failure_reason 与 expected_repay_date)、settled=已结清、reversed=已冲正(原行已有冲正/重述行回指，不再是有效款项)；同时返回可查看时刻、异议截止、财务指定付账日、当前到期日、逐次付款与顺延记录。按项目范围与商户交集。 18E（20-R3）：商户账号只按商户过滤，看得到各经营项目里本商户的数据（写入口仍只到本人项目）。第十八批 AV 段 310-R1（ENUM:252「押金退还支付不受三个付账日与账单异议期约束」）：退租押金退还应付（source_type=deposit_refund）同样可查；它没有付款时点固化，可查看时刻 visible_at＝挂账时刻，异议截止 objection_deadline 与财务指定付账日 designated_pay_day 为空。第十八批 AZ 段第 358 条 358-R1（BSM:1683「处理路径为原路重付，或更换收款账户后重付」「每笔应付的实际到账结果回写该笔应付并可逐笔追溯」）：data 另返回 account_changes——该款项已审批的换账户单，按 approved_at 升序，每项 id（换账户单编号）、failed_attempt_id（对应失败的付款尝试）、new_account_ref（新收款账户引用）、reason、approved_at（审批时刻，date-time）；没有为空数组。换新账户重付时 initiateInternalPayment 的 account_change_id 取其 id。",
         "x-permission": "finance.ar_ap.view",
         "x-data-scope": "project-merchant",
         "x-terminal-allowed": [
@@ -7113,7 +7113,7 @@
         ],
         "operationId": "initiateInternalPayment",
         "summary": "登记内部应付已发起付款(银行在途)",
-        "description": "BSM L1683：异议期未届满不进入付款 409 OBJECTION_PERIOD_NOT_EXPIRED；已发起未确认到账且未收到失败结果属在途，再发起 409 PAYMENT_IN_TRANSIT；换账户重付须引用收款方财务负责人已审批的 account_change_id(否则 409 ACCOUNT_CHANGE_NOT_APPROVED)；原行已有冲正/重述行回指 409 AR_AP_ITEM_REVERSED(与登记收付款同码)。到账仍走登记收付款，成功才结清。第十八批 AM 段第 241 条 241-R1（BSM:1803；第十八批裁决 55「所有应付都先走付款确认」）：发起付款前该应付须已有通过的付款确认（发起见 createArApPaymentConfirmation），否则 409 PAYMENT_CONFIRMATION_REQUIRED（在途判断之后判）；登记明确失败、资金不足顺延不是出款，不判；失败后原路重付仍用同一张已通过的确认，不必重新审批。第十八批 AV 段 310-R1（ENUM:252「押金退还支付不受三个付账日与账单异议期约束」）：退租押金退还应付（source_type=deposit_refund）不判异议期，所在地今天早于其到期日（等待期届满或退租结算算账完成之日）409 DEPOSIT_REFUND_NOT_DUE（与 createArApPayment 同码）；在途、付款确认、换账户照旧。",
+        "description": "BSM L1683：异议期未届满不进入付款 409 OBJECTION_PERIOD_NOT_EXPIRED；已发起未确认到账且未收到失败结果属在途，再发起 409 PAYMENT_IN_TRANSIT；换账户重付须引用收款方财务负责人已审批的 account_change_id(否则 409 ACCOUNT_CHANGE_NOT_APPROVED)；原行已有冲正/重述行回指 409 AR_AP_ITEM_REVERSED(与登记收付款同码)。到账仍走登记收付款，成功才结清。第十八批 AM 段第 241 条 241-R1（BSM:1803；第十八批裁决 55「所有应付都先走付款确认」）：发起付款前该应付须已有通过的付款确认（发起见 createArApPaymentConfirmation），否则 409 PAYMENT_CONFIRMATION_REQUIRED（在途判断之后判）；登记明确失败、资金不足顺延不是出款，不判；失败后原路重付仍用同一张已通过的确认，不必重新审批。第十八批 AV 段 310-R1（ENUM:252「押金退还支付不受三个付账日与账单异议期约束」）：退租押金退还应付（source_type=deposit_refund）不判异议期，所在地今天早于其到期日（等待期届满或退租结算算账完成之日）409 DEPOSIT_REFUND_NOT_DUE（与 createArApPayment 同码）；在途、付款确认、换账户照旧。第十八批 AZ 段第 358 条 358-R1（BSM:1683「处理路径为原路重付，或更换收款账户后重付」「每笔应付的实际到账结果回写该笔应付并可逐笔追溯」）：account_change_id 取自 getInternalPayableExecution（或商户专区 listMerchantPortalTicketSettlements）返回的 account_changes[].id；不带即原路重付。",
         "x-permission": "finance.payment.register",
         "x-data-scope": "project-merchant",
         "x-terminal-allowed": [
@@ -21417,7 +21417,7 @@
         ],
         "operationId": "approveSupervisorReview",
         "summary": "主管审批或驳回复核记录",
-        "description": "平台治理主管复核与基础定义违规阻断接口，用于高风险业务动作的可验证拦截、审批和留痕。复核单为授权申请（object_type=access_grant_request）且待审时转入授权申请审批，与 reviewAccessGrantRequest 同一门禁：access.grant_request.review 与 governance.supervisor_review.approve 一次核验（员工显式拒绝优先，最高权限会话同样受约束；同一单次授予来源只消耗一次），缺任一即 403 PERMISSION_DENIED，不推进审批节点、不落地。 18E：通过与驳回之前的读取按 governance.supervisor_review.approve 可触及的项目判发起人账号归属（持可跨项目角色的含该角色可查看的项目）；发起人不在其内、又不是当前审批人、被转发人或发起人本人的，403（SUPERVISOR_REVIEW_SCOPE_FORBIDDEN）；最高权限逐笔开放不变。 第十八批 AL 段 223-R1（BSM:1751「高价值差异复核通过才入账、同一差异只入账一次」）：对账差异关闭复核（action_type=finance.reconciliation_difference.close）终审通过、差异转已关闭时，提交时勾选 ledger_entry 的向原往来方入应收应付台账（写 ar_ap_items，source_type=reconciliation_difference，source_id 为差异号）；落账营业日已锁定 409 DAY_CLOSE_LOCKED，整笔审批不生效。第十八批 AL 段 245-R1（ENUM:190「日结锁定后的补录须上级审批」）：日结锁定后补录（action_type=finance.locked_backfill.review，object_type=ar_ap_adjustment）终审通过即按补录类型落账（见 requestArApAdjustment），落账各闸不过整笔审批不生效、补录与复核单保持待审；驳回不改账。第十八批 AM 段第 241 条 241-R1（BSM:1803「主线与各条平行线都通过才完成付款确认」）：付款确认（action_type=finance.payment_confirm.＜支付类型＞，object_type=payment_confirmation，object_id 为付款确认单号）全部节点通过即该确认转已通过（approved），任一节点驳回即转已驳回（rejected），驳回后可重新发起。锁账收付款补录终审落账的付款确认闸见 requestArApAdjustment：应付及付款方是平台主体的 7 个来源的应收未确认时 409 PAYMENT_CONFIRMATION_REQUIRED，补录与复核单保持待审。第十八批 AV 段第 306 条 306-R1（PGM:899「谁发起、谁销售、谁服务、谁第一个处理异常、为什么、谁审批、结果是什么，都要能查到。」）：整单终态（通过或驳回）的 evidence_attachment_ids 为提交时凭证在前、并上审批人本次所附凭证（去重保序），不覆盖提交时凭证。",
+        "description": "平台治理主管复核与基础定义违规阻断接口，用于高风险业务动作的可验证拦截、审批和留痕。复核单为授权申请（object_type=access_grant_request）且待审时转入授权申请审批，与 reviewAccessGrantRequest 同一门禁：access.grant_request.review 与 governance.supervisor_review.approve 一次核验（员工显式拒绝优先，最高权限会话同样受约束；同一单次授予来源只消耗一次），缺任一即 403 PERMISSION_DENIED，不推进审批节点、不落地。 18E：通过与驳回之前的读取按 governance.supervisor_review.approve 可触及的项目判发起人账号归属（持可跨项目角色的含该角色可查看的项目）；发起人不在其内、又不是当前审批人、被转发人或发起人本人的，403（SUPERVISOR_REVIEW_SCOPE_FORBIDDEN）；最高权限逐笔开放不变。 第十八批 AL 段 223-R1（BSM:1751「高价值差异复核通过才入账、同一差异只入账一次」）：对账差异关闭复核（action_type=finance.reconciliation_difference.close）终审通过、差异转已关闭时，提交时勾选 ledger_entry 的向原往来方入应收应付台账（写 ar_ap_items，source_type=reconciliation_difference，source_id 为差异号）；落账营业日已锁定 409 DAY_CLOSE_LOCKED，整笔审批不生效。第十八批 AL 段 245-R1（ENUM:190「日结锁定后的补录须上级审批」）：日结锁定后补录（action_type=finance.locked_backfill.review，object_type=ar_ap_adjustment）终审通过即按补录类型落账（见 requestArApAdjustment），落账各闸不过整笔审批不生效、补录与复核单保持待审；驳回不改账。第十八批 AM 段第 241 条 241-R1（BSM:1803「主线与各条平行线都通过才完成付款确认」）：付款确认（action_type=finance.payment_confirm.＜支付类型＞，object_type=payment_confirmation，object_id 为付款确认单号）全部节点通过即该确认转已通过（approved），任一节点驳回即转已驳回（rejected），驳回后可重新发起。锁账收付款补录终审落账的付款确认闸见 requestArApAdjustment：应付及付款方是平台主体的 8 个来源（含第十八批 AZ 段第 350 条 350-R1通用卡消费结算 general_card_consume）的应收未确认时 409 PAYMENT_CONFIRMATION_REQUIRED，补录与复核单保持待审。第十八批 AV 段第 306 条 306-R1（PGM:899「谁发起、谁销售、谁服务、谁第一个处理异常、为什么、谁审批、结果是什么，都要能查到。」）：整单终态（通过或驳回）的 evidence_attachment_ids 为提交时凭证在前、并上审批人本次所附凭证（去重保序），不覆盖提交时凭证。",
         "x-permission": "governance.supervisor_review.approve",
         "x-data-scope": "project-entity",
         "x-terminal-allowed": [
@@ -22085,7 +22085,7 @@
         ],
         "operationId": "requestArApAdjustment",
         "summary": "锁定后补录审批申请",
-        "description": "对已锁定日结的应收应付台账发起补录申请（pending），审批全部通过后才真正写入金额变动。第十八批 AL 段第 245 条 245-R1（ENUM:190「日结锁定后的补录须上级审批」；PGM:528「发起单据时只需指定该事项的最终审批人，系统按组织层级自动补全……逐级审批」；PGM:529 涉钱审批出厂 1 个工作日、超时提醒并升级）：提交即进统一审批（action_type finance.locked_backfill.review、object_type ar_ap_adjustment）——沿申请人直接上级链到所指定的最终审批人 final_approver_id（不填为直接上级，不在链上 400 FINAL_APPROVER_NOT_IN_CHAIN）逐级审批，全部通过才落账，任一节点驳回不改账；涉钱出厂 1 个工作日，超时提醒并升级；返回的补录记录带复核单号 review_id，审批经 approveSupervisorReview。第十八批 AL 段第 253 条 253-R1、253-R2（BSM:1642「记录缺失时允许人工补录，但必须写原因和责任人……补录必须附原始记录凭证（微信截图、通话录音等）并经审核」；第十八批裁决 56「三种锁账补录提交时必须上传原始凭证（银行回单、转账截图、异议处理结论等）并写责任人；「业务发生后 3 天内」不套。」）：三种补录一律须附原始凭证 evidence_attachment_ids（business_type=finance_locked_backfill 上传所得，去空去重后至少一个，否则 400 MANUAL_BACKFILL_EVIDENCE_REQUIRED；须真实存在，否则 400 EVIDENCE_ATTACHMENT_NOT_FOUND；须已完成上传，否则 400 EVIDENCE_NOT_UPLOADED）并写责任人 responsible_staff_id（缺 400 VALIDATION_FAILED，账号不存在 400 VALIDATION_FAILED「责任人账号不存在」）；责任人登记为复核单直接受益人，不得审批该单；不套补录时限。返回的补录记录另带 evidence_attachment_ids 与 responsible_staff_id。第十八批 R 段 143-R4：返回的补录记录带 item_no（台账单号）与 original_business_date（原营业日，即锁定该台账的日结的营业日，ENUM:190「在补录记录上标明其所属的原营业日」）；按日结号可查（listDailyCloseAdjustments）。第十八批 Z 段第 186 条 186-R1（ENUM:190「日结锁定后的补录须上级审批，且不改动已锁定的日结金额：补录金额归入当期……」；BSM:2023「已拍板：日结锁定后不能直接补录影响金额，必须上级审批通过后补录。」；第七批裁决 19「人工登记收款仍受锁定拦截。」）：kind 缺省 amount（金额调整，调整额不得为 0）；kind=payment 为收付款补录：adjustment_amount_cent 须为正且不超过台账未收付额（否则 400 VALIDATION_FAILED「支付金额超过未付金额」），payment_method 取 cash、bank_transfer、pos、other（否则 400 VALIDATION_FAILED）；台账未锁定照旧 400 AR_AP_ITEM_NOT_LOCKED。返回的补录记录带 kind 与 payment_method。第十八批 Z 段 186-R2（控制席并入，同根；BSM:1323「提出异议期间商户的付款义务不暂停，先按原值付款，异议成立后多退少补」；ENUM:190「日结锁定后的补录须上级审批……」）：kind=refund 为退款补录：只退应收（否则 400 REFUND_REQUIRES_RECEIVABLE）；所退原收款为该台账最后一笔尚未退完（按退款成功计）的收款，没有可退的收款 400 VALIDATION_FAILED；adjustment_amount_cent 须为正且不超过该笔收款的可退余额（已退及待退都占额，否则 400 VALIDATION_FAILED）；不填 payment_method，记录上的 payment_method 为该笔原收款的收付方式。第十八批 AL 段 245-R1 起原审批接口 approveArApAdjustment 删除，终审通过时按类型落账（原该接口所列各项照旧）：金额调整追加冲正行与重述行入账，沿用原行到期日（第十八批 S 段 160-R1），经营看板的合同应收与净收入按批准当日计补录差额、不改写原营业日（ENUM:190「补录金额归入当期」）；收付款补录按申请的金额与收付方式给该台账登记一笔收付款（付款时间取批准时刻），不追加冲正行与重述行，台账锁与日结七源汇总不动，押金退还、积分发行费的到期闸与已冲正闸照判（409）；退款补录按所退原收款走现有原路退款路径建一笔退款待办（requested，沿原收款渠道），台账、台账锁与日结七源汇总不动，可退余额（400 VALIDATION_FAILED）、分级授权（按终审节点审批人本人的退款额度，超额 403 REFUND_REVIEW_REQUIRED）、只退应收、沿原收款渠道（409 REFUND_CHANNEL_MISMATCH）、后收先退（409 REFUND_LATEST_PAYMENT_FIRST）各闸照判，原收款为现金、刷卡的批准时不判现场设备、只建待办，待办在退款办理处登记执行与核实时仍须带设备（否则 403 DEVICE_CONTEXT_REQUIRED）。落账任一闸不过整笔审批不生效，补录与复核单保持待审。补录记录的 approved_by 记终审或驳回节点审批人、decided_at 记决定时刻；留痕仍记 finance.locked_backfill_approved、finance.locked_backfill_rejected。第十八批 AM 段第 241 条 241-R1、241-R9（BSM:1803；第十八批裁决 55「所有应付都先走付款确认」、69「付款方是平台主体的应收，登记收款前也须付款确认」）：收付款补录（kind=payment）批准落账时照 createArApPayment 同一付款确认闸判——应付，以及付款方是平台主体的 7 个来源的应收，须已有通过的付款确认，否则终审 409 PAYMENT_CONFIRMATION_REQUIRED、补录与复核单保持待审，付款确认通过后再批即可；申请时不预判。",
+        "description": "对已锁定日结的应收应付台账发起补录申请（pending），审批全部通过后才真正写入金额变动。第十八批 AL 段第 245 条 245-R1（ENUM:190「日结锁定后的补录须上级审批」；PGM:528「发起单据时只需指定该事项的最终审批人，系统按组织层级自动补全……逐级审批」；PGM:529 涉钱审批出厂 1 个工作日、超时提醒并升级）：提交即进统一审批（action_type finance.locked_backfill.review、object_type ar_ap_adjustment）——沿申请人直接上级链到所指定的最终审批人 final_approver_id（不填为直接上级，不在链上 400 FINAL_APPROVER_NOT_IN_CHAIN）逐级审批，全部通过才落账，任一节点驳回不改账；涉钱出厂 1 个工作日，超时提醒并升级；返回的补录记录带复核单号 review_id，审批经 approveSupervisorReview。第十八批 AL 段第 253 条 253-R1、253-R2（BSM:1642「记录缺失时允许人工补录，但必须写原因和责任人……补录必须附原始记录凭证（微信截图、通话录音等）并经审核」；第十八批裁决 56「三种锁账补录提交时必须上传原始凭证（银行回单、转账截图、异议处理结论等）并写责任人；「业务发生后 3 天内」不套。」）：三种补录一律须附原始凭证 evidence_attachment_ids（business_type=finance_locked_backfill 上传所得，去空去重后至少一个，否则 400 MANUAL_BACKFILL_EVIDENCE_REQUIRED；须真实存在，否则 400 EVIDENCE_ATTACHMENT_NOT_FOUND；须已完成上传，否则 400 EVIDENCE_NOT_UPLOADED）并写责任人 responsible_staff_id（缺 400 VALIDATION_FAILED，账号不存在 400 VALIDATION_FAILED「责任人账号不存在」）；责任人登记为复核单直接受益人，不得审批该单；不套补录时限。返回的补录记录另带 evidence_attachment_ids 与 responsible_staff_id。第十八批 R 段 143-R4：返回的补录记录带 item_no（台账单号）与 original_business_date（原营业日，即锁定该台账的日结的营业日，ENUM:190「在补录记录上标明其所属的原营业日」）；按日结号可查（listDailyCloseAdjustments）。第十八批 Z 段第 186 条 186-R1（ENUM:190「日结锁定后的补录须上级审批，且不改动已锁定的日结金额：补录金额归入当期……」；BSM:2023「已拍板：日结锁定后不能直接补录影响金额，必须上级审批通过后补录。」；第七批裁决 19「人工登记收款仍受锁定拦截。」）：kind 缺省 amount（金额调整，调整额不得为 0）；kind=payment 为收付款补录：adjustment_amount_cent 须为正且不超过台账未收付额（否则 400 VALIDATION_FAILED「支付金额超过未付金额」），payment_method 取 cash、bank_transfer、pos、other（否则 400 VALIDATION_FAILED）；台账未锁定照旧 400 AR_AP_ITEM_NOT_LOCKED。返回的补录记录带 kind 与 payment_method。第十八批 Z 段 186-R2（控制席并入，同根；BSM:1323「提出异议期间商户的付款义务不暂停，先按原值付款，异议成立后多退少补」；ENUM:190「日结锁定后的补录须上级审批……」）：kind=refund 为退款补录：只退应收（否则 400 REFUND_REQUIRES_RECEIVABLE）；所退原收款为该台账最后一笔尚未退完（按退款成功计）的收款，没有可退的收款 400 VALIDATION_FAILED；adjustment_amount_cent 须为正且不超过该笔收款的可退余额（已退及待退都占额，否则 400 VALIDATION_FAILED）；不填 payment_method，记录上的 payment_method 为该笔原收款的收付方式。第十八批 AL 段 245-R1 起原审批接口 approveArApAdjustment 删除，终审通过时按类型落账（原该接口所列各项照旧）：金额调整追加冲正行与重述行入账，沿用原行到期日（第十八批 S 段 160-R1），经营看板的合同应收与净收入按批准当日计补录差额、不改写原营业日（ENUM:190「补录金额归入当期」）；收付款补录按申请的金额与收付方式给该台账登记一笔收付款（付款时间取批准时刻），不追加冲正行与重述行，台账锁与日结七源汇总不动，押金退还、积分发行费的到期闸与已冲正闸照判（409）；退款补录按所退原收款走现有原路退款路径建一笔退款待办（requested，沿原收款渠道），台账、台账锁与日结七源汇总不动，可退余额（400 VALIDATION_FAILED）、分级授权（按终审节点审批人本人的退款额度，超额 403 REFUND_REVIEW_REQUIRED）、只退应收、沿原收款渠道（409 REFUND_CHANNEL_MISMATCH）、后收先退（409 REFUND_LATEST_PAYMENT_FIRST）各闸照判，原收款为现金、刷卡的批准时不判现场设备、只建待办，待办在退款办理处登记执行与核实时仍须带设备（否则 403 DEVICE_CONTEXT_REQUIRED）。落账任一闸不过整笔审批不生效，补录与复核单保持待审。补录记录的 approved_by 记终审或驳回节点审批人、decided_at 记决定时刻；留痕仍记 finance.locked_backfill_approved、finance.locked_backfill_rejected。第十八批 AM 段第 241 条 241-R1、241-R9（BSM:1803；第十八批裁决 55「所有应付都先走付款确认」、69「付款方是平台主体的应收，登记收款前也须付款确认」）：收付款补录（kind=payment）批准落账时照 createArApPayment 同一付款确认闸判——应付，以及付款方是平台主体的 8 个来源（含第十八批 AZ 段第 350 条 350-R1通用卡消费结算 general_card_consume）的应收，须已有通过的付款确认，否则终审 409 PAYMENT_CONFIRMATION_REQUIRED、补录与复核单保持待审，付款确认通过后再批即可；申请时不预判。",
         "x-permission": "finance.locked_backfill.request",
         "x-data-scope": "project-entity",
         "x-terminal-allowed": [
@@ -25811,7 +25811,7 @@
         ],
         "operationId": "refundStoredValueAccount",
         "summary": "会员储值退卡/退余额（后台）",
-        "description": "CG-06a：退卡只退未消费的本金——amount_cent 超过 principal_cent 即 409 STORED_VALUE_PRINCIPAL_INSUFFICIENT；赠送金不退现；close_account 且本金退清时未使用赠送金作废（adjust 流水留痕）并置 closed（ENUM「储值卡类型与收款主体」）。操作员裁决 2026-10-20 第三轮第 7 条：综合体通用卡退卡一次退还全部剩余本金、赠送金清零、卡关闭，amount_cent 不等于剩余本金即 400 STORED_VALUE_GENERAL_CARD_FULL_REFUND_ONLY。",
+        "description": "CG-06a：退卡只退未消费的本金——amount_cent 超过 principal_cent 即 409 STORED_VALUE_PRINCIPAL_INSUFFICIENT；赠送金不退现；close_account 且本金退清时未使用赠送金作废（adjust 流水留痕）并置 closed（ENUM「储值卡类型与收款主体」）。操作员裁决 2026-10-20 第三轮第 7 条：综合体通用卡退卡一次退还全部剩余本金、赠送金清零、卡关闭，amount_cent 不等于剩余本金即 400 STORED_VALUE_GENERAL_CARD_FULL_REFUND_ONLY。第十八批 AZ 段第 278 条 278-R1（ENUM:86「余额管理与退款均由长沙项目公司负责」；BSM:833「商户的员工只能管理本商户发行的储值卡」「单张储值卡退款时如申请同时销卡，本金未退清的须拒绝销卡并明确报错」；PGM:528「④看不到别的商户和别的项目的数据」）：退款范围按卡判：最高权限放行；商户账号只办本商户的卡（他商户的卡与通用卡 403 CROSS_MERCHANT_FORBIDDEN「该储值卡不在当前商户权限范围内」）；卡带项目的只办本人项目的（403 CROSS_PROJECT_FORBIDDEN「该储值卡不在当前项目权限范围内」；平台管理员不限）；不挂商户的项目侧账号不按商户限，可办本项目通用卡，不再返回 MERCHANT_SCOPE_REQUIRED；碰到不带项目的商户卡按发卡商户的经营项目（主项目或已批准的经营项目）判，本人项目不在其中 403 CROSS_PROJECT_FORBIDDEN。首次提交与同一幂等键重放同一口径（重放在返回第一次结果之前按流水所属的卡判）。close_account 为真而本次退款后本金未退清 409 STORED_VALUE_CLOSE_PRINCIPAL_REMAINING（「本金未退清，不能销卡；同时销卡须一次退还剩余本金 X 元」）；会员注销放弃余额不经本接口。按手机号查可办理的卡见 lookupStoredValueRefundCards。",
         "x-permission": "customer.stored_value.refund",
         "x-data-scope": "project",
         "x-terminal-allowed": [
@@ -28621,10 +28621,10 @@
         ],
         "operationId": "createTurnoverRentRule",
         "summary": "新建营业额抽成规则草案",
-        "description": "第十八批 AE 段第 201 条 201-R6（照现码补契约）：填合同条款时为商户建营业额提成规则（阶梯超额累进，可设保底，不设封顶）。只落草案、对结算无影响，须由另一位持 settlement.config.manage 的同事经 POST /api/v1/settlement/config/{configType}/{id}/activate（configType=turnover_rent_rule）复核转正后才生效。商户账号只能给本商户建，他商户 403 CROSS_MERCHANT_FORBIDDEN；merchant_id、rule_name、effective_from 缺填，tiers 为空，effective_to 早于 effective_from，阶梯费率不在 0～10000 基点，非末档上限不为正或不逐级递增，或末档设了上限，均 400 VALIDATION_FAILED。",
+        "description": "第十八批 AE 段第 201 条 201-R6（照现码补契约）：填合同条款时为商户建营业额提成规则（阶梯超额累进，可设保底，不设封顶）。只落草案、对结算无影响，须由另一位持 settlement.config.manage 的同事经 POST /api/v1/settlement/config/{configType}/{id}/activate（configType=turnover_rent_rule）复核转正后才生效。商户账号只能给本商户建，他商户 403 CROSS_MERCHANT_FORBIDDEN；merchant_id、rule_name、effective_from 缺填，tiers 为空，effective_to 早于 effective_from，阶梯费率不在 0～10000 基点，非末档上限不为正或不逐级递增，或末档设了上限，均 400 VALIDATION_FAILED。第十八批 AZ 段第 349 条 349-R1（PGM:420 城市项目公司「只负责资产、场地、物业、租赁、直接管理的第三方商户」；PGM:664「商户费用账单出账……由该酒吧对应的财务 BP 负责」）：不挂商户的账号须按 finance.turnover_rent.bill 可触及的项目覆盖合同所属项目（contract_id 为空或合同没有项目按不可触及；平台管理员不限），否则 403 CROSS_PROJECT_FORBIDDEN「无权为其他项目的合同建抽成规则」，不再对不挂商户的账号返回 MERCHANT_SCOPE_REQUIRED；商户账号照旧只能给本商户建。",
         "x-auth-context": "staff-token",
         "x-permission": "finance.turnover_rent.bill",
-        "x-data-scope": "platform",
+        "x-data-scope": "project-merchant",
         "x-terminal-allowed": [
           "web"
         ],
@@ -28634,7 +28634,8 @@
         "x-failure-codes": [
           "PERMISSION_DENIED",
           "VALIDATION_FAILED",
-          "CROSS_MERCHANT_FORBIDDEN"
+          "CROSS_MERCHANT_FORBIDDEN",
+          "CROSS_PROJECT_FORBIDDEN"
         ],
         "requestBody": {
           "required": true,
@@ -30255,7 +30256,7 @@
         ],
         "operationId": "adjustBarBill",
         "summary": "对酒水账单应用调整",
-        "description": "第十八批 AY 段第 346 条 346-R1（BSM:1064「结账补足的差额按普通消费计入」；BSM:1069「账单调整只用于纠正漏记、多记的数量，不得改单价，也不得绕过折扣下限。」）：adjustment_type=min_spend_top_up（补足低消差额）不经账单调整准入复核（bar.bill_waiver），提交即生效；amount_cent 须等于本台当前低消差额（与结账闸同一算法，同 listBarOrders 的 min_spend_gap_cent），不等时 409 BAR_MIN_SPEND_TOP_UP_AMOUNT_MISMATCH（「补足金额须等于本台当前低消差额 X 元，请刷新后重试」），应付不变。第十八批 AY 段第 342 条 342-R1（BSM:1064「因此台位上要么没有任何消费（空台，无账可结），要么最终累计消费达到最低消费。」）：账单已结清、所在开台会话仍开台且有差额时，补足在本单另开一张补足账单（应付即补足额，台位取会话当前台位，转台后为目标台），返回的调整记录 bill_id 为新账单，新账单结清后才能关台（见 closeBarServiceResponsibility）；会话已关台或无会话归属的已结账单照旧 409 BAR_BILL_NOT_ADJUSTABLE。免单、退款、挂账、服务费照旧经 bar.bill_waiver 准入闸（409 ADMISSION_BLOCKED）。",
+        "description": "第十八批 AY 段第 346 条 346-R1（BSM:1064「结账补足的差额按普通消费计入」；BSM:1069「账单调整只用于纠正漏记、多记的数量，不得改单价，也不得绕过折扣下限。」）：adjustment_type=min_spend_top_up（补足低消差额）不经账单调整准入复核（bar.bill_waiver），提交即生效；amount_cent 须等于本台当前低消差额（与结账闸同一算法，同 listBarOrders 的 min_spend_gap_cent），不等时 409 BAR_MIN_SPEND_TOP_UP_AMOUNT_MISMATCH（「补足金额须等于本台当前低消差额 X 元，请刷新后重试」），应付不变。第十八批 AY 段第 342 条 342-R1（BSM:1064「因此台位上要么没有任何消费（空台，无账可结），要么最终累计消费达到最低消费。」）：账单已结清、所在开台会话仍开台且有差额时，补足在本单另开一张补足账单（应付即补足额，台位取会话当前台位，转台后为目标台），返回的调整记录 bill_id 为新账单，新账单结清后才能关台（见 closeBarServiceResponsibility）；会话已关台或无会话归属的已结账单照旧 409 BAR_BILL_NOT_ADJUSTABLE。免单、退款、挂账、服务费照旧经 bar.bill_waiver 准入闸（409 ADMISSION_BLOCKED）。第十八批 AZ 段第 284 条 284-R1（BSM:1064「因退品形成的留款在原台位账单中分别记录留款金额、已抵用金额与未抵用余额」「该笔金额留在本台位账上，客人可继续点其他产品」）：adjustment_type=refund 时账单级可退额扣除本账单已留在台位账上的退款额（min_spend_retained 已生效留款合计，见 getBarBillRefundContext 的 retained_goods_cent）——小费以外的退款合计不超过应付减已留款，商品分项不超过应付减服务费剩余减已留款，超出 400 BAR_PAYROLL_INVALID（「退款分项超过账单尚可退的小费、服务费或商品金额，不能改名挪用其他分项额度」）；同额重办或分次退款的留款合计不超过商品实收。",
         "x-auth-context": "staff-token",
         "x-permission": "bar.bill.adjust",
         "x-data-scope": "project-bar-table",
@@ -37253,15 +37254,20 @@
         ],
         "operationId": "billPropertyFee",
         "summary": "物业费按期计费（每平米固定单价 × 面积，不退不补）",
+        "description": "第十八批 AZ 段第 349 条 349-R1（PGM:420 城市项目公司「只负责资产、场地、物业、租赁、直接管理的第三方商户」；PGM:664「商户费用账单出账……由该酒吧对应的财务 BP 负责」；BSM:1758「生成的物业费账单在应收应付台账按「来源＝物业费」查询」）：商户账号只能为本商户出账，他商户 403 CROSS_MERCHANT_FORBIDDEN；不挂商户的账号须按 finance.property_fee.manage 可触及的项目覆盖所出账项目（平台管理员不限），否则 403 CROSS_PROJECT_FORBIDDEN「无权为其他项目出物业费账单」，不再对不挂商户的账号返回 MERCHANT_SCOPE_REQUIRED。物业费应收带所出账项目，项目财务在应收应付台账按来源＝物业费（property_fee）查看与登记收款。",
         "x-auth-context": "staff-token",
         "x-permission": "finance.property_fee.manage",
-        "x-data-scope": "platform",
+        "x-data-scope": "project-merchant",
         "x-terminal-allowed": [
           "web"
         ],
         "x-idempotency-required": true,
         "x-audit-event-success": "finance_property_fee.billed",
         "x-audit-event-failure": "finance_property_fee.bill_failed",
+        "x-failure-codes": [
+          "CROSS_MERCHANT_FORBIDDEN",
+          "CROSS_PROJECT_FORBIDDEN"
+        ],
         "requestBody": {
           "$ref": "#/components/requestBodies/PropertyFeeBillRequest"
         },
@@ -39960,7 +39966,7 @@
         "x-audit-event-success": "contract.activated",
         "x-audit-event-failure": "contract.activate_failed",
         "x-auth-context": "staff-token",
-        "description": "须待生效态。固化 4 项收益快照 + 绑定空间(防重复出租，重叠生效合同占用即拒)。合同由招商签约起草的，生效后在同一事务内把来源线索置已签约并留痕 leasing.lead.signed（PGM「招商运营细则」）。第十八批 G 段 82b-R3：合同所属项目须在本入口权限码可触及范围内（含可跨项目角色勾选的项目；平台管理员不限），合同未带项目或不在范围内 403 CROSS_PROJECT_FORBIDDEN（在幂等执行与行锁之前判）。",
+        "description": "须待生效态。固化 4 项收益快照 + 绑定空间(防重复出租，重叠生效合同占用即拒)。合同由招商签约起草的，生效后在同一事务内把来源线索置已签约并留痕 leasing.lead.signed（PGM「招商运营细则」）。第十八批 G 段 82b-R3：合同所属项目须在本入口权限码可触及范围内（含可跨项目角色勾选的项目；平台管理员不限），合同未带项目或不在范围内 403 CROSS_PROJECT_FORBIDDEN（在幂等执行与行锁之前判）。第十八批 AZ 段第 285 条 285-R1（BSM:1361「租金、物业费、能源费、押金、违约金按合同口径形成应收」；BSM:1353「实际收款或退款成功后才更新已收押金余额」）：生效即挂押金应收——source_type=contract_deposit（合同押金），金额为生效固化的押金（为空或 0 不挂），往来方与归属商户为该商户，来源单号与幂等键为合同号（重复生效不重挂），账期为生效月，到期日为生效日，挂合同所属项目；实收经 createArApPayment 登记后才计入已收押金余额。续租、面积位置变更不经本接口，仍只登记差额（deposit_adjustment）。",
         "parameters": [
           {
             "name": "contract_id",
@@ -48313,7 +48319,7 @@
         ],
         "operationId": "listMerchantPortalTicketSettlements",
         "summary": "商户专区·门票分账(本商户内部结算往来与待付状态)",
-        "description": "BSM L1597/L1683：本商户作为对方、已在商户专区可查看的通票分账应付、追收、单店服务费与补偿新增履约结算往来(项目范围按付款时点固化的项目判定)，含金额、异议截止日、财务指定付账日、当前付款日与执行状态(待付/付款失败待处理及原因与预计重付时间/已结清)；顺延不逐笔通知，以状态可见代替。无商户归属 403 MERCHANT_SCOPE_REQUIRED。 18E（20-R3）：商户账号只按商户过滤，看得到各经营项目里本商户的数据（写入口仍只到本人项目）。商户账号读到即记所列往来已读(首页未读账单提醒，第 92 条)。第十八批 AV 段 310-R2（BSM:1683「对收款方可见并注明失败原因与预计重付时间」）：并入本商户为往来方的退租押金退还应付（source_type=deposit_refund，不含冲正、重述行），以挂账时刻作可查看时刻、与其他往来一起按可查看时刻倒序，没有异议截止与指定付账日；同样记已读。",
+        "description": "BSM L1597/L1683：本商户作为对方、已在商户专区可查看的通票分账应付、追收、单店服务费与补偿新增履约结算往来(项目范围按付款时点固化的项目判定)，含金额、异议截止日、财务指定付账日、当前付款日与执行状态(待付/付款失败待处理及原因与预计重付时间/已结清)；顺延不逐笔通知，以状态可见代替。无商户归属 403 MERCHANT_SCOPE_REQUIRED。 18E（20-R3）：商户账号只按商户过滤，看得到各经营项目里本商户的数据（写入口仍只到本人项目）。商户账号读到即记所列往来已读(首页未读账单提醒，第 92 条)。第十八批 AV 段 310-R2（BSM:1683「对收款方可见并注明失败原因与预计重付时间」）：并入本商户为往来方的退租押金退还应付（source_type=deposit_refund，不含冲正、重述行），以挂账时刻作可查看时刻、与其他往来一起按可查看时刻倒序，没有异议截止与指定付账日；同样记已读。第十八批 AZ 段第 358 条 358-R1：每行同 getInternalPayableExecution 带 account_changes（本款项已审批的换账户单，按 approved_at 升序；每项 id（换账户单编号）、failed_attempt_id（对应失败的付款尝试）、new_account_ref（新收款账户引用）、reason、approved_at（审批时刻，date-time））。",
         "x-permission": "merchant.portal.settlement.view",
         "x-data-scope": "merchant",
         "x-terminal-allowed": [
@@ -55023,7 +55029,7 @@
         ],
         "operationId": "counterRefundStoredValueAccount",
         "summary": "会员储值到店柜台退款（商户预收卡唯一可达退款路径）",
-        "description": "CG-06a：同线上退款口径——只退未消费的本金（超过即 409 STORED_VALUE_PRINCIPAL_INSUFFICIENT），赠送金不退现，销户时赠送金作废留痕。 第十八批 N 段第 123 条 123-R2（BSM:1630「核销、收款、退款、放行等敏感操作，操作设备定位落在该项目综合体授权范围之外时一律拒绝并留痕」；BSM:1876「Web 端同样适用」）：本操作属敏感操作定位闸的现场动作闭集（第十八批裁决 31）。操作对象所属项目已配授权范围（123-R1）时须带请求头 X-Geo-Latitude、X-Geo-Longitude（设备当下定位，WGS-84 十进制度）：没带或解析不了按范围外处理（裁决 30）返回 403 SENSITIVE_OPERATION_LOCATION_REQUIRED，到圆心距离超过授权半径返回 403 SENSITIVE_OPERATION_OUT_OF_RANGE，拒绝在独立事务里留痕 sensitive_operation.location_rejected（business_id 为本 operationId，业务回滚不丢）；项目没配授权范围不查位置（裁决 32）；判定在幂等之前，重放不能绕过；通过时不存位置。",
+        "description": "CG-06a：同线上退款口径——只退未消费的本金（超过即 409 STORED_VALUE_PRINCIPAL_INSUFFICIENT），赠送金不退现，销户时赠送金作废留痕。 第十八批 N 段第 123 条 123-R2（BSM:1630「核销、收款、退款、放行等敏感操作，操作设备定位落在该项目综合体授权范围之外时一律拒绝并留痕」；BSM:1876「Web 端同样适用」）：本操作属敏感操作定位闸的现场动作闭集（第十八批裁决 31）。操作对象所属项目已配授权范围（123-R1）时须带请求头 X-Geo-Latitude、X-Geo-Longitude（设备当下定位，WGS-84 十进制度）：没带或解析不了按范围外处理（裁决 30）返回 403 SENSITIVE_OPERATION_LOCATION_REQUIRED，到圆心距离超过授权半径返回 403 SENSITIVE_OPERATION_OUT_OF_RANGE，拒绝在独立事务里留痕 sensitive_operation.location_rejected（business_id 为本 operationId，业务回滚不丢）；项目没配授权范围不查位置（裁决 32）；判定在幂等之前，重放不能绕过；通过时不存位置。第十八批 AZ 段第 278 条 278-R1（ENUM:86「余额管理与退款均由长沙项目公司负责」；BSM:833「商户的员工只能管理本商户发行的储值卡」「单张储值卡退款时如申请同时销卡，本金未退清的须拒绝销卡并明确报错」；PGM:528「④看不到别的商户和别的项目的数据」）：退款范围按卡判：最高权限放行；商户账号只办本商户的卡（他商户的卡与通用卡 403 CROSS_MERCHANT_FORBIDDEN「该储值卡不在当前商户权限范围内」）；卡带项目的只办本人项目的（403 CROSS_PROJECT_FORBIDDEN「该储值卡不在当前项目权限范围内」；平台管理员不限）；不挂商户的项目侧账号不按商户限，可办本项目通用卡，不再返回 MERCHANT_SCOPE_REQUIRED；碰到不带项目的商户卡按发卡商户的经营项目（主项目或已批准的经营项目）判，本人项目不在其中 403 CROSS_PROJECT_FORBIDDEN。首次提交与同一幂等键重放同一口径（重放在返回第一次结果之前按流水所属的卡判）。柜台退款首次提交起也核项目（原先只比商户）。close_account 为真而本次退款后本金未退清 409 STORED_VALUE_CLOSE_PRINCIPAL_REMAINING（「本金未退清，不能销卡；同时销卡须一次退还剩余本金 X 元」）；会员注销放弃余额不经本接口。按手机号查可办理的卡见 lookupStoredValueRefundCards。",
         "x-permission": "customer.stored_value.refund",
         "x-data-scope": "project",
         "x-terminal-allowed": [
@@ -55080,6 +55086,91 @@
           "SENSITIVE_OPERATION_LOCATION_REQUIRED",
           "SENSITIVE_OPERATION_OUT_OF_RANGE"
         ]
+      }
+    },
+    "/api/v1/loyalty/stored-value/refund-cards/lookup": {
+      "post": {
+        "tags": [
+          "customer"
+        ],
+        "operationId": "lookupStoredValueRefundCards",
+        "summary": "储值退卡查卡（按手机号列出当前账号可办理退卡的卡；手机号走请求体不进 URL）",
+        "description": "第十八批 AZ 段第 278 条 278-R1（ENUM:86「余额管理与退款均由长沙项目公司负责」；BSM:833「商户的员工只能管理本商户发行的储值卡」；PGM:528「④看不到别的商户和别的项目的数据」）：按客人完整手机号（精确匹配）列出其名下当前账号可办理退卡的卡，供后台「储值退卡」页办理 refundStoredValueAccount（通用卡）与 counterRefundStoredValueAccount（商户卡）。查询不扣单次授权（M723 操作员 2026-10-03「预览、查询不扣一次性授权」），不记审计事件。范围同退款：最高权限与平台管理员全见；商户账号只见本商户的卡，卡带项目的再限本人项目；不挂商户的账号见本人项目的卡、不带项目的通用卡，以及发卡商户在本人项目经营（主项目或已批准的经营项目）的不带项目商户卡。已销户（closed）的卡不列；手机号查不到客人返回空数组；只给掩码手机号。商户卡的 refund_allowed 与 refund_ratio_bps 取发卡商户退款规则（未配置为允许、10000），通用卡固定为 true 与 10000；pending_refund_cent 为账户关闭或注销时登记、状态为 requested 或 processing 的待退事项金额，否则为 null。缺 phone 400 VALIDATION_FAILED；没有 customer.stored_value.refund 403 PERMISSION_DENIED。",
+        "x-permission": "customer.stored_value.refund",
+        "x-data-scope": "project-merchant",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "not_applicable",
+        "x-audit-event-failure": "not_applicable",
+        "x-failure-codes": [
+          "VALIDATION_FAILED",
+          "PERMISSION_DENIED"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "phone"
+                ],
+                "properties": {
+                  "phone": {
+                    "type": "string",
+                    "description": "客人完整手机号（精确匹配，不支持模糊搜索）；PII 走请求体不入 URL query"
+                  }
+                }
+              },
+              "example": {
+                "phone": "13800000000"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "成功；data 为可办理退卡的卡（查不到为空数组）。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SuccessResponse"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/StoredValueRefundCard"
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-auth-context": "staff-token"
       }
     },
     "/api/v1/partner/orgs/{org_id}/bind-user": {
@@ -61537,7 +61628,7 @@
         ],
         "operationId": "computeDividendStatements",
         "summary": "期间分红作业：对期末日已生效的方案版本各算一张计算单（净利润=收入−成本−费用−税费；幂等可重跑，草稿/预览/驳回作废重算，进入审批流跳过）",
-        "description": "第十八批 V 段第 159 条（ENUM:190「非最终快照的数据一律不得进入结算、分红、正式提成计算和对账关账」）：159-R5 正式单（kind=official）——方案商户检查单位（酒吧按该店，其他商户按所属综合体；建档前的营业日不计）期间内任一营业日五类数据未全部标记为最终的，该方案不出单、记入 skipped（reason「以下营业日数据尚未标记为最终，不能出正式分红单：」后列「yyyy-MM-dd 单位名：类别原词、类别原词」，最多 10 行），旧草稿不作废。159-R6 预览（kind=preview；BSM:1777、DEC-R8-45）只判该月最后一个营业日的五类，未齐的方案记入 skipped（reason「该月最后一个营业日（yyyy-MM-dd）的五类数据尚未全部标记为最终，不得生成预览：」后接同样的列表）；某单位该日五类标齐时由 markDailyCloseFinal 提交后自动出预览，不设定时作业。跳过不是错误码，照常返回 200。159-R10：预览单不计尚未月结定格的服务费扣留数（revenue_bar 明细说明注明「预览：尚未月结定格的服务费扣留数暂不计」），正式单照旧要求月结定格，未定格 409 BAR_REVENUE_PENDING。第十八批 AC 段第 210 条 210-R3（BSM:1774「以及该期间的各项税费（含增值税、所得税及其他应由该主体承担的税费）」；BSM:1801「连接税务处理，拿到这期的各项税费，算出净利润」；第十八批裁决 42）：净利润再减该期税费——取方案商户经营主体（生效绑定的运营主体，否则商户档案上的经营主体）已生效（status=approved）、所属期末月落在本期内的税费实际申报金额（按季申报的整季计入季末那个月所在的那一期），逐税种落 tax_period 负额明细行，合计回显于计算单 period_tax_cent（net_profit_cent = revenue_cent − cost_cent − expense_cent − period_tax_cent）。第十八批 AR 段第 233 条 233-R3：同一经营主体已生效、计入月份（accounting_month）落在本期内的差异调整单（kind=period_difference，可正可负）一并扣减，逐税种与申报金额各成一行 tax_period（所属期写「原所属期 更正（差异调整单，计入 yyyy-MM）」）；补提、冲回调整单与实际缴纳登记不扣。正式单另判出单闸（第十八批裁决 42「正式单出单前本期每个月都要有已生效的税费登记，缺的不出单并写跳过原因」）：本期每个月都须被该经营主体至少一条已生效申报登记的所属期（period_start_month～period_end_month）覆盖，缺的该方案不出单、旧单不作废，记入 skipped（reason「本期 yyyy-MM、yyyy-MM 尚无已生效的税费申报登记，请先登记并审批通过后再出正式单」）；登记依法可分配金额后的重算同闸（不出单时 409 DIVIDEND_STATE_INVALID，message 即该原因）；预览照扣已生效税费、不判此闸。第十八批 AC 段第 211 条 211-R1（BSM:1777；第十八批裁决 43「「暂不分红」该期不出正式单、利润不补分；「暂缓分红」等协商恢复后由财务登记恢复，再照常出单；月度预览照常」）：正式单在期间标签校验之后、出单闸之前先判暂不分红／暂缓分红登记，该商户该期有未恢复登记的不出单、记入 skipped（reason「本期经协商暂不分红（或暂缓分红），不出正式单（原因：…；协商结果：…）」）；预览不判。第十八批 AQ 段第 234 条 234-R1（BSM:521「已发生的业务一律按当时生效的版本计算」）：每个商户取期末日已生效的方案版本（已批准、生效起始日不晚于期末日的最新一个；该版本 status=ended 即停用、不出单）出单；指定 merchant_id 找不到时 404 DIVIDEND_PLAN_NOT_FOUND（「该商户在 yyyy-MM-dd 没有已生效的分红方案」）。第十八批 AQ 段第 234 条 234-R2（BSM:1775；BSM:1757「多方分配产生的非涉税尾差单独留痕，并由该笔业务实际承担结算责任的主体承担」）：平台、各其他股东与主理人（10000 − 平台 − 其他股东合计）按持股比例各自四舍五入到分，可分配额减各方合计为尾差（带符号，由该酒吧公司承担、不发给任何一方）；个人股东按全平台统一代扣税率代扣（整除截断，第十八批 AX 段 271-R1 起），公司股东不代扣；每位其他股东落 shareholder_gross（应得）、shareholder_tax_withheld（代扣，负数）、shareholder_payout（实发）三行明细，尾差不为 0 另落 rounding_residual 行；计算单（computed[]）新增 other_shareholders_gross_cent（其他股东应得合计，不小于 0）与 rounding_residual_cent（尾差，带符号）。第十八批 AQ 段第 243 条 243-R1（BSM:1787「酒吧关闭须完成关停结算，依法核清本次分红」；18AQ 控制席判定）：有关停结算登记的商户取 min（期末日，关店最后营业日）已生效的版本，指定商户找不到时 404 提示里的日期即取该日；关店所在期正式单的五类最终标记只查期初到关店最后营业日，停用、存档后照查；整期在关店最后营业日之后的记入 skipped（reason「该酒吧已于 yyyy-MM-dd 关店（已登记关停结算），关店后的期间不再分红」）。第十八批 AX 段第 330 条 330-R1（BSM:1781「主理人这期该得的钱，按有效协议先抵其对相应法律主体尚未结清的欠款」）：方案开欠款抵扣时，可抵额只取主理人本人欠该酒吧公司的未清应收（该酒吧台账里往来方为方案主理人账户的未清应收），酒吧公司自己的租金等应收、客人挂账应收不抵；arrears_offset 明细行逐项写明债务人（主理人账户）与债权人（本酒吧公司）。第十八批 AX 段第 333 条 333-R1（ENUM:190「非最终快照的数据一律不得进入结算、分红」；BSM:1777「数据未全部标记最终之前不得生成预览」）：酒吧商户的五类最终标记一律按该店查、不看在营与存档（未登记关停结算就停用或存档的同样照查）——正式单查期初至 min（期末日，关店最后营业日），预览只查 min（期末日，关店最后营业日）这一天（未登记关停结算即期末日），跳过原因里的日期即该日；非酒吧商户照旧按所属综合体查。第十八批 AX 段第 271 条 271-R1（BSM:1776「全平台统一可配」；BSM:521「每一笔单据在生成时就把所用配置版本固化在单上」）：代扣税率取出单当日营业日（该商户当前营业日）已生效的全平台统一版本（见 listDividendTaxRates），主理人与其他个人股东同用；计算单 tax_rate_bps 为该税率（公司股东主理人为 0），tax_rate_version_id 固化所用版本 ID。第十八批 AX 段第 273 条 273-R2（PGM:436「酒吧当期可分配利润必须先偿还全部到期借款本息，剩余部分才可用于分红」；BSM:1785「存在逾期未还借款的，分红一律优先偿还借款」；BSM:1778「关着时仍须满足法定可分配额与借款清偿前置，再按比例分配」）：出单当日营业日已到期未还的借款本息（registerDividendBarLoan 登记、所挂酒吧应付的未付额；还款期限不晚于该日且未付清）按还款顺序、还款期限，在依法可分配上限之后、按比例劈分之前取小先偿（不超过可分配额），余额再按持股比例劈分；逐笔落 loan_repayment 负额明细行（出借方、还款期限、未还本息、本期先偿额与台账单号），合计回显于计算单 loan_repayment_cent（int64，不小于 0），distributable_cent＝min（经营口径可分配额，依法核定额）− loan_repayment_cent；预览同一算式；未到期的借款不扣。",
+        "description": "第十八批 V 段第 159 条（ENUM:190「非最终快照的数据一律不得进入结算、分红、正式提成计算和对账关账」）：159-R5 正式单（kind=official）——方案商户检查单位（酒吧按该店，其他商户按所属综合体；建档前的营业日不计）期间内任一营业日五类数据未全部标记为最终的，该方案不出单、记入 skipped（reason「以下营业日数据尚未标记为最终，不能出正式分红单：」后列「yyyy-MM-dd 单位名：类别原词、类别原词」，最多 10 行），旧草稿不作废。159-R6 预览（kind=preview；BSM:1777、DEC-R8-45）只判该月最后一个营业日的五类，未齐的方案记入 skipped（reason「该月最后一个营业日（yyyy-MM-dd）的五类数据尚未全部标记为最终，不得生成预览：」后接同样的列表）；某单位该日五类标齐时由 markDailyCloseFinal 提交后自动出预览，不设定时作业。跳过不是错误码，照常返回 200。159-R10：预览单不计尚未月结定格的服务费扣留数（revenue_bar 明细说明注明「预览：尚未月结定格的服务费扣留数暂不计」），正式单照旧要求月结定格，未定格 409 BAR_REVENUE_PENDING。第十八批 AC 段第 210 条 210-R3（BSM:1774「以及该期间的各项税费（含增值税、所得税及其他应由该主体承担的税费）」；BSM:1801「连接税务处理，拿到这期的各项税费，算出净利润」；第十八批裁决 42）：净利润再减该期税费——取方案商户经营主体（生效绑定的运营主体，否则商户档案上的经营主体）已生效（status=approved）、所属期末月落在本期内的税费实际申报金额（按季申报的整季计入季末那个月所在的那一期），逐税种落 tax_period 负额明细行，合计回显于计算单 period_tax_cent（net_profit_cent = revenue_cent − cost_cent − expense_cent − period_tax_cent）。第十八批 AR 段第 233 条 233-R3：同一经营主体已生效、计入月份（accounting_month）落在本期内的差异调整单（kind=period_difference，可正可负）一并扣减，逐税种与申报金额各成一行 tax_period（所属期写「原所属期 更正（差异调整单，计入 yyyy-MM）」）；补提、冲回调整单与实际缴纳登记不扣。正式单另判出单闸（第十八批裁决 42「正式单出单前本期每个月都要有已生效的税费登记，缺的不出单并写跳过原因」）：本期每个月都须被该经营主体至少一条已生效申报登记的所属期（period_start_month～period_end_month）覆盖，缺的该方案不出单、旧单不作废，记入 skipped（reason「本期 yyyy-MM、yyyy-MM 尚无已生效的税费申报登记，请先登记并审批通过后再出正式单」）；登记依法可分配金额后的重算同闸（不出单时 409 DIVIDEND_STATE_INVALID，message 即该原因）；预览照扣已生效税费、不判此闸。第十八批 AC 段第 211 条 211-R1（BSM:1777；第十八批裁决 43「「暂不分红」该期不出正式单、利润不补分；「暂缓分红」等协商恢复后由财务登记恢复，再照常出单；月度预览照常」）：正式单在期间标签校验之后、出单闸之前先判暂不分红／暂缓分红登记，该商户该期有未恢复登记的不出单、记入 skipped（reason「本期经协商暂不分红（或暂缓分红），不出正式单（原因：…；协商结果：…）」）；预览不判。第十八批 AQ 段第 234 条 234-R1（BSM:521「已发生的业务一律按当时生效的版本计算」）：每个商户取期末日已生效的方案版本（已批准、生效起始日不晚于期末日的最新一个；该版本 status=ended 即停用、不出单）出单；指定 merchant_id 找不到时 404 DIVIDEND_PLAN_NOT_FOUND（「该商户在 yyyy-MM-dd 没有已生效的分红方案」）。第十八批 AQ 段第 234 条 234-R2（BSM:1775；BSM:1757「多方分配产生的非涉税尾差单独留痕，并由该笔业务实际承担结算责任的主体承担」）：平台、各其他股东与主理人（10000 − 平台 − 其他股东合计）按持股比例各自四舍五入到分，可分配额减各方合计为尾差（带符号，由该酒吧公司承担、不发给任何一方）；个人股东按全平台统一代扣税率代扣（整除截断，第十八批 AX 段 271-R1 起），公司股东不代扣；每位其他股东落 shareholder_gross（应得）、shareholder_tax_withheld（代扣，负数）、shareholder_payout（实发）三行明细，尾差不为 0 另落 rounding_residual 行；计算单（computed[]）新增 other_shareholders_gross_cent（其他股东应得合计，不小于 0）与 rounding_residual_cent（尾差，带符号）。第十八批 AQ 段第 243 条 243-R1（BSM:1787「酒吧关闭须完成关停结算，依法核清本次分红」；18AQ 控制席判定）：有关停结算登记的商户取 min（期末日，关店最后营业日）已生效的版本，指定商户找不到时 404 提示里的日期即取该日；关店所在期正式单的五类最终标记只查期初到关店最后营业日，停用、存档后照查；整期在关店最后营业日之后的记入 skipped（reason「该酒吧已于 yyyy-MM-dd 关店（已登记关停结算），关店后的期间不再分红」）。第十八批 AX 段第 330 条 330-R1（BSM:1781「主理人这期该得的钱，按有效协议先抵其对相应法律主体尚未结清的欠款」）：方案开欠款抵扣时，可抵额只取主理人本人欠该酒吧公司的未清应收（该酒吧台账里往来方为方案主理人账户的未清应收），酒吧公司自己的租金等应收、客人挂账应收不抵；arrears_offset 明细行逐项写明债务人（主理人账户）与债权人（本酒吧公司）。第十八批 AX 段第 333 条 333-R1（ENUM:190「非最终快照的数据一律不得进入结算、分红」；BSM:1777「数据未全部标记最终之前不得生成预览」）：酒吧商户的五类最终标记一律按该店查、不看在营与存档（未登记关停结算就停用或存档的同样照查；第十八批 AZ 段第 356 条 356-R1：存档时刻所在营业日之后的营业日不再查）——正式单查期初至 min（期末日，关店最后营业日），预览只查 min（期末日，关店最后营业日）这一天（未登记关停结算即期末日），跳过原因里的日期即该日；非酒吧商户照旧按所属综合体查。第十八批 AX 段第 271 条 271-R1（BSM:1776「全平台统一可配」；BSM:521「每一笔单据在生成时就把所用配置版本固化在单上」）：代扣税率取出单当日营业日（该商户当前营业日）已生效的全平台统一版本（见 listDividendTaxRates），主理人与其他个人股东同用；计算单 tax_rate_bps 为该税率（公司股东主理人为 0），tax_rate_version_id 固化所用版本 ID。第十八批 AX 段第 273 条 273-R2（PGM:436「酒吧当期可分配利润必须先偿还全部到期借款本息，剩余部分才可用于分红」；BSM:1785「存在逾期未还借款的，分红一律优先偿还借款」；BSM:1778「关着时仍须满足法定可分配额与借款清偿前置，再按比例分配」）：出单当日营业日已到期未还的借款本息（registerDividendBarLoan 登记、所挂酒吧应付的未付额；还款期限不晚于该日且未付清）按还款顺序、还款期限，在依法可分配上限之后、按比例劈分之前取小先偿（不超过可分配额），余额再按持股比例劈分；逐笔落 loan_repayment 负额明细行（出借方、还款期限、未还本息、本期先偿额与台账单号），合计回显于计算单 loan_repayment_cent（int64，不小于 0），distributable_cent＝min（经营口径可分配额，依法核定额）− loan_repayment_cent；预览同一算式；未到期的借款不扣。",
         "x-auth-context": "staff-token",
         "x-permission": "finance.dividend.manage",
         "x-data-scope": "platform",
@@ -67071,7 +67162,7 @@
         ],
         "operationId": "listSettlementInvoiceItems",
         "summary": "开票清单列表",
-        "description": "按结算单及积分发行费月账单生成的开票清单条目分页列表(开票主体/发票项目/税率/税额/凭证要件/开票状态)。积分发行费行(income_type=points_issuance)按该账单已收额生成,开票主体为账单收款方,points_bill_id 为来源积分月账单、buyer_entity_id/buyer_name 为购方(合同销售方),bill_id 为空;结算单行 points_bill_id、buyer_entity_id、buyer_name 为空。税率按开票主体、开票期间末日当时生效的税率版本取(主体特例优先,否则平台默认;未配置或该版本没有这笔费用记 0;第十八批 AR 段第 233 条 233-R2)。系统只生成清单交财务,不自建开票引擎。",
+        "description": "按结算单及积分发行费月账单生成的开票清单条目分页列表(开票主体/发票项目/税率/税额/凭证要件/开票状态)。积分发行费行(income_type=points_issuance)按该账单已收额生成,开票主体为账单收款方,points_bill_id 为来源积分月账单、buyer_entity_id/buyer_name 为购方(合同销售方),bill_id 为空;结算单行 points_bill_id 为空，buyer_entity_id、buyer_name 除下述业态份额行外为空。税率按开票主体、开票期间末日当时生效的税率版本取(主体特例优先,否则平台默认;未配置或该版本没有这笔费用记 0;第十八批 AR 段第 233 条 233-R2)。系统只生成清单交财务,不自建开票引擎。第十八批 AZ 段第 290 条 290-R1（BSM:1803「平台内部各主体之间的往来需要开具发票」；BSM:755「一律按总额收付」）：结算单行另含组合通票游乐、演出、餐饮、零售各业态的域间份额（含追收与到期未核销归属，即月结过账挂往来的同三列之和）行——income_type 为 game、show、catering、retail（新增 retail 零售），开票主体为该业态份额归属主体，buyer_entity_id、buyer_name 为娱乐平台公司，settlement_item_id 为空，按总额、不与代付相抵，代付不开票。290-R2（BSM:1144「酒吧门票上的演出加价部分，随酒吧门票由娱乐平台公司售票收款后分给传媒公司」；BSM:1145）：传媒演出结算（门票加价分配、固定演出费、酒水提成）出账即生成一行——income_type=show（文化服务费），开票主体为收方传媒公司，购方为付方（门票加价为娱乐平台公司；固定演出费、酒水提成为该酒吧的收款主体），期间为演出日所在月；响应新增 ar_ap_item_id（string，可空）＝该行来源的传媒演出结算台账行，其余行为空，这类行 bill_id、points_bill_id 为空；结算调整后原行应开降为 0、列入已超开（先红冲），新额另出一行。",
         "x-auth-context": "staff-token",
         "x-permission": "settlement.invoice.view",
         "x-data-scope": "platform",
@@ -67161,7 +67252,7 @@
         ],
         "operationId": "settlementInvoiceSummary",
         "summary": "开票清单按主体汇总",
-        "description": "按开票主体分组的金额/税额/文建费汇总 + 开票主体与税目映射规则 + 已超开告警(已开>应开须先红冲再重开)。",
+        "description": "按开票主体分组的金额/税额/文建费汇总 + 开票主体与税目映射规则 + 已超开告警(已开>应开须先红冲再重开)。第十八批 AZ 段第 290 条 290-R1、290-R2：已超开按来源判——单头级 ticket 行应开额取门票综合服务费两支合计，game、show、catering、retail 业态份额行取该业态份额三列之和；传媒演出结算行应开额为该台账行加回指它的冲正行（调整后原行为 0），这类行在 over_issued 里 bill_id、settlement_item_id 为空。",
         "x-auth-context": "staff-token",
         "x-permission": "settlement.invoice.view",
         "x-data-scope": "platform",
@@ -67302,7 +67393,7 @@
         ],
         "operationId": "generateSettlementInvoiceItems",
         "summary": "按结算单生成开票清单",
-        "description": "把已确认/已结算的月度结算单拆成开票清单条目(门票综合服务费归娱乐平台公司、可分配池分账归各酒吧商户)。幂等:本次可开额 = 应开额 − 已开额,≤0 不生成;内部成本转付与营销成本规则不进对外清单。返回本次新增条目数。",
+        "description": "把已确认/已结算的月度结算单拆成开票清单条目(门票综合服务费归娱乐平台公司、可分配池分账归各酒吧商户)。幂等:本次可开额 = 应开额 − 已开额,≤0 不生成;内部成本转付与营销成本规则不进对外清单。返回本次新增条目数。第十八批 AZ 段第 290 条 290-R1（BSM:1803「平台内部各主体之间的往来需要开具发票」；BSM:755「一律按总额收付」）：另按结算单组合通票游乐、演出、餐饮、零售各业态的域间份额（含追收与到期未核销归属，即月结过账挂往来的同三列之和）逐业态出单头级行——income_type 游乐为 game、演出为 show、餐饮为 catering、零售为 retail，开票主体为该业态份额归属主体，购方为娱乐平台公司（该项目 all_pass_ticket 收入归属的管理主体），按总额、不与代付相抵；代付是垫付款，不开票。该收入类型未配规则或规则不可开票的不生成。",
         "x-auth-context": "staff-token",
         "x-permission": "settlement.invoice.manage",
         "x-data-scope": "platform",
@@ -67601,9 +67692,10 @@
                       "parking_credit_cost",
                       "pass_domain_share",
                       "pass_domain_direct_settlement",
-                      "pass_unverified_attribution"
+                      "pass_unverified_attribution",
+                      "general_card_consume"
                     ],
-                    "description": "钱路(应收应付来源)，kind=route 必填。第十八批 AI 段 214-R1、214-R2 加 pass_domain_share（通票域间份额）、pass_domain_direct_settlement（通票餐饮零售代付）、pass_unverified_attribution（通票到期未核销归属），上线前须先定规则，否则结算单过账 409 PAY_DAY_NOT_CONFIGURED。"
+                    "description": "钱路(应收应付来源)，kind=route 必填。第十八批 AI 段 214-R1、214-R2 加 pass_domain_share（通票域间份额）、pass_domain_direct_settlement（通票餐饮零售代付）、pass_unverified_attribution（通票到期未核销归属），上线前须先定规则，否则结算单过账 409 PAY_DAY_NOT_CONFIGURED。第十八批 AZ 段第 350 条 350-R1（BSM:1704「长沙项目公司就通用卡余额的实际消费向各业态的经营主体直接付款结算，按三个付账日结清」）：加 general_card_consume（通用卡消费结算），上线前须先定规则，否则通用卡消费月度入账跳过、下一轮重试。"
                   },
                   "first_pay_day": {
                     "type": "integer",
@@ -69939,7 +70031,7 @@
         ],
         "operationId": "listPaymentConfirmationFlows",
         "summary": "查询付款确认各支付类型的必带平行线",
-        "description": "第十八批 AM 段第 241 条 241-R8（BSM:1803「具体流程按支付类型分别设定」；第十八批裁决 66「每类必带财务、法务两线，其他部门线由发起人按单另加」、67「审批线页设定」）：列出付款确认全部 41 个支付类型（全平台配置，按 PaymentConfirmationType 顺序，不按项目过滤）及各类在财务（finance_review）、法务（legal_review）两线之外还必带的平行线，供「组织层级与审批线」页「付款确认流程」表。data 为数组，每项 payment_type、payment_type_label（中文名）、line_codes（未设定为空数组，出厂均为空）。缺 access.role.assign 403 PERMISSION_DENIED。",
+        "description": "第十八批 AM 段第 241 条 241-R8（BSM:1803「具体流程按支付类型分别设定」；第十八批裁决 66「每类必带财务、法务两线，其他部门线由发起人按单另加」、67「审批线页设定」）：列出付款确认全部 42 个支付类型（全平台配置，按 PaymentConfirmationType 顺序，不按项目过滤）及各类在财务（finance_review）、法务（legal_review）两线之外还必带的平行线，供「组织层级与审批线」页「付款确认流程」表。data 为数组，每项 payment_type、payment_type_label（中文名）、line_codes（未设定为空数组，出厂均为空）。缺 access.role.assign 403 PERMISSION_DENIED。",
         "x-permission": "access.role.assign",
         "x-data-scope": "platform",
         "x-terminal-allowed": [
@@ -69954,7 +70046,7 @@
         ],
         "responses": {
           "200": {
-            "description": "返回 41 个支付类型及各自两线之外的必带线。",
+            "description": "返回 42 个支付类型及各自两线之外的必带线。",
             "content": {
               "application/json": {
                 "schema": {
@@ -69997,7 +70089,7 @@
         ],
         "operationId": "savePaymentConfirmationFlow",
         "summary": "设定某支付类型两线之外的必带平行线",
-        "description": "第十八批 AM 段第 241 条 241-R8（BSM:1803「具体流程按支付类型分别设定」；第十八批裁决 66「每类必带财务、法务两线，其他部门线由发起人按单另加」、67「审批线页设定」——与各线最低起点层级同一处、同一门禁，不新增权限码）：设定某支付类型在财务、法务两线之外还必带的平行线，整体覆盖，line_codes 为空数组即清空（只带两线）。门禁 access.role.assign（缺 403 PERMISSION_DENIED）；流程是全平台配置，只许平台管理员或可管理全部项目的账号设定（同 upsertApprovalLine 对无归属全局线的口径），只能到部分项目的账号 403 CROSS_ORG_FORBIDDEN；payment_type 不在 41 个支付类型内 404 PAYMENT_TYPE_NOT_FOUND；缺幂等键 400 VALIDATION_FAILED；以上在幂等之前判。line_codes 每项须为在用的审批线，不存在或已停用 400 APPROVAL_LINE_NOT_CONFIGURED，含空值 400 VALIDATION_FAILED，重复的去重。设定后发起该类付款确认须为这些线各指定最终审批人（否则 400 APPROVAL_LINE_FINAL_APPROVER_REQUIRED），已发起的付款确认不受影响（审批链在发起时生成）。响应 data 为 payment_type、payment_type_label、line_codes。同一幂等键重发返回首次结果。成功留痕 access.payment_confirmation_flow.saved（带 line_codes）。",
+        "description": "第十八批 AM 段第 241 条 241-R8（BSM:1803「具体流程按支付类型分别设定」；第十八批裁决 66「每类必带财务、法务两线，其他部门线由发起人按单另加」、67「审批线页设定」——与各线最低起点层级同一处、同一门禁，不新增权限码）：设定某支付类型在财务、法务两线之外还必带的平行线，整体覆盖，line_codes 为空数组即清空（只带两线）。门禁 access.role.assign（缺 403 PERMISSION_DENIED）；流程是全平台配置，只许平台管理员或可管理全部项目的账号设定（同 upsertApprovalLine 对无归属全局线的口径），只能到部分项目的账号 403 CROSS_ORG_FORBIDDEN；payment_type 不在 42 个支付类型内 404 PAYMENT_TYPE_NOT_FOUND；缺幂等键 400 VALIDATION_FAILED；以上在幂等之前判。line_codes 每项须为在用的审批线，不存在或已停用 400 APPROVAL_LINE_NOT_CONFIGURED，含空值 400 VALIDATION_FAILED，重复的去重。设定后发起该类付款确认须为这些线各指定最终审批人（否则 400 APPROVAL_LINE_FINAL_APPROVER_REQUIRED），已发起的付款确认不受影响（审批链在发起时生成）。响应 data 为 payment_type、payment_type_label、line_codes。同一幂等键重发返回首次结果。成功留痕 access.payment_confirmation_flow.saved（带 line_codes）。",
         "x-permission": "access.role.assign",
         "x-data-scope": "platform",
         "x-terminal-allowed": [
@@ -70022,7 +70114,7 @@
             "schema": {
               "$ref": "#/components/schemas/PaymentConfirmationType"
             },
-            "description": "支付类型（41 个之一）。"
+            "description": "支付类型（42 个之一）。"
           }
         ],
         "requestBody": {
@@ -105285,6 +105377,98 @@
           "redemption_voucher_no"
         ]
       },
+      "StoredValueRefundCard": {
+        "type": "object",
+        "description": "退卡查卡的一张卡（lookupStoredValueRefundCards，第十八批 AZ 段第 278 条 278-R1）：页面据卡类型、本金、赠送金、发卡商户退款规则与账户关闭登记的待退事项办理退卡。",
+        "additionalProperties": false,
+        "required": [
+          "account_id",
+          "customer_id",
+          "masked_phone",
+          "project_id",
+          "merchant_id",
+          "principal_cent",
+          "bonus_cent",
+          "status",
+          "refund_allowed",
+          "refund_ratio_bps",
+          "pending_refund_cent"
+        ],
+        "properties": {
+          "account_id": {
+            "type": "string",
+            "description": "储值账户编号。",
+            "maxLength": 64
+          },
+          "customer_id": {
+            "type": "string",
+            "description": "客人账号编号。",
+            "maxLength": 64
+          },
+          "masked_phone": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "掩码手机号。"
+          },
+          "project_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "卡所属项目；不带项目为空。",
+            "maxLength": 64
+          },
+          "merchant_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "发卡商户；综合体通用卡为空。",
+            "maxLength": 64
+          },
+          "principal_cent": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0,
+            "description": "未消费本金（分）。"
+          },
+          "bonus_cent": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0,
+            "description": "赠送金（分，不退现）。"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "active",
+              "frozen"
+            ],
+            "description": "active 正常；frozen 已冻结（含账户关闭登记待退事项的商户卡）。"
+          },
+          "refund_allowed": {
+            "type": "boolean",
+            "description": "可否退：商户卡取发卡商户退款规则（未配置为允许），通用卡固定 true。"
+          },
+          "refund_ratio_bps": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0,
+            "maximum": 10000,
+            "description": "退款比例（基点）：商户卡取发卡商户退款规则（未配置为 10000），通用卡固定 10000。"
+          },
+          "pending_refund_cent": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "账户关闭或注销时登记、状态为 requested 或 processing 的待退事项金额（分）；没有为 null。"
+          }
+        }
+      },
       "PartnerOrgUserBindRequest": {
         "type": "object",
         "description": "请求载荷 `PartnerOrgUserBindRequest`；AUD-033 平台把既有后台账号绑定到外部协作机构（此前 partner_org_id 无任何 API 入口，顶层外包账号绑不到机构、外包模块整段不可用）。",
@@ -108604,6 +108788,7 @@
           "turnover_rent_reversal",
           "manual",
           "bar_loan",
+          "general_card_consume",
           "compensation_fulfillment_recovery",
           "ticket_distribution_recovery",
           "saved_bottle_remedy_recovery",
@@ -108617,7 +108802,7 @@
           "ticket_refund",
           "saved_bottle_compensation"
         ],
-        "description": "付款确认支付类型（第十八批 AM 段第 241 条；第十八批裁决 65「按台账来源逐个分」，共 41 个，系统按付款对象来源自动定类）：台账应付来源 29 个（含第十八批 AX 段 273-R1 酒吧借款还款 bar_loan）与付款方是平台主体的追收应收来源 3 个（第十八批裁决 69）取 ar_ap_items.source_type 原值（pass_domain_share、pass_domain_direct_settlement、bar_payroll_transfer、dispatch_commission_transfer 的应收与其应付同一类型）；财务退款待办 7 个为 finance_refund_＋退款来源；门票退款打款 ticket_refund；存酒对客赔付 saved_bottle_compensation。每种一个审批类型 finance.payment_confirm.＜支付类型＞。"
+        "description": "付款确认支付类型（第十八批 AM 段第 241 条；第十八批裁决 65「按台账来源逐个分」，共 42 个，系统按付款对象来源自动定类）：台账应付来源 30 个（含第十八批 AX 段 273-R1 酒吧借款还款 bar_loan、第十八批 AZ 段第 350 条 350-R1通用卡消费结算 general_card_consume）与付款方是平台主体的追收应收来源 3 个（第十八批裁决 69）取 ar_ap_items.source_type 原值（pass_domain_share、pass_domain_direct_settlement、bar_payroll_transfer、dispatch_commission_transfer、general_card_consume 的应收与其应付同一类型）；财务退款待办 7 个为 finance_refund_＋退款来源；门票退款打款 ticket_refund；存酒对客赔付 saved_bottle_compensation。每种一个审批类型 finance.payment_confirm.＜支付类型＞。"
       },
       "PaymentConfirmationRequest": {
         "type": "object",
@@ -119209,7 +119394,7 @@
           "remaining_goods_cent": {
             "type": "integer",
             "format": "int64",
-            "description": "可确认的原商品剩余额；多来源未定时null",
+            "description": "可确认的原商品剩余额（已扣除已留在本台位账上的退款额，第十八批 AZ 段第 284 条 284-R1）；多来源未定时null",
             "minimum": 0,
             "nullable": true
           },
@@ -119292,7 +119477,7 @@
           "remaining_goods_and_service_fee_cent": {
             "type": "integer",
             "format": "int64",
-            "description": "本收款账单商品及服务费剩余可退额",
+            "description": "本收款账单商品及服务费剩余可退额（已扣除已留在本台位账上的退款额 retained_goods_cent，第十八批 AZ 段第 284 条 284-R1）",
             "minimum": 0
           },
           "remaining_tip_cent": {
@@ -119312,6 +119497,12 @@
             "items": {
               "$ref": "#/components/schemas/BarPriorRefundLine"
             }
+          },
+          "retained_goods_cent": {
+            "type": "integer",
+            "format": "int64",
+            "description": "本账单已留在本台位账上的退款额（min_spend_retained 已生效留款合计，账单级与退品路径两种留款都算；未退款，客人可继续点其他产品抵用），剩余可退额已扣除；第十八批 AZ 段第 284 条 284-R1（BSM:1064「因退品形成的留款在原台位账单中分别记录留款金额、已抵用金额与未抵用余额」「该笔金额留在本台位账上，客人可继续点其他产品」）",
+            "minimum": 0
           }
         },
         "required": [
@@ -119319,7 +119510,8 @@
           "remaining_goods_and_service_fee_cent",
           "remaining_tip_cent",
           "sources",
-          "prior_lines"
+          "prior_lines",
+          "retained_goods_cent"
         ]
       },
       "SavedBottleManualPickupPolicyRequest": {

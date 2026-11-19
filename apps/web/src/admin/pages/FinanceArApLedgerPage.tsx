@@ -1,4 +1,4 @@
-// 文件版本：V0.19
+// 文件版本：V0.20
 import React from "react";
 import { FinancePayrollPaymentPanel } from "./FinancePayrollPaymentPanel";
 import { FinanceRefundPanel } from "./FinanceRefundPanel";
@@ -44,13 +44,13 @@ function centToYuan(cent: number | undefined): string {
   return new Intl.NumberFormat("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(cent) / 100);
 }
 
-// 第十八批 AM 段第 241 条 241-R9（第十八批裁决 69「付款方是平台主体的应收，登记收款前也须付款确认」）：付款方是平台主体、记成应收的 7 个来源
+// 第十八批 AM 段第 241 条 241-R9（第十八批裁决 69「付款方是平台主体的应收，登记收款前也须付款确认」）：付款方是平台主体、记成应收的 8 个来源
 // （同后端 PaymentConfirmationService.PLATFORM_PAYER_RECEIVABLE_SOURCES），与应付一样可勾选发起付款确认。
 const PLATFORM_PAYER_RECEIVABLE_SOURCES = new Set(["pass_domain_share", "pass_domain_direct_settlement", "bar_payroll_transfer", "dispatch_commission_transfer",
-  "compensation_fulfillment_recovery", "ticket_distribution_recovery", "saved_bottle_remedy_recovery"]);
+  "compensation_fulfillment_recovery", "ticket_distribution_recovery", "saved_bottle_remedy_recovery", "general_card_consume"]);
 
 // 第十八批 AM 段第 241 条 241-R2（BSM:1803；第十八批裁决 68「同收款方、同类型、同综合体可勾选合发；工资、退款、赔付按单发起」）：未结清、非冲正的
-// 应付可勾选（工资在下方工资面板逐人发起；分红留存待释放不可付），应收只限上述 7 个来源。
+// 应付可勾选（工资在下方工资面板逐人发起；分红留存待释放不可付），应收只限上述 8 个来源。
 function confirmable(row: FinanceLedgerRow): boolean {
   if (!((row.unpaidAmountCent ?? 0) > 0) || row.status === "reversed") return false;
   const source = row.sourceType ?? "";

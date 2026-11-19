@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -58,6 +58,7 @@ class BarMinSpendTopUpJdbcIntegrationTests {
     private final String waiter = "usr_mst_waiter_" + s;
     private final AtomicInteger seq = new AtomicInteger();
     private RequestPostProcessor clerk;
+    private RequestPostProcessor supervisor;
 
     @BeforeEach
     void seed() throws Exception {
@@ -79,7 +80,12 @@ class BarMinSpendTopUpJdbcIntegrationTests {
         StaffRequestFixture staffs = new StaffRequestFixture(jdbc);
         clerk = staffs.staff("usr_mst_clerk_" + s, "staff", project, bar, "bar.table_session.create", "bar.table_session.view",
                 "bar.table_session.transfer", "bar.order.create", "bar.order.view", "finance.payment.register", "bar.bill.adjust",
-                "bar.table_commission.calculate", "bar.table.open_close");
+                "bar.table_commission.calculate", "bar.table.open_close", "bar.bill.refund");
+        // 账单退款等补足低消以外的账单调整走既有准入闸 bar.bill_waiver（V068 恒阻断、上一级审批）：本酒吧主管为收银的直接上级。
+        String supervisorId = "usr_mst_sup_" + s;
+        supervisor = staffs.staff(supervisorId, "staff", project, bar,
+                "governance.supervisor_review.view", "governance.supervisor_review.approve", "governance.supervisor_review.manage");
+        jdbc.update("INSERT INTO org_hierarchy (user_id, superior_id) VALUES (?, ?)", "usr_mst_clerk_" + s, supervisorId);
         // 目标包厢接手服务员：在岗员工档案、本商户点单工作权限，转台前排目标包厢点位此刻的班。
         staffs.staff(waiter, "staff", project, bar, "bar.order.create");
         jdbc.update("INSERT INTO staff_profiles(id,project_id,merchant_id,user_id,name,company_id,registration_status,status,employment_status,"
@@ -193,7 +199,53 @@ class BarMinSpendTopUpJdbcIntegrationTests {
         assertThat(jdbc.queryForObject("SELECT status FROM bar_tables WHERE id = ?", String.class, roomB)).isEqualTo("pending_clear");
     }
 
+    /**
+     * 第十八批 AZ 段 284-R1（BSM:1064「退款后该台位累计消费将低于该台位适用的最低消费的，不退款——该笔金额留在本台位账上，客人可继续点其他产品。因退品形成的留款
+     * 在原台位账单中分别记录留款金额、已抵用金额与未抵用余额」）：低消 300 元、消费恰好 300 元的已结账单退商品 100 元整笔留款；退款上下文如实显示已留款、剩余可退
+     * 扣除已留款（改前不显示、剩余可退不减）；再退其余商品 200 元同样整笔留款照常成功；留款合计已等于商品实收后，换新编号照商品实收再提交退款 400
+     * （改前 200、再记一条同额留款），留款合计不超过商品实收。
+     */
+    @Test
+    void retainedRefundIsDeductedFromRefundableAndCannotBeRetainedAgain() throws Exception {
+        String room = room(30000L);
+        open(room);
+        String bill = bill(order(room, 3));
+        settle(bill, 30000L).andExpect(status().isOk());
+
+        approvedRefund(bill, 10000L).andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.adjustment_type").value("min_spend_retained"))
+                .andExpect(jsonPath("$.data.amount_cent").value(10000));
+        mockMvc.perform(get("/api/v1/bar/bills/" + bill + "/refund-context").with(clerk)).andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.retained_goods_cent").value(10000))
+                .andExpect(jsonPath("$.data.remaining_goods_and_service_fee_cent").value(20000))
+                .andExpect(jsonPath("$.data.sources[0].remaining_goods_cent").value(20000));
+        approvedRefund(bill, 20000L).andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.adjustment_type").value("min_spend_retained"));
+        approvedRefund(bill, 30000L).andExpect(status().isBadRequest());
+        assertThat(jdbc.queryForObject("SELECT sum(amount_cent) FROM bar_bill_adjustments WHERE bill_id = ? AND adjustment_type = 'min_spend_retained'",
+                Long.class, bill)).isEqualTo(30000L);
+    }
+
     // ---------- helpers ----------
+
+    /** 后台订单页「按原账单明细办理退款」（商品分项）：首次提交照既有准入闸 409 转主管复核，直接上级批准后原样再提交。 */
+    private ResultActions approvedRefund(String bill, long goodsCent) throws Exception {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("idempotency_key", "mst-refund-" + seq.incrementAndGet() + "-" + s);
+        body.put("adjustment_type", "refund");
+        body.put("amount_cent", goodsCent);
+        body.put("reason", "客人退回未开瓶酒水");
+        body.put("refund_lines", List.of(Map.of("source_bill_id", bill, "component_type", "goods", "amount_cent", goodsCent)));
+        post(clerk, "/api/v1/bar/bills/" + bill + "/adjustments", body).andExpect(status().isConflict())
+                .andExpect(jsonPath("$.detail_code").value("ADMISSION_BLOCKED"));
+        String review = jdbc.queryForObject("SELECT review_id FROM supervisor_review_decisions WHERE action_type = 'bar.bill_waiver' AND object_id = ?"
+                + " AND review_status = 'pending_review'", String.class, bill);
+        post(supervisor, "/api/v1/platform/supervisor-review/" + review + "/chain/regenerate", Map.of()).andExpect(status().isOk());
+        post(supervisor, "/api/v1/platform/supervisor-review/" + review + "/approve", Map.of(
+                "idempotency_key", "mst-refund-approve-" + seq.incrementAndGet() + "-" + s, "decision", "approved", "comment", "核实客人退回酒水"))
+                .andExpect(status().isOk());
+        return post(clerk, "/api/v1/bar/bills/" + bill + "/adjustments", body);
+    }
 
     /** 后台订单页「补足低消差额」的请求体（金额为页面显示的差额）。 */
     private Map<String, Object> topUpBody(String key, long amountCent) {
@@ -228,11 +280,15 @@ class BarMinSpendTopUpJdbcIntegrationTests {
     }
 
     private String order(String table) throws Exception {
+        return order(table, 1);
+    }
+
+    private String order(String table, int bottles) throws Exception {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("idempotency_key", "mst-order-" + seq.incrementAndGet() + "-" + s);
         body.put("bar_id", bar);
         body.put("table_id", table);
-        body.put("items", List.of(Map.of("product_id", wine, "quantity", 1)));
+        body.put("items", List.of(Map.of("product_id", wine, "quantity", bottles)));
         return CustomerTicketPaymentFixture.read(post(clerk, "/api/v1/bar/orders", body).andExpect(status().isOk()), "$.data.id");
     }
 

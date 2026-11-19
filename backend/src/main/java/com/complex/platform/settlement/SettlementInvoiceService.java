@@ -1,6 +1,6 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.PageResponse;
@@ -36,7 +36,7 @@ import org.springframework.transaction.annotation.Transactional;
  * (同来源 待开票/开票中/已开票 三态合计)。≤0 即不生成,故:
  * <ul>
  *   <li>重复生成天然幂等(第二次可开额=0);</li>
- *   <li>红冲后额度释放,再生成即「重开」;</li>
+ *   <li>红冲后额度释放,再生成即「重开」(演出结算台账行由 TicketPointsBillingJob 定时补开,同积分月账单);</li>
  *   <li>退款致应开额下降到已开额之下时不再生成,并在汇总里以 {@code overIssuedCent} 报「已超开」,提示先红冲。</li>
  * </ul>
  * DB 侧另有 {@code uq_sii_source_open} 局部唯一索引挡并发重复生成。
@@ -50,6 +50,11 @@ public class SettlementInvoiceService {
     static final String INCOME_SPV_SERVICE = "spv_service";
     /** FS-022-R1 积分发行费(ENUM L84「平台应收的积分发行费各自全额挂账、各自开票」)。 */
     static final String INCOME_POINTS_ISSUANCE = "points_issuance";
+    /** 第十八批 AZ 段 290-R2：传媒演出结算(V362 isr_show 文化服务费)。 */
+    static final String INCOME_SHOW = "show";
+    /** 第十八批 AZ 段 290-R1：组合通票业态份额 → 收入类型(游乐、演出、餐饮、零售;酒吧份额走 ② 可分配池,「其他」不开)。 */
+    private static final Map<String, String> FORMAT_INCOME_TYPES = Map.of(
+            "amusement", "game", "media", INCOME_SHOW, "catering", "catering", "retail", "retail");
 
     private static final String STATUS_PENDING = "pending";
     private static final Set<String> BILL_INVOICEABLE_STATUSES = Set.of("confirmed", "settled");
@@ -96,11 +101,21 @@ public class SettlementInvoiceService {
 
         int created = 0;
         // ① 单头级:门票综合服务费 → 娱乐平台公司
-        created += generateLine(source, null, INCOME_TICKET, source.compServiceFeeCent(), null, null, actorId);
+        created += generateLine(source, null, INCOME_TICKET, source.compServiceFeeCent(), null, null, null, actorId);
         // ② 明细级:各酒吧分账 → 各酒吧商户
         for (var share : repository.listMerchantShares(billId)) {
             created += generateLine(source, share.settlementItemId(), INCOME_SPV_SERVICE, share.finalAmountCent(),
-                    share.entityId(), share.merchantName(), actorId);
+                    share.entityId(), share.merchantName(), null, actorId);
+        }
+        // ③ 第十八批 AZ 段 290-R1(BSM:1803「平台内部各主体之间的往来需要开具发票」;BSM:755「一律按总额收付」):组合通票游乐、演出、餐饮、零售
+        //   各业态域间份额(含追收与到期未核销归属,即月结过账挂往来的同三列之和)按业态出单头级行,开票主体＝该业态份额归属主体,
+        //   购方＝娱乐平台公司(all_pass_ticket 归属,与传媒演出结算门票加价付方同一取法)。代付是垫付款,不开票。
+        var formatShares = repository.listFormatShares(billId);
+        String platform = formatShares.isEmpty() ? null : attributionRepository.resolveManagementEntity(source.projectId(),
+                TicketDistributionSettlementService.REVENUE_STREAM_ALL_PASS_TICKET);
+        for (var share : formatShares) {
+            created += generateLine(source, null, FORMAT_INCOME_TYPES.get(share.businessFormat()), share.dueAmountCent(),
+                    share.beneficiaryEntityId(), null, platform, actorId);
         }
 
         auditEventService.recordSuccess("settlement.invoice.generated", "settlement.invoice.manage",
@@ -110,11 +125,12 @@ public class SettlementInvoiceService {
     }
 
     /**
-     * 生成一行清单。{@code fallbackEntityId} 非空时按该主体开票(商户侧收款方),
-     * 否则按规则里的收入流查归属主体。
+     * 生成一行清单。{@code fallbackEntityId} 非空时按该主体开票(商户侧收款方、业态份额归属主体),
+     * 否则按规则里的收入流查归属主体。{@code buyerEntityId} 为购方(业态份额行为娱乐平台公司),其余为 null。
      */
     private int generateLine(JdbcSettlementInvoiceRepository.InvoiceSource source, String settlementItemId,
-            String incomeType, long dueAmountCent, String fallbackEntityId, String fallbackName, String actorId) {
+            String incomeType, long dueAmountCent, String fallbackEntityId, String fallbackName, String buyerEntityId,
+            String actorId) {
         var rule = repository.findRule(source.projectId(), incomeType);
         if (rule == null || !rule.invoiceable()) {
             return 0;   // 未配规则,或规则明示「内部转付/营销成本不开票」
@@ -125,10 +141,10 @@ public class SettlementInvoiceService {
             return 0;
         }
 
-        // 主体解析(V355 归属层):配了 entity 就用配的主体;配了 per_merchant(归各商户自己)或压根没配,
-        // 则回落到这笔分账的商户收款主体 —— 单头级条目没有商户,回落即 null(页面标「归属未配置」提示去配)。
+        // 主体解析:给了 fallbackEntityId 就按它开(第十八批 AZ 段 290-R1:通票餐饮份额不得按 isr_catering 的 table_dining 收入流错开到订台餐饮主体名下);
+        // 没给才按规则收入流查 V355 归属层,配了 entity 用配的主体,配了 per_merchant 或没配即 null(页面标「归属未配置」提示去配)。
         String subjectEntityId = fallbackEntityId;
-        if (rule.revenueStream() != null) {
+        if (subjectEntityId == null && rule.revenueStream() != null) {
             var attribution = attributionRepository.resolveAttribution(source.projectId(), rule.revenueStream());
             if (attribution != null && "entity".equals(attribution.beneficiaryKind())) {
                 subjectEntityId = attribution.managementEntityId();
@@ -147,8 +163,51 @@ public class SettlementInvoiceService {
                 subjectEntityId, subjectName, rule.invoiceItemName(), rule.taxCategory(), rule.evidenceRequired(),
                 invoiceable, tax.vatRateBps(), tax.vatCent(),
                 tax.culturalApplicable(), tax.culturalRateBps(), tax.culturalCent(),
-                STATUS_PENDING, null, actorId, null, null, null));
+                STATUS_PENDING, null, actorId, null, buyerEntityId, null, null));
         return 1;
+    }
+
+    /**
+     * 第十八批 AZ 段 290-R2(BSM:1803;BSM:1144「酒吧门票上的演出加价部分，随酒吧门票由娱乐平台公司售票收款后分给传媒公司」;BSM:1145;
+     * BSM:1750「开票金额≤已收−已退−已开」):传媒演出结算应付(门票加价分配、固定演出费、酒水提成)出账即进开票清单——文化服务费(show 规则),
+     * 开票主体＝收方传媒公司;购方＝付方(门票加价为娱乐平台公司;固定演出费、酒水提成为该酒吧及其收款主体,同 listMerchantShares 取法)。
+     * 应开额＝该台账行金额加回指它的冲正行金额(调整后原行为 0,列入已超开提示先红冲),可开额＝应开额−该行已开额,≤0 不生成。
+     * 期间＝演出日所在月。返回本次新增条目数。
+     */
+    @Transactional
+    public int generateForMediaSettlement(String arApItemId, String projectId, LocalDate showDate, String payeeEntityId,
+            String payerEntityId, String payerMerchantId, String actorId) {
+        var rule = repository.findRule(projectId, INCOME_SHOW);
+        if (rule == null || !rule.invoiceable()) {
+            return 0;
+        }
+        long invoiceable = repository.arApDueAmountCent(arApItemId) - repository.sumOpenArApAmountCent(arApItemId);
+        if (invoiceable <= 0) {
+            return 0;
+        }
+        LocalDate start = showDate.withDayOfMonth(1);
+        LocalDate end = showDate.withDayOfMonth(showDate.lengthOfMonth());
+        Tax tax = tax(payeeEntityId, INCOME_SHOW, invoiceable, end);
+        repository.insert(new SettlementInvoiceItemRecord(
+                "sii_mps_" + java.util.UUID.randomUUID().toString().replace("-", ""), null, null, projectId, start, end,
+                INCOME_SHOW, payeeEntityId, repository.findEntityName(payeeEntityId),
+                rule.invoiceItemName(), rule.taxCategory(), rule.evidenceRequired(),
+                invoiceable, tax.vatRateBps(), tax.vatCent(),
+                tax.culturalApplicable(), tax.culturalRateBps(), tax.culturalCent(),
+                STATUS_PENDING, null, actorId, null,
+                payerEntityId != null ? payerEntityId : repository.findMerchantEntityId(payerMerchantId), payerMerchantId, arApItemId));
+        auditEventService.recordSuccess("settlement.invoice.generated", "settlement.invoice.manage",
+                "ar_ap_item", arApItemId, "req_" + java.util.UUID.randomUUID(), null,
+                Map.of("created_item_count", 1, "amount_cent", invoiceable, "period_start", String.valueOf(start)));
+        return 1;
+    }
+
+    /**
+     * 18AZ 收尾复核(BSM:1750「退款后先红冲再重开」;BSM:1803):应开额高于已开额的演出结算台账行(开票行红冲或作废后额度释放;
+     * 定时作业逐条调 {@link #generateForMediaSettlement} 补开)。
+     */
+    public List<JdbcSettlementInvoiceRepository.MediaInvoiceSource> mediaSettlementsToInvoice() {
+        return repository.listMediaSettlementsToInvoice();
     }
 
     /** 已收额高于已开额的积分月账单(定时作业逐张调 {@link #generateForPointsBill})。 */
@@ -186,7 +245,7 @@ public class SettlementInvoiceService {
                 rule.invoiceItemName(), rule.taxCategory(), rule.evidenceRequired(),
                 invoiceable, tax.vatRateBps(), tax.vatCent(),
                 tax.culturalApplicable(), tax.culturalRateBps(), tax.culturalCent(),
-                STATUS_PENDING, null, actorId, pointsBillId, source.sellerEntityId(), source.sellerMerchantId()));
+                STATUS_PENDING, null, actorId, pointsBillId, source.sellerEntityId(), source.sellerMerchantId(), null));
         auditEventService.recordSuccess("settlement.invoice.generated", "settlement.invoice.manage",
                 "ticket_points_bill", pointsBillId, "req_" + java.util.UUID.randomUUID(), null,
                 Map.of("created_item_count", 1, "amount_cent", invoiceable,

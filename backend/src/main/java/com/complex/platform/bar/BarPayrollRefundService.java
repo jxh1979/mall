@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import static com.complex.platform.bar.BarPayrollSupport.*;
 import com.complex.platform.bar.BarBillAdjustmentRequest.RefundLine;
@@ -14,7 +14,8 @@ public class BarPayrollRefundService {
     BarPayrollRefundService(BarPayrollSupport p){this.p=p;}
     public record RefundSource(String sourceBillId,String tableId,Long remainingGoodsCent,long remainingServiceFeeCent,long remainingTipCent) {}
     public record PriorLine(String adjustmentId,String sourceBillId,String componentType,long amountCent,String paymentStatus) {}
-    public record RefundContext(String billId,long remainingGoodsAndServiceFeeCent,long remainingTipCent,List<RefundSource> sources,List<PriorLine> priorLines) {}
+    /** 第十八批 AZ 段 284-R1（BSM:1064「该笔金额留在本台位账上」「因退品形成的留款在原台位账单中分别记录留款金额」）：retainedGoodsCent＝本账单已留在台位账上的退款额，剩余可退已扣除。 */
+    public record RefundContext(String billId,long remainingGoodsAndServiceFeeCent,long remainingTipCent,List<RefundSource> sources,List<PriorLine> priorLines,long retainedGoodsCent) {}
     public RefundContext context(String billId) {
         var bill=p.jdbc.queryForMap("SELECT * FROM bar_bills WHERE id=?",billId);
         var scope=p.tableScope((String)bill.get("table_id"));
@@ -22,11 +23,12 @@ public class BarPayrollRefundService {
         p.auth.requirePermission("bar.bill.adjust");
         var ids=p.jdbc.queryForList("SELECT source_bill_id FROM bar_payroll_collection_links WHERE collection_bill_id=? AND active ORDER BY source_bill_id",String.class,billId);
         if(ids.isEmpty())ids=List.of(billId);
+        long kept=retained(billId);
         List<RefundSource> sources=new ArrayList<>();
         for(String source:ids) {
             String table=p.jdbc.queryForObject("SELECT table_id FROM bar_bills WHERE id=?",String.class,source);
             long fee=remaining(source,"service_fee",billId),tip=remaining(source,"tip",billId);
-            Long goods=ids.size()==1 ? Math.max(0L,((Number)bill.get("payable_amount_cent")).longValue()-fee) : null;
+            Long goods=ids.size()==1 ? Math.max(0L,((Number)bill.get("payable_amount_cent")).longValue()-fee-kept) : null;
             sources.add(new RefundSource(source,table,goods,fee,tip));
         }
         var prior=p.jdbc.query("""
@@ -36,7 +38,11 @@ public class BarPayrollRefundService {
             FROM bar_payroll_refund_lines r JOIN bar_bill_adjustments a ON a.id=r.adjustment_id
             WHERE r.collection_bill_id=? ORDER BY r.created_at,r.id
             """,(rs,n)->new PriorLine(rs.getString("adjustment_id"),rs.getString("source_bill_id"),rs.getString("component_type"),rs.getLong("amount_cent"),rs.getString("payment_status")),billId);
-        return new RefundContext(billId,((Number)bill.get("payable_amount_cent")).longValue(),((Number)bill.get("tip_amount_cent")).longValue(),sources,prior);
+        return new RefundContext(billId,Math.max(0L,((Number)bill.get("payable_amount_cent")).longValue()-kept),((Number)bill.get("tip_amount_cent")).longValue(),sources,prior,kept);
+    }
+    /** 284-R1：本账单已留在台位账上的退款额（账单级与退品路径两种留款都不减应付；已被别的账单抵用的同样不能再退）。 */
+    private long retained(String billId) {
+        return p.jdbc.queryForObject("SELECT COALESCE(sum(amount_cent),0) FROM bar_bill_adjustments WHERE bill_id=? AND adjustment_type='min_spend_retained' AND status='applied'",Long.class,billId);
     }
     private long remaining(String source,String type,String collection) {
         long original=p.jdbc.queryForObject("SELECT COALESCE(sum(amount_cent),0) FROM bar_payroll_bill_components WHERE source_bill_id=? AND component_type=? AND collection_bill_id=?",Long.class,source,type,collection);
@@ -79,7 +85,9 @@ public class BarPayrollRefundService {
               - COALESCE((SELECT sum(amount_cent) FROM bar_payroll_refund_lines WHERE collection_bill_id=? AND component_type='service_fee'),0)
             """,Long.class,collection.id(),collection.id());
         long goods=lines.stream().filter(l->"goods".equals(l.componentType())).mapToLong(RefundLine::amountCent).sum();
-        if(tip>collection.tipAmountCent() || total-tip>collection.payableAmountCent() || goods>Math.max(0L,collection.payableAmountCent()-remainingFee))
+        // 284-R1：可退额扣除已留在台位账上的部分——同额重办或分次退款的留款合计不超过商品实收。
+        long kept=retained(collection.id());
+        if(tip>collection.tipAmountCent() || total-tip>collection.payableAmountCent()-kept || goods>Math.max(0L,collection.payableAmountCent()-remainingFee-kept))
             throw invalid("退款分项超过账单尚可退的小费、服务费或商品金额，不能改名挪用其他分项额度");
         return lines;
     }

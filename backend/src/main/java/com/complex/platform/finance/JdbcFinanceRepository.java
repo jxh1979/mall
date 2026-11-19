@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.28
+// 文件版本：V0.29
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
@@ -1227,27 +1227,33 @@ class JdbcFinanceRepository implements FinanceRepository {
         return new com.complex.platform.common.api.PageResponse<>(items, safePage, safeSize, total == null ? 0L : total);
     }
 
-    /** 第十八批 V 段第 159 条 159-R1：检查单位（两条 SQL 由 FinanceFinalMarkOverdueService 原样搬来，排序不变）。 */
+    /**
+     * 第十八批 V 段第 159 条 159-R1：检查单位（两条 SQL 由 FinanceFinalMarkOverdueService 原样搬来，排序不变）。
+     * 第十八批 AZ 段 356-R1：酒吧不再限在营未存档，带上存档时刻与关停结算的关店最后营业日（dividend_closeouts 每店至多一条）。
+     */
     @Override
     public List<FinalMarkUnit> listFinalMarkUnits() {
         List<FinalMarkUnit> units = new java.util.ArrayList<>(jdbcTemplate.query(
-                "SELECT id, merchant_name, project_id, created_at FROM merchants WHERE merchant_type = 'bar' AND status = 'active' "
-                        + "AND archived_at IS NULL ORDER BY id",
-                Map.of(), (rs, i) -> new FinalMarkUnit(rs.getString(1), rs.getString(1), rs.getString(2), rs.getString(3),
-                        rs.getTimestamp(4).toInstant())));
+                BAR_FINAL_MARK_UNIT_SQL + " ORDER BY m.id", Map.of(), (rs, i) -> new FinalMarkUnit(rs.getString(1), rs.getString(1),
+                        rs.getString(2), rs.getString(3), rs.getTimestamp(4).toInstant(), nullableInstant(rs, "archived_at"),
+                        rs.getObject(6, LocalDate.class))));
         units.addAll(jdbcTemplate.query("SELECT id, name, created_at FROM projects WHERE status = 'active' ORDER BY id",
                 Map.of(), (rs, i) -> new FinalMarkUnit(null, rs.getString(1), rs.getString(2), rs.getString(1),
-                        rs.getTimestamp(3).toInstant())));
+                        rs.getTimestamp(3).toInstant(), null, null)));
         return units;
     }
 
-    /** 第十八批 AQ 段第 243 条 243-R1：某酒吧的检查单位（同 {@link #listFinalMarkUnits} 第一条 SQL，不限在营与存档）。 */
+    /** 第十八批 AQ 段第 243 条 243-R1：某酒吧的检查单位（同 {@link #listFinalMarkUnits} 第一条 SQL）。 */
     @Override
     public java.util.Optional<FinalMarkUnit> findBarFinalMarkUnit(String barId) {
-        return jdbcTemplate.query("SELECT id, merchant_name, project_id, created_at FROM merchants WHERE id = :id AND merchant_type = 'bar'",
-                Map.of("id", barId), (rs, i) -> new FinalMarkUnit(rs.getString(1), rs.getString(1), rs.getString(2), rs.getString(3),
-                        rs.getTimestamp(4).toInstant())).stream().findFirst();
+        return jdbcTemplate.query(BAR_FINAL_MARK_UNIT_SQL + " AND m.id = :id", Map.of("id", barId),
+                (rs, i) -> new FinalMarkUnit(rs.getString(1), rs.getString(1), rs.getString(2), rs.getString(3),
+                        rs.getTimestamp(4).toInstant(), nullableInstant(rs, "archived_at"), rs.getObject(6, LocalDate.class)))
+                .stream().findFirst();
     }
+
+    private static final String BAR_FINAL_MARK_UNIT_SQL = "SELECT m.id, m.merchant_name, m.project_id, m.created_at, m.archived_at,"
+            + " dc.closed_business_date FROM merchants m LEFT JOIN dividend_closeouts dc ON dc.merchant_id = m.id WHERE m.merchant_type = 'bar'";
 
     /** 159-R1：酒吧取 bar、merchant 范围日结，否则取 project 范围日结；同日多张取并集，没有标记的营业日没有键。 */
     @Override

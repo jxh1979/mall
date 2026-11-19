@@ -1,10 +1,10 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import React from "react";
 import type { AdminPageProps } from "../types";
 
 type Source = { sourceBillId: string; tableId: string; remainingGoodsCent?: number; remainingServiceFeeCent: number; remainingTipCent: number };
 type PriorLine = { adjustmentId: string; sourceBillId: string; componentType: string; amountCent: number; paymentStatus: string };
-type Context = { billId: string; remainingGoodsAndServiceFeeCent: number; remainingTipCent: number; sources: Source[]; priorLines: PriorLine[] };
+type Context = { billId: string; remainingGoodsAndServiceFeeCent: number; remainingTipCent: number; sources: Source[]; priorLines: PriorLine[]; retainedGoodsCent: number };
 type Amounts = { goods: string; service_fee: string; tip: string };
 const types = { goods: "商品", service_fee: "服务费", tip: "小费" } as const;
 const yuan = (cent: number) => (cent / 100).toFixed(2);
@@ -74,8 +74,15 @@ export function BarRefundBreakdownPanel({ api, effectivePermissions, setActionRe
       const body = { adjustmentType: "refund", amountCent, reason: reason.trim(), evidenceAttachmentIds: files.map(file => file.id), refundLines };
       const serialized = JSON.stringify({ billId, ...body });
       if (requestKey.current?.body !== serialized) requestKey.current = { body: serialized, key: crypto.randomUUID() };
-      const result = await api.post("/api/v1/bar/bills/" + encodeURIComponent(billId!) + "/adjustments", { ...body, idempotencyKey: requestKey.current.key });
-      requestKey.current = null; setActionResult(result); setContext(null); setOutcome("退款申请及真实分项已提交。请按原审批、付款流程办理，提交成功不表示客人已收到退款。"); await onChanged();
+      const result = await api.post<{ adjustmentType?: string; amountCent?: number }>("/api/v1/bar/bills/" + encodeURIComponent(billId!) + "/adjustments", { ...body, idempotencyKey: requestKey.current.key });
+      requestKey.current = null; setActionResult(result); setContext(null);
+      // 第十八批 AZ 段 284-R1（BSM:1064「退款后该台位累计消费将低于……最低消费的，不退款——该笔金额留在本台位账上」）：按返回的调整类型与金额如实提示整笔或部分留款。
+      const refunded = result?.adjustmentType === "refund" && result.amountCent != null ? result.amountCent : amountCent;
+      setOutcome(result?.adjustmentType === "min_spend_retained"
+        ? `退款后台位累计消费将低于最低消费，本次不退款，${yuan(result.amountCent ?? amountCent)} 元留在本台位账上，客人可继续点其他产品。`
+        : refunded < amountCent ? `本次实际退款 ${yuan(refunded)} 元；${yuan(amountCent - refunded)} 元因退后低于最低消费留在本台位账上。`
+        : "退款申请及真实分项已提交。请按原审批、付款流程办理，提交成功不表示客人已收到退款。");
+      await onChanged();
     });
   }
   let sum: string;
@@ -87,6 +94,7 @@ export function BarRefundBreakdownPanel({ api, effectivePermissions, setActionRe
     {error ? <p role="alert">{error}</p> : null}{outcome ? <p role="status">{outcome}</p> : null}
     {context ? <>
       <p>收款账单 {context.billId}；剩余商品及服务费 {yuan(context.remainingGoodsAndServiceFeeCent)} 元；小费 {yuan(context.remainingTipCent)} 元。</p>
+      {context.retainedGoodsCent > 0 ? <p>已留在本台位账上（未退款，可继续点其他产品抵用）{yuan(context.retainedGoodsCent)} 元</p> : null}
       {context.sources.map(source => <fieldset key={source.sourceBillId}><legend>原账单 {source.sourceBillId} · 原台 {source.tableId}</legend>
         <p>尚可退服务费 {yuan(source.remainingServiceFeeCent)} 元；小费 {yuan(source.remainingTipCent)} 元。{source.remainingGoodsCent == null ? "商品按实际退品原件核实。" : "商品尚可退 " + yuan(source.remainingGoodsCent) + " 元。"}</p>
         {Object.entries(types).map(([type, label]) => <label key={type}>{label}退款（元）<input inputMode="decimal" aria-label={source.sourceBillId + label + "退款"} value={amounts[source.sourceBillId]?.[type as keyof Amounts] ?? ""} onChange={e => setAmounts(old => ({ ...old, [source.sourceBillId]: { ...(old[source.sourceBillId] ?? { goods: "", service_fee: "", tip: "" }), [type]: e.target.value } }))} /></label>)}

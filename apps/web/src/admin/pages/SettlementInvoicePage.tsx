@@ -1,4 +1,4 @@
-// 文件版本：V0.03
+// 文件版本：V0.04
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
@@ -58,6 +58,7 @@ const INCOME_LABELS: Record<string, string> = {
   giveaway_transfer: "通票赠送权益兑付（内部转付）",
   marketing: "会员积分 / 门票折扣券（营销成本）",
   points_issuance: "积分发行费",
+  retail: "零售",
 };
 
 const yuan = (cent?: number | null) => ((cent ?? 0) / 100).toFixed(2);
@@ -212,8 +213,8 @@ export function SettlementInvoicePage({ api, setActionResult, setGlobalError, ef
           <div className="admin-inline-error" data-testid="settlement-invoice-over-issued">
             <strong>已超开，需先红冲再重开：</strong>
             <ul>
-              {summary.overIssued.map((o) => (
-                <li key={`${o.billId}-${o.incomeType}-${o.settlementItemId ?? "bill"}`}>
+              {summary.overIssued.map((o, index) => (
+                <li key={`${o.billId ?? "arap"}-${o.incomeType}-${o.settlementItemId ?? "bill"}-${index}`}>
                   {o.subjectName ?? "（归属未配置）"} · {label(INCOME_LABELS, o.incomeType)}：
                   应开 {yuan(o.dueAmountCent)} 元、已开 {yuan(o.openAmountCent)} 元，
                   超出 {yuan(o.overIssuedCent)} 元（结算单退款后金额下调所致）。
@@ -320,6 +321,7 @@ export function SettlementInvoicePage({ api, setActionResult, setGlobalError, ef
                   <td>{r.invoiceItemName}</td>
                   <td>{r.taxCategory}</td>
                   <td>{r.incomeType === "points_issuance" ? "积分月账单收款方（购方为合同销售方）"
+                    : r.incomeType === "retail" ? "组合通票零售份额的归属主体（购方为娱乐平台公司）"
                     : r.revenueStream ? "按收入流业态归因解析" : "按该笔分账的商户收款主体"}</td>
                   <td>{r.evidenceRequired || "—"}</td>
                   <td>{r.invoiceable ? "对外开票" : "不开票（内部单据）"}</td>

@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static com.complex.platform.common.Strings.requireText;
 import static com.complex.platform.common.Strings.trimToNull;
@@ -35,12 +35,12 @@ import org.springframework.transaction.annotation.Transactional;
  * 主线的最终审批人……财务、法务及相关部门作为平行的相关部门线……主线与各条平行线都通过才完成付款确认；具体流程按支付类型分别设定。」；第十八批裁决 55
  * 「所有应付都先走付款确认，按支付类型分别设流程」）。
  * <ul>
- *   <li>支付类型 41 个（裁决 65「按台账来源逐个分」）：台账来源各一个（payment_type 取 ar_ap_items.source_type 原值），财务退款待办各来源各一个
+ *   <li>支付类型 42 个（裁决 65「按台账来源逐个分」）：台账来源各一个（payment_type 取 ar_ap_items.source_type 原值），财务退款待办各来源各一个
  *       （finance_refund_＋来源），门票退款打款、存酒对客赔付各一个；每种一个审批类型 finance.payment_confirm.＜支付类型＞（SupervisorReviewService
  *       策略表由 {@link #PAYMENT_TYPES} 循环生成），必带财务、法务两线（裁决 66），其他在用线由发起人按单另加。</li>
  *   <li>一行一个付款对象，合并发起（裁决 68，同收款方、同支付类型、同综合体）时多行共用 confirmation_id，复核单对象为 payment_confirmation＋该号。</li>
  *   <li>不设「已用」状态：一个对象至多一张待审或已通过的确认（V629 部分唯一索引）；已通过即可分笔付到结清，失败重付不必重审。</li>
- *   <li>付款方是平台主体、台账记成应收的 7 个来源（{@link #PLATFORM_PAYER_RECEIVABLE_SOURCES}）登记收款前同样须确认（241-R9，裁决 69）。</li>
+ *   <li>付款方是平台主体、台账记成应收的 8 个来源（{@link #PLATFORM_PAYER_RECEIVABLE_SOURCES}）登记收款前同样须确认（241-R9，裁决 69）。</li>
  *   <li>各类在财务、法务两线之外还必带的线记在 payment_confirmation_flows（241-R8，裁决 67：在「组织层级与审批线」页设定），发起时逐线核。</li>
  *   <li>{@link #request} 在调用方的幂等写内执行（范围闸放在幂等之前，由各发起入口就地复用对象现有写法），本身不记留痕：调用方的幂等写以
  *       finance.payment_confirmation.requested 记成功。</li>
@@ -55,14 +55,15 @@ public class PaymentConfirmationService {
     public static final List<String> REQUIRED_LINES = List.of("finance_review", "legal_review");
     /**
      * 第十八批 AM 段第 241 条 241-R9（第十八批裁决 69「付款方是平台主体的应收，登记收款前也须付款确认」）：付款方是平台主体、台账记成应收的来源；
-     * 支付类型即来源（前 4 个与其应付同一类型）。
+     * 支付类型即来源（前 4 个与其应付同一类型）。第十八批 AZ 段 350-R1：加通用卡消费结算 general_card_consume——跨月退款另挂的追收应收，付款方是
+     * 娱乐平台公司、游乐公司或传媒公司，与其应付同一类型。
      */
     public static final Set<String> PLATFORM_PAYER_RECEIVABLE_SOURCES = Set.of("pass_domain_share", "pass_domain_direct_settlement",
             "bar_payroll_transfer", "dispatch_commission_transfer", "compensation_fulfillment_recovery", "ticket_distribution_recovery",
-            "saved_bottle_remedy_recovery");
+            "saved_bottle_remedy_recovery", "general_card_consume");
     private static final ObjectMapper JSON = new ObjectMapper();
     /**
-     * 台账来源（payment_type 即来源原值）：全仓写入 ar_ap_items 且可能挂应付的 29 个来源（含按金额正负分挂的；第十八批 AX 段 273-R1 加酒吧借款还款 bar_loan），加付款方是平台主体的 3 个追收应收来源
+     * 台账来源（payment_type 即来源原值）：全仓写入 ar_ap_items 且可能挂应付的 30 个来源（含按金额正负分挂的；第十八批 AX 段 273-R1 加酒吧借款还款 bar_loan，第十八批 AZ 段 350-R1 加通用卡消费结算 general_card_consume），加付款方是平台主体的 3 个追收应收来源
      * （裁决 69；另 4 个平台主体应收来源与其应付同一类型）。
      */
     static final List<String> AR_AP_SOURCES = List.of(
@@ -72,13 +73,14 @@ public class PaymentConfirmationService {
             "pass_unverified_attribution", "dispatch_commission_transfer", "bar_payroll_transfer", "inventory_transfer",
             "pass_drink_settlement", "media_performance_settlement", "refund", "bar_deposit_refund", "stored_value_consume",
             "partner_voucher", "reconciliation_difference", "inventory_difference", "turnover_rent_reversal", "manual", "bar_loan",
+            "general_card_consume",
             "compensation_fulfillment_recovery", "ticket_distribution_recovery", "saved_bottle_remedy_recovery");
     /** 财务退款待办来源（V539 chk_finance_refund_source 闭集）与中文名。 */
     private static final Map<String, String> FINANCE_REFUND_SOURCES = orderedMap(
             "ar_ap_payment", "原收款退款", "stored_value_account", "通用卡储值本金退款", "ticket_payment_rejection", "票务拒收待退",
             "channel_ticket_rejection", "渠道回流拒收待退", "dealer_order_refund", "经销订单退款", "bar_deposit_rejection", "订台定金冲突待退",
             "bar_scan_order_rejection", "扫码点单拒收待退");
-    /** 支付类型闭集（41 个，同 V660 CHECK）→ 中文名。 */
+    /** 支付类型闭集（42 个，同 V681 CHECK）→ 中文名。 */
     public static final Map<String, String> PAYMENT_TYPES;
 
     static {
@@ -312,7 +314,7 @@ public class PaymentConfirmationService {
         return List.copyOf(lines);
     }
 
-    /** 241-R8：41 个支付类型（清单顺序）各自在两线之外的必带线，没有设定的为空。 */
+    /** 241-R8：42 个支付类型（清单顺序）各自在两线之外的必带线，没有设定的为空。 */
     public List<Flow> flows() {
         Map<String, List<String>> set = jdbc.queryForList(
                         "SELECT payment_type, jsonb_array_elements_text(line_codes) AS line_code FROM payment_confirmation_flows").stream()

@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static com.complex.platform.support.DailyCloseFixture.closeWithMarks;
 import static com.complex.platform.support.DailyCloseFixture.markRangeFinal;
@@ -149,6 +149,59 @@ class FinancePeriodCloseJdbcIntegrationTests {
         close(staffs.staff("usr_fpc_m_" + s, "staff", project, bar, "finance.period_close.execute"), "m1", true)
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.detail_code").value("CROSS_MERCHANT_FORBIDDEN"));
+    }
+
+    /**
+     * 第十八批 AZ 段 356-R1（ENUM:190「非最终快照的数据一律不得进入……对账关账」）：停用（未存档、未登记关停结算）的酒吧照在营口径计入封账的
+     * 五类与锁定校验。A 五类全标、只有 02-15 没锁，停用后封账 409 PERIOD_CLOSE_DAY_NOT_LOCKED。修复前停用酒吧不在检查单位里，封账 200（断言红）。
+     */
+    @Test
+    void deactivatedBarStillCountsForLockedDays() throws Exception {
+        markRangeFinal(jdbc, "project", project, FROM, TO);
+        markRangeFinal(jdbc, "bar", bar, FROM, TO);
+        for (LocalDate day = FROM; !day.isAfter(TO); day = day.plusDays(1)) {
+            lock("project", project, day);
+            if (!day.equals(D15)) {
+                lock("bar", bar, day);
+            }
+        }
+        jdbc.update("UPDATE merchants SET status = 'inactive' WHERE id = ?", bar);
+
+        close(finance, "i1", true).andExpect(status().isConflict())
+                .andExpect(jsonPath("$.detail_code").value("PERIOD_CLOSE_DAY_NOT_LOCKED"))
+                .andExpect(jsonPath("$.message").value("以下营业日的日结尚未锁定，不能封账：" + D15 + " " + barName));
+    }
+
+    /**
+     * 356-R1（BSM:569「存档……不再被新业务选用」；BSM:1787「酒吧关闭须完成关停结算」）：存档时刻所在营业日之后、关停结算最后营业日之后的营业日
+     * 不再要求标记与锁定，不把整个综合体的封账永久拦住。A 于北京 02-15 12:00 存档、只标与锁到 02-15；B 停用并登记关停结算（最后营业日 02-10）、
+     * 只标与锁到 02-10：封账 200。
+     */
+    @Test
+    void archivedAndClosedOutBarsDoNotBlockAfterTheirLastDay() throws Exception {
+        String closedBar = "mer_fpc_b_" + s;
+        LocalDate d10 = LocalDate.of(2026, 2, 10);
+        jdbc.update("INSERT INTO merchants (id, merchant_name, merchant_type, project_id, status, created_at, updated_at)"
+                + " VALUES (?, ?, 'bar', ?, 'active', TIMESTAMPTZ '2026-01-01 00:00:00+08', now())", closedBar, "封账关店酒吧" + s, project);
+        markRangeFinal(jdbc, "project", project, FROM, TO);
+        markRangeFinal(jdbc, "bar", bar, FROM, D15);
+        markRangeFinal(jdbc, "bar", closedBar, FROM, d10);
+        for (LocalDate day = FROM; !day.isAfter(TO); day = day.plusDays(1)) {
+            lock("project", project, day);
+            if (!day.isAfter(D15)) {
+                lock("bar", bar, day);
+            }
+            if (!day.isAfter(d10)) {
+                lock("bar", closedBar, day);
+            }
+        }
+        jdbc.update("UPDATE merchants SET archived_at = TIMESTAMPTZ '2026-02-15 12:00:00+08' WHERE id = ?", bar);
+        jdbc.update("UPDATE merchants SET status = 'inactive' WHERE id = ?", closedBar);
+        jdbc.update("INSERT INTO dividend_closeouts (id, merchant_id, closed_business_date, reason, status, created_by)"
+                + " VALUES (?, ?, ?, '封账关停结算回归', 'open', ?)", "dco_fpc_" + s, closedBar, d10, financeUser);
+
+        close(finance, "a1", true).andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.period_month").value("2026-02"));
     }
 
     private ResultActions close(RequestPostProcessor who, String key, boolean fourFlows) throws Exception {

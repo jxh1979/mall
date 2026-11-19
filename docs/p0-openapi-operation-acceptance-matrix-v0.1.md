@@ -1,4 +1,4 @@
-# P0 OpenAPI Operation 验收矩阵 V0.84
+# P0 OpenAPI Operation 验收矩阵 V0.85
 
 ## 1. 文档定位
 
@@ -17,7 +17,7 @@
 
 ## 3. Operation 清单
 
-> 当前 `docs/openapi/openapi-p0.json` 共 1400 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
+> 当前 `docs/openapi/openapi-p0.json` 共 1401 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
 
 | 标签 | 方法 | 路径 | operationId | 摘要 | 请求体 | 权限 | 认证上下文 | 数据范围 | 终端/设备能力/调用通道 | 幂等 | 成功事件 | 失败事件 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -552,7 +552,7 @@
 | finance | `POST` | `/api/v1/finance/deposits/actions` | `recordDepositAction` | 押金台账动作（收取/退还/抵扣/没收） | `object` | `finance.deposit.manage` | `staff-token` | `platform` | web | 是 | `finance.deposit.action_recorded` | `finance.deposit.action_failed` |
 | finance | `POST` | `/api/v1/finance/inventory-variances/post` | `postInventoryVariance` | 库存差异复核入账为 AR/AP | `object` | `finance.inventory_variance.post` | `staff-token` | `platform` | web | 是 | `finance.inventory_variance.posted` | `finance.inventory_variance.post_failed` |
 | finance | `POST` | `/api/v1/finance/turnover-rent/bills` | `billTurnoverRent` | 营业额抽成计费生成应收 | `object` | `finance.turnover_rent.bill` | `staff-token` | `platform` | web | 是 | `finance.turnover_rent.billed` | `finance.turnover_rent.bill_failed` |
-| finance | `POST` | `/api/v1/finance/turnover-rent/rules` | `createTurnoverRentRule` | 新建营业额抽成规则草案 | `object` | `finance.turnover_rent.bill` | `staff-token` | `platform` | web | 是 | `finance_turnover_rent_rule.created` | `finance_turnover_rent_rule.create_failed` |
+| finance | `POST` | `/api/v1/finance/turnover-rent/rules` | `createTurnoverRentRule` | 新建营业额抽成规则草案 | `object` | `finance.turnover_rent.bill` | `staff-token` | `project-merchant` | web | 是 | `finance_turnover_rent_rule.created` | `finance_turnover_rent_rule.create_failed` |
 | integration | `GET` | `/api/v1/integration/reconciliation/batches` | `listIntegrationReconciliationBatches` | 查询对账批次列表 | `-` | `integration.reconciliation.view` | `staff-token` | `platform` | web | 否 | `integration.reconciliation_batch.viewed` | `integration.reconciliation_batch.view_failed` |
 | integration | `POST` | `/api/v1/integration/reconciliation/batches` | `createIntegrationReconciliationBatch` | 创建对账批次 | `object` | `integration.reconciliation.manage` | `staff-token` | `platform` | web | 是 | `integration.reconciliation_batch.created` | `integration.reconciliation_batch.create_failed` |
 | integration | `GET` | `/api/v1/integration/reconciliation/differences` | `listIntegrationReconciliationDifferences` | 查询对账差异列表 | `-` | `integration.reconciliation.view` | `staff-token` | `platform` | web | 否 | `integration.reconciliation_difference.viewed` | `integration.reconciliation_difference.view_failed` |
@@ -682,7 +682,7 @@
 | ticketing | `POST` | `/api/v1/ticketing/orders/{order_id}/cancel` | `cancelTicketOrder` | 取消未支付票务订单（回补库存） | `StatusChangeRequest` | `ticket.order.create` | `staff-token` | `platform` | web, kiosk | 是 | `ticket_order.cancelled` | `ticket_order.cancel_failed` |
 | finance | `GET` | `/api/v1/finance/property-fee/rates` | `listPropertyFeeRates` | 列出某项目的物业费费率 | `-` | `finance.property_fee.manage` | `staff-token` | `platform` | web | 否 | `not_applicable` | `not_applicable` |
 | finance | `POST` | `/api/v1/finance/property-fee/rates` | `createPropertyFeeRate` | 维护物业费费率（项目级、可按期） | `PropertyFeeRateRequest` | `finance.property_fee.manage` | `staff-token` | `platform` | web | 是 | `finance_property_fee.rate_set` | `finance_property_fee.rate_set_failed` |
-| finance | `POST` | `/api/v1/finance/property-fee/bills` | `billPropertyFee` | 物业费按期计费（每平米固定单价 × 面积，不退不补） | `PropertyFeeBillRequest` | `finance.property_fee.manage` | `staff-token` | `platform` | web | 是 | `finance_property_fee.billed` | `finance_property_fee.bill_failed` |
+| finance | `POST` | `/api/v1/finance/property-fee/bills` | `billPropertyFee` | 物业费按期计费（每平米固定单价 × 面积，不退不补） | `PropertyFeeBillRequest` | `finance.property_fee.manage` | `staff-token` | `project-merchant` | web | 是 | `finance_property_fee.billed` | `finance_property_fee.bill_failed` |
 | finance | `GET` | `/api/v1/finance/entity-taxes` | `listEntityTaxDeclarations` | 税费申报登记分页查询（按经营主体、所属月、税种、状态筛选） | `-` | `finance.entity_tax.view` | `staff-token` | `platform` | web | 否 | `entity_tax.listed` | `entity_tax.list_failed` |
 | finance | `POST` | `/api/v1/finance/entity-taxes` | `declareEntityTax` | 登记税费实际申报金额并提交财务、税务、法务审核与最高确认 | `EntityTaxDeclarationRequest` | `finance.entity_tax.manage` | `staff-token` | `platform` | web | 是 | `entity_tax.declared` | `entity_tax.declare_failed` |
 | finance | `GET` | `/api/v1/finance/entity-taxes/rates` | `listEntityTaxRates` | 税率版本列表（按经营主体 × 收入类型 × 税种，含待审批与已驳回） | `-` | `finance.entity_tax.view` | `staff-token` | `platform` | web | 否 | `entity_tax.rates_listed` | `entity_tax.rates_list_failed` |
@@ -995,6 +995,7 @@
 | customer | `GET` | `/api/v1/customer/ticket-transfers/outgoing` | `listOutgoingCustomerTicketTransfers` | 我发起的转赠(撤回入口/状态查看) | `-` | `not_applicable` | `customer-token` | `customer` | miniapp, app | 否 | `customer.ticket_transfer_outgoing_viewed` | `customer.ticket_transfer_outgoing_view_failed` |
 | ticketing | `GET` | `/api/v1/ticketing/ticket-transfers` | `listTicketTransfers` | 查询门票转赠记录(客服纠纷排查,只读) | `-` | `ticket.transfer.read` | `staff-token` | `project` | web | 否 | `ticket_transfer.viewed` | `ticket_transfer.view_failed` |
 | customer | `POST` | `/api/v1/loyalty/stored-value/{customer_id}/counter-refund` | `counterRefundStoredValueAccount` | 会员储值到店柜台退款（商户预收卡唯一可达退款路径） | `StoredValueCounterRefundRequest` | `customer.stored_value.refund` | `staff-token` | `project` | web | 是 | `stored_value.counter_refund` | `stored_value.counter_refund_failed` |
+| customer | `POST` | `/api/v1/loyalty/stored-value/refund-cards/lookup` | `lookupStoredValueRefundCards` | 储值退卡查卡（按手机号列出当前账号可办理退卡的卡；手机号走请求体不进 URL） | `object` | `customer.stored_value.refund` | `staff-token` | `project-merchant` | web | 否 | `not_applicable` | `not_applicable` |
 | partner | `POST` | `/api/v1/partner/orgs/{org_id}/bind-user` | `bindUserToPartnerOrg` | 账号绑定外部协作机构 | `PartnerOrgUserBindRequest` | `partner.org.manage` | `staff-token` | `platform` | web | 是 | `partner.org.user_bound` | `partner.org.user_bind_failed` |
 | partner | `POST` | `/api/v1/partner/orgs/{org_id}/unbind-user` | `unbindUserFromPartnerOrg` | 账号解绑外部协作机构 | `PartnerOrgUserBindRequest` | `partner.org.manage` | `staff-token` | `platform` | web | 是 | `partner.org.user_unbound` | `partner.org.user_unbind_failed` |
 | dealer | `GET` | `/api/v1/dealers` | `listDealers` | 经销商清单 | `-` | `dealer.view` | `staff-token` | `project` | web | 否 | `dealer.viewed` | `not_applicable` |

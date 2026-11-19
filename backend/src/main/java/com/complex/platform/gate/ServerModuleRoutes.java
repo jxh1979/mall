@@ -1,6 +1,6 @@
 package com.complex.platform.gate;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import java.util.Arrays;
 import java.util.Comparator;
@@ -100,6 +100,10 @@ final class ServerModuleRoutes {
                     // 247-R2：储值规则页独用。
                     Map.entry("/api/v1/loyalty/stored-value/merchant-card-config", "governance"),
                     Map.entry("/api/v1/loyalty/stored-value/merchant-refund-rules", "governance"),
+                    // 18AZ 收尾复核（247-R1、R2 同规则）：储值退卡页（ADM-CUS-006）独用的查卡、退卡、柜台退卡。
+                    Map.entry("/api/v1/loyalty/stored-value/refund-cards/lookup", "governance"),
+                    Map.entry("/api/v1/loyalty/stored-value/{customer_id}/refund", "governance"),
+                    Map.entry("/api/v1/loyalty/stored-value/{customer_id}/counter-refund", "governance"),
                     Map.entry("/api/v1/merchant-billing", "governance"),
                     Map.entry("/api/v1/merchant-penalties", "governance"),
                     Map.entry("/api/v1/merchant-penalty-bounds", "governance"),

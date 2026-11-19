@@ -1,4 +1,4 @@
-// 文件版本：V0.03
+// 文件版本：V0.04
 package com.complex.platform.gate;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -34,6 +34,16 @@ class ServerModuleRoutesTests {
         assertThat(ServerModuleRoutes.moduleOf("web", "GET", "/api/v1/platform/approval-deadlines")).as("GET 清单").isEqualTo("governance");
         assertThat(ServerModuleRoutes.moduleOf("web", "GET", "/api/v1/platform/approval-deadlines/staff.payroll.adjustment.add"))
                 .as("PUT 带 {action_type}").isEqualTo("governance");
+    }
+
+    /** 18AZ 收尾复核意见 8（PGM:737「关闭后菜单不可见或不可点，接口也要拒绝业务动作」；PGM:744；100-R1、247-R1、247-R2 页面独用接口定模块）：
+     *  储值退卡页（ADM-CUS-006，governance 组）独用的查卡、退卡、柜台退卡归治理模块；储值规则页的子路径照旧。 */
+    @Test
+    void storedValueRefundPageApisBelongToGovernance() {
+        assertThat(web("POST", "/api/v1/loyalty/stored-value/refund-cards/lookup")).isEqualTo("governance");
+        assertThat(web("POST", "/api/v1/loyalty/stored-value/cus_1/refund")).isEqualTo("governance");
+        assertThat(web("POST", "/api/v1/loyalty/stored-value/cus_1/counter-refund")).isEqualTo("governance");
+        assertThat(web("GET", "/api/v1/loyalty/stored-value/merchant-refund-rules/m1")).isEqualTo("governance");
     }
 
     @Test

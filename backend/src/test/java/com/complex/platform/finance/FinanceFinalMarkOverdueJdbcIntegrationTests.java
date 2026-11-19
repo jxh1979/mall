@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -27,8 +27,9 @@ import org.springframework.transaction.annotation.Transactional;
  *
  * <p>夹具随测试事务回滚：综合体 P（出厂营业日：起点 10:00、闭店次日 07:00）及其酒吧 X、综合体 Q；P 的平台侧财务 p 与 Q 的平台侧财务 q 持
  * finance.daily_close.lock，X 的商户账号 m 也持该码，P 的员工 n 不持该码，四人都有员工档案。共享库里别的酒吧与综合体也会被同一轮检查，
- * 断言只看本次夹具的单位与收件人。P、Q、X 建档于 30 天前；另有 P 里已存档（先下线）的酒吧 Y、今天才建档的酒吧 Z 与综合体 R
- * （R 的平台侧财务 r 持该码）：Y 不是在营酒吧（BSM:569「存档（先下线）」），Z、R 建档之前没有营业日，都不查、不发。</p>
+ * 断言只看本次夹具的单位与收件人。P、Q、X 建档于 30 天前；另有 P 里 10 天前已存档（先下线）的酒吧 Y、今天才建档的酒吧 Z 与综合体 R
+ * （R 的平台侧财务 r 持该码）：Y 存档之后的营业日不再要求标记（BSM:569「存档（先下线）」；第十八批 AZ 段 356-R1），Z、R 建档之前没有营业日，
+ * 都不查、不发。</p>
  */
 @SpringBootTest(properties = {
         "spring.datasource.url=${SETTLE_TEST_DB_URL:jdbc:postgresql://127.0.0.1:5432/complex_test}",
@@ -71,7 +72,7 @@ class FinanceFinalMarkOverdueJdbcIntegrationTests {
         jdbc.update("INSERT INTO merchants (id, merchant_name, merchant_type, project_id, status, created_at, updated_at) "
                 + "VALUES (?, ?, 'bar', ?, 'active', now() - interval '30 days', now())", barX, barName, projectP);
         jdbc.update("INSERT INTO merchants (id, merchant_name, merchant_type, project_id, status, archived_at, created_at, updated_at) "
-                + "VALUES (?, ?, 'bar', ?, 'active', now(), now() - interval '30 days', now())", barY, archivedName, projectP);
+                + "VALUES (?, ?, 'bar', ?, 'active', now() - interval '10 days', now() - interval '30 days', now())", barY, archivedName, projectP);
         jdbc.update("INSERT INTO merchants (id, merchant_name, merchant_type, project_id, status, created_at, updated_at) "
                 + "VALUES (?, ?, 'bar', ?, 'active', now(), now())", barZ, newBarName, projectP);
         jdbc.update("INSERT INTO projects (id, venue_type, name, status, created_at, updated_at) VALUES (?, 'complex', ?, 'active', now(), now())",
@@ -138,6 +139,32 @@ class FinanceFinalMarkOverdueJdbcIntegrationTests {
         assertThat(notices("p", archivedName)).isEmpty();
         assertThat(notices("p", newBarName)).isEmpty();
         assertThat(notices("r")).isEmpty();
+    }
+
+    /**
+     * 第十八批 AZ 段 356-R1（ENUM:190「某一类数据在上述时点仍未标记的，系统自动生成待办并通知该域主管公司的财务负责人」；BSM:569；BSM:1787）：
+     * 停用（未存档、未登记关停结算）的酒吧 V 照在营口径逐日查，D 没有日结即给 p 发待办；登记关停结算、最后营业日早于 D 的酒吧 W 与 10 天前存档的 Y 不发。
+     * 修复前停用酒吧不在检查单位里，V 的待办断言即红。
+     */
+    @Test
+    void deactivatedBarIsStillScannedButClosedOutAndArchivedBarsStopAfterTheirLastDay() {
+        String barV = "mer_fmo_v_" + suffix;
+        String inactiveName = "停用酒吧" + suffix;
+        String barW = "mer_fmo_w_" + suffix;
+        String closedName = "关店酒吧" + suffix;
+        for (String[] bar : List.of(new String[] {barV, inactiveName}, new String[] {barW, closedName})) {
+            jdbc.update("INSERT INTO merchants (id, merchant_name, merchant_type, project_id, status, created_at, updated_at) "
+                    + "VALUES (?, ?, 'bar', ?, 'inactive', now() - interval '30 days', now())", bar[0], bar[1], projectP);
+        }
+        jdbc.update("INSERT INTO dividend_closeouts (id, merchant_id, closed_business_date, reason, status, created_by)"
+                + " VALUES (?, ?, ?, '逾期待办关停结算回归', 'open', ?)", "dco_fmo_" + suffix, barW, d.minusDays(1), "usr_fmo_p_" + suffix);
+
+        overdueService.scanFinalMarkOverdue(at(n, 11));
+
+        assertThat(notices("p", inactiveName)).singleElement().satisfies(row ->
+                assertThat((String) row.get("title")).isEqualTo("五类数据逾期未标记：营业日 " + d + "、" + inactiveName));
+        assertThat(notices("p", closedName)).isEmpty();
+        assertThat(notices("p", archivedName)).isEmpty();
     }
 
     // ── 夹具 ─────────────────────────────────────────────────────────────────────────────────────

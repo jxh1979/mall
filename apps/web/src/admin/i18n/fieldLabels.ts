@@ -1,4 +1,4 @@
-// 文件版本：V0.47
+// 文件版本：V0.48
 // OBS-14-02 后台结果区字段中文名字典（PGM「全局原则 · 界面全中文（所有终端零英文）」）。
 // 键用后端 JSON 的蛇形写法；结果区查表时蛇形与驼峰同查（orderId / order_id 都命中 order_id）。
 // 与后端字段中文名表 FieldLabels.java（common.api 包）同键同名：前段按后端原样抄录，后端改名这里跟着改（门禁会比对）。
@@ -787,6 +787,7 @@ export const FIELD_LABELS: Record<string, string> = {
   accepted_at: "确认时间",
   accepted_quantity: "验收数量",
   account_change_id: "账户变更单",
+  account_changes: "已审批的账户变更单",   // 第十八批 AZ 段 358-R1：内部应付执行状态带出收款方已审批的更换收款账户
   account_status: "账户状态",
   account_type: "账号类型",
   accounting_period: "会计期间",
@@ -3693,8 +3694,12 @@ export const KEY_VALUE_LABELS: Record<string, Record<string, string>> = {
     purchase_inbound: "采购入库", purchase_prepayment: "采购预付款", purchase_consignment: "寄售结算",
     purchase_return_refund: "供应商退货退款", purchase_prepayment_refund: "采购未用预付款退款",
     deposit_adjustment: "变更押金补退差额", compensation_fulfillment: "补偿新增履约结算", compensation_fulfillment_recovery: "补偿应付已付追收",
+    // 第十八批 AZ 段 285-R1：合同生效挂的押金应收（同后端 AR_AP_SOURCE_TYPE_LABELS）。
+    contract_deposit: "合同押金",
     single_bar_service_fee: "单店门票综合服务费", ticket_distribution_recovery: "通票分账追收",
     contract_parking_monthly: "车位月租", parking_fee: "停车费", parking_credit_cost: "停车抵免成本",
+    // 第十八批 AZ 段 350-R1（BSM:1704）：通用卡消费结算往来（同后端 AR_AP_SOURCE_TYPE_LABELS）。
+    general_card_consume: "通用卡消费结算",
     bar_shift_overage: "收银长款（营业外收入）", turnover_rent_reversal: "营业额抽成冲正",
     // 第十八批 AI 段 214-R1、214-R2：组合通票各域份额主体间往来（同后端 AR_AP_SOURCE_TYPE_LABELS）。
     pass_domain_share: "通票域间份额", pass_domain_direct_settlement: "通票餐饮零售代付", pass_unverified_attribution: "通票到期未核销归属",

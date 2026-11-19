@@ -1,6 +1,6 @@
 # PRD 审计业务裁决台账
 
-文档版本：V1.08
+文档版本：V1.09
 状态：进行中
 迁移日期：2026-07-27
 当前事实源：三份立法 HTML 以既有冻结基线叠加 James 此前 M02 至 M08 的点名批准、全量审计 M001、M002 的逐项批准，以及本轮 2026-10-16 至 2026-10-17 业务 HTML 审计中 Q01 至 Q40 及子题实际明确批准且未被后续替代的裁决，和 2026-10-17 第二批 HTML 业务线推演审计（A–F 六线 64 条、停车章）的逐项批准，并叠加本轮 CG 70 项来源确认与 C01–C09、N01–N03 最终澄清及补全文稿中 F01、W01–W05 的整体修改批准（本文件末节）；本轮最终规则、未采纳或替代关系、现行版本与字节哈希见本文件末节。历史记录保留为各自当时事实，不恢复已被替代的建议。
@@ -10019,3 +10019,276 @@ HTML 的语义补齐与直接引用同步可在本批核验；70项中的业务�
 - 18AY 收尾复核修正（2026-11-19）：收尾复核意见 4 条全部成立，按控制席补充在本段一并修，不新增迁移与操作。①存酒页 StoredWinePage 证据上传列表：cancelStoredWine 成功后清空作废照片与视频，registerRemedy 成功后清空补存瓶登记照片，remedyAction 提交了 evidence_ids 的结案、员工赔偿认定、追收已收回成功后清空交付与收回凭证，handoverToPlatform 成功后清空交接照片与视频；换选存酒时清空作废、补存与结案追收的上传列表（交接证据随退出门店、不随选中存酒）；失败保留已上传列表供补传后重提。新用例 StoredWinePage.cancel.test.tsx「收尾复核：作废 A 成功后照片视频列表清空；再选 B 只填原因作废，请求体照片与视频编号都是空数组」「收尾复核：为 A 上传作废照片未提交，换选 B 后作废照片列表清空」；StoredWinePage.recovery.test.tsx 的 198-R5 用例原先一次上传后各单共用凭证，改为每单各自上传本单凭证、提交成功后断言列表清空（审批、垫付不带凭证、不清空）。依据 BSM:1940「……存酒作废……必须记录原因、员工、时间、点位、照片、视频和主管复核结果。」；BSM:1072「存酒作废需照片+视频双证据+主管复核」；BSM:1170「存酒登记必须拍照、填写人工备注……」；第十八批裁决 14「高价值的报损、盘点差异、存酒作废，必须照片＋视频＋主管复核才生效」。②契约 lookupSavedBottlesByPhone 补 description，与 listSavedBottles 同句：最高权限按手机号检索看全部酒吧的存酒（不按商户范围），其余账号照旧按本商户；yaml 与 json 同值，操作数不变。依据第十八批裁决 71「既然是最高权限，不应该什么都能看到吗？」；BSM:576。③结果区字典 fieldLabels 的 KEY_VALUE_LABELS.adjustment_type 补 min_spend_retained「低消留款」、transfer「转台」、merge「并台」，退款整笔转为低消留款、卡座转台与并台结果的调整类型不再显示英文；拆台 split、撤销转台 transfer_undo 已有中文名不改。新用例 ActionResultView.test.tsx「退款整笔转低消留款、卡座转台与并台结果的调整类型显示中文，不出现英文取值」。依据 PGM:287「展示给用户的一切文字……必须全部为中文」；BSM:1064「……不退款——该笔金额留在本台位账上」；BSM:1079「账单合并称为“合单”，不等同于台位“并台”。」④P0 验收标准 p0-end-to-end-acceptance-and-edge-cases-v0.1.md 的 AC-INV-05 取酒句与其边界用例两行，按现码与现句改为核验短信验证码或动态取酒码、通过即出酒、对应标签只留痕不作比对（标题版本 +0.01）；酒吧开发设计 §5.3.2 与 REQ-31 照设计 not_doing 不改。依据 BSM:1073「取酒与人工例外取酒必须核验当前客户的短信验证码，或由已登录的官方手机应用、小程序出示动态取酒码……取酒核验、对应标签、取用前后剩余量、操作员工和时间必须留痕。」酒吧 PRD §7.3A.4、§7.6.4 实现现状与修订表本段行同步。
 - 18AY 合并前变基（2026-11-19）：本段自 ed3cde79 变基到 origin/main b7762262；迁移按原序顺延改号 V666→V679；合并时 OpenAPI 共 1400 个操作（主干 1400）、info.version V0.84、决策台账 V1.08，Flyway 最新 V679（共 616 个迁移）。版本行、契约版本、计数与 SHA、生成物、台账补记与 PRD 修订行由合并前脚本按新主干统一重写。
 - 18AY 落地位置补记·运行验收证据、快照、终验文档刷新（无新裁决）：业务提交 8779356c 之后，按第十八批裁决 25 重刷了运行验收证据：后端全量 7043 测，0 失败 0 错误；apps/web 构建通过；常规界面验收（接口全部 mock）实跑 40 条全过；真实后端界面验收未跑，runtime_ready=false。随后依次重生成闭环当前态快照、生产闭环缺口报告、界面验收报告、无上线指挥台。生成器没改。手改 docs/final-closed-loop-acceptance-audit-v0.1.md 与 docs/code-implementation-acceptance-audit-v0.1.md：前端单测源码计数改为 1931；被核文件行数按现码同步（BarService.java 1325→1353、BarBillingService.java 1145→1158、BarBillRecords.java 174→175）；后端全量与常规界面验收的数字、日期改为本次实跑值；写入 npm run verify:unit 实跑结果，五个工作区全过。交付门禁于 2026-11-19 09:47 UTC 在工作树逐项实跑子项，NAS 两项现场探测未跑。仍红的有两项：一是 coding-host-protection，它写死主仓路径，在工作树口径下必红，属工具口径，不做；二是 final-closed-loop-audit，如实留 2 条红（integration-ready、business-acceptance-ready），原因是校验器要求终验把联调、业务验收写成「是」，而裁决 25 定了不跑真实后端界面验收、运行验收未就绪，终验写的是「否」。verify:delivery-gates 总链仍是红的。
+
+18AZ 落地位置补记（2026-11-19）：第十八批 AZ 段（batch72）按 18AZ 只读设计实现待开发清单第 278、284、285、290、349、350、352、356、358 条（财务往来组）；运行验收证据、终验文档在本段最后一个提交刷新；各条落地位置见下。本段追加时，原台账除文档版本升一版外，其他历史字节保持。
+
+- 18AZ 落地位置补记·控制席判定（2026-11-19）：本段（第十八批 AZ 段，batch72）实现待开发清单第 278、284、285、290、349、350、352、356、358 条（18AZ 只读设计 b72-audit/d-fin-c.json、b72-audit/d-fin-d.json，两轮质疑者修订后定稿，无待裁题）。第 290 条本段只做设计核实的两类（组合通票各业态域间份额含追收与到期未核销归属、传媒演出结算），其余主体间往来另登记第 374 条（待核实）；349 只做物业费出账与营业额抽成规则（另两处无客户端入口不做）；350 付款确认支付类型闭集以合并时主干为底取并集。设计旁见另记待开发清单第 364～368 条（待核实）。本段从 ed3cde79 开工；汇总文件由合并前脚本 summary_tool.py 剥离与重写。
+- 第十八批 AZ 段落地位置补记（Z1：352-R1、285-R1、358-R1、284-R1；本组新增操作 0 个、迁移 0 个）
+  352-R1 退租违约金应收与变更押金补退差额挂合同所属项目
+  - 改法：
+    - 退租落账端口 TerminationSettlementPort 的 createTerminationPenaltyReceivable、registerDepositAdjustment 加末参 projectId（同 310-R0 范式）；
+    - FinanceService 两个实现改走 persistDerivedArApItem 带项目的重载，到期日、幂等键、商户金额通知不变；
+    - ContractService.postTerminationLedger 传出租合同所属项目；
+    - ContractService.registerDepositDelta 传原合同所属项目（面积、位置变更子合同与续租同属原合同项目）。
+  - 依据：
+    - BSM:1673「所有数据默认按项目隔离，只有项目之上的获授权岗位可以跨项目汇总。」
+    - BSM:1361「退租结算的抵扣与追缴进应收应付台账」
+    - 按常理定：项目取合同所属项目（同 310-R0；PGM:420 城市项目公司负责租赁）。
+  - 测试：ContractApprovalChainJdbcIntegrationTests.terminationPenaltyReceivableBelongsToContractProjectForProjectFinance、areaChangeDepositSupplementBelongsToContractProjectForProjectFinance。
+  285-R1 合同生效挂押金应收，实收写押金台账
+  - 改法：
+    - 新类 ContractDepositReceivableService.register：source_type 为 contract_deposit，来源单号与幂等键为合同号（不带「合同号|」，不进退租欠费口径），账期为生效月，到期日为生效日，挂合同所属项目，押金不大于 0 不挂；
+    - FinanceService.persistDerivedArApItem 带项目重载改为包内可见；
+    - ContractService.activate 在整租期预排后委托 register（@Lazy 字段注入）；
+    - FinanceService.settleArApItem 对 contract_deposit 实收经 recordDepositAdjustmentLedger 写押金台账 collect 行；
+    - 来源中文名：FinanceService.AR_AP_SOURCE_TYPE_LABELS 和前端 KEY_VALUE_LABELS.source_type 为「合同押金」，MerchantFeeStatementService.SOURCE_FEE_NAMES 归「押金」。
+  - 依据：
+    - BSM:1361「连接财务对账，租金、物业费、能源费、押金、违约金按合同口径形成应收」
+    - BSM:1353「实际收款或退款成功后才更新已收押金余额」
+    - ENUM:256「押金」
+    - 按常理定：押金应收到期日取合同生效日。
+  - 测试：ContractApprovalChainJdbcIntegrationTests.contractDepositReceivableCollectedIntoLedgerAndRefundedAtTermination、partlyCollectedContractDepositCapsRefundAndStaysOutOfArrears。
+  358-R1 执行状态返回已审批换账户单，后台付款执行面板可选新收款账户重付
+  - 改法：
+    - InternalPayableExecutionService 新增 AccountChange 记录；
+    - Execution 加 accountChanges，由 view 按审批时刻列出，商户专区同一 view；
+    - initiate 不改；
+    - FinanceInternalPayablePanel 有换账户单时显示「付款账户」下拉（各新账户与「原收款账户（原路重付）」，默认最近审批的一条），选新账户时请求带 accountChangeId；
+    - fieldLabels.ts 补 account_changes。
+  - 依据：
+    - BSM:1683「处理路径为原路重付，或更换收款账户后重付；更换收款账户须经收款方所属公司财务负责人审批。……每笔应付的实际到账结果回写该笔应付并可逐笔追溯。」
+    - ENUM:252「押金退还付款状态按「内部应付执行状态」条执行」
+    - 按常理定：默认选中最近审批的新账户。
+  - 测试：InternalPayableExecutionJdbcIntegrationTests.retryToApprovedPayeeAccountOverHttp；FinanceArApLedgerPage.test.tsx「更换收款账户后重付」两例。
+  284-R1 账单级退款可退额扣除已留款，退款面板显示留款并如实提示
+  - 改法：
+    - BarPayrollRefundService 新增 retained（本账单已生效留款合计）；
+    - context 剩余可退扣除已留款，RefundContext 新增 retainedGoodsCent；
+    - validate 两处上限同减已留款，超出 400 BAR_PAYROLL_INVALID；
+    - BarRefundBreakdownPanel 显示「已留在本台位账上（未退款，可继续点其他产品抵用）」金额，并按返回结果提示整笔留款「本次不退款」或部分留款「本次实际退款 A 元；B 元因退后低于最低消费留在本台位账上」。
+  - 依据：BSM:1064「退款后该台位累计消费将低于该台位适用的最低消费的，不退款——该笔金额留在本台位账上，客人可继续点其他产品。因退品形成的留款在原台位账单中分别记录留款金额、已抵用金额与未抵用余额」。
+  - 测试：BarMinSpendTopUpJdbcIntegrationTests.retainedRefundIsDeductedFromRefundableAndCannotBeRetainedAgain；BarRefundBreakdownPanel.test.tsx「退款整笔或部分留在台位账上如实显示」三例。
+- 278-R1：
+  - 依据：
+    - ENUM:86「综合体通用卡：综合体内各商户通用，充值资金由长沙项目公司统一收取并作为预收款挂账，余额管理与退款均由长沙项目公司负责。」
+    - PGM:420「作为综合体通用储值卡的发行与收款主体，长沙项目公司」
+    - BSM:833「商户的员工只能管理本商户发行的储值卡。」「单张储值卡退款时如申请同时销卡，本金未退清的须拒绝销卡并明确报错」
+    - PGM:528「④看不到别的商户和别的项目的数据」
+    - 查卡不扣单次授权：操作员 2026-10-03「预览、查询不扣一次性授权，只有真正核销、真正执行的那一次才扣」
+    - 最高权限放行：BSM:576、第十八批裁决 71
+  - 改法与落地位置：
+    - 新类 customer.StoredValueRefundLookupService：
+      - requireRefundScope：最高权限放行；商户账号只办本商户卡，否则 403 CROSS_MERCHANT_FORBIDDEN；卡带项目的只办本人项目，否则 403 CROSS_PROJECT_FORBIDDEN；
+      - lookup：按手机号盲索引查客人，列出未销户且在范围内的卡；
+      - 响应 schema StoredValueRefundCard：本金、赠送金、状态、发卡商户退款规则、账户关闭待退事项金额、掩码手机号。
+    - 新增操作 lookupStoredValueRefundCards：LoyaltyController.lookupStoredValueRefundCards，标 DoesNotConsumeSingleUseGrant，请求体复用 CustomerAccountLookupRequest。
+    - StoredValueService.doRefund：
+      - 首次提交与重放两支改调 StoredValueRefundLookupService.requireRefundScope，删 requireProjectScopeForCard；不挂商户的项目侧账号可办本项目通用卡，柜台退款首次提交起核项目；
+      - close_account 为真而本金未退清，抛 409 STORED_VALUE_CLOSE_PRINCIPAL_REMAINING；
+      - 会员注销放弃余额走 waiveBalancesOnDeregistration，不经此处。
+    - FinanceService.recordStoredValuePayoutRefund：商户闸改为只拦别的商户的账号（currentMerchantIdQuietly），项目仍由 checkProjectScope 核。
+  - 本组增量：新增操作 1 个，迁移 0 个，无新权限码。
+  - 测试 StoredValueRefundLookupJdbcIntegrationTests：aMerchantStaffLookupListsOnlyTheirOwnMerchantsCards、aProjectSideStaffLooksUpAndRefundsTheGeneralCardOfTheirProject、aProjectSideStaffOfAnotherProjectNeitherSeesNorRefundsTheGeneralCard、aMerchantStaffOfAnotherProjectCannotCounterRefundAProjectBoundMerchantCard、closingACardWhilePrincipalRemainsIsRejected、aMerchantCardWithAnAccountClosurePendingRefundShowsTheItemAmount、aLookupDoesNotConsumeASingleUseRefundGrant、aMerchantStaffStillCannotRefundAGeneralCard。
+  278-R2：
+  - 依据：
+    - BSM:833「商户卡仍由发卡商户直接收款和退款，生成待退事项不代表平台已经付款或客人已经到账。」「综合体通用卡的未消费本金默认全额可退，赠送金不退现、未使用部分按活动规则作废或收回。」
+    - ENUM:86（同上）
+    - PGM:687「凡页面上出现上述两类必须强制脱敏内容的，这个页面就是敏感页」
+  - 改法与落地位置：新页 StoredValueRefundPage（ADM-CUS-006「储值退卡」，客人模块，路由 /admin/customers/stored-value-refunds，权限 customer.stored_value.refund）。
+    - 按手机号查卡（调 lookupStoredValueRefundCards）。
+    - 不挂商户的账号办通用卡退卡：HighRiskConfirm 二次确认，一次退还全部本金、卡关闭，调 refundStoredValueAccount，提示由财务按原收款路径办理、实际退款成功才结清。
+    - 商户账号办本商户卡柜台退卡：调 counterRefundStoredValueAccount，按发卡商户规则显示实退额，兑付凭证号必填；有账户关闭待退事项的锁定全部本金并销卡。
+    - 不挂商户的账号看商户卡只提示由发卡商户退款。
+    - 接线：adminRoutes 路由行与 SENSITIVE_PAGE_IDS；AdminApp 懒加载与分支；页面矩阵 ADM-CUS-006 行；verify-full-admin-page-matrix 的 bespokePages。
+  - 按字面或常理定：商户卡柜台退卡只给商户账号表单、通用卡退卡只给不挂商户的账号（ENUM:86、BSM:833 字面）。
+  - 测试 StoredValueRefundPage.test.tsx 五例：
+    - 输入手机号查询，手机号走请求体发查卡接口
+    - 不挂商户的账号退通用卡：一次退还全部本金并关卡，提示由财务按原收款路径办理
+    - 商户账号柜台退卡：不填兑付凭证号不发请求，填后带凭证号提交
+    - 有账户关闭待退事项的商户卡：退还本金锁定为全部本金、同时销卡已勾选
+    - 不挂商户的账号看商户卡只提示由发卡商户退款，没有柜台退卡入口
+- 【第十八批 AZ 段 18AZ 落地位置补记·乙组（第 349、356、290、350 条）】本组新增操作 0 个；迁移 V680（290）、V681（350）；新权限码 0 个。
+  一、349-R1 物业费出账与营业额抽成规则：不挂商户的账号按项目范围放行，物业费应收挂项目
+  - 改法：
+    - FinanceService.billPropertyFeeInternal：先判 AuthorizationService.currentMerchantIdQuietly。
+      - 不挂商户的账号须 projectReach(currentActor, finance.property_fee.manage).covers(所出账项目)，否则 403 CROSS_PROJECT_FORBIDDEN；
+      - 商户账号照旧逐户 checkMerchantOwnership；
+      - 物业费应收改走 persistDerivedArApItem 十参，带所出账项目。
+    - FinanceService.createTurnoverRentRuleInternal：
+      - 商户账号照旧调 checkMerchantOwnership；
+      - 不挂商户的账号取 FinanceRepository.findContractProjectId，须 projectReach(currentActor, finance.turnover_rent.bill) 覆盖合同所属项目，否则 403 CROSS_PROJECT_FORBIDDEN；合同或其项目为空按不可触及，与 316-R2 同口径。
+    - checkMerchantOwnership 本身不改。
+  - 契约：billPropertyFee、createTurnoverRentRule 的 x-data-scope 改为 project-merchant，失败码补 CROSS_PROJECT_FORBIDDEN。
+  - 不做：营业额抽成单独计费（billTurnoverRentInternal）与押金动作（recordDepositActionInternal），两者各端都没有入口。
+  - 依据：
+    - PGM:420「城市项目公司：……只负责资产、场地、物业、租赁、直接管理的第三方商户及自身人员和设备」；
+    - PGM:664「单店层面的财务工作——日结确认与锁定、商户费用账单出账……由该酒吧对应的财务 BP 负责」；
+    - BSM:1758「生成的物业费账单在应收应付台账按「来源＝物业费」查询。」
+  - 测试：PropertyFeeBillWebShape198R5Tests.projectFinanceWithoutMerchantBillsOwnProjectAndReceivableCarriesProject；TurnoverRentFinalSnapshotGateJdbcTests.projectFinanceWithoutMerchantCreatesTurnoverRuleOnlyForOwnProjectContracts。
+  二、356-R1 最终快照检查单位纳入停用、存档酒吧，止于关停结算最后营业日与存档当日
+  - 改法：
+    - FinanceRepository.FinalMarkUnit 加 archivedAt、closedDay 两个分量和判定方法 owes：营业日结束晚于建档、不晚于关店最后营业日、营业日起点早于存档时刻时才要求标记。
+    - JdbcFinanceRepository.listFinalMarkUnits、findBarFinalMarkUnit 的酒吧单位不再限在营与未存档，LEFT JOIN dividend_closeouts 取 closed_business_date。
+    - 改用 owes 判断的三处：FinanceService.unitNonFinalDays、FinanceService.closePeriod 的未锁定日结校验、FinanceFinalMarkOverdueService.scanFinalMarkOverdue。
+    - 下游自动跟随，调用方不改：提成月结拨付、工资、派驻拨付、演出结算、营业额抽成、封账、通票月结、分红（nonFinalDaysOfBar）。
+    - 停用而未存档、也未登记关停结算的酒吧，照在营口径逐日要求标记、发待办、计入封账未锁校验。
+    - 333-R1「分红五类最终闸对酒吧一律按店查、不看在营与存档」的口径随本条调整为：存档时刻所在营业日之后的营业日不再要求标记，停用照查。
+  - 依据：
+    - ENUM:190「非最终快照的数据一律不得进入结算、分红、正式提成计算和对账关账」「某一类数据在上述时点仍未标记的，系统自动生成待办并通知该域主管公司的财务负责人」；
+    - BSM:569「存档（先下线）：配错了或暂时不用，点"存档"就从各处的选择列表里隐藏，不再被新业务选用；但历史照样能查、能对账。」；
+    - BSM:1787「酒吧关闭须完成关停结算」；
+    - 第十八批裁决 35。
+  - 测试：
+    - CommissionSettlementFinalSnapshotJdbcIntegrationTests：deactivatedBarStillBlocksCloseUntilItsDaysAreFinal、archivedBarIsCheckedUpToTheArchiveDayOnly、closedOutBarIsCheckedUpToItsLastBusinessDayOnly；
+    - FinancePeriodCloseJdbcIntegrationTests：deactivatedBarStillCountsForLockedDays、archivedAndClosedOutBarsDoNotBlockAfterTheirLastDay；
+    - FinanceFinalMarkOverdueJdbcIntegrationTests.deactivatedBarIsStillScannedButClosedOutAndArchivedBarsStopAfterTheirLastDay；
+    - 既有夹具按新口径调整存档时刻：FinanceFinalMarkOverdueJdbcIntegrationTests、FinanceFinalSnapshotJdbcIntegrationTests。
+  三、290-R1 组合通票游乐、演出、餐饮、零售四业态域间份额（含追收与到期未核销归属）进开票清单
+  - 改法：
+    - V680：invoice_subject_rules 补 isr_retail（收入类型 retail，发票项目名「零售商品」，税目口径「零售」，按常理定）。
+    - JdbcSettlementInvoiceRepository.listFormatShares：应开额＝业态份额行的域间份额、追收、到期未核销三列之和。
+    - SettlementInvoiceService.generateLine：加购方参数，开票主体给了 fallbackEntityId 就直接用，免得通票餐饮份额按 table_dining 收入流错开。
+    - SettlementInvoiceService.generateForBill 新增第 ③ 步：按业态出 game、show、catering、retail 单头级行，开票主体＝该业态份额归属主体，购方＝all_pass_ticket 归属主体（娱乐平台公司）。
+    - JdbcSettlementInvoiceRepository.listOverIssued：单头级行按收入类型取应开额（下调后列入已超开提示先红冲）。
+    - SettlementInvoiceController.incomeLabel 与开票清单页 INCOME_LABELS 补 retail「零售」。
+    - 契约：generateSettlementInvoiceItems、listSettlementInvoiceItems、settlementInvoiceSummary 改说明。
+  - 不做：代付 pass_domain_direct_settlement 不开票（BSM:1760「交易实质」）。本条标题范围内其余主体间往来（单店门票综合服务费、门店要货货款、营销与派驻提成拨付、酒吧报酬拨付、停车抵免成本、通用卡消费结算）未取证，290 记部分完成，余项留在本条下待核。
+  - 依据：
+    - BSM:1803「平台内部各主体之间的往来需要开具发票，开票的具体规则一律按国家财税相关规定执行」；
+    - BSM:1750「开票金额≤已收−已退−已开」；
+    - BSM:1760「税率、税目、发票对象和红冲流程由系统按有效规则配置并保留凭证关联……已封账历史账单不回改，跨月退款和调整在当期生成冲正」；
+    - BSM:755「一律按总额收付、收支两条线，不得轧差」；
+    - DEC-R4-2026-08-04-51。
+  - 测试：PassShareInvoiceItemsJdbcTests.passDomainSharesEnterInvoiceListPerFormatWithPlatformAsBuyer；SettlementInvoicePage.test.tsx「组合通票零售业态份额行的收入类型显示「零售」」。
+  四、290-R2 传媒演出结算（门票加价分配、固定演出费、酒水提成）进开票清单
+  - 改法：
+    - V680：settlement_invoice_items 加 ar_ap_item_id；chk_sii_one_source 改为结算单、积分月账单、台账行三选一；加 uq_sii_arap_open。
+    - SettlementInvoiceService.generateForMediaSettlement：
+      - 开文化服务费（show 规则），开票主体＝收方传媒公司；
+      - 购方：门票加价为娱乐平台公司，固定演出费与酒水提成为该酒吧及其收款主体；
+      - 应开额＝台账行加回指它的冲正行，期间＝演出日所在月。
+    - MediaPerformanceSettlementService 注入 SettlementInvoiceService，settleInternal 与 adjustInternal 挂完应付后各调一次。
+    - listOverIssued 以 UNION 列出调整后原行（应开额 0）。
+    - SettlementInvoiceItemRecord、SettlementInvoiceItemView 加 arApItemId（响应键 ar_ap_item_id）；导出来源单号取台账行号。
+  - 依据：
+    - BSM:1803（同上）；
+    - BSM:1144「酒吧门票上的演出加价部分，随酒吧门票由娱乐平台公司售票收款后分给传媒公司」；
+    - BSM:1145「②签订固定费用的，由该酒吧向传媒公司支付合同约定的固定费用；③约定酒水提成的，按合同约定的比例分给传媒公司」；
+    - BSM:1760「跨月退款和调整在当期生成冲正」。
+  - 测试：MediaPerformanceSettlementJdbcIntegrationTests.settledFeesEnterInvoiceListAndAdjustmentFlagsOverIssue。
+  五、350-R1 通用卡购票按营业月合并挂长沙项目公司对票款收款主体的应付，跨月退款另挂追收应收
+  - 改法：
+    - V681：建 general_card_consume_lines；付款确认两条 payment_type CHECK 加 general_card_consume（共 42 个，合并时以主干闭集为底取并集）。
+    - 新类 GeneralCardConsumptionSettlement.pendingGroups，取数：
+      - 卡不挂商户的消费，其储值付款意向是已成功的票务订单付款、订单已出票；
+      - 计入额＝消费额减该笔 ticket_payment_route_fees；赠送段不扣；
+      - 回冲计入额＝负的（回冲额减本次 fee_adjust）；
+      - 收款主体按本单有价权益业态：全为游乐取 amusement_ticket，全为传媒取 performance_ticket，其余取 all_pass_ticket，同 JdbcSettlementBillRepository.OWN_COLLECTED 口径。
+    - GeneralCardConsumptionSettlement.postGroup 入账：
+      - 只入已结束的营业月；
+      - 按（项目、收款主体、营业月、正常或追收）合并：正常组挂应付，跨月回冲另成追收组挂应收，不轧差；
+      - 台账号与来源号按组内流水集合派生；付款时点按钱路 general_card_consume 固化。
+    - 新类 GeneralCardConsumptionSettlementJob 每日一轮，缺付账日规则只跳过该组、下一轮重试，客人付款路径一行未改；application-prod.yml 开启。
+    - 清单：InternalPayDayService.ROUTES、PaymentConfirmationService.AR_AP_SOURCES 与 PLATFORM_PAYER_RECEIVABLE_SOURCES、FinanceService.AR_AP_SOURCE_TYPE_LABELS（「通用卡消费结算」），前端台账来源、付款确认支付类型、付账日钱路三处同名，FinanceInternalPayablePanel 的 INTERNAL_PAYABLE_ROUTES 加入。
+    - 契约：PaymentConfirmationType 枚举、submitInternalPayDayRule 的 route 枚举加 general_card_consume；「7 个来源」改为 8 个。
+    - 上线前提：财务须给 general_card_consume 配付账日规则。
+  - 依据：
+    - BSM:1704「长沙项目公司就通用卡余额的实际消费向各业态的经营主体直接付款结算，按三个付账日结清。」；
+    - PGM:420「长沙项目公司应当就通用卡余额的实际消费向各业态的经营主体直接付款结算，按三个付账日结清」；
+    - ENUM:86「购买通票按通票规则与娱乐平台公司结算，购买游乐与游乐公司结算，购买演出与传媒公司结算」；
+    - ENUM:32「纯游乐票和纯游乐通票由游乐公司负责；演出票由传媒公司负责」；
+    - BSM:749「两者一律在拆分给各域之前从整单扣除且只扣一次」；
+    - BSM:1673「凡属电子数据、且计算比例固定的，一律在月结定格时即出结果」；
+    - BSM:755「收支两条线，不得轧差」；
+    - DEC-R3-2026-08-04-02；第十八批裁决 65、69。
+  - 测试：
+    - GeneralCardConsumptionSettlementJdbcTests：generalCardTicketPaymentsPostMonthlyPayableToTheCollectingEntity、sameMonthRefundNetsIntoPayableAndCrossMonthRefundIsSeparateRecovery、withoutPayDayRuleTheCardIsChargedButNothingPostsUntilTheRuleExists；
+    - FinanceServiceTests.generalCardConsumeSourceHasChineseLabel；
+    - PaymentConfirmationJdbcTests 成员表；
+    - SupervisorReviewServiceTests 总数；
+    - FinanceArApLedgerPage.test.tsx「通用卡消费结算应付显中文来源并出执行面板」。
+- K-contract（契约代理）18AZ 落地位置补记：
+  - 278-R1
+    - 改法：新增操作 lookupStoredValueRefundCards（POST /api/v1/loyalty/stored-value/refund-cards/lookup）。
+      - 请求体内联 phone，200 的 data 为新 schema StoredValueRefundCard 数组。
+      - x-permission customer.stored_value.refund、x-data-scope project-merchant、x-auth-context staff-token、x-terminal-allowed web；x-idempotency-required false；审计事件成功与失败均 not_applicable。
+      - x-failure-codes 为 VALIDATION_FAILED、PERMISSION_DENIED。
+      - 说明写明：查询不扣单次授权；只列当前账号可办理的卡；已销户不列；只给掩码手机号；refund_allowed、refund_ratio_bps、pending_refund_cent 的口径。
+    - 改法：refundStoredValueAccount、counterRefundStoredValueAccount 两处说明补：
+      - 退款范围按卡判（StoredValueRefundLookupService.requireRefundScope）；
+      - 首次提交与重放同口径；柜台退款首次提交起也核项目；
+      - 409 STORED_VALUE_CLOSE_PRINCIPAL_REMAINING；
+      - 不挂商户的项目侧账号不再返回 MERCHANT_SCOPE_REQUIRED。
+    - 依据：ENUM:86「余额管理与退款均由长沙项目公司负责」；BSM:833「商户的员工只能管理本商户发行的储值卡」「单张储值卡退款时如申请同时销卡，本金未退清的须拒绝销卡并明确报错」；PGM:528「④看不到别的商户和别的项目的数据」。
+  - 284-R1
+    - 改法：BarRefundContext（getBarBillRefundContext 的响应）加 retained_goods_cent，列入 required；remaining_goods_and_service_fee_cent 与 BarRefundSource.remaining_goods_cent 说明写明已扣除已留在台位账上的退款额；adjustBarBill 新增说明：账单级可退额扣除已留款（BarPayrollRefundService.validate），超出 400 BAR_PAYROLL_INVALID。
+    - 依据：BSM:1064「因退品形成的留款在原台位账单中分别记录留款金额、已抵用金额与未抵用余额」「该笔金额留在本台位账上，客人可继续点其他产品」。
+  - 285-R1
+    - 改法：activateContract 说明补生效即挂押金应收（source_type contract_deposit，ContractDepositReceivableService.register）；listArApItems 说明补该来源；createArApPayment 说明补该来源每笔收款写押金台账 collect 行（FinanceService.settleArApItem）、不计入退租欠费。
+    - 依据：BSM:1361「租金、物业费、能源费、押金、违约金按合同口径形成应收」；BSM:1353「实际收款或退款成功后才更新已收押金余额」。
+  - 352-R1
+    - 改法：listArApItems、createArApPayment 说明补 termination_penalty、deposit_adjustment 台账挂合同所属项目（FinanceService.createTerminationPenaltyReceivable、registerDepositAdjustment）。
+    - 依据：BSM:1673「所有数据默认按项目隔离，只有项目之上的获授权岗位可以跨项目汇总。」
+  - 358-R1
+    - 改法：getInternalPayableExecution、listMerchantPortalTicketSettlements 说明补响应 data 的 account_changes（InternalPayableExecutionService.AccountChange，按 approved_at 升序，字段为 id、failed_attempt_id、new_account_ref、reason、approved_at）；initiateInternalPayment 说明写明 account_change_id 取自 account_changes[].id，不带即原路重付。
+    - 依据：BSM:1683「处理路径为原路重付，或更换收款账户后重付」「每笔应付的实际到账结果回写该笔应付并可逐笔追溯」。
+  - 349-R1
+    - 改法：billPropertyFee 新增说明，x-data-scope 由 platform 改为 project-merchant，x-failure-codes 为 CROSS_MERCHANT_FORBIDDEN、CROSS_PROJECT_FORBIDDEN；createTurnoverRentRule 说明补项目口径，x-data-scope 改为 project-merchant，x-failure-codes 补 CROSS_PROJECT_FORBIDDEN。两者对不挂商户的账号不再返回 MERCHANT_SCOPE_REQUIRED。
+    - 依据：PGM:420「只负责资产、场地、物业、租赁、直接管理的第三方商户」；PGM:664「商户费用账单出账……由该酒吧对应的财务 BP 负责」；BSM:1758「生成的物业费账单在应收应付台账按「来源＝物业费」查询」。
+  - 356-R1
+    - 改法：closeFinancePeriod 说明「在营未存档的酒吧」改为：酒吧不论在营、停用或存档都是检查单位，存档时刻所在营业日之后、关停结算最后营业日之后的营业日不再要求标记与锁定日结，停用照在营口径（FinanceRepository.FinalMarkUnit.owes）；computeDividendStatements 说明补存档时刻所在营业日之后不再查。
+    - 依据：ENUM:190「非最终快照的数据一律不得进入结算、分红、正式提成计算和对账关账」；BSM:1787「酒吧关闭须完成关停结算」。
+  - 290-R1、290-R2
+    - 改法：generateSettlementInvoiceItems、listSettlementInvoiceItems、settlementInvoiceSummary 说明补组合通票四业态份额行（SettlementInvoiceService.generateForBill，income_type game、show、catering、retail，购方为娱乐平台公司）。
+    - 改法：同三处说明补传媒演出结算行（SettlementInvoiceService.generateForMediaSettlement）。响应字段 ar_ap_item_id 与 retail 写在说明里，清单项没有显式 schema，不改 schema 引用。over_issued 中演出结算行的 bill_id 为空。
+    - 依据：BSM:1803「平台内部各主体之间的往来需要开具发票」；BSM:755「一律按总额收付」；BSM:1144「酒吧门票上的演出加价部分，随酒吧门票由娱乐平台公司售票收款后分给传媒公司」；BSM:1145「②签订固定费用的，由该酒吧向传媒公司支付合同约定的固定费用；③约定酒水提成的，按合同约定的比例分给传媒公司」。
+  - 350-R1
+    - 改法：PaymentConfirmationType 枚举加 general_card_consume（共 42 个），并改其说明；submitInternalPayDayRule 的 route 枚举加 general_card_consume，说明补上线前须先定规则。
+    - 改法：createArApPayment、createArApPaymentConfirmation、confirmOfflinePayment、approveSupervisorReview、requestArApAdjustment 说明「付款方是平台主体的 7 个来源」改为 8 个，并列出 general_card_consume（PaymentConfirmationService.PLATFORM_PAYER_RECEIVABLE_SOURCES）。
+    - 改法：listPaymentConfirmationFlows、savePaymentConfirmationFlow 说明里的支付类型个数改为 42。
+    - 依据：BSM:1704「长沙项目公司就通用卡余额的实际消费向各业态的经营主体直接付款结算，按三个付账日结清」。
+  - 验证：yaml 与 json 深比较 0 差异；verify:openapi、verify:openapi-examples、verify:client-routes、verify:client-openapi、verify:client-payload 全部通过。
+  - 本段契约增量：新增操作 1 个、新 schema 1 个，K 段无迁移。
+- 18AZ J（汇合与门禁）：
+  - e2e 改法：full-admin-remaining.spec.ts 页面清单补 ADM-CUS-006「储值退卡」（/admin/customers/stored-value-refunds）；openAdminRoute 补页面专项断言：stored-value-refund-page、stored-value-refund-search 可见，「客人手机号」输入框可见。依据是 278-R2 新页 StoredValueRefundPage（BSM:833「商户卡仍由发卡商户直接收款和退款」）。补上后 verify-full-admin-page-matrix 转绿。
+  - 视觉基线：只重拍 full-admin-ops-readiness-desktop-chromium-linux.png 一张。原因是 278-R2 有意新增的导航菜单项「储值退卡」让侧栏导航的栅格化变了，「合规」组文字次像素差 272 像素。镜像去掉该菜单项后视觉用例即绿，以此证实因果。另三张基线不变。
+  - 其余各段：tests/e2e 不引用付款执行面板换账户选择、退款上下文留款金额、开票清单零售规则、付账日通用卡消费结算路由，mock 是空桩，不用改。
+  - 门禁：
+    - 后端 --fresh 全量 0 红（本段迁移 V680、V681 真迁）；
+    - 前端 typecheck 与 vitest 全量、客人三个工作区单测、安卓员工端 gradle test 与 android-app 编译都绿；
+    - 五份后台 e2e 全绿；
+    - 四份生成物在镜像重生成后 verify:p0-contract 全过，生成物未进工作树，由收尾统一重生成；
+    - OpenAPI yaml 与 json 一致，本段新增 1 个操作 lookupStoredValueRefundCards，没删操作；
+    - git diff --check 无输出。
+- 18AZ 落地位置补记——文档组（D-docs）：
+  按 5 段交付的文档要点与现码，把 7 份 PRD 的现状句就地改为现码实情，不新增业务规则。
+  - finance-settlement-product-prd
+    - §4B.1：台账来源中文名加 contract_deposit、general_card_consume。补 350-R1 现状（GeneralCardConsumptionSettlementJob、GeneralCardConsumptionSettlement.pendingGroups/postGroup，钱路 general_card_consume，上线前须先配付账日规则）和 358-R1 现状（InternalPayableExecutionService.Execution.accountChanges，付款执行面板可选新账户或原路重付）。
+    - §4C、§4D：平台主体应收来源加 general_card_consume（PaymentConfirmationService.PLATFORM_PAYER_RECEIVABLE_SOURCES），支付类型加同名一类（PaymentConfirmationType）。
+    - §5.1、§6.4：356-R1 口径（FinanceRepository.FinalMarkUnit.owes；FinanceService.nonFinalDays、nonFinalDaysAllUnits、nonFinalDaysOfBar；FinanceFinalMarkOverdueService；closeFinancePeriod）。
+    - §6A：290-R1、290-R2（SettlementInvoiceService.generateForBill 业态份额行、generateForMediaSettlement；listSettlementInvoiceItems 的 ar_ap_item_id；本段迁移 V680）。
+    - §13.1、§13.3：349-R1（createTurnoverRentRule、billPropertyFee 按 projectReach 放行不挂商户的账号，物业费应收挂项目）。
+    - §13.2：285-R1（ContractDepositReceivableService.register，settleArApItem 写押金台账 collect 行）和 352-R1（TerminationSettlementPort.createTerminationPenaltyReceivable、registerDepositAdjustment 带 projectId）。
+  - settlement-rebuild-prd：§5.2 第 159 条落地记录改为 356-R1 口径；附录 B.1 补 290 落地，注明其余主体间往来未进清单。
+  - member-loyalty-and-stored-value-product-prd：§4.1 补 350-R1；§7 补 278-R1、278-R2（lookupStoredValueRefundCards、StoredValueRefundCard、StoredValueRefundLookupService.requireRefundScope、ADM-CUS-006、409 STORED_VALUE_CLOSE_PRINCIPAL_REMAINING）。
+  - platform-governance-prd：§2A.5 付款确认策略随 general_card_consume 多一类；M724-F15 补记补 278-R1 首次提交与重复提交同一口径；§15A.3 敏感页加 ADM-CUS-006。
+  - bar-business-operations-product-prd：§10.3.3 第 9 条补 284-R1（getBarBillRefundContext 的 BarRefundContext.retained_goods_cent，adjustBarBill 超额 400 BAR_PAYROLL_INVALID）。
+  - real-estate-full-chain-domain-prd：§2 补 285-R1、352-R1。
+  - dividend-engine-prd：§4 五类最终标记闸补 356-R1 对 333-R1 的调整。
+  依据：BSM:1704；ENUM:86；BSM:833；BSM:1064；BSM:1353；BSM:1361；BSM:1673；BSM:1683；BSM:1750；BSM:1758；BSM:1803；BSM:569；BSM:1787；ENUM:190；PGM:420；PGM:664；PGM:686；第十八批裁决 65、66、69。
+  验证：verify-entry-anchors、verify-full-admin-page-matrix、git diff --check 全过。本组新增操作 0 个、迁移 0 个；html-prd-coverage.csv、决策台账、生成物不改。
+- 18AZ 收尾复核修正（2026-11-19）：按收尾复核成立的意见 1～10 与控制席补充修正；本组新增操作 0 个、迁移 0 个、新权限码 0 个。
+  - 284-R1 文档措辞（意见 1、6）：bar-business-operations-product-prd §10.3.3 第 9 条实现现状与本段修订行、html-prd-coverage.csv 的 BSM-0178 行，「整笔留款后重办不再重复留款」改为与代码和设计一致的说法——账单级可退额扣除已留款，留款合计不超过商品实收（超出 400 BAR_PAYROLL_INVALID），面板显示已留款并如实提示整笔或部分留款以防重办，封顶以内换新编号再提交按新的一笔退款处理；代码不动。依据：BSM:1064「退款后该台位累计消费将低于该台位适用的最低消费的，不退款——该笔金额留在本台位账上」；d-fin-c.json 284 not_doing「为换新编号的同额重提单独做去重……不另加去重」。
+  - 278-R1 不带项目的商户卡范围（意见 2）：StoredValueRefundLookupService.requireRefundScope 加末参（发卡商户经营项目查询），不挂商户的账号碰到不带项目的商户卡，按发卡商户的经营项目（主项目或已批准的经营项目，FinanceRepository.listMerchantOperatingProjectIds，同 FinanceService.recordStoredValuePayoutRefund 的归属口径）判本人项目可否触及：不可触及的 lookup 不列，refundStoredValueAccount、counterRefundStoredValueAccount 首次提交与重放 403 CROSS_PROJECT_FORBIDDEN；通用卡、带项目的卡、挂商户账号口径不变，页面对非商户账号仍只提示「商户卡由发卡商户退款」。lookup 经构造注入的 FinanceRepository 传入，StoredValueService 两处调用经字段注入传入。OpenAPI 上述三个操作说明同步（操作数不变）；member-loyalty-and-stored-value-product-prd §7 现状句、full-admin-page-permission-field-matrix 的 ADM-CUS-006 行规则列、platform-governance-prd §12 M724-F15 补记的 278-R1 句同步。测试 StoredValueRefundLookupJdbcIntegrationTests.aProjectSideStaffSeesAProjectlessMerchantCardOnlyWhereTheIssuingMerchantOperates。依据：PGM:528「④看不到别的商户和别的项目的数据」；BSM:1673「所有数据默认按项目隔离，只有项目之上的获授权岗位可以跨项目汇总」。
+  - 290-R2 演出结算开票行重开（意见 3）：JdbcSettlementInvoiceRepository.listMediaSettlementsToInvoice（应开额即本行加冲正行高于占额三态合计的演出结算台账行，带场次项目、演出日与结算行收付方；record MediaInvoiceSource）、SettlementInvoiceService.mediaSettlementsToInvoice；TicketPointsBillingJob 在积分账单补开之后逐条调 SettlementInvoiceService.generateForMediaSettlement 补开，调整后原行应开为 0 不重开；不加接口与迁移。finance-settlement-product-prd §6A、settlement-rebuild-prd 附录 B.1 现状句同步。测试 MediaPerformanceSettlementJdbcIntegrationTests.reversedOrVoidedShowInvoiceLineIsReopenedByTheScheduledJob。依据：BSM:1750「开票金额≤已收−已退−已开……退款后先红冲再重开」；BSM:1803「平台内部各主体之间的往来需要开具发票」；BSM:1760「税率、税目、发票对象和红冲流程由系统按有效规则配置」。
+  - 补记方法名（意见 4、9）：本节文档组 §6A 一句的 SettlementInvoiceService.generateItems 改为 SettlementInvoiceService.generateForBill。
+  - 通用卡追收应收付款确认（意见 5）：FinanceArApLedgerPage 的 PLATFORM_PAYER_RECEIVABLE_SOURCES 加 general_card_consume（8 个来源，与后端 PaymentConfirmationService.PLATFORM_PAYER_RECEIVABLE_SOURCES 同表），追收应收可勾选发起付款确认；finance-settlement-product-prd §4B.1 的 350-R1 现状句同步。测试 FinanceArApLedgerPage.test.tsx「通用卡消费追收应收可勾选发起付款确认」。依据：第十八批裁决 69「付款方是平台主体的应收，登记收款前也须付款确认」；BSM:1704「长沙项目公司就通用卡余额的实际消费向各业态的经营主体直接付款结算，按三个付账日结清。」
+  - 356-R1 写法（意见 7）：JdbcFinanceRepository 删去新增的行映射方法，listFinalMarkUnits、findBarFinalMarkUnit 各自用 lambda 取存档时刻与关店最后营业日，语义不变；定向重跑 FinanceFinalMarkOverdueJdbcIntegrationTests、FinancePeriodCloseJdbcIntegrationTests、CommissionSettlementFinalSnapshotJdbcIntegrationTests。依据：任务书「架构与写法」超过 1500 行的类不再追加新方法体。
+  - 储值退卡页接口模块（意见 8）：ServerModuleRoutes web 表加 /api/v1/loyalty/stored-value/refund-cards/lookup、/api/v1/loyalty/stored-value/{customer_id}/refund、/api/v1/loyalty/stored-value/{customer_id}/counter-refund 归 governance（web 端全仓只有 ADM-CUS-006 储值退卡页调这三个接口）。测试 ServerModuleRoutesTests.storedValueRefundPageApisBelongToGovernance。依据：PGM:737「关闭后菜单不可见或不可点，接口也要拒绝业务动作」；PGM:744「前端隐藏只是辅助，后端接口必须独立校验」；第 100 条 100-R1、第 247 条 247-R1、247-R2 页面独用规则。
+  - 补记用词（意见 10）：本节 Z1、乙组标题与 278-R1 增量句的「本段」改为「本组」。
+  - 控制席补充：
+    - GeneralCardConsumptionSettlement.postGroup 挂出往来后记操作留痕 settlement.general_card_consume.posted（业务类型 ar_ap_item，照停车抵免成本 parking.credit_cost.posted），audit-labels.json 加中文名「通用卡消费结算入账」；GeneralCardConsumptionSettlementJdbcTests.generalCardTicketPaymentsPostMonthlyPayableToTheCollectingEntity 补断言。依据：BSM:522「都必须可点击、可追溯到来源单据与操作记录」。
+    - SettlementInvoicePage 已超开列表每行 key 加行序号，同月两条以上演出结算行超开不再重复；测试 SettlementInvoicePage.test.tsx「同月两条演出结算行超开时都显示、不报重复 key」。
+    - SettlementInvoicePage 规则表零售规则的开票主体来源改为「组合通票零售份额的归属主体（购方为娱乐平台公司）」，同 SettlementInvoiceService.generateForBill 第 ③ 步；测试 SettlementInvoicePage.test.tsx「零售规则的开票主体来源显示组合通票业态份额的归属主体」。
+    - bar-business-operations-product-prd §10.2.1、§10.2.1A、§11A.2 三处「无低消保护判定」缺口登记改为第十批 TK-25-R1 已落地的现状句（BarOrderService 作废明细与 BarBillingService 账单级退款按台组低消拆留款 min_spend_retained，新账单以 min_spend_retained_applied 抵用），业务规则不改。
+- 18AZ 合并前变基（2026-11-20）：本段自 ed3cde79 变基到 origin/main 51950569；迁移按原序顺延改号 V670→V680、V671→V681；合并时 OpenAPI 共 1401 个操作（主干 1400）、info.version V0.85、决策台账 V1.09，Flyway 最新 V681（共 618 个迁移）。版本行、契约版本、计数与 SHA、生成物、台账补记与 PRD 修订行由合并前脚本按新主干统一重写。

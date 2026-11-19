@@ -1,15 +1,19 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static com.complex.platform.settlement.MediaPerformanceTestFixtures.BASE;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.containsString;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.complex.platform.common.LocalZone;
+import com.complex.platform.customer.TicketPointsBillingJob;
+import com.complex.platform.customer.TicketPointsBillingService;
 import com.complex.platform.support.TestSecurityActors;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.sql.Timestamp;
@@ -21,6 +25,7 @@ import java.util.Map;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
@@ -53,6 +58,7 @@ class MediaPerformanceSettlementJdbcIntegrationTests {
     @Autowired private MockMvc mockMvc;
     @Autowired private JdbcTemplate jdbc;
     @Autowired private MediaPerformanceSettlementService settlementService;
+    @Autowired private SettlementInvoiceService invoices;
 
     private final String suffix = MediaPerformanceTestFixtures.suffix();
     private final String project = "mps_prj_" + suffix;
@@ -307,6 +313,108 @@ class MediaPerformanceSettlementJdbcIntegrationTests {
                 .as("原应付红冲取反").isEqualTo(-50000L);
         assertThat(jdbc.queryForObject("SELECT amount_cent FROM ar_ap_items WHERE id = ?", Long.class, (String) live.get(0).get("ar_ap_item_id")))
                 .isEqualTo(30000L);
+    }
+
+    /**
+     * 第十八批 AZ 段 290-R2（BSM:1803「平台内部各主体之间的往来需要开具发票」；BSM:1144「酒吧门票上的演出加价部分，随酒吧门票由娱乐平台公司售票收款后
+     * 分给传媒公司」；BSM:1145「②签订固定费用的，由该酒吧向传媒公司支付合同约定的固定费用」；BSM:1760「跨月退款和调整在当期生成冲正」）：门票加价分配与
+     * 固定演出费出账即进开票清单（文化服务费，开票主体传媒公司；门票加价购方娱乐平台公司，固定演出费购方该酒吧）；门票加价调整后原行应开降为 0、
+     * 列入已超开提示先红冲，新额另出一行。修复前清单里没有演出行，第一条断言即红。
+     */
+    @Test
+    void settledFeesEnterInvoiceListAndAdjustmentFlagsOverIssue() throws Exception {
+        Map<String, Object> body = MediaPerformanceTestFixtures.barShowBody(project, bar, media, ticketType, SHOW_DATE);
+        body.remove("drink_commission_bps");
+        body.remove("drink_base_template");
+        String showId = lockedShow(body);
+        recordAndConfirm(showId, null);
+        verifiedTicket(Instant.parse(SHOW_DATE + "T12:30:00Z"), true);
+        verifiedTicket(Instant.parse(SHOW_DATE + "T12:40:00Z"), true);
+        verifiedTicket(Instant.parse(SHOW_DATE + "T12:50:00Z"), true);
+        settle(showId);
+        Map<String, Object> share = settlements(showId).stream().filter(r -> "ticket_share".equals(r.get("fee_kind"))).findFirst().orElseThrow();
+        String shareItem = (String) share.get("ar_ap_item_id");
+        String fixedItem = (String) settlements(showId).stream().filter(r -> "fixed_fee".equals(r.get("fee_kind"))).findFirst().orElseThrow()
+                .get("ar_ap_item_id");
+        RequestPostProcessor invoiceFinance = MediaPerformanceTestFixtures.staff(jdbc, "mps_inv_" + suffix, project, null,
+                "settlement.invoice.view");
+
+        invoiceItems(invoiceFinance)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items[?(@.ar_ap_item_id == '" + shareItem + "')].income_type", contains("show")))
+                .andExpect(jsonPath("$.data.items[?(@.ar_ap_item_id == '" + shareItem + "')].amount_cent", contains(3000)))
+                .andExpect(jsonPath("$.data.items[?(@.ar_ap_item_id == '" + shareItem + "')].subject_entity_id", contains("be_media")))
+                .andExpect(jsonPath("$.data.items[?(@.ar_ap_item_id == '" + shareItem + "')].buyer_name", contains("娱乐平台公司")))
+                .andExpect(jsonPath("$.data.items[?(@.ar_ap_item_id == '" + fixedItem + "')].amount_cent", contains(50000)));
+        assertThat(jdbc.queryForObject("SELECT buyer_merchant_id FROM settlement_invoice_items WHERE ar_ap_item_id = ?", String.class, fixedItem))
+                .isEqualTo(bar);
+
+        mockMvc.perform(post(BASE + "/" + showId + "/settlements/" + share.get("id") + "/adjust").with(manager)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"idempotency_key\":\"adj-inv-" + suffix + "\",\"amount_cent\":1000,\"adjust_reason\":\"按核实张数调整\"}"))
+                .andExpect(status().isOk());
+        String newItem = (String) settlements(showId).stream()
+                .filter(r -> "ticket_share".equals(r.get("fee_kind")) && !"adjusted".equals(r.get("status"))).findFirst().orElseThrow()
+                .get("ar_ap_item_id");
+        mockMvc.perform(get("/api/v1/settlement/invoice-items/summary").param("projectId", project).param("periodStart", "2014-03-01")
+                        .with(invoiceFinance))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.over_issued[?(@.income_type == 'show' && @.open_amount_cent == 3000)].due_amount_cent",
+                        contains(0)));
+        invoiceItems(invoiceFinance)
+                .andExpect(jsonPath("$.data.items[?(@.ar_ap_item_id == '" + newItem + "')].amount_cent", contains(1000)));
+    }
+
+    /**
+     * 18AZ 收尾复核（BSM:1750「开票金额≤已收−已退−已开……退款后先红冲再重开」；BSM:1760「税率、税目、发票对象和红冲流程由系统按有效规则配置」；
+     * SettlementInvoiceService 类注释「红冲后额度释放,再生成即「重开」」）：演出结算开票行红冲或作废后，积分账单补开所在的定时作业 TicketPointsBillingJob
+     * 补开一条同额待开票行；未红冲未作废的不重复生成。修复前作业不补开，红冲后的第一条断言即红。
+     */
+    @Test
+    void reversedOrVoidedShowInvoiceLineIsReopenedByTheScheduledJob() throws Exception {
+        String showId = lockedShow(fixedFeeOnly());
+        recordAndConfirm(showId, null);
+        settle(showId);
+        String item = (String) settlements(showId).get(0).get("ar_ap_item_id");
+        RequestPostProcessor invoiceManager = MediaPerformanceTestFixtures.staff(jdbc, "mps_invm_" + suffix, project, null,
+                "settlement.invoice.view", "settlement.invoice.manage");
+        TicketPointsBillingJob job = new TicketPointsBillingJob(Mockito.mock(TicketPointsBillingService.class), invoices);
+
+        String first = openShowLine(item);
+        invoiceStatus(invoiceManager, first, "{\"status\":\"issued\",\"invoice_no\":\"FP-MPS-" + suffix + "\",\"remark\":\"第三方平台已开具\"}");
+        invoiceStatus(invoiceManager, first, "{\"status\":\"reversed\",\"remark\":\"购方信息开错\"}");
+        job.run();
+        String reopened = openShowLine(item);
+        job.run();
+        assertThat(showLineCount(item)).as("未红冲未作废的不重复生成").isEqualTo(2);
+        invoiceStatus(invoiceManager, reopened, "{\"status\":\"voided\",\"remark\":\"购方信息开错，作废重开\"}");
+        job.run();
+        assertThat(openShowLine(item)).isNotIn(first, reopened);
+        assertThat(showLineCount(item)).isEqualTo(3);
+    }
+
+    /** 该台账行在占额三态（待开票、开票中、已开票）内恰有一条开票行，金额等于原应开 50000 分；返回其编号。 */
+    private String openShowLine(String arApItemId) {
+        List<Map<String, Object>> open = jdbc.queryForList("SELECT id, amount_cent FROM settlement_invoice_items "
+                + "WHERE ar_ap_item_id = ? AND status IN ('pending', 'issuing', 'issued')", arApItemId);
+        assertThat(open).as("占额三态的演出开票行").hasSize(1);
+        assertThat(num(open.get(0), "amount_cent")).isEqualTo(50000L);
+        return (String) open.get(0).get("id");
+    }
+
+    private int showLineCount(String arApItemId) {
+        return jdbc.queryForObject("SELECT count(*) FROM settlement_invoice_items WHERE ar_ap_item_id = ?", Integer.class, arApItemId);
+    }
+
+    private void invoiceStatus(RequestPostProcessor who, String itemId, String body) throws Exception {
+        mockMvc.perform(post("/api/v1/settlement/invoice-items/" + itemId + "/status").with(who)
+                        .contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isOk());
+    }
+
+    private ResultActions invoiceItems(RequestPostProcessor who) throws Exception {
+        return mockMvc.perform(get("/api/v1/settlement/invoice-items").param("projectId", project).param("periodStart", "2014-03-01")
+                .with(who));
     }
 
     // 重跑结算幂等：同一场同一费项只挂一笔应付。

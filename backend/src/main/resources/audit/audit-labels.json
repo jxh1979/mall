@@ -2334,6 +2334,7 @@
     "settlement.config.ticket_distribution_merchant_rates.updated": "维护每客单价/固定额",
     "settlement.config.ticket_distribution_rank_tiers.update_failed": "维护排名档位梯子失败",
     "settlement.config.ticket_distribution_rank_tiers.updated": "维护排名档位梯子",
+    "settlement.general_card_consume.posted": "通用卡消费结算入账",
     "settlement.internal_pay_day_rule.approved": "审批付账日配置",
     "settlement.internal_pay_day_rule.decision_failed": "审批付账日配置失败",
     "settlement.internal_pay_day_rule.rejected": "驳回付账日配置",

@@ -1,6 +1,6 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.09
+// 文件版本：V0.10
 
 import com.complex.platform.common.money.MoneyRounding;
 import com.complex.platform.finance.FinanceService;
@@ -153,7 +153,8 @@ public class TicketDistributionSettlementService {
         // 第十八批 V 段第 159 条 159-R2（ENUM:190「非最终快照的数据一律不得进入结算、分红、正式提成计算和对账关账」；BSM:1689「通票权益核销后
         //   才按所属域的已生效规则与实际提供方结算」）：分账只取核销与核销冲正事实、售票固化的池快照与入场使用、按核销挂与冲正的通票赠饮应付，
         //   对应「当日订单与核销记录」「当日退款与冲正记录」两类。单位同逾期待办（第十八批裁决 35「酒吧逐店逐日查；游乐等按综合体逐日查」）：
-        //   projectId 为空＝全部在营未存档酒吧与启用综合体，非空＝该综合体及其下酒吧；建档前的营业日不查。有未最终的营业日就整月不结、一行不写。
+        //   projectId 为空＝全部酒吧与启用综合体，非空＝该综合体及其下酒吧；建档前的营业日不查（第十八批 AZ 段 356-R1：酒吧含停用、存档，
+        //   存档时刻所在营业日之后、关停结算最后营业日之后不查）。有未最终的营业日就整月不结、一行不写。
         List<String> notFinal = financeService.nonFinalDaysAllUnits(projectId, periodStart, periodEnd,
                 List.of("orders_verifications", "refunds_reversals"));
         if (!notFinal.isEmpty()) {
