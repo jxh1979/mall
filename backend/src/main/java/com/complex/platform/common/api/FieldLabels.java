@@ -1,6 +1,6 @@
 package com.complex.platform.common.api;
 
-// 文件版本：V0.50
+// 文件版本：V0.51
 
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -352,6 +352,17 @@ public final class FieldLabels {
         p("effective_from", "生效起");   // 234-R1 分红方案版本生效起始日期（BSM:521），与前端字典同名
         p("period_min_months", "周期下限");   // 244-R1 分红周期下限（ENUM:299「须同时配置上下限」）
         p("period_max_months", "周期上限");   // 244-R1 分红周期上限
+        p("platform_share_min_bps", "平台比例下限");   // 272-R1 分红方案平台（参股方）比例下限（BSM:1775「须同时配置上下限」）
+        p("platform_share_max_bps", "平台比例上限");   // 272-R1 分红方案平台（参股方）比例上限
+        // 第十八批 AX 段 273-R1 酒吧借款登记（PGM:436「出借时须写明金额、利率、还款期限与还款顺序」）。
+        p("lender_name", "出借方");
+        p("lender_entity_id", "出借方主体");
+        p("principal_cent", "本金");
+        p("annual_rate_bps", "年利率（万分比）");
+        p("interest_cent", "到期应付利息");
+        p("lent_on", "出借日");
+        p("due_date", "到期日期");
+        p("repay_order", "还款顺序");
         p("price_cent", "价格");
         p("price_mode", "计价方式");
         p("base_calendar_price_mode", "基础日历定价方式");

@@ -1,4 +1,4 @@
-// 文件版本：V0.14
+// 文件版本：V0.15
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -232,7 +232,9 @@ describe("FinanceArApLedgerPage 来源中文名与后端同名补齐", () => {
           row("ia-fesl", "internal_accounting", "facility_equipment_scrap_loss", "settled"),
           row("ia-svt", "internal_accounting", "stored_value_topup", "settled"),
           row("ia-tko", "internal_accounting", "ticket_order", "settled"),
-          row("ar-svo", "receivable", "service_order", "paid")], total: 9, page: 1, page_size: 10 };
+          row("ar-svo", "receivable", "service_order", "paid"),
+          // 第十八批 AX 段 273-R1（PGM:436）：公司向酒吧借款登记后挂的酒吧应付，变基后中文名由统一字段值表 source_type 提供。
+          row("ap-bl", "payable", "bar_loan", "pending_payment")], total: 10, page: 1, page_size: 10 };
       } else if (url.includes("/api/v1/finance/internal-payables/")) {
         data = { ar_ap_item_id: "ap-drr", direction: "payable", source_type: "dividend_reserve_released", amount_cent: 1000, unpaid_amount_cent: 1000,
           execution_status: "pending", in_transit: false, attempts: [], postponements: [] };
@@ -241,12 +243,12 @@ describe("FinanceArApLedgerPage 来源中文名与后端同名补齐", () => {
     }));
     renderPage(new AdminApi("test"));
     await waitFor(() => expect(screen.queryByTestId("finance-ledger-row-ar-man")).not.toBeNull());
-    await waitFor(() => expect(screen.getByTestId("finance-ledger-filter-count").textContent).toContain("9"));
+    await waitFor(() => expect(screen.getByTestId("finance-ledger-filter-count").textContent).toContain("10"));
     for (const [id, code, label] of [["ap-drr", "dividend_reserve_released", "分红留存已释放"],
       ["ar-wom", "work_order_material", "工单用料费（商户承担）"], ["ia-sbr", "saved_bottle_remedy", "存酒补存/赔付损失"],
       ["ar-man", "manual", "手工录入"], ["ar-fes", "facility_equipment_scrap", "楼宇设备报废残值"],
       ["ia-fesl", "facility_equipment_scrap_loss", "楼宇设备报废损失"], ["ia-svt", "stored_value_topup", "通用卡储值充值"],
-      ["ia-tko", "ticket_order", "票务订单"], ["ar-svo", "service_order", "服务点单"]] as const) {
+      ["ia-tko", "ticket_order", "票务订单"], ["ar-svo", "service_order", "服务点单"], ["ap-bl", "bar_loan", "借款还款"]] as const) {
       fireEvent.click(screen.getByTestId(`finance-ledger-row-${id}`));
       await waitFor(() => expect(screen.queryByText(label)).not.toBeNull());
       expect(screen.queryByText(code)).toBeNull();

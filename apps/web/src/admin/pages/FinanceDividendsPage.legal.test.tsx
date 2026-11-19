@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -8,6 +8,7 @@ import type { AdminPageProps, EffectivePermissionsState } from "../types";
 
 // FS-014（BSM L1785「正式分红应付款形成前，由财务……确认依法可分配金额，本次分配不得超出该金额」）：
 // 草稿正式单须先登记依法可分配金额才可提交审阅；登记按元录入、以分提交到 legal-confirmation。
+// 第十八批 AX 段 273-R2 收尾（BSM:1785「当期可分配利润必须先偿还全部到期借款本息，剩余部分才可用于分红」）：登记弹窗说明在取小之后写明先偿到期借款本息。
 const MERCHANTS = [{ id: "merchant-1", merchant_name: "酒吧甲", status: "active" }];
 const BASE = {
   merchant_id: "merchant-1", plan_id: "divp_1", kind: "official", period_label: "2026-Q3",
@@ -88,6 +89,7 @@ describe("FinanceDividendsPage 依法可分配金额前置", () => {
     expect(screen.queryByTestId("dividend-legal-open-divs_nolegal")).not.toBeNull();
     fireEvent.click(screen.getByTestId("dividend-legal-open-divs_nolegal"));
     await waitFor(() => expect(screen.queryByTestId("dividend-legal-amount")).not.toBeNull());
+    expect(document.body.textContent).toContain("与本金额中较小者，被压下的部分留在公司、以后不单独补分；当期可分配利润必须先偿还全部到期借款本息，剩余部分才可用于分红；");
     fireEvent.change(screen.getByTestId("dividend-legal-amount"), { target: { value: "9000.50" } });
     fireEvent.change(screen.getByTestId("dividend-legal-tax-ref"), { target: { value: "财税核算报告 TA-2026Q3" } });
     fireEvent.change(screen.getByTestId("dividend-legal-resolution-ref"), { target: { value: "股东会分配决议 R-2026-10" } });

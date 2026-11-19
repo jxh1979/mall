@@ -1,6 +1,6 @@
 package com.complex.platform.dividend;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static com.complex.platform.support.DailyCloseFixture.markRangeFinal;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -46,7 +46,7 @@ import org.springframework.test.web.servlet.request.RequestPostProcessor;
  * 第十八批裁决 55、65（分红应付按台账来源 dividend_payout 走付款确认）。
  *
  * <p>酒吧 2026-08 五类全标、经营主体有已生效税费登记、已确认分账单里单店门票直付 10,000.06 元（即可分配额 D）。方案版本自 2000-01-01 起：平台 60%，
- * 其他股东个人「股东乙」10%、公司「丙公司」5%，主理人即 25%，代扣税率 20%，第一个付账日。请求按分红页、台账页与主管复核页的蛇形键走真实入口与授权链。
+ * 其他股东个人「股东乙」10%、公司「丙公司」5%，主理人即 25%，第一个付账日；代扣税率取全平台统一出厂版本 20%（271-R1）。请求按分红页、台账页与主管复核页的蛇形键走真实入口与授权链。
  * 不开测试事务：登记付款带准入闸，前一笔受闸调用失败会把测试事务标为只回滚（与线上每个请求各自一个事务不同）；夹具以纳秒后缀隔离。</p>
  */
 @SpringBootTest(properties = {
@@ -112,7 +112,7 @@ class DividendOtherShareholdersJdbcIntegrationTests {
     }
 
     /**
-     * ① 正式单四方各自四舍五入、尾差带符号单列（−1 分）；两位其他股东各落应得、代扣、实发三行：个人股东按方案税率整除代扣，公司股东代扣 0；
+     * ① 正式单四方各自四舍五入、尾差带符号单列（−1 分）；两位其他股东各落应得、代扣、实发三行：个人股东按全平台统一税率整除代扣，公司股东代扣 0；
      * 劈分恒等式含其他股东与尾差。修复前没有其他股东：计算单其他股东合计为 0、无股东明细行，断言红。
      */
     @Test
@@ -135,7 +135,7 @@ class DividendOtherShareholdersJdbcIntegrationTests {
                 Long.class, statement)).isEqualTo(-1L);
     }
 
-    /** ①b 主理人为公司股东：主理人代扣 0，个人股东乙仍按方案税率 20% 整除代扣（不随主理人生效税率变 0）。修复前无股东明细行：断言红。 */
+    /** ①b 主理人为公司股东：主理人代扣 0，个人股东乙仍按全平台统一税率 20% 整除代扣（不随主理人生效税率变 0）。修复前无股东明细行：断言红。 */
     @Test
     void companyPrincipalDoesNotZeroIndividualShareholderWithholding() throws Exception {
         plan("company", false);
@@ -148,7 +148,7 @@ class DividendOtherShareholdersJdbcIntegrationTests {
 
     /**
      * ② 审批通过：主理人照旧一笔应付（来源为计算单）；每位其他股东另挂一笔 dividend_payout 应付，应付对方与来源都是该股东实发行，金额为实发，到期日与
-     * 主理人同为方案付账日。方案开欠款抵扣、商户有未清应收 300 元：只抵主理人实发，两位其他股东实发不变。修复前审批不挂股东应付：断言红。
+     * 主理人同为方案付账日。方案开欠款抵扣、主理人本人欠本酒吧未清应收 300 元：只抵主理人实发，两位其他股东实发不变。修复前审批不挂股东应付：断言红。
      */
     @Test
     void approvalHangsOnePayablePerShareholderAndArrearsOffsetOnlyReducesPrincipal() throws Exception {
@@ -156,7 +156,7 @@ class DividendOtherShareholdersJdbcIntegrationTests {
         jdbc.update("INSERT INTO ar_ap_items (id, item_no, direction, counterparty_id, source_type, source_id, amount_cent, paid_amount_cent,"
                 + " unpaid_amount_cent, currency, due_date, accounting_period, status, created_at, updated_at, merchant_id)"
                 + " VALUES (?, ?, 'receivable', ?, 'manual', ?, 30000, 0, 30000, 'CNY', '2026-07-01', '2026-07', 'pending_collection', now(), now(), ?)",
-                "arap_dos_rcv_" + s, "ARAP-DOS-" + s, bar, "arap_dos_rcv_" + s, bar);
+                "arap_dos_rcv_" + s, "ARAP-DOS-" + s, principal, "arap_dos_rcv_" + s, bar);
         String statement = approved("2");
 
         long principalNet = PRINCIPAL - PRINCIPAL * 2000 / 10000;
@@ -172,6 +172,45 @@ class DividendOtherShareholdersJdbcIntegrationTests {
         assertThat(payables).extracting(p -> p.get("counterparty_id").equals(p.get("line_id")), p -> cent(p, "amount_cent"), p -> p.get("due_date"))
                 .containsExactly(tuple(true, B_GROSS - B_TAX, principalPayable.get("due_date")),
                         tuple(true, C_GROSS, principalPayable.get("due_date")));
+    }
+
+    /**
+     * ②b 330-R1（BSM:1781「欠款抵扣：主理人这期该得的钱，按有效协议先抵其对相应法律主体尚未结清的欠款，抵完剩下的才发。」；ENUM:301「欠款抵扣（先抵
+     * 主理人对相应法律主体未清欠款）」；分红 PRD 验收第 5 条「商户公司欠 20,000 元而主理人本人无欠款时，不得从主理人 10,000 元分红中抵扣」）：方案开欠款
+     * 抵扣，本酒吧台账有酒吧公司自己的租金应收 2 万元与一笔客人挂账应收，主理人本人无欠款时出正式单抵扣 0、实发＝税后应得；再登记主理人本人欠本酒吧 30 元，
+     * 重算只抵这一笔、明细一行写明债务人主理人账户；审批通过后只结清这一笔（dividend_offset 收款），租金与挂账应收未清额不变。
+     * 修复前抵的是该商户全部未清应收：第一次出单抵扣额即为税后应得，断言红。
+     */
+    @Test
+    void arrearsOffsetTakesOnlyPrincipalsOwnDebtToTheBar() throws Exception {
+        plan("individual", true);
+        String rent = "arap_dos_rent_" + s;
+        String guestTab = "arap_dos_tab_" + s;
+        String own = "arap_dos_own_" + s;
+        receivable(rent, bar, 2_000_000L);
+        receivable(guestTab, "cus_dos_guest_" + s, 50_000L);
+        long principalNet = PRINCIPAL - PRINCIPAL * 2000 / 10000;
+
+        mockMvc.perform(post("/api/v1/finance/dividends/statements/compute").with(finance).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"idempotency_key\":\"dos-c-5a-" + s + "\",\"period_label\":\"2026-08\",\"kind\":\"official\","
+                                + "\"merchant_id\":\"" + bar + "\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.computed[0].arrears_offset_cent").value(0L))
+                .andExpect(jsonPath("$.data.computed[0].payout_cent").value(principalNet));
+
+        receivable(own, principal, 3_000L);
+        String statement = approved("5");
+        Map<String, Object> head = jdbc.queryForMap("SELECT arrears_offset_cent, payout_cent FROM dividend_statements WHERE id = ?", statement);
+        assertThat(cent(head, "arrears_offset_cent")).isEqualTo(3_000L);
+        assertThat(cent(head, "payout_cent")).isEqualTo(principalNet - 3_000L);
+        assertThat(jdbc.queryForList("SELECT detail FROM dividend_statement_lines WHERE statement_id = ? AND line_type = 'arrears_offset'",
+                String.class, statement)).singleElement().asString().contains(principal).contains("NO-" + own);
+        Map<String, Object> settled = jdbc.queryForMap("SELECT i.unpaid_amount_cent, p.payment_method FROM ar_ap_items i"
+                + " JOIN ar_ap_payments p ON p.ar_ap_item_id = i.id WHERE i.id = ?", own);
+        assertThat(cent(settled, "unpaid_amount_cent")).isZero();
+        assertThat(settled.get("payment_method")).isEqualTo("dividend_offset");
+        assertThat(jdbc.queryForList("SELECT unpaid_amount_cent FROM ar_ap_items WHERE id IN (?, ?)", Long.class, rent, guestTab))
+                .containsExactlyInAnyOrder(2_000_000L, 50_000L);
     }
 
     /**
@@ -232,12 +271,20 @@ class DividendOtherShareholdersJdbcIntegrationTests {
 
     /** 已批准方案版本与其他股东名单（主理人类型、是否开欠款抵扣按用例给）。 */
     private void plan(String principalType, boolean arrearsOffset) {
-        jdbc.update("INSERT INTO dividend_plans (id, merchant_id, principal_user_id, platform_share_bps, tax_rate_bps, period_type, revenue_domains,"
+        jdbc.update("INSERT INTO dividend_plans (id, merchant_id, principal_user_id, platform_share_bps, period_type, revenue_domains,"
                 + " include_inventory_cost, status, payout_pay_slot, effective_from, reason, period_min_months, period_max_months, principal_type,"
-                + " arrears_offset_enabled) VALUES (?, ?, ?, 6000, 2000, 'monthly', 'ticket', TRUE, 'active', 1, DATE '2000-01-01', '工商登记持股比例',"
-                + " 1, 12, ?, ?)", plan, bar, principal, principalType, arrearsOffset);
+                + " arrears_offset_enabled, platform_share_min_bps, platform_share_max_bps) VALUES (?, ?, ?, 6000, 'monthly', 'ticket', TRUE, 'active', 1, DATE '2000-01-01', '工商登记持股比例',"
+                + " 1, 12, ?, ?, 5000, 9000)", plan, bar, principal, principalType, arrearsOffset);
         jdbc.update("INSERT INTO dividend_plan_shareholders (id, plan_id, shareholder_name, shareholder_type, share_bps, sort_order)"
                 + " VALUES (?, ?, '股东乙', 'individual', 1000, 0), (?, ?, '丙公司', 'company', 500, 1)", "dps_b_" + s, plan, "dps_c_" + s, plan);
+    }
+
+    /** 本酒吧台账一笔未清应收（往来方按用例给：酒吧公司本身、客人或主理人账户）。 */
+    private void receivable(String id, String counterparty, long cent) {
+        jdbc.update("INSERT INTO ar_ap_items (id, item_no, direction, counterparty_id, source_type, source_id, amount_cent, paid_amount_cent,"
+                + " unpaid_amount_cent, currency, due_date, accounting_period, status, created_at, updated_at, merchant_id)"
+                + " VALUES (?, ?, 'receivable', ?, 'manual', ?, ?, 0, ?, 'CNY', '2026-07-01', '2026-07', 'pending_collection', now(), now(), ?)",
+                id, "NO-" + id, counterparty, id, cent, cent, bar);
     }
 
     /** 分红页期间作业「正式单」的真实请求，返回草稿单号。 */

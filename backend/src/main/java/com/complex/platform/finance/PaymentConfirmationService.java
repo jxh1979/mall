@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static com.complex.platform.common.Strings.requireText;
 import static com.complex.platform.common.Strings.trimToNull;
@@ -35,7 +35,7 @@ import org.springframework.transaction.annotation.Transactional;
  * 主线的最终审批人……财务、法务及相关部门作为平行的相关部门线……主线与各条平行线都通过才完成付款确认；具体流程按支付类型分别设定。」；第十八批裁决 55
  * 「所有应付都先走付款确认，按支付类型分别设流程」）。
  * <ul>
- *   <li>支付类型 40 个（裁决 65「按台账来源逐个分」）：台账来源各一个（payment_type 取 ar_ap_items.source_type 原值），财务退款待办各来源各一个
+ *   <li>支付类型 41 个（裁决 65「按台账来源逐个分」）：台账来源各一个（payment_type 取 ar_ap_items.source_type 原值），财务退款待办各来源各一个
  *       （finance_refund_＋来源），门票退款打款、存酒对客赔付各一个；每种一个审批类型 finance.payment_confirm.＜支付类型＞（SupervisorReviewService
  *       策略表由 {@link #PAYMENT_TYPES} 循环生成），必带财务、法务两线（裁决 66），其他在用线由发起人按单另加。</li>
  *   <li>一行一个付款对象，合并发起（裁决 68，同收款方、同支付类型、同综合体）时多行共用 confirmation_id，复核单对象为 payment_confirmation＋该号。</li>
@@ -62,7 +62,7 @@ public class PaymentConfirmationService {
             "saved_bottle_remedy_recovery");
     private static final ObjectMapper JSON = new ObjectMapper();
     /**
-     * 台账来源（payment_type 即来源原值）：全仓写入 ar_ap_items 且可能挂应付的 28 个来源（含按金额正负分挂的），加付款方是平台主体的 3 个追收应收来源
+     * 台账来源（payment_type 即来源原值）：全仓写入 ar_ap_items 且可能挂应付的 29 个来源（含按金额正负分挂的；第十八批 AX 段 273-R1 加酒吧借款还款 bar_loan），加付款方是平台主体的 3 个追收应收来源
      * （裁决 69；另 4 个平台主体应收来源与其应付同一类型）。
      */
     static final List<String> AR_AP_SOURCES = List.of(
@@ -71,14 +71,14 @@ public class PaymentConfirmationService {
             "single_bar_service_fee", "compensation_fulfillment", "pass_domain_share", "pass_domain_direct_settlement",
             "pass_unverified_attribution", "dispatch_commission_transfer", "bar_payroll_transfer", "inventory_transfer",
             "pass_drink_settlement", "media_performance_settlement", "refund", "bar_deposit_refund", "stored_value_consume",
-            "partner_voucher", "reconciliation_difference", "inventory_difference", "turnover_rent_reversal", "manual",
+            "partner_voucher", "reconciliation_difference", "inventory_difference", "turnover_rent_reversal", "manual", "bar_loan",
             "compensation_fulfillment_recovery", "ticket_distribution_recovery", "saved_bottle_remedy_recovery");
     /** 财务退款待办来源（V539 chk_finance_refund_source 闭集）与中文名。 */
     private static final Map<String, String> FINANCE_REFUND_SOURCES = orderedMap(
             "ar_ap_payment", "原收款退款", "stored_value_account", "通用卡储值本金退款", "ticket_payment_rejection", "票务拒收待退",
             "channel_ticket_rejection", "渠道回流拒收待退", "dealer_order_refund", "经销订单退款", "bar_deposit_rejection", "订台定金冲突待退",
             "bar_scan_order_rejection", "扫码点单拒收待退");
-    /** 支付类型闭集（40 个，同 V629 CHECK）→ 中文名。 */
+    /** 支付类型闭集（41 个，同 V660 CHECK）→ 中文名。 */
     public static final Map<String, String> PAYMENT_TYPES;
 
     static {
@@ -312,7 +312,7 @@ public class PaymentConfirmationService {
         return List.copyOf(lines);
     }
 
-    /** 241-R8：40 个支付类型（清单顺序）各自在两线之外的必带线，没有设定的为空。 */
+    /** 241-R8：41 个支付类型（清单顺序）各自在两线之外的必带线，没有设定的为空。 */
     public List<Flow> flows() {
         Map<String, List<String>> set = jdbc.queryForList(
                         "SELECT payment_type, jsonb_array_elements_text(line_codes) AS line_code FROM payment_confirmation_flows").stream()

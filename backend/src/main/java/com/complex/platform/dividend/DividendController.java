@@ -1,6 +1,6 @@
 package com.complex.platform.dividend;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import com.complex.platform.common.api.ApiResponse;
 import com.complex.platform.common.api.PageResponse;
@@ -15,7 +15,9 @@ import com.complex.platform.dividend.dto.DividendActionRequest;
 import com.complex.platform.dividend.dto.DividendCloseoutRequest;
 import com.complex.platform.dividend.dto.DividendComputeRequest;
 import com.complex.platform.dividend.dto.DividendHoldRequest;
+import com.complex.platform.dividend.dto.DividendLoanRequest;
 import com.complex.platform.dividend.dto.DividendPlanRequest;
+import com.complex.platform.dividend.dto.DividendTaxRateRequest;
 import java.util.List;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -33,10 +35,15 @@ public class DividendController {
 
     private final DividendService service;
     private final DividendCloseoutService closeouts;
+    private final DividendTaxRateService taxRates;
+    private final DividendLoanService loans;
 
-    public DividendController(DividendService service, DividendCloseoutService closeouts) {
+    public DividendController(DividendService service, DividendCloseoutService closeouts, DividendTaxRateService taxRates,
+                              DividendLoanService loans) {
         this.service = service;
         this.closeouts = closeouts;
+        this.taxRates = taxRates;
+        this.loans = loans;
     }
 
     @GetMapping("/plans")
@@ -185,5 +192,34 @@ public class DividendController {
     public ApiResponse<DividendCloseoutService.Closeout> closeCloseout(
             @PathVariable("id") String closeoutId, @RequestBody DividendActionRequest request) {
         return ApiResponse.ok(closeouts.close(closeoutId, request));
+    }
+
+    // ── 第十八批 AX 段第 271 条 271-R1 全平台统一分红代扣个税税率（BSM:1776）──────────
+
+    /** 税率版本列表（finance.dividend.view，平台口径）：全部版本，生效起始日新的在前，出厂版本在末。 */
+    @GetMapping("/tax-rates")
+    public ApiResponse<List<DividendTaxRateService.Version>> listTaxRates() {
+        return ApiResponse.ok(taxRates.list());
+    }
+
+    /** 提交新税率版本（finance.dividend.manage；税率、上下限、生效起始日期与理由必填，进财务、税务、法务三审与最高确认）。 */
+    @PostMapping("/tax-rates")
+    public ApiResponse<DividendTaxRateService.Version> submitTaxRate(@RequestBody DividendTaxRateRequest request) {
+        return ApiResponse.ok(taxRates.submit(request));
+    }
+
+    // ── 第十八批 AX 段第 273 条 273-R1 公司向酒吧借款登记（PGM:436）──────────
+
+    /** 借款列表（finance.dividend.view，平台口径）；merchant_id 非空只看该酒吧。带所挂应付的未还本息与状态（按该酒吧当前营业日判）。 */
+    @GetMapping("/loans")
+    public ApiResponse<List<DividendLoanService.Loan>> listLoans(
+            @RequestParam(value = "merchant_id", required = false) String merchantId) {
+        return ApiResponse.ok(loans.list(merchantId));
+    }
+
+    /** 登记借款（finance.dividend.manage；只适用于酒吧；同事务挂酒吧应付，还款走付款确认与登记付款）。 */
+    @PostMapping("/loans")
+    public ApiResponse<DividendLoanService.Loan> registerLoan(@RequestBody DividendLoanRequest request) {
+        return ApiResponse.ok(loans.register(request));
     }
 }

@@ -1,5 +1,5 @@
 package com.complex.platform.dividend;
-// 文件版本：V0.07
+// 文件版本：V0.08
 
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
@@ -29,12 +29,13 @@ import org.springframework.stereotype.Repository;
 class JdbcDividendRepository implements DividendRepository {
 
     private static final String PLAN_COLS =
-            "id, merchant_id, principal_user_id, principal_name, platform_share_bps, tax_rate_bps, period_type, "
+            "id, merchant_id, principal_user_id, principal_name, platform_share_bps, period_type, "
             + "revenue_domains, include_inventory_cost, expense_types, effective_from, status, note, updated_by, "
             + "created_at, updated_at, "
             + "loss_carryforward_enabled, arrears_offset_enabled, payout_floor_enabled, payout_floor_bps, "
             + "payout_floor_fixed_cent, reserve_release_mode, reserve_release_delay_periods, principal_type, payout_pay_slot, "
-            + "stop_requested, reason, review_id, decided_by, decided_at, period_min_months, period_max_months";
+            + "stop_requested, reason, review_id, decided_by, decided_at, period_min_months, period_max_months, "
+            + "platform_share_min_bps, platform_share_max_bps";
 
     private static final String STMT_COLS =
             "id, merchant_id, plan_id, kind, period_label, period_start, period_end, principal_user_id, "
@@ -46,7 +47,7 @@ class JdbcDividendRepository implements DividendRepository {
             + "loss_carryforward_enabled, loss_carryforward_in_cent, loss_carryforward_applied_cent, "
             + "loss_carryforward_after_cent, arrears_offset_cent, reserve_withheld_cent, payout_cent, "
             + "principal_type, custom_deduction_cent, legal_distributable_cent, period_tax_cent, "
-            + "other_shareholders_gross_cent, rounding_residual_cent";
+            + "other_shareholders_gross_cent, rounding_residual_cent, tax_rate_version_id, loan_repayment_cent";
 
     private final NamedParameterJdbcTemplate jdbcTemplate;
 
@@ -111,20 +112,22 @@ class JdbcDividendRepository implements DividendRepository {
         try {
             return jdbcTemplate.update("""
                     INSERT INTO dividend_plans (
-                        id, merchant_id, principal_user_id, principal_name, platform_share_bps, tax_rate_bps,
+                        id, merchant_id, principal_user_id, principal_name, platform_share_bps,
                         period_type, revenue_domains, include_inventory_cost, expense_types, effective_from,
                         status, note, updated_by, created_at, updated_at,
                         loss_carryforward_enabled, arrears_offset_enabled, payout_floor_enabled,
                         payout_floor_bps, payout_floor_fixed_cent,
                         reserve_release_mode, reserve_release_delay_periods, principal_type, payout_pay_slot,
-                        stop_requested, reason, review_id, decided_by, decided_at, period_min_months, period_max_months)
+                        stop_requested, reason, review_id, decided_by, decided_at, period_min_months, period_max_months,
+                        platform_share_min_bps, platform_share_max_bps)
                     VALUES (:id, :merchant_id, :principal_user_id, :principal_name, :platform_share_bps,
-                            :tax_rate_bps, :period_type, :revenue_domains, :include_inventory_cost, :expense_types,
+                            :period_type, :revenue_domains, :include_inventory_cost, :expense_types,
                             :effective_from, :status, :note, :updated_by, :created_at, :updated_at,
                             :loss_carryforward_enabled, :arrears_offset_enabled, :payout_floor_enabled,
                             :payout_floor_bps, :payout_floor_fixed_cent,
                             :reserve_release_mode, :reserve_release_delay_periods, :principal_type, :payout_pay_slot,
-                            :stop_requested, :reason, :review_id, :decided_by, :decided_at, :period_min_months, :period_max_months)
+                            :stop_requested, :reason, :review_id, :decided_by, :decided_at, :period_min_months, :period_max_months,
+                            :platform_share_min_bps, :platform_share_max_bps)
                     ON CONFLICT (id) DO NOTHING
                     """, planParams(plan)) > 0 && insertShareholders(plan);
         } catch (DuplicateKeyException conflict) {
@@ -178,7 +181,6 @@ class JdbcDividendRepository implements DividendRepository {
                 .addValue("principal_user_id", plan.principalUserId())
                 .addValue("principal_name", plan.principalName(), Types.VARCHAR)
                 .addValue("platform_share_bps", plan.platformShareBps())
-                .addValue("tax_rate_bps", plan.taxRateBps())
                 .addValue("period_type", plan.periodType())
                 .addValue("revenue_domains", joinCsv(plan.revenueDomains()))
                 .addValue("include_inventory_cost", plan.includeInventoryCost())
@@ -204,7 +206,9 @@ class JdbcDividendRepository implements DividendRepository {
                 .addValue("decided_by", plan.decidedBy(), Types.VARCHAR)
                 .addValue("decided_at", timestampWithTimeZone(plan.decidedAt()), Types.TIMESTAMP_WITH_TIMEZONE)
                 .addValue("period_min_months", plan.periodMinMonths(), Types.SMALLINT)
-                .addValue("period_max_months", plan.periodMaxMonths(), Types.SMALLINT);
+                .addValue("period_max_months", plan.periodMaxMonths(), Types.SMALLINT)
+                .addValue("platform_share_min_bps", plan.platformShareMinBps(), Types.INTEGER)
+                .addValue("platform_share_max_bps", plan.platformShareMaxBps(), Types.INTEGER);
     }
 
     private DividendPlanRecord mapPlan(ResultSet rs, int rowNum) throws SQLException {
@@ -216,7 +220,6 @@ class JdbcDividendRepository implements DividendRepository {
                 rs.getString("principal_user_id"),
                 rs.getString("principal_name"),
                 rs.getInt("platform_share_bps"),
-                rs.getInt("tax_rate_bps"),
                 rs.getString("period_type"),
                 splitCsv(rs.getString("revenue_domains")),
                 rs.getBoolean("include_inventory_cost"),
@@ -245,7 +248,9 @@ class JdbcDividendRepository implements DividendRepository {
                 null,
                 rs.getObject("period_min_months", Integer.class),
                 rs.getObject("period_max_months", Integer.class),
-                listShareholders(rs.getString("id")));
+                listShareholders(rs.getString("id")),
+                rs.getObject("platform_share_min_bps", Integer.class),
+                rs.getObject("platform_share_max_bps", Integer.class));
     }
 
     // ── V309 自定义扣除项 ──────────────────────────────────────
@@ -367,7 +372,7 @@ class JdbcDividendRepository implements DividendRepository {
                     loss_carryforward_enabled, loss_carryforward_in_cent, loss_carryforward_applied_cent,
                     loss_carryforward_after_cent, arrears_offset_cent, reserve_withheld_cent, payout_cent,
                     principal_type, custom_deduction_cent, legal_distributable_cent, period_tax_cent,
-                    other_shareholders_gross_cent, rounding_residual_cent)
+                    other_shareholders_gross_cent, rounding_residual_cent, tax_rate_version_id, loan_repayment_cent)
                 VALUES (:id, :merchant_id, :plan_id, :kind, :period_label, :period_start, :period_end,
                     :principal_user_id, :platform_share_bps, :tax_rate_bps, :revenue_domains,
                     :include_inventory_cost, :expense_types, :revenue_cent, :cost_cent, :expense_cent,
@@ -377,7 +382,7 @@ class JdbcDividendRepository implements DividendRepository {
                     :loss_carryforward_enabled, :loss_carryforward_in_cent, :loss_carryforward_applied_cent,
                     :loss_carryforward_after_cent, :arrears_offset_cent, :reserve_withheld_cent, :payout_cent,
                     :principal_type, :custom_deduction_cent, :legal_distributable_cent, :period_tax_cent,
-                    :other_shareholders_gross_cent, :rounding_residual_cent)
+                    :other_shareholders_gross_cent, :rounding_residual_cent, :tax_rate_version_id, :loan_repayment_cent)
                 """, new MapSqlParameterSource()
                 .addValue("id", s.id())
                 .addValue("merchant_id", s.merchantId())
@@ -420,7 +425,9 @@ class JdbcDividendRepository implements DividendRepository {
                 .addValue("legal_distributable_cent", s.legalDistributableCent(), Types.BIGINT)
                 .addValue("period_tax_cent", s.periodTaxCent())
                 .addValue("other_shareholders_gross_cent", s.otherShareholdersGrossCent())
-                .addValue("rounding_residual_cent", s.roundingResidualCent()));
+                .addValue("rounding_residual_cent", s.roundingResidualCent())
+                .addValue("tax_rate_version_id", s.taxRateVersionId(), Types.VARCHAR)
+                .addValue("loan_repayment_cent", s.loanRepaymentCent()));
     }
 
     @Override
@@ -562,7 +569,9 @@ class JdbcDividendRepository implements DividendRepository {
                 rs.getObject("legal_distributable_cent", Long.class),
                 rs.getLong("period_tax_cent"),
                 rs.getLong("other_shareholders_gross_cent"),
-                rs.getLong("rounding_residual_cent"));
+                rs.getLong("rounding_residual_cent"),
+                rs.getString("tax_rate_version_id"),
+                rs.getLong("loan_repayment_cent"));
     }
 
     // ── V304 发放保护线留存·释放 ──────────────────────────────

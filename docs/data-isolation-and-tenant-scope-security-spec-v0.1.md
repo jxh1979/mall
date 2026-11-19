@@ -56,7 +56,7 @@ scope 类型（与盘点 CSV 的 `scope_type` 对齐）：
 
 <!-- DATA_ISOLATION_SPEC_AUTO_START -->
 ### 3A. 自动迁移隔离基线（由 `npm run docs:data-isolation-spec` 生成）
-> 事实源：`backend/src/main/resources/db/migration`。当前解析到最新迁移 **V648**，发现 **277** 张含 scope 字段的表。不要手工修改本区块；新增迁移后运行 `npm run docs:data-isolation-spec`，提交前运行 `npm run verify:data-isolation-spec`。
+> 事实源：`backend/src/main/resources/db/migration`。当前解析到最新迁移 **V660**，发现 **278** 张含 scope 字段的表。不要手工修改本区块；新增迁移后运行 `npm run docs:data-isolation-spec`，提交前运行 `npm run verify:data-isolation-spec`。
 | 表 | scope 字段 | scope 类型 | 首次出现迁移 | 证据文件 |
 |---|---|---|---|---|
 | `access_grant_requests` | `merchant_id` + `project_id` | direct | V170 | `V170__access_grant_requests.sql` |
@@ -155,6 +155,7 @@ scope 类型（与盘点 CSV 的 `scope_type` 对齐）：
 | `dealer_counterparty_confirmations` | `project_id` | direct | V565 | `V565__dealer_handler_counterparty_confirmations.sql` |
 | `dealers` | `project_id` | direct | V451 | `V451__dealer_admission_price_catalog.sql` |
 | `deposit_ledger` | `merchant_id` | direct | V110 | `V110__complex_billing.sql` |
+| `dividend_bar_loans` | `merchant_id` | direct | V660 | `V660__dividend_bar_loans.sql` |
 | `dividend_closeouts` | `merchant_id` | direct | V644 | `V644__dividend_closeouts.sql` |
 | `dividend_legal_confirmations` | `merchant_id` | direct | V507 | `V507__dividend_legal_distributable_and_ticket_settled.sql` |
 | `dividend_period_holds` | `merchant_id` | direct | V616 | `V616__dividend_payday_entity_tax_and_holds.sql` |

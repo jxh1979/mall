@@ -1,4 +1,4 @@
-// 文件版本：V0.07
+// 文件版本：V0.08
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
@@ -10,9 +10,12 @@ import { useAdminAction } from "../hooks/useAdminAction";
 import { useAdminResource } from "../hooks/useAdminResource";
 import { useServerPagedRows } from "../hooks/useServerPagedRows";
 import { FinanceDividendCloseoutPanel } from "./FinanceDividendCloseoutPanel";
+import { FinanceDividendTaxRatePanel } from "./FinanceDividendTaxRatePanel";
+import { FinanceDividendLoansPanel, loanRepaymentText } from "./FinanceDividendLoansPanel";
 import type { PagedResult } from "../client/adminClient";
 import type {
   AdminPageProps,
+  DividendBarLoanRow,
   DividendComputeResult,
   DividendHoldRow,
   DividendPlanRow,
@@ -22,7 +25,7 @@ import type {
   MerchantAdmissionRow,
 } from "../types";
 
-// 持股分红（V299）：方案配置（凡涉数据皆可配，80/20 与 20% 税率仅默认值）+ 期间作业（按方案周期出正式单/月度预览）
+// 持股分红（V299）：方案配置（80/20 仅新建预填建议值；代扣税率全平台统一，见页末税率配置，271-R2）+ 期间作业（按方案周期出正式单/月度预览）
 // + 计算单审阅审批（draft→pending_review→approved 挂应付→paid；预览只读）。
 const VIEW_PERMS = ["finance.dividend.view"];
 const MANAGE_PERMS = ["finance.dividend.manage"];
@@ -44,7 +47,7 @@ export const DIVIDEND_STATUS_LABELS: Record<string, string> = {
 };
 
 // BSM L1777「分红周期一律取月及月的整数倍粒度（如月、季、半年、年）……默认周期为半年」。
-const PERIOD_TYPE_LABELS: Record<string, string> = {
+export const PERIOD_TYPE_LABELS: Record<string, string> = {
   monthly: "月度（正式单按月）",
   quarterly: "季度（正式单按季，月度出预览）",
   semiannual: "半年（正式单按半年，月度出预览）",
@@ -123,7 +126,7 @@ export const DIVIDEND_LINE_LABELS: Record<string, string> = {
   principal_gross: "主理人应得",
   tax_withheld: "代扣个税",
   principal_net: "税后应得",
-  arrears_offset: "欠款抵扣（未清应收）",
+  arrears_offset: "欠款抵扣（主理人本人欠款）",
   reserve_withheld: "发放保护线留存",
   payout: "实发额（挂应付）",
   // 234-R2 其他股东与多方分配尾差（BSM:1757「多方分配产生的非涉税尾差单独留痕」）。
@@ -131,6 +134,8 @@ export const DIVIDEND_LINE_LABELS: Record<string, string> = {
   shareholder_tax_withheld: "其他股东代扣个税",
   shareholder_payout: "其他股东实发（挂应付）",
   rounding_residual: "分配尾差（酒吧公司承担）",
+  // 273-R2 分红前置借款清偿（PGM:436「酒吧当期可分配利润必须先偿还全部到期借款本息」；商户专区明细共用）。
+  loan_repayment: "借款清偿（分红前置）",
 };
 
 // 234-R2（BSM:1775「娱乐平台公司、主理人和其他股东按每家酒吧工商登记的真实持股比例分配」；BSM:1776 个人股东代扣、公司股东不代扣）。
@@ -163,13 +168,13 @@ export function shareholdersDetailText(plan: DividendPlanRow): string {
 const TEXT = {
   title: "持股分红",
   description:
-    "平台持股 + 主理人经营的分红周期作业：期间收入 − 销货成本（V296 成本台账）− 费用（V297 费用台账）− 该期税费（已生效的税费实际申报金额）= 净利润，娱乐平台公司、主理人和其他股东按工商登记持股比例分配（各方各自四舍五入，尾差单列由该酒吧公司承担），个人股东按股息红利代扣个税、公司股东不代扣，主理人与其他股东的净额各挂应付发放。比例/税率/周期/计入收入域可配，销货成本、全部费用与该期税费一律扣减，80/20 与 20% 仅默认值；每期算式逐项留痕可追溯。",
+    "平台持股 + 主理人经营的分红周期作业：期间收入 − 销货成本（V296 成本台账）− 费用（V297 费用台账）− 该期税费（已生效的税费实际申报金额）= 净利润，娱乐平台公司、主理人和其他股东按工商登记持股比例分配（各方各自四舍五入，尾差单列由该酒吧公司承担），个人股东按全平台统一税率代扣股息红利个税（见页末税率配置）、公司股东不代扣，主理人与其他股东的净额各挂应付发放。比例/周期/计入收入域按方案配，销货成本、全部费用与该期税费一律扣减，80/20 仅为新建预填建议值；每期算式逐项留痕可追溯。",
   loadFailed: "分红数据读取失败",
   detailFailed: "计算单明细读取失败",
   merchantRequired: "请选择商户。",
   principalRequired: "请填写主理人账户 ID（工商登记持股的真实股东）。",
   shareInvalid: "平台比例须在 0~100 之间。",
-  taxInvalid: "代扣税率须在 0~100 之间。",
+  shareBoundsInvalid: "平台（参股方）比例须同时配置上下限，且比例须在上下限之内",
   domainRequired: "至少勾选一个计入收入域。",
   paySlotRequired: "请选择发放付账日。",
   periodBoundsRequired: "请同时选择分红周期的下限与上限",
@@ -223,7 +228,9 @@ type PlanForm = {
   principalUserId: string;
   principalName: string;
   platformSharePercent: string;
-  taxRatePercent: string;
+  // 272-R1 平台（参股方）比例上下限（%，新建必填，修改带出改前版本）。
+  platformShareMinPercent: string;
+  platformShareMaxPercent: string;
   periodType: string;
   // 244-R1 周期上下限（"1"/"3"/"6"/"12"，未选为空）。
   periodMinMonths: string;
@@ -256,7 +263,8 @@ const DEFAULT_PLAN_FORM: PlanForm = {
   principalUserId: "",
   principalName: "",
   platformSharePercent: "80",
-  taxRatePercent: "20",
+  platformShareMinPercent: "",
+  platformShareMaxPercent: "",
   periodType: "semiannual",
   periodMinMonths: "",
   periodMaxMonths: "",
@@ -407,7 +415,8 @@ export function FinanceDividendsPage({ api, setActionResult, setGlobalError, eff
       principalUserId: plan.principalUserId ?? "",
       principalName: plan.principalName ?? "",
       platformSharePercent: plan.platformShareBps === undefined ? "80" : String(plan.platformShareBps / 100),
-      taxRatePercent: plan.taxRateBps === undefined ? "20" : String(plan.taxRateBps / 100),
+      platformShareMinPercent: plan.platformShareMinBps == null ? "" : String(plan.platformShareMinBps / 100),
+      platformShareMaxPercent: plan.platformShareMaxBps == null ? "" : String(plan.platformShareMaxBps / 100),
       periodType: plan.periodType ?? "semiannual",
       periodMinMonths: plan.periodMinMonths ? String(plan.periodMinMonths) : "",
       periodMaxMonths: plan.periodMaxMonths ? String(plan.periodMaxMonths) : "",
@@ -438,6 +447,14 @@ export function FinanceDividendsPage({ api, setActionResult, setGlobalError, eff
     if (!form.periodMinMonths || !form.periodMaxMonths) return TEXT.periodBoundsRequired;
     const months = PERIOD_MONTHS[form.periodType] ?? 0;
     return months < Number(form.periodMinMonths) || months > Number(form.periodMaxMonths) ? TEXT.periodOutOfBounds : null;
+  }
+
+  /** 272-R1（BSM:1775「须同时配置上下限」；BSM:521「超出该区间的配置一律拒绝生效」）：上下限都要填，下限不大于上限，平台比例须在其间。 */
+  function shareBoundsError(form: PlanForm): string | null {
+    const share = percentToBps(form.platformSharePercent);
+    const min = form.platformShareMinPercent.trim() ? percentToBps(form.platformShareMinPercent) : null;
+    const max = form.platformShareMaxPercent.trim() ? percentToBps(form.platformShareMaxPercent) : null;
+    return share === null || min === null || max === null || min > max || share < min || share > max ? TEXT.shareBoundsInvalid : null;
   }
 
   function shareholderShares(form: PlanForm): { shareBps: number }[] {
@@ -481,16 +498,16 @@ export function FinanceDividendsPage({ api, setActionResult, setGlobalError, eff
 
   async function submitPlan() {
     const shareBps = percentToBps(planForm.platformSharePercent);
-    const taxBps = percentToBps(planForm.taxRatePercent);
     if (!planForm.merchantId) return setFormError(TEXT.merchantRequired);
     if (!planForm.principalUserId.trim()) return setFormError(TEXT.principalRequired);
     if (shareBps === null) return setFormError(TEXT.shareInvalid);
-    if (taxBps === null) return setFormError(TEXT.taxInvalid);
     const holdersError = shareholdersError(planForm);
     if (holdersError) return setFormError(holdersError);
     if (!planForm.payoutPaySlot) return setFormError(TEXT.paySlotRequired);
     const boundsError = periodBoundsError(planForm);
     if (boundsError) return setFormError(boundsError);
+    const shareBoundsMessage = shareBoundsError(planForm);
+    if (shareBoundsMessage) return setFormError(shareBoundsMessage);
     if (!planForm.effectiveFrom) return setFormError(TEXT.effectiveFromRequired);
     if (!planForm.reason.trim()) return setFormError(TEXT.changeReasonRequired);
     // V303 发放保护线参数校验（仅开启时）。
@@ -504,7 +521,8 @@ export function FinanceDividendsPage({ api, setActionResult, setGlobalError, eff
       principalUserId: planForm.principalUserId.trim(),
       principalName: planForm.principalName.trim() || null,
       platformShareBps: shareBps,
-      taxRateBps: taxBps,
+      platformShareMinBps: percentToBps(planForm.platformShareMinPercent),
+      platformShareMaxBps: percentToBps(planForm.platformShareMaxPercent),
       periodType: planForm.periodType,
       periodMinMonths: Number(planForm.periodMinMonths),
       periodMaxMonths: Number(planForm.periodMaxMonths),
@@ -662,6 +680,9 @@ export function FinanceDividendsPage({ api, setActionResult, setGlobalError, eff
       const merchant = merchants.find((m) => m.id === statement.merchantId);
       // 234-R2：按该单所用方案版本列各方比例。
       const version = plans.find((plan) => plan.id === statement.planId);
+      // 273-R3（PGM:436「分红方案提交时须附借款清偿情况」）：另取该酒吧登记的借款，逐笔列清偿情况（读不到不阻断详情）。
+      const loans = await api.get<DividendBarLoanRow[]>(`/api/v1/finance/dividends/loans?merchant_id=${encodeURIComponent(statement.merchantId ?? "")}`)
+        .catch(() => null);
       const fields: RowDetailField[] = [
         { label: "商户", value: merchant ? merchantLabel(merchant) : statement.merchantId ?? "—" },
         { label: "期间", value: `${statement.periodLabel ?? "—"}（${cnDate(statement.periodStart)} ~ ${cnDate(statement.periodEnd)}）` },
@@ -673,6 +694,8 @@ export function FinanceDividendsPage({ api, setActionResult, setGlobalError, eff
         { label: "该期税费合计", value: `¥${centToYuan(statement.periodTaxCent)}` },
         { label: "其他股东应得合计", value: `¥${centToYuan(statement.otherShareholdersGrossCent ?? 0)}` },
         { label: "分配尾差", value: `¥${centToYuan(statement.roundingResidualCent ?? 0)}（多方按比例各自四舍五入的差额，由本酒吧公司承担）` },
+        { label: "借款清偿", value: `¥${centToYuan(statement.loanRepaymentCent ?? 0)}（出单时先偿的到期未还借款本息，逐笔见借款清偿明细行）` },
+        { label: "借款清偿情况", value: loans ? loanRepaymentText(Array.isArray(loans) ? loans : []) : "借款清偿情况读取失败" },
         ...(data.lines ?? []).map((line) => ({
           label: DIVIDEND_LINE_LABELS[line.lineType ?? ""] ?? line.lineType ?? "—",
           value: `¥${centToYuan(line.amountCent)}${line.detail ? `（${line.detail}）` : ""}`,
@@ -711,16 +734,15 @@ export function FinanceDividendsPage({ api, setActionResult, setGlobalError, eff
       </div>
       <div className="admin-table-scroll">
         <table className="admin-table" data-testid="dividend-plan-table">
-          <thead><tr><th>商户</th><th>主理人</th><th>持股比例</th><th>代扣税率</th><th>周期</th><th>发放付账日</th><th>基数构成</th><th>生效起始日</th><th>理由</th><th>版本状态</th><th>操作</th></tr></thead>
+          <thead><tr><th>商户</th><th>主理人</th><th>持股比例</th><th>周期</th><th>发放付账日</th><th>基数构成</th><th>生效起始日</th><th>理由</th><th>版本状态</th><th>操作</th></tr></thead>
           <tbody>
             {plans.length === 0 ? (
-              <tr data-testid="dividend-plan-table-empty"><td colSpan={11} className="admin-muted-action">暂无分红方案，点「新建分红方案」配置。</td></tr>
+              <tr data-testid="dividend-plan-table-empty"><td colSpan={10} className="admin-muted-action">暂无分红方案，点「新建分红方案」配置。</td></tr>
             ) : plans.map((plan) => (
               <tr key={plan.id} data-testid={`dividend-plan-row-${plan.id}`}>
                 <td>{merchants.find((m) => m.id === plan.merchantId) ? merchantLabel(merchants.find((m) => m.id === plan.merchantId)!) : plan.merchantId}</td>
                 <td>{plan.principalName ? `${plan.principalName}（${plan.principalUserId}）` : plan.principalUserId}</td>
-                <td>{shareSplitText(plan.platformShareBps, plan.otherShareholders)}</td>
-                <td>{bpsToPercentText(plan.taxRateBps)}</td>
+                <td>{shareSplitText(plan.platformShareBps, plan.otherShareholders)}{plan.platformShareMinBps == null ? "" : `（平台上下限 ${bpsToPercentText(plan.platformShareMinBps)}～${bpsToPercentText(plan.platformShareMaxBps ?? undefined)}）`}</td>
                 <td>{periodText(plan.periodType, plan.periodMinMonths, plan.periodMaxMonths)}</td>
                 <td>{PAY_SLOT_LABELS[String(plan.payoutPaySlot ?? "")] ?? "—"}</td>
                 <td>{(plan.revenueDomains ?? []).map((d) => DOMAIN_LABELS[d] ?? d).join("、")}</td>
@@ -973,16 +995,17 @@ export function FinanceDividendsPage({ api, setActionResult, setGlobalError, eff
             ),
           },
           {
-            title: "比例、税率与周期",
-            description: "全部可调：80/20 与 20% 仅默认值。每次调整生成新版本，经最高权限审批后自生效起始日起生效；每期正式单按该期期末日已生效的版本出单，已出历史单按单内所记版本追溯，不受影响。",
+            title: "比例与周期",
+            description: "80/20 仅为新建预填建议值；代扣税率全平台统一，见页末「分红代扣个税税率」。每次调整生成新版本，经最高权限审批后自生效起始日起生效；每期正式单按该期期末日已生效的版本出单，已出历史单按单内所记版本追溯，不受影响。",
             validate: () => {
               if (percentToBps(planForm.platformSharePercent) === null) return TEXT.shareInvalid;
-              if (percentToBps(planForm.taxRatePercent) === null) return TEXT.taxInvalid;
               const holdersError = shareholdersError(planForm);
               if (holdersError) return holdersError;
               if (!planForm.payoutPaySlot) return TEXT.paySlotRequired;
               const boundsError = periodBoundsError(planForm);
               if (boundsError) return boundsError;
+              const shareBoundsMessage = shareBoundsError(planForm);
+              if (shareBoundsMessage) return shareBoundsMessage;
               if (!planForm.effectiveFrom) return TEXT.effectiveFromRequired;
               if (!planForm.reason.trim()) return TEXT.changeReasonRequired;
               return null;
@@ -990,7 +1013,9 @@ export function FinanceDividendsPage({ api, setActionResult, setGlobalError, eff
             content: (
               <>
                 <label>平台比例（%）<input data-testid="dividend-plan-share" type="number" step="0.01" min="0" max="100" value={planForm.platformSharePercent} onChange={(event) => setPlanForm({ ...planForm, platformSharePercent: event.target.value })} /></label>
-                <span>其他股东（工商登记在册的真实股东，个人股东按代扣税率代扣、公司股东不代扣）：</span>
+                <label>平台比例下限（%）<input data-testid="dividend-plan-share-min" type="number" step="0.01" min="0" max="100" value={planForm.platformShareMinPercent} onChange={(event) => setPlanForm({ ...planForm, platformShareMinPercent: event.target.value })} /></label>
+                <label>平台比例上限（%）<input data-testid="dividend-plan-share-max" type="number" step="0.01" min="0" max="100" value={planForm.platformShareMaxPercent} onChange={(event) => setPlanForm({ ...planForm, platformShareMaxPercent: event.target.value })} /></label>
+                <span>其他股东（工商登记在册的真实股东，个人股东按全平台统一代扣税率代扣、公司股东不代扣）：</span>
                 {planForm.otherShareholders.map((row, index) => (
                   <div key={index} className="admin-form-row" data-testid={`dividend-plan-shareholder-${index}`}>
                     <label>名称<input data-testid={`dividend-plan-shareholder-name-${index}`} type="text" value={row.name} onChange={(event) => updateShareholder(index, { name: event.target.value })} /></label>
@@ -1004,7 +1029,6 @@ export function FinanceDividendsPage({ api, setActionResult, setGlobalError, eff
                 <button type="button" data-testid="dividend-plan-shareholder-add" onClick={() => setPlanForm({ ...planForm, otherShareholders: [...planForm.otherShareholders, { name: "", type: "individual", percent: "" }] })}>＋ 添加其他股东</button>
                 <span className="admin-muted-action" data-testid="dividend-plan-principal-share">主理人比例 = 100% − 平台比例 − 其他股东合计 = {bpsToPercentText(10000 - (percentToBps(planForm.platformSharePercent) ?? 0) - shareholderShares(planForm).reduce((sum, row) => sum + row.shareBps, 0))}（各方按比例各自四舍五入到分，尾差单列由酒吧公司承担）。</span>
                 {sharesOverLimit(planForm) ? <span className="admin-form-error" data-testid="dividend-plan-shareholder-over">{TEXT.shareholdersOver}</span> : null}
-                <label>代扣税率（%）<input data-testid="dividend-plan-tax" type="number" step="0.01" min="0" max="100" value={planForm.taxRatePercent} onChange={(event) => setPlanForm({ ...planForm, taxRatePercent: event.target.value })} /></label>
                 <label>分红周期<select data-testid="dividend-plan-period-type" value={planForm.periodType} onChange={(event) => setPlanForm({ ...planForm, periodType: event.target.value })}>
                   {Object.entries(PERIOD_TYPE_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
                 </select></label>
@@ -1063,7 +1087,7 @@ export function FinanceDividendsPage({ api, setActionResult, setGlobalError, eff
             content: (
               <>
                 <label><input data-testid="dividend-plan-loss-carryforward" type="checkbox" checked={planForm.lossCarryforwardEnabled} onChange={() => setPlanForm({ ...planForm, lossCarryforwardEnabled: !planForm.lossCarryforwardEnabled })} />亏损结转：本期可分配额先扣减该商户往期未弥补亏损累计（关闭仅暂停本期抵扣，历史亏损累计保留、不清零，后续开启继续抵减）</label>
-                <label><input data-testid="dividend-plan-arrears-offset" type="checkbox" checked={planForm.arrearsOffsetEnabled} onChange={() => setPlanForm({ ...planForm, arrearsOffsetEnabled: !planForm.arrearsOffsetEnabled })} />欠款抵扣：主理人应得先抵扣该商户对平台未清应收，抵扣后余额才发放（审批时逐项结算应收）</label>
+                <label><input data-testid="dividend-plan-arrears-offset" type="checkbox" checked={planForm.arrearsOffsetEnabled} onChange={() => setPlanForm({ ...planForm, arrearsOffsetEnabled: !planForm.arrearsOffsetEnabled })} />欠款抵扣：主理人应得先抵扣主理人本人欠该酒吧公司尚未结清的款项（台账里往来方为主理人账户的未清应收），抵扣后余额才发放（审批时逐项结算）</label>
                 <label><input data-testid="dividend-plan-payout-floor" type="checkbox" checked={planForm.payoutFloorEnabled} onChange={() => setPlanForm({ ...planForm, payoutFloorEnabled: !planForm.payoutFloorEnabled })} />发放保护线：留存一定比例或固定额作为风险准备金暂不发放（留存记为欠主理人的待释放款、非平台白拿，按下方释放规则全额返还主理人）</label>
                 {planForm.payoutFloorEnabled ? (
                   <>
@@ -1086,8 +1110,7 @@ export function FinanceDividendsPage({ api, setActionResult, setGlobalError, eff
         summary={[
           { label: "经营商户", value: merchantOptions.find((m) => m.id === planForm.merchantId) ? merchantLabel(merchantOptions.find((m) => m.id === planForm.merchantId)!) : (planForm.merchantId || "未选择") },
           { label: "主理人", value: planForm.principalName ? `${planForm.principalName}（${planForm.principalUserId}）` : (planForm.principalUserId || "未填写") },
-          { label: "持股比例", value: shareSplitText(percentToBps(planForm.platformSharePercent) ?? undefined, shareholderShares(planForm)) },
-          { label: "代扣税率", value: `${planForm.taxRatePercent || "?"}%（股息红利）` },
+          { label: "持股比例", value: `${shareSplitText(percentToBps(planForm.platformSharePercent) ?? undefined, shareholderShares(planForm))}（平台上下限 ${planForm.platformShareMinPercent || "?"}%～${planForm.platformShareMaxPercent || "?"}%）` },
           { label: "周期", value: periodText(planForm.periodType, planForm.periodMinMonths, planForm.periodMaxMonths) },
           { label: "发放付账日", value: PAY_SLOT_LABELS[planForm.payoutPaySlot] ?? "未选择" },
           { label: "基数构成", value: `收入域：${planForm.revenueDomains.map((d) => DOMAIN_LABELS[d] ?? d).join("、") || "无"}；扣减销货成本与全部费用` },
@@ -1121,7 +1144,7 @@ export function FinanceDividendsPage({ api, setActionResult, setGlobalError, eff
         steps={[
           {
             title: "依法可分配金额与依据",
-            description: "依据专业财税核算结果及公司有效分配决议登记。本次分配取「经营算出的可分配额」与本金额中较小者，被压下的部分留在公司、以后不单独补分；登记后本单作废并按核定额重算出新草稿。",
+            description: "依据专业财税核算结果及公司有效分配决议登记。本次分配取「经营算出的可分配额」与本金额中较小者，被压下的部分留在公司、以后不单独补分；当期可分配利润必须先偿还全部到期借款本息，剩余部分才可用于分红；登记后本单作废并按核定额重算出新草稿。",
             validate: validateLegal,
             content: (
               <>
@@ -1242,6 +1265,12 @@ export function FinanceDividendsPage({ api, setActionResult, setGlobalError, eff
       {/* ── 243-R1 酒吧关停结算（BSM:1787）──────────────────── */}
       <FinanceDividendCloseoutPanel api={api} effectivePermissions={effectivePermissions} setActionResult={setActionResult}
         setGlobalError={setGlobalError} plans={plans} merchants={merchants} />
+
+      {/* ── 271-R2 分红代扣个税税率（BSM:1776 全平台统一）──────── */}
+      <FinanceDividendTaxRatePanel api={api} effectivePermissions={effectivePermissions} setActionResult={setActionResult} setGlobalError={setGlobalError} />
+
+      {/* ── 273-R3 酒吧借款（PGM:436 分红前置）──────────────── */}
+      <FinanceDividendLoansPanel api={api} effectivePermissions={effectivePermissions} setActionResult={setActionResult} setGlobalError={setGlobalError} merchants={merchants} />
     </section>
   );
 }

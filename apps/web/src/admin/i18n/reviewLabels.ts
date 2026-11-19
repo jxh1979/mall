@@ -1,9 +1,9 @@
-// 文件版本：V0.12
+// 文件版本：V0.13
 // 第十八批 I 段第 87 条（PGM:287「界面全中文（所有终端零英文）」）：主管复核的动作码、对象码、档位码与证据类型中文名，
 // 主管复核页与审批链页（ADM-GOV-009）共用（展示层翻译，提交仍原码）。原表与 formatReviewValue 自 SupervisorReviewPage.tsx 搬入。
 import { formatBusinessStatus } from "./statusLabels";
 
-// 第十八批 AM 段第 241 条 241-R1（第十八批裁决 65「按台账来源逐个分」）：付款确认 40 种支付类型的中文名（同后端 PaymentConfirmationService.PAYMENT_TYPES），
+// 第十八批 AM 段第 241 条 241-R1（第十八批裁决 65「按台账来源逐个分」）：付款确认 41 种支付类型的中文名（同后端 PaymentConfirmationService.PAYMENT_TYPES），
 // 每种一个审批类型（动作码 finance.payment_confirm.＜支付类型＞）。
 export const PAYMENT_TYPE_LABELS: Record<string, string> = {
   dividend_payout: "持股分红发放", dividend_reserve_released: "分红留存已释放", staff_payroll: "员工工资", deposit_refund: "退租押金退还",
@@ -14,6 +14,7 @@ export const PAYMENT_TYPE_LABELS: Record<string, string> = {
   inventory_transfer: "门店要货货款", pass_drink_settlement: "通票酒水结算", media_performance_settlement: "传媒演出结算", refund: "退款",
   bar_deposit_refund: "订台定金达标退回", stored_value_consume: "平台代收商户卡消费", partner_voucher: "内部价券结算",
   reconciliation_difference: "对账差异", inventory_difference: "库存差异", turnover_rent_reversal: "营业额抽成冲正", manual: "手工录入",
+  bar_loan: "借款还款",   // 第十八批 AX 段 273-R1 酒吧借款还款（PGM:436）
   compensation_fulfillment_recovery: "补偿应付已付追收", ticket_distribution_recovery: "通票分账追收", saved_bottle_remedy_recovery: "存酒退出承接垫付追收",
   finance_refund_ar_ap_payment: "财务退款（原收款退款）", finance_refund_stored_value_account: "财务退款（通用卡储值本金退款）",
   finance_refund_ticket_payment_rejection: "财务退款（票务拒收待退）", finance_refund_channel_ticket_rejection: "财务退款（渠道回流拒收待退）",
@@ -100,13 +101,15 @@ export const REVIEW_LABELS: Record<string, string> = {
   amusement_maintenance_record: "游乐维修记录", amusement_incident: "游乐事故", amusement_group_booking: "游乐团体预订", bar_order_item: "酒吧订单明细", bar_shift: "酒吧班次",
   ticket_refund: "门票退款单", ticket_dynamic_pricing_rule: "动态定价规则", verification: "核销记录", inventory_stock_adjustment: "库存调整单", saved_bottle: "存酒",
   finance_refund: "财务退款单", finance_offline_payment_confirmation: "线下收款确认单", customer_home_content: "首页内容", position_role_template: "岗位模板",
-  // 第十八批 AM 段第 241 条 241-R1：付款确认的 40 个审批类型与复核对象（付款确认单）。
+  // 第十八批 AM 段第 241 条 241-R1：付款确认的 41 个审批类型与复核对象（付款确认单）。
   ...Object.fromEntries(Object.entries(PAYMENT_TYPE_LABELS).map(([type, label]) => [`finance.payment_confirm.${type}`, `付款确认（${label}）`])),
   payment_confirmation: "付款确认单",
   // 第十八批 AQ 段第 234 条 234-R1（PGM:666）：分红方案调整的审批动作与复核对象（方案版本）。
   "finance.dividend.plan.change": "分红方案调整", dividend_plan: "分红方案",
   // 第十八批 AQ 段第 243 条 243-R1（BSM:1787「由财务、法务核实」）：酒吧关停结算核实的审批动作与复核对象。
   "finance.dividend.closeout.verify": "酒吧关停结算核实", dividend_closeout: "酒吧关停结算",
+  // 第十八批 AX 段第 271 条 271-R1（BSM:1776「调整须经财务、税务、法务三审并由顶层平台公司最终确认」）：分红代扣税率版本同走税费三审与最高确认。
+  dividend_tax_rate: "分红代扣税率",
 };
 
 export function formatReviewValue(value?: string | null) {

@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -12,7 +12,7 @@ import type { AdminPageProps, EffectivePermissionsState } from "../types";
 // 核实通过后逐条登记处理再结案。
 const MERCHANTS = [{ id: "merchant-1", merchant_name: "酒吧甲", status: "active" }];
 const PLANS = [{
-  id: "divp_1", merchant_id: "merchant-1", principal_user_id: "usr_principal", platform_share_bps: 8000, tax_rate_bps: 2000,
+  id: "divp_1", merchant_id: "merchant-1", principal_user_id: "usr_principal", platform_share_bps: 8000,
   period_type: "monthly", period_min_months: 1, period_max_months: 12, revenue_domains: ["bar"], payout_pay_slot: 1, status: "active",
   effective_from: "2026-01-01", version_state: "in_force", reason: "按工商登记持股比例",
 }];

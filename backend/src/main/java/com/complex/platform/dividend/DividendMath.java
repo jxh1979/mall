@@ -1,6 +1,6 @@
 package com.complex.platform.dividend;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import com.complex.platform.common.money.MoneyRounding;
 import java.util.ArrayList;
@@ -33,6 +33,9 @@ import java.util.List;
  *       「取小、不补」），结转链不动——取小不叠加扣减，已在核定额中扣除的亏损不重复扣</li>
  *   <li>platformShare + principalGross + Σ其他股东应得 + 尾差 = distributable（234-R2 起各方各自四舍五入，尾差带符号单列）</li>
  *   <li>principalNet = principalGross − tax（tax = principalGross * taxRateBps / 10000，<b>整除截断·对齐税局</b>）</li>
+ *   <li>第十八批 AX 段 273-R2（BSM:1785「当期可分配利润必须先偿还全部到期借款本息，剩余部分才可用于分红」；BSM:1778「关着时仍须满足法定可分配额与借款清偿
+ *       前置，再按比例分配」）：依法可分配上限之后、劈分之前先偿到期未还借款本息 loanRepayment = min(上式可分配额, 到期未还额)，distributable 为偿后余额
+ *       （与 V660 chk_ds_distributable 对应）</li>
  * </ul>
  *
  * <p>V303 扣除项三开关（默认全关时逐分等于 V299 现状）：
@@ -77,7 +80,9 @@ public final class DividendMath {
             // 234-R2 其他股东（与入参同序）：各自应得（四舍五入到分）、代扣（个人股东按方案税率整除截断，公司股东 0）；多方各自四舍五入的尾差（带符号）。
             List<Long> otherGrossCents,
             List<Long> otherTaxCents,
-            long roundingResidualCent) {
+            long roundingResidualCent,
+            // 273-R2 出单先偿的到期未还借款本息（distributableCent 已减去本项）。
+            long loanRepaymentCent) {
 
         Split toSplit() {
             return new Split(distributableCent, platformShareCent, principalGrossCent, taxCent, principalNetCent, roundingResidualCent);
@@ -129,7 +134,7 @@ public final class DividendMath {
      * @param lossCarryforward      亏损结转开关；开时可分配额 = max(净利 − carryInCent, 0)
      * @param carryInCent           期初往期未弥补亏损累计（非负；关时忽略）
      * @param arrearsOffset         欠款抵扣开关；开时税后应得先抵扣 arrearsOutstandingCent（钳到 principalNet）
-     * @param arrearsOutstandingCent 该商户对平台未清应收合计（非负；关时忽略）
+     * @param arrearsOutstandingCent 主理人本人欠本酒吧公司的未清应收合计（非负；关时忽略；330-R1）
      * @param payoutFloor           发放保护线开关；开时按 bps/固定额留存风险准备金
      * @param reserveBps            留存比例（万分比，0~10000；关时忽略）
      * @param reserveFixedCent      留存固定额（非负；关时忽略），实取 max(比例额, 固定额) 并钳到可发额上限
@@ -184,7 +189,7 @@ public final class DividendMath {
      * @param taxRateBps      主理人生效代扣税率（主理人为公司股东时服务层传 0）
      * @param otherShareBps   各其他股东持股比例（万分比，按名单顺序；与平台合计不超过 10000，主理人为余下部分）
      * @param otherIsCompany  各其他股东是否公司股东（公司股东不代扣）
-     * @param otherTaxRateBps 其他个人股东代扣税率（方案税率，不随主理人类型变）
+     * @param otherTaxRateBps 其他个人股东代扣税率（全平台统一税率，271-R1；不随主理人类型变）
      */
     public static Distribution compute(
             long netProfitCent, int platformShareBps, int taxRateBps,
@@ -193,6 +198,22 @@ public final class DividendMath {
             long[] customDeductionRawCents,
             boolean payoutFloor, int reserveBps, long reserveFixedCent, Long legalCapCent,
             int[] otherShareBps, boolean[] otherIsCompany, int otherTaxRateBps) {
+        return compute(netProfitCent, platformShareBps, taxRateBps, lossCarryforward, carryInCent, arrearsOffset, arrearsOutstandingCent,
+                customDeductionRawCents, payoutFloor, reserveBps, reserveFixedCent, legalCapCent, otherShareBps, otherIsCompany, otherTaxRateBps, 0L);
+    }
+
+    /**
+     * 第十八批 AX 段 273-R2 完整分配（234-R2 + 分红前置借款清偿）。loanDueCent 为 0 时逐分等于 234-R2 口径。
+     *
+     * @param loanDueCent 出单当日营业日已到期未还的借款本息合计（非负；在依法可分配上限之后、劈分之前取小先偿，不透支）
+     */
+    public static Distribution compute(
+            long netProfitCent, int platformShareBps, int taxRateBps,
+            boolean lossCarryforward, long carryInCent,
+            boolean arrearsOffset, long arrearsOutstandingCent,
+            long[] customDeductionRawCents,
+            boolean payoutFloor, int reserveBps, long reserveFixedCent, Long legalCapCent,
+            int[] otherShareBps, boolean[] otherIsCompany, int otherTaxRateBps, long loanDueCent) {
         requireBps(platformShareBps, "platformShareBps");
         requireBps(taxRateBps, "taxRateBps");
         requireBps(reserveBps, "reserveBps");
@@ -214,6 +235,9 @@ public final class DividendMath {
         if (legalCapCent != null) {
             distributable = Math.min(distributable, Math.max(legalCapCent, 0L));
         }
+        // 273-R2（BSM:1785、PGM:436「酒吧当期可分配利润必须先偿还全部到期借款本息，剩余部分才可用于分红」）：依法可分配上限之后、劈分之前先偿，取小不透支。
+        long loanRepayment = Math.min(distributable, Math.max(loanDueCent, 0L));
+        distributable -= loanRepayment;
         long carryAfter = carryIn - carryApplied + Math.max(-netProfitCent, 0L);
 
         // R-7(2026-07-28 拍板):平台分成【四舍五入】——旧整除截断平台恒少收、差额白送主理人且不留痕。
@@ -257,7 +281,7 @@ public final class DividendMath {
 
         return new Distribution(carryIn, carryApplied, carryAfter, distributable, platformShare,
                 principalGross, tax, principalNet, arrears, custom, reserve, payout,
-                List.copyOf(otherGross), List.copyOf(otherTax), residual);
+                List.copyOf(otherGross), List.copyOf(otherTax), residual, loanRepayment);
     }
 
     private static void requireBps(int bps, String name) {

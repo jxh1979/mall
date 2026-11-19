@@ -1,6 +1,6 @@
 # PRD 审计业务裁决台账
 
-文档版本：V1.04
+文档版本：V1.05
 状态：进行中
 迁移日期：2026-07-27
 当前事实源：三份立法 HTML 以既有冻结基线叠加 James 此前 M02 至 M08 的点名批准、全量审计 M001、M002 的逐项批准，以及本轮 2026-10-16 至 2026-10-17 业务 HTML 审计中 Q01 至 Q40 及子题实际明确批准且未被后续替代的裁决，和 2026-10-17 第二批 HTML 业务线推演审计（A–F 六线 64 条、停车章）的逐项批准，并叠加本轮 CG 70 项来源确认与 C01–C09、N01–N03 最终澄清及补全文稿中 F01、W01–W05 的整体修改批准（本文件末节）；本轮最终规则、未采纳或替代关系、现行版本与字节哈希见本文件末节。历史记录保留为各自当时事实，不恢复已被替代的建议。
@@ -9255,3 +9255,246 @@ HTML 的语义补齐与直接引用同步可在本批核验；70项中的业务�
     - 测试：FinanceServiceTests.contractEnergyAndPurchaseRefundSourcesHaveChineseLabels 补五个来源的断言；FinanceArApLedgerPage.test.tsx「FinanceArApLedgerPage 来源中文名与后端同名补齐 › 分红留存已释放、工单用料费（商户承担）、存酒补存/赔付损失、手工录入显中文，不显原码」补五行，详情抽屉显中文、不显原码。
   - 票务定价用例改稳（只改测试）：TicketingPoliciesPage.pricing.test.tsx 选中通票后先等售价回显落定，输入后等输入框的值落定再断言；不改页面代码、不改用例意图与业务断言。
 - 18AV 落地位置补记·运行验收证据、快照、终验文档刷新（无新裁决）：业务提交 afc29400 之后，按第十八批裁决 25 重刷了运行验收证据：后端全量 6965 测，0 失败 0 错误；apps/web 构建通过；常规界面验收（接口全部 mock）实跑 40 条全过；真实后端界面验收未跑，runtime_ready=false。随后依次重生成闭环当前态快照、生产闭环缺口报告、界面验收报告、无上线指挥台。生成器没改。手改 docs/final-closed-loop-acceptance-audit-v0.1.md 与 docs/code-implementation-acceptance-audit-v0.1.md：前端单测源码计数改为 1901；被核文件行数都没变；后端全量与常规界面验收的数字、日期改为本次实跑值；写入 npm run verify:unit 实跑结果，五个工作区全过。交付门禁于 2026-11-19 00:08 UTC 在工作树逐项实跑子项，NAS 两项现场探测未跑。仍红的有两项：一是 coding-host-protection，它写死主仓路径，在工作树口径下必红，属工具口径，不做；二是 final-closed-loop-audit，如实留 2 条红（integration-ready、business-acceptance-ready），原因是校验器要求终验把联调、业务验收写成「是」，而裁决 25 定了不跑真实后端界面验收、运行验收未就绪，终验写的是「否」。verify:delivery-gates 总链仍是红的。
+
+18AX 落地位置补记（2026-11-18）：第十八批 AX 段（batch70）按 18AX 只读设计实现待开发清单第 330、331、332、333、271、272、273 条（分红待核实组）；运行验收证据、终验文档在本段最后一个提交刷新；各条落地位置见下。本段追加时，原台账除文档版本升一版外，其他历史字节保持。
+
+- 18AX 落地位置补记·控制席判定（2026-11-18）：本段（第十八批 AX 段，batch70）实现待开发清单第 330、331、332、333、271、272、273 条（18AX 只读设计 b70-audit/d-div-c.json，两轮质疑者修订后定稿，无待裁题）；第 274 条属实有依据，但前置的游乐公司按内部结算价与游乐商户结算没有记账，本段不出实现方案，前置登记为待开发清单第 357 条。迁移号因 18AW 多用一个改为 V658～V660（设计原写 V657～V659）。本段实现代理不改各文件头版本行，收尾按最终主干统一 +0.01。本段从 ff08d988 开工，实现后变基到含 18AU 酒吧组（PR #600）的 origin/main ff83ee69，合并前再变基到含 18AV 财务应收应付与对账组（PR #601）的 origin/main f77447e8（见本段末「18AX 合并前再变基」一条）。设计旁见另记待开发清单第 356、357 条（待核实）。
+- 18AX 落地位置补记（子段 A：330-R1、331-R1、332-R1、333-R1；无迁移、无新接口、无新字段键）：
+  - 330-R1
+    - 改法：
+      - 分红欠款抵扣只取主理人本人欠该酒吧公司的未清应收。计算单冻结抵扣额与审批时逐项结算，都只留该酒吧台账里往来方为方案主理人账户的未清应收；酒吧公司自己的租金、物业费、能耗费等应收与客人挂账应收不抵。
+      - FinanceService.DividendArrearsItem 加往来方；applyDividendOffsetToReceivables 改为（商户、主理人账户、抵扣额、计算单）四参；listOutstandingReceivables 签名与过滤不变。
+      - 欠款抵扣明细行逐项写债务人主理人账户与债权人本酒吧公司。
+      - DIVIDEND_ARREARS_CHANGED 文案改为「欠款抵扣期间主理人本人的未清欠款发生变化（当前可抵 X 分，单据冻结 Y 分）；请作废重算后再审批」。
+      - 前端方案弹窗欠款抵扣开关说明与明细行标签改为主理人本人欠款口径。
+    - 落地位置：backend/src/main/java/com/complex/platform/finance/FinanceService.java（listOutstandingReceivables 映射、applyDividendOffsetToReceivables、DividendArrearsItem）；backend/src/main/java/com/complex/platform/dividend/DividendService.java（computeStatement 欠款取数与 arrears_offset 明细行、approve）；DividendMath.java（参数注释）；apps/web/src/admin/pages/FinanceDividendsPage.tsx（DIVIDEND_LINE_LABELS.arrears_offset「欠款抵扣（主理人本人欠款）」、方案弹窗欠款抵扣开关说明）。
+    - 依据：
+      - BSM:1781「欠款抵扣：主理人这期该得的钱，按有效协议先抵其对相应法律主体尚未结清的欠款，抵完剩下的才发。」
+      - ENUM:301「欠款抵扣（先抵主理人对相应法律主体未清欠款）」。
+      - 按常理定（设计 notes ①）：「相应法律主体」取发放分红的该酒吧公司本身（BSM:1787「分红由该酒吧公司自己从其对公账户支付给主理人与其他股东」）；主理人本人欠款＝该酒吧台账里往来方为主理人账户的未清应收。
+    - 测试：
+      - 新增：DividendOtherShareholdersJdbcIntegrationTests.arrearsOffsetTakesOnlyPrincipalsOwnDebtToTheBar。
+      - 同步：approvalHangsOnePayablePerShareholderAndArrearsOffsetOnlyReducesPrincipal（应收往来方改主理人）；DividendJdbcIntegrationTests.seedReceivable（往来方改主理人账户，arrearsOffsetSettlesReceivablesAndPaysNetAtApprove、arrearsOffsetConflictAtApproveRollsBackNoHalfSettle 照旧绿）；DividendServiceTests 欠款抵扣三例（四参与往来方）。
+      - 前端：FinanceDividendsPage.guidedcreate.test.tsx「欠款抵扣开关说明只抵主理人本人欠该酒吧公司的款（330-R1，BSM:1781）」（新增）、「计算单明细抽屉：逐行展示三扣除项 + 实发额」（标签同步）。
+  - 331-R1
+    - 改法：商户专区「我的分红」当前方案摘要的周期部分，改为复用管理端周期名（PERIOD_TYPE_LABELS 导出）。按方案周期类型分别写「月度（正式单按月）」「季度（正式单按季，月度出预览）」「半年（正式单按半年，月度出预览）」「年度（正式单按年，月度出预览）」，不再把非月度方案一律写成季度。
+    - 落地位置：apps/web/src/admin/pages/FinanceDividendsPage.tsx（PERIOD_TYPE_LABELS 加 export）；apps/web/src/admin/pages/MerchantZoneDividendsPage.tsx（导入与 merchant-dividend-plan-summary）。
+    - 依据：BSM:1777「分红按所配周期一期一分配，默认周期为半年」「每月另出一张只读的预览单」；ENUM:299「分红周期一律取月及月的整数倍粒度（如月、季、半年、年）」。
+    - 测试：MerchantZoneDividendsPage.test.tsx「方案摘要按分红周期写出单口径，复用管理端周期名（331-R1，BSM:1777）」。
+  - 332-R1
+    - 改法：
+      - 提交分红方案新版本时（新建与修改同一处，最高权限本人提交同样判），如果新生效日前一日已生效的版本（即被接替的那一版）周期类型与新版本不同，生效起始日须为新旧两种周期中较长一种的期初。1、3、6、12 个月逐级整除，所以较长一种的期初就是两者共同的期初。
+      - 不是共同期初时返回 400 VALIDATION_FAILED「改分红周期时，生效起始日须为新旧两种周期共同的期初（如季度与半年之间为 1 月 1 日或 7 月 1 日，涉及年度为 1 月 1 日），以免已分配期间重复分配或留空」。
+      - 周期不变不限；上下限不符仍先报上下限原文。
+    - 落地位置：backend/src/main/java/com/complex/platform/dividend/DividendService.java（submitVersion，同生效日冲突判断之后）。
+    - 依据：BSM:1777「分红按所配周期一期一分配」；BSM:1775「修改不能追溯已经确认或发放的分红」；按常理定（设计 notes ③：只核被接替的那一版，共同期初取较长周期的期初）。
+    - 测试：DividendPlanVersionJdbcIntegrationTests.periodTypeChangeMustStartOnCommonPeriodStart（新增）；同步 DividendFinalSnapshotGateJdbcIntegrationTests.planPeriodMustFallWithinRequiredBounds 的 dfg-bnd-5（半年改年度，生效日改取 tomorrow+2 之后最近的 1 月 1 日）。
+  - 333-R1
+    - 改法：
+      - 分红五类最终闸对酒吧一律按店查（FinanceService.nonFinalDaysOfBar），不看在营与存档。
+      - 正式单查期初至 min（期末日，关店最后营业日）。月度预览只查该日：未登记关停结算即期末日；已登记且关店最后营业日在本月的，查关店最后营业日。
+      - 非酒吧商户照旧按所属综合体查（nonFinalDays）。
+      - 跳过原因文案模板不变，预览原因里的日期为实际所查之日。
+      - 共用的 FinanceService.nonFinalDays 不改（工资、提成月结等另记待开发清单第 356 条）。
+    - 落地位置：backend/src/main/java/com/complex/platform/dividend/DividendService.java（nonFinalReason）。
+    - 依据：ENUM:190「非最终快照的数据一律不得进入结算、分红、正式提成计算和对账关账」；BSM:1777「数据未全部标记最终之前不得生成预览」；BSM:1787「酒吧关闭须完成关停结算」。
+    - 测试：DividendFinalSnapshotGateJdbcIntegrationTests.deactivatedOrArchivedBarWithoutCloseoutStillChecksFinalMarks（新增）；closedBarOfficialDividendChecksFinalMarksUpToClosingDayEvenAfterDeactivation 照旧绿。
+- 第十八批 AX 段落地位置补记（子段 B：271-R1、271-R2、272-R1）：
+  ● 271-R1 全平台统一分红代扣个税税率版本
+  - 改法：
+    - 新表 dividend_tax_rate_versions（迁移 V658）。出厂行 dtrv_factory 为 20%，不预置上下限。
+    - 平台财务提交新版本时，税率、上下限（下限≤税率≤上限）、生效起始日期、理由都必填；同一生效日已有待审或已生效版本就 409 DIVIDEND_TAX_RATE_VERSION_CONFLICT。
+    - 审批与 233-R2 同一条链：财务、税务、法务三条真实部门起点，复核动作 finance.tax_rule.adjust（tax_rule_adjustment_l3，终点最高权限确认）。最高权限本人提交同样进审批。批准落已生效，驳回落已驳回。
+    - 出单取出单当日营业日已生效的版本，主理人与其他个人股东同用，计算单 tax_rate_version_id 固化所用版本。
+    - 方案上删去 tax_rate_bps。沿用 finance.dividend.view 与 finance.dividend.manage，不新增权限码。
+  - 落地位置：
+    - backend/src/main/resources/db/migration/V658__dividend_withholding_tax_rates.sql
+    - backend/src/main/java/com/complex/platform/dividend/DividendTaxRateService.java（list、submit、decided、inForce）
+    - dividend/dto/DividendTaxRateRequest.java
+    - DividendController（GET 和 POST /api/v1/finance/dividends/tax-rates）
+    - DividendService（构造注入；computeStatement 取 inForce、固化版本号；submitVersion 与审批摘要去税率）
+    - DividendRecords、DividendPlanRequest、JdbcDividendRepository（方案去税率，计算单加 tax_rate_version_id）
+    - finance/EntityTaxService.submitReview 就地改 public
+    - audit/audit-labels.json
+  - 依据：
+    - BSM:1776「其分得的款项按「股息红利」计税，由发放的经营主体代扣个人所得税（安全阈值，全平台统一可配，调整须经财务、税务、法务三审并由顶层平台公司最终确认，出厂默认 20%，须同时配置上下限），发放时在单据上写清代扣了多少」「税率以参数形式配置，不在业务页面硬编码」
+    - ENUM:298
+    - BSM:521「每一笔单据在生成时就把所用配置版本固化在单上」「超出该区间的配置一律拒绝生效，未填写上下限的参数不得上线」
+    - DEC-R8-82「调整须走最高一级审批与三审留痕」
+    - DEC-R3-2026-08-04-30「具体数值留到落地时逐个定」
+  - 测试：DividendWithholdingTaxRateJdbcIntegrationTests.taxRateVersionsNeedFinanceTaxLegalReviewAndTopConfirmation、.officialStatementWithholdsAtUnifiedRateInForceOnIssueDayAndRecordsVersion。
+  ● 271-R2 前端分红代扣税率面板，方案去税率
+  - 改法：
+    - 持股分红页末尾新增"分红代扣个税税率（全平台统一）"面板：版本表加提交新税率表单（税率、上下限、生效起始日期、理由、财务／税务／法务三线最终审批人），前端同规则校验。
+    - 方案弹窗、方案表、确认区删去代扣税率；商户专区方案摘要删去代扣税率。计算单明细照旧显示单上税率。
+  - 落地位置：
+    - apps/web/src/admin/pages/FinanceDividendTaxRatePanel.tsx
+    - FinanceDividendsPage.tsx（import 与一行挂载；删税率输入、列、确认行与说明）
+    - MerchantZoneDividendsPage.tsx
+    - types.ts（DividendTaxRateRow；计算单 taxRateVersionId；方案删 taxRateBps）
+    - i18n/fieldLabels.ts（dividend_tax_rate_submitted、tax_rate_version_id）
+    - i18n/reviewLabels.ts（dividend_tax_rate"分红代扣税率"）
+  - 依据：BSM:1776「全平台统一可配」「税率以参数形式配置，不在业务页面硬编码」。
+  - 测试：
+    - FinanceDividendTaxRatePanel.test.tsx「列出出厂版本 20%；下限大于税率前端拦下；填齐后按蛇形键提交税率、上下限、生效起始日期、理由与三条线最终审批人」
+    - FinanceDividendsPage.guidedcreate.test.tsx「引导式新建方案：校验拦截→确认页→提交带正确 body（百分比转万分比）」（无 dividend-plan-tax，载荷无 tax_rate_bps）
+    - MerchantZoneDividendsPage.test.tsx「列表展示每期金额与状态 + 当前方案摘要；只读无写动作」（摘要不含"代扣税率"）
+  ● 272-R1 方案版本平台（参股方）比例上下限
+  - 改法：
+    - dividend_plans 加 platform_share_min_bps、platform_share_max_bps（迁移 V659，CHECK chk_dp_share_bounds，不预置数值），随方案版本一起审批。
+    - 新建必填；修改不填沿用改前版本。下限不大于上限，平台比例须在其间，否则 400 VALIDATION_FAILED「平台（参股方）比例须同时配置上下限，且比例须在上下限之内」。
+    - 审批摘要加"平台比例上下限"一项。
+    - 前端方案弹窗加"平台比例下限（%）""平台比例上限（%）"，同规则校验；方案表与确认区显示"平台上下限 X%～Y%"。
+    - 80% 预填与后端缺省 8000 照旧，作为新酒吧建议值。
+  - 落地位置：
+    - V659__dividend_plan_share_bounds.sql
+    - DividendService.submitVersion（requirePeriodBounds 之后就地加校验）
+    - DividendService.SUMMARY_FIELDS
+    - DividendRecords.DividendPlanRecord 与 dto/DividendPlanRequest 末尾两字段（留旧形构造）
+    - JdbcDividendRepository
+    - common/api/FieldLabels.java 与 apps/web/src/admin/i18n/fieldLabels.ts（同键同名"平台比例下限""平台比例上限"）
+    - FinanceDividendsPage.tsx
+    - types.ts
+    - docs/full-admin-page-permission-field-matrix-v0.1.csv ADM-FIN-007
+  - 依据：
+    - BSM:1775「新酒吧可预填 80%／20%（业务参数，按经营主体可配，须同时配置上下限）建议值，但必须以获批登记版本生效」
+    - ENUM:297
+    - PGM:436
+    - BSM:521「超出该区间的配置一律拒绝生效，未填写上下限的参数不得上线」
+    - DEC-R3-2026-08-04-30
+  - 测试：DividendFinalSnapshotGateJdbcIntegrationTests.planPlatformShareMustFallWithinRequiredBounds；FinanceDividendsPage.guidedcreate.test.tsx「平台（参股方）比例上下限（BSM:1775「须同时配置上下限」、BSM:521「超出该区间的配置一律拒绝生效」）：方案表显示上下限；下限大于上限拦截；填 60、90 后载荷带万分比（272-R1）」。
+- 第十八批 AX 段第 273 条落地位置补记（子段 C，迁移 V660）
+  273-R1 酒吧借款登记，借款还款挂酒吧应付并走付款确认
+  - 改法：
+    - 新表 dividend_bar_loans（V660），只插不改。
+    - 新类 dividend/DividendLoanService.register：只适用于酒吧，平台财务凭 finance.dividend.manage 登记，平台范围闸在幂等之前。须写出借方（平台内主体或外部公司名称）、本金、年利率、借款协议约定的到期应付利息、出借日、还款期限、还款顺序，凭证可选。同一事务挂一笔酒吧应付：source_type bar_loan，金额＝本金＋利息，到期日＝还款期限，往来方为出借方主体，外部公司取借款号。
+    - DividendLoanService.list：凭 finance.dividend.view 列各笔的未还本息与状态（未到期、已到期未还、逾期未还、已还清，按该酒吧当前营业日判）。
+    - 还款走台账现有的付款确认与登记付款：PaymentConfirmationService.AR_AP_SOURCES 加 bar_loan（支付类型 40→41，复核策略与审批时限清单各多一行）；FinanceService.AR_AP_SOURCE_TYPE_LABELS 加 bar_loan「借款还款」；V660 重建 payment_confirmations、payment_confirmation_flows 两条 payment_type CHECK。
+  - 落地位置：
+    - backend/src/main/resources/db/migration/V660__dividend_bar_loans.sql
+    - backend/src/main/java/com/complex/platform/dividend/DividendLoanService.java
+    - backend/src/main/java/com/complex/platform/dividend/dto/DividendLoanRequest.java
+    - DividendController 的 GET、POST /api/v1/finance/dividends/loans（listDividendBarLoans、registerDividendBarLoan）
+    - PaymentConfirmationService.AR_AP_SOURCES；FinanceService.AR_AP_SOURCE_TYPE_LABELS
+    - FieldLabels.java；audit-labels.json
+  - 依据：
+    - PGM:436「必须按增资、股东借款、公司间借款等真实关系登记，借款不得当作股权或分红基数。任何公司向酒吧提供的借款，出借时须写明金额、利率、还款期限与还款顺序」
+    - 第十八批裁决 55「所有应付都先走付款确认」；65「按台账来源逐个分」；66「每类必带财务、法务两线」
+    - 决策台账 DEC-R7-41 的四个未定口径，按设计 notes⑦「按字面/常理定」：登记在借款表；按借款酒吧归集；逾期＝到期日早于当前营业日仍未还清；到期本息＝本金加协议约定利息
+  - 测试：
+    - DividendBarLoanJdbcIntegrationTests.registeredLoanPostsBarPayableThatGoesThroughPaymentConfirmation
+    - DividendBarLoanJdbcIntegrationTests.listedLoansShowStatusByDueDateAgainstBarBusinessDay
+    - PaymentConfirmationJdbcTests.fortyPaymentTypesAreMoneyApprovalTypesWithFinanceAndLegalLines（计数改 41）
+    - PaymentConfirmationJdbcTests.paymentConfirmationFlowsAreGlobalSettingsOnTheApprovalLinePage（清单加 bar_loan）
+    - SupervisorReviewServiceTests.listPoliciesReturnsBlockingCatalogAndWritesAudit（策略总数改 101）
+  273-R2 出单先扣到期未还借款本息，提交与审批有逾期未还即拦
+  - 改法：
+    - DividendMath 新增 16 参 compute（末尾 loanDueCent，15 参委托并传 0）：依法可分配上限之后、劈分之前先偿 min(可分配额, 到期未还额)，余额再按比例劈分。
+    - V660 给 dividend_statements 加 loan_repayment_cent；chk_ds_distributable 改为 LEAST(经营口径, 依法核定额) − loan_repayment_cent，另加 chk_ds_loan_repayment；明细行类型加 loan_repayment。
+    - DividendService.computeStatement 取出单当日营业日已到期未还的借款（DividendLoanService.dueUnpaid，按还款顺序、到期日），逐笔落 loan_repayment 明细行，计算单固化 loan_repayment_cent；月度预览同一算式。
+    - DividendService.submit 与 approve 各加 DividendLoanService.requireNoOverdue：有逾期未还借款即 409 DIVIDEND_LOAN_OVERDUE。
+  - 落地位置：
+    - DividendMath.compute（16 参）、Distribution.loanRepaymentCent
+    - DividendService.computeStatement、submit、approve；构造参数加 DividendLoanService
+    - DividendRecords.DividendStatementRecord.loanRepaymentCent（留旧形构造）
+    - JdbcDividendRepository 的计算单插入与映射
+    - V660
+  - 依据：
+    - BSM:1785「存在逾期未还借款的，分红一律优先偿还借款——当期可分配利润必须先偿还全部到期借款本息，剩余部分才可用于分红，分红方案提交时须附借款清偿情况（见平台治理地图）；该前置不属于本处三项扣除开关」
+    - PGM:436「酒吧当期可分配利润必须先偿还全部到期借款本息，剩余部分才可用于分红，存在逾期未还借款的一律不得分红」
+    - BSM:1778「关着时仍须满足法定可分配额与借款清偿前置，再按比例分配」
+    - ENUM:301「分红前置：存在逾期未还借款的一律优先偿还借款后方可分红；不属于三项扣除项」
+    - 决策台账 DEC-R7-21
+  - 测试：
+    - DividendBarLoanJdbcIntegrationTests.officialStatementRepaysDueLoanBeforeSplitAndIgnoresLoanNotYetDue
+    - DividendBarLoanJdbcIntegrationTests.overdueLoanBlocksSubmitAndApproveUntilRepaid
+    - DividendBarLoanJdbcIntegrationTests.loanRepaymentIsCappedAtDistributable
+    - DividendMathTests.loanRepaymentReducesDistributableBeforeSplit
+    - DividendMathTests.loanRepaymentCappedAtDistributable
+  273-R3 前端酒吧借款登记面板、借款清偿明细行与计算单详情里的借款清偿情况
+  - 改法：
+    - 新组件 FinanceDividendLoansPanel 挂在持股分红页末尾，标题「酒吧借款（分红前置）」：列表列出各笔借款与未还本息、状态；登记表单含酒吧（只列酒吧商户）、出借方主体下拉或名称、本金、年利率、到期应付利息、出借日、还款期限、还款顺序、备注、凭证；按钮要 finance.dividend.manage。
+    - DIVIDEND_LINE_LABELS 加 loan_repayment「借款清偿（分红前置）」，商户专区明细共用。
+    - 计算单详情抽屉加「借款清偿」金额行与「借款清偿情况」一栏：取 GET /api/v1/finance/dividends/loans?merchant_id= 该单商户逐笔列出；没有登记借款写「该酒吧无登记借款」。
+    - 应收应付台账页与字典的来源名加 bar_loan「借款还款」；付款确认支付类型中文名加 bar_loan。
+    - 页面矩阵 ADM-FIN-007 补借款两个接口与主体下拉接口。
+  - 落地位置：
+    - apps/web/src/admin/pages/FinanceDividendLoansPanel.tsx
+    - FinanceDividendsPage.tsx（DIVIDEND_LINE_LABELS、openDetail、页尾一行 JSX）
+    - types.ts（DividendBarLoanRow、loanRepaymentCent）
+    - i18n/fieldLabels.ts；i18n/reviewLabels.ts
+    - 台账页来源名：变基到 f77447e8 后按主干 18AV 317-R1 结构改由 i18n/fieldLabels.ts 的 KEY_VALUE_LABELS.source_type 提供（页面自带的 SOURCE_TYPE_LABELS 已随主干去掉）
+    - docs/full-admin-page-permission-field-matrix-v0.1.csv ADM-FIN-007 行
+  - 依据：
+    - PGM:436「出借时须写明金额、利率、还款期限与还款顺序」「分红方案提交时须附借款清偿情况」
+    - PGM:287 界面全中文
+    - 设计 notes⑦：提交审阅是列表行直接按钮，没有确认区，借款清偿情况由计算单借款清偿行加详情一栏承载
+  - 测试：
+    - FinanceDividendLoansPanel.test.tsx「列出借款的未还本息与状态；填齐后按蛇形键登记酒吧、出借方、本金、年利率、到期应付利息、出借日、还款期限与还款顺序」
+    - FinanceDividendLoansPanel.test.tsx「无 finance.dividend.manage 时登记借款按钮不可用」
+    - FinanceDividendLoansPanel.test.tsx「计算单详情列出借款清偿额、借款清偿明细行与该酒吧借款清偿情况；没有登记借款时写明」
+    - MerchantZoneDividendsPage.test.tsx「借款清偿明细行显示中文名（273-R3，PGM:436「酒吧当期可分配利润必须先偿还全部到期借款本息」）」
+- 18AX 落地位置补记（K-contract 契约，docs/openapi/openapi-p0.yaml 与 .json 同值；以下行号是本段改后 yaml 的行号）
+  271-R1：
+  - 改法：新增两个操作。listDividendTaxRates 为 GET /api/v1/finance/dividends/tax-rates（yaml:46610），权限 finance.dividend.view、平台口径、web，审计 dividend.tax_rates_listed / dividend.tax_rates_list_failed。submitDividendTaxRate 为 POST 同路径（yaml:46631），权限 finance.dividend.manage、需要幂等键，审计 dividend.tax_rate_submitted / dividend.tax_rate_submit_failed，x-failure-codes 为 VALIDATION_FAILED、DIVIDEND_TAX_RATE_VERSION_CONFLICT、TAX_DEPARTMENT_ROUTING_REQUIRED、TAX_APPROVAL_REQUIRED；复核走 finance.tax_rule.adjust（tax_rule_adjustment_l3），对象 dividend_tax_rate。
+  - 新增 components.requestBodies 与 schemas 的 DividendTaxRateRequest（yaml:65577、76731）。
+  - DividendPlanRequest（yaml:76286）删去 tax_rate_bps，说明与 other_shareholders.shareholder_type 改为全平台统一税率。
+  - createDividendPlan 摘要与说明、computeDividendStatements、getDividendStatement、listDividendStatements 说明补出单当日已生效版本与 tax_rate_version_id。
+  - 依据：BSM:1776「全平台统一可配，调整须经财务、税务、法务三审并由顶层平台公司最终确认，出厂默认 20%，须同时配置上下限」；BSM:521「每一笔单据在生成时就把所用配置版本固化在单上」；DEC-R8-82。
+  272-R1：
+  - 改法：DividendPlanRequest 加 platform_share_min_bps、platform_share_max_bps（yaml:76316 起，integer 0～10000，不进 required）；platform_share_bps 说明补上下限。
+  - createDividendPlan、updateDividendPlan 说明补 400 VALIDATION_FAILED「平台（参股方）比例须同时配置上下限，且比例须在上下限之内」，响应字段加这两项（可空）。
+  - 依据：BSM:1775「新酒吧可预填 80%／20%（业务参数，按经营主体可配，须同时配置上下限）建议值」；BSM:521「超出该区间的配置一律拒绝生效，未填写上下限的参数不得上线」。
+  273-R1、273-R2：
+  - 改法：新增两个操作。listDividendBarLoans 为 GET /api/v1/finance/dividends/loans（yaml:46664，query merchant_id）；registerDividendBarLoan 为 POST 同路径（yaml:46693），x-failure-codes 为 VALIDATION_FAILED、MERCHANT_NOT_FOUND、BUSINESS_ENTITY_NOT_FOUND、EVIDENCE_ATTACHMENT_NOT_FOUND。
+  - 新增 DividendLoanRequest 请求体与 schema（yaml:65583、76791）。
+  - computeDividendStatements 说明补借款清偿前置：loan_repayment 明细行，loan_repayment_cent，distributable_cent＝min（经营口径可分配额，依法核定额）− 借款清偿。getDividendStatement、listDividendStatements 说明补 loan_repayment_cent。
+  - submitDividendStatement 新加说明，submitDividendStatement 与 approveDividendStatement 的 x-failure-codes 加 DIVIDEND_LOAN_OVERDUE。
+  - PaymentConfirmationType 枚举加 bar_loan（yaml:78827），说明改为共 41 个、台账应付来源 29 个；支付类型流程查询与设定两个操作的说明及路径参数里的「40 个」改 41。
+  - 依据：PGM:436「任何公司向酒吧提供的借款，出借时须写明金额、利率、还款期限与还款顺序；酒吧当期可分配利润必须先偿还全部到期借款本息，剩余部分才可用于分红，存在逾期未还借款的一律不得分红，分红方案提交时须附借款清偿情况」；BSM:1785；BSM:1778；第十八批裁决 55、65、66。
+  330-R1：
+  - 改法：DividendPlanRequest.arrears_offset_enabled 说明改为抵扣主理人本人欠该酒吧公司的未清应收（往来方为主理人账户）；computeDividendStatements、approveDividendStatement 说明补该口径与 DIVIDEND_ARREARS_CHANGED 新原文。
+  - 依据：BSM:1781「主理人这期该得的钱，按有效协议先抵其对相应法律主体尚未结清的欠款」。
+  332-R1：
+  - 改法：updateDividendPlan 说明补 400 原文「改分红周期时，生效起始日须为新旧两种周期共同的期初…」（新建时没有被接替的版本，不触发，所以 createDividendPlan 不写）。
+  - 依据：BSM:1777「分红按所配周期一期一分配」；BSM:1775「修改不能追溯已经确认或发放的分红」。
+  333-R1：
+  - 改法：computeDividendStatements 说明补酒吧五类最终标记一律按店查、不看在营与存档；正式单查期初至 min（期末日，关店最后营业日），预览只查该日。
+  - 依据：ENUM:190「非最终快照的数据一律不得进入结算、分红」；BSM:1777「数据未全部标记最终之前不得生成预览」。
+  测试：verify:openapi、verify:openapi-examples、verify:client-routes、verify:client-openapi、verify:client-payload --strict 全过；OpenAPI 操作 1393→1397；info.version 收尾按最终主干 f77447e8 的 V0.80 升至 V0.81。
+- 18AX 汇合（J）：
+  - e2e 改动：只改 tests/e2e/support/mock-api.ts，spec 不改，意图不变。
+    - 分红方案假数据去掉 taxRateBps，补 platformShareMinBps 5000 和 platformShareMaxBps 9000（271-R1 方案去税率、272-R1 平台比例上下限，BSM:1775「须同时配置上下限」）。
+    - 计算单假数据补 taxRateVersionId 和 loanRepaymentCent（271-R1、273-R2）。
+    - 新增 /api/v1/finance/dividends/tax-rates（出厂 20%，BSM:1776）和 /api/v1/finance/dividends/loans（空）两条 GET 兜底。
+    - 视觉基线四张都不是本段改的页面，没有重拍。
+  - 门禁结论（变基前在 ff08d988 基线上实跑）：
+    - 后端 --fresh 全量 6945/0 红，V658～V660 已真迁；
+    - 前端 typecheck 0 错，vitest 2005/0 红；
+    - 客人三个工作区 77、131、85 全绿；
+    - 安卓员工端 125 个测试全绿，android-app 编译通过；
+    - 五份后台 e2e 33 个用例全部通过；
+    - 镜像重生成四份生成物后 verify:p0-contract 全绿（1397 个操作）；yaml 与 json 深比较一致；git diff --check 干净。
+    - 各段之间没有互相波及的缺陷，业务逻辑未改。
+- 第十八批 AX 段文档组（D-docs）：
+  - 改法：按 330-R1、332-R1、333-R1、271-R1、271-R2、272-R1、273-R1～273-R3、331-R1 的现码，就地改 PRD 与矩阵里的现状句、待补句，不新增业务规则。
+  - 落地位置：
+    - docs/dividend-engine-prd-v0.1.md V0.15：§2#2、§2#3、§3、§4 五类最终标记闸、§4A 第 4 条、§5 算式与现有实现边界、§6 分红前置、§8 ADM-FIN-007 与 ADM-MER-008、§9 欠款抵扣与 chk_ds_distributable、变更日志；
+    - docs/platform-governance-prd-v0.1.md V0.92：§2A.5 付款确认 40→41 条/行/类、§12C 借款与平台比例上下限实现现状、变更日志；
+    - docs/finance-settlement-product-prd-v0.1.md V0.40：§4D 支付类型 41 个、台账 32 个，补 bar_loan 借款还款，变更日志；
+    - docs/full-admin-page-permission-field-matrix-v0.1.csv V0.39：ADM-MER-008「查看当前方案比例与周期」。
+  - 依据：BSM:521、BSM:1775、BSM:1776、BSM:1777、BSM:1778、BSM:1781、BSM:1785、BSM:1787、BSM:1803；ENUM:190、ENUM:297、ENUM:298、ENUM:301；PGM:436；DEC-R3-2026-08-04-30、DEC-R7-21、DEC-R7-41、DEC-R8-82；第十八批裁决 55、65、66；18AX 控制席判定。
+  - 测试：node tools/verify-full-admin-page-matrix.mjs 通过；git diff --check 通过。
+- 18AX 收尾复核修正（2026-11-18）：按收尾复核成立的意见 1～4 与控制席补充修正，无新迁移、无新接口、无新字段键。
+  - ① 333-R1 已登记关停结算酒吧的月度预览只查关店最后营业日（意见 1，只补测试、业务代码不改）：DividendFinalSnapshotGateJdbcIntegrationTests 新增 closedBarMonthlyPreviewChecksClosingDayInsteadOfPeriodEnd——真实 HTTP、蛇形键，季度方案酒吧只标 08-01～08-19、漏标 08-20，登记关停结算（关店最后营业日 08-20）后出 2026-08 预览跳过，原因写「该月最后一个营业日（2026-08-20）」、不写 2026-08-31，补标 08-20 后能出。依据：ENUM:190「非最终快照的数据一律不得进入结算、分红、正式提成计算和对账关账」；BSM:1777「数据未全部标记最终之前不得生成预览」；BSM:1787「酒吧关闭须完成关停结算」。
+  - ② 依法可分配金额明细行（意见 2、3 同一处）：DividendService 计算单 legal_cap 明细行说明里「本次分配取二者较小」的数字改为经营口径可分配额与核定额的较小值（先偿借款之前），不再写 273-R2 先偿到期借款本息后的余额，借款清偿仍由下一行 loan_repayment 单列；FinanceDividendsPage 依法可分配金额登记弹窗说明在取小一句后补「当期可分配利润必须先偿还全部到期借款本息，剩余部分才可用于分红」（只改文字）。回归：DividendBarLoanJdbcIntegrationTests.officialStatementRepaysDueLoanBeforeSplitAndIgnoresLoanNotYetDue 断言 legal_cap 行写「本次分配取二者较小 5000000 分」、不含偿后余额；FinanceDividendsPage.legal.test.tsx 登记弹窗用例断言该说明。依据：BSM:1785「确认依法可分配金额，本次分配不得超出该金额……当期可分配利润必须先偿还全部到期借款本息，剩余部分才可用于分红」。
+  - ③ PRD 271 现状句错误码（意见 4，只改文档）：docs/dividend-engine-prd-v0.1.md §2#2 271-R1、271-R2 实现现状改为「税率、上下限（0～100%，下限 ≤ 税率 ≤ 上限）、生效起始日期与理由必填，否则 400 `VALIDATION_FAILED`；财务、税务、法务三条线须各指定最终审批人，否则 400 `APPROVAL_LINE_FINAL_APPROVER_REQUIRED`」，与现码一致（三线部门起点未配置 409 `TAX_DEPARTMENT_ROUTING_REQUIRED` 原已写）；本段 PRD 其余现状句的错误码逐句对现码核过，无误。依据：BSM:1776「调整须经财务、税务、法务三审并由顶层平台公司最终确认」。
+  - ④ 分红预览口径旧句（控制席补充②，同根一次扫完）：docs/openapi/openapi-p0.yaml 与 .json 的 DividendComputeRequest 说明「仅季度方案出预览」改为「季度、半年、年度方案出预览，月度方案不出预览」（只改说明，接口形状与 info.version 不变），dto/DividendComputeRequest.java 类注释同句同改；security-scans 两份 md 的 OpenAPI SHA-256 行按改后 json 更新，重生成 operation-matrix 与 openapi-closure；docs/ 下 PRD、页面矩阵、开发设计、验收矩阵其余同类句已与现码一致，历史记录与变更日志不改。依据：BSM:1777「每月另出一张只读的预览单」「分红按所配周期一期一分配」。
+- 18AX 合并前再变基（2026-11-19）：18AV 财务应收应付与对账组（PR #601）合并后，本段从 ff83ee69 再变基到 origin/main f77447e8（又含 18AV：无迁移、OpenAPI 1393 不变、info.version V0.80；决策台账 V1.04 与 18AV 落地位置补记；后端 FinanceService.AR_AP_SOURCE_TYPE_LABELS 与前端 KEY_VALUE_LABELS.source_type 台账来源各 60 项）。本段迁移仍为 V658～V660（609 个迁移），OpenAPI 1393→1397，info.version V0.81。
+  - 冲突与解法（7 个文件）：apps/web/src/admin/pages/FinanceArApLedgerPage.tsx 取主干 317-R1 结构，页面自带的来源表 SOURCE_TYPE_LABELS 不再保留，来源名由统一字段值表提供，该页面解后与主干相同，不在本段改动内；本段原加在该页面表里的 bar_loan「借款还款」并入 apps/web/src/admin/i18n/fieldLabels.ts 的 KEY_VALUE_LABELS.source_type（主干 317-R1 补的各项原样在前，本段一行接后），前后端两表各 61 项逐键一致；docs/finance-settlement-product-prd-v0.1.md、docs/platform-governance-prd-v0.1.md 变更日志的冲突行两边都留，本段行在上、主干 18AV 行在下；本台账版本行定 V1.05，文末主干 18AV 补记原样在前，空一行接本段 18AX 补记；security-scans 两份 md 的计数与 SHA 两行取主干后按下文重做。
+  - 自动合并核对：两边都改、由 git 自动合并的还有 FinanceService.java、页面矩阵 CSV、openapi-p0.yaml 与 .json、验收矩阵、收口附录、html-prd-coverage.csv 共 7 个。按行多重集核对，两边增删都在，没有新增重复行；后端 AR_AP_SOURCE_TYPE_LABELS 与前端 KEY_VALUE_LABELS.source_type 各 61 项逐键一致（含 bar_loan「借款还款」）。未发现合并造成的问题，没有改代码与业务逻辑。
+  - 被吞版本补升：两边都从同一基线 +0.01、被 git 当同一改动静默合并的版本递增再 +0.01——backend/src/main/java/com/complex/platform/finance/FinanceService.java V0.51，页面矩阵 CSV 第 2 行（ADM-OV-001）implementation_status 中的文件版本 V0.39；解冲突时已定 fieldLabels.ts V0.45、财务 PRD V0.40、平台治理 PRD V0.92、本台账 V1.05。
+  - 统一重做：OpenAPI yaml 与 json 的 info.version 就地由 V0.80 改为 V0.81（深比较一致，操作各 1397）；K-contract 补记引的 yaml 行号按变基后顺移 4 行改为现值（18AV 在本段新增操作之前的 yaml 里净增 4 行）；验收矩阵与收口附录重生成，只改文件头为 V0.81（1397 operations、444 permissions、2794 events）；数据隔离规格（V660、278 张含 scope 字段的表）与 domain-ownership-scope（574 张表）重生成无变化；refresh-entry-doc-baseline --check 通过（README 与入口文档仍为「V660（609 个迁移）」「1397」），不带 --check 实跑只改日期，不提交；security-scans 两份 md 只改第 6、7 行为计数 1397、SHA b0336fd3596e197049cccea2f7373d64389761e772bcb862fb8c65ea0f817607，未跑 generate-formal-security-baseline.mjs；security-baseline-latest.json 已是 1397，不改。其余改动文件的版本头逐个对 f77447e8 核过：改动的基线文件恰好 +0.01，新文件 V0.01，PRD 各只升一次。财务 PRD §4B.1 第 317 条现状句「台账页来源中文名与后端 AR_AP_SOURCE_TYPE_LABELS 逐字同名（共 60 项）」随合并改为 61 项（含 bar_loan 借款还款），V0.40 变更日志行补记，版本不再升。
+  - 合并回归：FinanceArApLedgerPage.test.tsx「FinanceArApLedgerPage 来源中文名与后端同名补齐」用例数据加一行 bar_loan 应付，断言详情显示「借款还款」、不显示原码，锁住变基后 bar_loan 中文名改由统一字段值表提供的合并结果；去掉 fieldLabels.ts 里的 bar_loan 时该断言失败（RED：AssertionError: expected null not to be null，FinanceArApLedgerPage.test.tsx:253），恢复后该文件 25 条全过（GREEN）；测试文件版本 V0.14→V0.15。
+  - 本轮实测（f77447e8 基线）：清掉镜像 dividend、finance 包的 classes 与 test-classes 后，b70_test.sh --fresh 定向 9 类 226 条 0 红（DividendBarLoanJdbcIntegrationTests 5、DividendJdbcIntegrationTests 24、DividendOtherShareholdersJdbcIntegrationTests 6、DividendFinalSnapshotGateJdbcIntegrationTests 16、DividendWithholdingTaxRateJdbcIntegrationTests 2、FinanceServiceTests 102、FinanceJdbcIntegrationTests 40、PaymentConfirmationJdbcTests 20、InternalPayableExecutionJdbcIntegrationTests 11；一次性库迁到 V660，609 个迁移）；b70_web.sh FinanceArApLedgerPage FinanceDividendsPage MerchantZoneDividendsPage FinanceDividendTaxRatePanel FinanceDividendLoansPanel：typecheck 0 错、13 个文件 67 条全过；共用锁下 chromium 跑 tests/e2e/full-admin-visual.spec.ts 2 条全过、无截图差异，不重拍；门禁 verify:p0-contract、verify:html-ledger-sync、verify:entry-anchors、verify:entry-doc-baseline、verify:security-baseline、verify:data-isolation-spec、verify:domain-ownership-scope（574 张表）、verify:migration-version-order（本分支新增 3 个迁移，均排在主干最大号 V648 之后）、verify-audit-labels（业务类型 433、事件名 2354，0 处缺失）、verify-full-admin-page-matrix（117 页）、verify-admin-result-labels（0 处缺失）、git diff --check 全绿，改动文件无 CRLF、无 BOM；共用锁下 npm run verify:predeploy 退出码 0。运行验收证据随指纹变化已过时，由合并前证据链按提交树重刷，本轮不动。
+- 18AX 落地位置补记·运行验收证据、快照、终验文档刷新（无新裁决）：业务提交 61cea293 之后，按第十八批裁决 25 重刷了运行验收证据：后端全量 6979 测，0 失败 0 错误；apps/web 构建通过；常规界面验收（接口全部 mock）实跑 40 条全过；真实后端界面验收未跑，runtime_ready=false。随后依次重生成闭环当前态快照、生产闭环缺口报告、界面验收报告、无上线指挥台。生成器没改。手改 docs/final-closed-loop-acceptance-audit-v0.1.md 与 docs/code-implementation-acceptance-audit-v0.1.md：前端单测源码计数改为 1909；被核文件行数都没变；后端全量与常规界面验收的数字、日期改为本次实跑值；写入 npm run verify:unit 实跑结果，五个工作区全过。交付门禁于 2026-11-19 01:59 UTC 在工作树逐项实跑子项，NAS 两项现场探测未跑。仍红的有两项：一是 coding-host-protection，它写死主仓路径，在工作树口径下必红，属工具口径，不做；二是 final-closed-loop-audit，如实留 2 条红（integration-ready、business-acceptance-ready），原因是校验器要求终验把联调、业务验收写成「是」，而裁决 25 定了不跑真实后端界面验收、运行验收未就绪，终验写的是「否」。verify:delivery-gates 总链仍是红的。

@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -11,7 +11,7 @@ import type { AdminPageProps, EffectivePermissionsState } from "../types";
 // 待审批版本可跳审批原件，同商户有待审批版本时各行「修改」禁用。
 const MERCHANTS = [{ id: "merchant-1", merchant_name: "酒吧甲", status: "active" }];
 const BASE = {
-  merchant_id: "merchant-1", principal_user_id: "usr_principal", platform_share_bps: 8000, tax_rate_bps: 2000,
+  merchant_id: "merchant-1", principal_user_id: "usr_principal", platform_share_bps: 8000, platform_share_min_bps: 5000, platform_share_max_bps: 9000,
   period_type: "semiannual", period_min_months: 3, period_max_months: 12, revenue_domains: ["bar"], payout_pay_slot: 1,
   status: "active", reason: "按工商登记持股比例",
 };

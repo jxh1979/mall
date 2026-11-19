@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "综合体管理系统 P0 API 契约",
-    "version": "V0.80",
+    "version": "V0.81",
     "description": "P0 首批编码前置契约。本文采用 JSON-compatible YAML，便于与 openapi-p0.json 保持一致。正式后端以 Java 21 + Spring Boot 4.x + springdoc-openapi 输出运行时 OpenAPI，并与本契约比对。"
   },
   "servers": [
@@ -61114,8 +61114,8 @@
           "finance"
         ],
         "operationId": "createDividendPlan",
-        "summary": "新建分红方案：提交该商户第一个方案版本，最高权限审批，自生效起始日起生效；最高权限本人提交直接生效（比例/税率/周期/收入域可配，80/20 仅默认值；销货成本、全部费用与该期税费固定扣减，发放付账日与分红周期上下限必填）",
-        "description": "第十八批 AQ 段第 234 条 234-R1（BSM:521「所有涉及钱的配置一律版本化：每次改动生成新版本，必须填写生效起始日期，并先存为草案、经高敏权限“转正”审批通过后按指定日期生效，不即改即生效」；PGM:666「持股分红的方案配置、算单、审批和发放属于资金类高危动作，由最高权限审批，提交人不能审批自己的单据」；BSM:576「持授权 U 盘密钥的最高权限本人发起的操作，不需要经过任何审批」）：新建即提交该商户的第一个方案版本，空缺字段按默认口径补齐；effective_from（生效起始日，须晚于该商户当前营业日）与 reason（调整理由）必填，否则 400 VALIDATION_FAILED。最高权限本人提交直接落已批准版本（status 按请求 active 或 ended）；其他人提交落待审批版本（status=pending_review），进统一审批：action_type=finance.dividend.plan.change、object_type=dividend_plan、object_id=方案版本 ID，策略 dividend_plan_change（最高权限审批，提交人不能审批自己的单），以 finance. 开头按涉钱出厂时限 1 个工作日；审批摘要含调整理由、商户、生效起始日与改前到改后的变化。审批通过时生效起始日仍晚于该商户当前营业日的按申请落 active 或 ended，已不晚于的落 expired（须重新提交）；驳回落 rejected。该商户已有已批准或待审批版本返回 409 DIVIDEND_PLAN_EXISTS（请在现有方案上用 updateDividendPlan 提交新版本）。第十八批 AQ 段第 244 条 244-R1（ENUM:299「分红周期可配置（业务参数，按经营主体可配，酒吧商户作为独立经营主体同样适用，须同时配置上下限）」）：period_min_months、period_max_months 必填，下限不大于上限，period_type 对应月数须落在上下限之内，否则 400 VALIDATION_FAILED。第十八批 AQ 段第 234 条 234-R2（BSM:1775「娱乐平台公司、主理人和其他股东按每家酒吧工商登记的真实持股比例分配」）：other_shareholders 不填即无其他股东；平台与其他股东合计不超过 10000 万分比，主理人为余下部分，否则 400 VALIDATION_FAILED。响应 data 为方案版本记录：除请求字段外含 id、status（pending_review 待审批、active、ended、rejected 已驳回、expired 审批时已过生效日）、stop_requested（是否申请停用）、reason（调整理由）、review_id（复核单号）、decided_by、decided_at（审批人与审批时间，最高权限本人提交时即本人与提交时间）、period_min_months、period_max_months（可空）、other_shareholders（数组，元素 id、plan_id、shareholder_name、shareholder_type、share_bps、sort_order）。",
+        "summary": "新建分红方案：提交该商户第一个方案版本，最高权限审批，自生效起始日起生效；最高权限本人提交直接生效（比例/周期/收入域可配，80/20 仅新建建议值，代扣税率全平台统一、不在方案上；销货成本、全部费用与该期税费固定扣减，发放付账日、分红周期上下限与平台比例上下限必填）",
+        "description": "第十八批 AQ 段第 234 条 234-R1（BSM:521「所有涉及钱的配置一律版本化：每次改动生成新版本，必须填写生效起始日期，并先存为草案、经高敏权限“转正”审批通过后按指定日期生效，不即改即生效」；PGM:666「持股分红的方案配置、算单、审批和发放属于资金类高危动作，由最高权限审批，提交人不能审批自己的单据」；BSM:576「持授权 U 盘密钥的最高权限本人发起的操作，不需要经过任何审批」）：新建即提交该商户的第一个方案版本，空缺字段按默认口径补齐；effective_from（生效起始日，须晚于该商户当前营业日）与 reason（调整理由）必填，否则 400 VALIDATION_FAILED。最高权限本人提交直接落已批准版本（status 按请求 active 或 ended）；其他人提交落待审批版本（status=pending_review），进统一审批：action_type=finance.dividend.plan.change、object_type=dividend_plan、object_id=方案版本 ID，策略 dividend_plan_change（最高权限审批，提交人不能审批自己的单），以 finance. 开头按涉钱出厂时限 1 个工作日；审批摘要含调整理由、商户、生效起始日与改前到改后的变化。审批通过时生效起始日仍晚于该商户当前营业日的按申请落 active 或 ended，已不晚于的落 expired（须重新提交）；驳回落 rejected。该商户已有已批准或待审批版本返回 409 DIVIDEND_PLAN_EXISTS（请在现有方案上用 updateDividendPlan 提交新版本）。第十八批 AQ 段第 244 条 244-R1（ENUM:299「分红周期可配置（业务参数，按经营主体可配，酒吧商户作为独立经营主体同样适用，须同时配置上下限）」）：period_min_months、period_max_months 必填，下限不大于上限，period_type 对应月数须落在上下限之内，否则 400 VALIDATION_FAILED。第十八批 AQ 段第 234 条 234-R2（BSM:1775「娱乐平台公司、主理人和其他股东按每家酒吧工商登记的真实持股比例分配」）：other_shareholders 不填即无其他股东；平台与其他股东合计不超过 10000 万分比，主理人为余下部分，否则 400 VALIDATION_FAILED。第十八批 AX 段第 271 条 271-R1（BSM:1776「全平台统一可配」）：代扣个税税率不再按方案配置，请求与方案记录都没有 tax_rate_bps，出单取全平台统一税率版本（见 listDividendTaxRates、submitDividendTaxRate）。第十八批 AX 段第 272 条 272-R1（BSM:1775「新酒吧可预填 80%／20%（业务参数，按经营主体可配，须同时配置上下限）建议值」；BSM:521「超出该区间的配置一律拒绝生效，未填写上下限的参数不得上线」）：平台（参股方）比例上下限 platform_share_min_bps、platform_share_max_bps 新建必填，随方案版本一起审批；缺任一、下限小于 0 或大于上限、上限超过 10000、platform_share_bps（不填按 8000 建议值）不在上下限之内，返回 400 VALIDATION_FAILED（「平台（参股方）比例须同时配置上下限，且比例须在上下限之内」），最高权限本人提交同样判。响应 data 为方案版本记录：除请求字段外含 id、status（pending_review 待审批、active、ended、rejected 已驳回、expired 审批时已过生效日）、stop_requested（是否申请停用）、reason（调整理由）、review_id（复核单号）、decided_by、decided_at（审批人与审批时间，最高权限本人提交时即本人与提交时间）、period_min_months、period_max_months（可空）、platform_share_min_bps、platform_share_max_bps（可空，272-R1 之前提交的版本为空）、other_shareholders（数组，元素 id、plan_id、shareholder_name、shareholder_type、share_bps、sort_order）。",
         "x-auth-context": "staff-token",
         "x-permission": "finance.dividend.manage",
         "x-data-scope": "platform",
@@ -61160,7 +61160,7 @@
         ],
         "operationId": "updateDividendPlan",
         "summary": "修改分红方案：提交新版本，最高权限审批，自生效起始日起生效；最高权限本人提交直接生效（历史分红单按单内所记版本追溯，不受影响）",
-        "description": "第十八批 AQ 段第 234 条 234-R1（BSM:521；BSM:1775「必须以获批登记版本生效，修改不能追溯已经确认或发放的分红」；PGM:666；BSM:576）：路径 id 为改前版本，须为已批准版本（status 为 active 或 ended），否则 409 DIVIDEND_PLAN_NOT_EDITABLE；不改原版本，另落一个新版本：取值＝改前版本各字段叠加请求里非空的字段，custom_deductions、other_shareholders 不填照改前版本复制、给了按请求整份替换，period_min_months、period_max_months 不填沿用改前版本。merchant_id 不可变更（400 VALIDATION_FAILED）。effective_from（须晚于该商户当前营业日）与 reason 必填，否则 400 VALIDATION_FAILED；status=ended 表示本版本自生效起始日起停用。该商户已有待审批版本返回 409 DIVIDEND_PLAN_PENDING_EXISTS（审批结束后再提交）；同一生效起始日已有已批准版本返回 409 DIVIDEND_PLAN_VERSION_CONFLICT。审批与生效、周期上下限（244-R1）与其他股东（234-R2）校验同 createDividendPlan。响应 data 为方案版本记录：除请求字段外含 id、status（pending_review 待审批、active、ended、rejected 已驳回、expired 审批时已过生效日）、stop_requested（是否申请停用）、reason（调整理由）、review_id（复核单号）、decided_by、decided_at（审批人与审批时间，最高权限本人提交时即本人与提交时间）、period_min_months、period_max_months（可空）、other_shareholders（数组，元素 id、plan_id、shareholder_name、shareholder_type、share_bps、sort_order）。",
+        "description": "第十八批 AQ 段第 234 条 234-R1（BSM:521；BSM:1775「必须以获批登记版本生效，修改不能追溯已经确认或发放的分红」；PGM:666；BSM:576）：路径 id 为改前版本，须为已批准版本（status 为 active 或 ended），否则 409 DIVIDEND_PLAN_NOT_EDITABLE；不改原版本，另落一个新版本：取值＝改前版本各字段叠加请求里非空的字段，custom_deductions、other_shareholders 不填照改前版本复制、给了按请求整份替换，period_min_months、period_max_months 与 platform_share_min_bps、platform_share_max_bps 不填沿用改前版本（改前版本未配平台比例上下限的须本次补填）。merchant_id 不可变更（400 VALIDATION_FAILED）。effective_from（须晚于该商户当前营业日）与 reason 必填，否则 400 VALIDATION_FAILED；status=ended 表示本版本自生效起始日起停用。该商户已有待审批版本返回 409 DIVIDEND_PLAN_PENDING_EXISTS（审批结束后再提交）；同一生效起始日已有已批准版本返回 409 DIVIDEND_PLAN_VERSION_CONFLICT。审批与生效、周期上下限（244-R1）、其他股东（234-R2）与平台比例上下限（272-R1）校验同 createDividendPlan。第十八批 AX 段第 332 条 332-R1（BSM:1777「分红按所配周期一期一分配」；BSM:1775「修改不能追溯已经确认或发放的分红」）：新版本的 period_type 与被接替的版本（新生效起始日前一日已生效的版本）不同时，effective_from 须为新旧两种周期共同的期初（1、3、6、12 个月逐级整除，即较长一种周期的期初），否则 400 VALIDATION_FAILED（「改分红周期时，生效起始日须为新旧两种周期共同的期初（如季度与半年之间为 1 月 1 日或 7 月 1 日，涉及年度为 1 月 1 日），以免已分配期间重复分配或留空」）；周期不变不限；在上下限校验之后判，最高权限本人提交同样判。响应 data 为方案版本记录：除请求字段外含 id、status（pending_review 待审批、active、ended、rejected 已驳回、expired 审批时已过生效日）、stop_requested（是否申请停用）、reason（调整理由）、review_id（复核单号）、decided_by、decided_at（审批人与审批时间，最高权限本人提交时即本人与提交时间）、period_min_months、period_max_months（可空）、platform_share_min_bps、platform_share_max_bps（可空，272-R1 之前提交的版本为空）、other_shareholders（数组，元素 id、plan_id、shareholder_name、shareholder_type、share_bps、sort_order）。",
         "x-auth-context": "staff-token",
         "x-permission": "finance.dividend.manage",
         "x-data-scope": "platform",
@@ -61220,7 +61220,7 @@
         ],
         "operationId": "computeDividendStatements",
         "summary": "期间分红作业：对期末日已生效的方案版本各算一张计算单（净利润=收入−成本−费用−税费；幂等可重跑，草稿/预览/驳回作废重算，进入审批流跳过）",
-        "description": "第十八批 V 段第 159 条（ENUM:190「非最终快照的数据一律不得进入结算、分红、正式提成计算和对账关账」）：159-R5 正式单（kind=official）——方案商户检查单位（酒吧按该店，其他商户按所属综合体；建档前的营业日不计）期间内任一营业日五类数据未全部标记为最终的，该方案不出单、记入 skipped（reason「以下营业日数据尚未标记为最终，不能出正式分红单：」后列「yyyy-MM-dd 单位名：类别原词、类别原词」，最多 10 行），旧草稿不作废。159-R6 预览（kind=preview；BSM:1777、DEC-R8-45）只判该月最后一个营业日的五类，未齐的方案记入 skipped（reason「该月最后一个营业日（yyyy-MM-dd）的五类数据尚未全部标记为最终，不得生成预览：」后接同样的列表）；某单位该日五类标齐时由 markDailyCloseFinal 提交后自动出预览，不设定时作业。跳过不是错误码，照常返回 200。159-R10：预览单不计尚未月结定格的服务费扣留数（revenue_bar 明细说明注明「预览：尚未月结定格的服务费扣留数暂不计」），正式单照旧要求月结定格，未定格 409 BAR_REVENUE_PENDING。第十八批 AC 段第 210 条 210-R3（BSM:1774「以及该期间的各项税费（含增值税、所得税及其他应由该主体承担的税费）」；BSM:1801「连接税务处理，拿到这期的各项税费，算出净利润」；第十八批裁决 42）：净利润再减该期税费——取方案商户经营主体（生效绑定的运营主体，否则商户档案上的经营主体）已生效（status=approved）、所属期末月落在本期内的税费实际申报金额（按季申报的整季计入季末那个月所在的那一期），逐税种落 tax_period 负额明细行，合计回显于计算单 period_tax_cent（net_profit_cent = revenue_cent − cost_cent − expense_cent − period_tax_cent）。第十八批 AR 段第 233 条 233-R3：同一经营主体已生效、计入月份（accounting_month）落在本期内的差异调整单（kind=period_difference，可正可负）一并扣减，逐税种与申报金额各成一行 tax_period（所属期写「原所属期 更正（差异调整单，计入 yyyy-MM）」）；补提、冲回调整单与实际缴纳登记不扣。正式单另判出单闸（第十八批裁决 42「正式单出单前本期每个月都要有已生效的税费登记，缺的不出单并写跳过原因」）：本期每个月都须被该经营主体至少一条已生效申报登记的所属期（period_start_month～period_end_month）覆盖，缺的该方案不出单、旧单不作废，记入 skipped（reason「本期 yyyy-MM、yyyy-MM 尚无已生效的税费申报登记，请先登记并审批通过后再出正式单」）；登记依法可分配金额后的重算同闸（不出单时 409 DIVIDEND_STATE_INVALID，message 即该原因）；预览照扣已生效税费、不判此闸。第十八批 AC 段第 211 条 211-R1（BSM:1777；第十八批裁决 43「「暂不分红」该期不出正式单、利润不补分；「暂缓分红」等协商恢复后由财务登记恢复，再照常出单；月度预览照常」）：正式单在期间标签校验之后、出单闸之前先判暂不分红／暂缓分红登记，该商户该期有未恢复登记的不出单、记入 skipped（reason「本期经协商暂不分红（或暂缓分红），不出正式单（原因：…；协商结果：…）」）；预览不判。第十八批 AQ 段第 234 条 234-R1（BSM:521「已发生的业务一律按当时生效的版本计算」）：每个商户取期末日已生效的方案版本（已批准、生效起始日不晚于期末日的最新一个；该版本 status=ended 即停用、不出单）出单；指定 merchant_id 找不到时 404 DIVIDEND_PLAN_NOT_FOUND（「该商户在 yyyy-MM-dd 没有已生效的分红方案」）。第十八批 AQ 段第 234 条 234-R2（BSM:1775；BSM:1757「多方分配产生的非涉税尾差单独留痕，并由该笔业务实际承担结算责任的主体承担」）：平台、各其他股东与主理人（10000 − 平台 − 其他股东合计）按持股比例各自四舍五入到分，可分配额减各方合计为尾差（带符号，由该酒吧公司承担、不发给任何一方）；个人股东按方案税率代扣（整除截断），公司股东不代扣；每位其他股东落 shareholder_gross（应得）、shareholder_tax_withheld（代扣，负数）、shareholder_payout（实发）三行明细，尾差不为 0 另落 rounding_residual 行；计算单（computed[]）新增 other_shareholders_gross_cent（其他股东应得合计，不小于 0）与 rounding_residual_cent（尾差，带符号）。第十八批 AQ 段第 243 条 243-R1（BSM:1787「酒吧关闭须完成关停结算，依法核清本次分红」；18AQ 控制席判定）：有关停结算登记的商户取 min（期末日，关店最后营业日）已生效的版本，指定商户找不到时 404 提示里的日期即取该日；关店所在期正式单的五类最终标记只查期初到关店最后营业日，停用、存档后照查；整期在关店最后营业日之后的记入 skipped（reason「该酒吧已于 yyyy-MM-dd 关店（已登记关停结算），关店后的期间不再分红」）。",
+        "description": "第十八批 V 段第 159 条（ENUM:190「非最终快照的数据一律不得进入结算、分红、正式提成计算和对账关账」）：159-R5 正式单（kind=official）——方案商户检查单位（酒吧按该店，其他商户按所属综合体；建档前的营业日不计）期间内任一营业日五类数据未全部标记为最终的，该方案不出单、记入 skipped（reason「以下营业日数据尚未标记为最终，不能出正式分红单：」后列「yyyy-MM-dd 单位名：类别原词、类别原词」，最多 10 行），旧草稿不作废。159-R6 预览（kind=preview；BSM:1777、DEC-R8-45）只判该月最后一个营业日的五类，未齐的方案记入 skipped（reason「该月最后一个营业日（yyyy-MM-dd）的五类数据尚未全部标记为最终，不得生成预览：」后接同样的列表）；某单位该日五类标齐时由 markDailyCloseFinal 提交后自动出预览，不设定时作业。跳过不是错误码，照常返回 200。159-R10：预览单不计尚未月结定格的服务费扣留数（revenue_bar 明细说明注明「预览：尚未月结定格的服务费扣留数暂不计」），正式单照旧要求月结定格，未定格 409 BAR_REVENUE_PENDING。第十八批 AC 段第 210 条 210-R3（BSM:1774「以及该期间的各项税费（含增值税、所得税及其他应由该主体承担的税费）」；BSM:1801「连接税务处理，拿到这期的各项税费，算出净利润」；第十八批裁决 42）：净利润再减该期税费——取方案商户经营主体（生效绑定的运营主体，否则商户档案上的经营主体）已生效（status=approved）、所属期末月落在本期内的税费实际申报金额（按季申报的整季计入季末那个月所在的那一期），逐税种落 tax_period 负额明细行，合计回显于计算单 period_tax_cent（net_profit_cent = revenue_cent − cost_cent − expense_cent − period_tax_cent）。第十八批 AR 段第 233 条 233-R3：同一经营主体已生效、计入月份（accounting_month）落在本期内的差异调整单（kind=period_difference，可正可负）一并扣减，逐税种与申报金额各成一行 tax_period（所属期写「原所属期 更正（差异调整单，计入 yyyy-MM）」）；补提、冲回调整单与实际缴纳登记不扣。正式单另判出单闸（第十八批裁决 42「正式单出单前本期每个月都要有已生效的税费登记，缺的不出单并写跳过原因」）：本期每个月都须被该经营主体至少一条已生效申报登记的所属期（period_start_month～period_end_month）覆盖，缺的该方案不出单、旧单不作废，记入 skipped（reason「本期 yyyy-MM、yyyy-MM 尚无已生效的税费申报登记，请先登记并审批通过后再出正式单」）；登记依法可分配金额后的重算同闸（不出单时 409 DIVIDEND_STATE_INVALID，message 即该原因）；预览照扣已生效税费、不判此闸。第十八批 AC 段第 211 条 211-R1（BSM:1777；第十八批裁决 43「「暂不分红」该期不出正式单、利润不补分；「暂缓分红」等协商恢复后由财务登记恢复，再照常出单；月度预览照常」）：正式单在期间标签校验之后、出单闸之前先判暂不分红／暂缓分红登记，该商户该期有未恢复登记的不出单、记入 skipped（reason「本期经协商暂不分红（或暂缓分红），不出正式单（原因：…；协商结果：…）」）；预览不判。第十八批 AQ 段第 234 条 234-R1（BSM:521「已发生的业务一律按当时生效的版本计算」）：每个商户取期末日已生效的方案版本（已批准、生效起始日不晚于期末日的最新一个；该版本 status=ended 即停用、不出单）出单；指定 merchant_id 找不到时 404 DIVIDEND_PLAN_NOT_FOUND（「该商户在 yyyy-MM-dd 没有已生效的分红方案」）。第十八批 AQ 段第 234 条 234-R2（BSM:1775；BSM:1757「多方分配产生的非涉税尾差单独留痕，并由该笔业务实际承担结算责任的主体承担」）：平台、各其他股东与主理人（10000 − 平台 − 其他股东合计）按持股比例各自四舍五入到分，可分配额减各方合计为尾差（带符号，由该酒吧公司承担、不发给任何一方）；个人股东按全平台统一代扣税率代扣（整除截断，第十八批 AX 段 271-R1 起），公司股东不代扣；每位其他股东落 shareholder_gross（应得）、shareholder_tax_withheld（代扣，负数）、shareholder_payout（实发）三行明细，尾差不为 0 另落 rounding_residual 行；计算单（computed[]）新增 other_shareholders_gross_cent（其他股东应得合计，不小于 0）与 rounding_residual_cent（尾差，带符号）。第十八批 AQ 段第 243 条 243-R1（BSM:1787「酒吧关闭须完成关停结算，依法核清本次分红」；18AQ 控制席判定）：有关停结算登记的商户取 min（期末日，关店最后营业日）已生效的版本，指定商户找不到时 404 提示里的日期即取该日；关店所在期正式单的五类最终标记只查期初到关店最后营业日，停用、存档后照查；整期在关店最后营业日之后的记入 skipped（reason「该酒吧已于 yyyy-MM-dd 关店（已登记关停结算），关店后的期间不再分红」）。第十八批 AX 段第 330 条 330-R1（BSM:1781「主理人这期该得的钱，按有效协议先抵其对相应法律主体尚未结清的欠款」）：方案开欠款抵扣时，可抵额只取主理人本人欠该酒吧公司的未清应收（该酒吧台账里往来方为方案主理人账户的未清应收），酒吧公司自己的租金等应收、客人挂账应收不抵；arrears_offset 明细行逐项写明债务人（主理人账户）与债权人（本酒吧公司）。第十八批 AX 段第 333 条 333-R1（ENUM:190「非最终快照的数据一律不得进入结算、分红」；BSM:1777「数据未全部标记最终之前不得生成预览」）：酒吧商户的五类最终标记一律按该店查、不看在营与存档（未登记关停结算就停用或存档的同样照查）——正式单查期初至 min（期末日，关店最后营业日），预览只查 min（期末日，关店最后营业日）这一天（未登记关停结算即期末日），跳过原因里的日期即该日；非酒吧商户照旧按所属综合体查。第十八批 AX 段第 271 条 271-R1（BSM:1776「全平台统一可配」；BSM:521「每一笔单据在生成时就把所用配置版本固化在单上」）：代扣税率取出单当日营业日（该商户当前营业日）已生效的全平台统一版本（见 listDividendTaxRates），主理人与其他个人股东同用；计算单 tax_rate_bps 为该税率（公司股东主理人为 0），tax_rate_version_id 固化所用版本 ID。第十八批 AX 段第 273 条 273-R2（PGM:436「酒吧当期可分配利润必须先偿还全部到期借款本息，剩余部分才可用于分红」；BSM:1785「存在逾期未还借款的，分红一律优先偿还借款」；BSM:1778「关着时仍须满足法定可分配额与借款清偿前置，再按比例分配」）：出单当日营业日已到期未还的借款本息（registerDividendBarLoan 登记、所挂酒吧应付的未付额；还款期限不晚于该日且未付清）按还款顺序、还款期限，在依法可分配上限之后、按比例劈分之前取小先偿（不超过可分配额），余额再按持股比例劈分；逐笔落 loan_repayment 负额明细行（出借方、还款期限、未还本息、本期先偿额与台账单号），合计回显于计算单 loan_repayment_cent（int64，不小于 0），distributable_cent＝min（经营口径可分配额，依法核定额）− loan_repayment_cent；预览同一算式；未到期的借款不扣。",
         "x-auth-context": "staff-token",
         "x-permission": "finance.dividend.manage",
         "x-data-scope": "platform",
@@ -61266,7 +61266,7 @@
         ],
         "operationId": "listDividendStatements",
         "summary": "分红计算单分页（商户 scope 账号只见本商户，主理人视图同入口）",
-        "description": "商户 scope 账号读到即记本页审批通过(含已发放)的分红单已读(首页未读账单提醒，第 92 条，BSM L1597)；平台账号看列表不记已读。第十八批 AQ 段第 234 条 234-R2：每条计算单另带 other_shareholders_gross_cent 与 rounding_residual_cent（见 getDividendStatement）。",
+        "description": "商户 scope 账号读到即记本页审批通过(含已发放)的分红单已读(首页未读账单提醒，第 92 条，BSM L1597)；平台账号看列表不记已读。第十八批 AQ 段第 234 条 234-R2：每条计算单另带 other_shareholders_gross_cent 与 rounding_residual_cent（见 getDividendStatement）；第十八批 AX 段 271-R1、273-R2 起另带 tax_rate_version_id 与 loan_repayment_cent（见 getDividendStatement）。",
         "x-auth-context": "staff-token",
         "x-permission": "finance.dividend.view",
         "x-data-scope": "merchant",
@@ -61377,7 +61377,7 @@
         ],
         "operationId": "getDividendStatement",
         "summary": "分红计算单详情（头 + 算式明细行，逐项可追溯到三个来源台账）",
-        "description": "第十八批 AQ 段第 234 条 234-R2：计算单头含 other_shareholders_gross_cent（其他股东应得合计，不小于 0）与 rounding_residual_cent（多方各自四舍五入的尾差，带符号，由该酒吧公司承担）；明细行 line_type 另有 shareholder_gross、shareholder_tax_withheld、shareholder_payout（每位其他股东各一行）与 rounding_residual（尾差不为 0 时）。",
+        "description": "第十八批 AQ 段第 234 条 234-R2：计算单头含 other_shareholders_gross_cent（其他股东应得合计，不小于 0）与 rounding_residual_cent（多方各自四舍五入的尾差，带符号，由该酒吧公司承担）；明细行 line_type 另有 shareholder_gross、shareholder_tax_withheld、shareholder_payout（每位其他股东各一行）与 rounding_residual（尾差不为 0 时）。第十八批 AX 段第 271 条 271-R1：计算单头 tax_rate_bps 为出单当日营业日已生效的全平台统一代扣税率（公司股东主理人为 0），tax_rate_version_id（可空）为所用税率版本 ID（见 listDividendTaxRates）。第十八批 AX 段第 273 条 273-R2：计算单头另含 loan_repayment_cent（出单先偿的到期未还借款本息，int64，不小于 0；distributable_cent＝min（经营口径可分配额，依法核定额）− loan_repayment_cent）；明细行 line_type 另有 loan_repayment（负额，逐笔借款一行）。",
         "x-auth-context": "staff-token",
         "x-permission": "finance.dividend.view",
         "x-data-scope": "merchant",
@@ -61492,6 +61492,7 @@
         ],
         "operationId": "submitDividendStatement",
         "summary": "提交审阅：draft → pending_review（预览单不可提交）",
+        "description": "第十八批 AX 段第 273 条 273-R2（PGM:436「存在逾期未还借款的一律不得分红，分红方案提交时须附借款清偿情况」）：在状态与依法可分配金额校验之后，该酒吧有逾期未还借款（还款期限早于该商户当前营业日、所挂应付仍未付清）返回 409 DIVIDEND_LOAN_OVERDUE（「该酒吧有逾期未还借款（出借方 ＜名称＞，到期 yyyy-MM-dd，未还本息 N 元；……），须先还清才能分红」）。借款清偿情况见计算单 loan_repayment 明细行与 listDividendBarLoans。",
         "x-auth-context": "staff-token",
         "x-permission": "finance.dividend.manage",
         "x-data-scope": "platform",
@@ -61505,7 +61506,8 @@
           "DIVIDEND_STATEMENT_NOT_FOUND",
           "DIVIDEND_STATE_INVALID",
           "DIVIDEND_PREVIEW_NOT_APPROVABLE",
-          "DIVIDEND_LEGAL_AMOUNT_REQUIRED"
+          "DIVIDEND_LEGAL_AMOUNT_REQUIRED",
+          "DIVIDEND_LOAN_OVERDUE"
         ],
         "requestBody": {
           "$ref": "#/components/requestBodies/DividendActionRequest"
@@ -61551,7 +61553,7 @@
         ],
         "operationId": "approveDividendStatement",
         "summary": "审批通过：pending_review → approved；净发放额>0 时给主理人挂应付（source_type=dividend_payout，一单一挂）；提交人不得审批自己提交的单",
-        "description": "第十八批 AQ 段第 234 条 234-R2（BSM:1787「分红由该酒吧公司自己从其对公账户支付给主理人与其他股东……发放走应付款项」）：除主理人应付外，每位其他股东实发（shareholder_payout 明细行）大于 0 的另挂一笔应付（source_type=dividend_payout），应付对方与 source_id 均为该股东实发行 ID，到期日同为方案发放付账日；登记付款前同样须经付款确认（第十八批裁决 55、65）。",
+        "description": "第十八批 AQ 段第 234 条 234-R2（BSM:1787「分红由该酒吧公司自己从其对公账户支付给主理人与其他股东……发放走应付款项」）：除主理人应付外，每位其他股东实发（shareholder_payout 明细行）大于 0 的另挂一笔应付（source_type=dividend_payout），应付对方与 source_id 均为该股东实发行 ID，到期日同为方案发放付账日；登记付款前同样须经付款确认（第十八批裁决 55、65）。第十八批 AX 段第 330 条 330-R1（BSM:1781）：欠款抵扣在审批时按冻结抵扣额对主理人本人欠该酒吧公司的未清应收（往来方为主理人账户）逐项结算（先欠先抵，收款方式 dividend_offset），实结不等于冻结额返回 409 DIVIDEND_ARREARS_CHANGED（「欠款抵扣期间主理人本人的未清欠款发生变化（当前可抵 X 分，单据冻结 Y 分）；请作废重算后再审批」），整笔回滚。第十八批 AX 段第 273 条 273-R2（PGM:436「存在逾期未还借款的一律不得分红」）：在自审闸（SELF_APPROVAL_FORBIDDEN）之后、欠款抵扣结算之前，该酒吧有逾期未还借款同样返回 409 DIVIDEND_LOAN_OVERDUE（原文同 submitDividendStatement）。",
         "x-auth-context": "staff-token",
         "x-permission": "finance.dividend.manage",
         "x-data-scope": "platform",
@@ -61568,7 +61570,8 @@
           "SELF_APPROVAL_FORBIDDEN",
           "DIVIDEND_ARREARS_CHANGED",
           "DIVIDEND_LEGAL_AMOUNT_REQUIRED",
-          "DIVIDEND_PAY_SLOT_MISSING"
+          "DIVIDEND_PAY_SLOT_MISSING",
+          "DIVIDEND_LOAN_OVERDUE"
         ],
         "requestBody": {
           "$ref": "#/components/requestBodies/DividendActionRequest"
@@ -62279,6 +62282,167 @@
             "description": "关停结算登记 ID。"
           }
         ]
+      }
+    },
+    "/api/v1/finance/dividends/tax-rates": {
+      "get": {
+        "tags": [
+          "finance"
+        ],
+        "operationId": "listDividendTaxRates",
+        "summary": "分红代扣个税税率版本列表（全平台统一，含待审批与已驳回）",
+        "description": "第十八批 AX 段第 271 条 271-R1（BSM:1776「全平台统一可配，调整须经财务、税务、法务三审并由顶层平台公司最终确认，出厂默认 20%，须同时配置上下限」；BSM:521「每一笔单据在生成时就把所用配置版本固化在单上」）：列全平台统一分红代扣个税（股息红利）税率的全部版本（含待审批与已驳回），按生效起始日期倒序、出厂版本排最后，同日再按提交时间倒序、id。无查询参数。响应 data 为数组，每项 id、rate_bps（int32，万分比 0～10000）、min_bps、max_bps（int32，可空，出厂版本未配上下限为空）、effective_from（日期，可空，空＝出厂版本、自始有效）、status（pending_review 待财务、税务、法务审核与最高确认 / approved 已生效 / rejected 已驳回）、reason（理由）、review_id（复核单号，可空）、created_by（提交人，可空）、created_at。出厂版本 id 为 dtrv_factory，税率 2000（20%），上下限不预置。取用口径：分红出单取出单当日营业日已生效的版本（生效起始日期不晚于该日的最新已生效版本，没有则取出厂版本），主理人与其他个人股东同用，公司股东不代扣，计算单 tax_rate_version_id 固化所用版本（见 computeDividendStatements）。缺 finance.dividend.view 返回 403 PERMISSION_DENIED；商户账号返回 403 PLATFORM_SCOPE_REQUIRED。",
+        "x-auth-context": "staff-token",
+        "x-permission": "finance.dividend.view",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "dividend.tax_rates_listed",
+        "x-audit-event-failure": "dividend.tax_rates_list_failed",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "finance"
+        ],
+        "operationId": "submitDividendTaxRate",
+        "summary": "提交分红代扣个税税率新版本（全平台统一；存为草案并提交财务、税务、法务审核与最高确认，批准后自生效起始日期起用）",
+        "description": "第十八批 AX 段第 271 条 271-R1（BSM:1776；BSM:521「超出该区间的配置一律拒绝生效，未填写上下限的参数不得上线」；决策台账 DEC-R8-82「调整须走最高一级审批与三审留痕」）：平台财务在持股分红页提交全平台统一分红代扣个税税率的新版本（税率、上下限、生效起始日期与理由），存为草案并提交审批（复核动作 finance.tax_rule.adjust，策略 tax_rule_adjustment_l3，复核对象类型 dividend_tax_rate、对象 ID 为新版本 ID，摘要列原生效版本 → 新版本与生效日，终点为最高权限确认，提交人不能审批自己的提交；最高权限本人提交同样进审批）；批准后 status=approved，自 effective_from 起出单按新版本（此前出的单不变），驳回落 rejected。rate_bps、min_bps、max_bps 缺任一返回 400 VALIDATION_FAILED（「代扣税率须同时填写税率与上下限」）；越出 0～10000 或不满足下限 ≤ 税率 ≤ 上限返回 400 VALIDATION_FAILED（「代扣税率须在 0%～100% 之间，且下限 ≤ 税率 ≤ 上限」）；缺 effective_from 返回 400 VALIDATION_FAILED（「须填写生效起始日期」）；缺 reason 返回 400 VALIDATION_FAILED。同一生效起始日期已有待审批或已生效版本返回 409 DIVIDEND_TAX_RATE_VERSION_CONFLICT（「这一生效起始日已有待审批或已生效的分红代扣税率版本，驳回后才能重新提交」），不另设「生效日须晚于今天」与待审互斥。财务、税务、法务三条线未配真实部门起点返回 409 TAX_DEPARTMENT_ROUTING_REQUIRED（「须先配置财务、税务、法务真实部门审批起点：＜线代码＞」或「部门起点须为在用且具有正式审批角色的人员：＜线代码＞」）；复核未进入待审批返回 409 TAX_APPROVAL_REQUIRED（「税费事项必须进入财税法和最高确认审批」）。权限与平台范围闸在幂等之前；同一幂等键重发返回首次结果，同键换载荷返回 409 IDEMPOTENCY_CONFLICT。响应 data 为税率版本（字段同 listDividendTaxRates 的数组元素，status=pending_review）。缺 finance.dividend.manage 返回 403 PERMISSION_DENIED；商户账号返回 403 PLATFORM_SCOPE_REQUIRED。",
+        "x-auth-context": "staff-token",
+        "x-permission": "finance.dividend.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "dividend.tax_rate_submitted",
+        "x-audit-event-failure": "dividend.tax_rate_submit_failed",
+        "x-failure-codes": [
+          "VALIDATION_FAILED",
+          "DIVIDEND_TAX_RATE_VERSION_CONFLICT",
+          "TAX_DEPARTMENT_ROUTING_REQUIRED",
+          "TAX_APPROVAL_REQUIRED"
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/DividendTaxRateRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/finance/dividends/loans": {
+      "get": {
+        "tags": [
+          "finance"
+        ],
+        "operationId": "listDividendBarLoans",
+        "summary": "公司向酒吧借款登记列表（平台财务持股分红页用；带所挂应付的未还本息与到期状态）",
+        "description": "第十八批 AX 段第 273 条 273-R1（PGM:436「任何公司向酒吧提供的借款，出借时须写明金额、利率、还款期限与还款顺序；酒吧当期可分配利润必须先偿还全部到期借款本息，剩余部分才可用于分红，存在逾期未还借款的一律不得分红，分红方案提交时须附借款清偿情况」）：列公司向酒吧借款的登记，merchant_id 非空只看该酒吧；按 merchant_id、还款顺序、还款期限排序（同序再按登记时间、id）。响应 data 为数组，每项 id、merchant_id（借款酒吧）、lender_entity_id（出借方主体 ID，可空，外部公司为空）、lender_name（出借方名称）、principal_cent（本金，int64）、annual_rate_bps（年利率，万分比 0～10000）、interest_cent（借款协议约定的到期应付利息，int64）、lent_on（出借日）、due_date（还款期限）、repay_order（还款顺序，不小于 1）、note（备注，可空）、evidence_attachment_ids（凭证附件 ID 数组）、ar_ap_item_id（登记时所挂酒吧应付的台账项 ID）、item_no（该应付台账单号）、outstanding_cent（该应付未付额，即未还本息，int64）、status（按该酒吧当前营业日判：not_due 未到期、due 还款期限即当日且未还清、overdue 逾期未还、repaid 已还清）、created_by、created_at。已还多少以所挂应付为准（还款走该应付的付款确认与登记付款）。缺 finance.dividend.view 返回 403 PERMISSION_DENIED；商户账号返回 403 PLATFORM_SCOPE_REQUIRED。",
+        "x-auth-context": "staff-token",
+        "x-permission": "finance.dividend.view",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "dividend.loans_listed",
+        "x-audit-event-failure": "dividend.loans_list_failed",
+        "parameters": [
+          {
+            "name": "merchant_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            },
+            "description": "酒吧商户 ID 筛选（选填）。"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "finance"
+        ],
+        "operationId": "registerDividendBarLoan",
+        "summary": "登记公司向酒吧的借款（只适用于酒吧；同事务挂酒吧应付，还款走付款确认与登记付款）",
+        "description": "第十八批 AX 段第 273 条 273-R1（PGM:436「任何公司向酒吧提供的借款，出借时须写明金额、利率、还款期限与还款顺序」；决策台账 DEC-R7-41；第十八批裁决 55、65、66）：平台财务按酒吧登记一笔公司向该酒吧提供的借款（只插不改）。merchant_id 缺返回 400 VALIDATION_FAILED，商户不存在返回 404 MERCHANT_NOT_FOUND（「商户不存在或已被删除」），不是酒吧返回 400 VALIDATION_FAILED（「借款登记只适用于酒吧（公司向酒吧提供的借款）」）。出借方为平台内主体填 lender_entity_id（主体不存在返回 404 BUSINESS_ENTITY_NOT_FOUND「出借方主体不存在：＜ID＞」，lender_name 不填取主体名），外部公司只填 lender_name，二者都没有返回 400 VALIDATION_FAILED（「请选择出借方主体或填写出借方名称」）。以下不符返回 400 VALIDATION_FAILED：principal_cent 须大于 0（「借款本金须大于 0」）；annual_rate_bps 须在 0～10000（「年利率须在 0%～100% 之间」）；interest_cent 必填且不小于 0（「须填写借款协议约定的到期应付利息（无息填 0）」）；lent_on 与 due_date 必填（「须填写出借日与还款期限」），due_date 不能早于 lent_on（「还款期限不能早于出借日」）；repay_order 须为不小于 1 的整数（「还款顺序须为不小于 1 的整数」）。evidence_attachment_ids 选填，每项须为已上传的证据附件，否则 400 EVIDENCE_ATTACHMENT_NOT_FOUND。登记同一事务挂一笔酒吧应付（ar_ap_items：direction=payable，往来方为出借方主体、外部公司取借款 ID，source_type=bar_loan、source_id=借款 ID，金额＝本金＋利息，到期日＝还款期限，账期＝到期月，归该酒吧及其所属综合体，状态 pending_payment），还款走该应付的付款确认（支付类型 bar_loan「借款还款」）与登记付款，已还多少以该应付为准。此后 computeDividendStatements 对该酒吧先偿出单当日已到期未还的本息，submitDividendStatement、approveDividendStatement 遇逾期未还借款返回 409 DIVIDEND_LOAN_OVERDUE。权限与平台范围闸在幂等之前；同一幂等键重发返回首次结果，同键换载荷返回 409 IDEMPOTENCY_CONFLICT。响应 data 为借款登记（字段同 listDividendBarLoans 的数组元素，status 按该酒吧当前营业日判）。缺 finance.dividend.manage 返回 403 PERMISSION_DENIED；商户账号返回 403 PLATFORM_SCOPE_REQUIRED。",
+        "x-auth-context": "staff-token",
+        "x-permission": "finance.dividend.manage",
+        "x-data-scope": "platform",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "dividend.loan_registered",
+        "x-audit-event-failure": "dividend.loan_register_failed",
+        "x-failure-codes": [
+          "VALIDATION_FAILED",
+          "MERCHANT_NOT_FOUND",
+          "BUSINESS_ENTITY_NOT_FOUND",
+          "EVIDENCE_ATTACHMENT_NOT_FOUND"
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/DividendLoanRequest"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Success"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
       }
     },
     "/api/v1/vouchers/definitions": {
@@ -69420,7 +69584,7 @@
         ],
         "operationId": "listPaymentConfirmationFlows",
         "summary": "查询付款确认各支付类型的必带平行线",
-        "description": "第十八批 AM 段第 241 条 241-R8（BSM:1803「具体流程按支付类型分别设定」；第十八批裁决 66「每类必带财务、法务两线，其他部门线由发起人按单另加」、67「审批线页设定」）：列出付款确认全部 40 个支付类型（全平台配置，按 PaymentConfirmationType 顺序，不按项目过滤）及各类在财务（finance_review）、法务（legal_review）两线之外还必带的平行线，供「组织层级与审批线」页「付款确认流程」表。data 为数组，每项 payment_type、payment_type_label（中文名）、line_codes（未设定为空数组，出厂均为空）。缺 access.role.assign 403 PERMISSION_DENIED。",
+        "description": "第十八批 AM 段第 241 条 241-R8（BSM:1803「具体流程按支付类型分别设定」；第十八批裁决 66「每类必带财务、法务两线，其他部门线由发起人按单另加」、67「审批线页设定」）：列出付款确认全部 41 个支付类型（全平台配置，按 PaymentConfirmationType 顺序，不按项目过滤）及各类在财务（finance_review）、法务（legal_review）两线之外还必带的平行线，供「组织层级与审批线」页「付款确认流程」表。data 为数组，每项 payment_type、payment_type_label（中文名）、line_codes（未设定为空数组，出厂均为空）。缺 access.role.assign 403 PERMISSION_DENIED。",
         "x-permission": "access.role.assign",
         "x-data-scope": "platform",
         "x-terminal-allowed": [
@@ -69435,7 +69599,7 @@
         ],
         "responses": {
           "200": {
-            "description": "返回 40 个支付类型及各自两线之外的必带线。",
+            "description": "返回 41 个支付类型及各自两线之外的必带线。",
             "content": {
               "application/json": {
                 "schema": {
@@ -69478,7 +69642,7 @@
         ],
         "operationId": "savePaymentConfirmationFlow",
         "summary": "设定某支付类型两线之外的必带平行线",
-        "description": "第十八批 AM 段第 241 条 241-R8（BSM:1803「具体流程按支付类型分别设定」；第十八批裁决 66「每类必带财务、法务两线，其他部门线由发起人按单另加」、67「审批线页设定」——与各线最低起点层级同一处、同一门禁，不新增权限码）：设定某支付类型在财务、法务两线之外还必带的平行线，整体覆盖，line_codes 为空数组即清空（只带两线）。门禁 access.role.assign（缺 403 PERMISSION_DENIED）；流程是全平台配置，只许平台管理员或可管理全部项目的账号设定（同 upsertApprovalLine 对无归属全局线的口径），只能到部分项目的账号 403 CROSS_ORG_FORBIDDEN；payment_type 不在 40 个支付类型内 404 PAYMENT_TYPE_NOT_FOUND；缺幂等键 400 VALIDATION_FAILED；以上在幂等之前判。line_codes 每项须为在用的审批线，不存在或已停用 400 APPROVAL_LINE_NOT_CONFIGURED，含空值 400 VALIDATION_FAILED，重复的去重。设定后发起该类付款确认须为这些线各指定最终审批人（否则 400 APPROVAL_LINE_FINAL_APPROVER_REQUIRED），已发起的付款确认不受影响（审批链在发起时生成）。响应 data 为 payment_type、payment_type_label、line_codes。同一幂等键重发返回首次结果。成功留痕 access.payment_confirmation_flow.saved（带 line_codes）。",
+        "description": "第十八批 AM 段第 241 条 241-R8（BSM:1803「具体流程按支付类型分别设定」；第十八批裁决 66「每类必带财务、法务两线，其他部门线由发起人按单另加」、67「审批线页设定」——与各线最低起点层级同一处、同一门禁，不新增权限码）：设定某支付类型在财务、法务两线之外还必带的平行线，整体覆盖，line_codes 为空数组即清空（只带两线）。门禁 access.role.assign（缺 403 PERMISSION_DENIED）；流程是全平台配置，只许平台管理员或可管理全部项目的账号设定（同 upsertApprovalLine 对无归属全局线的口径），只能到部分项目的账号 403 CROSS_ORG_FORBIDDEN；payment_type 不在 41 个支付类型内 404 PAYMENT_TYPE_NOT_FOUND；缺幂等键 400 VALIDATION_FAILED；以上在幂等之前判。line_codes 每项须为在用的审批线，不存在或已停用 400 APPROVAL_LINE_NOT_CONFIGURED，含空值 400 VALIDATION_FAILED，重复的去重。设定后发起该类付款确认须为这些线各指定最终审批人（否则 400 APPROVAL_LINE_FINAL_APPROVER_REQUIRED），已发起的付款确认不受影响（审批链在发起时生成）。响应 data 为 payment_type、payment_type_label、line_codes。同一幂等键重发返回首次结果。成功留痕 access.payment_confirmation_flow.saved（带 line_codes）。",
         "x-permission": "access.role.assign",
         "x-data-scope": "platform",
         "x-terminal-allowed": [
@@ -69503,7 +69667,7 @@
             "schema": {
               "$ref": "#/components/schemas/PaymentConfirmationType"
             },
-            "description": "支付类型（40 个之一）。"
+            "description": "支付类型（41 个之一）。"
           }
         ],
         "requestBody": {
@@ -91243,6 +91407,26 @@
           }
         }
       },
+      "DividendTaxRateRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/DividendTaxRateRequest"
+            }
+          }
+        }
+      },
+      "DividendLoanRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/DividendLoanRequest"
+            }
+          }
+        }
+      },
       "VoucherDefinitionRequest": {
         "required": true,
         "content": {
@@ -104741,7 +104925,7 @@
       },
       "DividendPlanRequest": {
         "type": "object",
-        "description": "请求载荷 `DividendPlanRequest`（分红方案新建/修改共用；第十八批 AQ 段 234-R1 起新建与修改都是提交一个新版本）：比例/税率/周期/计入收入域可调，销货成本与全部费用类别固定扣减（BSM:1774），新建须指定发放付账日与分红周期上下限，空缺按默认口径补齐（平台 80%、股息红利 20%、季度+月度预览、净利润全项）；修改时空缺字段沿用改前版本。effective_from 与 reason 必填。修改时 merchant_id 不可变更；status=ended 表示本版本自生效起始日起停用。",
+        "description": "请求载荷 `DividendPlanRequest`（分红方案新建/修改共用；第十八批 AQ 段 234-R1 起新建与修改都是提交一个新版本）：比例/周期/计入收入域可调（代扣个税税率全平台统一、不在方案上，第十八批 AX 段 271-R1），销货成本与全部费用类别固定扣减（BSM:1774），新建须指定发放付账日、分红周期上下限与平台比例上下限，空缺按默认口径补齐（平台 80%、半年+月度预览、净利润全项）；修改时空缺字段沿用改前版本。effective_from 与 reason 必填。修改时 merchant_id 不可变更；status=ended 表示本版本自生效起始日起停用。",
         "additionalProperties": false,
         "required": [
           "idempotency_key",
@@ -104773,13 +104957,19 @@
             "type": "integer",
             "minimum": 0,
             "maximum": 10000,
-            "description": "平台分成比例（万分比，默认 8000=80%；主理人=10000−平台−其他股东合计）。"
+            "description": "平台分成比例（万分比，新建不填按 8000=80% 建议值，须在 platform_share_min_bps～platform_share_max_bps 之内；主理人=10000−平台−其他股东合计）。"
           },
-          "tax_rate_bps": {
+          "platform_share_min_bps": {
             "type": "integer",
             "minimum": 0,
             "maximum": 10000,
-            "description": "主理人代扣税率（万分比，默认 2000=20% 股息红利；整除链截断）。"
+            "description": "平台（参股方）比例下限（万分比 0～10000；第十八批 AX 段 272-R1，BSM:1775「按经营主体可配，须同时配置上下限」）。新建必填，修改不填沿用改前版本；下限不大于上限，platform_share_bps 须落在上下限之内，否则 400 VALIDATION_FAILED（「平台（参股方）比例须同时配置上下限，且比例须在上下限之内」）。方案记录（列表、新建、修改的返回）同名字段回显（可空，272-R1 之前提交的版本为空）。"
+          },
+          "platform_share_max_bps": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 10000,
+            "description": "平台（参股方）比例上限（万分比 0～10000）；规则同 platform_share_min_bps。"
           },
           "period_type": {
             "type": "string",
@@ -104851,7 +105041,7 @@
           },
           "arrears_offset_enabled": {
             "type": "boolean",
-            "description": "欠款抵扣开关（默认 false）；开=主理人应得先抵扣该商户对平台未清应收，抵扣后余额才发放。"
+            "description": "欠款抵扣开关（默认 false）；开=主理人应得先抵扣主理人本人欠该酒吧公司尚未结清的款项（该酒吧台账里往来方为主理人账户的未清应收，第十八批 AX 段 330-R1，BSM:1781），酒吧公司自己的租金等应收、客人挂账应收不抵；抵扣后余额才发放（审批时逐项结算）。"
           },
           "payout_floor_enabled": {
             "type": "boolean",
@@ -104986,7 +105176,7 @@
                     "individual",
                     "company"
                   ],
-                  "description": "股东类型：individual 个人股东（按方案税率代扣股息红利个税）／company 公司股东（不代扣）。"
+                  "description": "股东类型：individual 个人股东（按全平台统一代扣税率代扣股息红利个税，第十八批 AX 段 271-R1）／company 公司股东（不代扣）。"
                 },
                 "share_bps": {
                   "type": "integer",
@@ -105001,7 +105191,7 @@
       },
       "DividendComputeRequest": {
         "type": "object",
-        "description": "请求载荷 `DividendComputeRequest`（期间分红作业触发）：kind=official 正式单（period_label 须匹配方案周期类型）或 preview 月度预览（period_label=yyyy-MM，仅季度方案出预览）。merchant_id 为空=对全部生效中方案跑批。幂等可重跑：草稿/预览/驳回单作废重算，已进入审批流跳过。",
+        "description": "请求载荷 `DividendComputeRequest`（期间分红作业触发）：kind=official 正式单（period_label 须匹配方案周期类型）或 preview 月度预览（period_label=yyyy-MM，季度、半年、年度方案出预览，月度方案不出预览）。merchant_id 为空=对全部生效中方案跑批。幂等可重跑：草稿/预览/驳回单作废重算，已进入审批流跳过。",
         "additionalProperties": false,
         "required": [
           "idempotency_key",
@@ -105304,6 +105494,173 @@
           "handled_note": {
             "type": "string",
             "description": "处理说明（必填），留痕后不能再改。"
+          }
+        }
+      },
+      "DividendTaxRateRequest": {
+        "type": "object",
+        "description": "请求载荷 `DividendTaxRateRequest`（全平台统一分红代扣个税税率新版本，第十八批 AX 段第 271 条 271-R1，BSM:1776）：税率、上下限（下限 ≤ 税率 ≤ 上限）、生效起始日期、理由与财务、税务、法务三条线的最终审批人必填；存为草案并提交财务、税务、法务审核与最高确认，批准后自生效起始日期起用。",
+        "additionalProperties": false,
+        "required": [
+          "idempotency_key",
+          "rate_bps",
+          "min_bps",
+          "max_bps",
+          "effective_from",
+          "reason",
+          "parallel_lines"
+        ],
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "description": "操作幂等键；同键同载荷重放返回同一版本，不重复提交审批。",
+            "maxLength": 128
+          },
+          "rate_bps": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0,
+            "maximum": 10000,
+            "description": "代扣税率（股息红利，万分比 0～10000；页面按百分数输入后转换）；须在 min_bps～max_bps 之内。"
+          },
+          "min_bps": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0,
+            "maximum": 10000,
+            "description": "税率下限（万分比 0～10000；BSM:1776「须同时配置上下限」），不大于 rate_bps。"
+          },
+          "max_bps": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0,
+            "maximum": 10000,
+            "description": "税率上限（万分比 0～10000），不小于 rate_bps。"
+          },
+          "effective_from": {
+            "type": "string",
+            "format": "date",
+            "description": "生效起始日期（年-月-日）；批准后自该日起出单按本版本，此前出的单不变。同一生效起始日期至多一条待审批或已生效版本。"
+          },
+          "reason": {
+            "type": "string",
+            "description": "调整理由；必填，存进税率版本，随复核单给审批人查看。"
+          },
+          "parallel_lines": {
+            "type": "array",
+            "description": "财务（finance_review）、税务（tax_review）、法务（legal_review）三条线各自的最终审批人，须逐线给齐。",
+            "items": {
+              "type": "object",
+              "properties": {
+                "line_code": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "平行审批线代码（finance_review、tax_review、legal_review）"
+                },
+                "final_approver_id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "该线最终审批人"
+                }
+              },
+              "required": [
+                "line_code",
+                "final_approver_id"
+              ],
+              "additionalProperties": false
+            }
+          }
+        }
+      },
+      "DividendLoanRequest": {
+        "type": "object",
+        "description": "请求载荷 `DividendLoanRequest`（登记公司向酒吧的借款，第十八批 AX 段第 273 条 273-R1，PGM:436「出借时须写明金额、利率、还款期限与还款顺序」）：酒吧商户、出借方（主体或名称至少一项）、本金、年利率、借款协议约定的到期应付利息、出借日、还款期限与还款顺序必填；备注与凭证选填。",
+        "additionalProperties": false,
+        "required": [
+          "idempotency_key",
+          "merchant_id",
+          "principal_cent",
+          "annual_rate_bps",
+          "interest_cent",
+          "lent_on",
+          "due_date",
+          "repay_order"
+        ],
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "description": "操作幂等键；同键同载荷重放返回首次响应。",
+            "maxLength": 128
+          },
+          "merchant_id": {
+            "type": "string",
+            "description": "借款酒吧的商户 ID（须为酒吧）。",
+            "maxLength": 64
+          },
+          "lender_entity_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 64,
+            "description": "出借方主体 ID（平台内主体选填；与 lender_name 至少给一项）。"
+          },
+          "lender_name": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 200,
+            "description": "出借方名称（外部公司必填；给了 lender_entity_id 可不填，取主体名）。"
+          },
+          "principal_cent": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1,
+            "description": "借款本金（分，须大于 0）。"
+          },
+          "annual_rate_bps": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0,
+            "maximum": 10000,
+            "description": "年利率（万分比 0～10000；页面按百分数输入后转换）。"
+          },
+          "interest_cent": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0,
+            "description": "借款协议约定的到期应付利息（分，无息填 0）；所挂应付金额＝本金＋利息。"
+          },
+          "lent_on": {
+            "type": "string",
+            "format": "date",
+            "description": "出借日（年-月-日）。"
+          },
+          "due_date": {
+            "type": "string",
+            "format": "date",
+            "description": "还款期限（年-月-日，不早于出借日）；所挂应付的到期日。"
+          },
+          "repay_order": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 1,
+            "description": "还款顺序（不小于 1）；出单先偿到期借款时按还款顺序、还款期限先后。"
+          },
+          "note": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "备注（选填）。"
+          },
+          "evidence_attachment_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "借款协议等凭证的证据附件 ID（选填，须为已上传的证据附件）。"
           }
         }
       },
@@ -107864,6 +108221,7 @@
           "inventory_difference",
           "turnover_rent_reversal",
           "manual",
+          "bar_loan",
           "compensation_fulfillment_recovery",
           "ticket_distribution_recovery",
           "saved_bottle_remedy_recovery",
@@ -107877,7 +108235,7 @@
           "ticket_refund",
           "saved_bottle_compensation"
         ],
-        "description": "付款确认支付类型（第十八批 AM 段第 241 条；第十八批裁决 65「按台账来源逐个分」，共 40 个，系统按付款对象来源自动定类）：台账应付来源 28 个与付款方是平台主体的追收应收来源 3 个（第十八批裁决 69）取 ar_ap_items.source_type 原值（pass_domain_share、pass_domain_direct_settlement、bar_payroll_transfer、dispatch_commission_transfer 的应收与其应付同一类型）；财务退款待办 7 个为 finance_refund_＋退款来源；门票退款打款 ticket_refund；存酒对客赔付 saved_bottle_compensation。每种一个审批类型 finance.payment_confirm.＜支付类型＞。"
+        "description": "付款确认支付类型（第十八批 AM 段第 241 条；第十八批裁决 65「按台账来源逐个分」，共 41 个，系统按付款对象来源自动定类）：台账应付来源 29 个（含第十八批 AX 段 273-R1 酒吧借款还款 bar_loan）与付款方是平台主体的追收应收来源 3 个（第十八批裁决 69）取 ar_ap_items.source_type 原值（pass_domain_share、pass_domain_direct_settlement、bar_payroll_transfer、dispatch_commission_transfer 的应收与其应付同一类型）；财务退款待办 7 个为 finance_refund_＋退款来源；门票退款打款 ticket_refund；存酒对客赔付 saved_bottle_compensation。每种一个审批类型 finance.payment_confirm.＜支付类型＞。"
       },
       "PaymentConfirmationRequest": {
         "type": "object",

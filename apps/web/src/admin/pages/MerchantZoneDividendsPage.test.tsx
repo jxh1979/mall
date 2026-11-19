@@ -1,5 +1,5 @@
-// 文件版本：V0.03
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+// 文件版本：V0.04
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { MerchantZoneDividendsPage } from "./MerchantZoneDividendsPage";
@@ -10,7 +10,7 @@ import type { AdminPageProps, EffectivePermissionsState } from "../types";
 const PLANS = [
   {
     id: "divp_1", merchant_id: "merchant-1", principal_user_id: "usr_principal", principal_name: "主理人甲",
-    platform_share_bps: 8000, tax_rate_bps: 2000, period_type: "quarterly",
+    platform_share_bps: 8000, period_type: "quarterly",
     revenue_domains: ["bar", "ticket"], include_inventory_cost: true, expense_types: ["labor"],
     status: "active", payout_floor_enabled: true, reserve_release_mode: "next_period", version_state: "in_force",
   },
@@ -67,6 +67,7 @@ function makeApi(): AdminApi {
             { id: "l1l", statement_id: "divs_q2", seq: 3, line_type: "legal_cap", amount_cent: 650000, detail: "财务核定" },
             { id: "l2", statement_id: "divs_q2", seq: 2, line_type: "tax_withheld", amount_cent: -26000, detail: "代扣股息红利个税" },
             { id: "l3", statement_id: "divs_q2", seq: 3, line_type: "principal_net", amount_cent: 104000, detail: "净发放额" },
+            { id: "l4", statement_id: "divs_q2", seq: 4, line_type: "loan_repayment", amount_cent: -103000, detail: "出借方 娱乐平台公司，到期 2026-06-30" },
           ],
         }));
       }
@@ -127,6 +128,20 @@ describe("MerchantZoneDividendsPage 我的分红", () => {
       .toContain("平台 60% / 主理人 25% / 其他股东 15%（2 人）"));
   });
 
+  it("方案摘要按分红周期写出单口径，复用管理端周期名（331-R1，BSM:1777）", async () => {
+    for (const [periodType, label] of [
+      ["semiannual", "半年（正式单按半年，月度出预览）"],
+      ["annual", "年度（正式单按年，月度出预览）"],
+      ["monthly", "月度（正式单按月）"],
+    ] as const) {
+      currentPlans = [{ ...PLANS[0], period_type: periodType }];
+      renderPage();
+      await waitFor(() => expect(screen.getByTestId("merchant-dividend-plan-summary").textContent).toContain(label));
+      expect(screen.getByTestId("merchant-dividend-plan-summary").textContent).not.toContain("季度");
+      cleanup();
+    }
+  });
+
   it("列表展示每期金额与状态 + 当前方案摘要；只读无写动作", async () => {
     renderPage();
     await waitFor(() => expect(screen.getByTestId("merchant-dividend-row-divs_q2")).toBeTruthy());
@@ -137,9 +152,10 @@ describe("MerchantZoneDividendsPage 我的分红", () => {
     expect(row.textContent).toContain("已审批");
     // 月度预览同样可见（只看不发）。
     expect(screen.getByTestId("merchant-dividend-row-divs_prev").textContent).toContain("月度预览");
-    // 方案摘要（比例/税率/周期口径）。
+    // 方案摘要（比例/周期口径；271-R2 代扣税率全平台统一、不在方案上，摘要不列，明细抽屉照旧显示单上税率）。
     expect(screen.getByTestId("merchant-dividend-plan-summary").textContent).toContain("80%");
     expect(screen.getByTestId("merchant-dividend-plan-summary").textContent).toContain("20%");
+    expect(screen.getByTestId("merchant-dividend-plan-summary").textContent).not.toContain("代扣税率");
     // 只读页：无提交/审批/驳回/发放入口。
     expect(screen.queryByTestId("dividend-submit-divs_q2")).toBeNull();
     expect(screen.queryByTestId("dividend-approve-divs_q2")).toBeNull();
@@ -166,6 +182,14 @@ describe("MerchantZoneDividendsPage 我的分红", () => {
     await waitFor(() => expect(screen.queryByText(/分红明细 · 2026-Q2/)).not.toBeNull());
     expect(screen.queryByText("已核销门票结算收入")).not.toBeNull();
     expect(screen.queryByText("依法可分配金额（核定）")).not.toBeNull();
+  });
+
+  it("借款清偿明细行显示中文名（273-R3，PGM:436「酒吧当期可分配利润必须先偿还全部到期借款本息」）", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("merchant-dividend-row-divs_q2")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("merchant-dividend-row-divs_q2"));
+    await waitFor(() => expect(screen.queryByText(/分红明细 · 2026-Q2/)).not.toBeNull());
+    expect(screen.queryByText("借款清偿（分红前置）")).not.toBeNull();
   });
 
   it("点行打开算式明细抽屉：逐项金额 + 取数口径说明", async () => {

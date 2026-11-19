@@ -1,4 +1,4 @@
-// 文件版本：V0.44
+// 文件版本：V0.45
 // OBS-14-02 后台结果区字段中文名字典（PGM「全局原则 · 界面全中文（所有终端零英文）」）。
 // 键用后端 JSON 的蛇形写法；结果区查表时蛇形与驼峰同查（orderId / order_id 都命中 order_id）。
 // 与后端字段中文名表 FieldLabels.java（common.api 包）同键同名：前段按后端原样抄录，后端改名这里跟着改（门禁会比对）。
@@ -2000,6 +2000,16 @@ export const FIELD_LABELS: Record<string, string> = {
   platform_head_approved_at: "平台负责人批准时间",
   platform_head_approved_by: "平台负责人",
   platform_share_bps: "平台分成比例（万分比）",
+  platform_share_min_bps: "平台比例下限",   // 272-R1 分红方案平台（参股方）比例下限（BSM:1775「须同时配置上下限」）
+  platform_share_max_bps: "平台比例上限",   // 272-R1 分红方案平台（参股方）比例上限
+  // 第十八批 AX 段 273-R1、273-R2 酒吧借款登记与分红前置借款清偿（PGM:436）；与后端 FieldLabels 同键同名。
+  lender_name: "出借方",
+  lender_entity_id: "出借方主体",
+  annual_rate_bps: "年利率（万分比）",
+  interest_cent: "到期应付利息",
+  lent_on: "出借日",
+  repay_order: "还款顺序",
+  loan_repayment_cent: "借款清偿",
   platform_share_cent: "平台分成金额",
   point_multiplier_basis_points: "积分倍率（万分比）",
   point_space_ids: "点位",
@@ -2562,6 +2572,7 @@ export const FIELD_LABELS: Record<string, string> = {
   tax_cent: "代扣个税",
   tax_date: "纳税日期",
   tax_rate_bps: "税率（万分比）",
+  tax_rate_version_id: "代扣税率版本",
   tax_type: "税种",
   tax_version_id: "税表版本",
   taxable_cent: "应税金额",
@@ -3143,6 +3154,8 @@ export const VALUE_LABELS: Record<string, string> = {
   dividend_closeout_submitted: "关停结算已提交财务法务核实",
   dividend_closeout_item_handled: "关停结算款项处理已登记",
   dividend_closeout_closed: "关停结算已结案",
+  dividend_tax_rate_submitted: "分红代扣税率已提交审批",
+  dividend_bar_loan_registered: "酒吧借款已登记",
   merchant_expense_created: "商户费用已登记",
   entity_tax_declared: "税费申报已登记并提交审批",
   entity_tax_payment_registered: "税费实际缴纳已登记并提交审批",
@@ -3684,6 +3697,8 @@ export const KEY_VALUE_LABELS: Record<string, Record<string, string>> = {
     // 第十八批 AV 段收尾复核（PGM:287）：正常业务写进台账、此前前后端都缺的五个来源，中文名逐字同后端 AR_AP_SOURCE_TYPE_LABELS。
     facility_equipment_scrap: "楼宇设备报废残值", facility_equipment_scrap_loss: "楼宇设备报废损失",
     stored_value_topup: "通用卡储值充值", ticket_order: "票务订单", service_order: "服务点单",
+    // 第十八批 AX 段 273-R1（PGM:436）：公司向酒吧借款登记后挂的酒吧应付（同后端 AR_AP_SOURCE_TYPE_LABELS）。
+    bar_loan: "借款还款",
   },
 };
 

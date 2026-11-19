@@ -1,4 +1,4 @@
-// 文件版本：V0.31
+// 文件版本：V0.32
 export type AdminUser = {
   id: string;
   username: string;
@@ -1128,7 +1128,6 @@ export type DividendPlanRow = {
   principalUserId?: string;
   principalName?: string | null;
   platformShareBps?: number;
-  taxRateBps?: number;
   periodType?: string;
   revenueDomains?: string[];
   includeInventoryCost?: boolean;
@@ -1153,6 +1152,9 @@ export type DividendPlanRow = {
   // 244-R1 分红周期上下限（按月数 1、3、6、12，ENUM:299「须同时配置上下限」）。
   periodMinMonths?: number | null;
   periodMaxMonths?: number | null;
+  // 272-R1 平台（参股方）比例上下限（万分比，BSM:1775「须同时配置上下限」）。
+  platformShareMinBps?: number | null;
+  platformShareMaxBps?: number | null;
   // 234-R1 版本化（BSM:521）：调整理由、复核单号、待审期间是否申请停用；versionState 为后端按营业日判的版本状态
   // （pending/scheduled/in_force/superseded/rejected/expired）。
   reason?: string | null;
@@ -1222,6 +1224,44 @@ export type DividendCloseoutRow = {
   closeoutItems?: DividendCloseoutItem[] | null;
 };
 
+// 第十八批 AX 段第 271 条 271-R1 全平台统一分红代扣个税税率版本（BSM:1776）：effectiveFrom 为空＝出厂版本自始有效；
+// status pending_review 审批中 / approved 已生效 / rejected 已驳回（同 V658 chk_dtrv_status）。
+export type DividendTaxRateRow = {
+  id: string;
+  rateBps?: number;
+  minBps?: number | null;
+  maxBps?: number | null;
+  effectiveFrom?: string | null;
+  status?: string;
+  reason?: string | null;
+  reviewId?: string | null;
+  createdBy?: string | null;
+  createdAt?: string | null;
+};
+
+// 第十八批 AX 段第 273 条 273-R1 公司向酒吧借款（PGM:436）：outstandingCent 为所挂应付的未还本息；status 按该酒吧当前营业日判
+// （not_due 未到期 / due 已到期未还 / overdue 逾期未还 / repaid 已还清）。
+export type DividendBarLoanRow = {
+  id: string;
+  merchantId?: string;
+  lenderEntityId?: string | null;
+  lenderName?: string;
+  principalCent?: number;
+  annualRateBps?: number;
+  interestCent?: number;
+  lentOn?: string;
+  dueDate?: string;
+  repayOrder?: number;
+  note?: string | null;
+  evidenceAttachmentIds?: string[];
+  arApItemId?: string;
+  itemNo?: string;
+  outstandingCent?: number;
+  status?: string;
+  createdBy?: string | null;
+  createdAt?: string | null;
+};
+
 // V304 发放保护线留存·待释放/已释放台账行。
 export type DividendReserveLedgerRow = {
   statementId?: string;
@@ -1249,6 +1289,10 @@ export type DividendStatementRow = {
   principalUserId?: string;
   platformShareBps?: number;
   taxRateBps?: number;
+  // 第十八批 AX 段 271-R1 出单所用全平台统一代扣税率版本（BSM:521 固化在单上）。
+  taxRateVersionId?: string | null;
+  // 第十八批 AX 段 273-R2 出单先偿的到期未还借款本息（distributableCent 已减去本项）。
+  loanRepaymentCent?: number;
   revenueDomains?: string[];
   includeInventoryCost?: boolean;
   expenseTypes?: string[];

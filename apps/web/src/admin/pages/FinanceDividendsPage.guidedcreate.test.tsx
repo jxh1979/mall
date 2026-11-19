@@ -1,4 +1,4 @@
-// 文件版本：V0.05
+// 文件版本：V0.06
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -11,7 +11,8 @@ const MERCHANTS = [{ id: "merchant-1", merchant_name: "酒吧甲", status: "acti
 const PLANS = [
   {
     id: "divp_1", merchant_id: "merchant-1", principal_user_id: "usr_principal", principal_name: "主理人甲",
-    platform_share_bps: 8000, tax_rate_bps: 2000, period_type: "quarterly", period_min_months: 1, period_max_months: 12,
+    platform_share_bps: 8000, platform_share_min_bps: 5000, platform_share_max_bps: 9000, period_type: "quarterly", period_min_months: 1,
+    period_max_months: 12,
     revenue_domains: ["bar", "ticket"], include_inventory_cost: true,
     expense_types: ["rent_allocation", "energy", "property_fee", "labor", "amortization", "other"], payout_pay_slot: 2,
     status: "active", created_at: "2026-07-18T00:00:00Z", updated_at: "2026-07-18T00:00:00Z", version_state: "in_force",
@@ -87,8 +88,13 @@ function makeApi(): AdminApi {
 
 const ADMIN_PERMS: EffectivePermissionsState = { status: "ready", value: { grants: [], denies: [], wildcard: true } };
 
-/** 234-R1（BSM:521）：提交方案版本必填生效起始日期与调整理由。244-R1（ENUM:299）：新建必选周期上下限（季～年，默认半年在其间）。 */
+/**
+ * 234-R1（BSM:521）：提交方案版本必填生效起始日期与调整理由。244-R1（ENUM:299）：新建必选周期上下限（季～年，默认半年在其间）。
+ * 272-R1（BSM:1775）：新建必填平台比例上下限（60%～90%，默认 80% 在其间）。
+ */
 function fillVersion() {
+  fireEvent.change(screen.getByTestId("dividend-plan-share-min"), { target: { value: "60" } });
+  fireEvent.change(screen.getByTestId("dividend-plan-share-max"), { target: { value: "90" } });
   fireEvent.change(screen.getByTestId("dividend-plan-period-min"), { target: { value: "3" } });
   fireEvent.change(screen.getByTestId("dividend-plan-period-max"), { target: { value: "12" } });
   fireEvent.change(screen.getByTestId("dividend-plan-effective-from"), { target: { value: "2026-12-01" } });
@@ -145,6 +151,8 @@ describe("FinanceDividendsPage 持股分红", () => {
     fireEvent.click(screen.getByTestId("dividend-plan-domain-ticket"));
     expect(screen.queryByTestId("dividend-plan-include-cost")).toBeNull();
     expect(screen.queryByTestId("dividend-plan-expense-labor")).toBeNull();
+    // 271-R2（BSM:1776「全平台统一可配」）：代扣税率不在方案上，弹窗无税率输入。
+    expect(screen.queryByTestId("dividend-plan-tax")).toBeNull();
     fireEvent.change(screen.getByTestId("dividend-plan-pay-slot"), { target: { value: "1" } });
     fillVersion();
     fireEvent.click(screen.getByTestId("dividend-plan-guided-next"));
@@ -158,7 +166,7 @@ describe("FinanceDividendsPage 持股分红", () => {
     expect(body.merchant_id).toBe("merchant-1");
     expect(body.principal_user_id).toBe("usr_new_principal");
     expect(body.platform_share_bps).toBe(7000);
-    expect(body.tax_rate_bps).toBe(2000);
+    expect(body).not.toHaveProperty("tax_rate_bps");
     expect(body.period_type).toBe("semiannual");
     expect(body.revenue_domains).toEqual(["bar"]);
     expect(body).not.toHaveProperty("include_inventory_cost");
@@ -207,6 +215,8 @@ describe("FinanceDividendsPage 持股分红", () => {
     await waitFor(() => expect(screen.getByTestId("dividend-plan-guided").textContent).toContain("周期下限"));
     expect(screen.getByTestId("dividend-plan-guided").textContent).toContain("周期上限");
     fireEvent.change(screen.getByTestId("dividend-plan-principal"), { target: { value: "usr_p_bounds" } });
+    fireEvent.change(screen.getByTestId("dividend-plan-share-min"), { target: { value: "60" } });
+    fireEvent.change(screen.getByTestId("dividend-plan-share-max"), { target: { value: "90" } });
     fireEvent.change(screen.getByTestId("dividend-plan-pay-slot"), { target: { value: "1" } });
     fireEvent.change(screen.getByTestId("dividend-plan-effective-from"), { target: { value: "2026-12-01" } });
     fireEvent.change(screen.getByTestId("dividend-plan-reason"), { target: { value: "按工商登记持股比例" } });
@@ -226,6 +236,29 @@ describe("FinanceDividendsPage 持股分红", () => {
     fireEvent.click(screen.getByTestId("dividend-plan-save"));
     await waitFor(() => expect(lastWriteBody).toBeTruthy());
     expect(lastWriteBody).toMatchObject({ period_type: "semiannual", period_min_months: 3, period_max_months: 12 });
+  });
+
+  it("平台（参股方）比例上下限（BSM:1775「须同时配置上下限」、BSM:521「超出该区间的配置一律拒绝生效」）：方案表显示上下限；下限大于上限拦截；填 60、90 后载荷带万分比（272-R1）", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("dividend-plan-row-divp_1").textContent).toContain("平台上下限 50%～90%"));
+    fireEvent.click(screen.getByTestId("dividend-plan-create-open"));
+    await waitFor(() => expect(screen.queryByTestId("dividend-plan-share-min")).not.toBeNull());
+    fireEvent.change(screen.getByTestId("dividend-plan-principal"), { target: { value: "usr_p_share" } });
+    fireEvent.change(screen.getByTestId("dividend-plan-pay-slot"), { target: { value: "1" } });
+    fillVersion();
+    fireEvent.change(screen.getByTestId("dividend-plan-share-min"), { target: { value: "90" } });
+    fireEvent.change(screen.getByTestId("dividend-plan-share-max"), { target: { value: "60" } });
+    fireEvent.click(screen.getByTestId("dividend-plan-guided-next"));
+    expect(screen.getByTestId("dividend-plan-guided-error").textContent).toContain("平台（参股方）比例须同时配置上下限，且比例须在上下限之内");
+    expect(lastWriteBody).toBeNull();
+
+    fireEvent.change(screen.getByTestId("dividend-plan-share-min"), { target: { value: "60" } });
+    fireEvent.change(screen.getByTestId("dividend-plan-share-max"), { target: { value: "90" } });
+    fireEvent.click(screen.getByTestId("dividend-plan-guided-next"));
+    await waitFor(() => expect(screen.getByTestId("dividend-plan-guided-summary").textContent).toContain("平台上下限 60%～90%"));
+    fireEvent.click(screen.getByTestId("dividend-plan-save"));
+    await waitFor(() => expect(lastWriteBody).toBeTruthy());
+    expect(lastWriteBody).toMatchObject({ platform_share_bps: 8000, platform_share_min_bps: 6000, platform_share_max_bps: 9000 });
   });
 
   it("期间作业：填期间标签生成计算单；驳回走理由必填弹窗", async () => {
@@ -300,13 +333,21 @@ describe("FinanceDividendsPage 持股分红", () => {
     expect(body.payout_floor_bps).toBe(1000);
   });
 
+  it("欠款抵扣开关说明只抵主理人本人欠该酒吧公司的款（330-R1，BSM:1781）", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("dividend-plan-create-open")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("dividend-plan-create-open"));
+    await waitFor(() => expect(screen.getByTestId("dividend-plan-arrears-offset").closest("label")?.textContent).toContain("主理人本人"));
+    expect(screen.getByTestId("dividend-plan-arrears-offset").closest("label")?.textContent).not.toContain("该商户对平台未清应收");
+  });
+
   it("计算单明细抽屉：逐行展示三扣除项 + 实发额", async () => {
     renderPage();
     await waitFor(() => expect(screen.getByTestId("dividend-statement-row-divs_draft")).toBeTruthy());
     fireEvent.click(screen.getByTestId("dividend-statement-row-divs_draft"));
     // 抽屉逐行渲染扣除项与实发额（DIVIDEND_LINE_LABELS 中文标签）。
     expect(await screen.findByText("亏损结转（往期未弥补亏损）")).toBeTruthy();
-    expect(await screen.findByText("欠款抵扣（未清应收）")).toBeTruthy();
+    expect(await screen.findByText("欠款抵扣（主理人本人欠款）")).toBeTruthy();
     expect(await screen.findByText("发放保护线留存")).toBeTruthy();
     expect(await screen.findByText("实发额（挂应付）")).toBeTruthy();
   });

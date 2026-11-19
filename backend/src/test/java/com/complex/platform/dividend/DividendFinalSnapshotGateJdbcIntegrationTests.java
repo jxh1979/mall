@@ -1,6 +1,6 @@
 package com.complex.platform.dividend;
 
-// 文件版本：V0.05
+// 文件版本：V0.06
 
 import static com.complex.platform.support.DailyCloseFixture.markRangeFinal;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -245,11 +245,11 @@ class DividendFinalSnapshotGateJdbcIntegrationTests {
         merchant(bar, "分红方案校验酒吧" + s, Instant.parse("2026-04-30T16:00:00Z"));
         RequestPostProcessor finance = new StaffRequestFixture(jdbc).staff("usr_dfg_cfg_" + s, "platform_admin", project, null,
                 "finance.dividend.manage");
-        // 234-R1：提交版本必填生效起始日期（晚于当前营业日）与理由；244-R1：新建必填周期上下限（月～年）。校验顺序不变，cfg-5 落成待最高权限审批的版本。
+        // 234-R1：提交版本必填生效起始日期（晚于当前营业日）与理由；244-R1：新建必填周期上下限（月～年）；272-R1：新建必填平台比例上下限。校验顺序不变，cfg-5 落成待最高权限审批的版本。
         String version = ",\"effective_from\":\"" + businessDays.merchantBusinessDate(null, bar, Instant.now()).plusDays(1)
                 + "\",\"reason\":\"按工商登记持股比例\"";
         String base = "\"merchant_id\":\"" + bar + "\",\"principal_user_id\":\"usr_dfg_principal\",\"period_type\":\"monthly\","
-                + "\"period_min_months\":1,\"period_max_months\":12" + version;
+                + "\"period_min_months\":1,\"period_max_months\":12,\"platform_share_min_bps\":5000,\"platform_share_max_bps\":9000" + version;
         createPlan(finance, "{\"idempotency_key\":\"dfg-cfg-1-" + s + "\"," + base + "}")
                 .andExpect(status().isBadRequest()).andExpect(jsonPath("$.message").value("发放付账日未填写"));
         createPlan(finance, "{\"idempotency_key\":\"dfg-cfg-2-" + s + "\"," + base + ",\"payout_pay_slot\":4}")
@@ -289,7 +289,7 @@ class DividendFinalSnapshotGateJdbcIntegrationTests {
                 "finance.dividend.manage");
         LocalDate tomorrow = businessDays.merchantBusinessDate(null, bar, Instant.now()).plusDays(1);
         String base = "\"merchant_id\":\"" + bar + "\",\"principal_user_id\":\"usr_dfg_principal\",\"payout_pay_slot\":1,"
-                + "\"effective_from\":\"" + tomorrow + "\",\"reason\":\"按工商登记持股比例\"";
+                + "\"effective_from\":\"" + tomorrow + "\",\"reason\":\"按工商登记持股比例\",\"platform_share_min_bps\":5000,\"platform_share_max_bps\":9000";
         createPlan(finance, "{\"idempotency_key\":\"dfg-bnd-1-" + s + "\"," + base
                 + ",\"period_type\":\"monthly\",\"period_min_months\":3,\"period_max_months\":12}")
                 .andExpect(status().isBadRequest()).andExpect(jsonPath("$.message").value("分红周期须在所配上下限之内"));
@@ -307,10 +307,10 @@ class DividendFinalSnapshotGateJdbcIntegrationTests {
         assertThat(jdbc.queryForMap("SELECT period_type, period_min_months, period_max_months FROM dividend_plans WHERE id = ?", planId))
                 .containsEntry("period_type", "semiannual").containsEntry("period_min_months", 3).containsEntry("period_max_months", 12);
 
-        // 改方案只改周期：年在季～年之内 200，月不在 400；只改备注 200，新版本沿用季～年。
+        // 改方案只改周期：年在季～年之内 200（332-R1：半年改年度，生效日取 1 月 1 日），月不在 400；只改备注 200，新版本沿用季～年。
         mockMvc.perform(put("/api/v1/finance/dividends/plans/" + planId).with(master()).contentType(MediaType.APPLICATION_JSON)
                         .content("{\"idempotency_key\":\"dfg-bnd-5-" + s + "\",\"period_type\":\"annual\",\"effective_from\":\""
-                                + tomorrow.plusDays(1) + "\",\"reason\":\"改为按年分红\"}"))
+                                + LocalDate.of(tomorrow.plusDays(2).getYear() + 1, 1, 1) + "\",\"reason\":\"改为按年分红\"}"))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.data.period_type").value("annual"));
         mockMvc.perform(put("/api/v1/finance/dividends/plans/" + planId).with(master()).contentType(MediaType.APPLICATION_JSON)
                         .content("{\"idempotency_key\":\"dfg-bnd-6-" + s + "\",\"period_type\":\"monthly\",\"effective_from\":\""
@@ -324,6 +324,48 @@ class DividendFinalSnapshotGateJdbcIntegrationTests {
         assertThat(jdbc.queryForMap("SELECT period_type, period_min_months, period_max_months, note FROM dividend_plans WHERE id = ?", noted))
                 .containsEntry("period_type", "semiannual").containsEntry("period_min_months", 3).containsEntry("period_max_months", 12)
                 .containsEntry("note", "协议续签");
+    }
+
+    /**
+     * 第十八批 AX 段第 272 条 272-R1（BSM:1775「新酒吧可预填 80%／20%（业务参数，按经营主体可配，须同时配置上下限）建议值，但必须以获批登记版本生效」；
+     * BSM:521「超出该区间的配置一律拒绝生效，未填写上下限的参数不得上线」）：平台（参股方）比例上下限随方案版本一起审批，建方案必填，下限不大于上限，平台比例
+     * 须在上下限之内；改方案不填上下限沿用改前版本。按分红页方案弹窗的蛇形键走真实入口与授权链。修复前上下限无处落：缺上下限照样建成，第一个 400 断言红。
+     */
+    @Test
+    void planPlatformShareMustFallWithinRequiredBounds() throws Exception {
+        project();
+        String bar = "dfg_shb_" + s;
+        merchant(bar, "分红平台比例上下限酒吧" + s, Instant.parse("2026-04-30T16:00:00Z"));
+        RequestPostProcessor finance = new StaffRequestFixture(jdbc).staff("usr_dfg_shb_" + s, "platform_admin", project, null,
+                "finance.dividend.manage");
+        LocalDate tomorrow = businessDays.merchantBusinessDate(null, bar, Instant.now()).plusDays(1);
+        String base = "\"merchant_id\":\"" + bar + "\",\"principal_user_id\":\"usr_dfg_principal\",\"payout_pay_slot\":1,\"period_type\":\"monthly\","
+                + "\"period_min_months\":1,\"period_max_months\":12,\"effective_from\":\"" + tomorrow + "\",\"reason\":\"按工商登记持股比例\","
+                + "\"platform_share_bps\":8000";
+        String message = "平台（参股方）比例须同时配置上下限，且比例须在上下限之内";
+        createPlan(finance, "{\"idempotency_key\":\"dfg-shb-1-" + s + "\"," + base + ",\"platform_share_max_bps\":9000}")
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.message").value(message));
+        createPlan(finance, "{\"idempotency_key\":\"dfg-shb-2-" + s + "\"," + base + ",\"platform_share_min_bps\":9000,\"platform_share_max_bps\":6000}")
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.message").value(message));
+        createPlan(finance, "{\"idempotency_key\":\"dfg-shb-3-" + s + "\"," + base + ",\"platform_share_min_bps\":5000,\"platform_share_max_bps\":7000}")
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.message").value(message));
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM dividend_plans WHERE merchant_id = ?", Integer.class, bar)).isZero();
+
+        // 最高权限本人建 60%～90% 的方案，直接生效、响应回显上下限；只改理由提交新版本，沿用改前上下限。
+        String planId = JsonPath.read(createPlan(master(), "{\"idempotency_key\":\"dfg-shb-4-" + s + "\"," + base
+                        + ",\"platform_share_min_bps\":6000,\"platform_share_max_bps\":9000}")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.platform_share_min_bps").value(6000))
+                .andExpect(jsonPath("$.data.platform_share_max_bps").value(9000))
+                .andReturn().getResponse().getContentAsString(), "$.data.id");
+        String next = JsonPath.read(mockMvc.perform(put("/api/v1/finance/dividends/plans/" + planId).with(master())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"idempotency_key\":\"dfg-shb-5-" + s + "\",\"effective_from\":\"" + tomorrow.plusDays(2)
+                                + "\",\"reason\":\"补记协议\"}"))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString(), "$.data.id");
+        assertThat(jdbc.queryForMap("SELECT platform_share_bps, platform_share_min_bps, platform_share_max_bps FROM dividend_plans WHERE id = ?", next))
+                .containsEntry("platform_share_bps", 8000).containsEntry("platform_share_min_bps", 6000)
+                .containsEntry("platform_share_max_bps", 9000);
     }
 
     /**
@@ -580,6 +622,85 @@ class DividendFinalSnapshotGateJdbcIntegrationTests {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.computed.length()").value(0))
                 .andExpect(jsonPath("$.data.skipped[0].reason").value("该酒吧已于 2026-08-20 关店（已登记关停结算），关店后的期间不再分红"));
+    }
+
+    /**
+     * 第十八批 AX 段第 333 条 333-R1（ENUM:190「非最终快照的数据一律不得进入结算、分红、正式提成计算和对账关账」；BSM:1777「数据未全部标记最终之前不得
+     * 生成预览」）：未登记关停结算就停用或存档的酒吧，五类最终闸照查到期末。甲店月度方案、8 月只漏标 08-10，停用后出 8 月正式单跳过并列出 08-10；乙店同样
+     * 漏标、只存档，同样跳过；补标甲店 08-10 后能出；丙店季度方案、漏标 08-31、停用后出 8 月预览跳过。修复前停用、存档的酒吧不在检查单位里、直接出单：断言红。
+     */
+    @Test
+    void deactivatedOrArchivedBarWithoutCloseoutStillChecksFinalMarks() throws Exception {
+        project();
+        RequestPostProcessor admin = new StaffRequestFixture(jdbc).staff("usr_dfg_admind_" + s, "platform_admin", project, null,
+                "finance.dividend.manage");
+        String inactive = "dfg_ina_" + s;
+        String inactiveName = "分红停用酒吧" + s;
+        barWithMonthlyPlan(inactive, inactiveName, Instant.parse("2026-04-30T16:00:00Z"));
+        markRangeFinal(jdbc, "bar", inactive, AUG_1, LocalDate.of(2026, 8, 9));
+        markRangeFinal(jdbc, "bar", inactive, LocalDate.of(2026, 8, 11), AUG_31);
+        jdbc.update("UPDATE merchants SET status = 'inactive' WHERE id = ?", inactive);
+        compute(admin, inactive, "dfg-ina-c1-" + s)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.computed.length()").value(0))
+                .andExpect(jsonPath("$.data.skipped[0].reason").value(containsString("2026-08-10 " + inactiveName + "：")));
+
+        String archived = "dfg_arc_" + s;
+        String archivedName = "分红存档酒吧" + s;
+        barWithMonthlyPlan(archived, archivedName, Instant.parse("2026-04-30T16:00:00Z"));
+        markRangeFinal(jdbc, "bar", archived, AUG_1, LocalDate.of(2026, 8, 9));
+        markRangeFinal(jdbc, "bar", archived, LocalDate.of(2026, 8, 11), AUG_31);
+        jdbc.update("UPDATE merchants SET archived_at = now() WHERE id = ?", archived);
+        compute(admin, archived, "dfg-arc-c1-" + s)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.computed.length()").value(0))
+                .andExpect(jsonPath("$.data.skipped[0].reason").value(containsString("2026-08-10 " + archivedName + "：")));
+
+        markRangeFinal(jdbc, "bar", inactive, LocalDate.of(2026, 8, 10), LocalDate.of(2026, 8, 10));
+        compute(admin, inactive, "dfg-ina-c2-" + s)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.computed.length()").value(1));
+
+        String quarterly = "dfg_inq_" + s;
+        merchant(quarterly, "分红停用季度酒吧" + s, Instant.parse("2026-04-30T16:00:00Z"));
+        jdbc.update("INSERT INTO dividend_plans (id, merchant_id, principal_user_id, period_type, revenue_domains, include_inventory_cost, status,"
+                + " payout_pay_slot, effective_from) VALUES (?, ?, 'usr_dfg_principal', 'quarterly', 'bar', TRUE, 'active', 1, DATE '2000-01-01')",
+                "divp_" + quarterly, quarterly);
+        markRangeFinal(jdbc, "bar", quarterly, AUG_1, LocalDate.of(2026, 8, 30));
+        jdbc.update("UPDATE merchants SET status = 'inactive' WHERE id = ?", quarterly);
+        computeAs(admin, quarterly, "2026-08", "preview", "dfg-inq-p-" + s)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.computed.length()").value(0))
+                .andExpect(jsonPath("$.data.skipped[0].reason").value(containsString("不得生成预览")));
+    }
+
+    /**
+     * 第十八批 AX 段第 333 条 333-R1（ENUM:190「非最终快照的数据一律不得进入结算、分红、正式提成计算和对账关账」；BSM:1777「数据未全部标记最终之前不得
+     * 生成预览」；BSM:1787「酒吧关闭须完成关停结算」）：已登记关停结算、关店最后营业日落在当月的酒吧，月度预览只查关店最后营业日，不查关店后不会再标的期末日。
+     * 丁店季度方案、只标 08-01～08-19、漏标 08-20，登记关停结算（关店最后营业日 08-20）后出 8 月预览跳过，原因写 08-20、不写 08-31；补标 08-20 后能出。
+     * 预览改回查期末日（直接放行或原因写 08-31）：断言红。
+     */
+    @Test
+    void closedBarMonthlyPreviewChecksClosingDayInsteadOfPeriodEnd() throws Exception {
+        project();
+        RequestPostProcessor admin = new StaffRequestFixture(jdbc).staff("usr_dfg_admine_" + s, "platform_admin", project, null,
+                "finance.dividend.manage");
+        String closed = "dfg_clq_" + s;
+        merchant(closed, "分红关店季度酒吧" + s, Instant.parse("2026-04-30T16:00:00Z"));
+        jdbc.update("INSERT INTO dividend_plans (id, merchant_id, principal_user_id, period_type, revenue_domains, include_inventory_cost, status,"
+                + " payout_pay_slot, effective_from) VALUES (?, ?, 'usr_dfg_principal', 'quarterly', 'bar', TRUE, 'active', 1, DATE '2000-01-01')",
+                "divp_" + closed, closed);
+        markRangeFinal(jdbc, "bar", closed, AUG_1, LocalDate.of(2026, 8, 19));
+        closeout(admin, closed, "dfg-clq-co-" + s);
+        computeAs(admin, closed, "2026-08", "preview", "dfg-clq-p1-" + s)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.computed.length()").value(0))
+                .andExpect(jsonPath("$.data.skipped[0].reason").value(containsString("该月最后一个营业日（2026-08-20）")))
+                .andExpect(jsonPath("$.data.skipped[0].reason").value(not(containsString("2026-08-31"))));
+        markRangeFinal(jdbc, "bar", closed, AUG_20, AUG_20);
+        computeAs(admin, closed, "2026-08", "preview", "dfg-clq-p2-" + s)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.computed.length()").value(1));
     }
 
     // ---------- helpers ----------
