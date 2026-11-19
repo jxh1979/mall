@@ -1,6 +1,6 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import static com.complex.platform.common.Strings.requireText;
 import static com.complex.platform.common.Strings.trimToNull;
@@ -67,12 +67,14 @@ public class MediaPerformanceSettlementService {
     private final BusinessDayResolver businessDayResolver;
     private final MediaPerformanceService showService;
     private final IdempotencyService idempotencyService;
+    private final SettlementInvoiceService invoices;
 
     public MediaPerformanceSettlementService(JdbcMediaPerformanceRepository repository,
                                              RevenueStreamAttributionRepository attributionRepository,
                                              FinanceService financeService, AuthorizationService authorizationService,
                                              AuditEventService auditEventService, BusinessDayResolver businessDayResolver,
-                                             MediaPerformanceService showService, IdempotencyService idempotencyService) {
+                                             MediaPerformanceService showService, IdempotencyService idempotencyService,
+                                             SettlementInvoiceService invoices) {
         this.repository = repository;
         this.attributionRepository = attributionRepository;
         this.financeService = financeService;
@@ -81,6 +83,7 @@ public class MediaPerformanceSettlementService {
         this.businessDayResolver = businessDayResolver;
         this.showService = showService;
         this.idempotencyService = idempotencyService;
+        this.invoices = invoices;
     }
 
     /**
@@ -172,6 +175,11 @@ public class MediaPerformanceSettlementService {
                 ? financeService.postMediaPerformancePayable(newId, original.payeeEntityId(), original.payerMerchantId(),
                         show.projectId(), amount).id()
                 : null;
+        if (arApItemId != null) {
+            // 第十八批 AZ 段 290-R2（BSM:1803）：新额另进开票清单；原行应开已随红冲降为 0，列入已超开提示先红冲。
+            invoices.generateForMediaSettlement(arApItemId, show.projectId(), show.showDate(), original.payeeEntityId(),
+                    original.payerEntityId(), original.payerMerchantId(), authorizationService.currentActor().id());
+        }
         SettlementRecord created = repository.insertSettlement(new SettlementRecord(newId, show.id(), original.fulfillmentId(),
                 original.feeKind(), original.baseAmountCent(), original.rateBps(), original.fixedAmountCent(), amount,
                 original.payerMerchantId(), original.payerEntityId(), original.payeeEntityId(), "posted", null, arApItemId,
@@ -243,6 +251,9 @@ public class MediaPerformanceSettlementService {
                 ArApItemRecord item = financeService.postMediaPerformancePayable(id, payee, computed.payerMerchantId(),
                         show.projectId(), computed.amountCent());
                 arApItemId = item.id();
+                // 第十八批 AZ 段 290-R2（BSM:1803「平台内部各主体之间的往来需要开具发票」）：出账即进开票清单。
+                invoices.generateForMediaSettlement(arApItemId, show.projectId(), show.showDate(), payee, computed.payerEntityId(),
+                        computed.payerMerchantId(), actor);
             }
             SettlementRecord row = new SettlementRecord(id, show.id(), computed.fulfillmentId(), feeKind, computed.baseAmountCent(),
                     computed.rateBps(), computed.fixedAmountCent(), computed.amountCent(), computed.payerMerchantId(),

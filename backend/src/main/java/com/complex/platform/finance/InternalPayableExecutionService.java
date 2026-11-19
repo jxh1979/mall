@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.06
+// 文件版本：V0.07
 
 import static com.complex.platform.common.Strings.requireText;
 import static com.complex.platform.common.Strings.trimToNull;
@@ -61,12 +61,22 @@ public class InternalPayableExecutionService {
                           String status, String failureReason, LocalDate expectedRepayDate, Instant initiatedAt) {
     }
 
-    /** 收款方与财务可见的一笔普通内部结算往来：金额、可查看时刻、异议截止、指定付账日、当前到期日与执行状态。 */
+    /**
+     * 第十八批 AZ 段 358-R1（BSM:1683「处理路径为原路重付，或更换收款账户后重付；更换收款账户须经收款方所属公司财务负责人审批」）：该款项已审批的换账户单，
+     * 换新账户登记已发起付款时 account_change_id 取其编号。
+     */
+    public record AccountChange(String id, String failedAttemptId, String newAccountRef, String reason, Instant approvedAt) {
+    }
+
+    /**
+     * 收款方与财务可见的一笔普通内部结算往来：金额、可查看时刻、异议截止、指定付账日、当前到期日与执行状态。
+     * 第十八批 AZ 段 358-R1：带已审批的换账户单（按审批时刻先后），付款方财务据此选新账户重付。
+     */
     public record Execution(String arApItemId, String direction, String sourceType, String counterpartyId, String projectId,
                             long amountCent, long unpaidAmountCent, Instant visibleAt, LocalDate objectionDeadline,
                             LocalDate designatedPayDay, LocalDate dueDate, String executionStatus, boolean inTransit,
                             String failureReason, LocalDate expectedRepayDate, List<Attempt> attempts,
-                            List<Map<String, Object>> postponements) {
+                            List<Map<String, Object>> postponements, List<AccountChange> accountChanges) {
     }
 
     private record Schedule(LocalDate objectionDeadline, LocalDate designatedPayDay, Instant visibleAt, int[] payDays) {
@@ -346,7 +356,12 @@ public class InternalPayableExecutionService {
                 jdbc.queryForList("""
                         SELECT reason_code, previous_due_date, due_date, recorded_at FROM internal_payable_postponements
                          WHERE ar_ap_item_id=? ORDER BY recorded_at
-                        """, item.id()));
+                        """, item.id()),
+                jdbc.query("""
+                        SELECT id, failed_attempt_id, new_account_ref, reason, approved_at FROM internal_payable_account_changes
+                         WHERE ar_ap_item_id=? ORDER BY approved_at, id
+                        """, (rs, n) -> new AccountChange(rs.getString(1), rs.getString(2), rs.getString(3), rs.getString(4),
+                        rs.getTimestamp(5).toInstant()), item.id()));
     }
 
     private java.util.Optional<Attempt> latest(String arApItemId) {

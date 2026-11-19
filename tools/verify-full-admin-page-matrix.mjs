@@ -1,4 +1,4 @@
-// 文件版本：V0.13
+// 文件版本：V0.14
 import { readFileSync } from "node:fs";
 
 const matrixPath = "docs/full-admin-page-permission-field-matrix-v0.1.csv";
@@ -52,6 +52,7 @@ const bespokePages = new Set([
   // 改任何字段都不影响任何计算。矩阵行/路由/页面/端点同批移除，故不再登记为专属页。
   "ADM-CUS-004",
   "ADM-CUS-005",
+  "ADM-CUS-006",
   "ADM-STL-001",
   "ADM-STL-002",
   "ADM-STL-003",

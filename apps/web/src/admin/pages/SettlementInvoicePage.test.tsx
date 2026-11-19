@@ -1,4 +1,4 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 import { render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
@@ -52,14 +52,24 @@ const ITEMS = {
       culturalFeeApplicable: false, culturalFeeRateBps: 0, culturalFeeCent: 0,
       status: "pending", invoiceNo: null, remark: null, buyerEntityId: "be_seller", buyerName: "北辰酒吧经营公司",
     },
+    {
+      // 第十八批 AZ 段 290-R1：组合通票零售业态份额行——开票主体＝城市项目公司，购方＝娱乐平台公司。
+      id: "sii_retail_1", billId: "sb_1", settlementItemId: null, projectId: "p1",
+      periodStart: "2026-05-01", periodEnd: "2026-05-31", incomeType: "retail",
+      subjectEntityId: "be_city", subjectName: "长沙城市项目公司", invoiceItemName: "零售商品",
+      taxCategory: "零售", evidenceRequired: "对账单",
+      amountCent: 8000, vatRateBps: 0, vatAmountCent: 0,
+      culturalFeeApplicable: false, culturalFeeRateBps: 0, culturalFeeCent: 0,
+      status: "pending", invoiceNo: null, remark: null, buyerEntityId: "be_plat", buyerName: "娱乐平台公司",
+    },
   ],
-  page: 1, pageSize: 200, total: 3,
+  page: 1, pageSize: 200, total: 4,
 };
 
-function makeApi(): AdminApiClient {
+function makeApi(summary: unknown = SUMMARY): AdminApiClient {
   return {
     get: vi.fn().mockImplementation((path: string) =>
-      Promise.resolve(path.includes("/summary") ? SUMMARY : ITEMS)) as AdminApiClient["get"],
+      Promise.resolve(path.includes("/summary") ? summary : ITEMS)) as AdminApiClient["get"],
     getPaged: vi.fn().mockResolvedValue({ items: [], total: 0, page: 1, size: 10 }),
     post: vi.fn().mockResolvedValue(1),
     put: vi.fn().mockResolvedValue({}),
@@ -73,9 +83,9 @@ const PERMISSIONS: EffectivePermissionsState = {
   value: { grants: ["settlement.invoice.view", "settlement.invoice.manage"], denies: [], wildcard: false },
 };
 
-function renderPage() {
+function renderPage(summary: unknown = SUMMARY) {
   const props = {
-    api: makeApi(),
+    api: makeApi(summary),
     user: { id: "u1", username: "admin" },
     setActionResult: vi.fn(),
     setGlobalError: vi.fn(),
@@ -121,6 +131,14 @@ describe("开票清单 ADM-STL-002", () => {
     expect(rules.textContent).toContain("积分月账单收款方");
   });
 
+  it("组合通票零售业态份额行的收入类型显示「零售」", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.queryAllByText("零售").length).toBeGreaterThan(0));
+    const detail = screen.getAllByTestId("settlement-invoice-item-table").map((t) => t.textContent ?? "").join("");
+    expect(detail).toContain("零售商品");
+    expect(detail).not.toContain("retail");
+  });
+
   it("已超开时提示先红冲再重开", async () => {
     renderPage();
     await waitFor(() => expect(screen.getByTestId("settlement-invoice-over-issued")).toBeTruthy());
@@ -131,11 +149,32 @@ describe("开票清单 ADM-STL-002", () => {
     expect(alert.textContent).toContain("超出 60.00 元");
   });
 
+  // 18AZ 收尾复核（控制席补充 b）：同月两条传媒演出结算行超开（结算单号为空、收入类型同为 show），每行 key 唯一，两行都显示、不报重复 key。
+  it("同月两条演出结算行超开时都显示、不报重复 key", async () => {
+    const errors = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    renderPage({ ...SUMMARY, overIssued: [
+      { billId: null, incomeType: "show", settlementItemId: null, subjectName: "演出传媒公司", dueAmountCent: 0, openAmountCent: 3000, overIssuedCent: 3000 },
+      { billId: null, incomeType: "show", settlementItemId: null, subjectName: "演出传媒公司", dueAmountCent: 0, openAmountCent: 50000, overIssuedCent: 50000 },
+    ] });
+    await waitFor(() => expect(screen.getByTestId("settlement-invoice-over-issued").querySelectorAll("li").length).toBe(2));
+    expect(errors.mock.calls.flat().join(" ")).not.toContain("same key");
+    errors.mockRestore();
+  });
+
   it("规则表把内部成本转付标为不开票", async () => {
     renderPage();
     await waitFor(() => expect(screen.getByTestId("settlement-invoice-rule-table")).toBeTruthy());
     const rules = screen.getByTestId("settlement-invoice-rule-table");
     expect(rules.textContent).toContain("内部领用单/成本转付单");
     expect(rules.textContent).toContain("不开票（内部单据）");
+  });
+
+  // 18AZ 收尾复核（控制席补充 c；SettlementInvoiceService.generateForBill 第 ③ 步：开票主体＝该业态份额归属主体，购方＝娱乐平台公司）：
+  // 收入流为空的零售规则不再显示「按该笔分账的商户收款主体」。
+  it("零售规则的开票主体来源显示组合通票业态份额的归属主体", async () => {
+    renderPage({ ...SUMMARY, rules: [{ incomeType: "retail", revenueStream: null, invoiceItemName: "零售商品", taxCategory: "零售",
+      evidenceRequired: "对账单", invoiceable: true }] });
+    await waitFor(() => expect(screen.getByTestId("settlement-invoice-rule-table").textContent).toContain("组合通票零售份额的归属主体"));
+    expect(screen.getByTestId("settlement-invoice-rule-table").textContent).not.toContain("按该笔分账的商户收款主体");
   });
 });

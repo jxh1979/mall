@@ -1,4 +1,4 @@
-// 文件版本：V0.15
+// 文件版本：V0.16
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -209,6 +209,33 @@ describe("FinanceArApLedgerPage 通票域间往来来源", () => {
   });
 });
 
+// 第十八批 AZ 段 350-R1（BSM:1704「长沙项目公司就通用卡余额的实际消费向各业态的经营主体直接付款结算，按三个付账日结清」）：通用卡消费结算往来
+// 显中文来源（同后端 AR_AP_SOURCE_TYPE_LABELS），其应付同为普通内部结算应付，选中即出付款执行面板。
+describe("FinanceArApLedgerPage 通用卡消费结算", () => {
+  it("通用卡消费结算应付显中文来源并出执行面板", async () => {
+    const row: FinanceLedgerRow = { id: "ap-gcc", itemNo: "ARAP-GCC-1", direction: "payable", status: "pending_payment", amountCent: 4950,
+      unpaidAmountCent: 4950, dueDate: "2027-01-05", sourceType: "general_card_consume" };
+    const api = makeApi(vi.fn().mockResolvedValue({ items: [row], total: 1, page: 1, size: 10 }));
+    (api.get as ReturnType<typeof vi.fn>).mockImplementation((path: string) =>
+      Promise.resolve(path.includes("/internal-payables/") ? { executionStatus: "pending", inTransit: false, attempts: [], postponements: [] } : []));
+    renderPage(api);
+    await waitFor(() => expect(screen.queryByTestId("finance-ledger-row-ap-gcc")).not.toBeNull());
+    fireEvent.click(screen.getByTestId("finance-ledger-row-ap-gcc"));
+    await waitFor(() => expect(screen.queryAllByText("通用卡消费结算").length).toBeGreaterThan(0));
+    fireEvent.click(screen.getByTestId("finance-ledger-select-ap-gcc"));
+    await waitFor(() => expect(screen.queryByTestId("internal-payable-panel")).not.toBeNull());
+  });
+
+  // 18AZ 收尾复核（第十八批裁决 69「付款方是平台主体的应收，登记收款前也须付款确认」；350-R1 plan ④）：跨月退款另挂的追收应收（付款方是游乐公司、
+  // 传媒公司或娱乐平台公司）同后端 PLATFORM_PAYER_RECEIVABLE_SOURCES，可勾选发起付款确认。
+  it("通用卡消费追收应收可勾选发起付款确认", async () => {
+    const row: FinanceLedgerRow = { id: "ar-gcr", itemNo: "ARAP-GCR-1", direction: "receivable", status: "pending_collection", amountCent: 4950,
+      unpaidAmountCent: 4950, dueDate: "2027-01-05", sourceType: "general_card_consume" };
+    renderPage(makeApi(vi.fn().mockResolvedValue({ items: [row], total: 1, page: 1, size: 10 })));
+    await waitFor(() => expect((screen.queryByTestId("finance-ledger-confirm-ar-gcr") as HTMLInputElement | null)?.disabled).toBe(false));
+  });
+});
+
 // 第十八批 AV 段第 317 条 317-R1（PGM:287「界面全中文（所有终端零英文）」）：台账来源中文名按后端 AR_AP_SOURCE_TYPE_LABELS 同名补齐，
 // 详情抽屉不再显示原码。
 describe("FinanceArApLedgerPage 来源中文名与后端同名补齐", () => {
@@ -279,6 +306,7 @@ describe("FinanceArApLedgerPage 内部应付执行状态", () => {
     expect(panel).toContain("收款账户被冻结");
     expect(panel).toContain("2026年12月5日");
     expect(panel).toContain("2026年11月13日");
+    expect(screen.queryByTestId("internal-payable-account")).toBeNull();   // 没有换账户单不出付款账户下拉（358-R1）
     fireEvent.change(screen.getByTestId("internal-payable-bank-ref"), { target: { value: "BANK-2" } });
     fireEvent.click(screen.getByTestId("internal-payable-initiate"));
     await waitFor(() => expect(api.post).toHaveBeenCalledWith("/api/v1/finance/internal-payables/ap-td/payment-attempts",
@@ -336,6 +364,65 @@ describe("FinanceArApLedgerPage 退租押金退还付款执行", () => {
     expect(screen.queryByTestId("internal-payable-initiate")).not.toBeNull();
     expect(screen.getByTestId("internal-payable-panel").textContent).toContain("2026年11月18日");
     expect(screen.queryByTestId("internal-payable-funds-insufficient")).toBeNull();
+  });
+});
+
+// 第十八批 AZ 段 358-R1（BSM:1683「处理路径为原路重付，或更换收款账户后重付；更换收款账户须经收款方所属公司财务负责人审批」）：执行状态带出收款方已审批的
+// 换账户单，「登记已发起付款」可选新账户（默认最近审批的一条）或原收款账户（原路重付）。
+describe("FinanceArApLedgerPage 更换收款账户后重付", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  const CHANGES = [
+    { id: "ipac-1", failed_attempt_id: "ippa-0", new_account_ref: "工商银行 6222****0001", reason: "原账户错误", approved_at: "2026-11-10T02:00:00Z" },
+    { id: "ipac-2", failed_attempt_id: "ippa-1", new_account_ref: "工商银行 6222****0002", reason: "原账户被冻结", approved_at: "2026-11-17T02:00:00Z" },
+  ];
+
+  function stubLedger() {
+    const posts: Array<{ url: string; body: Record<string, unknown> }> = [];
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      let data: unknown = {};
+      if (init?.method === "POST") {
+        posts.push({ url, body: JSON.parse(String(init.body)) as Record<string, unknown> });
+        data = { id: "ippa-2", status: "initiated" };
+      } else if (url.includes("/api/v1/finance/ar-ap-items?")) {
+        data = { items: [{ id: "ap-td", item_no: "ARAP-TD-1", direction: "payable", source_type: "ticket_distribution", status: "pending_payment",
+          amount_cent: 5000, paid_amount_cent: 0, unpaid_amount_cent: 5000, due_date: "2026-11-25" }], total: 1, page: 1, page_size: 10 };
+      } else if (url.includes("/api/v1/finance/internal-payables/ap-td")) {
+        data = { ar_ap_item_id: "ap-td", direction: "payable", source_type: "ticket_distribution", amount_cent: 5000, unpaid_amount_cent: 5000,
+          visible_at: "2026-11-01T00:00:00Z", objection_deadline: "2026-11-13", designated_pay_day: "2026-11-25", due_date: "2026-11-25",
+          execution_status: "failed_pending", in_transit: false, failure_reason: "收款账户被冻结", expected_repay_date: "2026-12-05",
+          attempts: [{ id: "ippa-1", attempt_no: 1, amount_cent: 5000, status: "failed" }], postponements: [], account_changes: CHANGES };
+      }
+      return new Response(JSON.stringify({ success: true, code: "OK", data }));
+    }));
+    return posts;
+  }
+
+  it("默认选中最近审批的新账户，登记已发起付款请求带该换账户单", async () => {
+    const posts = stubLedger();
+    renderPage(new AdminApi("test"));
+    await waitFor(() => expect(screen.queryByTestId("internal-payable-account")).not.toBeNull());
+    expect((screen.getByTestId("internal-payable-account") as HTMLSelectElement).value).toBe("ipac-2");
+    expect(screen.getByTestId("internal-payable-account").textContent).toContain("新账户 工商银行 6222****0002（2026年11月17日 审批，原账户被冻结）");
+    expect(screen.getByTestId("internal-payable-account").textContent).toContain("原收款账户（原路重付）");
+    await waitFor(() => expect((screen.getByTestId("internal-payable-initiate") as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.click(screen.getByTestId("internal-payable-initiate"));
+    await waitFor(() => expect(posts.find((p) => p.url.endsWith("/internal-payables/ap-td/payment-attempts"))?.body.account_change_id).toBe("ipac-2"));
+  });
+
+  it("改选原收款账户（原路重付），请求不带换账户单", async () => {
+    const posts = stubLedger();
+    renderPage(new AdminApi("test"));
+    await waitFor(() => expect(screen.queryByTestId("internal-payable-account")).not.toBeNull());
+    await waitFor(() => expect((screen.getByTestId("internal-payable-initiate") as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.change(screen.getByTestId("internal-payable-account"), { target: { value: "" } });
+    expect((screen.getByTestId("internal-payable-account") as HTMLSelectElement).value).toBe("");
+    fireEvent.click(screen.getByTestId("internal-payable-initiate"));
+    await waitFor(() => expect(posts.some((p) => p.url.endsWith("/internal-payables/ap-td/payment-attempts"))).toBe(true));
+    expect(posts.find((p) => p.url.endsWith("/payment-attempts"))?.body).not.toHaveProperty("account_change_id");
   });
 });
 

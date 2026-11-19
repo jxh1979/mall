@@ -1,5 +1,5 @@
 package com.complex.platform.dividend;
-// 文件版本：V0.14
+// 文件版本：V0.15
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.BusinessDayResolver;
@@ -736,7 +736,7 @@ public class DividendService {
      * 手动出预览与月末自动生成同闸。
      * 第十八批 AQ 段第 243 条 243-R1（ENUM:190；BSM:1787「酒吧关闭须完成关停结算，依法核清本次分红」）：有关停结算登记的酒吧，正式单只查期初至
      * min（期末日，关店最后营业日），停用、存档后照查；关店后的营业日不计。
-     * 第十八批 AX 段第 333 条 333-R1（ENUM:190；BSM:1777「数据未全部标记最终之前不得生成预览」）：酒吧一律按店查，不看在营与存档——正式单查期初至
+     * 第十八批 AX 段第 333 条 333-R1（ENUM:190；BSM:1777「数据未全部标记最终之前不得生成预览」）：酒吧一律按店查，不看在营与存档（第十八批 AZ 段 356-R1：存档时刻所在营业日之后不再查）——正式单查期初至
      * min（期末日，关店最后营业日），预览只查该日（未登记关停结算即期末日）；非酒吧商户照旧按所属综合体查。
      */
     private String nonFinalReason(String kind, DividendPeriod period, DividendPlanRecord plan, LocalDate closedDay) {

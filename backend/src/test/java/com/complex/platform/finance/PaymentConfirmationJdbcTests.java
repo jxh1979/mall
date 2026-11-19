@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.contains;
@@ -329,7 +329,7 @@ class PaymentConfirmationJdbcTests {
         mockMvc.perform(get("/api/v1/platform/supervisor-review/" + reviewId).with(otherViewer)).andExpect(status().isForbidden());
     }
 
-    /** l. 审批时限清单含 41 个付款确认审批类型（第十八批 AX 段 273-R1 加酒吧借款还款），涉钱、出厂 1 个工作日；策略各带财务、法务两线、主线按直接上级链。 */
+    /** l. 审批时限清单含 42 个付款确认审批类型（第十八批 AX 段 273-R1 加酒吧借款还款，第十八批 AZ 段 350-R1 加通用卡消费结算），涉钱、出厂 1 个工作日；策略各带财务、法务两线、主线按直接上级链。 */
     @Test
     void fortyPaymentTypesAreMoneyApprovalTypesWithFinanceAndLegalLines() throws Exception {
         List<Map<String, Object>> deadlines = JsonPath.read(mockMvc.perform(get("/api/v1/platform/approval-deadlines").with(main))
@@ -343,7 +343,7 @@ class PaymentConfirmationJdbcTests {
         List<Map<String, Object>> policies = JsonPath.read(mockMvc.perform(get("/api/v1/platform/supervisor-review-policies").with(main))
                 .andExpect(status().isOk()).andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8),
                 "$.data.items[?(@.policy_code =~ /payment_confirm_.*/)]");
-        assertThat(policies).hasSize(41).allSatisfy(row -> assertThat(row)
+        assertThat(policies).hasSize(42).allSatisfy(row -> assertThat(row)
                 .containsEntry("approval_level", "one_level_up").containsEntry("parallel_line_codes", List.of("finance_review", "legal_review")));
     }
 
@@ -521,6 +521,7 @@ class PaymentConfirmationJdbcTests {
             "pass_unverified_attribution", "dispatch_commission_transfer", "bar_payroll_transfer", "inventory_transfer",
             "pass_drink_settlement", "media_performance_settlement", "refund", "bar_deposit_refund", "stored_value_consume",
             "partner_voucher", "reconciliation_difference", "inventory_difference", "turnover_rent_reversal", "manual", "bar_loan",
+            "general_card_consume",
             "compensation_fulfillment_recovery", "ticket_distribution_recovery", "saved_bottle_remedy_recovery",
             "finance_refund_ar_ap_payment", "finance_refund_stored_value_account", "finance_refund_ticket_payment_rejection",
             "finance_refund_channel_ticket_rejection", "finance_refund_dealer_order_refund", "finance_refund_bar_deposit_rejection",

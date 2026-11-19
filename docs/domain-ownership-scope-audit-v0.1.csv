@@ -249,6 +249,7 @@ floor_plan_import_candidates,inherited,floor_plan_id/task_id,floor_plan_id/task_
 floor_plan_import_errors,inherited,floor_plan_id/task_id,floor_plan_id/task_id -> mall_floor_plans -> project/venue scope,must join through scope path before multi-complex rollout,V0.07,covered
 floor_plan_import_tasks,inherited,floor_plan_id/task_id,floor_plan_id/task_id -> mall_floor_plans -> project/venue scope,must join through scope path before multi-complex rollout,V0.07,covered
 floor_plan_shapes,inherited,floor_plan_id/task_id,floor_plan_id/task_id -> mall_floor_plans -> project/venue scope,must join through scope path before multi-complex rollout,V0.07,covered
+general_card_consume_lines,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",V0.07,covered
 giveaway_cost_configs,direct,project_id,project_id column on giveaway_cost_configs,ready for project/merchant scoped query enforcement,V0.07,covered
 high_value_thresholds,direct,project_id,project_id column on high_value_thresholds,ready for project/merchant scoped query enforcement,V0.07,covered
 holiday_calendar,single_complex_default,P0_SINGLE_COMPLEX,single-complex default scope; no direct scope column detected,"before multi-complex rollout, add direct project_id/merchant_id or document parent join",V0.07,covered

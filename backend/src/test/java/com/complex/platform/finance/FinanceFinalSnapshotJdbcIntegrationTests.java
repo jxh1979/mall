@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static com.complex.platform.support.DailyCloseFixture.closeWithMarks;
 import static com.complex.platform.support.DailyCloseFixture.markRangeFinal;
@@ -31,7 +31,7 @@ import org.springframework.transaction.annotation.Transactional;
  * 酒吧与综合体都跳过建档之前的营业日」。
  *
  * <p>夹具随测试事务回滚：综合体 P 建档 2026-06-01；P 下酒吧 X 建档 2026-07-10T02:30Z（北京 10:30，7-09 营业日在 7-10 10:00 结束，不查）、
- * 餐饮商户 C、已存档酒吧 Y。7-10 X 的 bar、merchant 两张日结各标一部分（并集五类齐）；7-11 X 的 bar 日结经真实生成、标记接口（蛇形键）由持
+ * 餐饮商户 C、7-01 已存档的酒吧 Y（存档之后的营业日不再查，第十八批 AZ 段 356-R1）。7-10 X 的 bar、merchant 两张日结各标一部分（并集五类齐）；7-11 X 的 bar 日结经真实生成、标记接口（蛇形键）由持
  * finance.daily_close.lock、负责范围覆盖 P 的平台侧财务 BP 生成并标除退款与冲正外四类；7-12 X 没有日结。P 的 project 日结 7-09、7-10、7-12 五类齐，
  * 7-11 缺订单与核销。</p>
  */
@@ -72,7 +72,8 @@ class FinanceFinalSnapshotJdbcIntegrationTests {
         jdbc.update("INSERT INTO merchants (id, merchant_name, merchant_type, project_id, status, created_at, updated_at)"
                 + " VALUES (?, ?, 'catering', ?, 'active', TIMESTAMPTZ '2026-06-01 00:00:00+08', now())", shopC, "快照餐饮" + s, project);
         jdbc.update("INSERT INTO merchants (id, merchant_name, merchant_type, project_id, status, archived_at, created_at, updated_at)"
-                + " VALUES (?, ?, 'bar', ?, 'active', now(), TIMESTAMPTZ '2026-06-01 00:00:00+08', now())", barY, "快照存档酒吧" + s, project);
+                + " VALUES (?, ?, 'bar', ?, 'active', TIMESTAMPTZ '2026-07-01 00:00:00+08', TIMESTAMPTZ '2026-06-01 00:00:00+08', now())",
+                barY, "快照存档酒吧" + s, project);
 
         String close10 = closeWithMarks(jdbc, "bar", barX, D10, List.of("orders_verifications", "production_handover", "attendance"));
         closeWithMarks(jdbc, "merchant", barX, D10, List.of("refunds_reversals", "anomaly_resolutions"));

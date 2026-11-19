@@ -1,6 +1,6 @@
 package com.complex.platform.access.staff;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static com.complex.platform.support.DailyCloseFixture.closeWithMarks;
 import static com.complex.platform.support.DailyCloseFixture.markRangeFinal;
@@ -112,8 +112,64 @@ class CommissionSettlementFinalSnapshotJdbcIntegrationTests {
         assertThat(transferAmounts(barX)).containsExactly(3000L);
     }
 
+    /**
+     * 第十八批 AZ 段 356-R1（ENUM:190「非最终快照的数据一律不得进入结算、分红、正式提成计算和对账关账」）：停用（未存档、未登记关停结算）的酒吧
+     * 照在营口径逐日查。X 停用后 9-20 只缺退款与冲正：月结 409，不拨付。修复前停用酒吧不在检查单位里、直接拨付（409 断言即红）。
+     */
+    @Test
+    void deactivatedBarStillBlocksCloseUntilItsDaysAreFinal() throws Exception {
+        closeWithMarks(jdbc, "bar", barX, D20, List.of("orders_verifications", "production_handover", "attendance", "anomaly_resolutions"));
+        jdbc.update("UPDATE merchants SET status = 'inactive' WHERE id = ?", barX);
+
+        closeCommissions().andExpect(status().isConflict())
+                .andExpect(jsonPath("$.detail_code").value("COMMISSION_DATA_NOT_FINAL"))
+                .andExpect(jsonPath("$.message").value(Matchers.containsString(D20 + " " + barXName + "：当日退款与冲正记录")));
+        assertThat(settlementCount(barX)).isZero();
+        assertThat(transferAmounts(barX)).isEmpty();
+    }
+
+    /**
+     * 356-R1（BSM:569「存档（先下线）……不再被新业务选用；但历史照样能查、能对账」）：存档时刻所在营业日照查，之后的营业日不再要求标记。
+     * Y（员工属主体 P，由 P 的人事办）于北京 9-20 12:00 存档，9-01～9-14、9-16～9-20 标齐，9-15 与 9-21 以后都没有日结：月结 409，
+     * 提示含 9-15、不含 9-25；补标 9-15 后照常拨付。修复前存档酒吧不在检查单位里、第一次即拨付（409 断言即红）。
+     */
+    @Test
+    void archivedBarIsCheckedUpToTheArchiveDayOnly() throws Exception {
+        RequestPostProcessor hrP = new StaffRequestFixture(jdbc).staff("usr_csf_hrp_" + s, "staff", companyP, null, "staff.payroll.manage");
+        markRangeFinal(jdbc, "bar", barY, LocalDate.of(2026, 9, 1), LocalDate.of(2026, 9, 14));
+        markRangeFinal(jdbc, "bar", barY, LocalDate.of(2026, 9, 16), D20);
+        jdbc.update("UPDATE merchants SET archived_at = TIMESTAMPTZ '2026-09-20 12:00:00+08' WHERE id = ?", barY);
+
+        closeCommissions(hrP).andExpect(status().isConflict())
+                .andExpect(jsonPath("$.detail_code").value("COMMISSION_DATA_NOT_FINAL"))
+                .andExpect(jsonPath("$.message").value(Matchers.containsString("2026-09-15 " + barYName)))
+                .andExpect(jsonPath("$.message").value(Matchers.not(Matchers.containsString("2026-09-25"))));
+        assertThat(transferAmounts(barY)).isEmpty();
+
+        markRangeFinal(jdbc, "bar", barY, LocalDate.of(2026, 9, 15), LocalDate.of(2026, 9, 15));
+        closeCommissions(hrP).andExpect(status().isOk()).andExpect(jsonPath("$.data.settlements").value(1));
+        assertThat(transferAmounts(barY)).containsExactly(3000L);
+    }
+
+    /** 356-R1（BSM:1787「酒吧关闭须完成关停结算」）：登记关停结算的酒吧止于关店最后营业日（同 243-R1）。Y 停用、最后营业日 9-18，只标到 9-18 即可拨付。 */
+    @Test
+    void closedOutBarIsCheckedUpToItsLastBusinessDayOnly() throws Exception {
+        RequestPostProcessor hrP = new StaffRequestFixture(jdbc).staff("usr_csf_hrp_" + s, "staff", companyP, null, "staff.payroll.manage");
+        markRangeFinal(jdbc, "bar", barY, LocalDate.of(2026, 9, 1), LocalDate.of(2026, 9, 18));
+        jdbc.update("UPDATE merchants SET status = 'inactive' WHERE id = ?", barY);
+        jdbc.update("INSERT INTO dividend_closeouts (id, merchant_id, closed_business_date, reason, status, created_by)"
+                + " VALUES (?, ?, DATE '2026-09-18', '提成拨付闸关停结算回归', 'open', ?)", "dco_csf_" + s, barY, "usr_csf_hrp_" + s);
+
+        closeCommissions(hrP).andExpect(status().isOk()).andExpect(jsonPath("$.data.settlements").value(1));
+        assertThat(transferAmounts(barY)).containsExactly(3000L);
+    }
+
     private ResultActions closeCommissions() throws Exception {
-        return postJson(hr, "/api/v1/staff/commission-settlements/close",
+        return closeCommissions(hr);
+    }
+
+    private ResultActions closeCommissions(RequestPostProcessor who) throws Exception {
+        return postJson(who, "/api/v1/staff/commission-settlements/close",
                 "{\"idempotency_key\":\"csf-close-" + key() + "\",\"month\":\"" + MONTH + "\"}");
     }
 

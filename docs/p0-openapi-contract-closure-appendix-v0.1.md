@@ -1,4 +1,4 @@
-# P0 OpenAPI 权限、事件、任务追溯收口附录 V0.84
+# P0 OpenAPI 权限、事件、任务追溯收口附录 V0.85
 
 ## 1. 文档定位
 
@@ -14,11 +14,11 @@
 
 | 检查项 | 当前结果 | 执行结论 |
 |---|---:|---|
-| OpenAPI operation 数 | 1400 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
+| OpenAPI operation 数 | 1401 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
 | OpenAPI 权限/通用权限状态数 | 445 | 人工权限矩阵正文未覆盖 344 项；缺口以本文第 3 节补齐 |
-| OpenAPI 成功/失败事件数 | 2800 | 人工事件矩阵正文未覆盖 2751 项；完整事件字典以本文第 4 节为准 |
-| operation 级任务追溯 | 1400 | 人工任务映射正文未逐项覆盖 1394 个 operation；逐 operation 映射以本文第 5 节为准 |
-| 写接口数量 | 861 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
+| OpenAPI 成功/失败事件数 | 2802 | 人工事件矩阵正文未覆盖 2753 项；完整事件字典以本文第 4 节为准 |
+| operation 级任务追溯 | 1401 | 人工任务映射正文未逐项覆盖 1395 个 operation；逐 operation 映射以本文第 5 节为准 |
+| 写接口数量 | 862 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
 
 ## 3. 权限码与认证上下文补充表
 
@@ -190,7 +190,7 @@
 | `customer.points.freeze` | staff-token | project | 2 | freezePointsAccount, unfreezePointsAccount | OpenAPI 补充，以本附录为准 |
 | `customer.stored_value.consume` | customer-token | self | 1 | payCustomerTicketOrderWithStoredValue | OpenAPI 补充，以本附录为准 |
 | `customer.stored_value.freeze` | staff-token | project | 2 | freezeStoredValueAccount, unfreezeStoredValueAccount | OpenAPI 补充，以本附录为准 |
-| `customer.stored_value.refund` | staff-token | merchant, platform, project | 7 | refundStoredValueAccount, configureStoredValueMerchantRefundRule, getStoredValueMerchantRefundRule, configureStoredValueMerchantCard, counterRefundStoredValueAccount, getMerchantCardExitNoticePolicy, saveMerchantCardExitNoticePolicy | OpenAPI 补充，以本附录为准 |
+| `customer.stored_value.refund` | staff-token | merchant, platform, project, project-merchant | 8 | refundStoredValueAccount, configureStoredValueMerchantRefundRule, getStoredValueMerchantRefundRule, configureStoredValueMerchantCard, counterRefundStoredValueAccount, lookupStoredValueRefundCards, getMerchantCardExitNoticePolicy, saveMerchantCardExitNoticePolicy | OpenAPI 补充，以本附录为准 |
 | `customer.stored_value.topup` | customer-token | customer | 2 | customerStoredValueTopup, customerStoredValueSettle | OpenAPI 补充，以本附录为准 |
 | `customer.stored_value.view` | customer-token | customer | 2 | customerStoredValueAccount, customerStoredValueAccounts | OpenAPI 补充，以本附录为准 |
 | `customer.voucher.manage` | staff-token | merchant | 3 | createVoucherDefinition, issueVouchers, revokeVoucher | OpenAPI 补充，以本附录为准 |
@@ -273,14 +273,14 @@
 | `finance.period_close.execute` | staff-token | project | 2 | listFinancePeriodCloses, closeFinancePeriod | OpenAPI 补充，以本附录为准 |
 | `finance.points_recovery.view` | staff-token | project-merchant | 1 | getPointsRecoveryDetail | OpenAPI 补充，以本附录为准 |
 | `finance.points_recovery.waive` | staff-token | project-merchant | 1 | waivePointsRecovery | OpenAPI 补充，以本附录为准 |
-| `finance.property_fee.manage` | staff-token | platform | 3 | listPropertyFeeRates, createPropertyFeeRate, billPropertyFee | OpenAPI 补充，以本附录为准 |
+| `finance.property_fee.manage` | staff-token | platform, project-merchant | 3 | listPropertyFeeRates, createPropertyFeeRate, billPropertyFee | OpenAPI 补充，以本附录为准 |
 | `finance.reconciliation.difference.create` | staff-token | project-entity | 1 | createFinanceReconciliationDifference | OpenAPI 补充，以本附录为准 |
 | `finance.reconciliation.policy.manage` | staff-token | project | 2 | listFinanceReconciliationStageLimits, saveFinanceReconciliationStageLimit | OpenAPI 补充，以本附录为准 |
 | `finance.reconciliation.resolve` | staff-token | project-entity | 2 | closeFinanceReconciliationDifference, identifyFinanceReconciliationDifference | OpenAPI 补充，以本附录为准 |
 | `finance.reconciliation.view` | staff-token | project-entity | 2 | listReconciliationBatches, listReconciliationDifferences | 已在权限矩阵正文出现 |
 | `finance.refund.create` | staff-token | project-order | 5 | createFinanceRefund, retryFinanceRefund, recordFinanceRefundExecution, createFinanceRefundPaymentConfirmation, confirmFinanceRefundResult | 已在权限矩阵正文出现 |
 | `finance.settlement.view` | staff-token | platform | 3 | listSettlementBills, getSettlementBillReview, listSettlementTransactions | OpenAPI 补充，以本附录为准 |
-| `finance.turnover_rent.bill` | staff-token | platform | 2 | billTurnoverRent, createTurnoverRentRule | OpenAPI 补充，以本附录为准 |
+| `finance.turnover_rent.bill` | staff-token | platform, project-merchant | 2 | billTurnoverRent, createTurnoverRentRule | OpenAPI 补充，以本附录为准 |
 | `floor_plan.import.manage` | staff-token | project-space | 2 | createFloorPlanImport, publishFloorPlanImport | OpenAPI 补充，以本附录为准 |
 | `floor_plan.import.view` | staff-token | project-space | 2 | listFloorPlanImports, getFloorPlanImportDetails | OpenAPI 补充，以本附录为准 |
 | `floor_plan.manage` | staff-token | -, project-space | 2 | createFloorPlan, saveFloorPlanShape | OpenAPI 补充，以本附录为准 |
@@ -2601,6 +2601,8 @@
 | `not_applicable` | failure | `listWecomRiskHits` | `GET` | `/api/v1/compliance/wecom/risk-hits` | P0-待归类 | `wecom.risk_hit.view` | 接口级事件，以本附录为准 |
 | `not_applicable` | success | `listWorkOrdersAssignedToMe` | `GET` | `/api/v1/facility/work-orders/assigned-to-me` | P0-待归类 | `facility.work_order.view_assigned` | 接口级事件，以本附录为准 |
 | `not_applicable` | failure | `listWorkOrdersAssignedToMe` | `GET` | `/api/v1/facility/work-orders/assigned-to-me` | P0-待归类 | `facility.work_order.view_assigned` | 接口级事件，以本附录为准 |
+| `not_applicable` | success | `lookupStoredValueRefundCards` | `POST` | `/api/v1/loyalty/stored-value/refund-cards/lookup` | CUS-客人端 | `customer.stored_value.refund` | 接口级事件，以本附录为准 |
+| `not_applicable` | failure | `lookupStoredValueRefundCards` | `POST` | `/api/v1/loyalty/stored-value/refund-cards/lookup` | CUS-客人端 | `customer.stored_value.refund` | 接口级事件，以本附录为准 |
 | `not_applicable` | success | `markStaffPayrollPaidLegacy` | `POST` | `/api/v1/staff/payroll/pay` | STAFF-员工 | `staff.payroll.manage` | 接口级事件，以本附录为准 |
 | `not_applicable` | success | `myServicePaymentCode` | `GET` | `/api/v1/services/payment-code/mine` | P0-待归类 | `service.order.perform` | 接口级事件，以本附录为准 |
 | `not_applicable` | failure | `myServicePaymentCode` | `GET` | `/api/v1/services/payment-code/mine` | P0-待归类 | `service.order.perform` | 接口级事件，以本附录为准 |
@@ -3672,6 +3674,7 @@
 | CUS-客人端 | `listVoucherOverview` | `GET` | `/api/v1/vouchers/overview` | 全部券聚合（读层并入不搬表：统一台账 ∪ 通票第三方合作券 V282） | `customer.voucher.view` | `voucher.overview_viewed` / `voucher.overview_view_failed` | web | operation 级补充 |
 | CUS-客人端 | `listVoucherRedemptions` | `GET` | `/api/v1/vouchers/redemptions` | 统一核销记录（append-only：核销点/操作员/结算挂钩一张表；settlement_amount_cent=内部结算价按 voucher.internal_price.view 权限脱敏） | `customer.voucher.view` | `voucher.redemptions_viewed` / `voucher.redemptions_view_failed` | web | operation 级补充 |
 | CUS-客人端 | `lookupCustomerAccountByPhone` | `POST` | `/api/v1/customer-accounts/lookup` | 按手机号精确查客人账号（盲索引，返回安全投影；手机号走请求体不入 URL） | `customer.account.manage` | `customer.account.viewed` / `customer.account.view_failed` | web | operation 级补充 |
+| CUS-客人端 | `lookupStoredValueRefundCards` | `POST` | `/api/v1/loyalty/stored-value/refund-cards/lookup` | 储值退卡查卡（按手机号列出当前账号可办理退卡的卡；手机号走请求体不进 URL） | `customer.stored_value.refund` | `not_applicable` / `not_applicable` | web | operation 级补充 |
 | CUS-客人端 | `markCustomerLevelNoticeRead` | `POST` | `/api/v1/customer/level-notices/{notice_id}/read` | 会员等级通知标记已读（客人点「知道了」） | `not_applicable` | `member.level_notice.read` / `member.level_notice.read_failed` | app, miniapp | operation 级补充 |
 | CUS-客人端 | `previewCustomerDeregistration` | `GET` | `/api/v1/customer/deregister/preview` | 客人注销预览（提醒名下各储值卡本金/赠送金与名下存酒） | `not_applicable` | `customer.account.deregister_previewed` / `customer.account.deregister_preview_failed` | miniapp, app | operation 级补充 |
 | CUS-客人端 | `previewCustomerVoucherTransfer` | `GET` | `/api/v1/customer/voucher-transfers/preview` | 领取预览(打开链接/二维码,不算领取) | `not_applicable` | `not_applicable` / `not_applicable` | miniapp, app | operation 级补充 |

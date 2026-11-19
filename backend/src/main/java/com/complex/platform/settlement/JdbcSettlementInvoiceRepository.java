@@ -1,6 +1,6 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import java.time.LocalDate;
 import java.util.List;
@@ -140,6 +140,71 @@ public class JdbcSettlementInvoiceRepository {
                 rs.getString("entity_id"), rs.getString("merchant_name")));
     }
 
+    /** 第十八批 AZ 段 290-R1：结算单游乐、传媒、餐饮、零售四业态份额行的归属主体与应开额（域间份额＋追收＋到期未核销归属，月结过账同三列）。 */
+    public List<FormatShare> listFormatShares(String billId) {
+        String sql = """
+                SELECT business_format, beneficiary_entity_id,
+                       inter_entity_net_cent + recovery_net_cent + unverified_net_cent AS due_cent
+                  FROM settlement_bill_format_shares
+                 WHERE bill_id = :bill_id AND business_format IN ('amusement', 'media', 'catering', 'retail')
+                 ORDER BY business_format
+                """;
+        return jdbcTemplate.query(sql, new MapSqlParameterSource().addValue("bill_id", billId), (rs, i) -> new FormatShare(
+                rs.getString("business_format"), rs.getString("beneficiary_entity_id"), rs.getLong("due_cent")));
+    }
+
+    /** 290-R2：台账行应开额＝本行金额加回指它的冲正行（origin_item_id）金额；调整后的原行为 0。 */
+    public long arApDueAmountCent(String arApItemId) {
+        Long v = jdbcTemplate.queryForObject("""
+                SELECT a.amount_cent + COALESCE((SELECT SUM(r.amount_cent) FROM ar_ap_items r WHERE r.origin_item_id = a.id), 0)
+                  FROM ar_ap_items a WHERE a.id = :id
+                """, new MapSqlParameterSource().addValue("id", arApItemId), Long.class);
+        return v == null ? 0L : v;
+    }
+
+    /** 290-R2：该台账行已开额（占额三态合计）。 */
+    public long sumOpenArApAmountCent(String arApItemId) {
+        Long v = jdbcTemplate.queryForObject("""
+                SELECT COALESCE(SUM(amount_cent), 0) FROM settlement_invoice_items
+                 WHERE ar_ap_item_id = :id AND status IN """ + OPEN_STATUSES,
+                new MapSqlParameterSource().addValue("id", arApItemId), Long.class);
+        return v == null ? 0L : v;
+    }
+
+    /** 18AZ 收尾复核：补开演出结算开票行所需事实（项目、演出日取场次，收方、付方取结算行）。 */
+    public record MediaInvoiceSource(String arApItemId, String projectId, LocalDate showDate, String payeeEntityId,
+            String payerEntityId, String payerMerchantId) {
+    }
+
+    /**
+     * 18AZ 收尾复核（BSM:1750「开票金额≤已收−已退−已开……退款后先红冲再重开」）：应开额（本行加指它的冲正行）高于占额三态合计的演出结算台账行，
+     * 即开票行红冲或作废后额度释放的；调整后的原行应开为 0、冲正行不被结算行引用，都不列。
+     */
+    public List<MediaInvoiceSource> listMediaSettlementsToInvoice() {
+        return jdbcTemplate.query("""
+                SELECT a.id, s.project_id, s.show_date, st.payee_entity_id, st.payer_entity_id, st.payer_merchant_id
+                  FROM ar_ap_items a
+                  JOIN media_performance_settlements st ON st.ar_ap_item_id = a.id
+                  JOIN media_performance_shows s ON s.id = st.show_id
+                 WHERE a.source_type = 'media_performance_settlement'
+                   AND a.amount_cent + COALESCE((SELECT SUM(r.amount_cent) FROM ar_ap_items r WHERE r.origin_item_id = a.id), 0)
+                       > (SELECT COALESCE(SUM(i.amount_cent), 0) FROM settlement_invoice_items i
+                           WHERE i.ar_ap_item_id = a.id AND i.status IN """ + OPEN_STATUSES + """
+                         )
+                 ORDER BY a.id
+                """, new MapSqlParameterSource(), (rs, i) -> new MediaInvoiceSource(rs.getString(1), rs.getString(2),
+                rs.getObject(3, LocalDate.class), rs.getString(4), rs.getString(5), rs.getString(6)));
+    }
+
+    /** 290-R2：商户收款主体（结算主体，缺了取经营主体，同 {@link #listMerchantShares}）；商户为空返回 null。 */
+    public String findMerchantEntityId(String merchantId) {
+        if (merchantId == null) {
+            return null;
+        }
+        return jdbcTemplate.query("SELECT COALESCE(settlement_entity_id, business_entity_id) FROM merchants WHERE id = :id",
+                new MapSqlParameterSource().addValue("id", merchantId), rs -> rs.next() ? rs.getString(1) : null);
+    }
+
     public String findEntityName(String entityId) {
         if (entityId == null) {
             return null;
@@ -221,13 +286,13 @@ public class JdbcSettlementInvoiceRepository {
                     subject_entity_id, subject_name, invoice_item_name, tax_category, evidence_required,
                     amount_cent, vat_rate_bps, vat_amount_cent,
                     cultural_fee_applicable, cultural_fee_rate_bps, cultural_fee_cent,
-                    status, remark, created_by, updated_by, points_bill_id, buyer_entity_id, buyer_merchant_id
+                    status, remark, created_by, updated_by, points_bill_id, buyer_entity_id, buyer_merchant_id, ar_ap_item_id
                 ) VALUES (
                     :id, :bill_id, :settlement_item_id, :project_id, :period_start, :period_end, :income_type,
                     :subject_entity_id, :subject_name, :invoice_item_name, :tax_category, :evidence_required,
                     :amount_cent, :vat_rate_bps, :vat_amount_cent,
                     :cultural_fee_applicable, :cultural_fee_rate_bps, :cultural_fee_cent,
-                    :status, :remark, :actor, :actor, :points_bill_id, :buyer_entity_id, :buyer_merchant_id
+                    :status, :remark, :actor, :actor, :points_bill_id, :buyer_entity_id, :buyer_merchant_id, :ar_ap_item_id
                 )
                 """;
         jdbcTemplate.update(sql, new MapSqlParameterSource()
@@ -254,7 +319,8 @@ public class JdbcSettlementInvoiceRepository {
                 .addValue("actor", item.updatedBy())
                 .addValue("points_bill_id", item.pointsBillId())
                 .addValue("buyer_entity_id", item.buyerEntityId())
-                .addValue("buyer_merchant_id", item.buyerMerchantId()));
+                .addValue("buyer_merchant_id", item.buyerMerchantId())
+                .addValue("ar_ap_item_id", item.arApItemId()));
     }
 
     public String findStatus(String itemId) {
@@ -297,7 +363,7 @@ public class JdbcSettlementInvoiceRepository {
                        amount_cent, vat_rate_bps, vat_amount_cent,
                        cultural_fee_applicable, cultural_fee_rate_bps, cultural_fee_cent,
                        status, invoice_no, remark, points_bill_id, buyer_entity_id,
-                       (SELECT be.entity_name FROM business_entities be WHERE be.id = buyer_entity_id) AS buyer_name
+                       (SELECT be.entity_name FROM business_entities be WHERE be.id = buyer_entity_id) AS buyer_name, ar_ap_item_id
                   FROM settlement_invoice_items
                 """ + LIST_FILTER + """
                  ORDER BY period_start DESC, subject_name NULLS LAST, income_type, id
@@ -316,7 +382,7 @@ public class JdbcSettlementInvoiceRepository {
                         rs.getBoolean("cultural_fee_applicable"), rs.getInt("cultural_fee_rate_bps"),
                         rs.getLong("cultural_fee_cent"), rs.getString("status"),
                         rs.getString("invoice_no"), rs.getString("remark"), rs.getString("points_bill_id"),
-                        rs.getString("buyer_entity_id"), rs.getString("buyer_name")));
+                        rs.getString("buyer_entity_id"), rs.getString("buyer_name"), rs.getString("ar_ap_item_id")));
     }
 
     public long count(String projectId, LocalDate periodStart, String subjectEntityId, String status) {
@@ -350,23 +416,43 @@ public class JdbcSettlementInvoiceRepository {
     /**
      * 已超开明细:同来源【已开额】(占额三态合计)> 结算单当期【应开额】。
      * 只会在结算单重跑(退款/冲正致金额下调)后出现;业务 HTML 要求「退款后先红冲再重开」。
+     * 第十八批 AZ 段 290-R1:单头级行的应开额按收入类型取——ticket 取门票综合服务费两支合计,game、show、catering、retail 取该业态份额行三列之和;
+     * 290-R2:传媒演出结算行(ar_ap_item_id 非空)的应开额＝该台账行加回指它的冲正行(调整后原行为 0)。
      */
     public List<OverIssuedRow> listOverIssued(String projectId, LocalDate periodStart) {
         String sql = """
-                SELECT s.bill_id, s.income_type, s.settlement_item_id,
-                       MIN(s.subject_name) AS subject_name,
-                       COALESCE(i.final_amount_cent, b.comp_service_fee_pooled_cent + b.comp_service_fee_exclusive_cent) AS due_amount_cent,
-                       SUM(s.amount_cent) AS open_amount_cent
-                  FROM settlement_invoice_items s
-                  JOIN settlement_bills b ON b.id = s.bill_id
-                  LEFT JOIN settlement_items i ON i.id = s.settlement_item_id
-                 WHERE s.status IN ('pending','issuing','issued')
-                   AND (CAST(:project_id AS VARCHAR) IS NULL OR s.project_id = CAST(:project_id AS VARCHAR))
-                   AND (CAST(:period_start AS DATE) IS NULL OR s.period_start = CAST(:period_start AS DATE))
-                 GROUP BY s.bill_id, s.income_type, s.settlement_item_id,
-                          i.final_amount_cent, b.comp_service_fee_pooled_cent, b.comp_service_fee_exclusive_cent
-                HAVING SUM(s.amount_cent) > COALESCE(i.final_amount_cent, b.comp_service_fee_pooled_cent + b.comp_service_fee_exclusive_cent)
-                 ORDER BY s.bill_id, s.income_type
+                SELECT * FROM (
+                    SELECT s.bill_id, s.income_type, s.settlement_item_id,
+                           MIN(s.subject_name) AS subject_name,
+                           COALESCE(i.final_amount_cent, CASE WHEN s.income_type = 'ticket'
+                                   THEN b.comp_service_fee_pooled_cent + b.comp_service_fee_exclusive_cent
+                                   ELSE COALESCE(f.inter_entity_net_cent + f.recovery_net_cent + f.unverified_net_cent, 0) END) AS due_amount_cent,
+                           SUM(s.amount_cent) AS open_amount_cent
+                      FROM settlement_invoice_items s
+                      JOIN settlement_bills b ON b.id = s.bill_id
+                      LEFT JOIN settlement_items i ON i.id = s.settlement_item_id
+                      LEFT JOIN settlement_bill_format_shares f ON f.bill_id = s.bill_id AND s.settlement_item_id IS NULL
+                           AND f.business_format = CASE s.income_type WHEN 'game' THEN 'amusement' WHEN 'show' THEN 'media'
+                                                                      ELSE s.income_type END
+                     WHERE s.status IN ('pending','issuing','issued')
+                       AND (CAST(:project_id AS VARCHAR) IS NULL OR s.project_id = CAST(:project_id AS VARCHAR))
+                       AND (CAST(:period_start AS DATE) IS NULL OR s.period_start = CAST(:period_start AS DATE))
+                     GROUP BY s.bill_id, s.income_type, s.settlement_item_id,
+                              i.final_amount_cent, b.comp_service_fee_pooled_cent, b.comp_service_fee_exclusive_cent,
+                              f.inter_entity_net_cent, f.recovery_net_cent, f.unverified_net_cent
+                    UNION ALL
+                    SELECT NULL, s.income_type, NULL, MIN(s.subject_name),
+                           a.amount_cent + COALESCE((SELECT SUM(r.amount_cent) FROM ar_ap_items r WHERE r.origin_item_id = a.id), 0),
+                           SUM(s.amount_cent)
+                      FROM settlement_invoice_items s
+                      JOIN ar_ap_items a ON a.id = s.ar_ap_item_id
+                     WHERE s.status IN ('pending','issuing','issued')
+                       AND (CAST(:project_id AS VARCHAR) IS NULL OR s.project_id = CAST(:project_id AS VARCHAR))
+                       AND (CAST(:period_start AS DATE) IS NULL OR s.period_start = CAST(:period_start AS DATE))
+                     GROUP BY s.income_type, a.id, a.amount_cent
+                ) t
+                 WHERE open_amount_cent > due_amount_cent
+                 ORDER BY bill_id NULLS LAST, income_type
                 """;
         var params = new MapSqlParameterSource()
                 .addValue("project_id", projectId)
@@ -403,6 +489,10 @@ public class JdbcSettlementInvoiceRepository {
             String status, long compServiceFeeCent) {
     }
 
+    /** 290-R1：结算单一行业态份额（业态、归属主体、应开额）。 */
+    public record FormatShare(String businessFormat, String beneficiaryEntityId, long dueAmountCent) {
+    }
+
     /** 结算单下的一条酒吧分账(含该商户的收款主体)。 */
     public record BillMerchantShare(String settlementItemId, String merchantId, long finalAmountCent,
             String entityId, String merchantName) {
@@ -415,7 +505,9 @@ public class JdbcSettlementInvoiceRepository {
             long vatAmountCent, boolean culturalFeeApplicable, int culturalFeeRateBps, long culturalFeeCent,
             String status, String invoiceNo, String remark,
             // FS-022-R1：积分发行费行的来源账单与购方（合同销售方）；结算单行为 null。
-            String pointsBillId, String buyerEntityId, String buyerName) {
+            String pointsBillId, String buyerEntityId, String buyerName,
+            // 第十八批 AZ 段 290-R2：传媒演出结算行的来源台账行；其余为 null。
+            String arApItemId) {
     }
 
     /** FS-022-R1：开票所需的积分月账单事实（收款方＝开票主体，合同销售方＝购方，已收额取应收应付台账）。 */

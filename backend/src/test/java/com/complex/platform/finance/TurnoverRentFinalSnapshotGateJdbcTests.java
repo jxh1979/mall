@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static com.complex.platform.support.DailyCloseFixture.markRangeFinal;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -139,7 +139,51 @@ class TurnoverRentFinalSnapshotGateJdbcTests {
         assertThat(rentBill(turnoverContract, "2026-08")).isEqualTo(1_000L);
     }
 
+    /**
+     * 第十八批 AZ 段 349-R1（PGM:420 城市项目公司「只负责资产、场地、物业、租赁、直接管理的第三方商户」；PGM:664）：不挂商户的项目财务
+     * 在合同工作台给本项目合同建抽成规则 200（只落草案）；给别的项目的合同建 403 CROSS_PROJECT_FORBIDDEN。
+     * 修复前不挂商户的账号一律 403 MERCHANT_SCOPE_REQUIRED，第一条 200 断言即红。
+     */
+    @Test
+    void projectFinanceWithoutMerchantCreatesTurnoverRuleOnlyForOwnProjectContracts() throws Exception {
+        String otherProject = "trg_prjo_" + s;
+        for (String p : List.of(project, otherProject)) {
+            jdbc.update("INSERT INTO projects(id,venue_type,name,status,created_at,updated_at)"
+                    + " VALUES(?,'complex','抽成规则范围综合体','active',now(),now())", p);
+        }
+        String bar = "trg_rbar_" + s;
+        bar(bar, "抽成规则范围酒吧" + s, Instant.parse("2026-05-31T16:00:00Z"));
+        String own = contract("trg_cr_" + s, bar, "turnover_only", 0);
+        String foreign = "trg_cro_" + s;
+        jdbc.update("""
+                INSERT INTO contracts (id, merchant_id, contract_subject_id, settlement_subject_id, effective_date, expiry_date,
+                    lifecycle_status, project_id, rent_terms, created_at, updated_at)
+                VALUES (?,?,?,?,DATE '2026-01-01',DATE '2026-12-31','effective',?,'{}'::jsonb,now(),now())""",
+                foreign, bar, "trg_subj_" + foreign, "trg_subj_" + foreign, otherProject);
+        RequestPostProcessor projectFinance = new StaffRequestFixture(jdbc).staff("usr_trg_rule_" + s, "staff", project, null,
+                "finance.turnover_rent.bill");
+
+        createRule(projectFinance, own, bar, "own")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.contract_id").value(own));
+        assertThat(jdbc.queryForObject("SELECT is_draft FROM turnover_rent_rules WHERE contract_id = ?", Boolean.class, own)).isTrue();
+
+        createRule(projectFinance, foreign, bar, "foreign")
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.detail_code").value("CROSS_PROJECT_FORBIDDEN"));
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM turnover_rent_rules WHERE contract_id = ?", Integer.class, foreign)).isZero();
+    }
+
     // ---------- helpers ----------
+
+    /** 合同工作台「营业额抽成规则」提交（adminClient 自动补 idempotency_key 并转蛇形）。 */
+    private ResultActions createRule(RequestPostProcessor who, String contractId, String merchantId, String tag) throws Exception {
+        return mockMvc.perform(post("/api/v1/finance/turnover-rent/rules").with(who).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"idempotency_key\":\"trg-rule-" + tag + "-" + s + "\",\"contract_id\":\"" + contractId
+                        + "\",\"merchant_id\":\"" + merchantId + "\",\"rule_name\":\"抽成规则范围回归\",\"min_amount_cent\":null,"
+                        + "\"effective_from\":\"2026-08-01\",\"effective_to\":null,"
+                        + "\"tiers\":[{\"upper_bound_cent\":null,\"rate_bps\":500}]}"));
+    }
 
     private void bar(String id, String name, Instant created) {
         jdbc.update("INSERT INTO merchants(id,merchant_name,merchant_type,status,project_id,created_at,updated_at)"

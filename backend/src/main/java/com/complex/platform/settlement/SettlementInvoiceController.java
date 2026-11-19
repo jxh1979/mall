@@ -139,6 +139,7 @@ public class SettlementInvoiceController implements ExportFileService.Source {
             case "giveaway_transfer" -> "通票赠送权益兑付（内部转付）";
             case "marketing" -> "会员积分 / 门票折扣券（营销成本）";
             case "points_issuance" -> "积分发行费";
+            case "retail" -> "零售";
             default -> incomeType;
         };
     }
@@ -162,7 +163,8 @@ public class SettlementInvoiceController implements ExportFileService.Source {
                 incomeLabel(item.incomeType()), yuan(item.amountCent()), rate(item.vatRateBps()),
                 yuan(item.vatAmountCent()), item.culturalFeeApplicable() ? yuan(item.culturalFeeCent()) : "不计", item.evidenceRequired(),
                 statusLabel(item.status()), item.invoiceNo(),
-                item.billId() != null ? item.billId() : item.pointsBillId(), item.buyerName());
+                item.billId() != null ? item.billId() : item.pointsBillId() != null ? item.pointsBillId() : item.arApItemId(),
+                item.buyerName());
     }
 
     private static String yuan(long cent) {

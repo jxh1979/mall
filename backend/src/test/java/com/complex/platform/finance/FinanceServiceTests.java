@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.21
+// 文件版本：V0.22
 
 import com.complex.platform.support.InMemoryAuditEventRepository;
 import com.complex.platform.support.InMemoryIdempotencyRepository;
@@ -146,6 +146,12 @@ class FinanceServiceTests {
         assertThat(FinanceService.sourceTypeLabel("stored_value_topup")).isEqualTo("通用卡储值充值");
         assertThat(FinanceService.sourceTypeLabel("ticket_order")).isEqualTo("票务订单");
         assertThat(FinanceService.sourceTypeLabel("service_order")).isEqualTo("服务点单");
+    }
+
+    /** 第十八批 AZ 段 350-R1（BSM:1704）：通用卡消费结算往来的来源中文名，与前端 KEY_VALUE_LABELS.source_type、付款确认支付类型同名。 */
+    @Test
+    void generalCardConsumeSourceHasChineseLabel() {
+        assertThat(FinanceService.sourceTypeLabel("general_card_consume")).isEqualTo("通用卡消费结算");
     }
 
     @Test
@@ -1804,7 +1810,7 @@ class FinanceServiceTests {
         depositCollect("dep-adj-init", "merchant_adj", 300000L);
         int ledgerRows = financeRepository.depositLedger.size();
         ArApItemRecord item = service.registerDepositAdjustment("merchant_adj", "ctr_child", "cch_1", 250000L,
-                LocalDate.parse("2026-09-30"));
+                LocalDate.parse("2026-09-30"), null);
         assertThat(item).extracting(ArApItemRecord::direction, ArApItemRecord::sourceType, ArApItemRecord::sourceId,
                 ArApItemRecord::amountCent, ArApItemRecord::unpaidAmountCent, ArApItemRecord::dueDate, ArApItemRecord::status)
                 .containsExactly("receivable", "deposit_adjustment", "ctr_child", 250000L, 250000L, LocalDate.parse("2026-09-30"),
@@ -1812,10 +1818,10 @@ class FinanceServiceTests {
         assertThat(financeRepository.currentDepositBalance("merchant_adj")).isEqualTo(300000L);
         assertThat(financeRepository.depositLedger).hasSize(ledgerRows);
         ArApItemRecord replay = service.registerDepositAdjustment("merchant_adj", "ctr_child", "cch_1", 250000L,
-                LocalDate.parse("2026-09-30"));
+                LocalDate.parse("2026-09-30"), null);
         assertThat(replay.id()).isEqualTo(item.id());
         ArApItemRecord refund = service.registerDepositAdjustment("merchant_adj", "ctr_child2", "cch_2", -60000L,
-                LocalDate.parse("2026-10-15"));
+                LocalDate.parse("2026-10-15"), null);
         assertThat(refund).extracting(ArApItemRecord::direction, ArApItemRecord::amountCent, ArApItemRecord::dueDate)
                 .containsExactly("payable", 60000L, LocalDate.parse("2026-10-15"));
         assertThat(financeRepository.depositLedger).hasSize(ledgerRows);
@@ -1826,7 +1832,7 @@ class FinanceServiceTests {
     void depositAdjustmentCollectionsWriteCollectRowPerPaymentThenSettle() {
         depositCollect("dep-adj-c0", "merchant_adjc", 300000L);
         ArApItemRecord item = service.registerDepositAdjustment("merchant_adjc", "ctr_c", "cch_c", 250000L,
-                LocalDate.parse("2026-09-30"));
+                LocalDate.parse("2026-09-30"), null);
         ArApPaymentResponse first = service.registerArApPayment(item.id(), paymentRequest("pay-adj-1", 100000L));
         assertThat(first.item().status()).isEqualTo("partial_paid");
         assertThat(financeRepository.currentDepositBalance("merchant_adjc")).isEqualTo(400000L);
@@ -1843,7 +1849,7 @@ class FinanceServiceTests {
     void depositAdjustmentRefundPaymentWritesRefundRowAndRejectsWhenBalanceShort() {
         depositCollect("dep-adj-r0", "merchant_adjr", 50000L);
         ArApItemRecord item = service.registerDepositAdjustment("merchant_adjr", "ctr_r", "cch_r", -60000L,
-                LocalDate.parse("2026-10-15"));
+                LocalDate.parse("2026-10-15"), null);
         assertThatThrownBy(() -> service.registerArApPayment(item.id(), paymentRequest("pay-adj-r1", 60000L)))
                 .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("DEPOSIT_INSUFFICIENT"));
         assertThat(financeRepository.currentDepositBalance("merchant_adjr")).isEqualTo(50000L);

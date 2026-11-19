@@ -1,4 +1,4 @@
-// 文件版本：V0.04
+// 文件版本：V0.05
 import React from "react";
 import { PermissionButton } from "../security/Can";
 import { cnDate } from "../components/RowDetailDrawer";
@@ -22,6 +22,8 @@ const ROUTE_LABELS: Record<string, string> = {
   pass_domain_share: "通票域间份额",
   pass_domain_direct_settlement: "通票餐饮零售代付",
   pass_unverified_attribution: "通票到期未核销归属",
+  // 第十八批 AZ 段 350-R1（BSM:1704「按三个付账日结清」）：通用卡消费结算，须先定规则才能月度入账。
+  general_card_consume: "通用卡消费结算",
 };
 const STATUS_LABELS: Record<string, string> = { pending: "待审批", approved: "已批准", rejected: "已驳回" };
 

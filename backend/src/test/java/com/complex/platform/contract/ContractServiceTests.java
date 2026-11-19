@@ -1,6 +1,6 @@
 package com.complex.platform.contract;
 
-// 文件版本：V0.26
+// 文件版本：V0.27
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
@@ -839,7 +839,7 @@ class ContractServiceTests {
         }
 
         @Override
-        public String createTerminationPenaltyReceivable(String merchantId, long penaltyCent, String settlementId) {
+        public String createTerminationPenaltyReceivable(String merchantId, long penaltyCent, String settlementId, String projectId) {
             this.penaltyCent = penaltyCent;
             penaltyCalls++;
             ledger.unpaidPenaltyBySettlement.put(settlementId, penaltyCent);
@@ -880,7 +880,7 @@ class ContractServiceTests {
 
         @Override
         public com.complex.platform.finance.ArApItemRecord registerDepositAdjustment(String merchantId, String childContractId,
-                String changeId, long deltaCent, LocalDate deadline) {
+                String changeId, long deltaCent, LocalDate deadline, String projectId) {
             adjustments.add(new Object[]{merchantId, childContractId, changeId, deltaCent, deadline});
             long amount = Math.abs(deltaCent);
             return new com.complex.platform.finance.ArApItemRecord("arap_adj_" + changeId, "ARAP-ADJ-" + adjustments.size(),

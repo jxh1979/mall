@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.51
+// 文件版本：V0.52
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -137,6 +137,8 @@ public class FinanceService implements TerminationSettlementPort {
             Map.entry("dividend_reserve_released", "分红留存已释放"), Map.entry("dealer_order", "经销订单"),
             // 第十八批 AX 段第 273 条 273-R1（PGM:436）：公司向酒吧借款登记后挂的酒吧应付（归还本息），付款确认支付类型同名。
             Map.entry("bar_loan", "借款还款"),
+            // 第十八批 AZ 段 350-R1（BSM:1704）：长沙项目公司就通用卡消费对票款收款主体的月度应付与跨月退款追收，付款确认支付类型同名。
+            Map.entry("general_card_consume", "通用卡消费结算"),
             Map.entry("termination_penalty", "退租违约金"), Map.entry("deposit_refund", "退租押金退还"),
             Map.entry("platform_incentive_subsidy", "平台激励补贴"),
             Map.entry("bar_deposit_refund", "订台定金达标退回"),
@@ -145,6 +147,8 @@ public class FinanceService implements TerminationSettlementPort {
             Map.entry("dispatch_commission_transfer", "派驻提成月结拨付"),
             Map.entry("bar_payroll_transfer", "酒吧报酬月结拨付"),
             Map.entry("deposit_adjustment", "变更押金补退差额"),
+            // 第十八批 AZ 段 285-R1（BSM:1361「押金……按合同口径形成应收」）：合同生效挂的押金应收。
+            Map.entry("contract_deposit", "合同押金"),
             // FS-012：补偿新增履约由补偿批次承担主体对实际提供方的补偿应付（AmusementCompensationFulfillmentAdapter 写入）。
             Map.entry("compensation_fulfillment", "补偿新增履约结算"),
             // 裁决 2026-10-19 第二轮第 5 条：补偿应付已付部分在该次核销撤销后对提供方的追收应收。
@@ -1397,7 +1401,12 @@ public class FinanceService implements TerminationSettlementPort {
         String sourceProject = trimToNull(projectId);
         // TK-21-R3：客人自助注销（客人 token 主体）为系统路径，按本人卡登记待退，不过员工的商户/项目范围闸。
         boolean customerSelfService = "customer".equals(authorizationService.currentActor().accountType());
-        if (!customerSelfService) checkMerchantOwnership(merchantId);
+        // 第十八批 AZ 段 278-R1（ENUM:86「余额管理与退款均由长沙项目公司负责」）：只拦别的商户的账号，不挂商户的项目侧账号可登记本项目通用卡的待退；
+        // 项目仍由下面的 checkProjectScope 核。商户编号取不抛错的 currentMerchantIdQuietly（同 requirePlatformReconciliationAccess）。
+        String callerMerchant = customerSelfService ? null : authorizationService.currentMerchantIdQuietly().orElse(null);
+        if (callerMerchant != null && !callerMerchant.equals(merchantId)) {
+            throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN", "无权操作其他商户的数据");
+        }
         String reasonText = trimToDefault(reason, "储值本金待退");
         String id = storedValuePayoutRefundId(idempotencyKey);
         Optional<FinanceRefundRecord> existing = repository.findRefundById(id, true);
@@ -2154,7 +2163,7 @@ public class FinanceService implements TerminationSettlementPort {
         }
         // 第十八批 AM 段第 241 条 241-R1（第十八批裁决 55「所有应付都先走付款确认」；BSM:1803「主线与各条平行线都通过才完成付款确认」）：应付登记付款前
         // 须有已通过的付款确认。登记付款、线下确认关联应付、锁账收付款补录批准都经此一处，不看 permission（补录未确认时终审 409、补录与复核单保持待审）。
-        // 241-R9（第十八批裁决 69「付款方是平台主体的应收，登记收款前也须付款确认」）：付款方是平台主体的 7 个来源的应收同样过闸；分红抵欠款、退租押金
+        // 241-R9（第十八批裁决 69「付款方是平台主体的应收，登记收款前也须付款确认」）：付款方是平台主体的 8 个来源的应收同样过闸；分红抵欠款、退租押金
         // 抵扣不是出款，不判。
         if ("payable".equals(current.direction()) || ("receivable".equals(current.direction())
                 && PaymentConfirmationService.PLATFORM_PAYER_RECEIVABLE_SOURCES.contains(current.sourceType())
@@ -2168,7 +2177,8 @@ public class FinanceService implements TerminationSettlementPort {
         String paymentId = "arap_pay_" + stableToken("ar_ap_payment", arApItemId + ":" + idempotencyKey);
         // HP-C03-2（BSM L1353「实际收款或退款成功后才更新已收押金余额……不将未来应收视为到账」）：变更押金补退差额按每笔实收/实付
         // 写 deposit_ledger collect/refund 行并更新已收押金余额；退还超余额拒绝（与押金四动作同一校验）。
-        if ("deposit_adjustment".equals(current.sourceType())) {
+        // 第十八批 AZ 段 285-R1（BSM:1353 同句）：合同生效挂的押金应收（contract_deposit）按每笔实收同样写 collect 行。
+        if ("deposit_adjustment".equals(current.sourceType()) || "contract_deposit".equals(current.sourceType())) {
             recordDepositAdjustmentLedger(current, amountCent, paymentId, now);
         }
         // 主键纳入 arApItemId，同一幂等键用于不同台账项产生不同 paymentId，避免 ON CONFLICT 覆盖。
@@ -2251,7 +2261,7 @@ public class FinanceService implements TerminationSettlementPort {
         }
         repository.saveDepositLedger(new DepositLedgerRecord("deposit_adj_" + stableToken("deposit_adjustment", paymentId),
                 merchantId, collect ? "collect" : "refund", amountCent, collect ? balance + amountCent : balance - amountCent,
-                item.id(), "变更押金补退差额", now));
+                item.id(), "contract_deposit".equals(item.sourceType()) ? "合同押金实收" : "变更押金补退差额", now));
     }
 
     /** 日结所属综合体：merchant/bar 范围取其所属项目（酒吧即业态为酒吧的商户），其余范围的 scope_id 即项目。 */
@@ -2261,8 +2271,9 @@ public class FinanceService implements TerminationSettlementPort {
 
     /**
      * 第十八批 V 段第 159 条 159-R1（ENUM:190「非最终快照的数据一律不得进入结算、分红、正式提成计算和对账关账」「「最终快照」指某一营业日的某一类数据
-     * 在该营业日结束后不再变动的状态。」；第十八批裁决 35「酒吧逐店逐日查；游乐等按综合体逐日查」；18R 143-R3 复核修复补记「检查单位只取未存档的酒吧……
-     * 酒吧与综合体都跳过建档之前的营业日」）：下游取数前列出 from～to（含两端）里所给类别尚未标记为最终的营业日。单位：商户是酒吧按该酒吧，
+     * 在该营业日结束后不再变动的状态。」；第十八批裁决 35「酒吧逐店逐日查；游乐等按综合体逐日查」；18R 143-R3 复核修复补记「……
+     * 酒吧与综合体都跳过建档之前的营业日」）：下游取数前列出 from～to（含两端）里所给类别尚未标记为最终的营业日。第十八批 AZ 段 356-R1：酒吧不论在营、
+     * 停用或存档都是检查单位，存档时刻所在营业日之后、关停结算最后营业日之后不再查（{@link FinanceRepository.FinalMarkUnit#owes}）。单位：商户是酒吧按该酒吧，
      * 否则按综合体（projectId，为空取商户所属综合体）；不在逾期待办同一检查单位集合（{@link FinanceRepository#listFinalMarkUnits}）里的单位
      * 没有标记义务，返回空。建档之前的营业日不查；今天及以后还不能标的营业日照算未最终。每行「yyyy-MM-dd 单位名：类别原词、类别原词」，
      * 按营业日升序；空＝全部已最终。不开事务、不抛业务异常、不判登录人与范围（系统作业与不持日结权限的月结操作人都调）。
@@ -2276,7 +2287,7 @@ public class FinanceService implements TerminationSettlementPort {
                 .findFirst().map(unit -> unitNonFinalDays(unit, from, to, categories)).orElse(List.of());
     }
 
-    /** 159-R1：projectId 为空取全部检查单位，否则取该综合体及其下在营未存档的酒吧；逐单位同 {@link #nonFinalDays}，按单位、营业日拼接。 */
+    /** 159-R1：projectId 为空取全部检查单位，否则取该综合体及其下各酒吧（356-R1 起含停用、存档）；逐单位同 {@link #nonFinalDays}，按单位、营业日拼接。 */
     public List<String> nonFinalDaysAllUnits(String projectId, LocalDate from, LocalDate to, java.util.Collection<String> categories) {
         return repository.listFinalMarkUnits().stream().filter(unit -> projectId == null || projectId.equals(unit.project()))
                 .flatMap(unit -> unitNonFinalDays(unit, from, to, categories).stream()).toList();
@@ -2284,7 +2295,7 @@ public class FinanceService implements TerminationSettlementPort {
 
     /**
      * 第十八批 AQ 段第 243 条 243-R1（ENUM:190；BSM:1787「酒吧关闭须完成关停结算，依法核清本次分红」）：已登记关停结算的酒吧按该店查 from～to 的
-     * 未最终营业日，停用、存档后照查（{@link #nonFinalDays} 只认在营未存档的酒吧）；逐日同 {@link #unitNonFinalDays}。
+     * 未最终营业日，停用、存档后照查；逐日同 {@link #unitNonFinalDays}（356-R1：存档时刻所在营业日之后不再查）。
      */
     public List<String> nonFinalDaysOfBar(String barId, LocalDate from, LocalDate to, java.util.Collection<String> categories) {
         return repository.findBarFinalMarkUnit(barId).map(unit -> unitNonFinalDays(unit, from, to, categories)).orElse(List.of());
@@ -2340,7 +2351,8 @@ public class FinanceService implements TerminationSettlementPort {
                     List<String> unlocked = repository.listFinalMarkUnits().stream().filter(unit -> projectId.equals(unit.project()))
                             .flatMap(unit -> repository.unlockedCloseDays(unit.bar(), unit.bar() == null ? unit.id() : null, from, to)
                                     .stream()
-                                    .filter(day -> businessDayResolver.end(unit.project(), unit.bar(), day).isAfter(unit.created()))
+                                    .filter(day -> unit.owes(day, businessDayResolver.start(unit.project(), unit.bar(), day),
+                                            businessDayResolver.end(unit.project(), unit.bar(), day)))
                                     .map(day -> day + " " + unit.name()))
                             .toList();
                     if (!unlocked.isEmpty()) {
@@ -2382,7 +2394,9 @@ public class FinanceService implements TerminationSettlementPort {
                 from, to);
         List<String> lines = new java.util.ArrayList<>();
         for (LocalDate day = from; !day.isAfter(to); day = day.plusDays(1)) {
-            if (!businessDayResolver.end(unit.project(), unit.bar(), day).isAfter(unit.created())) {
+            // 第十八批 AZ 段 356-R1：建档之前、存档时刻所在营业日之后、关停结算最后营业日之后的营业日不查。
+            if (!unit.owes(day, businessDayResolver.start(unit.project(), unit.bar(), day),
+                    businessDayResolver.end(unit.project(), unit.bar(), day))) {
                 continue;
             }
             Set<String> done = marked.getOrDefault(day, Set.of());
@@ -3431,7 +3445,18 @@ public class FinanceService implements TerminationSettlementPort {
     private TurnoverRentRuleRecord createTurnoverRentRuleInternal(TurnoverRentRuleRequest request) {
         TurnoverRentRuleRequest actual = requireRequest(request);
         String merchantId = requireText(actual.merchantId(), "merchant_id");
-        checkMerchantOwnership(merchantId);
+        // 第十八批 AZ 段 349-R1（PGM:420 城市项目公司「只负责资产、场地、物业、租赁、直接管理的第三方商户」）：商户账号照旧只限本商户；
+        // 不挂商户的账号须可触及合同所属项目（合同或其项目为空按不可触及，同 316-R2），不再一律 403 MERCHANT_SCOPE_REQUIRED。
+        if (authorizationService.currentMerchantIdQuietly().isPresent()) {
+            checkMerchantOwnership(merchantId);
+        } else {
+            String contractId = trimToNull(actual.contractId());
+            String contractProject = contractId == null ? null : repository.findContractProjectId(contractId);
+            if (!authorizationService.projectReach(authorizationService.currentActor(), "finance.turnover_rent.bill")
+                    .covers(contractProject)) {
+                throw ApiException.forbidden("CROSS_PROJECT_FORBIDDEN", "无权为其他项目的合同建抽成规则");
+            }
+        }
         String ruleName = requireText(actual.ruleName(), "rule_name");
         LocalDate effectiveFrom = requireDate(actual.effectiveFrom(), "effective_from");
         LocalDate effectiveTo = actual.effectiveTo();
@@ -3868,11 +3893,12 @@ public class FinanceService implements TerminationSettlementPort {
         return effectiveRefund;
     }
 
-    /** 提前退租违约金挂应收（source_type='termination_penalty'）。幂等键=结算单 id。 */
+    /** 提前退租违约金挂应收（source_type='termination_penalty'）。幂等键=结算单 id。第十八批 AZ 段 352-R1：台账行挂出租合同所属项目（BSM:1673）。 */
     @Override
-    public String createTerminationPenaltyReceivable(String merchantId, long penaltyCent, String settlementId) {
+    public String createTerminationPenaltyReceivable(String merchantId, long penaltyCent, String settlementId, String projectId) {
         ArApItemRecord item = persistDerivedArApItem(
-                "receivable", merchantId, "termination_penalty", settlementId, penaltyCent, settlementId, merchantId);
+                "receivable", merchantId, "termination_penalty", settlementId, penaltyCent, settlementId, merchantId, null, null,
+                projectId);
         notifyMerchantAmount(merchantId, "penalty", penaltyCent, "提前退租违约金（结算单 " + settlementId + "）", today(), null,
                 settlementId);
         return item.id();
@@ -3880,13 +3906,13 @@ public class FinanceService implements TerminationSettlementPort {
 
     /**
      * HP-C03-2：变更押金补退差额登记（差额&gt;0 应收补缴、&lt;0 应付退还，取绝对值；到期日＝办理期限；幂等键＝变更 id）。
-     * 只挂台账、不写 deposit_ledger——已收押金余额等实际收退（settleArApItem）才更新。
+     * 只挂台账、不写 deposit_ledger——已收押金余额等实际收退（settleArApItem）才更新。第十八批 AZ 段 352-R1：台账行挂原合同所属项目（BSM:1673）。
      */
     @Override
     public ArApItemRecord registerDepositAdjustment(String merchantId, String childContractId, String changeId,
-            long deltaCent, LocalDate deadline) {
+            long deltaCent, LocalDate deadline, String projectId) {
         ArApItemRecord item = persistDerivedArApItem(deltaCent > 0 ? "receivable" : "payable", merchantId, "deposit_adjustment",
-                childContractId, Math.abs(deltaCent), changeId, merchantId, null, deadline);
+                childContractId, Math.abs(deltaCent), changeId, merchantId, null, deadline, projectId);
         notifyMerchantAmount(merchantId, deltaCent > 0 ? "deposit_supplement" : "deposit_refund", Math.abs(deltaCent),
                 deltaCent > 0 ? "面积/位置变更押金补缴" : "面积/位置变更押金应退", today(), null, changeId);
         return item;
@@ -4113,8 +4139,11 @@ public class FinanceService implements TerminationSettlementPort {
                 merchantId, accountingPeriod, dueDate, null);
     }
 
-    /** projectId：派生台账的项目归属（HP-F03 报废残值/损失归原设备项目，供项目财务收款与隔离）；其余派生方传 null。 */
-    private ArApItemRecord persistDerivedArApItem(
+    /**
+     * projectId：派生台账的项目归属（HP-F03 报废残值/损失归原设备项目，供项目财务收款与隔离）；其余派生方传 null。
+     * 第十八批 AZ 段 285-R1：包内可见，供同包 {@link ContractDepositReceivableService} 挂合同押金应收。
+     */
+    ArApItemRecord persistDerivedArApItem(
             String direction,
             String counterpartyId,
             String sourceType,
@@ -4213,11 +4242,18 @@ public class FinanceService implements TerminationSettlementPort {
                 .orElseThrow(() -> ApiException.badRequest("PROPERTY_FEE_RATE_NOT_FOUND",
                         "项目 " + projectId + " 在账期 " + period + " 未配置生效的物业费率"));
         long rateCent = rate.ratePerSquareMeterCent();
+        // 第十八批 AZ 段 349-R1（PGM:664「商户费用账单出账……由该酒吧对应的财务 BP 负责」；PGM:420）：商户账号照旧只限本商户；
+        // 不挂商户的账号须可触及所出账项目（平台管理员恒覆盖），不再一律 403 MERCHANT_SCOPE_REQUIRED。
+        boolean merchantAccount = authorizationService.currentMerchantIdQuietly().isPresent();
+        if (!merchantAccount && !authorizationService.projectReach(authorizationService.currentActor(), "finance.property_fee.manage")
+                .covers(projectId)) {
+            throw ApiException.forbidden("CROSS_PROJECT_FORBIDDEN", "无权为其他项目出物业费账单");
+        }
         Instant now = Instant.now();
         List<PropertyFeeBillRecord> result = new java.util.ArrayList<>();
         for (String rawMerchantId : merchantIds) {
             String merchantId = requireText(rawMerchantId, "merchant_id");
-            checkMerchantOwnership(merchantId);
+            if (merchantAccount) checkMerchantOwnership(merchantId);
             // 不退不补 + 幂等：该 (项目,期,商户) 已计过费则跳过（含跨请求重复计费，不二次挂账）。
             if (repository.propertyFeeBillExists(projectId, period, merchantId)) {
                 continue;
@@ -4235,6 +4271,7 @@ public class FinanceService implements TerminationSettlementPort {
                 continue;   // rate=0 等导致 0 额，不挂 0 元应收。
             }
             // ar_ap 幂等键按 (项目,期,商户) 稳定派生（与 bills 行同源），跨请求重复计费 upsert 同一台账行、不重复挂账。
+            // 第十八批 AZ 段 349-R1（BSM:1758「生成的物业费账单在应收应付台账按「来源＝物业费」查询」）：应收挂所出账项目，供项目财务查看与收款。
             String naturalKey = projectId + "|" + period + "|" + merchantId;
             ArApItemRecord item = persistDerivedArApItem(
                     "receivable",
@@ -4243,7 +4280,10 @@ public class FinanceService implements TerminationSettlementPort {
                     "property_fee_" + naturalKey,
                     amountCent,
                     stableToken("property_fee", naturalKey),
-                    merchantId);
+                    merchantId,
+                    null,
+                    null,
+                    projectId);
             PropertyFeeBillRecord bill = repository.savePropertyFeeBill(new PropertyFeeBillRecord(
                     "pfb_" + stableToken("property_fee_bill", naturalKey),
                     projectId,

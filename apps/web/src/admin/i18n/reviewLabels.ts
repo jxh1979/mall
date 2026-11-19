@@ -1,4 +1,4 @@
-// 文件版本：V0.14
+// 文件版本：V0.15
 // 第十八批 I 段第 87 条（PGM:287「界面全中文（所有终端零英文）」）：主管复核的动作码、对象码、档位码与证据类型中文名，
 // 主管复核页与审批链页（ADM-GOV-009）共用（展示层翻译，提交仍原码）。原表与 formatReviewValue 自 SupervisorReviewPage.tsx 搬入。
 import { formatBusinessStatus } from "./statusLabels";
@@ -15,6 +15,7 @@ export const PAYMENT_TYPE_LABELS: Record<string, string> = {
   bar_deposit_refund: "订台定金达标退回", stored_value_consume: "平台代收商户卡消费", partner_voucher: "内部价券结算",
   reconciliation_difference: "对账差异", inventory_difference: "库存差异", turnover_rent_reversal: "营业额抽成冲正", manual: "手工录入",
   bar_loan: "借款还款",   // 第十八批 AX 段 273-R1 酒吧借款还款（PGM:436）
+  general_card_consume: "通用卡消费结算",   // 第十八批 AZ 段 350-R1（BSM:1704）
   compensation_fulfillment_recovery: "补偿应付已付追收", ticket_distribution_recovery: "通票分账追收", saved_bottle_remedy_recovery: "存酒退出承接垫付追收",
   finance_refund_ar_ap_payment: "财务退款（原收款退款）", finance_refund_stored_value_account: "财务退款（通用卡储值本金退款）",
   finance_refund_ticket_payment_rejection: "财务退款（票务拒收待退）", finance_refund_channel_ticket_rejection: "财务退款（渠道回流拒收待退）",

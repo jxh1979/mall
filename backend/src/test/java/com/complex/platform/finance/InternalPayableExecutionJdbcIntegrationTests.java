@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.catchThrowable;
@@ -343,6 +343,42 @@ class InternalPayableExecutionJdbcIntegrationTests {
         postJson(base(refund) + "/payment-attempts", fin, "{\"idempotency_key\":\"" + key() + "\",\"bank_ref\":\"BANK-D2\","
                 + "\"account_change_id\":\"" + changeId + "\"}")
                 .andExpect(status().isOk()).andExpect(jsonPath("$.data.account_change_id").value(changeId));
+    }
+
+    /**
+     * 第十八批 AZ 段 358-R1（BSM:1683「处理路径为原路重付，或更换收款账户后重付；更换收款账户须经收款方所属公司财务负责人审批。……每笔应付的实际到账结果
+     * 回写该笔应付并可逐笔追溯」）：付款失败待处理后收款方财务负责人在商户专区审批新收款账户，付款方财务经真实接口查看执行状态即见该换账户单（编号、新账户、
+     * 原因、审批时刻），换新账户登记已发起付款时带该单编号，付款尝试记下所用的换账户单；押金退还应付同一流程。
+     */
+    @Test
+    void retryToApprovedPayeeAccountOverHttp() throws Exception {
+        retryToApprovedPayeeAccount(item, nextPayDayOnOrAfter(today.plusDays(1)));
+        collectDeposit(10_000L);
+        retryToApprovedPayeeAccount(depositRefund("dr358", 6_000L, today), today.plusDays(40));
+    }
+
+    private void retryToApprovedPayeeAccount(String itemId, LocalDate repay) throws Exception {
+        RequestPostProcessor fin = web(financeUser, null);
+        postJson(base(itemId) + "/payment-attempts", fin, "{\"idempotency_key\":\"" + key() + "\",\"bank_ref\":\"BANK-358-1\"}")
+                .andExpect(status().isOk());
+        postJson(base(itemId) + "/payment-attempts/" + inTransitAttempt(itemId) + "/failure", fin, "{\"idempotency_key\":\"" + key()
+                + "\",\"failure_reason\":\"收款账户被冻结\",\"expected_repay_date\":\"" + repay + "\"}")
+                .andExpect(status().isOk());
+        postJson("/api/v1/merchant-portal/ticket-settlements/" + itemId + "/account-change", web(payeeHead, payee),
+                "{\"idempotency_key\":\"" + key() + "\",\"new_account_ref\":\"新账户 6222****0358\",\"reason\":\"原账户被冻结\"}")
+                .andExpect(status().isOk());
+        String changeId = jdbc.queryForObject("SELECT id FROM internal_payable_account_changes WHERE ar_ap_item_id=?", String.class, itemId);
+
+        mockMvc.perform(get(base(itemId)).with(fin)).andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.account_changes[0].id").value(changeId))
+                .andExpect(jsonPath("$.data.account_changes[0].new_account_ref").value("新账户 6222****0358"))
+                .andExpect(jsonPath("$.data.account_changes[0].reason").value("原账户被冻结"))
+                .andExpect(jsonPath("$.data.account_changes[0].approved_at").exists());
+        postJson(base(itemId) + "/payment-attempts", fin, "{\"idempotency_key\":\"" + key() + "\",\"bank_ref\":\"BANK-358-2\","
+                + "\"account_change_id\":\"" + changeId + "\"}")
+                .andExpect(status().isOk());
+        mockMvc.perform(get(base(itemId)).with(fin)).andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.attempts[1].account_change_id").value(changeId));
     }
 
     // ---- helpers ----

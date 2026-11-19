@@ -1,4 +1,4 @@
-// 文件版本：V0.18
+// 文件版本：V0.19
 import type { AdminAccountForm, AdminNavGroup, AdminRoute, PermissionDefinitionRow } from "./types";
 
 export const adminRoutes: AdminRoute[] = [
@@ -84,6 +84,7 @@ export const adminRoutes: AdminRoute[] = [
   // 改任何字段都不影响任何计算，运营改完以为生效实际无效。积分口径统一在结算配置中心配置。
   { pageId: "ADM-CUS-004", label: "会员等级与忠诚度", module: "客人", group: "governance", route: "/admin/customers/loyalty-config", requiredPermissions: ["customer.loyalty.view"] },
   { pageId: "ADM-CUS-005", label: "储值规则配置", module: "客人", group: "governance", route: "/admin/customers/stored-value-rules", requiredPermissions: ["customer.stored_value.refund"] },
+  { pageId: "ADM-CUS-006", label: "储值退卡", module: "客人", group: "governance", route: "/admin/customers/stored-value-refunds", requiredPermissions: ["customer.stored_value.refund"] },
   { pageId: "ADM-INT-004", label: "短信通知开关", module: "第三方接入", group: "integration", route: "/admin/integrations/sms-switches", requiredPermissions: ["terminal.switch.view"] },
   { pageId: "ADM-LEASE-002", label: "租赁状态看板", module: "招商租赁", group: "governance", route: "/admin/leasing/rental-status", requiredPermissions: ["contract.draft.manage"] },
   { pageId: "ADM-VND-002", label: "外包巡检任务", module: "外包工作台", group: "vendor", route: "/admin/vendor/inspections", requiredPermissions: ["facility.inspection.view_assigned"], accountForms: ["vendor"] },
@@ -133,7 +134,7 @@ export const adminRoutes: AdminRoute[] = [
 export const SENSITIVE_PAGE_IDS = new Set<string>([
   // 个人信息（姓名、手机号、证件信息、人脸与生物特征、住址、支付账号、精确位置）
   "ADM-TKT-005", "ADM-CUS-001", "ADM-BAR-001", "ADM-BAR-002", "ADM-BAR-003", "ADM-GOV-002", "ADM-GOV-005", "ADM-STF-004",
-  "ADM-LEASE-001", "ADM-FAC-001", "ADM-VND-003", "ADM-FAC-002", "ADM-FAC-003", "ADM-AMU-002", "ADM-COMP-002",
+  "ADM-LEASE-001", "ADM-FAC-001", "ADM-VND-003", "ADM-FAC-002", "ADM-FAC-003", "ADM-AMU-002", "ADM-COMP-002", "ADM-CUS-006",
   // 指标明细（新增会员明细的脱敏手机号、团体预约明细的客户姓名）
   "ADM-ANA-012",
   // 个人信息与供应链价格（经销商联系人手机号、经销价目）

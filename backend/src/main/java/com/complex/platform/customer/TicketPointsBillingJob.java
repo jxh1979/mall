@@ -1,6 +1,6 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import java.time.Instant;
 import org.slf4j.Logger;
@@ -24,5 +24,7 @@ public class TicketPointsBillingJob {
         try{bills.notifyPublishedBills();}catch(RuntimeException e){log.error("积分账单通知未完成，账单可见时间与异议期保持",e);}
         // FS-022-R1：已收部分进统一开票清单（按已收额开、收款方为开票主体、合同销售方为购方；幂等，只补开新收部分）。
         for(String id:invoices.pointsBillsToInvoice())try{invoices.generateForPointsBill(id,"system");}catch(RuntimeException e){log.error("积分账单 {} 未生成开票清单，保留待下轮",id,e);}
+        // 18AZ 收尾复核（BSM:1750「退款后先红冲再重开」；BSM:1803）：演出结算开票行红冲或作废后补开同额待开票行（调整后原行应开为 0，不重开）。
+        for(var m:invoices.mediaSettlementsToInvoice())try{invoices.generateForMediaSettlement(m.arApItemId(),m.projectId(),m.showDate(),m.payeeEntityId(),m.payerEntityId(),m.payerMerchantId(),"system");}catch(RuntimeException e){log.error("演出结算台账行 {} 未补开开票清单，保留待下轮",m.arApItemId(),e);}
     }
 }

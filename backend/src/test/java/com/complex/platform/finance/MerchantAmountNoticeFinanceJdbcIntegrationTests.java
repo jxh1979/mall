@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.05
+// 文件版本：V0.06
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -126,11 +126,11 @@ class MerchantAmountNoticeFinanceJdbcIntegrationTests {
                 VALUES(?,?,'collect',20000,20000,NULL,'进场押金',now())
                 """, "dep_" + suffix, merchant);
         String settlement = "cts_" + suffix;
-        String penalty = finance.createTerminationPenaltyReceivable(merchant, 8_000L, settlement);
+        String penalty = finance.createTerminationPenaltyReceivable(merchant, 8_000L, settlement, null);
         finance.offsetReceivablesWithDeposit(merchant, settlement, List.of(penalty), 8_000L);
         long refunded = finance.createDepositRefundPayable(merchant, 12_000L, settlement, LocalDate.now(LocalZone.ID).plusDays(30), null);
-        finance.registerDepositAdjustment(merchant, "ctc_" + suffix, "chg1_" + suffix, 5_000L, LocalDate.now(LocalZone.ID).plusDays(15));
-        finance.registerDepositAdjustment(merchant, "ctc_" + suffix, "chg2_" + suffix, -3_000L, LocalDate.now(LocalZone.ID).plusDays(15));
+        finance.registerDepositAdjustment(merchant, "ctc_" + suffix, "chg1_" + suffix, 5_000L, LocalDate.now(LocalZone.ID).plusDays(15), null);
+        finance.registerDepositAdjustment(merchant, "ctc_" + suffix, "chg2_" + suffix, -3_000L, LocalDate.now(LocalZone.ID).plusDays(15), null);
 
         assertThat(refunded).isEqualTo(12_000L);
         List<Map<String, Object>> rows = notices();

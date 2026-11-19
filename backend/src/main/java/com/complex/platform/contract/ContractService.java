@@ -1,6 +1,6 @@
 package com.complex.platform.contract;
 
-// 文件版本：V0.31
+// 文件版本：V0.32
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.LocalZone;
@@ -128,6 +128,11 @@ public class ContractService implements com.complex.platform.finance.Termination
     private final SupervisorReviewService reviews;
     // 押金收取月数／押金退还等待期配置写口经幂等服务执行（照 CG-08b configurePolicy 范式）；旧构造传 null（不调这两个写口的单测）。
     private final IdempotencyService idempotencyService;
+    // 第十八批 AZ 段 285-R1：合同生效挂押金应收（finance 实现）。字段注入免改八个构造器与各测试构造点（同 StoredValueService 对 TicketOrderService 的写法），
+    // @Lazy 防初始化环；单测手工构造未注入即为 null、不挂。
+    @Autowired
+    @org.springframework.context.annotation.Lazy
+    private com.complex.platform.finance.ContractDepositReceivableService contractDeposits;
 
     @Autowired
     public ContractService(ContractRepository repository, AuditEventService auditEventService,
@@ -685,6 +690,12 @@ public class ContractService implements com.complex.platform.finance.Termination
         //   且每期账单各带自身 due_date（期首），看板按 due_date 逐期确认收入，不在生效日堆叠整租期。
         //   若改 @Scheduled 累积巨量空跑作业，反更重；catch-up 仍可手工调 period-bills 端点（P1-B 按钮）。
         int billed = scheduleTermBills(effective, YearMonth.from(effective.effectiveDate()), "activate:" + effective.id(), true);
+        // 第十八批 AZ 段 285-R1（BSM:1361「租金、物业费、能源费、押金、违约金按合同口径形成应收」；BSM:1353「实际收款或退款成功后才更新已收押金余额」）：
+        // 生效即挂押金应收（到期日＝生效日），实收经登记收付款写押金台账；续租、面积位置变更不经此处，仍只登记差额。
+        if (contractDeposits != null) {
+            contractDeposits.register(effective.id(), effective.merchantId(), effective.projectId(), effective.depositCent(),
+                    effective.effectiveDate());
+        }
         // CG-01（PGM「招商运营细则」）：「合同审批全部通过、生效后转为已签约」——来源招商线索在此置已签约
         // （签约起草 LeasingService.signIntent 不再置）。同一生效事务内，生效失败则线索不动。
         if (effectiveLeadPort != null) {
@@ -1918,8 +1929,9 @@ public class ContractService implements com.complex.platform.finance.Termination
         if (delta == 0) {
             return null;
         }
+        // 第十八批 AZ 段 352-R1（BSM:1673「所有数据默认按项目隔离」）：差额台账挂原合同所属项目（子合同与续租同属原合同项目）。
         com.complex.platform.finance.ArApItemRecord item = terminationSettlementPort.registerDepositAdjustment(
-                original.merchantId(), contractId, changeId, delta, LocalDate.parse(deadline));
+                original.merchantId(), contractId, changeId, delta, LocalDate.parse(deadline), original.projectId());
         Map<String, Object> adj = new LinkedHashMap<>();
         adj.put("targetDepositCent", target);
         adj.put("deltaCent", delta);
@@ -2144,7 +2156,9 @@ public class ContractService implements com.complex.platform.finance.Termination
         String merchantId = contract.merchantId();
         String penaltyArId = null;
         if (result.penaltyCent() > 0) {
-            penaltyArId = terminationSettlementPort.createTerminationPenaltyReceivable(merchantId, result.penaltyCent(), settlementId);
+            // 第十八批 AZ 段 352-R1（BSM:1673）：违约金应收挂出租合同所属项目（同押金退还应付，310-R0）。
+            penaltyArId = terminationSettlementPort.createTerminationPenaltyReceivable(merchantId, result.penaltyCent(), settlementId,
+                    contract.projectId());
             annotateSettlementItem(items, "termination_penalty", penaltyArId);
         }
         if (result.offsetCent() > 0) {

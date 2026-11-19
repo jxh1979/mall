@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static com.complex.platform.common.Strings.trimToNull;
 
@@ -29,8 +29,8 @@ import org.springframework.stereotype.Service;
  * 第十八批 R 段第 143 条 143-R3（ENUM:190「由各域主管公司的财务岗在该营业日闭店之后完成核对并逐类标记，最迟不晚于该营业日闭店时点所在自然日的次日
  * 24:00」「某一类数据在上述时点仍未标记的，系统自动生成待办并通知该域主管公司的财务负责人，该营业日的日结不得确认锁定，直至标记完成。」；
  * 第十八批裁决 35「酒吧逐店逐日查；游乐等按综合体逐日查；待办发同综合体有日结锁定权限的财务人员。」）：{@link FinanceFinalMarkOverdueJob} 的业务规则。
- * 系统作业没有登录人，不走员工范围闸。检查单位：在营的每家酒吧（未存档，BSM:569「存档（先下线）」；按该酒吧的营业日与闭店时点，日结范围 bar 或
- * merchant）与每个启用的综合体（按综合体营业日，日结范围 project）；建档之前的营业日（营业日结束时刻不晚于建档时刻）该单位还不存在，不查。期限已到、该营业日没有日结或五类未标齐的，给持日结锁定权限、负责范围覆盖该综合体的平台侧财务人员
+ * 系统作业没有登录人，不走员工范围闸。检查单位：每家酒吧（第十八批 AZ 段 356-R1 起停用照查；存档时刻所在营业日之后、关停结算最后营业日之后不查，
+ * BSM:569「存档（先下线）」、BSM:1787；按该酒吧的营业日与闭店时点，日结范围 bar 或 merchant）与每个启用的综合体（按综合体营业日，日结范围 project）；建档之前的营业日（营业日结束时刻不晚于建档时刻）该单位还不存在，不查。期限已到、该营业日没有日结或五类未标齐的，给持日结锁定权限、负责范围覆盖该综合体的平台侧财务人员
  * （在用、不带商户归属、非外包、有员工档案，同 FacilityWorkOrderService 物业主管取人）各发一条员工系统通知作待办，正文列缺的类别（ENUM:190 原词）。
  * 第十八批 V 段第 159 条 159-R1：检查单位与标记并集查询下沉到 {@link FinanceRepository#listFinalMarkUnits}、
  * {@link FinanceRepository#finalMarkCategoriesByDay}，与下游闸 {@link FinanceService#nonFinalDays} 共用，口径不变。
@@ -68,7 +68,8 @@ public class FinanceFinalMarkOverdueService {
         for (FinalMarkUnit unit : units) {
             LocalDate current = businessDayResolver.businessDate(unit.project(), unit.bar(), now);
             for (LocalDate day : List.of(current.minusDays(3), current.minusDays(2))) {
-                if (!businessDayResolver.end(unit.project(), unit.bar(), day).isAfter(unit.created())) {
+                if (!unit.owes(day, businessDayResolver.start(unit.project(), unit.bar(), day),
+                        businessDayResolver.end(unit.project(), unit.bar(), day))) {
                     continue;
                 }
                 ZonedDateTime close = businessDayResolver.closeAt(unit.project(), unit.bar(), day);

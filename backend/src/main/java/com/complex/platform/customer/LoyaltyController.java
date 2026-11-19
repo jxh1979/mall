@@ -33,19 +33,22 @@ public class LoyaltyController {
     private final CustomerService customerService;
     private final AuditedOperationExecutor operations;
     private final AuditEventService audit;
+    private final StoredValueRefundLookupService refundLookupService;
 
     // 第十八批 N 段第 124 条 124-R5（PGM L966「已拍板：所有有过程的业务动作都必须留痕……」、L738「访问被拒绝也要留痕……」）：写口任一步失败
     // 经 AuditedOperationExecutor.recordingFailure 落 OpenAPI 声明的 x-audit-event-failure 再原样抛出；服务层原本不写成功事件的，
     // 服务返回后在这里落声明的 x-audit-event-success。
     public LoyaltyController(LoyaltyService service,
                              StoredValueService storedValueService, CustomerRepository repository,
-                             CustomerService customerService, AuditedOperationExecutor operations, AuditEventService audit) {
+                             CustomerService customerService, AuditedOperationExecutor operations, AuditEventService audit,
+                             StoredValueRefundLookupService refundLookupService) {
         this.service = service;
         this.storedValueService = storedValueService;
         this.repository = repository;
         this.customerService = customerService;
         this.operations = operations;
         this.audit = audit;
+        this.refundLookupService = refundLookupService;
     }
 
     /** 积分虚拟券核销领取(店员端):库存足则扣库存领实物,缺货则退回积分。 */
@@ -143,6 +146,18 @@ public class LoyaltyController {
                         request.projectId(), request.merchantId(), request.amountCent() == null ? 0L : request.amountCent(),
                         request.reason(), Boolean.TRUE.equals(request.closeAccount()), request.redemptionVoucherNo(),
                         request.idempotencyKey())));
+    }
+
+    /**
+     * 第十八批 AZ 段第 278 条 278-R1（ENUM:86「余额管理与退款均由长沙项目公司负责」；BSM:833「商户的员工只能管理本商户发行的储值卡」）：
+     * 退卡查卡——按手机号列出客人名下当前账号可办理退卡的卡。手机号走请求体、不进 URL（AUD-020）；查询不扣单次授权（M723，操作员 2026-10-03）。
+     */
+    @PostMapping("/stored-value/refund-cards/lookup")
+    @com.complex.platform.access.DoesNotConsumeSingleUseGrant
+    public ApiResponse<List<StoredValueRefundLookupService.StoredValueRefundCard>> lookupStoredValueRefundCards(
+            @RequestBody CustomerAccountLookupRequest request
+    ) {
+        return ApiResponse.ok(refundLookupService.lookup(request == null ? null : request.phone()));
     }
 
     // ---- B1d⑤ phase3：商户级卡退款规则配置（发卡商户自设可否退/比例）----

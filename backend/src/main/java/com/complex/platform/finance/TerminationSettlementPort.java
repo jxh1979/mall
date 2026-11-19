@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import java.time.LocalDate;
 import java.util.List;
@@ -20,8 +20,11 @@ public interface TerminationSettlementPort {
      */
     long createDepositRefundPayable(String merchantId, long netRefundCent, String settlementId, LocalDate dueDate, String projectId);
 
-    /** 提前退租违约金挂应收：direction=receivable, source_type='termination_penalty'。返回台账项 id。 */
-    String createTerminationPenaltyReceivable(String merchantId, long penaltyCent, String settlementId);
+    /**
+     * 提前退租违约金挂应收：direction=receivable, source_type='termination_penalty'。返回台账项 id。
+     * 第十八批 AZ 段 352-R1（BSM:1673「所有数据默认按项目隔离」）：projectId＝出租合同所属项目，台账行挂该项目，供项目财务查看与登记收款。
+     */
+    String createTerminationPenaltyReceivable(String merchantId, long penaltyCent, String settlementId, String projectId);
 
     /**
      * 应退押金封顶值：min(合同固化押金额, 该商户押金台账实收余额)。只退商户实际交纳的，不超退。
@@ -45,7 +48,8 @@ public interface TerminationSettlementPort {
      * HP-C03（BSM L1353「批准生效后登记应收或应退，实际收款或退款成功后才更新已收押金余额，未结差额继续跟进」）：
      * 面积/位置变更子合同押金补退差额登记进应收应付台账——deltaCent&gt;0 挂应收（商户补缴）、&lt;0 挂应付（退还），金额取绝对值，
      * 到期日＝办理期限，source_type='deposit_adjustment'、来源＝子合同；幂等键＝变更 id（重放不双挂）。登记时不写 deposit_ledger。
+     * 第十八批 AZ 段 352-R1（BSM:1673）：projectId＝原合同所属项目（子合同与续租同属原合同项目），台账行挂该项目。
      */
     ArApItemRecord registerDepositAdjustment(String merchantId, String childContractId, String changeId,
-            long deltaCent, LocalDate deadline);
+            long deltaCent, LocalDate deadline, String projectId);
 }

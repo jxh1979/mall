@@ -1,6 +1,6 @@
 package com.complex.platform.merchantportal;
 
-// 文件版本：V0.05
+// 文件版本：V0.06
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.LocalZone;
@@ -85,6 +85,8 @@ public class MerchantFeeStatementService {
             Map.entry("energy_fee", "能源费"),
             Map.entry("ticket_points_issuance", "积分发行费"),
             Map.entry("deposit", "押金"), Map.entry("deposit_adjustment", "押金"),
+            // 第十八批 AZ 段 285-R1：合同生效挂的押金应收归「押金」名目。
+            Map.entry("contract_deposit", "押金"),
             Map.entry("termination_penalty", "违约金"),
             Map.entry("contract_parking_monthly", "车位月租"),
             Map.entry("single_bar_service_fee", "门票综合服务费"),

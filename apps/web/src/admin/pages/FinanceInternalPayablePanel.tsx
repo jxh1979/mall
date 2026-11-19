@@ -1,4 +1,4 @@
-// 文件版本：V0.04
+// 文件版本：V0.05
 import React from "react";
 import type { AdminPageProps, FinanceLedgerRow } from "../types";
 import { PermissionButton } from "../security/Can";
@@ -11,14 +11,20 @@ import { cnDate } from "../components/RowDetailDrawer";
 // 第十八批 AV 段 310-R1（ENUM:252「押金退还付款状态按「内部应付执行状态」条执行」）：退租押金退还应付同样登记执行状态；它不受三个付账日约束，
 // 没有异议截止与指定付账日，也不出资金不足顺延。
 export const INTERNAL_PAYABLE_ROUTES = new Set(["ticket_distribution", "platform_incentive_subsidy", "single_bar_service_fee", "compensation_fulfillment",
-  "pass_domain_share", "pass_domain_direct_settlement", "pass_unverified_attribution", "deposit_refund"]);
+  "pass_domain_share", "pass_domain_direct_settlement", "pass_unverified_attribution", "deposit_refund",
+  // 第十八批 AZ 段 350-R1（BSM:1704）：通用卡消费结算应付同为普通内部结算应付。
+  "general_card_consume"]);
 const PAY = ["finance.payment.register"];
 
 type Attempt = { id: string; status: string };
+// 第十八批 AZ 段 358-R1（BSM:1683「处理路径为原路重付，或更换收款账户后重付」）：收款方财务负责人已审批的换账户单。
+type AccountChange = { id: string; newAccountRef: string; reason: string; approvedAt: string };
 type Execution = {
   executionStatus: string; inTransit: boolean; objectionDeadline?: string; designatedPayDay?: string; dueDate?: string;
-  failureReason?: string | null; expectedRepayDate?: string | null; attempts: Attempt[];
+  failureReason?: string | null; expectedRepayDate?: string | null; attempts: Attempt[]; accountChanges?: AccountChange[];
 };
+const approvedDay = (at: string) =>
+  new Date(at).toLocaleDateString("zh-CN", { timeZone: "Asia/Shanghai", year: "numeric", month: "long", day: "numeric" });
 type Props = Pick<AdminPageProps, "api" | "effectivePermissions" | "setActionResult"> & { row: FinanceLedgerRow; onChanged: () => void };
 
 export function executionLabel(status: string, inTransit: boolean): string {
@@ -31,6 +37,7 @@ export function executionLabel(status: string, inTransit: boolean): string {
 export function FinanceInternalPayablePanel({ api, effectivePermissions, setActionResult, row, onChanged }: Props) {
   const [state, setState] = React.useState<Execution | null>(null);
   const [bankRef, setBankRef] = React.useState("");
+  const [account, setAccount] = React.useState<string | null>(null);
   const [failure, setFailure] = React.useState("");
   const [repayDate, setRepayDate] = React.useState("");
   const [note, setNote] = React.useState("");
@@ -59,6 +66,9 @@ export function FinanceInternalPayablePanel({ api, effectivePermissions, setActi
   }
 
   const inTransitAttempt = state?.attempts.find((a) => a.status === "initiated");
+  // 358-R1：换账户只在付款失败待处理时审批，有审批即收款方要求改付新账户——默认选最近审批的一条；选空＝原收款账户（原路重付）。
+  const changes = state?.accountChanges ?? [];
+  const payAccount = account ?? changes[changes.length - 1]?.id ?? "";
   return (
     <div className="admin-panel" data-testid="internal-payable-panel">
       <h4>付款执行</h4>
@@ -69,9 +79,16 @@ export function FinanceInternalPayablePanel({ api, effectivePermissions, setActi
       ) : null}
       <div className="admin-form-row">
         <label>银行流水号<input data-testid="internal-payable-bank-ref" value={bankRef} onChange={(e) => setBankRef(e.target.value)} /></label>
+        {changes.length > 0 ? (
+          <label>付款账户<select data-testid="internal-payable-account" value={payAccount} onChange={(e) => setAccount(e.target.value)}>
+            {changes.map((c) => <option key={c.id} value={c.id}>新账户 {c.newAccountRef}（{approvedDay(c.approvedAt)} 审批，{c.reason}）</option>)}
+            <option value="">原收款账户（原路重付）</option>
+          </select></label>
+        ) : null}
         <PermissionButton permissionsState={effectivePermissions} permissions={PAY} data-testid="internal-payable-initiate"
           disabled={busy || !state || state.inTransit || state.executionStatus === "settled" || state.executionStatus === "reversed"}
-          onClick={() => void run("internal_payment_initiated", `${base}/payment-attempts`, { bankRef: bankRef.trim() || undefined })}>
+          onClick={() => void run("internal_payment_initiated", `${base}/payment-attempts`,
+            { bankRef: bankRef.trim() || undefined, accountChangeId: payAccount || undefined })}>
           登记已发起付款
         </PermissionButton>
       </div>

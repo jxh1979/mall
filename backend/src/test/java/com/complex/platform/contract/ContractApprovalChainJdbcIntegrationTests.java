@@ -1,17 +1,20 @@
 package com.complex.platform.contract;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.hamcrest.Matchers.hasItem;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.complex.platform.access.AccessActor;
 import com.complex.platform.common.api.ApiException;
+import com.complex.platform.contract.dto.ContractActivateRequest;
 import com.complex.platform.contract.dto.ContractApprovalFlowRequest;
 import com.complex.platform.contract.dto.ContractChangeRequest;
 import com.complex.platform.contract.dto.ContractDraftRequest;
@@ -44,6 +47,7 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.test.web.servlet.request.RequestPostProcessor;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -74,6 +78,7 @@ class ContractApprovalChainJdbcIntegrationTests {
     @Autowired private MockMvc mockMvc;
     @Autowired private ContractExpiryJob expiryJob;
     @Autowired private FinanceService financeService;
+    @Autowired private com.complex.platform.finance.ContractDepositReceivableService contractDeposits;
     @Autowired private com.complex.platform.analytics.AnalyticsRepository analytics;
 
     private String suffix;
@@ -668,6 +673,119 @@ class ContractApprovalChainJdbcIntegrationTests {
                 String.class, contract.id())).containsExactly("location_change/pending");
     }
 
+    /**
+     * 第十八批 AZ 段 352-R1（BSM:1673「所有数据默认按项目隔离，只有项目之上的获授权岗位可以跨项目汇总。」；BSM:1361「退租结算的抵扣与追缴进应收应付台账」）：
+     * 提前退租违约金在押金不够抵时追收——违约金应收挂出租合同所属项目，该项目财务（无商户编号、只到本人项目）经真实接口在台账里看得到、登记收款 200。
+     */
+    @Test
+    void terminationPenaltyReceivableBelongsToContractProjectForProjectFinance() throws Exception {
+        ContractChangeRecord change = terminationWithDeposit("c352a", 10000L, "early_termination", Map.of("penaltyAmountCent", 50000));
+        approveAll(change.reviewId());
+        String sid = repository.listSettlementsByContract(change.contractId()).get(0).id();
+        String penalty = jdbc.queryForObject(
+                "SELECT id FROM ar_ap_items WHERE source_type = 'termination_penalty' AND source_id = ?", String.class, sid);
+        assertThat(itemState(penalty)).isEqualTo("pending_collection:50000");
+        RequestPostProcessor finance = projectFinance(projectId);
+
+        mockMvc.perform(get("/api/v1/finance/ar-ap-items").param("keyword", "termination_penalty").param("size", "200").with(finance))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items[*].id", hasItem(penalty)));
+        assertThat(projectOf(penalty)).isEqualTo(projectId);
+        collect(finance, penalty, 50000L).andExpect(status().isOk());
+        assertThat(itemState(penalty)).isEqualTo("settled:0");
+    }
+
+    /**
+     * 第十八批 AZ 段 352-R1（BSM:1673；BSM:1353「批准生效后登记应收或应退，实际收款或退款成功后才更新已收押金余额，未结差额继续跟进」）：面积变更押金补缴应收
+     * 挂原合同所属项目——该项目财务经真实接口看得到、登记收款 200 且押金台账余额随实收增加；别的项目财务登记 403 CROSS_PROJECT_FORBIDDEN。
+     */
+    @Test
+    void areaChangeDepositSupplementBelongsToContractProjectForProjectFinance() throws Exception {
+        java.time.YearMonth now = java.time.YearMonth.now(com.complex.platform.common.LocalZone.ID);
+        ContractRecord contract = draft("c352b");
+        jdbc.update("UPDATE contracts SET lifecycle_status = 'effective', deposit_cent = 300000, snapshot = CAST(? AS jsonb) WHERE id = ?",
+                "{\"depositMonths\": 3}", contract.id());
+        ContractChangeRecord area = contractService.raiseChange(contract.id(), new ContractChangeRequest(key("ac_c352b"), "area_change",
+                Map.of("base_rent_cent", 150000, "deposit_deadline", now.plusMonths(1).atDay(1).toString()), gm,
+                LINE_CODES.stream().map(this::line).toList(), "面积变更"));
+        approveAll(area.reviewId());
+        String supplement = jdbc.queryForObject("SELECT id FROM ar_ap_items WHERE source_type = 'deposit_adjustment' AND counterparty_id = ?",
+                String.class, contract.merchantId());
+        assertThat(itemState(supplement)).isEqualTo("pending_collection:150000");
+        String otherProject = "hpc01_other_" + suffix;
+        jdbc.update("INSERT INTO projects(id,venue_type,name,status,created_at,updated_at) VALUES (?, 'complex', '别的项目', 'active', now(), now())",
+                otherProject);
+        RequestPostProcessor finance = projectFinance(projectId);
+
+        mockMvc.perform(get("/api/v1/finance/ar-ap-items").param("keyword", "deposit_adjustment").param("size", "200").with(finance))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items[*].id", hasItem(supplement)));
+        assertThat(projectOf(supplement)).isEqualTo(projectId);
+        collect(projectFinance(otherProject), supplement, 150000L).andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.detail_code").value("CROSS_PROJECT_FORBIDDEN"));
+        collect(finance, supplement, 150000L).andExpect(status().isOk());
+        assertThat(itemState(supplement)).isEqualTo("settled:0");
+        assertThat(jdbc.queryForObject("SELECT balance_after_cent FROM deposit_ledger WHERE merchant_id = ? ORDER BY created_at DESC, id DESC"
+                + " LIMIT 1", Long.class, contract.merchantId())).isEqualTo(150000L);
+    }
+
+    /**
+     * 第十八批 AZ 段 285-R1（BSM:1361「连接财务对账，租金、物业费、能源费、押金、违约金按合同口径形成应收」；BSM:1353「实际收款或退款成功后才更新已收押金余额」；
+     * ENUM:256 账单类型「押金」）：合同经 activate 生效即挂押金应收（来源 contract_deposit、金额＝生效固化押金、账期＝生效月、到期日＝生效日、挂合同所属项目），
+     * 项目财务经真实接口看得到、收全额后押金台账余额等于押金；无欠费到期退租终审后押金退还应付等于押金（改前押金台账为 0、不挂退还）。
+     */
+    @Test
+    void contractDepositReceivableCollectedIntoLedgerAndRefundedAtTermination() throws Exception {
+        ContractRecord contract = activated("c285a");
+        long deposit = contract.depositCent();
+        String item = contractDepositItem(contract.id());
+        assertThat(contractDeposits.register(contract.id(), contract.merchantId(), projectId, deposit, contract.effectiveDate()).id())
+                .isEqualTo(item);
+        contractDepositItem(contract.id());   // 同一合同再登记（幂等键＝合同号）仍只一条
+        RequestPostProcessor finance = projectFinance(projectId);
+        String row = "$.data.items[?(@.id == '" + item + "')]";
+        mockMvc.perform(get("/api/v1/finance/ar-ap-items").param("keyword", "contract_deposit").param("size", "200").with(finance))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath(row + ".direction").value("receivable"))
+                .andExpect(jsonPath(row + ".amount_cent").value((int) deposit))
+                .andExpect(jsonPath(row + ".accounting_period").value("2026-08"))
+                .andExpect(jsonPath(row + ".due_date").value("2026-08-01"));
+        assertThat(projectOf(item)).isEqualTo(projectId);
+        collect(finance, item, deposit).andExpect(status().isOk());
+        collect(finance, rentItemId(contract.id(), "2026-08"), 100000L).andExpect(status().isOk());   // 退租月租金已收清：无欠费
+
+        ContractChangeRecord change = movedOut(contract, "c285a");
+        approveAll(change.reviewId());
+        String sid = repository.listSettlementsByContract(contract.id()).get(0).id();
+        assertThat(offsetPayments(sid)).isEmpty();
+        String refund = jdbc.queryForObject("SELECT id FROM ar_ap_items WHERE source_type = 'deposit_refund' AND source_id = ?", String.class, sid);
+        assertThat(itemState(refund)).isEqualTo("pending_payment:" + deposit);
+        assertThat(depositLedger(change)).containsExactly("collect:" + deposit + ":" + deposit, "refund:" + deposit + ":0");
+    }
+
+    /**
+     * 第十八批 AZ 段 285-R1（BSM:1353「实际收款或退款成功后才更新已收押金余额」；BSM:1352「一次算清押金怎么处置、有没有违约金、还有没有没结清的欠费」）：
+     * 押金应收只收一半——退租终审退押金按实收封顶；没收的那一半不算退租欠费、不被押金自身抵扣，押金应收仍部分收付。
+     */
+    @Test
+    void partlyCollectedContractDepositCapsRefundAndStaysOutOfArrears() throws Exception {
+        ContractRecord contract = activated("c285b");
+        long half = contract.depositCent() / 2;
+        String item = contractDepositItem(contract.id());
+        RequestPostProcessor finance = projectFinance(projectId);
+        collect(finance, item, half).andExpect(status().isOk());
+        collect(finance, rentItemId(contract.id(), "2026-08"), 100000L).andExpect(status().isOk());
+
+        ContractChangeRecord change = movedOut(contract, "c285b");
+        approveAll(change.reviewId());
+        String sid = repository.listSettlementsByContract(contract.id()).get(0).id();
+        assertThat(offsetPayments(sid)).isEmpty();
+        assertThat(itemState(item)).isEqualTo("partial_paid:" + half);
+        String refund = jdbc.queryForObject("SELECT id FROM ar_ap_items WHERE source_type = 'deposit_refund' AND source_id = ?", String.class, sid);
+        assertThat(itemState(refund)).isEqualTo("pending_payment:" + half);
+        assertThat(depositLedger(change)).containsExactly("collect:" + half + ":" + half, "refund:" + half + ":0");
+    }
+
     /** 前置态：该酒吧卡座一张未结账单带服务费分项（营业日 businessDate），尚无月结。 */
     private void serviceFeeAwaitingMonthClose(String merchant, LocalDate businessDate) {
         String table = key("bt_c138");
@@ -858,6 +976,67 @@ class ContractApprovalChainJdbcIntegrationTests {
     private void actAs(String userId) {
         SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
                 new AccessActor(userId, userId, "platform_admin", projectId, null, "active"), "token", List.of()));
+    }
+
+    private String projectOf(String arApItemId) {
+        return jdbc.queryForObject("SELECT project_id FROM ar_ap_items WHERE id = ?", String.class, arApItemId);
+    }
+
+    /** 待生效合同（2026-08-01 起、月租 1000 元）绑本项目一个铺位经 activate 生效：押金按收取月数×月租固化，整租期逐期预排租金。 */
+    private ContractRecord activated(String tag) {
+        jdbc.update("INSERT INTO role_permissions (role_id, permission_code) VALUES (?, 'contract.lifecycle.activate')", "role_hpc01_" + suffix);
+        ContractRecord contract = draft(tag);
+        String space = "sp_" + key(tag);
+        jdbc.update("INSERT INTO spaces (id, space_name, space_type, floor_no, area_square_meter, polygon_points, status, project_id, created_at,"
+                + " updated_at) VALUES (?, '押金应收测试铺位', 'shop', '1F', 80, '[]'::jsonb, 'active', ?, now(), now())", space, projectId);
+        jdbc.update("UPDATE contracts SET lifecycle_status = 'pending_effective' WHERE id = ?", contract.id());
+        return contractService.activate(contract.id(), new ContractActivateRequest(key("act_" + tag), List.of(space)));
+    }
+
+    /** 该合同生效挂的押金应收（恰一条）。 */
+    private String contractDepositItem(String contractId) {
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM ar_ap_items WHERE source_type = 'contract_deposit' AND source_id = ?",
+                Integer.class, contractId)).isEqualTo(1);
+        return jdbc.queryForObject("SELECT id FROM ar_ap_items WHERE source_type = 'contract_deposit' AND source_id = ?", String.class,
+                contractId);
+    }
+
+    /** 生效合同到期日改到 2026-08-31、按到期退租发起并齐单核对，返回待审退租变更。 */
+    private ContractChangeRecord movedOut(ContractRecord contract, String tag) {
+        actAs(drafter);
+        jdbc.update("UPDATE contracts SET expiry_date = DATE '2026-08-31' WHERE id = ?", contract.id());
+        ContractChangeRecord change = contractService.raiseChange(contract.id(), new ContractChangeRequest(key("mo_" + tag), "move_out",
+                Map.of("moveOutDate", "2026-08-31"), gm, LINE_CODES.stream().map(this::line).toList(), "到期退租"));
+        ContractSettlementRecord settlement = repository.listSettlementsByContract(contract.id()).get(0);
+        contractService.checkSettlementDocuments(settlement.id(), new ContractResolveDisputeRequest(key("dc_" + tag), null));
+        return change;
+    }
+
+    /** 该项目的项目财务：员工账号、无商户编号、组织＝该项目，持台账查看与登记收付款；后台网页真实请求形状（X-Terminal-Type: web）。 */
+    private RequestPostProcessor projectFinance(String project) {
+        String userId = "usr_hpc01_fin_" + suffix + "_" + System.nanoTime();
+        String role = "role_hpc01_fin_" + System.nanoTime();
+        jdbc.update("INSERT INTO access_users (id, username, account_type, organization_id, merchant_id, status, created_at)"
+                + " VALUES (?, ?, 'staff', ?, NULL, 'active', now())", userId, userId, project);
+        jdbc.update("INSERT INTO roles (id, role_name, created_at) VALUES (?, ?, now())", role, "项目财务" + System.nanoTime());
+        for (String permission : List.of("finance.ar_ap.view", "finance.payment.register")) {
+            jdbc.update("INSERT INTO role_permissions (role_id, permission_code) VALUES (?, ?)", role, permission);
+        }
+        jdbc.update("INSERT INTO user_roles (user_id, role_id) VALUES (?, ?)", userId, role);
+        AccessActor actor = new AccessActor(userId, userId, "staff", project, null, "active");
+        return request -> {
+            request.addHeader("X-Terminal-Type", "web");
+            return authentication(new UsernamePasswordAuthenticationToken(actor, null,
+                    List.of(new SimpleGrantedAuthority("ROLE_P0_STAFF")))).postProcessRequest(request);
+        };
+    }
+
+    /** 后台台账页「登记核销」真实请求形状（蛇形键）：银行转账收款。 */
+    private ResultActions collect(RequestPostProcessor who, String arApItemId, long amountCent) throws Exception {
+        return mockMvc.perform(post("/api/v1/finance/ar-ap-items/" + arApItemId + "/payments").with(who)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"idempotency_key\":\"" + UUID.randomUUID() + "\",\"amount_cent\":" + amountCent
+                        + ",\"payment_method\":\"bank_transfer\",\"bank_flow_ref\":\"flow_" + UUID.randomUUID() + "\"}"));
     }
 
     private String key(String tag) {

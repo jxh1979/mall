@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.24
+// 文件版本：V0.25
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -653,11 +653,25 @@ public interface FinanceRepository {
     /**
      * 第十八批 V 段第 159 条 159-R1（第十八批裁决 35「酒吧逐店逐日查；游乐等按综合体逐日查」）：五类最终标记的检查单位。bar 非空＝酒吧单位
      * （id 即该酒吧，name 取商户名，project 取所属综合体）；否则为综合体单位（id＝project＝该综合体，name 取综合体名）。
+     * 第十八批 AZ 段 356-R1：archivedAt＝酒吧存档时刻、closedDay＝关停结算登记的关店最后营业日，综合体单位两者都为 null。
      */
-    record FinalMarkUnit(String bar, String id, String name, String project, Instant created) {
+    record FinalMarkUnit(String bar, String id, String name, String project, Instant created, Instant archivedAt,
+            LocalDate closedDay) {
+
+        /**
+         * 356-R1（ENUM:190；BSM:569「存档（先下线）……不再被新业务选用」；BSM:1787「酒吧关闭须完成关停结算」）：该营业日是否要求标记与日结——
+         * 建档之后（营业日结束晚于建档时刻）、不晚于关停结算最后营业日、营业日起点早于存档时刻（存档时刻所在营业日照查）。停用不截止。
+         */
+        public boolean owes(LocalDate day, Instant dayStart, Instant dayEnd) {
+            return dayEnd.isAfter(created) && (closedDay == null || !day.isAfter(closedDay))
+                    && (archivedAt == null || dayStart.isBefore(archivedAt));
+        }
     }
 
-    /** 159-R1：检查单位——在营未存档的酒吧，再加启用的综合体（逾期待办与下游闸同一集合）。default 返回空兼容既有测试双子。 */
+    /**
+     * 159-R1：检查单位——酒吧（第十八批 AZ 段 356-R1 起不论在营、停用或存档，逐日由 {@link FinalMarkUnit#owes} 截止），再加启用的综合体
+     * （逾期待办与下游闸同一集合）。default 返回空兼容既有测试双子。
+     */
     default List<FinalMarkUnit> listFinalMarkUnits() {
         return List.of();
     }

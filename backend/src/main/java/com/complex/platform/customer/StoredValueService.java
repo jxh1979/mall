@@ -1,6 +1,6 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.18
+// 文件版本：V0.19
 
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.idempotency.IdempotentReplayContext;
@@ -61,7 +61,8 @@ public class StoredValueService {
     // TK-21-R1：账户关闭/注销时商户卡应退本金事项 → 通知发卡商户联系人。
     private static final String NOTIFICATION_EVENT_PENDING_REFUND = "pending_refund";
     private static final String STORED_VALUE_PENDING_REFUND_TEMPLATE = "sms.stored_value.pending_refund";
-    private static final String ACCOUNT_CLOSE_KEY_PREFIX = "svclose_";
+    // 第十八批 AZ 段 278-R1：退卡查卡（StoredValueRefundLookupService）按同一前缀找账户关闭登记的待退事项，包内可见。
+    static final String ACCOUNT_CLOSE_KEY_PREFIX = "svclose_";
 
     /** 商户卡充值资金归属：merchant_prepaid=发卡商户预收（默认）；platform_collect=平台代收、消费时结算给商户。 */
     static final String FUND_MERCHANT_PREPAID = "merchant_prepaid";
@@ -101,6 +102,9 @@ public class StoredValueService {
     // 第十八批 N 段第 123 条 123-R2：敏感操作定位闸（字段注入免改构造点；单测未注入即不查）。
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     com.complex.platform.gate.SensitiveLocationGuard locationGuard;
+    // 18AZ 收尾复核：不带项目的商户卡按发卡商户经营项目判退款范围（StoredValueRefundLookupService.requireRefundScope）；字段注入免改构造点，单测未注入即不判。
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.complex.platform.finance.FinanceRepository financeRepository;
 
     // B1d⑤ 商户卡充值资金归属默认值（开关，可后台/配置覆盖；默认商户预收）。
     @Value("${stored-value.merchant-card.fund-ownership:merchant_prepaid}")
@@ -787,7 +791,7 @@ public class StoredValueService {
 
     /**
      * AUD-003 本店柜台/到店退款：商户预收(merchant_prepaid)卡的唯一可达退款路径（线上退对其无条件拒）。
-     * 仅限商户卡；staff-token 走权限闸 + {@link #requireMerchantScopeForCard} 发卡商户 scope；
+     * 仅限商户卡；staff-token 走权限闸 + {@link StoredValueRefundLookupService#requireRefundScope} 商户与项目范围；
      * 仍过发卡商户退款规则(可否退/比例)；必填兑付凭证号(现场现金/原路退付的凭据)入审计留痕。
      * 款项由柜台现场兑付，不走线上打款网关/退款台账。
      */
@@ -838,8 +842,9 @@ public class StoredValueService {
             CustomerStoredValueAccountRecord firstCard = repository.listStoredValueAccountsByCustomer(existing.customerId()).stream()
                     .filter(card -> card.id().equals(existing.accountId())).findFirst()
                     .orElseThrow(() -> ApiException.notFound("STORED_VALUE_ACCOUNT_NOT_FOUND", "储值账户不存在或已被删除"));
-            requireMerchantScopeForCard(firstCard);
-            requireProjectScopeForCard(firstCard);
+            // 第十八批 AZ 段 278-R1：商户与项目两维改由 requireRefundScope 一并核（与首次提交同一口径），不挂商户的项目侧账号可办本项目通用卡。
+            StoredValueRefundLookupService.requireRefundScope(authorizationService, firstCard,
+                    financeRepository == null ? null : financeRepository::listMerchantOperatingProjectIds);
             // AUD-002: 幂等命中核对完整不可变指纹(操作类型/金额/卡范围/业务事由)，不再只看 customerId。
             // 路径隔离由键命名空间保证（柜台=svcr_ 前缀），线上/柜台不会互相命中。
             CustomerStoredValueTransactionRecord first = verifyIdempotentReplay(existing, customerId, projectId, merchantId,
@@ -852,7 +857,10 @@ public class StoredValueService {
             return first;
         }
         CustomerStoredValueAccountRecord account = requireAccountForUpdate(customerId, projectId, merchantId);
-        requireMerchantScopeForCard(account);
+        // 第十八批 AZ 段 278-R1（ENUM:86「余额管理与退款均由长沙项目公司负责」；PGM:528「④看不到别的商户和别的项目的数据」）：
+        // 首次提交同核商户与项目——商户账号只办本商户卡，卡带项目的只办本人项目（柜台退款原先只比商户）。
+        StoredValueRefundLookupService.requireRefundScope(authorizationService, account,
+                financeRepository == null ? null : financeRepository::listMerchantOperatingProjectIds);
         if ("closed".equals(account.status())) {
             throw ApiException.conflict("STORED_VALUE_ACCOUNT_CLOSED", "储值账户已销户");
         }
@@ -901,6 +909,12 @@ public class StoredValueService {
         if (pendingItem != null && (payoutCent != pendingItem.refundAmountCent() || principalAfter != 0)) {
             throw ApiException.conflict("STORED_VALUE_PENDING_REFUND_AMOUNT_MISMATCH",
                     "柜台退卡金额须等于账户关闭登记的待退本金事项金额");
+        }
+        // 第十八批 AZ 段 278-R1（BSM:833「单张储值卡退款时如申请同时销卡，本金未退清的须拒绝销卡并明确报错」）：会员注销放弃余额走
+        // waiveBalancesOnDeregistration，不经此处（原句的例外）。
+        if (closeAccount && principalAfter != 0) {
+            throw ApiException.conflict("STORED_VALUE_CLOSE_PRINCIPAL_REMAINING", "本金未退清，不能销卡；同时销卡须一次退还剩余本金 "
+                    + java.math.BigDecimal.valueOf(account.principalCent(), 2).toPlainString() + " 元");
         }
         // CG-06a（ENUM「储值卡类型与收款主体」：「销户时……再退剩余本金，赠送金清零」；BSM「储值」：
         // 「赠送金不退现、未使用部分按活动规则作废或收回」）：销户（本金退清）时未使用赠送金作废，单独留一条 adjust 流水。
@@ -1553,21 +1567,6 @@ public class StoredValueService {
             if (!scope.equals(account.merchantId())) {
                 throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN",
                         "该储值卡不在当前商户权限范围内");
-            }
-        });
-    }
-
-    // M724-F15（治理地图第 528 行红线④「看不到别的商户和别的项目的数据」）：退款重复提交返回第一次的流水之前，按流水所属的卡核当前操作人的项目。
-    // 卡带项目才比（商户卡可以不带项目，V175「商户卡可无独立 project」，卡上没有项目可比）；平台管理员（scope 空）放行，口径同
-    // requireMerchantScopeForCard；authorizationService 为 null 不强制。只用在退款的重放分支。
-    private void requireProjectScopeForCard(CustomerStoredValueAccountRecord account) {
-        if (authorizationService == null || account.projectId() == null) {
-            return;
-        }
-        authorizationService.currentProjectScopeQuietly().ifPresent(scope -> {
-            if (!scope.equals(account.projectId())) {
-                throw ApiException.forbidden("CROSS_PROJECT_FORBIDDEN",
-                        "该储值卡不在当前项目权限范围内");
             }
         });
     }

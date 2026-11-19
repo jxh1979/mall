@@ -1,4 +1,4 @@
-// 文件版本：V0.20
+// 文件版本：V0.21
 import React from "react";
 import { ConfigProvider, theme } from "antd";
 import zhCN from "antd/es/locale/zh_CN";
@@ -117,6 +117,7 @@ const StudentCertificationsPage = React.lazy(() => import("./pages/StudentCertif
 const CustomerAccountsPage = React.lazy(() => import("./pages/CustomerAccountsPage").then((m) => ({ default: m.CustomerAccountsPage })));
 const MemberLoyaltyConfigPage = React.lazy(() => import("./pages/MemberLoyaltyConfigPage").then((m) => ({ default: m.MemberLoyaltyConfigPage })));
 const StoredValueRulesPage = React.lazy(() => import("./pages/StoredValueRulesPage").then((m) => ({ default: m.StoredValueRulesPage })));
+const StoredValueRefundPage = React.lazy(() => import("./pages/StoredValueRefundPage").then((m) => ({ default: m.StoredValueRefundPage })));
 const RefundAuthorityPage = React.lazy(() => import("./pages/RefundAuthorityPage").then((m) => ({ default: m.RefundAuthorityPage })));
 const OperatingParamsPage = React.lazy(() => import("./pages/OperatingParamsPage").then((m) => ({ default: m.OperatingParamsPage })));
 const PayrollTaxBracketsPage = React.lazy(() => import("./pages/PayrollTaxBracketsPage").then((m) => ({ default: m.PayrollTaxBracketsPage })));
@@ -433,6 +434,8 @@ function renderPage(route: AdminRoute, props: AdminPageProps) {
       return <MemberLoyaltyConfigPage {...props} />;
     case "ADM-CUS-005":
       return <StoredValueRulesPage {...props} />;
+    case "ADM-CUS-006":
+      return <StoredValueRefundPage {...props} />;
     case "ADM-FIN-005":
       return <SettlementReviewPage {...props} />;
     case "ADM-INT-001":
