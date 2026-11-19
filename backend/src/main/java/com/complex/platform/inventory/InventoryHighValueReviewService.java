@@ -1,6 +1,6 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.06
+// 文件版本：V0.07
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -515,8 +515,9 @@ public class InventoryHighValueReviewService {
         List<String> cleaned = value == null ? List.of()
                 : value.stream().map(Strings::trimToNull).filter(java.util.Objects::nonNull).toList();
         if (cleaned.isEmpty()) {
+            // 第十八批 AY 段 269-R2（PGM:287）：字段键打头，写响应体时经 FieldLabels.translate 译成「照片附件／视频附件不能为空：……」，日志仍留英文键。
             throw ApiException.badRequest("HIGH_VALUE_EVIDENCE_REQUIRED",
-                    "高价值动作需照片+视频双证据；" + fieldName + " 不能为空");
+                    fieldName + " 不能为空：高价值动作需照片+视频双证据");
         }
         return cleaned;
     }

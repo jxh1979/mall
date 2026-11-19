@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import static com.complex.platform.bar.BarPayrollSupport.*;
 import com.complex.platform.bar.BarBillAdjustmentRequest.RefundLine;
@@ -18,7 +18,7 @@ public class BarPayrollRefundService {
     public RefundContext context(String billId) {
         var bill=p.jdbc.queryForMap("SELECT * FROM bar_bills WHERE id=?",billId);
         var scope=p.tableScope((String)bill.get("table_id"));
-        p.requireScope(scope.project(),scope.merchant(),"bar.bill.refund");
+        p.requireReadScope(scope.project(),scope.merchant(),"bar.bill.refund");
         p.auth.requirePermission("bar.bill.adjust");
         var ids=p.jdbc.queryForList("SELECT source_bill_id FROM bar_payroll_collection_links WHERE collection_bill_id=? AND active ORDER BY source_bill_id",String.class,billId);
         if(ids.isEmpty())ids=List.of(billId);

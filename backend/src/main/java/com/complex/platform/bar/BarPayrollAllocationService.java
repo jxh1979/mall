@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.07
+// 文件版本：V0.08
 
 import static com.complex.platform.bar.BarPayrollSupport.*;
 import static com.complex.platform.bar.BarPayrollRequests.*;
@@ -91,7 +91,7 @@ public class BarPayrollAllocationService {
         return businessDays.businessDate(project,businessDays.barOfMerchant(merchant),Instant.now());
     }
     public List<MonthRun> overview(String project,String merchant,String month) {
-        p.requireScope(project,merchant,VIEW);var period=month(month);
+        p.requireReadScope(project,merchant,VIEW);var period=month(month);
         List<MonthRun> rows=new ArrayList<>(p.jdbc.query("SELECT * FROM bar_payroll_runs WHERE project_id=? AND merchant_id=? AND month=? ORDER BY created_at,id",
             this::runRow,project,merchant,month));
         for(String source:sources(project,merchant,period)) {

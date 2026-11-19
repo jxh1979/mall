@@ -1,4 +1,4 @@
-# P1 酒吧账单调整 API 契约 V0.12
+# P1 酒吧账单调整 API 契约 V0.13
 
 ## 1. 文档定位
 
@@ -11,7 +11,7 @@
 | 能力 | P1 本次包含 | 不包含 |
 |---|---|---|
 | 服务费 | 对未结清酒吧账单追加服务费，并记录调整流水 | 不做复杂服务费规则引擎 |
-| 低消差额补齐 | 对未结清酒吧账单追加低消差额，并记录调整流水 | 不允许用通票、卡座入场权益、赠酒权益抵扣低消 |
+| 低消差额补齐 | 对未结清酒吧账单追加低消差额，并记录调整流水；账单已结清而所在开台会话仍开台且有低消差额的，在本单另开一张补足账单收取（第十八批 AY 段第 342 条） | 不允许用通票、卡座入场权益、赠酒权益抵扣低消 |
 | 挂账登记 | 将未结清酒吧账单标记为 `payment_status=on_account`、`settlement_status=receivable`，并生成一条财务 AR/AP 应收台账 | 不做催收、坏账、账龄报表和第三方财务系统自动同步 |
 | 留痕 | 每次调整写入 `bar_bill_adjustments`，并记录审计事件 | 不接入第三方 POS 高级拆单、合单、转台能力 |
 | 账单拆合 | 不包含 | 拆单、合单、转台、配方成本、员工提成结算留在后续 P1 酒吧 SaaS 增强 |
@@ -34,7 +34,7 @@
 |---|---:|---|
 | `idempotencyKey` | 是 | 幂等键，同一账单同一幂等键只允许形成一次调整结果 |
 | `adjustmentType` | 是 | 支持 `service_fee`、`min_spend_top_up`、`on_account` |
-| `amountCent` | 是 | 金额，单位分；服务费和低消补差必须大于 0，挂账必须为 0 |
+| `amountCent` | 是 | 金额，单位分；服务费必须大于 0；低消补差须等于本台当前低消差额（大于 0，第十八批 AY 段第 346 条）；挂账必须为 0 |
 | `reason` | 是 | 调整原因，用于运营复盘和审计 |
 | `evidenceAttachmentIds` | 否 | 凭证、截图、审批附件 ID 列表 |
 
@@ -45,7 +45,7 @@
 | 字段 | 说明 |
 |---|---|
 | `id` | 调整记录 ID |
-| `billId` | 被调整账单 ID |
+| `billId` | 被调整账单 ID；已结账单另开补足账单时为新补足账单 ID |
 | `adjustmentType` | 调整类型 |
 | `amountCent` | 调整金额 |
 | `beforePayableAmountCent` | 调整前账单应付金额 |
@@ -65,10 +65,10 @@
 | 调整类型 | 金额规则 | 账单应付变化 | 支付状态变化 | 结算状态变化 |
 |---|---|---:|---|---|
 | `service_fee` | `amountCent > 0` | `payable += amountCent` | 不变 | 不变 |
-| `min_spend_top_up` | `amountCent > 0` | `payable += amountCent` | 不变 | 不变 |
+| `min_spend_top_up` | `amountCent` = 本台当前低消差额（> 0） | `payable += amountCent`（另开补足账单时加在新账单上） | 不变 | 不变 |
 | `on_account` | `amountCent = 0` | 不变 | `on_account` | `receivable`，并创建 `direction=receivable`、`source_type=bar_bill` 的 AR/AP 台账 |
 
-已 `settled` 的账单不允许调整。部分支付、未支付、挂账前状态允许按上述规则调整。账单已经处于 `payment_status=on_account` 或 `settlement_status=receivable` 后，不允许使用新的幂等键再次挂账，避免重复生成应收台账；同一账单同一幂等键重复提交仍返回同一结果。
+已 `settled` 的账单不允许调整；唯一例外是 `min_spend_top_up`：账单所在开台会话仍开台且有低消差额的，在本单另开一张补足账单（台位取会话当前台位，不计服务费、不抵留款，同一幂等键重复提交返回同一结果），会话已关台或无会话归属的照旧 409 `BAR_BILL_NOT_ADJUSTABLE`（第十八批 AY 段第 342 条）。部分支付、未支付、挂账前状态允许按上述规则调整。账单已经处于 `payment_status=on_account` 或 `settlement_status=receivable` 后，不允许使用新的幂等键再次挂账，避免重复生成应收台账；同一账单同一幂等键重复提交仍返回同一结果。
 
 ## 7. 错误码
 
@@ -76,7 +76,8 @@
 |---|---|
 | `VALIDATION_FAILED` | 请求体为空、幂等键缺失、必填字段缺失、金额不合法、调整类型不支持 |
 | `BAR_BILL_NOT_FOUND` | 账单不存在 |
-| `BAR_BILL_NOT_ADJUSTABLE` | 账单已结清，不能再调整 |
+| `BAR_BILL_NOT_ADJUSTABLE` | 账单已结清，不能再调整（低消补差在所在开台会话仍开台时另开补足账单，不报此码） |
+| `BAR_MIN_SPEND_TOP_UP_AMOUNT_MISMATCH` | 低消补差金额不等于本台当前低消差额，应付不变（第十八批 AY 段第 346 条） |
 | `BAR_BILL_ALREADY_ON_ACCOUNT` | 账单已挂账或已进入应收状态，不能再次挂账 |
 
 ## 8. 权限、幂等与审计
@@ -86,6 +87,7 @@
 | 权限点 | `bar.bill.adjust` |
 | 风险等级 | high |
 | 审批标记 | 权限种子 `requires_approval=true`；调整记录 `approvalRequired=true` |
+| 准入闸 | 服务费、挂账经账单调整准入闸 `bar.bill_waiver`（首次 409 `ADMISSION_BLOCKED`）；低消补差不经该闸、提交即生效（第十八批 AY 段第 346 条） |
 | 成功审计事件 | `bar.bill.adjust` |
 | 失败审计事件 | `bar.bill.adjust_failed` |
 | 业务类型 | `bar_bill_adjustment` |
@@ -127,6 +129,7 @@ mvn -Dtest=BarServiceTests,BarControllerTests,BarJdbcIntegrationTests,FinanceSer
 | `BarJdbcIntegrationTests` | Flyway 021、表结构、权限种子、`ar_ap_item_id` JDBC 保存和查询 |
 | `FinanceServiceTests` | `source_type=bar_bill` 的应收台账创建 |
 | `FinanceJdbcIntegrationTests` | 财务 AR/AP 表结构和台账持久化 |
+| `BarMinSpendTopUpJdbcIntegrationTests` | 低消补差不经准入闸、金额须等于当前差额、已结账单另开补足账单（真库、真实接口与授权链） |
 
 完整回归仍需执行：
 

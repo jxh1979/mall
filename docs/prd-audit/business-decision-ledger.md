@@ -1,6 +1,6 @@
 # PRD 审计业务裁决台账
 
-文档版本：V1.07
+文档版本：V1.08
 状态：进行中
 迁移日期：2026-07-27
 当前事实源：三份立法 HTML 以既有冻结基线叠加 James 此前 M02 至 M08 的点名批准、全量审计 M001、M002 的逐项批准，以及本轮 2026-10-16 至 2026-10-17 业务 HTML 审计中 Q01 至 Q40 及子题实际明确批准且未被后续替代的裁决，和 2026-10-17 第二批 HTML 业务线推演审计（A–F 六线 64 条、停车章）的逐项批准，并叠加本轮 CG 70 项来源确认与 C01–C09、N01–N03 最终澄清及补全文稿中 F01、W01–W05 的整体修改批准（本文件末节）；本轮最终规则、未采纳或替代关系、现行版本与字节哈希见本文件末节。历史记录保留为各自当时事实，不恢复已被替代的建议。
@@ -9819,3 +9819,203 @@ HTML 的语义补齐与直接引用同步可在本批核验；70项中的业务�
   ⑤ 校验：verify-full-admin-page-matrix 通过（117 页）；git diff --check 为 0；verify:html-ledger-sync PASS；verify:entry-anchors PASS。
 - 18BB 收尾复核修正（2026-11-19）：收尾复核意见逐条核实成立，本轮只修下面两处；无迁移，不新增操作、错误码与字段键。①契约失败码：控制席并入①的建单闸（InventoryTransferFlowService.requireCreatorParty，经 InventoryService.createTransferOrder 的 executeWrite 闸调用）新抛 403 CROSS_MERCHANT_FORBIDDEN，原先 createTransferOrder 只在说明里写了这个码；docs/openapi/openapi-p0.yaml 与 .json 的 createTransferOrder x-failure-codes 末尾补 CROSS_MERCHANT_FORBIDDEN（两份同值、就地插入，操作数不变），仓根 security-scans 两份的 OpenAPI SHA-256 行按最终 json 改；本台账契约段（K-contract）「createTransferOrder 只补说明」改为「补说明并在 x-failure-codes 加 CROSS_MERCHANT_FORBIDDEN」，与 B1 段一致（契约段 cancelTransferOrder、receiveTransferOrder「只补说明，失败码原已齐」核过属实）。依据 PGM:744「前端隐藏只是辅助，后端接口必须独立校验。」、任务书「接口变化同步 OpenAPI yaml/json」。②266-R2 补全：未声明身份的手机登录时不检测，在「员工设备凭证」首次绑定（无历史凭证，直接生效）后当场采用私人手机身份，原先这次会话不检测、可用到访问令牌过期；MainActivity.showStaffDevice 绑定成功分支在采用私人手机身份处就地补与登录相同的检测（PrivatePhoneIntegrity.status 不是 trusted 即经 TerminalWorkflow.reportStaffDeviceIntegrity 上报，服务端吊销本人生效凭证；成功或失败都退回登录页），不新增方法体、不加开关。同根扫过其余采用私人手机身份的路径：启动时按本机记录恢复、自助注册提交成功都在登录前，下次登录即检测，不另补。platform-governance-prd §6.9 第 9 条实现现状与 android-device-terminal-development-design §13.5.4 检测时机句同步补「首次绑定」。测试：TerminalFieldWorkflowTest.firstBindThenUntrustedPhoneReportsIntegrityAsPrivatePhone（首次绑定直接生效后按私人手机身份签名上报 root_detected、凭证吊销；采用身份、本机采集与退回登录页在 Activity 层，android-app 没有 JVM 单测，核可测的判定与上报一层）。依据 PGM:586「检测到手机被破解、篡改或处于异常环境时，私人手机 App 失效并复核。」；BSM:938「检测到手机被破解、篡改或处于异常环境时自动失效并进入复核。」；BSM:2007「已拍板：私人手机被破解、篡改或处于异常环境判为不可信并失效复核」。
 - 18BB 落地位置补记·运行验收证据、快照、终验文档刷新（无新裁决）：业务提交 e1ad9c67 之后，按第十八批裁决 25 重刷了运行验收证据：后端全量 7034 测，0 失败 0 错误；apps/web 构建通过；常规界面验收（接口全部 mock）实跑 40 条全过；真实后端界面验收未跑，runtime_ready=false。随后依次重生成闭环当前态快照、生产闭环缺口报告、界面验收报告、无上线指挥台。生成器没改。手改 docs/final-closed-loop-acceptance-audit-v0.1.md 与 docs/code-implementation-acceptance-audit-v0.1.md：前端单测源码计数改为 1920；被核文件行数都没变；后端全量与常规界面验收的数字、日期改为本次实跑值；写入 npm run verify:unit 实跑结果，五个工作区全过。交付门禁于 2026-11-19 08:48 UTC 在工作树逐项实跑子项，NAS 两项现场探测未跑。仍红的有两项：一是 coding-host-protection，它写死主仓路径，在工作树口径下必红，属工具口径，不做；二是 final-closed-loop-audit，如实留 2 条红（integration-ready、business-acceptance-ready），原因是校验器要求终验把联调、业务验收写成「是」，而裁决 25 定了不跑真实后端界面验收、运行验收未就绪，终验写的是「否」。verify:delivery-gates 总链仍是红的。
+
+18AY 落地位置补记（2026-11-19）：第十八批 AY 段（batch71）按 18AY 只读设计实现待开发清单第 268、269、329、342、344、345、346、347、348 条（酒吧与存酒组）；运行验收证据、终验文档在本段最后一个提交刷新；各条落地位置见下。本段追加时，原台账除文档版本升一版外，其他历史字节保持。
+
+- 18AY 落地位置补记·控制席判定（2026-11-19）：本段（第十八批 AY 段，batch71）实现待开发清单第 268、269、329、342、344、345、346、347、348 条（18AY 只读设计 b71-audit/d-bar-c.json、d-bar-d.json，两轮质疑者修订后定稿，无待裁题）。控制席并入同根同文件一项 S1：存酒页责任员工、退出门店的标签与必填提示里夹带的英文 user_id、id 改为全中文（只改文案；依据 PGM:287）。按字面或常理定的几处照设计 notes：取酒对应标签按 BSM:1073 只留痕不比对；已结清账单的低消差额另开补足账单收取、有消费而未达低消的不得关台（BSM:1064）；补足不过账单调整复核闸（BSM:1069 账单调整只指纠正漏记多记）；并单状态统一为界面已用的「已合并」。设计旁见另记待开发清单第 361～363 条（待核实）。本段从 ed3cde79 开工；汇总文件由合并前脚本 summary_tool.py 剥离与重写。
+- 18AY 落地位置补记·第 268、269、329 条（甲组，存酒；含控制席并入的 S1）：本段无迁移，不新增操作。
+  - 268-R1（取酒核验通过即出酒，删标签与姓名比对）
+    - 改法：取酒核验当前持有人短信验证码，或官方动态取酒码。核验通过后，直接按 claim_items 第一项的 quantity 出酒。删去以下分支：拿请求里的瓶底标签值、姓名昵称跟登记值比，不一致就把存酒转「待身份复核」并写 0 数量取酒流水。人工例外放酒同走这条出酒路径，核验方式仍记 manual_exception。对应标签经取酒流水的 saved_bottle_id 关联存酒行的瓶底标签留痕。请求 DTO 的两个组件保留、不再读取。契约 schema SavedBottleClaimRequest 删 bottle_label_value、customer_name_or_nickname 两个属性；SavedBottleRequest、SavedBottleTransferRequest、SavedBottleRemedyRequest 四处属性描述去掉「取酒核身比对项」口径（由契约代理落）。存酒状态闭集不动，争议与作废对待身份复核态的接纳也不动。
+    - 落地位置：InventoryService.claimSavedBottle；InventoryService.dispenseSavedBottle（删两参数与比对分支）；InventoryService.dispenseManualPickup；inventory/dto/SavedBottleClaimRequest；契约 operationId claimSavedBottle 的 schema SavedBottleClaimRequest。
+    - 依据：BSM:1073「取酒与人工例外取酒必须核验当前客户的短信验证码，或由已登录的官方手机应用、小程序出示动态取酒码……取酒核验、对应标签、取用前后剩余量、操作员工和时间必须留痕。」（旧句「取酒核身比对」已于 2026-08-03 经操作员逐条批准删去）
+    - 测试：
+      - SavedBottleTransferWebShape198R5Tests.claimSavedBottle_webShapeWithoutLabelAndName_dispensesTwice（新，先红：改前 500，0 数量流水违反 chk_saved_bottle_claims_quantity）
+      - InventoryServiceTests.claimWithDifferentLabelStillDispenses、claimWithDifferentNicknameStillDispenses、claimAfterTransferWithOtherNameDispensesAndRecordsCurrentHolder（由三条待核身用例改名并改断言）
+      - InventoryControllerTests.claimSavedBottleUsesSnakeCaseRequestShape（请求体去掉两键）
+  - 268-R2（网页领取请求体改成服务端读的形状）
+    - 改法：存酒页领取请求的 claim_items 改成 [{saved_bottle_id, quantity}]，删 item_name、claim_quantity。幂等键改成 admin-saved-bottle-claim-<存酒>-<时刻>，同一瓶分次取用同样数量也不撞号。不加标签与姓名输入框。
+    - 落地位置：apps/web/src/admin/pages/StoredWinePage.tsx 的 claimStoredWine（就地改）。
+    - 依据：BSM:1073「……取用前后剩余量、操作员工和时间必须留痕。」；BSM:1169「管理客人存酒：标签从酒瓶最底部开始贴，按标签显示数值记录剩余量。」
+    - 测试：StoredWinePage.holder.test.tsx「198-R3②／198-R5／229-R3⑦：领取请求体不含 claim_by_phone、operator_note 与写死附件」（改，加形状、幂等键与两次领取键不同的断言）。
+  - 329-R1（领取结果区核销方式显示中文）
+    - 改法：后台结果区按键取值表加 verification_method：sms 为「短信验证码」，pickup_code 为「动态取酒码」，manual_exception 为「人工例外取酒」。取值同取酒流水核销方式闭集，中文名取 BSM:1073 原词。
+    - 落地位置：apps/web/src/admin/i18n/fieldLabels.ts 的 KEY_VALUE_LABELS。
+    - 依据：PGM:287「展示给用户的一切文字，包括菜单、页面标题、字段名、状态、枚举取值、按钮、提示、报错……必须全部为中文，不得出现任何英文」；BSM:1073 原词。
+    - 测试：ActionResultView.test.tsx「存酒领取结果的核销方式显示「短信验证码」「动态取酒码」「人工例外取酒」」（新）。
+  - 269-R1（存酒页六处证据由手填附件编号改为拍照录像上传）
+    - 改法：
+      - 作废照片与视频、补存瓶登记照片、交付与收回凭证（结案、员工赔偿、追收已收回共用）、交接现场照片与视频这六处，改为真实上传（/api/v1/evidence/attachments/upload）。
+      - 界面显示文件名，提交只发服务端回的附件编号。
+      - business_type 依次为 saved_bottle_cancel、saved_bottle_registration、saved_bottle_remedy、saved_bottle_handover（技术自定）。
+      - 标签不再要员工填编号。
+      - 后端、权限矩阵不动。
+    - 落地位置：apps/web/src/admin/pages/StoredWineEvidenceUpload.tsx（新，组件 StoredWineEvidenceUpload）；StoredWinePage.tsx（六处原位替换，删 splitIds）。
+    - 依据：BSM:1072「存酒作废需照片+视频双证据+主管复核」；BSM:1940「……必须记录原因、员工、时间、点位、照片、视频和主管复核结果。」；BSM:1170「存酒登记必须拍照……」；PGM:287。
+    - 测试：
+      - StoredWinePage.cancel.test.tsx「269-R1：作废照片、视频拍照录像上传（business_type=saved_bottle_cancel）；上传后 POST …/cancel 含上传回的编号，不含 operator_note」与 252-R1 用例（改）
+      - StoredWinePage.remedy.test.tsx 254-R3 用例（改）
+      - StoredWinePage.recovery.test.tsx 两条（改）
+      - StoredWinePage.handover.test.tsx 首条（改）
+      - SavedBottleCancelDisputeJdbcIntegrationTests.highValueCancelWithUploadedPhotoAndVideoFreezesForReview（新，锁现行为）
+  - S1（控制席并入：存酒页标签与提示全中文，只改文案）
+    - 改法：「责任员工 user_id」改为「责任员工编号」；「退出门店（商户）id」改为「退出门店（商户）编号」；「须填写退出门店 id。」改为「须填写退出门店编号。」；「交接须填写退出门店 id 与指定领取地点。」改为「交接须填写退出门店编号与指定领取地点。」。字段与提交形状不变。
+    - 落地位置：StoredWinePage.tsx 的 TEXT（remedyStaffUser、exitMerchant、exitRequired、handoverRequired）。
+    - 依据：PGM:287「……可以不用中文的只有四样……单据号、设备编号、二维码内容、系统内部标识符」。
+    - 测试：StoredWinePage.handover.test.tsx「S1：退出门店标签与必填提示全中文，页面不出现 id 字样」（新）；StoredWinePage.recovery.test.tsx 首条（加断言）。
+  - 269-R2（作废证据交服务端按当刻高低价值判，高价值缺证据报错全中文）
+    - 改法：
+      - 存酒页作废不再由前端强制照片视频，也不按登记快照预判高低价值。服务端在作废当刻判定：低价值提交即作废，高价值缺证据由作废区显示服务端报错。
+      - 作废边界文案改为「高价值存酒作废须上传照片和视频，先冻结、待主管复核通过后才作废；其余存酒提交即作废。作废后在下方登记补存或赔付。」。
+      - 高价值双证据缺失的报错改为字段键打头，响应体译成「照片附件不能为空：高价值动作需照片+视频双证据」（视频同理）。错误码 HIGH_VALUE_EVIDENCE_REQUIRED 不变；报损、盘点差异、坏账转入同路报错一并变中文。
+    - 落地位置：StoredWinePage.tsx 的 validateCancel 与 TEXT.cancelBoundary（删 TEXT.cancelRequired）；InventoryHighValueReviewService.requireNonEmptyList。
+    - 依据：第十八批裁决 14「高价值的报损、盘点差异、存酒作废，必须照片＋视频＋主管复核才生效；低价值的维持现状，即时生效。」；BSM:1072「存酒作废需照片+视频双证据+主管复核」；PGM:287。
+    - 测试：
+      - SavedBottleCancelDisputeJdbcIntegrationTests.highValueCancelWithoutEvidenceRejectsWithChineseMessage（新，先红：改前 message 含 photo_attachment_ids）
+      - StoredWinePage.cancel.test.tsx「269-R2：只填作废原因、不上传就能提交 → POST …/cancel 照片视频编号为空数组，不被前端预检拦下」与「269-R2：服务端拒绝高价值作废缺证据时，作废区显示服务端中文报错」（新，先红）
+      - 照跑 lowValueCancelRequiresReasonPersistsItAndAuditsIt、TypedDamageHighValueJdbcIntegrationTests、StocktakeVarianceSelfReviewJdbcIntegrationTests、BarOrderBadDebtJdbcIntegrationTests
+- 【第十八批 AY 段落地位置补记·乙组段一 低消补足（346、342）】
+  346-R1
+  - 改法：补足低消差额（adjustment_type=min_spend_top_up）不再经账单调整准入闸 bar.bill_waiver（主管复核），提交即生效。补足金额须等于本台当前低消差额；不等时 409 BAR_MIN_SPEND_TOP_UP_AMOUNT_MISMATCH「补足金额须等于本台当前低消差额 X 元，请刷新后重试」，应付不变。这一校验挡住页面差额过时造成的多收。免单、退款、挂账、服务费照旧走 bar.bill_waiver。权限码 bar.bill.adjust、提交编号键「adjustBarBill:」+账单号、写操作 APPLY_BILL_ADJUSTMENT、留痕事件均不变。
+  - 落地位置：BarController.applyBillAdjustment 按 adjustment_type 分流（operationId adjustBarBill 不变）；BarService 新委托方法 applyMinSpendTopUp，@GuardedAction 只带能力码 bar.bill.adjust、不带 admissionAction；BarBillingService.applyBillAdjustment 的 min_spend_top_up 分支加「金额等于 BarMinSpend.gapCent」校验。
+  - 依据：BSM:1064「不足最低消费的要补足。」「结账补足的差额按普通消费计入该商户营业额、营业额抽成基数与销售提成基数」；BSM:1069「账单调整只用于纠正漏记、多记的数量，不得改单价，也不得绕过折扣下限。」补足是结账补收，不属账单调整，HTML 未写补足须复核。
+  - 测试：BarMinSpendTopUpJdbcIntegrationTests.transferToHigherMinimumShowsGapBlocksSettleAndTopUpClearsIt（补 200 元得 409 BAR_MIN_SPEND_TOP_UP_AMOUNT_MISMATCH 且应付不变；补 300 元首次即生效，不建 bar.bill_waiver 复核单；同账单免单照旧 409 ADMISSION_BLOCKED）；BarMinSpendTopUpJdbcIntegrationTests.toppedUpGapCountsTowardSalesCommissionBase；BarServiceTests.minimumSpendTopUpIncreasesPayableWithoutUsingTicketOrEntryRights（夹具按台位低消给出真实差额）。
+  346-R2
+  - 改法：后台订单页「补足低消差额」删掉收到 ADMISSION_BLOCKED 时提示「已提交主管审批……请原样再点一次」的分支。
+  - 落地位置：apps/web/src/admin/pages/BarBillCheckoutPanel.tsx 的 submit。
+  - 依据：BSM:1064「不足最低消费的要补足。」
+  - 测试：删的是死分支，不新增用例；BarOrdersPage.billOps.test.tsx 既有用例照旧通过。
+  342-R1
+  - 改法：散台、卡座当场结清后转到低消更高的台，或拆台后结果台不足时，按下面三点处理：
+    ①已结账单所在开台会话仍开台且有差额时，订单列表照样带台组差额 min_spend_gap_cent；
+    ②对该已结账单提交补足低消，在本单另开一张补足账单（应付即补足额，台位取会话当前台位，未结），返回的调整记录 bill_id 为新账单；不反结；会话已关台或无会话归属的照旧 409 BAR_BILL_NOT_ADJUSTABLE；同一提交编号重复点击按幂等重放，不再开第二张；
+    ③关台时台组有消费而未达台组低消的，409 BAR_TABLE_SESSION_MIN_SPEND_NOT_MET「本台低消差额 X 元未补足，不得关台：请继续消费，或在订单页「补足低消差额」后结清再关台」；空台照旧关台，已付定金照旧没收。
+  - 落地位置：新类 BarMinSpendTopUpBillService（topUp），BarService 以字段 minSpendTopUps 注入，经 applyMinSpendTopUp 路由；BarMinSpend.openRootSession、openSessionGapCent；BarService.listOrders 的账单摘要（BarBillSummary.minSpendGapCent，operationId listBarOrders）；BarServiceResponsibilityService.close 的关台闸（operationId closeBarServiceResponsibility）。
+  - 依据：BSM:1064「结账时累计消费多出的不退、不足最低消费的要补足。因此台位上要么没有任何消费（空台，无账可结），要么最终累计消费达到最低消费。」；BSM:1079「拆台后低消不足不阻断，各结果台显示差额并按既有规则继续消费或结账补足」；决策台账 DEC-R3-2026-08-04-25「原「因此不存在已消费但未达低消的账单」与「不设低消差额补收」的错误推论删除」。
+  - 测试：BarMinSpendTopUpJdbcIntegrationTests.settledBillThenTransferToHigherMinimumIsToppedUpOnANewBillBeforeClose；BarJdbcIntegrationTests.serviceCloseAllowsWhenAllBillsSettledOrMerged、serviceCloseAllowsVoidedBill（夹具改为消费达标）。
+  342-R2
+  - 改法：
+    - 后台订单页差额文字改为「本台低消差额 ¥X，结账或关台前须补足」。
+    - 补足确认框的影响说明改为「按普通消费计入本台消费：未结账单直接加到应付；账单已结清的另开一张补足账单，结清后方可关台。」
+    - 补足返回的账单不是所选账单时，提示「已另开补足低消账单，请在「办理账单」下拉中选中后结账」。
+    - 卡座页关台说明补「有消费而未达最低消费的，须先补足低消差额」。
+  - 落地位置：apps/web/src/admin/pages/BarBillCheckoutPanel.tsx（submit 与差额区）；BarServiceResponsibilityPanel.tsx；types.ts 中 BarBillRow.minSpendGapCent 的注释。
+  - 依据：BSM:1079「拆台后低消不足不阻断，各结果台显示差额并按既有规则继续消费或结账补足」。
+  - 测试：BarOrdersPage.billOps.test.tsx 用例「已结清账单差额 300 元时显示「结账或关台前须补足」，补足提交 amount_cent=30000，另开补足账单后提示选中结账」。
+  本段增量：新增 OpenAPI 操作 0 个，迁移 0 个，新增类 1 个（BarMinSpendTopUpBillService）；改动 adjustBarBill、listBarOrders、closeBarServiceResponsibility 三个操作的说明与 x-failure-codes。
+- 18AY 落地位置补记（乙组段二、段三：第 344、345、347、348 条）：
+  - 344-R1
+    - 改法：酒吧后台各页的列表读取，对最高权限（AuthorizationService.isMasterAuthority）不按商户、项目范围。其余账号读法不变，酒吧各写入口不放开。
+    - 落地位置：
+      - BarService.listOrders：项目侧分支排除最高权限，另一分支取 listScope。
+      - BarService.listOrderItemVoids、BarService.listShifts：商户范围改取 listScope。
+      - BarSuspendedOrderBoard.filter：项目分支排除最高权限，列表、汇总、导出同用这一处。
+      - BarBillingService.listBillRewards：最高权限不调 checkMerchantOwnership。
+      - BarPayrollSupport：新增 requireReadScope（最高权限只核权限码）；inScope 对最高权限为真。
+      - 改调 requireReadScope 的读取入口：BarPayrollRuleService.list、BarPayrollAllocationService.overview、BarServiceResponsibilityService.history、BarPayrollRefundService.context、BarSessionSalesBackfillTarget.requireView、BarSessionServiceBackfillTarget.requireView。写入口仍调 requireScope。
+    - 契约说明各补一句的操作：listBarOrders、listBarOrderItemVoids、listBarShifts、listBarSuspendedOrders、exportBarSuspendedOrders、listBarBillMerchantRewards、listBarPayrollRules、listBarPayrollRuns、listBarServiceResponsibilities、getBarBillRefundContext、listManualBackfills。
+    - 依据：第十八批裁决 71 操作员追加原话「既然是最高权限，不应该什么都能看到吗？」；BSM:576「持授权 U 盘密钥的最高权限本人发起的操作，不需要经过任何审批。」
+    - 测试：BarMasterReadsBarListsJdbcIntegrationTests.masterReadsEveryBarsListsAndDetails。
+  - 344-R2
+    - 改法：存酒页四个读取对最高权限放开。
+    - 落地位置：
+      - InventoryService.listSavedBottles：最高权限范围取空，即看全部酒吧存酒；按手机号检索 lookupSavedBottlesByPhone 走同一段代码。
+      - InventoryService.listSavedBottleRenewals、listSavedBottleManualPickups、listSavedBottleRemedies：最高权限不调 requireOwnMerchant，锁行照旧。
+    - 契约说明各补一句的操作：listSavedBottles、listSavedBottleRenewals、listSavedBottleManualPickups、listSavedBottleRemedies。
+    - 依据：同 344-R1。
+    - 测试：BarMasterReadsBarListsJdbcIntegrationTests.masterReadsEveryBarsSavedBottles。
+  - 344-R3
+    - 改法：EvidenceEventService.evidenceScope 的默认分支，回读（evidence.timeline.view）且是最高权限时不按商户。上传、绑定等写入照旧；经销两类分支与其余各业务类型分支不动。
+    - 契约说明各补一句的操作：readEvidenceAttachmentFile、getEvidenceTimeline。
+    - 依据：同 344-R1。
+    - 测试：BarMasterReadsBarListsJdbcIntegrationTests.masterReadsAnotherBarsEvidence。
+  - 344 不做：
+    - 出品票列表（BarService.listProductionTickets）：没有客户端调用。
+    - 员工手机空位视图、未挂铺位台位清单、赠饮核销列表、扫码菜单分类商品：没有后台页面调用。
+    - AuthorizationService.currentMerchantScope、projectReach 的全局口径不改。
+  - 345-R1
+    - 改法：本段迁移 V679__bar_product_sold_out_permission_name.sql，把权限码 bar.product.sold_out 的中文名改为「沽清与解除沽清酒吧商品」。原名由 V251 设定，按 Flyway 只加不改不动。
+    - 依据：ENUM:111「沽清与解除同样须审批留痕」；BSM:1069「沽清（卖完、临时下架）均需主管审批留痕」；PGM:287「展示给用户的一切文字……必须全部为中文」。
+    - 测试：BarProductSoldOutJdbcIntegrationTests.soldOutPermissionIsNamedAfterHtmlWording。
+  - 347-R1
+    - 改法与落地位置：
+      - 后台结果区组件 ActionResultView（entries）统一不展示服务端快照 snapshot_json，蛇形、驼峰、嵌套的都去掉。一处同时覆盖酒吧退款面板 BarRefundBreakdownPanel，以及卡座与订台页的转台、并台、拆台、撤销转台结果。
+      - BarBillCheckoutPanel 去掉单独删除快照的写法，结果原样交给结果区。
+      - 前端字典 KEY_VALUE_LABELS.adjustment_type 补 refund「退款」：退款结果的调整类型原来显示英文 refund。
+    - 依据：PGM:287「展示给用户的一切文字……必须全部为中文」。
+    - 测试：ActionResultView.test.tsx「退款结果与卡座转台结果不显示服务端快照（snapshot_json），其余字段照常中文」；BarRefundBreakdownPanel.test.tsx「退款提交成功后结果区不显示服务端快照 JSON」。
+  - 348-R1
+    - 改法：被合入的副单状态统一叫「已合并」，与状态字典 merged「已合并」同一叫法；字典不改。
+    - 落地位置：
+      - BarBillCheckoutPanel：合单确认的影响说明改为「合入后副单变为已合并……」。
+      - BarBillingService.addTip：BAR_BILL_NOT_TIPPABLE 文案改为「已结账或已合并的账单不能再加小费」。
+      - BarBillRecords.requireBillMovable：文案改为「账单已有支付、结账或已合并状态，不能执行此操作」（拆单、合单共用）。
+    - 契约：settleBarBill、listBarOrders、deliverBarOrder、suspendBarOrder、addBarBillTip、mergeBarBill、splitBarBill 说明中的「已并单」「并单、作废」改为「已合并」「已合并、作废」。
+    - 依据：BSM:1079「账单合并称为“合单”，不等同于台位“并台”。」；ENUM:101 账单状态；PGM:287。
+    - 测试：BarOrderItemVoidBillLockJdbcIntegrationTests.mergedSecondaryBillMessagesSayMerged；BarOrdersPage.billOps.test.tsx「合单确认说明副单变为「已合并」，不出现「已并单」」。
+  - 本段增量：OpenAPI 新增 0 个操作，改 23 个既有操作的说明；迁移 1 个（V679）。
+- 18AY K-contract（契约代理）落地位置补记：本段新增操作 0 个，没有迁移。yaml 与 json 两份契约同值，就地改，不重排，不用锚点。
+  - 268-R1
+    - 改法：契约 schema SavedBottleClaimRequest 删属性 bottle_label_value、customer_name_or_nickname（required 仍只有 claim_items、verification_code）；SavedBottleRequest.customer_name_or_nickname 说明删「作取酒核身比对项之一」；SavedBottleRequest.bottle_label_value 说明改为「取酒流水经存酒关联留痕（BSM:1073 对应标签）」；SavedBottleTransferRequest.to_name_or_nickname 说明删「（取酒核身比对项）」；SavedBottleRemedyRequest.bottle_label_value 说明改为「（新瓶新标签）」。claimSavedBottle 操作的属性不变。
+    - 依据：BSM:1073（取酒只核验短信验证码或动态取酒码，对应标签是留痕项）。
+    - 落地位置：InventoryService.claimSavedBottle 与 dispenseSavedBottle 已不再比对。
+  - 346-R1
+    - 改法：adjustBarBill 补操作说明——adjustment_type=min_spend_top_up 不经账单调整准入复核 bar.bill_waiver、提交即生效；amount_cent 须等于本台当前低消差额，否则 409 BAR_MIN_SPEND_TOP_UP_AMOUNT_MISMATCH「补足金额须等于本台当前低消差额 X 元，请刷新后重试」；免单、退款、挂账、服务费照旧 409 ADMISSION_BLOCKED。新建 x-failure-codes：VALIDATION_FAILED、ADMISSION_BLOCKED、BAR_BILL_NOT_FOUND、BAR_BILL_NOT_ADJUSTABLE、BAR_BILL_NOT_REFUNDABLE、BAR_SERVICE_FEE_TABLE_NOT_ELIGIBLE、BAR_BILL_ALREADY_ON_ACCOUNT、BAR_MIN_SPEND_TOP_UP_AMOUNT_MISMATCH。
+    - 依据：BSM:1064「结账补足的差额按普通消费计入」；BSM:1069「账单调整只用于纠正漏记、多记的数量，不得改单价，也不得绕过折扣下限。」
+    - 落地位置：BarController.adjustBarBill 分流到 BarService.applyMinSpendTopUp；金额校验在 BarBillingService.applyBillAdjustment。
+  - 342-R1
+    - 改法：
+      - adjustBarBill 说明：账单已结清、所在开台会话仍开台且有差额时，在本单另开补足账单，返回的 bill_id 为新账单，新账单结清后才能关台；会话已关台或无会话归属的照旧 409 BAR_BILL_NOT_ADJUSTABLE。
+      - listBarOrders 说明：min_spend_gap_cent 改为已结账单仅在所在开台会话仍开台且有差额时带差额，否则为空；已合并、作废的为空。
+      - closeBarServiceResponsibility 说明：补 409 BAR_TABLE_SESSION_MIN_SPEND_NOT_MET「本台低消差额 X 元未补足，不得关台：请继续消费，或在订单页「补足低消差额」后结清再关台」，空台照旧关台、定金照旧没收；新建 x-failure-codes：BAR_TABLE_SESSION_VERSION_CONFLICT、BAR_TABLE_SESSION_BILL_UNSETTLED、BAR_TABLE_SESSION_MIN_SPEND_NOT_MET。
+    - 依据：BSM:1064「因此台位上要么没有任何消费（空台，无账可结），要么最终累计消费达到最低消费。」
+    - 落地位置：BarMinSpendTopUpBillService.topUp、BarMinSpend.openRootSession 与 openSessionGapCent、BarServiceResponsibilityService.close。
+  - 344-R1
+    - 改法：以下 11 个操作的说明各补一句「最高权限看全部（只核权限码，不按项目、商户范围）」：listBarOrders、listBarOrderItemVoids、listBarShifts、listBarSuspendedOrders、exportBarSuspendedOrders、listBarBillMerchantRewards、listBarPayrollRules、listBarPayrollRuns、listBarServiceResponsibilities、getBarBillRefundContext、listManualBackfills。其中 listManualBackfills 只对 target_type 为 bar_session_sales、bar_session_service 的生效，交接扫码补录照旧。listBarPayrollRules、listBarPayrollRuns、listBarServiceResponsibilities、getBarBillRefundContext 原先没有说明，新补。
+    - 依据：第十八批裁决 71「既然是最高权限，不应该什么都能看到吗？」；BSM:576「持授权 U 盘密钥的最高权限本人发起的操作，不需要经过任何审批。」
+    - 落地位置：BarService.listOrders、listOrderItemVoids、listShifts（经 listScope）；BarSuspendedOrderBoard.filter；BarBillingService.listBillRewards；BarPayrollSupport.requireReadScope 与 inScope；BarSessionSalesBackfillTarget.requireView、BarSessionServiceBackfillTarget.requireView。
+  - 344-R2
+    - 改法：listSavedBottles、listSavedBottleRenewals、listSavedBottleManualPickups、listSavedBottleRemedies 的说明补「最高权限读任一酒吧存酒，不核商户」。
+    - 依据：同 344-R1。
+    - 落地位置：InventoryService.listSavedBottles、listSavedBottleRenewals、listSavedBottleManualPickups、listSavedBottleRemedies。
+  - 344-R3
+    - 改法：readEvidenceAttachmentFile、getEvidenceTimeline 的说明补「按商户范围判的业务类型回读时最高权限不按商户；上传、绑定照旧」。
+    - 依据：同 344-R1。
+    - 落地位置：EvidenceEventService.evidenceScope 的默认分支。
+  - 348-R1
+    - 改法：settleBarBill、listBarOrders、deliverBarOrder、suspendBarOrder、addBarBillTip、mergeBarBill、splitBarBill 说明里的「并单」状态叫法统一为「已合并」（「并单独留痕」不动）。
+    - 依据：BSM:1079「账单合并称为“合单”，不等同于台位“并台”。」
+  - 345、347：照方案 not_doing，不改契约。
+  - 校验：yaml 与 json 深比较一致，操作数不变；verify:openapi、verify:openapi-examples、verify:client-routes、verify:client-openapi、verify:client-payload --strict 均通过。
+- 18AY 汇合段 J（e2e 与门禁）：
+  1. e2e：汇合段改动零。本段改到存酒页 StoredWinePage（新组件 StoredWineEvidenceUpload 接替六个证据输入框，前端取酒请求 claimSavedBottle 的项形状改为 saved_bottle_id 加 quantity）、BarBillCheckoutPanel（低消差额提示、补足说明、合单说明）、BarServiceResponsibilityPanel（关台说明）、ActionResultView（不展示 snapshot_json）和 fieldLabels（adjustment_type 的 refund、verification_method）。逐项 grep tests/e2e 的选择器、断言和 mock，都没有用到这些改动点。full-admin-remaining ADM-REM-02 的存酒领取段靠 mock 回显 claim_items，「已领取」「领取明细」照样成立。full-admin-mvp ADM-MVP-04 的「已合并」是卡座会话合并，跟账单并单无关。视觉基线 full-admin-visual 的四张截图都不覆盖本段改动的可见区域，没有重拍。
+  2. 门禁：后端全量在新建库上跑，本段迁移 V679 真迁成功，0 红。前端 typecheck 与 vitest 全量 0 红；customer-core、customer-app、customer-miniapp、merchant-app 四个工作区单测 0 红；安卓员工端 gradle test 0 红，android-app 编译通过。五份后台 e2e spec 在 chromium 下全部通过，含视觉截图比对。在镜像里重生成 operation-matrix、openapi-closure、data-isolation-spec、domain-ownership-scope 四份生成物后，verify:p0-contract 整链通过。yaml 与 json 深比较一致，本段新增操作 0 个，git diff --check 通过。
+  3. 生成物：data-isolation spec 只是最新迁移号随 V679 变了，含 scope 字段的表数不变，留给收尾统一重生成；另三份生成物内容不变。
+- 第十八批 AY 段文档组（D-docs，2026-11-19）：按各实现段改动与「文档要点」，把 PRD 与下位契约文档里的现状句改成现码实情，不改契约，不加迁移。
+  一、酒吧 PRD bar-business-operations-product-prd-v0.1.md（本次 +0.01）
+  1. 第 348 条：§6A 157-R2、§7.4 157-R1、§10.3.2 282-R2、§11 第 5 条 283 实现现状里的「已并单」「并单、作废的除外」，统一改为「已合并」「已合并、作废的除外」。依据 BSM:1079「账单合并称为“合单”，不等同于台位“并台”。」；PGM:287。
+  2. 第 342、346 条：
+     - 283 实现现状改为：已结账单仅在所在开台会话仍开台且有差额时带差额；页面「结账或关台前须补足」；补足不经主管复核、提交即生效、金额须等于当前差额。
+     - §11 第 5 条下新增实现现状。补足经 BarService.applyMinSpendTopUp，不经 bar.bill_waiver。金额校验在 BarBillingService.applyBillAdjustment，不等报 409 BAR_MIN_SPEND_TOP_UP_AMOUNT_MISMATCH。已结账单的差额由 BarMinSpend.openSessionGapCent 带出；补足由 BarMinSpendTopUpBillService.topUp 在本单另开补足账单。BarServiceResponsibilityService.close 对有消费而未达低消的拒绝关台，报 409 BAR_TABLE_SESSION_MIN_SPEND_NOT_MET。operationId adjustBarBill、closeBarServiceResponsibility。
+     - §7.3A.5 第十批实现现状的关台门槛补同句。
+     - 依据 BSM:1064「因此台位上要么没有任何消费（空台，无账可结），要么最终累计消费达到最低消费」；BSM:1079「拆台后低消不足不阻断，各结果台显示差额并按既有规则继续消费或结账补足」；BSM:1069。
+  3. 第 344 条：
+     - §11 第 11 条下新增实现现状。列出 operationId listBarOrders、listBarOrderItemVoids、listBarShifts、listBarSuspendedOrders、exportBarSuspendedOrders、listBarBillMerchantRewards、listBarPayrollRules、listBarPayrollRuns、listBarServiceResponsibilities、getBarBillRefundContext；listManualBackfills 只限两类酒吧补录；readEvidenceAttachmentFile、getEvidenceTimeline 只限默认类型。
+     - §7.6.3 末新增条写存酒四个列表：listSavedBottles、listSavedBottleRenewals、listSavedBottleManualPickups、listSavedBottleRemedies。
+     - 157-R3（18T 复核修复⑤）、157-R7、254-R5/R7 三处范围句补最高权限。
+     - 依据第十八批裁决 71「既然是最高权限，不应该什么都能看到吗？」；BSM:576。
+  4. 第 268、329 条：§7.6.3 末新增实现现状。claimSavedBottle 核验通过即出酒，InventoryService.dispenseSavedBottle 删标签与姓名比对；schema SavedBottleClaimRequest 删两属性；后台领取请求项为 saved_bottle_id、quantity；核销方式显示中文。依据 BSM:1073「取酒核验、对应标签、取用前后剩余量、操作员工和时间必须留痕。」；PGM:287。
+  5. 第 269 条：§7.6.4 末新增实现现状。存酒页六处证据改为真实上传（StoredWineEvidenceUpload）；作废高低价值由服务端当刻判定；InventoryHighValueReviewService.requireNonEmptyList 报错全中文。依据 BSM:1072「存酒作废需照片+视频双证据+主管复核」；第十八批裁决 14「高价值的报损、盘点差异、存酒作废，必须照片＋视频＋主管复核才生效；低价值的维持现状，即时生效。」
+  6. 第 345 条：§10.2.3 末新增实现现状。迁移 V679__bar_product_sold_out_permission_name.sql 把 bar.product.sold_out 中文名改为「沽清与解除沽清酒吧商品」。依据 ENUM:111、BSM:1069、PGM:287。
+  7. 第 347 条：§7.3A.4 末新增实现现状。ActionResultView 不展示 snapshot_json，退款调整类型 refund 显示「退款」。依据 PGM:287。
+  二、酒吧开发设计 bar-operations-development-design.md（本次 +0.01）
+  §6.9 min_spend_gap_amount 行按 342、348 改写，写明 BarMinSpend.openSessionGapCent 与 BarMinSpendTopUpBillService。
+  三、账单调整下位契约 p1-bar-bill-adjustment-api-contract-v0.1.md（本次 +0.01）
+  - 低消补差金额须等于当前差额。
+  - 已结账单所在会话仍开台的另开补足账单，billId 为新账单。
+  - 错误码新增 BAR_MIN_SPEND_TOP_UP_AMOUNT_MISMATCH。
+  - 新增准入闸一行：低消补差不经 bar.bill_waiver。
+  - 验收覆盖加 BarMinSpendTopUpJdbcIntegrationTests。
+  本组没有新增测试，只改文档。各条回归用例名已写进上述实现现状。
+- 18AY 收尾复核修正（2026-11-19）：收尾复核意见 4 条全部成立，按控制席补充在本段一并修，不新增迁移与操作。①存酒页 StoredWinePage 证据上传列表：cancelStoredWine 成功后清空作废照片与视频，registerRemedy 成功后清空补存瓶登记照片，remedyAction 提交了 evidence_ids 的结案、员工赔偿认定、追收已收回成功后清空交付与收回凭证，handoverToPlatform 成功后清空交接照片与视频；换选存酒时清空作废、补存与结案追收的上传列表（交接证据随退出门店、不随选中存酒）；失败保留已上传列表供补传后重提。新用例 StoredWinePage.cancel.test.tsx「收尾复核：作废 A 成功后照片视频列表清空；再选 B 只填原因作废，请求体照片与视频编号都是空数组」「收尾复核：为 A 上传作废照片未提交，换选 B 后作废照片列表清空」；StoredWinePage.recovery.test.tsx 的 198-R5 用例原先一次上传后各单共用凭证，改为每单各自上传本单凭证、提交成功后断言列表清空（审批、垫付不带凭证、不清空）。依据 BSM:1940「……存酒作废……必须记录原因、员工、时间、点位、照片、视频和主管复核结果。」；BSM:1072「存酒作废需照片+视频双证据+主管复核」；BSM:1170「存酒登记必须拍照、填写人工备注……」；第十八批裁决 14「高价值的报损、盘点差异、存酒作废，必须照片＋视频＋主管复核才生效」。②契约 lookupSavedBottlesByPhone 补 description，与 listSavedBottles 同句：最高权限按手机号检索看全部酒吧的存酒（不按商户范围），其余账号照旧按本商户；yaml 与 json 同值，操作数不变。依据第十八批裁决 71「既然是最高权限，不应该什么都能看到吗？」；BSM:576。③结果区字典 fieldLabels 的 KEY_VALUE_LABELS.adjustment_type 补 min_spend_retained「低消留款」、transfer「转台」、merge「并台」，退款整笔转为低消留款、卡座转台与并台结果的调整类型不再显示英文；拆台 split、撤销转台 transfer_undo 已有中文名不改。新用例 ActionResultView.test.tsx「退款整笔转低消留款、卡座转台与并台结果的调整类型显示中文，不出现英文取值」。依据 PGM:287「展示给用户的一切文字……必须全部为中文」；BSM:1064「……不退款——该笔金额留在本台位账上」；BSM:1079「账单合并称为“合单”，不等同于台位“并台”。」④P0 验收标准 p0-end-to-end-acceptance-and-edge-cases-v0.1.md 的 AC-INV-05 取酒句与其边界用例两行，按现码与现句改为核验短信验证码或动态取酒码、通过即出酒、对应标签只留痕不作比对（标题版本 +0.01）；酒吧开发设计 §5.3.2 与 REQ-31 照设计 not_doing 不改。依据 BSM:1073「取酒与人工例外取酒必须核验当前客户的短信验证码，或由已登录的官方手机应用、小程序出示动态取酒码……取酒核验、对应标签、取用前后剩余量、操作员工和时间必须留痕。」酒吧 PRD §7.3A.4、§7.6.4 实现现状与修订表本段行同步。
+- 18AY 合并前变基（2026-11-19）：本段自 ed3cde79 变基到 origin/main b7762262；迁移按原序顺延改号 V666→V679；合并时 OpenAPI 共 1400 个操作（主干 1400）、info.version V0.84、决策台账 V1.08，Flyway 最新 V679（共 616 个迁移）。版本行、契约版本、计数与 SHA、生成物、台账补记与 PRD 修订行由合并前脚本按新主干统一重写。
+- 18AY 落地位置补记·运行验收证据、快照、终验文档刷新（无新裁决）：业务提交 8779356c 之后，按第十八批裁决 25 重刷了运行验收证据：后端全量 7043 测，0 失败 0 错误；apps/web 构建通过；常规界面验收（接口全部 mock）实跑 40 条全过；真实后端界面验收未跑，runtime_ready=false。随后依次重生成闭环当前态快照、生产闭环缺口报告、界面验收报告、无上线指挥台。生成器没改。手改 docs/final-closed-loop-acceptance-audit-v0.1.md 与 docs/code-implementation-acceptance-audit-v0.1.md：前端单测源码计数改为 1931；被核文件行数按现码同步（BarService.java 1325→1353、BarBillingService.java 1145→1158、BarBillRecords.java 174→175）；后端全量与常规界面验收的数字、日期改为本次实跑值；写入 npm run verify:unit 实跑结果，五个工作区全过。交付门禁于 2026-11-19 09:47 UTC 在工作树逐项实跑子项，NAS 两项现场探测未跑。仍红的有两项：一是 coding-host-protection，它写死主仓路径，在工作树口径下必红，属工具口径，不做；二是 final-closed-loop-audit，如实留 2 条红（integration-ready、business-acceptance-ready），原因是校验器要求终验把联调、业务验收写成「是」，而裁决 25 定了不跑真实后端界面验收、运行验收未就绪，终验写的是「否」。verify:delivery-gates 总链仍是红的。

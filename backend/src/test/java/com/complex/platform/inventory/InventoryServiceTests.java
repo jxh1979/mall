@@ -1,6 +1,6 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.13
+// 文件版本：V0.14
 
 import com.complex.platform.support.InMemoryAuditEventRepository;
 import com.complex.platform.support.InMemoryIdempotencyRepository;
@@ -522,15 +522,16 @@ class InventoryServiceTests {
                 .isInstanceOf(ApiException.class).extracting("code").isEqualTo("VALIDATION_FAILED");
     }
 
-    // ===== FS-016-R5 最小口径：转让后人工复核行记当前持有人 =====
+    // ===== 第十八批 AY 段 268-R1：转让后取酒按当前持有人核验，姓名不同也出酒（BSM:1073 不比对标签与姓名） =====
 
     @Test
-    void identityReviewAfterTransferRecordsCurrentHolder() {
+    void claimAfterTransferWithOtherNameDispensesAndRecordsCurrentHolder() {
         SavedBottleRecord bottle = registerBottle("rv-holder", null, "bar_1", HOLDER_PHONE, "甲", "LBL-1", 2);
         service.transferSavedBottle(bottle.id(), transferTo("rv-holder-1", "乙", OTHER_PHONE, null, "000000"));
-        SavedBottleClaimRecord review = service.claimSavedBottle(bottle.id(), claimOne("rv-holder-2", "000000", "LBL-1", "错名"));
-        assertThat(review.status()).isEqualTo("pending_identity_review");
-        assertThat(review.verifiedPhoneHash()).isEqualTo(sha256(OTHER_PHONE));
+        SavedBottleClaimRecord claim = service.claimSavedBottle(bottle.id(), claimOne("rv-holder-2", "000000", "LBL-1", "错名"));
+        assertThat(claim.status()).isEqualTo("picked_up");
+        assertThat(claim.remainingAfter()).isEqualTo(1);
+        assertThat(claim.verifiedPhoneHash()).isEqualTo(sha256(OTHER_PHONE));
     }
 
 
@@ -1296,9 +1297,9 @@ class InventoryServiceTests {
                 "inventory.risk_alert.list_failed", "inventory.supplier_reconciliation.list_failed");
     }
 
-    // A1(REQ-30): 登记瓶底标签后，取酒 verificationCode 不一致进入人工复核且不出酒
+    // 第十八批 AY 段 268-R1：取酒不再比对瓶底标签（BSM:1073 标签只留痕），请求不带或带不同标签都在核验通过后出酒。
     @Test
-    void claimWithMismatchedLabelEntersIdentityReviewWithoutDispensing() {
+    void claimWithDifferentLabelStillDispenses() {
         InventoryItemRecord item = createItem("identity-item");
         SavedBottleRecord savedBottle = service.createSavedBottle(new SavedBottleRequest(
                 "saved-identity", null, List.of(), "customer_1", "bar_1",
@@ -1306,14 +1307,15 @@ class InventoryServiceTests {
                 "LABEL-XYZ", "张三", "13800138000",
                 List.of("reg_photo"), "吧台登记", "000000"));
 
-        SavedBottleClaimRecord review = service.claimSavedBottle(savedBottle.id(), new SavedBottleClaimRequest(
-                "claim-mismatch", null, List.of(), List.of(Map.of("quantity", 1)), "13800138000", "WRONG-LABEL"));
+        SavedBottleClaimRecord claim = service.claimSavedBottle(savedBottle.id(), new SavedBottleClaimRequest(
+                "claim-mismatch", null, List.of(), List.of(Map.of("quantity", 1)), "13800138000", "000000",
+                "WRONG-LABEL", "张三"));
 
-        assertThat(review.status()).isEqualTo("pending_identity_review");
+        assertThat(claim.status()).isEqualTo("picked_up");
         assertThat(inventoryRepository.savedBottleById(savedBottle.id()))
                 .get()
                 .extracting(SavedBottleRecord::status, SavedBottleRecord::remainingQuantity)
-                .containsExactly("pending_identity_review", 2);
+                .containsExactly("stored", 1);
     }
 
     // P0#4(R6-D05): 散客（customer_id 可空）可存，登记三件套（姓名昵称+标签值+登记照片）落库。
@@ -1366,21 +1368,21 @@ class InventoryServiceTests {
         assertThat(ok.status()).isEqualTo("picked_up");
     }
 
-    // P0#4: 取酒核身——姓名昵称不符即使标签值一致也进人工复核、不出酒（反例）。
+    // 第十八批 AY 段 268-R1：取酒不再比对姓名昵称（BSM:1073），姓名不同也在核验通过后出酒、剩余量减少。
     @Test
-    void claimWithMismatchedNicknameEntersReview() {
+    void claimWithDifferentNicknameStillDispenses() {
         InventoryItemRecord item = createItem("claim-id-bad");
         SavedBottleRecord bottle = service.createSavedBottle(new SavedBottleRequest(
                 "saved-idbad", null, List.of(), null, "bar_1",
                 List.of(Map.of("item_id", item.id(), "quantity", 2, "bottle_name", "Rum", "unit", "bottle")),
                 "LBL-OK", "李四", "13800138000", List.of("reg_photo"), "吧台登记", "000000"));
 
-        SavedBottleClaimRecord review = service.claimSavedBottle(bottle.id(), new SavedBottleClaimRequest(
+        SavedBottleClaimRecord claim = service.claimSavedBottle(bottle.id(), new SavedBottleClaimRequest(
                 "claim-name-bad", null, List.of(), List.of(Map.of("quantity", 1)), "13800138000", "x",
                 "LBL-OK", "王五"));
-        assertThat(review.status()).isEqualTo("pending_identity_review");
+        assertThat(claim.status()).isEqualTo("picked_up");
         assertThat(inventoryRepository.savedBottleById(bottle.id()).orElseThrow().remainingQuantity())
-                .isEqualTo(2);
+                .isEqualTo(1);
     }
 
     @Test

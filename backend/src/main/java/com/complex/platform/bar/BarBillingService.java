@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.18
+// 文件版本：V0.19
 
 import static com.complex.platform.bar.BarBillRecords.*;
 import static com.complex.platform.bar.BarValidation.*;
@@ -536,7 +536,10 @@ public class BarBillingService {
     java.util.List<com.complex.platform.customer.MerchantConsumptionRewardService.RewardView> listBillRewards(String billId) {
         BarBillRecord bill = repository.findBillById(billId)
                 .orElseThrow(() -> ApiException.notFound("BAR_BILL_NOT_FOUND", "账单不存在或已被删除"));
-        checkMerchantOwnership(bill.merchantId());
+        // 第十八批 AY 段第 344 条 344-R1（第十八批裁决 71「既然是最高权限，不应该什么都能看到吗？」；BSM:576）：最高权限读任一酒吧账单的奖励，不核商户。
+        if (!authorizationService.isMasterAuthority(authorizationService.currentActor())) {
+            checkMerchantOwnership(bill.merchantId());
+        }
         return merchantRewards == null ? java.util.List.of()
                 : merchantRewards.listForSource(com.complex.platform.customer.MerchantConsumptionRewardService.BAR_BILL, bill.id());
     }
@@ -584,6 +587,15 @@ public class BarBillingService {
                 }
             }
             amount = positive(actual.amountCent(), "amount_cent");
+            // 第十八批 AY 段第 346 条 346-R1（BSM:1064「结账补足的差额」「结账时累计消费多出的不退」）：补足不再经主管复核，金额须等于当前低消差额，
+            // 挡住页面差额过时（同时加单使差额变小或归零）造成的多收。
+            if ("min_spend_top_up".equals(type)) {
+                long gap = BarMinSpend.gapCent(repository, bill);
+                if (amount != gap) {
+                    throw ApiException.conflict("BAR_MIN_SPEND_TOP_UP_AMOUNT_MISMATCH",
+                            "补足金额须等于本台当前低消差额 " + java.math.BigDecimal.valueOf(gap, 2).toPlainString() + " 元，请刷新后重试");
+                }
+            }
             if ("service_fee".equals(type) && payrollSources != null) payrollSources.recordComponent(bill, type, amount, "charge:" + actual.idempotencyKey());
             afterPayable = beforePayable + amount;
         } else if ("waiver".equals(type)) {
@@ -1044,7 +1056,8 @@ public class BarBillingService {
                 .orElseThrow(() -> ApiException.notFound("BAR_BILL_NOT_FOUND", "账单不存在或已被删除"));
         checkMerchantOwnership(bill.merchantId());
         if ("settled".equals(bill.settlementStatus()) || "merged".equals(bill.settlementStatus())) {
-            throw ApiException.conflict("BAR_BILL_NOT_TIPPABLE", "已结账或已并单的账单不能再加小费");
+            // 第十八批 AY 段第 348 条 348-R1（BSM:1079「账单合并称为“合单”，不等同于台位“并台”。」）：副单状态与状态字典同叫「已合并」。
+            throw ApiException.conflict("BAR_BILL_NOT_TIPPABLE", "已结账或已合并的账单不能再加小费");
         }
         long tip;
         if (actual.tipAmountCent() != null) {

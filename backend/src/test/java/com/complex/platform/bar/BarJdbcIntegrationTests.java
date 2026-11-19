@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.07
+// 文件版本：V0.08
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -904,9 +904,10 @@ class BarJdbcIntegrationTests {
         String merchant = closeFixture("cls3");
         BarTableSessionRecord b = closeSession("sess_cls3_b", merchant, "table_cls3_b", 50000L, "open", null);
         BarTableSessionRecord a = closeSession("sess_cls3_a", merchant, "table_cls3_a", 50000L, "merged", b.id());
-        String billB = familyOrder("cls3_b", merchant, b, 60000L);
+        // 第十八批 AY 段第 342 条 342-R1：有消费的台组关台前须达台组低消（两侧合计 1000 元），消费 700＋300 元达标。
+        String billB = familyOrder("cls3_b", merchant, b, 70000L);
         String billA = familyOrder("cls3_a", merchant, a, 30000L);
-        jdbcTemplate.update("UPDATE bar_bills SET settlement_status='settled',payment_status='paid',paid_amount_cent=60000 WHERE id=?", billB);
+        jdbcTemplate.update("UPDATE bar_bills SET settlement_status='settled',payment_status='paid',paid_amount_cent=70000 WHERE id=?", billB);
         jdbcTemplate.update("UPDATE bar_bills SET settlement_status='merged' WHERE id=?", billA);
 
         responsibilities.close(b.id(), closeRequest("close-cls3", b));
@@ -920,7 +921,8 @@ class BarJdbcIntegrationTests {
     @Test
     void serviceCloseAllowsVoidedBill() {
         String merchant = closeFixture("clsv");
-        BarTableSessionRecord b = closeSession("sess_clsv_b", merchant, "table_clsv_b", 50000L, "open", null);
+        // 第十八批 AY 段第 342 条 342-R1：作废账单不作废明细，消费 300 元仍计进度；台位低消取 300 元，关台不被低消闸拦。
+        BarTableSessionRecord b = closeSession("sess_clsv_b", merchant, "table_clsv_b", 30000L, "open", null);
         String bill = familyOrder("clsv_b", merchant, b, 30000L);
         jdbcTemplate.update("UPDATE bar_bills SET settlement_status='void',payment_status='void' WHERE id=?", bill);
 

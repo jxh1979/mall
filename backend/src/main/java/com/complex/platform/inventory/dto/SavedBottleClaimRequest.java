@@ -10,7 +10,7 @@ public record SavedBottleClaimRequest(
         List<Map<String, Object>> claimItems,
         String claimByPhone,
         String verificationCode,
-        // P0#4 取酒核身（openapi-p0.json F4/F7）：标签值 + 姓名/昵称强制比对项。
+        // 不再读取（BSM:1073 只核验短信验证码或动态取酒码）；契约已删这两个字段，记录组件保留免改既有构造。
         String bottleLabelValue,
         String customerNameOrNickname
 ) {

@@ -1,6 +1,6 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -104,6 +104,54 @@ class SavedBottleTransferWebShape198R5Tests {
                 .containsEntry("to_name_or_nickname", "受让人")
                 .containsEntry("operator_id", staffId)
                 .containsEntry("transfer_quantity", 2);
+    }
+
+    // 第十八批 AY 段 268-R1：按存酒页领取的真实形状（claim_items 只带 saved_bottle_id 与 quantity，不带瓶底标签与姓名）领取，
+    // 核验短信验证码通过即出酒（BSM:1073 只要求核验验证码或动态取酒码，标签只留痕）；同一瓶分次取用两次都出酒，不转待核身复核。
+    @Test
+    void claimSavedBottle_webShapeWithoutLabelAndName_dispensesTwice() throws Exception {
+        String digits = s.substring(s.length() - 8);
+        Map<String, Object> create = new LinkedHashMap<>();
+        create.put("idempotency_key", "b71-268-create-" + s);
+        create.put("bar_id", merchant);
+        create.put("items", List.of(Map.of("item_id", item, "quantity", 2, "bottle_name", "存酒形状威士忌", "unit", "bottle")));
+        create.put("bottle_label_value", "LBL-268");
+        create.put("customer_name_or_nickname", "取酒人");
+        create.put("customer_phone", "157" + digits);
+        create.put("registration_photo_refs", List.of("reg_photo_b71268"));
+        create.put("manual_note", "吧台登记");
+        create.put("verification_code", "000000");
+        String bottleId = JsonPath.read(call("/api/v1/inventory/saved-bottles", create).andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString(), "$.data.id");
+
+        Map<String, Object> first = new LinkedHashMap<>();
+        first.put("idempotency_key", "admin-saved-bottle-claim-" + bottleId + "-" + System.nanoTime());
+        first.put("claim_items", List.of(Map.of("saved_bottle_id", bottleId, "quantity", 1)));
+        first.put("verification_code", "000000");
+        call("/api/v1/inventory/saved-bottles/" + bottleId + "/claim", first)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("picked_up"))
+                .andExpect(jsonPath("$.data.claim_quantity").value(1))
+                .andExpect(jsonPath("$.data.remaining_before").value(2))
+                .andExpect(jsonPath("$.data.remaining_after").value(1))
+                .andExpect(jsonPath("$.data.verification_method").value("sms"));
+        assertThat(jdbc.queryForMap("SELECT status, remaining_quantity FROM saved_bottles WHERE id = ?", bottleId))
+                .containsEntry("status", "stored")
+                .containsEntry("remaining_quantity", 1);
+
+        Map<String, Object> second = new LinkedHashMap<>();
+        second.put("idempotency_key", "admin-saved-bottle-claim-" + bottleId + "-" + System.nanoTime());
+        second.put("claim_items", List.of(Map.of("saved_bottle_id", bottleId, "quantity", 1)));
+        second.put("verification_code", "000000");
+        call("/api/v1/inventory/saved-bottles/" + bottleId + "/claim", second)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.remaining_after").value(0));
+        assertThat(jdbc.queryForObject("SELECT status FROM saved_bottles WHERE id = ?", String.class, bottleId))
+                .isEqualTo("claimed");
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM saved_bottle_claims WHERE saved_bottle_id = ?", Integer.class, bottleId))
+                .isEqualTo(2);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM saved_bottle_claims WHERE saved_bottle_id = ? AND status = 'pending_identity_review'",
+                Integer.class, bottleId)).isZero();
     }
 
     private ResultActions call(String path, Map<String, Object> body) throws Exception {

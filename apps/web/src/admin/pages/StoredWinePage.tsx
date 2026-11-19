@@ -1,4 +1,4 @@
-// 文件版本：V0.10
+// 文件版本：V0.11
 import React from "react";
 import { formatBusinessStatus } from "../i18n/statusLabels";
 import { AdminDataState } from "../components/AdminDataState";
@@ -12,6 +12,7 @@ import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowD
 import { MetricDetailLink, useMetricKpiValue } from "../components/MetricDetailEntry";
 import type { AdminPageProps, InventoryItemRow, StoredWineRemedyRow, StoredWineRow } from "../types";
 import { PaymentConfirmationPanel } from "./PaymentConfirmationPanel";
+import { StoredWineEvidenceUpload, type StoredWineEvidenceFile } from "./StoredWineEvidenceUpload";
 
 // 后端 /saved-bottles 还返回到期/更新/剩余数量等（StoredWineRow 未全量声明），
 // 行明细抽屉就近读取这些字段，不改共享 types.ts。
@@ -87,10 +88,6 @@ const HANDOVER_CONDITIONS: Array<{ value: string; label: string }> = [
 // 第十八批 AP 段 254-R4：存酒登记表单初值（数量默认 1）。
 const EMPTY_REGISTER = { itemId: "", quantity: "1", label: "", phone: "", name: "", note: "", code: "" };
 
-function splitIds(value: string) {
-  return value.split(/[\s,，;；]+/).map((item) => item.trim()).filter(Boolean);
-}
-
 const TEXT = {
   title: "存酒",
   description: "展示客人存酒资产、在线领取核销、证据附件和幂等留痕；高价值酒水保持在线校验，不做离线核销。",
@@ -149,11 +146,11 @@ const TEXT = {
   // FS-017（BSM L1072）
   cancel: "作废",
   cancelReason: "作废原因",
-  cancelPhotos: "照片证据 id（逗号分隔）",
-  cancelVideos: "视频证据 id（逗号分隔）",
-  cancelRequired: "作废须填写照片与视频证据 id（照片+视频双证据+主管复核）。",
+  cancelPhotos: "作废照片（拍照上传）",
+  cancelVideos: "作废视频（录像上传）",
   cancelNotCancellable: "仅存酒中、待核身复核或争议中的存酒可作废。",
-  cancelBoundary: "存酒作废需照片+视频双证据+主管复核；高价值存酒先冻结待主管复核通过后才作废，作废后在下方登记补存或赔付。",
+  // 第十八批 AY 段 269-R2（第十八批裁决 14）：高低价值由服务端在作废当刻判定，前端不预检照片视频。
+  cancelBoundary: "高价值存酒作废须上传照片和视频，先冻结、待主管复核通过后才作废；其余存酒提交即作废。作废后在下方登记补存或赔付。",
   cancelFailed: "存酒作废失败",
   // 第十八批 AP 段 252-R1（BSM:1940）、254-R6（第十八批裁决 58）
   cancelReasonRequired: "作废须填写作废原因",
@@ -168,7 +165,7 @@ const TEXT = {
   remedy: "补存/赔付",
   remedyType: "方式",
   remedyAmount: "赔付金额（元）",
-  remedyPhotos: "补存瓶登记照片 id（逗号分隔）",
+  remedyPhotos: "补存瓶登记照片（拍照上传）",
   remedyLabel: "补存瓶底标签值",
   remedyLocation: "出库库位",
   remedyNote: "补存瓶人工备注",
@@ -176,7 +173,7 @@ const TEXT = {
   remedyBoundary: "作废后由该酒吧为客人以同品、同等剩余量补存，到期日不变，补酒成本计入经营损失；无法补存的登记赔付方案，经门店主管和财务审批后支付，赔款实际交付后才结案。对客交付与内部追收分别记录，员工未赔付不阻止对客交付。",
   remedyNotCancelled: "仅已作废的存酒可登记补存/赔付。",
   remedyAmountInvalid: "赔付金额必须大于 0。",
-  remedyReplacementRequired: "补存须填写登记照片 id、补存瓶底标签值、出库库位与补存瓶人工备注。",
+  remedyReplacementRequired: "补存须上传登记照片，并填写补存瓶底标签值、出库库位与补存瓶人工备注。",
   remedyFailed: "补存/赔付登记失败",
   remedyList: "补存/赔付记录",
   remedyEmpty: "该存酒暂无补存/赔付记录。",
@@ -188,22 +185,23 @@ const TEXT = {
   remedySettle: "登记交付/支付凭证并结案",
   remedyAdvance: "垫付并追收",
   remedyStaff: "认定员工责任",
-  remedyStaffUser: "责任员工 user_id",
+  // 第十八批 AY 段 S1（PGM:287）：标签与提示全中文，只改文案。
+  remedyStaffUser: "责任员工编号",
   remedyRecoverySettle: "追收已收回",
-  remedyEvidence: "交付/收回凭证 id（逗号分隔）",
+  remedyEvidence: "交付/收回凭证（上传照片或视频）",
   remedyActionFailed: "补存/赔付处理失败",
   exit: "门店退出",
-  exitMerchant: "退出门店（商户）id",
+  exitMerchant: "退出门店（商户）编号",
   exitNotice: "清点并通知客人原店取回",
   exitNoticeBoundary: "退出前清点有效期内未结存酒并逐瓶短信通知客人在原店取回。",
-  exitRequired: "须填写退出门店 id。",
+  exitRequired: "须填写退出门店编号。",
   exitFailed: "退出清点通知失败",
   handover: "交接到平台",
   handoverLocation: "指定领取地点",
-  handoverPhotos: "交接现场照片 id（逗号分隔）",
-  handoverVideos: "交接现场视频 id（逗号分隔）",
+  handoverPhotos: "交接现场照片（拍照上传）",
+  handoverVideos: "交接现场视频（录像上传）",
   handoverItems: "逐瓶清点（实收数量 / 接收状态）",
-  handoverRequired: "交接须填写退出门店 id 与指定领取地点。",
+  handoverRequired: "交接须填写退出门店编号与指定领取地点。",
   handoverBoundary: "门店退出后由所属娱乐平台公司接收有效期内未结存酒实物和记录，指定领取地点，继续按原有效期与原取酒规则处理；接收时已存在的毁损、短少仍由原门店承担，可经审批先垫付并向原门店追收。",
   handoverFailed: "存酒交接失败",
   // 第十八批 AP 段 254-R4（BSM:1037、BSM:1170；BSM:1072「存酒登记先取隐私同意……」；第十八批裁决 57 取短信验证码）
@@ -285,27 +283,29 @@ export function StoredWinePage({ api, user, setActionResult, setGlobalError, eff
   const [manualPickupError, setManualPickupError] = React.useState("");
   // FS-017 作废（照片+视频双证据）/ 补存赔付 / 门店退出清点与交接。
   const [cancelReason, setCancelReason] = React.useState("");
-  const [cancelPhotos, setCancelPhotos] = React.useState("");
-  const [cancelVideos, setCancelVideos] = React.useState("");
+  // 第十八批 AY 段 269-R1：六处证据改为真实上传，状态存服务端回的附件编号与文件名。
+  // 收尾复核（BSM:1940、第十八批裁决 14）：提交成功后清空本次所用证据；换选存酒清空作废、补存与结案追收证据（交接证据随退出门店，不随选中存酒）。
+  const [cancelPhotos, setCancelPhotos] = React.useState<StoredWineEvidenceFile[]>([]);
+  const [cancelVideos, setCancelVideos] = React.useState<StoredWineEvidenceFile[]>([]);
   const [cancelError, setCancelError] = React.useState("");
   // 第十八批 AP 段 254-R6：登记争议（原因必填、进审计）。
   const [disputeReason, setDisputeReason] = React.useState("");
   const [disputeError, setDisputeError] = React.useState("");
   const [remedyType, setRemedyType] = React.useState("replacement");
   const [remedyAmount, setRemedyAmount] = React.useState("");
-  const [remedyPhotos, setRemedyPhotos] = React.useState("");
+  const [remedyPhotos, setRemedyPhotos] = React.useState<StoredWineEvidenceFile[]>([]);
   const [remedyLabel, setRemedyLabel] = React.useState("");
   const [remedyLocation, setRemedyLocation] = React.useState("");
   const [remedyStaffUser, setRemedyStaffUser] = React.useState("");
-  const [remedyEvidence, setRemedyEvidence] = React.useState("");
+  const [remedyEvidence, setRemedyEvidence] = React.useState<StoredWineEvidenceFile[]>([]);
   const [remedyError, setRemedyError] = React.useState("");
   const [remedies, setRemedies] = React.useState<StoredWineRemedyRow[]>([]);
   const [exitMerchantId, setExitMerchantId] = React.useState("");
   const [exitResult, setExitResult] = React.useState("");
   const [exitError, setExitError] = React.useState("");
   const [handoverLocation, setHandoverLocation] = React.useState("");
-  const [handoverPhotos, setHandoverPhotos] = React.useState("");
-  const [handoverVideos, setHandoverVideos] = React.useState("");
+  const [handoverPhotos, setHandoverPhotos] = React.useState<StoredWineEvidenceFile[]>([]);
+  const [handoverVideos, setHandoverVideos] = React.useState<StoredWineEvidenceFile[]>([]);
   const [handoverItems, setHandoverItems] = React.useState<Record<string, { quantity: string; condition: string }>>({});
   const [claimQuantity, setClaimQuantity] = React.useState("1");
   // 第十八批 AP 段 254-R3（BSM:1170「存酒登记必须拍照、填写人工备注……」）：补存新瓶的人工备注，空默认，只在同品补存时作为 operator_note 发出。
@@ -691,10 +691,6 @@ export function StoredWinePage({ api, user, setActionResult, setGlobalError, eff
       setCancelError(TEXT.cancelReasonRequired);
       return false;
     }
-    if (splitIds(cancelPhotos).length === 0 || splitIds(cancelVideos).length === 0) {
-      setCancelError(TEXT.cancelRequired);
-      return false;
-    }
     setCancelError("");
     return true;
   }
@@ -709,11 +705,13 @@ export function StoredWinePage({ api, user, setActionResult, setGlobalError, eff
       const body = {
         idempotency_key: `admin-saved-bottle-cancel-${selected.id}`,
         reason: cancelReason.trim(),
-        photo_attachment_ids: splitIds(cancelPhotos),
-        video_attachment_ids: splitIds(cancelVideos),
+        photo_attachment_ids: cancelPhotos.map((f) => f.id),
+        video_attachment_ids: cancelVideos.map((f) => f.id),
       };
       const result = await api.post(`/api/v1/inventory/saved-bottles/${selected.id}/cancel`, body);
       setActionResult({ action: "stored_wine_cancelled", savedBottleId: selected.id, requestBody: body, result });
+      setCancelPhotos([]);
+      setCancelVideos([]);
       await reload();
     } catch (cancelErr) {
       const message = cancelErr instanceof Error ? cancelErr.message : TEXT.cancelFailed;
@@ -805,7 +803,7 @@ export function StoredWinePage({ api, user, setActionResult, setGlobalError, eff
         setRemedyError(TEXT.remedyAmountInvalid);
         return false;
       }
-    } else if (splitIds(remedyPhotos).length === 0 || !remedyLabel.trim() || !remedyLocation.trim() || !remedyNote.trim()) {
+    } else if (remedyPhotos.length === 0 || !remedyLabel.trim() || !remedyLocation.trim() || !remedyNote.trim()) {
       setRemedyError(TEXT.remedyReplacementRequired);
       return false;
     }
@@ -826,12 +824,13 @@ export function StoredWinePage({ api, user, setActionResult, setGlobalError, eff
         remedy_type: remedyType,
         amount_cent: remedyType === "compensation" ? Math.round(Number(remedyAmount) * 100) : undefined,
         reason: cancelReason.trim() || undefined,
-        registration_photo_refs: remedyType === "replacement" ? splitIds(remedyPhotos) : undefined,
+        registration_photo_refs: remedyType === "replacement" ? remedyPhotos.map((f) => f.id) : undefined,
         bottle_label_value: remedyType === "replacement" ? remedyLabel.trim() : undefined,
         location_id: remedyType === "replacement" ? remedyLocation.trim() : undefined,
       };
       const result = await api.post(`/api/v1/inventory/saved-bottles/${selected.id}/remedy`, body);
       setActionResult({ action: "stored_wine_remedy_registered", savedBottleId: selected.id, requestBody: body, result });
+      setRemedyPhotos([]);
       await loadRemedies(selected.id);
       await reload();
     } catch (remedyErr) {
@@ -852,6 +851,7 @@ export function StoredWinePage({ api, user, setActionResult, setGlobalError, eff
       const body = { idempotency_key: `admin-saved-bottle-remedy-${path.replace("/", "-")}-${remedyId}`, ...extra };
       const result = await api.post(`/api/v1/inventory/saved-bottles/remedies/${remedyId}/${path}`, body);
       setActionResult({ action: `stored_wine_remedy_${path.replace("/", "_")}`, remedyId, requestBody: body, result });
+      if ("evidence_ids" in extra) setRemedyEvidence([]);
       if (selected) {
         await loadRemedies(selected.id);
       }
@@ -921,8 +921,8 @@ export function StoredWinePage({ api, user, setActionResult, setGlobalError, eff
         idempotency_key: `admin-saved-bottle-handover-${exitMerchantId.trim()}-${Date.now()}`,
         merchant_id: exitMerchantId.trim(),
         pickup_location: handoverLocation.trim(),
-        photo_attachment_ids: splitIds(handoverPhotos),
-        video_attachment_ids: splitIds(handoverVideos),
+        photo_attachment_ids: handoverPhotos.map((f) => f.id),
+        video_attachment_ids: handoverVideos.map((f) => f.id),
         items: handoverRows.map((row) => ({
           saved_bottle_id: row.id,
           received_quantity: numberValue(handoverItems[row.id]?.quantity ?? row.remainingQuantity ?? row.quantity),
@@ -931,6 +931,8 @@ export function StoredWinePage({ api, user, setActionResult, setGlobalError, eff
       };
       const result = await api.post("/api/v1/inventory/saved-bottles/handover", body);
       setActionResult({ action: "stored_wine_handed_over", requestBody: body, result });
+      setHandoverPhotos([]);
+      setHandoverVideos([]);
       await reload();
     } catch (handoverErr) {
       const message = handoverErr instanceof Error ? handoverErr.message : TEXT.handoverFailed;
@@ -965,8 +967,9 @@ export function StoredWinePage({ api, user, setActionResult, setGlobalError, eff
     setGlobalError(null);
     try {
       const body = {
-        idempotency_key: `admin-saved-bottle-claim-${selected.id}-${quantity}`,
-        claim_items: [{ saved_bottle_id: selected.id, item_name: selected.itemName ?? selected.savedNo ?? selected.id, claim_quantity: quantity }],
+        // 第十八批 AY 段 268-R2：项形状同服务端所读（saved_bottle_id、quantity）；幂等键带时刻，同一瓶可分次取用同样数量。
+        idempotency_key: `admin-saved-bottle-claim-${selected.id}-${Date.now()}`,
+        claim_items: [{ saved_bottle_id: selected.id, quantity }],
         verification_code: verificationCode,
       };
       const result = await api.post(`/api/v1/inventory/saved-bottles/${selected.id}/claim`, body);
@@ -1351,8 +1354,10 @@ export function StoredWinePage({ api, user, setActionResult, setGlobalError, eff
 
         <div className="admin-form-grid" data-testid="stored-wine-cancel-form">
           <label>{TEXT.cancelReason}<input data-testid="stored-wine-cancel-reason" value={cancelReason} onChange={(event) => setCancelReason(event.target.value)} /></label>
-          <label>{TEXT.cancelPhotos}<input data-testid="stored-wine-cancel-photos" value={cancelPhotos} onChange={(event) => setCancelPhotos(event.target.value)} /></label>
-          <label>{TEXT.cancelVideos}<input data-testid="stored-wine-cancel-videos" value={cancelVideos} onChange={(event) => setCancelVideos(event.target.value)} /></label>
+          <StoredWineEvidenceUpload api={api} label={TEXT.cancelPhotos} businessType="saved_bottle_cancel" attachmentRole="photo" accept="image/*"
+            files={cancelPhotos} onChange={setCancelPhotos} testId="stored-wine-cancel-photos" />
+          <StoredWineEvidenceUpload api={api} label={TEXT.cancelVideos} businessType="saved_bottle_cancel" attachmentRole="video" accept="video/*"
+            files={cancelVideos} onChange={setCancelVideos} testId="stored-wine-cancel-videos" />
         </div>
         <div className="admin-form-row">
           <HighRiskConfirm
@@ -1384,7 +1389,8 @@ export function StoredWinePage({ api, user, setActionResult, setGlobalError, eff
                 <label>{TEXT.remedyAmount}<input data-testid="stored-wine-remedy-amount" type="number" min="0.01" step="0.01" value={remedyAmount} onChange={(event) => setRemedyAmount(event.target.value)} /></label>
               ) : (
                 <>
-                  <label>{TEXT.remedyPhotos}<input data-testid="stored-wine-remedy-photos" value={remedyPhotos} onChange={(event) => setRemedyPhotos(event.target.value)} /></label>
+                  <StoredWineEvidenceUpload api={api} label={TEXT.remedyPhotos} businessType="saved_bottle_registration" attachmentRole="photo" accept="image/*"
+                    files={remedyPhotos} onChange={setRemedyPhotos} testId="stored-wine-remedy-photos" />
                   <label>{TEXT.remedyLabel}<input data-testid="stored-wine-remedy-label" value={remedyLabel} onChange={(event) => setRemedyLabel(event.target.value)} /></label>
                   <label>{TEXT.remedyLocation}<input data-testid="stored-wine-remedy-location" value={remedyLocation} onChange={(event) => setRemedyLocation(event.target.value)} /></label>
                   <label>{TEXT.remedyNote}<input data-testid="stored-wine-remedy-note" value={remedyNote} onChange={(event) => setRemedyNote(event.target.value)} /></label>
@@ -1416,7 +1422,8 @@ export function StoredWinePage({ api, user, setActionResult, setGlobalError, eff
               <>
                 <div className="admin-form-grid">
                   <label>{TEXT.remedyStaffUser}<input data-testid="stored-wine-remedy-staff-user" value={remedyStaffUser} onChange={(event) => setRemedyStaffUser(event.target.value)} /></label>
-                  <label>{TEXT.remedyEvidence}<input data-testid="stored-wine-remedy-evidence" value={remedyEvidence} onChange={(event) => setRemedyEvidence(event.target.value)} /></label>
+                  <StoredWineEvidenceUpload api={api} label={TEXT.remedyEvidence} businessType="saved_bottle_remedy" attachmentRole="other" accept="image/*,video/*"
+                    files={remedyEvidence} onChange={setRemedyEvidence} testId="stored-wine-remedy-evidence" />
                 </div>
                 <ul className="admin-plain-list">
                   {remedies.map((remedy) => (
@@ -1444,7 +1451,7 @@ export function StoredWinePage({ api, user, setActionResult, setGlobalError, eff
                           objectId={remedy.id} createPath={`/api/v1/inventory/saved-bottles/remedies/${encodeURIComponent(remedy.id)}/payment-confirmations`}
                           permission={STORED_WINE_CLAIM_PERMISSION} />
                         <HighRiskConfirm label={TEXT.remedySettle} impact="赔款实际交付后才结案；记交付/支付凭证与时间并计入经营损失。" disabled={submitting}
-                          onConfirm={() => void remedyAction(remedy.id, "settle", { evidence_ids: splitIds(remedyEvidence) })}
+                          onConfirm={() => void remedyAction(remedy.id, "settle", { evidence_ids: remedyEvidence.map((f) => f.id) })}
                           permissionsState={effectivePermissions} permissions={[STORED_WINE_CLAIM_PERMISSION]}
                           data-testid={`stored-wine-remedy-settle-${remedy.id}`} />
                       </>) : null}
@@ -1455,14 +1462,14 @@ export function StoredWinePage({ api, user, setActionResult, setGlobalError, eff
                             permissionsState={effectivePermissions} permissions={[STORED_WINE_CLAIM_PERMISSION]}
                             data-testid={`stored-wine-remedy-advance-${remedy.id}`} />
                           <HighRiskConfirm label={TEXT.remedyStaff} impact="复核认定责任员工照价赔偿；金额由系统按内部结算价计，不改对客状态。" disabled={submitting}
-                            onConfirm={() => void remedyAction(remedy.id, "staff-liability", { staff_user_id: remedyStaffUser.trim(), evidence_ids: splitIds(remedyEvidence) })}
+                            onConfirm={() => void remedyAction(remedy.id, "staff-liability", { staff_user_id: remedyStaffUser.trim(), evidence_ids: remedyEvidence.map((f) => f.id) })}
                             permissionsState={effectivePermissions} permissions={[STORED_WINE_CLAIM_PERMISSION]}
                             data-testid={`stored-wine-remedy-staff-${remedy.id}`} />
                         </>
                       ) : null}
                       {remedy.recoveryPartyType === "staff" && remedy.recoveryStatus === "pending" ? (
                         <HighRiskConfirm label={TEXT.remedyRecoverySettle} impact="登记员工赔偿已收回（不改对客状态）。" disabled={submitting}
-                          onConfirm={() => void remedyAction(remedy.id, "recovery/settle", { evidence_ids: splitIds(remedyEvidence) })}
+                          onConfirm={() => void remedyAction(remedy.id, "recovery/settle", { evidence_ids: remedyEvidence.map((f) => f.id) })}
                           permissionsState={effectivePermissions} permissions={[STORED_WINE_CLAIM_PERMISSION]}
                           data-testid={`stored-wine-remedy-recovery-settle-${remedy.id}`} />
                       ) : null}
@@ -1477,8 +1484,10 @@ export function StoredWinePage({ api, user, setActionResult, setGlobalError, eff
         <div className="admin-form-grid" data-testid="stored-wine-exit-block">
           <label>{TEXT.exitMerchant}<input data-testid="stored-wine-exit-merchant" value={exitMerchantId} onChange={(event) => setExitMerchantId(event.target.value)} /></label>
           <label>{TEXT.handoverLocation}<input data-testid="stored-wine-handover-location" value={handoverLocation} onChange={(event) => setHandoverLocation(event.target.value)} /></label>
-          <label>{TEXT.handoverPhotos}<input data-testid="stored-wine-handover-photos" value={handoverPhotos} onChange={(event) => setHandoverPhotos(event.target.value)} /></label>
-          <label>{TEXT.handoverVideos}<input data-testid="stored-wine-handover-videos" value={handoverVideos} onChange={(event) => setHandoverVideos(event.target.value)} /></label>
+          <StoredWineEvidenceUpload api={api} label={TEXT.handoverPhotos} businessType="saved_bottle_handover" attachmentRole="photo" accept="image/*"
+            files={handoverPhotos} onChange={setHandoverPhotos} testId="stored-wine-handover-photos" />
+          <StoredWineEvidenceUpload api={api} label={TEXT.handoverVideos} businessType="saved_bottle_handover" attachmentRole="video" accept="video/*"
+            files={handoverVideos} onChange={setHandoverVideos} testId="stored-wine-handover-videos" />
         </div>
         <div className="admin-form-row">
           <HighRiskConfirm
@@ -1542,7 +1551,7 @@ export function StoredWinePage({ api, user, setActionResult, setGlobalError, eff
                 <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`stored-wine-row-${row.id}`}
                   onClick={() => openBottleDetail(row)}
                   onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openBottleDetail(row); } }}>
-                  <td onClick={(event) => event.stopPropagation()}><input type="radio" aria-label={`选择此存酒 ${row.id}`} data-testid={`stored-wine-select-${row.id}`} checked={(selected?.id ?? "") === row.id} onChange={() => setSelectedId(row.id)} /></td>
+                  <td onClick={(event) => event.stopPropagation()}><input type="radio" aria-label={`选择此存酒 ${row.id}`} data-testid={`stored-wine-select-${row.id}`} checked={(selected?.id ?? "") === row.id} onChange={() => { setSelectedId(row.id); setCancelPhotos([]); setCancelVideos([]); setRemedyPhotos([]); setRemedyEvidence([]); }} /></td>
                   <td>{row.savedNo ?? row.id}</td>
                   <td>{row.customerName ?? row.customerId ?? "-"}</td>
                   <td>{row.itemName ?? row.itemId ?? "-"}</td>

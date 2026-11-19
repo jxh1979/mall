@@ -1,6 +1,6 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.23
+// 文件版本：V0.24
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.LocalZone;
@@ -422,7 +422,8 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
                 "saved_bottle",
                 lookup,
                 () -> {
-                    Optional<String> scope = authorizationService.currentMerchantScope();
+                    // 第十八批 AY 段第 344 条 344-R2（第十八批裁决 71「既然是最高权限，不应该什么都能看到吗？」；BSM:576）：最高权限看全部酒吧存酒。
+                    Optional<String> scope = authorizationService.isMasterAuthority(authorizationService.currentActor()) ? Optional.empty() : authorizationService.currentMerchantScope();
                     if (number != null) {
                         return repository.listSavedBottlesByPhoneHash(phoneHash(number), scope.orElse(null));
                     }
@@ -836,7 +837,7 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
 
     /**
      * FS-016 取酒（BSM L1073）：必须核验当前客户的短信验证码（verification_code）或官方动态取酒码（swp_ 开头）；
-     * 核验在标签/姓名比对之前，核验失败即拒、不建复核行、数量不变；手机号/姓名不单独作为放酒凭证。
+     * 核验失败即拒、数量不变；核验通过即出酒；手机号/姓名不单独作为放酒凭证。
      */
     public SavedBottleClaimRecord claimSavedBottle(String savedBottleId, SavedBottleClaimRequest request) {
         String id = requireText(savedBottleId, "saved_bottle_id");
@@ -869,22 +870,19 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
                         verifiedPhoneHash = phoneHash(verifyHolderSms(savedBottle, code, "claim"));
                     }
                     return dispenseSavedBottle(savedBottle, actual.idempotencyKey(), actual.claimItems(),
-                            actual.bottleLabelValue(), actual.customerNameOrNickname(), actual.evidenceAttachmentIds(),
-                            method, verifiedPhoneHash, pickupCode);
+                            actual.evidenceAttachmentIds(), method, verifiedPhoneHash, pickupCode);
                 }
         );
     }
 
     /**
-     * 核验通过后的出酒：标签值/姓名昵称比对（登记了才比，不再把验证码当标签值回退），不符进 pending_identity_review 不出酒；
+     * 核验通过即出酒（BSM:1073）；对应标签经 saved_bottle_id 关联存酒行瓶底标签留痕；
      * 留痕操作员工=当前操作者、终端来源、取用前后剩余量、核验方式与被核验手机哈希（BSM L1073）。
      */
     private SavedBottleClaimRecord dispenseSavedBottle(
             SavedBottleRecord savedBottle,
             String idempotencyKey,
             List<Map<String, Object>> claimItems,
-            String bottleLabelValue,
-            String customerNameOrNickname,
             List<String> evidenceAttachmentIds,
             String verificationMethod,
             String verifiedPhoneHash,
@@ -894,21 +892,6 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
         String staffId = currentActorId();
         String terminal = operationSource();
         int before = savedBottle.remainingQuantity();
-        String claimLabel = trimToNull(bottleLabelValue);
-        String claimName = trimToNull(customerNameOrNickname);
-        boolean labelMismatch = savedBottle.bottleLabelValue() != null
-                && !savedBottle.bottleLabelValue().equals(claimLabel);
-        boolean nameMismatch = savedBottle.customerNameOrNickname() != null
-                && !savedBottle.customerNameOrNickname().equals(claimName);
-        if (labelMismatch || nameMismatch) {
-            repository.saveSavedBottle(savedBottleWith(savedBottle, "pending_identity_review", before, now));
-            SavedBottleClaimRecord review = repository.saveSavedBottleClaim(new SavedBottleClaimRecord(
-                    "claim_" + slug(idempotencyKey), savedBottle.id(), 0, staffId, terminal, null,
-                    "pending_identity_review", safeList(evidenceAttachmentIds), now,
-                    before, before, verificationMethod, verifiedPhoneHash, savedBottle.pickupLocation()));
-            consumePickupCode(pickupCode, review.id());
-            return review;
-        }
         Map<String, Object> claimItem = firstItem(claimItems, "claim_items");
         int quantity = requirePositiveItemQuantity(claimItem, "quantity");
         if (quantity > before) {
@@ -1157,7 +1140,11 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
                 "bar.saved_bottle.manage",
                 "saved_bottle_renewal",
                 () -> {
-                    requireOwnMerchant(lockSavedBottle(id));
+                    // 第十八批 AY 段第 344 条 344-R2（第十八批裁决 71「既然是最高权限，不应该什么都能看到吗？」；BSM:576）：最高权限读任一酒吧存酒的续存记录（锁行照旧）。
+                    SavedBottleRecord bottle = lockSavedBottle(id);
+                    if (!authorizationService.isMasterAuthority(authorizationService.currentActor())) {
+                        requireOwnMerchant(bottle);
+                    }
                     return repository.listSavedBottleRenewals(id);
                 });
     }
@@ -1627,10 +1614,9 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
                             .orElseThrow(() -> ApiException.notFound("SAVED_BOTTLE_NOT_FOUND", "存酒记录不存在或已被删除"));
                     requireCustody(bottle);
                     requireClaimable(bottle);
-                    // 持有人身份已由营销确认：按登记标签/姓名出酒，核验方式记 manual_exception、被核验手机=申请时持有人手机哈希。
+                    // 持有人身份已由营销确认：核验方式记 manual_exception、被核验手机=申请时持有人手机哈希。
                     SavedBottleClaimRecord claim = dispenseSavedBottle(bottle, actual.idempotencyKey(), actual.claimItems(),
-                            bottle.bottleLabelValue(), bottle.customerNameOrNickname(), actual.evidenceAttachmentIds(),
-                            "manual_exception", current.phoneHash(), null);
+                            actual.evidenceAttachmentIds(), "manual_exception", current.phoneHash(), null);
                     Instant now = clock.instant();
                     return repository.saveSavedBottleManualPickup(new SavedBottleManualPickupRecord(
                             current.id(), current.savedBottleId(), current.merchantId(), current.projectId(), current.customerId(),
@@ -1650,7 +1636,11 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
                 "bar.saved_bottle.manage",
                 "saved_bottle_manual_pickup",
                 () -> {
-                    requireOwnMerchant(lockSavedBottle(id));
+                    // 第十八批 AY 段第 344 条 344-R2（第十八批裁决 71「既然是最高权限，不应该什么都能看到吗？」；BSM:576）：最高权限读任一酒吧存酒的人工例外取酒申请（锁行照旧）。
+                    SavedBottleRecord bottle = lockSavedBottle(id);
+                    if (!authorizationService.isMasterAuthority(authorizationService.currentActor())) {
+                        requireOwnMerchant(bottle);
+                    }
                     return repository.listSavedBottleManualPickups(id);
                 });
     }
@@ -2067,7 +2057,9 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
         String id = requireText(savedBottleId, "saved_bottle_id");
         return readPage("bar.saved_bottle.remedy_viewed", "bar.saved_bottle.remedy_view_failed", "bar.saved_bottle.manage",
                 "saved_bottle_remedy", () -> {
-                    repository.findSavedBottleByIdForUpdate(id).ifPresent(this::requireOwnMerchant);
+                    // 第十八批 AY 段第 344 条 344-R2（第十八批裁决 71「既然是最高权限，不应该什么都能看到吗？」；BSM:576）：最高权限读任一酒吧存酒的补偿方案（锁行照旧）。
+                    boolean master = authorizationService.isMasterAuthority(authorizationService.currentActor());
+                    repository.findSavedBottleByIdForUpdate(id).filter(bottle -> !master).ifPresent(this::requireOwnMerchant);
                     return repository.listSavedBottleRemedies(id);
                 });
     }

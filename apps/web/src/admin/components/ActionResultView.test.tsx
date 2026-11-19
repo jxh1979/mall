@@ -1,4 +1,4 @@
-// 文件版本：V0.04
+// 文件版本：V0.05
 import { render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { FIELD_LABELS } from "../i18n/fieldLabels";
@@ -79,5 +79,38 @@ describe("后台结果区中文展示", () => {
     expect(formatActionResult({ 结果: "派驻记录已结束", 派驻记录: "d-1" })).toBe("结果：派驻记录已结束\n派驻记录：d-1");
     expect(formatActionResult("角色已创建：r-1")).toBe("角色已创建：r-1");
     expect(formatActionResult({ someUnknownField: 1, "merchant-1": 1200 })).toBe("其他信息：1\nmerchant-1：1200");
+  });
+
+  // 第十八批 AY 段 329-R1（PGM:287）：存酒取酒流水的核销方式取值显示中文（BSM:1073 原词），不出 sms、pickup_code、manual_exception。
+  it("存酒领取结果的核销方式显示「短信验证码」「动态取酒码」「人工例外取酒」", async () => {
+    render(<ActionResultView value={{ action: "stored_wine_claimed", result: { verificationMethod: "sms", claimQuantity: 1 } }} />);
+    await waitFor(() => expect(screen.getByTestId("admin-action-result").textContent).toContain("核销方式：短信验证码"));
+    expect(screen.getByTestId("admin-action-result").textContent).not.toContain("sms");
+    expect(formatActionResult({ verification_method: "pickup_code" })).toBe("核销方式：动态取酒码");
+    expect(formatActionResult({ verification_method: "manual_exception" })).toBe("核销方式：人工例外取酒");
+  });
+
+  // 第十八批 AY 段第 347 条 347-R1（PGM:287「展示给用户的一切文字……必须全部为中文」）：退款、转台等结果里的服务端快照 snapshot_json 已落库留痕，结果区不展示。
+  it("退款结果与卡座转台结果不显示服务端快照（snapshot_json），其余字段照常中文", async () => {
+    const snapshot = '{"bill_id":"b1","payment_status_before":"paid","payment_status_after":"partially_refunded"}';
+    render(<ActionResultView value={{ adjustmentType: "refund", amountCent: 5000, snapshotJson: snapshot }} />);
+    await waitFor(() => expect(screen.getByTestId("admin-action-result").textContent).toContain("调整类型：退款"));
+    expect(screen.getByTestId("admin-action-result").textContent).not.toMatch(/快照内容|payment_status/);
+    const transfer = formatActionResult({ action: "bar_table_session_transfer", status: "transferred", sessionId: "s1", result: { id: "adj-1", snapshot_json: snapshot } });
+    expect(transfer).toContain("操作：转台");
+    expect(transfer).not.toMatch(/快照内容|payment_status/);
+  });
+
+  // 第十八批 AY 段收尾复核（PGM:287；BSM:1064「……不退款——该笔金额留在本台位账上」；BSM:1079、ENUM:114「转台」「并台」）。
+  it("退款整笔转低消留款、卡座转台与并台结果的调整类型显示中文，不出现英文取值", () => {
+    const retained = formatActionResult({ adjustmentType: "min_spend_retained", amountCent: 20000 });
+    expect(retained).toContain("调整类型：低消留款");
+    expect(retained).not.toContain("min_spend_retained");
+    const transfer = formatActionResult({ action: "bar_table_session_transfer", result: { id: "adj-1", adjustmentType: "transfer" } });
+    expect(transfer).toContain("调整类型：转台");
+    expect(transfer).not.toMatch(/transfer/);
+    const merge = formatActionResult({ action: "bar_table_session_merge", result: { id: "adj-2", adjustment_type: "merge" } });
+    expect(merge).toContain("调整类型：并台");
+    expect(merge).not.toMatch(/merge/);
   });
 });

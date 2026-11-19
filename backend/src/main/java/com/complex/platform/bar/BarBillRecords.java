@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static com.complex.platform.bar.BarValidation.jsonText;
 import static com.complex.platform.bar.BarValidation.trimToDefault;
@@ -108,7 +108,8 @@ final class BarBillRecords {
                 || "settled".equals(bill.settlementStatus())
                 || "merged".equals(bill.settlementStatus())
                 || "merged".equals(bill.paymentStatus())) {
-            throw ApiException.conflict(code, "账单已有支付、结账或并单状态，不能执行此操作");
+            // 第十八批 AY 段第 348 条 348-R1（BSM:1079「账单合并称为“合单”，不等同于台位“并台”。」）：副单状态与状态字典同叫「已合并」。
+            throw ApiException.conflict(code, "账单已有支付、结账或已合并状态，不能执行此操作");
         }
     }
 

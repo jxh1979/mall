@@ -17,7 +17,8 @@ package com.complex.platform.bar;
  * 后台订单页按所选账单显示并办理结账、小费、拆单、合单。
  *
  * <p>第十八批 AU 段第 283 条 283-R1（BSM:1079「各结果台显示差额并按既有规则继续消费或结账补足」）：{@code minSpendGapCent} 未结账单的低消差额（分，
- * 与结账闸同一算法，0＝已达标）；已结、已并单、作废的账单为 null。
+ * 与结账闸同一算法，0＝已达标）；已并单、作废的账单为 null。第十八批 AY 段第 342 条 342-R1：已结账单仅在所在开台会话仍开台且有差额时带差额
+ * （补足另开补足账单收取），否则为 null。
  */
 public record BarBillSummary(
         String id,

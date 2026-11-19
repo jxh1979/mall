@@ -1,6 +1,6 @@
 # 酒吧经营：桌台、点单、库存、存酒开发设计
 
-> 版本：V0.15 ｜ 最后更新：2026-11-18 ｜ 当前迁移最高：V385 ｜ 状态：现行
+> 版本：V0.16 ｜ 最后更新：2026-11-19 ｜ 当前迁移最高：V385 ｜ 状态：现行
 >
 > 权限边界：三份业务 HTML 定义业务目标；本设计只承接实现与差距，代码不能反向覆盖 HTML。下文表结构、API、事件和状态若未在“当前实现”中明确为已落地，均按目标设计理解。
 
@@ -736,7 +736,7 @@ id, created_at, updated_at, deleted_at, created_by, updated_by, status, remark
 | `service_fee_monthly_withheld_amount`（目标） | bigint | 月结定格的商户扣留额，单位分 |
 | `service_fee_paid_settlement_amount`（目标） | bigint | 实际支付清偿额，单位分；不改变已定格的应发与扣留 |
 | `tip_amount`（目标） | bigint | 小费，单位分；归实际主责服务提供人并与商户收入、低消、销售提成、分红基数分离 |
-| `min_spend_gap_amount`（不落本表） | — | 最低消费差额不存列：订单列表 `GET /api/v1/bar/orders` 的账单摘要带 `min_spend_gap_cent`（分），读时按结账闸同一算法计算（`BarMinSpend.gapCent`，第十八批 AU 段第 283 条 283-R1），已结、已并单、作废的为空 |
+| `min_spend_gap_amount`（不落本表） | — | 最低消费差额不存列：订单列表 `GET /api/v1/bar/orders` 的账单摘要带 `min_spend_gap_cent`（分），读时按结账闸同一算法计算（`BarMinSpend.gapCent`，第十八批 AU 段第 283 条 283-R1），已合并、作废的为空；已结账单仅在所在开台会话仍开台且有差额时带差额（`BarMinSpend.openSessionGapCent`），补足在本单另开补足账单收取（`BarMinSpendTopUpBillService`，第十八批 AY 段第 342 条） |
 | `payable_amount` | bigint | 应付（权威金额口径），单位分 |
 | `paid_amount` | bigint | 已付，单位分 |
 | `refunded_amount` | bigint | 已退金额，单位分；承载部分退款/已退款态金额，与 `bar_bill_payments.status=refunded` 协同 |
@@ -1636,6 +1636,7 @@ P0 完成时必须能演示：
 
 | 日期 | 类型 | 位置 | 内容 | 原因/依据 |
 |---|---|---|---|---|
+| 2026-11-19 | 改 | §6.9 bar_bills 账单表 `min_spend_gap_amount` 行 | 版本升 V0.16；第十八批 AY 段第 342 条 342-R1：已结账单所在开台会话仍开台且有差额时也带差额，补足另开补足账单收取；第 348 条 348-R1：「已并单」改称「已合并」 | BSM:1064、BSM:1079 |
 | 2026-11-18 | 改 | §6.9 bar_bills 账单表 `min_spend_gap_amount` 行 | 版本升 V0.15；第十八批 AU 段第 283 条 283-R1：低消差额不落账单表，订单列表账单摘要 `min_spend_gap_cent` 读时按结账闸同一算法计算，该行改为「不落本表」 | BSM:1079「各结果台显示差额并按既有规则继续消费或结账补足」 |
 | 2026-11-16 | 改 | §5.3.1 存酒登记第 6 条 | 版本升 V0.14；第十八批 AP 段第 254 条 254-R1：人工备注由可选改为必填（登记与举证四项必填），与服务端一致 | BSM:1170 |
 | 2026-11-04 | 改 | 卡座免通票入场「并发与幂等要求」段、§7.8 接口表 | 版本升 V0.12；第十八批 Q 段第 151 条 151-R1：删掉按人数登记 `check-in-guest` 与名额预校验 `entry-allowance/verify` 两个接口，并发与幂等要求段改指门口入场核验 `invitation/entry-verify`，§7.8 删去 `entry-allowance/verify` 行 | BSM:1036「到店出示本人的动态入场码核验入场——邀请函二维码只用于转发与接受，本身不作为入场凭证……已确认与已入场总人数不超过卡座可进人数。」；ENUM:105「成员确认接受即占用该卡座的免通票入场名额」；ENUM:43「系统不提供人工放行」 |

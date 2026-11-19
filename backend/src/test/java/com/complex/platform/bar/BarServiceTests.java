@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.21
+// 文件版本：V0.22
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
@@ -2195,6 +2195,8 @@ class BarServiceTests {
     @Test
     void minimumSpendTopUpIncreasesPayableWithoutUsingTicketOrEntryRights() {
         BarBillRecord bill = billForOrder("min-spend-top-up", "staff_sales");
+        // 第十八批 AY 段第 346 条 346-R1：补足金额须等于当前差额——台位低消 1488 元、消费 1288 元，差额 200 元。
+        setTableMinConsumption(bill.tableId(), 148800L);
 
         BarBillAdjustmentRecord adjustment = service.applyBillAdjustment(
                 bill.id(),

@@ -1,8 +1,9 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -165,6 +166,21 @@ class BarProductSoldOutJdbcIntegrationTests {
                 .andExpect(jsonPath("$.data.sold_out_type").value("long_term"));
         assertThat(row(product)).containsEntry("sold_out", true).containsEntry("sold_out_type", "long_term")
                 .containsEntry("sold_out_until", null).containsEntry("sold_out_reason", "不再售卖");
+    }
+
+    /**
+     * 第十八批 AY 段第 345 条 345-R1（ENUM:111「沽清与解除同样须审批留痕」；BSM:1069「沽清（卖完、临时下架）均需主管审批留痕」；PGM:287「展示给用户的
+     * 一切文字……必须全部为中文」）：权限模板页、权限治理页经 GET /api/v1/access/permissions 读到的 bar.product.sold_out 中文名为「沽清与解除沽清酒吧商品」，
+     * 不出「售罄」「86」。修复前为「标记/恢复酒吧商品售罄(86)」。
+     */
+    @Test
+    void soldOutPermissionIsNamedAfterHtmlWording() throws Exception {
+        RequestPostProcessor admin = new StaffRequestFixture(jdbc).staff("bso_perm_" + s, "staff", "bso_prj_" + s, null, "access.permission.view");
+        String body = mockMvc.perform(get("/api/v1/access/permissions").with(admin)).andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString(java.nio.charset.StandardCharsets.UTF_8);
+        List<String> names = com.jayway.jsonpath.JsonPath.read(body, "$.data.items[?(@.permission_code == 'bar.product.sold_out')].permission_name");
+        assertThat(names).containsExactly("沽清与解除沽清酒吧商品");
+        assertThat(names.getFirst()).doesNotContain("售罄").doesNotContain("86");
     }
 
     // ---------- helpers ----------

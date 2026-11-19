@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import static com.complex.platform.common.Strings.requireText;
 
@@ -66,7 +66,9 @@ class BarSessionSalesBackfillTarget implements ManualBackfillTarget {
 
     @Override
     public void requireView(String targetId) {
-        scoped(targetId, viewPermission());
+        // 第十八批 AY 段第 344 条 344-R1（第十八批裁决 71「既然是最高权限，不应该什么都能看到吗？」；BSM:576）：查看补录走读取范围闸，最高权限看全部酒吧；提交与改派仍走 scoped。
+        var scope = p.tableScope(session(targetId).tableId());
+        p.requireReadScope(scope.project(), scope.merchant(), viewPermission());
     }
 
     @Override

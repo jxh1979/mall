@@ -1,7 +1,8 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { BarRefundBreakdownPanel } from "./BarRefundBreakdownPanel";
+import { formatActionResult } from "../components/ActionResultView";
 import type { AdminApiClient } from "../types";
 const context = { billId: "combined", remainingGoodsAndServiceFeeCent: 11000, remainingTipCent: 2000,
   sources: [{ sourceBillId: "original-a", tableId: "table-a", remainingGoodsCent: 10000, remainingServiceFeeCent: 1000, remainingTipCent: 2000 }], priorLines: [] };
@@ -45,5 +46,17 @@ describe("原账单真实分项退款", () => {
       { sourceBillId: "original-a", componentType: "goods", amountCent: 3000 },
       { sourceBillId: "original-a", componentType: "tip", amountCent: 2000 }]);
     await waitFor(() => expect(screen.getByRole("status").textContent).toContain("不表示客人已收到退款"));
+  });
+  // 第十八批 AY 段第 347 条 347-R1（PGM:287「展示给用户的一切文字……必须全部为中文」）：退款返回的服务端快照 snapshot_json 不上结果区。
+  it("退款提交成功后结果区不显示服务端快照 JSON", async () => {
+    const post = vi.fn().mockResolvedValue({ id: "adj-1", adjustmentType: "refund", amountCent: 5000, status: "applied",
+      snapshotJson: '{"bill_id":"combined","payment_status_before":"paid","payment_status_after":"partially_refunded"}' });
+    const { setActionResult } = setup(post); await load();
+    input("original-a商品退款", "50"); input("本次实际退款额", "50"); input("退款原因", "客人确认退回");
+    fireEvent.click(screen.getByText("按原流程提交退款"));
+    await waitFor(() => expect(setActionResult).toHaveBeenCalled());
+    const shown = formatActionResult(vi.mocked(setActionResult).mock.calls.at(-1)?.[0]);
+    expect(shown).toContain("调整类型：退款");
+    expect(shown).not.toMatch(/快照内容|payment_status/);
   });
 });

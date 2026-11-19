@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.13
+// 文件版本：V0.14
 import static com.complex.platform.common.api.ApiRequests.requireIdempotencyKey;
 
 import com.complex.platform.access.AuthorizationService;
@@ -192,6 +192,10 @@ public class BarController {
     ) {
         authorizationService.requirePermission("bar.bill.adjust");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        // 第十八批 AY 段第 346 条 346-R1：补足低消差额是结账补收，不走账单调整准入闸 bar.bill_waiver；其余调整类型照旧。
+        if ("min_spend_top_up".equals(request.adjustmentType())) {
+            return ApiResponse.ok(service.applyMinSpendTopUp(billId, request));
+        }
         return ApiResponse.ok(service.applyBillAdjustment(billId, request));
     }
 
