@@ -1,6 +1,6 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.09
+// 文件版本：V0.10
 
 import static com.complex.platform.common.Strings.requireText;
 import static com.complex.platform.common.Strings.trimToNull;
@@ -716,6 +716,33 @@ public class InventoryTransferFlowService {
             return;
         }
         requireStoreProject(o, permission);
+    }
+
+    /**
+     * 第十八批 BB 段第 276 条 276-R1（PGM:528「④看不到别的商户和别的项目的数据」；PGM:744「前端隐藏只是辅助，后端接口必须独立校验。」；
+     * BSM:1201「借用期间保管人变更为借入方并在溯源码上登记」）：借调单（lending）取消由借出方或借入方办理（{@link #requireParty}），
+     * 收货只由借入方本商户账号办理（{@link #requireStoreMerchant}，与买断收货同口径）。InventoryService 在幂等之前调用，同号重放也先过闸；
+     * 单不存在与门店要货（supply）这里不判，交给方法体。当事方在单上不变，不加锁读。
+     */
+    void requireLendingHandler(String orderId, boolean receive) {
+        repository.findTransferOrderById(orderId).filter(o -> "lending".equals(o.transferType())).ifPresent(o -> {
+            if (receive) {
+                requireStoreMerchant(o);
+            } else {
+                requireParty(o, MANAGE);
+            }
+        });
+    }
+
+    /**
+     * 第十八批 BB 段控制席并入①（PGM:528「④看不到别的商户和别的项目的数据」；PGM:744「前端隐藏只是辅助，后端接口必须独立校验。」）：
+     * 建调拨单时商户账号须为出让方或接收方之一；非商户账号照第十八批裁决 18 按单上项目判（InventoryService.transferOrderProject）。
+     */
+    void requireCreatorParty(String fromOwnerId, String toOwnerId) {
+        String merchant = auth.currentMerchantIdQuietly().orElse(null);
+        if (merchant != null && !merchant.equals(fromOwnerId) && !merchant.equals(toOwnerId)) {
+            throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN", "只能建本商户出让或接收的调拨单");
+        }
     }
 
     /**

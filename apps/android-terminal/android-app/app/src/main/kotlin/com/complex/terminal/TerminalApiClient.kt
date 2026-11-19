@@ -1,6 +1,6 @@
 package com.complex.terminal
 
-// 文件版本：V0.17
+// 文件版本：V0.18
 
 import java.io.BufferedReader
 import java.net.HttpURLConnection
@@ -370,11 +370,9 @@ class TerminalApiClient(
   ): StaffDeviceCredentialRecord =
     post("/api/v1/staff/device-credentials/${urlEncode(credentialId)}/approve-rebind", request)
 
-  fun reportStaffDeviceIntegrity(
-    credentialId: String,
-    request: StaffDeviceIntegrityReportRequest,
-  ): StaffDeviceCredentialRecord =
-    post("/api/v1/staff/device-credentials/${urlEncode(credentialId)}/report-integrity", request)
+  /** 第十八批 BB 段 266-R2：私人手机按登录人上报本机完整性（App 拿不到凭证编号）。 */
+  fun reportStaffDeviceIntegrity(request: StaffDeviceIntegrityReportRequest): StaffDeviceCredentialRecord =
+    post("/api/v1/staff/device-credentials/report-integrity", request)
 
   fun reverseVerification(verificationId: String, request: VerificationReverseRequest): VerificationResponse =
     post("/api/v1/ticketing/verifications/${urlEncode(verificationId)}/reverse", request)

@@ -1,6 +1,6 @@
 # PRD 审计业务裁决台账
 
-文档版本：V1.06
+文档版本：V1.07
 状态：进行中
 迁移日期：2026-07-27
 当前事实源：三份立法 HTML 以既有冻结基线叠加 James 此前 M02 至 M08 的点名批准、全量审计 M001、M002 的逐项批准，以及本轮 2026-10-16 至 2026-10-17 业务 HTML 审计中 Q01 至 Q40 及子题实际明确批准且未被后续替代的裁决，和 2026-10-17 第二批 HTML 业务线推演审计（A–F 六线 64 条、停车章）的逐项批准，并叠加本轮 CG 70 项来源确认与 C01–C09、N01–N03 最终澄清及补全文稿中 F01、W01–W05 的整体修改批准（本文件末节）；本轮最终规则、未采纳或替代关系、现行版本与字节哈希见本文件末节。历史记录保留为各自当时事实，不恢复已被替代的建议。
@@ -9700,3 +9700,121 @@ HTML 的语义补齐与直接引用同步可在本批核验；70项中的业务�
   ③ 动态价按时段、场次、容量条件配置未落地的缺口为基线既有，已由控制席登记待开发清单第 359 条（待核实），本段不改代码。
 - 18AW 合并前变基（2026-11-19）：本段自 ff83ee69（暂存提交 f9bc432b）变基到 origin/main 1ec697cd；迁移按原序顺延改号 V653→V661、V654→V662、V655→V663、V656→V664、V657→V665；合并时 OpenAPI 共 1399 个操作（主干 1397）、info.version V0.82、决策台账 V1.06，Flyway 最新 V665（共 614 个迁移）。版本行、契约版本、计数与 SHA、生成物、台账补记与 PRD 修订行由合并前脚本按新主干统一重写。
 - 18AW 落地位置补记·运行验收证据、快照、终验文档刷新（无新裁决）：业务提交 961170da 之后，按第十八批裁决 25 重刷了运行验收证据：后端全量 7019 测，0 失败 0 错误；apps/web 构建通过；常规界面验收（接口全部 mock）实跑 40 条全过；真实后端界面验收未跑，runtime_ready=false。随后依次重生成闭环当前态快照、生产闭环缺口报告、界面验收报告、无上线指挥台。生成器没改。手改 docs/final-closed-loop-acceptance-audit-v0.1.md 与 docs/code-implementation-acceptance-audit-v0.1.md：前端单测源码计数改为 1920；TicketingService.java 行数由 1363 改为 1381，其余被核文件行数无变化；后端全量与常规界面验收的数字、日期改为本次实跑值；写入 npm run verify:unit 实跑结果，五个工作区全过。交付门禁于 2026-11-19 02:46 UTC 在工作树逐项实跑子项，NAS 两项现场探测未跑。仍红的有两项：一是 coding-host-protection，它写死主仓路径，在工作树口径下必红，属工具口径，不做；二是 final-closed-loop-audit，如实留 2 条红（integration-ready、business-acceptance-ready），原因是校验器要求终验把联调、业务验收写成「是」，而裁决 25 定了不跑真实后端界面验收、运行验收未就绪，终验写的是「否」。verify:delivery-gates 总链仍是红的。
+
+18BB 落地位置补记（2026-11-19）：第十八批 BB 段（batch74）按 18BB 只读设计实现待开发清单第 266、276、279、280、318 条（库存借调、券核销回流、游乐巡检与安卓安全组）；运行验收证据、终验文档在本段最后一个提交刷新；各条落地位置见下。本段追加时，原台账除文档版本升一版外，其他历史字节保持。
+
+- 18BB 落地位置补记·控制席判定（2026-11-19）：本段（第十八批 BB 段，batch74）实现待开发清单第 266、276、279、280、318 条（18BB 只读设计 b74-audit/d-inv-a.json，两轮质疑者修订后定稿，无待裁题）。控制席并入同根同文件两项：建借调单时商户账号须为出让方或接收方之一（并入第 276 条）；合作方券配置留操作留痕并做项目范围闸（并入第 279、280 条；请求体没有项目字段，按权益模板实际提供方商户所在项目判，依据 BSM:1754「每项权益都必须绑定实际提供方」、PGM:659）。设计旁见另记待开发清单第 373 条（待核实）。本段从 ed3cde79 开工；汇总文件由合并前脚本 summary_tool.py 剥离与重写。
+- 【18BB 落地位置补记·B1 段（第 318、276、279、280 条）】
+  318-R1（第 318 条 游乐设备安全巡检模板可空）
+  - 改法：新迁移 V678__amusement_safety_inspection_template_optional 放开 amusement_safety_inspections.template_id 的非空约束，外键保留。AmusementInspectionService.createSafetyInspectionInternal 原本就按模板可空处理（填了才核存在，不存在 404 SAFETY_TEMPLATE_NOT_FOUND）；游乐安全页 AmusementSafetyPage「选择模板（可空）」不改。
+  - 契约：createAmusementSafetyInspection 的请求 schema AmusementSafetyInspectionRequest 去掉 template_id 必填。
+  - 依据：PGM:528「②当天没有做过合格巡检的设施不得开放」；BSM:1300「开放前巡检 + 营业中抽检 + 定期检修」；PGM:846「巡检计划支持按类型模板自动排、主管手动排、按点位路线排三种」——模板只是排计划的方式之一，按常理定为可空。
+  - 测试：AmusementSafetyEvidenceUpload229Tests.inspectionWithoutTemplateIsCreatedAndSubmitted（修复前 500）。
+  276-R1（第 276 条 借调单取消与收货校办理方；含控制席并入① 建单商户须为当事一方）
+  - 改法：InventoryTransferFlowService 新增两个包内方法。
+    - requireLendingHandler：只管借调单 lending。收货走 requireStoreMerchant，只认借入方本商户账号，平台管理员除外，否则 403 STORE_RECEIPT_ONLY；取消走 requireParty，商户账号须为借出方或借入方，否则 403 CROSS_MERCHANT_FORBIDDEN，非商户账号须能触及单上所属项目，否则 403 CROSS_PROJECT_FORBIDDEN。
+    - requireCreatorParty：建单时商户账号须为出让方或接收方之一，否则 403 CROSS_MERCHANT_FORBIDDEN。
+    - InventoryService 不加方法体，只就地改 executeWrite 带 gate 的三处调用：receiveTransferOrder、cancelTransferOrder 的 gate 分别为 requireLendingHandler(id, true/false)；createTransferOrder 的 gate 在 transferOrderProject 之后加 requireCreatorParty。三处都在幂等之前，同号重放也先过闸。
+    - 前端不改。
+  - 契约：cancelTransferOrder、receiveTransferOrder 补说明；createTransferOrder 的失败码加 CROSS_MERCHANT_FORBIDDEN。
+  - 依据：PGM:528「④看不到别的商户和别的项目的数据」；PGM:744「前端隐藏只是辅助，后端接口必须独立校验。」；BSM:1201「借用期间保管人变更为借入方并在溯源码上登记」；第十八批裁决 18「之后办理、赔偿应付、逾期工单都按单上的项目」。
+  - 测试：InventoryTransferBorrowJdbcIntegrationTests.onlyTheBorrowerCanReceiveTheLendingOrder、onlyTheLenderOrBorrowerCanCancelTheLendingOrder、cancelHandlerGateRunsBeforeIdempotency、merchantAccountCanOnlyCreateTransferOrdersItIsPartyTo；InventoryTransferOrderProjectJdbcIntegrationTests.lendingCancelByNonMerchantFollowsTheOrderProject。
+  279-R1（第 279 条 人工导入券核销回流留操作人）
+  - 改法：
+    - PartnerVoucherController 注入 AuditedOperationExecutor，importRedemption 用 recordingFailure 包住权限检查与服务调用。失败事件 ticket.partner_voucher_redemption.import_failed，业务类型 partner_voucher_redemption，留痕幂等键栏记外部核销单号。
+    - PartnerVoucherService 注入 AuditEventService。importRedemption 新存一条、按同一外部单号命中原记录，都经私有方法 imported 记 ticket.partner_voucher_redemption.imported，用 metadata.duplicate 区分。操作人与时间按会话自动记，partner_voucher_redemptions 不加列，无迁移。
+    - audit-labels.json 登记业务类型「合作方券核销回流」及导入成功、失败两个事件的中文名。
+  - 契约：importPartnerVoucherRedemption 的 x-audit-event-success、x-audit-event-failure 改为上述两个事件。
+  - 依据：BSM:1606「只要一个动作有过程，就要尽量在业务发生时自动留下记录。」；BSM:1618「第三方回流失败、重复、延迟、差异。」；PGM:966「已拍板：所有有过程的业务动作都必须留痕」。
+  - 测试：PartnerVoucherRedemptionImportJdbcIntegrationTests.importAndDuplicateAreAuditedWithTheOperator、failedImportIsAuditedWithTheOperator。
+  280-R1（第 280 条 券核销回流导入核券码所属项目；含控制席并入② 合作方券配置留痕与项目范围闸）
+  - 改法（导入）：PartnerVoucherService 注入 AuthorizationService。importRedemption 在找到权益之后、读合作方券配置与按外部单号去重之前，取发券订单的项目（与 TicketVerificationService.requestProjectId 同口径）。canReachProject(当前操作人, 项目, verification.execute) 为假时 403 CROSS_PROJECT_FORBIDDEN。取不到项目的普通账号按不可触及（同 TicketRefundService 原单无项目先例）；平台管理员恒可；可跨项目角色按所勾项目放行。失败经 recordingFailure 留痕。
+  - 改法（并入②）：createConfig 在找到权益模板后经私有方法 requireTemplateProject 做范围闸。请求体无项目字段，按模板提供方商户所在项目（主项目与经营项目，TicketingRepository.listMerchantProjectIds）判：操作人按 ticket.entitlement.manage 能触及其中之一才放行；平台管理员恒可；模板无提供方的只有平台管理员能配；否则 403 CROSS_PROJECT_FORBIDDEN。成功记 ticket.partner_voucher_config.saved；控制器 recordingFailure 记 ticket.partner_voucher_config.save_failed。业务类型 partner_voucher_config「合作方券配置」，业务编号为模板编号。
+  - 前端不改。
+  - 契约：importPartnerVoucherRedemption、createPartnerVoucherConfig 的失败码加 CROSS_PROJECT_FORBIDDEN；createPartnerVoucherConfig 的 x-audit-event 改为上述两个事件；x-data-scope 维持 project 并在说明里写明取法。
+  - 依据：PGM:528「④看不到别的商户和别的项目的数据」；PGM:659「所有业务数据默认按项目隔离」「数据的项目与商户隔离不提供关闭开关，与导出脱敏同例。」；PGM:744「前端隐藏只是辅助，后端接口必须独立校验。」；PGM:966「已拍板：所有有过程的业务动作都必须留痕」；BSM:1754「每项权益都必须绑定实际提供方」；BSM:576、第十八批裁决 71（平台管理员）。
+  - 测试：PartnerVoucherRedemptionImportJdbcIntegrationTests.importOfAnotherProjectsVoucherIsRejected、replayOfAnotherProjectsReferenceIsRejectedBeforeDeduplication、platformAdminImportsAnyProjectWhileProjectlessVoucherIsAdminOnly、configIsAuditedAndGatedByTheTemplateProviderProject。
+  本段增量：迁移 1 个（V678）；新增操作 0 个；新错误码 0；新字段键 0；留痕业务类型 +2、事件名 +4。
+- 18BB 落地位置补记·第 266 条（组 2，私人手机完整性；本段无迁移，新增 1 个操作）：
+  - 266-R1（后端补「本人上报本机完整性」入口）
+    - 改法：新增 POST /api/v1/staff/device-credentials/report-integrity（operationId reportMyStaffDeviceIntegrity），路径不带凭证编号。服务端按当前登录员工取本人档案和生效中的设备凭证，交既有 StaffService.reportIntegrity 处理：非 trusted 即吊销该凭证，发「设备完整性异常，凭证已失效」通知，记 staff_device.integrity_failed；trusted 只刷新完整性标记；幂等与失败留痕照旧。取不到生效凭证时，先记 staff_device.integrity_report_failed，再回 404 CREDENTIAL_NOT_FOUND。私人手机功能清单 staff_device 项放行该路径。按编号上报的 reportStaffDeviceIntegrity 保留不动。与既有入口一样不挂业务权限点；契约 requestBody 复用 StaffDeviceIntegrityReportRequest。
+    - 落地位置：access/staff/StaffDeviceIntegrityReportService.reportMine（新）；StaffController.reportMyIntegrity（只做注入与委托）；gate/StaffAppFunctions 私人手机清单 staff_device 项；契约操作 reportMyStaffDeviceIntegrity。
+    - 依据：PGM:586「检测到手机被破解、篡改或处于异常环境时，私人手机 App 失效并复核。」；BSM:938「私人手机 App 可收发通知、查看状态和审批结果；检测到手机被破解、篡改或处于异常环境时自动失效并进入复核。」
+    - 测试：StaffDeviceIntegrityMineJdbcIntegrationTests（rootedPhoneReportRevokesOwnCredentialAndThePhoneStopsWorking、trustedReportKeepsTheCredentialActive、employeeWithoutActiveCredentialGetsNotFoundAndTheFailureIsRecorded）；StaffAppFunctionsTests.privatePhoneAllowsLowRiskOffSiteCalls 补新路径一条。
+  - 266-R2（安卓私人手机 App 登录时本机检测，异常即上报并失效）
+    - 改法：私人手机每次登录成功后，在本机按特征检测 su 与 Magisk 痕迹、test-keys、调试器已连接、模拟器、Xposed 与 Frida 挂钩，判为 root_detected、debug_detected、abnormal 或 trusted。不是 trusted 就调 reportMyStaffDeviceIntegrity 上报，上报失败也照样处理，然后退回登录页，不进首页；登录页提示「本机被检测到已被破解、篡改或处于异常环境，私人手机 App 已失效；请联系主管复核后重新绑定。」复核走既有换绑审批。不接第三方设备证明服务，不查开发者选项与 USB 调试，不按构建类型豁免（技术选型由控制席定）。
+    - 落地位置：apps/android-terminal 共享库 DeviceIntegrityVerdict.of（新）；android-app PrivatePhoneIntegrity.status（新）；TerminalWorkflow.reportStaffDeviceIntegrity 与两份 TerminalApiClient.reportStaffDeviceIntegrity 改为不带凭证编号、走新路径；MainActivity.showLogin 就地改（登录成功分支与初始提示）。
+    - 依据：PGM:586「检测到手机被破解、篡改或处于异常环境时，私人手机 App 失效并复核。」；BSM:2007「已拍板：私人手机被破解、篡改或处于异常环境判为不可信并失效复核」
+    - 测试：DeviceIntegrityVerdictTest.localSignalsMapToTheBackendIntegrityStatuses（新）；TerminalFieldWorkflowTest.staffDeviceRebindBindApproveAndIntegrityReport（改为新路径与 abnormal，补幂等键、请求体与本地事件断言）。
+- 18BB 落地位置补记（契约，K-contract）：docs/openapi/openapi-p0.yaml 与 .json 已同值就地改完，本段新增 1 个操作；其余只改说明、扩展字段、失败码与一个请求 schema 的必填项。info.version 与操作总数由合并前脚本统一重写。
+  - 266-R1：新增 POST /api/v1/staff/device-credentials/report-integrity（reportMyStaffDeviceIntegrity）。
+    - 扩展字段：x-permission staff.device.bind；x-data-scope project；x-terminal-allowed staff_private_phone；x-idempotency-required true；x-audit-event-success staff_device.integrity_reported；x-audit-event-failure staff_device.integrity_report_failed；x-auth-context device-credential；x-failure-codes VALIDATION_FAILED、CREDENTIAL_NOT_FOUND。
+    - 请求体复用 requestBodies.StaffDeviceIntegrityReportRequest，响应 200、400、401、403、404、500。
+    - 说明：按当前登录员工取本人生效中的设备凭证上报，非 trusted 即吊销该凭证、通知并留痕，换绑须经审批复核；没有生效中凭证 404 CREDENTIAL_NOT_FOUND。
+    - 对应代码 StaffController.reportMyIntegrity → StaffDeviceIntegrityReportService.reportMine → StaffService.reportIntegrity。按编号的 reportStaffDeviceIntegrity 保留不动。
+    - 依据：PGM:586「检测到手机被破解、篡改或处于异常环境时，私人手机 App 失效并复核。」
+  - 276-R1：cancelTransferOrder、receiveTransferOrder 只补说明，失败码原已齐。
+    - 取消：借调单由借出方或借入方商户账号办理，否则 403 CROSS_MERCHANT_FORBIDDEN；非商户账号须能触及单上所属项目，否则 403 CROSS_PROJECT_FORBIDDEN。
+    - 收货：借用型与买断型相同，只由借入方本商户账号办理（平台管理员除外），否则 403 STORE_RECEIPT_ONLY。
+    - 两处校验都在幂等之前。对应代码 InventoryTransferFlowService.requireLendingHandler，经 InventoryService.cancelTransferOrder、receiveTransferOrder 的 executeWrite 闸调用。
+    - 依据：PGM:528「④看不到别的商户和别的项目的数据」；PGM:744「前端隐藏只是辅助，后端接口必须独立校验。」；BSM:1201「借用期间保管人变更为借入方并在溯源码上登记」。
+  - 控制席并入①：createTransferOrder 补说明并在 x-failure-codes 加 CROSS_MERCHANT_FORBIDDEN：商户账号建单须为出让方或接收方之一，否则 403 CROSS_MERCHANT_FORBIDDEN，校验在幂等之前。对应代码 InventoryTransferFlowService.requireCreatorParty，经 InventoryService.createTransferOrder 的闸调用。依据：PGM:528「④看不到别的商户和别的项目的数据」；PGM:744「前端隐藏只是辅助，后端接口必须独立校验。」
+  - 279-R1、280-R1：importPartnerVoucherRedemption。
+    - x-audit-event-success 由 not_applicable 改为 ticket.partner_voucher_redemption.imported，x-audit-event-failure 由 not_applicable 改为 ticket.partner_voucher_redemption.import_failed；x-failure-codes 加 CROSS_PROJECT_FORBIDDEN。
+    - 说明补：导入人与时间记入操作留痕，按同一外部单号重复导入也记（metadata.duplicate=true），留痕的幂等键栏记 external_redemption_ref；券码所属订单的项目须在操作人按 verification.execute 可触及的范围内，否则 403 CROSS_PROJECT_FORBIDDEN；订单无所属项目的只有平台管理员能导入；同一外部单号重放也先判。
+    - 对应代码：PartnerVoucherController.importRedemption 经 AuditedOperationExecutor.recordingFailure 落失败留痕；PartnerVoucherService.importRedemption 做项目闸与成功留痕（imported）。
+    - 依据：PGM:966「已拍板：所有有过程的业务动作都必须留痕」；BSM:1618「第三方回流失败、重复、延迟、差异。」；PGM:528「④看不到别的商户和别的项目的数据」；PGM:659「数据的项目与商户隔离不提供关闭开关，与导出脱敏同例。」
+  - 控制席并入②：createPartnerVoucherConfig。
+    - x-audit-event-success 由 not_applicable 改为 ticket.partner_voucher_config.saved，x-audit-event-failure 由 not_applicable 改为 ticket.partner_voucher_config.save_failed；x-failure-codes 加 CROSS_PROJECT_FORBIDDEN；x-data-scope 原为 project，不变。
+    - 说明补：配置人与时间记入操作留痕；权益模板按其提供方商户的主项目与经营项目判范围，操作人须按 ticket.entitlement.manage 能触及其中之一，否则 403 CROSS_PROJECT_FORBIDDEN；平台管理员恒可，模板没有提供方的只有平台管理员能配。
+    - 对应代码：PartnerVoucherController.createConfig 经 recordingFailure 落失败留痕；PartnerVoucherService.createConfig 与 requireTemplateProject 负责成功留痕与项目闸。
+    - 依据：PGM:966「已拍板：所有有过程的业务动作都必须留痕」；PGM:659「所有业务数据默认按项目隔离」。
+  - 318-R1：components.schemas.AmusementSafetyInspectionRequest 的 required 去掉 template_id；template_id 说明改为「巡检模板（可空）；填写时须为已登记的安检模板，否则 404 SAFETY_TEMPLATE_NOT_FOUND。」。配合本段迁移 V678（amusement_safety_inspections.template_id 去掉非空）。依据：PGM:528「②当天没有做过合格巡检的设施不得开放」；BSM:1300「开放前巡检 + 营业中抽检 + 定期检修」。
+  - 本段只改契约，没有新增测试。门禁为 verify:openapi、verify:openapi-examples、verify:client-routes、verify:client-openapi、verify:client-payload、verify-audit-labels，全绿；yaml 与 json 深比较一致。
+- 18BB 汇合组：
+  - tests/e2e 不改。各段的 e2e 要点都是无。本段涉及的游乐安全巡检新建（createAmusementSafetyInspection）、调拨单、合作方券、员工设备凭证在 e2e 里只出现在 mock-api 的假响应中；页面没有改，选择器、断言与 mock 的形状都不受影响。视觉基线不重拍。
+  - 门禁：
+    - 后端全量 0 红，空库全迁，本段迁移 V678 真迁。
+    - 前端 typecheck 与 apps/web 单测全过；客人三个工作区和商户工作区单测全过。
+    - 安卓员工端单测 0 失败，android-app 调试包编译通过。
+    - 五份后台 e2e spec（chromium）全过。
+  - 生成物：四份生成物在镜像重生成后，verify:p0-contract 通过。
+    - data-isolation-spec 因 V678 变化。
+    - operation-matrix 与 openapi-closure 的变化来自两处：新增本人设备完整性上报 reportMyStaffDeviceIntegrity；createPartnerVoucherConfig、importPartnerVoucherRedemption 改了说明、留痕事件与失败码。
+    - domain-ownership-scope 不变。
+    - 生成物由收尾按最终主干统一重生成。
+  - 契约：OpenAPI 两份深比较一致，无锚点和别名；本段新增 1 个操作；git diff --check 干净。
+  - 各段之间没有相互波及要修的项。
+- 18BB 落地位置补记·文档组（D-docs，2026-11-19，无迁移、无代码、无测试）：按各段交付和现码，把 7 份文档里的过期现状句或缺口句就地改成现码实情。有两位小数版本号的 5 份各升一次版，7 份的修订表各加一行。不新增业务规则，不扩表。
+  ① 第 318 条 318-R1：
+  - 文档位置：docs/amusement-business-operations-product-prd-v0.1.md §11「后续细化」第 4 条下补实现现状。
+  - 内容：游乐设备安全巡检新建（createAmusementSafetyInspection，schema AmusementSafetyInspectionRequest）的模板可空，不选就不套模板。本段迁移 V678 去掉 amusement_safety_inspections.template_id 的非空约束，外键保留。填写时须为已登记的安检模板，否则 404 SAFETY_TEMPLATE_NOT_FOUND（AmusementInspectionService 只在填了模板时核）。
+  - 依据：PGM:844「楼宇巡检与游乐设备安全巡检分开管理，但都要主管确认闭环。」；PGM:846「巡检计划支持按类型模板自动排、主管手动排、按点位路线排三种」。
+  ② 第 276 条 276-R1 与控制席并入①：
+  - 供应链 PRD（docs/supply-chain-inventory-product-prd-v0.1.md）§10.1「跨主体借调」行补两点，两处都在幂等之前：
+    - 借调单取消（cancelTransferOrder；InventoryTransferFlowService.requireLendingHandler 取消分支）只由借出方或借入方商户账号办理，非商户账号按单上所属项目判。
+    - 收货（receiveTransferOrder；同方法收货分支）只由借入方本商户账号办理，平台管理员除外。
+  - 同一 PRD「权限与数据隔离」行去掉「流转创建缺作用域」，补：建单（createTransferOrder；InventoryTransferFlowService.requireCreatorParty）时商户账号须为出让方或接收方之一，所属项目闸照旧。
+  - docs/supply-chain-inventory-development-design-v0.1.md 的 §8 权限边界段与 §12 GAP 清单「合同/流转隔离」行同步改。
+  - 依据：PGM:528「④看不到别的商户和别的项目的数据」；PGM:744「前端隐藏只是辅助，后端接口必须独立校验。」；BSM:1201「借用期间保管人变更为借入方并在溯源码上登记」；第十八批裁决 18。
+  ③ 第 279、280 条与控制席并入②：
+  - 文档位置：docs/ticketing-entitlement-checkin-product-prd-v0.1.md §6.1 表「券核销型权益（voucher）」行补实现现状。
+  - 人工导入回流（importPartnerVoucherRedemption）记入操作留痕：成功与按同一外部单号重复导入记 ticket.partner_voucher_redemption.imported（重复的 duplicate=true），失败记 ticket.partner_voucher_redemption.import_failed。
+  - 导入的范围闸：券码所属订单的项目须在操作人按 verification.execute 可触及的范围内，否则 403 CROSS_PROJECT_FORBIDDEN；订单无项目的只有平台管理员能导入。
+  - 合作方券配置（createPartnerVoucherConfig）记入操作留痕（ticket.partner_voucher_config.saved 与 ticket.partner_voucher_config.save_failed），并按模板提供方商户所在项目判范围。
+  - 依据：BSM:1606「只要一个动作有过程，就要尽量在业务发生时自动留下记录。」；BSM:1618「第三方回流失败、重复、延迟、差异。」；PGM:966「已拍板：所有有过程的业务动作都必须留痕」；PGM:528；PGM:659「所有业务数据默认按项目隔离」。
+  ④ 第 266 条 266-R1、266-R2：
+  - docs/platform-governance-prd-v0.1.md §6.9 第 9 条下补实现现状：
+    - 私人手机登录时在本机按特征检测，异常即经 reportMyStaffDeviceIntegrity 上报。
+    - 后端由 StaffDeviceIntegrityReportService.reportMine 取本人生效凭证，交 StaffService.reportIntegrity 吊销、通知并留痕。
+    - App 退回登录页提示失效。
+    - 复核走换绑审批（StaffService.approveRebind）。
+  - 同一 PRD §12 已确认第 4 条加指引行。
+  - docs/android-device-terminal-development-design.md §13.5.4 按实际做法改写：
+    - 检测项为 su 与 Magisk 痕迹、test-keys、调试器、模拟器、Xposed 与 Frida 挂钩；判定在 DeviceIntegrityVerdict.of，采集在 PrivatePhoneIntegrity.status。
+    - 不查开发者选项与 USB 调试。
+    - 端侧不另发 device_credential.invalidated，§13.5.6、§13.5.7 中该事件以本条为准。
+  - docs/requirement-traceability-matrix-v0.1.md REQ-56「仍开放」句去掉 Root 检测，补一句现状，覆盖结论不改。
+  - 依据：PGM:586「检测到手机被破解、篡改或处于异常环境时，私人手机 App 失效并复核。」；BSM:938。
+  ⑤ 校验：verify-full-admin-page-matrix 通过（117 页）；git diff --check 为 0；verify:html-ledger-sync PASS；verify:entry-anchors PASS。
+- 18BB 收尾复核修正（2026-11-19）：收尾复核意见逐条核实成立，本轮只修下面两处；无迁移，不新增操作、错误码与字段键。①契约失败码：控制席并入①的建单闸（InventoryTransferFlowService.requireCreatorParty，经 InventoryService.createTransferOrder 的 executeWrite 闸调用）新抛 403 CROSS_MERCHANT_FORBIDDEN，原先 createTransferOrder 只在说明里写了这个码；docs/openapi/openapi-p0.yaml 与 .json 的 createTransferOrder x-failure-codes 末尾补 CROSS_MERCHANT_FORBIDDEN（两份同值、就地插入，操作数不变），仓根 security-scans 两份的 OpenAPI SHA-256 行按最终 json 改；本台账契约段（K-contract）「createTransferOrder 只补说明」改为「补说明并在 x-failure-codes 加 CROSS_MERCHANT_FORBIDDEN」，与 B1 段一致（契约段 cancelTransferOrder、receiveTransferOrder「只补说明，失败码原已齐」核过属实）。依据 PGM:744「前端隐藏只是辅助，后端接口必须独立校验。」、任务书「接口变化同步 OpenAPI yaml/json」。②266-R2 补全：未声明身份的手机登录时不检测，在「员工设备凭证」首次绑定（无历史凭证，直接生效）后当场采用私人手机身份，原先这次会话不检测、可用到访问令牌过期；MainActivity.showStaffDevice 绑定成功分支在采用私人手机身份处就地补与登录相同的检测（PrivatePhoneIntegrity.status 不是 trusted 即经 TerminalWorkflow.reportStaffDeviceIntegrity 上报，服务端吊销本人生效凭证；成功或失败都退回登录页），不新增方法体、不加开关。同根扫过其余采用私人手机身份的路径：启动时按本机记录恢复、自助注册提交成功都在登录前，下次登录即检测，不另补。platform-governance-prd §6.9 第 9 条实现现状与 android-device-terminal-development-design §13.5.4 检测时机句同步补「首次绑定」。测试：TerminalFieldWorkflowTest.firstBindThenUntrustedPhoneReportsIntegrityAsPrivatePhone（首次绑定直接生效后按私人手机身份签名上报 root_detected、凭证吊销；采用身份、本机采集与退回登录页在 Activity 层，android-app 没有 JVM 单测，核可测的判定与上报一层）。依据 PGM:586「检测到手机被破解、篡改或处于异常环境时，私人手机 App 失效并复核。」；BSM:938「检测到手机被破解、篡改或处于异常环境时自动失效并进入复核。」；BSM:2007「已拍板：私人手机被破解、篡改或处于异常环境判为不可信并失效复核」。

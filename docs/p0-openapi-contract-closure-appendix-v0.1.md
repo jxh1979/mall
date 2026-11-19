@@ -1,4 +1,4 @@
-# P0 OpenAPI 权限、事件、任务追溯收口附录 V0.82
+# P0 OpenAPI 权限、事件、任务追溯收口附录 V0.83
 
 ## 1. 文档定位
 
@@ -14,11 +14,11 @@
 
 | 检查项 | 当前结果 | 执行结论 |
 |---|---:|---|
-| OpenAPI operation 数 | 1399 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
+| OpenAPI operation 数 | 1400 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
 | OpenAPI 权限/通用权限状态数 | 445 | 人工权限矩阵正文未覆盖 344 项；缺口以本文第 3 节补齐 |
-| OpenAPI 成功/失败事件数 | 2798 | 人工事件矩阵正文未覆盖 2749 项；完整事件字典以本文第 4 节为准 |
-| operation 级任务追溯 | 1399 | 人工任务映射正文未逐项覆盖 1393 个 operation；逐 operation 映射以本文第 5 节为准 |
-| 写接口数量 | 860 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
+| OpenAPI 成功/失败事件数 | 2800 | 人工事件矩阵正文未覆盖 2751 项；完整事件字典以本文第 4 节为准 |
+| operation 级任务追溯 | 1400 | 人工任务映射正文未逐项覆盖 1394 个 operation；逐 operation 映射以本文第 5 节为准 |
+| 写接口数量 | 861 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
 
 ## 3. 权限码与认证上下文补充表
 
@@ -413,7 +413,7 @@
 | `settlement.invoice.view` | staff-token | platform | 2 | listSettlementInvoiceItems, settlementInvoiceSummary | OpenAPI 补充，以本附录为准 |
 | `staff.attendance.punch` | staff-token | platform, self | 4 | punchStaffAttendance, issueStaffPhoneTimeAnchor, recordStaffPhoneReceipt, getCurrentStaffWorkPhoneContext | OpenAPI 补充，以本附录为准 |
 | `staff.attendance.view` | staff-token | platform | 1 | listStaffAttendance | OpenAPI 补充，以本附录为准 |
-| `staff.device.bind` | device-credential, staff-token | project | 2 | bindStaffDeviceCredential, reportStaffDeviceIntegrity | OpenAPI 补充，以本附录为准 |
+| `staff.device.bind` | device-credential, staff-token | project | 3 | bindStaffDeviceCredential, reportStaffDeviceIntegrity, reportMyStaffDeviceIntegrity | OpenAPI 补充，以本附录为准 |
 | `staff.device.review` | staff-token | project | 2 | listStaffDeviceCredentials, approveStaffDeviceRebind | OpenAPI 补充，以本附录为准 |
 | `staff.device.revoke` | staff-token | project | 1 | revokeStaffDeviceCredential | OpenAPI 补充，以本附录为准 |
 | `staff.leave.submit` | staff-token | platform | 3 | submitStaffLeave, listMyStaffLeaves, requestStaffLeaveRevoke | OpenAPI 补充，以本附录为准 |
@@ -2183,8 +2183,6 @@
 | `not_applicable` | failure | `countMediaPerformancePendingSettlements` | `GET` | `/api/v1/settlement/media-shows/pending-settlement-count` | P0-待归类 | `media.performance.view` | 接口级事件，以本附录为准 |
 | `not_applicable` | success | `createAmusementExitVerification` | `POST` | `/api/v1/amusement/verifications/exit` | AMU-游乐安全 | `amusement.verification.execute` | 接口级事件，以本附录为准 |
 | `not_applicable` | failure | `createAmusementExitVerification` | `POST` | `/api/v1/amusement/verifications/exit` | AMU-游乐安全 | `amusement.verification.execute` | 接口级事件，以本附录为准 |
-| `not_applicable` | success | `createPartnerVoucherConfig` | `POST` | `/api/v1/ticketing/partner-vouchers/configs` | TIC-票务权益 | `ticket.entitlement.manage` | 接口级事件，以本附录为准 |
-| `not_applicable` | failure | `createPartnerVoucherConfig` | `POST` | `/api/v1/ticketing/partner-vouchers/configs` | TIC-票务权益 | `ticket.entitlement.manage` | 接口级事件，以本附录为准 |
 | `not_applicable` | success | `createTicketDistributionMerchantRate` | `POST` | `/api/v1/ticketing/distribution-merchant-rates` | TIC-票务权益 | `ticket.price_variant.manage` | 接口级事件，以本附录为准 |
 | `not_applicable` | failure | `createTicketDistributionMerchantRate` | `POST` | `/api/v1/ticketing/distribution-merchant-rates` | TIC-票务权益 | `ticket.price_variant.manage` | 接口级事件，以本附录为准 |
 | `not_applicable` | success | `customerStoredValueAccount` | `GET` | `/api/v1/customer/stored-value/account` | CUS-客人端 | `customer.stored_value.view` | 接口级事件，以本附录为准 |
@@ -2330,8 +2328,6 @@
 | `not_applicable` | failure | `getTransferOrder` | `GET` | `/api/v1/inventory/transfer-orders/{order_id}` | INV-库存存酒 | `inventory.transfer_order.view` | 接口级事件，以本附录为准 |
 | `not_applicable` | success | `getUserEffectivePermissions` | `GET` | `/api/v1/access/users/{id}/effective-permissions` | AUTH-账号权限 | `access.user.view` | 接口级事件，以本附录为准 |
 | `not_applicable` | failure | `getUserEffectivePermissions` | `GET` | `/api/v1/access/users/{id}/effective-permissions` | AUTH-账号权限 | `access.user.view` | 接口级事件，以本附录为准 |
-| `not_applicable` | success | `importPartnerVoucherRedemption` | `POST` | `/api/v1/ticketing/partner-vouchers/redemptions` | TIC-票务权益 | `verification.execute` | 接口级事件，以本附录为准 |
-| `not_applicable` | failure | `importPartnerVoucherRedemption` | `POST` | `/api/v1/ticketing/partner-vouchers/redemptions` | TIC-票务权益 | `verification.execute` | 接口级事件，以本附录为准 |
 | `not_applicable` | failure | `listAccessGrantRequests` | `GET` | `/api/v1/access/grant-requests` | AUTH-账号权限 | `access.grant_request.view` | 接口级事件，以本附录为准 |
 | `not_applicable` | failure | `listAccessUsers` | `GET` | `/api/v1/access/users` | AUTH-账号权限 | `access.user.view` | 接口级事件，以本附录为准 |
 | `not_applicable` | failure | `listAmusementCompensationBatchesByEvent` | `GET` | `/api/v1/amusement/compensation-batches` | AMU-游乐安全 | `amusement.park_fault.view` | 接口级事件，以本附录为准 |
@@ -2857,7 +2853,9 @@
 | `space.viewed` | success | `listSpaces` | `GET` | `/api/v1/platform/spaces` | GOV-平台治理 | `governance.space.view` | 接口级事件，以本附录为准 |
 | `staff_device.bind_failed` | failure | `bindStaffDeviceCredential` | `POST` | `/api/v1/staff/device-credentials` | AUTH-账号权限 | `staff.device.bind` | 接口级事件，以本附录为准 |
 | `staff_device.bound` | success | `bindStaffDeviceCredential` | `POST` | `/api/v1/staff/device-credentials` | AUTH-账号权限 | `staff.device.bind` | 接口级事件，以本附录为准 |
+| `staff_device.integrity_report_failed` | failure | `reportMyStaffDeviceIntegrity` | `POST` | `/api/v1/staff/device-credentials/report-integrity` | AUTH-账号权限 | `staff.device.bind` | 接口级事件，以本附录为准 |
 | `staff_device.integrity_report_failed` | failure | `reportStaffDeviceIntegrity` | `POST` | `/api/v1/staff/device-credentials/{id}/report-integrity` | AUTH-账号权限 | `staff.device.bind` | 接口级事件，以本附录为准 |
+| `staff_device.integrity_reported` | success | `reportMyStaffDeviceIntegrity` | `POST` | `/api/v1/staff/device-credentials/report-integrity` | AUTH-账号权限 | `staff.device.bind` | 接口级事件，以本附录为准 |
 | `staff_device.integrity_reported` | success | `reportStaffDeviceIntegrity` | `POST` | `/api/v1/staff/device-credentials/{id}/report-integrity` | AUTH-账号权限 | `staff.device.bind` | 接口级事件，以本附录为准 |
 | `staff_device.rebind_failed` | failure | `approveStaffDeviceRebind` | `POST` | `/api/v1/staff/device-credentials/{id}/approve-rebind` | AUTH-账号权限 | `staff.device.review` | 接口级事件，以本附录为准 |
 | `staff_device.rebound` | success | `approveStaffDeviceRebind` | `POST` | `/api/v1/staff/device-credentials/{id}/approve-rebind` | AUTH-账号权限 | `staff.device.review` | 接口级事件，以本附录为准 |
@@ -3176,6 +3174,10 @@
 | `ticket.expiry_reminder_policy_updated` | success | `saveTicketExpiryReminderPolicy` | `PUT` | `/api/v1/ticketing/expiry-reminder-policies/{project_id}` | TIC-票务权益 | `ticket.product.manage` | 接口级事件，以本附录为准 |
 | `ticket.issue_failed` | failure | `issueTicket` | `POST` | `/api/v1/ticketing/orders/{order_id}/issue` | TIC-票务权益 | `ticket.ticket.issue` | 接口级事件，以本附录为准 |
 | `ticket.issued` | success | `issueTicket` | `POST` | `/api/v1/ticketing/orders/{order_id}/issue` | TIC-票务权益 | `ticket.ticket.issue` | 接口级事件，以本附录为准 |
+| `ticket.partner_voucher_config.save_failed` | failure | `createPartnerVoucherConfig` | `POST` | `/api/v1/ticketing/partner-vouchers/configs` | TIC-票务权益 | `ticket.entitlement.manage` | 接口级事件，以本附录为准 |
+| `ticket.partner_voucher_config.saved` | success | `createPartnerVoucherConfig` | `POST` | `/api/v1/ticketing/partner-vouchers/configs` | TIC-票务权益 | `ticket.entitlement.manage` | 接口级事件，以本附录为准 |
+| `ticket.partner_voucher_redemption.import_failed` | failure | `importPartnerVoucherRedemption` | `POST` | `/api/v1/ticketing/partner-vouchers/redemptions` | TIC-票务权益 | `verification.execute` | 接口级事件，以本附录为准 |
+| `ticket.partner_voucher_redemption.imported` | success | `importPartnerVoucherRedemption` | `POST` | `/api/v1/ticketing/partner-vouchers/redemptions` | TIC-票务权益 | `verification.execute` | 接口级事件，以本附录为准 |
 | `ticket.points.billing.bills.viewed` | success | `listTicketPointsBills` | `GET` | `/api/v1/loyalty/ticket-points-billing/bills` | P0-待归类 | `ticket.points.billing.view` | 接口级事件，以本附录为准 |
 | `ticket.points.billing.bills.viewed.failed` | failure | `listTicketPointsBills` | `GET` | `/api/v1/loyalty/ticket-points-billing/bills` | P0-待归类 | `ticket.points.billing.view` | 接口级事件，以本附录为准 |
 | `ticket.points.billing.calendar.submitted` | success | `submitTicketPointsCalendar` | `POST` | `/api/v1/loyalty/ticket-points-billing/calendars` | P0-待归类 | `ticket.points.billing.manage` | 接口级事件，以本附录为准 |
@@ -3460,6 +3462,7 @@
 | AUTH-账号权限 | `listStaffLevels` | `GET` | `/api/v1/access/staff-levels` | 查询职级目录 | `access.staff_level.view` | `access.staff_level.viewed` / `not_applicable` | web | operation 级补充 |
 | AUTH-账号权限 | `listStaffProfiles` | `GET` | `/api/v1/staff/profiles` | 查询员工档案 | `staff.profile.view` | `staff.profile.viewed` / `not_applicable` | web, mobile_admin | operation 级补充 |
 | AUTH-账号权限 | `removeUserPermissionOverrides` | `POST` | `/api/v1/access/users/{id}/permission-overrides/remove` | 解除员工单独授予或显式拒绝 | `access.role.assign` | `access.user_permission_override.remove` / `access.user_permission_override.remove_failed` | web | operation 级补充 |
+| AUTH-账号权限 | `reportMyStaffDeviceIntegrity` | `POST` | `/api/v1/staff/device-credentials/report-integrity` | 私人手机上报本机完整性 | `staff.device.bind` | `staff_device.integrity_reported` / `staff_device.integrity_report_failed` | staff_private_phone | operation 级补充 |
 | AUTH-账号权限 | `reportStaffDeviceIntegrity` | `POST` | `/api/v1/staff/device-credentials/{id}/report-integrity` | 端侧完整性上报 | `staff.device.bind` | `staff_device.integrity_reported` / `staff_device.integrity_report_failed` | staff_private_phone | operation 级补充 |
 | AUTH-账号权限 | `requestDeleteStaffProfile` | `POST` | `/api/v1/staff/profiles/{id}/delete-request` | 申请删除员工档案 | `staff.profile.review` | `staff.profile.delete_requested` / `not_applicable` | web | operation 级补充 |
 | AUTH-账号权限 | `reviewAccessGrantRequest` | `POST` | `/api/v1/access/grant-requests/{id}/review` | 复核授权申请 | `access.grant_request.review` | `access.grant_request.reviewed` / `access.grant_request.review_failed` | web | operation 级补充 |
@@ -4629,7 +4632,7 @@
 | TIC-票务权益 | `confirmTicketOrderPayment` | `POST` | `/api/v1/ticketing/orders/{order_id}/confirm-payment` | 确认票务订单支付成功（回写 paid） | `finance.payment.register` | `ticket_order.payment_confirmed` / `ticket_order.payment_confirm_failed` | web, kiosk | operation 级补充 |
 | TIC-票务权益 | `confirmTicketRefundPayout` | `POST` | `/api/v1/ticketing/refunds/{refund_id}/confirm-payout` | 退款确认拨付 | `ticket.refund.approve` | `ticket_refund.payout_confirmed` / `ticket_refund.payout_confirm_failed` | web | operation 级补充 |
 | TIC-票务权益 | `createEntitlementTemplate` | `POST` | `/api/v1/ticketing/entitlement-templates` | 创建权益模板 | `ticket.entitlement.manage` | `ticket_entitlement_template.changed` / `ticket_entitlement_template.changed_failed` | web | operation 级补充 |
-| TIC-票务权益 | `createPartnerVoucherConfig` | `POST` | `/api/v1/ticketing/partner-vouchers/configs` | 配置通票合作方券结算口径 | `ticket.entitlement.manage` | `not_applicable` / `not_applicable` | web | operation 级补充 |
+| TIC-票务权益 | `createPartnerVoucherConfig` | `POST` | `/api/v1/ticketing/partner-vouchers/configs` | 配置通票合作方券结算口径 | `ticket.entitlement.manage` | `ticket.partner_voucher_config.saved` / `ticket.partner_voucher_config.save_failed` | web | operation 级补充 |
 | TIC-票务权益 | `createTicketDistributionMerchantRate` | `POST` | `/api/v1/ticketing/distribution-merchant-rates` | 配置票务分销商户费率（每客单价或固定额） | `ticket.price_variant.manage` | `not_applicable` / `not_applicable` | web | operation 级补充 |
 | TIC-票务权益 | `createTicketDynamicPricingRule` | `POST` | `/api/v1/ticketing/dynamic-pricing-rules` | 创建动态定价规则草稿 | `ticket.dynamic_pricing.manage` | `ticket_dynamic_pricing.created.success` / `ticket_dynamic_pricing.created.failure` | web | operation 级补充 |
 | TIC-票务权益 | `createTicketOrder` | `POST` | `/api/v1/ticketing/orders` | 创建票务订单（含一体机辅助售票） | `ticket.order.create` | `ticket_order.created` / `ticket_order.create_failed` | web, kiosk, miniapp, app | operation 级补充 |
@@ -4642,7 +4645,7 @@
 | TIC-票务权益 | `getTicketExpiryReminderPolicy` | `GET` | `/api/v1/ticketing/expiry-reminder-policies/{project_id}` | 查未核销票到期提醒提前小时数（按项目） | `ticket.product.view` | `not_applicable` / `not_applicable` | web | operation 级补充 |
 | TIC-票务权益 | `getTicketQrRefreshConfig` | `GET` | `/api/v1/ticketing/qr-refresh-config` | 读全场统一动态码刷新间隔 | `ticket.product.view` | `not_applicable` / `not_applicable` | web | operation 级补充 |
 | TIC-票务权益 | `getTicketTypeMinGiftCups` | `GET` | `/api/v1/ticketing/ticket-types/{id}/min-gift-cups` | 查票种最低赠酒杯数（没配过为出厂 1 杯） | `ticket.product.view` | `not_applicable` / `not_applicable` | web | operation 级补充 |
-| TIC-票务权益 | `importPartnerVoucherRedemption` | `POST` | `/api/v1/ticketing/partner-vouchers/redemptions` | 导入合作方券核销回流 | `verification.execute` | `not_applicable` / `not_applicable` | web | operation 级补充 |
+| TIC-票务权益 | `importPartnerVoucherRedemption` | `POST` | `/api/v1/ticketing/partner-vouchers/redemptions` | 导入合作方券核销回流 | `verification.execute` | `ticket.partner_voucher_redemption.imported` / `ticket.partner_voucher_redemption.import_failed` | web | operation 级补充 |
 | TIC-票务权益 | `issueTicket` | `POST` | `/api/v1/ticketing/orders/{order_id}/issue` | 出票（含一体机辅助售票） | `ticket.ticket.issue` | `ticket.issued` / `ticket.issue_failed` | web, kiosk, miniapp, app | operation 级补充 |
 | TIC-票务权益 | `listEntitlementTemplates` | `GET` | `/api/v1/ticketing/entitlement-templates` | 查询权益模板 | `ticket.entitlement.view` | `ticket_entitlement_template.viewed` / `ticket_entitlement_template.viewed_failed` | web | operation 级补充 |
 | TIC-票务权益 | `listIssuedEntitlements` | `GET` | `/api/v1/ticketing/issued-entitlements` | 查询已发放权益 | `ticket.verify.view` | `ticket_issued_entitlement.viewed` / `ticket_issued_entitlement.viewed_failed` | web | operation 级补充 |

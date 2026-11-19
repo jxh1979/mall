@@ -1,6 +1,6 @@
 package com.complex.platform.gate;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import java.util.List;
 import java.util.Map;
@@ -35,8 +35,10 @@ public final class StaffAppFunctions {
     /** 私人手机清单：功能码 → 该功能调用的接口（方法＋路径模式）。 */
     private static final Map<String, List<String>> PRIVATE_PHONE = Map.ofEntries(
             // BSM:936 安装即绑定本机设备标识；BSM:938 检测到异常环境时上报。
+            // 第十八批 BB 段 266-R1：App 拿不到凭证编号，按登录人上报本机完整性。
             Map.entry("staff_device", List.of("POST /api/v1/staff/device-credentials",
-                    "POST /api/v1/staff/device-credentials/*/report-integrity")),
+                    "POST /api/v1/staff/device-credentials/*/report-integrity",
+                    "POST /api/v1/staff/device-credentials/report-integrity")),
             Map.entry("inbox", List.of()), // 汇总下列几项，无独立接口。
             Map.entry("notices", List.of("GET /api/v1/staff/notices", "POST /api/v1/staff/notices/*/acknowledge")),
             // 第十二批裁决第 13 条：「我的工单」里待我提单确认的单带「确认」「退回返工」；
