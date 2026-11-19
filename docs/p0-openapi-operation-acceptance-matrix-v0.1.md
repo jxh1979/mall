@@ -1,4 +1,4 @@
-# P0 OpenAPI Operation 验收矩阵 V0.85
+# P0 OpenAPI Operation 验收矩阵 V0.86
 
 ## 1. 文档定位
 
@@ -17,7 +17,7 @@
 
 ## 3. Operation 清单
 
-> 当前 `docs/openapi/openapi-p0.json` 共 1401 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
+> 当前 `docs/openapi/openapi-p0.json` 共 1400 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
 
 | 标签 | 方法 | 路径 | operationId | 摘要 | 请求体 | 权限 | 认证上下文 | 数据范围 | 终端/设备能力/调用通道 | 幂等 | 成功事件 | 失败事件 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -308,7 +308,7 @@
 | ops | `PUT` | `/api/v1/ops/production-readiness/items/{id}` | `updateProductionReadinessItem` | 更新生产前置责任状态 | `ProductionReadinessItemUpdateRequest` | `ops.production_readiness.manage` | `staff-token` | `project` | web, mobile_admin | 是 | `production_readiness.updated` | `production_readiness.update_failed` |
 | ops | `GET` | `/api/v1/ops/data-cleanup/jobs` | `listDataCleanupJobs` | 查询数据清理作业 | `-` | `data.cleanup.request` | `staff-token` | `platform` | web | 否 | `not_applicable` | `not_applicable` |
 | ops | `POST` | `/api/v1/ops/data-cleanup/preview` | `previewDataCleanup` | 数据清理试运行 | `object` | `data.cleanup.request` | `staff-token` | `platform` | web | 否 | `not_applicable` | `not_applicable` |
-| ops | `POST` | `/api/v1/ops/data-cleanup/jobs/{id}/submit` | `submitDataCleanupJob` | 提交数据清理申请 | `object` | `data.cleanup.request` | `staff-token` | `platform` | web | 否 | `not_applicable` | `not_applicable` |
+| ops | `POST` | `/api/v1/ops/data-cleanup/jobs/{id}/submit` | `submitDataCleanupJob` | 提交数据清理申请 | `object` | `data.cleanup.request` | `staff-token` | `platform` | web | 否 | `data.cleanup.submitted` | `data.cleanup.submit_failed` |
 | ops | `POST` | `/api/v1/ops/data-cleanup/jobs/{id}/approve` | `approveDataCleanupJob` | 审批并执行数据清理 | `object` | `data.cleanup.approve` | `staff-token` | `platform` | web | 否 | `data.cleanup.executed` | `data.cleanup.execute_failed` |
 | platform | `GET` | `/api/v1/platform/business-entities` | `listBusinessEntities` | 查询经营、运营、合同、结算主体档案 | `-` | `entity.binding.view` | `staff-token` | `project-merchant` | web | 否 | `business_entity.viewed` | `not_applicable` |
 | platform | `POST` | `/api/v1/platform/business-entities` | `createBusinessEntity` | 创建经营、运营、合同、结算主体档案 | `BusinessEntityRequest` | `entity.binding.manage` | `staff-token` | `project-merchant` | web | 是 | `business_entity.changed` | `business_entity.change_failed` |
@@ -846,8 +846,8 @@
 | customer | `GET` | `/api/v1/loyalty/stored-value/merchant-refund-rules/{merchant_id}` | `getStoredValueMerchantRefundRule` | 查询商户级储值卡退款规则 | `-` | `customer.stored_value.refund` | `staff-token` | `merchant` | web | 否 | `not_applicable` | `not_applicable` |
 | customer | `POST` | `/api/v1/loyalty/stored-value/merchant-card-config` | `configureStoredValueMerchantCard` | 配置商户储值卡（仅平台）：发卡资格 + 资金模式（预收/代收）+ 消费扣款顺序 | `StoredValueMerchantCardConfigRequest` | `customer.stored_value.refund` | `staff-token` | `platform` | web | 否 | `stored_value.merchant_card_configured` | `stored_value.merchant_card_config_failed` |
 | audit | `GET` | `/api/v1/audit/labels` | `getAuditLabels` | 读取操作留痕标签中文名 | `-` | `audit.operation_log.view` | `staff-token` | `platform` | web | 否 | `not_applicable` | `not_applicable` |
-| audit | `GET` | `/api/v1/audit/operation-events` | `queryAuditOperationEvents` | 跨对象查询操作留痕 | `-` | `audit.operation_log.view` | `staff-token` | `platform` | web | 否 | `not_applicable` | `not_applicable` |
-| audit | `GET` | `/api/v1/audit/operation-events/export` | `exportAuditOperationEvents` | 导出操作留痕（敏感） | `-` | `audit.operation_log.export` | `staff-token` | `platform` | web | 否 | `audit.operation_log.exported` | `audit.operation_log.export_failed` |
+| audit | `GET` | `/api/v1/audit/operation-events` | `queryAuditOperationEvents` | 跨对象查询操作留痕 | `-` | `audit.operation_log.view` | `staff-token` | `project` | web | 否 | `not_applicable` | `not_applicable` |
+| audit | `GET` | `/api/v1/audit/operation-events/export` | `exportAuditOperationEvents` | 导出操作留痕（敏感） | `-` | `audit.operation_log.export` | `staff-token` | `project` | web | 否 | `audit.operation_log.exported` | `audit.operation_log.export_failed` |
 | platform | `GET` | `/api/v1/platform/space-types` | `listSpaceTypes` | 空间类型字典列表 | `-` | `governance.space.view` | `staff-token` | `platform` | web | 否 | `space_type.viewed` | `not_applicable` |
 | platform | `POST` | `/api/v1/platform/space-types` | `createSpaceType` | 录入/修改空间类型字典 | `SpaceTypeRequest` | `governance.space.manage` | `staff-token` | `platform` | web | 是 | `space_type.updated` | `space_type.update_failed` |
 | platform | `DELETE` | `/api/v1/platform/space-types/{id}` | `deleteSpaceType` | 直接删除空间种类（已停用） | `-` | `governance.space.manage` | `staff-token` | `platform` | web | 否 | `not_applicable` | `not_applicable` |
@@ -1126,7 +1126,6 @@
 | settlement | `POST` | `/api/v1/settlement/media-shows/{id}/settle` | `settleMediaPerformanceShow` | 按锁定合同结算三项费用 | `object` | `media.performance.settle` | `staff-token` | `project` | web | 是 | `media_settlement.settled` | `media_settlement.settle_failed` |
 | settlement | `POST` | `/api/v1/settlement/media-shows/{id}/settlements/{settlementId}/adjust` | `adjustMediaPerformanceSettlement` | 调整已出账结算 | `object` | `media.performance.settle` | `staff-token` | `project` | web | 是 | `media_settlement.adjusted` | `media_settlement.adjust_failed` |
 | settlement | `GET` | `/api/v1/settlement/config/overview` | `settlementConfigOverview` | 结算配置中心总览 | `-` | `settlement.config.view` | `staff-token` | `platform` | web | 否 | `not_applicable` | `not_applicable` |
-| settlement | `POST` | `/api/v1/settlement/config/retention` | `settlementConfigUpsertRetention` | 维护项目公司留存比例(草案) | `object` | `settlement.config.manage` | `staff-token` | `platform` | web | 是 | `settlement.config.platform_retention_rules.updated` | `settlement.config.platform_retention_rules.update_failed` |
 | settlement | `POST` | `/api/v1/settlement/config/distribution-method` | `settlementConfigUpsertDistributionMethod` | 维护通票分配方式(草案) | `object` | `settlement.config.manage` | `staff-token` | `platform` | web | 是 | `settlement.config.ticket_distribution_configs.updated` | `settlement.config.ticket_distribution_configs.update_failed` |
 | settlement | `POST` | `/api/v1/settlement/config/merchant-rate` | `settlementConfigUpsertMerchantRate` | 维护每客单价/固定额(草案) | `object` | `settlement.config.manage` | `staff-token` | `platform` | web | 是 | `settlement.config.ticket_distribution_merchant_rates.updated` | `settlement.config.ticket_distribution_merchant_rates.update_failed` |
 | settlement | `POST` | `/api/v1/settlement/config/comprehensive-service-fee` | `settlementConfigUpsertComprehensiveServiceFee` | 维护门票综合服务费(草案) | `object` | `settlement.config.manage` | `staff-token` | `platform` | web | 是 | `settlement.config.comprehensive_service_fee_configs.updated` | `settlement.config.comprehensive_service_fee_configs.update_failed` |
@@ -1175,7 +1174,7 @@
 | settlement | `GET` | `/api/v1/settlement/internal-pay-days/objection-period` | `getSettlementObjectionPeriod` | 查非积分商户账单异议期(按项目) | `-` | `settlement.config.view` | `staff-token` | `project` | web | 否 | `not_applicable` | `not_applicable` |
 | settlement | `POST` | `/api/v1/settlement/internal-pay-days/objection-period` | `saveSettlementObjectionPeriod` | 配置非积分商户账单异议期及上下限(按项目) | `object` | `settlement.config.manage` | `staff-token` | `project` | web | 是 | `settlement.objection_period.configured` | `settlement.objection_period.config_failed` |
 | settlement | `POST` | `/api/v1/settlement/config/internal-price-item` | `settlementConfigUpsertInternalPriceItem` | 维护内部结算SKU目录条目(草案) | `object` | `settlement.internal_price.submit` | `staff-token` | `provider-self` | web | 是 | `settlement.config.internal_price_catalog.updated` | `settlement.config.internal_price_catalog.update_failed` |
-| settlement | `GET` | `/api/v1/settlement/config/internal-price-items` | `settlementConfigListInternalPriceItems` | 内部结算SKU目录三维筛选列表 | `-` | `settlement.config.view` | `staff-token` | `platform` | web | 否 | `not_applicable` | `not_applicable` |
+| settlement | `GET` | `/api/v1/settlement/config/internal-price-items` | `settlementConfigListInternalPriceItems` | 内部结算SKU目录三维筛选列表 | `-` | `settlement.config.view` | `staff-token` | `project-provider` | web | 否 | `not_applicable` | `not_applicable` |
 | integration | `GET` | `/api/v1/integration/channel-store-maps` | `listIntegrationChannelStoreMaps` | 查询渠道门店映射 | `-` | `integration.channel_store_map.view` | `staff-token` | `project-merchant` | web | 否 | `integration.channel_store_map.viewed` | `integration.channel_store_map.view_failed` |
 | integration | `POST` | `/api/v1/integration/channel-store-maps` | `saveIntegrationChannelStoreMap` | 登记/改绑渠道门店映射 | `object` | `integration.channel_store_map.manage` | `staff-token` | `platform` | web | 是 | `integration.channel_store_map.saved` | `integration.channel_store_map.save_failed` |
 | integration | `GET` | `/api/v1/integration/channel-ticket-type-maps` | `listIntegrationChannelTicketTypeMaps` | 查询渠道票种映射 | `-` | `integration.channel_store_map.view` | `staff-token` | `platform` | web | 否 | `integration.channel_ticket_type_map.viewed` | `integration.channel_ticket_type_map.view_failed` |

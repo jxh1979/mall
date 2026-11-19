@@ -108,3 +108,52 @@ describe("RiskAlertsPage 行明细抽屉", () => {
     expect(screen.queryByTestId("row-detail-drawer")).toBeNull();
   });
 });
+
+// 第十八批 BA 段第 267 条 267-R2、267-R3（PGM:287「……字段名、状态、枚举取值……必须全部为中文」）：
+// 「对象 ID」改「对象编号」；对象类型码显示中文，新建预警的对象类型默认中文。
+describe("RiskAlertsPage 对象类型与对象编号中文（第 267 条）", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    window.history.replaceState({}, "", "/admin/risk/alerts");
+  });
+
+  it("表头写「对象编号」，列表、明细与新建表单的对象类型都是中文", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("risk-alert-row-ra-1").textContent).toContain("酒吧订单"));
+    const table = screen.getByTestId("risk-alerts-table");
+    expect(table.querySelector("thead")?.textContent).toContain("对象编号");
+    expect(table.textContent).not.toMatch(/对象 ID|bar_order/);
+    fireEvent.click(screen.getByTestId("risk-alert-row-ra-1"));
+    expect(screen.getByTestId("row-detail-drawer").textContent).toContain("酒吧订单");
+    expect(screen.getByTestId("row-detail-drawer").textContent).not.toMatch(/对象 ID|bar_order/);
+    fireEvent.keyDown(window, { key: "Escape" });
+    fireEvent.click(screen.getByTestId("risk-alert-create-open"));
+    await waitFor(() => expect((screen.getByTestId("risk-alert-object-type") as HTMLInputElement).value).toBe("酒吧订单"));
+  });
+});
+
+// 第十八批 BA 段收尾复核修正（PGM:287「展示给用户的一切文字，包括……状态、枚举取值……必须全部为中文」）：
+// 系统写入的预警类型（AnalyticsService 指标异常转告警 metric_anomaly、WecomConversationService 企业微信违规命中 wecom_risk_hit）显示中文。
+describe("RiskAlertsPage 系统写入的预警类型显示中文（第 267 条收尾复核）", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    window.history.replaceState({}, "", "/admin/risk/alerts");
+  });
+
+  it("预警类型 metric_anomaly、wecom_risk_hit 在列表与明细里显示中文", async () => {
+    const alerts = [
+      { id: "ra-m", alert_type: "metric_anomaly", risk_level: "high", object_type: "metric_anomaly", object_id: "an-1", summary: "指标异常升级:客流突降", status: "open" },
+      { id: "ra-w", alert_type: "wecom_risk_hit", risk_level: "high", object_type: "wecom_message", object_id: "msg-1", summary: "企微违规命中", status: "open" },
+    ];
+    vi.stubGlobal("fetch", vi.fn().mockImplementation((input: RequestInfo | URL) =>
+      Promise.resolve(envelope(String(input).includes("risk-alerts") ? alerts : []))));
+    render(<RiskAlertsPage api={new AdminApi("test-token")} user={{ id: "u1", username: "admin", accountType: "platform_admin" }}
+      setActionResult={vi.fn()} setGlobalError={vi.fn()} effectivePermissions={ADMIN_PERMS} />);
+    await waitFor(() => expect(screen.getByTestId("risk-alert-row-ra-w").textContent).toContain("企业微信违规命中"));
+    expect(screen.getByTestId("risk-alert-row-ra-m").textContent).toContain("指标异常");
+    expect(screen.getByTestId("risk-alerts-table").textContent).not.toMatch(/metric_anomaly|wecom_risk_hit/);
+    fireEvent.click(screen.getByTestId("risk-alert-row-ra-w"));
+    expect(screen.getByTestId("row-detail-drawer").textContent).toContain("企业微信违规命中");
+    expect(screen.getByTestId("row-detail-drawer").textContent).not.toMatch(/metric_anomaly|wecom_risk_hit/);
+  });
+});

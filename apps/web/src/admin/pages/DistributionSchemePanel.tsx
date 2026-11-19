@@ -1,4 +1,4 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 import React from "react";
 import { PermissionButton, useCan } from "../security/Can";
 import { cnDate } from "../components/RowDetailDrawer";
@@ -311,7 +311,7 @@ export function DistributionSchemePanel({ api, effectivePermissions }: Pick<Admi
       <h4>第一段名单（每份票的金额）</h4>
       {first.map((f, fi) => (
         <div key={fi} className="admin-form-row" data-testid={`distribution-scheme-first-${fi}`}>
-          <label>酒吧商户 id<input data-testid={`distribution-scheme-first-merchant-${fi}`} value={f.merchantId}
+          <label>酒吧商户编号<input data-testid={`distribution-scheme-first-merchant-${fi}`} value={f.merchantId}
             onChange={(e) => setFirstRow(fi, { merchantId: e.target.value })} /></label>
           <label>方式<select data-testid={`distribution-scheme-first-rule-${fi}`} value={f.ruleType}
             onChange={(e) => setFirstRow(fi, { ruleType: e.target.value })}>

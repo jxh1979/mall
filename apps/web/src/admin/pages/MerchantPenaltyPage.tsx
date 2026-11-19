@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import React from "react";
 import { AdminPageHeader } from "../components/AdminPageHeader";
 import { PermissionButton } from "../security/Can";
@@ -36,7 +36,7 @@ export function MerchantPenaltyPage({ api, setActionResult, setGlobalError, effe
   const project = projectId.trim();
 
   async function load() {
-    if (!project) { setGlobalError("请先填写综合体项目 id"); return; }
+    if (!project) { setGlobalError("请先填写综合体项目编号"); return; }
     try {
       const result = await api.get<PenaltyList>(`/api/v1/merchant-penalties?project_id=${encodeURIComponent(project)}`);
       setData(result ?? {});
@@ -50,7 +50,7 @@ export function MerchantPenaltyPage({ api, setActionResult, setGlobalError, effe
   async function saveBounds() {
     const min = wholeNumber(minPoints);
     const max = wholeNumber(maxPoints);
-    if (!project) { setGlobalError("请先填写综合体项目 id"); return; }
+    if (!project) { setGlobalError("请先填写综合体项目编号"); return; }
     if (min === null || max === null || min > max) {
       setGlobalError("单次扣分下限与上限须同时填写（整数，下限不小于 1 且不大于上限）");
       return;
@@ -89,7 +89,7 @@ export function MerchantPenaltyPage({ api, setActionResult, setGlobalError, effe
         description="商户违反运营规则的，由项目运营人员登记处罚记录，每条处罚的扣分即对商户健康分的一次扣减。扣分由登记人填写，须在本项目配置的单次扣分上下限之内；本项目未配置上下限前不能登记。健康分具体计分与优惠规则待商场运营规则出台后另定。"
       />
       <div className="admin-form-grid">
-        <label>项目 id<input aria-label="处罚记录项目 id" value={projectId} onChange={(e) => setProjectId(e.target.value)} /></label>
+        <label>项目编号<input aria-label="处罚记录项目编号" value={projectId} onChange={(e) => setProjectId(e.target.value)} /></label>
         <button type="button" data-testid="merchant-penalty-query" onClick={() => void load()}>查询</button>
         <span className="admin-muted-action" data-testid="merchant-penalty-bounds-current">
           {data === null ? "未查询" : configured
@@ -104,7 +104,7 @@ export function MerchantPenaltyPage({ api, setActionResult, setGlobalError, effe
           data-testid="merchant-penalty-bounds-save" onClick={() => void saveBounds()}>保存上下限</PermissionButton>
       </div>
       <div className="admin-form-grid" style={{ marginTop: 8 }}>
-        <label>商户 id<input aria-label="处罚商户 id" value={merchantId} onChange={(e) => setMerchantId(e.target.value)} /></label>
+        <label>商户编号<input aria-label="处罚商户编号" value={merchantId} onChange={(e) => setMerchantId(e.target.value)} /></label>
         <label>扣分<input aria-label="扣分" type="number" min="1" value={points} onChange={(e) => setPoints(e.target.value)} /></label>
         <label>违规说明<input aria-label="违规说明" value={reason} onChange={(e) => setReason(e.target.value)} /></label>
         <PermissionButton permissionsState={effectivePermissions} permissions={RECORD}

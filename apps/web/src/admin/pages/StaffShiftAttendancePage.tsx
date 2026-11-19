@@ -1,4 +1,4 @@
-// 文件版本：V0.04
+// 文件版本：V0.05
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { CnDatePicker } from "../components/CnDatePicker";
@@ -437,7 +437,7 @@ export function StaffShiftAttendancePage({ api, setGlobalError, setActionResult,
             validate: () => (userId.trim() && start && end ? null : "请填全 员工/开始/结束时间"),
             content: (
               <>
-                <label>员工 user_id<input data-testid="shift-user-input" value={userId} disabled={Boolean(editingShift)} onChange={(event) => setUserId(event.target.value)} /></label>
+                <label>员工编号<input data-testid="shift-user-input" value={userId} disabled={Boolean(editingShift)} onChange={(event) => setUserId(event.target.value)} /></label>
                 <label>开始<input data-testid="shift-start-input" type="datetime-local" value={start} onChange={(event) => setStart(event.target.value)} /></label>
                 <label>结束<input data-testid="shift-end-input" type="datetime-local" value={end} onChange={(event) => setEnd(event.target.value)} /></label>
               </>
@@ -450,7 +450,7 @@ export function StaffShiftAttendancePage({ api, setGlobalError, setActionResult,
             validate: () => (editingShift && !note.trim() ? "修改排班必须填写原因" : null),
             content: (
               <>
-                <label>点位(space_id 逗号分隔)<input data-testid="shift-points-input" value={points} onChange={(event) => setPoints(event.target.value)} /></label>
+                <label>点位(空间编号，逗号分隔)<input data-testid="shift-points-input" value={points} onChange={(event) => setPoints(event.target.value)} /></label>
                 <label><input type="checkbox" data-testid="shift-night-duty-input" checked={nightDuty} onChange={(event) => setNightDuty(event.target.checked)} />承担所属项目本日夜班值班经理职责</label>
                 <p>职责随排班审批生效，同项目同日一名。改派先审批取消原班职责，再审批新安排；临时顶班按已记录的交接时段承接。</p>
                 <label>备注<input data-testid="shift-note-input" value={note} onChange={(event) => setNote(event.target.value)} /></label>
@@ -489,7 +489,7 @@ export function StaffShiftAttendancePage({ api, setGlobalError, setActionResult,
             },
             content: (
               <>
-                <label>员工 user_id(逗号分隔,可多名)<input data-testid="shift-batch-users-input" value={batchUsers} onChange={(event) => setBatchUsers(event.target.value)} /></label>
+                <label>员工编号(逗号分隔,可多名)<input data-testid="shift-batch-users-input" value={batchUsers} onChange={(event) => setBatchUsers(event.target.value)} /></label>
                 <label>起始日期<CnDatePicker data-testid="shift-batch-start-date" value={batchStartDate} onChange={(v) => setBatchStartDate(v || today())} /></label>
                 <label>天数(自起始日期起算,默认一周 7 天)<input data-testid="shift-batch-days-input" type="number" min={1} max={31} value={batchDays} onChange={(event) => setBatchDays(event.target.value)} /></label>
                 <fieldset data-testid="shift-batch-weekdays">
@@ -515,7 +515,7 @@ export function StaffShiftAttendancePage({ api, setGlobalError, setActionResult,
                 {crossesMidnight(batchStartTime, batchEndTime)
                   ? <p data-testid="shift-batch-overnight-hint">跨零点班:结束时间为<strong>次日 {batchEndTime}</strong>(系统自动顺延到第二天,排班员不用另选日期)。</p>
                   : null}
-                <label>点位(space_id 逗号分隔,整批共用)<input data-testid="shift-batch-points-input" value={batchPoints} onChange={(event) => setBatchPoints(event.target.value)} /></label>
+                <label>点位(空间编号，逗号分隔,整批共用)<input data-testid="shift-batch-points-input" value={batchPoints} onChange={(event) => setBatchPoints(event.target.value)} /></label>
                 <label><input type="checkbox" data-testid="shift-batch-night-duty-input" checked={batchNightDuty} onChange={(event) => setBatchNightDuty(event.target.checked)} />整批承担各自所属项目的夜班值班经理职责</label>
                 <p>每个项目每日只能安排一名夜班值班经理；同一项目请勿同时选多名员工。</p>
                 <label>备注(整批共用)<input data-testid="shift-batch-note-input" value={batchNote} onChange={(event) => setBatchNote(event.target.value)} /></label>

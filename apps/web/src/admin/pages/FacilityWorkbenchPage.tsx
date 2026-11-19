@@ -1,4 +1,4 @@
-// 文件版本：V0.08
+// 文件版本：V0.09
 import React from "react";
 import { withBase } from "../../basePath";
 import { AdminDataState } from "../components/AdminDataState";
@@ -292,7 +292,7 @@ export function FacilityWorkbenchPage({ api, user, setActionResult, setGlobalErr
 
   async function changeEquipmentStatus() {
     if (!statusForm.equipmentId.trim()) {
-      setGlobalError("先选择或填写设备 id");
+      setGlobalError("先选择或填写设备编号");
       return;
     }
     // HP-F01（2026-10-21 操作员裁决补充第 1 条）：告警/故障由上报人当场选优先级（决定接警响应时限）。
@@ -513,7 +513,7 @@ export function FacilityWorkbenchPage({ api, user, setActionResult, setGlobalErr
 
   async function assignWorkOrder(id: string) {
     if (!workOrderAction.assigneeId.trim()) {
-      setGlobalError("派单需填写处理人 id");
+      setGlobalError("派单需填写处理人编号");
       return;
     }
     await api.post(`/api/v1/facility/work-orders/${encodeURIComponent(id)}/assign`, { assigneeId: workOrderAction.assigneeId.trim() });
@@ -524,7 +524,7 @@ export function FacilityWorkbenchPage({ api, user, setActionResult, setGlobalErr
   // 第十二批操作员裁决第 9 条「补转派」：已派单或处理中改派他人，处理时限不重算；原因必填并留痕。
   async function reassignWorkOrder(id: string) {
     if (!workOrderAction.assigneeId.trim() || !workOrderAction.reassignReason.trim()) {
-      setGlobalError("转派需填写新处理人 id 和转派原因");
+      setGlobalError("转派需填写新处理人编号和转派原因");
       return;
     }
     await api.post(`/api/v1/facility/work-orders/${encodeURIComponent(id)}/reassign`, {
@@ -566,7 +566,7 @@ export function FacilityWorkbenchPage({ api, user, setActionResult, setGlobalErr
   // 提单人就是本次维修人时同此（裁决第 15 条）。
   async function designateConfirmer(id: string) {
     if (!workOrderAction.confirmerId.trim()) {
-      setGlobalError("指定提单确认人需填写确认人 id");
+      setGlobalError("指定提单确认人需填写确认人编号");
       return;
     }
     await api.post(`/api/v1/facility/work-orders/${encodeURIComponent(id)}/confirmer`, {
@@ -758,7 +758,7 @@ export function FacilityWorkbenchPage({ api, user, setActionResult, setGlobalErr
 
   function openPolicyDetail(row: FacilityWorkOrderPolicyRow) {
     setDetail({
-      title: `SLA 策略明细 · ${zh(row.workOrderType)}/${zh(row.priority)}`,
+      title: `时限策略明细 · ${zh(row.workOrderType)}/${zh(row.priority)}`,
       fields: [
         { label: "工单类型", value: zh(row.workOrderType) },
         { label: "优先级", value: zh(row.priority) },
@@ -822,7 +822,7 @@ export function FacilityWorkbenchPage({ api, user, setActionResult, setGlobalErr
       <AdminPageHeader title="楼宇运营工作台" description="设备台账、维保工单、楼宇巡检按后台真实端点闭环；设备告警和巡检异常仍由后端触发工单联动。" />
       <AdminDataState loading={loading} error={error} empty={false} onRetry={reload}>
         <div className="admin-preview" data-testid="facility-workbench-guide">
-          <strong>这一页做什么：</strong>楼宇运营三大块——① 设备台账（含维保到期提醒）② 维保工单（派单 / 逾期 / SLA 策略）③ 楼宇巡检（模板 / 任务 / 记录）。切换下方标签查看；设备告警与巡检异常仍由后端自动联动生成工单。
+          <strong>这一页做什么：</strong>楼宇运营三大块——① 设备台账（含维保到期提醒）② 维保工单（派单 / 逾期 / 时限策略）③ 楼宇巡检（模板 / 任务 / 记录）。切换下方标签查看；设备告警与巡检异常仍由后端自动联动生成工单。
         </div>
         <Tabs
           data-testid="facility-workbench-tabs"
@@ -831,7 +831,7 @@ export function FacilityWorkbenchPage({ api, user, setActionResult, setGlobalErr
         <h3>设备台账</h3>
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="facility-equipment-table">
-            <thead><tr><th>id</th><th>名称</th><th>分类</th><th>状态</th><th>品牌/责任人</th><th>维保到期</th><th>告警</th><th>操作</th><th>详情</th></tr></thead>
+            <thead><tr><th>编号</th><th>名称</th><th>分类</th><th>状态</th><th>品牌/责任人</th><th>维保到期</th><th>告警</th><th>操作</th><th>详情</th></tr></thead>
             <tbody>{equipment.map((row) => (
               <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`facility-equipment-${row.id}`}
                 onClick={() => openEquipmentDetail(row)}
@@ -861,7 +861,7 @@ export function FacilityWorkbenchPage({ api, user, setActionResult, setGlobalErr
             <span>申请报废 {scrapForm.equipmentId}（经所有权主体审批后才置报废）</span>
             <input data-testid="facility-scrap-reason" aria-label="报废原因" placeholder="报废原因" value={scrapForm.reason} onChange={(event) => setScrapForm({ ...scrapForm, reason: event.target.value })} />
             <input data-testid="facility-scrap-method" aria-label="处置方式" placeholder="处置方式" value={scrapForm.disposalMethod} onChange={(event) => setScrapForm({ ...scrapForm, disposalMethod: event.target.value })} />
-            <input data-testid="facility-scrap-approver" aria-label="最终审批人" placeholder="最终审批人 id（可空）" value={scrapForm.finalApproverId} onChange={(event) => setScrapForm({ ...scrapForm, finalApproverId: event.target.value })} />
+            <input data-testid="facility-scrap-approver" aria-label="最终审批人" placeholder="最终审批人编号（可空）" value={scrapForm.finalApproverId} onChange={(event) => setScrapForm({ ...scrapForm, finalApproverId: event.target.value })} />
             <PermissionButton permissionsState={effectivePermissions} permissions={EQUIPMENT} data-testid="facility-scrap-submit" onClick={() => void requestScrap()}>提交报废申请</PermissionButton>
             <button type="button" onClick={() => setScrapForm({ equipmentId: "", reason: "", disposalMethod: "", finalApproverId: "" })}>取消</button>
           </div>
@@ -898,9 +898,9 @@ export function FacilityWorkbenchPage({ api, user, setActionResult, setGlobalErr
               description: "指定责任人、维保周期与所在空间（均可空）。",
               content: (
                 <>
-                  <label>责任人<input data-testid="facility-equipment-owner" aria-label="责任人" placeholder="责任人 id" value={equipmentForm.responsibleUserId} onChange={(event) => setEquipmentForm({ ...equipmentForm, responsibleUserId: event.target.value })} /></label>
+                  <label>责任人<input data-testid="facility-equipment-owner" aria-label="责任人" placeholder="责任人编号" value={equipmentForm.responsibleUserId} onChange={(event) => setEquipmentForm({ ...equipmentForm, responsibleUserId: event.target.value })} /></label>
                   <label>维保周期（天）<input data-testid="facility-equipment-cycle" aria-label="维保周期" type="number" min="1" placeholder="维保周期(天)" value={equipmentForm.maintenanceCycleDays} onChange={(event) => setEquipmentForm({ ...equipmentForm, maintenanceCycleDays: event.target.value })} /></label>
-                  <label>所在空间<input data-testid="facility-equipment-space" aria-label="空间" placeholder="空间 id" value={equipmentForm.spaceId} onChange={(event) => setEquipmentForm({ ...equipmentForm, spaceId: event.target.value })} /></label>
+                  <label>所在空间<input data-testid="facility-equipment-space" aria-label="空间" placeholder="空间编号" value={equipmentForm.spaceId} onChange={(event) => setEquipmentForm({ ...equipmentForm, spaceId: event.target.value })} /></label>
                 </>
               ),
             },
@@ -916,7 +916,7 @@ export function FacilityWorkbenchPage({ api, user, setActionResult, setGlobalErr
           ]}
         />
         <div className="admin-inline-form" data-testid="facility-equipment-status-form">
-          <input data-testid="facility-equipment-status-id" aria-label="状态设备 id" placeholder="设备 id" value={statusForm.equipmentId} onChange={(event) => setStatusForm({ ...statusForm, equipmentId: event.target.value })} />
+          <input data-testid="facility-equipment-status-id" aria-label="状态设备编号" placeholder="设备编号" value={statusForm.equipmentId} onChange={(event) => setStatusForm({ ...statusForm, equipmentId: event.target.value })} />
           <select data-testid="facility-equipment-status" aria-label="设备状态" value={statusForm.status} onChange={(event) => setStatusForm({ ...statusForm, status: event.target.value })}>{EQUIPMENT_STATUSES.filter(([value]) => value !== "retired").map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
           <select data-testid="facility-equipment-status-priority" aria-label="告警优先级" value={statusForm.priority} onChange={(event) => setStatusForm({ ...statusForm, priority: event.target.value })}><option value="">告警/故障须选优先级</option>{PRIORITIES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
           <input data-testid="facility-equipment-alarm-note" aria-label="告警说明" placeholder="告警说明" value={statusForm.alarmNote} onChange={(event) => setStatusForm({ ...statusForm, alarmNote: event.target.value })} />
@@ -938,19 +938,19 @@ export function FacilityWorkbenchPage({ api, user, setActionResult, setGlobalErr
           <select data-testid="facility-work-order-type" aria-label="工单类型" value={workOrderForm.workOrderType} onChange={(event) => setWorkOrderForm({ ...workOrderForm, workOrderType: event.target.value })}>{WORK_ORDER_TYPES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
           <select data-testid="facility-work-order-priority" aria-label="优先级" value={workOrderForm.priority} onChange={(event) => setWorkOrderForm({ ...workOrderForm, priority: event.target.value })}>{PRIORITIES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
           <input data-testid="facility-work-order-title" aria-label="工单标题" placeholder="工单标题" value={workOrderForm.title} onChange={(event) => setWorkOrderForm({ ...workOrderForm, title: event.target.value })} />
-          <input data-testid="facility-work-order-equipment" aria-label="关联设备" placeholder="设备 id" value={workOrderForm.equipmentId} onChange={(event) => setWorkOrderForm({ ...workOrderForm, equipmentId: event.target.value })} />
-          <input data-testid="facility-work-order-space" aria-label="空间 id" placeholder="空间 id" value={workOrderForm.spaceId} onChange={(event) => setWorkOrderForm({ ...workOrderForm, spaceId: event.target.value })} />
+          <input data-testid="facility-work-order-equipment" aria-label="关联设备" placeholder="设备编号" value={workOrderForm.equipmentId} onChange={(event) => setWorkOrderForm({ ...workOrderForm, equipmentId: event.target.value })} />
+          <input data-testid="facility-work-order-space" aria-label="空间编号" placeholder="空间编号" value={workOrderForm.spaceId} onChange={(event) => setWorkOrderForm({ ...workOrderForm, spaceId: event.target.value })} />
           {pickProject ? <label>所属项目<select data-testid="facility-work-order-project" aria-label="工单所属项目" value={workOrderForm.projectId} onChange={(event) => setWorkOrderForm({ ...workOrderForm, projectId: event.target.value })}><option value="">按设备/空间所在项目，否则本人所在项目</option>{projects.map((p) => <option key={p.id} value={p.id}>{p.name ?? p.id}</option>)}</select></label> : null}
           <PermissionButton permissionsState={effectivePermissions} permissions={WORK_ORDER} data-testid="facility-work-order-create" onClick={() => void createWorkOrder()}>新建工单</PermissionButton>
         </div>
         <div className="admin-inline-form" data-testid="facility-work-order-action-form">
-          <input data-testid="facility-work-order-assignee" aria-label="派单处理人" placeholder="处理人 id" value={workOrderAction.assigneeId} onChange={(event) => setWorkOrderAction({ ...workOrderAction, assigneeId: event.target.value })} />
+          <input data-testid="facility-work-order-assignee" aria-label="派单处理人" placeholder="处理人编号" value={workOrderAction.assigneeId} onChange={(event) => setWorkOrderAction({ ...workOrderAction, assigneeId: event.target.value })} />
           <input data-testid="facility-work-order-resolution" aria-label="处理结果" placeholder="处理结果" value={workOrderAction.resolution} onChange={(event) => setWorkOrderAction({ ...workOrderAction, resolution: event.target.value })} />
           <input data-testid="facility-work-order-satisfaction" aria-label="满意度" type="number" min="1" max="5" value={workOrderAction.satisfaction} onChange={(event) => setWorkOrderAction({ ...workOrderAction, satisfaction: event.target.value })} />
           <input data-testid="facility-work-order-note" aria-label="操作备注" placeholder="备注（退回返工填不通过原因）" value={workOrderAction.note} onChange={(event) => setWorkOrderAction({ ...workOrderAction, note: event.target.value })} />
           <input data-testid="facility-work-order-customer-feedback" aria-label="客人反馈" placeholder="客人反馈（关闭客人投诉必填）" value={workOrderAction.customerFeedback} onChange={(event) => setWorkOrderAction({ ...workOrderAction, customerFeedback: event.target.value })} />
-          <input data-testid="facility-work-order-confirmer" aria-label="提单确认人" placeholder="指定提单确认人 id" value={workOrderAction.confirmerId} onChange={(event) => setWorkOrderAction({ ...workOrderAction, confirmerId: event.target.value })} />
-          <input data-testid="facility-work-order-reassign-reason" aria-label="转派原因" placeholder="转派原因（转派必填，新处理人填在处理人 id）" value={workOrderAction.reassignReason} onChange={(event) => setWorkOrderAction({ ...workOrderAction, reassignReason: event.target.value })} />
+          <input data-testid="facility-work-order-confirmer" aria-label="提单确认人" placeholder="指定提单确认人编号" value={workOrderAction.confirmerId} onChange={(event) => setWorkOrderAction({ ...workOrderAction, confirmerId: event.target.value })} />
+          <input data-testid="facility-work-order-reassign-reason" aria-label="转派原因" placeholder="转派原因（转派必填，新处理人填在处理人编号）" value={workOrderAction.reassignReason} onChange={(event) => setWorkOrderAction({ ...workOrderAction, reassignReason: event.target.value })} />
         </div>
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="facility-work-orders-table">
@@ -1002,11 +1002,11 @@ export function FacilityWorkbenchPage({ api, user, setActionResult, setGlobalErr
             <tbody>{overdueWorkOrders.map((row) => <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`facility-work-order-overdue-${row.id}`} onClick={() => openOverdueWorkOrderDetail(row)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openOverdueWorkOrderDetail(row); } }}><td>{row.code ?? row.id}</td><td>{zh(row.workOrderType)} / {zh(row.priority)}</td><td>{row.title}</td><td>{statusBadge(row.status)} · 已逾期</td><td onClick={(event) => event.stopPropagation()}><TraceLink navigateTo={navigateTo} pageId="ADM-ACC-001" objectId={row.assigneeId}>{row.assigneeId ?? "-"}</TraceLink></td><td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看逾期工单详情" onClick={(event) => { event.stopPropagation(); openOverdueWorkOrderDetail(row); }}>查看详情</button></td></tr>)}</tbody>
           </table>
         </div>
-        <h3>SLA 策略表</h3>
+        <h3>时限策略表</h3>
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="facility-work-order-policies-table">
             <thead><tr><th>类型</th><th>优先级</th><th>响应/处理分钟</th><th>验收</th><th>状态</th><th>详情</th></tr></thead>
-            <tbody>{policyRows.map((row) => <tr key={`${row.workOrderType}-${row.priority}`} className="admin-row-clickable" tabIndex={0} data-testid={`facility-work-order-policy-${row.workOrderType}-${row.priority}`} onClick={() => openPolicyDetail(row)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openPolicyDetail(row); } }}><td>{zh(row.workOrderType)}</td><td>{zh(row.priority)}</td><td>{row.responseMinutes} / {row.handleMinutes}</td><td>{row.requiresAcceptance ? zh(row.acceptanceBy) : "无需"}</td><td>{row.active ? "启用" : "停用"}</td><td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看SLA 策略详情" onClick={(event) => { event.stopPropagation(); openPolicyDetail(row); }}>查看详情</button></td></tr>)}</tbody>
+            <tbody>{policyRows.map((row) => <tr key={`${row.workOrderType}-${row.priority}`} className="admin-row-clickable" tabIndex={0} data-testid={`facility-work-order-policy-${row.workOrderType}-${row.priority}`} onClick={() => openPolicyDetail(row)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openPolicyDetail(row); } }}><td>{zh(row.workOrderType)}</td><td>{zh(row.priority)}</td><td>{row.responseMinutes} / {row.handleMinutes}</td><td>{row.requiresAcceptance ? zh(row.acceptanceBy) : "无需"}</td><td>{row.active ? "启用" : "停用"}</td><td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看时限策略详情" onClick={(event) => { event.stopPropagation(); openPolicyDetail(row); }}>查看详情</button></td></tr>)}</tbody>
           </table>
         </div>
         <div className="admin-inline-form" data-testid="facility-work-order-policy-form">
@@ -1016,7 +1016,7 @@ export function FacilityWorkbenchPage({ api, user, setActionResult, setGlobalErr
           <input data-testid="facility-policy-handle" aria-label="处理分钟" type="number" min="1" value={policyForm.handleMinutes} onChange={(event) => setPolicyForm({ ...policyForm, handleMinutes: event.target.value })} />
           <label><input data-testid="facility-policy-requires-acceptance" type="checkbox" checked={policyForm.requiresAcceptance} onChange={(event) => setPolicyForm({ ...policyForm, requiresAcceptance: event.target.checked })} />需验收</label>
           <select data-testid="facility-policy-acceptance-by" aria-label="验收方" value={policyForm.acceptanceBy} onChange={(event) => setPolicyForm({ ...policyForm, acceptanceBy: event.target.value })}><option value="handler">处理人</option><option value="supervisor">主管</option><option value="reporter">报告人</option></select>
-          <PermissionButton permissionsState={effectivePermissions} permissions={WORK_ORDER} data-testid="facility-policy-save" onClick={() => void savePolicy()}>保存 SLA</PermissionButton>
+          <PermissionButton permissionsState={effectivePermissions} permissions={WORK_ORDER} data-testid="facility-policy-save" onClick={() => void savePolicy()}>保存时限策略</PermissionButton>
         </div>
 
           </>) },
@@ -1024,7 +1024,7 @@ export function FacilityWorkbenchPage({ api, user, setActionResult, setGlobalErr
         <h3>楼宇巡检</h3>
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="facility-inspection-templates-table">
-            <thead><tr><th>id</th><th>模板</th><th>类型</th><th>周期</th><th>异常模式</th><th>状态</th><th>详情</th></tr></thead>
+            <thead><tr><th>编号</th><th>模板</th><th>类型</th><th>周期</th><th>异常模式</th><th>状态</th><th>详情</th></tr></thead>
             <tbody>{inspectionTemplates.map((row) => <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`facility-inspection-template-${row.id}`} onClick={() => openInspectionTemplateDetail(row)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openInspectionTemplateDetail(row); } }}><td className="admin-id-cell" title={row.id}>{shortId(row.id)}</td><td>{row.name}</td><td>{zh(row.inspectionType)}</td><td>{row.cycleDays ?? "-"}</td><td>{zh(row.abnormalMode)}</td><td>{row.active ? "启用" : "停用"}</td><td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看巡检模板详情" onClick={(event) => { event.stopPropagation(); openInspectionTemplateDetail(row); }}>查看详情</button></td></tr>)}</tbody>
           </table>
         </div>
@@ -1038,11 +1038,11 @@ export function FacilityWorkbenchPage({ api, user, setActionResult, setGlobalErr
           <PermissionButton permissionsState={effectivePermissions} permissions={INSPECTION} data-testid="facility-inspection-template-create" onClick={() => void createInspectionTemplate()}>新建模板</PermissionButton>
         </div>
         <div className="admin-inline-form" data-testid="facility-inspection-task-form">
-          <input data-testid="facility-inspection-task-template" aria-label="模板 id" placeholder="模板 id" value={taskForm.templateId} onChange={(event) => setTaskForm({ ...taskForm, templateId: event.target.value })} />
+          <input data-testid="facility-inspection-task-template" aria-label="模板编号" placeholder="模板编号" value={taskForm.templateId} onChange={(event) => setTaskForm({ ...taskForm, templateId: event.target.value })} />
           <select data-testid="facility-inspection-task-type" aria-label="任务类型" value={taskForm.inspectionType} onChange={(event) => setTaskForm({ ...taskForm, inspectionType: event.target.value })}>{INSPECTION_TYPES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
           <input data-testid="facility-inspection-task-title" aria-label="任务标题" placeholder="任务标题" value={taskForm.title} onChange={(event) => setTaskForm({ ...taskForm, title: event.target.value })} />
           <select data-testid="facility-inspection-task-schedule-mode" aria-label="排程模式" value={taskForm.scheduleMode} onChange={(event) => setTaskForm({ ...taskForm, scheduleMode: event.target.value })}><option value="manual">手工</option><option value="template">按模板</option><option value="route">按路线</option></select>
-          <input data-testid="facility-inspection-task-assignee" aria-label="巡检人" placeholder="巡检人 id" value={taskForm.assigneeId} onChange={(event) => setTaskForm({ ...taskForm, assigneeId: event.target.value })} />
+          <input data-testid="facility-inspection-task-assignee" aria-label="巡检人" placeholder="巡检人编号" value={taskForm.assigneeId} onChange={(event) => setTaskForm({ ...taskForm, assigneeId: event.target.value })} />
           <CnDatePicker data-testid="facility-inspection-task-scheduled-date" aria-label="计划日期" value={taskForm.scheduledDate} onChange={(v) => setTaskForm({ ...taskForm, scheduledDate: v })} />
           <CnDatePicker data-testid="facility-inspection-task-due-date" aria-label="到期日期" value={taskForm.dueDate} onChange={(v) => setTaskForm({ ...taskForm, dueDate: v })} />
           {pickProject ? <label>所属项目<select data-testid="facility-inspection-task-project" aria-label="巡检任务所属项目" value={taskForm.projectId} onChange={(event) => setTaskForm({ ...taskForm, projectId: event.target.value })}><option value="">按模板/空间所在项目，否则本人所在项目</option>{projects.map((p) => <option key={p.id} value={p.id}>{p.name ?? p.id}</option>)}</select></label> : null}
@@ -1050,7 +1050,7 @@ export function FacilityWorkbenchPage({ api, user, setActionResult, setGlobalErr
         </div>
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="facility-inspection-tasks-table">
-            <thead><tr><th>id</th><th>标题</th><th>类型/排程</th><th>状态</th><th>人员/日期</th><th>工单</th><th>操作</th><th>详情</th></tr></thead>
+            <thead><tr><th>编号</th><th>标题</th><th>类型/排程</th><th>状态</th><th>人员/日期</th><th>工单</th><th>操作</th><th>详情</th></tr></thead>
             <tbody>{inspectionTasks.map((row) => (
               <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`facility-inspection-task-${row.id}`}
                 onClick={() => openInspectionTaskDetail(row)}
@@ -1067,7 +1067,7 @@ export function FacilityWorkbenchPage({ api, user, setActionResult, setGlobalErr
           </table>
         </div>
         <div className="admin-inline-form" data-testid="facility-inspection-record-form">
-          <input data-testid="facility-inspection-record-task-id" aria-label="巡检任务 id" placeholder="任务 id" value={selectedTaskId} onChange={(event) => setSelectedTaskId(event.target.value)} />
+          <input data-testid="facility-inspection-record-task-id" aria-label="巡检任务编号" placeholder="任务编号" value={selectedTaskId} onChange={(event) => setSelectedTaskId(event.target.value)} />
           <select data-testid="facility-inspection-record-result" aria-label="巡检结果" value={recordForm.result} onChange={(event) => setRecordForm({ ...recordForm, result: event.target.value })}><option value="normal">正常</option><option value="abnormal">异常</option></select>
           <input data-testid="facility-inspection-record-note" aria-label="记录备注" placeholder="备注" value={recordForm.note} onChange={(event) => setRecordForm({ ...recordForm, note: event.target.value })} />
           <input data-testid="facility-inspection-record-abnormal-note" aria-label="异常说明" placeholder="异常说明" value={recordForm.abnormalNote} onChange={(event) => setRecordForm({ ...recordForm, abnormalNote: event.target.value })} />
@@ -1100,8 +1100,8 @@ export function FacilityWorkbenchPage({ api, user, setActionResult, setGlobalErr
           </table>
         </div>
         <div className="admin-inline-form" data-testid="facility-alarm-disposition-form">
-          <input data-testid="facility-alarm-disposition-alarm" aria-label="接警单" placeholder="接警单 id" value={dispositionForm.alarmId} onChange={(event) => setDispositionForm({ ...dispositionForm, alarmId: event.target.value })} />
-          <input data-testid="facility-alarm-disposition-rule" aria-label="所按故障处置规则" placeholder="所按规则 id（按已确认规则处理时填）" value={dispositionForm.appliedRuleId} onChange={(event) => setDispositionForm({ ...dispositionForm, appliedRuleId: event.target.value })} />
+          <input data-testid="facility-alarm-disposition-alarm" aria-label="接警单" placeholder="接警单编号" value={dispositionForm.alarmId} onChange={(event) => setDispositionForm({ ...dispositionForm, alarmId: event.target.value })} />
+          <input data-testid="facility-alarm-disposition-rule" aria-label="所按故障处置规则" placeholder="所按规则编号（按已确认规则处理时填）" value={dispositionForm.appliedRuleId} onChange={(event) => setDispositionForm({ ...dispositionForm, appliedRuleId: event.target.value })} />
           <input data-testid="facility-alarm-disposition-judgement" aria-label="专业处置判定" placeholder="专业处置判定（如停用或继续使用）" value={dispositionForm.judgement} onChange={(event) => setDispositionForm({ ...dispositionForm, judgement: event.target.value })} />
           <PermissionButton permissionsState={effectivePermissions} permissions={TAKE_OVER} data-testid="facility-alarm-disposition-submit" onClick={() => void recordDisposition()}>记录处置要求（不远程停机）</PermissionButton>
         </div>
@@ -1124,7 +1124,7 @@ export function FacilityWorkbenchPage({ api, user, setActionResult, setGlobalErr
         </div>
         <h3>接警值守安排</h3>
         <div className="admin-inline-form" data-testid="facility-alarm-duty-form">
-          <input data-testid="facility-alarm-duty-shift" aria-label="班次" placeholder="已发布班次 id" value={dutyForm.shiftId} onChange={(event) => setDutyForm({ ...dutyForm, shiftId: event.target.value })} />
+          <input data-testid="facility-alarm-duty-shift" aria-label="班次" placeholder="已发布班次编号" value={dutyForm.shiftId} onChange={(event) => setDutyForm({ ...dutyForm, shiftId: event.target.value })} />
           <select data-testid="facility-alarm-duty-role" aria-label="接警角色" value={dutyForm.dutyRole} onChange={(event) => setDutyForm({ ...dutyForm, dutyRole: event.target.value })}>{DUTY_ROLES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
           <input data-testid="facility-alarm-duty-phone" aria-label="联系电话" placeholder="联系电话" value={dutyForm.contactPhone} onChange={(event) => setDutyForm({ ...dutyForm, contactPhone: event.target.value })} />
           <PermissionButton permissionsState={effectivePermissions} permissions={ALARM_MANAGE} data-testid="facility-alarm-duty-assign" onClick={() => void assignDuty()}>安排接警值守</PermissionButton>
@@ -1157,8 +1157,8 @@ export function FacilityWorkbenchPage({ api, user, setActionResult, setGlobalErr
         </div>
         <h3>故障处置规则（专业负责人＋维保单位两方确认后生效）</h3>
         <div className="admin-inline-form" data-testid="facility-fault-rule-form">
-          <input data-testid="facility-fault-rule-project" aria-label="项目" placeholder="项目 id（按分类通用时填）" value={ruleForm.projectId} onChange={(event) => setRuleForm({ ...ruleForm, projectId: event.target.value })} />
-          <input data-testid="facility-fault-rule-equipment" aria-label="设备" placeholder="设备 id（按单台设备时填）" value={ruleForm.equipmentId} onChange={(event) => setRuleForm({ ...ruleForm, equipmentId: event.target.value })} />
+          <input data-testid="facility-fault-rule-project" aria-label="项目" placeholder="项目编号（按分类通用时填）" value={ruleForm.projectId} onChange={(event) => setRuleForm({ ...ruleForm, projectId: event.target.value })} />
+          <input data-testid="facility-fault-rule-equipment" aria-label="设备" placeholder="设备编号（按单台设备时填）" value={ruleForm.equipmentId} onChange={(event) => setRuleForm({ ...ruleForm, equipmentId: event.target.value })} />
           <select data-testid="facility-fault-rule-type" aria-label="设备分类" value={ruleForm.equipmentType} onChange={(event) => setRuleForm({ ...ruleForm, equipmentType: event.target.value })}>{EQUIPMENT_TYPES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
           <input data-testid="facility-fault-rule-scenario" aria-label="故障场景" placeholder="故障场景" value={ruleForm.faultScenario} onChange={(event) => setRuleForm({ ...ruleForm, faultScenario: event.target.value })} />
           <input data-testid="facility-fault-rule-requirement" aria-label="处置要求" placeholder="处置要求（停用或继续使用等）" value={ruleForm.handlingRequirement} onChange={(event) => setRuleForm({ ...ruleForm, handlingRequirement: event.target.value })} />

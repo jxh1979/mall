@@ -228,7 +228,7 @@ export function MonthlyComparisonPage({ api, setActionResult, setGlobalError, ef
           </table>
         </div>
       </AdminDataState>
-      <h3>节假日对比(今年 vs 去年同名假期;流量看总额与日均,天数不同看日均才公平)</h3>
+      <h3>节假日对比(今年对比去年同名假期;流量看总额与日均,天数不同看日均才公平)</h3>
       <div className="admin-toolbar" data-testid="holiday-comparison-controls">
         <label>
           节假日:

@@ -1,4 +1,4 @@
-# P0 OpenAPI 权限、事件、任务追溯收口附录 V0.85
+# P0 OpenAPI 权限、事件、任务追溯收口附录 V0.86
 
 ## 1. 文档定位
 
@@ -14,11 +14,11 @@
 
 | 检查项 | 当前结果 | 执行结论 |
 |---|---:|---|
-| OpenAPI operation 数 | 1401 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
+| OpenAPI operation 数 | 1400 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
 | OpenAPI 权限/通用权限状态数 | 445 | 人工权限矩阵正文未覆盖 344 项；缺口以本文第 3 节补齐 |
-| OpenAPI 成功/失败事件数 | 2802 | 人工事件矩阵正文未覆盖 2753 项；完整事件字典以本文第 4 节为准 |
-| operation 级任务追溯 | 1401 | 人工任务映射正文未逐项覆盖 1395 个 operation；逐 operation 映射以本文第 5 节为准 |
-| 写接口数量 | 862 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
+| OpenAPI 成功/失败事件数 | 2800 | 人工事件矩阵正文未覆盖 2751 项；完整事件字典以本文第 4 节为准 |
+| operation 级任务追溯 | 1400 | 人工任务映射正文未逐项覆盖 1394 个 operation；逐 operation 映射以本文第 5 节为准 |
+| 写接口数量 | 861 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
 
 ## 3. 权限码与认证上下文补充表
 
@@ -99,8 +99,8 @@
 | `analytics.review.lock` | staff-token | project | 2 | listReviewLocks, createReviewLock | OpenAPI 补充，以本附录为准 |
 | `analytics.risk_alert.manage` | staff-token | project | 3 | generateLocalLlmAiQualitySuggestion, createRiskAlert, resolveRiskAlert | 已在权限矩阵正文出现 |
 | `analytics.risk_alert.view` | staff-token | project | 8 | listAiQualityResults, listAiQualityTasks, listCustomerIntents, listMetricAnomalies, listMetricAnomalyTimeline, listRiskAlerts, listRiskRules, listStaffServiceScores | 已在权限矩阵正文出现 |
-| `audit.operation_log.export` | staff-token | platform, project-bar-table | 2 | exportBarSuspendedOrders, exportAuditOperationEvents | OpenAPI 补充，以本附录为准 |
-| `audit.operation_log.view` | staff-token | platform | 2 | getAuditLabels, queryAuditOperationEvents | OpenAPI 补充，以本附录为准 |
+| `audit.operation_log.export` | staff-token | project, project-bar-table | 2 | exportBarSuspendedOrders, exportAuditOperationEvents | OpenAPI 补充，以本附录为准 |
+| `audit.operation_log.view` | staff-token | platform, project | 2 | getAuditLabels, queryAuditOperationEvents | OpenAPI 补充，以本附录为准 |
 | `authenticated` | staff-token | current-session, merchant, platform, self | 9 | logout, refreshToken, getEffectivePermissions, approveDeleteSpaceType, listManualBackfills, recordPageView, listMyExports, requestEditableExportCopy, downloadEditableExportCopy | 已在权限矩阵正文出现 |
 | `bar.bill.adjust` | staff-token | project-bar-table | 2 | raiseBarBillAnomaly, adjustBarBill | OpenAPI 补充，以本附录为准 |
 | `bar.bill.anomaly.resolve` | staff-token | project-bar-table | 1 | resolveBarBillAnomaly | OpenAPI 补充，以本附录为准 |
@@ -405,8 +405,8 @@
 | `service.order.perform` | staff-token | platform | 5 | setMyServicePaymentCode, myServicePaymentCode, listMyServiceOrders, acceptServiceOrder, myServiceStats | OpenAPI 补充，以本附录为准 |
 | `settlement.bill.post` | staff-token | platform | 1 | settlementPostBill | OpenAPI 补充，以本附录为准 |
 | `settlement.bill.special_approve` | staff-token | platform | 2 | settlementConfigApprovePassIncentive, settlementConfigRejectPassIncentive | OpenAPI 补充，以本附录为准 |
-| `settlement.config.manage` | staff-token | platform, project | 23 | settlementConfigUpsertRetention, settlementConfigUpsertDistributionMethod, settlementConfigUpsertMerchantRate, settlementConfigUpsertComprehensiveServiceFee, settlementConfigUpsertComboDiscount, settlementConfigUpsertChannelFee, settlementConfigUpsertCommissionRate, settlementConfigUpsertPointsAccrualRate, settlementConfigUpsertRankTiers, settlementConfigUpsertRevenueStreamAttribution, settlementConfigActivateRankTiers, settlementConfigSaveDistributionScheme ... | OpenAPI 补充，以本附录为准 |
-| `settlement.config.view` | staff-token | platform, project | 5 | settlementConfigOverview, settlementConfigDistributionScheme, listInternalPayDayRules, getSettlementObjectionPeriod, settlementConfigListInternalPriceItems | OpenAPI 补充，以本附录为准 |
+| `settlement.config.manage` | staff-token | platform, project | 22 | settlementConfigUpsertDistributionMethod, settlementConfigUpsertMerchantRate, settlementConfigUpsertComprehensiveServiceFee, settlementConfigUpsertComboDiscount, settlementConfigUpsertChannelFee, settlementConfigUpsertCommissionRate, settlementConfigUpsertPointsAccrualRate, settlementConfigUpsertRankTiers, settlementConfigUpsertRevenueStreamAttribution, settlementConfigActivateRankTiers, settlementConfigSaveDistributionScheme, settlementConfigActivateDistributionScheme ... | OpenAPI 补充，以本附录为准 |
+| `settlement.config.view` | staff-token | platform, project, project-provider | 5 | settlementConfigOverview, settlementConfigDistributionScheme, listInternalPayDayRules, getSettlementObjectionPeriod, settlementConfigListInternalPriceItems | OpenAPI 补充，以本附录为准 |
 | `settlement.internal_price.submit` | staff-token | provider-self | 1 | settlementConfigUpsertInternalPriceItem | OpenAPI 补充，以本附录为准 |
 | `settlement.invoice.export` | staff-token | platform | 1 | exportSettlementInvoiceItems | OpenAPI 补充，以本附录为准 |
 | `settlement.invoice.manage` | staff-token | platform | 2 | generateSettlementInvoiceItems, changeSettlementInvoiceItemStatus | OpenAPI 补充，以本附录为准 |
@@ -1247,6 +1247,8 @@
 | `customer.ticket_usages_viewed` | success | `listCustomerTicketUsages` | `GET` | `/api/v1/customer/tickets/{ticket_id}/usages` | CUS/TIC-客人购票 | `not_applicable` | 接口级事件，以本附录为准 |
 | `data.cleanup.execute_failed` | failure | `approveDataCleanupJob` | `POST` | `/api/v1/ops/data-cleanup/jobs/{id}/approve` | OPS-生产前置 | `data.cleanup.approve` | 接口级事件，以本附录为准 |
 | `data.cleanup.executed` | success | `approveDataCleanupJob` | `POST` | `/api/v1/ops/data-cleanup/jobs/{id}/approve` | OPS-生产前置 | `data.cleanup.approve` | 接口级事件，以本附录为准 |
+| `data.cleanup.submit_failed` | failure | `submitDataCleanupJob` | `POST` | `/api/v1/ops/data-cleanup/jobs/{id}/submit` | OPS-生产前置 | `data.cleanup.request` | 接口级事件，以本附录为准 |
+| `data.cleanup.submitted` | success | `submitDataCleanupJob` | `POST` | `/api/v1/ops/data-cleanup/jobs/{id}/submit` | OPS-生产前置 | `data.cleanup.request` | 接口级事件，以本附录为准 |
 | `dealer.admission_view_failed` | failure | `getDealerAdmission` | `GET` | `/api/v1/dealers/{id}/admission` | P0-待归类 | `dealer.view` | 接口级事件，以本附录为准 |
 | `dealer.admission_viewed` | success | `getDealerAdmission` | `GET` | `/api/v1/dealers/{id}/admission` | P0-待归类 | `dealer.view` | 接口级事件，以本附录为准 |
 | `dealer.contract_create_failed` | failure | `createDealerContract` | `POST` | `/api/v1/dealers/{id}/contracts` | P0-待归类 | `dealer.manage` | 接口级事件，以本附录为准 |
@@ -2641,8 +2643,6 @@
 | `not_applicable` | failure | `settlementConfigOverview` | `GET` | `/api/v1/settlement/config/overview` | P0-待归类 | `settlement.config.view` | 接口级事件，以本附录为准 |
 | `not_applicable` | success | `settlementInvoiceSummary` | `GET` | `/api/v1/settlement/invoice-items/summary` | P0-待归类 | `settlement.invoice.view` | 接口级事件，以本附录为准 |
 | `not_applicable` | failure | `settlementInvoiceSummary` | `GET` | `/api/v1/settlement/invoice-items/summary` | P0-待归类 | `settlement.invoice.view` | 接口级事件，以本附录为准 |
-| `not_applicable` | success | `submitDataCleanupJob` | `POST` | `/api/v1/ops/data-cleanup/jobs/{id}/submit` | OPS-生产前置 | `data.cleanup.request` | 接口级事件，以本附录为准 |
-| `not_applicable` | failure | `submitDataCleanupJob` | `POST` | `/api/v1/ops/data-cleanup/jobs/{id}/submit` | OPS-生产前置 | `data.cleanup.request` | 接口级事件，以本附录为准 |
 | `not_applicable` | success | `ticketTypePriceCheck` | `GET` | `/api/v1/ticketing/ticket-types/{id}/price-check` | TIC-票务权益 | `ticket.product.view` | 接口级事件，以本附录为准 |
 | `not_applicable` | failure | `ticketTypePriceCheck` | `GET` | `/api/v1/ticketing/ticket-types/{id}/price-check` | TIC-票务权益 | `ticket.product.view` | 接口级事件，以本附录为准 |
 | `not_applicable` | failure | `unarchiveFacilityEquipment` | `POST` | `/api/v1/facility/equipment/{equipment_id}/unarchive` | P0-待归类 | `facility.equipment.manage` | 接口级事件，以本附录为准 |
@@ -2817,8 +2817,6 @@
 | `settlement.config.pass_incentive.rejected` | success | `settlementConfigRejectPassIncentive` | `POST` | `/api/v1/settlement/config/incentive-applications/{id}/reject` | P0-待归类 | `settlement.bill.special_approve` | 接口级事件，以本附录为准 |
 | `settlement.config.pass_incentive.submit_failed` | failure | `settlementConfigSubmitPassIncentive` | `POST` | `/api/v1/settlement/config/distribution-scheme/{id}/incentive-applications` | P0-待归类 | `settlement.config.manage` | 接口级事件，以本附录为准 |
 | `settlement.config.pass_incentive.submitted` | success | `settlementConfigSubmitPassIncentive` | `POST` | `/api/v1/settlement/config/distribution-scheme/{id}/incentive-applications` | P0-待归类 | `settlement.config.manage` | 接口级事件，以本附录为准 |
-| `settlement.config.platform_retention_rules.update_failed` | failure | `settlementConfigUpsertRetention` | `POST` | `/api/v1/settlement/config/retention` | P0-待归类 | `settlement.config.manage` | 接口级事件，以本附录为准 |
-| `settlement.config.platform_retention_rules.updated` | success | `settlementConfigUpsertRetention` | `POST` | `/api/v1/settlement/config/retention` | P0-待归类 | `settlement.config.manage` | 接口级事件，以本附录为准 |
 | `settlement.config.points_accrual_rate_configs.update_failed` | failure | `settlementConfigUpsertPointsAccrualRate` | `POST` | `/api/v1/settlement/config/points-accrual-rate` | P0-待归类 | `settlement.config.manage` | 接口级事件，以本附录为准 |
 | `settlement.config.points_accrual_rate_configs.updated` | success | `settlementConfigUpsertPointsAccrualRate` | `POST` | `/api/v1/settlement/config/points-accrual-rate` | P0-待归类 | `settlement.config.manage` | 接口级事件，以本附录为准 |
 | `settlement.config.revenue_stream_attribution.update_failed` | failure | `settlementConfigUpsertRevenueStreamAttribution` | `POST` | `/api/v1/settlement/config/revenue-stream-attribution` | P0-待归类 | `settlement.config.manage` | 接口级事件，以本附录为准 |
@@ -4095,7 +4093,7 @@
 | OPS-生产前置 | `listDataCleanupJobs` | `GET` | `/api/v1/ops/data-cleanup/jobs` | 查询数据清理作业 | `data.cleanup.request` | `not_applicable` / `not_applicable` | web | operation 级补充 |
 | OPS-生产前置 | `listProductionReadinessItems` | `GET` | `/api/v1/ops/production-readiness/items` | 查询生产前置责任状态 | `ops.production_readiness.view` | `production_readiness.viewed` / `production_readiness.view_failed` | web, mobile_admin | 已在任务映射正文出现 |
 | OPS-生产前置 | `previewDataCleanup` | `POST` | `/api/v1/ops/data-cleanup/preview` | 数据清理试运行 | `data.cleanup.request` | `not_applicable` / `not_applicable` | web | operation 级补充 |
-| OPS-生产前置 | `submitDataCleanupJob` | `POST` | `/api/v1/ops/data-cleanup/jobs/{id}/submit` | 提交数据清理申请 | `data.cleanup.request` | `not_applicable` / `not_applicable` | web | operation 级补充 |
+| OPS-生产前置 | `submitDataCleanupJob` | `POST` | `/api/v1/ops/data-cleanup/jobs/{id}/submit` | 提交数据清理申请 | `data.cleanup.request` | `data.cleanup.submitted` / `data.cleanup.submit_failed` | web | operation 级补充 |
 | OPS-生产前置 | `updateProductionReadinessItem` | `PUT` | `/api/v1/ops/production-readiness/items/{id}` | 更新生产前置责任状态 | `ops.production_readiness.manage` | `production_readiness.updated` / `production_readiness.update_failed` | web, mobile_admin | 已在任务映射正文出现 |
 | P0-待归类 | `acceptFacilityWorkOrder` | `POST` | `/api/v1/facility/work-orders/{work_order_id}/accept` | 主管验收工单 | `facility.work_order.manage` | `facility.work_order_accepted` / `facility.work_order_accept_failed` | web | operation 级补充 |
 | P0-待归类 | `acceptServiceOrder` | `POST` | `/api/v1/services/orders/{id}/accept` | 接单(仅指定履约人) | `service.order.perform` | `service.order.accepted` / `service.order.accept_failed` | web, staff_work_phone | operation 级补充 |
@@ -4462,7 +4460,6 @@
 | P0-待归类 | `settlementConfigUpsertPassGiftCost` | `POST` | `/api/v1/settlement/config/pass-gift-cost` | 维护赠送权益预估成本预扣规则(草案) | `settlement.config.manage` | `settlement.config.pass_gift_cost_configs.updated` / `settlement.config.pass_gift_cost_configs.update_failed` | web | operation 级补充 |
 | P0-待归类 | `settlementConfigUpsertPointsAccrualRate` | `POST` | `/api/v1/settlement/config/points-accrual-rate` | 维护积分累计率(草案) | `settlement.config.manage` | `settlement.config.points_accrual_rate_configs.updated` / `settlement.config.points_accrual_rate_configs.update_failed` | web | operation 级补充 |
 | P0-待归类 | `settlementConfigUpsertRankTiers` | `POST` | `/api/v1/settlement/config/rank-tiers` | 维护排名档位梯子(草案·整套替换) | `settlement.config.manage` | `settlement.config.ticket_distribution_rank_tiers.updated` / `settlement.config.ticket_distribution_rank_tiers.update_failed` | web | operation 级补充 |
-| P0-待归类 | `settlementConfigUpsertRetention` | `POST` | `/api/v1/settlement/config/retention` | 维护项目公司留存比例(草案) | `settlement.config.manage` | `settlement.config.platform_retention_rules.updated` / `settlement.config.platform_retention_rules.update_failed` | web | operation 级补充 |
 | P0-待归类 | `settlementConfigUpsertRevenueStreamAttribution` | `POST` | `/api/v1/settlement/config/revenue-stream-attribution` | 维护业态收入归属(草案) | `settlement.config.manage` | `settlement.config.revenue_stream_attribution.updated` / `settlement.config.revenue_stream_attribution.update_failed` | web | operation 级补充 |
 | P0-待归类 | `settlementInvoiceSummary` | `GET` | `/api/v1/settlement/invoice-items/summary` | 开票清单按主体汇总 | `settlement.invoice.view` | `not_applicable` / `not_applicable` | web | operation 级补充 |
 | P0-待归类 | `settlementPostBill` | `POST` | `/api/v1/settlement/bills/{id}/post` | 结算单过账(挂应付台账) | `settlement.bill.post` | `settlement.bill.posted` / `settlement.bill.post_failed` | web | operation 级补充 |

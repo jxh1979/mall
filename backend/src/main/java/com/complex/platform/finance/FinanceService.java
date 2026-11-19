@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.52
+// 文件版本：V0.53
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -4350,6 +4350,8 @@ public class FinanceService implements TerminationSettlementPort {
             payrollFinance.requireReadScope(item.sourceId(), FinancePayrollService.VIEW);
         }
         var actor=authorizationService.currentActor();
+        // 第十八批 BA 段第 314 条 314-R1（BSM:576；第十八批裁决 71）：最高权限不按项目闸收窄——批欠款抵扣大于 0 的分红单时结算应收不再 403。
+        if (authorizationService.isMasterAuthority(actor)) return;
         var reach=authorizationService.projectReach(actor,permission);
         boolean merchantAccount = !reach.platformAdmin() && trimToNull(actor.merchantId())!=null;
         if (merchantAccount && !actor.merchantId().equals(item.merchantId()))

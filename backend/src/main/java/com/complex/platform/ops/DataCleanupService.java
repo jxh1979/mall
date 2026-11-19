@@ -36,6 +36,12 @@ public class DataCleanupService {
     private static final AuditedOperation CLEANUP_EXECUTED = AuditedOperation.of(
             "data.cleanup.executed", "data.cleanup.execute_failed", "data.cleanup.approve", "data_cleanup_job");
 
+    /** 第十八批 BA 段第 275 条 275-R1（BSM:576「提交→由具备最高权限的人审批→批量清理，全程留痕」；PGM:966）：提交与驳回各落留痕。 */
+    private static final AuditedOperation SUBMITTED = AuditedOperation.of(
+            "data.cleanup.submitted", "data.cleanup.submit_failed", "data.cleanup.request", "data_cleanup_job");
+    private static final AuditedOperation REJECTED = AuditedOperation.of(
+            "data.cleanup.rejected", "data.cleanup.reject_failed", "data.cleanup.approve", "data_cleanup_job");
+
     private final JdbcDataCleanupRepository repository;
     private final AuthorizationService authorizationService;
     private final AuditedOperationExecutor operations;
@@ -80,13 +86,17 @@ public class DataCleanupService {
     /** ② 提交清理申请：dry_run → pending_approval（带事由）。 */
     @Transactional
     public DataCleanupJobRecord submitForApproval(String jobId, DataCleanupSubmitRequest request) {
-        DataCleanupJobRecord job = require(jobId);
-        if (!"dry_run".equals(job.status())) {
-            throw ApiException.conflict("DATA_CLEANUP_NOT_DRY_RUN", "只有试运行（dry_run）任务才能提交审批");
-        }
-        String reason = requireText(request == null ? null : request.reason(), "reason");
         Instant now = Instant.now();
-        DataCleanupJobRecord pending = repository.updateStatus(withStatus(job, "pending_approval", reason, null, null, null, null, now));
+        // 275-R1：提交人（登录人）与事由进 data.cleanup.submitted；作业行的发起人仍记试运行人。缺事由时不带元数据，照旧 400。
+        Map<String, Object> trace = request == null || request.reason() == null ? Map.of() : Map.of("reason", request.reason().trim());
+        DataCleanupJobRecord pending = operations.readSingle(SUBMITTED, () -> {
+            DataCleanupJobRecord job = require(jobId);
+            if (!"dry_run".equals(job.status())) {
+                throw ApiException.conflict("DATA_CLEANUP_NOT_DRY_RUN", "只有试运行（dry_run）任务才能提交审批");
+            }
+            String reason = requireText(request == null ? null : request.reason(), "reason");
+            return repository.updateStatus(withStatus(job, "pending_approval", reason, null, null, null, null, now));
+        }, r -> ((DataCleanupJobRecord) r).id(), trace);
         if (!isMaster()) {
             return pending;
         }
@@ -112,7 +122,9 @@ public class DataCleanupService {
         String approver = actorId();
 
         if ("rejected".equals(decision)) {
-            return repository.updateStatus(withStatus(job, "rejected", job.reason(), approver, now, null, null, now));
+            // 275-R1：驳回落 data.cleanup.rejected（审批人即登录人）。
+            return operations.readSingle(REJECTED, () -> repository.updateStatus(withStatus(job, "rejected", job.reason(), approver, now,
+                    null, null, now)), r -> ((DataCleanupJobRecord) r).id());
         }
 
         // 批准 → 批量隐藏（软删，走审计留痕执行器）。cutoff 用作业当初预览的 olderThanDays 重算（幂等重放安全）。

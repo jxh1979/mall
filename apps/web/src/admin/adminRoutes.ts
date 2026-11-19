@@ -1,4 +1,4 @@
-// 文件版本：V0.19
+// 文件版本：V0.20
 import type { AdminAccountForm, AdminNavGroup, AdminRoute, PermissionDefinitionRow } from "./types";
 
 export const adminRoutes: AdminRoute[] = [
@@ -103,7 +103,7 @@ export const adminRoutes: AdminRoute[] = [
   { pageId: "ADM-ANA-006", label: "工单时效", module: "分析", group: "overview", route: "/admin/analytics/work-order-sla", requiredPermissions: ["facility.work_order.manage"] },
   { pageId: "ADM-ANA-007", label: "能耗分析", module: "分析", group: "overview", route: "/admin/analytics/energy", requiredPermissions: ["energy.reading.manage"] },
   { pageId: "ADM-ANA-008", label: "月度对比", module: "分析", group: "overview", route: "/admin/analytics/monthly", requiredPermissions: ["analytics.dashboard.view"] },
-  { pageId: "ADM-ANA-009", label: "T3-A 只读经营分析", module: "分析", group: "overview", route: "/admin/analytics/t3a-readonly", requiredPermissions: ["analytics.dashboard.view"] },
+  { pageId: "ADM-ANA-009", label: "只读经营分析", module: "分析", group: "overview", route: "/admin/analytics/t3a-readonly", requiredPermissions: ["analytics.dashboard.view"] },
   { pageId: "ADM-ANA-012", label: "指标明细", module: "分析", group: "overview", route: "/admin/metric-detail", requiredPermissions: ["analytics.dashboard.view"] },
   { pageId: "ADM-ANA-013", label: "放弃权益额外收入", module: "分析", group: "overview", route: "/admin/analytics/abandoned-entitlement-revenue", requiredPermissions: ["analytics.dashboard.view"] },
   { pageId: "ADM-STF-001", label: "排班与考勤", module: "人事", group: "ops", route: "/admin/staff/shifts", requiredPermissions: ["staff.shift.manage"] },

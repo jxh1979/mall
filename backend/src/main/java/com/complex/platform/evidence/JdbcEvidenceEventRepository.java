@@ -69,13 +69,29 @@ class JdbcEvidenceEventRepository implements EvidenceEventRepository {
     @Override
     public com.complex.platform.common.api.PageResponse<EvidenceEventRecord> listPage(
             int page, int size, String merchantId) {
+        return listPage(page, size, merchantId, null);
+    }
+
+    @Override
+    public com.complex.platform.common.api.PageResponse<EvidenceEventRecord> listPage(
+            int page, int size, String merchantId, java.util.Set<String> projectScope) {
         int safePage = page < 1 ? 1 : page;
         int safeSize = size < 1 ? 20 : Math.min(size, 200);
+        if (projectScope != null && projectScope.isEmpty()) {
+            return new com.complex.platform.common.api.PageResponse<>(List.of(), safePage, safeSize, 0L);
+        }
         // 租户隔离谓词与 listLatest 同口径:merchantId 非空才加 merchant_id 过滤(平台口径不加)。
         org.springframework.jdbc.core.namedparam.MapSqlParameterSource params =
                 new org.springframework.jdbc.core.namedparam.MapSqlParameterSource()
                         .addValue("merchant_id", merchantId, java.sql.Types.VARCHAR);
         String where = " WHERE (:merchant_id IS NULL OR merchant_id = :merchant_id)";
+        // 第十八批 BA 段第 324 条 324-R2：不挂商户的账号按可触及项目内商户登记的事件（不带商户的事件归不到项目，不在内）。
+        // 18BA 收尾复核修正：商户所属项目＝主项目 UNION 已批准的经营项目（merchant_projects），与 listMerchantOperatingProjectIds 同一口径。
+        if (projectScope != null) {
+            where += " AND merchant_id IN (SELECT id FROM merchants WHERE project_id IN (:project_scope)"
+                    + " UNION SELECT merchant_id FROM merchant_projects WHERE project_id IN (:project_scope))";
+            params.addValue("project_scope", projectScope);
+        }
         Long total = jdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM evidence_events" + where, params, Long.class);
         params.addValue("limit", safeSize).addValue("offset", (long) (safePage - 1) * safeSize);

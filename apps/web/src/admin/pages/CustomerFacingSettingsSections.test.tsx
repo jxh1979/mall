@@ -1,4 +1,4 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
@@ -57,7 +57,7 @@ describe("客人端相关后台配置（ROOT-03 B 段券与展示组）", () => 
       ? { projectId: "__global__", remindHours: 24, minHours: null, maxHours: null } : []));
     render(<TicketingPoliciesPage {...props(api)} />);
     await waitFor(() => expect(screen.getByTestId("ticket-expiry-reminder-policy")).toBeTruthy());
-    fireEvent.change(screen.getByLabelText("到期提醒项目 id"), { target: { value: "prj_1" } });
+    fireEvent.change(screen.getByLabelText("到期提醒项目编号"), { target: { value: "prj_1" } });
     fireEvent.click(screen.getByTestId("ticket-expiry-reminder-query"));
     await waitFor(() => expect(screen.getByTestId("ticket-expiry-reminder-current").textContent).toContain("到期前 24 小时（出厂值"));
     fireEvent.change(screen.getByLabelText("到期提醒提前小时数"), { target: { value: "48" } });
@@ -74,7 +74,7 @@ describe("客人端相关后台配置（ROOT-03 B 段券与展示组）", () => 
     const p = props(api);
     render(<TicketingPoliciesPage {...p} />);
     await waitFor(() => expect(screen.queryByTestId("bar-arrival-reminder-policy")).not.toBeNull());
-    fireEvent.change(screen.getByLabelText("到店前提醒项目 id"), { target: { value: "prj_1" } });
+    fireEvent.change(screen.getByLabelText("到店前提醒项目编号"), { target: { value: "prj_1" } });
     fireEvent.click(screen.getByTestId("bar-arrival-reminder-query"));
     await waitFor(() => expect(screen.getByTestId("bar-arrival-reminder-current").textContent).toContain("最晚到店前 30 分钟（出厂值"));
     expect((screen.getByLabelText("最晚到店前提醒（分钟）") as HTMLInputElement).value).toBe("30");
@@ -118,7 +118,7 @@ describe("客人端相关后台配置（ROOT-03 B 段券与展示组）", () => 
     const p = props(api);
     render(<VenueBusinessHoursPage {...p} />);
     await waitFor(() => expect(screen.getByTestId("customer-home-content")).toBeTruthy());
-    fireEvent.change(screen.getByLabelText("首页内容项目 id"), { target: { value: "prj_1" } });
+    fireEvent.change(screen.getByLabelText("首页内容项目编号"), { target: { value: "prj_1" } });
     fireEvent.change(screen.getByLabelText("综合体介绍"), { target: { value: "城市娱乐综合体" } });
     fireEvent.change(screen.getByLabelText("活动公告"), { target: { value: "周六乐队演出" } });
     fireEvent.click(screen.getByTestId("customer-home-content-publish"));

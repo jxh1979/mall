@@ -25,6 +25,14 @@ public interface EvidenceEventRepository {
         return new PageResponse<>(all.subList(from, to), safePage, safeSize, all.size());
     }
 
+    /**
+     * 第十八批 BA 段第 324 条 324-R2：projectScope 非 null 时只取商户归属该项目集合的证据事件（空集合为空页）；null 同 3 参。
+     */
+    default PageResponse<EvidenceEventRecord> listPage(int page, int size, String merchantId, java.util.Set<String> projectScope) {
+        return projectScope == null ? listPage(page, size, merchantId)
+                : new PageResponse<>(List.of(), page < 1 ? 1 : page, size < 1 ? 20 : size, 0);
+    }
+
     EvidenceAttachmentRecord saveAttachment(EvidenceAttachmentRecord attachment);
 
     Optional<EvidenceAttachmentRecord> findAttachmentById(String id);

@@ -34,6 +34,9 @@ import com.complex.platform.ticketing.dto.VerificationRequest;
 })
 class SettlementPriceResolutionJdbcIntegrationTests {
 
+    /** 第十八批 BA 段第 355 条 355-R1：内部结算价批准后待生效，到生效起始日期由系统转正（用例里直接调到日转正）。 */
+    @Autowired private com.complex.platform.settlement.InternalPriceScheduledActivationService priceActivation;
+
     @Autowired
     private TicketingService ticketingService;
 
@@ -175,7 +178,7 @@ class SettlementPriceResolutionJdbcIntegrationTests {
         // ② 起草改价 3000：落的是草案，不生效——解析器此刻仍是 8000。
         configWriteService.saveInternalPriceItem(
                 new com.complex.platform.settlement.SettlementConfigWriteRequests.InternalPriceItemRequest(
-                        "idem-sku-" + suffix, itemCode, "merchant_a", "spirit", "SP Drink", 3000L),
+                        "idem-sku-" + suffix, itemCode, "merchant_a", "spirit", "SP Drink", 3000L, null, java.time.LocalDate.now(com.complex.platform.common.LocalZone.ID).plusDays(1).toString()),
                 "drafter_sp_it");
         assertThat(priceResolver.require(barProductId, "merchant_a", null)).isEqualTo(8000L);
 
@@ -192,6 +195,7 @@ class SettlementPriceResolutionJdbcIntegrationTests {
         jdbcTemplate.update("INSERT INTO access_users (id, username, account_type, organization_id, status, created_at)"
                 + " VALUES ('approver_sp_it', 'approver_sp_it', 'staff', 'be_ent_platform', 'active', now()) ON CONFLICT (id) DO NOTHING");
         configWriteService.activateDraft("internal_price_item", draftId, "approver_sp_it");
+        priceActivation.activateDue(java.time.Instant.now().plus(java.time.Duration.ofDays(2)));
         assertThat(settlementPrice(codeA)).isEqualTo(8000L); // 已发生的不可改
         assertThat(jdbcTemplate.queryForObject(
                 "SELECT internal_settlement_price_cent FROM bar_products WHERE id = ?", Long.class, barProductId))

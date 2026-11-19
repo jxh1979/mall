@@ -1,6 +1,6 @@
 package com.complex.platform.terminal;
 
-// 文件版本：V0.05
+// 文件版本：V0.06
 
 import com.complex.platform.support.InMemoryAuditEventRepository;
 import com.complex.platform.support.InMemoryIdempotencyRepository;
@@ -513,6 +513,11 @@ class TerminalDeviceServiceTests {
         assertThat(auditEventRepository.events)
                 .extracting(AuditEvent::eventName)
                 .containsExactly("terminal_switch.changed");
+        // 第十八批 BA 段第 270 条 270-R1（PGM:739「……变更前后的取值与影响范围。」；PGM:742 缺行即默认关闭）：新建行的变更前取值记关闭。
+        assertThat(auditEventRepository.events.get(0).metadata())
+                .containsEntry("previous_enabled", false).containsEntry("enabled", true)
+                .containsEntry("terminal_type", "kiosk").containsEntry("capability_code", "ticketing")
+                .containsEntry("scope_type", "device").containsEntry("scope_id", "device_ticketing_1");
     }
 
     @Test

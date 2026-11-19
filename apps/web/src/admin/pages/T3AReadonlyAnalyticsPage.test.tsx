@@ -65,3 +65,13 @@ describe("T3AReadonlyAnalyticsPage 英文枚举业务化", () => {
     expect(definition).not.toContain("active");
   });
 });
+
+// 第十八批 BA 段收尾复核修正（PGM:287）：页标题不写 T3-A。
+describe("T3AReadonlyAnalyticsPage 页标题不夹英文（第 267 条收尾复核）", () => {
+  it("页标题写「只读经营分析」，整页不含 T3", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("t3a-staff-table")).toBeTruthy());
+    expect(document.body.textContent).toContain("只读经营分析");
+    expect(document.body.textContent).not.toContain("T3");
+  });
+});

@@ -1,4 +1,4 @@
-// 文件版本：V0.22
+// 文件版本：V0.23
 import React from "react";
 import { QRCodeSVG } from "qrcode.react";
 import { buildCustomerLink } from "@complex/customer-core/links";
@@ -201,19 +201,19 @@ export function BarTableSessionsPage({ api, user, setActionResult, setGlobalErro
     if (!selectedSession?.id) return fail("请先选择要操作的开台会话。");
     if (!actionReason.trim()) return fail("转卡、合并、拆台必须填写原因。");
     if (kind === "transfer") {
-      if (!targetTableId.trim()) return fail("请输入目标卡座 ID。");
+      if (!targetTableId.trim()) return fail("请输入目标卡座编号。");
       if (!targetServiceStaffId.trim()) return fail("请明确目标卡座的实际当班接手人，不能默认原人跟随客人。");
       if (targetTableId.trim() === selectedSession.tableId) return fail("目标卡座不能与当前卡座相同。");
     }
     if (kind === "merge") {
-      if (!mergedSessionId.trim()) return fail("请输入要合并的目标会话 ID。");
+      if (!mergedSessionId.trim()) return fail("请输入要合并的目标会话编号。");
       if (mergedSessionId.trim() === selectedSession.id) return fail("不能把会话合并到自身。");
     }
     if (kind === "split") {
-      if (splitMode === "single" && !splitSessionId.trim()) return fail("任选一台拆出时请填写要拆出的原台会话 ID。");
-      if (parseIdAssignments(splitAssignments).some((row) => !row.id || !row.sessionId)) return fail("订单归属每行须为「订单ID=会话ID」。");
-      if (parseIdAssignments(splitInvitationAssignments).some((row) => !row.id || !row.sessionId)) return fail("邀请归属每行须为「订台ID=会话ID」。");
-      if (parseIdAssignments(splitMemberAssignments).some((row) => !row.id || !row.sessionId)) return fail("成员归属每行须为「成员ID=会话ID」。");
+      if (splitMode === "single" && !splitSessionId.trim()) return fail("任选一台拆出时请填写要拆出的原台会话编号。");
+      if (parseIdAssignments(splitAssignments).some((row) => !row.id || !row.sessionId)) return fail("订单归属每行须为「订单编号=会话编号」。");
+      if (parseIdAssignments(splitInvitationAssignments).some((row) => !row.id || !row.sessionId)) return fail("邀请归属每行须为「订台编号=会话编号」。");
+      if (parseIdAssignments(splitMemberAssignments).some((row) => !row.id || !row.sessionId)) return fail("成员归属每行须为「成员编号=会话编号」。");
     }
     setBarError("");
     return true;
@@ -387,7 +387,7 @@ export function BarTableSessionsPage({ api, user, setActionResult, setGlobalErro
   // 客人手机号必填（操作员裁决第十三批第 7 条：员工代订必须录入客人手机号，查到会员且受限就拒绝，查不到会员的照常代订）。
   function validateNewReservation() {
     if (!newReservation.barId.trim()) return fail("新建订台请填写所属酒吧。");
-    if (!newReservation.tableId.trim()) return fail("新建订台请填写卡座 ID。");
+    if (!newReservation.tableId.trim()) return fail("新建订台请填写卡座编号。");
     const count = Number(newReservation.guestCount);
     if (!Number.isFinite(count) || count <= 0) return fail("订台人数必须大于 0。");
     if (!newReservation.customerPhone.trim()) return fail("代客订台请填写客人手机号。");
@@ -433,7 +433,7 @@ export function BarTableSessionsPage({ api, user, setActionResult, setGlobalErro
   // 开台：为选定卡座新建开台会话（可选带销售/服务员）。营业日由服务端按开台时点所属酒吧营业日确定（ENUM:187）。
   function validateNewSession() {
     if (!newSession.barId.trim()) return fail("开台请填写所属酒吧。");
-    if (!newSession.tableId.trim()) return fail("开台请填写卡座 ID。");
+    if (!newSession.tableId.trim()) return fail("开台请填写卡座编号。");
     const count = Number(newSession.guestCount);
     if (!Number.isFinite(count) || count <= 0) return fail("开台人数必须大于 0。");
     setBarError("");
@@ -637,23 +637,23 @@ export function BarTableSessionsPage({ api, user, setActionResult, setGlobalErro
       />
       <div className="admin-form-row" data-testid="bar-create-reservation-form">
         <label>所属酒吧<BarVenueSelect api={api} testId="bar-new-reservation-bar" value={newReservation.barId} onChange={(v) => setNewReservation((p) => ({ ...p, barId: v }))} autoSelectFirst setGlobalError={setGlobalError} /></label>
-        <label>卡座 ID<input data-testid="bar-new-reservation-table" value={newReservation.tableId} onChange={(event) => setNewReservation((p) => ({ ...p, tableId: event.target.value }))} placeholder="要订的卡座 ID" /></label>
+        <label>卡座编号<input data-testid="bar-new-reservation-table" value={newReservation.tableId} onChange={(event) => setNewReservation((p) => ({ ...p, tableId: event.target.value }))} placeholder="要订的卡座编号" /></label>
         <label>人数<input data-testid="bar-new-reservation-guests" type="number" min={1} value={newReservation.guestCount} onChange={(event) => setNewReservation((p) => ({ ...p, guestCount: event.target.value }))} placeholder="人数" /></label>
-        <label>销售员（选填）<input data-testid="bar-new-reservation-sales" value={newReservation.salespersonUserId} onChange={(event) => setNewReservation((p) => ({ ...p, salespersonUserId: event.target.value }))} placeholder="销售员 ID" /></label>
+        <label>销售员（选填）<input data-testid="bar-new-reservation-sales" value={newReservation.salespersonUserId} onChange={(event) => setNewReservation((p) => ({ ...p, salespersonUserId: event.target.value }))} placeholder="销售员编号" /></label>
         <label>客人手机号<input data-testid="bar-new-reservation-phone" type="tel" value={newReservation.customerPhone} onChange={(event) => setNewReservation((p) => ({ ...p, customerPhone: event.target.value }))} placeholder="必填，用于核对会员是否受限" /></label>
         <label>最晚到店时间<input data-testid="bar-new-reservation-latest" type="datetime-local" value={newReservation.latestArrivalAt} onChange={(event) => setNewReservation((p) => ({ ...p, latestArrivalAt: event.target.value }))} /></label>
         <PermissionButton permissionsState={effectivePermissions} permissions={[BAR_RESERVATION_CREATE_PERMISSION]} disabled={submitting} onClick={() => void createReservation()} data-testid="bar-new-reservation-submit">新建订台（代客）</PermissionButton>
       </div>
       <div className="admin-form-row" data-testid="bar-create-session-form">
         <label>所属酒吧<BarVenueSelect api={api} testId="bar-new-session-bar" value={newSession.barId} onChange={(v) => setNewSession((p) => ({ ...p, barId: v }))} autoSelectFirst setGlobalError={setGlobalError} /></label>
-        <label>卡座 ID<input data-testid="bar-new-session-table" value={newSession.tableId} onChange={(event) => setNewSession((p) => ({ ...p, tableId: event.target.value }))} placeholder="要开台的卡座 ID" /></label>
+        <label>卡座编号<input data-testid="bar-new-session-table" value={newSession.tableId} onChange={(event) => setNewSession((p) => ({ ...p, tableId: event.target.value }))} placeholder="要开台的卡座编号" /></label>
         <label>订台号（有预订必填）<input data-testid="bar-new-session-reservation" value={newSession.reservationId} onChange={(event) => setNewSession((p) => ({ ...p, reservationId: event.target.value }))} placeholder="客人到店开台填该台位的订台号" /></label>
         <label>人数<input data-testid="bar-new-session-guests" type="number" min={1} value={newSession.guestCount} onChange={(event) => setNewSession((p) => ({ ...p, guestCount: event.target.value }))} placeholder="人数" /></label>
         {newSession.reservationId.trim()
           ? <span data-testid="bar-new-session-sales-from-reservation">销售：按订台带出</span>
-          : <label>销售（选填）<input data-testid="bar-new-session-sales" value={newSession.salesStaffId} onChange={(event) => setNewSession((p) => ({ ...p, salesStaffId: event.target.value }))} placeholder="销售 ID" /></label>}
+          : <label>销售（选填）<input data-testid="bar-new-session-sales" value={newSession.salesStaffId} onChange={(event) => setNewSession((p) => ({ ...p, salesStaffId: event.target.value }))} placeholder="销售编号" /></label>}
         {/* 第十八批 I 段 86-R3（BSM 第 1077 行「主责服务提供人按当日该场次排班指派到该卡座」）：卡座不填由服务端按排班指派。 */}
-        <label>服务员（不填按排班自动指派；当班多人时填其一）<input data-testid="bar-new-session-service" value={newSession.serviceStaffId} onChange={(event) => setNewSession((p) => ({ ...p, serviceStaffId: event.target.value }))} placeholder="服务员 ID" /></label>
+        <label>服务员（不填按排班自动指派；当班多人时填其一）<input data-testid="bar-new-session-service" value={newSession.serviceStaffId} onChange={(event) => setNewSession((p) => ({ ...p, serviceStaffId: event.target.value }))} placeholder="服务员编号" /></label>
         <PermissionButton permissionsState={effectivePermissions} permissions={[BAR_SESSION_CREATE_PERMISSION]} disabled={submitting} onClick={() => void createSession()} data-testid="bar-new-session-submit">开台</PermissionButton>
       </div>
       {barError ? <div data-testid="bar-create-error" className="admin-inline-error">{barError}</div> : null}
@@ -662,13 +662,13 @@ export function BarTableSessionsPage({ api, user, setActionResult, setGlobalErro
         <div className="admin-form-row">
           {/* 第十八批 P 段第 135 条：删按人数「登记入场」，卡座免通票入场只走下方门口入场核验本人动态入场码（BSM:1036「到店出示本人的动态入场码核验入场」、ENUM:36「不存在免核销入场的情形」）。 */}
           <label>转/合/拆原因<input data-testid="bar-session-reason" value={actionReason} onChange={(event) => setActionReason(event.target.value)} placeholder="必填，留痕用" /></label>
-          <label>目标卡座<input data-testid="bar-transfer-target-table" value={targetTableId} onChange={(event) => setTargetTableId(event.target.value)} placeholder="转入的卡座 ID" /></label>
+          <label>目标卡座<input data-testid="bar-transfer-target-table" value={targetTableId} onChange={(event) => setTargetTableId(event.target.value)} placeholder="转入的卡座编号" /></label>
           <label>目标卡座当班接手人<input data-testid="bar-transfer-target-staff" aria-label="目标卡座当班接手人" value={targetServiceStaffId} onChange={event => setTargetServiceStaffId(event.target.value)} placeholder="真实接手员工账号" /></label>
           <p>按目标工作点位已发布的排班或真实顶班记录核实接手人；原台服务责任截至实际转台时刻。</p>
           <HighRiskConfirm label="转卡" impact="将把选中开台会话转移到目标卡座，达到本酒吧转台次数上限时须主管审批。" disabled={submitting} precheck={() => validateSessionAction("transfer")} onConfirm={() => void runSessionAction("transfer")} permissionsState={effectivePermissions} permissions={[BAR_TRANSFER_PERMISSION]} data-testid="bar-transfer-submit" />
           {/* 第十八批 AB 段第 190 条 190-R3（BSM:1079「撤销转台……按转台前快照恢复原台位、邀请关系、成员归属、可邀请人数、最低消费额和消费进度，并完整留痕」）：原因取「转/合/拆原因」框。 */}
           <HighRiskConfirm label="撤销最近一次转台" impact="将把选中会话按转台前快照退回原台位，低消、可邀请人数与服务人一并恢复；转台后已有点单、付款、退款或邀请、成员变化，或原台已被占用时不能撤销。" disabled={submitting} precheck={() => validateSessionAction("transfer_undo")} onConfirm={() => void runSessionAction("transfer_undo")} permissionsState={effectivePermissions} permissions={[BAR_TRANSFER_PERMISSION]} data-testid="bar-transfer-undo-submit" />
-          <label>合并目标会话<input data-testid="bar-merge-target-session" value={mergedSessionId} onChange={(event) => setMergedSessionId(event.target.value)} placeholder="被并入的会话 ID" /></label>
+          <label>合并目标会话<input data-testid="bar-merge-target-session" value={mergedSessionId} onChange={(event) => setMergedSessionId(event.target.value)} placeholder="被并入的会话编号" /></label>
           <HighRiskConfirm label="合并" impact="将把选中会话与目标会话合并，账单和责任链必须留痕。" disabled={submitting} precheck={() => validateSessionAction("merge")} onConfirm={() => void runSessionAction("merge")} permissionsState={effectivePermissions} permissions={[BAR_MERGE_PERMISSION]} data-testid="bar-merge-submit" />
         </div>
         <div className="admin-form-row" data-testid="bar-split-form">
@@ -679,10 +679,10 @@ export function BarTableSessionsPage({ api, user, setActionResult, setGlobalErro
               <option value="all">一次全部拆开</option>
             </select>
           </label>
-          {splitMode === "single" ? <label>拆出的原台会话<input data-testid="bar-split-session" value={splitSessionId} onChange={(event) => setSplitSessionId(event.target.value)} placeholder="要单独拆出的原台会话 ID" /></label> : null}
-          <label>订单归属（每行 订单ID=会话ID）<textarea data-testid="bar-split-assignments" value={splitAssignments} onChange={(event) => setSplitAssignments(event.target.value)} placeholder="并台期间无法自动确认归属的订单，须先人工明确归属" rows={2} /></label>
-          <label>邀请归属（每行 订台ID=会话ID）<textarea data-testid="bar-split-invitation-assignments" value={splitInvitationAssignments} onChange={(event) => setSplitInvitationAssignments(event.target.value)} rows={2} /></label>
-          <label>成员归属（每行 成员ID=会话ID）<textarea data-testid="bar-split-member-assignments" value={splitMemberAssignments} onChange={(event) => setSplitMemberAssignments(event.target.value)} rows={2} /></label>
+          {splitMode === "single" ? <label>拆出的原台会话<input data-testid="bar-split-session" value={splitSessionId} onChange={(event) => setSplitSessionId(event.target.value)} placeholder="要单独拆出的原台会话编号" /></label> : null}
+          <label>订单归属（每行 订单编号=会话编号）<textarea data-testid="bar-split-assignments" value={splitAssignments} onChange={(event) => setSplitAssignments(event.target.value)} placeholder="并台期间无法自动确认归属的订单，须先人工明确归属" rows={2} /></label>
+          <label>邀请归属（每行 订台编号=会话编号）<textarea data-testid="bar-split-invitation-assignments" value={splitInvitationAssignments} onChange={(event) => setSplitInvitationAssignments(event.target.value)} rows={2} /></label>
+          <label>成员归属（每行 成员编号=会话编号）<textarea data-testid="bar-split-member-assignments" value={splitMemberAssignments} onChange={(event) => setSplitMemberAssignments(event.target.value)} rows={2} /></label>
           <p>并台前及并台期间已发生的每笔消费按实际订单归属重新汇总到拆出的原台或剩余合并台；无法确认归属的订单须先在此明确，未完成前不得拆台。拆出的原台恢复其并入前的低消，低消不足不阻断。并台期间新发出的邀请及其已接受、已入场成员，首次拆台前须在此逐一分配到当前合并台的某一张原台（开卡人不用分），未分配完不得拆台。</p>
           <HighRiskConfirm label="拆台" impact="将把选中合并台组按所选方式拆开，拆出台位保持已开台、各自独立计账，并按各结果台组重判定金。" disabled={submitting} precheck={() => validateSessionAction("split")} onConfirm={() => void runSessionAction("split")} permissionsState={effectivePermissions} permissions={[BAR_SPLIT_PERMISSION]} data-testid="bar-split-submit" />
         </div>

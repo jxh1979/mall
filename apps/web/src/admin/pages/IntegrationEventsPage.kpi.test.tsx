@@ -83,4 +83,12 @@ describe("IntegrationEventsPage KPI 聚焦视图", () => {
     expect(text).not.toContain("voucher");
     expect(text).toContain("待处理事件");
   });
+
+  it("267-R1（PGM:287 界面全中文；BSM:2028「支付回调」）：页头说明与边界说明写「回调」，整页不出现 Webhook", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("integration-events-boundary").textContent).toContain("回调与定时轮询校验"));
+    await waitFor(() => expect(screen.getByTestId("integration-events-summary")).toBeTruthy());
+    expect(document.body.textContent).toContain("统一查看第三方回调、定时轮询");
+    expect(document.body.textContent).not.toContain("Webhook");
+  });
 });

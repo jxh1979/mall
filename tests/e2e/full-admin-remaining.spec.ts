@@ -1,4 +1,4 @@
-// 文件版本：V0.25
+// 文件版本：V0.26
 import { expect, test } from "@playwright/test";
 import { installMockApi } from "./support/mock-api";
 import { fillCnDate } from "./support/cn-date";
@@ -103,7 +103,7 @@ const remainingRoutes: RouteSpec[] = [
   { pageId: "ADM-ANA-008", label: "月度对比", route: "/admin/analytics/monthly" },
   { pageId: "ADM-ANA-010", label: "AI/对标阈值", route: "/admin/analytics/ai-thresholds" },
   { pageId: "ADM-ANA-011", label: "提醒与留存天数配置", route: "/admin/analytics/notification-windows" },
-  { pageId: "ADM-ANA-009", label: "T3-A 只读经营分析", route: "/admin/analytics/t3a-readonly" },
+  { pageId: "ADM-ANA-009", label: "只读经营分析", route: "/admin/analytics/t3a-readonly" },
   { pageId: "ADM-ANA-012", label: "指标明细", route: "/admin/metric-detail" },
   { pageId: "ADM-ANA-013", label: "放弃权益额外收入", route: "/admin/analytics/abandoned-entitlement-revenue" },
   { pageId: "ADM-STF-001", label: "排班与考勤", route: "/admin/staff/shifts" },
@@ -947,7 +947,7 @@ test.describe("full admin remaining pages acceptance", () => {
         await expect(page.getByTestId("integration-events-table")).toContainText("SYNC-1");
         await expect(page.getByTestId("integration-events-table")).toContainText("VCH-1");
         await expect(page.getByTestId("integration-events-summary")).toContainText("四类读取接口");
-        await expect(page.getByTestId("integration-events-boundary")).toContainText("Webhook + 定时轮询校验");
+        await expect(page.getByTestId("integration-events-boundary")).toContainText("回调与定时轮询校验");
         await expect(page.getByTestId("integration-events-boundary")).toContainText("不得伪造第三方生产补偿执行");
         continue;
       }
@@ -1049,9 +1049,9 @@ test.describe("full admin remaining pages acceptance", () => {
     await openAdminRoute(page, remainingRoutes.find((item) => item.pageId === "ADM-CONT-001")!);
     // 引导式流程（单屏范式 singlePage=true）：合同双方 + 租期租金 + 结算方式 + 经营范围 同屏，一次「下一步」到确认页 → 起草。
     await page.getByTestId("contract-draft-open").click();
-    await page.getByLabel("商户 id").selectOption("merchant-1");
+    await page.getByLabel("商户编号", { exact: true }).selectOption("merchant-1");
     // 合同主体下拉选项来自 /platform/business-entities（mock 仅 org-1）；结果断言只看商户。
-    await page.getByLabel("合同主体 id").selectOption("org-1");
+    await page.getByLabel("合同主体编号", { exact: true }).selectOption("org-1");
     await fillCnDate(page, page.getByLabel("生效日期"), "2026-07-01");
     await fillCnDate(page, page.getByLabel("到期日期"), "2027-06-30");
     await page.getByTestId("contract-draft-next").click(); // 填写信息 → 确认信息

@@ -1,6 +1,6 @@
 package com.complex.platform.dividend;
 
-// 文件版本：V0.06
+// 文件版本：V0.07
 
 import static com.complex.platform.support.DailyCloseFixture.markRangeFinal;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -216,7 +216,8 @@ class DividendFinalSnapshotGateJdbcIntegrationTests {
         LocalDate slotDay = secondPayDayOnOrAfter(today);
         jdbc.update("UPDATE ticket_points_calendar_days SET bank_working_day = FALSE WHERE calendar_date = ?", slotDay);
 
-        mockMvc.perform(post("/api/v1/finance/dividends/statements/" + confirmed + "/approve").with(approver)
+        // 第十八批 BA 段第 314 条 314-R1：批准只认最高权限本人。
+        mockMvc.perform(post("/api/v1/finance/dividends/statements/" + confirmed + "/approve").with(master())
                         .contentType(MediaType.APPLICATION_JSON).content("{\"idempotency_key\":\"dfg-pay-a-" + s + "\"}"))
                 .andExpect(status().isOk());
         Instant approvedAt = jdbc.queryForObject("SELECT approved_at FROM dividend_statements WHERE id = ?", Timestamp.class, confirmed)

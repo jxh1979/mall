@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.tuple;
@@ -325,13 +325,13 @@ class PaymentConfirmationCompensationDividendJdbcTests {
         return id;
     }
 
-    /** 分红单提交审阅、另一人审批通过的真实请求。 */
+    /** 分红单提交审阅、最高权限本人审批通过的真实请求（第十八批 BA 段第 314 条 314-R1）。 */
     private void submitAndApprove(String statement) throws Exception {
         mockMvc.perform(post("/api/v1/finance/dividends/statements/" + statement + "/submit").with(submitter)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(json.writeValueAsString(Map.of("idempotency_key", "pcc-sub-" + statement))))
                 .andExpect(status().isOk());
-        mockMvc.perform(post("/api/v1/finance/dividends/statements/" + statement + "/approve").with(approver)
+        mockMvc.perform(post("/api/v1/finance/dividends/statements/" + statement + "/approve").with(master())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(json.writeValueAsString(Map.of("idempotency_key", "pcc-apv-" + statement))))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.data.status").value("approved"));
@@ -446,5 +446,19 @@ class PaymentConfirmationCompensationDividendJdbcTests {
 
     private static String reviewOf(ResultActions result) throws Exception {
         return JsonPath.read(result.andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8), "$.data.review_id");
+    }
+
+    /** 第十八批 BA 段第 314 条 314-R1：分红计算单批准只认最高权限本人（保留超管账号，组织 platform-company、无商户），经后台 Web 终端。 */
+    private RequestPostProcessor master() {
+        com.complex.platform.access.AccessActor actor = new com.complex.platform.access.AccessActor(
+                com.complex.platform.auth.SessionIssuer.MASTER_USER_ID, com.complex.platform.auth.SessionIssuer.MASTER_USERNAME,
+                com.complex.platform.auth.SessionIssuer.MASTER_ACCOUNT_TYPE, "platform-company", null, "active");
+        return request -> {
+            request.addHeader("X-Terminal-Type", "web");
+            return org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication(
+                    new org.springframework.security.authentication.UsernamePasswordAuthenticationToken(actor, null,
+                            List.of(new org.springframework.security.core.authority.SimpleGrantedAuthority("ROLE_P0_STAFF"))))
+                    .postProcessRequest(request);
+        };
     }
 }

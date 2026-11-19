@@ -1,6 +1,6 @@
 package com.complex.platform.governance.review;
 
-// 文件版本：V0.40
+// 文件版本：V0.41
 
 import com.complex.platform.access.AccessActor;
 import com.complex.platform.access.AuthorizationService;
@@ -434,6 +434,11 @@ public class SupervisorReviewService {
                         throw ApiException.conflict("DEPARTMENT_REVIEWS_PENDING", "须先完成各部门平行线审核，再由顶层平台最终确认");
                     }
                     requireDecisionEvidence(findPolicyByCode(pending.policyCode()), request);
+                    // 第十八批 BA 段第 353 条 353-R1（PGM:899「谁发起……为什么、谁审批、结果是什么，都要能查到。」；PGM:528 逐级审批）：每个节点审批人
+                    // 所附凭证都并入复核单（提交时与前序节点所附在前，去重保序），并记入本节点裁决留痕。
+                    List<String> nodeEvidence = request.evidenceAttachmentIds() == null ? List.of() : request.evidenceAttachmentIds();
+                    List<String> mergedEvidence = java.util.stream.Stream.concat(pending.evidenceAttachmentIds().stream(), nodeEvidence.stream())
+                            .distinct().toList();
                     Instant now = Instant.now();
                     // M087-I2-02（PGM-1.7.1「任一人审批即完成该节点」）：节点裁决为 status='pending' 的比较并交换，先到先得；后到者被拒。
                     if (!supervisorReviewRepository.updateChainNode(node.withStatus(decision, reviewerId, now))) {
@@ -448,7 +453,7 @@ public class SupervisorReviewService {
                             request.idempotencyKey(),
                             Map.of("node_id", node.nodeId(), "line_code", node.lineCode(), "seq", node.seq(),
                                     "approver_kind", node.approverKind(), "decision", decision, "reviewer_level", reviewerLevel,
-                                    "comment", request.comment() == null ? "" : request.comment())
+                                    "comment", request.comment() == null ? "" : request.comment(), "evidence_attachment_ids", nodeEvidence)
                     );
                     // M087-I2-02：整单终态由节点表归约，不用请求体里的结论：任一节点 rejected → 整单 rejected（退回起草）；
                     // 全部 approved → approved；否则保持待审。
@@ -462,7 +467,8 @@ public class SupervisorReviewService {
                             }
                         }
                         supervisorReviewRepository.refreshSupervisorReviewDue(id);
-                        return pending; // 链上仍有节点待审：单据保持待审（PGM-1.7.1 逐级审批）
+                        // 链上仍有节点待审：单据保持待审（PGM-1.7.1 逐级审批），353-R1 本节点所附凭证照样并入复核单。
+                        return supervisorReviewRepository.saveSupervisorReview(pending.withEvidenceAttachmentIds(mergedEvidence));
                     }
                     String outcome = anyRejected ? "rejected" : "approved";
                     if (anyRejected) {
@@ -486,10 +492,8 @@ public class SupervisorReviewService {
                             outcome,
                             pending.reason(), // M007-F-11：保留评估时的「为什么」，审批意见进审计留痕
                             // 第十八批 AV 段第 306 条 306-R1（PGM:899「谁发起……为什么、谁审批、结果是什么，都要能查到。」）：提交时凭证在前、并上审批人所附凭证，
-                            // 去重保序，不覆盖（主管复核页凭证框多为空）。
-                            java.util.stream.Stream.concat(pending.evidenceAttachmentIds().stream(),
-                                    request.evidenceAttachmentIds() == null ? java.util.stream.Stream.<String>empty() : request.evidenceAttachmentIds().stream())
-                                    .distinct().toList(),
+                            // 去重保序，不覆盖（主管复核页凭证框多为空）；353-R1 起前序节点所附已在复核单里。
+                            mergedEvidence,
                             now,
                             pending.initiatedBy(),
                             pending.approvalLevel(),

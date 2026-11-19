@@ -1,4 +1,4 @@
-// 文件版本：V0.08
+// 文件版本：V0.09
 import React from "react";
 import { DealerDeliveryPanel } from "../../dealer/DealerDeliveryPanel";
 import { CounterpartyConfirmationPanel, CounterpartyConfirmationPick } from "../../dealer/CounterpartyConfirmation";
@@ -239,7 +239,7 @@ export function DealerOrderFulfillmentPage({ api, user, setGlobalError, setActio
     if (!dealer || !draftContract) throw new Error("请先选择经销商与合同");
     const lines = draftLines.split("\n").map((l) => l.trim()).filter(Boolean).map((l) => {
       const [itemId, spec, qty, inquiryId] = l.split(",").map((s) => s.trim());
-      if (!itemId || !Number.isFinite(Number(qty)) || Number(qty) <= 0) throw new Error(`明细行格式应为「商品id,规格,数量,询价单id(可空)」：${l}`);
+      if (!itemId || !Number.isFinite(Number(qty)) || Number(qty) <= 0) throw new Error(`明细行格式应为「商品编号,规格,数量,询价单编号(可空)」：${l}`);
       return { itemId, spec: spec || "", quantity: Number(qty), inquiryId: inquiryId || undefined };
     });
     const o = await api.post<OrderRow>(`/api/v1/dealers/${encodeURIComponent(dealer.id)}/orders`, { idempotencyKey: key(), dealerContractId: draftContract, lines });
@@ -317,7 +317,7 @@ export function DealerOrderFulfillmentPage({ api, user, setGlobalError, setActio
             <label>合同<select data-testid="draft-contract-select" value={draftContract} onChange={(e) => setDraftContract(e.target.value)}>
               <option value="">请选择</option>{contracts.map((c) => <option key={c.id} value={c.id}>{c.contractNo ?? c.id}</option>)}
             </select></label>
-            <label>明细（每行：商品id,规格,数量,询价单id）<textarea data-testid="draft-lines-input" rows={3} value={draftLines} onChange={(e) => setDraftLines(e.target.value)} /></label>
+            <label>明细（每行：商品编号,规格,数量,询价单编号）<textarea data-testid="draft-lines-input" rows={3} value={draftLines} onChange={(e) => setDraftLines(e.target.value)} /></label>
             <PermissionButton permissionsState={effectivePermissions} permissions={["dealer.order.manage"]} data-testid="draft-create" onClick={() => void createDraft()}>建单</PermissionButton>
           </div>
 

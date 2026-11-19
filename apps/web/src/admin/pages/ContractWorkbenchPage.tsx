@@ -1,4 +1,4 @@
-// 文件版本：V0.21
+// 文件版本：V0.22
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { CnDatePicker } from "../components/CnDatePicker";
@@ -166,7 +166,7 @@ export function ContractWorkbenchPage({ api, user, setActionResult, setGlobalErr
   const [turnoverTiers, setTurnoverTiers] = React.useState<Array<{ upperWan: string; ratePct: string }>>([{ upperWan: "", ratePct: "" }]);
   const submitTurnoverRule = async () => {
     if (!turnoverForm.contractId.trim() || !turnoverForm.merchantId.trim() || !turnoverForm.ruleName.trim() || !turnoverForm.effectiveFrom) {
-      setGlobalError("建提成规则需填：合同 id、商户 id、规则名、生效日期");
+      setGlobalError("建提成规则需填：合同编号、商户编号、规则名、生效日期");
       return;
     }
     const tiers = turnoverTiers.map((t, i) => ({
@@ -375,7 +375,7 @@ export function ContractWorkbenchPage({ api, user, setActionResult, setGlobalErr
 
   async function activate(row: ContractRow) {
     if (!spaceId.trim()) {
-      setGlobalError("生效需填写所租空间 id");
+      setGlobalError("生效需填写所租空间编号");
       return;
     }
     await api.post(`/api/v1/contracts/${row.id}/activate`, { spaceIds: [spaceId.trim()] });
@@ -386,7 +386,7 @@ export function ContractWorkbenchPage({ api, user, setActionResult, setGlobalErr
   // P1-B 收入闭环：手工补排某账期租金/物业/能源 AR（生效已自动排整租期，此处用于补排/重排，幂等已挂账则跳过）。
   async function generatePeriodBills(row: ContractRow) {
     if (!billPeriod) {
-      setGlobalError("排租金AR需先选账期（年-月）");
+      setGlobalError("排租金应收需先选账期（年-月）");
       return;
     }
     try {
@@ -693,7 +693,7 @@ export function ContractWorkbenchPage({ api, user, setActionResult, setGlobalErr
           <div className="admin-state" data-testid="contract-config-degraded">审批链/到期着色/铺位租赁状态等配置{configNotice}</div>
         ) : null}
         <div className="admin-preview" data-testid="contract-workbench-guide">
-          <strong>这一页做什么：</strong>合同全生命周期——① 合同（起草 / 审批 / 生效 / 排租金 AR）② 审批与配置（审批链、铺位到期着色）③ 变更与结算（合同变更、退租结算，点合同「明细」联动）④ 铺位平面图。切换标签操作。
+          <strong>这一页做什么：</strong>合同全生命周期——① 合同（起草 / 审批 / 生效 / 排租金应收）② 审批与配置（审批链、铺位到期着色）③ 变更与结算（合同变更、退租结算，点合同「明细」联动）④ 铺位平面图。切换标签操作。
         </div>
         <Tabs
           data-testid="contract-workbench-tabs"
@@ -735,12 +735,12 @@ export function ContractWorkbenchPage({ api, user, setActionResult, setGlobalErr
                       }
                       if (row.lifecycleStatus === "pending_effective") acts.push({ key: "activate", label: "生效(绑铺位)", permissions: ACTIVATE, onClick: () => void activate(row), testId: `contract-activate-${row.id}` });
                       if (row.lifecycleStatus === "effective") {
-                        acts.push({ key: "period-bills", label: "排租金AR", permissions: RENT_AR, onClick: () => void generatePeriodBills(row), testId: `contract-period-bills-${row.id}` });
+                        acts.push({ key: "period-bills", label: "排租金应收", permissions: RENT_AR, onClick: () => void generatePeriodBills(row), testId: `contract-period-bills-${row.id}` });
                         acts.push({ key: "settle", label: "退租开账", permissions: SETTLE, onClick: () => void settle(row), testId: `contract-settle-${row.id}` });
                       }
                       if (row.lifecycleStatus === "expired") {
                         // 第十八批 Q 段第 138 条复核修正：营业额抽成类合同的最后一期在到期、该期月结定格后出，已到期合同仍可排到期日所在月及以前的账期。
-                        acts.push({ key: "period-bills", label: "排租金AR", permissions: RENT_AR, onClick: () => void generatePeriodBills(row), testId: `contract-period-bills-${row.id}` });
+                        acts.push({ key: "period-bills", label: "排租金应收", permissions: RENT_AR, onClick: () => void generatePeriodBills(row), testId: `contract-period-bills-${row.id}` });
                         // 到期合同经带确认的结算入口落押金退还（选「到期」类型），堵住到期押金悬空。
                         acts.push({ key: "settle", label: "结算开账", permissions: SETTLE, onClick: () => void settle(row, "expiry"), testId: `contract-settle-${row.id}` });
                       }
@@ -796,21 +796,21 @@ export function ContractWorkbenchPage({ api, user, setActionResult, setGlobalErr
               title: "合同双方",
               description: "填写商户与合同/结算主体（结算主体缺省时取合同主体）。",
               validate: () => {
-                if (!draft.merchantId.trim()) return "商户 id 不能为空。";
-                if (!draft.contractSubjectId.trim()) return "合同主体 id 不能为空。";
+                if (!draft.merchantId.trim()) return "商户编号不能为空。";
+                if (!draft.contractSubjectId.trim()) return "合同主体编号不能为空。";
                 return null;
               },
               content: (
                 <>
-                  <label>商户<select aria-label="商户 id" value={draft.merchantId} onChange={(e) => setDraft({ ...draft, merchantId: e.target.value })}>
+                  <label>商户<select aria-label="商户编号" value={draft.merchantId} onChange={(e) => setDraft({ ...draft, merchantId: e.target.value })}>
                     <option value="">请选择商户</option>
                     {merchants.map((m) => <option key={m.id} value={m.id}>{(m.displayName ?? m.companyName ?? m.id)}（{shortId(m.id)}）</option>)}
                   </select></label>
-                  <label>合同主体<select aria-label="合同主体 id" value={draft.contractSubjectId} onChange={(e) => setDraft({ ...draft, contractSubjectId: e.target.value })}>
+                  <label>合同主体<select aria-label="合同主体编号" value={draft.contractSubjectId} onChange={(e) => setDraft({ ...draft, contractSubjectId: e.target.value })}>
                     <option value="">请选择合同主体</option>
                     {entities.map((en) => <option key={en.id} value={en.id}>{(en.entityName ?? en.id)}（{shortId(en.id)}）</option>)}
                   </select></label>
-                  <label>结算主体<select aria-label="结算主体 id" value={draft.settlementSubjectId} onChange={(e) => setDraft({ ...draft, settlementSubjectId: e.target.value })}>
+                  <label>结算主体<select aria-label="结算主体编号" value={draft.settlementSubjectId} onChange={(e) => setDraft({ ...draft, settlementSubjectId: e.target.value })}>
                     <option value="">缺省 = 合同主体</option>
                     {entities.map((en) => <option key={en.id} value={en.id}>{(en.entityName ?? en.id)}（{shortId(en.id)}）</option>)}
                   </select></label>
@@ -904,9 +904,9 @@ export function ContractWorkbenchPage({ api, user, setActionResult, setGlobalErr
             },
           ]}
           summary={[
-            { label: "商户 id", value: draft.merchantId.trim() || "未填写" },
-            { label: "合同主体 id", value: draft.contractSubjectId.trim() || "未填写" },
-            { label: "结算主体 id", value: draft.settlementSubjectId.trim() || "缺省取合同主体" },
+            { label: "商户编号", value: draft.merchantId.trim() || "未填写" },
+            { label: "合同主体编号", value: draft.contractSubjectId.trim() || "未填写" },
+            { label: "结算主体编号", value: draft.settlementSubjectId.trim() || "缺省取合同主体" },
             { label: "生效日期", value: draft.effectiveDate || "未选择" },
             { label: "到期日期", value: draft.expiryDate || "未选择" },
             { label: "月租金（元）", value: draft.baseRentYuan.trim() || "未填写" },
@@ -915,8 +915,8 @@ export function ContractWorkbenchPage({ api, user, setActionResult, setGlobalErr
           ]}
         />
         <div className="admin-inline-form" data-testid="contract-activate-form">
-          <input aria-label="生效绑定空间 id" placeholder="生效绑定空间 id" value={spaceId} onChange={(e) => setSpaceId(e.target.value)} />
-          <CnDatePicker mode="month" aria-label="排租金AR账期" data-testid="contract-bill-period" value={billPeriod} onChange={setBillPeriod} />
+          <input aria-label="生效绑定空间编号" placeholder="生效绑定空间编号" value={spaceId} onChange={(e) => setSpaceId(e.target.value)} />
+          <CnDatePicker mode="month" aria-label="排租金应收账期" data-testid="contract-bill-period" value={billPeriod} onChange={setBillPeriod} />
         </div>
 
           </>) },
@@ -963,8 +963,8 @@ export function ContractWorkbenchPage({ api, user, setActionResult, setGlobalErr
           提交后<strong>先存为草案，不会马上影响结算</strong>：须由另一位有结算配置管理权限的同事在「结算配置中心 → 待复核草案」里复核转正。初始规则按填写日期生效；已有规则变更统一按实际批准次月1日生效，批准当月仍按旧规则，手填起日不决定变更生效。起草人不能自己转正。
         </p>
         <div className="admin-inline-form">
-          <input aria-label="提成-合同id" placeholder="合同 id" value={turnoverForm.contractId} onChange={(e) => setTurnoverForm({ ...turnoverForm, contractId: e.target.value })} />
-          <input aria-label="提成-商户id" placeholder="商户 id" value={turnoverForm.merchantId} onChange={(e) => setTurnoverForm({ ...turnoverForm, merchantId: e.target.value })} />
+          <input aria-label="提成-合同编号" placeholder="合同编号" value={turnoverForm.contractId} onChange={(e) => setTurnoverForm({ ...turnoverForm, contractId: e.target.value })} />
+          <input aria-label="提成-商户编号" placeholder="商户编号" value={turnoverForm.merchantId} onChange={(e) => setTurnoverForm({ ...turnoverForm, merchantId: e.target.value })} />
           <input aria-label="提成-规则名" placeholder="规则名" value={turnoverForm.ruleName} onChange={(e) => setTurnoverForm({ ...turnoverForm, ruleName: e.target.value })} />
           <input aria-label="提成-保底额（元，可空）" type="number" min="0" placeholder="保底额（元，可空）" value={turnoverForm.minYuan} onChange={(e) => setTurnoverForm({ ...turnoverForm, minYuan: e.target.value })} />
           <label>生效起<CnDatePicker aria-label="提成生效起" value={turnoverForm.effectiveFrom} onChange={(v) => setTurnoverForm({ ...turnoverForm, effectiveFrom: v })} /></label>
@@ -1010,7 +1010,7 @@ export function ContractWorkbenchPage({ api, user, setActionResult, setGlobalErr
 
         <h3>押金退还等待期（按项目；自最后一个审批完成之日起算，算账晚于等待期完成的顺延至算账完成之日支付）</h3>
         <div className="admin-inline-form" data-testid="contract-refund-wait-form">
-          <input aria-label="等待期项目 id" data-testid="contract-refund-wait-project" placeholder="综合体项目 id"
+          <input aria-label="等待期项目编号" data-testid="contract-refund-wait-project" placeholder="综合体项目编号"
             value={refundWaitForm.projectId} onChange={(e) => setRefundWaitForm({ ...refundWaitForm, projectId: e.target.value })} />
           <button type="button" data-testid="contract-refund-wait-query" onClick={() => void queryRefundWait()}>查询等待期</button>
           <span className="admin-muted-action" data-testid="contract-refund-wait-current">
@@ -1080,7 +1080,7 @@ export function ContractWorkbenchPage({ api, user, setActionResult, setGlobalErr
           <select aria-label="变更类型" value={changeForm.changeType} onChange={(e) => setChangeForm({ ...changeForm, changeType: e.target.value })}>
             {CHANGE_TYPES.map((t) => <option key={t.v} value={t.v}>{t.l}</option>)}
           </select>
-          <input aria-label="变更说明" placeholder="变更说明 / payload" value={changeForm.note} onChange={(e) => setChangeForm({ ...changeForm, note: e.target.value })} />
+          <input aria-label="变更说明" placeholder="变更说明" value={changeForm.note} onChange={(e) => setChangeForm({ ...changeForm, note: e.target.value })} />
           {TERMINATION_CHANGES.includes(changeForm.changeType) ? (
             <label>退租日<input type="date" aria-label="退租日" data-testid="contract-change-move-out-date" required
               value={changeForm.moveOutDate} onChange={(e) => setChangeForm({ ...changeForm, moveOutDate: e.target.value })} /></label>
@@ -1125,7 +1125,7 @@ export function ContractWorkbenchPage({ api, user, setActionResult, setGlobalErr
                 </>
               )}
               {changeForm.changeType === "location_change" ? (
-                <input aria-label="新经营位置铺位" placeholder="新铺位ID（逗号分隔；不填=沿用原铺位）"
+                <input aria-label="新经营位置铺位" placeholder="新铺位编号（逗号分隔；不填=沿用原铺位）"
                   value={changeForm.spaceIds} onChange={(e) => setChangeForm({ ...changeForm, spaceIds: e.target.value })} />
               ) : null}
             </div>

@@ -1,4 +1,4 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 import React from "react";
 import { ApiError } from "../../shared/apiError";
 import { PermissionButton } from "../security/Can";
@@ -92,7 +92,7 @@ export function TicketExpiryReminderSection({ api, setActionResult, setGlobalErr
   }
 
   async function load() {
-    if (!projectId.trim()) { setGlobalError("请先填写综合体项目 id"); return; }
+    if (!projectId.trim()) { setGlobalError("请先填写综合体项目编号"); return; }
     try {
       const policy = await api.get<ReminderPolicy>(path());
       setCurrent(policy ?? null);
@@ -108,7 +108,7 @@ export function TicketExpiryReminderSection({ api, setActionResult, setGlobalErr
     const value = wholeNumber(hours);
     const min = wholeNumber(minHours);
     const max = wholeNumber(maxHours);
-    if (!projectId.trim()) { setGlobalError("请先填写综合体项目 id"); return; }
+    if (!projectId.trim()) { setGlobalError("请先填写综合体项目编号"); return; }
     if (value === null || min === null || max === null || min > value || value > max) {
       setGlobalError("提前小时数与上下限须同时填写（整数小时，下限不小于 1），小时数须在上下限之间");
       return;
@@ -127,7 +127,7 @@ export function TicketExpiryReminderSection({ api, setActionResult, setGlobalErr
       <strong>未核销票到期提醒（按项目；出厂到期前 24 小时；须同时配置上下限）：</strong>
       客人官方 App / 小程序在票到期前按此提前量弹出提醒，客人不能关闭此类提醒。
       <div className="admin-form-grid" style={{ marginTop: 8 }}>
-        <label>项目 id<input aria-label="到期提醒项目 id" value={projectId} onChange={(e) => setProjectId(e.target.value)} /></label>
+        <label>项目编号<input aria-label="到期提醒项目编号" value={projectId} onChange={(e) => setProjectId(e.target.value)} /></label>
         <button type="button" data-testid="ticket-expiry-reminder-query" onClick={() => void load()}>查询</button>
         <span className="admin-muted-action" data-testid="ticket-expiry-reminder-current">
           {current ? `当前：到期前 ${current.remindHours} 小时${current.minHours == null ? "（出厂值，上下限未配置）" : `，下限 ${current.minHours}、上限 ${current.maxHours} 小时`}` : "未查询"}
@@ -157,7 +157,7 @@ export function BarArrivalReminderSection({ api, setActionResult, setGlobalError
   }
 
   async function load() {
-    if (!projectId.trim()) { setGlobalError("请先填写综合体项目 id"); return; }
+    if (!projectId.trim()) { setGlobalError("请先填写综合体项目编号"); return; }
     try {
       const policy = await api.get<ArrivalReminderPolicy>(path());
       setCurrent(policy ?? null);
@@ -173,7 +173,7 @@ export function BarArrivalReminderSection({ api, setActionResult, setGlobalError
     const value = wholeNumber(minutes);
     const min = wholeNumber(minMinutes);
     const max = wholeNumber(maxMinutes);
-    if (!projectId.trim()) { setGlobalError("请先填写综合体项目 id"); return; }
+    if (!projectId.trim()) { setGlobalError("请先填写综合体项目编号"); return; }
     if (value === null || min === null || max === null || min > value || value > max) {
       setGlobalError("提前分钟数与上下限须同时填写（整数分钟，下限不小于 1），分钟数须在上下限之间");
       return;
@@ -192,7 +192,7 @@ export function BarArrivalReminderSection({ api, setActionResult, setGlobalError
       <strong>最晚到店前提醒（按项目；出厂提前 30 分钟；须同时配置上下限）：</strong>
       订台仍占着台位的，在最晚到店时间前按此提前量给客人发短信提醒。
       <div className="admin-form-grid" style={{ marginTop: 8 }}>
-        <label>项目 id<input aria-label="到店前提醒项目 id" value={projectId} onChange={(e) => setProjectId(e.target.value)} /></label>
+        <label>项目编号<input aria-label="到店前提醒项目编号" value={projectId} onChange={(e) => setProjectId(e.target.value)} /></label>
         <button type="button" data-testid="bar-arrival-reminder-query" onClick={() => void load()}>查询</button>
         <span className="admin-muted-action" data-testid="bar-arrival-reminder-current">
           {current ? `当前：最晚到店前 ${current.remindMinutes} 分钟${current.minMinutes == null ? "（出厂值，上下限未配置）" : `，下限 ${current.minMinutes}、上限 ${current.maxMinutes} 分钟`}` : "未查询"}
@@ -298,7 +298,7 @@ export function CustomerHomeContentSection({ api, setActionResult, setGlobalErro
   }
 
   async function load() {
-    if (!projectId.trim()) { setGlobalError("请先填写综合体项目 id"); return; }
+    if (!projectId.trim()) { setGlobalError("请先填写综合体项目编号"); return; }
     try {
       const content = await api.get<HomeContent | null>(base());
       setPublished(content ?? null);
@@ -310,7 +310,7 @@ export function CustomerHomeContentSection({ api, setActionResult, setGlobalErro
   }
 
   async function publish() {
-    if (!projectId.trim() || !intro.trim()) { setGlobalError("请填写综合体项目 id 与综合体介绍"); return; }
+    if (!projectId.trim() || !intro.trim()) { setGlobalError("请填写综合体项目编号与综合体介绍"); return; }
     setNote("");
     try {
       await api.post(`${base()}/publish`, { intro: intro.trim(), announcement: announcement.trim() });
@@ -328,7 +328,7 @@ export function CustomerHomeContentSection({ api, setActionResult, setGlobalErro
     <div className="admin-preview" data-testid="customer-home-content">
       <strong>客人端首页：综合体介绍与活动公告（运营编辑后须上级审批，批准才对客人展示）</strong>
       <div className="admin-form-grid" style={{ marginTop: 8 }}>
-        <label>项目 id<input aria-label="首页内容项目 id" value={projectId} onChange={(e) => setProjectId(e.target.value)} /></label>
+        <label>项目编号<input aria-label="首页内容项目编号" value={projectId} onChange={(e) => setProjectId(e.target.value)} /></label>
         <button type="button" data-testid="customer-home-content-query" onClick={() => void load()}>查询已发布内容</button>
         <span className="admin-muted-action" data-testid="customer-home-content-current">
           {published === undefined ? "未查询" : published === null ? "尚未发布" : `已发布于 ${published.publishedAt ?? ""}`}

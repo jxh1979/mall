@@ -1,6 +1,6 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -43,6 +43,9 @@ import org.springframework.test.web.servlet.request.RequestPostProcessor;
 })
 @AutoConfigureMockMvc
 class InternalPriceApproverScope291Tests {
+
+    /** 第十八批 BA 段第 355 条 355-R1：内部结算价批准后待生效，到生效起始日期由系统转正（用例里直接调到日转正）。 */
+    @Autowired private com.complex.platform.settlement.InternalPriceScheduledActivationService priceActivation;
 
     private static final String ENT = "be_ent_platform";
     private static final String AMUSEMENT = "be_amusement";
@@ -120,7 +123,7 @@ class InternalPriceApproverScope291Tests {
     void centralCateringSupplyIsApprovedInsideTheCompanyByAnotherPerson() throws Exception {
         String drafter = employee(CENTRAL);
         String draft = draft(new InternalPriceItemRequest("c291-" + n + "-" + (++seq), null, null, "dining", "中央餐饮小食" + n,
-                800L, CENTRAL), drafter);
+                800L, CENTRAL, java.time.LocalDate.now(com.complex.platform.common.LocalZone.ID).plusDays(1).toString()), drafter);
         activate(draft, drafter).andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.detail_code").value("SELF_ACTIVATION_FORBIDDEN"));
         activate(draft, employee(city)).andExpect(status().isForbidden())
@@ -167,8 +170,9 @@ class InternalPriceApproverScope291Tests {
         String body = submit(master(), null, bar, null, 2600L).andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString(java.nio.charset.StandardCharsets.UTF_8);
         String item = new com.fasterxml.jackson.databind.ObjectMapper().readTree(body).path("data").asText();
+        priceActivation.activateDue(java.time.Instant.now().plus(java.time.Duration.ofDays(2)));
         assertThat(jdbc.queryForList("SELECT price_cent FROM internal_price_catalog WHERE item_code = ? AND is_draft = FALSE"
-                + " AND status = 'active'", Long.class, item)).as("最高权限本人提交即生效").containsExactly(2600L);
+                + " AND status = 'active'", Long.class, item)).as("最高权限本人提交免他人复核，到生效起始日期生效").containsExactly(2600L);
         assertThat(jdbc.queryForObject("SELECT count(*) FROM internal_price_catalog WHERE item_code = ? AND is_draft = TRUE",
                 Integer.class, item)).isZero();
     }
@@ -199,8 +203,8 @@ class InternalPriceApproverScope291Tests {
         return mockMvc.perform(post("/api/v1/settlement/config/internal-price-item").with(who)
                 .contentType(MediaType.APPLICATION_JSON).content("""
                         {"idempotency_key": "c291-sub-%s-%s", "item_code": %s, "merchant_id": %s, "provider_entity_id": %s,
-                         "category": "dining", "item_name": "提交条目%s_%s", "price_cent": %d}
-                        """.formatted(k, n, quoted(itemCode), quoted(merchant), quoted(entity), k, n, price)));
+                         "category": "dining", "item_name": "提交条目%s_%s", "price_cent": %d, "effective_from": "%s"}
+                        """.formatted(k, n, quoted(itemCode), quoted(merchant), quoted(entity), k, n, price, java.time.LocalDate.now(com.complex.platform.common.LocalZone.ID).plusDays(1))));
     }
 
     private static String quoted(String value) {
@@ -218,7 +222,7 @@ class InternalPriceApproverScope291Tests {
 
     private String merchantDraft(String merchant) {
         return draft(new InternalPriceItemRequest("c291-" + n + "-" + (++seq), null, merchant, "dining", "内部结算价条目" + seq + "_" + n,
-                1200L), "drafter_c291_" + n);
+                1200L, null, java.time.LocalDate.now(com.complex.platform.common.LocalZone.ID).plusDays(1).toString()), "drafter_c291_" + n);
     }
 
     private String draft(InternalPriceItemRequest request, String drafter) {

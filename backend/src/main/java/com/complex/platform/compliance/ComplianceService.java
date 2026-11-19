@@ -563,7 +563,7 @@ public class ComplianceService {
                     scanDate,
                     blocking ? "high" : "medium",
                     blocking,
-                    record.title() + " is overdue"
+                    record.title() + "已于" + record.dueDate() + "到期"
             ));
         }
         if (days <= lookaheadDays(record.reminderDays(), defaultLookaheadDays)) {
@@ -576,7 +576,7 @@ public class ComplianceService {
                     scanDate,
                     "medium",
                     false,
-                    record.title() + " is upcoming"
+                    record.title() + "将于" + record.dueDate() + "到期"
             ));
         }
         return List.of();

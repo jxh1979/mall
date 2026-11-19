@@ -343,7 +343,7 @@
           "path": "apps/web/src/admin/pages/IntegrationEventsPage.tsx",
           "markers": [
             "integration-events-page",
-            "Webhook + 定时轮询校验"
+            "回调与定时轮询校验"
           ]
         },
         {

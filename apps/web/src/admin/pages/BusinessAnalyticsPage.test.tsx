@@ -211,3 +211,19 @@ describe("BusinessAnalyticsPage 行明细抽屉（整行可点·域/趋势/风�
     await waitFor(() => expect(screen.queryByTestId("row-detail-drawer")).toBeNull());
   });
 });
+
+// 第十八批 BA 段第 267 条 267-R3（PGM:287）：页头说明与边界说明不写英文 BI；AI 照 PGM:532「本地 AI 大模型」原词保留。
+describe("BusinessAnalyticsPage 说明文字不出现英文 BI（第 267 条）", () => {
+  it("边界说明写「商业智能」，整页不含 BI", async () => {
+    renderPage(makeApi());
+    await waitFor(() => expect(screen.getByTestId("business-analytics-boundary").textContent).toContain("商业智能"));
+    expect(document.body.textContent).not.toMatch(/(^|[^A-Za-z])BI([^A-Za-z]|$)/);
+  });
+
+  // 第十八批 BA 段收尾复核修正（PGM:287）：趋势卡与品类占比标题写「对比」，不写英文 vs。
+  it("趋势卡与品类占比标题写「对比」，整页不含 vs", async () => {
+    renderPage(makeApi());
+    await waitFor(() => expect(screen.getByTestId("business-analytics-category-share").textContent).toContain("酒吧对比票务实收"));
+    expect(document.body.textContent).not.toMatch(/(^|[^A-Za-z])vs([^A-Za-z]|$)/i);
+  });
+});

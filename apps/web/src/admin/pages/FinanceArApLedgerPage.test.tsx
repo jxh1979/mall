@@ -1,4 +1,4 @@
-// 文件版本：V0.16
+// 文件版本：V0.17
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -615,5 +615,14 @@ describe("FinanceArApLedgerPage 付款确认勾选合发", () => {
     fireEvent.change(screen.getByTestId("finance-payment-method"), { target: { value: "bank_transfer" } });
     fireEvent.click(screen.getByTestId("finance-payment-submit"));
     await waitFor(() => expect(screen.queryByTestId("finance-ledger-error")?.textContent ?? "").toContain("须先完成付款确认"));
+  });
+});
+
+// 第十八批 BA 段收尾复核修正（PGM:287；第 340 条先例）：页头说明不写 P0。
+describe("FinanceArApLedgerPage 页头说明不夹英文（第 267 条收尾复核）", () => {
+  it("页头说明写「完整台账支持应收、应付、部分核销、余额」，不含 P0", async () => {
+    renderPage(makeApi());
+    await waitFor(() => expect(document.body.textContent).toContain("完整台账支持应收、应付、部分核销、余额"));
+    expect(document.body.textContent).not.toMatch(/(^|[^A-Za-z0-9])P0([^A-Za-z0-9]|$)/);
   });
 });

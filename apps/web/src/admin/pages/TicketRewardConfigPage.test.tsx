@@ -1,4 +1,4 @@
-// 文件版本：V0.05
+// 文件版本：V0.06
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import { TicketRewardConfigPage } from "./TicketRewardConfigPage";
@@ -106,7 +106,7 @@ it("储值充值赠送比例两类分别提交审批",async()=>{
   fireEvent.change(screen.getByLabelText("配置类型"),{target:{value:"merchant_card_bonus"}});
   expect(screen.queryByLabelText("综合体")).not.toBeInTheDocument();
   await waitFor(()=>expect(screen.queryByText("无需公告")).not.toBeNull());
-  fireEvent.change(screen.getByLabelText("发卡商户 id"),{target:{value:"m1"}});
+  fireEvent.change(screen.getByLabelText("发卡商户编号"),{target:{value:"m1"}});
   fireEvent.change(screen.getByLabelText("赠送比例（万分比）"),{target:{value:"1000"}});
   fireEvent.change(screen.getByLabelText("赠送比例下限（万分比）"),{target:{value:"0"}});
   fireEvent.change(screen.getByLabelText("赠送比例上限（万分比）"),{target:{value:"2000"}});
@@ -119,7 +119,7 @@ it("储值充值赠送比例两类分别提交审批",async()=>{
 
   fireEvent.change(screen.getByLabelText("配置类型"),{target:{value:"stored_value_bonus"}});
   expect(screen.queryByLabelText("票种")).not.toBeInTheDocument();
-  expect(screen.queryByLabelText("发卡商户 id")).not.toBeInTheDocument();
+  expect(screen.queryByLabelText("发卡商户编号")).not.toBeInTheDocument();
   fireEvent.change(screen.getByLabelText("综合体"),{target:{value:"p1"}});
   fireEvent.change(screen.getByLabelText("赠送比例（万分比）"),{target:{value:"500"}});
   fireEvent.change(screen.getByLabelText("赠送比例下限（万分比）"),{target:{value:"0"}});

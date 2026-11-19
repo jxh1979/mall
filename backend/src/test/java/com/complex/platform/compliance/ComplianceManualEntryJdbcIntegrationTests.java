@@ -1,7 +1,8 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 package com.complex.platform.compliance;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -70,6 +71,14 @@ class ComplianceManualEntryJdbcIntegrationTests {
                 String.class, keyDate)).isEqualTo("upcoming@" + today);
         assertThat(jdbc.queryForObject("SELECT actor_id FROM audit_events WHERE event_name = 'compliance.reminder.scan'"
                 + " AND idempotency_key = ?", String.class, key)).isEqualTo("cme_p_" + suffix);
+        // 326-R1（PGM:287 提示与通知全部中文）：合同关键日期提醒的说明照证照提醒写「将于……到期」，后台列表返回同一句。
+        String expected = "续约通知将于" + today.plusDays(10) + "到期";
+        assertThat(jdbc.queryForObject("SELECT message FROM compliance_reminders WHERE source_id = ?", String.class, keyDate))
+                .isEqualTo(expected).doesNotContain("is ");
+        RequestPostProcessor viewer = staffs.staff("cme_v_" + suffix, "staff", project, merchant, "compliance.reminder.view");
+        mockMvc.perform(get(BASE + "/reminders").with(viewer))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items[?(@.source_id == '" + keyDate + "')].message", Matchers.contains(expected)));
     }
 
     /** 258-R1② 选了基准日仍按所给日期生成。 */
@@ -81,6 +90,9 @@ class ComplianceManualEntryJdbcIntegrationTests {
                 .andExpect(status().isOk());
         assertThat(jdbc.queryForObject("SELECT reminder_type || '@' || reminder_at FROM compliance_reminders WHERE source_id = ?",
                 String.class, keyDate)).isEqualTo("expired@" + today.plusDays(11));
+        // 326-R1：已过期一类写「已于……到期」。
+        assertThat(jdbc.queryForObject("SELECT message FROM compliance_reminders WHERE source_id = ?", String.class, keyDate))
+                .isEqualTo("续约通知已于" + today.plusDays(10) + "到期");
     }
 
     /** 258-R2① 页面请求体不带商户：商户由合同带出，责任人照请求体入库。 */

@@ -1,4 +1,4 @@
-// 文件版本：V0.05
+// 文件版本：V0.06
 import React from "react";
 import { CounterpartyConfirmationPick } from "../../dealer/CounterpartyConfirmation";
 import { DealerReturnFinancialPanel, DealerInvoiceActions, ReturnEvidenceUpload } from "./DealerReturnFinancialPanel";
@@ -224,7 +224,7 @@ export function DealerReturnInvoicePage(props: AdminPageProps) {
               const line = orderLines.find(item => item.id === source.orderLineId);
               return line ? <button type="button" key={source.receiptLineId} onClick={() => setReqLines(previous => `${previous}${previous ? "\n" : ""}${line.itemId},${line.spec},${source.availableQuantity},${source.receiptLineId}`)}>{line.itemId} {line.spec}，批次 {source.batchId}，可退 {source.availableQuantity}</button> : null;
             })}</div>
-            <label>退货明细（每行：商品id,规格,数量,签收来源）<textarea data-testid="return-lines-input" rows={3} value={reqLines} onChange={(e) => setReqLines(e.target.value)} /></label>
+            <label>退货明细（每行：商品编号,规格,数量,签收来源）<textarea data-testid="return-lines-input" rows={3} value={reqLines} onChange={(e) => setReqLines(e.target.value)} /></label>
             <label>说明<input data-testid="return-note" value={reqNote} onChange={(e) => setReqNote(e.target.value)} /></label>
             {deactivated ? <CounterpartyConfirmationPick key={order.id} api={api} orderId={order.id} matterType="return_request" value={reqConfirmation} onChange={setReqConfirmation} /> : null}
             <PermissionButton permissionsState={effectivePermissions} permissions={["dealer.return.manage"]} data-testid="return-request" onClick={() => void requestReturn()}>提交退货申请</PermissionButton>
@@ -263,7 +263,7 @@ export function DealerReturnInvoicePage(props: AdminPageProps) {
 
               {ret.status === "inspecting" ? (
                 <div className="admin-form-grid" data-testid="return-inspection-form">
-                  <label>验收明细（每行：商品id,规格,验收数量,可复售数量,隔离数量,备注,退货明细）<textarea data-testid="inspection-lines-input" rows={3} value={inspLines} onChange={(e) => setInspLines(e.target.value)} /></label>
+                  <label>验收明细（每行：商品编号,规格,验收数量,可复售数量,隔离数量,备注,退货明细）<textarea data-testid="inspection-lines-input" rows={3} value={inspLines} onChange={(e) => setInspLines(e.target.value)} /></label>
                   <ReturnEvidenceUpload key={ret.id} api={api} effectivePermissions={effectivePermissions} type="dealer_return" id={ret.id} permission="dealer.return.inspect" testId="inspection-evidence" onChanged={setInspectionEvidence} />
                   <PermissionButton permissionsState={effectivePermissions} permissions={["dealer.return.inspect"]} data-testid="return-inspect" onClick={() => void inspect()}>确认验收（可复售回库，隔离禁售）</PermissionButton>
                 </div>

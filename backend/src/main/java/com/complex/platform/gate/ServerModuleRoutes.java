@@ -1,6 +1,6 @@
 package com.complex.platform.gate;
 
-// 文件版本：V0.05
+// 文件版本：V0.06
 
 import java.util.Arrays;
 import java.util.Comparator;
@@ -40,6 +40,8 @@ final class ServerModuleRoutes {
                     // 外壳取当前账号权限；关「权限与账号」模块不能锁死整台后台。
                     Map.entry("/api/v1/access/effective-permissions", NONE),
                     Map.entry("/api/v1/access/users", NONE),
+                    // 第十八批 BA 段第 323 条 323-R1：建号（同路径 POST）只有员工账号页调。
+                    Map.entry("POST /api/v1/access/users", "access"),
                     // 247-R4：账号列表被七个页面共用，权限治理页独用的子路径照判。
                     Map.entry("/api/v1/access/users/{id}/position", "access"),
                     Map.entry("/api/v1/access/users/{id}/scope", "access"),
@@ -48,7 +50,11 @@ final class ServerModuleRoutes {
                     Map.entry("/api/v1/partner/subordinates", "vendor"),
                     Map.entry("/api/v1/amusement", "amusement"),
                     Map.entry("/api/v1/amusement/projects", NONE),
-                    // 247-R4：权益列表票务页也调，单项权益的办理只有游乐页调。
+                    // 323 控制席并入：新建项目（同路径 POST）只有项目与场次页调。
+                    Map.entry("POST /api/v1/amusement/projects", "amusement"),
+                    // 323-R1：项目权益列表只有项目与场次页调，绑定权益（同路径 POST）只有票务策略页调；247-R4：单项权益的办理只有游乐页调。
+                    Map.entry("GET /api/v1/amusement/projects/{id}/entitlements", "amusement"),
+                    Map.entry("POST /api/v1/amusement/projects/{id}/entitlements", "ticketing"),
                     Map.entry("/api/v1/amusement/projects/{id}/entitlements/{entitlementType}", "amusement"),
                     Map.entry("/api/v1/bar-business-day-configs", "amusement"),
                     Map.entry("/api/v1/audit", "audit"),
@@ -56,9 +62,12 @@ final class ServerModuleRoutes {
                     Map.entry("/api/v1/security/my-exports", "audit"),
                     Map.entry("/api/v1/security/watermarks", "audit"),
                     Map.entry("/api/v1/bar", "bar"),
-                    Map.entry("/api/v1/bar/arrival-reminder-policies", NONE),
+                    // 323 控制席并入：到店提醒小节只在票务策略页。
+                    Map.entry("/api/v1/bar/arrival-reminder-policies", "ticketing"),
                     Map.entry("/api/v1/bar/catalog", NONE),
-                    // 247-R4：分类下商品列表票务页也调；分类、套餐、图片与单个商品的办理只有酒吧商品、套餐页调。
+                    // 323-R1：分类下商品列表（控制器只有 GET）只有票务策略页调。
+                    Map.entry("/api/v1/bar/catalog/products", "ticketing"),
+                    // 247-R4：分类、套餐、图片与单个商品的办理只有酒吧商品、套餐页调。
                     Map.entry("/api/v1/bar/catalog/categories", "bar"),
                     Map.entry("/api/v1/bar/catalog/combos", "bar"),
                     Map.entry("/api/v1/bar/catalog/images", "bar"),
@@ -74,6 +83,8 @@ final class ServerModuleRoutes {
                     Map.entry("/api/v1/evidence/manual-backfills", "bar"),
                     Map.entry("/api/v1/finance", "finance"),
                     Map.entry("/api/v1/finance/ar-ap-items", NONE),
+                    // 323-R1：收付款记录列表经销页也调；登记收付款（同路径 POST）只有应收应付台账页调。
+                    Map.entry("POST /api/v1/finance/ar-ap-items/{id}/payments", "finance"),
                     Map.entry("/api/v1/finance/ar-ap-items/export", "finance"),
                     // 247-R3：日结列表总控驾驶舱也调；生成日结（同路径 POST）与单张日结的办理只有对账页调。
                     Map.entry("/api/v1/finance/daily-closes", NONE),
@@ -104,6 +115,8 @@ final class ServerModuleRoutes {
                     Map.entry("/api/v1/loyalty/stored-value/refund-cards/lookup", "governance"),
                     Map.entry("/api/v1/loyalty/stored-value/{customer_id}/refund", "governance"),
                     Map.entry("/api/v1/loyalty/stored-value/{customer_id}/counter-refund", "governance"),
+                    // 323 控制席并入：退出公告策略小节只在储值规则页。
+                    Map.entry("/api/v1/loyalty/stored-value/merchant-card-exit-notice-policy", "governance"),
                     Map.entry("/api/v1/merchant-billing", "governance"),
                     Map.entry("/api/v1/merchant-penalties", "governance"),
                     Map.entry("/api/v1/merchant-penalty-bounds", "governance"),
@@ -126,16 +139,24 @@ final class ServerModuleRoutes {
                     Map.entry("/api/v1/platform/supervisor-review", "governance"),
                     Map.entry("/api/v1/platform/supervisor-review-policies", "governance"),
                     Map.entry("/api/v1/platform/venue-business-hours", "governance"),
+                    // 323 控制席并入：首页内容小节只有场地营业时间页、主管复核页调（都属治理）。
+                    Map.entry("/api/v1/home-contents", "governance"),
                     Map.entry("/api/v1/integration", "integration"),
                     // capability-switches 本就豁免终端总开关闸（TerminalMasterSwitchInterceptor）。
                     Map.entry("/api/v1/terminals", "integration"),
                     Map.entry("/api/v1/dealers", "inventory"),
                     Map.entry("/api/v1/inventory", "inventory"),
                     Map.entry("/api/v1/inventory/items", NONE),
+                    // 323-R1：新建物品（同路径 POST）只有库存台账页调。
+                    Map.entry("POST /api/v1/inventory/items", "inventory"),
                     // 247-R4：物品列表与新建酒吧页、调拨页也调；单个物品的高值标记、安全库存只有库存台账页调。
                     Map.entry("/api/v1/inventory/items/{id}", "inventory"),
                     Map.entry("/api/v1/inventory/stock-balances", NONE),
-                    Map.entry("/api/v1/inventory/saved-bottles", NONE),
+                    // 323-R2：存酒一族只有存酒页调；三个策略子路径只有提醒与留存天数配置页（总览）调。
+                    Map.entry("/api/v1/inventory/saved-bottles", "bar"),
+                    Map.entry("/api/v1/inventory/saved-bottles/reminder-policy", "overview"),
+                    Map.entry("/api/v1/inventory/saved-bottles/manual-pickup-policy", "overview"),
+                    Map.entry("/api/v1/inventory/saved-bottles/renewal-policy", "overview"),
                     Map.entry("/api/v1/energy", "ops"),
                     Map.entry("/api/v1/floor-plans", "ops"),
                     Map.entry("/api/v1/ops", "ops"),
@@ -181,16 +202,15 @@ final class ServerModuleRoutes {
                     Map.entry("/api/v1/facility/site-entry-reports/{report_id}/attachments/{attachment_id}/file", NONE),
                     Map.entry("/api/v1/ticketing", "ticketing"),
                     Map.entry("/api/v1/ticketing/ticket-types", NONE),
+                    // 323 控制席并入：新建票种（同路径 POST）只有票务策略页调。
+                    Map.entry("POST /api/v1/ticketing/ticket-types", "ticketing"),
                     // 247-R1：票种列表与新建结算组也调；单个票种的办理只有票务页调。
                     Map.entry("/api/v1/ticketing/ticket-types/{id}", "ticketing"),
-                    Map.entry("/api/v1/ticketing/expiry-reminder-policies", NONE),
                     Map.entry("/api/v1/student-certifications", "ticketing"),
                     Map.entry("/api/v1/loyalty/ticket-reward-configs", "ticketing")),
             "merchant_portal", Map.ofEntries(
                     // 含外壳的未读账单提醒（unread-bills），商户专区模块关闭时一并不显示。
                     Map.entry("/api/v1/merchant-portal", "merchant"),
-                    // 客人端设置小节里的门店退出公告，治理与票务页也引用。
-                    Map.entry("/api/v1/merchant-portal/card-exit-notices", NONE),
                     // 247-R1：工单列表、详情治理组商户页也调；商户自助取消只有商户专区「我的工单」调。
                     Map.entry("/api/v1/merchant-service/work-orders/{id}/cancel", "merchant"),
                     // 18AO 收尾复核：「我的工单」的确认已解决、商户建单（同路径列表治理组商户页也调，写方法单独判）、「我的证照」的宽限申请

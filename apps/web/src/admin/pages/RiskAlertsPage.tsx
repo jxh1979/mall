@@ -1,5 +1,6 @@
 import React from "react";
 import { formatBusinessStatus } from "../i18n/statusLabels";
+import { formatReviewValue } from "../i18n/reviewLabels";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
 import { HighRiskConfirm } from "../components/HighRiskConfirm";
@@ -18,6 +19,14 @@ import type { AdminPageProps, RiskAlertRow } from "../types";
 const HIGH_LEVELS = ["high", "critical"];
 const CLOSED_STATUSES = ["resolved", "dismissed", "ignored"];
 
+// 第十八批 BA 段第 267 条 267-R3（PGM:287「……枚举取值……必须全部为中文」）：对象类型显示中文。手工新建按中文填写、原样显示；
+// 系统写入的对象码（指标异常转告警、企业微信违规命中）与旧默认值在此译中文，其余对象码照复核对象码表。
+const OBJECT_TYPE_LABELS: Record<string, string> = { bar_order: "酒吧订单", metric_anomaly: "指标异常", wecom_message: "企业微信消息" };
+
+function objectTypeLabel(value?: string | null) {
+  return OBJECT_TYPE_LABELS[value ?? ""] ?? formatReviewValue(value);
+}
+
 const TEXT = {
   title: "风控预警",
   description: "集中处理高风险客户、员工行为、第三方异常和生产风险预警；创建、调查、解决和关闭都必须带原因和幂等键。",
@@ -34,7 +43,7 @@ const TEXT = {
   alertType: "预警类型",
   riskLevel: "风险等级",
   objectType: "对象类型",
-  objectId: "对象 ID",
+  objectId: "对象编号",
   summary: "预警摘要",
   reason: "处理原因",
   create: "创建预警",
@@ -82,7 +91,7 @@ export function RiskAlertsPage({ api, setActionResult, setGlobalError, effective
   const { selectedId, setSelectedId, selected } = useSelectedRow(rows);
   const [alertType, setAlertType] = React.useState("staff_behavior");
   const [riskLevel, setRiskLevel] = React.useState("high");
-  const [objectType, setObjectType] = React.useState("bar_order");
+  const [objectType, setObjectType] = React.useState("酒吧订单");
   const [objectId, setObjectId] = React.useState("");
   const [summary, setSummary] = React.useState("");
   const [resolutionReason, setResolutionReason] = React.useState("");
@@ -98,7 +107,7 @@ export function RiskAlertsPage({ api, setActionResult, setGlobalError, effective
       fields: [
         { label: TEXT.alertType, value: formatBusinessStatus(row.alertType) },
         { label: TEXT.riskLevel, value: formatBusinessStatus(row.riskLevel) },
-        { label: TEXT.objectType, value: row.objectType ?? "—" },
+        { label: TEXT.objectType, value: objectTypeLabel(row.objectType) },
         { label: TEXT.objectId, value: row.objectId ?? "—" },
         { label: TEXT.summary, value: row.summary ?? "—" },
         { label: TEXT.owner, value: row.ownerUserId ?? "—" },
@@ -220,7 +229,7 @@ export function RiskAlertsPage({ api, setActionResult, setGlobalError, effective
             <td onClick={(event) => event.stopPropagation()}><button type="button" data-testid={`risk-alert-select-${row.id}`} onClick={() => setSelectedId(row.id)}>{TEXT.select}</button></td>
             <td>{formatBusinessStatus(row.alertType)}</td>
             <td>{formatBusinessStatus(row.riskLevel)}</td>
-            <td>{row.objectType ?? "-"}</td>
+            <td>{objectTypeLabel(row.objectType)}</td>
             <td>{row.objectId ?? "-"}</td>
             <td>{row.summary ?? "-"}</td>
             <td>{row.ownerUserId ?? "-"}</td>

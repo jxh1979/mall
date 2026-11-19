@@ -1,4 +1,4 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -58,16 +58,16 @@ describe("ContractWorkbenchPage 引导式起草合同", () => {
     render(<ContractWorkbenchPage {...baseProps()} setActionResult={setActionResult} />);
     await waitFor(() => expect(screen.getByTestId("contract-draft-open")).toBeTruthy());
     // 未打开时弹窗字段不渲染。
-    expect(screen.queryByLabelText("商户 id")).toBeNull();
+    expect(screen.queryByLabelText("商户编号")).toBeNull();
 
     fireEvent.click(screen.getByTestId("contract-draft-open"));
     // 步1 合同双方：只填商户，缺合同主体 → 下一步校验报错。
-    fireEvent.change(screen.getByLabelText("商户 id"), { target: { value: "merchant-1" } });
+    fireEvent.change(screen.getByLabelText("商户编号"), { target: { value: "merchant-1" } });
     fireEvent.click(screen.getByTestId("contract-draft-next"));
     expect(screen.getByTestId("contract-draft-error").textContent).toContain("合同主体");
 
     // 补齐合同主体 → 步进到租期步。
-    fireEvent.change(screen.getByLabelText("合同主体 id"), { target: { value: "subject-1" } });
+    fireEvent.change(screen.getByLabelText("合同主体编号"), { target: { value: "subject-1" } });
     fireEvent.click(screen.getByTestId("contract-draft-next"));
     // 步2 租期：填生效/到期日期（CnDatePicker 受控，直接改 state 走不通，用组件内交互）。
     // 这里用最小路径：CnDatePicker 无法在此简单 fill，退回校验 → 补日期后再进。
@@ -89,8 +89,8 @@ describe("ContractWorkbenchPage 引导式起草合同", () => {
     fireEvent.change(screen.getByLabelText("收租方式"), { target: { value: "turnover_only" } });
     await waitFor(() => expect(screen.queryByLabelText("押金（元）")).not.toBeNull());
     await waitFor(() => expect(screen.getByRole("option", { name: /测试商户1/ })).toBeTruthy());
-    fireEvent.change(screen.getByLabelText("商户 id"), { target: { value: "merchant-1" } });
-    fireEvent.change(screen.getByLabelText("合同主体 id"), { target: { value: "subject-1" } });
+    fireEvent.change(screen.getByLabelText("商户编号"), { target: { value: "merchant-1" } });
+    fireEvent.change(screen.getByLabelText("合同主体编号"), { target: { value: "subject-1" } });
     for (const [label, day] of [["生效日期", "1"], ["到期日期", "28"]] as const) {
       fireEvent.click(screen.getByRole("button", { name: label }));
       fireEvent.click(within(screen.getByRole("dialog", { name: label })).getByRole("button", { name: day }));
@@ -123,8 +123,8 @@ describe("ContractWorkbenchPage 引导式起草合同", () => {
     await waitFor(() => expect(screen.queryByTestId("contract-draft-project")).not.toBeNull());
     await waitFor(() => expect(screen.getByRole("option", { name: /测试商户1/ })).toBeTruthy());
     fireEvent.change(screen.getByTestId("contract-draft-project"), { target: { value: "prj-b" } });
-    fireEvent.change(screen.getByLabelText("商户 id"), { target: { value: "merchant-1" } });
-    fireEvent.change(screen.getByLabelText("合同主体 id"), { target: { value: "subject-1" } });
+    fireEvent.change(screen.getByLabelText("商户编号"), { target: { value: "merchant-1" } });
+    fireEvent.change(screen.getByLabelText("合同主体编号"), { target: { value: "subject-1" } });
     for (const [label, day] of [["生效日期", "1"], ["到期日期", "28"]] as const) {
       fireEvent.click(screen.getByRole("button", { name: label }));
       fireEvent.click(within(screen.getByRole("dialog", { name: label })).getByRole("button", { name: day }));

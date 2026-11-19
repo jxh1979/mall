@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import React from "react";
 import { PermissionButton } from "../security/Can";
 import type { AdminPageProps } from "../types";
@@ -42,7 +42,7 @@ export function ManualBackfillPolicySection({ api, setActionResult, setGlobalErr
   }
 
   async function load() {
-    if (!projectId.trim()) { setGlobalError("请先填写综合体项目 id"); return; }
+    if (!projectId.trim()) { setGlobalError("请先填写综合体项目编号"); return; }
     try {
       const policy = await api.get<Policy | null>(path());
       setCurrent(policy);
@@ -57,7 +57,7 @@ export function ManualBackfillPolicySection({ api, setActionResult, setGlobalErr
     const g = GROUPS[group];
     const [valueKey, minKey, maxKey] = g.fields;
     const value = whole(form[valueKey], g.floor), min = whole(form[minKey], g.floor), max = whole(form[maxKey], g.floor);
-    if (!projectId.trim()) { setGlobalError("请先填写综合体项目 id"); return; }
+    if (!projectId.trim()) { setGlobalError("请先填写综合体项目编号"); return; }
     if (value === null || min === null || max === null || min > value || value > max) {
       setGlobalError(`${g.name}须同时填写${g.unit}数及上下限（整数，下限不小于 ${g.floor}），${g.unit}数须在上下限内`);
       return;
@@ -80,7 +80,7 @@ export function ManualBackfillPolicySection({ api, setActionResult, setGlobalErr
       <strong>人工补录参数（按项目；出厂补录时限 3 天、录音提前 30 分钟；须同时配置上下限）：</strong>
       超过补录时限不得补录；以通话录音为凭证的，录音起始须早于到店与开卡达录音提前量，否则不予采信。
       <div className="admin-form-grid" style={{ marginTop: 8 }}>
-        <label>项目 id<input data-testid="manual-backfill-policy-project" value={projectId} onChange={(e) => setProjectId(e.target.value)} /></label>
+        <label>项目编号<input data-testid="manual-backfill-policy-project" value={projectId} onChange={(e) => setProjectId(e.target.value)} /></label>
         <button type="button" data-testid="manual-backfill-policy-query" onClick={() => void load()}>查询</button>
         <span className="admin-muted-action" data-testid="manual-backfill-policy-current">
           {current ? `当前${current.projectId === "__global__" ? "（出厂值）" : ""}：补录时限 ${current.windowDays} 天${bounds(current.windowMinDays, current.windowMaxDays, "天")}；录音提前 ${current.recordingLeadMinutes} 分钟${bounds(current.leadMinMinutes, current.leadMaxMinutes, "分钟")}` : "未查询"}

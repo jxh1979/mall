@@ -1,4 +1,4 @@
-// 文件版本：V0.05
+// 文件版本：V0.06
 import React from "react";
 import { AdminPageHeader } from "../components/AdminPageHeader";
 import { PermissionButton } from "../security/Can";
@@ -87,7 +87,7 @@ export function TicketRewardConfigPage({ api, effectivePermissions, setActionRes
     if (!effective || !reason.trim() || !approver.trim()) throw new Error("请填写未来生效时间、原因和最终审批人");
     if (!nationwide && !generalBonus && (!project || !ticket)) throw new Error("请选择综合体和票种");
     if (merchantKind && !format) throw new Error("请选择商户业态");
-    if (merchantBonus && !merchant.trim()) throw new Error("请填写发卡商户 id");
+    if (merchantBonus && !merchant.trim()) throw new Error("请填写发卡商户编号");
     if (kind === "national") payload.receiverEntityId = values.receiverEntityId;
     if (kind === "sales_contract") Object.assign(payload, { sellerEntityId: values.sellerEntityId, sellerMerchantId: tickets.find(t => t.id === ticket)?.barId ?? null, contractNumber: values.contractNumber, attachmentIds: attachments });
     return api.post("/api/v1/loyalty/ticket-reward-configs", {
@@ -117,7 +117,7 @@ export function TicketRewardConfigPage({ api, effectivePermissions, setActionRes
     <div className="admin-form-row">
       <label>配置类型<select aria-label="配置类型" value={kind} onChange={e => { const next = e.target.value as Kind; setKind(next); setValues(next === "recovery_waiver" ? { fixedValue: "100" } : next === "national" ? { waitingHours: "24", merchantWaitingHours: "24" } : {}); }}>{Object.entries(kinds).map(([k, name]) => <option key={k} value={k}>{name}</option>)}</select></label>
       {merchantKind && <label>商户业态<select aria-label="商户业态" value={format} onChange={e => setFormat(e.target.value)}><option value="">请选择</option>{Object.entries(formats).map(([k, name]) => <option key={k} value={k}>{name}</option>)}</select></label>}
-      {merchantBonus && <label>发卡商户 id<input aria-label="发卡商户 id" value={merchant} onChange={e => setMerchant(e.target.value)} /></label>}
+      {merchantBonus && <label>发卡商户编号<input aria-label="发卡商户编号" value={merchant} onChange={e => setMerchant(e.target.value)} /></label>}
       {!nationwide && <><label>综合体<select aria-label="综合体" value={project} onChange={e => { setProject(e.target.value); setAttachments([]); }}><option value="">{generalBonus ? "不限项目（无项目通用卡）" : "请选择"}</option>{projects.map(p => <option key={p.id} value={p.id}>{p.name ?? p.id}</option>)}</select></label>
         {!generalBonus && <label>票种<select aria-label="票种" value={ticket} onChange={e => { setTicket(e.target.value); setAttachments([]); }}><option value="">请选择</option>{tickets.map(t => <option key={t.id} value={t.id}>{t.ticketName ?? t.id}</option>)}</select></label>}</>}
     </div>

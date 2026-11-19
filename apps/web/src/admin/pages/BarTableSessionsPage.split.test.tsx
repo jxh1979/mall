@@ -1,4 +1,4 @@
-// 文件版本：V0.05
+// 文件版本：V0.06
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { BarTableSessionsPage } from "./BarTableSessionsPage";
@@ -61,7 +61,7 @@ describe("卡座会话拆台", () => {
     fireEvent.change(screen.getByTestId("bar-split-invitation-assignments"), { target: { value: "rsv-1=session-2" } });
     fireEvent.change(screen.getByTestId("bar-split-member-assignments"), { target: { value: "invm-1=session-1\ninvm-2" } });
     fireEvent.click(screen.getByTestId("bar-split-submit"));
-    expect(screen.getByTestId("bar-checkin-error").textContent).toContain("成员归属每行须为「成员ID=会话ID」");
+    expect(screen.getByTestId("bar-checkin-error").textContent).toContain("成员归属每行须为「成员编号=会话编号」");
     expect(post).not.toHaveBeenCalled();
 
     fireEvent.change(screen.getByTestId("bar-split-member-assignments"), { target: { value: "invm-1=session-1\n\ninvm-2 = session-2" } });

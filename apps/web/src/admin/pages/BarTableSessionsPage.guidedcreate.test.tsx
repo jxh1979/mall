@@ -85,3 +85,17 @@ describe("BarTableSessionsPage 引导式新建卡座", () => {
     expect(screen.getByTestId("bar-new-table-guided").innerHTML).not.toMatch(/VIP|包坐/);
   });
 });
+
+// 第十八批 BA 段第 267 条 267-R2（PGM:287「……字段名……提示、报错……必须全部为中文……不得以“这是标识”为由保留英文」）：
+// 订台、开台表单字段名与占位提示里的「ID」改「编号」。
+describe("BarTableSessionsPage 订台与开台表单不出现英文 ID（第 267 条）", () => {
+  it("新建订台与开台表单的字段名、占位提示都写「编号」", async () => {
+    renderPage(makeApi());
+    await waitFor(() => expect(screen.getByTestId("bar-create-reservation-form").textContent).toContain("卡座编号"));
+    for (const testId of ["bar-create-reservation-form", "bar-create-session-form"]) {
+      const form = screen.getByTestId(testId);
+      expect(form.textContent).not.toMatch(/(^|[^A-Za-z])ID([^A-Za-z]|$)/);
+      for (const el of Array.from(form.querySelectorAll("[placeholder]"))) expect(el.getAttribute("placeholder")).not.toMatch(/(^|[^A-Za-z])ID([^A-Za-z]|$)/);
+    }
+  });
+});

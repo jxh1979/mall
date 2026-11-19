@@ -1,4 +1,4 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -88,6 +88,23 @@ describe("EnergyWorkbenchPage 行明细抽屉 + 零英文", () => {
     expect(screen.getByTestId("energy-readings-table").textContent).not.toContain("abnormal");
   });
 
+  // 第十八批 BA 段第 267 条 267-R3（PGM:287「不得出现任何英文（如……mm/dd/yyyy 英文日期格式……）」）：抄表期间提示写「年-月」。
+  it("抄表期间输入框提示不用英文日期格式", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByLabelText("抄表期间")).toBeTruthy());
+    expect(screen.getByLabelText("抄表期间").getAttribute("placeholder")).toBe("期间（年-月）");
+  });
+
+  // 第十八批 BA 段收尾复核修正（PGM:287「……字段名……提示、报错……必须全部为中文」）：字段名、占位与读屏名里的英文 id 改「编号」。
+  it("正文、占位与读屏名都不出现与中文相邻的 id", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByLabelText("抄表期间")).toBeTruthy());
+    const texts = [document.body.textContent ?? "", ...Array.from(document.querySelectorAll("[placeholder],[aria-label]"))
+      .flatMap((el) => [el.getAttribute("placeholder") ?? "", el.getAttribute("aria-label") ?? ""])];
+    for (const text of texts) expect(text).not.toMatch(/[\u4e00-\u9fff] ?id(?![A-Za-z_])|(^|[^A-Za-z_])id ?[\u4e00-\u9fff]/i);
+    expect(screen.getByLabelText("读数表计编号").getAttribute("placeholder")).toBe("表计编号");
+  });
+
   it("员工只能人工抄表，真实照片缺失时不发请求，照片不跨表沿用", async () => {
     const post=vi.fn().mockResolvedValue({id:"new-reading",status:"recorded"});
     const postForm=vi.fn().mockResolvedValue({id:"photo-1"});
@@ -98,7 +115,7 @@ describe("EnergyWorkbenchPage 行明细抽屉 + 零英文", () => {
       setActionResult={vi.fn()} setGlobalError={setGlobalError}/>);
     await waitFor(()=>expect(screen.getByTestId("energy-reading-record")).toBeTruthy());
     expect(screen.queryByLabelText("抄表方式")).toBeNull();
-    fireEvent.change(screen.getByLabelText("读数表计 id"),{target:{value:"m-1"}});
+    fireEvent.change(screen.getByLabelText("读数表计编号"),{target:{value:"m-1"}});
     fireEvent.change(screen.getByLabelText("本期读数"),{target:{value:"150"}});
     fireEvent.change(screen.getByLabelText("人工抄表原因"),{target:{value:"现场补录"}});
     fireEvent.click(screen.getByTestId("energy-reading-record"));
@@ -111,7 +128,7 @@ describe("EnergyWorkbenchPage 行明细抽屉 + 零英文", () => {
     await waitFor(()=>expect(screen.getByText("已上传0张")).toBeTruthy());
     fireEvent.change(screen.getByLabelText("人工表底照片"),{target:{files:[new File(["second photo"],"表底2.png",{type:"image/png"})]}});
     await waitFor(()=>expect(screen.getByText("已上传1张")).toBeTruthy());
-    fireEvent.change(screen.getByLabelText("读数表计 id"),{target:{value:"m-2"}});
+    fireEvent.change(screen.getByLabelText("读数表计编号"),{target:{value:"m-2"}});
     expect(screen.getByText("已上传0张")).toBeTruthy();
   });
 

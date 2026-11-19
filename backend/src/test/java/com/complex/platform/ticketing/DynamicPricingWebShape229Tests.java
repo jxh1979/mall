@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -10,7 +10,11 @@ import com.complex.platform.support.StaffRequestFixture;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -87,6 +91,58 @@ class DynamicPricingWebShape229Tests {
         assertThat(published.path("status").asText()).isEqualTo("published");
         assertThat(published.path("operator_note").asText()).isEqualTo("后台发布");
         assertThat(published.path("evidence_attachment_ids").size()).isZero();
+    }
+
+    /**
+     * 325-R1（文档与代码一致；矩阵同类第 304、313 条先例；控制席并入：矩阵各行权限码只跟现码、不新加权限）：页面矩阵 permissions 列每个码都是现行权限码
+     * （码后括注如「(导出按钮)」是说明、不是码）；ADM-TKT-002 行列出页面实调的建规则接口 POST /api/v1/ticketing/dynamic-pricing-rules 与其
+     * ticket.dynamic_pricing.manage，动作与状态流照现码（规则只有草稿→发布，没有回滚接口）。只有 ticket.dynamic_pricing.view 的账号建规则 403。
+     */
+    @Test
+    void pageMatrixPermissionsAreActiveCodesAndDynamicPricingRowFollowsCode() throws Exception {
+        Path matrix = Path.of("..", "docs", "full-admin-page-permission-field-matrix-v0.1.csv");
+        if (!Files.exists(matrix)) {
+            matrix = Path.of("docs", "full-admin-page-permission-field-matrix-v0.1.csv");
+        }
+        List<String> rows = Files.readAllLines(matrix, StandardCharsets.UTF_8);
+        List<String> missing = new ArrayList<>();
+        for (String row : rows.subList(1, rows.size())) {
+            if (row.isBlank()) {
+                continue;
+            }
+            String[] cols = row.split(",", -1);
+            for (String code : cols[6].split(";")) {
+                int note = code.indexOf('(');
+                String bare = (note < 0 ? code : code.substring(0, note)).trim();
+                if (!bare.isEmpty() && jdbc.queryForObject("SELECT count(*) FROM permissions WHERE permission_code = ? AND status = 'active'",
+                        Integer.class, bare) != 1) {
+                    missing.add(cols[0] + ":" + bare);
+                }
+            }
+        }
+        assertThat(missing).as("矩阵里不是现行权限码的").isEmpty();
+
+        String[] dynamicPricing = rows.stream().filter(row -> row.startsWith("ADM-TKT-002,")).findFirst().orElseThrow().split(",", -1);
+        assertThat(dynamicPricing[6].split(";")).containsExactly("ticket.dynamic_pricing.view", "ticket.dynamic_pricing.manage",
+                "ticket.dynamic_pricing.simulate", "ticket.dynamic_pricing.publish", "ticket.product.view");
+        assertThat(dynamicPricing[7].split(";")).contains("POST /api/v1/ticketing/dynamic-pricing-rules");
+        assertThat(dynamicPricing[8]).doesNotContain("回滚");
+        assertThat(dynamicPricing[10]).isEqualTo("draft->published");
+
+        String project = "prj_d325_" + s;
+        jdbc.update("INSERT INTO projects (id, venue_type, name, status, created_at, updated_at)"
+                + " VALUES (?, 'complex', '动态定价矩阵综合体', 'active', now(), now())", project);
+        RequestPostProcessor viewer = new StaffRequestFixture(jdbc).staff("usr_d325_" + s, "staff", project, null,
+                "ticket.dynamic_pricing.view");
+        Map<String, Object> draft = new LinkedHashMap<>();
+        draft.put("idempotency_key", "d325-rule-" + s);
+        draft.put("ticket_type_id", "tt_d325_" + s);
+        draft.put("rule_name", "周末上浮");
+        draft.put("adjustment_type", "percent_delta");
+        draft.put("adjustment_rate", 10);
+        mockMvc.perform(post("/api/v1/ticketing/dynamic-pricing-rules").with(viewer)
+                        .contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(draft)))
+                .andExpect(status().isForbidden());
     }
 
     private JsonNode call(RequestPostProcessor who, String path, Map<String, Object> body) throws Exception {

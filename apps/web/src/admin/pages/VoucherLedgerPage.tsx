@@ -1,4 +1,4 @@
-// 文件版本：V0.05
+// 文件版本：V0.06
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
@@ -78,7 +78,7 @@ const TEXT = {
   merchantRequired: "该券类型/结算口径必须选择归属商户。",
   goodsRequired: "店内实物券必须填写货品、库位与每张券件数。",
   internalPriceRequired: "内部结算必须引用内部结算价目录条目（条目须已复核转正且生效价大于 0）。",
-  customerRequired: "请填写客人 ID。",
+  customerRequired: "请填写客人编号。",
   definitionRequired: "请选择券定义。",
   quantityInvalid: "发放张数必须是 1-100 的整数。",
   reasonRequired: "作废理由必填（存进券实例，不写入审计事件）。",
@@ -407,7 +407,7 @@ export function VoucherLedgerPage({ api, setActionResult, setGlobalError, effect
             </select></label>
           </>
         ) : null}
-        <label>客人 ID<input data-testid="voucher-filter-customer" value={customerFilter} onChange={(event) => setCustomerFilter(event.target.value)} placeholder="按持有客人筛选" /></label>
+        <label>客人编号<input data-testid="voucher-filter-customer" value={customerFilter} onChange={(event) => setCustomerFilter(event.target.value)} placeholder="按持有客人筛选" /></label>
         <PermissionButton
           permissionsState={effectivePermissions}
           permissions={MANAGE_PERMS}
@@ -552,13 +552,13 @@ export function VoucherLedgerPage({ api, setActionResult, setGlobalError, effect
                   <option value="none">不结算（免费营销）</option>
                   <option value="internal_price">内部结算价挂应付</option>
                 </select></label>
-                <label>归属商户 ID<input data-testid="voucher-create-def-merchant" value={defMerchant} onChange={(event) => setDefMerchant(event.target.value)} placeholder="留空＝平台通用（折扣券/内部结算必填）" /></label>
+                <label>归属商户编号<input data-testid="voucher-create-def-merchant" value={defMerchant} onChange={(event) => setDefMerchant(event.target.value)} placeholder="留空＝平台通用（折扣券/内部结算必填）" /></label>
                 {defKind === "merchant_discount" ? (
                   <label>面额（元）<input data-testid="voucher-create-def-face" type="number" step="0.01" value={defFaceYuan} onChange={(event) => setDefFaceYuan(event.target.value)} placeholder="如 50.00" /></label>
                 ) : (
                   <>
-                    <label>货品 ID<input data-testid="voucher-create-def-item" value={defItemId} onChange={(event) => setDefItemId(event.target.value)} placeholder="库存货品 ID" /></label>
-                    <label>库位 ID<input data-testid="voucher-create-def-location" value={defLocationId} onChange={(event) => setDefLocationId(event.target.value)} placeholder="出库库位 ID" /></label>
+                    <label>货品编号<input data-testid="voucher-create-def-item" value={defItemId} onChange={(event) => setDefItemId(event.target.value)} placeholder="库存货品编号" /></label>
+                    <label>库位编号<input data-testid="voucher-create-def-location" value={defLocationId} onChange={(event) => setDefLocationId(event.target.value)} placeholder="出库库位编号" /></label>
                     <label>每张券件数<input data-testid="voucher-create-def-qty" type="number" step="1" value={defStockQty} onChange={(event) => setDefStockQty(event.target.value)} /></label>
                   </>
                 )}
@@ -631,7 +631,7 @@ export function VoucherLedgerPage({ api, setActionResult, setGlobalError, effect
                   {activeDefinitions.length === 0 ? <option value="">（暂无生效中的券定义）</option> : null}
                   {activeDefinitions.map((definition) => <option key={definition.id} value={definition.id}>{definition.name}</option>)}
                 </select></label>
-                <label>客人 ID<input data-testid="voucher-issue-customer" value={issueCustomer} onChange={(event) => setIssueCustomer(event.target.value)} placeholder="持有客人 ID" /></label>
+                <label>客人编号<input data-testid="voucher-issue-customer" value={issueCustomer} onChange={(event) => setIssueCustomer(event.target.value)} placeholder="持有客人编号" /></label>
                 <label>发放张数<input data-testid="voucher-issue-quantity" type="number" step="1" value={issueQuantity} onChange={(event) => setIssueQuantity(event.target.value)} /></label>
               </>
             ),

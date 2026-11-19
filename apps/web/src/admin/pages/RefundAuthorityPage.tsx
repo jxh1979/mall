@@ -60,7 +60,7 @@ export function RefundAuthorityPage({ api, setActionResult, setGlobalError, effe
   async function saveLimit() {
     const cent = Math.round(Number(limitForm.limitYuan) * 100);
     if (!limitForm.subjectId.trim() || !Number.isFinite(cent) || cent < 0) {
-      setGlobalError("请填写员工 id 与非负的单笔额度（元）");
+      setGlobalError("请填写员工编号与非负的单笔额度（元）");
       return;
     }
     await api.post("/api/v1/finance/refund-authority/limits", {
@@ -127,7 +127,7 @@ export function RefundAuthorityPage({ api, setActionResult, setGlobalError, effe
       title: `员工自助退款额度 · ${row.subjectId}`,
       fields: [
         { label: "主体", value: formatBusinessStatus(row.subjectType) },
-        { label: "员工 id", value: row.subjectId },
+        { label: "员工编号", value: row.subjectId },
         { label: "退款域", value: formatBusinessStatus(row.refundDomain) },
         { label: "单笔额度（元）", value: `¥${(row.limitAmountCent / 100).toFixed(2)}` },
         { label: "状态", value: formatBusinessStatus(row.status) },
@@ -162,7 +162,7 @@ export function RefundAuthorityPage({ api, setActionResult, setGlobalError, effe
             <thead>
               <tr>
                 <th>主体</th>
-                <th>员工 id</th>
+                <th>员工编号</th>
                 <th>退款域</th>
                 <th>单笔额度（元）</th>
                 <th>状态</th>
@@ -186,8 +186,8 @@ export function RefundAuthorityPage({ api, setActionResult, setGlobalError, effe
         </div>
         <div className="admin-inline-form" data-testid="refund-limit-form">
           <input
-            aria-label="员工 id"
-            placeholder="员工 id"
+            aria-label="员工编号"
+            placeholder="员工编号"
             value={limitForm.subjectId}
             onChange={(event) => setLimitForm({ ...limitForm, subjectId: event.target.value })}
           />

@@ -115,7 +115,9 @@ describe("FacilityWorkbenchPage 整行明细抽屉 + 零英文", () => {
     fireEvent.keyDown(window, { key: "Escape" });
     // SLA 策略（默认行）
     fireEvent.click(await screen.findByTestId("facility-work-order-policy-repair-urgent"));
-    expect(within(drawer()).getByText(/SLA 策略明细/)).toBeTruthy();
+    expect(drawer().textContent).toContain("时限策略明细");
+    // 第十八批 BA 段第 267 条 267-R3（PGM:287；BSM:1385「响应/处理时限按「工单类型×优先级」矩阵后台配置」）：不写英文 SLA。
+    expect(document.body.textContent).not.toContain("SLA");
     expect(within(drawer()).getByText("30 分钟")).toBeTruthy();
     fireEvent.keyDown(window, { key: "Escape" });
     // 巡检模板
@@ -143,5 +145,19 @@ describe("FacilityWorkbenchPage 整行明细抽屉 + 零英文", () => {
     fireEvent.click(rec);
     expect(within(drawer()).getByText("巡检记录明细 · rec-1")).toBeTruthy();
     expect(within(drawer()).getByText("2026年7月11日 09:30")).toBeTruthy();
+  });
+});
+
+// 第十八批 BA 段收尾复核修正（PGM:287「……字段名……提示、报错……必须全部为中文」）：表头、占位与读屏名里的英文 id 改「编号」。
+describe("FacilityWorkbenchPage 表头与字段名不夹英文 id（第 267 条收尾复核）", () => {
+  it("正文、占位与读屏名都不出现与中文相邻的 id，设备台账表头写「编号」", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("facility-equipment-eq-1")).toBeTruthy());
+    const texts = [document.body.textContent ?? "", ...Array.from(document.querySelectorAll("[placeholder],[aria-label]"))
+      .flatMap((el) => [el.getAttribute("placeholder") ?? "", el.getAttribute("aria-label") ?? ""])];
+    for (const text of texts) expect(text).not.toMatch(/[\u4e00-\u9fff] ?id(?![A-Za-z_])|(^|[^A-Za-z_])id ?[\u4e00-\u9fff]/i);
+    const headers = Array.from(document.querySelectorAll("th")).map((th) => th.textContent);
+    expect(headers).not.toContain("id");
+    expect(headers).toContain("编号");
   });
 });

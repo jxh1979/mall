@@ -1,6 +1,6 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -9,8 +9,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.complex.platform.support.StaffRequestFixture;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jayway.jsonpath.JsonPath;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -156,6 +159,31 @@ class SavedBottleDepositJdbcIntegrationTests {
                 .andExpect(status().isBadRequest());
         call(put(BASE + "/renewal-policy"), platform, validity("b62dp-pol-bar-" + s, "bar:" + merchant, 45, 7, 90))
                 .andExpect(status().isBadRequest());
+    }
+
+    // 325-R2（契约与代码一致）：没有 bar.saved_bottle.manage 的员工登记存酒、取酒都 403（权限闸在读存酒之前），不建存酒行；契约这两个操作都列 403。
+    @Test
+    void registrationAndClaimWithoutManagePermissionAreForbiddenAndContractListsForbidden() throws Exception {
+        RequestPostProcessor noManage = new StaffRequestFixture(jdbc).staff("usr_b62dp_nom_" + s, "staff", project, merchant,
+                "bar.saved_bottle.renewal_policy.manage");
+        call(post(BASE), noManage, registration("b62dp-nomanage-" + s, "000000", "吧台登记"))
+                .andExpect(status().isForbidden());
+        Map<String, Object> claim = new LinkedHashMap<>();
+        claim.put("idempotency_key", "b62dp-nomanage-claim-" + s);
+        claim.put("verification_code", "000000");
+        claim.put("bottle_label_value", "LBL-B62DP");
+        claim.put("customer_name_or_nickname", "登记客人");
+        call(post(BASE + "/sb_b62dp_any_" + s + "/claim"), noManage, claim)
+                .andExpect(status().isForbidden());
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM saved_bottles WHERE item_id=?", Long.class, item)).isZero();
+
+        Path contract = Path.of("..", "docs", "openapi", "openapi-p0.json");
+        if (!Files.exists(contract)) {
+            contract = Path.of("docs", "openapi", "openapi-p0.json");
+        }
+        JsonNode paths = json.readTree(Files.readString(contract)).path("paths");
+        assertThat(paths.path(BASE).path("post").path("responses").has("403")).as("createSavedBottle 列 403").isTrue();
+        assertThat(paths.path(BASE + "/{id}/claim").path("post").path("responses").has("403")).as("claimSavedBottle 列 403").isTrue();
     }
 
     private Map<String, Object> registration(String key, String code, String note) {

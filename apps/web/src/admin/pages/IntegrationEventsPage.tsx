@@ -1,4 +1,4 @@
-// 文件版本：V0.05
+// 文件版本：V0.06
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
@@ -24,7 +24,7 @@ const ENDPOINTS = [
 
 const TEXT = {
   title: "回调/轮询/补偿",
-  description: "统一查看第三方 Webhook、定时轮询、重试任务、补偿任务、订单同步和券核销回流；立即重试和补偿处理只更新平台任务状态与审计，不代表真实供应商生产补偿已执行。",
+  description: "统一查看第三方回调、定时轮询、重试任务、补偿任务、订单同步和券核销回流；立即重试和补偿处理只更新平台任务状态与审计，不代表真实供应商生产补偿已执行。",
   loadFailed: "第三方回调/轮询数据读取失败",
   total: "事件总数",
   pending: "待处理",
@@ -38,7 +38,7 @@ const TEXT = {
   resolveCompensation: "处理补偿",
   noRetry: "当前没有可重试任务。",
   noCompensation: "当前没有可处理补偿任务。",
-  boundary: "Webhook + 定时轮询校验为当前验收口径；立即重试/补偿处理只更新平台任务状态和审计，不得伪造第三方生产补偿执行。",
+  boundary: "回调与定时轮询校验为当前验收口径；立即重试/补偿处理只更新平台任务状态和审计，不得伪造第三方生产补偿执行。",
   source: "来源",
   taskNo: "任务号",
   provider: "供应商",

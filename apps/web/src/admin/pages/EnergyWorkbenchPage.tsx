@@ -1,4 +1,4 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 import React from "react";
 import { EnergyWorkflowPanel } from "./EnergyWorkflowPanel";
 import { AdminDataState } from "../components/AdminDataState";
@@ -229,7 +229,7 @@ export function EnergyWorkbenchPage({ api, setActionResult, setGlobalError, effe
   async function recordReading() {
     const readingValue = Number(readingForm.readingValue);
     if (!readingForm.meterId.trim() || !period.trim() || !readingForm.readingValue.trim() || !Number.isFinite(readingValue) || readingValue < 0) {
-      setGlobalError("抄表需填写表计 id、期间和有效读数");
+      setGlobalError("抄表需填写表计编号、期间和有效读数");
       return;
     }
     if (!readingFiles.length || !manualReason.trim()) {
@@ -263,7 +263,7 @@ export function EnergyWorkbenchPage({ api, setActionResult, setGlobalError, effe
 
   async function loadDifference() {
     if (!differenceMeterId.trim() || !period.trim()) {
-      setGlobalError("总分表抹差需填写总表 id 与期间");
+      setGlobalError("总分表抹差需填写总表编号与期间");
       return;
     }
     setDifference(await api.get<EnergyDifferenceRow>(`/api/v1/energy/meters/${encodeURIComponent(differenceMeterId.trim())}/difference?period=${encodeURIComponent(period.trim())}`));
@@ -284,7 +284,7 @@ export function EnergyWorkbenchPage({ api, setActionResult, setGlobalError, effe
       <AdminPageHeader title="能源工作台" description="表计实际计量、异常复核与独表费用代收；公区及水电损纳入物业费。" />
       <AdminDataState loading={loading} error={error} empty={false} onRetry={reload}>
         <div className="admin-inline-form" data-testid="energy-period-form">
-          <input aria-label="抄表期间" placeholder="期间 YYYY-MM" value={period} onChange={(event) => setPeriod(event.target.value)} />
+          <input aria-label="抄表期间" placeholder="期间（年-月）" value={period} onChange={(event) => setPeriod(event.target.value)} />
           <button type="button" data-testid="energy-period-load" onClick={() => void reload()}>按期读取</button>
         </div>
 
@@ -341,10 +341,10 @@ export function EnergyWorkbenchPage({ api, setActionResult, setGlobalError, effe
               description: "填写项目归属，商户独立表必须选择商户，可选填上级总表、空间，选择读数方式与启用状态。",
               content: (
                 <>
-                  <label><span>上级总表 id（可空）</span><select data-testid="energy-meter-guided-parent" value={meterForm.parentMeterId} onChange={(event) => setMeterForm({ ...meterForm, parentMeterId: event.target.value })}><option value="">— 不选 —</option>{meters.map((m) => <option key={m.id} value={m.id}>{(m.name ?? m.id)}（{shortId(m.id)}）</option>)}</select></label>
-                  <label><span>空间 id（可空）</span><select data-testid="energy-meter-guided-space" value={meterForm.spaceId} onChange={(event) => setMeterForm({ ...meterForm, spaceId: event.target.value })}><option value="">— 不选 —</option>{spaces.map((x) => <option key={x.id} value={x.id}>{(x.spaceName ?? x.id)}（{shortId(x.id)}）</option>)}</select></label>
-                  <label><span>商户 id（可空）</span><select data-testid="energy-meter-guided-merchant" value={meterForm.merchantId} onChange={(event) => setMeterForm({ ...meterForm, merchantId: event.target.value })}><option value="">— 不选 —</option>{merchants.map((x) => <option key={x.id} value={x.id}>{(x.displayName ?? x.companyName ?? x.id)}（{shortId(x.id)}）</option>)}</select></label>
-                  <label><span>项目 id（必填）</span><select data-testid="energy-meter-guided-project" value={meterForm.projectId} onChange={(event) => setMeterForm({ ...meterForm, projectId: event.target.value })}><option value="">— 不选 —</option>{projects.map((x) => <option key={x.id} value={x.id}>{(x.name ?? x.id)}（{shortId(x.id)}）</option>)}</select></label>
+                  <label><span>上级总表编号（可空）</span><select data-testid="energy-meter-guided-parent" value={meterForm.parentMeterId} onChange={(event) => setMeterForm({ ...meterForm, parentMeterId: event.target.value })}><option value="">— 不选 —</option>{meters.map((m) => <option key={m.id} value={m.id}>{(m.name ?? m.id)}（{shortId(m.id)}）</option>)}</select></label>
+                  <label><span>空间编号（可空）</span><select data-testid="energy-meter-guided-space" value={meterForm.spaceId} onChange={(event) => setMeterForm({ ...meterForm, spaceId: event.target.value })}><option value="">— 不选 —</option>{spaces.map((x) => <option key={x.id} value={x.id}>{(x.spaceName ?? x.id)}（{shortId(x.id)}）</option>)}</select></label>
+                  <label><span>商户编号（可空）</span><select data-testid="energy-meter-guided-merchant" value={meterForm.merchantId} onChange={(event) => setMeterForm({ ...meterForm, merchantId: event.target.value })}><option value="">— 不选 —</option>{merchants.map((x) => <option key={x.id} value={x.id}>{(x.displayName ?? x.companyName ?? x.id)}（{shortId(x.id)}）</option>)}</select></label>
+                  <label><span>项目编号（必填）</span><select data-testid="energy-meter-guided-project" value={meterForm.projectId} onChange={(event) => setMeterForm({ ...meterForm, projectId: event.target.value })}><option value="">— 不选 —</option>{projects.map((x) => <option key={x.id} value={x.id}>{(x.name ?? x.id)}（{shortId(x.id)}）</option>)}</select></label>
                   <label><span>读数方式</span><select data-testid="energy-meter-guided-readmode" value={meterForm.readMode} onChange={(event) => setMeterForm({ ...meterForm, readMode: event.target.value })}><option value="remote">远程</option><option value="manual">人工</option></select></label>
                   <label className="admin-inline-check"><Switch size="default" data-testid="energy-meter-guided-active" checked={meterForm.active} onChange={(checked) => setMeterForm({ ...meterForm, active: checked })} /><span>启用</span></label>
                 </>
@@ -361,14 +361,14 @@ export function EnergyWorkbenchPage({ api, setActionResult, setGlobalError, effe
           ]}
         />
         <div className="admin-inline-form" data-testid="energy-meter-form">
-          <input aria-label="表计 id" placeholder="表计 id(选中后更新)" value={meterForm.id} onChange={(event) => setMeterForm({ ...meterForm, id: event.target.value })} />
+          <input aria-label="表计编号" placeholder="表计编号(选中后更新)" value={meterForm.id} onChange={(event) => setMeterForm({ ...meterForm, id: event.target.value })} />
           <input aria-label="表计名称" placeholder="表计名称" value={meterForm.name} onChange={(event) => setMeterForm({ ...meterForm, name: event.target.value })} />
           <select aria-label="表计类型" value={meterForm.meterType} onChange={(event) => setMeterForm({ ...meterForm, meterType: event.target.value })}>{METER_TYPES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
-          <select aria-label="上级总表 id" value={meterForm.parentMeterId} onChange={(event) => setMeterForm({ ...meterForm, parentMeterId: event.target.value })}><option value="">上级总表（可空）</option>{meters.map((m) => <option key={m.id} value={m.id}>{(m.name ?? m.id)}（{shortId(m.id)}）</option>)}</select>
+          <select aria-label="上级总表编号" value={meterForm.parentMeterId} onChange={(event) => setMeterForm({ ...meterForm, parentMeterId: event.target.value })}><option value="">上级总表（可空）</option>{meters.map((m) => <option key={m.id} value={m.id}>{(m.name ?? m.id)}（{shortId(m.id)}）</option>)}</select>
           <select aria-label="归集对象" value={meterForm.gatherObject} onChange={(event) => setMeterForm({ ...meterForm, gatherObject: event.target.value })}>{GATHER_OBJECTS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
-          <select aria-label="空间 id" value={meterForm.spaceId} onChange={(event) => setMeterForm({ ...meterForm, spaceId: event.target.value })}><option value="">空间（可空）</option>{spaces.map((x) => <option key={x.id} value={x.id}>{(x.spaceName ?? x.id)}（{shortId(x.id)}）</option>)}</select>
-          <select aria-label="商户 id" value={meterForm.merchantId} onChange={(event) => setMeterForm({ ...meterForm, merchantId: event.target.value })}><option value="">商户（可空）</option>{merchants.map((x) => <option key={x.id} value={x.id}>{(x.displayName ?? x.companyName ?? x.id)}（{shortId(x.id)}）</option>)}</select>
-          <select aria-label="项目 id" value={meterForm.projectId} onChange={(event) => setMeterForm({ ...meterForm, projectId: event.target.value })}><option value="">项目（可空）</option>{projects.map((x) => <option key={x.id} value={x.id}>{(x.name ?? x.id)}（{shortId(x.id)}）</option>)}</select>
+          <select aria-label="空间编号" value={meterForm.spaceId} onChange={(event) => setMeterForm({ ...meterForm, spaceId: event.target.value })}><option value="">空间（可空）</option>{spaces.map((x) => <option key={x.id} value={x.id}>{(x.spaceName ?? x.id)}（{shortId(x.id)}）</option>)}</select>
+          <select aria-label="商户编号" value={meterForm.merchantId} onChange={(event) => setMeterForm({ ...meterForm, merchantId: event.target.value })}><option value="">商户（可空）</option>{merchants.map((x) => <option key={x.id} value={x.id}>{(x.displayName ?? x.companyName ?? x.id)}（{shortId(x.id)}）</option>)}</select>
+          <select aria-label="项目编号" value={meterForm.projectId} onChange={(event) => setMeterForm({ ...meterForm, projectId: event.target.value })}><option value="">项目（可空）</option>{projects.map((x) => <option key={x.id} value={x.id}>{(x.name ?? x.id)}（{shortId(x.id)}）</option>)}</select>
           <select aria-label="读数方式" value={meterForm.readMode} onChange={(event) => setMeterForm({ ...meterForm, readMode: event.target.value })}><option value="remote">远程</option><option value="manual">人工</option></select>
           <label className="admin-inline-check"><Switch size="default" checked={meterForm.active} onChange={(checked) => setMeterForm({ ...meterForm, active: checked })} /><span>启用</span></label>
           <PermissionButton permissionsState={effectivePermissions} permissions={METER} data-testid="energy-meter-update" onClick={() => void saveMeter()}>保存表计</PermissionButton>
@@ -378,7 +378,7 @@ export function EnergyWorkbenchPage({ api, setActionResult, setGlobalError, effe
           { key: "readings", label: "② 抄表与抹差", forceRender: true, children: (<>
         <h3>抄表与异常复核</h3>
         <div className="admin-inline-form" data-testid="energy-reading-form">
-          <input aria-label="读数表计 id" placeholder="表计 id" value={readingForm.meterId} onChange={(event) => { setReadingForm({ ...readingForm, meterId: event.target.value }); setReadingFiles([]); }} />
+          <input aria-label="读数表计编号" placeholder="表计编号" value={readingForm.meterId} onChange={(event) => { setReadingForm({ ...readingForm, meterId: event.target.value }); setReadingFiles([]); }} />
           <input aria-label="本期读数" type="number" placeholder="本期读数" value={readingForm.readingValue} onChange={(event) => setReadingForm({ ...readingForm, readingValue: event.target.value })} />
           <span>本页仅支持人工抄表；远程采集须完成真实设备接入</span>
           <label>人工补充原因<input aria-label="人工抄表原因" value={manualReason} onChange={event=>setManualReason(event.target.value)}/></label>
@@ -407,7 +407,7 @@ export function EnergyWorkbenchPage({ api, setActionResult, setGlobalError, effe
 
         <h3>总分表抹差</h3>
         <div className="admin-inline-form" data-testid="energy-difference-form">
-          <input aria-label="总表 id" placeholder="总表 id" value={differenceMeterId} onChange={(event) => setDifferenceMeterId(event.target.value)} />
+          <input aria-label="总表编号" placeholder="总表编号" value={differenceMeterId} onChange={(event) => setDifferenceMeterId(event.target.value)} />
           <PermissionButton permissionsState={effectivePermissions} permissions={READING} data-testid="energy-difference-load" onClick={() => void loadDifference()}>计算抹差</PermissionButton>
         </div>
         {difference ? (

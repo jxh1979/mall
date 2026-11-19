@@ -1,4 +1,4 @@
-// 文件版本：V0.06
+// 文件版本：V0.07
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -321,6 +321,9 @@ describe("FinanceDividendsPage 持股分红", () => {
     fireEvent.click(screen.getByTestId("dividend-plan-payout-floor"));
     // 保护线开启后留存比例输入展开。
     await waitFor(() => expect(screen.getByTestId("dividend-plan-floor-percent")).toBeTruthy());
+    // 第十八批 BA 段收尾复核修正（PGM:287）：页说明不写迁移号 V296、V297，留存说明不写英文 max。
+    expect(document.body.textContent).toContain("余额×比例与固定额取较大者");
+    expect(document.body.textContent).not.toMatch(/V29[67]|max\(/);
     fireEvent.change(screen.getByTestId("dividend-plan-floor-percent"), { target: { value: "10" } });
     fireEvent.click(screen.getByTestId("dividend-plan-guided-next"));
     await waitFor(() => expect(screen.getByTestId("dividend-plan-guided-summary")).toBeTruthy());

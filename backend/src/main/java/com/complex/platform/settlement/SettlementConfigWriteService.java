@@ -1,9 +1,10 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.10
+// 文件版本：V0.11
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.analytics.OperatingParamsService;
+import com.complex.platform.common.BusinessDayResolver;
 import com.complex.platform.common.Hashing;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.idempotency.IdempotencyService;
@@ -72,6 +73,7 @@ public class SettlementConfigWriteService {
     private final AuthorizationService auth;
     private final ObjectMapper json;
     private final InternalPriceScope internalPriceScope;
+    private final BusinessDayResolver businessDays;
 
     public SettlementConfigWriteService(JdbcSettlementConfigWriteRepository writeRepository,
                                         RevenueStreamAttributionRepository attributionRepository,
@@ -82,7 +84,8 @@ public class SettlementConfigWriteService {
                                         SupervisorReviewRepository reviewRepository,
                                         AuthorizationService auth,
                                         ObjectMapper json,
-                                        InternalPriceScope internalPriceScope) {
+                                        InternalPriceScope internalPriceScope,
+                                        BusinessDayResolver businessDays) {
         this.writeRepository = writeRepository;
         this.attributionRepository = attributionRepository;
         this.operatingParamsService = operatingParamsService;
@@ -93,6 +96,7 @@ public class SettlementConfigWriteService {
         this.auth = auth;
         this.json = json;
         this.internalPriceScope = internalPriceScope;
+        this.businessDays = businessDays;
     }
 
     // ================= §2 落草案(audit business_id 用仓储 RETURNING 的真实落地 id)=================
@@ -534,6 +538,17 @@ public class SettlementConfigWriteService {
         } else if (!writeRepository.businessEntityExists(providerEntityId)) {
             throw ApiException.badRequest("VALIDATION_FAILED", "provider_entity_id 对应经营主体不存在:" + providerEntityId);
         }
+        // 第十八批 BA 段第 355 条 355-R1（BSM:521「必须填写生效起始日期……按指定日期生效，不即改即生效」；BSM:1671「指定生效时间并只影响后续业务」；
+        // ENUM:187 按营业日）：生效起始日期必填，须晚于提供方当前营业日（照 234-R1 分红方案同句）。
+        java.time.LocalDate effectiveFrom;
+        try {
+            effectiveFrom = java.time.LocalDate.parse(requireText(req.effectiveFrom(), "effective_from"));
+        } catch (java.time.format.DateTimeParseException error) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "生效起始日期须为有效日期");
+        }
+        if (!effectiveFrom.isAfter(InternalPriceScheduledActivationService.providerBusinessDate(businessDays, merchantId, Instant.now()))) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "生效起始日期须晚于今天（按营业日）");
+        }
         String itemCode = trimToNull(req.itemCode());
         if (itemCode == null) {
             itemCode = "sku_" + Hashing.idempotencyCode(provider + "|" + itemName + "|" + idem);
@@ -545,11 +560,11 @@ public class SettlementConfigWriteService {
             }
         }
         String landedId = writeRepository.upsertInternalPriceItemDraft(
-                draftId("ipc_d_", itemCode, idem), itemCode, merchantId, providerEntityId, category, itemName, price, actorId);
+                draftId("ipc_d_", itemCode, idem), itemCode, merchantId, providerEntityId, category, itemName, price, effectiveFrom, actorId);
         auditEventService.recordSuccess("settlement.config.internal_price_catalog.updated", InternalPriceScope.SUBMIT,
                 "internal_price_catalog", landedId, null, idem,
                 Map.of("item_code", itemCode, merchantId != null ? "merchant_id" : "provider_entity_id", provider, "category", category,
-                        "item_name", itemName, "price_cent", String.valueOf(price)));
+                        "item_name", itemName, "price_cent", String.valueOf(price), "effective_from", effectiveFrom.toString()));
         if (masterSelfInitiated) {
             activateCatalogDraft(writeRepository.findCatalogDraftById(landedId), actorId, true);
         }
@@ -578,22 +593,30 @@ public class SettlementConfigWriteService {
         activateCatalogDraft(draft, actorId, false);
     }
 
-    /** 目录草案转正主体：0 价有券引用守卫 → 转正 + 快照传播 → 审计（复核转正与最高权限本人提交即生效共用）。 */
+    /**
+     * 目录草案批准主体：0 价有券引用守卫 → 生效起始日期守卫 → 置待生效 → 审计（复核转正与最高权限本人提交共用）。
+     * 第十八批 BA 段第 355 条 355-R1（BSM:521「经高敏权限“转正”审批通过后按指定日期生效，不即改即生效」）：批准时生效起始日期须仍晚于提供方当前营业日，
+     * 否则 409 由提交人改期重报（草案不动）；批准后待生效，到日由 {@link InternalPriceScheduledActivationService} 转正并同步业务快照（最高权限免审批不免生效日期）。
+     */
     private void activateCatalogDraft(JdbcSettlementConfigWriteRepository.CatalogEntryRow draft, String actorId,
                                       boolean masterSelfInitiated) {
         if (draft.priceCent() == 0 && writeRepository.countVoucherRefs(draft.itemCode()) > 0) {
             throw ApiException.badRequest("CATALOG_PRICE_ZERO_VOUCHER_REF",
                     "该条目已被实物券引用,内部结算价不可转正为 0(券口径要求内部价 >0);请先解除券引用或改为正价");
         }
-        // 转正 + 快照传播在仓储侧同一事务(activateInternalPriceItemDraft @Transactional,经代理调用)。
-        requireActivated(writeRepository.activateInternalPriceItemDraft(
-                draft.id(), draft.itemCode(), draft.priceCent(), actorId, Instant.now()));
-        if (masterSelfInitiated) {
-            auditEventService.recordSuccess("settlement.config.draft.activated", PERM, "internal_price_catalog", draft.itemCode(),
-                    null, null, Map.of("config_group", "internal_price_catalog", "master_self_initiated", true));
-        } else {
-            auditActivated("internal_price_catalog", draft.itemCode());
+        Instant now = Instant.now();
+        if (draft.effectiveFrom() == null || !draft.effectiveFrom().isAfter(
+                InternalPriceScheduledActivationService.providerBusinessDate(businessDays, draft.merchantId(), now))) {
+            throw ApiException.conflict("INTERNAL_PRICE_EFFECTIVE_DATE_PASSED", "生效起始日期已到，请改期后重新提交草案");
         }
+        requireActivated(writeRepository.scheduleInternalPriceItemDraft(draft.id(), actorId, now));
+        Map<String, Object> metadata = new java.util.LinkedHashMap<>();
+        metadata.put("config_group", "internal_price_catalog");
+        metadata.put("effective_from", draft.effectiveFrom().toString());
+        if (masterSelfInitiated) {
+            metadata.put("master_self_initiated", true);
+        }
+        audit("settlement.config.draft.activated", "internal_price_catalog", draft.itemCode(), null, metadata);
     }
 
     // ================= §3 复核转正(差人守卫 + Path 2 软替换)=================

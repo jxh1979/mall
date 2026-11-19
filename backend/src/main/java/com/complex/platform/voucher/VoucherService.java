@@ -1,6 +1,6 @@
 package com.complex.platform.voucher;
 
-// 文件版本：V0.05
+// 文件版本：V0.06
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -290,7 +290,7 @@ public class VoucherService implements VoucherIssuePort {
             // 券口径(V301 形状约束)要求建券即有 >0 内部价:目录条目须已复核转正且价 >0,草案态先转正再建券。
             internalPriceSnapshot = repository.findActiveCatalogPriceCent(catalogItemCode)
                     .orElseThrow(() -> ApiException.badRequest("CATALOG_ITEM_NOT_EFFECTIVE",
-                            "所引用的目录条目还没有复核转正的生效价，请先在结算配置中心完成复核"));
+                            "所引用的目录条目还没有生效价：未复核的请先在结算配置中心完成复核；已批准待生效的请到生效起始日期后再建券"));
             if (internalPriceSnapshot <= 0) {
                 throw ApiException.badRequest("VALIDATION_FAILED",
                         "internal_price 结算口径要求目录生效价 > 0(0 价属商户让利,不该按内部价挂应付)");

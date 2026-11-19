@@ -36,6 +36,9 @@ import org.springframework.jdbc.core.JdbcTemplate;
 })
 class InternalPriceCatalogJdbcIntegrationTests {
 
+    /** 第十八批 BA 段第 355 条 355-R1：内部结算价批准后待生效，到生效起始日期由系统转正（用例里直接调到日转正）。 */
+    @Autowired private com.complex.platform.settlement.InternalPriceScheduledActivationService priceActivation;
+
     private static final String DRAFTER = "drafter_ipc_it";
     private static final String APPROVER = "approver_ipc_it";
 
@@ -129,7 +132,7 @@ class InternalPriceCatalogJdbcIntegrationTests {
 
         // ① 就地新建 = 落草案：返回 item_code 可立即被引用，但没有生效价（解析 fail-closed）。
         String itemCode = writeService.saveInternalPriceItem(new InternalPriceItemRequest(
-                "idem-ipc-new-" + suffix, null, merchant, "spirit", "IPC新品", 6000L), DRAFTER);
+                "idem-ipc-new-" + suffix, null, merchant, "spirit", "IPC新品", 6000L, null, java.time.LocalDate.now(com.complex.platform.common.LocalZone.ID).plusDays(1).toString()), DRAFTER);
         assertThat(itemCode).startsWith("sku_");
         assertThat(priceResolver.resolve(null, merchant, itemCode)).isEmpty();
 
@@ -138,6 +141,7 @@ class InternalPriceCatalogJdbcIntegrationTests {
                 + " VALUES (?, ?, 'staff', 'be_ent_platform', 'active', now()) ON CONFLICT (id) DO NOTHING", APPROVER, APPROVER);
         com.complex.platform.support.TestSecurityActors.asPlatformAdmin();
         writeService.activateDraft("internal_price_item", draftId(itemCode), APPROVER);
+        priceActivation.activateDue(java.time.Instant.now().plus(java.time.Duration.ofDays(2)));
         assertThat(priceResolver.require(null, merchant, itemCode)).isEqualTo(6000L);
 
         // ③ 绑定商户不可改（换商户 = 成本价基整体易主，引用它的对象全部跨商户）。
@@ -147,7 +151,7 @@ class InternalPriceCatalogJdbcIntegrationTests {
                 VALUES (?, 'IPC另一商户', 'bar', 'active', now(), now()) ON CONFLICT (id) DO NOTHING
                 """, otherMerchant);
         assertThatThrownBy(() -> writeService.saveInternalPriceItem(new InternalPriceItemRequest(
-                "idem-ipc-rebind-" + suffix, itemCode, otherMerchant, "spirit", "IPC新品", 6000L), DRAFTER))
+                "idem-ipc-rebind-" + suffix, itemCode, otherMerchant, "spirit", "IPC新品", 6000L, null, java.time.LocalDate.now(com.complex.platform.common.LocalZone.ID).plusDays(1).toString()), DRAFTER))
                 .isInstanceOfSatisfying(ApiException.class,
                         e -> assertThat(e.code()).isEqualTo("CATALOG_ITEM_MERCHANT_IMMUTABLE"));
 
@@ -160,7 +164,7 @@ class InternalPriceCatalogJdbcIntegrationTests {
                     ?, 'inv_ipc', 'loc_ipc', 1, 6000, ?, 'active', now(), now())
                 """, "vd_ipc_" + suffix, merchant, itemCode);
         writeService.saveInternalPriceItem(new InternalPriceItemRequest(
-                "idem-ipc-zero-" + suffix, itemCode, merchant, "spirit", "IPC新品", 0L), DRAFTER);
+                "idem-ipc-zero-" + suffix, itemCode, merchant, "spirit", "IPC新品", 0L, null, java.time.LocalDate.now(com.complex.platform.common.LocalZone.ID).plusDays(1).toString()), DRAFTER);
         String zeroDraftId = draftId(itemCode);
         assertThatThrownBy(() -> writeService.activateDraft("internal_price_item", zeroDraftId, APPROVER))
                 .isInstanceOfSatisfying(ApiException.class,

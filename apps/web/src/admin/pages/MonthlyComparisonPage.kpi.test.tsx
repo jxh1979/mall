@@ -82,3 +82,13 @@ describe("MonthlyComparisonPage 行明细抽屉（整行可点·口径中文·�
     await waitFor(() => expect(screen.queryByTestId("row-detail-drawer")).toBeNull());
   });
 });
+
+// 第十八批 BA 段收尾复核修正（PGM:287）：节假日对比标题写「对比」，不写英文 vs。
+describe("MonthlyComparisonPage 标题不夹英文（第 267 条收尾复核）", () => {
+  it("节假日对比标题写「今年对比去年同名假期」，整页不含 vs", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("holiday-comparison-controls")).toBeTruthy());
+    expect(document.body.textContent).toContain("今年对比去年同名假期");
+    expect(document.body.textContent).not.toMatch(/(^|[^A-Za-z])vs([^A-Za-z]|$)/i);
+  });
+});

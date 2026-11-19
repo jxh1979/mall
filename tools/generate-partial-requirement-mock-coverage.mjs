@@ -44,7 +44,7 @@ const map = {
     ["supplier_mock", "tests/e2e/support/mock-api.ts", ["video", "robot", "webhook"]],
   ]],
   "REQ-40": ["第三方自动留痕通过开放平台 token、Webhook、provider adapter mock、重试/补偿/轮询页面和服务测试验收；真实 SDK/API 字段映射和签名材料未到位前不能生产关闭。", [
-    ["admin_ui", "apps/web/src/admin/pages/IntegrationEventsPage.tsx", ["integration-events-page", "Webhook + 定时轮询校验"]],
+    ["admin_ui", "apps/web/src/admin/pages/IntegrationEventsPage.tsx", ["integration-events-page", "回调与定时轮询校验"]],
     ["backend_unit", "backend/src/test/java/com/complex/platform/integration/IntegrationServiceTests.java", ["webhookPersistsEventAndDuplicateIdempotencyReturnsOriginalResult", "mockAdapterTestScenariosAreRecorded", "orderSyncRetryCompensationAndReconciliationKeepProviderPayloadOutOfCoreModels"]],
     ["supplier_mock", "docs/t3b-supplier-sdk-mock-kit-v0.1.md", ["Webhook", "provider adapter", "NO_REAL_SECRET"]],
     ["supplier_mock", "docs/supplier-mock/t3b-provider-adapter-test.example.json", ["test-mock", "mock-provider"]],

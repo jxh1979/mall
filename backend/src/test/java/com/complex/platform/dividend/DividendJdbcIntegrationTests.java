@@ -1,6 +1,6 @@
 package com.complex.platform.dividend;
 
-// 文件版本：V0.07
+// 文件版本：V0.08
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
@@ -123,6 +123,18 @@ class DividendJdbcIntegrationTests {
         TestSecurityActors.clear();
     }
 
+    /** 第十八批 BA 段第 314 条 314-R1：mock 授权的最高权限桩（批准与驳回只认最高权限；分红计算单由非最高权限提交，见 submitAsStaff）。 */
+    private final boolean[] master = {true};
+
+    private DividendStatementRecord submitAsStaff(DividendService service, String statementId, String key) {
+        master[0] = false;
+        try {
+            return service.submit(statementId, new DividendActionRequest(key, null));
+        } finally {
+            master[0] = true;
+        }
+    }
+
     /** I-1 职责分离：提交与审批必须不同人，测试里按动作分配不同 actor 的服务实例。 */
     private DividendService serviceWithPlatformActor(String actorId) {
         AuthorizationService authorizationService = mock(AuthorizationService.class);
@@ -130,7 +142,7 @@ class DividendJdbcIntegrationTests {
         when(authorizationService.currentActor()).thenReturn(
                 new AccessActor(actorId, "platform_admin_user", "platform_admin", "org_1", null, "active"));
         // 234-R1：按最高权限本人提交方案版本（直接生效，不进审批）。
-        when(authorizationService.isMasterAuthority(org.mockito.ArgumentMatchers.any())).thenReturn(true);
+        when(authorizationService.isMasterAuthority(org.mockito.ArgumentMatchers.any())).thenAnswer(invocation -> master[0]);
         return new DividendService(repository, inventoryRepository, businessDayResolver,
                 authorizationService, operations, payoutPort, payDays, taxRates, loans);
     }
@@ -442,7 +454,7 @@ class DividendJdbcIntegrationTests {
 
         // ── 审批链：draft → pending_review → approved 挂应付（真 FinanceService 端口）──
         // I-1 职责分离：提交与审批用不同 actor；同 actor 审批必须被拒。
-        service.submit(statement.id(), new DividendActionRequest("div-jdbc-submit-1", null));
+        submitAsStaff(service, statement.id(), "div-jdbc-submit-1");
         assertThatThrownBy(() -> service.approve(statement.id(),
                 new DividendActionRequest("div-jdbc-selfapprove-1", null)))
                 .isInstanceOf(com.complex.platform.common.api.ApiException.class)
@@ -656,7 +668,7 @@ class DividendJdbcIntegrationTests {
         assertThat(july.lossCarryforwardInCent()).isZero();
         assertThat(july.lossCarryforwardAfterCent()).isEqualTo(50_000L);
         // 审批 7 月（实发 0，不挂应付），结转链余额生效。
-        service.submit(july.id(), new DividendActionRequest("lcf-jdbc-s1", null));
+        submitAsStaff(service, july.id(), "lcf-jdbc-s1");
         DividendService approver = serviceWithPlatformActor("usr_div_jdbc_approver");
         approver.approve(july.id(), new DividendActionRequest("lcf-jdbc-a1", null));
 
@@ -784,6 +796,11 @@ class DividendJdbcIntegrationTests {
         assertThatThrownBy(() -> realAuthorizationService.requirePermission("finance.payment.register"))
                 .isInstanceOf(com.complex.platform.common.api.ApiException.class)
                 .extracting("code").isEqualTo("PERMISSION_DENIED");
+        // 第十八批 BA 段第 314 条 314-R1：持 finance.dividend.manage 的平台管理员不能批，批准只认最高权限本人（欠款抵扣照旧走真实 settleArApItem）。
+        assertThatThrownBy(() -> approver.approve(s.id(), new DividendActionRequest("arr-jdbc-a0", null)))
+                .isInstanceOf(com.complex.platform.common.api.ApiException.class)
+                .extracting("code").isEqualTo("MASTER_APPROVAL_REQUIRED");
+        TestSecurityActors.asMasterAuthority();
         DividendStatementRecord approved = approver.approve(s.id(), new DividendActionRequest("arr-jdbc-a1", null));
         assertThat(approved.status()).isEqualTo("approved");
 
@@ -829,7 +846,7 @@ class DividendJdbcIntegrationTests {
                  WHERE id = 'arap_r_arr2'
                 """);
 
-        service.submit(s.id(), new DividendActionRequest("arr2-jdbc-s1", null));
+        submitAsStaff(service, s.id(), "arr2-jdbc-s1");
         DividendService approver = serviceWithPlatformActor("usr_div_jdbc_approver");
         assertThatThrownBy(() -> approver.approve(s.id(), new DividendActionRequest("arr2-jdbc-a1", null)))
                 .isInstanceOf(com.complex.platform.common.api.ApiException.class)
@@ -875,7 +892,7 @@ class DividendJdbcIntegrationTests {
         assertThat(s.reserveWithheldCent()).isEqualTo(16_000L);
         assertThat(s.payoutCent()).isEqualTo(144_000L);
 
-        service.submit(s.id(), new DividendActionRequest("floor-jdbc-s1", null));
+        submitAsStaff(service, s.id(), "floor-jdbc-s1");
         DividendService approver = serviceWithPlatformActor("usr_div_jdbc_approver");
         approver.approve(s.id(), new DividendActionRequest("floor-jdbc-a1", null));
 
@@ -928,7 +945,9 @@ class DividendJdbcIntegrationTests {
         assertThat(s.reserveWithheldCent()).isEqualTo(16_000L);
         service.submit(s.id(), new DividendActionRequest("rel-jdbc-s1", null));
         DividendService approver = serviceWithRealPlatformActor("usr_div_real_approver");
+        TestSecurityActors.asMasterAuthority(); // 第十八批 BA 段第 314 条 314-R1：批准只认最高权限本人
         approver.approve(s.id(), new DividendActionRequest("rel-jdbc-a1", null));
+        TestSecurityActors.asPlatformAdmin("usr_div_real_approver");
 
         String withheldId = jdbcTemplate.queryForObject(
                 "SELECT id FROM ar_ap_items WHERE source_type = 'dividend_reserve_withheld' AND source_id = ?",
@@ -1100,7 +1119,7 @@ class DividendJdbcIntegrationTests {
         assertThat(row.get("resolution_ref")).isEqualTo("股东会分配决议 R-2026-07");
         assertThat(row.get("confirmed_by")).isEqualTo("usr_div_jdbc");
 
-        service.submit(capped.id(), new DividendActionRequest("legal-jdbc-s", null));
+        submitAsStaff(service, capped.id(), "legal-jdbc-s");
         serviceWithPlatformActor("usr_div_jdbc_approver").approve(capped.id(), new DividendActionRequest("legal-jdbc-a", null));
         Long payable = jdbcTemplate.queryForObject(
                 "SELECT amount_cent FROM ar_ap_items WHERE source_type = 'dividend_payout' AND source_id = ?",

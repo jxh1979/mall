@@ -1,6 +1,6 @@
 package com.complex.platform.dividend;
 
-// 文件版本：V0.08
+// 文件版本：V0.09
 
 import com.complex.platform.support.InMemoryIdempotencyRepository;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -419,6 +419,16 @@ class DividendServiceTests {
     // I-1 职责分离测试用：可切换当前操作人（提交与审批必须不同人）。
     private final String[] actorId = {"usr_admin"};
 
+    /** 第十八批 BA 段第 314 条 314-R1：本类分红计算单都由非最高权限提交（最高权限本人提交即审批通过），批准与驳回仍按 setUp 的最高权限桩。 */
+    private DividendStatementRecord submitAsStaff(String statementId, String key) {
+        when(authorizationService.isMasterAuthority(any())).thenReturn(false);
+        try {
+            return service.submit(statementId, new DividendActionRequest(key, null));
+        } finally {
+            when(authorizationService.isMasterAuthority(any())).thenReturn(true);
+        }
+    }
+
     @BeforeEach
     void setUp() {
         actorId[0] = "usr_admin";
@@ -737,7 +747,7 @@ class DividendServiceTests {
         repository.barRevenue.put(MERCHANT, 1_000_000L);
         DividendStatementRecord draft = computeOfficialQuarter();
         assertThat(draft.legalDistributableCent()).isNull();
-        assertThatThrownBy(() -> service.submit(draft.id(), new DividendActionRequest("s-nolegal", null)))
+        assertThatThrownBy(() -> submitAsStaff(draft.id(), "s-nolegal"))
                 .isInstanceOf(ApiException.class)
                 .satisfies(e -> assertThat(((ApiException) e).code()).isEqualTo("DIVIDEND_LEGAL_AMOUNT_REQUIRED"));
         assertThat(repository.findStatementById(draft.id()).orElseThrow().status()).isEqualTo("draft");
@@ -761,7 +771,7 @@ class DividendServiceTests {
         assertThat(capped.payoutCent()).isEqualTo(144_000L);
         assertThat(repository.listLines(capped.id(), null)).anyMatch(l -> l.lineType().equals("legal_cap")
                 && l.amountCent() == 900_000L && l.detail().contains("TA-2026Q3-001") && l.detail().contains("R-2026-10-08"));
-        service.submit(capped.id(), new DividendActionRequest("s-legal", null));
+        submitAsStaff(capped.id(), "s-legal");
         actorId[0] = "usr_approver";
         service.approve(capped.id(), new DividendActionRequest("a-legal", null));
         verify(payoutPort).createDividendPayoutPayable("usr_principal", MERCHANT, 144_000L, capped.id(), PAY_DAY);
@@ -867,7 +877,7 @@ class DividendServiceTests {
         assertThat(repository.findStatementById(first.id()).orElseThrow().status()).isEqualTo("voided");
         // 提交进入审批流后不再重算，跳过并给出原因。
         DividendStatementRecord second = recompute.computed().get(0);
-        service.submit(second.id(), new DividendActionRequest("submit-key-1", null));
+        submitAsStaff(second.id(), "submit-key-1");
         DividendComputeResultRecord third = service.compute(
                 new DividendComputeRequest("compute-key-3", "2026-Q3", "official", null));
         assertThat(third.computed()).isEmpty();
@@ -884,7 +894,7 @@ class DividendServiceTests {
         DividendStatementRecord statement = preview.computed().get(0);
         assertThat(statement.status()).isEqualTo("preview");
         // 预览单只可看：提交/审批/发放全部拒绝。
-        assertThatThrownBy(() -> service.submit(statement.id(), new DividendActionRequest("k1", null)))
+        assertThatThrownBy(() -> submitAsStaff(statement.id(), "k1"))
                 .isInstanceOf(ApiException.class)
                 .satisfies(e -> assertThat(((ApiException) e).code()).isEqualTo("DIVIDEND_PREVIEW_NOT_APPROVABLE"));
         assertThatThrownBy(() -> service.approve(statement.id(), new DividendActionRequest("k2", null)))
@@ -917,7 +927,7 @@ class DividendServiceTests {
         assertThatThrownBy(() -> service.approve(statement.id(), new DividendActionRequest("a0", null)))
                 .isInstanceOf(ApiException.class)
                 .satisfies(e -> assertThat(((ApiException) e).code()).isEqualTo("DIVIDEND_STATE_INVALID"));
-        service.submit(statement.id(), new DividendActionRequest("s1", null));
+        submitAsStaff(statement.id(), "s1");
         // I-1 职责分离：审批人须与提交人不同。
         actorId[0] = "usr_approver";
         DividendStatementRecord approved = service.approve(statement.id(), new DividendActionRequest("a1", null));
@@ -938,7 +948,7 @@ class DividendServiceTests {
         createDefaultPlan();
         // 无任何收入 → 净利 0 → 净发放 0 → 不挂应付。
         DividendStatementRecord statement = computeOfficialQuarter();
-        service.submit(statement.id(), new DividendActionRequest("s1", null));
+        submitAsStaff(statement.id(), "s1");
         actorId[0] = "usr_approver";
         DividendStatementRecord approved = service.approve(statement.id(), new DividendActionRequest("a1", null));
         assertThat(approved.status()).isEqualTo("approved");
@@ -951,7 +961,7 @@ class DividendServiceTests {
         // I-1：提交人不能审批自己提交的单（SELF_APPROVAL_FORBIDDEN，补录审批同范式）；换人后放行。
         createDefaultPlan();
         DividendStatementRecord statement = computeOfficialQuarter();
-        service.submit(statement.id(), new DividendActionRequest("s1", null));
+        submitAsStaff(statement.id(), "s1");
         assertThatThrownBy(() -> service.approve(statement.id(), new DividendActionRequest("a1", null)))
                 .isInstanceOf(ApiException.class)
                 .satisfies(e -> assertThat(((ApiException) e).code()).isEqualTo("SELF_APPROVAL_FORBIDDEN"));
@@ -980,7 +990,7 @@ class DividendServiceTests {
         service = guardedService;
         createDefaultPlan();
         DividendStatementRecord statement = computeOfficialQuarter();
-        service.submit(statement.id(), new DividendActionRequest("s1", null));
+        submitAsStaff(statement.id(), "s1");
         actorId[0] = "usr_approver";
         assertThatThrownBy(() -> service.approve(statement.id(), new DividendActionRequest("a1", null)))
                 .isInstanceOf(ApiException.class)
@@ -991,7 +1001,7 @@ class DividendServiceTests {
     void rejectRequiresReasonAndAllowsRecompute() {
         createDefaultPlan();
         DividendStatementRecord statement = computeOfficialQuarter();
-        service.submit(statement.id(), new DividendActionRequest("s1", null));
+        submitAsStaff(statement.id(), "s1");
         assertThatThrownBy(() -> service.reject(statement.id(), new DividendActionRequest("r0", "  ")))
                 .isInstanceOf(ApiException.class)
                 .satisfies(e -> assertThat(((ApiException) e).code()).isEqualTo("VALIDATION_FAILED"));
@@ -1011,6 +1021,7 @@ class DividendServiceTests {
         DividendStatementRecord statement = computeOfficialQuarter();
         // 商户 scope 账号：列表被强制只看自己（请求他商户参数被覆盖）。
         when(authorizationService.currentMerchantScope()).thenReturn(Optional.of("merchant_b"));
+        when(authorizationService.isMasterAuthority(any())).thenReturn(false); // 商户账号不是最高权限（314-R1 最高权限不按商户收窄）
         PageResponse<DividendStatementRecord> page =
                 service.listStatements(MERCHANT, null, null, null, 1, 50);
         assertThat(page.items()).isEmpty();
@@ -1099,7 +1110,7 @@ class DividendServiceTests {
         assertThat(q1.distributableCent()).isZero();
         assertThat(q1.lossCarryforwardAfterCent()).isEqualTo(300_000L);
         // 审批 Q1（实发 0），结转生效。
-        service.submit(q1.id(), new DividendActionRequest("lcf-s1", null));
+        submitAsStaff(q1.id(), "lcf-s1");
         actorId[0] = "usr_approver";
         service.approve(q1.id(), new DividendActionRequest("lcf-a1", null));
 
@@ -1139,7 +1150,7 @@ class DividendServiceTests {
                 .filteredOn(l -> l.lineType().equals("arrears_offset"))
                 .hasSize(2);
         // 审批：先结算应收（冻结 100000），再按实发 60000 挂应付。
-        service.submit(s.id(), new DividendActionRequest("arr-s1", null));
+        submitAsStaff(s.id(), "arr-s1");
         actorId[0] = "usr_approver";
         service.approve(s.id(), new DividendActionRequest("arr-a1", null));
         verify(payoutPort).applyDividendOffsetToReceivables(MERCHANT, "usr_principal", 100_000L, s.id());
@@ -1160,7 +1171,7 @@ class DividendServiceTests {
         assertThat(s.arrearsOffsetCent()).isEqualTo(100_000L);
         // 抵扣期间应收被清偿：只结算得 40000 < 冻结 100000。
         when(payoutPort.applyDividendOffsetToReceivables(anyString(), anyString(), anyLong(), anyString())).thenReturn(40_000L);
-        service.submit(s.id(), new DividendActionRequest("arr2-s1", null));
+        submitAsStaff(s.id(), "arr2-s1");
         actorId[0] = "usr_approver";
         assertThatThrownBy(() -> service.approve(s.id(), new DividendActionRequest("arr2-a1", null)))
                 .isInstanceOf(ApiException.class)
@@ -1183,7 +1194,7 @@ class DividendServiceTests {
         assertThat(s.payoutCent()).isEqualTo(144_000L);
         assertThat(repository.listLines(s.id(), null))
                 .anyMatch(l -> l.lineType().equals("reserve_withheld") && l.amountCent() == -16_000L);
-        service.submit(s.id(), new DividendActionRequest("floor-s1", null));
+        submitAsStaff(s.id(), "floor-s1");
         actorId[0] = "usr_approver";
         service.approve(s.id(), new DividendActionRequest("floor-a1", null));
         verify(payoutPort).createDividendPayoutPayable("usr_principal", MERCHANT, 144_000L, s.id(), PAY_DAY);
@@ -1210,7 +1221,7 @@ class DividendServiceTests {
                 new DividendComputeRequest("lcf-p-q1", "2026-Q1", "official", null)).computed().get(0);
         assertThat(q1.netProfitCent()).isEqualTo(-100_000L);
         assertThat(q1.lossCarryforwardAfterCent()).isEqualTo(100_000L);
-        service.submit(q1.id(), new DividendActionRequest("lcf-p-s1", null));
+        submitAsStaff(q1.id(), "lcf-p-s1");
         actorId[0] = "usr_approver";
         service.approve(q1.id(), new DividendActionRequest("lcf-p-a1", null));
 
@@ -1224,7 +1235,7 @@ class DividendServiceTests {
         assertThat(q2.lossCarryforwardAppliedCent()).isZero();
         assertThat(q2.lossCarryforwardAfterCent()).isEqualTo(100_000L);
         assertThat(q2.distributableCent()).isZero();
-        service.submit(q2.id(), new DividendActionRequest("lcf-p-s2", null));
+        submitAsStaff(q2.id(), "lcf-p-s2");
         actorId[0] = "usr_approver";
         service.approve(q2.id(), new DividendActionRequest("lcf-p-a2", null));
 
@@ -1250,7 +1261,7 @@ class DividendServiceTests {
         repository.barRefund.put(MERCHANT, 200_000L);
         DividendStatementRecord q1 = service.compute(
                 new DividendComputeRequest("combo-q1", "2026-Q1", "official", null)).computed().get(0);
-        service.submit(q1.id(), new DividendActionRequest("combo-s0", null));
+        submitAsStaff(q1.id(), "combo-s0");
         actorId[0] = "usr_approver";
         service.approve(q1.id(), new DividendActionRequest("combo-a0", null));
         // Q2 盈利 1000000，期初累计 200000 → 可分配 800000；平台 80% → 应得毛 160000，税 20% → 税后 128000。
@@ -1282,7 +1293,7 @@ class DividendServiceTests {
         repository.barRevenue.put(merchant, 1_000_000L); // 税后应得 160000，留 10% = 16000
         DividendStatementRecord s = service.compute(
                 new DividendComputeRequest(key, period, "official", merchant)).computed().get(0);
-        service.submit(s.id(), new DividendActionRequest(key + "-s", null));
+        submitAsStaff(s.id(), key + "-s");
         actorId[0] = "usr_approver";
         service.approve(s.id(), new DividendActionRequest(key + "-a", null));
         actorId[0] = "usr_admin";
@@ -1345,7 +1356,7 @@ class DividendServiceTests {
         repository.barRevenue.put("merchant_nr", 1_000_000L);
         DividendStatementRecord noReserve = service.compute(
                 new DividendComputeRequest("rel5-c1", "2026-Q3", "official", "merchant_nr")).computed().get(0);
-        service.submit(noReserve.id(), new DividendActionRequest("rel5-s", null));
+        submitAsStaff(noReserve.id(), "rel5-s");
         actorId[0] = "usr_approver";
         service.approve(noReserve.id(), new DividendActionRequest("rel5-a", null));
         actorId[0] = "usr_admin";

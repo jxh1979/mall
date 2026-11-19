@@ -112,7 +112,7 @@
 - 生产边界：covered_by_disabled_integration_switches；仍阻塞生产声明=否
 - 生产证据 item：
 - mock/测试/页面文件：
-  - admin_ui: `apps/web/src/admin/pages/IntegrationEventsPage.tsx`，markers=`integration-events-page`, `Webhook + 定时轮询校验`
+  - admin_ui: `apps/web/src/admin/pages/IntegrationEventsPage.tsx`，markers=`integration-events-page`, `回调与定时轮询校验`
   - backend_unit: `backend/src/test/java/com/complex/platform/integration/IntegrationServiceTests.java`，markers=`webhookPersistsEventAndDuplicateIdempotencyReturnsOriginalResult`, `mockAdapterTestScenariosAreRecorded`, `orderSyncRetryCompensationAndReconciliationKeepProviderPayloadOutOfCoreModels`
   - supplier_mock: `docs/t3b-supplier-sdk-mock-kit-v0.1.md`，markers=`Webhook`, `provider adapter`, `NO_REAL_SECRET`
   - supplier_mock: `docs/supplier-mock/t3b-provider-adapter-test.example.json`，markers=`test-mock`, `mock-provider`

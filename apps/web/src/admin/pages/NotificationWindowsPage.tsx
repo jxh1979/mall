@@ -1,4 +1,4 @@
-// 文件版本：V0.03
+// 文件版本：V0.04
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
@@ -56,7 +56,7 @@ function SavedBottleReminderSection({ api, setActionResult, setGlobalError, effe
   async function save() {
     const list = days.split(/[,，、\s]+/).filter(Boolean).map(Number);
     if (!projectId.trim()) {
-      setGlobalError("请先填写综合体项目 id");
+      setGlobalError("请先填写综合体项目编号");
       return;
     }
     if (list.length === 0 || list.some((d) => !Number.isInteger(d) || d < 1) || new Set(list).size !== list.length) {
@@ -89,7 +89,7 @@ function SavedBottleReminderSection({ api, setActionResult, setGlobalError, effe
         </table>
       </div>
       <div className="admin-form-grid" style={{ marginTop: 8 }}>
-        <label>项目 id<input aria-label="存酒提醒项目 id" value={projectId} onChange={(e) => setProjectId(e.target.value)} /></label>
+        <label>项目编号<input aria-label="存酒提醒项目编号" value={projectId} onChange={(e) => setProjectId(e.target.value)} /></label>
         <label>提醒节点（到期前第 N 天，逗号分隔）<input aria-label="存酒提醒节点" placeholder="14,7,3,1" value={days} onChange={(e) => setDays(e.target.value)} /></label>
         <PermissionButton permissionsState={effectivePermissions} permissions={REMINDER_MANAGE}
           data-testid="saved-bottle-reminder-policy-save" onClick={() => void save()}>保存提醒节点</PermissionButton>
@@ -125,7 +125,7 @@ function SavedBottleManualPickupPolicySection({ api, setActionResult, setGlobalE
     const min = toInt(form.min);
     const max = toInt(form.max);
     if (!form.projectId.trim()) {
-      setError("请先填写综合体项目 id");
+      setError("请先填写综合体项目编号");
       return;
     }
     if (![m1, m3, total, min, max].every((v) => Number.isInteger(v)) || min < 1 || min > max || [m1, m3, total].some((v) => v < min || v > max)) {
@@ -164,7 +164,7 @@ function SavedBottleManualPickupPolicySection({ api, setActionResult, setGlobalE
         </table>
       </div>
       <div className="admin-form-grid" style={{ marginTop: 8 }}>
-        <label>项目 id<input aria-label="消费历史条件项目 id" value={form.projectId} onChange={field("projectId")} /></label>
+        <label>项目编号<input aria-label="消费历史条件项目编号" value={form.projectId} onChange={field("projectId")} /></label>
         <label>近 1 个月（笔）<input aria-label="近 1 个月笔数" type="number" min="1" value={form.m1} onChange={field("m1")} /></label>
         <label>近 3 个月（笔）<input aria-label="近 3 个月笔数" type="number" min="1" value={form.m3} onChange={field("m3")} /></label>
         <label>累计（笔）<input aria-label="累计笔数" type="number" min="1" value={form.total} onChange={field("total")} /></label>
@@ -205,7 +205,7 @@ function SavedBottleRenewalPolicySection({ api, setActionResult, setGlobalError,
     const min = toInt(form.min);
     const max = toInt(form.max);
     if (!form.scopeId.trim()) {
-      setError(meta.scope === "bar" ? "请先填写酒吧 id" : "请先填写综合体项目 id");
+      setError(meta.scope === "bar" ? "请先填写酒吧编号" : "请先填写综合体项目编号");
       return;
     }
     const floor = form.policyKey === "max_renewals" ? 0 : 1;
@@ -256,7 +256,7 @@ function SavedBottleRenewalPolicySection({ api, setActionResult, setGlobalError,
             {Object.entries(RENEWAL_KEYS).map(([key, item]) => <option key={key} value={key}>{item.label}</option>)}
           </select>
         </label>
-        <label>{meta.scope === "bar" ? "酒吧 id" : "项目 id"}<input aria-label="参数范围 id" value={form.scopeId} onChange={field("scopeId")} /></label>
+        <label>{meta.scope === "bar" ? "酒吧编号" : "项目编号"}<input aria-label="参数范围编号" value={form.scopeId} onChange={field("scopeId")} /></label>
         <label>值<input aria-label="参数值" type="number" min="0" value={form.value} onChange={field("value")} /></label>
         <label>下限<input aria-label="参数下限" type="number" min="0" value={form.min} onChange={field("min")} /></label>
         <label>上限<input aria-label="参数上限" type="number" min="0" value={form.max} onChange={field("max")} /></label>
