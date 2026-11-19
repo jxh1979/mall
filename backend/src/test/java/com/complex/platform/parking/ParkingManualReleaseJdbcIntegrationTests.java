@@ -1,6 +1,6 @@
 package com.complex.platform.parking;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -96,6 +96,12 @@ class ParkingManualReleaseJdbcIntegrationTests {
         assertThat(alert.get("source_domain")).isEqualTo("parking");
         assertThat(alert.get("alert_type")).isEqualTo("parking.manual_release");
         assertThat((String) alert.get("summary")).contains("粤A10002", "识别失败", f.user("guard"));
+        // 第十八批 BC 段 369-R5（PGM:287「……日期时间等，必须全部为中文」；BSM:1438「人工放行必须记录原因、操作人、车牌和时间」）：
+        // 摘要里的时间为放行时刻的中文北京时间，不出 ISO 原文。
+        String releasedAt = java.time.format.DateTimeFormatter.ofPattern("yyyy年M月d日 HH:mm")
+                .format(((java.sql.Timestamp) row.get("released_at")).toInstant().atZone(java.time.ZoneId.of("Asia/Shanghai")));
+        assertThat((String) alert.get("summary")).contains("，时间 " + releasedAt)
+                .doesNotContainPattern("\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}");
     }
 
     @Test

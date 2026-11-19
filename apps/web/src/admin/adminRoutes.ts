@@ -1,4 +1,4 @@
-// 文件版本：V0.20
+// 文件版本：V0.21
 import type { AdminAccountForm, AdminNavGroup, AdminRoute, PermissionDefinitionRow } from "./types";
 
 export const adminRoutes: AdminRoute[] = [
@@ -84,7 +84,7 @@ export const adminRoutes: AdminRoute[] = [
   // 改任何字段都不影响任何计算，运营改完以为生效实际无效。积分口径统一在结算配置中心配置。
   { pageId: "ADM-CUS-004", label: "会员等级与忠诚度", module: "客人", group: "governance", route: "/admin/customers/loyalty-config", requiredPermissions: ["customer.loyalty.view"] },
   { pageId: "ADM-CUS-005", label: "储值规则配置", module: "客人", group: "governance", route: "/admin/customers/stored-value-rules", requiredPermissions: ["customer.stored_value.refund"] },
-  { pageId: "ADM-CUS-006", label: "储值退卡", module: "客人", group: "governance", route: "/admin/customers/stored-value-refunds", requiredPermissions: ["customer.stored_value.refund"] },
+  { pageId: "ADM-CUS-006", label: "储值退卡", module: "客人", group: "governance", route: "/admin/customers/stored-value-refunds", requiredPermissions: ["customer.stored_value.refund", "customer.stored_value.freeze"] },
   { pageId: "ADM-INT-004", label: "短信通知开关", module: "第三方接入", group: "integration", route: "/admin/integrations/sms-switches", requiredPermissions: ["terminal.switch.view"] },
   { pageId: "ADM-LEASE-002", label: "租赁状态看板", module: "招商租赁", group: "governance", route: "/admin/leasing/rental-status", requiredPermissions: ["contract.draft.manage"] },
   { pageId: "ADM-VND-002", label: "外包巡检任务", module: "外包工作台", group: "vendor", route: "/admin/vendor/inspections", requiredPermissions: ["facility.inspection.view_assigned"], accountForms: ["vendor"] },
@@ -93,6 +93,8 @@ export const adminRoutes: AdminRoute[] = [
   { pageId: "ADM-INT-003", label: "第三方开关", module: "第三方", group: "integration", route: "/admin/integrations/switches", requiredPermissions: ["terminal.switch.view"] },
   { pageId: "ADM-INT-005", label: "渠道映射维护", module: "第三方", group: "integration", route: "/admin/integrations/channel-maps", requiredPermissions: ["integration.channel_store_map.view"] },
   { pageId: "ADM-RISK-001", label: "风控预警", module: "风控", group: "risk", route: "/admin/risk/alerts", requiredPermissions: ["analytics.risk_alert.view"] },
+  // 第十八批 BC 段第 369 条 369-R2（BSM:1657「新增「异常预警」页面」）：读统一风控预警队列，查看、认领、转办与处置。
+  { pageId: "ADM-RISK-002", label: "异常预警", module: "风控", group: "risk", route: "/admin/risk/exception-alerts", requiredPermissions: ["risk_alert.view"] },
   { pageId: "ADM-EVD-001", label: "审计事件", module: "审计", group: "audit", route: "/admin/audit/events", requiredPermissions: ["evidence.event.view"] },
   { pageId: "ADM-SEC-001", label: "我的导出", module: "审计", group: "audit", route: "/admin/security/my-exports", requiredPermissions: [] },
   { pageId: "ADM-SEC-002", label: "暗纹与导出密码反查", module: "审计", group: "audit", route: "/admin/security/watermark-trace", requiredPermissions: ["security.watermark.trace"] },

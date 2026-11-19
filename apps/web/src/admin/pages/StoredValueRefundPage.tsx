@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import React from "react";
 import { AdminPageHeader } from "../components/AdminPageHeader";
 import { HighRiskConfirm } from "../components/HighRiskConfirm";
@@ -23,6 +23,7 @@ type RefundCard = {
 
 const LOOKUP = "/api/v1/loyalty/stored-value/refund-cards/lookup";
 const REFUND = ["customer.stored_value.refund"];
+const FREEZE = ["customer.stored_value.freeze"];
 const STATUS_LABELS: Record<string, string> = { active: "正常", frozen: "已冻结" };
 const yuan = (cent: number) => (cent / 100).toFixed(2);
 const cardPath = (card: RefundCard, action: string) =>
@@ -34,6 +35,7 @@ const errorText = (error: unknown, fallback: string) => (error instanceof Error 
  * 赠送金不退现」「单张储值卡退款时如申请同时销卡，本金未退清的须拒绝销卡并明确报错」；ENUM:86「余额管理与退款均由长沙项目公司负责」）：
  * 按手机号查卡（后端按当前账号范围只列可办理的卡）；不挂商户的账号办通用卡退卡（一次退还全部本金、赠送金作废、卡关闭，应退本金由财务按原收款路径办理）；
  * 商户账号在本商户柜台办商户卡退卡（按发卡商户规则退，填兑付凭证号）。页上有客人掩码手机号，属敏感页（PGM:687）。
+ * 第十八批 BC 段第 365 条 365-R1（BSM:833「账户可冻结/解冻。」）：冻结、解冻入口也在本页，分支与退卡相同；账户关闭待退而冻结的商户卡不给解冻。
  */
 export function StoredValueRefundPage({ api, user, setActionResult, setGlobalError, effectivePermissions, reportViewedObjects }: AdminPageProps) {
   const merchantAccount = accountFormOf(user) === "merchant";
@@ -123,14 +125,43 @@ export function StoredValueRefundPage({ api, user, setActionResult, setGlobalErr
       closeAccount, redemptionVoucherNo: voucher.trim() }, "柜台退卡已办理，款项由本商户柜台现场兑付给客人。");
   }
 
+  // 冻结、解冻接口不要求提交编号，确认后直接发请求。
+  async function toggleFreeze(card: RefundCard, freeze: boolean) {
+    try {
+      const result = await api.post<unknown>(cardPath(card, freeze ? "freeze" : "unfreeze"),
+        { projectId: card.projectId, merchantId: card.merchantId });
+      setActionResult(result);
+      setOutcome(freeze ? "已冻结" : "已解冻");
+      await search();
+    } catch (error) {
+      setGlobalError(errorText(error, freeze ? "冻结失败" : "解冻失败"));
+    }
+  }
+
+  function freezeAction(card: RefundCard) {
+    const freeze = card.status === "active";
+    if (!freeze && (card.status !== "frozen" || card.pendingRefundCent != null)) return null;
+    return (
+      <HighRiskConfirm
+        label={freeze ? "冻结" : "解冻"}
+        impact={freeze ? "冻结后该卡暂停消费，解冻前不能使用" : "解冻后该卡恢复消费"}
+        irreversible={false}
+        onConfirm={() => void toggleFreeze(card, freeze)}
+        permissionsState={effectivePermissions}
+        permissions={FREEZE}
+        data-testid={`stored-value-${freeze ? "freeze" : "unfreeze"}-${card.accountId}`}
+      />
+    );
+  }
+
   function action(card: RefundCard) {
     if (!card.merchantId) {
       return merchantAccount ? <span>通用卡由长沙项目公司服务台退款</span>
-        : <button type="button" onClick={() => choose(card)}>办理退卡</button>;
+        : <><button type="button" onClick={() => choose(card)}>办理退卡</button>{freezeAction(card)}</>;
     }
     if (!merchantAccount) return <span>商户卡由发卡商户退款</span>;
-    return card.refundAllowed ? <button type="button" onClick={() => choose(card)}>柜台退卡</button>
-      : <span>发卡商户不允许该商户卡退款</span>;
+    return <>{card.refundAllowed ? <button type="button" onClick={() => choose(card)}>柜台退卡</button>
+      : <span>发卡商户不允许该商户卡退款</span>}{freezeAction(card)}</>;
   }
 
   const amountCent = Math.round(Number(amount) * 100);
@@ -140,7 +171,7 @@ export function StoredValueRefundPage({ api, user, setActionResult, setGlobalErr
     <section data-testid="stored-value-refund-page">
       <AdminPageHeader
         title="储值退卡"
-        description="按手机号查客人储值卡。综合体通用卡由长沙项目公司服务台退卡：一次退还全部剩余本金、赠送金不退现、卡关闭，应退本金由财务按原收款路径办理；商户卡由发卡商户柜台退款，按发卡商户规则退，须填兑付凭证号；申请同时销卡的须退清本金。"
+        description="按手机号查客人储值卡。综合体通用卡由长沙项目公司服务台退卡：一次退还全部剩余本金、赠送金不退现、卡关闭，应退本金由财务按原收款路径办理；商户卡由发卡商户柜台退款，按发卡商户规则退，须填兑付凭证号；申请同时销卡的须退清本金。也可在此冻结、解冻。"
       />
       <div className="admin-inline-form" data-testid="stored-value-refund-search">
         <input aria-label="客人手机号" placeholder="客人手机号（完整精确匹配）" value={phone} onChange={(e) => setPhone(e.target.value)} />

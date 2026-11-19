@@ -44,6 +44,8 @@ class RiskAlertServiceTests {
         when(authorizationService.currentActor()).thenReturn(
                 new AccessActor("usr_admin", "platform_admin_user", "platform_admin", "org_1", null, "active"));
         when(authorizationService.isPlatformAdmin(any())).thenReturn(true);
+        when(authorizationService.projectReach(any(), any(String[].class)))
+                .thenReturn(new AuthorizationService.ProjectReach(true, true, "org_1", true, java.util.Set.of()));
         TestSecurityActors.asPlatformAdmin();
 
         service = new RiskAlertService(
@@ -204,17 +206,31 @@ class RiskAlertServiceTests {
         }
 
         @Override
-        public List<RiskAlertRecord> search(String sourceDomain, String status, String projectId,
-                                            String merchantScope, int limit) {
+        public List<RiskAlertRecord> search(List<String> sourceDomains, String status, String projectId,
+                                            String merchantScope, java.util.Collection<String> projectScope, int limit) {
             List<RiskAlertRecord> newestFirst = new ArrayList<>(alerts.values());
             java.util.Collections.reverse(newestFirst);
             return newestFirst.stream()
-                    .filter(a -> sourceDomain == null || sourceDomain.equals(a.sourceDomain()))
+                    .filter(a -> inScope(a, sourceDomains, merchantScope, projectScope))
                     .filter(a -> status == null || status.equals(a.status()))
                     .filter(a -> projectId == null || projectId.equals(a.projectId()))
-                    .filter(a -> merchantScope == null || merchantScope.equals(a.merchantId()))
                     .limit(limit)
                     .toList();
+        }
+
+        @Override
+        public long countUnfinished(List<String> sourceDomains, String merchantScope, java.util.Collection<String> projectScope) {
+            return alerts.values().stream()
+                    .filter(a -> List.of("open", "handling").contains(a.status()))
+                    .filter(a -> inScope(a, sourceDomains, merchantScope, projectScope))
+                    .count();
+        }
+
+        private static boolean inScope(RiskAlertRecord a, List<String> sourceDomains, String merchantScope,
+                                       java.util.Collection<String> projectScope) {
+            return (sourceDomains == null || sourceDomains.isEmpty() || sourceDomains.contains(a.sourceDomain()))
+                    && (merchantScope == null || merchantScope.equals(a.merchantId()))
+                    && (projectScope == null || a.projectId() != null && projectScope.contains(a.projectId()));
         }
     }
 }

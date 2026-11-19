@@ -1,4 +1,4 @@
-// 文件版本：V0.16
+// 文件版本：V0.17
 // 3.8 业务枚举中文化：展示层把后端状态码翻成中文业务口径；提交/请求仍用原码。
 // 未知码原样返回（不阻断展示），新增码逐步补此表即可。
 const STATUS_LABELS: Record<string, string> = {
@@ -178,6 +178,8 @@ const STATUS_LABELS: Record<string, string> = {
   "parking.manual_release": "停车人工放行",
   // 第十八批 AH 段 218-R1 高频出入场疑似借票（统一异常队列 alert_type）
   "ticket.frequent_entry": "高频出入场",
+  // 第十八批 BC 段 369-R2（BSM:1657「同一手机号短期内注销＋注册超过阈值」）：同号注销注册超限预警（统一异常队列 alert_type）
+  "customer.churn": "同一手机号注销注册超限",
   // 风险等级
   suspicious: "可疑",
   // 主管复核动作类型

@@ -1,6 +1,6 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -54,6 +54,8 @@ class SupplyChainT6ServiceTests {
         repo = new InMemoryRepo();
         authorizationService = mock(AuthorizationService.class);
         when(authorizationService.currentMerchantScope()).thenReturn(Optional.empty());
+        // 第十八批 BC 段 362-R1：读取改取 currentMerchantReadScope（非最高权限与 currentMerchantScope 同值），替身按真实实现委托
+        when(authorizationService.currentMerchantReadScope()).thenAnswer(call -> authorizationService.currentMerchantScope());
         when(authorizationService.currentActor()).thenReturn(ADMIN_ACTOR);
         IdempotencyService idem =
                 new IdempotencyService(new InMemoryIdem(), new ObjectMapper());

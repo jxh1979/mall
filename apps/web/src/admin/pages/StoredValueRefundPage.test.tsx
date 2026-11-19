@@ -1,5 +1,5 @@
-// 文件版本：V0.01
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+// 文件版本：V0.02
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { StoredValueRefundPage } from "./StoredValueRefundPage";
 import { AdminApi } from "../client/adminClient";
@@ -18,7 +18,7 @@ const merchantStaff: AdminUser = { id: "u2", username: "u2", accountType: "staff
 
 type Call = { url: string; method: string; body: Record<string, unknown> | null };
 
-function setup(user: AdminUser, cards: unknown[]) {
+function setup(user: AdminUser, cards: unknown[], grants: string[] = ["customer.stored_value.refund"]) {
   const calls: Call[] = [];
   vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
@@ -28,7 +28,7 @@ function setup(user: AdminUser, cards: unknown[]) {
   }));
   const setGlobalError = vi.fn();
   render(<StoredValueRefundPage api={new AdminApi("test")} user={user} setActionResult={vi.fn()} setGlobalError={setGlobalError}
-    effectivePermissions={{ status: "ready", value: { grants: ["customer.stored_value.refund"], denies: [], wildcard: false } }} />);
+    effectivePermissions={{ status: "ready", value: { grants, denies: [], wildcard: false } }} />);
   return { calls, setGlobalError };
 }
 
@@ -104,5 +104,37 @@ describe("储值退卡", () => {
     await search(calls);
     await waitFor(() => expect(screen.getByText("商户卡由发卡商户退款")).toBeTruthy());
     expect(screen.queryByText("柜台退卡")).toBeNull();
+  });
+
+  // 第十八批 BC 段第 365 条 365-R1（BSM:833「账户可冻结/解冻。」；ENUM:86「余额管理与退款均由长沙项目公司负责」）：冻结、解冻入口在本页，分支同退卡。
+  const BOTH = ["customer.stored_value.refund", "customer.stored_value.freeze"];
+
+  it("不挂商户的账号冻结通用卡：确认后发冻结请求，带项目与商户，随后重新查卡", async () => {
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+    const { calls } = setup(projectStaff, [general], BOTH);
+    await search(calls);
+    await waitFor(() => expect(screen.queryByText("冻结")).toBeTruthy());
+    fireEvent.click(screen.getByText("冻结"));
+    await waitFor(() => expect(callTo(calls, "/api/v1/loyalty/stored-value/cus_1/freeze")).toBeTruthy());
+    expect(callTo(calls, "/api/v1/loyalty/stored-value/cus_1/freeze")).toMatchObject({ method: "POST",
+      body: { project_id: "prj_a", merchant_id: null } });
+    expect(String(confirm.mock.calls[0]?.[0])).toContain("冻结后该卡暂停消费，解冻前不能使用");
+    await waitFor(() => expect(calls.filter((c) => c.url.endsWith(LOOKUP)).length).toBe(2));
+    await waitFor(() => expect(screen.getByRole("status").textContent).toContain("已冻结"));
+  });
+
+  it("已冻结的通用卡显示解冻；带账户关闭待退事项的商户卡不显示解冻", async () => {
+    const first = setup(projectStaff, [{ ...general, status: "frozen" }], BOTH);
+    await search(first.calls);
+    await waitFor(() => expect(screen.queryByText("解冻")).toBeTruthy());
+    expect(screen.queryByText("冻结")).toBeNull();
+    cleanup();
+    vi.unstubAllGlobals();
+
+    const second = setup(merchantStaff, [pendingCard], BOTH);
+    await search(second.calls);
+    await waitFor(() => expect(screen.getByText("柜台退卡")).toBeTruthy());
+    expect(screen.queryByText("解冻")).toBeNull();
+    expect(screen.queryByText("冻结")).toBeNull();
   });
 });

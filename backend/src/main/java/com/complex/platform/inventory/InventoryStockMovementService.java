@@ -1,6 +1,6 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -272,7 +272,7 @@ final class InventoryStockMovementService {
                 () -> {
                     // C2: merchant staff -> merchant; project staff (no merchant) -> project; platform admin -> all.
                     // AUD-013: 真分页在 SQL 层, 租户谓词经 nullable merchantId/projectId 下推。
-                    java.util.Optional<String> merchantScope = authorizationService.currentMerchantScope();
+                    java.util.Optional<String> merchantScope = authorizationService.currentMerchantReadScope();
                     String merchantId = merchantScope.orElse(null);
                     String projectId = merchantId != null ? null
                             : authorizationService.currentProjectScopeQuietly().orElse(null);

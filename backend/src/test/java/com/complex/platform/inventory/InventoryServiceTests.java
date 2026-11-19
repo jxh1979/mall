@@ -1,6 +1,6 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.14
+// 文件版本：V0.15
 
 import com.complex.platform.support.InMemoryAuditEventRepository;
 import com.complex.platform.support.InMemoryIdempotencyRepository;
@@ -95,6 +95,8 @@ class InventoryServiceTests {
         authorizationService = mock(AuthorizationService.class);
         // 默认：平台管理员视角——看全部，写入时 merchantId = null
         when(authorizationService.currentMerchantScope()).thenReturn(Optional.empty());
+        // 第十八批 BC 段 362-R1：读取改取 currentMerchantReadScope（非最高权限与 currentMerchantScope 同值），替身按真实实现委托
+        when(authorizationService.currentMerchantReadScope()).thenAnswer(call -> authorizationService.currentMerchantScope());
         when(authorizationService.currentActor()).thenReturn(ADMIN_ACTOR);
         terminalDeviceRepository = mock(com.complex.platform.terminal.TerminalDeviceRepository.class);
         // 默认：桩一条显式开启行放行（PGM 第 742 行 opt-in：缺行即关；机器人段被动留痕允许）。

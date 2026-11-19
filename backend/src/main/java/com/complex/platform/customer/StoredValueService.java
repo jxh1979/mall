@@ -1,6 +1,6 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.19
+// 文件版本：V0.20
 
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.idempotency.IdempotentReplayContext;
@@ -593,7 +593,7 @@ public class StoredValueService {
             if (principalBack > 0) {
                 String payoutRefundId = financeService.recordStoredValuePayoutRefund(account.id(), principalBack,
                         "消费退款回冲：账户已关闭，本金退还本人", account.merchantId(), account.projectId(),
-                        idempotencyKey + "|closed_payout");
+                        idempotencyKey + "|closed_payout", false);
                 detail.put("payout_status", "requested");
                 detail.put("payout_refund_id", payoutRefundId);
             }
@@ -960,7 +960,7 @@ public class StoredValueService {
         boolean payoutSettled = payoutCent <= 0;
         String payoutRefundId = payoutSettled ? null
                 : financeService.recordStoredValuePayoutRefund(account.id(), payoutCent, reason,
-                        account.merchantId(), account.projectId(), idempotencyKey);
+                        account.merchantId(), account.projectId(), idempotencyKey, false);
         Map<String, Object> detail = consumeRefundDetail(account, amountCent, balanceAfter);
         detail.put("principal_cent", amountCent);
         detail.put("bonus_voided_cent", bonusVoidCent);
@@ -1038,7 +1038,7 @@ public class StoredValueService {
             if (payoutCent > 0) {
                 String payoutRefundId = financeService.recordStoredValuePayoutRefund(account.id(), payoutCent,
                         merchantCard ? "账户关闭：商户卡本金待退" : "账户关闭：储值本金退还本人",
-                        account.merchantId(), account.projectId(), key);
+                        account.merchantId(), account.projectId(), key, true);
                 detail.put("principal_refund_cent", payoutCent);
                 detail.put("payout_gateway_status", "NOT_DISPATCHED");
                 detail.put("payout_status", "requested");
@@ -1270,7 +1270,10 @@ public class StoredValueService {
     public CustomerStoredValueAccountRecord freeze(String customerId, String projectId, String merchantId, String reason) {
         Instant now = now();
         CustomerStoredValueAccountRecord account = requireAccountForUpdate(customerId, projectId, merchantId);
-        requireMerchantScopeForCard(account);
+        // 第十八批 BC 段 365-R1（BSM:833「账户可冻结/解冻。」「商户的员工只能管理本商户发行的储值卡。」；ENUM:86「余额管理与退款均由长沙项目公司负责」）：
+        // 冻结、解冻与退卡同一范围口径——最高权限放行；商户账号只办本商户卡；卡带项目的只办本人项目；不挂商户的项目侧账号可办本项目通用卡。
+        StoredValueRefundLookupService.requireRefundScope(authorizationService, account,
+                financeRepository == null ? null : financeRepository::listMerchantOperatingProjectIds);
         if ("closed".equals(account.status())) {
             throw ApiException.conflict("STORED_VALUE_ACCOUNT_CLOSED", "储值账户已销户");
         }
@@ -1289,7 +1292,9 @@ public class StoredValueService {
     public CustomerStoredValueAccountRecord unfreeze(String customerId, String projectId, String merchantId, String reason) {
         Instant now = now();
         CustomerStoredValueAccountRecord account = requireAccountForUpdate(customerId, projectId, merchantId);
-        requireMerchantScopeForCard(account);
+        // 第十八批 BC 段 365-R1：同冻结（requireRefundScope）
+        StoredValueRefundLookupService.requireRefundScope(authorizationService, account,
+                financeRepository == null ? null : financeRepository::listMerchantOperatingProjectIds);
         if (!"frozen".equals(account.status())) {
             throw ApiException.conflict("STORED_VALUE_NOT_FROZEN", "储值账户不在冻结状态");
         }

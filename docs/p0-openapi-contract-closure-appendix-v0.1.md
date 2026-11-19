@@ -1,4 +1,4 @@
-# P0 OpenAPI 权限、事件、任务追溯收口附录 V0.86
+# P0 OpenAPI 权限、事件、任务追溯收口附录 V0.87
 
 ## 1. 文档定位
 
@@ -14,10 +14,10 @@
 
 | 检查项 | 当前结果 | 执行结论 |
 |---|---:|---|
-| OpenAPI operation 数 | 1400 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
+| OpenAPI operation 数 | 1401 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
 | OpenAPI 权限/通用权限状态数 | 445 | 人工权限矩阵正文未覆盖 344 项；缺口以本文第 3 节补齐 |
-| OpenAPI 成功/失败事件数 | 2800 | 人工事件矩阵正文未覆盖 2751 项；完整事件字典以本文第 4 节为准 |
-| operation 级任务追溯 | 1400 | 人工任务映射正文未逐项覆盖 1394 个 operation；逐 operation 映射以本文第 5 节为准 |
+| OpenAPI 成功/失败事件数 | 2802 | 人工事件矩阵正文未覆盖 2753 项；完整事件字典以本文第 4 节为准 |
+| operation 级任务追溯 | 1401 | 人工任务映射正文未逐项覆盖 1395 个 operation；逐 operation 映射以本文第 5 节为准 |
 | 写接口数量 | 861 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
 
 ## 3. 权限码与认证上下文补充表
@@ -273,7 +273,7 @@
 | `finance.period_close.execute` | staff-token | project | 2 | listFinancePeriodCloses, closeFinancePeriod | OpenAPI 补充，以本附录为准 |
 | `finance.points_recovery.view` | staff-token | project-merchant | 1 | getPointsRecoveryDetail | OpenAPI 补充，以本附录为准 |
 | `finance.points_recovery.waive` | staff-token | project-merchant | 1 | waivePointsRecovery | OpenAPI 补充，以本附录为准 |
-| `finance.property_fee.manage` | staff-token | platform, project-merchant | 3 | listPropertyFeeRates, createPropertyFeeRate, billPropertyFee | OpenAPI 补充，以本附录为准 |
+| `finance.property_fee.manage` | staff-token | project, project-merchant | 3 | listPropertyFeeRates, createPropertyFeeRate, billPropertyFee | OpenAPI 补充，以本附录为准 |
 | `finance.reconciliation.difference.create` | staff-token | project-entity | 1 | createFinanceReconciliationDifference | OpenAPI 补充，以本附录为准 |
 | `finance.reconciliation.policy.manage` | staff-token | project | 2 | listFinanceReconciliationStageLimits, saveFinanceReconciliationStageLimit | OpenAPI 补充，以本附录为准 |
 | `finance.reconciliation.resolve` | staff-token | project-entity | 2 | closeFinanceReconciliationDifference, identifyFinanceReconciliationDifference | OpenAPI 补充，以本附录为准 |
@@ -391,13 +391,13 @@
 | `public` | public | customer, none, public-project, self | 20 | login, issueMasterAuthChallenge, masterAuthLogin, customerPhoneLogin, requestCustomerLoginSmsCode, registerCustomerMember, getCustomerTerms, listCustomerEffectiveTerminalSwitches, customerLogout, listCustomerTicketProducts, getSystemHealth, listCustomerBarScanMenu ... | 已在权限矩阵正文出现 |
 | `refund.authority.manage` | staff-token | project | 2 | upsertRefundAuthorityLimit, upsertRefundAutoRule | OpenAPI 补充，以本附录为准 |
 | `refund.authority.view` | staff-token | project | 2 | listRefundAuthorityLimits, listRefundAutoRules | OpenAPI 补充，以本附录为准 |
-| `risk_alert.claim` | staff-token | platform | 1 | claimRiskAlert | OpenAPI 补充，以本附录为准 |
-| `risk_alert.dismiss` | staff-token | platform | 1 | dismissRiskAlert | OpenAPI 补充，以本附录为准 |
-| `risk_alert.escalate` | staff-token | platform | 1 | escalateRiskAlert | OpenAPI 补充，以本附录为准 |
+| `risk_alert.claim` | staff-token | project | 1 | claimRiskAlert | OpenAPI 补充，以本附录为准 |
+| `risk_alert.dismiss` | staff-token | project | 1 | dismissRiskAlert | OpenAPI 补充，以本附录为准 |
+| `risk_alert.escalate` | staff-token | project | 1 | escalateRiskAlert | OpenAPI 补充，以本附录为准 |
 | `risk_alert.report` | staff-token | platform | 1 | reportRiskAlert | OpenAPI 补充，以本附录为准 |
-| `risk_alert.resolve` | staff-token | platform | 1 | resolveEvidenceRiskAlert | OpenAPI 补充，以本附录为准 |
-| `risk_alert.transfer` | staff-token | platform | 1 | transferRiskAlert | OpenAPI 补充，以本附录为准 |
-| `risk_alert.view` | staff-token | platform | 2 | searchRiskAlerts, getRiskAlertDetail | 已在权限矩阵正文出现 |
+| `risk_alert.resolve` | staff-token | project | 1 | resolveEvidenceRiskAlert | OpenAPI 补充，以本附录为准 |
+| `risk_alert.transfer` | staff-token | project | 1 | transferRiskAlert | OpenAPI 补充，以本附录为准 |
+| `risk_alert.view` | staff-token | project | 3 | searchRiskAlerts, countUnfinishedRiskAlerts, getRiskAlertDetail | 已在权限矩阵正文出现 |
 | `security.watermark.trace` | staff-token | project | 2 | traceWatermark, lookupExportPassword | OpenAPI 补充，以本附录为准 |
 | `service.catalog.approve` | staff-token | platform | 2 | activateServiceCatalogFeeDraft, approveDeleteServiceCatalogItem | OpenAPI 补充，以本附录为准 |
 | `service.catalog.manage` | staff-token | platform | 8 | upsertServiceCatalogItem, draftServiceCatalogFeeChange, archiveServiceCatalogItem, unarchiveServiceCatalogItem, requestDeleteServiceCatalogItem, listServiceCatalogAll, listServiceOrders, setServicePayConfig | OpenAPI 补充，以本附录为准 |
@@ -1514,6 +1514,8 @@
 | `evidence.timeline_viewed` | success | `getEvidenceTimeline` | `GET` | `/api/v1/evidence/timelines/{object_type}/{object_id}` | EVD-事件证据 | `evidence.timeline.view` | 接口级事件，以本附录为准 |
 | `evidence.upload_intent_created` | success | `createEvidenceAttachmentUploadIntent` | `POST` | `/api/v1/evidence/attachments/upload-intents` | EVD-事件证据 | `evidence.attachment.create` | 接口级事件，以本附录为准 |
 | `evidence.upload_intent_failed` | failure | `createEvidenceAttachmentUploadIntent` | `POST` | `/api/v1/evidence/attachments/upload-intents` | EVD-事件证据 | `evidence.attachment.create` | 接口级事件，以本附录为准 |
+| `exception.alert_view_failed` | failure | `getRiskAlertDetail` | `GET` | `/api/v1/evidence/risk-alerts/{alert_id}` | EVD-事件证据 | `risk_alert.view` | 接口级事件，以本附录为准 |
+| `exception.alert_viewed` | success | `getRiskAlertDetail` | `GET` | `/api/v1/evidence/risk-alerts/{alert_id}` | EVD-事件证据 | `risk_alert.view` | 接口级事件，以本附录为准 |
 | `exception.alerts_view_failed` | failure | `searchRiskAlerts` | `GET` | `/api/v1/evidence/risk-alerts` | EVD-事件证据 | `risk_alert.view` | 接口级事件，以本附录为准 |
 | `exception.alerts_viewed` | success | `searchRiskAlerts` | `GET` | `/api/v1/evidence/risk-alerts` | EVD-事件证据 | `risk_alert.view` | 接口级事件，以本附录为准 |
 | `exception.claim_failed` | failure | `claimRiskAlert` | `POST` | `/api/v1/evidence/risk-alerts/{alert_id}/claim` | EVD-事件证据 | `risk_alert.claim` | 接口级事件，以本附录为准 |
@@ -2183,6 +2185,8 @@
 | `not_applicable` | success | `closeStaffPayrollMonth` | `POST` | `/api/v1/staff/payroll/close` | STAFF-员工 | `staff.payroll.manage` | 接口级事件，以本附录为准 |
 | `not_applicable` | success | `countMediaPerformancePendingSettlements` | `GET` | `/api/v1/settlement/media-shows/pending-settlement-count` | P0-待归类 | `media.performance.view` | 接口级事件，以本附录为准 |
 | `not_applicable` | failure | `countMediaPerformancePendingSettlements` | `GET` | `/api/v1/settlement/media-shows/pending-settlement-count` | P0-待归类 | `media.performance.view` | 接口级事件，以本附录为准 |
+| `not_applicable` | success | `countUnfinishedRiskAlerts` | `GET` | `/api/v1/evidence/risk-alerts/open-count` | EVD-事件证据 | `risk_alert.view` | 接口级事件，以本附录为准 |
+| `not_applicable` | failure | `countUnfinishedRiskAlerts` | `GET` | `/api/v1/evidence/risk-alerts/open-count` | EVD-事件证据 | `risk_alert.view` | 接口级事件，以本附录为准 |
 | `not_applicable` | success | `createAmusementExitVerification` | `POST` | `/api/v1/amusement/verifications/exit` | AMU-游乐安全 | `amusement.verification.execute` | 接口级事件，以本附录为准 |
 | `not_applicable` | failure | `createAmusementExitVerification` | `POST` | `/api/v1/amusement/verifications/exit` | AMU-游乐安全 | `amusement.verification.execute` | 接口级事件，以本附录为准 |
 | `not_applicable` | success | `createTicketDistributionMerchantRate` | `POST` | `/api/v1/ticketing/distribution-merchant-rates` | TIC-票务权益 | `ticket.price_variant.manage` | 接口级事件，以本附录为准 |
@@ -2295,8 +2299,6 @@
 | `not_applicable` | failure | `getParkingOverview` | `GET` | `/api/v1/parking/overview` | P0-待归类 | `parking.ops.view` | 接口级事件，以本附录为准 |
 | `not_applicable` | success | `getParkingPolicy` | `GET` | `/api/v1/parking/policies/{project_id}` | P0-待归类 | `parking.ops.view` | 接口级事件，以本附录为准 |
 | `not_applicable` | failure | `getParkingPolicy` | `GET` | `/api/v1/parking/policies/{project_id}` | P0-待归类 | `parking.ops.view` | 接口级事件，以本附录为准 |
-| `not_applicable` | success | `getRiskAlertDetail` | `GET` | `/api/v1/evidence/risk-alerts/{alert_id}` | EVD-事件证据 | `risk_alert.view` | 接口级事件，以本附录为准 |
-| `not_applicable` | failure | `getRiskAlertDetail` | `GET` | `/api/v1/evidence/risk-alerts/{alert_id}` | EVD-事件证据 | `risk_alert.view` | 接口级事件，以本附录为准 |
 | `not_applicable` | failure | `getRoleViewableProjects` | `GET` | `/api/v1/access/roles/{id}/viewable-projects` | AUTH-账号权限 | `access.role.manage` | 接口级事件，以本附录为准 |
 | `not_applicable` | success | `getServicePayConfig` | `GET` | `/api/v1/services/pay-config` | P0-待归类 | `service.order.create` | 接口级事件，以本附录为准 |
 | `not_applicable` | failure | `getServicePayConfig` | `GET` | `/api/v1/services/pay-config` | P0-待归类 | `service.order.create` | 接口级事件，以本附录为准 |
@@ -3737,6 +3739,7 @@
 | EVD-事件证据 | `bindEvidenceAttachment` | `POST` | `/api/v1/evidence/attachments/{attachment_id}/bind` | 关联证据附件到业务对象 | `evidence.attachment.create` | `evidence.attachment_bound` / `evidence.attachment_bind_failed` | web, staff_work_phone | operation 级补充 |
 | EVD-事件证据 | `claimRiskAlert` | `POST` | `/api/v1/evidence/risk-alerts/{alert_id}/claim` | 认领风险预警 | `risk_alert.claim` | `exception.claimed` / `exception.claim_failed` | web, mobile_admin | operation 级补充 |
 | EVD-事件证据 | `completeEvidenceAttachmentUpload` | `POST` | `/api/v1/evidence/attachments/{attachment_id}/complete` | 完成上传确认 | `evidence.attachment.create` | `evidence.attachment_completed` / `evidence.attachment_complete_failed` | web, staff_work_phone | operation 级补充 |
+| EVD-事件证据 | `countUnfinishedRiskAlerts` | `GET` | `/api/v1/evidence/risk-alerts/open-count` | 统一风险预警未处理条数（总控驾驶舱异常预警卡） | `risk_alert.view` | `not_applicable` / `not_applicable` | web | operation 级补充 |
 | EVD-事件证据 | `createEvidenceAttachmentUploadIntent` | `POST` | `/api/v1/evidence/attachments/upload-intents` | 申请证据附件预签名上传 | `evidence.attachment.create` | `evidence.upload_intent_created` / `evidence.upload_intent_failed` | web, staff_work_phone | operation 级补充 |
 | EVD-事件证据 | `createEvidenceEvents` | `POST` | `/api/v1/evidence/events` | 创建证据事件 | `evidence.event.create` | `evidence.events_reported` / `evidence.events_report_failed` | staff_work_phone, kiosk, web | operation 级补充 |
 | EVD-事件证据 | `createEvidenceReview` | `POST` | `/api/v1/evidence/reviews` | 风险或异常复核 | `evidence.review.create` | `evidence.review_created` / `evidence.review_create_failed` | web | operation 级补充 |
@@ -3745,7 +3748,7 @@
 | EVD-事件证据 | `escalateRiskAlert` | `POST` | `/api/v1/evidence/risk-alerts/{alert_id}/escalate` | 升级风险预警 | `risk_alert.escalate` | `exception.escalated` / `exception.escalate_failed` | web, mobile_admin | operation 级补充 |
 | EVD-事件证据 | `getEvidenceTimeline` | `GET` | `/api/v1/evidence/timelines/{object_type}/{object_id}` | 业务时间线 | `evidence.timeline.view` | `evidence.timeline_viewed` / `evidence.timeline_view_failed` | web | operation 级补充 |
 | EVD-事件证据 | `getManualBackfillPolicy` | `GET` | `/api/v1/evidence/manual-backfill-policies/{project_id}` | 查人工补录参数（补录时限与录音提前量，按项目） | `evidence.manual_backfill.policy.manage` | `not_applicable` / `not_applicable` | web | operation 级补充 |
-| EVD-事件证据 | `getRiskAlertDetail` | `GET` | `/api/v1/evidence/risk-alerts/{alert_id}` | 查询风险预警详情 | `risk_alert.view` | `not_applicable` / `not_applicable` | web, mobile_admin | operation 级补充 |
+| EVD-事件证据 | `getRiskAlertDetail` | `GET` | `/api/v1/evidence/risk-alerts/{alert_id}` | 查询风险预警详情 | `risk_alert.view` | `exception.alert_viewed` / `exception.alert_view_failed` | web, mobile_admin | operation 级补充 |
 | EVD-事件证据 | `getTraceabilityAutoCaptureRate` | `GET` | `/api/v1/evidence/traceability/auto-capture-rate` | 查询业务流程追溯自动采集率 | `evidence.timeline.view` | `not_applicable` / `not_applicable` | web | operation 级补充 |
 | EVD-事件证据 | `listEvidenceEvents` | `GET` | `/api/v1/evidence/events` | 事件查询 | `evidence.event.view` | `evidence.event_viewed` / `evidence.event_view_failed` | web | operation 级补充 |
 | EVD-事件证据 | `listManualBackfills` | `GET` | `/api/v1/evidence/manual-backfills` | 查某对象的人工补录记录（与原始记录并列展示） | `authenticated` | `not_applicable` / `not_applicable` | web | operation 级补充 |

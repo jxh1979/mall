@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.23
+// 文件版本：V0.24
 
 import com.complex.platform.support.InMemoryAuditEventRepository;
 import com.complex.platform.support.InMemoryIdempotencyRepository;
@@ -94,6 +94,8 @@ class FinanceServiceTests {
                 authorizationService.currentProjectScopeQuietly().isPresent() ? "staff" : "platform_admin",
                 authorizationService.currentProjectScopeQuietly().orElse("org_1"),
                 authorizationService.currentMerchantScope().orElse(null),"active"));
+        // 第十八批 BC 段 368-R1：物业费费率建与查走 requireReachableProject，替身按默认的平台管理员视角原样返回所给项目
+        when(authorizationService.requireReachableProject(any(), any(), any())).thenAnswer(call -> call.getArgument(0));
         when(authorizationService.projectReach(any(),any(String[].class))).thenAnswer(call->{
             var project=authorizationService.currentProjectScopeQuietly();
             return project.isPresent() ? AuthorizationService.ProjectReach.ownOnly(project.get())

@@ -1,6 +1,6 @@
 # PRD 审计业务裁决台账
 
-文档版本：V1.10
+文档版本：V1.11
 状态：进行中
 迁移日期：2026-07-27
 当前事实源：三份立法 HTML 以既有冻结基线叠加 James 此前 M02 至 M08 的点名批准、全量审计 M001、M002 的逐项批准，以及本轮 2026-10-16 至 2026-10-17 业务 HTML 审计中 Q01 至 Q40 及子题实际明确批准且未被后续替代的裁决，和 2026-10-17 第二批 HTML 业务线推演审计（A–F 六线 64 条、停车章）的逐项批准，并叠加本轮 CG 70 项来源确认与 C01–C09、N01–N03 最终澄清及补全文稿中 F01、W01–W05 的整体修改批准（本文件末节）；本轮最终规则、未采纳或替代关系、现行版本与字节哈希见本文件末节。历史记录保留为各自当时事实，不恢复已被替代的建议。
@@ -10517,3 +10517,163 @@ HTML 的语义补齐与直接引用同步可在本批核验；70项中的业务�
   ⑦ 控制席补充：风控预警页「预警类型」的系统写入码 metric_anomaly、wecom_risk_hit 在共用业务码表（customer-core statusLabels，后台 i18n statusLabels 转出）补中文名「指标异常」「企业微信违规命中」，新用例 RiskAlertsPage.test.tsx「预警类型 metric_anomaly、wecom_risk_hit 在列表与明细里显示中文」，依据 PGM:287；页面矩阵 ADM-OPS-002 校验列「禁自审」照 249-R7 改为批准与驳回只认最高权限本人、最高权限本人提交即执行；财务 PRD §3B 与结算重构 PRD §9.7 标题「内部结算 SKU 目录」改为「内部结算价目录（按商品规格逐项建目录）」，同节提及的 SKU 改「商品规格」（引用的裁决原题不动），依据 ENUM:79「业务文件与所有界面上一律叫“商品规格”，不使用英文缩写代替」、BSM:1670；覆盖表 BSM-0730、BSM-0731 的 conflict_summary 改为见待开发清单第 375 条（待核实）；覆盖表 PGM-0003、PGM-0186、PGM-0201～0203 的同句同步改。
 - 18BA 合并前变基（2026-11-20）：本段自 ed3cde79 开工，先后变基到 origin/main b7762262、51950569、807e10d5；迁移按原序顺延改号 V674→V679→V680→V682；合并时 OpenAPI 共 1400 个操作（主干 1401）、info.version V0.86、决策台账 V1.10，Flyway 最新 V682（共 619 个迁移）。版本行、契约版本、计数与 SHA、生成物、台账补记与 PRD 修订行由合并前脚本按新主干统一重写。
 - 18BA 落地位置补记·运行验收证据、快照、终验文档刷新（无新裁决）：业务提交 72a5b2c6 之后，按第十八批裁决 25 重刷了运行验收证据：后端全量 7097 测，0 失败 0 错误；apps/web 构建通过；常规界面验收（接口全部 mock）实跑 40 条全过；真实后端界面验收未跑，runtime_ready=false。随后依次重生成闭环当前态快照、生产闭环缺口报告、界面验收报告、无上线指挥台。生成器没改。手改 docs/final-closed-loop-acceptance-audit-v0.1.md 与 docs/code-implementation-acceptance-audit-v0.1.md：前端单测源码计数改为 1967；被核文件行数都没变；后端全量与常规界面验收的数字、日期改为本次实跑值；写入 npm run verify:unit 实跑结果，五个工作区全过。交付门禁于 2026-11-19 18:20 UTC 在工作树逐项实跑子项，NAS 两项现场探测未跑。仍红的有两项：一是 coding-host-protection，它写死主仓路径，在工作树口径下必红，属工具口径，不做；二是 final-closed-loop-audit，如实留 2 条红（integration-ready、business-acceptance-ready），原因是校验器要求终验把联调、业务验收写成「是」，而裁决 25 定了不跑真实后端界面验收、运行验收未就绪，终验写的是「否」。verify:delivery-gates 总链仍是红的。
+
+18BC 落地位置补记（2026-11-20）：第十八批 BC 段（batch75）按 18BC 只读设计实现待开发清单第 362、363、365、366、368、369、375 条（最高权限、项目范围与风控预警组）；运行验收证据、终验文档在本段最后一个提交刷新；各条落地位置见下。本段追加时，原台账除文档版本升一版外，其他历史字节保持。
+
+- 18BC 落地位置补记·控制席判定（2026-11-20）：本段（第十八批 BC 段，batch75）实现待开发清单第 362、363、365、366、368、369、375 条（18BC 只读设计 b75-audit/d-gov-c.json、b75-audit/d-gov-d.json，两轮质疑者修订后定稿，无待裁题）。第 363 条项目闸对最高权限按全部项目、写入口一并放开（依据 BSM:576、第十八批裁决 71）。控制席并入同根两项：369-R6 统一风控预警队列的列表、明细、未处理条数与认领、转办、处置按项目隔离，不带项目的预警只有项目之上的获授权岗位与最高权限可见可办（依据 PGM:659）；369-R7 旧风控预警页风险等级按 ENUM:217 显示低、中、高、严重。设计旁见另记待开发清单第 376 条（待核实）。本段从 6a1aa073 开工（第四轮起一次一段）；汇总文件由合并前脚本 summary_tool.py 剥离与重写。
+- 【18BC 落地位置补记·甲组（第 362、363、365、366、368 条）】本组没有迁移，新增操作 0 个，新权限码 0 个。
+  363-R1（项目闸与项目只读范围对最高权限按全部项目，写入口一并放开）
+  - 改法：AuthorizationService.projectReach 在平台管理员分支之后加最高权限分支，返回 ProjectReach(platformAdmin=true, allProjects=true, 本人组织, true, 当时的全部项目)；AuthorizationService.currentProjectScopeQuietly 对最高权限返回空，表示全量。currentMerchantScope、requireProjectScope、isPlatformAdmin 不改；四处既有的最高权限特判不动。
+  - 影响：reach.platformAdmin() 的各分支对最高权限一并按平台管理员走；先判 isPlatformAdmin 再取 organizationIds() 的列表（ContractService.listContracts 等）对最高权限取到全部项目；requireReachableProject 对最高权限不带项目时 400 VALIDATION_FAILED「必须指定综合体项目」。
+  - 依据：第十八批裁决 71，操作员选②，追加原话「既然是最高权限，不应该什么都能看到吗？」；BSM:576「持授权 U 盘密钥的最高权限本人发起的操作，不需要经过任何审批。」
+  - 测试：MasterAuthorityProjectReachJdbcIntegrationTests 的 masterReadsAndWritesAnyProjectsRestrictionSetting、masterSeesAnyProjectsPaymentConfirmations、masterReadsAnyProjectsRefund、masterListsEveryProjectsContracts。
+  - 按裁决 71 改断言的现有用例：PlatformServiceTests.masterHasNoGlobalListOrOrdinaryProfileBypass 改名为 masterSeesAndEditsEveryProject。商户、业务主体、项目、空间、业务主体绑定列表由 0 改为 2；最高权限 updateMerchant 由 403 PROJECT_SCOPE_MISMATCH 改为编辑成功（PlatformService.requireMerchant 走 reach.covers）。
+  - 契约：无变化。
+  362-R1（库存、库房、高价值复核与交接链读取对最高权限看全部）
+  - 改法：AuthorizationService 新增 currentMerchantReadScope()，最高权限返回空，其余同 currentMerchantScope，只给读取用。以下读取改取它：InventoryService.listInventoryItems、listStockBalances、getCostSummary、listBarConsumptionStats、listTraceHandovers，InventoryStockMovementService.listStockMovements，WarehouseService.listWarehouses，InventoryHighValueReviewService.listHighValueReviews。InventoryService.getTraceHandover 改为先取单头，再按 currentMerchantReadScope 核商户（拒绝时 403 CROSS_MERCHANT_FORBIDDEN）。交接补录、异常复核仍走 requireOwnedHandover；写入口不变；不挂商户的项目员工读库存台账仍 403（82b-R6）。
+  - 契约：listInventoryItems、listStockBalances、listStockMovements、getInventoryCostSummary、listBarConsumptionStats、listWarehouses、listHighValueReviews、listTraceHandovers、getTraceHandover 的说明各补最高权限看全部一句，x-data-scope 不变。
+  - 依据：第十八批裁决 71「既然是最高权限，不应该什么都能看到吗？」；BSM:576。
+  - 测试：InventoryMasterReadsJdbcIntegrationTests 的 masterReadsEveryMerchantsInventory、masterReadsAnotherMerchantsTraceHandover、merchantAndProjectStaffKeepTheirScope。
+  368-R1（物业费费率的建与查按入口权限码可触及的项目判）
+  - 改法：FinanceService.createPropertyFeeRate 的执行体 createPropertyFeeRateInternal，与 FinanceService.listPropertyFeeRates，都改用 AuthorizationService.requireReachableProject（finance.property_fee.manage），越权 403 CROSS_PROJECT_FORBIDDEN。建的失败落 finance_property_fee.rate_set_failed 留痕。
+  - 契约：createPropertyFeeRate、listPropertyFeeRates 的 x-data-scope 由 platform 改为 project，x-failure-codes 补 CROSS_PROJECT_FORBIDDEN。
+  - 依据：PGM:659「所有业务数据默认按项目隔离……数据的项目与商户隔离不提供关闭开关」；PGM:744「前端隐藏只是辅助，后端接口必须独立校验。」
+  - 测试：PropertyFeeRateProjectScopeJdbcIntegrationTests 的 projectFinanceOnlyReachesOwnProject、crossProjectRoleAndPlatformAdminReachProjectB。
+  365-R1（冻结解冻按退卡范围口径，并在储值退卡页给出入口）
+  - 后端：StoredValueService.freeze、unfreeze 改调 StoredValueRefundLookupService.requireRefundScope；StoredValueRefundLookupService.lookup 改为持 customer.stored_value.refund 或 customer.stored_value.freeze 任一即可。
+  - 前端：储值退卡页 StoredValueRefundPage（ADM-CUS-006）操作列加「冻结」「解冻」（HighRiskConfirm，权限码 customer.stored_value.freeze），分支同退卡；账户关闭待退而冻结的商户卡不给解冻。adminRoutes 的 ADM-CUS-006 加冻结码；AdminApp.routePermissions 改为持任一码可进；页面矩阵 ADM-CUS-006 行补权限码、接口与动作。
+  - 契约：freezeStoredValueAccount、unfreezeStoredValueAccount 补范围口径说明与 x-failure-codes；lookupStoredValueRefundCards 补 x-permissions-any-of。
+  - 依据：BSM:833「充值必须支付成功才入账、不凭空加余额，账户可冻结/解冻。」「商户的员工只能管理本商户发行的储值卡。」；ENUM:86「余额管理与退款均由长沙项目公司负责」。
+  - 测试：StoredValueFreezeScopeJdbcIntegrationTests 的 projectSideStaffFreezesOwnProjectsGeneralCardOnly、merchantStaffFreezesOwnCardsAndMasterFreezesAnyCard、freezeHolderCanLookUpCards；前端 StoredValueRefundPage.test.tsx 的「不挂商户的账号冻结通用卡：确认后发冻结请求，带项目与商户，随后重新查卡」「已冻结的通用卡显示解冻；带账户关闭待退事项的商户卡不显示解冻」。
+  366-R1（账户关闭自动登记应退本金，不按操作人本人范围拦）
+  - 改法：FinanceService.recordStoredValuePayoutRefund 末尾加参数 accountClosure；客人自助或账户关闭都按系统路径，商户闸与 checkProjectScope 不按操作人范围拦，按卡自身的商户与项目登记待退。StoredValueService.closeCardsOnAccountClosure 传 true，refundConsumption 与 doRefund 传 false。
+  - 契约：无变化。
+  - 依据：BSM:833「账户关闭的，储值本金退还本人。对需要退还本金的注销或拉黑事项，系统自动生成应退本金事项」；ENUM:68「黑名单全平台通用」。
+  - 测试：CustomerBlacklistFinalApproverJdbcIntegrationTests 的 entertainmentPlatformHeadApprovesAndEveryCardGetsAPendingRefund、masterAsFinalApproverClosesTheAccount。
+  366-R2（黑名单申请列表按入口权限码可触及的项目给终审人看）
+  - 改法：CustomerAccountStatusService.listBlacklistRequests 中持申请码或终审码的，按 AuthorizationService.projectReach（持 customer.blacklist.approve 时用它，否则用 customer.blacklist.request）的 covers 过滤；夜班值班经理分支不变。
+  - 契约：listCustomerBlacklistRequests 的说明补可见范围一句，x-data-scope 不变。
+  - 依据：ENUM:68「由保安团队申请、夜班值班经理批准、娱乐平台负责人批准」；PGM:659「被分配了可跨项目角色的员工（含经岗位得到），在所分配的权限内可以查看、处理该角色可查看项目的数据。」
+  - 测试：CustomerBlacklistFinalApproverJdbcIntegrationTests.requestListFollowsTheEntryPermissionsReach。
+- 18BC 落地位置补记·第 369 条、第 375 条（乙组；369-R4 文档同步由文档组另写）。本段新增操作 1 个（countUnfinishedRiskAlerts），没有迁移。
+  ① 369-R1：统一风控预警队列按多来源取、未处理条数接口、转办记录与状态冲突报错改中文
+    - 列表来源（RiskAlertController.search → RiskAlertService.search → RiskAlertRepository.search 与 JdbcRiskAlertRepository.search）：
+      source_domain 可多个；为空不按来源过滤；逐个经 requireDomain 校验。
+    - 新增 countUnfinishedRiskAlerts（RiskAlertController.countUnfinished、RiskAlertService.countUnfinished、RiskAlertRepository.countUnfinished）：
+      返回 open_count，口径为待处理、处理中，来源与范围同列表，不留痕。
+    - 转办记录原因（RiskAlertService.transferReason）写「转办给 对象编号」；状态冲突（RiskAlertService.requireStatusIn）报「风险预警状态已变化，不能执行该操作，请刷新后查看」。
+    - 服务端模块 ServerModuleRoutes：队列归风控，open-count 归总控。
+    - 依据：BSM:1657「集中汇集账户与出入场行为异常……供风控岗与管理层查看与处置」；BSM:1835「经营看板显示异常预警的入口与未处理条数计数卡片」；BSM:1438、BSM:1448；PGM:287「……提示、报错……必须全部为中文」。
+    - 测试：EvidenceEventJdbcIntegrationTests 的 listingByThreeSourcesKeepsChurnFrequentEntryAndParkingButNotMirrors、openCountCountsOnlyUnfinishedAlertsOfTheGivenSources、transferReasonAndStateErrorAreChinese；ServerModuleRoutesTests.unifiedRiskAlertQueueBelongsToRiskAndOpenCountToOverview。
+  ② 369-R6（控制席并入）：队列的列表、明细、未处理条数与认领、转办、处置按项目隔离
+    - RiskAlertService 新增 Scope 与 scope(permission)。挂商户的账号照旧只按商户；其余按入口权限码的 AuthorizationService.projectReach。
+    - 列表与计数只取可触及项目内带 project_id 的预警；平台位（平台管理员、最高权限）不按项目过滤。
+    - RiskAlertService.requireScopedAlert 对不可触及或不带项目的预警报 403 CROSS_PROJECT_FORBIDDEN；requireOpenForFlow 按各动作的入口权限码判。
+    - 依据：PGM:659「所有业务数据默认按项目隔离，普通岗位没有跨项目查看权；只有项目之上的获授权岗位才可以跨项目汇总。」；18BC 控制席判定。
+    - 测试：EvidenceEventJdbcIntegrationTests.projectStaffSeeAndHandleOnlyTheirOwnProjectsAlerts。
+  ③ 369-R5：停车人工放行预警摘要里的时间改中文北京时间
+    - ParkingReleaseService 常量 TIME_TEXT（yyyy年M月d日 HH:mm，LocalZone.ID）。
+    - 依据：PGM:287「……日期时间等，必须全部为中文」；BSM:1438「人工放行必须记录原因、操作人、车牌和时间」。
+    - 测试：ParkingManualReleaseJdbcIntegrationTests.releaseRecordsReasonOperatorPlateTimeAndRiskAlert。
+  ④ 369-R2：新增后台「异常预警」页（ADM-RISK-002）
+    - 页面：apps/web/src/admin/pages/ExceptionAlertsPage。
+      - 来源取平台、票务、停车三类（EXCEPTION_ALERT_SOURCES）。
+      - 状态按待处理、处理中、已处置筛选。
+      - 明细列所属综合体、关联编号与处置记录。
+      - 按状态认领、转办（须先认领）、填写处置结论处置。
+    - 接线与字典：
+      - 路由 adminRoutes、分派 AdminApp。
+      - 结果名在 fieldLabels 的 VALUE_LABELS。
+      - customer.churn 中文名「同一手机号注销注册超限」在 customer-core 的 statusLabels。
+      - 页面矩阵行与 verify-full-admin-page-matrix 的 bespokePages 名单。
+    - 依据：BSM:1657「新增「异常预警」页面……每条预警的查看、转办与处置结论均须留痕。」；BSM:1438、BSM:1448；第十二批裁决 14「由人在异常队列里按审批结果处理关闭」。
+    - 测试：ExceptionAlertsPage.test.tsx 四条；statusLabels.test.ts 的 customer.churn 断言。
+  ⑤ 369-R7（控制席并入）：风险等级按四级名显示
+    - fieldLabels 的 KEY_VALUE_LABELS.risk_level：normal 低、suspicious 中、high 高、critical 严重。共用码表 statusLabels 不改。
+    - RiskAlertsPage 新增 riskLevelLabel，列表、明细、选中卡与新建下拉都改走它；新页同表。
+    - 依据：ENUM:217「风险四级 低（进列表）、中（待复核）、高（生成工单+通知主管）、严重（可冻结/停用/强制审批）」。
+    - 测试：RiskAlertsPage.test.tsx「normal、suspicious、high、critical 显示低、中、高、严重」。
+  ⑥ 369-R3：总控驾驶舱加「异常预警」入口与未处理条数卡
+    - OverviewPage：持 risk_alert.view 才请求 countUnfinishedRiskAlerts，点数字进 ADM-RISK-002，失败显示「—」。
+    - 页面矩阵 ADM-OV-001 行同步。
+    - 依据：BSM:1835「异常预警入口：经营看板显示异常预警的入口与未处理条数计数卡片，点击进入异常预警页面；看板上的计数只是入口提示……」；DEC-R7-03。
+    - 测试：OverviewPage.exceptionalerts.test.tsx 三条。
+  ⑦ 375-R1：打开单条预警明细记查看留痕
+    - getRiskAlertDetail（RiskAlertService.getDetail）改走 AuditedOperationExecutor.readSingle：成功记 exception.alert_viewed，业务编号为该预警；失败记 exception.alert_view_failed。
+    - audit-labels 补两条中文名。
+    - 依据：BSM:1657「每条预警的查看、转办与处置结论均须留痕。」；DEC-R6-11。
+    - 测试：EvidenceEventJdbcIntegrationTests.openingOneRiskAlertLeavesAViewTrailNamingIt。
+  ⑧ 375-R2：列表查看留痕带本次列出的预警编号
+    - AuditedOperationExecutor.readPage 新增带额外明细的重载，原两参版本委托给它。
+    - searchRiskAlerts（RiskAlertService.search）的成功留痕 metadata 记 count 与 alert_ids。
+    - 依据：BSM:1657「每条预警的查看……均须留痕。」。
+    - 测试：EvidenceEventJdbcIntegrationTests.listingRiskAlertsRecordsWhichAlertsWereShown。
+- 第十八批 BC 段契约落地（契约代理；新增 1 个操作 countUnfinishedRiskAlerts，本段没有迁移、没有新权限码）：
+  - 362-R1：listInventoryItems、listStockBalances、listStockMovements、getInventoryCostSummary、listBarConsumptionStats、listWarehouses、listHighValueReviews、listTraceHandovers、getTraceHandover 的 description 各补「最高权限（第十八批裁决 71）看全部商户与项目」。x-data-scope 不变。代码位置：AuthorizationService.currentMerchantReadScope、AuthorizationService.currentProjectScopeQuietly、InventoryService.getTraceHandover。依据：第十八批裁决 71；BSM:576「持授权 U 盘密钥的最高权限本人发起的操作，不需要经过任何审批。」
+  - 368-R1：createPropertyFeeRate、listPropertyFeeRates 的 x-data-scope 由 platform 改为 project，x-failure-codes 新增 CROSS_PROJECT_FORBIDDEN；description 写明 project_id 须在 finance.property_fee.manage 可触及范围内（平台管理员、最高权限全部；可跨项目角色按勾选），否则 403 CROSS_PROJECT_FORBIDDEN；create 的失败留痕为 finance_property_fee.rate_set_failed。代码位置：FinanceService.createPropertyFeeRateInternal、FinanceService.listPropertyFeeRates，经 AuthorizationService.requireReachableProject。依据：PGM:659「所有业务数据默认按项目隔离，普通岗位没有跨项目查看权；只有项目之上的获授权岗位才可以跨项目汇总。」；PGM:744「前端隐藏只是辅助，后端接口必须独立校验。」
+  - 365-R1：freezeStoredValueAccount、unfreezeStoredValueAccount 的 description 补范围口径，句式同 refundStoredValueAccount 的 278-R1 句。x-data-scope 仍为 project。x-failure-codes 为：freeze 取 CROSS_MERCHANT_FORBIDDEN、CROSS_PROJECT_FORBIDDEN、STORED_VALUE_ACCOUNT_NOT_FOUND、STORED_VALUE_ACCOUNT_CLOSED、STORED_VALUE_ALREADY_FROZEN；unfreeze 取 CROSS_MERCHANT_FORBIDDEN、CROSS_PROJECT_FORBIDDEN、STORED_VALUE_ACCOUNT_NOT_FOUND、STORED_VALUE_NOT_FROZEN（已销户的卡解冻按现码报 STORED_VALUE_NOT_FROZEN）。lookupStoredValueRefundCards 新增 x-permissions-any-of [customer.stored_value.refund, customer.stored_value.freeze]，description 改为「两码都不持 403 PERMISSION_DENIED」。代码位置：StoredValueService.freeze、StoredValueService.unfreeze、StoredValueRefundLookupService.requireRefundScope、StoredValueRefundLookupService.lookup。依据：BSM:833「账户可冻结/解冻。」「商户的员工只能管理本商户发行的储值卡。」；ENUM:86「余额管理与退款均由长沙项目公司负责」。
+  - 366-R2：listCustomerBlacklistRequests 的 description 改为：持申请码或终审码的按入口权限码可触及的项目看（持终审码按终审码，否则按申请码；平台管理员与最高权限全部，可跨项目角色按勾选）；其余人只看本人此刻当班夜班值班经理的项目。x-data-scope 不变。代码位置：CustomerAccountStatusService.listBlacklistRequests。依据：ENUM:68「黑名单全平台通用，由保安团队申请、夜班值班经理批准、娱乐平台负责人批准。」；PGM:659「被分配了可跨项目角色的员工（含经岗位得到），在所分配的权限内可以查看、处理该角色可查看项目的数据。」
+  - 369-R1、369-R6、375-R2：searchRiskAlerts 的 source_domain 改为数组参数（style form、explode false，可逗号分隔多个，为空不按来源过滤，不支持的来源 400 VALIDATION_FAILED），responses 补 400，x-data-scope 由 platform 改为 project。范围口径：挂商户账号只看本商户；其余按 risk_alert.view 可触及的项目；不带项目的预警只有平台管理员与最高权限可见。x-failure-codes 为 VALIDATION_FAILED、PERMISSION_DENIED、PROJECT_SCOPE_REQUIRED。成功留痕 exception.alerts_viewed 的 metadata 带 count 与 alert_ids。新增 countUnfinishedRiskAlerts（GET /api/v1/evidence/risk-alerts/open-count，risk_alert.view，x-data-scope project，终端 web，不记留痕；200 的 data.open_count 为 int64，计待处理、处理中两种状态；失败码同列表）。代码位置：RiskAlertController.search、RiskAlertController.countUnfinished、RiskAlertService.search、RiskAlertService.countUnfinished、RiskAlertService.Scope、RiskAlertRepository.countUnfinished、AuditedOperationExecutor.readPage（带 extraMetadata 的重载）。依据：BSM:1657「集中汇集账户与出入场行为异常……供风控岗与管理层查看与处置」「每条预警的查看、转办与处置结论均须留痕。」；BSM:1835「经营看板显示异常预警的入口与未处理条数计数卡片，点击进入异常预警页面；看板上的计数只是入口提示，预警的查看、转办与处置仍在异常预警页面完成。」；PGM:659 原句同上。
+  - 375-R1、369-R6：getRiskAlertDetail 的 x-audit-event-success 改为 exception.alert_viewed，x-audit-event-failure 改为 exception.alert_view_failed；x-data-scope 改 project；responses 补 404；x-failure-codes 为 RISK_ALERT_NOT_FOUND、CROSS_PROJECT_FORBIDDEN、CROSS_MERCHANT_FORBIDDEN、PERMISSION_DENIED、PROJECT_SCOPE_REQUIRED。description 写明：每打开一次记一条成功留痕，business_id 为该预警编号；不存在或不在范围内记失败留痕。代码位置：RiskAlertService.getDetail、RiskAlertService.requireScopedAlert。依据：BSM:1657「每条预警的查看、转办与处置结论均须留痕。」
+  - 369-R6、369-R1：claimRiskAlert、transferRiskAlert、escalateRiskAlert、resolveEvidenceRiskAlert、dismissRiskAlert 的 x-data-scope 由 platform 改为 project，范围按各自入口权限码可触及的项目；x-failure-codes 为 CROSS_MERCHANT_FORBIDDEN、CROSS_PROJECT_FORBIDDEN、PROJECT_SCOPE_REQUIRED（不挂商户账号原来的 MERCHANT_SCOPE_REQUIRED 改为此码）、INVALID_STATE。409 的 message 为「风险预警状态已变化，不能执行该操作，请刷新后查看」；transferRiskAlert 的转办动作记录 reason 写「转办给 对象编号」或「原因（转办给 对象编号）」。代码位置：RiskAlertService.requireOpenForFlow、RiskAlertService.requireStatusIn、RiskAlertService.transferReason。依据：PGM:659 原句同上；PGM:287 提示、报错须全部为中文。
+  - 363-R1、366-R1：无契约变化。reportRiskAlert 不变。
+- 18BC 汇合段 J（e2e 与门禁）：
+  - e2e 改法与位置：
+    - full-admin-remaining.spec.ts 的 remainingRoutes 与 openAdminRoute 加 ADM-RISK-002「异常预警」，断言三处：异常预警页可见；列表含「高频出入场」；风险等级格显示「中」（369-R2、369-R7；依据 ENUM:217「风险四级 低（进列表）、中（待复核）、高（生成工单+通知主管）、严重（可冻结/停用/强制审批）」、BSM:1657「新增「异常预警」页面」）。
+    - support/mock-api.ts 给 searchRiskAlerts 加一行预警桩，给 countUnfinishedRiskAlerts 加 { openCount: 3 } 桩。
+    - 视觉基线只重拍两张桌面图：full-admin-overview-desktop（总控驾驶舱新增「异常预警」未处理条数卡，369-R3，BSM:1835）、full-admin-ops-readiness-desktop（侧栏新增「异常预警」导航项）。差异已核只在新卡（及同行卡行高）与新导航项；两张移动端基线没变。
+    - ADM-RISK-001、ADM-CUS-006 现有断言不受影响，没改。
+  - 门禁结论：
+    - 后端全量 tests=7119 failures=0 errors=0。
+    - 前端 typecheck 0 错，vitest 361 files / 2091 tests 全过。
+    - customer-core、customer-app、customer-miniapp、merchant-app 单测全过。
+    - 安卓员工端 gradle test 127 条全过，android-app 编译通过。
+    - chromium 五份后台 spec 33 passed。
+    - 四份生成物在镜像重生成后 verify:p0-contract 全过。
+    - yaml 与 json 深比较一致。
+    - 本段增量：新增 1 个操作（countUnfinishedRiskAlerts），无迁移。
+- 18BC D-docs（文档组）：按各实现段的「文档要点」，把九份 PRD 中与现码不符或写「未承载」的现状句就地改成现码实情。每份升一次版、修订表加一行，不新增业务规则，不扩表。本组无代码、无测试、无迁移、无新增操作。
+  ① 证据留痕与风控 PRD §8.2
+  - 原「实现状态」段标为已被更正的历史记录。
+  - 高频出入场现状句改指「异常预警」页（ADM-RISK-002），风险等级「中」。
+  - 新增第 369、375 条实现现状：
+    - 来源只取平台、票务、停车三类；风险等级按 ENUM:217 显示低、中、高、严重。
+    - 动作：认领；转办须先认领；填写处置结论关闭。
+    - 队列按入口权限码可触及的项目隔离（RiskAlertService 内按 AuthorizationService.projectReach 判），不带项目的只有平台管理员与最高权限可见可办。
+    - 留痕：searchRiskAlerts 成功留痕 exception.alerts_viewed 带 alert_ids；getRiskAlertDetail 记 exception.alert_viewed／exception.alert_view_failed。
+    - 驾驶舱卡 countUnfinishedRiskAlerts。
+    - 停车人工放行摘要时间写中文北京时间；ADM-RISK-001 风险等级同名。
+  - 依据：BSM:1657「每条预警的查看、转办与处置结论均须留痕。」；BSM:1835；ENUM:217「风险四级低（进列表）、中（待复核）、高（生成工单+通知主管）、严重（可冻结/停用/强制审批）」；PGM:659「所有业务数据默认按项目隔离」。
+  ② 票务 PRD §8.3.1
+  - 高频出入场实现现状改指「异常预警」页，风险等级「中」。
+  - 依据：BSM:1657、ENUM:217。
+  ③ 会员与等级 PRD §10.1
+  - 注销重注册异常预警末句「页面尚未承载（待开发清单第 369 条）」改为在「异常预警」页查看与处置。
+  - 黑名单补第 366 条：FinanceService.recordStoredValuePayoutRefund 的账户关闭路径不按终审人范围拦；listCustomerBlacklistRequests 按入口权限码可触及的项目看。
+  - 依据：ENUM:68「黑名单全平台通用」；BSM:833「账户关闭的，储值本金退还本人」。
+  ④ 经营看板 PRD §3A
+  - 「落地状态」改为驾驶舱「异常预警」卡已落地（countUnfinishedRiskAlerts），文首补同步记录。
+  - 依据：BSM:1835「经营看板显示异常预警的入口与未处理条数计数卡片」。
+  ⑤ 地产全链 PRD §6A
+  - 停车逃费、超长滞留与人工放行在「异常预警」页由物业认领、转办、填写处置结论关闭；人工放行摘要时间写中文北京时间。
+  - 依据：BSM:1438「超长滞留、逃费记录进异常队列由物业跟进」；PGM:287；第十二批裁决 14「由人在异常队列里按审批结果处理关闭」。
+  ⑥ 平台治理 PRD §7.8.1
+  - 补第 363 条：AuthorizationService.projectReach、currentProjectScopeQuietly 对最高权限按全部项目；currentMerchantScope 不改，读取另加 currentMerchantReadScope。
+  - 依据：第十八批裁决 71「既然是最高权限，不应该什么都能看到吗？」；BSM:576「持授权 U 盘密钥的最高权限本人发起的操作，不需要经过任何审批。」
+  ⑦ 供应链库存 PRD §10.1「权限与数据隔离」行
+  - 补第 362 条：listInventoryItems、listStockBalances、listStockMovements、getInventoryCostSummary、listBarConsumptionStats、listWarehouses、listHighValueReviews、listTraceHandovers、getTraceHandover 对最高权限看全部；写入口、交接补录与异常复核不变。
+  - 依据：第十八批裁决 71、BSM:576。
+  ⑧ 财务结算 PRD §13.3
+  - 补第 368 条：createPropertyFeeRate、listPropertyFeeRates 按 finance.property_fee.manage 可触及的项目判，越权 403 CROSS_PROJECT_FORBIDDEN。
+  - 依据：PGM:659；PGM:744「前端隐藏只是辅助，后端接口必须独立校验。」
+  ⑨ 储值 PRD
+  - §7 退卡页权限句补「持冻结码也可进入」。
+  - §8 补第 365 条：入口在 ADM-CUS-006；freezeStoredValueAccount、unfreezeStoredValueAccount 按 StoredValueRefundLookupService.requireRefundScope 口径；lookupStoredValueRefundCards 持退卡码或冻结码任一即可。
+  - 依据：BSM:833「账户可冻结/解冻」；ENUM:86。
+  校验：node tools/verify-full-admin-page-matrix.mjs 通过；git diff --check 通过。
+- 18BC 收尾复核修正（2026-11-20）：按收尾复核成立的意见 1、2、4 与控制席补充修正；本轮没有迁移，新增操作 0 个。
+  ① 意见 1（异常预警页结果区）：ExceptionAlertsPage 的 makeResult 不再把接口返回的整条 RiskAlertRecord 交给结果区（来源业务域 parking、ticketing 与首报人 system:parking 会原样上屏，状态显示共用码表的「已解决」而页内为「已处置」），只放动作名（结果区按 VALUE_LABELS 显示「异常预警已认领」「异常预警已转办」「异常预警已处置」）与预警编号；页内列表与明细照旧中文。新用例：ExceptionAlertsPage.test.tsx「认领、转办、处置成功后结果区只写动作名与预警编号」（结果区不含 parking、ticketing、system:、已解决，含动作名与预警编号）。依据 PGM:287「展示给用户的一切文字，包括菜单、页面标题、字段名、状态、枚举取值、按钮、提示、报错、导出文件表头与内容、短信与通知、日期时间等，必须全部为中文」「可以不用中文的只有四样，没有第五样：单据号、设备编号、二维码内容、系统内部标识符。」
+  ② 意见 2（异常预警页时间）：ExceptionAlertsPage 列表「上报时间」、明细「上报时间」与处置记录各条时间改按北京时间显示年月日时分（照 MerchantZoneSettlementsPage 的 toLocaleString zh-CN、timeZone Asia/Shanghai 写法），与 369-R5 停车人工放行摘要的北京时间同口径；全局 cnDate 不改。新用例：ExceptionAlertsPage.test.tsx「上报时间与处置记录时间按北京时间显示」（created_at 为 2026-11-19T17:30:00Z 时列表与明细显示 2026年11月20日 01:30）。依据 PGM:287；BSM:1438「人工放行必须记录原因、操作人、车牌和时间」。
+  ③ 意见 4（冻结、解冻的模块归属）：365-R1 之后冻结、解冻接口全仓只有储值退卡页（ADM-CUS-006）调用（apps、packages 已核），ServerModuleRoutes 的 web 表在 18AZ 储值退卡三条之后加 /api/v1/loyalty/stored-value/{customer_id}/freeze 与 /unfreeze 归 governance，治理模块关闭后与同页查卡、退卡一并被模块闸拒绝；ServerModuleRoutesTests.storedValueRefundPageApisBelongToGovernance 补两条断言。依据 PGM:737「关闭后菜单不可见或不可点，接口也要拒绝业务动作。」；PGM:744「前端隐藏只是辅助，后端接口必须独立校验。」；第 100 条 100-R1、第 247 条 247-R1 页面独用接口定模块。
+  ④ 控制席补充（契约）：getRiskAlertDetail 的 200 响应由分页响应改引新 schema RiskAlertDetail（alert 预警主记录与 actions 处置动作流水，字段照 RiskAlertDetail、RiskAlertRecord、RiskAlertActionRecord 现码，蛇形键、中文说明）；claimRiskAlert、transferRiskAlert、escalateRiskAlert、resolveEvidenceRiskAlert、dismissRiskAlert 补 404 响应与 x-failure-codes RISK_ALERT_NOT_FOUND（RiskAlertService.requireScopedAlert 抛出），与 getRiskAlertDetail 写法一致；yaml 与 json 同改，操作数不变，security-scans 两份只改 OpenAPI SHA-256 行。
+  ⑤ 意见 3 与意见 2 的全局部分本段不改：已登记待开发清单第 377 条（cnDate 不换算北京时间）、第 378 条（企微合规复核、经营分析、只读经营分析三页风险等级），待核实。

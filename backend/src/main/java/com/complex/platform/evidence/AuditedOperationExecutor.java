@@ -25,8 +25,20 @@ public class AuditedOperationExecutor {
     }
 
     public <T> PageResponse<T> readPage(AuditedOperation operation, Supplier<List<T>> action) {
+        return readPage(operation, action, items -> Map.of());
+    }
+
+    /**
+     * 同上，成功事件除条数外另带按本次结果算出的明细（第十八批 BC 段 375-R2：风控预警列表记本次列出的预警编号，
+     * BSM:1657「每条预警的查看……均须留痕」）；失败事件照旧只记错误码。
+     */
+    public <T> PageResponse<T> readPage(AuditedOperation operation, Supplier<List<T>> action,
+            Function<List<T>, Map<String, Object>> extraMetadata) {
         try {
             List<T> items = action.get();
+            Map<String, Object> metadata = new java.util.LinkedHashMap<>();
+            metadata.put("count", items.size());
+            metadata.putAll(extraMetadata.apply(items));
             auditEventService.recordSuccess(
                     operation.successEvent(),
                     operation.permissionCode(),
@@ -34,7 +46,7 @@ public class AuditedOperationExecutor {
                     "all",
                     null,
                     null,
-                    Map.of("count", items.size())
+                    metadata
             );
             return new PageResponse<>(items, DEFAULT_PAGE, DEFAULT_PAGE_SIZE, items.size());
         } catch (RuntimeException exception) {

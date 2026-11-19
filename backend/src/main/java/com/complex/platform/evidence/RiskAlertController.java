@@ -7,6 +7,7 @@ import com.complex.platform.evidence.dto.RiskAlertActionRequest;
 import com.complex.platform.evidence.dto.RiskAlertReportRequest;
 import com.complex.platform.evidence.dto.RiskAlertResolveRequest;
 import java.util.List;
+import java.util.Map;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -89,13 +90,21 @@ public class RiskAlertController {
 
     @GetMapping
     public ApiResponse<List<RiskAlertRecord>> search(
-            @RequestParam(name = "source_domain", required = false) String sourceDomain,
+            @RequestParam(name = "source_domain", required = false) List<String> sourceDomains,
             @RequestParam(name = "status", required = false) String status,
             @RequestParam(name = "project_id", required = false) String projectId,
             @RequestParam(name = "limit", defaultValue = "20") int limit
     ) {
-        // 查询权限在 service.search 内部统一校验（含 scope 隔离）。
-        return ApiResponse.ok(service.search(sourceDomain, status, projectId, limit));
+        // 查询权限在 service.search 内部统一校验（含 scope 隔离）。来源可逗号分隔多个（第十八批 BC 段 369-R1）。
+        return ApiResponse.ok(service.search(sourceDomains, status, projectId, limit));
+    }
+
+    /** 第十八批 BC 段 369-R1（BSM:1835）：经营看板异常预警卡的未处理条数；字面路径优先于 /{alert_id}。 */
+    @GetMapping("/open-count")
+    public ApiResponse<Map<String, Long>> countUnfinished(
+            @RequestParam(name = "source_domain", required = false) List<String> sourceDomains
+    ) {
+        return ApiResponse.ok(Map.of("open_count", service.countUnfinished(sourceDomains)));
     }
 
     @GetMapping("/{alert_id}")

@@ -1,6 +1,6 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.24
+// 文件版本：V0.25
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.LocalZone;
@@ -252,7 +252,7 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
                 "inventory.stock.view",
                 "inventory_item",
                 () -> {
-                    Optional<String> scope = authorizationService.currentMerchantScope();
+                    Optional<String> scope = authorizationService.currentMerchantReadScope();
                     return scope.map(repository::listInventoryItemsByMerchant)
                                 .orElseGet(repository::listInventoryItems);
                 }
@@ -3012,7 +3012,7 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
                 () -> {
                     // C2：商户员工按 merchant 隔离；商户空但项目非空（项目员工）按 project 隔离；
                     // 平台管理员（二者皆空）看全量。杜绝项目员工越读他项目/全平台库存余额。
-                    Optional<String> merchantScope = authorizationService.currentMerchantScope();
+                    Optional<String> merchantScope = authorizationService.currentMerchantReadScope();
                     if (merchantScope.isPresent()) {
                         return repository.listStockBalancesByMerchant(merchantScope.get());
                     }
@@ -3164,7 +3164,7 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
             if (end.isBefore(start)) {
                 throw ApiException.badRequest("VALIDATION_FAILED", "期间结束日期不能早于开始日期");
             }
-            String scope = authorizationService.currentMerchantScope().orElse(null);
+            String scope = authorizationService.currentMerchantReadScope().orElse(null);
             String merchantId = scope != null ? scope : trimToNull(merchantIdParam);
             String projectId = scope != null ? null
                     : authorizationService.currentProjectScopeQuietly().orElse(null);
@@ -3205,7 +3205,7 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
             if (end.isBefore(start)) {
                 throw ApiException.badRequest("VALIDATION_FAILED", "期间结束日期不能早于开始日期");
             }
-            String merchantId = authorizationService.currentMerchantScope().orElse(null);
+            String merchantId = authorizationService.currentMerchantReadScope().orElse(null);
             String projectId = merchantId != null ? null
                     : authorizationService.currentProjectScopeQuietly().orElse(null);
             String bar = days().barOfMerchant(merchantId);
@@ -4006,12 +4006,19 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
     /** 第十八批 F 段第 14 条 14-R2：按溯源码列交接单（商户账号只列本商户，平台管理员全列），新建在前。 */
     public List<TraceHandoverRecord> listTraceHandovers(String traceCode) {
         return repository.listTraceHandoversByTraceCode(requireText(traceCode, "trace_code"),
-                authorizationService.currentMerchantScope().orElse(null));
+                authorizationService.currentMerchantReadScope().orElse(null));
     }
 
     /** 14-R2：交接链视图——原扫码五段、异常、人工补录单并列（BSM:1201「补录记录与原始扫码记录并列展示、互不覆盖」）。 */
     public TraceHandoverChainView getTraceHandover(String handoverId) {
-        return chainView(requireOwnedHandover(requireText(handoverId, "handover_id")).id());
+        // 第十八批 BC 段 362-R1：详情读取按 currentMerchantReadScope（最高权限看全部商户）；补录、异常复核两个写入仍走 requireOwnedHandover
+        TraceHandoverRecord header = requireHandover(requireText(handoverId, "handover_id"));
+        authorizationService.currentMerchantReadScope().ifPresent(scope -> {
+            if (!scope.equals(header.merchantId())) {
+                throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN", "无权操作其他商户的交接记录");
+            }
+        });
+        return chainView(header.id());
     }
 
     /**

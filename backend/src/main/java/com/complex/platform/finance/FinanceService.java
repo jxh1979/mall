@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.53
+// 文件版本：V0.54
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -1344,10 +1344,13 @@ public class FinanceService implements TerminationSettlementPort {
                 () -> createPropertyFeeRateInternal(request));
     }
 
-    /** 列出某项目的物业费费率（含默认与各期）。 */
+    /**
+     * 列出某项目的物业费费率（含默认与各期）。第十八批 BC 段 368-R1（PGM:659「所有业务数据默认按项目隔离……数据的项目与商户隔离不提供关闭开关」；
+     * PGM:744「前端隐藏只是辅助，后端接口必须独立校验。」）：项目须在 finance.property_fee.manage 可触及范围内，否则 403 CROSS_PROJECT_FORBIDDEN。
+     */
     public List<PropertyFeeRateRecord> listPropertyFeeRates(String projectId) {
-        authorizationService.requirePermission("finance.property_fee.manage");
-        return repository.listPropertyFeeRates(requireText(projectId, "project_id"));
+        return repository.listPropertyFeeRates(authorizationService.requireReachableProject(requireText(projectId, "project_id"),
+                "finance.property_fee.manage", "无权查看其他项目的物业费费率"));
     }
 
     /**
@@ -1393,17 +1396,20 @@ public class FinanceService implements TerminationSettlementPort {
      * （该列无外键）。不复用 {@link #createRefund}：其内部强制 target 为 ar_ap_payment 单据，储值退款无 ar_ap 单据。
      * 仅供储值域服务内部调用（调用方已过 customer.stored_value.refund 权限闸并在同一事务/审计留痕），不暴露控制器入口。
      * 幂等：id 由储值退款幂等键派生；重放先核对原来源及金额，保留原支付状态，不能重置已经兑付的待办。
+     * 第十八批 BC 段 366-R1（BSM:833「账户关闭的，储值本金退还本人。对需要退还本金的注销或拉黑事项，系统自动生成应退本金事项」；ENUM:68「黑名单全平台通用」）：
+     * accountClosure＝账户关闭（拉黑、注销）时由系统按卡自身的商户与项目登记待退，与客人自助注销同口径，不按操作人本人的商户、项目范围拦。
      */
     public String recordStoredValuePayoutRefund(String accountId, long payoutCent, String reason,
-            String merchantId, String projectId, String idempotencyKey) {
+            String merchantId, String projectId, String idempotencyKey, boolean accountClosure) {
         String targetId = requireText(accountId, "account_id");
         long amount = requirePositive(payoutCent, "payout_cent");
         String sourceProject = trimToNull(projectId);
         // TK-21-R3：客人自助注销（客人 token 主体）为系统路径，按本人卡登记待退，不过员工的商户/项目范围闸。
         boolean customerSelfService = "customer".equals(authorizationService.currentActor().accountType());
+        boolean systemPath = customerSelfService || accountClosure; // 366-R1：账户关闭同为系统路径
         // 第十八批 AZ 段 278-R1（ENUM:86「余额管理与退款均由长沙项目公司负责」）：只拦别的商户的账号，不挂商户的项目侧账号可登记本项目通用卡的待退；
         // 项目仍由下面的 checkProjectScope 核。商户编号取不抛错的 currentMerchantIdQuietly（同 requirePlatformReconciliationAccess）。
-        String callerMerchant = customerSelfService ? null : authorizationService.currentMerchantIdQuietly().orElse(null);
+        String callerMerchant = systemPath ? null : authorizationService.currentMerchantIdQuietly().orElse(null);
         if (callerMerchant != null && !callerMerchant.equals(merchantId)) {
             throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN", "无权操作其他商户的数据");
         }
@@ -1418,7 +1424,7 @@ public class FinanceService implements TerminationSettlementPort {
                     || (sourceProject != null && !sourceProject.equals(original.projectId()))) {
                 throw ApiException.conflict("IDEMPOTENCY_KEY_CONFLICT", "该退款编号已用于其他来源或金额");
             }
-            if (!customerSelfService) checkProjectScope(original.projectId());
+            if (!systemPath) checkProjectScope(original.projectId());
             return original.id();
         }
         String project = sourceProject;
@@ -1427,7 +1433,7 @@ public class FinanceService implements TerminationSettlementPort {
             if (projects.size() == 1) project = projects.getFirst();
         }
         // 商户卡可无独立项目。无法唯一归属时登记待核实，不拿调用者项目补写原卡，也不允许出款。
-        if (!customerSelfService) checkProjectScope(project);
+        if (!systemPath) checkProjectScope(project);
         Instant now = Instant.now();
         FinanceRefundRecord saved = repository.saveRefund(new FinanceRefundRecord(
                 id, targetId, amount, reasonText, "original", DEFAULT_REFUND_DIRECTION, "requested", now,
@@ -4208,7 +4214,10 @@ public class FinanceService implements TerminationSettlementPort {
 
     private PropertyFeeRateRecord createPropertyFeeRateInternal(PropertyFeeRateRequest request) {
         PropertyFeeRateRequest actual = requireRequest(request);
-        String projectId = requireText(actual.projectId(), "project_id");
+        // 第十八批 BC 段 368-R1（PGM:659、PGM:744）：费率没有商户维度，所有账号一律按 finance.property_fee.manage 可触及的项目判；
+        // 闸在执行体内，失败同样落 rate_set_failed 留痕（同出账 349-R1 的位置）。
+        String projectId = authorizationService.requireReachableProject(requireText(actual.projectId(), "project_id"),
+                "finance.property_fee.manage", "无权设置其他项目的物业费费率");
         Long rateBoxed = actual.ratePerSquareMeterCent();
         if (rateBoxed == null || rateBoxed < 0) {
             throw ApiException.badRequest("VALIDATION_FAILED", "每平米费率必须大于等于 0");

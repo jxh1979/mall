@@ -1,6 +1,6 @@
 package com.complex.platform.parking;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import static com.complex.platform.common.Strings.requireText;
 import static com.complex.platform.common.Strings.trimToNull;
@@ -9,6 +9,7 @@ import com.complex.platform.access.AccessActor;
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.access.staff.JdbcStaffRepository;
 import com.complex.platform.common.BusinessDayResolver;
+import com.complex.platform.common.LocalZone;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.PageResponse;
 import com.complex.platform.common.idempotency.IdempotencyService;
@@ -19,6 +20,7 @@ import com.complex.platform.governance.review.SupervisorReviewEvaluateRequest;
 import com.complex.platform.governance.review.SupervisorReviewService;
 import java.sql.Timestamp;
 import java.time.Instant;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -37,6 +39,8 @@ import org.springframework.transaction.annotation.Transactional;
 public class ParkingReleaseService {
 
     static final String RECORD = "parking.release.record";
+    /** 第十八批 BC 段 369-R5（PGM:287「……日期时间等，必须全部为中文」）：摘要里的放行时刻按北京时间写中文。 */
+    private static final DateTimeFormatter TIME_TEXT = DateTimeFormatter.ofPattern("yyyy年M月d日 HH:mm");
     static final String ACTION = "parking.release.waive";
     static final String OBJECT = "parking_manual_release";
     private static final Set<String> REASONS = Set.of("recognition_failed", "gate_fault", "fee_dispute");
@@ -113,7 +117,7 @@ public class ParkingReleaseService {
                 String session = session(project, trimToNull(r.parkingSessionId()), plate, now);
                 String id = "pmr_" + UUID.randomUUID();
                 String summary = "停车人工放行：车牌 " + plate + "，原因 " + REASON_LABELS.get(releaseReason) + "（" + reason + "），操作人 "
-                        + actor.id() + "，时间 " + now + switch (waive) {
+                        + actor.id() + "，时间 " + TIME_TEXT.format(now.atZone(LocalZone.ID)) + switch (waive) {
                             case "free" -> "，申请免费放行";
                             case "reduction" -> "，申请减免 " + reduction + " 分";
                             default -> "";

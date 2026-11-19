@@ -1,4 +1,4 @@
-# P0 OpenAPI Operation 验收矩阵 V0.86
+# P0 OpenAPI Operation 验收矩阵 V0.87
 
 ## 1. 文档定位
 
@@ -17,7 +17,7 @@
 
 ## 3. Operation 清单
 
-> 当前 `docs/openapi/openapi-p0.json` 共 1400 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
+> 当前 `docs/openapi/openapi-p0.json` 共 1401 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
 
 | 标签 | 方法 | 路径 | operationId | 摘要 | 请求体 | 权限 | 认证上下文 | 数据范围 | 终端/设备能力/调用通道 | 幂等 | 成功事件 | 失败事件 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -541,14 +541,15 @@
 | bar | `POST` | `/api/v1/bar/shifts/{shift_id}/resolve` | `resolveBarShift` | 交班复核平账 | `BarShiftResolveRequest` | `finance.daily_close.manage` | `staff-token` | `project-bar-table` | web | 是 | `bar.shift_resolved` | `bar.shift_resolve_failed` |
 | bar | `POST` | `/api/v1/bar/shifts/{shift_id}/sign` | `signBarShift` | 交班单签字 | `BarShiftActionRequest` | `bar.shift.manage` | `staff-token` | `project-bar-table` | web | 是 | `bar.shift_signed` | `bar.shift_sign_failed` |
 | bar | `POST` | `/api/v1/bar/shifts/{shift_id}/witness` | `witnessBarShift` | 交班见证归档 | `BarShiftActionRequest` | `finance.daily_close.manage` | `staff-token` | `project-bar-table` | web | 是 | `bar.shift_witnessed` | `bar.shift_witness_failed` |
-| evidence | `GET` | `/api/v1/evidence/risk-alerts` | `searchRiskAlerts` | 查询风险预警列表 | `-` | `risk_alert.view` | `staff-token` | `platform` | web, mobile_admin | 否 | `exception.alerts_viewed` | `exception.alerts_view_failed` |
+| evidence | `GET` | `/api/v1/evidence/risk-alerts` | `searchRiskAlerts` | 查询风险预警列表 | `-` | `risk_alert.view` | `staff-token` | `project` | web, mobile_admin | 否 | `exception.alerts_viewed` | `exception.alerts_view_failed` |
 | evidence | `POST` | `/api/v1/evidence/risk-alerts` | `reportRiskAlert` | 上报统一风险预警 | `object` | `risk_alert.report` | `staff-token` | `platform` | web, mobile_admin | 是 | `exception.reported` | `exception.report_failed` |
-| evidence | `GET` | `/api/v1/evidence/risk-alerts/{alert_id}` | `getRiskAlertDetail` | 查询风险预警详情 | `-` | `risk_alert.view` | `staff-token` | `platform` | web, mobile_admin | 否 | `not_applicable` | `not_applicable` |
-| evidence | `POST` | `/api/v1/evidence/risk-alerts/{alert_id}/claim` | `claimRiskAlert` | 认领风险预警 | `object` | `risk_alert.claim` | `staff-token` | `platform` | web, mobile_admin | 是 | `exception.claimed` | `exception.claim_failed` |
-| evidence | `POST` | `/api/v1/evidence/risk-alerts/{alert_id}/transfer` | `transferRiskAlert` | 转交风险预警 | `object` | `risk_alert.transfer` | `staff-token` | `platform` | web, mobile_admin | 是 | `exception.transferred` | `exception.transfer_failed` |
-| evidence | `POST` | `/api/v1/evidence/risk-alerts/{alert_id}/escalate` | `escalateRiskAlert` | 升级风险预警 | `object` | `risk_alert.escalate` | `staff-token` | `platform` | web, mobile_admin | 是 | `exception.escalated` | `exception.escalate_failed` |
-| evidence | `POST` | `/api/v1/evidence/risk-alerts/{alert_id}/resolve` | `resolveEvidenceRiskAlert` | 关闭风险预警（需结论） | `object` | `risk_alert.resolve` | `staff-token` | `platform` | web, mobile_admin | 是 | `exception.resolved` | `exception.resolve_failed` |
-| evidence | `POST` | `/api/v1/evidence/risk-alerts/{alert_id}/dismiss` | `dismissRiskAlert` | 忽略关闭风险预警 | `object` | `risk_alert.dismiss` | `staff-token` | `platform` | web, mobile_admin | 是 | `exception.dismissed` | `exception.dismiss_failed` |
+| evidence | `GET` | `/api/v1/evidence/risk-alerts/open-count` | `countUnfinishedRiskAlerts` | 统一风险预警未处理条数（总控驾驶舱异常预警卡） | `-` | `risk_alert.view` | `staff-token` | `project` | web | 否 | `not_applicable` | `not_applicable` |
+| evidence | `GET` | `/api/v1/evidence/risk-alerts/{alert_id}` | `getRiskAlertDetail` | 查询风险预警详情 | `-` | `risk_alert.view` | `staff-token` | `project` | web, mobile_admin | 否 | `exception.alert_viewed` | `exception.alert_view_failed` |
+| evidence | `POST` | `/api/v1/evidence/risk-alerts/{alert_id}/claim` | `claimRiskAlert` | 认领风险预警 | `object` | `risk_alert.claim` | `staff-token` | `project` | web, mobile_admin | 是 | `exception.claimed` | `exception.claim_failed` |
+| evidence | `POST` | `/api/v1/evidence/risk-alerts/{alert_id}/transfer` | `transferRiskAlert` | 转交风险预警 | `object` | `risk_alert.transfer` | `staff-token` | `project` | web, mobile_admin | 是 | `exception.transferred` | `exception.transfer_failed` |
+| evidence | `POST` | `/api/v1/evidence/risk-alerts/{alert_id}/escalate` | `escalateRiskAlert` | 升级风险预警 | `object` | `risk_alert.escalate` | `staff-token` | `project` | web, mobile_admin | 是 | `exception.escalated` | `exception.escalate_failed` |
+| evidence | `POST` | `/api/v1/evidence/risk-alerts/{alert_id}/resolve` | `resolveEvidenceRiskAlert` | 关闭风险预警（需结论） | `object` | `risk_alert.resolve` | `staff-token` | `project` | web, mobile_admin | 是 | `exception.resolved` | `exception.resolve_failed` |
+| evidence | `POST` | `/api/v1/evidence/risk-alerts/{alert_id}/dismiss` | `dismissRiskAlert` | 忽略关闭风险预警 | `object` | `risk_alert.dismiss` | `staff-token` | `project` | web, mobile_admin | 是 | `exception.dismissed` | `exception.dismiss_failed` |
 | finance | `POST` | `/api/v1/finance/deposits/actions` | `recordDepositAction` | 押金台账动作（收取/退还/抵扣/没收） | `object` | `finance.deposit.manage` | `staff-token` | `platform` | web | 是 | `finance.deposit.action_recorded` | `finance.deposit.action_failed` |
 | finance | `POST` | `/api/v1/finance/inventory-variances/post` | `postInventoryVariance` | 库存差异复核入账为 AR/AP | `object` | `finance.inventory_variance.post` | `staff-token` | `platform` | web | 是 | `finance.inventory_variance.posted` | `finance.inventory_variance.post_failed` |
 | finance | `POST` | `/api/v1/finance/turnover-rent/bills` | `billTurnoverRent` | 营业额抽成计费生成应收 | `object` | `finance.turnover_rent.bill` | `staff-token` | `platform` | web | 是 | `finance.turnover_rent.billed` | `finance.turnover_rent.bill_failed` |
@@ -680,8 +681,8 @@
 | integration | `POST` | `/api/v1/integration/polling-checks` | `recordIntegrationPollingCheck` | 登记第三方定时轮询校验快照 | `object` | `integration.retry.manage` | `staff-token` | `platform` | web | 是 | `integration.polling_check.recorded` | `integration.polling_check.record_failed` |
 | ticketing | `POST` | `/api/v1/ticketing/orders/{order_id}/confirm-payment` | `confirmTicketOrderPayment` | 确认票务订单支付成功（回写 paid） | `ConfirmTicketOrderPaymentRequest` | `finance.payment.register` | `staff-token` | `platform` | web, kiosk | 是 | `ticket_order.payment_confirmed` | `ticket_order.payment_confirm_failed` |
 | ticketing | `POST` | `/api/v1/ticketing/orders/{order_id}/cancel` | `cancelTicketOrder` | 取消未支付票务订单（回补库存） | `StatusChangeRequest` | `ticket.order.create` | `staff-token` | `platform` | web, kiosk | 是 | `ticket_order.cancelled` | `ticket_order.cancel_failed` |
-| finance | `GET` | `/api/v1/finance/property-fee/rates` | `listPropertyFeeRates` | 列出某项目的物业费费率 | `-` | `finance.property_fee.manage` | `staff-token` | `platform` | web | 否 | `not_applicable` | `not_applicable` |
-| finance | `POST` | `/api/v1/finance/property-fee/rates` | `createPropertyFeeRate` | 维护物业费费率（项目级、可按期） | `PropertyFeeRateRequest` | `finance.property_fee.manage` | `staff-token` | `platform` | web | 是 | `finance_property_fee.rate_set` | `finance_property_fee.rate_set_failed` |
+| finance | `GET` | `/api/v1/finance/property-fee/rates` | `listPropertyFeeRates` | 列出某项目的物业费费率 | `-` | `finance.property_fee.manage` | `staff-token` | `project` | web | 否 | `not_applicable` | `not_applicable` |
+| finance | `POST` | `/api/v1/finance/property-fee/rates` | `createPropertyFeeRate` | 维护物业费费率（项目级、可按期） | `PropertyFeeRateRequest` | `finance.property_fee.manage` | `staff-token` | `project` | web | 是 | `finance_property_fee.rate_set` | `finance_property_fee.rate_set_failed` |
 | finance | `POST` | `/api/v1/finance/property-fee/bills` | `billPropertyFee` | 物业费按期计费（每平米固定单价 × 面积，不退不补） | `PropertyFeeBillRequest` | `finance.property_fee.manage` | `staff-token` | `project-merchant` | web | 是 | `finance_property_fee.billed` | `finance_property_fee.bill_failed` |
 | finance | `GET` | `/api/v1/finance/entity-taxes` | `listEntityTaxDeclarations` | 税费申报登记分页查询（按经营主体、所属月、税种、状态筛选） | `-` | `finance.entity_tax.view` | `staff-token` | `platform` | web | 否 | `entity_tax.listed` | `entity_tax.list_failed` |
 | finance | `POST` | `/api/v1/finance/entity-taxes` | `declareEntityTax` | 登记税费实际申报金额并提交财务、税务、法务审核与最高确认 | `EntityTaxDeclarationRequest` | `finance.entity_tax.manage` | `staff-token` | `platform` | web | 是 | `entity_tax.declared` | `entity_tax.declare_failed` |

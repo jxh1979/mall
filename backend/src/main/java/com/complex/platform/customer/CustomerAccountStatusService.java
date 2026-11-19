@@ -1,6 +1,6 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import static com.complex.platform.common.Strings.requireText;
 import static com.complex.platform.common.Strings.trimToNull;
@@ -339,14 +339,16 @@ public class CustomerAccountStatusService {
     }
 
     /**
-     * 申请列表：持申请或终审权限的看本项目范围（平台看全部）；其余人只看自己此刻在班当夜班值班经理的项目的申请。
-     * status 为空看全部状态。
+     * 申请列表：持申请或终审权限的看入口权限码可触及的项目（持终审码的按终审码，否则按申请码；平台管理员与最高权限看全部）；
+     * 其余人只看自己此刻在班当夜班值班经理的项目的申请。status 为空看全部状态。
+     * 第十八批 BC 段 366-R2（ENUM:68「由保安团队申请、夜班值班经理批准、娱乐平台负责人批准」；PGM:659「被分配了可跨项目角色的员工（含经岗位得到），
+     * 在所分配的权限内可以查看、处理该角色可查看项目的数据。」）：原按本人归属等于申请项目，归属娱乐平台公司的终审人看不到任何待批申请。
      */
     public List<CustomerBlacklistRequestRecord> listBlacklistRequests(String status) {
         AccessActor actor = authorizationService.currentActor();
-        String scope = authorizationService.isPlatformAdmin(actor) ? null : trimToNull(actor.organizationId());
-        boolean privileged = authorizationService.currentActorHasPermission(REQUEST)
-                || authorizationService.currentActorHasPermission(APPROVE);
+        boolean approver = authorizationService.currentActorHasPermission(APPROVE);
+        boolean privileged = approver || authorizationService.currentActorHasPermission(REQUEST);
+        AuthorizationService.ProjectReach reach = privileged ? authorizationService.projectReach(actor, approver ? APPROVE : REQUEST) : null;
         Instant now = Instant.now();
         List<CustomerBlacklistRequestRecord> rows = jdbc.query("""
                 SELECT * FROM customer_blacklist_requests
@@ -354,7 +356,7 @@ public class CustomerAccountStatusService {
                  ORDER BY CASE status WHEN 'pending' THEN 0 ELSE 1 END, requested_at DESC, id
                 """, new MapSqlParameterSource("status", trimToNull(status)), this::map).stream()
                 .filter(row -> privileged
-                        ? scope == null || scope.equals(row.projectId())
+                        ? reach.covers(row.projectId())
                         : staffRepository.findCurrentNightDuty(actor.id(), row.projectId(), now).isPresent())
                 .toList();
         auditEventService.recordSuccess("customer.blacklist_requests_viewed", REQUEST, "customer_blacklist_request", "list",

@@ -60,7 +60,7 @@ public class WarehouseService {
                 "inventory.warehouse.manage",
                 "warehouse",
                 () -> {
-                    Optional<String> scope = authorizationService.currentMerchantScope();
+                    Optional<String> scope = authorizationService.currentMerchantReadScope();
                     return scope.map(repository::listWarehousesByMerchant)
                                 .orElseGet(repository::listWarehouses);
                 }
