@@ -16,11 +16,11 @@
 
 | 绑定项 | 当前值 |
 |---|---|
-| 生成时的 Git HEAD | `61cea2933a5f498771fea6b21be5597fa745decc`（feature/business-code-batch70-20261106） |
+| 生成时的 Git HEAD | `961170dadb4c77d868c93cb4e24b84f66920f651`（feature/business-code-batch69-20261106） |
 | 生成时工作树 | 干净 |
-| 源码指纹 sha256 | `52374019d3ae6edb5e41eaa7e4b8ed942a5d9f60bac6fa47526519f2d78e3561` |
-| 指纹覆盖文件数 | 3514 |
-| 生成时间 | 2026-11-19T01:58:15.407Z |
+| 源码指纹 sha256 | `8c10d50f631c86f28b702fd3f6e7b553d93360db1cfde442c6272ca06888bb7d` |
+| 指纹覆盖文件数 | 3541 |
+| 生成时间 | 2026-11-19T02:45:22.832Z |
 | 最大有效天数 | 30 |
 
 > 校验规则（`--check`）：若当前源码指纹与本文记录不一致（源码已变更），或本证据超过最大有效天数，则立即 FAIL；陈旧证据不再自欺 PASS。
@@ -50,22 +50,22 @@
 
 | 指标 | 当前值 |
 |---|---:|
-| Surefire suites | 626 |
-| tests | 6979 |
+| Surefire suites | 635 |
+| tests | 7019 |
 | failures | 0 |
 | errors | 0 |
 | skipped | 0 |
-| latest_mtime | 2026-11-19T01:56:32.780Z |
+| latest_mtime | 2026-11-19T02:43:38.632Z |
 
 ## 4. Web 与 UI 验收证据
 
 | 证据 | 当前值 |
 |---|---|
 | Web dist index | 存在 |
-| Web main JS | `apps/web/dist/assets/main-bW9XhLgv.js` 4337 bytes |
+| Web main JS | `apps/web/dist/assets/main-Cyk422af.js` 4337 bytes |
 | 最大静态资源 | `apps/web/dist/assets/vendor-antd-Bh_XtmOr.js` 251112 bytes |
 | 主包过大 warning 预期 | 无 |
-| 前端单元测试源文件 | 354 个文件，1909 条测试定义 |
+| 前端单元测试源文件 | 357 个文件，1920 条测试定义 |
 | Playwright 常规 UI | 报告存在，47 条测试定义 |
 | Playwright 真实后端 UI | 报告缺失，3 条测试定义 |
 | Playwright last-run | passed |
