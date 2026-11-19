@@ -1,6 +1,6 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import com.complex.platform.common.BusinessDayResolver;
 import com.complex.platform.common.LocalZone;
@@ -115,9 +115,7 @@ public class PassPoolTrialService {
         long price = pricing.lowestUnitPriceCent(ticketTypeId, businessDays.businessDate(p, null, Instant.now()));
         List<TicketTypeEntitlementRecord> bindings = ticketing.listTicketTypeEntitlements(ticketTypeId);
         long[] alloc = TicketOrderService.allocateRevenue(bindings, price);
-        long[] full = TicketOrderService.componentFullPrices(bindings);
         long barAlloc = 0L;
-        long discount = 0L;
         int people = 1;
         int times = 1;
         int idx = 0;
@@ -135,17 +133,13 @@ public class PassPoolTrialService {
                     continue;
                 }
                 long[] revenue = TicketOrderService.allocateEvenly(alloc[idx], n);
-                long[] fullPrice = full == null ? null : TicketOrderService.allocateEvenly(full[idx], n);
                 for (int k = 0; k < n; k++) {
                     barAlloc += revenue[k];
-                    if (fullPrice != null) {
-                        discount += Math.max(0L, fullPrice[k] - revenue[k]);
-                    }
                 }
             }
         }
-        long borne = ComprehensiveServiceFee.platformBorneCent(bills.findComboDiscountConfig(p), discount);
-        long gross = barAlloc + borne;
+        // 第十八批 AW 段 293-R1：酒吧毛额即酒吧实付份额（与池快照同口径，不加回折扣）。
+        long gross = barAlloc;
         long route = price == 0L ? 0L : MoneyRounding.prorate(MoneyRounding.bpsOf(price, bills.findMaxRouteFeeBps(p)), barAlloc, price);
         long sales = 0L;
         for (String channel : TicketOrderService.THIRD_PARTY_SALES_CHANNELS) {

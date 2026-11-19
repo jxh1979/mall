@@ -1,6 +1,6 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.08
+// 文件版本：V0.09
 
 import com.complex.platform.common.money.MoneyRounding;
 import com.complex.platform.finance.FinanceService;
@@ -365,13 +365,13 @@ public class TicketDistributionSettlementService {
         Instant windowStart = window[0];
         Instant windowEnd = window[1];
 
-        // D6 套票折扣归属(§7.4)：项目级配置（默认 platform_absorb）。折扣额已在核销时逐笔落 discount_amount_cent（append-only 账本），
-        //   本引擎按 discount_bearer 应用——项目承担部分让商户拿满额、并记入 bill.combo_discount_cent。无折扣(折扣额=0)时全程 +0=零行为变更。
-        var discountCfg = repository.findComboDiscountConfig(projectId);
+        // 第十八批 AW 段 293-R1（BSM:754「凑整产生的差额按各业态价格比例，与折扣一并分摊到各域，由各域主管公司按份额各自承担或取得」）：
+        //   折扣与凑整差额一律按份额由各域承担——各业态份额就是出票时按业态价格占比拆出的实付份额，不再按「套票折扣归属」加回；
+        //   核销时逐笔落的 discount_amount_cent 照记留痕，bill.combo_discount_cent 恒 0。
 
         // ① 通票收入(已核销)按【业态】拆开(S11①,§二十.1)。一张联合通票的钱不是一整笔都归酒吧——
         //    游乐那份归游乐公司、餐饮那份归餐厅商户、零售那份归零售商户,只有酒吧那份才继续往下走进池。
-        //    D6/§20.4：项目承担的折扣补回口径对【每一个业态】一视同仁(旧实现只补酒吧一路,同一张票各家口径不一致)。
+        //    293-R1：各业态一律按实付份额分，不加回折扣（同一张票各家同一口径）。
         //    份额比例本身在【出票时】就按各权益票面原价占比拆好了(TicketOrderService.allocateRevenue),
         //    这里只是把权益级的份额按提供方业态归堆,不重新发明分摊算法。
         List<JdbcSettlementBillRepository.FormatRevenue> formatRows =
@@ -385,12 +385,10 @@ public class TicketDistributionSettlementService {
         //   付款时按支付通路固化、每笔核销按核销额占本单实付比例分摊落 settlement_transactions.route_fee_cent，这里按业态线性求和。
         long pooledRouteFee = 0L;
         for (var fr : formatRows) {
-            long borne = platformBorneDiscount(discountCfg, fr.discountCent());
             formatShares.put(fr.businessFormat(),
-                    new FormatShare(fr.businessFormat(), fr.revenueCent() + borne, borne, 0L, fr.routeFeeCent(),
+                    new FormatShare(fr.businessFormat(), fr.revenueCent(), 0L, 0L, fr.routeFeeCent(),
                             fr.compServiceFeeCent(), fr.giftCostCent()));
-            ticketRevenue += fr.revenueCent() + borne;
-            comboDiscountCent += borne;
+            ticketRevenue += fr.revenueCent();
             pooledServiceFee += fr.compServiceFeeCent();
             pooledGiftCost += fr.giftCostCent();
             pooledRouteFee += fr.routeFeeCent();
@@ -486,7 +484,7 @@ public class TicketDistributionSettlementService {
         for (var e : formatShares.entrySet()) {
             FormatShare s = e.getValue();
             var oc = ownCollected.get(s.format());
-            long ownGross = oc == null ? 0L : oc.revenueCent() + platformBorneDiscount(discountCfg, oc.discountCent());
+            long ownGross = oc == null ? 0L : oc.revenueCent();
             long ownNet = oc == null ? 0L : ownGross - oc.routeFeeCent()
                     - (s.grossCent() == 0L ? 0L : MoneyRounding.prorate(s.channelFeeCent(), ownGross, s.grossCent()));
             e.setValue(s.withInterEntity(interEntityFormat(s.format()) ? s.netCent() - ownNet : 0L));
@@ -558,12 +556,9 @@ public class TicketDistributionSettlementService {
         // P6:merchantAgg[mid] = {grossSum, verifiedCount, guestCount, compServiceFeeSum, singleBarRouteFee, singleBarChannelFee}
         //   compServiceFeeSum = 每笔核销/冲正落库的【实收】综合服务费之和(核销 fee>=0·增量封顶后·冲正 fee<=0·取原行之反)。
         for (var ex : exclusives) {
-            // D6：项目按归属承担的折扣加回该商户毛额，使其拿满额(platform_absorb 全额/split_by_ratio 平台份额/merchant_absorb=0)。
-            //   综合服务费在【核销时】已在此同口径毛额上算并落库(见 ComprehensiveServiceFee + SettlementSettledConsumer);
-            //   此处只用毛额算净额，不再月末重算 fee。折扣=0 时 gross=revenue → 与 D6 前逐分一致(零行为变更)。
-            long platformBorne = platformBorneDiscount(discountCfg, ex.discountCent());
-            long gross = ex.revenueCent() + platformBorne;
-            comboDiscountCent += platformBorne; // 项目承担的专属折扣入账
+            // 293-R1：商户毛额即其实付份额（折扣按份额由各域承担，不加回）。综合服务费在【核销时】已在同口径毛额上算并落库
+            //   (见 ComprehensiveServiceFee + SettlementSettledConsumer);此处只用毛额算净额，不再月末重算 fee。
+            long gross = ex.revenueCent();
             long[] mg = merchantAgg.computeIfAbsent(ex.merchantId(), k -> new long[6]);
             mg[0] += gross;
             mg[1] += ex.verifiedCount();
@@ -1114,26 +1109,7 @@ public class TicketDistributionSettlementService {
     }
 
     /**
-     * D6 套票折扣按归属拆出「项目公司承担」的部分(§7.4)：
-     * platform_absorb → 项目全额承担(商户拿满额)；split_by_ratio → 项目按 split_platform_bps 承担；
-     * merchant_absorb → 项目 0(商户自担，池/直付按净额=现状)。
-     *
-     * <p>🔴 <b>带符号(不钳0)</b>:核销为正(平台吸收折扣、商户按满额分),该核销在<b>后续已过账月</b>被冲正时为负
-     * (平台<b>追回</b>先前吸收的折扣)——与收入侧 verified_amount_cent 带符号跨月净掉<b>一致</b>(V335 放开 combo_discount ≥0)。
-     * 旧「discountCent&lt;=0 钳0」会丢弃跨月负向追回 → 收入 -R 追回了、折扣 -D 没追回,项目多付(套票真上线前必修)。
-     * R-7 改 HALF_UP 后仍<b>对 0 对称</b>({@code f(-x)=-f(x)},HALF_UP 远离零进位),split_by_ratio 的正负份额
-     * 依旧逐分精确对消;折扣=0 → 0(无折扣零行为变更)。
-     */
-    private long platformBorneDiscount(JdbcSettlementBillRepository.ComboDiscountConfig cfg, long discountCent) {
-        return switch (cfg.discountBearer()) {
-            case "platform_absorb" -> discountCent;
-            case "split_by_ratio" -> MoneyRounding.bpsOf(discountCent, cfg.splitPlatformBps());
-            default -> 0L; // merchant_absorb（及未知值防御）：项目不承担
-        };
-    }
-
-    /**
-     * S11 某业态当月的份额（计算中间结果）：毛额 = 已核销净额 + 项目承担的折扣补回；
+     * S11 某业态当月的份额（计算中间结果）：毛额 = 已核销实付份额（293-R1 起不加回折扣，platformBorneCent 恒 0）；
      * S4/S6:净份额 = 毛额 − 摊到的销售渠道费 − 本业态核销分摊的通路费(第十八批第 3 条) − 本业态计提的赠送权益预估成本(G) − 本业态计提的门票综合服务费
      * (池链支;G 与 F 都归娱乐平台公司,瀑布顺序照 HTML:739 先 G 后 F——减法交换律下金额同,列示按此序)。
      * S7 giftPaidCent:本业态当月兑付实付(A,按提供方业态分记,HTML:962)——纯留痕<b>不进净份额</b>

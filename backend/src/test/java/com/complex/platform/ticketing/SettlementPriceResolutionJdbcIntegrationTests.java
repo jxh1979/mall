@@ -188,7 +188,9 @@ class SettlementPriceResolutionJdbcIntegrationTests {
                 .isInstanceOfSatisfying(com.complex.platform.common.api.ApiException.class,
                         e -> assertThat(e.code()).isEqualTo("SELF_ACTIVATION_FORBIDDEN"));
 
-        // ③ 他人复核转正：目录换生效价 + 快照传播；已核销的 A 一分不动。
+        // ③ 他人复核转正：目录换生效价 + 快照传播；已核销的 A 一分不动（第十八批 AW 段 291-R1：酒吧商户由娱乐平台公司的人审批）。
+        jdbcTemplate.update("INSERT INTO access_users (id, username, account_type, organization_id, status, created_at)"
+                + " VALUES ('approver_sp_it', 'approver_sp_it', 'staff', 'be_ent_platform', 'active', now()) ON CONFLICT (id) DO NOTHING");
         configWriteService.activateDraft("internal_price_item", draftId, "approver_sp_it");
         assertThat(settlementPrice(codeA)).isEqualTo(8000L); // 已发生的不可改
         assertThat(jdbcTemplate.queryForObject(

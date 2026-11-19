@@ -1,7 +1,9 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { AdminApi } from "../client/adminClient";
+import { ActionResultView, formatActionResult } from "../components/ActionResultView";
 import { DynamicPricingPage } from "./DynamicPricingPage";
 import type { AdminApiClient, AdminPageProps, EffectivePermissionsState, TicketDynamicPricingRuleRow } from "../types";
 
@@ -209,5 +211,120 @@ describe("DynamicPricingPage 335-R1 按固定金额调价", () => {
     const body = postBody(post, "/api/v1/ticketing/dynamic-pricing-rules");
     expect(body).toMatchObject({ ticketTypeId: "tt_real", adjustmentType: "fixed_delta", adjustmentAmountCent: -500 });
     expect(body).not.toHaveProperty("adjustmentRate");
+  });
+});
+
+// 第十八批 AW 段 338-R3（BSM:782「会员价、渠道价、动态价都在对应基础价上按打折/减免/加价/固定额派生」；PGM:287「界面全中文」）：动态价可按固定价。
+describe("DynamicPricingPage 338-R3 按固定价", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    window.history.replaceState({}, "", "/admin/ticketing/dynamic-pricing");
+  });
+
+  it("调价方式选固定价填 199 → 确认页「固定价 ¥199.00」，请求体 fixed_price、adjustmentAmountCent 19900，不带 adjustmentRate", async () => {
+    const post = vi.fn().mockResolvedValue({ id: "rule-new" });
+    renderPage(makeApi(post));
+    await openCreateWithTicketTypes();
+    fireEvent.change(screen.getByTestId("dynamic-pricing-ticket-type"), { target: { value: "tt_real" } });
+    fireEvent.change(screen.getByTestId("dynamic-pricing-adjustment-type"), { target: { value: "fixed_price" } });
+    await waitFor(() => expect(screen.queryByTestId("dynamic-pricing-adjustment-amount")).not.toBeNull());
+    fireEvent.change(screen.getByTestId("dynamic-pricing-adjustment-amount"), { target: { value: "199" } });
+    fireEvent.click(screen.getByTestId("dynamic-pricing-guided-next"));
+    expect(screen.getByTestId("dynamic-pricing-guided-summary").textContent ?? "").toContain("固定价 ¥199.00");
+    fireEvent.click(screen.getByTestId("dynamic-pricing-create"));
+    await waitFor(() => expect(post.mock.calls.some((c) => c[0] === "/api/v1/ticketing/dynamic-pricing-rules")).toBe(true));
+    const body = postBody(post, "/api/v1/ticketing/dynamic-pricing-rules");
+    expect(body).toMatchObject({ ticketTypeId: "tt_real", adjustmentType: "fixed_price", adjustmentAmountCent: 19900 });
+    expect(body).not.toHaveProperty("adjustmentRate");
+  });
+
+  it("调整列：按固定价显示「固定价 ¥199.00」，不出英文取值", async () => {
+    const ok = (data: string) => new Response(`{"success":true,"code":"OK","message":"success","data":${data}}`,
+      { status: 200, headers: { "content-type": "application/json" } });
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input).includes("/ticketing/ticket-types")) return ok('{"items":[]}');
+      return ok('[{"id":"dp-fp","rule_name":"晚场固定价","sales_channel":"web","priority":10,"adjustment_type":"fixed_price","adjustment_rate":null,'
+        + '"adjustment_amount_cent":19900,"status":"draft","effective_from":"2026-11-01","effective_to":"2026-11-30","ticket_type_id":"tt-1"}]');
+    }));
+    const props: AdminPageProps = { api: new AdminApi(), user: { id: "u1", username: "admin", accountType: "platform_admin" },
+      setActionResult: vi.fn(), setGlobalError: vi.fn(), effectivePermissions: ADMIN_PERMS };
+    render(<DynamicPricingPage {...props} />);
+    await waitFor(() => expect(screen.queryByTestId("dynamic-pricing-row-dp-fp")?.textContent ?? "").toContain("固定价 ¥199.00"));
+    expect(screen.getByTestId("dynamic-pricing-row-dp-fp").textContent ?? "").not.toContain("fixed_price");
+  });
+});
+
+// 18AW 收尾复核修正（PGM:287「展示给用户的一切文字，包括菜单、页面标题、字段名、状态、枚举取值、按钮、提示、报错……必须全部为中文，不得出现任何英文」）：
+//   新建、发布动态价规则与试算后，结果区的调整类型与试算说明都显示中文。真实 AdminApi，假响应用文本体，结果区同后台外壳用 ActionResultView 渲染。
+describe("DynamicPricingPage 结果区中文", () => {
+  const setGlobalError = vi.fn();
+
+  function PageWithResult({ api }: { api: AdminApiClient }) {
+    const [result, setResult] = useState<unknown>(null);
+    return (
+      <>
+        <DynamicPricingPage api={api} user={{ id: "u1", username: "admin", accountType: "platform_admin" }}
+          setActionResult={setResult} setGlobalError={setGlobalError} effectivePermissions={ADMIN_PERMS} />
+        {result ? <ActionResultView value={result} /> : null}
+      </>
+    );
+  }
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    window.history.replaceState({}, "", "/admin/ticketing/dynamic-pricing");
+  });
+
+  it("新建固定价规则、发布、试算后结果区显示「调整类型：固定价」与中文说明，不出 fixed_price 等英文取值", async () => {
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+    const rule = (status: string) => '{"id":"dp-fp","ticket_type_id":"tt-1","rule_name":"晚场固定价","priority":10,"effective_from":null,'
+      + '"effective_to":null,"sales_channel":"web","adjustment_type":"fixed_price","adjustment_rate":null,"adjustment_amount_cent":19900,'
+      + `"min_price_cent":null,"max_price_cent":null,"status":"${status}","condition_rule":{},"operator_note":null,"evidence_attachment_ids":[]}`;
+    const ok = (data: string) => new Response(`{"success":true,"code":"OK","message":"success","data":${data}}`,
+      { status: 200, headers: { "content-type": "application/json" } });
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const isPost = (init?.method ?? "GET") === "POST";
+      if (isPost && url.endsWith("/dynamic-pricing-rules")) return ok(rule("draft"));
+      if (isPost && url.endsWith("/dynamic-pricing-rules/dp-fp/publish")) return ok(rule("published"));
+      if (isPost && url.endsWith("/dynamic-pricing/simulations")) {
+        return ok('{"ticket_type_id":"tt-1","visit_date":"2026-11-20","sales_channel":"web","base_price_cent":9900,"adjustment_cent":10000,'
+          + '"final_price_cent":19900,"matched_rule_id":"dp-fp","explanation":"命中规则：晚场固定价"}');
+      }
+      if (url.includes("/ticketing/ticket-types")) return ok('{"items":[{"id":"tt-1","ticket_name":"真实门票"}]}');
+      return ok(`[${rule("draft")}]`);
+    }));
+    render(<PageWithResult api={new AdminApi()} />);
+    await waitFor(() => expect((screen.queryByTestId("dynamic-pricing-select-dp-fp") as HTMLInputElement | null)?.checked).toBe(true));
+    const resultText = () => screen.queryByTestId("admin-action-result")?.textContent ?? "";
+    const englishCodes = /fixed_price|percent_delta|fixed_delta|matched|no matching/;
+
+    fireEvent.click(screen.getByTestId("dynamic-pricing-create-open"));
+    await waitFor(() => expect(screen.queryByTestId("dynamic-pricing-ticket-type")?.textContent ?? "").toContain("真实门票"));
+    fireEvent.change(screen.getByTestId("dynamic-pricing-ticket-type"), { target: { value: "tt-1" } });
+    fireEvent.change(screen.getByTestId("dynamic-pricing-adjustment-type"), { target: { value: "fixed_price" } });
+    await waitFor(() => expect(screen.queryByTestId("dynamic-pricing-adjustment-amount")).not.toBeNull());
+    fireEvent.change(screen.getByTestId("dynamic-pricing-adjustment-amount"), { target: { value: "199" } });
+    fireEvent.click(screen.getByTestId("dynamic-pricing-guided-next"));
+    fireEvent.click(screen.getByTestId("dynamic-pricing-create"));
+    await waitFor(() => expect(resultText()).toContain("动态定价规则已创建"));
+    expect(resultText()).toContain("调整类型：固定价");
+    expect(resultText()).not.toMatch(englishCodes);
+
+    fireEvent.click(screen.getByTestId("dynamic-pricing-publish"));
+    await waitFor(() => expect(resultText()).toContain("动态定价规则已发布"));
+    expect(resultText()).toContain("调整类型：固定价");
+    expect(resultText()).not.toMatch(englishCodes);
+
+    fireEvent.click(screen.getByTestId("dynamic-pricing-simulate"));
+    await waitFor(() => expect(resultText()).toContain("动态定价已试算"));
+    expect(resultText()).toContain("说明：命中规则：晚场固定价");
+    expect(resultText()).not.toMatch(englishCodes);
+    confirmSpy.mockRestore();
+  });
+
+  it("按比例、按固定金额两种调整类型在结果区也显示中文", () => {
+    expect(formatActionResult({ adjustment_type: "percent_delta" })).toBe("调整类型：按比例");
+    expect(formatActionResult({ adjustmentType: "fixed_delta" })).toBe("调整类型：按固定金额");
   });
 });

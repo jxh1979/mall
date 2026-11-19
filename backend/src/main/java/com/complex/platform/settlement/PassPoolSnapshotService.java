@@ -1,6 +1,6 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import com.complex.platform.common.money.MoneyRounding;
 import com.complex.platform.ticketing.InternalSettlementPriceResolver;
@@ -66,7 +66,6 @@ public class PassPoolSnapshotService {
             String ticketId = (String) ticket.get("id");
             long ticketAlloc = 0L;
             long barAlloc = 0L;
-            long discount = 0L;
             Set<String> covered = new LinkedHashSet<>();
             for (Map<String, Object> e : jdbc.queryForList("""
                     SELECT e.merchant_id, e.entitlement_type, e.allocated_revenue_cent, e.component_full_price_cent,
@@ -81,9 +80,6 @@ public class PassPoolSnapshotService {
                     continue;
                 }
                 barAlloc += alloc;
-                if (e.get("component_full_price_cent") != null) {
-                    discount += Math.max(0L, ((Number) e.get("component_full_price_cent")).longValue() - alloc);
-                }
                 if (ENTRY_TYPES.contains(e.get("entitlement_type"))) {
                     covered.add((String) e.get("merchant_id"));
                 }
@@ -94,8 +90,8 @@ public class PassPoolSnapshotService {
             if (version == null) {
                 version = schemes.effectiveVersionId(project, soldAt);
             }
-            long borne = ComprehensiveServiceFee.platformBorneCent(bills.findComboDiscountConfig(project), discount);
-            long barGross = barAlloc + borne;
+            // 第十八批 AW 段 293-R1（BSM:752、BSM:754）：酒吧毛额即出票时拆出的酒吧实付份额，折扣按份额由各域承担、不加回。
+            long barGross = barAlloc;
             long routeFee = routeFeeShares.shareOf(fact.orderId(), barAlloc);
             // 销售渠道费按本单付款时固化的配置（官方渠道与无固化行＝不扣），与月结、到期同一版。
             JdbcSettlementBillRepository.ChannelFeeConfig salesFee = bills.findOrderSalesChannelFee(fact.orderId());
@@ -121,7 +117,7 @@ public class PassPoolSnapshotService {
                     .addValue("p", project).addValue("tt", ticketType)
                     .addValue("slots", Math.max(1, ((Number) ticket.get("num_people")).intValue()))
                     .addValue("visits", Math.max(1, ((Number) ticket.get("total_times")).intValue()))
-                    .addValue("gross", barGross).addValue("borne", borne).addValue("route", routeFee)
+                    .addValue("gross", barGross).addValue("borne", 0L).addValue("route", routeFee)
                     .addValue("sales", salesChannelFee).addValue("sales_cfg", salesFee.id())
                     .addValue("gift", giftCost).addValue("gift_cfg", giftCfg.id())
                     .addValue("svc", serviceFeeCent).addValue("svc_cfg", serviceFee.id())

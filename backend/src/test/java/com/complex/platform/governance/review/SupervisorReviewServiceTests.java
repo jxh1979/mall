@@ -1,4 +1,4 @@
-// 文件版本：V0.26
+// 文件版本：V0.27
 package com.complex.platform.governance.review;
 
 import com.complex.platform.support.InMemoryAuditEventRepository;
@@ -58,7 +58,7 @@ class SupervisorReviewServiceTests {
     void listPoliciesReturnsBlockingCatalogAndWritesAudit() {
         var page = service.listPolicies();
 
-        assertThat(page.total()).isEqualTo(101); // 包括分红方案调整（第十八批 AQ 段第 234 条）、酒吧关停结算核实（第十八批 AQ 段第 243 条）、工资、绩效、酒吧分配、合同三类（HP-C01）、门店要货未出库取消（FS-011）、借用物无法归还（FS-019）、楼宇设备报废（HP-F03）、停车免费放行与减免（HP-P01）、酒吧营业日（第十八批第 1 条）、招商黑名单例外放行与意向关键阶段确认（第十八批第 30 条）、高价值判定阈值（第十八批第 24 条）、证照宽限期（第十八批 E 段第 22 条）、商户加经营项目（第十八批 E 段第 20 条）、人工补录三类（第十八批 F 段第 14 条）、导出文件可编辑版（第十八批 H 段第 23 条）、工单费用承担方争议（第十八批 M 段第 117 条）、对账差异关闭复核（第十八批 Y 段第 181 条）、超限转台申请（第十八批 AB 段第 190 条）、跨域组合通票票种规则发布（第十八批 AJ 段第 236 条）、日结锁定后补录（第十八批 AL 段第 245 条）及付款确认 41 种支付类型（第十八批 AM 段第 241 条，第十八批裁决 65；第十八批 AX 段 273-R1 加酒吧借款还款）审批。
+        assertThat(page.total()).isEqualTo(102); // 包括票种开启可退（第十八批 AW 段第 295 条）、分红方案调整（第十八批 AQ 段第 234 条）、酒吧关停结算核实（第十八批 AQ 段第 243 条）、工资、绩效、酒吧分配、合同三类（HP-C01）、门店要货未出库取消（FS-011）、借用物无法归还（FS-019）、楼宇设备报废（HP-F03）、停车免费放行与减免（HP-P01）、酒吧营业日（第十八批第 1 条）、招商黑名单例外放行与意向关键阶段确认（第十八批第 30 条）、高价值判定阈值（第十八批第 24 条）、证照宽限期（第十八批 E 段第 22 条）、商户加经营项目（第十八批 E 段第 20 条）、人工补录三类（第十八批 F 段第 14 条）、导出文件可编辑版（第十八批 H 段第 23 条）、工单费用承担方争议（第十八批 M 段第 117 条）、对账差异关闭复核（第十八批 Y 段第 181 条）、超限转台申请（第十八批 AB 段第 190 条）、跨域组合通票票种规则发布（第十八批 AJ 段第 236 条）、日结锁定后补录（第十八批 AL 段第 245 条）及付款确认 41 种支付类型（第十八批 AM 段第 241 条，第十八批裁决 65；第十八批 AX 段 273-R1 加酒吧借款还款）审批。
         assertThat(page.items())
                 .extracting(SupervisorReviewPolicyRecord::actionType)
                 .contains("manual_release", "bill_waiver", "contract_violation", "base_definition_violation",

@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -61,6 +61,7 @@ class TicketEntitlementPriceGateJdbcIntegrationTests {
     private final String admin = "usr_c236_admin_" + suffix;
     private final String pricer = "usr_c236_price_" + suffix;
     private final String reviewer = "usr_c236_review_" + suffix;
+    private final String city = "be_c236_city_" + suffix;
     private final List<String> ticketTypes = new ArrayList<>();
     private final List<String> templates = new ArrayList<>();
 
@@ -78,8 +79,13 @@ class TicketEntitlementPriceGateJdbcIntegrationTests {
                 + " VALUES (?, ?, '赠酒一杯', 'beverage', 3800, 'CNY', NULL, 'default', FALSE, 'active', now(), now())",
                 product, bar);
         user(admin, "票种发布闸配置" + n, List.of("ticket.product.manage", "ticket.product.view", "ticket.entitlement.manage"));
-        user(pricer, "内部结算价提交" + n, List.of("settlement.config.manage"));
-        user(reviewer, "内部结算价复核" + n, List.of("settlement.config.manage"));
+        // 第十八批 AW 段 291-R2（ENUM:54「实际提供商品或服务的主体提交」）：餐厅自己的账号提交。
+        user(pricer, "staff", project, restaurant, "内部结算价提交" + n, List.of("settlement.internal_price.submit"));
+        // 第十八批 AW 段 291-R1（ENUM:54「餐饮与零售商户……统一由城市项目公司审批」）：复核人是本项目城市项目公司的员工。
+        jdbc.update("INSERT INTO business_entities (id, entity_name, entity_role, status, created_at, updated_at)"
+                + " VALUES (?, ?, 'project_company', 'active', now(), now())", city, "发布闸城市项目公司" + n);
+        jdbc.update("INSERT INTO business_entity_projects (business_entity_id, project_id) VALUES (?, ?)", city, project);
+        user(reviewer, "staff", city, null, "内部结算价复核" + n, List.of("settlement.config.manage"));
     }
 
     @AfterEach
@@ -93,6 +99,8 @@ class TicketEntitlementPriceGateJdbcIntegrationTests {
         }
         jdbc.update("DELETE FROM internal_price_catalog WHERE item_code = ?", catalogCode);
         jdbc.update("DELETE FROM bar_products WHERE id = ?", product);
+        jdbc.update("DELETE FROM business_entity_projects WHERE business_entity_id = ?", city);
+        jdbc.update("DELETE FROM business_entities WHERE id = ?", city);
         jdbc.update("UPDATE projects SET status = 'suspended' WHERE id = ?", project);
     }
 
@@ -207,9 +215,14 @@ class TicketEntitlementPriceGateJdbcIntegrationTests {
     }
 
     private void user(String userId, String roleName, List<String> permissions) {
+        user(userId, "platform_admin", "org_1", null, roleName, permissions);
+    }
+
+    private void user(String userId, String accountType, String organizationId, String merchantId, String roleName,
+                      List<String> permissions) {
         String roleId = "role_" + userId;
         jdbc.update("INSERT INTO access_users (id, username, account_type, organization_id, merchant_id, status, created_at)"
-                + " VALUES (?, ?, 'platform_admin', 'org_1', NULL, 'active', now())", userId, userId);
+                + " VALUES (?, ?, ?, ?, ?, 'active', now())", userId, userId, accountType, organizationId, merchantId);
         jdbc.update("INSERT INTO roles (id, role_name, created_at) VALUES (?, ?, now())", roleId, roleName);
         for (String code : permissions) {
             jdbc.update("INSERT INTO role_permissions (role_id, permission_code) VALUES (?, ?)", roleId, code);
@@ -219,10 +232,13 @@ class TicketEntitlementPriceGateJdbcIntegrationTests {
 
     // 后台 Web 终端 + 生产过滤器放入的 AccessActor 主体（与账号表当前行一致）。
     private RequestPostProcessor session(String userId) {
+        java.util.Map<String, Object> row = jdbc.queryForMap(
+                "SELECT account_type, organization_id, merchant_id FROM access_users WHERE id = ?", userId);
         return request -> {
             request.addHeader("X-Terminal-Type", "web");
             return authentication(new UsernamePasswordAuthenticationToken(
-                    new AccessActor(userId, userId, "platform_admin", "org_1", null, "active"), null,
+                    new AccessActor(userId, userId, (String) row.get("account_type"), (String) row.get("organization_id"),
+                            (String) row.get("merchant_id"), "active"), null,
                     List.of(new SimpleGrantedAuthority("ROLE_P0_STAFF")))).postProcessRequest(request);
         };
     }

@@ -1,6 +1,6 @@
 # PRD 审计业务裁决台账
 
-文档版本：V1.05
+文档版本：V1.06
 状态：进行中
 迁移日期：2026-07-27
 当前事实源：三份立法 HTML 以既有冻结基线叠加 James 此前 M02 至 M08 的点名批准、全量审计 M001、M002 的逐项批准，以及本轮 2026-10-16 至 2026-10-17 业务 HTML 审计中 Q01 至 Q40 及子题实际明确批准且未被后续替代的裁决，和 2026-10-17 第二批 HTML 业务线推演审计（A–F 六线 64 条、停车章）的逐项批准，并叠加本轮 CG 70 项来源确认与 C01–C09、N01–N03 最终澄清及补全文稿中 F01、W01–W05 的整体修改批准（本文件末节）；本轮最终规则、未采纳或替代关系、现行版本与字节哈希见本文件末节。历史记录保留为各自当时事实，不恢复已被替代的建议。
@@ -9498,3 +9498,205 @@ HTML 的语义补齐与直接引用同步可在本批核验；70项中的业务�
   - 合并回归：FinanceArApLedgerPage.test.tsx「FinanceArApLedgerPage 来源中文名与后端同名补齐」用例数据加一行 bar_loan 应付，断言详情显示「借款还款」、不显示原码，锁住变基后 bar_loan 中文名改由统一字段值表提供的合并结果；去掉 fieldLabels.ts 里的 bar_loan 时该断言失败（RED：AssertionError: expected null not to be null，FinanceArApLedgerPage.test.tsx:253），恢复后该文件 25 条全过（GREEN）；测试文件版本 V0.14→V0.15。
   - 本轮实测（f77447e8 基线）：清掉镜像 dividend、finance 包的 classes 与 test-classes 后，b70_test.sh --fresh 定向 9 类 226 条 0 红（DividendBarLoanJdbcIntegrationTests 5、DividendJdbcIntegrationTests 24、DividendOtherShareholdersJdbcIntegrationTests 6、DividendFinalSnapshotGateJdbcIntegrationTests 16、DividendWithholdingTaxRateJdbcIntegrationTests 2、FinanceServiceTests 102、FinanceJdbcIntegrationTests 40、PaymentConfirmationJdbcTests 20、InternalPayableExecutionJdbcIntegrationTests 11；一次性库迁到 V660，609 个迁移）；b70_web.sh FinanceArApLedgerPage FinanceDividendsPage MerchantZoneDividendsPage FinanceDividendTaxRatePanel FinanceDividendLoansPanel：typecheck 0 错、13 个文件 67 条全过；共用锁下 chromium 跑 tests/e2e/full-admin-visual.spec.ts 2 条全过、无截图差异，不重拍；门禁 verify:p0-contract、verify:html-ledger-sync、verify:entry-anchors、verify:entry-doc-baseline、verify:security-baseline、verify:data-isolation-spec、verify:domain-ownership-scope（574 张表）、verify:migration-version-order（本分支新增 3 个迁移，均排在主干最大号 V648 之后）、verify-audit-labels（业务类型 433、事件名 2354，0 处缺失）、verify-full-admin-page-matrix（117 页）、verify-admin-result-labels（0 处缺失）、git diff --check 全绿，改动文件无 CRLF、无 BOM；共用锁下 npm run verify:predeploy 退出码 0。运行验收证据随指纹变化已过时，由合并前证据链按提交树重刷，本轮不动。
 - 18AX 落地位置补记·运行验收证据、快照、终验文档刷新（无新裁决）：业务提交 61cea293 之后，按第十八批裁决 25 重刷了运行验收证据：后端全量 6979 测，0 失败 0 错误；apps/web 构建通过；常规界面验收（接口全部 mock）实跑 40 条全过；真实后端界面验收未跑，runtime_ready=false。随后依次重生成闭环当前态快照、生产闭环缺口报告、界面验收报告、无上线指挥台。生成器没改。手改 docs/final-closed-loop-acceptance-audit-v0.1.md 与 docs/code-implementation-acceptance-audit-v0.1.md：前端单测源码计数改为 1909；被核文件行数都没变；后端全量与常规界面验收的数字、日期改为本次实跑值；写入 npm run verify:unit 实跑结果，五个工作区全过。交付门禁于 2026-11-19 01:59 UTC 在工作树逐项实跑子项，NAS 两项现场探测未跑。仍红的有两项：一是 coding-host-protection，它写死主仓路径，在工作树口径下必红，属工具口径，不做；二是 final-closed-loop-audit，如实留 2 条红（integration-ready、business-acceptance-ready），原因是校验器要求终验把联调、业务验收写成「是」，而裁决 25 定了不跑真实后端界面验收、运行验收未就绪，终验写的是「否」。verify:delivery-gates 总链仍是红的。
+
+18AW 落地位置补记（2026-11-18）：第十八批 AW 段（batch69）按 18AW 只读设计实现待开发清单第 289、291、293、294、295、338、339、341、296、299、322、340 条（票务其余组）；运行验收证据、终验文档在本段最后一个提交刷新；各条落地位置见下。本段追加时，原台账除文档版本升一版外，其他历史字节保持。
+
+- 18AW 落地位置补记·控制席判定（2026-11-18）：本段（第十八批 AW 段，batch69）实现待开发清单第 289、291、293、294、295、338、339、341、296、299、322、340 条（18AW 只读设计 b69-audit/d-tkt-a.json、d-tkt-b.json，两轮质疑者修订后定稿，无待裁题）；第 300 条属实但没有 HTML 或裁决依据、第 315 条渠道未接时走不到，均不做（接通渠道时的改法已补记进待开发清单第 41 条）。两组设计都想用 V653，控制席重排为 V661（293＋339）、V662（291 权限码）、V663（295 权限码）、V664（338）、V665（299）；299 按 R14 裁决 20（票种 4 态、待启用与已结束按生效时间派生、不存储）落在票种上。本段实现代理不改各文件头版本行，收尾按最终主干统一 +0.01。本段从 ff08d988 开工，实现后变基到含 18AU 酒吧组（PR #600）的 origin/main ff83ee69；变基核实查出本段新增 record 与既有同名致结果中文名检查报红，收尾改名修正。设计旁见另记待开发清单第 354、355 条（待核实）。
+- 【第十八批 AW 段落地位置补记·T1（289、291、293、339）】
+  289-R1
+  - 改法：销售渠道费固定额票数改为逐行判定。某行（核销或冲正）发生时，这张票没有别的仍有效核销才计数，核销 +1、冲正 −1，每张票净计数恒为 0 或 1。首笔核销被撤销后客人再核销，照扣一道；撤销后不再核销而到期，到期作业照扣。跨月时由原月重算之差追收，合计仍只扣一次。
+  - 落地位置：backend/.../settlement/JdbcSettlementBillRepository.java 常量 NO_OTHER_LIVE_VERIFICATION、POOL_LIVE，方法 aggregateChannelRevenue、aggregateSingleBarFees（删掉原最早核销锚点子查询和 ponytail 注释）；JdbcSettlementTransactionRepository.findExpiredUnverifiedEntitlements 的 anchored 只认未被冲正的核销。
+  - 依据：ENUM:51「任何票种经第三方渠道售出时，销售渠道费一律先从整单扣除且只扣一次」。
+  - 测试：ChannelFeeFixedAnchorReset289JdbcTests（reverifyAfterTheOnlyVerificationIsReversedCountsTheTicketAgain、crossMonthReversalMovesTheTicketToTheMonthOfTheNewVerification、reversingOneOfTwoLiveVerificationsKeepsTheTicketCounted）；ExclusiveDirectPayDomainShareJdbcIntegrationTests 的 fixedAmountSalesFeeIsTakenAgainWhenTheOnlyEntryIsReversedAndTheGuestEntersAgain、fixedAmountSalesFeeIsTakenAtExpiryWhenTheOnlyEntryWasReversed。
+  291-R1
+  - 改法：内部结算价转正须由对应域主管公司的人审批——酒吧由娱乐平台公司审批，游乐由游乐公司审批，传媒由传媒公司审批，餐饮、零售由该项目城市项目公司审批，「其他」由档案主管公司审批；提供方是经营主体的，由该主体内部另一人审批。所属公司不符报 403 INTERNAL_PRICE_APPROVER_SCOPE；定不出审批公司报 409 CITY_PROJECT_COMPANY_MISSING 或 REVENUE_STREAM_ATTRIBUTION_MISSING。最高权限本人放行。
+  - 落地位置：新类 backend/.../settlement/InternalPriceScope.java（requireApprover）；SettlementConfigWriteService.activateInternalPriceItem 调用它。
+  - 依据：ENUM:54「实际提供商品或服务的主体提交，对应域主管公司审批，提交人与审批人分离：酒吧由娱乐平台公司审批，游乐由游乐公司审批，演出传媒由传媒公司审批，中央餐饮供应的酒水或小食由中央餐饮公司内部差人审批；餐饮与零售商户……统一由城市项目公司审批……业态为“其他”的商户，由其商户档案上指定的主管公司审批」；PGM:432「由公司内部提交人与审批人分离审批」；BSM:576「持授权 U 盘密钥的最高权限本人发起的操作，不需要经过任何审批」。
+  - 测试：InternalPriceApproverScope291Tests 的 barPriceIsApprovedByTheEntertainmentPlatformCompanyOnly、cateringPriceIsApprovedByTheCityProjectCompany、mediaPriceIsApprovedByTheMediaCompany、otherFormatPriceIsApprovedByTheSupervisingCompanyOnFile、centralCateringSupplyIsApprovedInsideTheCompanyByAnotherPerson、masterAuthorityActivatesAnyDraft。
+  291-R2
+  - 改法：新权限码 settlement.internal_price.submit（V662，高敏，授出前审批，不预授任何角色）。只能由实际提供方提交：商户账号只报本商户，经营主体人员只报本公司，不符报 403 INTERNAL_PRICE_SUBMITTER_SCOPE。最高权限本人提交即生效（同一事务转正，0 价有券引用仍拒，审计带 master_self_initiated=true）。后台内部结算价目录页持查看码或提交码任一即可进入，提交按钮改认提交码。
+  - 落地位置：db/migration/V662__internal_price_submit_permission.sql；InternalPriceScope.requireSubmitter；SettlementConfigController.saveInternalPriceItem；SettlementConfigWriteService.saveInternalPriceItem 三参版与 activateCatalogDraft；apps/web/src/admin/adminRoutes.ts（ADM-STL-003）；AdminApp.tsx routePermissions；pages/InternalPriceCatalogPage.tsx；docs/full-admin-page-permission-field-matrix-v0.1.csv 的 ADM-STL-003 行。
+  - 依据：ENUM:54「实际提供商品或服务的主体提交」；BSM:1034「酒吧商户只能提交价格资料、履约事实和异议，不能自行决定」；PGM:660「查看、导出和修改分别授权」；BSM:576。
+  - 测试：InternalPriceApproverScope291Tests 的 merchantAccountSubmitsOnlyItsOwnPrice、companyStaffSubmitsOnlyWhatTheCompanyProvides、platformStaffWhoIsNotTheProviderCannotSubmitAMerchantPrice、masterAuthoritySubmissionTakesEffectWithoutAnotherReviewer、masterAuthorityZeroPriceForAVoucherReferencedItemIsStillRejected；前端 InternalPriceCatalogPage.test.tsx「持 settlement.internal_price.submit、无 settlement.config.manage 的账号：可提交新条目、不能转正」。
+  293-R1
+  - 改法：去掉套票折扣归属。V661 删除 discount_bearer、split_platform_bps 两列。折扣与凑整差额一律按出票时按业态价格占比拆出的实付份额由各域承担，不再加回：各业态份额、自收份额、专属直付、核销时的综合服务费基数、池快照酒吧毛额、池试算都按实付份额算。bill.combo_discount_cent 与 pass_pool_snapshots.platform_borne_cent 保留列，恒为 0。
+  - 落地位置：db/migration/V661__combo_rounding_platform_bounds.sql；settlement/TicketDistributionSettlementService.compute（删 platformBorneDiscount）；ComprehensiveServiceFee（删 platformBorneCent）；SettlementSettledConsumer；PassPoolSnapshotService；PassPoolTrialService；SettlementConfigWriteRequests.ComboDiscountRequest；SettlementConfigWriteService.saveComboDiscount；JdbcSettlementConfigWriteRepository.upsertComboDiscountDraft 与待转正摘要；SettlementConfigService.overview（删「套票折扣归属」项）。
+  - 依据：BSM:754「凑整产生的差额按各业态价格比例，与折扣一并分摊到各域，由各域主管公司按份额各自承担或取得」；ENUM:193 同句；ENUM:51「再按各业态价格占比分到各域」。
+  - 测试：SettlementFormatShareS11Tests.discountIsBorneByEachFormatShareWithoutAddBack；PassPoolSnapshotJdbcIntegrationTests.discountedTicketPoolIsBarPaidShareWithoutDiscountAddBack；SettlementComboDiscountTests 的 discountIsBorneByTheSharesAndNotAddedBackToThePool、exclusiveMerchantIsPaidItsShareWithoutDiscountAddBack、crossMonthReversalClawsBackTheShareOnly；ComboToleranceBounds339Tests.boundedTolerance_activated_showsBoundsAndNoDiscountBearerInOverview（总览不再出现 combo_discount_bearer）。
+  293-R2
+  - 改法：结算配置页 combo_discount 组改名「通票凑整参数（允许误差与允许尾数）」，删掉折扣归属下拉、平台分摊万分比与相关说明，请求体不再带这两项。
+  - 落地位置：apps/web/src/admin/pages/SettlementConfigPage.tsx。
+  - 依据：BSM:754 同上。
+  - 测试：SettlementConfigPage.test.tsx「通票凑整参数表单不再有折扣归属与平台分摊万分比，请求体不带 discountBearer」。
+  339-R1
+  - 改法：通票凑整允许误差改为全平台一行（V661 删项目行，加 chk_tcdc_platform_only），新增 rounding_tolerance_min_cent、rounding_tolerance_max_cent 两列（同空同填，0 ≤ 下限 ≤ 误差 ≤ 上限，出厂留空）。写入时带 project_id 报 400；误差与上下限三者缺一或越界报 400 VALIDATION_FAILED。票务取误差改为不按登录人项目。总览显示「x 元（下限 a 元～上限 b 元）」，未配显示「上下限未配置」。前后端字段中文名同键同名新增。
+  - 落地位置：V661；JdbcSettlementBillRepository.findComboDiscountConfig()、findComboRounding()、ComboDiscountConfig；ticketing/ComboPriceToleranceConfigPort.findComboRounding()；TicketCatalogService 四处调用（删 authorizationService 字段与 currentProjectId）；SettlementConfigWriteService.saveComboDiscount；SettlementConfigService.overview；common/api/FieldLabels.java 与 apps/web/src/admin/i18n/fieldLabels.ts。
+  - 依据：BSM:754「允许误差可配（业务参数，全平台统一可配，出厂默认 5 元，须同时配置上下限）」；ENUM:193 同句；DEC-R3-2026-08-04-30（参数取值区间超区间拒绝生效）。
+  - 测试：ComboToleranceBounds339Tests 的 projectScopedRoundingParameters_400、toleranceWithoutBounds_400、toleranceOutsideItsBounds_400、boundedTolerance_activated_showsBoundsAndNoDiscountBearerInOverview；SettlementV268Tests.comboRoundingConfig_platformRowOnly；SettlementConfigWriteJdbcIntegrationTests 跟进。
+  339-R2
+  - 改法：结算配置页通票凑整参数表单去掉项目输入（固定全平台），误差旁加下限、上限两个输入并先在前端校验；允许尾数始终显示；请求体带三项分值，不带 projectId。
+  - 落地位置：apps/web/src/admin/pages/SettlementConfigPage.tsx。
+  - 依据：BSM:754「全平台统一可配……须同时配置上下限」。
+  - 测试：SettlementConfigPage.test.tsx「通票凑整参数：无项目输入，误差须同填上下限，越界不发请求并提示；齐全时 POST 带上下限（分）」；「全平台默认的套票折扣可配凑整允许尾数」一例已改为同填上下限。
+- 18AW 落地位置补记·第 294、295、338、341 条（甲组步二，ticketing 包）：
+  - 294-R1（单一酒吧门票发布闸查本项目本酒吧综合服务费已转正）
+    - 改法：单店票（bar_id 非空）发布或草稿版提交时，票种所属的每个项目都须有一行「本项目、本酒吧、票种为空或为本票种、生效且已转正」的综合服务费（比例或固定额，填 0 也算），项目默认行与全平台默认行不算，缺了 409 TICKET_TYPE_SERVICE_FEE_REQUIRED 并点名项目。
+    - 落地位置：ticketing/SingleBarServiceFeeConfigPort（新）；settlement/SingleBarServiceFeeConfigReader（新）；TicketCatalogService.requirePublishable（排在「至少一个权益」之后）。
+    - 依据：BSM:755「单一酒吧门票的综合服务费按物理项目分别维护，初始为空、不自动继承酒吧通票的默认比例，票种发布前必须先选定按比例还是按固定金额并填入数值，未选定或未填写的票种不得发布上架。」
+    - 测试：SingleBarServiceFeePublishGate294Tests（singleBarTicketWithOnlyProjectDefaultOrDraftServiceFeeCannotPublish_untilBarRowActivated、fixedAmountBarRowAlsoCountsAsChosenAndFilled、passWithoutBarIsNotAffected）。既有的 TicketTypeRuleVersionJdbcIntegrationTests.sameDomainPassAndSingleBarTicketPublishDirectly、TicketTypePriceRuleVersionJdbcIntegrationTests.sameDomainPassAndSingleBarTicketPriceRulesTakeEffectDirectly 补了本项目本酒吧服务费夹具。
+  - 295-R1（票种开启可退改为逐个票种申请、高敏权限审批后生效）
+    - 改法：
+      - 建票一律不可退，请求带 refundable=true 返回 400。
+      - 新接口 POST /api/v1/ticketing/ticket-types/{id}/refundable-enable-requests（理由必填，最终审批人除最高权限本人外必填）建复核单：复核策略 ticket_type_refundable_enable（动作 ticket.type.refundable.enable，specific_role），最终审批人须经角色持有新权限码 ticket.product.refundable.approve（V663，高敏，不预授角色）。
+      - 获批才置可退，驳回不动并留痕；待审期间再申请 409，申请人不得自批。
+      - 最高权限本人申请即生效，留痕 master_self_initiated=true。
+    - 落地位置：V663__ticket_refundable_approve_permission.sql；ticketing/TicketRefundableEnableService（新）；TicketingService.requestTicketRefundableEnable；TicketingController；TicketingWriteOperation.REQUEST_TICKET_REFUNDABLE_ENABLE；SupervisorReviewService 策略清单；TicketCatalogService.createTicketType；audit-labels.json 四个留痕事件。
+    - 依据：BSM:785「「票种规则明确允许退款」这一项在后台出厂默认关闭；要让某一个票种可以退款，必须逐个票种单独开启，每次开启都须经高敏权限审批并留痕，不得整批打开，也不得把原则与例外倒置。」；DEC-R3B-2026-08-04-31「「票种规则明确允许退款」配置项出厂默认关闭，逐票种开启须高敏权限审批并留痕」；BSM:576「持授权 U 盘密钥的最高权限本人发起的操作，不需要经过任何审批。」
+    - 测试：TicketRefundable295Tests 即 TicketRefundableEnable295Tests（createWithRefundableTrue_400、requestStaysPendingUntilApproverApproves_selfApprovalAndDuplicateRequestRejected、rejectedRequestLeavesTicketNotRefundable、masterRequestTakesEffectAtOnce）；SupervisorReviewServiceTests 策略数 100→101；TicketingServiceTests 建票不再带可退。
+  - 295-R2（建票向导去掉可退票勾选，票种行加申请开启可退）
+    - 改法：后台票务策略页建票向导删掉「可退票」勾选，建票请求不带 refundable；票种列表不可退的票种行加「申请开启可退」，弹层填理由与最终审批人提交审批。
+    - 落地位置：apps/web/src/admin/pages/TicketRefundableRequest.tsx（新）；TicketingPoliciesPage.tsx；fieldLabels.ts（ticket_type_refundable_enable_submitted、ticket_type_refundable_enabled）；reviewLabels.ts（「票种开启可退」「票种」）；页面矩阵 ADM-TKT-001。
+    - 依据：BSM:785「必须逐个票种单独开启……不得整批打开」。
+    - 测试：TicketRefundableRequest.test.tsx；TicketingPoliciesPage.guidedcreate.test.tsx（改）。
+  - 338-R1（派生价加按基础价加减金额口径）
+    - 改法：派生价 price_mode 加 amount_delta，带符号加减金额 adjustment_amount_cent 必填且不为 0；取价＝对应日基础价＋金额，最低 0 元。客人价、下单、试算、最低实付价都生效。已上架跨域组合通票的此类派生价存入草稿版、带金额，复核单摘要写「按基础价减 x 元」。
+    - 落地位置：V664__ticket_price_amount_delta_and_dynamic_fixed_price.sql（ticket_price_rules.adjustment_amount_cent）；TicketCatalogService.PRICE_MODES 与 createPriceRule；TicketPriceRuleRecord；TicketPriceRuleRequest；JdbcTicketingRepository、JdbcTicketingRowMapper、JdbcTicketingParameterSource；TicketPricingService.resolveUnitPrice；TicketTypeRuleVersionView.PriceRule；TicketTypeRuleVersionService（apply 与摘要）。
+    - 依据：BSM:782「会员价、渠道价、动态价都在对应基础价上按打折/减免/加价/固定额派生；动态价按时段、容量等规则配置，可先试算再发布。」
+    - 测试：TicketPricingModes338Tests.amountDeltaPriceRuleCreated_missingOrZeroAmount400；TicketTypePriceRuleVersionJdbcIntegrationTests.publishedComboPassAmountDeltaPriceRuleGoesIntoDraftVersionAndKeepsAmountOnApproval；TicketingServiceTests.amountDeltaDerivedPriceAddsSignedAmountToTheDaysBasePriceFloorZero、lowestUnitPriceCountsAmountDeltaDerivedPrice。
+  - 338-R2（动态价加固定价口径）
+    - 改法：动态价 adjustment_type 加 fixed_price，金额必填且 ≥ 0；命中即公开价为该固定价，仍受最低价、最高价夹值；复核单摘要写「固定价 x 元」。
+    - 落地位置：V664 同文件（chk_ticket_dynamic_pricing_adjustment_type 重建）；TicketPricingService（DYNAMIC_ADJUSTMENT_TYPES、建规则校验、dynamicAdjustment）；TicketTypeRuleVersionService.adjustment。
+    - 依据：BSM:782「动态价都在对应基础价上按打折/减免/加价/固定额派生」。
+    - 测试：TicketPricingModes338Tests.dynamicFixedPriceSimulatesToTheFixedPriceWithinMaxPrice；TicketingServiceTests.dynamicFixedPriceSetsPublicPriceToTheFixedAmountWithinMaxPrice。
+  - 338-R3（票务策略页、动态定价页加新口径的录入与中文显示）
+    - 改法：票务策略页派生价表单加「按基础价加减金额」与「加减金额（元，负数为减免）」，派生价表、明细与规则版本表显示「按基础价加减金额」「减 ¥x／加 ¥x」；动态定价页调价方式加「固定价」，调整列显示「固定价 ¥x」。
+    - 落地位置：apps/web/src/admin/pages/ticketPriceModes.ts（新）；TicketingPoliciesPage.tsx；DynamicPricingPage.tsx。
+    - 依据：BSM:782「按打折/减免/加价/固定额派生」；PGM:287「界面全中文（所有终端零英文）」。
+    - 测试：TicketingPoliciesPage.pricing.test.tsx「派生价选按基础价加减金额填 -10 → 请求体 amount_delta、adjustment_amount_cent -1000，列表显示减 ¥10.00」；DynamicPricingPage.guidedcreate.test.tsx「338-R3 按固定价」两例。
+  - 341-R1（凑整后的平日价须为整元且尾数在允许集合内，否则不能保存与上架）
+    - 改法：填的平日价不等于系统算出价（即凑整了）时，须为整元且元位尾数在全平台允许尾数集合内，否则在误差内也返回 400 TICKET_PRICE_ENDING_NOT_ALLOWED。改售价、发布、草稿版提交三处同闸；已上架的票改组成后不合规退回草稿。只卡平日价，不凑整不要求。定价核算回带 ending_allowed 与 rounding_allowed_endings。
+    - 落地位置：TicketTypePriceCheck；TicketCatalogService.priceCheck、requirePriceWithinTolerance、priceWithinTolerance；fieldLabels.ts（ending_allowed）。
+    - 依据：BSM:754「运营可在此基础上填一个近似售价用于凑整（使最终售价为整数，且尾数落在后台配置的允许尾数集合内——业务参数，全平台统一可配，出厂默认 8、9、0）」；ENUM:193「运营可填近似售价凑整（最终售价为整数且尾数落在后台配置的允许尾数集合内（业务参数，全平台统一可配，出厂默认 8/9/0），上下调均可）」。
+    - 测试：TicketingServiceTests.roundedPriceMustBeWholeYuanEndingInAllowedSetOtherwiseNotPublishable；TicketPriceEnding341Tests.roundedWeekdayPriceEndingOutsideAllowedSet_400_andPriceCheckShowsEndingVerdict。
+  - 341-R2（组合式套票定价实时提示加尾数判断）
+    - 改法：组合式套票定价实时提示在误差内、尾数不合规时显示「尾数不对：凑整后的售价须为整元且尾数为 x、x、x 之一……这张票发不出去。凑整可填 ¥y。」
+    - 落地位置：TicketingPoliciesPage.tsx（实时提示与 PriceCheckRow 类型）。
+    - 依据：同 341-R1（BSM:754）。
+    - 测试：TicketingPoliciesPage.pricing.test.tsx「填 175 元（尾数 5）提示尾数不对、不能开卖；改填 178 元提示没问题」。
+- 18AW 落地位置补记·乙组后端（第 296、322、299 条）：
+  - 第 296 条 296-R1（完整补发改按原票该人份售出时所发权益补）
+    - 改法：AmusementFaultCompensationService.reissueFullTicketFace 不再读票种现绑定，改为按原票同父票同座次已发权益（TicketingRepository.listIssuedEntitlementsByParentSlot）逐行照抄补发；排除补偿补发行（compensation_item_id 非空），不按状态过滤；次数照 TK-10 折算；删去「票种无绑定至少补原权益」分支。全园故障、场次提前结束、安全事件恢复三条路共用此方法。无迁移，接口与契约不变。
+    - 落地位置：backend/src/main/java/com/complex/platform/amusement/AmusementFaultCompensationService.java（reissueFullTicketFace）。
+    - 依据：ENUM:148「另补一次完整票面权益，包括重新提供酒水、礼品；不只延长剩余未用权益，也不因原次已经核销而拒绝这一次补偿。」；ENUM:148「家庭票、多人票和多次票只对受影响的对应人份或次份办理补偿，不增加未受影响的剩余人数或次数。」；ENUM:47「再次入场提供完整票面权益，酒水、礼品重新提供」。
+    - 测试：ParkWideFaultCompensationJdbcIntegrationTests 新增 fullReissueUsesFaceSoldNotBindingsAddedAfterSale、fullReissueCoversOnlyAffectedSlotsOwnFace；按售出时票面改写 fullReissueHonoursBindingQuantityAndTimes、fullReissueForMultiUseTicketCoversOneShare、compensationGiftDrinkRowIsOneFullShareUsableWithinOneSession 及 addGiftDrinkBinding 助手。
+  - 第 322 条 322-R1（票种映射停用契约照现码补失败码、路径参数与 400/404/409 响应）
+    - 改法：代码不动；契约由契约代理照门店映射停用补 parameters Id、x-failure-codes（PERMISSION_DENIED、VALIDATION_FAILED、INTEGRATION_CHANNEL_TICKET_MAP_NOT_FOUND）、400、404、409 响应与说明句；本段加用例把两种失败钉在现码上。
+    - 落地位置：docs/openapi/openapi-p0.yaml 与 .json 的 archiveIntegrationChannelTicketTypeMap（契约代理）；现码 IntegrationOrderSyncService.java:270-275。
+    - 依据：本台账 18G 82c-R4「以代码和权威字典为准，只改契约」；门店映射停用 201-R6「照现码补契约」先例。
+    - 测试：ChannelStoreMapMaintenanceEntryJdbcTests.ticketTypeMapArchiveRejectsMissingReasonAndUnknownMap。
+  - 第 299 条 299-R1（票种开售、停售时间与暂停售卖一个售卖设置动作，六态派生，售卖闸按派生态）
+    - 改法：
+      - 迁移 V665 给 ticket_types 加 sale_starts_at、sale_ends_at、sale_paused_at（可空，空即不限或未暂停），暂停不改 status。
+      - TicketTypeRecord 派生 sale_status（归档、草稿、暂停售卖、待启用、已结束、售卖中），只读输出、不存储。
+      - 新增 PUT /api/v1/ticketing/ticket-types/{id}/sale-settings（ticket.product.manage，幂等，整体替换，草稿票也可设，不走审批），留痕 ticket_product.sale_settings_changed 记改前改后。
+      - 下单闸按派生态统一 409 TICKET_TYPE_NOT_SELLABLE，文案分别为「该票种暂停售卖，不可下单」「该票种尚未开售，不可下单」「该票种售卖已结束，不可下单」，只拦新下单。
+      - 客人公开票种列表只列售卖中；渠道回流同一入口，整笔拒收。
+    - 落地位置：
+      - backend/src/main/resources/db/migration/V665__ticket_type_sale_settings.sql
+      - ticketing/TicketTypeRecord.java（saleStatus）
+      - ticketing/JdbcTicketingRepository.java、JdbcTicketingRowMapper.java（读三列，upsert 不写）
+      - 新类 ticketing/TicketTypeSaleService.java、ticketing/JdbcTicketTypeSaleRepository.java、ticketing/dto/TicketTypeSaleSettingsRequest.java
+      - ticketing/TicketingController.java、TicketingWriteOperation.java（UPDATE_TICKET_TYPE_SALE_SETTINGS）
+      - ticketing/TicketOrderService.java（售卖闸）
+      - customer/CustomerService.java（客人列表）
+      - common/api/FieldLabels.java 与 apps/web/src/admin/i18n/fieldLabels.ts（sale_starts_at 开售时间、sale_ends_at 停售时间、sale_paused 暂停售卖）
+      - backend/src/main/resources/audit/audit-labels.json（修改票种售卖设置、修改票种售卖设置失败）
+    - 依据：ENUM:30「票务策略状态为：草稿（规则未发布）、待启用（规则已配置但未到生效时间）、售卖中（当前可售卖）、暂停售卖（临时停止售卖）、已结束（售卖周期结束）、归档（历史策略）。」；R14 裁决 20（docs/prd-audit/rounds/r14/rulings-b02.md:11）「乙——不设独立状态机，复用票种 4 态（草稿/上架/暂停/归档）；「待启用」「已结束」按生效时间派生、不存储。连带：……R14-CF-07（E-36）目标状态确定＝按 4 态对应，无需新增枚举。」；迁移号按 18AW 控制席判定用 V665。
+    - 测试：TicketTypeSaleStatusWeb299Tests.pauseBlocksNewOrdersAndHidesFromCustomersThenResumes、saleWindowDerivesPendingActivationAndEnded、draftArchivedUnknownAndMissingFlag；TicketingControllerTests 补售卖设置服务 mock bean。
+- 【299-R2】
+  - 改法：
+    - 票务策略页票种表「状态」列和票种明细的「状态」，按后端派生的 sale_status 显示 ENUM:30 六态中文：草稿、待启用、售卖中、暂停售卖、已结束、归档。用页内码表，没有 sale_status 时回落原显示。
+    - 票种明细加「开售时间」「停售时间」，按本地时刻显示，空值显示「不限」。
+    - 票种行操作列加「售卖设置」：权限 ticket.product.manage，已存档或待删除的票种不显示。
+    - 弹窗内有「暂停售卖」勾选与开售、停售时间（按现值回显）；两端都填时停售须晚于开售。
+    - 提交 PUT /api/v1/ticketing/ticket-types/{id}/sale-settings，整体替换，留空即不限、传 null。
+    - 失败时中文报错留在弹窗内；成功时结果区记「票种售卖设置已保存」，并重读列表。
+  - 落地位置：
+    - apps/web/src/admin/pages/TicketTypeSaleSettings.tsx（新增）；
+    - apps/web/src/admin/pages/TicketingPoliciesPage.tsx（TicketTypeRow 类型、openTicketTypeDetail、票种表状态列与操作列，就地改）；
+    - apps/web/src/admin/i18n/fieldLabels.ts（sale_paused_at「暂停售卖时间」，动作码 ticket_type_sale_settings_changed「票种售卖设置已保存」）；
+    - docs/full-admin-page-permission-field-matrix-v0.1.csv ADM-TKT-001 行（primary_apis 补 PUT sale-settings，status_flow 改为六态派生）。
+  - 依据：
+    - ENUM:30「票务策略状态为：草稿（规则未发布）、待启用（规则已配置但未到生效时间）、售卖中（当前可售卖）、暂停售卖（临时停止售卖）、已结束（售卖周期结束）、归档（历史策略）。」
+    - R14 裁决 20（docs/prd-audit/rounds/r14/rulings-b02.md:11）「乙——不设独立状态机，复用票种 4 态（草稿/上架/暂停/归档）；「待启用」「已结束」按生效时间派生、不存储。」
+    - PGM:287「展示给用户的一切文字，包括菜单、页面标题、字段名、状态、枚举取值、按钮、提示、报错……必须全部为中文，不得出现任何英文」
+  - 测试：apps/web/src/admin/pages/TicketingPoliciesPage.salestatus.test.tsx「票种行显示暂停售卖、售卖中、已结束；售卖设置取消暂停、填停售时间提交，后端拒绝时弹窗原样显示中文报错」。
+  【340-R1】
+  - 改法：
+    - 动态定价页说明去掉「P2 」「P0 」，其余字不动。
+    - 试算渠道和新建引导渠道由自由文本框改为下拉。六个渠道代码同后端 TicketPricingService.SALES_CHANNELS（web、miniapp、app、kiosk、admin、channel），选项文字显示中文：网页端、小程序、官方手机应用、售票一体机、后台、第三方渠道。
+    - 试算渠道单独一个值，默认网页端（后端试算渠道必填）。
+    - 新建引导首项为「全部渠道」（值为空，后端空即对所有渠道生效），默认仍为网页端。
+    - 确认摘要：渠道为空时显示「全部渠道」。
+    - 后端不改。
+  - 落地位置：apps/web/src/admin/pages/DynamicPricingPage.tsx。
+  - 依据：PGM:287「展示给用户的一切文字，包括菜单、页面标题、字段名、状态、枚举取值、按钮、提示、报错……必须全部为中文，不得出现任何英文」。
+  - 测试：
+    - apps/web/src/admin/pages/DynamicPricingPage.channel.test.tsx「页头说明不含 P2、P0 等拉丁字母；试算渠道下拉列六个中文渠道，选小程序后仿真请求带 miniapp」
+    - 同文件「新建引导渠道下拉首项「全部渠道」：选它后确认页显示全部渠道，请求体 salesChannel 为空串」
+    - backend/src/test/java/com/complex/platform/ticketing/DynamicPricingChannelOptionsWeb340Tests「everyPageChannelOptionSimulatesAndAnUnlistedChannelIsRejected」（钉住页面六个选项与后端取值一致：六值 200，wechat 400 VALIDATION_FAILED）。
+- 18AW 落地位置补记（契约，K-contract）：docs/openapi/openapi-p0.yaml 与 .json 已同值就地改完，本段新增 2 个操作（变基前 1393 变为 1395；合并时总数见本段末「合并前变基」一行）。
+  - 291-R2：POST /api/v1/settlement/config/internal-price-item（settlementConfigUpsertInternalPriceItem）的 x-permission 改为 settlement.internal_price.submit，x-data-scope 改为 provider-self，新增 x-failure-codes INTERNAL_PRICE_SUBMITTER_SCOPE 等；说明写明商户账号只报本商户、非商户账号只报本人所属公司，最高权限本人提交即生效（另记 settlement.config.draft.activated，master_self_initiated=true）。依据：ENUM:54「实际提供商品或服务的主体提交，对应域主管公司审批，提交人与审批人分离」；BSM:576。
+  - 291-R1：settlementConfigActivateDraft 在 configType=internal_price_item 时补 403 INTERNAL_PRICE_APPROVER_SCOPE、409 CITY_PROJECT_COMPANY_MISSING、409 REVENUE_STREAM_ATTRIBUTION_MISSING，以及按业态定审批公司的说明。依据：ENUM:54；PGM:432。
+  - 293-R1、339-R1：settlementConfigUpsertComboDiscount 改为「维护通票凑整参数（全平台，草案）」，删 discount_bearer、split_platform_bps，新增 rounding_tolerance_min_cent、rounding_tolerance_max_cent，三项必填，须 0 ≤ 下限 ≤ 误差 ≤ 上限，project_id 须空；settlementConfigOverview 说明同步。依据：BSM:754「允许误差可配（业务参数，全平台统一可配，出厂默认 5 元，须同时配置上下限）」。
+  - 294-R1：publishTicketType 补 409 TICKET_TYPE_SERVICE_FEE_REQUIRED，位于至少一个权益之后、各业态价格之前。依据：BSM:755「票种发布前必须先选定按比例还是按固定金额并填入数值，未选定或未填写的票种不得发布上架」。
+  - 295-R1：新增 POST /api/v1/ticketing/ticket-types/{id}/refundable-enable-requests（requestTicketRefundableEnable）；TicketTypeRequest.refundable 为 true 时 400。依据：BSM:785「要让某一个票种可以退款，必须逐个票种单独开启，每次开启都须经高敏权限审批并留痕」；BSM:576。
+  - 338-R1：TicketPriceRuleRequest 的 price_mode 加 amount_delta，新增 adjustment_amount_cent；TicketTypeRuleVersionView.price_rules 同步。
+  - 338-R2：TicketDynamicPricingRuleRequest 的 adjustment_type 加 fixed_price；版本视图 dynamic_pricing_rules 与试算说明同步。338 两条依据：BSM:782「按打折/减免/加价/固定额派生」。
+  - 341-R1：price-check、pricing、publish、entitlements 四处说明补 400 TICKET_PRICE_ENDING_NOT_ALLOWED；price_check 新增 ending_allowed、rounding_allowed_endings。依据：BSM:754「使最终售价为整数，且尾数落在后台配置的允许尾数集合内」。
+  - 322-R1：archiveIntegrationChannelTicketTypeMap 补 Id 参数、x-failure-codes 与 400/404/409 响应。依据：照现码补契约。
+  - 299-R1：新增 PUT /api/v1/ticketing/ticket-types/{id}/sale-settings（updateTicketTypeSaleSettings）；listTicketTypes 补 sale_starts_at、sale_ends_at、sale_paused_at、sale_status 六值；createTicketOrder 与 createCustomerTicketOrder 补 409 TICKET_TYPE_NOT_SELLABLE 及五种报文；listCustomerTicketProducts 只列售卖中。依据：ENUM:30「票务策略状态为：草稿（规则未发布）、待启用（规则已配置但未到生效时间）、售卖中（当前可售卖）、暂停售卖（临时停止售卖）、已结束（售卖周期结束）、归档（历史策略）。」；R14 裁决 20。
+  - 340-R1：TicketDynamicPricingRuleRequest.sales_channel 说明写明空即全部渠道。
+  本段只改契约，没有新增测试；门禁为 verify:openapi、verify:openapi-examples、verify:client-routes、verify:client-openapi、verify:client-payload，全绿。
+- 18AW J 段（汇合）落地补记：
+  - 改法：tests/e2e 的 spec 与 mock 不改，只按现页面重拍一张视觉基线 tests/e2e/full-admin-visual.spec.ts-snapshots/full-admin-dynamic-pricing-mobile-chromium-linux.png。
+  - 原因：340-R1 去掉了动态定价页说明里的「P2 」「P0 」，试算渠道也从显示 web 的文本框改成显示「网页端」的下拉。
+  - 依据：PGM:287「必须全部为中文，不得出现任何英文」。
+  - 测试（变基前）：ADM-VIS-02。重拍前截图有 2797 像素（0.01）不同，人工比对只有这两处；在 b59.lock 内用 --update-snapshots=changed 重拍，另三张基线不变。
+  - 门禁结论（变基前，在 ff08d988 基线上实跑）：
+    - 后端 --fresh 全量 tests=6971，red=0，迁到 v657。
+    - 前端 typecheck 0 错，vitest 353 个文件、2006 例全过。
+    - 客人三工作区 77、131、85 例全过。
+    - 安卓员工端 125 例全过，android-app 编译通过。
+    - 后台五份 e2e spec 33 例全过。
+    - 镜像里重生成四份生成物后跑 verify:p0-contract，8 个子项全过；yaml 与 json 深比较一致，操作数 1395。
+- 18AW 落地位置补记·文档组（D-docs，2026-11-18，无迁移、无代码、无测试）：按各段交付和现码，把 9 份文档里的过期现状句或缺口句就地改成现码实情；每份只升一次版，有修订表的各加一行，不新增业务规则，不扩表。
+  ① docs/finance-settlement-product-prd-v0.1.md（V0.41）：
+  - §3A 渠道费两层补 289-R1。依据 ENUM:51「任何票种经第三方渠道售出时，销售渠道费一律先从整单扣除且只扣一次」。
+  - §3A 凑整与允许误差补 339-R1、339-R2 与 341-R1，292 现状里的块名和「尾数不作发布闸」同步改。依据 BSM:754「允许误差可配（业务参数，全平台统一可配，出厂默认 5 元，须同时配置上下限）」「使最终售价为整数，且尾数落在后台配置的允许尾数集合内」。
+  - §3A 凑整差额与折扣的承担：越权缺口块改为 293-R1、293-R2 已改造现状。依据 BSM:754「凑整产生的差额按各业态价格比例，与折扣一并分摊到各域，由各域主管公司按份额各自承担或取得」。
+  - §3B.3 补 291-R1、291-R2。依据 ENUM:54「实际提供商品或服务的主体提交，对应域主管公司审批，提交人与审批人分离」，PGM:660「查看、导出和修改分别授权」，BSM:576。
+  ② docs/settlement-rebuild-prd-v1.0.md（V1.18）：同步 293（§5.0c ① 与 ①-b、§7.4、§10.2D、§14.1、附录 A 参数表）和 339（§5.0c ①-b 允许误差）；§9.7 当前落点同步 291；§5.1 落地记录补 289。
+  ③ docs/ticketing-entitlement-checkin-product-prd-v0.1.md（V0.39）：
+  - §5：339、341 现状；294 现状，依据 BSM:755「票种发布前必须先选定按比例还是按固定金额并填入数值，未选定或未填写的票种不得发布上架。」
+  - §7.1 E-36：按 R14 裁决 20（rulings-b02.md:11「不设独立状态机，复用票种 4 态（草稿/上架/暂停/归档）；「待启用」「已结束」按生效时间派生、不存储」）改写，补 299-R1、299-R2 现状（299-R3）。
+  - §8.3.3：296-R1，依据 ENUM:148「另补一次完整票面权益，包括重新提供酒水、礼品」。
+  - §8.4.1：295-R1、295-R2，依据 BSM:785「要让某一个票种可以退款，必须逐个票种单独开启，每次开启都须经高敏权限审批并留痕」与 BSM:576。
+  - §12A.2：338-R1～R3 与 340-R1，依据 BSM:782「会员价、渠道价、动态价都在对应基础价上按打折/减免/加价/固定额派生」与 PGM:287「界面全中文（所有终端零英文）」。
+  ④ 其余文档：
+  - docs/amusement-business-operations-product-prd-v0.1.md（V0.18）§11B.3 与 docs/amusement-operations-development-design.md（V0.19）§15B：296-R1。
+  - docs/ticketing-pass-entitlement-development-design.md（V0.16）：§4.1A 按 299 与 R14 裁决 20 改写；§6.2.1.0 同步 338-R1 与 status 行。
+  - docs/ticketing-database-implementation-notes.md（V0.10）：§6 补 V665 三列说明。
+  - docs/platform-governance-prd-v0.1.md（V0.93）：§2A.5 补 295 复核策略。
+  - docs/p2-ticket-dynamic-pricing-api-contract-v0.1.md（V0.12）：adjustment_type 补 fixed_price（338-R2）。
+  ⑤ 校验：verify-full-admin-page-matrix 通过（117 页）；docs 的 git diff --check 为 0；verify:html-ledger-sync PASS；verify:entry-anchors PASS。
+- 18AW 收尾复核修正（2026-11-19）：
+  ① 动态定价页结果区英文（复核意见 1；控制席判 percent_delta、fixed_delta 与试算说明虽是基线既有，与本段新增的 fixed_price 同页同键同根，一并改）：
+  - apps/web/src/admin/i18n/fieldLabels.ts 的 KEY_VALUE_LABELS 加 adjustment_type（percent_delta 按比例、fixed_delta 按固定金额、fixed_price 固定价，用语同页内 ADJUSTMENT_TYPE_LABELS），新建、发布规则后结果区「调整类型」显示中文。
+  - TicketPricingService.simulateDynamicPricing 的试算说明 explanation 由「no matching dynamic pricing rule」「matched 」加规则名改为「未命中动态定价规则」「命中规则：」加规则名；TicketingControllerTests 桩值、docs/p2-ticket-dynamic-pricing-api-contract-v0.1.md 响应示例与 §5 同步。
+  - 新用例：TicketPricingModes338Tests.simulationExplanationIsChineseWhetherMatchedOrNot（真实请求蛇形键、真实授权链）；DynamicPricingPage.guidedcreate.test.tsx「DynamicPricingPage 结果区中文」两例（新建固定价规则、发布、试算后结果区不出 fixed_price、percent_delta、fixed_delta 与英文说明；按比例、按固定金额显示中文）。
+  - 依据：PGM:287「展示给用户的一切文字，包括菜单、页面标题、字段名、状态、枚举取值、按钮、提示、报错……必须全部为中文，不得出现任何英文」。
+  ② 覆盖表（复核意见 2）：docs/prd-audit/html-prd-coverage.csv 的 BSM-0058 由 FULL 改回 PARTIAL，保留 338 落地现状，补「动态价按时段、容量等规则配置：后台动态定价页没有条件录入，各端下单不传时段、场次、容量上下文，condition_rule 不会命中，见待开发清单第 359 条（待核实）」；同根的 BSM-0631（BSM:756）由 FULL 改回 PARTIAL、BEQ-0132（ENUM:58）补同一现状句；本段其余 4 行 BEQ-0128、BSM-0610、BEQ-0158、BSM-0540 逐分句复核都已有代码落地，维持 FULL。依据 BSM:782「价格派生会员价、渠道价、动态价都在对应基础价上按打折/减免/加价/固定额派生；动态价按时段、容量等规则配置，可先试算再发布。」，BSM:756「先按日期、时段、场次和容量算动态公开价」，ENUM:58「先按日期、时段、场次和容量计算动态公开价」。
+  ③ 动态价按时段、场次、容量条件配置未落地的缺口为基线既有，已由控制席登记待开发清单第 359 条（待核实），本段不改代码。
+- 18AW 合并前变基（2026-11-19）：本段自 ff83ee69（暂存提交 f9bc432b）变基到 origin/main 1ec697cd；迁移按原序顺延改号 V653→V661、V654→V662、V655→V663、V656→V664、V657→V665；合并时 OpenAPI 共 1399 个操作（主干 1397）、info.version V0.82、决策台账 V1.06，Flyway 最新 V665（共 614 个迁移）。版本行、契约版本、计数与 SHA、生成物、台账补记与 PRD 修订行由合并前脚本按新主干统一重写。
+- 18AW 落地位置补记·运行验收证据、快照、终验文档刷新（无新裁决）：业务提交 961170da 之后，按第十八批裁决 25 重刷了运行验收证据：后端全量 7019 测，0 失败 0 错误；apps/web 构建通过；常规界面验收（接口全部 mock）实跑 40 条全过；真实后端界面验收未跑，runtime_ready=false。随后依次重生成闭环当前态快照、生产闭环缺口报告、界面验收报告、无上线指挥台。生成器没改。手改 docs/final-closed-loop-acceptance-audit-v0.1.md 与 docs/code-implementation-acceptance-audit-v0.1.md：前端单测源码计数改为 1920；TicketingService.java 行数由 1363 改为 1381，其余被核文件行数无变化；后端全量与常规界面验收的数字、日期改为本次实跑值；写入 npm run verify:unit 实跑结果，五个工作区全过。交付门禁于 2026-11-19 02:46 UTC 在工作树逐项实跑子项，NAS 两项现场探测未跑。仍红的有两项：一是 coding-host-protection，它写死主仓路径，在工作树口径下必红，属工具口径，不做；二是 final-closed-loop-audit，如实留 2 条红（integration-ready、business-acceptance-ready），原因是校验器要求终验把联调、业务验收写成「是」，而裁决 25 定了不跑真实后端界面验收、运行验收未就绪，终验写的是「否」。verify:delivery-gates 总链仍是红的。

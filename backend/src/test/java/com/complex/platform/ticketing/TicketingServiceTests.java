@@ -1,8 +1,8 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.15
+// 文件版本：V0.16
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import com.complex.platform.support.InMemoryAuditEventRepository;
 import com.complex.platform.support.InMemoryIdempotencyRepository;
@@ -85,7 +85,7 @@ class TicketingServiceTests {
         private String allowedEndings = FACTORY_ALLOWED_ENDINGS;
 
         @Override
-        public ComboRounding findComboRounding(String projectId) {
+        public ComboRounding findComboRounding() {
             return new ComboRounding(toleranceCent, allowedEndings);
         }
     }
@@ -395,7 +395,7 @@ class TicketingServiceTests {
         registerBar("mch_bar_e", "单店酒吧");
         TicketTypeRecord single = service.createTicketType(new TicketTypeRequest(
                 "k17-single", "create", List.of(), "单店入场票", "weekday_weekend_holiday", 9900L, 9900L, 9900L, false, "active",
-                null, null, true, "mch_bar_e", null, null, null));
+                null, null, null, "mch_bar_e", null, null, null));
         bindBarEntitlements(single.id(), "mch_bar_e", "E", 0);
 
         assertThat(service.publishTicketType(single.id(),
@@ -3593,6 +3593,7 @@ class TicketingServiceTests {
 
     private TicketTypeRecord createTicketType(String key) {
         // 方案2：测试票种默认设 refundable=true，退款链测试才能走通（生产默认 false，另有 refundable=false 专项用例）。
+        // 第十八批 AW 段 295-R1：建票不再带可退（逐票种申请审批），测试票种在仓储里直接置可退。
         TicketTypeRecord created = service.createTicketType(new TicketTypeRequest(
                 key,
                 "create",
@@ -3606,19 +3607,23 @@ class TicketingServiceTests {
                 "active",
                 null,
                 null,
-                true
+                null
         , null, null, null, null));
-        return publishedForTest(created);
+        return publishedForTest(created, true);
     }
 
     /** AUD-015：建票固定 draft；下单/退款/核销用例直接仓储级置 published 跳过发布闸（发布闸另有专项用例）。 */
     private TicketTypeRecord publishedForTest(TicketTypeRecord created) {
+        return publishedForTest(created, created.refundable());
+    }
+
+    private TicketTypeRecord publishedForTest(TicketTypeRecord created, boolean refundable) {
         return ticketingRepository.saveTicketType(new TicketTypeRecord(
                 created.id(), created.ticketName(), created.baseCalendarPriceMode(),
                 created.weekdayPriceCent(), created.weekendPriceCent(), created.holidayPriceCent(),
                 created.stockRequired(), "published", created.validityDays(), created.refreshIntervalSeconds(),
                 created.createdAt(), created.updatedAt(), created.stockQuantity(), created.soldQuantity(),
-                created.ticketCategory(), created.refundable(), created.barId(), TicketTypeRecord.NO_COMBO_DISCOUNT));
+                created.ticketCategory(), refundable, created.barId(), TicketTypeRecord.NO_COMBO_DISCOUNT));
     }
 
     private void assertDerivedPriceRuleAmount(String key, long basePriceCent, BigDecimal discountRate, long amountCent) {
@@ -3712,7 +3717,7 @@ class TicketingServiceTests {
     void createTicketTypePersistsValidityAndRefreshAndStartsAsDraft() {
         TicketTypeRecord tt = service.createTicketType(new TicketTypeRequest(
                 "b2-validity", "create", List.of(), "周票", "weekday_weekend_holiday",
-                9900L, 11900L, 12900L, false, "active", null, null, true, null, 7, 30, null));
+                9900L, 11900L, 12900L, false, "active", null, null, null, null, 7, 30, null));
         assertThat(tt.status()).isEqualTo("draft");
         assertThat(tt.validityDays()).isEqualTo(7);
         assertThat(tt.refreshIntervalSeconds()).isEqualTo(30);
@@ -3722,12 +3727,12 @@ class TicketingServiceTests {
     void createTicketTypeRejectsInvalidValidityAndRefresh() {
         assertThatThrownBy(() -> service.createTicketType(new TicketTypeRequest(
                 "b2-badvalidity", "create", List.of(), "坏有效期", "weekday_weekend_holiday",
-                9900L, 11900L, 12900L, false, null, null, null, true, null, 0, null, null)))
+                9900L, 11900L, 12900L, false, null, null, null, null, null, 0, null, null)))
                 .isInstanceOfSatisfying(ApiException.class,
                         e -> assertThat(e.getMessage()).contains("有效天数"));
         assertThatThrownBy(() -> service.createTicketType(new TicketTypeRequest(
                 "b2-badrefresh", "create", List.of(), "坏刷新", "weekday_weekend_holiday",
-                9900L, 11900L, 12900L, false, null, null, null, true, null, 7, 12, null)))
+                9900L, 11900L, 12900L, false, null, null, null, null, null, 7, 12, null)))
                 .isInstanceOfSatisfying(ApiException.class,
                         e -> assertThat(e.getMessage()).contains("刷新间隔秒数"));
     }
@@ -3738,7 +3743,7 @@ class TicketingServiceTests {
     void createTicketTypeRejectsUnknownBaseCalendarPriceMode() {
         assertThatThrownBy(() -> service.createTicketType(new TicketTypeRequest(
                 "bcpm-bad", "create", List.of(), "坏日历价模式", "calendar",
-                9900L, 11900L, 12900L, false, null, null, null, true, null, 1, null, null)))
+                9900L, 11900L, 12900L, false, null, null, null, null, null, 1, null, null)))
                 .isInstanceOfSatisfying(ApiException.class,
                         e -> assertThat(e.getMessage()).contains("base_calendar_price_mode"));
     }
@@ -3748,7 +3753,7 @@ class TicketingServiceTests {
     void createTicketTypeAcceptsFifteenSecondRefresh() {
         TicketTypeRecord tt = service.createTicketType(new TicketTypeRequest(
                 "qr15-ok", "create", List.of(), "十五秒票", "weekday_weekend_holiday",
-                9900L, 11900L, 12900L, false, null, null, null, true, null, 1, 15, null));
+                9900L, 11900L, 12900L, false, null, null, null, null, null, 1, 15, null));
         assertThat(tt.refreshIntervalSeconds()).isEqualTo(15);
     }
 
@@ -3757,7 +3762,7 @@ class TicketingServiceTests {
     void createTicketTypeAcceptsFiveSecondRefresh() {
         TicketTypeRecord tt = service.createTicketType(new TicketTypeRequest(
                 "qr5-ok", "create", List.of(), "五秒票", "weekday_weekend_holiday",
-                9900L, 11900L, 12900L, false, null, null, null, true, null, 1, 5, null));
+                9900L, 11900L, 12900L, false, null, null, null, null, null, 1, 5, null));
         assertThat(tt.refreshIntervalSeconds()).isEqualTo(5);
     }
 
@@ -3766,7 +3771,7 @@ class TicketingServiceTests {
     void createTicketTypeRejectsNonMultipleOfFiveRefresh() {
         assertThatThrownBy(() -> service.createTicketType(new TicketTypeRequest(
                 "qr12-bad", "create", List.of(), "十二秒票", "weekday_weekend_holiday",
-                9900L, 11900L, 12900L, false, null, null, null, true, null, 1, 12, null)))
+                9900L, 11900L, 12900L, false, null, null, null, null, null, 1, 12, null)))
                 .isInstanceOfSatisfying(ApiException.class,
                         e -> assertThat(e.getMessage()).contains("刷新间隔秒数"));
     }
@@ -3800,7 +3805,7 @@ class TicketingServiceTests {
             String key = "b2-days-" + days;
             TicketTypeRecord tt = service.createTicketType(new TicketTypeRequest(
                     key, "create", List.of(), "Pass " + days, "weekday_weekend_holiday",
-                    9900L, 11900L, 12900L, false, null, null, null, true, null, days, null, null));
+                    9900L, 11900L, 12900L, false, null, null, null, null, null, days, null, null));
             EntitlementTemplateRecord tpl = createTemplate(key + "-tpl", 1, 9900L);
             service.bindTicketTypeEntitlement(tt.id(), new TicketTypeEntitlementRequest(
                     key + "-bind", "bind", List.of(), tpl.id(), 1, 1, 9900L, "default", 1, 9900L));
@@ -3822,7 +3827,7 @@ class TicketingServiceTests {
     void publishGateRequiresEntitlementBindingAndDraftIsNotSellable() {
         TicketTypeRecord tt = service.createTicketType(new TicketTypeRequest(
                 "b2-gate", "create", List.of(), "闸口票", "weekday_weekend_holiday",
-                9900L, 11900L, 12900L, false, "active", null, null, true, null, null, null, null));
+                9900L, 11900L, 12900L, false, "active", null, null, null, null, null, null, null));
         assertThat(tt.status()).isEqualTo("draft");
         // 无权益绑定不可发布(AUD-015:公开可售的票必须能出票)。
         assertThatThrownBy(() -> service.publishTicketType(tt.id(), new TicketTypePublishRequest(
@@ -4776,7 +4781,7 @@ class TicketingServiceTests {
     private TicketTypeRecord seedComboPass(String key, long priceCent, java.math.BigDecimal discountRate) {
         TicketTypeRecord tt = service.createTicketType(new TicketTypeRequest(
                 key, "create", List.of(), "联合通票 " + key, "weekday_weekend_holiday",
-                priceCent, priceCent, priceCent, Boolean.FALSE, null, null, null, Boolean.TRUE,
+                priceCent, priceCent, priceCent, Boolean.FALSE, null, null, null, null,
                 null, null, null, discountRate));
         EntitlementTemplateRecord ride = service.createEntitlementTemplate(new EntitlementTemplateRequest(
                 key + "-tpl-ride", "ride", List.of(), "游乐 " + key, "amusement_ride", 1, 8000L, "active",
@@ -4942,7 +4947,7 @@ class TicketingServiceTests {
     void roundingDifferenceFlowsIntoTheExistingComboDiscountAccounting() {
         // HTML:741「凑整产生的差额按既有折扣承担口径处理」：不新建口径。
         //   出票时每张权益照旧记「满额份额=票面原价」与「实付份额」，两者之差就是折扣，
-        //   由结算配置中心那条 combo_discount_bearer 决定谁承担——凑整多出/少收的那点钱自然走同一条路。
+        //   第十八批 AW 段 293-R1 起按份额由各域承担（BSM:754）——凑整多出/少收的那点钱自然走同一条路。
         catalogService.comboPriceToleranceConfigPort = toleranceStub;
         TicketTypeRecord pass = seedComboPass("v369-discount", 17800L, new java.math.BigDecimal("85"));
         ticketingRepository.ticketProjects.put(pass.id(), List.of("project_rounding"));
@@ -5010,8 +5015,75 @@ class TicketingServiceTests {
     }
 
     @Test
+    void amountDeltaDerivedPriceAddsSignedAmountToTheDaysBasePriceFloorZero() {
+        // 第十八批 AW 段 338-R1（BSM:782「会员价、渠道价、动态价都在对应基础价上按打折/减免/加价/固定额派生」）：按基础价加减金额，负数为减免、正数为加价，
+        //   平日、周末、节假日各按当日基础价加减，最低 0 元。
+        TicketTypeRecord ticketType = createTicketType("amount-delta");   // 平日 99、周末 119、节假日 129 元
+        LocalDate holidayWednesday = LocalDate.parse("2026-06-24");
+        holidays.add(holidayWednesday);
+        TicketPriceRuleRecord minus = amountDeltaRule(ticketType, "amount-delta-minus", "member", -1000L);
+        assertThat(pricingService.resolveUnitPrice(ticketType, minus, LocalDate.parse("2026-07-01"))).isEqualTo(8900L);
+        assertThat(pricingService.resolveUnitPrice(ticketType, minus, LocalDate.parse("2026-07-04"))).isEqualTo(10900L);
+        assertThat(pricingService.resolveUnitPrice(ticketType, minus, holidayWednesday)).isEqualTo(11900L);
+        assertThat(pricingService.resolveUnitPrice(ticketType, amountDeltaRule(ticketType, "amount-delta-plus", "channel", 500L),
+                LocalDate.parse("2026-07-01"))).isEqualTo(10400L);
+        assertThat(pricingService.resolveUnitPrice(ticketType, amountDeltaRule(ticketType, "amount-delta-floor", "group", -20000L),
+                LocalDate.parse("2026-07-01"))).isZero();
+    }
+
+    @Test
+    void lowestUnitPriceCountsAmountDeltaDerivedPrice() {
+        // 338-R1：最低实付价（ENUM:52）把按基础价减免的学生价算进去：平日 99 元减 30 元＝69 元。
+        TicketTypeRecord ticketType = createTicketType("amount-delta-lowest");
+        amountDeltaRule(ticketType, "amount-delta-lowest-rule", "student", -3000L);
+        assertThat(pricingService.lowestUnitPriceCent(ticketType.id(), LocalDate.parse("2026-09-29"))).isEqualTo(6900L);
+    }
+
+    @Test
+    void dynamicFixedPriceSetsPublicPriceToTheFixedAmountWithinMaxPrice() {
+        // 第十八批 AW 段 338-R2（BSM:782「动态价都在对应基础价上按打折/减免/加价/固定额派生」）：动态价按固定价——命中即公开价为该固定价，仍受最高价夹值。
+        TicketTypeRecord ticketType = createTicketType("dynamic-fixed");   // 平日 99 元
+        LocalDate wednesday = LocalDate.parse("2026-07-01");
+        service.createDynamicPricingRule(new TicketDynamicPricingRuleRequest("dynamic-fixed-a", "fixed", List.of(), ticketType.id(),
+                "晚场固定价", 10, wednesday, wednesday, "admin", "fixed_price", null, 19900L, null, null, Map.of()));
+        assertThat(service.simulateDynamicPricing(new TicketDynamicPricingSimulationRequest("dynamic-fixed-sim-a", ticketType.id(),
+                wednesday, "admin", Map.of())).finalPriceCent()).isEqualTo(19900L);
+        service.createDynamicPricingRule(new TicketDynamicPricingRuleRequest("dynamic-fixed-b", "fixed", List.of(), ticketType.id(),
+                "晚场固定价封顶", 20, wednesday, wednesday, "admin", "fixed_price", null, 19900L, null, 18000L, Map.of()));
+        assertThat(service.simulateDynamicPricing(new TicketDynamicPricingSimulationRequest("dynamic-fixed-sim-b", ticketType.id(),
+                wednesday, "admin", Map.of())).finalPriceCent()).isEqualTo(18000L);
+    }
+
+    private TicketPriceRuleRecord amountDeltaRule(TicketTypeRecord ticketType, String key, String variant, long amountCent) {
+        return service.createTicketPriceRule(new TicketPriceRuleRequest(key, "amount delta", List.of(), ticketType.id(), variant,
+                "amount_delta", null, null, null, null, null, Map.of(), amountCent));
+    }
+
+    @Test
+    void roundedPriceMustBeWholeYuanEndingInAllowedSetOtherwiseNotPublishable() {
+        // 第十八批 AW 段 341-R1（BSM:754「使最终售价为整数，且尾数落在后台配置的允许尾数集合内」）：算出 174.25 元，凑成 175 元（尾数 5）或 174.50 元（非整元）
+        //   都不许开卖；178、179、170 元可以；不凑整（填的就是算出的 174.25 元）也可以；后台把允许尾数改成 5 后 175 元可以。
+        catalogService.comboPriceToleranceConfigPort = toleranceStub;
+        for (long bad : new long[]{17500L, 17450L}) {
+            TicketTypeRecord pass = seedComboPass("e341-bad-" + bad, bad, new java.math.BigDecimal("85"));
+            assertThatThrownBy(() -> publish(pass.id(), "e341-bad-pub-" + bad))
+                    .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("TICKET_PRICE_ENDING_NOT_ALLOWED"))
+                    .hasMessageContaining("178.00");
+        }
+        for (long ok : new long[]{17800L, 17900L, 17000L, 17425L}) {
+            TicketTypeRecord pass = seedComboPass("e341-ok-" + ok, ok, new java.math.BigDecimal("85"));
+            assertThat(service.publishTicketType(pass.id(), new TicketTypePublishRequest(
+                    "e341-ok-pub-" + ok, "p", "上架", List.of())).status()).isEqualTo("published");
+        }
+        toleranceStub.allowedEndings = "5";
+        TicketTypeRecord five = seedComboPass("e341-five", 17500L, new java.math.BigDecimal("85"));
+        assertThat(service.publishTicketType(five.id(), new TicketTypePublishRequest(
+                "e341-five-pub", "p", "上架", List.of())).status()).isEqualTo("published");
+    }
+
+    @Test
     void niceEndingSuggestionPicksTheNearestEightNineOrZero() {
-        // 凑整建议只是给运营的一个数（尾数按后台配置的允许尾数集合，出厂 8/9/0），不强制——真正拒绝发布的只有「超出允许误差」这一条。
+        // 凑整建议：离算出售价最近的整元且尾数在后台配置的允许尾数集合内（出厂 8/9/0）；第十八批 AW 段 341-R1 起凑整后的价不合这条即不许开卖。
         assertThat(TicketCatalogService.roundToNiceEnding(17425L, "089")).isEqualTo(17800L);
         assertThat(TicketCatalogService.roundToNiceEnding(19100L, "089")).isEqualTo(19000L);
         assertThat(TicketCatalogService.roundToNiceEnding(19300L, "089")).isEqualTo(19000L);

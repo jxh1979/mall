@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.08
+// 文件版本：V0.09
 
 import com.complex.platform.evidence.AuditedOperation;
 
@@ -37,6 +37,12 @@ enum TicketingWriteOperation implements AuditedOperation {
     // 第十八批 AJ 段 236-R7（第十八批裁决 61）：撤回跨域组合通票票种规则草稿版或待审提交（待审的同时作废复核单），留痕对象为该版本。
     WITHDRAW_TICKET_TYPE_RULE_VERSION("ticket_type.rule_version.withdrawn", "ticket_type.rule_version.withdraw_failed",
             "ticket.product.manage", "ticket_type_rule_version"),
+    // 第十八批 AW 段 295-R1（BSM:785）：申请开启票种可退（待审或最高权限本人即生效；获批、驳回由 TicketRefundableEnableService 另记）。
+    REQUEST_TICKET_REFUNDABLE_ENABLE("ticket_type.refundable_enable.submitted", "ticket_type.refundable_enable.submit_failed",
+            "ticket.product.manage", "ticket_type"),
+    // 第十八批 AW 段 299-R1（ENUM:30）：票种售卖设置（暂停售卖、开售与停售时间），留痕记改前改后。
+    UPDATE_TICKET_TYPE_SALE_SETTINGS("ticket_product.sale_settings_changed", "ticket_product.sale_settings_change_failed",
+            "ticket.product.manage", "ticket_type"),
     // 第十八批 AH 段 215-R2：按票种改最低赠酒杯数（ENUM:34「按票种可配……须同时配置上下限」），留痕记改前改后。
     CONFIGURE_TICKET_TYPE_MIN_GIFT_CUPS("ticket_type.min_gift_cups_configured", "ticket_type.min_gift_cups_config_failed",
             "ticket.product.manage", "ticket_type"),

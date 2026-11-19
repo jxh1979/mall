@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.13
+// 文件版本：V0.14
 
 import com.complex.platform.common.api.ApiException;
 
@@ -53,6 +53,9 @@ public class TicketingService {
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     @org.springframework.context.annotation.Lazy
     com.complex.platform.terminal.TerminalDeviceService terminalDeviceService;
+    // 第十八批 AW 段 295-R1：票种开启可退逐个申请、高敏审批（字段注入免改构造点；单测未注入）。
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    TicketRefundableEnableService refundableEnable;
 
     @org.springframework.beans.factory.annotation.Autowired
     public TicketingService(
@@ -861,6 +864,21 @@ public class TicketingService {
                 TicketTypeRuleVersionView.class,
                 TicketingWriteOperation.WITHDRAW_TICKET_TYPE_RULE_VERSION,
                 () -> catalogService.withdrawRuleVersion(id, request)
+        );
+    }
+
+    /** 第十八批 AW 段 295-R1（BSM:785「每次开启都须经高敏权限审批并留痕」）：申请开启该票种可退；最高权限本人发起即生效（BSM:576）。 */
+    @com.complex.platform.gate.GuardedAction(capability = "ticket.product.manage")
+    @Transactional
+    public TicketRefundableEnableService.TicketRefundableEnableResult requestTicketRefundableEnable(String ticketTypeId, TicketRefundableEnableService.Request request) {
+        String id = operations.requireText(ticketTypeId, "ticket_type_id");
+        return operations.executeWrite(
+                "requestTicketRefundableEnable:" + id,
+                request == null ? null : request.idempotencyKey(),
+                request,
+                TicketRefundableEnableService.TicketRefundableEnableResult.class,
+                TicketingWriteOperation.REQUEST_TICKET_REFUNDABLE_ENABLE,
+                () -> refundableEnable.request(id, request)
         );
     }
 

@@ -1,6 +1,6 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -35,7 +35,7 @@ import org.springframework.transaction.annotation.Transactional;
  * <p>依据：ENUM L52「娱乐平台公司确需让第一段合计高于池金额的，须在配置生效前提交短期经营激励申请并经项目之上的平台权限审批，
  * 超出部分由娱乐平台公司承担，初始有效期不超过后台配置的上限（业务参数，按项目可配，出厂默认三个月，须同时配置上下限）、到期重审」；
  * BSM L752「期限届满须重新提交审批，不得自动续期」；DEC-R3-2026-08-04-13（审批人为项目之上的平台权限）。
- * 草案第一段固定金额 5000 比最不利一份池 4473 多 527（造数见 {@link PoolTrialFixture}）。请求一律按前端真实请求形状（蛇形键）。
+ * 草案第一段固定金额 5000 比最不利一份池 3123 多 1877（造数见 {@link PoolTrialFixture}）。请求一律按前端真实请求形状（蛇形键）。
  */
 @SpringBootTest(properties = {
         "spring.datasource.url=${SETTLE_TEST_DB_URL:jdbc:postgresql://127.0.0.1:5432/complex_test}",
@@ -76,7 +76,7 @@ class PassIncentiveApplicationJdbcIntegrationTests {
     }
 
     /**
-     * 超池草案：转正 409；提交首次申请（待审，最大超出额＝试算超出 527）；平台负责人批准后另一人转正 200，
+     * 超池草案：转正 409；提交首次申请（待审，最大超出额＝试算超出 1877）；平台负责人批准后另一人转正 200，
      * 申请有效期自本版生效营业日起 3 个月（营业日起点）；提交、批准各记一条成功审计；同一幂等键重放返回原申请。
      */
     @Test
@@ -87,8 +87,8 @@ class PassIncentiveApplicationJdbcIntegrationTests {
         JsonNode submitted = data(submit(version, drafter, "idem1", 3, "month"));
         assertThat(submitted.path("status").asText()).isEqualTo("pending");
         assertThat(submitted.path("kind").asText()).isEqualTo("initial");
-        assertThat(submitted.path("max_excess_cent").asLong()).isEqualTo(527L);
-        assertThat(submitted.path("trial_result").get(0).path("excess_cent").asLong()).isEqualTo(527L);
+        assertThat(submitted.path("max_excess_cent").asLong()).isEqualTo(1877L);
+        assertThat(submitted.path("trial_result").get(0).path("excess_cent").asLong()).isEqualTo(1877L);
         String app = submitted.path("id").asText();
         assertThat(data(submit(version, drafter, "idem1", 3, "month")).path("id").asText()).as("幂等重放").isEqualTo(app);
 
@@ -259,7 +259,7 @@ class PassIncentiveApplicationJdbcIntegrationTests {
                 Timestamp.from(businessDays.start(fx.project, null, expiry)), app);
     }
 
-    /** 本项目超池草案：单人单次通票覆盖酒吧，第一段固定金额 5000 > 最不利一份池 4473。 */
+    /** 本项目超池草案：单人单次通票覆盖酒吧，第一段固定金额 5000 > 最不利一份池 3123。 */
     private String overPoolDraft() throws Exception {
         String bar = fx.bar("x" + (++seq));
         fx.singlePass(bar);

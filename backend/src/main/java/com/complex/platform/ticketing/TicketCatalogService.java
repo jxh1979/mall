@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.07
+// 文件版本：V0.08
 
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.governance.MerchantRecord;
@@ -37,7 +37,8 @@ public class TicketCatalogService {
     private static final BigDecimal MIN_DISCOUNT_RATE = BigDecimal.ZERO;
     private static final BigDecimal MAX_DISCOUNT_RATE = BigDecimal.valueOf(100);
     private static final Set<String> PRICE_VARIANTS = Set.of("group", "new_customer", "student", "channel", "member");
-    private static final Set<String> PRICE_MODES = Set.of("derive_from_calendar_price", "fixed_price");
+    // 第十八批 AW 段 338-R1（BSM:782「按打折/减免/加价/固定额派生」）：amount_delta＝按基础价加减金额（负数为减免、正数为加价）。
+    private static final Set<String> PRICE_MODES = Set.of("derive_from_calendar_price", "fixed_price", "amount_delta");
     // 基础日历价模式白名单：业务口径只有「平日/周末/节假日三类基础价」一种
     // （业务系统地图「平日票、周末票、节假日票（基础价，优先级最高）」）。
     // 与上面派生价规则的 PRICE_MODES 是两个不同字段，勿混用。
@@ -53,7 +54,7 @@ public class TicketCatalogService {
     // 第十八批 AI 段 236-R2：同包无状态解析器，发布与加权益时查提供方内部结算价是否已获批生效（与核销取价同一处）。
     private final InternalSettlementPriceResolver priceResolver;
 
-    // V369：凑整允许误差（后台可配，取自结算配置中心「通票分账 → 套票折扣归属」那一行）。
+    // V369：凑整允许误差（后台可配，取自结算配置中心「通票凑整参数」全平台一行；第十八批 AW 段 339-R1 起不按项目）。
     // 字段注入免改构造点；生产由 Spring 恒注入 JdbcSettlementBillRepository，端口自身缺配置时 fail-loud。
     // 为 null（旧构造/未注入的单测）= 不做误差校验，与 barDirectory 同范式。
     @org.springframework.beans.factory.annotation.Autowired(required = false)
@@ -62,13 +63,13 @@ public class TicketCatalogService {
     private static final ComboPriceToleranceConfigPort.ComboRounding ZERO_TOLERANCE_FACTORY_ENDINGS =
             new ComboPriceToleranceConfigPort.ComboRounding(0L, ComboPriceToleranceConfigPort.FACTORY_ALLOWED_ENDINGS);
 
-    // V369：解析当前登录人的项目公司作用域，用于按项目取允许误差。为 null 时取全局默认作用域。
-    @org.springframework.beans.factory.annotation.Autowired(required = false)
-    com.complex.platform.access.AuthorizationService authorizationService;
-
     // 第十八批 AJ 段 236-R3：跨域组合通票票种规则版本（字段注入免改构造点；单测未注入＝不识别跨域、发布与改动行为不变）。
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     TicketTypeRuleVersionService ruleVersions;
+
+    // 第十八批 AW 段 294-R1：单一酒吧门票发布前查本项目本酒吧综合服务费已转正（字段注入免改构造点；单测未注入＝不查）。
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    SingleBarServiceFeeConfigPort serviceFeeConfigPort;
 
     @org.springframework.beans.factory.annotation.Autowired
     public TicketCatalogService(TicketingRepository repository, BarMerchantDirectory barDirectory) {
@@ -79,6 +80,11 @@ public class TicketCatalogService {
 
     TicketTypeRecord createTicketType(TicketTypeRequest request) {
         TicketTypeRequest actual = requireRequest(request);
+        // 第十八批 AW 段 295-R1（BSM:785「要让某一个票种可以退款，必须逐个票种单独开启，每次开启都须经高敏权限审批并留痕，不得整批打开」）：
+        //   建票一律不可退，开启走建票后逐个票种申请（TicketRefundableEnableService）。
+        if (Boolean.TRUE.equals(actual.refundable())) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "票种开启可退须建票后逐个票种申请并经审批");
+        }
         Instant now = Instant.now();
         return repository.saveTicketType(new TicketTypeRecord(
                 "ticket_type_" + slug(actual.idempotencyKey()),
@@ -102,8 +108,8 @@ public class TicketCatalogService {
                 0,
                 // 结算重构批4（V230）：资格/定价档分类标签（可空=标准；非空校验取值，DB 另有 CHECK 兜底）。
                 normalizeTicketCategory(actual.ticketCategory()),
-                // 方案2/规则2（V286）：是否可退票（可空=不可退，默认最安全）。
-                actual.refundable() != null && actual.refundable(),
+                // 方案2/规则2（V286）：是否可退票；295-R1 起建票恒不可退。
+                false,
                 // AUD-076 单店票挂酒吧：校验并挂定酒吧归属（非空必须是业态 bar 且未存档的商户；建后不可变）。
                 validateBarBinding(actual.barId()),
                 // V369：票种折扣（0~100 百分数，可空=100 不打折）。系统据此自动算出售价。
@@ -153,7 +159,7 @@ public class TicketCatalogService {
         TicketTypeRecord ticketType = repository.findTicketTypeById(requireText(ticketTypeId, "ticket_type_id"))
                 .orElseThrow(() -> ApiException.notFound("TICKET_TYPE_NOT_FOUND", "票种不存在或已被删除"));
         ComboPriceToleranceConfigPort.ComboRounding rounding = comboPriceToleranceConfigPort == null
-                ? ZERO_TOLERANCE_FACTORY_ENDINGS : comboPriceToleranceConfigPort.findComboRounding(currentProjectId());
+                ? ZERO_TOLERANCE_FACTORY_ENDINGS : comboPriceToleranceConfigPort.findComboRounding();
         return priceCheck(ticketType, repository.listTicketTypeEntitlements(ticketType.id()), rounding);
     }
 
@@ -195,6 +201,10 @@ public class TicketCatalogService {
                 || actual.discountRate().compareTo(MAX_DISCOUNT_RATE) > 0)) {
             throw ApiException.badRequest("VALIDATION_FAILED", "折扣率必须在 0 到 100 之间");
         }
+        boolean amountDelta = "amount_delta".equals(priceMode);
+        if (amountDelta && (actual.adjustmentAmountCent() == null || actual.adjustmentAmountCent() == 0L)) {
+            throw ApiException.badRequest("VALIDATION_FAILED", "按金额加减须填加减金额（负数为减免）");
+        }
         validateNonNegative(actual.weekdayPriceCent(), "weekday_price_cent");
         validateNonNegative(actual.weekendPriceCent(), "weekend_price_cent");
         validateNonNegative(actual.holidayPriceCent(), "holiday_price_cent");
@@ -217,7 +227,9 @@ public class TicketCatalogService {
                 staged ? "draft" : "active",
                 actual.eligibilityRule() == null ? Map.of() : Map.copyOf(actual.eligibilityRule()),
                 now,
-                now
+                now,
+                null, null, "none", null, null, null,
+                amountDelta ? actual.adjustmentAmountCent() : null
         );
         if (staged) {
             Draft d = openDraft(ruleTicketType, bindings);
@@ -688,7 +700,8 @@ public class TicketCatalogService {
     }
 
     /**
-     * 发布闸（现表与 236-R7 草稿版同一套，次序不变）：至少一个权益、各业态价格、赠送出资方、通票赠酒下限、内部结算价、凑整误差。
+     * 发布闸（现表与 236-R7 草稿版同一套，次序不变）：至少一个权益、单一酒吧门票综合服务费（294-R1）、各业态价格、赠送出资方、通票赠酒下限、
+     * 内部结算价、凑整误差。
      *
      * @param giftShortfall 通票赠酒下限核对（现表读现表；草稿版按草稿组成与草稿最低杯数）
      */
@@ -698,6 +711,16 @@ public class TicketCatalogService {
         if (bindings.isEmpty()) {
             throw ApiException.conflict("TICKET_TYPE_ENTITLEMENT_REQUIRED",
                     "票种发布前必须至少绑定一个权益");
+        }
+        // 第十八批 AW 段 294-R1（BSM:755「票种发布前必须先选定按比例还是按固定金额并填入数值，未选定或未填写的票种不得发布上架」）：单一酒吧门票每个售卖项目
+        //   都须有本项目本酒吧已转正的综合服务费（项目默认、全平台默认行不算，「不自动继承酒吧通票的默认比例」）。
+        if (serviceFeeConfigPort != null && trimToNull(ticketType.barId()) != null) {
+            java.util.List<String> missing = serviceFeeConfigPort.unconfiguredProjects(ticketType.barId(), ticketType.id(),
+                    repository.listTicketTypeProjectIds(ticketType.id()));
+            if (!missing.isEmpty()) {
+                throw ApiException.conflict("TICKET_TYPE_SERVICE_FEE_REQUIRED", "单一酒吧门票发布前须在结算配置中心为项目「"
+                        + String.join("」「", missing) + "」的本酒吧选定综合服务费按比例或按固定金额并填入数值、复核转正后才能上架");
+            }
         }
         requireComponentPrices(bindings);
         requireCostBearers(bindings);
@@ -905,14 +928,20 @@ public class TicketCatalogService {
             return; // 未注入（旧构造/单测）：不校验。生产由 Spring 恒注入，端口自身缺配置时 fail-loud。
         }
         TicketTypePriceCheck check = priceCheck(ticketType, bindings,
-                comboPriceToleranceConfigPort.findComboRounding(currentProjectId()));
-        if (check.withinTolerance()) {
+                comboPriceToleranceConfigPort.findComboRounding());
+        if (check.withinTolerance() && check.endingAllowed()) {
             return;
         }
         if (check.filledPriceCent() == null) {
             throw ApiException.badRequest("TICKET_PRICE_REQUIRED",
                     "这张票还没填平日售价，不能开卖。系统按各业态价格算出的售价是 "
                             + yuan(check.computedPriceCent()) + " 元");
+        }
+        if (check.withinTolerance()) {
+            // 第十八批 AW 段 341-R1（BSM:754「使最终售价为整数，且尾数落在后台配置的允许尾数集合内」）：误差内但凑整后的价不是整元或尾数不在集合内。
+            throw ApiException.badRequest("TICKET_PRICE_ENDING_NOT_ALLOWED", "凑整后的售价须为整元且尾数为 "
+                    + String.join("、", check.roundingAllowedEndings().stream().map(String::valueOf).toList()) + " 之一（按后台配置），票不能开卖："
+                    + "填的是 " + yuan(check.filledPriceCent()) + " 元，凑整可填 " + yuan(check.roundingSuggested()) + " 元");
         }
         long over = Math.abs(check.diffCent()) - check.toleranceCent();
         throw ApiException.badRequest("TICKET_PRICE_OUT_OF_TOLERANCE",
@@ -931,8 +960,8 @@ public class TicketCatalogService {
         if (comboPriceToleranceConfigPort == null) {
             return true;
         }
-        return priceCheck(ticketType, bindings,
-                comboPriceToleranceConfigPort.findComboRounding(currentProjectId())).withinTolerance();
+        TicketTypePriceCheck check = priceCheck(ticketType, bindings, comboPriceToleranceConfigPort.findComboRounding());
+        return check.withinTolerance() && check.endingAllowed();
     }
 
     /**
@@ -958,13 +987,17 @@ public class TicketCatalogService {
         Long filled = ticketType.weekdayPriceCent();
         Long diff = filled == null ? null : filled - computed;
         boolean within = diff != null && Math.abs(diff) <= rounding.toleranceCent();
+        // 第十八批 AW 段 341-R1：只约束凑整后的价（填的等于算出价＝未凑整，不要求整元）。
+        boolean endingAllowed = filled == null || filled == computed
+                || (filled % 100 == 0 && rounding.allowedEndings().indexOf((char) ('0' + filled / 100 % 10)) >= 0);
         return new TicketTypePriceCheck(ticketType.id(), componentTotal, rate, computed,
-                filled, diff, rounding.toleranceCent(), within, roundToNiceEnding(computed, rounding.allowedEndings()));
+                filled, diff, rounding.toleranceCent(), within, roundToNiceEnding(computed, rounding.allowedEndings()),
+                endingAllowed, rounding.allowedEndings().chars().map(c -> c - '0').boxed().toList());
     }
 
     /**
      * 凑整建议：离算出售价最近的「整元、且元位尾数落在后台配置的允许尾数集合内」的价（BSM:754 括号里那句；第十八批 AT 段 292-R1
-     * 起按后台配置，出厂 8、9、0）。只是给运营的建议数，不强制——真正拒绝发布的只有「超出允许误差」这一条。
+     * 起按后台配置，出厂 8、9、0）。第十八批 AW 段 341-R1 起凑整后的价不是整元或尾数不在集合内即不能保存与上架（见 requirePriceWithinTolerance）。
      * 候选为算出价上下各 10 元共 21 个连续整数，任一尾数都必有候选。
      *
      * @param allowedEndings 允许尾数数字串（如 "089"）
@@ -990,12 +1023,6 @@ public class TicketCatalogService {
     /** 报错文案用：分 → 元（两位小数）。 */
     private static String yuan(long cent) {
         return BigDecimal.valueOf(cent).movePointLeft(2).toPlainString();
-    }
-
-    /** 当前登录人的项目公司作用域（未注入授权服务的单测取 null=全局默认作用域）。 */
-    private String currentProjectId() {
-        return authorizationService == null
-                ? null : authorizationService.currentProjectScopeQuietly().orElse(null);
     }
 
     private void requireComponentPrices(java.util.List<TicketTypeEntitlementRecord> bindings) {
@@ -1199,7 +1226,7 @@ public class TicketCatalogService {
             return versions;
         }
         ComboPriceToleranceConfigPort.ComboRounding rounding = comboPriceToleranceConfigPort == null
-                ? ZERO_TOLERANCE_FACTORY_ENDINGS : comboPriceToleranceConfigPort.findComboRounding(currentProjectId());
+                ? ZERO_TOLERANCE_FACTORY_ENDINGS : comboPriceToleranceConfigPort.findComboRounding();
         return versions.stream().map(version -> {
             if (!version.open()) {
                 return version;

@@ -1,6 +1,6 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 
@@ -16,14 +16,14 @@ import org.springframework.test.web.servlet.request.RequestPostProcessor;
  * 第 75 条试算与短期经营激励用例的公共造数（调用方 @Transactional 回滚，不清理）。
  *
  * <p>本项目配置：通路费 wechat 30bps、alipay 60bps（最高 60）；销售渠道费第三方通用 1000bps、meituan 每张票固定 1000 分；
- * 套票折扣项目承担（platform_absorb）。单人单次通票 {@link #singlePass}：酒吧入场 6000、游乐入场 4000（票面原价），
+ * 折扣按份额由各域承担（第十八批 AW 段 293-R1，BSM:754）。单人单次通票 {@link #singlePass}：酒吧入场 6000、游乐入场 4000（票面原价），
  * 日历价工作日 10000、周末 12000，会员价 9000，已发布动态规则 −20%、最低 7500；综合服务费 10%（月封顶 1 分，试算不套）；
- * 赠送权益按票 300。最低实付价 7500 → 酒吧份额 4500＋项目承担折扣 1500＝6000；通路费按 60bps：45×4500÷7500＝27；
- * 销售渠道费取 meituan 固定额 1000×4500÷7500＝600（大于比例 450）；赠送 300；服务费 600 → 最低份池 4473。
+ * 赠送权益按票 300。最低实付价 7500 → 酒吧份额 4500（不加回折扣）；通路费按 60bps：45×4500÷7500＝27；
+ * 销售渠道费取 meituan 固定额 1000×4500÷7500＝600（大于比例 450）；赠送 300；服务费 450 → 最低份池 3123。
  */
 final class PoolTrialFixture {
 
-    static final long SINGLE_PASS_LOWEST_POOL = 4473L;
+    static final long SINGLE_PASS_LOWEST_POOL = 3123L;
 
     private final JdbcTemplate jdbc;
     private final String suffix;
@@ -40,9 +40,6 @@ final class PoolTrialFixture {
         channelFee("route", "alipay", 60, null);
         channelFee("sales", null, 1000, null);
         channelFee("sales", "meituan", 0, 1000L);
-        jdbc.update("""
-                INSERT INTO ticket_combo_discount_configs (id, project_id, discount_bearer, split_platform_bps, status, is_draft)
-                VALUES (?, ?, 'platform_absorb', 10000, 'active', FALSE)""", "tcdc_ptr_" + suffix, project);
     }
 
     String bar(String label) {
@@ -56,7 +53,7 @@ final class PoolTrialFixture {
         return id;
     }
 
-    /** 单人单次通票（见类注释），最低份池 4473。 */
+    /** 单人单次通票（见类注释），最低份池 3123。 */
     String singlePass(String bar) {
         String type = ticketType(10000L, 12000L);
         bind(type, "entry", bar, 6000L, 1);

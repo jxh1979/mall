@@ -51,13 +51,13 @@ public class SettlementConfigService {
                         : "按票计 整额 " + giftCost.ticketGiftAmountCent() + " 分"
                                 + (giftCost.monthlyCapAmountCent() == null ? ""
                                         : ",每月封顶 " + giftCost.monthlyCapAmountCent() + " 分")));
-        JdbcSettlementBillRepository.ComboDiscountConfig combo = configRepository.findComboDiscountConfig(null);
-        defaults.add(new ConfigItem("通票分账", "combo_discount_bearer", "套票折扣归属",
-                combo.discountBearer()));
+        JdbcSettlementBillRepository.ComboDiscountConfig combo = configRepository.findComboDiscountConfig();
         // V369:综合/联合通票「凑整允许误差」。运营给通票填的近似售价与系统算出售价差多少还算凑整、
-        // 差多少就是填错了——超出这个数的票一律不许开卖。与折扣归属同一行配置(凑整差额走同一条承担口径)。
-        defaults.add(new ConfigItem("通票分账", "rounding_tolerance_cent", "通票凑整允许误差(分)",
-                String.valueOf(combo.roundingToleranceCent())));
+        // 差多少就是填错了——超出这个数的票一律不许开卖。第十八批 AW 段 293-R1 起不再有套票折扣归属(折扣与凑整差额按份额由各域承担);
+        // 339-R1（BSM:754「全平台统一可配，出厂默认 5 元，须同时配置上下限」）：全平台一行，连同上下限显示。
+        defaults.add(new ConfigItem("通票分账", "rounding_tolerance_cent", "通票凑整允许误差",
+                yuan(combo.roundingToleranceCent()) + " 元" + (combo.roundingToleranceMinCent() == null ? "（上下限未配置）"
+                        : "（下限 " + yuan(combo.roundingToleranceMinCent()) + " 元～上限 " + yuan(combo.roundingToleranceMaxCent()) + " 元）")));
         // 第十八批 AT 段 292-R1（BSM:754「尾数落在后台配置的允许尾数集合内——业务参数，全平台统一可配，出厂默认 8、9、0」）。
         defaults.add(new ConfigItem("通票分账", "rounding_allowed_endings", "通票凑整允许尾数",
                 String.join("、", combo.roundingAllowedEndings().split(""))));
@@ -107,5 +107,10 @@ public class SettlementConfigService {
 
     /** 待复核草案条目(展示用)。 */
     public record DraftItem(String id, String configGroup, String summary) {
+    }
+
+    /** 分 → 元（去掉多余的零，如 500 → 5、350 → 3.5）。 */
+    private static String yuan(long cent) {
+        return java.math.BigDecimal.valueOf(cent).movePointLeft(2).stripTrailingZeros().toPlainString();
     }
 }

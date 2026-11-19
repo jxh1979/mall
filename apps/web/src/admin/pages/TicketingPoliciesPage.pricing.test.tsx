@@ -20,6 +20,9 @@ const PRICE_CHECK = {
   toleranceCent: 500,
   withinTolerance: true,
   roundingSuggested: 17800,
+  // 第十八批 AW 段 341-R1：后端回带凑整后的价尾数合不合规与允许尾数（出厂 8、9、0）。
+  endingAllowed: true,
+  roundingAllowedEndings: [0, 8, 9],
 };
 
 const ADMIN_PERMS: EffectivePermissionsState = { status: "ready", value: { grants: [], denies: [], wildcard: true } };
@@ -92,6 +95,24 @@ describe("TicketingPoliciesPage 通票定价核算（V369）", () => {
     });
   });
 
+  // 第十八批 AW 段 341-R2（BSM:754「使最终售价为整数，且尾数落在后台配置的允许尾数集合内」）：误差内但尾数不合规，当场提示发不出去。
+  it("填 175 元（尾数 5）提示尾数不对、不能开卖；改填 178 元提示没问题", async () => {
+    renderPage(vi.fn());
+    await selectPass();
+
+    fireEvent.change(screen.getByTestId("combo-pricing-weekday"), { target: { value: "175" } });
+    await waitFor(() => {
+      const hint = screen.getByTestId("combo-pricing-live-hint").textContent ?? "";
+      expect(hint).toContain("尾数不对");
+      expect(hint).toContain("0、8、9");
+      expect(hint).toContain("发不出去");
+      expect(hint).toContain("178.00");
+    });
+
+    fireEvent.change(screen.getByTestId("combo-pricing-weekday"), { target: { value: "178" } });
+    await waitFor(() => expect(screen.getByTestId("combo-pricing-live-hint").textContent ?? "").toContain("没问题"));
+  });
+
   it("填错了（179 填成 160）：当场红字说清超了多少、这张票发不出去、凑整该填哪个数", async () => {
     renderPage(vi.fn());
     await selectPass();
@@ -131,5 +152,42 @@ describe("TicketingPoliciesPage 通票定价核算（V369）", () => {
     expect(body.combo_discount_rate).toBe(85);
     expect(body.weekday_price_cent).toBe(17800);
     expect(body.reason).toBe("按新的业态构成重新定价");
+  });
+});
+
+// 第十八批 AW 段 338-R3（BSM:782「会员价、渠道价、动态价都在对应基础价上按打折/减免/加价/固定额派生」；PGM:287「界面全中文」）：派生价可按基础价加减金额。
+describe("TicketingPoliciesPage 派生价按基础价加减金额（338-R3）", () => {
+  afterEach(() => vi.clearAllMocks());
+
+  it("派生价选按基础价加减金额填 -10 → 请求体 amount_delta、adjustment_amount_cent -1000，列表显示减 ¥10.00", async () => {
+    const postSpy = vi.fn(async () => ({ status: "active" }) as unknown);
+    const api = {
+      get: vi.fn(async (path: string) => {
+        if (path.includes("/price-rules")) {
+          return { items: [{ id: "pr-a", ticketTypeId: "tt-1", variantType: "member", priceMode: "amount_delta", discountRate: null,
+            weekdayPriceCent: null, adjustmentAmountCent: -1000, status: "active" }] } as unknown;
+        }
+        if (path.includes("/ticketing/ticket-types")) return { items: TICKETS } as unknown;
+        return { items: [] } as unknown;
+      }),
+      post: postSpy,
+      put: vi.fn(async () => ({}) as unknown),
+    } as unknown as AdminApiClient;
+    render(<TicketingPoliciesPage {...({ api, user: { id: "u1", username: "admin", accountType: "platform_admin" }, setActionResult: vi.fn(),
+      setGlobalError: vi.fn(), effectivePermissions: ADMIN_PERMS } as unknown as AdminPageProps)} />);
+
+    await waitFor(() => expect(screen.queryByTestId("price-rule-pr-a")?.textContent ?? "").toContain("减 ¥10.00"));
+    expect(screen.getByTestId("price-rule-pr-a").textContent ?? "").toContain("按基础价加减金额");
+    expect(screen.getByTestId("price-rule-pr-a").textContent ?? "").not.toContain("amount_delta");
+
+    fireEvent.change(screen.getByLabelText("派生票种"), { target: { value: "tt-1" } });
+    fireEvent.change(screen.getByLabelText("定价方式"), { target: { value: "amount_delta" } });
+    await waitFor(() => expect(screen.queryByLabelText("加减金额（元，负数为减免）")).not.toBeNull());
+    fireEvent.change(screen.getByLabelText("加减金额（元，负数为减免）"), { target: { value: "-10" } });
+    fireEvent.click(screen.getByTestId("price-rule-create"));
+
+    await waitFor(() => expect(postSpy.mock.calls.some((c) => String((c as unknown[])[0]) === "/api/v1/ticketing/price-rules")).toBe(true));
+    const body = (postSpy.mock.calls.find((c) => String((c as unknown[])[0]) === "/api/v1/ticketing/price-rules") as unknown as [string, Record<string, unknown>])[1];
+    expect(body).toMatchObject({ ticket_type_id: "tt-1", price_mode: "amount_delta", adjustment_amount_cent: -1000, discount_rate: null });
   });
 });

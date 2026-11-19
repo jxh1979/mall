@@ -1,4 +1,4 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 package com.complex.platform.settlement;
 
 import static org.mockito.Mockito.doThrow;
@@ -122,6 +122,12 @@ class SettlementConfigControllerTests {
         @Bean
         com.complex.platform.evidence.AuditEventService auditEventService() {
             return Mockito.mock(com.complex.platform.evidence.AuditEventService.class);
+        }
+
+        // 第十八批 AW 段 291-R2：内部结算价提交人范围闸（控制器新注入）。
+        @Bean
+        InternalPriceScope internalPriceScope() {
+            return Mockito.mock(InternalPriceScope.class);
         }
 
         @Bean

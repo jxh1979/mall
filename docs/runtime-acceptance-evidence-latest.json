@@ -8,14 +8,14 @@
     "RUNTIME_EVIDENCE_BOUND_TO_SOURCE_FINGERPRINT",
     "RUNTIME_EVIDENCE_DOES_NOT_CLOSE_PRODUCTION_MANIFEST"
   ],
-  "generated_at": "2026-11-19T01:58:15.407Z",
+  "generated_at": "2026-11-19T02:45:22.832Z",
   "git": {
-    "head": "61cea2933a5f498771fea6b21be5597fa745decc",
-    "head_short": "61cea293",
-    "branch": "feature/business-code-batch70-20261106",
+    "head": "961170dadb4c77d868c93cb4e24b84f66920f651",
+    "head_short": "961170da",
+    "branch": "feature/business-code-batch69-20261106",
     "worktree_dirty": false,
-    "source_fingerprint": "52374019d3ae6edb5e41eaa7e4b8ed942a5d9f60bac6fa47526519f2d78e3561",
-    "source_fingerprint_file_count": 3514,
+    "source_fingerprint": "8c10d50f631c86f28b702fd3f6e7b553d93360db1cfde442c6272ca06888bb7d",
+    "source_fingerprint_file_count": 3541,
     "source_fingerprint_paths": [
       "backend/src/main",
       "backend/src/test",
@@ -50,12 +50,12 @@
   },
   "backend_surefire": {
     "path": "backend/target/surefire-reports",
-    "suites": 626,
-    "tests": 6979,
+    "suites": 635,
+    "tests": 7019,
     "failures": 0,
     "errors": 0,
     "skipped": 0,
-    "latest_mtime": "2026-11-19T01:56:32.780Z",
+    "latest_mtime": "2026-11-19T02:43:38.632Z",
     "passed": true
   },
   "web_unit_source": {
@@ -188,6 +188,7 @@
       "apps/web/src/admin/pages/DealerOrderFulfillmentPage.test.tsx",
       "apps/web/src/admin/pages/DealerReturnFinancialPanel.test.tsx",
       "apps/web/src/admin/pages/DealerReturnInvoicePage.test.tsx",
+      "apps/web/src/admin/pages/DynamicPricingPage.channel.test.tsx",
       "apps/web/src/admin/pages/DynamicPricingPage.guidedcreate.test.tsx",
       "apps/web/src/admin/pages/DynamicPricingPage.kpi.test.tsx",
       "apps/web/src/admin/pages/EnergyAnalyticsPage.kpi.test.tsx",
@@ -379,6 +380,7 @@
       "apps/web/src/admin/pages/TicketOrdersPage.refundcases.test.tsx",
       "apps/web/src/admin/pages/TicketOrdersPage.verifications.test.tsx",
       "apps/web/src/admin/pages/TicketPointsBillingPage.test.tsx",
+      "apps/web/src/admin/pages/TicketRefundableRequest.test.tsx",
       "apps/web/src/admin/pages/TicketRewardConfigPage.test.tsx",
       "apps/web/src/admin/pages/TicketingPoliciesPage.combo.test.tsx",
       "apps/web/src/admin/pages/TicketingPoliciesPage.delete.test.tsx",
@@ -386,6 +388,7 @@
       "apps/web/src/admin/pages/TicketingPoliciesPage.kpi.test.tsx",
       "apps/web/src/admin/pages/TicketingPoliciesPage.pricing.test.tsx",
       "apps/web/src/admin/pages/TicketingPoliciesPage.ruleversions.test.tsx",
+      "apps/web/src/admin/pages/TicketingPoliciesPage.salestatus.test.tsx",
       "apps/web/src/admin/pages/TraceHandoverBackfillPage.test.tsx",
       "apps/web/src/admin/pages/TraceLinkDrilldown.test.tsx",
       "apps/web/src/admin/pages/TraceLinkP2A.test.tsx",
@@ -415,8 +418,8 @@
       "apps/web/src/dealer/dealerPortalClient.test.ts",
       "apps/web/src/shared/ReplayedNotice.test.tsx"
     ],
-    "file_count": 354,
-    "test_count_from_source": 1909
+    "file_count": 357,
+    "test_count_from_source": 1920
   },
   "web_build": {
     "dist_index_exists": true,
@@ -437,15 +440,15 @@
     "asset_count": 170,
     "main_js_assets": [
       {
-        "path": "apps/web/dist/assets/main-bW9XhLgv.js",
+        "path": "apps/web/dist/assets/main-Cyk422af.js",
         "size_bytes": 4337,
-        "mtime": "2026-11-19T01:56:41.625Z"
+        "mtime": "2026-11-19T02:43:47.621Z"
       }
     ],
     "largest_asset": {
       "path": "apps/web/dist/assets/vendor-antd-Bh_XtmOr.js",
       "size_bytes": 251112,
-      "mtime": "2026-11-19T01:56:41.628Z"
+      "mtime": "2026-11-19T02:43:47.624Z"
     },
     "no_main_bundle_warning_expected": true
   },

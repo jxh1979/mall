@@ -1,4 +1,4 @@
-// 文件版本：V0.12
+// 文件版本：V0.13
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
@@ -14,6 +14,9 @@ import { Tabs } from "antd";
 import { RowActions, type RowAction } from "../components/RowActions";
 import { BarArrivalReminderSection, TicketExpiryReminderSection } from "./CustomerFacingSettingsSections";
 import { dynamicAdjustment } from "./DynamicPricingPage";
+import { TicketRefundableRequest } from "./TicketRefundableRequest";
+import { priceModeLabel, priceModeValue } from "./ticketPriceModes";
+import { TICKET_SALE_STATUS_LABELS, TicketTypeSaleSettings, saleTimeLabel } from "./TicketTypeSaleSettings";
 
 // 3.10 票务策略配置化：票种/通票、权益模板、票种↔权益组装（通票）、派生价规则全部后台可配，
 // 替代旧骨架页（名称写死、派生规则只是文案）。请求字段对齐后端真实契约（snake_case）。
@@ -38,6 +41,11 @@ type TicketTypeRow = {
   validityDays?: number | null;
   refundable?: boolean;
   barId?: string | null;
+  // 第十八批 AW 段 299-R2（ENUM:30 票务策略六态）：后端按草稿、上架、暂停、存档加开售与停售时间派生的售卖状态，及售卖设置三项。
+  saleStatus?: string;
+  saleStartsAt?: string | null;
+  saleEndsAt?: string | null;
+  salePausedAt?: string | null;
 };
 type EntitlementTemplateRow = {
   id: string;
@@ -55,6 +63,8 @@ type PriceRuleRow = {
   priceMode: string;
   discountRate: number | null;
   weekdayPriceCent: number | null;
+  // 第十八批 AW 段 338-R3：按基础价加减金额（分，负数为减免），只在 amount_delta 时有值。
+  adjustmentAmountCent?: number | null;
   status: string;
   archivedAt?: string | null;
   deleteStatus?: string;
@@ -139,6 +149,9 @@ type PriceCheckRow = {
   toleranceCent: number;
   withinTolerance: boolean;
   roundingSuggested: number;
+  // 第十八批 AW 段 341-R1：凑整后的价尾数合不合规，与后台配置的允许尾数（升序）。
+  endingAllowed?: boolean;
+  roundingAllowedEndings?: number[];
 };
 
 // 第十八批 AJ 段 236-R5 跨域组合通票票种规则版本（后端 GET /ticketing/ticket-types/{id}/rule-versions，adminClient 已 snake→camel；ENUM:32「跨域组合通票的
@@ -162,7 +175,7 @@ type RuleVersionRow = {
   domainAllocations: Array<{ domain: string; domainName: string | null; componentTotalCent: number; discountShareCent: number; roundingShareCent: number }>;
   // 第十八批 AS 段 297-R4（第十八批裁决 63「跨域组合通票的派生价、动态价规则也要经项目之上的平台权限审批，并记入票种规则版本。」）：版本另记的两份清单。
   priceRules: Array<{ id: string; variantType: string; priceMode: string; weekdayPriceCent: number | null; weekendPriceCent: number | null;
-    holidayPriceCent: number | null; discountRate: number | string | null; channelId: string | null }>;
+    holidayPriceCent: number | null; discountRate: number | string | null; channelId: string | null; adjustmentAmountCent?: number | null }>;
   dynamicPricingRules: Array<{ id: string; ruleName: string; priority: number; effectiveFrom: string; effectiveTo: string; salesChannel: string | null;
     adjustmentType: string; adjustmentRate: number | string | null; adjustmentAmountCent: number | null }>;
   reviewId: string | null;
@@ -199,11 +212,10 @@ export function TicketingPoliciesPage({ api, user, setActionResult, setGlobalErr
   const [weekend, setWeekend] = React.useState("");
   const [holiday, setHoliday] = React.useState("");
   const [stock, setStock] = React.useState("");
-  // AUD-004/022：有效期天数/动态码刷新/可退票/单店酒吧 建票直配。
+  // AUD-004/022：有效期天数/动态码刷新/单店酒吧 建票直配（第十八批 AW 段 295-R2 起可退不在建票时配，建后在票种行逐个申请开启）。
   const [validityDays, setValidityDays] = React.useState("1");
   // #172：全场统一动态码刷新间隔（秒）——页级配置，不再按票种各配一套。
   const [qrRefresh, setQrRefresh] = React.useState<number>(15);
-  const [refundable, setRefundable] = React.useState(false);
   // 结算重构批4（V230）：票种资格/定价档分类（标准/新人/学生）。仅分类与报表口径，不碰定价。
   const [ticketCategory, setTicketCategory] = React.useState("standard");
   const [barId, setBarId] = React.useState("");
@@ -236,7 +248,7 @@ export function TicketingPoliciesPage({ api, user, setActionResult, setGlobalErr
   // 区3 通票组装（票种绑权益）
   const [bindForm, setBindForm] = React.useState({ ticketTypeId: "", templateId: "", quantity: "1", totalTimes: "1", numPeople: "1", componentPriceYuan: "", costBearer: "" });
   // 区4 派生价规则
-  const [ruleForm, setRuleForm] = React.useState({ ticketTypeId: "", variantType: "new_customer", priceMode: "derive_from_calendar_price", discount: "80", fixedYuan: "" }); // 第十八批 AT 段 334-R1：折扣按百分数（80＝八折），同后端 0～100。
+  const [ruleForm, setRuleForm] = React.useState({ ticketTypeId: "", variantType: "new_customer", priceMode: "derive_from_calendar_price", discount: "80", fixedYuan: "", amountYuan: "" }); // 第十八批 AT 段 334-R1：折扣按百分数（80＝八折），同后端 0～100。
   // 批3 第三方券:把权益模板配成第三方券 + 对账文件核销回流导入。
   const [pvConfig, setPvConfig] = React.useState({ templateId: "", settlementMode: "free_marketing", partnerKind: "merchant", partnerId: "", internalYuan: "" });
   const [pvRedeem, setPvRedeem] = React.useState({ code: "", redeemedDate: "", externalRef: "" });
@@ -308,7 +320,9 @@ export function TicketingPoliciesPage({ api, user, setActionResult, setGlobalErr
         { label: "周末价", value: `¥${yuan(row.weekendPriceCent)}` },
         { label: "节假日价", value: `¥${yuan(row.holidayPriceCent)}` },
         { label: "限量", value: row.stockQuantity ?? "不限" },
-        { label: "状态", value: formatBusinessStatus(row.status) },
+        { label: "状态", value: TICKET_SALE_STATUS_LABELS[row.saleStatus ?? ""] ?? formatBusinessStatus(row.status) },
+        { label: "开售时间", value: saleTimeLabel(row.saleStartsAt) },
+        { label: "停售时间", value: saleTimeLabel(row.saleEndsAt) },
         { label: "票种编号", value: row.id },
       ],
     });
@@ -333,8 +347,8 @@ export function TicketingPoliciesPage({ api, user, setActionResult, setGlobalErr
       fields: [
         { label: "票种", value: <TraceLink navigateTo={navigateTo} pageId="ADM-TKT-001" objectId={row.ticketTypeId}>{tickets.find((t) => t.id === row.ticketTypeId)?.ticketName ?? row.ticketTypeId}</TraceLink> },
         { label: "人群/渠道", value: VARIANT_LABELS[row.variantType] ?? row.variantType },
-        { label: "定价方式", value: row.priceMode === "fixed_price" ? "固定价" : "按基础价折扣" },
-        { label: "折扣/价格", value: row.priceMode === "fixed_price" ? `¥${yuan(row.weekdayPriceCent)}` : row.discountRate != null ? `${Number(row.discountRate)}%` : "—" },
+        { label: "定价方式", value: priceModeLabel(row.priceMode) },
+        { label: "折扣/价格", value: priceModeValue(row) },
         { label: "状态", value: formatBusinessStatus(row.status) },
         { label: "规则编号", value: row.id },
       ],
@@ -527,7 +541,6 @@ export function TicketingPoliciesPage({ api, user, setActionResult, setGlobalErr
         // V369 票种折扣：系统按「各业态票面原价合计 × 折扣」算出售价，运营填的价与它差太多不许开卖。
         combo_discount_rate: Number(createDiscount || "100"),
         validity_days: Number(validityDays) || 1,
-        refundable,
         bar_id: barId || null,
         // V230：资格/定价档分类（新人票/学生票等）。仅分类与报表用，价照样在本页三档价与派生价规则里配。
         ticket_category: ticketCategory,
@@ -638,13 +651,20 @@ export function TicketingPoliciesPage({ api, user, setActionResult, setGlobalErr
       setGlobalError("固定价模式必须填价格（元）");
       return;
     }
+    // 第十八批 AW 段 338-R3（BSM:782「按打折/减免/加价/固定额派生」）：按基础价加减金额，负数为减免、正数为加价，不能为 0。
+    const amountDelta = ruleForm.priceMode === "amount_delta";
+    if (amountDelta && !(Number.isFinite(Number(ruleForm.amountYuan)) && Number(ruleForm.amountYuan) !== 0)) {
+      setGlobalError("按基础价加减金额须填不为 0 的加减金额（元，负数为减免）");
+      return;
+    }
     try {
       const saved = await api.post<{ status?: string }>("/api/v1/ticketing/price-rules", {
         idempotency_key: crypto.randomUUID(),
         ticket_type_id: ruleForm.ticketTypeId,
         variant_type: ruleForm.variantType,
         price_mode: ruleForm.priceMode,
-        discount_rate: fixed ? null : Number(ruleForm.discount) || null,
+        discount_rate: fixed || amountDelta ? null : Number(ruleForm.discount) || null,
+        ...(amountDelta ? { adjustment_amount_cent: Math.round(Number(ruleForm.amountYuan) * 100) } : {}),
         weekday_price_cent: fixed ? Math.round(Number(ruleForm.fixedYuan) * 100) : null,
         weekend_price_cent: fixed ? Math.round(Number(ruleForm.fixedYuan) * 100) : null,
         holiday_price_cent: fixed ? Math.round(Number(ruleForm.fixedYuan) * 100) : null,
@@ -1070,6 +1090,7 @@ export function TicketingPoliciesPage({ api, user, setActionResult, setGlobalErr
       ["派生价规则", (v) => (v.priceRules.length === 0 ? "无" : v.priceRules.map((p) => (
         <div key={p.id}>{`${VARIANT_LABELS[p.variantType] ?? p.variantType} · ${p.priceMode === "fixed_price"
           ? `固定价 平日 ¥${yuan(p.weekdayPriceCent)}、周末 ¥${yuan(p.weekendPriceCent)}、节假日 ¥${yuan(p.holidayPriceCent)}`
+          : p.priceMode === "amount_delta" ? `按基础价${priceModeValue(p)}`
           : `按基础价 ${String(p.discountRate ?? "—")}%`} · ${p.channelId ? formatBusinessStatus(p.channelId) : "全部渠道"}`}</div>
       )))],
       ["动态价规则", (v) => (v.dynamicPricingRules.length === 0 ? "无" : v.dynamicPricingRules.map((d) => (
@@ -1179,11 +1200,13 @@ export function TicketingPoliciesPage({ api, user, setActionResult, setGlobalErr
                   <td>{yuan(row.holidayPriceCent)}</td>
                   <td>{row.stockQuantity ?? "不限"}</td>
                   <td>{row.validityDays ?? 1} 天</td>
-                  <td>{row.refundable ? "可退" : "不可退"}</td>
+                  <td>{row.refundable ? "可退" : <TicketRefundableRequest api={api} ticketTypeId={row.id} ticketName={row.ticketName} isMaster={isMaster}
+                    effectivePermissions={effectivePermissions} setActionResult={setActionResult} onDone={reload} />}</td>
                   <td>{row.barId ? (merchants.find((m) => m.id === row.barId)?.merchantName ?? row.barId) : "通票"}</td>
-                  <td>{formatBusinessStatus(row.status)}</td>
+                  <td>{TICKET_SALE_STATUS_LABELS[row.saleStatus ?? ""] ?? formatBusinessStatus(row.status)}</td>
                   <td>{archiveLabel(row)}</td>
-                  <td onClick={(event) => event.stopPropagation()}>{catalogActions("ticket-types", row)}</td>
+                  <td onClick={(event) => event.stopPropagation()}>{catalogActions("ticket-types", row)}
+                    <TicketTypeSaleSettings api={api} row={row} permissionsState={effectivePermissions} setActionResult={setActionResult} onDone={reload} /></td>
                   <td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看票种详情" onClick={(event) => { event.stopPropagation(); openTicketTypeDetail(row); }}>查看详情</button></td>
                 </tr>
               ))}
@@ -1240,10 +1263,6 @@ export function TicketingPoliciesPage({ api, user, setActionResult, setGlobalErr
                     <option value="new_person">新人票</option>
                     <option value="student">学生票</option>
                   </select>
-                </label>
-                <label>
-                  <input data-testid="ticket-refundable" type="checkbox" checked={refundable} onChange={(event) => setRefundable(event.target.checked)} aria-label="可退票" />
-                  可退票（勾选=客人可申请整票退款；不勾=不可退。到期未核销一律作废，任何票种都不自动退）
                 </label>
                 <label>单店票绑定酒吧（可空=通票）
                   <select data-testid="ticket-bar-select" aria-label="单店票绑定酒吧" value={barId} onChange={(event) => setBarId(event.target.value)}>
@@ -1302,7 +1321,6 @@ export function TicketingPoliciesPage({ api, user, setActionResult, setGlobalErr
           { label: "限量", value: stock.trim() || "不限" },
           { label: "有效期（天）", value: validityDays },
           { label: "票种分类", value: TICKET_CATEGORY_LABELS[ticketCategory] ?? "标准票" },
-          { label: "可退票", value: refundable ? "可退" : "不可退" },
           { label: "单店酒吧", value: barId ? (merchants.find((m) => m.id === barId)?.merchantName ?? barId) : "通票" },
           ...(draftOnly ? [] : [
             { label: "权益模板", value: createTemplateId ? (templates.find((t) => t.id === createTemplateId)?.name ?? createTemplateId) : "未选择" },
@@ -1418,7 +1436,13 @@ export function TicketingPoliciesPage({ api, user, setActionResult, setGlobalErr
       </div>
       {shownCheck && pricingLiveDiffCent ? (
         <div className="admin-preview" data-testid="combo-pricing-live-hint">
-          {Math.abs(pricingLiveDiffCent.diff) <= shownCheck.toleranceCent
+          {/* 第十八批 AW 段 341-R2（BSM:754「使最终售价为整数，且尾数落在后台配置的允许尾数集合内」）：误差内但凑整后的价不是整元或尾数不在集合内，也发不出去。 */}
+          {Math.abs(pricingLiveDiffCent.diff) <= shownCheck.toleranceCent && pricingLiveDiffCent.diff !== 0
+            && (pricingLiveDiffCent.filled % 100 !== 0
+              || !(shownCheck.roundingAllowedEndings ?? []).includes(Math.floor(pricingLiveDiffCent.filled / 100) % 10))
+            ? `尾数不对：凑整后的售价须为整元且尾数为 ${(shownCheck.roundingAllowedEndings ?? []).join("、")} 之一，你填 ¥${yuan(pricingLiveDiffCent.filled)}，`
+              + `这张票发不出去。凑整可填 ¥${yuan(shownCheck.roundingSuggested)}。`
+            : Math.abs(pricingLiveDiffCent.diff) <= shownCheck.toleranceCent
             ? `没问题：系统算出 ¥${yuan(pricingLiveDiffCent.computed)}，你填 ¥${yuan(pricingLiveDiffCent.filled)}，`
               + `${pricingLiveDiffCent.diff >= 0 ? "上调" : "下调"} ¥${yuan(Math.abs(pricingLiveDiffCent.diff))}，`
               + `在允许误差 ¥${yuan(shownCheck.toleranceCent)} 之内。`
@@ -1739,8 +1763,8 @@ export function TicketingPoliciesPage({ api, user, setActionResult, setGlobalErr
                 onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openRuleDetail(row); } }}>
                 <td onClick={(event) => event.stopPropagation()}><TraceLink navigateTo={navigateTo} pageId="ADM-TKT-001" objectId={row.ticketTypeId}>{tickets.find((t) => t.id === row.ticketTypeId)?.ticketName ?? row.ticketTypeId}</TraceLink></td>
                 <td>{VARIANT_LABELS[row.variantType] ?? row.variantType}</td>
-                <td>{row.priceMode === "fixed_price" ? "固定价" : "按基础价折扣"}</td>
-                <td>{row.priceMode === "fixed_price" ? `¥${yuan(row.weekdayPriceCent)}` : row.discountRate != null ? `${Number(row.discountRate)}%` : "—"}</td>
+                <td>{priceModeLabel(row.priceMode)}</td>
+                <td>{priceModeValue(row)}</td>
                 <td>{formatBusinessStatus(row.status)}</td>
                 <td>{archiveLabel(row)}</td>
                 <td onClick={(event) => event.stopPropagation()}>{catalogActions("price-rules", row)}</td>
@@ -1765,9 +1789,12 @@ export function TicketingPoliciesPage({ api, user, setActionResult, setGlobalErr
         <select aria-label="定价方式" value={ruleForm.priceMode} onChange={(event) => setRuleForm({ ...ruleForm, priceMode: event.target.value })}>
           <option value="derive_from_calendar_price">按基础价折扣</option>
           <option value="fixed_price">固定价</option>
+          <option value="amount_delta">按基础价加减金额</option>
         </select>
         {ruleForm.priceMode === "fixed_price" ? (
           <input aria-label="固定价（元）" type="number" min={0} step="0.01" value={ruleForm.fixedYuan} onChange={(event) => setRuleForm({ ...ruleForm, fixedYuan: event.target.value })} placeholder="固定价（元）" />
+        ) : ruleForm.priceMode === "amount_delta" ? (
+          <input aria-label="加减金额（元，负数为减免）" type="number" step="0.01" value={ruleForm.amountYuan} onChange={(event) => setRuleForm({ ...ruleForm, amountYuan: event.target.value })} placeholder="加减金额（元，负数为减免）" />
         ) : (
           <input aria-label="折扣率" type="number" min={0} max={100} step="0.01" value={ruleForm.discount} onChange={(event) => setRuleForm({ ...ruleForm, discount: event.target.value })} placeholder="折扣率（%，80＝8 折，100＝不打折）" />
         )}

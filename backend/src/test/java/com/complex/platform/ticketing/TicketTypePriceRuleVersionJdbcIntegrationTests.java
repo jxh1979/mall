@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -112,6 +112,7 @@ class TicketTypePriceRuleVersionJdbcIntegrationTests {
     @AfterEach
     void cleanup() {
         PassPoolFixtures.deleteByProject(jdbc, project);
+        jdbc.update("DELETE FROM comprehensive_service_fee_configs WHERE project_id = ?", project);
         for (String order : orders) {
             AppendOnlyTestBypass.updateOnTable(jdbc, "ticket_order_sales_contracts", "ticket_sales_snapshot_immutable",
                     "DELETE FROM ticket_order_sales_contracts WHERE order_id = ?", order);
@@ -181,6 +182,34 @@ class TicketTypePriceRuleVersionJdbcIntegrationTests {
         assertThat(JsonPath.<Integer>read(versions(pass), "$.data.items.length()")).isEqualTo(1);
     }
 
+    /**
+     * 第十八批 AW 段 338-R1（BSM:782「会员价、渠道价、动态价都在对应基础价上按打折/减免/加价/固定额派生」）：已上架跨域组合通票建「按基础价减 10 元」会员价，
+     * 存进第 2 版草稿并带加减金额，复核单摘要写明；获批后现表在售、带加减金额，带会员价下单按 199－10＝189 元。
+     */
+    @Test
+    void publishedComboPassAmountDeltaPriceRuleGoesIntoDraftVersionAndKeepsAmountOnApproval() throws Exception {
+        String pass = publishedComboPass("w");
+        salesContract(pass);
+        String member = JsonPath.read(send(post("/api/v1/ticketing/price-rules"), """
+                {"idempotency_key": "c338-pr-%s", "ticket_type_id": "%s", "variant_type": "member", "price_mode": "amount_delta",
+                 "adjustment_amount_cent": -1000}
+                """.formatted(UUID.randomUUID(), pass)).andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("draft"))
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8), "$.data.id");
+        assertThat(JsonPath.<List<Integer>>read(versions(pass), "$.data.items[0].price_rules[*].adjustment_amount_cent"))
+                .containsExactly(-1000);
+
+        publish(pass).andExpect(status().isOk());
+        mockMvc.perform(get("/api/v1/platform/supervisor-review/" + reviewOf(pass)).with(session(approver, "staff", project)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.reason").value(Matchers.containsString("派生价：会员价 · 按基础价减 10.00 元")));
+        approve(reviewOf(pass)).andExpect(status().isOk());
+
+        assertThat(jdbc.queryForObject("SELECT adjustment_amount_cent FROM ticket_price_rules WHERE id = ?", Long.class, member))
+                .isEqualTo(-1000L);
+        order(pass, member, 18900);
+    }
+
     /** 297-R1 不越界：酒吧通票与单一酒吧门票不是跨域组合通票，上架后配派生价、发布动态价照现行直接生效，不建规则版本。 */
     @Test
     void sameDomainPassAndSingleBarTicketPriceRulesTakeEffectDirectly() throws Exception {
@@ -194,6 +223,9 @@ class TicketTypePriceRuleVersionJdbcIntegrationTests {
 
         String single = createTicketType("b2", 5000L, 100, bar);
         bind(single, template(bar, "单店入场", "entry", null), 5000L, null).andExpect(status().isOk());
+        // 第十八批 AW 段 294-R1（BSM:755）：单店票发布前本项目本酒吧须有已转正的综合服务费。
+        jdbc.update("INSERT INTO comprehensive_service_fee_configs (id, project_id, merchant_id, fee_bps, status, is_draft)"
+                + " VALUES (?, ?, ?, 500, 'active', FALSE)", "csfc_" + suffix, project, bar);
         publish(single).andExpect(status().isOk()).andExpect(jsonPath("$.data.status").value("published"));
         priceRule(single, "student", 80).andExpect(status().isOk()).andExpect(jsonPath("$.data.status").value("active"));
         assertThat(JsonPath.<Integer>read(versions(single), "$.data.items.length()")).isZero();

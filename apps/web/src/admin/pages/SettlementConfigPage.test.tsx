@@ -1,4 +1,4 @@
-// 文件版本：V0.07
+// 文件版本：V0.08
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -9,7 +9,8 @@ import type { AdminApiClient, AdminPageProps, EffectivePermissionsState } from "
 // 结算配置中心总控页(ADM-STL-001)组件测试:概览默认值 + 通票分账 8 块「改」落草案 + 草案队列转正/下线路由 + 差人友好提示。
 const DEFAULTS = [
   // S4:原「项目公司留存比例」已并入门票综合服务费(同一项只扣一次),留存卡片下线。
-  { group: "通票分账", key: "combo_discount_bearer", label: "套票折扣归属", value: "platform_absorb" },
+  // 第十八批 AW 段 293-R1、339-R1：不再有套票折扣归属；凑整允许误差全平台一行、连同上下限显示。
+  { group: "通票分账", key: "rounding_tolerance_cent", label: "通票凑整允许误差", value: "5 元（上下限未配置）" },
   // V340(P0-D):提成/积分出厂默认 = 改造前写死值(销售 1500bp / 每积 1 分需 100 分)。
   { group: "提成与积分", key: "commission_rate_sales", label: "卡座提成率·销售人员(万分比)", value: "1500" },
   { group: "提成与积分", key: "commission_rate_non_sales", label: "卡座提成率·非销售人员(万分比)", value: "1000" },
@@ -66,7 +67,7 @@ describe("SettlementConfigPage 结算配置中心(ADM-STL-001)", () => {
     renderPage(makeApi(get));
     await waitFor(() => expect(get).toHaveBeenCalledWith("/api/v1/settlement/config/overview"));
     expect(await screen.findByTestId("settlement-config-page")).toBeTruthy();
-    expect(screen.getByTestId("settlement-config-default-combo_discount_bearer").textContent).toContain("platform_absorb");
+    expect(screen.getByTestId("settlement-config-default-rounding_tolerance_cent").textContent).toContain("5 元（上下限未配置）");
     expect(screen.getByTestId("settlement-config-drafts-empty")).toBeTruthy();
   });
 
@@ -87,24 +88,62 @@ describe("SettlementConfigPage 结算配置中心(ADM-STL-001)", () => {
     expect(screen.getByTestId("distribution-scheme-panel")).toBeTruthy();
   });
 
-  it("「改」套票折扣归属 → GuidedFlowModal 填写 → POST 落草案端点带 idempotency_key", async () => {
-    const post = vi.fn().mockResolvedValue({});
-    renderPage(makeApi(vi.fn().mockResolvedValue(OVERVIEW_NO_DRAFT), post));
-    fireEvent.click(await screen.findByTestId("settlement-config-edit-combo_discount"));
-    fireEvent.click(screen.getByTestId("settlement-config-guided-next")); // 填写 → 确认
-    fireEvent.click(screen.getByTestId("settlement-config-submit"));
-    await waitFor(() => expect(post).toHaveBeenCalledWith(
-      "/api/v1/settlement/config/combo-discount",
-      expect.objectContaining({ discountBearer: "platform_absorb", idempotencyKey: expect.any(String) }),
-    ));
-  });
-
   // 第十八批 AT 段 292-R2（BSM:754「尾数落在后台配置的允许尾数集合内——业务参数，全平台统一可配，出厂默认 8、9、0」）。
   async function openComboDiscount(get: ReturnType<typeof vi.fn>) {
     await waitFor(() => expect(get).toHaveBeenCalledWith("/api/v1/settlement/config/overview"));
     fireEvent.click(await screen.findByTestId("settlement-config-edit-combo_discount"));
     await waitFor(() => expect(screen.queryByLabelText("尾数 8")).not.toBeNull());
   }
+
+  function fillToleranceBounds(min: string, max: string) {
+    fireEvent.change(screen.getByTestId("settlement-config-field-roundingToleranceMinYuan"), { target: { value: min } });
+    fireEvent.change(screen.getByTestId("settlement-config-field-roundingToleranceMaxYuan"), { target: { value: max } });
+  }
+
+  // 第十八批 AW 段 293-R2（BSM:754「凑整产生的差额按各业态价格比例，与折扣一并分摊到各域，由各域主管公司按份额各自承担或取得」）。
+  it("通票凑整参数表单不再有折扣归属与平台分摊万分比，请求体不带 discountBearer", async () => {
+    const get = vi.fn().mockResolvedValue(OVERVIEW_NO_DRAFT);
+    const post = vi.fn().mockResolvedValue({});
+    renderPage(makeApi(get, post));
+    await waitFor(() => expect(screen.getByTestId("settlement-config-block-combo_discount").textContent).toContain("通票凑整参数"));
+    await openComboDiscount(get);
+    expect(screen.queryByTestId("settlement-config-field-discountBearer")).toBeNull();
+    expect(screen.queryByTestId("settlement-config-field-splitPlatformBps")).toBeNull();
+    fillToleranceBounds("0", "10");
+    fireEvent.click(screen.getByTestId("settlement-config-guided-next"));
+    fireEvent.click(await screen.findByTestId("settlement-config-submit"));
+    await waitFor(() => expect(post).toHaveBeenCalledWith(
+      "/api/v1/settlement/config/combo-discount",
+      expect.objectContaining({ idempotencyKey: expect.any(String), roundingToleranceCent: 500 }),
+    ));
+    expect(post.mock.calls[0]?.[1]).not.toHaveProperty("discountBearer");
+    expect(post.mock.calls[0]?.[1]).not.toHaveProperty("splitPlatformBps");
+  });
+
+  // 第十八批 AW 段 339-R2（BSM:754「允许误差可配（业务参数，全平台统一可配，出厂默认 5 元，须同时配置上下限）」）。
+  it("通票凑整参数：无项目输入，误差须同填上下限，越界不发请求并提示；齐全时 POST 带上下限（分）", async () => {
+    const get = vi.fn().mockResolvedValue(OVERVIEW_NO_DRAFT);
+    const post = vi.fn().mockResolvedValue({});
+    renderPage(makeApi(get, post));
+    await openComboDiscount(get);
+    expect(screen.queryByTestId("settlement-config-field-projectId")).toBeNull();
+
+    fireEvent.click(screen.getByTestId("settlement-config-guided-next"));
+    await waitFor(() => expect(screen.getByText(/误差须同时填写上下限，且在上下限之间/)).toBeTruthy());
+    fillToleranceBounds("6", "10");
+    fireEvent.click(screen.getByTestId("settlement-config-guided-next"));
+    await waitFor(() => expect(screen.getByText(/误差须同时填写上下限，且在上下限之间/)).toBeTruthy());
+    expect(post).not.toHaveBeenCalled();
+
+    fillToleranceBounds("1", "8.5");
+    fireEvent.click(screen.getByTestId("settlement-config-guided-next"));
+    fireEvent.click(await screen.findByTestId("settlement-config-submit"));
+    await waitFor(() => expect(post).toHaveBeenCalledWith(
+      "/api/v1/settlement/config/combo-discount",
+      expect.objectContaining({ roundingToleranceCent: 500, roundingToleranceMinCent: 100, roundingToleranceMaxCent: 850 }),
+    ));
+    expect(post.mock.calls[0]?.[1]).not.toHaveProperty("projectId");
+  });
 
   it("全平台默认的套票折扣可配凑整允许尾数：默认勾 8、9、0，改选后按集合提交", async () => {
     const get = vi.fn().mockResolvedValue(OVERVIEW_NO_DRAFT);
@@ -116,26 +155,13 @@ describe("SettlementConfigPage 结算配置中心(ADM-STL-001)", () => {
 
     fireEvent.click(screen.getByLabelText("尾数 8"));
     fireEvent.click(screen.getByLabelText("尾数 5"));
+    fillToleranceBounds("0", "10");
     fireEvent.click(screen.getByTestId("settlement-config-guided-next"));
     await waitFor(() => expect(screen.getByText("0、5、9")).toBeTruthy());
     fireEvent.click(screen.getByTestId("settlement-config-submit"));
     await waitFor(() => expect(post).toHaveBeenCalledWith("/api/v1/settlement/config/combo-discount", expect.anything()));
     const body = post.mock.calls[0]?.[1] as { roundingAllowedEndings: number[] };
     expect([...body.roundingAllowedEndings].sort((a, b) => a - b)).toEqual([0, 5, 9]);
-  });
-
-  it("套票折扣填了项目时不显示允许尾数、请求体不带该键", async () => {
-    const get = vi.fn().mockResolvedValue(OVERVIEW_NO_DRAFT);
-    const post = vi.fn().mockResolvedValue({});
-    renderPage(makeApi(get, post));
-    await openComboDiscount(get);
-    fireEvent.change(screen.getByTestId("settlement-config-field-projectId"), { target: { value: "proj_9" } });
-    await waitFor(() => expect(screen.queryByLabelText("尾数 8")).toBeNull());
-
-    fireEvent.click(screen.getByTestId("settlement-config-guided-next"));
-    fireEvent.click(await screen.findByTestId("settlement-config-submit"));
-    await waitFor(() => expect(post).toHaveBeenCalledWith("/api/v1/settlement/config/combo-discount", expect.anything()));
-    expect(post.mock.calls[0]?.[1]).not.toHaveProperty("roundingAllowedEndings");
   });
 
   it("允许尾数全部取消时不发请求并提示至少选一个", async () => {

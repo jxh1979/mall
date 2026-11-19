@@ -1,6 +1,6 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import java.time.LocalDate;
 
@@ -35,8 +35,7 @@ public record SettlementBillRecord(
         // 六业态收入归属(terminology-canonical §三):通票收入归属的 L3 管理公司/业态主体(娱乐平台公司)。
         // 由 revenue_stream_attribution 按 (项目, all_pass_ticket) 解析;未配置=null(零金额影响,仅归属留白)。
         String attributedEntityId,
-        // D6 套票折扣入账：本月项目公司实际承担的折扣额（platform_absorb 全额/split_by_ratio 平台份额；
-        //   merchant_absorb=0）。为覆盖折扣使商户拿满额，项目多支出的金额。默认 0=零行为变更。
+        // D6 套票折扣入账：第十八批 AW 段 293-R1（BSM:754）起折扣按份额由各域承担、不另由项目公司承担，恒 0（列保留）。
         long comboDiscountCent,
         // R-7/D15.1（V343 + V383）分账尾差（带符号）= 池分账舍入尾差 + 渠道费按业态分摊尾差。
         //   治理地图「全局原则 · 金额一律精确到分」：尾差【单列留痕】并由该笔业务

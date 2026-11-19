@@ -1,6 +1,6 @@
 package com.complex.platform.amusement;
 
-// 文件版本：V0.05
+// 文件版本：V0.06
 
 import static com.complex.platform.amusement.AmusementParkWideFaultService.roleLabel;
 
@@ -13,9 +13,7 @@ import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.PageResponse;
 import com.complex.platform.common.idempotency.IdempotencyService;
 import com.complex.platform.evidence.AuditEventService;
-import com.complex.platform.ticketing.EntitlementTemplateRecord;
 import com.complex.platform.ticketing.IssuedEntitlementRecord;
-import com.complex.platform.ticketing.TicketTypeEntitlementRecord;
 import com.complex.platform.ticketing.TicketingRepository;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
@@ -348,7 +346,7 @@ public class AmusementFaultCompensationService {
     }
 
     /**
-     * 实际发放（第二岗位确认后）：原票下按票种完整票面（含酒水、礼品）补发受影响这一人份/次份的权益行，标记补偿记录，
+     * 实际发放（第二岗位确认后）：原票下按该人份售出时的完整票面（含酒水、礼品）补发受影响这一人份/次份的权益行，标记补偿记录，
      * 有效期自发放之日起算。返回补发的补偿记录数。
      */
     int issueItems(AmusementFaultCompensationBatchRecord batch, Instant validUntil, Instant now) {
@@ -367,34 +365,21 @@ public class AmusementFaultCompensationService {
     private List<String> reissueFullTicketFace(AmusementFaultCompensationItemRecord item, Instant validUntil, Instant now) {
         IssuedEntitlementRecord original = ticketingRepository.findIssuedEntitlementById(item.entitlementId())
                 .orElseThrow(() -> ApiException.notFound("ENTITLEMENT_NOT_FOUND", "原票权益不存在：" + item.entitlementId()));
-        List<TicketTypeEntitlementRecord> bindings = ticketingRepository.listTicketTypeEntitlements(original.ticketTypeId());
-        List<String> ids = new ArrayList<>();
-        if (bindings.isEmpty()) {
-            // 票种无绑定（直发/历史手造）：至少补发原权益本身一次。
-            ids.add(issueCompensationEntitlement(original, original.entitlementTemplateId(), original.entitlementType(),
-                    original.merchantId(), original.venueId(), original.pointId(), original.valueAmountCent(),
-                    original.entitlementKind(), original.agreementPriceCent(), original.consumptionWindow(),
-                    original.exclusiveMerchantId(), 1, item.id(), validUntil, now));
-            return ids;
-        }
-        // TK-10（ENUM L148「另补一次完整票面权益」「只对受影响的对应人份或次份办理补偿」；ENUM L46「该窗口内附带权益按完整一份配足」）：
-        // 每条绑定按票面份数（quantity）补发，人数不展开（只补受影响这一人份、沿用原座次）；每行次数＝该绑定一个次份的次数——
-        // 原票为多次票（受影响原权益 E 次）时按 E 折算为单次份，单次票取绑定全部次数。
+        // 296-R1（ENUM:148「另补一次完整票面权益，包括重新提供酒水、礼品」）：票面＝原票这一人份售出时所发的权益（同父票同座次、
+        // 非补偿补发行；作废、已用完的照样算），不读票种现绑定——售出后再加或改的权益不补给早先售出的票。出票已按份数展开，逐行照抄。
+        // TK-10（ENUM L148「只对受影响的对应人份或次份办理补偿」；ENUM L46「该窗口内附带权益按完整一份配足」）：人数不展开、沿用原座次；
+        // 每行次数＝一个次份的次数——原票为多次票（受影响原权益 E 次）时按 E 折算为单次份，单次票取原行全部次数。
         int entries = original.totalTimes();
-        for (TicketTypeEntitlementRecord binding : bindings) {
-            EntitlementTemplateRecord template = ticketingRepository.findEntitlementTemplateById(binding.entitlementTemplateId())
-                    .orElse(null);
-            if (template == null) {
+        List<String> ids = new ArrayList<>();
+        for (IssuedEntitlementRecord face : ticketingRepository.listIssuedEntitlementsByParentSlot(original.parentTicketId(),
+                original.slotIndex())) {
+            if (face.compensationItemId() != null) {
                 continue;
             }
-            String merchantId = template.merchantId() != null ? template.merchantId() : original.merchantId();
-            int times = entries <= 1 ? binding.totalTimes() : Math.max(1, binding.totalTimes() / entries);
-            for (int i = 0; i < binding.quantity(); i++) {
-                ids.add(issueCompensationEntitlement(original, template.id(), template.entitlementType(), merchantId,
-                        template.venueId(), template.pointId(), binding.valueAmountCent(), template.entitlementKind(),
-                        template.agreementPriceCent(), template.consumptionWindow(), template.exclusiveMerchantId(),
-                        times, item.id(), validUntil, now));
-            }
+            int times = entries <= 1 ? face.totalTimes() : Math.max(1, face.totalTimes() / entries);
+            ids.add(issueCompensationEntitlement(original, face.entitlementTemplateId(), face.entitlementType(), face.merchantId(),
+                    face.venueId(), face.pointId(), face.valueAmountCent(), face.entitlementKind(), face.agreementPriceCent(),
+                    face.consumptionWindow(), face.exclusiveMerchantId(), times, item.id(), validUntil, now));
         }
         return ids;
     }

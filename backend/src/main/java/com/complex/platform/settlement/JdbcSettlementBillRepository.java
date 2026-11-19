@@ -1,6 +1,6 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.08
+// 文件版本：V0.09
 
 import com.complex.platform.common.api.ApiException;
 import java.sql.Timestamp;
@@ -61,6 +61,26 @@ public class JdbcSettlementBillRepository implements com.complex.platform.ticket
      */
     static final String SINGLE_BAR_ROW =
             "EXISTS (SELECT 1 FROM ticket_orders sbo WHERE sbo.id = %1$s.order_id AND sbo.bar_id = %1$s.exclusive_merchant_id)";
+
+    /**
+     * 第十八批 AW 段 289-R1（ENUM:51「任何票种经第三方渠道售出时，销售渠道费一律先从整单扣除且只扣一次」）：固定额票数按「本行发生时这张票还有没有
+     * 别的仍有效核销」逐行判定——核销时此前没有仍有效的核销才计 +1，冲正后这张票不再有别的有效核销才计 −1；每张票净计数恒为 0 或 1，
+     * 首笔核销被撤销后客人再核销，这张票重新计一张。%1$s＝本行别名，%2$s＝另一核销行 u 的同口径筛选。
+     */
+    private static final String NO_OTHER_LIVE_VERIFICATION = """
+            (%1$s.parent_ticket_id IS NOT NULL AND NOT EXISTS (
+                SELECT 1 FROM settlement_transactions u
+                 WHERE u.parent_ticket_id = %1$s.parent_ticket_id
+                   AND u.transaction_type = 'verification_settled'
+                   AND u.verification_id IS NOT NULL AND u.verification_id <> %1$s.verification_id
+                   AND %2$s
+                   AND (:project_id::text IS NULL OR u.project_id = :project_id)
+                   AND (COALESCE(u.business_at, u.created_at), u.id) < (COALESCE(%1$s.business_at, %1$s.created_at), %1$s.id)
+                   AND NOT EXISTS (SELECT 1 FROM settlement_transactions r
+                                    WHERE r.transaction_type = 'verification_reversed'
+                                      AND r.verification_id = u.verification_id
+                                      AND (COALESCE(r.business_at, r.created_at), r.id)
+                                          < (COALESCE(%1$s.business_at, %1$s.created_at), %1$s.id))))""";
 
     /**
      * 归属主体自收的票（第十八批 AI 段 237-R1、214-R2；ENUM:32「纯游乐票和纯游乐通票由游乐公司负责」「演出票由传媒公司负责」；BSM:1720「与娱乐平台公司无关」；
@@ -310,9 +330,9 @@ public class JdbcSettlementBillRepository implements com.complex.platform.ticket
      * S11②：当月<b>进池</b>核销按【销售渠道】汇总实付额（渠道抽成整单前移的计费基数）。
      * 渠道取自出票订单 {@code ticket_orders.sales_channel}；direct 出票无订单 → 空串（落通用率）。
      *
-     * <p><b>V381 当期票数(固定金额模式计费基数)</b>：每张票只在其「首笔进池核销」(锚点=该父票最早的
-     * verification_settled 行)所在月计 +1——一张票多次核销不重复计(与 S3 综合服务费固定额「一张票只收一道」
-     * 同语义)；冲正行沿用原核销的 verification_id，冲的恰是锚点行时计 −1(冲正取反)，冲非锚点行不动票数。
+     * <p><b>V381 当期票数(固定金额模式计费基数)</b>：一张票多次核销不重复计(与 S3 综合服务费固定额「一张票只收一道」同语义)；
+     * 第十八批 AW 段 289-R1 起按 {@link #NO_OTHER_LIVE_VERIFICATION} 逐行判定——核销时这张票此前没有仍有效的核销才计 +1，冲正后这张票
+     * 不再有别的有效核销才计 −1（冲正行沿用原核销的 verification_id），首笔核销被撤销后再核销重新计一张。
      * 无 parent_ticket_id 的行(V285 前不合规发放数据)不计票数——与 S3 同一态度，绝不退化成按核销笔数各收一道。
      * 第十八批第 2 条：有池快照的票，其酒吧那部分的销售渠道费已按酒吧份额在售票时固化进池快照——比例模式的计费基数不再含这些酒吧核销额；
      * 固定金额模式票数锚点照旧，另给出锚点票快照里已扣的酒吧那部分（pooledAtSaleFeeCent），由引擎扣回，整票仍只扣一次。
@@ -321,11 +341,12 @@ public class JdbcSettlementBillRepository implements com.complex.platform.ticket
      * 第十八批 X 段 176-R2（BSM:749「两者一律在拆分给各域之前从整单扣除且只扣一次，由各域按分配份额自然共担」）：有价专属直付行（记了域份额）
      * 一并计入，比例基数取其域份额，锚点同样认它。
      */
-    // ponytail: 锚点=全期最早核销、不随冲正复位——锚点被冲正后同一张票再核销(新 verificationId)不再计费,
-    //   平台少收该票一道(客人有利方向,入场冲正后重入场属罕见);真出现再照 S3 净额复位语义升级。
     public List<ChannelRevenue> aggregateChannelRevenue(String projectId, Instant monthStart, Instant nextMonthStart) {
         return aggregateChannelRevenue(projectId, monthStart, nextMonthStart, null);
     }
+
+    private static final String POOL_LIVE = NO_OTHER_LIVE_VERIFICATION.formatted("st",
+            "(u.exclusive_merchant_id IS NULL OR u.domain_share_cent IS NOT NULL)");
 
     public List<ChannelRevenue> aggregateChannelRevenue(String projectId, Instant monthStart, Instant nextMonthStart,
                                                         Instant recoveryCutoff) {
@@ -334,10 +355,10 @@ public class JdbcSettlementBillRepository implements com.complex.platform.ticket
                        f.sales_fee_config_id, COALESCE(f.sales_fee_bps, 0) AS sales_fee_bps, f.sales_fixed_amount_cent,
                        COALESCE(SUM(CASE WHEN """ + POOLED_AT_SALE.formatted("st", "m") + """
                                          THEN 0 ELSE COALESCE(st.domain_share_cent, st.verified_amount_cent) END), 0) AS revenue_cent,
-                       COALESCE(SUM(CASE WHEN a.verification_id IS NOT NULL
+                       COALESCE(SUM(CASE WHEN """ + POOL_LIVE + """
                                          THEN CASE st.transaction_type WHEN 'verification_settled' THEN 1 ELSE -1 END
                                          ELSE 0 END), 0)          AS ticket_count,
-                       COALESCE(SUM(CASE WHEN a.verification_id IS NOT NULL
+                       COALESCE(SUM(CASE WHEN """ + POOL_LIVE + """
                                          THEN CASE st.transaction_type WHEN 'verification_settled' THEN 1 ELSE -1 END
                                               * COALESCE(ps.sales_channel_fee_cent, 0)
                                          ELSE 0 END), 0)          AS pooled_at_sale_fee_cent
@@ -346,15 +367,6 @@ public class JdbcSettlementBillRepository implements com.complex.platform.ticket
                   LEFT JOIN pass_pool_snapshots ps ON ps.ticket_instance_id = st.parent_ticket_id
                   LEFT JOIN ticket_orders o ON o.id = st.order_id
                   LEFT JOIN ticket_order_channel_fees f ON f.order_id = st.order_id
-                  LEFT JOIN (SELECT DISTINCT ON (parent_ticket_id) parent_ticket_id, verification_id
-                               FROM settlement_transactions
-                              WHERE transaction_type = 'verification_settled'
-                                AND verification_id IS NOT NULL
-                                AND (exclusive_merchant_id IS NULL OR domain_share_cent IS NOT NULL)
-                                AND parent_ticket_id IS NOT NULL
-                                AND (:project_id::text IS NULL OR project_id = :project_id)
-                              ORDER BY parent_ticket_id, COALESCE(business_at, created_at), id) a
-                         ON a.parent_ticket_id = st.parent_ticket_id AND a.verification_id = st.verification_id
                  WHERE st.transaction_type IN ('verification_settled','verification_reversed')
                    AND st.verification_id IS NOT NULL
                    AND (st.exclusive_merchant_id IS NULL OR st.domain_share_cent IS NOT NULL)
@@ -384,8 +396,8 @@ public class JdbcSettlementBillRepository implements com.complex.platform.ticket
     /**
      * 第十八批 AI 段 212-R1（ENUM:51「所有支付都会产生通路费、官方渠道同样产生……不由该笔业务的收款主体单独承担」「任何票种经第三方渠道售出时，
      * 销售渠道费一律先从整单扣除且只扣一次」「每笔分摊的结果与所用合同版本必须留痕」；BSM:749「官方渠道售出的票不扣销售渠道费，但仍扣通路费」）：
-     * 当月单一酒吧门票核销与冲正行按酒吧 × 订单付款时固化的销售渠道费配置汇总核销额、已分摊的通路费与固定额锚点票数（锚点写法同
-     * {@link #aggregateChannelRevenue}：每张票只在其首笔核销所在月计 +1，冲的恰是锚点行计 −1）。官方渠道没有固化配置＝不扣销售渠道费。
+     * 当月单一酒吧门票核销与冲正行按酒吧 × 订单付款时固化的销售渠道费配置汇总核销额、已分摊的通路费与固定额票数（逐行判定同
+     * {@link #aggregateChannelRevenue}，第十八批 AW 段 289-R1）。官方渠道没有固化配置＝不扣销售渠道费。
      */
     public List<SingleBarFee> aggregateSingleBarFees(String projectId, Instant monthStart, Instant nextMonthStart,
                                                      Instant recoveryCutoff) {
@@ -394,21 +406,12 @@ public class JdbcSettlementBillRepository implements com.complex.platform.ticket
                        f.sales_fee_config_id, COALESCE(f.sales_fee_bps, 0) AS sales_fee_bps, f.sales_fixed_amount_cent,
                        COALESCE(SUM(st.verified_amount_cent), 0) AS revenue_cent,
                        COALESCE(SUM(st.route_fee_cent), 0)       AS route_fee_cent,
-                       COALESCE(SUM(CASE WHEN a.verification_id IS NOT NULL
+                       COALESCE(SUM(CASE WHEN """ + NO_OTHER_LIVE_VERIFICATION.formatted("st",
+                "u.domain_share_cent IS NULL AND " + SINGLE_BAR_ROW.formatted("u")) + """
                                          THEN CASE st.transaction_type WHEN 'verification_settled' THEN 1 ELSE -1 END
                                          ELSE 0 END), 0)          AS ticket_count
                   FROM settlement_transactions st
                   LEFT JOIN ticket_order_channel_fees f ON f.order_id = st.order_id
-                  LEFT JOIN (SELECT DISTINCT ON (x.parent_ticket_id) x.parent_ticket_id, x.verification_id
-                               FROM settlement_transactions x
-                              WHERE x.transaction_type = 'verification_settled'
-                                AND x.verification_id IS NOT NULL
-                                AND x.domain_share_cent IS NULL
-                """ + "                AND " + SINGLE_BAR_ROW.formatted("x") + "\n" + """
-                                AND x.parent_ticket_id IS NOT NULL
-                                AND (:project_id::text IS NULL OR x.project_id = :project_id)
-                              ORDER BY x.parent_ticket_id, COALESCE(x.business_at, x.created_at), x.id) a
-                         ON a.parent_ticket_id = st.parent_ticket_id AND a.verification_id = st.verification_id
                  WHERE st.transaction_type IN ('verification_settled','verification_reversed')
                    AND st.verification_id IS NOT NULL
                    AND st.domain_share_cent IS NULL
@@ -936,34 +939,33 @@ public class JdbcSettlementBillRepository implements com.complex.platform.ticket
     }
 
     /**
-     * V268 套票折扣归属(§7.4 口径10):项目级可配,默认 platform_absorb(项目承担)。
-     * 说明:当前无折扣额进结算引擎(折扣是定价期概念),本解析器先落地供后台/引擎读,逐笔应用待折扣额接入流水后启用。
+     * 通票凑整参数（第十八批 AW 段 339-R1，BSM:754「允许误差可配（业务参数，全平台统一可配，出厂默认 5 元，须同时配置上下限）」）：
+     * 只有全平台一行（V661 chk_tcdc_platform_only）；293-R1 起不再有套票折扣归属。
      */
-    public ComboDiscountConfig findComboDiscountConfig(String projectId) {
+    public ComboDiscountConfig findComboDiscountConfig() {
         ComboDiscountConfig cfg = jdbcTemplate.query("""
-                SELECT discount_bearer, split_platform_bps, rounding_tolerance_cent, rounding_allowed_endings
+                SELECT rounding_tolerance_cent, rounding_tolerance_min_cent, rounding_tolerance_max_cent, rounding_allowed_endings
                   FROM ticket_combo_discount_configs
-                 WHERE status = 'active' AND is_draft = FALSE
-                   AND COALESCE(project_id, '__DEFAULT__') IN (COALESCE(:project_id, '__DEFAULT__'), '__DEFAULT__')
-                 ORDER BY (project_id IS NOT NULL) DESC
+                 WHERE status = 'active' AND is_draft = FALSE AND project_id IS NULL
                  LIMIT 1
-                """, new MapSqlParameterSource().addValue("project_id", projectId),
+                """, new MapSqlParameterSource(),
                 rs -> rs.next()
-                        ? new ComboDiscountConfig(rs.getString("discount_bearer"), rs.getInt("split_platform_bps"),
-                                rs.getLong("rounding_tolerance_cent"), rs.getString("rounding_allowed_endings"))
+                        ? new ComboDiscountConfig(rs.getLong("rounding_tolerance_cent"),
+                                (Long) rs.getObject("rounding_tolerance_min_cent"), (Long) rs.getObject("rounding_tolerance_max_cent"),
+                                rs.getString("rounding_allowed_endings"))
                         : null);
-        return requireConfigured(cfg, "ticket_combo_discount_configs", projectId);
+        return requireConfigured(cfg, "ticket_combo_discount_configs", null);
     }
 
     /**
      * V369 凑整允许误差(分)与 V648 允许尾数,实现票务域声明的 {@link com.complex.platform.ticketing.ComboPriceToleranceConfigPort}。
-     * 与折扣归属同一行配置、同一套草案转正闸;缺配置时沿用 requireConfigured 的 fail-loud(不静默给 0)。
+     * 同一套草案转正闸;缺配置时沿用 requireConfigured 的 fail-loud(不静默给 0)。第十八批 AW 段 339-R1：误差与尾数都只认全平台一行。
      */
     @Override
-    public com.complex.platform.ticketing.ComboPriceToleranceConfigPort.ComboRounding findComboRounding(String projectId) {
-        // 第十八批 AT 段 292-R1：误差照旧按项目取；允许尾数只认全平台默认行（BSM:754「全平台统一可配」）。
-        return new com.complex.platform.ticketing.ComboPriceToleranceConfigPort.ComboRounding(findComboDiscountConfig(projectId).roundingToleranceCent(),
-                findComboDiscountConfig(null).roundingAllowedEndings());
+    public com.complex.platform.ticketing.ComboPriceToleranceConfigPort.ComboRounding findComboRounding() {
+        ComboDiscountConfig cfg = findComboDiscountConfig();
+        return new com.complex.platform.ticketing.ComboPriceToleranceConfigPort.ComboRounding(cfg.roundingToleranceCent(),
+                cfg.roundingAllowedEndings());
     }
 
     /**
@@ -1472,12 +1474,12 @@ public class JdbcSettlementBillRepository implements com.complex.platform.ticket
     }
 
     /**
-     * V268 套票折扣归属配置读投影(§7.4)。splitPlatformBps 仅 split_by_ratio 用。
-     * V369 roundingToleranceCent:综合/联合通票「凑整允许误差」(分)——运营填的近似售价与系统算出售价的差额上限,
-     * 超出即拒绝发布。刻意与折扣归属同表同行:凑整差额走的就是这条折扣承担口径,运营只在一处维护。
-     * V648 roundingAllowedEndings:凑整允许尾数(升序去重数字串,出厂 089),只取全平台默认行(第十八批 AT 段 292-R1,BSM:754)。
+     * 通票凑整参数读投影（全平台一行）。
+     * V369 roundingToleranceCent:综合/联合通票「凑整允许误差」(分)——运营填的近似售价与系统算出售价的差额上限,超出即拒绝发布。
+     * V661 roundingToleranceMinCent/MaxCent:误差取值上下限(分,同空同填,出厂留空;第十八批 AW 段 339-R1)。
+     * V648 roundingAllowedEndings:凑整允许尾数(升序去重数字串,出厂 089;第十八批 AT 段 292-R1,BSM:754)。
      */
-    public record ComboDiscountConfig(String discountBearer, int splitPlatformBps, long roundingToleranceCent,
+    public record ComboDiscountConfig(long roundingToleranceCent, Long roundingToleranceMinCent, Long roundingToleranceMaxCent,
                                       String roundingAllowedEndings) {
     }
 

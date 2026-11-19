@@ -1,6 +1,6 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.11
+// 文件版本：V0.12
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import java.sql.Timestamp;
@@ -303,6 +303,8 @@ public class JdbcSettlementTransactionRepository {
     //   18AH 复核修复：另取同父票各人份仍有效的入场类核销时刻（作业按整张票判本场，与核销放行 ticketCheckedInThisSession 同口径）；
     //   第十八批第 3 条：销售渠道费取订单付款时固化的配置（ticket_order_channel_fees）。
     //   第十八批 AI 段 212-R1（ENUM:48「各项均只扣一次」）：固定额锚点另认单一酒吧门票核销行——月结已按其首笔核销扣过一道。
+    //   第十八批 AW 段 289-R1（ENUM:51「销售渠道费一律先从整单扣除且只扣一次」）：锚点只认仍有效（未被冲正）的核销——唯一一次核销被撤销、
+    //   此后没再核销的票，月结净计 0，到期照扣固定额。
     public java.util.List<ExpiredUnverifiedRow> findExpiredUnverifiedEntitlements(Instant now) {
         MapSqlParameterSource params = new MapSqlParameterSource().addValue("now", Timestamp.from(now));
         return jdbcTemplate.query("""
@@ -318,7 +320,10 @@ public class JdbcSettlementTransactionRepository {
                                    AND a.verification_id IS NOT NULL
                                    AND (a.exclusive_merchant_id IS NULL OR
                 """ + JdbcSettlementBillRepository.SINGLE_BAR_ROW.formatted("a") + """
-                ))
+                )
+                                   AND NOT EXISTS (SELECT 1 FROM settlement_transactions ar
+                                                    WHERE ar.verification_id = a.verification_id
+                                                      AND ar.transaction_type = 'verification_reversed'))
                         -- 同票已有到期事实扣过渠道费（如多人票未到人份先于首场次结束时处理）：固定额不再扣第二次（ENUM L48「各项均只扣一次」）
                         OR EXISTS (SELECT 1 FROM settlement_transactions f
                                      JOIN issued_entitlements fe ON fe.id = f.entitlement_id

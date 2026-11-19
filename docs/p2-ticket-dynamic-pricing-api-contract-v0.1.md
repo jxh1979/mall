@@ -1,4 +1,4 @@
-# P2-C 票务动态定价规则容器 API 契约 V0.11
+# P2-C 票务动态定价规则容器 API 契约 V0.12
 
 ## 1. 定位
 
@@ -26,9 +26,9 @@
 | `effective_from` | date | 生效开始日期 |
 | `effective_to` | date | 生效结束日期 |
 | `sales_channel` | string/null | 销售渠道；为空表示不限渠道 |
-| `adjustment_type` | string | `percent_delta` 或 `fixed_delta` |
+| `adjustment_type` | string | `percent_delta`、`fixed_delta` 或 `fixed_price`（第十八批 AW 段 338-R2 起） |
 | `adjustment_rate` | decimal/null | 百分比增减，适用于 `percent_delta` |
-| `adjustment_amount_cent` | long/null | 固定增减金额，适用于 `fixed_delta` |
+| `adjustment_amount_cent` | long/null | 固定增减金额，适用于 `fixed_delta`；`fixed_price` 时为固定价（必填、不小于 0） |
 | `min_price_cent` | long/null | 最低保护价 |
 | `max_price_cent` | long/null | 最高保护价 |
 | `status` | string | `draft`、`published`、`disabled` |
@@ -130,7 +130,7 @@
   "adjustment_cent": 2380,
   "final_price_cent": 14280,
   "matched_rule_id": "dynamic_rule_1",
-  "explanation": "matched dynamic pricing rule"
+  "explanation": "命中规则：夏季加价"
 }
 ```
 
@@ -138,9 +138,11 @@
 
 - 基础价仍来自票种的平日/周末/节假日价。
 - 多条规则命中时按 `priority DESC, updated_at DESC, id` 选择第一条。
+- 模拟结果的 `explanation` 为中文：未命中时「未命中动态定价规则」，命中时「命中规则：」加规则名（18AW 收尾复核修正，PGM:287 界面全中文）。
 - `condition_rule` 采用键值完全匹配：规则中的每个键必须在模拟上下文中存在且值相同。
 - `percent_delta` 使用基础价乘以百分比，四舍五入到分。
 - `fixed_delta` 使用固定金额增减。
+- `fixed_price` 命中即公开价为该固定价（与派生价固定价同口径）。
 - 调整后价格先应用 `min_price_cent`，再应用 `max_price_cent`。
 
 ## 6. 审计事件

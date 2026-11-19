@@ -1,6 +1,6 @@
 package com.complex.platform.common.api;
 
-// 文件版本：V0.51
+// 文件版本：V0.52
 
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -918,6 +918,13 @@ public final class FieldLabels {
         p("sold_out_until", "临时沽清到期时间");
         // 第十八批 AT 段第 292 条 292-R1 通票凑整允许尾数（BSM:754；同前端 fieldLabels.ts）。
         p("rounding_allowed_endings", "凑整允许尾数");
+        // 第十八批 AW 段第 339 条 339-R1 通票凑整允许误差上下限（BSM:754；同前端 fieldLabels.ts）。
+        p("rounding_tolerance_min_cent", "凑整允许误差下限");
+        p("rounding_tolerance_max_cent", "凑整允许误差上限");
+        // 第十八批 AW 段第 299 条 299-R1 票种售卖设置（ENUM:30；同前端 fieldLabels.ts）。
+        p("sale_starts_at", "开售时间");
+        p("sale_ends_at", "停售时间");
+        p("sale_paused", "暂停售卖");
     }
 
     /** 字段键（snake 或 camel）→ 中文业务名；认不出返回 null。 */

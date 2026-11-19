@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -28,13 +28,13 @@ function makeApi(
   };
 }
 const ADMIN_PERMS: EffectivePermissionsState = { status: "ready", value: { grants: [], denies: [], wildcard: true } };
-function renderPage(api: AdminApiClient, setGlobalError = vi.fn()) {
+function renderPage(api: AdminApiClient, setGlobalError = vi.fn(), effectivePermissions = ADMIN_PERMS) {
   const props: AdminPageProps = {
     api,
     user: { id: "u1", username: "admin", accountType: "platform_admin" },
     setActionResult: vi.fn(),
     setGlobalError,
-    effectivePermissions: ADMIN_PERMS,
+    effectivePermissions,
   };
   render(<InternalPriceCatalogPage {...props} />);
   return { setGlobalError };
@@ -103,6 +103,29 @@ describe("InternalPriceCatalogPage 内部结算价目录(ADM-STL-003)", () => {
     await waitFor(() => expect(post).toHaveBeenCalledWith(
       "/api/v1/settlement/config/internal-price-item",
       expect.objectContaining({ merchantId: null, providerEntityId: "be_cpc_1", category: "parking_credit", priceCent: 800 }),
+    ));
+  });
+
+  // 第十八批 AW 段 291-R2（ENUM:54「实际提供商品或服务的主体提交，对应域主管公司审批」；PGM:660「查看、导出和修改分别授权」）：
+  // 提交单列 settlement.internal_price.submit，只有提交码、没有结算配置维护码的提供方账号能提交新条目，不能复核转正。
+  it("持 settlement.internal_price.submit、无 settlement.config.manage 的账号：可提交新条目、不能转正", async () => {
+    const get = vi.fn().mockResolvedValue(ROWS);
+    const post = vi.fn().mockResolvedValue("sku_new_2");
+    const perms: EffectivePermissionsState = {
+      status: "ready", value: { grants: ["settlement.config.view", "settlement.internal_price.submit"], denies: [], wildcard: false },
+    };
+    renderPage(makeApi(get, post), vi.fn(), perms);
+    await waitFor(() => expect(screen.getByTestId("internal-price-catalog-page")).toBeTruthy());
+    await waitFor(() => expect(screen.getByTestId("ipc-draft-sku_bp_p1")).toBeTruthy());
+    expect((screen.getByTestId("ipc-activate-sku_bp_p1") as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.change(screen.getByTestId("ipc-form-merchant"), { target: { value: "m_bar_1" } });
+    fireEvent.change(screen.getByTestId("ipc-form-category"), { target: { value: "spirit" } });
+    fireEvent.change(screen.getByTestId("ipc-form-name"), { target: { value: "新款朗姆" } });
+    fireEvent.change(screen.getByTestId("ipc-form-price"), { target: { value: "52" } });
+    fireEvent.click(screen.getByTestId("ipc-form-submit"));
+    await waitFor(() => expect(post).toHaveBeenCalledWith(
+      "/api/v1/settlement/config/internal-price-item",
+      expect.objectContaining({ merchantId: "m_bar_1", itemName: "新款朗姆", priceCent: 5200 }),
     ));
   });
 
