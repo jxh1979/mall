@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -180,6 +180,28 @@ class BarOrderItemVoidBillLockJdbcIntegrationTests {
                 .andExpect(status().isConflict()).andExpect(jsonPath("$.detail_code").value("BAR_BILL_NOT_MERGEABLE"));
         assertSettledUntouched(bill);
         assertThat(billState(primary.id())).isEqualTo(primaryBefore);
+    }
+
+    /**
+     * 第十八批 AY 段第 348 条 348-R1（BSM:1079「账单合并称为“合单”，不等同于台位“并台”。」；PGM:287）：已并入主账单的副单再加小费 409 BAR_BILL_NOT_TIPPABLE、
+     * 再拆单 409 BAR_BILL_NOT_SPLITTABLE，提示都用状态字典的同一叫法「已合并」，不出「并单」。修复前为「已结账或已并单的账单不能再加小费」。
+     */
+    @Test
+    void mergedSecondaryBillMessagesSayMerged() throws Exception {
+        Bill primary = deliveredBill("tipm-main");
+        Bill secondary = deliveredBill("tipm");
+        perform(staffPost("/api/v1/bar/bills/" + primary.id() + "/merge", cashier,
+                Map.of("idempotency_key", "bvl-tipm-merge-" + s, "merged_bill_id", secondary.id(), "reason", "客人一起付")))
+                .andExpect(status().isOk());
+
+        String tip = data(perform(staffPost("/api/v1/bar/bills/" + secondary.id() + "/tip", cashier,
+                Map.of("idempotency_key", "bvl-tipm-tip-" + s, "tip_amount_cent", 500)))
+                .andExpect(status().isConflict()).andExpect(jsonPath("$.detail_code").value("BAR_BILL_NOT_TIPPABLE")), "/message");
+        assertThat(tip).contains("已合并").doesNotContain("并单");
+        String split = data(perform(staffPost("/api/v1/bar/bills/" + secondary.id() + "/split", cashier,
+                Map.of("idempotency_key", "bvl-tipm-split-" + s, "split_amount_cent", 500, "reason", "客人分开付")))
+                .andExpect(status().isConflict()).andExpect(jsonPath("$.detail_code").value("BAR_BILL_NOT_SPLITTABLE")), "/message");
+        assertThat(split).contains("已合并").doesNotContain("并单");
     }
 
     /** 282-R1：订单列表账单摘要带应付、已付、小费金额（分），供后台订单页按所选账单显示与办理。 */

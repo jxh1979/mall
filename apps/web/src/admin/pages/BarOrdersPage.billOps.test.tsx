@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -20,9 +20,9 @@ function ok(data: unknown): Response {
   return new Response(JSON.stringify({ success: true, code: "OK", message: "success", data }), { status: 200, headers: { "content-type": "application/json" } });
 }
 
-function renderPage(grants: string[], options: { gap?: number; merged?: boolean; secondaryMerged?: boolean } = {}) {
+function renderPage(grants: string[], options: { gap?: number; merged?: boolean; secondaryMerged?: boolean; b1?: Record<string, unknown>; topUpBillId?: string } = {}) {
   const orders = [
-    order("ord-1", "bar-a", [bill("b1", { min_spend_gap_cent: options.gap ?? 0 }), bill("b2", { payable_amount_cent: 30000 })]),
+    order("ord-1", "bar-a", [bill("b1", { min_spend_gap_cent: options.gap ?? 0, ...options.b1 }), bill("b2", { payable_amount_cent: 30000 })]),
     order("ord-2", "bar-a", [bill("b3", options.secondaryMerged ? { status: "merged", payable_amount_cent: 0 } : { payable_amount_cent: 10000 })]),
     order("ord-3", "bar-a", [bill("b4", { status: "paid", paid_amount_cent: 50000 })]),
     order("ord-4", "bar-b", [bill("b5")]),
@@ -46,7 +46,7 @@ function renderPage(grants: string[], options: { gap?: number; merged?: boolean;
         sales_role_type: "non_sales", tip_amount_cent: 5000 }));
     }
     if ((init?.method ?? "GET") === "POST" && url.endsWith("/adjustments")) {
-      return Promise.resolve(ok({ id: "adj-1", bill_id: "b1", adjustment_type: "min_spend_top_up", amount_cent: 30000, status: "applied",
+      return Promise.resolve(ok({ id: "adj-1", bill_id: options.topUpBillId ?? "b1", adjustment_type: "min_spend_top_up", amount_cent: 30000, status: "applied",
         snapshot_json: '{"bill_id":"b1","payable_before":50000,"payable_after":80000,"payment_status_before":"unpaid","payment_status_after":"unpaid",'
           + '"settlement_status_before":"unsettled","settlement_status_after":"unsettled","ar_ap_item_id":""}' }));
     }
@@ -168,6 +168,19 @@ describe("BarOrdersPage 账单操作：小费、拆单、合单、补足低消",
     expect(String(body("/api/v1/bar/bills/b1/adjustments").reason ?? "")).not.toBe("");
   });
 
+  // 第十八批 AY 段第 342 条 342-R2（BSM:1079「拆台后低消不足不阻断，各结果台显示差额并按既有规则继续消费或结账补足」；BSM:1064「不足最低消费的要补足」）：
+  // 已结清的账单所在台仍有低消差额时照样显示差额与补足入口；后端另开一张补足账单（返回的 bill_id 不是所选账单），页面提示到「办理账单」里选中结账。
+  it("已结清账单差额 300 元时显示「结账或关台前须补足」，补足提交 amount_cent=30000，另开补足账单后提示选中结账", async () => {
+    renderPage(ALL, { gap: 30000, b1: { status: "paid", paid_amount_cent: 50000 }, topUpBillId: "b-topup" });
+    await waitFor(() => expect(screen.getByTestId("bar-bill-min-spend-gap")).toHaveTextContent("关台前须补足"));
+    await ready();
+    await userEvent.click(screen.getByTestId("bar-bill-min-spend-top-up"));
+    expect(window.confirm).toHaveBeenCalledWith(expect.stringContaining("另开一张补足账单"));
+    await waitFor(() => expect(calls("/api/v1/bar/bills/b1/adjustments", "POST").length).toBe(1));
+    expect(body("/api/v1/bar/bills/b1/adjustments")).toMatchObject({ adjustment_type: "min_spend_top_up", amount_cent: 30000 });
+    await waitFor(() => expect(screen.getByTestId("bar-bill-checkout-note")).toHaveTextContent("已另开补足低消账单"));
+  });
+
   // 第十八批 AU 段收尾复核（PGM:287「界面全中文（所有终端零英文）……状态、枚举取值……必须全部为中文」；BSM:1079「账单合并称为“合单”」）：
   // 合单后的副单状态 merged 在办理账单下拉、所选账单行与订单列表账单列都显示「已合并」。
   it("已并入别单的副单在办理账单下拉、所选账单行与订单列表显示「已合并」，不出现 merged", async () => {
@@ -206,6 +219,18 @@ describe("BarOrdersPage 账单操作：小费、拆单、合单、补足低消",
     await waitFor(() => expect(lastResult()).toContain("调整类型：补足低消差额"));
     expect(lastResult()).not.toMatch(/min_spend_top_up|applied|payable_before|unpaid|unsettled/);
     expect(lastResult()).not.toContain("快照内容");
+  });
+
+  // 第十八批 AY 段第 348 条 348-R1（BSM:1079「账单合并称为“合单”，不等同于台位“并台”。」）：合单确认的影响说明称副单「已合并」，与状态字典同一叫法，不出「已并单」。
+  it("合单确认说明副单变为「已合并」，不出现「已并单」", async () => {
+    renderPage(ALL);
+    await ready();
+    fireEvent.change(screen.getByTestId("bar-bill-merge-target"), { target: { value: "b3" } });
+    await waitFor(() => expect((screen.getByTestId("bar-bill-merge-target") as HTMLSelectElement).value).toBe("b3"));
+    await userEvent.type(screen.getByLabelText("合单原因"), "同行客人一起付");
+    await userEvent.click(screen.getByTestId("bar-bill-merge"));
+    await waitFor(() => expect(window.confirm).toHaveBeenCalledWith(expect.stringContaining("合入后副单变为已合并")));
+    expect(vi.mocked(window.confirm).mock.calls.flat().join("\n")).not.toContain("已并单");
   });
 
   it("差额为 0 时不出现补足按钮", async () => {

@@ -1,6 +1,6 @@
 package com.complex.platform.evidence;
 
-// 文件版本：V0.13
+// 文件版本：V0.14
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -645,7 +645,9 @@ public class EvidenceEventService {
             return authorizationService.currentMerchantIdQuietly();
         }
         if (!java.util.Set.of("dealer_admission", "dealer_overpayment").contains(type == null ? "" : type)) {
-            return authorizationService.currentMerchantScope();
+            // 第十八批 AY 段第 344 条 344-R3（第十八批裁决 71「既然是最高权限，不应该什么都能看到吗？」；BSM:576）：回读附件与证据时间线时最高权限不按商户；上传、绑定等写入照旧。
+            return reading && authorizationService.isMasterAuthority(authorizationService.currentActor()) ? Optional.empty()
+                    : authorizationService.currentMerchantScope();
         }
         String dealerId = requireText(businessId, "business_id");
         if ("dealer_overpayment".equals(type)) {

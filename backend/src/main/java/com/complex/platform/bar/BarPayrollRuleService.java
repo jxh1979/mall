@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static com.complex.platform.bar.BarPayrollSupport.*;
 import static com.complex.platform.common.Strings.requireText;
@@ -33,7 +33,7 @@ public class BarPayrollRuleService {
         this.p=p;this.reviews=reviews;this.idem=idem;this.evidence=evidence;this.attachments=attachments;this.audit=audit;
     }
     public List<Rule> list(String project,String merchant) {
-        p.requireScope(requireText(project,"project_id"),merchant,VIEW);
+        p.requireReadScope(requireText(project,"project_id"),merchant,VIEW);
         return p.jdbc.query("SELECT * FROM bar_payroll_rules WHERE project_id=? AND (merchant_id IS NULL OR merchant_id=?) ORDER BY created_at DESC,id",
             this::row,project,merchant).stream().filter(r->p.inScope(r.projectId(),r.merchantId(),VIEW)).toList();
     }

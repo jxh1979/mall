@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static com.complex.platform.common.Strings.requireText;
 import com.complex.platform.access.AccessActor;
@@ -48,9 +48,14 @@ class BarPayrollSupport {
                 || (actor.merchantId()!=null && !Objects.equals(actor.merchantId(),merchant)))
             throw ApiException.forbidden("BAR_PAYROLL_SCOPE_MISMATCH","无权处理该综合体和商户的服务收入");
     }
+    /** 第十八批 AY 段第 344 条 344-R1（第十八批裁决 71「既然是最高权限，不应该什么都能看到吗？」；BSM:576）：读取入口的范围闸——最高权限只核权限码、看全部综合体与酒吧；其余账号同 {@link #requireScope}。写入口仍调 requireScope。 */
+    void requireReadScope(String project,String merchant,String permission) {
+        if(auth.isMasterAuthority(auth.currentActor())) {auth.requirePermission(permission);return;}
+        requireScope(project,merchant,permission);
+    }
     boolean inScope(String project,String merchant,String permission) {
         var actor=auth.currentActor();
-        return auth.canReachProject(actor,project,permission)
+        return auth.isMasterAuthority(actor) || auth.canReachProject(actor,project,permission)
             && (actor.merchantId()==null || Objects.equals(actor.merchantId(),merchant));
     }
     String operationCompany(String project,String merchant) {

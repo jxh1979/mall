@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 // OBS-14-02：后台结果区中文展示（PGM「全局原则 · 界面全中文（所有终端零英文）」）。
 // 页面经 setActionResult 放进来的对象，按「中文键名：可读值」逐行展示：键名查 i18n/fieldLabels（与后端 FieldLabels 同口径），
 // 枚举取值先按键查 KEY_VALUE_LABELS（同码不同键含义不同），再查 formatBusinessStatus 状态码表，再查 VALUE_LABELS（动作码、页面状态码、
@@ -49,8 +49,12 @@ function field(name: string, key: string, value: unknown, indent: string): strin
   return [`${indent}${name}：${scalar(key, value)}`];
 }
 
+// 第十八批 AY 段第 347 条 347-R1（PGM:287「展示给用户的一切文字……必须全部为中文」）：服务端快照 JSON 串（snapshot_json，英文键与状态码）
+// 已随记录落库留痕，结果区不展示；嵌套的（如卡座转台结果）同样去掉。
+const SNAPSHOT = compact("snapshot_json");
+
 function entries(value: object, indent: string): string[] {
-  const list = Object.entries(value);
+  const list = Object.entries(value).filter(([key]) => compact(key) !== SNAPSHOT);
   return list.length === 0 ? [`${indent}无`] : list.flatMap(([key, item]) => field(label(key), key, item, indent));
 }
 

@@ -1,4 +1,4 @@
-// 文件版本：V0.11
+// 文件版本：V0.12
 package com.complex.platform.inventory;
 
 import static org.mockito.ArgumentMatchers.any;
@@ -739,7 +739,7 @@ class InventoryControllerTests {
         verify(authorizationService).requirePermission("bar.saved_bottle.manage");
     }
 
-    // FS-016：领取按前端真实请求形状（claim_items/verification_code/bottle_label_value/customer_name_or_nickname）。
+    // FS-016：领取按前端真实请求形状（claim_items/verification_code）；第十八批 AY 段 268-R1 起不带瓶底标签与姓名昵称。
     @Test
     void claimSavedBottleUsesSnakeCaseRequestShape() throws Exception {
         mockMvc.perform(post("/api/v1/inventory/saved-bottles/saved_1/claim")
@@ -750,8 +750,6 @@ class InventoryControllerTests {
                                   "idempotency_key": "admin-saved-bottle-claim-saved_1-1",
                                   "claim_items": [{"saved_bottle_id": "saved_1", "quantity": 1}],
                                   "verification_code": "000000",
-                                  "bottle_label_value": "LBL-1",
-                                  "customer_name_or_nickname": "甲",
                                   "evidence_attachment_ids": ["att-1"]
                                 }
                                 """))
@@ -760,8 +758,6 @@ class InventoryControllerTests {
         org.mockito.ArgumentCaptor<SavedBottleClaimRequest> captor = org.mockito.ArgumentCaptor.forClass(SavedBottleClaimRequest.class);
         verify(service).claimSavedBottle(eq("saved_1"), captor.capture());
         org.assertj.core.api.Assertions.assertThat(captor.getValue().verificationCode()).isEqualTo("000000");
-        org.assertj.core.api.Assertions.assertThat(captor.getValue().bottleLabelValue()).isEqualTo("LBL-1");
-        org.assertj.core.api.Assertions.assertThat(captor.getValue().customerNameOrNickname()).isEqualTo("甲");
     }
 
     private StockMovementRecord stockMovement(String movementType) {

@@ -1,4 +1,4 @@
-// 文件版本：V0.32
+// 文件版本：V0.33
 export type AdminUser = {
   id: string;
   username: string;
@@ -371,7 +371,8 @@ export type BarBillRow = {
   salesRoleType?: "sales" | "non_sales";
   commissionRateBp?: number | null;
   commissionAmountCent?: number | null;
-  // 第十八批 AU 段第 282 条 282-R1：账单应付、已付、小费金额（分）；第 283 条 283-R1：未结账单的低消差额（分，0＝已达标；已结、已并单、作废为空）。
+  // 第十八批 AU 段第 282 条 282-R1：账单应付、已付、小费金额（分）；第 283 条 283-R1：未结账单的低消差额（分，0＝已达标；已并单、作废为空）；
+  // 第十八批 AY 段第 342 条 342-R1：已结账单仅在所在开台会话仍开台且有差额时带差额，否则为空。
   payableAmountCent?: number;
   paidAmountCent?: number;
   tipAmountCent?: number;

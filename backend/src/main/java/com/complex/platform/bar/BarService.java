@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.17
+// 文件版本：V0.18
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.PageResponse;
@@ -60,12 +60,13 @@ public class BarService {
                 () -> {
                     // 18T 复核修复⑤（照 142-R3 listShifts）：非平台管理员、无商户号的项目侧账号（如项目财务）按订单列表入口码可触及的项目列订单，
                     // 与同页挂起订单风险看板的项目口径一致；商户账号、平台管理员读法不改。
+                    // 第十八批 AY 段第 344 条 344-R1（第十八批裁决 71「既然是最高权限，不应该什么都能看到吗？」；BSM:576）：最高权限不走项目侧分支、看全部酒吧订单。
                     var actor = authorizationService.currentActor();
                     List<BarOrderRecord> orders = !authorizationService.isPlatformAdmin(actor)
-                            && authorizationService.currentMerchantIdQuietly().isEmpty()
+                            && authorizationService.currentMerchantIdQuietly().isEmpty() && !isMaster()
                             ? repository.listOrdersInProjects(authorizationService
                                     .projectReach(actor, BarReadOperation.LIST_ORDERS.permissionCode()).organizationIds())
-                            : repository.listOrders(authorizationService.currentMerchantScope());
+                            : repository.listOrders(listScope());
                     if (orders.isEmpty()) {
                         return List.of();
                     }
@@ -91,7 +92,10 @@ public class BarService {
                                                         commission == null ? null : commission.commissionRateBp(),
                                                         commission == null ? null : commission.commissionAmountCent(),
                                                         bill.payableAmountCent(), bill.paidAmountCent(), bill.tipAmountCent(),
-                                                        java.util.Set.of("settled", "merged", "void").contains(bill.settlementStatus())
+                                                        // 第十八批 AY 段第 342 条 342-R1：已结账单在所在开台会话仍开台且有差额时也带差额（另开补足账单收取）。
+                                                        // ponytail: 已结账单逐张查会话，订单量大时改批量取。
+                                                        "settled".equals(bill.settlementStatus()) ? BarMinSpend.openSessionGapCent(repository, bill)
+                                                                : java.util.Set.of("merged", "void").contains(bill.settlementStatus())
                                                                 ? null : BarMinSpend.gapCent(repository, bill));
                                             },
                                             Collectors.toList())));
@@ -196,14 +200,15 @@ public class BarService {
     public PageResponse<BarOrderItemVoidRecord> listOrderItemVoids(String orderId, String status) {
         String normalizedStatus = status == null || status.isBlank() ? "pending" : status.trim();
         String normalizedOrderId = orderId == null || orderId.isBlank() ? null : orderId.trim();
+        // 第十八批 AY 段第 344 条 344-R1（第十八批裁决 71「既然是最高权限，不应该什么都能看到吗？」；BSM:576）：最高权限看全部酒吧的退菜退酒申请。
         return operations.readPage(
                 BarReadOperation.LIST_ORDER_ITEM_VOIDS,
                 () -> normalizedOrderId == null
                         ? repository.listOrderItemVoidsByStatus(
-                                authorizationService.currentMerchantScope(), normalizedStatus)
+                                listScope(), normalizedStatus)
                         : repository.listOrderItemVoids(normalizedOrderId).stream()
                                 .filter(v -> normalizedStatus.equals(v.status()))
-                                .filter(v -> authorizationService.currentMerchantScope()
+                                .filter(v -> listScope()
                                         .map(scope -> scope.equals(v.merchantId())).orElse(true))
                                 .toList()
         );
@@ -914,6 +919,24 @@ public class BarService {
         );
     }
 
+    /**
+     * 第十八批 AY 段第 346 条 346-R1（BSM:1064「不足最低消费的要补足」「结账补足的差额按普通消费计入」；BSM:1069「账单调整只用于纠正漏记、多记的数量」）：
+     * 补足低消差额（min_spend_top_up）不经账单调整准入复核（bar.bill_waiver），提交即生效；提交编号、写操作与留痕同 {@link #applyBillAdjustment}。
+     */
+    @com.complex.platform.gate.GuardedAction(capability = "bar.bill.adjust")
+    @Transactional
+    public BarBillAdjustmentRecord applyMinSpendTopUp(String billId, BarBillAdjustmentRequest request) {
+        String id = operations.requireText(billId, "bill_id");
+        return operations.executeWrite(
+                "adjustBarBill:" + id,
+                request == null ? null : request.idempotencyKey(),
+                request,
+                BarBillAdjustmentRecord.class,
+                BarWriteOperation.APPLY_BILL_ADJUSTMENT,
+                () -> minSpendTopUps == null ? billingService.applyBillAdjustment(id, request) : minSpendTopUps.topUp(id, request)
+        );
+    }
+
     public PageResponse<BarBillOperationRecord> listBillOperations(String billId) {
         String id = operations.requireText(billId, "bill_id");
         return operations.readPage(
@@ -1038,6 +1061,10 @@ public class BarService {
     // 第十八批 T 段第 157 条 157-R2：字段注入免改构造点（单测未注入＝挂起端点不可用、订单列表不带挂起状态）。
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     BarOrderSuspensionService suspensions;
+
+    // 第十八批 AY 段第 342 条 342-R1：已结账单所在开台会话仍有低消差额时，补足另开补足账单（字段注入免改构造点；单测未注入即照旧走账单调整）。
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    BarMinSpendTopUpBillService minSpendTopUps;
 
     // 157-R5：转坏账鉴权含关台未付清待办升级后的店长与夜班值班经理（字段注入免改构造点）。
     @org.springframework.beans.factory.annotation.Autowired(required = false)
@@ -1227,7 +1254,8 @@ public class BarService {
                         return repository.listShiftsInProjects(authorizationService
                                 .projectReach(actor, BarShiftService.FINANCE_REVIEW).organizationIds());
                     }
-                    return repository.listShifts(authorizationService.currentMerchantScope());
+                    // 第十八批 AY 段第 344 条 344-R1（第十八批裁决 71「既然是最高权限，不应该什么都能看到吗？」；BSM:576）：最高权限持全部权限码、走这一行，看全部酒吧班次。
+                    return repository.listShifts(listScope());
                 }
         );
     }

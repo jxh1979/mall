@@ -1,9 +1,8 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import React from "react";
 import { HighRiskConfirm } from "../components/HighRiskConfirm";
 import { formatBusinessStatus } from "../i18n/statusLabels";
 import { PermissionButton } from "../security/Can";
-import { ApiError } from "../../shared/apiError";
 import type { AdminPageProps, BarBillRow, BarOrderRow } from "../types";
 
 // 第十八批 AU 段第 282 条 282-R2（BSM:1077「小费是客人在服务费之外额外给的钱，结账可录（按额或按比例），计入账单并归属该桌台的主责服务提供人」；
@@ -78,20 +77,15 @@ export function BarBillCheckoutPanel({ api, effectivePermissions, setActionResul
       const result = await api.post(`/api/v1/bar/bills/${encodeURIComponent(billId)}/${path}`, { ...body, idempotencyKey: keys.current[action]!.key });
       delete keys.current[action];
       done();
-      // 第十八批 AU 段收尾复核（PGM:287「状态、枚举取值……必须全部为中文」）：合单、拆单、补足低消返回的服务端快照 snapshot_json
-      // （英文键与状态码的 JSON 串）已随记录落库留痕，结果区不展示。
-      const shown = { ...(result as Record<string, unknown>) };
-      delete shown.snapshotJson;
-      setActionResult(shown);
+      // 第十八批 AY 段第 347 条 347-R1：合单、拆单、补足低消返回的服务端快照 snapshot_json 由结果区组件统一不展示。
+      setActionResult(result);
+      // 第十八批 AY 段第 342 条 342-R2：账单已结清的，补足由后端另开一张补足账单（返回的 billId 不是所选账单），提示到「办理账单」里选中结账。
+      if (action === "topUp" && (result as { billId?: unknown }).billId !== billId) setNote("已另开补足低消账单，请在「办理账单」下拉中选中后结账");
       await onChanged();
     } catch (actionError) {
       const message = actionError instanceof Error ? actionError.message : "账单操作失败";
       setError(message);
       setGlobalError(message);
-      // 补足低消走账单调整既有准入闸（主管复核，V068 bar.bill_waiver）：批准后原样再点一次，请求编号沿用。
-      if (action === "topUp" && actionError instanceof ApiError && actionError.detailCode === "ADMISSION_BLOCKED") {
-        setNote("已提交主管审批：主管在「主管复核」页批准后，请原样再点一次「补足低消差额」。");
-      }
     } finally {
       setBusy(false);
     }
@@ -139,10 +133,10 @@ export function BarBillCheckoutPanel({ api, effectivePermissions, setActionResul
       <p className="admin-muted-action">所选账单：{bill?.id ? `${bill.billNo ?? bill.id} · ${formatBusinessStatus(bill.status)} · 应付 ${yuan(bill.payableAmountCent)} · 已付 ${yuan(bill.paidAmountCent)} · 小费 ${yuan(bill.tipAmountCent)}` : "未生成"}</p>
       {gap > 0 ? (
         <div className="admin-form-row" data-testid="bar-bill-min-spend-form">
-          <span data-testid="bar-bill-min-spend-gap">本台低消差额 {yuan(gap)}，结账须补足</span>
+          <span data-testid="bar-bill-min-spend-gap">本台低消差额 {yuan(gap)}，结账或关台前须补足</span>
           <HighRiskConfirm
             label="补足低消差额"
-            impact={`本账单应付增加 ${yuan(gap)}，按普通消费计入本台消费。`}
+            impact="按普通消费计入本台消费：未结账单直接加到应付；账单已结清的另开一张补足账单，结清后方可关台。"
             disabled={busy}
             onConfirm={() => void submit("topUp", "adjustments", { adjustmentType: "min_spend_top_up", amountCent: gap, reason: "结账补足低消差额" }, () => undefined)}
             permissionsState={effectivePermissions}
@@ -187,7 +181,7 @@ export function BarBillCheckoutPanel({ api, effectivePermissions, setActionResul
         <label>合单原因<input aria-label="合单原因" value={mergeReason} onChange={(e) => setMergeReason(e.target.value)} placeholder="例如：同行客人一起付" /></label>
         <HighRiskConfirm
           label="合单"
-          impact="合入后副单变为已并单，提成按订台人员、小费按各自台位服务人员分别记。"
+          impact="合入后副单变为已合并，提成按订台人员、小费按各自台位服务人员分别记。"
           disabled={busy || !movable}
           precheck={validateMerge}
           onConfirm={() => void submit("merge", "merge", { mergedBillId: mergeBillId, reason: mergeReason.trim() }, () => { setMergeBillId(""); setMergeReason(""); })}

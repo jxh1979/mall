@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.LocalZone;
@@ -173,7 +173,8 @@ public class BarSuspendedOrderBoard {
             where.add("s.merchant_id = ?");
             args.add(merchant.get());
             filters.put("merchant_id", merchant.get());
-        } else if (!authorization.isPlatformAdmin(actor)) {
+        } else if (!authorization.isPlatformAdmin(actor) && !authorization.isMasterAuthority(actor)) {
+            // 第十八批 AY 段第 344 条 344-R1（第十八批裁决 71「既然是最高权限，不应该什么都能看到吗？」；BSM:576）：最高权限同平台管理员，看全部酒吧（列表、汇总、导出同用本闸）。
             TreeSet<String> projects = new TreeSet<>(authorization.projectReach(actor, VIEW).organizationIds());
             where.add(projects.isEmpty() ? "FALSE" : "s.project_id IN (" + String.join(", ", projects.stream().map(p -> "?").toList()) + ")");
             args.addAll(projects);

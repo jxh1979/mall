@@ -1,4 +1,4 @@
-// 文件版本：V0.03
+// 文件版本：V0.04
 import React from "react";
 import { PermissionButton } from "../security/Can";
 import type { AdminPageProps, BarTableSessionRow } from "../types";
@@ -87,7 +87,7 @@ export function BarServiceResponsibilityPanel({ api, effectivePermissions, setAc
     <PermissionButton permissionsState={effectivePermissions} permissions={["bar.table_session.transfer"]} disabled={busy || session?.status !== "open"} onClick={() => void write("service-handover")}>确认此刻交接</PermissionButton>
     <label><input type="checkbox" checked={finished} onChange={e => setFinished(e.target.checked)} />本场及并入场次的实际服务均已结束</label>
     <PermissionButton permissionsState={effectivePermissions} permissions={["bar.table.open_close"]} disabled={busy || session?.status !== "open" || !finished} onClick={() => void write("service-close")}>关台（登记实际服务结束）</PermissionButton>
-    <p>关台须台组全部账单已结清或已并入主账单；挂账、未结账单一律不得关台，关台后台位进入待清台，未达最低消费的已付定金没收。</p>
+    <p>关台须台组全部账单已结清或已并入主账单；挂账、未结账单一律不得关台；有消费而未达最低消费的，须先补足低消差额。关台后台位进入待清台，未达最低消费的已付定金没收。</p>
     <p>缺少早先责任区间时，用「补录服务责任区间」附凭证提交主管复核，通过后才计入；交接操作不会把未知历史自动补给当前人员。</p>
     <PermissionButton permissionsState={effectivePermissions} permissions={["bar.table_session.transfer", "evidence.attachment.create"]} disabled={busy || !session} data-testid="bar-service-backfill-open" onClick={() => void openBackfill()}>补录服务责任区间</PermissionButton>
     <BackfillFormModal open={form !== null} title="补录服务责任区间" testId="bar-service-backfill-form" api={api} submitting={busy} error={formError}

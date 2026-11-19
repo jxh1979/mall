@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.07
+// 文件版本：V0.08
 
 import static com.complex.platform.bar.BarPayrollSupport.*;
 import static com.complex.platform.common.Strings.requireText;
@@ -51,7 +51,7 @@ public class BarServiceResponsibilityService {
             order.id(),session.id(),order.tableId(),scope.project(),scope.merchant(),session.businessDate());
     }
     public List<Responsibility> history(String sessionId) {
-        var s=session(sessionId,false);var scope=p.tableScope(s.tableId());p.requireScope(scope.project(),scope.merchant(),VIEW);
+        var s=session(sessionId,false);var scope=p.tableScope(s.tableId());p.requireReadScope(scope.project(),scope.merchant(),VIEW);
         return responsibilityRows(sessionId);
     }
     @Transactional
@@ -174,6 +174,12 @@ public class BarServiceResponsibilityService {
                 }
                 throw conflict("BAR_TABLE_SESSION_BILL_UNSETTLED","账单未结清，不得关台："+String.join("、",unsettled));
             }
+            // 第十八批 AY 段第 342 条 342-R1（BSM:1064「因此台位上要么没有任何消费（空台，无账可结），要么最终累计消费达到最低消费」）：有消费而未达台组低消的
+            // 不得关台（转台到低消更高的台、拆台后结果台不足，账单已当场结清时）；空台照旧关台、已付定金照旧没收（BSM:1062）。
+            long threshold=deposits.familyMinConsumptionCent(sessionId),consumed=deposits.familyConsumedCent(sessionId);
+            if(consumed>0 && consumed<threshold)
+                throw conflict("BAR_TABLE_SESSION_MIN_SPEND_NOT_MET","本台低消差额 "+java.math.BigDecimal.valueOf(threshold-consumed,2).toPlainString()
+                    +" 元未补足，不得关台：请继续消费，或在订单页「补足低消差额」后结清再关台");
             var ids=family(sessionId);
             Instant now=Instant.now();
             for(String id:ids) {

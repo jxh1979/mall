@@ -1,4 +1,4 @@
-// 文件版本：V0.05
+// 文件版本：V0.06
 // FS-017（BSM L1072）：作废后对客补存/赔付——选中已作废行出现补存/赔付面板，选「赔付」填 120 元 → POST …/remedy 蛇形键 amount_cent=12000。
 // 第十八批 AP 段 254-R3（BSM:1170「存酒登记必须拍照、填写人工备注……」）：同品补存须填补存瓶人工备注，作为 operator_note 发出；
 // 赔付不发 operator_note；领取表单不再有备注框与「完整后台验收领取」默认值。
@@ -21,6 +21,8 @@ function makeApi(): AdminApiClient {
     get: vi.fn(async (path: string) => (path.endsWith("/remedies") ? [] : ROWS)),
     getPaged: vi.fn().mockResolvedValue({ items: [], total: 0, page: 1, size: 10 }),
     post: vi.fn(async () => ({ id: "sbr_1", customerDeliveryStatus: "pending_approval" })),
+    // 第十八批 AY 段 269-R1：证据改为真实上传，按附件角色回服务端编号（视频 att_v1，其余 att_p1）。
+    postForm: vi.fn(async (_path: string, form: FormData) => ({ id: form.get("attachment_role") === "video" ? "att_v1" : "att_p1" })),
     put: vi.fn().mockResolvedValue({}),
     patch: vi.fn().mockResolvedValue({}),
     delete: vi.fn().mockResolvedValue({}),
@@ -76,7 +78,15 @@ describe("StoredWinePage 补存/赔付（FS-017）", () => {
     fireEvent.click(screen.getByTestId("stored-wine-select-c-1"));
     await waitFor(() => expect(screen.queryByTestId("stored-wine-remedy-panel")).not.toBeNull());
     await waitFor(() => expect(api.get).toHaveBeenCalledWith("/api/v1/inventory/saved-bottles/c-1/remedies"));
-    fireEvent.change(screen.getByTestId("stored-wine-remedy-photos"), { target: { value: "att_p1" } });
+    // 第十八批 AY 段 269-R1：补存瓶登记照片改为拍照上传（与存酒登记同 business_type），标签不再要员工填编号。
+    expect(screen.getByTestId("stored-wine-remedy-photos").getAttribute("type")).toBe("file");
+    expect(screen.getByTestId("stored-wine-remedy-photos").closest("label")!.textContent).not.toMatch(/id|逗号分隔/);
+    fireEvent.change(screen.getByTestId("stored-wine-remedy-photos"), { target: { files: [new File(["x"], "a.jpg", { type: "image/jpeg" })] } });
+    await waitFor(() => expect(screen.getByTestId("stored-wine-remedy-photos-files").textContent).toBe("a.jpg"));
+    const photoForm = vi.mocked(api.postForm!).mock.calls[0]!;
+    expect(photoForm[0]).toBe("/api/v1/evidence/attachments/upload");
+    expect(photoForm[1].get("business_type")).toBe("saved_bottle_registration");
+    expect(photoForm[1].get("attachment_role")).toBe("photo");
     fireEvent.change(screen.getByTestId("stored-wine-remedy-label"), { target: { value: "LBL-NEW" } });
     fireEvent.change(screen.getByTestId("stored-wine-remedy-location"), { target: { value: "store-1" } });
     fireEvent.click(screen.getByTestId("stored-wine-remedy-submit"));

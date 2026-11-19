@@ -1,9 +1,10 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -13,6 +14,7 @@ import com.complex.platform.common.crypto.PiiCipher;
 import com.complex.platform.evidence.EvidenceEventService;
 import com.complex.platform.support.StaffRequestFixture;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.jayway.jsonpath.JsonPath;
 import java.security.MessageDigest;
 import java.nio.charset.StandardCharsets;
 import java.sql.Timestamp;
@@ -143,6 +145,41 @@ class SavedBottleCancelDisputeJdbcIntegrationTests {
                 .andExpect(jsonPath("$.data.items[0].subject_summary.reason").value("客人退回时瓶身碎裂"));
     }
 
+    // 第十八批 AY 段 269-R2（第十八批裁决 14「高价值的……存酒作废，必须照片＋视频＋主管复核才生效」；PGM:287 报错全中文）：前端不再预检照片视频，
+    // 店员只带原因作废高价值存酒 → 400 HIGH_VALUE_EVIDENCE_REQUIRED，报错是全中文（不夹带 photo_attachment_ids），存酒不动、不建复核单。
+    @Test
+    void highValueCancelWithoutEvidenceRejectsWithChineseMessage() throws Exception {
+        String bottle = insertBottle(highItem, "stored");
+
+        call(clerk, bottle + "/cancel", body("b71-269-cancel-noevidence-" + s, "交还时瓶身碎裂"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.detail_code").value("HIGH_VALUE_EVIDENCE_REQUIRED"))
+                .andExpect(jsonPath("$.message").value("照片附件不能为空：高价值动作需照片+视频双证据"));
+        assertThat(statusOf(bottle)).isEqualTo("stored");
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM inventory_high_value_reviews WHERE subject_id=?", Long.class, bottle)).isZero();
+    }
+
+    // 第十八批 AY 段 269-R1（BSM:1072「存酒作废需照片+视频双证据+主管复核」）：存酒页改为真实上传后，店员按页面形状经上传接口
+    // （business_type=saved_bottle_cancel，attachment_role 照片 photo、视频 video）拿附件编号，再用这两个编号作废高价值存酒 → 冻结待复核，
+    // 复核单记的照片、视频编号与上传一致。后端未改，本条锁现行为。
+    @Test
+    void highValueCancelWithUploadedPhotoAndVideoFreezesForReview() throws Exception {
+        String bottle = insertBottle(highItem, "stored");
+        String photo = uploadViaHttp("broken.jpg", "image/jpeg", "photo");
+        String video = uploadViaHttp("broken.mp4", "video/mp4", "video");
+        Map<String, Object> cancel = body("b71-269-cancel-hv-" + s, "交还时瓶身碎裂");
+        cancel.put("photo_attachment_ids", List.of(photo));
+        cancel.put("video_attachment_ids", List.of(video));
+
+        call(clerk, bottle + "/cancel", cancel)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("disputed_frozen"));
+        assertThat(jdbc.queryForMap("SELECT photo_attachment_ids::text AS photos, video_attachment_ids::text AS videos"
+                        + " FROM inventory_high_value_reviews WHERE subject_id=?", bottle))
+                .containsEntry("photos", "[\"" + photo + "\"]")
+                .containsEntry("videos", "[\"" + video + "\"]");
+    }
+
     // 254-R6：争议原因必填并进审计；店员、别家商户主管不能了结；门店主管核实争议不成立 → 恢复存酒中，同号重放返回首次结果，随后照常取酒。
     @Test
     void disputeReasonAuditedAndSupervisorDismissalRestoresClaimableBottle() throws Exception {
@@ -249,6 +286,15 @@ class SavedBottleCancelDisputeJdbcIntegrationTests {
         inventoryRepository.saveStockMovement(new StockMovementRecord("mv_b62sd_" + item, "inbound", item, null, "loc_b62sd_" + s, 1,
                 unitCostCent, null, "purchase_request", "pr_" + item, null, null, List.of(), "completed",
                 Instant.now().minusSeconds(60), merchant), project);
+    }
+
+    private String uploadViaHttp(String name, String contentType, String role) throws Exception {
+        String response = mockMvc.perform(multipart("/api/v1/evidence/attachments/upload")
+                        .file(new MockMultipartFile("file", name, contentType, "fake-bytes".getBytes()))
+                        .param("business_type", "saved_bottle_cancel").param("attachment_role", role).with(clerk))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        return JsonPath.read(response, "$.data.id");
     }
 
     private String upload(String name, String contentType, String role) {

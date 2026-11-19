@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import java.util.List;
 import java.util.Optional;
@@ -73,6 +73,23 @@ final class BarMinSpend {
                     .sum();
         }
         return threshold > 0 ? Math.max(0L, threshold - consumed) : 0L;
+    }
+
+    /**
+     * 第十八批 AY 段第 342 条 342-R1（BSM:1064「因此台位上要么没有任何消费（空台，无账可结），要么最终累计消费达到最低消费」）：账单订单所在开台会话的
+     * 当前有效链根仍开台时返回该会话；无会话归属或已关台为空。
+     */
+    static Optional<BarTableSessionRecord> openRootSession(BarRepository repository, BarBillRecord bill) {
+        return Optional.ofNullable(bill.orderId())
+                .flatMap(repository::findSessionIdByOrderId)
+                .map(sessionId -> rootSessionId(repository, sessionId))
+                .flatMap(repository::findTableSessionById)
+                .filter(session -> "open".equals(session.status()));
+    }
+
+    /** 同上：已结账单所在开台会话仍开台且有低消差额时返回差额（分），否则 null（订单列表账单摘要用）。 */
+    static Long openSessionGapCent(BarRepository repository, BarBillRecord bill) {
+        return openRootSession(repository, bill).map(session -> gapCent(repository, bill)).filter(gap -> gap > 0).orElse(null);
     }
 
     /** 当前有效并台链根：被并（merged）/ 整体转台前旧链（merged_transferred）会话沿 source_session_id 上溯到链根。 */

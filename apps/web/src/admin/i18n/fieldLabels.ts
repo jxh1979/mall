@@ -1,4 +1,4 @@
-// 文件版本：V0.46
+// 文件版本：V0.47
 // OBS-14-02 后台结果区字段中文名字典（PGM「全局原则 · 界面全中文（所有终端零英文）」）。
 // 键用后端 JSON 的蛇形写法；结果区查表时蛇形与驼峰同查（orderId / order_id 都命中 order_id）。
 // 与后端字段中文名表 FieldLabels.java（common.api 包）同键同名：前段按后端原样抄录，后端改名这里跟着改（门禁会比对）。
@@ -3717,7 +3717,10 @@ export const KEY_VALUE_LABELS: Record<string, Record<string, string>> = {
   },
   // 18AW 收尾复核修正（PGM:287「展示给用户的一切文字，包括……状态、枚举取值……必须全部为中文，不得出现任何英文」）：动态定价规则的调整类型
   //   （同后端 TicketPricingService.DYNAMIC_ADJUSTMENT_TYPES），用语同 DynamicPricingPage ADJUSTMENT_TYPE_LABELS。
-  adjustment_type: { percent_delta: "按比例", fixed_delta: "按固定金额", fixed_price: "固定价" },
+  // 第十八批 AY 段第 347 条 347-R1（PGM:287）：酒吧账单退款结果的调整类型 refund 显示「退款」；收尾复核：退款整笔转低消留款 min_spend_retained、卡座转台 transfer、并台 merge 同此（BSM:1064、BSM:1079）。
+  adjustment_type: { percent_delta: "按比例", fixed_delta: "按固定金额", fixed_price: "固定价", refund: "退款", min_spend_retained: "低消留款", transfer: "转台", merge: "并台" },
+  // 第十八批 AY 段 329-R1（PGM:287）：存酒取酒流水的核销方式，取值同后端 V512 chk_saved_bottle_claims_verification_method 闭集，中文名取 BSM:1073 原词。
+  verification_method: { sms: "短信验证码", pickup_code: "动态取酒码", manual_exception: "人工例外取酒" },
 };
 
 // 终端码 → 中文名（PGM:745 受控的十一类终端）：终端开关矩阵与审计页「终端」列共用（第十八批 N 段第 122 条 122-R2）。

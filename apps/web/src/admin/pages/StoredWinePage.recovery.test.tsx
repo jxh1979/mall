@@ -1,4 +1,4 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 // FS-017（BSM L1072「对客实际交付结案与内部追收状态分别记录」）：补存/赔付记录同时展示对客「已结案」与追收「待收回」两列；
 // 「追收已收回」→ POST …/remedies/{id}/recovery/settle。
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
@@ -22,6 +22,8 @@ function makeApi(remedies: StoredWineRemedyRow[] = REMEDIES): AdminApiClient {
     get: vi.fn(async (path: string) => (path.endsWith("/remedies") ? remedies : ROWS)),
     getPaged: vi.fn().mockResolvedValue({ items: [], total: 0, page: 1, size: 10 }),
     post: vi.fn(async () => ({ ...REMEDIES[0], recoveryStatus: "recovered" })),
+    // 第十八批 AY 段 269-R1：证据改为真实上传，按附件角色回服务端编号（视频 att_v1，其余 att_p1）。
+    postForm: vi.fn(async (_path: string, form: FormData) => ({ id: form.get("attachment_role") === "video" ? "att_v1" : "att_p1" })),
     put: vi.fn().mockResolvedValue({}),
     patch: vi.fn().mockResolvedValue({}),
     delete: vi.fn().mockResolvedValue({}),
@@ -54,11 +56,21 @@ describe("StoredWinePage 对客结案与内部追收分别记录（FS-017）", (
     await waitFor(() => expect(screen.queryByTestId("stored-wine-remedy-row-sbr_1")).not.toBeNull());
     expect(screen.getByTestId("stored-wine-remedy-delivery-sbr_1").textContent).toBe("已结案");
     expect(screen.getByTestId("stored-wine-remedy-recovery-sbr_1").textContent).toContain("待收回");
-    fireEvent.change(screen.getByTestId("stored-wine-remedy-evidence"), { target: { value: "receipt_1" } });
+    // 第十八批 AY 段 S1（PGM:287 字段名全中文）：责任员工标签不夹带 user_id，页面不出现 user_id、id 字样。
+    expect(screen.getByTestId("stored-wine-remedy-staff-user").closest("label")!.textContent).toBe("责任员工编号");
+    expect(screen.getByTestId("stored-wine-page").textContent).not.toMatch(/user_id|\bid\b/);
+    // 第十八批 AY 段 269-R1：交付/收回凭证改为上传照片或视频（business_type=saved_bottle_remedy），标签不再要员工填编号。
+    expect(screen.getByTestId("stored-wine-remedy-evidence").getAttribute("type")).toBe("file");
+    expect(screen.getByTestId("stored-wine-remedy-evidence").closest("label")!.textContent).not.toMatch(/id|逗号分隔/);
+    fireEvent.change(screen.getByTestId("stored-wine-remedy-evidence"), { target: { files: [new File(["x"], "receipt.jpg", { type: "image/jpeg" })] } });
+    await waitFor(() => expect(screen.getByTestId("stored-wine-remedy-evidence-files").textContent).toBe("receipt.jpg"));
+    const evidenceForm = vi.mocked(api.postForm!).mock.calls[0]!;
+    expect(evidenceForm[0]).toBe("/api/v1/evidence/attachments/upload");
+    expect(evidenceForm[1].get("business_type")).toBe("saved_bottle_remedy");
     fireEvent.click(screen.getByTestId("stored-wine-remedy-recovery-settle-sbr_1"));
     await waitFor(() => expect(api.post).toHaveBeenCalledWith(
       "/api/v1/inventory/saved-bottles/remedies/sbr_1/recovery/settle",
-      expect.objectContaining({ evidence_ids: ["receipt_1"] }),
+      expect.objectContaining({ evidence_ids: ["att_p1"] }),
     ));
   });
 
@@ -75,7 +87,8 @@ describe("StoredWinePage 对客结案与内部追收分别记录（FS-017）", (
     await waitFor(() => expect(api.get).toHaveBeenCalledWith("/api/v1/inventory/saved-bottles/c-1/remedies"));
     await waitFor(() => expect(screen.queryByTestId("stored-wine-remedy-row-sbr_b")).not.toBeNull());
     fireEvent.change(screen.getByTestId("stored-wine-remedy-staff-user"), { target: { value: "usr_staff_x" } });
-    fireEvent.change(screen.getByTestId("stored-wine-remedy-evidence"), { target: { value: "receipt_1" } });
+    fireEvent.change(screen.getByTestId("stored-wine-remedy-evidence"), { target: { files: [new File(["x"], "receipt.jpg", { type: "image/jpeg" })] } });
+    await waitFor(() => expect(screen.queryByTestId("stored-wine-remedy-evidence-files")).not.toBeNull());
     const actions: Array<[string, string]> = [
       ["stored-wine-remedy-approve-sup-sbr_a", "sbr_a/approve"],
       ["stored-wine-remedy-approve-fin-sbr_a", "sbr_a/approve"],
@@ -85,6 +98,14 @@ describe("StoredWinePage 对客结案与内部追收分别记录（FS-017）", (
       ["stored-wine-remedy-recovery-settle-sbr_b", "sbr_b/recovery/settle"],
     ];
     for (const [testId, path] of actions) {
+      const carriesEvidence = path.endsWith("/settle") || path.endsWith("/staff-liability");
+      // 第十八批 AY 段收尾复核：凭证随提交成功清空，每一单各自上传本单凭证；审批、垫付不带凭证，不清空已上传的凭证。
+      if (path === "sbr_a/staff-liability") {
+        expect(screen.getByTestId("stored-wine-remedy-evidence-files").textContent).toBe("receipt.jpg");
+      } else if (carriesEvidence) {
+        fireEvent.change(screen.getByTestId("stored-wine-remedy-evidence"), { target: { files: [new File(["x"], "receipt.jpg", { type: "image/jpeg" })] } });
+        await waitFor(() => expect(screen.queryByTestId("stored-wine-remedy-evidence-files")).not.toBeNull());
+      }
       await waitFor(() => expect((screen.getByTestId(testId) as HTMLButtonElement).disabled).toBe(false));
       const before = vi.mocked(api.post).mock.calls.length;
       fireEvent.click(screen.getByTestId(testId));
@@ -92,6 +113,11 @@ describe("StoredWinePage 对客结案与内部追收分别记录（FS-017）", (
       const [calledPath, body] = vi.mocked(api.post).mock.calls[before]!;
       expect(calledPath).toBe(`/api/v1/inventory/saved-bottles/remedies/${path}`);
       expect(body).not.toHaveProperty("operator_note");
+      // 第十八批 AY 段 269-R1：结案、员工赔偿、追收已收回的凭证是上传回的附件编号。
+      if (carriesEvidence) {
+        expect(body).toMatchObject({ evidence_ids: ["att_p1"] });
+        await waitFor(() => expect(screen.queryByTestId("stored-wine-remedy-evidence-files")).toBeNull());
+      }
     }
   });
 });

@@ -1,4 +1,4 @@
-// 文件版本：V0.04
+// 文件版本：V0.05
 // FS-016 存酒持有人核验（BSM L1073 / L1198 / PGM L878）：领取与转让都向当前持有人发短信验证码；
 // 转让表单按蛇形键提交；检索只按手机号走 POST lookup（手机号不进 URL）。
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
@@ -72,6 +72,25 @@ describe("StoredWinePage 持有人核验（FS-016）", () => {
     expect(Object.keys(body as object)).not.toContain("claim_by_phone");
     expect(Object.keys(body as object)).not.toContain("operator_note");
     expect(Object.keys(body as object)).not.toContain("evidence_attachment_ids");
+    // 第十八批 AY 段 268-R2（BSM:1073 只核验短信验证码或动态取酒码；BSM:1169 按剩余量分次取用）：claim_items 项只带服务端读的
+    // saved_bottle_id 与 quantity，不带瓶底标签与姓名；幂等键带时刻，同一瓶第二次领同样数量不撞号。
+    const claimBody = body as { idempotency_key: string; claim_items: Array<Record<string, unknown>>; verification_code: string };
+    expect(claimBody.claim_items).toEqual([{ saved_bottle_id: "w-1", quantity: 1 }]);
+    expect(claimBody.verification_code).toBe("000000");
+    expect(Object.keys(claimBody)).not.toContain("bottle_label_value");
+    expect(Object.keys(claimBody)).not.toContain("customer_name_or_nickname");
+    expect(claimBody.claim_items[0]).not.toHaveProperty("claim_quantity");
+    expect(claimBody.claim_items[0]).not.toHaveProperty("item_name");
+    expect(claimBody.idempotency_key).toMatch(/^admin-saved-bottle-claim-w-1-\d{13}$/);
+    await waitFor(() => expect((screen.getByTestId("stored-wine-claim") as HTMLButtonElement).disabled).toBe(false));
+    await new Promise((r) => setTimeout(r, 5));
+    fireEvent.change(screen.getByTestId("stored-wine-claim-code"), { target: { value: "000000" } });
+    fireEvent.click(screen.getByTestId("stored-wine-claim"));
+    await waitFor(() => expect(vi.mocked(api.post).mock.calls.filter(([path]) => path === "/api/v1/inventory/saved-bottles/w-1/claim")).toHaveLength(2));
+    const keys = vi.mocked(api.post).mock.calls
+      .filter(([path]) => path === "/api/v1/inventory/saved-bottles/w-1/claim")
+      .map(([, sent]) => (sent as { idempotency_key: string }).idempotency_key);
+    expect(keys[1]).not.toBe(keys[0]);
   });
 
   it("转让分组：发码 scene=transfer，提交转让 → POST …/transfer 含 to_name_or_nickname/to_phone/verification_code，不含 operator_note", async () => {
