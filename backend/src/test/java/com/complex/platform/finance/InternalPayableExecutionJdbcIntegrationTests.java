@@ -1,9 +1,16 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.catchThrowable;
+import static org.hamcrest.Matchers.hasItem;
+import static org.hamcrest.Matchers.not;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.complex.platform.access.AccessActor;
 import com.complex.platform.access.AccessRepository;
@@ -24,9 +31,15 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.ResultActions;
+import org.springframework.test.web.servlet.request.RequestPostProcessor;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
@@ -39,6 +52,7 @@ import org.springframework.transaction.annotation.Transactional;
         "spring.datasource.username=${COMPLEX_DATABASE_USERNAME:complex}",
         "spring.datasource.password=${COMPLEX_DATABASE_PASSWORD:complex_dev_pwd}"
 })
+@AutoConfigureMockMvc
 @Transactional
 class InternalPayableExecutionJdbcIntegrationTests {
 
@@ -48,6 +62,7 @@ class InternalPayableExecutionJdbcIntegrationTests {
     @Autowired FinanceService finance;
     @Autowired AccessRepository access;
     @Autowired JdbcTemplate jdbc;
+    @Autowired MockMvc mockMvc;
 
     String suffix, project, payee, otherMerchant, item, payeeHead, payeeClerk, otherHead, financeUser;
     LocalDate today, due;
@@ -247,6 +262,89 @@ class InternalPayableExecutionJdbcIntegrationTests {
                 .satisfies(v -> assertThat(v.executionStatus()).isEqualTo("reversed"));
     }
 
+    // ---- 第十八批 AV 段 310-R1、310-R2：退租押金退还应付的付款执行状态（ENUM:252「押金退还支付不受三个付账日与账单异议期约束」
+    //      「押金退还付款状态按「内部应付执行状态」条执行」；ENUM:253；BSM:1683）。真实 HTTP，项目财务无商户编号、只到本人项目。----
+
+    /** 查看执行状态、登记已发起（在途不重付）、登记明确失败（预计重付日不受下一个付账日上限）、不适用资金不足顺延；确认到账结清并回写该次付款。 */
+    @Test
+    void depositRefundPaymentExecutionOverHttp() throws Exception {
+        collectDeposit(10_000L);
+        String refund = depositRefund("dr1", 6_000L, today);
+        RequestPostProcessor fin = web(financeUser, null);
+
+        mockMvc.perform(get(base(refund)).with(fin)).andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.source_type").value("deposit_refund"))
+                .andExpect(jsonPath("$.data.execution_status").value("pending"))
+                .andExpect(jsonPath("$.data.objection_deadline").doesNotExist())
+                .andExpect(jsonPath("$.data.designated_pay_day").doesNotExist());
+        postJson(base(refund) + "/payment-attempts", fin, "{\"idempotency_key\":\"" + key() + "\",\"bank_ref\":\"BANK-D1\"}")
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.status").value("initiated"));
+        postJson(base(refund) + "/payment-attempts", fin, "{\"idempotency_key\":\"" + key() + "\",\"bank_ref\":\"BANK-D2\"}")
+                .andExpect(status().isConflict()).andExpect(jsonPath("$.detail_code").value("PAYMENT_IN_TRANSIT"));
+        LocalDate repay = today.plusDays(40);
+        postJson(base(refund) + "/payment-attempts/" + inTransitAttempt(refund) + "/failure", fin, "{\"idempotency_key\":\"" + key()
+                + "\",\"failure_reason\":\"收款账户已注销\",\"expected_repay_date\":\"" + repay + "\"}")
+                .andExpect(status().isOk());
+        mockMvc.perform(get(base(refund)).with(fin)).andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.execution_status").value("failed_pending"))
+                .andExpect(jsonPath("$.data.failure_reason").value("收款账户已注销"))
+                .andExpect(jsonPath("$.data.expected_repay_date").value(repay.toString()));
+        postJson(base(refund) + "/funds-insufficient", fin, "{\"idempotency_key\":\"" + key() + "\",\"note\":\"账上资金不足\"}")
+                .andExpect(status().isConflict()).andExpect(jsonPath("$.detail_code").value("INTERNAL_PAYABLE_NOT_SCHEDULED"));
+
+        postJson(base(refund) + "/payment-attempts", fin, "{\"idempotency_key\":\"" + key() + "\",\"bank_ref\":\"BANK-D3\"}")
+                .andExpect(status().isOk());
+        postJson("/api/v1/finance/ar-ap-items/" + refund + "/payments", fin, "{\"idempotency_key\":\"" + key()
+                + "\",\"amount_cent\":6000,\"payment_method\":\"bank_transfer\",\"bank_flow_ref\":\"BANK-D3\"}")
+                .andExpect(status().isOk());
+        mockMvc.perform(get(base(refund)).with(fin)).andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.execution_status").value("settled"))
+                .andExpect(jsonPath("$.data.attempts[1].status").value("succeeded"));
+    }
+
+    /** 押金退还不早于到期日（等待期届满或退租结算算账完成之日）发起付款，与登记付款同码。 */
+    @Test
+    void depositRefundInitiateBeforeDueDateRejectedOverHttp() throws Exception {
+        collectDeposit(10_000L);
+        String refund = depositRefund("dr2", 2_000L, today.plusDays(1));
+
+        postJson(base(refund) + "/payment-attempts", web(financeUser, null), "{\"idempotency_key\":\"" + key() + "\"}")
+                .andExpect(status().isConflict()).andExpect(jsonPath("$.detail_code").value("DEPOSIT_REFUND_NOT_DUE"));
+    }
+
+    /** 商户专区可见押金退还的付款失败待处理（原因与预计重付日）；收款方财务负责人审批更换收款账户后换账户重付；别家商户看不到、不能代批。 */
+    @Test
+    void merchantZoneShowsDepositRefundFailureAndPayeeHeadApprovesAccountChangeOverHttp() throws Exception {
+        collectDeposit(10_000L);
+        String refund = depositRefund("dr3", 6_000L, today);
+        RequestPostProcessor fin = web(financeUser, null);
+        postJson(base(refund) + "/payment-attempts", fin, "{\"idempotency_key\":\"" + key() + "\",\"bank_ref\":\"BANK-D1\"}")
+                .andExpect(status().isOk());
+        postJson(base(refund) + "/payment-attempts/" + inTransitAttempt(refund) + "/failure", fin, "{\"idempotency_key\":\"" + key()
+                + "\",\"failure_reason\":\"收款账户已注销\",\"expected_repay_date\":\"" + today.plusDays(40) + "\"}")
+                .andExpect(status().isOk());
+
+        String row = "$.data[?(@.ar_ap_item_id == '" + refund + "')]";
+        mockMvc.perform(get("/api/v1/merchant-portal/ticket-settlements").with(web(payeeHead, payee))).andExpect(status().isOk())
+                .andExpect(jsonPath(row + ".source_type").value("deposit_refund"))
+                .andExpect(jsonPath(row + ".execution_status").value("failed_pending"))
+                .andExpect(jsonPath(row + ".failure_reason").value("收款账户已注销"))
+                .andExpect(jsonPath(row + ".expected_repay_date").value(today.plusDays(40).toString()));
+        mockMvc.perform(get("/api/v1/merchant-portal/ticket-settlements").with(web(otherHead, otherMerchant))).andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[*].ar_ap_item_id", not(hasItem(refund))));
+        String change = "{\"idempotency_key\":\"%s\",\"new_account_ref\":\"新账户 6222****0003\",\"reason\":\"原账户已注销\"}";
+        postJson("/api/v1/merchant-portal/ticket-settlements/" + refund + "/account-change", web(otherHead, otherMerchant),
+                change.formatted(key()))
+                .andExpect(status().isForbidden()).andExpect(jsonPath("$.detail_code").value("CROSS_MERCHANT_FORBIDDEN"));
+        postJson("/api/v1/merchant-portal/ticket-settlements/" + refund + "/account-change", web(payeeHead, payee),
+                change.formatted(key()))
+                .andExpect(status().isOk());
+        String changeId = jdbc.queryForObject("SELECT id FROM internal_payable_account_changes WHERE ar_ap_item_id=?", String.class, refund);
+        postJson(base(refund) + "/payment-attempts", fin, "{\"idempotency_key\":\"" + key() + "\",\"bank_ref\":\"BANK-D2\","
+                + "\"account_change_id\":\"" + changeId + "\"}")
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.account_change_id").value(changeId));
+    }
+
     // ---- helpers ----
 
     private static LocalDate nextPayDayOnOrAfter(LocalDate from) {
@@ -274,6 +372,46 @@ class InternalPayableExecutionJdbcIntegrationTests {
     private void actAsMerchant(String id, String merchantId) {
         SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
                 new AccessActor(id, id, "staff", project, merchantId, "active"), "test", List.of()));
+    }
+
+    private void collectDeposit(long cent) {
+        jdbc.update("""
+                INSERT INTO deposit_ledger(id,merchant_id,action,amount_cent,balance_after_cent,ar_ap_item_id,reason,created_at)
+                VALUES(?,?,'collect',?,?,NULL,'进场押金',now())
+                """, "ipe_dep_" + suffix, payee, cent, cent);
+    }
+
+    /** 经真实退租落账端口挂一笔押金退还应付（项目＝本测试项目，310-R0），并让付款确认通过（第十八批裁决 55）。 */
+    private String depositRefund(String tag, long cent, LocalDate dueDate) {
+        String settlement = "ipe_cts_" + tag + "_" + suffix;
+        finance.createDepositRefundPayable(payee, cent, settlement, dueDate, project);
+        String id = jdbc.queryForObject("SELECT id FROM ar_ap_items WHERE source_type='deposit_refund' AND source_id=?", String.class,
+                settlement);
+        com.complex.platform.support.PaymentConfirmationFixture.approvedArAp(jdbc, id);
+        return id;
+    }
+
+    private String inTransitAttempt(String itemId) {
+        return jdbc.queryForObject("SELECT id FROM internal_payable_payment_attempts WHERE ar_ap_item_id=? AND status='initiated'",
+                String.class, itemId);
+    }
+
+    private static String base(String itemId) {
+        return "/api/v1/finance/internal-payables/" + itemId;
+    }
+
+    private ResultActions postJson(String path, RequestPostProcessor who, String body) throws Exception {
+        return mockMvc.perform(post(path).contentType(MediaType.APPLICATION_JSON).content(body).with(who));
+    }
+
+    /** 后台网页真实请求形状（X-Terminal-Type: web）的员工账号（已建好、组织＝本测试项目）。 */
+    private RequestPostProcessor web(String userId, String merchantId) {
+        AccessActor actor = new AccessActor(userId, userId, "staff", project, merchantId, "active");
+        return request -> {
+            request.addHeader("X-Terminal-Type", "web");
+            return authentication(new UsernamePasswordAuthenticationToken(actor, null,
+                    List.of(new SimpleGrantedAuthority("ROLE_P0_STAFF")))).postProcessRequest(request);
+        };
     }
 
     private static String key() {

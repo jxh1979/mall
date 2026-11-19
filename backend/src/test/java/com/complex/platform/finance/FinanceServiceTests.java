@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.20
+// 文件版本：V0.21
 
 import com.complex.platform.support.InMemoryAuditEventRepository;
 import com.complex.platform.support.InMemoryIdempotencyRepository;
@@ -86,6 +86,8 @@ class FinanceServiceTests {
         service.refundAuthorizationService = new RefundAuthorizationService(permissiveRefundRepo());
         // 第十八批 AM 段第 241 条 241-R1：付款确认出款闸的桩——requireApproved 不抛，hasApproved 默认 false（用例按需自设）。
         service.paymentConfirmations = mock(PaymentConfirmationService.class);
+        // 第十八批 AV 段 305-R1：业务单号平台侧归属的桩（Mockito 对 Optional 默认返回空＝平台侧查不到，不核批次范围）。
+        service.reconciliationBusinessRefs = mock(JdbcReconciliationBusinessRefRepository.class);
         when(authorizationService.currentProjectScopeQuietly()).thenAnswer(call->
                 authorizationService.currentMerchantScope().isPresent() ? Optional.of("org_1") : Optional.empty());
         when(authorizationService.currentActor()).thenAnswer(call->new AccessActor("op_default","op_default",
@@ -124,6 +126,26 @@ class FinanceServiceTests {
     @Test
     void platformIncentiveSubsidySourceLabelNoLongerMentionsSpecialApproval() {
         assertThat(FinanceService.sourceTypeLabel("platform_incentive_subsidy")).isEqualTo("平台激励补贴");
+    }
+
+    /**
+     * 第十八批 AV 段第 317 条 317-R1（PGM:287「界面全中文（所有终端零英文）」）：台账导出与付款确认支付类型用的来源中文名补齐合同租金、合同物业费、能源费
+     * 与采购两类退款，与前端 KEY_VALUE_LABELS.source_type 同名。
+     */
+    @Test
+    void contractEnergyAndPurchaseRefundSourcesHaveChineseLabels() {
+        assertThat(FinanceService.sourceTypeLabel("contract_rent")).isEqualTo("合同租金");
+        assertThat(FinanceService.sourceTypeLabel("contract_property_fee")).isEqualTo("物业费");
+        assertThat(FinanceService.sourceTypeLabel("energy_fee")).isEqualTo("能源费");
+        assertThat(FinanceService.sourceTypeLabel("purchase_return_refund")).isEqualTo("供应商退货退款");
+        assertThat(FinanceService.sourceTypeLabel("purchase_prepayment_refund")).isEqualTo("采购未用预付款退款");
+        // 第十八批 AV 段收尾复核（PGM:287「……枚举取值……导出文件表头与内容……必须全部为中文」）：正常业务写进台账、此前前后端都缺的五个来源；
+        // 台账导出 arApExportRow 与本方法同取 AR_AP_SOURCE_TYPE_LABELS。
+        assertThat(FinanceService.sourceTypeLabel("facility_equipment_scrap")).isEqualTo("楼宇设备报废残值");
+        assertThat(FinanceService.sourceTypeLabel("facility_equipment_scrap_loss")).isEqualTo("楼宇设备报废损失");
+        assertThat(FinanceService.sourceTypeLabel("stored_value_topup")).isEqualTo("通用卡储值充值");
+        assertThat(FinanceService.sourceTypeLabel("ticket_order")).isEqualTo("票务订单");
+        assertThat(FinanceService.sourceTypeLabel("service_order")).isEqualTo("服务点单");
     }
 
     @Test
@@ -1760,13 +1782,13 @@ class FinanceServiceTests {
         // #3② 根治：退押金写 deposit_ledger refund 行扣减余额 → 同商户第二笔退款按已减余额封顶，不超退。
         service.recordDepositAction(new com.complex.platform.finance.dto.DepositActionRequest(
                 "dep-init2", "note", List.of(), "merchant_ref", "collect", 40000L, "init"));   // 余额 40000
-        long refund1 = service.createDepositRefundPayable("merchant_ref", 30000L, "cst_ref_a", LocalDate.now());
-        long refund2 = service.createDepositRefundPayable("merchant_ref", 30000L, "cst_ref_b", LocalDate.now());
+        long refund1 = service.createDepositRefundPayable("merchant_ref", 30000L, "cst_ref_a", LocalDate.now(), null);
+        long refund2 = service.createDepositRefundPayable("merchant_ref", 30000L, "cst_ref_b", LocalDate.now(), null);
         assertThat(refund1).isEqualTo(30000L);                 // 余额 40000，全退请求 30000
         assertThat(refund2).isEqualTo(10000L);                 // 余额只剩 10000 → 封顶 10000（非再退 30000）
         assertThat(refund1 + refund2).isEqualTo(40000L);       // 共退=实交，不超退
         // 第三笔余额已空 → 实退 0，不落账。
-        assertThat(service.createDepositRefundPayable("merchant_ref", 5000L, "cst_ref_c", LocalDate.now())).isZero();
+        assertThat(service.createDepositRefundPayable("merchant_ref", 5000L, "cst_ref_c", LocalDate.now(), null)).isZero();
     }
 
     // ============ HP-C03 变更押金补退差额（BSM L1353「批准生效后登记应收或应退，实际收款或退款成功后才更新已收押金余额，未结差额继续跟进……
@@ -1848,8 +1870,8 @@ class FinanceServiceTests {
             future = future.plusDays(1);   // 取非付账日，证明不被推到 5/15/25
         }
         LocalDate notDueDate = future;
-        service.createDepositRefundPayable("merchant_rw", 60000L, "cst_rw_future", notDueDate);
-        service.createDepositRefundPayable("merchant_rw", 40000L, "cst_rw_today", today);
+        service.createDepositRefundPayable("merchant_rw", 60000L, "cst_rw_future", notDueDate, null);
+        service.createDepositRefundPayable("merchant_rw", 40000L, "cst_rw_today", today, null);
         ArApItemRecord notDue = financeRepository.listArApItems().stream()
                 .filter(i -> "cst_rw_future".equals(i.sourceId())).findFirst().orElseThrow();
         ArApItemRecord dueToday = financeRepository.listArApItems().stream()
@@ -1875,7 +1897,7 @@ class FinanceServiceTests {
     void depositRefundPaymentTimeBeforeDueDateIsRejected() {
         depositCollect("dep-rw-pt", "merchant_rwpt", 100000L);
         LocalDate today = LocalDate.now(com.complex.platform.common.LocalZone.ID);
-        service.createDepositRefundPayable("merchant_rwpt", 40000L, "cst_rw_pt", today);
+        service.createDepositRefundPayable("merchant_rwpt", 40000L, "cst_rw_pt", today, null);
         ArApItemRecord due = financeRepository.listArApItems().stream()
                 .filter(i -> "cst_rw_pt".equals(i.sourceId())).findFirst().orElseThrow();
         Instant dayBefore = today.minusDays(1).atTime(12, 0).atZone(com.complex.platform.common.LocalZone.ID).toInstant();
@@ -1894,7 +1916,7 @@ class FinanceServiceTests {
     void paymentCallsBackSettlementProgressWithUpdatedItem() {
         depositCollect("dep-rw-cb", "merchant_rwcb", 100000L);
         service.createDepositRefundPayable("merchant_rwcb", 50000L, "cst_rw_cb",
-                LocalDate.now(com.complex.platform.common.LocalZone.ID));
+                LocalDate.now(com.complex.platform.common.LocalZone.ID), null);
         ArApItemRecord item = financeRepository.listArApItems().stream()
                 .filter(i -> "cst_rw_cb".equals(i.sourceId())).findFirst().orElseThrow();
         service.registerArApPayment(item.id(), paymentRequestAt("pay-rw-cb-1", 20000L, null));
@@ -1932,7 +1954,7 @@ class FinanceServiceTests {
         assertThat(financeRepository.depositLedger).filteredOn(r -> "deduct".equals(r.action()))
                 .extracting(DepositLedgerRecord::amountCent, DepositLedgerRecord::balanceAfterCent)
                 .containsExactly(tuple(400000L, 100000L));
-        assertThat(service.createDepositRefundPayable("merchant_off", 100000L, "cst_off", LocalDate.now())).isEqualTo(100000L);
+        assertThat(service.createDepositRefundPayable("merchant_off", 100000L, "cst_off", LocalDate.now(), null)).isEqualTo(100000L);
         assertThat(financeRepository.currentDepositBalance("merchant_off")).isZero();
     }
 

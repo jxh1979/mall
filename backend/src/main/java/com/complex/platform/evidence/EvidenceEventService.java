@@ -1,6 +1,6 @@
 package com.complex.platform.evidence;
 
-// 文件版本：V0.12
+// 文件版本：V0.13
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -85,6 +85,8 @@ public class EvidenceEventService {
     org.springframework.beans.factory.ObjectProvider<com.complex.platform.finance.FinanceReconciliationDifferenceService> reconciliationDifferences;
     @org.springframework.beans.factory.annotation.Autowired
     org.springframework.beans.factory.ObjectProvider<com.complex.platform.finance.FinanceService> lockedBackfills;
+    @org.springframework.beans.factory.annotation.Autowired
+    org.springframework.beans.factory.ObjectProvider<ManualBackfillService> manualBackfills;
 
     public EvidenceEventService(
             EvidenceEventRepository repository,
@@ -196,8 +198,9 @@ public class EvidenceEventService {
                 .orElseThrow(() -> ApiException.notFound("ATTACHMENT_NOT_FOUND", "证据附件不存在"));
         // 18Y 复核修复：对账单原件上传时差异还没建、不带业务编号，按附件编号找引用它的差异过范围闸。
         // 第十八批 AL 段 253-R1：锁账补录凭证同样先于补录上传、不带业务编号。
-        String scopeId = "finance_reconciliation_difference".equals(attachment.businessType()) || "finance_locked_backfill".equals(attachment.businessType())
-                ? attachment.id() : attachment.businessId();
+        // 第十八批 AV 段 307-R1：人工补录凭证同上。
+        String scopeId = java.util.Set.of("finance_reconciliation_difference", "finance_locked_backfill", "manual_backfill")
+                .contains(attachment.businessType()) ? attachment.id() : attachment.businessId();
         evidenceScope(attachment.businessType(), scopeId, "dealer.view", "evidence.timeline.view").ifPresent(scope -> {
             if (!scope.equals(attachment.merchantId())) {
                 throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN", "证据附件不属于本商户");
@@ -603,7 +606,9 @@ public class EvidenceEventService {
             }
             // FS-021-R6（BSM L1673「所有数据默认按项目隔离」）：共享财务退款的凭证按退款所属项目办理，项目财务无商户编号也可上传/查看；
             //   商户账号仍只限本商户的退款。
-            if (refund != null && "ar_ap_payment".equals(refund.sourceType())) {
+            // 第十八批 AV 段 316-R1（BSM:806「原路退回结果」）：口径由原收款退款扩到经销退款以外的全部来源（通用卡储值本金、票务与渠道拒收、
+            //   订台定金与扫码点单拒收待退）；通用卡退款不挂商户，商户账号一律 403（ENUM:86「余额管理与退款均由长沙项目公司负责」）。
+            if (refund != null) {
                 String permission = "evidence.timeline.view".equals(evidencePermission) ? "finance.ar_ap.view" : "finance.refund.create";
                 authorizationService.requirePermissions(permission, evidencePermission);
                 String merchant = authorizationService.currentMerchantIdQuietly().orElse(null);
@@ -630,6 +635,13 @@ public class EvidenceEventService {
         //   回读时不带商户编号的账号按引用该凭证的锁账补录过闸（FinanceService#canViewLockedBackfillEvidence：链上审批人或可触及该日结）；都不满足的、商户账号照旧。
         if ("finance_locked_backfill".equals(type) && (!reading || (authorizationService.currentMerchantIdQuietly().isEmpty()
                 && lockedBackfills.getObject().canViewLockedBackfillEvidence(businessId)))) {
+            return authorizationService.currentMerchantIdQuietly();
+        }
+        // 第十八批 AV 段第 307 条 307-R1（BSM:1642「补录必须附原始记录凭证（微信截图、通话录音等）并经审核」）：人工补录凭证，无商户编号的账号也可上传
+        //   （同锁账补录凭证）；回读时不带商户编号的账号按引用该凭证的补录单过闸（ManualBackfillService#canViewEvidence：复核链上审批人或可查看该补录对象）；
+        //   都不满足的、商户账号照旧。
+        if ("manual_backfill".equals(type) && (!reading || (authorizationService.currentMerchantIdQuietly().isEmpty()
+                && manualBackfills.getObject().canViewEvidence(businessId)))) {
             return authorizationService.currentMerchantIdQuietly();
         }
         if (!java.util.Set.of("dealer_admission", "dealer_overpayment").contains(type == null ? "" : type)) {

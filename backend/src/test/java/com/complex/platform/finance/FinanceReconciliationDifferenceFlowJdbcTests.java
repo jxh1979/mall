@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -245,6 +245,57 @@ class FinanceReconciliationDifferenceFlowJdbcTests {
                 .andExpect(status().isForbidden());
     }
 
+    /**
+     * ⑨ 第十八批 AV 段第 308 条 308-R1（ENUM:191「差异处理状态 待识别、待处理、待复核、已关闭」；BSM:1751「同一差异只入账一次」）：第一笔差异勾选入账、
+     * 经审批关闭后，同一批次再登记第二笔；第一笔仍为已关闭、复核单号不变，入账台账仍只一行、来源为第一笔差异号。
+     */
+    @Test
+    void laterDifferenceInSameBatchDoesNotOverwriteClosedOne() throws Exception {
+        generate(barB);
+        String batch = batchOf(barB);
+        String first = idOf(register("first", batch, paidPayment("f1", barB, projectB, 100L), 70L, List.of(upload()))
+                .andExpect(status().isOk()));
+        identify(admin, first, "first").andExpect(status().isOk());
+        String reviewId = JsonPath.read(submit(admin, first, "first", List.of(), null, true).andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.ledger_entry").value(true))
+                .andReturn().getResponse().getContentAsString(), "$.data.review_id");
+        approve(approver, reviewId, "first", "approved").andExpect(status().isOk());
+
+        String second = idOf(register("second", batch, paidPayment("f2", barB, projectB, 100L), 60L, List.of(upload()))
+                .andExpect(status().isOk()));
+
+        assertThat(row(first)).containsEntry("status", "closed").containsEntry("review_id", reviewId);
+        assertThat(second).isNotEqualTo(first);
+        assertThat(jdbc.queryForList("SELECT source_id FROM ar_ap_items WHERE source_type = 'reconciliation_difference' AND source_id IN (?, ?)",
+                String.class, first, second)).containsExactly(first);
+    }
+
+    /**
+     * ⑩ 第十八批 AV 段第 306 条 306-R1（PGM:899「谁发起、谁销售、谁服务、谁第一个处理异常、为什么、谁审批、结果是什么，都要能查到。」；ENUM:202「复核人须
+     * 比对原件与录入值后签字」）：审批人按主管复核页真实请求终审——凭证框留空通过、另附凭证通过、留空驳回——复核单仍保留提交时的对账单原件，另附的并在其后。
+     */
+    @Test
+    void finalDecisionOnSupervisorReviewPageKeepsSubmittedEvidence() throws Exception {
+        generate(barB);
+        String batch = batchOf(barB);
+
+        String statement = upload();
+        String review = submittedReview("ev0", batch, statement);
+        decideOnReviewPage(review, "ev0", "approved", List.of()).andExpect(status().isOk());
+        assertThat(reviewEvidence(review)).containsExactly(statement);
+
+        String statement2 = upload();
+        String added = upload();
+        String review2 = submittedReview("ev1", batch, statement2);
+        decideOnReviewPage(review2, "ev1", "approved", List.of(added)).andExpect(status().isOk());
+        assertThat(reviewEvidence(review2)).containsExactly(statement2, added);
+
+        String statement3 = upload();
+        String review3 = submittedReview("ev2", batch, statement3);
+        decideOnReviewPage(review3, "ev2", "rejected", List.of()).andExpect(status().isOk());
+        assertThat(reviewEvidence(review3)).containsExactly(statement3);
+    }
+
     // ---------- helpers ----------
 
     /** 后台日结区块生成该酒吧该营业日日结（随之生成对账批次，180-R1），补齐五类最终标记（143-R2 前提），返回日结 ID。 */
@@ -290,10 +341,19 @@ class FinanceReconciliationDifferenceFlowJdbcTests {
     /** 对账差异页选中待处理的行点「提交复核」的真实请求（最终审批人可不填）。 */
     private ResultActions submit(RequestPostProcessor who, String differenceId, String tag, List<String> attachments, String finalApprover)
             throws Exception {
+        return submit(who, differenceId, tag, attachments, finalApprover, false);
+    }
+
+    /** 308-R1：同上，ledgerEntry 为真即勾选「认定结果入应收应付台账」。 */
+    private ResultActions submit(RequestPostProcessor who, String differenceId, String tag, List<String> attachments, String finalApprover,
+            boolean ledgerEntry) throws Exception {
         Map<String, Object> body = new HashMap<>(Map.of("idempotency_key", "frf-submit-" + tag + "-" + s, "close_reason", CONCLUSION,
                 "evidence_attachment_ids", attachments));
         if (finalApprover != null) {
             body.put("final_approver_id", finalApprover);
+        }
+        if (ledgerEntry) {
+            body.put("ledger_entry", true);
         }
         return mockMvc.perform(post("/api/v1/finance/reconciliation/differences/" + differenceId + "/close").with(who)
                 .contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(body)));
@@ -305,6 +365,29 @@ class FinanceReconciliationDifferenceFlowJdbcTests {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(json.writeValueAsString(Map.of("idempotency_key", "frf-approve-" + tag + "-" + s, "decision", decision,
                         "comment", "rejected".equals(decision) ? "处理结论与原件不符" : "已比对原件与录入值"))));
+    }
+
+    /** 306-R1：主管复核页选中待审单后点「通过」或「驳回」的真实请求（证据附件编号框留空即空数组）。 */
+    private ResultActions decideOnReviewPage(String reviewId, String tag, String decision, List<String> attachments) throws Exception {
+        return mockMvc.perform(post("/api/v1/platform/supervisor-review/" + reviewId + "/approve").with(approver)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(json.writeValueAsString(Map.of("idempotency_key", "frf-page-" + tag + "-" + s,
+                        "operator_note", "approved".equals(decision) ? "完整后台主管审批放行" : "完整后台主管驳回",
+                        "evidence_attachment_ids", attachments, "decision", decision, "comment", "已比对原件与录入值"))));
+    }
+
+    /** 306-R1：审批链页「提交时原始内容与凭证」区读复核单的真实请求，取其凭证附件编号。 */
+    private List<String> reviewEvidence(String reviewId) throws Exception {
+        return JsonPath.read(mockMvc.perform(get("/api/v1/platform/supervisor-review/" + reviewId).with(admin))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString(), "$.data.evidence_attachment_ids");
+    }
+
+    /** 306-R1：在该批次带对账单原件登记一笔差异、识别、提交复核，返回复核单号。 */
+    private String submittedReview(String tag, String batch, String statement) throws Exception {
+        String diff = idOf(register(tag, batch, paidPayment(tag, barB, projectB, 100L), 70L, List.of(statement)).andExpect(status().isOk()));
+        identify(admin, diff, tag).andExpect(status().isOk());
+        return JsonPath.read(submit(admin, diff, tag, List.of(), null).andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString(), "$.data.review_id");
     }
 
     private ResultActions confirm(String dailyCloseId, String tag) throws Exception {

@@ -1,10 +1,18 @@
 package com.complex.platform.contract;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.hasItem;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.complex.platform.access.AccessActor;
+import com.complex.platform.access.AccessRepository;
+import com.complex.platform.access.AccessUser;
+import com.complex.platform.access.RoleRecord;
 import com.complex.platform.analytics.AnalyticsRecords;
 import com.complex.platform.analytics.AnalyticsRepository;
 import com.complex.platform.common.LocalZone;
@@ -18,6 +26,7 @@ import com.complex.platform.governance.review.SupervisorReviewEvaluateRequest.Pa
 import com.complex.platform.governance.review.SupervisorReviewService;
 import com.complex.platform.support.TestSecurityActors;
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
@@ -28,9 +37,13 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.request.RequestPostProcessor;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
@@ -47,6 +60,7 @@ import org.springframework.transaction.annotation.Transactional;
         "spring.datasource.username=complex",
         "spring.datasource.password=${COMPLEX_DATABASE_PASSWORD:complex_dev_pwd}"
 })
+@AutoConfigureMockMvc
 @Transactional
 class SpaceRentalStatusAfterSettlementJdbcIntegrationTests {
 
@@ -56,6 +70,8 @@ class SpaceRentalStatusAfterSettlementJdbcIntegrationTests {
     @Autowired private JdbcTemplate jdbcTemplate;
     @Autowired private SupervisorReviewService reviews;
     @Autowired private FinanceService financeService;
+    @Autowired private AccessRepository access;
+    @Autowired private MockMvc mockMvc;
 
     private String suffix;
     private String projectId;
@@ -191,6 +207,33 @@ class SpaceRentalStatusAfterSettlementJdbcIntegrationTests {
         assertThat(rentalStatus(spaceId)).isEqualTo("vacant");
     }
 
+    /**
+     * 第十八批 AV 段 310-R0（BSM:1673「所有数据默认按项目隔离」；ENUM:252「押金退还付款状态按「内部应付执行状态」条执行」）：
+     * 退租押金退还应付挂出租合同所属项目；该项目财务（无商户编号、只到本人项目）在应收应付台账里看得到这一笔。
+     */
+    @Test
+    void depositRefundPayableBelongsToContractProjectAndListedForProjectFinance() throws Exception {
+        String spaceId = space("sp_f", "90");
+        String contractId = contract("ct_f", spaceId, "effective", today.minusDays(30), today.plusDays(300));
+        jdbcTemplate.update("UPDATE contracts SET deposit_cent = 300000 WHERE id = ?", contractId);
+        jdbcTemplate.update("INSERT INTO deposit_ledger (id, merchant_id, action, amount_cent, balance_after_cent, reason, created_at)"
+                + " VALUES (?, ?, 'collect', 300000, 300000, '退租押金项目归属测试押金', now())", "dl_cg09f_" + suffix, "mch_cg09_" + suffix);
+        jdbcTemplate.update("INSERT INTO contract_deposit_refund_wait_policy (project_id, wait_days, min_days, max_days)"
+                + " VALUES (?, 0, 0, 60)", projectId);
+        ContractSettlementRecord opened = contractService.settle(contractId, settleRequest("cg09-prj-open-" + suffix, "expiry"));
+        contractService.checkSettlementDocuments(opened.id(), new ContractResolveDisputeRequest("cg09-prj-docs-" + suffix, null));
+        approveAll(opened.reviewId());
+
+        String payableId = jdbcTemplate.queryForObject(
+                "SELECT id FROM ar_ap_items WHERE source_type = 'deposit_refund' AND source_id = ?", String.class, opened.id());
+        assertThat(jdbcTemplate.queryForObject("SELECT project_id FROM ar_ap_items WHERE id = ?", String.class, payableId))
+                .isEqualTo(projectId);
+        mockMvc.perform(get("/api/v1/finance/ar-ap-items").param("keyword", "deposit_refund").param("size", "200")
+                        .with(projectFinance()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items[*].id", hasItem(payableId)));
+    }
+
     // ---------- helpers ----------
 
     /** 结算开账请求：到期结算按「到期终止」类模板开复核单（主线最终审批人 gm＋三线各自最终审批人）；退租/提前终止不用审批入参。 */
@@ -261,6 +304,22 @@ class SpaceRentalStatusAfterSettlementJdbcIntegrationTests {
                 + "VALUES (?, '退租转空置测试线索', 'outbound', 'negotiating', ?, ?, now(), now())", leadId, spaceId, projectId);
         jdbcTemplate.update("INSERT INTO leasing_intents (id, lead_id, stage, intended_space_id, project_id, created_at, updated_at) "
                 + "VALUES (?, ?, 'negotiation', ?, ?, now(), now())", "intent_cg09_" + spaceId, leadId, spaceId, projectId);
+    }
+
+    /** 本项目的项目财务：员工账号、无商户编号、组织＝本项目，只持 finance.ar_ap.view；后台网页真实请求形状（X-Terminal-Type: web）。 */
+    private RequestPostProcessor projectFinance() {
+        String roleId = "role_cg09_fin_" + suffix;
+        access.createRole(new RoleRecord(roleId, "项目财务" + System.nanoTime(), null, "project", "active", Instant.now(),
+                List.of("finance.ar_ap.view"), null, false, List.of()));
+        String userId = "usr_cg09_fin_" + suffix;
+        access.createUser(new AccessUser(userId, userId, "staff", projectId, null, "active", Instant.now()));
+        access.assignUserRole(userId, roleId);
+        AccessActor actor = new AccessActor(userId, userId, "staff", projectId, null, "active");
+        return request -> {
+            request.addHeader("X-Terminal-Type", "web");
+            return authentication(new UsernamePasswordAuthenticationToken(actor, null,
+                    List.of(new SimpleGrantedAuthority("ROLE_P0_STAFF")))).postProcessRequest(request);
+        };
     }
 
     private void authenticateWithSettlementPermission() {

@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -128,7 +128,7 @@ class MerchantAmountNoticeFinanceJdbcIntegrationTests {
         String settlement = "cts_" + suffix;
         String penalty = finance.createTerminationPenaltyReceivable(merchant, 8_000L, settlement);
         finance.offsetReceivablesWithDeposit(merchant, settlement, List.of(penalty), 8_000L);
-        long refunded = finance.createDepositRefundPayable(merchant, 12_000L, settlement, LocalDate.now(LocalZone.ID).plusDays(30));
+        long refunded = finance.createDepositRefundPayable(merchant, 12_000L, settlement, LocalDate.now(LocalZone.ID).plusDays(30), null);
         finance.registerDepositAdjustment(merchant, "ctc_" + suffix, "chg1_" + suffix, 5_000L, LocalDate.now(LocalZone.ID).plusDays(15));
         finance.registerDepositAdjustment(merchant, "ctc_" + suffix, "chg2_" + suffix, -3_000L, LocalDate.now(LocalZone.ID).plusDays(15));
 

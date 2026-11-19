@@ -1,4 +1,4 @@
-// 文件版本：V0.09
+// 文件版本：V0.10
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -433,6 +433,26 @@ describe("MerchantZoneSettlementsPage 门票分账", () => {
     expect(body.new_account_ref).toBe("新账户 6222****0001");
     expect(body.reason).toBe("原账户被冻结");
     expect(typeof body.idempotency_key).toBe("string");
+  });
+
+  // 第十八批 AV 段 310-R2（BSM:1683「对收款方可见并注明失败原因与预计重付时间」；ENUM:252「押金退还付款状态按「内部应付执行状态」条执行」）：
+  // 退租押金退还与门票分账同表显示执行状态；押金退还没有异议截止与指定付账日。
+  it("退租押金退还显示款项名与付款失败待处理（原因与预计重付日），区标题含押金退还", async () => {
+    const deposit = { ar_ap_item_id: "ap-dr", direction: "payable", source_type: "deposit_refund", counterparty_id: "bar-1", project_id: "p1",
+      amount_cent: 300000, unpaid_amount_cent: 300000, visible_at: "2026-11-02T00:00:00Z", objection_deadline: null,
+      designated_pay_day: null, due_date: "2026-11-02", execution_status: "failed_pending", in_transit: false,
+      failure_reason: "收款账户已注销", expected_repay_date: "2026-12-12", attempts: [], postponements: [] };
+    vi.stubGlobal("fetch", vi.fn().mockImplementation((input: RequestInfo | URL) =>
+      Promise.resolve(String(input).includes("/ticket-settlements") ? single([deposit]) : envelope([]))));
+    render(<MerchantZoneSettlementsPage api={new AdminApi("test-token")} user={{ id: "u1", username: "merchant", accountType: "merchant_admin" }}
+      setActionResult={vi.fn()} setGlobalError={vi.fn()} effectivePermissions={ADMIN_PERMS} navigateTo={vi.fn()} />);
+    await waitFor(() => expect(screen.queryByTestId("merchant-zone-ticket-row-ap-dr")).not.toBeNull());
+    const row = screen.getByTestId("merchant-zone-ticket-row-ap-dr").textContent ?? "";
+    expect(row).toContain("退租押金退还");
+    expect(row).toContain("付款失败待处理");
+    expect(row).toContain("收款账户已注销");
+    expect(row).toContain("2026年12月12日");
+    expect(screen.getByTestId("merchant-zone-ticket-settlements").textContent).toContain("门票分账与押金退还");
   });
 });
 

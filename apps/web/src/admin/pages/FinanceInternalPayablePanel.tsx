@@ -1,4 +1,4 @@
-// 文件版本：V0.03
+// 文件版本：V0.04
 import React from "react";
 import type { AdminPageProps, FinanceLedgerRow } from "../types";
 import { PermissionButton } from "../security/Can";
@@ -8,8 +8,10 @@ import { cnDate } from "../components/RowDetailDrawer";
 // 明确失败（付款失败待处理，注明原因与预计重付时间，不迟于下一个付账日）与资金不足顺延；到账仍走上方「登记核销」，成功才结清。
 // 补偿新增履约结算（FS-012）同为普通内部结算钱路（与 InternalPayDaysPanel.ROUTE_LABELS、后端 InternalPayDayService.ROUTES 同词表）。
 // 第十八批 AI 段 214-R1、214-R2：组合通票域间份额、餐饮零售代付（负额时为应付）、到期未核销归属三个钱路的应付同样登记执行状态。
+// 第十八批 AV 段 310-R1（ENUM:252「押金退还付款状态按「内部应付执行状态」条执行」）：退租押金退还应付同样登记执行状态；它不受三个付账日约束，
+// 没有异议截止与指定付账日，也不出资金不足顺延。
 export const INTERNAL_PAYABLE_ROUTES = new Set(["ticket_distribution", "platform_incentive_subsidy", "single_bar_service_fee", "compensation_fulfillment",
-  "pass_domain_share", "pass_domain_direct_settlement", "pass_unverified_attribution"]);
+  "pass_domain_share", "pass_domain_direct_settlement", "pass_unverified_attribution", "deposit_refund"]);
 const PAY = ["finance.payment.register"];
 
 type Attempt = { id: string; status: string };
@@ -85,14 +87,16 @@ export function FinanceInternalPayablePanel({ api, effectivePermissions, setActi
           </PermissionButton>
         </div>
       ) : null}
-      <div className="admin-form-row">
-        <label>说明<input data-testid="internal-payable-funds-note" value={note} onChange={(e) => setNote(e.target.value)} placeholder="账上资金不足" /></label>
-        <PermissionButton permissionsState={effectivePermissions} permissions={PAY} data-testid="internal-payable-funds-insufficient"
-          disabled={busy || !note.trim() || !state || state.inTransit || state.executionStatus === "settled" || state.executionStatus === "reversed"}
-          onClick={() => void run("internal_payment_postponed", `${base}/funds-insufficient`, { note: note.trim() })}>
-          资金不足顺延至下一个付账日
-        </PermissionButton>
-      </div>
+      {row.sourceType === "deposit_refund" ? null : (
+        <div className="admin-form-row">
+          <label>说明<input data-testid="internal-payable-funds-note" value={note} onChange={(e) => setNote(e.target.value)} placeholder="账上资金不足" /></label>
+          <PermissionButton permissionsState={effectivePermissions} permissions={PAY} data-testid="internal-payable-funds-insufficient"
+            disabled={busy || !note.trim() || !state || state.inTransit || state.executionStatus === "settled" || state.executionStatus === "reversed"}
+            onClick={() => void run("internal_payment_postponed", `${base}/funds-insufficient`, { note: note.trim() })}>
+            资金不足顺延至下一个付账日
+          </PermissionButton>
+        </div>
+      )}
       {error ? <div className="admin-inline-error" data-testid="internal-payable-error">{error}</div> : null}
     </div>
   );

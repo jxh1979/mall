@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.05
+// 文件版本：V0.06
 
 import static com.complex.platform.common.Strings.requireText;
 import static com.complex.platform.common.Strings.trimToNull;
@@ -33,6 +33,9 @@ import org.springframework.transaction.annotation.Transactional;
  *       （409 AR_AP_ITEM_REVERSED，与登记收付款 {@link FinanceService#settleArApItem} 同码）。</li>
  * </ul>
  * 只作用于有付款时点固化（internal_payable_schedules）的普通内部结算往来；工资与暂缓的拨付（CG 第 18 条）不在此列。
+ * 第十八批 AV 段 310-R1、310-R2（ENUM:252「押金退还支付不受三个付账日与账单异议期约束」「押金退还付款状态按「内部应付执行状态」条执行」）：
+ * 退租押金退还应付（source_type=deposit_refund，没有付款时点固化行）同样查看执行状态、登记已发起与明确失败、在商户专区可见并可审批更换
+ * 收款账户；不判异议期而判到期日（不早于等待期届满或算账完成之日，同 DEPOSIT_REFUND_NOT_DUE），预计重付日只须不早于今天，不适用资金不足顺延。
  */
 @Service
 public class InternalPayableExecutionService {
@@ -94,7 +97,7 @@ public class InternalPayableExecutionService {
     public Execution execution(String arApItemId) {
         ArApItemRecord item = item(arApItemId, false);
         finance.requireArApScope(item, VIEW);
-        return view(item, schedule(item.id()));
+        return view(item, schedule(item));
     }
 
     @Transactional
@@ -105,8 +108,15 @@ public class InternalPayableExecutionService {
             auth.requirePermission(PAY);
             return idem.execute("initiateInternalPayment:" + arApItemId, key, r, () -> {
                 ArApItemRecord item = payable(arApItemId);
-                Schedule s = schedule(item.id());
-                if (LocalDate.now(LocalZone.ID).isBefore(s.objectionDeadline())) {
+                Schedule s = schedule(item);
+                LocalDate today = LocalDate.now(LocalZone.ID);
+                if (s.payDays() == null) {
+                    // 押金退还不判异议期，不早于到期日（等待期届满或算账完成之日，ENUM:252），与登记付款同码。
+                    if (today.isBefore(item.dueDate())) {
+                        throw ApiException.conflict("DEPOSIT_REFUND_NOT_DUE", "押金退还不早于 " + item.dueDate()
+                                + " 支付（等待期届满或退租结算算账完成之日），届时方可登记付款");
+                    }
+                } else if (today.isBefore(s.objectionDeadline())) {
                     throw ApiException.conflict("OBJECTION_PERIOD_NOT_EXPIRED",
                             "异议期 " + s.objectionDeadline() + " 届满前不进入付款（顺延二）");
                 }
@@ -153,12 +163,19 @@ public class InternalPayableExecutionService {
                 Attempt attempt = latest(item.id()).filter(a -> a.id().equals(attemptId) && "initiated".equals(a.status()))
                         .orElseThrow(() -> ApiException.conflict("ATTEMPT_NOT_IN_TRANSIT", "只有在途的那次付款可登记失败结果"));
                 LocalDate today = LocalDate.now(LocalZone.ID);
-                LocalDate nextPayDay = calendar.bankDayOnOrAfter(
-                        com.complex.platform.settlement.InternalPayDayService.firstPayDayOnOrAfter(schedule(item.id()).payDays(),
-                                today.plusDays(1)));
                 LocalDate repay = r.expectedRepayDate();
-                if (repay == null || repay.isBefore(today) || repay.isAfter(nextPayDay)) {
-                    throw ApiException.badRequest("REPAY_AFTER_NEXT_PAY_DAY", "预计重付时间须在今天至下一个付账日（" + nextPayDay + "）之间");
+                int[] payDays = schedule(item).payDays();
+                if (payDays == null) {
+                    // 押金退还不受三个付账日约束（ENUM:252）；「重付不迟于下一个付账日」只管普通内部结算款项（ENUM:253），只须不早于今天。
+                    if (repay == null || repay.isBefore(today)) {
+                        throw ApiException.badRequest("REPAY_AFTER_NEXT_PAY_DAY", "预计重付时间不得早于今天");
+                    }
+                } else {
+                    LocalDate nextPayDay = calendar.bankDayOnOrAfter(
+                            com.complex.platform.settlement.InternalPayDayService.firstPayDayOnOrAfter(payDays, today.plusDays(1)));
+                    if (repay == null || repay.isBefore(today) || repay.isAfter(nextPayDay)) {
+                        throw ApiException.badRequest("REPAY_AFTER_NEXT_PAY_DAY", "预计重付时间须在今天至下一个付账日（" + nextPayDay + "）之间");
+                    }
                 }
                 jdbc.update("""
                         UPDATE internal_payable_payment_attempts SET status='failed',failure_reason=?,expected_repay_date=?,
@@ -187,7 +204,10 @@ public class InternalPayableExecutionService {
                 if (latest(item.id()).filter(a -> "initiated".equals(a.status())).isPresent()) {
                     throw ApiException.conflict("PAYMENT_IN_TRANSIT", "该笔付款已发起在途，不属资金不足顺延");
                 }
-                Schedule s = schedule(item.id());
+                Schedule s = schedule(item);
+                if (s.payDays() == null) {
+                    throw ApiException.conflict("INTERNAL_PAYABLE_NOT_SCHEDULED", "押金退还不受三个付账日约束，不适用资金不足顺延至下一个付账日");
+                }
                 LocalDate next = calendar.bankDayOnOrAfter(
                         com.complex.platform.settlement.InternalPayDayService.firstPayDayOnOrAfter(s.payDays(), item.dueDate().plusDays(1)));
                 jdbc.update("""
@@ -217,7 +237,7 @@ public class InternalPayableExecutionService {
             requireText(r.reason(), "reason");
             return idem.execute("approveInternalPayeeAccount:" + arApItemId, key, r, () -> {
                 ArApItemRecord item = item(arApItemId, true);
-                schedule(item.id());
+                schedule(item);
                 requirePayee(item, PAYEE_APPROVE);
                 Attempt failed = latest(item.id()).filter(a -> "failed".equals(a.status()))
                         .orElseThrow(() -> ApiException.conflict("ACCOUNT_CHANGE_NOT_ALLOWED", "只有付款失败待处理的款项可更换收款账户"));
@@ -238,17 +258,22 @@ public class InternalPayableExecutionService {
     }
 
     /** 商户专区「门票分账」：本商户作为对方的、已可查看的普通内部结算往来及其执行状态。
-     *  第十八批 E 段 20-R3：商户账号看各经营项目里本商户的往来，只按商户（不再按本人项目过滤）。 */
+     *  第十八批 E 段 20-R3：商户账号看各经营项目里本商户的往来，只按商户（不再按本人项目过滤）。
+     *  第十八批 AV 段 310-R2（BSM:1683「对收款方可见并注明失败原因与预计重付时间」）：并入本商户为往来方的退租押金退还应付（不含冲正、重述行），
+     *  押金退还按挂账时刻排序。 */
     public List<Execution> merchantTicketSettlements() {
         auth.requirePermission(PORTAL_VIEW);
         String merchant = auth.currentMerchantIdQuietly()
                 .orElseThrow(() -> ApiException.forbidden("MERCHANT_SCOPE_REQUIRED", "此操作必须在商户范围内进行"));
         List<Execution> listed = jdbc.queryForList("""
-                        SELECT ar_ap_item_id, project_id FROM internal_payable_schedules WHERE counterparty_id=? AND visible_at<=now()
+                        SELECT ar_ap_item_id, visible_at FROM internal_payable_schedules WHERE counterparty_id=? AND visible_at<=now()
+                        UNION ALL
+                        SELECT id, created_at FROM ar_ap_items WHERE direction='payable' AND source_type='deposit_refund' AND counterparty_id=?
+                           AND origin_item_id IS NULL
                          ORDER BY visible_at DESC, ar_ap_item_id
-                        """, merchant).stream()
+                        """, merchant, merchant).stream()
                 .map(row -> repository.findArApItemById((String) row.get("ar_ap_item_id")).orElseThrow())
-                .map(item -> view(item, schedule(item.id())))
+                .map(item -> view(item, schedule(item)))
                 .toList();
         // 第 92 条（BSM:1597 首页未读账单提醒）：列出的就是商户看过的，按商户记已读，首次已读时间不改。
         jdbc.batchUpdate("INSERT INTO merchant_bill_reads (merchant_id, bill_kind, bill_id) VALUES (?, 'ar_ap_item', ?) ON CONFLICT DO NOTHING",
@@ -285,21 +310,26 @@ public class InternalPayableExecutionService {
             throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN", "只有收款方所属公司的财务负责人可审批更换收款账户");
         }
         // 按固化付款时点的项目（往来对方所属项目）判定，写入口只到本人项目（列表对商户账号只按商户，第十八批 E 段 20-R3）；平台单台账行本身无项目归属。
-        String project = jdbc.queryForObject("SELECT project_id FROM internal_payable_schedules WHERE ar_ap_item_id=?", String.class,
+        // 第十八批 AV 段 310-R2：押金退还没有付款时点固化行，取台账行项目（310-R0 起挂出租合同所属项目）。
+        List<String> scheduled = jdbc.queryForList("SELECT project_id FROM internal_payable_schedules WHERE ar_ap_item_id=?", String.class,
                 item.id());
+        String project = scheduled.isEmpty() ? item.projectId() : scheduled.getFirst();
         if (!auth.projectReach(auth.currentActor(), permission).covers(project)) {
             throw ApiException.forbidden("CROSS_PROJECT_FORBIDDEN", "无权处理其他项目的款项");
         }
     }
 
-    private Schedule schedule(String arApItemId) {
+    /** 付款时点固化行；退租押金退还应付没有该行：挂账即可查看，没有异议截止与指定付账日（payDays＝null，ENUM:252）。 */
+    private Schedule schedule(ArApItemRecord item) {
         return jdbc.query("""
                 SELECT s.objection_deadline, s.designated_pay_day, s.visible_at, r.day_1, r.day_2, r.day_3
                   FROM internal_payable_schedules s JOIN internal_pay_day_rules r ON r.id = s.pay_days_rule_id
                  WHERE s.ar_ap_item_id=?
                 """, (rs, n) -> new Schedule(rs.getObject(1, LocalDate.class), rs.getObject(2, LocalDate.class),
-                rs.getTimestamp(3).toInstant(), new int[]{rs.getInt(4), rs.getInt(5), rs.getInt(6)}), arApItemId)
+                rs.getTimestamp(3).toInstant(), new int[]{rs.getInt(4), rs.getInt(5), rs.getInt(6)}), item.id())
                 .stream().findFirst()
+                .or(() -> "payable".equals(item.direction()) && "deposit_refund".equals(item.sourceType())
+                        ? java.util.Optional.of(new Schedule(null, null, item.createdAt(), null)) : java.util.Optional.empty())
                 .orElseThrow(() -> ApiException.conflict("INTERNAL_PAYABLE_NOT_SCHEDULED", "该款项不是按付账日执行的普通内部结算往来"));
     }
 

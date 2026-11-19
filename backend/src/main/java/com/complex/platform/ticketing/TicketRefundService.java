@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.07
+// 文件版本：V0.08
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -91,24 +91,32 @@ public class TicketRefundService {
     }
 
     /**
-     * P0 越权修复统一范式（对齐 TicketVerificationService.enforceMerchantScope）：取出原单后按调用者商户范围校验归属。
-     * 平台管理员 scope 为空 → 放行；商户用户 → 必须等于原单 merchant_id，否则 CROSS_MERCHANT_FORBIDDEN。
+     * P0 越权修复统一范式（对齐 TicketVerificationService.enforceMerchantScope）：取出原单后按调用者范围校验归属，发起、批准、驳回、确认拨付、
+     * 发起付款确认五处共用。商户账号（含派驻）→ 必须等于原单 merchant_id，否则 CROSS_MERCHANT_FORBIDDEN；
+     * 第十八批 AV 段 316-R2（BSM:1673「所有数据默认按项目隔离」；PGM:664 付款执行由财务中心负责）：不挂商户的账号（平台管理员与项目侧人员）
+     * → 须按该动作权限码可触及原单所属项目（平台管理员恒可触及；原单无项目按不可触及，同退款台账），否则 CROSS_PROJECT_FORBIDDEN。
      * authorizationService 为 null（旧构造/兼容测试）时不强制。
      */
-    private void enforceMerchantScope(String merchantId) {
+    private void enforceOrderScope(TicketOrderRecord order, String permission) {
         if (authorizationService == null) {
             return;
         }
+        var actor = authorizationService.currentActor();
         // TK-05-R1：持授权 U 盘密钥的最高权限逐笔放行须能审批任一商户的退款（最高权限账号不挂商户）。
-        if (authorizationService.isMasterAuthority(authorizationService.currentActor())) {
+        if (authorizationService.isMasterAuthority(actor)) {
             return;
         }
-        authorizationService.currentMerchantScope().ifPresent(scope -> {
-            if (!scope.equals(merchantId)) {
+        String merchant = authorizationService.currentMerchantIdQuietly().orElse(null);
+        if (merchant != null) {
+            if (!merchant.equals(order.merchantId())) {
                 throw ApiException.forbidden(
                         "CROSS_MERCHANT_FORBIDDEN", "无权查看其他商户的票务订单");
             }
-        });
+            return;
+        }
+        if (!authorizationService.canReachProject(actor, order.projectId(), permission)) {
+            throw ApiException.forbidden("CROSS_PROJECT_FORBIDDEN", "无权处理其他项目的票务退款");
+        }
     }
 
     TicketRefundRecord requestRefund(TicketRefundRequest request) {
@@ -117,7 +125,7 @@ public class TicketRefundService {
         TicketOrderRecord order = repository.findTicketOrderById(targetId)
                 .orElseThrow(() -> ApiException.notFound("TICKET_ORDER_NOT_FOUND", "票务订单不存在或已被删除"));
         // F-TXN-01 越权修复：发起退款前按调用者商户范围校验原单归属，防商户A退商户B的票（跨租户 IDOR）。
-        enforceMerchantScope(order.merchantId());
+        enforceOrderScope(order, "ticket.refund.request");
         // 仅已支付订单可退款：堵"未支付/已取消订单凭空发起退款"（无真实收款却触发退款冻结/积分冲减链）。
         if (!"paid".equals(order.payStatus())) {
             throw ApiException.conflict("TICKET_ORDER_NOT_REFUNDABLE", "只有已支付的票务订单才能退款");
@@ -222,10 +230,10 @@ public class TicketRefundService {
         requireText(actual.reason(), "reason");
         TicketRefundRecord current = repository.findTicketRefundById(requireText(refundId, "refund_id"))
                 .orElseThrow(() -> ApiException.notFound("TICKET_REFUND_NOT_FOUND", "票务退款不存在或已被删除"));
-        // F-TXN-01 越权修复：审批退款（冻结权益/积分冲减/库存回补皆为写）前，按调用者商户范围校验原单归属，
+        // F-TXN-01 越权修复：审批退款（冻结权益/积分冲减/库存回补皆为写）前，按调用者范围校验原单归属，
         // 防商户A审批通过商户B的退款。原单缺失时不做归属判定（交由下方既有 null 容错路径）。
         repository.findTicketOrderById(current.targetId())
-                .ifPresent(order -> enforceMerchantScope(order.merchantId()));
+                .ifPresent(order -> enforceOrderScope(order, "ticket.refund.approve"));
         // AUD-007 职责分离（SoD）+ 真实审批人留痕：不受功能标志控制——一律以真实操作者为审批人、且审批人不得为发起人
         //   （approver≠requestedBy，SELF_APPROVAL_FORBIDDEN）；不再退化为字面量 "staff"（那样自审自批且不可归责）。
         String approver = currentActorId();
@@ -261,7 +269,7 @@ public class TicketRefundService {
         TicketRefundRecord current = repository.findTicketRefundById(requireText(refundId, "refund_id"))
                 .orElseThrow(() -> ApiException.notFound("TICKET_REFUND_NOT_FOUND", "票务退款不存在或已被删除"));
         repository.findTicketOrderById(current.targetId())
-                .ifPresent(order -> enforceMerchantScope(order.merchantId()));
+                .ifPresent(order -> enforceOrderScope(order, "ticket.refund.approve"));
         // AUD-007 职责分离（SoD）+ 真实复核人留痕：不受功能标志控制——一律真实操作者、复核人不得为发起人；不退化为 "staff"。
         String reviewer = currentActorId();
         if (reviewer != null && reviewer.equals(current.requestedBy())) {
@@ -310,7 +318,7 @@ public class TicketRefundService {
         TicketRefundRecord current = repository.findTicketRefundById(requireText(refundId, "refund_id"))
                 .orElseThrow(() -> ApiException.notFound("TICKET_REFUND_NOT_FOUND", "票务退款不存在或已被删除"));
         repository.findTicketOrderById(current.targetId())
-                .ifPresent(order -> enforceMerchantScope(order.merchantId()));
+                .ifPresent(order -> enforceOrderScope(order, "ticket.refund.approve"));
         // 第十八批 AM 段第 241 条 241-R5：原路打款确认拨付前须有已通过的付款确认（只分到储值笔的退款批准即成功，不经此处）。
         if (paymentConfirmations == null) {
             throw ApiException.conflict("PAYMENT_CONFIRMATION_REQUIRED", "该笔付款须先完成付款确认（主线与财务、法务等各条平行线全部审批通过）");
@@ -325,11 +333,11 @@ public class TicketRefundService {
         return current.withStatus("success", current.approvedBy(), current.approvedAt(), now).withPayoutResult(payoutResult);
     }
 
-    /** 第十八批 AM 段第 241 条 241-R5：按调用者商户范围取门票退款（发起付款确认的范围闸，幂等之前与写内各调一次）。 */
+    /** 第十八批 AM 段第 241 条 241-R5：按调用者范围取门票退款（发起付款确认的范围闸，幂等之前与写内各调一次）。 */
     TicketRefundRecord payoutScoped(String refundId) {
         TicketRefundRecord refund = repository.findTicketRefundById(requireText(refundId, "refund_id"))
                 .orElseThrow(() -> ApiException.notFound("TICKET_REFUND_NOT_FOUND", "票务退款不存在或已被删除"));
-        repository.findTicketOrderById(refund.targetId()).ifPresent(order -> enforceMerchantScope(order.merchantId()));
+        repository.findTicketOrderById(refund.targetId()).ifPresent(order -> enforceOrderScope(order, "ticket.refund.approve"));
         return refund;
     }
 

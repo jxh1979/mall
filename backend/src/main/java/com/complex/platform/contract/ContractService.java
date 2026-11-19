@@ -1,6 +1,6 @@
 package com.complex.platform.contract;
 
-// 文件版本：V0.30
+// 文件版本：V0.31
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.LocalZone;
@@ -2163,7 +2163,7 @@ public class ContractService implements com.complex.platform.finance.Termination
         long actualRefund = 0L;
         if (result.depositRefundCent() > 0) {
             actualRefund = terminationSettlementPort.createDepositRefundPayable(
-                    merchantId, result.depositRefundCent(), settlementId, due.dueDate());
+                    merchantId, result.depositRefundCent(), settlementId, due.dueDate(), contract.projectId());
             recordActualDepositRefund(items, actualRefund, result.depositRefundCent());
             if (actualRefund > 0) {
                 annotateDepositRefundDue(items, due);

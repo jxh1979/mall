@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -155,7 +155,7 @@ class FinanceReconciliationDifferenceLedgerJdbcTests {
     @Test
     void verifiedDealerPaymentPostsReceivableToDealer() throws Exception {
         String dealer = "frl_dl_" + s;
-        String diff = handled("r7", dealerPayment(dealer, 50_000L), 49_000L);
+        String diff = handled("r7", dealerPayment(dealer, 50_000L), 49_000L, "project", project);
 
         approve(reviewOf(submit(diff, "r7", true)), "r7").andExpect(status().isOk());
 
@@ -203,12 +203,17 @@ class FinanceReconciliationDifferenceLedgerJdbcTests {
 
     /** 生成该酒吧营业日日结（随之生成对账批次），以人工录入登记差异（带原件）并识别，返回处于待处理的差异号。 */
     private String handled(String tag, String businessRef, long actualCent) throws Exception {
+        return handled(tag, businessRef, actualCent, "merchant", bar);
+    }
+
+    /** 第十八批 AV 段 305-R1：同上，指定日结范围（经销到账是项目级，登记在综合体批次下）。 */
+    private String handled(String tag, String businessRef, long actualCent, String scopeType, String scopeId) throws Exception {
         mockMvc.perform(post("/api/v1/finance/daily-closes").with(admin).contentType(MediaType.APPLICATION_JSON)
                         .content(json.writeValueAsString(Map.of("idempotency_key", "frl-gen-" + tag + "-" + s,
-                                "business_date", day.toString(), "scope_type", "merchant", "scope_id", bar))))
+                                "business_date", day.toString(), "scope_type", scopeType, "scope_id", scopeId))))
                 .andExpect(status().isOk());
         List<String> batches = JsonPath.read(mockMvc.perform(get("/api/v1/finance/reconciliation/batches").with(admin))
-                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString(), "$.data.items[?(@.scope_id == '" + bar + "')].id");
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString(), "$.data.items[?(@.scope_id == '" + scopeId + "')].id");
         assertThat(batches).hasSize(1);
         String diff = JsonPath.read(mockMvc.perform(post("/api/v1/finance/reconciliation/differences").with(admin)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -287,15 +292,15 @@ class FinanceReconciliationDifferenceLedgerJdbcTests {
         return payment;
     }
 
-    /** 前置态：一张已支付票务订单，返回票务订单号。 */
+    /** 前置态：本酒吧受理的一张已支付票务订单（305-R1 起写受理商户与售票项目，归本酒吧日结），返回票务订单号。 */
     private String ticketOrder(String tag, long amountCent) {
         String type = "frl_tt_" + tag + "_" + s;
         jdbc.update("INSERT INTO ticket_types (id, ticket_name, base_calendar_price_mode, status, created_at, updated_at)"
                 + " VALUES (?, '对账差异入账门票', 'fixed', 'active', now(), now())", type);
         String order = "frl_to_" + tag + "_" + s;
         jdbc.update("INSERT INTO ticket_orders (id, order_no, ticket_type_id, quantity, sales_channel, amount_cent, pay_status, issue_status, status,"
-                + " created_at, updated_at) VALUES (?, ?, ?, 1, 'web', ?, 'paid', 'issued', 'created', now(), now())",
-                order, "FRL-" + order, type, amountCent);
+                + " created_at, updated_at, merchant_id, project_id) VALUES (?, ?, ?, 1, 'web', ?, 'paid', 'issued', 'created', now(), now(), ?, ?)",
+                order, "FRL-" + order, type, amountCent, bar, project);
         return order;
     }
 

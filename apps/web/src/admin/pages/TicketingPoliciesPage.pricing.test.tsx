@@ -49,6 +49,8 @@ async function selectPass() {
   await waitFor(() => expect(screen.getByTestId("combo-ticket-select")).toBeTruthy());
   fireEvent.change(screen.getByTestId("combo-ticket-select"), { target: { value: "tt-1" } });
   await waitFor(() => expect(screen.getByTestId("combo-price-check-table")).toBeTruthy());
+  // 页面读到核算后由被动 effect 把售价回显进输入框（178.00）；负载高时回显晚于下面的输入就会盖掉输入，先等回显落定。
+  await waitFor(() => expect(screen.getByTestId("combo-pricing-weekday")).toHaveValue(178));
 }
 
 describe("TicketingPoliciesPage 通票定价核算（V369）", () => {
@@ -79,6 +81,7 @@ describe("TicketingPoliciesPage 通票定价核算（V369）", () => {
     await selectPass();
 
     fireEvent.change(screen.getByTestId("combo-pricing-weekday"), { target: { value: "178" } });
+    await waitFor(() => expect(screen.getByTestId("combo-pricing-weekday")).toHaveValue(178));
 
     await waitFor(() => {
       const hint = screen.getByTestId("combo-pricing-live-hint").textContent ?? "";
@@ -94,6 +97,7 @@ describe("TicketingPoliciesPage 通票定价核算（V369）", () => {
     await selectPass();
 
     fireEvent.change(screen.getByTestId("combo-pricing-weekday"), { target: { value: "160" } });
+    await waitFor(() => expect(screen.getByTestId("combo-pricing-weekday")).toHaveValue(160));
 
     await waitFor(() => {
       const hint = screen.getByTestId("combo-pricing-live-hint").textContent ?? "";
@@ -117,6 +121,7 @@ describe("TicketingPoliciesPage 通票定价核算（V369）", () => {
 
     fireEvent.change(screen.getByTestId("combo-pricing-discount"), { target: { value: "85" } });
     fireEvent.change(screen.getByTestId("combo-pricing-weekday"), { target: { value: "178" } });
+    await waitFor(() => expect(screen.getByTestId("combo-pricing-weekday")).toHaveValue(178));
     fireEvent.change(screen.getByTestId("combo-pricing-reason"), { target: { value: "按新的业态构成重新定价" } });
     fireEvent.click(screen.getByTestId("combo-pricing-save"));
 

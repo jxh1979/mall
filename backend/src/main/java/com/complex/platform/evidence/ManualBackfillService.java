@@ -1,6 +1,6 @@
 package com.complex.platform.evidence;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import com.complex.platform.access.AccessActor;
 import com.complex.platform.access.AccessRepository;
@@ -88,6 +88,11 @@ public class ManualBackfillService {
     private final EvidenceAttachmentValidator attachments;
     private final EvidenceEventRepository evidence;
     private final ObjectMapper json;
+
+    // 第十八批 AV 段 307-R1：回读凭证核复核链节点。字段注入、@Lazy 防初始化环（同 FinanceService.supervisorReviews），不改构造器。
+    @org.springframework.beans.factory.annotation.Autowired
+    @org.springframework.context.annotation.Lazy
+    com.complex.platform.governance.review.SupervisorReviewRepository supervisorReviews;
 
     public ManualBackfillService(ObjectProvider<ManualBackfillTarget> targets, AuthorizationService auth, AccessRepository access,
             NamedParameterJdbcTemplate jdbc, SupervisorReviewService reviews, IdempotencyService idempotency,
@@ -177,6 +182,28 @@ public class ManualBackfillService {
         audit.recordSuccess("evidence.manual_backfill_submitted", target.submitPermission(), OBJECT, id, null, request.idempotencyKey(),
                 Map.of("target_type", target.type(), "target_id", targetId, "review_id", decision.reviewId()));
         return find("id", id, false);
+    }
+
+    /**
+     * 第十八批 AV 段第 307 条 307-R1（BSM:1642「补录必须附原始记录凭证……并经审核」）：不带商户编号的账号能否回读该凭证——引用它的补录单中，
+     * 本人在其复核链上（审批人或被转交人），或可查看该补录对象（对象范围闸不抛）；都不满足为假（同 FinanceService#canViewLockedBackfillEvidence）。
+     */
+    public boolean canViewEvidence(String attachmentId) {
+        String actorId = auth.currentActor().id();
+        for (Backfill row : jdbc.query("SELECT * FROM manual_backfills WHERE evidence_attachment_ids @> jsonb_build_array(CAST(:id AS text))",
+                Map.of("id", attachmentId), this::map)) {
+            if (row.reviewId() != null && supervisorReviews.listChainNodes(row.reviewId()).stream()
+                    .anyMatch(node -> actorId.equals(node.approverId()) || actorId.equals(node.forwardedTo()))) {
+                return true;
+            }
+            try {
+                target(row.targetType()).requireView(row.targetId());
+                return true;
+            } catch (ApiException outOfScope) {
+                // 不可查看这笔补录的对象：看下一笔。
+            }
+        }
+        return false;
     }
 
     /** 某对象的全部补录单（按提交时间），供各页与原始记录并列展示。 */

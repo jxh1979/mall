@@ -1,6 +1,6 @@
 package com.complex.platform.governance.review;
 
-// 文件版本：V0.38
+// 文件版本：V0.39
 
 import com.complex.platform.access.AccessActor;
 import com.complex.platform.access.AuthorizationService;
@@ -481,7 +481,11 @@ public class SupervisorReviewService {
                             reviewerLevel,
                             outcome,
                             pending.reason(), // M007-F-11：保留评估时的「为什么」，审批意见进审计留痕
-                            request.evidenceAttachmentIds() == null ? List.of() : List.copyOf(request.evidenceAttachmentIds()),
+                            // 第十八批 AV 段第 306 条 306-R1（PGM:899「谁发起……为什么、谁审批、结果是什么，都要能查到。」）：提交时凭证在前、并上审批人所附凭证，
+                            // 去重保序，不覆盖（主管复核页凭证框多为空）。
+                            java.util.stream.Stream.concat(pending.evidenceAttachmentIds().stream(),
+                                    request.evidenceAttachmentIds() == null ? java.util.stream.Stream.<String>empty() : request.evidenceAttachmentIds().stream())
+                                    .distinct().toList(),
                             now,
                             pending.initiatedBy(),
                             pending.approvalLevel(),

@@ -1,6 +1,6 @@
 package com.complex.platform.amusement;
 
-// 文件版本：V0.10
+// 文件版本：V0.11
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -104,6 +104,7 @@ class ParkWideFaultCompensationJdbcIntegrationTests {
     @Autowired private InternalPayableExecutionService internalPayableExecution;
     @Autowired private CompensationFulfillmentPort compensationFulfillmentPort;
     @Autowired private CustomerRepository customerRepository;
+    @Autowired private com.complex.platform.common.BusinessDayResolver businessDayResolver;
 
     private String suffix;
     private String projectId;
@@ -439,7 +440,7 @@ class ParkWideFaultCompensationJdbcIntegrationTests {
         for (Map<String, Object> r : payables) {
             assertThat(r).containsEntry("direction", "payable").containsEntry("counterparty_id", providerMerchantId)
                     .containsEntry("merchant_id", null).containsEntry("status", "pending_payment")
-                    .containsEntry("accounting_period", YearMonth.now().toString());
+                    .containsEntry("accounting_period", providerBusinessMonth().toString());
             assertThat(r.get("unpaid_amount_cent")).isEqualTo(r.get("amount_cent"));
             Map<String, Object> s = jdbcTemplate.queryForMap("SELECT route, project_id, visible_at, objection_deadline, scheduled_due_date"
                     + " FROM internal_payable_schedules WHERE ar_ap_item_id = ?", r.get("id"));
@@ -596,7 +597,7 @@ class ParkWideFaultCompensationJdbcIntegrationTests {
         assertThat(recovery).containsEntry("direction", "receivable").containsEntry("counterparty_id", providerMerchantId)
                 .containsEntry("merchant_id", null).containsEntry("project_id", projectId).containsEntry("source_id", reversal.get("id"))
                 .containsEntry("amount_cent", 500L).containsEntry("paid_amount_cent", 0L).containsEntry("unpaid_amount_cent", 500L)
-                .containsEntry("status", "pending_collection").containsEntry("accounting_period", YearMonth.now().toString())
+                .containsEntry("status", "pending_collection").containsEntry("accounting_period", providerBusinessMonth().toString())
                 .containsEntry("origin_item_id", null);
         Map<String, Object> s = jdbcTemplate.queryForMap("SELECT route, project_id, counterparty_id, objection_deadline, scheduled_due_date"
                 + " FROM internal_payable_schedules WHERE ar_ap_item_id = ?", recovery.get("id"));
@@ -647,8 +648,62 @@ class ParkWideFaultCompensationJdbcIntegrationTests {
                 Integer.class, verificationId)).isEqualTo(1);
     }
 
+    /**
+     * 第十八批 AV 段 262-R1（BSM:1682「全系统的钱账统一按「营业日」归集：营业日从当日上午 10:00 起算，至次日上午 10:00 止」；BSM:804
+     * 「再次入场提供完整票面权益，酒水、礼品重新提供」）：补发酒水在下月 1 日凌晨 02:30 由酒吧提供方履约，营业日仍属本月最后一天 →
+     * 补偿应付记本月账期、到期日按本月账期的付账日推算并固化；平台财务按后台真实请求查台账。
+     */
+    @Test
+    void compensationPayableAfterMidnightBooksProviderBusinessDayMonth() throws Exception {
+        String itemId = issueFullReissue();
+        String drink = compensationEntitlement(itemId, "bar_drink");
+        markEntryVerified(drink);
+        YearMonth thisMonth = YearMonth.now(com.complex.platform.common.LocalZone.ID);
+        Instant fulfilledAt = thisMonth.plusMonths(1).atDay(1).atTime(2, 30).atZone(com.complex.platform.common.LocalZone.ID).toInstant();
+        compensationFulfillmentPort.recordFulfillment(itemId, drink, "ver_" + drink, providerMerchantId, fulfilledAt,
+                new com.complex.platform.ticketing.InternalSettlementPriceResolver.VersionedPrice(1200L, drinkItemCode + "_v1"));
+        Map<String, Object> payable = jdbcTemplate.queryForMap("SELECT a.item_no, s.scheduled_due_date FROM ar_ap_items a"
+                + " JOIN internal_payable_schedules s ON s.ar_ap_item_id = a.id"
+                + " WHERE a.source_type = 'compensation_fulfillment' AND a.project_id = ?", projectId);
+        String viewer = user("arv", List.of("finance.ar_ap.view"));
+        AccessActor admin = new AccessActor(viewer, "u_" + viewer, "platform_admin", "org_1", null, "active");
+        mockMvc.perform(get("/api/v1/finance/ar-ap-items?keyword=" + payable.get("item_no") + "&page=1&size=20")
+                        .with(request -> {
+                            request.addHeader("X-Terminal-Type", "web");
+                            return authentication(new UsernamePasswordAuthenticationToken(admin, "token", List.of()))
+                                    .postProcessRequest(request);
+                        }))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items.length()").value(1))
+                .andExpect(jsonPath("$.data.items[0].accounting_period").value(thisMonth.toString()))
+                .andExpect(jsonPath("$.data.items[0].due_date").value(payable.get("scheduled_due_date").toString()));
+    }
+
+    /** 第十八批 AV 段 262-R1（BSM:1682）：已付 500 后该次核销在下月 1 日凌晨 01:00 撤销，营业日仍属本月 → 对提供方的追收应收记本月账期。 */
+    @Test
+    void compensationRecoveryAfterMidnightBooksProviderBusinessDayMonth() {
+        String verificationId = partiallyPaidCompensation(500L);
+        YearMonth thisMonth = YearMonth.now(com.complex.platform.common.LocalZone.ID);
+        compensationFulfillmentPort.reverseFulfillment(verificationId,
+                thisMonth.plusMonths(1).atDay(1).atTime(1, 0).atZone(com.complex.platform.common.LocalZone.ID).toInstant());
+        assertThat(recoveryRows()).singleElement().extracting(r -> r.get("accounting_period")).isEqualTo(thisMonth.toString());
+    }
+
+    /** 提供方此刻所属营业日的月（262-R1：补偿应付与追收按提供方营业日定月）。 */
+    private YearMonth providerBusinessMonth() {
+        return YearMonth.from(businessDayResolver.merchantBusinessDate(projectId, providerMerchantId, Instant.now()));
+    }
+
     /** 补发酒水核销形成补偿应付 1200 → 承担方先付 paidCent → 撤销该次核销；返回该次核销 id。 */
     private String reverseAfterPartialPayment(long paidCent) {
+        String verificationId = partiallyPaidCompensation(paidCent);
+        ticketingService.reverseVerification(verificationId, new VerificationReverseRequest("fs012-part-rev-" + suffix, "误核销冲正"),
+                "staff_fs012");
+        return verificationId;
+    }
+
+    /** 补发酒水核销形成补偿应付 1200 → 承担方先付 paidCent；返回该次核销 id（当前身份回到平台管理员）。 */
+    private String partiallyPaidCompensation(long paidCent) {
         String itemId = issueFullReissue();
         VerificationResponse drink = verify("fs012-part-" + suffix, compensationEntitlement(itemId, "bar_drink"));
         String payableId = jdbcTemplate.queryForObject("SELECT id FROM ar_ap_items WHERE source_type = 'compensation_fulfillment'"
@@ -659,8 +714,6 @@ class ParkWideFaultCompensationJdbcIntegrationTests {
         financeService.registerArApPayment(payableId, new ArApPaymentRequest("fs012-part-pay-" + suffix, null, List.of(), paidCent,
                 "bank_transfer", null, "BANK-CPF-" + suffix));
         TestSecurityActors.asPlatformAdmin();
-        ticketingService.reverseVerification(drink.id(), new VerificationReverseRequest("fs012-part-rev-" + suffix, "误核销冲正"),
-                "staff_fs012");
         return drink.id();
     }
 
