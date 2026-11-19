@@ -1,6 +1,6 @@
 package com.complex.platform.terminal;
 
-// 文件版本：V0.14
+// 文件版本：V0.15
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.access.AuthorizationService.ProjectReach;
@@ -933,6 +933,9 @@ public class TerminalDeviceService {
     @Transactional
     public TerminalCapabilitySwitchRecord updateCapabilitySwitch(String id, CapabilitySwitchRequest request) {
         String switchId = requireText(id, "id");
+        // 第十八批 BA 段第 270 条 270-R1（PGM:739「开关配置的每一次变更……都必须记录变更人、变更时间、变更前后的取值与影响范围。」；
+        // PGM:742 没有开关行时一律默认关闭）：变更前取值（新建行记关闭）与保存后的端、能力、范围随成功事件留痕。
+        java.util.concurrent.atomic.AtomicBoolean previous = new java.util.concurrent.atomic.AtomicBoolean();
         return executeWrite(
                 "updateCapabilitySwitch:" + switchId,
                 request == null ? null : request.idempotencyKey(),
@@ -953,6 +956,7 @@ public class TerminalDeviceService {
                     // 改写成 device 行，守卫按模块解析不到 → 关了开关接口照放行（活证据抓到的真 bug）。
                     java.util.Optional<TerminalCapabilitySwitchRecord> existing =
                             repository.findCapabilitySwitchById(switchId);
+                    previous.set(existing.map(TerminalCapabilitySwitchRecord::enabled).orElse(false));
                     // OBS-13-04：BSM 第 1598 行不可关闭的短信「不得按类或按条关闭」；第三方接入 PRD §11A.4「尝试按类或按条关闭一律拒绝并给出中文报错」。
                     if (!actual.enabled() && NotificationSwitchResolver.isMandatorySwitch(existing
                             .map(TerminalCapabilitySwitchRecord::capabilityCode).orElse(actual.capabilityCode()))) {
@@ -989,7 +993,9 @@ public class TerminalDeviceService {
                             now,
                             now
                     ));
-                }
+                },
+                saved -> Map.of("previous_enabled", previous.get(), "enabled", saved.enabled(), "terminal_type", saved.terminalType(),
+                        "capability_code", saved.capabilityCode(), "scope_type", saved.scopeType(), "scope_id", saved.scopeId())
         );
     }
 
@@ -1347,7 +1353,8 @@ public class TerminalDeviceService {
                 "terminal_device",
                 scopeCheck,
                 action,
-                storedResponseTransformer
+                storedResponseTransformer,
+                response -> Map.of()
         );
     }
 
@@ -1360,7 +1367,8 @@ public class TerminalDeviceService {
             String failureEvent,
             String permissionCode,
             String businessType,
-            Supplier<T> action
+            Supplier<T> action,
+            Function<T, Map<String, Object>> successMetadata
     ) {
         return executeWrite(
                 operationId,
@@ -1374,7 +1382,8 @@ public class TerminalDeviceService {
                 // 能力开关不是设备，没有设备归属范围可核（平台口径由控制器 requirePlatformScope 把关）
                 () -> { },
                 action,
-                Function.identity()
+                Function.identity(),
+                successMetadata
         );
     }
 
@@ -1389,7 +1398,8 @@ public class TerminalDeviceService {
             String businessType,
             Runnable scopeCheck,
             Supplier<T> action,
-            Function<T, T> storedResponseTransformer
+            Function<T, T> storedResponseTransformer,
+            Function<T, Map<String, Object>> successMetadata
     ) {
         try {
             // M723-F21（治理地图第 653 行项目与商户隔离；操作员 2026-10-06 裁决）：设备归属范围校验先于幂等层——越范围的请求
@@ -1408,7 +1418,7 @@ public class TerminalDeviceService {
                                 businessId(response),
                                 null,
                                 idempotencyKey,
-                                Map.of()
+                                successMetadata.apply(response)
                         );
                         return response;
                     },

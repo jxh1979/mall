@@ -1,4 +1,4 @@
-// 文件版本：V0.04
+// 文件版本：V0.05
 package com.complex.platform.gate;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -49,7 +49,9 @@ class ServerModuleRoutesTests {
     @Test
     void merchantPortalRoutesResolveOnlyMerchantZone() {
         assertThat(ServerModuleRoutes.moduleOf("merchant_portal", "GET", "/api/v1/merchant-portal/unread-bills")).isEqualTo("merchant");
-        assertThat(ServerModuleRoutes.moduleOf("merchant_portal", "GET", "/api/v1/merchant-portal/card-exit-notices")).isNull();
+        // 第十八批 BA 段第 327 条 327-R1（PGM:737；PGM:744）：卡片退出通知只有商户专区「我的合同」页调，随前缀判商户专区。
+        assertThat(ServerModuleRoutes.moduleOf("merchant_portal", "GET", "/api/v1/merchant-portal/card-exit-notices")).isEqualTo("merchant");
+        assertThat(ServerModuleRoutes.moduleOf("merchant_portal", "POST", "/api/v1/merchant-portal/card-exit-notices")).isEqualTo("merchant");
         assertThat(ServerModuleRoutes.moduleOf("merchant_portal", "GET", "/api/v1/bar/orders")).isNull();
     }
 
@@ -92,7 +94,7 @@ class ServerModuleRoutesTests {
         assertThat(web("POST", "/api/v1/facility/site-entry-reports/r1/attachments")).isEqualTo("vendor");
         assertThat(web("GET", "/api/v1/facility/site-entry-reports/r1/attachments/a1/file")).as("物业与外包共用").isNull();
         assertThat(web("GET", "/api/v1/loyalty/stored-value/merchant-refund-rules/m1")).isEqualTo("governance");
-        assertThat(web("GET", "/api/v1/loyalty/stored-value/merchant-card-exit-notice-policy")).isNull();
+        assertThat(web("GET", "/api/v1/loyalty/stored-value/merchant-card-exit-notice-policy")).as("只在储值规则页（323 并入）").isEqualTo("governance");
         assertThat(web("POST", "/api/v1/platform/merchants/m1/delete-approve")).isEqualTo("governance");
         assertThat(web("PUT", "/api/v1/platform/merchants/m1/project")).isNull();
     }
@@ -135,26 +137,50 @@ class ServerModuleRoutesTests {
         assertThat(merchantPortal("GET", "/api/v1/compliance/expiry-items")).as("合规台账页也调").isNull();
     }
 
-    /** 247-R4：表里写「不判」的前缀下，逐接口看只有一个菜单组用的子路径照判（存酒一族本段不动）。 */
+    /** 247-R4：表里写「不判」的前缀下，逐接口看只有一个菜单组用的子路径照判。第十八批 BA 段第 323 条（PGM:737；PGM:744）323-R1：同路径列表被几组共用、
+     *  写方法只有一组调的按方法判，只有一组调的列表照判；323-R2：存酒一族按存酒页（酒吧）与提醒与留存天数配置页（总览）判。 */
     @Test
     void exclusiveSubpathsUnderNonePrefixesAreRegistered() {
         assertThat(web("GET", "/api/v1/bar/catalog")).isNull();
-        assertThat(web("GET", "/api/v1/bar/catalog/products")).as("票务页也调").isNull();
+        assertThat(web("GET", "/api/v1/bar/catalog/products")).as("只有票务策略页调").isEqualTo("ticketing");
         assertThat(web("POST", "/api/v1/bar/catalog/products/p1/archive")).isEqualTo("bar");
         assertThat(web("POST", "/api/v1/bar/catalog/products/p1/category")).isEqualTo("bar");
         assertThat(web("POST", "/api/v1/bar/catalog/combos/c1/delete-approve")).isEqualTo("bar");
-        assertThat(web("GET", "/api/v1/inventory/saved-bottles")).isNull();
+        assertThat(web("GET", "/api/v1/inventory/saved-bottles")).as("只有存酒页调").isEqualTo("bar");
+        assertThat(web("POST", "/api/v1/inventory/saved-bottles/s1/claim")).isEqualTo("bar");
+        assertThat(web("PUT", "/api/v1/inventory/saved-bottles/reminder-policy")).as("只有提醒与留存天数配置页调").isEqualTo("overview");
+        assertThat(web("GET", "/api/v1/inventory/saved-bottles/manual-pickup-policy")).isEqualTo("overview");
+        assertThat(web("PUT", "/api/v1/inventory/saved-bottles/renewal-policy")).isEqualTo("overview");
         assertThat(web("GET", "/api/v1/access/users")).isNull();
+        assertThat(web("POST", "/api/v1/access/users")).as("建号只有员工账号页调").isEqualTo("access");
         assertThat(web("PUT", "/api/v1/access/users/u1/scope")).isEqualTo("access");
         assertThat(web("GET", "/api/v1/access/users/u1/effective-permissions")).isNull();
-        assertThat(web("GET", "/api/v1/amusement/projects/a1/entitlements")).as("票务页也调").isNull();
+        assertThat(web("GET", "/api/v1/amusement/projects/a1/entitlements")).as("只有项目与场次页调").isEqualTo("amusement");
+        assertThat(web("POST", "/api/v1/amusement/projects/a1/entitlements")).as("只有票务策略页调").isEqualTo("ticketing");
         assertThat(web("POST", "/api/v1/amusement/projects/a1/entitlements/e1/archive")).isEqualTo("amusement");
         assertThat(web("GET", "/api/v1/inventory/items")).isNull();
+        assertThat(web("POST", "/api/v1/inventory/items")).as("新建物品只有库存台账页调").isEqualTo("inventory");
         assertThat(web("POST", "/api/v1/inventory/items/i1/safety-stock")).isEqualTo("inventory");
         assertThat(web("GET", "/api/v1/finance/ar-ap-items/export")).isEqualTo("finance");
         assertThat(web("GET", "/api/v1/finance/ar-ap-items/x1/payments")).as("经销页也调").isNull();
+        assertThat(web("POST", "/api/v1/finance/ar-ap-items/x1/payments")).as("登记收付款只有应收应付台账页调").isEqualTo("finance");
         assertThat(web("POST", "/api/v1/staff/registrations")).isEqualTo("access");
         assertThat(web("POST", "/api/v1/staff/registrations/r1/review")).isEqualTo("ops");
+    }
+
+    /** 第十八批 BA 段第 323 条控制席并入（PGM:737「关闭后菜单不可见或不可点，接口也要拒绝业务动作。」；PGM:744）：表里漏判的其余单组独用接口
+     *  按页面独用规则判；几组共用的列表照旧不判。 */
+    @Test
+    void remainingSingleGroupApisAreGated() {
+        assertThat(web("POST", "/api/v1/amusement/projects")).as("新建项目只有项目与场次页调").isEqualTo("amusement");
+        assertThat(web("GET", "/api/v1/amusement/projects")).as("票务策略、安全巡检、核销记录页也调").isNull();
+        assertThat(web("POST", "/api/v1/ticketing/ticket-types")).as("新建票种只有票务策略页调").isEqualTo("ticketing");
+        assertThat(web("GET", "/api/v1/ticketing/expiry-reminder-policies/p1")).as("到期提醒小节只在票务策略页").isEqualTo("ticketing");
+        assertThat(web("PUT", "/api/v1/bar/arrival-reminder-policies/p1")).as("到店提醒小节只在票务策略页").isEqualTo("ticketing");
+        assertThat(web("POST", "/api/v1/loyalty/stored-value/merchant-card-exit-notice-policy")).as("退出公告策略只在储值规则页")
+                .isEqualTo("governance");
+        assertThat(web("GET", "/api/v1/home-contents/p1")).as("场地营业时间页、主管复核页").isEqualTo("governance");
+        assertThat(web("POST", "/api/v1/home-contents/p1/publish")).isEqualTo("governance");
     }
 
     private static String web(String method, String uri) {

@@ -1,6 +1,6 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static com.complex.platform.common.Strings.trimToNull;
 
@@ -73,6 +73,25 @@ public class InternalPriceScope {
             throw ApiException.forbidden("INTERNAL_PRICE_APPROVER_SCOPE",
                     "内部结算价须由对应域主管公司审批：本条目应由「" + (names.isEmpty() ? company : names.getFirst()) + "」的人员审批");
         }
+    }
+
+    /**
+     * 第十八批 BA 段第 355 条控制席并入（BSM:1671「实际提供商品或服务的主体提交价格，对应域主管公司审批」）：不挂商户的人员在目录列表只看本公司可办的条目——
+     * 提供主体为本公司的（可提交，也由本公司内部差人审批）与域主管公司为本公司的（可审批）；定不出审批公司的条目不列。
+     * ponytail: 逐条按商户算审批公司（每条一两次查询），目录条目多到成为负担时改成按商户批量算。
+     */
+    public List<CatalogEntryRow> handledBy(String userId, List<CatalogEntryRow> rows) {
+        String company = companyOf(userId);
+        if (company == null) {
+            return List.of();
+        }
+        return rows.stream().filter(row -> {
+            try {
+                return company.equals(approvingCompany(row));
+            } catch (ApiException unresolved) {
+                return false;
+            }
+        }).toList();
     }
 
     /** 提供主体自己提供的（中央餐饮、城市项目公司自营停车等）由该主体内部差人审批；商户按业态定域主管公司。 */

@@ -72,9 +72,11 @@ public class AuditController implements ExportFileService.Source {
             @RequestParam(name = "to", required = false) String to,
             @RequestParam(name = "limit", defaultValue = "100") int limit) {
         authorizationService.requirePermission("audit.operation_log.view");
+        // 第十八批 BA 段第 324 条 324-R1：读范围见 AuditEventService.ReadScope。
+        AuditEventService.ReadScope scope = AuditEventService.ReadScope.of(authorizationService, "audit.operation_log.view");
         return ApiResponse.ok(service.searchOperationEvents(
                 businessType, businessId, actorId, eventName, parseInstant(from), parseInstant(to), limit,
-                authorizationService.currentMerchantScope().orElse(null)));
+                scope.merchantId(), scope.projectIds()));
     }
 
     @GetMapping("/operation-events/export")
@@ -93,7 +95,8 @@ public class AuditController implements ExportFileService.Source {
         try {
             authorizationService.requirePermission("audit.operation_log.export");
             // 第 23 条 23-R3（PGM:687）：只交出服务端生成的带密码、带暗纹的 PDF。
-            ExportFileService.Table table = operationEventsTable(businessType, businessId, actorId, eventName, from, to, limit);
+            ExportFileService.Table table = operationEventsTable("audit.operation_log.export", businessType, businessId, actorId, eventName,
+                    from, to, limit);
             ExportFileService.ExportFile file = exportFiles.create("audit_operation_events", table.title(), table.filters(), table.columns(),
                     table.rows());
             service.recordSuccess("audit.operation_log.exported", "audit.operation_log.export", "export_file", file.id(), null, null,
@@ -115,7 +118,7 @@ public class AuditController implements ExportFileService.Source {
     @Override
     public ExportFileService.Table viewTable(Map<String, Object> filters) {
         authorizationService.requirePermission("audit.operation_log.view");
-        return operationEventsTable(text(filters, "business_type"), text(filters, "business_id"), text(filters, "actor_id"),
+        return operationEventsTable("audit.operation_log.view", text(filters, "business_type"), text(filters, "business_id"), text(filters, "actor_id"),
                 text(filters, "event_name"), text(filters, "from"), text(filters, "to"), ((Number) filters.get("limit")).intValue());
     }
 
@@ -124,12 +127,15 @@ public class AuditController implements ExportFileService.Source {
         return value == null ? null : value.toString();
     }
 
-    /** 按筛选取操作留痕（商户范围按当前账号）；导出记录 filters 记筛选参数与取数所按的商户范围。 */
-    private ExportFileService.Table operationEventsTable(String businessType, String businessId, String actorId, String eventName,
-            String from, String to, int limit) {
-        String merchant = authorizationService.currentMerchantScope().orElse(null);
+    /**
+     * 按筛选取操作留痕（范围按当前账号与入口权限码，第十八批 BA 段第 324 条 324-R1）；导出记录 filters 记筛选参数与取数所按的商户、项目范围。
+     */
+    private ExportFileService.Table operationEventsTable(String permissionCode, String businessType, String businessId, String actorId,
+            String eventName, String from, String to, int limit) {
+        AuditEventService.ReadScope scope = AuditEventService.ReadScope.of(authorizationService, permissionCode);
         List<AuditEvent> events = service.searchOperationEvents(
-                businessType, businessId, actorId, eventName, parseInstant(from), parseInstant(to), limit, merchant);
+                businessType, businessId, actorId, eventName, parseInstant(from), parseInstant(to), limit, scope.merchantId(),
+                scope.projectIds());
         Map<String, Object> filters = new LinkedHashMap<>();
         filters.put("business_type", businessType);
         filters.put("business_id", businessId);
@@ -138,7 +144,8 @@ public class AuditController implements ExportFileService.Source {
         filters.put("from", from);
         filters.put("to", to);
         filters.put("limit", limit);
-        filters.put("merchant_id", merchant);
+        filters.put("merchant_id", scope.merchantId());
+        filters.put("project_ids", scope.projectIds() == null ? null : new java.util.TreeSet<>(scope.projectIds()));
         return new ExportFileService.Table("操作留痕", filters, EXPORT_COLUMNS, events.stream().map(AuditController::exportRow).toList());
     }
 

@@ -1,4 +1,4 @@
-// 文件版本：V0.03
+// 文件版本：V0.04
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { CnDatePicker } from "../components/CnDatePicker";
@@ -79,7 +79,7 @@ export function OperatingParamsPage({ api, setActionResult, setGlobalError, effe
   async function saveArea() {
     const area = Number(form.areaSqm);
     if (areaInvalid()) {
-      setParamsError("请填写综合体 id 与大于 0 的可经营面积（㎡）");
+      setParamsError("请填写综合体编号与大于 0 的可经营面积（㎡）");
       return;
     }
     setParamsSubmitting(true);
@@ -177,7 +177,7 @@ export function OperatingParamsPage({ api, setActionResult, setGlobalError, effe
 
   async function fetchHolidays() {
     if (!fetchUrl.trim()) {
-      setGlobalError("请填节假日数据源 URL(holiday-cn JSON 格式)");
+      setGlobalError("请填节假日数据源网址(holiday-cn JSON 格式)");
       return;
     }
     const result = await api.post<{ imported?: number }>("/api/v1/analytics/holiday-calendar/fetch", { url: fetchUrl.trim() });
@@ -237,18 +237,18 @@ export function OperatingParamsPage({ api, setActionResult, setGlobalError, effe
           steps={[
             {
               title: "运营面积",
-              description: "填写综合体 id 与大于 0 的可经营面积（㎡）。",
-              validate: () => (areaInvalid() ? "请填写综合体 id 与大于 0 的可经营面积（㎡）" : null),
+              description: "填写综合体编号与大于 0 的可经营面积（㎡）。",
+              validate: () => (areaInvalid() ? "请填写综合体编号与大于 0 的可经营面积（㎡）" : null),
               content: (
                 <>
-                  <label>综合体 id<input aria-label="综合体 id" placeholder="综合体 id" value={form.projectId} onChange={(event) => setForm({ ...form, projectId: event.target.value })} /></label>
+                  <label>综合体编号<input aria-label="综合体编号" placeholder="综合体编号" value={form.projectId} onChange={(event) => setForm({ ...form, projectId: event.target.value })} /></label>
                   <label>可经营面积（㎡）<input aria-label="可经营面积（㎡）" type="number" min="0" placeholder="可经营面积（㎡）" value={form.areaSqm} onChange={(event) => setForm({ ...form, areaSqm: event.target.value })} /></label>
                 </>
               ),
             },
           ]}
           summary={[
-            { label: "综合体 id", value: form.projectId.trim() || "未填写" },
+            { label: "综合体编号", value: form.projectId.trim() || "未填写" },
             { label: "可经营面积（㎡）", value: form.areaSqm.trim() || "未填写" },
           ]}
         />
@@ -259,7 +259,7 @@ export function OperatingParamsPage({ api, setActionResult, setGlobalError, effe
           <button type="button" data-testid="anomaly-config-save" onClick={saveAnomalyConfig}>保存阈值</button>
           <span className="admin-muted-action">当前:可疑 {anomalyConfig?.surgePct === undefined ? "—" : `${(Number(anomalyConfig.surgePct) * 100).toFixed(0)}%`} / 高风险 {anomalyConfig?.highPct === undefined ? "—" : `${(Number(anomalyConfig.highPct) * 100).toFixed(0)}%`};关键指标当日较前一经营日突变超线自动记异常,小基数日不报防误报。</span>
         </div>
-        <h3>节假日日历(节假日对比与异常免报共用;农历+调休每年按国务院公布,URL 抓取或手动录入)</h3>
+        <h3>节假日日历(节假日对比与异常免报共用;农历+调休每年按国务院公布,网址抓取或手动录入)</h3>
         <div className="admin-table-scroll" data-testid="holiday-calendar-section">
           <table className="admin-table" data-testid="holiday-calendar-table">
             <thead><tr><th>年份</th><th>节假日</th><th>起</th><th>止</th><th>来源</th></tr></thead>
@@ -284,8 +284,8 @@ export function OperatingParamsPage({ api, setActionResult, setGlobalError, effe
           <button type="button" data-testid="holiday-save" onClick={saveHoliday}>手动录入</button>
         </div>
         <div className="admin-form-grid" data-testid="holiday-fetch-editor">
-          <label>数据源 URL<input data-testid="holiday-fetch-url" value={fetchUrl} onChange={(e) => setFetchUrl(e.target.value)} placeholder="https://.../2026.json (holiday-cn 格式)" /></label>
-          <button type="button" data-testid="holiday-fetch" onClick={fetchHolidays}>从 URL 抓取</button>
+          <label>数据源网址<input data-testid="holiday-fetch-url" value={fetchUrl} onChange={(e) => setFetchUrl(e.target.value)} placeholder="https://.../2026.json (holiday-cn 格式)" /></label>
+          <button type="button" data-testid="holiday-fetch" onClick={fetchHolidays}>从网址抓取</button>
           <span className="admin-muted-action">抓取失败不影响既有日历;内网不通外网时用手动录入。</span>
         </div>
       </AdminDataState>
@@ -301,7 +301,7 @@ export function OperatingParamsPage({ api, setActionResult, setGlobalError, effe
             {rangeField("minRadiusMeters", "半径下限（米）", "sensitive-range-min")}
             {rangeField("maxRadiusMeters", "半径上限（米）", "sensitive-range-max")}
             <button type="button" data-testid="sensitive-range-save" onClick={() => void saveRange()}>保存授权范围</button>
-            <span className="admin-muted-action">坐标按 GPS 原始坐标（WGS-84）填写；授权半径与半径上下限须同时填写。</span>
+            <span className="admin-muted-action">坐标填定位设备读出的原始经纬度（国际通用坐标系），不要填地图软件换算后的坐标；授权半径与半径上下限须同时填写。</span>
             <span className="admin-muted-action" data-testid="sensitive-range-current">{rangeCurrent || "填写项目编号后查询当前配置"}</span>
           </div>
         </>

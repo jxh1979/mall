@@ -1,4 +1,4 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -73,12 +73,14 @@ describe("InternalPriceCatalogPage 内部结算价目录(ADM-STL-003)", () => {
     fireEvent.change(screen.getByTestId("ipc-form-category"), { target: { value: "spirit" } });
     fireEvent.change(screen.getByTestId("ipc-form-name"), { target: { value: "新款金酒" } });
     fireEvent.change(screen.getByTestId("ipc-form-price"), { target: { value: "68" } });
+    await waitFor(() => expect(screen.queryByTestId("ipc-form-effective-from")).not.toBeNull());
+    fireEvent.change(screen.getByTestId("ipc-form-effective-from"), { target: { value: "2026-12-01" } });
     fireEvent.click(screen.getByTestId("ipc-form-submit"));
     await waitFor(() => expect(post).toHaveBeenCalledWith(
       "/api/v1/settlement/config/internal-price-item",
       expect.objectContaining({
         itemCode: null, merchantId: "m_bar_1", category: "spirit", itemName: "新款金酒",
-        priceCent: 6800, idempotencyKey: expect.any(String),
+        priceCent: 6800, effectiveFrom: "2026-12-01", idempotencyKey: expect.any(String),
       }),
     ));
   });
@@ -94,6 +96,8 @@ describe("InternalPriceCatalogPage 内部结算价目录(ADM-STL-003)", () => {
     fireEvent.change(screen.getByTestId("ipc-form-category"), { target: { value: "parking_credit" } });
     fireEvent.change(screen.getByTestId("ipc-form-name"), { target: { value: "停车抵免（每小时）" } });
     fireEvent.change(screen.getByTestId("ipc-form-price"), { target: { value: "8" } });
+    await waitFor(() => expect(screen.queryByTestId("ipc-form-effective-from")).not.toBeNull());
+    fireEvent.change(screen.getByTestId("ipc-form-effective-from"), { target: { value: "2026-12-01" } });
     fireEvent.click(screen.getByTestId("ipc-form-submit"));
     await waitFor(() => expect(screen.getByTestId("ipc-form-error").textContent).toContain("二选一"));
     expect(post).not.toHaveBeenCalled();
@@ -102,7 +106,8 @@ describe("InternalPriceCatalogPage 内部结算价目录(ADM-STL-003)", () => {
     fireEvent.click(screen.getByTestId("ipc-form-submit"));
     await waitFor(() => expect(post).toHaveBeenCalledWith(
       "/api/v1/settlement/config/internal-price-item",
-      expect.objectContaining({ merchantId: null, providerEntityId: "be_cpc_1", category: "parking_credit", priceCent: 800 }),
+      expect.objectContaining({ merchantId: null, providerEntityId: "be_cpc_1", category: "parking_credit", priceCent: 800,
+        effectiveFrom: "2026-12-01" }),
     ));
   });
 
@@ -122,10 +127,52 @@ describe("InternalPriceCatalogPage 内部结算价目录(ADM-STL-003)", () => {
     fireEvent.change(screen.getByTestId("ipc-form-category"), { target: { value: "spirit" } });
     fireEvent.change(screen.getByTestId("ipc-form-name"), { target: { value: "新款朗姆" } });
     fireEvent.change(screen.getByTestId("ipc-form-price"), { target: { value: "52" } });
+    await waitFor(() => expect(screen.queryByTestId("ipc-form-effective-from")).not.toBeNull());
+    fireEvent.change(screen.getByTestId("ipc-form-effective-from"), { target: { value: "2026-12-01" } });
     fireEvent.click(screen.getByTestId("ipc-form-submit"));
     await waitFor(() => expect(post).toHaveBeenCalledWith(
       "/api/v1/settlement/config/internal-price-item",
-      expect.objectContaining({ merchantId: "m_bar_1", itemName: "新款朗姆", priceCent: 5200 }),
+      expect.objectContaining({ merchantId: "m_bar_1", itemName: "新款朗姆", priceCent: 5200, effectiveFrom: "2026-12-01" }),
+    ));
+  });
+
+  it("267-R1（ENUM:79 一律叫「商品规格」；BSM:1670「内部结算价目录（按商品规格逐项建目录）」；PGM:287）：页头不写 SKU，商家与主体输入框写「编号」", async () => {
+    const get = vi.fn().mockResolvedValue(ROWS);
+    renderPage(makeApi(get));
+    await waitFor(() => expect(screen.getByTestId("ipc-price-sku_bp_p1")).toBeTruthy());
+    expect(document.body.textContent).toContain("内部结算价目录（按商品规格逐项建目录）");
+    expect(document.body.textContent).not.toContain("SKU");
+    expect(screen.getByTestId("ipc-filter-merchant").getAttribute("placeholder")).toBe("商户编号");
+    expect(screen.getByTestId("ipc-form-merchant").getAttribute("placeholder")).toBe("商户编号");
+    expect(screen.getByTestId("ipc-form-entity").getAttribute("placeholder")).toMatch(/^经营主体编号/);
+  });
+
+  // 第十八批 BA 段第 355 条 355-R1（BSM:521「必须填写生效起始日期……按指定日期生效，不即改即生效」；BSM:1671「指定生效时间并只影响后续业务」）：
+  // 保存草案必填生效起始日期并随请求提交；批准后待生效的版本在生效条目表显示「待生效（自某日起）」，草案队列列出生效起始日期。
+  it("355-R1：生效起始日期必填并随草案提交，待生效版本显示待生效（自某日起）", async () => {
+    const scheduled = { ...ROWS[0], id: "row_s", priceCent: 5600, status: "scheduled", effectiveFrom: "2026-12-01" };
+    const draft = { ...ROWS[1], effectiveFrom: "2026-12-05" };
+    const post = vi.fn().mockResolvedValue("sku_bp_p1");
+    renderPage(makeApi(vi.fn().mockResolvedValue([scheduled, draft]), post));
+    await waitFor(() => expect(screen.queryByTestId("ipc-form-effective-from")).not.toBeNull());
+    await waitFor(() => expect(screen.queryByTestId("ipc-active-sku_bp_p1")).not.toBeNull());
+    expect(screen.getByTestId("ipc-active-sku_bp_p1").textContent).toContain("待生效（自 2026-12-01 起）");
+    expect(screen.getByTestId("ipc-draft-sku_bp_p1").textContent).toContain("2026-12-05");
+
+    fireEvent.change(screen.getByTestId("ipc-form-code"), { target: { value: "sku_bp_p1" } });
+    fireEvent.change(screen.getByTestId("ipc-form-merchant"), { target: { value: "m_bar_1" } });
+    fireEvent.change(screen.getByTestId("ipc-form-category"), { target: { value: "spirit" } });
+    fireEvent.change(screen.getByTestId("ipc-form-name"), { target: { value: "威士忌" } });
+    fireEvent.change(screen.getByTestId("ipc-form-price"), { target: { value: "60" } });
+    fireEvent.click(screen.getByTestId("ipc-form-submit"));
+    await waitFor(() => expect(screen.getByTestId("ipc-form-error").textContent).toContain("生效起始日期"));
+    expect(post).not.toHaveBeenCalled();
+
+    fireEvent.change(screen.getByTestId("ipc-form-effective-from"), { target: { value: "2026-12-08" } });
+    fireEvent.click(screen.getByTestId("ipc-form-submit"));
+    await waitFor(() => expect(post).toHaveBeenCalledWith(
+      "/api/v1/settlement/config/internal-price-item",
+      expect.objectContaining({ itemCode: "sku_bp_p1", priceCent: 6000, effectiveFrom: "2026-12-08" }),
     ));
   });
 

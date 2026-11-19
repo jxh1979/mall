@@ -1,6 +1,6 @@
 package com.complex.platform.merchantportal;
 
-// 文件版本：V0.05
+// 文件版本：V0.06
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.entry;
@@ -187,7 +187,6 @@ class MerchantUnreadBillJdbcIntegrationTests {
         access.createRole(new RoleRecord(role, "未读分红审批-" + sfx, null, "platform", "active", now,
                 List.of("finance.dividend.manage", "finance.dividend.view"), null, false, List.of()));
         String submitter = platformUser(role);
-        String approver = platformUser(role);
         String paid = statement(m, plan, "2026-04");
         String approved = statement(m, plan, "2026-05");
         String pending = statement(m, plan, "2026-06");
@@ -196,7 +195,7 @@ class MerchantUnreadBillJdbcIntegrationTests {
         for (String id : List.of(paid, approved, pending)) {
             dividends.submit(id, new DividendActionRequest(UUID.randomUUID().toString(), null));
         }
-        TestSecurityActors.asPlatformAdmin(approver);
+        TestSecurityActors.asMasterAuthority(); // 第十八批 BA 段第 314 条 314-R1：批准只认最高权限本人
         dividends.approve(paid, new DividendActionRequest(UUID.randomUUID().toString(), null));
         // 第十八批 AM 段第 241 条 241-R3：标记发放前主理人分红应付须已付清（本类只核未读账单，付款确认与登记付款见 PaymentConfirmationCompensationDividendJdbcTests）。
         jdbc.update("UPDATE ar_ap_items SET paid_amount_cent = amount_cent, unpaid_amount_cent = 0, status = 'settled'"

@@ -1,6 +1,6 @@
 package com.complex.platform.dividend;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static com.complex.platform.support.DailyCloseFixture.markRangeFinal;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -305,7 +305,8 @@ class DividendOtherShareholdersJdbcIntegrationTests {
                                 + "\"tax_accounting_ref\":\"财税核算" + s + "\",\"resolution_ref\":\"分配决议" + s + "\"}"))
                 .andExpect(status().isOk()).andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8), "$.data.id");
         statementAction(finance, confirmed, "submit", tag).andExpect(status().isOk());
-        statementAction(approver, confirmed, "approve", tag).andExpect(status().isOk()).andExpect(jsonPath("$.data.status").value("approved"));
+        statementAction(master(), confirmed, "approve", tag) // 第十八批 BA 段第 314 条 314-R1：批准只认最高权限本人
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.status").value("approved"));
         return confirmed;
     }
 

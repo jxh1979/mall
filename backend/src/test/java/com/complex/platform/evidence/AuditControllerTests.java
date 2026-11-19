@@ -29,7 +29,7 @@ class AuditControllerTests {
                 "2026-06-14T00:00:00Z", null, 50);
         verify(authz).requirePermission("audit.operation_log.view");
         verify(service).searchOperationEvents("ticket_order", "o_x", "alice", "ticket_refund.approved",
-                Instant.parse("2026-06-14T00:00:00Z"), null, 50, null);
+                Instant.parse("2026-06-14T00:00:00Z"), null, 50, null, null);
     }
 
     @Test

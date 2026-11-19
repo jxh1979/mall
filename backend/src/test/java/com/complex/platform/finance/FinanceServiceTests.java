@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.22
+// 文件版本：V0.23
 
 import com.complex.platform.support.InMemoryAuditEventRepository;
 import com.complex.platform.support.InMemoryIdempotencyRepository;
@@ -1285,10 +1285,12 @@ class FinanceServiceTests {
 
         PageResponse<DailyCloseSummaryRecord> summaries = service.listDailyCloseSummaries(close.id());
         assertThat(summaries.items()).extracting(DailyCloseSummaryRecord::id).doesNotHaveDuplicates();
+        // TOTALS-R1 同类：只断言已知来源各有且只有一行，不断言来源总数（别段新增日结来源不用改本用例）。
         assertThat(summaries.items()).extracting(DailyCloseSummaryRecord::sourceStream)
-                .containsExactlyInAnyOrder(
+                .contains(
                         "official_ticket", "channel_ticket", "bar", "amusement", "supply_cost", "thirdparty_reflow",
-                        "bar_deposit", "low_value_difference");
+                        "bar_deposit", "low_value_difference")
+                .doesNotHaveDuplicates();
         assertThat(summaries.items())
                 .filteredOn(s -> "official_ticket".equals(s.sourceStream()))
                 .extracting(DailyCloseSummaryRecord::amountCent, DailyCloseSummaryRecord::orderCount)

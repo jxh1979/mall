@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.17
+// 文件版本：V0.18
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.List;
@@ -1322,7 +1322,7 @@ class JdbcTicketingRepository implements TicketingRepository {
         // 批10/E:建模板设引用时的归属校验。草案/生效行绑定商户一致(写面禁改绑商户),任取其一。
         return Optional.ofNullable(jdbcTemplate.query("""
                 SELECT merchant_id FROM internal_price_catalog
-                 WHERE item_code = :item_code AND status = 'active'
+                 WHERE item_code = :item_code AND status IN ('active', 'scheduled')
                  ORDER BY is_draft LIMIT 1
                 """, Map.of("item_code", itemCode),
                 rs -> rs.next() ? rs.getString(1) : null));

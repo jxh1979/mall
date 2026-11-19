@@ -1,4 +1,4 @@
-// 文件版本：V0.08
+// 文件版本：V0.09
 import React from "react";
 import { InventoryQuarantinePanel } from "./InventoryQuarantinePanel";
 import { InventoryWarehousePanel } from "./InventoryWarehousePanel";
@@ -28,7 +28,7 @@ const TRACE_CODE_REGISTER_PERMISSION = "inventory.trace_code.register";
 
 const TEXT = {
   title: "库存台账",
-  description: "集中查看物料、库存余额和库存流水，支持按 OpenAPI 契约登记库存移动；负库存禁止，高价值酒水保持在线核销。",
+  description: "集中查看物料、库存余额和库存流水，支持登记库存移动；负库存禁止，高价值酒水保持在线核销。",
   loadFailed: "库存台账读取失败",
   actionFailed: "库存移动登记失败",
   quantityInvalid: "移动数量必须大于 0，禁止负库存调整。",
@@ -46,7 +46,7 @@ const TEXT = {
   traceCode: "追踪码",
   note: "备注",
   submit: "登记库存移动",
-  boundary: "库存移动必须使用 from_location_id、to_location_id、items 和 idempotency_key；高价值酒水不允许离线扣减，异常调整必须留原因和附件证据。",
+  boundary: "库存移动必须填调出库位、调入库位、明细项和提交编号；高价值酒水不允许离线扣减，异常调整必须留原因和附件证据。",
   itemCode: "编码",
   itemName: "名称",
   category: "分类",

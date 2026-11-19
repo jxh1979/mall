@@ -1,4 +1,4 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
@@ -93,7 +93,7 @@ export function MemberLoyaltyConfigPage({ api, setActionResult, setGlobalError, 
   }
 
   async function saveTier() {
-    if (!tierForm.editingId && !writeProjectId()) { setGlobalError("请先在上方填写综合体 id（新增时必填）"); return; }
+    if (!tierForm.editingId && !writeProjectId()) { setGlobalError("请先在上方填写综合体编号（新增时必填）"); return; }
     if (Number(tierForm.streakDays) < 1) { setGlobalError("连续签到天数需为不小于 1 的整数"); return; }
     if (Number(tierForm.awardPoints) < 0) { setGlobalError("奖励积分需为不小于 0 的数字"); return; }
     await api.post("/api/v1/loyalty/config/check-in-tiers", {
@@ -124,7 +124,7 @@ export function MemberLoyaltyConfigPage({ api, setActionResult, setGlobalError, 
         description="会员等级档位/升级门槛/积分倍率与生日加倍规则全平台统一（仅全国范围账号可维护）；连续签到阶梯按综合体维护。改配置不改代码；列表仅显示生效中配置。查看需会员忠诚度查看权限，维护需会员忠诚度维护权限。"
       />
       <div className="admin-form-row" data-testid="loyalty-project-filter">
-        <label>综合体 id<input aria-label="综合体 id 查询" placeholder="综合体 id（留空看平台缺省）" value={projectId} onChange={(e) => setProjectId(e.target.value)} /></label>
+        <label>综合体编号<input aria-label="综合体编号查询" placeholder="综合体编号（留空看平台缺省）" value={projectId} onChange={(e) => setProjectId(e.target.value)} /></label>
         <button type="button" data-testid="loyalty-query" onClick={() => setQuery(projectId)}>查询该综合体配置</button>
         <span className="admin-muted-action">项目级管理员由登录归属自动绑定，无需填写。</span>
       </div>

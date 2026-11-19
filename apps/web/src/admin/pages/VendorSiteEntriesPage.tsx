@@ -1,4 +1,4 @@
-// 文件版本：V0.04
+// 文件版本：V0.05
 import React from "react";
 import { SiteEntryHistory, type SiteEntryHistoryRow } from "./SiteEntryHistory";
 import { formatBusinessStatus } from "../i18n/statusLabels";
@@ -324,8 +324,8 @@ export function VendorSiteEntriesPage({ api, user, setActionResult, setGlobalErr
             validate: () => (form.projectId.trim() && form.spaceId.trim() && form.workScope.trim() ? null : "项目、空间和施工范围不能为空"),
             content: (
               <>
-                <label>项目 id<input data-testid="vendor-site-entry-project" value={form.projectId} onChange={(event) => setField("projectId", event.target.value)} /></label>
-                <label>空间 id<input data-testid="vendor-site-entry-space" value={form.spaceId} onChange={(event) => setField("spaceId", event.target.value)} /></label>
+                <label>项目编号<input data-testid="vendor-site-entry-project" value={form.projectId} onChange={(event) => setField("projectId", event.target.value)} /></label>
+                <label>空间编号<input data-testid="vendor-site-entry-space" value={form.spaceId} onChange={(event) => setField("spaceId", event.target.value)} /></label>
                 <label>施工范围<input data-testid="vendor-site-entry-scope" value={form.workScope} onChange={(event) => setField("workScope", event.target.value)} /></label>
               </>
             ),

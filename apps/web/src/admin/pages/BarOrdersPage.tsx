@@ -1,4 +1,4 @@
-// 文件版本：V0.17
+// 文件版本：V0.18
 import React from "react";
 import { BarBillCheckoutPanel } from "./BarBillCheckoutPanel";
 import { BarRefundBreakdownPanel } from "./BarRefundBreakdownPanel";
@@ -537,7 +537,7 @@ export function BarOrdersPage({ api, user, setActionResult, setGlobalError, effe
       return false;
     }
     if (!voidOrderItemId.trim()) {
-      setFormError("请填写要退的订单明细 ID。");
+      setFormError("请填写要退的订单明细编号。");
       return false;
     }
     if (!voidReason.trim()) {
@@ -894,7 +894,7 @@ export function BarOrdersPage({ api, user, setActionResult, setGlobalError, effe
           已出品的高价值退酒为「先审后行」：申请后账单与库存不动，须主管审批通过才生效，且必须同时选择退酒原因并上传证据（双证据）。低价值或出品前撤单即时生效。是否高价值全平台一套判定：看这瓶酒的进货价有没有高于后台配置的那一个金额阈值，或者它被手工标为高价值；阈值在「结算配置中心」维护，没配置就一律按高价值拦下走审批。
         </p>
         <div className="admin-form-grid" data-testid="bar-void-request-form">
-          <label>订单明细 ID<input data-testid="bar-void-order-item-id" value={voidOrderItemId} onChange={(e) => setVoidOrderItemId(e.target.value)} placeholder="要退的明细 ID" /></label>
+          <label>订单明细编号<input data-testid="bar-void-order-item-id" value={voidOrderItemId} onChange={(e) => setVoidOrderItemId(e.target.value)} placeholder="要退的明细编号" /></label>
           <label>退品说明<input data-testid="bar-void-reason" value={voidReason} onChange={(e) => setVoidReason(e.target.value)} placeholder="例如：客人反馈变质" /></label>
           <label>退酒原因
             <select data-testid="bar-void-reason-code" value={voidReasonCode} onChange={(e) => setVoidReasonCode(e.target.value)}>

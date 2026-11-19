@@ -1,4 +1,4 @@
-// 文件版本：V0.11
+// 文件版本：V0.12
 import React from "react";
 import { payrollDetailFields } from "./StaffPayrollDetail";
 import type { PayrollStatementDetail } from "./staffPayrollTypes";
@@ -105,7 +105,7 @@ export function StaffPayrollLeavePage({ api, user, setGlobalError, setActionResu
   const saveAdjustment = async () => {
     const cent = Math.round(Number(adjAmount) * 100);
     if (!adjUser.trim() || !Number.isFinite(cent) || cent <= 0 || !adjReason.trim()) {
-      setGlobalError("奖惩必须填 员工id/正金额(元)/事由(留痕硬要求)");
+      setGlobalError("奖惩必须填 员工编号/正金额(元)/事由(留痕硬要求)");
       return;
     }
     // 第十八批 W 段 209-R1（PGM:291「含……提示、报错」）：本页四个写操作被后端拒绝时经全局报错显示中文，不记成功、不清空已填内容。
@@ -269,7 +269,7 @@ export function StaffPayrollLeavePage({ api, user, setGlobalError, setActionResu
       <div id="payroll-approved-basis"><StaffPayrollBasisPanel api={api} user={user} effectivePermissions={effectivePermissions} setActionResult={setActionResult} setGlobalError={setGlobalError} month={month} onSettled={result => { detailRequest.current++; setDetail({ title: `薪资单明细 · ${result.statement.userId ?? "—"}`, fields: payrollDetailFields(result) }); void reload(); }} /></div>
       <h3>奖金 / 处罚手录(必须带事由；人力会签＋直属起共三个组织层级复核通过后入账)</h3>
       <div className="admin-form-grid" data-testid="payroll-adj-editor">
-        <label>员工 user_id<input data-testid="adj-user-input" value={adjUser} onChange={(event) => setAdjUser(event.target.value)} /></label>
+        <label>员工编号<input data-testid="adj-user-input" value={adjUser} onChange={(event) => setAdjUser(event.target.value)} /></label>
         <label>类型<select data-testid="adj-type-select" value={adjType} onChange={(event) => setAdjType(event.target.value)}><option value="bonus">激励奖金</option><option value="penalty">处罚扣款</option></select></label>
         <label>金额(元)<input data-testid="adj-amount-input" value={adjAmount} onChange={(event) => setAdjAmount(event.target.value)} /></label>
         <label>事由<input data-testid="adj-reason-input" value={adjReason} onChange={(event) => setAdjReason(event.target.value)} /></label>

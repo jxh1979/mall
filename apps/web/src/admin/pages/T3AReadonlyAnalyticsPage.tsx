@@ -189,7 +189,7 @@ export function T3AReadonlyAnalyticsPage({ api, setGlobalError }: AdminPageProps
 
   return (
     <section data-testid="t3a-readonly-analytics-page">
-      <AdminPageHeader title="T3-A 只读经营分析" description="只读分析视图：聚合机器人、商户健康、员工服务、客户意向、指标定义与指标快照六类只读接口，只看不动、不发任何控制指令。" />
+      <AdminPageHeader title="只读经营分析" description="只读分析视图：聚合机器人、商户健康、员工服务、客户意向、指标定义与指标快照六类只读接口，只看不动、不发任何控制指令。" />
       <AdminDataState loading={loading} error={error} empty={false} onRetry={reload}>
         {/* T3A_READONLY_ANALYTICS_VIEW_START：以下为只读视图区域,禁止任何写/POST(门禁强制)。 */}
         {data ? (

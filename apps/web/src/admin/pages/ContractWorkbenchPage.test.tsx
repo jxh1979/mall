@@ -1,4 +1,4 @@
-// 文件版本：V0.03
+// 文件版本：V0.04
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -1077,8 +1077,10 @@ describe("ContractWorkbenchPage 第十八批 Q 段第 138 条复核修正：已�
     await waitFor(() => expect(screen.queryByTestId("contract-actions-contract-gggg7777")).toBeTruthy());
     fireEvent.click(screen.getByTestId("contract-actions-contract-gggg7777"));
     await waitFor(() => expect(screen.queryByTestId("contract-period-bills-contract-gggg7777")).toBeTruthy());
+    // 第十八批 BA 段第 267 条 267-R3（PGM:287；PGM:645「租金物业费能源费应收」）：按钮与提示写「应收」，不写英文 AR。
+    expect(screen.getByTestId("contract-period-bills-contract-gggg7777").textContent).toContain("排租金应收");
     fireEvent.click(screen.getByTestId("contract-period-bills-contract-gggg7777"));
-    await waitFor(() => expect(setGlobalError).toHaveBeenCalledWith("排租金AR需先选账期（年-月）"));
+    await waitFor(() => expect(setGlobalError).toHaveBeenCalledWith("排租金应收需先选账期（年-月）"));
   });
 });
 
@@ -1111,5 +1113,22 @@ describe("ContractWorkbenchPage 第十八批 V 段第 159 条 159-R4：排租金
     fireEvent.click(screen.getByTestId("contract-period-bills-contract-aaaa1111"));
     await waitFor(() => expect(props.setGlobalError).toHaveBeenCalledWith(`操作冲突：${notFinal}`));
     expect(props.setActionResult).not.toHaveBeenCalled();
+  });
+});
+
+// 第十八批 BA 段收尾复核修正（PGM:287「展示给用户的一切文字，包括菜单、页面标题、字段名、状态、枚举取值、按钮、提示、报错……必须全部为中文」）：
+// 字段名、占位与读屏名里的英文 id 改「编号」；变更说明占位不写英文 payload。
+describe("ContractWorkbenchPage 字段名不夹英文 id（第 267 条收尾复核）", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("正文、占位与读屏名都不出现与中文相邻的 id，变更说明占位不含 payload", async () => {
+    render(<ContractWorkbenchPage {...baseProps()} />);
+    await waitFor(() => expect(screen.getByTestId("contract-contract-aaaa1111")).toBeTruthy());
+    await loadSubTables();
+    const texts = [document.body.textContent ?? "", ...Array.from(document.querySelectorAll("[placeholder],[aria-label]"))
+      .flatMap((el) => [el.getAttribute("placeholder") ?? "", el.getAttribute("aria-label") ?? ""])];
+    for (const text of texts) expect(text).not.toMatch(/[\u4e00-\u9fff] ?id(?![A-Za-z_])|(^|[^A-Za-z_])id ?[\u4e00-\u9fff]/i);
+    expect(screen.getByLabelText("提成-合同编号").getAttribute("placeholder")).toBe("合同编号");
+    expect(screen.getByLabelText("变更说明").getAttribute("placeholder")).toBe("变更说明");
   });
 });

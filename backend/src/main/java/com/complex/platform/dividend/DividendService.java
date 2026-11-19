@@ -1,5 +1,5 @@
 package com.complex.platform.dividend;
-// 文件版本：V0.15
+// 文件版本：V0.16
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.BusinessDayResolver;
@@ -69,7 +69,8 @@ import static com.complex.platform.common.Strings.requireText;
  * （红字更正范式），已进入审批流（pending_review/approved/paid）不重算。
  *
  * <p>写路径统一走 {@link AuditedOperationExecutor#executeWrite}（同键不同载荷抛 IDEMPOTENCY_CONFLICT）。
- * 审批要求 finance.dividend.manage（V299 仅授 role_platform_admin=最高权限审批现状口径）。
+ * 审批要求 finance.dividend.manage；批准与驳回只认持授权 U 盘密钥的最高权限本人，最高权限本人提交即审批通过（第十八批 BA 段第 314 条
+ * 314-R1，BSM:1794、PGM:666、BSM:576）。
  *
  * <p>234-R1 方案版本化（BSM:521）：dividend_plans 每行是一个版本，新版本经最高权限审批后自生效起始日起用（最高权限本人提交直接生效）；
  * 每期出单取该期期末日已生效的版本，计算单 plan_id 固化所用版本。
@@ -1077,8 +1078,9 @@ public class DividendService {
                     PageResponse<DividendStatementRecord> pageResult = repository.pageStatements(
                             blankToNull(scopeMerchant(merchantId)), blankToNull(kind),
                             blankToNull(periodLabel), blankToNull(status), safePage, safeSize);
-                    // S-3：商户 scope（主理人视图）不外发内部操作员 id 与应付款项 id（平台侧全量）。
-                    Optional<String> scoped = authorizationService.currentMerchantScope();
+                    // S-3：商户 scope（主理人视图）不外发内部操作员 id 与应付款项 id（平台侧全量）。314-R1：最高权限按平台视图（裁决 71）。
+                    Optional<String> scoped = authorizationService.isMasterAuthority(authorizationService.currentActor()) ? Optional.empty()
+                            : authorizationService.currentMerchantScope();
                     if (scoped.isEmpty()) {
                         return pageResult;
                     }
@@ -1102,7 +1104,9 @@ public class DividendService {
                 () -> {
                     DividendStatementRecord statement = requireStatement(statementId);
                     checkMerchantOwnership(statement.merchantId());
-                    String scoped = authorizationService.currentMerchantScope().orElse(null);
+                    // 314-R1：最高权限按平台视图（裁决 71）。
+                    String scoped = (authorizationService.isMasterAuthority(authorizationService.currentActor()) ? Optional.<String>empty()
+                            : authorizationService.currentMerchantScope()).orElse(null);
                     // S-3：商户 scope（主理人视图）不外发内部操作员 id 与应付款项 id（平台侧全量）。
                     return new DividendStatementDetailRecord(
                             scoped == null ? statement : statement.forMerchantView(),
@@ -1124,6 +1128,12 @@ public class DividendService {
                     // 273-R2（PGM:436「存在逾期未还借款的一律不得分红」）：该酒吧有逾期未还借款即 409。
                     loans.requireNoOverdue(statement.merchantId(), businessDayResolver.merchantBusinessDate(null, statement.merchantId(), now));
                     requireTransition(repository.markSubmitted(statement.id(), operator, now), "提交审阅");
+                    // 第十八批 BA 段第 314 条 314-R1（BSM:576「持授权 U 盘密钥的最高权限本人发起的操作，不需要经过任何审批。」；234-R1 先例）：
+                    // 最高权限本人提交即在同一事务里审批通过，另落 dividend.approved。
+                    if (authorizationService.isMasterAuthority(authorizationService.currentActor())) {
+                        approveStep(requireStatement(statement.id()), operator, now);
+                        operations.recordDetail("dividend.approved", MANAGE_PERM, STMT_TYPE, statement.id(), java.util.Map.of());
+                    }
                 });
     }
 
@@ -1138,51 +1148,64 @@ public class DividendService {
         return transition(statementId, request, "approveDividendStatement",
                 AuditedOperation.of("dividend.approved", "dividend.approve_failed", MANAGE_PERM, STMT_TYPE),
                 (statement, operator, now) -> {
+                    // 第十八批 BA 段第 314 条 314-R1（BSM:1794「有最高权限的管理者：审批分红单」；PGM:666「由最高权限审批」；BSM:588 最终业务审批不因
+                    // 平台管理员身份自动获得）：批准与驳回只认持授权 U 盘密钥的最高权限本人，照 249-R7 DataCleanupService.approveAndExecute。
+                    if (!authorizationService.isMasterAuthority(authorizationService.currentActor())) {
+                        throw ApiException.forbidden("MASTER_APPROVAL_REQUIRED", "分红单须由最高权限本人审批");
+                    }
                     requireStatus(statement, "pending_review", "只有待审批单可以审批通过");
                     if (operator != null && operator.equals(statement.submittedBy())) {
                         throw ApiException.forbidden("SELF_APPROVAL_FORBIDDEN",
                                 "分红计算单的提交人不能审批自己提交的单；请由另一位审批人处理");
                     }
-                    // 273-R2（PGM:436）：审批时同样不得有逾期未还借款。
-                    loans.requireNoOverdue(statement.merchantId(), businessDayResolver.merchantBusinessDate(null, statement.merchantId(), now));
-                    // V303 欠款抵扣：先按冻结抵扣额对主理人本人欠本酒吧公司的未清应收逐项结算（先欠先抵，dividend_offset 收款；330-R1）。
-                    // 实结 != 冻结额 = 抵扣期间应收被并发清偿——@Transactional 回滚，要求作废重算（快照冻结口径）。
-                    if (statement.arrearsOffsetCent() > 0) {
-                        long settled = payoutPort.applyDividendOffsetToReceivables(
-                                statement.merchantId(), statement.principalUserId(), statement.arrearsOffsetCent(), statement.id());
-                        if (settled != statement.arrearsOffsetCent()) {
-                            throw ApiException.conflict("DIVIDEND_ARREARS_CHANGED",
-                                    "欠款抵扣期间主理人本人的未清欠款发生变化（当前可抵 " + settled + " 分，单据冻结 "
-                                            + statement.arrearsOffsetCent() + " 分）；请作废重算后再审批");
-                        }
-                    }
-                    // 实发额（税后应得 − 欠款抵扣 − 留存）> 0 才给主理人挂应付（立即可付）。
-                    String arApItemId = null;
-                    if (statement.payoutCent() > 0) {
-                        arApItemId = payoutPort.createDividendPayoutPayable(
-                                statement.principalUserId(), statement.merchantId(),
-                                statement.payoutCent(), statement.id(), payoutDueDate(statement, now));
-                    }
-                    // V303 发放保护线留存 → 记为欠主理人的待释放款（非平台白拿；释放为后续 R）。
-                    if (statement.reserveWithheldCent() > 0) {
-                        payoutPort.createDividendReserveWithholdingPayable(
-                                statement.principalUserId(), statement.merchantId(),
-                                statement.reserveWithheldCent(), statement.id());
-                    }
-                    // 234-R2（BSM:1787「分红由该酒吧公司自己从其对公账户支付给主理人与其他股东……发放走应付款项」）：每位其他股东实发 > 0 另挂一笔
-                    // dividend_payout 应付，应付对方与来源都是该股东实发行（不要求平台账户，按单查得到是谁），到期日同为方案发放付账日；
-                    // 登记付款同样过付款确认（第十八批裁决 55、65）。
-                    for (DividendStatementLineRecord line : shareholderPayouts(statement)) {
-                        payoutPort.createShareholderDividendPayable(line.id(), statement.merchantId(), line.amountCent(),
-                                payoutDueDate(statement, now));
-                    }
-                    requireTransition(repository.markApproved(statement.id(), operator, arApItemId, now), "审批通过");
-                    // 审批通过这一步才挂应付、抵欠款（草稿与月度预览会重算作废，不发）。
-                    notifyMerchantAmount(statement.merchantId(), "dividend_issued", statement.payoutCent(),
-                            statement.periodLabel() + " 分红出单：税后应得 " + yuan(statement.principalNetCent()) + "，欠款抵扣 "
-                                    + yuan(statement.arrearsOffsetCent()) + "，留存 " + yuan(statement.reserveWithheldCent()),
-                            now, statement.id());
+                    approveStep(statement, operator, now);
                 });
+    }
+
+    /**
+     * 第十八批 BA 段第 314 条 314-R1：批准这一步（逾期借款核验、欠款抵扣、挂主理人与其他股东应付、置已批准、发金额通知），供最高权限批准与最高权限本人
+     * 提交即审批通过共用（BSM:576）；自审闸只在 {@link #approve} 入口。
+     */
+    private void approveStep(DividendStatementRecord statement, String operator, Instant now) {
+        // 273-R2（PGM:436）：审批时同样不得有逾期未还借款。
+        loans.requireNoOverdue(statement.merchantId(), businessDayResolver.merchantBusinessDate(null, statement.merchantId(), now));
+        // V303 欠款抵扣：先按冻结抵扣额对主理人本人欠本酒吧公司的未清应收逐项结算（先欠先抵，dividend_offset 收款；330-R1）。
+        // 实结 != 冻结额 = 抵扣期间应收被并发清偿——@Transactional 回滚，要求作废重算（快照冻结口径）。
+        if (statement.arrearsOffsetCent() > 0) {
+            long settled = payoutPort.applyDividendOffsetToReceivables(
+                    statement.merchantId(), statement.principalUserId(), statement.arrearsOffsetCent(), statement.id());
+            if (settled != statement.arrearsOffsetCent()) {
+                throw ApiException.conflict("DIVIDEND_ARREARS_CHANGED",
+                        "欠款抵扣期间主理人本人的未清欠款发生变化（当前可抵 " + settled + " 分，单据冻结 "
+                                + statement.arrearsOffsetCent() + " 分）；请作废重算后再审批");
+            }
+        }
+        // 实发额（税后应得 − 欠款抵扣 − 留存）> 0 才给主理人挂应付（立即可付）。
+        String arApItemId = null;
+        if (statement.payoutCent() > 0) {
+            arApItemId = payoutPort.createDividendPayoutPayable(
+                    statement.principalUserId(), statement.merchantId(),
+                    statement.payoutCent(), statement.id(), payoutDueDate(statement, now));
+        }
+        // V303 发放保护线留存 → 记为欠主理人的待释放款（非平台白拿；释放为后续 R）。
+        if (statement.reserveWithheldCent() > 0) {
+            payoutPort.createDividendReserveWithholdingPayable(
+                    statement.principalUserId(), statement.merchantId(),
+                    statement.reserveWithheldCent(), statement.id());
+        }
+        // 234-R2（BSM:1787「分红由该酒吧公司自己从其对公账户支付给主理人与其他股东……发放走应付款项」）：每位其他股东实发 > 0 另挂一笔
+        // dividend_payout 应付，应付对方与来源都是该股东实发行（不要求平台账户，按单查得到是谁），到期日同为方案发放付账日；
+        // 登记付款同样过付款确认（第十八批裁决 55、65）。
+        for (DividendStatementLineRecord line : shareholderPayouts(statement)) {
+            payoutPort.createShareholderDividendPayable(line.id(), statement.merchantId(), line.amountCent(),
+                    payoutDueDate(statement, now));
+        }
+        requireTransition(repository.markApproved(statement.id(), operator, arApItemId, now), "审批通过");
+        // 审批通过这一步才挂应付、抵欠款（草稿与月度预览会重算作废，不发）。
+        notifyMerchantAmount(statement.merchantId(), "dividend_issued", statement.payoutCent(),
+                statement.periodLabel() + " 分红出单：税后应得 " + yuan(statement.principalNetCent()) + "，欠款抵扣 "
+                        + yuan(statement.arrearsOffsetCent()) + "，留存 " + yuan(statement.reserveWithheldCent()),
+                now, statement.id());
     }
 
     /** 234-R2 本单金额大于 0 的其他股东实发行（各挂一笔分红应付，来源＝行 id）。 */
@@ -1197,6 +1220,10 @@ public class DividendService {
         return transition(statementId, request, "rejectDividendStatement",
                 AuditedOperation.of("dividend.rejected", "dividend.reject_failed", MANAGE_PERM, STMT_TYPE),
                 (statement, operator, now) -> {
+                    // 314-R1：驳回同批准，只认最高权限本人。
+                    if (!authorizationService.isMasterAuthority(authorizationService.currentActor())) {
+                        throw ApiException.forbidden("MASTER_APPROVAL_REQUIRED", "分红单须由最高权限本人审批");
+                    }
                     String reason = requireText(request.note(), "note");
                     requireStatus(statement, "pending_review", "只有待审批单可以驳回");
                     requireTransition(repository.markRejected(statement.id(), operator, reason, now), "驳回");
@@ -1357,7 +1384,9 @@ public class DividendService {
                     int safeSize = Math.min(Math.max(pageSize, 1), 200);
                     PageResponse<DividendReserveLedgerRecord> result = repository.pageReserveLedger(
                             blankToNull(scopeMerchant(merchantId)), filter, safePage, safeSize);
-                    if (authorizationService.currentMerchantScope().isEmpty()) {
+                    // 314-R1：最高权限按平台视图（裁决 71）。
+                    if ((authorizationService.isMasterAuthority(authorizationService.currentActor()) ? Optional.<String>empty()
+                            : authorizationService.currentMerchantScope()).isEmpty()) {
                         return result;
                     }
                     // 商户（主理人）视图脱敏：不外发内部操作员 id。
@@ -1567,11 +1596,18 @@ public class DividendService {
         return payDays.payDayOnOrAfter(slot, businessDayResolver.merchantBusinessDate(null, statement.merchantId(), at));
     }
 
+    /** 314-R1（第十八批裁决 71「最高权限什么都能看」；照 265-R1 BarService.listScope）：最高权限不按商户收窄。 */
     private String scopeMerchant(String requested) {
+        if (authorizationService.isMasterAuthority(authorizationService.currentActor())) {
+            return requested;
+        }
         return authorizationService.currentMerchantScope().orElse(requested);
     }
 
     private void checkMerchantOwnership(String resourceMerchantId) {
+        if (authorizationService.isMasterAuthority(authorizationService.currentActor())) {
+            return; // 314-R1：最高权限看全部商户（裁决 71）
+        }
         Optional<String> scope = authorizationService.currentMerchantScope();
         if (scope.isPresent() && !scope.get().equals(resourceMerchantId)) {
             throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN",

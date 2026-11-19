@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -45,6 +45,9 @@ import org.springframework.test.web.servlet.request.RequestPostProcessor;
 })
 @AutoConfigureMockMvc
 class TicketEntitlementPriceGateJdbcIntegrationTests {
+
+    /** 第十八批 BA 段第 355 条 355-R1：内部结算价批准后待生效，到生效起始日期由系统转正（用例里直接调到日转正）。 */
+    @Autowired private com.complex.platform.settlement.InternalPriceScheduledActivationService priceActivation;
 
     private static final ObjectMapper JSON = new ObjectMapper();
 
@@ -110,8 +113,8 @@ class TicketEntitlementPriceGateJdbcIntegrationTests {
         mockMvc.perform(post("/api/v1/settlement/config/internal-price-item").with(session(pricer))
                         .contentType(MediaType.APPLICATION_JSON).content("""
                                 {"idempotency_key": "c236-price-%s", "item_code": "%s", "merchant_id": "%s", "category": "dining",
-                                 "item_name": "套餐", "price_cent": 3000}
-                                """.formatted(suffix, catalogCode, restaurant)))
+                                 "item_name": "套餐", "price_cent": 3000, "effective_from": "%s"}
+                                """.formatted(suffix, catalogCode, restaurant, java.time.LocalDate.now(com.complex.platform.common.LocalZone.ID).plusDays(1))))
                 .andExpect(status().isOk());
         String pass = createPass("a");
         bind(pass, template("入场", "entry", null, null), 5000L, null).andExpect(status().isOk());
@@ -127,6 +130,7 @@ class TicketEntitlementPriceGateJdbcIntegrationTests {
                 String.class, catalogCode);
         mockMvc.perform(post("/api/v1/settlement/config/internal_price_item/" + draft + "/activate").with(session(reviewer)))
                 .andExpect(status().isOk());
+        priceActivation.activateDue(java.time.Instant.now().plus(java.time.Duration.ofDays(2)));
 
         publish(pass).andExpect(status().isOk()).andExpect(jsonPath("$.data.status").value("published"));
     }

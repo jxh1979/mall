@@ -1,4 +1,4 @@
-// 文件版本：V0.05
+// 文件版本：V0.06
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -419,5 +419,15 @@ describe("InventoryLedgerPage 登记物品码（第十八批 L 段 103-R2）", (
       expect.objectContaining({ item_id: "i-1", trace_code: "TRC-001", idempotency_key: expect.any(String) })));
     await waitFor(() => expect(setActionResult).toHaveBeenCalled());
     expect(formatActionResult(setActionResult.mock.calls[0]![0])).toContain("物品码已登记");
+  });
+});
+
+// 第十八批 BA 段收尾复核修正（PGM:287）：页头与边界说明不写 OpenAPI 与原始字段名，字段名照字典中文名。
+describe("InventoryLedgerPage 说明文字不夹英文（第 267 条收尾复核）", () => {
+  it("页头与边界说明写业务说法，不含 OpenAPI 与原始字段名", async () => {
+    renderPage();
+    await waitFor(() => expect(document.body.textContent).toContain("库存移动必须填调出库位、调入库位、明细项和提交编号"));
+    expect(document.body.textContent).not.toContain("OpenAPI");
+    expect(document.body.textContent).not.toMatch(/from_location_id|to_location_id|idempotency_key|(^|[^A-Za-z_])items([^A-Za-z_]|$)/);
   });
 });

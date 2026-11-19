@@ -1,6 +1,6 @@
 package com.complex.platform.evidence;
 
-// 文件版本：V0.14
+// 文件版本：V0.15
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -115,10 +115,11 @@ public class EvidenceEventService {
     public com.complex.platform.common.api.PageResponse<EvidenceEventRecord> listEvents(int page, int size) {
         int safeSize = size <= 0 ? DEFAULT_LIMIT : Math.min(size, MAX_LIMIT);
         int safePage = page < 1 ? 1 : page;
-        String merchantId = authorizationService.currentMerchantScope().orElse(null);
+        // 第十八批 BA 段第 324 条 324-R2：读范围同操作留痕（AuditEventService.ReadScope）。
+        AuditEventService.ReadScope scope = AuditEventService.ReadScope.of(authorizationService, VIEW_PERMISSION);
         return executor.readPageResult(
                 AuditedOperation.of("evidence.event_viewed", "evidence.event_view_failed", VIEW_PERMISSION, "evidence_event"),
-                () -> repository.listPage(safePage, safeSize, merchantId));
+                () -> repository.listPage(safePage, safeSize, scope.merchantId(), scope.projectIds()));
     }
 
     /**

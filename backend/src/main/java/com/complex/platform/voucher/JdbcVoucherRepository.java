@@ -1,6 +1,6 @@
 package com.complex.platform.voucher;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
@@ -69,7 +69,7 @@ class JdbcVoucherRepository implements VoucherRepository {
     public Optional<String> findCatalogItemMerchant(String itemCode) {
         return Optional.ofNullable(jdbcTemplate.query("""
                 SELECT merchant_id FROM internal_price_catalog
-                 WHERE item_code = :item_code AND status = 'active'
+                 WHERE item_code = :item_code AND status IN ('active', 'scheduled')
                  ORDER BY is_draft LIMIT 1
                 """, new MapSqlParameterSource("item_code", itemCode),
                 rs -> rs.next() ? rs.getString(1) : null));

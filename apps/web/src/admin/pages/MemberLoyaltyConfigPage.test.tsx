@@ -1,4 +1,4 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
@@ -79,7 +79,7 @@ describe("MemberLoyaltyConfigPage 会员等级与忠诚度(ADM-CUS-004)", () => 
     expect(screen.queryByLabelText("保级门槛")).toBeNull();
     expect(screen.queryByLabelText("考核周期天数")).toBeNull();
     expect(screen.getByTestId("member-levels-table").textContent).not.toContain("宽限期");
-    fireEvent.change(screen.getByLabelText("综合体 id 查询"), { target: { value: "prj_A" } });
+    fireEvent.change(screen.getByLabelText("综合体编号查询"), { target: { value: "prj_A" } });
     fireEvent.change(screen.getByLabelText("等级代码"), { target: { value: "silver" } });
     fireEvent.change(screen.getByLabelText("等级名称"), { target: { value: "银卡" } });
     fireEvent.click(screen.getByTestId("member-level-save"));
@@ -93,7 +93,7 @@ describe("MemberLoyaltyConfigPage 会员等级与忠诚度(ADM-CUS-004)", () => 
     const setGlobalError = vi.fn();
     renderPage(makeApi(post), setGlobalError);
     await screen.findByTestId("check-in-tiers-table");
-    fireEvent.change(screen.getByLabelText("综合体 id 查询"), { target: { value: "prj_A" } });
+    fireEvent.change(screen.getByLabelText("综合体编号查询"), { target: { value: "prj_A" } });
     fireEvent.change(screen.getByLabelText("连续签到天数"), { target: { value: "0" } });
     fireEvent.change(screen.getByLabelText("签到奖励积分"), { target: { value: "50" } });
     fireEvent.click(screen.getByTestId("check-in-tier-save"));

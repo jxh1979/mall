@@ -1,4 +1,4 @@
-// 文件版本：V0.09
+// 文件版本：V0.10
 import React from "react";
 import { CnDatePicker } from "../components/CnDatePicker";
 import { AdminDataState } from "../components/AdminDataState";
@@ -540,7 +540,7 @@ export function LeasingWorkbenchPage({ api, user, setActionResult, setGlobalErro
       return;
     }
     if (!signMerchantId) { setFormError("请选择签约商户。"); return; }
-    if (!signSubjectId) { setFormError("请选择合同主体（经营主体），不能用商户 id 顶替。"); return; }
+    if (!signSubjectId) { setFormError("请选择合同主体（经营主体），不能用商户编号顶替。"); return; }
     if (signTurnoverOnly && !(Number(signDepositYuan) > 0)) { setFormError("纯提成合同须填写合同约定押金（元），不得为零。"); return; }
     if (!signEffectiveDate || !signExpiryDate) { setFormError("请填写合同生效日和到期日。"); return; }
     const request = {

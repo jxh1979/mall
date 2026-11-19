@@ -170,19 +170,19 @@ export function IntegrationChannelMapsPage({ api, setActionResult, setGlobalErro
             ))}
           </select>
           <input
-            placeholder="渠道商品编号（团购套餐 id）"
+            placeholder="渠道商品编号（团购套餐编号）"
             value={ticketForm.externalProductId}
             onChange={(event) => setTicketForm({ ...ticketForm, externalProductId: event.target.value })}
             data-testid="ticket-map-product"
           />
           <input
-            placeholder="本地票种 id"
+            placeholder="本地票种编号"
             value={ticketForm.ticketTypeId}
             onChange={(event) => setTicketForm({ ...ticketForm, ticketTypeId: event.target.value })}
             data-testid="ticket-map-ticket-type"
           />
           <input
-            placeholder="价格规则 id（选填=渠道团购价）"
+            placeholder="价格规则编号（选填=渠道团购价）"
             value={ticketForm.priceRuleId}
             onChange={(event) => setTicketForm({ ...ticketForm, priceRuleId: event.target.value })}
             data-testid="ticket-map-price-rule"
@@ -263,7 +263,7 @@ export function IntegrationChannelMapsPage({ api, setActionResult, setGlobalErro
             data-testid="store-map-store"
           />
           <input
-            placeholder="本地商户 id"
+            placeholder="本地商户编号"
             value={storeForm.merchantId}
             onChange={(event) => setStoreForm({ ...storeForm, merchantId: event.target.value })}
             data-testid="store-map-merchant"

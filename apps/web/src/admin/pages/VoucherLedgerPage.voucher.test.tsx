@@ -1,5 +1,5 @@
-// 文件版本：V0.01
-import { render, screen, waitFor } from "@testing-library/react";
+// 文件版本：V0.02
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { VoucherLedgerPage } from "./VoucherLedgerPage";
 import type { AdminApiClient, AdminPageProps } from "../types";
@@ -63,5 +63,34 @@ describe("券台账：商户折扣券只在结账时抵扣核销", () => {
 
     await waitFor(() => expect(screen.getByTestId("voucher-redeem-open-vi_c")).toBeTruthy());
     expect(screen.queryByTestId("voucher-redeem-open-vi_d")).toBeNull();
+  });
+});
+
+// 第十八批 BA 段第 267 条 267-R2（PGM:287「……字段名……提示、报错……必须全部为中文」）：券台账字段名、占位提示里的「ID」改「编号」。
+describe("券台账字段名不出现英文 ID（第 267 条）", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it("客人筛选与发放券表单写「客人编号」，字段名与占位提示都不含 ID", async () => {
+    const api = {
+      get: vi.fn().mockResolvedValue([]),
+      getPaged: vi.fn(async (url: string) => {
+        if (url.includes("/vouchers/definitions")) return { items: DEFINITIONS, total: 3, page: 1, size: 200 };
+        if (url.includes("/vouchers/instances")) return { items: INSTANCES, total: 3, page: 1, size: 20 };
+        return { items: [], total: 0, page: 1, size: 20 };
+      }),
+      post: vi.fn(), put: vi.fn(), patch: vi.fn(), delete: vi.fn(),
+    } as unknown as AdminApiClient;
+    const props: AdminPageProps = {
+      api, user: { id: "u1", username: "admin", accountType: "platform_admin" },
+      setActionResult: vi.fn(), setGlobalError: vi.fn(),
+      effectivePermissions: { status: "ready", value: { wildcard: true, grants: [], denies: [] } },
+    };
+    render(<VoucherLedgerPage {...props} />);
+
+    await waitFor(() => expect(screen.getByTestId("voucher-redeem-open-vi_g")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("voucher-issue-open"));
+    await waitFor(() => expect(screen.getByTestId("voucher-issue-guided").textContent).toContain("客人编号"));
+    for (const label of Array.from(document.querySelectorAll("label"))) expect(label.textContent).not.toMatch(/(^|[^A-Za-z])ID([^A-Za-z]|$)/);
+    for (const el of Array.from(document.querySelectorAll("[placeholder]"))) expect(el.getAttribute("placeholder")).not.toMatch(/(^|[^A-Za-z])ID([^A-Za-z]|$)/);
   });
 });

@@ -1,4 +1,4 @@
-// 文件版本：V0.13
+// 文件版本：V0.14
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
@@ -1386,7 +1386,7 @@ export function TicketingPoliciesPage({ api, user, setActionResult, setGlobalErr
         </>
       )}
 
-      <h4 data-testid="combo-price-check-title">定价核算{draftVersion ? "（草稿版）" : ""}（系统算出售价 vs 你填的售价）</h4>
+      <h4 data-testid="combo-price-check-title">定价核算{draftVersion ? "（草稿版）" : ""}（系统算出售价对比你填的售价）</h4>
       <div className="admin-preview">
         通票的售价不用自己拍脑袋：各业态价格加起来、再按票种折扣打一下，系统就算出该卖多少。
         你可以在这个数上下调一点凑个好卖的整数（尾数按后台配置），但差得太多就是填错了——超过后台配的允许误差，这张票不许开卖。
@@ -1691,7 +1691,7 @@ export function TicketingPoliciesPage({ api, user, setActionResult, setGlobalErr
             {merchants.map((m) => (<option key={m.id} value={m.id}>{m.merchantName}</option>))}
           </select>
         ) : (
-          <input aria-label="外部餐厅id" placeholder="外部合作餐厅 id" value={pvConfig.partnerId} onChange={(e) => setPvConfig({ ...pvConfig, partnerId: e.target.value })} />
+          <input aria-label="外部餐厅编号" placeholder="外部合作餐厅编号" value={pvConfig.partnerId} onChange={(e) => setPvConfig({ ...pvConfig, partnerId: e.target.value })} />
         )}
         {pvConfig.settlementMode === "internal_purchased" ? (
           <input aria-label="内部结算价（元）" type="number" min={0} step="0.01" placeholder="内部结算价（元）" value={pvConfig.internalYuan} onChange={(e) => setPvConfig({ ...pvConfig, internalYuan: e.target.value })} />

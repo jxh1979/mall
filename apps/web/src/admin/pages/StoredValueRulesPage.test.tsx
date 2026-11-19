@@ -18,7 +18,7 @@ describe("StoredValueRulesPage 储值规则配置(ADM-CUS-005)", () => {
   it("查询商户后读回商户卡规则", async () => {
     const api = makeApi();
     renderPage(api);
-    fireEvent.change(screen.getByLabelText("商户 id"), { target: { value: "m1" } });
+    fireEvent.change(screen.getByLabelText("商户编号"), { target: { value: "m1" } });
     fireEvent.click(screen.getByTestId("stored-value-query"));
     await waitFor(() => expect(api.get).toHaveBeenCalledWith("/api/v1/loyalty/stored-value/merchant-refund-rules/m1"));
     await waitFor(() => expect(screen.getByTestId("stored-value-current")).toBeTruthy());
@@ -27,7 +27,7 @@ describe("StoredValueRulesPage 储值规则配置(ADM-CUS-005)", () => {
   it("保存发卡与资金模式走 merchant-card-config", async () => {
     const post = vi.fn().mockResolvedValue({});
     renderPage(makeApi(post));
-    fireEvent.change(screen.getByLabelText("商户 id"), { target: { value: "m1" } });
+    fireEvent.change(screen.getByLabelText("商户编号"), { target: { value: "m1" } });
     fireEvent.click(screen.getByTestId("stored-value-query"));
     await waitFor(() => expect(screen.getByTestId("stored-value-card-config-form")).toBeTruthy());
     fireEvent.change(screen.getByLabelText("发卡资格"), { target: { value: "on" } });
@@ -46,7 +46,7 @@ describe("StoredValueRulesPage 储值规则配置(ADM-CUS-005)", () => {
     renderPage(makeApi());
     await waitFor(() => expect(screen.queryByText(/综合体通用卡充值赠送比例在「门票积分、成长值与销售责任」页提交审批/)).not.toBeNull());
     expect(screen.queryByTestId("stored-value-bonus-policy-form")).toBeNull();
-    fireEvent.change(screen.getByLabelText("商户 id"), { target: { value: "m1" } });
+    fireEvent.change(screen.getByLabelText("商户编号"), { target: { value: "m1" } });
     fireEvent.click(screen.getByTestId("stored-value-query"));
     await waitFor(() => expect(screen.getByLabelText("资金模式")).toBeTruthy());
     expect(screen.queryByRole("option", { name: /平台代收/ })).toBeNull();
@@ -56,7 +56,7 @@ describe("StoredValueRulesPage 储值规则配置(ADM-CUS-005)", () => {
   it("退款比例按百分比转基点后 POST", async () => {
     const post = vi.fn().mockResolvedValue({});
     renderPage(makeApi(post));
-    fireEvent.change(screen.getByLabelText("商户 id"), { target: { value: "m1" } });
+    fireEvent.change(screen.getByLabelText("商户编号"), { target: { value: "m1" } });
     fireEvent.click(screen.getByTestId("stored-value-query"));
     await waitFor(() => expect(screen.getByTestId("stored-value-refund-rule-form")).toBeTruthy());
     fireEvent.change(screen.getByLabelText("可退比例"), { target: { value: "50" } });

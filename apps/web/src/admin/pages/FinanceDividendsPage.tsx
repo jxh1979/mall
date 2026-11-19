@@ -1,4 +1,4 @@
-// 文件版本：V0.08
+// 文件版本：V0.09
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
@@ -168,11 +168,11 @@ export function shareholdersDetailText(plan: DividendPlanRow): string {
 const TEXT = {
   title: "持股分红",
   description:
-    "平台持股 + 主理人经营的分红周期作业：期间收入 − 销货成本（V296 成本台账）− 费用（V297 费用台账）− 该期税费（已生效的税费实际申报金额）= 净利润，娱乐平台公司、主理人和其他股东按工商登记持股比例分配（各方各自四舍五入，尾差单列由该酒吧公司承担），个人股东按全平台统一税率代扣股息红利个税（见页末税率配置）、公司股东不代扣，主理人与其他股东的净额各挂应付发放。比例/周期/计入收入域按方案配，销货成本、全部费用与该期税费一律扣减，80/20 仅为新建预填建议值；每期算式逐项留痕可追溯。",
+    "平台持股 + 主理人经营的分红周期作业：期间收入 − 销货成本（成本台账）− 费用（费用台账）− 该期税费（已生效的税费实际申报金额）= 净利润，娱乐平台公司、主理人和其他股东按工商登记持股比例分配（各方各自四舍五入，尾差单列由该酒吧公司承担），个人股东按全平台统一税率代扣股息红利个税（见页末税率配置）、公司股东不代扣，主理人与其他股东的净额各挂应付发放。比例/周期/计入收入域按方案配，销货成本、全部费用与该期税费一律扣减，80/20 仅为新建预填建议值；每期算式逐项留痕可追溯。",
   loadFailed: "分红数据读取失败",
   detailFailed: "计算单明细读取失败",
   merchantRequired: "请选择商户。",
-  principalRequired: "请填写主理人账户 ID（工商登记持股的真实股东）。",
+  principalRequired: "请填写主理人账户编号（工商登记持股的真实股东）。",
   shareInvalid: "平台比例须在 0~100 之间。",
   shareBoundsInvalid: "平台（参股方）比例须同时配置上下限，且比例须在上下限之内",
   domainRequired: "至少勾选一个计入收入域。",
@@ -212,7 +212,9 @@ function nextKey(prefix: string) {
 }
 
 function makeResult(action: string, request: Record<string, unknown>, result: unknown) {
-  return { action, idempotencyKey: request.idempotencyKey, result };
+  // 第十八批 BA 段第 314 条 314-R1（BSM:576）：最高权限本人提交即审批通过，提交返回已审批的单时按「分红已批准」提示。
+  const approvedAtOnce = action === "dividend_submitted" && (result as { status?: string } | null)?.status === "approved";
+  return { action: approvedAtOnce ? "dividend_approved" : action, idempotencyKey: request.idempotencyKey, result };
 }
 
 function merchantLabel(merchant: MerchantAdmissionRow): string {
@@ -989,7 +991,7 @@ export function FinanceDividendsPage({ api, setActionResult, setGlobalError, eff
                   {merchantOptions.length === 0 ? <option value="">（暂无商户）</option> : null}
                   {merchantOptions.map((m) => <option key={m.id} value={m.id}>{merchantLabel(m)}</option>)}
                 </select></label>
-                <label>主理人账户 ID<input data-testid="dividend-plan-principal" type="text" value={planForm.principalUserId} onChange={(event) => setPlanForm({ ...planForm, principalUserId: event.target.value })} placeholder="如 usr_xxx（系统内账户）" /></label>
+                <label>主理人账户编号<input data-testid="dividend-plan-principal" type="text" value={planForm.principalUserId} onChange={(event) => setPlanForm({ ...planForm, principalUserId: event.target.value })} placeholder="如 usr_xxx（系统内账户）" /></label>
                 <label>主理人姓名（选填）<input data-testid="dividend-plan-principal-name" type="text" value={planForm.principalName} onChange={(event) => setPlanForm({ ...planForm, principalName: event.target.value })} /></label>
               </>
             ),
@@ -1093,7 +1095,7 @@ export function FinanceDividendsPage({ api, setActionResult, setGlobalError, eff
                   <>
                     <label>留存比例（%）<input data-testid="dividend-plan-floor-percent" type="number" step="0.01" min="0" max="100" value={planForm.payoutFloorPercent} onChange={(event) => setPlanForm({ ...planForm, payoutFloorPercent: event.target.value })} /></label>
                     <label>留存固定额（元）<input data-testid="dividend-plan-floor-fixed" type="number" step="0.01" min="0" value={planForm.payoutFloorFixedYuan} onChange={(event) => setPlanForm({ ...planForm, payoutFloorFixedYuan: event.target.value })} /></label>
-                    <span className="admin-muted-action">留存 = 抵扣后余额 与 max(余额×比例, 固定额) 取小（钳到可发额上限，实发不为负）。</span>
+                    <span className="admin-muted-action">留存 = 抵扣后余额 与（余额×比例与固定额取较大者）取小（钳到可发额上限，实发不为负）。</span>
                     <label>留存释放时点<select data-testid="dividend-plan-release-mode" value={planForm.reserveReleaseMode} onChange={(event) => setPlanForm({ ...planForm, reserveReleaseMode: event.target.value })}>
                       {Object.entries(RESERVE_RELEASE_MODE_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
                     </select></label>

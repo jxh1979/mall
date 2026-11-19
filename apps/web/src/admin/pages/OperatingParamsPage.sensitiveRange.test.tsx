@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import AdminApp from "../AdminApp";
@@ -47,6 +47,9 @@ describe("经营参数页 敏感操作授权范围（按项目）", () => {
     // 先等页面被动加载落定（表格出现）与新区块出现，再操作。
     await waitFor(() => expect(screen.queryByTestId("operating-params-table")).not.toBeNull());
     await waitFor(() => expect(screen.queryByTestId("sensitive-range-project")).not.toBeNull());
+    // 第十八批 BA 段收尾复核修正（PGM:287）：坐标说明不写 GPS、WGS-84。
+    expect(screen.getByTestId("sensitive-range-editor").textContent).toContain("国际通用坐标系");
+    expect(screen.getByTestId("sensitive-range-editor").textContent).not.toMatch(/GPS|WGS/);
     fireEvent.change(screen.getByTestId("sensitive-range-project"), { target: { value: "proj_1" } });
     fireEvent.click(screen.getByTestId("sensitive-range-query"));
     await waitFor(() => expect(screen.getByTestId("sensitive-range-current").textContent ?? "").toContain("未配置"));

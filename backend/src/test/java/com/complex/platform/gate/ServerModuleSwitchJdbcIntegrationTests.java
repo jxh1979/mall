@@ -1,4 +1,4 @@
-// 文件版本：V0.04
+// 文件版本：V0.05
 package com.complex.platform.gate;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -284,7 +284,7 @@ class ServerModuleSwitchJdbcIntegrationTests {
                 .andExpect(jsonPath("$.detail_code").value("TERMINAL_DISABLED"));
     }
 
-    /** 247-R4 (n)：酒吧模块关闭——商品分类（只有酒吧商品页用）403；票务页也用的分类下商品列表照常不判。 */
+    /** 247-R4 (n)：酒吧模块关闭——商品分类（只有酒吧商品页用）403；分类下商品列表（只有票务策略页用，323-R1 起归票务）不受酒吧模块约束。 */
     @Test
     void barModuleOffRejectsCatalogCategoriesButKeepsSharedProductList() throws Exception {
         account(staff, "staff", null, "bar.category.manage", "bar.product.view");
@@ -296,6 +296,81 @@ class ServerModuleSwitchJdbcIntegrationTests {
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.detail_code").value("TERMINAL_DISABLED"));
         notModuleGated(web(get("/api/v1/bar/catalog/products?bar_id=bar_b61sm_" + suffix), session, "web"));
+    }
+
+    /** 第十八批 BA 段第 323 条 323-R1 (o)（PGM:737「关闭后菜单不可见或不可点，接口也要拒绝业务动作。」；PGM:744）：票务模块关闭——
+     *  分类下商品列表（后台只有票务策略页调）403 并按 ticketing 留痕。 */
+    @Test
+    void ticketingModuleOffRejectsBarCatalogProductList() throws Exception {
+        account(staff, "staff", null, "bar.product.view");
+        Cookie[] session = webSession(staff);
+        close("tcs_web_mod_ticketing");
+        int before = moduleRejections("ticketing");
+
+        mockMvc.perform(web(get("/api/v1/bar/catalog/products?bar_id=bar_b73sm_" + suffix), session, "web"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.detail_code").value("TERMINAL_DISABLED"));
+        assertThat(moduleRejections("ticketing")).isEqualTo(before + 1);
+    }
+
+    /** 323-R1 (p)：权限与账号模块关闭——员工账号页建号（同路径列表七页共用，写方法只有该页调）403、不建号；账号列表照常不判。 */
+    @Test
+    void accessModuleOffRejectsCreateUserButKeepsSharedUserList() throws Exception {
+        account(staff, "staff", null, "access.user.view", "access.user.manage");
+        Cookie[] session = webSession(staff);
+        close("tcs_web_mod_access");
+        String username = "b73sm_new_" + suffix;
+
+        mockMvc.perform(withBody(web(post("/api/v1/access/users"), session, "web"), Map.of("idempotency_key", "b73sm-user-" + suffix,
+                        "username", username, "password", "b73-new-user-" + suffix, "account_type", "staff", "status", "active",
+                        "organization_id", "proj_1", "operator_note", "后台手动录入工作人员")))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.detail_code").value("TERMINAL_DISABLED"));
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM access_users WHERE username = ?", Integer.class, username)).isZero();
+        notModuleGated(web(get("/api/v1/access/users"), session, "web"));
+    }
+
+    /** 323-R2 (q)：酒吧模块关闭——存酒列表（只有存酒页调）403；存酒到期提醒节点（只有提醒与留存天数配置页调）不受酒吧模块约束，
+     *  总览模块关闭后 403。 */
+    @Test
+    void savedBottlesFollowStoredWinePageAndReminderPolicyFollowsOverview() throws Exception {
+        account(staff, "staff", null, "bar.saved_bottle.manage", "bar.saved_bottle.reminder_policy.manage");
+        Cookie[] session = webSession(staff);
+        close("tcs_web_mod_bar");
+
+        mockMvc.perform(web(get("/api/v1/inventory/saved-bottles"), session, "web"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.detail_code").value("TERMINAL_DISABLED"));
+        notModuleGated(web(get("/api/v1/inventory/saved-bottles/reminder-policy"), session, "web"));
+
+        close("tcs_web_mod_overview");
+        mockMvc.perform(web(get("/api/v1/inventory/saved-bottles/reminder-policy"), session, "web"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.detail_code").value("TERMINAL_DISABLED"));
+    }
+
+    /** 第十八批 BA 段第 327 条 327-R1 (r)（PGM:737；PGM:744）：卡片退出通知只有商户专区「我的合同」页调——模块开着时发卡商户照常查看；
+     *  商户专区模块关闭后查看与发布都 403，不新增公告。 */
+    @Test
+    void merchantZoneModuleOffRejectsCardExitNotices() throws Exception {
+        String merchant = "mch_b73ce_" + suffix;
+        String shop = "usr_b73ce_" + suffix;
+        account(shop, "staff", merchant, "merchant.portal.card_exit_notice.publish");
+        Cookie[] session = webSession(shop);
+        mockMvc.perform(web(get("/api/v1/merchant-portal/card-exit-notices"), session, "merchant_portal")).andExpect(status().isOk());
+
+        close("tcs_mp_mod_merchant");
+        mockMvc.perform(web(get("/api/v1/merchant-portal/card-exit-notices"), session, "merchant_portal"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.detail_code").value("TERMINAL_DISABLED"));
+        mockMvc.perform(withBody(web(post("/api/v1/merchant-portal/card-exit-notices"), session, "merchant_portal"),
+                        Map.of("idempotency_key", "b73ce-publish-" + suffix, "use_until", LocalDate.now().plusDays(60).toString(),
+                                "refundable", true, "refund_ratio_bps", 10000, "refund_method", "原路退回",
+                                "refund_contact", "前台服务台", "publish_until", LocalDate.now().plusDays(45).toString())))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.detail_code").value("TERMINAL_DISABLED"));
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM merchant_card_exit_notices WHERE merchant_id = ?", Integer.class, merchant))
+                .isZero();
     }
 
     /** 100-R1 (d)：商户专区模块关闭——商户账号不带模块头、改报别的模块都 403；外壳的未读账单提醒同样不给；异议被拒、不落异议，加 X-Forwarded-Prefix 头也一样。 */

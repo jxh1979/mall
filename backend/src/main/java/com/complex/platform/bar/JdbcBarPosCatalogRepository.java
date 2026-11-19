@@ -235,7 +235,7 @@ class JdbcBarPosCatalogRepository {
     Optional<String> findCatalogItemMerchant(String itemCode) {
         return Optional.ofNullable(jdbcTemplate.query("""
                 SELECT merchant_id FROM internal_price_catalog
-                 WHERE item_code = :item_code AND status = 'active'
+                 WHERE item_code = :item_code AND status IN ('active', 'scheduled')
                  ORDER BY is_draft LIMIT 1
                 """, Map.of("item_code", itemCode), rs -> rs.next() ? rs.getString(1) : null));
     }

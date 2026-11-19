@@ -1,12 +1,14 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.UUID;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -210,6 +212,26 @@ class SettlementPoolTrialJdbcIntegrationTests {
 
         assertThat(jdbc.queryForObject("SELECT count(*) FROM merchant_zone_notices WHERE source_id = ? AND merchant_id = ?",
                 Integer.class, global, a)).isEqualTo(1);
+    }
+
+    /**
+     * 309-R1（BSM:752「门票综合服务费（该费与「娱乐平台公司留存」「项目管理费」是同一笔钱，全程只扣一次、不在池内再扣）」；V370 已停用
+     * platform_retention_rules）：契约不再列已停用的「维护项目公司留存比例（草案）」接口，后端也确无该入口（平台管理员带结算配置维护权限调用得 4xx）。
+     */
+    @Test
+    void retiredRetentionEndpointIsNeitherInContractNorServed() throws Exception {
+        MvcResult result = mockMvc.perform(post("/api/v1/settlement/config/retention").with(drafter)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"idempotency_key\":\"ptr_ret_" + suffix + "\",\"project_id\":\"" + fx.project + "\",\"retention_bps\":500}"))
+                .andReturn();
+        assertThat(result.getResponse().getStatus()).isBetween(400, 499);
+
+        Path contract = Path.of("..", "docs", "openapi", "openapi-p0.json");
+        if (!Files.exists(contract)) {
+            contract = Path.of("docs", "openapi", "openapi-p0.json");
+        }
+        assertThat(Files.readString(contract)).doesNotContain("settlementConfigUpsertRetention")
+                .doesNotContain("\"/api/v1/settlement/config/retention\"");
     }
 
     // ───────── helpers ─────────

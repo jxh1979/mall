@@ -302,7 +302,7 @@ export function BarCombosPage({ api, user, setActionResult, setGlobalError, effe
           },
         ]}
         summary={[
-          { label: "酒吧 ID", value: form.barId.trim() || "未填写" },
+          { label: "酒吧编号", value: form.barId.trim() || "未填写" },
           { label: "套餐名", value: form.comboName.trim() || "未填写" },
           { label: "售价（元）", value: form.priceYuan.trim() || "未填写" },
           { label: "内部结算价目录条目", value: form.catalogItemCode.trim() || "不引用" },

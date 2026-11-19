@@ -1,4 +1,4 @@
-// 文件版本：V0.20
+// 文件版本：V0.21
 import React from "react";
 import { FinancePayrollPaymentPanel } from "./FinancePayrollPaymentPanel";
 import { FinanceRefundPanel } from "./FinanceRefundPanel";
@@ -210,7 +210,7 @@ export function FinanceArApLedgerPage({ api, setActionResult, setGlobalError, ef
 
   return (
     <section data-testid="finance-ledger-page">
-      <AdminPageHeader title="应收应付台账" description="P0 完整台账支持应收、应付、部分核销、余额。" />
+      <AdminPageHeader title="应收应付台账" description="完整台账支持应收、应付、部分核销、余额。" />
       <div className="admin-kpi-grid" data-testid="finance-ledger-summary">
         <div className="admin-kpi-card"><span>应收欠费余额（元）</span><strong className="admin-kpi-value--text" data-testid="finance-ledger-kpi-ar">{arBalanceKpi.status === "ready" && arBalanceKpi.value !== null ? centToYuan(arBalanceKpi.value) : "—"}</strong><small>逾期未清·期末时点{arBalanceKpi.status === "ready" ? <MetricDetailLink navigateTo={navigateTo} metric="finance.ar_balance" testid="finance-ledger-metric-detail-ar" /> : null}</small></div>
         <div className="admin-kpi-card"><span>应付欠款余额（元）</span><strong className="admin-kpi-value--text" data-testid="finance-ledger-kpi-ap">{apBalanceKpi.status === "ready" && apBalanceKpi.value !== null ? centToYuan(apBalanceKpi.value) : "—"}</strong><small>逾期未清·期末时点{apBalanceKpi.status === "ready" ? <MetricDetailLink navigateTo={navigateTo} metric="finance.ap_balance" testid="finance-ledger-metric-detail-ap" /> : null}</small></div>

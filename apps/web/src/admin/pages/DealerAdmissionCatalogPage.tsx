@@ -1,4 +1,4 @@
-// 文件版本：V0.06
+// 文件版本：V0.07
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
@@ -260,7 +260,7 @@ export function DealerAdmissionCatalogPage({ api, user, setGlobalError, setActio
     const parsed = draftLines.split("\n").map((l) => l.trim()).filter(Boolean).map((l) => {
       const [itemId, spec, price, tax, restock] = l.split(",").map((s) => s.trim());
       const cent = Math.round(Number(price) * 100);
-      if (!itemId || !Number.isFinite(cent) || cent <= 0) throw new Error(`价格行格式应为「商品id,规格,单价(元),税率%,预计到货日」：${l}`);
+      if (!itemId || !Number.isFinite(cent) || cent <= 0) throw new Error(`价格行格式应为「商品编号,规格,单价(元),税率%,预计到货日」：${l}`);
       return { itemId, spec: spec || "", unitPriceCent: cent, taxRateBps: tax ? Math.round(Number(tax) * 100) : undefined, expectedRestockDate: restock || undefined };
     });
     if (parsed.length === 0) throw new Error("至少一条商品价格");
@@ -293,7 +293,7 @@ export function DealerAdmissionCatalogPage({ api, user, setGlobalError, setActio
   const createInquiry = () => run("dealer_inquiry_created", async () => {
     if (!selected || !contractId) throw new Error("请先选择经销商与合同");
     const qty = Number(inqQty);
-    if (!inqItem.trim() || !Number.isFinite(qty) || qty <= 0) throw new Error("商品 id 与大于 0 的数量必填");
+    if (!inqItem.trim() || !Number.isFinite(qty) || qty <= 0) throw new Error("商品编号与大于 0 的数量必填");
     const q = await api.post<InquiryRow>(`/api/v1/dealers/${encodeURIComponent(selected.id)}/inquiries`, { idempotencyKey: key(), dealerContractId: contractId, itemId: inqItem.trim(), spec: inqSpec.trim() || undefined, quantity: qty });
     setInqItem(""); setInqSpec(""); setInqQty("");
     await loadDealerData(selected);
@@ -419,8 +419,8 @@ export function DealerAdmissionCatalogPage({ api, user, setGlobalError, setActio
           <h3>经销合同：{selected.dealerName}</h3>
           <div className="admin-form-grid" data-testid="dealer-contract-form">
             <label>合同编号<input data-testid="contract-no-input" value={contractNo} onChange={(e) => setContractNo(e.target.value)} /></label>
-            <label>销售主体 id<input data-testid="contract-entity-input" value={salesEntityId} onChange={(e) => setSalesEntityId(e.target.value)} /></label>
-            <label>中心仓 id<input data-testid="contract-warehouse-input" value={warehouseId} onChange={(e) => setWarehouseId(e.target.value)} /></label>
+            <label>销售主体编号<input data-testid="contract-entity-input" value={salesEntityId} onChange={(e) => setSalesEntityId(e.target.value)} /></label>
+            <label>中心仓编号<input data-testid="contract-warehouse-input" value={warehouseId} onChange={(e) => setWarehouseId(e.target.value)} /></label>
             <label>生效日期<input type="date" data-testid="contract-from-input" value={validFrom} onChange={(e) => setValidFrom(e.target.value)} /></label>
             <label>到期日期<input type="date" data-testid="contract-to-input" value={validTo} onChange={(e) => setValidTo(e.target.value)} /></label>
             <PermissionButton permissionsState={effectivePermissions} permissions={["dealer.manage"]} data-testid="contract-create" onClick={() => void createContract()}>登记合同</PermissionButton>
@@ -450,7 +450,7 @@ export function DealerAdmissionCatalogPage({ api, user, setGlobalError, setActio
             <>
               <h3>合同销售价格目录（版本只影响生效后的订单）</h3>
               <div className="admin-form-grid" data-testid="catalog-draft-form">
-                <label>价格明细（每行：商品id,规格,单价元,税率%,预计到货日）
+                <label>价格明细（每行：商品编号,规格,单价元,税率%,预计到货日）
                   <textarea data-testid="catalog-lines-input" value={draftLines} onChange={(e) => setDraftLines(e.target.value)} rows={4} />
                 </label>
                 <label>说明<input data-testid="catalog-note-input" value={draftNote} onChange={(e) => setDraftNote(e.target.value)} /></label>
@@ -509,7 +509,7 @@ export function DealerAdmissionCatalogPage({ api, user, setGlobalError, setActio
 
               <h3>询价（未定价商品）</h3>
               <div className="admin-form-grid" data-testid="inquiry-form">
-                <label>商品 id<input data-testid="inquiry-item-input" value={inqItem} onChange={(e) => setInqItem(e.target.value)} /></label>
+                <label>商品编号<input data-testid="inquiry-item-input" value={inqItem} onChange={(e) => setInqItem(e.target.value)} /></label>
                 <label>规格<input data-testid="inquiry-spec-input" value={inqSpec} onChange={(e) => setInqSpec(e.target.value)} /></label>
                 <label>数量<input data-testid="inquiry-qty-input" value={inqQty} onChange={(e) => setInqQty(e.target.value)} /></label>
                 <PermissionButton permissionsState={effectivePermissions} permissions={["dealer.inquiry.manage"]} data-testid="inquiry-create" onClick={() => void createInquiry()}>登记询价</PermissionButton>

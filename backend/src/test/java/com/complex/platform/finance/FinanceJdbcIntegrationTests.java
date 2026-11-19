@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.13
+// 文件版本：V0.14
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.groups.Tuple.tuple;
@@ -55,6 +55,10 @@ class FinanceJdbcIntegrationTests {
 
     @Autowired
     private FinanceService finance;
+
+    /** 日结汇总的已知来源（同 FinanceService.DAILY_CLOSE_SOURCES，该常量私有故照抄）；TOTALS-R1 只断言各有且只有一行，不断言总数。 */
+    private static final List<String> DAILY_CLOSE_SOURCES = List.of("official_ticket", "channel_ticket", "bar", "amusement",
+            "supply_cost", "thirdparty_reflow", "bar_deposit", "low_value_difference");
 
     @Test
     void dailyCloseLockChecksAcceptNullMerchantScope() {
@@ -515,9 +519,9 @@ class FinanceJdbcIntegrationTests {
         assertThat(JsonPath.<List<Object>>read(body, rowA + ".scope_id")).containsExactly(barA);
         assertThat(JsonPath.<List<Object>>read(body, rowA + ".status")).containsExactly("locked");
         assertThat(JsonPath.<List<Object>>read(body, rowA + ".locked_at")).hasSize(1).doesNotContainNull();
-        mockMvc.perform(get("/api/v1/finance/daily-closes/" + closeA + "/summaries").with(finance))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.items.length()").value(8));
+        assertThat(JsonPath.<List<String>>read(mockMvc.perform(get("/api/v1/finance/daily-closes/" + closeA + "/summaries").with(finance))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString(), "$.data.items[*].source_stream"))
+                .containsAll(DAILY_CLOSE_SOURCES).doesNotHaveDuplicates();
 
         String closeP1 = lockDailyClose(finance, "dcl-p1-" + s, "2998-03-03", "project", p1);
         List<String> ours = List.of(closeA, closeB, closeP1);
@@ -554,9 +558,9 @@ class FinanceJdbcIntegrationTests {
                 .andExpect(jsonPath("$.data.locked_at").doesNotExist())
                 .andReturn().getResponse().getContentAsString();
         String close = JsonPath.read(body, "$.data.id");
-        mockMvc.perform(get("/api/v1/finance/daily-closes/" + close + "/summaries").with(financeBp))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.items.length()").value(8));
+        assertThat(JsonPath.<List<String>>read(mockMvc.perform(get("/api/v1/finance/daily-closes/" + close + "/summaries").with(financeBp))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString(), "$.data.items[*].source_stream"))
+                .containsAll(DAILY_CLOSE_SOURCES).doesNotHaveDuplicates();
         assertThat(lockedDayClose(item)).isNull();
         pay(financeBp, item, "dcf-pay1-" + s).andExpect(status().isOk());
         closeAction(financeBp, close, "lock", "dcf-lk0-" + s).andExpect(status().isConflict())
@@ -1104,9 +1108,9 @@ class FinanceJdbcIntegrationTests {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.items[0].status").value("archived"))
                 .andExpect(jsonPath("$.data.items[0].archived_at").isNotEmpty());
-        mockMvc.perform(get("/api/v1/finance/daily-closes/" + close + "/summaries").with(financeBp))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.items.length()").value(8));
+        assertThat(JsonPath.<List<String>>read(mockMvc.perform(get("/api/v1/finance/daily-closes/" + close + "/summaries").with(financeBp))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString(), "$.data.items[*].source_stream"))
+                .containsAll(DAILY_CLOSE_SOURCES).doesNotHaveDuplicates();
 
         closeAction(financeBp, close, "archive", "dca-ar2-" + s).andExpect(status().isConflict())
                 .andExpect(jsonPath("$.detail_code").value("DAILY_CLOSE_NOT_LOCKED"));

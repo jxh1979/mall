@@ -1,4 +1,4 @@
-// 文件版本：V0.03
+// 文件版本：V0.04
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
@@ -196,7 +196,7 @@ export function WecomComplianceReviewPage({ api, user, setActionResult, setGloba
         <p>永久保存，不自动到期归档、删除或匿名化；此规则不可修改。</p>
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="wecom-retention-policies-table">
-            <thead><tr><th>适用范围</th><th>范围 ID</th><th>保留天数</th><th>到期动作</th><th>启用</th><th>详情</th></tr></thead>
+            <thead><tr><th>适用范围</th><th>范围编号</th><th>保留天数</th><th>到期动作</th><th>启用</th><th>详情</th></tr></thead>
             <tbody>
               {policies.slice(0, 100).map((row) => (
                 <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`wecom-retention-policy-row-${row.id}`}

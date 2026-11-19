@@ -265,7 +265,7 @@ export function AmusementSafetyPage({ api, setActionResult, setGlobalError, effe
 
   async function submitMaintenance() {
     if (!maintForm.projectId || !maintForm.vendorId.trim()) {
-      setGlobalError("提交检修需选择项目并填写维保供应商 id。");
+      setGlobalError("提交检修需选择项目并填写维保供应商编号。");
       return;
     }
     // 229-R1（BSM:1269「……记录检修单位、检修人员、结果和异常原因。」）：不合格须如实写异常说明，不再兜底。
@@ -523,7 +523,7 @@ export function AmusementSafetyPage({ api, setActionResult, setGlobalError, effe
                 {projects.map((p) => (<option key={p.id} value={p.id}>{p.projectName ?? p.id}</option>))}
               </select>
               <input aria-label="检修设备码" placeholder="设备码（可空）" value={maintForm.deviceId} onChange={(e) => setMaintForm({ ...maintForm, deviceId: e.target.value })} />
-              <input aria-label="维保供应商id" placeholder="维保供应商 id" value={maintForm.vendorId} onChange={(e) => setMaintForm({ ...maintForm, vendorId: e.target.value })} />
+              <input aria-label="维保供应商编号" placeholder="维保供应商编号" value={maintForm.vendorId} onChange={(e) => setMaintForm({ ...maintForm, vendorId: e.target.value })} />
               <input aria-label="工程师" placeholder="工程师（可空）" value={maintForm.engineerName} onChange={(e) => setMaintForm({ ...maintForm, engineerName: e.target.value })} />
               <select aria-label="检修结果" value={maintForm.result} onChange={(e) => setMaintForm({ ...maintForm, result: e.target.value })}>
                 <option value="pass">合格（可复工）</option>

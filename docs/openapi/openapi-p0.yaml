@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: 综合体管理系统 P0 API 契约
-  version: V0.85
+  version: V0.86
   description: P0 首批编码前置契约。本文采用 JSON-compatible YAML，便于与 openapi-p0.json 保持一致。正式后端以 Java 21 + Spring Boot 4.x +
     springdoc-openapi 输出运行时 OpenAPI，并与本契约比对。
 servers:
@@ -511,8 +511,7 @@ paths:
         - access
       operationId: createAccessUser
       summary: 创建权限用户
-      description: 后台手动创建工作人员/商户/销售账号。必须绑定 organization_id；销售、商户员工、商户管理员必须绑定 merchant_id；密码仅用于写入生产登录凭证哈希；手机号不落明文。
-        18F：外包账号带商户时，商户不在该项目经营（主项目或已批准的经营项目；自营商户另可挂在其经营主体公司）403 MERCHANT_NOT_IN_PROJECT、不建账号。
+      description: "后台手动创建外部协作机构账号（外包与服务商人员）；公司员工与商户员工须走员工注册申请，本接口对其返回 409 STAFF_REGISTRATION_REQUIRED。必须绑定 organization_id；销售、商户员工、商户管理员必须绑定 merchant_id；密码仅用于写入生产登录凭证哈希；手机号不落明文。 18F：外包账号带商户时，商户不在该项目经营（主项目或已批准的经营项目；自营商户另可挂在其经营主体公司）403 MERCHANT_NOT_IN_PROJECT、不建账号。"
       x-permission: access.user.manage
       x-data-scope: project
       x-terminal-allowed:
@@ -4178,6 +4177,7 @@ paths:
         - evidence
       operationId: listEvidenceEvents
       summary: 事件查询
+      description: "第十八批 BA 段第 324 条 324-R2（PGM:899；PGM:682；第十八批裁决 71）：可见范围——最高权限与平台管理员看全部；商户账号看本商户的证据事件；其余不挂商户的账号按 evidence.event.view 可触及的项目，看这些项目内商户的证据事件（不带商户的证据事件在项目口径下不出现）；没有项目归属 403 PROJECT_SCOPE_REQUIRED。"
       x-permission: evidence.event.view
       x-data-scope: project-object
       x-terminal-allowed:
@@ -7111,6 +7111,8 @@ paths:
           $ref: "#/components/responses/Success"
         "400":
           $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
         "409":
           $ref: "#/components/responses/Error"
         "429":
@@ -7142,6 +7144,8 @@ paths:
         "200":
           $ref: "#/components/responses/Success"
         "400":
+          $ref: "#/components/responses/Error"
+        "403":
           $ref: "#/components/responses/Error"
         "409":
           $ref: "#/components/responses/Error"
@@ -11544,14 +11548,14 @@ paths:
         - ops
       operationId: submitDataCleanupJob
       summary: 提交数据清理申请
-      description: "第十八批 AE 段第 201 条 201-R7（BSM:576「提交→由具备最高权限的人审批→批量清理」；契约与代码一致，照决策台账 171-R1 先例补契约）：把一条试运行作业提交审批：只有 dry_run 作业能提交，否则 409 DATA_CLEANUP_NOT_DRY_RUN；reason 必填，缺了 400 VALIDATION_FAILED；作业不存在 404 DATA_CLEANUP_JOB_NOT_FOUND。提交后状态为 pending_approval、记下事由；发起人仍记试运行时的登录人，提交不改。持授权 U 盘密钥的最高权限本人提交的不经审批当场执行（第十八批 AO 段第 249 条 249-R7；BSM:576「持授权 U 盘密钥的最高权限本人发起的操作，不需要经过任何审批。」）：同一事务里照 approveDataCleanupJob 批准后的执行段，以提交时刻重算截止时间并标记删除，审批人记本人，作业改 executed，落 data.cleanup.executed（失败 data.cleanup.execute_failed）。须持 data.cleanup.request，否则 403 PERMISSION_DENIED。除上述最高权限本人提交即执行的执行事件外，无审计事件写点。"
+      description: "第十八批 AE 段第 201 条 201-R7（BSM:576「提交→由具备最高权限的人审批→批量清理」；契约与代码一致，照决策台账 171-R1 先例补契约）：把一条试运行作业提交审批：只有 dry_run 作业能提交，否则 409 DATA_CLEANUP_NOT_DRY_RUN；reason 必填，缺了 400 VALIDATION_FAILED；作业不存在 404 DATA_CLEANUP_JOB_NOT_FOUND。提交后状态为 pending_approval、记下事由；发起人仍记试运行时的登录人，提交不改。持授权 U 盘密钥的最高权限本人提交的不经审批当场执行（第十八批 AO 段第 249 条 249-R7；BSM:576「持授权 U 盘密钥的最高权限本人发起的操作，不需要经过任何审批。」）：同一事务里照 approveDataCleanupJob 批准后的执行段，以提交时刻重算截止时间并标记删除，审批人记本人，作业改 executed，落 data.cleanup.executed（失败 data.cleanup.execute_failed）。须持 data.cleanup.request，否则 403 PERMISSION_DENIED。提交成功落 data.cleanup.submitted（business_type data_cleanup_job、business_id 为作业号、操作人为提交人，元数据 reason 为事由去首尾空白；作业行发起人仍记试运行人）；进入服务后的 404、409、400 失败落 data.cleanup.submit_failed；最高权限本人提交依次落 data.cleanup.submitted 与 data.cleanup.executed（第十八批 BA 段第 275 条 275-R1；BSM:576「全程留痕」；PGM:966）。"
       x-permission: data.cleanup.request
       x-data-scope: platform
       x-terminal-allowed:
         - web
       x-idempotency-required: false
-      x-audit-event-success: not_applicable
-      x-audit-event-failure: not_applicable
+      x-audit-event-success: data.cleanup.submitted
+      x-audit-event-failure: data.cleanup.submit_failed
       x-failure-codes:
         - VALIDATION_FAILED
         - DATA_CLEANUP_JOB_NOT_FOUND
@@ -11591,7 +11595,7 @@ paths:
         - ops
       operationId: approveDataCleanupJob
       summary: 审批并执行数据清理
-      description: "第十八批 AE 段第 201 条 201-R7（BSM:576「批量清理，全程留痕、绝不碰在用的活数据」；契约与代码一致，照决策台账 171-R1 先例补契约）：审批一条待审批的清理申请。只认持授权 U 盘密钥的最高权限本人（第十八批 AO 段第 249 条 249-R7；BSM:576「删除一律须由具备最高权限的人审批通过后执行，不设例外」），其他人批准、驳回都 403 MASTER_APPROVAL_REQUIRED「数据清理须由最高权限本人批准」。作业不存在 404 DATA_CLEANUP_JOB_NOT_FOUND；不在 pending_approval 409 DATA_CLEANUP_NOT_PENDING；审批人是该作业发起人 403 DATA_CLEANUP_SELF_APPROVE_FORBIDDEN；decision 只收 approved、rejected（去首尾空白、不分大小写），其他值或不填 400 VALIDATION_FAILED。rejected：状态改 rejected、记审批人与时间。approved：在同一事务里按作业的 older_than_days 以审批时刻重算截止时间，把该范围内已存档超期、尚未删除且没有活引用的行标为已删除（delete_status=approved，行保留可查，有活引用的跳过），作业改 executed，deleted_count 为本次标记条数。只有批准后的执行段落审计事件：成功 data.cleanup.executed，失败 data.cleanup.execute_failed；驳回、上述 404、409、403、400 拒绝都不落事件。须持 data.cleanup.approve，否则 403 PERMISSION_DENIED。"
+      description: "第十八批 AE 段第 201 条 201-R7（BSM:576「批量清理，全程留痕、绝不碰在用的活数据」；契约与代码一致，照决策台账 171-R1 先例补契约）：审批一条待审批的清理申请。只认持授权 U 盘密钥的最高权限本人（第十八批 AO 段第 249 条 249-R7；BSM:576「删除一律须由具备最高权限的人审批通过后执行，不设例外」），其他人批准、驳回都 403 MASTER_APPROVAL_REQUIRED「数据清理须由最高权限本人批准」。作业不存在 404 DATA_CLEANUP_JOB_NOT_FOUND；不在 pending_approval 409 DATA_CLEANUP_NOT_PENDING；审批人是该作业发起人 403 DATA_CLEANUP_SELF_APPROVE_FORBIDDEN；decision 只收 approved、rejected（去首尾空白、不分大小写），其他值或不填 400 VALIDATION_FAILED。rejected：状态改 rejected、记审批人与时间。approved：在同一事务里按作业的 older_than_days 以审批时刻重算截止时间，把该范围内已存档超期、尚未删除且没有活引用的行标为已删除（delete_status=approved，行保留可查，有活引用的跳过），作业改 executed，deleted_count 为本次标记条数。批准后的执行段落 data.cleanup.executed（失败 data.cleanup.execute_failed）；驳回落 data.cleanup.rejected（business_id 为作业号、操作人为审批人；失败 data.cleanup.reject_failed）；上述 404、409、403、400 拒绝不落专用事件（第十八批 BA 段第 275 条 275-R1）。须持 data.cleanup.approve，否则 403 PERMISSION_DENIED。"
       x-permission: data.cleanup.approve
       x-data-scope: platform
       x-terminal-allowed:
@@ -11599,6 +11603,8 @@ paths:
       x-idempotency-required: false
       x-audit-event-success: data.cleanup.executed
       x-audit-event-failure: data.cleanup.execute_failed
+      x-audit-event-success-alternatives:
+        - data.cleanup.rejected
       x-failure-codes:
         - VALIDATION_FAILED
         - DATA_CLEANUP_JOB_NOT_FOUND
@@ -12948,8 +12954,7 @@ paths:
         - terminals
       operationId: upsertTerminalCanaryRollout
       summary: 开启或结束灰度试点
-      description: 开启后该「端 × 能力」进入试点期：白名单内的对象照常，白名单外一律关闭；上面任一层开关关闭仍然压倒灰度白名单。按 (terminal_type, capability_code)
-        唯一，重复提交即覆盖（天然幂等，不需幂等键）。写口限平台级主体。
+      description: "开启后该「端 × 能力」进入试点期：白名单内的对象照常，白名单外一律关闭；上面任一层开关关闭仍然压倒灰度白名单。按 (terminal_type, capability_code) 唯一，重复提交即覆盖（天然幂等，不需幂等键）。写口限平台级主体。第十八批 BA 段第 270 条 270-R1（PGM:739）：terminal_canary.rollout_changed 元数据另记 previous_active（变更前是否在试点，该端×能力首次建行时记 false）。"
       x-permission: terminal.switch.manage
       x-data-scope: project-device
       x-terminal-allowed:
@@ -13179,9 +13184,7 @@ paths:
         - terminals
       operationId: updateCapabilitySwitch
       summary: 修改端能力开关
-      description: 后台修改终端能力开关（terminal_capability_switches）。capability_code 为自由取值，覆盖第三方/支付类预留开关，例如
-        payment.gateway.enabled（支付真实渠道总开关，默认关；关→收款/退款/会员自动续费走内部/占位结算 reserved，不调渠道、不阻塞；开→路由到渠道适配器，当前无真实厂商=占位
-        NOT_CONFIGURED，留接缝）。支付渠道开关/适配器的管理另受 finance.payment_gateway.manage 权限约束。第十四批 OBS-13-04（BSM 第 1598 行「下列三类不在可关闭范围内，不得按类或按条关闭」）：把不可关闭的短信事件开关（sms.notify.stored_value.topup/consume、sms.notify.stored_wine.expiring、sms.notify.bar_reservation.deposit_forfeited/deposit_refunded、sms.notify.merchant_fee.rent/utilities/property、sms.notify.points.bill）置为关闭一律 409 SMS_NOTIFICATION_NOT_CLOSABLE「该短信提醒属于不可关闭的通知，不能关闭」，记失败审计，开关保持原值；这些事件发送时不看总开关、域开关、事件开关。商户费用催缴另用 sms.notify.merchant_fee.*_dunning 事件开关，仍可关闭。
+      description: "后台修改终端能力开关（terminal_capability_switches）。capability_code 为自由取值，覆盖第三方/支付类预留开关，例如 payment.gateway.enabled（支付真实渠道总开关，默认关；关→收款/退款/会员自动续费走内部/占位结算 reserved，不调渠道、不阻塞；开→路由到渠道适配器，当前无真实厂商=占位 NOT_CONFIGURED，留接缝）。支付渠道开关/适配器的管理另受 finance.payment_gateway.manage 权限约束。第十四批 OBS-13-04（BSM 第 1598 行「下列三类不在可关闭范围内，不得按类或按条关闭」）：把不可关闭的短信事件开关（sms.notify.stored_value.topup/consume、sms.notify.stored_wine.expiring、sms.notify.bar_reservation.deposit_forfeited/deposit_refunded、sms.notify.merchant_fee.rent/utilities/property、sms.notify.points.bill）置为关闭一律 409 SMS_NOTIFICATION_NOT_CLOSABLE「该短信提醒属于不可关闭的通知，不能关闭」，记失败审计，开关保持原值；这些事件发送时不看总开关、域开关、事件开关。商户费用催缴另用 sms.notify.merchant_fee.*_dunning 事件开关，仍可关闭。第十八批 BA 段第 270 条 270-R1（PGM:739「开关配置的每一次变更——包括模块级开关——都必须记录变更人、变更时间、变更前后的取值与影响范围。」；PGM:742）：成功事件 terminal_switch.changed 的元数据记 previous_enabled（变更前取值；该号开关行不存在而新建时记 false）、enabled，以及保存后该行的 terminal_type、capability_code、scope_type、scope_id（影响范围）；同一幂等键重放不重复落事件。"
       x-permission: terminal.switch.manage
       x-data-scope: project-device
       x-terminal-allowed:
@@ -16018,7 +16021,7 @@ paths:
         - platform
       operationId: approveSupervisorReview
       summary: 主管审批或驳回复核记录
-      description: 平台治理主管复核与基础定义违规阻断接口，用于高风险业务动作的可验证拦截、审批和留痕。复核单为授权申请（object_type=access_grant_request）且待审时转入授权申请审批，与 reviewAccessGrantRequest 同一门禁：access.grant_request.review 与 governance.supervisor_review.approve 一次核验（员工显式拒绝优先，最高权限会话同样受约束；同一单次授予来源只消耗一次），缺任一即 403 PERMISSION_DENIED，不推进审批节点、不落地。 18E：通过与驳回之前的读取按 governance.supervisor_review.approve 可触及的项目判发起人账号归属（持可跨项目角色的含该角色可查看的项目）；发起人不在其内、又不是当前审批人、被转发人或发起人本人的，403（SUPERVISOR_REVIEW_SCOPE_FORBIDDEN）；最高权限逐笔开放不变。 第十八批 AL 段 223-R1（BSM:1751「高价值差异复核通过才入账、同一差异只入账一次」）：对账差异关闭复核（action_type=finance.reconciliation_difference.close）终审通过、差异转已关闭时，提交时勾选 ledger_entry 的向原往来方入应收应付台账（写 ar_ap_items，source_type=reconciliation_difference，source_id 为差异号）；落账营业日已锁定 409 DAY_CLOSE_LOCKED，整笔审批不生效。第十八批 AL 段 245-R1（ENUM:190「日结锁定后的补录须上级审批」）：日结锁定后补录（action_type=finance.locked_backfill.review，object_type=ar_ap_adjustment）终审通过即按补录类型落账（见 requestArApAdjustment），落账各闸不过整笔审批不生效、补录与复核单保持待审；驳回不改账。第十八批 AM 段第 241 条 241-R1（BSM:1803「主线与各条平行线都通过才完成付款确认」）：付款确认（action_type=finance.payment_confirm.＜支付类型＞，object_type=payment_confirmation，object_id 为付款确认单号）全部节点通过即该确认转已通过（approved），任一节点驳回即转已驳回（rejected），驳回后可重新发起。锁账收付款补录终审落账的付款确认闸见 requestArApAdjustment：应付及付款方是平台主体的 8 个来源（含第十八批 AZ 段第 350 条 350-R1通用卡消费结算 general_card_consume）的应收未确认时 409 PAYMENT_CONFIRMATION_REQUIRED，补录与复核单保持待审。第十八批 AV 段第 306 条 306-R1（PGM:899「谁发起、谁销售、谁服务、谁第一个处理异常、为什么、谁审批、结果是什么，都要能查到。」）：整单终态（通过或驳回）的 evidence_attachment_ids 为提交时凭证在前、并上审批人本次所附凭证（去重保序），不覆盖提交时凭证。
+      description: "平台治理主管复核与基础定义违规阻断接口，用于高风险业务动作的可验证拦截、审批和留痕。复核单为授权申请（object_type=access_grant_request）且待审时转入授权申请审批，与 reviewAccessGrantRequest 同一门禁：access.grant_request.review 与 governance.supervisor_review.approve 一次核验（员工显式拒绝优先，最高权限会话同样受约束；同一单次授予来源只消耗一次），缺任一即 403 PERMISSION_DENIED，不推进审批节点、不落地。 18E：通过与驳回之前的读取按 governance.supervisor_review.approve 可触及的项目判发起人账号归属（持可跨项目角色的含该角色可查看的项目）；发起人不在其内、又不是当前审批人、被转发人或发起人本人的，403（SUPERVISOR_REVIEW_SCOPE_FORBIDDEN）；最高权限逐笔开放不变。 第十八批 AL 段 223-R1（BSM:1751「高价值差异复核通过才入账、同一差异只入账一次」）：对账差异关闭复核（action_type=finance.reconciliation_difference.close）终审通过、差异转已关闭时，提交时勾选 ledger_entry 的向原往来方入应收应付台账（写 ar_ap_items，source_type=reconciliation_difference，source_id 为差异号）；落账营业日已锁定 409 DAY_CLOSE_LOCKED，整笔审批不生效。第十八批 AL 段 245-R1（ENUM:190「日结锁定后的补录须上级审批」）：日结锁定后补录（action_type=finance.locked_backfill.review，object_type=ar_ap_adjustment）终审通过即按补录类型落账（见 requestArApAdjustment），落账各闸不过整笔审批不生效、补录与复核单保持待审；驳回不改账。第十八批 AM 段第 241 条 241-R1（BSM:1803「主线与各条平行线都通过才完成付款确认」）：付款确认（action_type=finance.payment_confirm.＜支付类型＞，object_type=payment_confirmation，object_id 为付款确认单号）全部节点通过即该确认转已通过（approved），任一节点驳回即转已驳回（rejected），驳回后可重新发起。锁账收付款补录终审落账的付款确认闸见 requestArApAdjustment：应付及付款方是平台主体的 8 个来源（含第十八批 AZ 段第 350 条 350-R1通用卡消费结算 general_card_consume）的应收未确认时 409 PAYMENT_CONFIRMATION_REQUIRED，补录与复核单保持待审。第十八批 AV 段第 306 条 306-R1（PGM:899「谁发起、谁销售、谁服务、谁第一个处理异常、为什么、谁审批、结果是什么，都要能查到。」）：整单终态（通过或驳回）的 evidence_attachment_ids 为提交时凭证在前、并上审批人本次所附凭证（去重保序），不覆盖提交时凭证。第十八批 BA 段第 353 条 353-R1（PGM:899；PGM:528）：每个节点审批人所附凭证（evidence_attachment_ids）都并入复核单凭证（提交时与前序节点所附在前，去重保序），中间节点通过后返回的复核单（review_status=pending_review）已含本节点所附；本节点所附另记入 governance.supervisor_review.node_decided 元数据 evidence_attachment_ids（未附为空数组）。"
       x-permission: governance.supervisor_review.approve
       x-data-scope: project-entity
       x-terminal-allowed:
@@ -34135,16 +34138,18 @@ paths:
       tags:
         - audit
       x-permission: audit.operation_log.view
-      x-data-scope: platform
+      x-data-scope: project
       x-terminal-allowed:
         - web
       x-idempotency-required: false
       x-audit-event-success: not_applicable
       x-audit-event-failure: not_applicable
+      x-failure-codes:
+        - PROJECT_SCOPE_REQUIRED
       x-auth-context: staff-token
       operationId: queryAuditOperationEvents
       summary: 跨对象查询操作留痕
-      description: 审计只读角色按业务对象/操作人/事件名/时间范围跨对象查询 audit_events 操作日志（与 evidence/events 对象时间线互补，解决跨对象批量查询入口）。terminal 记该操作所在的端，取服务端派生的可信终端（客人会话端、商户手机应用会话、登记设备类型、商户账号为 merchant_portal、后台网页为 web）；一体机自助与员工自助注册端点取请求声明的终端；没有终端信息的为空（BSM 第 940 行、PGM 第 745 行）。metadata 另记 login_session_id（执行该动作的那一次员工登录会话编号）与 operator_device_id（执行设备：员工手机、平板、一体机为请求设备号，商户手机应用为会话设备编号，后台网页为浏览器设备编号），没有的不记（BSM 第 940 行、DEC-R8-97-19）。
+      description: "审计只读角色按业务对象/操作人/事件名/时间范围跨对象查询 audit_events 操作日志（与 evidence/events 对象时间线互补，解决跨对象批量查询入口）。terminal 记该操作所在的端，取服务端派生的可信终端（客人会话端、商户手机应用会话、登记设备类型、商户账号为 merchant_portal、后台网页为 web）；一体机自助与员工自助注册端点取请求声明的终端；没有终端信息的为空（BSM 第 940 行、PGM 第 745 行）。metadata 另记 login_session_id（执行该动作的那一次员工登录会话编号）与 operator_device_id（执行设备：员工手机、平板、一体机为请求设备号，商户手机应用为会话设备编号，后台网页为浏览器设备编号），没有的不记（BSM 第 940 行、DEC-R8-97-19）。第十八批 BA 段第 324 条 324-R1（PGM:899「谁发起、谁销售、谁服务、谁第一个处理异常、为什么、谁审批、结果是什么，都要能查到。」；PGM:682「内部稽核可查看本综合体全部数据」；第十八批裁决 71）：可见范围——最高权限与平台管理员看全部；商户账号看本商户；其余不挂商户的账号按 audit.operation_log.view 可触及的项目，看这些项目内商户与人员所做的操作（操作人所属商户在该项目，或操作人账号归属该项目）；没有项目归属 403 PROJECT_SCOPE_REQUIRED。"
       parameters:
         - name: business_type
           in: query
@@ -34210,16 +34215,18 @@ paths:
       tags:
         - audit
       x-permission: audit.operation_log.export
-      x-data-scope: platform
+      x-data-scope: project
       x-terminal-allowed:
         - web
       x-idempotency-required: false
       x-audit-event-success: audit.operation_log.exported
       x-audit-event-failure: audit.operation_log.export_failed
+      x-failure-codes:
+        - PROJECT_SCOPE_REQUIRED
       x-auth-context: staff-token
       operationId: exportAuditOperationEvents
       summary: 导出操作留痕（敏感）
-      description: 导出全量操作留痕，敏感动作；audit.operation_log.export 标 requires_approval，在授予层经审批放行后方可使用。 第 23 条 23-R3（PGM:687「所有导出的文件一律带密码，密码不可取消、不可由导出人自行设定……导出文件中的数据不可复制、不可编辑」）：只交出服务端生成的 PDF：打开密码按导出人账号、导出时刻（秒）、导出所用设备编号（浏览器设备编号，第十八批裁决 6）与接入网络统一算法生成 10 位，密码与文件都不落库、可按密码反查（POST /api/v1/security/export-files/lookup），导出人在 GET /api/v1/security/my-exports 查看；非可编辑版禁止复制与修改（打印不限），每页按页面暗纹同一规则平铺暗纹；每次导出落导出记录 export_files（导出人、时间、设备、网络、内容范围与筛选条件、行数，只增不改不删，PGM:686）。没有已登记的设备编号 409 DEVICE_NOT_REGISTERED（请重新登录）。列：发生时间（北京时间）、事件名称、结果、操作人类型、操作人、终端、权限码、业务类型、业务编号、请求编号、商户编号；导出记录 filters 记各筛选参数与 merchant_id。
+      description: "导出全量操作留痕，敏感动作；audit.operation_log.export 标 requires_approval，在授予层经审批放行后方可使用。 第 23 条 23-R3（PGM:687「所有导出的文件一律带密码，密码不可取消、不可由导出人自行设定……导出文件中的数据不可复制、不可编辑」）：只交出服务端生成的 PDF：打开密码按导出人账号、导出时刻（秒）、导出所用设备编号（浏览器设备编号，第十八批裁决 6）与接入网络统一算法生成 10 位，密码与文件都不落库、可按密码反查（POST /api/v1/security/export-files/lookup），导出人在 GET /api/v1/security/my-exports 查看；非可编辑版禁止复制与修改（打印不限），每页按页面暗纹同一规则平铺暗纹；每次导出落导出记录 export_files（导出人、时间、设备、网络、内容范围与筛选条件、行数，只增不改不删，PGM:686）。没有已登记的设备编号 409 DEVICE_NOT_REGISTERED（请重新登录）。列：发生时间（北京时间）、事件名称、结果、操作人类型、操作人、终端、权限码、业务类型、业务编号、请求编号、商户编号；导出记录 filters 记各筛选参数与取数所按的 merchant_id、project_ids（按项目口径取数时为项目集合，否则为空）。第十八批 BA 段第 324 条 324-R1（PGM:899「谁发起、谁销售、谁服务、谁第一个处理异常、为什么、谁审批、结果是什么，都要能查到。」；PGM:682「内部稽核可查看本综合体全部数据」；第十八批裁决 71）：可见范围——最高权限与平台管理员看全部；商户账号看本商户；其余不挂商户的账号按 audit.operation_log.export 可触及的项目，看这些项目内商户与人员所做的操作（操作人所属商户在该项目，或操作人账号归属该项目）；没有项目归属 403 PROJECT_SCOPE_REQUIRED。"
       parameters:
         - name: business_type
           in: query
@@ -46019,7 +46026,7 @@ paths:
         - finance
       operationId: listDividendPlans
       summary: 分红方案列表（商户 scope 账号只见本商户）
-      description: 第十八批 AQ 段第 234 条 234-R1（BSM:521）：返回全部方案版本（含待审批、已驳回、已过期与已被新版本取代的），新建在前；元素字段同 createDividendPlan 响应，另带 version_state（只在列表里填，按各商户当前营业日计）：pending 待审批、scheduled 已批准待生效、in_force 当前生效（status=ended 即已停用）、superseded 已被新版本取代、rejected 已驳回、expired 审批时已过生效日。
+      description: "第十八批 AQ 段第 234 条 234-R1（BSM:521）：返回全部方案版本（含待审批、已驳回、已过期与已被新版本取代的），新建在前；元素字段同 createDividendPlan 响应，另带 version_state（只在列表里填，按各商户当前营业日计）：pending 待审批、scheduled 已批准待生效、in_force 当前生效（status=ended 即已停用）、superseded 已被新版本取代、rejected 已驳回、expired 审批时已过生效日。第十八批 BA 段第 314 条 314-R1（第十八批裁决 71）：最高权限不按商户收窄，看全部商户的方案。"
       x-auth-context: staff-token
       x-permission: finance.dividend.view
       x-data-scope: merchant
@@ -46160,7 +46167,7 @@ paths:
         - finance
       operationId: listDividendStatements
       summary: 分红计算单分页（商户 scope 账号只见本商户，主理人视图同入口）
-      description: 商户 scope 账号读到即记本页审批通过(含已发放)的分红单已读(首页未读账单提醒，第 92 条，BSM L1597)；平台账号看列表不记已读。第十八批 AQ 段第 234 条 234-R2：每条计算单另带 other_shareholders_gross_cent 与 rounding_residual_cent（见 getDividendStatement）；第十八批 AX 段 271-R1、273-R2 起另带 tax_rate_version_id 与 loan_repayment_cent（见 getDividendStatement）。
+      description: "商户 scope 账号读到即记本页审批通过(含已发放)的分红单已读(首页未读账单提醒，第 92 条，BSM L1597)；平台账号看列表不记已读。第十八批 AQ 段第 234 条 234-R2：每条计算单另带 other_shareholders_gross_cent 与 rounding_residual_cent（见 getDividendStatement）；第十八批 AX 段 271-R1、273-R2 起另带 tax_rate_version_id 与 loan_repayment_cent（见 getDividendStatement）。第十八批 BA 段第 314 条 314-R1（第十八批裁决 71）：最高权限看全部商户，按平台视图、不脱敏（同平台账号，不记已读）。"
       x-auth-context: staff-token
       x-permission: finance.dividend.view
       x-data-scope: merchant
@@ -46241,7 +46248,7 @@ paths:
         - finance
       operationId: getDividendStatement
       summary: 分红计算单详情（头 + 算式明细行，逐项可追溯到三个来源台账）
-      description: 第十八批 AQ 段第 234 条 234-R2：计算单头含 other_shareholders_gross_cent（其他股东应得合计，不小于 0）与 rounding_residual_cent（多方各自四舍五入的尾差，带符号，由该酒吧公司承担）；明细行 line_type 另有 shareholder_gross、shareholder_tax_withheld、shareholder_payout（每位其他股东各一行）与 rounding_residual（尾差不为 0 时）。第十八批 AX 段第 271 条 271-R1：计算单头 tax_rate_bps 为出单当日营业日已生效的全平台统一代扣税率（公司股东主理人为 0），tax_rate_version_id（可空）为所用税率版本 ID（见 listDividendTaxRates）。第十八批 AX 段第 273 条 273-R2：计算单头另含 loan_repayment_cent（出单先偿的到期未还借款本息，int64，不小于 0；distributable_cent＝min（经营口径可分配额，依法核定额）− loan_repayment_cent）；明细行 line_type 另有 loan_repayment（负额，逐笔借款一行）。
+      description: "第十八批 AQ 段第 234 条 234-R2：计算单头含 other_shareholders_gross_cent（其他股东应得合计，不小于 0）与 rounding_residual_cent（多方各自四舍五入的尾差，带符号，由该酒吧公司承担）；明细行 line_type 另有 shareholder_gross、shareholder_tax_withheld、shareholder_payout（每位其他股东各一行）与 rounding_residual（尾差不为 0 时）。第十八批 AX 段第 271 条 271-R1：计算单头 tax_rate_bps 为出单当日营业日已生效的全平台统一代扣税率（公司股东主理人为 0），tax_rate_version_id（可空）为所用税率版本 ID（见 listDividendTaxRates）。第十八批 AX 段第 273 条 273-R2：计算单头另含 loan_repayment_cent（出单先偿的到期未还借款本息，int64，不小于 0；distributable_cent＝min（经营口径可分配额，依法核定额）− loan_repayment_cent）；明细行 line_type 另有 loan_repayment（负额，逐笔借款一行）。第十八批 BA 段第 314 条 314-R1（第十八批裁决 71）：最高权限看全部商户的单，按平台视图、不脱敏。"
       x-auth-context: staff-token
       x-permission: finance.dividend.view
       x-data-scope: merchant
@@ -46324,7 +46331,7 @@ paths:
         - finance
       operationId: submitDividendStatement
       summary: 提交审阅：draft → pending_review（预览单不可提交）
-      description: 第十八批 AX 段第 273 条 273-R2（PGM:436「存在逾期未还借款的一律不得分红，分红方案提交时须附借款清偿情况」）：在状态与依法可分配金额校验之后，该酒吧有逾期未还借款（还款期限早于该商户当前营业日、所挂应付仍未付清）返回 409 DIVIDEND_LOAN_OVERDUE（「该酒吧有逾期未还借款（出借方 ＜名称＞，到期 yyyy-MM-dd，未还本息 N 元；……），须先还清才能分红」）。借款清偿情况见计算单 loan_repayment 明细行与 listDividendBarLoans。
+      description: "第十八批 AX 段第 273 条 273-R2（PGM:436「存在逾期未还借款的一律不得分红，分红方案提交时须附借款清偿情况」）：在状态与依法可分配金额校验之后，该酒吧有逾期未还借款（还款期限早于该商户当前营业日、所挂应付仍未付清）返回 409 DIVIDEND_LOAN_OVERDUE（「该酒吧有逾期未还借款（出借方 ＜名称＞，到期 yyyy-MM-dd，未还本息 N 元；……），须先还清才能分红」）。借款清偿情况见计算单 loan_repayment 明细行与 listDividendBarLoans。第十八批 BA 段第 314 条 314-R1（BSM:576「持授权 U 盘密钥的最高权限本人发起的操作，不需要经过任何审批。」）：最高权限本人提交即审批通过——同一事务里照 approveDividendStatement 的批准这一步（逾期借款核验、欠款抵扣、挂主理人与其他股东应付、发金额通知）置 approved，落 dividend.submitted 后另落 dividend.approved，返回 status=approved；批准这一步失败（如 409 DIVIDEND_ARREARS_CHANGED、DIVIDEND_PAY_SLOT_MISSING）整笔回滚。"
       x-auth-context: staff-token
       x-permission: finance.dividend.manage
       x-data-scope: platform
@@ -46333,12 +46340,16 @@ paths:
       x-idempotency-required: true
       x-audit-event-success: dividend.submitted
       x-audit-event-failure: dividend.submit_failed
+      x-audit-event-success-alternatives:
+        - dividend.approved
       x-failure-codes:
         - DIVIDEND_STATEMENT_NOT_FOUND
         - DIVIDEND_STATE_INVALID
         - DIVIDEND_PREVIEW_NOT_APPROVABLE
         - DIVIDEND_LEGAL_AMOUNT_REQUIRED
         - DIVIDEND_LOAN_OVERDUE
+        - DIVIDEND_ARREARS_CHANGED
+        - DIVIDEND_PAY_SLOT_MISSING
       requestBody:
         $ref: "#/components/requestBodies/DividendActionRequest"
       responses:
@@ -46368,7 +46379,7 @@ paths:
         - finance
       operationId: approveDividendStatement
       summary: 审批通过：pending_review → approved；净发放额>0 时给主理人挂应付（source_type=dividend_payout，一单一挂）；提交人不得审批自己提交的单
-      description: 第十八批 AQ 段第 234 条 234-R2（BSM:1787「分红由该酒吧公司自己从其对公账户支付给主理人与其他股东……发放走应付款项」）：除主理人应付外，每位其他股东实发（shareholder_payout 明细行）大于 0 的另挂一笔应付（source_type=dividend_payout），应付对方与 source_id 均为该股东实发行 ID，到期日同为方案发放付账日；登记付款前同样须经付款确认（第十八批裁决 55、65）。第十八批 AX 段第 330 条 330-R1（BSM:1781）：欠款抵扣在审批时按冻结抵扣额对主理人本人欠该酒吧公司的未清应收（往来方为主理人账户）逐项结算（先欠先抵，收款方式 dividend_offset），实结不等于冻结额返回 409 DIVIDEND_ARREARS_CHANGED（「欠款抵扣期间主理人本人的未清欠款发生变化（当前可抵 X 分，单据冻结 Y 分）；请作废重算后再审批」），整笔回滚。第十八批 AX 段第 273 条 273-R2（PGM:436「存在逾期未还借款的一律不得分红」）：在自审闸（SELF_APPROVAL_FORBIDDEN）之后、欠款抵扣结算之前，该酒吧有逾期未还借款同样返回 409 DIVIDEND_LOAN_OVERDUE（原文同 submitDividendStatement）。
+      description: "第十八批 AQ 段第 234 条 234-R2（BSM:1787「分红由该酒吧公司自己从其对公账户支付给主理人与其他股东……发放走应付款项」）：除主理人应付外，每位其他股东实发（shareholder_payout 明细行）大于 0 的另挂一笔应付（source_type=dividend_payout），应付对方与 source_id 均为该股东实发行 ID，到期日同为方案发放付账日；登记付款前同样须经付款确认（第十八批裁决 55、65）。第十八批 AX 段第 330 条 330-R1（BSM:1781）：欠款抵扣在审批时按冻结抵扣额对主理人本人欠该酒吧公司的未清应收（往来方为主理人账户）逐项结算（先欠先抵，收款方式 dividend_offset），实结不等于冻结额返回 409 DIVIDEND_ARREARS_CHANGED（「欠款抵扣期间主理人本人的未清欠款发生变化（当前可抵 X 分，单据冻结 Y 分）；请作废重算后再审批」），整笔回滚。第十八批 AX 段第 273 条 273-R2（PGM:436「存在逾期未还借款的一律不得分红」）：在自审闸（SELF_APPROVAL_FORBIDDEN）之后、欠款抵扣结算之前，该酒吧有逾期未还借款同样返回 409 DIVIDEND_LOAN_OVERDUE（原文同 submitDividendStatement）。第十八批 BA 段第 314 条 314-R1（BSM:1794「有最高权限的管理者：审批分红单（提交单据的人不能审批自己提交的单）。」；PGM:666「持股分红的方案配置、算单、审批和发放属于资金类高危动作，由最高权限审批」）：只认持授权 U 盘密钥的最高权限本人，其他人（含持 finance.dividend.manage 的平台管理员）403 MASTER_APPROVAL_REQUIRED「分红单须由最高权限本人审批」，先于状态与自审闸。"
       x-auth-context: staff-token
       x-permission: finance.dividend.manage
       x-data-scope: platform
@@ -46386,6 +46397,7 @@ paths:
         - DIVIDEND_LEGAL_AMOUNT_REQUIRED
         - DIVIDEND_PAY_SLOT_MISSING
         - DIVIDEND_LOAN_OVERDUE
+        - MASTER_APPROVAL_REQUIRED
       requestBody:
         $ref: "#/components/requestBodies/DividendActionRequest"
       responses:
@@ -46415,6 +46427,7 @@ paths:
         - finance
       operationId: rejectDividendStatement
       summary: 驳回：pending_review → rejected（理由必填；驳回后可重算）
+      description: "第十八批 BA 段第 314 条 314-R1（BSM:1794；PGM:666）：驳回同审批，只认持授权 U 盘密钥的最高权限本人，其他人 403 MASTER_APPROVAL_REQUIRED「分红单须由最高权限本人审批」，先于理由与状态校验。"
       x-auth-context: staff-token
       x-permission: finance.dividend.manage
       x-data-scope: platform
@@ -46427,6 +46440,7 @@ paths:
         - DIVIDEND_STATEMENT_NOT_FOUND
         - DIVIDEND_STATE_INVALID
         - DIVIDEND_PREVIEW_NOT_APPROVABLE
+        - MASTER_APPROVAL_REQUIRED
       requestBody:
         $ref: "#/components/requestBodies/DividendActionRequest"
       responses:
@@ -46500,6 +46514,7 @@ paths:
         - finance
       operationId: listDividendReserveReleases
       summary: 发放保护线留存·待释放/已释放台账（商户 scope 账号只见本商户，主理人视图同入口）
+      description: "第十八批 BA 段第 314 条 314-R1（第十八批裁决 71）：最高权限看全部商户，按平台视图、不脱敏。"
       x-auth-context: staff-token
       x-permission: finance.dividend.view
       x-data-scope: merchant
@@ -48337,47 +48352,6 @@ paths:
           $ref: "#/components/responses/Error"
         "500":
           $ref: "#/components/responses/Error"
-  /api/v1/settlement/config/retention:
-    post:
-      tags:
-        - settlement
-      operationId: settlementConfigUpsertRetention
-      summary: 维护项目公司留存比例(草案)
-      description: 结算配置中心批1:落草案(is_draft=TRUE,不动生效行),须经差人复核转正后生效。
-      x-auth-context: staff-token
-      x-permission: settlement.config.manage
-      x-data-scope: platform
-      x-terminal-allowed:
-        - web
-      x-idempotency-required: true
-      x-audit-event-success: settlement.config.platform_retention_rules.updated
-      x-audit-event-failure: settlement.config.platform_retention_rules.update_failed
-      requestBody:
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                idempotency_key:
-                  type: string
-                project_id:
-                  type: string
-                retention_bps:
-                  type: integer
-              required:
-                - idempotency_key
-                - retention_bps
-      responses:
-        "200":
-          $ref: "#/components/responses/Success"
-        "400":
-          $ref: "#/components/responses/Error"
-        "403":
-          $ref: "#/components/responses/Error"
-        "409":
-          $ref: "#/components/responses/Error"
-        "500":
-          $ref: "#/components/responses/Error"
   /api/v1/settlement/config/distribution-method:
     post:
       tags:
@@ -49215,7 +49189,7 @@ paths:
         - settlement
       operationId: settlementConfigActivateDraft
       summary: 复核转正:单行/归属/归因规则草案转正
-      description: 差人复核(执行人≠起草人否则403);Path 2 换行(旧生效行软替换 status→inactive)。营业额租金规则已有已复核版本时，变更统一从实际批准月份的次月1日生效，当月沿用旧版，草案手填起日不决定变更日期；初始规则保留填写起日。按系统业务时区判定批准月份；结束日早于实际生效起日时拒绝转正，不改变原规则。第十八批第 24 条：configType=high_value_threshold 一律 403 HIGH_VALUE_THRESHOLD_TOP_AUTHORITY_REQUIRED（高价值判定阈值只经最高权限审批生效，不在此转正）。 第十八批 AW 段第 291 条 291-R1（ENUM:54；PGM:432）：configType=internal_price_item 时审批人须属该条目的域主管公司——提供方为商户的按商户业态定：酒吧归娱乐平台公司（收入归属 all_pass_ticket 的管理主体），游乐归游乐公司（amusement_ticket），演出传媒归传媒公司（performance_ticket），餐饮、零售归本项目城市项目公司（须恰好一家，否则 409 CITY_PROJECT_COMPANY_MISSING），业态为其他的归商户档案上的主管公司；提供方是经营主体的，由该主体内部另一人审批。审批人不属该公司 403 INTERNAL_PRICE_APPROVER_SCOPE（点名应审批的公司）；定不出域主管公司（收入归属或商户档案主管公司未配置）409 REVENUE_STREAM_ATTRIBUTION_MISSING。最高权限不受此限。
+      description: "差人复核(执行人≠起草人否则403);Path 2 换行(旧生效行软替换 status→inactive)。营业额租金规则已有已复核版本时，变更统一从实际批准月份的次月1日生效，当月沿用旧版，草案手填起日不决定变更日期；初始规则保留填写起日。按系统业务时区判定批准月份；结束日早于实际生效起日时拒绝转正，不改变原规则。第十八批第 24 条：configType=high_value_threshold 一律 403 HIGH_VALUE_THRESHOLD_TOP_AUTHORITY_REQUIRED（高价值判定阈值只经最高权限审批生效，不在此转正）。 第十八批 AW 段第 291 条 291-R1（ENUM:54；PGM:432）：configType=internal_price_item 时审批人须属该条目的域主管公司——提供方为商户的按商户业态定：酒吧归娱乐平台公司（收入归属 all_pass_ticket 的管理主体），游乐归游乐公司（amusement_ticket），演出传媒归传媒公司（performance_ticket），餐饮、零售归本项目城市项目公司（须恰好一家，否则 409 CITY_PROJECT_COMPANY_MISSING），业态为其他的归商户档案上的主管公司；提供方是经营主体的，由该主体内部另一人审批。审批人不属该公司 403 INTERNAL_PRICE_APPROVER_SCOPE（点名应审批的公司）；定不出域主管公司（收入归属或商户档案主管公司未配置）409 REVENUE_STREAM_ATTRIBUTION_MISSING。最高权限不受此限。 第十八批 BA 段第 355 条 355-R1（BSM:521「经高敏权限“转正”审批通过后按指定日期生效，不即改即生效」；BSM:1671「价格变更形成新版本、指定生效时间并只影响后续业务」；ENUM:187 按营业日）：configType=internal_price_item 批准后为待生效（status=scheduled，旧生效价与四处业务快照不变），到生效起始日期（按提供方营业日：商户按该商户营业日，经营主体按平台默认营业日）由系统转正——旧生效行软替换 inactive、本行生效、同一事务同步四处业务快照；同一生效日后批准的覆盖先批准的。批准时生效起始日期已不晚于提供方当前营业日 409 INTERNAL_PRICE_EFFECTIVE_DATE_PASSED「生效起始日期已到，请改期后重新提交草案」（草案不动）；最高权限免他人复核但不免生效日期。成功事件 settlement.config.draft.activated 元数据记 config_group=internal_price_catalog 与 effective_from。"
       x-auth-context: staff-token
       x-permission: settlement.config.manage
       x-data-scope: platform
@@ -49229,6 +49203,7 @@ paths:
         - INTERNAL_PRICE_APPROVER_SCOPE
         - CITY_PROJECT_COMPANY_MISSING
         - REVENUE_STREAM_ATTRIBUTION_MISSING
+        - INTERNAL_PRICE_EFFECTIVE_DATE_PASSED
       responses:
         "200":
           $ref: "#/components/responses/Success"
@@ -50622,7 +50597,7 @@ paths:
         - settlement
       operationId: settlementConfigUpsertInternalPriceItem
       summary: 维护内部结算SKU目录条目(草案)
-      description: 批10/E(V379/V380)：内部结算价唯一可编辑处。条目硬绑提供商家(业态随商家带出)并归入品类；item_code 留空=新建(返回条目编码,业务页「就地新建」拿它建立引用)、非空=对既有条目改价/改名/改类(绑定商户不可改)。落草案(is_draft=TRUE,不动生效行),须经差人复核转正后生效并同步四处业务快照(酒吧商品/套餐/权益模板/券)。价格 0 为商户让利型合法价。提供商家业态为其他且档案未指定主管公司 → 409 MERCHANT_SUPERVISING_COMPANY_MISSING（ENUM 商户业态条，FS-024）。HP-P01：提供方可为经营主体（城市项目公司经营停车，品类 parking_credit「停车抵免（每小时）」），provider_entity_id 与 merchant_id 恰填其一，绑定的提供方不可改。 第十八批 AW 段第 291 条 291-R2（ENUM:54；BSM:576「持授权 U 盘密钥的最高权限本人发起的操作，不需要经过任何审批。」）：权限码为 settlement.internal_price.submit（内部结算价提交，高敏、授出前审批），只能由实际提供方提交——商户账号只能报本商户（merchant_id＝本人商户，不填 provider_entity_id），非商户账号只能报本人所属公司（provider_entity_id＝本人所属公司，merchant_id 为空），否则 403 INTERNAL_PRICE_SUBMITTER_SCOPE；最高权限不受此限。最高权限本人提交即生效：落草案后在同一事务里转正，0 价且有券引用仍 400 CATALOG_PRICE_ZERO_VOUCHER_REF 且不留草案，另记 settlement.config.draft.activated（元数据 config_group=internal_price_catalog、master_self_initiated=true）。其余账号落的草案须由对应域主管公司的人经 settlementConfigActivateDraft 转正。
+      description: "批10/E(V379/V380)：内部结算价唯一可编辑处。条目硬绑提供商家(业态随商家带出)并归入品类；item_code 留空=新建(返回条目编码,业务页「就地新建」拿它建立引用)、非空=对既有条目改价/改名/改类(绑定商户不可改)。落草案(is_draft=TRUE,不动生效行),须经差人复核转正后生效并同步四处业务快照(酒吧商品/套餐/权益模板/券)。价格 0 为商户让利型合法价。提供商家业态为其他且档案未指定主管公司 → 409 MERCHANT_SUPERVISING_COMPANY_MISSING（ENUM 商户业态条，FS-024）。HP-P01：提供方可为经营主体（城市项目公司经营停车，品类 parking_credit「停车抵免（每小时）」），provider_entity_id 与 merchant_id 恰填其一，绑定的提供方不可改。 第十八批 AW 段第 291 条 291-R2（ENUM:54；BSM:576「持授权 U 盘密钥的最高权限本人发起的操作，不需要经过任何审批。」）：权限码为 settlement.internal_price.submit（内部结算价提交，高敏、授出前审批），只能由实际提供方提交——商户账号只能报本商户（merchant_id＝本人商户，不填 provider_entity_id），非商户账号只能报本人所属公司（provider_entity_id＝本人所属公司，merchant_id 为空），否则 403 INTERNAL_PRICE_SUBMITTER_SCOPE；最高权限不受此限。最高权限本人提交免他人复核：落草案后在同一事务里批准（同 settlementConfigActivateDraft，批准后待生效、到生效起始日期由系统转正），0 价且有券引用仍 400 CATALOG_PRICE_ZERO_VOUCHER_REF 且不留草案，另记 settlement.config.draft.activated（元数据 config_group=internal_price_catalog、effective_from、master_self_initiated=true）。其余账号落的草案须由对应域主管公司的人经 settlementConfigActivateDraft 批准。第十八批 BA 段第 355 条 355-R1（BSM:521「所有涉及钱的配置一律版本化：每次改动生成新版本，必须填写生效起始日期」；BSM:1671「价格变更形成新版本、指定生效时间并只影响后续业务」；ENUM:187 按营业日）：effective_from（生效起始日期，年-月-日）必填，缺了 400 VALIDATION_FAILED；不是有效日期 400 VALIDATION_FAILED「生效起始日期须为有效日期」；不晚于提供方当前营业日（商户按该商户营业日，经营主体按平台默认营业日）400 VALIDATION_FAILED「生效起始日期须晚于今天（按营业日）」。成功事件 settlement.config.internal_price_catalog.updated 元数据另记 effective_from。"
       x-auth-context: staff-token
       x-permission: settlement.internal_price.submit
       x-data-scope: provider-self
@@ -50655,11 +50630,16 @@ paths:
                   type: string
                 price_cent:
                   type: integer
+                effective_from:
+                  type: string
+                  format: date
+                  description: "生效起始日期（年-月-日），须晚于提供方当前营业日；批准后待生效，到该日由系统转正（第十八批 BA 段第 355 条 355-R1）。"
               required:
                 - idempotency_key
                 - category
                 - item_name
                 - price_cent
+                - effective_from
       responses:
         "200":
           $ref: "#/components/responses/Success"
@@ -50677,11 +50657,10 @@ paths:
         - settlement
       operationId: settlementConfigListInternalPriceItems
       summary: 内部结算SKU目录三维筛选列表
-      description: 批10/E：按 商家/业态(随商家带出)/品类 三维筛选目录条目；include_drafts 含草案(目录页草案队列)、include_archived
-        含归档档。内部结算价属敏感信息,仅授权后台可见(settlement.config.view 或 V279/V301 内部价读脱敏点任一);商户 scope 操作者强制只看本商户条目。
+      description: "批10/E：按 商家/业态(随商家带出)/品类 三维筛选目录条目；include_drafts 含草案(目录页草案队列)、include_archived 含归档档。内部结算价属敏感信息,仅授权后台可见(settlement.config.view 或 V279/V301 内部价读脱敏点任一);商户 scope 操作者强制只看本商户条目。 第十八批 BA 段第 355 条 355-R1：每条另带 effective_from（生效起始日期，可空＝自始有效）；status 另有 scheduled（已批准待生效，到生效起始日期由系统转正）；不含归档时列 active 与 scheduled。可见范围（BSM:1671「实际提供商品或服务的主体提交价格，对应域主管公司审批」；第十八批裁决 71）：最高权限与平台管理员看全部；商户账号只看本商户；其余不挂商户的账号只看本人所属公司为该条目审批公司的条目（提供主体为本公司的条目由本公司内部审批，也在其内），定不出审批公司的条目不列。"
       x-auth-context: staff-token
       x-permission: settlement.config.view
-      x-data-scope: platform
+      x-data-scope: project-provider
       x-terminal-allowed:
         - web
       x-audit-event-success: not_applicable
@@ -70263,7 +70242,8 @@ components:
             - supervisor
             - merchant_admin
             - merchant
-          description: 后台可创建的账号类型；禁止通过普通建号接口创建 platform_admin。销售人员用于卡座销售提成归属，商户/销售类型必须绑定 merchant_id。
+            - outsourced_vendor
+          description: "后台可创建的账号类型；禁止通过普通建号接口创建 platform_admin。销售人员用于卡座销售提成归属，商户/销售类型必须绑定 merchant_id。本接口只直接建外部协作机构账号（outsourced_vendor，外包与服务商人员，PGM:681）；公司自有员工与商户员工须走员工注册申请（PGM:580），传 staff、sales、supervisor、merchant_admin、merchant 的不建账号、返回 409 STAFF_REGISTRATION_REQUIRED（merchant、merchant_admin、sales 缺 merchant_id 时先报 400 VALIDATION_FAILED）；其他取值 400 INVALID_ACCOUNT_TYPE。"
         organization_id:
           type: string
           maxLength: 64

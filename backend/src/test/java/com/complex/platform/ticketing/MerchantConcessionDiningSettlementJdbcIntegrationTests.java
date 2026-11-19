@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.08
+// 文件版本：V0.09
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -55,6 +55,9 @@ import org.springframework.test.web.servlet.request.RequestPostProcessor;
 })
 @AutoConfigureMockMvc
 class MerchantConcessionDiningSettlementJdbcIntegrationTests {
+
+    /** 第十八批 BA 段第 355 条 355-R1：内部结算价批准后待生效，到生效起始日期由系统转正（用例里直接调到日转正）。 */
+    @Autowired private com.complex.platform.settlement.InternalPriceScheduledActivationService priceActivation;
 
     private static final long CATALOG_PRICE_CENT = 3000L;
 
@@ -348,14 +351,15 @@ class MerchantConcessionDiningSettlementJdbcIntegrationTests {
         mockMvc.perform(post("/api/v1/settlement/config/internal-price-item").with(session(pricer, "staff", project, restaurant))
                         .contentType(MediaType.APPLICATION_JSON).content("""
                                 {"idempotency_key": "c236-price-%s", "item_code": "%s", "merchant_id": "%s", "category": "dining",
-                                 "item_name": "套餐", "price_cent": 3500}
-                                """.formatted(suffix, catalogCode, restaurant)))
+                                 "item_name": "套餐", "price_cent": 3500, "effective_from": "%s"}
+                                """.formatted(suffix, catalogCode, restaurant, java.time.LocalDate.now(com.complex.platform.common.LocalZone.ID).plusDays(1))))
                 .andExpect(status().isOk());
         String draft = jdbc.queryForObject("SELECT id FROM internal_price_catalog WHERE item_code = ? AND is_draft = TRUE",
                 String.class, catalogCode);
         mockMvc.perform(post("/api/v1/settlement/config/internal_price_item/" + draft + "/activate")
                         .with(session(reviewer, "staff", city, null)))
                 .andExpect(status().isOk());
+        priceActivation.activateDue(java.time.Instant.now().plus(java.time.Duration.ofDays(2)));
 
         verify(after);
         assertThat(catalogEntry(after)).isEqualTo(draft);

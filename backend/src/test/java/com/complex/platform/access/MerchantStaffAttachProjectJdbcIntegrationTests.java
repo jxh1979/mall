@@ -1,6 +1,6 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -9,6 +9,9 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -136,6 +139,39 @@ class MerchantStaffAttachProjectJdbcIntegrationTests {
                  "username": "%s", "password": "M81-Test-Pass-2026"}
                 """.formatted(key(), projectB, merchantM, username)));
         assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM access_users WHERE username = ?", Integer.class, username)).isZero();
+    }
+
+    // ⑥ 286-R1（PGM:580「员工注册分两条路径：公司自有员工由本人在私人手机 App 注册……商户员工由商户代该员工提交注册申请……」；PGM:681「外包/服务商人员
+    // ……可拥有自己的系统账号登录……」）：建号接口只直接建外部协作机构账号；公司员工类型 409 STAFF_REGISTRATION_REQUIRED、不建账号；
+    // 不认识的类型 400 INVALID_ACCOUNT_TYPE。契约 AccessUserRequest.account_type 枚举与现码认的六个值一致（含 outsourced_vendor）。
+    @Test
+    void accessUserCreationOnlyIssuesOutsourcedVendorAccountsAndContractListsAcceptedTypes() throws Exception {
+        RequestPostProcessor manager = account("acct", projectA, null, role("acct", "access.user.manage"));
+        String vendor = "m81_ov_" + suffix;
+        String staff = "m81_st_" + suffix;
+        String body = """
+                {"idempotency_key": "%s", "account_type": "%s", "organization_id": "%s", "username": "%s", "password": "M81-Test-Pass-2026"}
+                """;
+        postJson(manager, "/api/v1/access/users", body.formatted(key(), "outsourced_vendor", projectA, vendor))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.account_type").value("outsourced_vendor"));
+        postJson(manager, "/api/v1/access/users", body.formatted(key(), "staff", projectA, staff))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.detail_code").value("STAFF_REGISTRATION_REQUIRED"));
+        assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM access_users WHERE username = ?", Integer.class, staff)).isZero();
+        postJson(manager, "/api/v1/access/users", body.formatted(key(), "platform_admin", projectA, "m81_pa_" + suffix))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.detail_code").value("INVALID_ACCOUNT_TYPE"));
+
+        Path contract = Path.of("..", "docs", "openapi", "openapi-p0.json");
+        if (!Files.exists(contract)) {
+            contract = Path.of("docs", "openapi", "openapi-p0.json");
+        }
+        List<String> accountTypes = new java.util.ArrayList<>();
+        new ObjectMapper().readTree(Files.readString(contract))
+                .at("/components/schemas/AccessUserRequest/properties/account_type/enum")
+                .forEach(node -> accountTypes.add(node.asText()));
+        assertThat(accountTypes).containsExactlyInAnyOrder("staff", "merchant", "merchant_admin", "supervisor", "sales", "outsourced_vendor");
     }
 
     // ⑤ 守护：自营商户员工（归属为所属公司 E）改挂到同公司另一自营商户、归属不变，不被本闸拦（自营商户没有主项目）。

@@ -1,6 +1,6 @@
 package com.complex.platform.dividend;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static com.complex.platform.support.DailyCloseFixture.markRangeFinal;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -101,7 +101,7 @@ class DividendBarLoanJdbcIntegrationTests {
                 "divp_dbl_" + s, bar, "usr_dbl_principal_" + s);
         StaffRequestFixture staffs = new StaffRequestFixture(jdbc);
         finance = staffs.staff("usr_dbl_fin_" + s, "platform_admin", project, null, "finance.dividend.manage", "finance.dividend.view");
-        approver = staffs.staff("usr_dbl_apv_" + s, "platform_admin", project, null, "finance.dividend.manage", "finance.dividend.view");
+        approver = master(); // 第十八批 BA 段第 314 条 314-R1：分红计算单批准只认最高权限本人
         String payerId = "usr_dbl_pay_" + s;
         payer = staffs.staff(payerId, "staff", project, null, "finance.payment.register", "finance.ar_ap.view");
         main = staffs.staff(mainId, "staff", project, null, "governance.supervisor_review.view", "governance.supervisor_review.approve");
@@ -285,5 +285,19 @@ class DividendBarLoanJdbcIntegrationTests {
         return mockMvc.perform(post("/api/v1/finance/ar-ap-items/" + item + "/payments").with(payer).contentType(MediaType.APPLICATION_JSON)
                 .content("{\"idempotency_key\":\"dbl-pay-" + tag + "-" + s + "\",\"amount_cent\":" + amountCent
                         + ",\"payment_method\":\"bank_transfer\",\"bank_flow_ref\":\"FLOW-" + tag + "-" + s + "\"}"));
+    }
+
+    /** 第十八批 BA 段第 314 条 314-R1：分红计算单批准只认最高权限本人（保留超管账号，组织 platform-company、无商户），经后台 Web 终端。 */
+    private RequestPostProcessor master() {
+        com.complex.platform.access.AccessActor actor = new com.complex.platform.access.AccessActor(
+                com.complex.platform.auth.SessionIssuer.MASTER_USER_ID, com.complex.platform.auth.SessionIssuer.MASTER_USERNAME,
+                com.complex.platform.auth.SessionIssuer.MASTER_ACCOUNT_TYPE, "platform-company", null, "active");
+        return request -> {
+            request.addHeader("X-Terminal-Type", "web");
+            return org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication(
+                    new org.springframework.security.authentication.UsernamePasswordAuthenticationToken(actor, null,
+                            List.of(new org.springframework.security.core.authority.SimpleGrantedAuthority("ROLE_P0_STAFF"))))
+                    .postProcessRequest(request);
+        };
     }
 }

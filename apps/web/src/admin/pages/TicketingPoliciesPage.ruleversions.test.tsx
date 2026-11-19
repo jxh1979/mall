@@ -1,4 +1,4 @@
-// 文件版本：V0.03
+// 文件版本：V0.04
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -189,6 +189,9 @@ describe("TicketingPoliciesPage 236-R5②③ 规则版本区", () => {
     // 已上架且有草稿版：定价核算读草稿版（合计 255 元），标题注明草稿版。
     await waitFor(() => expect(screen.getByTestId("price-check-component-total").textContent).toContain("255.00"));
     expect(screen.getByTestId("combo-price-check-title").textContent).toContain("草稿版");
+    // 第十八批 BA 段收尾复核修正（PGM:287）：定价核算标题写「对比」，不写英文 vs。
+    expect(screen.getByTestId("combo-price-check-title").textContent).toContain("系统算出售价对比你填的售价");
+    expect(screen.getByTestId("combo-price-check-title").textContent).not.toMatch(/(^|[^A-Za-z])vs([^A-Za-z]|$)/i);
 
     fireEvent.change(screen.getByTestId("rule-version-submit-reason"), { target: { value: "加游乐后重新定价" } });
     fireEvent.change(screen.getByTestId("rule-version-submit-approver"), { target: { value: "usr_platform_1" } });

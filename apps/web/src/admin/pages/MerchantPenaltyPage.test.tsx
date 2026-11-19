@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
@@ -40,7 +40,7 @@ async function renderAndQuery(api: AdminApiClient, permissions = ALL) {
   };
   render(<MerchantPenaltyPage {...props} />);
   await waitFor(() => expect(screen.getByTestId("merchant-penalty-page").textContent).toContain("商户处罚记录"));
-  await userEvent.type(screen.getByLabelText("处罚记录项目 id"), "p1");
+  await userEvent.type(screen.getByLabelText("处罚记录项目编号"), "p1");
   await userEvent.click(screen.getByTestId("merchant-penalty-query"));
 }
 
@@ -63,7 +63,7 @@ describe("MerchantPenaltyPage 商户处罚记录", () => {
   it("登记处罚提交项目、商户、扣分与违规说明", async () => {
     const { api, post } = makeApi();
     await renderAndQuery(api);
-    await userEvent.type(screen.getByLabelText("处罚商户 id"), "m1");
+    await userEvent.type(screen.getByLabelText("处罚商户编号"), "m1");
     await userEvent.type(screen.getByLabelText("扣分"), "3");
     await userEvent.type(screen.getByLabelText("违规说明"), "占道经营");
     await userEvent.click(screen.getByTestId("merchant-penalty-submit"));

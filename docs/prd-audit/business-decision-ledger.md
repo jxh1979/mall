@@ -1,6 +1,6 @@
 # PRD 审计业务裁决台账
 
-文档版本：V1.09
+文档版本：V1.10
 状态：进行中
 迁移日期：2026-07-27
 当前事实源：三份立法 HTML 以既有冻结基线叠加 James 此前 M02 至 M08 的点名批准、全量审计 M001、M002 的逐项批准，以及本轮 2026-10-16 至 2026-10-17 业务 HTML 审计中 Q01 至 Q40 及子题实际明确批准且未被后续替代的裁决，和 2026-10-17 第二批 HTML 业务线推演审计（A–F 六线 64 条、停车章）的逐项批准，并叠加本轮 CG 70 项来源确认与 C01–C09、N01–N03 最终澄清及补全文稿中 F01、W01–W05 的整体修改批准（本文件末节）；本轮最终规则、未采纳或替代关系、现行版本与字节哈希见本文件末节。历史记录保留为各自当时事实，不恢复已被替代的建议。
@@ -3976,6 +3976,8 @@ HTML 的语义补齐与直接引用同步可在本批核验；70项中的业务�
 | 69 | **第 241 条 付款方是平台主体、台账记成应收的一侧登记收款前要不要先付款确认**（题面：「【第 5/5 题（第 241 条）：付款方是平台主体、台账记成应收的那一侧，登记收款前要不要也先付款确认】 前因：裁决 55 的选项名是「所有对外付款都走付款确认」，解释是「所有应付都先走付款确认」；BSM:1683「平台内部各主体之间的普通内部结算应收应付，每月有三个付账日」。三份 HTML 与裁决都没写平台各主体之间的往来记成应收的那一侧怎么办。 现状：台账对平台各主体之间的一笔往来只记一行，同一类往来按金额正负分挂应付或应收：组合通票域间份额正额挂应付、负额改挂应收；酒吧报酬月结拨付正额应付、负额应收；另有通票餐饮零售代付、派驻提成冲回、补偿应付已付追收、通票分账追收、存酒退出承接垫付追收等应收，付款方都是平台主体。记成应收的那一行，登记收款就是登记该平台主体的出款。方案目前按裁决原话只在应付登记付款时设闸。 分歧与利弊： ① 只管台账应付，平台主体付款、记成应收的一侧不过闸。好处：照裁决原话「所有应付」，改动最小。坏处：同一类内部往来按金额正负，一半要付款确认、一半不要。 ② 付款方是平台主体的上述应收，登记收款前也须付款确认。好处：平台各主体的出款口径一致。坏处：多接一类闸、多一批审批；登记的是收款，财务操作上不直观。 （前 4 题已记：支付类型按台账来源逐个分；每类固定财务、法务两线；流程在「组织层级与审批线」页设定；台账应付可合并发起。）」）—— 操作员选「平台主体应收也过闸」：付款方是平台主体的应收，登记收款前也须付款确认。（未选：「只管应付（推荐）」）（2026-11-16 弹窗；来由：18AM 只读设计第 241 条待裁题。控制席说明：做条件项 241-R9。） | 待开发清单第 241 条（18AM） |
 | 70 | **第 257 条 员工换手机「先解绑旧手机，再绑定新手机」怎么算做到**（题面：「【第 1/2 题（第 257 条，18AN）：员工换手机「先解绑旧手机，再绑定新手机」怎么算做到】 前因：PGM:585「员工换手机必须先解绑旧手机，再绑定新手机。」（BSM:937 同句）。原句只定了先后，没说「绑定新手机」指员工在新手机上发起绑定，还是新手机正式生效。第 257 条要给后台补上「解绑」和「批准换机」入口（现在后台没有任何入口）。 现状：员工在新手机上发起绑定时，即使旧手机还有效也接受，新手机进入「待批准换机」；后台批准那一刻，系统先把旧手机作废、再让新手机生效，同一员工任何时刻只有一台有效手机。仓内两份研发设计稿说法不一（员工凭证表设计稿认定现做法符合原句；安卓设备终端设计稿写旧手机没先解绑就拒绝新手机发起），都不是业务裁决，决策台账里也没答过。 分歧与利弊： ① 按现做法：新手机可以先发起，后台批准换机时系统自动先作废旧手机、再让新手机生效。好处：后台只批一次；批准前旧手机照常能用，员工不会有一段时间手机端用不了；丢手机的仍可先在后台解绑旧手机。坏处：员工发起时旧手机还没解绑，「先解绑」体现在批准那一刻。 ② 旧手机必须先解绑，新手机才能发起：旧手机还有效时新手机发起一律拒绝并提示「请先解绑旧手机」。好处：与原句字面先后完全一致。坏处：每次换机后台要办两次（先解绑、再批准）；从解绑到批准这段时间员工名下没有有效的私人手机；要改现有绑定规则。」）—— 操作员选「批准时先废旧再生效（推荐）」：新手机可先发起；后台批准换机时系统先作废旧手机、再让新手机生效（现做法）。（未选：「旧手机须先解绑才能发起」）（2026-11-16 弹窗；来由：18AN 只读设计第 257 条待裁题。控制席说明：257 只做 R1、R2，不做条件项 257-R3（现有绑定规则与 approveRebind 不改）。） | 待开发清单第 257 条（18AN） |
 | 71 | **第 249 条 酒吧商品、分类、套餐删除只认最高权限审批后最高权限在这几页能看到什么**（题面：「【第 2/2 题（第 249 条，18AO）：酒吧商品、分类、套餐的删除改为只认最高权限审批后，最高权限在这几页能看到什么】 前因：BSM:576「删除一律须由具备最高权限的人审批通过后执行，不设例外，申请人不得审批自己的申请；持授权 U 盘密钥的最高权限本人发起的操作，不需要经过任何审批。」；PGM:528「第④类看不到别的商户和别的项目的数据，持授权 U 盘密钥的最高权限可以逐笔开放，每次只对当前这一笔生效并留痕。」HTML 没写最高权限查看别家酒吧目录的范围。 现状：酒吧的商品、分类、套餐按酒吧（商户）隔离，最高权限账号不挂商户，现在打开这几页会提示「此操作必须在商户范围内进行」、一条看不到（读代码推断）。本条落地后，店长存档并申请删除配错的商品，只有最高权限能批，但最高权限看不到这条申请，会一直挂着。系统里已有两种做法：待复核清单里最高权限只看到轮到自己审批的单子，别的要按编号逐笔打开并留痕；门票退款单列表对最高权限全部放开。票种、价格规则、服务目录、数据清理，最高权限现在就看得到，不受本题影响。 分歧与利弊： ① 只列待批的那几条：只看到各酒吧待审批删除的条目，逐条批准或驳回并留痕；其他目录照旧看不到。好处：与待复核清单同一做法，符合「逐笔开放」字面，改动最小。坏处：批的时候看不到同店其他商品作参照。 ② 看全部酒吧目录：和门票退款单列表一样对最高权限全放开，最高权限也可以自己发起删除、即时生效。好处：信息最全。坏处：等于整类打开商户隔离，与「每次只对当前这一笔生效」字面不符。 ③ 改走待复核清单：酒吧目录的删除申请生成一张须最高权限审批的复核单，在待复核清单里批。好处：须最高权限批的事集中在一处。坏处：改动大，和员工档案、设施设备等已做对象的审批方式不一致。」）—— 操作员选「看全部酒吧目录」：操作员弹窗先选「只列待批的（推荐）」，随即追加原话改定：「既然是最高权限，不应该什么都能看到吗？……这是你的代码库，不会发生的，没有必要的，实际场景当中不存在的，你又不需要问。有些东西你应该能推导出来的。」——即选项②：最高权限打开酒吧商品、分类、套餐页看到全部酒吧的全部目录，也可以自己发起删除、即时生效（BSM:576「持授权 U 盘密钥的最高权限本人发起的操作，不需要经过任何审批」）。（未选：「只列待批的（推荐）」（弹窗所选，已被追加原话改定）「改走待复核清单」）（2026-11-16 弹窗；来由：18AO 只读设计第 249 条待裁题。控制席说明：按 18AO 只读设计 d-gov-b 选项②的写法做：249-R1⑤、249-R8⑤ 并入同批，249-R9 去掉待批过滤（最高权限看全部酒吧目录）。） | 待开发清单第 249 条（18AO） |
+| 72 | **第 360 条 ENUM:51「每笔分摊的结果与所用合同版本必须留痕」怎么算做到**（题面：「第 7 条（18AW，已合并）。ENUM:51 写「每笔分摊的结果与所用合同版本必须留痕」。现码没有独立的「渠道合同」版本记录，渠道费配置是按项目和渠道就地修改的；但每一单在付款时，都把当时用的配置号、费率和固定额固化下来，结算单也逐商户记了渠道费份额，可以逐单追溯。修复人把这条交我定，我判为「已落地」，没有登记缺口。这是对 HTML 原句「所用合同版本」的理解。认可吗？」选项：① 认可：固化到单即算留痕（推荐）；② 不算，登记新条目——渠道费配置改成按版本保存（新版本、生效日、旧版保留），每单记录所用版本号） | 操作员 2026-11-19 选②「不算，登记新条目」：每单固化配置号、费率与固定额不算落地；渠道费配置须按版本保存（新版本、生效日、旧版保留），每单记录所用版本号。登记待开发清单第 360 条（待核实）；覆盖表 BEQ-0128 改回 PARTIAL。 |
+| 73 | **PGM:287「界面全中文」四样例外之外的文件格式名要不要改中文**（背景：18BA 第 267 条同根旁见，后台 ReconciliationPage「支持 PDF、Excel、CSV 原件」、WatermarkTracePage「PNG、JPEG」等文件格式名；控制席原按 PGM:287「可以不用中文的只有四样，没有第五样……不得以『这是标识』为由保留英文」字面判为要改中文，向操作员说明后操作员直接答复） | 操作员 2026-11-19 原话「文件格式名不用中文」：PDF、Excel、CSV、PNG、JPEG 等文件格式名在界面上保持原样，不改中文；PGM:287 其余要求不变。 |
 
 第一段转正前最低池额试算与取消结算环节超池待审批：既有缺口，列入待开发清单第 75 条、随 18C 做（ENUM L52、BSM L752）。
 
@@ -10293,3 +10295,225 @@ HTML 的语义补齐与直接引用同步可在本批核验；70项中的业务�
     - bar-business-operations-product-prd §10.2.1、§10.2.1A、§11A.2 三处「无低消保护判定」缺口登记改为第十批 TK-25-R1 已落地的现状句（BarOrderService 作废明细与 BarBillingService 账单级退款按台组低消拆留款 min_spend_retained，新账单以 min_spend_retained_applied 抵用），业务规则不改。
 - 18AZ 合并前变基（2026-11-20）：本段自 ed3cde79 变基到 origin/main 51950569；迁移按原序顺延改号 V670→V680、V671→V681；合并时 OpenAPI 共 1401 个操作（主干 1400）、info.version V0.85、决策台账 V1.09，Flyway 最新 V681（共 618 个迁移）。版本行、契约版本、计数与 SHA、生成物、台账补记与 PRD 修订行由合并前脚本按新主干统一重写。
 - 18AZ 落地位置补记·运行验收证据、快照、终验文档刷新（无新裁决）：业务提交 4564560e 之后，按第十八批裁决 25 重刷了运行验收证据：后端全量 7074 测，0 失败 0 错误；apps/web 构建通过；常规界面验收（接口全部 mock）实跑 40 条全过；真实后端界面验收未跑，runtime_ready=false。随后依次重生成闭环当前态快照、生产闭环缺口报告、界面验收报告、无上线指挥台。生成器没改。手改 docs/final-closed-loop-acceptance-audit-v0.1.md 与 docs/code-implementation-acceptance-audit-v0.1.md：前端单测源码计数改为 1946；被核文件行数都没变；后端全量与常规界面验收的数字、日期改为本次实跑值；写入 npm run verify:unit 实跑结果，五个工作区全过。交付门禁于 2026-11-19 16:49 UTC 在工作树逐项实跑子项，NAS 两项现场探测未跑。仍红的有两项：一是 coding-host-protection，它写死主仓路径，在工作树口径下必红，属工具口径，不做；二是 final-closed-loop-audit，如实留 2 条红（integration-ready、business-acceptance-ready），原因是校验器要求终验把联调、业务验收写成「是」，而裁决 25 定了不跑真实后端界面验收、运行验收未就绪，终验写的是「否」。verify:delivery-gates 总链仍是红的。
+
+18BA 落地位置补记（2026-11-19）：第十八批 BA 段（batch73）按 18BA 只读设计实现待开发清单第 267、270、275、286、288、309、314、323、324、325、326、327、353、355 条与 TOTALS-R1（治理文案与结算小项组）；运行验收证据、终验文档在本段最后一个提交刷新；各条落地位置见下。本段追加时，原台账除文档版本升一版外，其他历史字节保持。
+
+- 18BA 落地位置补记·控制席判定（2026-11-19）：本段（第十八批 BA 段，batch73）实现待开发清单第 267、270、275、286、288、309、314、323、324、325、326、327、353、355 条与 TOTALS-R1（18BA 只读设计 b73-audit/d-gov-a.json、b73-audit/d-gov-b.json，两轮质疑者修订后定稿，无待裁题）。控制席并入同根同文件四项：267-R3（风控预警页对象类型与各页英文缩写改中文；文件格式名按第十八批裁决 73 不改）、325（页面矩阵另 24 个不存在的权限码按页面实调接口改正、ADM-TKT-002 回滚与状态流按现码）、323（其余单组独用接口按页面独用规则判模块）、355（内部结算价目录列表按 InternalPriceScope 同口径放行审批人与提交人）；落实第十八批裁决 72（覆盖表 BEQ-0128 改回 PARTIAL、写第 360 条）与裁决 73（文件格式名不用中文）。第 263 条核实不属实（真缺口登记第 369 条）。设计旁见另记待开发清单第 363、369～372 条（待核实）。本段从 ed3cde79 开工；汇总文件由合并前脚本 summary_tool.py 剥离与重写。
+- 18BA 落地位置补记·A1 段（TOTALS-R1、309-R1、286-R1、325-R2、325-R1 含控制席并入项、326-R1、267-R1、288-R1；本段无迁移、无新权限码、无新审计事件、无新字段键；OpenAPI 净减 1 个操作）：
+  - TOTALS-R1：写死全仓总数的测试断言改为成员断言，只改测试、不改断言意图。
+    - SupervisorReviewServiceTests.listPoliciesReturnsBlockingCatalogAndWritesAudit：删复核策略总数断言，成员断言补齐注释点名的 14 个动作与 PaymentConfirmationService.action("bar_loan")，另断言 policyCode 不重复。
+    - PaymentConfirmationJdbcTests.fortyPaymentTypesAreMoneyApprovalTypesWithFinanceAndLegalLines：审批时限与付款确认策略改为对照 PaymentConfirmationService.PAYMENT_TYPES 不多不少，并含测试自列的各类型。
+    - PaymentConfirmationJdbcTests.paymentConfirmationFlowsAreGlobalSettingsOnTheApprovalLinePage：顺序对照生产常量，按 payment_type 取「采购入库」行。
+    - FinanceJdbcIntegrationTests 的 dailyCloseListShowsLockedClosesWithinReachNewestBusinessDateFirst、dailyCloseGeneratesPendingThenConfirmsAndLocksInOrder、lockedDailyCloseArchivesReadOnlyWhileBackfillStillGoesThroughApproval：日结汇总改为八个已知 source_stream 各有且只有一行。
+    - 依据：操作员 2026-11-19 批准的避冲突办法第 3 条。
+  - 309-R1：契约删掉已停用的「维护项目公司留存比例（草案）」操作 settlementConfigUpsertRetention（POST /api/v1/settlement/config/retention），本段净减 1 个操作；契约改动由契约代理落；后端与 audit-labels.json 不改。
+    - 依据：BSM:752「门票综合服务费（该费与「娱乐平台公司留存」「项目管理费」是同一笔钱，全程只扣一次、不在池内再扣）」；V370 已停用 platform_retention_rules。
+    - 测试：SettlementPoolTrialJdbcIntegrationTests.retiredRetentionEndpointIsNeitherInContractNorServed（真实 HTTP 调用得 4xx；契约不含该 operationId 与路径）。
+  - 286-R1：只改契约（契约代理落）。schema AccessUserRequest 的 account_type 枚举补 outsourced_vendor，与 AccessService.ALLOWED_ACCOUNT_TYPES 六个值一致；属性说明与 createAccessUser 说明改为「本接口只直接建外部协作机构账号，公司员工与商户员工 409 STAFF_REGISTRATION_REQUIRED，其他取值 400 INVALID_ACCOUNT_TYPE」。
+    - 依据：PGM:580「员工注册分两条路径：公司自有员工由本人在私人手机 App 注册、提交资料后后台审批；商户员工由商户代该员工提交注册申请，经对应域公司批准后账号生效」；PGM:681「外包/服务商人员（设备维保单位、安保与保洁、工程施工/装修队等）可拥有自己的系统账号登录……开通哪些外包账号、能做什么由管理员分配」。
+    - 测试：MerchantStaffAttachProjectJdbcIntegrationTests.accessUserCreationOnlyIssuesOutsourcedVendorAccountsAndContractListsAcceptedTypes。
+  - 325-R2：契约 createSavedBottle、claimSavedBottle 两个操作补 403 响应（契约代理落）；不补 operator_note（第 170 条先例：只声明控制器实读的字段）。
+    - 依据：契约与代码一致（InventoryController.createSavedBottle、InventoryController.claimSavedBottle 先 requirePermission bar.saved_bottle.manage）。
+    - 测试：SavedBottleDepositJdbcIntegrationTests.registrationAndClaimWithoutManagePermissionAreForbiddenAndContractListsForbidden。
+  - 325-R1（含控制席并入项）：页面矩阵 docs/full-admin-page-permission-field-matrix-v0.1.csv 的 permissions 列只跟现码，不新加权限。ADM-TKT-002 行改为：
+    - 权限码 ticket.dynamic_pricing.view、ticket.dynamic_pricing.manage、ticket.dynamic_pricing.simulate、ticket.dynamic_pricing.publish、ticket.product.view；
+    - 接口补 POST /api/v1/ticketing/dynamic-pricing-rules（createTicketDynamicPricingRule）；
+    - 动作去掉「回滚」；
+    - 状态流改为 draft->published（TicketPricingService.publishDynamicPricingRule 只有发布，没有回滚接口）。
+    其余各行把不存在的码改成页面实调接口的 x-permission：
+    - ADM-GOV-002：删 organization.write、merchant.write（写入已由 merchant.profile.manage 覆盖）；
+    - ADM-GOV-003：subject_binding.write 改为 entity.binding.manage，删 subject_binding.approve；
+    - ADM-GOV-005：admission.audit.export 改为 evidence.event.create；
+    - ADM-CONT-001：删 contract.submit（提交走 contract.draft.manage）、contract.archive（页面无此调用）；
+    - ADM-ACC-002：permission_template.write 改为 access.permission_template.manage，permission_template.grant 改为 access.permission_template.apply；
+    - ADM-TKT-001：删 ticket.policy.write、ticket.policy.publish（均走 ticket.product.manage）；
+    - ADM-TKT-003：ticket.verify.read 改为 ticket.verify.view，ticket.refund 改为 ticket.refund.view；
+    - ADM-BAR-004：删 bar.commission.settle；
+    - ADM-AMU-001：amusement.session.write 改为 amusement.session.manage；
+    - ADM-AMU-002：amusement.group.write 改为 amusement.group_booking.manage；
+    - ADM-AMU-003：amusement.incident.write 改为 amusement.safety_inspection.create、submit、rectify、recheck、approve_reopen；
+    - ADM-INV-001：inventory.adjust 改为 inventory.stock.adjust，删 inventory.count（走 inventory.stock.move）；
+    - ADM-INT-001：secret.ref.bind 改为 integration.provider_adapter.create；
+    - ADM-RISK-001：risk.alert.resolve 改为 analytics.risk_alert.manage；
+    - ADM-EVD-001：audit.export 改为 evidence.event.create。
+    其中 ADM-GOV-005、ADM-EVD-001 两码不在 d-gov-a 旁见⑤之列（只在 V251 的 UPDATE 语句里出现、从未建码），同根一并改。码后括注如「(导出按钮)」的 5 个码本身存在，不改。
+    - 依据：文档与代码一致（第 304、313 条先例；控制席 2026-11-19 判定并入）。
+    - 测试：DynamicPricingWebShape229Tests.pageMatrixPermissionsAreActiveCodesAndDynamicPricingRowFollowsCode（全表逐码查 permissions 表 active；核 ADM-TKT-002 行；只有 view 码的账号建规则 403）。
+  - 326-R1：ComplianceService.reminderForContractDate 的说明改为「<标题>已于<到期日>到期」和「<标题>将于<到期日>到期」，写法同 reminderForExpiryItem。
+    - 依据：PGM:287「展示给用户的一切文字，包括菜单、页面标题、字段名、状态、枚举取值、按钮、提示、报错、导出文件表头与内容、短信与通知、日期时间等，必须全部为中文」。
+    - 测试：ComplianceManualEntryJdbcIntegrationTests.scanWithoutDateOrOperatorUsesTodayAndRecordsLoggedInOperator（含 GET /api/v1/compliance/reminders 返回的 message）、scanWithDateUsesGivenDate。
+  - 267-R1：
+    - IntegrationEventsPage 页头与边界说明「Webhook」改「回调」（边界句为「回调与定时轮询校验为当前验收口径……」）。
+    - InternalPriceCatalogPage 页头改为「内部结算价目录（按商品规格逐项建目录）」；placeholder「商户 ID」「经营主体 ID」改「商户编号」「经营主体编号」。
+    - tools/generate-partial-requirement-mock-coverage.mjs 的 REQ-40 标记同步改，两份输出由文档组重生成；e2e 断言由汇合组改。
+    - 依据：PGM:287（同上）；ENUM:79「业务文件与所有界面上一律叫“商品规格”，不使用英文缩写代替」；BSM:1670「内部结算价目录（按商品规格逐项建目录）」；BSM:2028「支付回调」。
+    - 测试：IntegrationEventsPage.kpi.test.tsx「267-R1（PGM:287 界面全中文；BSM:2028「支付回调」）：页头说明与边界说明写「回调」，整页不出现 Webhook」；InternalPriceCatalogPage.test.tsx「267-R1（ENUM:79……）：页头不写 SKU，商家与主体输入框写「编号」」。
+  - 288-R1：只改文档（文档组落）。会员 PRD §10.1 与票务 PRD §5.1 的「注销重注册计数与预警触发当前无承载」改为实现现状（CustomerChurnAlertService 在注册成功、注销完成时计近一年次数，超上限写 customer.churn 预警，只作提示；后台列出该队列的页面尚未承载）。
+    - 依据：BSM:1657「……同一手机号短期内注销＋注册超过阈值……供风控岗与管理层查看与处置。预警只作提示与线索汇集，不自动阻断业务」；ENUM:68「同一手机号在一年内注销与注册合计超过后台配置的次数上限的，触发异常预警交风控查看处置……预警只作提示，不自动阻断注册」。
+    - 行为已由 CustomerChurnAlertJdbcIntegrationTests 覆盖，本条不加用例。
+- 18BA 落地位置补记（乙组段1）：
+  - 323-R1
+    - 改法：服务端模块路由 ServerModuleRoutes（web 表）对同路径写方法与独用列表按页面独用规则补登：POST /api/v1/access/users 归 access（员工账号页建号）；POST /api/v1/inventory/items 归 inventory（库存台账页新建物品）；POST /api/v1/finance/ar-ap-items/{id}/payments 归 finance（应收应付台账页登记收付款）；GET /api/v1/amusement/projects/{id}/entitlements 归 amusement（项目与场次页），POST 同路径归 ticketing（票务策略页）；/api/v1/bar/catalog/products 归 ticketing（票务策略页，控制器只有 GET）。几组共用的列表照旧不判：GET /api/v1/access/users、GET /api/v1/inventory/items、GET /api/v1/finance/ar-ap-items/{id}/payments。
+    - 落地位置：ServerModuleRoutes.moduleOf 所用路由表。
+    - 依据：PGM:737「关闭后菜单不可见或不可点，接口也要拒绝业务动作。」；PGM:744「前端隐藏只是辅助，后端接口必须独立校验。」；PGM:719「开关关闭时，端或模块就不能用；开关打开后，也还要继续看员工权限、商户范围和设备状态。」
+    - 测试：ServerModuleRoutesTests.exclusiveSubpathsUnderNonePrefixesAreRegistered；ServerModuleSwitchJdbcIntegrationTests.ticketingModuleOffRejectsBarCatalogProductList、accessModuleOffRejectsCreateUserButKeepsSharedUserList（barModuleOffRejectsCatalogCategoriesButKeepsSharedProductList 保持绿）。
+  - 323-R2（含控制席并入）
+    - 改法：存酒一族 /api/v1/inventory/saved-bottles 由不判改 bar（存酒页）；其 reminder-policy、manual-pickup-policy、renewal-policy 三个子路径归 overview（提醒与留存天数配置页）。并入项：POST /api/v1/amusement/projects 归 amusement；POST /api/v1/ticketing/ticket-types 归 ticketing；/api/v1/ticketing/expiry-reminder-policies 删去不判键，落回 /api/v1/ticketing 前缀判 ticketing；/api/v1/bar/arrival-reminder-policies 由不判改 ticketing（到期、到店提醒小节只在票务策略页）；/api/v1/loyalty/stored-value/merchant-card-exit-notice-policy 归 governance（储值规则页）；/api/v1/home-contents 归 governance（场地营业时间页、主管复核页）。
+    - 落地位置：ServerModuleRoutes 路由表。
+    - 依据：同 323-R1 三句；待开发清单第 323 条现状（存酒一族待重扫）；18BA 控制席判定 323 并入项。
+    - 测试：ServerModuleRoutesTests.exclusiveSubpathsUnderNonePrefixesAreRegistered、exclusiveApisFromBefore18LAreRegistered、remainingSingleGroupApisAreGated；ServerModuleSwitchJdbcIntegrationTests.savedBottlesFollowStoredWinePageAndReminderPolicyFollowsOverview。
+  - 327-R1
+    - 改法：ServerModuleRoutes 的 merchant_portal 表删去 /api/v1/merchant-portal/card-exit-notices 的不判键，落回 /api/v1/merchant-portal 前缀判 merchant。listMyMerchantCardExitNotices、publishMerchantCardExitNotice 随商户专区模块开关，模块关闭即 403 TERMINAL_DISABLED、不新增公告。
+    - 落地位置：ServerModuleRoutes 路由表。
+    - 依据：PGM:737「关闭后菜单不可见或不可点，接口也要拒绝业务动作。」；PGM:744「前端隐藏只是辅助，后端接口必须独立校验。」
+    - 测试：ServerModuleRoutesTests.merchantPortalRoutesResolveOnlyMerchantZone；ServerModuleSwitchJdbcIntegrationTests.merchantZoneModuleOffRejectsCardExitNotices。
+  - 270-R1
+    - 改法：能力开关变更（updateCapabilitySwitch 操作）的成功事件 terminal_switch.changed 元数据记 previous_enabled（变更前取值；该号开关行不存在而新建时按缺行即关闭记 false）、enabled，以及保存后该行的 terminal_type、capability_code、scope_type、scope_id；设备类写操作元数据照旧为空。灰度试点开关（upsertTerminalCanaryRollout 操作）的 terminal_canary.rollout_changed 元数据加 previous_active（首次建行记 false）。不建开关历史表。
+    - 落地位置：TerminalDeviceService.updateCapabilitySwitch，以及其能力开关用 executeWrite 重载与总版本新增的成功元数据参数；TerminalCanaryService.doUpsertRollout。
+    - 依据：PGM:739「开关配置的每一次变更——包括模块级开关——都必须记录变更人、变更时间、变更前后的取值与影响范围。」；PGM:742「任何能力在后台没有显式开关配置行时一律默认关闭（opt-in）」；PGM:736 灰度是开关最细的一档。
+    - 测试：CapabilitySwitchChangeTraceJdbcIntegrationTests.toggleRecordsPreviousAndNewValueWithScope、creatingSwitchRowRecordsPreviousAsClosed、canaryRolloutChangeRecordsPreviousActive；TerminalDeviceServiceTests.updateCapabilitySwitchPersistsEnabledStateAndWritesAudit。
+  - 275-R1
+    - 改法：集中数据清理提交（submitDataCleanupJob 操作）经留痕执行器落 data.cleanup.submitted（操作人为提交人，元数据 reason 为事由；作业行发起人仍记试运行人）。进入服务后的 404、409、400 失败落 data.cleanup.submit_failed。最高权限本人提交依次落 data.cleanup.submitted 与 data.cleanup.executed。审批（approveDataCleanupJob 操作）的驳回分支落 data.cleanup.rejected（失败 data.cleanup.reject_failed）；审批前的 403、404、409、400 拒绝照旧不落专用事件。留痕事件中文名字典加四条：提交数据清理申请、提交数据清理申请失败、驳回数据清理申请、驳回数据清理申请失败。
+    - 落地位置：DataCleanupService.submitForApproval、approveAndExecute（常量 SUBMITTED、REJECTED，走 AuditedOperationExecutor.readSingle）；audit-labels.json 的 event_names。
+    - 依据：BSM:576「提交→由具备最高权限的人审批→批量清理，全程留痕、绝不碰在用的活数据」；PGM:966「已拍板：所有有过程的业务动作都必须留痕」；PGM:899「谁发起、谁销售、谁服务、谁第一个处理异常、为什么、谁审批、结果是什么，都要能查到。」
+    - 测试：DataCleanupDryRunApprovalJdbcIntegrationTests.submitAndRejectionWriteTraceEvents（新增）、submitNeedsReasonAndSelfApprovalIsForbiddenAndRejectionIsTraced（原 submitNeedsReasonAndSelfApprovalIsForbiddenAndRejectionWritesNoCleanupEvent 改名、改断言）。
+  - 353-R1
+    - 改法：主管复核审批（approveSupervisorReview 操作）每个节点审批人所附凭证都并入复核单凭证（提交时与前序节点所附在前，去重保序）。中间节点通过时也落库，并返回含本节点所附凭证的待审复核单。本节点所附另记入 governance.supervisor_review.node_decided 元数据 evidence_attachment_ids（未附为空数组）。终审沿用同一并集（306-R1 口径不变）。不给审批链节点表加凭证列。
+    - 落地位置：SupervisorReviewService.approve；SupervisorReviewDecisionRecord.withEvidenceAttachmentIds；中间节点经 SupervisorReviewRepository.saveSupervisorReview 落库。
+    - 依据：PGM:899「平台治理层要保证每个重要动作能追溯。谁发起、谁销售、谁服务、谁第一个处理异常、为什么、谁审批、结果是什么，都要能查到。」；PGM:528「审批链不由发起人选择档位：发起单据时只需指定该事项的最终审批人，系统按组织层级自动补全从发起人到该最终审批人之间的全部直接上级节点，逐级审批」。
+    - 测试：SupervisorReviewNodeEvidenceJdbcIntegrationTests.everyNodeEvidenceIsMergedIntoReviewAndTracedOnItsNode。
+  - 本段增量：新增操作 0、删除操作 0、迁移 0；契约只改 updateCapabilitySwitch、upsertTerminalCanaryRollout、submitDataCleanupJob、approveDataCleanupJob、approveSupervisorReview 的说明与 x-audit-event 扩展（由契约代理落）。
+- 18BA 落地位置补记·第 324 条 324-R1（操作留痕查询与导出按账号范围放开）：
+  - 改法：查询、导出、可编辑版重取三个入口改按入口权限码取读范围。最高权限与平台管理员不收窄；商户账号只看本商户；不挂商户的其余账号（原先一律 403 MERCHANT_SCOPE_REQUIRED）改按该权限码可触及的项目，取项目内商户与人员所做的操作——按操作人所属商户的项目或操作人账号机构归到综合体；没有项目归属的 403 PROJECT_SCOPE_REQUIRED。导出记录的筛选另记所按项目集合。
+  - 落地位置：AuditController.queryOperationEvents、exportOperationEvents、viewTable；范围判定共用 AuditEventService.ReadScope.of；带项目集合的 AuditEventService.searchOperationEvents 重载、AuditEventRepository.searchOperationEvents 重载、JdbcAuditEventRepository.searchOperationEvents；契约 queryAuditOperationEvents、exportAuditOperationEvents。
+  - 依据：PGM:899「平台治理层要保证每个重要动作能追溯。谁发起、谁销售、谁服务、谁第一个处理异常、为什么、谁审批、结果是什么，都要能查到。」；PGM:682「审计人员分两类：内部稽核可查看本综合体全部数据，外部审计/监管只能查看划定的范围与时间段；两类都只能查看、不能修改任何业务数据。」；第十八批裁决 71（最高权限什么都能看）。
+  - 测试：AuditOperationEventsScopeJdbcIntegrationTests.auditorWithoutMerchantSeesOperationEventsOfOwnProjectAndMasterSeesAll；AuditControllerTests 改核带项目集合的重载。
+- 18BA 落地位置补记·第 324 条 324-R2（审计事件页证据事件列表同口径）：
+  - 改法：证据事件列表按入口码 evidence.event.view 取同一读范围。不挂商户的账号只看可触及项目内商户登记的事件，总数与列表用同一谓词；不带商户的证据事件在项目口径下不出现。
+  - 落地位置：EvidenceEventService.listEvents；EvidenceEventRepository.listPage 带项目集合的重载、JdbcEvidenceEventRepository.listPage；契约 listEvidenceEvents。
+  - 依据：同 324-R1（PGM:899、PGM:682、第十八批裁决 71）。
+  - 测试：AuditOperationEventsScopeJdbcIntegrationTests.auditorWithoutMerchantSeesEvidenceEventsOfOwnProjectAndMasterSeesAll。
+- 18BA 落地位置补记·第 314 条 314-R1（分红计算单批准与驳回只认最高权限本人）：
+  - 改法：
+    - 批准、驳回只认持授权 U 盘密钥的最高权限本人，其他持 finance.dividend.manage 的人 403 MASTER_APPROVAL_REQUIRED，失败照旧落 dividend.approve_failed、dividend.reject_failed。
+    - 最高权限本人提交即在同一事务审批通过：挂主理人与其他股东应付、做欠款抵扣，另落 dividend.approved。
+    - 最高权限在分红页看全部商户的方案、计算单与留存台账，按平台视图、不脱敏。
+    - 最高权限批准欠款抵扣大于 0 的单时，结算应收不再被项目闸 403 CROSS_PROJECT_FORBIDDEN。
+    - 提交人不能审批自己的单照旧；按钮显隐不变（照 249-R8）；标记发放不动。
+  - 落地位置：DividendService.approve、reject、submit 与私有方法 approveStep（原 approve 的批准步骤原样搬移）；DividendService.scopeMerchant、checkMerchantOwnership、listStatements、getStatement、listReserveLedger；FinanceService.requireArApScope；前端 FinanceDividendsPage 的 makeResult（提交返回已批准时提示「分红已批准」）；契约 approveDividendStatement、rejectDividendStatement、submitDividendStatement、listDividendStatements、getDividendStatement、listDividendReserveReleases、listDividendPlans。
+  - 依据：BSM:1794「有最高权限的管理者：审批分红单（提交单据的人不能审批自己提交的单）。」；PGM:666「持股分红的方案配置、算单、审批和发放属于资金类高危动作，由最高权限审批，提交人不能审批自己的单据。」；BSM:588「最高权限是另一个角色，全平台只设一人，即持有授权 U 盘密钥的那个人」；BSM:576「持授权 U 盘密钥的最高权限本人发起的操作，不需要经过任何审批。」；第十八批裁决 71。
+  - 测试：DividendStatementMasterApprovalJdbcIntegrationTests 三例（onlyMasterAuthorityApprovesAndMasterSeesPendingStatement、masterSubmissionIsApprovedAtOnce、masterApprovesStatementWithArrearsOffset）；前端 FinanceDividendsPage.master.test.tsx；既有分红测试改由最高权限审批、提交改由非最高权限，断言意图不变。
+- 18BA 落地位置补记·第 355 条 355-R1（内部结算价指定生效起始日期，含控制席并入的目录列表范围）：
+  - 改法：
+    - 内部结算价每个版本必填生效起始日期，须晚于提供方当前营业日（商户按该商户，经营主体按平台默认营业日），否则 400 VALIDATION_FAILED。
+    - 批准（复核转正与最高权限本人提交共用）时日期须仍晚于当前营业日，否则 409 INTERNAL_PRICE_EFFECTIVE_DATE_PASSED，由提交人改期重报，草案不动；通过后置待生效（scheduled），旧生效价与业务快照不变。
+    - 到日由系统按生效起始日期、批准先后逐条转正：旧生效行下线、本行生效，与四处业务快照同步在同一事务里完成；同一生效日后批准的覆盖先批准的。成功落 settlement.config.internal_price_catalog.effective，失败落 effective_failed 后继续下一条、下一轮再试。
+    - 待生效条目也算该条目的绑定商户，可被权益模板、酒吧商品与点单引用，快照到日补上；券口径要求建券即有大于 0 的生效价，须到生效起始日期之后再建券；取生效价的各处不动。
+    - 目录页表单加生效起始日期，草案队列与生效条目表显示日期与「待生效（自某日起）」。
+    - 控制席并入：目录列表的最高权限与平台管理员看全部，商户账号看本商户，其余不挂商户的账号（域主管公司审批人等）只看本人所属公司为该条目审批公司的条目（含本公司作为提供主体的条目），不再 403 MERCHANT_SCOPE_REQUIRED。
+  - 落地位置：
+    - 本段迁移 V682：internal_price_catalog 加 effective_from，status 加 scheduled。
+    - SettlementConfigWriteRequests.InternalPriceItemRequest.effectiveFrom；SettlementConfigWriteService.saveInternalPriceItem、activateCatalogDraft。
+    - JdbcSettlementConfigWriteRepository 的 scheduleInternalPriceItemDraft、listScheduledInternalPrices、promoteScheduledInternalPrice、upsertInternalPriceItemDraft、listCatalogEntries、catalogItemMerchant，以及 CatalogEntryRow.effectiveFrom。
+    - 新类 InternalPriceScheduledActivationService.activateDue 与 InternalPriceScheduledActivationJob；application-prod.yml 的 settlement.internal-price-activation.scheduled.enabled。
+    - JdbcTicketingRepository、JdbcVoucherRepository、JdbcBarPosCatalogRepository 的 findCatalogItemMerchant。
+    - SettlementConfigController.listInternalPriceItems；InternalPriceScope.handledBy。
+    - 前端 InternalPriceCatalogPage。
+    - 契约 settlementConfigUpsertInternalPriceItem、settlementConfigActivateDraft、settlementConfigListInternalPriceItems；本段新增操作 0 个。
+  - 依据：BSM:1671「价格变更形成新版本、指定生效时间并只影响后续业务；核销或结算时把当时价格固化到流水，历史不得手改。」与同行「实际提供商品或服务的主体提交价格，对应域主管公司审批」；BSM:521「所有涉及钱的配置一律版本化：每次改动生成新版本，必须填写生效起始日期，并先存为草案、经高敏权限“转正”审批通过后按指定日期生效，不即改即生效。」；ENUM:187「全系统的钱账统一按「营业日」归集。」；第十八批裁决 71。
+  - 测试：InternalPriceEffectiveDateJdbcIntegrationTests 两例（approvedVersionsWaitForTheirEffectiveDateAndTheLaterApprovalWinsOnTheSameDay、approvalAfterTheEffectiveDateHasArrivedIsRejected）；前端 InternalPriceCatalogPage.test.tsx 新用例「355-R1：生效起始日期必填并随草案提交，待生效版本显示待生效（自某日起）」；7 个用写入口建价的测试类补生效起始日期、要用新价处先调到日转正，断言意图不变。
+- 18BA 落地位置补记·第 267 条 267-R2（后台其余各页字段名、占位提示、报错里的「ID」改「编号」）
+  - 改法：只改可见文字，变量名、testid、请求字段和代码注释都不动。
+  - 落地位置（apps/web/src/admin/pages/）：
+    - RiskAlertsPage.tsx：「对象 ID」改「对象编号」。
+    - BarProductsPage.tsx（两处确认摘要）、BarCombosPage.tsx：「酒吧 ID」改「酒吧编号」。
+    - BarOrdersPage.tsx：退菜的「订单明细 ID」「要退的明细 ID」和报错改「……编号」。
+    - FinanceDividendsPage.tsx：主理人账户的字段名和报错改「主理人账户编号」。
+    - VoucherLedgerPage.tsx：客人筛选、发放券的客人字段名、占位和报错改「客人编号」；新建券定义的「归属商户 ID」「货品 ID／库存货品 ID」「库位 ID／出库库位 ID」改「……编号」。
+    - BarTableSessionsPage.tsx：订台、开台、转台、并台、拆台各字段名、占位和报错里的卡座、会话、销售员、销售、服务员改「……编号」；拆台人工归属格式改为「订单编号=会话编号」「订台编号=会话编号」「成员编号=会话编号」。
+    - WecomComplianceReviewPage.tsx：留存策略表头改「范围编号」。
+    - ContractWorkbenchPage.tsx：变更新经营位置的占位改「新铺位编号」。
+    - 页面里展示的编号取值和示例（如 usr_xxx）属系统内部标识符，不改。
+  - 依据：PGM:287「展示给用户的一切文字，包括菜单、页面标题、字段名、状态、枚举取值、按钮、提示、报错……必须全部为中文……可以不用中文的只有四样，没有第五样：单据号、设备编号、二维码内容、系统内部标识符。这四样之外，凡是展示给人看的文字一律中文，不得以“这是标识”为由保留英文」；先例 227-R1「请求 ID」改「请求编号」。
+  - 测试：
+    - BarTableSessionsPage.split.test.tsx「按邀请归属与成员归属提交拆台请求，格式不对不发请求」（断言改为「成员编号=会话编号」）；
+    - BarTableSessionsPage.guidedcreate.test.tsx「新建订台与开台表单的字段名、占位提示都写「编号」」；
+    - VoucherLedgerPage.voucher.test.tsx「客人筛选与发放券表单写「客人编号」，字段名与占位提示都不含 ID」；
+    - RiskAlertsPage.test.tsx「表头写「对象编号」，列表、明细与新建表单的对象类型都是中文」。
+- 18BA 落地位置补记·第 267 条 267-R3（控制席并入：风控预警页对象类型英文与后台其余英文缩写改中文；文件格式名按第十八批裁决 73 不改）。落地位置（apps/web/src/admin/pages/）：
+  ① RiskAlertsPage.tsx 对象类型：
+    - 新建预警的默认值由英文 bar_order 改为「酒吧订单」，照 SupervisorReviewPage 对象类型默认「合同」的先例，手填中文原样提交、原样显示。
+    - 列表和行明细改走页面内的 objectTypeLabel：旧默认码 bar_order 显示「酒吧订单」；系统写入的 metric_anomaly（AnalyticsService 指标异常转告警）显示「指标异常」，wecom_message（WecomConversationService 企业微信违规命中）显示「企业微信消息」。
+    - 其余对象码按 reviewLabels 的 formatReviewValue 处理。
+    - 依据：PGM:287「……枚举取值……必须全部为中文」。
+  ② ContractWorkbenchPage.tsx：「排租金AR」改「排租金应收」（生效与已到期合同行动作、页说明、账期选择框读屏名、未选账期提示）。依据：PGM:645「租金物业费能源费应收」。
+  ③ EnergyWorkbenchPage.tsx：抄表期间占位「期间 YYYY-MM」改「期间（年-月）」。依据：PGM:287「不得出现任何英文（如 active/draft 英文状态、mm/dd/yyyy 英文日期格式、英文按钮或提示）」；用词照 ContractWorkbenchPage 已有的「账期（年-月）」。
+  ④ FacilityWorkbenchPage.tsx：「SLA 策略明细／SLA 策略表／SLA 策略／保存 SLA」和详情按钮读屏名，改「时限策略明细／时限策略表／时限策略／保存时限策略」。依据：BSM:1385「响应/处理时限按「工单类型×优先级」矩阵后台配置」；BSM:1382「按响应时限和处理时限统计时效」。
+  ⑤ OperatingParamsPage.tsx：节假日抓取区块标题、字段名、按钮和空值报错里的「URL」改「网址」。依据：BSM:1832「节假日日历可给网址自动抓取，也可手工维护」。「holiday-cn JSON 格式」和抓取地址示例占位，按第十八批裁决 73 原样保留。
+  ⑥ BusinessAnalyticsPage.tsx：页头说明和边界说明的「BI」改「商业智能」；HTML 里没有这个词，按通行译名定。「AI 预测」照 PGM:532「P0 可引入本地 AI 大模型做辅助分析判断」的原词保留。
+  ⑦ ReconciliationPage.tsx、WatermarkTracePage.tsx 的 PDF、Excel、CSV、PNG、JPEG 一字不动。依据：第十八批裁决 73 操作员原话「文件格式名不用中文」。
+  - 测试：
+    - RiskAlertsPage.test.tsx「表头写「对象编号」，列表、明细与新建表单的对象类型都是中文」；
+    - ContractWorkbenchPage.test.tsx「已到期合同行仍有「排租金AR」，未选账期点击即提示先选账期」（断言改为按钮含「排租金应收」，提示「排租金应收需先选账期（年-月）」）；
+    - EnergyWorkbenchPage.test.tsx「抄表期间输入框提示不用英文日期格式」；
+    - FacilityWorkbenchPage.rowdetail.test.tsx「维保到期/逾期工单/SLA/巡检模板/任务四表整行可点 → 抽屉」（断言改为明细含「时限策略明细」、整页不含 SLA）；
+    - OperatingParamsPage.guidedcreate.test.tsx「抓取区标题、字段名、按钮与空网址报错都写「网址」，不含 URL」；
+    - BusinessAnalyticsPage.test.tsx「边界说明写「商业智能」，整页不含 BI」。
+  - 本段 267-R2、267-R3 无迁移，新增操作 0 个，无契约改动。
+- K-contract（契约代理）18BA 契约落地位置补记，本段新增操作 0 个、删除 1 个，没有迁移：
+  - 309-R1：删 settlementConfigUpsertRetention（POST /api/v1/settlement/config/retention）整条路径，扩展属性和内联请求体一并删去。依据：BSM:752「门票综合服务费（该费与「娱乐平台公司留存」「项目管理费」是同一笔钱，全程只扣一次、不在池内再扣）」，V370 已停用 platform_retention_rules，后端没有入口。测试：SettlementPoolTrialJdbcIntegrationTests.retiredRetentionEndpointIsNeitherInContractNorServed。
+  - 286-R1：AccessUserRequest.account_type 的 enum 加 outsourced_vendor，与 AccessService.ALLOWED_ACCOUNT_TYPES 一致；description 补「只直接建外部协作机构账号；传 staff、sales、supervisor、merchant_admin、merchant 返回 409 STAFF_REGISTRATION_REQUIRED（merchant、merchant_admin、sales 缺 merchant_id 先报 400 VALIDATION_FAILED）；其他取值 400 INVALID_ACCOUNT_TYPE」。createAccessUser 首句改为建外部协作机构账号。依据：PGM:580「员工注册分两条路径：公司自有员工由本人在私人手机 App 注册……商户员工由商户代该员工提交注册申请……」；PGM:681「外包/服务商人员……可拥有自己的系统账号登录」。测试：MerchantStaffAttachProjectJdbcIntegrationTests.accessUserCreationOnlyIssuesOutsourcedVendorAccountsAndContractListsAcceptedTypes。
+  - 325-R2：createSavedBottle、claimSavedBottle 的 responses 加 403（引 Error），与代码权限闸一致。测试：SavedBottleDepositJdbcIntegrationTests.registrationAndClaimWithoutManagePermissionAreForbiddenAndContractListsForbidden。
+  - 270-R1：updateCapabilitySwitch 的 description 写明 terminal_switch.changed 元数据记 previous_enabled、enabled、terminal_type、capability_code、scope_type、scope_id；upsertTerminalCanaryRollout 写明 terminal_canary.rollout_changed 另记 previous_active。依据：PGM:739「开关配置的每一次变更——包括模块级开关——都必须记录变更人、变更时间、变更前后的取值与影响范围。」；PGM:742。
+  - 275-R1：submitDataCleanupJob 的成功/失败事件改为 data.cleanup.submitted / data.cleanup.submit_failed，description 写明元数据 reason 与最高权限提交的事件顺序；approveDataCleanupJob 加 x-audit-event-success-alternatives data.cleanup.rejected，description 写明驳回落 data.cleanup.rejected（失败 data.cleanup.reject_failed）。依据：BSM:576「……批量清理，全程留痕……」；PGM:966「所有有过程的业务动作都必须留痕」。代码：DataCleanupService.submitForApproval、approveAndExecute。
+  - 353-R1：approveSupervisorReview 的 description 写明每个节点所附凭证都并入复核单（去重保序），本节点所附另记进 governance.supervisor_review.node_decided 的元数据 evidence_attachment_ids。依据：PGM:899「谁发起……谁审批、结果是什么，都要能查到。」；PGM:528 逐级审批。
+  - 324-R1：queryAuditOperationEvents、exportAuditOperationEvents 的 x-data-scope 由 platform 改 project，加 x-failure-codes PROJECT_SCOPE_REQUIRED，description 写明范围口径（最高权限与平台管理员看全部、商户账号看本商户、其余按入口权限码可触及的项目），导出记录 filters 另记 project_ids。代码：AuditEventService.ReadScope。324-R2：listEvidenceEvents 补 description，口径相同，入口码 evidence.event.view，不带商户的事件在项目口径下不出现。依据：PGM:899；PGM:682「内部稽核可查看本综合体全部数据」；第十八批裁决 71。
+  - 314-R1：approveDividendStatement、rejectDividendStatement 的 x-failure-codes 加 MASTER_APPROVAL_REQUIRED，说明写「只认持授权 U 盘密钥的最高权限本人」。submitDividendStatement 补「最高权限本人提交即审批通过、另落 dividend.approved、返回 status=approved」，加 x-audit-event-success-alternatives dividend.approved，x-failure-codes 补 DIVIDEND_ARREARS_CHANGED、DIVIDEND_PAY_SLOT_MISSING。listDividendPlans、listDividendStatements、getDividendStatement、listDividendReserveReleases 补「最高权限看全部商户」。依据：BSM:1794「有最高权限的管理者：审批分红单」；PGM:666「持股分红的……审批和发放属于资金类高危动作，由最高权限审批」；BSM:576；第十八批裁决 71。代码：DividendService.approve、reject、submit、approveStep、scopeMerchant、checkMerchantOwnership。
+  - 355-R1：settlementConfigUpsertInternalPriceItem 的内联请求体加必填 effective_from（date），description 写明两句 VALIDATION_FAILED 提示，最高权限提交改为「免他人复核、批准后待生效」。settlementConfigActivateDraft 写明 internal_price_item 批准后为待生效（status=scheduled），到生效起始日期（按提供方营业日）由系统转正并同步四处业务快照，同一生效日后批准的覆盖先批准的；x-failure-codes 加 INTERNAL_PRICE_EFFECTIVE_DATE_PASSED。settlementConfigListInternalPriceItems 写明 effective_from、scheduled 与范围口径（控制席并入），x-data-scope 由 platform 改 project-provider。依据：BSM:521「……必须填写生效起始日期……经高敏权限“转正”审批通过后按指定日期生效，不即改即生效」；BSM:1671「实际提供商品或服务的主体提交价格，对应域主管公司审批……价格变更形成新版本、指定生效时间并只影响后续业务」；ENUM:187 按营业日。代码：SettlementConfigWriteService.activateCatalogDraft、InternalPriceScheduledActivationService.activateDue、InternalPriceScope.handledBy、SettlementConfigController 的目录列表方法。系统作业事件 settlement.config.internal_price_catalog.effective、effective_failed 不对应任何接口，不进契约。
+  - 323-R1、323-R2、327-R1、325-R1、326-R1、267 的各 rid、288-R1：契约不动。
+- 18BA 汇合段 J（e2e 与门禁）落地补记：
+  - 改法：
+    - tests/e2e/full-admin-remaining.spec.ts 的 ADM-REM-01（ADM-INT-002 分支）：边界说明断言由「Webhook + 定时轮询校验」改为「回调与定时轮询校验」，随 267-R1 改 IntegrationEventsPage 的边界说明。
+    - 按现页面重拍 tests/e2e/full-admin-visual.spec.ts-snapshots/full-admin-bar-orders-mobile-chromium-linux.png（ADM-VIS-02，390 宽视口），原因是 267-R2 把 BarOrdersPage「退菜退酒申请」表单的标签「订单明细 ID」改成「订单明细编号」、占位「要退的明细 ID」改成「要退的明细编号」。重拍前该图 208 像素（0.01）不同、尺寸不变；重拍后逐像素比对，只有这两处文字。重拍在 b59.lock 内用 --update-snapshots=changed 做，另三张基线不变。
+    - spec 的步骤与 mock 都不改；其余各段的 e2e 要点都是「无」。
+  - 依据：PGM:287「必须全部为中文，不得出现任何英文」（267-R1、267-R2）。
+  - 测试：ADM-REM-01、ADM-VIS-02。
+  - 门禁结论（变基前，在本段基线上实跑）：
+    - 后端 --fresh 全量 tests=7040，red=0，迁到 v674（本段迁移 V682）。
+    - 前端 typecheck 0 错，vitest 358 个文件、2044 例全过。
+    - 客人三个工作区 131、85、77 例全过。
+    - 安卓员工端 125 例全过，android-app 编译通过。
+    - 后台五份 e2e spec 33 例全过。
+    - 镜像里重生成四份生成物后跑 verify:p0-contract，8 个子项全过；yaml 与 json 深比较一致，操作数比基线净减 1（309-R1 删 settlementConfigUpsertRetention），本段新增操作 0。
+    - git diff --check 只标出基线里本来就是 CRLF 的文件被改行的行尾 CR，按 cr-at-eol 复核无输出。
+- 18BA 文档组（D-docs）：按各段实现把 PRD 与页面矩阵的现状句就地改成现码实情。各 PRD 标题版本 +0.01、修订表加一行，版本由收尾统一定；不新增业务规则，不扩表。
+  ① 288-R1：会员与等级 PRD §10.1 末句「实现改造列入排期：注销重注册计数与预警触发当前无承载」改为实现现状——CustomerChurnAlertService 在注册成功与注销完成时计近一年次数，超全平台上限写统一风控预警 customer.churn，只作提示；另写明后台列该队列的页面尚未承载（第 369 条）。票务 PRD §5.1 同句改为指向会员 PRD §10.1。依据 BSM:1657「……同一手机号短期内注销＋注册超过阈值……供风控岗与管理层查看与处置」、ENUM:68。
+  ② 324-R1、R2：全链路留痕与终端开关 PRD §2.2 补实现现状——操作留痕查询与导出（queryAuditOperationEvents、exportAuditOperationEvents）与证据事件列表（listEvidenceEvents）的读范围：最高权限与平台管理员看全部，商户账号看本商户，不挂商户的按入口权限码可触及的项目看，无项目归属 403 PROJECT_SCOPE_REQUIRED（AuditEventService.ReadScope）。客人与系统作业留痕、不带商户的证据事件不按综合体归属（第 370 条）。依据 PGM:899、PGM:682「内部稽核可查看本综合体全部数据」、第十八批裁决 71。
+  ③ 323-R1、R2（含控制席并入）与 327-R1：同 PRD §5.4 补各接口按页面独用所归模块（ServerModuleRoutes），商户门户卡片退出通知改归商户专区；依据 PGM:737、PGM:744。
+  ④ 270-R1：
+     - 平台治理 PRD §6.11 第 5 条下补实现现状：TerminalDeviceService.updateCapabilitySwitch 的 terminal_switch.changed 记 previous_enabled、enabled 与 terminal_type、capability_code、scope_type、scope_id；TerminalCanaryService 的 terminal_canary.rollout_changed 记 previous_active。
+     - 全链路留痕 PRD §6.3A 灰度事件元数据说明就地补 previous_active。
+     - 依据 PGM:739「开关配置的每一次变更……都必须记录变更人、变更时间、变更前后的取值与影响范围」、PGM:742。
+  ⑤ 275-R1：治理 PRD §15C.3「提交与驳回本身落事件属待开发清单第 275 条」改为已落——DataCleanupService.submitForApproval 落 data.cleanup.submitted（记事由），approveAndExecute 驳回落 data.cleanup.rejected；页面矩阵 ADM-OPS-002 留痕事件列同步。依据 BSM:576「全程留痕」。
+  ⑥ 353-R1：治理 PRD §2A.5 补实现现状——SupervisorReviewService.approve 每个节点（含中间节点）所附凭证并入复核单，并记入 governance.supervisor_review.node_decided 元数据 evidence_attachment_ids。依据 PGM:899、PGM:528。
+  ⑦ 314-R1：分红引擎 PRD §6「职责分离」后补实现现状——approveDividendStatement、rejectDividendStatement 只认最高权限本人（403 MASTER_APPROVAL_REQUIRED）；最高权限本人提交即审批通过，另落 dividend.approved；最高权限看全部商户、平台视图不脱敏；FinanceService.requireArApScope 对最高权限不按项目闸。依据 BSM:1794「有最高权限的管理者：审批分红单」、PGM:666、BSM:576、BSM:588、第十八批裁决 71。
+  ⑧ 355-R1（含控制席并入）：
+     - 财务 PRD §3B.3 补实现现状：settlementConfigUpsertInternalPriceItem 必填 effective_from；settlementConfigActivateDraft 批准后 status=scheduled，日期已到 409 INTERNAL_PRICE_EFFECTIVE_DATE_PASSED；InternalPriceScheduledActivationService 到日转正，同步四处快照；settlementConfigListInternalPriceItems 按 InternalPriceScope.handledBy 放行审批人。
+     - 291 现状「最高权限本人提交即生效」随改。
+     - 结算重构 PRD §9.7「当前落点」同步。
+     - 页面矩阵 ADM-STL-003 状态流、字段、校验、事件就地改。
+     - 本段迁移 V682。
+     - 依据 BSM:1671「价格变更形成新版本、指定生效时间并只影响后续业务」、BSM:521、ENUM:187。
+  ⑨ 267-R3：财务 PRD §13.1 与地产全链 PRD §2 的界面按钮名「排租金AR」改为「排租金应收」（共 4 处）。依据 PGM:287。
+  ⑩ 第十八批裁决 72：结算重构 PRD 文首缺口①「销售渠道费逐单固化所用配置（BSM L749 所用合同版本）」一句补：逐单固化不算「所用合同版本」已留痕，渠道费配置没有版本，见第 360 条。依据 ENUM:51「每笔分摊的结果与所用合同版本必须留痕」与裁决 72 原文。
+  本组未改：决策台账、覆盖表、生成物、契约、info.version。新增操作 0 个。测试：只改文档，无新用例；node tools/verify-full-admin-page-matrix.mjs 通过。
+- 18BA 收尾复核修正（2026-11-20）：按收尾复核成立的意见与控制席补充修，只修同根问题，不做别的；本组新增操作 0 个，无迁移。
+  ① TOTALS-R1 补一处同类：FinanceServiceTests.lockDailyCloseAggregatesSixSourcesAndTagsSameDayItems 的日结汇总来源由写死八项的 containsExactlyInAnyOrder 改为 contains（八个已知来源）加 doesNotHaveDuplicates，断言意图不变；镜像变异验证删掉 low_value_difference 变红、FinanceService.DAILY_CLOSE_SOURCES 加一个来源仍绿。同根扫描主代码字符串目录常量在测试里的精确比对，其余命中（库存交接五段、分红方案默认费用类别、员工建号账号类型对照契约枚举）是封闭值或对照契约本身，不属写死全仓总数，不改。依据操作员 2026-11-19 批准的避冲突办法第 3 条。
+  ② 第 267 条同根（小写 id）：后台各页字段名、占位、读屏名、报错、说明与表头里与中文相邻的英文 id，以及 user_id、space_id 原始字段名，照 267-R2 改为「……编号」（如「商户编号」「空间编号」「员工编号」，表头「编号」），变量名、data-testid、请求字段、接口路径不动；复扫（不区分大小写、含 _id 字段名、去注释）为 0。同步按旧文案取元素的前端单测与 e2e。新用例：ContractWorkbenchPage.test.tsx「正文、占位与读屏名都不出现与中文相邻的 id，变更说明占位不含 payload」、EnergyWorkbenchPage.test.tsx「正文、占位与读屏名都不出现与中文相邻的 id」、FacilityWorkbenchPage.rowdetail.test.tsx「正文、占位与读屏名都不出现与中文相邻的 id，设备台账表头写「编号」」、OperatingParamsPage.guidedcreate.test.tsx「引导录入的字段名、占位、读屏名与确认摘要都写「综合体编号」，不出现与中文相邻的 id」。依据 PGM:287「展示给用户的一切文字，包括菜单、页面标题、字段名、状态、枚举取值、按钮、提示、报错……必须全部为中文……不得以“这是标识”为由保留英文」。
+  ③ 第 267 条同根（267-R3 清单外的英文字样）：经营分析趋势卡与品类占比、月度对比节假日对比、票务定价核算标题的「vs」改「对比」；合同变更说明占位删去 payload；经营参数授权范围坐标说明改为「坐标填定位设备读出的原始经纬度（国际通用坐标系），不要填地图软件换算后的坐标」；库存台账页头去掉「按 OpenAPI 契约」，边界说明的原始字段名照字典中文名写「调出库位、调入库位、明细项和提交编号」；分红页说明去掉迁移号 V296、V297，留存说明 max(…) 改「余额×比例与固定额取较大者」；应收应付台账页头去掉 P0（第 340 条先例）；菜单与页标题「T3-A 只读经营分析」改「只读经营分析」，页面矩阵 ADM-ANA-009 页面名与 e2e 页面表同步，路由键、页面码、文件名不动，菜单不重名。复扫与中文相邻的拉丁字母词，余下的只有 HTML 原词（POS、App、Web、KPI、AI、NFC、U 盘、X 光、A／B／C 档）、文件格式名（第十八批裁决 73）、系统代码示例（如 usr_xxx、expired_unused、2026-Q3、Asia/Shanghai、渠道码、权限码、页面码）与单字母代号（第 N 天、B 吧）。新用例：BusinessAnalyticsPage.test.tsx「趋势卡与品类占比标题写「对比」，整页不含 vs」、MonthlyComparisonPage.kpi.test.tsx「节假日对比标题写「今年对比去年同名假期」，整页不含 vs」、InventoryLedgerPage.test.tsx「页头与边界说明写业务说法，不含 OpenAPI 与原始字段名」、FinanceArApLedgerPage.test.tsx「页头说明写「完整台账支持应收、应付、部分核销、余额」，不含 P0」、T3AReadonlyAnalyticsPage.test.tsx「页标题写「只读经营分析」，整页不含 T3」、adminRoutes.test.ts「只读经营分析菜单名为「只读经营分析」且不与其他菜单重名」，另在 TicketingPoliciesPage.ruleversions.test.tsx、FinanceDividendsPage.guidedcreate.test.tsx、OperatingParamsPage.sensitiveRange.test.tsx 既有用例里扩断言。依据 PGM:287（同上）。
+  ④ 第 324 条同根：证据事件列表与计数（JdbcEvidenceEventRepository.listPage）、操作留痕查询（JdbcAuditEventRepository.searchOperationEvents）按项目查时的商户谓词，由只认主项目改为主项目 UNION 已批准的经营项目（merchant_projects），与 listMerchantOperatingProjectIds 同一口径；操作追溯与终端开关 PRD 第 324 条现状句同步。新用例 AuditOperationEventsScopeJdbcIntegrationTests.auditorSeesEventsOfMerchantApprovedToOperateInOwnProject：主项目在乙、经批准也在甲经营的商户，其证据事件与商户级账号的操作留痕对甲的稽核可见；只提了申请、尚未批准的不可见。依据 PGM:682「内部稽核可查看本综合体全部数据」、PGM:659「一个商户在两个或更多项目中有经营的，看到的是每一个项目内他经营的商户」。
+  ⑤ 第 355 条同根：上面 355-R1 补记那句改为券口径须到生效起始日期之后再建券；VoucherService.createDefinitionInternal 的 CATALOG_ITEM_NOT_EFFECTIVE 报错改为「所引用的目录条目还没有生效价：未复核的请先在结算配置中心完成复核；已批准待生效的请到生效起始日期后再建券」，只改文案、不加分支；契约 x-failure-codes 只列错误码，不改；财务 PRD §3B.3 的 355-R1 现状句「待生效条目可被业务对象引用」同步改为权益模板、酒吧商品与点单可引用、券须到生效起始日期之后再建。新用例 InternalPriceEffectiveDateJdbcIntegrationTests.voucherReferencingAnItemOnlyApprovedAndWaitingIsToldToWaitForTheEffectiveDate（券台账页新建券定义的真实请求）。依据 BSM:1671「任何商户在没有获批内部结算价之前不得为其开通需要该价格结算的权益或券」、BSM:521。
+  ⑥ 上面 A1 段 325-R1 句的括注改为 operationId createTicketDynamicPricingRule。
+  ⑦ 控制席补充：风控预警页「预警类型」的系统写入码 metric_anomaly、wecom_risk_hit 在共用业务码表（customer-core statusLabels，后台 i18n statusLabels 转出）补中文名「指标异常」「企业微信违规命中」，新用例 RiskAlertsPage.test.tsx「预警类型 metric_anomaly、wecom_risk_hit 在列表与明细里显示中文」，依据 PGM:287；页面矩阵 ADM-OPS-002 校验列「禁自审」照 249-R7 改为批准与驳回只认最高权限本人、最高权限本人提交即执行；财务 PRD §3B 与结算重构 PRD §9.7 标题「内部结算 SKU 目录」改为「内部结算价目录（按商品规格逐项建目录）」，同节提及的 SKU 改「商品规格」（引用的裁决原题不动），依据 ENUM:79「业务文件与所有界面上一律叫“商品规格”，不使用英文缩写代替」、BSM:1670；覆盖表 BSM-0730、BSM-0731 的 conflict_summary 改为见待开发清单第 375 条（待核实）；覆盖表 PGM-0003、PGM-0186、PGM-0201～0203 的同句同步改。
+- 18BA 合并前变基（2026-11-20）：本段自 ed3cde79 开工，先后变基到 origin/main b7762262、51950569、807e10d5；迁移按原序顺延改号 V674→V679→V680→V682；合并时 OpenAPI 共 1400 个操作（主干 1401）、info.version V0.86、决策台账 V1.10，Flyway 最新 V682（共 619 个迁移）。版本行、契约版本、计数与 SHA、生成物、台账补记与 PRD 修订行由合并前脚本按新主干统一重写。
+- 18BA 落地位置补记·运行验收证据、快照、终验文档刷新（无新裁决）：业务提交 72a5b2c6 之后，按第十八批裁决 25 重刷了运行验收证据：后端全量 7097 测，0 失败 0 错误；apps/web 构建通过；常规界面验收（接口全部 mock）实跑 40 条全过；真实后端界面验收未跑，runtime_ready=false。随后依次重生成闭环当前态快照、生产闭环缺口报告、界面验收报告、无上线指挥台。生成器没改。手改 docs/final-closed-loop-acceptance-audit-v0.1.md 与 docs/code-implementation-acceptance-audit-v0.1.md：前端单测源码计数改为 1967；被核文件行数都没变；后端全量与常规界面验收的数字、日期改为本次实跑值；写入 npm run verify:unit 实跑结果，五个工作区全过。交付门禁于 2026-11-19 18:20 UTC 在工作树逐项实跑子项，NAS 两项现场探测未跑。仍红的有两项：一是 coding-host-protection，它写死主仓路径，在工作树口径下必红，属工具口径，不做；二是 final-closed-loop-audit，如实留 2 条红（integration-ready、business-acceptance-ready），原因是校验器要求终验把联调、业务验收写成「是」，而裁决 25 定了不跑真实后端界面验收、运行验收未就绪，终验写的是「否」。verify:delivery-gates 总链仍是红的。

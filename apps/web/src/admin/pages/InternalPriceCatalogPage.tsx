@@ -1,4 +1,4 @@
-// 文件版本：V0.03
+// 文件版本：V0.04
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
@@ -9,6 +9,8 @@ import type { AdminPageProps } from "../types";
 // 平台所有内部结算价集中在这里维护，是成本侧唯一真源、唯一可改价处：
 //   条目硬绑提供商家（业态随商家带出）+ 归入品类，商家/业态/品类三维筛选；
 //   新建/改价先落草案 → 对应域主管公司的他人复核转正 → 只对之后的核销/结算生效，转正同时同步四处业务快照；
+//   第十八批 BA 段第 355 条 355-R1（BSM:521「必须填写生效起始日期……按指定日期生效，不即改即生效」）：每个版本填生效起始日期，批准后待生效，
+//   到日（按营业日）由系统转正并同步业务快照；
 //   第十八批 AW 段 291-R2（ENUM:54「实际提供商品或服务的主体提交」）：提交单列 settlement.internal_price.submit，转正、下线仍为结算配置维护码；
 //   核销/结算发生时当时价固化到流水，此后改价不影响已发生的账；条目可下线归档，不影响历史引用。
 // 敏感：内部结算价仅授权后台人员可见（读端权限闸在后端，无权限直接 403）。
@@ -30,6 +32,7 @@ type CatalogRow = {
   isDraft: boolean;
   updatedBy?: string | null;
   updatedAt?: string | null;
+  effectiveFrom?: string | null;
 };
 
 const FORMAT_LABELS: Record<string, string> = {
@@ -45,8 +48,8 @@ function yuan(cent: number | null | undefined): string {
   return (cent / 100).toFixed(2);
 }
 
-type Form = { itemCode: string; merchantId: string; entityId: string; category: string; itemName: string; priceYuan: string };
-const EMPTY_FORM: Form = { itemCode: "", merchantId: "", entityId: "", category: "", itemName: "", priceYuan: "" };
+type Form = { itemCode: string; merchantId: string; entityId: string; category: string; itemName: string; priceYuan: string; effectiveFrom: string };
+const EMPTY_FORM: Form = { itemCode: "", merchantId: "", entityId: "", category: "", itemName: "", priceYuan: "", effectiveFrom: "" };
 const provider = (row: CatalogRow) => row.merchantId ?? row.providerEntityId ?? "—";
 
 export function InternalPriceCatalogPage({ api, setActionResult, setGlobalError, effectivePermissions, reportViewedObjects }: AdminPageProps) {
@@ -100,12 +103,13 @@ export function InternalPriceCatalogPage({ api, setActionResult, setGlobalError,
     const category = form.category.trim();
     const itemName = form.itemName.trim();
     const priceYuan = form.priceYuan.trim();
+    const effectiveFrom = form.effectiveFrom.trim();
     if (merchantId && entityId) {
       setFormError("提供商家与提供主体二选一（商户提供的填商家，城市项目公司等经营主体提供的填主体）");
       return;
     }
-    if (!(merchantId || entityId) || !category || !itemName || !priceYuan) {
-      setFormError("提供方、品类、条目名称、内部结算价都必填（条目编码留空=新建）");
+    if (!(merchantId || entityId) || !category || !itemName || !priceYuan || !effectiveFrom) {
+      setFormError("提供方、品类、条目名称、内部结算价、生效起始日期都必填（条目编码留空=新建）");
       return;
     }
     const priceCent = Math.round(Number(priceYuan) * 100);
@@ -123,6 +127,7 @@ export function InternalPriceCatalogPage({ api, setActionResult, setGlobalError,
         category,
         itemName,
         priceCent,
+        effectiveFrom,
       });
       setActionResult({ action: "internal_price_item_draft_saved", itemCode });
       setForm(EMPTY_FORM);
@@ -173,12 +178,12 @@ export function InternalPriceCatalogPage({ api, setActionResult, setGlobalError,
   return (
     <section className="admin-page" data-testid="internal-price-catalog-page">
       <AdminPageHeader
-        title="内部结算价目录（内部结算 SKU 目录）"
-        description="平台所有内部结算价集中在本目录维护，是成本侧唯一真源、唯一可改价处：条目必须绑定提供它的商家（业态随商家带出）并归入品类，商家/业态/品类三维可筛。酒吧商品、酒吧套餐、票务权益模板、券在各自页面引用条目编码即可复用；新建/改价先存草案，须由具备高敏权限的他人复核转正后才对之后的核销/结算生效；核销/结算发生时当时价固化到该笔流水，此后目录价怎么变都不影响已发生的账。条目可下线归档，不影响历史引用。"
+        title="内部结算价目录（按商品规格逐项建目录）"
+        description="平台所有内部结算价集中在本目录维护，是成本侧唯一真源、唯一可改价处：条目必须绑定提供它的商家（业态随商家带出）并归入品类，商家/业态/品类三维可筛。酒吧商品、酒吧套餐、票务权益模板、券在各自页面引用条目编码即可复用；新建/改价先存草案，须由具备高敏权限的他人复核转正后自所填生效起始日期（按营业日）起对之后的核销/结算生效；核销/结算发生时当时价固化到该笔流水，此后目录价怎么变都不影响已发生的账。条目可下线归档，不影响历史引用。"
       />
 
       <div className="admin-inline-form" data-testid="ipc-filters">
-        <label><span>提供商家</span><input data-testid="ipc-filter-merchant" value={filterMerchant} onChange={(e) => setFilterMerchant(e.target.value)} placeholder="商户 ID" /></label>
+        <label><span>提供商家</span><input data-testid="ipc-filter-merchant" value={filterMerchant} onChange={(e) => setFilterMerchant(e.target.value)} placeholder="商户编号" /></label>
         <label><span>业态（随商家带出）</span>
           <select data-testid="ipc-filter-format" value={filterFormat} onChange={(e) => setFilterFormat(e.target.value)}>
             <option value="">全部业态</option>
@@ -192,15 +197,16 @@ export function InternalPriceCatalogPage({ api, setActionResult, setGlobalError,
       <h3>新建条目 / 对既有条目改价（先落草案）</h3>
       <p style={{ color: "var(--adm-text-3)", fontSize: 13 }}>
         条目编码留空＝新建（保存后返回编码，业务页「就地新建」拿它建立引用）；填既有编码＝对该条目改价/改名/改类。
-        草案不生效：须由对应域主管公司的另一位人员在下方草案队列「复核转正」，才对之后的核销/结算生效，同时系统把四处业务快照同步为新价。绑定商户不可更改——要换提供方请新建条目。
+        草案不生效：须由对应域主管公司的另一位人员在下方草案队列「复核转正」，自所填生效起始日期（按营业日，须晚于今天）起对之后的核销/结算生效，届时系统把四处业务快照同步为新价。绑定商户不可更改——要换提供方请新建条目。
       </p>
       <div className="admin-inline-form" data-testid="ipc-create-form">
         <label><span>条目编码（留空=新建）</span><input data-testid="ipc-form-code" value={form.itemCode} onChange={(e) => setForm({ ...form, itemCode: e.target.value })} /></label>
-        <label><span>提供商家</span><input data-testid="ipc-form-merchant" value={form.merchantId} onChange={(e) => setForm({ ...form, merchantId: e.target.value })} placeholder="商户 ID" /></label>
-        <label><span>或提供主体</span><input data-testid="ipc-form-entity" value={form.entityId} onChange={(e) => setForm({ ...form, entityId: e.target.value })} placeholder="经营主体 ID（如城市项目公司）" /></label>
+        <label><span>提供商家</span><input data-testid="ipc-form-merchant" value={form.merchantId} onChange={(e) => setForm({ ...form, merchantId: e.target.value })} placeholder="商户编号" /></label>
+        <label><span>或提供主体</span><input data-testid="ipc-form-entity" value={form.entityId} onChange={(e) => setForm({ ...form, entityId: e.target.value })} placeholder="经营主体编号（如城市项目公司）" /></label>
         <label><span>品类</span><input data-testid="ipc-form-category" value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} placeholder="如 spirit / combo / dining" /></label>
         <label><span>条目名称</span><input data-testid="ipc-form-name" value={form.itemName} onChange={(e) => setForm({ ...form, itemName: e.target.value })} /></label>
         <label><span>内部结算价（元）</span><input data-testid="ipc-form-price" inputMode="decimal" value={form.priceYuan} onChange={(e) => setForm({ ...form, priceYuan: e.target.value })} placeholder="0=商户让利型" /></label>
+        <label><span>生效起始日期</span><input data-testid="ipc-form-effective-from" type="date" value={form.effectiveFrom} onChange={(e) => setForm({ ...form, effectiveFrom: e.target.value })} /></label>
         <PermissionButton permissionsState={effectivePermissions} permissions={SUBMIT} data-testid="ipc-form-submit" disabled={busy === "save"} onClick={() => void submitDraft()}>
           保存草案
         </PermissionButton>
@@ -211,10 +217,10 @@ export function InternalPriceCatalogPage({ api, setActionResult, setGlobalError,
         <h3>草案复核队列（{drafts.length}）</h3>
         <p style={{ color: "var(--adm-text-3)", fontSize: 13 }}>草案本身不生效；不能自行转正自己起草的改动，须对应域主管公司的另一位人员复核批准。</p>
         <table className="admin-table" data-testid="ipc-draft-table">
-          <thead><tr><th>条目编码</th><th>提供商家</th><th>业态</th><th>品类</th><th>名称</th><th>草案价（元）</th><th>起草人</th><th>操作</th></tr></thead>
+          <thead><tr><th>条目编码</th><th>提供商家</th><th>业态</th><th>品类</th><th>名称</th><th>草案价（元）</th><th>生效起始日期</th><th>起草人</th><th>操作</th></tr></thead>
           <tbody>
             {drafts.length === 0 ? (
-              <tr><td colSpan={8} data-testid="ipc-draft-empty">暂无待复核草案</td></tr>
+              <tr><td colSpan={9} data-testid="ipc-draft-empty">暂无待复核草案</td></tr>
             ) : drafts.map((row) => (
               <tr key={row.id} data-testid={`ipc-draft-${row.itemCode}`}>
                 <td>{row.itemCode}</td>
@@ -223,6 +229,7 @@ export function InternalPriceCatalogPage({ api, setActionResult, setGlobalError,
                 <td>{row.category}</td>
                 <td>{row.itemName}</td>
                 <td className="admin-num">¥{yuan(row.priceCent)}</td>
+                <td>{row.effectiveFrom ?? "—"}</td>
                 <td>{row.updatedBy ?? "—"}</td>
                 <td>
                   <PermissionButton permissionsState={effectivePermissions} permissions={MANAGE} data-testid={`ipc-activate-${row.itemCode}`} disabled={busy === row.id} onClick={() => void activate(row)}>
@@ -248,7 +255,7 @@ export function InternalPriceCatalogPage({ api, setActionResult, setGlobalError,
                 <td>{row.category}</td>
                 <td>{row.itemName}</td>
                 <td className="admin-num" data-testid={`ipc-price-${row.itemCode}`}>¥{yuan(row.priceCent)}</td>
-                <td>{row.status === "active" ? "生效中" : "已下线（历史留档）"}</td>
+                <td>{row.status === "active" ? "生效中" : row.status === "scheduled" ? `待生效（自 ${row.effectiveFrom ?? "—"} 起）` : "已下线（历史留档）"}</td>
                 <td>
                   {row.status === "active" ? (
                     <span className="admin-form-row">

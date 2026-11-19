@@ -1,4 +1,4 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
@@ -104,12 +104,12 @@ export function StoredValueRulesPage({ api, setActionResult, setGlobalError, eff
       <ExitNoticePolicySection api={api} setActionResult={setActionResult} setGlobalError={setGlobalError} effectivePermissions={effectivePermissions} />
 
       <div className="admin-form-row" data-testid="stored-value-merchant-filter">
-        <label>商户 id<input aria-label="商户 id" placeholder="商户 id" value={merchantInput} onChange={(e) => setMerchantInput(e.target.value)} /></label>
+        <label>商户编号<input aria-label="商户编号" placeholder="商户编号" value={merchantInput} onChange={(e) => setMerchantInput(e.target.value)} /></label>
         <button type="button" data-testid="stored-value-query" onClick={() => setMerchantId(merchantInput)}>查询商户卡规则</button>
       </div>
       <AdminDataState loading={loading} error={error} empty={false} onRetry={reload}>
         {!merchantId.trim() ? (
-          <p className="admin-muted-action" data-testid="stored-value-empty-hint">输入商户 id 并点「查询商户卡规则」查看与配置该商户的储值卡规则。</p>
+          <p className="admin-muted-action" data-testid="stored-value-empty-hint">输入商户编号并点「查询商户卡规则」查看与配置该商户的储值卡规则。</p>
         ) : (
           <>
             <div className="admin-kpi-grid" data-testid="stored-value-current">

@@ -1,4 +1,4 @@
-// 文件版本：V0.09
+// 文件版本：V0.10
 import React from "react";
 import { Tabs } from "antd";
 import { AdminDataState } from "../components/AdminDataState";
@@ -565,7 +565,7 @@ function editSteps(
 ): GuidedStep[] {
   const projectField = (
     <label>项目（留空 = 全平台默认）
-      <input data-testid="settlement-config-field-projectId" value={form.projectId} onChange={setField("projectId")} placeholder="项目公司 id，空=默认" />
+      <input data-testid="settlement-config-field-projectId" value={form.projectId} onChange={setField("projectId")} placeholder="项目公司编号，空=默认" />
     </label>
   );
   let content: React.ReactNode;
@@ -598,7 +598,7 @@ function editSteps(
       break;
     case "comprehensive_service_fee":
       content = (<>{projectField}
-        <label>商户 id（留空 = 通用）<input data-testid="settlement-config-field-merchantId" value={form.merchantId} onChange={setField("merchantId")} /></label>
+        <label>商户编号（留空 = 通用）<input data-testid="settlement-config-field-merchantId" value={form.merchantId} onChange={setField("merchantId")} /></label>
         {canTicketTypeView ? (
           <label>票种（留空 = 该范围内所有票种通用）
             <select data-testid="settlement-config-field-ticketTypeId" value={form.ticketTypeId} onChange={setField("ticketTypeId")}>
@@ -609,7 +609,7 @@ function editSteps(
             </select>
           </label>
         ) : (
-          <label>票种 id（无票种查看权限，暂按 id 手填；留空 = 全部票种通用）
+          <label>票种编号（无票种查看权限，暂按编号手填；留空 = 全部票种通用）
             <input data-testid="settlement-config-field-ticketTypeId" value={form.ticketTypeId} onChange={setField("ticketTypeId")} />
           </label>
         )}
@@ -629,7 +629,7 @@ function editSteps(
             </select>
           </label>
         ) : (
-          <label>票种 id（无票种查看权限，暂按 id 手填；留空 = 全部票种通用）
+          <label>票种编号（无票种查看权限，暂按编号手填；留空 = 全部票种通用）
             <input data-testid="settlement-config-field-ticketTypeId" value={form.ticketTypeId} onChange={setField("ticketTypeId")} />
           </label>
         )}
@@ -720,14 +720,14 @@ function editSteps(
             </select>
           </label>
         ) : (
-          <label>收款主体 id（无经营主体查看权限，暂按 id 手填）
+          <label>收款主体编号（无经营主体查看权限，暂按编号手填）
             <input data-testid="settlement-config-field-managementEntityId" value={form.managementEntityId} onChange={setField("managementEntityId")} />
           </label>
         )}</>);
       break;
     case "commission_rate":
       content = (<>{projectField}
-        <label>商户 id（留空 = 该项目通用）<input data-testid="settlement-config-field-merchantId" value={form.merchantId} onChange={setField("merchantId")} /></label>
+        <label>商户编号（留空 = 该项目通用）<input data-testid="settlement-config-field-merchantId" value={form.merchantId} onChange={setField("merchantId")} /></label>
         <label>提成角色档
           <select data-testid="settlement-config-field-roleType" value={form.roleType} onChange={setField("roleType")}>
             {ROLE_TYPE_OPTIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
@@ -737,7 +737,7 @@ function editSteps(
       break;
     case "points_accrual_rate":
       content = (<>{projectField}
-        <label>商户 id（留空 = 通用）<input data-testid="settlement-config-field-merchantId" value={form.merchantId} onChange={setField("merchantId")} /></label>
+        <label>商户编号（留空 = 通用）<input data-testid="settlement-config-field-merchantId" value={form.merchantId} onChange={setField("merchantId")} /></label>
         <label>每积 1 分所需消费金额（分，须大于 0；100 = 每 1 元积 1 分）<input data-testid="settlement-config-field-amountCentPerPoint" type="number" min={1} value={form.amountCentPerPoint} onChange={setField("amountCentPerPoint")} /></label></>);
       break;
     case "high_value_threshold":

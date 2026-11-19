@@ -1,6 +1,6 @@
 package com.complex.platform.parking;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -50,6 +50,9 @@ import org.springframework.transaction.annotation.Transactional;
 @AutoConfigureMockMvc
 @Transactional
 class ParkingCreditJdbcIntegrationTests {
+
+    /** 第十八批 BA 段第 355 条 355-R1：内部结算价批准后待生效，到生效起始日期由系统转正（用例里直接调到日转正）。 */
+    @Autowired private com.complex.platform.settlement.InternalPriceScheduledActivationService priceActivation;
 
     @Autowired private MockMvc mockMvc;
     @Autowired private JdbcTemplate jdbc;
@@ -280,8 +283,8 @@ class ParkingCreditJdbcIntegrationTests {
         com.fasterxml.jackson.databind.ObjectMapper snake = new com.fasterxml.jackson.databind.ObjectMapper()
                 .setPropertyNamingStrategy(com.fasterxml.jackson.databind.PropertyNamingStrategies.SNAKE_CASE);
         com.complex.platform.settlement.SettlementConfigWriteRequests.InternalPriceItemRequest request = snake.readValue("""
-                {"idempotency_key":"ipc-pk-%s","provider_entity_id":"%s","category":"parking_credit","item_name":"停车抵免（每小时）","price_cent":800}
-                """.formatted(f.suffix, company), com.complex.platform.settlement.SettlementConfigWriteRequests.InternalPriceItemRequest.class);
+                {"idempotency_key":"ipc-pk-%s","provider_entity_id":"%s","category":"parking_credit","item_name":"停车抵免（每小时）","price_cent":800,"effective_from":"%s"}
+                """.formatted(f.suffix, company, java.time.LocalDate.now(com.complex.platform.common.LocalZone.ID).plusDays(1)), com.complex.platform.settlement.SettlementConfigWriteRequests.InternalPriceItemRequest.class);
         String code = catalog.saveInternalPriceItem(request, "pk_drafter_" + f.suffix);
         Instant entered = Instant.now().minus(Duration.ofMinutes(140));
         f.barBill(a[0], customer, null, 30_000, entered.plus(Duration.ofMinutes(1)));
@@ -296,6 +299,7 @@ class ParkingCreditJdbcIntegrationTests {
                 + " VALUES (?, ?, 'staff', ?, 'active', now())", approver, approver, company);
         com.complex.platform.support.TestSecurityActors.asPlatformAdmin(approver);
         catalog.activateDraft("internal_price_item", draft, approver);
+        priceActivation.activateDue(java.time.Instant.now().plus(java.time.Duration.ofDays(2)));
         com.complex.platform.support.TestSecurityActors.clear();
         pay(session, "ac_" + f.suffix).andExpect(status().isOk()).andExpect(jsonPath("$.data.status").value("paid"));
         assertThat(jdbc.queryForObject("SELECT hour_price_cent FROM parking_credits WHERE customer_id=?", Long.class, customer)).isEqualTo(800L);

@@ -1,6 +1,6 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.05
+// 文件版本：V0.06
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiResponse;
@@ -205,7 +205,20 @@ public class SettlementConfigController {
             throw com.complex.platform.common.api.ApiException.forbidden("INTERNAL_PRICE_FORBIDDEN",
                     "内部结算价属敏感信息,仅授权后台人员可见");
         }
-        String scopedMerchant = authorizationService.currentMerchantScope().orElse(merchantId);
+        // 第十八批 BA 段第 355 条控制席并入（BSM:1671「实际提供商品或服务的主体提交价格，对应域主管公司审批」；第十八批裁决 71）：最高权限与平台管理员
+        // 看全部，商户账号只看本商户；其余不挂商户的账号按 InternalPriceScope 同口径只看本公司可提交、可审批的条目。
+        com.complex.platform.access.AccessActor actor = authorizationService.currentActor();
+        String scopedMerchant;
+        try {
+            scopedMerchant = authorizationService.isMasterAuthority(actor) ? merchantId
+                    : authorizationService.currentMerchantScope().orElse(merchantId);
+        } catch (com.complex.platform.common.api.ApiException error) {
+            if (!"MERCHANT_SCOPE_REQUIRED".equals(error.code())) {
+                throw error;
+            }
+            return ApiResponse.ok(internalPriceScope.handledBy(actor.id(), settlementConfigService.listInternalPriceItems(
+                    merchantId, businessFormat, category, includeDrafts, includeArchived)));
+        }
         return ApiResponse.ok(settlementConfigService.listInternalPriceItems(
                 scopedMerchant, businessFormat, category, includeDrafts, includeArchived));
     }

@@ -1,4 +1,4 @@
-// 文件版本：V0.48
+// 文件版本：V0.49
 // OBS-14-02 后台结果区字段中文名字典（PGM「全局原则 · 界面全中文（所有终端零英文）」）。
 // 键用后端 JSON 的蛇形写法；结果区查表时蛇形与驼峰同查（orderId / order_id 都命中 order_id）。
 // 与后端字段中文名表 FieldLabels.java（common.api 包）同键同名：前段按后端原样抄录，后端改名这里跟着改（门禁会比对）。
@@ -3188,7 +3188,7 @@ export const VALUE_LABELS: Record<string, string> = {
   integration_compensation_resolved: "接入补偿已处理",
   capability_switch_toggled: "能力开关已切换",
   internal_price_item_draft_saved: "内部价格草稿已保存",
-  internal_price_item_activated: "内部价格已启用",
+  internal_price_item_activated: "内部价格已批准，到生效起始日期生效",
   internal_price_item_archived: "内部价格已存档",
   inventory_stock_movement_created: "出入库已登记",
   inventory_item_high_value_marked: "高价值标记已更新",

@@ -1,4 +1,4 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -47,7 +47,7 @@ describe("NotificationWindowsPage 存酒到期提醒节点", () => {
     renderPage(new AdminApi("test-token"));
     await waitFor(() => expect(screen.queryByTestId("saved-bottle-reminder-policy-table")?.textContent ?? "").toContain("到期前第 14、7、3、1 天"));
     expect(screen.getByTestId("saved-bottle-reminder-policy-table").textContent).toContain("出厂默认");
-    fireEvent.change(screen.getByLabelText("存酒提醒项目 id"), { target: { value: "prj_a" } });
+    fireEvent.change(screen.getByLabelText("存酒提醒项目编号"), { target: { value: "prj_a" } });
     fireEvent.change(screen.getByLabelText("存酒提醒节点"), { target: { value: "10,5，1" } });
     fireEvent.click(screen.getByTestId("saved-bottle-reminder-policy-save"));
     await waitFor(() => expect(sent).toHaveLength(1));
@@ -92,7 +92,7 @@ describe("NotificationWindowsPage 人工例外取酒消费历史条件与存酒�
     expect(screen.getByTestId("saved-bottle-manual-pickup-policy-table").textContent).toContain("2");
     expect(screen.getByTestId("saved-bottle-renewal-policy-table").textContent).toContain("转存顺延天数（按酒吧）");
 
-    fireEvent.change(screen.getByLabelText("消费历史条件项目 id"), { target: { value: "prj_a" } });
+    fireEvent.change(screen.getByLabelText("消费历史条件项目编号"), { target: { value: "prj_a" } });
     fireEvent.change(screen.getByLabelText("近 1 个月笔数"), { target: { value: "2" } });
     fireEvent.change(screen.getByLabelText("近 3 个月笔数"), { target: { value: "3" } });
     fireEvent.change(screen.getByLabelText("累计笔数"), { target: { value: "5" } });
@@ -110,7 +110,7 @@ describe("NotificationWindowsPage 人工例外取酒消费历史条件与存酒�
     expect(sent[0]!.body).toHaveProperty("idempotency_key");
 
     fireEvent.change(screen.getByLabelText("转存参数"), { target: { value: "validity_days" } });
-    fireEvent.change(screen.getByLabelText("参数范围 id"), { target: { value: "prj_a" } });
+    fireEvent.change(screen.getByLabelText("参数范围编号"), { target: { value: "prj_a" } });
     fireEvent.change(screen.getByLabelText("参数值"), { target: { value: "45" } });
     fireEvent.change(screen.getByLabelText("参数下限"), { target: { value: "7" } });
     fireEvent.click(screen.getByTestId("saved-bottle-renewal-policy-save"));
@@ -125,7 +125,7 @@ describe("NotificationWindowsPage 人工例外取酒消费历史条件与存酒�
     expect(sent[1]!.body).toHaveProperty("idempotency_key");
 
     fireEvent.change(screen.getByLabelText("转存参数"), { target: { value: "extension_days" } });
-    fireEvent.change(screen.getByLabelText("参数范围 id"), { target: { value: "bar_1" } });
+    fireEvent.change(screen.getByLabelText("参数范围编号"), { target: { value: "bar_1" } });
     fireEvent.change(screen.getByLabelText("参数值"), { target: { value: "20" } });
     fireEvent.change(screen.getByLabelText("参数下限"), { target: { value: "7" } });
     fireEvent.change(screen.getByLabelText("参数上限"), { target: { value: "60" } });
@@ -140,7 +140,7 @@ describe("NotificationWindowsPage 人工例外取酒消费历史条件与存酒�
     renderPage(api);
     await waitFor(() => expect(screen.queryByTestId("saved-bottle-manual-pickup-policy")).not.toBeNull());
     await waitFor(() => expect(api.get).toHaveBeenCalledWith("/api/v1/inventory/saved-bottles/manual-pickup-policy"));
-    fireEvent.change(screen.getByLabelText("消费历史条件项目 id"), { target: { value: "prj_a" } });
+    fireEvent.change(screen.getByLabelText("消费历史条件项目编号"), { target: { value: "prj_a" } });
     for (const [label, value] of [["近 1 个月笔数", "2"], ["近 3 个月笔数", "3"], ["累计笔数", "5"], ["笔数下限", "1"], ["笔数上限", "10"]] as const) {
       fireEvent.change(screen.getByLabelText(label), { target: { value } });
     }

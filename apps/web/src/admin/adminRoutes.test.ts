@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import { describe, expect, it } from "vitest";
 
 import { accountFormOf, adminRoutes } from "./adminRoutes";
@@ -55,5 +55,13 @@ describe("accountFormOf 账号形态判定", () => {
 
   it("无归属账号归平台形态", () => {
     expect(accountFormOf({ accountType: "staff", merchantId: null })).toBe("platform");
+  });
+});
+
+// 第十八批 BA 段收尾复核修正（PGM:287）：菜单名不写 T3-A，且不与其他菜单重名。
+describe("adminRoutes 菜单名不夹英文（第 267 条收尾复核）", () => {
+  it("只读经营分析菜单名为「只读经营分析」且不与其他菜单重名", () => {
+    expect(adminRoutes.find((route) => route.pageId === "ADM-ANA-009")?.label).toBe("只读经营分析");
+    expect(adminRoutes.filter((route) => route.label === "只读经营分析")).toHaveLength(1);
   });
 });

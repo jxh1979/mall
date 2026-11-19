@@ -1,6 +1,6 @@
 package com.complex.platform.dividend;
 
-// 文件版本：V0.05
+// 文件版本：V0.06
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -77,7 +77,7 @@ class DividendAmountNoticeJdbcIntegrationTests {
         TestSecurityActors.asPlatformAdmin(submitter);
         service.submit(issued, new DividendActionRequest(key(), null));
         service.submit(rejected, new DividendActionRequest(key(), null));
-        TestSecurityActors.asPlatformAdmin(approver);
+        TestSecurityActors.asMasterAuthority(); // 第十八批 BA 段第 314 条 314-R1：批准与驳回只认最高权限本人
         service.reject(rejected, new DividendActionRequest(key(), "利润口径待复核"));
         service.approve(issued, new DividendActionRequest(key(), null));
         // 第十八批 AM 段第 241 条 241-R3：标记发放前主理人分红应付须已付清（本类只核通知，付款确认与登记付款见 PaymentConfirmationCompensationDividendJdbcTests）。

@@ -13,7 +13,7 @@ import { formatBusinessStatus } from "../i18n/statusLabels";
 
 const TEXT = {
   title: "经营分析",
-  description: "把收入、票务、酒吧、游乐、商户健康和风险指标沉淀成可复盘经营视图；当前以正式指标快照、指标定义和异常接口为准，不伪造预测或生产 BI。",
+  description: "把收入、票务、酒吧、游乐、商户健康和风险指标沉淀成可复盘经营视图；当前以正式指标快照、指标定义和异常接口为准，不伪造预测或商业智能生产口径。",
   loadFailed: "经营分析数据读取失败",
   totalMetrics: "指标快照",
   upward: "上升趋势",
@@ -27,7 +27,7 @@ const TEXT = {
   lockedEmpty: "暂无锁定记录",
   locking: "锁定中…",
   empty: "暂无经营指标",
-  boundary: "经营分析用于管理复盘和趋势判断；敏感财务仍按角色权限脱敏，AI 预测和外部 BI 生产口径不在本页伪造。",
+  boundary: "经营分析用于管理复盘和趋势判断；敏感财务仍按角色权限脱敏，AI 预测和外部商业智能系统的生产口径不在本页伪造。",
   metricKey: "指标",
   businessDate: "日期",
   actualValue: "实际值",
@@ -470,7 +470,7 @@ export function BusinessAnalyticsPage({ api, setActionResult, setGlobalError, na
               <div className="admin-chart-panel" data-testid="business-analytics-charts">
                 {series.map((item) => (
                   <div className="admin-chart-block" key={item.metricKey} data-testid={`business-analytics-chart-${item.metricKey}`}>
-                    <span>{formatMetricName(item.metricKey)}（实际值趋势 / 实际 vs 基准）</span>
+                    <span>{formatMetricName(item.metricKey)}（实际值趋势 / 实际对比基准）</span>
                     <Sparkline values={item.actual} width={140} height={36} testid={`business-analytics-sparkline-${item.metricKey}`} ariaLabel={`${formatMetricName(item.metricKey)} 实际值趋势`} />
                     <MiniBars values={[numberValue(item.latest?.actualValue), numberValue(item.latest?.baselineValue)]} width={80} height={36} testid={`business-analytics-bars-${item.metricKey}`} ariaLabel={`${formatMetricName(item.metricKey)} 实际值与基准值`} />
                     <small className="admin-muted-action">趋势 {trendLabel(item.latest?.trendDirection)} · 实际 {formatNumber(item.latest?.actualValue)} · 基准 {formatNumber(item.latest?.baselineValue)}</small>
@@ -488,7 +488,7 @@ export function BusinessAnalyticsPage({ api, setActionResult, setGlobalError, na
                 <small className="admin-muted-action">面积在「经营参数」页维护；未配置时此处显示未配置、不伪造。</small>
               </div>
               <div className="admin-chart-block" data-testid="business-analytics-category-share">
-                <span>品类占比（酒吧 vs 票务实收）</span>
+                <span>品类占比（酒吧对比票务实收）</span>
                 <MiniBars values={[barRevenue, ticketRevenue]} width={90} height={36} testid="business-analytics-category-bars" ariaLabel="酒吧与票务收入占比" />
                 <small className="admin-muted-action" data-testid="business-analytics-category-share-note">
                   {categoryTotal > 0 ? `酒吧 ${barShare.toFixed(1)}% · 票务 ${ticketShare.toFixed(1)}%` : "暂无收入数据"}

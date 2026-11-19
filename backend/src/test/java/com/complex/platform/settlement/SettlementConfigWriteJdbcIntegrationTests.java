@@ -1,6 +1,6 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.06
+// 文件版本：V0.07
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -324,7 +324,8 @@ class SettlementConfigWriteJdbcIntegrationTests {
                 + " supervising_company_reason = '无对应经营域' WHERE id = ?", merchant);
         writeService.saveMerchantRate(new MerchantRateRequest("mo3", PROJECT, merchant, 500L, null), DRAFTER);
         assertThat(writeService.saveInternalPriceItem(
-                new SettlementConfigWriteRequests.InternalPriceItemRequest("mo4", null, merchant, "spirit", "FS024 商品", 1000L),
+                new SettlementConfigWriteRequests.InternalPriceItemRequest("mo4", null, merchant, "spirit", "FS024 商品", 1000L,
+                        null, java.time.LocalDate.now(com.complex.platform.common.LocalZone.ID).plusDays(1).toString()),
                 DRAFTER)).startsWith("sku_");
     }
 

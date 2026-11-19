@@ -1,6 +1,6 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.06
+// 文件版本：V0.07
 
 import java.util.List;
 
@@ -162,14 +162,16 @@ public final class SettlementConfigWriteRequests {
      * merchantId 必填(HTML:每条必须绑定提供它的商家,业态随商家带出);category/itemName 必填;
      * priceCent 必填 ≥0(0=商户让利型合法价,S5 同一套 0/NULL 语义)。
      */
+    /** 第十八批 BA 段第 355 条 355-R1：effectiveFrom＝生效起始日期（年-月-日，须晚于提供方当前营业日）。 */
     public record InternalPriceItemRequest(String idempotencyKey, String itemCode, String merchantId,
-                                           String category, String itemName, Long priceCent, String providerEntityId) {
+                                           String category, String itemName, Long priceCent, String providerEntityId,
+                                           String effectiveFrom) {
         /**
          * HP-P01：提供方为经营主体（如城市项目公司经营的停车，品类 parking_credit「停车抵免（每小时）」）时填 providerEntityId、merchantId 留空，二者恰填其一。
          */
         public InternalPriceItemRequest(String idempotencyKey, String itemCode, String merchantId, String category, String itemName,
                                         Long priceCent) {
-            this(idempotencyKey, itemCode, merchantId, category, itemName, priceCent, null);
+            this(idempotencyKey, itemCode, merchantId, category, itemName, priceCent, null, null);
         }
     }
 

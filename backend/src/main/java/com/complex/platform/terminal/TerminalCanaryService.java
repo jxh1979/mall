@@ -133,7 +133,9 @@ public class TerminalCanaryService {
                         "capability", capabilityCode,
                         "active", saved.active(),
                         "action", saved.active() ? "canary_opened" : "canary_closed",
-                        "reason", reason
+                        "reason", reason,
+                        // 第十八批 BA 段第 270 条 270-R1（PGM:739 变更前后的取值）：变更前是否在试点（新建记否）。
+                        "previous_active", existing != null && existing.active()
                 )
         );
         return saved;

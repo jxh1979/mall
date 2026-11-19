@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -159,7 +159,7 @@ describe("AmusementSafetyPage 证据附件真实上传（第 229 条 229-R1）",
     const setGlobalError = renderPage();
     await ready();
     fireEvent.change(screen.getByLabelText("检修项目"), { target: { value: "amuse-1" } });
-    fireEvent.change(screen.getByLabelText("维保供应商id"), { target: { value: "sup-1" } });
+    fireEvent.change(screen.getByLabelText("维保供应商编号"), { target: { value: "sup-1" } });
     fireEvent.change(screen.getByLabelText("检修结果"), { target: { value: "fail" } });
     fireEvent.click(screen.getByTestId("amusement-maintenance-submit"));
     await waitFor(() => expect(setGlobalError).toHaveBeenCalledWith("检查不通过时必须填写异常说明。"));
@@ -214,7 +214,7 @@ describe("AmusementSafetyPage 巡检时间、复检结论与检修来源如实�
     renderPage();
     await ready();
     fireEvent.change(screen.getByLabelText("检修项目"), { target: { value: "amuse-1" } });
-    fireEvent.change(screen.getByLabelText("维保供应商id"), { target: { value: "sup-1" } });
+    fireEvent.change(screen.getByLabelText("维保供应商编号"), { target: { value: "sup-1" } });
     fireEvent.click(screen.getByTestId("amusement-maintenance-submit"));
     await waitFor(() => expect(posts((url) => url.endsWith("/amusement/maintenance-records"))).toHaveLength(1));
     expect(jsonBody(posts((url) => url.endsWith("/amusement/maintenance-records"))[0]!).source_terminal).toBe("web");

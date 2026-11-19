@@ -441,7 +441,7 @@ export function BarProductsPage({ api, user, setActionResult, setGlobalError, ef
             },
           ]}
           summary={[
-            { label: "酒吧 ID", value: categoryForm.barId.trim() || "未填写" },
+            { label: "酒吧编号", value: categoryForm.barId.trim() || "未填写" },
             { label: "分类名", value: categoryForm.categoryName.trim() || "未填写" },
             { label: "排序", value: categoryForm.sortOrder.trim() || "0" },
           ]}
@@ -553,7 +553,7 @@ export function BarProductsPage({ api, user, setActionResult, setGlobalError, ef
             },
           ]}
           summary={[
-            { label: "酒吧 ID", value: form.barId.trim() || "未填写" },
+            { label: "酒吧编号", value: form.barId.trim() || "未填写" },
             { label: "商品名", value: form.productName.trim() || "未填写" },
             { label: "类别", value: categoryLabel(form.category) },
             { label: "售价（元）", value: form.priceYuan.trim() || "未填写" },

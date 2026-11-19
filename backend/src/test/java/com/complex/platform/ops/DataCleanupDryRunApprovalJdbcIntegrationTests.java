@@ -1,6 +1,6 @@
 package com.complex.platform.ops;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -14,6 +14,7 @@ import com.complex.platform.auth.SessionIssuer;
 import com.complex.platform.support.StaffRequestFixture;
 import com.jayway.jsonpath.JsonPath;
 import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -98,7 +99,7 @@ class DataCleanupDryRunApprovalJdbcIntegrationTests {
     }
 
     @Test
-    void submitNeedsReasonAndSelfApprovalIsForbiddenAndRejectionWritesNoCleanupEvent() throws Exception {
+    void submitNeedsReasonAndSelfApprovalIsForbiddenAndRejectionIsTraced() throws Exception {
         String jobId = JsonPath.read(preview(requester, "{\"scope_type\":\"archived_bar_combos\",\"older_than_days\":0}")
                 .andExpect(status().isOk()).andReturn().getResponse().getContentAsString(), "$.data.id");
 
@@ -133,8 +134,47 @@ class DataCleanupDryRunApprovalJdbcIntegrationTests {
         approve(master(), jobId, "approved")
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.detail_code").value("DATA_CLEANUP_NOT_PENDING"));
-        assertThat(jdbc.queryForObject("SELECT count(*) FROM audit_events WHERE event_name LIKE 'data.cleanup.%' AND business_id = ?",
-                Integer.class, jobId)).isZero();
+        // 第十八批 BA 段第 275 条 275-R1：提交与驳回各落一条，驳回不执行清理。
+        assertThat(jdbc.queryForList("SELECT event_name FROM audit_events WHERE event_name LIKE 'data.cleanup.%' AND business_id = ?",
+                String.class, jobId)).containsExactlyInAnyOrder("data.cleanup.submitted", "data.cleanup.rejected");
+    }
+
+    /**
+     * 第十八批 BA 段第 275 条 275-R1（BSM:576「提交→由具备最高权限的人审批→批量清理，全程留痕」；PGM:966「所有有过程的业务动作都必须留痕」；
+     * PGM:899「谁发起……谁审批、结果是什么，都要能查到。」）：换人提交时提交人与事由进留痕；最高权限驳回落驳回事件；最高权限本人提交依次落
+     * 提交与执行；对已提交的任务再提交落提交失败；缺事由仍是 400 不是 500。
+     */
+    @Test
+    void submitAndRejectionWriteTraceEvents() throws Exception {
+        String submitterId = "usr_dcl_sub_" + s;
+        RequestPostProcessor submitter = new StaffRequestFixture(jdbc).staff(submitterId, "staff", "dcl_prj_" + s, null, "data.cleanup.request");
+        String jobId = JsonPath.read(preview(requester, "{\"scope_type\":\"archived_bar_combos\",\"older_than_days\":0}")
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString(), "$.data.id");
+
+        submit(submitter, jobId, "{\"reason\":\"清理测试遗留\"}").andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("pending_approval"));
+        assertThat(jdbc.queryForList("SELECT actor_id, metadata->>'reason' AS reason FROM audit_events"
+                + " WHERE event_name = 'data.cleanup.submitted' AND business_id = ?", jobId))
+                .containsExactly(Map.of("actor_id", submitterId, "reason", "清理测试遗留"));
+
+        int failedBefore = submitFailures();
+        submit(submitter, jobId, "{\"reason\":\"再次提交\"}").andExpect(status().isConflict())
+                .andExpect(jsonPath("$.detail_code").value("DATA_CLEANUP_NOT_DRY_RUN"));
+        assertThat(submitFailures()).isEqualTo(failedBefore + 1);
+
+        approve(master(), jobId, "rejected").andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("rejected"));
+        assertThat(jdbc.queryForList("SELECT actor_id FROM audit_events WHERE event_name = 'data.cleanup.rejected' AND business_id = ?",
+                String.class, jobId)).containsExactly(SessionIssuer.MASTER_USER_ID);
+
+        String masterJob = JsonPath.read(preview(master(), "{\"scope_type\":\"archived_bar_combos\",\"older_than_days\":0}")
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString(), "$.data.id");
+        submit(master(), masterJob, "{}").andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.detail_code").value("VALIDATION_FAILED"));
+        submit(master(), masterJob, "{\"reason\":\"最高权限清理旧套餐\"}").andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("executed"));
+        assertThat(jdbc.queryForList("SELECT event_name FROM audit_events WHERE event_name LIKE 'data.cleanup.%' AND business_id = ?",
+                String.class, masterJob)).containsExactlyInAnyOrder("data.cleanup.submitted", "data.cleanup.executed");
     }
 
     /** 249-R7：最高权限本人审批通过即执行，落 data.cleanup.executed。 */
@@ -194,6 +234,10 @@ class DataCleanupDryRunApprovalJdbcIntegrationTests {
     private ResultActions approve(RequestPostProcessor who, String jobId, String decision) throws Exception {
         return mockMvc.perform(post("/api/v1/ops/data-cleanup/jobs/" + jobId + "/approve").with(who)
                 .contentType(MediaType.APPLICATION_JSON).content("{\"decision\":\"" + decision + "\"}"));
+    }
+
+    private int submitFailures() {
+        return jdbc.queryForObject("SELECT count(*) FROM audit_events WHERE event_name = 'data.cleanup.submit_failed'", Integer.class);
     }
 
     private String statusOf(String jobId) {

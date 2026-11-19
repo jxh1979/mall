@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.contains;
@@ -329,7 +329,7 @@ class PaymentConfirmationJdbcTests {
         mockMvc.perform(get("/api/v1/platform/supervisor-review/" + reviewId).with(otherViewer)).andExpect(status().isForbidden());
     }
 
-    /** l. 审批时限清单含 42 个付款确认审批类型（第十八批 AX 段 273-R1 加酒吧借款还款，第十八批 AZ 段 350-R1 加通用卡消费结算），涉钱、出厂 1 个工作日；策略各带财务、法务两线、主线按直接上级链。 */
+    /** l. 审批时限清单含各支付类型的付款确认审批类型（第十八批 AX 段 273-R1 加酒吧借款还款，第十八批 AZ 段 350-R1 加通用卡消费结算），涉钱、出厂 1 个工作日；策略各带财务、法务两线、主线按直接上级链。 */
     @Test
     void fortyPaymentTypesAreMoneyApprovalTypesWithFinanceAndLegalLines() throws Exception {
         List<Map<String, Object>> deadlines = JsonPath.read(mockMvc.perform(get("/api/v1/platform/approval-deadlines").with(main))
@@ -337,13 +337,15 @@ class PaymentConfirmationJdbcTests {
         List<Map<String, Object>> payment = deadlines.stream()
                 .filter(row -> String.valueOf(row.get("action_type")).startsWith("finance.payment_confirm.")).toList();
         assertThat(payment).extracting(row -> String.valueOf(row.get("action_type")).substring("finance.payment_confirm.".length()))
-                .containsExactlyInAnyOrderElementsOf(PAYMENT_TYPES);
+                .containsExactlyInAnyOrderElementsOf(PaymentConfirmationService.PAYMENT_TYPES.keySet()).containsAll(PAYMENT_TYPES);
         assertThat(payment).allSatisfy(row -> assertThat(row).containsEntry("money", true).containsEntry("factory_working_days", 1));
 
         List<Map<String, Object>> policies = JsonPath.read(mockMvc.perform(get("/api/v1/platform/supervisor-review-policies").with(main))
                 .andExpect(status().isOk()).andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8),
                 "$.data.items[?(@.policy_code =~ /payment_confirm_.*/)]");
-        assertThat(policies).hasSize(42).allSatisfy(row -> assertThat(row)
+        assertThat(policies).extracting(row -> String.valueOf(row.get("policy_code"))).containsExactlyInAnyOrderElementsOf(
+                PaymentConfirmationService.PAYMENT_TYPES.keySet().stream().map(type -> "payment_confirm_" + type).toList());
+        assertThat(policies).allSatisfy(row -> assertThat(row)
                 .containsEntry("approval_level", "one_level_up").containsEntry("parallel_line_codes", List.of("finance_review", "legal_review")));
     }
 
@@ -385,7 +387,7 @@ class PaymentConfirmationJdbcTests {
     }
 
     /**
-     * 241-R8（第十八批裁决 67「审批线页设定」、66「每类必带财务、法务两线」）：组织层级与审批线页列出 41 个支付类型（中文名、两线之外的必带线，出厂为空）；
+     * 241-R8（第十八批裁决 67「审批线页设定」、66「每类必带财务、法务两线」）：组织层级与审批线页列出各支付类型（中文名、两线之外的必带线，出厂为空）；
      * 无门禁码 403、只能到本项目的账号改全局流程 403、未知支付类型 404、含停用线 400；平台管理员保存后留痕。
      */
     @Test
@@ -396,9 +398,11 @@ class PaymentConfirmationJdbcTests {
 
         List<Map<String, Object>> flows = JsonPath.read(mockMvc.perform(get("/api/v1/access/payment-confirmation-flows").with(admin))
                 .andExpect(status().isOk()).andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8), "$.data");
-        assertThat(flows).extracting(row -> String.valueOf(row.get("payment_type"))).containsExactlyElementsOf(PAYMENT_TYPES);
+        assertThat(flows).extracting(row -> String.valueOf(row.get("payment_type")))
+                .containsExactlyElementsOf(PaymentConfirmationService.PAYMENT_TYPES.keySet()).containsSubsequence(PAYMENT_TYPES);
         assertThat(flows).allSatisfy(row -> assertThat(row).containsEntry("line_codes", List.of()));
-        assertThat(flows.get(PAYMENT_TYPES.indexOf("purchase_inbound"))).containsEntry("payment_type_label", "采购入库");
+        assertThat(flows).filteredOn(row -> "purchase_inbound".equals(row.get("payment_type")))
+                .extracting(row -> row.get("payment_type_label")).containsExactly("采购入库");
         mockMvc.perform(get("/api/v1/access/payment-confirmation-flows").with(viewer)).andExpect(status().isForbidden());
 
         flow(finance, "purchase_inbound", "o1", List.of("business_review")).andExpect(status().isForbidden());

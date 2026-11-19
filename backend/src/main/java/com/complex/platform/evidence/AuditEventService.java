@@ -1,6 +1,8 @@
 package com.complex.platform.evidence;
 
 import com.complex.platform.access.AccessActor;
+import com.complex.platform.access.AuthorizationService;
+import com.complex.platform.common.api.ApiException;
 import com.complex.platform.gate.TerminalIdentityHolder;
 import jakarta.servlet.http.HttpServletRequest;
 import java.time.Instant;
@@ -31,6 +33,35 @@ public class AuditEventService {
     public java.util.List<AuditEvent> searchOperationEvents(String businessType, String businessId,
             String actorId, String eventName, java.time.Instant from, java.time.Instant to, int limit, String merchantScope) {
         return repository.searchOperationEvents(businessType, businessId, actorId, eventName, from, to, limit, merchantScope);
+    }
+
+    /** 第十八批 BA 段第 324 条 324-R1：projectScope 非 null 时只取该项目集合内商户与人员所做的操作（空集合取不到）。 */
+    public java.util.List<AuditEvent> searchOperationEvents(String businessType, String businessId, String actorId, String eventName,
+            java.time.Instant from, java.time.Instant to, int limit, String merchantScope, java.util.Set<String> projectScope) {
+        return repository.searchOperationEvents(businessType, businessId, actorId, eventName, from, to, limit, merchantScope, projectScope);
+    }
+
+    /**
+     * 第十八批 BA 段第 324 条 324-R1、324-R2（PGM:899「……谁审批、结果是什么，都要能查到。」；PGM:682「内部稽核可查看本综合体全部数据」；
+     * 第十八批裁决 71 最高权限什么都能看）：操作留痕与证据事件的读范围。最高权限与平台管理员不收窄（两项都为 null）；商户账号按本商户；
+     * 不挂商户的其余账号按入口权限码可触及的项目（照 MerchantServiceService 93-R3 改判 MERCHANT_SCOPE_REQUIRED；没有项目归属的由
+     * projectReach 403 PROJECT_SCOPE_REQUIRED）。
+     */
+    public record ReadScope(String merchantId, java.util.Set<String> projectIds) {
+        public static ReadScope of(AuthorizationService authorization, String permissionCode) {
+            AccessActor actor = authorization.currentActor();
+            if (authorization.isMasterAuthority(actor)) {
+                return new ReadScope(null, null);
+            }
+            try {
+                return new ReadScope(authorization.currentMerchantScope().orElse(null), null);
+            } catch (ApiException exception) {
+                if (!"MERCHANT_SCOPE_REQUIRED".equals(exception.code())) {
+                    throw exception;
+                }
+                return new ReadScope(null, authorization.projectReach(actor, permissionCode).organizationIds());
+            }
+        }
     }
 
     public AuditEvent recordSuccess(

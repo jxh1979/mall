@@ -1,4 +1,4 @@
-// 文件版本：V0.15
+// 文件版本：V0.16
 // 3.8 业务枚举中文化：展示层把后端状态码翻成中文业务口径；提交/请求仍用原码。
 // 未知码原样返回（不阻断展示），新增码逐步补此表即可。
 const STATUS_LABELS: Record<string, string> = {
@@ -169,6 +169,9 @@ const STATUS_LABELS: Record<string, string> = {
   customer_risk: "客人风险",
   third_party_exception: "第三方异常",
   production_risk: "出品风险",
+  // 系统写入的预警类型：指标异常转告警（AnalyticsService）、企业微信违规命中（WecomConversationService）
+  metric_anomaly: "指标异常",
+  wecom_risk_hit: "企业微信违规命中",
   // HP-P01 停车场异常（统一异常队列 alert_type）
   "parking.fee_evasion": "停车逃费",
   "parking.overstay": "停车超长滞留",
