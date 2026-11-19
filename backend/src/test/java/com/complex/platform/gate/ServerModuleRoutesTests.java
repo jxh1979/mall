@@ -1,4 +1,4 @@
-// 文件版本：V0.05
+// 文件版本：V0.06
 package com.complex.platform.gate;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -43,7 +43,18 @@ class ServerModuleRoutesTests {
         assertThat(web("POST", "/api/v1/loyalty/stored-value/refund-cards/lookup")).isEqualTo("governance");
         assertThat(web("POST", "/api/v1/loyalty/stored-value/cus_1/refund")).isEqualTo("governance");
         assertThat(web("POST", "/api/v1/loyalty/stored-value/cus_1/counter-refund")).isEqualTo("governance");
+        // 18BC 收尾复核修正（365-R1 后冻结、解冻只有储值退卡页调；PGM:737「关闭后菜单不可见或不可点，接口也要拒绝业务动作。」）。
+        assertThat(web("POST", "/api/v1/loyalty/stored-value/cus_1/freeze")).isEqualTo("governance");
+        assertThat(web("POST", "/api/v1/loyalty/stored-value/cus_1/unfreeze")).isEqualTo("governance");
         assertThat(web("GET", "/api/v1/loyalty/stored-value/merchant-refund-rules/m1")).isEqualTo("governance");
+    }
+
+    /** 第十八批 BC 段 369-R1（PGM:737、PGM:744；100-R1 页面独用接口定模块）：统一风控预警队列归风控（异常预警页），未处理条数归总控驾驶舱。 */
+    @Test
+    void unifiedRiskAlertQueueBelongsToRiskAndOpenCountToOverview() {
+        assertThat(web("GET", "/api/v1/evidence/risk-alerts")).isEqualTo("risk");
+        assertThat(web("POST", "/api/v1/evidence/risk-alerts/alert_1/resolve")).isEqualTo("risk");
+        assertThat(web("GET", "/api/v1/evidence/risk-alerts/open-count")).isEqualTo("overview");
     }
 
     @Test

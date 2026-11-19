@@ -1499,6 +1499,8 @@
     "evidence.timeline_viewed": "业务时间线",
     "evidence.upload_intent_created": "申请证据附件预签名上传",
     "evidence.upload_intent_failed": "申请证据附件预签名上传失败",
+    "exception.alert_view_failed": "查看风险预警明细失败",
+    "exception.alert_viewed": "查看风险预警明细",
     "exception.alerts_view_failed": "查询风险预警列表失败",
     "exception.alerts_viewed": "查询风险预警列表",
     "exception.claim_failed": "认领风险预警失败",

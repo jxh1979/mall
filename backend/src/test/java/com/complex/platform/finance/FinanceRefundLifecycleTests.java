@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.05
+// 文件版本：V0.06
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -279,7 +279,7 @@ class FinanceRefundLifecycleTests {
 
     @Test
     void storedValuePayoutCannotBeAutomaticallyRetriedWithoutRechargeRoutes() {
-        String id = service.recordStoredValuePayoutRefund("account", 3000, "退卡", "merchant", "project", "stored");
+        String id = service.recordStoredValuePayoutRefund("account", 3000, "退卡", "merchant", "project", "stored", false);
         assertThat(refunds.get(id).sourceType()).isEqualTo("stored_value_account");
         assertThat(refunds.get(id).projectId()).isEqualTo("project");
         assertThatThrownBy(() -> service.retryFinanceRefund(id, operation("retry-stored")))
@@ -398,7 +398,7 @@ class FinanceRefundLifecycleTests {
     void merchantCardWithoutOwnProjectUsesOnlyItsUniqueTrustedMerchantProject() {
         when(repository.listMerchantOperatingProjectIds("merchant")).thenReturn(List.of("project"));
         String id = service.recordStoredValuePayoutRefund("card-without-project", 3000, "退卡",
-                "merchant", null, "merchant-card");
+                "merchant", null, "merchant-card", false);
         FinanceRefundRecord refund = refunds.get(id);
         assertThat(refund.projectId()).isEqualTo("project");
         assertThat(refund.targetId()).isEqualTo("card-without-project");
@@ -408,7 +408,7 @@ class FinanceRefundLifecycleTests {
         assertThat(service.confirmFinanceRefundResult(id, confirmation("merchant-confirm", "finance")).status())
                 .isEqualTo("success");
         when(repository.listMerchantOperatingProjectIds("merchant")).thenReturn(List.of("new-project"));
-        service.recordStoredValuePayoutRefund("card-without-project", 3000, "退卡", "merchant", null, "merchant-card");
+        service.recordStoredValuePayoutRefund("card-without-project", 3000, "退卡", "merchant", null, "merchant-card", false);
         assertThat(refunds.get(id).projectId()).isEqualTo("project");
         assertThat(refunds.get(id).status()).isEqualTo("success");
         verify(repository, times(1)).listMerchantOperatingProjectIds("merchant");
@@ -420,7 +420,7 @@ class FinanceRefundLifecycleTests {
         for (List<String> projects : List.of(List.<String>of(), List.of("project-one", "project-two"))) {
             when(repository.listMerchantOperatingProjectIds("merchant")).thenReturn(projects);
             String key = "unresolved-" + projects.size();
-            String id = service.recordStoredValuePayoutRefund("card-" + key, 3000, "退卡", "merchant", null, key);
+            String id = service.recordStoredValuePayoutRefund("card-" + key, 3000, "退卡", "merchant", null, key, false);
             assertThat(refunds.get(id).projectId()).isNull();
             assertThat(refunds.get(id).status()).isEqualTo("requested");
             assertThatThrownBy(() -> service.recordFinanceRefundExecution(id, execution(key + "-execute")))
@@ -437,7 +437,7 @@ class FinanceRefundLifecycleTests {
 
     @Test
     void originalCardProjectTakesPriorityAndForeignScopesCannotProcessMerchantCardRefund() {
-        String id = service.recordStoredValuePayoutRefund("card", 3000, "退卡", "merchant", "card-project", "card-project");
+        String id = service.recordStoredValuePayoutRefund("card", 3000, "退卡", "merchant", "card-project", "card-project", false);
         verify(repository, never()).listMerchantOperatingProjectIds(anyString());
         when(authorization.currentProjectScopeQuietly()).thenReturn(Optional.of("other-project"));
         assertThatThrownBy(() -> service.recordFinanceRefundExecution(id, execution("cross-project")))
@@ -445,24 +445,24 @@ class FinanceRefundLifecycleTests {
         when(authorization.currentProjectScopeQuietly()).thenReturn(Optional.empty());
         when(authorization.currentMerchantScope()).thenReturn(Optional.of("other-merchant"));
         assertThatThrownBy(() -> service.recordStoredValuePayoutRefund("card", 3000, "退卡", "merchant",
-                "card-project", "card-project")).isInstanceOf(ApiException.class)
+                "card-project", "card-project", false)).isInstanceOf(ApiException.class)
                 .extracting("code").isEqualTo("CROSS_MERCHANT_FORBIDDEN");
     }
 
     @Test
     void storedValuePayoutReplayPreservesFinalStatusAndRejectsChangedSource() {
-        String id = service.recordStoredValuePayoutRefund("account", 3000, "退卡", "merchant", "project", "stored-repeat");
+        String id = service.recordStoredValuePayoutRefund("account", 3000, "退卡", "merchant", "project", "stored-repeat", false);
         FinanceRefundRecord original = refunds.get(id);
         Instant now = Instant.now();
         refunds.put(id, new FinanceRefundRecord(id, original.targetId(), original.refundAmountCent(), original.reason(),
                 original.refundChannel(), original.refundDirection(), "success", original.createdAt(), original.sourceType(),
                 original.merchantId(), original.projectId(), original.requestedBy(), original.originalPaymentRef(),
                 "manual_verified", "actual-payout", now, now));
-        assertThat(service.recordStoredValuePayoutRefund("account", 3000, "退卡", "merchant", "project", "stored-repeat"))
+        assertThat(service.recordStoredValuePayoutRefund("account", 3000, "退卡", "merchant", "project", "stored-repeat", false))
                 .isEqualTo(id);
         assertThat(refunds.get(id).status()).isEqualTo("success");
         assertThatThrownBy(() -> service.recordStoredValuePayoutRefund("other-account", 3000, "退卡",
-                "merchant", "project", "stored-repeat")).isInstanceOf(ApiException.class)
+                "merchant", "project", "stored-repeat", false)).isInstanceOf(ApiException.class)
                 .extracting("code").isEqualTo("IDEMPOTENCY_KEY_CONFLICT");
     }
 

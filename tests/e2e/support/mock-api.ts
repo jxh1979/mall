@@ -1,4 +1,4 @@
-// 文件版本：V0.20
+// 文件版本：V0.21
 import type { Page, Route } from "@playwright/test";
 
 type ApiData = Record<string, unknown> | Array<Record<string, unknown>> | null;
@@ -284,6 +284,9 @@ function fixedRows(pathname: string, state: MockState, options: MockOptions = {}
     "/api/v1/amusement/group-bookings": state.groupBookings,
     "/api/v1/analytics/risk-rules": [{ id: "risk-rule-1", ruleCode: "RISK", ruleName: "Manual Risk", ruleType: "manual", threshold: 1, status: "active" }],
     "/api/v1/analytics/risk-alerts": state.riskAlerts,
+    // 第十八批 BC 段 369-R2、369-R3：统一风控预警队列与未处理条数。
+    "/api/v1/evidence/risk-alerts": [{ alertId: "exc-1", sourceRef: "entry-1", alertType: "ticket.frequent_entry", riskLevel: "suspicious", status: "open", summary: "同一门票短时间内多次出入场", firstHandlerId: null, resolutionConclusion: null, projectId: "project_1", createdAt: now }],
+    "/api/v1/evidence/risk-alerts/open-count": { openCount: 3 },
     "/api/v1/evidence/events": state.evidenceEvents,
     "/api/v1/integration/provider-adapters": state.providerAdapters,
     "/api/v1/integration/order-syncs": state.orderSyncs,

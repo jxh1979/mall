@@ -1,4 +1,4 @@
-// 文件版本：V0.04
+// 文件版本：V0.05
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { CnDatePicker } from "../components/CnDatePicker";
@@ -10,6 +10,7 @@ import { KEY_VALUE_LABELS } from "../i18n/fieldLabels";
 import { formatBusinessStatus } from "../i18n/statusLabels";
 import { hasPermissions } from "../security/PermissionGate";
 import type { AdminPageProps, OverviewPayload } from "../types";
+import { EXCEPTION_ALERT_SOURCES } from "./ExceptionAlertsPage";
 
 function metricValue(data: OverviewPayload | null, metricCode: string): number | null {
   const metric = data?.metrics?.[metricCode];
@@ -137,6 +138,19 @@ export function OverviewPage({ api, setGlobalError, navigateTo, effectivePermiss
       .catch(() => undefined);
     return () => { cancelled = true; };
   }, [api, canSeePointsObjections]);
+  // 第十八批 BC 段 369-R3（BSM:1835「异常预警入口：经营看板显示异常预警的入口与未处理条数计数卡片，点击进入异常预警页面；看板上的计数只是入口提示，
+  // 预警的查看、转办与处置仍在异常预警页面完成。」）：未处理＝待处理、处理中，来源与范围同异常预警页。持 risk_alert.view 才请求与显示；失败显示「—」。
+  const canSeeExceptionAlerts = hasPermissions(effectivePermissions, ["risk_alert.view"]);
+  const [exceptionOpen, setExceptionOpen] = React.useState<number | null>(null);
+  React.useEffect(() => {
+    if (!canSeeExceptionAlerts) return;
+    let cancelled = false;
+    api
+      .get<{ openCount?: number }>(`/api/v1/evidence/risk-alerts/open-count?source_domain=${EXCEPTION_ALERT_SOURCES.join(",")}`)
+      .then((result) => { if (!cancelled && typeof result?.openCount === "number") setExceptionOpen(result.openCount); })
+      .catch(() => undefined);
+    return () => { cancelled = true; };
+  }, [api, canSeeExceptionAlerts]);
 
   const revenueValues = REVENUE_BARS.map((item) =>
     (item.code === "revenue.ticket" ? ticketDisplay : item.code === "revenue.bar" ? barDisplay : metricValue(data, item.code)) ?? 0);
@@ -179,6 +193,7 @@ export function OverviewPage({ api, setGlobalError, navigateTo, effectivePermiss
           {canSeeDailyClose ? <div className="admin-kpi-card admin-kpi-card--clickable" data-testid="overview-kpi-dayclose"><span>日结状态</span><button type="button" className="admin-kpi-value" style={{ fontSize: 14, whiteSpace: "normal" }} data-testid="overview-kpi-dayclose-value" onClick={() => navigateTo?.("ADM-FIN-002")}>{dailyCloseDisplay}</button><small>所看营业日各范围日结，查不到即待生成，查看对账差异页日结区块</small></div> : null}
           {canSeeReconciliation ? <div className="admin-kpi-card admin-kpi-card--clickable" data-testid="overview-kpi-recondiff"><span>对账差异</span><button type="button" className="admin-kpi-value" data-testid="overview-kpi-recondiff-value" onClick={() => navigateTo?.("ADM-FIN-002")}>{reconDiffKpi.status === "ready" && reconDiffKpi.value !== null ? String(reconDiffKpi.value) : "—"}</button><small>所看营业日新发现的对账差异笔数（含已关闭），查看对账差异页{reconDiffKpi.status === "ready" ? <> · <MetricDetailLink navigateTo={navigateTo} metric="finance.recon_diff_count" from={asOfDay} to={asOfDay} testid="overview-metric-detail-recondiff" /></> : null}</small></div> : null}
           {canSeeMediaPending || canSeePointsObjections ? <div className="admin-kpi-card admin-kpi-card--clickable" data-testid="overview-kpi-settlepending"><span>结算待确认</span><span data-testid="overview-kpi-settlepending-value">{canSeeMediaPending ? <button type="button" className="admin-kpi-value" style={{ fontSize: 14 }} data-testid="overview-kpi-settlepending-media" onClick={() => navigateTo?.("ADM-STL-004")}>演出结算 {mediaPending ?? "—"}</button> : null}{canSeeMediaPending && canSeePointsObjections ? " · " : null}{canSeePointsObjections ? <button type="button" className="admin-kpi-value" style={{ fontSize: 14 }} data-testid="overview-kpi-settlepending-points" onClick={() => navigateTo?.("ADM-FIN-008")}>积分账单异议 {pointsObjections ?? "—"}</button> : null}</span><small>演出结算挂起待确认的条数、积分月结账单有未处理异议的张数，分开计、不相加，点各数查看</small></div> : null}
+          {canSeeExceptionAlerts ? <div className="admin-kpi-card admin-kpi-card--clickable" data-testid="overview-kpi-exception-alerts"><span>异常预警</span><button type="button" className="admin-kpi-value" data-testid="overview-kpi-exception-alerts-value" onClick={() => navigateTo?.("ADM-RISK-002")}>{exceptionOpen ?? "—"}</button><small>未处理条数（待处理、处理中），只作入口提示，查看、转办与处置在异常预警页完成</small></div> : null}
         </div>
         {hasRevenue || hasVolume ? (
           <div className="admin-chart-panel" data-testid="overview-charts">

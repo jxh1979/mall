@@ -1,6 +1,6 @@
 package com.complex.platform.common.api;
 
-// 文件版本：V0.52
+// 文件版本：V0.53
 
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -490,6 +490,7 @@ public final class FieldLabels {
         p("actual_count", "实际数量");
         p("source_count", "来源数量");
         p("pending_count", "待处理数量");
+        p("open_count", "未处理条数");
         p("capacity", "容量");
 
         // ── 空间 / 楼宇 / 设备 / 巡检 ───────────────────────────────

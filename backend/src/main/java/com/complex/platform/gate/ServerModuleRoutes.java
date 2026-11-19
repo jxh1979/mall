@@ -1,6 +1,6 @@
 package com.complex.platform.gate;
 
-// 文件版本：V0.06
+// 文件版本：V0.07
 
 import java.util.Arrays;
 import java.util.Comparator;
@@ -36,6 +36,9 @@ final class ServerModuleRoutes {
                     // 第十八批 AO 段第 247 条（247-R1）：运营参数页、总控驾驶舱独用。
                     Map.entry("/api/v1/platform/projects/{project_id}/sensitive-operation-range", "overview"),
                     Map.entry("/api/v1/settlement/media-shows/pending-settlement-count", "overview"),
+                    // 第十八批 BC 段 369-R1：统一风控预警队列只有异常预警页（ADM-RISK-002）调，未处理条数只有总控驾驶舱调。
+                    Map.entry("/api/v1/evidence/risk-alerts", "risk"),
+                    Map.entry("/api/v1/evidence/risk-alerts/open-count", "overview"),
                     Map.entry("/api/v1/access", "access"),
                     // 外壳取当前账号权限；关「权限与账号」模块不能锁死整台后台。
                     Map.entry("/api/v1/access/effective-permissions", NONE),
@@ -115,6 +118,9 @@ final class ServerModuleRoutes {
                     Map.entry("/api/v1/loyalty/stored-value/refund-cards/lookup", "governance"),
                     Map.entry("/api/v1/loyalty/stored-value/{customer_id}/refund", "governance"),
                     Map.entry("/api/v1/loyalty/stored-value/{customer_id}/counter-refund", "governance"),
+                    // 365-R1：冻结、解冻入口也只在储值退卡页（ADM-CUS-006）。
+                    Map.entry("/api/v1/loyalty/stored-value/{customer_id}/freeze", "governance"),
+                    Map.entry("/api/v1/loyalty/stored-value/{customer_id}/unfreeze", "governance"),
                     // 323 控制席并入：退出公告策略小节只在储值规则页。
                     Map.entry("/api/v1/loyalty/stored-value/merchant-card-exit-notice-policy", "governance"),
                     Map.entry("/api/v1/merchant-billing", "governance"),

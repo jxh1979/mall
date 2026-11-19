@@ -1,5 +1,6 @@
 package com.complex.platform.evidence;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -22,14 +23,18 @@ public interface RiskAlertRepository {
     List<RiskAlertActionRecord> listActions(String alertId);
 
     /**
-     * 按条件查询（scope 隔离）。任意过滤项为 null 表示不约束。
-     * merchantScope 非 null 时强制按商户隔离（商户用户只能看自己的）。
+     * 按条件查询（scope 隔离）。任意过滤项为 null 表示不约束；sourceDomains 为空不按来源过滤。
+     * merchantScope 非 null 时强制按商户隔离（商户用户只能看自己的）；projectScope 非 null 时只取所属项目在其中的（不带项目的不在内）。
      */
     List<RiskAlertRecord> search(
-            String sourceDomain,
+            List<String> sourceDomains,
             String status,
             String projectId,
             String merchantScope,
+            Collection<String> projectScope,
             int limit
     );
+
+    /** 第十八批 BC 段 369-R1：未处理（待处理、处理中）条数，来源、商户与项目范围同 {@link #search}。 */
+    long countUnfinished(List<String> sourceDomains, String merchantScope, Collection<String> projectScope);
 }

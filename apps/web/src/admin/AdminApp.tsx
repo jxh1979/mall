@@ -1,4 +1,4 @@
-// 文件版本：V0.21
+// 文件版本：V0.22
 import React from "react";
 import { ConfigProvider, theme } from "antd";
 import zhCN from "antd/es/locale/zh_CN";
@@ -92,6 +92,7 @@ const OrganizationMerchantPage = React.lazy(() => import("./pages/OrganizationMe
 const SubjectBindingsPage = React.lazy(() => import("./pages/SubjectBindingsPage").then((m) => ({ default: m.SubjectBindingsPage })));
 const AdmissionAuditsPage = React.lazy(() => import("./pages/AdmissionAuditsPage").then((m) => ({ default: m.AdmissionAuditsPage })));
 const RiskAlertsPage = React.lazy(() => import("./pages/RiskAlertsPage").then((m) => ({ default: m.RiskAlertsPage })));
+const ExceptionAlertsPage = React.lazy(() => import("./pages/ExceptionAlertsPage").then((m) => ({ default: m.ExceptionAlertsPage })));
 const IntegrationEventsPage = React.lazy(() => import("./pages/IntegrationEventsPage").then((m) => ({ default: m.IntegrationEventsPage })));
 const AuditEventsPage = React.lazy(() => import("./pages/AuditEventsPage").then((m) => ({ default: m.AuditEventsPage })));
 const BusinessAnalyticsPage = React.lazy(() => import("./pages/BusinessAnalyticsPage").then((m) => ({ default: m.BusinessAnalyticsPage })));
@@ -370,6 +371,8 @@ function renderPage(route: AdminRoute, props: AdminPageProps) {
       return <AdmissionAuditsPage {...props} />;
     case "ADM-RISK-001":
       return <RiskAlertsPage {...props} />;
+    case "ADM-RISK-002":
+      return <ExceptionAlertsPage {...props} />;
     case "ADM-INT-002":
       return <IntegrationEventsPage {...props} />;
     case "ADM-EVD-001":
@@ -672,8 +675,9 @@ export default function AdminApp() {
     // 第十八批第 24 条：高价值复核页门店主管与财务共用，持主管复核码或财务应收应付管理码任一即可进入。
     // 第 123 条 123-R1：经营参数页另放敏感操作授权范围区块，持看板查看码或授权范围配置码任一即可进入。
     // 第十八批 AW 段 291-R2（PGM:660「查看、导出和修改分别授权」）：内部结算价目录持查看码或提交码任一即可进入。
+    // 第十八批 BC 段 365-R1（BSM:833「账户可冻结/解冻。」）：储值退卡页持退卡码或冻结码任一即可进入。
     if (target.pageId === "ADM-AMU-008" || target.pageId === "ADM-INV-004" || target.pageId === "ADM-ANA-003"
-      || target.pageId === "ADM-STL-003") {
+      || target.pageId === "ADM-STL-003" || target.pageId === "ADM-CUS-006") {
       const held = target.requiredPermissions.find((code) => hasPermissions(effectivePermissions, [code]));
       return held ? [held] : target.requiredPermissions;
     }

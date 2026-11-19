@@ -1,4 +1,4 @@
-// 文件版本：V0.26
+// 文件版本：V0.27
 import { expect, test } from "@playwright/test";
 import { installMockApi } from "./support/mock-api";
 import { fillCnDate } from "./support/cn-date";
@@ -90,6 +90,7 @@ const remainingRoutes: RouteSpec[] = [
   { pageId: "ADM-INT-004", label: "短信通知开关", route: "/admin/integrations/sms-switches" },
   { pageId: "ADM-INT-005", label: "渠道映射维护", route: "/admin/integrations/channel-maps" },
   { pageId: "ADM-RISK-001", label: "风控预警", route: "/admin/risk/alerts" },
+  { pageId: "ADM-RISK-002", label: "异常预警", route: "/admin/risk/exception-alerts" },
   { pageId: "ADM-EVD-001", label: "审计事件", route: "/admin/audit/events" },
   { pageId: "ADM-SEC-001", label: "我的导出", route: "/admin/security/my-exports" },
   { pageId: "ADM-SEC-002", label: "暗纹与导出密码反查", route: "/admin/security/watermark-trace" },
@@ -290,6 +291,11 @@ async function openAdminRoute(page: import("@playwright/test").Page, spec: Route
     await expect(page.getByTestId("admission-audits-page")).toBeVisible();
   } else if (spec.pageId === "ADM-RISK-001") {
     await expect(page.getByTestId("risk-alerts-page")).toBeVisible();
+  } else if (spec.pageId === "ADM-RISK-002") {
+    // 第十八批 BC 段 369-R2：异常预警页读统一风控预警队列（风险等级按 ENUM:217 四级名）。
+    await expect(page.getByTestId("exception-alerts-page")).toBeVisible();
+    await expect(page.getByTestId("exception-alerts-table")).toContainText("高频出入场");
+    await expect(page.getByTestId("exception-alert-row-exc-1").locator("td").nth(2)).toHaveText("中");
   } else if (spec.pageId === "ADM-INT-002") {
     await expect(page.getByTestId("integration-events-page")).toBeVisible();
   } else if (spec.pageId === "ADM-INT-003") {

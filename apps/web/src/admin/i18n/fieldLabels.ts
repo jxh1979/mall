@@ -1,4 +1,4 @@
-// 文件版本：V0.49
+// 文件版本：V0.50
 // OBS-14-02 后台结果区字段中文名字典（PGM「全局原则 · 界面全中文（所有终端零英文）」）。
 // 键用后端 JSON 的蛇形写法；结果区查表时蛇形与驼峰同查（orderId / order_id 都命中 order_id）。
 // 与后端字段中文名表 FieldLabels.java（common.api 包）同键同名：前段按后端原样抄录，后端改名这里跟着改（门禁会比对）。
@@ -374,6 +374,7 @@ export const FIELD_LABELS: Record<string, string> = {
   actual_count: "实际数量",
   source_count: "来源数量",
   pending_count: "待处理数量",
+  open_count: "未处理条数",
   capacity: "容量",
   space_id: "空间",
   space_ids: "空间",
@@ -3296,6 +3297,10 @@ export const VALUE_LABELS: Record<string, string> = {
   refund_rule_saved: "退款规则已保存",
   risk_alert_created: "风险告警已创建",
   risk_alert_resolved: "风险告警已处理",
+  // 第十八批 BC 段 369-R2：异常预警页（ADM-RISK-002）三个动作的结果名。
+  exception_alert_claimed: "异常预警已认领",
+  exception_alert_transferred: "异常预警已转办",
+  exception_alert_resolved: "异常预警已处置",
   service_catalog_fee_drafted: "服务收费草稿已保存",
   service_catalog_fee_activated: "服务收费已启用",
   service_catalog_archived: "服务目录已存档",
@@ -3649,6 +3654,9 @@ export const KEY_VALUE_LABELS: Record<string, Record<string, string>> = {
   fee_event: { rent: "租金", utilities: "能耗", property: "物业" },
   cooperation_form: { self_operated: "自营", lease: "租赁", joint_operation: "联营", managed_operation: "代运营", service_provider: "服务商接入", other: "其他" },
   object_type: { bar_order: "酒吧订单" },
+  // 第十八批 BC 段 369-R7（ENUM:217「风险四级 低（进列表）、中（待复核）、高（生成工单+通知主管）、严重（可冻结/停用/强制审批）」）：
+  //   风险等级按此键取四级名（对应 V103 的 normal、suspicious、high、critical）；通用状态码表的正常、可疑、紧急别页在用，不改。
+  risk_level: { normal: "低", suspicious: "中", high: "高", critical: "严重" },
   adj_type: { bonus: "激励奖金", penalty: "处罚扣款" },
   decision: { approve: "批准", reject: "驳回" },
   fund_ownership: { merchant_prepaid: "商户预收", platform_collect: "平台代收" },

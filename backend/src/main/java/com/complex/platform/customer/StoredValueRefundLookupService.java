@@ -1,6 +1,6 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static com.complex.platform.common.Strings.requireText;
 
@@ -21,6 +21,7 @@ import org.springframework.stereotype.Service;
 public class StoredValueRefundLookupService {
 
     private static final String PERMISSION = "customer.stored_value.refund";
+    private static final String FREEZE_PERMISSION = "customer.stored_value.freeze";
 
     /** 退卡查卡的一张卡：页面据卡类型、本金、赠送金、发卡商户退款规则与账户关闭登记的待退事项办理退卡。 */
     public record StoredValueRefundCard(String accountId, String customerId, String maskedPhone, String projectId,
@@ -66,9 +67,12 @@ public class StoredValueRefundLookupService {
         }
     }
 
-    /** 按手机号查客人名下可办理退卡的卡（已销户的不列；范围外的不列）。查询不扣单次授权，由控制器标注。 */
+    /**
+     * 按手机号查客人名下可办理退卡的卡（已销户的不列；范围外的不列）。查询不扣单次授权，由控制器标注。
+     * 第十八批 BC 段 365-R1（BSM:833「账户可冻结/解冻。」）：冻结、解冻入口在储值退卡页，持退卡码或冻结码任一即可查卡，两码都不持 403。
+     */
     public List<StoredValueRefundCard> lookup(String phone) {
-        authorizationService.requirePermission(PERMISSION);
+        authorizationService.requirePermission(authorizationService.currentActorHasPermission(PERMISSION) ? PERMISSION : FREEZE_PERMISSION);
         CustomerRecord customer = repository.findCustomerByPhone(requireText(phone, "phone")).orElse(null);
         if (customer == null) {
             return List.of();

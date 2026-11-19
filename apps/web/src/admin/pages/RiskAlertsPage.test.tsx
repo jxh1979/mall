@@ -157,3 +157,31 @@ describe("RiskAlertsPage 系统写入的预警类型显示中文（第 267 条�
     expect(screen.getByTestId("row-detail-drawer").textContent).not.toMatch(/metric_anomaly|wecom_risk_hit/);
   });
 });
+
+// 第十八批 BC 段 369-R7（ENUM:217「风险四级 低（进列表）、中（待复核）、高（生成工单+通知主管）、严重（可冻结/停用/强制审批）」）：
+// 风险等级列、明细与新建表单按四级名显示低、中、高、严重（normal、suspicious、high、critical），不用通用状态码表的正常、可疑、紧急。
+describe("RiskAlertsPage 风险等级按四级名（369-R7）", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    window.history.replaceState({}, "", "/admin/risk/alerts");
+  });
+
+  it("normal、suspicious、high、critical 显示低、中、高、严重", async () => {
+    const levels = ["normal", "suspicious", "high", "critical"];
+    const alerts = levels.map((level, index) => ({ id: `ra-l${index}`, alert_type: "staff_behavior", risk_level: level, object_type: "bar_order",
+      object_id: `o-${index}`, summary: `等级回归${index}`, status: "open" }));
+    vi.stubGlobal("fetch", vi.fn().mockImplementation((input: RequestInfo | URL) =>
+      Promise.resolve(envelope(String(input).includes("risk-alerts") ? alerts : []))));
+    render(<RiskAlertsPage api={new AdminApi("test-token")} user={{ id: "u1", username: "admin", accountType: "platform_admin" }}
+      setActionResult={vi.fn()} setGlobalError={vi.fn()} effectivePermissions={ADMIN_PERMS} />);
+    await waitFor(() => expect(screen.getByTestId("risk-alert-row-ra-l3")).toBeTruthy());
+    expect(levels.map((_, index) => screen.getByTestId(`risk-alert-row-ra-l${index}`).querySelectorAll("td")[2]?.textContent))
+      .toEqual(["低", "中", "高", "严重"]);
+    expect(screen.getByTestId("risk-alerts-table").textContent).not.toMatch(/可疑|紧急|正常/);
+    fireEvent.click(screen.getByTestId("risk-alert-row-ra-l1"));
+    expect(screen.getByTestId("row-detail-drawer").textContent).toContain("风险等级中");
+    fireEvent.keyDown(window, { key: "Escape" });
+    fireEvent.click(screen.getByTestId("risk-alert-create-open"));
+    await waitFor(() => expect(screen.getByTestId("risk-alert-level").textContent).toBe("中高严重"));
+  });
+});

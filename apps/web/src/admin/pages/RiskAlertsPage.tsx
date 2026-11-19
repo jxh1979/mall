@@ -1,6 +1,7 @@
 import React from "react";
 import { formatBusinessStatus } from "../i18n/statusLabels";
 import { formatReviewValue } from "../i18n/reviewLabels";
+import { KEY_VALUE_LABELS } from "../i18n/fieldLabels";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
 import { HighRiskConfirm } from "../components/HighRiskConfirm";
@@ -25,6 +26,11 @@ const OBJECT_TYPE_LABELS: Record<string, string> = { bar_order: "酒吧订单", 
 
 function objectTypeLabel(value?: string | null) {
   return OBJECT_TYPE_LABELS[value ?? ""] ?? formatReviewValue(value);
+}
+
+// 第十八批 BC 段 369-R7（ENUM:217 风险四级「低、中、高、严重」）：风险等级只按风险等级这个键取四级名，不改通用状态码表。
+function riskLevelLabel(value?: string | null) {
+  return KEY_VALUE_LABELS.risk_level?.[value ?? ""] ?? formatBusinessStatus(value);
 }
 
 const TEXT = {
@@ -106,7 +112,7 @@ export function RiskAlertsPage({ api, setActionResult, setGlobalError, effective
       title: `风控预警明细 · ${row.summary ?? row.id}`,
       fields: [
         { label: TEXT.alertType, value: formatBusinessStatus(row.alertType) },
-        { label: TEXT.riskLevel, value: formatBusinessStatus(row.riskLevel) },
+        { label: TEXT.riskLevel, value: riskLevelLabel(row.riskLevel) },
         { label: TEXT.objectType, value: objectTypeLabel(row.objectType) },
         { label: TEXT.objectId, value: row.objectId ?? "—" },
         { label: TEXT.summary, value: row.summary ?? "—" },
@@ -228,7 +234,7 @@ export function RiskAlertsPage({ api, setActionResult, setGlobalError, effective
             onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openAlertDetail(row); } }}>
             <td onClick={(event) => event.stopPropagation()}><button type="button" data-testid={`risk-alert-select-${row.id}`} onClick={() => setSelectedId(row.id)}>{TEXT.select}</button></td>
             <td>{formatBusinessStatus(row.alertType)}</td>
-            <td>{formatBusinessStatus(row.riskLevel)}</td>
+            <td>{riskLevelLabel(row.riskLevel)}</td>
             <td>{objectTypeLabel(row.objectType)}</td>
             <td>{row.objectId ?? "-"}</td>
             <td>{row.summary ?? "-"}</td>
@@ -261,7 +267,7 @@ export function RiskAlertsPage({ api, setActionResult, setGlobalError, effective
               <div className="admin-kpi-card admin-kpi-card--clickable"><span>{TEXT.total}</span><button type="button" className="admin-kpi-value" data-testid="risk-alerts-kpi-total" onClick={() => enterKpiFocus("all")}>{rows.length}</button><small>{TEXT.status}</small></div>
               <div className="admin-kpi-card admin-kpi-card--clickable"><span>{TEXT.highRisk}</span><button type="button" className="admin-kpi-value" data-testid="risk-alerts-kpi-high" onClick={() => enterKpiFocus("high")}>{highRiskCount}</button><small>{TEXT.riskLevel}</small></div>
               <div className="admin-kpi-card admin-kpi-card--clickable"><span>{TEXT.open}</span><button type="button" className="admin-kpi-value" data-testid="risk-alerts-kpi-open" onClick={() => enterKpiFocus("open")}>{openCount}</button><small>{TEXT.status}</small></div>
-              <div className="admin-kpi-card"><span>{TEXT.selected}</span><strong className="admin-kpi-value--text" title={selected?.summary ?? "-"}>{selected?.summary ?? "-"}</strong><small>{formatBusinessStatus(selected?.riskLevel)}</small></div>
+              <div className="admin-kpi-card"><span>{TEXT.selected}</span><strong className="admin-kpi-value--text" title={selected?.summary ?? "-"}>{selected?.summary ?? "-"}</strong><small>{riskLevelLabel(selected?.riskLevel)}</small></div>
             </div>
 
             {/* 引导式：创建预警收起为「＋ 创建预警」入口，点开分步引导；处理(resolve)是对选中预警的动作，留在动作区。 */}
@@ -293,7 +299,7 @@ export function RiskAlertsPage({ api, setActionResult, setGlobalError, effective
               onSubmit={() => void createAlert()}
             >
               <label>{TEXT.alertType}<select data-testid="risk-alert-type" value={alertType} onChange={(event) => setAlertType(event.target.value)}><option value="staff_behavior">员工行为</option><option value="customer_risk">客人风险</option><option value="third_party_exception">第三方异常</option><option value="production_risk">出品风险</option></select></label>
-              <label>{TEXT.riskLevel}<select data-testid="risk-alert-level" value={riskLevel} onChange={(event) => setRiskLevel(event.target.value)}><option value="suspicious">可疑</option><option value="high">高</option><option value="critical">紧急</option></select></label>
+              <label>{TEXT.riskLevel}<select data-testid="risk-alert-level" value={riskLevel} onChange={(event) => setRiskLevel(event.target.value)}><option value="suspicious">中</option><option value="high">高</option><option value="critical">严重</option></select></label>
               <label>{TEXT.objectType}<input data-testid="risk-alert-object-type" value={objectType} onChange={(event) => setObjectType(event.target.value)} /></label>
               <label>{TEXT.objectId}<input data-testid="risk-alert-object-id" value={objectId} onChange={(event) => setObjectId(event.target.value)} /></label>
               <label>{TEXT.summary}<input data-testid="risk-alert-summary-input" value={summary} onChange={(event) => setSummary(event.target.value)} /></label>

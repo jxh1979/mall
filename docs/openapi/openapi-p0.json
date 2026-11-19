@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "综合体管理系统 P0 API 契约",
-    "version": "V0.86",
+    "version": "V0.87",
     "description": "P0 首批编码前置契约。本文采用 JSON-compatible YAML，便于与 openapi-p0.json 保持一致。正式后端以 Java 21 + Spring Boot 4.x + springdoc-openapi 输出运行时 OpenAPI，并与本契约比对。"
   },
   "servers": [
@@ -9061,7 +9061,7 @@
         ],
         "operationId": "listInventoryItems",
         "summary": "查询库存明细",
-        "description": "用于查询库存明细。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。",
+        "description": "用于查询库存明细。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。第十八批 BC 段第 362 条 362-R1：最高权限（第十八批裁决 71）看全部商户与项目。",
         "x-permission": "inventory.stock.view",
         "x-data-scope": "project",
         "x-terminal-allowed": [
@@ -10517,7 +10517,7 @@
         ],
         "operationId": "listHighValueReviews",
         "summary": "查询库存域高价值复核单(报损/盘点差异/存酒作废)",
-        "description": "第十八批第 24 条 24-R2：后台高价值复核页（ADM-INV-004）门店主管与财务共用——持 inventory.high_value.review 或 finance.ar_ap.manage 任一可列；只持财务码、不持主管复核码的账号只列 subject_type=saved_bottle_stock_disposal（存酒库房存货处置，财务那一道）。每行带只读 subject_summary（报损/盘点差异/存酒库房处置取调整单的 item_name、quantity、unit、location_id、adjustment_type、reason；存酒作废取 saved_bottle_id、item_name、剩余量与作废原因 reason）。",
+        "description": "第十八批第 24 条 24-R2：后台高价值复核页（ADM-INV-004）门店主管与财务共用——持 inventory.high_value.review 或 finance.ar_ap.manage 任一可列；只持财务码、不持主管复核码的账号只列 subject_type=saved_bottle_stock_disposal（存酒库房存货处置，财务那一道）。每行带只读 subject_summary（报损/盘点差异/存酒库房处置取调整单的 item_name、quantity、unit、location_id、adjustment_type、reason；存酒作废取 saved_bottle_id、item_name、剩余量与作废原因 reason）。第十八批 BC 段第 362 条 362-R1：最高权限（第十八批裁决 71）看全部商户与项目。",
         "x-permission": "inventory.high_value.review",
         "x-data-scope": "project-warehouse-bar",
         "x-terminal-allowed": [
@@ -10683,7 +10683,7 @@
         ],
         "operationId": "listStockBalances",
         "summary": "查询库存余额",
-        "description": "用于查询库存余额。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。第十八批 I 段第 76 条：每行带 opened_volume_ml 已开瓶余量（毫升）——按杯出品先用已开瓶余量、不够再开新瓶，开新瓶才减瓶数 quantity。",
+        "description": "用于查询库存余额。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。第十八批 I 段第 76 条：每行带 opened_volume_ml 已开瓶余量（毫升）——按杯出品先用已开瓶余量、不够再开新瓶，开新瓶才减瓶数 quantity。第十八批 BC 段第 362 条 362-R1：最高权限（第十八批裁决 71）看全部商户与项目。",
         "x-permission": "inventory.stock.view",
         "x-data-scope": "project",
         "x-terminal-allowed": [
@@ -10811,7 +10811,7 @@
           }
         },
         "x-auth-context": "staff-token",
-        "description": "用于查询库存流水。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。第十八批 I 段第 76 条：按杯出品、按杯退品回库与驳回重扣的流水带 volume_ml 出酒量与 loss_volume_ml 损耗量（毫升），只动已开瓶余量、没开新瓶的流水 quantity 为 0；按瓶流水两列为空。"
+        "description": "用于查询库存流水。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。第十八批 I 段第 76 条：按杯出品、按杯退品回库与驳回重扣的流水带 volume_ml 出酒量与 loss_volume_ml 损耗量（毫升），只动已开瓶余量、没开新瓶的流水 quantity 为 0；按瓶流水两列为空。第十八批 BC 段第 362 条 362-R1：最高权限（第十八批裁决 71）看全部商户与项目。"
       }
     },
     "/api/v1/inventory/stock-movements/transfer": {
@@ -12941,7 +12941,7 @@
         ],
         "operationId": "listTraceHandovers",
         "summary": "按溯源码查交接单",
-        "description": "第十八批 F 段第 14 条（BSM 第 1201 行）：按溯源码列交接单表头（整链状态、当前段、建链时间），新建在前；商户账号只列本商户的交接单。",
+        "description": "第十八批 F 段第 14 条（BSM 第 1201 行）：按溯源码列交接单表头（整链状态、当前段、建链时间），新建在前；商户账号只列本商户的交接单。第十八批 BC 段第 362 条 362-R1：最高权限（第十八批裁决 71）看全部商户与项目。",
         "x-permission": "inventory.handover.scan",
         "x-data-scope": "project-warehouse-bar",
         "x-terminal-allowed": [
@@ -12987,7 +12987,7 @@
         ],
         "operationId": "getTraceHandover",
         "summary": "查交接链（原扫码五段、异常与人工补录并列）",
-        "description": "第十八批 F 段第 14 条（BSM 第 1201 行「补录记录与原始扫码记录并列展示、互不覆盖」）：返回表头 handover、五段原扫码记录 steps（原样，补录不改写）、 异常 exceptions 与该交接单全部人工补录单 backfills（字段同 GET /api/v1/evidence/manual-backfills）。整链完成＝每段扫码完成或该段有已通过的人工补录，且没有待处理异常。 商户账号只能查本商户的交接单，否则 403 CROSS_MERCHANT_FORBIDDEN；交接单不存在 404 HANDOVER_NOT_FOUND。",
+        "description": "第十八批 F 段第 14 条（BSM 第 1201 行「补录记录与原始扫码记录并列展示、互不覆盖」）：返回表头 handover、五段原扫码记录 steps（原样，补录不改写）、 异常 exceptions 与该交接单全部人工补录单 backfills（字段同 GET /api/v1/evidence/manual-backfills）。整链完成＝每段扫码完成或该段有已通过的人工补录，且没有待处理异常。 商户账号只能查本商户的交接单，否则 403 CROSS_MERCHANT_FORBIDDEN；交接单不存在 404 HANDOVER_NOT_FOUND。第十八批 BC 段第 362 条 362-R1：最高权限（第十八批裁决 71）看全部商户与项目的交接单。",
         "x-permission": "inventory.handover.scan",
         "x-data-scope": "project-warehouse-bar",
         "x-terminal-allowed": [
@@ -23144,6 +23144,7 @@
         ],
         "operationId": "listWarehouses",
         "summary": "查询库房列表",
+        "description": "第十八批 BC 段第 362 条 362-R1：最高权限（第十八批裁决 71）看全部商户与项目。",
         "x-auth-context": "staff-token",
         "x-permission": "inventory.warehouse.manage",
         "x-data-scope": "warehouse",
@@ -25717,6 +25718,7 @@
         ],
         "operationId": "freezeStoredValueAccount",
         "summary": "冻结会员储值账户（后台）",
+        "description": "第十八批 BC 段第 365 条 365-R1（BSM:833「账户可冻结/解冻。」「商户的员工只能管理本商户发行的储值卡。」；ENUM:86「余额管理与退款均由长沙项目公司负责」）：冻结客人的一张储值卡，请求体 project_id、merchant_id 定位卡，reason 记入成功留痕，不要求 idempotency_key；后台入口在储值退卡页（按手机号查卡见 lookupStoredValueRefundCards）。范围同 refundStoredValueAccount（278-R1）：最高权限放行；商户账号只办本商户的卡（他商户的卡与通用卡 403 CROSS_MERCHANT_FORBIDDEN「该储值卡不在当前商户权限范围内」）；卡带项目的只办本人项目的（403 CROSS_PROJECT_FORBIDDEN「该储值卡不在当前项目权限范围内」；平台管理员不限）；不挂商户的账号可办本项目通用卡，碰到不带项目的商户卡按发卡商户的经营项目（主项目或已批准的经营项目）判，本人项目不在其中 403 CROSS_PROJECT_FORBIDDEN。卡不存在 404 STORED_VALUE_ACCOUNT_NOT_FOUND；已销户 409 STORED_VALUE_ACCOUNT_CLOSED；已是冻结 409 STORED_VALUE_ALREADY_FROZEN。",
         "x-permission": "customer.stored_value.freeze",
         "x-data-scope": "project",
         "x-terminal-allowed": [
@@ -25725,6 +25727,13 @@
         "x-idempotency-required": false,
         "x-audit-event-success": "stored_value.frozen",
         "x-audit-event-failure": "stored_value.frozen_failed",
+        "x-failure-codes": [
+          "CROSS_MERCHANT_FORBIDDEN",
+          "CROSS_PROJECT_FORBIDDEN",
+          "STORED_VALUE_ACCOUNT_NOT_FOUND",
+          "STORED_VALUE_ACCOUNT_CLOSED",
+          "STORED_VALUE_ALREADY_FROZEN"
+        ],
         "parameters": [
           {
             "name": "customer_id",
@@ -25769,6 +25778,7 @@
         ],
         "operationId": "unfreezeStoredValueAccount",
         "summary": "解冻会员储值账户（后台）",
+        "description": "第十八批 BC 段第 365 条 365-R1（BSM:833「账户可冻结/解冻。」「商户的员工只能管理本商户发行的储值卡。」；ENUM:86「余额管理与退款均由长沙项目公司负责」）：解冻客人的一张已冻结储值卡，请求体同冻结，reason 记入成功留痕，不要求 idempotency_key；后台入口在储值退卡页（按手机号查卡见 lookupStoredValueRefundCards）。范围同 refundStoredValueAccount（278-R1）：最高权限放行；商户账号只办本商户的卡（他商户的卡与通用卡 403 CROSS_MERCHANT_FORBIDDEN「该储值卡不在当前商户权限范围内」）；卡带项目的只办本人项目的（403 CROSS_PROJECT_FORBIDDEN「该储值卡不在当前项目权限范围内」；平台管理员不限）；不挂商户的账号可办本项目通用卡，碰到不带项目的商户卡按发卡商户的经营项目（主项目或已批准的经营项目）判，本人项目不在其中 403 CROSS_PROJECT_FORBIDDEN。卡不存在 404 STORED_VALUE_ACCOUNT_NOT_FOUND；不在冻结状态（含已销户）409 STORED_VALUE_NOT_FROZEN。",
         "x-permission": "customer.stored_value.freeze",
         "x-data-scope": "project",
         "x-terminal-allowed": [
@@ -25777,6 +25787,12 @@
         "x-idempotency-required": false,
         "x-audit-event-success": "stored_value.unfrozen",
         "x-audit-event-failure": "stored_value.unfrozen_failed",
+        "x-failure-codes": [
+          "CROSS_MERCHANT_FORBIDDEN",
+          "CROSS_PROJECT_FORBIDDEN",
+          "STORED_VALUE_ACCOUNT_NOT_FOUND",
+          "STORED_VALUE_NOT_FROZEN"
+        ],
         "parameters": [
           {
             "name": "customer_id",
@@ -27858,9 +27874,10 @@
         ],
         "operationId": "searchRiskAlerts",
         "summary": "查询风险预警列表",
+        "description": "第十八批 BC 段第 369 条 369-R1、369-R6，第 375 条 375-R2（BSM:1657「集中汇集账户与出入场行为异常……供风控岗与管理层查看与处置」「每条预警的查看、转办与处置结论均须留痕。」；PGM:659「所有业务数据默认按项目隔离，普通岗位没有跨项目查看权；只有项目之上的获授权岗位才可以跨项目汇总。」）：统一风控预警队列，新建在前。source_domain 可多个（逗号分隔，重复参数也收），为空不按来源过滤；异常预警页与总控驾驶舱异常预警卡取 platform、ticketing、parking。范围：挂商户账号只看本商户的预警；其余按 risk_alert.view 可触及的项目（预警带 project_id 的按该项目；平台管理员、最高权限全部，可跨项目角色按勾选）；不带项目的预警（如同号注销注册超限预警）只有平台管理员与最高权限可见。成功留痕 exception.alerts_viewed 的 metadata 带 count 与 alert_ids（本次列出的预警编号）。不支持的来源 400 VALIDATION_FAILED；没有 risk_alert.view 403 PERMISSION_DENIED；不挂商户且无组织归属的账号 403 PROJECT_SCOPE_REQUIRED。",
         "x-auth-context": "staff-token",
         "x-permission": "risk_alert.view",
-        "x-data-scope": "platform",
+        "x-data-scope": "project",
         "x-terminal-allowed": [
           "web",
           "mobile_admin"
@@ -27868,16 +27885,26 @@
         "x-idempotency-required": false,
         "x-audit-event-success": "exception.alerts_viewed",
         "x-audit-event-failure": "exception.alerts_view_failed",
+        "x-failure-codes": [
+          "VALIDATION_FAILED",
+          "PERMISSION_DENIED",
+          "PROJECT_SCOPE_REQUIRED"
+        ],
         "parameters": [
           {
             "name": "source_domain",
             "in": "query",
             "required": false,
             "schema": {
-              "type": "string",
-              "maxLength": 64
+              "type": "array",
+              "items": {
+                "type": "string",
+                "maxLength": 64
+              }
             },
-            "description": "按来源业务域过滤。"
+            "style": "form",
+            "explode": false,
+            "description": "按来源业务域过滤；可逗号分隔多个（重复参数也收）；为空不按来源过滤；异常预警页与驾驶舱卡取 platform、ticketing、parking；不支持的来源 400 VALIDATION_FAILED。"
           },
           {
             "name": "status",
@@ -27916,6 +27943,104 @@
           "200": {
             "$ref": "#/components/responses/Page"
           },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/evidence/risk-alerts/open-count": {
+      "get": {
+        "tags": [
+          "evidence"
+        ],
+        "operationId": "countUnfinishedRiskAlerts",
+        "summary": "统一风险预警未处理条数（总控驾驶舱异常预警卡）",
+        "description": "第十八批 BC 段第 369 条 369-R1、369-R6（BSM:1835「经营看板显示异常预警的入口与未处理条数计数卡片，点击进入异常预警页面；看板上的计数只是入口提示，预警的查看、转办与处置仍在异常预警页面完成。」；PGM:659「所有业务数据默认按项目隔离，普通岗位没有跨项目查看权；只有项目之上的获授权岗位才可以跨项目汇总。」）：总控驾驶舱异常预警卡的未处理条数。open_count＝查看人可见的待处理、处理中（status 为 open、handling）预警条数，取查询时状态；source_domain 与范围同 searchRiskAlerts（挂商户账号只数本商户的；其余按 risk_alert.view 可触及的项目，不带项目的只有平台管理员与最高权限计入）。只给条数、不给预警内容，不记留痕。不支持的来源 400 VALIDATION_FAILED；没有 risk_alert.view 403 PERMISSION_DENIED；不挂商户且无组织归属的账号 403 PROJECT_SCOPE_REQUIRED。",
+        "x-auth-context": "staff-token",
+        "x-permission": "risk_alert.view",
+        "x-data-scope": "project",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "not_applicable",
+        "x-audit-event-failure": "not_applicable",
+        "x-failure-codes": [
+          "VALIDATION_FAILED",
+          "PERMISSION_DENIED",
+          "PROJECT_SCOPE_REQUIRED"
+        ],
+        "parameters": [
+          {
+            "name": "source_domain",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "maxLength": 64
+              }
+            },
+            "style": "form",
+            "explode": false,
+            "description": "按来源业务域过滤；可逗号分隔多个（重复参数也收）；为空不按来源过滤；异常预警页与驾驶舱卡取 platform、ticketing、parking；不支持的来源 400 VALIDATION_FAILED。"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功；data.open_count 为未处理（待处理、处理中）条数。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SuccessResponse"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "type": "object",
+                          "required": [
+                            "open_count"
+                          ],
+                          "properties": {
+                            "open_count": {
+                              "type": "integer",
+                              "format": "int64",
+                              "minimum": 0,
+                              "description": "未处理条数。"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                },
+                "example": {
+                  "success": true,
+                  "code": "OK",
+                  "message": "success",
+                  "data": {
+                    "open_count": 3
+                  },
+                  "request_id": "req_20261120_000001",
+                  "server_time": "2026-11-20T12:00:00Z"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
           "403": {
             "$ref": "#/components/responses/Error"
           },
@@ -27932,16 +28057,24 @@
         ],
         "operationId": "getRiskAlertDetail",
         "summary": "查询风险预警详情",
+        "description": "第十八批 BC 段第 375 条 375-R1、第 369 条 369-R6（BSM:1657「每条预警的查看、转办与处置结论均须留痕。」；PGM:659「所有业务数据默认按项目隔离，普通岗位没有跨项目查看权；只有项目之上的获授权岗位才可以跨项目汇总。」）：返回预警主记录 alert 与处置动作流水 actions。每打开一次记一条成功留痕 exception.alert_viewed，business_id 为该预警编号；预警不存在或不在范围内记失败留痕 exception.alert_view_failed。范围同 searchRiskAlerts：挂商户账号只看本商户的预警，越商户 403 CROSS_MERCHANT_FORBIDDEN；其余预警项目须在 risk_alert.view 可触及的项目内（平台管理员、最高权限全部，可跨项目角色按勾选），不带项目的预警只有平台管理员与最高权限可看，否则 403 CROSS_PROJECT_FORBIDDEN；不挂商户且无组织归属的账号 403 PROJECT_SCOPE_REQUIRED；没有 risk_alert.view 403 PERMISSION_DENIED；预警不存在 404 RISK_ALERT_NOT_FOUND。",
         "x-auth-context": "staff-token",
         "x-permission": "risk_alert.view",
-        "x-data-scope": "platform",
+        "x-data-scope": "project",
         "x-terminal-allowed": [
           "web",
           "mobile_admin"
         ],
         "x-idempotency-required": false,
-        "x-audit-event-success": "not_applicable",
-        "x-audit-event-failure": "not_applicable",
+        "x-audit-event-success": "exception.alert_viewed",
+        "x-audit-event-failure": "exception.alert_view_failed",
+        "x-failure-codes": [
+          "RISK_ALERT_NOT_FOUND",
+          "CROSS_PROJECT_FORBIDDEN",
+          "CROSS_MERCHANT_FORBIDDEN",
+          "PERMISSION_DENIED",
+          "PROJECT_SCOPE_REQUIRED"
+        ],
         "parameters": [
           {
             "name": "alert_id",
@@ -27956,9 +28089,31 @@
         ],
         "responses": {
           "200": {
-            "$ref": "#/components/responses/Page"
+            "description": "返回预警主记录 alert 与处置动作流水 actions（RiskAlertDetail）。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SuccessResponse"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "$ref": "#/components/schemas/RiskAlertDetail"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
           },
           "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
             "$ref": "#/components/responses/Error"
           },
           "500": {
@@ -27974,9 +28129,10 @@
         ],
         "operationId": "claimRiskAlert",
         "summary": "认领风险预警",
+        "description": "第十八批 BC 段第 369 条 369-R6（PGM:659「所有业务数据默认按项目隔离，普通岗位没有跨项目查看权；只有项目之上的获授权岗位才可以跨项目汇总。」）：范围按 risk_alert.claim 可触及的项目（口径同 searchRiskAlerts）：挂商户账号只办本商户的预警，越商户 403 CROSS_MERCHANT_FORBIDDEN；其余预警项目须在该码可触及的项目内（平台管理员、最高权限全部，可跨项目角色按勾选），不带项目的预警只有平台管理员与最高权限可办，否则 403 CROSS_PROJECT_FORBIDDEN；不挂商户且无组织归属的账号 403 PROJECT_SCOPE_REQUIRED。369-R1（PGM:287 提示、报错须全部为中文）：当前状态不允许该动作 409 INVALID_STATE「风险预警状态已变化，不能执行该操作，请刷新后查看」。",
         "x-auth-context": "staff-token",
         "x-permission": "risk_alert.claim",
-        "x-data-scope": "platform",
+        "x-data-scope": "project",
         "x-terminal-allowed": [
           "web",
           "mobile_admin"
@@ -27984,6 +28140,13 @@
         "x-idempotency-required": true,
         "x-audit-event-success": "exception.claimed",
         "x-audit-event-failure": "exception.claim_failed",
+        "x-failure-codes": [
+          "RISK_ALERT_NOT_FOUND",
+          "CROSS_MERCHANT_FORBIDDEN",
+          "CROSS_PROJECT_FORBIDDEN",
+          "PROJECT_SCOPE_REQUIRED",
+          "INVALID_STATE"
+        ],
         "parameters": [
           {
             "name": "alert_id",
@@ -28040,6 +28203,9 @@
           "403": {
             "$ref": "#/components/responses/Error"
           },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
           "409": {
             "$ref": "#/components/responses/Error"
           },
@@ -28056,9 +28222,10 @@
         ],
         "operationId": "transferRiskAlert",
         "summary": "转交风险预警",
+        "description": "第十八批 BC 段第 369 条 369-R6（PGM:659「所有业务数据默认按项目隔离，普通岗位没有跨项目查看权；只有项目之上的获授权岗位才可以跨项目汇总。」）：范围按 risk_alert.transfer 可触及的项目（口径同 searchRiskAlerts）：挂商户账号只办本商户的预警，越商户 403 CROSS_MERCHANT_FORBIDDEN；其余预警项目须在该码可触及的项目内（平台管理员、最高权限全部，可跨项目角色按勾选），不带项目的预警只有平台管理员与最高权限可办，否则 403 CROSS_PROJECT_FORBIDDEN；不挂商户且无组织归属的账号 403 PROJECT_SCOPE_REQUIRED。369-R1（PGM:287 提示、报错须全部为中文）：当前状态不允许该动作 409 INVALID_STATE「风险预警状态已变化，不能执行该操作，请刷新后查看」。转办动作记录的 reason 写「转办给 对象编号」，填了原因的写「原因（转办给 对象编号）」。",
         "x-auth-context": "staff-token",
         "x-permission": "risk_alert.transfer",
-        "x-data-scope": "platform",
+        "x-data-scope": "project",
         "x-terminal-allowed": [
           "web",
           "mobile_admin"
@@ -28066,6 +28233,13 @@
         "x-idempotency-required": true,
         "x-audit-event-success": "exception.transferred",
         "x-audit-event-failure": "exception.transfer_failed",
+        "x-failure-codes": [
+          "RISK_ALERT_NOT_FOUND",
+          "CROSS_MERCHANT_FORBIDDEN",
+          "CROSS_PROJECT_FORBIDDEN",
+          "PROJECT_SCOPE_REQUIRED",
+          "INVALID_STATE"
+        ],
         "parameters": [
           {
             "name": "alert_id",
@@ -28126,6 +28300,9 @@
             "$ref": "#/components/responses/Error"
           },
           "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
             "$ref": "#/components/responses/Error"
           },
           "409": {
@@ -28144,9 +28321,10 @@
         ],
         "operationId": "escalateRiskAlert",
         "summary": "升级风险预警",
+        "description": "第十八批 BC 段第 369 条 369-R6（PGM:659「所有业务数据默认按项目隔离，普通岗位没有跨项目查看权；只有项目之上的获授权岗位才可以跨项目汇总。」）：范围按 risk_alert.escalate 可触及的项目（口径同 searchRiskAlerts）：挂商户账号只办本商户的预警，越商户 403 CROSS_MERCHANT_FORBIDDEN；其余预警项目须在该码可触及的项目内（平台管理员、最高权限全部，可跨项目角色按勾选），不带项目的预警只有平台管理员与最高权限可办，否则 403 CROSS_PROJECT_FORBIDDEN；不挂商户且无组织归属的账号 403 PROJECT_SCOPE_REQUIRED。369-R1（PGM:287 提示、报错须全部为中文）：当前状态不允许该动作 409 INVALID_STATE「风险预警状态已变化，不能执行该操作，请刷新后查看」。",
         "x-auth-context": "staff-token",
         "x-permission": "risk_alert.escalate",
-        "x-data-scope": "platform",
+        "x-data-scope": "project",
         "x-terminal-allowed": [
           "web",
           "mobile_admin"
@@ -28154,6 +28332,13 @@
         "x-idempotency-required": true,
         "x-audit-event-success": "exception.escalated",
         "x-audit-event-failure": "exception.escalate_failed",
+        "x-failure-codes": [
+          "RISK_ALERT_NOT_FOUND",
+          "CROSS_MERCHANT_FORBIDDEN",
+          "CROSS_PROJECT_FORBIDDEN",
+          "PROJECT_SCOPE_REQUIRED",
+          "INVALID_STATE"
+        ],
         "parameters": [
           {
             "name": "alert_id",
@@ -28216,6 +28401,9 @@
           "403": {
             "$ref": "#/components/responses/Error"
           },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
           "409": {
             "$ref": "#/components/responses/Error"
           },
@@ -28232,9 +28420,10 @@
         ],
         "operationId": "resolveEvidenceRiskAlert",
         "summary": "关闭风险预警（需结论）",
+        "description": "第十八批 BC 段第 369 条 369-R6（PGM:659「所有业务数据默认按项目隔离，普通岗位没有跨项目查看权；只有项目之上的获授权岗位才可以跨项目汇总。」）：范围按 risk_alert.resolve 可触及的项目（口径同 searchRiskAlerts）：挂商户账号只办本商户的预警，越商户 403 CROSS_MERCHANT_FORBIDDEN；其余预警项目须在该码可触及的项目内（平台管理员、最高权限全部，可跨项目角色按勾选），不带项目的预警只有平台管理员与最高权限可办，否则 403 CROSS_PROJECT_FORBIDDEN；不挂商户且无组织归属的账号 403 PROJECT_SCOPE_REQUIRED。369-R1（PGM:287 提示、报错须全部为中文）：当前状态不允许该动作 409 INVALID_STATE「风险预警状态已变化，不能执行该操作，请刷新后查看」。",
         "x-auth-context": "staff-token",
         "x-permission": "risk_alert.resolve",
-        "x-data-scope": "platform",
+        "x-data-scope": "project",
         "x-terminal-allowed": [
           "web",
           "mobile_admin"
@@ -28242,6 +28431,13 @@
         "x-idempotency-required": true,
         "x-audit-event-success": "exception.resolved",
         "x-audit-event-failure": "exception.resolve_failed",
+        "x-failure-codes": [
+          "RISK_ALERT_NOT_FOUND",
+          "CROSS_MERCHANT_FORBIDDEN",
+          "CROSS_PROJECT_FORBIDDEN",
+          "PROJECT_SCOPE_REQUIRED",
+          "INVALID_STATE"
+        ],
         "parameters": [
           {
             "name": "alert_id",
@@ -28299,6 +28495,9 @@
           "403": {
             "$ref": "#/components/responses/Error"
           },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
           "409": {
             "$ref": "#/components/responses/Error"
           },
@@ -28315,9 +28514,10 @@
         ],
         "operationId": "dismissRiskAlert",
         "summary": "忽略关闭风险预警",
+        "description": "第十八批 BC 段第 369 条 369-R6（PGM:659「所有业务数据默认按项目隔离，普通岗位没有跨项目查看权；只有项目之上的获授权岗位才可以跨项目汇总。」）：范围按 risk_alert.dismiss 可触及的项目（口径同 searchRiskAlerts）：挂商户账号只办本商户的预警，越商户 403 CROSS_MERCHANT_FORBIDDEN；其余预警项目须在该码可触及的项目内（平台管理员、最高权限全部，可跨项目角色按勾选），不带项目的预警只有平台管理员与最高权限可办，否则 403 CROSS_PROJECT_FORBIDDEN；不挂商户且无组织归属的账号 403 PROJECT_SCOPE_REQUIRED。369-R1（PGM:287 提示、报错须全部为中文）：当前状态不允许该动作 409 INVALID_STATE「风险预警状态已变化，不能执行该操作，请刷新后查看」。",
         "x-auth-context": "staff-token",
         "x-permission": "risk_alert.dismiss",
-        "x-data-scope": "platform",
+        "x-data-scope": "project",
         "x-terminal-allowed": [
           "web",
           "mobile_admin"
@@ -28325,6 +28525,13 @@
         "x-idempotency-required": true,
         "x-audit-event-success": "exception.dismissed",
         "x-audit-event-failure": "exception.dismiss_failed",
+        "x-failure-codes": [
+          "RISK_ALERT_NOT_FOUND",
+          "CROSS_MERCHANT_FORBIDDEN",
+          "CROSS_PROJECT_FORBIDDEN",
+          "PROJECT_SCOPE_REQUIRED",
+          "INVALID_STATE"
+        ],
         "parameters": [
           {
             "name": "alert_id",
@@ -28379,6 +28586,9 @@
             "$ref": "#/components/responses/Error"
           },
           "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
             "$ref": "#/components/responses/Error"
           },
           "409": {
@@ -37184,15 +37394,19 @@
         ],
         "operationId": "createPropertyFeeRate",
         "summary": "维护物业费费率（项目级、可按期）",
+        "description": "第十八批 BC 段第 368 条 368-R1（PGM:659「所有业务数据默认按项目隔离，普通岗位没有跨项目查看权；只有项目之上的获授权岗位才可以跨项目汇总。」；PGM:744「前端隐藏只是辅助，后端接口必须独立校验。」）：费率没有商户维度，project_id 须在 finance.property_fee.manage 可触及范围内（平台管理员、最高权限全部；可跨项目角色按勾选），否则 403 CROSS_PROJECT_FORBIDDEN，失败留痕 finance_property_fee.rate_set_failed。",
         "x-auth-context": "staff-token",
         "x-permission": "finance.property_fee.manage",
-        "x-data-scope": "platform",
+        "x-data-scope": "project",
         "x-terminal-allowed": [
           "web"
         ],
         "x-idempotency-required": true,
         "x-audit-event-success": "finance_property_fee.rate_set",
         "x-audit-event-failure": "finance_property_fee.rate_set_failed",
+        "x-failure-codes": [
+          "CROSS_PROJECT_FORBIDDEN"
+        ],
         "requestBody": {
           "$ref": "#/components/requestBodies/PropertyFeeRateRequest"
         },
@@ -37220,15 +37434,19 @@
         ],
         "operationId": "listPropertyFeeRates",
         "summary": "列出某项目的物业费费率",
+        "description": "第十八批 BC 段第 368 条 368-R1（PGM:659「所有业务数据默认按项目隔离，普通岗位没有跨项目查看权；只有项目之上的获授权岗位才可以跨项目汇总。」；PGM:744「前端隐藏只是辅助，后端接口必须独立校验。」）：费率没有商户维度，project_id 须在 finance.property_fee.manage 可触及范围内（平台管理员、最高权限全部；可跨项目角色按勾选），否则 403 CROSS_PROJECT_FORBIDDEN。",
         "x-auth-context": "staff-token",
         "x-permission": "finance.property_fee.manage",
-        "x-data-scope": "platform",
+        "x-data-scope": "project",
         "x-terminal-allowed": [
           "web"
         ],
         "x-idempotency-required": false,
         "x-audit-event-success": "not_applicable",
         "x-audit-event-failure": "not_applicable",
+        "x-failure-codes": [
+          "CROSS_PROJECT_FORBIDDEN"
+        ],
         "parameters": [
           {
             "name": "project_id",
@@ -47108,7 +47326,7 @@
         ],
         "operationId": "listCustomerBlacklistRequests",
         "summary": "黑名单申请列表（待批准在前）",
-        "description": "ROOT-03-R23：持申请或终审权限的看本项目范围（平台看全部）；其余人只看自己此刻在班当夜班值班经理的项目的申请。status 可选 pending、approved、rejected。",
+        "description": "ROOT-03-R23、第十八批 BC 段第 366 条 366-R2（ENUM:68「黑名单全平台通用，由保安团队申请、夜班值班经理批准、娱乐平台负责人批准。」；PGM:659「被分配了可跨项目角色的员工（含经岗位得到），在所分配的权限内可以查看、处理该角色可查看项目的数据。」）：持申请码或终审码的按入口权限码可触及的项目看（持终审码按终审码，否则按申请码；平台管理员与最高权限全部，可跨项目角色按勾选）；其余人只看本人此刻当班夜班值班经理的项目的申请。status 可选 pending、approved、rejected。",
         "x-permission": "customer.blacklist.request",
         "x-data-scope": "project",
         "x-terminal-allowed": [
@@ -55111,8 +55329,12 @@
         ],
         "operationId": "lookupStoredValueRefundCards",
         "summary": "储值退卡查卡（按手机号列出当前账号可办理退卡的卡；手机号走请求体不进 URL）",
-        "description": "第十八批 AZ 段第 278 条 278-R1（ENUM:86「余额管理与退款均由长沙项目公司负责」；BSM:833「商户的员工只能管理本商户发行的储值卡」；PGM:528「④看不到别的商户和别的项目的数据」）：按客人完整手机号（精确匹配）列出其名下当前账号可办理退卡的卡，供后台「储值退卡」页办理 refundStoredValueAccount（通用卡）与 counterRefundStoredValueAccount（商户卡）。查询不扣单次授权（M723 操作员 2026-10-03「预览、查询不扣一次性授权」），不记审计事件。范围同退款：最高权限与平台管理员全见；商户账号只见本商户的卡，卡带项目的再限本人项目；不挂商户的账号见本人项目的卡、不带项目的通用卡，以及发卡商户在本人项目经营（主项目或已批准的经营项目）的不带项目商户卡。已销户（closed）的卡不列；手机号查不到客人返回空数组；只给掩码手机号。商户卡的 refund_allowed 与 refund_ratio_bps 取发卡商户退款规则（未配置为允许、10000），通用卡固定为 true 与 10000；pending_refund_cent 为账户关闭或注销时登记、状态为 requested 或 processing 的待退事项金额，否则为 null。缺 phone 400 VALIDATION_FAILED；没有 customer.stored_value.refund 403 PERMISSION_DENIED。",
+        "description": "第十八批 AZ 段第 278 条 278-R1（ENUM:86「余额管理与退款均由长沙项目公司负责」；BSM:833「商户的员工只能管理本商户发行的储值卡」；PGM:528「④看不到别的商户和别的项目的数据」）：按客人完整手机号（精确匹配）列出其名下当前账号可办理退卡的卡，供后台「储值退卡」页办理 refundStoredValueAccount（通用卡）与 counterRefundStoredValueAccount（商户卡）。查询不扣单次授权（M723 操作员 2026-10-03「预览、查询不扣一次性授权」），不记审计事件。范围同退款：最高权限与平台管理员全见；商户账号只见本商户的卡，卡带项目的再限本人项目；不挂商户的账号见本人项目的卡、不带项目的通用卡，以及发卡商户在本人项目经营（主项目或已批准的经营项目）的不带项目商户卡。已销户（closed）的卡不列；手机号查不到客人返回空数组；只给掩码手机号。商户卡的 refund_allowed 与 refund_ratio_bps 取发卡商户退款规则（未配置为允许、10000），通用卡固定为 true 与 10000；pending_refund_cent 为账户关闭或注销时登记、状态为 requested 或 processing 的待退事项金额，否则为 null。第十八批 BC 段第 365 条 365-R1（BSM:833「账户可冻结/解冻。」）：储值退卡页同时办冻结、解冻（freezeStoredValueAccount、unfreezeStoredValueAccount），持 customer.stored_value.freeze 也可查卡，范围同上。缺 phone 400 VALIDATION_FAILED；customer.stored_value.refund 与 customer.stored_value.freeze 都不持 403 PERMISSION_DENIED。",
         "x-permission": "customer.stored_value.refund",
+        "x-permissions-any-of": [
+          "customer.stored_value.refund",
+          "customer.stored_value.freeze"
+        ],
         "x-data-scope": "project-merchant",
         "x-terminal-allowed": [
           "web"
@@ -61429,7 +61651,7 @@
           }
         },
         "x-auth-context": "staff-token",
-        "description": "V296 成本台账：按商户+期间返回出库成本合计（持股分红净利润制的成本侧取数点）。成本=内部口径：要求独立高危权限 inventory.cost.view（仅授权后台可见）。查询参数 period_start/period_end 必填（yyyy-MM-dd，窗口=[period_start 经营日起, period_end+1 经营日起)，与财务日结同切分基准）；merchant_id 可选，仅对平台/项目管理员生效，商户员工强制按自身商户。返回 outbound_total_cost_cent 出库成本合计、outbound_movement_count 出库笔数、no_cost_basis_count 无成本基准笔数（提示合计存在低估）。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。"
+        "description": "V296 成本台账：按商户+期间返回出库成本合计（持股分红净利润制的成本侧取数点）。成本=内部口径：要求独立高危权限 inventory.cost.view（仅授权后台可见）。查询参数 period_start/period_end 必填（yyyy-MM-dd，窗口=[period_start 经营日起, period_end+1 经营日起)，与财务日结同切分基准）；merchant_id 可选，仅对平台/项目管理员生效，商户员工强制按自身商户。返回 outbound_total_cost_cent 出库成本合计、outbound_movement_count 出库笔数、no_cost_basis_count 无成本基准笔数（提示合计存在低估）。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。第十八批 BC 段第 362 条 362-R1：最高权限（第十八批裁决 71）看全部商户与项目。"
       }
     },
     "/api/v1/inventory/bar-consumption-stats": {
@@ -61484,7 +61706,7 @@
           }
         },
         "x-auth-context": "staff-token",
-        "description": "第十八批 K 段 97-R3（BSM:1168「记录吧台售卖后的酒水消耗，支持按杯、按瓶、按套餐或其他形式统计」）：按酒吧、销售形式（sale_form＝by_glass 按杯、by_bottle 按瓶、combo 套餐）、套餐、酒吧商品汇总期间内出品的售卖明细。查询参数 period_start、period_end 必填（yyyy-MM-dd，营业日窗口与库存台账本月出库成本 cost-summary 同一切分），结束日期早于开始日期 400 VALIDATION_FAILED；商户员工只看本商户，平台管理员看全量。赠送明细与小吃不计；回库退品的数量与出酒量不计，损耗不退。返回 bar_id、bar_name、sale_form、combo_id、combo_name、product_id、product_name、inventory_item_id、item_name、quantity、pour_volume_ml、loss_volume_ml。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。"
+        "description": "第十八批 K 段 97-R3（BSM:1168「记录吧台售卖后的酒水消耗，支持按杯、按瓶、按套餐或其他形式统计」）：按酒吧、销售形式（sale_form＝by_glass 按杯、by_bottle 按瓶、combo 套餐）、套餐、酒吧商品汇总期间内出品的售卖明细。查询参数 period_start、period_end 必填（yyyy-MM-dd，营业日窗口与库存台账本月出库成本 cost-summary 同一切分），结束日期早于开始日期 400 VALIDATION_FAILED；商户员工只看本商户，平台管理员看全量。赠送明细与小吃不计；回库退品的数量与出酒量不计，损耗不退。返回 bar_id、bar_name、sale_form、combo_id、combo_name、product_id、product_name、inventory_item_id、item_name、quantity、pour_volume_ml、loss_volume_ml。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。第十八批 BC 段第 362 条 362-R1：最高权限（第十八批裁决 71）看全部商户与项目。"
       }
     },
     "/api/v1/finance/dividends/plans": {
@@ -119768,6 +119990,209 @@
             "type": "string",
             "description": "中文名。",
             "maxLength": 255
+          }
+        }
+      },
+      "RiskAlertDetail": {
+        "type": "object",
+        "description": "统一风控预警单条明细（第十八批 BC 段第 375 条 375-R1）：预警主记录与处置动作流水，按动作时间先后。",
+        "additionalProperties": false,
+        "required": [
+          "alert",
+          "actions"
+        ],
+        "properties": {
+          "alert": {
+            "type": "object",
+            "description": "预警主记录。",
+            "additionalProperties": false,
+            "required": [
+              "alert_id",
+              "source_domain",
+              "source_ref",
+              "alert_type",
+              "risk_level",
+              "status",
+              "summary",
+              "first_reported_by",
+              "first_handler_id",
+              "escalated_to",
+              "resolved_by",
+              "resolution_conclusion",
+              "project_id",
+              "created_at",
+              "updated_at"
+            ],
+            "properties": {
+              "alert_id": {
+                "type": "string",
+                "description": "风险预警编号。",
+                "maxLength": 64
+              },
+              "source_domain": {
+                "type": "string",
+                "description": "来源业务域编码（如 platform 平台、ticketing 票务、parking 停车）。",
+                "maxLength": 32
+              },
+              "source_ref": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "来源业务对象编号；可为空。",
+                "maxLength": 128
+              },
+              "alert_type": {
+                "type": "string",
+                "description": "预警类型编码。",
+                "maxLength": 64
+              },
+              "risk_level": {
+                "type": "string",
+                "description": "风险等级码（normal、suspicious、high、critical，按 ENUM:217 依次为低、中、高、严重）。",
+                "maxLength": 16
+              },
+              "status": {
+                "type": "string",
+                "description": "预警状态码（open 待处理、handling 处理中、escalated 已升级处理、resolved 已处置、dismissed 已忽略）。",
+                "maxLength": 16
+              },
+              "summary": {
+                "type": "string",
+                "description": "预警摘要。",
+                "maxLength": 500
+              },
+              "first_reported_by": {
+                "type": "string",
+                "description": "首报人编号；系统上报为 system 或 system: 加来源。",
+                "maxLength": 64
+              },
+              "first_handler_id": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "处理人编号；未认领为空。",
+                "maxLength": 64
+              },
+              "escalated_to": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "升级对象编号；未升级为空。",
+                "maxLength": 64
+              },
+              "resolved_by": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "关闭人编号；未关闭为空。",
+                "maxLength": 64
+              },
+              "resolution_conclusion": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "处置结论；未处置为空。",
+                "maxLength": 4000
+              },
+              "project_id": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "所属综合体项目编号；不带项目的预警（同一手机号注销注册超限）为空。",
+                "maxLength": 64
+              },
+              "created_at": {
+                "type": "string",
+                "format": "date-time",
+                "description": "上报时间。"
+              },
+              "updated_at": {
+                "type": "string",
+                "format": "date-time",
+                "description": "最后更新时间。"
+              }
+            }
+          },
+          "actions": {
+            "type": "array",
+            "description": "处置动作流水。",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "action_id",
+                "alert_id",
+                "action_type",
+                "actor_id",
+                "from_status",
+                "to_status",
+                "reason",
+                "evidence_refs",
+                "created_at"
+              ],
+              "properties": {
+                "action_id": {
+                  "type": "string",
+                  "description": "动作编号。",
+                  "maxLength": 64
+                },
+                "alert_id": {
+                  "type": "string",
+                  "description": "风险预警编号。",
+                  "maxLength": 64
+                },
+                "action_type": {
+                  "type": "string",
+                  "description": "动作类型码（report 上报、claim 认领、transfer 转办、escalate 升级、resolve 处置、dismiss 忽略）。",
+                  "maxLength": 16
+                },
+                "actor_id": {
+                  "type": "string",
+                  "description": "操作人编号；系统上报为 system 或 system: 加来源。",
+                  "maxLength": 64
+                },
+                "from_status": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "动作前状态码；上报为空。",
+                  "maxLength": 16
+                },
+                "to_status": {
+                  "type": "string",
+                  "description": "动作后状态码。",
+                  "maxLength": 16
+                },
+                "reason": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "动作说明或原因；可为空。",
+                  "maxLength": 4000
+                },
+                "evidence_refs": {
+                  "type": "array",
+                  "description": "证据引用列表。",
+                  "items": {
+                    "type": "string",
+                    "maxLength": 64
+                  }
+                },
+                "created_at": {
+                  "type": "string",
+                  "format": "date-time",
+                  "description": "动作时间。"
+                }
+              }
+            }
           }
         }
       }

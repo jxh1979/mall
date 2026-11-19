@@ -1,6 +1,6 @@
 package com.complex.platform.evidence;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import com.complex.platform.access.AccessActor;
 import com.complex.platform.access.AuthorizationService;
@@ -140,8 +140,8 @@ public class RiskAlertService {
                 "exception.claim_failed",
                 CLAIM_PERMISSION,
                 () -> {
-                    RiskAlertRecord existing = requireOpenForFlow(alertId);
-                    requireStatusIn(existing, "claim", "open", "escalated");
+                    RiskAlertRecord existing = requireOpenForFlow(alertId, CLAIM_PERMISSION);
+                    requireStatusIn(existing, "open", "escalated");
                     AccessActor actor = authorizationService.currentActor();
                     Instant now = Instant.now();
                     RiskAlertRecord updated = existing.withStatus("handling")
@@ -168,8 +168,8 @@ public class RiskAlertService {
                 "exception.transfer_failed",
                 TRANSFER_PERMISSION,
                 () -> {
-                    RiskAlertRecord existing = requireOpenForFlow(alertId);
-                    requireStatusIn(existing, "transfer", "handling");
+                    RiskAlertRecord existing = requireOpenForFlow(alertId, TRANSFER_PERMISSION);
+                    requireStatusIn(existing, "handling");
                     String target = requireText(actual.targetHandlerId(), "target_handler_id");
                     AccessActor actor = authorizationService.currentActor();
                     Instant now = Instant.now();
@@ -197,8 +197,8 @@ public class RiskAlertService {
                 "exception.escalate_failed",
                 ESCALATE_PERMISSION,
                 () -> {
-                    RiskAlertRecord existing = requireOpenForFlow(alertId);
-                    requireStatusIn(existing, "escalate", "open", "handling");
+                    RiskAlertRecord existing = requireOpenForFlow(alertId, ESCALATE_PERMISSION);
+                    requireStatusIn(existing, "open", "handling");
                     String target = requireText(actual.targetHandlerId(), "target_handler_id");
                     AccessActor actor = authorizationService.currentActor();
                     Instant now = Instant.now();
@@ -226,8 +226,8 @@ public class RiskAlertService {
                 "exception.resolve_failed",
                 RESOLVE_PERMISSION,
                 () -> {
-                    RiskAlertRecord existing = requireOpenForFlow(alertId);
-                    requireStatusIn(existing, "resolve", "open", "handling", "escalated");
+                    RiskAlertRecord existing = requireOpenForFlow(alertId, RESOLVE_PERMISSION);
+                    requireStatusIn(existing, "open", "handling", "escalated");
                     // 服务层校验："异常关闭必须有结论"（DB CHECK 为第二道防线）。
                     String conclusion = requireText(actual.resolutionConclusion(), "resolution_conclusion");
                     AccessActor actor = authorizationService.currentActor();
@@ -257,8 +257,8 @@ public class RiskAlertService {
                 "exception.dismiss_failed",
                 DISMISS_PERMISSION,
                 () -> {
-                    RiskAlertRecord existing = requireOpenForFlow(alertId);
-                    requireStatusIn(existing, "dismiss", "open", "handling", "escalated");
+                    RiskAlertRecord existing = requireOpenForFlow(alertId, DISMISS_PERMISSION);
+                    requireStatusIn(existing, "open", "handling", "escalated");
                     AccessActor actor = authorizationService.currentActor();
                     Instant now = Instant.now();
                     RiskAlertRecord updated = existing.withStatus("dismissed").touched(now);
@@ -271,22 +271,41 @@ public class RiskAlertService {
     }
 
     // ── 查询（scope 隔离）──────────────────────────────────────────────────────
-    public List<RiskAlertRecord> search(String sourceDomain, String status, String projectId, int limit) {
+    /**
+     * 第十八批 BC 段 369-R1（BSM:1657「集中汇集账户与出入场行为异常……供风控岗与管理层查看与处置」）：来源可多个（为空不按来源过滤）。
+     * 375-R2（BSM:1657「每条预警的查看……均须留痕」）：成功留痕另记本次列出的预警编号 alert_ids。
+     */
+    public List<RiskAlertRecord> search(List<String> sourceDomains, String status, String projectId, int limit) {
         authorizationService.requirePermission(VIEW_PERMISSION);
         int safeLimit = limit <= 0 ? DEFAULT_LIMIT : Math.min(limit, MAX_LIMIT);
-        String domain = sourceDomain == null ? null : requireDomain(sourceDomain);
-        String merchantScope = authorizationService.currentMerchantScope().orElse(null);
+        List<String> domains = requireDomains(sourceDomains);
+        Scope scope = scope(VIEW_PERMISSION);
         return executor.readPage(
                 AuditedOperation.of("exception.alerts_viewed", "exception.alerts_view_failed", VIEW_PERMISSION, "risk_alert"),
-                () -> repository.search(domain, trimToNull(status), trimToNull(projectId), merchantScope, safeLimit))
+                () -> repository.search(domains, trimToNull(status), trimToNull(projectId), scope.merchant(), scope.projects(), safeLimit),
+                items -> Map.of("alert_ids", items.stream().map(RiskAlertRecord::alertId).toList()))
                 .items();
     }
 
+    /**
+     * 369-R1（BSM:1835「经营看板显示异常预警的入口与未处理条数计数卡片……看板上的计数只是入口提示」）：未处理（待处理、处理中）条数，
+     * 来源与范围同 {@link #search}；计数不显示任何预警内容，不留痕。
+     */
+    public long countUnfinished(List<String> sourceDomains) {
+        authorizationService.requirePermission(VIEW_PERMISSION);
+        List<String> domains = requireDomains(sourceDomains);
+        Scope scope = scope(VIEW_PERMISSION);
+        return repository.countUnfinished(domains, scope.merchant(), scope.projects());
+    }
+
+    /** 375-R1（BSM:1657「每条预警的查看、转办与处置结论均须留痕。」）：每打开一次记一条，业务编号为该预警；不存在或不在范围内记失败。 */
     public RiskAlertDetail getDetail(String alertId) {
         authorizationService.requirePermission(VIEW_PERMISSION);
         String id = requireText(alertId, "alert_id");
-        RiskAlertRecord alert = requireScopedAlert(id);
-        return new RiskAlertDetail(alert, repository.listActions(id));
+        return executor.readSingle(
+                AuditedOperation.of("exception.alert_viewed", "exception.alert_view_failed", VIEW_PERMISSION, "risk_alert"),
+                () -> new RiskAlertDetail(requireScopedAlert(id, VIEW_PERMISSION), repository.listActions(id)),
+                item -> ((RiskAlertDetail) item).alert().alertId());
     }
 
     /**
@@ -334,32 +353,55 @@ public class RiskAlertService {
         ));
     }
 
-    /** 取出可流转的预警，已做 scope 隔离与存在校验。 */
-    private RiskAlertRecord requireOpenForFlow(String alertId) {
-        return requireScopedAlert(requireText(alertId, "alert_id"));
+    /** 取出可流转的预警，已做 scope 隔离与存在校验（范围按该动作的入口权限码）。 */
+    private RiskAlertRecord requireOpenForFlow(String alertId, String permission) {
+        return requireScopedAlert(requireText(alertId, "alert_id"), permission);
     }
 
-    /** 存在性 + 商户隔离：商户用户只能操作自己的预警。 */
-    private RiskAlertRecord requireScopedAlert(String alertId) {
+    /**
+     * 存在性 + 范围：商户用户只能看、办自己的预警；其余按入口权限码可触及的项目（369-R6，见 {@link Scope}），
+     * 不带项目的只有平台位（平台管理员、最高权限）可看可办。
+     */
+    private RiskAlertRecord requireScopedAlert(String alertId, String permission) {
         RiskAlertRecord alert = repository.findById(alertId)
                 .orElseThrow(() -> ApiException.notFound("RISK_ALERT_NOT_FOUND", "风险预警不存在或已被删除"));
-        Optional<String> scope = authorizationService.currentMerchantScope();
-        if (scope.isPresent() && !scope.get().equals(alert.merchantId())) {
-            throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN",
-                    "风险预警不属于当前商户");
+        Scope scope = scope(permission);
+        if (scope.merchant() != null) {
+            if (!scope.merchant().equals(alert.merchantId())) {
+                throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN", "风险预警不属于当前商户");
+            }
+        } else if (!scope.reach().covers(alert.projectId())) {
+            throw ApiException.forbidden("CROSS_PROJECT_FORBIDDEN", "风险预警不在本权限可触及的项目范围内");
         }
         return alert;
     }
 
-    /** 状态机校验：终态（resolved/dismissed）不可再流转；非法迁移返回 INVALID_STATE。 */
-    private void requireStatusIn(RiskAlertRecord alert, String action, String... allowed) {
-        for (String status : allowed) {
-            if (status.equals(alert.status())) {
-                return;
-            }
+    /**
+     * 第十八批 BC 段 369-R6（PGM:659「所有业务数据默认按项目隔离，普通岗位没有跨项目查看权；只有项目之上的获授权岗位才可以跨项目汇总。」）：
+     * 读与处置的范围。挂商户的账号照旧只按商户（merchant 非空）；其余按入口权限码可触及的项目（{@link AuthorizationService#projectReach}）——
+     * 平台管理员与最高权限（363-R1）为平台位，看全部，含不带项目的同号注销注册超限预警；其余人只到可触及项目里带项目的预警。
+     */
+    private record Scope(String merchant, AuthorizationService.ProjectReach reach) {
+        /** 列表与计数的项目集合：null＝不按项目过滤。 */
+        Set<String> projects() {
+            return merchant != null || reach.platformAdmin() ? null : reach.organizationIds();
         }
-        throw ApiException.conflict("INVALID_STATE",
-                "风险预警当前状态不可执行 " + action + " 操作：" + alert.status());
+    }
+
+    private Scope scope(String permission) {
+        Optional<String> merchant = authorizationService.currentMerchantIdQuietly();
+        return merchant.isPresent() ? new Scope(merchant.get(), null)
+                : new Scope(null, authorizationService.projectReach(authorizationService.currentActor(), permission));
+    }
+
+    /**
+     * 状态机校验：终态（resolved/dismissed）不可再流转；非法迁移返回 INVALID_STATE。第十八批 BC 段 369-R1（PGM:287「……提示、报错……
+     * 必须全部为中文」）：报错一句固定中文，不带动作与状态码（两人同时处置同一条时第二人会看到）。
+     */
+    private void requireStatusIn(RiskAlertRecord alert, String... allowed) {
+        if (!List.of(allowed).contains(alert.status())) {
+            throw ApiException.conflict("INVALID_STATE", "风险预警状态已变化，不能执行该操作，请刷新后查看");
+        }
     }
 
     private <T> T execute(
@@ -392,16 +434,21 @@ public class RiskAlertService {
         return null;
     }
 
+    /** 369-R1（PGM:287）：转办记录的原因写「转办给 对象编号」，填了原因的为「原因（转办给 对象编号）」。 */
     private String transferReason(String reason, String target) {
         String base = trimToNull(reason);
-        String suffix = "transferred to " + target;
-        return base == null ? suffix : base + " (" + suffix + ")";
+        String suffix = "转办给 " + target;
+        return base == null ? suffix : base + "（" + suffix + "）";
     }
 
     private String escalateReason(String reason, String target) {
         String base = trimToNull(reason);
         String suffix = "escalated to " + target;
         return base == null ? suffix : base + " (" + suffix + ")";
+    }
+
+    private List<String> requireDomains(List<String> values) {
+        return values == null ? List.of() : values.stream().map(this::requireDomain).distinct().toList();
     }
 
     private String requireDomain(String value) {

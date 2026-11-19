@@ -1,6 +1,6 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.28
+// 文件版本：V0.29
 
 import com.complex.platform.auth.AuthService;
 import com.complex.platform.common.api.ApiException;
@@ -742,7 +742,7 @@ public class AuthorizationService implements CallerScopeResolver {
     /**
      * M736（XM-M001-D 可跨项目角色；操作员 2026-10-01 确认的治理地图第 653 行追加句：「被分配了可跨项目角色的员工（含经岗位得到），
      * 在所分配的权限内可以查看、处理该角色可查看项目的数据。」）：一次判定算出的可触及项目范围。
-     * platformAdmin＝平台管理员（一切，D-032）；allProjects＝经勾了「可以查看全部项目」的角色持有入口权限码；ownProject＝本人项目；
+     * platformAdmin＝平台管理员（一切，D-032），第十八批 BC 段 363-R1 起最高权限同样置位；allProjects＝经勾了「可以查看全部项目」的角色持有入口权限码；ownProject＝本人项目；
      * ownBySource＝入口权限码另有不是可跨项目角色的来源（普通角色、员工单独授予、模板、临时授权；M736 第二步：带保留标记的老持有人
      * 所持的、对他有效的勾选一条不剩的角色也算，见 {@link #projectReach}）；
      * projects＝可跨项目角色勾中、且在当时项目集合内的归属。
@@ -806,7 +806,8 @@ public class AuthorizationService implements CallerScopeResolver {
     }
 
     /**
-     * M736：操作人按入口权限码可触及的项目范围。按顺序判：平台管理员 → 一切；本人没有项目归属 → 照旧 403；
+     * M736：操作人按入口权限码可触及的项目范围。按顺序判：平台管理员 → 一切；最高权限 → 一切（363-R1，见方法内注释）；
+     * 本人没有项目归属 → 照旧 403；
      * 账号停用、带商户归属、外包账号 → 只到本人项目（操作员 2026-09-25「商户账号。是不能跨项目的。」；治理地图第 675 行「也不能跨出本综合体」）；
      * 其余逐码取有效授予（{@link #validGrants}，来源是否在效与入口核权同一口径 {@link #usable}）——来源是可跨项目角色的
      * （直接分配与岗位派生都算，操作员 2026-09-25「也算」）累计「勾了全部」与勾选清单，其余来源记本人项目；
@@ -821,6 +822,13 @@ public class AuthorizationService implements CallerScopeResolver {
     public ProjectReach projectReach(AccessActor actor, String... permissionCodes) {
         if (isPlatformAdminBridge(actor)) {
             return new ProjectReach(true, true, actor.organizationId(), true, Set.of());
+        }
+        if (isMasterAuthority(actor)) {
+            // 第十八批 BC 段 363-R1（第十八批裁决 71 所选选项②，操作员追加原话「既然是最高权限，不应该什么都能看到吗？」；
+            // BSM:576「持授权 U 盘密钥的最高权限本人发起的操作，不需要经过任何审批。」）：最高权限经各项目闸按全部项目，可看、可办。
+            // platformAdmin 位为真，reach.platformAdmin() 的各分支对他一并按平台管理员走（含本人授出可跨项目角色不走高风险档）；
+            // projects 填当时的全部项目，先判 isPlatformAdmin(actor) 再取 organizationIds() 的列表对他也取到全部项目。
+            return new ProjectReach(true, true, actor.organizationId(), true, projectOrganizationIds());
         }
         String ownProject = requireProjectScope(actor);
         ProjectReach ownOnly = ProjectReach.ownOnly(ownProject);
@@ -1157,6 +1165,15 @@ public class AuthorizationService implements CallerScopeResolver {
     }
 
     /**
+     * 第十八批 BC 段 362-R1（第十八批裁决 71「既然是最高权限，不应该什么都能看到吗？」；BSM:576「持授权 U 盘密钥的最高权限本人发起的操作，
+     * 不需要经过任何审批。」）：只给列表与详情读取用的商户范围——最高权限返回空＝看全部商户；其余同 {@link #currentMerchantScope()}。
+     * 写入口仍用 currentMerchantScope：最高权限不挂商户，写入取空商户会落下没有商户归属的库存与酒吧单据。
+     */
+    public Optional<String> currentMerchantReadScope() {
+        return isMasterAuthority(currentActor()) ? Optional.empty() : currentMerchantScope();
+    }
+
+    /**
      * 第十八批 AB 段第 191 条 191-R1（BSM:1143「派驻仅由平台侧获授权人员登记，保留员工、目标商户及项目组织范围」「其他公司的人员派驻到某家酒吧工作期间……」；
      * BSM:931、BSM:1468 本人帮客人订位）：本人此刻恰好在一家酒吧的派驻期内时取该派驻酒吧，否则取账号商户号。
      * 只看起止日期、不看状态：结束派驻即置 ended，结束日期可选当天或以后（与提成归集同一判定）。
@@ -1242,11 +1259,12 @@ public class AuthorizationService implements CallerScopeResolver {
     }
 
     /**
-     * 项目维度只读 scope：平台管理员返回空＝全量（D-032）；其余主体返回其项目 ID，没有项目归属则拒绝。
+     * 项目维度只读 scope：平台管理员返回空＝全量（D-032）；最高权限同样返回空＝全量（第十八批 BC 段 363-R1，依据第十八批裁决 71、
+     * BSM:576；写入时用 orElse(null) 取项目的，最高权限取到空，不再把 platform-company 当项目）；其余主体返回其项目 ID，没有项目归属则拒绝。
      */
     public Optional<String> currentProjectScopeQuietly() {
         AccessActor actor = currentActor();
-        if (isPlatformAdminBridge(actor)) {
+        if (isPlatformAdminBridge(actor) || isMasterAuthority(actor)) {
             return Optional.empty();
         }
         return Optional.of(requireProjectScope(actor));

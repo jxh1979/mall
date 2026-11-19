@@ -1,5 +1,5 @@
 package com.complex.platform.governance;
-// 文件版本：V0.21
+// 文件版本：V0.22
 
 import com.complex.platform.access.AccessActor;
 import com.complex.platform.auth.SessionIssuer;
@@ -1403,19 +1403,23 @@ class PlatformServiceTests {
                 new ProjectAssociationRequest("missing-company", "org_1", "确认"))).isInstanceOf(ApiException.class);
     }
 
+    /**
+     * 第十八批 BC 段 363-R1 改断言（第十八批裁决 71「既然是最高权限，不应该什么都能看到吗？」；BSM:576）：最高权限经项目闸按全部项目，
+     * 商户、业务主体、项目、空间、业务主体绑定列表都看到两个项目的行（原断言为空）；本人编辑任一项目的商户档案即时生效
+     * （原断言 403 PROJECT_SCOPE_MISMATCH；裁决 71 所选选项②「本人发起即时生效」，写入口一并放开）。
+     */
     @Test
-    void masterHasNoGlobalListOrOrdinaryProfileBypass() {
+    void masterSeesAndEditsEveryProject() {
         twoProjectFixtures();
         asMasterAuthority();
         org.junit.jupiter.api.Assertions.assertAll(
-                () -> assertThat(service.listMerchants(true).total()).isZero(),
-                () -> assertThat(service.listBusinessEntities().total()).isZero(),
-                () -> assertThat(service.listProjects().total()).isZero(),
-                () -> assertThat(service.listSpaces().total()).isZero(),
-                () -> assertThat(service.listBusinessEntityBindings().total()).isZero());
-        assertThatThrownBy(() -> service.updateMerchant("scoped-merchant-a",
-                numericMerchant("master-ordinary-edit", "active", null, null, null)))
-                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("PROJECT_SCOPE_MISMATCH"));
+                () -> assertThat(service.listMerchants(true).total()).isEqualTo(2),
+                () -> assertThat(service.listBusinessEntities().total()).isEqualTo(2),
+                () -> assertThat(service.listProjects().total()).isEqualTo(2),
+                () -> assertThat(service.listSpaces().total()).isEqualTo(2),
+                () -> assertThat(service.listBusinessEntityBindings().total()).isEqualTo(2));
+        assertThat(service.updateMerchant("scoped-merchant-a",
+                numericMerchant("master-ordinary-edit", "active", null, null, null)).id()).isEqualTo("scoped-merchant-a");
     }
 
     private static final class InMemoryPlatformRepository implements PlatformRepository {

@@ -7,6 +7,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
@@ -98,24 +99,21 @@ class JdbcRiskAlertRepository implements RiskAlertRepository {
 
     @Override
     public List<RiskAlertRecord> search(
-            String sourceDomain,
+            List<String> sourceDomains,
             String status,
             String projectId,
             String merchantScope,
+            Collection<String> projectScope,
             int limit
     ) {
+        MapSqlParameterSource params = new MapSqlParameterSource();
         StringBuilder sql = new StringBuilder("""
                 SELECT alert_id, source_domain, source_ref, alert_type, risk_level, status, summary,
                        first_reported_by, first_handler_id, escalated_to, resolved_by, resolution_conclusion,
                        project_id, merchant_id, idempotency_key, created_at, updated_at
                   FROM risk_alerts
                  WHERE 1 = 1
-                """);
-        MapSqlParameterSource params = new MapSqlParameterSource();
-        if (sourceDomain != null) {
-            sql.append(" AND source_domain = :source_domain");
-            params.addValue("source_domain", sourceDomain);
-        }
+                """).append(scopeFilter(sourceDomains, merchantScope, projectScope, params));
         if (status != null) {
             sql.append(" AND status = :status");
             params.addValue("status", status);
@@ -124,13 +122,36 @@ class JdbcRiskAlertRepository implements RiskAlertRepository {
             sql.append(" AND project_id = :project_id");
             params.addValue("project_id", projectId);
         }
+        sql.append(" ORDER BY created_at DESC, alert_id DESC LIMIT :limit");
+        params.addValue("limit", limit);
+        return jdbcTemplate.query(sql.toString(), params, this::mapAlert);
+    }
+
+    @Override
+    public long countUnfinished(List<String> sourceDomains, String merchantScope, Collection<String> projectScope) {
+        MapSqlParameterSource params = new MapSqlParameterSource();
+        Long count = jdbcTemplate.queryForObject("SELECT count(*) FROM risk_alerts WHERE status IN ('open', 'handling')"
+                + scopeFilter(sourceDomains, merchantScope, projectScope, params), params, Long.class);
+        return count == null ? 0 : count;
+    }
+
+    /** 来源、商户与项目范围（列表与未处理条数同口径）。 */
+    private static String scopeFilter(List<String> sourceDomains, String merchantScope, Collection<String> projectScope,
+            MapSqlParameterSource params) {
+        StringBuilder sql = new StringBuilder();
+        if (sourceDomains != null && !sourceDomains.isEmpty()) {
+            sql.append(" AND source_domain IN (:source_domains)");
+            params.addValue("source_domains", sourceDomains);
+        }
         if (merchantScope != null) {
             sql.append(" AND merchant_id = :merchant_scope");
             params.addValue("merchant_scope", merchantScope);
         }
-        sql.append(" ORDER BY created_at DESC, alert_id DESC LIMIT :limit");
-        params.addValue("limit", limit);
-        return jdbcTemplate.query(sql.toString(), params, this::mapAlert);
+        if (projectScope != null) {
+            sql.append(projectScope.isEmpty() ? " AND FALSE" : " AND project_id IN (:project_scope)");
+            params.addValue("project_scope", projectScope);
+        }
+        return sql.toString();
     }
 
     private MapSqlParameterSource alertParameters(RiskAlertRecord alert) {

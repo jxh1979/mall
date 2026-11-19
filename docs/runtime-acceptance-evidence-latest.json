@@ -8,14 +8,14 @@
     "RUNTIME_EVIDENCE_BOUND_TO_SOURCE_FINGERPRINT",
     "RUNTIME_EVIDENCE_DOES_NOT_CLOSE_PRODUCTION_MANIFEST"
   ],
-  "generated_at": "2026-11-19T18:19:16.235Z",
+  "generated_at": "2026-11-19T23:23:03.203Z",
   "git": {
-    "head": "72a5b2c653c99cf1e671ba4b7e828aaa3b0e545c",
-    "head_short": "72a5b2c6",
-    "branch": "feature/business-code-batch73-20261106",
+    "head": "56256e209c5e618cb6bc668ddfc74c95a1da14fb",
+    "head_short": "56256e20",
+    "branch": "feature/business-code-batch75-20261106",
     "worktree_dirty": false,
-    "source_fingerprint": "adfa6109a6a88cb9336d0a9802bb7401422445587691c06bb6957ee8893f7778",
-    "source_fingerprint_file_count": 3569,
+    "source_fingerprint": "6259ad22e34243ba8a6aea50007383d3b5f6ec1541bd3f77d96fb44410a039f9",
+    "source_fingerprint_file_count": 3577,
     "source_fingerprint_paths": [
       "backend/src/main",
       "backend/src/test",
@@ -50,12 +50,12 @@
   },
   "backend_surefire": {
     "path": "backend/target/surefire-reports",
-    "suites": 646,
-    "tests": 7097,
+    "suites": 651,
+    "tests": 7119,
     "failures": 0,
     "errors": 0,
     "skipped": 0,
-    "latest_mtime": "2026-11-19T18:15:58.912Z",
+    "latest_mtime": "2026-11-19T23:21:18.527Z",
     "passed": true
   },
   "web_unit_source": {
@@ -199,6 +199,7 @@
       "apps/web/src/admin/pages/EnergyWorkbenchPage.test.tsx",
       "apps/web/src/admin/pages/EnergyWorkflowPanel.test.tsx",
       "apps/web/src/admin/pages/EntityTaxDeclarationsPage.test.tsx",
+      "apps/web/src/admin/pages/ExceptionAlertsPage.test.tsx",
       "apps/web/src/admin/pages/ExportDownloads.test.tsx",
       "apps/web/src/admin/pages/FacilityWorkbenchPage.alarm.test.tsx",
       "apps/web/src/admin/pages/FacilityWorkbenchPage.customercomplaint.test.tsx",
@@ -288,6 +289,7 @@
       "apps/web/src/admin/pages/OrganizationMerchantPage.test.tsx",
       "apps/web/src/admin/pages/OverviewPage.datepicker.test.tsx",
       "apps/web/src/admin/pages/OverviewPage.dayclose.test.tsx",
+      "apps/web/src/admin/pages/OverviewPage.exceptionalerts.test.tsx",
       "apps/web/src/admin/pages/OverviewPage.kpi.test.tsx",
       "apps/web/src/admin/pages/OverviewPage.metricdetail.test.tsx",
       "apps/web/src/admin/pages/OverviewPage.recondiff.test.tsx",
@@ -420,8 +422,8 @@
       "apps/web/src/dealer/dealerPortalClient.test.ts",
       "apps/web/src/shared/ReplayedNotice.test.tsx"
     ],
-    "file_count": 359,
-    "test_count_from_source": 1967
+    "file_count": 361,
+    "test_count_from_source": 1979
   },
   "web_build": {
     "dist_index_exists": true,
@@ -439,18 +441,18 @@
         "exists": true
       }
     ],
-    "asset_count": 171,
+    "asset_count": 172,
     "main_js_assets": [
       {
-        "path": "apps/web/dist/assets/main-BtD7E9Q4.js",
+        "path": "apps/web/dist/assets/main-DFyfHoj3.js",
         "size_bytes": 4337,
-        "mtime": "2026-11-19T18:16:07.908Z"
+        "mtime": "2026-11-19T23:21:27.522Z"
       }
     ],
     "largest_asset": {
       "path": "apps/web/dist/assets/vendor-antd-Bh_XtmOr.js",
       "size_bytes": 251112,
-      "mtime": "2026-11-19T18:16:07.913Z"
+      "mtime": "2026-11-19T23:21:27.525Z"
     },
     "no_main_bundle_warning_expected": true
   },

@@ -3,11 +3,15 @@ package com.complex.platform.evidence;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.groups.Tuple.tuple;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.complex.platform.access.AccessActor;
+import com.complex.platform.auth.SessionIssuer;
+import com.complex.platform.support.StaffRequestFixture;
+import com.jayway.jsonpath.JsonPath;
 
 import java.time.Instant;
 import java.util.List;
@@ -22,6 +26,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.test.web.servlet.request.RequestPostProcessor;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -45,6 +50,9 @@ class EvidenceEventJdbcIntegrationTests {
 
     @Autowired
     private MockMvc mockMvc;
+
+    @Autowired
+    private RiskAlertService riskAlertService;
 
     @BeforeEach
     void resetEvidenceEventTables() {
@@ -258,6 +266,208 @@ class EvidenceEventJdbcIntegrationTests {
                 .andExpect(jsonPath("$.data.status").value("handling"));
         assertThat(jdbcTemplate.queryForList("SELECT jsonb_array_elements_text(evidence_refs) FROM risk_alert_actions"
                 + " WHERE alert_id = ? AND action_type = 'claim'", String.class, alertId)).containsExactly("att_259_a", "att_259_b");
+    }
+
+    private static final String QUEUE = "/api/v1/evidence/risk-alerts?source_domain=platform,ticketing,parking&limit=200";
+
+    /**
+     * 第十八批 BC 段 369-R1（BSM:1657「集中汇集账户与出入场行为异常……供风控岗与管理层查看与处置」；BSM:1438、BSM:1448 停车逃费、
+     * 滞留与人工放行进异常队列）：列表按逗号分隔的多个来源取，同号注销注册超限、高频出入场、停车逃费都在，别的来源不在；不支持的来源 400。
+     */
+    @Test
+    void listingByThreeSourcesKeepsChurnFrequentEntryAndParkingButNotMirrors() throws Exception {
+        RequestPostProcessor admin = platformAdmin("u_369_list_" + System.nanoTime());
+        String n = String.valueOf(System.nanoTime());
+        String churn = systemAlert("platform", "customer.churn", null, n);
+        String entry = systemAlert("ticketing", "ticket.frequent_entry", "prj_369_" + n, n);
+        String evasion = systemAlert("parking", "parking.fee_evasion", "prj_369_" + n, n);
+        String mirror = systemAlert("analytics", "staff_behavior", null, n);
+
+        assertThat(alertIds(QUEUE, admin)).contains(churn, entry, evasion).doesNotContain(mirror);
+        mockMvc.perform(get("/api/v1/evidence/risk-alerts?source_domain=parking,unknown").with(admin))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.detail_code").value("VALIDATION_FAILED"));
+    }
+
+    /** 369-R1（BSM:1835「经营看板显示异常预警的入口与未处理条数计数卡片」）：未处理＝待处理、处理中，已处置与别的来源不计；无权 403。 */
+    @Test
+    void openCountCountsOnlyUnfinishedAlertsOfTheGivenSources() throws Exception {
+        RequestPostProcessor admin = riskOfficer("u_369_cnt_" + System.nanoTime());
+        String url = "/api/v1/evidence/risk-alerts/open-count?source_domain=platform,ticketing,parking";
+        int base = openCount(url, admin);
+        String n = String.valueOf(System.nanoTime());
+        report(admin, "parking", "cnt-open-" + n);
+        claim(admin, report(admin, "parking", "cnt-claim-" + n), n);
+        resolve(admin, report(admin, "parking", "cnt-resolve-" + n), n);
+        report(admin, "analytics", "cnt-analytics-" + n);
+
+        assertThat(openCount(url, admin)).isEqualTo(base + 2);
+        String nobody = "u_369_nobody_" + System.nanoTime();
+        jdbcTemplate.update("INSERT INTO access_users (id, username, account_type, organization_id, merchant_id, status, created_at) "
+                + "VALUES (?, ?, 'staff', 'org', NULL, 'active', now())", nobody, nobody);
+        mockMvc.perform(get(url).with(web(new AccessActor(nobody, nobody, "staff", "org", null, "active"))))
+                .andExpect(status().isForbidden());
+    }
+
+    /** 369-R1（PGM:287「……提示、报错……必须全部为中文」）：转办记录写「转办给 对象编号」；已处置再转办 409，报错中文。 */
+    @Test
+    void transferReasonAndStateErrorAreChinese() throws Exception {
+        RequestPostProcessor admin = riskOfficer("u_369_tr_" + System.nanoTime());
+        String n = String.valueOf(System.nanoTime());
+        String alertId = report(admin, "parking", "tr-" + n);
+        claim(admin, alertId, n);
+        mockMvc.perform(post("/api/v1/evidence/risk-alerts/" + alertId + "/transfer").with(admin)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"idempotency_key\":\"tr-transfer-" + n + "\",\"target_handler_id\":\"u_x\"}"))
+                .andExpect(status().isOk());
+        List<String> reasons = JsonPath.read(body(mockMvc.perform(get("/api/v1/evidence/risk-alerts/" + alertId).with(admin))
+                .andExpect(status().isOk())), "$.data.actions[?(@.action_type == 'transfer')].reason");
+        assertThat(reasons).containsExactly("转办给 u_x");
+
+        resolve(admin, alertId, n);
+        String message = JsonPath.read(body(mockMvc.perform(post("/api/v1/evidence/risk-alerts/" + alertId + "/transfer").with(admin)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"idempotency_key\":\"tr-again-" + n + "\",\"target_handler_id\":\"u_y\"}"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.detail_code").value("INVALID_STATE"))), "$.message");
+        assertThat(message).isEqualTo("风险预警状态已变化，不能执行该操作，请刷新后查看").doesNotContainPattern("[A-Za-z]");
+    }
+
+    /**
+     * 第十八批 BC 段 369-R6（PGM:659「所有业务数据默认按项目隔离，普通岗位没有跨项目查看权；只有项目之上的获授权岗位才可以跨项目汇总。」）：
+     * 项目级稽核账号（不挂商户）只看、只办本综合体带项目的预警；别的综合体与不带项目的同号注销注册超限预警看不到、办不了（403 CROSS_PROJECT_FORBIDDEN）；
+     * 平台管理员与最高权限三类都看得到。
+     */
+    @Test
+    void projectStaffSeeAndHandleOnlyTheirOwnProjectsAlerts() throws Exception {
+        String n = String.valueOf(System.nanoTime());
+        String projectA = "prj_369r6a_" + n;
+        String inA = systemAlert("parking", "parking.fee_evasion", projectA, n);
+        String inB = systemAlert("ticketing", "ticket.frequent_entry", "prj_369r6b_" + n, n);
+        String churn = systemAlert("platform", "customer.churn", null, n);
+        RequestPostProcessor auditorA = new StaffRequestFixture(jdbcTemplate).staff("u_369r6_" + n, "staff", projectA, null,
+                "risk_alert.view", "risk_alert.claim", "risk_alert.transfer", "risk_alert.resolve");
+
+        assertThat(alertIds(QUEUE, auditorA)).contains(inA).doesNotContain(inB, churn);
+        for (String other : List.of(inB, churn)) {
+            mockMvc.perform(get("/api/v1/evidence/risk-alerts/" + other).with(auditorA))
+                    .andExpect(status().isForbidden())
+                    .andExpect(jsonPath("$.detail_code").value("CROSS_PROJECT_FORBIDDEN"));
+            mockMvc.perform(post("/api/v1/evidence/risk-alerts/" + other + "/claim").with(auditorA)
+                            .contentType(MediaType.APPLICATION_JSON).content("{\"idempotency_key\":\"r6-claim-" + other + "\"}"))
+                    .andExpect(status().isForbidden())
+                    .andExpect(jsonPath("$.detail_code").value("CROSS_PROJECT_FORBIDDEN"));
+        }
+        mockMvc.perform(get("/api/v1/evidence/risk-alerts/" + inA).with(auditorA)).andExpect(status().isOk());
+        claim(auditorA, inA, n);
+        assertThat(openCount("/api/v1/evidence/risk-alerts/open-count?source_domain=platform,ticketing,parking", auditorA)).isEqualTo(1);
+
+        assertThat(alertIds(QUEUE, platformAdmin("u_369r6_admin_" + n))).contains(inA, inB, churn);
+        RequestPostProcessor master = web(new AccessActor(SessionIssuer.MASTER_USER_ID, SessionIssuer.MASTER_USERNAME,
+                SessionIssuer.MASTER_ACCOUNT_TYPE, "platform-company", null, "active"));
+        assertThat(alertIds(QUEUE, master)).contains(inA, inB, churn);
+        mockMvc.perform(get("/api/v1/evidence/risk-alerts/" + churn).with(master)).andExpect(status().isOk());
+    }
+
+    /** 第十八批 BC 段 375-R1（BSM:1657「每条预警的查看、转办与处置结论均须留痕。」）：每打开一次单条明细记一条，业务编号为该预警；不存在的记失败。 */
+    @Test
+    void openingOneRiskAlertLeavesAViewTrailNamingIt() throws Exception {
+        String user = "u_375_" + System.nanoTime();
+        RequestPostProcessor admin = platformAdmin(user);
+        String alertId = report(admin, "parking", "375-" + System.nanoTime());
+
+        mockMvc.perform(get("/api/v1/evidence/risk-alerts/" + alertId).with(admin))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.alert.alert_id").value(alertId))
+                .andExpect(jsonPath("$.data.actions[0].action_type").value("report"));
+        assertThat(trails("exception.alert_viewed", alertId, user)).isEqualTo(1);
+        mockMvc.perform(get("/api/v1/evidence/risk-alerts/" + alertId).with(admin)).andExpect(status().isOk());
+        assertThat(trails("exception.alert_viewed", alertId, user)).isEqualTo(2);
+
+        int failedBefore = trails("exception.alert_view_failed", null, user);
+        mockMvc.perform(get("/api/v1/evidence/risk-alerts/alert_absent_" + System.nanoTime()).with(admin))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.detail_code").value("RISK_ALERT_NOT_FOUND"));
+        assertThat(trails("exception.alert_view_failed", null, user)).isEqualTo(failedBefore + 1);
+    }
+
+    /** 375-R2（BSM:1657「每条预警的查看……均须留痕。」）：列表查看留痕带本次列出的预警编号，条数与编号个数一致。 */
+    @Test
+    void listingRiskAlertsRecordsWhichAlertsWereShown() throws Exception {
+        String user = "u_375l_" + System.nanoTime();
+        RequestPostProcessor admin = platformAdmin(user);
+        String alertId = report(admin, "parking", "375l-" + System.nanoTime());
+        mockMvc.perform(get("/api/v1/evidence/risk-alerts?source_domain=parking&limit=200").with(admin)).andExpect(status().isOk());
+
+        Map<String, Object> trail = jdbcTemplate.queryForMap("""
+                SELECT (metadata->'alert_ids') @> to_jsonb(?::text) AS shown,
+                       jsonb_array_length(metadata->'alert_ids') = (metadata->>'count')::int AS same_size
+                  FROM audit_events WHERE event_name = 'exception.alerts_viewed' AND actor_id = ?
+                 ORDER BY occurred_at DESC LIMIT 1""", alertId, user);
+        assertThat(trail.get("shown")).isEqualTo(true);
+        assertThat(trail.get("same_size")).isEqualTo(true);
+    }
+
+    private String systemAlert(String sourceDomain, String alertType, String projectId, String n) {
+        return riskAlertService.recordSystemAlert("alert_369_" + sourceDomain + "_" + n, sourceDomain, "ref_" + n, alertType,
+                "suspicious", "回归预警摘要", projectId, "system").alertId();
+    }
+
+    private String report(RequestPostProcessor actor, String sourceDomain, String key) throws Exception {
+        return JsonPath.read(body(mockMvc.perform(post("/api/v1/evidence/risk-alerts").with(actor)
+                        .contentType(MediaType.APPLICATION_JSON).content("""
+                                {"idempotency_key":"%s","source_domain":"%s","alert_type":"parking.fee_evasion","risk_level":"high",
+                                 "summary":"停车逃费回归"}""".formatted(key, sourceDomain)))
+                .andExpect(status().isOk())), "$.data.alert_id");
+    }
+
+    private void claim(RequestPostProcessor actor, String alertId, String n) throws Exception {
+        mockMvc.perform(post("/api/v1/evidence/risk-alerts/" + alertId + "/claim").with(actor)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"idempotency_key\":\"claim-" + alertId + "-" + n + "\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("handling"));
+    }
+
+    private void resolve(RequestPostProcessor actor, String alertId, String n) throws Exception {
+        mockMvc.perform(post("/api/v1/evidence/risk-alerts/" + alertId + "/resolve").with(actor)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"idempotency_key\":\"resolve-" + alertId + "-" + n + "\",\"resolution_conclusion\":\"已核实处理\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("resolved"));
+    }
+
+    private List<String> alertIds(String url, RequestPostProcessor actor) throws Exception {
+        return JsonPath.read(body(mockMvc.perform(get(url).with(actor)).andExpect(status().isOk())), "$.data[*].alert_id");
+    }
+
+    private int openCount(String url, RequestPostProcessor actor) throws Exception {
+        return ((Number) JsonPath.read(body(mockMvc.perform(get(url).with(actor)).andExpect(status().isOk())), "$.data.open_count")).intValue();
+    }
+
+    private int trails(String eventName, String businessId, String actorId) {
+        return jdbcTemplate.queryForObject("SELECT count(*) FROM audit_events WHERE event_name = ? AND actor_id = ?"
+                + " AND (CAST(? AS varchar) IS NULL OR business_id = ?)", Integer.class, eventName, actorId, businessId, businessId);
+    }
+
+    private static String body(ResultActions result) throws Exception {
+        return result.andReturn().getResponse().getContentAsString(java.nio.charset.StandardCharsets.UTF_8);
+    }
+
+    /**
+     * 风控岗：平台管理员形态、另由单独角色逐项授予风控预警权限码（role_platform_admin 随字典播种的高危码转办、处置不当逐项授权，
+     * 见 AuthorizationService.isExplicitOrDailyGrant）。
+     */
+    private RequestPostProcessor riskOfficer(String userId) {
+        return new StaffRequestFixture(jdbcTemplate).staff(userId, "platform_admin", null, null,
+                "risk_alert.report", "risk_alert.view", "risk_alert.claim", "risk_alert.transfer", "risk_alert.resolve");
+    }
+
+    private static RequestPostProcessor web(AccessActor actor) {
+        return request -> {
+            request.addHeader("X-Terminal-Type", "web");
+            return authentication(new UsernamePasswordAuthenticationToken(actor, null,
+                    List.of(new SimpleGrantedAuthority("ROLE_P0_STAFF")))).postProcessRequest(request);
+        };
     }
 
     /** 平台管理员账号（种子角色 role_platform_admin）；后台 Web 终端＋生产过滤器放入的 AccessActor 主体。 */

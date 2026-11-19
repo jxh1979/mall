@@ -1,6 +1,6 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.07
+// 文件版本：V0.08
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -114,7 +114,7 @@ public class InventoryHighValueReviewService {
                 "inventory.high_value_review.view_failed",
                 () -> {
                     // 读路径按商户范围（同 reviewInternal 的 C3 口径）：有商户范围只列本商户的复核单；平台、项目账号空范围照旧全列。
-                    Optional<String> scope = authorizationService.currentMerchantScope();
+                    Optional<String> scope = authorizationService.currentMerchantReadScope();
                     // 第十八批第 24 条 24-R2：只持财务应收应付管理码、不持主管复核码的账号只列存酒库房存货处置单（财务那一道）。
                     boolean financeOnly = !authorizationService.currentActorHasPermission(REVIEW_PERMISSION)
                             && authorizationService.currentActorHasPermission(InventoryService.REMEDY_FINANCE_APPROVE);

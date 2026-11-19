@@ -1,6 +1,6 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -261,6 +261,8 @@ class MemberWalletServiceTests {
         com.complex.platform.access.AuthorizationService merchantAuth =
                 org.mockito.Mockito.mock(com.complex.platform.access.AuthorizationService.class);
         org.mockito.Mockito.when(merchantAuth.currentMerchantScope()).thenReturn(Optional.of("m1"));
+        // 第十八批 BC 段 365-R1：冻结、解冻改按退卡范围口径（requireRefundScope 取 currentMerchantIdQuietly），替身同步
+        org.mockito.Mockito.when(merchantAuth.currentMerchantIdQuietly()).thenReturn(Optional.of("m1"));
         StoredValueService m1Staff = new StoredValueService(repo, new FakeFinance(), audit(),
                 gatewayRouter(true), merchantAuth, null,
                 Clock.fixed(T0, ZoneOffset.UTC));
@@ -537,7 +539,8 @@ class MemberWalletServiceTests {
 
         @Override
         public String recordStoredValuePayoutRefund(String accountId, long payoutCent, String reason,
-                                                    String merchantId, String projectId, String idempotencyKey) {
+                                                    String merchantId, String projectId, String idempotencyKey,
+                                                    boolean accountClosure) {
             String id = "refund_sv_" + idempotencyKey;
             payoutRefunds.add(id + "|" + accountId + "|" + payoutCent + "|manual");
             return id;
