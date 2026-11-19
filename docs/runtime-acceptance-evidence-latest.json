@@ -8,14 +8,14 @@
     "RUNTIME_EVIDENCE_BOUND_TO_SOURCE_FINGERPRINT",
     "RUNTIME_EVIDENCE_DOES_NOT_CLOSE_PRODUCTION_MANIFEST"
   ],
-  "generated_at": "2026-11-19T16:48:02.275Z",
+  "generated_at": "2026-11-19T18:19:16.235Z",
   "git": {
-    "head": "4564560e8eddfe0fb520115fe8bdc7db3de18c71",
-    "head_short": "4564560e",
-    "branch": "feature/business-code-batch72-20261106",
+    "head": "72a5b2c653c99cf1e671ba4b7e828aaa3b0e545c",
+    "head_short": "72a5b2c6",
+    "branch": "feature/business-code-batch73-20261106",
     "worktree_dirty": false,
-    "source_fingerprint": "d4502f123de5276cc7f64ab9c3b186744e5e862af2ee8718473b88b5c6361a1e",
-    "source_fingerprint_file_count": 3560,
+    "source_fingerprint": "adfa6109a6a88cb9336d0a9802bb7401422445587691c06bb6957ee8893f7778",
+    "source_fingerprint_file_count": 3569,
     "source_fingerprint_paths": [
       "backend/src/main",
       "backend/src/test",
@@ -50,12 +50,12 @@
   },
   "backend_surefire": {
     "path": "backend/target/surefire-reports",
-    "suites": 641,
-    "tests": 7074,
+    "suites": 646,
+    "tests": 7097,
     "failures": 0,
     "errors": 0,
     "skipped": 0,
-    "latest_mtime": "2026-11-19T16:46:01.779Z",
+    "latest_mtime": "2026-11-19T18:15:58.912Z",
     "passed": true
   },
   "web_unit_source": {
@@ -219,6 +219,7 @@
       "apps/web/src/admin/pages/FinanceDividendsPage.guidedcreate.test.tsx",
       "apps/web/src/admin/pages/FinanceDividendsPage.hold.test.tsx",
       "apps/web/src/admin/pages/FinanceDividendsPage.legal.test.tsx",
+      "apps/web/src/admin/pages/FinanceDividendsPage.master.test.tsx",
       "apps/web/src/admin/pages/FinanceDividendsPage.oneshot.test.tsx",
       "apps/web/src/admin/pages/FinanceDividendsPage.reserve.test.tsx",
       "apps/web/src/admin/pages/FinanceDividendsPage.shareholders.test.tsx",
@@ -419,8 +420,8 @@
       "apps/web/src/dealer/dealerPortalClient.test.ts",
       "apps/web/src/shared/ReplayedNotice.test.tsx"
     ],
-    "file_count": 358,
-    "test_count_from_source": 1946
+    "file_count": 359,
+    "test_count_from_source": 1967
   },
   "web_build": {
     "dist_index_exists": true,
@@ -441,15 +442,15 @@
     "asset_count": 171,
     "main_js_assets": [
       {
-        "path": "apps/web/dist/assets/main-D-e6yARR.js",
+        "path": "apps/web/dist/assets/main-BtD7E9Q4.js",
         "size_bytes": 4337,
-        "mtime": "2026-11-19T16:46:12.382Z"
+        "mtime": "2026-11-19T18:16:07.908Z"
       }
     ],
     "largest_asset": {
       "path": "apps/web/dist/assets/vendor-antd-Bh_XtmOr.js",
       "size_bytes": 251112,
-      "mtime": "2026-11-19T16:46:12.384Z"
+      "mtime": "2026-11-19T18:16:07.913Z"
     },
     "no_main_bundle_warning_expected": true
   },
