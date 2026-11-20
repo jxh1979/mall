@@ -31,6 +31,11 @@ public interface MerchantServiceRepository {
 
     Optional<MerchantWorkOrderRecord> findWorkOrderById(String id);
 
+    /** 第十八批 BI 段第 261 条 261-B17-R1：锁行读（SELECT … FOR UPDATE），写入口据此串行；内存替身照普通读。 */
+    default Optional<MerchantWorkOrderRecord> findWorkOrderByIdForUpdate(String id) {
+        return findWorkOrderById(id);
+    }
+
     /**
      * SLA 扫描：返回 due_at 已过期（&lt;= now）、未完成（status 非 resolved/closed/cancelled）
      * 且尚未升级（escalated_at IS NULL）的工单，供定时升级任务处理。

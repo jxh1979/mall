@@ -1,4 +1,4 @@
-# P1 商户服务工单 API 契约 V0.13
+# P1 商户服务工单 API 契约 V0.14
 
 文档类型：Implementation / API Contract
 
@@ -127,7 +127,9 @@
 | 必填字段为空 | 业务字段为空白 | 400 | `VALIDATION_FAILED` | 拒绝写入 |
 | 枚举非法 | 类型、优先级、目标状态非法 | 400 | `VALIDATION_FAILED` | 拒绝写入 |
 | 工单不存在 | ID 查不到 | 404 | `WORK_ORDER_NOT_FOUND` | 拒绝动作 |
-| 终态后修改 | `closed`/`cancelled` 后继续派单/处理/关闭 | 409 | `WORK_ORDER_CLOSED` | 拒绝动作 |
+| 终态后修改 | `closed`/`cancelled` 后用新的请求编号继续派单/处理/关闭/确认/取消 | 409 | `WORK_ORDER_CLOSED` | 拒绝动作 |
+| 同编号重放 | 同一 `idempotency_key`、同一请求体再次提交（含工单已因第一次提交关闭或取消之后；第十八批 BI 段第 261 条 261-B17-R1） | 200 | `OK` | 返回第一次的结果，响应带 `replayed=true` 与已完成提示，不重复写动作与留痕 |
+| 两端并发关闭 | 员工关单、商户确认、取消等同时提交同一张单：写入口先锁工单行，后到者读到先到者提交后的状态 | 409 | `WORK_ORDER_CLOSED`（或按状态规则 `INVALID_STATE`） | 拒绝后到的动作，不覆盖先到者的结果 |
 | 幂等冲突 | 同 key 不同请求体 | 409 | `IDEMPOTENCY_CONFLICT` | 要求换 key 或查原请求 |
 | 用料未标承担方 | 有用料流水而未标承担方，转 `resolved` 或关闭 | 409 | `WORK_ORDER_MATERIAL_BEARER_REQUIRED` | 先标明费用承担方（117-R5） |
 | 承担方争议待判定 | 有待上级判定的争议，转 `resolved`、关闭、商户确认、改承担方或再提争议 | 409 | `WORK_ORDER_BEARER_DISPUTE_PENDING` | 等上级判定（117-R5，第十八批裁决 29） |
