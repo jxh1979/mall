@@ -4,6 +4,7 @@ import com.complex.platform.access.AccessActor;
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.PageResponse;
+import com.complex.platform.common.idempotency.IdempotencyService;
 import com.complex.platform.evidence.AuditEventService;
 import com.complex.platform.facility.dto.FacilityInspectionExceptionReportRequest;
 import com.complex.platform.facility.dto.FacilityInspectionRecheckConfirmRequest;
@@ -47,21 +48,25 @@ public class FacilityInspectionService {
     private final AuthorizationService authorizationService;
     private final ApplicationEventPublisher eventPublisher;
     private final PlatformService platformService;
+    // 第十八批 BJ 段第 261 条 261-B18-R2：写入口经幂等层（不带幂等服务的测试装配直接执行）。
+    private final IdempotencyService idempotencyService;
 
     @Autowired
     public FacilityInspectionService(FacilityInspectionRepository repository, AuditEventService auditEventService,
-            AuthorizationService authorizationService, ApplicationEventPublisher eventPublisher, PlatformService platformService) {
+            AuthorizationService authorizationService, ApplicationEventPublisher eventPublisher, PlatformService platformService,
+            IdempotencyService idempotencyService) {
         this.repository = repository;
         this.auditEventService = auditEventService;
         this.authorizationService = authorizationService;
         this.eventPublisher = eventPublisher;
         this.platformService = platformService;
+        this.idempotencyService = idempotencyService;
     }
 
     /** 测试与内部装配用：不带平台服务（新建模板与任务照旧取请求里的项目，见 {@link #landingProject}）。 */
     public FacilityInspectionService(FacilityInspectionRepository repository, AuditEventService auditEventService,
             AuthorizationService authorizationService, ApplicationEventPublisher eventPublisher) {
-        this(repository, auditEventService, authorizationService, eventPublisher, null);
+        this(repository, auditEventService, authorizationService, eventPublisher, null, null);
     }
 
     public PageResponse<FacilityInspectionTemplateRecord> listTemplates() {
@@ -101,11 +106,21 @@ public class FacilityInspectionService {
         String type = normalizeAllowed(r.inspectionType(), "inspection_type", TYPES);
         String abnormalMode = normalizeAllowed(defaultValue(r.abnormalMode(), "light"), "abnormal_mode", ABNORMAL_MODES);
         Integer cycleDays = validateCycle(r.cycleDays());
+        String name = requireText(r.name(), "name");
+        String projectId = landingProject(r.projectId(), null, null);
+        // 第十八批 BJ 段第 261 条 261-B18-R2（PGM:528「⑤同一笔操作重复提交不重复生效（重复点击、网络重发、渠道重复回调都只算一次）」；PGM:303
+        // 「同一次操作重复提交时，返回第一次的结果并提示已完成。」）：入参校验与范围闸在前，写入经幂等层——同编号重发返回第一次的结果，不多建一条。
+        return once("facilityInspectionTemplateCreate", r.idempotencyKey(), r,
+                () -> insertTemplate(r, name, type, cycleDays, abnormalMode, projectId), FacilityInspectionTemplateRecord.class);
+    }
+
+    private FacilityInspectionTemplateRecord insertTemplate(FacilityInspectionTemplateRequest r, String name, String type, Integer cycleDays,
+            String abnormalMode, String projectId) {
         Instant now = Instant.now();
         FacilityInspectionTemplateRecord rec = new FacilityInspectionTemplateRecord(
-                "fit_" + UUID.randomUUID(), requireText(r.name(), "name"), type, cycleDays, abnormalMode,
+                "fit_" + UUID.randomUUID(), name, type, cycleDays, abnormalMode,
                 listOrEmpty(r.checklist()), trimToNull(r.scopeNote()), r.active() == null || r.active(),
-                landingProject(r.projectId(), null, null), now, now);
+                projectId, now, now);
         repository.insertTemplate(rec);
         audit("facility.inspection_template_created", TEMPLATE_BUSINESS_TYPE, rec.id(), r.idempotencyKey(),
                 Map.of("type", type, "abnormal_mode", abnormalMode));
@@ -117,16 +132,23 @@ public class FacilityInspectionService {
         authorizationService.requirePlatformScope();
         FacilityInspectionTaskRequest r = requireTask(request);
         FacilityInspectionTaskRecord rec = newTask(r, Instant.now());
-        repository.insertTask(rec);
-        audit("facility.inspection_task_created", TASK_BUSINESS_TYPE, rec.id(), r.idempotencyKey(),
-                Map.of("status", rec.status(), "schedule_mode", rec.scheduleMode()));
-        return rec;
+        return once("facilityInspectionTaskCreate", r.idempotencyKey(), r, () -> {
+            repository.insertTask(rec);
+            audit("facility.inspection_task_created", TASK_BUSINESS_TYPE, rec.id(), r.idempotencyKey(),
+                    Map.of("status", rec.status(), "schedule_mode", rec.scheduleMode()));
+            return rec;
+        }, FacilityInspectionTaskRecord.class);
     }
 
     @Transactional
     public FacilityInspectionTaskRecord start(String id, FacilityInspectionRecheckConfirmRequest request) {
         AccessActor actor = requireScopeActor();
         FacilityInspectionRecheckConfirmRequest r = requireAction(request);
+        enforceAssignedScope(actor, loadTask(id)); // 261-B18-R2：范围闸在幂等之前，体内重读后照旧再核
+        return once("facilityInspectionStart:" + id, r.idempotencyKey(), r, () -> startOnce(id, r, actor), FacilityInspectionTaskRecord.class);
+    }
+
+    private FacilityInspectionTaskRecord startOnce(String id, FacilityInspectionRecheckConfirmRequest r, AccessActor actor) {
         FacilityInspectionTaskRecord cur = loadTask(id);
         enforceAssignedScope(actor, cur);
         requireStatus(cur, "pending", "只有待巡检的任务才能开始");
@@ -142,6 +164,13 @@ public class FacilityInspectionService {
     public FacilityInspectionRecordRecord submitRecord(String taskId, FacilityInspectionRecordSubmitRequest request) {
         AccessActor actor = requireScopeActor();
         FacilityInspectionRecordSubmitRequest r = requireRecord(request);
+        enforceAssignedScope(actor, loadTask(taskId)); // 261-B18-R2：范围闸在幂等之前
+        // 同编号重发不再插第二条记录、不再发第二次巡检异常事件（不重复建整改工单）。
+        return once("facilityInspectionRecord:" + taskId, r.idempotencyKey(), r, () -> submitRecordOnce(taskId, r, actor),
+                FacilityInspectionRecordRecord.class);
+    }
+
+    private FacilityInspectionRecordRecord submitRecordOnce(String taskId, FacilityInspectionRecordSubmitRequest r, AccessActor actor) {
         FacilityInspectionTaskRecord cur = loadTask(taskId);
         enforceAssignedScope(actor, cur);
         requireStatus(cur, "in_progress", "只有已开始的巡检任务才能提交");
@@ -171,6 +200,12 @@ public class FacilityInspectionService {
     public FacilityInspectionRecordRecord reportException(String taskId, FacilityInspectionExceptionReportRequest request) {
         AccessActor actor = requireScopeActor();
         FacilityInspectionExceptionReportRequest r = requireException(request);
+        enforceAssignedScope(actor, loadTask(taskId)); // 261-B18-R2：范围闸在幂等之前
+        return once("facilityInspectionException:" + taskId, r.idempotencyKey(), r, () -> reportExceptionOnce(taskId, r, actor),
+                FacilityInspectionRecordRecord.class);
+    }
+
+    private FacilityInspectionRecordRecord reportExceptionOnce(String taskId, FacilityInspectionExceptionReportRequest r, AccessActor actor) {
         FacilityInspectionTaskRecord cur = loadTask(taskId);
         enforceAssignedScope(actor, cur);
         if (!Set.of("pending", "in_progress").contains(cur.status())) {
@@ -200,6 +235,11 @@ public class FacilityInspectionService {
     public FacilityInspectionTaskRecord recheck(String id, FacilityInspectionRecheckConfirmRequest request) {
         authorizationService.requirePlatformScope();
         FacilityInspectionRecheckConfirmRequest r = requireAction(request);
+        requireReach(loadTask(id).projectId()); // 261-B18-R2：范围闸在幂等之前
+        return once("facilityInspectionRecheck:" + id, r.idempotencyKey(), r, () -> recheckOnce(id, r), FacilityInspectionTaskRecord.class);
+    }
+
+    private FacilityInspectionTaskRecord recheckOnce(String id, FacilityInspectionRecheckConfirmRequest r) {
         FacilityInspectionTaskRecord cur = loadTask(id);
         requireReach(cur.projectId());
         requireStatus(cur, "rectifying", "只有整改中的巡检任务才能复检");
@@ -215,6 +255,11 @@ public class FacilityInspectionService {
     public FacilityInspectionTaskRecord supervisorConfirm(String id, FacilityInspectionRecheckConfirmRequest request) {
         authorizationService.requirePlatformScope();
         FacilityInspectionRecheckConfirmRequest r = requireAction(request);
+        requireReach(loadTask(id).projectId()); // 261-B18-R2：范围闸在幂等之前
+        return once("facilityInspectionConfirm:" + id, r.idempotencyKey(), r, () -> supervisorConfirmOnce(id, r), FacilityInspectionTaskRecord.class);
+    }
+
+    private FacilityInspectionTaskRecord supervisorConfirmOnce(String id, FacilityInspectionRecheckConfirmRequest r) {
         FacilityInspectionTaskRecord cur = loadTask(id);
         requireReach(cur.projectId());
         requireStatus(cur, "rechecked", "只有已复检的巡检任务才能确认");
@@ -325,6 +370,11 @@ public class FacilityInspectionService {
                 cur.title(), cur.scheduleMode(), cur.routePoints(), cur.assigneeId(), cur.scheduledDate(),
                 cur.dueDate(), startedAt, completedAt, cur.workOrderId(), cur.projectId(), cur.spaceId(),
                 cur.createdAt(), updatedAt);
+    }
+
+    /** 261-B18-R2：经幂等层执行——同一请求编号重发返回第一次的结果并提示已完成，在途的第二笔等第一笔提交后重放。 */
+    private <T> T once(String operationId, String idempotencyKey, Object request, java.util.function.Supplier<T> action, Class<T> type) {
+        return idempotencyService == null ? action.get() : idempotencyService.execute(operationId, idempotencyKey, request, action, type);
     }
 
     private FacilityInspectionTemplateRecord loadTemplate(String id) {

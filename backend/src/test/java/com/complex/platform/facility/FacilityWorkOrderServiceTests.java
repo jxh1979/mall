@@ -1,6 +1,6 @@
 package com.complex.platform.facility;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -672,8 +672,11 @@ class FacilityWorkOrderServiceTests {
      */
     private FacilityWorkOrderRequest req(String type, String priority, String source, String equipmentId) {
         return new FacilityWorkOrderRequest(type, priority, type + " title", "desc", source, "sp_1",
-                equipmentId, "usr_reporter", "merchant", "proj_1", "mch_1", "k_" + type + priority + source);
+                equipmentId, "usr_reporter", "merchant", "proj_1", "mch_1", "k_" + type + priority + source + "_" + (++createSeq));
     }
+
+    /** 建单接幂等层后（第十八批 BJ 段第 261 条 261-B18-R1）同编号再提交算重发，所以每次建单用各自的请求编号。 */
+    private int createSeq;
 
     private FacilityWorkOrderActionRequest action(String resolution, Integer satisfaction, String note, String key) {
         return new FacilityWorkOrderActionRequest(resolution, satisfaction, note, key);

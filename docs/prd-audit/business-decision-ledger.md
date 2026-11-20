@@ -1,6 +1,6 @@
 # PRD 审计业务裁决台账
 
-文档版本：V1.17
+文档版本：V1.18
 状态：进行中
 迁移日期：2026-07-27
 当前事实源：三份立法 HTML 以既有冻结基线叠加 James 此前 M02 至 M08 的点名批准、全量审计 M001、M002 的逐项批准，以及本轮 2026-10-16 至 2026-10-17 业务 HTML 审计中 Q01 至 Q40 及子题实际明确批准且未被后续替代的裁决，和 2026-10-17 第二批 HTML 业务线推演审计（A–F 六线 64 条、停车章）的逐项批准，并叠加本轮 CG 70 项来源确认与 C01–C09、N01–N03 最终澄清及补全文稿中 F01、W01–W05 的整体修改批准（本文件末节）；本轮最终规则、未采纳或替代关系、现行版本与字节哈希见本文件末节。历史记录保留为各自当时事实，不恢复已被替代的建议。
@@ -10931,3 +10931,27 @@ HTML 的语义补齐与直接引用同步可在本批核验；70项中的业务�
   测试：M738CrossProjectJdbcIntegrationTests 加 1 条（同一请求编号连发两次，第二次 200、带已完成标记与提示、成功留痕只一条；履约人不在其可触及项目的人用同一编号提交照旧 403，拿不到第一次的订单。修复前第二次没有已完成标记）。
   文档：服务点单 PRD §5 状态机约束补第 4 条。
 - 18BI 落地位置补记·运行验收证据、快照、终验文档刷新（无新裁决）：业务提交 e4903bc9 之后，按第十八批裁决 25 重刷了运行验收证据：后端全量 7165 测，0 失败 0 错误；apps/web 构建通过；常规界面验收（接口全部 mock）实跑 40 条全过；真实后端界面验收未跑，runtime_ready=false。随后依次重生成闭环当前态快照、生产闭环缺口报告、界面验收报告、无上线指挥台。生成器没改。手改 docs/final-closed-loop-acceptance-audit-v0.1.md 与 docs/code-implementation-acceptance-audit-v0.1.md：前端单测源码计数改为 2001；被核文件行数都没变；后端全量与常规界面验收的数字、日期改为本次实跑值；写入 npm run verify:unit 实跑结果，五个工作区全过。交付门禁于 2026-11-20 11:14 UTC 在工作树逐项实跑子项，NAS 两项现场探测未跑。仍红的有两项：一是 coding-host-protection，它写死主仓路径，在工作树口径下必红，属工具口径，不做；二是 final-closed-loop-audit，如实留 2 条红（integration-ready、business-acceptance-ready），原因是校验器要求终验把联调、业务验收写成「是」，而裁决 25 定了不跑真实后端界面验收、运行验收未就绪，终验写的是「否」。verify:delivery-gates 总链仍是红的。证据链里交付门禁的前端单测一步第一次跑时 160 负载很高（负载均值约 20），apps/web 有 1 条用例（AdminApp.oneshot.test.tsx 里登出后再登录沿用首发编号的那条）超过 5 秒上限判为失败，其余 2114 条全过；本段没有改前端，等负载回落后只重跑门禁这一步，五个工作区全过，文档记的是重跑的时间。
+
+18BJ 落地位置补记（2026-11-20）：第十八批 BJ 段（batch82）实现待开发清单第 261 条 B18 批三项（设施工单、楼宇巡检、进场报备的重复提交）；运行验收证据、终验文档在本段最后一个提交刷新；各条落地位置见下。本段追加时，原台账除文档版本升一版外，其他历史字节保持。
+
+- 18BJ 落地位置补记·控制席判定（2026-11-20）：本段（第十八批 BJ 段，batch82）实现第 261 条 261-B18-R1、261-B18-R2、261-B18-R3（18AG 核实方案 b53-audit/oneshot/o9-b17-b18.json；第十八批裁决 50「逐批核实、照草稿在现主干重做」）。三项的实现由 Cursor 代理（Claude Fable 5.2）单代理完成；收尾、多视角独立复核与合并由 Claude Code 控制席接手。三项在现主干重核仍缺：设施工单的新建、派单、开始、完成、主管验收、提单确认、挂起、恢复，楼宇巡检的七个写入口，进场报备的新建、提交进场、审核，都不认请求编号——重复点击或网络重发时，新建类多建一条，其余被状态闸拒绝、不返回第一次的结果。照方案做，无待裁题。与方案不一致四处：① 方案 261-B18-R2 的「双线程同编号同时提交」用例没有另写——在途的第二笔在占位处等第一笔提交后重放是共用幂等层自身的行为，IdempotencyService 已有用例覆盖；② 方案 261-B18-R1 的两名主管同时派单用例，先到的一端用一条更新语句代替（只为占住工单行并改成已派单），后到的一端走真实接口（同 18BI 写法）；③ 方案 261-B18-R2 用例里的外包账号改用持巡检管理权的在职员工账号——外包账号对「异常转整改工单」模板的任务提交异常，在主干即被巡检异常监听方的平台范围闸拒回（基线既有，另记待开发清单第 379 条，待核实），外包账号这条链上的同编号重发本段没有用例；④ 方案 261-B18-R2 写入参校验放在幂等之前，实际只有新建模板、新建任务如此，提交记录、上报异常的结果、异常说明与定位校验留在执行体内（保持原有报错先后；校验失败随事务回滚、不占请求编号）。不做（方案 not_doing）：设施工单、进场报备不加草稿的前态条件写回与「已被处理」错误码（主干已用行锁串行）；楼宇巡检同样不加（巡检仓储不锁行，任务由被派的巡检员一人执行，同一人重复点击与网络重发由幂等层解决）；超时标记作业与时限策略保存不包。多视角独立复核（四个视角，每条意见再经独立反驳核实）成立 3 条，都是本补记与楼宇运营 PRD §4 的说法与现码不逐句一致，已改，代码不用改。
+- 18BJ 落地位置补记·第 261 条 261-B18-R1（设施工单写入口接幂等层，派单改锁行读；第十八批裁决 50）：
+  改法：FacilityWorkOrderService 的 create、assign、start、complete、accept、review、suspend、resume 经新增的 once() 走 IdempotencyService.execute（操作号 facilityWorkOrderCreate，其余为 facilityWorkOrderAssign、Start、Complete、Accept、Review、Suspend、Resume 加工单号）。范围闸放在幂等之前（照同服务 reassign、rework、designateConfirmer 的写法）：平台范围、可触及项目、外包处理人范围按不加锁读到的工单先判；执行体（assignLocked、startLocked、completeLocked、acceptLocked、reviewLocked、suspendLocked、resumeLocked）里按锁重读后照旧再核范围与状态。派单原来不锁行，改为与转派、开始、完成同锁工单行：两名主管同时派单，后到者读到已派单即 400 INVALID_STATE，不覆盖先到者。同编号重发返回第一次的结果并带已完成标记，不多建工单、不多记留痕。契约不变（这些操作已要求请求编号、已列 409）。
+  依据：
+  - PGM:528「⑤同一笔操作重复提交不重复生效（重复点击、网络重发、渠道重复回调都只算一次）」
+  - PGM:303「同一次操作重复提交时，返回第一次的结果并提示已完成。」「两个操作同时发生冲突时，一律以“先处理成功”的那个为准」
+  测试：FacilityWorkOrderDualConfirmationJdbcIntegrationTests 加 writeEntriesReplaySameKeyReturnFirstResult（八个入口同编号重发、验收后换编号仍 400），锁行参数用例加派单一支；新类 FacilityWorkOrderAssignConcurrencyJdbcIntegrationTests（两端同时派单，后到者 400、处理人不被覆盖）；FacilityWorkOrderServiceTests 的建单夹具改为每次各自的请求编号（建单接幂等层后同编号再提交算重发）。
+- 18BJ 落地位置补记·第 261 条 261-B18-R2（楼宇巡检写入口接幂等层；第十八批裁决 50）：
+  改法：FacilityInspectionService 构造注入 IdempotencyService；createTemplate、createTask、start、submitRecord、reportException、recheck、supervisorConfirm 经 once() 走幂等层（操作号 facilityInspectionTemplateCreate、facilityInspectionTaskCreate，其余为 facilityInspectionStart、Record、Exception、Recheck、Confirm 加任务号）。新建模板、新建任务的入参校验与落地项目，以及各入口的范围闸在幂等之前；执行体里重读任务后照旧核范围与状态，提交记录、上报异常的结果、异常说明与定位校验也在执行体里（保持原有报错先后），然后插记录、按异常处理方式流转并发巡检异常事件。同编号重发不再插第二条巡检记录、不再发第二次巡检异常事件（不重复建整改工单），新建模板、任务不多建一条。
+  依据：
+  - PGM:528「⑤同一笔操作重复提交不重复生效（重复点击、网络重发、渠道重复回调都只算一次）」
+  - PGM:303「同一次操作重复提交时，返回第一次的结果并提示已完成。」
+  测试：新类 FacilityInspectionOneShotJdbcIntegrationTests 3 例（提交异常记录同编号重发只一条记录、一张整改工单；上报异常同编号重发同上；新建模板与任务各只一条，开始、复检、主管确认同编号重发返回第一次的结果）。
+- 18BJ 落地位置补记·第 261 条 261-B18-R3（进场报备新建、提交进场、审核接幂等层，契约补 409；第十八批裁决 50）：
+  改法：SiteEntryReportService 的 create、submit、review 走 IdempotencyService.execute（操作号 siteEntryCreate、siteEntrySubmit 与 siteEntryReview 加报备号；执行体 doCreate、doSubmit、doReview），照同服务 uploadCompletion、accept 的写法。外包或物业身份、项目与报备范围、入参校验在幂等之前；执行体里按锁重读后照旧再核。契约：createSiteEntryReport、submitSiteEntryReport、reviewSiteEntryReport、acceptSiteEntryReport、uploadSiteEntryCompletion、reportInspectionException 六个操作的响应补 409；操作数不变。
+  依据：
+  - PGM:528「⑤同一笔操作重复提交不重复生效（重复点击、网络重发、渠道重复回调都只算一次）」
+  - PGM:303「同一次操作重复提交时，返回第一次的结果并提示已完成。」
+  测试：SiteEntryCompletionJdbcIntegrationTests 加 createReviewAndSubmitReplaySameKey（新建同编号重发只建一张；审核、提交进场同编号重发返回第一次的结果；审核后换编号再驳回仍 400）。
+  文档：楼宇运营 PRD §3、§4、§5A 补实现现状并记变更日志。
+- 18BJ 落地位置补记·运行验收证据、快照、终验文档刷新（无新裁决）：业务提交 6ddf9331 之后，按第十八批裁决 25 重刷了运行验收证据：后端全量 7172 测，0 失败 0 错误；apps/web 构建通过；常规界面验收（接口全部 mock）实跑 40 条全过；真实后端界面验收未跑，runtime_ready=false。随后依次重生成闭环当前态快照、生产闭环缺口报告、界面验收报告、无上线指挥台。生成器没改。手改 docs/final-closed-loop-acceptance-audit-v0.1.md 与 docs/code-implementation-acceptance-audit-v0.1.md：前端单测源码计数改为 2001；被核文件行数都没变；后端全量与常规界面验收的数字、日期改为本次实跑值；写入 npm run verify:unit 实跑结果，五个工作区全过。交付门禁于 2026-11-20 16:11 UTC 在工作树逐项实跑子项，NAS 两项现场探测未跑。仍红的有两项：一是 coding-host-protection，它写死主仓路径，在工作树口径下必红，属工具口径，不做；二是 final-closed-loop-audit，如实留 2 条红（integration-ready、business-acceptance-ready），原因是校验器要求终验把联调、业务验收写成「是」，而裁决 25 定了不跑真实后端界面验收、运行验收未就绪，终验写的是「否」。verify:delivery-gates 总链仍是红的。

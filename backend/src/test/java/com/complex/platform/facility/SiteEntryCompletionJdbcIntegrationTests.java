@@ -1,6 +1,6 @@
 package com.complex.platform.facility;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -245,6 +245,53 @@ class SiteEntryCompletionJdbcIntegrationTests {
                 .andExpect(jsonPath("$.data.status").value("approved"));
         assertThat(jdbc.queryForMap("SELECT status, review_comment FROM site_entry_reports WHERE id = ?", created))
                 .containsEntry("status", "approved").containsEntry("review_comment", "资料齐全，同意进场");
+    }
+
+    /**
+     * 第十八批 BJ 段第 261 条 261-B18-R3（PGM:528「⑤同一笔操作重复提交不重复生效（重复点击、网络重发、渠道重复回调都只算一次）」；PGM:303
+     * 「同一次操作重复提交时，返回第一次的结果并提示已完成。」）：外包新建进场报备同编号重发只建一张；物业审核、外包提交进场同编号重发返回第一次的
+     * 结果并带已完成标记；审核后换编号再驳回照旧 400。修复前新建多建一张，审核与提交进场重发被状态闸 400。
+     */
+    @Test void createReviewAndSubmitReplaySameKey() throws Exception {
+        String creator = vendor + "_r";
+        seedUser(creator, "outsourced_vendor", List.of("facility.site_entry.create_assigned", "facility.site_entry.submit_assigned"));
+        String scope = "三层卫生间防水返修" + report;
+        String create = """
+                {"idempotency_key":"b18r3-create-%s","project_id":"%s","work_scope":"%s","planned_start_date":"%s",
+                 "planned_end_date":"%s","crew_count":2,"contact_name":"李师傅","contact_phone":"13800000002"}"""
+                .formatted(report, project, scope, LocalDate.now(), LocalDate.now().plusDays(1));
+        String created = com.jayway.jsonpath.JsonPath.read(mockMvc.perform(post("/api/v1/facility/site-entry-reports")
+                        .with(web(creator, "outsourced_vendor")).contentType(MediaType.APPLICATION_JSON).content(create))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.replayed").doesNotExist())
+                .andReturn().getResponse().getContentAsString(java.nio.charset.StandardCharsets.UTF_8), "$.data.id");
+        mockMvc.perform(post("/api/v1/facility/site-entry-reports").with(web(creator, "outsourced_vendor"))
+                        .contentType(MediaType.APPLICATION_JSON).content(create))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.replayed").value(true)).andExpect(jsonPath("$.data.id").value(created));
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM site_entry_reports WHERE work_scope = ?", Integer.class, scope)).isEqualTo(1);
+
+        String review = "{\"idempotency_key\":\"b18r3-review-" + report + "\",\"decision\":\"approve\",\"review_comment\":\"同意进场\"}";
+        for (boolean replayed : new boolean[] {false, true}) {
+            mockMvc.perform(post("/api/v1/facility/site-entry-reports/" + created + "/review").with(web(reviewer, "staff"))
+                            .contentType(MediaType.APPLICATION_JSON).content(review))
+                    .andExpect(status().isOk()).andExpect(jsonPath("$.data.status").value("approved"))
+                    .andExpect(replayed ? jsonPath("$.replayed").value(true) : jsonPath("$.replayed").doesNotExist());
+        }
+        mockMvc.perform(post("/api/v1/facility/site-entry-reports/" + created + "/review").with(web(reviewer, "staff"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"idempotency_key\":\"b18r3-review2-" + report + "\",\"decision\":\"reject\",\"review_comment\":\"改主意\"}"))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.detail_code").value("INVALID_STATE"));
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM audit_events WHERE event_name = 'facility.site_entry.review' AND business_id = ?",
+                Integer.class, created)).isEqualTo(1);
+
+        String submit = "{\"idempotency_key\":\"b18r3-submit-" + report + "\",\"note\":\"人员已到场\"}";
+        for (boolean replayed : new boolean[] {false, true}) {
+            mockMvc.perform(post("/api/v1/facility/site-entry-reports/" + created + "/submit").with(web(creator, "outsourced_vendor"))
+                            .contentType(MediaType.APPLICATION_JSON).content(submit))
+                    .andExpect(status().isOk()).andExpect(jsonPath("$.data.status").value("in_progress"))
+                    .andExpect(replayed ? jsonPath("$.replayed").value(true) : jsonPath("$.replayed").doesNotExist());
+        }
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM audit_events WHERE event_name = 'facility.site_entry.submit_assigned' AND business_id = ?",
+                Integer.class, created)).isEqualTo(1);
     }
 
     /** 后台 Web 终端＋生产过滤器放入的 AccessActor 主体（与账号行一致）。 */
