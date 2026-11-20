@@ -1,4 +1,4 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -242,6 +242,18 @@ describe("EntityTaxDeclarationsPage 税费申报登记", () => {
     });
     expect(typeof lastPost?.body.idempotency_key).toBe("string");
     expect(setActionResult).toHaveBeenCalledWith(expect.objectContaining({ action: "entity_tax_rate_submitted" }));
+  });
+
+  // 第十八批 BU 段 374-R4（ENUM:201「每个主体 × 每类收入 × 每种税（增值税/文化事业建设费/附加税）后台各自配」；BSM:1760「税率、税目、发票对象和红冲流程
+  // 由系统按有效规则配置」）：派驻提成与酒吧报酬拨付进开票清单后，税率版本的收入类型可选「人员报酬拨付」。
+  it("税率版本的收入类型可选人员报酬拨付", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.queryByTestId("entity-tax-tab-rates")).not.toBeNull());
+    await waitFor(() => expect(screen.getByTestId("entity-tax-filter-entity").textContent).toContain("甲酒吧公司"));
+    fireEvent.click(screen.getByTestId("entity-tax-tab-rates"));
+    await waitFor(() => expect(screen.queryByTestId("entity-tax-rate-row-stc_2")).not.toBeNull());
+    fireEvent.click(screen.getByTestId("entity-tax-rate-open"));
+    await waitFor(() => expect(screen.getByTestId("entity-tax-rate-income").textContent).toContain("人员报酬拨付"));
   });
 
   // 第十八批 AR 段第 233 条 233-R5（BSM:1760「税费金额分三个阶段分别保存、互不覆盖」「申报金额高于系统计算金额的生成补提调整单、低于的生成冲回调整单。

@@ -1,6 +1,6 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import static com.complex.platform.settlement.MediaPerformanceTestFixtures.BASE;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -378,7 +378,8 @@ class MediaPerformanceSettlementJdbcIntegrationTests {
         String item = (String) settlements(showId).get(0).get("ar_ap_item_id");
         RequestPostProcessor invoiceManager = MediaPerformanceTestFixtures.staff(jdbc, "mps_invm_" + suffix, project, null,
                 "settlement.invoice.view", "settlement.invoice.manage");
-        TicketPointsBillingJob job = new TicketPointsBillingJob(Mockito.mock(TicketPointsBillingService.class), invoices);
+        TicketPointsBillingJob job = new TicketPointsBillingJob(Mockito.mock(TicketPointsBillingService.class), invoices,
+                Mockito.mock(LedgerInvoiceService.class));
 
         String first = openShowLine(item);
         invoiceStatus(invoiceManager, first, "{\"status\":\"issued\",\"invoice_no\":\"FP-MPS-" + suffix + "\",\"remark\":\"第三方平台已开具\"}");

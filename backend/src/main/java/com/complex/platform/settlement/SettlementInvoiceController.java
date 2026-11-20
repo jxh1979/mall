@@ -140,6 +140,10 @@ public class SettlementInvoiceController implements ExportFileService.Source {
             case "marketing" -> "会员积分 / 门票折扣券（营销成本）";
             case "points_issuance" -> "积分发行费";
             case "retail" -> "零售";
+            // 第十八批 BU 段 374-R1：门店要货货款、停车抵免成本、派驻提成与酒吧报酬拨付开票行的收入类型（同 EntityTaxService.INCOME_LABELS）。
+            case "goods" -> "供货货款";
+            case "parking" -> "停车费";
+            case "staff_remuneration" -> "人员报酬拨付";
             default -> incomeType;
         };
     }
@@ -157,13 +161,16 @@ public class SettlementInvoiceController implements ExportFileService.Source {
         };
     }
 
-    private static List<String> exportRow(JdbcSettlementInvoiceRepository.SettlementInvoiceItemView item) {
+    static List<String> exportRow(JdbcSettlementInvoiceRepository.SettlementInvoiceItemView item) {
         return Arrays.asList(item.periodStart() == null ? "" : item.periodStart().toString(),
                 item.subjectName() == null ? "（归属未配置）" : item.subjectName(), item.invoiceItemName(), item.taxCategory(),
                 incomeLabel(item.incomeType()), yuan(item.amountCent()), rate(item.vatRateBps()),
                 yuan(item.vatAmountCent()), item.culturalFeeApplicable() ? yuan(item.culturalFeeCent()) : "不计", item.evidenceRequired(),
                 statusLabel(item.status()), item.invoiceNo(),
-                item.billId() != null ? item.billId() : item.pointsBillId() != null ? item.pointsBillId() : item.arApItemId(),
+                // 374-R1（PGM:287「界面全中文」）：台账来源月度组行写来源中文名加年月。
+                item.ledgerSource() != null
+                        ? com.complex.platform.finance.FinanceService.sourceTypeLabel(item.ledgerSource()) + " " + item.periodStart().toString().substring(0, 7)
+                        : item.billId() != null ? item.billId() : item.pointsBillId() != null ? item.pointsBillId() : item.arApItemId(),
                 item.buyerName());
     }
 

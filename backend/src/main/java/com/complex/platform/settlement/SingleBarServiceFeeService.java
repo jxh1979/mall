@@ -1,6 +1,6 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import com.complex.platform.common.BusinessDayResolver;
 import com.complex.platform.finance.ArApItemRecord;
@@ -126,15 +126,18 @@ public class SingleBarServiceFeeService {
         jdbc.update("UPDATE single_bar_service_fee_months SET ar_ap_item_id=? WHERE id=?", arApItemId, monthId);
     }
 
+    /** 月应收总额的取数段（第十八批 BU 段 374-R2：开票清单台账来源组 {@link JdbcLedgerInvoiceRepository#GROUPS_SQL} 共用）。 */
+    static final String MONTH_TOTAL_FROM = """
+            single_bar_service_fee_months m,
+                   LATERAL (SELECT COALESCE(SUM(fee_cent), 0) AS total FROM single_bar_service_fee_tickets
+                             WHERE month_id = m.id AND refund_id IS NULL) s
+            """;
+    /** 月应收总额＝min(Σ未退票逐票费, 锁定封顶)；未设封顶按汇总额（配 {@link #MONTH_TOTAL_FROM}）。 */
+    static final String MONTH_TOTAL = "CASE WHEN m.cap_cent IS NULL THEN s.total ELSE LEAST(s.total, m.cap_cent) END";
+
     /** 月应收总额＝min(Σ未退票逐票费, 锁定封顶)；未设封顶按汇总额。 */
     long monthTotal(String monthId) {
-        return jdbc.queryForObject("""
-                SELECT CASE WHEN m.cap_cent IS NULL THEN s.total ELSE LEAST(s.total, m.cap_cent) END
-                  FROM single_bar_service_fee_months m,
-                       LATERAL (SELECT COALESCE(SUM(fee_cent), 0) AS total FROM single_bar_service_fee_tickets
-                                 WHERE month_id = m.id AND refund_id IS NULL) s
-                 WHERE m.id = ?
-                """, Long.class, monthId);
+        return jdbc.queryForObject("SELECT " + MONTH_TOTAL + " FROM " + MONTH_TOTAL_FROM + " WHERE m.id = ?", Long.class, monthId);
     }
 
     /** 第十八批 AR 段第 233 条 233-R4：某计费月各项目的月应收总额（同 {@link #monthTotal}），供经营主体收入按 ticket_service_fee 收入归属定主体。 */

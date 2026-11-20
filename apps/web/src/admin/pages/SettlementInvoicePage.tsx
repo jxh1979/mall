@@ -1,9 +1,10 @@
-// 文件版本：V0.04
+// 文件版本：V0.05
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
 import { CnDatePicker } from "../components/CnDatePicker";
 import { PermissionButton } from "../security/Can";
+import { KEY_VALUE_LABELS } from "../i18n/fieldLabels";
 import { saveDownloadedFile } from "../client/adminClient";
 import type { AdminPageProps } from "../types";
 
@@ -25,6 +26,8 @@ type Item = {
   status: string; invoiceNo?: string | null; remark?: string | null;
   // FS-022-R1：积分发行费月账单行的来源账单与购方（合同销售方）；结算单行为空。
   pointsBillId?: string | null; buyerName?: string | null;
+  // 第十八批 BU 段 374-R7：台账来源月度组行的来源类型（单店门票综合服务费、门店要货货款、提成与报酬拨付、停车抵免成本、通用卡消费结算）；其余行为空。
+  ledgerSource?: string | null;
 };
 type Subject = {
   subjectEntityId?: string | null; subjectName?: string | null;
@@ -59,7 +62,13 @@ const INCOME_LABELS: Record<string, string> = {
   marketing: "会员积分 / 门票折扣券（营销成本）",
   points_issuance: "积分发行费",
   retail: "零售",
+  // 第十八批 BU 段 374-R7：门店要货货款、停车抵免成本、派驻提成与酒吧报酬拨付开票行（同税率配置的收入类型）。
+  goods: "供货货款",
+  parking: "停车费",
+  staff_remuneration: "人员报酬拨付",
 };
+// 374-R7：台账来源中文名同应收应付台账页（字典 KEY_VALUE_LABELS.source_type）。
+const SOURCE_LABELS: Record<string, string> = KEY_VALUE_LABELS.source_type ?? {};
 
 const yuan = (cent?: number | null) => ((cent ?? 0) / 100).toFixed(2);
 const pct = (bps?: number | null) => `${((bps ?? 0) / 100).toFixed(2)}%`;
@@ -257,7 +266,7 @@ export function SettlementInvoicePage({ api, setActionResult, setGlobalError, ef
             <table className="admin-table" data-testid="settlement-invoice-item-table">
               <thead>
                 <tr>
-                  <th>结算月</th><th>开票项目</th><th>收入类型</th><th>开票金额(元)</th>
+                  <th>结算月</th><th>开票项目</th><th>收入类型</th><th>来源</th><th>开票金额(元)</th>
                   <th>税率</th><th>税额(元)</th><th>文建费(元)</th><th>凭证要件</th>
                   <th>开票状态</th><th>发票号</th><th>购方</th><th>操作</th>
                 </tr>
@@ -268,6 +277,7 @@ export function SettlementInvoicePage({ api, setActionResult, setGlobalError, ef
                     <td>{i.periodStart}</td>
                     <td>{i.invoiceItemName}</td>
                     <td>{label(INCOME_LABELS, i.incomeType)}</td>
+                    <td>{i.ledgerSource ? label(SOURCE_LABELS, i.ledgerSource) : "—"}</td>
                     <td>{yuan(i.amountCent)}</td>
                     <td>{pct(i.vatRateBps)}</td>
                     <td>{yuan(i.vatAmountCent)}</td>
@@ -322,6 +332,8 @@ export function SettlementInvoicePage({ api, setActionResult, setGlobalError, ef
                   <td>{r.taxCategory}</td>
                   <td>{r.incomeType === "points_issuance" ? "积分月账单收款方（购方为合同销售方）"
                     : r.incomeType === "retail" ? "组合通票零售份额的归属主体（购方为娱乐平台公司）"
+                    : r.incomeType === "parking" ? "停车收款主体城市项目公司（购方为承担商户）"
+                    : r.incomeType === "staff_remuneration" ? "人员所属主体（购方为拨付酒吧）"
                     : r.revenueStream ? "按收入流业态归因解析" : "按该笔分账的商户收款主体"}</td>
                   <td>{r.evidenceRequired || "—"}</td>
                   <td>{r.invoiceable ? "对外开票" : "不开票（内部单据）"}</td>

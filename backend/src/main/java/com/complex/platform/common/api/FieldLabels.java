@@ -1,6 +1,6 @@
 package com.complex.platform.common.api;
 
-// 文件版本：V0.53
+// 文件版本：V0.54
 
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -392,6 +392,7 @@ public final class FieldLabels {
         p("trial_result", "逐票种试算结果");
         p("decision_note", "审批意见");
         p("ar_ap_item_id", "应收应付明细");
+        p("ledger_source", "台账来源");
         // 第十八批 AM 段第 241 条 241-R1（BSM:1803 付款确认；第十八批裁决 65「按台账来源逐个分」、68 台账勾选合发）。
         p("ar_ap_item_ids", "应收应付款项");
         p("payment_type", "支付类型");

@@ -1,4 +1,4 @@
-// 文件版本：V0.03
+// 文件版本：V0.04
 import { render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
@@ -66,10 +66,10 @@ const ITEMS = {
   page: 1, pageSize: 200, total: 4,
 };
 
-function makeApi(summary: unknown = SUMMARY): AdminApiClient {
+function makeApi(summary: unknown = SUMMARY, items: unknown = ITEMS): AdminApiClient {
   return {
     get: vi.fn().mockImplementation((path: string) =>
-      Promise.resolve(path.includes("/summary") ? summary : ITEMS)) as AdminApiClient["get"],
+      Promise.resolve(path.includes("/summary") ? summary : items)) as AdminApiClient["get"],
     getPaged: vi.fn().mockResolvedValue({ items: [], total: 0, page: 1, size: 10 }),
     post: vi.fn().mockResolvedValue(1),
     put: vi.fn().mockResolvedValue({}),
@@ -83,9 +83,9 @@ const PERMISSIONS: EffectivePermissionsState = {
   value: { grants: ["settlement.invoice.view", "settlement.invoice.manage"], denies: [], wildcard: false },
 };
 
-function renderPage(summary: unknown = SUMMARY) {
+function renderPage(summary: unknown = SUMMARY, items: unknown = ITEMS) {
   const props = {
-    api: makeApi(summary),
+    api: makeApi(summary, items),
     user: { id: "u1", username: "admin" },
     setActionResult: vi.fn(),
     setGlobalError: vi.fn(),
@@ -176,5 +176,30 @@ describe("开票清单 ADM-STL-002", () => {
       evidenceRequired: "对账单", invoiceable: true }] });
     await waitFor(() => expect(screen.getByTestId("settlement-invoice-rule-table").textContent).toContain("组合通票零售份额的归属主体"));
     expect(screen.getByTestId("settlement-invoice-rule-table").textContent).not.toContain("按该笔分账的商户收款主体");
+  });
+
+  // 第十八批 BU 段 374-R7（PGM:287「界面全中文」；BSM:522「可追溯到来源单据」；BSM:1803「平台内部各主体之间的往来需要开具发票」）：台账来源月度组行
+  // 显示来源中文名与新增收入类型中文名（同主体同购方同月的提成拨付与报酬拨付靠「来源」分辨），规则表写清人员报酬拨付的开票主体与购方。
+  it("台账来源的开票行显示来源与中文收入类型", async () => {
+    const line = { billId: null, settlementItemId: null, projectId: "p1", periodStart: "2026-06-01", periodEnd: "2026-06-30",
+      evidenceRequired: "对账单", vatRateBps: 0, vatAmountCent: 0, culturalFeeApplicable: false, culturalFeeRateBps: 0, culturalFeeCent: 0,
+      status: "pending", invoiceNo: null, remark: null };
+    const items = { items: [
+      { ...line, id: "sii_lg_1", incomeType: "staff_remuneration", subjectEntityId: "be_staff", subjectName: "派驻人员所属公司",
+        invoiceItemName: "派驻提成开票项目", taxCategory: "人员报酬拨付", amountCent: 42000, buyerEntityId: "be_bar", buyerName: "北辰酒吧经营公司",
+        ledgerSource: "dispatch_commission_transfer" },
+      { ...line, id: "sii_lg_2", incomeType: "goods", subjectEntityId: "be_supply", subjectName: "中央供货公司",
+        invoiceItemName: "要货开票项目", taxCategory: "供货货款", amountCent: 16000, buyerEntityId: "be_store", buyerName: "要货门店经营公司",
+        ledgerSource: "inventory_transfer" },
+    ], page: 1, pageSize: 200, total: 2 };
+    renderPage({ ...SUMMARY, rules: [{ incomeType: "staff_remuneration", revenueStream: null, invoiceItemName: "人员报酬拨付",
+      taxCategory: "人员报酬拨付", evidenceRequired: "对账单", invoiceable: true }] }, items);
+    const detail = () => screen.queryAllByTestId("settlement-invoice-item-table").map((t) => t.textContent ?? "").join("");
+    await waitFor(() => expect(detail()).toContain("派驻提成月结拨付"));
+    expect(detail()).toContain("人员报酬拨付");
+    expect(detail()).toContain("门店要货货款");
+    expect(detail()).toContain("供货货款");
+    expect(detail()).not.toMatch(/staff_remuneration|dispatch_commission_transfer|inventory_transfer|goods/);
+    expect(screen.getByTestId("settlement-invoice-rule-table").textContent).toContain("人员所属主体（购方为拨付酒吧）");
   });
 });

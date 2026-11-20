@@ -1,4 +1,4 @@
-// 文件版本：V0.52
+// 文件版本：V0.53
 // OBS-14-02 后台结果区字段中文名字典（PGM「全局原则 · 界面全中文（所有终端零英文）」）。
 // 键用后端 JSON 的蛇形写法；结果区查表时蛇形与驼峰同查（orderId / order_id 都命中 order_id）。
 // 与后端字段中文名表 FieldLabels.java（common.api 包）同键同名：前段按后端原样抄录，后端改名这里跟着改（门禁会比对）。
@@ -288,6 +288,7 @@ export const FIELD_LABELS: Record<string, string> = {
   settlement_subject_id: "结算主体",
   statement_id: "对账单号",
   ar_ap_item_id: "应收应付明细",
+  ledger_source: "台账来源",
   // 第十八批 AM 段第 241 条 241-R1（BSM:1803 付款确认）：与后端 FieldLabels 同键同名。
   ar_ap_item_ids: "应收应付款项",
   payment_type: "支付类型",
@@ -3603,9 +3604,10 @@ export const KEY_VALUE_LABELS: Record<string, Record<string, string>> = {
   // 第十八批 AC 段第 210 条 210-R2：税费申报登记的税种（同后端 entity_tax_declarations.chk_etd_tax_type）。
   tax_type: { vat: "增值税", cultural_fee: "文化事业建设费", surcharge: "附加税", corporate_income: "企业所得税", other: "其他税费" },
   // 第十八批 AR 段第 233 条 233-R2：税率版本的收入类型（同后端 EntityTaxService.INCOME_LABELS，开票清单页同码同名；goods、parking、retail 为本条新增，
-  // all 只用于企业所得税）。
+  // all 只用于企业所得税）。第十八批 BU 段 374-R4：staff_remuneration 人员报酬拨付（派驻提成与酒吧报酬拨付开票行的税率）。
   income_type: { ticket: "平台通票 / 门票综合服务费", spv_service: "通票可分配池分账", nonstd_service: "非散台服务费", catering: "订台低消 / 二次消费 / 额外酒水",
-    retail: "零售", game: "游乐收入", show: "演出票", rent: "商业租赁 / 市集摊位", parking: "停车费", points_issuance: "积分发行费", goods: "供货货款", all: "全部收入" },
+    retail: "零售", game: "游乐收入", show: "演出票", rent: "商业租赁 / 市集摊位", parking: "停车费", points_issuance: "积分发行费", goods: "供货货款",
+    staff_remuneration: "人员报酬拨付", all: "全部收入" },
   // 第十八批 AR 段第 233 条 233-R5：差异处理（第十八批裁决 59：增值税、文化事业建设费、附加税出补提或冲回调整单，企业所得税与其他税费按季核对拉平）。
   difference_mechanism: { adjustment: "补提／冲回调整单", alignment: "按季核对拉平" },
   // 第十八批 AR 段第 233 条 233-R6：成本分项（平台主体按第十八批裁决 60；酒吧经营主体同持股分红明细行类型与中文名）与汇总口径。
