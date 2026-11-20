@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "综合体管理系统 P0 API 契约",
-    "version": "V0.88",
+    "version": "V0.89",
     "description": "P0 首批编码前置契约。本文采用 JSON-compatible YAML，便于与 openapi-p0.json 保持一致。正式后端以 Java 21 + Spring Boot 4.x + springdoc-openapi 输出运行时 OpenAPI，并与本契约比对。"
   },
   "servers": [
@@ -15111,13 +15111,13 @@
         ],
         "operationId": "submitDataCleanupJob",
         "summary": "提交数据清理申请",
-        "description": "第十八批 AE 段第 201 条 201-R7（BSM:576「提交→由具备最高权限的人审批→批量清理」；契约与代码一致，照决策台账 171-R1 先例补契约）：把一条试运行作业提交审批：只有 dry_run 作业能提交，否则 409 DATA_CLEANUP_NOT_DRY_RUN；reason 必填，缺了 400 VALIDATION_FAILED；作业不存在 404 DATA_CLEANUP_JOB_NOT_FOUND。提交后状态为 pending_approval、记下事由；发起人仍记试运行时的登录人，提交不改。持授权 U 盘密钥的最高权限本人提交的不经审批当场执行（第十八批 AO 段第 249 条 249-R7；BSM:576「持授权 U 盘密钥的最高权限本人发起的操作，不需要经过任何审批。」）：同一事务里照 approveDataCleanupJob 批准后的执行段，以提交时刻重算截止时间并标记删除，审批人记本人，作业改 executed，落 data.cleanup.executed（失败 data.cleanup.execute_failed）。须持 data.cleanup.request，否则 403 PERMISSION_DENIED。提交成功落 data.cleanup.submitted（business_type data_cleanup_job、business_id 为作业号、操作人为提交人，元数据 reason 为事由去首尾空白；作业行发起人仍记试运行人）；进入服务后的 404、409、400 失败落 data.cleanup.submit_failed；最高权限本人提交依次落 data.cleanup.submitted 与 data.cleanup.executed（第十八批 BA 段第 275 条 275-R1；BSM:576「全程留痕」；PGM:966）。",
+        "description": "第十八批 AE 段第 201 条 201-R7（BSM:576「提交→由具备最高权限的人审批→批量清理」；契约与代码一致，照决策台账 171-R1 先例补契约）：把一条试运行作业提交审批：只有 dry_run 作业能提交，否则 409 DATA_CLEANUP_NOT_DRY_RUN；reason 必填，缺了 400 VALIDATION_FAILED；作业不存在 404 DATA_CLEANUP_JOB_NOT_FOUND。提交后状态为 pending_approval、记下事由；发起人仍记试运行时的登录人，提交不改。持授权 U 盘密钥的最高权限本人提交的不经审批当场执行（第十八批 AO 段第 249 条 249-R7；BSM:576「持授权 U 盘密钥的最高权限本人发起的操作，不需要经过任何审批。」）：同一事务里照 approveDataCleanupJob 批准后的执行段，以提交时刻重算截止时间并标记删除，审批人记本人，作业改 executed，落 data.cleanup.executed（失败 data.cleanup.execute_failed）。须持 data.cleanup.request，否则 403 PERMISSION_DENIED。提交成功落 data.cleanup.submitted（business_type data_cleanup_job、business_id 为作业号、操作人为提交人，元数据 reason 为事由去首尾空白；作业行发起人仍记试运行人）；进入服务后的 404、409、400 失败落 data.cleanup.submit_failed；最高权限本人提交依次落 data.cleanup.submitted 与 data.cleanup.executed（第十八批 BA 段第 275 条 275-R1；BSM:576「全程留痕」；PGM:966）。第十八批 BG 段第 261 条 261-B21-R3：idempotency_key 必填，缺失 400 VALIDATION_FAILED；同一请求编号重复提交返回第一次的结果并提示已完成、不重复留痕（PGM「同一次操作重复提交时，返回第一次的结果并提示已完成」）。",
         "x-permission": "data.cleanup.request",
         "x-data-scope": "platform",
         "x-terminal-allowed": [
           "web"
         ],
-        "x-idempotency-required": false,
+        "x-idempotency-required": true,
         "x-audit-event-success": "data.cleanup.submitted",
         "x-audit-event-failure": "data.cleanup.submit_failed",
         "x-failure-codes": [
@@ -15138,9 +15138,15 @@
                 "type": "object",
                 "additionalProperties": false,
                 "required": [
+                  "idempotency_key",
                   "reason"
                 ],
                 "properties": {
+                  "idempotency_key": {
+                    "type": "string",
+                    "description": "操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。",
+                    "maxLength": 128
+                  },
                   "reason": {
                     "type": "string",
                     "description": "清理事由。"
@@ -15180,13 +15186,13 @@
         ],
         "operationId": "approveDataCleanupJob",
         "summary": "审批并执行数据清理",
-        "description": "第十八批 AE 段第 201 条 201-R7（BSM:576「批量清理，全程留痕、绝不碰在用的活数据」；契约与代码一致，照决策台账 171-R1 先例补契约）：审批一条待审批的清理申请。只认持授权 U 盘密钥的最高权限本人（第十八批 AO 段第 249 条 249-R7；BSM:576「删除一律须由具备最高权限的人审批通过后执行，不设例外」），其他人批准、驳回都 403 MASTER_APPROVAL_REQUIRED「数据清理须由最高权限本人批准」。作业不存在 404 DATA_CLEANUP_JOB_NOT_FOUND；不在 pending_approval 409 DATA_CLEANUP_NOT_PENDING；审批人是该作业发起人 403 DATA_CLEANUP_SELF_APPROVE_FORBIDDEN；decision 只收 approved、rejected（去首尾空白、不分大小写），其他值或不填 400 VALIDATION_FAILED。rejected：状态改 rejected、记审批人与时间。approved：在同一事务里按作业的 older_than_days 以审批时刻重算截止时间，把该范围内已存档超期、尚未删除且没有活引用的行标为已删除（delete_status=approved，行保留可查，有活引用的跳过），作业改 executed，deleted_count 为本次标记条数。批准后的执行段落 data.cleanup.executed（失败 data.cleanup.execute_failed）；驳回落 data.cleanup.rejected（business_id 为作业号、操作人为审批人；失败 data.cleanup.reject_failed）；上述 404、409、403、400 拒绝不落专用事件（第十八批 BA 段第 275 条 275-R1）。须持 data.cleanup.approve，否则 403 PERMISSION_DENIED。",
+        "description": "第十八批 AE 段第 201 条 201-R7（BSM:576「批量清理，全程留痕、绝不碰在用的活数据」；契约与代码一致，照决策台账 171-R1 先例补契约）：审批一条待审批的清理申请。只认持授权 U 盘密钥的最高权限本人（第十八批 AO 段第 249 条 249-R7；BSM:576「删除一律须由具备最高权限的人审批通过后执行，不设例外」），其他人批准、驳回都 403 MASTER_APPROVAL_REQUIRED「数据清理须由最高权限本人批准」。作业不存在 404 DATA_CLEANUP_JOB_NOT_FOUND；不在 pending_approval 409 DATA_CLEANUP_NOT_PENDING；审批人是该作业发起人 403 DATA_CLEANUP_SELF_APPROVE_FORBIDDEN；decision 只收 approved、rejected（去首尾空白、不分大小写），其他值或不填 400 VALIDATION_FAILED。rejected：状态改 rejected、记审批人与时间。approved：在同一事务里按作业的 older_than_days 以审批时刻重算截止时间，把该范围内已存档超期、尚未删除且没有活引用的行标为已删除（delete_status=approved，行保留可查，有活引用的跳过），作业改 executed，deleted_count 为本次标记条数。批准后的执行段落 data.cleanup.executed（失败 data.cleanup.execute_failed）；驳回落 data.cleanup.rejected（business_id 为作业号、操作人为审批人；失败 data.cleanup.reject_failed）；上述 404、409、403、400 拒绝不落专用事件（第十八批 BA 段第 275 条 275-R1）。须持 data.cleanup.approve，否则 403 PERMISSION_DENIED。第十八批 BG 段第 261 条 261-B21-R3：idempotency_key 必填，缺失 400 VALIDATION_FAILED；同一请求编号重复提交返回第一次的结果并提示已完成、不重复留痕（PGM「同一次操作重复提交时，返回第一次的结果并提示已完成」），清理不会再执行一遍。",
         "x-permission": "data.cleanup.approve",
         "x-data-scope": "platform",
         "x-terminal-allowed": [
           "web"
         ],
-        "x-idempotency-required": false,
+        "x-idempotency-required": true,
         "x-audit-event-success": "data.cleanup.executed",
         "x-audit-event-failure": "data.cleanup.execute_failed",
         "x-audit-event-success-alternatives": [
@@ -15212,9 +15218,15 @@
                 "type": "object",
                 "additionalProperties": false,
                 "required": [
+                  "idempotency_key",
                   "decision"
                 ],
                 "properties": {
+                  "idempotency_key": {
+                    "type": "string",
+                    "description": "操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。",
+                    "maxLength": 128
+                  },
                   "decision": {
                     "type": "string",
                     "enum": [
@@ -23691,7 +23703,7 @@
         ],
         "operationId": "approveDeleteStaffProfile",
         "summary": "审批员工档案删除申请",
-        "description": "第 201 条 201-R4（BSM:577「员工档案、设施设备、商户服务工单、卡座预订这类业务记录，现在也支持存档、以及审批后删除」「存档及删除都需要填写理由」）：最高权限本人审批员工档案删除申请：approved 且无占用即删除，rejected 回到未申请态。删除为软删除：转入后台留存、各处不再显示。非最高权限本人 403 MASTER_APPROVAL_REQUIRED；不按公司或登记范围取档案，档案不存在 404 STAFF_NOT_FOUND；没有待审批申请 400 STAFF_PROFILE_DELETE_NOT_PENDING；decision 不是 approved／rejected 400 VALIDATION_FAILED；仍挂考勤、请假、职级、未结束排班或未取寄存记录的 409 STAFF_PROFILE_IN_USE。返回 id、decision 与 deleted（是否已删除）。批准落 staff.profile.delete_approved，驳回落 staff.profile.delete_rejected；失败不落事件。",
+        "description": "第 201 条 201-R4（BSM:577「员工档案、设施设备、商户服务工单、卡座预订这类业务记录，现在也支持存档、以及审批后删除」「存档及删除都需要填写理由」）：最高权限本人审批员工档案删除申请：approved 且无占用即删除，rejected 回到未申请态。删除为软删除：转入后台留存、各处不再显示。非最高权限本人 403 MASTER_APPROVAL_REQUIRED；不按公司或登记范围取档案，档案不存在 404 STAFF_NOT_FOUND；没有待审批申请 400 STAFF_PROFILE_DELETE_NOT_PENDING；decision 不是 approved／rejected 400 VALIDATION_FAILED；仍挂考勤、请假、职级、未结束排班或未取寄存记录的 409 STAFF_PROFILE_IN_USE。返回 id、decision 与 deleted（是否已删除）。批准落 staff.profile.delete_approved，驳回落 staff.profile.delete_rejected；失败不落事件。第十八批 BG 段第 261 条 261-B21-R4：idempotency_key 必填，缺失 400 VALIDATION_FAILED；同一请求编号重复提交返回第一次的结果并提示已完成、不重复留痕（PGM「同一次操作重复提交时，返回第一次的结果并提示已完成」）。",
         "x-failure-codes": [
           "MASTER_APPROVAL_REQUIRED",
           "STAFF_NOT_FOUND",
@@ -23704,7 +23716,7 @@
         "x-terminal-allowed": [
           "web"
         ],
-        "x-idempotency-required": false,
+        "x-idempotency-required": true,
         "x-audit-event-success": "staff.profile.delete_approved",
         "x-audit-event-failure": "not_applicable",
         "parameters": [
@@ -23727,9 +23739,15 @@
                 "type": "object",
                 "additionalProperties": false,
                 "required": [
+                  "idempotency_key",
                   "decision"
                 ],
                 "properties": {
+                  "idempotency_key": {
+                    "type": "string",
+                    "description": "操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。",
+                    "maxLength": 128
+                  },
                   "decision": {
                     "type": "string",
                     "enum": [
@@ -34767,13 +34785,13 @@
         ],
         "operationId": "reviewWecomRiskHit",
         "summary": "复核处置企微违规命中",
-        "description": "第十八批 I 段 88-R1：非平台管理员只能复核 wecom.risk_hit.review 可触及项目（含可跨项目角色勾选的项目）内的命中，越范围 403 CROSS_PROJECT_FORBIDDEN，不改命中。",
+        "description": "第十八批 I 段 88-R1：非平台管理员只能复核 wecom.risk_hit.review 可触及项目（含可跨项目角色勾选的项目）内的命中，越范围 403 CROSS_PROJECT_FORBIDDEN，不改命中。第十八批 BG 段第 261 条 261-B22-R1、261-B22-R2：idempotency_key 必填，缺失 400 VALIDATION_FAILED；同一请求编号重复提交返回第一次的结果并提示已完成、不重复留痕（PGM「同一次操作重复提交时，返回第一次的结果并提示已完成」）。命中已被领取后再领取（status 为 reviewing 而命中已不是 open）409 WECOM_RISK_HIT_ALREADY_CLAIMED，不改写复核人；复核中的命中确认违规或误报驳回照常。",
         "x-auth-context": "staff-token",
         "x-permission": "wecom.risk_hit.review",
         "x-terminal-allowed": [
           "web"
         ],
-        "x-idempotency-required": false,
+        "x-idempotency-required": true,
         "x-audit-event-success": "wecom.risk.hit_reviewed",
         "x-audit-event-failure": "wecom.risk_hit.review_failed",
         "parameters": [
@@ -34796,9 +34814,15 @@
                 "type": "object",
                 "additionalProperties": true,
                 "required": [
+                  "idempotency_key",
                   "status"
                 ],
                 "properties": {
+                  "idempotency_key": {
+                    "type": "string",
+                    "description": "操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。",
+                    "maxLength": 128
+                  },
                   "status": {
                     "type": "string",
                     "description": "目标处置状态。",
@@ -34834,7 +34858,14 @@
           "500": {
             "$ref": "#/components/responses/Error"
           }
-        }
+        },
+        "x-failure-codes": [
+          "VALIDATION_FAILED",
+          "CROSS_PROJECT_FORBIDDEN",
+          "WECOM_RISK_HIT_NOT_FOUND",
+          "WECOM_RISK_HIT_ALREADY_RESOLVED",
+          "WECOM_RISK_HIT_ALREADY_CLAIMED"
+        ]
       }
     },
     "/api/v1/terminals/devices/{id}/found": {
@@ -39723,7 +39754,7 @@
         "x-audit-event-success": "leasing.intent.signed",
         "x-audit-event-failure": "leasing.intent.sign_failed",
         "x-auth-context": "staff-token",
-        "description": "仅 pending_signing 意向可签。四类主体默认同公司，operation/settlement 缺省指向 contract。签约只起草合同草稿并把合同绑到来源意向（leasing_intents.contract_id），线索状态不在此变更；合同生效（activateContract）后线索才转为已签约（PGM「招商运营细则」：合同审批全部通过、生效后转为已签约）。第十八批 G 段（第 82 条）：意向须在 leasing.convert 可触及的项目内，否则 403 CROSS_PROJECT_FORBIDDEN；平台管理员不受此限。",
+        "description": "仅 pending_signing 意向可签。四类主体默认同公司，operation/settlement 缺省指向 contract。签约只起草合同草稿并把合同绑到来源意向（leasing_intents.contract_id），线索状态不在此变更；合同生效（activateContract）后线索才转为已签约（PGM「招商运营细则」：合同审批全部通过、生效后转为已签约）。第十八批 G 段（第 82 条）：意向须在 leasing.convert 可触及的项目内，否则 403 CROSS_PROJECT_FORBIDDEN；平台管理员不受此限。第十八批 BG 段第 261 条 261-B20-R1：意向已签约（已绑定合同）时再签，不论是否同一请求编号，都返回首次起草的合同并提示已完成，不再建商户与主体绑定、不重复留痕。",
         "parameters": [
           {
             "name": "intent_id",
@@ -46798,13 +46829,13 @@
         ],
         "operationId": "approveDeleteSpaceType",
         "summary": "审批空间种类删除申请",
-        "description": "第十八批 AE 段第 201 条 201-R3（BSM:576「删除一律须由具备最高权限的人审批通过后执行，不设例外，申请人不得审批自己的申请」）：最高权限审批空间种类删除申请。控制器不校权限码，服务层先要求平台范围（商户账号与外包供应商 403 PLATFORM_SCOPE_REQUIRED）、再要求最高权限（否则 403 SPACE_TYPE_DELETE_APPROVER_NOT_MASTER）。decision 为 approved 时种类转为已删除，落 space_type.delete_approved；为 rejected 时退回已存档，改落 space_type.delete_rejected。种类不存在 404 SPACE_TYPE_NOT_FOUND；没有待审批的删除申请 400 SPACE_TYPE_DELETE_NOT_PENDING；申请人本人审批 403 SPACE_TYPE_SELF_APPROVE_FORBIDDEN；decision 不是 approved 或 rejected（不分大小写）400 VALIDATION_FAILED。不校验幂等键；被拒不落失败事件。",
+        "description": "第十八批 AE 段第 201 条 201-R3（BSM:576「删除一律须由具备最高权限的人审批通过后执行，不设例外，申请人不得审批自己的申请」）：最高权限审批空间种类删除申请。控制器不校权限码，服务层先要求平台范围（商户账号与外包供应商 403 PLATFORM_SCOPE_REQUIRED）、再要求最高权限（否则 403 SPACE_TYPE_DELETE_APPROVER_NOT_MASTER）。decision 为 approved 时种类转为已删除，落 space_type.delete_approved；为 rejected 时退回已存档，改落 space_type.delete_rejected。种类不存在 404 SPACE_TYPE_NOT_FOUND；没有待审批的删除申请 400 SPACE_TYPE_DELETE_NOT_PENDING；申请人本人审批 403 SPACE_TYPE_SELF_APPROVE_FORBIDDEN；decision 不是 approved 或 rejected（不分大小写）400 VALIDATION_FAILED。不校验幂等键；被拒不落失败事件。第十八批 BG 段第 261 条 261-B21-R2：idempotency_key 必填，缺失 400 VALIDATION_FAILED；同一请求编号重复提交返回第一次的结果并提示已完成、不重复留痕（PGM「同一次操作重复提交时，返回第一次的结果并提示已完成」）。",
         "x-permission": "authenticated",
         "x-data-scope": "platform",
         "x-terminal-allowed": [
           "web"
         ],
-        "x-idempotency-required": false,
+        "x-idempotency-required": true,
         "x-audit-event-success": "space_type.delete_approved",
         "x-audit-event-failure": "not_applicable",
         "parameters": [
@@ -46820,9 +46851,15 @@
                 "type": "object",
                 "additionalProperties": false,
                 "required": [
+                  "idempotency_key",
                   "decision"
                 ],
                 "properties": {
+                  "idempotency_key": {
+                    "type": "string",
+                    "description": "操作幂等键；重复提交时必须返回同一处理结果，避免重复出票、扣减或入账。",
+                    "maxLength": 128
+                  },
                   "decision": {
                     "type": "string",
                     "enum": [
@@ -46847,6 +46884,9 @@
             "$ref": "#/components/responses/Error"
           },
           "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
             "$ref": "#/components/responses/Error"
           },
           "500": {
@@ -51796,7 +51836,7 @@
         ],
         "operationId": "reviewStaffLeave",
         "summary": "请假审批(排班主管)",
-        "description": "通过/驳回+批注;通过区间考勤记「请假」;审批留痕。 18E：持可跨项目角色的，凭该角色的部分按员工档案登记项目是否在 staff.shift.manage 可触及的项目内判；该权限另有非可跨项目角色来源时本公司员工照旧可处理；范围外 403（CROSS_ORG_FORBIDDEN；目标没有员工档案的为 CROSS_PROJECT_FORBIDDEN）。",
+        "description": "通过/驳回+批注;通过区间考勤记「请假」;审批留痕。 18E：持可跨项目角色的，凭该角色的部分按员工档案登记项目是否在 staff.shift.manage 可触及的项目内判；该权限另有非可跨项目角色来源时本公司员工照旧可处理；范围外 403（CROSS_ORG_FORBIDDEN；目标没有员工档案的为 CROSS_PROJECT_FORBIDDEN）。 第十八批 BG 段第 261 条 261-B21-R1：同一请求编号重复提交返回第一次的结果并提示已完成、不重复留痕（PGM「同一次操作重复提交时，返回第一次的结果并提示已完成」）。",
         "x-permission": "staff.shift.manage",
         "x-data-scope": "platform",
         "x-terminal-allowed": [
@@ -51862,6 +51902,9 @@
             "$ref": "#/components/responses/Error"
           },
           "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
             "$ref": "#/components/responses/Error"
           },
           "500": {
@@ -51954,7 +51997,7 @@
         ],
         "operationId": "revokeStaffLeave",
         "summary": "销假审批(排班主管):批准或驳回员工本人的销假申请",
-        "description": "2026-10-18 裁决：销假=本人申请＋主管批准。只有员工本人已申请销假（revoke_requested）的请假才能办理，未经本人申请的假不得直接销。批准 → 原请假单转「已销假」，审批人与审批意见不变，另记批准人、批准时间与批准说明；事假已计入已定格月份工资的，不回改原单，由工资补差在下一次薪资单冲正并注明来源 leave_revoked（BSM L1481）。驳回 → 回到「已批准」，假仍有效。 18E：持可跨项目角色的，凭该角色的部分按员工档案登记项目是否在 staff.shift.manage 可触及的项目内判；该权限另有非可跨项目角色来源时本公司员工照旧可处理；范围外 403（CROSS_ORG_FORBIDDEN；目标没有员工档案的为 CROSS_PROJECT_FORBIDDEN）。",
+        "description": "2026-10-18 裁决：销假=本人申请＋主管批准。只有员工本人已申请销假（revoke_requested）的请假才能办理，未经本人申请的假不得直接销。批准 → 原请假单转「已销假」，审批人与审批意见不变，另记批准人、批准时间与批准说明；事假已计入已定格月份工资的，不回改原单，由工资补差在下一次薪资单冲正并注明来源 leave_revoked（BSM L1481）。驳回 → 回到「已批准」，假仍有效。 18E：持可跨项目角色的，凭该角色的部分按员工档案登记项目是否在 staff.shift.manage 可触及的项目内判；该权限另有非可跨项目角色来源时本公司员工照旧可处理；范围外 403（CROSS_ORG_FORBIDDEN；目标没有员工档案的为 CROSS_PROJECT_FORBIDDEN）。 第十八批 BG 段第 261 条 261-B21-R1：同一请求编号重复提交返回第一次的结果并提示已完成、不重复留痕（PGM「同一次操作重复提交时，返回第一次的结果并提示已完成」），不重复改单、不重复发工资补差。",
         "x-permission": "staff.shift.manage",
         "x-data-scope": "platform",
         "x-terminal-allowed": [
@@ -52020,6 +52063,9 @@
             "$ref": "#/components/responses/Error"
           },
           "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
             "$ref": "#/components/responses/Error"
           },
           "500": {

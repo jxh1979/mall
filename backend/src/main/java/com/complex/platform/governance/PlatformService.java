@@ -1,5 +1,5 @@
 package com.complex.platform.governance;
-// 文件版本：V0.19
+// 文件版本：V0.20
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -73,6 +73,9 @@ public class PlatformService {
     // F-AUTHZ-02 治理写仅平台：治理写方法（建商户/法律实体绑定/合同/项目空间等）首行经
     // requirePlatformScope() fail-closed 拒 merchant-scoped 主体，防权限被下放给商户角色后越权治理。
     private final AuthorizationService authorizationService;
+    // 第十八批 BG 段第 261 条 261-B21-R2：空间种类删除审批接幂等层（字段注入免改构造点；单测未注入即直接办理）。
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    com.complex.platform.common.idempotency.IdempotencyService idempotencyService;
 
     public PlatformService(
             PlatformRepository repository,
@@ -889,10 +892,29 @@ public class PlatformService {
 
     @org.springframework.transaction.annotation.Transactional
     public void approveDeleteSpaceType(String id, String decision) {
+        approveDeleteSpaceType(id, decision, null, null);
+    }
+
+    /**
+     * 第十八批 BG 段第 261 条 261-B21-R2（PGM:528「⑤同一笔操作重复提交不重复生效」；PGM:303「同一次操作重复提交时，返回第一次的结果并提示已完成。」）：
+     * 最高权限闸在幂等之前；取种类、待审批闸、禁自审、结论校验、写回与成功留痕在幂等层里，同一请求编号重发返回首次结果、不重复留痕。
+     */
+    @org.springframework.transaction.annotation.Transactional
+    public void approveDeleteSpaceType(String id, String decision, String idempotencyKey, Object request) {
         authorizationService.requirePlatformScope();
         if (!isMasterAuthority()) {
             throw ApiException.forbidden("SPACE_TYPE_DELETE_APPROVER_NOT_MASTER", "空间种类删除只能由最高权限审批通过");
         }
+        if (idempotencyService == null || idempotencyKey == null || idempotencyKey.isBlank()) {
+            doApproveDeleteSpaceType(id, decision);
+            return;
+        }
+        idempotencyService.execute("approveDeleteSpaceType:" + id, idempotencyKey, request,
+                () -> doApproveDeleteSpaceType(id, decision), String.class);
+    }
+
+    /** 返回审批结论（approved／rejected），供幂等层存首次结果。 */
+    private String doApproveDeleteSpaceType(String id, String decision) {
         SpaceTypeRecord existing = repository.findSpaceTypeById(id)
                 .orElseThrow(() -> ApiException.notFound("SPACE_TYPE_NOT_FOUND", "空间种类不存在或已被删除"));
         if (!"pending_delete".equals(existing.status())) {
@@ -916,6 +938,7 @@ public class PlatformService {
         auditEventService.recordSuccess(
                 "approved".equals(verdict) ? "space_type.delete_approved" : "space_type.delete_rejected", "governance.space.manage", "space_type", id, null, null,
                 Map.of("decision", verdict, "type_code", existing.typeCode()));
+        return verdict;
     }
 
     public SpaceRecord createSpace(SpaceRequest request) {

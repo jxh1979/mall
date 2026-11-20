@@ -1,4 +1,4 @@
-// 文件版本：V0.03
+// 文件版本：V0.04
 package com.complex.platform.compliance;
 import static com.complex.platform.common.api.ApiRequests.requireIdempotencyKey;
 
@@ -187,12 +187,10 @@ public class ComplianceController {
                 null, () -> {
                     authorizationService.requirePermission("wecom.risk_hit.review");
                     authorizationService.requirePlatformComplianceScope();
+                    // 第十八批 BG 段第 261 条 261-B22-R1（PGM:528⑤、PGM:303）：复核带请求编号，同一编号重发返回首次处置结果。
+                    com.complex.platform.common.api.ApiRequests.requireIdempotencyKey(request == null ? null : request.idempotencyKey());
                     String reviewerId = authorizationService.currentActor().id();
-                    return wecomConversationService.reviewRiskHit(
-                            id,
-                            request == null ? null : request.status(),
-                            reviewerId,
-                            request == null ? null : request.reviewNote());
+                    return wecomConversationService.reviewRiskHit(id, request, reviewerId);
                 }));
     }
 

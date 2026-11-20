@@ -1,5 +1,5 @@
 package com.complex.platform.governance;
-// 文件版本：V0.09
+// 文件版本：V0.10
 import static com.complex.platform.common.api.ApiRequests.requireIdempotencyKey;
 
 import com.complex.platform.access.AuthorizationService;
@@ -292,7 +292,10 @@ public class PlatformController {
     public ApiResponse<Void> approveDeleteSpaceType(
             @org.springframework.web.bind.annotation.PathVariable("id") String id,
             @RequestBody java.util.Map<String, String> body) {
-        service.approveDeleteSpaceType(id, body == null ? null : body.get("decision"));
+        // 第十八批 BG 段第 261 条 261-B21-R2（PGM:528⑤、PGM:303）：删除审批带请求编号，同一编号重发返回首次结果。
+        String key = body == null ? null : body.get("idempotency_key");
+        requireIdempotencyKey(key);
+        service.approveDeleteSpaceType(id, body.get("decision"), key, body);
         return ApiResponse.ok(null);
     }
 

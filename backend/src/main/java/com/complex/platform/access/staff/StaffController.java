@@ -1,6 +1,6 @@
 package com.complex.platform.access.staff;
 
-// 文件版本：V0.15
+// 文件版本：V0.16
 import static com.complex.platform.common.api.ApiRequests.requireIdempotencyKey;
 
 import com.complex.platform.access.staff.dto.EmployeeNoticeAcknowledgeRequest;
@@ -128,6 +128,8 @@ public class StaffController {
     public ApiResponse<com.complex.platform.access.staff.dto.StaffProfileDeleteDecision> approveDeleteProfile(
             @PathVariable String id,
             @RequestBody(required = false) com.complex.platform.access.staff.dto.StaffProfileDeleteApprovalRequest request) {
+        // 第十八批 BG 段第 261 条 261-B21-R4（PGM:528⑤、PGM:303）：删除审批带请求编号，同一编号重发返回首次审批结果。
+        com.complex.platform.common.api.ApiRequests.requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.approveDeleteProfile(id, request));
     }
 

@@ -1,6 +1,6 @@
 package com.complex.platform.governance;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -188,7 +188,7 @@ class CrossProjectBusinessRecordsJdbcIntegrationTests {
         String hitA = wecomHit("a", projectA);
         String hitB = wecomHit("b", projectB);
         String url = "/api/v1/compliance/wecom/risk-hits";
-        String review = "{\"status\":\"confirmed\",\"review_note\":\"确认违规\"}";
+        String review = "{\"idempotency_key\":\"g88-review-" + suffix + "\",\"status\":\"confirmed\",\"review_note\":\"确认违规\"}";
         String reviewed = "SELECT status || '/' || coalesce(reviewer_id, '') FROM wecom_risk_hits WHERE hit_id=?";
 
         RequestPostProcessor plain = staffOfA("wh", role("wh", List.of(), "wecom.risk_hit.view", "wecom.risk_hit.review"));

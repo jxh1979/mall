@@ -1,5 +1,5 @@
 package com.complex.platform.leasing;
-// 文件版本：V0.11
+// 文件版本：V0.12
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.PhoneMask;
@@ -78,6 +78,11 @@ public class LeasingService implements com.complex.platform.contract.ContractEff
     private final NotificationWindowConfig windowConfig;
     private final SupervisorReviewService reviews;
     private final LeasingBlacklistExceptionService blacklistExceptions;
+    // 第十八批 BG 段第 261 条 261-B20-R1：签约接幂等层、读已签约的合同（字段注入免改构造点；单测未注入即直接办理）。
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    com.complex.platform.common.idempotency.IdempotencyService idempotencyService;
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    com.complex.platform.contract.ContractRepository contractRepository;
 
     @org.springframework.beans.factory.annotation.Autowired
     public LeasingService(LeasingRepository repository, AuditEventService auditEventService,
@@ -390,6 +395,25 @@ public class LeasingService implements com.complex.platform.contract.ContractEff
         LeasingSignRequest actual = requireRequest(request);
         LeasingIntentRecord intent = requireIntent(intentId);
         requireInReach(intent.projectId(), "leasing.convert", "签约意向不在本权限可触及的项目范围内");
+        // 第十八批 BG 段第 261 条 261-B20-R1（PGM:528「⑤同一笔操作重复提交不重复生效」；PGM:303「同一次操作重复提交时，返回第一次的结果并提示已完成。」）：
+        // 意向已绑定合同（只由签约写入）即已签约——重发或别人再签都返回首次起草的合同并提示已完成，不再建商户与绑定、不重复留痕。
+        // 放在幂等层之外：幂等层里执行过动作的请求不算重复提交，在其内标记不生效。
+        if (contractRepository != null) {
+            Optional<ContractRecord> signed = repository.findIntentContractId(intent.id()).flatMap(contractRepository::findContractById);
+            if (signed.isPresent()) {
+                IdempotentReplayContext.markCurrentReplayed();
+                return signed.get();
+            }
+        }
+        String key = actual.idempotencyKey();
+        if (idempotencyService == null || key == null || key.isBlank()) {
+            return doSignIntent(intent, actual);
+        }
+        // 同一编号在途重发在幂等层串行，先到者提交后返回首次合同。
+        return idempotencyService.execute("signIntent:" + intent.id(), key, actual, () -> doSignIntent(intent, actual), ContractRecord.class);
+    }
+
+    private ContractRecord doSignIntent(LeasingIntentRecord intent, LeasingSignRequest actual) {
         if (!"pending_signing".equals(intent.stage())) {
             throw ApiException.conflict("LEASING_INTENT_NOT_PENDING_SIGNING",
                     "只有待签约状态的意向才能签约");

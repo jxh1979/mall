@@ -1,5 +1,5 @@
 package com.complex.platform.leasing;
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
@@ -174,6 +174,12 @@ class JdbcLeasingRepository implements LeasingRepository {
     }
 
     // ---------- CG-01：合同 ↔ 意向 ↔ 线索（合同生效后置已签约） ----------
+    @Override
+    public java.util.Optional<String> findIntentContractId(String intentId) {
+        return jdbcTemplate.query("SELECT contract_id FROM leasing_intents WHERE id = :id AND contract_id IS NOT NULL",
+                Map.of("id", intentId), (rs, row) -> rs.getString(1)).stream().findFirst();
+    }
+
     @Override
     public void bindIntentContract(String intentId, String contractId) {
         jdbcTemplate.update("""

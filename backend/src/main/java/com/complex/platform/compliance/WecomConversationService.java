@@ -1,4 +1,4 @@
-// 文件版本：V0.04
+// 文件版本：V0.05
 package com.complex.platform.compliance;
 
 import com.complex.platform.access.AuthorizationService;
@@ -574,6 +574,18 @@ public class WecomConversationService {
      */
     public WecomRiskHitRecord reviewRiskHit(
             String hitId, String targetStatus, String reviewerId, String reviewNote) {
+        return reviewRiskHit(hitId, new com.complex.platform.compliance.dto.WecomRiskHitReviewRequest(null, targetStatus, reviewNote), reviewerId);
+    }
+
+    /**
+     * 第十八批 BG 段第 261 条 261-B22-R1（PGM:528「⑤同一笔操作重复提交不重复生效」；PGM:303「同一次操作重复提交时，返回第一次的结果并提示已完成。」）：
+     * 参数校验、取命中与项目范围闸在幂等之前；终态闸、领取闸、写回与成功留痕在幂等层里，同一请求编号重发返回首次处置结果、不重复留痕。
+     * 请求不带编号的（内部调用）不经幂等层。
+     */
+    public WecomRiskHitRecord reviewRiskHit(
+            String hitId, com.complex.platform.compliance.dto.WecomRiskHitReviewRequest request, String reviewerId) {
+        String targetStatus = request == null ? null : request.status();
+        String reviewNote = request == null ? null : request.reviewNote();
         String resolvedHitId = requireText(hitId, "hit_id");
         String resolvedStatus = requireText(targetStatus, "status").toLowerCase(Locale.ROOT);
         if (!REVIEW_TARGET_STATUSES.contains(resolvedStatus)) {
@@ -588,10 +600,25 @@ public class WecomConversationService {
                 authorizationService.currentActor(), existing.projectId(), "wecom.risk_hit.review")) {
             throw ApiException.forbidden("CROSS_PROJECT_FORBIDDEN", "该违规命中不在本权限可触及的项目范围内");
         }
+        String key = request == null ? null : request.idempotencyKey();
+        if (key == null || key.isBlank()) {
+            return reviewRiskHitOnce(resolvedHitId, resolvedStatus, resolvedReviewer, reviewNote);
+        }
+        return idempotencyService.execute("reviewWecomRiskHit:" + resolvedHitId, key, request,
+                () -> reviewRiskHitOnce(resolvedHitId, resolvedStatus, resolvedReviewer, reviewNote), WecomRiskHitRecord.class);
+    }
+
+    private WecomRiskHitRecord reviewRiskHitOnce(String resolvedHitId, String resolvedStatus, String resolvedReviewer, String reviewNote) {
+        WecomRiskHitRecord existing = repository.findRiskHitById(resolvedHitId)
+                .orElseThrow(() -> ApiException.notFound("WECOM_RISK_HIT_NOT_FOUND", "风险命中记录不存在或已被删除"));
         // 终态（confirmed/dismissed）不可再流转，避免复核覆盖既有处置结论。
         if ("confirmed".equals(existing.status()) || "dismissed".equals(existing.status())) {
             throw ApiException.conflict("WECOM_RISK_HIT_ALREADY_RESOLVED",
                     "该风险命中已处理完毕，处理结果：" + existing.status());
+        }
+        // 261-B22-R2（PGM:303「两个操作同时发生冲突时，一律以“先处理成功”的那个为准」）：已被领取的命中再领取不生效，不改写复核人。
+        if ("reviewing".equals(resolvedStatus) && !"open".equals(existing.status())) {
+            throw ApiException.conflict("WECOM_RISK_HIT_ALREADY_CLAIMED", "该风险命中已被领取，本次领取未生效，请刷新后查看");
         }
         WecomRiskHitRecord updated = repository.updateRiskHitReview(
                 resolvedHitId, resolvedStatus, resolvedReviewer, trimToNull(reviewNote));

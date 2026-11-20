@@ -1,4 +1,4 @@
-# P0 OpenAPI Operation 验收矩阵 V0.88
+# P0 OpenAPI Operation 验收矩阵 V0.89
 
 ## 1. 文档定位
 
@@ -308,8 +308,8 @@
 | ops | `PUT` | `/api/v1/ops/production-readiness/items/{id}` | `updateProductionReadinessItem` | 更新生产前置责任状态 | `ProductionReadinessItemUpdateRequest` | `ops.production_readiness.manage` | `staff-token` | `project` | web, mobile_admin | 是 | `production_readiness.updated` | `production_readiness.update_failed` |
 | ops | `GET` | `/api/v1/ops/data-cleanup/jobs` | `listDataCleanupJobs` | 查询数据清理作业 | `-` | `data.cleanup.request` | `staff-token` | `platform` | web | 否 | `not_applicable` | `not_applicable` |
 | ops | `POST` | `/api/v1/ops/data-cleanup/preview` | `previewDataCleanup` | 数据清理试运行 | `object` | `data.cleanup.request` | `staff-token` | `platform` | web | 否 | `not_applicable` | `not_applicable` |
-| ops | `POST` | `/api/v1/ops/data-cleanup/jobs/{id}/submit` | `submitDataCleanupJob` | 提交数据清理申请 | `object` | `data.cleanup.request` | `staff-token` | `platform` | web | 否 | `data.cleanup.submitted` | `data.cleanup.submit_failed` |
-| ops | `POST` | `/api/v1/ops/data-cleanup/jobs/{id}/approve` | `approveDataCleanupJob` | 审批并执行数据清理 | `object` | `data.cleanup.approve` | `staff-token` | `platform` | web | 否 | `data.cleanup.executed` | `data.cleanup.execute_failed` |
+| ops | `POST` | `/api/v1/ops/data-cleanup/jobs/{id}/submit` | `submitDataCleanupJob` | 提交数据清理申请 | `object` | `data.cleanup.request` | `staff-token` | `platform` | web | 是 | `data.cleanup.submitted` | `data.cleanup.submit_failed` |
+| ops | `POST` | `/api/v1/ops/data-cleanup/jobs/{id}/approve` | `approveDataCleanupJob` | 审批并执行数据清理 | `object` | `data.cleanup.approve` | `staff-token` | `platform` | web | 是 | `data.cleanup.executed` | `data.cleanup.execute_failed` |
 | platform | `GET` | `/api/v1/platform/business-entities` | `listBusinessEntities` | 查询经营、运营、合同、结算主体档案 | `-` | `entity.binding.view` | `staff-token` | `project-merchant` | web | 否 | `business_entity.viewed` | `not_applicable` |
 | platform | `POST` | `/api/v1/platform/business-entities` | `createBusinessEntity` | 创建经营、运营、合同、结算主体档案 | `BusinessEntityRequest` | `entity.binding.manage` | `staff-token` | `project-merchant` | web | 是 | `business_entity.changed` | `business_entity.change_failed` |
 | platform | `POST` | `/api/v1/platform/business-entities/{entity_id}/projects` | `associateBusinessEntityProject` | 为经营主体追加关联项目（最高权限） | `object` | `entity.binding.manage` | `staff-token` | `project-merchant` | web | 是 | `business_entity.project_associated` | `business_entity.project_associate_failed` |
@@ -464,7 +464,7 @@
 | access | `POST` | `/api/v1/staff/profiles/{id}/archive` | `archiveStaffProfile` | 存档员工档案 | `object` | `staff.profile.submit` | `staff-token` | `project` | web | 否 | `staff.profile.archived` | `not_applicable` |
 | access | `POST` | `/api/v1/staff/profiles/{id}/unarchive` | `unarchiveStaffProfile` | 取消存档员工档案 | `-` | `staff.profile.submit` | `staff-token` | `project` | web | 否 | `staff.profile.unarchived` | `not_applicable` |
 | access | `POST` | `/api/v1/staff/profiles/{id}/delete-request` | `requestDeleteStaffProfile` | 申请删除员工档案 | `object` | `staff.profile.review` | `staff-token` | `project` | web | 否 | `staff.profile.delete_requested` | `not_applicable` |
-| access | `POST` | `/api/v1/staff/profiles/{id}/delete-approve` | `approveDeleteStaffProfile` | 审批员工档案删除申请 | `object` | `staff.profile.approve` | `staff-token` | `project` | web | 否 | `staff.profile.delete_approved` | `not_applicable` |
+| access | `POST` | `/api/v1/staff/profiles/{id}/delete-approve` | `approveDeleteStaffProfile` | 审批员工档案删除申请 | `object` | `staff.profile.approve` | `staff-token` | `project` | web | 是 | `staff.profile.delete_approved` | `not_applicable` |
 | access | `GET` | `/api/v1/staff/device-credentials` | `listStaffDeviceCredentials` | 员工私人手机凭证列表 | `-` | `staff.device.review` | `staff-token` | `project` | web, mobile_admin | 否 | `not_applicable` | `not_applicable` |
 | access | `POST` | `/api/v1/staff/device-credentials` | `bindStaffDeviceCredential` | 绑定/换机申请员工设备凭证 | `StaffDeviceBindRequest` | `staff.device.bind` | `staff-token` | `project` | staff_private_phone, web | 是 | `staff_device.bound` | `staff_device.bind_failed` |
 | access | `POST` | `/api/v1/staff/device-credentials/{id}/approve-rebind` | `approveStaffDeviceRebind` | 审批换机生效 | `StaffDeviceRebindDecisionRequest` | `staff.device.review` | `staff-token` | `project` | web, mobile_admin | 是 | `staff_device.rebound` | `staff_device.rebind_failed` |
@@ -634,7 +634,7 @@
 | compliance | `POST` | `/api/v1/compliance/expiry-items/{id}/grace-requests` | `requestComplianceGracePeriod` | 商户申请证照宽限期（最高权限审批） | `object` | `compliance.grace_period.request` | `staff-token` | `merchant` | web | 是 | `compliance.grace.submitted` | `compliance.grace.submit_failed` |
 | compliance | `POST` | `/api/v1/compliance/expiry-items/{id}/renewal` | `renewComplianceExpiryItem` | 证照续期登记（更新有效期） | `object` | `compliance.expiry_item.manage` | `staff-token` | `-` | web | 是 | `compliance.expiry_item.renewed` | `compliance.expiry_item.renew_failed` |
 | compliance | `GET` | `/api/v1/compliance/wecom/risk-hits` | `listWecomRiskHits` | 查询企微会话违规命中列表 | `-` | `wecom.risk_hit.view` | `staff-token` | `-` | web | 否 | `not_applicable` | `not_applicable` |
-| compliance | `POST` | `/api/v1/compliance/wecom/risk-hits/{id}/review` | `reviewWecomRiskHit` | 复核处置企微违规命中 | `object` | `wecom.risk_hit.review` | `staff-token` | `-` | web | 否 | `wecom.risk.hit_reviewed` | `wecom.risk_hit.review_failed` |
+| compliance | `POST` | `/api/v1/compliance/wecom/risk-hits/{id}/review` | `reviewWecomRiskHit` | 复核处置企微违规命中 | `object` | `wecom.risk_hit.review` | `staff-token` | `-` | web | 是 | `wecom.risk.hit_reviewed` | `wecom.risk_hit.review_failed` |
 | terminals | `POST` | `/api/v1/terminals/devices/{id}/found` | `markTerminalDeviceFound` | 标记设备找回 | `object` | `terminal.device.lifecycle` | `staff-token` | `-` | web, mobile_admin | 是 | `terminal.device.found` | `terminal.device.found_failed` |
 | terminals | `POST` | `/api/v1/terminals/devices/{id}/lost` | `markTerminalDeviceLost` | 标记设备挂失 | `object` | `terminal.device.lifecycle` | `staff-token` | `-` | web, mobile_admin | 是 | `terminal.device.lost` | `terminal.device.lost_failed` |
 | terminals | `POST` | `/api/v1/terminals/devices/{id}/repair` | `markTerminalDeviceRepair` | 设备送修 | `object` | `terminal.device.lifecycle` | `staff-token` | `-` | web, mobile_admin | 是 | `terminal.device.repaired` | `terminal.device.repair_failed` |
@@ -855,7 +855,7 @@
 | platform | `POST` | `/api/v1/platform/space-types/{id}/archive` | `archiveSpaceType` | 存档空间种类 | `object` | `governance.space.manage` | `staff-token` | `platform` | web | 否 | `space_type.archived` | `not_applicable` |
 | platform | `POST` | `/api/v1/platform/space-types/{id}/unarchive` | `unarchiveSpaceType` | 取消存档空间种类 | `-` | `governance.space.manage` | `staff-token` | `platform` | web | 否 | `space_type.unarchived` | `not_applicable` |
 | platform | `POST` | `/api/v1/platform/space-types/{id}/delete-request` | `requestDeleteSpaceType` | 申请删除空间种类 | `object` | `governance.space.manage` | `staff-token` | `platform` | web | 否 | `space_type.delete_requested` | `not_applicable` |
-| platform | `POST` | `/api/v1/platform/space-types/{id}/delete-approve` | `approveDeleteSpaceType` | 审批空间种类删除申请 | `object` | `authenticated` | `staff-token` | `platform` | web | 否 | `space_type.delete_approved` | `not_applicable` |
+| platform | `POST` | `/api/v1/platform/space-types/{id}/delete-approve` | `approveDeleteSpaceType` | 审批空间种类删除申请 | `object` | `authenticated` | `staff-token` | `platform` | web | 是 | `space_type.delete_approved` | `not_applicable` |
 | partner | `GET` | `/api/v1/partner/orgs` | `listPartnerOrgs` | 外部协作机构列表 | `-` | `partner.org.view` | `staff-token` | `platform` | web | 否 | `partner_org.viewed` | `not_applicable` |
 | partner | `POST` | `/api/v1/partner/orgs` | `createPartnerOrg` | 录入/修改外部协作机构 | `ExternalPartnerOrgRequest` | `partner.org.manage` | `staff-token` | `platform` | web | 是 | `partner_org.updated` | `partner_org.update_failed` |
 | partner | `GET` | `/api/v1/partner/subordinates` | `listPartnerSubordinates` | 本机构下属账号列表 | `-` | `partner.subordinate.view` | `staff-token` | `self` | web | 否 | `partner_subordinate.viewed` | `not_applicable` |

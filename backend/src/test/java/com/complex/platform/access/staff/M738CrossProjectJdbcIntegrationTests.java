@@ -1,6 +1,6 @@
 package com.complex.platform.access.staff;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import static com.complex.platform.support.DailyCloseFixture.markRangeFinal;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -481,6 +481,47 @@ class M738CrossProjectJdbcIntegrationTests {
         // 修复前红：403 CROSS_ORG_FORBIDDEN
         mockMvc.perform(get("/api/v1/staff/payroll/adjustments/appeals").param("user_id", eB).with(ticked)).andExpect(status().isOk());
         denied(mockMvc.perform(get("/api/v1/staff/payroll/adjustments/appeals").param("user_id", eA).with(ticked)), "CROSS_ORG_FORBIDDEN");
+    }
+
+    // 第十八批 BG 段第 261 条 261-B21-R1（PGM:528「⑤同一笔操作重复提交不重复生效」；PGM:303「同一次操作重复提交时，返回第一次的结果并提示已完成。」）：
+    // 请假审批同一请求编号连发两次，第二次返回首次审批结果并提示已完成、成功留痕只一条；换新编号再驳回照旧被状态闸拒、单据仍是已批准。修复前第二次 400。
+    @Test
+    void leaveReviewResentWithSameKeyReturnsFirstResult() throws Exception {
+        String eB = employee("rpb", entityB);
+        String leaveB = leave(eB, entityB, "pending");
+        RequestPostProcessor ticked = staffOfA("rpt", tickedBRole("rpt", "staff.shift.manage"));
+        String body = """
+                {"idempotency_key": "%s", "decision": "approve", "review_note": "准"}
+                """.formatted(key());
+        postJson(ticked, "/api/v1/staff/leaves/" + leaveB + "/review", body).andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("approved")).andExpect(jsonPath("$.replayed").doesNotExist());
+        postJson(ticked, "/api/v1/staff/leaves/" + leaveB + "/review", body).andExpect(status().isOk())
+                .andExpect(jsonPath("$.replayed").value(true))
+                .andExpect(jsonPath("$.message").value(com.complex.platform.common.api.ApiResponse.REPLAYED_MESSAGE))
+                .andExpect(jsonPath("$.data.status").value("approved"));
+        assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM audit_events WHERE event_name='staff.leave.reviewed' AND business_id=?",
+                Integer.class, leaveB)).isEqualTo(1);
+        postJson(ticked, "/api/v1/staff/leaves/" + leaveB + "/review", """
+                {"idempotency_key": "%s", "decision": "reject", "review_note": "驳回"}
+                """.formatted(key())).andExpect(status().isBadRequest());
+        assertThat(leaveStatus(leaveB)).isEqualTo("approved");
+    }
+
+    // 261-B21-R1：销假审批同一请求编号连发两次，第二次返回首次结果并提示已完成、成功留痕只一条。修复前第二次 400。
+    @Test
+    void leaveRevokeReviewResentWithSameKeyReturnsFirstResult() throws Exception {
+        String eB = employee("rvb", entityB);
+        String leaveB = leave(eB, entityB, "revoke_requested");
+        RequestPostProcessor ticked = staffOfA("rvt", tickedBRole("rvt", "staff.shift.manage"));
+        String body = """
+                {"idempotency_key": "%s", "decision": "approve", "review_note": "准予销假"}
+                """.formatted(key());
+        postJson(ticked, "/api/v1/staff/leaves/" + leaveB + "/revoke", body).andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("revoked")).andExpect(jsonPath("$.replayed").doesNotExist());
+        postJson(ticked, "/api/v1/staff/leaves/" + leaveB + "/revoke", body).andExpect(status().isOk())
+                .andExpect(jsonPath("$.replayed").value(true)).andExpect(jsonPath("$.data.status").value("revoked"));
+        assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM audit_events WHERE event_name='staff.leave.revoke_reviewed' AND business_id=?",
+                Integer.class, leaveB)).isEqualTo(1);
     }
 
     // 18E-②（main 后来新增的同类入口）：只勾 B 持 staff.shift.manage 的人批准 B 员工的销假申请。修复前 403（第一处断言即红）。
