@@ -1,6 +1,6 @@
-# 应收应付台账开发设计 V0.13
+# 应收应付台账开发设计 V0.14
 
-> 版本：V0.13 ｜ 最后更新：2026-11-18（第十八批 AV 段：`compensation_fulfillment`、`compensation_fulfillment_recovery` 会计期间改按提供方营业日定月；第十八批 AL 段：§4.3 F-OPS-07 补更正，锁定后补录审批改走统一审批；第十八批 AI 段补 `pass_domain_share`、`pass_domain_direct_settlement`、`pass_unverified_attribution` 来源，`single_bar_service_fee` 计费月改按该酒吧营业日；第九批补 `saved_bottle_remedy`、`saved_bottle_remedy_recovery` 来源；第八批补 `compensation_fulfillment`、`compensation_fulfillment_recovery`、`single_bar_service_fee`、`ticket_distribution_recovery` 来源）｜ 覆盖迁移基线：见各小节迁移号（最新 V124）｜ 状态：现行
+> 版本：V0.14 ｜ 最后更新：2026-11-20（第十八批 BK 段：§6D.3 补库存差异过账范围与台账项目归属；第十八批 AV 段：`compensation_fulfillment`、`compensation_fulfillment_recovery` 会计期间改按提供方营业日定月；第十八批 AL 段：§4.3 F-OPS-07 补更正，锁定后补录审批改走统一审批；第十八批 AI 段补 `pass_domain_share`、`pass_domain_direct_settlement`、`pass_unverified_attribution` 来源，`single_bar_service_fee` 计费月改按该酒吧营业日；第九批补 `saved_bottle_remedy`、`saved_bottle_remedy_recovery` 来源；第八批补 `compensation_fulfillment`、`compensation_fulfillment_recovery`、`single_bar_service_fee`、`ticket_distribution_recovery` 来源）｜ 覆盖迁移基线：见各小节迁移号（最新 V124）｜ 状态：现行
 > 新功能承接见 docs/v099-v124-feature-implementation-and-acceptance-spec-v0.1.md
 > <!-- 文档goalP3(2026-06-20)：补版本/日期/覆盖迁移头，未改正文 -->
 
@@ -205,6 +205,7 @@ P0 不替代正式财务软件的总账、凭证、报税和复杂税票自动�
 - 高价值报损 / 盘点差异经**主管复核**（`inventory_variance.review_status=入账`）后 →生成 `ar_ap_items`，`source_type=inventory_difference`，`source_id` 指向 `inventory_variance.id`。
 - 方向：损失类（盘亏/报损）按应付/调整分录登记；盘盈或回收类按应收/冲减登记（具体科目方向见待确认项）。
 - 来源明细写入 `ar_ap_item_sources`（关联库存差异），金额来自 `amount_diff_cent`，不得前端手填。
+- 实现现状（第十八批 BK 段第 384 条 384-R2）：过账（`postInventoryVariance`，`finance.inventory_variance.post`）按盘点单范围闸——最高权限与平台管理员不限；商户账号只过本商户盘点单的差异（否则 403 `CROSS_MERCHANT_FORBIDDEN`）；不挂商户的账号（酒吧财务 BP、平台库房库管）按过账码可触及盘点库房所在综合体办（否则 403 `CROSS_PROJECT_FORBIDDEN`），范围闸在幂等之前。生成的 `ar_ap_items.project_id` 取盘点库房所在综合体，`merchant_id` 取盘点单商户（即库房商户，平台库房为空）。
 
 ### 6D.4 状态流转
 

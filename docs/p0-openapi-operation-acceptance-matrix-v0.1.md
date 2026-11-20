@@ -1,4 +1,4 @@
-# P0 OpenAPI Operation 验收矩阵 V1.03
+# P0 OpenAPI Operation 验收矩阵 V1.04
 
 ## 1. 文档定位
 
@@ -17,7 +17,7 @@
 
 ## 3. Operation 清单
 
-> 当前 `docs/openapi/openapi-p0.json` 共 1419 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
+> 当前 `docs/openapi/openapi-p0.json` 共 1420 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
 
 | 标签 | 方法 | 路径 | operationId | 摘要 | 请求体 | 权限 | 认证上下文 | 数据范围 | 终端/设备能力/调用通道 | 幂等 | 成功事件 | 失败事件 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -563,7 +563,7 @@
 | evidence | `POST` | `/api/v1/evidence/risk-alerts/{alert_id}/resolve` | `resolveEvidenceRiskAlert` | 关闭风险预警（需结论） | `object` | `risk_alert.resolve` | `staff-token` | `project` | web, mobile_admin | 是 | `exception.resolved` | `exception.resolve_failed` |
 | evidence | `POST` | `/api/v1/evidence/risk-alerts/{alert_id}/dismiss` | `dismissRiskAlert` | 忽略关闭风险预警 | `object` | `risk_alert.dismiss` | `staff-token` | `project` | web, mobile_admin | 是 | `exception.dismissed` | `exception.dismiss_failed` |
 | finance | `POST` | `/api/v1/finance/deposits/actions` | `recordDepositAction` | 押金台账动作（收取/退还/抵扣/没收） | `object` | `finance.deposit.manage` | `staff-token` | `platform` | web | 是 | `finance.deposit.action_recorded` | `finance.deposit.action_failed` |
-| finance | `POST` | `/api/v1/finance/inventory-variances/post` | `postInventoryVariance` | 库存差异复核入账为 AR/AP | `object` | `finance.inventory_variance.post` | `staff-token` | `platform` | web | 是 | `finance.inventory_variance.posted` | `finance.inventory_variance.post_failed` |
+| finance | `POST` | `/api/v1/finance/inventory-variances/post` | `postInventoryVariance` | 库存差异复核入账为 AR/AP | `object` | `finance.inventory_variance.post` | `staff-token` | `project-merchant` | web | 是 | `finance.inventory_variance.posted` | `finance.inventory_variance.post_failed` |
 | finance | `POST` | `/api/v1/finance/turnover-rent/bills` | `billTurnoverRent` | 营业额抽成计费生成应收 | `object` | `finance.turnover_rent.bill` | `staff-token` | `platform` | web | 是 | `finance.turnover_rent.billed` | `finance.turnover_rent.bill_failed` |
 | finance | `POST` | `/api/v1/finance/turnover-rent/rules` | `createTurnoverRentRule` | 新建营业额抽成规则草案 | `object` | `finance.turnover_rent.bill` | `staff-token` | `project-merchant` | web | 是 | `finance_turnover_rent_rule.created` | `finance_turnover_rent_rule.create_failed` |
 | integration | `GET` | `/api/v1/integration/reconciliation/batches` | `listIntegrationReconciliationBatches` | 查询对账批次列表 | `-` | `integration.reconciliation.view` | `staff-token` | `platform` | web | 否 | `integration.reconciliation_batch.viewed` | `integration.reconciliation_batch.view_failed` |
@@ -675,6 +675,7 @@
 | inventory | `GET` | `/api/v1/inventory/stocktakes/{id}` | `getInventoryStocktake` | 查询库存盘点单详情（含差异明细） | `-` | `inventory.stocktake.view` | `staff-token` | `project` | web | 否 | `inventory.stocktake.detail_viewed` | `inventory.stocktake.detail_view_failed` |
 | inventory | `POST` | `/api/v1/inventory/stocktakes/{id}/variances` | `recordInventoryStocktakeVariance` | 录入库存盘点差异行 | `RecordVarianceRequest` | `inventory.stocktake.variance_record` | `staff-token` | `project` | web | 是 | `inventory.stocktake.variance_recorded` | `inventory.stocktake.variance_record_failed` |
 | inventory | `POST` | `/api/v1/inventory/stocktakes/{id}/variances/{vid}/review` | `reviewInventoryStocktakeVariance` | 复核库存盘点差异（approved/rejected） | `ReviewVarianceRequest` | `inventory.stocktake.variance_review` | `staff-token` | `project` | web | 是 | `inventory.stocktake.variance_reviewed` | `inventory.stocktake.variance_review_failed` |
+| inventory | `POST` | `/api/v1/inventory/stocktakes/{id}/close` | `closeInventoryStocktake` | 结束库存盘点 | `CloseStocktakeRequest` | `inventory.stocktake.create` | `staff-token` | `project` | web | 是 | `inventory.stocktake.closed` | `inventory.stocktake.close_failed` |
 | amusement | `GET` | `/api/v1/amusement/projects/{projectId}/over-capacity-policy` | `getAmusementOverCapacityPolicy` | 查询游乐项目超容处置策略 | `-` | `amusement.over_capacity_policy.view` | `staff-token` | `project-amusement` | web | 否 | `amusement.over_capacity_policy.viewed` | `amusement.over_capacity_policy.view_failed` |
 | amusement | `PUT` | `/api/v1/amusement/projects/{projectId}/over-capacity-policy` | `configureAmusementOverCapacityPolicy` | 配置游乐项目超容处置策略 | `ConfigureOverCapacityPolicyRequest` | `amusement.over_capacity_policy.configure` | `staff-token` | `project-amusement` | web | 是 | `amusement.over_capacity_policy.configured` | `amusement.over_capacity_policy.configure_failed` |
 | inventory | `GET` | `/api/v1/inventory/trace-codes` | `listInventoryTraceCodes` | 查询溯源码主数据列表 | `-` | `inventory.trace_code.view` | `staff-token` | `project` | web | 否 | `inventory.trace_code.listed` | `inventory.trace_code.list_failed` |

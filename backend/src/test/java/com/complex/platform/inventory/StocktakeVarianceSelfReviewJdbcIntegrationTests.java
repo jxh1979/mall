@@ -1,8 +1,9 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.nullValue;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -145,6 +146,64 @@ class StocktakeVarianceSelfReviewJdbcIntegrationTests {
         recordVariance(counter, stocktake, List.of(), List.of()).andExpect(status().isOk());
     }
 
+    // 第十八批 BK 段修复项 F02（BSM:1165「商品成本按「当前平均进货价」算：每次新进货后，把新到的货和原有库存合在一起算出新的平均单价；
+    // 商户领用或出库时就按这个平均单价计成本。」）：登记差异没给金额也没给单价的，按该物料当前平均进货价估算；
+    // 此前差异金额记 0，复核通过后过账被「库存差异金额为 0，无需过账」拒，这笔差异进不了财务台账。
+    @Test
+    void varianceWithoutUnitCostIsValuedAtCurrentAverageCostAndCanBePosted() throws Exception {
+        arrival(1_000L); // 成本台账：当前平均进货价 10 元（低价值，不要照片视频）
+        RequestPostProcessor counter = account("cnt", "'inventory.stocktake.create','inventory.stocktake.variance_record'");
+        RequestPostProcessor reviewer = account("rev", "'inventory.stocktake.variance_review'");
+        RequestPostProcessor finance = account("fin", "'finance.inventory_variance.post'");
+        String stocktake = openStocktake(counter);
+
+        // 账面 10、实盘 8，请求不带单价也不带金额：差异金额 = −2 × 10 元，按真实金额落库。
+        // 第十八批 BK 段复核修复（PGM:660「系统自动使用某个价格完成计算，不代表当前操作人取得查看或修改权限。」）：
+        // 登记人、复核人不持 inventory.cost.view，响应里差异金额隐去（为空），只给不含价格的 has_variance_amount。
+        String variance = data(recordVariance(counter, stocktake, List.of(), List.of())
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.variance_amount_cent").value(nullValue()))
+                .andExpect(jsonPath("$.data.has_variance_amount").value(true))).path("id").asText();
+        assertThat(jdbc.queryForObject("SELECT variance_amount_cent FROM inventory_variance WHERE id=?", Long.class, variance))
+                .isEqualTo(-2000L);
+        // 盘点单详情：不持成本查看码的隐去金额，持的照常看到。
+        detail(account("vw", "'inventory.stocktake.view'"), stocktake)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.variances[0].variance_amount_cent").value(nullValue()))
+                .andExpect(jsonPath("$.data.variances[0].has_variance_amount").value(true));
+        detail(account("cv", "'inventory.stocktake.view','inventory.cost.view'"), stocktake)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.variances[0].variance_amount_cent").value(-2000))
+                .andExpect(jsonPath("$.data.variances[0].has_variance_amount").value(true));
+
+        review(reviewer, stocktake, variance).andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.variance_amount_cent").value(nullValue()))
+                .andExpect(jsonPath("$.data.has_variance_amount").value(true));
+        assertThat(available()).isEqualTo(8);
+        // 复核通过后可过账：盘亏记内部核算行，金额取差异金额的绝对值。
+        call(finance, "/api/v1/finance/inventory-variances/post",
+                "{\"idempotency_key\":\"" + UUID.randomUUID() + "\",\"inventory_variance_id\":\"" + variance
+                        + "\",\"counterparty_id\":\"" + merchant + "\"}")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.source_type").value("inventory_difference"))
+                .andExpect(jsonPath("$.data.amount_cent").value(2000));
+        assertThat(jdbc.queryForObject("SELECT posted_ar_ap_item_id IS NOT NULL FROM inventory_variance WHERE id=?", Boolean.class, variance)).isTrue();
+    }
+
+    // F02：请求给了单价的照旧按所给单价算（可选覆盖）；登记人持 inventory.cost.view，响应照常带金额。
+    @Test
+    void explicitUnitCostStillOverridesAverageCost() throws Exception {
+        arrival(1_000L);
+        RequestPostProcessor counter = account("cnt", "'inventory.stocktake.create','inventory.stocktake.variance_record','inventory.cost.view'");
+        String stocktake = openStocktake(counter);
+
+        call(counter, "/api/v1/inventory/stocktakes/" + stocktake + "/variances",
+                "{\"idempotency_key\":\"" + UUID.randomUUID() + "\",\"item_id\":\"" + item
+                        + "\",\"counted_qty\":8,\"reason\":\"shortage\",\"unit_cost_cents\":1500}")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.variance_amount_cent").value(-3000));
+    }
+
     private String openStocktake(RequestPostProcessor who) throws Exception {
         return data(call(who, "/api/v1/inventory/stocktakes",
                 "{\"idempotency_key\":\"" + UUID.randomUUID() + "\",\"warehouse_id\":\"" + warehouse + "\",\"remark\":\"月末盘点\"}")
@@ -179,6 +238,11 @@ class StocktakeVarianceSelfReviewJdbcIntegrationTests {
     private ResultActions review(RequestPostProcessor who, String stocktake, String variance) throws Exception {
         return call(who, "/api/v1/inventory/stocktakes/" + stocktake + "/variances/" + variance + "/review",
                 "{\"idempotency_key\":\"" + UUID.randomUUID() + "\",\"decision\":\"approved\",\"reason\":\"复盘一致\"}");
+    }
+
+    private ResultActions detail(RequestPostProcessor who, String stocktake) throws Exception {
+        return mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                .get("/api/v1/inventory/stocktakes/" + stocktake).with(who));
     }
 
     private ResultActions call(RequestPostProcessor who, String path, String body) throws Exception {

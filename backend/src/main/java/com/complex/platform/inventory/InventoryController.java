@@ -1,6 +1,6 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.15
+// 文件版本：V0.16
 
 import static com.complex.platform.common.api.ApiRequests.requireIdempotencyKey;
 
@@ -9,6 +9,7 @@ import com.complex.platform.common.PhoneMask;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.ApiResponse;
 import com.complex.platform.common.api.PageResponse;
+import com.complex.platform.inventory.dto.CloseStocktakeRequest;
 import com.complex.platform.inventory.dto.CreateStocktakeRequest;
 import com.complex.platform.inventory.dto.InventoryItemHighValueMarkRequest;
 import com.complex.platform.inventory.dto.InventoryItemRequest;
@@ -531,7 +532,12 @@ public class InventoryController {
     @GetMapping("/stocktakes/{id}")
     public ApiResponse<StocktakeDetailRecord> getStocktake(@PathVariable String id) {
         authorizationService.requirePermission("inventory.stocktake.view");
-        return ApiResponse.ok(service.getStocktake(id));
+        StocktakeDetailRecord detail = service.getStocktake(id);
+        if (authorizationService.currentActorHasPermission("inventory.cost.view")) {
+            return ApiResponse.ok(detail);
+        }
+        return ApiResponse.ok(new StocktakeDetailRecord(detail.stocktake(),
+                detail.variances().stream().map(InventoryVarianceRecord::withoutCosts).toList()));
     }
 
     @PostMapping("/stocktakes")
@@ -548,7 +554,7 @@ public class InventoryController {
     ) {
         authorizationService.requirePermission("inventory.stocktake.variance_record");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
-        return ApiResponse.ok(service.recordVariance(id, request));
+        return ApiResponse.ok(maskVarianceCostForUnauthorized(service.recordVariance(id, request)));
     }
 
     @PostMapping("/stocktakes/{id}/variances/{vid}/review")
@@ -559,7 +565,18 @@ public class InventoryController {
     ) {
         authorizationService.requirePermission("inventory.stocktake.variance_review");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
-        return ApiResponse.ok(service.reviewVariance(id, vid, request));
+        return ApiResponse.ok(maskVarianceCostForUnauthorized(service.reviewVariance(id, vid, request)));
+    }
+
+    /** 第十八批 BK 段修复项 F01：结束盘点（核建单权限；还有待复核的差异时 409）。结束后该库房恢复出入库。 */
+    @PostMapping("/stocktakes/{id}/close")
+    public ApiResponse<StocktakeRecord> closeStocktake(
+            @PathVariable String id,
+            @RequestBody @jakarta.validation.Valid CloseStocktakeRequest request
+    ) {
+        authorizationService.requirePermission("inventory.stocktake.create");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(service.closeStocktake(id, request));
     }
 
     @PostMapping("/stock-adjustments")
@@ -705,6 +722,16 @@ public class InventoryController {
     }
 
     private StockMovementRecord maskCostForUnauthorized(StockMovementRecord record) {
+        if (record == null || authorizationService.currentActorHasPermission("inventory.cost.view")) {
+            return record;
+        }
+        return record.withoutCosts();
+    }
+
+    // 第十八批 BK 段复核修复（PGM:660「……没有相应价格权限的商户人员不得查看。系统自动使用某个价格完成计算，不代表当前操作人取得查看或修改权限。」；
+    // ENUM:235；BSM:588）：盘点差异金额可由系统按当前平均进货价估算，不持 inventory.cost.view 的读者隐去（盘点单详情、登记差异、复核三处响应），
+    // 估算、复核、过账仍按真实金额。
+    private InventoryVarianceRecord maskVarianceCostForUnauthorized(InventoryVarianceRecord record) {
         if (record == null || authorizationService.currentActorHasPermission("inventory.cost.view")) {
             return record;
         }

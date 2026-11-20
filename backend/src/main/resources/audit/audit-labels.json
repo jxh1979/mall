@@ -1909,6 +1909,8 @@
     "inventory.stock_movement_failed": "库存移动或扣减失败",
     "inventory.stock_transfer.created": "调拨库存流水",
     "inventory.stock_transfer.created_failed": "调拨库存流水失败",
+    "inventory.stocktake.close_failed": "结束库存盘点失败",
+    "inventory.stocktake.closed": "结束库存盘点",
     "inventory.stocktake.create_failed": "建库存盘点单失败",
     "inventory.stocktake.created": "建库存盘点单",
     "inventory.stocktake.detail_view_failed": "查询库存盘点单详情失败",

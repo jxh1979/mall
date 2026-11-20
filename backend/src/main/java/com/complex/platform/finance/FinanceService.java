@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.58
+// 文件版本：V0.59
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -262,6 +262,12 @@ public class FinanceService implements TerminationSettlementPort {
     // 可为 null（旧构造/单测未注入）；包私有便于单测置位。开标志后超额财务退款须复核（见 requireRefundTierAuthorized）。
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     RefundAuthorizationService refundAuthorizationService;
+
+    // 第十八批 BK 段第 384 条 384-R2（PGM:664「单店层面的财务工作——……差异认定……由该酒吧对应的财务 BP 负责」）：库存差异过账按盘点单范围闸
+    // （商户账号按本商户，不挂商户的账号按过账码可触及盘点库房所在综合体），台账行带该综合体。字段注入以免改既有构造点；
+    // 为空（旧构造/单测未注入）时照旧按商户比对、台账行不带项目。
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    com.complex.platform.inventory.InventoryProjectScope stocktakeScope;
 
     // FS-017：存酒退出承接垫付追收回写端口（inventory 域实现；@Lazy 防初始化环；可为 null＝不回写）。
     @org.springframework.beans.factory.annotation.Autowired(required = false)
@@ -1255,6 +1261,11 @@ public class FinanceService implements TerminationSettlementPort {
     @com.complex.platform.gate.GuardedAction(capability = "finance.inventory_variance.post", admissionAction = "finance.inventory_variance_post", objectType = "ar_ap_item")
     @Transactional
     public ArApItemRecord postInventoryVariance(InventoryVariancePostRequest request) {
+        // 384-R2：范围闸在幂等之前（同号重放也先过）；差异取不到不判，交给方法体 404。
+        if (stocktakeScope != null && request != null && request.inventoryVarianceId() != null) {
+            repository.findInventoryVarianceById(request.inventoryVarianceId().trim()).ifPresent(variance ->
+                    stocktakeScope.requireStocktake(variance.stocktakeId(), "finance.inventory_variance.post"));
+        }
         return executeWrite(
                 "postInventoryVariance",
                 request == null ? null : request.idempotencyKey(),
@@ -3413,7 +3424,12 @@ public class FinanceService implements TerminationSettlementPort {
 
         InventoryVarianceRecord variance = repository.findInventoryVarianceById(varianceId)
                 .orElseThrow(() -> ApiException.notFound("INVENTORY_VARIANCE_NOT_FOUND", "库存差异不存在或已被删除"));
-        checkMerchantOwnership(variance.merchantId());
+        // 384-R2：体内重核同一道盘点单范围闸；未注入时照旧按商户比对。
+        if (stocktakeScope != null) {
+            stocktakeScope.requireStocktake(variance.stocktakeId(), "finance.inventory_variance.post");
+        } else {
+            checkMerchantOwnership(variance.merchantId());
+        }
 
         // 幂等：已入账直接返回原台账项，不重复生成。
         if (variance.postedArApItemId() != null) {
@@ -3444,6 +3460,8 @@ public class FinanceService implements TerminationSettlementPort {
             throw ApiException.badRequest("VALIDATION_FAILED", "库存差异金额为 0，无需过账");
         }
 
+        // 384-R2（PGM:959「保证所有对象带综合体项目归属」）：台账行带盘点库房所在综合体——不挂商户的财务 BP 的往来台账按可触及项目列、
+        // 登记收付款也核台账项目，不带的话过完账自己查不到。
         ArApItemRecord saved = persistDerivedArApItem(
                 direction,
                 counterpartyId,
@@ -3451,7 +3469,10 @@ public class FinanceService implements TerminationSettlementPort {
                 variance.id(),
                 amountCent,
                 actual.idempotencyKey(),
-                variance.merchantId());
+                variance.merchantId(),
+                null,
+                null,
+                stocktakeScope == null ? null : stocktakeScope.stocktakeProject(variance.stocktakeId()));
         // P1 修复：条件回填（仅当 posted_ar_ap_item_id IS NULL 才 UPDATE）。并发双开时后到者命中 0 行返回 false，
         // 说明该 variance 已被他人入账，抛冲突，避免重复挂应付台账（前面 persistDerivedArApItem 凭 idempotencyKey 幂等不重复落项）。
         boolean posted = repository.markInventoryVariancePostedIfUnposted(variance.id(), saved.id());

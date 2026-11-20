@@ -1,4 +1,4 @@
-# P0 OpenAPI 权限、事件、任务追溯收口附录 V1.03
+# P0 OpenAPI 权限、事件、任务追溯收口附录 V1.04
 
 ## 1. 文档定位
 
@@ -14,11 +14,11 @@
 
 | 检查项 | 当前结果 | 执行结论 |
 |---|---:|---|
-| OpenAPI operation 数 | 1419 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
+| OpenAPI operation 数 | 1420 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
 | OpenAPI 权限/通用权限状态数 | 446 | 人工权限矩阵正文未覆盖 345 项；缺口以本文第 3 节补齐 |
-| OpenAPI 成功/失败事件数 | 2838 | 人工事件矩阵正文未覆盖 2789 项；完整事件字典以本文第 4 节为准 |
-| operation 级任务追溯 | 1419 | 人工任务映射正文未逐项覆盖 1413 个 operation；逐 operation 映射以本文第 5 节为准 |
-| 写接口数量 | 869 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
+| OpenAPI 成功/失败事件数 | 2840 | 人工事件矩阵正文未覆盖 2791 项；完整事件字典以本文第 4 节为准 |
+| operation 级任务追溯 | 1420 | 人工任务映射正文未逐项覆盖 1414 个 operation；逐 operation 映射以本文第 5 节为准 |
+| 写接口数量 | 870 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
 
 ## 3. 权限码与认证上下文补充表
 
@@ -262,7 +262,7 @@
 | `finance.dividend.view` | staff-token | merchant, platform | 8 | listDividendPlans, listDividendStatements, getDividendStatement, listDividendReserveReleases, listDividendPeriodHolds, listDividendCloseouts, listDividendTaxRates, listDividendBarLoans | OpenAPI 补充，以本附录为准 |
 | `finance.entity_tax.manage` | staff-token | platform | 4 | declareEntityTax, submitEntityTaxRate, registerEntityTaxPayment, registerEntityTaxAdjustment | OpenAPI 补充，以本附录为准 |
 | `finance.entity_tax.view` | staff-token | platform | 3 | listEntityTaxDeclarations, listEntityTaxRates, getEntityTaxProfit | OpenAPI 补充，以本附录为准 |
-| `finance.inventory_variance.post` | staff-token | platform | 1 | postInventoryVariance | OpenAPI 补充，以本附录为准 |
+| `finance.inventory_variance.post` | staff-token | project-merchant | 1 | postInventoryVariance | OpenAPI 补充，以本附录为准 |
 | `finance.locked_backfill.request` | staff-token | project-entity | 1 | requestArApAdjustment | OpenAPI 补充，以本附录为准 |
 | `finance.merchant_expense.manage` | staff-token | merchant, platform | 3 | createMerchantExpenseEntry, reverseMerchantExpenseEntry, syncMerchantExpenseAuto | OpenAPI 补充，以本附录为准 |
 | `finance.merchant_expense.view` | staff-token | merchant | 3 | listMerchantExpenses, summarizeMerchantExpenses, listMerchantExpensePeriodLocks | OpenAPI 补充，以本附录为准 |
@@ -320,7 +320,7 @@
 | `inventory.stock.batch.manage` | staff-token | warehouse | 1 | createInventoryStockBatch | OpenAPI 补充，以本附录为准 |
 | `inventory.stock.move` | staff-token | project, project-warehouse | 9 | createInventoryItem, updateInventoryItemSafetyStock, createStockIn, createStockMovement, transferStockMovement, createTypedStockMovement, createDamageStockAdjustment, createLossStockAdjustment, createWasteStockAdjustment | 已在权限矩阵正文出现 |
 | `inventory.stock.view` | staff-token | project, project-merchant, project-warehouse, warehouse | 8 | listInventoryItems, listStockBalances, listStockMovements, listInventoryStockBatches, listBarConsumptionStats, listQuarantineWarehouses, listInventoryQuarantine, listQuarantineDispositions | 已在权限矩阵正文出现 |
-| `inventory.stocktake.create` | staff-token | project | 1 | createInventoryStocktake | OpenAPI 补充，以本附录为准 |
+| `inventory.stocktake.create` | staff-token | project | 2 | createInventoryStocktake, closeInventoryStocktake | OpenAPI 补充，以本附录为准 |
 | `inventory.stocktake.variance_record` | staff-token | project | 1 | recordInventoryStocktakeVariance | OpenAPI 补充，以本附录为准 |
 | `inventory.stocktake.variance_review` | staff-token | project | 1 | reviewInventoryStocktakeVariance | OpenAPI 补充，以本附录为准 |
 | `inventory.stocktake.view` | staff-token | project | 2 | listInventoryStocktakes, getInventoryStocktake | OpenAPI 补充，以本附录为准 |
@@ -1936,6 +1936,8 @@
 | `inventory.stock_movement.viewed` | success | `listStockMovements` | `GET` | `/api/v1/inventory/stock-movements` | INV-库存存酒 | `inventory.stock.view` | 接口级事件，以本附录为准 |
 | `inventory.stock_transfer.created` | success | `transferStockMovement` | `POST` | `/api/v1/inventory/stock-movements/transfer` | INV-库存存酒 | `inventory.stock.move` | 接口级事件，以本附录为准 |
 | `inventory.stock_transfer.created_failed` | failure | `transferStockMovement` | `POST` | `/api/v1/inventory/stock-movements/transfer` | INV-库存存酒 | `inventory.stock.move` | 接口级事件，以本附录为准 |
+| `inventory.stocktake.close_failed` | failure | `closeInventoryStocktake` | `POST` | `/api/v1/inventory/stocktakes/{id}/close` | INV-库存存酒 | `inventory.stocktake.create` | 接口级事件，以本附录为准 |
+| `inventory.stocktake.closed` | success | `closeInventoryStocktake` | `POST` | `/api/v1/inventory/stocktakes/{id}/close` | INV-库存存酒 | `inventory.stocktake.create` | 接口级事件，以本附录为准 |
 | `inventory.stocktake.create_failed` | failure | `createInventoryStocktake` | `POST` | `/api/v1/inventory/stocktakes` | INV-库存存酒 | `inventory.stocktake.create` | 接口级事件，以本附录为准 |
 | `inventory.stocktake.created` | success | `createInventoryStocktake` | `POST` | `/api/v1/inventory/stocktakes` | INV-库存存酒 | `inventory.stocktake.create` | 接口级事件，以本附录为准 |
 | `inventory.stocktake.detail_view_failed` | failure | `getInventoryStocktake` | `GET` | `/api/v1/inventory/stocktakes/{id}` | INV-库存存酒 | `inventory.stocktake.view` | 接口级事件，以本附录为准 |
@@ -4010,6 +4012,7 @@
 | INV-库存存酒 | `cancelSavedBottle` | `POST` | `/api/v1/inventory/saved-bottles/{id}/cancel` | 存酒作废(高价值→照片+视频双证据建复核;非高价值直接作废) | `bar.saved_bottle.manage` | `bar.saved_bottle.cancelled` / `bar.saved_bottle.cancel_failed` | web, staff_work_phone | operation 级补充 |
 | INV-库存存酒 | `cancelTransferOrder` | `POST` | `/api/v1/inventory/transfer-orders/{order_id}/cancel` | 取消调拨／要货单 | `inventory.transfer_order.manage` | `inventory.transfer_order_cancelled` / `inventory.transfer_order_cancel_failed` | web | operation 级补充 |
 | INV-库存存酒 | `claimSavedBottle` | `POST` | `/api/v1/inventory/saved-bottles/{id}/claim` | 存酒领取 | `bar.saved_bottle.manage` | `bar.saved_bottle_picked_up` / `bar.saved_bottle.pickup_failed` | staff_work_phone, web | operation 级补充 |
+| INV-库存存酒 | `closeInventoryStocktake` | `POST` | `/api/v1/inventory/stocktakes/{id}/close` | 结束库存盘点 | `inventory.stocktake.create` | `inventory.stocktake.closed` / `inventory.stocktake.close_failed` | web | operation 级补充 |
 | INV-库存存酒 | `completeQuarantineDisposition` | `POST` | `/api/v1/inventory/quarantine/dispositions/{id}/complete` | 登记批准的实际隔离处置 | `inventory.stock.adjust` | `inventory.quarantine.disposition_completed` / `inventory.quarantine.disposition_complete_failed` | web | operation 级补充 |
 | INV-库存存酒 | `completeTransferDisposal` | `POST` | `/api/v1/inventory/transfer-orders/{order_id}/dispositions/{disposition_id}/disposal-completed` | 借出方登记实物处置完成 | `inventory.transfer_order.manage` | `inventory.transfer_disposal_completed` / `inventory.transfer_disposal_complete_failed` | web | operation 级补充 |
 | INV-库存存酒 | `configureSavedBottleManualPickupPolicy` | `PUT` | `/api/v1/inventory/saved-bottles/manual-pickup-policy` | 配置人工例外取酒消费历史条件（按项目；最高权限本人办理并留痕；须同时配置上下限） | `bar.saved_bottle.manual_pickup_policy.manage` | `bar.saved_bottle.manual_pickup_policy_configured` / `bar.saved_bottle.manual_pickup_policy_config_failed` | web | operation 级补充 |

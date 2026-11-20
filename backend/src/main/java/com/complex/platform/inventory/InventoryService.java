@@ -1,6 +1,6 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.27
+// 文件版本：V0.28
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.LocalZone;
@@ -171,6 +171,9 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
     private final AuditEventService auditEventService;
     private final AuthorizationService authorizationService;
     private final InventoryStockMovementService stockMovementService;
+    private final StocktakeCloseService stocktakeCloseService;
+    /** 第十八批 BK 段第 384 条 384-R1：盘点单各动作的范围闸（商户账号按本商户，不挂商户的账号按入口权限码可触及库房所在综合体）。 */
+    private final InventoryProjectScope stocktakeScope;
     private final TerminalSwitchGuard terminalSwitchGuard;
     private final InventoryHighValueReviewService highValueReviewService;
     /** V350：「高价值」判定全平台唯一入口（存酒登记快照 / 存酒作废 / 报损 / 盘点差异共用）。 */
@@ -237,6 +240,9 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
         this.stockMovementService = new InventoryStockMovementService(
                 repository, idempotencyService, auditEventService, authorizationService,
                 highValueReviewService, this.highValueDecisionService);
+        this.stocktakeScope = new InventoryProjectScope(authorizationService, repository);
+        this.stocktakeCloseService = new StocktakeCloseService(
+                repository, idempotencyService, auditEventService, stocktakeScope);
     }
 
     /** 第十八批 T 段第 157 条 157-R4：高价值挂起订单转坏账复核的生效端口（酒吧域实现），交给本域内手建的复核服务。 */
@@ -2538,10 +2544,9 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
                 "inventory.stocktake.view",
                 "stocktake",
                 () -> {
-                    // 第十八批 BF 段第 351 条 351-R2（第十八批裁决 71）：盘点单读取按 currentMerchantReadScope，最高权限看全部商户的。
-                    Optional<String> scope = authorizationService.currentMerchantReadScope();
-                    return scope.map(repository::listStocktakesByMerchant)
-                                .orElseGet(repository::listStocktakes);
+                    // 第十八批 BF 段第 351 条 351-R2（第十八批裁决 71）：最高权限看全部商户的。
+                    // 第十八批 BK 段第 384 条 384-R1（PGM:664、PGM:659）：不挂商户的账号（财务 BP、平台库管）按本码可触及库房所在综合体看。
+                    return stocktakeScope.visibleStocktakes("inventory.stocktake.view");
                 }
         );
     }
@@ -2549,7 +2554,7 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
     public StocktakeDetailRecord getStocktake(String stocktakeId) {
         String id = requireText(stocktakeId, "stocktake_id");
         try {
-            StocktakeRecord stocktake = loadStocktakeScoped(id, authorizationService.currentMerchantReadScope());
+            StocktakeRecord stocktake = loadStocktakeScoped(id, "inventory.stocktake.view");
             List<InventoryVarianceRecord> variances = repository.listInventoryVariancesByStocktake(id);
             auditEventService.recordSuccess(
                     "inventory.stocktake.detail_viewed", "inventory.stocktake.view", "stocktake",
@@ -2575,13 +2580,20 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
                 "inventory.stocktake.create_failed",
                 "inventory.stocktake.create",
                 "stocktake",
+                // 第十八批 BK 段第 384 条 384-R1：范围闸在幂等之前（同号重放也先过）。
+                () -> stocktakeScope.requireStocktakeWarehouse(
+                        request == null ? null : request.warehouseId(), "inventory.stocktake.create"),
                 () -> {
                     com.complex.platform.inventory.dto.CreateStocktakeRequest actual = requireRequest(request);
-                    String warehouseId = requireText(actual.warehouseId(), "warehouse_id");
-                    String merchantId = authorizationService.currentMerchantScope().orElse(null);
+                    // 384-R1（PGM:948「盘点差异，都要看商户归属」）：盘点单商户取库房的商户、不再取操作人的——平台侧账号给酒吧库建的单酒吧看得到；
+                    // 商户账号给别家库房建单 403 CROSS_MERCHANT_FORBIDDEN，库房不存在 404 WAREHOUSE_NOT_FOUND。
+                    WarehouseRecord warehouse = stocktakeScope.requireStocktakeWarehouse(
+                            actual.warehouseId(), "inventory.stocktake.create");
+                    String warehouseId = warehouse.id();
+                    String merchantId = warehouse.merchantId();
                     // 盘点单经营日缺省取仓库所属项目的当前营业日（ENUM:187）。
                     LocalDate businessDate = actual.businessDate() == null
-                            ? days().businessDate(repository.findWarehouseProjectId(warehouseId).orElse(null), null, Instant.now())
+                            ? days().businessDate(warehouse.projectId(), null, Instant.now())
                             : actual.businessDate();
                     Instant now = Instant.now();
                     String slug = slug(actual.idempotencyKey());
@@ -2613,9 +2625,11 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
                 "inventory.stocktake.variance_record_failed",
                 "inventory.stocktake.variance_record",
                 "inventory_variance",
+                // 第十八批 BK 段第 384 条 384-R1：范围闸在幂等之前（同号重放也先过）。
+                () -> stocktakeScope.requireStocktake(id, "inventory.stocktake.variance_record"),
                 () -> {
                     com.complex.platform.inventory.dto.RecordVarianceRequest actual = requireRequest(request);
-                    StocktakeRecord stocktake = loadStocktakeScoped(id);
+                    StocktakeRecord stocktake = loadStocktakeScoped(id, "inventory.stocktake.variance_record");
                     if (!List.of("counting", "reviewing").contains(stocktake.status())) {
                         throw ApiException.conflict("STOCKTAKE_NOT_OPEN",
                                 "盘点已关闭，不能再登记差异");
@@ -2631,8 +2645,17 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
                     // variance_qty = counted − book（带符号）。
                     java.math.BigDecimal varianceQty = countedQty.subtract(bookQty);
                     // variance_amount_cent：显式传入优先；缺省按 variance_qty × unitCostCents 估算（成本估算，带符号）。
+                    // 第十八批 BK 段修复项 F02（BSM:1165「商品成本按「当前平均进货价」算」）：金额与单价都没给的，单价取该物料当前平均进货价
+                    // （成本台账有成本基础时）。此前记 0，复核通过后过账被「库存差异金额为 0，无需过账」拒，这笔差异进不了财务台账。
+                    Long unitCostCents = actual.unitCostCents();
+                    if (actual.varianceAmountCent() == null && unitCostCents == null) {
+                        unitCostCents = repository.findCostState(itemId)
+                                .filter(InventoryItemCostStateRecord::hasCostBasis)
+                                .map(InventoryItemCostStateRecord::avgUnitCostCent)
+                                .orElse(null);
+                    }
                     long varianceAmountCent = resolveVarianceAmountCent(
-                            actual.varianceAmountCent(), varianceQty, actual.unitCostCents());
+                            actual.varianceAmountCent(), varianceQty, unitCostCents);
                     List<String> photos = actual.photoAttachmentIds() == null ? List.of() : actual.photoAttachmentIds();
                     List<String> videos = actual.videoAttachmentIds() == null ? List.of() : actual.videoAttachmentIds();
                     // 第十八批第 24 条 24-R4（ENUM:164「报损/盘点差异/存酒作废须照片+视频双证据+主管复核」；任务书 18D 裁决补充第 14 条
@@ -2683,6 +2706,8 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
                 "inventory.stocktake.variance_review_failed",
                 "inventory.stocktake.variance_review",
                 "inventory_variance",
+                // 第十八批 BK 段第 384 条 384-R1：范围闸在幂等之前（同号重放也先过）。
+                () -> stocktakeScope.requireStocktake(stId, "inventory.stocktake.variance_review"),
                 () -> {
                     com.complex.platform.inventory.dto.ReviewVarianceRequest actual = requireRequest(request);
                     String decision = requireDecision(actual.decision());
@@ -2693,11 +2718,7 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
                         throw ApiException.notFound("INVENTORY_VARIANCE_NOT_FOUND",
                                 "该库存差异不属于此盘点");
                     }
-                    Optional<String> scope = authorizationService.currentMerchantScope();
-                    if (scope.isPresent() && !scope.get().equals(variance.merchantId())) {
-                        throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN",
-                                "该库存差异不属于当前商户");
-                    }
+                    // 384-R1：差异已核属于该盘点单，盘点单已过范围闸，不再按操作人商户比差异商户。
                     if (!"pending".equals(variance.reviewStatus())) {
                         throw ApiException.conflict("INVENTORY_VARIANCE_NOT_PENDING",
                                 "该库存差异不在待审核状态");
@@ -2726,7 +2747,7 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
                     if ("approved".equals(decision)) {
                         int delta = variance.varianceQty() == null ? 0 : variance.varianceQty().intValue();
                         if (delta != 0) {
-                            StocktakeRecord stocktake = loadStocktakeScoped(stId);
+                            StocktakeRecord stocktake = loadStocktakeScoped(stId, "inventory.stocktake.variance_review");
                             // 第十八批 G 段 82b-R6（第十八批裁决 18「按业务发生地」）：纠账补写的余额与流水记到盘点库房所在项目，不是复核人本人项目。
                             String bookProject = repository.findWarehouseProjectId(stocktake.warehouseId())
                                     .orElseGet(() -> authorizationService.currentProjectScopeQuietly().orElse(null));
@@ -2770,7 +2791,7 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
                                     int take = Math.min(remaining, Math.max(0, row.availableQuantity()));
                                     if (take > 0 && repository.atomicDecreaseStockBalance(
                                             variance.itemId(), row.locationId(), take,
-                                            authorizationService.currentMerchantScope().orElse(null)) == 1) {
+                                            variance.merchantId()) == 1) {
                                         remaining -= take;
                                         // 守恒账本：盘亏逐库位扣减，按库位各补一条流水（source=该库位），
                                         // 多库位也能逐位回放对平，避免合并一条导致重建在库位维度漂移。
@@ -2812,20 +2833,20 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
         );
     }
 
-    /** 按 id 读取盘点单并校验归属（merchant scope）。不存在抛 404，跨商户抛 403。 */
-    private StocktakeRecord loadStocktakeScoped(String stocktakeId) {
-        return loadStocktakeScoped(stocktakeId, authorizationService.currentMerchantScope());
+    /** 第十八批 BK 段修复项 F01：结束盘点（置已关闭，该库房恢复出入库），实现在 StocktakeCloseService。 */
+    @com.complex.platform.gate.GuardedAction(capability = "inventory.stocktake.create")
+    @Transactional
+    public StocktakeRecord closeStocktake(
+            String stocktakeId, com.complex.platform.inventory.dto.CloseStocktakeRequest request) {
+        return stocktakeCloseService.close(stocktakeId, request);
     }
 
-    /** 351-R2：详情读取传 currentMerchantReadScope（最高权限看全部商户）；登记差异等写入仍按 currentMerchantScope。 */
-    private StocktakeRecord loadStocktakeScoped(String stocktakeId, Optional<String> scope) {
-        StocktakeRecord stocktake = repository.findStocktakeById(stocktakeId)
-                .orElseThrow(() -> ApiException.notFound("STOCKTAKE_NOT_FOUND", "盘点不存在或已被删除"));
-        if (scope.isPresent() && !scope.get().equals(stocktake.merchantId())) {
-            throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN",
-                    "该盘点不属于当前商户");
-        }
-        return stocktake;
+    /**
+     * 按 id 读取盘点单并过范围闸，不存在 404 STOCKTAKE_NOT_FOUND。第十八批 BK 段第 384 条 384-R1：商户账号只限本商户的（403 CROSS_MERCHANT_FORBIDDEN），
+     * 不挂商户的账号按该码可触及盘点库房所在综合体（403 CROSS_PROJECT_FORBIDDEN），最高权限与平台管理员不限（{@link InventoryProjectScope#requireStocktake}）。
+     */
+    private StocktakeRecord loadStocktakeScoped(String stocktakeId, String permissionCode) {
+        return stocktakeScope.requireStocktake(stocktakeId, permissionCode);
     }
 
     /** variance_amount_cent：显式传入优先；否则 round(variance_qty × unitCostCents)（带符号，可为 0）。 */

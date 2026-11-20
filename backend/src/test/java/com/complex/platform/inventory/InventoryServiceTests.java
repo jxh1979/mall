@@ -1,6 +1,6 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.16
+// 文件版本：V0.17
 
 import com.complex.platform.support.InMemoryAuditEventRepository;
 import com.complex.platform.support.InMemoryIdempotencyRepository;
@@ -98,6 +98,9 @@ class InventoryServiceTests {
         // 第十八批 BC 段 362-R1：读取改取 currentMerchantReadScope（非最高权限与 currentMerchantScope 同值），替身按真实实现委托
         when(authorizationService.currentMerchantReadScope()).thenAnswer(call -> authorizationService.currentMerchantScope());
         when(authorizationService.currentActor()).thenReturn(ADMIN_ACTOR);
+        // 第十八批 BK 段第 384 条 384-R1：盘点单范围闸（InventoryProjectScope）不挂商户时取 projectReach，替身默认按平台管理员口径（一切可触及）。
+        when(authorizationService.projectReach(any(), any(String[].class)))
+                .thenReturn(new AuthorizationService.ProjectReach(true, true, null, true, java.util.Set.of()));
         terminalDeviceRepository = mock(com.complex.platform.terminal.TerminalDeviceRepository.class);
         // 默认：桩一条显式开启行放行（PGM 第 742 行 opt-in：缺行即关；机器人段被动留痕允许）。
         when(terminalDeviceRepository.resolveEffectiveSwitch(
@@ -121,6 +124,13 @@ class InventoryServiceTests {
                 "item_x", "item_y")) {
             inventoryRepository.seedCost(varianceItem, 1_000L);
         }
+        // 384-R1：建盘点单先核库房存在与范围，盘点单商户取库房商户。各盘点用例所用库房：平台库房不挂商户，wh_a 属商户 m_a。
+        for (String warehouseId : List.of("wh_main", "wh_frozen", "wh_recon", "wh_ambi", "wh_insf")) {
+            inventoryRepository.saveWarehouse(new WarehouseRecord(warehouseId, null, null, "main", warehouseId, "active", false,
+                    Instant.now(), Instant.now()));
+        }
+        inventoryRepository.saveWarehouse(new WarehouseRecord("wh_a", null, "m_a", "bar", "wh_a", "active", false,
+                Instant.now(), Instant.now()));
         service = new InventoryService(
                 inventoryRepository,
                 new IdempotencyService(new InMemoryIdempotencyRepository(), new ObjectMapper()),
@@ -2506,6 +2516,7 @@ class InventoryServiceTests {
     @Test
     void stocktakeListAndDetailAreMerchantScoped() {
         when(authorizationService.currentMerchantScope()).thenReturn(Optional.of("m_a"));
+        when(authorizationService.currentMerchantIdQuietly()).thenReturn(Optional.of("m_a"));
         when(authorizationService.currentActor()).thenReturn(MERCHANT_A_ACTOR);
         StocktakeRecord ownStocktake = service.createStocktake(
                 new CreateStocktakeRequest("st-a", "wh_a", null, null));
@@ -2523,6 +2534,7 @@ class InventoryServiceTests {
 
         // 商户 B 看不到商户 A 的盘点单，详情访问被拒。
         when(authorizationService.currentMerchantScope()).thenReturn(Optional.of("m_b"));
+        when(authorizationService.currentMerchantIdQuietly()).thenReturn(Optional.of("m_b"));
         when(authorizationService.currentActor()).thenReturn(MERCHANT_B_ACTOR);
         assertThat(service.listStocktakes().items()).isEmpty();
         assertThatThrownBy(() -> service.getStocktake(ownStocktake.id()))
@@ -2541,7 +2553,9 @@ class InventoryServiceTests {
                 "damage", null, -200L, null));
 
         // 用错误的 stocktakeId 复核该差异行 → 404（不属于该盘点单）。
-        assertThatThrownBy(() -> service.reviewVariance("stocktake_wrong", variance.id(),
+        StocktakeRecord wrong = service.createStocktake(
+                new CreateStocktakeRequest("st-bind-other", "wh_main", null, null));
+        assertThatThrownBy(() -> service.reviewVariance(wrong.id(), variance.id(),
                 new ReviewVarianceRequest("rev-bind", "approved", null)))
                 .isInstanceOf(ApiException.class)
                 .extracting(e -> ((ApiException) e).code())
@@ -4045,6 +4059,12 @@ class InventoryServiceTests {
             return warehouses.values().stream()
                     .filter(w -> merchantId.equals(w.merchantId()))
                     .toList();
+        }
+
+        // 第十八批 BK 段第 384 条 384-R1：建盘点单先按编号取库房（InventoryProjectScope）。
+        @Override
+        public Optional<WarehouseRecord> findWarehouseById(String warehouseId) {
+            return Optional.ofNullable(warehouses.get(warehouseId));
         }
 
         final Map<String, InventoryHighValueReviewRecord> highValueReviews = new LinkedHashMap<>();

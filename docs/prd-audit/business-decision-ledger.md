@@ -1,6 +1,6 @@
 # PRD 审计业务裁决台账
 
-文档版本：V1.32
+文档版本：V1.33
 状态：进行中
 迁移日期：2026-07-27
 当前事实源：三份立法 HTML 以既有冻结基线叠加 James 此前 M02 至 M08 的点名批准、全量审计 M001、M002 的逐项批准，以及本轮 2026-10-16 至 2026-10-17 业务 HTML 审计中 Q01 至 Q40 及子题实际明确批准且未被后续替代的裁决，和 2026-10-17 第二批 HTML 业务线推演审计（A–F 六线 64 条、停车章）的逐项批准，并叠加本轮 CG 70 项来源确认与 C01–C09、N01–N03 最终澄清及补全文稿中 F01、W01–W05 的整体修改批准（本文件末节）；本轮最终规则、未采纳或替代关系、现行版本与字节哈希见本文件末节。历史记录保留为各自当时事实，不恢复已被替代的建议。
@@ -12238,3 +12238,149 @@ HTML 的语义补齐与直接引用同步可在本批核验；70项中的业务�
   测试：文档组无新增用例；核验为 node tools/verify-full-admin-page-matrix.mjs 通过、git diff --check 通过。实现用例见 O1 组：TerminalFieldWorkflowTest、KioskBarPurchaseApiTest、KioskClaimTest。本段新增 0 个操作、0 个迁移。
 - 18BO 合并前变基（2026-11-24）：本段自 83efbc89 变基到 origin/main 9d6a781c；合并时 OpenAPI 共 1419 个操作（主干 1419）、info.version V1.03、决策台账 V1.32，Flyway 最新 V737（共 630 个迁移）。版本行、契约版本、计数与 SHA、生成物、台账补记与 PRD 修订行由合并前脚本按新主干统一重写。
 - 18BO 落地位置补记·运行验收证据、快照、终验文档刷新（无新裁决）：业务提交 ba8657c6 之后，按第十八批裁决 25 重刷了运行验收证据：后端全量 7302 测，0 失败 0 错误；apps/web 构建通过；常规界面验收（接口全部 mock）实跑 40 条全过；真实后端界面验收未跑，runtime_ready=false。随后依次重生成闭环当前态快照、生产闭环缺口报告、界面验收报告、无上线指挥台。生成器没改。手改 docs/final-closed-loop-acceptance-audit-v0.1.md 与 docs/code-implementation-acceptance-audit-v0.1.md：前端单测源码计数改为 2074；被核文件行数都没变；后端全量与常规界面验收的数字、日期改为本次实跑值；写入 npm run verify:unit 实跑结果，五个工作区全过。交付门禁于 2026-11-24 07:10 UTC 在工作树逐项实跑子项，NAS 两项现场探测未跑。仍红的有两项：一是 coding-host-protection，它写死主仓路径，在工作树口径下必红，属工具口径，不做；二是 final-closed-loop-audit，如实留 2 条红（integration-ready、business-acceptance-ready），原因是校验器要求终验把联调、业务验收写成「是」，而裁决 25 定了不跑真实后端界面验收、运行验收未就绪，终验写的是「否」。verify:delivery-gates 总链仍是红的。
+
+18BK 落地位置补记（2026-11-20）：第十八批 BK 段（batch83）按 18BK 只读设计实现待开发清单第 384 条与补做复核修复项 F01、F02、F03、F04、F05（库存盘点返修组）；运行验收证据、终验文档在本段最后一个提交刷新；各条落地位置见下。本段追加时，原台账除文档版本升一版外，其他历史字节保持。
+
+- 18BK 落地位置补记·控制席判定（2026-11-20）：本段（第十八批 BK 段，batch83）实现待开发清单第 384 条与补做复核修复项 F01、F02、F03、F04、F05（18BK 只读设计 b83-audit/d-inv-b.json，两轮质疑者修订后定稿，无待裁题）。补做复核修复项 F01、F02、F03、F04、F05（18BD～18BI 补做多视角独立复核，每条经独立反驳核实未驳倒）先行实现，修法以 b83-audit\fix_items.json 各项控制席判定为准。控制席判定：照设计做 384-R1、R2、R3、R5（财务 BP 与平台库管两类不挂商户的账号都做，不只做财务 BP 一半）；384-R4 照设计移入 not_doing，按控制席 82b-R6 不改判（物料、库房两份列表仍不放开）。设计 notes 四（平台库管在库存台账页的手工入库、报损报溢、出库调拨、建库房、建物料写入口 403）设计旁见由控制席另行登记为待核实新条目，本段不改。第五轮设计与修复代理的范围外旁见已登记为待开发清单第 388～414 条（待核实）。本段从 614159b0 开工（第五轮 13 段并行），变基到 83efbc89 后收尾；汇总文件由合并前脚本 summary_tool.py 剥离与重写。
+- 修复项 F01（建盘点单后该库房出入库永久冻结：加「结束盘点」动作）——来自 18BF 第 351 条的多视角独立复核（阻断）。更正 18BF 落地位置补记·控制席判定中的「③ 不做：盘点单关闭（接口没有，HTML 没写盘点单怎么收口）」：该判定没有评估既有盘点冻结闸，库存盘点页接上「新建盘点单」后，该库房的入库、采购到货、要货收货等一律 409 INVENTORY_WAREHOUSE_STOCKTAKE_LOCKED 且无法解除，本段补做结束动作。
+  改法：① 后端新增 1 个操作 closeInventoryStocktake（POST /api/v1/inventory/stocktakes/{id}/close，请求体 schema CloseStocktakeRequest 只带 idempotency_key）；新业务动作放 inventory 包新类 StocktakeCloseService.close，InventoryService 只加注入与委托方法 closeStocktake（能力闸 inventory.stocktake.create 与事务在这一层），InventoryController.closeStocktake 核建单权限 inventory.stocktake.create 并要求请求编号。规则：按当前商户范围核归属（放在幂等之前，同号重放也先过；跨商户 403 CROSS_MERCHANT_FORBIDDEN，不存在 404 STOCKTAKE_NOT_FOUND）；走共用幂等层；该盘点单还有待复核的差异时 409 STOCKTAKE_HAS_PENDING_VARIANCE「该盘点单还有待复核的差异，复核完才能结束盘点」；已关闭的再结束 409 STOCKTAKE_NOT_OPEN；通过后把盘点单状态置 closed（沿用 InventoryRepository.saveStocktake，状态值 closed 已在既有 CHECK 内，本项无迁移）；成功留痕 inventory.stocktake.closed、失败留痕 inventory.stocktake.close_failed（业务类型 stocktake），两个事件中文名「结束库存盘点」「结束库存盘点失败」进 audit-labels.json。② 页面 InventoryStocktakePage：盘点单列表里盘点中、复核中的单加「结束盘点」按钮（HighRiskConfirm 高危确认，核建单权限），确认说明「结束后该库房恢复入库、出库、调拨等库存变动；已关闭的盘点单不能再登记差异。」，成功后刷新列表，被接口拒绝时原样提示。③ 页面矩阵 ADM-INV-006 行补接口、动作、规则与留痕事件。盘点冻结闸（InventoryRepository.hasActiveStocktakeForWarehouse 及各调用处）不动；不加重新打开盘点、不加自动结束。路径参数名沿用同组既有操作的 {id}。
+  依据：BSM:1164「记录入库、出库、调拨、盘点、报损、报溢和库存调整。」——入库、出库、调拨是日常动作，盘点不能把它们永久拦住；冻结闸报错原文「仓库正在盘点中，盘点结束前库存变动已冻结」以盘点会结束为前提。谁能结束（建单权限）、何时能结束（无待复核差异）按常理定（18BK 控制席判定·修复项 F01）。三份 HTML 与裁决没有盘点期间冻结或盘点单如何收口的原句。
+  本段增量：新增 1 个操作（closeInventoryStocktake）、1 个请求体 schema（CloseStocktakeRequest）；无迁移、无新权限码、无新字段中文名键。
+  测试：后端 StocktakeCloseJdbcIntegrationTests.closingStocktakeUnfreezesWarehouseOnceEveryVarianceIsReviewed（真库真接口：建单→入库 409 INVENTORY_WAREHOUSE_STOCKTAKE_LOCKED→有待复核差异时结束 409→他人复核后结束 200、状态 closed、留痕 1 条→入库放行→已关闭不能再登记差异）、StocktakeCloseJdbcIntegrationTests.closeNeedsCreatePermissionAndOwnMerchantAndReplaysBySameKey（无建单权限 403、别的商户 403、同号重放返回原结果且不重复留痕、换号再结束 409、缺请求编号 400）；前端 InventoryStocktakePage.test.tsx「F01 盘点中的盘点单有「结束盘点」：取消确认不发请求；确认后按蛇形键调结束接口并刷新成已关闭；已关闭的单没有该按钮」「F01 结束盘点被接口拒绝（还有待复核的差异）时原样提示，不写结果区」，并在「只有查看权限时……」用例里加核结束盘点按钮不可用。
+  文档同步：供应链库存 PRD「盘点与差异」行原现状句「盘点单关闭没有入口」更正为可在库存盘点页结束盘点（建单后该库房出入库冻结、结束后恢复；有待复核差异不能结束；已关闭不能再登记差异）。
+- 18BK 落地位置补记·修复项 F02（差异单价留空按当前平均进货价估算；无新裁决）：
+  - 改法：登记盘点差异时，请求既没给差异金额（variance_amount_cent）也没给单位成本（unit_cost_cents）的，单位成本取该物料成本台账的当前平均进货价（有成本基础时）估算，差异金额＝差异数量×平均进货价；显式金额、显式单价照旧优先，没有成本基础的照旧记 0。页面「单位成本」保留为可选覆盖，说明改为「单位成本（元，不填按当前平均进货价估算）」。此前不填单价时差异金额记 0，复核通过后过账被「库存差异金额为 0，无需过账」拒绝，差异又没有修改入口，这笔差异进不了应收应付台账。
+  - 落地位置：InventoryService.recordVariance，经 InventoryRepository.findCostState 取 InventoryItemCostStateRecord.avgUnitCostCent（hasCostBasis 为真时），resolveVarianceAmountCent 不改；InventoryStocktakePage 单位成本输入框说明；页面矩阵 ADM-INV-006 行规则列。契约 recordInventoryStocktakeVariance 与 schema RecordVarianceRequest 只改说明，不加字段。本段新增 0 个操作，无迁移。
+  - 依据：BSM:1165「商品成本按「当前平均进货价」算：每次新进货后，把新到的货和原有库存合在一起算出新的平均单价；商户领用或出库时就按这个平均单价计成本。」；BSM:1181「连接财务，采购成本、报损、盘点差异和库存余额会影响经营判断。」；BSM:1687「核对采购入库、库存消耗、报损、盘点差异和高价值酒水异常。」
+  - 测试：StocktakeVarianceSelfReviewJdbcIntegrationTests.varianceWithoutUnitCostIsValuedAtCurrentAverageCostAndCanBePosted、StocktakeVarianceSelfReviewJdbcIntegrationTests.explicitUnitCostStillOverridesAverageCost；InventoryStocktakePage.test.tsx「F02 单位成本可不填：说明写明不填按当前平均进货价估算，留空时登记请求不带单位成本」。
+- 18BK 落地位置补记·修复项 F03（删掉不落地的「复核意见」「过账说明」输入框；无新裁决）：
+  - 改法：库存盘点页删掉「复核意见（可选）」「过账说明（可选）」两个输入框；差异复核请求只发复核结论 decision，差异过账请求只发 inventory_variance_id、counterparty_id，不再发 reason、operator_note。后端与契约不改：契约 ReviewVarianceRequest 本就只有 idempotency_key 与 decision，postInventoryVariance 请求体本就没有 operator_note。18AF 落地位置补记·第 198 条 198-R5 契约已删这两个字段，理由是后端不读。
+  - 更正：18BF 落地位置补记·第 351 条 351-R1 中「待复核的可「通过」「驳回」（权限 inventory.stocktake.variance_review，可填复核意见）」一句，自本段起不再有复核意见输入，复核只记结论、复核人与复核时间。原补记历史字节不改。
+  - 落地位置：InventoryStocktakePage 的 reviewVariance、postVariance 与过账往来单位输入区；页面矩阵 ADM-INV-006 行「已实现」列。
+  - 依据：BSM:1940「供应链连留痕因为高价值酒水报损、盘点差异、存酒作废、异常调拨都可能产生责任争议，必须记录原因、员工、时间、点位、照片、视频和主管复核结果。」（只要求记主管复核结果）。
+  - 测试：InventoryStocktakePage.test.tsx「差异表显示中文原因、状态与证据链接；待复核的可通过或驳回，请求只带复核结论；被准入闸拦下时提示」、「过账：复核通过、未过账且金额不为 0 的差异才有「过账」；供应商责任默认取责任供应商，其余须填往来单位」，两条都删了对应旧断言，改为断言没有这两个输入框、请求不带 reason 与 operator_note。
+- 18BK 落地位置补记·修复项 F04（实盘数量只收整数；无新裁决）：
+  - 改法：库存盘点页「实盘数量」只收不小于 0 的整数，填小数提示「实盘数量须为整数。」，不提交；输入框改为数字键盘（inputMode numeric）。后端不改：库存余额按整瓶记，复核纠账按整数纠正。
+  - 落地位置：InventoryStocktakePage.recordVariance 校验与实盘数量输入框；页面矩阵 ADM-INV-006 行规则列。
+  - 依据：BSM:1164「记录入库、出库、调拨、盘点、报损、报溢和库存调整。」；BSM:1181「连接财务，采购成本、报损、盘点差异和库存余额会影响经营判断。」（库存余额与入账的差异须一致）；库存按整瓶记的现状来自第 76 条按 ENUM:79 的落地。
+  - 测试：InventoryStocktakePage.test.tsx「F04 实盘数量只收整数：填小数时提示「实盘数量须为整数」且不提交，改成整数后照常登记」。
+- 18BK 落地位置补记·修复项 F05（盘点页用例补照片视频上传与金额为 0 不显示过账；无新裁决）：
+  - 改法：只补用例，页面代码不因本项改动。登记差异用例给证据输入框传一张照片、一段视频，断言走附件上传接口两次（business_type 为 inventory_variance，attachment_role 依次为 photo、video），登记请求按 photo_attachment_ids、video_attachment_ids 分栏带回对应附件编号。夹具加一条复核通过、未过账、金额为 0 的差异，断言它没有「过账」按钮，操作列显示「—」。变异验证：把照片视频分栏写反，或去掉「金额不为 0」条件，两处新断言各自失败。
+  - 落地位置：InventoryStocktakePage.test.tsx 第 2、4 条。
+  - 依据：第十八批裁决 14「高价值的报损、盘点差异、存酒作废，必须照片＋视频＋主管复核才生效；低价值的维持现状，即时生效。」；ENUM:164「报损/盘点差异/存酒作废须照片+视频双证据+主管复核。」
+  - 测试：InventoryStocktakePage.test.tsx「登记差异：必填项不全不提交；按蛇形键发物料、实盘数量、原因、责任供应商与单位成本（分），不发账面数量；照片、视频先上传再分栏带附件编号」、「过账：复核通过、未过账且金额不为 0 的差异才有「过账」；供应商责任默认取责任供应商，其余须填往来单位」。
+- 18BK 落地位置补记·控制席判定（第 384 条）：本段按只读设计 d-inv-b（两轮质疑者修订）做 384-R1、R2、R3、R5。财务 BP 和平台库房库管这两类不挂商户的账号都做。384-R4（放开库房、物料两份列表）照控制席 82b-R6 不改判，移入不做；设计旁见（平台库管在库存台账页的手工入库、报损报溢、出库调拨、建库房、建物料等写入口 403）由控制席另行登记。本段没有新裁决、没有迁移、没有新权限码，新增 0 个操作。以下按字面与常理定：①不挂商户的账号按入口权限码可触及库房所在综合体办（PGM:659；与 142-R1、225-R1、316-R2、349-R1 同一写法）；②盘点单商户取库房的商户（PGM:948）；③最高权限可建单、登记、复核、过账（第十八批裁决 71、BSM:576）；④过账台账行带库房所在综合体（PGM:959）；⑤差异证据上传时带盘点单编号（技术选型）。
+- 18BK 落地位置补记·384-R1（盘点单各动作的范围闸；盘点单商户取库房商户）：
+  改法：新增同包新类 InventoryProjectScope，对外方法为 requireStocktakeWarehouse、requireStocktake、visibleStocktakes、stocktakeProject。判定规则：
+  - 商户账号（含派驻期内取派驻酒吧，即 currentMerchantIdQuietly 有值）须与库房或盘点单的商户一致，否则 403 CROSS_MERCHANT_FORBIDDEN。
+  - 不挂商户的账号用 AuthorizationService.projectReach（多个码取交集）判能否触及盘点库房所在综合体，否则 403 CROSS_PROJECT_FORBIDDEN。
+  - 平台管理员与最高权限不限。
+  - 库房不存在 404 WAREHOUSE_NOT_FOUND，盘点单不存在 404 STOCKTAKE_NOT_FOUND。
+  InventoryService 只就地改：
+  - 构造器里手建一个范围闸。
+  - listStocktakes 改用 visibleStocktakes。
+  - 两个 loadStocktakeScoped 合成一个，参数为盘点单编号加权限码。
+  - createStocktake、recordVariance、reviewVariance 改用带 gate 的 executeWrite，范围闸在幂等之前，同号重放也先过。
+  - createStocktake 的盘点单商户取库房商户，营业日取库房项目。
+  - reviewVariance 删去按操作人商户比差异商户那一段；纠账扣减改按差异商户。
+  StocktakeCloseService.close（F01 的结束盘点）改走同一道闸（requireStocktake，建单码）。
+  依据：PGM:664「单店层面的财务工作——日结确认与锁定、商户费用账单出账、差异认定、异常单据处置、报损物品的财务确认——由该酒吧对应的财务 BP 负责」；BSM:1162「管理库房和库位，包括总库、酒吧库、吧台库存、消耗品库、礼品库和存酒区。」；BSM:1164「记录入库、出库、调拨、盘点、报损、报溢和库存调整。」；PGM:659「被分配了可跨项目角色的员工（含经岗位得到），在所分配的权限内可以查看、处理该角色可查看项目的数据。」；PGM:948「治理连接供应链供应商、供应合同、采购、库房、库存报损和盘点差异，都要看商户归属、合同范围和复核权限。」；PGM:744「前端隐藏只是辅助，后端接口必须独立校验。」；第十八批裁决 71。
+  契约：listInventoryStocktakes、getInventoryStocktake、createInventoryStocktake、recordInventoryStocktakeVariance、reviewInventoryStocktakeVariance、closeInventoryStocktake 的说明补范围口径（由契约代理补）。
+  测试：新增 StocktakeProjectScopeJdbcIntegrationTests 的 financeBpWithoutMerchantSeesStocktakesOfReachableProjectOnly、platformKeeperCountsPlatformWarehouseWithEvidenceButNotAnotherProjects、stocktakeTakesWarehouseMerchantAndMerchantAccountsStayOnOwnWarehouses。修复前不挂商户的账号都是 403 MERCHANT_SCOPE_REQUIRED，商户乙给甲的吧台仓建单放行，最高权限建单 403。InventoryServiceTests 只调夹具（替身桩 projectReach、内存仓按编号取库房、各盘点用例所用库房），断言不改。
+- 18BK 落地位置补记·384-R2（差异过账：不挂商户的账号按可触及库房所在综合体办，台账行带该综合体）：
+  改法：FinanceService 字段注入 InventoryProjectScope。postInventoryVariance 在幂等之前按差异所属盘点单过 requireStocktake（过账码），postInventoryVarianceInternal 体内重核同一道闸；未注入时照旧按商户比对。落账改调 persistDerivedArApItem 带项目的重载，项目取 stocktakeProject（盘点库房所在综合体），商户照旧取盘点单商户。
+  依据：PGM:664（同上）；BSM:1687「核对采购入库、库存消耗、报损、盘点差异和高价值酒水异常。」；BSM:1181「连接财务，采购成本、报损、盘点差异和库存余额会影响经营判断。」；PGM:959「已拍板：未来需要集团视图和跨项目汇总视图，保证所有对象带综合体项目归属。」
+  契约：postInventoryVariance 的 x-data-scope 由 platform 改为 project-merchant，新增 x-failure-codes（CROSS_MERCHANT_FORBIDDEN、CROSS_PROJECT_FORBIDDEN），说明写范围口径与台账带综合体（由契约代理补）。
+  测试：StocktakeProjectScopeJdbcIntegrationTests.financeBpPostsReachableVariancesAndLedgerRowCarriesWarehouseProject。覆盖：财务 BP 过账甲的吧台仓和总库的差异，台账行带 A 综合体，往来台账查得到；B 综合体的差异 403 CROSS_PROJECT_FORBIDDEN，不落台账、不回填、不落幂等记录；商户甲过本店差异照旧，乙过甲的 403 CROSS_MERCHANT_FORBIDDEN。修复前财务 BP 403 MERCHANT_SCOPE_REQUIRED。
+- 18BK 落地位置补记·384-R3（盘点差异照片视频：不挂商户的账号能上传，能看本人可看盘点单上的证据）：
+  改法：
+  - 页面 InventoryStocktakePage.uploadEvidence 上传时带所选盘点单编号（business_id）。
+  - EvidenceEventService.evidenceScope 加一个分支：inventory_variance 带业务编号时，先核盘点码与附件码（回读用 inventory.stocktake.view，上传用 inventory.stocktake.variance_record），再按两码过 InventoryProjectScope.requireStocktake。上传记上传人商户（不挂商户的记空），回读不比附件商户。
+  - 不带编号的照旧走商户分支。
+  依据：BSM:1183「连接留痕与异常，高价值酒水报损、盘点差异、存酒作废必须拍照和视频留证，并主管复核。」；第十八批裁决 14「高价值的报损、盘点差异、存酒作废，必须照片＋视频＋主管复核才生效」；BSM:1687（同上）；PGM:659（同上）。
+  契约：uploadEvidenceAttachment、readEvidenceAttachmentFile 的说明补一句（由契约代理补）。
+  测试：
+  - StocktakeProjectScopeJdbcIntegrationTests.varianceEvidenceIsReadByStocktakeScopeNotByAttachmentMerchant：财务 BP 读甲盘点单上的附件 200；读 B 综合体盘点单上的 403 CROSS_PROJECT_FORBIDDEN；不持盘点查看码的 403 PERMISSION_DENIED；乙读甲的 403 CROSS_MERCHANT_FORBIDDEN；甲的主管读平台侧账号上传的 200。修复前平台侧账号上传、回读都是 403。
+  - platformKeeperCountsPlatformWarehouseWithEvidenceButNotAnotherProjects：平台库管带盘点单编号上传照片视频，附件不挂商户，登记高价值差异 200。
+  - InventoryStocktakePage.test.tsx 的上传用例加断言：表单带 business_id。
+- 18BK 落地位置补记·384-R5（同步）：页面矩阵 ADM-INV-006 行的规则列改为新的范围口径，实现状态列补第 384 条。契约、供应链库存 PRD「盘点与差异」行（含更正「盘点单列表与详情最高权限看全部商户，商户账号只看本商户」）、财务往来台账设计 §6D.3 由契约代理与文档组按本段契约要点、文档要点补。
+- 18BK 契约同步（契约代理；本段新增 1 个操作，本段无迁移）。
+  修复项 F01：
+  - 改法：新增结束盘点操作 closeInventoryStocktake（POST，路径参数 Id）。请求体是新 schema 与 requestBody CloseStocktakeRequest，只有必填的 idempotency_key。权限码 inventory.stocktake.create；x-data-scope project；x-terminal-allowed web；需要幂等；留痕 inventory.stocktake.closed / inventory.stocktake.close_failed；x-auth-context staff-token。
+  - 说明写明：建盘点单后该库房出入库等库存变动冻结（409 INVENTORY_WAREHOUSE_STOCKTAKE_LOCKED），结束盘点后恢复；缺 idempotency_key 400 VALIDATION_FAILED；盘点单不存在 404 STOCKTAKE_NOT_FOUND；已结束 409 STOCKTAKE_NOT_OPEN；还有待复核的差异 409 STOCKTAKE_HAS_PENDING_VARIANCE；同号不同内容 409 IDEMPOTENCY_CONFLICT；已结束的盘点单不能再登记差异；复核与过账不依赖盘点单状态；响应与建单同形，不含 merchant_id。
+  - 落地位置：控制器 InventoryController.closeStocktake → InventoryService.closeStocktake → StocktakeCloseService.close。
+  - 依据：BSM:1164「记录入库、出库、调拨、盘点、报损、报溢和库存调整。」
+  - 测试：StocktakeCloseJdbcIntegrationTests（实现段已写）。
+  修复项 F02：
+  - 改法：recordInventoryStocktakeVariance 与 schema RecordVarianceRequest 的说明补「variance_amount_cent 与 unit_cost_cents 都不传时按该物料当前平均进货价（成本台账有成本基础时）估算；没有成本基础记 0」；unit_cost_cents 改为「可选覆盖；不传时取该物料当前平均进货价」。
+  - 落地位置：InventoryService.recordVariance。
+  - 依据：BSM:1165「商品成本按「当前平均进货价」算」。
+  - F03、F04 契约不改：ReviewVarianceRequest 与 postInventoryVariance 的请求体本来就没有说明字段；counted_qty 照旧是 number。
+  第 384 条 384-R1：
+  - 改法：listInventoryStocktakes、getInventoryStocktake、createInventoryStocktake、recordInventoryStocktakeVariance、reviewInventoryStocktakeVariance、closeInventoryStocktake 的说明补范围口径：
+    - 最高权限与平台管理员不限；
+    - 商户账号只限本商户库房的盘点单，否则 403 CROSS_MERCHANT_FORBIDDEN；
+    - 不挂商户的账号须以该操作权限码可触及盘点库房所在综合体，否则 403 CROSS_PROJECT_FORBIDDEN（没有项目归属的账号 403 PROJECT_SCOPE_REQUIRED）；
+    - 建单时盘点单商户取库房商户，库房不存在 404 WAREHOUSE_NOT_FOUND；
+    - 范围闸在幂等之前；
+    - 不再对不挂商户的账号返回 MERCHANT_SCOPE_REQUIRED。
+  - 这几个操作不新增 x-failure-codes 键。schema CreateStocktakeRequest 的说明按现码改为「merchant_id 取盘点库房的商户（平台库房为空），不由请求体传入」。
+  - 落地位置：InventoryProjectScope.requireStocktakeWarehouse、requireStocktake、visibleStocktakes。
+  - 依据：PGM:664「单店层面的财务工作——日结确认与锁定、商户费用账单出账、差异认定、异常单据处置、报损物品的财务确认——由该酒吧对应的财务 BP 负责」；PGM:659「在所分配的权限内可以查看、处理该角色可查看项目的数据」；PGM:948「库房、库存报损和盘点差异，都要看商户归属、合同范围和复核权限。」；第十八批裁决 71。
+  - 测试：StocktakeProjectScopeJdbcIntegrationTests。
+  第 384 条 384-R2：
+  - 改法：postInventoryVariance 的 x-data-scope 由 platform 改为 project-merchant，新增 x-failure-codes CROSS_MERCHANT_FORBIDDEN、CROSS_PROJECT_FORBIDDEN。说明写明：按差异所属盘点单过范围闸——商户账号只过本商户的差异；不挂商户的账号按 finance.inventory_variance.post 可触及盘点库房所在综合体；范围闸在幂等之前；台账行带盘点库房所在综合体，商户取盘点单商户（平台库房为空）。x-permission、留痕、x-auth-context、x-terminal-allowed 不变。
+  - 落地位置：FinanceService.postInventoryVariance、postInventoryVarianceInternal，经 InventoryProjectScope.requireStocktake、stocktakeProject。
+  - 依据：PGM:664 同上；BSM:1687「核对采购入库、库存消耗、报损、盘点差异和高价值酒水异常。」；PGM:959「保证所有对象带综合体项目归属」。
+  - 测试：StocktakeProjectScopeJdbcIntegrationTests。
+  第 384 条 384-R3：
+  - 改法：uploadEvidenceAttachment、readEvidenceAttachmentFile 的说明各补一句——business_type 为 inventory_variance 且带业务编号（盘点单编号）时，上传须持 inventory.stocktake.variance_record 与 evidence.attachment.create，回读须持 inventory.stocktake.view 与 evidence.timeline.view，缺码 403 PERMISSION_DENIED；并按两码过盘点单范围闸；上传时附件商户记上传人商户（不挂商户的记空）；回读不再比附件商户；不带编号的照旧按商户判。
+  - 落地位置：EvidenceEventService.evidenceScope。
+  - 依据：BSM:1183「高价值酒水报损、盘点差异、存酒作废必须拍照和视频留证，并主管复核。」
+  - 测试：StocktakeProjectScopeJdbcIntegrationTests。
+  listWarehouses、listInventoryItems 不改（控制席 82b-R6）。无新裁决；PROJECT_SCOPE_REQUIRED、VALIDATION_FAILED、IDEMPOTENCY_CONFLICT、PERMISSION_DENIED 四个拒绝码按现码写入说明。
+- 第十八批 BK 段汇合（J）：
+  - e2e 不改：全量 e2e 中只有 full-admin-remaining.spec.ts 的 ADM-INV-006 分支碰到库存盘点页，它只核页面容器与建单按钮可见，不受影响：
+    - 修复项 F01 的结束盘点按钮（closeInventoryStocktake，只在盘点中的行出现）；
+    - F03 删掉的复核意见与过账说明输入框；
+    - F04 实盘数量只收整数；
+    - 第 384 条 384-R3 证据上传带盘点单编号。
+  - 视觉基线不涉及库存盘点页，没有重拍。
+  - 门禁结论：
+    - 本段新增 1 个操作（closeInventoryStocktake，请求体 CloseStocktakeRequest），本段无迁移。
+    - 后端全量、前端全量（类型检查与单测）、客人三个工作区单测、安卓员工端单测与 android-app 编译、chromium 五份后台 e2e 全绿。
+    - 四份生成物在镜像里重生成后，verify:p0-contract 全过（含客户端路由、契约覆盖与请求体字段写法）；页面矩阵与结果中文名校验也过。
+    - OpenAPI yaml 与 json 深比较一致，没有锚点。
+- D-docs（第 384 条 384-R5 的文档部分，以及修复项 F01～F04 的文档更正）。改法：只把下位文档里的现状句改成现码实情，不新增业务规则，没有新裁决。
+  落地位置：
+  - 供应链与库存管理产品 PRD §6「盘点与差异」行：
+    - 实盘数量页面只收整数（F04）。
+    - 单位成本不填时差异金额按该物料当前平均进货价估算，有成本基础才估、没有记 0（F02）。
+    - 复核只记结论、复核人和时间，页面不设复核意见、过账说明输入框（F03）。
+    - 未结束的盘点单可结束盘点（F01，closeInventoryStocktake、建单码 inventory.stocktake.create）；建单后该库房出入库冻结，结束后恢复；有待复核差异时不能结束；已结束的不能再结束、不能再登记差异。
+    - 盘点单各动作与差异过账的范围口径（384-R1、384-R2，InventoryProjectScope.requireStocktake、visibleStocktakes）：商户账号只办本商户库房的；不挂商户的财务 BP、平台库管按该动作权限码可触及盘点库房所在综合体办；最高权限与平台管理员不限；盘点单商户取库房商户；过账台账行带盘点库房所在综合体。
+    - 差异照片视频带盘点单编号，按盘点码、附件码与盘点单范围判，回读不再比附件商户（384-R3，EvidenceEventService.evidenceScope）。
+  - 同一 PRD §10.1「权限与数据隔离」行补一句指向：盘点单与差异过账另按盘点单范围闸。变更日志加一行。
+  - 应收应付台账开发设计 §6D.3 加实现现状：postInventoryVariance 的范围闸；ar_ap_items.project_id 取盘点库房所在综合体，merchant_id 取盘点单商户。
+  - 页面矩阵 ADM-INV-006 行已由 FX1、K1 段改好，本组核对后未再改。
+  依据：
+  - BSM:1162「管理库房和库位，包括总库、酒吧库、吧台库存、消耗品库、礼品库和存酒区。」
+  - BSM:1164「记录入库、出库、调拨、盘点、报损、报溢和库存调整。」
+  - BSM:1165「商品成本按「当前平均进货价」算」
+  - BSM:1183「高价值酒水报损、盘点差异、存酒作废必须拍照和视频留证，并主管复核。」
+  - BSM:1687「核对采购入库、库存消耗、报损、盘点差异和高价值酒水异常。」
+  - PGM:659「被分配了可跨项目角色的员工（含经岗位得到），在所分配的权限内可以查看、处理该角色可查看项目的数据。」
+  - PGM:664「单店层面的财务工作——日结确认与锁定、商户费用账单出账、差异认定、异常单据处置、报损物品的财务确认——由该酒吧对应的财务 BP 负责」
+  - 第十八批裁决 71。
+  更正：
+  - 18BF 落地位置补记·控制席判定里的「③ 不做：盘点单关闭」，现由本段 F01 补做。
+  - 18BF 补记第 351 条 351-R1「可填复核意见」半句，由本段 F03 更正：页面不设复核意见输入框。
+  - 原补记字节不改。
+  测试：本组没有代码测试；verify-full-admin-page-matrix 与 git diff --check 通过。
+- 18BK 落地位置补记·盘点差异金额按成本查看权限隐去（18BK 收尾复核后的修复；无新裁决，控制席按 HTML 字面定，未弹窗）：
+  - 起因：修复项 F02 让单价留空的差异按当前平均进货价估算金额，差异金额原样返回给持盘点码、不持 inventory.cost.view 的读者，按差异数量一除即该物料平均进货价；库存流水对这类读者已把成本列置空，盘点页口径不一致。
+  - 改法：InventoryVarianceRecord 的 varianceAmountCent 改为可空，另加不含价格的布尔 hasVarianceAmount（差异金额不为 0 即真），加脱敏副本 withoutCosts（照 StockMovementRecord.withoutCosts，金额置空、布尔保留）；InventoryController 的 getStocktake（差异列表）、recordVariance、reviewVariance 三处响应对不持 inventory.cost.view 的读者过同一道脱敏（maskVarianceCostForUnauthorized，照 maskCostForUnauthorized）。后端估算、复核纠账、过账仍按库里真实金额（系统用价计算不等于读者可见）。InventoryStocktakePage 差异金额为空时显示「—」，「过账」按钮改按 hasVarianceAmount 显示，不再以页面看到的金额不为 0 为条件；持 inventory.cost.view 的照常看金额。
+  - 依据：PGM:660「敏感经营数据不限于内部结算价和成本价……普通用户、会员、前线员工以及没有相应价格权限的商户人员不得查看。系统自动使用某个价格完成计算，不代表当前操作人取得查看或修改权限。」；ENUM:235「……普通用户、会员、前线员工和无价格权限的商户人员不得查看。系统在计算中使用某个价格，不代表当前操作人获得查看或修改权限。」；BSM:588「敏感数据查看与导出（内部结算价、成本价、分账底价、企业微信会话原文、客人与员工个人信息）……必须逐项单独授予并留痕」。
+  - 契约与文档：getInventoryStocktake、recordInventoryStocktakeVariance、reviewInventoryStocktakeVariance 的说明补「差异行另带 has_variance_amount；不持 inventory.cost.view 的读者 variance_amount_cent 为空」（三个操作的响应走通用 Success，无专用 schema）；本项新增 0 个操作。页面矩阵 ADM-INV-006 行 key_fields 补 has_variance_amount 与金额为空的条件；供应链库存 PRD「盘点与差异」行补一句；前端结果区字段表补 has_variance_amount。
+  - 测试：StocktakeVarianceSelfReviewJdbcIntegrationTests.varianceWithoutUnitCostIsValuedAtCurrentAverageCostAndCanBePosted（不持 inventory.cost.view 的登记人、复核人响应金额为空、has_variance_amount 为真，库里为真实估算金额；详情不持的隐去、持的看到；过账照常按真实金额入账）、explicitUnitCostStillOverridesAverageCost（登记人持 inventory.cost.view，响应照常带金额）；InventoryStocktakePage.test.tsx「差异金额被隐去时显示「—」，复核通过未过账的差异按「有差异金额」给「过账」」。
+- 18BK 合并前变基（2026-11-24）：本段自 83efbc89 变基到 origin/main cbf3e4e4；合并时 OpenAPI 共 1420 个操作（主干 1419）、info.version V1.04、决策台账 V1.33，Flyway 最新 V737（共 630 个迁移）。版本行、契约版本、计数与 SHA、生成物、台账补记与 PRD 修订行由合并前脚本按新主干统一重写。
