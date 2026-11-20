@@ -3,9 +3,14 @@ import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
 import { useAdminResource } from "../hooks/useAdminResource";
 import { formatBusinessStatus } from "../i18n/statusLabels";
+import { KEY_VALUE_LABELS } from "../i18n/fieldLabels";
 import { formatMetricDomain, formatMetricName } from "../i18n/metricLabels";
 import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowDetailDrawer";
 import type { AdminPageProps } from "../types";
+
+// 第十八批 BE 段第 378 条 378-R1（ENUM:217「风险四级 低（进列表）、中（待复核）、高（生成工单+通知主管）、严重（可冻结/停用/强制审批）」；PGM:287）：
+// 风险等级按四级名显示，取值 normal、suspicious、high、critical 与风控预警页同一张码表。
+const riskLevelLabel = (code?: string | null) => (code ? KEY_VALUE_LABELS.risk_level?.[code] ?? formatBusinessStatus(code) : "-");
 
 // 逾期应收以“分”存储 → 展示为“¥元”（业务语言，禁止把分直出给管理层）。
 function money(cent?: number | null) {
@@ -155,7 +160,7 @@ export function T3AReadonlyAnalyticsPage({ api, setGlobalError }: AdminPageProps
         { label: "岗位", value: formatBusinessStatus(row.roleCode) },
         { label: "服务分", value: row.serviceScore ?? "—" },
         { label: "投诉", value: row.complaintCount ?? 0 },
-        { label: "风险", value: formatBusinessStatus(row.riskLevel) },
+        { label: "风险", value: riskLevelLabel(row.riskLevel) },
         { label: "评分编号", value: row.scoreId ?? "—" },
       ],
     });
@@ -167,7 +172,7 @@ export function T3AReadonlyAnalyticsPage({ api, setGlobalError }: AdminPageProps
       fields: [
         { label: "客户", value: row.customerRef ?? "—" },
         { label: "意向类型", value: row.intentType ?? "—" },
-        { label: "风险", value: formatBusinessStatus(row.riskLevel) },
+        { label: "风险", value: riskLevelLabel(row.riskLevel) },
         { label: "摘要", value: row.summary ?? "—" },
         { label: "意向编号", value: row.intentId ?? "—" },
       ],
@@ -233,7 +238,7 @@ export function T3AReadonlyAnalyticsPage({ api, setGlobalError }: AdminPageProps
               <div className="admin-table-scroll">
                 <table className="admin-table" data-testid="t3a-staff-table">
                   <thead><tr><th>员工</th><th>岗位</th><th>服务分</th><th>投诉</th><th>风险</th><th>详情</th></tr></thead>
-                  <tbody>{data.staff.slice(0, 50).map((row) => (<tr key={row.scoreId} className="admin-row-clickable" tabIndex={0} data-testid={`t3a-staff-row-${row.scoreId}`} onClick={() => openStaffDetail(row)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openStaffDetail(row); } }}><td>{row.staffName ?? "-"}</td><td>{formatBusinessStatus(row.roleCode)}</td><td>{row.serviceScore ?? "-"}</td><td>{row.complaintCount ?? 0}</td><td>{formatBusinessStatus(row.riskLevel)}</td><td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看员工服务分详情" onClick={(event) => { event.stopPropagation(); openStaffDetail(row); }}>查看详情</button></td></tr>))}</tbody>
+                  <tbody>{data.staff.slice(0, 50).map((row) => (<tr key={row.scoreId} className="admin-row-clickable" tabIndex={0} data-testid={`t3a-staff-row-${row.scoreId}`} onClick={() => openStaffDetail(row)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openStaffDetail(row); } }}><td>{row.staffName ?? "-"}</td><td>{formatBusinessStatus(row.roleCode)}</td><td>{row.serviceScore ?? "-"}</td><td>{row.complaintCount ?? 0}</td><td>{riskLevelLabel(row.riskLevel)}</td><td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看员工服务分详情" onClick={(event) => { event.stopPropagation(); openStaffDetail(row); }}>查看详情</button></td></tr>))}</tbody>
                 </table>
               </div>
             </>)}
@@ -242,7 +247,7 @@ export function T3AReadonlyAnalyticsPage({ api, setGlobalError }: AdminPageProps
               <div className="admin-table-scroll">
                 <table className="admin-table" data-testid="t3a-intent-table">
                   <thead><tr><th>客户</th><th>意向类型</th><th>风险</th><th>摘要</th><th>详情</th></tr></thead>
-                  <tbody>{data.intent.slice(0, 50).map((row) => (<tr key={row.intentId} className="admin-row-clickable" tabIndex={0} data-testid={`t3a-intent-row-${row.intentId}`} onClick={() => openIntentDetail(row)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openIntentDetail(row); } }}><td>{row.customerRef ?? "-"}</td><td>{row.intentType ?? "-"}</td><td>{formatBusinessStatus(row.riskLevel)}</td><td>{row.summary ?? "-"}</td><td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看客户意向详情" onClick={(event) => { event.stopPropagation(); openIntentDetail(row); }}>查看详情</button></td></tr>))}</tbody>
+                  <tbody>{data.intent.slice(0, 50).map((row) => (<tr key={row.intentId} className="admin-row-clickable" tabIndex={0} data-testid={`t3a-intent-row-${row.intentId}`} onClick={() => openIntentDetail(row)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openIntentDetail(row); } }}><td>{row.customerRef ?? "-"}</td><td>{row.intentType ?? "-"}</td><td>{riskLevelLabel(row.riskLevel)}</td><td>{row.summary ?? "-"}</td><td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看客户意向详情" onClick={(event) => { event.stopPropagation(); openIntentDetail(row); }}>查看详情</button></td></tr>))}</tbody>
                 </table>
               </div>
             </>)}

@@ -19,13 +19,27 @@ type Props = {
   onClose: () => void;
 };
 
+// 第十八批 BE 段第 377 条 377-R1：带时区的时刻（末尾 Z 或 ±hh:mm 偏移）一律换成北京时间。
+const ZONED_INSTANT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:?\d{2})$/;
+const BEIJING_PARTS = new Intl.DateTimeFormat("en-CA", {
+  timeZone: "Asia/Shanghai", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23",
+});
+
 /**
  * ISO 日期/时间 → 中文展示（禁止 mm/dd/yyyy 或 ISO 原文直出给管理层）：
- * "2026-07-05" → "2026年7月5日"；"2026-07-05T13:20:00Z" → "2026年7月5日 13:20"。
+ * "2026-07-05" → "2026年7月5日"；"2026-07-05T13:20:00Z" → "2026年7月5日 21:20"（服务端的时刻按 UTC 带 Z 输出，换成北京时间）；
+ * 不带时区的本地时间（"2026-07-05T13:20:00"）照原样取年月日时分。
  * 非日期串原样返回（调用方保证已是中文/机读标识）。
  */
 export function cnDate(value?: string | null): string {
   if (!value) return "—";
+  if (ZONED_INSTANT.test(value)) {
+    const instant = new Date(value);
+    if (!Number.isNaN(instant.getTime())) {
+      const part = Object.fromEntries(BEIJING_PARTS.formatToParts(instant).map((p) => [p.type, p.value]));
+      return `${part.year}年${Number(part.month)}月${Number(part.day)}日 ${part.hour}:${part.minute}`;
+    }
+  }
   const m = /^(\d{4})-(\d{2})-(\d{2})(?:[T\s](\d{2}):(\d{2}))?/.exec(value);
   if (!m) return value;
   const [, y, mo, d, hh, mm] = m;

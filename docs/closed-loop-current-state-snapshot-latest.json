@@ -131,7 +131,7 @@
       "backend_tests": 7133,
       "backend_failures": 0,
       "backend_errors": 0,
-      "web_unit_tests": 1984,
+      "web_unit_tests": 1996,
       "ui_tests": 47,
       "real_backend_ui_tests": 3,
       "last_run_passed": true,

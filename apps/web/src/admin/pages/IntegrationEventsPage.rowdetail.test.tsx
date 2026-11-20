@@ -1,4 +1,4 @@
-// 文件版本：V0.04
+// 文件版本：V0.05
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -77,7 +77,7 @@ describe("IntegrationEventsPage 行明细抽屉", () => {
     expect(drawer.textContent).toContain("RT-1");
     expect(drawer.textContent).toContain("重试任务");
     expect(drawer.textContent).toContain("待处理");
-    expect(drawer.textContent).toContain("2026年7月5日 13:20");
+    expect(drawer.textContent).toContain("2026年7月5日 21:20"); // 第 377 条 377-R1：带 Z 的时刻按北京时间显示（13:20Z）
     // 抽屉零英文枚举：状态码不得原文出现
     expect(drawer.textContent).not.toContain("pending");
     fireEvent.keyDown(window, { key: "Escape" });
@@ -88,7 +88,7 @@ describe("IntegrationEventsPage 行明细抽屉", () => {
     renderPage();
     await waitFor(() => expect(screen.getByTestId("integration-events-table")).toBeTruthy());
     const table = screen.getByTestId("integration-events-table").textContent ?? "";
-    expect(table).toContain("2026年7月5日 13:20");
+    expect(table).toContain("2026年7月5日 21:20"); // 第 377 条 377-R1：带 Z 的时刻按北京时间显示（13:20Z）
     expect(table).not.toContain("2026-07-05T13:20:00Z");
   });
 

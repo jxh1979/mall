@@ -1,4 +1,4 @@
-// 文件版本：V0.28
+// 文件版本：V0.29
 import { expect, test } from "@playwright/test";
 import { installMockApi } from "./support/mock-api";
 import { fillCnDate } from "./support/cn-date";
@@ -47,6 +47,7 @@ const remainingRoutes: RouteSpec[] = [
   { pageId: "ADM-CUS-005", label: "储值规则配置", route: "/admin/customers/stored-value-rules" },
   { pageId: "ADM-CUS-006", label: "储值退卡", route: "/admin/customers/stored-value-refunds" },
   { pageId: "ADM-CUS-007", label: "储值台账", route: "/admin/customers/stored-value-ledger" },
+  { pageId: "ADM-OPS-003", label: "已存档内容", route: "/admin/ops/archived-content" },
   { pageId: "ADM-STL-001", label: "结算配置中心", route: "/admin/settlement/config" },
   { pageId: "ADM-STL-003", label: "内部结算价目录", route: "/admin/settlement/internal-price-catalog" },
   { pageId: "ADM-STL-004", label: "演出合同与履约结算", route: "/admin/settlement/media-shows" },
@@ -213,6 +214,10 @@ async function openAdminRoute(page: import("@playwright/test").Page, spec: Route
     // 第十八批 BD 段 364-R2：储值台账页按客人、商户、期间查逐笔明细（打开页面不自动查询）。
     await expect(page.getByTestId("stored-value-ledger-page")).toBeVisible();
     await expect(page.getByTestId("stored-value-ledger-query")).toBeVisible();
+  } else if (spec.pageId === "ADM-OPS-003") {
+    // 第十八批 BE 段 343-R1：已存档内容页按分类查阅、逐条恢复。
+    await expect(page.getByTestId("archived-content-page")).toBeVisible();
+    await expect(page.getByTestId("archived-content-category")).toBeVisible();
   } else if (spec.pageId === "ADM-STL-001") {
     await expect(page.getByTestId("settlement-config-page")).toBeVisible();
     await expect(page.getByTestId("settlement-config-defaults-table")).toBeVisible();

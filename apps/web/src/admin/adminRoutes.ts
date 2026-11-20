@@ -1,4 +1,4 @@
-// 文件版本：V0.22
+// 文件版本：V0.23
 import type { AdminAccountForm, AdminNavGroup, AdminRoute, PermissionDefinitionRow } from "./types";
 
 export const adminRoutes: AdminRoute[] = [
@@ -128,6 +128,9 @@ export const adminRoutes: AdminRoute[] = [
   { pageId: "ADM-FLR-001", label: "商场平面图导入", module: "地产/空间", group: "ops", route: "/admin/space/floor-plans", requiredPermissions: ["floor_plan.view"] },
   { pageId: "ADM-COMP-001", label: "合规到期提醒台账", module: "合规", group: "compliance", route: "/admin/compliance/reminders", requiredPermissions: ["compliance.reminder.view"] },
   { pageId: "ADM-COMP-002", label: "企微会话合规监察", module: "合规", group: "compliance", route: "/admin/compliance/wecom", requiredPermissions: ["wecom.risk_hit.view"] },
+  // 第十八批 BE 段第 343 条 343-R1（BSM:569「后台另设「已存档内容」页」）：持任一分类的查看权限即可进入（同 ArchivedContentPage 的 ARCHIVED_CONTENT_VIEW_PERMISSIONS）。
+  // 放在表末：权限域到菜单模块的归并按先出现的页面算，这一行不改变各权限域原来归到的模块。
+  { pageId: "ADM-OPS-003", label: "已存档内容", module: "运维", group: "ops", route: "/admin/ops/archived-content", requiredPermissions: ["merchant.profile.view", "ticket.product.view", "ticket.price_variant.view", "ticket.entitlement.view", "bar.product.view", "bar.category.view", "bar.combo.view", "bar.reservation.view", "staff.profile.view", "facility.equipment.manage", "merchant.service_work_order.view", "service.catalog.manage", "governance.space.view"] },
 ];
 
 // 第 23 条：敏感页（PGM:687「凡页面上出现上述两类必须强制脱敏内容的，这个页面就是敏感页」）的页面编号，清单由 23-R5 定；
