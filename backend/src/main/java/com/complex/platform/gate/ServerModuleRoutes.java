@@ -1,6 +1,6 @@
 package com.complex.platform.gate;
 
-// 文件版本：V0.08
+// 文件版本：V0.09
 
 import java.util.Arrays;
 import java.util.Comparator;
@@ -86,6 +86,8 @@ final class ServerModuleRoutes {
                     Map.entry("/api/v1/evidence/manual-backfills", "bar"),
                     Map.entry("/api/v1/finance", "finance"),
                     Map.entry("/api/v1/finance/ar-ap-items", NONE),
+                    // 第十八批 BF 段第 351 条 351-R2：盘点差异过账只有库存盘点页（ADM-INV-006）调。
+                    Map.entry("/api/v1/finance/inventory-variances/post", "inventory"),
                     // 323-R1：收付款记录列表经销页也调；登记收付款（同路径 POST）只有应收应付台账页调。
                     Map.entry("POST /api/v1/finance/ar-ap-items/{id}/payments", "finance"),
                     Map.entry("/api/v1/finance/ar-ap-items/export", "finance"),
