@@ -4,7 +4,7 @@ import { AdminPageHeader } from "../components/AdminPageHeader";
 import { Sparkline, MiniBars } from "../components/MiniChart";
 import { loadSecondary, loadSecondaryIfPermitted, useAdminResource } from "../hooks/useAdminResource";
 import { hasPermissions } from "../security/PermissionGate";
-import { RowDetailDrawer, type RowDetailField } from "../components/RowDetailDrawer";
+import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowDetailDrawer";
 import { GuidedFlowModal } from "../components/GuidedFlowModal";
 import { MetricDetailLink, useMetricKpiValue } from "../components/MetricDetailEntry";
 import type { AdminPageProps, AnomalyDispositionEventRow, BusinessMetricSnapshotRow, BusinessReviewLockRow, MetricAnomalyRow, MetricDefinitionRow } from "../types";
@@ -463,7 +463,7 @@ export function BusinessAnalyticsPage({ api, setActionResult, setGlobalError, na
                   <ul className="admin-plain-list" data-testid="business-analytics-review-locks-list">
                     {reviewLocks.slice(0, 20).map((lock) => (
                       <li key={lock.id} data-testid={`business-analytics-review-lock-${lock.id}`}>
-                        {(lock.lockedAt ?? "").replace("T", " ").slice(0, 16)} · {lock.domain === "all" ? TEXT.allDomains : formatMetricDomain(lock.domain ?? "")} · {lock.metricCount ?? 0} 项 · {lock.operatorNote}
+                        {cnDate(lock.lockedAt)} · {lock.domain === "all" ? TEXT.allDomains : formatMetricDomain(lock.domain ?? "")} · {lock.metricCount ?? 0} 项 · {lock.operatorNote}
                       </li>
                     ))}
                   </ul>

@@ -1,5 +1,5 @@
 package com.complex.platform.analytics;
-// 文件版本：V0.14
+// 文件版本：V0.15
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
 import com.complex.platform.contract.SpaceRentalDerivationSql;
@@ -759,14 +759,15 @@ class JdbcAnalyticsRepository implements AnalyticsRepository, com.complex.platfo
     @Override
     public Map<Integer, Long> hourlyTrafficCounts(LocalDate businessDate, Optional<String> merchantScope) {
         // T4.3：按经营日窗口对成功核销 created_at 分小时桶。
-        // ponytail: 按 UTC 小时分桶（确定、与窗口同源）；若要本地时段口径，改 AT TIME ZONE '业务时区'。
+        // 第 382 条 382-R1（ENUM:144）：按所在地时区（北京时间，LocalZone）钟点分桶。
         Map<Integer, Long> result = new LinkedHashMap<>();
-        MapSqlParameterSource params = dayRange("ticketing", businessDate);
+        MapSqlParameterSource params = dayRange("ticketing", businessDate)
+                .addValue("zone", com.complex.platform.common.LocalZone.ID.getId());
         String sql;
         if (merchantScope.isEmpty()) {
             sql = """
                     SELECT h, COUNT(*) AS total FROM (
-                        SELECT date_part('hour', created_at AT TIME ZONE 'UTC')::int AS h
+                        SELECT date_part('hour', created_at AT TIME ZONE :zone)::int AS h
                           FROM ticket_verifications
                          WHERE status = 'success' AND created_at >= :start AND created_at < :end
                     ) t GROUP BY h
@@ -774,7 +775,7 @@ class JdbcAnalyticsRepository implements AnalyticsRepository, com.complex.platfo
         } else {
             params.addValue("merchant_id", merchantScope.get());
             sql = """
-                    SELECT date_part('hour', created_at AT TIME ZONE 'UTC')::int AS h, COUNT(*) AS total
+                    SELECT date_part('hour', created_at AT TIME ZONE :zone)::int AS h, COUNT(*) AS total
                       FROM ticket_verifications
                      WHERE status = 'success' AND merchant_id = :merchant_id
                        AND created_at >= :start AND created_at < :end

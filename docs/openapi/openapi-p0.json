@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "综合体管理系统 P0 API 契约",
-    "version": "V0.92",
+    "version": "V0.93",
     "description": "P0 首批编码前置契约。本文采用 JSON-compatible YAML，便于与 openapi-p0.json 保持一致。正式后端以 Java 21 + Spring Boot 4.x + springdoc-openapi 输出运行时 OpenAPI，并与本契约比对。"
   },
   "servers": [
@@ -34854,6 +34854,9 @@
           "403": {
             "$ref": "#/components/responses/Error"
           },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
           "409": {
             "$ref": "#/components/responses/Error"
           },
@@ -44835,6 +44838,18 @@
         "x-audit-event-success": "access.position_role_template.viewed",
         "x-audit-event-failure": "not_applicable",
         "x-auth-context": "staff-token",
+        "parameters": [
+          {
+            "name": "include_archived",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false
+            },
+            "description": "include_archived 查询参数；true 时连同已存档与已删除的模板一并返回，默认只返回未存档、未删除的模板。"
+          }
+        ],
         "responses": {
           "200": {
             "$ref": "#/components/responses/Page"
@@ -46832,7 +46847,7 @@
         ],
         "operationId": "approveDeleteSpaceType",
         "summary": "审批空间种类删除申请",
-        "description": "第十八批 AE 段第 201 条 201-R3（BSM:576「删除一律须由具备最高权限的人审批通过后执行，不设例外，申请人不得审批自己的申请」）：最高权限审批空间种类删除申请。控制器不校权限码，服务层先要求平台范围（商户账号与外包供应商 403 PLATFORM_SCOPE_REQUIRED）、再要求最高权限（否则 403 SPACE_TYPE_DELETE_APPROVER_NOT_MASTER）。decision 为 approved 时种类转为已删除，落 space_type.delete_approved；为 rejected 时退回已存档，改落 space_type.delete_rejected。种类不存在 404 SPACE_TYPE_NOT_FOUND；没有待审批的删除申请 400 SPACE_TYPE_DELETE_NOT_PENDING；申请人本人审批 403 SPACE_TYPE_SELF_APPROVE_FORBIDDEN；decision 不是 approved 或 rejected（不分大小写）400 VALIDATION_FAILED。不校验幂等键；被拒不落失败事件。第十八批 BG 段第 261 条 261-B21-R2：idempotency_key 必填，缺失 400 VALIDATION_FAILED；同一请求编号重复提交返回第一次的结果并提示已完成、不重复留痕（PGM「同一次操作重复提交时，返回第一次的结果并提示已完成」）。",
+        "description": "第十八批 AE 段第 201 条 201-R3（BSM:576「删除一律须由具备最高权限的人审批通过后执行，不设例外，申请人不得审批自己的申请」）：最高权限审批空间种类删除申请。控制器不校权限码，服务层先要求平台范围（商户账号与外包供应商 403 PLATFORM_SCOPE_REQUIRED）、再要求最高权限（否则 403 SPACE_TYPE_DELETE_APPROVER_NOT_MASTER）。decision 为 approved 时种类转为已删除，落 space_type.delete_approved；为 rejected 时退回已存档，改落 space_type.delete_rejected。种类不存在 404 SPACE_TYPE_NOT_FOUND；没有待审批的删除申请 400 SPACE_TYPE_DELETE_NOT_PENDING；申请人本人审批 403 SPACE_TYPE_SELF_APPROVE_FORBIDDEN；decision 不是 approved 或 rejected（不分大小写）400 VALIDATION_FAILED。被拒不落失败事件。第十八批 BG 段第 261 条 261-B21-R2：idempotency_key 必填，缺失 400 VALIDATION_FAILED；同一请求编号重复提交返回第一次的结果并提示已完成、不重复留痕（PGM「同一次操作重复提交时，返回第一次的结果并提示已完成」）。",
         "x-permission": "authenticated",
         "x-data-scope": "platform",
         "x-terminal-allowed": [
