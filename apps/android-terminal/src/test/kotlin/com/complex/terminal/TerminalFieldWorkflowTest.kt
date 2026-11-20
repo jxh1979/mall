@@ -1,12 +1,18 @@
 package com.complex.terminal
 
-// 文件版本：V0.11
+// 文件版本：V0.12
 
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
 import java.net.http.HttpResponse
+import java.net.http.HttpTimeoutException
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
+import kotlin.concurrent.thread
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFails
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
@@ -580,6 +586,231 @@ class TerminalFieldWorkflowTest {
     assertEquals("2026-11-05T12:30:00Z", localInstantOf(" 2026-11-05 ", " 20:30 ", shanghai))
     assertNull(localInstantOf("2026/11/05", "20:30", shanghai))
     assertNull(localInstantOf("2026-11-05", "", shanghai))
+  }
+
+  // ── 第十八批 BO 段第 261 条 261-B06-R1（PGM:303「同一个操作被重复提交，系统只认一次，不会因为重试就重复扣款、重复入账或重复核销……
+  //    同一次操作重复提交时，返回第一次的结果并提示已完成。」；PGM:528「⑤同一笔操作重复提交不重复生效（重复点击、网络重发、渠道重复回调都只算一次）」）：
+  //    在线核销（门票与游乐入口共用一槽）与点酒下单按「一次操作」沿用请求编号，重复提交读出「已完成」提示 ──
+
+  private fun envelope(data: String, replayed: Boolean = false): HttpResponse<String> = okJson(
+    if (replayed) """{"success":true,"code":"OK","message":"该操作已完成（重复提交，返回首次结果）","data":$data,"replayed":true}"""
+    else """{"success":true,"code":"OK","message":"success","data":$data}""",
+  )
+
+  private fun verified(no: String, replayed: Boolean = false) =
+    envelope("""{"id":"ver-$no","verification_no":"$no","status":"success"}""", replayed)
+
+  /** 按次序回应每个请求：空＝没收到响应（读超时）。 */
+  private fun replying(captured: MutableList<StubHttpClient.Captured>, vararg replies: HttpResponse<String>?): StubHttpClient.Handler {
+    val queue = ArrayDeque(replies.toList())
+    return StubHttpClient.Handler { req ->
+      synchronized(queue) {
+        captured += req
+        queue.removeFirst()
+      } ?: throw HttpTimeoutException("读超时")
+    }
+  }
+
+  private fun key(body: String): String =
+    Regex("\"idempotency_key\":\"([^\"]+)\"").find(body)?.groupValues?.get(1) ?: error("缺 idempotency_key：$body")
+
+  @Test
+  fun verifyOnlineWithoutAResultResendsTheSameRequestAndRenewsTheKeyAfterAResult() {
+    val captured = mutableListOf<StubHttpClient.Captured>()
+    val workflow = TerminalWorkflow(newApi(replying(captured, null, verified("V-1"), verified("V-2"))), storeWithSessionAndBinding())
+
+    assertFailsWith<java.io.IOException> { workflow.verifyOnline("E-RETRY-1") }
+    workflow.verifyOnline("E-RETRY-1")
+    workflow.verifyOnline("E-RETRY-1")
+
+    assertEquals(captured[0].body, captured[1].body, "没拿到结果再核同一个码，沿用原编号、请求体逐字节相同")
+    assertTrue(key(captured[2].body) != key(captured[1].body), "拿到结果后再扫，换新编号")
+  }
+
+  @Test
+  fun verifyOnlineReplayCarriesTheCompletedNotice() {
+    val workflow = TerminalWorkflow(newApi(replying(mutableListOf(), verified("V-1"), verified("V-1", replayed = true))), storeWithSessionAndBinding())
+
+    workflow.verifyOnline("E-1")
+    assertNull(workflow.operationKeys.completedNotice, "首次执行不提示已完成")
+    workflow.verifyOnline("E-1")
+    assertEquals("该操作已完成（重复提交，返回首次结果）", workflow.operationKeys.completedNotice)
+  }
+
+  @Test
+  fun scanningAnotherCodeFirstResendsTheEarlierVerificationAndReturnsItWhenItSucceeded() {
+    val captured = mutableListOf<StubHttpClient.Captured>()
+    val workflow = TerminalWorkflow(newApi(replying(captured, null, verified("V-A"), verified("V-B"))), storeWithSessionAndBinding())
+    assertFailsWith<java.io.IOException> { workflow.verifyOnline("E-A", faceCapture = "RkFDRQ==", faceConsentAccepted = true) }
+
+    val response = workflow.verifyOnline("E-B")
+
+    assertEquals(2, captured.size, "本次扫到的码不提交：${captured.map { it.body }}")
+    assertEquals(captured[0].body, captured[1].body, "先用原编号原样重发上一笔（含人脸）")
+    assertEquals("V-A", response.verificationNo)
+    assertEquals(PREVIOUS_VERIFICATION_NOTICE, workflow.operationKeys.completedNotice)
+
+    val again = workflow.verifyOnline("E-B")
+
+    assertEquals(3, captured.size, captured.map { it.body }.toString())
+    assertTrue("\"credential_payload\":\"E-B\"" in captured[2].body, "上一笔已确认即清槽，乙再扫一次提交的是乙的码：${captured[2].body}")
+    assertTrue(key(captured[2].body) != key(captured[0].body), "乙的码用新编号")
+    assertEquals("V-B", again.verificationNo)
+    assertNull(workflow.operationKeys.completedNotice)
+  }
+
+  @Test
+  fun anEarlierVerificationThatFailedOrWasRejectedIsDroppedAndTheNewCodeGoesOutWithANewKey() {
+    val windowExpired = envelope("""{"id":"ver-a","verification_no":"V-A","status":"failed","result_reason":"window_expired"}""")
+    val rejected = StubResponse(409, """{"code":"CONFLICT","detail_code":"ENTITLEMENT_EXPIRED","message":"权益已过期"}""")
+    listOf(windowExpired, rejected).forEach { earlierReply ->
+      val captured = mutableListOf<StubHttpClient.Captured>()
+      val workflow = TerminalWorkflow(newApi(replying(captured, null, earlierReply, verified("V-B"))), storeWithSessionAndBinding())
+      assertFailsWith<java.io.IOException> { workflow.verifyOnline("E-A") }
+
+      val response = workflow.verifyOnline("E-B")
+
+      assertEquals(3, captured.size, captured.map { it.body }.toString())
+      assertEquals(captured[0].body, captured[1].body, "先原样重发上一笔")
+      assertTrue("\"credential_payload\":\"E-B\"" in captured[2].body, captured[2].body)
+      assertTrue(key(captured[2].body) != key(captured[0].body), "上一笔已有结论，本次用新编号")
+      assertEquals("V-B", response.verificationNo)
+      assertNull(workflow.operationKeys.completedNotice)
+    }
+  }
+
+  @Test
+  fun anEarlierVerificationStillWithoutAResultKeepsTheNewCodeFromBeingSent() {
+    val gatewayTimeout = StubResponse(504, """{"code":"PROVIDER_UNAVAILABLE","message":"网关超时"}""")
+    val inProgress = StubResponse(409, """{"code":"CONFLICT","detail_code":"IDEMPOTENCY_IN_PROGRESS","message":"请求正在处理中，请稍后刷新查看结果"}""")
+    listOf(null, gatewayTimeout, inProgress).forEach { earlierReply ->
+      val captured = mutableListOf<StubHttpClient.Captured>()
+      val workflow = TerminalWorkflow(newApi(replying(captured, null, earlierReply)), storeWithSessionAndBinding())
+      assertFailsWith<java.io.IOException> { workflow.verifyOnline("E-A") }
+
+      assertFails { workflow.verifyOnline("E-B") }
+
+      assertEquals(2, captured.size, captured.map { it.body }.toString())
+      assertEquals(captured[0].body, captured[1].body, "仍先原样重发上一笔")
+      assertTrue(captured.none { "\"credential_payload\":\"E-B\"" in it.body }, "上一笔仍没有结果，本次的码不提交")
+    }
+  }
+
+  @Test
+  fun pressingAgainWhileTheFirstVerificationIsInFlightSendsTheSameKeyWithoutWaiting() {
+    val captured = java.util.Collections.synchronizedList(mutableListOf<StubHttpClient.Captured>())
+    val firstArrived = CountDownLatch(1)
+    val release = CountDownLatch(1)
+    val calls = AtomicInteger()
+    val workflow = TerminalWorkflow(newApi { req ->
+      captured += req
+      if (calls.incrementAndGet() == 1) {
+        firstArrived.countDown()
+        release.await(5, TimeUnit.SECONDS)
+      }
+      verified("V-1")
+    }, storeWithSessionAndBinding())
+    val first = thread { workflow.verifyOnline("E-1") }
+    assertTrue(firstArrived.await(5, TimeUnit.SECONDS))
+
+    workflow.verifyOnline("E-1")
+    val secondDidNotWait = release.count == 1L
+    release.countDown()
+    first.join(5_000)
+
+    assertTrue(secondDidNotWait, "在途再点不等第一笔")
+    assertEquals(2, captured.size)
+    assertEquals(key(captured[0].body), key(captured[1].body), "在途再点带同一个编号")
+  }
+
+  @Test
+  fun aKeyWithoutAResultIsGivenUpSixtySecondsAfterTheLastAttempt() {
+    var clock = 0L
+    val captured = mutableListOf<StubHttpClient.Captured>()
+    val workflow = TerminalWorkflow(newApi(replying(captured, null, null, null, null)), storeWithSessionAndBinding(), TerminalOperationKeys { clock })
+
+    assertFailsWith<java.io.IOException> { workflow.verifyOnline("E-1") }
+    clock = 59_000
+    assertFailsWith<java.io.IOException> { workflow.verifyOnline("E-1") }
+    clock = 118_000
+    assertFailsWith<java.io.IOException> { workflow.verifyOnline("E-1") }
+    clock = 179_001
+    assertFailsWith<java.io.IOException> { workflow.verifyOnline("E-1") }
+
+    val keys = captured.map { key(it.body) }
+    assertEquals(keys[0], keys[1], "失败后 59 秒同一个码再核，沿用原编号")
+    assertEquals(keys[1], keys[2], "离最近一次失败 59 秒、离第一次发出 118 秒再核，仍沿用原编号（从最近一次算）：$keys")
+    assertTrue(keys[3] != keys[2], "最近一次失败后 61 秒再核，当作放弃、换新编号：$keys")
+  }
+
+  @Test
+  fun anotherStaffLoggingInDropsTheKeysWhileTheSameStaffLoggingInAgainKeepsThem() {
+    val captured = mutableListOf<StubHttpClient.Captured>()
+    val staffIds = ArrayDeque(listOf("staff-1", "staff-1", "staff-2"))
+    val api = newApi { req ->
+      captured += req
+      if (req.path == "/api/v1/auth/login") {
+        val id = staffIds.removeFirst()
+        envelope("""{"access_token":"tok-$id","session_id":"ses-$id","user":{"id":"$id","username":"u-$id"}}""")
+      } else {
+        throw HttpTimeoutException("读超时")
+      }
+    }
+    val workflow = TerminalWorkflow(api, storeWithSessionAndBinding())
+
+    workflow.login("operator", "pw")
+    assertFailsWith<java.io.IOException> { workflow.verifyOnline("E-1") }
+    workflow.login("operator", "pw")
+    assertFailsWith<java.io.IOException> { workflow.verifyOnline("E-1") }
+    workflow.login("other", "pw")
+    assertFailsWith<java.io.IOException> { workflow.verifyOnline("E-1") }
+
+    val verifications = captured.filter { it.path == "/api/v1/ticketing/verifications" }.map { it.body }
+    assertEquals(3, verifications.size)
+    assertEquals(key(verifications[0]), key(verifications[1]), "同一位员工重新登录，沿用原编号")
+    assertTrue("\"staff_id\":\"staff-2\"" in verifications[2], "换一位员工后不重发上一位的核销：${verifications[2]}")
+    assertTrue(key(verifications[2]) != key(verifications[1]), "换一位员工登录，换新编号")
+  }
+
+  @Test
+  fun amusementVerificationSharesTheOnlineVerificationSlot() {
+    val captured = mutableListOf<StubHttpClient.Captured>()
+    val workflow = TerminalWorkflow(newApi(replying(captured, null, verified("V-T"))), storeWithSessionAndBinding())
+    assertFailsWith<java.io.IOException> { workflow.verifyOnline("E-T") }
+
+    val response = workflow.amusementVerifyOnline("E-R")
+
+    assertEquals(2, captured.size, captured.map { it.body }.toString())
+    assertEquals(captured[0].body, captured[1].body, "游乐核销扫码前先原样重发没拿到结果的门票核销")
+    assertEquals("V-T", response.verificationNo)
+  }
+
+  @Test
+  fun barOrderKeyFollowsTheContentAndWhetherTheResultIsKnown() {
+    val captured = mutableListOf<StubHttpClient.Captured>()
+    val workflow = TerminalWorkflow(newApi(replying(captured,
+      null,
+      envelope("""{"id":"order-1","bar_id":"bar-1","status":"created"}"""),
+      StubResponse(401, """{"code":"UNAUTHORIZED","message":"会话已失效"}"""),
+      StubResponse(429, """{"code":"RATE_LIMITED","message":"请求过于频繁"}"""),
+      StubResponse(400, """{"code":"VALIDATION_FAILED","detail_code":"VALIDATION_FAILED","message":"商品已下架"}"""),
+      null,
+      null,
+    )), storeWithSessionAndBinding())
+    val wine = listOf(mapOf("product_id" to "wine-1", "quantity" to "2"))
+    fun press(items: List<Map<String, String>> = wine) = runCatching { workflow.createBarOrder("bar-1", items, tableId = "table-1") }
+
+    repeat(6) { press() }
+    press(listOf(mapOf("product_id" to "beer-1", "quantity" to "1")))
+
+    val keys = captured.map { key(it.body) }
+    assertEquals(7, keys.size)
+    assertEquals(keys[0], keys[1], "没收到响应后同样内容再下单，沿用原编号")
+    assertTrue(keys[2] != keys[1], "拿到结果后再下单，换新编号")
+    assertEquals(keys[2], keys[3], "会话失效（401）后再下单，沿用原编号")
+    assertEquals(keys[3], keys[4], "限速（429）后再下单，沿用原编号")
+    assertTrue(keys[5] != keys[4], "被明确拒绝（400）后再下单，换新编号")
+    assertTrue(keys[6] != keys[5], "购物车不同，换新编号")
   }
 
   private fun okJson(body: String): HttpResponse<String> = StubResponse(200, body)

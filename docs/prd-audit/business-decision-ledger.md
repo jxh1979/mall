@@ -1,6 +1,6 @@
 # PRD 审计业务裁决台账
 
-文档版本：V1.31
+文档版本：V1.32
 状态：进行中
 迁移日期：2026-07-27
 当前事实源：三份立法 HTML 以既有冻结基线叠加 James 此前 M02 至 M08 的点名批准、全量审计 M001、M002 的逐项批准，以及本轮 2026-10-16 至 2026-10-17 业务 HTML 审计中 Q01 至 Q40 及子题实际明确批准且未被后续替代的裁决，和 2026-10-17 第二批 HTML 业务线推演审计（A–F 六线 64 条、停车章）的逐项批准，并叠加本轮 CG 70 项来源确认与 C01–C09、N01–N03 最终澄清及补全文稿中 F01、W01–W05 的整体修改批准（本文件末节）；本轮最终规则、未采纳或替代关系、现行版本与字节哈希见本文件末节。历史记录保留为各自当时事实，不恢复已被替代的建议。
@@ -12177,3 +12177,63 @@ HTML 的语义补齐与直接引用同步可在本批核验；70项中的业务�
   - 本段补记同步：「控制席判定」条原「设计旁见……不登记」改为已登记为待开发清单第 420 条、本段修复阶段已做；264-R2 与 264-R5 条「不分零元有价」改正。不加迁移、不新增接口与字段键。
 - 18BV 合并前变基（2026-11-22）：本段自 2bd98895 变基到 origin/main 30c38664；迁移按原序顺延改号 V728→V737；合并时 OpenAPI 共 1419 个操作（主干 1415）、info.version V1.03、决策台账 V1.31，Flyway 最新 V737（共 630 个迁移）。版本行、契约版本、计数与 SHA、生成物、台账补记与 PRD 修订行由合并前脚本按新主干统一重写。
 - 18BV 落地位置补记·运行验收证据、快照、终验文档刷新（无新裁决）：业务提交 900a9cbb 之后，按第十八批裁决 25 重刷了运行验收证据：后端全量 7302 测，0 失败 0 错误；apps/web 构建通过；常规界面验收（接口全部 mock）实跑 40 条全过；真实后端界面验收未跑，runtime_ready=false。随后依次重生成闭环当前态快照、生产闭环缺口报告、界面验收报告、无上线指挥台。生成器没改。手改 docs/final-closed-loop-acceptance-audit-v0.1.md 与 docs/code-implementation-acceptance-audit-v0.1.md：前端单测源码计数改为 2074；被核文件行数都没变；后端全量与常规界面验收的数字、日期改为本次实跑值；写入 npm run verify:unit 实跑结果，五个工作区全过。交付门禁于 2026-11-22 02:12 UTC 在工作树逐项实跑子项，NAS 两项现场探测未跑。仍红的有两项：一是 coding-host-protection，它写死主仓路径，在工作树口径下必红，属工具口径，不做；二是 final-closed-loop-audit，如实留 2 条红（integration-ready、business-acceptance-ready），原因是校验器要求终验把联调、业务验收写成「是」，而裁决 25 定了不跑真实后端界面验收、运行验收未就绪，终验写的是「否」。verify:delivery-gates 总链仍是红的。
+
+18BO 落地位置补记（2026-11-20）：第十八批 BO 段（batch87）按 18BO 只读设计实现待开发清单第 261 条 261-B06-R1（第 261 条 B06 安卓终端按一次操作沿用请求编号）；运行验收证据、终验文档在本段最后一个提交刷新；各条落地位置见下。本段追加时，原台账除文档版本升一版外，其他历史字节保持。
+
+- 18BO 落地位置补记·控制席判定（2026-11-20）：本段（第十八批 BO 段，batch87）实现待开发清单第 261 条 261-B06-R1（18BO 只读设计 b87-audit/d-one-c.json，两轮质疑者修订后定稿，无待裁题）。控制席判定：设计旁见的工作手机与一体机券核销（MainActivity 里 api.redeemVoucher 每次新编号）：第 261 条补充②登记的范围是「安卓员工端与一体机整端」，这一处在其内，随本段一并做——写法同 261-B06-R1 plan ⑤（先查券、再点核销，码不变，按内容从登记表取号），测试照该 rid 的安卓单测写法补一条；其余照设计。第五轮设计与修复代理的范围外旁见已登记为待开发清单第 388～414 条（待核实）。本段从 614159b0 开工（第五轮 13 段并行），变基到 83efbc89 后收尾；汇总文件由合并前脚本 summary_tool.py 剥离与重写。
+- 18BO 落地位置补记·第 261 条 261-B06-R1（安卓终端按「一次操作」沿用请求编号并提示已完成：工作手机在线核销（门票＋游乐入口）、一体机门票权益领取、工作手机与平板点酒下单、一体机吧台买酒下单；按控制席判定并入工作手机与一体机券核销；第十八批裁决 50）：
+  改法（只改安卓终端，服务端、OpenAPI、迁移不改）：共享核新增同包类 TerminalOperationKeys。它是按槽记录的请求编号登记表，每槽记请求内容（去掉编号）、编号、最近一次发出或失败的时刻。发出即记；同槽同内容、没拿到明确结果的再提交沿用原编号；在途再点也带同一个编号，发请求不在同步块里，不等第一笔。拿到 2xx 或被明确拒绝（isRejection：4xx 但不是 401、408、429，detail_code 也不是 IDEMPOTENCY_IN_PROGRESS、IDEMPOTENCY_KEY_USED）后清，其余保留并刷新时刻；不分首发与沿用编号的再次提交。最近一次发出或失败后 60 秒（UNCONFIRMED_KEY_RETRY_MS）没再提交即放弃。operator 只在换了登录的人时清空全部槽。completedNotice 每次提交开始时置空，成功后记本次读到的 lastReplayedNotice。
+  在线核销单槽 TerminalOperationKeys.verify：槽里有没拿到结果、未过 60 秒的上一笔，且内容与本次不同时，先用原编号原样重发上一笔（含人脸）。上一笔核销成功即返回它并提示 PREVIOUS_VERIFICATION_NOTICE，本次的码不提交；返回 2xx 但未成功或被明确拒绝，清掉后用新编号提交本次；仍没有结果原样抛出。
+  TerminalWorkflow 构造加 operationKeys；login 后调 operator；verifyOnline 与 amusementVerifyOnline 共用单槽；createBarOrder 走 submit（槽 bar-order）。
+  一体机：placeKioskBarOrder 加登记表参数，下单与开账单算同一次操作（槽 kiosk-bar-order，两步都成功才清）。KioskClaim 顶层新增 claimKioskEntitlement（槽 kiosk-claim，只按内容沿用、不先重发上一笔）与 redeemVoucherOnce（槽 voucher-redeem，内容是券码加物品码）。KioskPaymentKey 私有的 detail_code 解析提成顶层 apiDetailCode 共用，KioskPaymentKey 自己的口径不改。
+  MainActivity 只就地改已有语句：核销、游乐核销、一体机领取、券核销的结果前出「已完成」提示；点酒下单屏、平板 POS 下单、一体机吧台买酒下单成功后用浮层显示提示再换屏。
+  与方案不一致：
+  - 控制席判定把工作手机「礼物 / 券核销」与一体机领取屏的券动态码核销（原来每次新编号调券核销接口）并入本段，写法同方案 ⑤。
+  - 方案 ⑦ 的两份 PRD 由文档组按本段文档要点补。
+  依据：
+  - PGM:303「同一个操作被重复提交，系统只认一次，不会因为重试就重复扣款、重复入账或重复核销……凡只能用一次的动作（单次授权、门票核销、券核销等），只有这次操作成功完成、返回结果确认后才算完成、才算用掉；没有返回确认的不算完成，不扣减、不核销。同一次操作重复提交时，返回第一次的结果并提示已完成。」
+  - PGM:528「⑤同一笔操作重复提交不重复生效（重复点击、网络重发、渠道重复回调都只算一次）」
+  - 第十八批裁决 50：操作员选「逐批核实、照草稿重做（推荐）」
+  本段增量：OpenAPI 新增 0 个操作，既有操作不改；迁移 0 个（预留 V700～V703 未用）；无新权限码。
+  测试：
+  - 安卓 TerminalFieldWorkflowTest 加 10 例：verifyOnlineWithoutAResultResendsTheSameRequestAndRenewsTheKeyAfterAResult、verifyOnlineReplayCarriesTheCompletedNotice、scanningAnotherCodeFirstResendsTheEarlierVerificationAndReturnsItWhenItSucceeded、anEarlierVerificationThatFailedOrWasRejectedIsDroppedAndTheNewCodeGoesOutWithANewKey、anEarlierVerificationStillWithoutAResultKeepsTheNewCodeFromBeingSent、pressingAgainWhileTheFirstVerificationIsInFlightSendsTheSameKeyWithoutWaiting、aKeyWithoutAResultIsGivenUpSixtySecondsAfterTheLastAttempt、anotherStaffLoggingInDropsTheKeysWhileTheSameStaffLoggingInAgainKeepsThem、amusementVerificationSharesTheOnlineVerificationSlot、barOrderKeyFollowsTheContentAndWhetherTheResultIsKnown。
+  - KioskBarPurchaseApiTest 加 2 例：kioskBarOrderWithoutAResultIsPlacedAgainWithTheSameKey、kioskBarOrderPlacedButNotBilledKeepsTheOrderKeyAndTheReplayIsReportedAsCompleted；既有 kioskBarOrderIsPlacedOnTheCounterThenBilledWithSnakeCaseKeys 补传登记表参数。
+  - KioskClaimTest 加 3 例：kioskEntitlementClaimWithoutAResultIsClaimedAgainWithTheSameKeyAndTheReplayIsReportedAsCompleted、kioskEntitlementClaimRejectedIsClaimedAgainWithANewKey、voucherRedeemWithoutAResultIsRedeemedAgainWithTheSameKeyAndTheReplayIsReportedAsCompleted。
+  - 后端不加用例：服务端回放已有回归 SingleUseGrantPreviewThenVerifyJdbcIntegrationTests、AmusementVerifyRoutingJdbcIntegrationTests、IdempotentReplayCompletedJdbcIntegrationTests。
+  - 安卓员工端单测与安卓 App 编译不在 PR 的 CI 里，以 160 实跑为准。
+- 契约（第十八批 BO 段 261-B06-R1）：本段服务端与接口都不改，新增 0 个操作。没有改任何既有操作的说明或结构，迁移 0 个（预留的 V700～V703 未用），也没有新权限码。
+  安卓终端只是在已有接口上沿用请求编号：
+  - 票务核销 createVerification（在线核销、游乐入口核销、一体机门票权益领取）
+  - 券核销 redeemVoucher
+  - 酒吧下单 createOrder
+  - 一体机买酒开账单仍按服务端已有的 BarBillingService.issuedBill 回放
+  已完成提示读服务端已有的响应 replayed 与 message（ApiResponse），两份 TerminalApiClient 记在 lastReplayedNotice 里。
+  依据：PGM:303「同一次操作重复提交时，返回第一次的结果并提示已完成。」；PGM:528「⑤同一笔操作重复提交不重复生效」；第十八批裁决 50「逐批核实、照草稿重做（推荐）」。
+  核验：verify:openapi、verify:openapi-examples、verify:client-routes、verify:client-openapi、verify:client-payload --strict 全部通过；openapi-p0 的 yaml 与 json 深比较一致。
+- 18BO 汇合段（J）：本段改动只在安卓员工端（261-B06-R1：同包新类 TerminalOperationKeys，TerminalWorkflow 的 verifyOnline、amusementVerifyOnline、createBarOrder，顶层函数 placeKioskBarOrder、claimKioskEntitlement，以及 MainActivity 的调用处）。tests/e2e 不覆盖安卓员工端，搜过没有相关选择器、断言或 mock，e2e 不改，视觉基线不重拍。门禁结论：
+  - 后端全量（--fresh）0 红；
+  - 网页 typecheck 与 vitest 全绿；
+  - 客人三个工作区（customer-core、customer-app、customer-miniapp）单测全绿；
+  - 安卓员工端 gradle test 全绿，android-app 的 :app:compileDebugKotlin 通过；
+  - 五份后台 e2e spec 用 chromium 全过；
+  - 四份生成物重生成后无差异，verify:p0-contract 全过；
+  - OpenAPI yaml 与 json 深比较一致。
+  本段增量：新增 0 个操作，既有操作的说明和结构不变，无迁移（预留 V700～V703 未用）。
+- 18BO 落地位置补记·文档组（第 261 条 261-B06-R1，安卓终端按「一次操作」沿用请求编号并提示已完成；第十八批裁决 50）：
+  改法：只改两份 PRD 的现状句，不新增业务规则；两份各升一版，变更日志各加一行。
+  落地位置：
+  ①《终端与页面产品 PRD》§11 表：「员工工作手机｜核销结果」行与「触摸屏一体机｜领取结果」行，P0 内容各补「重复提交返回第一次的结果并提示已完成」。
+  ② 同 PRD §11 表后新增「实现现状（第十八批 BO 段第 261 条 261-B06-R1）」，写了五项：
+  - 范围：工作手机在线核销（门票与游乐入口）、一体机门票权益领取、工作手机与平板点酒下单、一体机吧台买酒下单，以及按控制席判定并入的工作手机「礼物 / 券核销」与一体机领取屏的券核销。
+  - 规则：发出即记；没拿到明确结果（没收到响应、5xx、会话失效、请求超时、限速、「请求正在处理中」、「该提交编号已被使用」）时再提交同样内容沿用原编号；成功或被明确拒绝后清；换人不沿用，同一人重新登录照常沿用。
+  - 与《平台治理 PRD》§2A.3 的 M725 补记不同的四点：不分首发与再次提交；60 秒没再提交即放弃；工作手机在线核销单槽先原样重发上一笔（一体机领取与券核销只按内容沿用）；一体机买酒下单与开账单算同一次操作。
+  - 单槽确认上一笔时的提示「上一笔核销已完成（此前没拿到结果，现已确认）；本次扫到的码没有提交，如是另一位客人请再扫一次」。
+  - 显示方式：服务端「该操作已完成（重复提交，返回首次结果）」在核销、领取、券核销结果前一行显示，点酒下单与一体机买酒用浮层显示。
+  对应代码：TerminalOperationKeys.submit、TerminalOperationKeys.verify、TerminalOperationKeys.operator、isRejection；TerminalWorkflow.verifyOnline、amusementVerifyOnline、createBarOrder；placeKioskBarOrder、claimKioskEntitlement、redeemVoucherOnce。
+  ③《票务/通票/权益/核销产品 PRD》§8.3 现场核销流程图后补一条「同一次核销重复提交」：工作手机在线核销（门票与游乐入口）没拿到结果时再点或再扫到同一个码沿用原请求编号，再扫到另一个码时先原样重发上一笔，上一笔成功即返回它并提示「上一笔核销已完成……如是另一位客人请再扫一次」、本次的码不提交；一体机门票权益领取与工作手机、一体机的券核销只在内容不变（不重扫、直接再点）时沿用原请求编号，客人出示的动态码刷新后再扫属新的一次操作；服务端只认一次、不重复扣次，码不变的重复提交终端提示已完成；末尾指向终端 PRD §11 表后的实现现状。
+  依据：
+  - PGM:303「同一个操作被重复提交，系统只认一次，不会因为重试就重复扣款、重复入账或重复核销……同一次操作重复提交时，返回第一次的结果并提示已完成。」
+  - PGM:528「⑤同一笔操作重复提交不重复生效（重复点击、网络重发、渠道重复回调都只算一次）」
+  - 第十八批裁决 50「逐批核实、照草稿重做（推荐）」
+  测试：文档组无新增用例；核验为 node tools/verify-full-admin-page-matrix.mjs 通过、git diff --check 通过。实现用例见 O1 组：TerminalFieldWorkflowTest、KioskBarPurchaseApiTest、KioskClaimTest。本段新增 0 个操作、0 个迁移。
+- 18BO 合并前变基（2026-11-24）：本段自 83efbc89 变基到 origin/main 9d6a781c；合并时 OpenAPI 共 1419 个操作（主干 1419）、info.version V1.03、决策台账 V1.32，Flyway 最新 V737（共 630 个迁移）。版本行、契约版本、计数与 SHA、生成物、台账补记与 PRD 修订行由合并前脚本按新主干统一重写。

@@ -1,12 +1,14 @@
 package com.complex.terminal
 
-// 文件版本：V0.09
+// 文件版本：V0.10
 
 import java.util.UUID
 
 class TerminalWorkflow(
   private val api: TerminalApiClient,
   private val store: InMemoryLocalStore,
+  // 第十八批 BO 段第 261 条 261-B06-R1：按一次操作持有请求编号的登记表（在线核销、点酒下单；一体机下单、领取与券核销经界面传入同一张表）。
+  val operationKeys: TerminalOperationKeys = TerminalOperationKeys(),
 ) {
   var networkOnline: Boolean = true
 
@@ -20,6 +22,7 @@ class TerminalWorkflow(
       username = response.user.username,
     )
     store.saveSession(session)
+    operationKeys.operator(response.user.id)
     store.addEvent(
       TerminalEvent(
         eventType = "terminal.login",
@@ -73,9 +76,10 @@ class TerminalWorkflow(
     requireOnline()
     val session = requireNotNull(store.session) { "terminal session is missing" }
     val binding = requireNotNull(store.binding) { "device binding is missing" }
-    val response = api.verify(
+    // 第十八批 BO 段第 261 条 261-B06-R1（PGM:303、PGM:528⑤）：请求编号由登记表的在线核销单槽给（[TerminalOperationKeys.verify]）。
+    val response = operationKeys.verify(
       VerificationRequest(
-        idempotencyKey = newClientTaskId("online-verification"),
+        idempotencyKey = "",
         credentialPayload = entitlementCode,
         deviceId = binding.id,
         pointId = binding.locationPointId ?: binding.deviceCode,
@@ -86,7 +90,8 @@ class TerminalWorkflow(
         faceCapture = faceCapture,
         faceConsentAccepted = faceConsentAccepted,
       ),
-    )
+      "online-verification",
+    ) { request -> api.verify(request) to api.lastReplayedNotice.get() }
     store.addEvent(
       TerminalEvent(
         eventType = "terminal.verification.online",
@@ -166,9 +171,10 @@ class TerminalWorkflow(
     requireOnline()
     val session = requireNotNull(store.session) { "terminal session is missing" }
     val binding = requireNotNull(store.binding) { "device binding is missing" }
-    val response = api.verify(
+    // 261-B06-R1：与门票在线核销共用登记表的在线核销单槽（[TerminalOperationKeys.verify]）。
+    val response = operationKeys.verify(
       VerificationRequest(
-        idempotencyKey = newClientTaskId("amusement-verification"),
+        idempotencyKey = "",
         credentialPayload = entitlementCode,
         deviceId = binding.id,
         pointId = binding.locationPointId ?: binding.deviceCode,
@@ -177,7 +183,8 @@ class TerminalWorkflow(
           "staff_id" to session.staffId,
         ),
       ),
-    )
+      "amusement-verification",
+    ) { request -> api.verify(request) to api.lastReplayedNotice.get() }
     store.addEvent(
       TerminalEvent(
         eventType = "terminal.amusement.verification.online",
@@ -290,16 +297,18 @@ class TerminalWorkflow(
     paymentMode: String? = null,
   ): BarOrderRecord {
     requireOnline()
-    val order = api.createBarOrder(
-      BarOrderRequest(
-        idempotencyKey = newClientTaskId("bar-order"),
-        barId = barId,
-        tableId = tableId,
-        reservationId = reservationId,
-        items = items,
-        paymentMode = paymentMode,
-      ),
+    // 261-B06-R1：点酒下单按一次操作沿用请求编号（槽 bar-order，内容＝去掉编号的下单请求）。
+    val content = BarOrderRequest(
+      idempotencyKey = "",
+      barId = barId,
+      tableId = tableId,
+      reservationId = reservationId,
+      items = items,
+      paymentMode = paymentMode,
     )
+    val order = operationKeys.submit("bar-order", content, "bar-order") { key ->
+      api.createBarOrder(content.copy(idempotencyKey = key)) to api.lastReplayedNotice.get()
+    }
     store.addEvent(
       TerminalEvent(
         eventType = "terminal.bar.order.created",
