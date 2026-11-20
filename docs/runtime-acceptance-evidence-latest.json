@@ -8,14 +8,14 @@
     "RUNTIME_EVIDENCE_BOUND_TO_SOURCE_FINGERPRINT",
     "RUNTIME_EVIDENCE_DOES_NOT_CLOSE_PRODUCTION_MANIFEST"
   ],
-  "generated_at": "2026-11-20T03:02:25.597Z",
+  "generated_at": "2026-11-20T05:16:02.327Z",
   "git": {
-    "head": "3c6a53fd1a7ce047b99f605553fc00961fbee1fa",
-    "head_short": "3c6a53fd",
-    "branch": "feature/business-code-batch76-20261106",
+    "head": "3e455aec8846459cf6b98fe54d7b94215213da84",
+    "head_short": "3e455aec",
+    "branch": "feature/business-code-batch77-20261106",
     "worktree_dirty": false,
-    "source_fingerprint": "420d56121800dbd5873848ce14c4ea289c82a9a0742aff84f6d363af1091b323",
-    "source_fingerprint_file_count": 3584,
+    "source_fingerprint": "8ac1edf29a76897afb3305e157c40f4de6d834447954944d87235e3de38234df",
+    "source_fingerprint_file_count": 3587,
     "source_fingerprint_paths": [
       "backend/src/main",
       "backend/src/test",
@@ -54,8 +54,8 @@
     "tests": 7133,
     "failures": 0,
     "errors": 0,
-    "skipped": 2,
-    "latest_mtime": "2026-11-20T03:00:40.974Z",
+    "skipped": 0,
+    "latest_mtime": "2026-11-20T05:12:41.411Z",
     "passed": true
   },
   "web_unit_source": {
@@ -120,6 +120,7 @@
       "apps/web/src/admin/pages/AmusementVerificationRecordsPage.robustness.test.tsx",
       "apps/web/src/admin/pages/AnalyticsKpiFocus.test.tsx",
       "apps/web/src/admin/pages/ApprovalChainPage.test.tsx",
+      "apps/web/src/admin/pages/ArchivedContentPage.test.tsx",
       "apps/web/src/admin/pages/AuditEventsPage.test.tsx",
       "apps/web/src/admin/pages/BarCombosPage.delete.test.tsx",
       "apps/web/src/admin/pages/BarCombosPage.test.tsx",
@@ -315,6 +316,7 @@
       "apps/web/src/admin/pages/RevenueMetricNotes.test.tsx",
       "apps/web/src/admin/pages/RiskAlertsPage.guidedcreate.test.tsx",
       "apps/web/src/admin/pages/RiskAlertsPage.test.tsx",
+      "apps/web/src/admin/pages/RiskLevelFourTiers.test.tsx",
       "apps/web/src/admin/pages/RowDetailDrawer.test.tsx",
       "apps/web/src/admin/pages/ServiceOrdersPage.delete.test.tsx",
       "apps/web/src/admin/pages/ServiceOrdersPage.guidedcreate.test.tsx",
@@ -423,8 +425,8 @@
       "apps/web/src/dealer/dealerPortalClient.test.ts",
       "apps/web/src/shared/ReplayedNotice.test.tsx"
     ],
-    "file_count": 362,
-    "test_count_from_source": 1984
+    "file_count": 364,
+    "test_count_from_source": 1996
   },
   "web_build": {
     "dist_index_exists": true,
@@ -442,18 +444,18 @@
         "exists": true
       }
     ],
-    "asset_count": 173,
+    "asset_count": 174,
     "main_js_assets": [
       {
-        "path": "apps/web/dist/assets/main-Co48O7Ga.js",
+        "path": "apps/web/dist/assets/main-CL6Q5vc2.js",
         "size_bytes": 4337,
-        "mtime": "2026-11-20T03:00:50.060Z"
+        "mtime": "2026-11-20T05:12:50.577Z"
       }
     ],
     "largest_asset": {
       "path": "apps/web/dist/assets/vendor-antd-Bh_XtmOr.js",
       "size_bytes": 251112,
-      "mtime": "2026-11-20T03:00:50.063Z"
+      "mtime": "2026-11-20T05:12:50.580Z"
     },
     "no_main_bundle_warning_expected": true
   },
