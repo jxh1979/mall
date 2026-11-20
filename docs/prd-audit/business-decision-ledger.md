@@ -10794,3 +10794,4 @@ HTML 的语义补齐与直接引用同步可在本批核验；70项中的业务�
 - 依据：BSM:1072「存酒作废需照片+视频双证据+主管复核」；第十八批裁决 14「高价值的报损、盘点差异、存酒作废，必须照片＋视频＋主管复核才生效」；第十八批裁决 58。
 - 测试：SavedBottleCancelDisputeJdbcIntegrationTests、InventoryServiceTests。
   文档组本身：不新增操作、不新增迁移。
+- 18BD 落地位置补记·运行验收证据、快照、终验文档刷新（无新裁决）：业务提交 3c6a53fd 之后，按第十八批裁决 25 重刷了运行验收证据：后端全量 7133 测，0 失败 0 错误；apps/web 构建通过；常规界面验收（接口全部 mock）实跑 40 条全过；真实后端界面验收未跑，runtime_ready=false。随后依次重生成闭环当前态快照、生产闭环缺口报告、界面验收报告、无上线指挥台。生成器没改。手改 docs/final-closed-loop-acceptance-audit-v0.1.md 与 docs/code-implementation-acceptance-audit-v0.1.md：前端单测源码计数改为 1984；被核文件中 BarBillingService.java 行数由 1158 改为 1165，其余无变化；后端全量与常规界面验收的数字、日期改为本次实跑值；写入 npm run verify:unit 实跑结果，五个工作区全过。交付门禁于 2026-11-20 03:03 UTC 在工作树逐项实跑子项，NAS 两项现场探测未跑。仍红的有两项：一是 coding-host-protection，它写死主仓路径，在工作树口径下必红，属工具口径，不做；二是 final-closed-loop-audit，如实留 2 条红（integration-ready、business-acceptance-ready），原因是校验器要求终验把联调、业务验收写成「是」，而裁决 25 定了不跑真实后端界面验收、运行验收未就绪，终验写的是「否」。verify:delivery-gates 总链仍是红的。
