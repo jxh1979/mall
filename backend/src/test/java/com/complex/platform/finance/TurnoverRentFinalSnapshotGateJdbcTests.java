@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static com.complex.platform.support.DailyCloseFixture.markRangeFinal;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -172,6 +172,42 @@ class TurnoverRentFinalSnapshotGateJdbcTests {
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.detail_code").value("CROSS_PROJECT_FORBIDDEN"));
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM turnover_rent_rules WHERE contract_id = ?", Integer.class, foreign)).isZero();
+    }
+
+    /**
+     * 第十八批 BH 段第 261 条 261-B14-R4（BSM:1673「影响结算的规则由各自责任主体在系统中配置、审批和版本化」；ENUM:257 营业额抽成账单）：
+     * 商户号按建档的真实格式（「mch_」＋UUID，40 个字符），名下两份合同各建一条抽成规则，请求编号按后台真实格式、互不相同。
+     * 两次都成功，规则两行、各带自己的阶梯行。修复前规则号由「商户号＋请求编号」截到 40 个字符，只剩商户号，第二条 409。
+     */
+    @Test
+    void oneMerchantCanHaveSeveralTurnoverRules() throws Exception {
+        jdbc.update("INSERT INTO projects(id,venue_type,name,status,created_at,updated_at)"
+                + " VALUES(?,'complex','抽成规则多条综合体','active',now(),now())", project);
+        String bar = "mch_" + UUID.randomUUID();
+        bar(bar, "抽成规则多条酒吧" + s, Instant.parse("2026-05-31T16:00:00Z"));
+        String first = contract("trg_cm1_" + s, bar, "turnover_only", 0);
+        String second = contract("trg_cm2_" + s, bar, "turnover_only", 0);
+        RequestPostProcessor finance = new StaffRequestFixture(jdbc).staff("usr_trg_multi_" + s, "staff", project, null,
+                "finance.turnover_rent.bill");
+
+        keyedRule(finance, first, bar, "admin-web-1794000000123-abcdefgh").andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.contract_id").value(first));
+        keyedRule(finance, second, bar, "admin-web-1794050000456-zyxwvuts").andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.contract_id").value(second));
+
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM turnover_rent_rules WHERE merchant_id = ?", Integer.class, bar)).isEqualTo(2);
+        assertThat(jdbc.queryForList("SELECT contract_id FROM turnover_rent_rules WHERE merchant_id = ?", String.class, bar))
+                .containsExactlyInAnyOrder(first, second);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM turnover_rent_rule_tiers WHERE rule_id IN "
+                + "(SELECT id FROM turnover_rent_rules WHERE merchant_id = ?)", Integer.class, bar)).isEqualTo(2);
+    }
+
+    private ResultActions keyedRule(RequestPostProcessor who, String contractId, String merchantId, String key) throws Exception {
+        return mockMvc.perform(post("/api/v1/finance/turnover-rent/rules").with(who).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"idempotency_key\":\"" + key + "\",\"contract_id\":\"" + contractId
+                        + "\",\"merchant_id\":\"" + merchantId + "\",\"rule_name\":\"抽成规则多条回归\",\"min_amount_cent\":null,"
+                        + "\"effective_from\":\"2026-08-01\",\"effective_to\":null,"
+                        + "\"tiers\":[{\"upper_bound_cent\":null,\"rate_bps\":500}]}"));
     }
 
     // ---------- helpers ----------

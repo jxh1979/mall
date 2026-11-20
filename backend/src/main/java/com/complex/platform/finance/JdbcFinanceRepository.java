@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.29
+// 文件版本：V0.30
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
@@ -2192,19 +2192,12 @@ class JdbcFinanceRepository implements FinanceRepository {
 
     @Override
     public long currentDepositBalanceForUpdate(String merchantId) {
-        // P1 修复：对该商户最新一条保证金台账行加 FOR UPDATE 行锁，使并发 collect/deduct 在锁内串行化读取权威余额。
-        // 子查询定位最新行后，外层对该行 SELECT ... FOR UPDATE 持锁直至事务结束，杜绝余额读取丢更新与超额校验绕过。
-        // 无任何台账时（首笔 collect）无行可锁，退化为 0，由 saveDepositLedger 的插入与后续读锁保证后续动作串行。
-        Long locked = jdbcTemplate.query("""
-                SELECT balance_after_cent
-                  FROM deposit_ledger
-                 WHERE merchant_id = :merchant_id
-                 ORDER BY created_at DESC, id DESC
-                 LIMIT 1
-                   FOR UPDATE
-                """, Map.of("merchant_id", merchantId),
-                (rs, rowNum) -> rs.getLong("balance_after_cent")).stream().findFirst().orElse(null);
-        return locked == null ? 0L : locked;
+        // 第十八批 BH 段第 261 条 261-B14-R2（PGM:303「两个操作同时发生冲突时，一律以“先处理成功”的那个为准」；BSM:1353「实际收款或退款成功后才
+        // 更新已收押金余额」）：先取本商户押金的事务级咨询锁（持到事务结束），再另起语句读最新余额，同一商户的押金处理逐笔串行。
+        // 旧写法锁「最新一条台账行」：先到者新插一行后，后到者等到的仍是旧那一行、读到旧余额（两笔退押金合计超退）；商户还没有台账时无行可锁、根本不等。
+        jdbcTemplate.queryForObject("SELECT pg_advisory_xact_lock(hashtextextended('deposit_ledger:' || :merchant_id, 0))",
+                Map.of("merchant_id", merchantId), Object.class);
+        return currentDepositBalance(merchantId);
     }
 
     // ── F-OPS-08 物业费固定计费（V150，替代已废止 CAM）────────────────────────────

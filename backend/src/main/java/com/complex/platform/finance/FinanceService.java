@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.55
+// 文件版本：V0.56
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -3502,7 +3502,9 @@ public class FinanceService implements TerminationSettlementPort {
             }
         }
         Instant now = Instant.now();
-        String ruleId = "trr_" + slug(merchantId + "_" + actual.idempotencyKey());
+        // 第十八批 BH 段第 261 条 261-B14-R4（BSM:1673「影响结算的规则由各自责任主体在系统中配置、审批和版本化」）：商户号已 40 位，
+        // 旧写法把「商户号＋请求编号」截到 40 位后只剩商户号，同一商户第二条规则撞号被拒；改用定长摘要，同一请求编号重放仍落同一条。
+        String ruleId = "trr_" + stableToken("turnover_rent_rule", merchantId + ":" + actual.idempotencyKey());
         // P0-E：一律落草案 + 记起草人（差人复核转正的守卫依据），草案对结算零影响。
         TurnoverRentRuleRecord rule = repository.saveTurnoverRentRuleDraft(new TurnoverRentRuleRecord(
                 ruleId,
@@ -4099,20 +4101,6 @@ public class FinanceService implements TerminationSettlementPort {
      * 由派生计费/差异流程直接生成一条 ar_ap_items（不经请求体 createItem，但同样遵守锁定经营日硬拦截）。
      * dueDate 取当日（经营日落账），sourceType ∈ SOURCE_TYPES。
      */
-    // ponytail: 派生 AR/AP item id="arap_"+slug;物业费出账的 idempotencyKey 含 projectId|period|merchantId 长键→
-    // slug 过长会溢出 ar_ap_items.id varchar(64)。仅对超长 slug 哈希封顶(短 slug 不变→其它调用方 id 格式不动)。
-    private static String boundedArApSlug(String rawSlug) {
-        if (rawSlug.length() <= 48) {
-            return rawSlug;
-        }
-        try {
-            return java.util.HexFormat.of().formatHex(java.security.MessageDigest.getInstance("SHA-256")
-                    .digest(rawSlug.getBytes(java.nio.charset.StandardCharsets.UTF_8))).substring(0, 40);
-        } catch (java.security.NoSuchAlgorithmException e) {
-            throw new IllegalStateException("ar/ap slug hashing unavailable", e);
-        }
-    }
-
     private ArApItemRecord persistDerivedArApItem(
             String direction,
             String counterpartyId,
@@ -4180,7 +4168,13 @@ public class FinanceService implements TerminationSettlementPort {
                     "营业日 " + today + " 已锁定，请走补录调整流程");
         }
         Instant now = Instant.now();
-        String slug = boundedArApSlug(slug(sourceType + "_" + idempotencyKey));
+        // 第十八批 BH 段第 261 条 261-B14-R5（BSM:1408「残值或损失由财务记录并关联原设备」；BSM:1072「可经审批先垫付并向原门店追收」；
+        // PGM:303「不会因为重试就重复扣款、重复入账」）：slug() 把「来源类型＋请求编号」截到 40 位，来源类型长的（设备报废损失、存酒垫付追收）
+        // 截完只剩来源类型，不同单据撞同一号、后落的覆盖先落的。达到 40 位（可能已被截断）的改取定长摘要；短于 40 位的号不变，同键重放仍落同一行。
+        String slug = slug(sourceType + "_" + idempotencyKey);
+        if (slug.length() >= 40) {
+            slug = stableToken("ar_ap_derived_item", sourceType + ":" + idempotencyKey);
+        }
         String id = "arap_" + slug;
         // internal_accounting（内部核算损耗/归集）非对外债权债务：登记即已确认，paid=amount、unpaid=0、settled；
         // receivable/payable 维持待收/待付（unpaid=amount）。

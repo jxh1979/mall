@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "综合体管理系统 P0 API 契约",
-    "version": "V0.89",
+    "version": "V0.90",
     "description": "P0 首批编码前置契约。本文采用 JSON-compatible YAML，便于与 openapi-p0.json 保持一致。正式后端以 Java 21 + Spring Boot 4.x + springdoc-openapi 输出运行时 OpenAPI，并与本契约比对。"
   },
   "servers": [
@@ -28860,7 +28860,7 @@
         ],
         "operationId": "createTurnoverRentRule",
         "summary": "新建营业额抽成规则草案",
-        "description": "第十八批 AE 段第 201 条 201-R6（照现码补契约）：填合同条款时为商户建营业额提成规则（阶梯超额累进，可设保底，不设封顶）。只落草案、对结算无影响，须由另一位持 settlement.config.manage 的同事经 POST /api/v1/settlement/config/{configType}/{id}/activate（configType=turnover_rent_rule）复核转正后才生效。商户账号只能给本商户建，他商户 403 CROSS_MERCHANT_FORBIDDEN；merchant_id、rule_name、effective_from 缺填，tiers 为空，effective_to 早于 effective_from，阶梯费率不在 0～10000 基点，非末档上限不为正或不逐级递增，或末档设了上限，均 400 VALIDATION_FAILED。第十八批 AZ 段第 349 条 349-R1（PGM:420 城市项目公司「只负责资产、场地、物业、租赁、直接管理的第三方商户」；PGM:664「商户费用账单出账……由该酒吧对应的财务 BP 负责」）：不挂商户的账号须按 finance.turnover_rent.bill 可触及的项目覆盖合同所属项目（contract_id 为空或合同没有项目按不可触及；平台管理员不限），否则 403 CROSS_PROJECT_FORBIDDEN「无权为其他项目的合同建抽成规则」，不再对不挂商户的账号返回 MERCHANT_SCOPE_REQUIRED；商户账号照旧只能给本商户建。",
+        "description": "第十八批 AE 段第 201 条 201-R6（照现码补契约）：填合同条款时为商户建营业额提成规则（阶梯超额累进，可设保底，不设封顶）。只落草案、对结算无影响，须由另一位持 settlement.config.manage 的同事经 POST /api/v1/settlement/config/{configType}/{id}/activate（configType=turnover_rent_rule）复核转正后才生效。商户账号只能给本商户建，他商户 403 CROSS_MERCHANT_FORBIDDEN；merchant_id、rule_name、effective_from 缺填，tiers 为空，effective_to 早于 effective_from，阶梯费率不在 0～10000 基点，非末档上限不为正或不逐级递增，或末档设了上限，均 400 VALIDATION_FAILED。第十八批 AZ 段第 349 条 349-R1（PGM:420 城市项目公司「只负责资产、场地、物业、租赁、直接管理的第三方商户」；PGM:664「商户费用账单出账……由该酒吧对应的财务 BP 负责」）：不挂商户的账号须按 finance.turnover_rent.bill 可触及的项目覆盖合同所属项目（contract_id 为空或合同没有项目按不可触及；平台管理员不限），否则 403 CROSS_PROJECT_FORBIDDEN「无权为其他项目的合同建抽成规则」，不再对不挂商户的账号返回 MERCHANT_SCOPE_REQUIRED；商户账号照旧只能给本商户建。第十八批 BH 段第 261 条 261-B14-R4：规则号按「商户号＋请求编号」取定长摘要，同一商户可建多条规则（各合同、各生效期各一条），同一请求编号重放仍落同一条。",
         "x-auth-context": "staff-token",
         "x-permission": "finance.turnover_rent.bill",
         "x-data-scope": "project-merchant",
@@ -40172,7 +40172,7 @@
         "x-audit-event-success": "contract.submitted",
         "x-audit-event-failure": "contract.submit_failed",
         "x-auth-context": "staff-token",
-        "description": "按所属综合体「新建」类审批流程模板开统一审批复核单(主线最终审批人默认模板配置,模板各平行线须逐线指定最终审批人),审批人在 approveSupervisorReview 逐节点裁决,全部通过→待生效,任一驳回→退回起草。模板未配则拒。第四轮裁决第 4 条：非纯提成合同月租为 0 或缺(每平米计租看单价)→ 400 CONTRACT_RENT_REQUIRED「请先在草稿上补录月租」(先经 editContractDraftRentTerms 补录)；纯提成合同约定押金缺或为 0 → 400 VALIDATION_FAILED。第十八批 G 段 82b-R3：合同所属项目须在本入口权限码可触及范围内（含可跨项目角色勾选的项目；平台管理员不限），合同未带项目或不在范围内 403 CROSS_PROJECT_FORBIDDEN（在幂等执行与行锁之前判）。",
+        "description": "按所属综合体「新建」类审批流程模板开统一审批复核单(主线最终审批人默认模板配置,模板各平行线须逐线指定最终审批人),审批人在 approveSupervisorReview 逐节点裁决,全部通过→待生效,任一驳回→退回起草。模板未配则拒。第四轮裁决第 4 条：非纯提成合同月租为 0 或缺(每平米计租看单价)→ 400 CONTRACT_RENT_REQUIRED「请先在草稿上补录月租」(先经 editContractDraftRentTerms 补录)；纯提成合同约定押金缺或为 0 → 400 VALIDATION_FAILED。第十八批 G 段 82b-R3：合同所属项目须在本入口权限码可触及范围内（含可跨项目角色勾选的项目；平台管理员不限），合同未带项目或不在范围内 403 CROSS_PROJECT_FORBIDDEN（在幂等执行与行锁之前判）。第十八批 BH 段第 261 条 261-B16-R1：同一请求编号重复提交返回第一次的结果并提示已完成、不再执行、不重复留痕（PGM「同一次操作重复提交时，返回第一次的结果并提示已完成」）。",
         "parameters": [
           {
             "name": "contract_id",
@@ -40226,7 +40226,7 @@
         "x-audit-event-success": "contract.activated",
         "x-audit-event-failure": "contract.activate_failed",
         "x-auth-context": "staff-token",
-        "description": "须待生效态。固化 4 项收益快照 + 绑定空间(防重复出租，重叠生效合同占用即拒)。合同由招商签约起草的，生效后在同一事务内把来源线索置已签约并留痕 leasing.lead.signed（PGM「招商运营细则」）。第十八批 G 段 82b-R3：合同所属项目须在本入口权限码可触及范围内（含可跨项目角色勾选的项目；平台管理员不限），合同未带项目或不在范围内 403 CROSS_PROJECT_FORBIDDEN（在幂等执行与行锁之前判）。第十八批 AZ 段第 285 条 285-R1（BSM:1361「租金、物业费、能源费、押金、违约金按合同口径形成应收」；BSM:1353「实际收款或退款成功后才更新已收押金余额」）：生效即挂押金应收——source_type=contract_deposit（合同押金），金额为生效固化的押金（为空或 0 不挂），往来方与归属商户为该商户，来源单号与幂等键为合同号（重复生效不重挂），账期为生效月，到期日为生效日，挂合同所属项目；实收经 createArApPayment 登记后才计入已收押金余额。续租、面积位置变更不经本接口，仍只登记差额（deposit_adjustment）。",
+        "description": "须待生效态。固化 4 项收益快照 + 绑定空间(防重复出租，重叠生效合同占用即拒)。合同由招商签约起草的，生效后在同一事务内把来源线索置已签约并留痕 leasing.lead.signed（PGM「招商运营细则」）。第十八批 G 段 82b-R3：合同所属项目须在本入口权限码可触及范围内（含可跨项目角色勾选的项目；平台管理员不限），合同未带项目或不在范围内 403 CROSS_PROJECT_FORBIDDEN（在幂等执行与行锁之前判）。第十八批 AZ 段第 285 条 285-R1（BSM:1361「租金、物业费、能源费、押金、违约金按合同口径形成应收」；BSM:1353「实际收款或退款成功后才更新已收押金余额」）：生效即挂押金应收——source_type=contract_deposit（合同押金），金额为生效固化的押金（为空或 0 不挂），往来方与归属商户为该商户，来源单号与幂等键为合同号（重复生效不重挂），账期为生效月，到期日为生效日，挂合同所属项目；实收经 createArApPayment 登记后才计入已收押金余额。续租、面积位置变更不经本接口，仍只登记差额（deposit_adjustment）。第十八批 BH 段第 261 条 261-B16-R1：同一请求编号重复提交返回第一次的结果并提示已完成、不再执行、不重复留痕（PGM「同一次操作重复提交时，返回第一次的结果并提示已完成」）。",
         "parameters": [
           {
             "name": "contract_id",
@@ -40320,7 +40320,7 @@
         "x-audit-event-success": "contract.change_raised",
         "x-audit-event-failure": "contract.change_raise_failed",
         "x-auth-context": "staff-token",
-        "description": "6 类：续租/退租/面积/租金/经营范围/提前终止(无转租)。须 effective 合同。按「变更」类模板开统一审批复核单(final_approver_id/parallel_lines 同 submitContract)。第十八批 G 段 82b-R3：合同所属项目须在本入口权限码可触及范围内（含可跨项目角色勾选的项目；平台管理员不限），合同未带项目或不在范围内 403 CROSS_PROJECT_FORBIDDEN（在幂等执行与行锁之前判）。",
+        "description": "6 类：续租/退租/面积/租金/经营范围/提前终止(无转租)。须 effective 合同。按「变更」类模板开统一审批复核单(final_approver_id/parallel_lines 同 submitContract)。第十八批 G 段 82b-R3：合同所属项目须在本入口权限码可触及范围内（含可跨项目角色勾选的项目；平台管理员不限），合同未带项目或不在范围内 403 CROSS_PROJECT_FORBIDDEN（在幂等执行与行锁之前判）。第十八批 BH 段第 261 条 261-B16-R1：同一请求编号重复提交返回第一次的结果并提示已完成、不再执行、不重复留痕（PGM「同一次操作重复提交时，返回第一次的结果并提示已完成」）。",
         "parameters": [
           {
             "name": "contract_id",
@@ -40374,7 +40374,7 @@
         "x-audit-event-success": "contract.scope_request_raised",
         "x-audit-event-failure": "contract.scope_request_raise_failed",
         "x-auth-context": "staff-token",
-        "description": "下单被合同经营范围拦下后,就某品类提交申请(须填原因),进 contract_changes(type=scope_grant) 按「变更」类模板开统一审批复核单;通过则授予该商户该品类临时/永久经营许可放行,驳回则不予下单。须 effective 合同。第十八批 G 段 82b-R3：合同所属项目须在本入口权限码可触及范围内（含可跨项目角色勾选的项目；平台管理员不限），合同未带项目或不在范围内 403 CROSS_PROJECT_FORBIDDEN（在幂等执行与行锁之前判）。",
+        "description": "下单被合同经营范围拦下后,就某品类提交申请(须填原因),进 contract_changes(type=scope_grant) 按「变更」类模板开统一审批复核单;通过则授予该商户该品类临时/永久经营许可放行,驳回则不予下单。须 effective 合同。第十八批 G 段 82b-R3：合同所属项目须在本入口权限码可触及范围内（含可跨项目角色勾选的项目；平台管理员不限），合同未带项目或不在范围内 403 CROSS_PROJECT_FORBIDDEN（在幂等执行与行锁之前判）。 第十八批 BH 段第 261 条 261-B16-R1：同一请求编号重复提交返回第一次的结果并提示已完成、不再执行、不重复留痕（PGM「同一次操作重复提交时，返回第一次的结果并提示已完成」）。",
         "parameters": [
           {
             "name": "contract_id",
@@ -40540,7 +40540,7 @@
         "x-audit-event-success": "contract.settled",
         "x-audit-event-failure": "contract.settle_failed",
         "x-auth-context": "staff-token",
-        "description": "按合同 settlement_rules 逐例算、只开单不落账；带 dispute_reason 则挂起「有争议」等主管裁决。HP-C02（BSM「退租、提前终止、合同到期等各种终止结算，都要经过多级审批」「审批全部通过后，系统按算好的结算清单自动落账，不再单设手动确认入口」）：trigger_type=expiry 开账即按「到期终止」类模板开统一审批复核单（final_approver_id/parallel_lines 同变更入参，缺项 400）并把 review_id 挂在结算单上；复核单全部通过→过齐单核对与非争议闸（未核对或缺单 409 CONTRACT_SETTLEMENT_DOCUMENTS_INCOMPLETE、争议挂起 409 CONTRACT_SETTLEMENT_DISPUTED，随终审整笔回滚）后自动落账、合同到期，结算单按押金够不够分流：押金抵扣全部欠费后有余额要退→押金抵扣中（押金退还应付付清后已结清），押金不足抵扣→欠费追缴中（差额收齐后已结清），正好抵完→已结清；任一节点驳回→结算单作废。退租/提前终止的审批挂在退租变更上，终审通过自动落账。第十八批 G 段 82b-R3：合同所属项目须在本入口权限码可触及范围内（含可跨项目角色勾选的项目；平台管理员不限），合同未带项目或不在范围内 403 CROSS_PROJECT_FORBIDDEN（在幂等执行与行锁之前判）。",
+        "description": "按合同 settlement_rules 逐例算、只开单不落账；带 dispute_reason 则挂起「有争议」等主管裁决。HP-C02（BSM「退租、提前终止、合同到期等各种终止结算，都要经过多级审批」「审批全部通过后，系统按算好的结算清单自动落账，不再单设手动确认入口」）：trigger_type=expiry 开账即按「到期终止」类模板开统一审批复核单（final_approver_id/parallel_lines 同变更入参，缺项 400）并把 review_id 挂在结算单上；复核单全部通过→过齐单核对与非争议闸（未核对或缺单 409 CONTRACT_SETTLEMENT_DOCUMENTS_INCOMPLETE、争议挂起 409 CONTRACT_SETTLEMENT_DISPUTED，随终审整笔回滚）后自动落账、合同到期，结算单按押金够不够分流：押金抵扣全部欠费后有余额要退→押金抵扣中（押金退还应付付清后已结清），押金不足抵扣→欠费追缴中（差额收齐后已结清），正好抵完→已结清；任一节点驳回→结算单作废。退租/提前终止的审批挂在退租变更上，终审通过自动落账。第十八批 G 段 82b-R3：合同所属项目须在本入口权限码可触及范围内（含可跨项目角色勾选的项目；平台管理员不限），合同未带项目或不在范围内 403 CROSS_PROJECT_FORBIDDEN（在幂等执行与行锁之前判）。第十八批 BH 段第 261 条 261-B16-R1：同一请求编号重复提交返回第一次的结果并提示已完成、不再执行、不重复留痕（PGM「同一次操作重复提交时，返回第一次的结果并提示已完成」），不再多开一张结算单。",
         "parameters": [
           {
             "name": "contract_id",
@@ -40636,7 +40636,7 @@
         "x-audit-event-success": "contract.dispute_resolved",
         "x-audit-event-failure": "contract.dispute_resolve_failed",
         "x-auth-context": "staff-token",
-        "description": "主管裁决：有争议 → 写裁决结论；有争议，诉讼/仲裁 → 录入诉讼/仲裁结果。resolution_note 必填（结论追加落 dispute_resolution，记裁决人/时），按既有口径重算清单回待结算（合同仍生效），退租变更或到期终止复核单的最后审批随之可继续；非两种争议态 409 CONTRACT_SETTLEMENT_NOT_DISPUTED。第十八批 G 段 82b-R3：合同所属项目须在本入口权限码可触及范围内（含可跨项目角色勾选的项目；平台管理员不限），合同未带项目或不在范围内 403 CROSS_PROJECT_FORBIDDEN（在幂等执行与行锁之前判）。",
+        "description": "主管裁决：有争议 → 写裁决结论；有争议，诉讼/仲裁 → 录入诉讼/仲裁结果。resolution_note 必填（结论追加落 dispute_resolution，记裁决人/时），按既有口径重算清单回待结算（合同仍生效），退租变更或到期终止复核单的最后审批随之可继续；非两种争议态 409 CONTRACT_SETTLEMENT_NOT_DISPUTED。第十八批 G 段 82b-R3：合同所属项目须在本入口权限码可触及范围内（含可跨项目角色勾选的项目；平台管理员不限），合同未带项目或不在范围内 403 CROSS_PROJECT_FORBIDDEN（在幂等执行与行锁之前判）。第十八批 BH 段第 261 条 261-B16-R1：同一请求编号重复提交返回第一次的结果并提示已完成、不再执行、不重复留痕（PGM「同一次操作重复提交时，返回第一次的结果并提示已完成」）。",
         "parameters": [
           {
             "name": "settlement_id",
@@ -41003,6 +41003,7 @@
         ],
         "operationId": "saveSpaceExpiryColorRule",
         "summary": "配置到期着色分类(颜色+提前天数)",
+        "description": "第十八批 BH 段第 261 条 261-B16-R1：同一请求编号重复提交返回第一次的结果并提示已完成、不再执行、不重复留痕（PGM「同一次操作重复提交时，返回第一次的结果并提示已完成」），不再多建一条着色分类。",
         "x-permission": "contract.space.color.manage",
         "x-data-scope": "platform",
         "x-terminal-allowed": [
@@ -41320,7 +41321,7 @@
         "x-audit-event-success": "contract.fee_billed",
         "x-audit-event-failure": "contract.period_bill_failed",
         "x-auth-context": "staff-token",
-        "description": "一期生成 租金(ContractRentMath)+物业费(rent_terms.propertyFeeCent)+能源费(基非none取 rent_terms.energyFeeCent) 应收;各费目幂等;0/免租跳过。 涉及抽成时锁定该账期实际采用的 turnover_rule_id；规则缺失、重叠或月内切换不能唯一覆盖完整账期时待处理，不按当前最新规则替算。第十八批 G 段 82b-R3：合同所属项目须在本入口权限码可触及范围内（含可跨项目角色勾选的项目；平台管理员不限），合同未带项目或不在范围内 403 CROSS_PROJECT_FORBIDDEN（在幂等执行与行锁之前判）。第十八批 Q 段第 138 条：涉及抽成的账期，酒吧商户服务费尚未月结定格或酒吧收入来源分项未齐时 409 BAR_REVENUE_PENDING，本次不出账。第十八批 Q 段第 138 条复核修正：已到期合同可对到期日所在月及以前的账期出账（营业额抽成类合同的最后一期在到期、该期月结定格后出），到期日所在月之后的账期与其他非生效状态 409 CONTRACT_NOT_EFFECTIVE；保底与抽成取高、保底加抽成叠加合同变更或续租终审前的账期按当时月租（rent_terms.priorRentTerms）出账。 第十八批 U 段第 155 条 155-R1：涉及抽成的账期，出账同一事务按酒吧整单逐笔记下该笔在当月累计中所适用的档位费率与本期是否按保底收租（规则保底生效，或取高合同抽成额低于月租）；所退账单在之前账期结清的商品退款为跨期退款，不进本期抽成基数，原月按保底收租的不冲回，原月按抽成额收租的按原档位费率原额逐笔挂营业额抽成冲正应付（source_type=turnover_rent_reversal，归本期；本期没有销售、只有冲正时也挂，重出不重挂）；所退原账期的抽成尚未出账时 409 TURNOVER_RENT_ORIGIN_UNBILLED，本次不出账。 第十八批 U 段第 155 条 155-R3 起，餐饮、零售第三方回流订单同口径——净额大于 0 的回流订单逐笔记快照；同期回流退款从原订单里减；跨期回流退款按原订单快照逐笔冲正（原月按保底收租的不冲回），原账期未出账同样 409 TURNOVER_RENT_ORIGIN_UNBILLED；查不到本系统原订单的回流退款不计。 第十八批 V 段第 159 条 159-R4（ENUM:190「非最终快照的数据一律不得进入结算、分红、正式提成计算和对账关账」）：涉及抽成的账期，取数之前判账期内该商户检查单位（酒吧按该店，其他商户按所属综合体；建档前的营业日不计）各营业日的「当日订单与核销记录」「当日退款与冲正记录」是否已标记为最终，有未标齐的 409 TURNOVER_DATA_NOT_FINAL（message「以下营业日数据尚未标记为最终，不能出营业额抽成账单：」后列「yyyy-MM-dd 单位名：类别」，最多 10 行），本次不出账、不写逐笔快照与冲正应付；固定租金合同不判。",
+        "description": "一期生成 租金(ContractRentMath)+物业费(rent_terms.propertyFeeCent)+能源费(基非none取 rent_terms.energyFeeCent) 应收;各费目幂等;0/免租跳过。 涉及抽成时锁定该账期实际采用的 turnover_rule_id；规则缺失、重叠或月内切换不能唯一覆盖完整账期时待处理，不按当前最新规则替算。第十八批 G 段 82b-R3：合同所属项目须在本入口权限码可触及范围内（含可跨项目角色勾选的项目；平台管理员不限），合同未带项目或不在范围内 403 CROSS_PROJECT_FORBIDDEN（在幂等执行与行锁之前判）。第十八批 Q 段第 138 条：涉及抽成的账期，酒吧商户服务费尚未月结定格或酒吧收入来源分项未齐时 409 BAR_REVENUE_PENDING，本次不出账。第十八批 Q 段第 138 条复核修正：已到期合同可对到期日所在月及以前的账期出账（营业额抽成类合同的最后一期在到期、该期月结定格后出），到期日所在月之后的账期与其他非生效状态 409 CONTRACT_NOT_EFFECTIVE；保底与抽成取高、保底加抽成叠加合同变更或续租终审前的账期按当时月租（rent_terms.priorRentTerms）出账。 第十八批 U 段第 155 条 155-R1：涉及抽成的账期，出账同一事务按酒吧整单逐笔记下该笔在当月累计中所适用的档位费率与本期是否按保底收租（规则保底生效，或取高合同抽成额低于月租）；所退账单在之前账期结清的商品退款为跨期退款，不进本期抽成基数，原月按保底收租的不冲回，原月按抽成额收租的按原档位费率原额逐笔挂营业额抽成冲正应付（source_type=turnover_rent_reversal，归本期；本期没有销售、只有冲正时也挂，重出不重挂）；所退原账期的抽成尚未出账时 409 TURNOVER_RENT_ORIGIN_UNBILLED，本次不出账。 第十八批 U 段第 155 条 155-R3 起，餐饮、零售第三方回流订单同口径——净额大于 0 的回流订单逐笔记快照；同期回流退款从原订单里减；跨期回流退款按原订单快照逐笔冲正（原月按保底收租的不冲回），原账期未出账同样 409 TURNOVER_RENT_ORIGIN_UNBILLED；查不到本系统原订单的回流退款不计。 第十八批 V 段第 159 条 159-R4（ENUM:190「非最终快照的数据一律不得进入结算、分红、正式提成计算和对账关账」）：涉及抽成的账期，取数之前判账期内该商户检查单位（酒吧按该店，其他商户按所属综合体；建档前的营业日不计）各营业日的「当日订单与核销记录」「当日退款与冲正记录」是否已标记为最终，有未标齐的 409 TURNOVER_DATA_NOT_FINAL（message「以下营业日数据尚未标记为最终，不能出营业额抽成账单：」后列「yyyy-MM-dd 单位名：类别」，最多 10 行），本次不出账、不写逐笔快照与冲正应付；固定租金合同不判。 第十八批 BH 段第 261 条 261-B16-R1：同一请求编号重复提交返回第一次的结果并提示已完成、不再执行、不重复留痕（PGM「同一次操作重复提交时，返回第一次的结果并提示已完成」）（返回第一次挂出的各费目账单，而不是空列表）。",
         "parameters": [
           {
             "name": "contract_id",

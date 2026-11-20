@@ -1,6 +1,6 @@
 package com.complex.platform.contract;
 
-// 文件版本：V0.27
+// 文件版本：V0.28
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
@@ -597,7 +597,7 @@ class ContractServiceTests {
                     "fixed_ratio", "by_contract", 500000L, Map.of(), List.of(), List.of(), null, null)))
                     .hasMessageContaining("不可预设固定能源费");
             assertThatThrownBy(() -> service.raiseChange(c.id(), change(
-                    "k_fixed_change", "business_scope_change", Map.of(key, value))))
+                    "k_fixed_change_" + value, "business_scope_change", Map.of(key, value))))   // 每次提交各用自己的请求编号（261-B16-R1 起变更经幂等层）
                     .hasMessageContaining("不可预设固定能源费");
         }
     }

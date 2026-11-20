@@ -1,6 +1,6 @@
 package com.complex.platform.contract;
 
-// 文件版本：V0.32
+// 文件版本：V0.33
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.LocalZone;
@@ -525,6 +525,11 @@ public class ContractService implements com.complex.platform.finance.Termination
     public ContractRecord submit(String contractId, ContractSubmitRequest request) {
         authorizationService.requirePlatformScope();
         ContractSubmitRequest actual = requireRequest(request);
+        requireContractInReach(contractId, "contract.draft.manage");
+        return once("submitContract:" + contractId, actual.idempotencyKey(), actual, () -> submitOnce(contractId, actual), ContractRecord.class);
+    }
+
+    private ContractRecord submitOnce(String contractId, ContractSubmitRequest actual) {
         ContractRecord contract = requireContractInReach(contractId, "contract.draft.manage");
         if (!"drafting".equals(contract.lifecycleStatus())) {
             throw ApiException.conflict("CONTRACT_NOT_DRAFTING", "只有草拟中的合同才能提交审批");
@@ -648,6 +653,11 @@ public class ContractService implements com.complex.platform.finance.Termination
     public ContractRecord activate(String contractId, ContractActivateRequest request) {
         authorizationService.requirePermission("contract.lifecycle.activate");
         ContractActivateRequest actual = requireRequest(request);
+        requireContractInReach(contractId, "contract.lifecycle.activate");
+        return once("activateContract:" + contractId, actual.idempotencyKey(), actual, () -> activateOnce(contractId, actual), ContractRecord.class);
+    }
+
+    private ContractRecord activateOnce(String contractId, ContractActivateRequest actual) {
         List<String> spaceIds = (actual.spaceIds() == null ? List.<String>of() : actual.spaceIds())
                 .stream().map(s -> requireText(s, "space_id")).distinct().toList();
         if (spaceIds.isEmpty()) {
@@ -729,6 +739,11 @@ public class ContractService implements com.complex.platform.finance.Termination
     public ContractChangeRecord raiseChange(String contractId, ContractChangeRequest request) {
         authorizationService.requirePermission("contract.change.manage");
         ContractChangeRequest actual = requireRequest(request);
+        requireContractInReach(contractId, "contract.change.manage");
+        return once("raiseContractChange:" + contractId, actual.idempotencyKey(), actual, () -> raiseChangeOnce(contractId, actual), ContractChangeRecord.class);
+    }
+
+    private ContractChangeRecord raiseChangeOnce(String contractId, ContractChangeRequest actual) {
         String type = requireEnum(actual.changeType(), CHANGE_TYPES, "change_type");
         if ("scope_grant".equals(type)) {
             // scope_grant 只从专用申请入口(requestScopeGrant)发起，通用变更入口拒收(避免缺 requestedCategory 载荷)。
@@ -867,6 +882,11 @@ public class ContractService implements com.complex.platform.finance.Termination
     public ContractChangeRecord requestScopeGrant(String contractId, ContractScopeRequestRequest request) {
         authorizationService.requirePermission("contract.scope_request.raise");
         ContractScopeRequestRequest actual = requireRequest(request);
+        requireContractInReach(contractId, "contract.scope_request.raise");
+        return once("requestContractScopeGrant:" + contractId, actual.idempotencyKey(), actual, () -> requestScopeGrantOnce(contractId, actual), ContractChangeRecord.class);
+    }
+
+    private ContractChangeRecord requestScopeGrantOnce(String contractId, ContractScopeRequestRequest actual) {
         String category = requireText(actual.category(), "category");
         if (!ContractScopeGuard.ALLOWED_CATEGORY_VALUES.contains(category)) {
             throw ApiException.badRequest("VALIDATION_FAILED",
@@ -925,6 +945,11 @@ public class ContractService implements com.complex.platform.finance.Termination
     public ContractSettlementRecord settle(String contractId, ContractSettleRequest request) {
         authorizationService.requirePermission("contract.settlement.manage");
         ContractSettleRequest actual = requireRequest(request);
+        requireContractInReach(contractId, "contract.settlement.manage");
+        return once("settleContract:" + contractId, actual.idempotencyKey(), actual, () -> settleOnce(contractId, actual), ContractSettlementRecord.class);
+    }
+
+    private ContractSettlementRecord settleOnce(String contractId, ContractSettleRequest actual) {
         String trigger = requireEnum(actual.triggerType(), SETTLE_TRIGGERS, "trigger_type");
         ContractRecord contract = requireContractInReach(contractId, "contract.settlement.manage");
         if (!Set.of("effective", "expired").contains(contract.lifecycleStatus())) {
@@ -968,6 +993,11 @@ public class ContractService implements com.complex.platform.finance.Termination
         ContractSettlementRecord found = repository.findSettlementById(requireText(settlementId, "settlement_id"))
                 .orElseThrow(() -> ApiException.notFound("CONTRACT_SETTLEMENT_NOT_FOUND", "结算单不存在或已被删除"));
         requireContractInReach(found.contractId(), "contract.settlement.dispute.resolve");
+        return once("resolveContractSettlementDispute:" + found.id(), actual.idempotencyKey(), actual,
+                () -> resolveDisputeOnce(found, actual), ContractSettlementRecord.class);
+    }
+
+    private ContractSettlementRecord resolveDisputeOnce(ContractSettlementRecord found, ContractResolveDisputeRequest actual) {
         ContractRecord contract = lockContract(found.contractId());
         ContractSettlementRecord settlement = repository.findSettlementById(found.id()).orElseThrow();   // 锁后重读状态
         if (!DISPUTED_SETTLEMENT_STATUSES.contains(settlement.status())) {
@@ -1357,6 +1387,19 @@ public class ContractService implements com.complex.platform.finance.Termination
         }
     }
 
+    /**
+     * 第十八批 BH 段第 261 条 261-B16-R1（PGM:528「⑤同一笔操作重复提交不重复生效（重复点击、网络重发、渠道重复回调都只算一次）」；
+     * PGM:303「同一次操作重复提交时，返回第一次的结果并提示已完成。」）：合同域写入口在权限与项目范围校验之后经共用幂等层执行，
+     * 同一请求编号重交返回第一次的结果、不再执行（退租开账、着色分类不再多建一条）。不带请求编号的（服务内调用、未接幂等层的单测）直接办理；
+     * 经接口提交的由控制器要求请求编号必填。
+     */
+    private <T> T once(String operationId, String idempotencyKey, Object request, java.util.function.Supplier<T> action, Class<T> type) {
+        if (idempotencyService == null || idempotencyKey == null || idempotencyKey.isBlank()) {
+            return action.get();
+        }
+        return idempotencyService.execute(operationId, idempotencyKey, request, action, type);
+    }
+
     private static String errorCodeOf(RuntimeException exception) {
         return exception instanceof ApiException api ? api.code() : "INTERNAL_ERROR";
     }
@@ -1364,6 +1407,10 @@ public class ContractService implements com.complex.platform.finance.Termination
     public SpaceExpiryColorRuleRecord saveColorRule(SpaceExpiryColorRuleRequest request) {
         authorizationService.requirePermission("contract.space.color.manage");
         SpaceExpiryColorRuleRequest actual = requireRequest(request);
+        return once("saveSpaceExpiryColorRule", actual.idempotencyKey(), actual, () -> saveColorRuleOnce(actual), SpaceExpiryColorRuleRecord.class);
+    }
+
+    private SpaceExpiryColorRuleRecord saveColorRuleOnce(SpaceExpiryColorRuleRequest actual) {
         int days = actual.thresholdDays() == null ? 0 : actual.thresholdDays();
         if (days <= 0) {
             throw ApiException.badRequest("VALIDATION_FAILED", "提醒天数必须大于 0");
@@ -1451,6 +1498,13 @@ public class ContractService implements com.complex.platform.finance.Termination
     public List<ContractRentBillRecord> generatePeriodBills(String contractId, ContractRentBillRequest request) {
         authorizationService.requirePermission("finance.ar_ap.manage");
         ContractRentBillRequest actual = requireRequest(request);
+        requireContractInReach(contractId, "finance.ar_ap.manage");
+        // 幂等层按类型存取首次结果，列表以数组存。
+        return List.of(once("generateContractPeriodBills:" + contractId, actual.idempotencyKey(), actual,
+                () -> generatePeriodBillsOnce(contractId, actual).toArray(ContractRentBillRecord[]::new), ContractRentBillRecord[].class));
+    }
+
+    private List<ContractRentBillRecord> generatePeriodBillsOnce(String contractId, ContractRentBillRequest actual) {
         String period = requireText(actual.period(), "period");
         if (!period.matches("\\d{4}-\\d{2}")) {
             throw ApiException.badRequest("VALIDATION_FAILED", "账期格式不正确，应为 YYYY-MM");
