@@ -1,12 +1,13 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.complex.platform.common.api.ApiResponse;
 import com.complex.platform.support.StaffRequestFixture;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jayway.jsonpath.JsonPath;
@@ -85,15 +86,40 @@ class PartnerVoucherRedemptionImportJdbcIntegrationTests {
     void importAndDuplicateAreAuditedWithTheOperator() throws Exception {
         String code = issue("own", projectA);
         String ref = "POS-PVI-OWN-" + s;
-        String id = id(importRedemption(staffA, code, ref).andExpect(status().isOk()));
+        String id = id(importRedemption(staffA, code, ref).andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("success")).andExpect(jsonPath("$.replayed").doesNotExist()));
 
         assertThat(audits(IMPORTED, user("a"))).singleElement().satisfies(row -> assertThat(row)
                 .containsEntry("event_result", "success").containsEntry("business_id", id)
                 .containsEntry("idempotency_key", ref).containsEntry("duplicate", "false"));
 
-        importRedemption(staffA, code, ref).andExpect(status().isOk()).andExpect(jsonPath("$.data.id").value(id));
+        // 第十八批 BN 段 261-B08-R1（PGM:303「同一次操作重复提交时，返回第一次的结果并提示已完成。」）：重导（网页换了请求编号）返回首次记录并提示已完成，
+        // 只扣一次、回流与应付各一笔。修复前红：第二次 message 为 success、不带 replayed
+        importRedemption(staffA, code, ref).andExpect(status().isOk()).andExpect(jsonPath("$.data.id").value(id))
+                .andExpect(jsonPath("$.replayed").value(true)).andExpect(jsonPath("$.message").value(ApiResponse.REPLAYED_MESSAGE));
         assertThat(usedTimes(code)).isEqualTo(1);
+        assertThat(redemptions(ref)).isEqualTo(1);
+        assertThat(payables()).isEqualTo(1);
         assertThat(audits(IMPORTED, user("a"))).extracting(row -> row.get("duplicate")).containsExactly("false", "true");
+    }
+
+    // 第十八批 BN 段 261-B08-R1（PGM:303「没有返回确认的不算完成，不扣减、不核销」；同一合作方同一外部核销单号只容一条回流，V282 uq_pvr_ext）：
+    // 单号已登记在同一合作方另一张券上 → 409 PARTNER_VOUCHER_REDEMPTION_CONFLICT，这张券不扣次、不多落回流与应付，失败留痕记该码。
+    // 修复前红：200 且返回第一张券的记录
+    @Test
+    void referenceAlreadyImportedOnAnotherVoucherIsRejectedWithoutCharging() throws Exception {
+        String ref = "POS-PVI-CONFLICT-" + s;
+        importRedemption(staffA, issue("first", projectA), ref).andExpect(status().isOk());
+        String second = issue("second", projectA);
+
+        importRedemption(staffA, second, ref).andExpect(status().isConflict())
+                .andExpect(jsonPath("$.detail_code").value("PARTNER_VOUCHER_REDEMPTION_CONFLICT"));
+
+        assertThat(usedTimes(second)).isZero();
+        assertThat(redemptions(ref)).isEqualTo(1);
+        assertThat(payables()).isEqualTo(1);
+        assertThat(audits(IMPORT_FAILED, user("a"))).singleElement().satisfies(row -> assertThat(row)
+                .containsEntry("error_code", "PARTNER_VOUCHER_REDEMPTION_CONFLICT"));
     }
 
     // 279-R1：券码不存在 → 404，失败留痕记操作人与错误码。修复前红：没有留痕
@@ -191,6 +217,15 @@ class PartnerVoucherRedemptionImportJdbcIntegrationTests {
 
     private int usedTimes(String code) {
         return jdbc.queryForObject("SELECT used_times FROM issued_entitlements WHERE entitlement_code=?", Integer.class, code);
+    }
+
+    private long redemptions(String ref) {
+        return jdbc.queryForObject("SELECT count(*) FROM partner_voucher_redemptions WHERE partner_id=? AND external_redemption_ref=?",
+                Long.class, partner, ref);
+    }
+
+    private long payables() {
+        return jdbc.queryForObject("SELECT count(*) FROM ar_ap_items WHERE source_type='partner_voucher' AND counterparty_id=?", Long.class, partner);
     }
 
     private String user(String tag) {

@@ -1,6 +1,6 @@
 package com.complex.platform.integration;
 
-// 文件版本：V0.06
+// 文件版本：V0.07
 
 import com.complex.platform.support.InMemoryAuditEventRepository;
 import com.complex.platform.support.InMemoryIdempotencyRepository;
@@ -1634,9 +1634,13 @@ class IntegrationServiceTests {
         }
 
         @Override
-        public OpenApiEventRecord saveOpenEvent(OpenApiEventRecord event) {
+        public boolean saveOpenEvent(OpenApiEventRecord event) {
+            // 同 Jdbc 实现（261-B23-R1）：同一 (endpoint_key, provider_code, idempotency_key) 已有事件时不写
+            if (findOpenEventByIdempotency(event.endpointKey(), event.providerCode(), event.idempotencyKey()).isPresent()) {
+                return false;
+            }
             events.add(event);
-            return event;
+            return true;
         }
 
         @Override
@@ -1871,9 +1875,18 @@ class IntegrationServiceTests {
         private final List<String> videoAccessAudits = new ArrayList<>();
 
         @Override
-        public RobotTaskEventRecord saveRobotTaskEvent(RobotTaskEventRecord record) {
+        public boolean saveRobotTaskEvent(RobotTaskEventRecord record) {
+            // 同 Jdbc 实现（261-B23-R2）：同一事件号已有时不写
+            if (findRobotTaskEventById(record.id()).isPresent()) {
+                return false;
+            }
             robotTaskEvents.add(record);
-            return record;
+            return true;
+        }
+
+        @Override
+        public Optional<RobotTaskEventRecord> findRobotTaskEventById(String id) {
+            return robotTaskEvents.stream().filter(event -> event.id().equals(id)).findFirst();
         }
 
         @Override

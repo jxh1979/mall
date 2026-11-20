@@ -2,8 +2,10 @@ package com.complex.platform.integration;
 
 import static com.complex.platform.integration.IntegrationValidation.requireText;
 
+import com.complex.platform.common.Hashing;
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.PageResponse;
+import com.complex.platform.common.idempotency.IdempotentReplayContext;
 import com.complex.platform.evidence.AuditEventService;
 import com.complex.platform.gate.TerminalSwitchGuard;
 import java.time.Clock;
@@ -79,7 +81,9 @@ final class ThirdPartyScaffoldingService {
             resultJson.put("mapped", false);
             resultJson.put("third_party_type", resolvedType);
             resultJson.put("mapping", Map.of());
-            repository.saveOpenEvent(new OpenApiEventRecord(
+            // 第十八批 BN 段 261-B23-R1（PGM:528⑤；BSM:1618「第三方回流失败、重复、延迟、差异。」）：同一幂等键重投或同时投递只落一条，
+            // 返回首次事件编号并标已去重；收到留痕照记、带 deduplicated。
+            WebhookAcceptedResponse response = repository.acceptOpenEvent(new OpenApiEventRecord(
                     eventId,
                     "integration-" + resolvedType,
                     resolvedType,
@@ -97,12 +101,12 @@ final class ThirdPartyScaffoldingService {
                     "integration.webhook_received",
                     "not_applicable",
                     "integration_typed_webhook",
-                    eventId,
+                    response.eventId(),
                     requestId(),
                     resolvedIdempotencyKey,
-                    Map.of("third_party_type", resolvedType, "process_status", "accepted")
+                    Map.of("third_party_type", resolvedType, "process_status", "accepted", "deduplicated", response.deduplicated())
             );
-            return new WebhookAcceptedResponse(eventId, false);
+            return response;
         } catch (RuntimeException exception) {
             auditEventService.recordFailure(
                     "integration.webhook_rejected",
@@ -123,6 +127,9 @@ final class ThirdPartyScaffoldingService {
         terminalSwitchGuard.check("integration.robot.sync");
         try {
             requireText(request == null ? null : request.robotTaskRef(), "robot_task_ref");
+            // 第十八批 BN 段 261-B23-R2（契约 RobotTaskEventRequest.idempotency_key「重复提交时必须返回同一处理结果，避免重复留痕。」）：
+            // 幂等键必填，验签前先拒（照记上报失败留痕）。
+            requireText(request.idempotencyKey(), "idempotency_key");
             String eventType = request.eventType();
             if (eventType == null || !ROBOT_EVENT_TYPES.contains(eventType)) {
                 throw ApiException.badRequest("ROBOT_EVENT_TYPE_INVALID",
@@ -137,25 +144,31 @@ final class ThirdPartyScaffoldingService {
             signable.put("payload", payload);
             verifyWebhookSignature("robot", provider, "integration.robot.report",
                     request.idempotencyKey(), signable, signature, timestamp, nonce);
+            // 第十八批 BN 段 261-B23-R2（PGM:528⑤；PGM:303「同一次操作重复提交时，返回第一次的结果并提示已完成。」）：事件号按合作方与幂等键派生，
+            // 重投或同时投递只落一条被动留痕；没写入时返回首条，上报留痕照记并带 deduplicated，响应提示已完成。
             RobotTaskEventRecord record = new RobotTaskEventRecord(
-                    "robotevt_" + UUID.randomUUID(),
+                    "robotcb_" + Hashing.idempotencyCode("integration.robot.report|" + provider + "|" + request.idempotencyKey()),
                     request.robotTaskRef(),
                     eventType,
                     request.handoverId(),
                     payload,
                     clock.instant()
             );
-            repository.saveRobotTaskEvent(record);
+            boolean written = repository.saveRobotTaskEvent(record);
+            RobotTaskEventRecord result = written ? record : repository.findRobotTaskEventById(record.id()).orElseThrow();
             auditEventService.recordSuccess(
                     "integration.robot_reported",
                     "not_applicable",
                     "integration_robot_task_event",
-                    record.id(),
+                    result.id(),
                     requestId(),
                     request.idempotencyKey(),
-                    Map.of("robot_task_ref", record.robotTaskRef(), "event_type", record.eventType())
+                    Map.of("robot_task_ref", result.robotTaskRef(), "event_type", result.eventType(), "deduplicated", !written)
             );
-            return record;
+            if (!written) {
+                IdempotentReplayContext.markCurrentReplayed();
+            }
+            return result;
         } catch (RuntimeException exception) {
             auditEventService.recordFailure(
                     "integration.robot_report_failed",

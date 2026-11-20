@@ -1,6 +1,6 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.21
+// 文件版本：V0.22
 
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.idempotency.IdempotentReplayContext;
@@ -351,7 +351,8 @@ public class StoredValueService {
     /**
      * 客人本人订单储值付款。ROOT-03-R20（操作员原话「一个订单可分多个渠道支付，但最终必须完成一次支付才算完成」）：amountCent 为空＝付清待付金额，
      * 可只付一部分、其余在线补足，不得超过待付金额；合计足额才置已付。ROOT-03-R17（BSM 第 859 行「客人付款成功后必须出票」）：付足即同一事务自动出票，
-     * 出票失败整笔回滚（余额不扣、订单仍待付）。idempotencyKey＝客人请求编号：同一请求重复提交不重复扣款。
+     * 出票失败整笔回滚（余额不扣、订单仍待付）。idempotencyKey＝客人请求编号：同一请求重复提交（部分付或付足）不重复扣款，返回订单现状并提示已完成；
+     * 订单已付清而不是本请求付的（别的渠道先付清），本次不生效、回 409 ORDER_NOT_PAYABLE（261-B05-R1）。
      */
     @Transactional
     @GuardedAction(capability = "customer.stored_value.consume", permission = "customer.stored_value.consume")
@@ -385,7 +386,17 @@ public class StoredValueService {
         if ("cancelled".equals(order.status())) {
             throw ApiException.conflict("ORDER_CANCELLED", "订单已取消");
         }
-        if ("paid".equals(order.payStatus())) return order;
+        // 第十八批 BN 段第 261 条 261-B05-R1（PGM:303「同一个操作被重复提交，系统只认一次，不会因为重试就重复扣款、重复入账或重复核销」、
+        // 行末「同一次操作重复提交时，返回第一次的结果并提示已完成。」；PGM:528「⑤同一笔操作重复提交不重复生效（重复点击、网络重发、渠道重复回调都只算一次）」；
+        // 第十八批裁决 50）：本请求的扣款流水已在＝同一请求重复提交（部分付或付足都算），返回订单现状并提示已完成、不再扣款。
+        // 订单已付清而不是本请求付的（别的渠道先付清），落到下面的「不在待支付状态」，本次不生效、不扣款（PGM:303「两个操作同时发生冲突时，
+        // 一律以“先处理成功”的那个为准」及其括号内「其余自动失效并提示」）。
+        String consumeKey = idempotencyKey == null ? "ticketsv_" + order.id()
+                : "ticketsv_" + sha256Hex(order.id() + "|" + idempotencyKey).substring(0, 40);
+        if (repository.findStoredValueTransactionByIdempotencyKey(consumeKey).isPresent()) {
+            IdempotentReplayContext.markCurrentReplayed();
+            return order;
+        }
         if (!"created".equals(order.status()) || !"unpaid".equals(order.payStatus())) {
             throw ApiException.conflict("ORDER_NOT_PAYABLE", "订单不在待支付状态");
         }
@@ -403,11 +414,6 @@ public class StoredValueService {
         }
         if (!"CNY".equals(order.currency())) {
             throw ApiException.conflict("PAYMENT_CURRENCY_MISMATCH", "订单币种与储值余额不一致");
-        }
-        String consumeKey = idempotencyKey == null ? "ticketsv_" + order.id()
-                : "ticketsv_" + sha256Hex(order.id() + "|" + idempotencyKey).substring(0, 40);
-        if (repository.findStoredValueTransactionByIdempotencyKey(consumeKey).isPresent()) {
-            return order; // 同一请求重复提交：已扣过，返回订单现状。
         }
         long paidBefore = ticketingRepository.listTicketPaymentIntentsByOrder(order.id()).stream()
                 .filter(intent -> "succeeded".equals(intent.status()))

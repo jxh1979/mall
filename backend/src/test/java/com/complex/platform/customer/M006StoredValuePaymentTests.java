@@ -1,6 +1,6 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.16
+// 文件版本：V0.17
 // M006-027：现场储值扣款必须先核验报出的手机号和短信验证码。
 import static org.assertj.core.api.Assertions.*;
 import static org.mockito.Mockito.*;
@@ -84,6 +84,11 @@ class M006StoredValuePaymentTests {
                 "customer_1","customer_1","customer",null,null,"active"));
         ReflectionTestUtils.setField(storedValue, "ticketingRepository", tickets);
         ReflectionTestUtils.setField(storedValue, "customerService", customerService);
+        // 261-B05-R1：已付订单不再一律直接返回，同一请求重复提交按本请求扣款流水认出——模拟仓储须读回已保存的扣款流水。
+        var debit = new AtomicReference<CustomerStoredValueTransactionRecord>();
+        when(customers.saveStoredValueTransaction(any())).thenAnswer(i -> { debit.set(i.getArgument(0)); return debit.get(); });
+        when(customers.findStoredValueTransactionByIdempotencyKey("ticketsv_ticket_order_1"))
+                .thenAnswer(i -> Optional.ofNullable(debit.get()));
         for (int n=0;n<2;n++) {
             ReflectionTestUtils.invokeMethod(storedValue, "payTicketOrder", "customer_1",
                     "ticket_order_1", "card_1", "13800138000", "123456");
@@ -116,6 +121,11 @@ class M006StoredValuePaymentTests {
         ReflectionTestUtils.setField(storedValue, "ticketingRepository", tickets);
         ReflectionTestUtils.setField(storedValue, "customerService", customerService);
         if (payable) {
+            // 261-B05-R1：已付订单不再一律直接返回，同一请求重复提交按本请求扣款流水认出——模拟仓储须读回已保存的扣款流水。
+            var debit = new AtomicReference<CustomerStoredValueTransactionRecord>();
+            when(customers.saveStoredValueTransaction(any())).thenAnswer(i -> { debit.set(i.getArgument(0)); return debit.get(); });
+            when(customers.findStoredValueTransactionByIdempotencyKey("ticketsv_ticket_order_1"))
+                    .thenAnswer(i -> Optional.ofNullable(debit.get()));
             storedValue.payTicketOrder("customer_1", order.get().id(), "card_1", "13800138000", "123456");
             storedValue.payTicketOrder("customer_1", order.get().id(), "card_1", "13800138000", "123456");
             assertThat(balance.get().balanceCent()).isEqualTo(7500L);

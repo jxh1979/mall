@@ -1,11 +1,12 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.complex.platform.common.api.ApiResponse;
 import com.complex.platform.customer.CustomerRepository;
 import com.complex.platform.finance.gateway.PaymentGatewayRouter;
 import com.complex.platform.support.CustomerTicketPaymentFixture;
@@ -13,7 +14,9 @@ import com.complex.platform.support.TestSecurityActors;
 import com.complex.platform.ticketing.dto.StatusChangeRequest;
 import com.complex.platform.ticketing.dto.TicketRefundRequest;
 import java.time.Instant;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -23,6 +26,7 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
@@ -135,6 +139,88 @@ class TicketOrderSplitPaymentJdbcIntegrationTests {
         ticketingService.cancelExpiredUnpaidTicketOrders(Instant.now().plusSeconds(60));
         assertThat(f.order(orderId)).containsEntry("status", "cancelled");
         assertThat(f.cardBalance()).isEqualTo(20_000L);
+    }
+
+    /**
+     * 第十八批 BN 段第 261 条 261-B05-R1（PGM:303「同一个操作被重复提交，系统只认一次，不会因为重试就重复扣款、重复入账或重复核销」、
+     * 行末「同一次操作重复提交时，返回第一次的结果并提示已完成。」；PGM:528「⑤同一笔操作重复提交不重复生效（重复点击、网络重发、渠道重复回调都只算一次）」）：
+     * 储值付足后同一请求编号再提交，返回订单现状并提示已完成；只扣一次、只记一笔储值收款与一条扣款流水。
+     */
+    @Test
+    void sameKeyResubmitAfterFullStoredValuePayRepliesCompletedWithoutSecondDebit() throws Exception {
+        String orderId = f.createOrderId(2);
+        String key = "b86sv-full-" + f.suffix;
+        payStoredValue(orderId, key, null).andExpect(status().isOk())
+                .andExpect(jsonPath("$.replayed").doesNotExist())
+                .andExpect(jsonPath("$.data.pay_status").value("paid"));
+        payStoredValue(orderId, key, null).andExpect(status().isOk())
+                .andExpect(jsonPath("$.replayed").value(true))
+                .andExpect(jsonPath("$.message").value(ApiResponse.REPLAYED_MESSAGE))
+                .andExpect(jsonPath("$.data.pay_status").value("paid"));
+        assertThat(f.cardBalance()).isEqualTo(10_000L);
+        assertThat(storedValuePayments(orderId)).isEqualTo(1);
+        assertThat(ticketDebits()).isEqualTo(1);
+    }
+
+    /** 261-B05-R1：只付一部分后同一请求编号再提交，同样提示已完成、不再扣款，订单仍待付、待付金额不变。 */
+    @Test
+    void sameKeyResubmitAfterPartialStoredValuePayRepliesCompletedWithoutSecondDebit() throws Exception {
+        String orderId = f.createOrderId(2);
+        String key = "b86sv-part-" + f.suffix;
+        payStoredValue(orderId, key, 3000L).andExpect(status().isOk())
+                .andExpect(jsonPath("$.replayed").doesNotExist());
+        payStoredValue(orderId, key, 3000L).andExpect(status().isOk())
+                .andExpect(jsonPath("$.replayed").value(true))
+                .andExpect(jsonPath("$.message").value(ApiResponse.REPLAYED_MESSAGE))
+                .andExpect(jsonPath("$.data.pay_status").value("unpaid"))
+                .andExpect(jsonPath("$.data.remaining_cent").value(7000));
+        assertThat(f.cardBalance()).isEqualTo(17_000L);
+        assertThat(f.order(orderId)).containsEntry("pay_status", "unpaid");
+        assertThat(storedValuePayments(orderId)).isEqualTo(1);
+        assertThat(ticketDebits()).isEqualTo(1);
+    }
+
+    /**
+     * 261-B05-R1（PGM:303「两个操作同时发生冲突时，一律以“先处理成功”的那个为准」及其括号内「其余自动失效并提示；支付回调、核销、充值到账同理」）：
+     * 订单已在线付清后客人再点储值支付（新请求编号），本次不生效并提示订单不在待支付状态、不扣款；再点一次同样。
+     */
+    @Test
+    void storedValuePayAfterOrderPaidOnlineIsRejectedWithoutDebit() throws Exception {
+        String orderId = f.createOrderId(2);
+        String intentId = CustomerTicketPaymentFixture.read(f.startOnlinePayment(orderId, "wechat")
+                .andExpect(status().isOk()), "$.data.payment_intent_id");
+        f.markPaid(intentId);
+        f.confirmOnlinePayment(orderId, intentId).andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.pay_status").value("paid"));
+        for (int attempt = 0; attempt < 2; attempt++) {
+            f.payWithStoredValue(orderId, null).andExpect(status().isConflict())
+                    .andExpect(jsonPath("$.detail_code").value("ORDER_NOT_PAYABLE"));
+            assertThat(f.cardBalance()).isEqualTo(20_000L);
+        }
+        assertThat(ticketDebits()).isZero();
+    }
+
+    /** 储值付款，请求编号由用例指定（customerPost 把同一编号放进 Idempotency-Key 头，与客人端同一次操作沿用编号一致）。 */
+    private ResultActions payStoredValue(String orderId, String key, Long amountCent) throws Exception {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("idempotency_key", key);
+        body.put("account_id", f.accountId);
+        body.put("phone", f.phone);
+        body.put("sms_code", "000000");
+        if (amountCent != null) {
+            body.put("amount_cent", amountCent);
+        }
+        return f.customerPost("/api/v1/customer/orders/" + orderId + "/stored-value/pay", body);
+    }
+
+    private int storedValuePayments(String orderId) {
+        return jdbc.queryForObject("SELECT count(*) FROM ticket_payment_intents WHERE business_order_id = ?"
+                + " AND channel = 'stored_value' AND status = 'succeeded'", Integer.class, orderId);
+    }
+
+    private int ticketDebits() {
+        return jdbc.queryForObject("SELECT count(*) FROM customer_stored_value_transactions WHERE account_id = ?"
+                + " AND left(idempotency_key, 9) = 'ticketsv_'", Integer.class, f.accountId);
     }
 
     private TicketRefundRecord refund(String orderId, String ticketId, String entity, String tag) {
