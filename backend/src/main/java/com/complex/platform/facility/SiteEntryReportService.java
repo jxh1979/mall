@@ -1,6 +1,6 @@
 package com.complex.platform.facility;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import com.complex.platform.access.AccessActor;
 import com.complex.platform.access.AuthorizationService;
@@ -100,10 +100,22 @@ public class SiteEntryReportService {
             throw ApiException.badRequest("VALIDATION_FAILED", "计划结束日期不能早于计划开始日期");
         }
         int crewCount = positive(r.crewCount(), "crew_count");
+        String workScope = requireText(r.workScope(), "work_scope");
+        String contactName = requireText(r.contactName(), "contact_name");
+        String contactPhone = requireText(r.contactPhone(), "contact_phone");
+        // 第十八批 BJ 段第 261 条 261-B18-R3（PGM:528「⑤同一笔操作重复提交不重复生效」；PGM:303「同一次操作重复提交时，返回第一次的结果并提示已完成。」）：
+        // 外包身份、项目范围与入参校验在前，建单经幂等层——同编号重发返回第一次建的报备单，不多建一张。
+        return idempotency.execute("siteEntryCreate", r.idempotencyKey(), r,
+                () -> doCreate(r, actor, projectId, plannedStart, plannedEnd, crewCount, workScope, contactName, contactPhone),
+                SiteEntryReportRecord.class);
+    }
+
+    private SiteEntryReportRecord doCreate(SiteEntryReportRequest r, AccessActor actor, String projectId, LocalDate plannedStart,
+            LocalDate plannedEnd, int crewCount, String workScope, String contactName, String contactPhone) {
         Instant now = Instant.now();
         SiteEntryReportRecord rec = new SiteEntryReportRecord("ser_" + UUID.randomUUID(), projectId,
-                trimToNull(r.spaceId()), requireText(r.workScope(), "work_scope"), plannedStart, plannedEnd,
-                crewCount, requireText(r.contactName(), "contact_name"), requireText(r.contactPhone(), "contact_phone"),
+                trimToNull(r.spaceId()), workScope, plannedStart, plannedEnd,
+                crewCount, contactName, contactPhone,
                 actor.id(), "submitted", null, null, actor.id(), now, now, List.of(), null, null, null);
         repository.insert(rec);
         audit("facility.site_entry.create_assigned", CREATE_PERM, rec.id(), r.idempotencyKey(),
@@ -118,6 +130,11 @@ public class SiteEntryReportService {
         if (!authorizationService.isOutsourcedVendor(actor)) {
             throw ApiException.forbidden("FORBIDDEN", "只有外包供应商才能提交进场报备");
         }
+        enforceRecordScope(actor, load(id), SUBMIT_PERM); // 261-B18-R3：范围闸在幂等之前，体内按锁重读后照旧再核
+        return idempotency.execute("siteEntrySubmit:" + id, r.idempotencyKey(), r, () -> doSubmit(id, r, actor), SiteEntryReportRecord.class);
+    }
+
+    private SiteEntryReportRecord doSubmit(String id, SiteEntryReportSubmitRequest r, AccessActor actor) {
         SiteEntryReportRecord cur = loadForUpdate(id);
         enforceRecordScope(actor, cur, SUBMIT_PERM);
         requireStatus(cur, "approved", "只有审批通过的进场报备才能提交进场");
@@ -178,6 +195,12 @@ public class SiteEntryReportService {
         AccessActor actor = requirePropertyActor();
         SiteEntryReportReviewRequest r = requireReview(request);
         String decision = normalizeAllowed(r.decision(), "decision", Set.of("approve", "reject"));
+        enforceRecordScope(actor, load(id), REVIEW_PERM); // 261-B18-R3：范围闸在幂等之前
+        return idempotency.execute("siteEntryReview:" + id, r.idempotencyKey(), r, () -> doReview(id, r, actor, decision),
+                SiteEntryReportRecord.class);
+    }
+
+    private SiteEntryReportRecord doReview(String id, SiteEntryReportReviewRequest r, AccessActor actor, String decision) {
         SiteEntryReportRecord cur = loadForUpdate(id);
         enforceRecordScope(actor, cur, REVIEW_PERM);
         requireStatus(cur, "submitted", "只有已提交的进场报备才能审核");

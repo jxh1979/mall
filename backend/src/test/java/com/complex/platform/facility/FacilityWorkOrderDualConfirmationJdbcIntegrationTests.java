@@ -1,6 +1,6 @@
 package com.complex.platform.facility;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.containsInAnyOrder;
@@ -316,20 +316,74 @@ class FacilityWorkOrderDualConfirmationJdbcIntegrationTests {
      * 对方提交后的处理人与状态，不会用旧快照整行写回把转派结果覆盖掉。
      */
     @ParameterizedTest
-    @ValueSource(strings = {"start", "complete", "suspend", "resume"})
+    @ValueSource(strings = {"assign", "start", "complete", "suspend", "resume"})
     void processingActionsLockWorkOrderRow(String action) throws Exception {
         String status = switch (action) {
+            case "assign" -> "pending_assign"; // 261-B18-R1：派单也先锁工单行
             case "start" -> "assigned";
             case "resume" -> "suspended";
             default -> "processing";
         };
         String id = order(null, status, "platform");
         assertThat(rowLocks()).isZero();
-        String body = "complete".equals(action)
+        String body = "assign".equals(action)
+                ? "{\"assignee_id\":\"" + user("b") + "\",\"idempotency_key\":\"pl_" + suffix + "\"}"
+                : "complete".equals(action)
                 ? "{\"resolution\":\"更换阀门\",\"idempotency_key\":\"pl_" + suffix + "\"}"
                 : "{\"note\":\"现场处理\",\"idempotency_key\":\"pl_" + suffix + "\"}";
         call(admin, id, action, body).andExpect(status().isOk());
         assertThat(rowLocks()).isPositive();
+    }
+
+    /**
+     * 第十八批 BJ 段第 261 条 261-B18-R1（PGM:528「⑤同一笔操作重复提交不重复生效（重复点击、网络重发、渠道重复回调都只算一次）」；PGM:303
+     * 「同一次操作重复提交时，返回第一次的结果并提示已完成。」）：新建、派单、开始、挂起、恢复、完成、主管验收、提单确认同编号重发，都返回第一次的
+     * 结果并带已完成标记，不多建工单、不多记留痕；验收后换编号再验收照旧 400。
+     */
+    @Test
+    void writeEntriesReplaySameKeyReturnFirstResult() throws Exception {
+        String viewRole = "hpf02_b18_" + suffix;
+        jdbc.update("INSERT INTO roles(id,role_name,description,data_scope,status,created_at) VALUES(?,?,'同编号重发回归','project','active',now())",
+                viewRole, viewRole);
+        jdbc.update("INSERT INTO role_permissions(role_id,permission_code) VALUES(?,'facility.work_order.view_assigned'),(?,'facility.work_order.manage')",
+                viewRole, viewRole);
+        RequestPostProcessor owner = account("b18", "staff", project, viewRole);
+        String title = "同编号重发回归_" + suffix;
+        String create = """
+                {"work_order_type":"repair","priority":"high","title":"%s","source":"platform","equipment_id":"%s",
+                 "space_id":"sp_roof","reporter_type":"staff","idempotency_key":"b18c_%s"}
+                """.formatted(title, equipment, suffix);
+        String id = JsonPath.read(mockMvc.perform(post(BASE).with(owner).contentType(MediaType.APPLICATION_JSON).content(create))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.replayed").doesNotExist())
+                .andReturn().getResponse().getContentAsString(java.nio.charset.StandardCharsets.UTF_8), "$.data.id");
+        mockMvc.perform(post(BASE).with(owner).contentType(MediaType.APPLICATION_JSON).content(create))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.replayed").value(true)).andExpect(jsonPath("$.data.id").value(id));
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM facility_work_orders WHERE title=?", Integer.class, title)).isEqualTo(1);
+        assertThat(successes("facility.work_order_created", id)).isEqualTo(1);
+
+        replay(admin, id, "assign", "{\"assignee_id\":\"" + user("eng") + "\",\"idempotency_key\":\"b18as_" + suffix + "\"}", "assigned",
+                "facility.work_order_assigned");
+        replay(admin, id, "start", "{\"idempotency_key\":\"b18st_" + suffix + "\"}", "processing", "facility.work_order_started");
+        replay(admin, id, "suspend", "{\"note\":\"等配件\",\"idempotency_key\":\"b18su_" + suffix + "\"}", "suspended",
+                "facility.work_order_suspended");
+        replay(admin, id, "resume", "{\"note\":\"配件到货\",\"idempotency_key\":\"b18re_" + suffix + "\"}", "processing",
+                "facility.work_order_resumed");
+        replay(admin, id, "complete", "{\"resolution\":\"更换轴承\",\"idempotency_key\":\"b18co_" + suffix + "\"}", "pending_acceptance",
+                "facility.work_order_completed");
+        replay(admin, id, "accept", "{\"idempotency_key\":\"b18ac_" + suffix + "\"}", "accepted", "facility.work_order_accepted");
+        call(admin, id, "accept", "{\"idempotency_key\":\"b18ac2_" + suffix + "\"}").andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.detail_code").value("INVALID_STATE"));
+        replay(owner, id, "review", "{\"satisfaction\":5,\"idempotency_key\":\"b18rv_" + suffix + "\"}", "closed",
+                "facility.work_order_reviewed");
+    }
+
+    /** 同一编号、同一正文连发两次：第一次照常办成，第二次 200 并带已完成标记、状态同第一次，成功留痕只有一条。 */
+    private void replay(RequestPostProcessor who, String id, String action, String body, String status, String event) throws Exception {
+        call(who, id, action, body).andExpect(status().isOk()).andExpect(jsonPath("$.replayed").doesNotExist())
+                .andExpect(jsonPath("$.data.status").value(status));
+        call(who, id, action, body).andExpect(status().isOk()).andExpect(jsonPath("$.replayed").value(true))
+                .andExpect(jsonPath("$.data.status").value(status));
+        assertThat(successes(event, id)).as(event).isEqualTo(1);
     }
 
     private int successes(String event, String businessId) {

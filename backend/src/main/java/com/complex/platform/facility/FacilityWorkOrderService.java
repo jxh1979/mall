@@ -1,6 +1,6 @@
 package com.complex.platform.facility;
 
-// 文件版本：V0.08
+// 文件版本：V0.09
 
 import com.complex.platform.access.AccessActor;
 import com.complex.platform.access.AccessRepository;
@@ -177,7 +177,10 @@ public class FacilityWorkOrderService {
         // 第十八批 G 段 82b-R2：落地项目在建单之前算好（见 landingProject）。
         r = new FacilityWorkOrderRequest(r.workOrderType(), r.priority(), r.title(), r.description(), r.source(), r.spaceId(),
                 r.equipmentId(), reporterId, r.reporterType(), landingProject(r), r.merchantId(), r.idempotencyKey());
-        return createInternal(r, r.idempotencyKey(), null);
+        FacilityWorkOrderRequest landed = r;
+        // 第十八批 BJ 段第 261 条 261-B18-R1（PGM:528「⑤同一笔操作重复提交不重复生效」；PGM:303「同一次操作重复提交时，返回第一次的结果并提示已完成。」）：
+        // 范围闸、来源校验与落地项目在前，建单经幂等层——同编号重发返回第一次建的工单，不多建一张。
+        return once("facilityWorkOrderCreate", landed.idempotencyKey(), landed, () -> createInternal(landed, landed.idempotencyKey(), null));
     }
 
     @Transactional
@@ -187,28 +190,34 @@ public class FacilityWorkOrderService {
             if (request == null) {
                 throw ApiException.badRequest("VALIDATION_FAILED", "请求内容不能为空");
             }
-            FacilityWorkOrderRecord cur = load(id);
-            requireReach(cur.projectId());
-            requireStatus(cur, "pending_assign", "只有待派单的工单才能派单");
-            if ("equipment_alarm".equals(cur.source()) && alarmService != null) {
-                alarmService.requireTakenOverBeforeDispatch(cur.id());
-            }
-            Instant now = Instant.now();
-            FacilityWorkOrderRecord assigned = new FacilityWorkOrderRecord(cur.id(), cur.code(), cur.workOrderType(),
-                    cur.priority(), "assigned", cur.title(), cur.description(), cur.source(), cur.spaceId(),
-                    cur.equipmentId(), cur.reporterId(), cur.reporterType(), requireText(request.assigneeId(), "assignee_id"),
-                    cur.responseDueAt(), cur.handleDueAt(), now, cur.respondedAt(), cur.completedAt(), cur.verifiedAt(),
-                    cur.verifierId(), cur.satisfaction(), cur.overtime(), cur.resolution(), cur.projectId(),
-                    cur.merchantId(), cur.createdAt(), now, cur.confirmerId(), cur.reporterConfirmedAt(),
-                    cur.reporterConfirmedBy());
-            repository.updateWorkOrder(assigned);
-            audit("facility.work_order_assigned", assigned.id(), request.idempotencyKey(),
-                    Map.of("status", assigned.status(), "assignee_id", assigned.assigneeId()));
-            return assigned;
+            requireReach(load(id).projectId()); // 261-B18-R1：范围闸在幂等之前，体内按锁重读后照旧再核
+            return once("facilityWorkOrderAssign:" + id, request.idempotencyKey(), request, () -> assignLocked(id, request));
         } catch (RuntimeException exception) {
             recordFailure("facility.work_order_assign_failed", id, request == null ? null : request.idempotencyKey(), exception);
             throw exception;
         }
+    }
+
+    /** 261-B18-R1：派单与转派、开始、完成同锁工单行——两名主管同时派单，后到者读到已派单即 400，不覆盖先到者；同一刻超时升级打的标记也不被写回。 */
+    private FacilityWorkOrderRecord assignLocked(String id, FacilityWorkOrderAssignRequest request) {
+        FacilityWorkOrderRecord cur = loadForUpdate(id);
+        requireReach(cur.projectId());
+        requireStatus(cur, "pending_assign", "只有待派单的工单才能派单");
+        if ("equipment_alarm".equals(cur.source()) && alarmService != null) {
+            alarmService.requireTakenOverBeforeDispatch(cur.id());
+        }
+        Instant now = Instant.now();
+        FacilityWorkOrderRecord assigned = new FacilityWorkOrderRecord(cur.id(), cur.code(), cur.workOrderType(),
+                cur.priority(), "assigned", cur.title(), cur.description(), cur.source(), cur.spaceId(),
+                cur.equipmentId(), cur.reporterId(), cur.reporterType(), requireText(request.assigneeId(), "assignee_id"),
+                cur.responseDueAt(), cur.handleDueAt(), now, cur.respondedAt(), cur.completedAt(), cur.verifiedAt(),
+                cur.verifierId(), cur.satisfaction(), cur.overtime(), cur.resolution(), cur.projectId(),
+                cur.merchantId(), cur.createdAt(), now, cur.confirmerId(), cur.reporterConfirmedAt(),
+                cur.reporterConfirmedBy());
+        repository.updateWorkOrder(assigned);
+        audit("facility.work_order_assigned", assigned.id(), request.idempotencyKey(),
+                Map.of("status", assigned.status(), "assignee_id", assigned.assigneeId()));
+        return assigned;
     }
 
     /**
@@ -256,6 +265,11 @@ public class FacilityWorkOrderService {
     public FacilityWorkOrderRecord start(String id, FacilityWorkOrderActionRequest request) {
         AccessActor actor = requireScopeActor();
         FacilityWorkOrderActionRequest r = requireAction(request);
+        enforceAssignedScope(actor, load(id)); // 261-B18-R1：范围闸在幂等之前，体内按锁重读后照旧再核
+        return once("facilityWorkOrderStart:" + id, r.idempotencyKey(), r, () -> startLocked(id, r, actor));
+    }
+
+    private FacilityWorkOrderRecord startLocked(String id, FacilityWorkOrderActionRequest r, AccessActor actor) {
         // 与转派同锁工单行：转派与原处理人「开始」「完成」并发时串行，后者按最新处理人与状态校验，不以旧快照整行写回覆盖转派。
         FacilityWorkOrderRecord cur = loadForUpdate(id);
         enforceAssignedScope(actor, cur);
@@ -277,6 +291,11 @@ public class FacilityWorkOrderService {
     public FacilityWorkOrderRecord complete(String id, FacilityWorkOrderActionRequest request) {
         AccessActor actor = requireScopeActor();
         FacilityWorkOrderActionRequest r = requireAction(request);
+        enforceAssignedScope(actor, load(id)); // 261-B18-R1：范围闸在幂等之前
+        return once("facilityWorkOrderComplete:" + id, r.idempotencyKey(), r, () -> completeLocked(id, r, actor));
+    }
+
+    private FacilityWorkOrderRecord completeLocked(String id, FacilityWorkOrderActionRequest r, AccessActor actor) {
         FacilityWorkOrderRecord cur = loadForUpdate(id);
         enforceAssignedScope(actor, cur);
         requireStatus(cur, "processing", "只有处理中的工单才能完成");
@@ -313,6 +332,11 @@ public class FacilityWorkOrderService {
         authorizationService.requirePlatformScope();
         FacilityWorkOrderActionRequest r = requireAction(request);
         validateSatisfaction(r.satisfaction());
+        requireReach(load(id).projectId()); // 261-B18-R1：范围闸在幂等之前
+        return once("facilityWorkOrderAccept:" + id, r.idempotencyKey(), r, () -> acceptLocked(id, r));
+    }
+
+    private FacilityWorkOrderRecord acceptLocked(String id, FacilityWorkOrderActionRequest r) {
         FacilityWorkOrderRecord cur = loadForUpdate(id);
         requireReach(cur.projectId());
         requireStatus(cur, "pending_acceptance", "只有待验收的工单才能验收");
@@ -336,40 +360,49 @@ public class FacilityWorkOrderService {
             authorizationService.requirePlatformScope();
             FacilityWorkOrderActionRequest r = requireAction(request);
             validateSatisfaction(r.satisfaction());
-            FacilityWorkOrderRecord cur = loadForUpdate(id);
-            if (!confirmerSelf(cur)) {
+            FacilityWorkOrderRecord before = load(id); // 261-B18-R1：凭管理权那一支的范围闸在幂等之前（体内按锁重读后照旧核）
+            if (!confirmerSelf(before)) {
                 authorizationService.requirePermission(PERM);
-                requireReach(cur.projectId());
+                requireReach(before.projectId());
             }
-            FacilityWorkOrderRecord closed;
-            if (dual(cur)) {
-                // 双闸的提单方确认：主管验收前后都可确认；只确认一次；两项齐全才关闭。
-                if (!DUAL_PENDING_STATUSES.contains(cur.status())) {
-                    throw ApiException.badRequest("INVALID_STATE", "只有待验收或已验收的工单才能做提单确认");
-                }
-                if (cur.reporterConfirmedAt() != null) {
-                    throw ApiException.badRequest("INVALID_STATE", "提单方已确认");
-                }
-                if (confirmerBound(cur)) {
-                    requireConfirmer(cur);
-                }
-                Instant now = Instant.now();
-                closed = withConfirmations(cur, cur.verifiedAt() != null ? "closed" : cur.status(), cur.completedAt(),
-                        cur.verifiedAt(), cur.verifierId(), r.satisfaction(), now, actorId(), now);
-            } else {
-                requireStatus(cur, "pending_review", "只有待审核的工单才能审核");
-                closed = verifyClosed(cur, r);
-            }
-            recordCustomerFeedbackOnClose(cur, closed, r);
-            repository.updateWorkOrder(closed);
-            resetEquipmentIfClosed(cur, closed);
-            postMaterialReceivable(cur, closed, r.idempotencyKey());
-            audit("facility.work_order_reviewed", closed.id(), r.idempotencyKey(), metadata(closed, r.note()));
-            return closed;
+            return once("facilityWorkOrderReview:" + id, r.idempotencyKey(), r, () -> reviewLocked(id, r));
         } catch (RuntimeException exception) {
             recordFailure("facility.work_order_review_failed", id, request == null ? null : request.idempotencyKey(), exception);
             throw exception;
         }
+    }
+
+    private FacilityWorkOrderRecord reviewLocked(String id, FacilityWorkOrderActionRequest r) {
+        FacilityWorkOrderRecord cur = loadForUpdate(id);
+        if (!confirmerSelf(cur)) {
+            authorizationService.requirePermission(PERM);
+            requireReach(cur.projectId());
+        }
+        FacilityWorkOrderRecord closed;
+        if (dual(cur)) {
+            // 双闸的提单方确认：主管验收前后都可确认；只确认一次；两项齐全才关闭。
+            if (!DUAL_PENDING_STATUSES.contains(cur.status())) {
+                throw ApiException.badRequest("INVALID_STATE", "只有待验收或已验收的工单才能做提单确认");
+            }
+            if (cur.reporterConfirmedAt() != null) {
+                throw ApiException.badRequest("INVALID_STATE", "提单方已确认");
+            }
+            if (confirmerBound(cur)) {
+                requireConfirmer(cur);
+            }
+            Instant now = Instant.now();
+            closed = withConfirmations(cur, cur.verifiedAt() != null ? "closed" : cur.status(), cur.completedAt(),
+                    cur.verifiedAt(), cur.verifierId(), r.satisfaction(), now, actorId(), now);
+        } else {
+            requireStatus(cur, "pending_review", "只有待审核的工单才能审核");
+            closed = verifyClosed(cur, r);
+        }
+        recordCustomerFeedbackOnClose(cur, closed, r);
+        repository.updateWorkOrder(closed);
+        resetEquipmentIfClosed(cur, closed);
+        postMaterialReceivable(cur, closed, r.idempotencyKey());
+        audit("facility.work_order_reviewed", closed.id(), r.idempotencyKey(), metadata(closed, r.note()));
+        return closed;
     }
 
     /**
@@ -476,6 +509,11 @@ public class FacilityWorkOrderService {
     public FacilityWorkOrderRecord suspend(String id, FacilityWorkOrderActionRequest request) {
         authorizationService.requirePlatformScope();
         FacilityWorkOrderActionRequest r = requireAction(request);
+        requireReach(load(id).projectId()); // 261-B18-R1：范围闸在幂等之前
+        return once("facilityWorkOrderSuspend:" + id, r.idempotencyKey(), r, () -> suspendLocked(id, r));
+    }
+
+    private FacilityWorkOrderRecord suspendLocked(String id, FacilityWorkOrderActionRequest r) {
         FacilityWorkOrderRecord cur = loadForUpdate(id);
         requireReach(cur.projectId());
         if (!ACTIVE_STATUSES.contains(cur.status())) {
@@ -491,6 +529,11 @@ public class FacilityWorkOrderService {
     public FacilityWorkOrderRecord resume(String id, FacilityWorkOrderActionRequest request) {
         authorizationService.requirePlatformScope();
         FacilityWorkOrderActionRequest r = requireAction(request);
+        requireReach(load(id).projectId()); // 261-B18-R1：范围闸在幂等之前
+        return once("facilityWorkOrderResume:" + id, r.idempotencyKey(), r, () -> resumeLocked(id, r));
+    }
+
+    private FacilityWorkOrderRecord resumeLocked(String id, FacilityWorkOrderActionRequest r) {
         FacilityWorkOrderRecord cur = loadForUpdate(id);
         requireReach(cur.projectId());
         requireStatus(cur, "suspended", "只有已挂起的工单才能恢复");
@@ -1059,6 +1102,16 @@ public class FacilityWorkOrderService {
             throw ApiException.forbidden("CROSS_PROJECT_FORBIDDEN", AuthorizationService.PROJECT_OUT_OF_REACH);
         }
         return landing;
+    }
+
+    /**
+     * 第十八批 BJ 段第 261 条 261-B18-R1：写入口经幂等层——同一请求编号重发返回第一次的结果并提示已完成，在途的第二笔等第一笔提交后重放。
+     * 不带幂等服务的测试装配直接执行。
+     */
+    private FacilityWorkOrderRecord once(String operationId, String idempotencyKey, Object request,
+            java.util.function.Supplier<FacilityWorkOrderRecord> action) {
+        return idempotencyService == null ? action.get()
+                : idempotencyService.execute(operationId, idempotencyKey, request, action, FacilityWorkOrderRecord.class);
     }
 
     private FacilityWorkOrderRecord load(String id) {

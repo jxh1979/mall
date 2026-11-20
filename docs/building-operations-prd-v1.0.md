@@ -1,4 +1,4 @@
-# 楼宇运营业务域 PRD（V1.17·据需求重建）
+# 楼宇运营业务域 PRD（V1.18·据需求重建）
 
 > **锚点口径（2026-08-05 R7·GAP-36 锚点重建）**：本文引用三份业务 HTML（BSM＝`business-system-map-for-operations-v0.1.html`／PGM＝`platform-governance-map-for-operations-v0.1.html`／ENUM＝`business-enum-quick-reference-v0.1.html`）时，一律采用**「条目名主锚点 + 行号辅助」**；标注「实测 L…」的行号为 **2026-08-05** 按现行 HTML `sed -n 'Np'` 逐条实测值，**以条目名为主锚点**，行号漂移不影响条目效力。变更日志章及既有「锚点复核」块内的历史行号为当时记录，一律不改写。
 
@@ -159,6 +159,7 @@
 - 表：`facility_work_order_policy`、`facility_work_orders`
 - **商户服务工单表（分表，2026-08-04 第三轮用户裁决 UD-06 / DEC-R6-26）**：`merchant_service_work_orders` / `merchant_service_work_order_actions`（V022）是**商户服务工单的主写表**，与设施工单彻底分表、各自状态链；商户专区「我的工单」ADM-MER-004 继续走 `/api/v1/merchant-service/work-orders`（`MerchantServiceController` → V022），**不向 `/api/v1/facility/work-orders` 收敛**。V022 的 7 值 CHECK 已存在；七态均可达，`MerchantServiceService` 已实现创建、派单、处理、待商户确认、已处理待关闭、关闭和逾期打标/动作留痕；`cancelled` 的取消入口由第十八批 M 段第 111 条 111-R2 补上（第十八批裁决 27：派单前商户自己取消，派单后重复提或误提的由客户关怀部填原因取消；V586）。仍待对齐 V166 现仍接受 `merchant_self`、其历史迁移注释还称 V022 停止写入、设施/商户工单看板分行对照及商户工单不显示首次响应指标。本轮只改 PRD 口径，**不改 CSV、不改代码、不改迁移**。
 - **商户服务工单关闭类入口的重复提交与两端同时办（实现现状，第十八批 BI 段第 261 条 261-B17-R1）**：员工关单、商户确认已解决、商户取消、员工取消、处理人标已处理即关闭，同一请求编号重复提交返回第一次的结果并提示已完成、不多记动作；换新的请求编号再办已关闭或已取消的单照旧 409 `WORK_ORDER_CLOSED`。派单、处理、关单、商户确认、取消都先锁工单行再判状态，两端同时办时后到的一笔读到先到者提交后的状态、按原状态规则被拒，不覆盖先到者的结果（如员工关单与商户确认同时发生只认先到的一笔）。依据 PGM:528「⑤同一笔操作重复提交不重复生效（重复点击、网络重发、渠道重复回调都只算一次）」、PGM:303「同一次操作重复提交时，返回第一次的结果并提示已完成。」；PGM:303「两个操作同时发生冲突时，一律以“先处理成功”的那个为准」；BSM:1385。
+- **设施工单写入口的重复提交与同时派单（实现现状，第十八批 BJ 段第 261 条 261-B18-R1）**：新建、派单、开始、完成、主管验收、提单确认、挂起、恢复，同一请求编号重复提交返回第一次的结果并提示已完成，不多建工单、不多记留痕；换新的请求编号再办照旧按状态规则判（如验收后再验收 400 `INVALID_STATE`）。派单与转派、开始、完成一样先锁工单行再判状态：两名主管同时派单只认先到的一笔，后到的读到已派单被拒，不覆盖先到者的处理人。范围校验在此之前判。依据 PGM:528「⑤同一笔操作重复提交不重复生效（重复点击、网络重发、渠道重复回调都只算一次）」、PGM:303「同一次操作重复提交时，返回第一次的结果并提示已完成。」；PGM:303「两个操作同时发生冲突时，一律以“先处理成功”的那个为准」。
 - 权限：`facility.work_order.manage`（`domain=platform`、`risk_level=medium`、`requires_approval=false`）
 - 接警（V529 `V529__facility_alarm_takeover.sql`）：表 `facility_alarm_response_policies`、`facility_alarms`、`facility_alarm_duty_assignments`、`facility_alarm_contact_attempts`、`facility_alarm_takeovers`；权限 `facility.alarm.manage`、`facility.alarm.take_over`（`domain=facility`、`risk_level=medium`，授予现持 `facility.work_order.manage` 的角色与权限模板）
 - 故障处置规则（V530 `V530__facility_alarm_fault_rules.sql`）：表 `facility_fault_handling_rules`，`facility_alarms` 加 `applied_rule_id`、`disposition_note`、`disposition_by`、`disposition_at`；权限 `facility.fault_rule.confirm`（`domain=facility`、`risk_level=medium`，授予现持 `facility.work_order.manage` 的角色与权限模板，另进外包维保权限模板 `tpl_outsourced_facility`（本项目范围，按 V181 限时授权范式））
@@ -189,6 +190,7 @@
 - 迁移：`V167__facility_inspection.sql`
 - 表：`facility_inspection_templates`、`facility_inspection_tasks`、`facility_inspection_records`
 - 权限：`facility.inspection.manage`（`domain=platform`、`risk_level=medium`、`requires_approval=false`）
+- **巡检写入口的重复提交（实现现状，第十八批 BJ 段第 261 条 261-B18-R2）**：新建模板、新建任务、开始、提交记录、上报异常、复检、主管确认，同一请求编号重复提交返回第一次的结果并提示已完成——不多插一条巡检记录、不重复建整改工单、不多建模板与任务。范围校验在此之前判（新建模板、新建任务的入参校验也在此之前）。依据 PGM:528「⑤同一笔操作重复提交不重复生效（重复点击、网络重发、渠道重复回调都只算一次）」、PGM:303「同一次操作重复提交时，返回第一次的结果并提示已完成。」
 
 ## 5. 能耗抄表与实际费用（HP-E01／E02／E03）
 
@@ -228,6 +230,7 @@
 - 物业人员在“进场审批”与“施工验收”入口分别按对应权限及项目范围办理；供应商只能看本人报备。材料下载核对原报备、真实文件与操作者范围，不公开文件路径。
 - `facility_site_entry_history` 由 V467 建立，只追加不可回改。报备状态更新与历史追加在同一事务，并锁定报备以避免整改、重新提交和验收互相覆盖。
 - 端点沿用 `/api/v1/facility/site-entry-reports/{report_id}` 的提交和验收，新增 `/history`、真实文件 `/attachments` 与 `/attachments/{attachment_id}/file`；验收请求增加必填 `completion_sequence`。页面为 ADM-FAC-002、ADM-FAC-003 及供应商原进场报备页。
+- **进场报备新建、提交进场、审核的重复提交（实现现状，第十八批 BJ 段第 261 条 261-B18-R3）**：与上传完工材料、验收一样按请求编号只认一次，同一请求编号重复提交返回第一次的结果并提示已完成，新建不多建一张；外包或物业身份与范围校验在此之前判。契约里新建、提交进场、审核、验收、上传完工材料与巡检上报异常补 409。依据 PGM:528「⑤同一笔操作重复提交不重复生效（重复点击、网络重发、渠道重复回调都只算一次）」、PGM:303「同一次操作重复提交时，返回第一次的结果并提示已完成。」
 
 ## 6. 待建一览（M08 现状登记）
 
@@ -297,3 +300,4 @@
 | 2026-11-01 | 改 | §3、§6 L | V1.15（续）：第十八批 M 段第 117 条 117-R3、117-R5——楼宇运营工作台工单行「用料」面板；商户服务工单同样登记用料、标承担方、完工闸与结案应收；承担方争议表与审批策略改两类工单共用（`work_order_bearer_disputes`、策略 `work_order_bearer_dispute`、错误码 `WORK_ORDER_BEARER_DISPUTE_PENDING`），商户服务工单争议停在原状态转上级判定，判定前不能转已处理待关闭、不能关闭（V587） | BSM「派单到具体人员或班组」条（L1380）、L1372；第十八批裁决 29 |
 | 2026-11-16 | 改 | 版本、§4 楼宇巡检现场留痕 | 版本升至 V1.16：第十八批 AP 段第 229 条 229-R8——外包巡检记录 `POST /api/v1/facility/inspections/tasks/{task_id}/records` 的巡检人取提交账号（同异常上报），请求体不再收 `inspector_id`（契约删该属性与必填）；外包巡检页与楼宇运营工作台巡检记录区删巡检人输入框 | BSM:940 |
 | 2026-11-20 | 改 | 版本、§3 商户服务工单 | 版本升至 V1.17：第十八批 BI 段第 261 条 261-B17-R1——商户服务工单关闭类入口同一请求编号重复提交返回第一次的结果并提示已完成；派单、处理、关单、商户确认、取消先锁工单行再判状态，两端同时办只认先到的一笔 | PGM:528⑤；PGM:303；BSM:1385；第十八批裁决 50；待开发清单第 261 条 |
+| 2026-11-20 | 改 | 版本、§3、§4、§5A | 版本升至 V1.18：第十八批 BJ 段第 261 条 261-B18-R1～R3——设施工单八个写入口、楼宇巡检七个写入口、进场报备新建与提交进场与审核，同一请求编号重复提交返回第一次的结果并提示已完成；设施工单派单改为先锁工单行，两名主管同时派单只认先到的一笔 | PGM:528⑤；PGM:303；第十八批裁决 50；待开发清单第 261 条 |
