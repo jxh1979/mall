@@ -138,6 +138,22 @@ class JdbcMerchantServiceRepository implements MerchantServiceRepository {
     }
 
     @Override
+    public Optional<MerchantWorkOrderRecord> findWorkOrderByIdForUpdate(String id) {
+        return jdbcTemplate.query("""
+                SELECT id, merchant_id, space_id, contract_id, work_order_type, priority, status,
+                       title, description, reported_by_user_id, reported_channel, owner_department,
+                       owner_user_id, due_at, closed_at, resolution, satisfaction_score,
+                       evidence_attachment_ids, sla_breached, escalated_at, created_at, updated_at,
+                       archived_at, archived_by, delete_status, delete_requested_by,
+                       delete_requested_at, delete_reason
+                  FROM merchant_service_work_orders
+                 WHERE id = :id
+                   AND delete_status <> 'approved'
+                   FOR UPDATE
+                """, Map.of("id", id), this::mapWorkOrder).stream().findFirst();
+    }
+
+    @Override
     public List<MerchantWorkOrderRecord> findOverdueOpenWorkOrders(Instant now, int limit) {
         return jdbcTemplate.query("""
                 SELECT id, merchant_id, space_id, contract_id, work_order_type, priority, status,

@@ -1,6 +1,6 @@
 package com.complex.platform.serviceorder;
 
-// 文件版本：V0.07
+// 文件版本：V0.08
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -590,13 +590,20 @@ public class ServiceOrderService {
     /** 口径⑤:履约前可取消(下单者或目录管理岗),留原因;完成后不可退。 */
     public ServiceOrderRecord cancel(String id, com.complex.platform.serviceorder.dto.ServiceOrderCancelRequest request) {
         return withFailureAudit("service.order.cancel_failed", "service.order.create",
-                "service_order", id, request == null ? null : request.idempotencyKey(),
-                () -> doCancel(id, request));
+                "service_order", id, request == null ? null : request.idempotencyKey(), () -> {
+            // 第十八批 BI 段第 261 条 261-B19-R1（PGM:528「⑤同一笔操作重复提交不重复生效」；PGM:303「同一次操作重复提交时，返回第一次的结果
+            // 并提示已完成。」）：权限与履约人范围闸在幂等之前；取消本身经幂等层，同一请求编号重发返回第一次的结果（同确认收款、完成履约）。
+            authorizationService.requirePermission("service.order.create");
+            var reach = authorizationService.projectReach(authorizationService.currentActor(), "service.order.create");
+            requirePerformerInScope(reach, require(id));
+            return idempotencyService.execute("cancelServiceOrder:" + id,
+                    request == null ? null : request.idempotencyKey(), request,
+                    () -> doCancel(id, request, reach), ServiceOrderRecord.class);
+        });
     }
 
-    private ServiceOrderRecord doCancel(String id, com.complex.platform.serviceorder.dto.ServiceOrderCancelRequest request) {
-        authorizationService.requirePermission("service.order.create");
-        var reach = authorizationService.projectReach(authorizationService.currentActor(), "service.order.create");
+    private ServiceOrderRecord doCancel(String id, com.complex.platform.serviceorder.dto.ServiceOrderCancelRequest request,
+            AuthorizationService.ProjectReach reach) {
         if (request == null || request.reason() == null || request.reason().isBlank()) {
             throw ApiException.badRequest("VALIDATION_FAILED", "取消订单必须填写理由");
         }

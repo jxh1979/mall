@@ -257,7 +257,6 @@ public class MerchantServiceService {
                     requireText(request.idempotencyKey(), "idempotency_key");
                     validateSatisfactionScore(request.satisfactionScore());
                     MerchantWorkOrderRecord existing = findWorkOrder(workOrderId);
-                    rejectTerminal(existing);
                     String merchantId = authorizationService.currentMerchantScope()
                             .orElseThrow(() -> ApiException.forbidden("MERCHANT_SCOPE_REQUIRED", "只有提单商户能确认工单已解决"));
                     if (!merchantId.equals(existing.merchantId())) {
@@ -286,7 +285,6 @@ public class MerchantServiceService {
                 () -> {
                     validateCancelRequest(request);
                     MerchantWorkOrderRecord existing = findWorkOrder(workOrderId);
-                    rejectTerminal(existing);
                     String merchantId = authorizationService.currentMerchantScope()
                             .orElseThrow(() -> ApiException.forbidden("MERCHANT_SCOPE_REQUIRED", "只有提单商户能取消未派单的工单"));
                     if (!merchantId.equals(existing.merchantId())) {
@@ -550,7 +548,7 @@ public class MerchantServiceService {
     }
 
     private MerchantWorkOrderRecord assignWorkOrderOnce(String id, MerchantWorkOrderAssignRequest request) {
-        MerchantWorkOrderRecord existing = findWorkOrder(id);
+        MerchantWorkOrderRecord existing = lockWorkOrder(id);
         rejectTerminal(existing);
         if (!"created".equals(existing.status())) {
             throw ApiException.conflict("INVALID_STATE", "只有新建状态的工单才能派单");
@@ -586,7 +584,7 @@ public class MerchantServiceService {
     }
 
     private MerchantWorkOrderRecord addActionOnce(String id, MerchantWorkOrderActionRequest request) {
-        MerchantWorkOrderRecord existing = findWorkOrder(id);
+        MerchantWorkOrderRecord existing = lockWorkOrder(id);
         rejectTerminal(existing);
         String operatorUserId = authorizationService.currentActor().id();
         String operatorNote = requireText(request.operatorNote(), "operator_note");
@@ -632,7 +630,7 @@ public class MerchantServiceService {
     }
 
     private MerchantWorkOrderRecord closeWorkOrderOnce(String id, MerchantWorkOrderCloseRequest request) {
-        MerchantWorkOrderRecord existing = findWorkOrder(id);
+        MerchantWorkOrderRecord existing = lockWorkOrder(id);
         rejectTerminal(existing);
         // 工单只能从 resolved 态收口关闭：resolved 是唯一"已处理待关闭"前置态
         // （ALLOWED_ACTION_TRANSITIONS 中 resolved 的后继为空集，唯一出口即 close）。
@@ -678,7 +676,7 @@ public class MerchantServiceService {
     }
 
     private MerchantWorkOrderRecord confirmByMerchantOnce(String id, MerchantWorkOrderMerchantConfirmRequest request) {
-        MerchantWorkOrderRecord existing = findWorkOrder(id);
+        MerchantWorkOrderRecord existing = lockWorkOrder(id);
         rejectTerminal(existing);
         if (!MERCHANT_CONFIRM_STATUSES.contains(existing.status())) {
             throw ApiException.conflict("INVALID_STATE", "只有待商户确认或已处理待关闭的工单才能由商户确认");
@@ -706,7 +704,7 @@ public class MerchantServiceService {
     /** 111-R2：取消即为已取消（关闭时间不写），取消动作的操作人为当前账号、说明为原因。 */
     private MerchantWorkOrderRecord cancelOnce(String id, MerchantWorkOrderCancelRequest request, Set<String> allowedStatuses,
             String permissionCode, String stateMessage) {
-        MerchantWorkOrderRecord existing = findWorkOrder(id);
+        MerchantWorkOrderRecord existing = lockWorkOrder(id);
         rejectTerminal(existing);
         if (!allowedStatuses.contains(existing.status())) {
             throw ApiException.conflict("INVALID_STATE", stateMessage);
@@ -988,10 +986,20 @@ public class MerchantServiceService {
                 .orElseThrow(() -> ApiException.notFound("WORK_ORDER_NOT_FOUND", "商户服务工单不存在或已被删除"));
     }
 
+    /**
+     * 第十八批 BI 段第 261 条 261-B17-R1（PGM:528「⑤同一笔操作重复提交不重复生效」；PGM:303「同一次操作重复提交时，返回第一次的结果并提示已完成。」
+     * 「两个操作同时发生冲突时，一律以“先处理成功”的那个为准」；BSM:1385 商户确认与客户关怀部关闭两端）：幂等之前只判存在与归属；
+     * 「已关闭或已取消」放在幂等执行体里判——同一请求编号重发先到幂等层、返回第一次的结果，换新编号再办已关闭的单照旧 409 WORK_ORDER_CLOSED。
+     */
     private void ensureWorkOrderCanChange(String id, String permissionCode) {
         MerchantWorkOrderRecord existing = findWorkOrder(id);
-        rejectTerminal(existing);
         checkMerchantOwnership(existing.merchantId(), permissionCode);
+    }
+
+    /** 261-B17-R1：写入口在执行体里先锁工单行再判状态，两端同时办时后到的一笔读到先到者提交后的状态、按原状态规则被拒，不互相覆盖。 */
+    private MerchantWorkOrderRecord lockWorkOrder(String id) {
+        return repository.findWorkOrderByIdForUpdate(id)
+                .orElseThrow(() -> ApiException.notFound("WORK_ORDER_NOT_FOUND", "商户服务工单不存在或已被删除"));
     }
 
     private void checkMerchantOwnership(String recordMerchantId, String permissionCode) {

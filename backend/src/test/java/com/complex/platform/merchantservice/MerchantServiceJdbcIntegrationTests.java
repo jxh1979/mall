@@ -543,6 +543,72 @@ class MerchantServiceJdbcIntegrationTests {
                         .containsEntry("operator_note", "与上午那张重复").containsEntry("from_status", "processing"));
     }
 
+    /**
+     * 第十八批 BI 段第 261 条 261-B17-R1（PGM:528「⑤同一笔操作重复提交不重复生效（重复点击、网络重发、渠道重复回调都只算一次）」；
+     * PGM:303「同一次操作重复提交时，返回第一次的结果并提示已完成。」；BSM:1385 商户确认与客户关怀部关闭两端）：五个关闭类入口各一条——
+     * 员工关单、商户确认已解决、商户取消、员工取消、处理人标已处理即关闭（保洁）。同一请求编号、同一正文提交两次，第二次 200、带已完成标记与提示、
+     * 状态与第一次相同，关闭或取消动作只一条；换新编号再办照旧 409 WORK_ORDER_CLOSED。别的商户用同一编号确认照旧 403（闸在幂等之前）。
+     * 修复前第二次在幂等之前就被「已关闭」拦下，返回 409。
+     */
+    @Test
+    void closingEntriesResentWithSameKeyReturnTheFirstResult() throws Exception {
+        seedOperatingMerchant();
+        RequestPostProcessor closer = account("k", project("a"), null, role("closer", "merchant.service_work_order.view", "merchant.service_work_order.close"));
+
+        String complaint = createAsMerchant("complaint", "high", "");
+        moveTo(complaint, "resolved");
+        String closeBody = keyed("close", ",\"operator_note\":\"关闭商户服务工单\",\"evidence_attachment_ids\":[\"att-merchant-work-order-close\"],"
+                + "\"resolution\":\"已维修完成并确认关闭\",\"satisfaction_score\":null,\"close_reason\":\"商户多次联系未回复，按既有规则关闭\"");
+        twice(closer, complaint, "close", closeBody, "closed", "closed");
+        assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM audit_events WHERE event_name = 'merchant_service.closeMerchantServiceWorkOrder.succeeded'"
+                + " AND business_id = ?", Integer.class, complaint)).isEqualTo(1);
+        close(closer, complaint, ",\"close_reason\":\"再关一次\"").andExpect(status().isConflict())
+                .andExpect(jsonPath("$.detail_code").value("WORK_ORDER_CLOSED"));
+
+        String confirmed = createAsMerchant("complaint", "high", "");
+        moveTo(confirmed, "pending_merchant");
+        String confirmBody = keyed("confirm", ",\"satisfaction_score\":4");
+        twice(merchantAccount, confirmed, "merchant-confirm", confirmBody, "closed", "closed");
+        String otherMerchant = "mch_b17_" + suffix;
+        jdbcTemplate.update("INSERT INTO merchants (id, merchant_name, merchant_type, status, created_at, updated_at, project_id) "
+                + "VALUES (?, ?, 'retail', 'active', now(), now(), ?)", otherMerchant, "别家商户" + suffix, project("a"));
+        send(account("m2", project("a"), otherMerchant, role("creator", "merchant.service_work_order.view", "merchant.service_work_order.create")),
+                confirmed, "merchant-confirm", confirmBody).andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.detail_code").value("CROSS_MERCHANT_FORBIDDEN"));
+
+        String cancelled = createAsMerchant("cleaning", "low", "");
+        twice(merchantAccount, cancelled, "cancel", keyed("mcancel", ",\"reason\":\"误报，问题已自行解决\""), "cancelled", "cancelled");
+
+        String duplicate = createAsMerchant("repair", "high", "");
+        moveTo(duplicate, "processing");
+        twice(closer, duplicate, "staff-cancel", keyed("scancel", ",\"reason\":\"与上午那张重复\""), "cancelled", "cancelled");
+
+        String cleaning = createAsMerchant("cleaning", "low", "");
+        moveTo(cleaning, "processing");
+        twice(processorA, cleaning, "actions", keyed("handled", ",\"operator_note\":\"已清洁完毕\","
+                + "\"evidence_attachment_ids\":[\"att-merchant-work-order-process\"],\"target_status\":\"resolved\""), "closed", "closed");
+    }
+
+    /** 同一入口、同一正文提交两次：第一次不带已完成标记；第二次 200、带已完成标记与提示、状态相同；该类动作记录只一条。 */
+    private void twice(RequestPostProcessor who, String id, String action, String body, String status, String actionType) throws Exception {
+        send(who, id, action, body).andExpect(status().isOk()).andExpect(jsonPath("$.data.status").value(status))
+                .andExpect(jsonPath("$.replayed").doesNotExist());
+        send(who, id, action, body).andExpect(status().isOk()).andExpect(jsonPath("$.replayed").value(true))
+                .andExpect(jsonPath("$.message").value(com.complex.platform.common.api.ApiResponse.REPLAYED_MESSAGE))
+                .andExpect(jsonPath("$.data.status").value(status));
+        assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM merchant_service_work_order_actions WHERE work_order_id = ? AND action_type = ?",
+                Integer.class, id, actionType)).isEqualTo(1);
+    }
+
+    private ResultActions send(RequestPostProcessor who, String id, String action, String body) throws Exception {
+        return mockMvc.perform(post(WORK_ORDERS + "/" + id + "/" + action).with(who).contentType(MediaType.APPLICATION_JSON).content(body));
+    }
+
+    /** 带固定请求编号的蛇形键正文；rest 以逗号开头接其余键。 */
+    private String keyed(String tag, String rest) {
+        return "{\"idempotency_key\":\"b17-" + tag + "-" + suffix + "\"" + rest + "}";
+    }
+
     /** 照商户专区「取消」（MerchantZoneWorkOrdersPage.cancelWorkOrder）的请求形状。 */
     private ResultActions merchantCancel(RequestPostProcessor who, String id, String reason) throws Exception {
         return mockMvc.perform(post(WORK_ORDERS + "/" + id + "/cancel").with(who).contentType(MediaType.APPLICATION_JSON).content("""

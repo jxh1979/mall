@@ -1,6 +1,6 @@
 package com.complex.platform.access.staff;
 
-// 文件版本：V0.05
+// 文件版本：V0.06
 
 import static com.complex.platform.support.DailyCloseFixture.markRangeFinal;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -419,6 +419,32 @@ class M738CrossProjectJdbcIntegrationTests {
         // 非持有人：照旧只到本人项目（守护）
         assertThat(serviceOrders(staffOfA("plain", plainRole("plain", codes)))).containsExactly(oA);
         assertThat(serviceOrders(staffOfA("all", allProjectsRole("all", codes)))).containsExactlyInAnyOrder(oA, oB);
+    }
+
+    // 第十八批 BI 段第 261 条 261-B19-R1（PGM:528「⑤同一笔操作重复提交不重复生效」；PGM:303「同一次操作重复提交时，返回第一次的结果并提示已完成。」）：
+    // 服务单取消同一请求编号连发两次，第二次返回第一次的结果并提示已完成、成功留痕只一条；范围闸在幂等之前——履约人不在其可触及项目的人
+    // 用同一编号提交照旧 403，拿不到第一次的订单。修复前第二次没有已完成标记。
+    @Test
+    void serviceOrderCancelResentWithSameKeyReturnsFirstResult() throws Exception {
+        String[] codes = {"service.catalog.manage", "service.order.create"};
+        String eB = employee("ceb", entityB);
+        String order = serviceOrder("c19", eB, entityB, catalogItem());
+        String url = "/api/v1/services/orders/" + order + "/cancel";
+        String body = """
+                {"idempotency_key": "%s", "reason": "后台取消"}
+                """.formatted(key());
+        RequestPostProcessor ticked = staffOfA("c19t", tickedBRole("c19t", codes));
+
+        postJson(ticked, url, body).andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("cancelled")).andExpect(jsonPath("$.replayed").doesNotExist());
+        postJson(ticked, url, body).andExpect(status().isOk())
+                .andExpect(jsonPath("$.replayed").value(true))
+                .andExpect(jsonPath("$.message").value(com.complex.platform.common.api.ApiResponse.REPLAYED_MESSAGE))
+                .andExpect(jsonPath("$.data.status").value("cancelled"));
+        assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM audit_events WHERE event_name='service.order.cancelled' AND business_id=?",
+                Integer.class, order)).isEqualTo(1);
+
+        denied(postJson(staffOfA("c19n", plainRole("c19n", codes)), url, body), "CROSS_PROJECT_FORBIDDEN");
     }
 
     // J9 补（M738-F03 验收④）：只勾 B、普通角色、勾全部三种人各一组服务单——履约人分别在其范围内、范围外。码同 J9。
