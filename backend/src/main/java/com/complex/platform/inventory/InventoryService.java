@@ -1,6 +1,6 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.26
+// 文件版本：V0.27
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.LocalZone;
@@ -2538,7 +2538,8 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
                 "inventory.stocktake.view",
                 "stocktake",
                 () -> {
-                    Optional<String> scope = authorizationService.currentMerchantScope();
+                    // 第十八批 BF 段第 351 条 351-R2（第十八批裁决 71）：盘点单读取按 currentMerchantReadScope，最高权限看全部商户的。
+                    Optional<String> scope = authorizationService.currentMerchantReadScope();
                     return scope.map(repository::listStocktakesByMerchant)
                                 .orElseGet(repository::listStocktakes);
                 }
@@ -2548,7 +2549,7 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
     public StocktakeDetailRecord getStocktake(String stocktakeId) {
         String id = requireText(stocktakeId, "stocktake_id");
         try {
-            StocktakeRecord stocktake = loadStocktakeScoped(id);
+            StocktakeRecord stocktake = loadStocktakeScoped(id, authorizationService.currentMerchantReadScope());
             List<InventoryVarianceRecord> variances = repository.listInventoryVariancesByStocktake(id);
             auditEventService.recordSuccess(
                     "inventory.stocktake.detail_viewed", "inventory.stocktake.view", "stocktake",
@@ -2813,9 +2814,13 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
 
     /** 按 id 读取盘点单并校验归属（merchant scope）。不存在抛 404，跨商户抛 403。 */
     private StocktakeRecord loadStocktakeScoped(String stocktakeId) {
+        return loadStocktakeScoped(stocktakeId, authorizationService.currentMerchantScope());
+    }
+
+    /** 351-R2：详情读取传 currentMerchantReadScope（最高权限看全部商户）；登记差异等写入仍按 currentMerchantScope。 */
+    private StocktakeRecord loadStocktakeScoped(String stocktakeId, Optional<String> scope) {
         StocktakeRecord stocktake = repository.findStocktakeById(stocktakeId)
                 .orElseThrow(() -> ApiException.notFound("STOCKTAKE_NOT_FOUND", "盘点不存在或已被删除"));
-        Optional<String> scope = authorizationService.currentMerchantScope();
         if (scope.isPresent() && !scope.get().equals(stocktake.merchantId())) {
             throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN",
                     "该盘点不属于当前商户");

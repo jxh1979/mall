@@ -8,14 +8,14 @@
     "RUNTIME_EVIDENCE_BOUND_TO_SOURCE_FINGERPRINT",
     "RUNTIME_EVIDENCE_DOES_NOT_CLOSE_PRODUCTION_MANIFEST"
   ],
-  "generated_at": "2026-11-20T05:16:02.327Z",
+  "generated_at": "2026-11-20T06:24:33.190Z",
   "git": {
-    "head": "3e455aec8846459cf6b98fe54d7b94215213da84",
-    "head_short": "3e455aec",
-    "branch": "feature/business-code-batch77-20261106",
+    "head": "faf936e499aa4e6ea43b06d2646a445e2c790c50",
+    "head_short": "faf936e4",
+    "branch": "feature/business-code-batch78-20261106",
     "worktree_dirty": false,
-    "source_fingerprint": "8ac1edf29a76897afb3305e157c40f4de6d834447954944d87235e3de38234df",
-    "source_fingerprint_file_count": 3587,
+    "source_fingerprint": "fcfc95574176340f30d517e0b253fafe0be61ea912ef029cf3a24f21f3003b47",
+    "source_fingerprint_file_count": 3589,
     "source_fingerprint_paths": [
       "backend/src/main",
       "backend/src/test",
@@ -51,11 +51,11 @@
   "backend_surefire": {
     "path": "backend/target/surefire-reports",
     "suites": 654,
-    "tests": 7133,
+    "tests": 7134,
     "failures": 0,
     "errors": 0,
     "skipped": 0,
-    "latest_mtime": "2026-11-20T05:12:41.411Z",
+    "latest_mtime": "2026-11-20T06:22:45.801Z",
     "passed": true
   },
   "web_unit_source": {
@@ -251,6 +251,7 @@
       "apps/web/src/admin/pages/InventoryLedgerPage.guidedcreate.test.tsx",
       "apps/web/src/admin/pages/InventoryLedgerPage.test.tsx",
       "apps/web/src/admin/pages/InventoryQuarantinePanel.test.tsx",
+      "apps/web/src/admin/pages/InventoryStocktakePage.test.tsx",
       "apps/web/src/admin/pages/InventoryTransferWorkbenchPage.test.tsx",
       "apps/web/src/admin/pages/InventoryWarehousePanel.test.tsx",
       "apps/web/src/admin/pages/LeasingRentalStatusPage.test.tsx",
@@ -425,8 +426,8 @@
       "apps/web/src/dealer/dealerPortalClient.test.ts",
       "apps/web/src/shared/ReplayedNotice.test.tsx"
     ],
-    "file_count": 364,
-    "test_count_from_source": 1996
+    "file_count": 365,
+    "test_count_from_source": 2001
   },
   "web_build": {
     "dist_index_exists": true,
@@ -444,18 +445,18 @@
         "exists": true
       }
     ],
-    "asset_count": 174,
+    "asset_count": 175,
     "main_js_assets": [
       {
-        "path": "apps/web/dist/assets/main-CL6Q5vc2.js",
+        "path": "apps/web/dist/assets/main-gqXTWttI.js",
         "size_bytes": 4337,
-        "mtime": "2026-11-20T05:12:50.577Z"
+        "mtime": "2026-11-20T06:22:54.933Z"
       }
     ],
     "largest_asset": {
       "path": "apps/web/dist/assets/vendor-antd-Bh_XtmOr.js",
       "size_bytes": 251112,
-      "mtime": "2026-11-20T05:12:50.580Z"
+      "mtime": "2026-11-20T06:22:54.936Z"
     },
     "no_main_bundle_warning_expected": true
   },

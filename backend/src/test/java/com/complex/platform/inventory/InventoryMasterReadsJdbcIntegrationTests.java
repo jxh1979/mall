@@ -1,6 +1,6 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -108,6 +108,26 @@ class InventoryMasterReadsJdbcIntegrationTests {
                 .andExpect(jsonPath("$.detail_code").value("CROSS_MERCHANT_FORBIDDEN"));
     }
 
+    /**
+     * 第十八批 BF 段第 351 条 351-R2（第十八批裁决 71；BSM:1164「记录入库、出库、调拨、盘点、报损、报溢和库存调整。」）：库存盘点页的盘点单列表与详情，
+     * 最高权限看全部商户的；商户账号照旧只看本商户，读别家的盘点单详情仍 403。修复前最高权限两处读都 403 MERCHANT_SCOPE_REQUIRED。
+     */
+    @Test
+    void masterReadsEveryMerchantsStocktakes() throws Exception {
+        String stA = stocktake(a);
+        String stB = stocktake(b);
+        assertThat(this.<String>read(master(), "/api/v1/inventory/stocktakes", "$.data.items[*].id")).contains(stA, stB);
+        mockMvc.perform(get("/api/v1/inventory/stocktakes/" + stB).with(master())).andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.stocktake.id").value(stB))
+                .andExpect(jsonPath("$.data.stocktake.warehouse_id").value(b.warehouse()));
+
+        RequestPostProcessor merchantA = new StaffRequestFixture(jdbc).staff("r351usr_ma_" + s, "staff", a.project(), a.merchant(),
+                "inventory.stocktake.view");
+        assertThat(this.<String>read(merchantA, "/api/v1/inventory/stocktakes", "$.data.items[*].id")).contains(stA).doesNotContain(stB);
+        mockMvc.perform(get("/api/v1/inventory/stocktakes/" + stB).with(merchantA)).andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.detail_code").value("CROSS_MERCHANT_FORBIDDEN"));
+    }
+
     /** 回归：商户账号只看本商户；不挂商户的项目员工读物料仍 403 MERCHANT_SCOPE_REQUIRED（控制席 82b-R6 判定不变）。 */
     @Test
     void merchantAndProjectStaffKeepTheirScope() throws Exception {
@@ -151,6 +171,14 @@ class InventoryMasterReadsJdbcIntegrationTests {
                 + "created_at,merchant_id) VALUES(?,'damage_report',?,'[\"p\"]'::jsonb,'[\"v\"]'::jsonb,'pending',now(),?)",
                 review, "r362adj_" + n, merchant);
         return new Bar(project, merchant, item, balance, movement, warehouse, review, traceCode);
+    }
+
+    /** 该酒吧吧台仓的一张盘点中的盘点单。 */
+    private String stocktake(Bar bar) {
+        String id = "r351st_" + bar.merchant();
+        jdbc.update("INSERT INTO stocktake(id,stocktake_no,warehouse_id,merchant_id,business_date,status,created_at,updated_at)"
+                + " VALUES(?,?,?,?,DATE '" + DAY + "','counting',now(),now())", id, "ST351" + bar.merchant(), bar.warehouse(), bar.merchant());
+        return id;
     }
 
     // ---------- 请求 ----------

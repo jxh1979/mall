@@ -1,4 +1,4 @@
-// 文件版本：V0.07
+// 文件版本：V0.08
 package com.complex.platform.gate;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -191,6 +191,9 @@ class ServerModuleRoutesTests {
         assertThat(web("PUT", "/api/v1/bar/arrival-reminder-policies/p1")).as("到店提醒小节只在票务策略页").isEqualTo("ticketing");
         assertThat(web("POST", "/api/v1/loyalty/stored-value/merchant-card-exit-notice-policy")).as("退出公告策略只在储值规则页")
                 .isEqualTo("governance");
+        // 第十八批 BF 段第 351 条 351-R2：盘点差异过账只有库存盘点页（ADM-INV-006）调。
+        assertThat(web("POST", "/api/v1/finance/inventory-variances/post")).as("盘点差异过账只在库存盘点页").isEqualTo("inventory");
+        assertThat(web("GET", "/api/v1/inventory/stocktakes")).isEqualTo("inventory");
         assertThat(web("GET", "/api/v1/home-contents/p1")).as("场地营业时间页、主管复核页").isEqualTo("governance");
         assertThat(web("POST", "/api/v1/home-contents/p1/publish")).isEqualTo("governance");
     }
