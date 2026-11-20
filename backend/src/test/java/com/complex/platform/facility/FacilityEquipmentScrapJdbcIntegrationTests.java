@@ -1,6 +1,6 @@
 package com.complex.platform.facility;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -57,6 +57,7 @@ class FacilityEquipmentScrapJdbcIntegrationTests {
     @Autowired private JdbcTemplate jdbc;
     @Autowired private SupervisorReviewService reviews;
     @Autowired private EvidenceEventService evidence;
+    @Autowired private com.complex.platform.finance.FinanceService financeService;
 
     private final String suffix = UUID.randomUUID().toString().substring(0, 8);
     private final String project = "hpf03_prj_" + suffix;
@@ -263,6 +264,55 @@ class FacilityEquipmentScrapJdbcIntegrationTests {
         finance(manager, scrapId, body.formatted("f3_" + suffix)).andExpect(status().isOk());
         finance(manager, scrapId, body.formatted("f4_" + suffix)).andExpect(status().isConflict())
                 .andExpect(jsonPath("$.detail_code").value("FACILITY_EQUIPMENT_SCRAP_FINANCE_RECORDED"));
+    }
+
+    /**
+     * 第十八批 BH 段第 261 条 261-B14-R5（BSM:1408「残值或损失由财务记录并关联原设备」；PGM:303「不会因为重试就重复扣款、重复入账」）：
+     * 两张报废单先后做财务登记，请求编号按后台真实格式（「admin-web-」＋13 位毫秒＋「-」＋8 位随机）。两张单的残值应收、损失核算各落各的台账行，
+     * 金额与来源单各是自己的。修复前派生号由「来源类型＋请求编号」截到 40 个字符，损失一行只剩来源类型加「admin_web」，后登记的把先登记的覆盖。
+     */
+    @Test
+    void twoScrapsKeepTheirOwnResidualAndLossLedgerRows() throws Exception {
+        String first = idOf(requestScrap().andExpect(status().isOk()));
+        decide(first, "approved");
+        String equipment2 = "hpf03_feq2_" + suffix;
+        jdbc.update("""
+                INSERT INTO facility_equipment (id, name, equipment_type, space_id, responsible_user_id, status, project_id)
+                VALUES (?, '4号冷却塔', 'hvac', 'sp_roof', ?, 'normal', ?)""", equipment2, user("tech"), project);
+        String second = idOf(send(manager, EQUIPMENT_BASE + equipment2 + "/scrap-requests",
+                "{\"reason\":\"风机断轴\",\"disposal_method\":\"整机交回收商\",\"idempotency_key\":\"rq_" + UUID.randomUUID() + "\"}")
+                .andExpect(status().isOk()));
+        decide(second, "approved");
+
+        finance(manager, first, "{\"residual_amount_cent\":20000,\"residual_counterparty_id\":\"recycler_x\",\"loss_amount_cent\":12000,"
+                + "\"idempotency_key\":\"admin-web-1794000000123-" + suffix + "\"}").andExpect(status().isOk());
+        finance(manager, second, "{\"residual_amount_cent\":30000,\"residual_counterparty_id\":\"recycler_y\",\"loss_amount_cent\":34000,"
+                + "\"idempotency_key\":\"admin-web-1794050000456-" + suffix + "\"}").andExpect(status().isOk());
+
+        List<Map<String, Object>> rows = jdbc.queryForList("""
+                SELECT id, source_type || '/' || source_id || '/' || amount_cent AS line FROM ar_ap_items
+                 WHERE source_type IN ('facility_equipment_scrap','facility_equipment_scrap_loss') AND source_id IN (?, ?)""", first, second);
+        assertThat(rows).extracting(row -> row.get("line")).containsExactlyInAnyOrder(
+                "facility_equipment_scrap/" + first + "/20000", "facility_equipment_scrap_loss/" + first + "/12000",
+                "facility_equipment_scrap/" + second + "/30000", "facility_equipment_scrap_loss/" + second + "/34000");
+        List<String> linked = jdbc.queryForList("""
+                SELECT x FROM facility_equipment_scraps, LATERAL (VALUES (residual_ar_ap_item_id), (loss_ar_ap_item_id)) AS v(x)
+                 WHERE id IN (?, ?)""", String.class, first, second);
+        assertThat(linked).doesNotContainNull().doesNotHaveDuplicates().hasSize(4)
+                .containsExactlyInAnyOrderElementsOf(rows.stream().map(row -> (String) row.get("id")).toList());
+    }
+
+    /** 261-B14-R5（BSM:1072「该娱乐平台公司可经审批先垫付并向原门店追收」）：两条存酒赔付单各挂追收（键为后台请求编号加「:recovery」），各落各的应收行。 */
+    @Test
+    void twoSavedBottleRemedyRecoveriesKeepTheirOwnLedgerRows() {
+        String bar = "mch_" + UUID.randomUUID();
+        jdbc.update("INSERT INTO merchants(id,merchant_name,merchant_type,status,project_id,created_at,updated_at)"
+                + " VALUES(?,?,'bar','active',?,now(),now())", bar, "垫付追收回归酒吧" + suffix, project);
+        financeService.postSavedBottleRemedyRecovery("sbr_a_" + suffix, bar, 12000L, "admin-web-1794000000123-" + suffix + ":recovery");
+        financeService.postSavedBottleRemedyRecovery("sbr_b_" + suffix, bar, 34000L, "admin-web-1794050000456-" + suffix + ":recovery");
+        assertThat(jdbc.queryForList("SELECT source_id || '/' || amount_cent FROM ar_ap_items"
+                + " WHERE source_type = 'saved_bottle_remedy_recovery' AND counterparty_id = ?", String.class, bar))
+                .containsExactlyInAnyOrder("sbr_a_" + suffix + "/12000", "sbr_b_" + suffix + "/34000");
     }
 
     private ResultActions requestScrap() throws Exception {
