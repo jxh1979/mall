@@ -1,6 +1,6 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.17
+// 文件版本：V0.18
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -2160,7 +2160,7 @@ class SingleUseGrantRequestTransactionTests {
         String jobId = data(previewed).get("id").asText();
 
         mockMvc.perform(post("/api/v1/ops/data-cleanup/jobs/" + jobId + "/submit").with(session(null))
-                        .contentType(MediaType.APPLICATION_JSON).content("{\"reason\": \"M723 单次授权回归\"}"))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"idempotency_key\": \"m723-cleanup-" + java.util.UUID.randomUUID() + "\", \"reason\": \"M723 单次授权回归\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.status").value("pending_approval"));
         assertConsumedOnce();

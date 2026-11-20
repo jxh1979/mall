@@ -45,6 +45,9 @@ public class DataCleanupService {
     private final JdbcDataCleanupRepository repository;
     private final AuthorizationService authorizationService;
     private final AuditedOperationExecutor operations;
+    // 第十八批 BG 段第 261 条 261-B21-R3：提交审批与审批接幂等层（字段注入免改构造点；单测未注入即直接办理）。
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    com.complex.platform.common.idempotency.IdempotencyService idempotencyService;
 
     public DataCleanupService(JdbcDataCleanupRepository repository,
             AuthorizationService authorizationService,
@@ -86,6 +89,17 @@ public class DataCleanupService {
     /** ② 提交清理申请：dry_run → pending_approval（带事由）。 */
     @Transactional
     public DataCleanupJobRecord submitForApproval(String jobId, DataCleanupSubmitRequest request) {
+        // 261-B21-R3（PGM:528「⑤同一笔操作重复提交不重复生效」；PGM:303「同一次操作重复提交时，返回第一次的结果并提示已完成。」）：
+        // 带请求编号的经幂等层，同一编号重发返回首次结果、不重复留痕；幂等层包在留痕之外。
+        String key = request == null ? null : request.idempotencyKey();
+        if (idempotencyService == null || key == null || key.isBlank()) {
+            return doSubmitForApproval(jobId, request);
+        }
+        return idempotencyService.execute("submitDataCleanup:" + jobId, key, request,
+                () -> doSubmitForApproval(jobId, request), DataCleanupJobRecord.class);
+    }
+
+    private DataCleanupJobRecord doSubmitForApproval(String jobId, DataCleanupSubmitRequest request) {
         Instant now = Instant.now();
         // 275-R1：提交人（登录人）与事由进 data.cleanup.submitted；作业行的发起人仍记试运行人。缺事由时不带元数据，照旧 400。
         Map<String, Object> trace = request == null || request.reason() == null ? Map.of() : Map.of("reason", request.reason().trim());
@@ -112,6 +126,16 @@ public class DataCleanupService {
         if (!isMaster()) {
             throw ApiException.forbidden("MASTER_APPROVAL_REQUIRED", "数据清理须由最高权限本人批准");
         }
+        // 261-B21-R3：最高权限闸在幂等之前；状态闸、禁自审、驳回或执行与留痕在幂等层里，同一编号重发不再执行一遍清理。
+        String key = request == null ? null : request.idempotencyKey();
+        if (idempotencyService == null || key == null || key.isBlank()) {
+            return doApproveAndExecute(jobId, request);
+        }
+        return idempotencyService.execute("approveDataCleanup:" + jobId, key, request,
+                () -> doApproveAndExecute(jobId, request), DataCleanupJobRecord.class);
+    }
+
+    private DataCleanupJobRecord doApproveAndExecute(String jobId, DataCleanupApprovalRequest request) {
         DataCleanupJobRecord job = require(jobId);
         if (!"pending_approval".equals(job.status())) {
             throw ApiException.conflict("DATA_CLEANUP_NOT_PENDING", "该任务不在待审批状态");

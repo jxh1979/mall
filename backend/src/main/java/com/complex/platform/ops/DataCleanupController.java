@@ -46,6 +46,8 @@ public class DataCleanupController {
     public ApiResponse<DataCleanupJobRecord> submit(
             @PathVariable("id") String id, @RequestBody(required = false) DataCleanupSubmitRequest request) {
         authorizationService.requirePermission("data.cleanup.request");
+        // 第十八批 BG 段第 261 条 261-B21-R3（PGM:528⑤、PGM:303）：提交审批与审批带请求编号，同一编号重发返回首次结果。
+        com.complex.platform.common.api.ApiRequests.requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.submitForApproval(id, request));
     }
 
@@ -53,6 +55,7 @@ public class DataCleanupController {
     public ApiResponse<DataCleanupJobRecord> approve(
             @PathVariable("id") String id, @RequestBody(required = false) DataCleanupApprovalRequest request) {
         authorizationService.requirePermission("data.cleanup.approve");
+        com.complex.platform.common.api.ApiRequests.requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.approveAndExecute(id, request));
     }
 }

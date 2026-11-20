@@ -1,6 +1,6 @@
 package com.complex.platform.access.staff;
 
-// 文件版本：V0.33
+// 文件版本：V0.34
 
 import com.complex.platform.access.AccessActor;
 import com.complex.platform.access.AccessRepository;
@@ -427,7 +427,7 @@ public class StaffService {
         auditEventService.recordSuccess("staff.profile.delete_requested", "staff.profile.review",
                 "staff_profile", id, null, null, Map.of());
         if (authorizationService.isMasterAuthority(authorizationService.currentActor())) {
-            approveDeleteProfile(id, new com.complex.platform.access.staff.dto.StaffProfileDeleteApprovalRequest(
+            doApproveDeleteProfile(id, new com.complex.platform.access.staff.dto.StaffProfileDeleteApprovalRequest(
                     "approved", reason));
             return saved.withDelete("approved", saved.deleteRequestedBy(), saved.deleteRequestedAt(), reason, now);
         }
@@ -441,6 +441,18 @@ public class StaffService {
         if (!authorizationService.isMasterAuthority(authorizationService.currentActor())) {
             throw ApiException.forbidden("MASTER_APPROVAL_REQUIRED", "员工档案删除须由最高权限本人批准");
         }
+        // 第十八批 BG 段第 261 条 261-B21-R4（PGM:528⑤、PGM:303）：经接口提交的带请求编号，同一编号重发返回首次审批结果、不重复留痕；
+        // 不带编号的是服务内调用，直接办理。
+        String key = request == null ? null : request.idempotencyKey();
+        if (key == null || key.isBlank()) {
+            return doApproveDeleteProfile(id, request);
+        }
+        return idempotencyService.execute("approveStaffProfileDelete:" + id, key, request,
+                () -> doApproveDeleteProfile(id, request), com.complex.platform.access.staff.dto.StaffProfileDeleteDecision.class);
+    }
+
+    private com.complex.platform.access.staff.dto.StaffProfileDeleteDecision doApproveDeleteProfile(String id,
+            com.complex.platform.access.staff.dto.StaffProfileDeleteApprovalRequest request) {
         // 最高权限逐笔开放（治理地图第 528 行第④类）：不按公司或登记范围取档案，只校验存在；留痕由 delete_approved/rejected 承担。
         StaffProfileRecord profile = repository.findProfileById(id)
                 .orElseThrow(() -> ApiException.notFound("STAFF_NOT_FOUND", "员工档案不存在：" + id));
@@ -2018,6 +2030,22 @@ public class StaffService {
             StaffLeaveRequestRecord current = repository.findLeaveById(id)
                     .orElseThrow(() -> ApiException.notFound("LEAVE_NOT_FOUND", "请假申请不存在或已被删除"));
             requireUserInScope(current.userId(), reach);
+            // 第十八批 BG 段第 261 条 261-B21-R1（PGM:528⑤、PGM:303）：范围闸在幂等之前；状态闸、写回与成功留痕在幂等层里，同一请求编号重发返回首次审批结果。
+            return idempotencyService.execute("reviewStaffLeave:" + id, request.idempotencyKey(), request,
+                    () -> doReviewLeave(id, request), StaffLeaveRequestRecord.class);
+        } catch (RuntimeException exception) {
+            auditEventService.recordFailure("staff.leave.review_failed", "staff.shift.manage",
+                    "staff_leave_request", id, null,
+                    request == null ? null : request.idempotencyKey(), codeOf(exception));
+            throw exception;
+        }
+    }
+
+    private StaffLeaveRequestRecord doReviewLeave(String id,
+            com.complex.platform.access.staff.dto.StaffLeaveReviewRequest request) {
+        {
+            StaffLeaveRequestRecord current = repository.findLeaveById(id)
+                    .orElseThrow(() -> ApiException.notFound("LEAVE_NOT_FOUND", "请假申请不存在或已被删除"));
             if (!current.status().equals("pending")) {
                 throw ApiException.badRequest("VALIDATION_FAILED", "请假申请已审批，不能重复处理");
             }
@@ -2030,11 +2058,6 @@ public class StaffService {
                     "staff_leave_request", saved.id(), null, request.idempotencyKey(),
                     java.util.Map.of("decision", request.decision(), "user_id", saved.userId()));
             return saved;
-        } catch (RuntimeException exception) {
-            auditEventService.recordFailure("staff.leave.review_failed", "staff.shift.manage",
-                    "staff_leave_request", id, null,
-                    request == null ? null : request.idempotencyKey(), codeOf(exception));
-            throw exception;
         }
     }
 
@@ -2093,6 +2116,22 @@ public class StaffService {
             StaffLeaveRequestRecord current = repository.findLeaveById(id)
                     .orElseThrow(() -> ApiException.notFound("LEAVE_NOT_FOUND", "请假申请不存在或已被删除"));
             requireUserInScope(current.userId(), reach);
+            // 261-B21-R1：同上，销假审批同一请求编号重发返回首次审批结果，不重复改单、不重复发补差事件。
+            return idempotencyService.execute("revokeStaffLeave:" + id, request.idempotencyKey(), request,
+                    () -> doRevokeLeave(id, request), StaffLeaveRequestRecord.class);
+        } catch (RuntimeException exception) {
+            auditEventService.recordFailure("staff.leave.revoke_review_failed", "staff.shift.manage",
+                    "staff_leave_request", id, null,
+                    request == null ? null : request.idempotencyKey(), codeOf(exception));
+            throw exception;
+        }
+    }
+
+    private StaffLeaveRequestRecord doRevokeLeave(String id,
+            com.complex.platform.access.staff.dto.StaffLeaveReviewRequest request) {
+        {
+            StaffLeaveRequestRecord current = repository.findLeaveById(id)
+                    .orElseThrow(() -> ApiException.notFound("LEAVE_NOT_FOUND", "请假申请不存在或已被删除"));
             if (!"revoke_requested".equals(current.status())) {
                 throw ApiException.badRequest("VALIDATION_FAILED", "只有员工本人已申请销假（待销假审批）的请假才能办理");
             }
@@ -2118,11 +2157,6 @@ public class StaffService {
                     "staff_leave_request", saved.id(), null, request.idempotencyKey(),
                     java.util.Map.of("decision", request.decision(), "user_id", saved.userId(), "leave_type", saved.leaveType()));
             return saved;
-        } catch (RuntimeException exception) {
-            auditEventService.recordFailure("staff.leave.revoke_review_failed", "staff.shift.manage",
-                    "staff_leave_request", id, null,
-                    request == null ? null : request.idempotencyKey(), codeOf(exception));
-            throw exception;
         }
     }
 

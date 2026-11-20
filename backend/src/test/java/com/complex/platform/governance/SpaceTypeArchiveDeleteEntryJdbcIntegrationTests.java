@@ -1,6 +1,6 @@
 package com.complex.platform.governance;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -73,7 +73,7 @@ class SpaceTypeArchiveDeleteEntryJdbcIntegrationTests {
         jdbc.update("INSERT INTO space_type_delete_requests(id,space_type_id,reason,requested_by,requested_at,status) "
                 + "VALUES(?,?,'不再使用',?,now(),'pending')", "stdr_b51r3_" + digits, typeId, "b51r3_req_" + digits);
 
-        send(post(url("/delete-approve")), "{\"decision\":\"approved\"}")
+        send(post(url("/delete-approve")), "{\"idempotency_key\":\"b51r3-" + digits + "\",\"decision\":\"approved\"}")
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.detail_code").value("SPACE_TYPE_DELETE_APPROVER_NOT_MASTER"));
         assertThat(statusOf()).isEqualTo("pending_delete");
@@ -103,6 +103,57 @@ class SpaceTypeArchiveDeleteEntryJdbcIntegrationTests {
         assertThat(statusOf()).isEqualTo("archived");
         assertThat(jdbc.queryForObject("SELECT count(*) FROM audit_events WHERE event_name='space_type.archived' AND business_id=?",
                 Integer.class, typeId)).isEqualTo(1);
+    }
+
+    // 第十八批 BG 段第 261 条 261-B21-R2（PGM:528「⑤同一笔操作重复提交不重复生效」；PGM:303「同一次操作重复提交时，返回第一次的结果并提示已完成。」）：
+    // 最高权限批准删除，同一请求编号连发两次：第二次 200 并提示已完成，种类已停用，成功留痕只一条且带种类编码。修复前第二次 400 SPACE_TYPE_DELETE_NOT_PENDING。
+    @Test
+    void approveDelete_resentWithSameKey_returnsFirstResultOnce() throws Exception {
+        pendingDelete();
+        String body = "{\"idempotency_key\":\"b21r2-ok-" + digits + "\",\"decision\":\"approved\"}";
+        mockMvc.perform(post(url("/delete-approve")).with(master()).contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.replayed").doesNotExist());
+        mockMvc.perform(post(url("/delete-approve")).with(master()).contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.replayed").value(true))
+                .andExpect(jsonPath("$.message").value(com.complex.platform.common.api.ApiResponse.REPLAYED_MESSAGE));
+        assertThat(statusOf()).isEqualTo("disabled");
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM audit_events WHERE event_name='space_type.delete_approved' AND business_id=?"
+                + " AND metadata->>'type_code' = ?", Integer.class, typeId, "b51r3_" + digits)).isEqualTo(1);
+    }
+
+    // 261-B21-R2：驳回同样重放（种类回到已存档，留痕一条）；不带请求编号 400、种类仍待审批删除。
+    @Test
+    void rejectDelete_resentWithSameKey_andMissingKeyRejected() throws Exception {
+        pendingDelete();
+        mockMvc.perform(post(url("/delete-approve")).with(master()).contentType(MediaType.APPLICATION_JSON).content("{\"decision\":\"rejected\"}"))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.detail_code").value("VALIDATION_FAILED"));
+        assertThat(statusOf()).isEqualTo("pending_delete");
+        String body = "{\"idempotency_key\":\"b21r2-no-" + digits + "\",\"decision\":\"rejected\"}";
+        mockMvc.perform(post(url("/delete-approve")).with(master()).contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isOk());
+        mockMvc.perform(post(url("/delete-approve")).with(master()).contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.replayed").value(true));
+        assertThat(statusOf()).isEqualTo("archived");
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM audit_events WHERE event_name='space_type.delete_rejected' AND business_id=?",
+                Integer.class, typeId)).isEqualTo(1);
+    }
+
+    /** 把种类置为待审批删除（申请人是别的账号）。 */
+    private void pendingDelete() {
+        jdbc.update("UPDATE space_type_dictionary SET status = 'pending_delete' WHERE id = ?", typeId);
+        jdbc.update("INSERT INTO space_type_delete_requests(id,space_type_id,reason,requested_by,requested_at,status) "
+                + "VALUES(?,?,'不再使用',?,now(),'pending')", "stdr_b21r2_" + digits, typeId, "b21r2_req_" + digits);
+    }
+
+    /** 最高权限本人（保留超管账号，组织 platform-company、无商户），经后台 Web 终端。 */
+    private RequestPostProcessor master() {
+        AccessActor actor = new AccessActor(com.complex.platform.auth.SessionIssuer.MASTER_USER_ID, com.complex.platform.auth.SessionIssuer.MASTER_USERNAME,
+                com.complex.platform.auth.SessionIssuer.MASTER_ACCOUNT_TYPE, "platform-company", null, "active");
+        return request -> {
+            request.addHeader("X-Terminal-Type", "web");
+            return authentication(new UsernamePasswordAuthenticationToken(actor, null,
+                    List.of(new SimpleGrantedAuthority("ROLE_P0_STAFF")))).postProcessRequest(request);
+        };
     }
 
     private ResultActions send(org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder request, String body)

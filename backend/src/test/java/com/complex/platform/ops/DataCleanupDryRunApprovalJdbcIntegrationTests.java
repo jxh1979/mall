@@ -1,6 +1,6 @@
 package com.complex.platform.ops;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -208,7 +208,61 @@ class DataCleanupDryRunApprovalJdbcIntegrationTests {
                 Integer.class, jobId)).isEqualTo(1);
     }
 
+    /**
+     * 第十八批 BG 段第 261 条 261-B21-R3（PGM:528「⑤同一笔操作重复提交不重复生效」；PGM:303「同一次操作重复提交时，返回第一次的结果并提示已完成。」）：
+     * 提交审批同一请求编号连发两次，第二次返回首次结果并提示已完成、提交留痕只一条；最高权限批准同一编号连发两次，第二次返回首次结果，
+     * 清理没有再执行一遍（执行时间、清理条数与第一次相同，执行留痕只一条）。修复前两处第二次都 409。
+     */
+    @Test
+    void submitAndApprovalResentWithSameKeyReturnFirstResult() throws Exception {
+        String jobId = JsonPath.read(preview(requester, "{\"scope_type\":\"archived_bar_combos\",\"older_than_days\":0}")
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString(), "$.data.id");
+        String submitUrl = "/api/v1/ops/data-cleanup/jobs/" + jobId + "/submit";
+        String submitBody = "{\"idempotency_key\":\"b21r3-sub-" + s + "\",\"reason\":\"清理测试遗留的旧套餐\"}";
+        raw(requester, submitUrl, submitBody).andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("pending_approval")).andExpect(jsonPath("$.replayed").doesNotExist());
+        raw(requester, submitUrl, submitBody).andExpect(status().isOk()).andExpect(jsonPath("$.replayed").value(true))
+                .andExpect(jsonPath("$.message").value(com.complex.platform.common.api.ApiResponse.REPLAYED_MESSAGE))
+                .andExpect(jsonPath("$.data.status").value("pending_approval"));
+        assertThat(events("data.cleanup.submitted", jobId)).isEqualTo(1);
+
+        String approveUrl = "/api/v1/ops/data-cleanup/jobs/" + jobId + "/approve";
+        String approveBody = "{\"idempotency_key\":\"b21r3-apr-" + s + "\",\"decision\":\"approved\"}";
+        String first = raw(master(), approveUrl, approveBody).andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("executed")).andReturn().getResponse().getContentAsString();
+        String second = raw(master(), approveUrl, approveBody).andExpect(status().isOk()).andExpect(jsonPath("$.replayed").value(true))
+                .andExpect(jsonPath("$.data.status").value("executed")).andReturn().getResponse().getContentAsString();
+        assertThat(JsonPath.<Object>read(second, "$.data.executed_at")).isEqualTo(JsonPath.<Object>read(first, "$.data.executed_at"));
+        assertThat(JsonPath.<Object>read(second, "$.data.deleted_count")).isEqualTo(JsonPath.<Object>read(first, "$.data.deleted_count"));
+        assertThat(events("data.cleanup.executed", jobId)).isEqualTo(1);
+    }
+
+    /** 261-B21-R3：提交、审批不带请求编号都 400、任务状态不变；驳回同一编号重发返回首次结果、驳回留痕只一条。 */
+    @Test
+    void missingKeyIsRejectedAndRejectionReplays() throws Exception {
+        String jobId = JsonPath.read(preview(requester, "{\"scope_type\":\"archived_bar_combos\",\"older_than_days\":0}")
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString(), "$.data.id");
+        raw(requester, "/api/v1/ops/data-cleanup/jobs/" + jobId + "/submit", "{\"reason\":\"清理测试遗留的旧套餐\"}")
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.detail_code").value("VALIDATION_FAILED"));
+        assertThat(statusOf(jobId)).isEqualTo("dry_run");
+        submit(requester, jobId, "{\"reason\":\"清理测试遗留的旧套餐\"}").andExpect(status().isOk());
+
+        String approveUrl = "/api/v1/ops/data-cleanup/jobs/" + jobId + "/approve";
+        raw(master(), approveUrl, "{\"decision\":\"rejected\"}")
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.detail_code").value("VALIDATION_FAILED"));
+        assertThat(statusOf(jobId)).isEqualTo("pending_approval");
+        String rejectBody = "{\"idempotency_key\":\"b21r3-rej-" + s + "\",\"decision\":\"rejected\"}";
+        raw(master(), approveUrl, rejectBody).andExpect(status().isOk()).andExpect(jsonPath("$.data.status").value("rejected"));
+        raw(master(), approveUrl, rejectBody).andExpect(status().isOk()).andExpect(jsonPath("$.replayed").value(true))
+                .andExpect(jsonPath("$.data.status").value("rejected"));
+        assertThat(events("data.cleanup.rejected", jobId)).isEqualTo(1);
+    }
+
     // ---------- helpers ----------
+
+    private int events(String name, String jobId) {
+        return jdbc.queryForObject("SELECT count(*) FROM audit_events WHERE event_name = ? AND business_id = ?", Integer.class, name, jobId);
+    }
 
     /** 最高权限本人（保留超管账号，组织 platform-company、无商户），经后台 Web 终端。 */
     private RequestPostProcessor master() {
@@ -226,14 +280,19 @@ class DataCleanupDryRunApprovalJdbcIntegrationTests {
                 .contentType(MediaType.APPLICATION_JSON).content(json));
     }
 
+    /** 每次调用是一次新的提交：自动带一个新的请求编号（261-B21-R3 起接口必填）。 */
     private ResultActions submit(RequestPostProcessor who, String jobId, String json) throws Exception {
-        return mockMvc.perform(post("/api/v1/ops/data-cleanup/jobs/" + jobId + "/submit").with(who)
-                .contentType(MediaType.APPLICATION_JSON).content(json));
+        String keyed = "{\"idempotency_key\":\"dcl-" + java.util.UUID.randomUUID() + "\"" + ("{}".equals(json) ? "}" : "," + json.substring(1));
+        return raw(who, "/api/v1/ops/data-cleanup/jobs/" + jobId + "/submit", keyed);
     }
 
     private ResultActions approve(RequestPostProcessor who, String jobId, String decision) throws Exception {
-        return mockMvc.perform(post("/api/v1/ops/data-cleanup/jobs/" + jobId + "/approve").with(who)
-                .contentType(MediaType.APPLICATION_JSON).content("{\"decision\":\"" + decision + "\"}"));
+        return raw(who, "/api/v1/ops/data-cleanup/jobs/" + jobId + "/approve",
+                "{\"idempotency_key\":\"dcl-" + java.util.UUID.randomUUID() + "\",\"decision\":\"" + decision + "\"}");
+    }
+
+    private ResultActions raw(RequestPostProcessor who, String url, String json) throws Exception {
+        return mockMvc.perform(post(url).with(who).contentType(MediaType.APPLICATION_JSON).content(json));
     }
 
     private int submitFailures() {

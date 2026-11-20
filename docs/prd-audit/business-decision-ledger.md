@@ -1,6 +1,6 @@
 # PRD 审计业务裁决台账
 
-文档版本：V1.14
+文档版本：V1.15
 状态：进行中
 迁移日期：2026-07-27
 当前事实源：三份立法 HTML 以既有冻结基线叠加 James 此前 M02 至 M08 的点名批准、全量审计 M001、M002 的逐项批准，以及本轮 2026-10-16 至 2026-10-17 业务 HTML 审计中 Q01 至 Q40 及子题实际明确批准且未被后续替代的裁决，和 2026-10-17 第二批 HTML 业务线推演审计（A–F 六线 64 条、停车章）的逐项批准，并叠加本轮 CG 70 项来源确认与 C01–C09、N01–N03 最终澄清及补全文稿中 F01、W01–W05 的整体修改批准（本文件末节）；本轮最终规则、未采纳或替代关系、现行版本与字节哈希见本文件末节。历史记录保留为各自当时事实，不恢复已被替代的建议。
@@ -10840,3 +10840,41 @@ HTML 的语义补齐与直接引用同步可在本批核验；70项中的业务�
   测试：InventoryMasterReadsJdbcIntegrationTests.masterReadsEveryMerchantsStocktakes（最高权限读两个商户的盘点单列表与详情，商户账号只看本商户、读别家详情 403）；ServerModuleRoutesTests 补过账接口与盘点单接口的模块断言。
   文档：供应链库存 PRD §6 盘点与差异行补实现现状；覆盖表 BSM-0207、BSM-0375 补本段落地，判定不变。
 - 18BF 落地位置补记·运行验收证据、快照、终验文档刷新（无新裁决）：业务提交 faf936e4 之后，按第十八批裁决 25 重刷了运行验收证据：后端全量 7134 测，0 失败 0 错误；apps/web 构建通过；常规界面验收（接口全部 mock）实跑 40 条全过；真实后端界面验收未跑，runtime_ready=false。随后依次重生成闭环当前态快照、生产闭环缺口报告、界面验收报告、无上线指挥台。生成器没改。手改 docs/final-closed-loop-acceptance-audit-v0.1.md 与 docs/code-implementation-acceptance-audit-v0.1.md：前端单测源码计数改为 2001；被核文件行数都没变；后端全量与常规界面验收的数字、日期改为本次实跑值；写入 npm run verify:unit 实跑结果，五个工作区全过。交付门禁于 2026-11-20 06:25 UTC 在工作树逐项实跑子项，NAS 两项现场探测未跑。仍红的有两项：一是 coding-host-protection，它写死主仓路径，在工作树口径下必红，属工具口径，不做；二是 final-closed-loop-audit，如实留 2 条红（integration-ready、business-acceptance-ready），原因是校验器要求终验把联调、业务验收写成「是」，而裁决 25 定了不跑真实后端界面验收、运行验收未就绪，终验写的是「否」。verify:delivery-gates 总链仍是红的。
+
+18BG 落地位置补记（2026-11-20）：第十八批 BG 段（batch79）按 18AG 逐批核实方案实现待开发清单第 261 条 B20、B21、B22 三批共 7 项（治理类审批、风险处置、招商签约的一次性动作）；运行验收证据、终验文档在本段最后一个提交刷新；各项落地位置见下。本段追加时，原台账除文档版本升一版外，其他历史字节保持。
+
+- 18BG 落地位置补记·控制席判定（2026-11-20）：本段（第十八批 BG 段，batch79）实现第 261 条 261-B20-R1、261-B21-R1～R4、261-B22-R1、261-B22-R2（方案本机 b53-audit\oneshot\o10-b20-b22.json，第十八批裁决 50「逐批核实、照草稿在现主干重做」）。控制席由 Cursor 代理（Claude Fable 5.2）担任，不跑多代理工作流；各项落笔前在现主干重核，方案所述入口与缺口都还在，没有待裁题。照方案做，三处写法说明：① 认出重复提交、返回首次结果的判断若要让响应带已完成提示，须放在共用幂等层之外（同 18AK 第 222 条控制席判定③），261-B20-R1 照此办；其余六项直接把动作放进幂等层，由幂等层返回首次结果并带提示。② 服务层保留不带请求编号的调用（服务内调用与既有单测），不带编号时直接办理；经接口提交的由控制器要求必填。新增的幂等层依赖在 PlatformService、DataCleanupService、LeasingService 用字段注入，不改构造点。③ 契约里失败码不逐个列共用幂等层的错误码，照全仓现有写法。本段无迁移、无新增操作、无新权限码；新增错误码 1 个（WECOM_RISK_HIT_ALREADY_CLAIMED）；五个操作的请求体新增必填 idempotency_key（后台各页经共用客户端自动带，页面不改）。第 261 条其余 10 批 16 项待做。
+- 18BG 落地位置补记·261-B22-R1、261-B22-R2（企微违规命中复核接请求编号、已被领取后再领取不生效）：
+  改法：WecomRiskHitReviewRequest 加 idempotencyKey；ComplianceController.reviewWecomRiskHit 要求编号必填并把请求交给服务；WecomConversationService.reviewRiskHit 的参数校验、取命中与项目范围闸留在幂等之前，终态闸、领取闸、写回与成功留痕（wecom.risk.hit_reviewed）抽成 reviewRiskHitOnce 放进幂等层（操作号 reviewWecomRiskHit:命中编号）。领取闸：目标为 reviewing 而命中已不是 open 时 409 WECOM_RISK_HIT_ALREADY_CLAIMED「该风险命中已被领取，本次领取未生效，请刷新后查看」，不写库、不留成功痕；复核中的命中确认违规或误报驳回照常。
+  依据：
+  - PGM:528「⑤同一笔操作重复提交不重复生效（重复点击、网络重发、渠道重复回调都只算一次）」
+  - PGM:303「同一次操作重复提交时，返回第一次的结果并提示已完成。」「两个操作同时发生冲突时，一律以“先处理成功”的那个为准」
+  契约：reviewWecomRiskHit 请求体 idempotency_key 必填、x-idempotency-required 改 true、补失败码清单与说明。
+  测试：新增 WecomRiskHitReviewReplayJdbcIntegrationTests 3 条（确认违规同编号重发返回首次结果且留痕一条；不带编号 400；甲领取后乙再领取 409、不改写复核人，甲同编号重发返回首次结果，甲随后确认成功）；CrossProjectBusinessRecordsJdbcIntegrationTests 既有复核用例请求体补编号。
+- 18BG 落地位置补记·261-B21-R1（请假审批与销假审批重发返回首次审批结果）：
+  改法：StaffService.reviewLeave、revokeLeave 的权限、结论校验、取单与范围闸留在幂等之前，其后的状态闸、写回（销假含员工工资锁与补差事件）与成功留痕抽成 doReviewLeave、doRevokeLeave 放进幂等层（操作号 reviewStaffLeave:、revokeStaffLeave: 加请假单编号）；失败留痕照旧。
+  依据：同上 PGM:528⑤、PGM:303。
+  契约：reviewStaffLeave、revokeStaffLeave 补 409 与说明（请求体原已要求 idempotency_key）。
+  测试：M738CrossProjectJdbcIntegrationTests 加 2 条（请假审批同编号连发两次，第二次返回首次结果并提示已完成、留痕一条，换新编号再驳回仍被拒；销假审批同编号连发两次同样）。
+- 18BG 落地位置补记·261-B21-R2（空间种类删除审批接请求编号）：
+  改法：PlatformController.approveDeleteSpaceType 从请求体取 idempotency_key（缺则 400）交服务；PlatformService.approveDeleteSpaceType 的平台范围与最高权限闸留在幂等之前，取种类、待审批闸、禁自审、结论校验、写回与成功留痕（事件名、元数据不变）抽成 doApproveDeleteSpaceType 放进幂等层（操作号 approveDeleteSpaceType:种类编号，存首次的审批结论）。
+  依据：同上。
+  契约：approveDeleteSpaceType 请求体 idempotency_key 必填、x-idempotency-required 改 true、补 409 与说明。
+  测试：SpaceTypeArchiveDeleteEntryJdbcIntegrationTests 加 2 条（最高权限批准同编号连发两次，第二次提示已完成、种类已停用、留痕一条且带种类编码；驳回同样重放，不带编号 400），既有一条用例请求体补编号。
+- 18BG 落地位置补记·261-B21-R3（数据清理提交审批与审批接请求编号）：
+  改法：DataCleanupSubmitRequest、DataCleanupApprovalRequest 各加 idempotencyKey；DataCleanupController 两个入口要求编号必填；DataCleanupService.submitForApproval 整段、approveAndExecute 在最高权限闸之后的部分分别抽成 doSubmitForApproval、doApproveAndExecute 放进幂等层（操作号 submitDataCleanup:、approveDataCleanup: 加任务编号），幂等层包在留痕之外，同一编号重发不重复留痕、清理不会再执行一遍。
+  依据：同上。
+  契约：submitDataCleanupJob、approveDataCleanupJob 请求体 idempotency_key 必填、x-idempotency-required 改 true、补说明。
+  测试：DataCleanupDryRunApprovalJdbcIntegrationTests 加 2 条（提交与批准各同编号连发两次，第二次返回首次结果，执行时间与清理条数与第一次相同、留痕各一条；不带编号 400，驳回同样重放），既有请求助手改为每次自动带新编号；SingleUseGrantRequestTransactionTests 一处提交补编号。
+- 18BG 落地位置补记·261-B21-R4（员工档案删除审批接请求编号）：
+  改法：StaffProfileDeleteApprovalRequest 加 idempotencyKey；StaffController.approveDeleteProfile 要求编号必填；StaffService.approveDeleteProfile 的最高权限闸留在幂等之前，取档案、待审批闸、结论校验、驳回或删除与成功留痕抽成 doApproveDeleteProfile 放进幂等层（操作号 approveStaffProfileDelete:档案编号）；最高权限本人提出删除即生效的服务内调用直接调 doApproveDeleteProfile，不经幂等层。
+  依据：同上。
+  契约：approveDeleteStaffProfile 请求体 idempotency_key 必填、x-idempotency-required 改 true、补说明。
+  测试：新增 StaffProfileDeleteApprovalReplayJdbcIntegrationTests 3 条（批准同编号连发两次返回首次结果、留痕一条；驳回同样；不带编号 400）。
+- 18BG 落地位置补记·261-B20-R1（招商签约按意向认出已签约并接入幂等层）：
+  改法：LeasingRepository 加 findIntentContractId（JdbcLeasingRepository 按意向取 leasing_intents.contract_id，该列只由签约写入）；LeasingService.signIntent 在取意向与项目范围闸之后、待签约阶段闸之前先查该意向已绑定的合同，已绑定即标已重放并返回该合同，不再建商户与四主体绑定、不再绑定、不再记 leasing.intent.signed；未绑定时其余签约步骤抽成 doSignIntent 放进幂等层（操作号 signIntent:意向编号），同一编号在途重发在幂等层串行。
+  依据：同上。
+  契约：signLeasingIntent 只补说明。
+  测试：新增 LeasingSignReplayJdbcIntegrationTests 1 条（首次签约不带已完成标记；同编号重发与另一位招商员换新编号再签都返回首次合同并带已完成标记，商户、合同行数不变，意向绑定的合同不变，签约留痕一条）。
+  文档：平台治理 PRD §2A.3、证据留痕与风控 PRD §11A.2、招商获客 PRD §6 补实现现状。
+- 18BG 落地位置补记·运行验收证据、快照、终验文档刷新（无新裁决）：业务提交 6c3a051b 之后，按第十八批裁决 25 重刷了运行验收证据：后端全量 7147 测，0 失败 0 错误；apps/web 构建通过；常规界面验收（接口全部 mock）实跑 40 条全过；真实后端界面验收未跑，runtime_ready=false。随后依次重生成闭环当前态快照、生产闭环缺口报告、界面验收报告、无上线指挥台。生成器没改。手改 docs/final-closed-loop-acceptance-audit-v0.1.md 与 docs/code-implementation-acceptance-audit-v0.1.md：前端单测源码计数改为 2001；被核文件行数都没变；后端全量与常规界面验收的数字、日期改为本次实跑值；写入 npm run verify:unit 实跑结果，五个工作区全过。交付门禁于 2026-11-20 09:08 UTC 在工作树逐项实跑子项，NAS 两项现场探测未跑。仍红的有两项：一是 coding-host-protection，它写死主仓路径，在工作树口径下必红，属工具口径，不做；二是 final-closed-loop-audit，如实留 2 条红（integration-ready、business-acceptance-ready），原因是校验器要求终验把联调、业务验收写成「是」，而裁决 25 定了不跑真实后端界面验收、运行验收未就绪，终验写的是「否」。verify:delivery-gates 总链仍是红的。

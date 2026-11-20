@@ -1,5 +1,5 @@
 package com.complex.platform.leasing;
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import com.complex.platform.common.api.PageResponse;
 import java.util.List;
@@ -47,6 +47,11 @@ public interface LeasingRepository {
     // ── CG-01 招商线索「已签约」改到合同生效时（PGM「招商运营细则」）：default 以不破坏测试替身。 ──
     /** 签约起草合同时把合同 id 绑到来源意向（leasing_intents.contract_id，V442），供合同生效后反查线索。 */
     default void bindIntentContract(String intentId, String contractId) { }
+
+    /** 第十八批 BG 段第 261 条 261-B20-R1：意向已绑定的合同编号（只由签约写入）；没签过为空。 */
+    default java.util.Optional<String> findIntentContractId(String intentId) {
+        return java.util.Optional.empty();
+    }
 
     /** 合同生效时反查：按签约起草时绑定的合同 id 找来源意向；无 = 该合同不是招商签约起草的。 */
     default Optional<LeasingIntentRecord> findIntentByContractId(String contractId) {
