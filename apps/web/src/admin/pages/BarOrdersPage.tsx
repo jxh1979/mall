@@ -1,4 +1,4 @@
-// 文件版本：V0.18
+// 文件版本：V0.19
 import React from "react";
 import { BarBillCheckoutPanel } from "./BarBillCheckoutPanel";
 import { BarRefundBreakdownPanel } from "./BarRefundBreakdownPanel";
@@ -188,6 +188,8 @@ export function BarOrdersPage({ api, user, setActionResult, setGlobalError, effe
   const [posTransactionNo, setPosTransactionNo] = React.useState("");
   const [paymentPhone, setPaymentPhone] = React.useState("");
   const [paymentSmsCode, setPaymentSmsCode] = React.useState("");
+  // 第十八批 BD 段第 367 条 367-R3（BSM:833「消费时按客人指定的某一张卡扣减，不自动跨卡」）：储值扣哪张卡按客人指定，缺省本酒吧商户卡。
+  const [storedValueCard, setStoredValueCard] = React.useState("merchant");
   // 第十批 TK-28（ENUM L81「商户折扣券——到对应商户抵扣」；操作员裁决「一次结账一张」）：结账带一张折扣券码；结账后回显账单折扣合计。
   const [voucherCode, setVoucherCode] = React.useState("");
   // 第十一批 TK-04-R2（BSM L822「由收银在收款时现场录入会员号累计」；PGM L878 会员号即注册手机号）：选填，后端走客人查询专门通道留痕。
@@ -415,7 +417,7 @@ export function BarOrdersPage({ api, user, setActionResult, setGlobalError, effe
     }
     const body = {
       paymentId: paymentChannel === "stored_value" ? "stored-value:" + billId : paymentReference.trim(),
-      ...(paymentChannel === "stored_value" ? { phone: paymentPhone.trim(), smsCode: paymentSmsCode.trim() } : {}),
+      ...(paymentChannel === "stored_value" ? { phone: paymentPhone.trim(), smsCode: paymentSmsCode.trim(), storedValueCard } : {}),
       ...(paymentAmount.trim() ? { settlementAmountCent: Math.round(Number(paymentAmount) * 100) } : {}),
       paymentChannel,
       posTransactionNo: paymentChannel === "pos" ? posTransactionNo.trim() || undefined : undefined,
@@ -698,10 +700,14 @@ export function BarOrdersPage({ api, user, setActionResult, setGlobalError, effe
             <option value="other">其他</option>
           </select></label>
           {paymentChannel === "stored_value" ? <>
+            <label>扣款卡（按客人指定）<select data-testid="bar-settle-stored-value-card" value={storedValueCard} onChange={(e) => setStoredValueCard(e.target.value)}>
+              <option value="merchant">本酒吧商户卡</option>
+              <option value="general">综合体通用卡</option>
+            </select></label>
             <label>付款手机号<input type="tel" autoComplete="off" value={paymentPhone} onChange={(e) => setPaymentPhone(e.target.value)} /></label>
             <PermissionButton permissionsState={effectivePermissions} permissions={["finance.payment.register"]} disabled={busyAction !== ""} onClick={() => void requestStoredValueCode()}>发送扣款验证码</PermissionButton>
             <label>短信验证码<input inputMode="numeric" autoComplete="one-time-code" value={paymentSmsCode} onChange={(e) => setPaymentSmsCode(e.target.value)} /></label>
-            <p>从付款客人在本商户的储值卡扣除本账单剩余应付金额，短信验证通过后才会扣款。</p>
+            <p>从客人指定的那张储值卡（本酒吧商户卡或本综合体通用卡）扣除本账单剩余应付金额，短信验证通过后才会扣款；不自动换卡。</p>
           </> : null}
           {paymentChannel === "pos" ? (
             <label>POS 流水号<input data-testid="bar-settle-pos-no" value={posTransactionNo} onChange={(e) => setPosTransactionNo(e.target.value)} placeholder="POS 交易流水号" /></label>

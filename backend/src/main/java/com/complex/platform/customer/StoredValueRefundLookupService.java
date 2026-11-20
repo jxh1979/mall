@@ -1,6 +1,6 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static com.complex.platform.common.Strings.requireText;
 
@@ -44,13 +44,16 @@ public class StoredValueRefundLookupService {
 
     /**
      * 退款范围（口径同 TicketRefundService.enforceOrderScope）：最高权限放行（BSM:576、第十八批裁决 71）；商户账号只办本商户的卡、不碰通用卡；
-     * 卡带项目的只办本人项目的（平台管理员不限）。不挂商户的项目侧账号由此可办本项目通用卡。auth 为 null 不强制。
+     * 卡带项目的按该入口权限码 permission 可触及的项目判（平台管理员不限）。auth 为 null 不强制。
      * 18AZ 收尾复核（PGM:528「④看不到别的商户和别的项目的数据」；BSM:1673「所有数据默认按项目隔离」）：不挂商户的账号碰到不带项目的商户卡，按发卡商户的
-     * 经营项目（主项目或已批准的经营项目，同 FinanceService.recordStoredValuePayoutRefund 的 listMerchantOperatingProjectIds）判本人项目可否触及；
+     * 经营项目（主项目或已批准的经营项目，同 FinanceService.recordStoredValuePayoutRefund 的 listMerchantOperatingProjectIds）判可否触及；
      * merchantProjects 为 null（单测未注入仓储）不判。
+     * 第十八批 BD 段第 376 条 376-R1（PGM:659「被分配了可跨项目角色的员工（含经岗位得到），在所分配的权限内可以查看、处理该角色可查看项目的数据。」
+     * 「逐个勾选的只能查看被选中的项目」「商户账号持有这类角色也不能跨项目」；ENUM:86「余额管理与退款均由长沙项目公司负责」）：项目维按
+     * {@link AuthorizationService#projectReach}（本人项目与可跨项目角色勾选的项目）判，不再只比本人组织；商户账号 projectReach 只给本人项目，行为不变。
      */
     static void requireRefundScope(AuthorizationService auth, CustomerStoredValueAccountRecord card,
-            Function<String, List<String>> merchantProjects) {
+            Function<String, List<String>> merchantProjects, String permission) {
         if (auth == null || auth.isMasterAuthority(auth.currentActor())) {
             return;
         }
@@ -58,11 +61,18 @@ public class StoredValueRefundLookupService {
         if (merchant != null && !merchant.equals(card.merchantId())) {
             throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN", "该储值卡不在当前商户权限范围内");
         }
-        if (card.projectId() != null && auth.currentProjectScopeQuietly().filter(scope -> !scope.equals(card.projectId())).isPresent()) {
-            throw ApiException.forbidden("CROSS_PROJECT_FORBIDDEN", "该储值卡不在当前项目权限范围内");
+        boolean projectless = card.projectId() == null;
+        if (projectless && (merchant != null || card.merchantId() == null || merchantProjects == null)) {
+            return;
         }
-        if (merchant == null && card.projectId() == null && card.merchantId() != null && merchantProjects != null
-                && auth.currentProjectScopeQuietly().filter(scope -> !merchantProjects.apply(card.merchantId()).contains(scope)).isPresent()) {
+        if (auth.currentProjectScopeQuietly().isEmpty()) {
+            return; // 平台管理员不限
+        }
+        AuthorizationService.ProjectReach reach = auth.projectReach(auth.currentActor(), permission);
+        boolean covered = projectless
+                ? merchantProjects.apply(card.merchantId()).stream().anyMatch(reach::covers)
+                : reach.covers(card.projectId());
+        if (!covered) {
             throw ApiException.forbidden("CROSS_PROJECT_FORBIDDEN", "该储值卡不在当前项目权限范围内");
         }
     }
@@ -72,20 +82,22 @@ public class StoredValueRefundLookupService {
      * 第十八批 BC 段 365-R1（BSM:833「账户可冻结/解冻。」）：冻结、解冻入口在储值退卡页，持退卡码或冻结码任一即可查卡，两码都不持 403。
      */
     public List<StoredValueRefundCard> lookup(String phone) {
-        authorizationService.requirePermission(authorizationService.currentActorHasPermission(PERMISSION) ? PERMISSION : FREEZE_PERMISSION);
+        // 376-R1：查卡范围按所持码之一（优先退卡码）可触及的项目判
+        String permission = authorizationService.currentActorHasPermission(PERMISSION) ? PERMISSION : FREEZE_PERMISSION;
+        authorizationService.requirePermission(permission);
         CustomerRecord customer = repository.findCustomerByPhone(requireText(phone, "phone")).orElse(null);
         if (customer == null) {
             return List.of();
         }
         return repository.listStoredValueAccountsByCustomer(customer.id()).stream()
-                .filter(card -> !"closed".equals(card.status()) && inScope(card))
+                .filter(card -> !"closed".equals(card.status()) && inScope(card, permission))
                 .map(card -> view(customer, card))
                 .toList();
     }
 
-    private boolean inScope(CustomerStoredValueAccountRecord card) {
+    private boolean inScope(CustomerStoredValueAccountRecord card, String permission) {
         try {
-            requireRefundScope(authorizationService, card, financeRepository::listMerchantOperatingProjectIds);
+            requireRefundScope(authorizationService, card, financeRepository::listMerchantOperatingProjectIds, permission);
             return true;
         } catch (ApiException outOfScope) {
             return false;

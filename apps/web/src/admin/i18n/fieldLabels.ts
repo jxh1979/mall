@@ -1,4 +1,4 @@
-// 文件版本：V0.50
+// 文件版本：V0.51
 // OBS-14-02 后台结果区字段中文名字典（PGM「全局原则 · 界面全中文（所有终端零英文）」）。
 // 键用后端 JSON 的蛇形写法；结果区查表时蛇形与驼峰同查（orderId / order_id 都命中 order_id）。
 // 与后端字段中文名表 FieldLabels.java（common.api 包）同键同名：前段按后端原样抄录，后端改名这里跟着改（门禁会比对）。
@@ -3003,6 +3003,14 @@ export const FIELD_LABELS: Record<string, string> = {
   price_check: "定价核算",
   // 第十八批 AJ 段 236-R6 结算流水该笔订单所属票种规则版本号（GET /api/v1/settlement/transactions；BSM:756「订单保存……规则版本」）。
   ticket_type_rule_version_no: "票种规则版本",
+  // 第十八批 BD 段第 364 条 364-R1 储值台账（POST /api/v1/loyalty/stored-value/ledger/query；BSM:833「逐笔明细与余额构成」）。
+  txn_id: "流水号",
+  principal_after_cent: "变动后本金",
+  bonus_after_cent: "变动后赠送金",
+  issuer_merchant_id: "发卡商户",
+  issuer_merchant_name: "发卡商户名称",
+  consume_merchant_id: "扣款商户",
+  consume_merchant_name: "扣款商户名称",
 };
 
 // 结果对象里页面自定的取值（action 动作码、status 状态码）→ 中文；STATUS_LABELS 已有的码不重复列。

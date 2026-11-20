@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: 综合体管理系统 P0 API 契约
-  version: V0.87
+  version: V0.88
   description: P0 首批编码前置契约。本文采用 JSON-compatible YAML，便于与 openapi-p0.json 保持一致。正式后端以 Java 21 + Spring Boot 4.x +
     springdoc-openapi 输出运行时 OpenAPI，并与本契约比对。
 servers:
@@ -2525,7 +2525,7 @@ paths:
         - bar
         - finance
       operationId: settleBarBill
-      description: "第十八批 N 段第 123 条 123-R2（BSM:1630「核销、收款、退款、放行等敏感操作，操作设备定位落在该项目综合体授权范围之外时一律拒绝并留痕」；BSM:1876「Web 端同样适用」）：本操作属敏感操作定位闸的现场动作闭集（第十八批裁决 31）。操作对象所属项目已配授权范围（123-R1）时须带请求头 X-Geo-Latitude、X-Geo-Longitude（设备当下定位，WGS-84 十进制度）：没带或解析不了按范围外处理（裁决 30）返回 403 SENSITIVE_OPERATION_LOCATION_REQUIRED，到圆心距离超过授权半径返回 403 SENSITIVE_OPERATION_OUT_OF_RANGE，拒绝在独立事务里留痕 sensitive_operation.location_rejected（business_id 为本 operationId，业务回滚不丢）；项目没配授权范围不查位置（裁决 32）；判定在幂等之前，重放不能绕过；通过时不存位置。第十八批 O 段第 127 条 127-R3：收款人（cashier_staff_id，各支付渠道）取执行结账的那一次登录会话的操作人，不收请求填写，交班对账按它归入收银员（BSM 第 940、1066、1081 行）。第十八批 T 段第 157 条 157-R2：本次结账使挂起订单的账单（本单除已合并、作废外的全部账单，含合单后改指本账单的挂起）全部结清时，同一事务内挂起置已结清（settled）并写审计 bar.order_suspension_settled；应付为 0 的关单同样联动。第十八批 T 段第 157 条 157-R6（BSM:1108「取消后迟到到账进入待退款，不得恢复订单或继续出品」；DEC-R8-94-37「迟到到账须进入待退款并按原支付路径退款」）：账单所属订单的挂起已取消（cancelled）或已待退款（pending_refund）时为迟到到账——不判低消与账单状态，照常落该笔收款流水（payment_channel、POS 必填 pos_transaction_no、收款人同正常结账；settlement_amount_cent 必填且大于 0，否则 400 VALIDATION_FAILED），同一事务按作废并冲正同一口径（后收的先退、储值部分回原卡，其余挂一笔退款应付，source_id 为该笔收款流水编号）原路待退并把该笔流水置冲正；账单不改（仍作废）、不进营业额与分红；挂起置待退款（pending_refund），记 refund_ar_ap_item_id，审计 bar.order_suspension_late_payment；返回仍作废的账单。第十八批 AU 段第 328 条 328-R1：payment_channel=stored_value 时手机号不是会员或短信验证码不正确、已过期 409 CUSTOMER_OTP_INVALID（员工侧核客人验证码不回 401，401 只表示员工自己的登录会话失效），不扣储值、账单不变。"
+      description: "第十八批 N 段第 123 条 123-R2（BSM:1630「核销、收款、退款、放行等敏感操作，操作设备定位落在该项目综合体授权范围之外时一律拒绝并留痕」；BSM:1876「Web 端同样适用」）：本操作属敏感操作定位闸的现场动作闭集（第十八批裁决 31）。操作对象所属项目已配授权范围（123-R1）时须带请求头 X-Geo-Latitude、X-Geo-Longitude（设备当下定位，WGS-84 十进制度）：没带或解析不了按范围外处理（裁决 30）返回 403 SENSITIVE_OPERATION_LOCATION_REQUIRED，到圆心距离超过授权半径返回 403 SENSITIVE_OPERATION_OUT_OF_RANGE，拒绝在独立事务里留痕 sensitive_operation.location_rejected（business_id 为本 operationId，业务回滚不丢）；项目没配授权范围不查位置（裁决 32）；判定在幂等之前，重放不能绕过；通过时不存位置。第十八批 O 段第 127 条 127-R3：收款人（cashier_staff_id，各支付渠道）取执行结账的那一次登录会话的操作人，不收请求填写，交班对账按它归入收银员（BSM 第 940、1066、1081 行）。第十八批 T 段第 157 条 157-R2：本次结账使挂起订单的账单（本单除已合并、作废外的全部账单，含合单后改指本账单的挂起）全部结清时，同一事务内挂起置已结清（settled）并写审计 bar.order_suspension_settled；应付为 0 的关单同样联动。第十八批 T 段第 157 条 157-R6（BSM:1108「取消后迟到到账进入待退款，不得恢复订单或继续出品」；DEC-R8-94-37「迟到到账须进入待退款并按原支付路径退款」）：账单所属订单的挂起已取消（cancelled）或已待退款（pending_refund）时为迟到到账——不判低消与账单状态，照常落该笔收款流水（payment_channel、POS 必填 pos_transaction_no、收款人同正常结账；settlement_amount_cent 必填且大于 0，否则 400 VALIDATION_FAILED），同一事务按作废并冲正同一口径（后收的先退、储值部分回原卡，其余挂一笔退款应付，source_id 为该笔收款流水编号）原路待退并把该笔流水置冲正；账单不改（仍作废）、不进营业额与分红；挂起置待退款（pending_refund），记 refund_ar_ap_item_id，审计 bar.order_suspension_late_payment；返回仍作废的账单。第十八批 AU 段第 328 条 328-R1：payment_channel=stored_value 时手机号不是会员或短信验证码不正确、已过期 409 CUSTOMER_OTP_INVALID（员工侧核客人验证码不回 401，401 只表示员工自己的登录会话失效），不扣储值、账单不变。第十八批 BD 段第 367 条 367-R1（BSM:833「①综合体通用卡：综合体内各商户通用」「消费时按客人指定的某一张卡扣减，不自动跨卡」；BSM:1066 酒吧支付方式含储值卡）：payment_channel=stored_value 时按客人指定的 stored_value_card 扣卡——merchant（缺省）扣本酒吧商户卡；general 扣账单所在综合体（桌台所在铺位的项目）的通用卡，综合体内各商户通用，收银为酒吧商户账号也可扣、不过商户范围闸；不自动跨卡，客人名下没有指定的那张卡 404 STORED_VALUE_ACCOUNT_NOT_FOUND，不扣储值、账单不变。反结与退款回冲按该笔消费流水回到原扣的那张卡。"
       summary: 账单结清（可带一张本商户折扣券：核销并原子抵扣应付，一次结账一张）
       x-failure-codes:
         - VOUCHER_NOT_FOUND
@@ -2539,6 +2539,7 @@ paths:
         - SENSITIVE_OPERATION_LOCATION_REQUIRED
         - SENSITIVE_OPERATION_OUT_OF_RANGE
         - CUSTOMER_OTP_INVALID
+        - STORED_VALUE_ACCOUNT_NOT_FOUND
       x-permission: finance.payment.register
       x-data-scope: project-bar-table
       x-terminal-allowed:
@@ -7684,7 +7685,7 @@ paths:
         - bar
       operationId: cancelSavedBottle
       summary: 存酒作废(高价值→照片+视频双证据建复核;非高价值直接作废)
-      description: "BSM L1940「……存酒作废、异常调拨都可能产生责任争议，必须记录原因、员工、时间、点位、照片、视频和主管复核结果。」：作废原因 reason 必填（缺失 400 VALIDATION_FAILED），高价值与非高价值两路都落存酒行 cancel_reason 并进成功审计 bar.saved_bottle.cancelled 元数据 reason，高价值复核单的复核对象摘要显示该原因。可作废源态 stored | pending_identity_review | disputed，其余 409 SAVED_BOTTLE_NOT_CANCELLABLE；源态为 disputed（争议成立转作废，第十八批裁决 58）时须另持门店主管码 inventory.high_value.review，否则 403。别家商户 403 CROSS_MERCHANT_FORBIDDEN；存酒不存在 404 SAVED_BOTTLE_NOT_FOUND。"
+      description: "BSM L1940「……存酒作废、异常调拨都可能产生责任争议，必须记录原因、员工、时间、点位、照片、视频和主管复核结果。」：作废原因 reason 必填（缺失 400 VALIDATION_FAILED），高价值与非高价值两路都落存酒行 cancel_reason 并进成功审计 bar.saved_bottle.cancelled 元数据 reason，高价值复核单的复核对象摘要显示该原因。可作废源态 stored | pending_identity_review | disputed，其余 409 SAVED_BOTTLE_NOT_CANCELLABLE；源态为 disputed（争议成立转作废，第十八批裁决 58）时须另持门店主管码 inventory.high_value.review，否则 403。别家商户 403 CROSS_MERCHANT_FORBIDDEN；存酒不存在 404 SAVED_BOTTLE_NOT_FOUND。第十八批 BD 段第 361 条 361-R1（BSM:1072「存酒作废需照片+视频双证据+主管复核」；第十八批裁决 14、58）：高价值作废先冻结为 disputed_frozen 待主管复核（reviewHighValue），驳回即恢复作废前状态（存酒中或争议中）。"
       x-permission: bar.saved_bottle.manage
       x-data-scope: project-bar-customer
       x-terminal-allowed:
@@ -8175,7 +8176,7 @@ paths:
         - inventory
       operationId: reviewHighValue
       summary: 复核高价值动作(approve生效/reject回滚)；存酒库房存货处置须门店主管与财务两道审批
-      description: OBS-13-02（BSM L1072「转库存之后的报废、赠送、内部使用等处置必须走审批并保留操作记录」；操作员裁决补充第十四批第 4 条门店主管与财务审批，同赔付方案审批）：subject_type=saved_bottle_stock_disposal 的复核单须带 role——supervisor 核 inventory.high_value.review（门店主管）、finance 核 finance.ar_ap.manage（财务）；审批人不得是发起人（409 HIGH_VALUE_REVIEW_SELF_APPROVAL），两道不得同一人（409 HIGH_VALUE_REVIEW_SAME_APPROVER）；只批一道时仍为 pending，两道都批才 approved 并扣库存、写同类型流水，任一道驳回即 rejected 不扣。其余复核对象不读 role、只认 inventory.high_value.review（持财务码 403）。第十八批第 24 条 24-R3（PGM:529「申请人与直接受益人不得审批与自己相关的申请」）：报损、盘点差异、存酒作废复核单的审批人同样不得是发起人（409 HIGH_VALUE_REVIEW_SELF_APPROVAL）。第十八批 T 段第 157 条 157-R4（BSM:1112「达到既有高价值标准的商品仍执行原证据和审批要求。」）：subject_type=bar_order_bad_debt（subject_id 为酒吧订单）的复核单由经理确认挂起订单无法收款时本单含高价值已出品商品而建，只认 inventory.high_value.review、审批人不得是发起人；approved 即在本事务内把该订单挂起转坏账损耗处理中（发起经理为确认人，固化同 POST /api/v1/bar/orders/{order_id}/suspension/bad-debt，审计 bar.order_suspension_bad_debt 带 bad_debt_review_id 与 reviewer_user_id），挂起已不在待本复核的已挂起待付款时 409 BAR_ORDER_NOT_HANGING_UNPAID、复核不生效；rejected 即清空该挂起的 bad_debt_review_id 与 bad_debt_reason，挂起保持已挂起待付款、可重新发起，审计 bar.order_suspension_bad_debt_review_rejected。
+      description: OBS-13-02（BSM L1072「转库存之后的报废、赠送、内部使用等处置必须走审批并保留操作记录」；操作员裁决补充第十四批第 4 条门店主管与财务审批，同赔付方案审批）：subject_type=saved_bottle_stock_disposal 的复核单须带 role——supervisor 核 inventory.high_value.review（门店主管）、finance 核 finance.ar_ap.manage（财务）；审批人不得是发起人（409 HIGH_VALUE_REVIEW_SELF_APPROVAL），两道不得同一人（409 HIGH_VALUE_REVIEW_SAME_APPROVER）；只批一道时仍为 pending，两道都批才 approved 并扣库存、写同类型流水，任一道驳回即 rejected 不扣。其余复核对象不读 role、只认 inventory.high_value.review（持财务码 403）。第十八批第 24 条 24-R3（PGM:529「申请人与直接受益人不得审批与自己相关的申请」）：报损、盘点差异、存酒作废复核单的审批人同样不得是发起人（409 HIGH_VALUE_REVIEW_SELF_APPROVAL）。第十八批 T 段第 157 条 157-R4（BSM:1112「达到既有高价值标准的商品仍执行原证据和审批要求。」）：subject_type=bar_order_bad_debt（subject_id 为酒吧订单）的复核单由经理确认挂起订单无法收款时本单含高价值已出品商品而建，只认 inventory.high_value.review、审批人不得是发起人；approved 即在本事务内把该订单挂起转坏账损耗处理中（发起经理为确认人，固化同 POST /api/v1/bar/orders/{order_id}/suspension/bad-debt，审计 bar.order_suspension_bad_debt 带 bad_debt_review_id 与 reviewer_user_id），挂起已不在待本复核的已挂起待付款时 409 BAR_ORDER_NOT_HANGING_UNPAID、复核不生效；rejected 即清空该挂起的 bad_debt_review_id 与 bad_debt_reason，挂起保持已挂起待付款、可重新发起，审计 bar.order_suspension_bad_debt_review_rejected。第十八批 BD 段第 361 条 361-R1：subject_type=saved_bottle_void 的复核单 approved 时存酒置 cancelled；rejected 时作废不生效，存酒回到作废前的状态（存酒中或争议中，作废前状态在发起作废时记下）（BSM:1072「存酒作废需照片+视频双证据+主管复核」；第十八批裁决 14、58）。
       x-permission: inventory.high_value.review
       x-data-scope: project-warehouse-bar
       x-terminal-allowed:
@@ -19167,7 +19168,7 @@ paths:
         - customer
       operationId: listCustomerStoredValueTransactions
       summary: 我的余额逐笔记录
-      description: ROOT-03-R30（BSM 第 868 行「每笔充值（时间、金额、本金与赠送金拆分、支付通路）、每笔扣款（商户、扣减的本金与赠送金各多少）、每笔退款与回冲（含回冲顺序结果）」）：只许本人卡（否则 404 STORED_VALUE_ACCOUNT_NOT_FOUND）；每笔带 principal_cent/bonus_cent、充值行 payment_channel、扣款行 merchant_id/merchant_name（通票为空＝综合体）、回冲行 original_txn_id。page 从 1 起，size 1～100。 PGM 第 744 行「前端隐藏只是辅助，后端接口必须独立校验」：按综合体的客人端终端开关以本人储值卡所属综合体（商户卡取发卡项目：卡上的 project_id 是发卡商户已批准的经营项目的取它，否则取该商户的主项目，第十八批裁决 18）在服务端判（不取客户端自报的 X-Project-Id），该综合体客人端已关→403 TERMINAL_DISABLED。
+      description: ROOT-03-R30（BSM 第 868 行「每笔充值（时间、金额、本金与赠送金拆分、支付通路）、每笔扣款（商户、扣减的本金与赠送金各多少）、每笔退款与回冲（含回冲顺序结果）」）：只许本人卡（否则 404 STORED_VALUE_ACCOUNT_NOT_FOUND）；每笔带 principal_cent/bonus_cent、充值行 payment_channel、扣款行 merchant_id/merchant_name（通票为空＝综合体；通用卡在酒吧结账的扣款行为结账酒吧，第十八批 BD 段第 367 条 367-R1）、回冲行 original_txn_id。page 从 1 起，size 1～100。 PGM 第 744 行「前端隐藏只是辅助，后端接口必须独立校验」：按综合体的客人端终端开关以本人储值卡所属综合体（商户卡取发卡项目：卡上的 project_id 是发卡商户已批准的经营项目的取它，否则取该商户的主项目，第十八批裁决 18）在服务端判（不取客户端自报的 X-Project-Id），该综合体客人端已关→403 TERMINAL_DISABLED。
       x-permission: not_applicable
       x-data-scope: self
       x-terminal-allowed:
@@ -19878,7 +19879,7 @@ paths:
         - customer
       operationId: freezeStoredValueAccount
       summary: 冻结会员储值账户（后台）
-      description: 第十八批 BC 段第 365 条 365-R1（BSM:833「账户可冻结/解冻。」「商户的员工只能管理本商户发行的储值卡。」；ENUM:86「余额管理与退款均由长沙项目公司负责」）：冻结客人的一张储值卡，请求体 project_id、merchant_id 定位卡，reason 记入成功留痕，不要求 idempotency_key；后台入口在储值退卡页（按手机号查卡见 lookupStoredValueRefundCards）。范围同 refundStoredValueAccount（278-R1）：最高权限放行；商户账号只办本商户的卡（他商户的卡与通用卡 403 CROSS_MERCHANT_FORBIDDEN「该储值卡不在当前商户权限范围内」）；卡带项目的只办本人项目的（403 CROSS_PROJECT_FORBIDDEN「该储值卡不在当前项目权限范围内」；平台管理员不限）；不挂商户的账号可办本项目通用卡，碰到不带项目的商户卡按发卡商户的经营项目（主项目或已批准的经营项目）判，本人项目不在其中 403 CROSS_PROJECT_FORBIDDEN。卡不存在 404 STORED_VALUE_ACCOUNT_NOT_FOUND；已销户 409 STORED_VALUE_ACCOUNT_CLOSED；已是冻结 409 STORED_VALUE_ALREADY_FROZEN。
+      description: 第十八批 BC 段第 365 条 365-R1（BSM:833「账户可冻结/解冻。」「商户的员工只能管理本商户发行的储值卡。」；ENUM:86「余额管理与退款均由长沙项目公司负责」）：冻结客人的一张储值卡，请求体 project_id、merchant_id 定位卡，reason 记入成功留痕，不要求 idempotency_key；后台入口在储值退卡页（按手机号查卡见 lookupStoredValueRefundCards）。范围同 refundStoredValueAccount（278-R1）：最高权限放行；商户账号只办本商户的卡（他商户的卡与通用卡 403 CROSS_MERCHANT_FORBIDDEN「该储值卡不在当前商户权限范围内」）；卡带项目的按冻结码 customer.stored_value.freeze 可触及的项目办（本人项目与可跨项目角色勾选的项目，PGM:659；第十八批 BD 段第 376 条 376-R1；商户账号只到本人项目），不在其中 403 CROSS_PROJECT_FORBIDDEN「该储值卡不在当前项目权限范围内」（平台管理员不限）；不挂商户的账号可办可触及项目的通用卡，碰到不带项目的商户卡按发卡商户的经营项目（主项目或已批准的经营项目）判，其中没有一个在可触及的项目内 403 CROSS_PROJECT_FORBIDDEN。卡不存在 404 STORED_VALUE_ACCOUNT_NOT_FOUND；已销户 409 STORED_VALUE_ACCOUNT_CLOSED；已是冻结 409 STORED_VALUE_ALREADY_FROZEN。
       x-permission: customer.stored_value.freeze
       x-data-scope: project
       x-terminal-allowed:
@@ -19921,7 +19922,7 @@ paths:
         - customer
       operationId: unfreezeStoredValueAccount
       summary: 解冻会员储值账户（后台）
-      description: 第十八批 BC 段第 365 条 365-R1（BSM:833「账户可冻结/解冻。」「商户的员工只能管理本商户发行的储值卡。」；ENUM:86「余额管理与退款均由长沙项目公司负责」）：解冻客人的一张已冻结储值卡，请求体同冻结，reason 记入成功留痕，不要求 idempotency_key；后台入口在储值退卡页（按手机号查卡见 lookupStoredValueRefundCards）。范围同 refundStoredValueAccount（278-R1）：最高权限放行；商户账号只办本商户的卡（他商户的卡与通用卡 403 CROSS_MERCHANT_FORBIDDEN「该储值卡不在当前商户权限范围内」）；卡带项目的只办本人项目的（403 CROSS_PROJECT_FORBIDDEN「该储值卡不在当前项目权限范围内」；平台管理员不限）；不挂商户的账号可办本项目通用卡，碰到不带项目的商户卡按发卡商户的经营项目（主项目或已批准的经营项目）判，本人项目不在其中 403 CROSS_PROJECT_FORBIDDEN。卡不存在 404 STORED_VALUE_ACCOUNT_NOT_FOUND；不在冻结状态（含已销户）409 STORED_VALUE_NOT_FROZEN。
+      description: 第十八批 BC 段第 365 条 365-R1（BSM:833「账户可冻结/解冻。」「商户的员工只能管理本商户发行的储值卡。」；ENUM:86「余额管理与退款均由长沙项目公司负责」）：解冻客人的一张已冻结储值卡，请求体同冻结，reason 记入成功留痕，不要求 idempotency_key；后台入口在储值退卡页（按手机号查卡见 lookupStoredValueRefundCards）。范围同 refundStoredValueAccount（278-R1）：最高权限放行；商户账号只办本商户的卡（他商户的卡与通用卡 403 CROSS_MERCHANT_FORBIDDEN「该储值卡不在当前商户权限范围内」）；卡带项目的按冻结码 customer.stored_value.freeze 可触及的项目办（本人项目与可跨项目角色勾选的项目，PGM:659；第十八批 BD 段第 376 条 376-R1；商户账号只到本人项目），不在其中 403 CROSS_PROJECT_FORBIDDEN「该储值卡不在当前项目权限范围内」（平台管理员不限）；不挂商户的账号可办可触及项目的通用卡，碰到不带项目的商户卡按发卡商户的经营项目（主项目或已批准的经营项目）判，其中没有一个在可触及的项目内 403 CROSS_PROJECT_FORBIDDEN。卡不存在 404 STORED_VALUE_ACCOUNT_NOT_FOUND；不在冻结状态（含已销户）409 STORED_VALUE_NOT_FROZEN。
       x-permission: customer.stored_value.freeze
       x-data-scope: project
       x-terminal-allowed:
@@ -19963,7 +19964,7 @@ paths:
         - customer
       operationId: refundStoredValueAccount
       summary: 会员储值退卡/退余额（后台）
-      description: CG-06a：退卡只退未消费的本金——amount_cent 超过 principal_cent 即 409 STORED_VALUE_PRINCIPAL_INSUFFICIENT；赠送金不退现；close_account 且本金退清时未使用赠送金作废（adjust 流水留痕）并置 closed（ENUM「储值卡类型与收款主体」）。操作员裁决 2026-10-20 第三轮第 7 条：综合体通用卡退卡一次退还全部剩余本金、赠送金清零、卡关闭，amount_cent 不等于剩余本金即 400 STORED_VALUE_GENERAL_CARD_FULL_REFUND_ONLY。第十八批 AZ 段第 278 条 278-R1（ENUM:86「余额管理与退款均由长沙项目公司负责」；BSM:833「商户的员工只能管理本商户发行的储值卡」「单张储值卡退款时如申请同时销卡，本金未退清的须拒绝销卡并明确报错」；PGM:528「④看不到别的商户和别的项目的数据」）：退款范围按卡判：最高权限放行；商户账号只办本商户的卡（他商户的卡与通用卡 403 CROSS_MERCHANT_FORBIDDEN「该储值卡不在当前商户权限范围内」）；卡带项目的只办本人项目的（403 CROSS_PROJECT_FORBIDDEN「该储值卡不在当前项目权限范围内」；平台管理员不限）；不挂商户的项目侧账号不按商户限，可办本项目通用卡，不再返回 MERCHANT_SCOPE_REQUIRED；碰到不带项目的商户卡按发卡商户的经营项目（主项目或已批准的经营项目）判，本人项目不在其中 403 CROSS_PROJECT_FORBIDDEN。首次提交与同一幂等键重放同一口径（重放在返回第一次结果之前按流水所属的卡判）。close_account 为真而本次退款后本金未退清 409 STORED_VALUE_CLOSE_PRINCIPAL_REMAINING（「本金未退清，不能销卡；同时销卡须一次退还剩余本金 X 元」）；会员注销放弃余额不经本接口。按手机号查可办理的卡见 lookupStoredValueRefundCards。
+      description: CG-06a：退卡只退未消费的本金——amount_cent 超过 principal_cent 即 409 STORED_VALUE_PRINCIPAL_INSUFFICIENT；赠送金不退现；close_account 且本金退清时未使用赠送金作废（adjust 流水留痕）并置 closed（ENUM「储值卡类型与收款主体」）。操作员裁决 2026-10-20 第三轮第 7 条：综合体通用卡退卡一次退还全部剩余本金、赠送金清零、卡关闭，amount_cent 不等于剩余本金即 400 STORED_VALUE_GENERAL_CARD_FULL_REFUND_ONLY。第十八批 AZ 段第 278 条 278-R1（ENUM:86「余额管理与退款均由长沙项目公司负责」；BSM:833「商户的员工只能管理本商户发行的储值卡」「单张储值卡退款时如申请同时销卡，本金未退清的须拒绝销卡并明确报错」；PGM:528「④看不到别的商户和别的项目的数据」）：退款范围按卡判：最高权限放行；商户账号只办本商户的卡（他商户的卡与通用卡 403 CROSS_MERCHANT_FORBIDDEN「该储值卡不在当前商户权限范围内」）；卡带项目的按退卡码 customer.stored_value.refund 可触及的项目办（本人项目与可跨项目角色勾选的项目，PGM:659；第十八批 BD 段第 376 条 376-R1；商户账号只到本人项目），不在其中 403 CROSS_PROJECT_FORBIDDEN「该储值卡不在当前项目权限范围内」（平台管理员不限）；不挂商户的项目侧账号不按商户限，可办可触及项目的通用卡，不再返回 MERCHANT_SCOPE_REQUIRED；碰到不带项目的商户卡按发卡商户的经营项目（主项目或已批准的经营项目）判，其中没有一个在可触及的项目内 403 CROSS_PROJECT_FORBIDDEN。首次提交与同一幂等键重放同一口径（重放在返回第一次结果之前按流水所属的卡判）。close_account 为真而本次退款后本金未退清 409 STORED_VALUE_CLOSE_PRINCIPAL_REMAINING（「本金未退清，不能销卡；同时销卡须一次退还剩余本金 X 元」）；会员注销放弃余额不经本接口。按手机号查可办理的卡见 lookupStoredValueRefundCards。
       x-permission: customer.stored_value.refund
       x-data-scope: project
       x-terminal-allowed:
@@ -41404,7 +41405,7 @@ paths:
       operationId: counterRefundStoredValueAccount
       summary: 会员储值到店柜台退款（商户预收卡唯一可达退款路径）
       description: CG-06a：同线上退款口径——只退未消费的本金（超过即 409 STORED_VALUE_PRINCIPAL_INSUFFICIENT），赠送金不退现，销户时赠送金作废留痕。
-        第十八批 N 段第 123 条 123-R2（BSM:1630「核销、收款、退款、放行等敏感操作，操作设备定位落在该项目综合体授权范围之外时一律拒绝并留痕」；BSM:1876「Web 端同样适用」）：本操作属敏感操作定位闸的现场动作闭集（第十八批裁决 31）。操作对象所属项目已配授权范围（123-R1）时须带请求头 X-Geo-Latitude、X-Geo-Longitude（设备当下定位，WGS-84 十进制度）：没带或解析不了按范围外处理（裁决 30）返回 403 SENSITIVE_OPERATION_LOCATION_REQUIRED，到圆心距离超过授权半径返回 403 SENSITIVE_OPERATION_OUT_OF_RANGE，拒绝在独立事务里留痕 sensitive_operation.location_rejected（business_id 为本 operationId，业务回滚不丢）；项目没配授权范围不查位置（裁决 32）；判定在幂等之前，重放不能绕过；通过时不存位置。第十八批 AZ 段第 278 条 278-R1（ENUM:86「余额管理与退款均由长沙项目公司负责」；BSM:833「商户的员工只能管理本商户发行的储值卡」「单张储值卡退款时如申请同时销卡，本金未退清的须拒绝销卡并明确报错」；PGM:528「④看不到别的商户和别的项目的数据」）：退款范围按卡判：最高权限放行；商户账号只办本商户的卡（他商户的卡与通用卡 403 CROSS_MERCHANT_FORBIDDEN「该储值卡不在当前商户权限范围内」）；卡带项目的只办本人项目的（403 CROSS_PROJECT_FORBIDDEN「该储值卡不在当前项目权限范围内」；平台管理员不限）；不挂商户的项目侧账号不按商户限，可办本项目通用卡，不再返回 MERCHANT_SCOPE_REQUIRED；碰到不带项目的商户卡按发卡商户的经营项目（主项目或已批准的经营项目）判，本人项目不在其中 403 CROSS_PROJECT_FORBIDDEN。首次提交与同一幂等键重放同一口径（重放在返回第一次结果之前按流水所属的卡判）。柜台退款首次提交起也核项目（原先只比商户）。close_account 为真而本次退款后本金未退清 409 STORED_VALUE_CLOSE_PRINCIPAL_REMAINING（「本金未退清，不能销卡；同时销卡须一次退还剩余本金 X 元」）；会员注销放弃余额不经本接口。按手机号查可办理的卡见 lookupStoredValueRefundCards。
+        第十八批 N 段第 123 条 123-R2（BSM:1630「核销、收款、退款、放行等敏感操作，操作设备定位落在该项目综合体授权范围之外时一律拒绝并留痕」；BSM:1876「Web 端同样适用」）：本操作属敏感操作定位闸的现场动作闭集（第十八批裁决 31）。操作对象所属项目已配授权范围（123-R1）时须带请求头 X-Geo-Latitude、X-Geo-Longitude（设备当下定位，WGS-84 十进制度）：没带或解析不了按范围外处理（裁决 30）返回 403 SENSITIVE_OPERATION_LOCATION_REQUIRED，到圆心距离超过授权半径返回 403 SENSITIVE_OPERATION_OUT_OF_RANGE，拒绝在独立事务里留痕 sensitive_operation.location_rejected（business_id 为本 operationId，业务回滚不丢）；项目没配授权范围不查位置（裁决 32）；判定在幂等之前，重放不能绕过；通过时不存位置。第十八批 AZ 段第 278 条 278-R1（ENUM:86「余额管理与退款均由长沙项目公司负责」；BSM:833「商户的员工只能管理本商户发行的储值卡」「单张储值卡退款时如申请同时销卡，本金未退清的须拒绝销卡并明确报错」；PGM:528「④看不到别的商户和别的项目的数据」）：退款范围按卡判：最高权限放行；商户账号只办本商户的卡（他商户的卡与通用卡 403 CROSS_MERCHANT_FORBIDDEN「该储值卡不在当前商户权限范围内」）；卡带项目的按退卡码 customer.stored_value.refund 可触及的项目办（本人项目与可跨项目角色勾选的项目，PGM:659；第十八批 BD 段第 376 条 376-R1；商户账号只到本人项目），不在其中 403 CROSS_PROJECT_FORBIDDEN「该储值卡不在当前项目权限范围内」（平台管理员不限）；不挂商户的项目侧账号不按商户限，可办可触及项目的通用卡，不再返回 MERCHANT_SCOPE_REQUIRED；碰到不带项目的商户卡按发卡商户的经营项目（主项目或已批准的经营项目）判，其中没有一个在可触及的项目内 403 CROSS_PROJECT_FORBIDDEN。首次提交与同一幂等键重放同一口径（重放在返回第一次结果之前按流水所属的卡判）。柜台退款首次提交起也核项目（原先只比商户）。close_account 为真而本次退款后本金未退清 409 STORED_VALUE_CLOSE_PRINCIPAL_REMAINING（「本金未退清，不能销卡；同时销卡须一次退还剩余本金 X 元」）；会员注销放弃余额不经本接口。按手机号查可办理的卡见 lookupStoredValueRefundCards。
       x-permission: customer.stored_value.refund
       x-data-scope: project
       x-terminal-allowed:
@@ -41448,7 +41449,7 @@ paths:
         - customer
       operationId: lookupStoredValueRefundCards
       summary: 储值退卡查卡（按手机号列出当前账号可办理退卡的卡；手机号走请求体不进 URL）
-      description: 第十八批 AZ 段第 278 条 278-R1（ENUM:86「余额管理与退款均由长沙项目公司负责」；BSM:833「商户的员工只能管理本商户发行的储值卡」；PGM:528「④看不到别的商户和别的项目的数据」）：按客人完整手机号（精确匹配）列出其名下当前账号可办理退卡的卡，供后台「储值退卡」页办理 refundStoredValueAccount（通用卡）与 counterRefundStoredValueAccount（商户卡）。查询不扣单次授权（M723 操作员 2026-10-03「预览、查询不扣一次性授权」），不记审计事件。范围同退款：最高权限与平台管理员全见；商户账号只见本商户的卡，卡带项目的再限本人项目；不挂商户的账号见本人项目的卡、不带项目的通用卡，以及发卡商户在本人项目经营（主项目或已批准的经营项目）的不带项目商户卡。已销户（closed）的卡不列；手机号查不到客人返回空数组；只给掩码手机号。商户卡的 refund_allowed 与 refund_ratio_bps 取发卡商户退款规则（未配置为允许、10000），通用卡固定为 true 与 10000；pending_refund_cent 为账户关闭或注销时登记、状态为 requested 或 processing 的待退事项金额，否则为 null。第十八批 BC 段第 365 条 365-R1（BSM:833「账户可冻结/解冻。」）：储值退卡页同时办冻结、解冻（freezeStoredValueAccount、unfreezeStoredValueAccount），持 customer.stored_value.freeze 也可查卡，范围同上。缺 phone 400 VALIDATION_FAILED；customer.stored_value.refund 与 customer.stored_value.freeze 都不持 403 PERMISSION_DENIED。
+      description: 第十八批 AZ 段第 278 条 278-R1（ENUM:86「余额管理与退款均由长沙项目公司负责」；BSM:833「商户的员工只能管理本商户发行的储值卡」；PGM:528「④看不到别的商户和别的项目的数据」）：按客人完整手机号（精确匹配）列出其名下当前账号可办理退卡的卡，供后台「储值退卡」页办理 refundStoredValueAccount（通用卡）与 counterRefundStoredValueAccount（商户卡）。查询不扣单次授权（M723 操作员 2026-10-03「预览、查询不扣一次性授权」），不记审计事件。范围同退款：最高权限与平台管理员全见；商户账号只见本商户的卡，卡带项目的再限本人项目；不挂商户的账号按所持查卡码（持 customer.stored_value.refund 按它，否则按 customer.stored_value.freeze）可触及的项目（本人项目与可跨项目角色勾选的项目，PGM:659；第十八批 BD 段第 376 条 376-R1）见卡带项目的卡，另见不带项目的通用卡，以及发卡商户在可触及的项目中任一经营（主项目或已批准的经营项目）的不带项目商户卡。已销户（closed）的卡不列；手机号查不到客人返回空数组；只给掩码手机号。商户卡的 refund_allowed 与 refund_ratio_bps 取发卡商户退款规则（未配置为允许、10000），通用卡固定为 true 与 10000；pending_refund_cent 为账户关闭或注销时登记、状态为 requested 或 processing 的待退事项金额，否则为 null。第十八批 BC 段第 365 条 365-R1（BSM:833「账户可冻结/解冻。」）：储值退卡页同时办冻结、解冻（freezeStoredValueAccount、unfreezeStoredValueAccount），持 customer.stored_value.freeze 也可查卡，范围同上。缺 phone 400 VALIDATION_FAILED；customer.stored_value.refund 与 customer.stored_value.freeze 都不持 403 PERMISSION_DENIED。
       x-permission: customer.stored_value.refund
       x-permissions-any-of:
         - customer.stored_value.refund
@@ -41491,6 +41492,82 @@ paths:
                         type: array
                         items:
                           $ref: "#/components/schemas/StoredValueRefundCard"
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
+  /api/v1/loyalty/stored-value/ledger/query:
+    post:
+      tags:
+        - customer
+      operationId: queryStoredValueLedger
+      summary: 储值台账查询（按客人、商户、期间查储值逐笔明细与余额构成；手机号走请求体不进 URL）
+      description: 第十八批 BD 段第 364 条 364-R1（BSM:833「运营端提供储值台账，可按客人、商户、期间查询逐笔明细与余额构成。」「商户的员工只能管理本商户发行的储值卡。」；ENUM:86「每笔充值拆为本金与赠送金两段分别记账」；PGM:659「所有业务数据默认按项目隔离」「在所分配的权限内可以查看、处理该角色可查看项目的数据」「商户账号持有这类角色也不能跨项目」）：供后台「储值台账」页（ADM-CUS-007）按客人（phone，完整手机号精确匹配）、商户（merchant_id，发卡商户或扣款商户是它的都出）、期间（date_from、date_to，北京时间日期，含首尾）查储值逐笔流水，三项都可不填，起止颠倒不另报错（结果为空）；每笔给本金、赠送金变动及变动后的本金、赠送金与余额，变动后本金与赠送金按该卡全部流水累计（不受期间与商户筛选影响）。范围：最高权限与平台管理员全见；商户账号只见本商户发的卡，卡带项目的再限本人项目；其余账号按 customer.stored_value.view 可触及的项目（本人项目与可跨项目角色勾选的项目，PGM:659）见卡带项目的卡，不带项目的商户卡按发卡商户的经营项目（主项目或已批准的经营项目）判，不带项目也不挂商户的卡不出。扣款商户（consume_merchant_id、consume_merchant_name，只在 consume 与 consume_reversal 行，回冲行按原消费取）取商户卡的发卡商户、票务订单的 bar_id，或通用卡酒吧结账储值支付的结账酒吧商户，取不到为空；支付通路 payment_channel 只在 topup 行。按 created_at 倒序、再按 txn_id 倒序分页；手机号查不到客人返回空页。查询不扣单次授权（M723 操作员 2026-10-03「预览、查询不扣一次性授权」），不记审计事件，查了谁由外壳敏感页登记（PGM:878，同 lookupStoredValueRefundCards）。page 小于 1 或 size 不在 1～100 返回 400 VALIDATION_FAILED「分页参数无效」；缺 customer.stored_value.view 403 PERMISSION_DENIED；没有项目归属的非平台账号 403 PROJECT_SCOPE_REQUIRED。
+      x-permission: customer.stored_value.view
+      x-data-scope: project-merchant
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: not_applicable
+      x-audit-event-failure: not_applicable
+      x-failure-codes:
+        - VALIDATION_FAILED
+        - PERMISSION_DENIED
+        - PROJECT_SCOPE_REQUIRED
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StoredValueLedgerQueryRequest"
+            example:
+              phone: "13800000000"
+              merchant_id: merchant_001
+              date_from: "2026-11-01"
+              date_to: "2026-11-19"
+              page: 1
+              size: 20
+      responses:
+        "200":
+          description: 成功；data 为分页 items（StoredValueLedgerRow，按 created_at、txn_id 倒序）与 page、page_size、total；手机号查不到客人为空页。
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        additionalProperties: false
+                        required:
+                          - items
+                          - page
+                          - page_size
+                          - total
+                        properties:
+                          items:
+                            type: array
+                            items:
+                              $ref: "#/components/schemas/StoredValueLedgerRow"
+                          page:
+                            type: integer
+                            minimum: 1
+                            description: 当前页码。
+                          page_size:
+                            type: integer
+                            minimum: 1
+                            maximum: 100
+                            description: 每页条数。
+                          total:
+                            type: integer
+                            format: int64
+                            minimum: 0
+                            description: 符合条件的流水总笔数（请求页超出末页时本页为空、total 为 0）。
         "400":
           $ref: "#/components/responses/Error"
         "401":
@@ -68807,6 +68884,13 @@ components:
           type: string
           description: 储值支付短信验证码；先调 POST /api/v1/bar/bills/{bill_id}/stored-value/sms 发到 phone，payment_channel=stored_value 时核验，验证不过整笔结账不成立。
           maxLength: 16
+        stored_value_card:
+          type: string
+          enum:
+            - merchant
+            - general
+          default: merchant
+          description: 储值支付扣哪张卡，按客人指定：merchant＝本酒吧商户卡（缺省），general＝账单所在综合体（桌台所在铺位的项目）的通用卡；不自动跨卡（BSM:833）。只在 payment_channel=stored_value 时使用（第十八批 BD 段第 367 条 367-R1）。
     CommissionCalculateRequest:
       type: object
       description: 请求载荷 `CommissionCalculateRequest`；字段、必填项和枚举用于生成 DTO、校验和契约测试。
@@ -76824,6 +76908,166 @@ components:
             - "null"
           format: int64
           description: 账户关闭或注销时登记、状态为 requested 或 processing 的待退事项金额（分）；没有为 null。
+    StoredValueLedgerQueryRequest:
+      type: object
+      description: 储值台账查询条件（queryStoredValueLedger，第十八批 BD 段第 364 条 364-R1）：客人、商户、期间三项都可不填；手机号走请求体不入 URL query（AUD-020）。
+      additionalProperties: false
+      properties:
+        phone:
+          type: string
+          description: 客人完整手机号（精确匹配，不支持模糊搜索）；查不到客人返回空页。
+        merchant_id:
+          type: string
+          description: 商户编号；发卡商户或扣款商户是它的流水都出。
+        date_from:
+          type: string
+          format: date
+          description: 起始日期（北京时间，含当日）；不填不限。
+        date_to:
+          type: string
+          format: date
+          description: 结束日期（北京时间，含当日）；不填不限。
+        page:
+          type: integer
+          minimum: 1
+          default: 1
+          description: 页码，从 1 起，缺省 1。
+        size:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 20
+          description: 每页条数 1～100，缺省 20。
+    StoredValueLedgerRow:
+      type: object
+      description: 储值台账的一行＝一笔储值流水（queryStoredValueLedger，第十八批 BD 段第 364 条 364-R1）：金额入为正、出为负；变动后本金与赠送金按该卡全部流水累计（ENUM:86「每笔充值拆为本金与赠送金两段分别记账」）。
+      additionalProperties: false
+      required:
+        - txn_id
+        - created_at
+        - txn_type
+        - amount_cent
+        - principal_cent
+        - bonus_cent
+        - balance_after_cent
+        - principal_after_cent
+        - bonus_after_cent
+        - account_id
+        - card_type
+        - project_id
+        - issuer_merchant_id
+        - issuer_merchant_name
+        - customer_id
+        - masked_phone
+        - payment_channel
+        - consume_merchant_id
+        - consume_merchant_name
+        - original_txn_id
+        - reason
+      properties:
+        txn_id:
+          type: string
+          description: 流水编号。
+          maxLength: 64
+        created_at:
+          type: string
+          format: date-time
+          description: 记账时间。
+        txn_type:
+          type: string
+          enum:
+            - topup
+            - consume
+            - refund
+            - adjust
+            - consume_reversal
+          description: topup 充值；consume 消费；refund 退卡（退余额）；adjust 调整（如销卡时赠送金作废）；consume_reversal 消费退款回冲。
+        amount_cent:
+          type: integer
+          format: int64
+          description: 本笔金额（分），入为正、出为负。
+        principal_cent:
+          type: integer
+          format: int64
+          description: 本笔本金变动（分）。
+        bonus_cent:
+          type: integer
+          format: int64
+          description: 本笔赠送金变动（分）。
+        balance_after_cent:
+          type: integer
+          format: int64
+          description: 本笔后余额（分）。
+        principal_after_cent:
+          type: integer
+          format: int64
+          description: 本笔后本金（分），按该卡全部流水累计。
+        bonus_after_cent:
+          type: integer
+          format: int64
+          description: 本笔后赠送金（分），按该卡全部流水累计。
+        account_id:
+          type: string
+          description: 储值账户编号。
+          maxLength: 64
+        card_type:
+          type: string
+          enum:
+            - general
+            - merchant
+          description: general 综合体通用卡；merchant 商户卡。
+        project_id:
+          type:
+            - string
+            - "null"
+          description: 卡所属项目；不带项目为空。
+          maxLength: 64
+        issuer_merchant_id:
+          type:
+            - string
+            - "null"
+          description: 发卡商户；综合体通用卡为空。
+          maxLength: 64
+        issuer_merchant_name:
+          type:
+            - string
+            - "null"
+          description: 发卡商户名称；综合体通用卡为空。
+        customer_id:
+          type: string
+          description: 客人账号编号。
+          maxLength: 64
+        masked_phone:
+          type: string
+          description: 客人掩码手机号。
+        payment_channel:
+          type:
+            - string
+            - "null"
+          description: 充值支付通路；只在 topup 行，其余为空。
+          maxLength: 64
+        consume_merchant_id:
+          type:
+            - string
+            - "null"
+          description: 扣款商户；只在 consume、consume_reversal 行（回冲行按原消费取）——商户卡取发卡商户，通用卡取票务订单的 bar_id 或酒吧结账的商户，取不到为空。
+          maxLength: 64
+        consume_merchant_name:
+          type:
+            - string
+            - "null"
+          description: 扣款商户名称；同 consume_merchant_id。
+        original_txn_id:
+          type:
+            - string
+            - "null"
+          description: 回冲行指向的原消费流水；其余为空。
+          maxLength: 64
+        reason:
+          type:
+            - string
+            - "null"
+          description: 业务事由。
     PartnerOrgUserBindRequest:
       type: object
       description: 请求载荷 `PartnerOrgUserBindRequest`；AUD-033 平台把既有后台账号绑定到外部协作机构（此前 partner_org_id 无任何 API 入口，顶层外包账号绑不到机构、外包模块整段不可用）。

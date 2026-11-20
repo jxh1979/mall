@@ -1,6 +1,6 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.25
+// 文件版本：V0.26
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.LocalZone;
@@ -533,7 +533,7 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
     }
 
     /** 重建存酒记录（携带 A1 扩展字段），仅改 status/remaining/updatedAt。 */
-    private SavedBottleRecord savedBottleWith(SavedBottleRecord b, String status, int remaining, Instant updatedAt) {
+    static SavedBottleRecord savedBottleWith(SavedBottleRecord b, String status, int remaining, Instant updatedAt) {
         return new SavedBottleRecord(b.id(), b.customerId(), b.barProjectId(), b.itemId(), b.bottleName(),
                 b.initialQuantity(), remaining, b.unit(), b.expireAt(), status, b.evidenceAttachmentIds(),
                 b.createdAt(), updatedAt, b.merchantId(), b.isHighValue(), b.highValueThresholdCents(),
@@ -1811,12 +1811,12 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
      * {@code videoAttachmentIds} 各非空，真正区分类型，替换旧"附件数≥2 不分类型"弱校验）；命中后建库存域内高价值
      * 复核单（{@code inventory_high_value_reviews}，pending，subject_type=saved_bottle_void、subject_id=存酒 id），
      * 并把存酒置中间态 {@code disputed_frozen}（待主管复核冻结，不直接 cancelled）。主管经
-     * {@link InventoryHighValueReviewService#review} approve 后存酒才真正置 {@code cancelled}；reject 则维持
-     * {@code disputed_frozen}（不作废）。
+     * {@link InventoryHighValueReviewService#review} approve 后存酒才真正置 {@code cancelled}；reject 则作废不生效，
+     * 存酒回到作废前的状态（第十八批 BD 段 361-R1，作废前状态记在 {@code saved_bottles.void_prior_status}）。
      *
      * <p><b>非高价值</b>作废维持<b>直接 cancel</b>（向后兼容，无证据要求）。
      *
-     * <p>中间态选用 {@code disputed_frozen}（V061 既有状态："争议冻结/待人工复核"语义，已在可作废源态集内），
+     * <p>中间态选用 {@code disputed_frozen}（V061 既有状态："争议冻结/待人工复核"语义），
      * 因本期无新迁移、{@code saved_bottles.status} CHECK 不含 pending_review。
      *
      * <p>第十八批 AP 段 252-R1（BSM:1940「……存酒作废、异常调拨都可能产生责任争议，必须记录原因、员工、时间、点位、照片、视频和主管复核结果。」）：
@@ -1878,6 +1878,8 @@ public class InventoryService implements com.complex.platform.finance.SavedBottl
                     photoAttachmentIds,
                     videoAttachmentIds);
             repository.revokeActiveSavedBottlePickupCodes(savedBottle.id());
+            // 第十八批 BD 段 361-R1：记下作废前状态，复核驳回时存酒据此恢复。
+            repository.updateSavedBottleVoidPriorStatus(savedBottle.id(), savedBottle.status());
             return repository.saveSavedBottle(
                     savedBottleWith(savedBottle, "disputed_frozen", savedBottle.remainingQuantity(), Instant.now()));
         }

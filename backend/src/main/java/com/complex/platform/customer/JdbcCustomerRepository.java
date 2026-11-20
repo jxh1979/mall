@@ -1,6 +1,6 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.07
+// 文件版本：V0.08
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
@@ -1260,7 +1260,9 @@ class JdbcCustomerRepository implements CustomerRepository {
                   LEFT JOIN finance_payment_intents fpi ON fpi.id = t.payment_intent_id
                   LEFT JOIN ticket_payment_intents tpi ON tpi.id = t.id
                   LEFT JOIN ticket_orders o ON o.id = tpi.business_order_id
-                  LEFT JOIN merchants m ON t.txn_type = 'consume' AND m.id = COALESCE(a.merchant_id, o.bar_id)
+                  LEFT JOIN bar_bill_settlements bs ON t.txn_type = 'consume' AND a.merchant_id IS NULL
+                        AND left(t.idempotency_key, 6) = 'barsv_' AND bs.id = 'settle_' || substr(t.idempotency_key, 7)
+                  LEFT JOIN merchants m ON t.txn_type = 'consume' AND m.id = COALESCE(a.merchant_id, o.bar_id, bs.merchant_id)
                  WHERE t.customer_id = :customer AND t.account_id = :account
                  ORDER BY t.created_at DESC, t.id DESC LIMIT :size OFFSET :offset
                 """, new MapSqlParameterSource().addValue("customer", customerId).addValue("account", accountId)

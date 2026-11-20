@@ -1,4 +1,4 @@
-# P0 OpenAPI Operation 验收矩阵 V0.87
+# P0 OpenAPI Operation 验收矩阵 V0.88
 
 ## 1. 文档定位
 
@@ -17,7 +17,7 @@
 
 ## 3. Operation 清单
 
-> 当前 `docs/openapi/openapi-p0.json` 共 1401 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
+> 当前 `docs/openapi/openapi-p0.json` 共 1402 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
 
 | 标签 | 方法 | 路径 | operationId | 摘要 | 请求体 | 权限 | 认证上下文 | 数据范围 | 终端/设备能力/调用通道 | 幂等 | 成功事件 | 失败事件 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -997,6 +997,7 @@
 | ticketing | `GET` | `/api/v1/ticketing/ticket-transfers` | `listTicketTransfers` | 查询门票转赠记录(客服纠纷排查,只读) | `-` | `ticket.transfer.read` | `staff-token` | `project` | web | 否 | `ticket_transfer.viewed` | `ticket_transfer.view_failed` |
 | customer | `POST` | `/api/v1/loyalty/stored-value/{customer_id}/counter-refund` | `counterRefundStoredValueAccount` | 会员储值到店柜台退款（商户预收卡唯一可达退款路径） | `StoredValueCounterRefundRequest` | `customer.stored_value.refund` | `staff-token` | `project` | web | 是 | `stored_value.counter_refund` | `stored_value.counter_refund_failed` |
 | customer | `POST` | `/api/v1/loyalty/stored-value/refund-cards/lookup` | `lookupStoredValueRefundCards` | 储值退卡查卡（按手机号列出当前账号可办理退卡的卡；手机号走请求体不进 URL） | `object` | `customer.stored_value.refund` | `staff-token` | `project-merchant` | web | 否 | `not_applicable` | `not_applicable` |
+| customer | `POST` | `/api/v1/loyalty/stored-value/ledger/query` | `queryStoredValueLedger` | 储值台账查询（按客人、商户、期间查储值逐笔明细与余额构成；手机号走请求体不进 URL） | `StoredValueLedgerQueryRequest` | `customer.stored_value.view` | `staff-token` | `project-merchant` | web | 否 | `not_applicable` | `not_applicable` |
 | partner | `POST` | `/api/v1/partner/orgs/{org_id}/bind-user` | `bindUserToPartnerOrg` | 账号绑定外部协作机构 | `PartnerOrgUserBindRequest` | `partner.org.manage` | `staff-token` | `platform` | web | 是 | `partner.org.user_bound` | `partner.org.user_bind_failed` |
 | partner | `POST` | `/api/v1/partner/orgs/{org_id}/unbind-user` | `unbindUserFromPartnerOrg` | 账号解绑外部协作机构 | `PartnerOrgUserBindRequest` | `partner.org.manage` | `staff-token` | `platform` | web | 是 | `partner.org.user_unbound` | `partner.org.user_unbind_failed` |
 | dealer | `GET` | `/api/v1/dealers` | `listDealers` | 经销商清单 | `-` | `dealer.view` | `staff-token` | `project` | web | 否 | `dealer.viewed` | `not_applicable` |

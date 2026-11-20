@@ -1,6 +1,6 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.20
+// 文件版本：V0.21
 
 import com.complex.platform.common.crypto.PiiCipher;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -1444,6 +1444,18 @@ class JdbcInventoryRepository implements InventoryRepository {
     public void updateSavedBottleCancelReason(String savedBottleId, String reason) {
         jdbcTemplate.update("UPDATE saved_bottles SET cancel_reason = :reason WHERE id = :id",
                 Map.of("id", savedBottleId, "reason", reason));
+    }
+
+    @Override
+    public void updateSavedBottleVoidPriorStatus(String savedBottleId, String priorStatus) {
+        jdbcTemplate.update("UPDATE saved_bottles SET void_prior_status = :status WHERE id = :id",
+                Map.of("id", savedBottleId, "status", priorStatus));
+    }
+
+    @Override
+    public Optional<String> findSavedBottleVoidPriorStatus(String savedBottleId) {
+        return Optional.ofNullable(jdbcTemplate.queryForObject("SELECT void_prior_status FROM saved_bottles WHERE id = :id",
+                Map.of("id", savedBottleId), String.class));
     }
 
     @Override

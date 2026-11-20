@@ -1,6 +1,6 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.16
+// 文件版本：V0.17
 
 import java.time.Instant;
 import java.util.List;
@@ -227,6 +227,16 @@ public interface InventoryRepository {
     /** 第十八批 AP 段 252-R1：存酒作废原因单列写入（整行保存 saveSavedBottle 按列 SET、不含此列，之后不会冲掉）。 */
     default void updateSavedBottleCancelReason(String savedBottleId, String reason) {
         throw new UnsupportedOperationException("saved bottle cancel reason not supported");
+    }
+
+    /** 第十八批 BD 段 361-R1：高价值作废冻结前的状态单列写入（复核驳回时据此恢复；整行保存 saveSavedBottle 按列 SET、不含此列，不会冲掉）。 */
+    default void updateSavedBottleVoidPriorStatus(String savedBottleId, String priorStatus) {
+        throw new UnsupportedOperationException("saved bottle void prior status not supported");
+    }
+
+    /** 第十八批 BD 段 361-R1：读高价值作废冻结前的状态。 */
+    default Optional<String> findSavedBottleVoidPriorStatus(String savedBottleId) {
+        throw new UnsupportedOperationException("saved bottle void prior status not supported");
     }
 
     default SavedBottleManualPickupRecord saveSavedBottleManualPickup(SavedBottleManualPickupRecord request) {

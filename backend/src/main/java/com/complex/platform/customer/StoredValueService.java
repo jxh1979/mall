@@ -1,6 +1,6 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.20
+// 文件版本：V0.21
 
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.idempotency.IdempotentReplayContext;
@@ -444,12 +444,14 @@ public class StoredValueService {
     /**
      * 内部消费（酒吧结账-储值支付等已过各自权限闸的域调用）：不重复过 customer.stored_value.consume 权限闸，
      * 但仍走卡范围/状态/余额守卫，并按开卡定格的资金模式对 platform_collect 商户卡逐笔挂应付商户。
+     * 第十八批 BD 段第 367 条 367-R1（BSM:833「①综合体通用卡：综合体内各商户通用」）：扣通用卡（merchantId 为空）不过员工商户范围闸——
+     * 调用方已按账单所在综合体取卡、已核客人短信；商户卡照旧过 requireMerchantScopeForCard。
      * 仅供本域及已授权域内部调用，不暴露控制器入口。@Transactional(REQUIRED)：并入调用方事务，同成同败。
      */
     @Transactional
     public CustomerStoredValueTransactionRecord consumeInternal(String customerId, String projectId, String merchantId,
                                                         long amountCent, String reason, String idempotencyKey) {
-        return consumeBalance(customerId, projectId, merchantId, amountCent, reason, idempotencyKey, false);
+        return consumeBalance(customerId, projectId, merchantId, amountCent, reason, idempotencyKey, merchantId == null);
     }
 
     private CustomerStoredValueTransactionRecord consumeBalance(String customerId, String projectId, String merchantId,
@@ -844,7 +846,7 @@ public class StoredValueService {
                     .orElseThrow(() -> ApiException.notFound("STORED_VALUE_ACCOUNT_NOT_FOUND", "储值账户不存在或已被删除"));
             // 第十八批 AZ 段 278-R1：商户与项目两维改由 requireRefundScope 一并核（与首次提交同一口径），不挂商户的项目侧账号可办本项目通用卡。
             StoredValueRefundLookupService.requireRefundScope(authorizationService, firstCard,
-                    financeRepository == null ? null : financeRepository::listMerchantOperatingProjectIds);
+                    financeRepository == null ? null : financeRepository::listMerchantOperatingProjectIds, "customer.stored_value.refund");
             // AUD-002: 幂等命中核对完整不可变指纹(操作类型/金额/卡范围/业务事由)，不再只看 customerId。
             // 路径隔离由键命名空间保证（柜台=svcr_ 前缀），线上/柜台不会互相命中。
             CustomerStoredValueTransactionRecord first = verifyIdempotentReplay(existing, customerId, projectId, merchantId,
@@ -860,7 +862,7 @@ public class StoredValueService {
         // 第十八批 AZ 段 278-R1（ENUM:86「余额管理与退款均由长沙项目公司负责」；PGM:528「④看不到别的商户和别的项目的数据」）：
         // 首次提交同核商户与项目——商户账号只办本商户卡，卡带项目的只办本人项目（柜台退款原先只比商户）。
         StoredValueRefundLookupService.requireRefundScope(authorizationService, account,
-                financeRepository == null ? null : financeRepository::listMerchantOperatingProjectIds);
+                financeRepository == null ? null : financeRepository::listMerchantOperatingProjectIds, "customer.stored_value.refund");
         if ("closed".equals(account.status())) {
             throw ApiException.conflict("STORED_VALUE_ACCOUNT_CLOSED", "储值账户已销户");
         }
@@ -1271,9 +1273,9 @@ public class StoredValueService {
         Instant now = now();
         CustomerStoredValueAccountRecord account = requireAccountForUpdate(customerId, projectId, merchantId);
         // 第十八批 BC 段 365-R1（BSM:833「账户可冻结/解冻。」「商户的员工只能管理本商户发行的储值卡。」；ENUM:86「余额管理与退款均由长沙项目公司负责」）：
-        // 冻结、解冻与退卡同一范围口径——最高权限放行；商户账号只办本商户卡；卡带项目的只办本人项目；不挂商户的项目侧账号可办本项目通用卡。
+        // 冻结、解冻与退卡同一范围口径——最高权限放行；商户账号只办本商户卡；卡带项目的按冻结码可触及的项目办（376-R1：含可跨项目角色勾选的项目）。
         StoredValueRefundLookupService.requireRefundScope(authorizationService, account,
-                financeRepository == null ? null : financeRepository::listMerchantOperatingProjectIds);
+                financeRepository == null ? null : financeRepository::listMerchantOperatingProjectIds, "customer.stored_value.freeze");
         if ("closed".equals(account.status())) {
             throw ApiException.conflict("STORED_VALUE_ACCOUNT_CLOSED", "储值账户已销户");
         }
@@ -1294,7 +1296,7 @@ public class StoredValueService {
         CustomerStoredValueAccountRecord account = requireAccountForUpdate(customerId, projectId, merchantId);
         // 第十八批 BC 段 365-R1：同冻结（requireRefundScope）
         StoredValueRefundLookupService.requireRefundScope(authorizationService, account,
-                financeRepository == null ? null : financeRepository::listMerchantOperatingProjectIds);
+                financeRepository == null ? null : financeRepository::listMerchantOperatingProjectIds, "customer.stored_value.freeze");
         if (!"frozen".equals(account.status())) {
             throw ApiException.conflict("STORED_VALUE_NOT_FROZEN", "储值账户不在冻结状态");
         }

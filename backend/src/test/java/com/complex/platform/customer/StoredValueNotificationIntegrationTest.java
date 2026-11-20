@@ -1,6 +1,6 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.08
+// 文件版本：V0.09
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -195,21 +195,19 @@ class StoredValueNotificationIntegrationTest {
         assertThat(logValue("consume", phone, "status")).isEqualTo("sent");
     }
 
+    /** 第十八批 BD 段 367-R1（BSM:833「①综合体通用卡：综合体内各商户通用」）：内部消费扣通用卡不过员工商户范围闸，扣款并发扣款短信。 */
     @Test
-    void projectCardInternalConsumeWithoutMerchantScopeRemainsRejected() {
+    void generalCardInternalConsumeSkipsMerchantScope() {
         String prefix = unique("scope");
         String customerId = prefix + "_customer";
         String phone = uniquePhone();
         insertCustomer(customerId, phone);
         settleTopup(customerId, 5_000L, prefix, null);
-        assertThatThrownBy(() -> storedValueService.consumeInternal(customerId, PROJECT_ID, null,
-                1_000L, "无商户范围项目卡扣款", prefix + "_consume"))
-                .isInstanceOfSatisfying(com.complex.platform.common.api.ApiException.class,
-                        e -> assertThat(e.code()).isEqualTo("MERCHANT_SCOPE_REQUIRED"));
+        storedValueService.consumeInternal(customerId, PROJECT_ID, null, 1_000L, "无商户范围项目卡扣款", prefix + "_consume");
         assertThat(jdbcTemplate.queryForObject(
                 "SELECT balance_cent FROM customer_stored_value_accounts WHERE customer_id = ? AND project_id = ? AND merchant_id IS NULL",
-                Long.class, customerId, PROJECT_ID)).isEqualTo(5_000L);
-        assertThat(logCount("consume", phone)).isZero();
+                Long.class, customerId, PROJECT_ID)).isEqualTo(4_000L);
+        assertThat(logCount("consume", phone)).isEqualTo(1);
     }
 
     private CustomerStoredValueTransactionRecord settleTopup(

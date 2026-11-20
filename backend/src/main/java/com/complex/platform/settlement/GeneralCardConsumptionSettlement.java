@@ -1,6 +1,6 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import com.complex.platform.common.BusinessDayResolver;
 import com.complex.platform.evidence.AuditEventService;
@@ -38,6 +38,9 @@ import org.springframework.transaction.annotation.Transactional;
  *       挂应收（同一来源正挂应付、负挂应收，照 pass_domain_share），不与当月应付轧差，已付出的应付也不冲正。</li>
  *   <li>台账号与来源号按组内流水集合派生（晚到的流水自然另成一笔）；付款时点按钱路 general_card_consume 固化，缺规则即整组不入、下一轮重试。</li>
  * </ul>
+ * 第十八批 BD 段第 367 条 367-R2（ENUM:86「在商户处消费商品或服务的，按该商户给客人的成交价格、扣除该笔消费所对应的通路费后与该商户结算，不另扣任何比例」；
+ * BSM:704「独立酒吧商户负责自己的经营、人员、设备、单一酒吧门票和店内收入。」）：酒吧账单通用卡消费（储值结账 barsv_ 流水对应 settle_ 结算行）按酒吧商户成组，
+ * 收款方＝该酒吧商户，计入额＝消费额减该笔已分摊的批次通路费，营业月按该酒吧的营业日；反结与退款回卡的回冲行照同一公式冲减。
  * ponytail: 通用卡已关闭后才办的消费退款，本金改登记退本人、不恢复批次也不写 fee_adjust，这笔回冲按全额冲减，会比原消费净额多冲一笔通路费；卡关闭期间仍有
  *   未退门票的情形罕见，真遇到再按 stored_value_consume_allocations 的原费率补算。
  */
@@ -63,8 +66,9 @@ public class GeneralCardConsumptionSettlement {
         this.audit = audit;
     }
 
-    /** 一笔待计入的流水：at＝流水时刻，consumedAt＝原消费时刻（消费即本身），amountCent＝计入额。 */
-    record ConsumeLine(String txnId, String projectId, String revenueStream, Instant at, Instant consumedAt, long amountCent) {
+    /** 一笔待计入的流水：at＝流水时刻，consumedAt＝原消费时刻（消费即本身），amountCent＝计入额；merchantId、barId 只酒吧账单行有（367-R2）。 */
+    record ConsumeLine(String txnId, String projectId, String revenueStream, Instant at, Instant consumedAt, long amountCent,
+            String merchantId, String barId) {
     }
 
     /** 一组（项目、收款主体、营业月、正常或追收）的待入账流水。 */
@@ -79,7 +83,8 @@ public class GeneralCardConsumptionSettlement {
         String own = JdbcSettlementBillRepository.OWN_COLLECTED;
         List<ConsumeLine> lines = jdbc.query("""
                 WITH consumes AS (
-                    SELECT t.id, o.id AS order_id, o.project_id, t.created_at, -t.amount_cent - COALESCE(f.fee_cent, 0) AS amount_cent
+                    SELECT t.id, o.id AS order_id, o.project_id, t.created_at, -t.amount_cent - COALESCE(f.fee_cent, 0) AS amount_cent,
+                           NULL::varchar AS merchant_id, NULL::varchar AS bar_id
                       FROM customer_stored_value_transactions t
                       JOIN customer_stored_value_accounts a ON a.id = t.account_id AND a.merchant_id IS NULL
                       JOIN ticket_payment_intents p ON p.id = t.id AND p.business_order_type = 'ticket_order'
@@ -87,35 +92,50 @@ public class GeneralCardConsumptionSettlement {
                       JOIN ticket_orders o ON o.id = p.business_order_id
                       LEFT JOIN ticket_payment_route_fees f ON f.payment_intent_id = t.id
                      WHERE t.txn_type = 'consume' AND EXISTS (SELECT 1 FROM issued_entitlements e WHERE e.order_id = o.id)
+                    UNION ALL
+                    -- 367-R2：酒吧账单通用卡消费（反结只把结算行置 reversed，不按它过滤，回冲行另行冲减）
+                    SELECT t.id, NULL, a.project_id, t.created_at,
+                           -t.amount_cent - COALESCE((SELECT SUM(x.fee_cent) FROM stored_value_consume_allocations x
+                                                       WHERE x.consume_txn_id = t.id), 0),
+                           bs.merchant_id, b.bar_id
+                      FROM customer_stored_value_transactions t
+                      JOIN customer_stored_value_accounts a ON a.id = t.account_id AND a.merchant_id IS NULL
+                      JOIN bar_bill_settlements bs ON left(t.idempotency_key, 6) = 'barsv_'
+                           AND bs.id = 'settle_' || substr(t.idempotency_key, 7) AND bs.settle_channel = 'stored_value'
+                      JOIN bar_bills b ON b.id = bs.bill_id
+                     WHERE t.txn_type = 'consume'
                 ), streams AS (
                     SELECT c.*, CASE WHEN %s THEN 'amusement_ticket' WHEN %s THEN 'performance_ticket' ELSE 'all_pass_ticket' END AS stream
                       FROM consumes c
                 )
-                SELECT s.id, s.project_id, s.stream, s.created_at, s.created_at AS consumed_at, s.amount_cent
+                SELECT s.id, s.project_id, s.stream, s.created_at, s.created_at AS consumed_at, s.amount_cent, s.merchant_id, s.bar_id
                   FROM streams s
                  WHERE NOT EXISTS (SELECT 1 FROM general_card_consume_lines l WHERE l.txn_id = s.id)
                 UNION ALL
                 SELECT r.id, s.project_id, s.stream, r.created_at, s.created_at,
                        -(r.amount_cent + COALESCE((SELECT SUM(x.fee_adjust_cent) FROM stored_value_consume_restorations x
-                                                    WHERE x.reversal_txn_id = r.id), 0))
+                                                    WHERE x.reversal_txn_id = r.id), 0)),
+                       s.merchant_id, s.bar_id
                   FROM customer_stored_value_transactions r
                   JOIN streams s ON s.id = r.original_txn_id
                  WHERE r.txn_type = 'consume_reversal'
                    AND NOT EXISTS (SELECT 1 FROM general_card_consume_lines l WHERE l.txn_id = r.id)
                 """.formatted(own.formatted("c", "'amusement'"), own.formatted("c", "'media'")), Map.of(),
                 (rs, i) -> new ConsumeLine(rs.getString(1), rs.getString(2), rs.getString(3), rs.getTimestamp(4).toInstant(),
-                        rs.getTimestamp(5).toInstant(), rs.getLong(6)));
+                        rs.getTimestamp(5).toInstant(), rs.getLong(6), rs.getString(7), rs.getString(8)));
         Map<GroupKey, List<ConsumeLine>> groups = new LinkedHashMap<>();
         for (ConsumeLine line : lines) {
-            YearMonth month = month(line.projectId(), line.at());
-            if (!month.isBefore(month(line.projectId(), now))) {
+            YearMonth month = month(line.projectId(), line.barId(), line.at());
+            if (!month.isBefore(month(line.projectId(), line.barId(), now))) {
                 continue;
             }
-            String payee = attribution.resolveManagementEntity(line.projectId(), line.revenueStream());
+            // 367-R2：酒吧账单行与该酒吧商户结算（ENUM:86「与该商户结算」；BSM:704 店内收入归独立酒吧商户）
+            String payee = line.merchantId() != null ? line.merchantId()
+                    : attribution.resolveManagementEntity(line.projectId(), line.revenueStream());
             if (payee == null) {
                 continue;
             }
-            boolean recovery = month(line.projectId(), line.consumedAt()).isBefore(month);
+            boolean recovery = month(line.projectId(), line.barId(), line.consumedAt()).isBefore(month);
             groups.computeIfAbsent(new GroupKey(line.projectId(), payee, month, recovery), k -> new ArrayList<>()).add(line);
         }
         return groups.entrySet().stream().map(e -> new Group(e.getKey().projectId(), e.getKey().payeeEntityId(), e.getKey().month(),
@@ -153,8 +173,8 @@ public class GeneralCardConsumptionSettlement {
         }
     }
 
-    private YearMonth month(String projectId, Instant at) {
-        return YearMonth.from(businessDays.businessDate(projectId, null, at));
+    private YearMonth month(String projectId, String barId, Instant at) {
+        return YearMonth.from(businessDays.businessDate(projectId, barId, at));
     }
 
     /** 组内流水号（已排序）拼接的 SHA-256 前 20 位：同一组流水同一编号，晚到的流水另成一笔。 */
