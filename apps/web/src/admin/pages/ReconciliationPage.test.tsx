@@ -708,7 +708,7 @@ describe("ReconciliationPage 188-R2 封账区块", () => {
     expect(text).toContain("2026年6月");
     expect(text).toContain("proj_1");
     expect(text).toContain("usr-fin-9");
-    expect(text).toContain("2026年7月3日 02:30");
+    expect(text).toContain("2026年7月3日 10:30"); // 第 377 条 377-R1：带 Z 的时刻按北京时间显示（02:30Z）
   });
 
   it("未勾选已核对四流一致不弹确认、不发封账请求", async () => {

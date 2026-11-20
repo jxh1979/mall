@@ -1,4 +1,4 @@
-// 文件版本：V0.07
+// 文件版本：V0.08
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { FinanceDailyClosePanel } from "./FinanceDailyClosePanel";
@@ -204,7 +204,7 @@ describe("日结区块", () => {
   it("已归档行只读：显示「已归档」与归档时间，没有确认、锁定、归档与标记按钮，七源汇总照常可看", async () => {
     const { get } = setup({ rows: [ARCHIVED] });
     await waitFor(() => expect(screen.queryByTestId("daily-close-row-d4")?.textContent ?? "").toContain("已归档"));
-    expect(screen.getByTestId("daily-close-row-d4").textContent).toContain("2026年12月25日 05:00");
+    expect(screen.getByTestId("daily-close-row-d4").textContent).toContain("2026年12月25日 13:00"); // 第 377 条 377-R1：带 Z 的时刻按北京时间显示（05:00Z）
     expect(screen.getByTestId("daily-close-table").textContent).toContain("归档时间");
     for (const action of ["confirm", "lock", "archive"]) {
       expect(screen.queryByTestId(`daily-close-${action}-d4`)).toBeNull();
@@ -295,7 +295,7 @@ describe("日结区块", () => {
     await waitFor(() => expect(screen.queryByTestId("daily-close-adjustments")?.textContent ?? "").toContain("漏记收入"));
     expect(get).toHaveBeenCalledWith("/api/v1/finance/daily-closes/d3/adjustments");
     const text = screen.getByTestId("daily-close-adjustments").textContent ?? "";
-    for (const value of ["财务甲", "财务乙", "2026年11月3日 05:00", "2026年11月1日", "5.00", "-3.00", "已通过", "待处理"]) {
+    for (const value of ["财务甲", "财务乙", "2026年11月3日 13:00", "2026年11月1日", "5.00", "-3.00", "已通过", "待处理"]) {
       expect(text).toContain(value);
     }
     expect(screen.queryByTestId("daily-close-adjustment-approve-adj2")).toBeNull();

@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -134,7 +134,7 @@ describe("AmusementSessionsPage 行明细抽屉", () => {
     fireEvent.click(screen.getByTestId("amusement-session-row-s-1"));
     const drawer = screen.getByTestId("row-detail-drawer");
     expect(drawer.textContent).toContain("上午场");
-    expect(drawer.textContent).toContain("2026年6月20日 10:00");
+    expect(drawer.textContent).toContain("2026年6月20日 18:00"); // 第 377 条 377-R1：带 Z 的时刻按北京时间显示（10:00Z）
     expect(drawer.textContent).not.toContain("2026-06-20T10:00:00Z");
     expect(drawer.textContent).not.toContain("open");
   });

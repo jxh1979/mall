@@ -1,4 +1,4 @@
-// 文件版本：V0.23
+// 文件版本：V0.24
 import React from "react";
 import { ConfigProvider, theme } from "antd";
 import zhCN from "antd/es/locale/zh_CN";
@@ -119,6 +119,7 @@ const CustomerAccountsPage = React.lazy(() => import("./pages/CustomerAccountsPa
 const MemberLoyaltyConfigPage = React.lazy(() => import("./pages/MemberLoyaltyConfigPage").then((m) => ({ default: m.MemberLoyaltyConfigPage })));
 const StoredValueRulesPage = React.lazy(() => import("./pages/StoredValueRulesPage").then((m) => ({ default: m.StoredValueRulesPage })));
 const StoredValueRefundPage = React.lazy(() => import("./pages/StoredValueRefundPage").then((m) => ({ default: m.StoredValueRefundPage })));
+const ArchivedContentPage = React.lazy(() => import("./pages/ArchivedContentPage").then((m) => ({ default: m.ArchivedContentPage })));
 const StoredValueLedgerPage = React.lazy(() => import("./pages/StoredValueLedgerPage").then((m) => ({ default: m.StoredValueLedgerPage })));
 const RefundAuthorityPage = React.lazy(() => import("./pages/RefundAuthorityPage").then((m) => ({ default: m.RefundAuthorityPage })));
 const OperatingParamsPage = React.lazy(() => import("./pages/OperatingParamsPage").then((m) => ({ default: m.OperatingParamsPage })));
@@ -442,6 +443,8 @@ function renderPage(route: AdminRoute, props: AdminPageProps) {
       return <StoredValueRefundPage {...props} />;
     case "ADM-CUS-007":
       return <StoredValueLedgerPage {...props} />;
+    case "ADM-OPS-003":
+      return <ArchivedContentPage {...props} />;
     case "ADM-FIN-005":
       return <SettlementReviewPage {...props} />;
     case "ADM-INT-001":
@@ -679,8 +682,9 @@ export default function AdminApp() {
     // 第 123 条 123-R1：经营参数页另放敏感操作授权范围区块，持看板查看码或授权范围配置码任一即可进入。
     // 第十八批 AW 段 291-R2（PGM:660「查看、导出和修改分别授权」）：内部结算价目录持查看码或提交码任一即可进入。
     // 第十八批 BC 段 365-R1（BSM:833「账户可冻结/解冻。」）：储值退卡页持退卡码或冻结码任一即可进入。
+    // 第十八批 BE 段 343-R1（BSM:569「按分类查阅」）：已存档内容页持任一分类的查看码即可进入，页内只列有查看码的分类。
     if (target.pageId === "ADM-AMU-008" || target.pageId === "ADM-INV-004" || target.pageId === "ADM-ANA-003"
-      || target.pageId === "ADM-STL-003" || target.pageId === "ADM-CUS-006") {
+      || target.pageId === "ADM-STL-003" || target.pageId === "ADM-CUS-006" || target.pageId === "ADM-OPS-003") {
       const held = target.requiredPermissions.find((code) => hasPermissions(effectivePermissions, [code]));
       return held ? [held] : target.requiredPermissions;
     }

@@ -144,7 +144,7 @@ describe("FacilityWorkbenchPage 整行明细抽屉 + 零英文", () => {
     expect(rec.textContent).not.toContain("abnormal");
     fireEvent.click(rec);
     expect(within(drawer()).getByText("巡检记录明细 · rec-1")).toBeTruthy();
-    expect(within(drawer()).getByText("2026年7月11日 09:30")).toBeTruthy();
+    expect(within(drawer()).getByText("2026年7月11日 17:30")).toBeTruthy();
   });
 });
 

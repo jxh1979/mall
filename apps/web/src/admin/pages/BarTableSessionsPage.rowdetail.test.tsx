@@ -65,7 +65,7 @@ describe("BarTableSessionsPage 行明细抽屉 + 零英文", () => {
     const drawer = screen.getByTestId("row-detail-drawer");
     expect(drawer.textContent).toContain("已确认");
     expect(drawer.textContent).toContain("预定时间");
-    expect(drawer.textContent).toContain("2026年7月5日");
+    expect(drawer.textContent).toContain("2026年7月6日 04:00"); // 第 377 条 377-R1：带 Z 的时刻按北京时间显示（20:00Z，跨日）
     expect(drawer.textContent).not.toContain("confirmed");
     // 第十八批 Q 段 151-R2：订台明细不再显示第二个「免通票入场人数」。
     expect(drawer.textContent).not.toContain("免通票入场人数");

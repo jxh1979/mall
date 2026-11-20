@@ -1,8 +1,8 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 // OBS-14-02：后台结果区中文展示（PGM「全局原则 · 界面全中文（所有终端零英文）」）。
 // 页面经 setActionResult 放进来的对象，按「中文键名：可读值」逐行展示：键名查 i18n/fieldLabels（与后端 FieldLabels 同口径），
 // 枚举取值先按键查 KEY_VALUE_LABELS（同码不同键含义不同），再查 formatBusinessStatus 状态码表，再查 VALUE_LABELS（动作码、页面状态码、
-// 一词多义的后端状态）；金额（*_cent、*_cents 及其 _min/_max 上下限）分转元，ISO 时间转本地中文时间，
+// 一词多义的后端状态）；金额（*_cent、*_cents 及其 _min/_max 上下限）分转元，ISO 时间转中文时间（带时区的时刻按北京时间），
 // 嵌套对象缩进、数组逐项；字符串结果照旧。字典缺键、缺取值由 tools/verify-admin-result-labels.mjs 门禁拦。
 import { FIELD_LABELS, KEY_VALUE_LABELS, VALUE_LABELS } from "../i18n/fieldLabels";
 import { formatBusinessStatus } from "../i18n/statusLabels";
@@ -13,7 +13,6 @@ const compact = (key: string) => key.replace(/_/g, "").toLowerCase();
 const LABELS = new Map(Object.entries(FIELD_LABELS).map(([key, label]) => [compact(key), label]));
 const KEY_VALUES = new Map(Object.entries(KEY_VALUE_LABELS).map(([key, values]) => [compact(key), values]));
 const MONEY = /(^|_)cents?(_(min|max))?$|Cents?(Min|Max)?$/;
-const pad = (n: number) => String(n).padStart(2, "0");
 
 function label(key: string): string {
   if (/[一-鿿]/.test(key)) return key;
@@ -28,11 +27,8 @@ function scalar(key: string, value: unknown): string {
   if (typeof value === "boolean") return value ? "是" : "否";
   if (typeof value === "number") return MONEY.test(key) ? `${(value / 100).toFixed(2)} 元` : String(value);
   const text = String(value);
-  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(text)) {
-    const d = new Date(text);
-    if (!Number.isNaN(d.getTime())) return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日 ${pad(d.getHours())}:${pad(d.getMinutes())}`;
-  }
-  if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return cnDate(text);
+  // 第十八批 BE 段第 377 条 377-R1：结果区的时间与各页同一口径（cnDate：带时区的时刻换成北京时间，不带时区的照原样），不再按本机时区换算。
+  if (/^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}.*)?$/.test(text)) return cnDate(text);
   const byKey = KEY_VALUES.get(compact(key))?.[text];
   if (byKey) return byKey;
   const status = formatBusinessStatus(text);

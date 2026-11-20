@@ -132,8 +132,8 @@ describe("TicketOrdersPage 行明细抽屉（整行可点·时间中文，与单
     expect(text).toContain("TKT-0001");
     expect(text).toContain("已支付");
     expect(text).toContain("已出票");
-    expect(text).toContain("2026年7月5日 09:00");
-    expect(text).toContain("2026年7月5日 10:30");
+    expect(text).toContain("2026年7月5日 17:00"); // 第 377 条 377-R1：带 Z 的时刻按北京时间显示（09:00Z）
+    expect(text).toContain("2026年7月5日 18:30");
     expect(text).not.toContain("paid");
     expect(text).not.toContain("issued");
   });

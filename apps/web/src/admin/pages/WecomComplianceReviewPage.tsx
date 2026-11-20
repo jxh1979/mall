@@ -1,15 +1,18 @@
-// 文件版本：V0.04
+// 文件版本：V0.05
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
 import { useAdminResource } from "../hooks/useAdminResource";
 import { PermissionButton } from "../security/Can";
 import { formatBusinessStatus } from "../i18n/statusLabels";
+import { KEY_VALUE_LABELS } from "../i18n/fieldLabels";
 import { RowDetailDrawer, type RowDetailField, cnDate } from "../components/RowDetailDrawer";
 import type { AdminPageProps } from "../types";
 
 // 企微合规域内枚举中文（风险等级/复核处置/留存到期动作/scope，页内映射；状态码走全局表兜底）。
-const RISK_LEVEL_LABELS: Record<string, string> = { high: "高", medium: "中", low: "低" };
+// 第十八批 BE 段第 378 条 378-R1（ENUM:217「风险四级 低（进列表）、中（待复核）、高（生成工单+通知主管）、严重（可冻结/停用/强制审批）」；PGM:287）：
+// 风险等级按四级名显示，取值 normal、suspicious、high、critical 与风控预警页同一张码表。
+const riskLevelLabel = (code?: string | null) => (code ? KEY_VALUE_LABELS.risk_level?.[code] ?? formatBusinessStatus(code) : "-");
 const REVIEW_STATUS_LABELS: Record<string, string> = { reviewing: "领取复核", confirmed: "确认违规", dismissed: "误报驳回" };
 const EXPIRY_ACTION_LABELS: Record<string, string> = { permanent: "永久保存，不自动处理" };
 const SCOPE_LABELS: Record<string, string> = { global: "全局", project: "综合体", merchant: "商户" };
@@ -125,7 +128,7 @@ export function WecomComplianceReviewPage({ api, user, setActionResult, setGloba
       title: `违规命中 · ${row.ruleCode ?? row.hitId}`,
       fields: [
         { label: "违规规则码", value: row.ruleCode ?? "—" },
-        { label: "风险等级", value: wLabel(RISK_LEVEL_LABELS, row.riskLevel) },
+        { label: "风险等级", value: riskLevelLabel(row.riskLevel) },
         { label: "命中片段（脱敏）", value: row.matchedSnippet ?? "—" },
         { label: "会话", value: row.conversationId ?? "—" },
         { label: "消息", value: row.messageId ?? "—" },
@@ -184,7 +187,7 @@ export function WecomComplianceReviewPage({ api, user, setActionResult, setGloba
                   onClick={() => openHitDetail(row)}
                   onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openHitDetail(row); } }}>
                   <td onClick={(event) => event.stopPropagation()}><input type="radio" aria-label={`选择此风险命中 ${row.hitId}`} data-testid={`wecom-risk-hit-select-${row.hitId}`} checked={selectedHitId === row.hitId} onChange={() => setSelectedHitId(row.hitId)} /></td>
-                  <td>{row.ruleCode ?? "-"}</td><td>{wLabel(RISK_LEVEL_LABELS, row.riskLevel)}</td><td>{row.matchedSnippet ?? "-"}</td>
+                  <td>{row.ruleCode ?? "-"}</td><td>{riskLevelLabel(row.riskLevel)}</td><td>{row.matchedSnippet ?? "-"}</td>
                   <td>{formatBusinessStatus(row.status)}</td><td>{row.reviewerId ?? "-"}</td>
                 <td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看违规命中详情" onClick={(event) => { event.stopPropagation(); openHitDetail(row); }}>查看详情</button></td></tr>
               ))}

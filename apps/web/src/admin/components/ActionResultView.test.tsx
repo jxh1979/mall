@@ -1,4 +1,4 @@
-// 文件版本：V0.05
+// 文件版本：V0.06
 import { render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { FIELD_LABELS } from "../i18n/fieldLabels";
@@ -13,12 +13,11 @@ describe("后台结果区中文展示", () => {
     ));
   });
 
-  it("ISO 时间按本地时区转成中文年月日时分", () => {
-    const local = new Date("2026-07-05T05:20:00Z");
-    const pad = (n: number) => String(n).padStart(2, "0");
-    expect(formatActionResult({ occurredAt: "2026-07-05T05:20:00Z" })).toBe(
-      `发生时间：${local.getFullYear()}年${local.getMonth() + 1}月${local.getDate()}日 ${pad(local.getHours())}:${pad(local.getMinutes())}`,
-    );
+  // 第十八批 BE 段第 377 条 377-R1：结果区的时间与各页同一口径，带时区的时刻按北京时间，不随本机时区变。
+  it("ISO 时间：带时区的时刻转成北京时间的中文年月日时分，不带时区的照原样", () => {
+    expect(formatActionResult({ occurredAt: "2026-07-05T05:20:00Z" })).toBe("发生时间：2026年7月5日 13:20");
+    expect(formatActionResult({ occurredAt: "2026-07-05T18:30:00.5Z" })).toBe("发生时间：2026年7月6日 02:30");
+    expect(formatActionResult({ occurredAt: "2026-07-05T05:20:00" })).toBe("发生时间：2026年7月5日 05:20");
   });
 
   it("嵌套对象缩进，对象数组逐项，标量数组用顿号连接", () => {

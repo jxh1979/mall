@@ -47,8 +47,8 @@ describe("BarOrdersPage 行明细抽屉 + 零英文", () => {
     expect(drawer.textContent).toContain("¥200.00");
     expect(drawer.textContent).toContain("已支付");
     // 下单时间 + 支付时间都在抽屉里，且为中文
-    expect(drawer.textContent).toContain("2026年7月5日 13:20");
-    expect(drawer.textContent).toContain("2026年7月5日 14:05");
+    expect(drawer.textContent).toContain("2026年7月5日 21:20"); // 第 377 条 377-R1：带 Z 的时刻按北京时间显示（13:20Z）
+    expect(drawer.textContent).toContain("2026年7月5日 22:05");
     expect(drawer.textContent).not.toContain("2026-07-05T");
     expect(drawer.textContent).not.toContain("paid");
     fireEvent.keyDown(window, { key: "Escape" });

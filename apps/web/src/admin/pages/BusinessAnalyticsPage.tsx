@@ -10,6 +10,11 @@ import { MetricDetailLink, useMetricKpiValue } from "../components/MetricDetailE
 import type { AdminPageProps, AnomalyDispositionEventRow, BusinessMetricSnapshotRow, BusinessReviewLockRow, MetricAnomalyRow, MetricDefinitionRow } from "../types";
 import { formatMetricDomain, formatMetricName } from "../i18n/metricLabels";
 import { formatBusinessStatus } from "../i18n/statusLabels";
+import { KEY_VALUE_LABELS } from "../i18n/fieldLabels";
+
+// 第十八批 BE 段第 378 条 378-R1（ENUM:217「风险四级 低（进列表）、中（待复核）、高（生成工单+通知主管）、严重（可冻结/停用/强制审批）」；PGM:287）：
+// 风险等级按四级名显示，取值 normal、suspicious、high、critical 与风控预警页同一张码表。
+const riskLevelLabel = (code?: string | null) => (code ? KEY_VALUE_LABELS.risk_level?.[code] ?? formatBusinessStatus(code) : "—");
 
 const TEXT = {
   title: "经营分析",
@@ -204,7 +209,7 @@ export function BusinessAnalyticsPage({ api, setActionResult, setGlobalError, na
       title: `异常指标明细 · ${formatMetricName(row.metricKey)}`,
       fields: [
         { label: TEXT.metricKey, value: formatMetricName(row.metricKey) },
-        { label: TEXT.riskLevel, value: row.riskLevel === "high" ? "高" : row.riskLevel === "suspicious" ? "可疑" : formatBusinessStatus(row.riskLevel) },
+        { label: TEXT.riskLevel, value: riskLevelLabel(row.riskLevel) },
         { label: TEXT.observed, value: formatNumber(row.observedValue) },
         { label: TEXT.expected, value: formatNumber(row.expectedValue) },
         { label: TEXT.summary, value: row.summary ?? "—" },
@@ -550,7 +555,7 @@ export function BusinessAnalyticsPage({ api, setActionResult, setGlobalError, na
                     onClick={() => openAnomalyDetail(row)}
                     onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openAnomalyDetail(row); } }}>
                     <td title={row.metricKey}>{formatMetricName(row.metricKey)}</td>
-                    <td>{row.riskLevel === "high" ? "高" : row.riskLevel === "suspicious" ? "可疑" : formatBusinessStatus(row.riskLevel)}</td>
+                    <td>{riskLevelLabel(row.riskLevel)}</td>
                     <td>{formatNumber(row.observedValue)}</td>
                     <td>{formatNumber(row.expectedValue)}</td>
                     <td>{row.summary ?? "—"}</td>
