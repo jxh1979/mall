@@ -1,4 +1,4 @@
-// 文件版本：V0.06
+// 文件版本：V0.07
 package com.complex.platform.gate;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -41,6 +41,7 @@ class ServerModuleRoutesTests {
     @Test
     void storedValueRefundPageApisBelongToGovernance() {
         assertThat(web("POST", "/api/v1/loyalty/stored-value/refund-cards/lookup")).isEqualTo("governance");
+        assertThat(web("POST", "/api/v1/loyalty/stored-value/ledger/query")).isEqualTo("governance"); // 364-R1
         assertThat(web("POST", "/api/v1/loyalty/stored-value/cus_1/refund")).isEqualTo("governance");
         assertThat(web("POST", "/api/v1/loyalty/stored-value/cus_1/counter-refund")).isEqualTo("governance");
         // 18BC 收尾复核修正（365-R1 后冻结、解冻只有储值退卡页调；PGM:737「关闭后菜单不可见或不可点，接口也要拒绝业务动作。」）。

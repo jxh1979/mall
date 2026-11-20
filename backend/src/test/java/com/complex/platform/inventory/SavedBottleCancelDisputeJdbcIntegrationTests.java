@@ -1,6 +1,6 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -75,6 +75,7 @@ class SavedBottleCancelDisputeJdbcIntegrationTests {
     private RequestPostProcessor clerk;
     private RequestPostProcessor supervisor;
     private RequestPostProcessor otherSupervisor;
+    private RequestPostProcessor supervisor2;
 
     @BeforeEach
     void seed() {
@@ -99,6 +100,8 @@ class SavedBottleCancelDisputeJdbcIntegrationTests {
         supervisor = fixture.staff("usr_b62sd_sup_" + s, "staff", project, merchant,
                 "bar.saved_bottle.manage", "inventory.high_value.review");
         otherSupervisor = fixture.staff("usr_b62sd_osup_" + s, "staff", project, otherMerchant,
+                "bar.saved_bottle.manage", "inventory.high_value.review");
+        supervisor2 = fixture.staff("usr_b62sd_sup2_" + s, "staff", project, merchant,
                 "bar.saved_bottle.manage", "inventory.high_value.review");
     }
 
@@ -240,6 +243,77 @@ class SavedBottleCancelDisputeJdbcIntegrationTests {
                 .andExpect(jsonPath("$.data.status").value("cancelled"));
         assertThat(jdbc.queryForObject("SELECT cancel_reason FROM saved_bottles WHERE id=?", String.class, bottle))
                 .isEqualTo("核实标签确被改动，争议成立");
+    }
+
+    // 第十八批 BD 段第 361 条 361-R1（BSM:1072「存酒作废需照片+视频双证据+主管复核」；第十八批裁决 14「必须照片＋视频＋主管复核才生效」）：
+    // 店员作废高价值存酒冻结待复核，门店主管驳回 → 作废不生效，存酒回到作废前的存酒中，照常可取。
+    @Test
+    void highValueVoidRejectedRestoresStoredBottle() throws Exception {
+        String bottle = insertBottle(highItem, "stored");
+        Map<String, Object> cancel = body("b76-361-cancel-" + s, "交还时瓶身碎裂");
+        cancel.put("photo_attachment_ids", List.of(uploadViaHttp("broken.jpg", "image/jpeg", "photo")));
+        cancel.put("video_attachment_ids", List.of(uploadViaHttp("broken.mp4", "video/mp4", "video")));
+        call(clerk, bottle + "/cancel", cancel)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("disputed_frozen"));
+
+        reject(supervisor, bottle, "b76-361-reject-" + s)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.review_status").value("rejected"));
+        assertThat(statusOf(bottle)).isEqualTo("stored");
+        assertThat(voidPriorStatusOf(bottle)).isEqualTo("stored");
+
+        Map<String, Object> claim = new LinkedHashMap<>();
+        claim.put("idempotency_key", "b76-361-claim-" + s);
+        claim.put("verification_code", "000000");
+        claim.put("bottle_label_value", "LBL-B62SD");
+        claim.put("customer_name_or_nickname", "争议客人");
+        claim.put("claim_items", List.of(Map.of("quantity", 1)));
+        call(clerk, bottle + "/claim", claim)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("picked_up"));
+        assertThat(jdbc.queryForObject("SELECT remaining_quantity FROM saved_bottles WHERE id=?", Integer.class, bottle)).isEqualTo(1);
+        assertThat(statusOf(bottle)).isEqualTo("stored");
+    }
+
+    // 361-R1（第十八批裁决 58「争议成立，走现有存酒作废（高价值的要照片＋视频＋主管复核，裁决 14）」）：争议中的高价值存酒由门店主管转作废，
+    // 另一位门店主管驳回 → 回到争议中，仍由门店主管二选一了结。
+    @Test
+    void disputedHighValueVoidRejectedReturnsToDispute() throws Exception {
+        String bottle = insertBottle(highItem, "stored");
+        call(clerk, bottle + "/dispute", body("b76-361-dispute-" + s, "客人称瓶底标签被改"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("disputed"));
+        Map<String, Object> cancel = body("b76-361-cancel2-" + s, "核实标签确被改动，争议成立");
+        cancel.put("photo_attachment_ids", List.of(uploadViaHttp("label.jpg", "image/jpeg", "photo")));
+        cancel.put("video_attachment_ids", List.of(uploadViaHttp("label.mp4", "video/mp4", "video")));
+        call(supervisor, bottle + "/cancel", cancel)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("disputed_frozen"));
+
+        reject(supervisor2, bottle, "b76-361-reject2-" + s)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.review_status").value("rejected"));
+        assertThat(statusOf(bottle)).isEqualTo("disputed");
+        assertThat(voidPriorStatusOf(bottle)).isEqualTo("disputed");
+
+        call(supervisor, bottle + "/dispute-dismissal", body("b76-361-dismiss-" + s, null))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("stored"));
+    }
+
+    private ResultActions reject(RequestPostProcessor who, String bottle, String key) throws Exception {
+        String review = jdbc.queryForObject("SELECT id FROM inventory_high_value_reviews WHERE subject_id=?", String.class, bottle);
+        Map<String, Object> decision = new LinkedHashMap<>();
+        decision.put("idempotency_key", key);
+        decision.put("decision", "rejected");
+        decision.put("reason", "视频看不清破损");
+        return mockMvc.perform(post("/api/v1/inventory/high-value-reviews/" + review + "/review").with(who)
+                .contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(decision)));
+    }
+
+    private String voidPriorStatusOf(String bottle) {
+        return jdbc.queryForObject("SELECT void_prior_status FROM saved_bottles WHERE id=?", String.class, bottle);
     }
 
     private Map<String, Object> body(String key, String reason) {

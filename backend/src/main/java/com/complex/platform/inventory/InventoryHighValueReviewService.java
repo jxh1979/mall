@@ -1,6 +1,6 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.08
+// 文件版本：V0.09
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -39,7 +39,7 @@ import static com.complex.platform.common.Strings.requireText;
  * </ol>
  *
  * <p>本期仅 {@code saved_bottle_void} 由 {@link InventoryService#cancelSavedBottle} 接入活跃链路
- * （approve 回调把存酒由中间态置 cancelled，reject 维持原态）；{@code damage_report}/{@code stock_variance}
+ * （approve 回调把存酒由中间态置 cancelled，reject 让存酒回到作废前的状态）；{@code damage_report}/{@code stock_variance}
  * 子类型表与复核服务已支持，但报损/盘点差异入口尚未接复核（见类尾遗留说明），作为后续。
  */
 @Service
@@ -197,7 +197,7 @@ public class InventoryHighValueReviewService {
     }
 
     /**
-     * 主管复核 approve/reject。approve → 动作生效（按 subject_type 回调）；reject → 回滚（保持原态）。
+     * 主管复核 approve/reject。approve → 动作生效（按 subject_type 回调）；reject → 回滚（不扣减；存酒回到作废前的状态）。
      *
      * <p>{@code onApprove} 由调用域注入：对 {@code saved_bottle_void} 即把存酒由中间态置 cancelled。
      * reject 不调 {@code onApprove}（保持原态、不扣减）。两路均写 reviewer/reason/reviewed_at + 事件。
@@ -262,7 +262,7 @@ public class InventoryHighValueReviewService {
                             current.photoAttachmentIds(), current.videoAttachmentIds(),
                             decision, reviewer, trimToNull(actual.reason()), current.createdAt(), now,
                             current.merchantId());
-                    // approve → 动作生效（回调）；reject → 收口（报损/盘点差异置 rejected，存酒维持冻结/不扣减）。
+                    // approve → 动作生效（回调）；reject → 收口（报损/盘点差异置 rejected 不扣减，存酒回到作废前的状态）。
                     if ("approved".equals(decision) && onApprove != null) {
                         onApprove.accept(resolved);
                     } else if ("rejected".equals(decision)) {
@@ -403,9 +403,15 @@ public class InventoryHighValueReviewService {
         }
     }
 
-    /** reject 收口：报损/盘点差异调整单由 {@code pending_review} 置 {@code rejected}（不扣减）。存酒维持冻结由 approve 不触发实现。 */
+    /** reject 收口：报损/盘点差异调整单由 {@code pending_review} 置 {@code rejected}（不扣减）；存酒作废不生效，存酒回到作废前的状态。 */
     private void applyRejectEffect(InventoryHighValueReviewRecord resolved) {
-        if (ADJUSTMENT_SUBJECTS.contains(resolved.subjectType())) {
+        if (SUBJECT_SAVED_BOTTLE_VOID.equals(resolved.subjectType())) {
+            // 第十八批 BD 段第 361 条 361-R1（第十八批裁决 14「必须照片＋视频＋主管复核才生效」；裁决 58 争议由门店主管二选一了结）：
+            // 驳回即作废不生效——原来存酒中的回到存酒中照常可取，原来争议中的回到争议中待门店主管了结。
+            SavedBottleRecord bottle = loadSavedBottleScoped(resolved.subjectId());
+            repository.saveSavedBottle(InventoryService.savedBottleWith(bottle,
+                    repository.findSavedBottleVoidPriorStatus(bottle.id()).orElseThrow(), bottle.remainingQuantity(), Instant.now()));
+        } else if (ADJUSTMENT_SUBJECTS.contains(resolved.subjectType())) {
             StockAdjustmentRecord adjustment = loadAdjustmentPending(resolved.subjectId());
             repository.saveStockAdjustment(withAdjustmentStatus(adjustment, "rejected"));
         } else if (SUBJECT_BAR_ORDER_BAD_DEBT.equals(resolved.subjectType())) {

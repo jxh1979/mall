@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.54
+// 文件版本：V0.55
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -1407,8 +1407,16 @@ public class FinanceService implements TerminationSettlementPort {
         // TK-21-R3：客人自助注销（客人 token 主体）为系统路径，按本人卡登记待退，不过员工的商户/项目范围闸。
         boolean customerSelfService = "customer".equals(authorizationService.currentActor().accountType());
         boolean systemPath = customerSelfService || accountClosure; // 366-R1：账户关闭同为系统路径
+        // 第十八批 BD 段 376-R1（PGM:659「在所分配的权限内可以查看、处理该角色可查看项目的数据」；ENUM:86「余额管理与退款均由长沙项目公司负责」）：
+        // 项目按退卡码可触及的项目判（含可跨项目角色勾选的项目），口径同本类财务退款执行台的 projectReach(...).covers；平台管理员不限。
+        java.util.function.Consumer<String> projectGate = resourceProject -> {
+            if (!systemPath && resourceProject != null && authorizationService.currentProjectScopeQuietly().isPresent()
+                    && !authorizationService.projectReach(authorizationService.currentActor(), "customer.stored_value.refund").covers(resourceProject)) {
+                throw ApiException.forbidden("CROSS_PROJECT_FORBIDDEN", "无权操作其他项目的财务数据");
+            }
+        };
         // 第十八批 AZ 段 278-R1（ENUM:86「余额管理与退款均由长沙项目公司负责」）：只拦别的商户的账号，不挂商户的项目侧账号可登记本项目通用卡的待退；
-        // 项目仍由下面的 checkProjectScope 核。商户编号取不抛错的 currentMerchantIdQuietly（同 requirePlatformReconciliationAccess）。
+        // 项目仍由下面的 projectGate 核。商户编号取不抛错的 currentMerchantIdQuietly（同 requirePlatformReconciliationAccess）。
         String callerMerchant = systemPath ? null : authorizationService.currentMerchantIdQuietly().orElse(null);
         if (callerMerchant != null && !callerMerchant.equals(merchantId)) {
             throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN", "无权操作其他商户的数据");
@@ -1424,7 +1432,7 @@ public class FinanceService implements TerminationSettlementPort {
                     || (sourceProject != null && !sourceProject.equals(original.projectId()))) {
                 throw ApiException.conflict("IDEMPOTENCY_KEY_CONFLICT", "该退款编号已用于其他来源或金额");
             }
-            if (!systemPath) checkProjectScope(original.projectId());
+            projectGate.accept(original.projectId());
             return original.id();
         }
         String project = sourceProject;
@@ -1433,7 +1441,7 @@ public class FinanceService implements TerminationSettlementPort {
             if (projects.size() == 1) project = projects.getFirst();
         }
         // 商户卡可无独立项目。无法唯一归属时登记待核实，不拿调用者项目补写原卡，也不允许出款。
-        if (!systemPath) checkProjectScope(project);
+        projectGate.accept(project);
         Instant now = Instant.now();
         FinanceRefundRecord saved = repository.saveRefund(new FinanceRefundRecord(
                 id, targetId, amount, reasonText, "original", DEFAULT_REFUND_DIRECTION, "requested", now,

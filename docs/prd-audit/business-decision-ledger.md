@@ -1,6 +1,6 @@
 # PRD 审计业务裁决台账
 
-文档版本：V1.11
+文档版本：V1.12
 状态：进行中
 迁移日期：2026-07-27
 当前事实源：三份立法 HTML 以既有冻结基线叠加 James 此前 M02 至 M08 的点名批准、全量审计 M001、M002 的逐项批准，以及本轮 2026-10-16 至 2026-10-17 业务 HTML 审计中 Q01 至 Q40 及子题实际明确批准且未被后续替代的裁决，和 2026-10-17 第二批 HTML 业务线推演审计（A–F 六线 64 条、停车章）的逐项批准，并叠加本轮 CG 70 项来源确认与 C01–C09、N01–N03 最终澄清及补全文稿中 F01、W01–W05 的整体修改批准（本文件末节）；本轮最终规则、未采纳或替代关系、现行版本与字节哈希见本文件末节。历史记录保留为各自当时事实，不恢复已被替代的建议。
@@ -10678,3 +10678,119 @@ HTML 的语义补齐与直接引用同步可在本批核验；70项中的业务�
   ④ 控制席补充（契约）：getRiskAlertDetail 的 200 响应由分页响应改引新 schema RiskAlertDetail（alert 预警主记录与 actions 处置动作流水，字段照 RiskAlertDetail、RiskAlertRecord、RiskAlertActionRecord 现码，蛇形键、中文说明）；claimRiskAlert、transferRiskAlert、escalateRiskAlert、resolveEvidenceRiskAlert、dismissRiskAlert 补 404 响应与 x-failure-codes RISK_ALERT_NOT_FOUND（RiskAlertService.requireScopedAlert 抛出），与 getRiskAlertDetail 写法一致；yaml 与 json 同改，操作数不变，security-scans 两份只改 OpenAPI SHA-256 行。
   ⑤ 意见 3 与意见 2 的全局部分本段不改：已登记待开发清单第 377 条（cnDate 不换算北京时间）、第 378 条（企微合规复核、经营分析、只读经营分析三页风险等级），待核实。
 - 18BC 落地位置补记·运行验收证据、快照、终验文档刷新（无新裁决）：业务提交 56256e20 之后，按第十八批裁决 25 重刷了运行验收证据：后端全量 7119 测，0 失败 0 错误；apps/web 构建通过；常规界面验收（接口全部 mock）实跑 40 条全过；真实后端界面验收未跑，runtime_ready=false。随后依次重生成闭环当前态快照、生产闭环缺口报告、界面验收报告、无上线指挥台。生成器没改。手改 docs/final-closed-loop-acceptance-audit-v0.1.md 与 docs/code-implementation-acceptance-audit-v0.1.md：前端单测源码计数改为 1979；被核文件行数都没变；后端全量与常规界面验收的数字、日期改为本次实跑值；写入 npm run verify:unit 实跑结果，五个工作区全过。交付门禁于 2026-11-19 23:23 UTC 在工作树逐项实跑子项，NAS 两项现场探测未跑。仍红的有两项：一是 coding-host-protection，它写死主仓路径，在工作树口径下必红，属工具口径，不做；二是 final-closed-loop-audit，如实留 2 条红（integration-ready、business-acceptance-ready），原因是校验器要求终验把联调、业务验收写成「是」，而裁决 25 定了不跑真实后端界面验收、运行验收未就绪，终验写的是「否」。verify:delivery-gates 总链仍是红的。
+
+18BD 落地位置补记（2026-11-20）：第十八批 BD 段（batch76）按 18BD 只读设计实现待开发清单第 361、364、367、376 条（储值与存酒组）；运行验收证据、终验文档在本段最后一个提交刷新；各条落地位置见下。本段追加时，原台账除文档版本升一版外，其他历史字节保持。
+
+- 18BD 落地位置补记·控制席判定（2026-11-20）：本段（第十八批 BD 段，batch76）实现待开发清单第 361、364、367、376 条（18BD 只读设计 b76-audit/d-sv-a.json、b76-audit/d-bar-e.json，两轮质疑者修订后定稿，无待裁题，无新登记旁见）。照设计、不另并入：第 367 条扣哪张卡由收银按客人所说在本酒吧商户卡与综合体通用卡两项中选、缺省本酒吧商户卡、不自动跨卡（依据 BSM:833），通用卡取账单桌台所在铺位的项目那张；酒吧通用卡消费按酒吧商户结算、按酒吧营业月挂长沙项目公司应付、走既有 general_card_consume 钱路（依据 ENUM:86、BSM:1704）。第 361 条驳回后存酒回到作废前状态（存酒中或争议中），另记 void_prior_status 一列（依据第十八批裁决 14、58，先例 bar_bills.abnormal_prior_status）。第 364 条储值台账用既有 customer.stored_value.view，范围同退卡查卡。第 376 条按入口权限码可触及项目判、认可可跨项目角色勾选的项目。本段从 f03d9e7a 开工（第四轮起一次一段）；汇总文件由合并前脚本 summary_tool.py 剥离与重写。实现工作流跑完时原控制席（Claude Code）触及周限额，自收尾起由 Cursor 代理（Claude Fable 5.2）接手控制席：收尾各项、复核与修复由其串行自做，没有起多视角复核工作流。
+- 第十八批 BD 段落地位置补记（甲组：第 376、367、364 条；本段新增 1 个操作 queryStoredValueLedger，新 schema StoredValueLedgerQueryRequest、StoredValueLedgerRow；本段无迁移）
+  376-R1 储值查卡、退卡、冻结与解冻按入口权限码可触及的项目判，认可可跨项目角色勾选的项目。
+- 依据：PGM:659「被分配了可跨项目角色的员工（含经岗位得到），在所分配的权限内可以查看、处理该角色可查看项目的数据。」「逐个勾选的只能查看被选中的项目」「商户账号持有这类角色也不能跨项目」；ENUM:86「余额管理与退款均由长沙项目公司负责。」；BSM:833「账户可冻结/解冻。」。
+- 改法：StoredValueRefundLookupService.requireRefundScope 加入口权限码参数，项目维改按 AuthorizationService.projectReach(...).covers 判（卡带项目的看卡项目，不带项目的商户卡看发卡商户经营项目）。最高权限、平台管理员、商户账号的行为不变。lookup 按所持码之一（优先退卡码）判。StoredValueService.refund 与 counterRefund 的首次和重放传 customer.stored_value.refund，freeze、unfreeze 传 customer.stored_value.freeze。FinanceService.recordStoredValuePayoutRefund 非系统路径的项目闸改用同口径 projectReach(...,"customer.stored_value.refund").covers。
+- 涉及操作：lookupStoredValueRefundCards、refundStoredValueAccount、counterRefundStoredValueAccount、freezeStoredValueAccount、unfreezeStoredValueAccount（只改说明）。页面矩阵 ADM-CUS-006 同步。
+- 测试：StoredValueCrossProjectRefundScopeJdbcIntegrationTests.crossProjectRoleHolderHandlesTickedProjectsGeneralCard、untickedProjectStaysForbidden。
+  367-R1 酒吧结账储值可按客人指定扣综合体通用卡，客人逐笔显示扣款酒吧。
+- 依据：BSM:1066「储值卡（通用卡先扣本金后扣赠送金且不可配置；商户级卡消费扣款顺序由发卡商户自定、由平台运营代为录入后台）」；BSM:833「①综合体通用卡：综合体内各商户通用」「消费时按客人指定的某一张卡扣减，不自动跨卡」；BSM:868「每笔扣款（商户、扣减的本金与赠送金各多少）」。
+- 改法：settleBarBill 的请求 BarBillSettleRequest 加 stored_value_card（merchant 或 general，缺省 merchant）。BarBillingService.settleBill 储值支在客人指定 general 时，按账单桌台所在铺位的项目取通用卡扣款，否则照旧扣本酒吧商户卡。StoredValueService.consumeInternal 扣通用卡不过员工商户范围闸。JdbcCustomerRepository.listStoredValueTransactionViews 的扣款商户并入酒吧结算行（listCustomerStoredValueTransactions 只改说明）。旧用例 MemberWalletServiceTests.merchantStaffCanOnlyOperateOwnMerchantCards 的通用卡内部扣款断言，以及 StoredValueNotificationIntegrationTest 的原用例（改名 generalCardInternalConsumeSkipsMerchantScope），依 BSM:833「综合体内各商户通用」改为扣款成功。
+- 测试：BarGeneralCardSettleJdbcIntegrationTests.generalCardPaysBarBillOfItsComplex、withoutChoiceStillChargesTheBarMerchantCard、generalCardOfAnotherComplexIsNotUsed、customerSeesTheBarOnGeneralCardDebit。
+  367-R2 酒吧账单通用卡消费并入月度结算，挂长沙项目公司对该酒吧商户的应付。
+- 依据：ENUM:86「在商户处消费商品或服务的，按该商户给客人的成交价格、扣除该笔消费所对应的通路费后与该商户结算，不另扣任何比例」；BSM:704「独立酒吧商户负责自己的经营、人员、设备、单一酒吧门票和店内收入。」；BSM:1704「长沙项目公司就通用卡余额的实际消费向各业态的经营主体直接付款结算，按三个付账日结清」；决策台账 DEC-R3-2026-08-04-02「长沙项目公司就通用卡余额消费向各业态付款结算，「可」改为「应当」」。
+- 改法：GeneralCardConsumptionSettlement.pendingGroups 并入酒吧账单通用卡消费（barsv_ 流水对应 settle_ 储值结算行），计入额为消费额减该笔已分摊的批次通路费；反结与退款回卡的回冲行照原公式冲减。收款方取该酒吧商户，营业月按该酒吧营业日。postGroup 不改，走既有 general_card_consume 钱路与付账日；不加迁移，不改契约。
+- 测试：BarGeneralCardSettleJdbcIntegrationTests.barBillGeneralCardConsumptionPostsMonthlyPayableToTheBarMerchant。
+  367-R3 后台账单结清页加扣款卡选择。
+- 依据：BSM:833「消费时按客人指定的某一张卡扣减，不自动跨卡」。
+- 改法：BarOrdersPage 储值分支加「扣款卡（按客人指定）」下拉（本酒吧商户卡/综合体通用卡，缺省商户卡），请求体带 storedValueCard。页面矩阵 ADM-BAR-002 同步。
+- 测试：M006BarStoredValue.test.tsx「选综合体通用卡：结账请求体带 storedValueCard general」；原用例补断言缺省 merchant。
+  364-R1 储值台账查询接口。
+- 依据：BSM:833「运营端提供储值台账，可按客人、商户、期间查询逐笔明细与余额构成。」「商户的员工只能管理本商户发行的储值卡。」；ENUM:86「每笔充值拆为本金与赠送金两段分别记账」；PGM:659「所有业务数据默认按项目隔离」「在所分配的权限内可以查看、处理该角色可查看项目的数据」。
+- 改法：新类 StoredValueLedgerService.query（嵌套记录 QueryRequest、LedgerRow），用既有码 customer.stored_value.view，范围同退卡查卡且按该码可触及的项目判。逐笔给变动后的本金、赠送金与余额（按卡的全部流水累计后再按期间与商户过滤）。LoyaltyController.queryStoredValueLedger 只委托；ServerModuleRoutes 把该路径归 governance。新增操作 queryStoredValueLedger。
+- 测试：StoredValueLedgerJdbcIntegrationTests.platformAdminSeesRunningPrincipalAndBonus、merchantFilterKeepsIssuedCardAndConsumptionAtMerchant、periodFilterExcludesOutside、scopeFollowsAccount、permissionAndPagingAreChecked；ServerModuleRoutesTests 台账路径断言。
+  364-R2 后台「储值台账」页 ADM-CUS-007。
+- 依据：BSM:833「运营端提供储值台账，可按客人、商户、期间查询逐笔明细与余额构成。」；PGM:687「打开敏感页这件事本身也要留痕，记下是谁打开的、什么时间打开的、打开的是哪一个页面、这一次看到的是哪些对象（哪个客人、哪个商户、哪些单据）」。
+- 改法：新页 StoredValueLedgerPage，路由 /admin/customers/stored-value-ledger，列入敏感页并登记本次看到的卡。页面矩阵新增 ADM-CUS-007 行；fieldLabels.ts 补台账七个响应键的中文名。翻页按本页满 20 笔判断，因后台客户端会把分页信封拍平。
+- 测试：StoredValueLedgerPage.test.tsx 四条（按手机号与期间查询，表格显示类型、卡与本金赠送金构成中文／按商户编号查询带 merchantId，本页满 20 笔时下一页带 page 2／敏感页登记本次看到的卡／无权限按钮禁用）。
+- 18BD 落地位置补记·第 361 条（乙组；361-R2 的契约与文档同步由契约代理和文档组另写）。本段新增操作 0 个、新权限码 0 个，迁移 1 个（V683，saved_bottles 加 void_prior_status）。
+  ① 361-R1：高价值存酒作废被主管复核驳回后，存酒回到作废前的状态
+    - 迁移 V683__saved_bottle_void_prior_status：saved_bottles 加 void_prior_status。取值为 stored、pending_identity_review、disputed，同 cancelSavedBottle 可作废的源态。研发阶段无存量，不回填。
+    - 作废（cancelSavedBottle，以及交接毁损，两者共用 InventoryService.applyCancel 的高价值分支）：冻结为 disputed_frozen 之前，经 InventoryRepository.updateSavedBottleVoidPriorStatus（JdbcInventoryRepository 单列写入）记下原状态。整行保存 saveSavedBottle 不含此列，不会冲掉。
+    - 复核驳回（reviewHighValue → InventoryService.reviewHighValue → InventoryHighValueReviewService.review → reviewInternal → applyRejectEffect）：
+      - 新增 saved_bottle_void 分支：按 InventoryRepository.findSavedBottleVoidPriorStatus 读出的原状态，经 InventoryService.savedBottleWith（改为包内 static，方法体不动）恢复存酒。
+      - 原来存酒中的，照常可取、转让、转存、再作废或登记争议；原来争议中的，仍由门店主管按裁决 58 二选一了结。
+      - 复核单照旧置 rejected，照旧记 inventory.high_value_review_decided。批准分支 applyDecisionEffect 不动。
+      - 不新增接口、字段、错误码，新列不进 SavedBottleRecord，也不进响应。
+    - 依据：
+      - BSM:1072「存酒作废需照片+视频双证据+主管复核」
+      - BSM:1196「退酒、报损、盘点差异、存酒作废等需主管复核或先审后行的场景一律以此判定」
+      - 第十八批裁决 14「高价值的报损、盘点差异、存酒作废，必须照片＋视频＋主管复核才生效」
+      - 第十八批裁决 58「门店主管核实后二选一：争议不成立，恢复为存酒中、照常可取；争议成立，走现有存酒作废（高价值的要照片＋视频＋主管复核，裁决 14），作废后按现有补存或赔付处理。」
+    - 测试：
+      - 新增 SavedBottleCancelDisputeJdbcIntegrationTests.highValueVoidRejectedRestoresStoredBottle、disputedHighValueVoidRejectedReturnsToDispute（真实 HTTP、真库）。
+      - InventoryServiceTests.highValueVoidRejectRestoresStoredBottle（原 highValueVoidRejectKeepsBottle 改名，断言由 disputed_frozen 改为 stored）。
+- 18BD 落地位置补记（契约，K-contract）：
+- 376-R1：
+  - 改法：refundStoredValueAccount、counterRefundStoredValueAccount 两个操作的 description 原写「卡带项目的只办本人项目的……不挂商户的项目侧账号……可办本项目通用卡……本人项目不在其中 403」，改为按退卡码 customer.stored_value.refund 可触及的项目判（本人项目与可跨项目角色勾选的项目，PGM:659；商户账号只到本人项目），不在其中 403 CROSS_PROJECT_FORBIDDEN，平台管理员不限；不带项目的商户卡按发卡商户的经营项目判，其中没有一个在可触及的项目内才 403。freezeStoredValueAccount、unfreezeStoredValueAccount 同样改，按冻结码 customer.stored_value.freeze。lookupStoredValueRefundCards 改为按所持查卡码（持退卡码按它，否则按冻结码）可触及的项目见卡，另见不带项目的通用卡。
+  - 不变：x-data-scope、x-failure-codes、请求与响应结构、操作数。
+  - 落地位置：以上五个 operationId 的 description；对应代码 StoredValueRefundLookupService.requireRefundScope 与 lookup、StoredValueService 退款、冻结、解冻的调用处、FinanceService.recordStoredValuePayoutRefund。
+  - 依据：PGM:659「在所分配的权限内可以查看、处理该角色可查看项目的数据」「逐个勾选的只能查看被选中的项目」「商户账号持有这类角色也不能跨项目」；ENUM:86「余额管理与退款均由长沙项目公司负责」。
+  - 测试：StoredValueCrossProjectRefundScopeJdbcIntegrationTests；契约校验 verify:openapi、verify:client-openapi。
+- 367-R1：
+  - 改法：BarBillSettleRequest 加 stored_value_card（string，enum merchant、general，缺省 merchant）。说明为：储值支付扣哪张卡，按客人指定；merchant＝本酒吧商户卡，general＝账单所在综合体（桌台所在铺位的项目）的通用卡；不自动跨卡。settleBarBill 的 description 末尾补第 367 条口径：general 扣通用卡，不过收银商户范围闸，指定的卡不存在 404 STORED_VALUE_ACCOUNT_NOT_FOUND，反结与退款回冲回原卡；x-failure-codes 补 STORED_VALUE_ACCOUNT_NOT_FOUND。listCustomerStoredValueTransactions 的 description 补：通用卡在酒吧结账的扣款行，merchant_id、merchant_name 为结账酒吧。
+  - 不变：操作数。
+  - 落地位置：schema BarBillSettleRequest；operationId settleBarBill、listCustomerStoredValueTransactions；对应代码 BarBillSettleRequest.storedValueCard、BarBillingService.settleBill、StoredValueService.consumeInternal、JdbcCustomerRepository.listStoredValueTransactionViews。
+  - 依据：BSM:833「①综合体通用卡：综合体内各商户通用」「消费时按客人指定的某一张卡扣减，不自动跨卡」；BSM:1066「储值卡（通用卡先扣本金后扣赠送金且不可配置；商户级卡消费扣款顺序由发卡商户自定、由平台运营代为录入后台）」。
+  - 测试：BarGeneralCardSettleJdbcIntegrationTests、M006BarStoredValue.test.tsx。
+- 367-R2、367-R3、364-R2、361-R2：契约无改动。
+- 364-R1：
+  - 改法：新增 1 个操作 queryStoredValueLedger（POST /api/v1/loyalty/stored-value/ledger/query）。属性：tags customer、x-auth-context staff-token、x-permission customer.stored_value.view、x-data-scope project-merchant、x-terminal-allowed web、x-idempotency-required false、审计成功与失败均 not_applicable；x-failure-codes VALIDATION_FAILED、PERMISSION_DENIED、PROJECT_SCOPE_REQUIRED。请求 schema StoredValueLedgerQueryRequest：phone、merchant_id、date_from、date_to、page、size，全部可选。响应为 SuccessResponse，data 为分页 items（schema StoredValueLedgerRow）、page、page_size、total。范围：最高权限与平台管理员全见；商户账号只见本商户发的卡，卡带项目的再限本人项目；其余账号按查看码可触及的项目，不带项目的商户卡按发卡商户的经营项目判。查询不扣单次授权，不记审计事件。新增 schema 2 个。
+  - 落地位置：operationId queryStoredValueLedger；schema StoredValueLedgerQueryRequest、StoredValueLedgerRow；对应代码 LoyaltyController.queryStoredValueLedger → StoredValueLedgerService.query（QueryRequest、LedgerRow）。
+  - 依据：BSM:833「运营端提供储值台账，可按客人、商户、期间查询逐笔明细与余额构成。」「商户的员工只能管理本商户发行的储值卡。」；ENUM:86「每笔充值拆为本金与赠送金两段分别记账」；PGM:659「所有业务数据默认按项目隔离」「在所分配的权限内可以查看、处理该角色可查看项目的数据」「商户账号持有这类角色也不能跨项目」。
+  - 测试：StoredValueLedgerJdbcIntegrationTests、StoredValueLedgerPage.test.tsx。
+- 361-R1：
+  - 改法：reviewHighValue 的 description 补：subject_type=saved_bottle_void 的复核单 approved 时存酒置 cancelled；rejected 时作废不生效，存酒回到作废前的状态（存酒中或争议中，作废前状态在发起作废时记下）。cancelSavedBottle 的 description 补：高价值作废先冻结为 disputed_frozen 待主管复核（reviewHighValue），驳回即恢复作废前状态。
+  - 不变：操作数、schema、审计事件、请求与响应结构；新列 void_prior_status 不进响应。
+  - 落地位置：operationId reviewHighValue、cancelSavedBottle；对应代码 InventoryHighValueReviewService.applyRejectEffect、InventoryService.cancelSavedBottle；本段迁移 V683（saved_bottles.void_prior_status）。
+  - 依据：BSM:1072「存酒作废需照片+视频双证据+主管复核」；第十八批裁决 14「高价值的报损、盘点差异、存酒作废，必须照片＋视频＋主管复核才生效」；第十八批裁决 58「门店主管核实后二选一：争议不成立，恢复为存酒中、照常可取；争议成立，走现有存酒作废（高价值的要照片＋视频＋主管复核，裁决 14），作废后按现有补存或赔付处理。」
+  - 测试：SavedBottleCancelDisputeJdbcIntegrationTests、InventoryServiceTests。
+- 本段契约增量：新增 1 个操作（queryStoredValueLedger）、新增 2 个 schema、改 1 个请求 schema（BarBillSettleRequest 加 stored_value_card）、改 9 个既有操作的说明（settleBarBill 另补 1 个失败码）；本段迁移 V683。
+- 18BD 汇合段 J（e2e 与门禁）：
+  - e2e 改法与位置：
+    - full-admin-remaining.spec.ts 的 remainingRoutes 与 openAdminRoute 加 ADM-CUS-007「储值台账」，断言两处：储值台账页（stored-value-ledger-page）可见、查询按钮（stored-value-ledger-query）可见。打开页面不自动查询，support/mock-api.ts 不加桩（364-R2；依据 BSM:833「运营端提供储值台账，可按客人、商户、期间查询逐笔明细与余额构成。」）。
+    - 视觉基线只重拍一张桌面图 full-admin-ops-readiness-desktop：侧栏新增「储值台账」导航项，侧栏滚到当前项的位置随之变化。差异已核，只在侧栏导航文字的 1 像素位移，正文区不变。另外三张基线（full-admin-overview-desktop 与两张移动端）没变。
+    - 酒吧结账表单的扣款卡下拉（367-R3）与存酒作废驳回恢复（361）没有 e2e 用到，没改。ADM-CUS-006 现有断言不受影响。
+  - 门禁结论：
+    - 后端全量 tests=7133 failures=0 errors=0，V683 已在一次性空库真迁。
+    - 前端 typecheck 0 错，vitest 362 files / 2098 tests 全过。
+    - customer-core、customer-app、customer-miniapp 单测全过。
+    - 安卓员工端 gradle test 127 条全过，android-app 编译通过。
+    - chromium 五份后台 spec 33 passed。
+    - 四份生成物在镜像重生成后 verify:p0-contract 全过。
+    - yaml 与 json 深比较一致。
+    - 本段增量：新增 1 个操作（queryStoredValueLedger，新 schema StoredValueLedgerQueryRequest、StoredValueLedgerRow；settleBarBill 的请求体 BarBillSettleRequest 加 stored_value_card）；本段迁移 V683（saved_bottles 加 void_prior_status）。
+- 18BD 文档组（D-docs）补记：按各实现段现码同步 PRD 与下位文档的现状句，不新增业务规则。
+  （1）第 376 条 376-R1：
+- 储值 PRD §8 新增现状：储值查卡、退卡、冻结、解冻按入口权限码可触及的项目判（本人项目与可跨项目角色勾选的项目）。退卡按 customer.stored_value.refund，冻结、解冻按 customer.stored_value.freeze，查卡按所持码；商户账号仍只到本人项目。
+- 储值 PRD §7 的 278 现状与 §8 的 365 现状，在「本人项目」处就地注明新口径。
+- 平台治理 PRD §12 的 M724-F15 补记同步。
+- 落地位置：StoredValueRefundLookupService.requireRefundScope、StoredValueRefundLookupService.lookup、FinanceService.recordStoredValuePayoutRefund；契约 lookupStoredValueRefundCards、refundStoredValueAccount、counterRefundStoredValueAccount、freezeStoredValueAccount、unfreezeStoredValueAccount。
+- 依据：PGM:659「被分配了可跨项目角色的员工（含经岗位得到），在所分配的权限内可以查看、处理该角色可查看项目的数据」；ENUM:86「余额管理与退款均由长沙项目公司负责」。
+- 测试：StoredValueCrossProjectRefundScopeJdbcIntegrationTests。
+  （2）第 367 条 367-R1～367-R3：
+- 储值 PRD §6 与酒吧 PRD §6「支付与收款通则」新增现状：酒吧结账储值按客人指定扣本酒吧商户卡（缺省）或账单所在综合体（桌台所在铺位的项目）的通用卡，不自动跨卡；客人没有该卡 404 STORED_VALUE_ACCOUNT_NOT_FOUND；后台结清页加扣款卡选择。
+- 客人「我的余额」逐笔显示扣款酒吧，同步写进客人端 PRD §3。
+- 储值 PRD §4.1、财务 PRD §4B.1 新增 367-R2 现状：酒吧通用卡消费并入通用卡消费结算，收款主体为该酒吧商户，按酒吧营业日定营业月，计入额扣该笔已分摊的批次通路费，回冲同月冲减、跨月另挂追收；财务 PRD 的 350-R1 现状随注。
+- 落地位置：settleBarBill（BarBillSettleRequest.stored_value_card）、listCustomerStoredValueTransactions、BarBillingService.settleBill、StoredValueService.consumeInternal、JdbcCustomerRepository.listStoredValueTransactionViews、GeneralCardConsumptionSettlement.pendingGroups、BarOrdersPage。
+- 依据：BSM:833「①综合体通用卡：综合体内各商户通用」「消费时按客人指定的某一张卡扣减，不自动跨卡」；BSM:1066；ENUM:86「在商户处消费商品或服务的，按该商户给客人的成交价格、扣除该笔消费所对应的通路费后与该商户结算，不另扣任何比例」；BSM:704；BSM:1704。
+- 测试：BarGeneralCardSettleJdbcIntegrationTests、M006BarStoredValue.test.tsx。
+  （3）第 364 条 364-R1、364-R2：
+- 储值 PRD §5 新增现状，§12 加指引；§5 原「运营端三维台账尚未落地」改为只剩活动来源引用未落地。
+- 储值开发设计 §6A 的缺口里删去运营端三维储值台账。
+- 平台治理 PRD §15A.3 敏感页清单加 ADM-CUS-007 储值台账，共 33 页。
+- 落地位置：queryStoredValueLedger（StoredValueLedgerQueryRequest、StoredValueLedgerRow）、StoredValueLedgerService.query、LoyaltyController.queryStoredValueLedger、StoredValueLedgerPage（ADM-CUS-007）。
+- 依据：BSM:833「运营端提供储值台账，可按客人、商户、期间查询逐笔明细与余额构成。」；PGM:659；PGM:687。
+- 测试：StoredValueLedgerJdbcIntegrationTests、StoredValueLedgerPage.test.tsx。
+  （4）第 361 条 361-R1：
+- 酒吧 PRD §7.6.4 与供应链 PRD §7.4 新增现状：高价值存酒作废经主管复核驳回即作废不生效，存酒回到作废前的状态（存酒中或争议中），作废前状态记在 saved_bottles.void_prior_status。
+- 需求追溯矩阵 REQ-32 补「reject 回到作废前状态」。
+- 落地位置：reviewHighValue、cancelSavedBottle、InventoryHighValueReviewService.applyRejectEffect、InventoryService.applyCancel；本段迁移 V683。
+- 依据：BSM:1072「存酒作废需照片+视频双证据+主管复核」；第十八批裁决 14「高价值的报损、盘点差异、存酒作废，必须照片＋视频＋主管复核才生效」；第十八批裁决 58。
+- 测试：SavedBottleCancelDisputeJdbcIntegrationTests、InventoryServiceTests。
+  文档组本身：不新增操作、不新增迁移。

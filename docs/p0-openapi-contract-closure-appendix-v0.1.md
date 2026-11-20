@@ -1,4 +1,4 @@
-# P0 OpenAPI 权限、事件、任务追溯收口附录 V0.87
+# P0 OpenAPI 权限、事件、任务追溯收口附录 V0.88
 
 ## 1. 文档定位
 
@@ -14,11 +14,11 @@
 
 | 检查项 | 当前结果 | 执行结论 |
 |---|---:|---|
-| OpenAPI operation 数 | 1401 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
+| OpenAPI operation 数 | 1402 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
 | OpenAPI 权限/通用权限状态数 | 445 | 人工权限矩阵正文未覆盖 344 项；缺口以本文第 3 节补齐 |
-| OpenAPI 成功/失败事件数 | 2802 | 人工事件矩阵正文未覆盖 2753 项；完整事件字典以本文第 4 节为准 |
-| operation 级任务追溯 | 1401 | 人工任务映射正文未逐项覆盖 1395 个 operation；逐 operation 映射以本文第 5 节为准 |
-| 写接口数量 | 861 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
+| OpenAPI 成功/失败事件数 | 2804 | 人工事件矩阵正文未覆盖 2755 项；完整事件字典以本文第 4 节为准 |
+| operation 级任务追溯 | 1402 | 人工任务映射正文未逐项覆盖 1396 个 operation；逐 operation 映射以本文第 5 节为准 |
+| 写接口数量 | 862 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
 
 ## 3. 权限码与认证上下文补充表
 
@@ -192,7 +192,7 @@
 | `customer.stored_value.freeze` | staff-token | project | 2 | freezeStoredValueAccount, unfreezeStoredValueAccount | OpenAPI 补充，以本附录为准 |
 | `customer.stored_value.refund` | staff-token | merchant, platform, project, project-merchant | 8 | refundStoredValueAccount, configureStoredValueMerchantRefundRule, getStoredValueMerchantRefundRule, configureStoredValueMerchantCard, counterRefundStoredValueAccount, lookupStoredValueRefundCards, getMerchantCardExitNoticePolicy, saveMerchantCardExitNoticePolicy | OpenAPI 补充，以本附录为准 |
 | `customer.stored_value.topup` | customer-token | customer | 2 | customerStoredValueTopup, customerStoredValueSettle | OpenAPI 补充，以本附录为准 |
-| `customer.stored_value.view` | customer-token | customer | 2 | customerStoredValueAccount, customerStoredValueAccounts | OpenAPI 补充，以本附录为准 |
+| `customer.stored_value.view` | customer-token, staff-token | customer, project-merchant | 3 | customerStoredValueAccount, customerStoredValueAccounts, queryStoredValueLedger | OpenAPI 补充，以本附录为准 |
 | `customer.voucher.manage` | staff-token | merchant | 3 | createVoucherDefinition, issueVouchers, revokeVoucher | OpenAPI 补充，以本附录为准 |
 | `customer.voucher.redeem` | staff-token | merchant | 2 | redeemVoucher, previewVoucherRedemption | OpenAPI 补充，以本附录为准 |
 | `customer.voucher.view` | customer-token, staff-token | customer, merchant | 5 | customerVoucherWallet, listVoucherDefinitions, listVoucherInstances, listVoucherRedemptions, listVoucherOverview | OpenAPI 补充，以本附录为准 |
@@ -2622,6 +2622,8 @@
 | `not_applicable` | failure | `previewDataCleanup` | `POST` | `/api/v1/ops/data-cleanup/preview` | OPS-生产前置 | `data.cleanup.request` | 接口级事件，以本附录为准 |
 | `not_applicable` | success | `queryAuditOperationEvents` | `GET` | `/api/v1/audit/operation-events` | P0-待归类 | `audit.operation_log.view` | 接口级事件，以本附录为准 |
 | `not_applicable` | failure | `queryAuditOperationEvents` | `GET` | `/api/v1/audit/operation-events` | P0-待归类 | `audit.operation_log.view` | 接口级事件，以本附录为准 |
+| `not_applicable` | success | `queryStoredValueLedger` | `POST` | `/api/v1/loyalty/stored-value/ledger/query` | CUS-客人端 | `customer.stored_value.view` | 接口级事件，以本附录为准 |
+| `not_applicable` | failure | `queryStoredValueLedger` | `POST` | `/api/v1/loyalty/stored-value/ledger/query` | CUS-客人端 | `customer.stored_value.view` | 接口级事件，以本附录为准 |
 | `not_applicable` | success | `readFacilityWorkOrderCustomerMedia` | `GET` | `/api/v1/facility/work-orders/{work_order_id}/customer-media/{media_id}/file` | P0-待归类 | `facility.work_order.manage` | 接口级事件，以本附录为准 |
 | `not_applicable` | failure | `readFacilityWorkOrderCustomerMedia` | `GET` | `/api/v1/facility/work-orders/{work_order_id}/customer-media/{media_id}/file` | P0-待归类 | `facility.work_order.manage` | 接口级事件，以本附录为准 |
 | `not_applicable` | success | `readStudentCertificationFile` | `GET` | `/api/v1/student-certifications/{certification_id}/files/{index}` | CUS-客人端 | `ticket.student_cert.review` | 接口级事件，以本附录为准 |
@@ -3680,6 +3682,7 @@
 | CUS-客人端 | `previewCustomerVoucherTransfer` | `GET` | `/api/v1/customer/voucher-transfers/preview` | 领取预览(打开链接/二维码,不算领取) | `not_applicable` | `not_applicable` / `not_applicable` | miniapp, app | operation 级补充 |
 | CUS-客人端 | `previewVoucherRedemption` | `POST` | `/api/v1/vouchers/redemptions/preview` | 按客人出示的券码查券（只读：不改券状态、不落惰性过期、不消费码、不动库存与预占） | `customer.voucher.redeem` | `voucher.redeem_previewed` / `voucher.redeem_preview_failed` | staff_work_phone, kiosk | operation 级补充 |
 | CUS-客人端 | `publishCustomerHomeContent` | `POST` | `/api/v1/home-contents/{project_id}/publish` | 提交发布客人端首页综合体介绍与活动公告（审批后生效） | `customer.home_content.manage` | `customer.home_content_published` / `customer.home_content_publish_failed` | web | operation 级补充 |
+| CUS-客人端 | `queryStoredValueLedger` | `POST` | `/api/v1/loyalty/stored-value/ledger/query` | 储值台账查询（按客人、商户、期间查储值逐笔明细与余额构成；手机号走请求体不进 URL） | `customer.stored_value.view` | `not_applicable` / `not_applicable` | web | operation 级补充 |
 | CUS-客人端 | `rateCustomerComplaint` | `POST` | `/api/v1/customer/complaints/{work_order_id}/satisfaction` | 客人对本人投诉评满意度 | `not_applicable` | `customer.complaint_rated` / `customer.complaint_rate_failed` | app, miniapp | operation 级补充 |
 | CUS-客人端 | `readStudentCertificationFile` | `GET` | `/api/v1/student-certifications/{certification_id}/files/{index}` | 回读学生证件照片 | `ticket.student_cert.review` | `not_applicable` / `not_applicable` | web | operation 级补充 |
 | CUS-客人端 | `redeemCustomerPoints` | `POST` | `/api/v1/customer/points/redemptions` | 提交积分兑换 | `not_applicable` | `customer.points.redeem` / `customer.points.redeem_failed` | app, miniapp | operation 级补充 |

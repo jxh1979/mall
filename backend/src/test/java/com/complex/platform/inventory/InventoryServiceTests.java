@@ -1,6 +1,6 @@
 package com.complex.platform.inventory;
 
-// 文件版本：V0.15
+// 文件版本：V0.16
 
 import com.complex.platform.support.InMemoryAuditEventRepository;
 import com.complex.platform.support.InMemoryIdempotencyRepository;
@@ -1509,9 +1509,9 @@ class InventoryServiceTests {
         assertThat(inventoryRepository.savedBottleById(bottle.id()).orElseThrow().status()).isEqualTo("disputed_frozen");
     }
 
-    // R5 T6: 主管 reject → 存酒保留（维持 disputed_frozen，不作废）
+    // 第十八批 BD 段第 361 条 361-R1（第十八批裁决 14「必须照片＋视频＋主管复核才生效」）：主管 reject → 作废不生效，存酒回到作废前的 stored
     @Test
-    void highValueVoidRejectKeepsBottle() {
+    void highValueVoidRejectRestoresStoredBottle() {
         InventoryItemRecord item = createHighValueItem("hv-reject");
         SavedBottleRecord bottle = service.createSavedBottle(new SavedBottleRequest(
                 "saved-hv-reject", null, List.of(), "customer_1", "bar_1",
@@ -1528,7 +1528,7 @@ class InventoryServiceTests {
                         "review-reject", "rejected", "insufficient"));
         assertThat(decided.reviewStatus()).isEqualTo("rejected");
         assertThat(inventoryRepository.savedBottleById(bottle.id()).orElseThrow().status())
-                .isEqualTo("disputed_frozen");
+                .isEqualTo("stored");
     }
 
     // 双证据闭环：附件 id 不存在 → 拒（改造前只校列表非空，随手编两个字符串就算「有双证据」）。
@@ -3723,6 +3723,19 @@ class InventoryServiceTests {
         @Override
         public void updateSavedBottleCancelReason(String savedBottleId, String reason) {
             savedBottleCancelReasons.put(savedBottleId, reason);
+        }
+
+        // 第十八批 BD 段 361-R1：作废前状态单列（库内 saved_bottles.void_prior_status）。
+        final Map<String, String> savedBottleVoidPriorStatuses = new HashMap<>();
+
+        @Override
+        public void updateSavedBottleVoidPriorStatus(String savedBottleId, String priorStatus) {
+            savedBottleVoidPriorStatuses.put(savedBottleId, priorStatus);
+        }
+
+        @Override
+        public Optional<String> findSavedBottleVoidPriorStatus(String savedBottleId) {
+            return Optional.ofNullable(savedBottleVoidPriorStatuses.get(savedBottleId));
         }
 
         public Optional<SavedBottleRecord> savedBottleById(String id) {

@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import java.util.List;
 
@@ -8,6 +8,8 @@ import java.util.List;
  * 结账请求。第十批 TK-28：voucherCode / voucherInstanceId 二选一可选——本次结账抵扣一张本商户折扣券
  * （操作员裁决「一次结账一张」，两项同填即拒绝）。
  * 第十一批 TK-04-R2：memberPhone 可选——收银现场录入会员号（即注册手机号）识别本单会员，走客人查询专门通道留痕（BSM L822、PGM L878）。
+ * 第十八批 BD 段第 367 条 367-R1（BSM:833「①综合体通用卡：综合体内各商户通用」「消费时按客人指定的某一张卡扣减，不自动跨卡」）：
+ * storedValueCard 可选——储值支付扣哪张卡，按客人指定：general＝账单所在综合体的通用卡，其余（缺省 merchant）＝本酒吧商户卡。
  */
 public record BarBillSettleRequest(
         String idempotencyKey,
@@ -22,8 +24,17 @@ public record BarBillSettleRequest(
         String smsCode,
         String voucherCode,
         String voucherInstanceId,
-        String memberPhone
+        String memberPhone,
+        String storedValueCard
 ) {
+    public BarBillSettleRequest(String idempotencyKey, String operatorNote, List<String> evidenceAttachmentIds,
+            String paymentId, Long settlementAmountCent, String paymentChannel, String cashierStaffId,
+            String posTransactionNo, String phone, String smsCode, String voucherCode, String voucherInstanceId,
+            String memberPhone) {
+        this(idempotencyKey, operatorNote, evidenceAttachmentIds, paymentId, settlementAmountCent, paymentChannel,
+                cashierStaffId, posTransactionNo, phone, smsCode, voucherCode, voucherInstanceId, memberPhone, null);
+    }
+
     public BarBillSettleRequest(String idempotencyKey, String operatorNote, List<String> evidenceAttachmentIds,
             String paymentId, Long settlementAmountCent, String paymentChannel, String cashierStaffId,
             String posTransactionNo, String phone, String smsCode, String voucherCode, String voucherInstanceId) {

@@ -34,6 +34,7 @@ public class LoyaltyController {
     private final AuditedOperationExecutor operations;
     private final AuditEventService audit;
     private final StoredValueRefundLookupService refundLookupService;
+    private final StoredValueLedgerService ledgerService;
 
     // 第十八批 N 段第 124 条 124-R5（PGM L966「已拍板：所有有过程的业务动作都必须留痕……」、L738「访问被拒绝也要留痕……」）：写口任一步失败
     // 经 AuditedOperationExecutor.recordingFailure 落 OpenAPI 声明的 x-audit-event-failure 再原样抛出；服务层原本不写成功事件的，
@@ -41,7 +42,7 @@ public class LoyaltyController {
     public LoyaltyController(LoyaltyService service,
                              StoredValueService storedValueService, CustomerRepository repository,
                              CustomerService customerService, AuditedOperationExecutor operations, AuditEventService audit,
-                             StoredValueRefundLookupService refundLookupService) {
+                             StoredValueRefundLookupService refundLookupService, StoredValueLedgerService ledgerService) {
         this.service = service;
         this.storedValueService = storedValueService;
         this.repository = repository;
@@ -49,6 +50,7 @@ public class LoyaltyController {
         this.operations = operations;
         this.audit = audit;
         this.refundLookupService = refundLookupService;
+        this.ledgerService = ledgerService;
     }
 
     /** 积分虚拟券核销领取(店员端):库存足则扣库存领实物,缺货则退回积分。 */
@@ -158,6 +160,18 @@ public class LoyaltyController {
             @RequestBody CustomerAccountLookupRequest request
     ) {
         return ApiResponse.ok(refundLookupService.lookup(request == null ? null : request.phone()));
+    }
+
+    /**
+     * 第十八批 BD 段第 364 条 364-R1（BSM:833「运营端提供储值台账，可按客人、商户、期间查询逐笔明细与余额构成。」）：储值台账查询。
+     * 手机号走请求体、不进 URL（AUD-020）；查询不扣单次授权（同退卡查卡）。
+     */
+    @PostMapping("/stored-value/ledger/query")
+    @com.complex.platform.access.DoesNotConsumeSingleUseGrant
+    public ApiResponse<PageResponse<StoredValueLedgerService.LedgerRow>> queryStoredValueLedger(
+            @RequestBody(required = false) StoredValueLedgerService.QueryRequest request
+    ) {
+        return ApiResponse.ok(ledgerService.query(request));
     }
 
     // ---- B1d⑤ phase3：商户级卡退款规则配置（发卡商户自设可否退/比例）----
