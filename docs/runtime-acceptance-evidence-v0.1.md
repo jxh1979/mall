@@ -16,11 +16,11 @@
 
 | 绑定项 | 当前值 |
 |---|---|
-| 生成时的 Git HEAD | `6c3a051b43ed17a5eb65a4e92a3a565672a75d69`（feature/business-code-batch79-20261106） |
+| 生成时的 Git HEAD | `460c0c0e9041827249816ff64a987b358dc33d2a`（feature/business-code-batch80-20261106） |
 | 生成时工作树 | 干净 |
-| 源码指纹 sha256 | `51f7dc44d1a1902c48c8b3d041a723727d76ef8fc99795b72c100828b5e092ae` |
-| 指纹覆盖文件数 | 3592 |
-| 生成时间 | 2026-11-20T09:07:41.976Z |
+| 源码指纹 sha256 | `46cfd08c71432062e0b7f9b22483276cccefa4051b40e95a5ed7cb09e649f8e9` |
+| 指纹覆盖文件数 | 3595 |
+| 生成时间 | 2026-11-20T10:15:27.442Z |
 | 最大有效天数 | 30 |
 
 > 校验规则（`--check`）：若当前源码指纹与本文记录不一致（源码已变更），或本证据超过最大有效天数，则立即 FAIL；陈旧证据不再自欺 PASS。
@@ -50,12 +50,12 @@
 
 | 指标 | 当前值 |
 |---|---:|
-| Surefire suites | 657 |
-| tests | 7147 |
+| Surefire suites | 660 |
+| tests | 7162 |
 | failures | 0 |
 | errors | 0 |
 | skipped | 0 |
-| latest_mtime | 2026-11-20T09:05:54.773Z |
+| latest_mtime | 2026-11-20T10:13:40.170Z |
 
 ## 4. Web 与 UI 验收证据
 
