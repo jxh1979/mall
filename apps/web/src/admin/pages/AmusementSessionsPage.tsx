@@ -1,4 +1,4 @@
-// 文件版本：V0.08
+// 文件版本：V0.09
 import React from "react";
 import { formatActionResult } from "../components/ActionResultView";
 import { AdminDataState } from "../components/AdminDataState";
@@ -436,7 +436,7 @@ export function AmusementSessionsPage({ api, setActionResult, setGlobalError, ef
                 <tr data-testid="amusement-entitlements-empty-row"><td colSpan={5} className="admin-empty-cell">{TEXT.entitlementEmpty}</td></tr>
               ) : entitlements.map((row) => (
                 <tr key={row.id ?? row.entitlementType} data-testid={`amusement-entitlement-row-${row.entitlementType}`}>
-                  <td>{display(row.entitlementType)}</td>
+                  <td>{formatBusinessStatus(row.entitlementType)}</td>
                   <td>{entitlementStatusLabel(row)}</td>
                   <td>{display(row.archiveReason)}</td>
                   <td>{display(row.deleteReason)}</td>

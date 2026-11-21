@@ -34,7 +34,7 @@ function envelope(items: unknown[]): Response {
 
 type Call = { url: string; method: string; body: Record<string, unknown> | null };
 
-function makeApi(calls: Call[]): AdminApi {
+function makeApi(calls: Call[], active: unknown[] = ACTIVE_ENTITLEMENTS): AdminApi {
   vi.stubGlobal(
     "fetch",
     vi.fn().mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
@@ -42,7 +42,7 @@ function makeApi(calls: Call[]): AdminApi {
       const method = String(init?.method ?? "GET").toUpperCase();
       calls.push({ url, method, body: init?.body ? JSON.parse(String(init.body)) : null });
       if (url.includes("/entitlements")) {
-        return Promise.resolve(envelope(url.includes("include_archived=true") ? ARCHIVED_ENTITLEMENTS : ACTIVE_ENTITLEMENTS));
+        return Promise.resolve(envelope(url.includes("include_archived=true") ? ARCHIVED_ENTITLEMENTS : active));
       }
       if (url.includes("/amusement/projects")) return Promise.resolve(envelope(PROJECTS));
       return Promise.resolve(envelope([]));
@@ -53,9 +53,9 @@ function makeApi(calls: Call[]): AdminApi {
 
 const ADMIN_PERMS: EffectivePermissionsState = { status: "ready", value: { grants: [], denies: [], wildcard: true } };
 
-function renderPage(calls: Call[], setGlobalError = vi.fn()) {
+function renderPage(calls: Call[], setGlobalError = vi.fn(), active?: unknown[]) {
   const fullProps: AdminPageProps = {
-    api: makeApi(calls),
+    api: makeApi(calls, active),
     user: { id: "u1", username: "admin", accountType: "platform_admin" },
     setActionResult: vi.fn(),
     setGlobalError,
@@ -117,5 +117,16 @@ describe("AmusementSessionsPage 权益绑定软删（V341 / R-12）", () => {
 
     fireEvent.click(screen.getByTestId("amusement-entitlement-restore-amusement_single"));
     await waitFor(() => expect(calls.some((c) => c.method === "POST" && c.url.includes("/entitlements/amusement_single/unarchive"))).toBe(true));
+  });
+
+  it("第 413 条：权益绑定表「权益类型」列按共用码表显示中文，游乐类显示「游乐」、不露 amusement 原码（PGM:287、ENUM:36）", async () => {
+    const calls: Call[] = [];
+    renderPage(calls, vi.fn(), [
+      { id: "ament_3", project_id: "amuse-1", entitlement_type: "amusement", created_at: "2026-07-01T00:00:00Z", delete_status: "none" },
+    ]);
+    await waitFor(() => expect(screen.getByTestId("amusement-entitlement-row-amusement")).toBeTruthy());
+    const row = screen.getByTestId("amusement-entitlement-row-amusement");
+    expect(row.querySelector("td")?.textContent).toBe("游乐");
+    expect(row.textContent).not.toContain("amusement");
   });
 });

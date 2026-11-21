@@ -1,6 +1,6 @@
 # PRD 审计业务裁决台账
 
-文档版本：V1.22
+文档版本：V1.23
 状态：进行中
 迁移日期：2026-07-27
 当前事实源：三份立法 HTML 以既有冻结基线叠加 James 此前 M02 至 M08 的点名批准、全量审计 M001、M002 的逐项批准，以及本轮 2026-10-16 至 2026-10-17 业务 HTML 审计中 Q01 至 Q40 及子题实际明确批准且未被后续替代的裁决，和 2026-10-17 第二批 HTML 业务线推演审计（A–F 六线 64 条、停车章）的逐项批准，并叠加本轮 CG 70 项来源确认与 C01–C09、N01–N03 最终澄清及补全文稿中 F01、W01–W05 的整体修改批准（本文件末节）；本轮最终规则、未采纳或替代关系、现行版本与字节哈希见本文件末节。历史记录保留为各自当时事实，不恢复已被替代的建议。
@@ -11342,3 +11342,29 @@ HTML 的语义补齐与直接引用同步可在本批核验；70项中的业务�
   校验：node tools/verify-full-admin-page-matrix.mjs 通过；git diff --check 无输出。
 - 18BU 合并前变基（2026-11-21）：本段自 83efbc89 变基到 origin/main 7a19a646；合并时 OpenAPI 共 1403 个操作（主干 1403）、info.version V0.95、决策台账 V1.22，Flyway 最新 V724（共 621 个迁移）。版本行、契约版本、计数与 SHA、生成物、台账补记与 PRD 修订行由合并前脚本按新主干统一重写。
 - 18BU 落地位置补记·运行验收证据、快照、终验文档刷新（无新裁决）：业务提交 85aa58a1 之后，按第十八批裁决 25 重刷了运行验收证据：后端全量 7213 测，0 失败 0 错误；apps/web 构建通过；常规界面验收（接口全部 mock）实跑 40 条全过；真实后端界面验收未跑，runtime_ready=false。随后依次重生成闭环当前态快照、生产闭环缺口报告、界面验收报告、无上线指挥台。生成器没改。手改 docs/final-closed-loop-acceptance-audit-v0.1.md 与 docs/code-implementation-acceptance-audit-v0.1.md：前端单测源码计数改为 2025；被核文件行数都没变；后端全量与常规界面验收的数字、日期改为本次实跑值；写入 npm run verify:unit 实跑结果，五个工作区全过。交付门禁于 2026-11-21 09:46 UTC 在工作树逐项实跑子项，NAS 两项现场探测未跑。仍红的有两项：一是 coding-host-protection，它写死主仓路径，在工作树口径下必红，属工具口径，不做；二是 final-closed-loop-audit，如实留 2 条红（integration-ready、business-acceptance-ready），原因是校验器要求终验把联调、业务验收写成「是」，而裁决 25 定了不跑真实后端界面验收、运行验收未就绪，终验写的是「否」。verify:delivery-gates 总链仍是红的。
+
+18CI 落地位置补记（2026-11-20）：第十八批 CI 段（batch107）按 18CI 只读设计实现待开发清单第 413、414 条（后台显示中文与首页内容状态组）；运行验收证据、终验文档在本段最后一个提交刷新；各条落地位置见下。本段追加时，原台账除文档版本升一版外，其他历史字节保持。
+
+- 18CI 落地位置补记·控制席判定（2026-11-20）：本段（第十八批 CI 段，batch107）实现待开发清单第 413、414 条（18CI 只读设计 b107-audit/d6-ci.json，两轮质疑者修订后定稿，无待裁题）。控制席判定：照设计做 413-R1、414-R1；18BM 合并后变基时按内容定位。设计旁见（全局码表 entry 显示「入园」而 ENUM:36 写「入场」；首页内容送审后点「查询已发布内容」丢失待审原文，只有第十三批裁决第 5 条依据）设计旁见由控制席另行登记为待核实新条目（第 424 条起），本段不改。第五、六轮设计与修复代理的范围外旁见已登记为待开发清单第 388～446 条（待核实）。本段从 2bd98895 开工（第六轮 13 段并行），变基到 6068f50e 后收尾；汇总文件由合并前脚本 summary_tool.py 剥离与重写。
+- 18CI 落地位置补记·I1-d6-ci（第 413 条 413-R1、第 414 条 414-R1；本段新增 OpenAPI 操作 0、迁移 0、权限码 0，契约不改）
+  一、413-R1：项目与场次页权益绑定表「权益类型」列按共用码表显示中文。
+  - 改法：AmusementSessionsPage 权益绑定表（amusement-entitlements-table）的权益类型单元格，由原样显示改为 formatBusinessStatus（共用码表 packages/customer-core statusLabels，经后台 admin/i18n/statusLabels 转出），游乐类 amusement 显示「游乐」。
+  - 保留原码：行 key、行与操作按钮的 data-testid、接口路径里的权益类型码（系统内部标识符）。
+  - 不改：不新增码表条目；不改后端、契约、迁移、字典、页面矩阵。
+  - 落地位置：AmusementSessionsPage（权益绑定表权益类型列）。
+  - 依据：PGM:287「界面全中文（所有终端零英文）：……展示给用户的一切文字，包括菜单、页面标题、字段名、状态、枚举取值……必须全部为中文，不得出现任何英文」，同句「可以不用中文的只有四样……单据号、设备编号、二维码内容、系统内部标识符」；ENUM:36「权益类型」行「入场、游乐、酒水（赠饮/兑换券）……」；待开发清单第 413 条。
+  - 测试：AmusementSessionsPage.entitlementsoftdelete.test.tsx「第 413 条：权益绑定表「权益类型」列按共用码表显示中文，游乐类显示「游乐」、不露 amusement 原码（PGM:287、ENUM:36）」（makeApi 与 renderPage 加可选参数 active 透传）。
+  二、414-R1：首页内容区以有没有发布时间判断已发布，只有待审提交、从未发布的显示「尚未发布」。
+  - 改法：CustomerHomeContentSection 状态文字（customer-home-content-current）原来只在返回为空时显示「尚未发布」，改为返回为空或没有发布时间（published_at 为空）都显示「尚未发布」，有发布时间才显示「已发布于」加发布时间。
+  - 不改：getHomeContent 的返回形状不改，主管复核页 SupervisorReviewPage 仍靠它读待审原文；HomeContent 前端类型不改；查询后输入框回填不改。
+  - 落地位置：CustomerHomeContentSection（VenueBusinessHoursPage 内）状态文字，判据为 CustomerShowcaseService.getHomeContent 返回的 HomeContent.publishedAt（published_at）。
+  - 依据：BSM:857「查看综合体介绍、营业时间、活动公告、票务入口。」；第十三批裁决第 5 条「ROOT-03 客人端首页综合体介绍与活动公告：操作员选「上级审批后发布」：运营编辑后走审批，批准才对客人展示。」；待开发清单第 414 条。
+  - 测试：CustomerFacingSettingsSections.test.tsx「场地营业时间页：只有待审提交、从未发布过的项目，查询后显示「尚未发布」（第 414 条）」；CustomerShowcaseJdbcIntegrationTests.homeContentShownOnlyAfterApproval（扩）：首次提交被拦下后，以编辑人身份真实 HTTP GET 首页内容，断言 published_at 与 intro 为空、draft_intro 为本次提交原文，锁定前端依赖的契约。
+  - 门禁结论：后端全量（重建空库）0 红；后台前端 typecheck 与 vitest 全绿；verify:admin-result-labels、verify:ui-experience-acceptance 绿；tests/e2e 不改。
+- 18CI 契约（第 413、414 条）：本段不改 OpenAPI，新增操作 0 个，改动的既有操作 0 个，本段没有迁移，也没有权限码。413-R1 只改前端显示：AmusementSessionsPage 权益绑定表的权益类型改用 formatBusinessStatus。414-R1 只改前端判断：CustomerHomeContentSection 的状态文字改用 publishedAt 是否为空来判断。getCustomerHomeContent 的返回形状不变，现有说明已写明会返回已发布的 intro、announcement、published_by、published_at 和待审原文 draft_intro、draft_announcement、draft_submitted_by、draft_submitted_at，只有待审原文时发布字段为空。依据：BSM:857「查看综合体介绍、营业时间、活动公告、票务入口。」；第十三批裁决第 5 条「运营编辑后走审批，批准才对客人展示」。契约锁定测试：CustomerShowcaseJdbcIntegrationTests.homeContentShownOnlyAfterApproval（编辑人 GET，断言 published_at 为空、intro 为空、draft_intro 等于这次提交的原文）。
+- 第十八批 CI 段汇合（J）：
+  - e2e：I1-d6-ci 和 K-contract 的「e2e 要点」都是「无」。tests/e2e 下的 spec 与 mock 里没有引用 AmusementSessionsPage 权益绑定表、CustomerHomeContentSection 的选择器或文字（amusement-entitlement-*、customer-home-content-*、已发布于、尚未发布），所以 e2e 不改。4 张视觉基线都不是本段改的页面，没有重拍。
+  - 门禁结论：后端全量 --fresh 0 红；apps/web 的 typecheck 与 vitest 全量全绿；customer-app、customer-miniapp、customer-core 单测全绿；安卓员工端 gradle test 全绿，android-app 编译通过；chromium 后台五份 spec 全过。
+  - 契约：docs:operation-matrix、docs:openapi-closure、docs:data-isolation-spec、docs:domain-ownership-scope 重生成后没有差异，verify:p0-contract 通过。OpenAPI yaml 与 json 深比较一致。本段新增 0 个操作，没有改动的既有操作或 schema（getCustomerHomeContent 不变）；本段迁移 0 个（预留的 V780～V783 不用）。
+- 18CI 文档组（D-docs）：PGM PRD（docs/platform-governance-prd-v0.1.md）§2A.2 在第 378 条 378-R1 实现现状段之后，加第 413 条 413-R1 实现现状段。内容：项目与场次页 AmusementSessionsPage 的权益绑定表「权益类型」列按共用码表 formatBusinessStatus 显示中文，游乐类显示「游乐」；行标识与接口路径里的权益类型码保留原码。依据 PGM:287「全局原则 · 界面全中文（所有终端零英文）」、ENUM:36「权益类型」行「入场、游乐……」。客人端 PRD（docs/customer-app-miniapp-product-prd-v0.1.md）§3 主要功能「查看综合体介绍、营业时间、活动公告、票务入口。」下的 V541、V542 实现现状段末尾，补第 414 条 414-R1 句：后台「场地营业时间」页 CustomerHomeContentSection 查询首页内容时，按 getCustomerHomeContent 返回的 published_at 判断，只有待审原文、从未发布过的项目显示「尚未发布」。依据 BSM:857「查看综合体介绍、营业时间、活动公告、票务入口。」、第十三批裁决第 5 条「运营编辑后走审批，批准才对客人展示」。两份 PRD 各升一版，变更日志各加一行。其余 PRD、下位契约文档与矩阵按模式 grep 过，没有对应的现状句或「未实现」「待补」句，没改。测试名沿用 I1：AmusementSessionsPage.entitlementsoftdelete.test.tsx 新增的权益类型显示「游乐」用例；CustomerFacingSettingsSections.test.tsx 新增的只有待审原文显示「尚未发布」用例；CustomerShowcaseJdbcIntegrationTests.homeContentShownOnlyAfterApproval 新增的编辑人 GET 断言。
+- 18CI 合并前变基（2026-11-21）：本段自 6068f50e 变基到 origin/main cae07072；合并时 OpenAPI 共 1403 个操作（主干 1403）、info.version V0.95、决策台账 V1.23，Flyway 最新 V724（共 621 个迁移）。版本行、契约版本、计数与 SHA、生成物、台账补记与 PRD 修订行由合并前脚本按新主干统一重写。
