@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.15
+// 文件版本：V0.16
 
 import com.complex.platform.common.api.ApiException;
 
@@ -369,7 +369,7 @@ public class TicketingService {
                 TicketDynamicPricingRuleRecord.class,
                 TicketingWriteOperation.PUBLISH_DYNAMIC_PRICING_RULE,
                 () -> {
-                    // 第十八批 AS 段 297-R2：已上架跨域组合通票的动态价只存进草稿版，其余照现行发布。
+                    // 第十八批 AS 段 297-R2：已上架跨域组合通票的动态价只存进草稿版，其余照现行发布（第十八批 BP 段 300-R1 起已上架域内票同）。
                     TicketDynamicPricingRuleRecord saved = catalogService.stageDynamicPricingRule(id, request)
                             .orElseGet(() -> pricingService.publishDynamicPricingRule(id, request));
                     trail.putAll(catalogService.ruleVersionTrail(saved.ticketTypeId()));

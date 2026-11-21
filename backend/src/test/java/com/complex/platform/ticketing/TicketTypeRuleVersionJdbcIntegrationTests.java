@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -11,6 +11,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.complex.platform.access.AccessActor;
+import com.complex.platform.auth.SessionIssuer;
 import com.complex.platform.settlement.SettlementSettledConsumer;
 import com.complex.platform.support.AppendOnlyTestBypass;
 import com.complex.platform.support.PassPoolFixtures;
@@ -290,14 +291,18 @@ class TicketTypeRuleVersionJdbcIntegrationTests {
                 .andExpect(jsonPath("$.detail_code").value("TICKET_RULE_VERSION_PENDING"));
     }
 
-    /** 酒吧通票（酒吧入场有价＋零元赠酒＋零元平台出资餐饮小食）与单一酒吧门票不是跨域组合通票：照旧直接上架、不建规则版本。 */
+    /**
+     * 酒吧通票（酒吧入场有价＋零元赠酒＋零元平台出资餐饮小食）不是跨域组合通票：第十八批 BP 段 300-R1（第十八批裁决 74）起也须指定最终审批人（对应域主管公司的人），
+     * 不指定 400、票仍为草稿、不建版本（审批人分流见 DomainPassRuleVersion300Tests）；单一酒吧门票照旧直接上架、不建规则版本。
+     */
     @Test
-    void sameDomainPassAndSingleBarTicketPublishDirectly() throws Exception {
+    void domainPassNeedsFinalApproverWhileSingleBarTicketPublishesDirectly() throws Exception {
         String barPass = createTicketType("e1", 10000L, 100, null);
         bind(barPass, template(bar, "酒吧入场", "entry", null), 10000L, null).andExpect(status().isOk());
         bind(barPass, template(bar, "平台赠酒", "gift_drink", product), 0L, "platform_funded").andExpect(status().isOk());
         bind(barPass, template(restaurant, "餐饮小食", "dining", null), 0L, "platform_funded").andExpect(status().isOk());
-        publish(barPass, null).andExpect(status().isOk()).andExpect(jsonPath("$.data.status").value("published"));
+        publish(barPass, null).andExpect(status().isBadRequest()).andExpect(jsonPath("$.detail_code").value("VALIDATION_FAILED"));
+        assertThat(ticketStatus(barPass)).isEqualTo("draft");
         assertThat(JsonPath.<Integer>read(versions(barPass), "$.data.items.length()")).isZero();
 
         String single = createTicketType("e2", 5000L, 100, bar);
@@ -429,14 +434,15 @@ class TicketTypeRuleVersionJdbcIntegrationTests {
 
     /**
      * 第十八批裁决 62（控制席说明「已上架票加别域零元权益不受本裁决限制」）：已上架酒吧通票加有价游乐（误差内、超误差）、已上架纯游乐通票加有价酒吧入场（缺赠酒）
-     * 一律 409，绑定不落库、票不退回草稿、不建版本，失败留痕；加别域零元平台出资餐饮、加同一家吧的有价兑换券照现行。
+     * 一律 409，绑定不落库、票不退回草稿、不建新版本，失败留痕；加别域零元平台出资餐饮、加同一家吧的有价兑换券可以加。第十八批 BP 段 300-R1（第十八批裁决 74）起
+     * 两张域内票由最高权限本人上架（第 1 版生效），可以加的改动存进第 2 版草稿、现表不变。
      */
     @Test
     void publishedSingleDomainPassCannotTakePaidEntitlementFromAnotherDomain() throws Exception {
         String barPass = createTicketType("l1", 5000L, 100, null);
         bind(barPass, template(bar, "酒吧入场", "entry", null), 5000L, null).andExpect(status().isOk());
         bind(barPass, template(bar, "平台赠酒", "gift_drink", product), 0L, "platform_funded").andExpect(status().isOk());
-        publish(barPass, null).andExpect(status().isOk()).andExpect(jsonPath("$.data.status").value("published"));
+        masterPublish(barPass);
         String ride = template(park, "游乐入场", "entry", null);
 
         String key = "r7-l-" + UUID.randomUUID();
@@ -447,13 +453,13 @@ class TicketTypeRuleVersionJdbcIntegrationTests {
                 .andExpect(jsonPath("$.detail_code").value("TICKET_CROSS_DOMAIN_NEW_TYPE_REQUIRED"));
         assertThat(bindingCount(barPass)).isEqualTo(2);
         assertThat(ticketStatus(barPass)).isEqualTo("published");
-        assertThat(JsonPath.<Integer>read(versions(barPass), "$.data.items.length()")).isZero();
+        assertThat(JsonPath.<Integer>read(versions(barPass), "$.data.items.length()")).isEqualTo(1);
         assertThat(jdbc.queryForObject("SELECT count(*) FROM audit_events WHERE event_name = 'ticket_product_entitlement.bound_failed'"
                 + " AND event_result = 'failure' AND idempotency_key = ?", Integer.class, key)).isEqualTo(1);
 
         String parkPass = createTicketType("l2", 8000L, 100, null);
         bind(parkPass, template(park, "纯游乐入场", "entry", null), 8000L, null).andExpect(status().isOk());
-        publish(parkPass, null).andExpect(status().isOk()).andExpect(jsonPath("$.data.status").value("published"));
+        masterPublish(parkPass);
         bind(parkPass, template(bar, "新酒吧入场", "entry", null), 300L, null).andExpect(status().isConflict())
                 .andExpect(jsonPath("$.detail_code").value("TICKET_CROSS_DOMAIN_NEW_TYPE_REQUIRED"));
         assertThat(bindingCount(parkPass)).isEqualTo(1);
@@ -461,20 +467,22 @@ class TicketTypeRuleVersionJdbcIntegrationTests {
 
         bind(barPass, template(restaurant, "餐饮小食", "dining", null), 0L, "platform_funded").andExpect(status().isOk());
         bind(barPass, template(bar, "酒水兑换券", "gift_drink", product), 300L, null).andExpect(status().isOk());
-        assertThat(bindingCount(barPass)).isEqualTo(4);
+        assertThat(bindingCount(barPass)).isEqualTo(2);
         assertThat(ticketStatus(barPass)).isEqualTo("published");
+        String drafted = versions(barPass);
+        assertThat(JsonPath.<String>read(drafted, "$.data.items[0].status")).isEqualTo("draft");
+        assertThat(JsonPath.<Integer>read(drafted, "$.data.items[0].entitlements.length()")).isEqualTo(4);
     }
 
     /**
-     * 裁决 62 只管已上架的票：已上架酒吧通票加同一家吧的有价兑换券跌破误差，照 V369 退回草稿（非跨域行为不变）；草稿票再加有价游乐照现行写现表、不建版本；
-     * 改价过误差后发布即跨域组合通票首次发布，提交平台权限审批，获批上架、第 1 版生效。
+     * 裁决 62 只管已上架的票：未上架的酒吧通票再加同一家吧的有价兑换券与有价游乐照现行写现表、不建版本；改价过误差后发布即跨域组合通票首次发布，
+     * 提交平台权限审批，获批上架、第 1 版生效。（第十八批 BP 段 300-R1 起已上架酒吧通票的改动进草稿版、不再退回草稿，原「已上架后退回草稿」一段删去。）
      */
     @Test
     void draftTicketMayBecomeCrossDomainPassThroughApproval() throws Exception {
         String pass = createTicketType("m", 5000L, 100, null);
         bind(pass, template(bar, "酒吧入场", "entry", null), 5000L, null).andExpect(status().isOk());
         bind(pass, template(bar, "平台赠酒", "gift_drink", product), 0L, "platform_funded").andExpect(status().isOk());
-        publish(pass, null).andExpect(status().isOk()).andExpect(jsonPath("$.data.status").value("published"));
 
         bind(pass, template(bar, "酒水兑换券", "gift_drink", product), 2000L, null).andExpect(status().isOk());
         assertThat(ticketStatus(pass)).isEqualTo("draft");
@@ -494,15 +502,15 @@ class TicketTypeRuleVersionJdbcIntegrationTests {
     /**
      * 236-R4（BSM:756「订单保存基础价、动态价、全部命中资格价、最终选中价和规则版本。」；裁决 61「下单定价与出票都要改成读「当前生效版」」）与
      * 236-R6（BSM:1754「每项权益都必须绑定实际提供方和审批版本，避免悬空账。」）：第 1 版生效时下单 A，记第 1 版、按 199 元；加有价餐饮 30 元并改价
-     * 225 元的第 2 版获批后下单 B，记第 2 版、按 225 元，B 出票含有价餐饮；A 换版后才出票，所记仍是第 1 版；纯游乐通票（非跨域）的订单 C 不记版本。
-     * 三单游乐入场核销入账后，通票结算审阅流水分别显示第 1 版、第 2 版与空（不是 0）。
+     * 225 元的第 2 版获批后下单 B，记第 2 版、按 225 元，B 出票含有价餐饮；A 换版后才出票，所记仍是第 1 版；纯游乐通票（域内票，第十八批 BP 段 300-R1 起由
+     * 最高权限本人上架、第 1 版生效）的订单 C 记它的第 1 版。三单游乐入场核销入账后，通票结算审阅流水分别显示第 1 版、第 2 版与第 1 版。
      */
     @Test
     void ordersRecordRuleVersionInForceWhenPlacedAndSettlementReviewShowsIt() throws Exception {
         String pass = publishedComboPass("o");
         String parkPass = createTicketType("o2", 8000L, 100, null);
         bind(parkPass, template(park, "纯游乐入场", "entry", null), 8000L, null).andExpect(status().isOk());
-        publish(parkPass, null).andExpect(status().isOk()).andExpect(jsonPath("$.data.status").value("published"));
+        masterPublish(parkPass);
         salesContract(pass);
         salesContract(parkPass);
         String first = effectiveVersion(pass);
@@ -528,12 +536,12 @@ class TicketTypeRuleVersionJdbcIntegrationTests {
 
         String c = order(parkPass, 8000);
         issue(c);
-        assertThat(orderVersion(c)).isNull();
+        assertThat(orderVersion(c)).isEqualTo(effectiveVersion(parkPass));
 
         String rowA = settleRide(a, "a");
         String rowB = settleRide(b, "b");
         String rowC = settleRide(c, "c");
-        assertThat(ruleVersionNoBySettlementRow()).containsEntry(rowA, "1").containsEntry(rowB, "2").containsEntry(rowC, null);
+        assertThat(ruleVersionNoBySettlementRow()).containsEntry(rowA, "1").containsEntry(rowB, "2").containsEntry(rowC, "1");
     }
 
     /** 售票链既有前置：该票种已批准、已公告、已生效的销售合同（下单时锁定）。 */
@@ -681,6 +689,24 @@ class TicketTypeRuleVersionJdbcIntegrationTests {
                 {"idempotency_key": "%s", "entitlement_template_id": "%s", "quantity": 1,
                  "total_times": 1, "num_people": 1, "component_price_cent": %d, "cost_bearer": %s}
                 """.formatted(key, template, componentPriceCent, costBearer == null ? "null" : "\"" + costBearer + "\""));
+    }
+
+    /** 最高权限本人发布（BSM:576「持授权 U 盘密钥的最高权限本人发起的操作，不需要经过任何审批」）：不带最终审批人，即上架、本版生效。 */
+    private void masterPublish(String type) throws Exception {
+        mockMvc.perform(post("/api/v1/ticketing/ticket-types/" + type + "/publish").with(master()).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"idempotency_key\": \"r3-mpub-" + UUID.randomUUID() + "\", \"reason\": \"本人核对后上架\"}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.status").value("published"));
+    }
+
+    /** 最高权限本人（保留超管账号，组织 platform-company、无商户），经后台 Web 终端。 */
+    private static RequestPostProcessor master() {
+        AccessActor actor = new AccessActor(SessionIssuer.MASTER_USER_ID, SessionIssuer.MASTER_USERNAME,
+                SessionIssuer.MASTER_ACCOUNT_TYPE, "platform-company", null, "active");
+        return request -> {
+            request.addHeader("X-Terminal-Type", "web");
+            return authentication(new UsernamePasswordAuthenticationToken(actor, null,
+                    List.of(new SimpleGrantedAuthority("ROLE_P0_STAFF")))).postProcessRequest(request);
+        };
     }
 
     /** 后台发布：跨域组合通票带最终审批人。 */

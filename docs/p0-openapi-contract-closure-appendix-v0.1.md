@@ -1,4 +1,4 @@
-# P0 OpenAPI 权限、事件、任务追溯收口附录 V1.12
+# P0 OpenAPI 权限、事件、任务追溯收口附录 V1.13
 
 ## 1. 文档定位
 
@@ -4719,7 +4719,7 @@
 | TIC-票务权益 | `listTicketTransfers` | `GET` | `/api/v1/ticketing/ticket-transfers` | 查询门票转赠记录(客服纠纷排查,只读) | `ticket.transfer.read` | `ticket_transfer.viewed` / `ticket_transfer.view_failed` | web | operation 级补充 |
 | TIC-票务权益 | `listTicketTypeConcessionApplications` | `GET` | `/api/v1/ticketing/ticket-types/{id}/concession-applications` | 票种的商户让利申请（运营配票选用） | `ticket.product.view` | `not_applicable` / `not_applicable` | web | operation 级补充 |
 | TIC-票务权益 | `listTicketTypeGiftCoverage` | `GET` | `/api/v1/ticketing/ticket-types/{id}/gift-coverage` | 票面赠酒清单（按酒吧分组） | `ticket.product.view` | `ticket_product.viewed` / `ticket_product.view_failed` | web | operation 级补充 |
-| TIC-票务权益 | `listTicketTypeRuleVersions` | `GET` | `/api/v1/ticketing/ticket-types/{id}/rule-versions` | 票种规则版本（跨域组合通票） | `ticket.product.view` | `ticket_product.viewed` / `ticket_product.view_failed` | web | operation 级补充 |
+| TIC-票务权益 | `listTicketTypeRuleVersions` | `GET` | `/api/v1/ticketing/ticket-types/{id}/rule-versions` | 票种规则版本（未挂酒吧的票） | `ticket.product.view` | `ticket_product.viewed` / `ticket_product.view_failed` | web | operation 级补充 |
 | TIC-票务权益 | `listTicketTypes` | `GET` | `/api/v1/ticketing/ticket-types` | 票种查询 | `ticket.product.view` | `ticket_product.viewed` / `ticket_product.view_failed` | web | operation 级补充 |
 | TIC-票务权益 | `listTicketVerifications` | `GET` | `/api/v1/ticketing/verifications` | 查询票核销记录 | `verification.view` | `verification.viewed` / `verification.view_failed` | web, staff_work_phone, kiosk | operation 级补充 |
 | TIC-票务权益 | `previewTicketVerification` | `POST` | `/api/v1/ticketing/verifications/preview` | 票务核销预览 | `verification.execute` | `verification.previewed` / `verification.failed` | staff_work_phone, kiosk, web<br>device: verification-gate | operation 级补充 |
@@ -4745,7 +4745,7 @@
 | TIC-票务权益 | `updateTicketQrRefreshConfig` | `PUT` | `/api/v1/ticketing/qr-refresh-config` | 改全场统一动态码刷新间隔 | `ticket.product.manage` | `ticket.qr_refresh_config.updated` / `ticket.qr_refresh_config.update_failed` | web | operation 级补充 |
 | TIC-票务权益 | `updateTicketTypePricing` | `PUT` | `/api/v1/ticketing/ticket-types/{id}/pricing` | 改票种售价／折扣（凑整误差闸） | `ticket.product.manage` | `ticket_product.pricing_changed` / `ticket_product.pricing_change_failed` | web | operation 级补充 |
 | TIC-票务权益 | `updateTicketTypeSaleSettings` | `PUT` | `/api/v1/ticketing/ticket-types/{id}/sale-settings` | 修改票种售卖设置（暂停售卖、开售与停售时间） | `ticket.product.manage` | `ticket_product.sale_settings_changed` / `ticket_product.sale_settings_change_failed` | web | operation 级补充 |
-| TIC-票务权益 | `withdrawTicketTypeRuleVersion` | `POST` | `/api/v1/ticketing/ticket-types/{id}/rule-versions/withdraw` | 撤回票种规则草稿版或待审提交（跨域组合通票） | `ticket.product.manage` | `ticket_type.rule_version.withdrawn` / `ticket_type.rule_version.withdraw_failed` | web | operation 级补充 |
+| TIC-票务权益 | `withdrawTicketTypeRuleVersion` | `POST` | `/api/v1/ticketing/ticket-types/{id}/rule-versions/withdraw` | 撤回票种规则草稿版或待审提交（未挂酒吧的票） | `ticket.product.manage` | `ticket_type.rule_version.withdrawn` / `ticket_type.rule_version.withdraw_failed` | web | operation 级补充 |
 
 ## 6. OpenAPI 示例覆盖执行口径
 

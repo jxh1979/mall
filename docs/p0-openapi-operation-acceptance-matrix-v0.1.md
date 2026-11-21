@@ -1,4 +1,4 @@
-# P0 OpenAPI Operation 验收矩阵 V1.12
+# P0 OpenAPI Operation 验收矩阵 V1.13
 
 ## 1. 文档定位
 
@@ -410,8 +410,8 @@
 | ticketing | `PUT` | `/api/v1/ticketing/ticket-types/{id}/min-gift-cups` | `configureTicketTypeMinGiftCups` | 配置票种最低赠酒杯数（杯数与上下限同配） | `TicketTypeGiftFloorRequest` | `ticket.product.manage` | `staff-token` | `project` | web | 是 | `ticket_type.min_gift_cups_configured` | `ticket_type.min_gift_cups_config_failed` |
 | ticketing | `POST` | `/api/v1/ticketing/ticket-types/{id}/entitlements` | `bindTicketTypeEntitlement` | 绑定票类型权益 | `TicketTypeEntitlementRequest` | `ticket.product.manage` | `staff-token` | `project` | web | 是 | `ticket_product_entitlement.bound` | `ticket_product_entitlement.bound_failed` |
 | ticketing | `POST` | `/api/v1/ticketing/ticket-types/{id}/publish` | `publishTicketType` | 发布票种 | `TicketTypePublishRequest` | `ticket.product.manage` | `staff-token` | `project` | web | 是 | `ticket_price.published` | `ticket_price.publish_failed` |
-| ticketing | `GET` | `/api/v1/ticketing/ticket-types/{id}/rule-versions` | `listTicketTypeRuleVersions` | 票种规则版本（跨域组合通票） | `-` | `ticket.product.view` | `staff-token` | `project` | web | 否 | `ticket_product.viewed` | `ticket_product.view_failed` |
-| ticketing | `POST` | `/api/v1/ticketing/ticket-types/{id}/rule-versions/withdraw` | `withdrawTicketTypeRuleVersion` | 撤回票种规则草稿版或待审提交（跨域组合通票） | `object` | `ticket.product.manage` | `staff-token` | `project` | web | 是 | `ticket_type.rule_version.withdrawn` | `ticket_type.rule_version.withdraw_failed` |
+| ticketing | `GET` | `/api/v1/ticketing/ticket-types/{id}/rule-versions` | `listTicketTypeRuleVersions` | 票种规则版本（未挂酒吧的票） | `-` | `ticket.product.view` | `staff-token` | `project` | web | 否 | `ticket_product.viewed` | `ticket_product.view_failed` |
+| ticketing | `POST` | `/api/v1/ticketing/ticket-types/{id}/rule-versions/withdraw` | `withdrawTicketTypeRuleVersion` | 撤回票种规则草稿版或待审提交（未挂酒吧的票） | `object` | `ticket.product.manage` | `staff-token` | `project` | web | 是 | `ticket_type.rule_version.withdrawn` | `ticket_type.rule_version.withdraw_failed` |
 | ticketing | `GET` | `/api/v1/ticketing/ticket-types/{id}/concession-applications` | `listTicketTypeConcessionApplications` | 票种的商户让利申请（运营配票选用） | `-` | `ticket.product.view` | `staff-token` | `project` | web | 否 | `not_applicable` | `not_applicable` |
 | ticketing | `POST` | `/api/v1/ticketing/ticket-types/{id}/refundable-enable-requests` | `requestTicketRefundableEnable` | 申请开启票种可退（逐个票种、经审批） | `object` | `ticket.product.manage` | `staff-token` | `project` | web | 是 | `ticket_type.refundable_enable.submitted` | `ticket_type.refundable_enable.submit_failed` |
 | ticketing | `PUT` | `/api/v1/ticketing/ticket-types/{id}/sale-settings` | `updateTicketTypeSaleSettings` | 修改票种售卖设置（暂停售卖、开售与停售时间） | `object` | `ticket.product.manage` | `staff-token` | `project` | web | 是 | `ticket_product.sale_settings_changed` | `ticket_product.sale_settings_change_failed` |

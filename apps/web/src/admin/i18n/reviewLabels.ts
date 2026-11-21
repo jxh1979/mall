@@ -1,4 +1,4 @@
-// 文件版本：V0.16
+// 文件版本：V0.17
 // 第十八批 I 段第 87 条（PGM:287「界面全中文（所有终端零英文）」）：主管复核的动作码、对象码、档位码与证据类型中文名，
 // 主管复核页与审批链页（ADM-GOV-009）共用（展示层翻译，提交仍原码）。原表与 formatReviewValue 自 SupervisorReviewPage.tsx 搬入。
 import { formatBusinessStatus } from "./statusLabels";
@@ -55,7 +55,7 @@ export const REVIEW_LABELS: Record<string, string> = {
   "bar.product_sold_out": "酒吧商品临时沽清", "bar.product_delist": "酒吧商品长期下架", "bar.product_sold_out_release": "酒吧商品解除沽清",
   bar_product: "酒吧商品",
   // 第十八批 AJ 段第 236 条 236-R3（ENUM:32「跨域组合通票的定价与域间结算规则由项目之上的平台权限统一审批」）：跨域组合通票票种规则发布审批。
-  "ticket.type.rule.publish": "跨域组合通票规则审批", ticket_type_rule_version: "票种规则版本",
+  "ticket.type.rule.publish": "票种规则审批", ticket_type_rule_version: "票种规则版本",
   // 第十八批 AW 段第 295 条 295-R1（BSM:785「要让某一个票种可以退款，必须逐个票种单独开启，每次开启都须经高敏权限审批并留痕」）：票种开启可退审批。
   "ticket.type.refundable.enable": "票种开启可退", ticket_type: "票种",
   // 第十八批 AC 段第 210 条 210-R2（第十八批裁决 42）：税费实际申报金额登记走财务、税务、法务审核与最高确认。

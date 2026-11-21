@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -151,7 +151,9 @@ class TicketTypePriceRuleVersionJdbcIntegrationTests {
         String studentId = JsonPath.read(priceRule(pass, "student", 80).andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8), "$.data.id");
         archive(studentId).andExpect(status().isOk());
-        String dynamic = dynamicRule(pass, "节假日加价");
+        // 第十八批 BP 段 359-R1、359-R3（第十八批裁决 63：动态价规则经审批，审批人须看得到规则的条件；第十八批裁决 75「到访当天已售满多少张起」）。
+        String dynamic = dynamicRule(pass, "节假日加价", """
+                {"time_from": "22:00", "time_to": "02:00", "day_sold_min": 50}""");
         publishDynamic(dynamic).andExpect(status().isOk()).andExpect(jsonPath("$.data.status").value("published"));
 
         publish(pass).andExpect(status().isOk()).andExpect(jsonPath("$.data.status").value("draft"));
@@ -167,7 +169,8 @@ class TicketTypePriceRuleVersionJdbcIntegrationTests {
         mockMvc.perform(get("/api/v1/platform/supervisor-review/" + reviewOf(pass)).with(session(approver, "staff", project)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.reason").value(Matchers.containsString("派生价：会员价 · 按基础价 90%")))
-                .andExpect(jsonPath("$.data.reason").value(Matchers.containsString("动态价：节假日加价")));
+                .andExpect(jsonPath("$.data.reason").value(Matchers.containsString("动态价：节假日加价")))
+                .andExpect(jsonPath("$.data.reason").value(Matchers.containsString(" · 后台 · 时段 22:00～次日 02:00 · 到访当天已售满 50 张起 · 加价")));
 
         approve(reviewOf(pass)).andExpect(status().isOk());
 
@@ -210,16 +213,22 @@ class TicketTypePriceRuleVersionJdbcIntegrationTests {
         order(pass, member, 18900);
     }
 
-    /** 297-R1 不越界：酒吧通票与单一酒吧门票不是跨域组合通票，上架后配派生价、发布动态价照现行直接生效，不建规则版本。 */
+    /**
+     * 297-R1 不越界：单一酒吧门票上架后配派生价照现行直接生效，不建规则版本。第十八批 BP 段 300-R1（第十八批裁决 74「改动先存草稿版，审批期间按旧版照卖，
+     * 批准后自动换新版」）起酒吧通票等域内票同跨域组合通票：最高权限本人上架（第 1 版生效）后配派生价、发布动态价都只进第 2 版草稿。
+     */
     @Test
-    void sameDomainPassAndSingleBarTicketPriceRulesTakeEffectDirectly() throws Exception {
+    void domainPassPriceRulesGoIntoDraftVersionWhileSingleBarTicketTakesEffectDirectly() throws Exception {
         String barPass = createTicketType("b1", 10000L, 100, null);
         bind(barPass, template(bar, "酒吧入场", "entry", null), 10000L, null).andExpect(status().isOk());
         bind(barPass, template(bar, "平台赠酒", "gift_drink", product), 0L, "platform_funded").andExpect(status().isOk());
-        publish(barPass).andExpect(status().isOk()).andExpect(jsonPath("$.data.status").value("published"));
-        priceRule(barPass, "member", 90).andExpect(status().isOk()).andExpect(jsonPath("$.data.status").value("active"));
-        publishDynamic(dynamicRule(barPass, "酒吧通票加价")).andExpect(status().isOk()).andExpect(jsonPath("$.data.status").value("published"));
-        assertThat(JsonPath.<Integer>read(versions(barPass), "$.data.items.length()")).isZero();
+        masterPublish(barPass, "p297-mpub-" + UUID.randomUUID()).andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("published"));
+        priceRule(barPass, "member", 90).andExpect(status().isOk()).andExpect(jsonPath("$.data.status").value("draft"));
+        publishDynamic(dynamicRule(barPass, "酒吧通票加价")).andExpect(status().isOk()).andExpect(jsonPath("$.data.status").value("draft"));
+        String barVersions = versions(barPass);
+        assertThat(JsonPath.<Integer>read(barVersions, "$.data.items.length()")).isEqualTo(2);
+        assertThat(JsonPath.<String>read(barVersions, "$.data.items[0].status")).isEqualTo("draft");
 
         String single = createTicketType("b2", 5000L, 100, bar);
         bind(single, template(bar, "单店入场", "entry", null), 5000L, null).andExpect(status().isOk());
@@ -451,11 +460,15 @@ class TicketTypePriceRuleVersionJdbcIntegrationTests {
 
     /** 后台渠道、昨天起 30 天、每张加 10 元的动态价草稿，返回规则编号。 */
     private String dynamicRule(String type, String name) throws Exception {
+        return dynamicRule(type, name, "{}");
+    }
+
+    private String dynamicRule(String type, String name, String conditionRule) throws Exception {
         String body = send(post("/api/v1/ticketing/dynamic-pricing-rules"), """
                 {"idempotency_key": "p297-dr-%s", "ticket_type_id": "%s", "rule_name": "%s", "priority": 10,
                  "effective_from": "%s", "effective_to": "%s", "sales_channel": "admin", "adjustment_type": "fixed_delta",
-                 "adjustment_amount_cent": 1000}
-                """.formatted(UUID.randomUUID(), type, name, LocalDate.now().minusDays(1), LocalDate.now().plusDays(30)))
+                 "adjustment_amount_cent": 1000, "condition_rule": %s}
+                """.formatted(UUID.randomUUID(), type, name, LocalDate.now().minusDays(1), LocalDate.now().plusDays(30), conditionRule))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.data.status").value("draft"))
                 .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
         return JsonPath.read(body, "$.data.id");

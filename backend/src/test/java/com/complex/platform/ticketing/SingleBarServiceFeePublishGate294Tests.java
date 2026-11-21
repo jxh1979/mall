@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -96,11 +96,13 @@ class SingleBarServiceFeePublishGate294Tests {
         publish(singleBarTicket("b")).andExpect(status().isOk()).andExpect(jsonPath("$.data.status").value("published"));
     }
 
+    /** 通票不套本闸：发布闸全过、走到票种规则审批（第十八批 BP 段 300-R1：域内票须指定对应域主管公司的最终审批人，不指定 400），不报综合服务费未选定。 */
     @Test
     void passWithoutBarIsNotAffected() throws Exception {
         String pass = create("c", null);
         bind(pass, template("通票入场", restaurant));
-        publish(pass).andExpect(status().isOk()).andExpect(jsonPath("$.data.status").value("published"));
+        publish(pass).andExpect(status().isBadRequest()).andExpect(jsonPath("$.detail_code").value("VALIDATION_FAILED"))
+                .andExpect(jsonPath("$.message").value(Matchers.containsString("最终审批人")));
     }
 
     private String singleBarTicket(String tag) throws Exception {

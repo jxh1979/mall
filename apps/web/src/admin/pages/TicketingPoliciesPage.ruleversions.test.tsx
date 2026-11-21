@@ -1,4 +1,4 @@
-// 文件版本：V0.04
+// 文件版本：V0.05
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -152,7 +152,7 @@ describe("TicketingPoliciesPage 236-R5① 草稿票种行「发布」（关闭�
     fireEvent.click(screen.getByTestId("ticket-type-publish-tt-draft"));
   }
 
-  it("非跨域票最终审批人留空发 null，返回已上架提示「已发布」", async () => {
+  it("单一酒吧门票最终审批人留空发 null，返回已上架提示「已发布」", async () => {
     const sent: Sent[] = [];
     const props = stubBackend(sent, { reply: (url, method) => method === "POST" && url.endsWith("/ticket-types/tt-draft/publish")
       ? okBody('{"id":"tt-draft","ticket_name":"草稿组合票","status":"published"}') : null });
@@ -193,6 +193,8 @@ describe("TicketingPoliciesPage 236-R5②③ 规则版本区", () => {
     expect(screen.getByTestId("combo-price-check-title").textContent).toContain("系统算出售价对比你填的售价");
     expect(screen.getByTestId("combo-price-check-title").textContent).not.toMatch(/(^|[^A-Za-z])vs([^A-Za-z]|$)/i);
 
+    expect(screen.getByTestId("rule-version-submit-approver").getAttribute("placeholder"))
+      .toBe("单一酒吧门票不用此处；酒吧通票、游乐票等填对应域主管公司的审批人；跨域组合通票填项目之上的平台审批人（用户编号，不是登录名）");
     fireEvent.change(screen.getByTestId("rule-version-submit-reason"), { target: { value: "加游乐后重新定价" } });
     fireEvent.change(screen.getByTestId("rule-version-submit-approver"), { target: { value: "usr_platform_1" } });
     fireEvent.click(screen.getByTestId("rule-version-submit"));
@@ -264,6 +266,17 @@ describe("TicketingPoliciesPage 297-R4 规则版本里的派生价与动态价",
     await waitFor(() => expect(screen.queryByTestId("rule-versions-table")?.textContent ?? "").toContain("派生价规则"));
     expect(versionCells("派生价规则")).toEqual(["无", "会员价 · 按基础价 90% · 全部渠道"]);
     expect(versionCells("动态价规则")).toEqual(["无", "旺季加价 · 2026-11-01～2026-11-30 · 网页端 · 加价 ¥10.00 · 优先级 10"]);
+  });
+
+  // 第十八批 BP 段 359-R2、359-R3（第十八批裁决 63：动态价规则经审批，审批人须看得到条件；第十八批裁决 75）：版本里动态价带条件时单元格写出时段与已售条件。
+  it("动态价带时段与到访当天已售条件 → 「动态价规则」单元格写出", async () => {
+    const sent: Sent[] = [];
+    const rules = PRICED_RULES.replace('"condition_rule":{}', '"condition_rule":{"time_from":"22:00","time_to":"02:00","day_sold_min":50}');
+    const draft = version(2, "draft", `"review_id":null,"price_check":${DRAFT_CHECK}`, rules);
+    stubBackend(sent, { versions: { "tt-eff": `${draft},${EFFECTIVE}` } });
+    await selectCombo("tt-eff");
+    await waitFor(() => expect(screen.queryByTestId("rule-versions-table")?.textContent ?? "").toContain("动态价规则"));
+    expect(versionCells("动态价规则")[1]).toBe("旺季加价 · 2026-11-01～2026-11-30 · 网页端 · 时段 22:00～次日 02:00 · 到访当天已售满 50 张起 · 加价 ¥10.00 · 优先级 10");
   });
 
   it("已上架跨域组合通票新建派生价：后端回 status draft → 提示已存入草稿版、去「② 组合式套票配置」提交审批", async () => {

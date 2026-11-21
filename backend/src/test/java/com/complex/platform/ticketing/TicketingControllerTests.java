@@ -1,4 +1,4 @@
-// 文件版本：V0.04
+// 文件版本：V0.05
 package com.complex.platform.ticketing;
 
 import static org.mockito.ArgumentMatchers.any;
@@ -664,6 +664,12 @@ class TicketingControllerTests {
         @Bean
         TicketTypeSaleService ticketTypeSaleService() {
             return Mockito.mock(TicketTypeSaleService.class);
+        }
+
+        // 第十八批 BP 段 354-R1：控制器构造注入票种写入口范围闸。
+        @Bean
+        TicketTypeWriteScope ticketTypeWriteScope() {
+            return Mockito.mock(TicketTypeWriteScope.class);
         }
 
         @Bean

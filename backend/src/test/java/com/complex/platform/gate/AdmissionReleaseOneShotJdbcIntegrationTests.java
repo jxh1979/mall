@@ -1,6 +1,6 @@
 package com.complex.platform.gate;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -104,10 +104,13 @@ class AdmissionReleaseOneShotJdbcIntegrationTests {
                 """, Integer.class, ACTION)).as("V099 种子准入策略：动态定价发布超经营范围拦截").isEqualTo(1);
         staff(userId);
         staff(otherUserId);
+        // 第十八批 BP 段 354-R1（商户账号只能办理本店的单一酒吧门票）：票种挂在本类商户（业态 bar）名下。
+        jdbcTemplate.update("INSERT INTO merchants (id, merchant_name, merchant_type, status, created_at, updated_at)"
+                + " VALUES (?, ?, 'bar', 'active', now(), now())", merchantId, "放行回归酒吧-" + suffix);
         jdbcTemplate.update("""
-                INSERT INTO ticket_types (id, ticket_name, base_calendar_price_mode, stock_required, status, created_at, updated_at)
-                VALUES (?, ?, 'weekday_weekend_holiday', FALSE, 'published', now(), now())
-                """, ticketTypeId, "放行回归票种-" + suffix);
+                INSERT INTO ticket_types (id, ticket_name, base_calendar_price_mode, stock_required, status, bar_id, created_at, updated_at)
+                VALUES (?, ?, 'weekday_weekend_holiday', FALSE, 'published', ?, now(), now())
+                """, ticketTypeId, "放行回归票种-" + suffix, merchantId);
     }
 
     @AfterEach
@@ -119,6 +122,7 @@ class AdmissionReleaseOneShotJdbcIntegrationTests {
         jdbcTemplate.update("DELETE FROM temporary_permission_grants WHERE subject_id IN (?, ?, ?, ?)",
                 userId, otherUserId, outsiderId, strangerId);
         jdbcTemplate.update("DELETE FROM access_users WHERE id IN (?, ?, ?, ?)", userId, otherUserId, outsiderId, strangerId);
+        jdbcTemplate.update("DELETE FROM merchants WHERE id = ?", merchantId);
     }
 
     // 【返回前已判已用／先扣后败】放行后业务失败：放行单随业务回滚，仍未用掉；同一请求再发按首次处理，恰好用掉一次；用掉后换请求编号须重新审批
@@ -226,12 +230,12 @@ class AdmissionReleaseOneShotJdbcIntegrationTests {
         assertThat(published(key)).isEqualTo(1);
         assertReleasedOnce(reviewId);
 
-        // 另一个商户的员工（同样的常规授权）拿同键同正文：闸口同样不拦、不建复核单，幂等层按提交范围拒绝——409「该提交编号已被使用」，
-        // 拿不到第一次的结果、不再执行
+        // 另一个商户的员工（同样的常规授权）拿同键同正文：第十八批 BP 段 354-R1 起票种范围闸在幂等之前，按「商户账号只能办理本店的单一酒吧门票」拒绝（403），
+        // 不建复核单、拿不到第一次的结果、不再执行
         staff(outsiderId, outsiderMerchantId);
         publish(outsiderId, outsiderMerchantId, body)
-                .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.detail_code").value("IDEMPOTENCY_KEY_USED"));
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.detail_code").value("TICKET_TYPE_SCOPE_FORBIDDEN"));
         assertThat(pendingReviews(outsiderId)).isZero();
         assertThat(published(key)).isEqualTo(1);
         assertReleasedOnce(reviewId);

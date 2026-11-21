@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.07
+// 文件版本：V0.08
 
 import static com.complex.platform.common.api.ApiRequests.requireIdempotencyKey;
 
@@ -42,12 +42,15 @@ public class TicketingController {
     private final TicketingService service;
     private final AuthorizationService authorizationService;
     private final TicketTypeSaleService saleService;
+    // 第十八批 BP 段 354-R1、354-R2：票种各写入口的商户与经营域范围闸（requirePermission 之后、幂等之前）。
+    private final TicketTypeWriteScope writeScope;
 
     public TicketingController(TicketingService service, AuthorizationService authorizationService,
-            TicketTypeSaleService saleService) {
+            TicketTypeSaleService saleService, TicketTypeWriteScope writeScope) {
         this.service = service;
         this.authorizationService = authorizationService;
         this.saleService = saleService;
+        this.writeScope = writeScope;
     }
 
     @GetMapping("/ticketing/ticket-types")
@@ -61,6 +64,7 @@ public class TicketingController {
     public ApiResponse<TicketTypeRecord> archiveTicketType(
             @PathVariable("id") String id, @RequestBody @jakarta.validation.Valid TicketCatalogArchiveRequest request) {
         authorizationService.requirePermission("ticket.product.manage");
+        writeScope.requireWrite(id);
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.archiveTicketType(id, request));
     }
@@ -69,6 +73,7 @@ public class TicketingController {
     public ApiResponse<TicketTypeRecord> unarchiveTicketType(
             @PathVariable("id") String id, @RequestBody @jakarta.validation.Valid TicketCatalogArchiveRequest request) {
         authorizationService.requirePermission("ticket.product.manage");
+        writeScope.requireWrite(id);
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.unarchiveTicketType(id, request));
     }
@@ -77,6 +82,7 @@ public class TicketingController {
     public ApiResponse<TicketTypeRecord> requestDeleteTicketType(
             @PathVariable("id") String id, @RequestBody @jakarta.validation.Valid TicketCatalogDeleteRequest request) {
         authorizationService.requirePermission("ticket.product.manage");
+        writeScope.requireWrite(id);
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.requestDeleteTicketType(id, request));
     }
@@ -92,6 +98,7 @@ public class TicketingController {
     @PostMapping("/ticketing/ticket-types")
     public ApiResponse<TicketTypeRecord> createTicketType(@RequestBody @jakarta.validation.Valid TicketTypeRequest request) {
         authorizationService.requirePermission("ticket.product.manage");
+        writeScope.requireCreate(request == null ? null : request.barId());
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.createTicketType(request));
     }
@@ -107,17 +114,22 @@ public class TicketingController {
     public ApiResponse<QrRefreshConfigResponse> updateQrRefreshConfig(
             @RequestBody @jakarta.validation.Valid QrRefreshConfigRequest request) {
         authorizationService.requirePermission("ticket.product.manage");
+        writeScope.requireNotMerchant();
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.updateQrRefreshConfig(request));
     }
 
-    /** 第十八批 AJ 段 236-R3：跨域组合通票首次发布提交项目之上的平台权限审批（带最终审批人），返回仍为草稿、获批即上架。 */
+    /**
+     * 第十八批 AJ 段 236-R3：跨域组合通票首次发布提交项目之上的平台权限审批（带最终审批人），返回仍为草稿、获批即上架；第十八批 BP 段 300-R1
+     * （第十八批裁决 74）起未挂酒吧的域内票同，最终审批人为对应域主管公司的人。
+     */
     @PostMapping("/ticketing/ticket-types/{id}/publish")
     public ApiResponse<TicketTypeRecord> publishTicketType(
             @PathVariable String id,
             @RequestBody @jakarta.validation.Valid TicketTypePublishRequest request
     ) {
         authorizationService.requirePermission("ticket.product.manage");
+        writeScope.requireWrite(id);
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.publishTicketType(id, request));
     }
@@ -133,6 +145,7 @@ public class TicketingController {
     public ApiResponse<TicketPriceRuleRecord> archivePriceRule(
             @PathVariable("id") String id, @RequestBody @jakarta.validation.Valid TicketCatalogArchiveRequest request) {
         authorizationService.requirePermission("ticket.price_variant.manage");
+        writeScope.requirePriceRule(id);
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.archivePriceRule(id, request));
     }
@@ -141,6 +154,7 @@ public class TicketingController {
     public ApiResponse<TicketPriceRuleRecord> unarchivePriceRule(
             @PathVariable("id") String id, @RequestBody @jakarta.validation.Valid TicketCatalogArchiveRequest request) {
         authorizationService.requirePermission("ticket.price_variant.manage");
+        writeScope.requirePriceRule(id);
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.unarchivePriceRule(id, request));
     }
@@ -149,6 +163,7 @@ public class TicketingController {
     public ApiResponse<TicketPriceRuleRecord> requestDeletePriceRule(
             @PathVariable("id") String id, @RequestBody @jakarta.validation.Valid TicketCatalogDeleteRequest request) {
         authorizationService.requirePermission("ticket.price_variant.manage");
+        writeScope.requirePriceRule(id);
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.requestDeletePriceRule(id, request));
     }
@@ -172,6 +187,7 @@ public class TicketingController {
     @PostMapping("/ticketing/price-rules")
     public ApiResponse<TicketPriceRuleRecord> createTicketPriceRule(@RequestBody @jakarta.validation.Valid TicketPriceRuleRequest request) {
         authorizationService.requirePermission("ticket.price_variant.manage");
+        writeScope.requireWrite(request == null ? null : request.ticketTypeId());
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.createTicketPriceRule(request));
     }
@@ -188,6 +204,7 @@ public class TicketingController {
             @RequestBody @jakarta.validation.Valid TicketDynamicPricingRuleRequest request
     ) {
         authorizationService.requirePermission("ticket.dynamic_pricing.manage");
+        writeScope.requireWrite(request == null ? null : request.ticketTypeId());
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.createDynamicPricingRule(request));
     }
@@ -198,6 +215,7 @@ public class TicketingController {
             @RequestBody @jakarta.validation.Valid StatusChangeRequest request
     ) {
         authorizationService.requirePermission("ticket.dynamic_pricing.publish");
+        writeScope.requireDynamicRule(id);
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.publishDynamicPricingRule(id, request));
     }
@@ -223,6 +241,7 @@ public class TicketingController {
     public ApiResponse<EntitlementTemplateRecord> archiveEntitlementTemplate(
             @PathVariable("id") String id, @RequestBody @jakarta.validation.Valid EntitlementTemplateArchiveRequest request) {
         authorizationService.requirePermission("ticket.entitlement.manage");
+        writeScope.requireTemplate(id);
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.archiveEntitlementTemplate(id, request));
     }
@@ -231,6 +250,7 @@ public class TicketingController {
     public ApiResponse<EntitlementTemplateRecord> unarchiveEntitlementTemplate(
             @PathVariable("id") String id, @RequestBody @jakarta.validation.Valid EntitlementTemplateArchiveRequest request) {
         authorizationService.requirePermission("ticket.entitlement.manage");
+        writeScope.requireTemplate(id);
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.unarchiveEntitlementTemplate(id, request));
     }
@@ -239,6 +259,7 @@ public class TicketingController {
     public ApiResponse<EntitlementTemplateRecord> requestDeleteEntitlementTemplate(
             @PathVariable("id") String id, @RequestBody @jakarta.validation.Valid EntitlementTemplateDeleteRequest request) {
         authorizationService.requirePermission("ticket.entitlement.manage");
+        writeScope.requireTemplate(id);
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.requestDeleteEntitlementTemplate(id, request));
     }
@@ -254,6 +275,7 @@ public class TicketingController {
     @PostMapping("/ticketing/entitlement-templates")
     public ApiResponse<EntitlementTemplateRecord> createEntitlementTemplate(@RequestBody @jakarta.validation.Valid EntitlementTemplateRequest request) {
         authorizationService.requirePermission("ticket.entitlement.manage");
+        writeScope.requireTemplateMerchant(request == null ? null : request.merchantId());
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.createEntitlementTemplate(request));
     }
@@ -274,6 +296,7 @@ public class TicketingController {
             @PathVariable("id") String id,
             @RequestBody @jakarta.validation.Valid com.complex.platform.ticketing.dto.TicketTypePricingRequest request) {
         authorizationService.requirePermission("ticket.product.manage");
+        writeScope.requireWrite(id);
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.updateTicketTypePricing(id, request));
     }
@@ -286,7 +309,7 @@ public class TicketingController {
         return ApiResponse.ok(service.listGiftCoverage(id));
     }
 
-    /** 第十八批 AJ 段 236-R3 票种规则版本（跨域组合通票）：各版三档价、折扣、权益组成、凑整差额与各域分摊，新版在前。 */
+    /** 第十八批 AJ 段 236-R3 票种规则版本（未挂酒吧的票，第十八批 BP 段 300-R1 起含域内票）：各版三档价、折扣、权益组成、凑整差额与各域分摊，新版在前。 */
     @GetMapping("/ticketing/ticket-types/{id}/rule-versions")
     public ApiResponse<PageResponse<TicketTypeRuleVersionView>> listTicketTypeRuleVersions(@PathVariable("id") String id) {
         authorizationService.requirePermission("ticket.product.view");
@@ -298,6 +321,7 @@ public class TicketingController {
     public ApiResponse<TicketTypeRuleVersionView> withdrawTicketTypeRuleVersion(
             @PathVariable("id") String id, @RequestBody @jakarta.validation.Valid TicketCatalogArchiveRequest request) {
         authorizationService.requirePermission("ticket.product.manage");
+        writeScope.requireWrite(id);
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.withdrawTicketTypeRuleVersion(id, request));
     }
@@ -307,6 +331,7 @@ public class TicketingController {
     public ApiResponse<TicketRefundableEnableService.TicketRefundableEnableResult> requestTicketRefundableEnable(
             @PathVariable("id") String id, @RequestBody TicketRefundableEnableService.Request request) {
         authorizationService.requirePermission("ticket.product.manage");
+        writeScope.requireWrite(id);
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.requestTicketRefundableEnable(id, request));
     }
@@ -324,6 +349,7 @@ public class TicketingController {
             @PathVariable("id") String id,
             @RequestBody @jakarta.validation.Valid com.complex.platform.ticketing.dto.TicketTypeGiftFloorRequest request) {
         authorizationService.requirePermission("ticket.product.manage");
+        writeScope.requireWrite(id);
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.configureGiftFloor(id, request));
     }
@@ -334,6 +360,7 @@ public class TicketingController {
             @PathVariable("id") String id,
             @RequestBody com.complex.platform.ticketing.dto.TicketTypeSaleSettingsRequest request) {
         authorizationService.requirePermission("ticket.product.manage");
+        writeScope.requireWrite(id);
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(saleService.updateSaleSettings(id, request));
     }
@@ -347,6 +374,7 @@ public class TicketingController {
             @RequestBody @jakarta.validation.Valid TicketTypeEntitlementRequest request
     ) {
         authorizationService.requirePermission("ticket.product.manage");
+        writeScope.requireBind(id);
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.bindTicketTypeEntitlement(id, request));
     }

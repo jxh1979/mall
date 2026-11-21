@@ -36,15 +36,19 @@ public class PartnerVoucherService {
     private final AuthorizationService authorization;
     private final AuditEventService audit;
     private final JdbcTemplate jdbc;
+    // 第十八批 BP 段 354-R1：配置改的是权益模板的结算方式，商户账号只能配本店提供的模板（同模板存档）。
+    private final TicketTypeWriteScope writeScope;
 
     @Autowired
     public PartnerVoucherService(TicketingRepository repository, @Lazy FinanceService settlementPort,
-            AuthorizationService authorization, AuditEventService audit, JdbcTemplate jdbc) {
+            AuthorizationService authorization, AuditEventService audit, JdbcTemplate jdbc,
+            TicketTypeWriteScope writeScope) {
         this.repository = repository;
         this.settlementPort = settlementPort;
         this.authorization = authorization;
         this.audit = audit;
         this.jdbc = jdbc;
+        this.writeScope = writeScope;
     }
 
     /** 配置某票务权益模板为第三方券(通票包含该权益即附赠此券)。 */
@@ -54,6 +58,7 @@ public class PartnerVoucherService {
         EntitlementTemplateRecord template = repository.findEntitlementTemplateById(templateId)
                 .orElseThrow(() -> ApiException.notFound("ENTITLEMENT_TEMPLATE_NOT_FOUND", "权益模板不存在或已被删除"));
         requireTemplateProject(template.merchantId());
+        writeScope.requireTemplateMerchant(template.merchantId());
         String mode = requireEnum(actual.settlementMode(), MODES, "settlement_mode");
         String kind = requireEnum(actual.partnerKind(), KINDS, "partner_kind");
         String partnerId = requireText(actual.partnerId(), "partner_id");

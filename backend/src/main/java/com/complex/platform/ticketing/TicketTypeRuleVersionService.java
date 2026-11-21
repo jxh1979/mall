@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import static com.complex.platform.common.Strings.trimToNull;
 
@@ -46,6 +46,10 @@ import org.springframework.transaction.annotation.Transactional;
  * <p>第十八批 AS 段 297-R1（第十八批裁决 63「跨域组合通票的派生价、动态价规则也要经项目之上的平台权限审批，并记入票种规则版本。」）：版本另记派生价与动态价
  * 两份清单，随提交审批；获批时草稿版里新建的派生价写入现表、发布的动态价置已发布。297-R3（BSM:576「持授权 U 盘密钥的最高权限本人发起的操作，
  * 不需要经过任何审批。」；第十八批裁决 71）：最高权限本人提交即生效。
+ *
+ * <p>第十八批 BP 段 300-R1（第十八批裁决 74「要审批也留版本」：与跨域组合通票同一做法，审批人换成该域主管公司的人，提交人不能自批；BSM:1673「影响结算的规则
+ * 由各自责任主体在系统中配置、审批和版本化：域内规则由对应域主管公司负责，跨域规则由项目之上的平台权限审批」）：未挂酒吧的域内票（酒吧通票、纯游乐票与纯游乐通票、
+ * 演出票）同走本版本，提交时按本版组成分流审批人。
  */
 @Service
 public class TicketTypeRuleVersionService {
@@ -72,9 +76,12 @@ public class TicketTypeRuleVersionService {
     private final AuditEventService audit;
     private final AuthorizationService auth;
     private final AccessRepository access;
+    // 第十八批 BP 段 300-R1：域内票最终审批人须属对应域主管公司（取法同票种写入口域闸）。
+    private final TicketTypeWriteScope writeScope;
 
     public TicketTypeRuleVersionService(JdbcTemplate jdbc, ObjectMapper json, TicketingRepository repository,
-            SupervisorReviewService reviews, AuditEventService audit, AuthorizationService auth, AccessRepository access) {
+            SupervisorReviewService reviews, AuditEventService audit, AuthorizationService auth, AccessRepository access,
+            TicketTypeWriteScope writeScope) {
         this.jdbc = jdbc;
         // 版本里的权益组成与各域分摊按接口同名蛇形键存 JSONB。
         this.json = json.copy().setPropertyNamingStrategy(PropertyNamingStrategies.SNAKE_CASE);
@@ -83,6 +90,7 @@ public class TicketTypeRuleVersionService {
         this.audit = audit;
         this.auth = auth;
         this.access = access;
+        this.writeScope = writeScope;
     }
 
     static ApiException pendingConflict() {
@@ -113,8 +121,8 @@ public class TicketTypeRuleVersionService {
     }
 
     /**
-     * 提交项目之上的平台权限审批：调用方已持票种锁、已跑全部发布闸。最终审批人须持跨域组合通票票种规则审批权限（复核策略 specific_role 把关）、
-     * 能看全部项目，并在提交人的直接上级链上（审批链补全时把关）；提交人不得自批（复核时把关）。
+     * 提交审批：调用方已持票种锁、已跑全部发布闸。最终审批人须持票种规则审批权限（复核策略 specific_role 把关），并在提交人的直接上级链上（审批链补全时把关）；
+     * 提交人不得自批（复核时把关）。跨域组合通票的最终审批人须能看全部项目；300-R1 起域内票的最终审批人须属对应域主管公司。
      *
      * <p>297-R3：最高权限本人提交不指定最终审批人、不建复核单，本版立即生效并套回现表（同审批通过）。
      */
@@ -124,9 +132,10 @@ public class TicketTypeRuleVersionService {
         String approver = trimToNull(finalApproverId);
         if (!master) {
             if (approver == null) {
-                throw ApiException.badRequest("VALIDATION_FAILED", "跨域组合通票须指定最终审批人（项目之上的平台权限）");
+                throw ApiException.badRequest("VALIDATION_FAILED",
+                        "须指定最终审批人：域内票填对应域主管公司的审批人，跨域组合通票填项目之上的平台审批人");
             }
-            requirePlatformApprover(approver);
+            requireApprover(approver, snapshot);
         }
         if (findOpen(ticketType.id()).filter(open -> "pending_review".equals(open.status())).isPresent()) {
             throw pendingConflict();
@@ -278,6 +287,23 @@ public class TicketTypeRuleVersionService {
         return id;
     }
 
+    /**
+     * 第十八批 BP 段 300-R1：按本版组成分流——有价权益（各业态价格大于 0）的经营域按主管公司归并后有两个及以上（跨域组合通票，同
+     * TicketCatalogService#crossDomain 口径）须项目之上的平台权限；其余（域内票）须对应域主管公司的人，没有有价权益时按全部权益的提供方定。
+     */
+    private void requireApprover(String approverId, TicketCatalogService.RuleSnapshot snapshot) {
+        List<TicketTypeRuleVersionView.Entitlement> paid = snapshot.entitlements().stream()
+                .filter(e -> e.componentPriceCent() != null && e.componentPriceCent() > 0L && e.domain() != null).toList();
+        long domains = paid.stream().map(e -> TicketCatalogService.FORMAT_DOMAINS.containsKey(e.domain())
+                ? TicketCatalogService.FORMAT_DOMAINS.get(e.domain())[0] : e.domain()).distinct().count();
+        if (domains >= 2) {
+            requirePlatformApprover(approverId);
+            return;
+        }
+        writeScope.requireDomainApprover(approverId, (paid.isEmpty() ? snapshot.entitlements() : paid).stream()
+                .map(TicketTypeRuleVersionView.Entitlement::providerMerchantId).filter(Objects::nonNull).distinct().toList());
+    }
+
     /** 能看全部项目（平台管理员，或经勾了「可以查看全部项目」的角色持有审批权限码）；对同一原话的既有落法见决策台账第 75 条 18C。 */
     private void requirePlatformApprover(String approverId) {
         AccessUser user = access.findUserById(approverId).filter(found -> "active".equals(found.status()))
@@ -327,8 +353,13 @@ public class TicketTypeRuleVersionService {
         }
         for (TicketTypeRuleVersionView.DynamicPricingRule r : v.dynamicPricingRules()) {
             text.append("\n动态价：").append(r.ruleName()).append(" · ").append(r.effectiveFrom()).append("～").append(r.effectiveTo())
-                    .append(" · ").append(r.salesChannel() == null ? "全部渠道" : CHANNEL_NAMES.getOrDefault(r.salesChannel(), r.salesChannel()))
-                    .append(" · ").append(adjustment(r));
+                    .append(" · ").append(r.salesChannel() == null ? "全部渠道" : CHANNEL_NAMES.getOrDefault(r.salesChannel(), r.salesChannel()));
+            // 第十八批 BP 段 359-R1、359-R3（第十八批裁决 63：动态价规则经审批，审批人须看得到规则的时段与到访当天已售张数条件）。
+            String condition = TicketDynamicPricingConditions.describe(r.conditionRule());
+            if (!condition.isEmpty()) {
+                text.append(" · ").append(condition);
+            }
+            text.append(" · ").append(adjustment(r));
             if (r.minPriceCent() != null) {
                 text.append(" · 最低 ").append(yuan(r.minPriceCent()));
             }

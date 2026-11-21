@@ -1,4 +1,4 @@
-// 文件版本：V0.37
+// 文件版本：V0.38
 export type AdminUser = {
   id: string;
   username: string;
@@ -276,7 +276,12 @@ export type TicketDynamicPricingRuleRow = {
   minPriceCent?: number;
   maxPriceCent?: number;
   status?: string;
+  conditionRule?: TicketDynamicPricingConditionRule | null;
 };
+
+// 第十八批 BP 段第 359 条（BSM:782「动态价按时段、容量等规则配置」；第十八批裁决 75）：动态价条件——每日时段（时:分，结束早于开始即跨零点）与
+//   到访当天已售满多少张起；键同后端 condition_rule（经客户端转驼峰）。
+export type TicketDynamicPricingConditionRule = { timeFrom?: string; timeTo?: string; daySoldMin?: number };
 
 export type TicketDynamicPricingSimulationResult = {
   ticketTypeId?: string;

@@ -148,7 +148,7 @@ describe("DynamicPricingPage 引导式新建定价规则", () => {
     await waitFor(() => expect((screen.queryByTestId("dynamic-pricing-select-r-1") as HTMLInputElement | null)?.checked).toBe(true));
     fireEvent.click(screen.getByTestId("dynamic-pricing-publish"));
     await waitFor(() => expect(props.setActionResult).toHaveBeenCalledWith(expect.objectContaining({
-      action: "ticket_dynamic_rule_staged", note: expect.stringContaining("动态价已存入规则草稿版") })));
+      action: "ticket_dynamic_rule_staged", note: expect.stringContaining("这张票是已上架的未挂酒吧的票：动态价已存入规则草稿版") })));
     confirmSpy.mockRestore();
     vi.unstubAllGlobals();
   });
@@ -251,6 +251,102 @@ describe("DynamicPricingPage 338-R3 按固定价", () => {
     render(<DynamicPricingPage {...props} />);
     await waitFor(() => expect(screen.queryByTestId("dynamic-pricing-row-dp-fp")?.textContent ?? "").toContain("固定价 ¥199.00"));
     expect(screen.getByTestId("dynamic-pricing-row-dp-fp").textContent ?? "").not.toContain("fixed_price");
+  });
+});
+
+// 第十八批 BP 段第 359 条 359-R2、359-R3（BSM:782「动态价按时段、容量等规则配置，可先试算再发布。」；第十八批裁决 75「规则里填『到访当天已售满多少张起』」；
+//   PGM:287「界面全中文」）：新建引导录入时段与到访当天已售张数，列表与明细显示条件，试算可填试算时刻与当天已售张数。
+describe("DynamicPricingPage 359 时段与到访当天已售条件", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    window.history.replaceState({}, "", "/admin/ticketing/dynamic-pricing");
+  });
+
+  function stubRules(rows: string) {
+    const ok = (data: string) => new Response(`{"success":true,"code":"OK","message":"success","data":${data}}`,
+      { status: 200, headers: { "content-type": "application/json" } });
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => (String(input).includes("/ticketing/ticket-types") ? ok('{"items":[]}') : ok(rows))));
+    render(<DynamicPricingPage api={new AdminApi()} user={{ id: "u1", username: "admin", accountType: "platform_admin" }}
+      setActionResult={vi.fn()} setGlobalError={vi.fn()} effectivePermissions={ADMIN_PERMS} />);
+  }
+
+  const row = (id: string, condition: string) => `{"id":"${id}","rule_name":"晚场加价","sales_channel":"web","priority":10,"adjustment_type":"percent_delta",`
+    + `"adjustment_rate":10,"status":"draft","effective_from":"2026-11-01","effective_to":"2026-11-30","ticket_type_id":"tt-1","condition_rule":${condition}}`;
+
+  // 359-R2
+  it("填时段 20:00～22:00 → 确认页列出时段，请求体带 conditionRule", async () => {
+    const post = vi.fn().mockResolvedValue({ id: "rule-new" });
+    renderPage(makeApi(post));
+    await openCreateWithTicketTypes();
+    await waitFor(() => expect(screen.queryByTestId("dynamic-pricing-time-from")).not.toBeNull());
+    fireEvent.change(screen.getByTestId("dynamic-pricing-ticket-type"), { target: { value: "tt_real" } });
+    fireEvent.change(screen.getByTestId("dynamic-pricing-time-from"), { target: { value: "20:00" } });
+    fireEvent.change(screen.getByTestId("dynamic-pricing-time-to"), { target: { value: "22:00" } });
+    fireEvent.click(screen.getByTestId("dynamic-pricing-guided-next"));
+    expect(screen.getByTestId("dynamic-pricing-guided-summary").textContent ?? "").toContain("时段 20:00～22:00");
+    fireEvent.click(screen.getByTestId("dynamic-pricing-create"));
+    await waitFor(() => expect(post.mock.calls.some((c) => c[0] === "/api/v1/ticketing/dynamic-pricing-rules")).toBe(true));
+    expect((postBody(post, "/api/v1/ticketing/dynamic-pricing-rules") as { conditionRule?: unknown }).conditionRule)
+      .toEqual({ timeFrom: "20:00", timeTo: "22:00" });
+  });
+
+  it("只填时段开始 → 提示「时段开始与结束须同时填写。」，不建规则", async () => {
+    const post = vi.fn().mockResolvedValue({});
+    renderPage(makeApi(post));
+    await openCreateWithTicketTypes();
+    await waitFor(() => expect(screen.queryByTestId("dynamic-pricing-time-from")).not.toBeNull());
+    fireEvent.change(screen.getByTestId("dynamic-pricing-ticket-type"), { target: { value: "tt_real" } });
+    fireEvent.change(screen.getByTestId("dynamic-pricing-time-from"), { target: { value: "20:00" } });
+    fireEvent.click(screen.getByTestId("dynamic-pricing-guided-next"));
+    await waitFor(() => expect(screen.queryByTestId("dynamic-pricing-guided-error")?.textContent).toBe("时段开始与结束须同时填写。"));
+    expect(post.mock.calls.some((c) => c[0] === "/api/v1/ticketing/dynamic-pricing-rules")).toBe(false);
+  });
+
+  it("列表与明细显示时段，结束早于开始写「次日」", async () => {
+    stubRules(`[${row("dp-eve", '{"time_from":"20:00","time_to":"22:00"}')},${row("dp-night", '{"time_from":"22:00","time_to":"02:00"}')}]`);
+    await waitFor(() => expect(screen.queryByTestId("dynamic-pricing-row-dp-eve")?.textContent ?? "").toContain("时段 20:00～22:00"));
+    expect(screen.getByTestId("dynamic-pricing-row-dp-night").textContent ?? "").toContain("时段 22:00～次日 02:00");
+    fireEvent.click(screen.getByTestId("dynamic-pricing-row-dp-eve"));
+    await waitFor(() => expect(screen.queryByTestId("row-detail-drawer")?.textContent ?? "").toContain("时段 20:00～22:00"));
+  });
+
+  it("试算填试算时刻 → 请求体 context.atTime", async () => {
+    const post = vi.fn().mockResolvedValue({ finalPriceCent: 11000 });
+    renderPage(makeApi(post));
+    await waitFor(() => expect((screen.queryByTestId("dynamic-pricing-select-r-1") as HTMLInputElement | null)?.checked).toBe(true));
+    await waitFor(() => expect(screen.queryByTestId("dynamic-pricing-simulate-time")).not.toBeNull());
+    expect(screen.getByTestId("dynamic-pricing-simulate-time").closest("label")?.textContent ?? "").toContain("试算时刻（空＝此刻）");
+    fireEvent.change(screen.getByTestId("dynamic-pricing-simulate-time"), { target: { value: "01:30" } });
+    fireEvent.click(screen.getByTestId("dynamic-pricing-simulate"));
+    await waitFor(() => expect(post.mock.calls.some((c) => c[0] === "/api/v1/ticketing/dynamic-pricing/simulations")).toBe(true));
+    expect(postBody(post, "/api/v1/ticketing/dynamic-pricing/simulations")).toEqual({ ticketTypeId: "t-1", salesChannel: "web", context: { atTime: "01:30" } });
+  });
+
+  // 359-R3（第十八批裁决 75）
+  it("填到访当天已售满 50 张 → 确认页列出，请求体 conditionRule.daySoldMin 50", async () => {
+    const post = vi.fn().mockResolvedValue({ id: "rule-new" });
+    renderPage(makeApi(post));
+    await openCreateWithTicketTypes();
+    await waitFor(() => expect(screen.queryByTestId("dynamic-pricing-day-sold-min")).not.toBeNull());
+    fireEvent.change(screen.getByTestId("dynamic-pricing-ticket-type"), { target: { value: "tt_real" } });
+    fireEvent.change(screen.getByTestId("dynamic-pricing-day-sold-min"), { target: { value: "50" } });
+    fireEvent.click(screen.getByTestId("dynamic-pricing-guided-next"));
+    expect(screen.getByTestId("dynamic-pricing-guided-summary").textContent ?? "").toContain("到访当天已售满 50 张起");
+    fireEvent.click(screen.getByTestId("dynamic-pricing-create"));
+    await waitFor(() => expect(post.mock.calls.some((c) => c[0] === "/api/v1/ticketing/dynamic-pricing-rules")).toBe(true));
+    expect((postBody(post, "/api/v1/ticketing/dynamic-pricing-rules") as { conditionRule?: unknown }).conditionRule).toEqual({ daySoldMin: 50 });
+  });
+
+  it("列表显示「到访当天已售满 50 张起」；试算填当天已售张数 → 请求体 context.daySold", async () => {
+    stubRules(`[${row("dp-sold", '{"day_sold_min":50}')}]`);
+    await waitFor(() => expect(screen.queryByTestId("dynamic-pricing-row-dp-sold")?.textContent ?? "").toContain("到访当天已售满 50 张起"));
+    await waitFor(() => expect((screen.getByTestId("dynamic-pricing-select-dp-sold") as HTMLInputElement).checked).toBe(true));
+    await waitFor(() => expect(screen.queryByTestId("dynamic-pricing-simulate-day-sold")).not.toBeNull());
+    fireEvent.change(screen.getByTestId("dynamic-pricing-simulate-day-sold"), { target: { value: "80" } });
+    fireEvent.click(screen.getByTestId("dynamic-pricing-simulate"));
+    await waitFor(() => expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url).endsWith("/dynamic-pricing/simulations"))).toBe(true));
+    const sent = vi.mocked(fetch).mock.calls.find(([url]) => String(url).endsWith("/dynamic-pricing/simulations"))?.[1];
+    expect(JSON.parse(String(sent?.body)).context).toEqual({ day_sold: 80 });
   });
 });
 
