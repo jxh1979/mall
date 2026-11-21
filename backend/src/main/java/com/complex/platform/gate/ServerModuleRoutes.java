@@ -1,6 +1,6 @@
 package com.complex.platform.gate;
 
-// 文件版本：V0.11
+// 文件版本：V0.12
 
 import java.util.Arrays;
 import java.util.Comparator;
@@ -49,6 +49,8 @@ final class ServerModuleRoutes {
                     Map.entry("/api/v1/access/users/{id}/position", "access"),
                     Map.entry("/api/v1/access/users/{id}/scope", "access"),
                     Map.entry("/api/v1/access/users/{id}/permission-overrides", "access"),
+                    // 第十八批 BX 段第 372 条 372-R5：划定外审数据时段只有员工账号页调。
+                    Map.entry("/api/v1/access/users/{id}/audit-data-window", "access"),
                     Map.entry("/api/v1/partner/orgs", "access"),
                     Map.entry("/api/v1/partner/subordinates", "vendor"),
                     Map.entry("/api/v1/amusement", "amusement"),

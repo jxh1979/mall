@@ -1,4 +1,4 @@
-// 文件版本：V0.08
+// 文件版本：V0.09
 package com.complex.platform.gate;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -166,6 +166,7 @@ class ServerModuleRoutesTests {
         assertThat(web("GET", "/api/v1/access/users")).isNull();
         assertThat(web("POST", "/api/v1/access/users")).as("建号只有员工账号页调").isEqualTo("access");
         assertThat(web("PUT", "/api/v1/access/users/u1/scope")).isEqualTo("access");
+        assertThat(web("PUT", "/api/v1/access/users/u1/audit-data-window")).as("划定外审数据时段只有员工账号页调").isEqualTo("access");
         assertThat(web("GET", "/api/v1/access/users/u1/effective-permissions")).isNull();
         assertThat(web("GET", "/api/v1/amusement/projects/a1/entitlements")).as("只有项目与场次页调").isEqualTo("amusement");
         assertThat(web("POST", "/api/v1/amusement/projects/a1/entitlements")).as("只有票务策略页调").isEqualTo("ticketing");

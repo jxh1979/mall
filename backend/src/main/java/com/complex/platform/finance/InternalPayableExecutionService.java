@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.07
+// 文件版本：V0.08
 
 import static com.complex.platform.common.Strings.requireText;
 import static com.complex.platform.common.Strings.trimToNull;
@@ -107,6 +107,7 @@ public class InternalPayableExecutionService {
     public Execution execution(String arApItemId) {
         ArApItemRecord item = item(arApItemId, false);
         finance.requireArApScope(item, VIEW);
+        com.complex.platform.access.AuditDataWindow.requireCovers(item.createdAt()); // 第十八批 BX 段 372-R4：外审数据时段按台账挂账时间
         return view(item, schedule(item));
     }
 

@@ -1,6 +1,6 @@
 package com.complex.platform.common.api;
 
-// 文件版本：V0.55
+// 文件版本：V0.56
 
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -450,6 +450,9 @@ public final class FieldLabels {
         p("max_close_hour", "最晚闭店时点");
         p("renewed_until", "续约至");
         p("valid_until", "有效期至");
+        p("data_from", "数据起始日期");
+        p("data_to", "数据截止日期");
+        p("data_window", "外审数据时段");
         p("expires_at", "到期时间");
         p("expiry_action", "到期处理方式");
         p("lead_id", "线索");

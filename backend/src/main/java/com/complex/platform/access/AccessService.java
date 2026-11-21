@@ -1,6 +1,6 @@
 package com.complex.platform.access;
 
-// 文件版本：V0.47
+// 文件版本：V0.48
 
 import com.complex.platform.access.AuthorizationService.ProjectReach;
 import com.complex.platform.access.dto.AccessGrantApplyRequest;
@@ -101,6 +101,14 @@ public class AccessService {
     // 18F（第 81 条 81-R1）：挂商户时核商户的经营项目（字段注入，同 StaffService）
     @Autowired
     private com.complex.platform.governance.PlatformRepository platformRepository;
+    // 第十八批 BX 段第 372 条 372-R2（第十八批裁决 77「开外审权限必须划定数据起止日期」）：开外审权限四处入口先判须划定；
+    // 可选注入，手工构造的单测不传即不判（同 AuthorizationService.setStaffRepository）。
+    private AuditDataWindowService auditDataWindows;
+
+    @Autowired(required = false)
+    public void setAuditDataWindows(AuditDataWindowService auditDataWindows) {
+        this.auditDataWindows = auditDataWindows;
+    }
 
     @Autowired
     public AccessService(
@@ -442,6 +450,7 @@ public class AccessService {
                         // M001-F09（PGM 权限规则，2026-09-24 操作员裁决）：项目自有模板只能套给本项目员工，平台管理员同样；
                         // 跨项目使用须先复制为平台模板再套用。
                         targets.forEach(target -> requireTemplateAssignableToTarget(template, target));
+                        if (auditDataWindows != null) auditDataWindows.requireBeforeGrant(template, targets); // 372-R2
                         // P0-1：套用模板授予的权限码不得超出授权人自身有效权限（堵 copy-then-apply 提权）。
                         List<PermissionTemplateItem> templateItems = repository.findTemplateItems(id);
                         List<String> templatePermissionCodes = templateItems.stream()
@@ -2338,6 +2347,7 @@ public class AccessService {
         AccessUser target = lockTargetUser(requireText(request.targetUserId(), "target_user_id"));
         if (enforceApproval) { // M002-F04：审批落地不按终审人组织判定（与角色、员工单独授予落地同口径）
             requireSameOrganization(actor, target, reach);
+            if (auditDataWindows != null) auditDataWindows.requireBeforeGrant(null, List.of(target)); // 372-R2
         }
         if (safeList(request.permissionCodes()).isEmpty()) {
             throw ApiException.badRequest("VALIDATION_FAILED", "必须填写权限编码列表");
@@ -2593,6 +2603,7 @@ public class AccessService {
         AccessActor actor = authorizationService.currentActor();
         AccessUser targetUser = requireTargetUser(requireText(request.targetUserId(), "target_user_id"));
         requireSameOrganization(actor, targetUser, reach);
+        if (auditDataWindows != null) auditDataWindows.requireBeforeGrant(null, List.of(targetUser)); // 372-R2
         List<String> permissionCodes = safeList(request.permissionCodes());
         if (permissionCodes.isEmpty()) {
             throw ApiException.badRequest("VALIDATION_FAILED", "必须填写权限编码列表");
@@ -2870,6 +2881,8 @@ public class AccessService {
                         "权限模板不存在：" + mapping.templateId()));
         requireRoleAssignableToTarget(role, targetUser);
         requireTemplateAssignableToTarget(template, targetUser);
+        // 372-R2：定岗、岗位申请建单判；审批落地（reach 为空）不判——建单时已判、时段不能删；有岗位时改职级、保存岗位映射后的在岗重算同判
+        if (reach != null && auditDataWindows != null) auditDataWindows.requireBeforeGrant(template, List.of(targetUser));
         // M002-F20（[10]）：员工行之后、读条目之前取模板共享锁，与模板编辑的排他锁互斥——编辑进行中的定岗等编辑提交后按新条目派生，
         // 编辑前已取得共享锁的定岗先提交、再由编辑在锁下对账，不会按编辑前条目在编辑之后落库。
         repository.lockTemplateForApply(template.id());

@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import static com.complex.platform.common.Strings.requireText;
 import static com.complex.platform.common.Strings.trimToNull;
@@ -294,7 +294,9 @@ public class PaymentConfirmationService {
         String merchant = reach.platformAdmin() ? null : trimToNull(actor.merchantId());
         FinancePayrollService wages = "staff_payroll".equals(paymentType) ? payroll.getIfAvailable() : null;
         Set<String> wageIds = wages == null ? Set.of() : wages.visiblePayableIds(permission);
-        List<Item> items = jdbc.query("SELECT * FROM payment_confirmations WHERE object_type = ? AND object_id = ? ORDER BY requested_at DESC, id DESC",
+        // 第十八批 BX 段 372-R4（第十八批裁决 77）：外审数据时段按确认发起时刻 requested_at
+        List<Item> items = jdbc.query("SELECT * FROM payment_confirmations WHERE object_type = ? AND object_id = ?"
+                        + com.complex.platform.access.AuditDataWindow.andInstant("requested_at") + " ORDER BY requested_at DESC, id DESC",
                         (rs, n) -> new Row(new Item(rs.getString("confirmation_id"), rs.getLong("amount_cent"), rs.getString("status"),
                                 rs.getString("review_id"), rs.getString("requested_by"), rs.getTimestamp("requested_at").toInstant(),
                                 rs.getTimestamp("decided_at") == null ? null : rs.getTimestamp("decided_at").toInstant()),

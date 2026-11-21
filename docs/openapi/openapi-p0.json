@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "综合体管理系统 P0 API 契约",
-    "version": "V1.01",
+    "version": "V1.02",
     "description": "P0 首批编码前置契约。本文采用 JSON-compatible YAML，便于与 openapi-p0.json 保持一致。正式后端以 Java 21 + Spring Boot 4.x + springdoc-openapi 输出运行时 OpenAPI，并与本契约比对。"
   },
   "servers": [
@@ -329,6 +329,7 @@
         ],
         "operationId": "applyPermissionTemplate",
         "summary": "应用权限模板",
+        "description": "第十八批 BX 段第 372 条 372-R2（第十八批裁决 77「开外审权限必须划定数据起止日期」）：所套模板是外部审计模板 tpl_auditor_external 或其直接复制件（复制来源 source_template_id 为 tpl_auditor_external），或目标账号带外审标记（归属外部审计类外部机构，或装配了外部审计角色 role_auditor_external）时，各目标账号须已划定外审数据时段（见 setAuditDataWindow），缺的逐个列出用户名，409 AUDIT_DATA_WINDOW_REQUIRED（给外部审计账号开查看权限前，须先划定其可查看数据的起止日期：＜用户名，顿号分隔＞），整笔不套用；在模板可套给目标的判定之后、写套用行之前判。",
         "x-permission": "access.permission_template.apply",
         "x-data-scope": "project",
         "x-terminal-allowed": [
@@ -368,7 +369,8 @@
         },
         "x-auth-context": "staff-token",
         "x-failure-codes": [
-          "GRANT_EXCEEDS_OWN_PERMISSIONS"
+          "GRANT_EXCEEDS_OWN_PERMISSIONS",
+          "AUDIT_DATA_WINDOW_REQUIRED"
         ]
       }
     },
@@ -647,6 +649,7 @@
         ],
         "operationId": "createTemporaryGrant",
         "summary": "临时授权",
+        "description": "第十八批 BX 段第 372 条 372-R2（第十八批裁决 77「开外审权限必须划定数据起止日期」）：目标账号带外审标记（归属外部审计类外部机构，或装配了外部审计角色 role_auditor_external）而未划定外审数据时段（见 setAuditDataWindow）时 409 AUDIT_DATA_WINDOW_REQUIRED（给外部审计账号开查看权限前，须先划定其可查看数据的起止日期：＜用户名，顿号分隔＞），不发授权；在目标账号范围判定之后判。临时权限申请审批通过后的落地不再判（建单时已判，见 createAccessGrantRequest）。",
         "x-permission": "access.temporary_grant.create",
         "x-data-scope": "project",
         "x-terminal-allowed": [
@@ -674,7 +677,8 @@
         },
         "x-auth-context": "staff-token",
         "x-failure-codes": [
-          "GRANT_EXCEEDS_OWN_PERMISSIONS"
+          "GRANT_EXCEEDS_OWN_PERMISSIONS",
+          "AUDIT_DATA_WINDOW_REQUIRED"
         ]
       }
     },
@@ -790,6 +794,159 @@
         "x-auth-context": "staff-token",
         "requestBody": {
           "$ref": "#/components/requestBodies/AccessUserRequest"
+        }
+      }
+    },
+    "/api/v1/access/audit-data-windows": {
+      "get": {
+        "tags": [
+          "access"
+        ],
+        "operationId": "listAuditDataWindows",
+        "summary": "查看外审数据时段",
+        "description": "第十八批 BX 段第 372 条 372-R1（PGM:682「外部审计/监管只能查看划定的范围与时间段」；第十八批裁决 77「开外审权限必须划定数据起止日期」）：列出已划定的外审数据时段，供后台员工账号页按账号对上显示。每项 user_id、data_from、data_to（北京时间自然日，起止两端都含），按 user_id 排序、不分页（page 为 1，page_size 与 total 为返回条数），不返回账号名（前端按员工账号列表对上）。范围同 listAccessUsers：平台管理员与最高权限看全部；带商户的账号只看本商户账号的；其余账号只看按 access.user.view 可触及的账号的。门禁 access.user.view（缺 403 PERMISSION_DENIED）。成功留痕 access.audit_data_window.viewed（metadata 的 count 为返回条数）。",
+        "x-permission": "access.user.view",
+        "x-data-scope": "project",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": false,
+        "x-audit-event-success": "access.audit_data_window.viewed",
+        "x-audit-event-failure": "not_applicable",
+        "x-auth-context": "staff-token",
+        "x-failure-codes": [
+          "PERMISSION_DENIED"
+        ],
+        "responses": {
+          "200": {
+            "description": "统一分页响应；items 为已划定的外审数据时段。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/PageResponse"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "type": "object",
+                          "properties": {
+                            "items": {
+                              "type": "array",
+                              "items": {
+                                "$ref": "#/components/schemas/AuditDataWindowRecord"
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/access/users/{user_id}/audit-data-window": {
+      "put": {
+        "tags": [
+          "access"
+        ],
+        "operationId": "setAuditDataWindow",
+        "summary": "划定外审数据时段",
+        "description": "第十八批 BX 段第 372 条 372-R1（PGM:682「外部审计/监管只能查看划定的范围与时间段」；第十八批裁决 77「开外审权限必须划定数据起止日期，各清单、明细、导出只看得到这段时间发生的记录；没有发生日期的资料照常显示」）：给外部人员账号（account_type 为 outsourced_vendor）划定或改划外审数据时段 data_from～data_to（北京时间自然日，起止两端都含）。划定后该账号在已承载的清单、明细与导出里只看得到时段内发生的记录（口径见 x-contract-rules 的 auditDataWindowRule）；给外部审计账号开查看权限前须先划定（见 applyPermissionTemplate、assignUserPosition、assignStaffLevel、createTemporaryGrant、createAccessGrantRequest、createPositionRoleTemplate、updatePositionRoleTemplate 的 AUDIT_DATA_WINDOW_REQUIRED）。可改划，改前改后值留痕；不提供删除或清空。门禁 access.user.manage（缺 403 PERMISSION_DENIED）；缺幂等键 400 VALIDATION_FAILED；data_from、data_to 缺任一 400 VALIDATION_FAILED（必须划定数据起止日期），起始日期晚于截止日期 400 VALIDATION_FAILED（数据起始日期不能晚于截止日期）；账号不存在 404 USER_NOT_FOUND；目标不是外部人员账号 409 AUDIT_DATA_WINDOW_TARGET_INVALID（只能给外部人员账号划定数据时段）；目标账号不在操作人按 access.user.manage 可触及的范围内 403 CROSS_ORG_FORBIDDEN（不能操作其他组织的用户）。响应 data 为 user_id、data_from、data_to。同一幂等键重发返回首次结果。成功留痕 access.audit_data_window.set（metadata 带 data_from、data_to 与改前的 data_from_before、data_to_before，首次划定改前值为空串）；任一步失败留痕 access.audit_data_window.set_failed。",
+        "x-permission": "access.user.manage",
+        "x-data-scope": "project",
+        "x-terminal-allowed": [
+          "web"
+        ],
+        "x-idempotency-required": true,
+        "x-audit-event-success": "access.audit_data_window.set",
+        "x-audit-event-failure": "access.audit_data_window.set_failed",
+        "x-auth-context": "staff-token",
+        "x-failure-codes": [
+          "PERMISSION_DENIED",
+          "VALIDATION_FAILED",
+          "USER_NOT_FOUND",
+          "AUDIT_DATA_WINDOW_TARGET_INVALID",
+          "CROSS_ORG_FORBIDDEN"
+        ],
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "description": "要划定数据时段的外部人员账号 id。",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AuditDataWindowRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "返回划定后的时段；重复提交返回首次结果。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SuccessResponse"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "$ref": "#/components/schemas/AuditDataWindowRecord"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
         }
       }
     },
@@ -6396,7 +6553,7 @@
           }
         },
         "x-auth-context": "staff-token",
-        "description": "按 finance.ar_ap.view 获批的项目范围查询；项目公司财务无需绑定商户，商户人员仍同时受商户范围限制。分页结果与 total 使用相同范围条件，普通人员不可读取缺少项目归属的台账。 18E（20-R3）：商户账号只按商户过滤，看得到各经营项目里本商户的数据（写入口仍只到本人项目）。 第十八批 R 段第 143 条 143-R4：可选查询参数 locked_day_close_id 只列被该日结锁定的台账（日结页面「本日结锁定的台账」），范围与分页条件不变。第十八批 AZ 段第 285 条 285-R1：来源 contract_deposit（合同押金，应收）由合同生效挂出（见 activateContract），挂合同所属项目。第十八批 AZ 段第 352 条 352-R1（BSM:1673「所有数据默认按项目隔离，只有项目之上的获授权岗位可以跨项目汇总。」）：退租违约金应收（termination_penalty）挂出租合同所属项目，变更押金补退差额（deposit_adjustment）挂原合同所属项目，项目财务按项目范围可见。"
+        "description": "按 finance.ar_ap.view 获批的项目范围查询；项目公司财务无需绑定商户，商户人员仍同时受商户范围限制。分页结果与 total 使用相同范围条件，普通人员不可读取缺少项目归属的台账。 18E（20-R3）：商户账号只按商户过滤，看得到各经营项目里本商户的数据（写入口仍只到本人项目）。 第十八批 R 段第 143 条 143-R4：可选查询参数 locked_day_close_id 只列被该日结锁定的台账（日结页面「本日结锁定的台账」），范围与分页条件不变。第十八批 AZ 段第 285 条 285-R1：来源 contract_deposit（合同押金，应收）由合同生效挂出（见 activateContract），挂合同所属项目。第十八批 AZ 段第 352 条 352-R1（BSM:1673「所有数据默认按项目隔离，只有项目之上的获授权岗位可以跨项目汇总。」）：退租违约金应收（termination_penalty）挂出租合同所属项目，变更押金补退差额（deposit_adjustment）挂原合同所属项目，项目财务按项目范围可见。第十八批 BX 段第 372 条 372-R4（第十八批裁决 77「各清单、明细、导出只看得到这段时间发生的记录；没有发生日期的资料照常显示」）：外部审计账号划定了数据时段的（见 setAuditDataWindow），只列时段内发生的记录，发生时间取挂账时间 created_at（北京时间自然日，起止两端都含），分页结果与 total 同一条件。"
       },
       "post": {
         "tags": [
@@ -6498,7 +6655,7 @@
         "x-idempotency-required": false,
         "x-audit-event-success": "ar_ap_payment.listed",
         "x-audit-event-failure": "ar_ap_payment.list_failed",
-        "description": "读取所选台账原收付款流水；按 finance.ar_ap.view 获批项目范围与商户范围交集核验原台账，项目公司财务无需绑定商户。 18E（20-R3）：商户账号只按商户过滤，看得到各经营项目里本商户的数据（写入口仍只到本人项目）。",
+        "description": "读取所选台账原收付款流水；按 finance.ar_ap.view 获批项目范围与商户范围交集核验原台账，项目公司财务无需绑定商户。 18E（20-R3）：商户账号只按商户过滤，看得到各经营项目里本商户的数据（写入口仍只到本人项目）。第十八批 BX 段第 372 条 372-R4（第十八批裁决 77「各清单、明细、导出只看得到这段时间发生的记录；没有发生日期的资料照常显示」）：外部审计账号划定了数据时段的（见 setAuditDataWindow），只列时段内发生的收付款流水，发生时间取付款时刻 payment_time，不另判所属台账。",
         "responses": {
           "200": {
             "$ref": "#/components/responses/ArApPaymentList"
@@ -6623,7 +6780,7 @@
         ],
         "operationId": "listPaymentConfirmations",
         "summary": "查询付款对象的付款确认与必带平行线",
-        "description": "第十八批 AM 段第 241 条 241-R1、241-R8（BSM:1803「主线与各条平行线都通过才完成付款确认；具体流程按支付类型分别设定」；第十八批裁决 66「每类必带财务、法务两线」、67「审批线页设定」）：读某付款对象的付款确认（新到旧）与该支付类型必带的平行线，供各付款入口的付款确认面板显示状态与必带线。object_type 取 ar_ap_item（应收应付台账项，含工资应付）、finance_refund（财务退款待办）、ticket_refund（门票退款）、saved_bottle_remedy（存酒补存/赔付单），缺 object_type 或 object_id、或 object_type 取其他值 400 VALIDATION_FAILED。查看权限按对象类型：台账项 finance.ar_ap.view（工资应付为 finance.payroll.view），财务退款待办 finance.ar_ap.view，门票退款 ticket.refund.approve，存酒赔付 bar.saved_bottle.manage，缺 403 PERMISSION_DENIED；台账项不存在 404 AR_AP_ITEM_NOT_FOUND。确认记录按该码可触及的项目过滤，商户账号只看本商户，工资应付须能触及发薪主体（同工资读写），看不到的不返回。data：object_type、object_id、payment_type（支付类型：台账项即来源原值，财务退款待办为 finance_refund_＋来源，门票退款 ticket_refund，存酒赔付 saved_bottle_compensation）、payment_type_label、required_line_codes（固定财务、法务两线加流程设定的线）、confirmations[]（confirmation_id、amount_cent、status、review_id、requested_by、requested_at、decided_at）。",
+        "description": "第十八批 AM 段第 241 条 241-R1、241-R8（BSM:1803「主线与各条平行线都通过才完成付款确认；具体流程按支付类型分别设定」；第十八批裁决 66「每类必带财务、法务两线」、67「审批线页设定」）：读某付款对象的付款确认（新到旧）与该支付类型必带的平行线，供各付款入口的付款确认面板显示状态与必带线。object_type 取 ar_ap_item（应收应付台账项，含工资应付）、finance_refund（财务退款待办）、ticket_refund（门票退款）、saved_bottle_remedy（存酒补存/赔付单），缺 object_type 或 object_id、或 object_type 取其他值 400 VALIDATION_FAILED。查看权限按对象类型：台账项 finance.ar_ap.view（工资应付为 finance.payroll.view），财务退款待办 finance.ar_ap.view，门票退款 ticket.refund.approve，存酒赔付 bar.saved_bottle.manage，缺 403 PERMISSION_DENIED；台账项不存在 404 AR_AP_ITEM_NOT_FOUND。确认记录按该码可触及的项目过滤，商户账号只看本商户，工资应付须能触及发薪主体（同工资读写），看不到的不返回。data：object_type、object_id、payment_type（支付类型：台账项即来源原值，财务退款待办为 finance_refund_＋来源，门票退款 ticket_refund，存酒赔付 saved_bottle_compensation）、payment_type_label、required_line_codes（固定财务、法务两线加流程设定的线）、confirmations[]（confirmation_id、amount_cent、status、review_id、requested_by、requested_at、decided_at）。第十八批 BX 段第 372 条 372-R4（第十八批裁决 77「各清单、明细、导出只看得到这段时间发生的记录；没有发生日期的资料照常显示」）：外部审计账号划定了数据时段的（见 setAuditDataWindow），confirmations 只列时段内发生的付款确认，发生时间取发起时刻 requested_at。",
         "x-permission": "finance.ar_ap.view",
         "x-permissions-any-of": [
           "finance.ar_ap.view",
@@ -6923,7 +7080,7 @@
         ],
         "operationId": "listReconciliationBatches",
         "summary": "查询对账批次",
-        "description": "用于查询对账批次。第十八批 Y 段第 180 条 180-R1（BSM:1682「按营业日生成日结批次。」）：批次来源为生成日结（createDailyClose）时随之生成，一营业日一范围一批，business_date、scope_type、scope_id 取该日结的。180-R2（PGM:778「本商户订单回流、券核销、对账差异、结算依据、看板。」；PGM:528 红线④「看不到别的商户和别的项目的数据」）：范围同 listDailyCloses——平台管理员看全部；商户账号只看本商户的 merchant、bar 范围批次；其余按 finance.reconciliation.view 可触及的项目看 project 范围批次与这些项目下商户的 merchant、bar 范围批次。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。",
+        "description": "用于查询对账批次。第十八批 Y 段第 180 条 180-R1（BSM:1682「按营业日生成日结批次。」）：批次来源为生成日结（createDailyClose）时随之生成，一营业日一范围一批，business_date、scope_type、scope_id 取该日结的。180-R2（PGM:778「本商户订单回流、券核销、对账差异、结算依据、看板。」；PGM:528 红线④「看不到别的商户和别的项目的数据」）：范围同 listDailyCloses——平台管理员看全部；商户账号只看本商户的 merchant、bar 范围批次；其余按 finance.reconciliation.view 可触及的项目看 project 范围批次与这些项目下商户的 merchant、bar 范围批次。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。第十八批 BX 段第 372 条 372-R4（第十八批裁决 77「各清单、明细、导出只看得到这段时间发生的记录；没有发生日期的资料照常显示」）：外部审计账号划定了数据时段的（见 setAuditDataWindow），只列时段内的对账批次，发生时间取批次营业日 business_date。",
         "x-permission": "finance.reconciliation.view",
         "x-data-scope": "project-entity",
         "x-terminal-allowed": [
@@ -6953,7 +7110,7 @@
         ],
         "operationId": "listReconciliationDifferences",
         "summary": "对账差异",
-        "description": "第十八批 Y 段第 180 条 180-R2（BSM:1318「查看与平台口径不一致的对账差异。」；PGM:778；PGM:528 红线④）：按所属对账批次的范围读，范围同 listReconciliationBatches。每行返回差异类型 difference_type（amount 金额差异、count 数量差异、status 状态差异、missing 缺失差异）、业务单号 business_ref、平台侧金额 expected_amount_cent（系统取数）、第三方侧金额 actual_amount_cent、差额 amount_cent、来源 source（system 系统取数、manual 人工录入）、状态 status、渠道对账单原件附件编号 evidence_attachment_ids（不带原件为空，即待补凭证）。第十八批 Y 段第 181 条 181-R1（ENUM:191「差异处理状态 待识别、待处理、待复核、已关闭」）：status 为 pending_identification 待识别、pending_handling 待处理、pending_review 待复核、closed 已关闭；另返回负责人 responsible_user_id（登记人、识别人）、进入本阶段的时刻 stage_entered_at、识别写下的差异原因 identified_cause 与待复核时的复核单号 review_id。第十八批 Y 段第 181 条 181-R2（ENUM:191「超时未推进的，系统自动提醒并升级到上一级负责人」）：另返回本阶段（待识别或待处理）超时升级的时刻 stage_escalated_at，未升级为空。第十八批 AL 段第 223 条 223-R1（BSM:1751「高价值差异复核通过才入账、同一差异只入账一次」）：另返回 ledger_entry（提交复核时是否认定结果入应收应付台账）与 posted_ar_ap_item_id（复核通过后入账的台账编号，按台账来源反查，未入账为空）。",
+        "description": "第十八批 Y 段第 180 条 180-R2（BSM:1318「查看与平台口径不一致的对账差异。」；PGM:778；PGM:528 红线④）：按所属对账批次的范围读，范围同 listReconciliationBatches。每行返回差异类型 difference_type（amount 金额差异、count 数量差异、status 状态差异、missing 缺失差异）、业务单号 business_ref、平台侧金额 expected_amount_cent（系统取数）、第三方侧金额 actual_amount_cent、差额 amount_cent、来源 source（system 系统取数、manual 人工录入）、状态 status、渠道对账单原件附件编号 evidence_attachment_ids（不带原件为空，即待补凭证）。第十八批 Y 段第 181 条 181-R1（ENUM:191「差异处理状态 待识别、待处理、待复核、已关闭」）：status 为 pending_identification 待识别、pending_handling 待处理、pending_review 待复核、closed 已关闭；另返回负责人 responsible_user_id（登记人、识别人）、进入本阶段的时刻 stage_entered_at、识别写下的差异原因 identified_cause 与待复核时的复核单号 review_id。第十八批 Y 段第 181 条 181-R2（ENUM:191「超时未推进的，系统自动提醒并升级到上一级负责人」）：另返回本阶段（待识别或待处理）超时升级的时刻 stage_escalated_at，未升级为空。第十八批 AL 段第 223 条 223-R1（BSM:1751「高价值差异复核通过才入账、同一差异只入账一次」）：另返回 ledger_entry（提交复核时是否认定结果入应收应付台账）与 posted_ar_ap_item_id（复核通过后入账的台账编号，按台账来源反查，未入账为空）。第十八批 BX 段第 372 条 372-R4（第十八批裁决 77「各清单、明细、导出只看得到这段时间发生的记录；没有发生日期的资料照常显示」）：外部审计账号划定了数据时段的（见 setAuditDataWindow），只列时段内的对账差异，发生时间取所属批次的营业日 business_date。",
         "x-permission": "finance.reconciliation.view",
         "x-data-scope": "project-entity",
         "x-terminal-allowed": [
@@ -7505,7 +7662,10 @@
         ],
         "operationId": "getInternalPayableExecution",
         "summary": "查普通内部结算往来的付款时点与执行状态",
-        "description": "ENUM L253 内部应付执行状态：pending=待付(含银行在途 in_transit=true)、failed_pending=付款失败待处理(注明 failure_reason 与 expected_repay_date)、settled=已结清、reversed=已冲正(原行已有冲正/重述行回指，不再是有效款项)；同时返回可查看时刻、异议截止、财务指定付账日、当前到期日、逐次付款与顺延记录。按项目范围与商户交集。 18E（20-R3）：商户账号只按商户过滤，看得到各经营项目里本商户的数据（写入口仍只到本人项目）。第十八批 AV 段 310-R1（ENUM:252「押金退还支付不受三个付账日与账单异议期约束」）：退租押金退还应付（source_type=deposit_refund）同样可查；它没有付款时点固化，可查看时刻 visible_at＝挂账时刻，异议截止 objection_deadline 与财务指定付账日 designated_pay_day 为空。第十八批 AZ 段第 358 条 358-R1（BSM:1683「处理路径为原路重付，或更换收款账户后重付」「每笔应付的实际到账结果回写该笔应付并可逐笔追溯」）：data 另返回 account_changes——该款项已审批的换账户单，按 approved_at 升序，每项 id（换账户单编号）、failed_attempt_id（对应失败的付款尝试）、new_account_ref（新收款账户引用）、reason、approved_at（审批时刻，date-time）；没有为空数组。换新账户重付时 initiateInternalPayment 的 account_change_id 取其 id。",
+        "description": "ENUM L253 内部应付执行状态：pending=待付(含银行在途 in_transit=true)、failed_pending=付款失败待处理(注明 failure_reason 与 expected_repay_date)、settled=已结清、reversed=已冲正(原行已有冲正/重述行回指，不再是有效款项)；同时返回可查看时刻、异议截止、财务指定付账日、当前到期日、逐次付款与顺延记录。按项目范围与商户交集。 18E（20-R3）：商户账号只按商户过滤，看得到各经营项目里本商户的数据（写入口仍只到本人项目）。第十八批 AV 段 310-R1（ENUM:252「押金退还支付不受三个付账日与账单异议期约束」）：退租押金退还应付（source_type=deposit_refund）同样可查；它没有付款时点固化，可查看时刻 visible_at＝挂账时刻，异议截止 objection_deadline 与财务指定付账日 designated_pay_day 为空。第十八批 AZ 段第 358 条 358-R1（BSM:1683「处理路径为原路重付，或更换收款账户后重付」「每笔应付的实际到账结果回写该笔应付并可逐笔追溯」）：data 另返回 account_changes——该款项已审批的换账户单，按 approved_at 升序，每项 id（换账户单编号）、failed_attempt_id（对应失败的付款尝试）、new_account_ref（新收款账户引用）、reason、approved_at（审批时刻，date-time）；没有为空数组。换新账户重付时 initiateInternalPayment 的 account_change_id 取其 id。第十八批 BX 段第 372 条 372-R4（第十八批裁决 77「各清单、明细、导出只看得到这段时间发生的记录；没有发生日期的资料照常显示」）：外部审计账号划定了数据时段的（见 setAuditDataWindow），只能看时段内发生的台账，发生时间取台账挂账时间 created_at；时段外 403 OUT_OF_AUDIT_DATA_WINDOW（该记录不在划定的数据时段内），在台账项目与商户范围判定之后判（跨项目、跨商户的仍先报 CROSS_PROJECT_FORBIDDEN、CROSS_MERCHANT_FORBIDDEN）。",
+        "x-failure-codes": [
+          "OUT_OF_AUDIT_DATA_WINDOW"
+        ],
         "x-permission": "finance.ar_ap.view",
         "x-data-scope": "project-merchant",
         "x-terminal-allowed": [
@@ -7849,7 +8009,7 @@
         "x-idempotency-required": false,
         "x-audit-event-success": "finance_refund.listed",
         "x-audit-event-failure": "finance_refund.list_failed",
-        "description": "读取退款台账及未结状态 经销原路退款以dealer_order_refund关联源单，按原订单真实项目核验权限；执行结果与经销状态同事务同步，登记待办不等于成功。",
+        "description": "读取退款台账及未结状态 经销原路退款以dealer_order_refund关联源单，按原订单真实项目核验权限；执行结果与经销状态同事务同步，登记待办不等于成功。第十八批 BX 段第 372 条 372-R4（第十八批裁决 77「各清单、明细、导出只看得到这段时间发生的记录；没有发生日期的资料照常显示」）：外部审计账号划定了数据时段的（见 setAuditDataWindow），只列时段内发生的退款，发生时间取建单时刻 created_at。",
         "responses": {
           "200": {
             "$ref": "#/components/responses/FinanceRefundList"
@@ -22281,7 +22441,10 @@
         ],
         "operationId": "assignStaffLevel",
         "summary": "分配员工职级与薪资",
-        "description": "用于为员工分配职级与具体薪资（职级只给薪资大范围，具体薪资单独填写；币种 P0 仅 CNY，金额整数分）。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。",
+        "description": "用于为员工分配职级与具体薪资（职级只给薪资大范围，具体薪资单独填写；币种 P0 仅 CNY，金额整数分）。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。第十八批 BX 段第 372 条 372-R2（第十八批裁决 77「开外审权限必须划定数据起止日期」）：已定岗员工改职级按新职级的岗位映射重算，与定岗（assignUserPosition）同判——映射到的权限模板是外部审计模板 tpl_auditor_external 或其直接复制件（复制来源 source_template_id 为 tpl_auditor_external），或目标账号带外审标记（归属外部审计类外部机构，或装配了外部审计角色 role_auditor_external）而未划定外审数据时段（见 setAuditDataWindow）时 409 AUDIT_DATA_WINDOW_REQUIRED（给外部审计账号开查看权限前，须先划定其可查看数据的起止日期：＜用户名，顿号分隔＞），职级不变；未定岗或职级未变的只记职级与薪资，不判。",
+        "x-failure-codes": [
+          "AUDIT_DATA_WINDOW_REQUIRED"
+        ],
         "x-permission": "access.staff_level.manage",
         "x-data-scope": "project",
         "x-terminal-allowed": [
@@ -37779,7 +37942,7 @@
         ],
         "operationId": "exportArApItems",
         "summary": "导出应收应付台账快照",
-        "description": "导出当前权限范围内的应收应付台账（十二列：单据编号至状态，枚举为中文）；不改变财务数据。资金流水属敏感信息，导出与查看分权：审计角色只直授查看，导出须经临时授权审批（V196）。导出按 finance.ar_ap.export 获批项目范围与商户范围交集获取全部结果，不截断为首个分页；项目公司财务无需绑定商户。 18E（20-R3）：商户账号只按商户过滤，看得到各经营项目里本商户的数据（写入口仍只到本人项目）。 第 23 条 23-R3（PGM:687「所有导出的文件一律带密码，密码不可取消、不可由导出人自行设定……导出文件中的数据不可复制、不可编辑」）：只交出服务端生成的 PDF：打开密码按导出人账号、导出时刻（秒）、导出所用设备编号（浏览器设备编号，第十八批裁决 6）与接入网络统一算法生成 10 位，密码与文件都不落库、可按密码反查（POST /api/v1/security/export-files/lookup），导出人在 GET /api/v1/security/my-exports 查看；非可编辑版禁止复制与修改（打印不限），每页按页面暗纹同一规则平铺暗纹；每次导出落导出记录 export_files（导出人、时间、设备、网络、内容范围与筛选条件、行数，只增不改不删，PGM:686）。没有已登记的设备编号 409 DEVICE_NOT_REGISTERED（请重新登录）。导出记录 filters 记 merchant_id 与 project_ids（null＝不按该项收窄）；成功审计 finance_ar_ap.exported 的 metadata 记 format=pdf 与 export_file_id。",
+        "description": "导出当前权限范围内的应收应付台账（十二列：单据编号至状态，枚举为中文）；不改变财务数据。资金流水属敏感信息，导出与查看分权：审计角色只直授查看，导出须经临时授权审批（V196）。导出按 finance.ar_ap.export 获批项目范围与商户范围交集获取全部结果，不截断为首个分页；项目公司财务无需绑定商户。 18E（20-R3）：商户账号只按商户过滤，看得到各经营项目里本商户的数据（写入口仍只到本人项目）。 第 23 条 23-R3（PGM:687「所有导出的文件一律带密码，密码不可取消、不可由导出人自行设定……导出文件中的数据不可复制、不可编辑」）：只交出服务端生成的 PDF：打开密码按导出人账号、导出时刻（秒）、导出所用设备编号（浏览器设备编号，第十八批裁决 6）与接入网络统一算法生成 10 位，密码与文件都不落库、可按密码反查（POST /api/v1/security/export-files/lookup），导出人在 GET /api/v1/security/my-exports 查看；非可编辑版禁止复制与修改（打印不限），每页按页面暗纹同一规则平铺暗纹；每次导出落导出记录 export_files（导出人、时间、设备、网络、内容范围与筛选条件、行数，只增不改不删，PGM:686）。没有已登记的设备编号 409 DEVICE_NOT_REGISTERED（请重新登录）。导出记录 filters 记 merchant_id 与 project_ids（null＝不按该项收窄）；成功审计 finance_ar_ap.exported 的 metadata 记 format=pdf 与 export_file_id。第十八批 BX 段第 372 条 372-R4（第十八批裁决 77「各清单、明细、导出只看得到这段时间发生的记录；没有发生日期的资料照常显示」）：外部审计账号划定了数据时段的（见 setAuditDataWindow），只导出时段内发生的记录，发生时间取挂账时间 created_at；导出记录 filters 另记 data_window（所用时段「起～止」，无时段为 null），导出留痕 finance_ar_ap.exported 的 row_count 为时段内条数；往来台账可编辑版重取同按时段取数。",
         "x-auth-context": "staff-token",
         "x-permission": "finance.ar_ap.export",
         "x-data-scope": "project-entity",
@@ -45503,6 +45666,10 @@
         ],
         "operationId": "createPositionRoleTemplate",
         "summary": "创建岗位角色模板",
+        "description": "第十八批 BX 段第 372 条 372-R2（第十八批裁决 77「开外审权限必须划定数据起止日期」）：保存启用的映射后按新映射重算在岗员工的派生权限，逐人与定岗（assignUserPosition）同判——映射到的权限模板是外部审计模板 tpl_auditor_external 或其直接复制件（复制来源 source_template_id 为 tpl_auditor_external），或在岗员工带外审标记（归属外部审计类外部机构，或装配了外部审计角色 role_auditor_external）而未划定外审数据时段（见 setAuditDataWindow）时 409 AUDIT_DATA_WINDOW_REQUIRED（给外部审计账号开查看权限前，须先划定其可查看数据的起止日期：＜用户名，顿号分隔＞），整笔不保存。",
+        "x-failure-codes": [
+          "AUDIT_DATA_WINDOW_REQUIRED"
+        ],
         "x-permission": "access.role.assign",
         "x-data-scope": "project",
         "x-terminal-allowed": [
@@ -45547,6 +45714,10 @@
         ],
         "operationId": "updatePositionRoleTemplate",
         "summary": "更新岗位角色模板",
+        "description": "第十八批 BX 段第 372 条 372-R2（第十八批裁决 77「开外审权限必须划定数据起止日期」）：保存启用的映射后按新映射重算在岗员工的派生权限，逐人与定岗（assignUserPosition）同判——映射到的权限模板是外部审计模板 tpl_auditor_external 或其直接复制件（复制来源 source_template_id 为 tpl_auditor_external），或在岗员工带外审标记（归属外部审计类外部机构，或装配了外部审计角色 role_auditor_external）而未划定外审数据时段（见 setAuditDataWindow）时 409 AUDIT_DATA_WINDOW_REQUIRED（给外部审计账号开查看权限前，须先划定其可查看数据的起止日期：＜用户名，顿号分隔＞），整笔不保存。",
+        "x-failure-codes": [
+          "AUDIT_DATA_WINDOW_REQUIRED"
+        ],
         "x-permission": "access.role.assign",
         "x-data-scope": "project",
         "x-terminal-allowed": [
@@ -45776,7 +45947,10 @@
         "x-audit-event-success": "access.user_position.assigned",
         "x-audit-event-failure": "access.user_position.assign_failed",
         "x-auth-context": "staff-token",
-        "description": "目标 user_id 由路径参数提供；后端按岗位+职级匹配岗位角色模板并分配角色/权限模板。",
+        "description": "目标 user_id 由路径参数提供；后端按岗位+职级匹配岗位角色模板并分配角色/权限模板。第十八批 BX 段第 372 条 372-R2（第十八批裁决 77「开外审权限必须划定数据起止日期」）：岗位映射到的权限模板是外部审计模板 tpl_auditor_external 或其直接复制件（复制来源 source_template_id 为 tpl_auditor_external）（如种子映射 prt_auditor_external 把外部审计岗位 auditor_external 映射到外部审计角色与该模板），或目标账号带外审标记（归属外部审计类外部机构，或装配了外部审计角色 role_auditor_external）时，目标账号须已划定外审数据时段（见 setAuditDataWindow），否则 409 AUDIT_DATA_WINDOW_REQUIRED（给外部审计账号开查看权限前，须先划定其可查看数据的起止日期：＜用户名，顿号分隔＞），不定岗；在目标账号范围与模板可套给目标的判定之后判。已定岗改职级（assignStaffLevel）、岗位申请建单（createAccessGrantRequest 的 user_position）与保存岗位映射后的在岗重算（createPositionRoleTemplate、updatePositionRoleTemplate）同判；审批通过后的落地不判。",
+        "x-failure-codes": [
+          "AUDIT_DATA_WINDOW_REQUIRED"
+        ],
         "parameters": [
           {
             "name": "id",
@@ -46245,7 +46419,10 @@
         "x-audit-event-success": "access.grant_request.applied",
         "x-audit-event-failure": "access.grant_request.apply_failed",
         "x-auth-context": "staff-token",
-        "description": "request_type 为 user_permission_grant、user_permission_deny_removal、position_high_risk_release 时，发起人还必须具备 access.role.assign，否则 403（入口对 access.grant_request.apply 与 access.role.assign 一次核验，同一单次授予来源只消耗一次；不具备的拒绝不消耗任何来源）。目标员工不在发起人可触及的项目内、或发起人带商户而目标属其他商户的（平台管理员除外），403（CROSS_ORG_FORBIDDEN / CROSS_MERCHANT_FORBIDDEN），不建单。可触及的项目按入口核验的权限判（M736）：发起人经可跨项目角色持有该权限的，按该角色可查看的项目判，上述三类申请取 access.grant_request.apply 与 access.role.assign 各自可触及项目的交集；其余发起人仍是本人所属项目（细则见平台治理 PRD §12 M736 补记）。request_type 为 role_project_reapproval（M736）时须带 role_id，只收对该角色有待重新审批的可查看项目的员工，否则 400（VALIDATION_FAILED）；不论发起人是谁、角色是否含须审批的权限都受理。",
+        "description": "request_type 为 user_permission_grant、user_permission_deny_removal、position_high_risk_release 时，发起人还必须具备 access.role.assign，否则 403（入口对 access.grant_request.apply 与 access.role.assign 一次核验，同一单次授予来源只消耗一次；不具备的拒绝不消耗任何来源）。目标员工不在发起人可触及的项目内、或发起人带商户而目标属其他商户的（平台管理员除外），403（CROSS_ORG_FORBIDDEN / CROSS_MERCHANT_FORBIDDEN），不建单。可触及的项目按入口核验的权限判（M736）：发起人经可跨项目角色持有该权限的，按该角色可查看的项目判，上述三类申请取 access.grant_request.apply 与 access.role.assign 各自可触及项目的交集；其余发起人仍是本人所属项目（细则见平台治理 PRD §12 M736 补记）。request_type 为 role_project_reapproval（M736）时须带 role_id，只收对该角色有待重新审批的可查看项目的员工，否则 400（VALIDATION_FAILED）；不论发起人是谁、角色是否含须审批的权限都受理。第十八批 BX 段第 372 条 372-R2（第十八批裁决 77「开外审权限必须划定数据起止日期」）：request_type 为 temporary_permission 且目标账号带外审标记（归属外部审计类外部机构，或装配了外部审计角色 role_auditor_external），或 request_type 为 user_position 且岗位映射到的权限模板是外部审计模板 tpl_auditor_external 或其直接复制件（复制来源 source_template_id 为 tpl_auditor_external）、或目标账号带外审标记时，目标账号须已划定外审数据时段（见 setAuditDataWindow），否则 409 AUDIT_DATA_WINDOW_REQUIRED（给外部审计账号开查看权限前，须先划定其可查看数据的起止日期：＜用户名，顿号分隔＞），不建单；在目标账号范围判定之后判，审批通过后的落地不再判。",
+        "x-failure-codes": [
+          "AUDIT_DATA_WINDOW_REQUIRED"
+        ],
         "requestBody": {
           "$ref": "#/components/requestBodies/AccessGrantApplyRequest"
         },
@@ -70619,7 +70796,10 @@
         "x-idempotency-required": false,
         "x-audit-event-success": "finance_refund.viewed",
         "x-audit-event-failure": "finance_refund.view_failed",
-        "description": "读取退款详情和全部办理记录 经销原路退款以dealer_order_refund关联源单，按原订单真实项目核验权限；执行结果与经销状态同事务同步，登记待办不等于成功。",
+        "description": "读取退款详情和全部办理记录 经销原路退款以dealer_order_refund关联源单，按原订单真实项目核验权限；执行结果与经销状态同事务同步，登记待办不等于成功。第十八批 BX 段第 372 条 372-R4（第十八批裁决 77「各清单、明细、导出只看得到这段时间发生的记录；没有发生日期的资料照常显示」）：外部审计账号划定了数据时段的（见 setAuditDataWindow），只能看时段内发生的退款，发生时间取建单时刻 created_at；时段外 403 OUT_OF_AUDIT_DATA_WINDOW（该记录不在划定的数据时段内），在项目与商户范围判定之后判（跨项目、跨商户的仍先报 CROSS_PROJECT_FORBIDDEN、CROSS_MERCHANT_FORBIDDEN）。",
+        "x-failure-codes": [
+          "OUT_OF_AUDIT_DATA_WINDOW"
+        ],
         "responses": {
           "200": {
             "$ref": "#/components/responses/FinanceRefundDetail"
@@ -70670,7 +70850,10 @@
         "x-idempotency-required": true,
         "x-audit-event-success": "finance_refund.queried",
         "x-audit-event-failure": "finance_refund.query_failed",
-        "description": "查询或原单重试；processing 只能查询，requested/failed 可原单重试，储值缺原路事实禁止自动重试。 经销原路退款以dealer_order_refund关联源单，按原订单真实项目核验权限；执行结果与经销状态同事务同步，登记待办不等于成功。",
+        "description": "查询或原单重试；processing 只能查询，requested/failed 可原单重试，储值缺原路事实禁止自动重试。 经销原路退款以dealer_order_refund关联源单，按原订单真实项目核验权限；执行结果与经销状态同事务同步，登记待办不等于成功。第十八批 BX 段第 372 条 372-R4（第十八批裁决 77「各清单、明细、导出只看得到这段时间发生的记录；没有发生日期的资料照常显示」）：外部审计账号划定了数据时段的（见 setAuditDataWindow），只能查询时段内发生的退款，发生时间取建单时刻 created_at；时段外 403 OUT_OF_AUDIT_DATA_WINDOW（该记录不在划定的数据时段内），在项目与商户范围判定之后、查询网关之前判（跨项目、跨商户的仍先报 CROSS_PROJECT_FORBIDDEN、CROSS_MERCHANT_FORBIDDEN）。",
+        "x-failure-codes": [
+          "OUT_OF_AUDIT_DATA_WINDOW"
+        ],
         "responses": {
           "200": {
             "$ref": "#/components/responses/FinanceRefundResult"
@@ -98838,6 +99021,71 @@
           }
         }
       },
+      "AuditDataWindowRequest": {
+        "type": "object",
+        "description": "划定外审数据时段请求体（setAuditDataWindow；第十八批裁决 77）。起止两端都含，北京时间自然日。",
+        "additionalProperties": false,
+        "required": [
+          "idempotency_key",
+          "data_from",
+          "data_to"
+        ],
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "description": "操作幂等键；同一键重发返回首次结果。"
+          },
+          "data_from": {
+            "type": "string",
+            "format": "date",
+            "description": "数据起始日期（北京时间自然日，含当日）。"
+          },
+          "data_to": {
+            "type": "string",
+            "format": "date",
+            "description": "数据截止日期（北京时间自然日，含当日）；不得早于 data_from。"
+          }
+        },
+        "example": {
+          "idempotency_key": "adw-outsourced-0001",
+          "data_from": "2026-01-01",
+          "data_to": "2026-12-31"
+        }
+      },
+      "AuditDataWindowRecord": {
+        "type": "object",
+        "description": "外审数据时段一行（setAuditDataWindow 响应 data、listAuditDataWindows 的 items）；不含账号名。",
+        "additionalProperties": false,
+        "required": [
+          "user_id",
+          "data_from",
+          "data_to"
+        ],
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "maxLength": 64,
+            "description": "外部人员账号 id。"
+          },
+          "data_from": {
+            "type": "string",
+            "format": "date",
+            "description": "数据起始日期（北京时间自然日，含当日）。"
+          },
+          "data_to": {
+            "type": "string",
+            "format": "date",
+            "description": "数据截止日期（北京时间自然日，含当日）。"
+          }
+        },
+        "example": {
+          "user_id": "u-outsourced-0001",
+          "data_from": "2026-01-01",
+          "data_to": "2026-12-31"
+        }
+      },
       "AmusementProjectRuleRequest": {
         "type": "object",
         "description": "游乐项目规则请求体。字段必须与 OpenAPI、后端 DTO、前端请求、Android 请求和供应商 mock 保持一致。",
@@ -121750,6 +121998,7 @@
     "authContextExtension": "`x-auth-context` 表达 customer-token/device-credential/open-app-credential/webhook-signature 等鉴权上下文",
     "requestBodyRule": "所有 P0 写接口必须使用字段级 requestBody schema，不得使用 GenericWrite 作为正式编码输入",
     "idempotencyRule": "x-idempotency-required=true 的接口必须校验 X-Idempotency-Key，并保证重试返回一致结果+全链路留痕",
+    "auditDataWindowRule": "外审数据时段（第 372 条；PGM:682「外部审计/监管只能查看划定的范围与时间段」；第十八批裁决 77「开外审权限必须划定数据起止日期，各清单、明细、导出只看得到这段时间发生的记录；没有发生日期的资料照常显示」）：只对已由 setAuditDataWindow 划定时段的外部人员账号（outsourced_vendor）生效，时段按北京时间自然日、起止两端都含；平台管理员、最高权限、员工、商户与客人账号不受限。已承载的读取入口里，有发生日期的清单只列时段内发生的记录（分页结果与 total 同一条件，子清单按子记录自身时刻）；导出与清单同取数，导出记录 filters 记 data_window；明细在项目与商户范围判定之后，时段外 403 OUT_OF_AUDIT_DATA_WINDOW（该记录不在划定的数据时段内）；没有发生日期的资料（规则设置、设备台账、平面图等）照常显示。各入口取哪一列作发生时间在该操作描述里逐段标明（已承载：应收应付台账与其导出、收付款流水、内部应付执行、付款确认、对账批次与差异、财务退款），未标明的入口尚未承载。给外部审计账号开查看权限前须先划定，否则 409 AUDIT_DATA_WINDOW_REQUIRED。",
     "terminalAllowedRule": "x-terminal-allowed 只能使用 unified-standards-baseline D5 的 10 个终端码加受控第十一端 dealer_portal（独立经销商 Web 门户，CG-11d）；设备能力写入 x-device-capability，服务端/监控调用写入 x-invocation-channel。",
     "authContextRule": "每个 operation 必须显式声明 x-auth-context，允许值为 public、staff-token、customer-token、device-credential、open-app-credential、webhook-signature；不得用 x-permission 或 x-data-scope 代替认证上下文。"
   },

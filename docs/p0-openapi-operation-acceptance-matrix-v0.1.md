@@ -1,4 +1,4 @@
-# P0 OpenAPI Operation 验收矩阵 V1.01
+# P0 OpenAPI Operation 验收矩阵 V1.02
 
 ## 1. 文档定位
 
@@ -17,7 +17,7 @@
 
 ## 3. Operation 清单
 
-> 当前 `docs/openapi/openapi-p0.json` 共 1413 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
+> 当前 `docs/openapi/openapi-p0.json` 共 1415 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
 
 | 标签 | 方法 | 路径 | operationId | 摘要 | 请求体 | 权限 | 认证上下文 | 数据范围 | 终端/设备能力/调用通道 | 幂等 | 成功事件 | 失败事件 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -38,6 +38,8 @@
 | access | `POST` | `/api/v1/access/temporary-grants/{id}/revoke` | `revokeTemporaryGrant` | 撤销临时授权 | `StatusChangeRequest` | `access.temporary_grant.revoke` | `staff-token` | `project` | web | 是 | `permission_template.revoked` | `temporary_grant.revoke_failed` |
 | access | `GET` | `/api/v1/access/users` | `listAccessUsers` | 查询权限用户 | `-` | `access.user.view` | `staff-token` | `project` | web | 否 | `access.user.viewed` | `not_applicable` |
 | access | `POST` | `/api/v1/access/users` | `createAccessUser` | 创建权限用户 | `AccessUserRequest` | `access.user.manage` | `staff-token` | `project` | web | 是 | `access.user.changed` | `access.user.changed_failed` |
+| access | `GET` | `/api/v1/access/audit-data-windows` | `listAuditDataWindows` | 查看外审数据时段 | `-` | `access.user.view` | `staff-token` | `project` | web | 否 | `access.audit_data_window.viewed` | `not_applicable` |
+| access | `PUT` | `/api/v1/access/users/{user_id}/audit-data-window` | `setAuditDataWindow` | 划定外审数据时段 | `AuditDataWindowRequest` | `access.user.manage` | `staff-token` | `project` | web | 是 | `access.audit_data_window.set` | `access.audit_data_window.set_failed` |
 | amusement | `GET` | `/api/v1/amusement/device-statuses` | `listAmusementDeviceStatuses` | 查询游乐设备状态 | `-` | `amusement.device_status.view` | `staff-token` | `project` | web | 否 | `amusement.device_status.viewed` | `amusement.device_status.viewed_failed` |
 | amusement | `GET` | `/api/v1/amusement/group-bookings` | `listAmusementGroupBookings` | List P2 amusement group and private bookings | `-` | `amusement.group_booking.view` | `staff-token` | `project-amusement` | web | 否 | `amusement_group_booking.viewed.success` | `amusement_group_booking.viewed.failure` |
 | amusement | `POST` | `/api/v1/amusement/group-bookings` | `createAmusementGroupBooking` | Create P2 amusement group or private booking request | `AmusementGroupBookingRequest` | `amusement.group_booking.manage` | `staff-token` | `project-amusement` | web | 是 | `amusement_group_booking.created.success` | `amusement_group_booking.created.failure` |

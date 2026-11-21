@@ -1,6 +1,6 @@
 # PRD 审计业务裁决台账
 
-文档版本：V1.29
+文档版本：V1.30
 状态：进行中
 迁移日期：2026-07-27
 当前事实源：三份立法 HTML 以既有冻结基线叠加 James 此前 M02 至 M08 的点名批准、全量审计 M001、M002 的逐项批准，以及本轮 2026-10-16 至 2026-10-17 业务 HTML 审计中 Q01 至 Q40 及子题实际明确批准且未被后续替代的裁决，和 2026-10-17 第二批 HTML 业务线推演审计（A–F 六线 64 条、停车章）的逐项批准，并叠加本轮 CG 70 项来源确认与 C01–C09、N01–N03 最终澄清及补全文稿中 F01、W01–W05 的整体修改批准（本文件末节）；本轮最终规则、未采纳或替代关系、现行版本与字节哈希见本文件末节。历史记录保留为各自当时事实，不恢复已被替代的建议。
@@ -3979,6 +3979,7 @@ HTML 的语义补齐与直接引用同步可在本批核验；70项中的业务�
 | 72 | **第 360 条 ENUM:51「每笔分摊的结果与所用合同版本必须留痕」怎么算做到**（题面：「第 7 条（18AW，已合并）。ENUM:51 写「每笔分摊的结果与所用合同版本必须留痕」。现码没有独立的「渠道合同」版本记录，渠道费配置是按项目和渠道就地修改的；但每一单在付款时，都把当时用的配置号、费率和固定额固化下来，结算单也逐商户记了渠道费份额，可以逐单追溯。修复人把这条交我定，我判为「已落地」，没有登记缺口。这是对 HTML 原句「所用合同版本」的理解。认可吗？」选项：① 认可：固化到单即算留痕（推荐）；② 不算，登记新条目——渠道费配置改成按版本保存（新版本、生效日、旧版保留），每单记录所用版本号） | 操作员 2026-11-19 选②「不算，登记新条目」：每单固化配置号、费率与固定额不算落地；渠道费配置须按版本保存（新版本、生效日、旧版保留），每单记录所用版本号。登记待开发清单第 360 条（待核实）；覆盖表 BEQ-0128 改回 PARTIAL。 |
 | 73 | **PGM:287「界面全中文」四样例外之外的文件格式名要不要改中文**（背景：18BA 第 267 条同根旁见，后台 ReconciliationPage「支持 PDF、Excel、CSV 原件」、WatermarkTracePage「PNG、JPEG」等文件格式名；控制席原按 PGM:287「可以不用中文的只有四样，没有第五样……不得以『这是标识』为由保留英文」字面判为要改中文，向操作员说明后操作员直接答复） | 操作员 2026-11-19 原话「文件格式名不用中文」：PDF、Excel、CSV、PNG、JPEG 等文件格式名在界面上保持原样，不改中文；PGM:287 其余要求不变。 |
 | 76 | **第 373 条 游乐安全巡检逐个点位怎样才算走到**（题面：「【第 373 条】游乐安全巡检逐个点位怎样才算走到：要不要扫贴在点位上的码？ 前因：BSM:1300「巡检必须按点位顺序完成，缺一个点位、上一个点位就不能通过；未走完全部点位的巡检不成立……确需补录的一律须附证据并经主管复核」，没写怎样算走到。决策台账 DEC-R3-2026-08-04-33 标题是「新增两条扫码强制规则」，第二条就是这句（理由「扫码本来就是工作的必要过程，不扫等于活没干完」）；DEC-R6-09 扫码缺失可补录也扩到游乐巡检行；工作手机用途列有「巡检」。但 HTML 巡检那句没写扫码。 现状：系统里没有点位、也没有点位码；游乐安全巡检只在后台网页填，工作手机没有游乐巡检界面。 分歧：HTML 现句与两条裁决口径不一致；选扫码要多做一整块。」）—— 操作员选「逐点扫码（推荐）」：每个点位生成一张码贴在现场，巡检员用工作手机按顺序扫码后记结果，扫错码或跳点记不上。（未选：「不扫码按序记录」）（2026-11-20 弹窗；来由：18BS 只读设计第 373 条待裁题。控制席说明：按 18BS 只读设计 d-insp-a 做 373-R1、R2、R3、R5（仅选扫码时做）、R4。） | 待开发清单第 373 条（18BS） |
+| 77 | **第 372 条 外部审计、监管「只能查看划定的时间段」怎么落**（题面：「【第 372 条】外部审计、监管「只能查看划定的时间段」怎么落？ 前因：PGM:682「审计人员分两类：内部稽核可查看本综合体全部数据，外部审计/监管只能查看划定的范围与时间段；两类都只能查看、不能修改」。同一文件讲账号期限一律用「有效期」，这句用「时间段」且作查看对象，字面更像数据时段；但当初落地按授权时效做。 现状：「范围」已有（套外部审计模板或逐项临时授权，只限所给项目）。「时间段」只有账号层面期限：外部机构账号有效期（可不填＝长期）、临时授权到期时间；外部审计模板本身不带有效期。外审账号有效期间看到的是该项目有史以来全部记录。 分歧：「时间段」指能看哪段时间发生的数据（如年审只看 2026 年度），还是账号在哪段时间能进来看（如只在进场一个月内有效）。」）—— 操作员选「按数据发生时间（推荐）」：开外审权限必须划定数据起止日期，各清单、明细、导出只看得到这段时间发生的记录；没有发生日期的资料照常显示；十二个业务域上百个读取入口逐个加，分几轮做完。（未选：「按账号授权时效」「暂不做保留登记」）（2026-11-20 弹窗；来由：18BT 只读设计第 372 条待裁题。控制席说明：工作量大，另起只读设计按业务域拆成若干段分轮做；18BT 本段只做第 370 条。） | 待开发清单第 372 条（18BT） |
 
 第一段转正前最低池额试算与取消结算环节超池待审批：既有缺口，列入待开发清单第 75 条、随 18C 做（ENUM L52、BSM L752）。
 
@@ -11966,3 +11967,116 @@ HTML 的语义补齐与直接引用同步可在本批核验；70项中的业务�
   校验：verify-full-admin-page-matrix 通过；git diff --check 0。
 - 18BR 合并前变基（2026-11-22）：本段自 83efbc89 变基到 origin/main 38f998b6；迁移按原序顺延改号 V712→V730、V713→V731；合并时 OpenAPI 共 1413 个操作（主干 1412）、info.version V1.01、决策台账 V1.29，Flyway 最新 V731（共 628 个迁移）。版本行、契约版本、计数与 SHA、生成物、台账补记与 PRD 修订行由合并前脚本按新主干统一重写。
 - 18BR 落地位置补记·运行验收证据、快照、终验文档刷新（无新裁决）：业务提交 3add8226 之后，按第十八批裁决 25 重刷了运行验收证据：后端全量 7283 测，0 失败 0 错误；apps/web 构建通过；常规界面验收（接口全部 mock）实跑 40 条全过；真实后端界面验收未跑，runtime_ready=false。随后依次重生成闭环当前态快照、生产闭环缺口报告、界面验收报告、无上线指挥台。生成器没改。手改 docs/final-closed-loop-acceptance-audit-v0.1.md 与 docs/code-implementation-acceptance-audit-v0.1.md：前端单测源码计数改为 2057；被核文件行数都没变；后端全量与常规界面验收的数字、日期改为本次实跑值；写入 npm run verify:unit 实跑结果，五个工作区全过。交付门禁于 2026-11-21 18:09 UTC 在工作树逐项实跑子项，NAS 两项现场探测未跑。仍红的有两项：一是 coding-host-protection，它写死主仓路径，在工作树口径下必红，属工具口径，不做；二是 final-closed-loop-audit，如实留 2 条红（integration-ready、business-acceptance-ready），原因是校验器要求终验把联调、业务验收写成「是」，而裁决 25 定了不跑真实后端界面验收、运行验收未就绪，终验写的是「否」。verify:delivery-gates 总链仍是红的。
+
+18BX 落地位置补记（2026-11-20）：第十八批 BX 段（batch96）按 18BX 只读设计实现待开发清单第 372 条（外审数据时段·第 1 段（底座与财务域））；运行验收证据、终验文档在本段最后一个提交刷新；各条落地位置见下。本段追加时，原台账除文档版本升一版与裁决表第 77 行外，其他历史字节保持。
+
+- 18BX 落地位置补记·控制席判定（2026-11-20）：本段（第十八批 BX 段，batch96）实现待开发清单第 372 条（18BX 只读设计 b96-audit/d-aud-b.json，两轮质疑者修订后定稿；待裁题经 2026-11-20 弹窗裁决 77 定）。控制席判定：照补设计 d-aud-b 定稿做第 372 条第 1 段 372-R1～R5（外审数据时段的承载、划定与查看，开外审权限前须先划定，读取底座，财务域 11 个入口与往来台账导出、可编辑版重取，后台员工账号页显示并划定）；batching 里段 2～段 6 的入口留给后续段，本段不做。裁决表第 77 行已由控制席插入本段工作树决策台账，勿重插；补记引用写「第十八批裁决 77」。listArOverdueDebtors 走经营分析 reach()、外审本就 403，照设计不改。第五、六轮设计与修复代理的范围外旁见已登记为待开发清单第 388～446 条（待核实）。本段从 83efbc89 开工（第五轮 13 段并行），变基到 2bd98895 后收尾；汇总文件由合并前脚本 summary_tool.py 剥离与重写。
+- 18BX 落地位置补记（第 372 条第 1 段：底座＋财务；依据第十八批裁决 77「开外审权限必须划定数据起止日期，各清单、明细、导出只看得到这段时间发生的记录；没有发生日期的资料照常显示；十二个业务域上百个读取入口逐个加，分几轮做完」；本段增量：新增 2 个操作 setAuditDataWindow、listAuditDataWindows，新增 schema AuditDataWindowRequest、AuditDataWindowRecord，迁移 V736）
+  372-R1 外审数据时段的承载、划定与查看
+  - 改法：
+    - 迁移 V736 新建 audit_data_windows，一个外部人员账号一行，起止两端都含，北京时间自然日。
+    - access 包新类 AuditDataWindowService.set：幂等；校验缺起止或起晚于止 VALIDATION_FAILED、账号不存在 USER_NOT_FOUND、非外部人员账号 AUDIT_DATA_WINDOW_TARGET_INVALID、不可触及 CROSS_ORG_FORBIDDEN；先读旧值再写，留痕 access.audit_data_window.set，带改前改后值。
+    - AuditDataWindowService.list：范围同 AccessService.listAccessUsers，留痕 access.audit_data_window.viewed。
+    - 新控制器 AuditDataWindowController：setAuditDataWindow（PUT 外审数据时段，access.user.manage，失败经 AuditedOperationExecutor.recordingFailure 落 access.audit_data_window.set_failed）；listAuditDataWindows（GET 外审数据时段列表，access.user.view）。
+    - audit-labels 加三个事件中文名；FieldLabels 与 fieldLabels 同键同名加 data_from、data_to。
+  - 依据：
+    - PGM:682「审计人员分两类：内部稽核可查看本综合体全部数据，外部审计/监管只能查看划定的范围与时间段；两类都只能查看、不能修改任何业务数据。」
+    - PGM:662「权限的授予、收回、到期、单次消耗、失效全部留痕」
+    - 第十八批裁决 77「开外审权限必须划定数据起止日期」
+  - 测试：AuditDataWindowJdbcIntegrationTests.masterSetsAndChangesWindowWithBeforeValuesInAuditAndListsIt、rejectsReversedRangeStaffTargetAndOtherProjectTargetWithoutWritingRows。
+  372-R2 开外审权限前须先划定
+  - 改法：
+    - AuditDataWindowService.requireBeforeGrant：模板为外部审计模板或其直接复制件（source_template_id 为 tpl_auditor_external），或目标带外审标记（归属外部审计类外部机构、或装配外部审计角色 role_auditor_external）而未划定时段的，409 AUDIT_DATA_WINDOW_REQUIRED，并列出用户名。
+    - AccessService 只加可选注入 setAuditDataWindows 与四处委托：applyPermissionTemplate；resolvePositionGrant（定岗、有岗位时改职级、岗位申请建单）；createTemporaryGrantDirect（直接发临时授权）；buildTemporaryPermissionGrantRequest（临时权限申请建单）。审批落地不判；有岗位时改职级、保存岗位映射后的在岗重算同判。
+  - 依据：第十八批裁决 77「开外审权限必须划定数据起止日期」。
+  - 契约：applyPermissionTemplate、assignUserPosition、createTemporaryGrant、createAccessGrantRequest 失败码补 AUDIT_DATA_WINDOW_REQUIRED。
+  - 测试：externalAuditTemplateAndPositionRequireWindowFirst、temporaryGrantAndGrantRequestForMarkedAuditorRequireWindowButPlainVendorDoesNot。
+  372-R3 读取底座
+  - 改法：
+    - AuditDataWindow.current、andInstant、andDate、requireCovers：只认请求属性；时段外 403 OUT_OF_AUDIT_DATA_WINDOW。
+    - AuditDataWindowService.resolve、currentWindow：只对外部人员账号查库。
+    - 新配置 AuditDataWindowWebMvcConfig：对 /api/** 的拦截器，请求开始时取值放入请求属性，只取不拒。
+  - 依据：第十八批裁决 77「各清单、明细、导出只看得到这段时间发生的记录；没有发生日期的资料照常显示」。
+  - 契约：x-contract-rules auditDataWindowRule。
+  - 测试：arApListKeepsOnlyItemsCreatedInsideWindowWhileUnwindowedAccountsSeeAll（不带时段的外包账号与项目员工照常看全部），及 372-R4 各例。
+  372-R4 财务域按时段承载
+  - 改法：
+    - JdbcFinanceRepository.listArApItemsForProjects 按挂账时间 created_at，行与总数同口径；listArApItems、exportArApItems 与可编辑版重取 FinanceService.arApViewTable 共用。
+    - JdbcFinanceRepository.listArApPayments 按 payment_time。
+    - JdbcFinanceRepository.reconciliationScopeWhere 按批次营业日 business_date；listReconciliationBatches、listReconciliationDifferences 共用。
+    - JdbcFinanceRepository.listRefundsForProjects 按 created_at。
+    - FinanceService.arApTable 导出记录筛选加 data_window。
+    - FinanceService.scopedRefund 过完项目与商户闸后 requireCovers（getFinanceRefund、queryFinanceRefund）。
+    - InternalPayableExecutionService.execution 加 requireCovers（getInternalPayableExecution）。
+    - PaymentConfirmationService.list 按 requested_at。
+    - listRefundAuthorityLimits、listRefundAutoRules 为规则设置，照常显示。
+  - 依据：第十八批裁决 77；所选选项原文「没有发生日期的资料（规则设置、设备台账、平面图等）照常显示」。
+  - 契约：上述 9 个操作与 exportArApItems 描述补时段口径；getFinanceRefund、queryFinanceRefund、getInternalPayableExecution 补 OUT_OF_AUDIT_DATA_WINDOW。
+  - 测试：refundsListDetailAndQueryFollowWindow、reconciliationBatchesAndDifferencesFollowBusinessDate、paymentsInternalPayableAndConfirmationsFollowWindow、exportRecordsWindowAndCountsOnlyItemsInsideIt、refundRulesWithoutOccurrenceDateStayVisible。
+  372-R5 后台员工账号页显示并划定
+  - 改法：
+    - AccessUsersPage 账号表与行详情加「外审数据时段」。
+    - 新增「划定外审数据时段」区：只列外部人员账号，起止两个日期，需 access.user.manage，调 setAuditDataWindow；页面读 listAuditDataWindows。
+    - 类型 AuditDataWindowRow。
+    - 页面矩阵 ADM-ACC-001 行补接口、字段、事件。
+  - 依据：第十八批裁决 77「开外审权限必须划定数据起止日期」；PGM:682「外部审计/监管只能查看划定的范围与时间段」。
+  - 测试：AccessUsersPage.auditWindow.test.tsx 两例（显示并划定；服务端拒绝时显示原因）。
+- 契约（第十八批 BX 段第 372 条第 1 段，K-contract）
+  依据：PGM:682「外部审计/监管只能查看划定的范围与时间段」；第十八批裁决 77「开外审权限必须划定数据起止日期，各清单、明细、导出只看得到这段时间发生的记录；没有发生日期的资料照常显示」。
+  ①372-R1：新增 2 个操作。
+  - setAuditDataWindow（PUT，access.user.manage）：请求 schema AuditDataWindowRequest（idempotency_key、data_from、data_to）；响应 data 为 AuditDataWindowRecord（user_id、data_from、data_to）。成功留痕 access.audit_data_window.set（metadata 带改前改后值），失败留痕 access.audit_data_window.set_failed。x-failure-codes：PERMISSION_DENIED、VALIDATION_FAILED、USER_NOT_FOUND、AUDIT_DATA_WINDOW_TARGET_INVALID、CROSS_ORG_FORBIDDEN。
+  - listAuditDataWindows（GET，access.user.view）：分页，items 为 AuditDataWindowRecord，范围同 listAccessUsers，留痕 access.audit_data_window.viewed。
+  - 对应代码：AuditDataWindowController.setAuditDataWindow、listAuditDataWindows；AuditDataWindowService.set、list。
+  - 新增 schema：AuditDataWindowRequest、AuditDataWindowRecord。
+  ②372-R2：x-failure-codes 补 AUDIT_DATA_WINDOW_REQUIRED，描述写明各自判定情形，审批通过后的落地不判。
+  - 判定情形：外部审计模板 tpl_auditor_external 或其直接复制件；外审标记，即归属外部审计类外部机构或装配 role_auditor_external。
+  - 涉及操作：applyPermissionTemplate、assignUserPosition、createTemporaryGrant、createAccessGrantRequest，另有按现码同判的 assignStaffLevel（已定岗改职级）、createPositionRoleTemplate、updatePositionRoleTemplate（保存启用映射后的在岗重算）。
+  - 对应代码：AuditDataWindowService.requireBeforeGrant；AccessService.applyPermissionTemplate、resolvePositionGrant、createTemporaryGrantDirect、buildTemporaryPermissionGrantRequest 四处委托。
+  ③372-R3：x-contract-rules 加 auditDataWindowRule。
+  - 内容：只对已划定时段的外部人员账号生效；有发生日期的清单只列时段内；导出记 data_window；明细时段外 403 OUT_OF_AUDIT_DATA_WINDOW；没有发生日期的资料照常显示；已承载入口在各操作描述里逐段标明。
+  - 对应代码：AuditDataWindow.andInstant、andDate、requireCovers；AuditDataWindowWebMvcConfig。
+  ④372-R4：财务各操作描述补时段口径，发生时间列如下。
+  - listArApItems、exportArApItems：挂账时间 created_at。exportArApItems 另写：导出记录 filters 记 data_window，导出留痕 row_count 为时段内条数，可编辑版重取 FinanceService.arApViewTable 同按时段取数。
+  - listArApPayments：付款时刻 payment_time。
+  - getInternalPayableExecution：台账 created_at。
+  - listPaymentConfirmations：requested_at。
+  - listReconciliationBatches、listReconciliationDifferences：所属批次营业日 business_date。
+  - listFinanceRefunds、getFinanceRefund、queryFinanceRefund：created_at。
+  - getInternalPayableExecution、getFinanceRefund、queryFinanceRefund 的 x-failure-codes 补 OUT_OF_AUDIT_DATA_WINDOW。
+  - listRefundAuthorityLimits、listRefundAutoRules 不改。
+  本段增量：新增 2 个操作、2 个 schema、1 条契约规则；改 17 个既有操作的描述或失败码。
+  核验：verify:openapi、verify:openapi-examples、verify:client-routes、verify:client-openapi、verify:client-payload --strict 全绿；yaml 与 json 全文深比较值差异为 0。
+- 18BX 汇合段 J（e2e 与门禁）：
+  - e2e 改法与位置：tests/e2e 没改。
+    - 员工账号页（ADM-ACC-001）新增「外审数据时段」列和划定区，页面新调 listAuditDataWindows（AccessUsersPage 的 saveAuditDataWindow 调 setAuditDataWindow）。
+    - full-admin-ui-hardening 的 ADM-UI-HARDEN-01 只断言表头含「账号类型」，full-admin-mvp 的 ADM-MVP-02 只走新建账号流程，都不受影响。
+    - support/mock-api.ts 对没登记的 GET 路径兜底返回空数组，所以不加桩。setAuditDataWindow 没有 e2e 走到。
+    - 四张视觉基线都不含员工账号页，侧栏导航也没变，所以没有重拍。
+  - 门禁结论：
+    - 后端全量 tests=7182 failures=0 errors=0；本段迁移 V736（audit_data_windows）已在一次性空库真迁。
+    - 前端 typecheck 0 错，vitest 366 files / 2117 tests 全过。
+    - customer-core、customer-app、customer-miniapp 单测全过。
+    - 安卓员工端 gradle test 127 条全过，android-app 编译通过。
+    - chromium 五份后台 spec 33 passed。
+    - 四份生成物在镜像重生成后，verify:p0-contract 全过。
+    - yaml 与 json 深比较一致。
+    - 本段增量：新增 2 个操作（listAuditDataWindows、setAuditDataWindow），新 schema 是 AuditDataWindowRequest、AuditDataWindowRecord；既有操作改说明或失败码 17 个；本段迁移 V736。
+- 18BX 文档组（D-docs）：按 X1、K-contract、J 各段实现，把 PRD、隔离规格与页面矩阵的现状句就地改成现码实情。两份文档标题版本各 +0.01，平台治理 PRD 修订表加一行，版本由收尾统一定；不新增业务规则，不扩表。
+  ① 372-R1～R5，平台治理 PRD §4「角色边界补充」审计人员条后补实现现状：
+     - 划定：外部人员账号由持 access.user.manage 的管理员在员工账号页（ADM-ACC-001「划定外审数据时段」区）划定数据起止日期，北京时间自然日、两端都含，一账号一行（audit_data_windows，本段迁移 V736），换期间直接改。
+     - 接口：setAuditDataWindow（AuditDataWindowController.setAuditDataWindow → AuditDataWindowService.set）与 listAuditDataWindows（AuditDataWindowService.list，范围同员工账号列表）。
+     - 「先划定」闸：AuditDataWindowService.requireBeforeGrant，挂在 AccessService 的 applyPermissionTemplate、resolvePositionGrant（reach 不为空时）、createTemporaryGrantDirect、buildTemporaryPermissionGrantRequest；对应契约 applyPermissionTemplate、assignUserPosition、assignStaffLevel、createTemporaryGrant、createAccessGrantRequest，以及保存岗位映射后重算的 createPositionRoleTemplate、updatePositionRoleTemplate；未划定 409 AUDIT_DATA_WINDOW_REQUIRED。
+     - 读取底座：AuditDataWindowWebMvcConfig 请求级取值；AuditDataWindow.andInstant、andDate、requireCovers；明细在时段外 403 OUT_OF_AUDIT_DATA_WINDOW。
+     - 财务域已承载：listArApItems、exportArApItems 与可编辑版重取，listArApPayments，getInternalPayableExecution，listPaymentConfirmations，listReconciliationBatches，listReconciliationDifferences，listFinanceRefunds，getFinanceRefund，queryFinanceRefund。导出记录筛选记 data_window；listRefundAuthorityLimits、listRefundAutoRules 照常；其余业务域分段承载中。
+     - 依据：PGM:682「审计人员分两类：内部稽核可查看本综合体全部数据，外部审计/监管只能查看划定的范围与时间段；两类都只能查看、不能修改任何业务数据。」；第十八批裁决 77 所选选项原文「给外审开权限时必须划定数据起止日期，外审账号在各清单、明细和导出里只看得到这段时间内发生的记录；没有发生日期的资料（规则设置、设备台账、平面图等）照常显示」。
+  ② 多租户隔离规格 §10 审计人员行「外审 project 限期只读」处就地补：外审数据时段承载于 audit_data_windows（一账号一行），请求级取值，财务域已按时段过滤，其余业务域分段承载中。该行在自动生成区块之外。
+  ③ 页面权限矩阵 ADM-ACC-001 行：功能列补「显示并划定外审数据时段」，现状句补 372-R5（账号表与详情显示外审数据时段，「划定外审数据时段」区给外部人员账号划定数据起止日期）。
+  ④ 验证：verify-full-admin-page-matrix 122 个页面通过；git diff --check 无输出。测试名不适用（本组只改文档；对应实现用例为 AuditDataWindowJdbcIntegrationTests、AccessUsersPage.auditWindow.test.tsx）。
+- 18BX 收尾复核修正（2026-11-21）：按收尾复核成立的意见 1～9 与控制席补充修正；本组新增操作 0 个、迁移 0 个、新权限码 0 个，新增字段键 1 个（data_window）。
+  ① 意见 1（划定外审数据时段的模块归属）：setAuditDataWindow 全仓只有员工账号页（ADM-ACC-001，菜单组 access）调用，ServerModuleRoutes 的 web 表在 /api/v1/access/users/{id}/permission-overrides 之后加 /api/v1/access/users/{id}/audit-data-window 归 access，「权限与账号」模块关闭后与同页 listAuditDataWindows 一并被模块闸拒绝；ServerModuleRoutesTests.exclusiveSubpathsUnderNonePrefixesAreRegistered 补一条断言。依据 PGM:737「关闭后菜单不可见或不可点，接口也要拒绝业务动作。」；第 100 条 100-R1、第 247 条（页面独用接口登记进服务端模块路由）。
+  ② 意见 2、3、4、8（同一缺陷）：exportArApItems 与可编辑版重取写进导出记录筛选条件的键 data_window 补中文字段名「外审数据时段」（FieldLabels 与前端 fieldLabels 同键同名，与员工账号页列名一致），「我的导出」、暗纹溯源页的筛选条件与可编辑版申请说明不再露英文键。新用例：MySecurityExportsPage.test.tsx「筛选条件里的外审数据时段按中文字段名显示，不露英文键」。依据 PGM:287「界面全中文（所有终端零英文）」。
+  ③ 意见 5：AuditDataWindowJdbcIntegrationTests.masterSetsAndChangesWindowWithBeforeValuesInAuditAndListsIt 改划后补断言响应与 audit_data_windows 的 data_from 都是新值；把 AuditDataWindowService.set 的 upsert 改成 ON CONFLICT DO NOTHING 的变异下该用例变红，已还原。
+  ④ 意见 6：同类补三条用例——dealerReturnRefundDetailFollowsWindow（经销退货退款明细在时段外 403 OUT_OF_AUDIT_DATA_WINDOW，走 FinanceService.scopedRefund 经销分支）、temporaryGrantForExternalAuditOrgMemberRequiresWindow（只绑外部审计类机构的外部人员账号直接发临时授权 409 AUDIT_DATA_WINDOW_REQUIRED）、listForProjectStaffShowsOnlyReachableAccounts（只持 access.user.view 的项目人事看不到别的项目外审账号的时段）；三处分支各做一次删除变异均变红，已还原。
+  ⑤ 意见 7：员工账号页 AccessUsersPage 外审数据时段副资源读取失败时，照同页权限模板副资源写法在账号表上方显示区块提示，表中与详情的时段显示「读取失败」，不再当作未划定显示「-」。新用例：AccessUsersPage.auditWindow.test.tsx「外审数据时段读取失败 → 账号表上方区块提示，时段列不当作未划定显示」。
+  ⑥ 意见 9：本补记 372-R2 改法末句与 AccessService.resolvePositionGrant 处注释改为以现码为准（审批落地不判；有岗位时改职级、保存岗位映射后的在岗重算同判），代码不改；依据第十八批裁决 77「开外审权限必须划定数据起止日期」（重算授予也是开权限）。
+- 18BX 合并前变基（2026-11-22）：本段自 2bd98895 变基到 origin/main d310ff86；合并时 OpenAPI 共 1415 个操作（主干 1413）、info.version V1.02、决策台账 V1.30，Flyway 最新 V736（共 629 个迁移）。版本行、契约版本、计数与 SHA、生成物、台账补记与 PRD 修订行由合并前脚本按新主干统一重写。
