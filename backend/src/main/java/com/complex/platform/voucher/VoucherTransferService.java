@@ -1,10 +1,11 @@
 package com.complex.platform.voucher;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.crypto.BlindIndex;
 import com.complex.platform.common.crypto.PiiCipher;
+import com.complex.platform.common.idempotency.IdempotentReplayContext;
 import com.complex.platform.evidence.AuditEventService;
 import com.complex.platform.notification.NotificationService;
 import com.complex.platform.voucher.dto.CustomerVoucherTransferRequest;
@@ -231,6 +232,10 @@ public class VoucherTransferService {
             throw ApiException.forbidden("VOUCHER_TRANSFER_NOT_INITIATOR", "只有发起人可以撤回转赠");
         }
         if ("revoked".equals(transfer.status())) {
+            // 第十八批 CA 段第 393 条 393-R1（PGM:303 末句「同一次操作重复提交时，返回第一次的结果并提示已完成。」；PGM:528「⑤同一笔操作
+            // 重复提交不重复生效（重复点击、网络重发、渠道重复回调都只算一次）」）：revoked 只由发起人撤回写入，发起人对已撤回的转赠再撤回
+            // ＝同一次操作重复提交，返回该转赠并提示已完成；排在转赠不存在、非发起人与综合体开关等各项拒绝之后。
+            IdempotentReplayContext.markCurrentReplayed();
             return VoucherTransferResponse.of(transfer, voucherName(transfer.voucherInstanceId()), true); // 幂等
         }
         if (!"pending".equals(transfer.status())) {
@@ -241,6 +246,8 @@ public class VoucherTransferService {
         if (rows == 0) {
             VoucherTransferRecord latest = transfers.findById(id).orElse(transfer);
             if ("revoked".equals(latest.status())) {
+                // 393-R1：同一次撤回同时到达，后到者条件更新 0 行、重读为已撤回——同上，提示已完成。
+                IdempotentReplayContext.markCurrentReplayed();
                 return VoucherTransferResponse.of(latest, voucherName(latest.voucherInstanceId()), true);
             }
             throw statusConflict(latest); // 撤回时对方已先领 → 409 已被领取
