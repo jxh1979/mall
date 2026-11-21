@@ -1,4 +1,4 @@
-// 文件版本：V0.09
+// 文件版本：V0.10
 import React from "react";
 import { formatActionResult } from "../components/ActionResultView";
 import { AdminDataState } from "../components/AdminDataState";
@@ -106,7 +106,7 @@ function SessionEndingHistory({ api, sessionId }: { api: AdminPageProps["api"]; 
   </div>;
 }
 
-export function AmusementSessionsPage({ api, setActionResult, setGlobalError, effectivePermissions, navigateTo }: AdminPageProps) {
+export function AmusementSessionsPage({ api, user, setActionResult, setGlobalError, effectivePermissions, navigateTo }: AdminPageProps) {
   const [projects, setProjects] = React.useState<AmusementProjectRow[]>([]);
   const [sessions, setSessions] = React.useState<AmusementSessionRow[]>([]);
   const [verifications, setVerifications] = React.useState<AmusementVerificationRow[]>([]);
@@ -288,6 +288,25 @@ export function AmusementSessionsPage({ api, setActionResult, setGlobalError, ef
     }
   }
 
+  // 第十八批 BR 段 357-R1（BSM:753「游乐公司再按已批准的内部结算价或域内规则，与实际提供服务的游乐商户结算」；ENUM:53「采用哪种规则由域主管公司决定，
+  // 商户不能决定」）：游乐公司为项目引用所属商户的内部结算价目录条目，校验与拒绝文案以后端为准。
+  const [priceRefProjectId, setPriceRefProjectId] = React.useState("");
+  const [priceRefCode, setPriceRefCode] = React.useState("");
+  const [priceRefError, setPriceRefError] = React.useState("");
+  const priceRefProject = priceRefProjectId || String(projects[0]?.id ?? "");
+
+  async function saveInternalPriceItem() {
+    setPriceRefError("");
+    try {
+      const result = await api.put<unknown>(`/api/v1/amusement/projects/${encodeURIComponent(priceRefProject)}/internal-price-item`,
+        { idempotencyKey: `amusement-project-price-item-${Date.now()}`, catalogItemCode: priceRefCode.trim() });
+      setActionResult({ action: "amusement_project_internal_price_item_saved", projectId: priceRefProject, result });
+      await reload();
+    } catch (actionError) {
+      setPriceRefError(actionError instanceof Error ? actionError.message : "保存失败");
+    }
+  }
+
   async function createSession() {
     if (!sessionName.trim()) {
       setFormError(TEXT.nameRequired);
@@ -395,7 +414,18 @@ export function AmusementSessionsPage({ api, setActionResult, setGlobalError, ef
   const projectsSection = (
     <>
       <div className="admin-section-title">项目</div>
-      <div className="admin-table-scroll"><table className="admin-table" data-testid="amusement-projects-table"><thead><tr><th>项目</th><th>编码</th><th>容量</th><th>状态</th><th>详情</th></tr></thead><tbody>{projects.map((row) => <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`amusement-project-row-${row.id}`} onClick={() => openProjectDetail(row)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openProjectDetail(row); } }}><td>{display(row.projectName)}</td><td>{display(row.projectCode)}</td><td>{display(row.capacity)}</td><td>{formatBusinessStatus(row.status)}</td><td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看项目详情" onClick={(event) => { event.stopPropagation(); openProjectDetail(row); }}>查看详情</button></td></tr>)}</tbody></table></div>
+      {/* 357-R1（ENUM:53「采用哪种规则由域主管公司决定，商户不能决定。」）：带商户范围的账号（游乐商户）不显示引用表单。 */}
+      {user.merchantId ? null : <>
+      <div className="admin-form-row" data-testid="amusement-price-ref-form">
+        <label>游乐项目<select data-testid="amusement-price-ref-project" aria-label="选择游乐项目" value={priceRefProject} onChange={(event) => setPriceRefProjectId(event.target.value)}>
+          {projects.map((row) => <option key={row.id} value={row.id}>{display(row.projectName)}（{row.id}）</option>)}
+        </select></label>
+        <label>内部结算价目录条目编码<input data-testid="amusement-price-ref-code" value={priceRefCode} onChange={(event) => setPriceRefCode(event.target.value)} /></label>
+        <PermissionButton permissionsState={effectivePermissions} permissions={SESSION_MANAGE} data-testid="amusement-price-ref-save" onClick={() => void saveInternalPriceItem()}>保存</PermissionButton>
+      </div>
+      {priceRefError ? <div className="admin-form-error" data-testid="amusement-price-ref-error">{priceRefError}</div> : null}
+      </>}
+      <div className="admin-table-scroll"><table className="admin-table" data-testid="amusement-projects-table"><thead><tr><th>项目</th><th>编码</th><th>容量</th><th>状态</th><th>内部结算价目录条目</th><th>详情</th></tr></thead><tbody>{projects.map((row) => <tr key={row.id} className="admin-row-clickable" tabIndex={0} data-testid={`amusement-project-row-${row.id}`} onClick={() => openProjectDetail(row)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openProjectDetail(row); } }}><td>{display(row.projectName)}</td><td>{display(row.projectCode)}</td><td>{display(row.capacity)}</td><td>{formatBusinessStatus(row.status)}</td><td>{row.catalogItemCode || "不引用（不参与域内结算）"}</td><td className="admin-row-detail-cell"><button type="button" className="admin-row-detail-btn" aria-label="查看项目详情" onClick={(event) => { event.stopPropagation(); openProjectDetail(row); }}>查看详情</button></td></tr>)}</tbody></table></div>
     </>
   );
 

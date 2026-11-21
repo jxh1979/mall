@@ -1,4 +1,4 @@
-// 文件版本：V0.05
+// 文件版本：V0.06
 import React from "react";
 import { PermissionButton } from "../security/Can";
 import { cnDate } from "../components/RowDetailDrawer";
@@ -24,6 +24,8 @@ const ROUTE_LABELS: Record<string, string> = {
   pass_unverified_attribution: "通票到期未核销归属",
   // 第十八批 AZ 段 350-R1（BSM:1704「按三个付账日结清」）：通用卡消费结算，须先定规则才能月度入账。
   general_card_consume: "通用卡消费结算",
+  // 第十八批 BR 段 357-R3（BSM:1673「游乐域内结算……付款落在三个付账日上」）：游乐域内结算，须先定规则才能月度入账。
+  amusement_domain_settlement: "游乐域内结算",
 };
 const STATUS_LABELS: Record<string, string> = { pending: "待审批", approved: "已批准", rejected: "已驳回" };
 

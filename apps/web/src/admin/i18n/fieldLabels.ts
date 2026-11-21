@@ -1,4 +1,4 @@
-// 文件版本：V0.54
+// 文件版本：V0.55
 // OBS-14-02 后台结果区字段中文名字典（PGM「全局原则 · 界面全中文（所有终端零英文）」）。
 // 键用后端 JSON 的蛇形写法；结果区查表时蛇形与驼峰同查（orderId / order_id 都命中 order_id）。
 // 与后端字段中文名表 FieldLabels.java（common.api 包）同键同名：前段按后端原样抄录，后端改名这里跟着改（门禁会比对）。
@@ -3035,6 +3035,7 @@ export const VALUE_LABELS: Record<string, string> = {
   amusement_safety_rechecked: "安全复查已登记",
   amusement_safety_reopen_approved: "恢复开放已批准",
   amusement_project_created: "游乐项目已创建",
+  amusement_project_internal_price_item_saved: "游乐项目内部结算价条目已保存",
   amusement_session_created: "游乐场次已创建",
   amusement_session_ended: "游乐场次已结束",
   chain_node_approved: "审批节点已通过",
@@ -3621,6 +3622,7 @@ export const KEY_VALUE_LABELS: Record<string, Record<string, string>> = {
   // 第十八批 AR 段第 233 条 233-R6：成本分项（平台主体按第十八批裁决 60；酒吧经营主体同持股分红明细行类型与中文名）与汇总口径。
   cost_type: { payroll: "工资单税前应发", pool_distribution: "通票分账池内分配", exclusive_direct_settlement: "专属直付按内部结算价应直付",
     channel_fee: "渠道费（通路费与销售渠道费）", gift_redemption: "赠送权益兑付", compensation_fulfillment: "游乐故障补偿履约",
+    amusement_domain_settlement: "游乐域内结算",   // 第十八批 BR 段 357-R4（裁决 60「作为付款方的内部结算应付」）
     commission_transfer_reversal: "提成与报酬拨付冲回", media_ticket_share: "传媒演出门票分成", points_issuance: "积分发行费",
     cost_inventory: "销货成本", expense_rent_allocation: "费用·房租分摊", expense_energy: "费用·能耗", expense_property_fee: "费用·物业费",
     expense_labor: "费用·人工", expense_amortization: "费用·摊销", expense_other: "费用·其他", expense_ticket_service_fee: "费用·门票综合服务费（单店门票）" },
@@ -3728,6 +3730,8 @@ export const KEY_VALUE_LABELS: Record<string, Record<string, string>> = {
     contract_parking_monthly: "车位月租", parking_fee: "停车费", parking_credit_cost: "停车抵免成本",
     // 第十八批 AZ 段 350-R1（BSM:1704）：通用卡消费结算往来（同后端 AR_AP_SOURCE_TYPE_LABELS）。
     general_card_consume: "通用卡消费结算",
+    // 第十八批 BR 段 357-R3（BSM:753、1673）：游乐域内结算往来（同后端 AR_AP_SOURCE_TYPE_LABELS）。
+    amusement_domain_settlement: "游乐域内结算",
     bar_shift_overage: "收银长款（营业外收入）", turnover_rent_reversal: "营业额抽成冲正",
     // 第十八批 AI 段 214-R1、214-R2：组合通票各域份额主体间往来（同后端 AR_AP_SOURCE_TYPE_LABELS）。
     pass_domain_share: "通票域间份额", pass_domain_direct_settlement: "通票餐饮零售代付", pass_unverified_attribution: "通票到期未核销归属",

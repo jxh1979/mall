@@ -53,7 +53,8 @@ final class JdbcAmusementRowMapper {
                 rs.getString("location_point_id"),
                 instant(rs, "created_at"),
                 instant(rs, "updated_at"),
-                rs.getString("merchant_id")
+                rs.getString("merchant_id"),
+                rs.getString("catalog_item_code")
         );
     }
 

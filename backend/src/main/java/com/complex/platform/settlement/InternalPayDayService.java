@@ -1,6 +1,6 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.07
+// 文件版本：V0.08
 
 import static com.complex.platform.common.Strings.requireText;
 import static com.complex.platform.common.Strings.trimToNull;
@@ -54,13 +54,14 @@ public class InternalPayDayService {
     public static final String PARKING_CREDIT_COST = "parking_credit_cost";
     /**
      * 本批纳入财务指定付账日的普通内部结算钱路（应收应付来源）；第十八批 AI 段 214-R1、214-R2 加组合通票各域份额三个钱路；第十八批 AZ 段 350-R1
-     * 加通用卡消费结算（BSM:1704「按三个付账日结清」，上线前须先定规则，否则月度入账跳过、下一轮重试）。
+     * 加通用卡消费结算（BSM:1704「按三个付账日结清」，上线前须先定规则，否则月度入账跳过、下一轮重试）；第十八批 BR 段 357-R3 加游乐域内结算
+     * （BSM:1673「游乐域内结算……付款落在三个付账日上」）。
      */
     public static final Set<String> ROUTES = Set.of("ticket_distribution", "ticket_distribution_recovery",
             "platform_incentive_subsidy", SingleBarServiceFeeService.SOURCE_TYPE, COMPENSATION_FULFILLMENT,
             COMPENSATION_FULFILLMENT_RECOVERY, PARKING_CREDIT_COST, SettlementPostingService.SOURCE_PASS_DOMAIN_SHARE,
             SettlementPostingService.SOURCE_PASS_DOMAIN_DIRECT_SETTLEMENT, SettlementPostingService.SOURCE_PASS_UNVERIFIED_ATTRIBUTION,
-            GeneralCardConsumptionSettlement.ROUTE);
+            GeneralCardConsumptionSettlement.ROUTE, AmusementDomainSettlement.ROUTE);
     private static final String GLOBAL = "__global__";
 
     public record Rule(String id, String kind, String route, Integer firstPayDay, Integer secondPayDay, Integer thirdPayDay,

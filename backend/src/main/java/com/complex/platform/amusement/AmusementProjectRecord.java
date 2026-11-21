@@ -16,6 +16,14 @@ public record AmusementProjectRecord(
         Instant createdAt,
         Instant updatedAt,
         @JsonIgnore
-        String merchantId
+        String merchantId,
+        // 第十八批 BR 段 357-R1（BSM:753；ENUM:53）：游乐公司为该项目引用的所属商户内部结算价目录条目；空＝不参与域内结算。
+        String catalogItemCode
 ) {
+    /** 兼容构造（建项目时尚未引用目录条目）。 */
+    public AmusementProjectRecord(String id, String projectName, int capacity, String openStatus, String safetyTemplateId,
+            Map<String, Object> eligibilityRule, String locationPointId, Instant createdAt, Instant updatedAt, String merchantId) {
+        this(id, projectName, capacity, openStatus, safetyTemplateId, eligibilityRule, locationPointId, createdAt, updatedAt, merchantId,
+                null);
+    }
 }

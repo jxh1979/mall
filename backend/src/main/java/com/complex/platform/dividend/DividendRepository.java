@@ -1,6 +1,6 @@
 package com.complex.platform.dividend;
 
-// 文件版本：V0.05
+// 文件版本：V0.06
 
 import com.complex.platform.common.api.PageResponse;
 import com.complex.platform.dividend.DividendRecords.DividendPlanRecord;
@@ -120,6 +120,11 @@ public interface DividendRepository {
      * （单一酒吧门票直付额 + 通票池分配额；未核销票款、通票未核销减除额、退票均不在其中）。
      */
     long sumTicketSettledCent(String merchantId, java.time.LocalDate periodStart, java.time.LocalDate periodEnd);
+
+    /** 第十八批 BR 段 274-R1：营业日落在 [from, to] 的游乐域内结算行（该商户为实际提供方）金额合计，settled 为正、reversed 为负。 */
+    default long sumAmusementDomainSettledCent(String merchantId, java.time.LocalDate from, java.time.LocalDate to) {
+        return 0L;
+    }
 
     /** FS-015 期间内尚无已确认（confirmed/settled）月度分账单的月份（yyyy-MM；缺单或超池待特批 draft）。 */
     List<String> listUnconfirmedTicketSettlementMonths(List<String> months);

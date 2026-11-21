@@ -1,4 +1,4 @@
-# P0 OpenAPI 权限、事件、任务追溯收口附录 V1.00
+# P0 OpenAPI 权限、事件、任务追溯收口附录 V1.01
 
 ## 1. 文档定位
 
@@ -14,11 +14,11 @@
 
 | 检查项 | 当前结果 | 执行结论 |
 |---|---:|---|
-| OpenAPI operation 数 | 1412 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
+| OpenAPI operation 数 | 1413 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
 | OpenAPI 权限/通用权限状态数 | 445 | 人工权限矩阵正文未覆盖 344 项；缺口以本文第 3 节补齐 |
-| OpenAPI 成功/失败事件数 | 2824 | 人工事件矩阵正文未覆盖 2775 项；完整事件字典以本文第 4 节为准 |
-| operation 级任务追溯 | 1412 | 人工任务映射正文未逐项覆盖 1406 个 operation；逐 operation 映射以本文第 5 节为准 |
-| 写接口数量 | 866 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
+| OpenAPI 成功/失败事件数 | 2826 | 人工事件矩阵正文未覆盖 2777 项；完整事件字典以本文第 4 节为准 |
+| operation 级任务追溯 | 1413 | 人工任务映射正文未逐项覆盖 1407 个 operation；逐 operation 映射以本文第 5 节为准 |
+| 写接口数量 | 867 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
 
 ## 3. 权限码与认证上下文补充表
 
@@ -86,7 +86,7 @@
 | `amusement.safety_template.manage` | staff-token | project, project-amusement | 3 | replaceAmusementProjectInspectionPoints, saveAmusementSpotCheckPolicy, createAmusementSafetyTemplate | 已在权限矩阵正文出现 |
 | `amusement.safety_template.view` | staff-token | project-amusement | 1 | listAmusementSafetyTemplates | 已在权限矩阵正文出现 |
 | `amusement.session.end` | staff-token | project-amusement | 1 | endAmusementSession | OpenAPI 补充，以本附录为准 |
-| `amusement.session.manage` | staff-token | project, project-amusement | 5 | createAmusementProject, createAmusementSession, assignAmusementProjectSpace, listAmusementProjectsWithoutSpace, listAmusementProjectsWithoutDeviceRegistry | 已在权限矩阵正文出现 |
+| `amusement.session.manage` | staff-token | project, project-amusement | 6 | createAmusementProject, createAmusementSession, assignAmusementProjectSpace, setAmusementProjectInternalPriceItem, listAmusementProjectsWithoutSpace, listAmusementProjectsWithoutDeviceRegistry | 已在权限矩阵正文出现 |
 | `amusement.session.view` | staff-token | project-amusement | 5 | listAmusementProjects, listAmusementProjectStatusBoard, listAmusementSessions, listAmusementSessionEndings, listAmusementSessionFollowups | 已在权限矩阵正文出现 |
 | `amusement.verification.execute` | staff-token | project-amusement-point | 2 | createAmusementVerification, createAmusementExitVerification | 已在权限矩阵正文出现 |
 | `amusement.verification.view` | staff-token | project-amusement | 3 | listAmusementVerifications, listAmusementCountReleases, listAmusementCapacitySnapshots | 已在权限矩阵正文出现 |
@@ -616,6 +616,8 @@
 | `amusement.project_space_backlog.viewed` | success | `listAmusementProjectsWithoutSpace` | `GET` | `/api/v1/amusement/projects/without-space` | AMU-游乐安全 | `amusement.session.manage` | 接口级事件，以本附录为准 |
 | `amusement.project_space.assign_failed` | failure | `assignAmusementProjectSpace` | `PUT` | `/api/v1/amusement/projects/{id}/space` | AMU-游乐安全 | `amusement.session.manage` | 接口级事件，以本附录为准 |
 | `amusement.project_space.assigned` | success | `assignAmusementProjectSpace` | `PUT` | `/api/v1/amusement/projects/{id}/space` | AMU-游乐安全 | `amusement.session.manage` | 接口级事件，以本附录为准 |
+| `amusement.project.internal_price_ref.update_failed` | failure | `setAmusementProjectInternalPriceItem` | `PUT` | `/api/v1/amusement/projects/{id}/internal-price-item` | AMU-游乐安全 | `amusement.session.manage` | 接口级事件，以本附录为准 |
+| `amusement.project.internal_price_ref.updated` | success | `setAmusementProjectInternalPriceItem` | `PUT` | `/api/v1/amusement/projects/{id}/internal-price-item` | AMU-游乐安全 | `amusement.session.manage` | 接口级事件，以本附录为准 |
 | `amusement.project.resumed` | success | `confirmAmusementMaintenanceResume` | `POST` | `/api/v1/amusement/maintenance-records/{id}/confirm-resume` | AMU-游乐安全 | `amusement.maintenance.confirm` | 接口级事件，以本附录为准 |
 | `amusement.queue_entry.create` | success | `createAmusementQueueEntry` | `POST` | `/api/v1/amusement/queue-entries` | AMU-游乐安全 | `amusement.queue.manage` | 接口级事件，以本附录为准 |
 | `amusement.queue_entry.create_failed` | failure | `createAmusementQueueEntry` | `POST` | `/api/v1/amusement/queue-entries` | AMU-游乐安全 | `amusement.queue.manage` | 接口级事件，以本附录为准 |
@@ -3395,6 +3397,7 @@
 | AMU-游乐安全 | `replaceAmusementProjectInspectionPoints` | `PUT` | `/api/v1/amusement/projects/{id}/inspection-points` | 整份替换游乐项目巡检点位清单 | `amusement.safety_template.manage` | `amusement.inspection_points.configured` / `amusement.inspection_points.configure_failed` | web | operation 级补充 |
 | AMU-游乐安全 | `requestDeleteAmusementProjectEntitlement` | `POST` | `/api/v1/amusement/projects/{id}/entitlements/{entitlementType}/delete-request` | 发起游乐项目权益绑定删除申请 | `amusement.project_entitlement.manage` | `amusement.project_entitlement.changed` / `amusement.project_entitlement.change_failed` | web | operation 级补充 |
 | AMU-游乐安全 | `saveAmusementSpotCheckPolicy` | `PUT` | `/api/v1/amusement/spot-check-policies/{project_id}` | 配置营业中抽检间隔及上下限（按综合体项目，最高权限本人） | `amusement.safety_template.manage` | `amusement.spot_check_policy.updated` / `amusement.spot_check_policy.update_failed` | web | operation 级补充 |
+| AMU-游乐安全 | `setAmusementProjectInternalPriceItem` | `PUT` | `/api/v1/amusement/projects/{id}/internal-price-item` | 游乐项目引用内部结算价目录条目 | `amusement.session.manage` | `amusement.project.internal_price_ref.updated` / `amusement.project.internal_price_ref.update_failed` | web | operation 级补充 |
 | AMU-游乐安全 | `submitAmusementBusinessDayConfig` | `POST` | `/api/v1/amusement/business-day-configs` | 提交综合体游乐营业日最高权限审批 | `amusement.business_day.manage` | `amusement.business_day.submit_completed` / `amusement.business_day.submit_failed` | app, dealer_portal, kiosk, merchant_app, merchant_portal, miniapp, mobile_admin, staff_work_phone, web | operation 级补充 |
 | AMU-游乐安全 | `submitAmusementSafetyInspection` | `POST` | `/api/v1/amusement/safety-inspections/{id}/submit` | 提交巡检结果 | `amusement.safety_inspection.submit` | `amusement.safety_inspection.submitted` / `amusement.safety_inspection.blocked` | staff_work_phone, web | operation 级补充 |
 | AMU-游乐安全 | `unarchiveAmusementProjectEntitlement` | `POST` | `/api/v1/amusement/projects/{id}/entitlements/{entitlementType}/unarchive` | 恢复游乐项目权益绑定 | `amusement.project_entitlement.manage` | `amusement.project_entitlement.changed` / `amusement.project_entitlement.change_failed` | web | operation 级补充 |

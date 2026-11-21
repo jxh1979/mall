@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -189,6 +189,34 @@ class VoucherSettlementTurnoverRentJdbcTests {
         assertThat(finance.computePeriodTurnoverRent(catering, contract, "2026-07")).isEqualTo(110L);
         assertThat(finance.computePeriodTurnoverRent(catering, contract, "2026-08")).isEqualTo(200L);
         assertThat(finance.computePeriodTurnoverRent(bar, barContract, "2026-07")).isZero();
+    }
+
+    /**
+     * 第十八批 BR 段第 357 条 357-R5（ENUM:257「未计收服务费的商户（餐饮、零售等），其通票或券核销划归本商户并已完成结算的部分计入。」；PGM:430「纯游乐业务
+     * 不向娱乐平台公司支付门票综合服务费。」）：游乐商户 7 月付讫的游乐域内结算应付 3000 计入，同来源追收应收 7 月收回 1000 相抵；平台管理员出 7 月抽成账单：
+     * (3000−1000) × 10% = 200。修复前不计：账单金额断言红。
+     */
+    @Test
+    void paidAmusementDomainSettlementIsBilledAsTurnoverRentNetOfRecovery() throws Exception {
+        String amusement = "vst_amu_" + s;
+        String amusementContract = "vst_amu_contract_" + s;
+        String amusementRule = "vst_amu_rule_" + s;
+        merchant(amusement, "券结算游乐商户", "amusement");
+        rule(amusementRule, amusementContract, amusement);
+        Instant july = Instant.parse("2026-07-12T06:00:00Z");
+        payable("ads", amusement, "amusement_domain_settlement", 3000, july);
+        String recovery = "vst_ar_ads_" + s;
+        jdbc.update("INSERT INTO ar_ap_items(id,item_no,direction,counterparty_id,source_type,source_id,amount_cent,unpaid_amount_cent,due_date,"
+                + "status,created_at,updated_at) VALUES(?,?,'receivable',?,'amusement_domain_settlement',?,1000,1000,'2026-07-31','open',now(),now())",
+                recovery, recovery, amusement, recovery);
+        jdbc.update("INSERT INTO ar_ap_payments(id,ar_ap_item_id,amount_cent,payment_method,payment_time,created_at)"
+                + " VALUES(?,?,1000,'bank_transfer',?,now())", "vst_pay_ar_ads_" + s, recovery, Timestamp.from(july));
+
+        mockMvc.perform(post("/api/v1/finance/turnover-rent/bills").with(admin).contentType(MediaType.APPLICATION_JSON)
+                        .content(json.writeValueAsString(Map.of("idempotency_key", "vst-amu-bill-" + s, "rule_id", amusementRule,
+                                "period_start", "2026-07-01", "period_end", "2026-07-31", "due_date", "2026-08-10"))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.amount_cent").value(200));
     }
 
     // ---------- helpers ----------

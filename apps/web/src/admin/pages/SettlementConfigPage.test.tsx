@@ -1,4 +1,4 @@
-// 文件版本：V0.09
+// 文件版本：V0.10
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -681,6 +681,21 @@ describe("SettlementConfigPage 付账日与钱路指派", () => {
     fireEvent.click(screen.getByTestId("internal-pay-day-approve-ipdr-1"));
     await waitFor(() => expect(calls.some((c) => c.method === "POST" && c.url.endsWith("/rules/ipdr-1/decision"))).toBe(true));
     expect(calls.find((c) => c.url.endsWith("/rules/ipdr-1/decision"))!.body).toMatchObject({ decision: "approve" });
+  });
+
+  // 第十八批 BR 段 357-R3（BSM:1673「游乐域内结算……付款落在三个付账日上」）：游乐域内结算钱路须财务先定付账日规则才能月度入账，钱路下拉可选。
+  it("钱路指派规则下拉可选「游乐域内结算」", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockImplementation((input: RequestInfo | URL) => {
+      const body = String(input).includes("/overview") ? { platform_defaults: [], pending_draft_count: 0, pending_drafts: [] } : [];
+      return Promise.resolve(new Response(JSON.stringify({ success: true, code: "OK", message: "success", data: body }),
+        { status: 200, headers: { "content-type": "application/json" } }));
+    }));
+    const { AdminApi } = await import("../client/adminClient");
+    render(<SettlementConfigPage api={new AdminApi("test-token")} user={{ id: "u1", username: "finance", accountType: "platform_admin" }}
+      setActionResult={vi.fn()} setGlobalError={vi.fn()} effectivePermissions={ADMIN_PERMS} />);
+
+    await waitFor(() => expect(Array.from((screen.getByTestId("internal-pay-day-route") as HTMLSelectElement).options).map((o) => o.textContent))
+      .toContain("游乐域内结算"));
   });
 });
 

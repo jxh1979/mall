@@ -1,4 +1,4 @@
-# 文件版本：V0.15
+# 文件版本：V0.16
 server:
   address: ${COMPLEX_API_HOST:127.0.0.1}
 
@@ -72,6 +72,7 @@ bar.unpaid-close-escalation.scheduled.enabled: true          # 第 157 条 157-R
 bar.pending-clear-alert.scheduled.enabled: true              # TK-27 待清台超时提醒本酒吧此刻有排班且持 bar.table.open_close 的员工(每台位每次待清台只发一次,默认 60s 一轮)
 facility.work-order-escalation.scheduled.enabled: true       # 第 77 条 BSM「按响应时限和处理时限统计时效，超时自动升级通知主管」:物业工单响应/处理超时各升级一次并通知可触及该单项目的物业主管(设备告警的接警响应按告警条,默认 60s 一轮)
 facility.alarm-escalation.scheduled.enabled: true            # HP-F01 设备告警超时只在当班范围升级、换班未结告警须下一班明确接手(BSM「楼宇运营」告警条,默认 60s 一轮)
+settlement.amusement-domain.scheduled.enabled: true          # 第十八批 BR 段 357-R3 BSM:1673「游乐域内结算……自然月计费、次月出账；付款落在三个付账日上」:游乐入场按内部结算价固化的域内结算行按营业月合并挂游乐公司对游乐商户的应付、跨月撤销另挂追收(该综合体当月两类数据未标最终或缺钱路付账日规则只跳过该组下一轮重试,每日 04:50 一轮)
 settlement.general-card.scheduled.enabled: true              # 第十八批 AZ 段 350-R1 BSM:1704「长沙项目公司就通用卡余额的实际消费向各业态的经营主体直接付款结算，按三个付账日结清」:通用卡购票按营业月合并挂对票款收款主体的应付、跨月退款另挂追收(缺钱路付账日规则只跳过该组下一轮重试,每日 04:40 一轮处理已结束营业月)
 parking.credit-cost.scheduled.enabled: true                 # HP-P01 停车消费抵免成本按月合并为城市项目公司对承担商户的普通内部结算应收(付款时点按付账日规则固化,每日一轮处理已结束月份)
 settlement.merchant-statement-notice.scheduled.enabled: true  # 第十八批第 13 条 BSM「结算金额出账……一律短信通知」:普通内部结算往来到出账日逐笔短信通知对方商户(每日 09:00 一轮,发送日志去重)

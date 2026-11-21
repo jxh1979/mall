@@ -1,4 +1,4 @@
-// 文件版本：V0.05
+// 文件版本：V0.06
 import React from "react";
 import type { AdminPageProps, FinanceLedgerRow } from "../types";
 import { PermissionButton } from "../security/Can";
@@ -13,7 +13,9 @@ import { cnDate } from "../components/RowDetailDrawer";
 export const INTERNAL_PAYABLE_ROUTES = new Set(["ticket_distribution", "platform_incentive_subsidy", "single_bar_service_fee", "compensation_fulfillment",
   "pass_domain_share", "pass_domain_direct_settlement", "pass_unverified_attribution", "deposit_refund",
   // 第十八批 AZ 段 350-R1（BSM:1704）：通用卡消费结算应付同为普通内部结算应付。
-  "general_card_consume"]);
+  "general_card_consume",
+  // 第十八批 BR 段 357-R3（BSM:1673）：游乐公司对游乐商户的游乐域内结算应付同为普通内部结算应付。
+  "amusement_domain_settlement"]);
 const PAY = ["finance.payment.register"];
 
 type Attempt = { id: string; status: string };

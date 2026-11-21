@@ -1,4 +1,4 @@
-// 文件版本：V0.03
+// 文件版本：V0.04
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -320,6 +320,25 @@ describe("EntityTaxDeclarationsPage 税费申报登记", () => {
     }
     expect(table).not.toMatch(/ticket|pool_distribution|channel_fee|payroll/);
     expect(screen.getByTestId("entity-tax-profit-basis").textContent).toContain("平台主体");
+  });
+
+  // 第十八批 BR 段第 357 条 357-R4（第十八批裁决 60「成本＝该主体在平台内作为付款方的内部结算应付」）：游乐公司的游乐域内结算应付成本分项显中文。
+  it("主体收入成本利润成本行显示「游乐域内结算」", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("entity-tax-filter-entity").textContent).toContain("甲酒吧公司"));
+    const fetchMock = vi.mocked(globalThis.fetch);
+    const base = fetchMock.getMockImplementation()!;
+    fetchMock.mockImplementation((input: RequestInfo | URL, init?: RequestInit) => String(input).includes("/finance/entity-taxes/profits")
+      ? Promise.resolve(text({ ...PROFIT, cost_cent: 300000, cost_items: [{ cost_type: "amusement_domain_settlement", amount_cent: 300000 }] }))
+      : base(input, init));
+    fireEvent.click(screen.getByTestId("entity-tax-tab-profits"));
+    await waitFor(() => expect(screen.getByTestId("entity-tax-profit-entity").textContent).toContain("甲酒吧公司"));
+    fireEvent.change(screen.getByTestId("entity-tax-profit-entity"), { target: { value: "be_1" } });
+    fireEvent.change(screen.getByTestId("entity-tax-profit-start"), { target: { value: "2026-01" } });
+    fireEvent.change(screen.getByTestId("entity-tax-profit-end"), { target: { value: "2026-01" } });
+
+    await waitFor(() => expect(screen.getByTestId("entity-tax-profit-table").textContent).toContain("游乐域内结算"));
+    expect(screen.getByTestId("entity-tax-profit-table").textContent).not.toContain("amusement_domain_settlement");
   });
 
   it("登记弹窗按蛇形键提交（金额元转分，三条线最终审批人）", async () => {

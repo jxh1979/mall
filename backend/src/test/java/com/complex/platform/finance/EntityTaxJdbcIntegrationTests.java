@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.contains;
@@ -954,6 +954,42 @@ class EntityTaxJdbcIntegrationTests {
     private void payroll(String entityId, String month, long cent) {
         jdbc.update("INSERT INTO staff_payroll_statements (id, user_id, month, total_cent, payer_company_id) VALUES (?, ?, ?, ?, ?)",
                 "sps_etd_" + entityId, "usr_etd_pay_" + entityId, month, cent, entityId);
+    }
+
+    /**
+     * 第十八批 BR 段第 357 条 357-R4（BSM:1760 五家主体各自的收入、成本与利润；第十八批裁决 60「成本＝该主体在平台内作为付款方的内部结算应付……」）：游乐公司
+     * 2031-05 有一笔对应两条域内结算行的应付 6000 元、一笔追收应收 3000 元：成本分项游乐域内结算 3000 元（一笔台账行不按结算行数放大），利润相应减少；
+     * 娱乐平台公司同月没有该分项。修复前没有该分项：断言红。
+     */
+    @Test
+    void amusementDomainSettlementCostCountsEachLedgerRowOnceForThePayingCompany() throws Exception {
+        String amusementCo = newEntity("ad", "management_company", "游乐公司");
+        String platformCo = newEntity("ap", "management_company", "娱乐平台公司");
+        String shop = "etd_mad_" + s;
+        // 主体利润按已确认月度分账单取数（同 233-R6 用例），该月须有已确认分账单。
+        jdbc.update("INSERT INTO settlement_bills (id, project_id, period_start, period_end, status) VALUES (?, ?, DATE '2031-05-01', DATE '2031-05-31',"
+                + " 'confirmed')", "sb_etd_ad_" + s, project);
+        String payable = arAp("payable", shop, "amusement_domain_settlement", 600_000, "2031-06-15");
+        String recovery = arAp("receivable", shop, "amusement_domain_settlement", 300_000, "2031-06-15");
+        jdbc.update("UPDATE ar_ap_items SET accounting_period = '2031-05' WHERE id IN (?, ?)", payable, recovery);
+        for (String[] line : List.of(new String[]{"a", "settled", "300000", payable}, new String[]{"b", "settled", "300000", payable},
+                new String[]{"c", "reversed", "-300000", recovery})) {
+            jdbc.update("INSERT INTO amusement_domain_settlement_lines (id, verification_id, kind, amusement_project_id, project_id, provider_merchant_id,"
+                    + " payer_entity_id, amount_cent, price_catalog_entry_id, business_at, business_date, ar_ap_item_id, posted_at)"
+                    + " VALUES (?, ?, ?, 'etd_amp', ?, ?, ?, ?, 'etd_ipc', now(), DATE '2031-05-10', ?, now())",
+                    "adsl_etd_" + line[0] + "_" + s, "ver_etd_" + line[0] + "_" + s, line[1], project, shop, amusementCo,
+                    Long.parseLong(line[2]), line[3]);
+        }
+
+        String body = profitOf(amusementCo, "2031-05", "2031-05").andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.basis").value("platform"))
+                .andExpect(jsonPath("$.data.cost_cent").value(300_000))
+                .andReturn().getResponse().getContentAsString();
+        assertThat(costs(body)).containsEntry("amusement_domain_settlement", 300_000L);
+        assertThat(((Number) JsonPath.read(body, "$.data.profit_cent")).longValue())
+                .isEqualTo(((Number) JsonPath.read(body, "$.data.revenue_cent")).longValue() - 300_000L);
+        assertThat(costs(profitOf(platformCo, "2031-05", "2031-05").andExpect(status().isOk()).andReturn().getResponse().getContentAsString()))
+                .doesNotContainKey("amusement_domain_settlement");
     }
 
     /** 233-R6「主体收入成本利润」页签的真实请求形状（蛇形键）。 */

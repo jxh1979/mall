@@ -1,4 +1,4 @@
-// 文件版本：V0.21
+// 文件版本：V0.22
 import React from "react";
 import { FinancePayrollPaymentPanel } from "./FinancePayrollPaymentPanel";
 import { FinanceRefundPanel } from "./FinanceRefundPanel";
@@ -47,7 +47,8 @@ function centToYuan(cent: number | undefined): string {
 // 第十八批 AM 段第 241 条 241-R9（第十八批裁决 69「付款方是平台主体的应收，登记收款前也须付款确认」）：付款方是平台主体、记成应收的 8 个来源
 // （同后端 PaymentConfirmationService.PLATFORM_PAYER_RECEIVABLE_SOURCES），与应付一样可勾选发起付款确认。
 const PLATFORM_PAYER_RECEIVABLE_SOURCES = new Set(["pass_domain_share", "pass_domain_direct_settlement", "bar_payroll_transfer", "dispatch_commission_transfer",
-  "compensation_fulfillment_recovery", "ticket_distribution_recovery", "saved_bottle_remedy_recovery", "general_card_consume"]);
+  "compensation_fulfillment_recovery", "ticket_distribution_recovery", "saved_bottle_remedy_recovery", "general_card_consume",
+  "amusement_domain_settlement"]);   // 第十八批 BR 段 357-R3：游乐域内结算跨月撤销的追收应收，付款方是游乐公司
 
 // 第十八批 AM 段第 241 条 241-R2（BSM:1803；第十八批裁决 68「同收款方、同类型、同综合体可勾选合发；工资、退款、赔付按单发起」）：未结清、非冲正的
 // 应付可勾选（工资在下方工资面板逐人发起；分红留存待释放不可付），应收只限上述 8 个来源。

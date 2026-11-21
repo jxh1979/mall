@@ -1,4 +1,4 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -114,7 +114,8 @@ describe("FinanceDividendsPage 其他股东（234-R2）", () => {
     await waitFor(() => expect(screen.getByTestId("dividend-plan-row-divp_now").textContent).toContain("酒吧甲"));
     fireEvent.click(screen.getByTestId("dividend-statement-row-divs_aug"));
     await waitFor(() => expect(screen.queryByText("其他股东应得")).not.toBeNull());
-    for (const label of ["其他股东代扣个税", "其他股东实发（挂应付）", "分配尾差（酒吧公司承担）"]) {
+    // 第十八批 BR 段 274-R2：尾差明细行名改中性措辞（与商户专区共用，酒吧公司即酒吧的经营主体）。
+    for (const label of ["其他股东代扣个税", "其他股东实发（挂应付）", "分配尾差（经营主体承担）"]) {
       expect(screen.queryByText(label)).not.toBeNull();
     }
     expect(screen.queryByText(/平台 80% \/ 主理人 15% \/ 丙公司（公司股东）5%/)).not.toBeNull();

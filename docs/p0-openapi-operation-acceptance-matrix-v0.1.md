@@ -1,4 +1,4 @@
-# P0 OpenAPI Operation 验收矩阵 V1.00
+# P0 OpenAPI Operation 验收矩阵 V1.01
 
 ## 1. 文档定位
 
@@ -17,7 +17,7 @@
 
 ## 3. Operation 清单
 
-> 当前 `docs/openapi/openapi-p0.json` 共 1412 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
+> 当前 `docs/openapi/openapi-p0.json` 共 1413 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
 
 | 标签 | 方法 | 路径 | operationId | 摘要 | 请求体 | 权限 | 认证上下文 | 数据范围 | 终端/设备能力/调用通道 | 幂等 | 成功事件 | 失败事件 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -541,6 +541,7 @@
 | bar | `GET` | `/api/v1/bar/tables/without-space` | `listBarTablesWithoutSpace` | 未回填空间的卡座/桌台清单 | `-` | `bar.table.manage` | `staff-token` | `project-bar-table` | web | 否 | `bar.table_space_backlog.viewed` | `bar.table_space_backlog.view_failed` |
 | bar | `GET` | `/api/v1/bar/tables/space-options` | `listBarTableSpaceOptions` | 台位可选空间清单 | `-` | `bar.table.manage` | `staff-token` | `project-bar` | web | 否 | `bar.table_space_option.viewed` | `bar.table_space_option.view_failed` |
 | amusement | `PUT` | `/api/v1/amusement/projects/{id}/space` | `assignAmusementProjectSpace` | 游乐项目空间指派（回填） | `AmusementProjectSpaceAssignmentRequest` | `amusement.session.manage` | `staff-token` | `project` | web | 是 | `amusement.project_space.assigned` | `amusement.project_space.assign_failed` |
+| amusement | `PUT` | `/api/v1/amusement/projects/{id}/internal-price-item` | `setAmusementProjectInternalPriceItem` | 游乐项目引用内部结算价目录条目 | `AmusementProjectInternalPriceItemRequest` | `amusement.session.manage` | `staff-token` | `project` | web | 是 | `amusement.project.internal_price_ref.updated` | `amusement.project.internal_price_ref.update_failed` |
 | amusement | `GET` | `/api/v1/amusement/projects/without-space` | `listAmusementProjectsWithoutSpace` | 未回填空间的游乐项目清单 | `-` | `amusement.session.manage` | `staff-token` | `project` | web | 否 | `amusement.project_space_backlog.viewed` | `amusement.project_space_backlog.view_failed` |
 | bar | `GET` | `/api/v1/bar/shifts` | `listBarShifts` | 查询收银班次 | `-` | `bar.shift.manage` | `staff-token` | `project-bar-table` | web | 否 | `bar.shift.viewed` | `bar.shift.view_failed` |
 | bar | `POST` | `/api/v1/bar/shifts/open` | `openBarShift` | 开班 | `BarShiftOpenRequest` | `bar.shift.manage` | `staff-token` | `project-bar-table` | web | 是 | `bar.shift_opened` | `bar.shift_open_failed` |

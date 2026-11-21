@@ -1,6 +1,6 @@
 # PRD 审计业务裁决台账
 
-文档版本：V1.28
+文档版本：V1.29
 状态：进行中
 迁移日期：2026-07-27
 当前事实源：三份立法 HTML 以既有冻结基线叠加 James 此前 M02 至 M08 的点名批准、全量审计 M001、M002 的逐项批准，以及本轮 2026-10-16 至 2026-10-17 业务 HTML 审计中 Q01 至 Q40 及子题实际明确批准且未被后续替代的裁决，和 2026-10-17 第二批 HTML 业务线推演审计（A–F 六线 64 条、停车章）的逐项批准，并叠加本轮 CG 70 项来源确认与 C01–C09、N01–N03 最终澄清及补全文稿中 F01、W01–W05 的整体修改批准（本文件末节）；本轮最终规则、未采纳或替代关系、现行版本与字节哈希见本文件末节。历史记录保留为各自当时事实，不恢复已被替代的建议。
@@ -11882,3 +11882,87 @@ HTML 的语义补齐与直接引用同步可在本批核验；70项中的业务�
   ⑥ 契约说明改动后，security-scans 两份 md 的 OpenAPI SHA-256 行按最终 openapi-p0.json 重算；verify:operation-matrix、verify:openapi-closure 校验一致，yaml 与 json 深比较一致。
 - 18BL 合并前变基（2026-11-22）：本段自 6068f50e 变基到 origin/main 2969331f；迁移按原序顺延改号 V688→V729；合并时 OpenAPI 共 1412 个操作（主干 1409）、info.version V1.00、决策台账 V1.28，Flyway 最新 V729（共 626 个迁移）。版本行、契约版本、计数与 SHA、生成物、台账补记与 PRD 修订行由合并前脚本按新主干统一重写。
 - 18BL 落地位置补记·运行验收证据、快照、终验文档刷新（无新裁决）：业务提交 7402d2f5 之后，按第十八批裁决 25 重刷了运行验收证据：后端全量 7265 测，0 失败 0 错误；apps/web 构建通过；常规界面验收（接口全部 mock）实跑 40 条全过；真实后端界面验收未跑，runtime_ready=false。随后依次重生成闭环当前态快照、生产闭环缺口报告、界面验收报告、无上线指挥台。生成器没改。手改 docs/final-closed-loop-acceptance-audit-v0.1.md 与 docs/code-implementation-acceptance-audit-v0.1.md：前端单测源码计数改为 2048；被核文件行数都没变；后端全量与常规界面验收的数字、日期改为本次实跑值；写入 npm run verify:unit 实跑结果，五个工作区全过。交付门禁于 2026-11-21 17:09 UTC 在工作树逐项实跑子项，NAS 两项现场探测未跑。仍红的有两项：一是 coding-host-protection，它写死主仓路径，在工作树口径下必红，属工具口径，不做；二是 final-closed-loop-audit，如实留 2 条红（integration-ready、business-acceptance-ready），原因是校验器要求终验把联调、业务验收写成「是」，而裁决 25 定了不跑真实后端界面验收、运行验收未就绪，终验写的是「否」。verify:delivery-gates 总链仍是红的。
+
+18BR 落地位置补记（2026-11-20）：第十八批 BR 段（batch90）按 18BR 只读设计实现待开发清单第 357、274 条（分红与游乐结算组）；运行验收证据、终验文档在本段最后一个提交刷新；各条落地位置见下。本段追加时，原台账除文档版本升一版外，其他历史字节保持。
+
+- 18BR 落地位置补记·控制席判定（2026-11-20）：本段（第十八批 BR 段，batch90）实现待开发清单第 357、274 条（18BR 只读设计 b90-audit/d-div-c.json，两轮质疑者修订后定稿，无待裁题）。控制席判定：照设计（子段 A 第 357 条在前、子段 B 第 274 条在后）。设计旁见（游乐权益不认具体项目且跨商户核销被拒、当天不限次数没有配置入口等）设计旁见由控制席另行登记为待核实新条目，本段不改。第五轮设计与修复代理的范围外旁见已登记为待开发清单第 388～414 条（待核实）。本段从 614159b0 开工（第五轮 13 段并行），变基到 83efbc89 后收尾；汇总文件由合并前脚本 summary_tool.py 剥离与重写。
+- 第十八批 BR 段（第 357、274 条）落地位置补记：
+  357-R1 游乐公司为游乐项目引用所属商户的内部结算价目录条目
+  - 改法与落地：迁移 V730 给 amusement_projects 加 catalog_item_code（引用 internal_price_catalog.item_code，空＝不参与域内结算）。AmusementProjectRecord 加 catalogItemCode，JdbcAmusementRowMapper.mapProject 与 JdbcAmusementRepository 的 listProjects、listProjectsByMerchant、findProjectById 读该列。
+  - 新类 AmusementProjectPriceRefService.setInternalPriceItem：
+    - 商户账号 403 AMUSEMENT_SETTLEMENT_RULE_DOMAIN_COMPANY_ONLY，闸在幂等之前；
+    - 用 InternalSettlementPriceResolver.resolveVersioned 一次判「条目存在、绑定商户等于项目所属商户、有获批生效价」，不符 400 AMUSEMENT_PRICE_ITEM_UNUSABLE；
+    - 走幂等，留痕 amusement.project.internal_price_ref.updated，失败留痕 amusement.project.internal_price_ref.update_failed。
+  - 新类 AmusementProjectPriceRefController 新增操作 setAmusementProjectInternalPriceItem（PUT /api/v1/amusement/projects/{id}/internal-price-item，权限 amusement.session.manage）。本段新增操作 1 个。
+  - 前端：AmusementSessionsPage 项目表加列「内部结算价目录条目」，表格上方加小表单（带商户范围的账号即游乐商户不显示该表单，ENUM:53「采用哪种规则由域主管公司决定，商户不能决定。」），动作码 amusement_project_internal_price_item_saved；页面矩阵 ADM-AMU-001 行补该接口。
+  - 依据：BSM:753「游乐权益核销的收入按具体的游乐项目归属……游乐公司再按已批准的内部结算价或域内规则，与实际提供服务的游乐商户结算。」；ENUM:53「采用哪种规则由域主管公司决定，商户不能决定。」；BSM:1673「商户只能提交资料、履约事实和异议，不能自行决定域内分配方式。」；PGM:430「游乐公司负责……内部结算审批与域内分配」；ENUM:54「任何商户在没有获批内部结算价之前，不得为其开通需要该价格结算的权益或券。」
+  - 测试：AmusementProjectInternalPriceItemJdbcIntegrationTests 三条；前端 AmusementSessionsPage.internalprice.test.tsx 四条。
+  357-R2 游乐入场核销逐笔固化域内结算行，撤销记冲减行
+  - 改法与落地：V730 建 amusement_domain_settlement_lines，UNIQUE(verification_id, kind)。
+  - 新类 AmusementDomainSettlement：
+    - onSettled 同步监听 SettlementSettledEvent，与入场同一事务：游乐类、非补偿履约、项目引用了目录条目时，按项目所属商户 requireVersioned 锁价与价格版本；付款方取 RevenueStreamAttributionRepository.resolveManagementEntity(综合体, amusement_ticket)；营业日取该次入场原件锁定的 business_date。取不到价 400 ENTITLEMENT_PRICE_UNRESOLVED，整笔入场回滚。
+    - onReversed 监听 VerificationReversedEvent，插 reversed 冲减行。
+    - TicketVerificationService 不改。
+  - 依据：BSM:753 同句；BSM:1689「通票权益核销后才按所属域的已生效规则与实际提供方结算；未核销不产生提供方结算。」；BSM:1671「核销或结算时把当时价格固化到流水，历史不得手改。」；ENUM:54 同句。
+  - 测试：AmusementDomainSettlementJdbcIntegrationTests 四条。
+  357-R3 游乐域内结算按营业月入账并登记为新钱路
+  - 改法与落地：AmusementDomainSettlement.pendingGroups、postGroup 按（综合体、游乐商户、付款方、营业月、正常或追收）合并。
+    - 只入已结束、且该综合体「订单与核销」「退款与冲正」两类已标最终的营业月（FinanceService.nonFinalDays）；
+    - 正常组挂游乐公司对游乐商户的应付，跨月撤销另挂追收应收，不轧差；merchant_id 不填；
+    - 付款时点经 InternalPayDayService.schedule 与 record 固化；留痕 settlement.amusement_domain.posted；缺付账日规则整组下一轮重试。
+  - 新类 AmusementDomainSettlementJob，开关 settlement.amusement-domain.scheduled.enabled，prod 开启。
+  - 钱路与来源 amusement_domain_settlement 登记进 InternalPayDayService.ROUTES、PaymentConfirmationService.AR_AP_SOURCES 与 PLATFORM_PAYER_RECEIVABLE_SOURCES、FinanceService 来源中文名「游乐域内结算」；V730 重建付款确认两条支付类型 CHECK，加 1 个。
+  - 前端：reviewLabels、fieldLabels、InternalPayDaysPanel、FinanceInternalPayablePanel、FinanceArApLedgerPage 各补词条。
+  - 依据：BSM:1673「通票分账、单店门票结付、游乐域内结算、餐饮与零售的券结算，一律沿用与积分结算相同的账期：自然月计费、次月出账；付款落在三个付账日上。」；决策台账 DEC-R3-2026-08-04-07；BSM:755「收支两条线，不得轧差」；ENUM:190；第十八批裁决 35「游乐等按综合体逐日查」、65「按台账来源逐个分」、69「付款方是平台主体的应收，登记收款前也须付款确认」。
+  - 测试：AmusementDomainSettlementPostingJdbcTests 四条；PaymentConfirmationJdbcTests、SupervisorReviewServiceTests 成员断言；FinanceServiceTests.amusementDomainSettlementSourceHasChineseLabelAndGatesItsRecovery；前端 SettlementConfigPage.test.tsx、FinanceArApLedgerPage.test.tsx 各一条。
+  357-R4 游乐公司的主体成本计入域内结算应付
+  - 改法与落地：EntityProfitService.platformCost 加成本分项 amusement_domain_settlement（应付为正、追收应收为负；按结算行 payer_entity_id 用 EXISTS，不随行数放大）；前端 cost_type 中文名「游乐域内结算」。
+  - 依据：BSM:1760「娱乐平台公司、游乐公司、传媒公司、中央餐饮公司、城市项目公司五家主体各自的收入、成本与利润，由平台汇总计算」；第十八批裁决 60「成本＝该主体在平台内作为付款方的内部结算应付……」。
+  - 测试：EntityTaxJdbcIntegrationTests.amusementDomainSettlementCostCountsEachLedgerRowOnceForThePayingCompany；前端 EntityTaxDeclarationsPage.test.tsx 一条。
+  357-R5 游乐商户的营业额抽成基数计入已付讫的域内结算
+  - 改法与落地：JdbcFinanceRepository.listSettledVoucherSettlementRows 应付付讫计入、追收应收收回相抵，各加该来源。
+  - 依据：ENUM:257「未计收服务费的商户（餐饮、零售等），其通票或券核销划归本商户并已完成结算的部分计入。」；PGM:430「纯游乐业务不向娱乐平台公司支付门票综合服务费。」
+  - 测试：VoucherSettlementTurnoverRentJdbcTests.paidAmusementDomainSettlementIsBilledAsTurnoverRentNetOfRecovery（经 billTurnoverRent 真实接口）。
+  274-R1 分红收入域加「游乐域内结算」
+  - 改法与落地：DividendService.REVENUE_DOMAINS 加 amusement；computeStatement 取 DividendRepository.sumAmusementDomainSettledCent（JdbcDividendRepository 按 provider_merchant_id 与 business_date 落期），明细行 revenue_amusement；迁移 V731 重建 chk_dsl_line_type。前端 FinanceDividendsPage 收入域勾选项「游乐域内结算」、明细行名「游乐域内结算收入」。
+  - 依据：ENUM:297「参股方、主理人和其他股东按每家采用参股经营的经营主体工商登记的真实持股比例分配；酒吧的参股方为娱乐平台公司，引进参股的游乐项目的参股方为引进该项目的域主管公司」；BSM:1774「分红基数按「净利润」算：一个周期里的经营收入（按含税实收口径）……」；决策台账 DEC-R3-2026-08-04-17。
+  - 测试：DividendAmusementRevenueJdbcIntegrationTests 四条；前端 FinanceDividendsPage.amusement.test.tsx 两条。
+  274-R2 非酒吧方案的计算单说明不再写「酒吧公司」
+  - 改法与落地：DividendService.computeStatement 按方案商户是否酒吧取词：非酒吧时，参股方分成行写「参股方（引进该项目的域主管公司）分成」，尾差行、欠款抵扣行写「本经营主体」；酒吧方案不变。前端 DIVIDEND_LINE_LABELS 尾差行名、详情抽屉尾差说明、方案表单提示改中性措辞「经营主体承担」。页头说明改写「参股方（酒吧为娱乐平台公司，引进参股的游乐项目为引进该项目的域主管公司）、主理人和其他股东……尾差单列由该经营主体承担」，方案表单欠款抵扣勾选项改「欠该经营主体」。
+  - 依据：ENUM:297「酒吧的参股方为娱乐平台公司，引进参股的游乐项目的参股方为引进该项目的域主管公司」；BSM:1776「由发放的经营主体代扣个人所得税」。
+  - 测试：DividendAmusementRevenueJdbcIntegrationTests.amusementDomainSettlementIsTheAmusementMerchantsRevenue（措辞断言）；DividendOtherShareholdersJdbcIntegrationTests.officialStatementSplitsAmongAllShareholdersWithSignedResidual（酒吧措辞不变）；前端 FinanceDividendsPage.shareholders.test.tsx 改一处断言。
+  本段迁移：V730、V731。新增操作：1 个（setAmusementProjectInternalPriceItem）。付款确认支付类型：+1。
+- 18BR 契约落地位置（契约代理）：
+  - 357-R1：新增 setAmusementProjectInternalPriceItem（PUT 游乐项目内部结算价目录条目引用；请求体 AmusementProjectInternalPriceItemRequest，含 idempotency_key、catalog_item_code）。权限 amusement.session.manage，数据范围 project，终端 web，事件 amusement.project.internal_price_ref.updated 与 amusement.project.internal_price_ref.update_failed。错误码：挂商户的非平台侧账号 403 AMUSEMENT_SETTLEMENT_RULE_DOMAIN_COMPANY_ONLY；不挂商户的非平台侧账号 403 MERCHANT_SCOPE_REQUIRED；条目不可用 400 AMUSEMENT_PRICE_ITEM_UNUSABLE；项目不存在 404 PROJECT_NOT_FOUND。没有清空入口。listAmusementProjects、createAmusementProject 说明补 catalog_item_code。依据：BSM:753「游乐公司再按已批准的内部结算价或域内规则，与实际提供服务的游乐商户结算。」；ENUM:53「采用哪种规则由域主管公司决定，商户不能决定。」。实现在 AmusementProjectPriceRefController.setInternalPriceItem 与 AmusementProjectPriceRefService.setInternalPriceItem，测试 AmusementProjectInternalPriceItemJdbcIntegrationTests。
+  - 357-R2：createTicketVerification、createAmusementVerification 说明补：入场项目引用了目录条目的，按所属商户当时生效价逐笔固化游乐域内结算行；取不到价 400 ENTITLEMENT_PRICE_UNRESOLVED、游乐票收入归属未配置 409 REVENUE_STREAM_ATTRIBUTION_MISSING，都整笔回滚、不扣次，不另落 rejected 或 failed 核销记录。reverseTicketVerification 说明补冲减行。依据：BSM:1689「通票权益核销后才按所属域的已生效规则与实际提供方结算；未核销不产生提供方结算。」；BSM:1671「核销或结算时把当时价格固化到流水，历史不得手改。」。实现在 AmusementDomainSettlement.onSettled 与 onReversed，测试 ticketing 包的 AmusementDomainSettlementJdbcIntegrationTests。
+  - 357-R3：
+    - submitInternalPayDayRule 请求体 route 枚举加 amusement_domain_settlement。
+    - PaymentConfirmationType 枚举加 amusement_domain_settlement，说明写明付款方是游乐公司、跨月撤销另挂的追收应收同类型；listPaymentConfirmationFlows、savePaymentConfirmationFlow 的支付类型个数随之加 1。
+    - createArApPayment、createArApPaymentConfirmation、confirmOfflinePayment、approveSupervisorReview、requestArApAdjustment 的「付款方是平台主体的来源」清单各加该来源。
+    - listMerchantPortalTicketSettlements 说明补该来源。
+    依据：BSM:1673「通票分账、单店门票结付、游乐域内结算、餐饮与零售的券结算，一律沿用与积分结算相同的账期：自然月计费、次月出账；付款落在三个付账日上。」；第十八批裁决 69「付款方是平台主体的应收，登记收款前也须付款确认」。实现在 AmusementDomainSettlement.pendingGroups 与 postGroup、AmusementDomainSettlementJob，测试 AmusementDomainSettlementPostingJdbcTests。
+  - 357-R4：getEntityTaxProfit 的成本分项清单加 amusement_domain_settlement（游乐公司作为付款方的游乐域内结算应付减跨月撤销追收应收）。依据：第十八批裁决 60「作为付款方的内部结算应付」。实现在 EntityProfitService.platformCost，测试 EntityTaxJdbcIntegrationTests。
+  - 357-R5：billTurnoverRent 说明补游乐域内结算应付的实际付款计入、追收的实际收回相抵。依据：ENUM:257「其通票或券核销划归本商户并已完成结算的部分计入」。实现在 JdbcFinanceRepository.listSettledVoucherSettlementRows，测试 VoucherSettlementTurnoverRentJdbcTests。
+  - 274-R1：DividendPlanRequest.revenue_domains 枚举加 amusement（createDividendPlan、updateDividendPlan 共用）；computeDividendStatements、getDividendStatement 说明补 revenue_amusement 明细行。依据：ENUM:297「引进参股的游乐项目的参股方为引进该项目的域主管公司」。实现在 DividendService.computeStatement 与 JdbcDividendRepository.sumAmusementDomainSettledCent，测试 DividendAmusementRevenueJdbcIntegrationTests。
+  - 274-R2：同两个操作的说明补：非酒吧方案的 platform_share 行写「参股方（引进该项目的域主管公司）分成」，尾差行与欠款抵扣行写「本经营主体」，酒吧方案文字不变。依据：ENUM:297。测试 DividendAmusementRevenueJdbcIntegrationTests、DividendOtherShareholdersJdbcIntegrationTests。
+  本段增量：新增 1 个操作（setAmusementProjectInternalPriceItem），新增 1 个 requestBody 与 1 个 schema（均名 AmusementProjectInternalPriceItemRequest），付款确认支付类型加 1 个；迁移号 V730、V731（实现段所落，契约代理没加迁移）。
+- 18BR 汇合段 J：逐条 grep 了 e2e 用例和 mock 里涉及本段页面的地方，包括 AmusementSessionsPage（ADM-AMU-001 项目表多了「内部结算价目录条目」一列和引用表单）、FinanceDividendsPage（分配尾差改称「经营主体承担」，新增收入域「游乐域内结算」）、FinanceArApLedgerPage、FinanceInternalPayablePanel、InternalPayDaysPanel（新增来源与路线 amusement_domain_settlement）。现有 e2e 断言都不按列数或表头查，也不断言分配尾差的措辞，所以 tests/e2e 不用改；视觉基线也不涉及本段改的页面，不用重拍。门禁结论：本段迁移 V730__amusement_domain_settlement、V731__dividend_amusement_revenue 在一次性空库里真迁，后端全量 0 红；前端 typecheck 与 vitest 全量、客人三个工作区单测、安卓员工端 gradle test 与 android-app 编译都通过；五份后台 e2e（chromium）全部通过；四份生成物（操作矩阵、契约闭包附录、数据隔离规格、domain-ownership-scope）重生成后 verify:p0-contract 全过；OpenAPI yaml 与 json 深比较一致，本段新增 1 个操作 setAmusementProjectInternalPriceItem（AmusementProjectPriceRefController.setInternalPriceItem）；git diff --check 干净。
+- D-docs（文档组，同步第 357、274 条落地后的 PRD 与矩阵现状；无代码、无迁移、不改契约）：按现码就地改现状句，每份只升一版并加修订行，不新增业务规则。
+  ① docs/finance-settlement-product-prd-v0.1.md：
+  - §4B.1 补 357-R1～357-R3 实现现状。钱路 amusement_domain_settlement「游乐域内结算」。游乐公司经 setAmusementProjectInternalPriceItem 为项目引用所属商户已获批生效的内部结算价目录条目。AmusementDomainSettlement.onSettled 在入场同一事务内按当时生效价逐笔固化，取不到价报 400 ENTITLEMENT_PRICE_UNRESOLVED，整笔回滚、不扣次；onReversed 记冲减行。AmusementDomainSettlementJob 调 pendingGroups 与 postGroup，按营业月合并挂游乐公司对游乐商户的应付；跨月撤销另挂追收应收；该综合体两类数据未标最终，或缺付账日规则（409 PAY_DAY_NOT_CONFIGURED）时，整组下一轮重试。付款确认、留痕 settlement.amusement_domain.posted、商户专区可见，都写进了这条现状。台账来源中文名加一项。
+  - §4B.4 补账期现状指针。
+  - §4C、§4D：平台主体应收来源、付款确认支付类型、台账来源各加 1 个（amusement_domain_settlement）。
+  - §6D.8 平台主体成本加游乐域内结算（357-R4，EntityProfitService.platformCost）。
+  - §13.1 营业额抽成基数加游乐域内结算应付的实际付款与追收应收的实际收回（357-R5，JdbcFinanceRepository.listSettledVoucherSettlementRows）。
+  ② docs/platform-governance-prd-v0.1.md §2A.5：付款确认复核策略、审批时限清单、付款确认流程表随支付类型加 1 类。
+  ③ docs/amusement-business-operations-product-prd-v0.1.md §9 承接补句补 357-R1、357-R2 实现现状：setAmusementProjectInternalPriceItem、AmusementProjectPriceRefService.setInternalPriceItem、列 amusement_projects.catalog_item_code；商户账号 403 AMUSEMENT_SETTLEMENT_RULE_DOMAIN_COMPANY_ONLY；条目不可用 400 AMUSEMENT_PRICE_ITEM_UNUSABLE；ADM-AMU-001 加引用列与保存表单。
+  ④ docs/settlement-rebuild-prd-v1.0.md §4 收入类型表「纯游乐票及纯游乐通票」行补备注：游乐公司再按内部结算价与游乐商户另结。
+  ⑤ docs/dividend-engine-prd-v0.1.md：
+  - §3 新增游乐商户分红实现现状。274-R1：DividendService.REVENUE_DOMAINS 加 amusement；DividendRepository.sumAmusementDomainSettledCent 按营业日取游乐域内结算行；明细行 revenue_amusement；迁移 V731。274-R2：非酒吧方案的平台分成写「参股方（引进该项目的域主管公司）分成」，尾差与欠款抵扣写「本经营主体」；前端明细行名改「分配尾差（经营主体承担）」。
+  - §5 期间收入式加 amusement 项，尾差两处写成「由该经营主体承担（酒吧方案即该酒吧公司）」。
+  - §8 页面补收入域勾选项与明细行名。
+  ⑥ docs/full-admin-page-permission-field-matrix-v0.1.csv 的 ADM-AMU-001 行：补动作、字段 catalog_item_code、校验、事件 amusement.project.internal_price_ref.updated 与实现现状。docs/full-admin-remaining-requirements-code-matrix-v0.1.csv 的 ADM-AMU-001 行：补 PUT 接口与前端用例。
+  依据：BSM:753「游乐公司再按已批准的内部结算价或域内规则，与实际提供服务的游乐商户结算。」；BSM:1673「通票分账、单店门票结付、游乐域内结算、餐饮与零售的券结算，一律沿用与积分结算相同的账期：自然月计费、次月出账；付款落在三个付账日上。」；ENUM:297「酒吧的参股方为娱乐平台公司，引进参股的游乐项目的参股方为引进该项目的域主管公司」；DEC-R3-2026-08-04-17。
+  校验：verify-full-admin-page-matrix 通过；git diff --check 0。
+- 18BR 合并前变基（2026-11-22）：本段自 83efbc89 变基到 origin/main 38f998b6；迁移按原序顺延改号 V712→V730、V713→V731；合并时 OpenAPI 共 1413 个操作（主干 1412）、info.version V1.01、决策台账 V1.29，Flyway 最新 V731（共 628 个迁移）。版本行、契约版本、计数与 SHA、生成物、台账补记与 PRD 修订行由合并前脚本按新主干统一重写。
+- 18BR 落地位置补记·运行验收证据、快照、终验文档刷新（无新裁决）：业务提交 3add8226 之后，按第十八批裁决 25 重刷了运行验收证据：后端全量 7283 测，0 失败 0 错误；apps/web 构建通过；常规界面验收（接口全部 mock）实跑 40 条全过；真实后端界面验收未跑，runtime_ready=false。随后依次重生成闭环当前态快照、生产闭环缺口报告、界面验收报告、无上线指挥台。生成器没改。手改 docs/final-closed-loop-acceptance-audit-v0.1.md 与 docs/code-implementation-acceptance-audit-v0.1.md：前端单测源码计数改为 2057；被核文件行数都没变；后端全量与常规界面验收的数字、日期改为本次实跑值；写入 npm run verify:unit 实跑结果，五个工作区全过。交付门禁于 2026-11-21 18:09 UTC 在工作树逐项实跑子项，NAS 两项现场探测未跑。仍红的有两项：一是 coding-host-protection，它写死主仓路径，在工作树口径下必红，属工具口径，不做；二是 final-closed-loop-audit，如实留 2 条红（integration-ready、business-acceptance-ready），原因是校验器要求终验把联调、业务验收写成「是」，而裁决 25 定了不跑真实后端界面验收、运行验收未就绪，终验写的是「否」。verify:delivery-gates 总链仍是红的。

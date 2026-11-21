@@ -1,4 +1,4 @@
-// 文件版本：V0.29
+// 文件版本：V0.30
 package com.complex.platform.governance.review;
 
 import com.complex.platform.support.InMemoryAuditEventRepository;
@@ -77,7 +77,8 @@ class SupervisorReviewServiceTests {
                         "inventory.transfer_order.unreturnable", "compliance.expiry_item.grace", "merchant.project.add",
                         "inventory.trace.scan_backfill", "bar.sales.backfill", "bar.service.backfill", "ticket.type.rule.publish",
                         com.complex.platform.finance.PaymentConfirmationService.action("bar_loan"),
-                        com.complex.platform.finance.PaymentConfirmationService.action("general_card_consume"));
+                        com.complex.platform.finance.PaymentConfirmationService.action("general_card_consume"),
+                        com.complex.platform.finance.PaymentConfirmationService.action("amusement_domain_settlement"));
         assertThat(page.items()).extracting(SupervisorReviewPolicyRecord::policyCode).doesNotHaveDuplicates();
         assertThat(page.items())
                 .filteredOn(policy -> "contract_violation".equals(policy.actionType()))
