@@ -35,7 +35,7 @@ public class AuditEventService {
         return repository.searchOperationEvents(businessType, businessId, actorId, eventName, from, to, limit, merchantScope);
     }
 
-    /** 第十八批 BA 段第 324 条 324-R1：projectScope 非 null 时只取该项目集合内商户与人员所做的操作（空集合取不到）。 */
+    /** 第十八批 BA 段第 324 条 324-R1：projectScope 非 null 时只取该项目集合内商户与人员所做的操作（空集合取不到）；启用中的综合体都在该集合内时另含归不到任何项目的操作（第 370 条 370-R1）。 */
     public java.util.List<AuditEvent> searchOperationEvents(String businessType, String businessId, String actorId, String eventName,
             java.time.Instant from, java.time.Instant to, int limit, String merchantScope, java.util.Set<String> projectScope) {
         return repository.searchOperationEvents(businessType, businessId, actorId, eventName, from, to, limit, merchantScope, projectScope);

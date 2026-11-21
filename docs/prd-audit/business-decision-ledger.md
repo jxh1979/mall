@@ -1,6 +1,6 @@
 # PRD 审计业务裁决台账
 
-文档版本：V1.33
+文档版本：V1.34
 状态：进行中
 迁移日期：2026-07-27
 当前事实源：三份立法 HTML 以既有冻结基线叠加 James 此前 M02 至 M08 的点名批准、全量审计 M001、M002 的逐项批准，以及本轮 2026-10-16 至 2026-10-17 业务 HTML 审计中 Q01 至 Q40 及子题实际明确批准且未被后续替代的裁决，和 2026-10-17 第二批 HTML 业务线推演审计（A–F 六线 64 条、停车章）的逐项批准，并叠加本轮 CG 70 项来源确认与 C01–C09、N01–N03 最终澄清及补全文稿中 F01、W01–W05 的整体修改批准（本文件末节）；本轮最终规则、未采纳或替代关系、现行版本与字节哈希见本文件末节。历史记录保留为各自当时事实，不恢复已被替代的建议。
@@ -12385,3 +12385,27 @@ HTML 的语义补齐与直接引用同步可在本批核验；70项中的业务�
   - 测试：StocktakeVarianceSelfReviewJdbcIntegrationTests.varianceWithoutUnitCostIsValuedAtCurrentAverageCostAndCanBePosted（不持 inventory.cost.view 的登记人、复核人响应金额为空、has_variance_amount 为真，库里为真实估算金额；详情不持的隐去、持的看到；过账照常按真实金额入账）、explicitUnitCostStillOverridesAverageCost（登记人持 inventory.cost.view，响应照常带金额）；InventoryStocktakePage.test.tsx「差异金额被隐去时显示「—」，复核通过未过账的差异按「有差异金额」给「过账」」。
 - 18BK 合并前变基（2026-11-24）：本段自 83efbc89 变基到 origin/main cbf3e4e4；合并时 OpenAPI 共 1420 个操作（主干 1419）、info.version V1.04、决策台账 V1.33，Flyway 最新 V737（共 630 个迁移）。版本行、契约版本、计数与 SHA、生成物、台账补记与 PRD 修订行由合并前脚本按新主干统一重写。
 - 18BK 落地位置补记·运行验收证据、快照、终验文档刷新（无新裁决）：业务提交 a036121e 之后，按第十八批裁决 25 重刷了运行验收证据：后端全量 7311 测，0 失败 0 错误；apps/web 构建通过；常规界面验收（接口全部 mock）实跑 40 条全过；真实后端界面验收未跑，runtime_ready=false。随后依次重生成闭环当前态快照、生产闭环缺口报告、界面验收报告、无上线指挥台。生成器没改。手改 docs/final-closed-loop-acceptance-audit-v0.1.md 与 docs/code-implementation-acceptance-audit-v0.1.md：前端单测源码计数改为 2079；被核文件行数都没变；后端全量与常规界面验收的数字、日期改为本次实跑值；写入 npm run verify:unit 实跑结果，五个工作区全过。交付门禁于 2026-11-24 08:32 UTC 在工作树逐项实跑子项，NAS 两项现场探测未跑。仍红的有两项：一是 coding-host-protection，它写死主仓路径，在工作树口径下必红，属工具口径，不做；二是 final-closed-loop-audit，如实留 2 条红（integration-ready、business-acceptance-ready），原因是校验器要求终验把联调、业务验收写成「是」，而裁决 25 定了不跑真实后端界面验收、运行验收未就绪，终验写的是「否」。verify:delivery-gates 总链仍是红的。
+
+18BT 落地位置补记（2026-11-20）：第十八批 BT 段（batch92）按 18BT 只读设计实现待开发清单第 370 条（第 372 条按第十八批裁决 77 另起 18BX 分段做）（审计组）；运行验收证据、终验文档在本段最后一个提交刷新；各条落地位置见下。本段追加时，原台账除文档版本升一版与裁决表第 77 行外，其他历史字节保持。
+
+- 18BT 落地位置补记·控制席判定（2026-11-20）：本段（第十八批 BT 段，batch92）实现待开发清单第 370 条（18BT 只读设计 b92-audit/d-aud-a.json，两轮质疑者修订后定稿；待裁题经 2026-11-20 弹窗裁决 77 定）。控制席判定：第 370 条 370-R1 照设计。第 372 条按裁决 77（选「按数据发生时间（推荐）」）工作量大，控制席另起只读设计按业务域拆成若干段分轮做，本段不做。设计旁见（证据事件登记要求商户范围、系统作业留痕操作人类型落 staff）设计旁见由控制席另行登记为待核实新条目，本段不改。第五轮设计与修复代理的范围外旁见已登记为待开发清单第 388～414 条（待核实）。本段从 614159b0 开工（第五轮 13 段并行），变基到 83efbc89 后收尾；汇总文件由合并前脚本 summary_tool.py 剥离与重写。
+- 18BT 落地位置补记·第 370 条 370-R1（归不到任何项目的留痕与证据事件，对能看全部启用综合体的账号可见；当前单综合体即本综合体稽核可见）。
+  - 改法：只改操作留痕与证据事件的读条件。迁移 0，新增操作 0，前端 0。
+  - 落地位置：
+    - 在 JdbcAuditEventRepository 新增常量 ALL_ACTIVE_PROJECTS_IN_SCOPE，含义是启用中（status='active'，与 BusinessDayResolver.soleProject 同口径）的综合体全部落在读者可触及的项目集合内，两处读方法共用。
+    - JdbcAuditEventRepository.searchOperationEvents（带 projectScope）：按项目看时，原来的「商户属于这些项目（主项目加已批准经营项目），或操作人账号机构属于这些项目」之外，再并入「不带商户、操作人也不是任何项目员工账号的留痕（客人、系统作业与 system_scheduler、平台管理员与最高权限等），启用中的综合体都可触及时可见」。已停用项目的员工所做操作仍归该项目。
+    - 操作留痕查询、导出与可编辑版重取都走这一个方法：AuditController.queryOperationEvents、exportOperationEvents、operationEventsTable；对应 queryAuditOperationEvents、exportAuditOperationEvents。
+    - JdbcEvidenceEventRepository.listPage（带 projectScope）：不带商户的证据事件在同一条件下可见，总数与列表同口径；调用方 EvidenceEventService.listEvents，对应 listEvidenceEvents。
+    - 读范围的判定仍是 AuditEventService.ReadScope，没有改。
+    - 契约：只改 queryAuditOperationEvents、exportAuditOperationEvents、listEvidenceEvents 三个操作的说明。
+    - 启用综合体不止一个时，这几类只对能看全部启用综合体的账号出现。多综合体启用前另行给两表加所属综合体列。
+  - 依据：PGM:682「审计人员分两类：内部稽核可查看本综合体全部数据，外部审计/监管只能查看划定的范围与时间段；两类都只能查看、不能修改任何业务数据。」；PGM:413「当前先按一个综合体落地，但所有基础对象都要带“综合体项目归属”。未来需要集团视图和跨项目汇总。」（本条落的是前半句的单综合体口径）；PGM:899「平台治理层要保证每个重要动作能追溯。谁发起、谁销售、谁服务、谁第一个处理异常、为什么、谁审批、结果是什么，都要能查到。」；第十八批裁决 71。
+  - 测试：AuditOperationEventsScopeJdbcIntegrationTests.auditorOfSoleActiveComplexAlsoSeesEventsBelongingToNoProject、AuditOperationEventsScopeJdbcIntegrationTests.auditorOfOneOfTwoActiveComplexesDoesNotSeeEventsBelongingToNoProject。
+- 第 372 条：按第十八批裁决 77（选「按数据发生时间（推荐）」），控制席另起只读设计、按业务域分轮做，本段不做。
+- 18BT 落地位置补记·第 370 条 370-R1（契约部分）：不新增操作，操作数不变；只就地改 queryAuditOperationEvents、exportAuditOperationEvents、listEvidenceEvents 三个操作的 description，openapi-p0.yaml 与 .json 两份同值。
+  - queryAuditOperationEvents、exportAuditOperationEvents：324-R1 可见范围句里，在「没有项目归属 403 PROJECT_SCOPE_REQUIRED」之前补一句：不带商户、操作人也不属于任何项目的留痕（如客人操作、系统作业、平台管理员与最高权限的操作），启用中的综合体都在可触及范围内时一并可见，否则不出现。
+  - listEvidenceEvents：删去「（不带商户的证据事件在项目口径下不出现）」，改补：不带商户的证据事件，启用中的综合体都在可触及范围内时一并可见，否则不出现。
+  三个操作的权限码（audit.operation_log.view、audit.operation_log.export、evidence.event.view）、x-data-scope、x-auth-context、x-terminal-allowed、x-audit-event 与错误码（PROJECT_SCOPE_REQUIRED）都不变。契约对应的代码：JdbcAuditEventRepository.searchOperationEvents（带 projectScope 的项目口径分支）、JdbcEvidenceEventRepository.listPage（带 projectScope 的项目口径分支），两处共用常量 JdbcAuditEventRepository.ALL_ACTIVE_PROJECTS_IN_SCOPE。依据：PGM:682「审计人员分两类：内部稽核可查看本综合体全部数据，外部审计/监管只能查看划定的范围与时间段；两类都只能查看、不能修改任何业务数据。」；PGM:413「当前先按一个综合体落地，但所有基础对象都要带“综合体项目归属”。未来需要集团视图和跨项目汇总。」
+- 18BT 落地位置补记·汇合验证：tests/e2e 不改。本段只改了 evidence 包 JdbcAuditEventRepository.searchOperationEvents 与 JdbcEvidenceEventRepository.listPage 的读判定条件（共用常量 JdbcAuditEventRepository.ALL_ACTIVE_PROJECTS_IN_SCOPE），以及 queryAuditOperationEvents、exportAuditOperationEvents、listEvidenceEvents 三个操作的 description，响应结构不变。e2e 里对 /api/v1/evidence/events 与 /api/v1/audit/operation-events/export 的 mock 和 errorPath 用法照旧，前端零改动，截图基线不重拍。门禁结论（变基前在 614159b0 基线上实跑）：后端全量（新建空库）0 红 0 跳过；后台 typecheck 0 错，vitest 全过；客人三个工作区（customer-app、customer-miniapp、customer-core）单测全过；安卓员工端 gradle test 与 android-app 编译都通过；chromium 五份后台 spec 全过；四份生成物重生成后与工作树一致；verify:p0-contract 通过；OpenAPI 的 yaml 与 json 深比较一致，本段新增 0 个操作，只改上述三个操作的 description；本段没有迁移（预留的 V720～V723 未用）；git diff --check 通过。
+- 18BT 落地位置补记·第 370 条 370-R1（文档组）：全链路操作留痕与终端开关 PRD 升一版。§2.2 第 324 条实现现状块末句原写「客人与系统作业的留痕、不带商户的证据事件不按综合体归属，项目口径下查不到（待开发清单第 370 条）」，改为现状：操作留痕查询与导出（queryAuditOperationEvents、exportAuditOperationEvents）、审计事件页证据事件列表（listEvidenceEvents）在项目口径下，不带商户、操作人也不属于任何项目的留痕（如客人操作、系统作业、平台管理员与最高权限的操作）与不带商户的证据事件，在启用中的综合体（项目状态 active）都在可触及范围内时一并可见（当前单综合体即本综合体稽核可见），否则不出现；已停用项目的员工所做操作仍归该项目（JdbcAuditEventRepository.searchOperationEvents、JdbcEvidenceEventRepository.listPage，共用常量 JdbcAuditEventRepository.ALL_ACTIVE_PROJECTS_IN_SCOPE）。变更日志加一行。依据：PGM:682「审计人员分两类：内部稽核可查看本综合体全部数据，外部审计/监管只能查看划定的范围与时间段；两类都只能查看、不能修改任何业务数据。」；PGM:413「当前先按一个综合体落地，但所有基础对象都要带“综合体项目归属”。未来需要集团视图和跨项目汇总。」；PGM:899。测试：AuditOperationEventsScopeJdbcIntegrationTests.auditorOfSoleActiveComplexAlsoSeesEventsBelongingToNoProject、auditorOfOneOfTwoActiveComplexesDoesNotSeeEventsBelongingToNoProject（T1 段）。本组不新增操作、无迁移。
+- 18BT 合并前变基（2026-11-24）：本段自 83efbc89 变基到 origin/main 0ed7c377；合并时 OpenAPI 共 1420 个操作（主干 1420）、info.version V1.05、决策台账 V1.34，Flyway 最新 V737（共 630 个迁移）。版本行、契约版本、计数与 SHA、生成物、台账补记与 PRD 修订行由合并前脚本按新主干统一重写。

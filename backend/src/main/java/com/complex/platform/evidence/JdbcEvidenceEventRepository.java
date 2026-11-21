@@ -85,11 +85,13 @@ class JdbcEvidenceEventRepository implements EvidenceEventRepository {
                 new org.springframework.jdbc.core.namedparam.MapSqlParameterSource()
                         .addValue("merchant_id", merchantId, java.sql.Types.VARCHAR);
         String where = " WHERE (:merchant_id IS NULL OR merchant_id = :merchant_id)";
-        // 第十八批 BA 段第 324 条 324-R2：不挂商户的账号按可触及项目内商户登记的事件（不带商户的事件归不到项目，不在内）。
+        // 第十八批 BA 段第 324 条 324-R2：不挂商户的账号按可触及项目内商户登记的事件。不带商户的事件归不到项目，
+        // 第十八批 BT 段第 370 条 370-R1 起在启用中的综合体都可触及时一并可见（JdbcAuditEventRepository.ALL_ACTIVE_PROJECTS_IN_SCOPE）。
         // 18BA 收尾复核修正：商户所属项目＝主项目 UNION 已批准的经营项目（merchant_projects），与 listMerchantOperatingProjectIds 同一口径。
         if (projectScope != null) {
-            where += " AND merchant_id IN (SELECT id FROM merchants WHERE project_id IN (:project_scope)"
-                    + " UNION SELECT merchant_id FROM merchant_projects WHERE project_id IN (:project_scope))";
+            where += " AND (merchant_id IN (SELECT id FROM merchants WHERE project_id IN (:project_scope)"
+                    + " UNION SELECT merchant_id FROM merchant_projects WHERE project_id IN (:project_scope))"
+                    + " OR (merchant_id IS NULL AND " + JdbcAuditEventRepository.ALL_ACTIVE_PROJECTS_IN_SCOPE + "))";
             params.addValue("project_scope", projectScope);
         }
         Long total = jdbcTemplate.queryForObject(

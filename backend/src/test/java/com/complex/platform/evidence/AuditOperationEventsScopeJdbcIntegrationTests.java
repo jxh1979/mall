@@ -1,6 +1,6 @@
 package com.complex.platform.evidence;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -137,6 +137,46 @@ class AuditOperationEventsScopeJdbcIntegrationTests {
         assertThat(((Number) JsonPath.read(own, "$.data.total")).longValue()).isEqualTo(1L);
     }
 
+    /**
+     * 第十八批 BT 段第 370 条 370-R1（PGM:682「内部稽核可查看本综合体全部数据」；PGM:413「当前先按一个综合体落地」）：只有一个启用中的综合体时，
+     * 不带商户、操作人也不属于任何项目的留痕（客人、无登录主体的系统作业、system_scheduler、平台管理员）与不带商户的证据事件，本综合体稽核一并可见；
+     * 已停用项目的员工所做操作仍归该项目、不并入。
+     */
+    @Test
+    void auditorOfSoleActiveComplexAlsoSeesEventsBelongingToNoProject() throws Exception {
+        jdbc.update("UPDATE projects SET status = 'suspended' WHERE status = 'active' AND id <> ?", p1);
+        String customer = "cus_aud_" + s;
+        String platformAdmin = "usr_aud_padm_" + s;
+        new StaffRequestFixture(jdbc).staff(platformAdmin, "platform_admin", "platform-company", null, "ops.production_readiness.view");
+        eventsBelongingToNoProject(customer, platformAdmin);
+        String noMerchant = evidenceEventWithoutMerchant();
+
+        assertThat(actorIds(auditor)).containsExactlyInAnyOrder(p1Staff, m1User, customer, "system_scheduler", platformAdmin, null);
+        String own = mockMvc.perform(get("/api/v1/evidence/events").param("page", "1").param("size", "20").with(auditor))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        List<String> ownIds = JsonPath.read(own, "$.data.items[*].id");
+        assertThat(ownIds).contains(noMerchant);
+        assertThat(((Number) JsonPath.read(own, "$.data.total")).longValue()).isGreaterThanOrEqualTo(1L);
+    }
+
+    /** 第 370 条 370-R1：两个综合体都启用时，归不到任何项目的留痕与不带商户的证据事件不对只能触及其中一个的稽核出现。 */
+    @Test
+    void auditorOfOneOfTwoActiveComplexesDoesNotSeeEventsBelongingToNoProject() throws Exception {
+        String customer = "cus_aud_" + s;
+        String platformAdmin = "usr_aud_padm_" + s;
+        new StaffRequestFixture(jdbc).staff(platformAdmin, "platform_admin", "platform-company", null, "ops.production_readiness.view");
+        eventsBelongingToNoProject(customer, platformAdmin);
+        String noMerchant = evidenceEventWithoutMerchant();
+
+        assertThat(actorIds(auditor)).containsExactlyInAnyOrder(p1Staff, m1User);
+        String own = mockMvc.perform(get("/api/v1/evidence/events").param("page", "1").param("size", "20").with(auditor))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        List<String> ownIds = JsonPath.read(own, "$.data.items[*].id");
+        assertThat(ownIds).doesNotContain(noMerchant);
+    }
+
     // ---------- helpers ----------
 
     private List<String> actorIds(RequestPostProcessor who) throws Exception {
@@ -147,8 +187,28 @@ class AuditOperationEventsScopeJdbcIntegrationTests {
     }
 
     private void auditEvent(String actorId, String merchantId) {
+        auditEvent("staff", actorId, merchantId);
+    }
+
+    private void auditEvent(String actorType, String actorId, String merchantId) {
         jdbc.update("INSERT INTO audit_events (id, occurred_at, event_name, event_result, actor_type, actor_id, merchant_id) "
-                + "VALUES (?, now(), ?, 'success', 'staff', ?, ?)", UUID.randomUUID(), eventName, actorId, merchantId);
+                + "VALUES (?, now(), ?, 'success', ?, ?, ?)", UUID.randomUUID(), eventName, actorType, actorId, merchantId);
+    }
+
+    /** 第 370 条：都不带商户——客人（合成客人号）、无登录主体的系统作业（操作人空、类型落默认 staff）、system_scheduler、平台管理员。 */
+    private void eventsBelongingToNoProject(String customer, String platformAdmin) {
+        auditEvent("customer", customer, null);
+        auditEvent("staff", null, null);
+        auditEvent("platform_admin", "system_scheduler", null);
+        auditEvent("platform_admin", platformAdmin, null);
+    }
+
+    /** 平台管理员登记的、不带商户的证据事件；收到时间排在最前。 */
+    private String evidenceEventWithoutMerchant() {
+        String id = "evt_aud_nomerchant_" + s;
+        jdbc.update("INSERT INTO evidence_events (id, device_code, event_type, summary, occurred_at, received_at, merchant_id) "
+                + "VALUES (?, 'DEV-AUD', 'terminal.login', '留痕范围探针', now(), now() + interval '1 day', NULL)", id);
+        return id;
     }
 
     /** 收到时间排在最前（其余用例留在库里的事件不挤出第一页）。 */

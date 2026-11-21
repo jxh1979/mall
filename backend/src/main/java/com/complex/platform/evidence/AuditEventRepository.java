@@ -16,7 +16,7 @@ public interface AuditEventRepository {
         return List.of();
     }
 
-    /** 第十八批 BA 段第 324 条 324-R1：projectScope 非 null 时只取操作人或其商户归属该项目集合的留痕（空集合取不到）。 */
+    /** 第十八批 BA 段第 324 条 324-R1：projectScope 非 null 时只取操作人或其商户归属该项目集合的留痕（空集合取不到）；启用中的综合体都在该集合内时另含归不到任何项目的留痕（第 370 条 370-R1）。 */
     default List<AuditEvent> searchOperationEvents(String businessType, String businessId, String actorId,
             String eventName, Instant from, Instant to, int limit, String merchantScope, java.util.Set<String> projectScope) {
         return List.of();
