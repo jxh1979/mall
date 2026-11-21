@@ -1,4 +1,4 @@
-// 文件版本：V0.32
+// 文件版本：V0.33
 import { expect, test } from "@playwright/test";
 import { installMockApi } from "./support/mock-api";
 import { fillCnDate } from "./support/cn-date";
@@ -206,7 +206,8 @@ async function openAdminRoute(page: import("@playwright/test").Page, spec: Route
     await expect(page.getByTestId("member-levels-table")).toBeVisible();
   } else if (spec.pageId === "ADM-CUS-005") {
     await expect(page.getByTestId("stored-value-rules-page")).toBeVisible();
-    await expect(page.getByTestId("stored-value-empty-hint")).toBeVisible();
+    // 第十八批 CL 段 423-R2：平台账号不再出现商户级卡配置，只留通用卡说明与退出公示天数。
+    await expect(page.getByTestId("stored-value-exit-notice-policy-form")).toBeVisible();
   } else if (spec.pageId === "ADM-CUS-006") {
     // 第十八批 AZ 段 278-R2：储值退卡页按手机号查卡（手机号走请求体）。
     await expect(page.getByTestId("stored-value-refund-page")).toBeVisible();

@@ -70,15 +70,27 @@ class JdbcAuditEventRepository implements AuditEventRepository {
         }
     }
 
+    /** 内部取数（退卡重放核对、对象时间线、复核意见等）：不加商户级卡过滤。 */
     @Override
     public java.util.List<AuditEvent> searchOperationEvents(String businessType, String businessId,
             String actorId, String eventName, java.time.Instant from, java.time.Instant to, int limit, String merchantScope) {
-        return searchOperationEvents(businessType, businessId, actorId, eventName, from, to, limit, merchantScope, null);
+        return search(businessType, businessId, actorId, eventName, from, to, limit, merchantScope, null, false);
     }
 
+    /**
+     * 操作留痕查询与导出（AuditController 经 AuditEventService 调用）。第十八批 CL 段 421-R4（第十八批裁决 79，BSM:833「平台各岗位（含最高权限）一律
+     * 看不到商户级卡的卡号、持卡人、余额与充值、退款流水」）：不挂商户的读者（merchantScope 为空：平台管理员、最高权限、项目侧）不列以商户级卡为对象
+     * 或以商户级卡充值意向为对象的事件；商户账号照旧按 merchant_id。
+     */
     @Override
     public java.util.List<AuditEvent> searchOperationEvents(String businessType, String businessId, String actorId, String eventName,
             java.time.Instant from, java.time.Instant to, int limit, String merchantScope, java.util.Set<String> projectScope) {
+        return search(businessType, businessId, actorId, eventName, from, to, limit, merchantScope, projectScope, merchantScope == null);
+    }
+
+    private java.util.List<AuditEvent> search(String businessType, String businessId, String actorId, String eventName,
+            java.time.Instant from, java.time.Instant to, int limit, String merchantScope, java.util.Set<String> projectScope,
+            boolean hideMerchantCardEvents) {
         if (projectScope != null && projectScope.isEmpty()) {
             return java.util.List.of();
         }
@@ -110,6 +122,15 @@ class JdbcAuditEventRepository implements AuditEventRepository {
                     + " (SELECT u.id FROM access_users u JOIN projects p ON p.id = u.organization_id))"
                     + " AND " + ALL_ACTIVE_PROJECTS_IN_SCOPE + "))");
             params.addValue("project_scope", projectScope);
+        }
+        if (hideMerchantCardEvents) {
+            sql.append(" AND NOT EXISTS (SELECT 1 FROM customer_stored_value_accounts a WHERE a.merchant_id IS NOT NULL AND a.id = audit_events.business_id)"
+                    + " AND NOT EXISTS (SELECT 1 FROM stored_value_topup_intents i WHERE i.merchant_id IS NOT NULL"
+                    + " AND i.payment_intent_id = audit_events.business_id)");
+            // 18CL 收尾复核：商户账号在冻结、解冻、线上与柜台退卡写口失败的留痕以客人编号为对象（LoyaltyController 的 recordingFailure），
+            // 421-R1 后商户账号只办本商户卡，一并不列；商户账号的成功留痕以账户为对象（如酒吧结账扣通用卡），按上两条判，通用卡的照列。
+            sql.append(" AND (business_type IS DISTINCT FROM 'customer_stored_value' OR event_result IS DISTINCT FROM 'failure'"
+                    + " OR merchant_id IS NULL)");
         }
         // 第十八批 CM 段第 372 条第 2 段 372-S2-R1（PGM:682；第十八批裁决 77）：外审数据时段按留痕发生时刻，与 from、to 同时生效。
         sql.append(com.complex.platform.access.AuditDataWindow.andInstant("occurred_at"));

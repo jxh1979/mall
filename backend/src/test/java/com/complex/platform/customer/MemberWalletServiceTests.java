@@ -1,6 +1,6 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.06
+// 文件版本：V0.07
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -285,14 +285,17 @@ class MemberWalletServiceTests {
         assertThatThrownBy(() -> m1Staff.configureMerchantRefundRule("m2", true, 5000))
                 .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("CROSS_MERCHANT_FORBIDDEN"));
 
-        // 平台管理员（scope 空）→ 任意卡放行。
+        // 第十八批裁决 79（BSM:833「商户级卡的发行、充值、余额与退款完全由发卡商户自行办理，不经平台」）：不挂商户的平台账号
+        // （currentMerchantIdQuietly 空）碰商户卡 CROSS_MERCHANT_FORBIDDEN，综合体通用卡照常办。
         com.complex.platform.access.AuthorizationService platformAuth =
                 org.mockito.Mockito.mock(com.complex.platform.access.AuthorizationService.class);
         org.mockito.Mockito.when(platformAuth.currentMerchantScope()).thenReturn(Optional.empty());
         StoredValueService platform = new StoredValueService(repo, new FakeFinance(), audit(),
                 gatewayRouter(true), platformAuth, null,
                 Clock.fixed(T0, ZoneOffset.UTC));
-        assertThat(platform.freeze("c1", null, "m2", "ok").status()).isEqualTo("frozen");
+        assertThat(platform.freeze("c1", null, null, "ok").status()).isEqualTo("frozen");
+        assertThatThrownBy(() -> platform.freeze("c1", null, "m2", "x"))
+                .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("CROSS_MERCHANT_FORBIDDEN"));
     }
 
     // ============================================================
@@ -392,7 +395,7 @@ class MemberWalletServiceTests {
     }
 
     @Test
-    void fundModeFrozenAtOpenAndPlatformOnly() {
+    void fundModeFrozenAtOpenAndIssuingMerchantOnly() {
         InMemoryRepo repo = seeded();
         FakeFinance finance = new FakeFinance();
         StoredValueService platform = new StoredValueService(repo, finance, audit(), gatewayRouter(true), null, null,
@@ -409,17 +412,23 @@ class MemberWalletServiceTests {
         platform.configureMerchantCard("mX", true, "merchant_prepaid");
         assertThat(repo.storedValue.get("c1|null|mX").fundOwnership()).isEqualTo("platform_collect");
 
-        // 仅平台可改：商户 scope 调用方改资金模式 → 拒（requirePlatformScope 抛 PLATFORM_SCOPE_REQUIRED）。
+        // 第十八批裁决 79（ENUM:86「其扣款顺序由发卡商户自定、由发卡商户在商户后台自行设置」；BSM:833「商户级卡的发行……完全由发卡商户自行办理，不经平台」）：
+        // 发卡商户本商户账号可设本商户卡；不挂商户的平台账号（currentMerchantIdQuietly 空）→ MERCHANT_SCOPE_REQUIRED。
         com.complex.platform.access.AuthorizationService merchantAuth =
                 org.mockito.Mockito.mock(com.complex.platform.access.AuthorizationService.class);
-        org.mockito.Mockito.doThrow(ApiException.forbidden("PLATFORM_SCOPE_REQUIRED", "x"))
-                .when(merchantAuth).requirePlatformScope();
+        org.mockito.Mockito.when(merchantAuth.currentMerchantIdQuietly()).thenReturn(Optional.of("mX"));
         StoredValueService merchantSvc = new StoredValueService(repo, finance, audit(),
                 gatewayRouter(true), merchantAuth, null,
                 Clock.fixed(T0, ZoneOffset.UTC));
-        assertThatThrownBy(() -> merchantSvc.configureMerchantCard("mX", true, "merchant_prepaid"))
+        assertThat(merchantSvc.configureMerchantCard("mX", true, "merchant_prepaid").cardIssuanceEnabled()).isTrue();
+        com.complex.platform.access.AuthorizationService platformAuth =
+                org.mockito.Mockito.mock(com.complex.platform.access.AuthorizationService.class);
+        StoredValueService platformSvc = new StoredValueService(repo, finance, audit(),
+                gatewayRouter(true), platformAuth, null,
+                Clock.fixed(T0, ZoneOffset.UTC));
+        assertThatThrownBy(() -> platformSvc.configureMerchantCard("mX", true, "merchant_prepaid"))
                 .isInstanceOfSatisfying(ApiException.class,
-                        e -> assertThat(e.code()).isEqualTo("PLATFORM_SCOPE_REQUIRED"));
+                        e -> assertThat(e.code()).isEqualTo("MERCHANT_SCOPE_REQUIRED"));
     }
 
     @Test

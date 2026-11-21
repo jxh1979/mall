@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.32
+// 文件版本：V0.33
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
@@ -800,7 +800,10 @@ class JdbcFinanceRepository implements FinanceRepository {
         }
         var params = new MapSqlParameterSource().addValue("merchant", merchantId, java.sql.Types.VARCHAR)
                 .addValue("projects", projectIds);
+        // 第十八批 CL 段 421-R3（第十八批裁决 79，BSM:833「平台各岗位（含最高权限）一律看不到商户级卡的卡号、持卡人、余额与充值、退款流水」）：
+        // 不挂商户的读者（平台管理员、最高权限、项目侧）不列商户级卡待退本金事项；商户账号照旧只列本商户的。
         return jdbcTemplate.query("SELECT * FROM finance_refunds WHERE (:merchant IS NULL OR merchant_id = :merchant)"
+                + " AND (:merchant IS NOT NULL OR merchant_id IS NULL OR source_type IS DISTINCT FROM 'stored_value_account')"
                 + (projectIds == null ? "" : " AND project_id IN (:projects)")
                 + com.complex.platform.access.AuditDataWindow.andInstant("created_at") // 372-R4：外审数据时段按退款发起时刻
                 + " ORDER BY created_at DESC, id", params, this::mapRefund);

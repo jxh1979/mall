@@ -1,6 +1,6 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -12,6 +12,7 @@ import com.complex.platform.access.AccessActor;
 import com.complex.platform.access.AccessRepository;
 import com.complex.platform.access.AccessUser;
 import com.complex.platform.access.TemporaryGrant;
+import com.complex.platform.auth.SessionIssuer;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
@@ -218,10 +219,10 @@ class StoredValueRefundLookupJdbcIntegrationTests {
         assertThat(principal(general)).isEqualTo(3000L);
     }
 
-    // ⑨ 18AZ 收尾复核（PGM:528「④看不到别的商户和别的项目的数据」；BSM:1673「所有数据默认按项目隔离」）：发卡商户只在项目甲经营、卡不带项目，
-    // 项目乙不挂商户的员工查不到（修复前查得到）；商户另有已批准的经营项目乙后查得到（同 FinanceService.recordStoredValuePayoutRefund 的经营项目口径）
+    // ⑨ 第十八批裁决 79（BSM:833「平台各岗位（含最高权限）一律看不到商户级卡的卡号、持卡人、余额与充值、退款流水」）：发卡商户只在项目甲经营、卡不带项目，
+    // 项目乙不挂商户的员工查不到；商户另有已批准的经营项目乙后仍查不到（18AZ 收尾复核按发卡商户经营项目列出商户卡的口径撤销，修复前查得到）
     @Test
-    void aProjectSideStaffSeesAProjectlessMerchantCardOnlyWhereTheIssuingMerchantOperates() throws Exception {
+    void aProjectSideStaffNeverSeesAProjectlessMerchantCardEvenWhereTheIssuingMerchantOperates() throws Exception {
         for (String project : List.of(projectA, projectB)) {
             jdbcTemplate.update("INSERT INTO projects (id, venue_type, name, status, created_at, updated_at) VALUES (?, 'complex', ?, 'active', now(), now())",
                     project, "储值退卡综合体" + project);
@@ -234,13 +235,50 @@ class StoredValueRefundLookupJdbcIntegrationTests {
 
         assertThat(accountIds(lookup(staff, projectB, null, guest.phone()).andExpect(status().isOk()))).doesNotContain(card);
         jdbcTemplate.update("INSERT INTO merchant_projects (merchant_id, project_id) VALUES (?, ?)", merchantM, projectB);
-        assertThat(accountIds(lookup(staff, projectB, null, guest.phone()).andExpect(status().isOk()))).contains(card);
+        assertThat(accountIds(lookup(staff, projectB, null, guest.phone()).andExpect(status().isOk()))).doesNotContain(card);
+    }
+
+    // ⑩ 第十八批裁决 79（BSM:833「平台各岗位（含最高权限）一律看不到商户级卡的卡号、持卡人、余额与充值、退款流水」）：平台管理员与最高权限查卡
+    // 只列综合体通用卡，带项目与不带项目的商户卡都不列（修复前都列）；项目甲不挂商户的员工以同一手机号查卡同样只见通用卡，冻结带项目甲的商户卡
+    // 403 CROSS_MERCHANT_FORBIDDEN、卡仍有效（修复前查得到、冻得了）
+    @Test
+    void platformAdminAndMasterLookupListOnlyTheGeneralCard() throws Exception {
+        String admin = staff("pf", null, null, false, "platform_admin");
+        Guest guest = guest("ten");
+        String general = card(guest.id(), projectA, null, 5000L, 0L, null);
+        String bound = card(guest.id(), projectA, merchantM, 4000L, 0L, "merchant_prepaid");
+        String projectless = card(guest.id(), null, merchantM, 2000L, 0L, "merchant_prepaid");
+
+        assertThat(accountIds(perform(new AccessActor(admin, admin, "platform_admin", null, null, "active"), LOOKUP,
+                "{\"phone\": \"" + guest.phone() + "\"}").andExpect(status().isOk())))
+                .contains(general).doesNotContain(bound, projectless);
+        assertThat(accountIds(perform(new AccessActor(SessionIssuer.MASTER_USER_ID, SessionIssuer.MASTER_USERNAME,
+                SessionIssuer.MASTER_ACCOUNT_TYPE, "platform-company", null, "active"), LOOKUP,
+                "{\"phone\": \"" + guest.phone() + "\"}").andExpect(status().isOk())))
+                .contains(general).doesNotContain(bound, projectless);
+
+        String projectStaff = staff("pa2", projectA, null, false);
+        Instant now = Instant.now();
+        accessRepository.createTemporaryGrant(new TemporaryGrant(UUID.randomUUID().toString(), projectStaff,
+                List.of("customer.stored_value.freeze"), now.minusSeconds(3600), now.plusSeconds(86_400), false, false,
+                "active", "储值冻结回归", "seed-admin", now, null, null));
+        assertThat(accountIds(lookup(projectStaff, projectA, null, guest.phone()).andExpect(status().isOk())))
+                .contains(general).doesNotContain(bound, projectless);
+        write(projectStaff, projectA, null, "/api/v1/loyalty/stored-value/" + guest.id() + "/freeze",
+                "{\"project_id\": \"" + projectA + "\", \"merchant_id\": \"" + merchantM + "\", \"reason\": \"客人报失\"}")
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.detail_code").value("CROSS_MERCHANT_FORBIDDEN"));
+        assertThat(cardStatus(bound)).isEqualTo("active");
     }
 
     private String staff(String tag, String project, String merchant, boolean singleUse) {
+        return staff(tag, project, merchant, singleUse, "staff");
+    }
+
+    private String staff(String tag, String project, String merchant, boolean singleUse, String accountType) {
         String userId = "usr_b72sv_" + tag + "_" + suffix;
         Instant now = Instant.now();
-        accessRepository.createUser(new AccessUser(userId, userId, "staff", project, merchant, "active", now));
+        accessRepository.createUser(new AccessUser(userId, userId, accountType, project, merchant, "active", now));
         accessRepository.createTemporaryGrant(new TemporaryGrant(UUID.randomUUID().toString(), userId,
                 List.of("customer.stored_value.refund"), now.minusSeconds(3600), now.plusSeconds(86_400), singleUse, false,
                 "active", "储值退卡回归", "seed-admin", now, null, null));
@@ -273,18 +311,25 @@ class StoredValueRefundLookupJdbcIntegrationTests {
     }
 
     private ResultActions write(String user, String project, String merchant, String path, String body) throws Exception {
+        return perform(new AccessActor(user, user, "staff", project, merchant, "active"), path, body);
+    }
+
+    private ResultActions perform(AccessActor actor, String path, String body) throws Exception {
         return mockMvc.perform(post(path)
                 .with(request -> {
                     request.addHeader("X-Terminal-Type", "web");
-                    return authentication(token(user, project, merchant)).postProcessRequest(request);
+                    return authentication(token(actor)).postProcessRequest(request);
                 })
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(body));
     }
 
     private static UsernamePasswordAuthenticationToken token(String user, String project, String merchant) {
-        return new UsernamePasswordAuthenticationToken(new AccessActor(user, user, "staff", project, merchant, "active"), null,
-                List.of(new SimpleGrantedAuthority("ROLE_P0_STAFF")));
+        return token(new AccessActor(user, user, "staff", project, merchant, "active"));
+    }
+
+    private static UsernamePasswordAuthenticationToken token(AccessActor actor) {
+        return new UsernamePasswordAuthenticationToken(actor, null, List.of(new SimpleGrantedAuthority("ROLE_P0_STAFF")));
     }
 
     private static String refundPath(Guest guest) {

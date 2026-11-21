@@ -1,17 +1,19 @@
-// 文件版本：V0.06
+// 文件版本：V0.07
 import React from "react";
 import { AdminPageHeader } from "../components/AdminPageHeader";
 import { PermissionButton } from "../security/Can";
+import { accountFormOf } from "../adminRoutes";
 import type { AdminPageProps } from "../types";
 
 type Kind = "points" | "growth" | "national" | "sales_contract" | "recovery_waiver" | "merchant_points" | "merchant_growth" | "level_rolling_months" | "level_protection_months" | "level_notice_days" | "merchant_card_bonus" | "stored_value_bonus";
 type Row = { id: string; kind: Kind; version: string; status: string; ticketTypeId?: string; businessFormat?: string; merchantId?: string; effectiveAt: string; publishedAt?: string; reviewId?: string; values: Record<string, unknown> };
 type Option = { id: string; name?: string; entityName?: string; ticketName?: string; barId?: string };
-const kinds: Record<Kind, string> = { points: "门票固定积分", growth: "门票成长值", national: "全国积分等待与发行单价", sales_contract: "合同销售主体", recovery_waiver: "全国待追回积分豁免线", merchant_points: "商户业态积分获取率", merchant_growth: "商户业态成长值规则", level_rolling_months: "会员等级滚动统计周期（月）", level_protection_months: "会员等级保护期（月）", level_notice_days: "降级提前通知天数（天）", merchant_card_bonus: "商户级卡充值赠送比例（商户提出、平台代录）", stored_value_bonus: "综合体通用卡充值赠送比例" };
+const kinds: Record<Kind, string> = { points: "门票固定积分", growth: "门票成长值", national: "全国积分等待与发行单价", sales_contract: "合同销售主体", recovery_waiver: "全国待追回积分豁免线", merchant_points: "商户业态积分获取率", merchant_growth: "商户业态成长值规则", level_rolling_months: "会员等级滚动统计周期（月）", level_protection_months: "会员等级保护期（月）", level_notice_days: "降级提前通知天数（天）", merchant_card_bonus: "商户级卡充值赠送比例（本商户自行设置）", stored_value_bonus: "综合体通用卡充值赠送比例" };
 // OBS-13-01（BSM L820「业务参数，全平台统一可配……须同时配置上下限」「变更须经审批、只对后续周期生效」）：三项会员等级参数全国生效，无公告要求。
 const levelKind = (k: Kind) => k === "level_rolling_months" || k === "level_protection_months" || k === "level_notice_days";
-// 第十八批第 11 条（ENUM L86「商户级卡同样可以设赠送……赠送比例由发卡商户提出、由平台运营代为录入后台」「赠送比例可配（业务参数，按项目可配，须同时配置上下限）」；
-// BSM L521 涉钱配置版本化审批）：商户级卡按发卡商户、通用卡按综合体（可空＝无项目通用卡），无公告要求。
+// 第十八批第 11 条（ENUM L86「赠送比例可配（业务参数，按项目可配，须同时配置上下限）」；BSM L521 涉钱配置版本化审批）：商户级卡按发卡商户、通用卡按综合体
+// （可空＝无项目通用卡），无公告要求。第十八批 CL 段 423-R3（第十八批裁决 85：ENUM:86 改句「赠送比例由发卡商户在商户后台自行设置」）：商户级卡一类只给商户账号、
+// 取本账号商户提交；平台账号不再出现。
 const bonusKind = (k: Kind) => k === "merchant_card_bonus" || k === "stored_value_bonus";
 const bonusFields: Array<[string, string]> = [["fixedValue", "赠送比例（万分比）"], ["minimumValue", "赠送比例下限（万分比）"], ["maximumValue", "赠送比例上限（万分比）"]];
 // 第十一批 TK-04-R1（BSM L822「按商户业态可配，须同时配置上下限」；操作员 2026-10-21 裁决补充第 4 条）：商户业态规则全国生效，按业态分别配置。
@@ -33,13 +35,13 @@ const numberFields: Record<Kind, Array<[string, string]>> = {
 };
 const list = (value: Option[] | { items: Option[] }) => Array.isArray(value) ? value : value.items;
 
-export function TicketRewardConfigPage({ api, effectivePermissions, setActionResult, setGlobalError }: AdminPageProps) {
+export function TicketRewardConfigPage({ api, user, effectivePermissions, setActionResult, setGlobalError }: AdminPageProps) {
+  const ownMerchant = accountFormOf(user) === "merchant" ? user.merchantId ?? "" : "";
   const [project, setProject] = React.useState("");
   const [kind, setKind] = React.useState<Kind>("points");
   const [ticket, setTicket] = React.useState("");
   const [values, setValues] = React.useState<Record<string, string>>({ waitingHours: "24" });
   const [format, setFormat] = React.useState("");
-  const [merchant, setMerchant] = React.useState("");
   const [rows, setRows] = React.useState<Row[]>([]);
   const [projects, setProjects] = React.useState<Option[]>([]);
   const [tickets, setTickets] = React.useState<Option[]>([]);
@@ -65,13 +67,15 @@ export function TicketRewardConfigPage({ api, effectivePermissions, setActionRes
   }, [api, project, nationwide, generalBonus]);
   React.useEffect(() => { void load().catch(e => setError(e.message)); }, [load]);
   React.useEffect(() => {
+    // 18CL 收尾复核（第十八批裁决 85）：项目、主体列表只对平台开放（后端 requirePlatformScope），商户账号不读；商户级卡赠送比例全国生效，用不到这几个下拉。
+    if (ownMerchant) return;
     void Promise.all([
       api.get<Option[] | { items: Option[] }>("/api/v1/platform/projects"),
       api.get<Option[] | { items: Option[] }>("/api/v1/ticketing/ticket-types?includeArchived=false"),
       api.get<Option[] | { items: Option[] }>("/api/v1/platform/business-entities"),
     ]).then(([p, t, e]) => { setProjects(list(p)); setTickets(list(t)); setEntities(list(e)); })
       .catch(e => setError(`项目、票种或主体列表读取失败：${e.message}`));
-  }, [api]);
+  }, [api, ownMerchant]);
   async function action(run: () => Promise<unknown>) {
     if (busy) return; setBusy(true); setError("");
     try { const result = await run(); setActionResult(result); await load(); }
@@ -87,12 +91,11 @@ export function TicketRewardConfigPage({ api, effectivePermissions, setActionRes
     if (!effective || !reason.trim() || !approver.trim()) throw new Error("请填写未来生效时间、原因和最终审批人");
     if (!nationwide && !generalBonus && (!project || !ticket)) throw new Error("请选择综合体和票种");
     if (merchantKind && !format) throw new Error("请选择商户业态");
-    if (merchantBonus && !merchant.trim()) throw new Error("请填写发卡商户编号");
     if (kind === "national") payload.receiverEntityId = values.receiverEntityId;
     if (kind === "sales_contract") Object.assign(payload, { sellerEntityId: values.sellerEntityId, sellerMerchantId: tickets.find(t => t.id === ticket)?.barId ?? null, contractNumber: values.contractNumber, attachmentIds: attachments });
     return api.post("/api/v1/loyalty/ticket-reward-configs", {
       idempotencyKey: crypto.randomUUID(), kind, projectId: nationwide ? null : project || null,
-      ticketTypeId: nationwide || generalBonus ? null : ticket, ...(merchantKind ? { businessFormat: format } : {}), ...(merchantBonus ? { merchantId: merchant.trim() } : {}), values: payload, effectiveAt: new Date(effective).toISOString(),
+      ticketTypeId: nationwide || generalBonus ? null : ticket, ...(merchantKind ? { businessFormat: format } : {}), ...(merchantBonus ? { merchantId: ownMerchant } : {}), values: payload, effectiveAt: new Date(effective).toISOString(),
       reason, finalApproverId: approver.trim(),
       parallelLines: kind === "sales_contract" ? Object.entries(reviewers).map(([lineCode, finalApproverId]) => ({ lineCode, finalApproverId: finalApproverId.trim() })) : [],
     });
@@ -115,9 +118,8 @@ export function TicketRewardConfigPage({ api, effectivePermissions, setActionRes
     <AdminPageHeader title="门票积分、成长值与销售责任" description="配置审批通过后须在生效前发布。积分和成长值分别设置；积分归实际使用会员，合同销售方独立承担发行费。" />
     {error && <p role="alert">{error}</p>}
     <div className="admin-form-row">
-      <label>配置类型<select aria-label="配置类型" value={kind} onChange={e => { const next = e.target.value as Kind; setKind(next); setValues(next === "recovery_waiver" ? { fixedValue: "100" } : next === "national" ? { waitingHours: "24", merchantWaitingHours: "24" } : {}); }}>{Object.entries(kinds).map(([k, name]) => <option key={k} value={k}>{name}</option>)}</select></label>
+      <label>配置类型<select aria-label="配置类型" value={kind} onChange={e => { const next = e.target.value as Kind; setKind(next); setValues(next === "recovery_waiver" ? { fixedValue: "100" } : next === "national" ? { waitingHours: "24", merchantWaitingHours: "24" } : {}); }}>{Object.entries(kinds).filter(([k]) => ownMerchant || k !== "merchant_card_bonus").map(([k, name]) => <option key={k} value={k}>{name}</option>)}</select></label>
       {merchantKind && <label>商户业态<select aria-label="商户业态" value={format} onChange={e => setFormat(e.target.value)}><option value="">请选择</option>{Object.entries(formats).map(([k, name]) => <option key={k} value={k}>{name}</option>)}</select></label>}
-      {merchantBonus && <label>发卡商户编号<input aria-label="发卡商户编号" value={merchant} onChange={e => setMerchant(e.target.value)} /></label>}
       {!nationwide && <><label>综合体<select aria-label="综合体" value={project} onChange={e => { setProject(e.target.value); setAttachments([]); }}><option value="">{generalBonus ? "不限项目（无项目通用卡）" : "请选择"}</option>{projects.map(p => <option key={p.id} value={p.id}>{p.name ?? p.id}</option>)}</select></label>
         {!generalBonus && <label>票种<select aria-label="票种" value={ticket} onChange={e => { setTicket(e.target.value); setAttachments([]); }}><option value="">请选择</option>{tickets.map(t => <option key={t.id} value={t.id}>{t.ticketName ?? t.id}</option>)}</select></label>}</>}
     </div>

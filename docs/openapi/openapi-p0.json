@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "综合体管理系统 P0 API 契约",
-    "version": "V1.17",
+    "version": "V1.18",
     "description": "P0 首批编码前置契约。本文采用 JSON-compatible YAML，便于与 openapi-p0.json 保持一致。正式后端以 Java 21 + Spring Boot 4.x + springdoc-openapi 输出运行时 OpenAPI，并与本契约比对。"
   },
   "servers": [
@@ -8104,7 +8104,7 @@
         "x-idempotency-required": false,
         "x-audit-event-success": "finance_refund.listed",
         "x-audit-event-failure": "finance_refund.list_failed",
-        "description": "读取退款台账及未结状态 经销原路退款以dealer_order_refund关联源单，按原订单真实项目核验权限；执行结果与经销状态同事务同步，登记待办不等于成功。第十八批 BX 段第 372 条 372-R4（第十八批裁决 77「各清单、明细、导出只看得到这段时间发生的记录；没有发生日期的资料照常显示」）：外部审计账号划定了数据时段的（见 setAuditDataWindow），只列时段内发生的退款，发生时间取建单时刻 created_at。",
+        "description": "读取退款台账及未结状态 经销原路退款以dealer_order_refund关联源单，按原订单真实项目核验权限；执行结果与经销状态同事务同步，登记待办不等于成功。第十八批 BX 段第 372 条 372-R4（第十八批裁决 77「各清单、明细、导出只看得到这段时间发生的记录；没有发生日期的资料照常显示」）：外部审计账号划定了数据时段的（见 setAuditDataWindow），只列时段内发生的退款，发生时间取建单时刻 created_at。 第十八批 CL 段 421-R3（第十八批裁决 79，BSM:833「平台各岗位（含最高权限）一律看不到商户级卡的卡号、持卡人、余额与充值、退款流水」）：不挂商户的读者（平台管理员、最高权限、项目侧）不列商户级卡的待退本金事项（source_type＝stored_value_account 且 merchant_id 非空，客人账户关闭时按卡登记、由发卡商户柜台退款）；商户账号照旧只列本商户的。",
         "responses": {
           "200": {
             "$ref": "#/components/responses/FinanceRefundList"
@@ -26484,7 +26484,7 @@
         ],
         "operationId": "customerStoredValueTopup",
         "summary": "客人储值充值（绑支付意图）",
-        "description": "ROOT-03-R18：响应 launch＝渠道按付款端（取本会话锁定的登录端 app／miniapp）签发的拉起参数 {kind, params}：kind 闭集 h5_url（H5 跳转）、app_wechat（App 微信）、app_alipay（App 支付宝）、miniapp_wechat（小程序微信），params 原样透传给客户端 SDK；支付渠道未启用或未配置时 launch 与 payment_url 为空、gateway_status 为 RESERVED/NOT_CONFIGURED，客户端显示「支付暂不可用，未扣款」。客户端未回前台入账的，由服务端结算作业按充值绑定的卡范围查单入账。 PGM 第 744 行「前端隐藏只是辅助，后端接口必须独立校验」：按综合体的客人端终端开关以所充卡的综合体（商户卡取发卡项目：卡上的 project_id 是发卡商户已批准的经营项目的取它，卡上不带项目或不是它的经营项目取该商户的主项目，第十八批裁决 18；否则取 project_id）在服务端判（不取客户端自报的 X-Project-Id，先于幂等），该综合体客人端已关→403 TERMINAL_DISABLED，不建支付意向；按综合体单独停用储值充值模块（能力码 customer.stored_value.topup）同样按该综合体判。",
+        "description": "ROOT-03-R18：响应 launch＝渠道按付款端（取本会话锁定的登录端 app／miniapp）签发的拉起参数 {kind, params}：kind 闭集 h5_url（H5 跳转）、app_wechat（App 微信）、app_alipay（App 支付宝）、miniapp_wechat（小程序微信），params 原样透传给客户端 SDK；支付渠道未启用或未配置时 launch 与 payment_url 为空、gateway_status 为 RESERVED/NOT_CONFIGURED，客户端显示「支付暂不可用，未扣款」。客户端未回前台入账的，由服务端结算作业按充值绑定的卡范围查单入账。 PGM 第 744 行「前端隐藏只是辅助，后端接口必须独立校验」：按综合体的客人端终端开关以所充卡的综合体（商户卡取发卡项目：卡上的 project_id 是发卡商户已批准的经营项目的取它，卡上不带项目或不是它的经营项目取该商户的主项目，第十八批裁决 18；否则取 project_id）在服务端判（不取客户端自报的 X-Project-Id，先于幂等），该综合体客人端已关→403 TERMINAL_DISABLED，不建支付意向；按综合体单独停用储值充值模块（能力码 customer.stored_value.topup）同样按该综合体判。 第十八批 CL 段 422-R1（第十八批裁决 79，BSM:833「平台方（城市项目公司及娱乐平台公司、游乐公司、传媒公司、中央餐饮公司）按工商登记合计持股过半的商户，不得发行商户级卡，只能使用综合体通用卡。」）：给商户级卡充值（merchant_id 非空，开卡即发卡）时，该商户当日生效的已批准分红方案平台方比例（platform_share_bps）大于 5000 返回 409 MERCHANT_CARD_PLATFORM_MAJORITY「平台方合计持股过半的商户不得发行商户级卡，只能使用综合体通用卡」（没有生效方案按平台方未持股）；平台方不过半而发卡商户未开通发卡 409 STORED_VALUE_CARD_ISSUANCE_DISABLED「该商户未开通商户卡发卡」；两种情形都不建卡、不建支付意向。通用卡不受限。",
         "x-permission": "customer.stored_value.topup",
         "x-data-scope": "customer",
         "x-terminal-allowed": [
@@ -26689,7 +26689,7 @@
         ],
         "operationId": "freezeStoredValueAccount",
         "summary": "冻结会员储值账户（后台）",
-        "description": "第十八批 BC 段第 365 条 365-R1（BSM:833「账户可冻结/解冻。」「商户的员工只能管理本商户发行的储值卡。」；ENUM:86「余额管理与退款均由长沙项目公司负责」）：冻结客人的一张储值卡，请求体 project_id、merchant_id 定位卡，reason 记入成功留痕，不要求 idempotency_key；后台入口在储值退卡页（按手机号查卡见 lookupStoredValueRefundCards）。范围同 refundStoredValueAccount（278-R1）：最高权限放行；商户账号只办本商户的卡（他商户的卡与通用卡 403 CROSS_MERCHANT_FORBIDDEN「该储值卡不在当前商户权限范围内」）；卡带项目的按冻结码 customer.stored_value.freeze 可触及的项目办（本人项目与可跨项目角色勾选的项目，PGM:659；第十八批 BD 段第 376 条 376-R1；商户账号只到本人项目），不在其中 403 CROSS_PROJECT_FORBIDDEN「该储值卡不在当前项目权限范围内」（平台管理员不限）；不挂商户的账号可办可触及项目的通用卡，碰到不带项目的商户卡按发卡商户的经营项目（主项目或已批准的经营项目）判，其中没有一个在可触及的项目内 403 CROSS_PROJECT_FORBIDDEN。卡不存在 404 STORED_VALUE_ACCOUNT_NOT_FOUND；已销户 409 STORED_VALUE_ACCOUNT_CLOSED；已是冻结 409 STORED_VALUE_ALREADY_FROZEN。",
+        "description": "第十八批 BC 段第 365 条 365-R1（BSM:833「账户可冻结/解冻。」「商户的员工只能管理本商户发行的储值卡。」；ENUM:86「余额管理与退款均由长沙项目公司负责」）：冻结客人的一张储值卡，请求体 project_id、merchant_id 定位卡，reason 记入成功留痕，不要求 idempotency_key；后台入口在储值退卡页（按手机号查卡见 lookupStoredValueRefundCards）。范围同 refundStoredValueAccount（278-R1、第十八批 CL 段 421-R1，第十八批裁决 79），先比商户：商户级卡只对发卡商户本商户账号可见可办——商户账号只办本商户的卡（他商户的卡与通用卡 403 CROSS_MERCHANT_FORBIDDEN「该储值卡不在当前商户权限范围内」）；不挂商户的账号（平台管理员、最高权限、项目侧）只办综合体通用卡，碰任何商户级卡同样 403 CROSS_MERCHANT_FORBIDDEN。再比项目：最高权限、不带项目的卡、平台管理员不限；其余卡带项目的按冻结码 customer.stored_value.freeze 可触及的项目办（本人项目与可跨项目角色勾选的项目，PGM:659；第十八批 BD 段第 376 条 376-R1；商户账号只到本人项目），不在其中 403 CROSS_PROJECT_FORBIDDEN「该储值卡不在当前项目权限范围内」。卡不存在 404 STORED_VALUE_ACCOUNT_NOT_FOUND；已销户 409 STORED_VALUE_ACCOUNT_CLOSED；已是冻结 409 STORED_VALUE_ALREADY_FROZEN。",
         "x-permission": "customer.stored_value.freeze",
         "x-data-scope": "project",
         "x-terminal-allowed": [
@@ -26749,7 +26749,7 @@
         ],
         "operationId": "unfreezeStoredValueAccount",
         "summary": "解冻会员储值账户（后台）",
-        "description": "第十八批 BC 段第 365 条 365-R1（BSM:833「账户可冻结/解冻。」「商户的员工只能管理本商户发行的储值卡。」；ENUM:86「余额管理与退款均由长沙项目公司负责」）：解冻客人的一张已冻结储值卡，请求体同冻结，reason 记入成功留痕，不要求 idempotency_key；后台入口在储值退卡页（按手机号查卡见 lookupStoredValueRefundCards）。范围同 refundStoredValueAccount（278-R1）：最高权限放行；商户账号只办本商户的卡（他商户的卡与通用卡 403 CROSS_MERCHANT_FORBIDDEN「该储值卡不在当前商户权限范围内」）；卡带项目的按冻结码 customer.stored_value.freeze 可触及的项目办（本人项目与可跨项目角色勾选的项目，PGM:659；第十八批 BD 段第 376 条 376-R1；商户账号只到本人项目），不在其中 403 CROSS_PROJECT_FORBIDDEN「该储值卡不在当前项目权限范围内」（平台管理员不限）；不挂商户的账号可办可触及项目的通用卡，碰到不带项目的商户卡按发卡商户的经营项目（主项目或已批准的经营项目）判，其中没有一个在可触及的项目内 403 CROSS_PROJECT_FORBIDDEN。卡不存在 404 STORED_VALUE_ACCOUNT_NOT_FOUND；不在冻结状态（含已销户）409 STORED_VALUE_NOT_FROZEN。",
+        "description": "第十八批 BC 段第 365 条 365-R1（BSM:833「账户可冻结/解冻。」「商户的员工只能管理本商户发行的储值卡。」；ENUM:86「余额管理与退款均由长沙项目公司负责」）：解冻客人的一张已冻结储值卡，请求体同冻结，reason 记入成功留痕，不要求 idempotency_key；后台入口在储值退卡页（按手机号查卡见 lookupStoredValueRefundCards）。范围同 refundStoredValueAccount（278-R1、第十八批 CL 段 421-R1，第十八批裁决 79），先比商户：商户级卡只对发卡商户本商户账号可见可办——商户账号只办本商户的卡（他商户的卡与通用卡 403 CROSS_MERCHANT_FORBIDDEN「该储值卡不在当前商户权限范围内」）；不挂商户的账号（平台管理员、最高权限、项目侧）只办综合体通用卡，碰任何商户级卡同样 403 CROSS_MERCHANT_FORBIDDEN。再比项目：最高权限、不带项目的卡、平台管理员不限；其余卡带项目的按冻结码 customer.stored_value.freeze 可触及的项目办（本人项目与可跨项目角色勾选的项目，PGM:659；第十八批 BD 段第 376 条 376-R1；商户账号只到本人项目），不在其中 403 CROSS_PROJECT_FORBIDDEN「该储值卡不在当前项目权限范围内」。卡不存在 404 STORED_VALUE_ACCOUNT_NOT_FOUND；不在冻结状态（含已销户）409 STORED_VALUE_NOT_FROZEN。",
         "x-permission": "customer.stored_value.freeze",
         "x-data-scope": "project",
         "x-terminal-allowed": [
@@ -26808,7 +26808,7 @@
         ],
         "operationId": "refundStoredValueAccount",
         "summary": "会员储值退卡/退余额（后台）",
-        "description": "CG-06a：退卡只退未消费的本金——amount_cent 超过 principal_cent 即 409 STORED_VALUE_PRINCIPAL_INSUFFICIENT；赠送金不退现；close_account 且本金退清时未使用赠送金作废（adjust 流水留痕）并置 closed（ENUM「储值卡类型与收款主体」）。操作员裁决 2026-10-20 第三轮第 7 条：综合体通用卡退卡一次退还全部剩余本金、赠送金清零、卡关闭，amount_cent 不等于剩余本金即 400 STORED_VALUE_GENERAL_CARD_FULL_REFUND_ONLY。第十八批 AZ 段第 278 条 278-R1（ENUM:86「余额管理与退款均由长沙项目公司负责」；BSM:833「商户的员工只能管理本商户发行的储值卡」「单张储值卡退款时如申请同时销卡，本金未退清的须拒绝销卡并明确报错」；PGM:528「④看不到别的商户和别的项目的数据」）：退款范围按卡判：最高权限放行；商户账号只办本商户的卡（他商户的卡与通用卡 403 CROSS_MERCHANT_FORBIDDEN「该储值卡不在当前商户权限范围内」）；卡带项目的按退卡码 customer.stored_value.refund 可触及的项目办（本人项目与可跨项目角色勾选的项目，PGM:659；第十八批 BD 段第 376 条 376-R1；商户账号只到本人项目），不在其中 403 CROSS_PROJECT_FORBIDDEN「该储值卡不在当前项目权限范围内」（平台管理员不限）；不挂商户的项目侧账号不按商户限，可办可触及项目的通用卡，不再返回 MERCHANT_SCOPE_REQUIRED；碰到不带项目的商户卡按发卡商户的经营项目（主项目或已批准的经营项目）判，其中没有一个在可触及的项目内 403 CROSS_PROJECT_FORBIDDEN。首次提交与同一幂等键重放同一口径（重放在返回第一次结果之前按流水所属的卡判）。close_account 为真而本次退款后本金未退清 409 STORED_VALUE_CLOSE_PRINCIPAL_REMAINING（「本金未退清，不能销卡；同时销卡须一次退还剩余本金 X 元」）；会员注销放弃余额不经本接口。按手机号查可办理的卡见 lookupStoredValueRefundCards。同一幂等键同时到达（如双击确认）：后到者等先到者提交后，返回第一次的退款流水并带 replayed=true、提示已完成，不再报已销户、余额不足或重复记录（第十八批 CA 段第 392 条 392-R1；PGM:303、PGM:528⑤）。",
+        "description": "CG-06a：退卡只退未消费的本金——amount_cent 超过 principal_cent 即 409 STORED_VALUE_PRINCIPAL_INSUFFICIENT；赠送金不退现；close_account 且本金退清时未使用赠送金作废（adjust 流水留痕）并置 closed（ENUM「储值卡类型与收款主体」）。操作员裁决 2026-10-20 第三轮第 7 条：综合体通用卡退卡一次退还全部剩余本金、赠送金清零、卡关闭，amount_cent 不等于剩余本金即 400 STORED_VALUE_GENERAL_CARD_FULL_REFUND_ONLY。第十八批 AZ 段第 278 条 278-R1（ENUM:86「余额管理与退款均由长沙项目公司负责」；BSM:833「商户的员工只能管理本商户发行的储值卡」「单张储值卡退款时如申请同时销卡，本金未退清的须拒绝销卡并明确报错」；PGM:528「④看不到别的商户和别的项目的数据」）：退款范围按卡判，先比商户（第十八批 CL 段 421-R1，第十八批裁决 79，BSM:833「商户级卡的发行、充值、余额与退款完全由发卡商户自行办理，不经平台；平台各岗位（含最高权限）一律看不到商户级卡的卡号、持卡人、余额与充值、退款流水」）：商户级卡只对发卡商户本商户账号可见可办——商户账号只办本商户的卡（他商户的卡与通用卡 403 CROSS_MERCHANT_FORBIDDEN「该储值卡不在当前商户权限范围内」）；不挂商户的账号（平台管理员、最高权限、项目侧）只办综合体通用卡（不返回 MERCHANT_SCOPE_REQUIRED），碰任何商户级卡同样 403 CROSS_MERCHANT_FORBIDDEN。再比项目：最高权限、不带项目的卡、平台管理员不限；其余卡带项目的按退卡码 customer.stored_value.refund 可触及的项目办（本人项目与可跨项目角色勾选的项目，PGM:659；第十八批 BD 段第 376 条 376-R1；商户账号只到本人项目），不在其中 403 CROSS_PROJECT_FORBIDDEN「该储值卡不在当前项目权限范围内」。首次提交与同一幂等键重放同一口径（重放在返回第一次结果之前按流水所属的卡判）。close_account 为真而本次退款后本金未退清 409 STORED_VALUE_CLOSE_PRINCIPAL_REMAINING（「本金未退清，不能销卡；同时销卡须一次退还剩余本金 X 元」）；会员注销放弃余额不经本接口。按手机号查可办理的卡见 lookupStoredValueRefundCards。同一幂等键同时到达（如双击确认）：后到者等先到者提交后，返回第一次的退款流水并带 replayed=true、提示已完成，不再报已销户、余额不足或重复记录（第十八批 CA 段第 392 条 392-R1；PGM:303、PGM:528⑤）。",
         "x-permission": "customer.stored_value.refund",
         "x-data-scope": "project",
         "x-terminal-allowed": [
@@ -47572,6 +47572,7 @@
         ],
         "operationId": "configureStoredValueMerchantRefundRule",
         "summary": "配置商户级储值卡退款规则（发卡商户自设可否退/比例）",
+        "description": "第十八批 CL 段 423-R1（第十八批裁决 79，BSM:833「商户级卡是否可退、退多少比例由发卡商户自设规则（可设为不可退）」「商户级卡的发行、充值、余额与退款完全由发卡商户自行办理，不经平台」）：只限发卡商户本商户账号设置——不挂商户的账号（平台管理员、最高权限、项目侧）403 MERCHANT_SCOPE_REQUIRED「商户级卡由发卡商户在商户后台自行设置」，merchant_id 不是本账号商户 403 CROSS_MERCHANT_FORBIDDEN「该商户退款规则不在当前商户权限范围内」。保存时保留同一行原有的发卡开关、资金模式与消费扣款顺序（不再把扣款顺序重置为先本金后赠送金）。",
         "x-permission": "customer.stored_value.refund",
         "x-data-scope": "merchant",
         "x-terminal-allowed": [
@@ -47616,6 +47617,7 @@
         ],
         "operationId": "getStoredValueMerchantRefundRule",
         "summary": "查询商户级储值卡退款规则",
+        "description": "第十八批 CL 段 423-R1（第十八批裁决 79）：只限发卡商户本商户账号查看——不挂商户的账号（平台管理员、最高权限、项目侧）403 MERCHANT_SCOPE_REQUIRED「商户级卡由发卡商户在商户后台自行设置」，merchant_id 不是本账号商户 403 CROSS_MERCHANT_FORBIDDEN「该商户退款规则不在当前商户权限范围内」。返回同一行的退款规则、发卡开关、资金模式与消费扣款顺序；未配置按缺省（拒发卡、允许退、全额 10000、商户预收、先本金后赠送金）。",
         "x-permission": "customer.stored_value.refund",
         "x-data-scope": "merchant",
         "x-terminal-allowed": [
@@ -47667,10 +47669,10 @@
           "customer"
         ],
         "operationId": "configureStoredValueMerchantCard",
-        "summary": "配置商户储值卡（仅平台）：发卡资格 + 资金模式（预收/代收）+ 消费扣款顺序",
-        "description": "CG-06a：consume_order 为商户级卡消费扣款顺序（由发卡商户自定、由平台运营代为录入后台；BSM「支付方式」），principal_first=先本金后赠送金、bonus_first=先赠送金后本金；通用卡写死先本金后赠送金不可配置。",
+        "summary": "发卡商户设置本商户储值卡：发卡开关、资金模式（只可商户预收）、消费扣款顺序",
+        "description": "CG-06a：consume_order 为商户级卡消费扣款顺序（由发卡商户自定、由发卡商户在商户后台自行设置；BSM「支付方式」），principal_first=先本金后赠送金、bonus_first=先赠送金后本金，为空保留现值；通用卡写死先本金后赠送金不可配置。第十八批 CL 段 423-R1、422-R1（第十八批裁决 79，BSM:833「商户级卡的发行、充值、余额与退款完全由发卡商户自行办理，不经平台」「平台方（城市项目公司及娱乐平台公司、游乐公司、传媒公司、中央餐饮公司）按工商登记合计持股过半的商户，不得发行商户级卡，只能使用综合体通用卡。」）：只限发卡商户本商户账号设置——不挂商户的账号（平台管理员、最高权限、项目侧）403 MERCHANT_SCOPE_REQUIRED「商户级卡由发卡商户在商户后台自行设置」，merchant_id 不是本账号商户 403 CROSS_MERCHANT_FORBIDDEN「该商户退款规则不在当前商户权限范围内」；consume_order 不是上述两值之一或 fund_ownership 不是 merchant_prepaid 返回 400 VALIDATION_FAILED（先于商户核对；平台不代收）；card_issuance_enabled＝true 且该商户当日生效的已批准分红方案平台方比例（platform_share_bps）大于 5000 时 409 MERCHANT_CARD_PLATFORM_MAJORITY「平台方合计持股过半的商户不得发行商户级卡，只能使用综合体通用卡」，没有生效方案按平台方未持股。发卡开关、资金模式、扣款顺序与退款规则存于同一行，读改存互不覆盖。",
         "x-permission": "customer.stored_value.refund",
-        "x-data-scope": "platform",
+        "x-data-scope": "merchant",
         "x-terminal-allowed": [
           "web"
         ],
@@ -47810,7 +47812,7 @@
         "x-auth-context": "staff-token",
         "operationId": "queryAuditOperationEvents",
         "summary": "跨对象查询操作留痕",
-        "description": "审计只读角色按业务对象/操作人/事件名/时间范围跨对象查询 audit_events 操作日志（与 evidence/events 对象时间线互补，解决跨对象批量查询入口）。terminal 记该操作所在的端，取服务端派生的可信终端（客人会话端、商户手机应用会话、登记设备类型、商户账号为 merchant_portal、后台网页为 web）；一体机自助与员工自助注册端点取请求声明的终端；没有终端信息的为空（BSM 第 940 行、PGM 第 745 行）。metadata 另记 login_session_id（执行该动作的那一次员工登录会话编号）与 operator_device_id（执行设备：员工手机、平板、一体机为请求设备号，商户手机应用为会话设备编号，后台网页为浏览器设备编号），没有的不记（BSM 第 940 行、DEC-R8-97-19）。第十八批 BA 段第 324 条 324-R1（PGM:899「谁发起、谁销售、谁服务、谁第一个处理异常、为什么、谁审批、结果是什么，都要能查到。」；PGM:682「内部稽核可查看本综合体全部数据」；第十八批裁决 71）：可见范围——最高权限与平台管理员看全部；商户账号看本商户；其余不挂商户的账号按 audit.operation_log.view 可触及的项目，看这些项目内商户与人员所做的操作（操作人所属商户在该项目，或操作人账号归属该项目）；不带商户、操作人也不属于任何项目的留痕（如客人操作、系统作业、平台管理员与最高权限的操作）：启用中的综合体都在可触及范围内时一并可见，否则不出现（第十八批 BT 段第 370 条 370-R1）；没有项目归属 403 PROJECT_SCOPE_REQUIRED。第十八批 CM 段第 372 条第 2 段（PGM:682、PGM:683；第十八批裁决 77）：外部审计账号划定了数据时段的，只列时段内发生的留痕，发生时间取 occurred_at；带 from、to 的两者同时生效。",
+        "description": "审计只读角色按业务对象/操作人/事件名/时间范围跨对象查询 audit_events 操作日志（与 evidence/events 对象时间线互补，解决跨对象批量查询入口）。terminal 记该操作所在的端，取服务端派生的可信终端（客人会话端、商户手机应用会话、登记设备类型、商户账号为 merchant_portal、后台网页为 web）；一体机自助与员工自助注册端点取请求声明的终端；没有终端信息的为空（BSM 第 940 行、PGM 第 745 行）。metadata 另记 login_session_id（执行该动作的那一次员工登录会话编号）与 operator_device_id（执行设备：员工手机、平板、一体机为请求设备号，商户手机应用为会话设备编号，后台网页为浏览器设备编号），没有的不记（BSM 第 940 行、DEC-R8-97-19）。第十八批 BA 段第 324 条 324-R1（PGM:899「谁发起、谁销售、谁服务、谁第一个处理异常、为什么、谁审批、结果是什么，都要能查到。」；PGM:682「内部稽核可查看本综合体全部数据」；第十八批裁决 71）：可见范围——最高权限与平台管理员看全部；商户账号看本商户；其余不挂商户的账号按 audit.operation_log.view 可触及的项目，看这些项目内商户与人员所做的操作（操作人所属商户在该项目，或操作人账号归属该项目）；不带商户、操作人也不属于任何项目的留痕（如客人操作、系统作业、平台管理员与最高权限的操作）：启用中的综合体都在可触及范围内时一并可见，否则不出现（第十八批 BT 段第 370 条 370-R1）；没有项目归属 403 PROJECT_SCOPE_REQUIRED。第十八批 CM 段第 372 条第 2 段（PGM:682、PGM:683；第十八批裁决 77）：外部审计账号划定了数据时段的，只列时段内发生的留痕，发生时间取 occurred_at；带 from、to 的两者同时生效。第十八批 CL 段 421-R4（第十八批裁决 79，BSM:833「平台各岗位（含最高权限）一律看不到商户级卡的卡号、持卡人、余额与充值、退款流水」）：不挂商户的读者（最高权限、平台管理员、项目侧）不列以商户级卡账户为对象（business_type＝customer_stored_value，business_id 为商户级卡账户编号）或以商户级卡充值意向为对象（business_type＝payment_intent，business_id 为商户级卡充值的支付意向编号）的事件，也不列商户账号在储值冻结、解冻、线上与柜台退卡写口失败的留痕（business_type＝customer_stored_value、event_result＝failure、带 merchant_id，business_id 为客人编号）；商户账号照旧按本商户。",
         "parameters": [
           {
             "name": "business_type",
@@ -47919,7 +47921,7 @@
         "x-auth-context": "staff-token",
         "operationId": "exportAuditOperationEvents",
         "summary": "导出操作留痕（敏感）",
-        "description": "导出全量操作留痕，敏感动作；audit.operation_log.export 标 requires_approval，在授予层经审批放行后方可使用。 第 23 条 23-R3（PGM:687「所有导出的文件一律带密码，密码不可取消、不可由导出人自行设定……导出文件中的数据不可复制、不可编辑」）：只交出服务端生成的 PDF：打开密码按导出人账号、导出时刻（秒）、导出所用设备编号（浏览器设备编号，第十八批裁决 6）与接入网络统一算法生成 10 位，密码与文件都不落库、可按密码反查（POST /api/v1/security/export-files/lookup），导出人在 GET /api/v1/security/my-exports 查看；非可编辑版禁止复制与修改（打印不限），每页按页面暗纹同一规则平铺暗纹；每次导出落导出记录 export_files（导出人、时间、设备、网络、内容范围与筛选条件、行数，只增不改不删，PGM:686）。没有已登记的设备编号 409 DEVICE_NOT_REGISTERED（请重新登录）。列：发生时间（北京时间）、事件名称、结果、操作人类型、操作人、终端、权限码、业务类型、业务编号、请求编号、商户编号；导出记录 filters 记各筛选参数与取数所按的 merchant_id、project_ids（按项目口径取数时为项目集合，否则为空）。第十八批 BA 段第 324 条 324-R1（PGM:899「谁发起、谁销售、谁服务、谁第一个处理异常、为什么、谁审批、结果是什么，都要能查到。」；PGM:682「内部稽核可查看本综合体全部数据」；第十八批裁决 71）：可见范围——最高权限与平台管理员看全部；商户账号看本商户；其余不挂商户的账号按 audit.operation_log.export 可触及的项目，看这些项目内商户与人员所做的操作（操作人所属商户在该项目，或操作人账号归属该项目）；不带商户、操作人也不属于任何项目的留痕（如客人操作、系统作业、平台管理员与最高权限的操作）：启用中的综合体都在可触及范围内时一并可见，否则不出现（第十八批 BT 段第 370 条 370-R1）；没有项目归属 403 PROJECT_SCOPE_REQUIRED。第十八批 CM 段第 372 条第 2 段（PGM:682、PGM:683；第十八批裁决 77）：外部审计账号划定了数据时段的，只导出时段内发生的留痕，发生时间取 occurred_at；带 from、to 的两者同时生效；导出记录 filters 记 data_window，可编辑版重取同按时段取数。",
+        "description": "导出全量操作留痕，敏感动作；audit.operation_log.export 标 requires_approval，在授予层经审批放行后方可使用。 第 23 条 23-R3（PGM:687「所有导出的文件一律带密码，密码不可取消、不可由导出人自行设定……导出文件中的数据不可复制、不可编辑」）：只交出服务端生成的 PDF：打开密码按导出人账号、导出时刻（秒）、导出所用设备编号（浏览器设备编号，第十八批裁决 6）与接入网络统一算法生成 10 位，密码与文件都不落库、可按密码反查（POST /api/v1/security/export-files/lookup），导出人在 GET /api/v1/security/my-exports 查看；非可编辑版禁止复制与修改（打印不限），每页按页面暗纹同一规则平铺暗纹；每次导出落导出记录 export_files（导出人、时间、设备、网络、内容范围与筛选条件、行数，只增不改不删，PGM:686）。没有已登记的设备编号 409 DEVICE_NOT_REGISTERED（请重新登录）。列：发生时间（北京时间）、事件名称、结果、操作人类型、操作人、终端、权限码、业务类型、业务编号、请求编号、商户编号；导出记录 filters 记各筛选参数与取数所按的 merchant_id、project_ids（按项目口径取数时为项目集合，否则为空）。第十八批 BA 段第 324 条 324-R1（PGM:899「谁发起、谁销售、谁服务、谁第一个处理异常、为什么、谁审批、结果是什么，都要能查到。」；PGM:682「内部稽核可查看本综合体全部数据」；第十八批裁决 71）：可见范围——最高权限与平台管理员看全部；商户账号看本商户；其余不挂商户的账号按 audit.operation_log.export 可触及的项目，看这些项目内商户与人员所做的操作（操作人所属商户在该项目，或操作人账号归属该项目）；不带商户、操作人也不属于任何项目的留痕（如客人操作、系统作业、平台管理员与最高权限的操作）：启用中的综合体都在可触及范围内时一并可见，否则不出现（第十八批 BT 段第 370 条 370-R1）；没有项目归属 403 PROJECT_SCOPE_REQUIRED。第十八批 CM 段第 372 条第 2 段（PGM:682、PGM:683；第十八批裁决 77）：外部审计账号划定了数据时段的，只导出时段内发生的留痕，发生时间取 occurred_at；带 from、to 的两者同时生效；导出记录 filters 记 data_window，可编辑版重取同按时段取数。第十八批 CL 段 421-R4（第十八批裁决 79，BSM:833「平台各岗位（含最高权限）一律看不到商户级卡的卡号、持卡人、余额与充值、退款流水」）：不挂商户的读者（最高权限、平台管理员、项目侧）不列以商户级卡账户为对象（business_type＝customer_stored_value，business_id 为商户级卡账户编号）或以商户级卡充值意向为对象（business_type＝payment_intent，business_id 为商户级卡充值的支付意向编号）的事件，也不列商户账号在储值冻结、解冻、线上与柜台退卡写口失败的留痕（business_type＝customer_stored_value、event_result＝failure、带 merchant_id，business_id 为客人编号）；商户账号照旧按本商户。导出与 queryAuditOperationEvents 同一口径。",
         "parameters": [
           {
             "name": "business_type",
@@ -57079,7 +57081,7 @@
         ],
         "operationId": "counterRefundStoredValueAccount",
         "summary": "会员储值到店柜台退款（商户预收卡唯一可达退款路径）",
-        "description": "CG-06a：同线上退款口径——只退未消费的本金（超过即 409 STORED_VALUE_PRINCIPAL_INSUFFICIENT），赠送金不退现，销户时赠送金作废留痕。 第十八批 N 段第 123 条 123-R2（BSM:1630「核销、收款、退款、放行等敏感操作，操作设备定位落在该项目综合体授权范围之外时一律拒绝并留痕」；BSM:1876「Web 端同样适用」）：本操作属敏感操作定位闸的现场动作闭集（第十八批裁决 31）。操作对象所属项目已配授权范围（123-R1）时须带请求头 X-Geo-Latitude、X-Geo-Longitude（设备当下定位，WGS-84 十进制度）：没带或解析不了按范围外处理（裁决 30）返回 403 SENSITIVE_OPERATION_LOCATION_REQUIRED，到圆心距离超过授权半径返回 403 SENSITIVE_OPERATION_OUT_OF_RANGE，拒绝在独立事务里留痕 sensitive_operation.location_rejected（business_id 为本 operationId，业务回滚不丢）；项目没配授权范围不查位置（裁决 32）；判定在幂等之前，重放不能绕过；通过时不存位置。第十八批 AZ 段第 278 条 278-R1（ENUM:86「余额管理与退款均由长沙项目公司负责」；BSM:833「商户的员工只能管理本商户发行的储值卡」「单张储值卡退款时如申请同时销卡，本金未退清的须拒绝销卡并明确报错」；PGM:528「④看不到别的商户和别的项目的数据」）：退款范围按卡判：最高权限放行；商户账号只办本商户的卡（他商户的卡与通用卡 403 CROSS_MERCHANT_FORBIDDEN「该储值卡不在当前商户权限范围内」）；卡带项目的按退卡码 customer.stored_value.refund 可触及的项目办（本人项目与可跨项目角色勾选的项目，PGM:659；第十八批 BD 段第 376 条 376-R1；商户账号只到本人项目），不在其中 403 CROSS_PROJECT_FORBIDDEN「该储值卡不在当前项目权限范围内」（平台管理员不限）；不挂商户的项目侧账号不按商户限，可办可触及项目的通用卡，不再返回 MERCHANT_SCOPE_REQUIRED；碰到不带项目的商户卡按发卡商户的经营项目（主项目或已批准的经营项目）判，其中没有一个在可触及的项目内 403 CROSS_PROJECT_FORBIDDEN。首次提交与同一幂等键重放同一口径（重放在返回第一次结果之前按流水所属的卡判）。柜台退款首次提交起也核项目（原先只比商户）。close_account 为真而本次退款后本金未退清 409 STORED_VALUE_CLOSE_PRINCIPAL_REMAINING（「本金未退清，不能销卡；同时销卡须一次退还剩余本金 X 元」）；会员注销放弃余额不经本接口。按手机号查可办理的卡见 lookupStoredValueRefundCards。同一幂等键同时到达（如双击确认）：后到者等先到者提交后，返回第一次的退款流水并带 replayed=true、提示已完成，不再报已销户、余额不足或重复记录（第十八批 CA 段第 392 条 392-R1；PGM:303、PGM:528⑤）。",
+        "description": "CG-06a：同线上退款口径——只退未消费的本金（超过即 409 STORED_VALUE_PRINCIPAL_INSUFFICIENT），赠送金不退现，销户时赠送金作废留痕。 第十八批 N 段第 123 条 123-R2（BSM:1630「核销、收款、退款、放行等敏感操作，操作设备定位落在该项目综合体授权范围之外时一律拒绝并留痕」；BSM:1876「Web 端同样适用」）：本操作属敏感操作定位闸的现场动作闭集（第十八批裁决 31）。操作对象所属项目已配授权范围（123-R1）时须带请求头 X-Geo-Latitude、X-Geo-Longitude（设备当下定位，WGS-84 十进制度）：没带或解析不了按范围外处理（裁决 30）返回 403 SENSITIVE_OPERATION_LOCATION_REQUIRED，到圆心距离超过授权半径返回 403 SENSITIVE_OPERATION_OUT_OF_RANGE，拒绝在独立事务里留痕 sensitive_operation.location_rejected（business_id 为本 operationId，业务回滚不丢）；项目没配授权范围不查位置（裁决 32）；判定在幂等之前，重放不能绕过；通过时不存位置。第十八批 AZ 段第 278 条 278-R1（ENUM:86「余额管理与退款均由长沙项目公司负责」；BSM:833「商户的员工只能管理本商户发行的储值卡」「单张储值卡退款时如申请同时销卡，本金未退清的须拒绝销卡并明确报错」；PGM:528「④看不到别的商户和别的项目的数据」）：退款范围按卡判，先比商户（第十八批 CL 段 421-R1，第十八批裁决 79，BSM:833「商户级卡的发行、充值、余额与退款完全由发卡商户自行办理，不经平台；平台各岗位（含最高权限）一律看不到商户级卡的卡号、持卡人、余额与充值、退款流水」）：商户级卡只对发卡商户本商户账号可见可办——商户账号只办本商户的卡（他商户的卡与通用卡 403 CROSS_MERCHANT_FORBIDDEN「该储值卡不在当前商户权限范围内」）；不挂商户的账号（平台管理员、最高权限、项目侧）只办综合体通用卡（不返回 MERCHANT_SCOPE_REQUIRED），碰任何商户级卡同样 403 CROSS_MERCHANT_FORBIDDEN。再比项目：最高权限、不带项目的卡、平台管理员不限；其余卡带项目的按退卡码 customer.stored_value.refund 可触及的项目办（本人项目与可跨项目角色勾选的项目，PGM:659；第十八批 BD 段第 376 条 376-R1；商户账号只到本人项目），不在其中 403 CROSS_PROJECT_FORBIDDEN「该储值卡不在当前项目权限范围内」。首次提交与同一幂等键重放同一口径（重放在返回第一次结果之前按流水所属的卡判）。柜台退款首次提交起也核项目（原先只比商户）。close_account 为真而本次退款后本金未退清 409 STORED_VALUE_CLOSE_PRINCIPAL_REMAINING（「本金未退清，不能销卡；同时销卡须一次退还剩余本金 X 元」）；会员注销放弃余额不经本接口。按手机号查可办理的卡见 lookupStoredValueRefundCards。同一幂等键同时到达（如双击确认）：后到者等先到者提交后，返回第一次的退款流水并带 replayed=true、提示已完成，不再报已销户、余额不足或重复记录（第十八批 CA 段第 392 条 392-R1；PGM:303、PGM:528⑤）。",
         "x-permission": "customer.stored_value.refund",
         "x-data-scope": "project",
         "x-terminal-allowed": [
@@ -57145,7 +57147,7 @@
         ],
         "operationId": "lookupStoredValueRefundCards",
         "summary": "储值退卡查卡（按手机号列出当前账号可办理退卡的卡；手机号走请求体不进 URL）",
-        "description": "第十八批 AZ 段第 278 条 278-R1（ENUM:86「余额管理与退款均由长沙项目公司负责」；BSM:833「商户的员工只能管理本商户发行的储值卡」；PGM:528「④看不到别的商户和别的项目的数据」）：按客人完整手机号（精确匹配）列出其名下当前账号可办理退卡的卡，供后台「储值退卡」页办理 refundStoredValueAccount（通用卡）与 counterRefundStoredValueAccount（商户卡）。查询不扣单次授权（M723 操作员 2026-10-03「预览、查询不扣一次性授权」），不记审计事件。范围同退款：最高权限与平台管理员全见；商户账号只见本商户的卡，卡带项目的再限本人项目；不挂商户的账号按所持查卡码（持 customer.stored_value.refund 按它，否则按 customer.stored_value.freeze）可触及的项目（本人项目与可跨项目角色勾选的项目，PGM:659；第十八批 BD 段第 376 条 376-R1）见卡带项目的卡，另见不带项目的通用卡，以及发卡商户在可触及的项目中任一经营（主项目或已批准的经营项目）的不带项目商户卡。已销户（closed）的卡不列；手机号查不到客人返回空数组；只给掩码手机号。商户卡的 refund_allowed 与 refund_ratio_bps 取发卡商户退款规则（未配置为允许、10000），通用卡固定为 true 与 10000；pending_refund_cent 为账户关闭或注销时登记、状态为 requested 或 processing 的待退事项金额，否则为 null。第十八批 BC 段第 365 条 365-R1（BSM:833「账户可冻结/解冻。」）：储值退卡页同时办冻结、解冻（freezeStoredValueAccount、unfreezeStoredValueAccount），持 customer.stored_value.freeze 也可查卡，范围同上。缺 phone 400 VALIDATION_FAILED；customer.stored_value.refund 与 customer.stored_value.freeze 都不持 403 PERMISSION_DENIED。",
+        "description": "第十八批 AZ 段第 278 条 278-R1（ENUM:86「余额管理与退款均由长沙项目公司负责」；BSM:833「商户的员工只能管理本商户发行的储值卡」；PGM:528「④看不到别的商户和别的项目的数据」）：按客人完整手机号（精确匹配）列出其名下当前账号可办理退卡的卡，供后台「储值退卡」页办理 refundStoredValueAccount（通用卡）与 counterRefundStoredValueAccount（商户卡）。查询不扣单次授权（M723 操作员 2026-10-03「预览、查询不扣一次性授权」），不记审计事件。范围同退款，先比商户（第十八批 CL 段 421-R1，第十八批裁决 79，BSM:833「平台各岗位（含最高权限）一律看不到商户级卡的卡号、持卡人、余额与充值、退款流水」）：商户级卡只对发卡商户本商户账号可见——商户账号只见本商户的卡，卡带项目的再限本人项目；不挂商户的账号（平台管理员、最高权限、项目侧）只见综合体通用卡、不列任何商户级卡，其中最高权限与平台管理员见全部通用卡，其余按所持查卡码（持 customer.stored_value.refund 按它，否则按 customer.stored_value.freeze）可触及的项目（本人项目与可跨项目角色勾选的项目，PGM:659；第十八批 BD 段第 376 条 376-R1）见卡带项目的通用卡，另见不带项目的通用卡。已销户（closed）的卡不列；手机号查不到客人返回空数组；只给掩码手机号。商户卡的 refund_allowed 与 refund_ratio_bps 取发卡商户退款规则（未配置为允许、10000），通用卡固定为 true 与 10000；pending_refund_cent 为账户关闭或注销时登记、状态为 requested 或 processing 的待退事项金额，否则为 null。第十八批 BC 段第 365 条 365-R1（BSM:833「账户可冻结/解冻。」）：储值退卡页同时办冻结、解冻（freezeStoredValueAccount、unfreezeStoredValueAccount），持 customer.stored_value.freeze 也可查卡，范围同上。缺 phone 400 VALIDATION_FAILED；customer.stored_value.refund 与 customer.stored_value.freeze 都不持 403 PERMISSION_DENIED。",
         "x-permission": "customer.stored_value.refund",
         "x-permissions-any-of": [
           "customer.stored_value.refund",
@@ -57234,7 +57236,7 @@
         ],
         "operationId": "queryStoredValueLedger",
         "summary": "储值台账查询（按客人、商户、期间查储值逐笔明细与余额构成；手机号走请求体不进 URL）",
-        "description": "第十八批 BD 段第 364 条 364-R1（BSM:833「运营端提供储值台账，可按客人、商户、期间查询逐笔明细与余额构成。」「商户的员工只能管理本商户发行的储值卡。」；ENUM:86「每笔充值拆为本金与赠送金两段分别记账」；PGM:659「所有业务数据默认按项目隔离」「在所分配的权限内可以查看、处理该角色可查看项目的数据」「商户账号持有这类角色也不能跨项目」）：供后台「储值台账」页（ADM-CUS-007）按客人（phone，完整手机号精确匹配）、商户（merchant_id，发卡商户或扣款商户是它的都出）、期间（date_from、date_to，北京时间日期，含首尾）查储值逐笔流水，三项都可不填，起止颠倒不另报错（结果为空）；每笔给本金、赠送金变动及变动后的本金、赠送金与余额，变动后本金与赠送金按该卡全部流水累计（不受期间与商户筛选影响），同一时刻写入的多条流水（如退卡、消费回冲与随后的赠送金作废）按先非调整行、后调整（adjust）行累计。范围：最高权限与平台管理员全见；商户账号只见本商户发的卡，卡带项目的再限本人项目；其余账号按 customer.stored_value.view 可触及的项目（本人项目与可跨项目角色勾选的项目，PGM:659）见卡带项目的卡，不带项目的商户卡按发卡商户的经营项目（主项目或已批准的经营项目）判，不带项目也不挂商户的卡不出。扣款商户（consume_merchant_id、consume_merchant_name，只在 consume 与 consume_reversal 行，回冲行按原消费取）取商户卡的发卡商户、票务订单的 bar_id，或通用卡酒吧结账储值支付的结账酒吧商户，取不到为空；支付通路 payment_channel 只在 topup 行。按 created_at 倒序分页，同一时刻的流水里调整（adjust，如赠送金作废）行排在最上，再按 txn_id 倒序（修复项 F07）；手机号查不到客人返回空页。查询不扣单次授权（M723 操作员 2026-10-03「预览、查询不扣一次性授权」），不记审计事件，查了谁由外壳敏感页登记（PGM:878，同 lookupStoredValueRefundCards）。page 小于 1 或 size 不在 1～100 返回 400 VALIDATION_FAILED「分页参数无效」；缺 customer.stored_value.view 403 PERMISSION_DENIED；没有项目归属的非平台账号 403 PROJECT_SCOPE_REQUIRED。",
+        "description": "第十八批 BD 段第 364 条 364-R1（BSM:833「运营端提供储值台账，可按客人、商户、期间查询逐笔明细与余额构成。」「商户的员工只能管理本商户发行的储值卡。」；ENUM:86「每笔充值拆为本金与赠送金两段分别记账」；PGM:659「所有业务数据默认按项目隔离」「在所分配的权限内可以查看、处理该角色可查看项目的数据」「商户账号持有这类角色也不能跨项目」）：供后台「储值台账」页（ADM-CUS-007）按客人（phone，完整手机号精确匹配）、商户（merchant_id，发卡商户或扣款商户是它的都出）、期间（date_from、date_to，北京时间日期，含首尾）查储值逐笔流水，三项都可不填，起止颠倒不另报错（结果为空）；每笔给本金、赠送金变动及变动后的本金、赠送金与余额，变动后本金与赠送金按该卡全部流水累计（不受期间与商户筛选影响），同一时刻写入的多条流水（如退卡、消费回冲与随后的赠送金作废）按先非调整行、后调整（adjust）行累计。范围先比商户（第十八批 CL 段第 421 条 421-R2，第十八批裁决 79，BSM:833「平台各岗位（含最高权限）一律看不到商户级卡的卡号、持卡人、余额与充值、退款流水」）：商户账号只见本商户发的卡，卡带项目的再限本人项目；不挂商户的账号（平台管理员、最高权限、项目侧与可跨项目角色账号）只列综合体通用卡的流水、不列任何商户级卡，其中最高权限与平台管理员见全部通用卡，其余按 customer.stored_value.view 可触及的项目（本人项目与可跨项目角色勾选的项目，PGM:659）见卡带项目的通用卡，不带项目的卡不出；这类账号按商户筛选时只得通用卡在该商户扣款的流水。扣款商户（consume_merchant_id、consume_merchant_name，只在 consume 与 consume_reversal 行，回冲行按原消费取）取商户卡的发卡商户、票务订单的 bar_id，或通用卡酒吧结账储值支付的结账酒吧商户，取不到为空；支付通路 payment_channel 只在 topup 行。按 created_at 倒序分页，同一时刻的流水里调整（adjust，如赠送金作废）行排在最上，再按 txn_id 倒序（修复项 F07）；手机号查不到客人返回空页。查询不扣单次授权（M723 操作员 2026-10-03「预览、查询不扣一次性授权」），不记审计事件，查了谁由外壳敏感页登记（PGM:878，同 lookupStoredValueRefundCards）。page 小于 1 或 size 不在 1～100 返回 400 VALIDATION_FAILED「分页参数无效」；缺 customer.stored_value.view 403 PERMISSION_DENIED；没有项目归属的非平台账号 403 PROJECT_SCOPE_REQUIRED。",
         "x-permission": "customer.stored_value.view",
         "x-data-scope": "project-merchant",
         "x-terminal-allowed": [
@@ -71645,7 +71647,7 @@
         "x-idempotency-required": false,
         "x-audit-event-success": "finance_refund.viewed",
         "x-audit-event-failure": "finance_refund.view_failed",
-        "description": "读取退款详情和全部办理记录 经销原路退款以dealer_order_refund关联源单，按原订单真实项目核验权限；执行结果与经销状态同事务同步，登记待办不等于成功。第十八批 BX 段第 372 条 372-R4（第十八批裁决 77「各清单、明细、导出只看得到这段时间发生的记录；没有发生日期的资料照常显示」）：外部审计账号划定了数据时段的（见 setAuditDataWindow），只能看时段内发生的退款，发生时间取建单时刻 created_at；时段外 403 OUT_OF_AUDIT_DATA_WINDOW（该记录不在划定的数据时段内），在项目与商户范围判定之后判（跨项目、跨商户的仍先报 CROSS_PROJECT_FORBIDDEN、CROSS_MERCHANT_FORBIDDEN）。",
+        "description": "读取退款详情和全部办理记录 经销原路退款以dealer_order_refund关联源单，按原订单真实项目核验权限；执行结果与经销状态同事务同步，登记待办不等于成功。第十八批 BX 段第 372 条 372-R4（第十八批裁决 77「各清单、明细、导出只看得到这段时间发生的记录；没有发生日期的资料照常显示」）：外部审计账号划定了数据时段的（见 setAuditDataWindow），只能看时段内发生的退款，发生时间取建单时刻 created_at；时段外 403 OUT_OF_AUDIT_DATA_WINDOW（该记录不在划定的数据时段内），在项目与商户范围判定之后判（跨项目、跨商户的仍先报 CROSS_PROJECT_FORBIDDEN、CROSS_MERCHANT_FORBIDDEN）。 第十八批 CL 段 421-R3（第十八批裁决 79）：商户级卡的待退本金事项（source_type＝stored_value_account 且 merchant_id 非空）对不挂商户的账号（平台管理员、最高权限、项目侧）按查无此单处理，404 REFUND_NOT_FOUND「退款记录不存在」；queryFinanceRefund、retryFinanceRefund、createFinanceRefundPaymentConfirmation、recordFinanceRefundExecution、confirmFinanceRefundResult 用同一取单口径，其中 recordFinanceRefundExecution 与 confirmFinanceRefundResult 仍先判 409 STORED_VALUE_MERCHANT_COUNTER_ONLY。发卡商户本商户账号照旧可看。",
         "x-failure-codes": [
           "OUT_OF_AUDIT_DATA_WINDOW"
         ],
@@ -75224,7 +75226,7 @@
         ],
         "operationId": "listTicketRewardConfigs",
         "summary": "查看门票奖励版本",
-        "description": "查看门票奖励版本",
+        "description": "查看门票奖励版本。第十八批 CL 段 423-R3（第十八批裁决 85）：商户账号不带 project_id 时只返回本商户 kind＝merchant_card_bonus（商户级卡充值赠送比例）的版本。",
         "x-permission": "ticket.reward.config.view",
         "x-data-scope": "project-merchant",
         "x-auth-context": "staff-token",
@@ -75328,7 +75330,7 @@
         ],
         "operationId": "submitTicketRewardConfig",
         "summary": "提交门票奖励规则或销售合同审批",
-        "description": "固定积分与成长值分别配置；核销时取已公布生效规则，积分不随会员等级变化。全国等待期及发行单价由全国权限审批，销售合同须业务、财务、法务平行通过并关联真实合同附件。会员等级三项参数（滚动统计周期、保护期、降级提前通知天数）全平台统一、值与上下限同配，须顶层平台主管审批，只对此后起算的保护期与此后的等级变化生效，不在保护期的会员按最近一次定级时点生效的版本、不因改参当天降级（OBS-13-01，BSM 第 820 行；第十四批第 5 条）。",
+        "description": "固定积分与成长值分别配置；核销时取已公布生效规则，积分不随会员等级变化。全国等待期及发行单价由全国权限审批，销售合同须业务、财务、法务平行通过并关联真实合同附件。会员等级三项参数（滚动统计周期、保护期、降级提前通知天数）全平台统一、值与上下限同配，须顶层平台主管审批，只对此后起算的保护期与此后的等级变化生效，不在保护期的会员按最近一次定级时点生效的版本、不因改参当天降级（OBS-13-01，BSM 第 820 行；第十四批第 5 条）。 第十八批 CL 段 423-R3（第十八批裁决 85，ENUM:86 改句「赠送比例由发卡商户在商户后台自行设置」）：kind＝merchant_card_bonus（商户级卡充值赠送比例）只限发卡商户本商户账号提交——不挂商户的账号（平台管理员、最高权限、项目侧）403 MERCHANT_SCOPE_REQUIRED「商户级卡赠送比例由发卡商户在商户后台自行设置」，商户账号缺 merchant_id 400 VALIDATION_FAILED，merchant_id 不是本账号商户 403 CROSS_MERCHANT_FORBIDDEN「不能设置其他商户的商户级卡赠送比例」；final_approver_id 须是发卡商户本商户的账号，否则 400 VALIDATION_FAILED「商户级卡赠送比例的最终审批人须是发卡商户本商户有审批权的人」；照旧按版本与生效时间保存、进入审批，经本商户有审批权的人转正后生效。kind＝stored_value_bonus（综合体通用卡充值赠送比例）仍只限平台。",
         "x-permission": "ticket.reward.config.manage",
         "x-data-scope": "project-merchant",
         "x-auth-context": "staff-token",
@@ -89450,7 +89452,7 @@
         ],
         "operationId": "getCustomerStoredValueTopupRules",
         "summary": "充值前规则告知（扣款顺序、赠送金性质、退卡口径）",
-        "description": "ROOT-03-R30（ENUM 第 86 行「储值卡的消费扣款顺序、赠送金的性质与退卡口径，须在客人充值之前告知」）：merchant_id 为空＝综合体通用卡（card_scope=general，扣款顺序固定先本金后赠送金）；非空＝该商户的商户级卡（card_scope=merchant，consume_order 与 refund_allowed、refund_ratio_bps 按平台代录的商户卡规则）。bonus_bps 取此刻已审批、已生效的赠送比例版本（通用卡按项目 stored_value_bonus，商户级卡按发卡商户 merchant_card_bonus，第十八批第 11 条 V558），无生效版本为 0。另给 consume_order_text、bonus_rule_text、refund_rule_text 原句。 PGM 第 744 行「前端隐藏只是辅助，后端接口必须独立校验」：按综合体的客人端终端开关以卡范围所属综合体（merchant_id 非空取发卡项目：project_id 是该商户已批准的经营项目的取它，为空或不是它的经营项目取该商户的主项目，第十八批裁决 18；否则取 project_id）在服务端判（不取客户端自报的 X-Project-Id），该综合体客人端已关→403 TERMINAL_DISABLED。",
+        "description": "ROOT-03-R30（ENUM 第 86 行「储值卡的消费扣款顺序、赠送金的性质与退卡口径，须在客人充值之前告知」）：merchant_id 为空＝综合体通用卡（card_scope=general，扣款顺序固定先本金后赠送金）；非空＝该商户的商户级卡（card_scope=merchant，consume_order 与 refund_allowed、refund_ratio_bps 按发卡商户在商户后台自行设置的商户卡规则）。bonus_bps 取此刻已审批、已生效的赠送比例版本（通用卡按项目 stored_value_bonus，商户级卡按发卡商户 merchant_card_bonus，第十八批第 11 条 V558），无生效版本为 0。另给 consume_order_text、bonus_rule_text、refund_rule_text 原句。 PGM 第 744 行「前端隐藏只是辅助，后端接口必须独立校验」：按综合体的客人端终端开关以卡范围所属综合体（merchant_id 非空取发卡项目：project_id 是该商户已批准的经营项目的取它，为空或不是它的经营项目取该商户的主项目，第十八批裁决 18；否则取 project_id）在服务端判（不取客户端自报的 X-Project-Id），该综合体客人端已关→403 TERMINAL_DISABLED。",
         "x-permission": "not_applicable",
         "x-data-scope": "self",
         "x-terminal-allowed": [
@@ -108490,7 +108492,7 @@
       },
       "StoredValueMerchantCardConfigRequest": {
         "type": "object",
-        "description": "请求载荷 `StoredValueMerchantCardConfigRequest`；AUD-061 商户储值卡平台配置（仅平台）：发卡资格 + 资金模式（只可商户预收，平台不代收）+ 扣款顺序。",
+        "description": "请求载荷 `StoredValueMerchantCardConfigRequest`；AUD-061 发卡商户设置本商户储值卡（只限发卡商户本商户账号，第十八批 CL 段 423-R1、第十八批裁决 79）：发卡开关 + 资金模式（只可商户预收，平台不代收）+ 消费扣款顺序。",
         "additionalProperties": false,
         "required": [
           "merchant_id"
@@ -108503,7 +108505,7 @@
           },
           "card_issuance_enabled": {
             "type": "boolean",
-            "description": "发卡资格：开通后客人才能给该商户卡充值；空＝关。"
+            "description": "发卡开关：发卡商户自行开通后客人才能给该商户卡充值；空＝关；平台方合计持股过半（当日生效的已批准分红方案平台方比例大于 5000）的商户传 true 返回 409 MERCHANT_CARD_PLATFORM_MAJORITY（第十八批 CL 段 422-R1）。"
           },
           "fund_ownership": {
             "type": "string",
@@ -108514,7 +108516,7 @@
           },
           "consume_order": {
             "type": "string",
-            "description": "CG-06a 商户级卡消费扣款顺序（由发卡商户自定、由平台运营代为录入；BSM「支付方式」）：principal_first=先本金后赠送金（缺省）；bonus_first=先赠送金后本金；空＝保留现值。通用卡写死先本金后赠送金，不在此配置。",
+            "description": "CG-06a 商户级卡消费扣款顺序（由发卡商户自定、由发卡商户在商户后台自行设置；BSM「支付方式」）：principal_first=先本金后赠送金（缺省）；bonus_first=先赠送金后本金；空＝保留现值。通用卡写死先本金后赠送金，不在此配置。",
             "enum": [
               "principal_first",
               "bonus_first"
@@ -114503,7 +114505,7 @@
               "string",
               "null"
             ],
-            "description": "第十八批第 11 条：发卡商户；仅 merchant_card_bonus（商户级卡充值赠送比例，ENUM L86「赠送比例由发卡商户提出、由平台运营代为录入后台」）必填，其余类型为空。"
+            "description": "第十八批第 11 条：发卡商户；仅 merchant_card_bonus（商户级卡充值赠送比例，ENUM L86 按第十八批裁决 85 改为「赠送比例由发卡商户在商户后台自行设置」）必填，其余类型为空。"
           },
           "version": {
             "type": "string"
@@ -114708,7 +114710,7 @@
               "merchant_card_bonus",
               "stored_value_bonus"
             ],
-            "description": "level_rolling_months（会员等级滚动统计周期，月）、level_protection_months（保护期，月）、level_notice_days（降级提前通知天数）为 OBS-13-01（BSM 第 820 行「业务参数，全平台统一可配……须同时配置上下限」「上述三项参数的变更须经审批、只对后续周期生效」）的三项会员等级参数：不可限定项目、票种、业态，values 须同填 fixed_value 与 minimum_value（不小于 1）、maximum_value，最终审批人须属顶层平台主体，审批通过到生效时间即用于此后起算的保护期与此后的等级变化（不在保护期的会员按最近一次定级时点生效的版本，第十四批第 5 条），无需公告；出厂值 12 个月、12 个月、30 天；merchant_card_bonus（商户级卡充值赠送比例，商户提出、平台运营代录，赠送金由发卡商户承担）与 stored_value_bonus（综合体通用卡充值赠送比例，project_id 可空＝无项目通用卡）为第十八批第 11 条（ENUM L86；BSM L521 涉钱配置版本化审批；cg-pending-decisions 第 11、13 条）：不可限定票种、业态，merchant_card_bonus 须填 merchant_id 且不可限定项目；values 同填 fixed_value（赠送比例，万分比）与 minimum_value、maximum_value，值须落在上下限内；仅平台（非商户、外包账号）可提交，审批人由复核策略 ticket.reward.rule.approve 把关；审批通过到生效时间即用于此后的充值拆赠送金，充值流水记下所用版本；无需公告。"
+            "description": "level_rolling_months（会员等级滚动统计周期，月）、level_protection_months（保护期，月）、level_notice_days（降级提前通知天数）为 OBS-13-01（BSM 第 820 行「业务参数，全平台统一可配……须同时配置上下限」「上述三项参数的变更须经审批、只对后续周期生效」）的三项会员等级参数：不可限定项目、票种、业态，values 须同填 fixed_value 与 minimum_value（不小于 1）、maximum_value，最终审批人须属顶层平台主体，审批通过到生效时间即用于此后起算的保护期与此后的等级变化（不在保护期的会员按最近一次定级时点生效的版本，第十四批第 5 条），无需公告；出厂值 12 个月、12 个月、30 天；merchant_card_bonus（商户级卡充值赠送比例，由发卡商户在商户后台自行设置，第十八批裁决 85；赠送金由发卡商户承担）与 stored_value_bonus（综合体通用卡充值赠送比例，project_id 可空＝无项目通用卡）为第十八批第 11 条（ENUM L86；BSM L521 涉钱配置版本化审批；cg-pending-decisions 第 11、13 条）：不可限定票种、业态，merchant_card_bonus 须填 merchant_id 且不可限定项目；values 同填 fixed_value（赠送比例，万分比）与 minimum_value、maximum_value，值须落在上下限内；merchant_card_bonus 只限发卡商户本商户账号提交、最终审批人须是发卡商户本商户的账号（第十八批 CL 段 423-R3），stored_value_bonus 仅平台（非商户、外包账号）可提交；审批人由复核策略 ticket.reward.rule.approve 把关；审批通过到生效时间即用于此后的充值拆赠送金，充值流水记下所用版本；无需公告。"
           },
           "ticket_type_id": {
             "type": [
@@ -114743,7 +114745,7 @@
               "string",
               "null"
             ],
-            "description": "第十八批第 11 条：发卡商户；仅 merchant_card_bonus（商户级卡充值赠送比例，ENUM L86「赠送比例由发卡商户提出、由平台运营代为录入后台」）必填，其余类型为空。"
+            "description": "第十八批第 11 条：发卡商户；仅 merchant_card_bonus（商户级卡充值赠送比例，ENUM L86 按第十八批裁决 85 改为「赠送比例由发卡商户在商户后台自行设置」）必填，其余类型为空；提交 merchant_card_bonus 时须等于当前商户账号的商户（第十八批 CL 段 423-R3）。"
           },
           "values": {
             "$ref": "#/components/schemas/TicketRewardConfigValues"

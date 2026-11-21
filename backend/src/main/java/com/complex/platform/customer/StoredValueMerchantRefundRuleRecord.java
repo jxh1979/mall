@@ -3,13 +3,13 @@ package com.complex.platform.customer;
 import java.time.Instant;
 
 /**
- * B1d⑤ phase3 商户级卡规则（发卡商户 + 平台配置）。
+ * B1d⑤ phase3 商户级卡规则（第十八批 CL 段 423-R1、第十八批裁决 79：全部由发卡商户在商户后台自行设置）。
  * <ul>
  *   <li>refundAllowed=false → 该商户的商户卡拒退；refundRatioBps=可退回客户比例（基点 0..10000），余下为商户留存。
  *       （发卡商户自设，商户员工可改本商户。）</li>
- *   <li>cardIssuanceEnabled=发卡资格：平台后台开通后客人才能给该商户卡充值（默认关，仅平台可改）。</li>
- *   <li>fundOwnership=资金模式：merchant_prepaid=商户预收（商户自收）；platform_collect=平台代收、消费时逐笔结算给商户。
- *       仅平台可改，且只影响之后新开的卡（开卡时定格到卡）。</li>
+ *   <li>cardIssuanceEnabled=发卡资格：发卡商户开通后客人才能给该商户卡充值（默认关；平台方合计持股过半的商户开不了）。</li>
+ *   <li>fundOwnership=资金模式：merchant_prepaid=商户预收（商户自收）；platform_collect=平台代收、消费时逐笔结算给商户（入口已关，只剩此前定格的旧卡）。
+ *       只影响之后新开的卡（开卡时定格到卡）。</li>
  * </ul>
  * 仅对商户级卡（merchant_id 非空）生效；无配置=默认拒发卡、允许退、全额（10000）、商户预收。
  */
@@ -21,7 +21,7 @@ public record StoredValueMerchantRefundRuleRecord(
         String fundOwnership,
         Instant createdAt,
         Instant updatedAt,
-        // CG-06a：商户级卡消费扣款顺序（BSM「支付方式」：由发卡商户自定、由平台运营代为录入后台）：principal_first / bonus_first。
+        // CG-06a：商户级卡消费扣款顺序（BSM「支付方式」：由发卡商户自定、由发卡商户在商户后台自行设置）：principal_first / bonus_first。
         String consumeOrder
 ) {
     public static final String CONSUME_PRINCIPAL_FIRST = "principal_first";

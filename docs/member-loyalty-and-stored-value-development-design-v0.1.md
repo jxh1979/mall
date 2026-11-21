@@ -1,4 +1,4 @@
-# 会员忠诚度 · 储值开发设计 V0.07（付费会员已废止）
+# 会员忠诚度 · 储值开发设计 V0.08（付费会员已废止）
 
 > 生成日期：2026-06-24。性质：**据当前实现回填（source-driven）**——`LoyaltyService` 与 `StoredValueService` 已有部分后端能力，但与现行 HTML 仍有明确差距；`MembershipService` 已不存在，付费会员表已由 V290 删除。本文只记录当前代码事实和待改造差距，业务口径以三份 HTML 和现行会员、积分、储值 PRD 为准。
 
@@ -153,16 +153,16 @@ ENUM「等级与成长值」条现文：「成长值与可用积分是两套独�
 | 裁决 | 要求 |
 |---|---|
 | DEC-SV-LEDGER-001 | 充值拆 **本金 + 赠送金**；赠送额度可配 |
-| DEC-SV-SPEND-ORDER-001 | 扣款顺序**写死为先扣本金、后扣赠送金，不可配置**（**仅商户级卡例外**：其扣款顺序由发卡商户自定、由平台运营代为录入后台）。依据 ENUM「储值卡类型与收款主体」条；DEC-R3-2026-08-04-21 / -24 |
+| DEC-SV-SPEND-ORDER-001 | 扣款顺序**写死为先扣本金、后扣赠送金，不可配置**（**仅商户级卡例外**：其扣款顺序由发卡商户自定、由发卡商户在商户后台自行设置）。依据 ENUM「储值卡类型与收款主体」条；DEC-R3-2026-08-04-21 / -24 |
 | DEC-SV-REFUND-001 | **退卡只退未消费的本金**；**赠送金不退现**，未使用部分按活动规则作废或收回（非默认值，无「可退赠送金」的配置项）。依据 ENUM「储值卡类型与收款主体」条 |
 | DEC-SV-CLOSE-001 | 销户：先解除全部占用与冻结，再退剩余本金；**赠送金清零**（非默认值，无可配置项）。依据 ENUM「储值卡类型与收款主体」条 |
 | DEC-SV-NO-MIGRATE-001 | **禁止**余额迁移 |
 
 **已落地（2026-10-17 CG-06a，V444 `stored_value_principal_bonus_split`）**：
 - `customer_stored_value_accounts.principal_cent / bonus_cent`、`customer_stored_value_transactions.principal_cent / bonus_cent` 两段记账，`balance_cent`＝两段之和（服务层维护，不加等式约束，存量行两段为 0 不回填）；
-- 充值赠送比例（第十八批第 11 条 V558 起取代原 `stored_value_bonus_policies` 存即生效表与 `bonus-policies` 端点）：通用卡 `stored_value_bonus`（按项目，项目可空＝无项目通用卡）与商户级卡 `merchant_card_bonus`（按发卡商户）并入 `ticket_reward_config_versions`，经 `POST /api/v1/loyalty/ticket-reward-configs` 提交审批（值与上下限同配，`ticket.reward.config.manage` 提交、`ticket.reward.rule.approve` 复核），审批通过到生效时间生效；充值流水 `bonus_config_version_id` 记下所用版本；
-- `StoredValueService.settleTopupInternal` 拆两段入账；`consumeBalance` 通用卡先本金后赠送金、商户级卡按 `stored_value_merchant_refund_rules.consume_order`（`configureMerchantCard` 代录）；`doRefund` 只退本金（409 `STORED_VALUE_PRINCIPAL_INSUFFICIENT`），销户时赠送金作废（`adjust` 流水）；
-- 客人端钱包账户与逐笔记录分列本金/赠送金；后台储值规则页配置扣款顺序，赠送比例在「门票积分、成长值与销售责任」页提交审批。
+- 充值赠送比例（第十八批第 11 条 V558 起取代原 `stored_value_bonus_policies` 存即生效表与 `bonus-policies` 端点）：通用卡 `stored_value_bonus`（按项目，项目可空＝无项目通用卡）与商户级卡 `merchant_card_bonus`（按发卡商户）并入 `ticket_reward_config_versions`，经 `POST /api/v1/loyalty/ticket-reward-configs` 提交审批（值与上下限同配，`ticket.reward.config.manage` 提交、`ticket.reward.rule.approve` 复核），审批通过到生效时间生效（商户级卡一类自第十八批 CL 段 423-R3、第十八批裁决 85 起只由发卡商户本商户账号提交，平台账号 403 `MERCHANT_SCOPE_REQUIRED`、别家商户 403 `CROSS_MERCHANT_FORBIDDEN`，最终审批人须是发卡商户本商户的人）；充值流水 `bonus_config_version_id` 记下所用版本；
+- `StoredValueService.settleTopupInternal` 拆两段入账；`consumeBalance` 通用卡先本金后赠送金、商户级卡按 `stored_value_merchant_refund_rules.consume_order`（`configureMerchantCard`，第十八批 CL 段 423-R1 起只由发卡商户本商户账号设置）；`doRefund` 只退本金（409 `STORED_VALUE_PRINCIPAL_INSUFFICIENT`），销户时赠送金作废（`adjust` 流水）；
+- 客人端钱包账户与逐笔记录分列本金/赠送金；后台储值规则页由发卡商户本商户账号设置扣款顺序，赠送比例在「门票积分、成长值与销售责任」页提交审批。
 
 实现缺口（相对 MAIN，不在本文假装已落地）：
 - 活动来源引用（赠送比例的版本化与审批已于第十八批第 11 条 V558 落地）；

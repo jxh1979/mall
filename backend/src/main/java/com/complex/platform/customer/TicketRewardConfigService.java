@@ -1,6 +1,6 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.05
+// 文件版本：V0.06
 
 import static com.complex.platform.common.Strings.requireText;
 import com.complex.platform.access.AuthorizationService;
@@ -40,8 +40,9 @@ public class TicketRewardConfigService {
     static final String LEVEL_PROTECTION_MONTHS = "level_protection_months";
     static final String LEVEL_NOTICE_DAYS = "level_notice_days";
     static final Set<String> LEVEL_KINDS = Set.of(LEVEL_ROLLING_MONTHS, LEVEL_PROTECTION_MONTHS, LEVEL_NOTICE_DAYS);
-    /** 第十八批第 11 条（ENUM L86；BSM L521；cg-pending-decisions 第 11、13 条）：储值充值赠送比例（万分比）版本化审批——
-     *  商户级卡按发卡商户（商户提出、平台运营代录，商户不自行改动），综合体通用卡按项目（project 为空＝无项目通用卡）；值与上下限同配，无需公告。 */
+    /** 第十八批第 11 条（ENUM L86；BSM L521；cg-pending-decisions 第 13 条）：储值充值赠送比例（万分比）版本化审批——
+     *  商户级卡按发卡商户（第十八批裁决 85：由发卡商户在商户后台自行设置，经本商户有审批权的人转正），综合体通用卡按项目（project 为空＝无项目通用卡，
+     *  仅平台可改）；值与上下限同配，无需公告。 */
     static final String MERCHANT_CARD_BONUS = "merchant_card_bonus";
     static final String STORED_VALUE_BONUS = "stored_value_bonus";
     static final Set<String> BONUS_KINDS = Set.of(MERCHANT_CARD_BONUS, STORED_VALUE_BONUS);
@@ -63,6 +64,13 @@ public class TicketRewardConfigService {
     }
 
     public List<TicketRewardConfig> list(String projectId) {
+        // 第十八批 CL 段 423-R3（第十八批裁决 85）：商户账号不带项目只列本商户的商户级卡赠送比例版本
+        String own = projectId == null ? auth.currentMerchantIdQuietly().orElse(null) : null;
+        if (own != null) {
+            auth.requirePermission(VIEW);
+            return jdbc.query("SELECT * FROM ticket_reward_config_versions WHERE kind=? AND merchant_id=? ORDER BY created_at DESC,id", this::map,
+                    MERCHANT_CARD_BONUS, own);
+        }
         scope(projectId, VIEW);
         String merchant=auth.currentActor().merchantId();
         return jdbc.query("SELECT c.* FROM ticket_reward_config_versions c LEFT JOIN ticket_types t ON t.id=c.ticket_type_id WHERE c.project_id IS NOT DISTINCT FROM ? AND (?::text IS NULL OR t.bar_id=?) ORDER BY c.created_at DESC,c.id", this::map, projectId,merchant,merchant);
@@ -72,7 +80,7 @@ public class TicketRewardConfigService {
     public TicketRewardConfig submit(TicketRewardConfig.Request r) {
         if(r==null || r.values()==null || r.effectiveAt()==null || !r.effectiveAt().isAfter(Instant.now()))
             throw invalid("须填写规则内容及未来生效时间");
-        scope(r.projectId(),MANAGE);
+        if(MERCHANT_CARD_BONUS.equals(r.kind())) requireIssuingMerchant(r.merchantId()); else scope(r.projectId(),MANAGE);
         String kind=requireText(r.kind(),"kind");
         if(!Set.of("points","growth","national","sales_contract","recovery_waiver","merchant_points","merchant_growth").contains(kind) && !LEVEL_KINDS.contains(kind) && !BONUS_KINDS.contains(kind)) throw invalid("不支持的奖励配置类型");
         validate(r);
@@ -168,7 +176,7 @@ public class TicketRewardConfigService {
             return;
         }
         if(BONUS_KINDS.contains(r.kind())) {
-            auth.requirePlatformScope(); // 商户、外包账号不能改（ENUM L86「商户不自行改动」；通用卡赠送比例原即仅平台可改）
+            if(STORED_VALUE_BONUS.equals(r.kind())) auth.requirePlatformScope(); // 通用卡赠送比例仅平台可改；商户级卡由发卡商户自行设置（提交前已核本商户）
             if(r.ticketTypeId()!=null) throw invalid("储值赠送比例不可限定票种");
             if(MERCHANT_CARD_BONUS.equals(r.kind())) {
                 if(r.projectId()!=null) throw invalid("商户级卡赠送比例按发卡商户配置，不可限定项目");
@@ -268,6 +276,9 @@ public class TicketRewardConfigService {
         List<String> companies=jdbc.queryForList("SELECT COALESCE((SELECT company_id FROM staff_profiles WHERE user_id=u.id AND status='active' AND registration_status='approved' ORDER BY updated_at DESC LIMIT 1),(SELECT organization_id FROM user_position_assignments WHERE user_id=u.id AND assigned_at<=now()),u.organization_id) FROM access_users u WHERE u.id=? AND u.status='active' AND NOT EXISTS(SELECT 1 FROM staff_profiles s WHERE s.user_id=u.id AND (s.status<>'active' OR s.registration_status<>'approved'))",String.class,approver);
         if(companies.size()!=1 || companies.getFirst()==null)throw invalid("最终审批人尚无有效的所属公司");
         String company=companies.getFirst();
+        // 第十八批裁决 85「平台不再代录、不再审批……经本商户有审批权的人转正后生效」：商户级卡赠送比例的最终审批人须是发卡商户本商户的人。
+        if(MERCHANT_CARD_BONUS.equals(r.kind()) && !jdbc.queryForList("SELECT merchant_id FROM access_users WHERE id=?",String.class,approver).contains(r.merchantId()))
+            throw invalid("商户级卡赠送比例的最终审批人须是发卡商户本商户有审批权的人");
         // 储值赠送比例：BSM L521 只要求经高敏权限审批，审批人资格由复核策略 ticket.reward.rule.approve 把关，不另限所属主体。
         if(BONUS_KINDS.contains(r.kind())) return;
         // 成长值基础规则与等级参数由全国平台审批（会员与等级 PRD §4）；业态积分获取率由该业态对应域主管公司审批（DEC-R8-93）。
@@ -281,6 +292,13 @@ public class TicketRewardConfigService {
         if(platform) {
             if(jdbc.queryForObject("SELECT count(*) FROM business_entities WHERE id=? AND entity_role='platform' AND status='active'",Integer.class,company)!=1)throw invalid("全国或跨域奖励须由顶层平台主管审批");
         } else if(!domains.contains(company))throw invalid("最终审批人须属于本票种对应的域主管公司");
+    }
+    /** 第十八批 CL 段 423-R3（第十八批裁决 85，ENUM:86 改句「赠送比例由发卡商户在商户后台自行设置」）：商户级卡赠送比例只由发卡商户本商户账号提交。 */
+    private void requireIssuingMerchant(String merchantId) {
+        auth.requirePermission(MANAGE);
+        String own=auth.currentMerchantIdQuietly().orElse(null);
+        if(own==null) throw ApiException.forbidden("MERCHANT_SCOPE_REQUIRED","商户级卡赠送比例由发卡商户在商户后台自行设置");
+        if(!own.equals(requireText(merchantId,"merchant_id"))) throw ApiException.forbidden("CROSS_MERCHANT_FORBIDDEN","不能设置其他商户的商户级卡赠送比例");
     }
     private void scope(String project,String permission) {
         auth.requirePermission(permission);

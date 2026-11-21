@@ -1,4 +1,4 @@
-# P0 OpenAPI Operation 验收矩阵 V1.17
+# P0 OpenAPI Operation 验收矩阵 V1.18
 
 ## 1. 文档定位
 
@@ -864,7 +864,7 @@
 | access | `POST` | `/api/v1/access/grant-policy` | `updateAccessGrantPolicy` | 保存授权政策 | `object` | `admission.policy.manage` | `staff-token` | `platform` | web | 是 | `access.grant_policy.changed` | `access.grant_policy.change_failed` |
 | customer | `POST` | `/api/v1/loyalty/stored-value/merchant-refund-rules` | `configureStoredValueMerchantRefundRule` | 配置商户级储值卡退款规则（发卡商户自设可否退/比例） | `StoredValueMerchantRefundRuleRequest` | `customer.stored_value.refund` | `staff-token` | `merchant` | web | 否 | `stored_value.merchant_refund_rule_configured` | `stored_value.merchant_refund_rule_failed` |
 | customer | `GET` | `/api/v1/loyalty/stored-value/merchant-refund-rules/{merchant_id}` | `getStoredValueMerchantRefundRule` | 查询商户级储值卡退款规则 | `-` | `customer.stored_value.refund` | `staff-token` | `merchant` | web | 否 | `not_applicable` | `not_applicable` |
-| customer | `POST` | `/api/v1/loyalty/stored-value/merchant-card-config` | `configureStoredValueMerchantCard` | 配置商户储值卡（仅平台）：发卡资格 + 资金模式（预收/代收）+ 消费扣款顺序 | `StoredValueMerchantCardConfigRequest` | `customer.stored_value.refund` | `staff-token` | `platform` | web | 否 | `stored_value.merchant_card_configured` | `stored_value.merchant_card_config_failed` |
+| customer | `POST` | `/api/v1/loyalty/stored-value/merchant-card-config` | `configureStoredValueMerchantCard` | 发卡商户设置本商户储值卡：发卡开关、资金模式（只可商户预收）、消费扣款顺序 | `StoredValueMerchantCardConfigRequest` | `customer.stored_value.refund` | `staff-token` | `merchant` | web | 否 | `stored_value.merchant_card_configured` | `stored_value.merchant_card_config_failed` |
 | audit | `GET` | `/api/v1/audit/labels` | `getAuditLabels` | 读取操作留痕标签中文名 | `-` | `audit.operation_log.view` | `staff-token` | `platform` | web | 否 | `not_applicable` | `not_applicable` |
 | audit | `GET` | `/api/v1/audit/operation-events` | `queryAuditOperationEvents` | 跨对象查询操作留痕 | `-` | `audit.operation_log.view` | `staff-token` | `project` | web | 否 | `not_applicable` | `not_applicable` |
 | audit | `GET` | `/api/v1/audit/operation-events/export` | `exportAuditOperationEvents` | 导出操作留痕（敏感） | `-` | `audit.operation_log.export` | `staff-token` | `project` | web | 否 | `audit.operation_log.exported` | `audit.operation_log.export_failed` |

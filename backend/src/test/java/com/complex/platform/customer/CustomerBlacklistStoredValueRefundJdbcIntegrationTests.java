@@ -1,6 +1,6 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -191,6 +191,7 @@ class CustomerBlacklistStoredValueRefundJdbcIntegrationTests {
     @Test
     void counterRefundSettlesPendingItemAndClosesMerchantCard() {
         customerService.blacklistCustomer(customerId, "查实将票借给他人使用");
+        authenticateAsIssuingMerchantStaff();
 
         storedValueService.counterRefund(customerId, null, merchantId, 2_000L, "到店退卡", false,
                 "凭证-" + suffix, "cg06b-settle-" + suffix);
@@ -210,6 +211,7 @@ class CustomerBlacklistStoredValueRefundJdbcIntegrationTests {
     @Test
     void counterRefundAmountMismatchWithPendingItemRejected() {
         customerService.blacklistCustomer(customerId, "查实将票借给他人使用");
+        authenticateAsIssuingMerchantStaff();
 
         org.assertj.core.api.Assertions.assertThatThrownBy(() -> storedValueService.counterRefund(
                         customerId, null, merchantId, 1_000L, "到店退卡", false, "凭证-" + suffix, "cg06b-mismatch-" + suffix))
@@ -227,6 +229,7 @@ class CustomerBlacklistStoredValueRefundJdbcIntegrationTests {
     @Test
     void merchantCardCounterRefundRemainsAvailableAfterBlacklist() {
         customerService.blacklistCustomer(customerId, "查实将票借给他人使用");
+        authenticateAsIssuingMerchantStaff();
 
         storedValueService.counterRefund(customerId, null, merchantId, 2_000L, "到店退卡", true,
                 "凭证-" + suffix, "cg06b-counter-" + suffix);
@@ -296,6 +299,7 @@ class CustomerBlacklistStoredValueRefundJdbcIntegrationTests {
         storedValueService.refundConsumption(consume.id(), 500L, "消费退款", "cg06b-m2-r-" + suffix);
 
         assertThat(account(merchantCardId).get("principal_cent")).isEqualTo(1_500L);
+        authenticateAsIssuingMerchantStaff();
         storedValueService.counterRefund(customerId, null, merchantId, 1_500L, "柜台退卡", true, "VCH-" + suffix, "cg06b-m2-c-" + suffix);
         assertThat(account(merchantCardId).get("status")).isEqualTo("closed");
     }
@@ -305,6 +309,23 @@ class CustomerBlacklistStoredValueRefundJdbcIntegrationTests {
         for (String code : codes) {
             jdbcTemplate.update("INSERT INTO role_permissions (role_id, permission_code) VALUES (?, ?) ON CONFLICT DO NOTHING", roleId, code);
         }
+    }
+
+    /**
+     * 第十八批裁决 79（BSM:833「商户级卡的发行、充值、余额与退款完全由发卡商户自行办理，不经平台」）：商户卡柜台退卡改由发卡商户本商户员工办理
+     * （不挂商户的平台账号碰商户卡 403 CROSS_MERCHANT_FORBIDDEN）。
+     */
+    private void authenticateAsIssuingMerchantStaff() {
+        String userId = "usr_cg06b_m_" + suffix;
+        String roleId = "role_cg06b_m_" + suffix;
+        jdbcTemplate.update("INSERT INTO access_users (id, username, account_type, organization_id, merchant_id, status, created_at)"
+                + " VALUES (?, ?, 'staff', ?, ?, 'active', now())", userId, "u_cg06b_m_" + suffix, projectId, merchantId);
+        jdbcTemplate.update("INSERT INTO roles (id, role_name, created_at) VALUES (?, ?, now())", roleId,
+                "发卡商户柜台退卡测试角色" + System.nanoTime());
+        jdbcTemplate.update("INSERT INTO role_permissions (role_id, permission_code) VALUES (?, 'customer.stored_value.refund')", roleId);
+        jdbcTemplate.update("INSERT INTO user_roles (user_id, role_id) VALUES (?, ?)", userId, roleId);
+        SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
+                new AccessActor(userId, "u_cg06b_m_" + suffix, "staff", projectId, merchantId, "active"), "token", List.of()));
     }
 
     private void authenticateWithAccountAndStoredValuePermissions() {

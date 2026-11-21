@@ -1,6 +1,6 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.contains;
@@ -13,6 +13,7 @@ import com.complex.platform.access.AccessActor;
 import com.complex.platform.access.AccessRepository;
 import com.complex.platform.access.AccessUser;
 import com.complex.platform.access.RoleRecord;
+import com.complex.platform.auth.SessionIssuer;
 import com.complex.platform.bar.BarBillRecord;
 import com.complex.platform.bar.BarBillSettlementRecord;
 import com.complex.platform.bar.BarOrderRecord;
@@ -123,7 +124,8 @@ class StoredValueLedgerJdbcIntegrationTests {
         SecurityContextHolder.clearContext();
     }
 
-    /** ① 平台管理员按手机号与期间查：A 通用卡各行倒序，变动后本金、赠送金按卡的全部流水累计（期间前的充值也算），只回掩码手机号。 */
+    /** ① 平台管理员按手机号与期间查：A 通用卡各行倒序，变动后本金、赠送金按卡的全部流水累计（期间前的充值也算），只回掩码手机号；
+     * 第十八批裁决 79（BSM:833「平台各岗位（含最高权限）一律看不到商户级卡的卡号、持卡人、余额与充值、退款流水」）：M 的商户卡流水不出。 */
     @Test
     void platformAdminSeesRunningPrincipalAndBonus() throws Exception {
         String json = query(admin(), "{\"phone\":\"" + phone + "\",\"date_from\":\"" + yesterday() + "\",\"date_to\":\"" + today() + "\"}")
@@ -140,19 +142,17 @@ class StoredValueLedgerJdbcIntegrationTests {
                 .andExpect(jsonPath(row(barConsumeA, "principal_after_cent"), contains(7_500)))
                 .andExpect(jsonPath(row(barConsumeA, "consume_merchant_id"), contains(merchantM)))
                 .andExpect(jsonPath(row(barConsumeA, "consume_merchant_name"), contains("储值台账回归酒吧" + s)))
-                .andExpect(jsonPath(row(topupM, "card_type"), contains("merchant")))
-                .andExpect(jsonPath(row(topupM, "issuer_merchant_name"), contains("储值台账回归酒吧" + s)))
                 .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
         List<String> ids = JsonPath.read(json, "$.data.items[*].txn_id");
-        assertThat(ids).startsWith(barConsumeA, reversalA, consumeA).doesNotContain(topupA);
+        assertThat(ids).startsWith(barConsumeA, reversalA, consumeA).doesNotContain(topupA, topupM);
         assertThat(json).doesNotContain(phone);
     }
 
-    /** ② 按商户 M 查：只含 M 发的卡的流水与在 M 扣款的那笔通用卡消费，不含 B 卡与不在 M 扣的流水。 */
+    /** ② 平台管理员按商户 M 查：只得在 M 扣款的那笔通用卡消费，不含 B 卡与不在 M 扣的流水；M 发的商户卡流水不出（第十八批裁决 79）。 */
     @Test
     void merchantFilterKeepsIssuedCardAndConsumptionAtMerchant() throws Exception {
         assertThat(ids(admin(), "{\"phone\":\"" + phone + "\",\"merchant_id\":\"" + merchantM + "\"}"))
-                .containsExactlyInAnyOrder(topupM, barConsumeA);
+                .containsExactly(barConsumeA);
     }
 
     /** ③ 期间外的流水不出；不带期间时全部出（含 40 天前的充值）。 */
@@ -161,16 +161,16 @@ class StoredValueLedgerJdbcIntegrationTests {
         assertThat(ids(admin(), "{\"phone\":\"" + phone + "\",\"date_from\":\"" + yesterday() + "\"}")).doesNotContain(topupA)
                 .contains(consumeA);
         assertThat(ids(admin(), "{\"phone\":\"" + phone + "\"}"))
-                .containsExactlyInAnyOrder(topupA, consumeA, reversalA, barConsumeA, topupB, topupM);
+                .containsExactlyInAnyOrder(topupA, consumeA, reversalA, barConsumeA, topupB);
     }
 
     /** ④ 范围：本人项目 A 的普通账号不见 B 卡；持勾选 B 的可跨项目角色的账号见 B 卡；商户 M 账号只见 M 的卡；商户 N 账号见不到（N 没发卡）。
-     * M 的卡不带项目（修复项 F08）：项目 A 账号经发卡商户的经营项目见到，商户 M 账号经「卡不带项目」那半句见到。 */
+     * M 的卡不带项目（修复项 F08）：商户 M 账号经「卡不带项目」那半句见到；项目 A 账号不挂商户，M 在 A 经营也见不到（第十八批裁决 79）。 */
     @Test
     void scopeFollowsAccount() throws Exception {
         String body = "{\"phone\":\"" + phone + "\"}";
         assertThat(ids(staffs.staff("r364usr_pa_" + s, "staff", projectA, null, VIEW), body))
-                .containsExactlyInAnyOrder(topupA, consumeA, reversalA, barConsumeA, topupM);
+                .containsExactlyInAnyOrder(topupA, consumeA, reversalA, barConsumeA);
         assertThat(ids(crossProjectToB(), body)).containsExactly(topupB);
         assertThat(ids(staffs.staff("r364usr_m_" + s, "merchant_staff", projectA, merchantM, VIEW), body)).containsExactly(topupM);
         assertThat(ids(staffs.staff("r364usr_n_" + s, "merchant_staff", projectB, merchantN, VIEW), body)).isEmpty();
@@ -211,6 +211,18 @@ class StoredValueLedgerJdbcIntegrationTests {
             assertThat(cent(rows.get(0), "balance_after_cent")).isZero();
             assertThat(rows.get(1).get("txn_type")).isEqualTo("refund");
         }
+    }
+
+    /** ⑦ 第十八批裁决 79（BSM:833「平台各岗位（含最高权限）一律看不到商户级卡的卡号、持卡人、余额与充值、退款流水」）：
+     * 最高权限按手机号查，只列综合体通用卡流水，M 的商户卡流水不出。 */
+    @Test
+    void masterSeesOnlyGeneralCardRows() throws Exception {
+        String json = query(master(), "{\"phone\":\"" + phone + "\"}").andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+        List<String> cardTypes = JsonPath.read(json, "$.data.items[*].card_type");
+        assertThat(cardTypes).isNotEmpty().containsOnly("general");
+        List<String> ids = JsonPath.read(json, "$.data.items[*].txn_id");
+        assertThat(ids).doesNotContain(topupM);
     }
 
     // ---------- 夹具与请求 ----------
@@ -268,6 +280,17 @@ class StoredValueLedgerJdbcIntegrationTests {
 
     private RequestPostProcessor admin() {
         return staffs.staff("r364usr_admin_" + s, "platform_admin", null, null, VIEW);
+    }
+
+    /** 最高权限本人（保留超管账号，组织 platform-company、无商户），经后台 Web 终端。 */
+    private static RequestPostProcessor master() {
+        AccessActor actor = new AccessActor(SessionIssuer.MASTER_USER_ID, SessionIssuer.MASTER_USERNAME,
+                SessionIssuer.MASTER_ACCOUNT_TYPE, "platform-company", null, "active");
+        return request -> {
+            request.addHeader("X-Terminal-Type", "web");
+            return authentication(new UsernamePasswordAuthenticationToken(actor, null,
+                    List.of(new SimpleGrantedAuthority("ROLE_P0_STAFF")))).postProcessRequest(request);
+        };
     }
 
     /** 组织为项目 A、只经勾选了 B 的可跨项目角色持查看码的账号（PGM:659「逐个勾选的只能查看被选中的项目」）。 */
