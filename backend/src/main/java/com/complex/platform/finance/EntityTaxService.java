@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import static com.complex.platform.common.Strings.requireText;
 
@@ -77,12 +77,14 @@ public class EntityTaxService {
     static final String ADJUSTMENT = "entity_tax_adjustment";
     static final String RATE = "entity_tax_rate";
     /** 233-R2 ENUM:201「每类收入」（同前端 KEY_VALUE_LABELS.income_type，开票清单页同码同名）：V223 种子各类＋goods 供货货款、parking 停车费、retail 零售
-     * （BSM:1722、1723 分行列出；组合通票业态份额餐饮、零售分列）；all 只用于企业所得税。 */
+     * （BSM:1722、1723 分行列出；组合通票业态份额餐饮、零售分列）；all 只用于企业所得税。
+     * 第十八批 BU 段 374-R4：加 staff_remuneration 人员报酬拨付（派驻提成与酒吧报酬拨付开票行的税率；ENUM:201、BSM:1760），不进主体收入汇总。 */
     static final Map<String, String> INCOME_LABELS = Map.ofEntries(Map.entry("ticket", "平台通票 / 门票综合服务费"),
             Map.entry("spv_service", "通票可分配池分账"), Map.entry("nonstd_service", "非散台服务费"),
             Map.entry("catering", "订台低消 / 二次消费 / 额外酒水"), Map.entry("retail", "零售"), Map.entry("game", "游乐收入"),
             Map.entry("show", "演出票"), Map.entry("rent", "商业租赁 / 市集摊位"), Map.entry("parking", "停车费"),
-            Map.entry("points_issuance", "积分发行费"), Map.entry("goods", "供货货款"), Map.entry("all", "全部收入"));
+            Map.entry("points_issuance", "积分发行费"), Map.entry("goods", "供货货款"),
+            Map.entry("staff_remuneration", "人员报酬拨付"), Map.entry("all", "全部收入"));
     private static final String RATE_SELECT = "SELECT c.id, c.business_entity_id, e.entity_name, c.income_type, c.tax_type, c.applicable, c.rate_bps,"
             + " c.effective_from, c.reason, CASE WHEN c.status = 'inactive' THEN 'rejected' WHEN c.is_draft THEN 'pending_review' ELSE 'approved' END"
             + " AS review_status, c.review_id FROM settlement_tax_configs c LEFT JOIN business_entities e ON e.id = c.business_entity_id";

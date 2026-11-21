@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.contains;
@@ -311,6 +311,17 @@ class EntityTaxJdbcIntegrationTests {
         rate("etd-rv6-" + s, entity, "goods", "surcharge", true, 700, "2026-04-01").andExpect(status().isConflict())
                 .andExpect(jsonPath("$.detail_code").value("TAX_DEPARTMENT_ROUTING_REQUIRED"));
         assertThat(jdbc.queryForObject("SELECT count(*) FROM settlement_tax_configs WHERE business_entity_id = ?", Integer.class, entity)).isEqualTo(1);
+    }
+
+    /**
+     * 第十八批 BU 段 374-R4（ENUM:201「每个主体 × 每类收入 × 每种税（增值税/文化事业建设费/附加税）后台各自配」；BSM:1760「税率、税目、发票对象和红冲流程由系统
+     * 按有效规则配置」）：派驻提成与酒吧报酬拨付进开票清单后，人员报酬拨付是可配税率的收入类型。修复前 400 VALIDATION_FAILED：断言红。
+     */
+    @Test
+    void staffRemunerationIsARateIncomeType() throws Exception {
+        rate("etd-sr-" + s, entity, "staff_remuneration", "vat", true, 600, "2026-03-01").andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.income_type").value("staff_remuneration"))
+                .andExpect(jsonPath("$.data.status").value("pending_review"));
     }
 
     /**

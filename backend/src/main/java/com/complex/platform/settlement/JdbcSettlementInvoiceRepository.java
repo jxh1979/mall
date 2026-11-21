@@ -1,6 +1,6 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import java.time.LocalDate;
 import java.util.List;
@@ -286,13 +286,15 @@ public class JdbcSettlementInvoiceRepository {
                     subject_entity_id, subject_name, invoice_item_name, tax_category, evidence_required,
                     amount_cent, vat_rate_bps, vat_amount_cent,
                     cultural_fee_applicable, cultural_fee_rate_bps, cultural_fee_cent,
-                    status, remark, created_by, updated_by, points_bill_id, buyer_entity_id, buyer_merchant_id, ar_ap_item_id
+                    status, remark, created_by, updated_by, points_bill_id, buyer_entity_id, buyer_merchant_id, ar_ap_item_id,
+                    ledger_source, ledger_group_key
                 ) VALUES (
                     :id, :bill_id, :settlement_item_id, :project_id, :period_start, :period_end, :income_type,
                     :subject_entity_id, :subject_name, :invoice_item_name, :tax_category, :evidence_required,
                     :amount_cent, :vat_rate_bps, :vat_amount_cent,
                     :cultural_fee_applicable, :cultural_fee_rate_bps, :cultural_fee_cent,
-                    :status, :remark, :actor, :actor, :points_bill_id, :buyer_entity_id, :buyer_merchant_id, :ar_ap_item_id
+                    :status, :remark, :actor, :actor, :points_bill_id, :buyer_entity_id, :buyer_merchant_id, :ar_ap_item_id,
+                    :ledger_source, :ledger_group_key
                 )
                 """;
         jdbcTemplate.update(sql, new MapSqlParameterSource()
@@ -320,7 +322,9 @@ public class JdbcSettlementInvoiceRepository {
                 .addValue("points_bill_id", item.pointsBillId())
                 .addValue("buyer_entity_id", item.buyerEntityId())
                 .addValue("buyer_merchant_id", item.buyerMerchantId())
-                .addValue("ar_ap_item_id", item.arApItemId()));
+                .addValue("ar_ap_item_id", item.arApItemId())
+                .addValue("ledger_source", item.ledgerSource())
+                .addValue("ledger_group_key", item.ledgerGroupKey()));
     }
 
     public String findStatus(String itemId) {
@@ -363,7 +367,8 @@ public class JdbcSettlementInvoiceRepository {
                        amount_cent, vat_rate_bps, vat_amount_cent,
                        cultural_fee_applicable, cultural_fee_rate_bps, cultural_fee_cent,
                        status, invoice_no, remark, points_bill_id, buyer_entity_id,
-                       (SELECT be.entity_name FROM business_entities be WHERE be.id = buyer_entity_id) AS buyer_name, ar_ap_item_id
+                       (SELECT be.entity_name FROM business_entities be WHERE be.id = buyer_entity_id) AS buyer_name, ar_ap_item_id,
+                       ledger_source
                   FROM settlement_invoice_items
                 """ + LIST_FILTER + """
                  ORDER BY period_start DESC, subject_name NULLS LAST, income_type, id
@@ -382,7 +387,8 @@ public class JdbcSettlementInvoiceRepository {
                         rs.getBoolean("cultural_fee_applicable"), rs.getInt("cultural_fee_rate_bps"),
                         rs.getLong("cultural_fee_cent"), rs.getString("status"),
                         rs.getString("invoice_no"), rs.getString("remark"), rs.getString("points_bill_id"),
-                        rs.getString("buyer_entity_id"), rs.getString("buyer_name"), rs.getString("ar_ap_item_id")));
+                        rs.getString("buyer_entity_id"), rs.getString("buyer_name"), rs.getString("ar_ap_item_id"),
+                        rs.getString("ledger_source")));
     }
 
     public long count(String projectId, LocalDate periodStart, String subjectEntityId, String status) {
@@ -418,6 +424,7 @@ public class JdbcSettlementInvoiceRepository {
      * 只会在结算单重跑(退款/冲正致金额下调)后出现;业务 HTML 要求「退款后先红冲再重开」。
      * 第十八批 AZ 段 290-R1:单头级行的应开额按收入类型取——ticket 取门票综合服务费两支合计,game、show、catering、retail 取该业态份额行三列之和;
      * 290-R2:传媒演出结算行(ar_ap_item_id 非空)的应开额＝该台账行加回指它的冲正行(调整后原行为 0)。
+     * 第十八批 BU 段 374-R1:台账来源月度组行(ledger_group_key 非空)的应开额＝该组台账现值({@link JdbcLedgerInvoiceRepository#GROUPS_SQL}),为负按 0。
      */
     public List<OverIssuedRow> listOverIssued(String projectId, LocalDate periodStart) {
         String sql = """
@@ -450,6 +457,15 @@ public class JdbcSettlementInvoiceRepository {
                        AND (CAST(:project_id AS VARCHAR) IS NULL OR s.project_id = CAST(:project_id AS VARCHAR))
                        AND (CAST(:period_start AS DATE) IS NULL OR s.period_start = CAST(:period_start AS DATE))
                      GROUP BY s.income_type, a.id, a.amount_cent
+                    UNION ALL
+                    SELECT NULL, s.income_type, NULL, MIN(s.subject_name), GREATEST(g.due_cent, 0), SUM(s.amount_cent)
+                      FROM settlement_invoice_items s
+                      JOIN (""" + JdbcLedgerInvoiceRepository.GROUPS_SQL + """
+                      ) g ON g.group_key = s.ledger_group_key
+                     WHERE s.status IN ('pending','issuing','issued')
+                       AND (CAST(:project_id AS VARCHAR) IS NULL OR s.project_id = CAST(:project_id AS VARCHAR))
+                       AND (CAST(:period_start AS DATE) IS NULL OR s.period_start = CAST(:period_start AS DATE))
+                     GROUP BY s.income_type, g.group_key, g.due_cent
                 ) t
                  WHERE open_amount_cent > due_amount_cent
                  ORDER BY bill_id NULLS LAST, income_type
@@ -507,7 +523,9 @@ public class JdbcSettlementInvoiceRepository {
             // FS-022-R1：积分发行费行的来源账单与购方（合同销售方）；结算单行为 null。
             String pointsBillId, String buyerEntityId, String buyerName,
             // 第十八批 AZ 段 290-R2：传媒演出结算行的来源台账行；其余为 null。
-            String arApItemId) {
+            String arApItemId,
+            // 第十八批 BU 段 374-R1：台账来源月度组行的来源类型（响应键 ledger_source）；其余为 null。
+            String ledgerSource) {
     }
 
     /** FS-022-R1：开票所需的积分月账单事实（收款方＝开票主体，合同销售方＝购方，已收额取应收应付台账）。 */

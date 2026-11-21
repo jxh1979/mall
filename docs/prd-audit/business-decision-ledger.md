@@ -1,6 +1,6 @@
 # PRD 审计业务裁决台账
 
-文档版本：V1.21
+文档版本：V1.22
 状态：进行中
 迁移日期：2026-07-27
 当前事实源：三份立法 HTML 以既有冻结基线叠加 James 此前 M02 至 M08 的点名批准、全量审计 M001、M002 的逐项批准，以及本轮 2026-10-16 至 2026-10-17 业务 HTML 审计中 Q01 至 Q40 及子题实际明确批准且未被后续替代的裁决，和 2026-10-17 第二批 HTML 业务线推演审计（A–F 六线 64 条、停车章）的逐项批准，并叠加本轮 CG 70 项来源确认与 C01–C09、N01–N03 最终澄清及补全文稿中 F01、W01–W05 的整体修改批准（本文件末节）；本轮最终规则、未采纳或替代关系、现行版本与字节哈希见本文件末节。历史记录保留为各自当时事实，不恢复已被替代的建议。
@@ -11273,3 +11273,72 @@ HTML 的语义补齐与直接引用同步可在本批核验；70项中的业务�
   本轮增量：新增操作 0 个，无迁移，无新权限码与新字段键。
 - 18BW 合并前变基（2026-11-21）：本段自 83efbc89 变基到 origin/main 6068f50e；合并时 OpenAPI 共 1403 个操作（主干 1402）、info.version V0.94、决策台账 V1.21，Flyway 最新 V683（共 620 个迁移）。版本行、契约版本、计数与 SHA、生成物、台账补记与 PRD 修订行由合并前脚本按新主干统一重写。
 - 18BW 落地位置补记·运行验收证据、快照、终验文档刷新（无新裁决）：业务提交 676127af 之后，按第十八批裁决 25 重刷了运行验收证据：后端全量 7204 测，0 失败 0 错误；apps/web 构建通过；常规界面验收（接口全部 mock）实跑 40 条全过；真实后端界面验收未跑，runtime_ready=false。随后依次重生成闭环当前态快照、生产闭环缺口报告、界面验收报告、无上线指挥台。生成器没改。手改 docs/final-closed-loop-acceptance-audit-v0.1.md 与 docs/code-implementation-acceptance-audit-v0.1.md：前端单测源码计数改为 2023；被核文件行数都没变；后端全量与常规界面验收的数字、日期改为本次实跑值；写入 npm run verify:unit 实跑结果，五个工作区全过。交付门禁于 2026-11-21 07:04 UTC 在工作树逐项实跑子项，NAS 两项现场探测未跑。仍红的有两项：一是 coding-host-protection，它写死主仓路径，在工作树口径下必红，属工具口径，不做；二是 final-closed-loop-audit，如实留 2 条红（integration-ready、business-acceptance-ready），原因是校验器要求终验把联调、业务验收写成「是」，而裁决 25 定了不跑真实后端界面验收、运行验收未就绪，终验写的是「否」。verify:delivery-gates 总链仍是红的。
+
+18BU 落地位置补记（2026-11-20）：第十八批 BU 段（batch93）按 18BU 只读设计实现待开发清单第 374 条（开票清单组）；运行验收证据、终验文档在本段最后一个提交刷新；各条落地位置见下。本段追加时，原台账除文档版本升一版外，其他历史字节保持。
+
+- 18BU 落地位置补记·控制席判定（2026-11-20）：本段（第十八批 BU 段，batch93）实现待开发清单第 374 条（18BU 只读设计 b93-audit/d-fin-e.json，两轮质疑者修订后定稿，无待裁题）。控制席判定：照设计；开票清单每轮全量聚合的量级上限按设计留 ponytail 注释。设计旁见（通票免费酒水结算、补偿履约结算、酒吧之间借调货款与赔偿三类内部往来不进开票清单）设计旁见由控制席另行登记为待核实新条目，本段不改。第五轮设计与修复代理的范围外旁见已登记为待开发清单第 388～414 条（待核实）。本段从 614159b0 开工（第五轮 13 段并行），变基到 83efbc89 后收尾；汇总文件由合并前脚本 summary_tool.py 剥离与重写。
+- 18BU 落地位置补记·实现概述（第十八批 BU 段，batch93）：本段实现 374-R1～R7。374-R8 的契约、PRD、覆盖表与生成物由契约代理、文档组和收尾统一做。本段迁移 V724（预留 V725～V727 未用），新增 0 个操作。
+- 18BU 落地位置补记·374-R1（台账来源月度组进开票清单的底座）：
+  改法：迁移 V724 给 settlement_invoice_items 加 ledger_source、ledger_group_key 两列；来源约束 chk_sii_one_source 改为结算单、积分月账单、演出结算台账行、台账来源月度组四选一；加组键局部索引。同包新类 JdbcLedgerInvoiceRepository：GROUPS_SQL 汇总五类来源的月度组；groupsToInvoice 只回已结束月份里可开额大于 0 的组；sumOpen 取已开额；lock 加事务级咨询锁。同包新类 LedgerInvoiceService.generate 锁组后重算可开额（应开额取台账现值减占额三态合计，小于等于 0 不生成），按来源定收入类型、开票主体与购方，税额复用 SettlementInvoiceService.tax，插一行待开票条目，写 settlement.invoice.generated。TicketPointsBillingJob 每轮在演出结算补开之后逐组调 LedgerInvoiceService.generate。JdbcSettlementInvoiceRepository.listOverIssued 加台账来源组一支，应开额取该组现值，为负按 0。SettlementInvoiceItemView 加 ledgerSource（响应键 ledger_source）。SettlementInvoiceController.exportRow 的来源单号写来源中文名加年月，incomeLabel 补 goods、parking、staff_remuneration。
+  落地位置：JdbcLedgerInvoiceRepository.GROUPS_SQL、groupsToInvoice；LedgerInvoiceService.generate；TicketPointsBillingJob.run；JdbcSettlementInvoiceRepository.listOverIssued、list、insert；SettlementInvoiceController.exportRow、incomeLabel；迁移 V724。
+  依据：BSM:1803「平台内部各主体之间的往来需要开具发票，开票的具体规则一律按国家财税相关规定执行，本文件不复述细则。」；BSM:1750「开票金额≤已收−已退−已开」「退款后先红冲再重开」；BSM:1760「已封账历史账单不回改，跨月退款和调整在当期生成冲正」；决策台账 DEC-R4-2026-08-04-51；DEC-TAX-CN-REFUND-001「有原票→红冲」。
+  测试：LedgerInvoiceItemsJdbcTests.ledgerGroupsOfEndedMonthsEnterInvoiceListAndCurrentMonthWaits、lateLedgerRowsAddDeltaLineAndReversalFlagsOverIssueThenReopens、exportRowShowsChineseLedgerSourceAndIncomeType（修复前生成条数为 0 或清单无行，断言红）。
+- 18BU 落地位置补记·374-R2（单店门票综合服务费进开票清单）：
+  改法：GROUPS_SQL 取已挂应收的计费月，应开额为该月应收总额（未退票逐票费合计与锁定封顶取小）。取数与 SingleBarServiceFeeService.monthTotal 共用包内常量 MONTH_TOTAL_FROM、MONTH_TOTAL，语义不变。收入类型 ticket，开票主体按规则收入流 ticket_service_fee 的归属，购方为该酒吧及其收款主体，期间为计费月。整张退款后月应收总额下降，已开额高于它即列入已超开。
+  依据：BSM:755「单店门票综合服务费按前述计费月汇总后的应收总额另行收取，同样走三个付账日」「平台内部各主体之间的应收应付，一律按总额收付、收支两条线，不得轧差——因涉及税务处理。」；BSM:1803 同上。
+  测试：LedgerInvoiceItemsJdbcTests.singleBarServiceFeeMonthEntersInvoiceListAndRefundFlagsOverIssue；回归 SingleBarServiceFeeJdbcIntegrationTests。
+- 18BU 落地位置补记·374-R3（门店要货货款进开票清单）：
+  改法：V724 加规则 isr_goods（goods，收入流 supply_goods，发票项目与税目「供货货款」，凭证要件「对账单」）。GROUPS_SQL 取 inventory_transfer 应付里往来对方为供货主体的行，按项目、门店、到期日所在月合计（签收货款为签收营业日；收货方担责的损失为财务复核通过当日营业日；货款调整的冲正与重述沿用原行到期日）；往来对方是商户的借调买断不计。开票主体按 supply_goods 归属，购方为门店及其收款主体。
+  依据：BSM:1201「跨主体流转货物可在经营主体之间流转：平台级供货主体（如中央餐饮）向商户送货（调拨），商户按货款与供货主体结算」；BSM:1212「合格接收部分转移货权、计入门店库存，并按已锁定内部结算价形成货款。」。
+  测试：LedgerInvoiceItemsJdbcTests.storeRequisitionPayablesEnterInvoiceListMonthlyNetOfAdjustments。
+- 18BU 落地位置补记·374-R4（营销与派驻提成拨付、酒吧报酬拨付进开票清单，人员报酬拨付进税率收入类型闭集）：
+  改法：V724 加规则 isr_staff_remuneration（staff_remuneration，发票项目与税目「人员报酬拨付」）。GROUPS_SQL 按来源、酒吧、人员所属主体、会计期间分组，应开额为应付减应收，两类拨付分别成行。开票主体为人员所属主体，购方为该酒吧及其收款主体。EntityTaxService.INCOME_LABELS 与前端 KEY_VALUE_LABELS.income_type 加 staff_remuneration「人员报酬拨付」，税率可按主体配；不进主体收入汇总，第十八批裁决 60 口径不变。
+  依据：BSM:1142「营销在某家酒吧促成的订单产生的提成，由该酒吧按月拨付给娱乐平台公司」「拨付作为平台内部各主体之间的普通内部结算应收应付，按三个付账日结清」；BSM:1143「其中应付给本人的提成、服务费等报酬，由该酒吧按月拨付给人员所属主体」；ENUM:201「每个主体 × 每类收入 × 每种税（增值税/文化事业建设费/附加税）后台各自配」；BSM:1760「税率、税目、发票对象和红冲流程由系统按有效规则配置并保留凭证关联」。
+  测试：LedgerInvoiceItemsJdbcTests.commissionAndRemunerationTransfersEnterInvoiceListAsSeparateLines；EntityTaxJdbcIntegrationTests.staffRemunerationIsARateIncomeType（修复前 400）；前端 EntityTaxDeclarationsPage.test.tsx「税率版本的收入类型可选人员报酬拨付」。
+- 18BU 落地位置补记·374-R5（停车抵免成本进开票清单）：
+  改法：V724 加规则 isr_parking（parking，发票项目与税目「停车费」）。GROUPS_SQL 取 parking_credit_cost_months 每行，开票主体为入账时定格的停车收款主体城市项目公司，购方为承担主体，金额为该月抵免成本。
+  依据：BSM:1436「抵免成本按组成有效消费金额的比例，由各笔原消费归属经营主体分别承担，按内部结算价与城市项目公司走平台内部各主体之间的普通内部结算应收应付，按月结算」。
+  测试：LedgerInvoiceItemsJdbcTests.parkingCreditCostMonthEntersInvoiceList。
+- 18BU 落地位置补记·374-R6（通用卡消费结算进开票清单）：
+  改法：复用现有 ticket、game、show、catering 规则。GROUPS_SQL 按项目、收款方、会计期间分组，应开额为应付减跨月追收应收，小于等于 0 不出行。收款方是酒吧商户时开票主体为其收款主体、收入类型 catering；否则按游乐票、演出票收入归属定 game 或 show，其余为 ticket；不按规则收入流解析主体。购方为该综合体唯一的城市项目公司（JdbcSettlementTransactionRepository.findProjectCompanies 恰好一家时取它）。
+  依据：BSM:1704「长沙项目公司就通用卡余额的实际消费向各业态的经营主体直接付款结算，按三个付账日结清。」；ENUM:86「在商户处消费商品或服务的，按该商户给客人的成交价格、扣除该笔消费所对应的通路费后与该商户结算」。
+  测试：LedgerInvoiceItemsJdbcTests.generalCardConsumptionSettlementEntersInvoiceListByPayee；回归 GeneralCardConsumptionSettlementJdbcTests。
+- 18BU 落地位置补记·374-R7（开票清单页显示台账来源与新增收入类型中文名）：
+  改法：SettlementInvoicePage 明细表在「收入类型」后加「来源」列，台账来源行取 KEY_VALUE_LABELS.source_type 的中文名，其余行显示「—」；页内收入类型补「供货货款」「停车费」「人员报酬拨付」；规则表补 parking、staff_remuneration 两支开票主体来源说明。
+  依据：PGM:287「界面全中文（所有终端零英文）」；BSM:522「都必须可点击、可追溯到来源单据与操作记录」。
+  测试：前端 SettlementInvoicePage.test.tsx「台账来源的开票行显示来源与中文收入类型」。
+- 18BU 落地位置补记·374-R8（契约与文档）：本段已改 listSettlementInvoiceItems、settlementInvoiceSummary、exportSettlementInvoiceItems、listEntityTaxRates 四个操作的说明与 EntityTaxRateRequest.income_type（enum 加 staff_remuneration）；submitEntityTaxRate 说明本身不列收入类型，未改。契约与两份 PRD、覆盖表均由本段落笔。
+- 374-R8（契约部分）：OpenAPI yaml 与 json 同值就地改，本段新增 0 个操作、0 个 schema，权限码、x-audit-event、x-data-scope、x-auth-context、x-terminal-allowed、错误码都不变。依据：BSM:1803「平台内部各主体之间的往来需要开具发票」；ENUM:201「每个主体 × 每类收入 × 每种税……后台各自配」。各项改动：
+  - listSettlementInvoiceItems（settlement.invoice.view，响应 components/responses/Page）只改说明：补台账来源月度行，响应项另带 ledger_source（single_bar_service_fee、inventory_transfer、dispatch_commission_transfer、bar_payroll_transfer、parking_credit_cost、general_card_consume，其余行为空；这类行 bill_id、points_bill_id、ar_ap_item_id 为空），并写明各来源的 income_type、开票主体、购方、期间与应开额口径，以及只出已结束月份、应开额取台账现值、晚到流水另出差额行、红冲或作废后下一轮按新应开额重开。对应代码：LedgerInvoiceService.generate、JdbcLedgerInvoiceRepository.GROUPS_SQL、JdbcSettlementInvoiceRepository.SettlementInvoiceItemView.ledgerSource。
+  - settlementInvoiceSummary：说明补 over_issued 含台账来源月度行（bill_id、settlement_item_id 为空，应开额为该组台账现值，为负按 0）。对应代码：JdbcSettlementInvoiceRepository.listOverIssued。
+  - exportSettlementInvoiceItems：说明补来源单号列，台账来源月度行写来源中文名加空格加年月；收入类型列补 goods 供货货款、parking 停车费、staff_remuneration 人员报酬拨付。对应代码：SettlementInvoiceController.exportRow、SettlementInvoiceController.incomeLabel。
+  - listEntityTaxRates：说明里的 income_type 列表补 staff_remuneration 人员报酬拨付。
+  - components/schemas/EntityTaxRateRequest 的 income_type：enum 在 goods 后加 staff_remuneration，说明同补，「只收这 11 类」改为 12 类（submitEntityTaxRate 经 requestBodies/EntityTaxRateRequest 引用，说明本身不列收入类型，故未改）。对应代码：EntityTaxService.INCOME_LABELS。
+  - settlement.invoice.generated 由 TicketPointsBillingJob 定时写，不属于任何接口操作，契约不声明。
+  核对：yaml 与 json 深比较一致；verify:openapi、verify:openapi-examples、verify:client-routes、verify:client-openapi、verify:client-payload --strict 通过。
+- 18BU 汇合段 J（第 374 条 e2e 与门禁）：e2e 不改。full-admin-remaining 对开票清单页（ADM-STL-002）只断言 settlement-invoice-page、settlement-invoice-subject-table、settlement-invoice-rule-table 可见，对税费申报登记页（ADM-FIN-010）只断言 entity-tax-page、entity-tax-table 可见。mock-api 里开票清单列表与 summary 都返回空，碰不到 SettlementInvoicePage 新加的「来源」列（ledgerSource 经 KEY_VALUE_LABELS.source_type 显示中文）和 goods、parking、staff_remuneration 三个收入类型中文名。视觉基线页面都不是本段改动的，没有重拍。门禁结论：后端 --fresh 全量 0 红，本段迁移 V724__ledger_invoice_groups 真迁，LedgerInvoiceItemsJdbcTests 全绿；前端 typecheck 与 vitest 全绿；客人三个工作区单测全绿；安卓员工端 gradle test 全绿，android-app 编译通过；chromium 五份后台 spec 全过；四份生成物重生成后 verify:p0-contract 全过。本段契约增量是新增 0 个操作，只改 listSettlementInvoiceItems、settlementInvoiceSummary、exportSettlementInvoiceItems、listEntityTaxRates 的说明和 EntityTaxRateRequest.income_type 的 enum 与说明（加 staff_remuneration）；yaml 与 json 深比较一致。
+- 18BU 落地位置补记——文档组（D-docs）：
+  按 U1-d-fin-e、K-contract、J 三段交付的文档要点和现码，把 2 份 PRD 的现状句就地改成现码实情，不新增业务规则。
+  - finance-settlement-product-prd
+    - §6A：290 现状段末句「其余主体间往来……尚未进开票清单」改为由第 374 条进开票清单。其后补 374 现状，涉及的代码与契约：
+      - LedgerInvoiceService.generate，取数为 JdbcLedgerInvoiceRepository.GROUPS_SQL，由 TicketPointsBillingJob 每轮补开，同组按 JdbcLedgerInvoiceRepository.lock 串行；
+      - JdbcSettlementInvoiceRepository.listOverIssued 列出台账来源月度行的已超开；
+      - listSettlementInvoiceItems 的 ledger_source、settlementInvoiceSummary 的 over_issued、exportSettlementInvoiceItems 的来源单号；
+      - 本段迁移 V724：ledger_source、ledger_group_key，chk_sii_one_source 改四选一，规则 isr_goods、isr_parking、isr_staff_remuneration；
+      - 开票清单页 SettlementInvoicePage 的「来源」列。
+    - §6D.8：收入类型闭集加 staff_remuneration 人员报酬拨付（EntityTaxService.INCOME_LABELS；EntityTaxRateRequest.income_type），只用于开票清单税额，不进主体收入汇总，第十八批裁决 60 口径不变。
+  - settlement-rebuild-prd：附录 B.1 改了三处：
+    - 「向商户供货货款→中央餐饮公司暂不出条目」一条补上 V724 已补 isr_goods，门店要货货款按月出条目；
+    - 290 现状末句改为由第 374 条进清单；
+    - 补第⑤类「台账来源月度组」落地记录，含六类开票主体、购方、期间与应开额口径，晚到流水另出差额行，已超开应开额为负按 0，先红冲再重开，不设占额唯一索引、同组用咨询锁，三条规则。
+  - 未改：页面矩阵 csv（页面没有新调接口）；pending-development-backlog-v0.1.md 批 4b 行（2026-07-28 快照）。
+  依据：
+  - BSM:1803「平台内部各主体之间的往来需要开具发票，开票的具体规则一律按国家财税相关规定执行，本文件不复述细则。」
+  - BSM:1750「开票金额≤已收−已退−已开」「退款后先红冲再重开」
+  - BSM:1760「跨月退款和调整在当期生成冲正」
+  - BSM:755、BSM:1142、BSM:1143、BSM:1201、BSM:1212、BSM:1436、BSM:1704
+  - ENUM:201「每个主体 × 每类收入 × 每种税（增值税/文化事业建设费/附加税）后台各自配」
+  - DEC-R4-2026-08-04-51；第十八批裁决 60
+  校验：node tools/verify-full-admin-page-matrix.mjs 通过；git diff --check 无输出。
+- 18BU 合并前变基（2026-11-21）：本段自 83efbc89 变基到 origin/main 7a19a646；合并时 OpenAPI 共 1403 个操作（主干 1403）、info.version V0.95、决策台账 V1.22，Flyway 最新 V724（共 621 个迁移）。版本行、契约版本、计数与 SHA、生成物、台账补记与 PRD 修订行由合并前脚本按新主干统一重写。
+- 18BU 落地位置补记·运行验收证据、快照、终验文档刷新（无新裁决）：业务提交 85aa58a1 之后，按第十八批裁决 25 重刷了运行验收证据：后端全量 7213 测，0 失败 0 错误；apps/web 构建通过；常规界面验收（接口全部 mock）实跑 40 条全过；真实后端界面验收未跑，runtime_ready=false。随后依次重生成闭环当前态快照、生产闭环缺口报告、界面验收报告、无上线指挥台。生成器没改。手改 docs/final-closed-loop-acceptance-audit-v0.1.md 与 docs/code-implementation-acceptance-audit-v0.1.md：前端单测源码计数改为 2025；被核文件行数都没变；后端全量与常规界面验收的数字、日期改为本次实跑值；写入 npm run verify:unit 实跑结果，五个工作区全过。交付门禁于 2026-11-21 09:46 UTC 在工作树逐项实跑子项，NAS 两项现场探测未跑。仍红的有两项：一是 coding-host-protection，它写死主仓路径，在工作树口径下必红，属工具口径，不做；二是 final-closed-loop-audit，如实留 2 条红（integration-ready、business-acceptance-ready），原因是校验器要求终验把联调、业务验收写成「是」，而裁决 25 定了不跑真实后端界面验收、运行验收未就绪，终验写的是「否」。verify:delivery-gates 总链仍是红的。

@@ -1,6 +1,6 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.PageResponse;
@@ -163,7 +163,7 @@ public class SettlementInvoiceService {
                 subjectEntityId, subjectName, rule.invoiceItemName(), rule.taxCategory(), rule.evidenceRequired(),
                 invoiceable, tax.vatRateBps(), tax.vatCent(),
                 tax.culturalApplicable(), tax.culturalRateBps(), tax.culturalCent(),
-                STATUS_PENDING, null, actorId, null, buyerEntityId, null, null));
+                STATUS_PENDING, null, actorId, null, buyerEntityId, null, null, null, null));
         return 1;
     }
 
@@ -195,7 +195,8 @@ public class SettlementInvoiceService {
                 invoiceable, tax.vatRateBps(), tax.vatCent(),
                 tax.culturalApplicable(), tax.culturalRateBps(), tax.culturalCent(),
                 STATUS_PENDING, null, actorId, null,
-                payerEntityId != null ? payerEntityId : repository.findMerchantEntityId(payerMerchantId), payerMerchantId, arApItemId));
+                payerEntityId != null ? payerEntityId : repository.findMerchantEntityId(payerMerchantId), payerMerchantId, arApItemId,
+                null, null));
         auditEventService.recordSuccess("settlement.invoice.generated", "settlement.invoice.manage",
                 "ar_ap_item", arApItemId, "req_" + java.util.UUID.randomUUID(), null,
                 Map.of("created_item_count", 1, "amount_cent", invoiceable, "period_start", String.valueOf(start)));
@@ -245,7 +246,7 @@ public class SettlementInvoiceService {
                 rule.invoiceItemName(), rule.taxCategory(), rule.evidenceRequired(),
                 invoiceable, tax.vatRateBps(), tax.vatCent(),
                 tax.culturalApplicable(), tax.culturalRateBps(), tax.culturalCent(),
-                STATUS_PENDING, null, actorId, pointsBillId, source.sellerEntityId(), source.sellerMerchantId(), null));
+                STATUS_PENDING, null, actorId, pointsBillId, source.sellerEntityId(), source.sellerMerchantId(), null, null, null));
         auditEventService.recordSuccess("settlement.invoice.generated", "settlement.invoice.manage",
                 "ticket_points_bill", pointsBillId, "req_" + java.util.UUID.randomUUID(), null,
                 Map.of("created_item_count", 1, "amount_cent", invoiceable,
@@ -257,8 +258,9 @@ public class SettlementInvoiceService {
      * 税额:含税额 × 率 ÷ (10000 + 率),四舍五入到分(全局金额口径 D15.1);文化事业建设费计费依据 = 取得的全部含税价款
      * (财税〔2016〕25 号),最终认定权留财务,费率后台可配。未配即 0。第十八批 AR 段第 233 条 233-R2:税率按开票主体、按业务日期(开票期间末日)
      * 当时生效的版本取(ENUM:201「每个主体 × 每类收入 × 每种税」;BSM:521「已发生的业务一律按当时生效的版本计算」)。
+     * 第十八批 BU 段 374-R1:台账来源月度组开票行({@link LedgerInvoiceService})同用,故包内可见。
      */
-    private Tax tax(String subjectEntityId, String incomeType, long amountCent, LocalDate date) {
+    Tax tax(String subjectEntityId, String incomeType, long amountCent, LocalDate date) {
         var vat = repository.findTaxRate(subjectEntityId, incomeType, "vat", date);
         int vatRateBps = vat == null ? 0 : vat.rateBps();
         long vatCent = MoneyRounding.prorate(amountCent, vatRateBps, MoneyRounding.BPS_DENOMINATOR + vatRateBps);
@@ -269,7 +271,7 @@ public class SettlementInvoiceService {
                 culturalApplicable ? MoneyRounding.bpsOf(amountCent, culturalRate) : 0L);
     }
 
-    private record Tax(int vatRateBps, long vatCent, boolean culturalApplicable, int culturalRateBps, long culturalCent) {
+    record Tax(int vatRateBps, long vatCent, boolean culturalApplicable, int culturalRateBps, long culturalCent) {
     }
 
     /**

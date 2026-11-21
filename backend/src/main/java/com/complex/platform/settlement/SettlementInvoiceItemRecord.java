@@ -1,6 +1,6 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import java.time.LocalDate;
 
@@ -35,6 +35,9 @@ public record SettlementInvoiceItemRecord(
         String buyerEntityId,
         String buyerMerchantId,
         /** 第十八批 AZ 段 290-R2：传媒演出结算应付行来源（与 billId、pointsBillId 三选一）；其余来源为 null。 */
-        String arApItemId
+        String arApItemId,
+        /** 第十八批 BU 段 374-R1：台账来源月度组的来源类型与组键（与 billId、pointsBillId、arApItemId 四选一）；其余来源为 null。 */
+        String ledgerSource,
+        String ledgerGroupKey
 ) {
 }
