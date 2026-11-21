@@ -53,6 +53,9 @@ describe("BusinessAnalyticsPage 复盘锁定真落库(V216)", () => {
     await waitFor(() => expect(get).toHaveBeenCalledWith("/api/v1/analytics/review-locks"));
     await waitFor(() => expect(screen.getByTestId("business-analytics-review-locks-list")).toBeTruthy());
     expect(screen.getByTestId("business-analytics-review-locks-list").textContent).toContain("上周复盘锁定");
+    // 修复项 F11（PGM:287；18BE 控制席判定①）：锁定时间按北京时间显示（09:30Z），不再原样截取 UTC 时刻。
+    expect(screen.getByTestId("business-analytics-review-locks-list").textContent).toContain("2026年7月1日 17:30");
+    expect(screen.getByTestId("business-analytics-review-locks-list").textContent).not.toContain("2026-07-01 09:30");
   });
 
   it("锁定按钮调用 POST /review-locks(带幂等键),成功后刷新(引导式:入口→确认→提交)", async () => {

@@ -1,6 +1,7 @@
-// 文件版本：V0.03
+// 文件版本：V0.04
 import React from "react";
 import { ApiError } from "../../shared/apiError";
+import { cnDate } from "../components/RowDetailDrawer";
 import { PermissionButton } from "../security/Can";
 import type { AdminPageProps } from "../types";
 
@@ -331,7 +332,7 @@ export function CustomerHomeContentSection({ api, setActionResult, setGlobalErro
         <label>项目编号<input aria-label="首页内容项目编号" value={projectId} onChange={(e) => setProjectId(e.target.value)} /></label>
         <button type="button" data-testid="customer-home-content-query" onClick={() => void load()}>查询已发布内容</button>
         <span className="admin-muted-action" data-testid="customer-home-content-current">
-          {published === undefined ? "未查询" : published === null ? "尚未发布" : `已发布于 ${published.publishedAt ?? ""}`}
+          {published === undefined ? "未查询" : published === null ? "尚未发布" : `已发布于 ${cnDate(published.publishedAt)}`}
         </span>
         <label>综合体介绍<textarea aria-label="综合体介绍" value={intro} onChange={(e) => setIntro(e.target.value)} /></label>
         <label>活动公告<textarea aria-label="活动公告" value={announcement} onChange={(e) => setAnnouncement(e.target.value)} /></label>

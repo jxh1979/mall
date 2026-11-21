@@ -1,6 +1,6 @@
 package com.complex.platform.amusement;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static org.assertj.core.api.Assertions.*;
 import com.complex.platform.governance.review.SupervisorReviewApprovalRequest;
@@ -132,6 +132,18 @@ class AmusementBusinessDayJdbcIntegrationTests {
         jdbc.update("UPDATE spaces SET project_id=? WHERE id=(SELECT space_id FROM amusement_projects WHERE id=?)",b,ra);
         assertThat(analytics.detail("traffic.amusement",LocalDate.parse("2098-10-18"),LocalDate.parse("2098-10-18"),at,false,20,0,List.of(a)).summaryValue()).isEqualByComparingTo("1");
         assertThat(aRows.rows()).allSatisfy(row->assertThat(row.get("complexId")).isEqualTo(a));
+    }
+    /** 第 382 条 382-R1（ENUM:144「时区一律取项目所在地时间，禁止使用服务器默认时区。」；18BE 控制席判定①）：分时段客流里的游乐核销按所在地
+     * （北京时间）钟点分桶——UTC 12:15 的一笔记进 20 点桶，12 点桶不变。修前按 UTC 钟点分桶，20 点桶不增，断言即红。 */
+    @Test void hourlyAmusementTrafficUsesLocalZoneHours() {
+        String a=complex(),ra=ride(a);
+        AmusementBusinessDayTestFixture.approve(jdbc,service,reviews,a,"Asia/Shanghai",10,at.minusSeconds(86400*5));
+        LocalDate date=LocalDate.parse("2098-10-18");
+        var before=analytics.hourly(date);
+        verification(ra,Instant.parse("2098-10-18T12:15:00Z"));
+        var after=analytics.hourly(date);
+        assertThat(after.getOrDefault(20,0L)-before.getOrDefault(20,0L)).isEqualTo(1L);
+        assertThat(after.getOrDefault(12,0L)).isEqualTo(before.getOrDefault(12,0L));
     }
     @Test void capacityMetricCountsEachRideOnceAcrossMultipleSessions() {
         String a=complex(),ra=ride(a);

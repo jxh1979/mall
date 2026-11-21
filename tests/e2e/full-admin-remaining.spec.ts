@@ -1,4 +1,4 @@
-// 文件版本：V0.30
+// 文件版本：V0.31
 import { expect, test } from "@playwright/test";
 import { installMockApi } from "./support/mock-api";
 import { fillCnDate } from "./support/cn-date";
@@ -223,6 +223,9 @@ async function openAdminRoute(page: import("@playwright/test").Page, spec: Route
     // 第十八批 BE 段 343-R1：已存档内容页按分类查阅、逐条恢复。
     await expect(page.getByTestId("archived-content-page")).toBeVisible();
     await expect(page.getByTestId("archived-content-category")).toBeVisible();
+    // 第十八批 BM 段修复项 F14（BSM:569「全部被存档的对象」）：分类含游乐项目权益绑定、岗位角色模板两类。
+    await expect(page.getByTestId("archived-content-category")).toContainText("游乐项目权益绑定");
+    await expect(page.getByTestId("archived-content-category")).toContainText("岗位角色模板");
   } else if (spec.pageId === "ADM-STL-001") {
     await expect(page.getByTestId("settlement-config-page")).toBeVisible();
     await expect(page.getByTestId("settlement-config-defaults-table")).toBeVisible();

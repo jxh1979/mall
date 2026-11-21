@@ -1,6 +1,6 @@
 package com.complex.platform.analytics;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -11,6 +11,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.complex.platform.access.AccessActor;
 import com.complex.platform.common.BusinessDayResolver;
+import com.complex.platform.common.LocalZone;
 import com.complex.platform.ticketing.IssuedEntitlementRecord;
 import com.complex.platform.ticketing.TicketCredentialRecord;
 import com.complex.platform.ticketing.TicketOrderRecord;
@@ -21,6 +22,7 @@ import java.nio.charset.StandardCharsets;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -163,6 +165,33 @@ class VerificationRejectedMetricJdbcIntegrationTests {
         });
     }
 
+    /**
+     * 第 382 条 382-R1（BSM:682、BSM:1819；ENUM:144「时区一律取项目所在地时间，禁止使用服务器默认时区。」；18BE 控制席判定①）：
+     * 分时段客流按所在地（北京时间）钟点分桶。本商户一笔成功核销挪到营业日窗起点后 10 小时 15 分（出厂窗下北京 20:15、UTC 12:15），
+     * 本商户账号 GET traffic-hourly：北京钟点桶为 1、UTC 钟点桶为 0。修前按 UTC 钟点分桶，北京钟点桶为 0，断言即红。
+     */
+    @Test
+    void hourlyTrafficBucketsUseLocalZoneHours() throws Exception {
+        LocalDate d = businessDayResolver.businessDate(null, null, Instant.now());
+        seed();
+        verify("vrm-hourly-" + suffix, code).andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("success"));
+        Instant at = businessDayResolver.start(businessDayResolver.soleProject(), null, d).plusSeconds(10 * 3600 + 15 * 60);
+        jdbc.update("UPDATE ticket_verifications SET created_at = ? WHERE entitlement_id = ? AND status = 'success'",
+                Timestamp.from(at), "ent_" + code);
+        jdbc.update("INSERT INTO role_permissions (role_id, permission_code) VALUES (?, ?)", role, "analytics.dashboard.view");
+        int localHour = at.atZone(LocalZone.ID).getHour();
+        int utcHour = at.atZone(ZoneOffset.UTC).getHour();
+        mockMvc.perform(get("/api/v1/analytics/traffic-hourly").param("date", d.toString())
+                        .with(session(staff, "staff", project, merchant)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.business_date").value(d.toString()))
+                .andExpect(jsonPath("$.data.buckets.length()").value(24))
+                .andExpect(jsonPath("$.data.buckets[" + localHour + "].hour").value(localHour))
+                .andExpect(jsonPath("$.data.buckets[" + localHour + "].count").value(1))
+                .andExpect(jsonPath("$.data.buckets[" + utcHour + "].count").value(0));
+    }
+
     @Test
     void issuedEntitlementsAreCountedPerBusinessDay() throws Exception {
         LocalDate d = businessDayResolver.businessDate(null, null, Instant.now());
@@ -230,7 +259,7 @@ class VerificationRejectedMetricJdbcIntegrationTests {
     private RequestPostProcessor platformAdmin() {
         String admin = "usr_vrm_admin_" + suffix;
         String adminRole = "role_vrm_admin_" + suffix;
-        account(admin, "platform_admin", "org", null, adminRole, "核销拒绝数回归管理员" + suffix, "analytics.dashboard.view");
+        account(admin, "platform_admin", "org", null, adminRole, "核销拒绝数回归管理员" + Long.parseLong(suffix, 16), "analytics.dashboard.view");
         return session(admin, "platform_admin", "org", null);
     }
 
@@ -262,7 +291,7 @@ class VerificationRejectedMetricJdbcIntegrationTests {
                 project);
         jdbc.update("INSERT INTO merchants (id, merchant_name, merchant_type, status, created_at, updated_at, project_id)"
                 + " VALUES (?, '核销拒绝数商户', 'bar', 'active', now(), now(), ?)", merchant, project);
-        account(staff, "staff", project, merchant, role, "核销拒绝数回归核销员" + suffix, "verification.execute");
+        account(staff, "staff", project, merchant, role, "核销拒绝数回归核销员" + Long.parseLong(suffix, 16), "verification.execute");
         jdbc.update("""
                 INSERT INTO terminal_devices (id, device_id, device_code, terminal_type, binding_scope, status, created_at, updated_at)
                 VALUES (?, ?, ?, 'kiosk', 'venue', 'bound', ?, ?)

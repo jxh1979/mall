@@ -1,7 +1,8 @@
-// 文件版本：V0.04
+// 文件版本：V0.05
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
+import { cnDate } from "../components/RowDetailDrawer";
 import { PermissionButton } from "../security/Can";
 import { KEY_VALUE_LABELS } from "../i18n/fieldLabels";
 import type { AdminPageProps } from "../types";
@@ -83,10 +84,16 @@ function cents(value: string): number | null {
 function toInstant(local: string): string | null {
   return local ? new Date(local).toISOString() : null;
 }
+// 第 381 条 381-R1：服务端时刻 → datetime-local 本机串，与 toInstant 互逆（同 TicketTypeSaleSettings 的 inputTime）。
+function toLocalInput(iso: string | null): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+}
 function fromShow(show: MediaShow): Form {
   return {
     projectId: show.projectId, showKind: show.showKind, barMerchantId: show.barMerchantId ?? "", mediaMerchantId: show.mediaMerchantId,
-    showDate: show.showDate, plannedStartAt: show.plannedStartAt ? show.plannedStartAt.slice(0, 16) : "", plannedEndAt: show.plannedEndAt ? show.plannedEndAt.slice(0, 16) : "",
+    showDate: show.showDate, plannedStartAt: toLocalInput(show.plannedStartAt), plannedEndAt: toLocalInput(show.plannedEndAt),
     contractRef: show.contractRef ?? "",
     ticketOn: show.ticketShareMode !== "none", ticketShareMode: show.ticketShareMode === "fixed" ? "fixed" : "ratio",
     ticketShareBps: show.ticketShareBps == null ? "" : String(show.ticketShareBps), ticketShareAmountYuan: show.ticketShareAmountCent == null ? "" : yuan(show.ticketShareAmountCent),
@@ -332,7 +339,7 @@ export function MediaPerformanceShowPage({ api, setActionResult, setGlobalError,
             </div>
           ) : (
             <div data-testid="mps-fulfillment">
-              <p>状态：{STATUS_LABEL[detail.fulfillment.status]}；实际 {detail.fulfillment.actualStartAt} ～ {detail.fulfillment.actualEndAt}；登记人 {detail.fulfillment.recordedBy}
+              <p>状态：{STATUS_LABEL[detail.fulfillment.status]}；实际 {cnDate(detail.fulfillment.actualStartAt)} ～ {cnDate(detail.fulfillment.actualEndAt)}；登记人 {detail.fulfillment.recordedBy}
                 {detail.fulfillment.confirmedBy ? `；确认人 ${detail.fulfillment.confirmedBy}` : ""}</p>
               <p>已完成：{detail.fulfillment.completedContent}；未完成：{detail.fulfillment.uncompletedContent ?? "无"}；依据：{detail.fulfillment.basis}</p>
               {detail.fulfillment.disputeReason ? <p>争议：{detail.fulfillment.disputeReason}{detail.fulfillment.resolutionNote ? `；裁决：${detail.fulfillment.resolutionNote}（${detail.fulfillment.resolvedBy}）` : ""}</p> : null}

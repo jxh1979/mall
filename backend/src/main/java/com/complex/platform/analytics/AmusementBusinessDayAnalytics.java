@@ -1,8 +1,9 @@
 package com.complex.platform.analytics;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import com.complex.platform.amusement.AmusementBusinessDayService;
+import com.complex.platform.common.LocalZone;
 import com.complex.platform.common.api.ApiException;
 import java.math.BigDecimal;
 import java.sql.Timestamp;
@@ -59,7 +60,8 @@ public class AmusementBusinessDayAnalytics {
         Query q=query(definition("traffic.amusement"),date,date,Instant.now(),false,null);
         requireComplete(q);
         Map<Integer,Long> result=new LinkedHashMap<>();
-        jdbc.query(q.sql()+" SELECT date_part('hour',created_at AT TIME ZONE 'UTC')::int AS hour, count(*) AS total FROM filtered GROUP BY hour",q.params(),
+        // 第 382 条 382-R1（ENUM:144）：按所在地时区（北京时间，LocalZone）钟点分桶，与票务核销同一口径。
+        jdbc.query(q.sql()+" SELECT date_part('hour',created_at AT TIME ZONE :zone)::int AS hour, count(*) AS total FROM filtered GROUP BY hour",q.params().addValue("zone",LocalZone.ID.getId()),
                 (org.springframework.jdbc.core.RowCallbackHandler)rs->result.put(rs.getInt("hour"),rs.getLong("total")));
         return result;
     }

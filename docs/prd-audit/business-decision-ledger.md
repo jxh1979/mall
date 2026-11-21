@@ -1,6 +1,6 @@
 # PRD 审计业务裁决台账
 
-文档版本：V1.19
+文档版本：V1.20
 状态：进行中
 迁移日期：2026-07-27
 当前事实源：三份立法 HTML 以既有冻结基线叠加 James 此前 M02 至 M08 的点名批准、全量审计 M001、M002 的逐项批准，以及本轮 2026-10-16 至 2026-10-17 业务 HTML 审计中 Q01 至 Q40 及子题实际明确批准且未被后续替代的裁决，和 2026-10-17 第二批 HTML 业务线推演审计（A–F 六线 64 条、停车章）的逐项批准，并叠加本轮 CG 70 项来源确认与 C01–C09、N01–N03 最终澄清及补全文稿中 F01、W01–W05 的整体修改批准（本文件末节）；本轮最终规则、未采纳或替代关系、现行版本与字节哈希见本文件末节。历史记录保留为各自当时事实，不恢复已被替代的建议。
@@ -11030,3 +11030,137 @@ HTML 的语义补齐与直接引用同步可在本批核验；70项中的业务�
   - 依据：PGM:303「同一次操作重复提交时，返回第一次的结果并提示已完成。」；PGM:528「⑤同一笔操作重复提交不重复生效（重复点击、网络重发、渠道重复回调都只算一次）」；BSM:1618「第三方回流失败、重复、延迟、差异。」；BSM:1579「机器人到达是被动留痕：由机器人上报的任务状态自动记录时间和点位。」；第十八批裁决 50。
   - 本组增量：无新增操作，无迁移，无测试改动（测试名见 N1、N2 两段补记）；其余 PRD、开发设计、契约包与矩阵经 grep 核对没有需改的现状句。
 - 18BN 落地位置补记·运行验收证据、快照、终验文档刷新（无新裁决）：业务提交 5d97e30b 之后，按第十八批裁决 25 重刷了运行验收证据：后端全量 7187 测，0 失败 0 错误；apps/web 构建通过；常规界面验收（接口全部 mock）实跑 40 条全过；真实后端界面验收未跑，runtime_ready=false。随后依次重生成闭环当前态快照、生产闭环缺口报告、界面验收报告、无上线指挥台。生成器没改。手改 docs/final-closed-loop-acceptance-audit-v0.1.md 与 docs/code-implementation-acceptance-audit-v0.1.md：前端单测源码计数改为 2001；被核文件行数都没变；后端全量与常规界面验收的数字、日期改为本次实跑值；写入 npm run verify:unit 实跑结果，五个工作区全过。交付门禁于 2026-11-21 01:57 UTC 在工作树逐项实跑子项，NAS 两项现场探测未跑。仍红的有两项：一是 coding-host-protection，它写死主仓路径，在工作树口径下必红，属工具口径，不做；二是 final-closed-loop-audit，如实留 2 条红（integration-ready、business-acceptance-ready），原因是校验器要求终验把联调、业务验收写成「是」，而裁决 25 定了不跑真实后端界面验收、运行验收未就绪，终验写的是「否」。verify:delivery-gates 总链仍是红的。
+
+18BM 落地位置补记（2026-11-20）：第十八批 BM 段（batch85）按 18BM 只读设计实现待开发清单第 381、382 条与补做复核修复项 F11、F12、F13、F14、F15、F16、F17、F18（后台显示与已存档返修组）；运行验收证据、终验文档在本段最后一个提交刷新；各条落地位置见下。本段追加时，原台账除文档版本升一版外，其他历史字节保持。
+
+- 18BM 落地位置补记·控制席判定（2026-11-20）：本段（第十八批 BM 段，batch85）实现待开发清单第 381、382 条与补做复核修复项 F11、F12、F13、F14、F15、F16、F17、F18（18BM 只读设计 b85-audit/d-web-a.json，两轮质疑者修订后定稿，无待裁题）。补做复核修复项 F11、F12、F13、F14、F15、F16、F17、F18（18BD～18BI 补做多视角独立复核，每条经独立反驳核实未驳倒）先行实现，修法以 b83-audit\fix_items.json 各项控制席判定为准。控制席判定：照设计；381-R1、382-R1 排在修复项之后。修复项 F16、F17 的契约文字由契约代理按修复项结果的「契约要点」做。第五轮设计与修复代理的范围外旁见已登记为待开发清单第 388～414 条（待核实）。本段从 614159b0 开工（第五轮 13 段并行），变基到 83efbc89 后收尾；汇总文件由合并前脚本 summary_tool.py 剥离与重写。
+- 18BM 落地位置补记·修复项 F12（已存档内容页票价规则、卡座预订的名称；无新裁决）：
+  改法：ArchivedContentPage 的票价规则分类改用 loadPriceRules，并读含已存档的票种列表（listTicketTypes），名称拼成「票种名 · 价格档中文名 · 定价方式与价格」；票种对不上或没有票种查看权限时显示票种编号。价格档中文名用票务策略页的 VARIANT_LABELS（改为导出），定价方式与价格用 ticketPriceModes 的 priceModeLabel、priceModeValue，同票务策略页派生价规则表。卡座预订分类改用 loadBarReservations，并读桌台列表（listBarTables），名称拼成「桌台 · 到店时间（北京时间）· 人数」；桌台取桌台编码，没有取桌台名，读不到桌台列表（没有 bar.table.view）或对不上时显示桌台编号。对照表读取失败只降级名称，不影响该类列出与恢复。NAME_KEYS 删去记录里不存在的 ruleName、customerName。
+  依据：
+  - BSM:569「后台另设「已存档内容」页，进去可以看到全部被存档的对象，按分类查阅、可逐条恢复。」
+  - 18BM 控制席判定·修复项 F12「票价规则名称＝票种名（按 ticketTypeId 对票种列表，取不到显示票种编号）＋价格档中文名＋价格；卡座预订名称＝桌台＋到店时间（北京时间）＋人数。补两类单测。」
+  测试：ArchivedContentPage.test.tsx「票价规则名称按票种名、价格档、价格拼；票种对不上的显示票种编号」「卡座预订名称按桌台、到店时间（北京时间）、人数拼」「没有桌台查看权限（桌台接口 403）时卡座预订照样列出，桌台显示桌台编号」。
+- 18BM 落地位置补记·修复项 F13（已存档内容页按分类只显示接口真带出的列；无新裁决）：
+  改法：ArchivedContentPage 的分类定义加 columns，表头与单元格按它渲染。默认显示存档时间、存档人；服务项目与游乐项目权益绑定多一列存档理由（ServiceCatalogItemRecord、AmusementProjectEntitlementRecord 带 archiveReason）；空间类型三列都不设（SpaceTypeRecord 只有状态）；岗位角色模板只有存档时间（PositionRoleTemplate 没有存档人）。页面矩阵 ADM-OPS-003 行的 key_fields 与边界说明改如实。测试夹具改成接口真实返回的字段，票种夹具去掉 archive_reason。各类列表要不要带出存档理由另见待开发清单第 387 条，本段不做后端。
+  更正：18BE 落地位置补记·第 343 条 343-R1 写的「每类列出全部已存档对象的名称、编号、存档时间（北京时间）、存档人与存档理由」与实现不符——十三类里只有服务项目的列表带出存档理由，空间类型的列表不带存档时间与存档人，票价规则与卡座预订当时也没有名称。该补记历史字节不改，以本条与 F12 为准。
+  依据：
+  - BSM:569（同上）
+  - 18BM 控制席判定·修复项 F13「页面按分类只显示接口真带出的列——存档理由列只在带 archiveReason 的分类显示（现只有服务项目），空间类型不显示存档时间与存档人两列；页面矩阵 ADM-OPS-003 行 key_fields 与平台治理 PRD 现状句改如实；……测试夹具改成接口真实返回的字段。」
+  测试：ArchivedContentPage.test.tsx「只列有查看权限的分类；默认分类只显示已存档的对象，带名称、北京时间的存档时间与存档人；票种接口不带存档理由，不设该列」「存档理由列只在接口带出理由的分类显示（服务项目）；空间类型接口不带存档时间与存档人，这两列也不设」。
+- 18BM 落地位置补记·修复项 F14（已存档内容页补游乐项目权益绑定、岗位角色模板两类；无新裁决）：
+  改法：ARCHIVED_CATEGORIES 加两类。
+  - 游乐项目权益绑定：loadAmusementEntitlements 先读游乐项目列表（listAmusementProjects），再逐项目读含已存档的绑定（listAmusementProjectEntitlements，include_archived=true）。名称为「项目名 · 权益类型中文名」，列出存档时间、存档人、存档理由。恢复调 unarchiveAmusementProjectEntitlement。查看须同时持 amusement.project_entitlement.manage 与 amusement.session.view，恢复码 amusement.project_entitlement.manage。
+  - 岗位角色模板：loadPositionTemplates 读 listPositionRoleTemplates（include_archived=true）。名称为「岗位 / 职级」，用访问治理页的 zhPosition、zhLevel（改为导出），列出存档时间。恢复时弹框填理由后调 changePositionRoleTemplateLifecycle（action=restore），取消不提交，空理由提示「恢复理由不能为空」。查看与恢复码 access.role.assign。
+  - 两类都只列已存档、未审批删除的，已删除的仍在各自原页面处理。
+  - 本页入口码 ARCHIVED_CONTENT_VIEW_PERMISSIONS 改取各分类头一个查看码；adminRoutes 的 ADM-OPS-003 行 requiredPermissions 加 amusement.project_entitlement.manage、access.role.assign（持任一即可进）；页面矩阵 ADM-OPS-003 行补权限码与接口。
+  - 本段增量：新增操作 0 个，无迁移，无新权限码。
+  更正：18BE 落地位置补记·控制席判定②「游乐项目权益绑定（按游乐项目逐个查看）与岗位角色模板（恢复须填理由）的已存档项仍在各自页面，没有并入」是当时实现席自定，没有操作员裁决，与 BSM:569「全部被存档的对象」字面不符。18BM 控制席判定推翻，本段并入；该补记历史字节不改。
+  依据：
+  - BSM:569（同上）
+  - BSM:571「所有存档与删除的数据都按分类（票种、商品、商户、员工、设备、工单、预订等）分门别类归拢，便于按类查阅、恢复与清理。」
+  - 18BM 控制席判定·修复项 F14「补这两类（HTML BSM:569「全部被存档的对象」字面；推翻 18BE 当时「留在各自页面」的自定，在本段补记写明）。岗位角色模板：读 GET /api/v1/access/position-role-templates?include_archived=true，恢复时弹框填理由后调 lifecycle action=restore；游乐项目权益绑定：先取游乐项目列表，再逐项目取含已存档的权益绑定，恢复调 unarchive。」
+  测试：ArchivedContentPage.test.tsx「分类覆盖票种、商品、商户、员工、设备、工单、预订，连同游乐项目权益绑定与岗位角色模板；入口权限取各分类查看权限」「游乐项目权益绑定：先取游乐项目，再逐项目取含已存档的绑定；恢复走该项目该权益的取消存档接口」「岗位角色模板：只列已存档未删除的；恢复须填理由，走生命周期接口的恢复动作」。
+- 18BM 落地位置补记·修复项 F15（已存档内容页切分类竞态；无新裁决）：
+  改法：ArchivedContentPage 的 load 每次读取记一个请求序号（loadSeq），返回时序号不是最新的整体丢弃，不写行、报错与读取中状态。restore 完成后经 latestLoad 调当前分类的读取，不再用点击当时那一类的读取。
+  依据：
+  - BSM:569「按分类查阅、可逐条恢复。」
+  - 18BM 控制席判定·修复项 F15「load 记请求序号、过期响应丢弃；恢复完成后按当前分类重读；补一条单测。」
+  测试：ArchivedContentPage.test.tsx「切分类时旧请求晚到不盖住当前分类」「恢复途中切了分类，恢复完成后重读的是当前分类」（两半各一条，各有独立的失败复现）。
+- 修复项 F11（后台四处把服务端 UTC 时刻原样上屏）：
+  - 改法：四处显示都改走共用格式化 cnDate（RowDetailDrawer 模块导出，带时区的时刻换成北京时间后显示成「年月日 时:分」），不另写格式化；只改显示，不动回填与提交。
+  - 落地位置：① AmusementSessionsPage 核销记录表「核销时间」列（原 display(row.createdAt)）；② BusinessAnalyticsPage 口径复核锁定列表的锁定时间（原按字符串把 T 换空格后截前 16 位）；③ MediaPerformanceShowPage 实际履约起止（原直接渲染 actualStartAt、actualEndAt）；④ CustomerFacingSettingsSections 的 CustomerHomeContentSection「已发布于」（原直接拼 publishedAt）。
+  - 同根复扫：后台非测试源码里按「把 T 换成空格」「截前 16 位等」「直接渲染以 At 结尾的字段」三种写法复扫，四处之外没有属显示用途而未换算的；其余截取都是给时间输入框回填或取当天默认值，按判定不改。演出场次页计划起止的回填与提交属待开发清单第 381 条、经营分析页高峰时段分桶属第 382 条，本项未动。
+  - 依据：PGM:287「展示给用户的一切文字，包括菜单、页面标题、字段名、状态、枚举取值、按钮、提示、报错、导出文件表头与内容、短信与通知、日期时间等，必须全部为中文，不得出现任何英文（如 active/draft 英文状态、mm/dd/yyyy 英文日期格式、英文按钮或提示）」；18BE 落地位置补记·控制席判定①「后台把服务端按 UTC 输出的时刻原样显示，比实际早 8 小时、凌晨连日期都差一天，属显示错误，不是新规则」。该判定留着不动的是「约二十处页面自己用浏览器本机时区格式化时间」，这四处不做任何换算，不在其列。
+  - 测试：AmusementSessionsPage.test.tsx「V232：核销记录展示核销时间 + 对应场次（场次以名称呈现）」（断言改为北京时间并断言不含 ISO 原文）；BusinessAnalyticsPage.test.tsx「加载时读回已锁定复盘并展示(刷新后仍可见)」（补北京时间断言）；MediaPerformanceShowPage.test.tsx「实际履约起止按北京时间显示，不出现 ISO 原文」（新）；CustomerFacingSettingsSections.test.tsx「场地营业时间页：查询已发布的首页内容，发布时间按北京时间显示」（新）。
+  - 契约与迁移：无新增操作、无迁移、无权限码变化。
+- 18BM 落地位置补记·复核修复项 F18（方案 261-B17-R1 测试④补写；更正 18BI 补记「测试写法两处与方案不同」的说法）：
+  改法：MerchantWorkOrderCloseConcurrencyJdbcIntegrationTests 加 1 条 merchantCancelArrivingBehindAssignIsRejectedWithoutOverwriting，写法同本类原有用例：不开测试事务，两条线程。夹具单改成已提交（created）。一端在事务里把单改成已派单（assigned），不提交。提单商户账号（持 merchant.service_work_order.create）经真实接口 cancelMerchantServiceWorkOrder 取消，后到。在库里观测到有事务在锁上等待后放行先到者。断言后到者 409 INVALID_STATE、库内仍是 assigned、取消动作 0 条。主代码不改：MerchantServiceService.cancelOnce 已经先 lockWorkOrder 再判状态。
+  变异验证：把 MerchantServiceService.cancelOnce 的 lockWorkOrder 改回不锁的 findWorkOrder，本条变红（expected: 409 but was: 200），后到的取消把已派单的单写成已取消；还原后变绿。
+  依据：
+  - PGM:303「两个操作同时发生冲突时，一律以“先处理成功”的那个为准」
+  - 第十八批裁决 27「派单前商户自己取消；派单后，重复提或误提的由客户关怀部填原因取消。」
+  - 方案 261-B17-R1 tests ④「甲为员工派单（created 单）先锁行挂住，乙为商户 cancel 同一张单，放甲提交后 → 乙 409 INVALID_STATE；库内 status=assigned，cancelled 动作 0 条」
+  测试：MerchantWorkOrderCloseConcurrencyJdbcIntegrationTests.merchantCancelArrivingBehindAssignIsRejectedWithoutOverwriting（新增 1 条）。
+  更正：18BI 补记·控制席判定写「测试写法两处与方案不同」，与实际不符。除所列两处（261-B17-R1 两端同时关闭的先到一端用更新语句代替；261-B19-R1 在途第二笔用例不另写）外，还有两处当时没写、也没披露：
+  - 261-B17-R1 测试④（员工派单先到、商户取消后到）：本段已补上，见上。
+  - 261-B19-R1 测试④前半（履约人不在可触及项目内的员工用新编号提交，403 CROSS_PROJECT_FORBIDDEN，且幂等记录里没有该编号的行）：M738CrossProjectJdbcIntegrationTests.serviceOrderCancelResentWithSameKeyReturnsFirstResult 只验了同编号 403。本段不补，修复项 F18 只定补 B17 的④。
+  18BI 补记的历史字节不改。本段无迁移、无新权限码、无新错误码，新增操作 0 个。
+- 18BM 落地位置补记·复核修复项 F16（approveDeleteSpaceType 契约说明自相矛盾）：
+  改法：契约 approveDeleteSpaceType 的说明删去「不校验幂等键；」半句，保留「被拒不落失败事件。」和其后 261-B21-R2 的「idempotency_key 必填」一句，两份契约同值。x-idempotency-required、请求体 required 不变。archiveSpaceType、unarchiveSpaceType、requestDeleteSpaceType 三处同句属实，不改。由契约代理落笔。
+  依据：
+  - 控制席判定「yaml 与 json 删掉「不校验幂等键；」半句」
+  - 方案 261-B21-R2 plan「改写说明里「不校验幂等键」一句」
+  - 现码 PlatformController 空间种类删除审批入口缺请求编号即 400，PlatformService.approveDeleteSpaceType 走幂等层
+  - PGM:303「同一次操作重复提交时，返回第一次的结果并提示已完成。」
+  测试：无，只改契约文字，不影响运行。
+- 18BM 落地位置补记·复核修复项 F17（reviewWecomRiskHit 列了 NOT_FOUND 失败码但 responses 没 404）：
+  改法：契约 reviewWecomRiskHit 的 responses 补 404（引用 components/responses/Error），两份契约同值。x-failure-codes 不变。由契约代理落笔。
+  依据：
+  - 控制席判定「yaml 与 json 的 responses 补 404」
+  - 现码 WecomConversationService.reviewRiskHit 以 ApiException.notFound 抛 WECOM_RISK_HIT_NOT_FOUND
+  - 无 HTML 原句，依据为契约与现码一致，同第 322 条 322-R1（票种映射停用契约照现码补失败码、路径参数与 400/404/409 响应）与第 337 条先例
+  测试：无，只改契约响应声明，不影响运行。
+- 18BM 落地位置补记·381-R1（演出场次页计划起止时间回填改按本机时区，与提交换算互逆）：
+  改法：演出合同与履约结算页（MediaPerformanceShowPage）新增同文件函数 toLocalInput，把服务端时刻按浏览器本机时区换成 datetime-local 串，与提交用的 toInstant 互逆，写法同 TicketTypeSaleSettings 的 inputTime。fromShow 的计划开始、计划结束由截取 ISO 串前 16 位改为调用 toLocalInput。查看、新建版本「取消」、锁定后只读回显都经 fromShow。提交换算、后端、契约、迁移都不改。
+  落地位置：apps/web MediaPerformanceShowPage 的 toLocalInput、fromShow。
+  依据：
+  - BSM:1145「按演出合同逐场约定的比例或金额分给传媒公司，并在后台配置页面逐场填写、随合同固化版本」
+  - BSM:1145「每场演出适用哪几种情形、各自的数值与合同版本，必须逐场记录。」
+  - 18BE 落地位置补记·控制席判定①「后台把服务端按 UTC 输出的时刻原样显示，比实际早 8 小时、凌晨连日期都差一天，属显示错误，不是新规则」
+  按常理定：回填按浏览器本机时区（与本页提交换算、同类四页一致；18BE 判定①写明员工在国内使用时就是北京时间），不改成固定北京时区。
+  测试：MediaPerformanceShowPage.test.tsx 新 describe「MediaPerformanceShowPage 计划起止回填（第 381 条）」两条：北京时间下打开草案不改直接「保存修改」，PATCH 发出的计划起止仍是原时刻；锁定版本「新建合同版本」不改直接提交，POST /versions 发出的仍是原时刻。用例桩 TZ=Asia/Shanghai，真实 AdminApi 加桩 fetch。修前分别回填成 UTC 钟点、提交提前 8 小时，断言失败。
+- 18BM 落地位置补记·382-R1（分时段客流小时桶改按北京时间钟点，票务核销与游乐核销两处同改）：
+  改法：
+  - getAnalyticsTrafficHourly 读取的 JdbcAnalyticsRepository.hourlyTrafficCounts，平台与商户两条 SQL 由按 UTC 钟点分桶改为按所在地时区（LocalZone，北京时间）钟点分桶。
+  - 平台口径合并的 AmusementBusinessDayAnalytics.hourly 同改。
+  - 经营日窗口、24 桶补零、范围隔离都不动；契约说明与 AnalyticsRecords.HourlyTrafficResponse 注释原本就没写 UTC，不改。
+  落地位置：JdbcAnalyticsRepository.hourlyTrafficCounts、AmusementBusinessDayAnalytics.hourly。
+  依据：
+  - BSM:682「给管理层和运营看收入、客流、核销、异常、商户表现和对账结果。」
+  - BSM:1819「客流：入场人数、酒吧入场、游乐核销人数、渠道客流。」
+  - BSM:1682「营业日从当日上午 10:00 起算，至次日上午 10:00 止」
+  - ENUM:144「时区一律取项目所在地时间，禁止使用服务器默认时区。」
+  - DEC-BIZDAY-001「运营营业日 = 项目时区 + 可配切日时刻。」
+  - 18BE 落地位置补记·控制席判定①（同上）
+  按常理定：按 LocalZone 单一钟点分桶，不按各综合体各自配置的时区，因为各综合体都在国内，所在地时间即北京时间，且票务与游乐要并成一条 24 桶曲线。
+  测试：
+  - VerificationRejectedMetricJdbcIntegrationTests.hourlyTrafficBucketsUseLocalZoneHours：本商户账号经真实接口 GET traffic-hourly，营业日窗起点后 10 小时 15 分的一笔成功核销落在北京钟点桶、不在 UTC 钟点桶。
+  - AmusementBusinessDayJdbcIntegrationTests.hourlyAmusementTrafficUsesLocalZoneHours：UTC 12:15 的一笔游乐核销记进 20 点桶、12 点桶不变。
+  - 修前两条都断言失败。
+- 第 381、382 条这一组增量：新增操作 0 个，迁移 0 个，这一组不改 OpenAPI（本段契约改动见下一条契约代理补记）。
+- 18BM 契约代理（K-contract）落地位置补记：本段 OpenAPI 新增操作 0 个、删除 0 个，迁移 0 个；只改 3 个既有操作，yaml 与 json 同值。
+  - F16（approveDeleteSpaceType 契约说明自相矛盾）：改法是 approveDeleteSpaceType 的 description 删掉「不校验幂等键；」半句，保留「被拒不落失败事件。」与后面 261-B21-R2 整句。落地位置：openapi-p0 契约 approveDeleteSpaceType.description。依据：控制席判定「yaml 与 json 删掉『不校验幂等键；』半句」；现码 PlatformController.approveDeleteSpaceType 先调 requireIdempotencyKey 再进 PlatformService.approveDeleteSpaceType，该操作 x-idempotency-required 为 true、请求体 required 含 idempotency_key。同文件 archiveSpaceType、unarchiveSpaceType、requestDeleteSpaceType 三处「不校验幂等键」属实，不改。验证：verify:openapi、yaml 与 json 深比较一致。
+  - F17（reviewWecomRiskHit 列了 NOT_FOUND 失败码但 responses 没 404）：改法是 reviewWecomRiskHit 的 responses 补 404，引用 components.responses.Error，排在 403 与 409 之间。落地位置：openapi-p0 契约 reviewWecomRiskHit.responses。依据：控制席判定「yaml 与 json 的 responses 补 404」；x-failure-codes 已列 WECOM_RISK_HIT_NOT_FOUND，现码 WecomConversationService.reviewRiskHit 用 ApiException.notFound 以 404 抛出。验证：verify:openapi、yaml 与 json 深比较一致。
+  - F14 配套（listPositionRoleTemplates 补 include_archived 参数声明）：改法是 listPositionRoleTemplates 补 query 参数 include_archived（boolean，非必填，默认 false；true 时连同已存档与已删除的模板一并返回，默认只返回未存档、未删除的模板），写法照 listAmusementProjectEntitlements 的 include_archived。落地位置：openapi-p0 契约 listPositionRoleTemplates.parameters。依据：F14 控制席判定「岗位角色模板：读 GET /api/v1/access/position-role-templates?include_archived=true……接口路径、参数与权限码落笔前在现码核准」；现码 AccessController.listPositionRoleTemplates 接收 include_archived，AccessService.listPositionRoleTemplates 按 archivedAt、deletedAt 过滤。其余属性不变。验证：verify:client-openapi、verify:openapi、yaml 与 json 深比较一致。
+  - F18：无契约改动（cancelMerchantServiceWorkOrder 已声明 409）。F11、381-R1、382-R1：无契约改动。
+- 18BM 汇合段（J）：
+  1. e2e 同步修复项 F14：full-admin-remaining.spec.ts 的 openAdminRoute 函数里 ADM-OPS-003 分支，加了两条断言：已存档内容页的分类下拉（archived-content-category）含「游乐项目权益绑定」「岗位角色模板」两类。依据是 BSM:569「后台另设「已存档内容」页，进去可以看到全部被存档的对象，按分类查阅、可逐条恢复。」和修复项 F14 控制席判定「权限码、路由 requiredPermissions……页面矩阵行、e2e 与单测同步」。用例名 ADM-REM-01（exposes all non-first admin pages with route, evidence and readable content）。
+  2. 其余各段改过的页面，e2e 断言与 mock 都不用改：项目与场次页核销记录、经营分析页复核锁定、首页内容区发布时间、演出场次页。四张视觉基线都不含这些页面，没有重拍。
+  3. 门禁结论：
+     - 后端全量为 0 红。
+     - 前端：typecheck 为 0 错，vitest 全绿；客人三个工作区与商户工作区单测全绿。
+     - 安卓：员工端单测全绿，android-app 编译通过。
+     - chromium 后台五份 spec 全部通过。
+     - 四份生成物重生成后无差异；verify:p0-contract 全部子项通过，页面矩阵与结果字段中文名校验通过。
+     - OpenAPI 两份深比较一致；本段新增 0 个操作，只改既有操作 reviewWecomRiskHit、approveDeleteSpaceType、listPositionRoleTemplates 的说明与结构。本段无迁移。
+- 18BM 落地位置补记·文档组（平台治理 PRD 现状句改如实；无新裁决）：
+  改法：
+  - docs/platform-governance-prd-v0.1.md §15C.1 第 343 条 343-R1 的实现现状句改如实：
+    - 分类加游乐项目权益绑定、岗位角色模板，共十五类。
+    - 每类只列名称、编号和该类列表接口带出的存档信息：存档时间（北京时间）与存档人多数分类有，空间类型两项都没有，岗位角色模板没有存档人；存档理由只有服务项目与游乐项目权益绑定显示。
+    - 补名称拼法：票价规则按票种名、价格档、价格（票种对不上显示票种编号）；卡座预订按桌台、到店时间（北京时间）、人数（读不到桌台列表显示桌台编号）。
+    - 删去「两类仍在各自页面、没有并入本页」，改为：游乐项目权益绑定先取游乐项目再逐项目取含已存档的绑定，岗位角色模板恢复须填理由，两类里已审批删除的仍在各自原页面处理。
+  - §2A.2 第 377 条 377-R1 的实现现状句末补修复项 F11：项目与场次页核销时间、经营分析页已锁定复盘的锁定时间、演出合同与履约结算页实际履约起止、场地营业时间页首页内容「已发布于」四处现同走 cnDate。
+  - 标题升一版，§16 变更日志加一行。
+  落地位置：平台治理 PRD §2A.2、§15C.1、§16（对应代码 ArchivedContentPage 的 ARCHIVED_CATEGORIES、loadPriceRules、loadBarReservations、loadAmusementEntitlements、loadPositionTemplates；四处 cnDate 见修复项 F11 补记）。
+  不改的：
+  - 第 381 条（MediaPerformanceShowPage 的 toLocalInput）、第 382 条（getAnalyticsTrafficHourly，即 JdbcAnalyticsRepository.hourlyTrafficCounts、AmusementBusinessDayAnalytics.hourly）、修复项 F16、F17、F18 与 listPositionRoleTemplates 补 include_archived：各 PRD 与下位文档里都没有对应的现状句或未实现句（按分时段客流、高峰时段、traffic-hourly、UTC 分桶、计划起止、planned_start_at、不校验幂等键、reviewWecomRiskHit、WECOM_RISK_HIT_NOT_FOUND、261-B17-R1、include_archived 等 grep 过）。
+  - 页面矩阵 ADM-OPS-003 行已由修复项 F13、F14 改如实，本组未动。
+  依据：
+  - BSM:569「后台另设「已存档内容」页，进去可以看到全部被存档的对象，按分类查阅、可逐条恢复。」
+  - BSM:571「所有存档与删除的数据都按分类（票种、商品、商户、员工、设备、工单、预订等）分门别类归拢，便于按类查阅、恢复与清理。」
+  - PGM:287「……日期时间等，必须全部为中文」
+  - 18BM 控制席判定·修复项 F13「页面矩阵 ADM-OPS-003 行 key_fields 与平台治理 PRD 现状句改如实」。
+  测试：无（只改文档）。node tools/verify-full-admin-page-matrix.mjs 通过，git diff --check 通过。本段增量：新增操作 0 个，无迁移。
+- 18BM 合并前变基（2026-11-21）：本段自 83efbc89 变基到 origin/main 2bd98895；合并时 OpenAPI 共 1402 个操作（主干 1402）、info.version V0.93、决策台账 V1.20，Flyway 最新 V683（共 620 个迁移）。版本行、契约版本、计数与 SHA、生成物、台账补记与 PRD 修订行由合并前脚本按新主干统一重写。
+- 18BM 落地位置补记·运行验收证据、快照、终验文档刷新（无新裁决）：业务提交 dda9a238 之后，按第十八批裁决 25 重刷了运行验收证据：后端全量 7190 测，0 失败 0 错误；apps/web 构建通过；常规界面验收（接口全部 mock）实跑 40 条全过；真实后端界面验收未跑，runtime_ready=false。随后依次重生成闭环当前态快照、生产闭环缺口报告、界面验收报告、无上线指挥台。生成器没改。手改 docs/final-closed-loop-acceptance-audit-v0.1.md 与 docs/code-implementation-acceptance-audit-v0.1.md：前端单测源码计数改为 2013；被核文件行数都没变；后端全量与常规界面验收的数字、日期改为本次实跑值；写入 npm run verify:unit 实跑结果，五个工作区全过。交付门禁于 2026-11-21 03:44 UTC 在工作树逐项实跑子项，NAS 两项现场探测未跑。仍红的有两项：一是 coding-host-protection，它写死主仓路径，在工作树口径下必红，属工具口径，不做；二是 final-closed-loop-audit，如实留 2 条红（integration-ready、business-acceptance-ready），原因是校验器要求终验把联调、业务验收写成「是」，而裁决 25 定了不跑真实后端界面验收、运行验收未就绪，终验写的是「否」。verify:delivery-gates 总链仍是红的。

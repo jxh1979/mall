@@ -1,4 +1,4 @@
-// 文件版本：V0.12
+// 文件版本：V0.13
 import React from "react";
 import { withBase } from "../../basePath";
 import { AdminDataState } from "../components/AdminDataState";
@@ -56,7 +56,7 @@ const POSITION_LABELS: Record<string, string> = {
   ops_manager: "运营经理",
   night_duty_manager: "夜班值班经理",
 };
-function zhPosition(code?: string | null): string {
+export function zhPosition(code?: string | null): string {
   if (!code) return "—";
   // M038-003：未映射的岗位码不裸露英文——中文说明在前，岗位码作为系统内部标识符放括号里。
   return POSITION_LABELS[code] ?? `未登记岗位（${code}）`;
@@ -89,7 +89,7 @@ function grantStatusLabel(code?: string | null): string {
 function grantTypeLabel(code?: string | null): string {
   return code ? GRANT_TYPE_LABELS[code] ?? formatBusinessStatus(code) : "—";
 }
-function zhLevel(code?: string | null): string {
+export function zhLevel(code?: string | null): string {
   if (!code) return "—";
   const m = /^lvl_m(\d+)(?:_(lower|middle|upper))?$/.exec(code);
   if (m) return m[2] ? `M${m[1]}·${m[2] === "upper" ? "上" : m[2] === "middle" ? "中" : "下"}` : `M${m[1]}`;

@@ -1,4 +1,4 @@
-// 文件版本：V0.14
+// 文件版本：V0.15
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
@@ -79,7 +79,7 @@ const MANAGE = ["ticket.product.manage"];
 // #172(2026-07-19 拍板)：全场统一动态码刷新间隔——5 秒为单位、最长 60 秒。
 const QR_REFRESH_OPTIONS = [5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60];
 const VARIANT_TYPES = ["new_customer", "student", "group", "channel", "member"];
-const VARIANT_LABELS: Record<string, string> = {
+export const VARIANT_LABELS: Record<string, string> = {
   new_customer: "新人票",
   student: "学生票",
   group: "多人票",

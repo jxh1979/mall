@@ -1,4 +1,4 @@
-// 文件版本：V0.02
+// 文件版本：V0.03
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -117,7 +117,9 @@ describe("AmusementSessionsPage KPI 聚焦视图", () => {
     renderPage();
     await waitFor(() => expect(screen.getByTestId("amusement-verifications-table")).toBeTruthy());
     const table = screen.getByTestId("amusement-verifications-table");
-    expect(table.textContent).toContain("2026-06-20T10:15:00Z");
+    // 修复项 F11（PGM:287；18BE 控制席判定①）：核销时间与同页场次起止同一口径，按北京时间显示（10:15Z）。
+    expect(table.textContent).toContain("2026年6月20日 18:15");
+    expect(table.textContent).not.toContain("2026-06-20T10:15:00Z");
     expect(table.textContent).toContain("上午场");
   });
 });

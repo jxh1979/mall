@@ -1,4 +1,4 @@
-// 文件版本：V0.03
+// 文件版本：V0.04
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
@@ -109,6 +109,16 @@ describe("客人端相关后台配置（ROOT-03 B 段券与展示组）", () => 
       useUntil: "2026-12-31", refundable: true, refundRatioBps: 8000, refundMethod: "到店收银台原路退回",
       refundContact: "店长 王女士", publishUntil: "2026-12-01",
     }));
+  });
+
+  // 修复项 F11（PGM:287；18BE 控制席判定①）：已发布时间是服务端按 UTC 带 Z 输出的时刻，按北京时间显示，不上屏 ISO 原文。
+  it("场地营业时间页：查询已发布的首页内容，发布时间按北京时间显示", async () => {
+    const api = makeApi((url) => (url.includes("home-contents") ? { intro: "城市娱乐综合体", announcement: "", publishedAt: "2026-07-05T05:20:00.123456Z" } : []));
+    render(<VenueBusinessHoursPage {...props(api)} />);
+    await waitFor(() => expect(screen.getByTestId("customer-home-content")).toBeTruthy());
+    fireEvent.change(screen.getByLabelText("首页内容项目编号"), { target: { value: "prj_1" } });
+    fireEvent.click(screen.getByTestId("customer-home-content-query"));
+    await waitFor(() => expect(screen.getByTestId("customer-home-content-current").textContent).toBe("已发布于 2026年7月5日 13:20"));
   });
 
   it("场地营业时间页：首页介绍与公告首次提交被拦下送审，提示批准后原样再提交", async () => {

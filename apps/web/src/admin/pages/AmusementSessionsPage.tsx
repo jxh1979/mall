@@ -1,4 +1,4 @@
-// 文件版本：V0.07
+// 文件版本：V0.08
 import React from "react";
 import { formatActionResult } from "../components/ActionResultView";
 import { AdminDataState } from "../components/AdminDataState";
@@ -473,7 +473,7 @@ export function AmusementSessionsPage({ api, setActionResult, setGlobalError, ef
   const verificationsSection = (
     <>
       <div className="admin-section-title">核销记录</div>
-      <div className="admin-table-scroll"><table className="admin-table" data-testid="amusement-verifications-table"><thead><tr><th>核销时间</th><th>对应场次</th><th>结果</th><th>核销人数</th><th>设备</th></tr></thead><tbody>{verifications.length === 0 ? <tr data-testid="amusement-verifications-empty-row"><td colSpan={5}>暂无核销记录</td></tr> : verifications.map((row) => <tr key={row.id}><td>{display(row.createdAt)}</td><td>{display(sessionNameById.get(String(row.sessionId ?? "")) ?? row.sessionId)}</td><td>{formatBusinessStatus(row.verificationResult)}</td><td>{display(row.verifiedPeople)}</td><td>{display(row.deviceId)}</td></tr>)}</tbody></table></div>
+      <div className="admin-table-scroll"><table className="admin-table" data-testid="amusement-verifications-table"><thead><tr><th>核销时间</th><th>对应场次</th><th>结果</th><th>核销人数</th><th>设备</th></tr></thead><tbody>{verifications.length === 0 ? <tr data-testid="amusement-verifications-empty-row"><td colSpan={5}>暂无核销记录</td></tr> : verifications.map((row) => <tr key={row.id}><td>{cnDate(row.createdAt)}</td><td>{display(sessionNameById.get(String(row.sessionId ?? "")) ?? row.sessionId)}</td><td>{formatBusinessStatus(row.verificationResult)}</td><td>{display(row.verifiedPeople)}</td><td>{display(row.deviceId)}</td></tr>)}</tbody></table></div>
     </>
   );
 
