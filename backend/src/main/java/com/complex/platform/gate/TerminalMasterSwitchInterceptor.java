@@ -1,11 +1,12 @@
 package com.complex.platform.gate;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import com.complex.platform.common.api.ApiException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.util.List;
+import java.util.regex.Pattern;
 import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.HandlerInterceptor;
 import org.springframework.web.util.UrlPathHelper;
@@ -32,6 +33,8 @@ import org.springframework.web.util.UrlPathHelper;
  * 矩阵页重新打开（死锁）；②<b>非终端通道</b>——第三方开放平台回调、一体机自助端点不是「受管一方端」，
  * 各有自己的签名 / X-Device-Token 认证，且一体机路径同样豁免于 {@link DeviceCredentialInterceptor}
  * （拿不到可信身份），不进本闸，否则第三方回调与一体机心跳会被写请求 fail-closed 误杀。
+ * 第十八批 CK 段 418-R1（BSM:1511）：统一 webhook 与机器人上报两个第三方回调同属非终端通道，自带签名、时间戳、随机数验证，
+ * 仍受 integration.{type}.sync 开关门控；按整串路径豁免（{@link #PROVIDER_CALLBACK}），后台集成管理写接口照旧过闸。
  *
  * <p>第十八批 M 段第 116 条（PGM:747「……员工自有手机只开放低风险功能……」；PGM:744；PGM:738「访问被拒绝也要留痕……」）：可信终端是员工私人手机时，
  * 只放行 {@link StaffAppFunctions} 私人手机清单内的接口，读写都判；清单外的先留痕 {@code private_phone_function_not_allowed} 再 403 TERMINAL_NOT_ALLOWED。
@@ -61,6 +64,9 @@ public class TerminalMasterSwitchInterceptor implements HandlerInterceptor {
             "/api/v1/security/page-views"
     );
 
+    /** 第十八批 CK 段 418-R1：两个第三方回调的整串路径，不按 /api/v1/integration/ 前缀豁免。 */
+    private static final Pattern PROVIDER_CALLBACK = Pattern.compile("/api/v1/integration/([^/]+/webhook|robot/report)");
+
     // ObjectProvider：@WebMvcTest 切片自动纳入 HandlerInterceptor 但不装 gate 依赖，guard 缺席时跳过闸；
     // 完整应用上下文中 TerminalSwitchGuard 恒存在（@Component），生产不会走缺席分支。
     private final org.springframework.beans.factory.ObjectProvider<TerminalSwitchGuard> terminalSwitchGuard;
@@ -83,6 +89,9 @@ public class TerminalMasterSwitchInterceptor implements HandlerInterceptor {
             if (uri != null && uri.startsWith(prefix)) {
                 return true;
             }
+        }
+        if (uri != null && PROVIDER_CALLBACK.matcher(uri).matches()) {
+            return true;
         }
         String terminalType = TerminalIdentityHolder.of(request)
                 .map(TerminalIdentityHolder.VerifiedTerminal::terminalType)

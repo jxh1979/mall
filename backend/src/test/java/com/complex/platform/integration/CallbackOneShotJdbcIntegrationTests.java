@@ -1,12 +1,11 @@
 package com.complex.platform.integration;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 
 import com.complex.platform.common.api.ApiResponse;
-import com.complex.platform.support.StaffRequestFixture;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.jayway.jsonpath.JsonPath;
@@ -36,7 +35,7 @@ import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.test.web.servlet.MockMvc;
-import org.springframework.test.web.servlet.request.RequestPostProcessor;
+import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
@@ -48,7 +47,11 @@ import org.springframework.transaction.support.TransactionTemplate;
  *
  * <p>R1：统一 webhook 与开放平台 webhook 同一幂等键重投（换 nonce）或同时投递，信封只落一条、返回首次事件编号并标已去重，不覆盖原事件；
  * 别的幂等键带着已被占用的事件编号 409 DUPLICATE_KEY。R2：机器人上报同一合作方同一幂等键只落一条被动留痕，重投返回首条并提示已完成；
- * 缺幂等键 400。统一 webhook 与机器人上报两个路径现主干要登录，用后台会话发；开放平台 webhook 走公开路径。</p>
+ * 缺幂等键 400。统一 webhook 与机器人上报两个路径免登录（第十八批 CK 段 418-R1），与开放平台 webhook 一样不带后台会话、不带终端头发。</p>
+ *
+ * <p>第十八批 CK 段第 418 条 418-R1（BSM:1511「先开发自己的系统和开放接口：第三方可以在身份核验后读取或回写平台数据」；BSM:1579「机器人到达是被动留痕：
+ * 由机器人上报的任务状态自动记录时间和点位。」）：两个回调入口免后台登录、免终端总开关闸，后台集成管理写接口照旧要登录。第 419 条 419-R1：回执是统一包络，
+ * 事件编号与是否去重在 data 下；419-R2：验签失败与随机数重放回 401。</p>
  *
  * <p>签名密钥只用占位测试串（仓库公开）。第三方能力开关用后置回出厂的关；信封、被动留痕与留痕只增不删，夹具按纯数字后缀隔离、留在一次性库。</p>
  */
@@ -78,7 +81,6 @@ class CallbackOneShotJdbcIntegrationTests {
     private final String endpoint = "b86_ep_" + s;
     private final CountDownLatch release = new CountDownLatch(1);
     private final ExecutorService pool = Executors.newFixedThreadPool(2);
-    private RequestPostProcessor staff;
 
     @BeforeEach
     void seed() {
@@ -87,7 +89,6 @@ class CallbackOneShotJdbcIntegrationTests {
         }
         jdbc.update("INSERT INTO open_endpoint_configs (id, endpoint_key, provider_code, secret_ref, status, webhook_enabled, created_at, updated_at)"
                 + " VALUES (?, ?, ?, ?, 'active', TRUE, now(), now())", "oec_" + endpoint, endpoint, provider, "config:" + OPEN_SECRET_PROPERTY);
-        staff = new StaffRequestFixture(jdbc).staff("usr_b86cb_" + s, "staff", null, null);
     }
 
     @AfterEach
@@ -209,6 +210,61 @@ class CallbackOneShotJdbcIntegrationTests {
                 + " AND business_id = ?", String.class, ref)).containsExactly("VALIDATION_FAILED");
     }
 
+    // ── 第十八批 CK 段 418-R1、419-R1、419-R2 ──
+
+    /**
+     * 不带后台会话、不带任何终端头：签名正确的机器人上报与统一 webhook 都 200，回执是统一包络（事件编号与是否去重在 data 下、顶层没有）；
+     * 后台集成管理写接口（补偿任务）照旧 401 AUTH_SESSION_INVALID。修复前红：两个回调都 401 AUTH_SESSION_INVALID。
+     */
+    @Test
+    void callbacksNeedNoStaffSessionOrTerminalIdentity() throws Exception {
+        String ref = "robot-task-b109-anon-" + s;
+        Map<String, Object> robot = ok(robotReport(ref, "b109-robot-anon-" + s));
+        assertThat(robot).containsEntry("code", "OK");
+        assertThat(data(robot)).containsEntry("robot_task_ref", ref);
+        assertThat(robotRows(ref)).isEqualTo(1);
+
+        Map<String, Object> typed = ok(typedWebhook("b109-typed-anon-" + s, Map.of("sku", "A1")));
+        assertThat(typed).containsEntry("success", true).containsEntry("code", "OK")
+                .doesNotContainKeys("event_id", "deduplicated");
+        assertThat(typed.get("request_id")).isNotNull();
+        assertThat(typed.get("server_time")).isNotNull();
+        assertThat(data(typed)).containsEntry("deduplicated", false);
+        assertThat(data(typed).get("event_id")).isNotNull();
+
+        MockHttpServletResponse admin = mockMvc.perform(post("/api/v1/integration/compensation-tasks")
+                .contentType(MediaType.APPLICATION_JSON).content("{}")).andReturn().getResponse();
+        String adminBody = admin.getContentAsString(StandardCharsets.UTF_8);
+        assertThat(admin.getStatus()).as(adminBody).isEqualTo(401);
+        assertThat(JsonPath.<String>read(adminBody, "$.detail_code")).isEqualTo("AUTH_SESSION_INVALID");
+    }
+
+    /**
+     * 不带后台会话：缺签名的机器人上报与统一 webhook 回 401 INTEGRATION_WEBHOOK_SIGNATURE_INVALID；同一随机数再发一笔签名正确的机器人上报回 401
+     * INTEGRATION_WEBHOOK_NONCE_REPLAYED，被动留痕不增行。修复前红：都是 401 AUTH_SESSION_INVALID。
+     */
+    @Test
+    void callbacksFailingVerificationReturn401() throws Exception {
+        String ref = "robot-task-b109-verify-" + s;
+        assertUnauthorized(robotReport(ref, "b109-robot-unsigned-" + s, "n_" + UUID.randomUUID(), false),
+                "INTEGRATION_WEBHOOK_SIGNATURE_INVALID");
+        assertThat(robotRows(ref)).isZero();
+
+        String nonce = "n_" + UUID.randomUUID();
+        ok(robotReport(ref, "b109-robot-nonce-a-" + s, nonce, true));
+        assertUnauthorized(robotReport(ref, "b109-robot-nonce-b-" + s, nonce, true), "INTEGRATION_WEBHOOK_NONCE_REPLAYED");
+        assertThat(robotRows(ref)).isEqualTo(1);
+
+        assertUnauthorized(typedWebhook("b109-typed-unsigned-" + s, Map.of("sku", "A1"), false),
+                "INTEGRATION_WEBHOOK_SIGNATURE_INVALID");
+    }
+
+    private static void assertUnauthorized(MockHttpServletResponse response, String detailCode) throws Exception {
+        String body = response.getContentAsString(StandardCharsets.UTF_8);
+        assertThat(response.getStatus()).as(body).isEqualTo(401);
+        assertThat(JsonPath.<String>read(body, "$.detail_code")).isEqualTo(detailCode);
+    }
+
     // ── 夹具 ──
 
     /**
@@ -232,14 +288,22 @@ class CallbackOneShotJdbcIntegrationTests {
 
     /** 统一 webhook（零售 POS），每次新 nonce；幂等键只放请求头。 */
     private MockHttpServletResponse typedWebhook(String key, Map<String, Object> payload) throws Exception {
+        return typedWebhook(key, payload, true);
+    }
+
+    /** signed 为 false 时不带 X-Signature。 */
+    private MockHttpServletResponse typedWebhook(String key, Map<String, Object> payload, boolean signed) throws Exception {
         long ts = System.currentTimeMillis();
         String nonce = "n_" + UUID.randomUUID();
         String body = SORTED.writeValueAsString(payload);
-        return mockMvc.perform(post("/api/v1/integration/retail_pos/webhook").with(staff)
+        MockHttpServletRequestBuilder call = post("/api/v1/integration/retail_pos/webhook")
                 .header("X-Provider", provider)
-                .header("X-Signature", sign("retail_pos", "integration.retail_pos.webhook", key, body, ts, nonce))
                 .header("X-Timestamp", String.valueOf(ts)).header("X-Nonce", nonce).header("Idempotency-Key", key)
-                .contentType(MediaType.APPLICATION_JSON).content(body)).andReturn().getResponse();
+                .contentType(MediaType.APPLICATION_JSON).content(body);
+        if (signed) {
+            call.header("X-Signature", sign("retail_pos", "integration.retail_pos.webhook", key, body, ts, nonce));
+        }
+        return mockMvc.perform(call).andReturn().getResponse();
     }
 
     /** 开放平台 webhook（公开路径、本用例自建端点），每次新 nonce。 */
@@ -255,8 +319,12 @@ class CallbackOneShotJdbcIntegrationTests {
 
     /** 机器人上报（蛇形键），每次新 nonce；签名覆盖任务引用、事件类型、交接与载荷。key 为 null 时请求体不带幂等键。 */
     private MockHttpServletResponse robotReport(String ref, String key) throws Exception {
+        return robotReport(ref, key, "n_" + UUID.randomUUID(), true);
+    }
+
+    /** 随机数由调用方给（重放用例）；signed 为 false 时不带 X-Signature。 */
+    private MockHttpServletResponse robotReport(String ref, String key, String nonce, boolean signed) throws Exception {
         long ts = System.currentTimeMillis();
-        String nonce = "n_" + UUID.randomUUID();
         Map<String, Object> signable = new LinkedHashMap<>();
         signable.put("robot_task_ref", ref);
         signable.put("event_type", "delivered");
@@ -266,11 +334,14 @@ class CallbackOneShotJdbcIntegrationTests {
         if (key != null) {
             request.put("idempotency_key", key);
         }
-        return mockMvc.perform(post("/api/v1/integration/robot/report").with(staff)
+        MockHttpServletRequestBuilder call = post("/api/v1/integration/robot/report")
                 .header("X-Provider", provider)
-                .header("X-Signature", sign("robot", "integration.robot.report", String.valueOf(key), SORTED.writeValueAsString(signable), ts, nonce))
                 .header("X-Timestamp", String.valueOf(ts)).header("X-Nonce", nonce)
-                .contentType(MediaType.APPLICATION_JSON).content(SORTED.writeValueAsString(request))).andReturn().getResponse();
+                .contentType(MediaType.APPLICATION_JSON).content(SORTED.writeValueAsString(request));
+        if (signed) {
+            call.header("X-Signature", sign("robot", "integration.robot.report", String.valueOf(key), SORTED.writeValueAsString(signable), ts, nonce));
+        }
+        return mockMvc.perform(call).andReturn().getResponse();
     }
 
     /** 与 OpenPlatformCrypto 同算法：规范串换行拼接后用占位测试密钥 HmacSHA256 取十六进制；载荷哈希为按键排序 JSON 的 SHA-256。 */

@@ -1,4 +1,4 @@
-# P0 OpenAPI Operation 验收矩阵 V0.95
+# P0 OpenAPI Operation 验收矩阵 V0.96
 
 ## 1. 文档定位
 

@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "综合体管理系统 P0 API 契约",
-    "version": "V0.95",
+    "version": "V0.96",
     "description": "P0 首批编码前置契约。本文采用 JSON-compatible YAML，便于与 openapi-p0.json 保持一致。正式后端以 Java 21 + Spring Boot 4.x + springdoc-openapi 输出运行时 OpenAPI，并与本契约比对。"
   },
   "servers": [
@@ -8547,7 +8547,8 @@
         ],
         "operationId": "reportIntegrationRobotTaskEvent",
         "summary": "机器人任务事件上报（被动留痕）",
-        "description": "R5 T14：机器人被动留痕写回调，受终端能力开关 integration.robot.sync 编程式门控（关→TERMINAL_DISABLED）；handover_id 预留对接 T17 交接。真实回流闭环待厂商资料 + 开关开启后交付。第十八批 BN 段第 261 条 261-B23-R2（PGM:528⑤、PGM:303）：idempotency_key 必填，缺失 400 VALIDATION_FAILED；同一合作方（X-Provider）同一幂等键重投或同时投递只落一条被动留痕，返回首条记录并带 replayed=true、提示已完成；成功留痕 integration.robot_reported 的 metadata 带 deduplicated（重投照记）。",
+        "description": "R5 T14：机器人被动留痕写回调，受终端能力开关 integration.robot.sync 编程式门控（关→TERMINAL_DISABLED）；handover_id 预留对接 T17 交接。真实回流闭环待厂商资料 + 开关开启后交付。第十八批 BN 段第 261 条 261-B23-R2（PGM:528⑤、PGM:303）：idempotency_key 必填，缺失 400 VALIDATION_FAILED；同一合作方（X-Provider）同一幂等键重投或同时投递只落一条被动留痕，返回首条记录并带 replayed=true、提示已完成；成功留痕 integration.robot_reported 的 metadata 带 deduplicated（重投照记）。第十八批 CK 段第 418 条 418-R1（BSM:1511）：不需要后台登录、不过终端总开关闸，凭签名、时间戳和一次性随机数核验身份，仍受 integration.robot.sync 开关门控。",
+        "security": [],
         "x-permission": "not_applicable",
         "x-data-scope": "open-endpoint",
         "x-terminal-allowed": [],
@@ -8565,6 +8566,9 @@
             "$ref": "#/components/responses/Success"
           },
           "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
             "$ref": "#/components/responses/Error"
           },
           "403": {
@@ -8626,7 +8630,8 @@
         ],
         "operationId": "receiveIntegrationTypedWebhook",
         "summary": "第三方统一 webhook 入口（开关门控）",
-        "description": "R5 T14：各类第三方（catering_pos/retail_pos/robot/video/wecom/ticket_channel/payment/face_age）统一 webhook 入口。capability 随 {type} 动态拼接为 integration.{type}.sync，在 handler 内编程式调用 TerminalSwitchGuard.check（关→TERMINAL_DISABLED）。通过则落 open_api_events 信封（mapping 占位空、process_status=accepted），不伪造对账。第十八批 BN 段第 261 条 261-B23-R1（PGM:528⑤、PGM:303）：同一类型同一幂等键重投或同时投递只落一条，返回首次事件编号与 deduplicated=true；event_id 已被别的回调占用时 409 DUPLICATE_KEY，不覆盖原事件；成功留痕 integration.webhook_received 的 metadata 带 deduplicated（重投照记）。",
+        "description": "R5 T14：各类第三方（catering_pos/retail_pos/robot/video/wecom/ticket_channel/payment/face_age）统一 webhook 入口。capability 随 {type} 动态拼接为 integration.{type}.sync，在 handler 内编程式调用 TerminalSwitchGuard.check（关→TERMINAL_DISABLED）。通过则落 open_api_events 信封（mapping 占位空、process_status=accepted），不伪造对账。第十八批 BN 段第 261 条 261-B23-R1（PGM:528⑤、PGM:303）：同一类型同一幂等键重投或同时投递只落一条，返回首次事件编号与 deduplicated=true；event_id 已被别的回调占用时 409 DUPLICATE_KEY，不覆盖原事件；成功留痕 integration.webhook_received 的 metadata 带 deduplicated（重投照记）。第十八批 CK 段第 418 条 418-R1（BSM:1511）：不需要后台登录、不过终端总开关闸，凭签名、时间戳和一次性随机数核验身份，仍受 integration.{type}.sync 开关门控。",
+        "security": [],
         "x-permission": "not_applicable",
         "x-data-scope": "open-endpoint",
         "x-terminal-allowed": [],
@@ -8665,6 +8670,9 @@
             "$ref": "#/components/responses/WebhookAccepted"
           },
           "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
             "$ref": "#/components/responses/Error"
           },
           "403": {
@@ -92645,14 +92653,13 @@
             },
             "example": {
               "success": true,
-              "trace_id": "req_20260612_000003",
+              "code": "OK",
+              "message": "success",
+              "request_id": "req_20260612_000003",
+              "server_time": "2026-06-12T12:00:00Z",
               "data": {
                 "event_id": "evt_platform_20260612_000001",
-                "dedup_status": "created",
-                "compensation_required": false
-              },
-              "meta": {
-                "server_time": "2026-06-12T12:00:00Z"
+                "deduplicated": false
               }
             }
           }
@@ -93368,48 +93375,34 @@
         "description": "provideradapter请求体。字段必须与 OpenAPI、后端 DTO、前端请求、Android 请求和供应商 mock 保持一致。"
       },
       "WebhookAccepted": {
-        "type": "object",
-        "required": [
-          "success",
-          "code",
-          "event_id",
-          "deduplicated",
-          "request_id",
-          "server_time"
-        ],
-        "properties": {
-          "success": {
-            "type": "boolean",
-            "const": true,
-            "description": "Webhook 是否已被平台接收；接收成功不等于业务处理成功。"
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/SuccessResponse"
           },
-          "code": {
-            "type": "string",
-            "example": "ACCEPTED",
-            "description": "Webhook 接收响应码；用于供应商判断是否需要重试。",
-            "maxLength": 128
-          },
-          "event_id": {
-            "type": "string",
-            "description": "供应商事件 ID；用于幂等去重、对账和异常补偿。",
-            "maxLength": 64
-          },
-          "deduplicated": {
-            "type": "boolean",
-            "description": "是否为重复事件；重复事件应返回已接收但不得重复执行业务动作。"
-          },
-          "request_id": {
-            "type": "string",
-            "description": "请求唯一 ID，用于日志追踪、客服排查和跨系统对账。",
-            "maxLength": 64
-          },
-          "server_time": {
-            "type": "string",
-            "format": "date-time",
-            "description": "服务端接收时间，ISO 8601 格式。"
+          {
+            "type": "object",
+            "properties": {
+              "data": {
+                "type": "object",
+                "required": [
+                  "event_id",
+                  "deduplicated"
+                ],
+                "properties": {
+                  "event_id": {
+                    "type": "string",
+                    "description": "回调事件编号：请求体带 event_id 就用它，否则平台生成 evt_ 开头的编号；同一幂等键重投时返回首次的事件编号。",
+                    "maxLength": 64
+                  },
+                  "deduplicated": {
+                    "type": "boolean",
+                    "description": "是否同一幂等键的重投，为 true 时没有新落信封。"
+                  }
+                }
+              }
+            }
           }
-        },
-        "description": "webhookaccepted请求体。字段必须与 OpenAPI、后端 DTO、前端请求、Android 请求和供应商 mock 保持一致。"
+        ]
       },
       "LoginRequest": {
         "type": "object",

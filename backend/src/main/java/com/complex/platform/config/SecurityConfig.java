@@ -1,6 +1,6 @@
 package com.complex.platform.config;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import com.complex.platform.auth.BearerAuthenticationFilter;
 import com.complex.platform.auth.CustomerTokenAuthenticationFilter;
@@ -124,6 +124,10 @@ public class SecurityConfig {
                 "/api/v1/auth/master/**",
                 "/api/v1/customer/**",
                 "/api/open/**",
+                // 第十八批 CK 段 418-R1（BSM:1511「第三方可以在身份核验后读取或回写平台数据」）：统一 webhook 与机器人上报两个第三方回调，
+                // 凭签名、时间戳、一次性随机数核验身份（ThirdPartyScaffoldingService.verifyWebhookSignature），不要后台登录。
+                "/api/v1/integration/*/webhook",
+                "/api/v1/integration/robot/report",
                 "/api/v1/terminals/kiosks/*/config",
                 "/api/v1/terminals/kiosks/*/heartbeat",
                 "/api/v1/terminals/kiosks/*/locker-events",
