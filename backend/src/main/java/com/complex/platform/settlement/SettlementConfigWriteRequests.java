@@ -1,6 +1,6 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.07
+// 文件版本：V0.08
 
 import java.util.List;
 
@@ -8,9 +8,10 @@ import java.util.List;
  * 结算配置中心批1 写入面请求 DTO 族(§2)。JSON 全局 SNAKE_CASE:字段 idempotencyKey ↔ idempotency_key 等。
  * 所有写入落草案(服务层强制 is_draft=TRUE),需 idempotency_key,平台 scope + settlement.config.manage。
  *
- * <p>TODO(生效日期调度):5 张单行表有 effective_from/effective_to 列,但所有 finder 均不按结算月过滤=形同虚设
- * (排期下月转正后当月即按新值结算=按错时点)。批1 不接收该二字段(写面不赋值、留 null);生效日期调度=独立功能,
- * 需 finder 按结算月过滤 effective_from/to 才能开放,届时随写面一并加。
+ * <p>第十八批 BQ 段第 371 条 371-R1、371-R3（BSM:521「必须填写生效起始日期，并先存为草案、经高敏权限“转正”审批通过后按指定日期生效，不即改即生效」）：
+ * 分配方式、门票综合服务费、通票凑整参数、渠道费用、卡座提成费率、赠送权益预估成本与高价值判定阈值的请求收 effectiveFrom（生效起始日期，年-月-日，
+ * 必填、须晚于该配置范围当前营业日）；批准后待生效，到日由 {@link SettlementConfigScheduledActivationService} 转正，读侧 finder 仍只认生效行。
+ * effective_to 不启用（旧版由新版到日替换）；积分累计率、收入流业态归因与商户每客单价不收该字段。
  */
 public final class SettlementConfigWriteRequests {
 
@@ -26,7 +27,8 @@ public final class SettlementConfigWriteRequests {
      */
     public record DistributionMethodRequest(String idempotencyKey, String projectId, String methodType,
                                             Integer specialApprovalTermValue, String specialApprovalTermUnit,
-                                            Integer specialApprovalTermMinValue, Integer specialApprovalTermMaxValue) {
+                                            Integer specialApprovalTermMinValue, Integer specialApprovalTermMaxValue,
+                                            String effectiveFrom) {
     }
 
     /** ticket_distribution_merchant_rates:某商户每客单价/固定额(分),两额至少配一、各≥0。 */
@@ -43,7 +45,7 @@ public final class SettlementConfigWriteRequests {
      */
     public record ComprehensiveServiceFeeRequest(String idempotencyKey, String projectId, String merchantId,
                                                  String ticketTypeId, Integer feeBps, Long fixedAmountCent,
-                                                 Long monthlyCapAmountCent) {
+                                                 Long monthlyCapAmountCent, String effectiveFrom) {
     }
 
     /**
@@ -58,7 +60,7 @@ public final class SettlementConfigWriteRequests {
      */
     public record ComboDiscountRequest(String idempotencyKey, String projectId, Long roundingToleranceCent,
                                        Long roundingToleranceMinCent, Long roundingToleranceMaxCent,
-                                       List<Integer> roundingAllowedEndings) {
+                                       List<Integer> roundingAllowedEndings, String effectiveFrom) {
     }
 
     /**
@@ -67,7 +69,7 @@ public final class SettlementConfigWriteRequests {
      * 比例(feeBps∈[0,10000])或每张票固定金额(fixedAmountCent,分,≥0)二选一(V381 chk_cfc_fee_mode:配固定金额则 feeBps 必 0)。
      */
     public record ChannelFeeRequest(String idempotencyKey, String projectId, String feeLayer, String channel, Integer feeBps,
-                                    Long fixedAmountCent) {
+                                    Long fixedAmountCent, String effectiveFrom) {
     }
 
     /** ticket_distribution_rank_tiers:by_rank_tier 排名档位梯子(整套替换草案)。 */
@@ -92,7 +94,7 @@ public final class SettlementConfigWriteRequests {
      * roleType ∈{sales,non_sales};merchantId 留空=该项目通用;rateBp∈[0,10000](出厂默认 sales=1500/non_sales=1000)。
      */
     public record CommissionRateRequest(String idempotencyKey, String projectId, String merchantId,
-                                        String roleType, Integer rateBp) {
+                                        String roleType, Integer rateBp, String effectiveFrom) {
     }
 
     /**
@@ -106,10 +108,11 @@ public final class SettlementConfigWriteRequests {
     /**
      * 第十八批第 24 条 high_value_thresholds：全平台统一「高价值物品」判定阈值（退酒/报损/盘点差异/存酒作废共用，ENUM:164）。
      * highValueThresholdCent＝物品最近一次实际到货价大于或等于本值即高价值，单位分；须同时配置下限与上限（0 ≤ 下限 ≤ 阈值 ≤ 上限）；
-     * 出厂默认 500000（5000 元）；reason 必填，提交后进最高权限审批，批准后生效。
+     * 出厂默认 500000（5000 元）；reason 必填，提交后进最高权限审批，批准后按生效起始日期（effectiveFrom，371-R3）生效。
      */
     public record HighValueThresholdRequest(String idempotencyKey, Long highValueThresholdCent,
-                                          Long highValueThresholdMinCent, Long highValueThresholdMaxCent, String reason) {
+                                          Long highValueThresholdMinCent, Long highValueThresholdMaxCent, String reason,
+                                          String effectiveFrom) {
     }
 
     /**
@@ -121,7 +124,7 @@ public final class SettlementConfigWriteRequests {
      */
     public record PassGiftCostRequest(String idempotencyKey, String projectId, String ticketTypeId,
                                       String predeductMode, Long ticketGiftAmountCent,
-                                      Long monthlyCapAmountCent, String varianceHandling) {
+                                      Long monthlyCapAmountCent, String varianceHandling, String effectiveFrom) {
     }
 
     /** 梯子整体转正 body(§3):projectId 可空=全局默认梯子。 */

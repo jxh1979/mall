@@ -2318,6 +2318,7 @@
     "settlement.config.high_value_thresholds.updated": "提交高价值判定阈值调整",
     "settlement.config.internal_price_catalog.effective": "内部结算价按生效日期生效",
     "settlement.config.internal_price_catalog.effective_failed": "内部结算价按生效日期生效失败",
+    "settlement.config.version.effective": "结算配置按生效日期生效",
     "settlement.config.internal_price_catalog.update_failed": "维护内部结算价目条目失败",
     "settlement.config.internal_price_catalog.updated": "维护内部结算价目条目",
     "settlement.config.pass_gift_cost_configs.update_failed": "维护赠送权益预估成本预扣规则失败",

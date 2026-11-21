@@ -1,6 +1,6 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -11,10 +11,14 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.complex.platform.access.AccessActor;
 import com.complex.platform.amusement.AmusementBusinessDayTestFixture;
+import com.complex.platform.common.BusinessDayResolver;
 import com.complex.platform.governance.review.SupervisorReviewApprovalRequest;
 import com.complex.platform.governance.review.SupervisorReviewService;
 import com.complex.platform.inventory.HighValueDecisionService;
 import com.complex.platform.support.TestSecurityActors;
+import java.time.Duration;
+import java.time.Instant;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.AfterEach;
@@ -37,6 +41,8 @@ import org.springframework.transaction.annotation.Transactional;
  * 出厂默认 5000 元，须同时配置上下限），大于或等于阈值即高价值」。全平台只一行；阈值与下限、上限同时必填、理由必填；
  * 提交即进最高权限审批（照酒吧营业日 BarBusinessDayJdbcIntegrationTests），批准后生效、驳回不生效，结算配置的差人复核转正不再适用。
  * 请求体按前端 adminClient 蛇形键。
+ * 第十八批 BQ 段第 371 条 371-R3（BSM:521「必须填写生效起始日期……按指定日期生效，不即改即生效」「无法判断是否涉及钱的，一律按涉及钱处理。」）：
+ * 生效起始日期必填（晚于平台默认当前营业日），最高权限批准后待生效、到日由系统转正；批准时日期已到的草案下线、阈值不变。
  */
 @SpringBootTest(properties = {
         "spring.datasource.url=${SETTLE_TEST_DB_URL:jdbc:postgresql://127.0.0.1:5432/complex_test}",
@@ -53,13 +59,17 @@ class HighValueThresholdMasterApprovalJdbcIntegrationTests {
     @Autowired private JdbcTemplate jdbc;
     @Autowired private SupervisorReviewService reviews;
     @Autowired private HighValueDecisionService decisions;
+    @Autowired private BusinessDayResolver businessDays;
+    @Autowired private SettlementConfigScheduledActivationService activation;
 
     private final String suffix = UUID.randomUUID().toString().replace("-", "").substring(0, 12);
     private String project;
+    private LocalDate today;
 
     @BeforeEach
     void seed() {
         project = AmusementBusinessDayTestFixture.complex(jdbc);
+        today = businessDays.businessDate(null, null, Instant.now());
     }
 
     @AfterEach
@@ -132,7 +142,11 @@ class HighValueThresholdMasterApprovalJdbcIntegrationTests {
                 Long.class)).isEqualTo(600_000L);
     }
 
-    /** 上级同意后仍待审，非最高权限不能批；最高权限批准后判定读到新阈值，出厂默认行停用。 */
+    /**
+     * 上级同意后仍待审，非最高权限不能批；最高权限批准后待生效、判定仍读原阈值，未到日作业照跑也不转正；到生效起始日期由系统转正后读到新阈值，出厂默认行停用，
+     * 落一条按生效日期生效留痕。
+     * 371-R3 修复前批准即生效，断言红。
+     */
     @Test
     void onlyTopAuthorityApprovalActivatesThresholdAndRetiresFactorySeed() throws Exception {
         String requester = "hvt_req2_" + suffix;
@@ -152,8 +166,56 @@ class HighValueThresholdMasterApprovalJdbcIntegrationTests {
 
         AmusementBusinessDayTestFixture.master();
         reviews.approve(review, decision("master", "approved"));
+        String draft = jdbc.queryForObject("SELECT object_id FROM supervisor_review_decisions WHERE review_id=?", String.class, review);
+        assertThat(jdbc.queryForObject("SELECT status || '|' || is_draft FROM high_value_thresholds WHERE id=?", String.class, draft))
+                .isEqualTo("scheduled|false");
+        assertThat(thresholdNow()).isEqualTo(500_000L);
+        activation.activateDue(Instant.now());
+        assertThat(thresholdNow()).as("未到生效起始日期，作业不转正").isEqualTo(500_000L);
+
+        activation.activateDue(Instant.now().plus(Duration.ofDays(1)));
         assertThat(thresholdNow()).isEqualTo(600_000L);
         assertThat(jdbc.queryForObject("SELECT status FROM high_value_thresholds WHERE id='hvt_default'", String.class)).isEqualTo("inactive");
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM audit_events WHERE event_name='settlement.config.version.effective' AND business_id=?",
+                Integer.class, draft)).isEqualTo(1);
+    }
+
+    /** 371-R3：不填生效起始日期、填当天（平台默认营业日）都 400，不落草案。修复前不收日期，断言红。 */
+    @Test
+    void effectiveFromIsRequiredAndMustBeAfterToday() throws Exception {
+        String requester = "hvt_eff_" + suffix;
+        RequestPostProcessor who = staff(requester);
+        submit(who, body(600_000, 100_000, 1_000_000, "缺生效起始日期", null))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.detail_code").value("VALIDATION_FAILED"));
+        submit(who, body(600_000, 100_000, 1_000_000, "生效起始日期为今天", today))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.detail_code").value("VALIDATION_FAILED"));
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM high_value_thresholds WHERE updated_by=?", Integer.class, requester)).isZero();
+    }
+
+    /** 371-R3：最高权限批准时生效起始日期已到（平台默认营业日）→ 审批照常记批准，草案下线并写明「生效起始日期已到」，阈值不变。修复前批准即生效，断言红。 */
+    @Test
+    void approvalAfterTheEffectiveDateHasArrivedRetiresTheDraft() throws Exception {
+        String requester = "hvt_late_" + suffix;
+        RequestPostProcessor who = staff(requester);
+        String superior = AmusementBusinessDayTestFixture.actor(jdbc, project,
+                List.of("governance.supervisor_review.approve", "governance.supervisor_review.view"));
+        jdbc.update("INSERT INTO org_hierarchy(user_id,superior_id) VALUES(?,?)", requester, superior);
+        submit(who, body(600_000, 100_000, 1_000_000, "按近一年到货价复核")).andExpect(status().isOk());
+        String draft = draftOf(requester);
+        String review = reviewOf(requester);
+        jdbc.update("UPDATE high_value_thresholds SET effective_from=? WHERE id=?", today, draft);
+
+        AmusementBusinessDayTestFixture.authenticate(superior, project);
+        reviews.approve(review, decision("superior", "approved"));
+        AmusementBusinessDayTestFixture.master();
+        reviews.approve(review, decision("master", "approved"));
+
+        assertThat(jdbc.queryForObject("SELECT review_status FROM supervisor_review_decisions WHERE review_id=?", String.class, review))
+                .isEqualTo("approved");
+        assertThat(jdbc.queryForObject("SELECT status FROM high_value_thresholds WHERE id=?", String.class, draft)).isEqualTo("inactive");
+        assertThat(jdbc.queryForObject("SELECT archive_reason FROM high_value_thresholds WHERE id=?", String.class, draft))
+                .contains("生效起始日期已到");
+        assertThat(thresholdNow()).isEqualTo(500_000L);
     }
 
     /** 最高权限驳回 → 草案下线，判定仍读原阈值。 */
@@ -172,10 +234,16 @@ class HighValueThresholdMasterApprovalJdbcIntegrationTests {
     }
 
     private String body(long cent, long min, long max, String reason) {
+        return body(cent, min, max, reason, today.plusDays(1));
+    }
+
+    /** 371-R3：生效起始日期为空则不带该键。 */
+    private String body(long cent, long min, long max, String reason, LocalDate effectiveFrom) {
         return """
                 {"idempotency_key":"hvt-%s","high_value_threshold_cent":%d,"high_value_threshold_min_cent":%d,
-                 "high_value_threshold_max_cent":%d,"reason":"%s"}
-                """.formatted(UUID.randomUUID(), cent, min, max, reason);
+                 "high_value_threshold_max_cent":%d,"reason":"%s"%s}
+                """.formatted(UUID.randomUUID(), cent, min, max, reason,
+                effectiveFrom == null ? "" : ",\"effective_from\":\"" + effectiveFrom + "\"");
     }
 
     private ResultActions submit(RequestPostProcessor who, String body) throws Exception {

@@ -1,4 +1,4 @@
-// 文件版本：V0.10
+// 文件版本：V0.11
 import React from "react";
 import { Tabs } from "antd";
 import { AdminDataState } from "../components/AdminDataState";
@@ -44,11 +44,11 @@ type BlockDef = { key: EditKey; title: string; defaultKey?: string; note?: strin
 const BLOCKS: BlockDef[] = [
   { key: "distribution_method", title: "各酒吧分配方式（第二段）", defaultKey: "distribution_method", endpoint: "distribution-method", note: "两段分配：第一段名单内的酒吧每份票按固定金额或固定单价先拿（不再参与第二段）；其余覆盖酒吧按下方通票分账方案的参与家数档位表分第二段。此处配分配方式与短期经营激励单次有效期上限（按项目可配，出厂 3 个月，须同时配置上下限）。" },
   { key: "comprehensive_service_fee", title: "门票综合服务费", defaultKey: "comprehensive_service_fee", endpoint: "comprehensive-service-fee", note: "按「项目 × 商户 × 票种」配置（商户 / 票种留空 = 通用）。即娱乐平台公司留存 / 项目管理费——与原「项目公司留存比例」为同一项、只扣一次，原留存卡片已并入本费率。" },
-  { key: "pass_gift_cost", title: "赠送权益预估成本", defaultKey: "pass_gift_cost", endpoint: "pass-gift-cost", note: "通票分账在进入可分配池之前预扣的一笔「赠送权益预估成本」，归娱乐平台公司。按「项目 × 票种」配置（票种留空 = 通用）：按件计 = 票面各赠送权益数量 × 提供方内部结算价之和（金额由票面推导，无需手填）；按票计 = 该票种赠送部分的售价整额。商户让利型权益（在票种配置里标明）不进预扣。改动落草案、复核转正后生效。" },
+  { key: "pass_gift_cost", title: "赠送权益预估成本", defaultKey: "pass_gift_cost", endpoint: "pass-gift-cost", note: "通票分账在进入可分配池之前预扣的一笔「赠送权益预估成本」，归娱乐平台公司。按「项目 × 票种」配置（票种留空 = 通用）：按件计 = 票面各赠送权益数量 × 提供方内部结算价之和（金额由票面推导，无需手填）；按票计 = 该票种赠送部分的售价整额。商户让利型权益（在票种配置里标明）不进预扣。改动落草案、复核转正后按生效起始日期生效。" },
   // 第十八批 AW 段 293-R2（BSM:754「凑整产生的差额按各业态价格比例，与折扣一并分摊到各域，由各域主管公司按份额各自承担或取得」）：不再配折扣归属；
   // 339-R2（BSM:754「允许误差可配（业务参数，全平台统一可配，出厂默认 5 元，须同时配置上下限）」）：全平台一行，误差与上下限同填。
   { key: "combo_discount", title: "通票凑整参数（允许误差与允许尾数）", defaultKey: "rounding_tolerance_cent", endpoint: "combo-discount", note: "全平台统一配置：运营给通票填的售价与系统按各业态价格×折扣算出的售价，差额超过「通票凑整允许误差」的票一律不许开卖；允许误差须同时配置上下限。" },
-  { key: "channel_fee", title: "渠道费用（通路费／销售渠道费）", endpoint: "channel-fee", note: "两层分别配、不可混用：通路费按支付通路（微信、支付宝、聚合支付、银联及第三方回款通路，填通路码）配比例，所有付款都扣、官方渠道同样扣；销售渠道费按第三方销售渠道（美团、抖音等，填渠道码，留空＝第三方通用）配比例或每张票固定金额，只有第三方渠道售出的票才扣、官方渠道不扣。两层都在拆分各业态之前从整单扣、由各业态按份额共担。改动落草案。" },
+  { key: "channel_fee", title: "渠道费用（通路费／销售渠道费）", endpoint: "channel-fee", note: "两层分别配、不可混用：通路费按支付通路（微信、支付宝、聚合支付、银联及第三方回款通路，填通路码）配比例，所有付款都扣、官方渠道同样扣；销售渠道费按第三方销售渠道（美团、抖音等，填渠道码，留空＝第三方通用）配比例或每张票固定金额，只有第三方渠道售出的票才扣、官方渠道不扣。两层都在拆分各业态之前从整单扣、由各业态按份额共担。改动落草案并须填生效起始日期（按营业日，须晚于今天）；复核批准后待生效，到日由系统生效，旧版本留档。" },
   { key: "revenue_stream_attribution", title: "收入流业态归因", endpoint: "revenue-stream-attribution", note: "六业态收入流 → 管理公司 / 业态主体，改动落草案；可对草案「下线」。" },
 ];
 
@@ -76,11 +76,17 @@ const HIGH_VALUE_BLOCKS: BlockDef[] = [
     title: "高价值判定阈值（最近一次实际到货价）",
     defaultKey: "high_value_threshold_cent",
     endpoint: "high-value-threshold",
-    note: "全平台统一一个金额（当前生效值以分计）：物品最近一次实际到货价大于或等于该值即高价值，退酒、报损、盘点差异、存酒作废共用。出厂默认 5000 元；调整须同时填写阈值的下限与上限和调整理由，提交后进最高权限审批，批准后才生效。",
+    note: "全平台统一一个金额（当前生效值以分计）：物品最近一次实际到货价大于或等于该值即高价值，退酒、报损、盘点差异、存酒作废共用。出厂默认 5000 元；调整须同时填写阈值的下限与上限和调整理由，提交后进最高权限审批，批准后按生效起始日期生效。",
   },
 ];
 
 const ALL_BLOCKS: BlockDef[] = [...BLOCKS, ...COMMISSION_POINTS_BLOCKS, ...HIGH_VALUE_BLOCKS];
+// 第十八批 BQ 段第 371 条 371-R2、371-R3（BSM:521「所有涉及钱的配置一律版本化：每次改动生成新版本，必须填写生效起始日期，并先存为草案、
+// 经高敏权限“转正”审批通过后按指定日期生效，不即改即生效」）：这些配置的草案须带生效起始日期（晚于今天由后端按营业日判）。
+const DATED_KEYS = new Set<EditKey>([
+  "distribution_method", "comprehensive_service_fee", "pass_gift_cost", "combo_discount", "channel_fee", "commission_rate",
+  "high_value_threshold",
+]);
 
 const ROLE_TYPE_OPTIONS: [string, string][] = [
   ["sales", "销售人员"],
@@ -215,6 +221,8 @@ type Form = {
   highValueThresholdMinYuan: string;
   highValueThresholdMaxYuan: string;
   reason: string;
+  // 371-R2：生效起始日期（年-月-日）。
+  effectiveFrom: string;
 };
 const EMPTY_FORM: Form = {
   projectId: "", methodType: "by_rank_tier",
@@ -226,6 +234,7 @@ const EMPTY_FORM: Form = {
   roleType: "sales", rateBp: "", amountCentPerPoint: "",
   predeductMode: "by_ticket_amount", ticketGiftAmountYuan: "",
   highValueThresholdYuan: "", highValueThresholdMinYuan: "", highValueThresholdMaxYuan: "", reason: "",
+  effectiveFrom: "",
 };
 
 function nextKey(prefix: string) {
@@ -503,7 +512,7 @@ export function SettlementConfigPage({ api, setGlobalError, effectivePermissions
   const highValueTab = (
     <div data-testid="settlement-config-high-value">
       <p className="admin-muted-action">
-        高价值判定阈值全平台统一，调整须经最高权限审批并留痕：提交后在「审批链与节点裁决」页由最高权限人员审批，批准后才生效，驳回则维持原值。
+        高价值判定阈值全平台统一，调整须经最高权限审批并留痕：提交后在「审批链与节点裁决」页由最高权限人员审批，批准后按生效起始日期生效，驳回则维持原值。
       </p>
       {renderBlocks(HIGH_VALUE_BLOCKS)}
     </div>
@@ -748,10 +757,21 @@ function editSteps(
         <label>调整理由<input data-testid="settlement-config-field-reason" value={form.reason} onChange={setField("reason")} /></label></>);
       break;
   }
+  if (DATED_KEYS.has(key)) {
+    content = (<>{content}
+      <label>生效起始日期（按营业日，须晚于今天；批准后到该日起生效）
+        <input data-testid="settlement-config-field-effectiveFrom" type="date" value={form.effectiveFrom} onChange={setField("effectiveFrom")} />
+      </label></>);
+  }
   return [{ title: "配置内容", validate: () => validate(key, form), content }];
 }
 
 function editSummary(key: EditKey, form: Form, ticketTypes: TicketTypeOption[]): GuidedSummaryItem[] {
+  const items = summaryFields(key, form, ticketTypes);
+  return DATED_KEYS.has(key) ? [...items, { label: "生效起始日期", value: form.effectiveFrom }] : items;
+}
+
+function summaryFields(key: EditKey, form: Form, ticketTypes: TicketTypeOption[]): GuidedSummaryItem[] {
   const scope: GuidedSummaryItem = { label: "项目", value: form.projectId.trim() || "全平台默认" };
   // 确认页给票名而不是 id —— 复核的人要看得出这条费率影响的是哪个票。
   const ticketTypeLabel = (id: string) => {
@@ -779,12 +799,18 @@ function editSummary(key: EditKey, form: Form, ticketTypes: TicketTypeOption[]):
     case "points_accrual_rate": return [scope, { label: "商户", value: form.merchantId.trim() || "通用" }, { label: "每积1分所需消费（分）", value: form.amountCentPerPoint || "—" }];
     case "high_value_threshold": return [{ label: "作用范围", value: "全平台统一" },
       { label: "高价值判定阈值", value: `${form.highValueThresholdYuan} 元（下限 ${form.highValueThresholdMinYuan} 元，上限 ${form.highValueThresholdMaxYuan} 元）` },
-      { label: "调整理由", value: form.reason.trim() }, { label: "生效方式", value: "最高权限审批批准后生效" }];
+      { label: "调整理由", value: form.reason.trim() }, { label: "生效方式", value: "最高权限审批批准后按生效起始日期生效" }];
   }
 }
 
 // 单屏校验（返回中文错误则阻止提交，null 放行）。
 function validate(key: EditKey, form: Form): string | null {
+  const invalid = validateFields(key, form);
+  if (invalid) return invalid;
+  return DATED_KEYS.has(key) && form.effectiveFrom.trim() === "" ? "生效起始日期必填。" : null;
+}
+
+function validateFields(key: EditKey, form: Form): string | null {
   switch (key) {
     case "distribution_method":
       // 第 75 条（ENUM 第 52 行「初始有效期不超过后台配置的上限（业务参数，按项目可配，出厂默认三个月，须同时配置上下限）」）：
@@ -856,6 +882,11 @@ function validate(key: EditKey, form: Form): string | null {
 // 构造落草案请求体（camelCase；adminClient 会归一为 snake_case 并注入 idempotency_key，此处仍显式带上）。
 // 抛错=校验未过（提交前 GuidedFlowModal 已跑 validate，这里是二次防线）。
 function buildBody(key: EditKey, form: Form, idempotencyKey: string): Record<string, unknown> {
+  const body = buildFields(key, form, idempotencyKey);
+  return DATED_KEYS.has(key) ? { ...body, effectiveFrom: form.effectiveFrom.trim() } : body;
+}
+
+function buildFields(key: EditKey, form: Form, idempotencyKey: string): Record<string, unknown> {
   const invalid = validate(key, form);
   if (invalid) throw new Error(invalid);
   const project = orUndef(form.projectId);

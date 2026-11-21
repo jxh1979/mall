@@ -1,4 +1,4 @@
-// 文件版本：V0.08
+// 文件版本：V0.09
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -61,6 +61,11 @@ function renderPage(api: AdminApiClient, setGlobalError = vi.fn()) {
 
 afterEach(() => vi.restoreAllMocks());
 
+// 第十八批 BQ 段第 371 条 371-R2、371-R3（BSM:521「必须填写生效起始日期……按指定日期生效，不即改即生效」）：涉钱配置草案填生效起始日期。
+function fillEffectiveFrom(value = "2026-12-01") {
+  fireEvent.change(screen.getByTestId("settlement-config-field-effectiveFrom"), { target: { value } });
+}
+
 describe("SettlementConfigPage 结算配置中心(ADM-STL-001)", () => {
   it("概览默认展示当前生效默认值 + 无草案空态", async () => {
     const get = vi.fn().mockResolvedValue(OVERVIEW_NO_DRAFT);
@@ -110,11 +115,12 @@ describe("SettlementConfigPage 结算配置中心(ADM-STL-001)", () => {
     expect(screen.queryByTestId("settlement-config-field-discountBearer")).toBeNull();
     expect(screen.queryByTestId("settlement-config-field-splitPlatformBps")).toBeNull();
     fillToleranceBounds("0", "10");
+    fillEffectiveFrom();
     fireEvent.click(screen.getByTestId("settlement-config-guided-next"));
     fireEvent.click(await screen.findByTestId("settlement-config-submit"));
     await waitFor(() => expect(post).toHaveBeenCalledWith(
       "/api/v1/settlement/config/combo-discount",
-      expect.objectContaining({ idempotencyKey: expect.any(String), roundingToleranceCent: 500 }),
+      expect.objectContaining({ idempotencyKey: expect.any(String), roundingToleranceCent: 500, effectiveFrom: "2026-12-01" }),
     ));
     expect(post.mock.calls[0]?.[1]).not.toHaveProperty("discountBearer");
     expect(post.mock.calls[0]?.[1]).not.toHaveProperty("splitPlatformBps");
@@ -136,11 +142,13 @@ describe("SettlementConfigPage 结算配置中心(ADM-STL-001)", () => {
     expect(post).not.toHaveBeenCalled();
 
     fillToleranceBounds("1", "8.5");
+    fillEffectiveFrom();
     fireEvent.click(screen.getByTestId("settlement-config-guided-next"));
     fireEvent.click(await screen.findByTestId("settlement-config-submit"));
     await waitFor(() => expect(post).toHaveBeenCalledWith(
       "/api/v1/settlement/config/combo-discount",
-      expect.objectContaining({ roundingToleranceCent: 500, roundingToleranceMinCent: 100, roundingToleranceMaxCent: 850 }),
+      expect.objectContaining({ roundingToleranceCent: 500, roundingToleranceMinCent: 100, roundingToleranceMaxCent: 850,
+        effectiveFrom: "2026-12-01" }),
     ));
     expect(post.mock.calls[0]?.[1]).not.toHaveProperty("projectId");
   });
@@ -156,12 +164,14 @@ describe("SettlementConfigPage 结算配置中心(ADM-STL-001)", () => {
     fireEvent.click(screen.getByLabelText("尾数 8"));
     fireEvent.click(screen.getByLabelText("尾数 5"));
     fillToleranceBounds("0", "10");
+    fillEffectiveFrom();
     fireEvent.click(screen.getByTestId("settlement-config-guided-next"));
     await waitFor(() => expect(screen.getByText("0、5、9")).toBeTruthy());
     fireEvent.click(screen.getByTestId("settlement-config-submit"));
     await waitFor(() => expect(post).toHaveBeenCalledWith("/api/v1/settlement/config/combo-discount", expect.anything()));
-    const body = post.mock.calls[0]?.[1] as { roundingAllowedEndings: number[] };
+    const body = post.mock.calls[0]?.[1] as { roundingAllowedEndings: number[]; effectiveFrom: string };
     expect([...body.roundingAllowedEndings].sort((a, b) => a - b)).toEqual([0, 5, 9]);
+    expect(body.effectiveFrom).toBe("2026-12-01");
   });
 
   it("允许尾数全部取消时不发请求并提示至少选一个", async () => {
@@ -234,6 +244,9 @@ describe("SettlementConfigPage 结算配置中心(ADM-STL-001)", () => {
     const post = vi.fn().mockResolvedValue({});
     renderPage(makeApi(vi.fn().mockResolvedValue(OVERVIEW_NO_DRAFT), post));
     await waitFor(() => expect(screen.queryByTestId("settlement-config-edit-channel_fee")).not.toBeNull());
+    // 第十八批 BQ 段第 360 条 360-R3（BSM:521「必须填写生效起始日期……按指定日期生效，不即改即生效」；第十八批裁决 72「旧版保留」）。
+    expect(screen.getByTestId("settlement-config-block-channel_fee").textContent)
+      .toContain("改动落草案并须填生效起始日期（按营业日，须晚于今天）；复核批准后待生效，到日由系统生效，旧版本留档。");
     fireEvent.click(screen.getByTestId("settlement-config-edit-channel_fee"));
     await waitFor(() => expect(screen.queryByTestId("settlement-config-field-feeLayer")).not.toBeNull());
 
@@ -244,11 +257,13 @@ describe("SettlementConfigPage 结算配置中心(ADM-STL-001)", () => {
 
     fireEvent.change(screen.getByTestId("settlement-config-field-channel"), { target: { value: "wechat" } });
     fireEvent.change(screen.getByTestId("settlement-config-field-feeBps"), { target: { value: "60" } });
+    fillEffectiveFrom();
     fireEvent.click(screen.getByTestId("settlement-config-guided-next"));
     fireEvent.click(screen.getByTestId("settlement-config-submit"));
     await waitFor(() => expect(post).toHaveBeenCalledWith(
       "/api/v1/settlement/config/channel-fee",
-      expect.objectContaining({ feeLayer: "route", channel: "wechat", feeBps: 60, fixedAmountCent: null, idempotencyKey: expect.any(String) }),
+      expect.objectContaining({ feeLayer: "route", channel: "wechat", feeBps: 60, fixedAmountCent: null, idempotencyKey: expect.any(String),
+        effectiveFrom: "2026-12-01" }),
     ));
   });
 
@@ -264,11 +279,13 @@ describe("SettlementConfigPage 结算配置中心(ADM-STL-001)", () => {
     expect(document.body.textContent).not.toContain("回补当期");
 
     fireEvent.change(screen.getByTestId("settlement-config-field-ticketGiftAmountYuan"), { target: { value: "59" } });
+    fillEffectiveFrom();
     fireEvent.click(screen.getByTestId("settlement-config-guided-next"));
     fireEvent.click(screen.getByTestId("settlement-config-submit"));
     await waitFor(() => expect(post).toHaveBeenCalledWith(
       "/api/v1/settlement/config/pass-gift-cost",
-      expect.objectContaining({ predeductMode: "by_ticket_amount", ticketGiftAmountCent: 5900, idempotencyKey: expect.any(String) }),
+      expect.objectContaining({ predeductMode: "by_ticket_amount", ticketGiftAmountCent: 5900, idempotencyKey: expect.any(String),
+        effectiveFrom: "2026-12-01" }),
     ));
     expect(post.mock.calls[0]?.[1]).not.toHaveProperty("varianceHandling");
   });
@@ -280,12 +297,13 @@ describe("SettlementConfigPage 结算配置中心(ADM-STL-001)", () => {
     fireEvent.change(screen.getByTestId("settlement-config-field-merchantId"), { target: { value: "m_bar_1" } });
     fireEvent.change(screen.getByTestId("settlement-config-field-roleType"), { target: { value: "non_sales" } });
     fireEvent.change(screen.getByTestId("settlement-config-field-rateBp"), { target: { value: "1200" } });
+    fillEffectiveFrom();
     fireEvent.click(screen.getByTestId("settlement-config-guided-next"));
     fireEvent.click(screen.getByTestId("settlement-config-submit"));
     await waitFor(() => expect(post).toHaveBeenCalledWith(
       "/api/v1/settlement/config/commission-rate",
       expect.objectContaining({
-        merchantId: "m_bar_1", roleType: "non_sales", rateBp: 1200, idempotencyKey: expect.any(String),
+        merchantId: "m_bar_1", roleType: "non_sales", rateBp: 1200, idempotencyKey: expect.any(String), effectiveFrom: "2026-12-01",
       }),
     ));
   });
@@ -305,6 +323,42 @@ describe("SettlementConfigPage 结算配置中心(ADM-STL-001)", () => {
       "/api/v1/settlement/config/points-accrual-rate",
       expect.objectContaining({ amountCentPerPoint: 50, idempotencyKey: expect.any(String) }),
     ));
+    expect(screen.queryByTestId("settlement-config-field-effectiveFrom")).toBeNull();
+    expect(post.mock.calls[0]?.[1]).not.toHaveProperty("effectiveFrom");
+  });
+
+  it("371-R2：生效起始日期必填并随草案以蛇形键提交", async () => {
+    const calls: { url: string; method: string; body: Record<string, unknown> | null }[] = [];
+    const ok = (data: unknown) => new Response(JSON.stringify({ success: true, code: "OK", message: "success", data }),
+      { status: 200, headers: { "content-type": "application/json" } });
+    vi.stubGlobal("fetch", vi.fn().mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const method = (init?.method ?? "GET").toUpperCase();
+      calls.push({ url, method, body: typeof init?.body === "string" ? JSON.parse(init.body) as Record<string, unknown> : null });
+      if (method === "POST") return Promise.resolve(ok(null));
+      if (url.includes("/overview")) return Promise.resolve(ok({ platform_defaults: [], pending_draft_count: 0, pending_drafts: [] }));
+      return Promise.resolve(ok([]));
+    }));
+    const { AdminApi } = await import("../client/adminClient");
+    render(<SettlementConfigPage api={new AdminApi("test-token")} user={{ id: "u1", username: "finance", accountType: "platform_admin" }}
+      setActionResult={vi.fn()} setGlobalError={vi.fn()} effectivePermissions={ADMIN_PERMS} />);
+
+    await waitFor(() => expect(screen.queryByTestId("settlement-config-defaults-table")).not.toBeNull());
+    await waitFor(() => expect(calls.some((c) => c.url.includes("/overview"))).toBe(true));
+    fireEvent.click(screen.getByTestId("settlement-config-edit-commission_rate"));
+    await waitFor(() => expect(screen.queryByTestId("settlement-config-field-rateBp")).not.toBeNull());
+    fireEvent.change(screen.getByTestId("settlement-config-field-rateBp"), { target: { value: "2000" } });
+    fireEvent.click(screen.getByTestId("settlement-config-guided-next"));
+    await waitFor(() => expect(screen.queryByTestId("settlement-config-guided-error")?.textContent ?? "").toContain("生效起始日期必填。"));
+    expect(calls.some((c) => c.method === "POST")).toBe(false);
+
+    fillEffectiveFrom("2026-12-01");
+    fireEvent.click(screen.getByTestId("settlement-config-guided-next"));
+    fireEvent.click(screen.getByTestId("settlement-config-submit"));
+    await waitFor(() => expect(calls.some((c) => c.method === "POST" && c.url.endsWith("/settlement/config/commission-rate"))).toBe(true));
+    expect(calls.find((c) => c.method === "POST" && c.url.endsWith("/settlement/config/commission-rate"))!.body)
+      .toMatchObject({ rate_bp: 2000, effective_from: "2026-12-01" });
+    vi.unstubAllGlobals();
   });
 
   it("草案队列:commission_rate 草案可复核转正、可下线(商户特例回落默认)", async () => {
@@ -479,12 +533,13 @@ describe("SettlementConfigPage 短期经营激励（第 75 条）", () => {
     expect(calls.some((c) => c.method === "POST")).toBe(false);
 
     fireEvent.change(screen.getByTestId("settlement-config-field-specialApprovalTermMinValue"), { target: { value: "1" } });
+    fillEffectiveFrom();
     fireEvent.click(screen.getByTestId("settlement-config-guided-next"));
     fireEvent.click(screen.getByTestId("settlement-config-submit"));
     await waitFor(() => expect(calls.some((c) => c.method === "POST" && c.url.endsWith("/settlement/config/distribution-method"))).toBe(true));
     expect(calls.find((c) => c.url.endsWith("/settlement/config/distribution-method"))!.body).toMatchObject({
       special_approval_term_value: 2, special_approval_term_unit: "month",
-      special_approval_term_min_value: 1, special_approval_term_max_value: 6,
+      special_approval_term_min_value: 1, special_approval_term_max_value: 6, effective_from: "2026-12-01",
     });
   });
 
@@ -669,14 +724,16 @@ describe("SettlementConfigPage 高价值判定阈值（第十八批第 24 条）
 
     fireEvent.click(screen.getByTestId("settlement-config-edit-high_value_threshold"));
     fill("6000", "1000", "20000", "进口酒到货价普遍上涨");
+    fillEffectiveFrom();
     fireEvent.click(screen.getByTestId("settlement-config-guided-next"));
     expect(screen.getByTestId("settlement-config-submit").textContent).toContain("提交最高权限审批");
+    expect(document.body.textContent).toContain("最高权限审批批准后按生效起始日期生效");
     fireEvent.click(screen.getByTestId("settlement-config-submit"));
 
     await waitFor(() => expect(calls.some((c) => c.method === "POST" && c.url.endsWith("/settlement/config/high-value-threshold"))).toBe(true));
     const body = calls.find((c) => c.method === "POST" && c.url.endsWith("/settlement/config/high-value-threshold"))!.body!;
     expect(body).toMatchObject({ high_value_threshold_cent: 600000, high_value_threshold_min_cent: 100000,
-      high_value_threshold_max_cent: 2000000, reason: "进口酒到货价普遍上涨" });
+      high_value_threshold_max_cent: 2000000, reason: "进口酒到货价普遍上涨", effective_from: "2026-12-01" });
     expect(typeof body.idempotency_key).toBe("string");
     expect(body).not.toHaveProperty("project_id");
     expect(body).not.toHaveProperty("merchant_id");

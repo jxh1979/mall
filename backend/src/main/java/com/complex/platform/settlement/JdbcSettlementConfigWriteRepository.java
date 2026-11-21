@@ -1,6 +1,6 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.10
+// 文件版本：V0.11
 
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.LocalZone;
@@ -97,20 +97,21 @@ public class JdbcSettlementConfigWriteRepository {
     public String upsertDistributionMethodDraft(String id, String projectId, String methodType,
                                                 int specialApprovalTermValue, String specialApprovalTermUnit,
                                                 int specialApprovalTermMinValue, int specialApprovalTermMaxValue,
-                                                String updatedBy) {
+                                                LocalDate effectiveFrom, String updatedBy) {
         return jdbcTemplate.queryForObject("""
                 INSERT INTO ticket_distribution_configs
                     (id, project_id, method_type, special_approval_term_value, special_approval_term_unit,
                      special_approval_term_min_value, special_approval_term_max_value,
-                     status, is_draft, updated_by, updated_at)
+                     effective_from, status, is_draft, updated_by, updated_at)
                 VALUES (:id, :project_id, :method_type, :term_value, :term_unit, :term_min, :term_max,
-                        'active', TRUE, :updated_by, now())
+                        :effective_from, 'active', TRUE, :updated_by, now())
                 ON CONFLICT (COALESCE(project_id, '__DEFAULT__'), is_draft) WHERE status = 'active' DO UPDATE SET
                     method_type = EXCLUDED.method_type,
                     special_approval_term_value = EXCLUDED.special_approval_term_value,
                     special_approval_term_unit = EXCLUDED.special_approval_term_unit,
                     special_approval_term_min_value = EXCLUDED.special_approval_term_min_value,
                     special_approval_term_max_value = EXCLUDED.special_approval_term_max_value,
+                    effective_from = EXCLUDED.effective_from,
                     updated_by = EXCLUDED.updated_by,
                     updated_at = now()
                 RETURNING id
@@ -118,6 +119,7 @@ public class JdbcSettlementConfigWriteRepository {
                 .addValue("id", id).addValue("project_id", projectId).addValue("method_type", methodType)
                 .addValue("term_value", specialApprovalTermValue).addValue("term_unit", specialApprovalTermUnit)
                 .addValue("term_min", specialApprovalTermMinValue).addValue("term_max", specialApprovalTermMaxValue)
+                .addValue("effective_from", effectiveFrom)
                 .addValue("updated_by", updatedBy), String.class);
     }
 
@@ -143,24 +145,25 @@ public class JdbcSettlementConfigWriteRepository {
 
     public String upsertComprehensiveServiceFeeDraft(String id, String projectId, String merchantId,
                                                      String ticketTypeId, int feeBps, Long fixedAmountCent,
-                                                     Long monthlyCapAmountCent, String updatedBy) {
+                                                     Long monthlyCapAmountCent, LocalDate effectiveFrom, String updatedBy) {
         return jdbcTemplate.queryForObject("""
                 INSERT INTO comprehensive_service_fee_configs
                     (id, project_id, merchant_id, ticket_type_id, fee_bps, fixed_amount_cent,
-                     monthly_cap_amount_cent, status, is_draft, updated_by, updated_at)
+                     monthly_cap_amount_cent, effective_from, status, is_draft, updated_by, updated_at)
                 VALUES (:id, :project_id, :merchant_id, :ticket_type_id, :fee_bps, :fixed_amount_cent,
-                        :monthly_cap_amount_cent, 'active', TRUE, :updated_by, now())
+                        :monthly_cap_amount_cent, :effective_from, 'active', TRUE, :updated_by, now())
                 ON CONFLICT (COALESCE(project_id, '__DEFAULT__'), COALESCE(merchant_id, '__ANY__'),
                              COALESCE(ticket_type_id, '__ANY__'), is_draft) WHERE status = 'active' DO UPDATE SET
                     fee_bps = EXCLUDED.fee_bps,
                     fixed_amount_cent = EXCLUDED.fixed_amount_cent,
                     monthly_cap_amount_cent = EXCLUDED.monthly_cap_amount_cent,
+                    effective_from = EXCLUDED.effective_from,
                     updated_by = EXCLUDED.updated_by,
                     updated_at = now()
                 RETURNING id
                 """, new MapSqlParameterSource()
                 .addValue("id", id).addValue("project_id", projectId).addValue("merchant_id", merchantId)
-                .addValue("ticket_type_id", ticketTypeId).addValue("fee_bps", feeBps)
+                .addValue("ticket_type_id", ticketTypeId).addValue("fee_bps", feeBps).addValue("effective_from", effectiveFrom)
                 .addValue("fixed_amount_cent", fixedAmountCent)
                 .addValue("monthly_cap_amount_cent", monthlyCapAmountCent)
                 .addValue("updated_by", updatedBy), String.class);
@@ -178,18 +181,20 @@ public class JdbcSettlementConfigWriteRepository {
      * 通票凑整参数草案（全平台一行）：V369 凑整允许误差(分)、V661 误差上下限(第十八批 AW 段 339-R1)、V648 允许尾数(第十八批 AT 段 292-R1)。
      */
     public String upsertComboDiscountDraft(String id, long roundingToleranceCent, long roundingToleranceMinCent,
-                                           long roundingToleranceMaxCent, String roundingAllowedEndings, String updatedBy) {
+                                           long roundingToleranceMaxCent, String roundingAllowedEndings, LocalDate effectiveFrom,
+                                           String updatedBy) {
         return jdbcTemplate.queryForObject("""
                 INSERT INTO ticket_combo_discount_configs
                     (id, project_id, rounding_tolerance_cent, rounding_tolerance_min_cent, rounding_tolerance_max_cent,
-                     rounding_allowed_endings, status, is_draft, updated_by, updated_at)
+                     rounding_allowed_endings, effective_from, status, is_draft, updated_by, updated_at)
                 VALUES (:id, NULL, :rounding_tolerance_cent, :rounding_tolerance_min_cent, :rounding_tolerance_max_cent,
-                     :rounding_allowed_endings, 'active', TRUE, :updated_by, now())
+                     :rounding_allowed_endings, :effective_from, 'active', TRUE, :updated_by, now())
                 ON CONFLICT (COALESCE(project_id, '__DEFAULT__'), is_draft) WHERE status = 'active' DO UPDATE SET
                     rounding_tolerance_cent = EXCLUDED.rounding_tolerance_cent,
                     rounding_tolerance_min_cent = EXCLUDED.rounding_tolerance_min_cent,
                     rounding_tolerance_max_cent = EXCLUDED.rounding_tolerance_max_cent,
                     rounding_allowed_endings = EXCLUDED.rounding_allowed_endings,
+                    effective_from = EXCLUDED.effective_from,
                     updated_by = EXCLUDED.updated_by,
                     updated_at = now()
                 RETURNING id
@@ -199,24 +204,27 @@ public class JdbcSettlementConfigWriteRepository {
                 .addValue("rounding_tolerance_min_cent", roundingToleranceMinCent)
                 .addValue("rounding_tolerance_max_cent", roundingToleranceMaxCent)
                 .addValue("rounding_allowed_endings", roundingAllowedEndings)
+                .addValue("effective_from", effectiveFrom)
                 .addValue("updated_by", updatedBy), String.class);
     }
 
     /** V381:同一草案槽再带「每张票固定金额」(分,与 fee_bps 二选一,写入面与 chk_cfc_fee_mode 双闸);V555 草案槽按费用层分开。 */
     public String upsertChannelFeeDraft(String id, String projectId, String feeLayer, String channel, int feeBps,
-                                        Long fixedAmountCent, String updatedBy) {
+                                        Long fixedAmountCent, LocalDate effectiveFrom, String updatedBy) {
         return jdbcTemplate.queryForObject("""
                 INSERT INTO channel_fee_configs
-                    (id, project_id, fee_layer, channel, fee_bps, fixed_amount_cent, status, is_draft, updated_by, updated_at)
-                VALUES (:id, :project_id, :fee_layer, :channel, :fee_bps, :fixed_amount_cent, 'active', TRUE, :updated_by, now())
+                    (id, project_id, fee_layer, channel, fee_bps, fixed_amount_cent, effective_from, status, is_draft, updated_by, updated_at)
+                VALUES (:id, :project_id, :fee_layer, :channel, :fee_bps, :fixed_amount_cent, :effective_from, 'active', TRUE, :updated_by, now())
                 ON CONFLICT (COALESCE(project_id, '__DEFAULT__'), fee_layer, COALESCE(channel, '__ALL__'), is_draft) WHERE status = 'active' DO UPDATE SET
                     fee_bps = EXCLUDED.fee_bps,
                     fixed_amount_cent = EXCLUDED.fixed_amount_cent,
+                    effective_from = EXCLUDED.effective_from,
                     updated_by = EXCLUDED.updated_by,
                     updated_at = now()
                 RETURNING id
                 """, new MapSqlParameterSource()
                 .addValue("id", id).addValue("project_id", projectId).addValue("fee_layer", feeLayer)
+                .addValue("effective_from", effectiveFrom)
                 .addValue("channel", channel)
                 .addValue("fee_bps", feeBps).addValue("fixed_amount_cent", fixedAmountCent)
                 .addValue("updated_by", updatedBy), String.class);
@@ -224,20 +232,21 @@ public class JdbcSettlementConfigWriteRepository {
 
     /** V340 卡座提成费率落草案(项目 × 商户 × 角色档;merchant_id NULL=该项目通用)。 */
     public String upsertCommissionRateDraft(String id, String projectId, String merchantId,
-                                            String roleType, int rateBp, String updatedBy) {
+                                            String roleType, int rateBp, LocalDate effectiveFrom, String updatedBy) {
         return jdbcTemplate.queryForObject("""
                 INSERT INTO bar_commission_rate_configs
-                    (id, project_id, merchant_id, role_type, rate_bp, status, is_draft, updated_by, updated_at)
-                VALUES (:id, :project_id, :merchant_id, :role_type, :rate_bp, 'active', TRUE, :updated_by, now())
+                    (id, project_id, merchant_id, role_type, rate_bp, effective_from, status, is_draft, updated_by, updated_at)
+                VALUES (:id, :project_id, :merchant_id, :role_type, :rate_bp, :effective_from, 'active', TRUE, :updated_by, now())
                 ON CONFLICT (COALESCE(project_id, '__DEFAULT__'), COALESCE(merchant_id, '__ANY__'),
                              role_type, is_draft) WHERE status = 'active' DO UPDATE SET
                     rate_bp = EXCLUDED.rate_bp,
+                    effective_from = EXCLUDED.effective_from,
                     updated_by = EXCLUDED.updated_by,
                     updated_at = now()
                 RETURNING id
                 """, new MapSqlParameterSource()
                 .addValue("id", id).addValue("project_id", projectId).addValue("merchant_id", merchantId)
-                .addValue("role_type", roleType).addValue("rate_bp", rateBp)
+                .addValue("role_type", roleType).addValue("rate_bp", rateBp).addValue("effective_from", effectiveFrom)
                 .addValue("updated_by", updatedBy), String.class);
     }
 
@@ -266,19 +275,21 @@ public class JdbcSettlementConfigWriteRepository {
      */
     public String upsertPassGiftCostDraft(String id, String projectId, String ticketTypeId,
                                           String predeductMode, Long ticketGiftAmountCent,
-                                          Long monthlyCapAmountCent, String varianceHandling, String updatedBy) {
+                                          Long monthlyCapAmountCent, String varianceHandling, LocalDate effectiveFrom,
+                                          String updatedBy) {
         return jdbcTemplate.queryForObject("""
                 INSERT INTO pass_gift_cost_configs
                     (id, project_id, ticket_type_id, prededuct_mode, ticket_gift_amount_cent,
-                     monthly_cap_amount_cent, variance_handling, status, is_draft, updated_by, updated_at)
+                     monthly_cap_amount_cent, variance_handling, effective_from, status, is_draft, updated_by, updated_at)
                 VALUES (:id, :project_id, :ticket_type_id, :prededuct_mode, :ticket_gift_amount_cent,
-                     :monthly_cap_amount_cent, :variance_handling, 'active', TRUE, :updated_by, now())
+                     :monthly_cap_amount_cent, :variance_handling, :effective_from, 'active', TRUE, :updated_by, now())
                 ON CONFLICT (COALESCE(project_id, '__DEFAULT__'), COALESCE(ticket_type_id, '__ANY__'),
                              is_draft) WHERE status = 'active' DO UPDATE SET
                     prededuct_mode = EXCLUDED.prededuct_mode,
                     ticket_gift_amount_cent = EXCLUDED.ticket_gift_amount_cent,
                     monthly_cap_amount_cent = EXCLUDED.monthly_cap_amount_cent,
                     variance_handling = EXCLUDED.variance_handling,
+                    effective_from = EXCLUDED.effective_from,
                     updated_by = EXCLUDED.updated_by,
                     updated_at = now()
                 RETURNING id
@@ -288,6 +299,7 @@ public class JdbcSettlementConfigWriteRepository {
                 .addValue("ticket_gift_amount_cent", ticketGiftAmountCent)
                 .addValue("monthly_cap_amount_cent", monthlyCapAmountCent)
                 .addValue("variance_handling", varianceHandling)
+                .addValue("effective_from", effectiveFrom)
                 .addValue("updated_by", updatedBy), String.class);
     }
 
@@ -296,19 +308,20 @@ public class JdbcSettlementConfigWriteRepository {
      * 已有一条在审草案即不写、返回 null（服务层据此 409，不覆盖在审草案）。
      */
     public String insertHighValueThresholdDraft(String id, long highValueThresholdCent, long minCent, long maxCent,
-                                                String updatedBy) {
+                                                LocalDate effectiveFrom, String updatedBy) {
         return jdbcTemplate.query("""
                 INSERT INTO high_value_thresholds
                     (id, project_id, merchant_id, high_value_threshold_cent, high_value_threshold_min_cent,
-                     high_value_threshold_max_cent, status, is_draft, updated_by, updated_at)
-                VALUES (:id, NULL, NULL, :high_value_threshold_cent, :min_cent, :max_cent, 'active', TRUE, :updated_by, now())
+                     high_value_threshold_max_cent, effective_from, status, is_draft, updated_by, updated_at)
+                VALUES (:id, NULL, NULL, :high_value_threshold_cent, :min_cent, :max_cent, :effective_from, 'active', TRUE,
+                        :updated_by, now())
                 ON CONFLICT (COALESCE(project_id, '__DEFAULT__'), COALESCE(merchant_id, '__ANY__'),
                              is_draft) WHERE status = 'active' DO NOTHING
                 RETURNING id
                 """, new MapSqlParameterSource()
                 .addValue("id", id)
                 .addValue("high_value_threshold_cent", highValueThresholdCent)
-                .addValue("min_cent", minCent).addValue("max_cent", maxCent)
+                .addValue("min_cent", minCent).addValue("max_cent", maxCent).addValue("effective_from", effectiveFrom)
                 .addValue("updated_by", updatedBy), rs -> rs.next() ? rs.getString(1) : null);
     }
 
@@ -565,6 +578,67 @@ public class JdbcSettlementConfigWriteRepository {
                                   java.time.LocalDate effectiveFrom) {
     }
 
+    // ================= 第十八批 BQ 段第 371 条：单行涉钱配置按生效起始日期生效(待生效 scheduled + 到日转正)=================
+
+    /** 371-R1：草案或待生效行的范围（项目、商户；范围列没有商户的取空）与生效起始日期。 */
+    public record DatedRow(String id, String projectId, String merchantId, LocalDate effectiveFrom) {
+    }
+
+    private static String datedColumns(SingleRowConfig cfg) {
+        return "id, project_id, " + (cfg.scopeColumns.contains("merchant_id") ? "merchant_id" : "NULL") + " AS merchant_id, effective_from";
+    }
+
+    private static final org.springframework.jdbc.core.RowMapper<DatedRow> DATED_ROW_MAPPER = (rs, i) ->
+            new DatedRow(rs.getString("id"), rs.getString("project_id"), rs.getString("merchant_id"),
+                    rs.getObject("effective_from", LocalDate.class));
+
+    /** 371-R1：在审草案（is_draft=TRUE、status=active）的范围与生效起始日期；不存在返回 null。 */
+    public DatedRow findDatedDraft(SingleRowConfig cfg, String id) {
+        List<DatedRow> rows = jdbcTemplate.query("SELECT " + datedColumns(cfg) + " FROM " + cfg.table
+                + " WHERE id = :id AND is_draft = TRUE AND status = 'active'", new MapSqlParameterSource().addValue("id", id), DATED_ROW_MAPPER);
+        return rows.isEmpty() ? null : rows.get(0);
+    }
+
+    /**
+     * 371-R1：草案批准后置待生效（is_draft=FALSE、status=scheduled），同范围旧生效行不动。返回翻转行数。
+     * 第十八批 BQ 段第 360 条 360-R1（第十八批裁决 72「渠道费配置须按版本保存（新版本、生效日、旧版保留），每单记录所用版本号」）：
+     * 渠道费批准时取版本号＝同范围（项目、费用层、渠道）非草案行最大版本号加一（草案可反复覆盖，不算版本；每范围只一个草案槽）。
+     */
+    public int scheduleSingleRowDraft(SingleRowConfig cfg, String id, String updatedBy, Instant now) {
+        String versionNo = cfg == SingleRowConfig.CHANNEL_FEE
+                ? ", version_no = (SELECT COALESCE(MAX(v.version_no), 0) + 1 FROM channel_fee_configs v WHERE v.is_draft = FALSE"
+                        + " AND v.project_id IS NOT DISTINCT FROM channel_fee_configs.project_id AND v.fee_layer = channel_fee_configs.fee_layer"
+                        + " AND v.channel IS NOT DISTINCT FROM channel_fee_configs.channel)"
+                : "";
+        return jdbcTemplate.update("UPDATE " + cfg.table + " SET is_draft = FALSE, status = 'scheduled', updated_by = :updated_by, updated_at = :now"
+                + versionNo + " WHERE id = :id AND is_draft = TRUE AND status = 'active'", new MapSqlParameterSource().addValue("id", id)
+                .addValue("updated_by", updatedBy).addValue("now", java.sql.Timestamp.from(now)));
+    }
+
+    /** 371-R1：全部待生效版本，按生效起始日期、批准先后排（到日逐条转正，同一生效日后批准的覆盖先批准的）。 */
+    public List<DatedRow> listScheduledSingleRows(SingleRowConfig cfg) {
+        return jdbcTemplate.query("SELECT " + datedColumns(cfg) + " FROM " + cfg.table
+                + " WHERE status = 'scheduled' ORDER BY effective_from NULLS FIRST, updated_at, id", new MapSqlParameterSource(), DATED_ROW_MAPPER);
+    }
+
+    /**
+     * 371-R1：待生效版本到日转正（@Transactional）：同范围旧生效行软替换 inactive（留库）、本行生效。返回本行翻转行数（0＝已不是待生效）。
+     * d.status = 'scheduled' 防作业重入把刚转正的行停掉；l.is_draft = FALSE 防把同范围在审草案停掉。须经 Spring 代理从服务层调进来。
+     */
+    @Transactional
+    public int promoteScheduledSingleRow(SingleRowConfig cfg, String id, Instant now) {
+        MapSqlParameterSource params = new MapSqlParameterSource().addValue("id", id).addValue("now", java.sql.Timestamp.from(now));
+        StringBuilder scopeEq = new StringBuilder();
+        for (String col : cfg.scopeColumns) {
+            scopeEq.append(" AND l.").append(col).append(" IS NOT DISTINCT FROM d.").append(col);
+        }
+        jdbcTemplate.update("UPDATE " + cfg.table + " l SET status = 'inactive', updated_by = d.updated_by, updated_at = :now"
+                + " FROM " + cfg.table + " d WHERE d.id = :id AND d.status = 'scheduled'"
+                + " AND l.is_draft = FALSE AND l.status = 'active' AND l.id <> d.id" + scopeEq, params);
+        return jdbcTemplate.update("UPDATE " + cfg.table + " SET status = 'active', updated_at = :now WHERE id = :id AND status = 'scheduled'",
+                params);
+    }
+
     // ================= §3 复核转正(旧生效行软替换 status→inactive,不物理删)=================
 
     /**
@@ -757,6 +831,7 @@ public class JdbcSettlementConfigWriteRepository {
                                || ' 短期经营激励有效期上限 ' || special_approval_term_value
                                || CASE special_approval_term_unit WHEN 'day' THEN ' 天' ELSE ' 个月' END
                                || '（下限 ' || special_approval_term_min_value || '，上限 ' || special_approval_term_max_value || '）'
+                               || ' 生效起=' || effective_from
                                AS summary,
                            updated_at
                       FROM ticket_distribution_configs WHERE is_draft = TRUE AND status = 'active'
@@ -773,7 +848,8 @@ public class JdbcSettlementConfigWriteRepository {
                            'project=' || COALESCE(c.project_id, '__DEFAULT__') || ' 商户=' || COALESCE(c.merchant_id, '__ANY__')
                                || ' 票种=' || COALESCE(tt.ticket_name, '__ANY__')
                                || ' 费=' || CASE WHEN c.fixed_amount_cent IS NULL THEN c.fee_bps || 'bps' ELSE c.fixed_amount_cent || '分' END
-                               || CASE WHEN c.monthly_cap_amount_cent IS NULL THEN '' ELSE ' 封顶' || c.monthly_cap_amount_cent || '分' END,
+                               || CASE WHEN c.monthly_cap_amount_cent IS NULL THEN '' ELSE ' 封顶' || c.monthly_cap_amount_cent || '分' END
+                               || ' 生效起=' || c.effective_from,
                            c.updated_at
                       FROM comprehensive_service_fee_configs c
                       LEFT JOIN ticket_types tt ON tt.id = c.ticket_type_id
@@ -783,7 +859,8 @@ public class JdbcSettlementConfigWriteRepository {
                            'project=' || COALESCE(project_id, '__DEFAULT__')
                                || ' 凑整允许误差 ' || rounding_tolerance_cent || '分（下限 ' || COALESCE(rounding_tolerance_min_cent::text, '—')
                                || '分～上限 ' || COALESCE(rounding_tolerance_max_cent::text, '—') || '分）'
-                               || ' 允许尾数 ' || array_to_string(string_to_array(rounding_allowed_endings, NULL), '、'),
+                               || ' 允许尾数 ' || array_to_string(string_to_array(rounding_allowed_endings, NULL), '、')
+                               || ' 生效起=' || effective_from,
                            updated_at
                       FROM ticket_combo_discount_configs WHERE is_draft = TRUE AND status = 'active'
                     UNION ALL
@@ -793,13 +870,15 @@ public class JdbcSettlementConfigWriteRepository {
                                || COALESCE(channel, '第三方通用')
                                || CASE WHEN fixed_amount_cent IS NOT NULL
                                        THEN ' 每张票固定 ' || fixed_amount_cent || '分'
-                                       ELSE ' 费率 ' || fee_bps || 'bps' END,
+                                       ELSE ' 费率 ' || fee_bps || 'bps' END
+                               || ' 生效起=' || effective_from,
                            updated_at
                       FROM channel_fee_configs WHERE is_draft = TRUE AND status = 'active'
                     UNION ALL
                     SELECT id, 'commission_rate',
                            'project=' || COALESCE(project_id, '__DEFAULT__') || ' 商户=' || COALESCE(merchant_id, '__ANY__')
-                               || ' 角色=' || role_type || ' 提成 ' || rate_bp || 'bps',
+                               || ' 角色=' || role_type || ' 提成 ' || rate_bp || 'bps'
+                               || ' 生效起=' || effective_from,
                            updated_at
                       FROM bar_commission_rate_configs WHERE is_draft = TRUE AND status = 'active'
                     UNION ALL
@@ -812,7 +891,8 @@ public class JdbcSettlementConfigWriteRepository {
                     SELECT id, 'high_value_threshold',
                            '高价值判定阈值(最近一次实际到货价) ' || high_value_threshold_cent || ' 分，上下限 '
                                || COALESCE(high_value_threshold_min_cent::text, '-') || '～'
-                               || COALESCE(high_value_threshold_max_cent::text, '-') || ' 分',
+                               || COALESCE(high_value_threshold_max_cent::text, '-') || ' 分'
+                               || ' 生效起=' || effective_from,
                            updated_at
                       FROM high_value_thresholds WHERE is_draft = TRUE AND status = 'active'
                     UNION ALL
@@ -842,7 +922,8 @@ public class JdbcSettlementConfigWriteRepository {
                                || ' 模式=' || CASE g.prededuct_mode WHEN 'by_item' THEN '按件计' ELSE '按票计' END
                                || COALESCE(' 整额' || g.ticket_gift_amount_cent || '分', '')
                                || CASE WHEN g.monthly_cap_amount_cent IS NULL THEN ''
-                                       ELSE ' 封顶' || g.monthly_cap_amount_cent || '分' END,
+                                       ELSE ' 封顶' || g.monthly_cap_amount_cent || '分' END
+                               || ' 生效起=' || g.effective_from,
                            g.updated_at
                       FROM pass_gift_cost_configs g
                       LEFT JOIN ticket_types tt ON tt.id = g.ticket_type_id

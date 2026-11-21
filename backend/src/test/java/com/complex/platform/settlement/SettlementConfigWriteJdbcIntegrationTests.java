@@ -1,6 +1,6 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.07
+// 文件版本：V0.08
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -36,6 +36,8 @@ import org.springframework.transaction.annotation.Transactional;
  * <p>⚠️ 走真实 Flyway 迁移库(complex_test);<b>本类须在 B1-8 临时库串行跑</b>,勿与其它 Flyway 集成测试并发。
  * {@code @Transactional} = 每用例结束自动回滚:含删全表的 fail-loud 用例不污染库/不影响用例次序。本轮仅 test-compile,不执行。
  * <p>差人转正:起草用 {@code DRAFTER}、复核转正用 {@code APPROVER}(二者不同,否则 403)。
+ * <p>第十八批 BQ 段第 371 条 371-R1:六类单行涉钱配置落草案带次日生效起始日期({@link #next}),批准后待生效,
+ * 用例经 {@link #activate} 批准后按次日调到日转正再读新值(断言意图不变)。
  */
 @SpringBootTest(properties = {
         "spring.datasource.url=${SETTLE_TEST_DB_URL:jdbc:postgresql://127.0.0.1:5432/complex_test}",
@@ -70,9 +72,19 @@ class SettlementConfigWriteJdbcIntegrationTests {
     @Autowired
     private JdbcTemplate jdbcTemplate;
 
+    @Autowired
+    private SettlementConfigScheduledActivationService activation;
+
+    @Autowired
+    private com.complex.platform.common.BusinessDayResolver businessDays;
+
+    /** 371-R1:次日(按平台默认营业日;本类项目、商户未设营业日,与之相同)。 */
+    private String next;
+
     @BeforeEach
     void setUp() {
         TestSecurityActors.asPlatformAdmin();
+        next = businessDays.businessDate(null, null, java.time.Instant.now()).plusDays(1).toString();
         cleanupProjectRows();
         // @Transactional 用例结束回滚,无需清理。
         jdbcTemplate.update(
@@ -108,20 +120,20 @@ class SettlementConfigWriteJdbcIntegrationTests {
     @Test
     void serviceFeeDraftDoesNotAffectEffectiveUntilActivated() {
         writeService.saveComprehensiveServiceFee(
-                new ComprehensiveServiceFeeRequest("k1", PROJECT, null, null, 3000, null, null), DRAFTER);
+                new ComprehensiveServiceFeeRequest("k1", PROJECT, null, null, 3000, null, null, next), DRAFTER);
         // 草案不被读,回退全局默认(2000 = V370 等价保值种子:原池内 20% 留存平移为费率)
         assertThat(billRepository.findComprehensiveServiceFee(PROJECT, null, null).feeBps()).isEqualTo(2000);
 
-        writeService.activateDraft("comprehensive_service_fee",
+        activate("comprehensive_service_fee",
                 draftRowId("comprehensive_service_fee_configs"), APPROVER);
         assertThat(billRepository.findComprehensiveServiceFee(PROJECT, null, null).feeBps()).isEqualTo(3000);
 
         writeService.saveComprehensiveServiceFee(
-                new ComprehensiveServiceFeeRequest("k2", PROJECT, null, null, 5000, null, null), DRAFTER);
+                new ComprehensiveServiceFeeRequest("k2", PROJECT, null, null, 5000, null, null, next), DRAFTER);
         // 保值:草案期读侧仍旧生效
         assertThat(billRepository.findComprehensiveServiceFee(PROJECT, null, null).feeBps()).isEqualTo(3000);
 
-        writeService.activateDraft("comprehensive_service_fee",
+        activate("comprehensive_service_fee",
                 draftRowId("comprehensive_service_fee_configs"), APPROVER);
         assertThat(billRepository.findComprehensiveServiceFee(PROJECT, null, null).feeBps()).isEqualTo(5000);
     }
@@ -136,11 +148,11 @@ class SettlementConfigWriteJdbcIntegrationTests {
                 .setPropertyNamingStrategy(com.fasterxml.jackson.databind.PropertyNamingStrategies.SNAKE_CASE)
                 .configure(com.fasterxml.jackson.databind.DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
         writeService.saveChannelFee(json.readValue("""
-                {"idempotency_key":"lr1","project_id":"%s","fee_layer":"route","channel":"wechat","fee_bps":60}
-                """.formatted(PROJECT), ChannelFeeRequest.class), DRAFTER);
+                {"idempotency_key":"lr1","project_id":"%s","fee_layer":"route","channel":"wechat","fee_bps":60,"effective_from":"%s"}
+                """.formatted(PROJECT, next), ChannelFeeRequest.class), DRAFTER);
         writeService.saveChannelFee(json.readValue("""
-                {"idempotency_key":"ls1","project_id":"%s","fee_layer":"sales","channel":"wechat","fee_bps":500}
-                """.formatted(PROJECT), ChannelFeeRequest.class), DRAFTER);
+                {"idempotency_key":"ls1","project_id":"%s","fee_layer":"sales","channel":"wechat","fee_bps":500,"effective_from":"%s"}
+                """.formatted(PROJECT, next), ChannelFeeRequest.class), DRAFTER);
 
         assertThat(jdbcTemplate.queryForObject("""
                 SELECT count(*) FROM channel_fee_configs
@@ -149,7 +161,7 @@ class SettlementConfigWriteJdbcIntegrationTests {
         for (String id : jdbcTemplate.queryForList(
                 "SELECT id FROM channel_fee_configs WHERE project_id = ? AND is_draft = TRUE AND status = 'active'",
                 String.class, PROJECT)) {
-            writeService.activateDraft("channel_fee", id, APPROVER);
+            activate("channel_fee", id, APPROVER);
         }
         assertThat(jdbcTemplate.queryForObject("""
                 SELECT fee_bps FROM channel_fee_configs
@@ -179,38 +191,38 @@ class SettlementConfigWriteJdbcIntegrationTests {
         //   S8 语义收窄(V374):method_type 仅指第二段方式,只剩 by_rank_tier 合法——Path 2 的
         //   草案/转正切换观测点改由同表的特批有效期承担(3 个月 → 6 天)。
         writeService.saveDistributionMethod(
-                new DistributionMethodRequest("d1", PROJECT, "by_rank_tier", 6, "day", 1, 90), DRAFTER);
+                new DistributionMethodRequest("d1", PROJECT, "by_rank_tier", 6, "day", 1, 90, next), DRAFTER);
         assertThat(billRepository.findDistributionMethod(PROJECT)).isEqualTo("by_rank_tier");
         assertThat(billRepository.findSpecialApprovalTerm(PROJECT).label()).isEqualTo("3 个月");
-        writeService.activateDraft("distribution_method", draftRowId("ticket_distribution_configs"), APPROVER);
+        activate("distribution_method", draftRowId("ticket_distribution_configs"), APPROVER);
         assertThat(billRepository.findDistributionMethod(PROJECT)).isEqualTo("by_rank_tier");
         assertThat(billRepository.findSpecialApprovalTerm(PROJECT).label()).isEqualTo("6 天");
 
-        writeService.saveChannelFee(new ChannelFeeRequest("c1", PROJECT, "sales", null, 500, null), DRAFTER);
+        writeService.saveChannelFee(new ChannelFeeRequest("c1", PROJECT, "sales", null, 500, null, next), DRAFTER);
         assertThat(billRepository.findChannelFee(PROJECT).feeBps()).isZero();
-        writeService.activateDraft("channel_fee", draftRowId("channel_fee_configs"), APPROVER);
+        activate("channel_fee", draftRowId("channel_fee_configs"), APPROVER);
         assertThat(billRepository.findChannelFee(PROJECT).feeBps()).isEqualTo(500);
 
         // V381:渠道专属「每张票固定金额」草案期不生效(该渠道仍落回刚转正的通用 500bps),转正后切固定额。
-        writeService.saveChannelFee(new ChannelFeeRequest("c2", PROJECT, "sales", "meituan", 0, 700L), DRAFTER);
+        writeService.saveChannelFee(new ChannelFeeRequest("c2", PROJECT, "sales", "meituan", 0, 700L, next), DRAFTER);
         assertThat(billRepository.findChannelFee(PROJECT, "meituan").feeBps()).isEqualTo(500);
         assertThat(billRepository.findChannelFee(PROJECT, "meituan").fixedAmountCent()).isNull();
-        writeService.activateDraft("channel_fee", draftRowId("channel_fee_configs"), APPROVER);
+        activate("channel_fee", draftRowId("channel_fee_configs"), APPROVER);
         assertThat(billRepository.findChannelFee(PROJECT, "meituan").fixedAmountCent()).isEqualTo(700L);
         assertThat(billRepository.findChannelFee(PROJECT, "meituan").feeBps()).isZero();
 
         writeService.saveComprehensiveServiceFee(
-                new ComprehensiveServiceFeeRequest("s1", PROJECT, null, null, 250, null, null), DRAFTER);
+                new ComprehensiveServiceFeeRequest("s1", PROJECT, null, null, 250, null, null, next), DRAFTER);
         // 草案不被读 → 回落全局默认 2000(V370 等价保值种子)
         assertThat(billRepository.findComprehensiveServiceFee(PROJECT, null, null).feeBps()).isEqualTo(2000);
-        writeService.activateDraft("comprehensive_service_fee",
+        activate("comprehensive_service_fee",
                 draftRowId("comprehensive_service_fee_configs"), APPROVER);
         assertThat(billRepository.findComprehensiveServiceFee(PROJECT, null, null).feeBps()).isEqualTo(250);
 
         // 第十八批 AW 段 339-R1：通票凑整参数只配全平台一行，误差与上下限同填。
-        writeService.saveComboDiscount(new ComboDiscountRequest("b1", null, 300L, 100L, 800L, null), DRAFTER);
+        writeService.saveComboDiscount(new ComboDiscountRequest("b1", null, 300L, 100L, 800L, null, next), DRAFTER);
         assertThat(billRepository.findComboDiscountConfig().roundingToleranceCent()).isEqualTo(500L);
-        writeService.activateDraft("combo_discount", jdbcTemplate.queryForObject("SELECT id FROM ticket_combo_discount_configs"
+        activate("combo_discount", jdbcTemplate.queryForObject("SELECT id FROM ticket_combo_discount_configs"
                 + " WHERE project_id IS NULL AND is_draft = TRUE AND status = 'active'", String.class), APPROVER);
         assertThat(billRepository.findComboDiscountConfig().roundingToleranceCent()).isEqualTo(300L);
         assertThat(billRepository.findComboDiscountConfig().roundingToleranceMaxCent()).isEqualTo(800L);
@@ -220,11 +232,11 @@ class SettlementConfigWriteJdbcIntegrationTests {
     @Test
     void comprehensiveServiceFeeMonthlyCapDraftThenActivate() {
         writeService.saveComprehensiveServiceFee(
-                new ComprehensiveServiceFeeRequest("cap1", PROJECT, MERCHANT, TICKET_TYPE, 1000, null, 5000L), DRAFTER);
+                new ComprehensiveServiceFeeRequest("cap1", PROJECT, MERCHANT, TICKET_TYPE, 1000, null, 5000L, next), DRAFTER);
         // 草案期读侧仍回退全局默认(无封顶、费 0),保值
         assertThat(billRepository.findComprehensiveServiceFee(PROJECT, MERCHANT, TICKET_TYPE).monthlyCapAmountCent())
                 .isNull();
-        writeService.activateDraft("comprehensive_service_fee",
+        activate("comprehensive_service_fee",
                 draftRowId("comprehensive_service_fee_configs"), APPROVER);
         var cfg = billRepository.findComprehensiveServiceFee(PROJECT, MERCHANT, TICKET_TYPE);
         assertThat(cfg.feeBps()).isEqualTo(1000);
@@ -245,8 +257,8 @@ class SettlementConfigWriteJdbcIntegrationTests {
                 otherTicketType);
 
         writeService.saveComprehensiveServiceFee(
-                new ComprehensiveServiceFeeRequest("tt1", PROJECT, MERCHANT, TICKET_TYPE, 1500, null, null), DRAFTER);
-        writeService.activateDraft("comprehensive_service_fee",
+                new ComprehensiveServiceFeeRequest("tt1", PROJECT, MERCHANT, TICKET_TYPE, 1500, null, null, next), DRAFTER);
+        activate("comprehensive_service_fee",
                 draftRowId("comprehensive_service_fee_configs"), APPROVER);
 
         assertThat(billRepository.findComprehensiveServiceFee(PROJECT, MERCHANT, TICKET_TYPE).feeBps()).isEqualTo(1500);
@@ -259,7 +271,7 @@ class SettlementConfigWriteJdbcIntegrationTests {
     @Test
     void channelFeeRejectsBothRateAndFixedAmount() {
         assertThatThrownBy(() -> writeService.saveChannelFee(
-                new ChannelFeeRequest("cboth", PROJECT, "sales", null, 100, 100L), DRAFTER))
+                new ChannelFeeRequest("cboth", PROJECT, "sales", null, 100, 100L, next), DRAFTER))
                 .isInstanceOf(ApiException.class)
                 .hasMessageContaining("二选一");
     }
@@ -268,7 +280,7 @@ class SettlementConfigWriteJdbcIntegrationTests {
     @Test
     void comprehensiveServiceFeeRejectsUnknownTicketType() {
         assertThatThrownBy(() -> writeService.saveComprehensiveServiceFee(
-                new ComprehensiveServiceFeeRequest("bad1", PROJECT, MERCHANT, "tt_not_exist", 1000, null, null),
+                new ComprehensiveServiceFeeRequest("bad1", PROJECT, MERCHANT, "tt_not_exist", 1000, null, null, next),
                 DRAFTER))
                 .isInstanceOf(ApiException.class)
                 .hasMessageContaining("票种不存在");
@@ -350,9 +362,10 @@ class SettlementConfigWriteJdbcIntegrationTests {
 
         writeService.saveDistributionMethod(json.readValue("""
                 {"idempotency_key":"it3","project_id":"%s","method_type":"by_rank_tier","special_approval_term_value":2,
-                 "special_approval_term_unit":"month","special_approval_term_min_value":1,"special_approval_term_max_value":6}
-                """.formatted(PROJECT), DistributionMethodRequest.class), DRAFTER);
-        writeService.activateDraft("distribution_method", draftRowId("ticket_distribution_configs"), APPROVER);
+                 "special_approval_term_unit":"month","special_approval_term_min_value":1,"special_approval_term_max_value":6,
+                 "effective_from":"%s"}
+                """.formatted(PROJECT, next), DistributionMethodRequest.class), DRAFTER);
+        activate("distribution_method", draftRowId("ticket_distribution_configs"), APPROVER);
 
         assertThat(billRepository.findSpecialApprovalTerm(PROJECT).label()).isEqualTo("2 个月");
         assertThat(jdbcTemplate.queryForObject("""
@@ -366,9 +379,9 @@ class SettlementConfigWriteJdbcIntegrationTests {
     void s8NarrowedWriteGatesRejectLegacyMethodAndAmbiguousRate() {
         // 旧项目级方式已由商户级固定规则取代 → 写入口 400。
         assertValidationFailed(() -> writeService.saveDistributionMethod(
-                new DistributionMethodRequest("dx", PROJECT, "by_fixed_amount", 3, "month", 1, 6), DRAFTER));
+                new DistributionMethodRequest("dx", PROJECT, "by_fixed_amount", 3, "month", 1, 6, next), DRAFTER));
         assertValidationFailed(() -> writeService.saveDistributionMethod(
-                new DistributionMethodRequest("dy", PROJECT, "by_venue_per_guest", 3, "month", 1, 6), DRAFTER));
+                new DistributionMethodRequest("dy", PROJECT, "by_venue_per_guest", 3, "month", 1, 6, next), DRAFTER));
         // 同行双值 = 无从消歧(两段化后无项目级 method 兜底)→ 拒;双空同拒。
         assertValidationFailed(() -> writeService.saveMerchantRate(
                 new MerchantRateRequest("mx", PROJECT, MERCHANT, 500L, 6000L), DRAFTER));
@@ -424,16 +437,16 @@ class SettlementConfigWriteJdbcIntegrationTests {
     @Test
     void activateSoftReplacesOldEffectiveRowKeepingItInactive() {
         writeService.saveComprehensiveServiceFee(
-                new ComprehensiveServiceFeeRequest("k1", PROJECT, null, null, 3000, null, null), DRAFTER);
-        writeService.activateDraft("comprehensive_service_fee",
+                new ComprehensiveServiceFeeRequest("k1", PROJECT, null, null, 3000, null, null, next), DRAFTER);
+        activate("comprehensive_service_fee",
                 draftRowId("comprehensive_service_fee_configs"), APPROVER);
         String oldEffectiveId = jdbcTemplate.queryForObject(
                 "SELECT id FROM comprehensive_service_fee_configs WHERE project_id = ? AND fee_bps = 3000 AND status = 'active'",
                 String.class, PROJECT);
 
         writeService.saveComprehensiveServiceFee(
-                new ComprehensiveServiceFeeRequest("k2", PROJECT, null, null, 5000, null, null), DRAFTER);
-        writeService.activateDraft("comprehensive_service_fee",
+                new ComprehensiveServiceFeeRequest("k2", PROJECT, null, null, 5000, null, null, next), DRAFTER);
+        activate("comprehensive_service_fee",
                 draftRowId("comprehensive_service_fee_configs"), APPROVER);
 
         // 旧生效行仍在库(未物理删),status=inactive。
@@ -482,10 +495,10 @@ class SettlementConfigWriteJdbcIntegrationTests {
     @Test
     void selfActivationForbidden() {
         writeService.saveComprehensiveServiceFee(
-                new ComprehensiveServiceFeeRequest("k1", PROJECT, null, null, 3000, null, null), DRAFTER);
+                new ComprehensiveServiceFeeRequest("k1", PROJECT, null, null, 3000, null, null, next), DRAFTER);
         String csfcId = draftRowId("comprehensive_service_fee_configs");
-        assertForbidden(() -> writeService.activateDraft("comprehensive_service_fee", csfcId, DRAFTER)); // 同人 → 403
-        writeService.activateDraft("comprehensive_service_fee", csfcId, APPROVER); // 换人可转
+        assertForbidden(() -> activate("comprehensive_service_fee", csfcId, DRAFTER)); // 同人 → 403
+        activate("comprehensive_service_fee", csfcId, APPROVER); // 换人可转
 
         // 软删同样差人
         writeService.saveMerchantRate(new MerchantRateRequest("m1", PROJECT, MERCHANT, 500L, null), DRAFTER);
@@ -516,7 +529,7 @@ class SettlementConfigWriteJdbcIntegrationTests {
     @Test
     void passGiftCostPath2DraftThenActivateThenArchive() {
         writeService.savePassGiftCost(
-                new PassGiftCostRequest("g1", PROJECT, null, "by_ticket_amount", 5900L, 8000L, null), DRAFTER);
+                new PassGiftCostRequest("g1", PROJECT, null, "by_ticket_amount", 5900L, 8000L, null, next), DRAFTER);
         // 草案不被读 → 回落全局种子(by_ticket_amount + 0 = 上线逐分不变保值)。
         var effective = billRepository.findPassGiftCostConfig(PROJECT, null);
         assertThat(effective.predeductMode()).isEqualTo("by_ticket_amount");
@@ -524,8 +537,8 @@ class SettlementConfigWriteJdbcIntegrationTests {
 
         // 同人转正 → 403;换人转正 → 生效切 5900/封顶 8000。
         String rowId = draftRowId("pass_gift_cost_configs");
-        assertForbidden(() -> writeService.activateDraft("pass_gift_cost", rowId, DRAFTER));
-        writeService.activateDraft("pass_gift_cost", rowId, APPROVER);
+        assertForbidden(() -> activate("pass_gift_cost", rowId, DRAFTER));
+        activate("pass_gift_cost", rowId, APPROVER);
         var activated = billRepository.findPassGiftCostConfig(PROJECT, null);
         assertThat(activated.ticketGiftAmountCent()).isEqualTo(5900L);
         assertThat(activated.monthlyCapAmountCent()).isEqualTo(8000L);
@@ -543,18 +556,18 @@ class SettlementConfigWriteJdbcIntegrationTests {
     @Test
     void passGiftCostModeGuardsAndSeedProtection() {
         assertValidationFailed(() -> writeService.savePassGiftCost(
-                new PassGiftCostRequest("g2", PROJECT, null, "by_item", 5900L, null, null), DRAFTER));
+                new PassGiftCostRequest("g2", PROJECT, null, "by_item", 5900L, null, null, next), DRAFTER));
         assertValidationFailed(() -> writeService.savePassGiftCost(
-                new PassGiftCostRequest("g3", PROJECT, null, "by_ticket_amount", null, null, null), DRAFTER));
+                new PassGiftCostRequest("g3", PROJECT, null, "by_ticket_amount", null, null, null, next), DRAFTER));
         assertValidationFailed(() -> writeService.savePassGiftCost(
-                new PassGiftCostRequest("g4", PROJECT, "tt_missing_s6", "by_item", null, null, null), DRAFTER));
+                new PassGiftCostRequest("g4", PROJECT, "tt_missing_s6", "by_item", null, null, null, next), DRAFTER));
         assertThatThrownBy(() -> writeService.archive("pass_gift_cost", "pgc_default",
                 new ArchiveRequest("g5", "试删种子"), DRAFTER))
                 .isInstanceOf(ApiException.class)
                 .hasMessageContaining("全局默认配置不可下线");
         // 按件计合法落草案(票种维度用真实票种,整额留空)。
         writeService.savePassGiftCost(
-                new PassGiftCostRequest("g6", PROJECT, TICKET_TYPE, "by_item", null, null, null), DRAFTER);
+                new PassGiftCostRequest("g6", PROJECT, TICKET_TYPE, "by_item", null, null, null, next), DRAFTER);
         assertThat(draftRowId("pass_gift_cost_configs")).isNotNull();
     }
 
@@ -576,8 +589,8 @@ class SettlementConfigWriteJdbcIntegrationTests {
         }
         writeService.savePassGiftCost(json.readValue("""
                 {"idempotency_key":"gv_ok","project_id":"%s","prededuct_mode":"by_ticket_amount",
-                 "ticket_gift_amount_cent":5900,"variance_handling":"platform_absorb"}
-                """.formatted(PROJECT), PassGiftCostRequest.class), DRAFTER);
+                 "ticket_gift_amount_cent":5900,"variance_handling":"platform_absorb","effective_from":"%s"}
+                """.formatted(PROJECT, next), PassGiftCostRequest.class), DRAFTER);
         assertThat(jdbcTemplate.queryForObject("SELECT variance_handling FROM pass_gift_cost_configs WHERE id = ?",
                 String.class, draftRowId("pass_gift_cost_configs"))).isEqualTo("platform_absorb");
     }
@@ -586,13 +599,13 @@ class SettlementConfigWriteJdbcIntegrationTests {
     @Test
     void rejectsSentinelProjectId() {
         assertValidationFailed(() -> writeService.saveComprehensiveServiceFee(
-                new ComprehensiveServiceFeeRequest("k1", "__DEFAULT__", null, null, 3000, null, null), DRAFTER));
+                new ComprehensiveServiceFeeRequest("k1", "__DEFAULT__", null, null, 3000, null, null, next), DRAFTER));
     }
 
     /** 转正泛化:不存在/非草案 id → 400 DRAFT_NOT_ACTIVATABLE;已下线的 retention 类型 → 400 UNKNOWN_CONFIG_TYPE。 */
     @Test
     void activateNonexistentDraftFails() {
-        assertThatThrownBy(() -> writeService.activateDraft("comprehensive_service_fee", "csfc_d_nonexistent", APPROVER))
+        assertThatThrownBy(() -> activate("comprehensive_service_fee", "csfc_d_nonexistent", APPROVER))
                 .isInstanceOfSatisfying(ApiException.class,
                         e -> assertThat(e.code()).isEqualTo("DRAFT_NOT_ACTIVATABLE"));
         // S4:retention 配置类型随留存合并下线,泛化端点不再认识它。
@@ -624,6 +637,12 @@ class SettlementConfigWriteJdbcIntegrationTests {
     }
 
     // ---- helpers ----
+
+    /** 371-R1:他人复核批准(六类批准后待生效),随即按次日调到日转正;不是六类的配置批准即生效,到日转正对其无作用。 */
+    private void activate(String configType, String id, String actor) {
+        writeService.activateDraft(configType, id, actor);
+        activation.activateDue(java.time.Instant.now().plus(java.time.Duration.ofDays(1)));
+    }
 
     private int activeRankTierCount(String projectId) {
         return jdbcTemplate.queryForObject("""

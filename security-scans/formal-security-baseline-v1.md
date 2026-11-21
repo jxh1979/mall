@@ -4,7 +4,7 @@
 
 - Generated from deterministic workspace inputs; execution time is captured by the verification logs.
 - OpenAPI operation count: 1403
-- OpenAPI SHA-256: `74f3fccb5eabd27bb4250d5e38b0ee5f30a0dcd348ed54a17589d3119b4d6e7e`
+- OpenAPI SHA-256: `bd259f0a421843dc290b91a59f3347b35b29332b2c236707120b1d3a2da815f6`
 - Java version: `21`
 - Spring Boot version: `4.1.0`
 - springdoc-openapi version: `3.0.3`

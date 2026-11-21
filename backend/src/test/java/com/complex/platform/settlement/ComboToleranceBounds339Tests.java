@@ -1,6 +1,6 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -43,6 +43,8 @@ class ComboToleranceBounds339Tests {
     @Autowired private MockMvc mockMvc;
     @Autowired private JdbcTemplate jdbc;
     @Autowired private ObjectMapper json;
+    @Autowired private com.complex.platform.common.BusinessDayResolver businessDays;
+    @Autowired private SettlementConfigScheduledActivationService activation;
 
     private final String s = String.valueOf(System.nanoTime());
     private String project;
@@ -90,6 +92,7 @@ class ComboToleranceBounds339Tests {
                 + " WHERE project_id IS NULL AND is_draft = TRUE AND status = 'active'", String.class);
         mockMvc.perform(post("/api/v1/settlement/config/combo_discount/" + draftId + "/activate").with(reviewer))
                 .andExpect(status().isOk());
+        activation.activateDue(java.time.Instant.now().plus(java.time.Duration.ofDays(1)));   // 371-R1：批准后待生效，到次日转正
 
         String overview = mockMvc.perform(get("/api/v1/settlement/config/overview").with(reviewer))
                 .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
@@ -102,6 +105,8 @@ class ComboToleranceBounds339Tests {
     private Map<String, Object> body(String key, Long tolerance, Long min, Long max) {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("idempotency_key", "c339-" + key + "-" + s);
+        // 第十八批 BQ 段第 371 条 371-R1：生效起始日期必填（全平台一行按平台默认营业日，次日）。
+        body.put("effective_from", businessDays.businessDate(null, null, java.time.Instant.now()).plusDays(1).toString());
         body.put("rounding_tolerance_cent", tolerance);
         if (min != null) {
             body.put("rounding_tolerance_min_cent", min);

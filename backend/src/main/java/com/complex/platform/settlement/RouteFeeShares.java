@@ -1,6 +1,6 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import com.complex.platform.common.money.MoneyRounding;
 import com.complex.platform.ticketing.TicketOrderService;
@@ -32,7 +32,8 @@ public class RouteFeeShares {
 
     /**
      * 一笔付款成功（同一事务内）固化其通路费：储值笔＝该笔消费在各充值批次分摊的通路费之和（充值时已产生，不再按费率另算）；
-     * 其它笔＝付款额 × 该支付通路在订单项目下的生效通路费率（未配置＝0），记所用配置行。同一笔重放不改已固化行。
+     * 其它笔＝付款额 × 该支付通路在订单项目下的生效通路费率（未配置＝0），记所用配置行与其版本号（第十八批 BQ 段第 360 条 360-R2，
+     * 第十八批裁决 72「每单记录所用版本号」）。同一笔重放不改已固化行。
      * 本单销售渠道费所用配置同时固化（见 {@link #fixSalesChannelFee}）。
      */
     public void fix(String paymentIntentId, String orderId, String projectId, String paymentChannel, long amountCent) {
@@ -51,8 +52,9 @@ public class RouteFeeShares {
         }
         jdbc.update("""
                 INSERT INTO ticket_payment_route_fees
-                    (payment_intent_id, order_id, project_id, payment_channel, amount_cent, fee_bps, fee_cent, config_id)
-                VALUES (:payment_intent_id, :order_id, :project_id, :payment_channel, :amount_cent, :fee_bps, :fee_cent, :config_id)
+                    (payment_intent_id, order_id, project_id, payment_channel, amount_cent, fee_bps, fee_cent, config_id, config_version)
+                VALUES (:payment_intent_id, :order_id, :project_id, :payment_channel, :amount_cent, :fee_bps, :fee_cent, :config_id,
+                        (SELECT version_no FROM channel_fee_configs WHERE id = :config_id))
                 ON CONFLICT (payment_intent_id) DO NOTHING
                 """, new MapSqlParameterSource()
                 .addValue("payment_intent_id", paymentIntentId)
@@ -68,7 +70,8 @@ public class RouteFeeShares {
 
     /**
      * 本单首笔受理付款时固化销售渠道费所用配置（之后改配置不回改，核销、到期与售票池快照都按这一版算）：官方渠道与未标渠道不扣、不记；
-     * 第三方渠道按订单项目与销售渠道解析当时生效的配置（比例或每张票固定金额），记配置行 id。
+     * 第三方渠道按订单项目与销售渠道解析当时生效的配置（比例或每张票固定金额），记配置行 id 与其版本号（第十八批 BQ 段第 360 条 360-R2，
+     * 第十八批裁决 72「每单记录所用版本号」）。
      */
     public void fixSalesChannelFee(String orderId) {
         Map<String, Object> order = jdbc.queryForList("SELECT project_id, sales_channel FROM ticket_orders WHERE id = :id",
@@ -81,11 +84,13 @@ public class RouteFeeShares {
         JdbcSettlementBillRepository.ChannelFeeConfig cfg = billRepository.findChannelFee(projectId, channel);
         jdbc.update("""
                 INSERT INTO ticket_order_channel_fees (order_id, project_id, sales_channel, sales_fee_config_id, sales_fee_bps,
-                    sales_fixed_amount_cent, sales_fixed_at)
-                VALUES (:order_id, :project_id, :sales_channel, :config_id, :fee_bps, :fixed_amount_cent, now())
+                    sales_fixed_amount_cent, sales_fee_config_version, sales_fixed_at)
+                VALUES (:order_id, :project_id, :sales_channel, :config_id, :fee_bps, :fixed_amount_cent,
+                        (SELECT version_no FROM channel_fee_configs WHERE id = :config_id), now())
                 ON CONFLICT (order_id) DO UPDATE SET sales_channel = EXCLUDED.sales_channel,
                     sales_fee_config_id = EXCLUDED.sales_fee_config_id, sales_fee_bps = EXCLUDED.sales_fee_bps,
-                    sales_fixed_amount_cent = EXCLUDED.sales_fixed_amount_cent, sales_fixed_at = EXCLUDED.sales_fixed_at
+                    sales_fixed_amount_cent = EXCLUDED.sales_fixed_amount_cent,
+                    sales_fee_config_version = EXCLUDED.sales_fee_config_version, sales_fixed_at = EXCLUDED.sales_fixed_at
                  WHERE ticket_order_channel_fees.sales_fixed_at IS NULL
                 """, new MapSqlParameterSource()
                 .addValue("order_id", orderId)

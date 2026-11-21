@@ -23,6 +23,8 @@ import org.springframework.transaction.annotation.Transactional;
  *
  * <p>⚠️ 走真实 Flyway 迁移库;{@code @Transactional} = 每用例结束自动回滚(含删表行的 fail-loud 用例不污染库)。
  * <p>差人转正:起草用 {@code DRAFTER}、复核转正用 {@code APPROVER}(二者不同,否则 403)。
+ * <p>第十八批 BQ 段第 371 条 371-R1:卡座提成费率落草案带次日生效起始日期,批准后待生效,经 {@link #activate} 按次日调到日转正再读新值;
+ * 积分累计率不在其列,仍批准即生效。
  */
 @SpringBootTest(properties = {
         "spring.datasource.url=${SETTLE_TEST_DB_URL:jdbc:postgresql://127.0.0.1:5432/complex_test}",
@@ -49,9 +51,19 @@ class CommissionPointsConfigJdbcIntegrationTests {
     @Autowired
     private JdbcTemplate jdbcTemplate;
 
+    @Autowired
+    private SettlementConfigScheduledActivationService activation;
+
+    @Autowired
+    private com.complex.platform.common.BusinessDayResolver businessDays;
+
+    /** 371-R1:次日(按平台默认营业日;本类项目、商户未设营业日,与之相同)。 */
+    private String next;
+
     @BeforeEach
     void setUp() {
         TestSecurityActors.asPlatformAdmin();
+        next = businessDays.businessDate(null, null, java.time.Instant.now()).plusDays(1).toString();
         cleanupProjectRows();
     }
 
@@ -65,6 +77,12 @@ class CommissionPointsConfigJdbcIntegrationTests {
         for (String table : List.of("bar_commission_rate_configs", "points_accrual_rate_configs")) {
             jdbcTemplate.update("DELETE FROM " + table + " WHERE project_id = ?", PROJECT);
         }
+    }
+
+    /** 371-R1:他人复核批准卡座提成费率草案(批准后待生效),随即按次日调到日转正。 */
+    private void activate(String configType, String id, String actor) {
+        writeService.activateDraft(configType, id, actor);
+        activation.activateDue(java.time.Instant.now().plus(java.time.Duration.ofDays(1)));
     }
 
     private String draftRowId(String table) {
@@ -92,9 +110,9 @@ class CommissionPointsConfigJdbcIntegrationTests {
     @Test
     void draftsDoNotAffectEngineUntilActivated() {
         writeService.saveCommissionRate(
-                new CommissionRateRequest("cr1", PROJECT, MERCHANT, "sales", 2500), DRAFTER);
+                new CommissionRateRequest("cr1", PROJECT, MERCHANT, "sales", 2500, next), DRAFTER);
         assertThat(configRepository.findCommissionRateBp(PROJECT, MERCHANT, "sales")).isEqualTo(1500); // 草案不被读
-        writeService.activateDraft("commission_rate", draftRowId("bar_commission_rate_configs"), APPROVER);
+        activate("commission_rate", draftRowId("bar_commission_rate_configs"), APPROVER);
         assertThat(configRepository.findCommissionRateBp(PROJECT, MERCHANT, "sales")).isEqualTo(2500);
         // 同项目的 non_sales 未配特例 → 仍全局默认(维度互不串)。
         assertThat(configRepository.findCommissionRateBp(PROJECT, MERCHANT, "non_sales")).isEqualTo(1000);
@@ -110,14 +128,14 @@ class CommissionPointsConfigJdbcIntegrationTests {
     @Test
     void moreSpecificScopeWins() {
         writeService.saveCommissionRate(
-                new CommissionRateRequest("cr-proj", PROJECT, null, "sales", 1800), DRAFTER);
-        writeService.activateDraft("commission_rate", draftRowId("bar_commission_rate_configs"), APPROVER);
+                new CommissionRateRequest("cr-proj", PROJECT, null, "sales", 1800, next), DRAFTER);
+        activate("commission_rate", draftRowId("bar_commission_rate_configs"), APPROVER);
         assertThat(configRepository.findCommissionRateBp(PROJECT, MERCHANT, "sales")).isEqualTo(1800);
         assertThat(configRepository.findCommissionRateBp(PROJECT, null, "sales")).isEqualTo(1800);
 
         writeService.saveCommissionRate(
-                new CommissionRateRequest("cr-merch", PROJECT, MERCHANT, "sales", 2200), DRAFTER);
-        writeService.activateDraft("commission_rate", draftRowId("bar_commission_rate_configs"), APPROVER);
+                new CommissionRateRequest("cr-merch", PROJECT, MERCHANT, "sales", 2200, next), DRAFTER);
+        activate("commission_rate", draftRowId("bar_commission_rate_configs"), APPROVER);
         assertThat(configRepository.findCommissionRateBp(PROJECT, MERCHANT, "sales")).isEqualTo(2200); // 商户特例赢
         assertThat(configRepository.findCommissionRateBp(PROJECT, "merch_other", "sales")).isEqualTo(1800); // 他商户回落项目通用
         assertThat(configRepository.findCommissionRateBp(null, MERCHANT, "sales")).isEqualTo(1500); // 他项目回落全局
@@ -130,8 +148,8 @@ class CommissionPointsConfigJdbcIntegrationTests {
     @Test
     void projectScopedRowIsInvisibleToOtherProjects() {
         writeService.saveCommissionRate(
-                new CommissionRateRequest("iso1", PROJECT, null, "sales", 4000), DRAFTER);
-        writeService.activateDraft("commission_rate", draftRowId("bar_commission_rate_configs"), APPROVER);
+                new CommissionRateRequest("iso1", PROJECT, null, "sales", 4000, next), DRAFTER);
+        activate("commission_rate", draftRowId("bar_commission_rate_configs"), APPROVER);
         writeService.savePointsAccrualRate(
                 new PointsAccrualRateRequest("iso2", PROJECT, null, 25L), DRAFTER);
         writeService.activateDraft("points_accrual_rate", draftRowId("points_accrual_rate_configs"), APPROVER);
@@ -152,8 +170,8 @@ class CommissionPointsConfigJdbcIntegrationTests {
     @Test
     void merchantScopedRowIsInvisibleToOtherMerchants() {
         writeService.saveCommissionRate(
-                new CommissionRateRequest("iso3", PROJECT, MERCHANT, "sales", 4500), DRAFTER);
-        writeService.activateDraft("commission_rate", draftRowId("bar_commission_rate_configs"), APPROVER);
+                new CommissionRateRequest("iso3", PROJECT, MERCHANT, "sales", 4500, next), DRAFTER);
+        activate("commission_rate", draftRowId("bar_commission_rate_configs"), APPROVER);
 
         assertThat(configRepository.findCommissionRateBp(PROJECT, MERCHANT, "sales")).isEqualTo(4500);
         assertThat(configRepository.findCommissionRateBp(PROJECT, "merch_other_tenant", "sales")).isEqualTo(1500);
@@ -216,9 +234,9 @@ class CommissionPointsConfigJdbcIntegrationTests {
     @Test
     void merchantOverrideCanBeArchivedButDefaultSeedCannot() {
         writeService.saveCommissionRate(
-                new CommissionRateRequest("cr-arch", PROJECT, MERCHANT, "sales", 3000), DRAFTER);
+                new CommissionRateRequest("cr-arch", PROJECT, MERCHANT, "sales", 3000, next), DRAFTER);
         String draftId = draftRowId("bar_commission_rate_configs");
-        writeService.activateDraft("commission_rate", draftId, APPROVER);
+        activate("commission_rate", draftId, APPROVER);
         assertThat(configRepository.findCommissionRateBp(PROJECT, MERCHANT, "sales")).isEqualTo(3000);
 
         writeService.archive("commission_rate", draftId, new ArchiveRequest("arc1", "商户合同改签，特例作废"), DRAFTER);
@@ -239,10 +257,10 @@ class CommissionPointsConfigJdbcIntegrationTests {
     @Test
     void writeSideValidatesEnumAndRanges() {
         assertThatThrownBy(() -> writeService.saveCommissionRate(
-                new CommissionRateRequest("bad1", PROJECT, null, "manager", 1000), DRAFTER))
+                new CommissionRateRequest("bad1", PROJECT, null, "manager", 1000, next), DRAFTER))
                 .isInstanceOf(ApiException.class);
         assertThatThrownBy(() -> writeService.saveCommissionRate(
-                new CommissionRateRequest("bad2", PROJECT, null, "sales", 10001), DRAFTER))
+                new CommissionRateRequest("bad2", PROJECT, null, "sales", 10001, next), DRAFTER))
                 .isInstanceOf(ApiException.class);
         assertThatThrownBy(() -> writeService.savePointsAccrualRate(
                 new PointsAccrualRateRequest("bad3", PROJECT, null, 0L), DRAFTER))
@@ -253,7 +271,7 @@ class CommissionPointsConfigJdbcIntegrationTests {
     @Test
     void draftsAppearInPendingQueue() {
         writeService.saveCommissionRate(
-                new CommissionRateRequest("q1", PROJECT, MERCHANT, "non_sales", 900), DRAFTER);
+                new CommissionRateRequest("q1", PROJECT, MERCHANT, "non_sales", 900, next), DRAFTER);
         writeService.savePointsAccrualRate(
                 new PointsAccrualRateRequest("q2", PROJECT, MERCHANT, 200L), DRAFTER);
         // 覆盖 listPendingConfigDrafts 新增的两条 UNION 分支(总控页草案队列的数据源)。
