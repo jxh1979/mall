@@ -1,6 +1,6 @@
 package com.complex.platform.contract;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static com.complex.platform.common.api.ApiRequests.requireIdempotencyKey;
 
@@ -280,7 +280,7 @@ public class ContractController {
         return ApiResponse.ok(service.listColorRules(projectId));
     }
 
-    /** 铺位平面图着色数据源（每铺：可租/已租/即将到期 + 命中色）。 */
+    /** 铺位平面图与租赁状态看板数据源（每铺：六态 + 命中色 + 所属项目、空间类型、面积 + 「已签待交」标注，第十八批 CE 段 403-R1）。 */
     @GetMapping("/space-rental-status")
     public ApiResponse<List<SpaceRentalStatusRecord>> spaceRentalStatus(
             @RequestParam(value = "project_id", required = false) String projectId) {

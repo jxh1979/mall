@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "综合体管理系统 P0 API 契约",
-    "version": "V1.07",
+    "version": "V1.08",
     "description": "P0 首批编码前置契约。本文采用 JSON-compatible YAML，便于与 openapi-p0.json 保持一致。正式后端以 Java 21 + Spring Boot 4.x + springdoc-openapi 输出运行时 OpenAPI，并与本契约比对。"
   },
   "servers": [
@@ -41972,8 +41972,8 @@
           "contract"
         ],
         "operationId": "listSpaceRentalStatus",
-        "summary": "铺位平面图着色数据源(可租/已租/即将到期)",
-        "description": "六态推导（PGM「合同运营细则（已确认）」：铺位租赁状态随意向与合同自动联动，退租结算完成即转空置，不可租人工标注）：不可租(人工 unavailable) > 已退租(该铺最近一份合同存在落账前的退租结算单——待结算/有争议/有争议，诉讼/仲裁，结算单开立起、不论合同是否仍 effective、含 move_out/expiry/early_termination 三种触发；或租期已结束而无已落账结算单) > 已租/即将到期(生效合同在租期内且无开立中结算单，按着色分类再判即将到期) > 洽谈中(有招商意向) > 空置(结算单已落账——押金抵扣中/欠费追缴中/已结清，铺位于终审落账时转空置——或从未绑约)。与出租率 occupancyAreas / 空置铺位明细 listVacantSpaces 共用同一推导。第十八批 G 段 82b-R3：平台管理员照旧；其余账号只出 contract.draft.manage 可触及项目的铺位，带 project_id 时取它与可触及项目的交集（不在范围内返回空表）。第十八批 BW 段第 386 条 386-R1（BSM:1354「分类、颜色和提前天数按综合体后台可配」）：已租铺位的即将到期按铺位所在综合体自己的在用着色分类判定（命中提前天数最紧一档，着该档颜色），该综合体未配置时按平台默认，两者不叠加。",
+        "summary": "铺位平面图与租赁状态看板数据源(六态＋已签待交)",
+        "description": "六态推导（PGM「合同运营细则（已确认）」：铺位租赁状态随意向与合同自动联动，退租结算完成即转空置，不可租人工标注）：不可租(人工 unavailable) > 已退租(该铺最近一份合同存在落账前的退租结算单——待结算/有争议/有争议，诉讼/仲裁，结算单开立起、不论合同是否仍 effective、含 move_out/expiry/early_termination 三种触发；或租期已结束而无已落账结算单) > 已租/即将到期(生效合同在租期内且无开立中结算单，按着色分类再判即将到期) > 洽谈中(有招商意向) > 空置(结算单已落账——押金抵扣中/欠费追缴中/已结清，铺位于终审落账时转空置——或从未绑约)。与出租率 occupancyAreas / 空置铺位明细 listVacantSpaces 共用同一推导。第十八批 G 段 82b-R3：平台管理员照旧；其余账号只出 contract.draft.manage 可触及项目的铺位，带 project_id 时取它与可触及项目的交集（不在范围内返回空表）。第十八批 BW 段第 386 条 386-R1（BSM:1354「分类、颜色和提前天数按综合体后台可配」）：已租铺位的即将到期按铺位所在综合体自己的在用着色分类判定（命中提前天数最紧一档，着该档颜色），该综合体未配置时按平台默认，两者不叠加。第十八批 CE 段第 403 条 403-R1（ENUM:259「看板对已签合同但尚未交付的铺位另加「已签待交」标注并关联合同与交付依据，不新增第七种铺位租赁状态，不混作空置或已交付」）：每行另带 5 个蛇形键——project_id（铺位所属综合体项目 id）、space_type（空间类型）、area_sqm（铺位面积，平方米）、signed_pending_contract_id、signed_pending_effective_date；已签待交＝绑定该铺位的待生效合同（pending_effective），或已生效但未到生效日的合同，多份时取生效日最早的一份，两键分别为该合同 id 与其生效日（yyyy-MM-dd，作交付依据，BSM:1347「交付日（即起租日）」）；只作标注、不改六态，没有时两键为 null。",
         "x-permission": "contract.draft.manage",
         "x-data-scope": "platform",
         "x-terminal-allowed": [
