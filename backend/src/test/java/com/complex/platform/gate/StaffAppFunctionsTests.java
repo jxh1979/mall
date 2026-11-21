@@ -1,6 +1,6 @@
 package com.complex.platform.gate;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -52,6 +52,19 @@ class StaffAppFunctionsTests {
     void voucherRedeemAndKioskClaimAreCompanyDeviceFunctions() {
         assertThat(StaffAppFunctions.ALL).contains("voucher_redeem", "kiosk_claim");
         assertThat(StaffAppFunctions.functionsFor("staff_private_phone")).doesNotContain("voucher_redeem", "kiosk_claim");
+    }
+
+    /**
+     * 第十八批 BS 段第 373 条 373-R5（第十八批裁决 76「巡检员用工作手机按顺序扫码后记结果」；BSM:1891 工作手机用于「……巡检……扫码」）：
+     * 游乐巡检走点是工作手机功能，不进私人手机与平板清单。
+     */
+    @Test
+    void amusementInspectionWalkIsAWorkPhoneFunction() {
+        assertThat(StaffAppFunctions.ALL).contains("amusement_inspection");
+        assertThat(StaffAppFunctions.functionsFor("staff_private_phone")).doesNotContain("amusement_inspection");
+        assertThat(StaffAppFunctions.functionsFor("tablet")).doesNotContain("amusement_inspection");
+        assertThat(StaffAppFunctions.allows("staff_private_phone", "POST",
+                "/api/v1/amusement/projects/amu_1/inspection-points/1/check")).isFalse();
     }
 
     /** 第十八批 O 段第 129 条（BSM:800「核销必须在线、不做离线核销」）：离线同步通道已下线，功能清单不再有「同步待提交任务」。 */

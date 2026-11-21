@@ -1,4 +1,4 @@
-# P0 OpenAPI 权限、事件、任务追溯收口附录 V0.98
+# P0 OpenAPI 权限、事件、任务追溯收口附录 V0.99
 
 ## 1. 文档定位
 
@@ -14,11 +14,11 @@
 
 | 检查项 | 当前结果 | 执行结论 |
 |---|---:|---|
-| OpenAPI operation 数 | 1403 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
+| OpenAPI operation 数 | 1409 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
 | OpenAPI 权限/通用权限状态数 | 445 | 人工权限矩阵正文未覆盖 344 项；缺口以本文第 3 节补齐 |
-| OpenAPI 成功/失败事件数 | 2806 | 人工事件矩阵正文未覆盖 2757 项；完整事件字典以本文第 4 节为准 |
-| operation 级任务追溯 | 1403 | 人工任务映射正文未逐项覆盖 1397 个 operation；逐 operation 映射以本文第 5 节为准 |
-| 写接口数量 | 862 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
+| OpenAPI 成功/失败事件数 | 2818 | 人工事件矩阵正文未覆盖 2769 项；完整事件字典以本文第 4 节为准 |
+| operation 级任务追溯 | 1409 | 人工任务映射正文未逐项覆盖 1403 个 operation；逐 operation 映射以本文第 5 节为准 |
+| 写接口数量 | 865 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
 
 ## 3. 权限码与认证上下文补充表
 
@@ -76,14 +76,14 @@
 | `amusement.reservation.manage` | staff-token | project-amusement | 2 | createAmusementReservation, changeAmusementReservationStatus | OpenAPI 补充，以本附录为准 |
 | `amusement.reservation.view` | staff-token | project | 1 | listAmusementReservations | 已在权限矩阵正文出现 |
 | `amusement.safety_inspection.approve_reopen` | staff-token | project-amusement | 1 | approveAmusementReopen | 已在权限矩阵正文出现 |
-| `amusement.safety_inspection.create` | staff-token | project-amusement | 1 | createAmusementSafetyInspection | 已在权限矩阵正文出现 |
+| `amusement.safety_inspection.create` | staff-token | project-amusement | 2 | createAmusementSafetyInspection, checkAmusementInspectionPoint | 已在权限矩阵正文出现 |
 | `amusement.safety_inspection.recheck` | staff-token | project-amusement | 1 | recheckAmusementSafetyInspection | 已在权限矩阵正文出现 |
 | `amusement.safety_inspection.rectify` | staff-token | project-amusement | 1 | rectifyAmusementSafetyInspection | 已在权限矩阵正文出现 |
 | `amusement.safety_inspection.submit` | staff-token | project-amusement | 1 | submitAmusementSafetyInspection | 已在权限矩阵正文出现 |
-| `amusement.safety_inspection.view` | staff-token | project-amusement | 3 | getAmusementOpenEligibility, listAmusementSafetyInspections, listAmusementInspectionTasks | 已在权限矩阵正文出现 |
+| `amusement.safety_inspection.view` | staff-token | project, project-amusement | 6 | getAmusementOpenEligibility, listAmusementSafetyInspections, getAmusementProjectInspectionPoints, getAmusementSpotCheckPolicy, listAmusementSpotCheckMisses, listAmusementInspectionTasks | 已在权限矩阵正文出现 |
 | `amusement.safety_notice.manage` | staff-token | project-amusement | 1 | createAmusementSafetyNotice | OpenAPI 补充，以本附录为准 |
 | `amusement.safety_notice.view` | staff-token | project-amusement | 1 | listAmusementSafetyNotices | OpenAPI 补充，以本附录为准 |
-| `amusement.safety_template.manage` | staff-token | project-amusement | 1 | createAmusementSafetyTemplate | 已在权限矩阵正文出现 |
+| `amusement.safety_template.manage` | staff-token | project, project-amusement | 3 | replaceAmusementProjectInspectionPoints, saveAmusementSpotCheckPolicy, createAmusementSafetyTemplate | 已在权限矩阵正文出现 |
 | `amusement.safety_template.view` | staff-token | project-amusement | 1 | listAmusementSafetyTemplates | 已在权限矩阵正文出现 |
 | `amusement.session.end` | staff-token | project-amusement | 1 | endAmusementSession | OpenAPI 补充，以本附录为准 |
 | `amusement.session.manage` | staff-token | project, project-amusement | 5 | createAmusementProject, createAmusementSession, assignAmusementProjectSpace, listAmusementProjectsWithoutSpace, listAmusementProjectsWithoutDeviceRegistry | 已在权限矩阵正文出现 |
@@ -568,6 +568,10 @@
 | `amusement.incident.create` | success | `createAmusementIncident` | `POST` | `/api/v1/amusement/incidents` | AMU-游乐安全 | `amusement.incident.create` | 接口级事件，以本附录为准 |
 | `amusement.incident.create_failed` | failure | `createAmusementIncident` | `POST` | `/api/v1/amusement/incidents` | AMU-游乐安全 | `amusement.incident.create` | 接口级事件，以本附录为准 |
 | `amusement.incident.list` | success | `listAmusementIncidents` | `GET` | `/api/v1/amusement/incidents` | AMU-游乐安全 | `amusement.incident.view` | 接口级事件，以本附录为准 |
+| `amusement.inspection_point.check_failed` | failure | `checkAmusementInspectionPoint` | `POST` | `/api/v1/amusement/projects/{id}/inspection-points/{seq}/check` | AMU-游乐安全 | `amusement.safety_inspection.create` | 接口级事件，以本附录为准 |
+| `amusement.inspection_point.checked` | success | `checkAmusementInspectionPoint` | `POST` | `/api/v1/amusement/projects/{id}/inspection-points/{seq}/check` | AMU-游乐安全 | `amusement.safety_inspection.create` | 接口级事件，以本附录为准 |
+| `amusement.inspection_points.configure_failed` | failure | `replaceAmusementProjectInspectionPoints` | `PUT` | `/api/v1/amusement/projects/{id}/inspection-points` | AMU-游乐安全 | `amusement.safety_template.manage` | 接口级事件，以本附录为准 |
+| `amusement.inspection_points.configured` | success | `replaceAmusementProjectInspectionPoints` | `PUT` | `/api/v1/amusement/projects/{id}/inspection-points` | AMU-游乐安全 | `amusement.safety_template.manage` | 接口级事件，以本附录为准 |
 | `amusement.inspection_task.viewed` | success | `listAmusementInspectionTasks` | `GET` | `/api/v1/amusement/inspection-tasks` | AMU-游乐安全 | `amusement.safety_inspection.view` | 接口级事件，以本附录为准 |
 | `amusement.inspection_task.viewed_failed` | failure | `listAmusementInspectionTasks` | `GET` | `/api/v1/amusement/inspection-tasks` | AMU-游乐安全 | `amusement.safety_inspection.view` | 接口级事件，以本附录为准 |
 | `amusement.maintenance_record_failed` | failure | `createAmusementMaintenanceRecord` | `POST` | `/api/v1/amusement/maintenance-records` | AMU-游乐安全 | `amusement.maintenance.submit` | 接口级事件，以本附录为准 |
@@ -660,6 +664,8 @@
 | `amusement.session.viewed` | success | `listAmusementSessionEndings` | `GET` | `/api/v1/amusement/sessions/{id}/endings` | AMU-游乐安全 | `amusement.session.view` | 接口级事件，以本附录为准 |
 | `amusement.session.viewed` | success | `listAmusementSessionFollowups` | `GET` | `/api/v1/amusement/sessions/{id}/followups` | AMU-游乐安全 | `amusement.session.view` | 接口级事件，以本附录为准 |
 | `amusement.session.viewed` | success | `listAmusementSessions` | `GET` | `/api/v1/amusement/sessions` | AMU-游乐安全 | `amusement.session.view` | 接口级事件，以本附录为准 |
+| `amusement.spot_check_policy.update_failed` | failure | `saveAmusementSpotCheckPolicy` | `PUT` | `/api/v1/amusement/spot-check-policies/{project_id}` | AMU-游乐安全 | `amusement.safety_template.manage` | 接口级事件，以本附录为准 |
+| `amusement.spot_check_policy.updated` | success | `saveAmusementSpotCheckPolicy` | `PUT` | `/api/v1/amusement/spot-check-policies/{project_id}` | AMU-游乐安全 | `amusement.safety_template.manage` | 接口级事件，以本附录为准 |
 | `amusement.status_board.view_failed` | failure | `listAmusementProjectStatusBoard` | `GET` | `/api/v1/amusement/projects/status-board` | AMU-游乐安全 | `amusement.session.view` | 接口级事件，以本附录为准 |
 | `amusement.status_board.viewed` | success | `listAmusementProjectStatusBoard` | `GET` | `/api/v1/amusement/projects/status-board` | AMU-游乐安全 | `amusement.session.view` | 接口级事件，以本附录为准 |
 | `amusement.verification_failed` | failure | `createAmusementVerification` | `POST` | `/api/v1/amusement/verifications` | AMU-游乐安全 | `amusement.verification.execute` | 已在事件矩阵正文出现 |
@@ -2227,6 +2233,10 @@
 | `not_applicable` | failure | `getAiThresholds` | `GET` | `/api/v1/analytics/ai-thresholds` | ANA-风控分析 | `analytics.dashboard.view` | 接口级事件，以本附录为准 |
 | `not_applicable` | success | `getAmusementCompensationPolicy` | `GET` | `/api/v1/amusement/compensation-policies/{project_id}` | AMU-游乐安全 | `amusement.park_fault.view` | 接口级事件，以本附录为准 |
 | `not_applicable` | failure | `getAmusementCompensationPolicy` | `GET` | `/api/v1/amusement/compensation-policies/{project_id}` | AMU-游乐安全 | `amusement.park_fault.view` | 接口级事件，以本附录为准 |
+| `not_applicable` | success | `getAmusementProjectInspectionPoints` | `GET` | `/api/v1/amusement/projects/{id}/inspection-points` | AMU-游乐安全 | `amusement.safety_inspection.view` | 接口级事件，以本附录为准 |
+| `not_applicable` | failure | `getAmusementProjectInspectionPoints` | `GET` | `/api/v1/amusement/projects/{id}/inspection-points` | AMU-游乐安全 | `amusement.safety_inspection.view` | 接口级事件，以本附录为准 |
+| `not_applicable` | success | `getAmusementSpotCheckPolicy` | `GET` | `/api/v1/amusement/spot-check-policies/{project_id}` | AMU-游乐安全 | `amusement.safety_inspection.view` | 接口级事件，以本附录为准 |
+| `not_applicable` | failure | `getAmusementSpotCheckPolicy` | `GET` | `/api/v1/amusement/spot-check-policies/{project_id}` | AMU-游乐安全 | `amusement.safety_inspection.view` | 接口级事件，以本附录为准 |
 | `not_applicable` | success | `getAnomalyConfig` | `GET` | `/api/v1/analytics/anomaly-config` | ANA-风控分析 | `analytics.dashboard.view` | 接口级事件，以本附录为准 |
 | `not_applicable` | failure | `getAnomalyConfig` | `GET` | `/api/v1/analytics/anomaly-config` | ANA-风控分析 | `analytics.dashboard.view` | 接口级事件，以本附录为准 |
 | `not_applicable` | success | `getAuditLabels` | `GET` | `/api/v1/audit/labels` | P0-待归类 | `audit.operation_log.view` | 接口级事件，以本附录为准 |
@@ -2343,6 +2353,8 @@
 | `not_applicable` | failure | `listAmusementParkWideFaultActions` | `GET` | `/api/v1/amusement/park-wide-faults/{fault_id}/actions` | AMU-游乐安全 | `amusement.park_fault.view` | 接口级事件，以本附录为准 |
 | `not_applicable` | failure | `listAmusementParkWideFaults` | `GET` | `/api/v1/amusement/park-wide-faults` | AMU-游乐安全 | `amusement.park_fault.view` | 接口级事件，以本附录为准 |
 | `not_applicable` | failure | `listAmusementSafetyNotices` | `GET` | `/api/v1/amusement/safety-notices` | AMU-游乐安全 | `amusement.safety_notice.view` | 接口级事件，以本附录为准 |
+| `not_applicable` | success | `listAmusementSpotCheckMisses` | `GET` | `/api/v1/amusement/spot-check-misses` | AMU-游乐安全 | `amusement.safety_inspection.view` | 接口级事件，以本附录为准 |
+| `not_applicable` | failure | `listAmusementSpotCheckMisses` | `GET` | `/api/v1/amusement/spot-check-misses` | AMU-游乐安全 | `amusement.safety_inspection.view` | 接口级事件，以本附录为准 |
 | `not_applicable` | success | `listApprovalDeadlines` | `GET` | `/api/v1/platform/approval-deadlines` | GOV-平台治理 | `governance.supervisor_review.view` | 接口级事件，以本附录为准 |
 | `not_applicable` | failure | `listApprovalDeadlines` | `GET` | `/api/v1/platform/approval-deadlines` | GOV-平台治理 | `governance.supervisor_review.view` | 接口级事件，以本附录为准 |
 | `not_applicable` | success | `listBarCombos` | `GET` | `/api/v1/bar/catalog/combos` | BAR-酒吧经营 | `bar.combo.view` | 接口级事件，以本附录为准 |
@@ -3300,6 +3312,7 @@
 | AMU-游乐安全 | `assignAmusementProjectSpace` | `PUT` | `/api/v1/amusement/projects/{id}/space` | 游乐项目空间指派（回填） | `amusement.session.manage` | `amusement.project_space.assigned` / `amusement.project_space.assign_failed` | web | operation 级补充 |
 | AMU-游乐安全 | `changeAmusementQueueEntryStatus` | `POST` | `/api/v1/amusement/queue-entries/{id}/status` | 变更游乐排队记录状态 | `amusement.queue.manage` | `amusement.queue_entry.status_change` / `amusement.queue_entry.status_change_failed` | staff_work_phone | operation 级补充 |
 | AMU-游乐安全 | `changeAmusementReservationStatus` | `POST` | `/api/v1/amusement/reservations/{id}/status` | 变更游乐预约状态 | `amusement.reservation.manage` | `amusement.reservation.status_change` / `amusement.reservation.status_change_failed` | staff_work_phone | operation 级补充 |
+| AMU-游乐安全 | `checkAmusementInspectionPoint` | `POST` | `/api/v1/amusement/projects/{id}/inspection-points/{seq}/check` | 按序扫码记录一个巡检点位 | `amusement.safety_inspection.create` | `amusement.inspection_point.checked` / `amusement.inspection_point.check_failed` | staff_work_phone | operation 级补充 |
 | AMU-游乐安全 | `claimAmusementEntitlementSession` | `POST` | `/api/v1/amusement/entitlement-sessions/{id}/claim` | 一体机领取核销权益会话（防错领 + 会话时效） | `amusement.entitlement_session.claim` | `amusement.entitlement_session.claimed` / `amusement.entitlement_session.claim_failed` | web, kiosk | operation 级补充 |
 | AMU-游乐安全 | `closeAmusementIncident` | `POST` | `/api/v1/amusement/incidents/{incidentId}/close` | 关闭游乐安全事件 | `amusement.incident.close` | `amusement.incident.close` / `amusement.incident.close_failed` | staff_work_phone | operation 级补充 |
 | AMU-游乐安全 | `configureAmusementCompensationPolicy` | `POST` | `/api/v1/amusement/compensation-policies/{project_id}` | 配置全园故障补偿有效期参数（含上下限） | `amusement.compensation_policy.manage` | `amusement.fault_compensation.policy_configured` / `amusement.fault_compensation.policy_config_failed` | web | operation 级补充 |
@@ -3331,6 +3344,8 @@
 | AMU-游乐安全 | `getAmusementMaintenanceRecord` | `GET` | `/api/v1/amusement/maintenance-records/{id}` | 查询游乐定期检修记录详情 | `amusement.maintenance.read` | `amusement.maintenance.viewed` / `amusement.maintenance.view_failed` | kiosk, web, mobile_admin | operation 级补充 |
 | AMU-游乐安全 | `getAmusementOpenEligibility` | `GET` | `/api/v1/amusement/projects/{id}/open-eligibility` | 查询项目或场次安全与容量准入 | `amusement.safety_inspection.view` | `amusement.open_eligibility.viewed` / `amusement.open_eligibility.blocked` | web, staff_work_phone, kiosk | operation 级补充 |
 | AMU-游乐安全 | `getAmusementOverCapacityPolicy` | `GET` | `/api/v1/amusement/projects/{projectId}/over-capacity-policy` | 查询游乐项目超容处置策略 | `amusement.over_capacity_policy.view` | `amusement.over_capacity_policy.viewed` / `amusement.over_capacity_policy.view_failed` | web | operation 级补充 |
+| AMU-游乐安全 | `getAmusementProjectInspectionPoints` | `GET` | `/api/v1/amusement/projects/{id}/inspection-points` | 查询游乐项目巡检点位清单与本轮走点 | `amusement.safety_inspection.view` | `not_applicable` / `not_applicable` | web, staff_work_phone | operation 级补充 |
+| AMU-游乐安全 | `getAmusementSpotCheckPolicy` | `GET` | `/api/v1/amusement/spot-check-policies/{project_id}` | 查询营业中抽检间隔（按综合体项目） | `amusement.safety_inspection.view` | `not_applicable` / `not_applicable` | web | operation 级补充 |
 | AMU-游乐安全 | `initiateAmusementEntitlementSession` | `POST` | `/api/v1/amusement/entitlement-sessions` | 发起权益会话（工作手机扫附赠权益码） | `amusement.entitlement_session.initiate` | `amusement.entitlement_session.initiated` / `amusement.entitlement_session.initiate_failed` | staff_work_phone, web | operation 级补充 |
 | AMU-游乐安全 | `initiateAmusementFaultCompensationBatch` | `POST` | `/api/v1/amusement/park-wide-faults/{fault_id}/compensation-batches` | 发起全园故障补偿批次（第一岗位：快照受影响人份） | `amusement.park_fault.confirm_as_head` | `amusement.fault_compensation.batch_initiated` / `amusement.fault_compensation.batch_initiate_failed` | web | operation 级补充 |
 | AMU-游乐安全 | `initiateAmusementParkWideFault` | `POST` | `/api/v1/amusement/park-wide-faults` | 发起全园故障状态（第一岗位） | `amusement.park_fault.confirm_as_head` | `amusement.park_fault.initiated` / `amusement.park_fault.initiate_failed` | web, staff_work_phone | operation 级补充 |
@@ -3364,13 +3379,16 @@
 | AMU-游乐安全 | `listAmusementSessionEndings` | `GET` | `/api/v1/amusement/sessions/{id}/endings` | 查看场次结束原件 | `amusement.session.view` | `amusement.session.viewed` / `amusement.session.view_failed` | app, dealer_portal, kiosk, merchant_app, merchant_portal, miniapp, mobile_admin, staff_work_phone, web | operation 级补充 |
 | AMU-游乐安全 | `listAmusementSessionFollowups` | `GET` | `/api/v1/amusement/sessions/{id}/followups` | 查看场次结束后的未履约事项 | `amusement.session.view` | `amusement.session.viewed` / `amusement.session.view_failed` | app, dealer_portal, kiosk, merchant_app, merchant_portal, miniapp, mobile_admin, staff_work_phone, web | operation 级补充 |
 | AMU-游乐安全 | `listAmusementSessions` | `GET` | `/api/v1/amusement/sessions` | 查询游乐场次安排 | `amusement.session.view` | `amusement.session.viewed` / `amusement.session.view_failed` | web, staff_work_phone, kiosk | operation 级补充 |
+| AMU-游乐安全 | `listAmusementSpotCheckMisses` | `GET` | `/api/v1/amusement/spot-check-misses` | 查询当班未抽检记录 | `amusement.safety_inspection.view` | `not_applicable` / `not_applicable` | web | operation 级补充 |
 | AMU-游乐安全 | `listAmusementVerifications` | `GET` | `/api/v1/amusement/verifications` | 查询游乐核销记录 | `amusement.verification.view` | `amusement.verification.viewed` / `amusement.verification.view_failed` | web | operation 级补充 |
 | AMU-游乐安全 | `readAmusementBusinessDayConfigOriginal` | `GET` | `/api/v1/amusement/business-day-configs/{id}` | 逐笔查看游乐营业日配置审批原件 | `governance.supervisor_review.view` | `amusement.business_day.original_viewed` / `amusement.business_day.original_view_failed` | app, dealer_portal, kiosk, merchant_app, merchant_portal, miniapp, mobile_admin, staff_work_phone, web | operation 级补充 |
 | AMU-游乐安全 | `recheckAmusementSafetyInspection` | `POST` | `/api/v1/amusement/safety-inspections/{id}/recheck` | 提交复检结果 | `amusement.safety_inspection.recheck` | `amusement.safety_inspection.rechecked` / `amusement.safety_inspection.recheck_failed` | staff_work_phone, web | operation 级补充 |
 | AMU-游乐安全 | `rectifyAmusementSafetyInspection` | `POST` | `/api/v1/amusement/safety-inspections/{id}/rectify` | 提交整改说明和证据 | `amusement.safety_inspection.rectify` | `amusement.safety_inspection.rectification_submitted` / `amusement.safety_inspection.rectification_failed` | staff_work_phone, web | operation 级补充 |
 | AMU-游乐安全 | `releaseAmusementGroupBooking` | `POST` | `/api/v1/amusement/group-bookings/{id}/release` | Release P2 amusement group booking and free locked capacity | `amusement.group_booking.manage` | `amusement_group_booking.released.success` / `amusement_group_booking.released.failure` | web | operation 级补充 |
 | AMU-游乐安全 | `removeAmusementProjectEntitlement` | `POST` | `/api/v1/amusement/projects/{id}/entitlements/{entitlementType}/remove` | 解除游乐项目权益绑定 | `amusement.project_entitlement.manage` | `amusement.project_entitlement.changed` / `amusement.project_entitlement.change_failed` | web | operation 级补充 |
+| AMU-游乐安全 | `replaceAmusementProjectInspectionPoints` | `PUT` | `/api/v1/amusement/projects/{id}/inspection-points` | 整份替换游乐项目巡检点位清单 | `amusement.safety_template.manage` | `amusement.inspection_points.configured` / `amusement.inspection_points.configure_failed` | web | operation 级补充 |
 | AMU-游乐安全 | `requestDeleteAmusementProjectEntitlement` | `POST` | `/api/v1/amusement/projects/{id}/entitlements/{entitlementType}/delete-request` | 发起游乐项目权益绑定删除申请 | `amusement.project_entitlement.manage` | `amusement.project_entitlement.changed` / `amusement.project_entitlement.change_failed` | web | operation 级补充 |
+| AMU-游乐安全 | `saveAmusementSpotCheckPolicy` | `PUT` | `/api/v1/amusement/spot-check-policies/{project_id}` | 配置营业中抽检间隔及上下限（按综合体项目，最高权限本人） | `amusement.safety_template.manage` | `amusement.spot_check_policy.updated` / `amusement.spot_check_policy.update_failed` | web | operation 级补充 |
 | AMU-游乐安全 | `submitAmusementBusinessDayConfig` | `POST` | `/api/v1/amusement/business-day-configs` | 提交综合体游乐营业日最高权限审批 | `amusement.business_day.manage` | `amusement.business_day.submit_completed` / `amusement.business_day.submit_failed` | app, dealer_portal, kiosk, merchant_app, merchant_portal, miniapp, mobile_admin, staff_work_phone, web | operation 级补充 |
 | AMU-游乐安全 | `submitAmusementSafetyInspection` | `POST` | `/api/v1/amusement/safety-inspections/{id}/submit` | 提交巡检结果 | `amusement.safety_inspection.submit` | `amusement.safety_inspection.submitted` / `amusement.safety_inspection.blocked` | staff_work_phone, web | operation 级补充 |
 | AMU-游乐安全 | `unarchiveAmusementProjectEntitlement` | `POST` | `/api/v1/amusement/projects/{id}/entitlements/{entitlementType}/unarchive` | 恢复游乐项目权益绑定 | `amusement.project_entitlement.manage` | `amusement.project_entitlement.changed` / `amusement.project_entitlement.change_failed` | web | operation 级补充 |

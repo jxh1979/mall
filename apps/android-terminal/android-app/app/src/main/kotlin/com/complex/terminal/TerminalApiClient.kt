@@ -1,6 +1,6 @@
 package com.complex.terminal
 
-// 文件版本：V0.18
+// 文件版本：V0.19
 
 import java.io.BufferedReader
 import java.net.HttpURLConnection
@@ -351,6 +351,13 @@ class TerminalApiClient(
 
   fun listAmusementMaintenanceRecords(): List<AmusementMaintenanceRecord> =
     get<Page<AmusementMaintenanceRecord>>("/api/v1/amusement/maintenance-records").items
+
+  /** 第十八批 BS 段第 373 条 373-R5（第十八批裁决 76「逐点扫码」）：游乐巡检走点——读点位清单与本轮走点、按序扫码记点位。 */
+  fun getAmusementInspectionPoints(projectId: String): AmusementInspectionPoints =
+    get("/api/v1/amusement/projects/${urlEncode(projectId)}/inspection-points")
+
+  fun checkAmusementInspectionPoint(projectId: String, seq: Int, request: AmusementInspectionPointCheckRequest): AmusementInspectionPoints =
+    post("/api/v1/amusement/projects/${urlEncode(projectId)}/inspection-points/$seq/check", request)
 
   fun createBarOrder(request: BarOrderRequest): BarOrderRecord =
     post("/api/v1/bar/orders", request)

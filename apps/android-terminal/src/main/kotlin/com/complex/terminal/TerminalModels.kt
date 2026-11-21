@@ -1,6 +1,6 @@
 package com.complex.terminal
 
-// 文件版本：V0.21
+// 文件版本：V0.22
 
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
@@ -296,6 +296,37 @@ data class AmusementDevice(val id: String = "", val deviceCode: String = "", val
 /** 120-R6：供应商（检修单位作为供应商记录，BSM:992）。 */
 @Serializable
 data class InventorySupplier(val id: String = "", val supplierName: String? = null, val status: String? = null)
+
+/** 第十八批 BS 段第 373 条 373-R5（第十八批裁决 76「逐点扫码」）：游乐巡检点位（GET /api/v1/amusement/projects/{id}/inspection-points）。 */
+@Serializable
+data class AmusementInspectionPoint(val seq: Int = 0, val pointName: String = "", val pointCode: String? = null)
+
+/** 373-R5：本轮已记的点位（上一个闭店时点之后）。 */
+@Serializable
+data class AmusementInspectionWalkPoint(
+  val seq: Int = 0,
+  val pointName: String = "",
+  val result: String = "",
+  val note: String? = null,
+  val checkedBy: String? = null,
+  val checkedAt: String? = null,
+)
+
+@Serializable
+data class AmusementInspectionPoints(
+  val projectId: String = "",
+  val points: List<AmusementInspectionPoint> = emptyList(),
+  val walk: List<AmusementInspectionWalkPoint> = emptyList(),
+)
+
+/** 373-R5：记一个点位（POST .../inspection-points/{seq}/check），pointCode 为扫到的点位码，result 为 pass 或 fail。 */
+@Serializable
+data class AmusementInspectionPointCheckRequest(
+  val idempotencyKey: String,
+  val pointCode: String,
+  val result: String,
+  val note: String? = null,
+)
 
 // 游乐检修主管确认恢复 POST .../maintenance-records/{id}/confirm-resume
 // 注意：此处用 remark（非 operator_note）。

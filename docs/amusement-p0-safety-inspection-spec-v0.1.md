@@ -1,4 +1,4 @@
-# 游乐 P0 安全巡检闭环规格 V0.03
+# 游乐 P0 安全巡检闭环规格 V0.04
 
 > **口径修订（2026-08-06 R10）：「场次容量」已废止**——BSM「容量控制」条 明确「**只按单个游乐项目的实时在玩人数控制容量，不再按场次/时段或点位/设备另设容量；排队人数不占用容量**」（DEC-R5-2026-08-04-04；R8 用户裁决 D-02）。本文原「场次容量」一律改称「**项目容量（实时在玩人数）**」；双阈值不变（运营容量软上限告警放行、安全容量硬上限阻断并自动停运）。仍按场次/时段或点位/设备维度罗列的页面、接口、组件与字段只作历史结构参考，容量口径一律以本条为准，相关字段待代码轮下线，期间不得据以新增受控维度。
 
@@ -6,7 +6,7 @@
 
 > **M07 当前迁移与代码事实（2026-09-01，核到 V385）**
 > - V114 已为 `amusement_projects` 增补 `location_point_id`，并为 `amusement_safety_inspections` 增补 `inspector_id`、`inspection_result`、`abnormal_found`、`abnormal_note`；V143 又增补 `device_id`、设备主数据和到期巡检任务表。上述字段不再标为“尚未迁移”。
-> - `amusement_safety_template_items`、`amusement_safety_inspection_items` 和独立 `amusement_reopen_approvals` 仍不存在；单项结果与证据当前内嵌 `items_json`，点位顺序仍缺结构化承载，恢复审批用 `reopen_status` + `amusement_safety_actions`。
+> - `amusement_safety_template_items`、`amusement_safety_inspection_items` 和独立 `amusement_reopen_approvals` 仍不存在；单项结果与证据当前内嵌 `items_json`；点位清单配在游乐项目的 `inspection_points`，进行中的走点表 `amusement_inspection_walk_points`（第十八批 BS 段第 373 条，V727），恢复审批用 `reopen_status` + `amusement_safety_actions`。
 > - `AmusementInspectionTaskJob` 与 `generateDueInspectionTasks` 已实现；调度未配置时默认关闭，生产配置已显式开启。设备周期为空时当前代码回退项目级 24 小时，与 HTML“直接采用设备台账登记周期”不一致，登记为待修缺口。
 > - `approveReopen` 当前会尝试联动项目状态，但 `reopenProjectIfBlocked` 只把 `maintenance/closed` 翻为 `open`，对 `paused` 不强制翻转；若安全阻断落为 `paused`，主管批准后仍可能无法恢复开放，属待修代码缺口。
 
@@ -223,11 +223,15 @@ Given 巡检模板配置了多个有序点位，
 When 巡检员漏过任一点位、越过前一点位或提交事后补录，
 Then 未走完全部点位的任务不得完成；补录须附照片、录音或录像等证据并经主管复核后生效，且不得覆盖原记录。
 
+> 实现现状（第十八批 BS 段第 373 条 373-R1、373-R5）：点位清单配在游乐项目上，不是巡检模板；巡检员用工作手机按顺序逐点扫点位码记录，跳点、扫错码记不上，未走完全部点位不能新建巡检（409 `INSPECTION_POINTS_INCOMPLETE`）；补录未做。
+
 ### AC-AMU-SAFE-009 营业中最低频次
 
 Given 项目已配置营业中抽检最低频次及上下限，
 When 当班未在配置间隔内完成抽检，
 Then 系统必须把该班次标记为未抽检并通知责任人；出厂默认值只作为可调整的项目参数，不得硬编码为不可变规则。
+
+> 实现现状（第十八批 BS 段第 373 条 373-R2）：抽检间隔按综合体项目配置（出厂 120 分钟；项目行间隔与上下限三项同填，最高权限本人调整）；巡检到期任务作业判定超过间隔仍有成功入场即记一条当班未抽检（当班由时刻对应，不另建班次）；只判定留痕，不通知责任人。
 
 ### AC-AMU-SAFE-010 设备周期与分类
 
@@ -288,6 +292,7 @@ Then 局部故障不得直接发补偿通票；全园故障须停止所有新增
 
 | 日期 | 版本 | 变更 |
 |---|---|---|
+| 2026-11-20 | V0.04 | 第十八批 BS 段第 373 条：文首代码事实第二条改记点位清单与走点表（V727）；AC-AMU-SAFE-008、AC-AMU-SAFE-009 记实现现状（点位配在游乐项目上、逐点扫码；抽检间隔按综合体项目、当班未抽检只判定留痕不通知；补录未做） |
 | 2026-09-01 | V0.03 | Grok 只读复审返修：准确登记 `approveReopen` 只联动 `maintenance/closed → open`、不强翻 `paused` 的代码缺口；删除把电子免责和深度事故工单排入 P1 的未授权表述 |
 | 2026-09-01 | V0.02 | M07 收口：更新 V114/V143 与 approveReopen 代码事实；删除 `open_with_warning` 与重大即自动阻断；补点位顺序、证据补录、抽检频次、设备分级、营业日/项目时区、园区容量原文、全园故障与商户隔离；固化 James 批准的 P1/P2 边界 |
 | 2026-06-10 | V0.01 | 新增游乐 P0 安全巡检闭环规格，固化开放前巡检、阻断、整改、复检、主管恢复、核销联动、事件留痕、验收标准和边界场景 |

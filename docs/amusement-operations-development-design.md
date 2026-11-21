@@ -1,10 +1,10 @@
-# 游乐设施运营系统开发设计文档 V0.19
+# 游乐设施运营系统开发设计文档 V0.20
 
 > **口径修订（2026-08-06 R10）：「人工放行」已废止**——ENUM「核销记录状态」条 明确「**系统不提供人工放行：核销要么成功、要么拒绝或失败，任何岗位、任何权限都不能以人工方式让一笔不满足规则的核销通过**」（DEC-CFG-2026-08-03-12 / DEC-R6-08）。本文原有的「人工放行」流程（§6.5）、表 `AmusementManualOverride`、状态取值 `manual_override`、端点 `/api/v1/amusement/manual-overrides`、权限点 `amusement.verification.override`、事件 `amusement.verification_overridden`、指标与页面入口**一律废止**，废止处就地标注；已实现的表、端点与取值待代码轮下线，期间不得新增调用、不得新写入。
 
 > **口径修订（2026-08-06 R10）：「场次容量／三维度容量」已废止**——BSM「容量控制」条 明确「**只按单个游乐项目的实时在玩人数控制容量，不再按场次/时段或点位/设备另设容量；排队人数不占用容量**」（DEC-R5-2026-08-04-04；R8 用户裁决 D-02）。本文原「按项目 + 场次/时段 + 点位/设备三维度取最小可放行余量」的容量判定口径**整体废止**，一律改为「**项目容量（实时在玩人数）**」单维；双阈值不变（运营容量软上限告警放行、安全容量硬上限阻断并自动停运）。`amusement_capacity_config`、`amusement_capacity_snapshot` 的场次维与点位/设备维字段待代码轮下线，期间不得据以新增受控维度。
 
-> 版本：V0.19 ｜ 最后更新：2026-11-18 ｜ 迁移证据：保留历史迁移记录；TK-17/18 新增 V483/V484/V487 ｜ 状态：现行；本批同步单项目容量、营业日配置与实际结束实现，未完成项仍单列。
+> 版本：V0.20 ｜ 最后更新：2026-11-20 ｜ 迁移证据：保留历史迁移记录；TK-17/18 新增 V483/V484/V487 ｜ 状态：现行；本批同步单项目容量、营业日配置与实际结束实现，未完成项仍单列。
 > 新功能承接见 docs/v099-v124-feature-implementation-and-acceptance-spec-v0.1.md
 > <!-- 文档goalP3(2026-06-20)：补版本/日期/覆盖迁移头，未改正文 -->
 >
@@ -765,7 +765,7 @@ stateDiagram-v2
 - V143 已为 `amusement_safety_inspections` 增补 `device_id`，并建立设备主数据和到期巡检任务表。
 - 当前 `inspection_result` CHECK 为 `pass/fail/pending_rectification`；旧稿提出的 `conditional_pass` 从未落迁移且现已明确删除。目标业务结论只允许“通过/警告/阻断”，代码须完成映射或迁移收口。
 - `abnormal_found` 只表示发现异常，不能一律自动暂停；只有结论为“阻断”或设备分类/依赖规则要求停运时，才触发 `amusement.safety_inspection.blocked` 并停止相关设备或项目。
-- 点位顺序、缺点位不得完成、证据补录与主管复核仍缺结构化承载；实现应复用 `items_json` 中稳定的点位标识和顺序，或做最小迁移，不新增 HTML 未授权状态。
+- 点位顺序与缺点位不得完成已承载（第十八批 BS 段第 373 条，V727）：`amusement_projects.inspection_points` 存有序点位（点位名称、点位码），`amusement_inspection_walk_points` 存进行中的走点（序号、点位名、结果、备注、记录人、记录时刻，主键项目＋序号；上一个闭店时点之前的行不算本轮，建成巡检或换清单即清空）；建成的巡检检查项仍写 `items_json`（`item_code`＝`point_序号`，带记录人与记录时间）。营业中抽检间隔表 `amusement_spot_check_policies`（按综合体项目，`__global__` 出厂行 120 分钟）与当班未抽检记录表 `amusement_spot_check_misses` 见 V728。证据补录与主管复核仍未承载。
 
 验收：项目入口、设备、巡检人和结论可结构化追溯；巡检事件携带项目、点位、设备、巡检人、结论和异常证据；警告不误触发阻断；阻断后未经整改、复检和主管确认不得恢复。
 
@@ -904,6 +904,8 @@ stateDiagram-v2
 | POST | `/api/v1/amusement/safety-inspections/{id}/rectify` | 提交整改 |
 | POST | `/api/v1/amusement/safety-inspections/{id}/recheck` | 提交复检 |
 | POST | `/api/v1/amusement/safety-inspections/{id}/approve-reopen` | 主管确认恢复；业务目标为恢复开放。当前代码仅联动 `maintenance/closed → open`，`paused` 不强制翻转，属待修缺口 |
+
+> 第十八批 BS 段第 373 条（新增 6 个接口）：`GET/PUT /api/v1/amusement/projects/{id}/inspection-points`（读点位清单与本轮走点／整份替换点位清单，`amusement.safety_inspection.view`／`amusement.safety_template.manage`）、`POST /api/v1/amusement/projects/{id}/inspection-points/{seq}/check`（工作手机按顺序逐点扫码记录，`amusement.safety_inspection.create`）、`GET/PUT /api/v1/amusement/spot-check-policies/{project_id}`（读／改营业中抽检间隔，改须最高权限本人）、`GET /api/v1/amusement/spot-check-misses`（当班未抽检记录）；`AmusementInspectionTaskJob` 每轮生成到期任务后判当班未抽检。项目配了点位的，`POST /api/v1/amusement/safety-inspections` 的检查项取本轮走完的点位，没走完 409 `INSPECTION_POINTS_INCOMPLETE`。
 
 ### 8.7.1 定期检修 API
 
@@ -1258,6 +1260,7 @@ P0 完成时必须满足：
 
 | 日期 | 类型 | 位置 | 内容 | 原因/依据 |
 |---|---|---|---|---|
+| 2026-11-20 | 改 | 抬头、§7.18、§8.7 | V0.20：第十八批 BS 段第 373 条：游乐项目巡检点位清单与走点表（V727）、营业中抽检间隔与当班未抽检记录两表（V728）、新增 6 个接口、巡检到期任务作业判当班未抽检；配了点位的项目新建巡检须先走完全部点位 | BSM:1300；第十八批裁决 76；待开发清单第 373 条 |
 | 2026-11-18 | 改 | 抬头、§15B | V0.19：第十八批 AW 段第 296 条 296-R1：full_reissue 改按原票该人份售出时所发权益逐行补发，不读票种现绑定 | ENUM:148；待开发清单第 296 条 |
 | 2026-11-11 | 改 | 抬头、文首已落地清单、§6.4.2、§7.7 索引 | V0.18：第十八批 AH 段第 219 条 219-R1：票内游乐消费与预览扣次前判本场已检票、一份封顶；第 239 条 239-R1：游乐侧有效期闸只拦未生效，票面到期由票务侧按本场已检票例外复核；第 219 条补充：V619 删除 `uk_amusement_verifications_active_entry`，§7.7 索引清单删去该行 | BSM:800「该票所含的各项权益（各酒吧入场、酒水赠饮、游乐、餐饮券、零售券等），只能在完成检票环节所在的那一个场次内核销……」；ENUM:46；BSM:780「按可用次数逐次核销（每用一次扣一次，剩余为 0 才算用完）」；V619 迁移 |
 | 2026-11-11 | 改 | 抬头、§7.15、§7.16 | V0.17：第十八批 AG 段第 255 条 255-R3：游乐事故上报人（`amusement_incidents.reported_by_user_id`）与事故处置动作操作人（`amusement_incident_actions.operator_user_id`，含新建、追加处置、关闭）改取登录人，请求体里的 `reported_by_user_id`、`operator_user_id`、`closed_by_user_id` 不再读；系统超容事故上报人仍记 `system` | PGM:899「谁发起、谁销售、谁服务、谁第一个处理异常、为什么、谁审批、结果是什么，都要能查到。」；决策台账 18AE 198-R3「服务端操作人一律取登录人」先例；AmusementSafetyService 现码 |

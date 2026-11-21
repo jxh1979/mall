@@ -1,6 +1,6 @@
 package com.complex.platform.gate;
 
-// 文件版本：V0.09
+// 文件版本：V0.10
 
 import java.util.Arrays;
 import java.util.Comparator;
@@ -59,6 +59,8 @@ final class ServerModuleRoutes {
                     Map.entry("GET /api/v1/amusement/projects/{id}/entitlements", "amusement"),
                     Map.entry("POST /api/v1/amusement/projects/{id}/entitlements", "ticketing"),
                     Map.entry("/api/v1/amusement/projects/{id}/entitlements/{entitlementType}", "amusement"),
+                    // 第十八批 BS 段第 373 条 373-R1：巡检点位清单与走点进度只有安全巡检页调（工作手机扫码走点不受本表约束）。
+                    Map.entry("/api/v1/amusement/projects/{id}/inspection-points", "amusement"),
                     Map.entry("/api/v1/bar-business-day-configs", "amusement"),
                     Map.entry("/api/v1/audit", "audit"),
                     Map.entry("/api/v1/security/export-files", "audit"),

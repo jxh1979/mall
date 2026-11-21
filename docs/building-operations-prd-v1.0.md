@@ -1,4 +1,4 @@
-# 楼宇运营业务域 PRD（V1.18·据需求重建）
+# 楼宇运营业务域 PRD（V1.19·据需求重建）
 
 > **锚点口径（2026-08-05 R7·GAP-36 锚点重建）**：本文引用三份业务 HTML（BSM＝`business-system-map-for-operations-v0.1.html`／PGM＝`platform-governance-map-for-operations-v0.1.html`／ENUM＝`business-enum-quick-reference-v0.1.html`）时，一律采用**「条目名主锚点 + 行号辅助」**；标注「实测 L…」的行号为 **2026-08-05** 按现行 HTML `sed -n 'Np'` 逐条实测值，**以条目名为主锚点**，行号漂移不影响条目效力。变更日志章及既有「锚点复核」块内的历史行号为当时记录，一律不改写。
 
@@ -171,7 +171,7 @@
 - 定时排程由 `FacilityInspectionScheduleJob` 承担，开关为 `facility.inspection.scheduled.enabled=true`，默认固定延迟 `${facility.inspection.scheduled.fixed-delay-ms:300000}`。
 - 现场留痕落 `facility_inspection_records`：照片 `photos`、二维码 `qr_code`、GPS `gps_lat/gps_lng`、检查清单结果 `checklist_result`、备注、异常说明、巡检人（取提交账号，请求体不收巡检人；第十八批 AP 段第 229 条 229-R8）、记录时间。
 - 正常记录：任务从 `in_progress` 写 `normal` 后立即 `closed`。
-- 异常记录必须填 `abnormal_note`。模板 `abnormal_mode=light` 时写 `abnormal` 后直接 `closed`；`to_work_order` 时写 `abnormal` → `rectifying`，发布 `FacilityInspectionAbnormalEvent` 自动生成整改工单，整改完成后 `recheck` → `rechecked`，主管确认 `supervisor-confirm` → `closed`。
+- 异常记录必须填 `abnormal_note`。模板 `abnormal_mode=light` 时写 `abnormal` 后直接 `closed`；`to_work_order` 时写 `abnormal` → `rectifying`，发布 `FacilityInspectionAbnormalEvent` 自动生成整改工单（外包巡检账号对派给本人的任务提交异常记录或上报异常同样自动生成，提单方记该账号；第十八批 BS 段第 379 条），整改完成后 `recheck` → `rechecked`，主管确认 `supervisor-confirm` → `closed`。
 - 巡检闭环与游乐安全巡检分离；本域只覆盖楼宇安防/消防/设施设备/环境卫生。
 
 **关键端点（实际 Controller）**
@@ -301,3 +301,4 @@
 | 2026-11-16 | 改 | 版本、§4 楼宇巡检现场留痕 | 版本升至 V1.16：第十八批 AP 段第 229 条 229-R8——外包巡检记录 `POST /api/v1/facility/inspections/tasks/{task_id}/records` 的巡检人取提交账号（同异常上报），请求体不再收 `inspector_id`（契约删该属性与必填）；外包巡检页与楼宇运营工作台巡检记录区删巡检人输入框 | BSM:940 |
 | 2026-11-20 | 改 | 版本、§3 商户服务工单 | 版本升至 V1.17：第十八批 BI 段第 261 条 261-B17-R1——商户服务工单关闭类入口同一请求编号重复提交返回第一次的结果并提示已完成；派单、处理、关单、商户确认、取消先锁工单行再判状态，两端同时办只认先到的一笔 | PGM:528⑤；PGM:303；BSM:1385；第十八批裁决 50；待开发清单第 261 条 |
 | 2026-11-20 | 改 | 版本、§3、§4、§5A | 版本升至 V1.18：第十八批 BJ 段第 261 条 261-B18-R1～R3——设施工单八个写入口、楼宇巡检七个写入口、进场报备新建与提交进场与审核，同一请求编号重复提交返回第一次的结果并提示已完成；设施工单派单改为先锁工单行，两名主管同时派单只认先到的一笔 | PGM:528⑤；PGM:303；第十八批裁决 50；待开发清单第 261 条 |
+| 2026-11-20 | 改 | 版本、§4 楼宇巡检异常记录 | 版本升至 V1.19：第十八批 BS 段第 379 条 379-R1——巡检异常自动建整改工单的账号口径同发布方：外包巡检员对派给本人的「转工单」模板任务提交异常记录或上报异常，照常落记录并自动建整改工单（提单方记该账号；此前整笔 403 回滚） | BSM:657「……设备告警与巡检异常自动转工单。」；PGM:842「巡检任务分派到人，现场扫码或定位留痕，发现异常生成整改工单。」；PGM:681；待开发清单第 379 条 |

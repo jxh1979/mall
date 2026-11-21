@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: 综合体管理系统 P0 API 契约
-  version: V0.98
+  version: V0.99
   description: P0 首批编码前置契约。本文采用 JSON-compatible YAML，便于与 openapi-p0.json 保持一致。正式后端以 Java 21 + Spring Boot 4.x +
     springdoc-openapi 输出运行时 OpenAPI，并与本契约比对。
 servers:
@@ -1124,6 +1124,7 @@ paths:
         - amusement
       operationId: createAmusementSafetyInspection
       summary: 创建开放前安全巡检
+      description: "第十八批 BS 段第 373 条 373-R1（BSM:1300「巡检必须按点位顺序完成，缺一个点位、上一个点位就不能通过；未走完全部点位的巡检不成立、不得标记为已完成」）：项目配了巡检点位时，不分开放前巡检、营业中抽检与按设备安全检查周期的到期巡检，检查项一律取本轮按序走完的全部点位（请求里的 items 不看、可不传），本轮没走完 409 INSPECTION_POINTS_INCOMPLETE「未走完全部点位的巡检不成立：第 N 个点位（名称）尚未完成」，建成即清空本轮走点；项目没配点位时照旧须带 items，缺则 400 VALIDATION_FAILED。overall_result=pass 而任一检查项为 fail 时 409 SAFETY_INSPECTION_PASS_CONFLICTS_ITEMS，对走点得来的检查项同样生效。"
       x-permission: amusement.safety_inspection.create
       x-data-scope: project-amusement
       x-terminal-allowed:
@@ -1259,6 +1260,280 @@ paths:
         "500":
           $ref: "#/components/responses/Error"
       x-auth-context: staff-token
+  /api/v1/amusement/projects/{id}/inspection-points:
+    get:
+      tags:
+        - amusement
+      operationId: getAmusementProjectInspectionPoints
+      summary: 查询游乐项目巡检点位清单与本轮走点
+      description: "第十八批 BS 段第 373 条 373-R1、373-R5（BSM:1300「巡检必须按点位顺序完成，缺一个点位、上一个点位就不能通过；未走完全部点位的巡检不成立、不得标记为已完成」；第十八批裁决 76 选「逐点扫码」）：返回该游乐项目的有序巡检点位（序号、名称、点位码）与本轮已记的走点 walk。本轮以上一个闭店时点为界（BSM:1682 次日 07:00 起为已闭店），更早记的走点不返回、不算数；项目没配点位时 points 与 walk 都是空数组。范围：商户账号只看本商户的游乐项目，否则 403 CROSS_MERCHANT_FORBIDDEN；其余账号须持本权限且游乐项目所属综合体项目可触及，否则 403 FORBIDDEN（最高权限不限）；游乐项目不存在 404 AMUSEMENT_PROJECT_NOT_FOUND，没有唯一综合体归属 409 AMUSEMENT_BUSINESS_DAY_CONFIGURATION_REQUIRED。只读，不记留痕。"
+      x-permission: amusement.safety_inspection.view
+      x-data-scope: project-amusement
+      x-terminal-allowed:
+        - web
+        - staff_work_phone
+      x-idempotency-required: false
+      x-audit-event-success: not_applicable
+      x-audit-event-failure: not_applicable
+      x-auth-context: staff-token
+      parameters:
+        - $ref: "#/components/parameters/Id"
+          description: 游乐项目编号。
+      responses:
+        "200":
+          description: 巡检点位清单与本轮走点；data 为 AmusementInspectionPointsView。
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/AmusementInspectionPointsView"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+    put:
+      tags:
+        - amusement
+      operationId: replaceAmusementProjectInspectionPoints
+      summary: 整份替换游乐项目巡检点位清单
+      description: "第十八批 BS 段第 373 条 373-R1、373-R5（BSM:1300「巡检必须按点位顺序完成……」；第十八批裁决 76「每个点位生成一张码贴在现场，巡检员用工作手机按顺序扫码后记结果，扫错码或跳点记不上」）：整份替换该游乐项目的巡检点位清单，points 从上到下即走点顺序。点位名称去空白后不得为空、单个不超过 120 字、清单内不得重复，否则 400 VALIDATION_FAILED；空数组即清空（清空后该项目新建巡检照旧须带检查项）。同名点位保留原点位码，新名称生成新点位码（12 位大写字母与数字，项目内唯一），改清单只需补贴新点位的码。换清单即清空该项目本轮已记的走点。范围：须持本权限且游乐项目所属综合体项目可触及，否则 403 FORBIDDEN；商户账号只能办本商户的游乐项目，否则 403 CROSS_MERCHANT_FORBIDDEN（最高权限不限）；能力开关关闭 403 TERMINAL_DISABLED；游乐项目不存在 404 AMUSEMENT_PROJECT_NOT_FOUND，没有唯一综合体归属 409 AMUSEMENT_BUSINESS_DAY_CONFIGURATION_REQUIRED。范围闸在幂等之前，同一幂等键重放返回第一次的结果；留痕记改前改后的点位名称。"
+      x-permission: amusement.safety_template.manage
+      x-data-scope: project-amusement
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: amusement.inspection_points.configured
+      x-audit-event-failure: amusement.inspection_points.configure_failed
+      x-auth-context: staff-token
+      parameters:
+        - $ref: "#/components/parameters/Id"
+          description: 游乐项目编号。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AmusementInspectionPointsReplaceRequest"
+            example:
+              idempotency_key: amu_points_20261120_000001
+              points:
+                - 入口闸机
+                - 安全压杠
+                - 紧急停止按钮
+      responses:
+        "200":
+          description: 替换后的点位清单与本轮走点（已清空）；data 为 AmusementInspectionPointsView。
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/AmusementInspectionPointsView"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/amusement/projects/{id}/inspection-points/{seq}/check:
+    post:
+      tags:
+        - amusement
+      operationId: checkAmusementInspectionPoint
+      summary: 按序扫码记录一个巡检点位
+      description: "第十八批 BS 段第 373 条 373-R1、373-R5（BSM:1300「巡检必须按点位顺序完成，缺一个点位、上一个点位就不能通过」；决策台账 DEC-R3-2026-08-04-33；第十八批裁决 76「巡检员用工作手机按顺序扫码后记结果，扫错码或跳点记不上」）：工作手机扫点位码后记一个点位的结果。项目没配点位或序号不在 1 至点位数之间 404 INSPECTION_POINT_NOT_FOUND；point_code 与该序号点位的码不符 409 INSPECTION_POINT_CODE_MISMATCH「扫到的不是第 N 个点位（名称）的码」，走点不写；记第 1 个点位即重新开始本轮（先清掉本轮已记的走点）；序号大于 1 时本轮须已记上一个点位，否则 409 INSPECTION_PREVIOUS_POINT_INCOMPLETE「上一个点位（名称）尚未完成，不能记录本点位」；本轮已记过该点位 409 INSPECTION_POINT_ALREADY_CHECKED。result 只收 pass 或 fail，缺 point_code 或 result、取值不对 400 VALIDATION_FAILED。记录人取当前登录账号，记录时刻取服务端时刻；本轮以上一个闭店时点为界。范围与 replaceAmusementProjectInspectionPoints 相同（按本权限码判），能力开关关闭 403 TERMINAL_DISABLED。同一幂等键重放返回第一次的结果。"
+      x-permission: amusement.safety_inspection.create
+      x-data-scope: project-amusement
+      x-terminal-allowed:
+        - staff_work_phone
+      x-idempotency-required: true
+      x-audit-event-success: amusement.inspection_point.checked
+      x-audit-event-failure: amusement.inspection_point.check_failed
+      x-auth-context: staff-token
+      parameters:
+        - $ref: "#/components/parameters/Id"
+          description: 游乐项目编号。
+        - name: seq
+          in: path
+          required: true
+          description: 点位序号，从 1 起。
+          schema:
+            type: integer
+            minimum: 1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AmusementInspectionPointCheckRequest"
+            example:
+              idempotency_key: amu_point_check_20261120_000001
+              point_code: K7Q2M9X4B1ZT
+              result: pass
+      responses:
+        "200":
+          description: 记录后的点位清单与本轮走点；data 为 AmusementInspectionPointsView。
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/AmusementInspectionPointsView"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/amusement/spot-check-policies/{project_id}:
+    get:
+      tags:
+        - amusement
+      operationId: getAmusementSpotCheckPolicy
+      summary: 查询营业中抽检间隔（按综合体项目）
+      description: "第十八批 BS 段第 373 条 373-R2（BSM:1300「营业中抽检有最低频次要求，每隔多久至少抽检一次由后台配置（安全阈值，按项目可配，须同时配置上限与下限，出厂默认每 2 小时一次），达不到最低频次的视为当班未抽检」）：返回该综合体项目生效的营业中抽检间隔（分钟）与上下限；项目没有自有行时返回出厂行（project_id=__global__、interval_minutes=120、上下限为空）。项目须在本权限可触及范围内（最高权限不限），否则 403 CROSS_PROJECT_FORBIDDEN；项目不存在 404 PROJECT_NOT_FOUND。只读，不记留痕。"
+      x-permission: amusement.safety_inspection.view
+      x-data-scope: project
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: not_applicable
+      x-audit-event-failure: not_applicable
+      x-auth-context: staff-token
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          description: 综合体项目编号。
+          schema:
+            type: string
+            maxLength: 64
+      responses:
+        "200":
+          description: 生效的营业中抽检间隔；data 为 AmusementSpotCheckPolicy。
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/AmusementSpotCheckPolicy"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+    put:
+      tags:
+        - amusement
+      operationId: saveAmusementSpotCheckPolicy
+      summary: 配置营业中抽检间隔及上下限（按综合体项目，最高权限本人）
+      description: "第十八批 BS 段第 373 条 373-R2（BSM:1300「……安全阈值，按项目可配，须同时配置上限与下限，出厂默认每 2 小时一次……」；决策台账 DEC-CFG-2026-08-03-01「安全阈值可配但须最高权限审批并留痕」；BSM:576「持授权 U 盘密钥的最高权限本人发起的操作，不需要经过任何审批。」）：按综合体项目配置营业中抽检间隔，保存即生效。综合体项目参数，商户账号 403 CROSS_MERCHANT_FORBIDDEN；项目须在本权限可触及范围内（最高权限不限），否则 403 CROSS_PROJECT_FORBIDDEN；项目不存在 404 PROJECT_NOT_FOUND（出厂行 __global__ 不是项目，不经接口改）；抽检间隔是安全阈值，不是最高权限本人 403 MASTER_APPROVAL_REQUIRED「营业中抽检间隔是安全阈值，调整须由最高权限本人办理」。interval_minutes、min_minutes、max_minutes 三项都必填，且 1 ≤ min_minutes ≤ interval_minutes ≤ max_minutes，否则 400 VALIDATION_FAILED。同一幂等键重放返回第一次的结果；留痕记改动人与改前改后值。返回保存后的生效行。"
+      x-permission: amusement.safety_template.manage
+      x-data-scope: project
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: amusement.spot_check_policy.updated
+      x-audit-event-failure: amusement.spot_check_policy.update_failed
+      x-auth-context: staff-token
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          description: 综合体项目编号。
+          schema:
+            type: string
+            maxLength: 64
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AmusementSpotCheckPolicyRequest"
+            example:
+              idempotency_key: amu_spot_policy_20261120_000001
+              interval_minutes: 90
+              min_minutes: 60
+              max_minutes: 180
+      responses:
+        "200":
+          description: 保存后的营业中抽检间隔；data 为 AmusementSpotCheckPolicy。
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/AmusementSpotCheckPolicy"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+  /api/v1/amusement/spot-check-misses:
+    get:
+      tags:
+        - amusement
+      operationId: listAmusementSpotCheckMisses
+      summary: 查询当班未抽检记录
+      description: "第十八批 BS 段第 373 条 373-R2（BSM:1300「……达不到最低频次的视为当班未抽检」）：列出当班未抽检记录，按判定时间倒序，不分页。判定由游乐巡检到期作业每轮执行：每笔成功入场找它之前最近一次已提交巡检作锚点（提交时刻与复检时刻取较晚者），起算点取锚点与该入场所属营业日起点二者较晚者，超过所属综合体项目的抽检间隔仍有成功入场即记一条（同一项目同一锚点只记最早那笔）；只判定留痕，不拦核销、不发通知。范围：商户账号只见本商户的游乐项目；其余账号按本权限可触及的综合体项目过滤（最高权限与平台管理员全部）。只读，不记留痕。"
+      x-permission: amusement.safety_inspection.view
+      x-data-scope: project-amusement
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: not_applicable
+      x-audit-event-failure: not_applicable
+      x-auth-context: staff-token
+      responses:
+        "200":
+          description: 当班未抽检记录；data 为 AmusementSpotCheckMiss 数组。
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/AmusementSpotCheckMiss"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
   /api/v1/amusement/safety-templates:
     get:
       tags:
@@ -70011,7 +70286,6 @@ components:
       additionalProperties: false
       required:
         - project_id
-        - items
       properties:
         idempotency_key:
           type: string
@@ -70038,7 +70312,7 @@ components:
           maxLength: 64
         items:
           type: array
-          description: AmusementSafetyInspectionRequest 明细列表；每一项必须按对应明细 schema 校验类型、数量、金额、状态和数据范围。
+          description: "检查项列表。项目没配巡检点位时必填（至少一项）；项目配了点位时忽略请求里的 items，检查项取本轮按序走完的全部点位（item_code=point_序号、item_name、result、note、checked_by、checked_at），未走完 409 INSPECTION_POINTS_INCOMPLETE（第十八批 BS 段第 373 条 373-R1）。"
           items:
             type: object
           maxItems: 200
@@ -70066,6 +70340,247 @@ components:
           type: string
           description: 异常说明（可空）；overall_result 非 pass 时填报，存进巡检记录，不写入审计事件。
           maxLength: 1000
+    AmusementInspectionPoint:
+      type: object
+      description: 游乐项目巡检点位（第十八批 BS 段第 373 条 373-R1、373-R5）。
+      additionalProperties: false
+      required:
+        - seq
+        - point_name
+        - point_code
+      properties:
+        seq:
+          type: integer
+          minimum: 1
+          description: 点位序号，从 1 起，即走点顺序。
+        point_name:
+          type: string
+          description: 点位名称。
+          maxLength: 120
+        point_code:
+          type: string
+          description: 点位码（12 位大写字母与数字，项目内唯一）；印成码贴在点位现场，工作手机扫码记点位时提交。
+          maxLength: 64
+    AmusementInspectionWalkPoint:
+      type: object
+      description: 本轮已记的一个走点（第十八批 BS 段第 373 条 373-R1）。
+      additionalProperties: false
+      required:
+        - seq
+        - point_name
+        - result
+        - note
+        - checked_by
+        - checked_at
+      properties:
+        seq:
+          type: integer
+          minimum: 1
+          description: 点位序号。
+        point_name:
+          type: string
+          description: 记录时的点位名称。
+          maxLength: 120
+        result:
+          type: string
+          description: 本点位检查结果：pass 通过、fail 不通过。
+          enum:
+            - pass
+            - fail
+        note:
+          type:
+            - string
+            - "null"
+          description: 本点位备注（可空）。
+        checked_by:
+          type: string
+          description: 记录人（当前登录账号）。
+          maxLength: 128
+        checked_at:
+          type: string
+          format: date-time
+          description: 记录时刻（服务端时刻）。
+    AmusementInspectionPointsView:
+      type: object
+      description: 游乐项目巡检点位清单与本轮走点（第十八批 BS 段第 373 条 373-R1、373-R5）。
+      additionalProperties: false
+      required:
+        - project_id
+        - points
+        - walk
+      properties:
+        project_id:
+          type: string
+          description: 游乐项目编号。
+          maxLength: 64
+        points:
+          type: array
+          description: 有序巡检点位；空数组＝未配置点位（新建巡检照旧填检查项）。
+          items:
+            $ref: "#/components/schemas/AmusementInspectionPoint"
+        walk:
+          type: array
+          description: 本轮已记的走点，按序号升序；只含上一个闭店时点之后记的行，项目没配点位时为空数组。
+          items:
+            $ref: "#/components/schemas/AmusementInspectionWalkPoint"
+    AmusementInspectionPointsReplaceRequest:
+      type: object
+      description: 整份替换游乐项目巡检点位清单（第十八批 BS 段第 373 条 373-R1、373-R5）。
+      additionalProperties: false
+      required:
+        - idempotency_key
+        - points
+      properties:
+        idempotency_key:
+          type: string
+          description: 操作幂等键；重复提交时必须返回同一处理结果。
+          maxLength: 128
+        points:
+          type: array
+          description: 点位名称，从上到下即走点顺序；去空白后不得为空、单个不超过 120 字、不得重复；空数组即清空。
+          items:
+            type: string
+            maxLength: 120
+    AmusementInspectionPointCheckRequest:
+      type: object
+      description: 按序扫码记录一个巡检点位（第十八批 BS 段第 373 条 373-R1、373-R5）。
+      additionalProperties: false
+      required:
+        - idempotency_key
+        - point_code
+        - result
+      properties:
+        idempotency_key:
+          type: string
+          description: 操作幂等键；重复提交时必须返回同一处理结果。
+          maxLength: 128
+        point_code:
+          type: string
+          description: 工作手机扫到的点位码；须与该序号点位的码一致，否则 409 INSPECTION_POINT_CODE_MISMATCH。
+          maxLength: 64
+        result:
+          type: string
+          description: 本点位检查结果：pass 通过、fail 不通过。
+          enum:
+            - pass
+            - fail
+        note:
+          type:
+            - string
+            - "null"
+          description: 本点位备注（可空）。
+    AmusementSpotCheckPolicy:
+      type: object
+      description: 营业中抽检间隔生效行（第十八批 BS 段第 373 条 373-R2）。
+      additionalProperties: false
+      required:
+        - project_id
+        - interval_minutes
+        - min_minutes
+        - max_minutes
+        - updated_by
+        - updated_at
+      properties:
+        project_id:
+          type: string
+          description: 生效行所属：综合体项目有自有行时为该项目编号，没有时为 __global__（出厂行）。
+          maxLength: 64
+        interval_minutes:
+          type: integer
+          minimum: 1
+          description: 每隔多少分钟至少抽检一次（出厂 120）。
+        min_minutes:
+          type:
+            - integer
+            - "null"
+          description: 间隔下限（分钟）；出厂行为空。
+        max_minutes:
+          type:
+            - integer
+            - "null"
+          description: 间隔上限（分钟）；出厂行为空。
+        updated_by:
+          type:
+            - string
+            - "null"
+          description: 最近调整人；出厂行为空。
+          maxLength: 128
+        updated_at:
+          type: string
+          format: date-time
+          description: 最近调整时间。
+    AmusementSpotCheckPolicyRequest:
+      type: object
+      description: 配置营业中抽检间隔（第十八批 BS 段第 373 条 373-R2）；三项都必填，且 1 ≤ min_minutes ≤ interval_minutes ≤ max_minutes。
+      additionalProperties: false
+      required:
+        - idempotency_key
+        - interval_minutes
+        - min_minutes
+        - max_minutes
+      properties:
+        idempotency_key:
+          type: string
+          description: 操作幂等键；重复提交时必须返回同一处理结果。
+          maxLength: 128
+        interval_minutes:
+          type: integer
+          minimum: 1
+          description: 每隔多少分钟至少抽检一次。
+        min_minutes:
+          type: integer
+          minimum: 1
+          description: 间隔下限（分钟）。
+        max_minutes:
+          type: integer
+          minimum: 1
+          description: 间隔上限（分钟）。
+    AmusementSpotCheckMiss:
+      type: object
+      description: 当班未抽检记录（第十八批 BS 段第 373 条 373-R2）：超过抽检间隔仍有客人成功入场即记一条，同一项目同一锚点只记最早那笔。
+      additionalProperties: false
+      required:
+        - id
+        - project_id
+        - project_name
+        - complex_id
+        - anchor_at
+        - interval_minutes
+        - first_admission_at
+        - detected_at
+      properties:
+        id:
+          type: string
+          description: 记录编号。
+          maxLength: 64
+        project_id:
+          type: string
+          description: 游乐项目编号。
+          maxLength: 64
+        project_name:
+          type: string
+          description: 游乐项目名称。
+          maxLength: 120
+        complex_id:
+          type: string
+          description: 所属综合体项目（取该入场核销时锁定的综合体）。
+          maxLength: 64
+        anchor_at:
+          type: string
+          format: date-time
+          description: 上次巡检时间（该入场之前最近一次已提交巡检的生效时刻）。
+        interval_minutes:
+          type: integer
+          minimum: 1
+          description: 判定时所用抽检间隔（分钟）。
+        first_admission_at:
+          type: string
+          format: date-time
+          description: 超过间隔后首笔成功入场时刻。
+        detected_at:
+          type: string
+          format: date-time
+          description: 判定时刻。
     AmusementSafetyActionRequest:
       type: object
       description: 请求载荷 `AmusementSafetyActionRequest`；字段、必填项和枚举用于生成 DTO、校验和契约测试。
@@ -70867,6 +71382,7 @@ components:
               - "tablet_pos"
               - "kiosk_claim"
               - "amusement_maintenance"
+              - "amusement_inspection"
               - "staff_device"
               - "ticket_reverse"
               - "inbox"

@@ -1,6 +1,6 @@
 package com.complex.terminal
 
-// 文件版本：V0.08
+// 文件版本：V0.09
 
 import java.util.UUID
 
@@ -253,6 +253,30 @@ class TerminalWorkflow(
       ),
     )
     return record
+  }
+
+  /**
+   * 第十八批 BS 段第 373 条 373-R5（BSM:1300「巡检必须按点位顺序完成，缺一个点位、上一个点位就不能通过」；第十八批裁决 76「巡检员用工作手机
+   * 按顺序扫码后记结果，扫错码或跳点都记不上」）：记一个游乐巡检点位；顺序与点位码由服务端判，拒绝原样抛出。
+   */
+  fun checkAmusementInspectionPoint(
+    projectId: String,
+    seq: Int,
+    pointCode: String,
+    result: String,
+    note: String? = null,
+  ): AmusementInspectionPoints {
+    requireOnline()
+    return api.checkAmusementInspectionPoint(
+      projectId,
+      seq,
+      AmusementInspectionPointCheckRequest(
+        idempotencyKey = UUID.randomUUID().toString(),
+        pointCode = pointCode,
+        result = result,
+        note = note,
+      ),
+    )
   }
 
   // -------------------------------------------------------------------------

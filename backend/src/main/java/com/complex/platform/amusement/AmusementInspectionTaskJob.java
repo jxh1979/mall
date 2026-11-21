@@ -24,6 +24,10 @@ public class AmusementInspectionTaskJob {
     private final Clock clock;
     private final boolean scheduledEnabled;
 
+    /** 第十八批 BS 段第 373 条 373-R2：每轮生成到期任务后判当班未抽检（沿用本作业开关与间隔）；单测未注入即不判。 */
+    @Autowired(required = false)
+    AmusementSpotCheckService spotChecks;
+
     @Autowired
     public AmusementInspectionTaskJob(
             AmusementService service,
@@ -48,6 +52,10 @@ public class AmusementInspectionTaskJob {
         if (!scheduledEnabled) {
             return;
         }
-        service.generateDueInspectionTasks(Instant.now(clock));
+        Instant now = Instant.now(clock);
+        service.generateDueInspectionTasks(now);
+        if (spotChecks != null) {
+            spotChecks.detectMisses(now);
+        }
     }
 }

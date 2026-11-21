@@ -1,6 +1,6 @@
 package com.complex.platform.facility;
 
-// 文件版本：V0.09
+// 文件版本：V0.10
 
 import com.complex.platform.access.AccessActor;
 import com.complex.platform.access.AccessRepository;
@@ -797,7 +797,9 @@ public class FacilityWorkOrderService {
     @EventListener
     @Transactional
     public void onInspectionAbnormal(FacilityInspectionAbnormalEvent event) {
-        authorizationService.requirePlatformScope();
+        // 第十八批 BS 段第 379 条（BSM:657「……设备告警与巡检异常自动转工单。」；PGM:842「……发现异常生成整改工单。」；
+        // PGM:681「……只能处理被指派的工单、负责的区域或任务……」）：账号口径同发布方，外包巡检账号放行；派给本人与项目范围由发布方核。
+        requireScopeActor();
         String taskId = requireText(event.taskId(), "task_id");
         FacilityWorkOrderRequest request = new FacilityWorkOrderRequest("rectification", "normal",
                 "巡检异常整改: " + requireText(event.title(), "title"), event.abnormalNote(),

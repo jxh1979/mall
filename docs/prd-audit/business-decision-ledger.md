@@ -1,6 +1,6 @@
 # PRD 审计业务裁决台账
 
-文档版本：V1.26
+文档版本：V1.27
 状态：进行中
 迁移日期：2026-07-27
 当前事实源：三份立法 HTML 以既有冻结基线叠加 James 此前 M02 至 M08 的点名批准、全量审计 M001、M002 的逐项批准，以及本轮 2026-10-16 至 2026-10-17 业务 HTML 审计中 Q01 至 Q40 及子题实际明确批准且未被后续替代的裁决，和 2026-10-17 第二批 HTML 业务线推演审计（A–F 六线 64 条、停车章）的逐项批准，并叠加本轮 CG 70 项来源确认与 C01–C09、N01–N03 最终澄清及补全文稿中 F01、W01–W05 的整体修改批准（本文件末节）；本轮最终规则、未采纳或替代关系、现行版本与字节哈希见本文件末节。历史记录保留为各自当时事实，不恢复已被替代的建议。
@@ -3978,6 +3978,7 @@ HTML 的语义补齐与直接引用同步可在本批核验；70项中的业务�
 | 71 | **第 249 条 酒吧商品、分类、套餐删除只认最高权限审批后最高权限在这几页能看到什么**（题面：「【第 2/2 题（第 249 条，18AO）：酒吧商品、分类、套餐的删除改为只认最高权限审批后，最高权限在这几页能看到什么】 前因：BSM:576「删除一律须由具备最高权限的人审批通过后执行，不设例外，申请人不得审批自己的申请；持授权 U 盘密钥的最高权限本人发起的操作，不需要经过任何审批。」；PGM:528「第④类看不到别的商户和别的项目的数据，持授权 U 盘密钥的最高权限可以逐笔开放，每次只对当前这一笔生效并留痕。」HTML 没写最高权限查看别家酒吧目录的范围。 现状：酒吧的商品、分类、套餐按酒吧（商户）隔离，最高权限账号不挂商户，现在打开这几页会提示「此操作必须在商户范围内进行」、一条看不到（读代码推断）。本条落地后，店长存档并申请删除配错的商品，只有最高权限能批，但最高权限看不到这条申请，会一直挂着。系统里已有两种做法：待复核清单里最高权限只看到轮到自己审批的单子，别的要按编号逐笔打开并留痕；门票退款单列表对最高权限全部放开。票种、价格规则、服务目录、数据清理，最高权限现在就看得到，不受本题影响。 分歧与利弊： ① 只列待批的那几条：只看到各酒吧待审批删除的条目，逐条批准或驳回并留痕；其他目录照旧看不到。好处：与待复核清单同一做法，符合「逐笔开放」字面，改动最小。坏处：批的时候看不到同店其他商品作参照。 ② 看全部酒吧目录：和门票退款单列表一样对最高权限全放开，最高权限也可以自己发起删除、即时生效。好处：信息最全。坏处：等于整类打开商户隔离，与「每次只对当前这一笔生效」字面不符。 ③ 改走待复核清单：酒吧目录的删除申请生成一张须最高权限审批的复核单，在待复核清单里批。好处：须最高权限批的事集中在一处。坏处：改动大，和员工档案、设施设备等已做对象的审批方式不一致。」）—— 操作员选「看全部酒吧目录」：操作员弹窗先选「只列待批的（推荐）」，随即追加原话改定：「既然是最高权限，不应该什么都能看到吗？……这是你的代码库，不会发生的，没有必要的，实际场景当中不存在的，你又不需要问。有些东西你应该能推导出来的。」——即选项②：最高权限打开酒吧商品、分类、套餐页看到全部酒吧的全部目录，也可以自己发起删除、即时生效（BSM:576「持授权 U 盘密钥的最高权限本人发起的操作，不需要经过任何审批」）。（未选：「只列待批的（推荐）」（弹窗所选，已被追加原话改定）「改走待复核清单」）（2026-11-16 弹窗；来由：18AO 只读设计第 249 条待裁题。控制席说明：按 18AO 只读设计 d-gov-b 选项②的写法做：249-R1⑤、249-R8⑤ 并入同批，249-R9 去掉待批过滤（最高权限看全部酒吧目录）。） | 待开发清单第 249 条（18AO） |
 | 72 | **第 360 条 ENUM:51「每笔分摊的结果与所用合同版本必须留痕」怎么算做到**（题面：「第 7 条（18AW，已合并）。ENUM:51 写「每笔分摊的结果与所用合同版本必须留痕」。现码没有独立的「渠道合同」版本记录，渠道费配置是按项目和渠道就地修改的；但每一单在付款时，都把当时用的配置号、费率和固定额固化下来，结算单也逐商户记了渠道费份额，可以逐单追溯。修复人把这条交我定，我判为「已落地」，没有登记缺口。这是对 HTML 原句「所用合同版本」的理解。认可吗？」选项：① 认可：固化到单即算留痕（推荐）；② 不算，登记新条目——渠道费配置改成按版本保存（新版本、生效日、旧版保留），每单记录所用版本号） | 操作员 2026-11-19 选②「不算，登记新条目」：每单固化配置号、费率与固定额不算落地；渠道费配置须按版本保存（新版本、生效日、旧版保留），每单记录所用版本号。登记待开发清单第 360 条（待核实）；覆盖表 BEQ-0128 改回 PARTIAL。 |
 | 73 | **PGM:287「界面全中文」四样例外之外的文件格式名要不要改中文**（背景：18BA 第 267 条同根旁见，后台 ReconciliationPage「支持 PDF、Excel、CSV 原件」、WatermarkTracePage「PNG、JPEG」等文件格式名；控制席原按 PGM:287「可以不用中文的只有四样，没有第五样……不得以『这是标识』为由保留英文」字面判为要改中文，向操作员说明后操作员直接答复） | 操作员 2026-11-19 原话「文件格式名不用中文」：PDF、Excel、CSV、PNG、JPEG 等文件格式名在界面上保持原样，不改中文；PGM:287 其余要求不变。 |
+| 76 | **第 373 条 游乐安全巡检逐个点位怎样才算走到**（题面：「【第 373 条】游乐安全巡检逐个点位怎样才算走到：要不要扫贴在点位上的码？ 前因：BSM:1300「巡检必须按点位顺序完成，缺一个点位、上一个点位就不能通过；未走完全部点位的巡检不成立……确需补录的一律须附证据并经主管复核」，没写怎样算走到。决策台账 DEC-R3-2026-08-04-33 标题是「新增两条扫码强制规则」，第二条就是这句（理由「扫码本来就是工作的必要过程，不扫等于活没干完」）；DEC-R6-09 扫码缺失可补录也扩到游乐巡检行；工作手机用途列有「巡检」。但 HTML 巡检那句没写扫码。 现状：系统里没有点位、也没有点位码；游乐安全巡检只在后台网页填，工作手机没有游乐巡检界面。 分歧：HTML 现句与两条裁决口径不一致；选扫码要多做一整块。」）—— 操作员选「逐点扫码（推荐）」：每个点位生成一张码贴在现场，巡检员用工作手机按顺序扫码后记结果，扫错码或跳点记不上。（未选：「不扫码按序记录」）（2026-11-20 弹窗；来由：18BS 只读设计第 373 条待裁题。控制席说明：按 18BS 只读设计 d-insp-a 做 373-R1、R2、R3、R5（仅选扫码时做）、R4。） | 待开发清单第 373 条（18BS） |
 
 第一段转正前最低池额试算与取消结算环节超池待审批：既有缺口，列入待开发清单第 75 条、随 18C 做（ENUM L52、BSM L752）。
 
@@ -11580,3 +11581,151 @@ HTML 的语义补齐与直接引用同步可在本批核验；70项中的业务�
   - 本段增量：新增操作 0 个，迁移 V725、V726（由前几段建）。
 - 18BQ 合并前变基（2026-11-21）：本段自 83efbc89 变基到 origin/main 50bc92b2；迁移按原序顺延改号 V708→V725、V709→V726；合并时 OpenAPI 共 1403 个操作（主干 1403）、info.version V0.98、决策台账 V1.26，Flyway 最新 V726（共 623 个迁移）。版本行、契约版本、计数与 SHA、生成物、台账补记与 PRD 修订行由合并前脚本按新主干统一重写。
 - 18BQ 落地位置补记·运行验收证据、快照、终验文档刷新（无新裁决）：业务提交 fd8aeeb3 之后，按第十八批裁决 25 重刷了运行验收证据：后端全量 7229 测，0 失败 0 错误；apps/web 构建通过；常规界面验收（接口全部 mock）实跑 40 条全过；真实后端界面验收未跑，runtime_ready=false。随后依次重生成闭环当前态快照、生产闭环缺口报告、界面验收报告、无上线指挥台。生成器没改。手改 docs/final-closed-loop-acceptance-audit-v0.1.md 与 docs/code-implementation-acceptance-audit-v0.1.md：前端单测源码计数改为 2028；被核文件行数都没变；后端全量与常规界面验收的数字、日期改为本次实跑值；写入 npm run verify:unit 实跑结果，五个工作区全过。交付门禁于 2026-11-21 13:26 UTC 在工作树逐项实跑子项，NAS 两项现场探测未跑。仍红的有两项：一是 coding-host-protection，它写死主仓路径，在工作树口径下必红，属工具口径，不做；二是 final-closed-loop-audit，如实留 2 条红（integration-ready、business-acceptance-ready），原因是校验器要求终验把联调、业务验收写成「是」，而裁决 25 定了不跑真实后端界面验收、运行验收未就绪，终验写的是「否」。verify:delivery-gates 总链仍是红的。
+
+18BS 落地位置补记（2026-11-20）：第十八批 BS 段（batch91）按 18BS 只读设计实现待开发清单第 373、379 条（巡检组）；运行验收证据、终验文档在本段最后一个提交刷新；各条落地位置见下。本段追加时，原台账除文档版本升一版与裁决表第 76 行外，其他历史字节保持。
+
+- 18BS 落地位置补记·控制席判定（2026-11-20）：本段（第十八批 BS 段，batch91）实现待开发清单第 373、379 条（18BS 只读设计 b91-audit/d-insp-a.json、b91-audit/d-insp-b.json，两轮质疑者修订后定稿；待裁题经 2026-11-20 弹窗裁决 76 定）。控制席判定：裁决 76（第 373 条选「逐点扫码（推荐）」）：373-R1、R2、R3、R5、R4 全做（R5 原写「仅选扫码时做」，现已选）。379-R1 照设计。裁决表第 76 行已由控制席插入本段工作树决策台账，勿重插。设计旁见（游乐巡检补录、复检后批准前可核销、当日合格巡检按最新一条判、设备关键与辅助分级、楼宇巡检轻重分级等）设计旁见由控制席另行登记为待核实新条目，本段不改。第五、六轮设计与修复代理的范围外旁见已登记为待开发清单第 388～446 条（待核实）。本段从 614159b0 开工（第五轮 13 段并行），变基到 2bd98895 后收尾；汇总文件由合并前脚本 summary_tool.py 剥离与重写。
+- 18BS 甲落地位置补记：第十八批 BS 段（batch91）甲组做待开发清单第 373 条 373-R1、373-R2、373-R3、373-R5。方案在本机 b91-audit\d-insp-a.json，裁决 76 选「逐点扫码（推荐）」。373-R4 的文档部分由文档组补，契约由契约代理补。本段增量：新增 6 个操作，迁移 V727、V728，不新增权限码。
+  - 18BS 落地位置补记·373-R1（游乐项目巡检点位清单、按序走点、未走完的巡检不能建）：
+    改法：
+    - 迁移 V727：amusement_projects 加 inspection_points（有序点位，元素为 point_name、point_code）；新表 amusement_inspection_walk_points 只存进行中的一轮走点。
+    - 新类 AmusementInspectionPointService（view、replacePoints、checkPoint、completedWalkItems、clearWalk）和 AmusementInspectionPointController。
+    - 范围闸放在幂等之前：写入口用 AmusementSessionLifecycleService.requireProjectScope；读入口用 requireReadScope，只把 private 改成包内可见。
+    - checkPoint：
+      - 上一个点位本轮没记，回 409 INSPECTION_PREVIOUS_POINT_INCOMPLETE；
+      - 本轮已记过同一点位，回 409 INSPECTION_POINT_ALREADY_CHECKED；
+      - 序号越界或项目没配点位，回 404 INSPECTION_POINT_NOT_FOUND；
+      - 记第 1 个点位即重新开始；
+      - 本轮以上一个闭店时点为界，用 BusinessDayResolver.businessDate 和 closeAt 按综合体取。
+    - AmusementInspectionService.createSafetyInspectionInternal：项目配了点位时检查项取 completedWalkItems，请求里的 items 不看；没走完回 409 INSPECTION_POINTS_INCOMPLETE；建成后在同一事务里 clearWalk。不分开放前、营业中抽检和到期巡检。没配点位照旧要求 items。
+    - AmusementService 只加 inspectionPoints 字段注入和构造器里一行 supplier。
+    - ServerModuleRoutes 加 /api/v1/amusement/projects/{id}/inspection-points 归 amusement。
+    - 留痕对象 amusement_inspection_points，事件 amusement.inspection_points.configured、configure_failed、amusement.inspection_point.checked、check_failed。
+    契约：
+    - 新增 getAmusementProjectInspectionPoints、replaceAmusementProjectInspectionPoints、checkAmusementInspectionPoint。
+    - 新增 schema：AmusementInspectionPointsView、AmusementInspectionPoint、AmusementInspectionWalkPoint、AmusementInspectionPointsReplaceRequest、AmusementInspectionPointCheckRequest。
+    - AmusementSafetyInspectionRequest.items 改为项目没配点位时必填；createAmusementSafetyInspection 补 409 INSPECTION_POINTS_INCOMPLETE。
+    依据：
+    - BSM:1300「巡检必须按点位顺序完成，缺一个点位、上一个点位就不能通过；未走完全部点位的巡检不成立、不得标记为已完成」
+    - DEC-R3-2026-08-04-33「巡检必须按点位顺序完成，缺一个点位上一个点位就不能通过」
+    - PGM:528「②当天没有做过合格巡检的设施不得开放」「④看不到别的商户和别的项目的数据」
+    - BSM:1682「其中次日凌晨 07:00 至上午 10:00 为非营业时段（已闭店）」
+    测试：新增 AmusementInspectionPointJdbcIntegrationTests 9 条：pointListIsConfiguredOnlyWithinScope、pointsAreCheckedInOrderOnce、inspectionNeedsEveryPointWalked、failedPointConflictsWithPass、walkBeforeLastCloseDoesNotCount、replacingPointListClearsWalk、projectWithoutPointsKeepsItems、everyInspectionNeedsAFreshWalk，以及 373-R5 的 pointCodesMustMatchTheScannedPoint。修复前除 projectWithoutPointsKeepsItems（锁现有行为、基线即通过）外都是 404。
+  - 18BS 落地位置补记·373-R5（点位码生成与打印、工作手机扫码走点）：
+    改法：
+    - 后端：AmusementInspectionPointService.replacePoints 校验清单名称不重复；同名点位保留原码，新点位用 SecureRandom 生成 12 位大写字母数字码，项目内不重复。checkPoint 必须带 point_code，与该序号点位的码不符回 409 INSPECTION_POINT_CODE_MISMATCH，不写走点。
+    - StaffAppFunctions.ALL 在 amusement_maintenance 旁加工作手机功能 amusement_inspection，不进私人手机和平板清单。
+    - 安卓：两份 TerminalApiClient 加 getAmusementInspectionPoints、checkAmusementInspectionPoint；TerminalModels 加 AmusementInspectionPoint、AmusementInspectionWalkPoint、AmusementInspectionPoints、AmusementInspectionPointCheckRequest；TerminalWorkflow 加 checkAmusementInspectionPoint。
+    - MainActivity.showHome 只加一行「游乐巡检走点」入口，新屏用到的成员只改可见性；新屏 showAmusementInspectionWalk 放在新文件 AmusementInspectionWalkScreen.kt：选游乐项目，扫点位码，选通过或不通过，提交；拒绝文案原样显示；可从第 1 个点位重新走。
+    - 网页规则块在点位清单下逐个显示点位码二维码供打印；新建弹窗的走点面板只读，记点位在工作手机上做。
+    契约：checkAmusementInspectionPoint 请求带 point_code；staff-app-functions 响应的功能码枚举加 amusement_inspection。
+    依据：
+    - 第十八批裁决 76「逐点扫码：每个点位生成一张码贴在现场，巡检员用工作手机按顺序扫码后记结果，扫错码或跳点都记不上」
+    - DEC-R3-2026-08-04-33「新增两条扫码强制规则：……巡检必须按点位顺序完成，缺一个点位上一个点位就不能通过」
+    - BSM:1891「上岗、领设备、扫二维码核销门票和权益、补录、巡检、库房和酒水交接扫码。」
+    测试：
+    - AmusementInspectionPointJdbcIntegrationTests.pointCodesMustMatchTheScannedPoint；
+    - StaffAppFunctionsTests.amusementInspectionWalkIsAWorkPhoneFunction；
+    - 安卓 TerminalFieldWorkflowTest.amusementInspectionPointCheckSendsScannedCodeAndSurfacesRefusal（基线没有这个方法，以把路径改错的变异验证代替 RED）。
+  - 18BS 落地位置补记·373-R2（营业中抽检间隔与当班未抽检判定）：
+    改法：
+    - 迁移 V728：amusement_spot_check_policies（按综合体项目，出厂行 __global__ 120 分钟，项目行三项同填）、amusement_spot_check_misses（同一项目同一锚点只记一条）、成功入场的部分索引。
+    - 新类 AmusementSpotCheckService：
+      - getPolicy 与 savePolicy：调整只认最高权限本人，否则 403 MASTER_APPROVAL_REQUIRED；商户账号 403 CROSS_MERCHANT_FORBIDDEN。
+      - detectMisses：每笔成功入场找它之前最近一次已提交巡检作锚点，起算点取锚点与入场核销时锁定的营业日起点二者较晚者，超间隔即记；补做抽检不抹缺口；只回看两天，暂停时段也计入间隔，代码里用 ponytail 注释标了这两个上限。
+      - listMisses：商户账号只看本商户，其余按 AuthorizationService.projectReach 可触及的综合体。
+    - 新控制器 AmusementSpotCheckController。AmusementInspectionTaskJob 加可选注入，每轮生成到期任务后调 detectMisses，沿用原开关与间隔。
+    - 留痕对象 amusement_spot_check_policy，事件 amusement.spot_check_policy.updated、update_failed。
+    契约：新增 getAmusementSpotCheckPolicy、saveAmusementSpotCheckPolicy、listAmusementSpotCheckMisses；schema AmusementSpotCheckPolicy、AmusementSpotCheckPolicyRequest、AmusementSpotCheckMiss。
+    依据：
+    - BSM:1300「营业中抽检有最低频次要求，每隔多久至少抽检一次由后台配置（安全阈值，按项目可配，须同时配置上限与下限，出厂默认每 2 小时一次），达不到最低频次的视为当班未抽检」
+    - DEC-R3B-2026-08-04-30
+    - DEC-CFG-2026-08-03-01「安全阈值可配但须最高权限审批并留痕」
+    - BSM:576「持授权 U 盘密钥的最高权限本人发起的操作，不需要经过任何审批。」
+    - BSM:1682「营业日配置的变更只影响未来，不回改历史」
+    测试：新增 AmusementSpotCheckJdbcIntegrationTests 8 条：unconfiguredComplexReadsFactoryInterval、onlyMasterAdjustsInterval、admissionPastIntervalIsRecordedOncePerAnchor、lateSpotCheckDoesNotHideMiss、intervalStartsAtBusinessDayStartAfterPreOpenInspection、intervalFollowsComplexOfTheAdmission、exitsAndFailedAdmissionsDoNotCount、missListIsScoped。
+  - 18BS 落地位置补记·373-R3（游乐安全巡检页）：
+    改法：
+    - 新组件 AmusementInspectionWalkPanel（readInspectionWalk、walkComplete）：新建弹窗选了配有点位的项目时，只读显示走点进度，隐藏「检查项说明」；提交前重读进度，没走完提示「还有点位没走完」且不发请求，走完后请求不带 items。
+    - 新组件 AmusementInspectionRulesSection，挂在 AmusementSafetyPage 巡检列表的读取与空态闸之外、没有 KPI 聚焦时显示（收尾复核修正⑤）：点位清单一行一个并显示点位码二维码；营业中抽检间隔三项同填，最高权限闸拒绝时按细码 MASTER_APPROVAL_REQUIRED 显示「营业中抽检间隔是安全阈值，调整须由最高权限本人办理」；当班未抽检记录表。
+    - 明细抽屉逐点列结果与记录时间。
+    - 页面矩阵 ADM-AMU-003 行补 5 个接口和 amusement.safety_template.manage；fieldLabels.ts 与 FieldLabels.java 同键同名补字段名。
+    依据：BSM:1300 两句（同上）；第十八批裁决 76。
+    测试：新增 AmusementSafetyPage.pointwalk.test.tsx 2 条、AmusementInspectionRulesSection.test.tsx 4 条（含收尾复核修正⑤ 1 条）。
+  - 按字面或常理定（方案 notes 一，控制席已认可）：
+    ① 点位清单配在游乐项目上，由持安检模板管理权限的人维护；
+    ② 按序是逐点闸，不是整表校验；
+    ③ 走点跨闭店时点作废；
+    ④ 不分巡检类型，营业中抽检也要走完全部点位；
+    ⑤「按项目可配」取综合体项目；
+    ⑥ 抽检间隔调整只认最高权限本人；
+    ⑦「营业中」落成营业日起点之后的成功入场，起算点取最近一次已提交巡检与营业日起点二者较晚者；
+    ⑧ 出厂行上下限留空，项目行三项同填；
+    ⑨ 新接口用现成的游乐范围闸。
+  - 待答题：第 373 条「怎样才算走到点位」已由第十八批裁决 76 定为逐点扫码，本段照做。
+- 18BS 落地位置补记·379-R1（第 379 条：外包巡检员提交异常被整笔拒回）
+  - 改法：巡检异常监听的账号口径对齐发布方。FacilityWorkOrderService.onInspectionAbnormal 第一句原为平台范围闸 AuthorizationService.requirePlatformScope，改为本类已有的 FacilityWorkOrderService.requireScopeActor：外包账号放行，其余账号照旧要求平台范围（商户账号仍 403）。「派给本人、同项目」由发布方 FacilityInspectionService.submitRecord、reportException 里的 requireScopeActor 与 enforceAssignedScope 核。
+  - 修后效果：外包巡检员对派给本人、挂「异常转整改工单」模板的任务提交异常记录（operationId submitFacilityInspectionRecord）或上报异常（operationId reportInspectionException）时，巡检记录照常落库，任务转整改中，同一事务内自动建整改工单（类型整改、普通优先级、来源巡检、待派单、提单方记该外包账号、项目与空间取自任务），工单号回写到巡检任务。修前整笔 403 PLATFORM_SCOPE_REQUIRED 回滚。
+  - 不改：设备告警监听 FacilityWorkOrderService.onEquipmentAlarmed（唯一发布方 FacilityEquipmentService.changeStatus 只走平台口径，外包到不了）；外包账号仍看不到也处理不了这张整改工单（待平台派单）。
+  - 落地位置：FacilityWorkOrderService.onInspectionAbnormal。本段无迁移，无新增或改动的 OpenAPI 操作（新增 0 个），前端无改动。
+  - 依据：
+    - BSM:657「楼宇机电设备台账与维保、能耗表计抄表与归集、楼宇安防消防设施巡检；设备告警与巡检异常自动转工单。」
+    - PGM:842「巡检任务分派到人，现场扫码或定位留痕，发现异常生成整改工单。」
+    - PGM:681「外包/服务商人员（设备维保单位、安保与保洁、工程施工/装修队等）可拥有自己的系统账号登录，但只能处理被指派的工单、负责的区域或任务，看不到平台全局，也不能跨出本综合体」
+    - 待开发清单第 379 条。
+  - 测试：FacilityInspectionOutsourcedToWorkOrderJdbcIntegrationTests.outsourcedReportExceptionCreatesRectificationWorkOrder、outsourcedAbnormalRecordCreatesRectificationWorkOrder（真实 HTTP、真实授权链；修前红于 403 PLATFORM_SCOPE_REQUIRED，修后绿）。
+- 18BS 契约（K-contract）落地位置补记：本段新增 6 个操作，没有新增权限码。契约照现码写，yaml 与 json 两份同值。
+  - 373-R1、373-R5（BSM:1300「巡检必须按点位顺序完成，缺一个点位、上一个点位就不能通过；未走完全部点位的巡检不成立、不得标记为已完成」；决策台账 DEC-R3-2026-08-04-33；第十八批裁决 76「每个点位生成一张码贴在现场，巡检员用工作手机按顺序扫码后记结果，扫错码或跳点记不上」）
+    - 新增 getAmusementProjectInspectionPoints（GET /api/v1/amusement/projects/{id}/inspection-points）：权限 amusement.safety_inspection.view；终端 web 与 staff_work_phone；不留痕。
+    - 新增 replaceAmusementProjectInspectionPoints（PUT 同路径）：权限 amusement.safety_template.manage；终端 web；留痕 amusement.inspection_points.configured / configure_failed。
+    - 新增 checkAmusementInspectionPoint（POST /api/v1/amusement/projects/{id}/inspection-points/{seq}/check）：权限 amusement.safety_inspection.create；终端 staff_work_phone；留痕 amusement.inspection_point.checked / check_failed；错误码 INSPECTION_POINT_NOT_FOUND、INSPECTION_POINT_CODE_MISMATCH、INSPECTION_PREVIOUS_POINT_INCOMPLETE、INSPECTION_POINT_ALREADY_CHECKED。
+    - 新增 schema：AmusementInspectionPointsView、AmusementInspectionPoint（含 point_code）、AmusementInspectionWalkPoint、AmusementInspectionPointsReplaceRequest、AmusementInspectionPointCheckRequest。
+    - 改既有：createAmusementSafetyInspection 补说明（配了点位时检查项取本轮走完的点位，未走完 409 INSPECTION_POINTS_INCOMPLETE）；AmusementSafetyInspectionRequest 的 required 去掉 items（项目没配点位时必填）；StaffAppFunctionsResponse 功能码枚举加 amusement_inspection（对应 StaffAppFunctions.ALL）。
+    - 对应代码：AmusementInspectionPointController 的 view、replace、check；AmusementInspectionPointService 的 view、replacePoints、checkPoint、completedWalkItems；AmusementInspectionService.createSafetyInspectionInternal。
+  - 373-R2（BSM:1300「营业中抽检有最低频次要求，每隔多久至少抽检一次由后台配置（安全阈值，按项目可配，须同时配置上限与下限，出厂默认每 2 小时一次），达不到最低频次的视为当班未抽检」；DEC-CFG-2026-08-03-01「安全阈值可配但须最高权限审批并留痕」；BSM:576「持授权 U 盘密钥的最高权限本人发起的操作，不需要经过任何审批。」）
+    - 新增 getAmusementSpotCheckPolicy 与 saveAmusementSpotCheckPolicy（GET 与 PUT /api/v1/amusement/spot-check-policies/{project_id}，按综合体项目）。保存只认最高权限本人，否则 403 MASTER_APPROVAL_REQUIRED；留痕 amusement.spot_check_policy.updated / update_failed。
+    - 新增 listAmusementSpotCheckMisses（GET /api/v1/amusement/spot-check-misses）。
+    - 新增 schema：AmusementSpotCheckPolicy、AmusementSpotCheckPolicyRequest、AmusementSpotCheckMiss。
+    - 对应代码：AmusementSpotCheckController 的 getPolicy、savePolicy、listMisses；AmusementSpotCheckService 的同名方法与 detectMisses。
+  - 379-R1：契约不变，新增 0 个操作。
+  - 校验：npm run verify:openapi、verify:openapi-examples、verify:client-routes、verify:client-openapi、verify:client-payload --strict 全绿。
+- 18BS 汇合段 J（e2e 与门禁）：
+  - e2e 改法与位置：本段不改 tests/e2e。
+    - 第 373 条只改到一个有 e2e 的后台页：ADM-AMU-003「安全巡检/事故」（AmusementSafetyPage，新加 AmusementInspectionWalkPanel 与 AmusementInspectionRulesSection）。
+    - full-admin-remaining.spec.ts 里有两处用到它：一处断言 amusement-safety-summary、amusement-safety-table、amusement-safety-boundary；另一处是 ADM-REM-02 的新建、提交、整改、复检、批准恢复流程。两处用到的选择器都还在。
+    - 新增的读接口 getAmusementProjectInspectionPoints 与 listAmusementSpotCheckMisses，在 support/mock-api.ts 里走 fixedRows 兜底空表。新建弹窗照旧显示检查项说明并带 items，规则块里的未抽检表为空。所以不加桩，也不改断言。
+    - 四张视觉基线都不包含该页，不重拍。
+    - 第 379 条只改后端 FacilityWorkOrderService.onInspectionAbnormal 的范围闸，没有 e2e 用到。
+  - 门禁结论（变基前在 614159b0 基线上实跑；写本段增量，不写全仓总数）：
+    - 后端全量 0 失败 0 错误。本段新增后端用例 20 条：AmusementInspectionPointJdbcIntegrationTests 9 条、AmusementSpotCheckJdbcIntegrationTests 8 条、FacilityInspectionOutsourcedToWorkOrderJdbcIntegrationTests 2 条、StaffAppFunctionsTests 1 条。本段迁移 V727（amusement_inspection_points）、V728（amusement_spot_check）已在一次性空库真迁。
+    - 前端 typecheck 0 错，vitest 全过。本段新增前端用例 5 条：AmusementSafetyPage.pointwalk.test.tsx 2 条、AmusementInspectionRulesSection.test.tsx 3 条（收尾复核修正⑤另加 1 条）。
+    - customer-core、customer-app、customer-miniapp 单测全过。
+    - 安卓员工端 gradle test 全过，本段新增 1 条（TerminalFieldWorkflowTest）；android-app 编译通过。
+    - chromium 五份后台 spec 全过，本段不新增 e2e 用例。
+    - 四份生成物重生成后 verify:p0-contract 全绿。
+    - yaml 与 json 深比较一致。本段新增 6 个操作：getAmusementProjectInspectionPoints、replaceAmusementProjectInspectionPoints、checkAmusementInspectionPoint、getAmusementSpotCheckPolicy、saveAmusementSpotCheckPolicy、listAmusementSpotCheckMisses。
+    - 既有操作只改了 createAmusementSafetyInspection（schema AmusementSafetyInspectionRequest），StaffAppFunctionsResponse 的枚举加 amusement_inspection。
+    - git diff --check 干净。
+- D-docs（18BS 文档组）：第 373 条（373-R1、373-R2、373-R5）、第 379 条（379-R1）的 PRD 与下位文档同步。改法是把各文档已有的现状句或「仍缺结构化承载」句就地改成现码实情，每份升一版、修订表加一行，不新增业务规则。
+  落地位置：
+  - 游乐基础运营产品 PRD：
+    - §8「巡检记录」行补按点位走点；
+    - §11B.2「按点位顺序完成」条下记实现现状：点位清单按游乐项目配置，每个点位一张点位码；工作手机按顺序扫码记录，扫错码、跳点都记不上；重记第 1 个点位即重新开始；上一个闭店时点之前记的走点不算本轮；未走完不能新建巡检（INSPECTION_POINTS_INCOMPLETE），开放前巡检、营业中抽检、到期巡检一样要走完；补录未做；
+    - §11B.2「营业中抽检」项下记实现现状：间隔按综合体项目配置，出厂 120 分钟，项目行三项同填，最高权限本人调整；从最近一次已提交巡检与该入场所属营业日起点二者较晚者起算，超过间隔仍有成功入场即记一条当班未抽检；只判定留痕，不拦核销、不通知。
+  - 游乐 P0 安全巡检规格：文首代码事实第二条改记 amusement_projects.inspection_points 与走点表 amusement_inspection_walk_points；AC-AMU-SAFE-008、AC-AMU-SAFE-009 记实现现状（点位配在项目上而不是模板；未抽检只判定留痕、不通知；补录未做）。
+  - 游乐开发设计：§7.18 改记两张新表 amusement_spot_check_policies、amusement_spot_check_misses 与走点表；§8.7 补一句：6 个接口 getAmusementProjectInspectionPoints、replaceAmusementProjectInspectionPoints、checkAmusementInspectionPoint、getAmusementSpotCheckPolicy、saveAmusementSpotCheckPolicy、listAmusementSpotCheckMisses，以及 AmusementInspectionTaskJob 每轮判当班未抽检。
+  - 终端与页面 PRD：§6「巡检记录」行记工作手机「游乐巡检走点」屏（功能码 amusement_inspection，不进私人手机与平板清单）。
+  - 楼宇运营 PRD：§4「异常记录必须填 abnormal_note……」一条补半句「外包巡检账号对派给本人的任务提交异常记录或上报异常同样自动生成，提单方记该账号」（FacilityWorkOrderService.onInspectionAbnormal 的账号口径同发布方）。
+  依据：
+  - BSM:1300「巡检必须按点位顺序完成，缺一个点位、上一个点位就不能通过；未走完全部点位的巡检不成立、不得标记为已完成」，及同行「营业中抽检有最低频次要求……出厂默认每 2 小时一次……达不到最低频次的视为当班未抽检」；
+  - 第十八批裁决 76（选「逐点扫码」）；
+  - BSM:657「……设备告警与巡检异常自动转工单。」；PGM:842「巡检任务分派到人，现场扫码或定位留痕，发现异常生成整改工单。」；PGM:681。
+  测试：本组只改文档，无新增测试；verify-full-admin-page-matrix、verify:entry-anchors 通过。
+- 18BS 收尾复核修正（2026-11-21）：按收尾复核成立的意见 1～6 与控制席补充修正；本轮没有迁移，新增操作 0 个，不新增权限码与字段键。
+  ① 意见 1、6（工作手机「游乐巡检走点」屏状态行）：AmusementInspectionWalkScreen 的 show() 在没有下一个待记点位时也写定值：项目没配点位写「该项目没有配置巡检点位」，本轮走完写「全部点位已走完，请在后台安全巡检页新建巡检」，不再停在上一次的「正在提交…」「正在读取巡检点位…」。只改这一处，服务端不动（第十八批裁决 76）。
+  ② 意见 2（本节「18BS 汇合段 J」门禁结论）：改成本段增量写法，注明变基前在 614159b0 基线上实跑，不写全仓总数。
+  ③ 意见 3（当班未抽检列表的商户隔离用例）：AmusementSpotCheckJdbcIntegrationTests 的夹具在综合体 A 再建一家别的商户的游乐项目；missListIsScoped 给它造已提交巡检与一笔超间隔的成功入场，断言已判出一条、商户 A 的员工读 listAmusementSpotCheckMisses 看不到它（PGM:528「④看不到别的商户和别的项目的数据」）。产品代码不改。
+  ④ 意见 4（项目配了点位时请求里的 items 不看）：AmusementInspectionPointJdbcIntegrationTests 加三发带手填检查项的 createAmusementSafetyInspection 请求：只走完部分点位时仍 409 INSPECTION_POINTS_INCOMPLETE、不增巡检；有点位不通过而手填检查项全部通过、总体合格时仍 409 SAFETY_INSPECTION_PASS_CONFLICTS_ITEMS、不增巡检；走完全部点位都通过时 200，检查项仍取点位名（BSM:1300；PGM:744「前端隐藏只是辅助，后端接口必须独立校验。」）。产品代码不改。
+  ⑤ 意见 5（规则块与新建巡检按钮被巡检列表空态藏住）：AmusementSafetyPage 的「暂无数据」只占巡检表格区，一条巡检都没有时新建巡检、提交、整改、复检、审批与定期检修照样显示；AmusementInspectionRulesSection 移到巡检列表的读取与空态闸之外，没有 KPI 聚焦时显示，块内读取失败照旧提示（BSM:1300 抽检频次「由后台配置」；第十八批裁决 76「每个点位生成一张码贴在现场」）。其他页面的同形问题已登记待开发清单第 453 条，本段不动。新用例：AmusementInspectionRulesSection.test.tsx「一条巡检都没有：规则块与新建巡检按钮照样显示，暂无数据只占巡检表格区」。
+  测试：本轮新增前端用例 1 条；后端只在原有用例里加请求与断言，不新增用例。③④各做变异（商户账号也按综合体看；请求带 items 就用请求的；请求带 items 就不查走点），相应用例都变红，变异已还原。
+- 18BS 合并前变基（2026-11-22）：本段自 2bd98895 变基到 origin/main 97be1fe4；迁移按原序顺延改号 V716→V727、V717→V728；合并时 OpenAPI 共 1409 个操作（主干 1403）、info.version V0.99、决策台账 V1.27，Flyway 最新 V728（共 625 个迁移）。版本行、契约版本、计数与 SHA、生成物、台账补记与 PRD 修订行由合并前脚本按新主干统一重写。
