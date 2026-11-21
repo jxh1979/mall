@@ -113,14 +113,13 @@ const responseExamples = {
   },
   WebhookAccepted: {
     success: true,
-    trace_id: "req_20260612_000003",
+    code: "OK",
+    message: "success",
+    request_id: "req_20260612_000003",
+    server_time: "2026-06-12T12:00:00Z",
     data: {
       event_id: "evt_platform_20260612_000001",
-      dedup_status: "created",
-      compensation_required: false
-    },
-    meta: {
-      server_time: "2026-06-12T12:00:00Z"
+      deduplicated: false
     }
   }
 };

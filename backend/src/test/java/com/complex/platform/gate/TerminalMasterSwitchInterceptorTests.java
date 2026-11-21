@@ -56,6 +56,16 @@ class TerminalMasterSwitchInterceptorTests {
     }
 
     @Test
+    void integrationAdminWriteWithoutTrustedTerminalIsStillRejected() {
+        // 第十八批 CK 段 418-R1：只放两个回调整串路径，后台集成管理写接口照旧要可信终端。
+        MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/v1/integration/compensation-tasks");
+        assertThatThrownBy(() -> interceptor.preHandle(request, new MockHttpServletResponse(), new Object()))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.code()).isEqualTo("TERMINAL_NOT_ALLOWED"));
+        verify(guard, never()).checkTerminalEnabled();
+    }
+
+    @Test
     void readWithoutTrustedTerminalIdentityStillSkipsGate() {
         // 读请求维持放行：终端开关是端停用开关，不是鉴权边界；前端隐藏为辅助，读不产生业务副作用。
         MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/v1/bar/orders");
@@ -69,6 +79,9 @@ class TerminalMasterSwitchInterceptorTests {
         for (String uri : new String[]{
                 "/api/v1/auth/login",
                 "/api/open/d/ep1/webhooks/wechat/pay",
+                // 第十八批 CK 段 418-R1（BSM:1511）：统一 webhook 与机器人上报两个第三方回调。
+                "/api/v1/integration/catering_pos/webhook",
+                "/api/v1/integration/robot/report",
                 "/api/v1/terminals/kiosks/dev1/heartbeat"}) {
             MockHttpServletRequest request = new MockHttpServletRequest("POST", uri);
             assertThat(interceptor.preHandle(request, new MockHttpServletResponse(), new Object())).isTrue();
