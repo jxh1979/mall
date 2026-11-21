@@ -1,4 +1,4 @@
-// 文件版本：V0.04
+// 文件版本：V0.05
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
@@ -136,5 +136,17 @@ describe("客人端相关后台配置（ROOT-03 B 段券与展示组）", () => 
     expect(api.post).toHaveBeenCalledWith("/api/v1/home-contents/prj_1/publish", { intro: "城市娱乐综合体", announcement: "周六乐队演出" });
     fireEvent.click(screen.getByTestId("customer-home-content-publish"));
     await waitFor(() => expect(p.setActionResult).toHaveBeenCalledWith({ action: "customer_home_content_published", projectId: "prj_1" }));
+  });
+
+  it("场地营业时间页：只有待审提交、从未发布过的项目，查询后显示「尚未发布」（第 414 条）", async () => {
+    const api = makeApi((url) => (url.includes("home-contents") ? {
+      projectId: "prj_1", intro: null, announcement: null, publishedBy: null, publishedAt: null,
+      draftIntro: "城市娱乐综合体", draftAnnouncement: "周六乐队演出", draftSubmittedBy: "u1", draftSubmittedAt: "2026-07-05T05:20:00Z",
+    } : []));
+    render(<VenueBusinessHoursPage {...props(api)} />);
+    await waitFor(() => expect(screen.getByTestId("customer-home-content")).toBeTruthy());
+    fireEvent.change(screen.getByLabelText("首页内容项目编号"), { target: { value: "prj_1" } });
+    fireEvent.click(screen.getByTestId("customer-home-content-query"));
+    await waitFor(() => expect(screen.getByTestId("customer-home-content-current").textContent).toBe("尚未发布"));
   });
 });

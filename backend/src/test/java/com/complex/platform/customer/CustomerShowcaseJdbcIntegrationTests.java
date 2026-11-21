@@ -1,6 +1,6 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.contains;
@@ -97,6 +97,11 @@ class CustomerShowcaseJdbcIntegrationTests {
         List<String> pending = jdbc.queryForList("SELECT review_id FROM supervisor_review_decisions WHERE action_type = 'customer.home_content.publish'"
                 + " AND object_id = ? AND review_status = 'pending_review'", String.class, f.projectId).stream().filter(blocked::contains).toList();
         assertThat(pending).hasSize(1);
+        // 第 414 条：编辑人在场地营业时间页查询，只有待审原文、从未发布——没有发布时间，后台据此显示「尚未发布」。
+        mockMvc.perform(get("/api/v1/home-contents/" + f.projectId).with(editor)).andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.published_at").value(nullValue()))
+                .andExpect(jsonPath("$.data.intro").value(nullValue()))
+                .andExpect(jsonPath("$.data.draft_intro").value("城市娱乐综合体，含酒吧与游乐。"));
         // 裁决第 5 条「运营编辑后走审批」：审批人审批前能读到这次要发布的原文（不是盲批）。
         mockMvc.perform(get("/api/v1/home-contents/" + f.projectId).with(supervisor)).andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.draft_intro").value("城市娱乐综合体，含酒吧与游乐。"))
