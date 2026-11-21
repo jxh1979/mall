@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -206,6 +206,22 @@ class BarGeneralCardSettleJdbcIntegrationTests {
                 SOURCE, projectP)).isEqualTo(1);
     }
 
+    /**
+     * 修复项 F06（BSM:833「①综合体通用卡：综合体内各商户通用」）：没挂空间的吧台位（建台位必选空间之前建的，或不经后台接口写入的），吧台直点（无开台会话）的账单指定
+     * general 结清，扣酒吧商户所属综合体 P 的那张通用卡（酒吧 id 即商户 id，V267；修复前只按桌台铺位取项目，取不到即 404
+     * STORED_VALUE_ACCOUNT_NOT_FOUND）。
+     */
+    @Test
+    void generalCardSettlesCounterBillWhoseTableHasNoSpace() throws Exception {
+        String card = generalCard(projectP);
+        String bill = deliveredBill(merchant, null, "bar_counter", 10_000L);
+
+        settle(bill, ",\"stored_value_card\":\"general\"").andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.payment_status").value("paid"));
+
+        assertThat(principal(card)).isEqualTo(10_000L);
+    }
+
     // ---------- 夹具与请求 ----------
 
     /** 客人在该综合体的通用卡：充一批 20000 分本金（通路费率 1%）。 */
@@ -225,23 +241,30 @@ class BarGeneralCardSettleJdbcIntegrationTests {
 
     /** 该客人点单、出品已全部送达的 30000 待结账单，桌台绑在综合体 P 的铺位。 */
     private String deliveredBill() {
+        return deliveredBill(bar, space, "card_seat", 30_000L);
+    }
+
+    /** 该客人点单（无开台会话）、出品已全部送达的待结账单；spaceId 为空＝没挂空间的台位（建台位必选空间之前建的，或不经后台接口写入的）。 */
+    private String deliveredBill(String barId, String spaceId, String tableType, long amountCent) {
         int n = seq.incrementAndGet();
         String table = "r367tbl_" + suffix + "_" + n;
         String order = "r367ord_" + suffix + "_" + n;
         String product = "r367prd_" + suffix + "_" + n;
         String bill = "r367bill_" + suffix + "_" + n;
         Instant now = Instant.now();
-        bars.saveTable(new BarTableRecord(table, bar, merchant, "T-" + suffix + "-" + n, "通用卡回归卡座", "card_seat",
+        bars.saveTable(new BarTableRecord(table, barId, merchant, "T-" + suffix + "-" + n, "通用卡回归卡座", tableType,
                 4, 1, 0L, "CNY", "active", now, now));
-        jdbc.update("UPDATE bar_tables SET space_id = ? WHERE id = ?", space, table);
-        bars.saveProduct(new BarProductRecord(product, bar, merchant, "通用卡回归酒", "spirit", 30_000L, "CNY", null, null, false,
+        if (spaceId != null) {
+            jdbc.update("UPDATE bar_tables SET space_id = ? WHERE id = ?", spaceId, table);
+        }
+        bars.saveProduct(new BarProductRecord(product, barId, merchant, "通用卡回归酒", "spirit", amountCent, "CNY", null, null, false,
                 "active", now, now, null, null, null, false, null, null, null));
-        bars.saveOrder(new BarOrderRecord(order, bar, merchant, table, null, customer, "staff", "created", 30_000L, "CNY", "web",
+        bars.saveOrder(new BarOrderRecord(order, barId, merchant, table, null, customer, "staff", "created", amountCent, "CNY", "web",
                 null, null, now, now));
-        bars.saveOrderItem(new BarOrderItemRecord("r367item_" + suffix + "_" + n, order, product, "通用卡回归酒", 1, 30_000L, 30_000L,
+        bars.saveOrderItem(new BarOrderItemRecord("r367item_" + suffix + "_" + n, order, product, "通用卡回归酒", 1, amountCent, amountCent,
                 "delivered", now, now, null, 0L, false, null, null, null, false, false, now.minusSeconds(60)));
-        bars.saveBill(new BarBillRecord(bill, "BILL-R367-" + suffix + "-" + n, order, bar, merchant, table, null,
-                30_000L, 0L, 0L, 30_000L, 0L, "CNY", "unpaid", "unsettled", null, null, now, now));
+        bars.saveBill(new BarBillRecord(bill, "BILL-R367-" + suffix + "-" + n, order, barId, merchant, table, null,
+                amountCent, 0L, 0L, amountCent, 0L, "CNY", "unpaid", "unsettled", null, null, now, now));
         return bill;
     }
 

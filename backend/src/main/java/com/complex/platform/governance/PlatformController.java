@@ -1,5 +1,5 @@
 package com.complex.platform.governance;
-// 文件版本：V0.10
+// 文件版本：V0.11
 import static com.complex.platform.common.api.ApiRequests.requireIdempotencyKey;
 
 import com.complex.platform.access.AuthorizationService;
@@ -15,6 +15,7 @@ import com.complex.platform.governance.dto.MerchantProfileRequest;
 import com.complex.platform.governance.dto.ProjectRequest;
 import com.complex.platform.governance.dto.ProjectAssociationRequest;
 import com.complex.platform.governance.dto.SpaceRequest;
+import com.complex.platform.governance.dto.SpaceUpdateRequest;
 import com.complex.platform.governance.dto.StatusChangeRequest;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -34,6 +35,9 @@ public class PlatformController {
     // D1：场地营业时间配置（V226 建表后一直无界面，场次划分全靠它）。
     private final VenueBusinessHoursService venueBusinessHoursService;
     private final AuditedOperationExecutor operations;
+    // 第十八批 BL 段第 388 条 388-R1：修改空间的业务动作（PlatformControllerTests 手工构造本控制器，字段注入不动其构造）。
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private SpaceMaintenanceService spaceMaintenanceService;
 
     // 第十八批 N 段第 124 条 124-R5（PGM L738「访问被拒绝也要留痕，便于排查是权限问题还是开关问题。」）：写口任一步失败（权限、范围、校验、
     // 状态冲突）经 AuditedOperationExecutor.recordingFailure 落 OpenAPI 声明的 x-audit-event-failure 再原样抛出。
@@ -304,6 +308,16 @@ public class PlatformController {
         authorizationService.requirePermission("governance.space.manage");
         requireIdempotencyKey(request == null ? null : request.idempotencyKey());
         return ApiResponse.ok(service.createSpace(request));
+    }
+
+    // 第十八批 BL 段第 388 条 388-R1（PGM:469「维护楼层、区域、点位、商铺……」；PGM:470「记录空间面积、用途、状态、负责人和所属商户。」）：
+    // 修改空间（含改所属商户、状态改为不可用即停用），不改所属项目与平面图点位。
+    @PutMapping("/spaces/{space_id}")
+    public ApiResponse<SpaceRecord> updateSpace(@PathVariable("space_id") String spaceId,
+            @RequestBody @jakarta.validation.Valid SpaceUpdateRequest request) {
+        authorizationService.requirePermission("governance.space.manage");
+        requireIdempotencyKey(request == null ? null : request.idempotencyKey());
+        return ApiResponse.ok(spaceMaintenanceService.updateSpace(spaceId, request));
     }
 
     // D1 场地营业时间：V226 的 venue_business_hours 此前只有核销侧读、没有任何配置入口（只能改库）。

@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.18
+// 文件版本：V0.19
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.PageResponse;
@@ -661,6 +661,14 @@ public class BarService {
         return operations.readPage(
                 BarReadOperation.LIST_TABLES_WITHOUT_SPACE,
                 tableSessionService::listTablesWithoutSpace
+        );
+    }
+
+    // 第十八批 BL 段第 380 条 380-R1（BSM:717）：新建卡座的可选空间清单。
+    public PageResponse<BarTableSpaceBinding.Option> listTableSpaceOptions(String barId) {
+        return operations.readPage(
+                BarReadOperation.LIST_TABLE_SPACE_OPTIONS,
+                () -> tableSessionService.listTableSpaceOptions(barId)
         );
     }
 

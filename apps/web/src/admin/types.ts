@@ -1,4 +1,4 @@
-// 文件版本：V0.33
+// 文件版本：V0.34
 export type AdminUser = {
   id: string;
   username: string;
@@ -1437,6 +1437,9 @@ export type GovernanceSpaceRow = {
   floorNo?: string;
   areaSquareMeter?: number | string;
   status?: string;
+  // 第十八批 BL 段第 388 条 388-R1（PGM:470）：用途、负责人（员工账号编号）。
+  purpose?: string;
+  ownerUserId?: string;
   // 旧臆造字段（保留 optional 防他页引用报错）
   venueId?: string;
   areaId?: string;

@@ -1,4 +1,4 @@
-// 文件版本：V0.23
+// 文件版本：V0.24
 import React from "react";
 import { QRCodeSVG } from "qrcode.react";
 import { buildCustomerLink } from "@complex/customer-core/links";
@@ -106,7 +106,26 @@ export function BarTableSessionsPage({ api, user, setActionResult, setGlobalErro
   const [tableCreateOpen, setTableCreateOpen] = React.useState(false);
   const [tableCreateError, setTableCreateError] = React.useState("");
   // 从零起单三表单：新建卡座 / 新建订台（代客）/ 开台。全站零英文，受权限按钮约束。
-  const [newTable, setNewTable] = React.useState({ barId: "", tableName: "", tableType: "card_seat", capacity: "4", minimumSpendYuan: "0" });
+  const [newTable, setNewTable] = React.useState({ barId: "", tableName: "", tableType: "card_seat", capacity: "4", minimumSpendYuan: "0", spaceId: "" });
+  // 第十八批 BL 段第 380 条 380-R2（BSM:717「酒吧要知道桌台、卡座、吧台属于哪个空间和商户。」）：新建卡座的所属空间——弹窗打开且已选所属酒吧时，
+  // 取该酒吧名下启用中的空间；换酒吧时清空已选空间并重取。
+  const [tableSpaceOptions, setTableSpaceOptions] = React.useState<Array<{ id: string; spaceName?: string }>>([]);
+  React.useEffect(() => {
+    if (!tableCreateOpen || !newTable.barId) {
+      setTableSpaceOptions((prev) => (prev.length ? [] : prev));
+      return undefined;
+    }
+    let cancelled = false;
+    api.get<Array<{ id: string; spaceName?: string }>>("/api/v1/bar/tables/space-options?bar_id=" + encodeURIComponent(newTable.barId)).then(
+      (rows) => { if (!cancelled) setTableSpaceOptions(Array.isArray(rows) ? rows : []); },
+      (actionError) => {
+        if (cancelled) return;
+        setTableSpaceOptions([]);
+        setGlobalError(actionError instanceof Error ? actionError.message : "可选空间读取失败");
+      });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [api, tableCreateOpen, newTable.barId]);
   const [newReservation, setNewReservation] = React.useState({ barId: "", tableId: "", guestCount: "2", salespersonUserId: "", customerPhone: "", latestArrivalAt: "" });
   const [qrTableId, setQrTableId] = React.useState("");
   const [newSession, setNewSession] = React.useState({ barId: "", tableId: "", reservationId: "", guestCount: "2", salesStaffId: "", serviceStaffId: "" });
@@ -328,6 +347,7 @@ export function BarTableSessionsPage({ api, user, setActionResult, setGlobalErro
   function newTableValidationMessage(): string | null {
     if (!newTable.barId.trim()) return "新建卡座请填写所属酒吧。";
     if (!newTable.tableName.trim()) return "新建卡座请填写卡座名称。";
+    if (!newTable.spaceId) return "新建卡座请选择所属空间。";
     const cap = Number(newTable.capacity);
     if (!Number.isFinite(cap) || cap <= 0) return "可进人数必须大于 0。";
     const spend = Number(newTable.minimumSpendYuan);
@@ -350,10 +370,11 @@ export function BarTableSessionsPage({ api, user, setActionResult, setGlobalErro
         tableType: newTable.tableType,
         capacity: Number(newTable.capacity),
         minimumSpendCent: Math.round(Number(newTable.minimumSpendYuan) * 100),
+        spaceId: newTable.spaceId,
       });
       setActionResult({ action: "bar_table_create", status: "created", result });
       setTableCreateError("");
-      setNewTable((prev) => ({ ...prev, tableName: "" }));
+      setNewTable((prev) => ({ ...prev, tableName: "", spaceId: "" }));
       setTableCreateOpen(false);
       await reload();
     } catch (actionError) {
@@ -594,15 +615,16 @@ export function BarTableSessionsPage({ api, user, setActionResult, setGlobalErro
         steps={[
           {
             title: "卡座信息",
-            description: "填写所属酒吧与卡座名称。",
+            description: "填写所属酒吧、卡座名称与所属空间。",
             validate: () => {
               if (!newTable.barId.trim()) return "新建卡座请填写所属酒吧。";
               if (!newTable.tableName.trim()) return "新建卡座请填写卡座名称。";
+              if (!newTable.spaceId) return "新建卡座请选择所属空间。";
               return null;
             },
             content: (
               <>
-                <label>所属酒吧<BarVenueSelect api={api} testId="bar-new-table-bar" value={newTable.barId} onChange={(v) => setNewTable((p) => ({ ...p, barId: v }))} autoSelectFirst setGlobalError={setGlobalError} /></label>
+                <label>所属酒吧<BarVenueSelect api={api} testId="bar-new-table-bar" value={newTable.barId} onChange={(v) => setNewTable((p) => ({ ...p, barId: v, spaceId: p.barId === v ? p.spaceId : "" }))} autoSelectFirst setGlobalError={setGlobalError} merchantId={user.merchantId} /></label>
                 <label>卡座名称<input data-testid="bar-new-table-name" value={newTable.tableName} onChange={(event) => setNewTable((p) => ({ ...p, tableName: event.target.value }))} placeholder="如 包厢-01" /></label>
                 <label>桌台类型
                   <select data-testid="bar-new-table-type" aria-label="桌台类型" value={newTable.tableType} onChange={(event) => setNewTable((p) => ({ ...p, tableType: event.target.value }))}>
@@ -610,6 +632,12 @@ export function BarTableSessionsPage({ api, user, setActionResult, setGlobalErro
                     <option value="vip">包厢（同卡座流转）</option>
                     <option value="bar_counter">吧台位（直点即点即取，不走出品流转）</option>
                     <option value="loose_table">散台（客人扫码点单、下单即付款，不收服务费）</option>
+                  </select>
+                </label>
+                <label>所属空间
+                  <select data-testid="bar-new-table-space" aria-label="所属空间" value={newTable.spaceId} onChange={(event) => setNewTable((p) => ({ ...p, spaceId: event.target.value }))}>
+                    <option value="">请选择所属空间</option>
+                    {tableSpaceOptions.map((option) => <option key={option.id} value={option.id}>{option.spaceName ?? option.id}</option>)}
                   </select>
                 </label>
               </>
@@ -631,12 +659,13 @@ export function BarTableSessionsPage({ api, user, setActionResult, setGlobalErro
           { label: "所属酒吧", value: newTable.barId.trim() || "未填写" },
           { label: "卡座名称", value: newTable.tableName.trim() || "未填写" },
           { label: "桌台类型", value: newTable.tableType === "bar_counter" ? "吧台位（不走出品流转）" : newTable.tableType === "vip" ? "包厢" : newTable.tableType === "loose_table" ? "散台（扫码点单）" : "卡座" },
+          { label: "所属空间", value: tableSpaceOptions.find((option) => option.id === newTable.spaceId)?.spaceName ?? (newTable.spaceId || "未选择") },
           { label: "可进人数", value: newTable.capacity.trim() || "未填写" },
           { label: "低消（元）", value: newTable.minimumSpendYuan.trim() || "0" },
         ]}
       />
       <div className="admin-form-row" data-testid="bar-create-reservation-form">
-        <label>所属酒吧<BarVenueSelect api={api} testId="bar-new-reservation-bar" value={newReservation.barId} onChange={(v) => setNewReservation((p) => ({ ...p, barId: v }))} autoSelectFirst setGlobalError={setGlobalError} /></label>
+        <label>所属酒吧<BarVenueSelect api={api} testId="bar-new-reservation-bar" value={newReservation.barId} onChange={(v) => setNewReservation((p) => ({ ...p, barId: v }))} autoSelectFirst setGlobalError={setGlobalError} merchantId={user.merchantId} /></label>
         <label>卡座编号<input data-testid="bar-new-reservation-table" value={newReservation.tableId} onChange={(event) => setNewReservation((p) => ({ ...p, tableId: event.target.value }))} placeholder="要订的卡座编号" /></label>
         <label>人数<input data-testid="bar-new-reservation-guests" type="number" min={1} value={newReservation.guestCount} onChange={(event) => setNewReservation((p) => ({ ...p, guestCount: event.target.value }))} placeholder="人数" /></label>
         <label>销售员（选填）<input data-testid="bar-new-reservation-sales" value={newReservation.salespersonUserId} onChange={(event) => setNewReservation((p) => ({ ...p, salespersonUserId: event.target.value }))} placeholder="销售员编号" /></label>
@@ -645,7 +674,7 @@ export function BarTableSessionsPage({ api, user, setActionResult, setGlobalErro
         <PermissionButton permissionsState={effectivePermissions} permissions={[BAR_RESERVATION_CREATE_PERMISSION]} disabled={submitting} onClick={() => void createReservation()} data-testid="bar-new-reservation-submit">新建订台（代客）</PermissionButton>
       </div>
       <div className="admin-form-row" data-testid="bar-create-session-form">
-        <label>所属酒吧<BarVenueSelect api={api} testId="bar-new-session-bar" value={newSession.barId} onChange={(v) => setNewSession((p) => ({ ...p, barId: v }))} autoSelectFirst setGlobalError={setGlobalError} /></label>
+        <label>所属酒吧<BarVenueSelect api={api} testId="bar-new-session-bar" value={newSession.barId} onChange={(v) => setNewSession((p) => ({ ...p, barId: v }))} autoSelectFirst setGlobalError={setGlobalError} merchantId={user.merchantId} /></label>
         <label>卡座编号<input data-testid="bar-new-session-table" value={newSession.tableId} onChange={(event) => setNewSession((p) => ({ ...p, tableId: event.target.value }))} placeholder="要开台的卡座编号" /></label>
         <label>订台号（有预订必填）<input data-testid="bar-new-session-reservation" value={newSession.reservationId} onChange={(event) => setNewSession((p) => ({ ...p, reservationId: event.target.value }))} placeholder="客人到店开台填该台位的订台号" /></label>
         <label>人数<input data-testid="bar-new-session-guests" type="number" min={1} value={newSession.guestCount} onChange={(event) => setNewSession((p) => ({ ...p, guestCount: event.target.value }))} placeholder="人数" /></label>

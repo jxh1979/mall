@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.06
+// 文件版本：V0.07
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -373,6 +373,11 @@ class BarInvitationCustomerJdbcIntegrationTests {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("idempotency_key", "inv-table6-" + suffix);
         body.put("bar_id", barId);
+        // 第十八批 BL 段第 380 条 380-R1：建台位必带该酒吧名下启用中的所属空间。
+        String spaceId = "space_inv6_" + suffix;
+        jdbc.update("INSERT INTO spaces(id,project_id,merchant_id,space_name,space_type,status,created_at,updated_at)"
+                + " VALUES(?,?,?,'卡座区','unit','active',now(),now())", spaceId, "prj_inv_" + suffix, barId);
+        body.put("space_id", spaceId);
         body.put("table_name", "六人卡座");
         body.put("table_type", "card_seat");
         body.put("capacity", 6);
@@ -409,6 +414,11 @@ class BarInvitationCustomerJdbcIntegrationTests {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("idempotency_key", "inv-loose-" + suffix);
         body.put("bar_id", barId);
+        // 第十八批 BL 段第 380 条 380-R1：建台位必带该酒吧名下启用中的所属空间。
+        String spaceId = "space_invloose_" + suffix;
+        jdbc.update("INSERT INTO spaces(id,project_id,merchant_id,space_name,space_type,status,created_at,updated_at)"
+                + " VALUES(?,?,?,'卡座区','unit','active',now(),now())", spaceId, "prj_inv_" + suffix, barId);
+        body.put("space_id", spaceId);
         body.put("table_name", "散台一号");
         body.put("table_type", "loose_table");
         body.put("capacity", 4);

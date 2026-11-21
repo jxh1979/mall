@@ -1,6 +1,6 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.contains;
@@ -27,6 +27,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
 import org.junit.jupiter.api.AfterEach;
@@ -50,7 +51,7 @@ import org.springframework.transaction.annotation.Transactional;
  * ENUM:86「每笔充值拆为本金与赠送金两段分别记账」；PGM:659「所有业务数据默认按项目隔离」「在所分配的权限内可以查看、处理该角色可查看项目的数据」）：
  * 储值台账查询 queryStoredValueLedger。真库、真实入口、真实授权链、蛇形键，随测试事务回滚。
  *
- * <p>夹具：项目 A、B；酒吧商户 M 在 A、商户 N 在 B；客人有 A 通用卡、B 通用卡与 M 的商户卡（项目 A）。A 通用卡：40 天前充值本金 10000 赠送 1000，
+ * <p>夹具：项目 A、B；酒吧商户 M 在 A、商户 N 在 B；客人有 A 通用卡、B 通用卡与 M 的商户卡（不带项目，酒吧结账取的就是这种卡，修复项 F08）。A 通用卡：40 天前充值本金 10000 赠送 1000，
  * 近 3 分钟内依次消费本金 3000、回冲本金 1000、在酒吧 M 结账扣本金 500（barsv_ 键对应 M 的结算行）。修复前接口不存在（404）。</p>
  */
 @SpringBootTest(properties = {
@@ -103,8 +104,8 @@ class StoredValueLedgerJdbcIntegrationTests {
         Instant now = Instant.now();
         customerRepository.saveCustomer(new CustomerRecord(customer, phone, "139****" + phone.substring(7), "active", null, null, now, now));
         generalA = card(projectA, null, 8_500L, 7_500L, 1_000L);
-        generalB = card(projectB, null, 5_000L, 5_000L, 0L);
-        cardM = card(projectA, merchantM, 2_000L, 2_000L, 0L);
+        generalB = card(projectB, null, 5_500L, 5_000L, 500L);
+        cardM = card(null, merchantM, 2_000L, 2_000L, 0L);
 
         topupA = txn(generalA, "topup", 10_000L, 1_000L, 11_000L, now.minus(40, ChronoUnit.DAYS), null, null);
         consumeA = txn(generalA, "consume", -3_000L, 0L, 8_000L, now.minusSeconds(180), null, null);
@@ -112,7 +113,7 @@ class StoredValueLedgerJdbcIntegrationTests {
         String bill = barBill(now);
         bars.saveBillSettlement(new BarBillSettlementRecord("settle_r364_" + s, bill, "stored_value", null, null, 500L, merchantM, now));
         barConsumeA = txn(generalA, "consume", -500L, 0L, 8_500L, now.minusSeconds(60), null, "barsv_r364_" + s);
-        topupB = txn(generalB, "topup", 5_000L, 0L, 5_000L, now.minusSeconds(300), null, null);
+        topupB = txn(generalB, "topup", 5_000L, 500L, 5_500L, now.minusSeconds(300), null, null);
         topupM = txn(cardM, "topup", 2_000L, 0L, 2_000L, now.minusSeconds(300), null, null);
         staffs = new StaffRequestFixture(jdbc);
     }
@@ -163,7 +164,8 @@ class StoredValueLedgerJdbcIntegrationTests {
                 .containsExactlyInAnyOrder(topupA, consumeA, reversalA, barConsumeA, topupB, topupM);
     }
 
-    /** ④ 范围：本人项目 A 的普通账号不见 B 卡；持勾选 B 的可跨项目角色的账号见 B 卡；商户 M 账号只见 M 的卡；商户 N 账号见不到（N 没发卡）。 */
+    /** ④ 范围：本人项目 A 的普通账号不见 B 卡；持勾选 B 的可跨项目角色的账号见 B 卡；商户 M 账号只见 M 的卡；商户 N 账号见不到（N 没发卡）。
+     * M 的卡不带项目（修复项 F08）：项目 A 账号经发卡商户的经营项目见到，商户 M 账号经「卡不带项目」那半句见到。 */
     @Test
     void scopeFollowsAccount() throws Exception {
         String body = "{\"phone\":\"" + phone + "\"}";
@@ -182,6 +184,35 @@ class StoredValueLedgerJdbcIntegrationTests {
         query(admin(), "{\"size\":0}").andExpect(status().isBadRequest()).andExpect(jsonPath("$.detail_code").value("VALIDATION_FAILED"));
     }
 
+    /**
+     * ⑥ 修复项 F07（BSM:833「可按客人、商户、期间查询逐笔明细与余额构成」；ENUM:86「销户时先解除全部占用与冻结，再退剩余本金，赠送金清零」）：
+     * 退卡与赠送金作废两条流水同一事务同一时刻写入，不论两条流水号谁大谁小，台账都按「先退卡、后作废」累计——
+     * 两行都是变动后本金＋变动后赠送金＝变动后余额，最新一行是作废行、余额为 0。
+     * 修复前先后只靠随机流水号定：作废流水号较小的 B 通用卡，退卡行排在最上面（本金 0、赠送金 0、余额 500），作废行本金 5000、余额 0。
+     */
+    @Test
+    void refundAndBonusVoidAtSameInstantAccumulateInWriteOrder() throws Exception {
+        Instant at = Instant.now();
+        // A 通用卡：退卡流水号小于作废流水号；B 通用卡：作废流水号小于退卡流水号。
+        txn("svtxn_r364_1_" + s, generalA, "refund", -7_500L, 0L, 1_000L, at, null, null);
+        txn("svtxn_r364_2_" + s, generalA, "adjust", 0L, -1_000L, 0L, at, null, null);
+        txn("svtxn_r364_4_" + s, generalB, "refund", -5_000L, 0L, 500L, at, null, null);
+        txn("svtxn_r364_3_" + s, generalB, "adjust", 0L, -500L, 0L, at, null, null);
+        String json = query(admin(), "{\"phone\":\"" + phone + "\"}").andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+        for (String account : List.of(generalA, generalB)) {
+            List<Map<String, Object>> rows = JsonPath.read(json, "$.data.items[?(@.account_id == '" + account + "')]");
+            for (Map<String, Object> row : rows.subList(0, 2)) {
+                assertThat(cent(row, "principal_after_cent") + cent(row, "bonus_after_cent"))
+                        .as("%s 行变动后本金＋变动后赠送金应等于变动后余额：%s", row.get("txn_type"), row)
+                        .isEqualTo(cent(row, "balance_after_cent"));
+            }
+            assertThat(rows.get(0).get("txn_type")).isEqualTo("adjust");
+            assertThat(cent(rows.get(0), "balance_after_cent")).isZero();
+            assertThat(rows.get(1).get("txn_type")).isEqualTo("refund");
+        }
+    }
+
     // ---------- 夹具与请求 ----------
 
     private String card(String projectId, String merchantId, long balance, long principal, long bonus) {
@@ -192,7 +223,12 @@ class StoredValueLedgerJdbcIntegrationTests {
     }
 
     private String txn(String account, String type, long principal, long bonus, long balanceAfter, Instant at, String original, String key) {
-        String id = "svtxn_r364_" + UUID.randomUUID().toString().replace("-", "");
+        return txn("svtxn_r364_" + UUID.randomUUID().toString().replace("-", ""), account, type, principal, bonus, balanceAfter, at, original, key);
+    }
+
+    /** 指定流水号写一笔（同刻两条流水的先后要靠流水号大小摆出来）。 */
+    private String txn(String id, String account, String type, long principal, long bonus, long balanceAfter, Instant at, String original,
+            String key) {
         jdbc.update("INSERT INTO customer_stored_value_transactions (id, account_id, customer_id, txn_type, amount_cent, balance_after_cent,"
                 + " reason, idempotency_key, created_at, principal_cent, bonus_cent, original_txn_id) VALUES (?, ?, ?, ?, ?, ?, '储值台账回归', ?, ?, ?, ?, ?)",
                 id, account, customer, type, principal + bonus, balanceAfter, key == null ? "r364-" + id : key, Timestamp.from(at),
@@ -212,6 +248,10 @@ class StoredValueLedgerJdbcIntegrationTests {
         bars.saveBill(new BarBillRecord(bill, "BILL-R364-" + s, order, bar, merchantM, table, null,
                 500L, 0L, 0L, 500L, 500L, "CNY", "paid", "settled", null, null, now, now));
         return bill;
+    }
+
+    private static long cent(Map<String, Object> row, String field) {
+        return ((Number) row.get(field)).longValue();
     }
 
     private static String today() {

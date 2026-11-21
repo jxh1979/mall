@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.20
+// 文件版本：V0.21
 
 import static com.complex.platform.bar.BarBillRecords.*;
 import static com.complex.platform.bar.BarValidation.*;
@@ -375,12 +375,14 @@ public class BarBillingService {
             String svCustomerId = staffSideOtp(() -> customerService.verifyStoredValueCustomer(
                     resolveBillCustomerId(payingBill), actual.phone(), actual.smsCode())).id();
             // 第十八批 BD 段第 367 条 367-R1（BSM:833「①综合体通用卡：综合体内各商户通用」「消费时按客人指定的某一张卡扣减，不自动跨卡」；
-            // BSM:1066 酒吧支付方式含通用卡）：客人指定通用卡时扣账单所在综合体（桌台所在铺位的项目，同 BarOrderSuspensionService.projectOf）
-            // 的那张；否则照旧扣本酒吧商户卡。幂等键同一个 barsv_，反结与退款回卡沿用。
+            // BSM:1066 酒吧支付方式含通用卡）：客人指定通用卡时扣账单所在综合体（桌台所挂铺位的项目；修复项 F06：没挂空间的台位（建台位必选
+            // 空间之前建的，或不经后台接口写入的）、吧台直点不经开台——取酒吧商户所属项目，与同入口定位闸 BarService.settleBill 同口径）的那张；否则照旧扣本酒吧商户卡。
+            // 幂等键同一个 barsv_，反结与退款回卡沿用。
             boolean generalCard = actual.storedValueCard() != null && "general".equals(actual.storedValueCard().trim());
             String cardProject = generalCard ? jdbc.queryForList(
                     "SELECT s.project_id FROM bar_tables t JOIN spaces s ON s.id = t.space_id WHERE t.id = ?",
-                    String.class, bill.tableId()).stream().findFirst().orElse(null) : null;
+                    String.class, bill.tableId()).stream().findFirst()
+                    .orElseGet(() -> businessDays.projectOfMerchant(payingBill.barId())) : null;
             storedValueService.consumeInternal(svCustomerId, cardProject, generalCard ? null : bill.merchantId(), settlementAmount,
                     "酒吧结账-储值支付 账单" + bill.id(), "barsv_" + slug(actual.idempotencyKey()));
             if (memberPhone == null && merchantRewards != null) {

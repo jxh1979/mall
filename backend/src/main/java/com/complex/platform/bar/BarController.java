@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.14
+// 文件版本：V0.15
 import static com.complex.platform.common.api.ApiRequests.requireIdempotencyKey;
 
 import com.complex.platform.access.AuthorizationService;
@@ -717,6 +717,14 @@ public class BarController {
     public ApiResponse<PageResponse<BarTableSpaceBacklogRecord>> listTablesWithoutSpace() {
         authorizationService.requirePermission("bar.table.manage");
         return ApiResponse.ok(service.listTablesWithoutSpace());
+    }
+
+    // 第十八批 BL 段第 380 条 380-R1（BSM:717「酒吧要知道桌台、卡座、吧台属于哪个空间和商户。」）：新建卡座选所属空间——
+    // 该酒吧名下启用中的空间；挂商户的账号按本人商户取。
+    @GetMapping("/tables/space-options")
+    public ApiResponse<PageResponse<BarTableSpaceBinding.Option>> listTableSpaceOptions(@RequestParam(name = "bar_id") String barId) {
+        authorizationService.requirePermission("bar.table.manage");
+        return ApiResponse.ok(service.listTableSpaceOptions(barId));
     }
 
     @PutMapping("/tables/{table_id}/space")

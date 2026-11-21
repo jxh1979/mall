@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: 综合体管理系统 P0 API 契约
-  version: V0.99
+  version: V1.00
   description: P0 首批编码前置契约。本文采用 JSON-compatible YAML，便于与 openapi-p0.json 保持一致。正式后端以 Java 21 + Spring Boot 4.x +
     springdoc-openapi 输出运行时 OpenAPI，并与本契约比对。
 servers:
@@ -2801,7 +2801,7 @@ paths:
         - bar
         - finance
       operationId: settleBarBill
-      description: "第十八批 N 段第 123 条 123-R2（BSM:1630「核销、收款、退款、放行等敏感操作，操作设备定位落在该项目综合体授权范围之外时一律拒绝并留痕」；BSM:1876「Web 端同样适用」）：本操作属敏感操作定位闸的现场动作闭集（第十八批裁决 31）。操作对象所属项目已配授权范围（123-R1）时须带请求头 X-Geo-Latitude、X-Geo-Longitude（设备当下定位，WGS-84 十进制度）：没带或解析不了按范围外处理（裁决 30）返回 403 SENSITIVE_OPERATION_LOCATION_REQUIRED，到圆心距离超过授权半径返回 403 SENSITIVE_OPERATION_OUT_OF_RANGE，拒绝在独立事务里留痕 sensitive_operation.location_rejected（business_id 为本 operationId，业务回滚不丢）；项目没配授权范围不查位置（裁决 32）；判定在幂等之前，重放不能绕过；通过时不存位置。第十八批 O 段第 127 条 127-R3：收款人（cashier_staff_id，各支付渠道）取执行结账的那一次登录会话的操作人，不收请求填写，交班对账按它归入收银员（BSM 第 940、1066、1081 行）。第十八批 T 段第 157 条 157-R2：本次结账使挂起订单的账单（本单除已合并、作废外的全部账单，含合单后改指本账单的挂起）全部结清时，同一事务内挂起置已结清（settled）并写审计 bar.order_suspension_settled；应付为 0 的关单同样联动。第十八批 T 段第 157 条 157-R6（BSM:1108「取消后迟到到账进入待退款，不得恢复订单或继续出品」；DEC-R8-94-37「迟到到账须进入待退款并按原支付路径退款」）：账单所属订单的挂起已取消（cancelled）或已待退款（pending_refund）时为迟到到账——不判低消与账单状态，照常落该笔收款流水（payment_channel、POS 必填 pos_transaction_no、收款人同正常结账；settlement_amount_cent 必填且大于 0，否则 400 VALIDATION_FAILED），同一事务按作废并冲正同一口径（后收的先退、储值部分回原卡，其余挂一笔退款应付，source_id 为该笔收款流水编号）原路待退并把该笔流水置冲正；账单不改（仍作废）、不进营业额与分红；挂起置待退款（pending_refund），记 refund_ar_ap_item_id，审计 bar.order_suspension_late_payment；返回仍作废的账单。第十八批 AU 段第 328 条 328-R1：payment_channel=stored_value 时手机号不是会员或短信验证码不正确、已过期 409 CUSTOMER_OTP_INVALID（员工侧核客人验证码不回 401，401 只表示员工自己的登录会话失效），不扣储值、账单不变。第十八批 BD 段第 367 条 367-R1（BSM:833「①综合体通用卡：综合体内各商户通用」「消费时按客人指定的某一张卡扣减，不自动跨卡」；BSM:1066 酒吧支付方式含储值卡）：payment_channel=stored_value 时按客人指定的 stored_value_card 扣卡——merchant（缺省）扣本酒吧商户卡；general 扣账单所在综合体（桌台所在铺位的项目）的通用卡，综合体内各商户通用，收银为酒吧商户账号也可扣、不过商户范围闸；不自动跨卡，客人名下没有指定的那张卡 404 STORED_VALUE_ACCOUNT_NOT_FOUND，不扣储值、账单不变。反结与退款回冲按该笔消费流水回到原扣的那张卡。"
+      description: "第十八批 N 段第 123 条 123-R2（BSM:1630「核销、收款、退款、放行等敏感操作，操作设备定位落在该项目综合体授权范围之外时一律拒绝并留痕」；BSM:1876「Web 端同样适用」）：本操作属敏感操作定位闸的现场动作闭集（第十八批裁决 31）。操作对象所属项目已配授权范围（123-R1）时须带请求头 X-Geo-Latitude、X-Geo-Longitude（设备当下定位，WGS-84 十进制度）：没带或解析不了按范围外处理（裁决 30）返回 403 SENSITIVE_OPERATION_LOCATION_REQUIRED，到圆心距离超过授权半径返回 403 SENSITIVE_OPERATION_OUT_OF_RANGE，拒绝在独立事务里留痕 sensitive_operation.location_rejected（business_id 为本 operationId，业务回滚不丢）；项目没配授权范围不查位置（裁决 32）；判定在幂等之前，重放不能绕过；通过时不存位置。第十八批 O 段第 127 条 127-R3：收款人（cashier_staff_id，各支付渠道）取执行结账的那一次登录会话的操作人，不收请求填写，交班对账按它归入收银员（BSM 第 940、1066、1081 行）。第十八批 T 段第 157 条 157-R2：本次结账使挂起订单的账单（本单除已合并、作废外的全部账单，含合单后改指本账单的挂起）全部结清时，同一事务内挂起置已结清（settled）并写审计 bar.order_suspension_settled；应付为 0 的关单同样联动。第十八批 T 段第 157 条 157-R6（BSM:1108「取消后迟到到账进入待退款，不得恢复订单或继续出品」；DEC-R8-94-37「迟到到账须进入待退款并按原支付路径退款」）：账单所属订单的挂起已取消（cancelled）或已待退款（pending_refund）时为迟到到账——不判低消与账单状态，照常落该笔收款流水（payment_channel、POS 必填 pos_transaction_no、收款人同正常结账；settlement_amount_cent 必填且大于 0，否则 400 VALIDATION_FAILED），同一事务按作废并冲正同一口径（后收的先退、储值部分回原卡，其余挂一笔退款应付，source_id 为该笔收款流水编号）原路待退并把该笔流水置冲正；账单不改（仍作废）、不进营业额与分红；挂起置待退款（pending_refund），记 refund_ar_ap_item_id，审计 bar.order_suspension_late_payment；返回仍作废的账单。第十八批 AU 段第 328 条 328-R1：payment_channel=stored_value 时手机号不是会员或短信验证码不正确、已过期 409 CUSTOMER_OTP_INVALID（员工侧核客人验证码不回 401，401 只表示员工自己的登录会话失效），不扣储值、账单不变。第十八批 BD 段第 367 条 367-R1（BSM:833「①综合体通用卡：综合体内各商户通用」「消费时按客人指定的某一张卡扣减，不自动跨卡」；BSM:1066 酒吧支付方式含储值卡）：payment_channel=stored_value 时按客人指定的 stored_value_card 扣卡——merchant（缺省）扣本酒吧商户卡；general 扣账单所在综合体（桌台所挂铺位的项目，没挂铺位的取酒吧商户所属项目）的通用卡，综合体内各商户通用，收银为酒吧商户账号也可扣、不过商户范围闸；不自动跨卡，客人名下没有指定的那张卡 404 STORED_VALUE_ACCOUNT_NOT_FOUND，不扣储值、账单不变。反结与退款回冲按该笔消费流水回到原扣的那张卡。"
       summary: 账单结清（可带一张本商户折扣券：核销并原子抵扣应付，一次结账一张）
       x-failure-codes:
         - VOUCHER_NOT_FOUND
@@ -3104,7 +3104,7 @@ paths:
         - bar
       operationId: createBarProduct
       summary: 创建酒吧商品
-      description: 用于创建酒吧商品。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。第十八批 I 段第 76 条：stock_deduction_required=true 且填了 standard_pour_volume（按杯，毫升）的商品，所挂库存物料须已登记规格容量 spec_volume_ml，否则 400 VALIDATION_FAILED；出品按标准出酒量连同损耗按容量扣库存。
+      description: 用于创建酒吧商品。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。第十八批 I 段第 76 条：stock_deduction_required=true 且填了 standard_pour_volume（按杯，毫升）的商品，所挂库存物料须已登记规格容量 spec_volume_ml，否则 400 VALIDATION_FAILED；出品按标准出酒量连同损耗按容量扣库存。新建时所属商户：挂商户的账号取本人商户，平台管理员取所选酒吧 bar_id（第十八批 BL 段第 389 条 389-R2，BSM:1017「桌台、商品、分类、套餐等都归属到具体的酒吧商户」）。
       x-permission: bar.product.manage
       x-data-scope: project
       x-terminal-allowed:
@@ -3342,6 +3342,7 @@ paths:
         - bar
       operationId: createBarTable
       summary: 创建桌台或卡座
+      description: "第十八批 BL 段第 380 条 380-R1（BSM:717「酒吧要知道桌台、卡座、吧台属于哪个空间和商户。」）：必选所属空间 space_id，不带 400 VALIDATION_FAILED；所选空间须所属商户为该酒吧（即台位所属商户）且启用中，否则 409 BAR_TABLE_SPACE_NOT_OWNED「所选空间不属于该酒吧或已停用」，台位不落；所属空间与台位同一事务写入（可选空间见 listBarTableSpaceOptions）。第十八批 BL 段第 389 条 389-R1（BSM:1017「桌台、商品、分类、套餐等都归属到具体的酒吧商户」）：台位所属商户——挂商户的账号取本人商户，平台管理员取所选酒吧 bar_id。"
       x-permission: bar.table.manage
       x-data-scope: project-bar
       x-terminal-allowed:
@@ -13106,7 +13107,7 @@ paths:
         - platform
       operationId: createSpace
       summary: 创建场馆、区域、点位
-      description: 第十八批 E 段（第 19 条）：project_id 须在 governance.space.manage 可触及范围内，否则 403 PROJECT_SCOPE_MISMATCH；上级空间须属同一项目。
+      description: 第十八批 E 段（第 19 条）：project_id 须在 governance.space.manage 可触及范围内，否则 403 PROJECT_SCOPE_MISMATCH；上级空间须属同一项目。第十八批 BL 段第 388 条 388-R1（PGM:470「记录空间面积、用途、状态、负责人和所属商户。」）：可带用途 purpose、负责人 owner_user_id（员工账号编号），不填为空；修改见 updateSpace。
       x-permission: governance.space.manage
       x-data-scope: project
       x-terminal-allowed:
@@ -13122,6 +13123,42 @@ paths:
         "400":
           $ref: "#/components/responses/Error"
         "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
+  /api/v1/platform/spaces/{space_id}:
+    put:
+      tags:
+        - platform
+      operationId: updateSpace
+      summary: 修改场馆、区域、点位
+      description: "第十八批 BL 段第 388 条 388-R1（PGM:469「维护楼层、区域、点位、商铺、卡座、吧台位、游乐入口、库房和设备点位。」；PGM:470「记录空间面积、用途、状态、负责人和所属商户。」）：修改空间，可改名称、类型、上级、楼层、面积、用途、负责人、所属商户与状态，状态改为 unavailable 即停用；所属项目与平面图点位照原值、不可改。请求体为整份内容，未带的可选字段按空保存，status 不填按 active。类型与原值不同时须为空间类型字典中的启用值，否则 400 VALIDATION_FAILED「空间种类必须是空间种类表中的启用值」（类型照原值的不核，所属类型已存档的空间仍可改其他字段）；所属商户与原值不同且非空时须存在（否则 404 MERCHANT_NOT_FOUND）、在本入口权限码可触及的项目里经营（否则 403 PROJECT_SCOPE_MISMATCH）且未存档未经审批删除（否则 400 MERCHANT_ARCHIVED），沿用原值的不核；上级空间须存在（否则 404 SPACE_NOT_FOUND「上级空间不存在」）且与本空间同项目（否则 403 PROJECT_SCOPE_MISMATCH「上级空间须属于同一项目」）；面积为负、状态不是 active 或 unavailable 400 VALIDATION_FAILED。挂商户的账号与外包供应商 403 PLATFORM_SCOPE_REQUIRED。范围闸在幂等之前（同一请求编号重放也要再过）：空间不存在 404 SPACE_NOT_FOUND「空间不存在」，空间所属项目不在 governance.space.manage 可触及范围内（平台管理员不限）403 PROJECT_SCOPE_MISMATCH「无权访问该项目的数据」，被拒照样记 space.update_failed。同一 idempotency_key 重发返回首次结果。返回修改后的空间记录（含 purpose、owner_user_id）。"
+      x-permission: governance.space.manage
+      x-data-scope: project
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: space.updated
+      x-audit-event-failure: space.update_failed
+      parameters:
+        - name: space_id
+          in: path
+          required: true
+          description: 空间编号。
+          schema:
+            type: string
+            maxLength: 64
+      requestBody:
+        $ref: "#/components/requestBodies/SpaceUpdateRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
           $ref: "#/components/responses/Error"
         "500":
           $ref: "#/components/responses/Error"
@@ -21338,6 +21375,38 @@ paths:
           $ref: "#/components/responses/Error"
         "500":
           $ref: "#/components/responses/Error"
+  /api/v1/bar/tables/space-options:
+    get:
+      tags:
+        - bar
+      operationId: listBarTableSpaceOptions
+      summary: 台位可选空间清单
+      description: "第十八批 BL 段第 380 条 380-R1（BSM:717「酒吧要知道桌台、卡座、吧台属于哪个空间和商户。」）：新建卡座选所属空间用——所属商户为该酒吧且启用中的空间，按空间名称排序，每项含 id（空间编号）、space_name（空间名称）；与 createBarTable 校验所属空间同一口径。挂商户的账号按本人商户取，不看 bar_id；不挂商户的账号（平台管理员）按 bar_id 取，bar_id 为空白 400 VALIDATION_FAILED，缺 bar_id 参数 400。"
+      x-permission: bar.table.manage
+      x-data-scope: project-bar
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: bar.table_space_option.viewed
+      x-audit-event-failure: bar.table_space_option.view_failed
+      parameters:
+        - name: bar_id
+          in: query
+          required: true
+          description: 所选酒吧（酒吧商户编号）；挂商户的账号按本人商户取，不看此值。
+          schema:
+            type: string
+            maxLength: 64
+      responses:
+        "200":
+          $ref: "#/components/responses/Page"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
   /api/v1/amusement/projects/{id}/space:
     put:
       tags:
@@ -38094,6 +38163,28 @@ paths:
         "500":
           $ref: "#/components/responses/Error"
       x-auth-context: staff-token
+  /api/v1/staff/shift-point-options:
+    get:
+      tags:
+        - staff
+      operationId: listStaffShiftPointOptions
+      summary: 排班可选点位
+      description: "第十八批 BL 段第 390 条 390-R1（BSM:1474「主管排班：排到几点几分，可指定当天工作点位（比如某个服务区、某片保洁区域）」）：排班指定点位用的可选空间，只列启用中的空间，按空间名称排序，每项含 id（空间编号）、space_name（空间名称）。范围按排班员：持授权 U 盘密钥的最高权限与平台管理员看全部（第十八批裁决 71）；挂商户（含派驻到一家酒吧）的看本商户名下；其余看 staff.shift.manage 可触及项目下的，没有可触及项目返回空页。缺 staff.shift.manage 403 PERMISSION_DENIED。"
+      x-permission: staff.shift.manage
+      x-data-scope: platform
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: false
+      x-audit-event-success: not_applicable
+      x-audit-event-failure: not_applicable
+      responses:
+        "200":
+          $ref: "#/components/responses/Page"
+        "403":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+      x-auth-context: staff-token
   /api/v1/staff/shifts/batch:
     post:
       tags:
@@ -40572,7 +40663,7 @@ paths:
         - bar
       operationId: saveBarProductCategory
       summary: 新增或修改酒吧商品分类
-      description: 图形化点单 POS 分类维护（后台自建分类，可停用）。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
+      description: 图形化点单 POS 分类维护（后台自建分类，可停用）。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。新建时所属商户：挂商户的账号取本人商户，平台管理员取所选酒吧 bar_id（第十八批 BL 段第 389 条 389-R2，BSM:1017「桌台、商品、分类、套餐等都归属到具体的酒吧商户」）。
       x-permission: bar.category.manage
       x-data-scope: project
       x-terminal-allowed:
@@ -41049,7 +41140,7 @@ paths:
         - bar
       operationId: saveBarCombo
       summary: 新增或修改酒吧套餐
-      description: 从既有 SKU 组合套餐、定整体售价；内部结算价不在此录入，取所挂内部结算 SKU 目录条目（catalog_item_code）的当前生效价（内部结算价只在目录维护，敏感）。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。
+      description: 从既有 SKU 组合套餐、定整体售价；内部结算价不在此录入，取所挂内部结算 SKU 目录条目（catalog_item_code）的当前生效价（内部结算价只在目录维护，敏感）。必须按 OpenAPI schema、权限、数据范围、终端、幂等和审计事件实现；P1/P2/P3 深度能力不得反向扩大 P0 范围。新建时所属商户：挂商户的账号取本人商户，平台管理员取所选酒吧 bar_id（第十八批 BL 段第 389 条 389-R2，BSM:1017「桌台、商品、分类、套餐等都归属到具体的酒吧商户」）。
       x-permission: bar.combo.manage
       x-data-scope: project
       x-terminal-allowed:
@@ -41887,7 +41978,7 @@ paths:
         - customer
       operationId: queryStoredValueLedger
       summary: 储值台账查询（按客人、商户、期间查储值逐笔明细与余额构成；手机号走请求体不进 URL）
-      description: 第十八批 BD 段第 364 条 364-R1（BSM:833「运营端提供储值台账，可按客人、商户、期间查询逐笔明细与余额构成。」「商户的员工只能管理本商户发行的储值卡。」；ENUM:86「每笔充值拆为本金与赠送金两段分别记账」；PGM:659「所有业务数据默认按项目隔离」「在所分配的权限内可以查看、处理该角色可查看项目的数据」「商户账号持有这类角色也不能跨项目」）：供后台「储值台账」页（ADM-CUS-007）按客人（phone，完整手机号精确匹配）、商户（merchant_id，发卡商户或扣款商户是它的都出）、期间（date_from、date_to，北京时间日期，含首尾）查储值逐笔流水，三项都可不填，起止颠倒不另报错（结果为空）；每笔给本金、赠送金变动及变动后的本金、赠送金与余额，变动后本金与赠送金按该卡全部流水累计（不受期间与商户筛选影响）。范围：最高权限与平台管理员全见；商户账号只见本商户发的卡，卡带项目的再限本人项目；其余账号按 customer.stored_value.view 可触及的项目（本人项目与可跨项目角色勾选的项目，PGM:659）见卡带项目的卡，不带项目的商户卡按发卡商户的经营项目（主项目或已批准的经营项目）判，不带项目也不挂商户的卡不出。扣款商户（consume_merchant_id、consume_merchant_name，只在 consume 与 consume_reversal 行，回冲行按原消费取）取商户卡的发卡商户、票务订单的 bar_id，或通用卡酒吧结账储值支付的结账酒吧商户，取不到为空；支付通路 payment_channel 只在 topup 行。按 created_at 倒序、再按 txn_id 倒序分页；手机号查不到客人返回空页。查询不扣单次授权（M723 操作员 2026-10-03「预览、查询不扣一次性授权」），不记审计事件，查了谁由外壳敏感页登记（PGM:878，同 lookupStoredValueRefundCards）。page 小于 1 或 size 不在 1～100 返回 400 VALIDATION_FAILED「分页参数无效」；缺 customer.stored_value.view 403 PERMISSION_DENIED；没有项目归属的非平台账号 403 PROJECT_SCOPE_REQUIRED。
+      description: 第十八批 BD 段第 364 条 364-R1（BSM:833「运营端提供储值台账，可按客人、商户、期间查询逐笔明细与余额构成。」「商户的员工只能管理本商户发行的储值卡。」；ENUM:86「每笔充值拆为本金与赠送金两段分别记账」；PGM:659「所有业务数据默认按项目隔离」「在所分配的权限内可以查看、处理该角色可查看项目的数据」「商户账号持有这类角色也不能跨项目」）：供后台「储值台账」页（ADM-CUS-007）按客人（phone，完整手机号精确匹配）、商户（merchant_id，发卡商户或扣款商户是它的都出）、期间（date_from、date_to，北京时间日期，含首尾）查储值逐笔流水，三项都可不填，起止颠倒不另报错（结果为空）；每笔给本金、赠送金变动及变动后的本金、赠送金与余额，变动后本金与赠送金按该卡全部流水累计（不受期间与商户筛选影响），同一时刻写入的多条流水（如退卡、消费回冲与随后的赠送金作废）按先非调整行、后调整（adjust）行累计。范围：最高权限与平台管理员全见；商户账号只见本商户发的卡，卡带项目的再限本人项目；其余账号按 customer.stored_value.view 可触及的项目（本人项目与可跨项目角色勾选的项目，PGM:659）见卡带项目的卡，不带项目的商户卡按发卡商户的经营项目（主项目或已批准的经营项目）判，不带项目也不挂商户的卡不出。扣款商户（consume_merchant_id、consume_merchant_name，只在 consume 与 consume_reversal 行，回冲行按原消费取）取商户卡的发卡商户、票务订单的 bar_id，或通用卡酒吧结账储值支付的结账酒吧商户，取不到为空；支付通路 payment_channel 只在 topup 行。按 created_at 倒序分页，同一时刻的流水里调整（adjust，如赠送金作废）行排在最上，再按 txn_id 倒序（修复项 F07）；手机号查不到客人返回空页。查询不扣单次授权（M723 操作员 2026-10-03「预览、查询不扣一次性授权」），不记审计事件，查了谁由外壳敏感页登记（PGM:878，同 lookupStoredValueRefundCards）。page 小于 1 或 size 不在 1～100 返回 400 VALIDATION_FAILED「分页参数无效」；缺 customer.stored_value.view 403 PERMISSION_DENIED；没有项目归属的非平台账号 403 PROJECT_SCOPE_REQUIRED。
       x-permission: customer.stored_value.view
       x-data-scope: project-merchant
       x-terminal-allowed:
@@ -64886,6 +64977,12 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/SpaceRequest"
+    SpaceUpdateRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/SpaceUpdateRequest"
     ContractDraftRequest:
       required: true
       content:
@@ -67536,6 +67633,66 @@ components:
             - active
             - unavailable
           maxLength: 64
+        purpose:
+          type: string
+          description: 用途（可空，自由文本；第十八批 BL 段第 388 条，PGM:470）。
+          maxLength: 200
+        owner_user_id:
+          type: string
+          description: 负责人员工账号编号（第十八批 BL 段第 388 条，PGM:470）；不填为未指定。
+          maxLength: 64
+    SpaceUpdateRequest:
+      type: object
+      description: 请求载荷 `SpaceUpdateRequest`（updateSpace，第十八批 BL 段第 388 条 388-R1）：修改空间的整份内容，未带的可选字段按空保存；不含所属项目与平面图点位（照原值）。
+      additionalProperties: false
+      required:
+        - space_name
+        - space_type
+      properties:
+        idempotency_key:
+          type: string
+          description: 操作幂等键；重复提交时必须返回同一处理结果。
+          maxLength: 128
+        parent_space_id:
+          type: string
+          description: 上级空间编号（可空）；须存在（否则 404 SPACE_NOT_FOUND）且与本空间同项目（否则 403 PROJECT_SCOPE_MISMATCH）。
+          maxLength: 64
+        space_name:
+          type: string
+          description: 空间名称；保存前去除首尾空白。
+          maxLength: 120
+        space_type:
+          type: string
+          description: 空间类型编码；与原值不同时须是空间类型字典中状态为启用的 type_code，否则 400 VALIDATION_FAILED；照原值的不核。
+          maxLength: 64
+        floor_no:
+          type: string
+          description: 楼层（可空）。
+          maxLength: 128
+        area_square_meter:
+          type: number
+          description: 面积（平方米，可空），不得为负。
+          minimum: 0
+          maximum: 999999999999
+        purpose:
+          type: string
+          description: 用途（可空，自由文本）。
+          maxLength: 200
+        owner_user_id:
+          type: string
+          description: 负责人员工账号编号；不填为未指定。
+          maxLength: 64
+        merchant_id:
+          type: string
+          description: 所属商户（可空）；与原值不同且非空时须是未存档且未经审批删除的商户，否则 400 MERCHANT_ARCHIVED；照原值的不核。
+          maxLength: 64
+        status:
+          type: string
+          description: 空间状态：active 可用／unavailable 不可用（即停用）；不填按 active；其他取值返回 400 VALIDATION_FAILED。
+          enum:
+            - active
+            - unavailable
+          maxLength: 64
     ContractDraftRequest:
       type: object
       description: 请求载荷 ContractDraftRequest（V162 起草合同）。
@@ -69044,6 +69201,7 @@ components:
       required:
         - bar_id
         - table_name
+        - space_id
       properties:
         idempotency_key:
           type: string
@@ -69080,6 +69238,10 @@ components:
           description: 新建台位状态，只能为 active（空闲），不填按 active。
           enum:
             - active
+          maxLength: 64
+        space_id:
+          type: string
+          description: 台位所属空间编号（必填，第十八批 BL 段第 380 条 380-R1）；须是所属商户为该酒吧且启用中的空间（可选清单见 listBarTableSpaceOptions），否则 409 BAR_TABLE_SPACE_NOT_OWNED；不带 400 VALIDATION_FAILED。
           maxLength: 64
     BarReservationRequest:
       type: object
@@ -69289,7 +69451,7 @@ components:
             - merchant
             - general
           default: merchant
-          description: 储值支付扣哪张卡，按客人指定：merchant＝本酒吧商户卡（缺省），general＝账单所在综合体（桌台所在铺位的项目）的通用卡；不自动跨卡（BSM:833）。只在 payment_channel=stored_value 时使用（第十八批 BD 段第 367 条 367-R1）。
+          description: 储值支付扣哪张卡，按客人指定：merchant＝本酒吧商户卡（缺省），general＝账单所在综合体（桌台所挂铺位的项目，没挂铺位的取酒吧商户所属项目）的通用卡；不自动跨卡（BSM:833）。只在 payment_channel=stored_value 时使用（第十八批 BD 段第 367 条 367-R1）。
     CommissionCalculateRequest:
       type: object
       description: 请求载荷 `CommissionCalculateRequest`；字段、必填项和枚举用于生成 DTO、校验和契约测试。
@@ -77686,8 +77848,10 @@ components:
           description: 客人账号编号。
           maxLength: 64
         masked_phone:
-          type: string
-          description: 客人掩码手机号。
+          type:
+            - string
+            - "null"
+          description: 客人掩码手机号；客人注销或解除黑名单后原账户手机号已清空的为空。
         payment_channel:
           type:
             - string

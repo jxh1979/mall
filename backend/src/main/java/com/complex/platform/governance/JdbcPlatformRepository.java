@@ -1,5 +1,5 @@
 package com.complex.platform.governance;
-// 文件版本：V0.28
+// 文件版本：V0.29
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
@@ -276,7 +276,8 @@ class JdbcPlatformRepository implements PlatformRepository, SupervisorReviewRepo
     public Optional<SpaceRecord> findSpaceById(String spaceId) {
         return jdbcTemplate.query("""
                 SELECT id, project_id, merchant_id, parent_space_id, space_name, space_type, floor_no,
-                       area_square_meter, polygon_points::text AS polygon_points, status, created_at, updated_at
+                       area_square_meter, polygon_points::text AS polygon_points, status, created_at, updated_at,
+                       purpose, owner_user_id
                   FROM spaces
                  WHERE id = :id
                 """, Map.of("id", spaceId), this::mapSpace).stream().findFirst();
@@ -410,11 +411,11 @@ class JdbcPlatformRepository implements PlatformRepository, SupervisorReviewRepo
         jdbcTemplate.update("""
                 INSERT INTO spaces (
                     id, project_id, merchant_id, parent_space_id, space_name, space_type, floor_no,
-                    area_square_meter, polygon_points, status, created_at, updated_at
+                    area_square_meter, polygon_points, status, created_at, updated_at, purpose, owner_user_id
                 )
                 VALUES (
                     :id, :project_id, :merchant_id, :parent_space_id, :space_name, :space_type, :floor_no,
-                    :area_square_meter, CAST(:polygon_points AS jsonb), :status, :created_at, :updated_at
+                    :area_square_meter, CAST(:polygon_points AS jsonb), :status, :created_at, :updated_at, :purpose, :owner_user_id
                 )
                 ON CONFLICT (id) DO UPDATE SET
                     project_id = EXCLUDED.project_id,
@@ -426,6 +427,8 @@ class JdbcPlatformRepository implements PlatformRepository, SupervisorReviewRepo
                     area_square_meter = EXCLUDED.area_square_meter,
                     polygon_points = EXCLUDED.polygon_points,
                     status = EXCLUDED.status,
+                    purpose = EXCLUDED.purpose,
+                    owner_user_id = EXCLUDED.owner_user_id,
                     updated_at = EXCLUDED.updated_at
                 """, spaceParameters(space));
         return space;
@@ -435,7 +438,8 @@ class JdbcPlatformRepository implements PlatformRepository, SupervisorReviewRepo
     public List<SpaceRecord> listSpaces() {
         return jdbcTemplate.query("""
                 SELECT id, project_id, merchant_id, parent_space_id, space_name, space_type, floor_no,
-                       area_square_meter, polygon_points::text AS polygon_points, status, created_at, updated_at
+                       area_square_meter, polygon_points::text AS polygon_points, status, created_at, updated_at,
+                       purpose, owner_user_id
                   FROM spaces
                  ORDER BY created_at DESC, id
                  LIMIT 500
@@ -627,7 +631,8 @@ class JdbcPlatformRepository implements PlatformRepository, SupervisorReviewRepo
         params.addValue("limit", safeSize).addValue("offset", (long) (safePage - 1) * safeSize);
         List<SpaceRecord> items = jdbcTemplate.query("""
                 SELECT id, project_id, merchant_id, parent_space_id, space_name, space_type, floor_no,
-                       area_square_meter, polygon_points::text AS polygon_points, status, created_at, updated_at
+                       area_square_meter, polygon_points::text AS polygon_points, status, created_at, updated_at,
+                       purpose, owner_user_id
                   FROM spaces
                  ORDER BY created_at DESC, id
                  LIMIT :limit OFFSET :offset
@@ -799,7 +804,9 @@ class JdbcPlatformRepository implements PlatformRepository, SupervisorReviewRepo
                 .addValue("polygon_points", writeJson(space.polygonPoints() == null ? List.of() : space.polygonPoints()))
                 .addValue("status", space.status())
                 .addValue("created_at", timestampWithTimeZone(space.createdAt()))
-                .addValue("updated_at", timestampWithTimeZone(space.updatedAt()));
+                .addValue("updated_at", timestampWithTimeZone(space.updatedAt()))
+                .addValue("purpose", space.purpose())
+                .addValue("owner_user_id", space.ownerUserId());
     }
 
     private MapSqlParameterSource bindingParameters(BusinessEntityBindingRecord binding) {
@@ -896,7 +903,9 @@ class JdbcPlatformRepository implements PlatformRepository, SupervisorReviewRepo
                 readPolygonPoints(resultSet.getString("polygon_points")),
                 resultSet.getString("status"),
                 nullableInstant(resultSet, "created_at"),
-                nullableInstant(resultSet, "updated_at")
+                nullableInstant(resultSet, "updated_at"),
+                resultSet.getString("purpose"),
+                resultSet.getString("owner_user_id")
         );
     }
 
@@ -1594,7 +1603,8 @@ class JdbcPlatformRepository implements PlatformRepository, SupervisorReviewRepo
         params.addValue("limit", safeSize).addValue("offset", (long) (safePage - 1) * safeSize);
         List<SpaceRecord> items = jdbcTemplate.query("""
                 SELECT id, project_id, merchant_id, parent_space_id, space_name, space_type, floor_no,
-                       area_square_meter, polygon_points::text AS polygon_points, status, created_at, updated_at
+                       area_square_meter, polygon_points::text AS polygon_points, status, created_at, updated_at,
+                       purpose, owner_user_id
                   FROM spaces
                  WHERE project_id = :project_id
                  ORDER BY created_at DESC, id
@@ -1660,7 +1670,7 @@ class JdbcPlatformRepository implements PlatformRepository, SupervisorReviewRepo
     public com.complex.platform.common.api.PageResponse<SpaceRecord> listSpacesPaged(java.util.Collection<String> projectIds,
             int page, int size) {
         return pagedInProjects(projectIds, page, size, "id, project_id, merchant_id, parent_space_id, space_name, space_type, floor_no, "
-                + "area_square_meter, polygon_points::text AS polygon_points, status, created_at, updated_at",
+                + "area_square_meter, polygon_points::text AS polygon_points, status, created_at, updated_at, purpose, owner_user_id",
                 "FROM spaces WHERE project_id IN (:project_ids)", new MapSqlParameterSource(), this::mapSpace);
     }
 

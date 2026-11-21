@@ -257,7 +257,7 @@ export function BarCombosPage({ api, user, setActionResult, setGlobalError, effe
             validate: () => (form.barId.trim() && form.comboName.trim() ? null : "酒吧、套餐名必填"),
             content: (
               <>
-                <label><span>所属酒吧</span><BarVenueSelect api={api} testId="bar-combo-bar-id" value={form.barId} onChange={(v) => setField("barId", v)} setGlobalError={setGlobalError} /></label>
+                <label><span>所属酒吧</span><BarVenueSelect api={api} testId="bar-combo-bar-id" value={form.barId} onChange={(v) => setField("barId", v)} setGlobalError={setGlobalError} merchantId={user.merchantId} /></label>
                 <label><span>套餐名</span><input data-testid="bar-combo-name" value={form.comboName} onChange={(e) => setField("comboName", e.target.value)} /></label>
               </>
             ),

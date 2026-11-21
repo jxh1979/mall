@@ -1,5 +1,5 @@
 package com.complex.platform.governance;
-// 文件版本：V0.21
+// 文件版本：V0.22
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -592,7 +592,7 @@ public class PlatformService {
     }
 
     /** 18E（第 19 条 19-R2）：入口权限码可触及的项目范围（平台口径闸照旧先过）。 */
-    private AuthorizationService.ProjectReach reachOf(String code) {
+    AuthorizationService.ProjectReach reachOf(String code) {
         authorizationService.requirePlatformScope();
         return authorizationService.projectReach(authorizationService.currentActor(), code);
     }
@@ -609,7 +609,7 @@ public class PlatformService {
     }
 
     /** D-032：平台管理员（项目范围为空＝全量）不受当前项目限定；普通项目岗位按真实项目校验（M009-038）。 */
-    private boolean platformWide() {
+    boolean platformWide() {
         authorizationService.requirePlatformScope();
         return authorizationService.currentProjectScopeQuietly().isEmpty();
     }
@@ -658,7 +658,7 @@ public class PlatformService {
     }
 
     /** M009-028：BSM-004「下线就不能再用」——新项目/空间/绑定只能引用未存档且未审批删除的商户；档案更新、存档/恢复与删除流程仍经 requireMerchant 命中已存档行。 */
-    private MerchantRecord requireActiveMerchant(String id, String code) {
+    MerchantRecord requireActiveMerchant(String id, String code) {
         return requireActive(requireMerchant(id, code));
     }
 
@@ -994,7 +994,9 @@ public class PlatformService {
                             request.polygonPoints() == null ? List.of() : request.polygonPoints(),
                             requireSpaceStatus(request.status()),
                             now,
-                            now
+                            now,
+                            trimToNull(request.purpose()),
+                            trimToNull(request.ownerUserId())
                     ));
                 }
         );
@@ -1222,7 +1224,7 @@ public class PlatformService {
     }
 
     /** M009-036：空间状态白名单＝已发布 V203 chk_spaces_status 二值（active/unavailable），缺省 active；不引入其它状态。 */
-    private String requireSpaceStatus(String raw) {
+    String requireSpaceStatus(String raw) {
         String value = trimToDefault(raw, "active");
         if (!SPACE_STATUSES.contains(value)) {
             throw ApiException.badRequest("VALIDATION_FAILED",
@@ -1402,7 +1404,7 @@ public class PlatformService {
     }
 
     /** 18E（第 19 条 19-R2）：scopeGate＝既有对象的范围闸，在幂等之前跑（同一幂等键重放也要再过），被拒照旧记失败留痕。 */
-    private <T> T executeWrite(
+    <T> T executeWrite(
             String operationId,
             String idempotencyKey,
             Object request,
@@ -1454,7 +1456,7 @@ public class PlatformService {
         return Map.copyOf(metadata);
     }
 
-    private void requireNonNegative(java.math.BigDecimal value, String label) {
+    void requireNonNegative(java.math.BigDecimal value, String label) {
         if (value != null && value.signum() < 0) {
             throw ApiException.badRequest("VALIDATION_FAILED", label + "不得为负数");
         }
