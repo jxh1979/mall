@@ -1,6 +1,6 @@
 package com.complex.platform.contract;
 
-// 文件版本：V0.22
+// 文件版本：V0.23
 
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
@@ -433,7 +433,8 @@ class JdbcContractRepository implements ContractRepository {
         return jdbcTemplate.query("""
                 SELECT id, project_id, category_name, color, threshold_days, seq, active
                   FROM space_expiry_color_rules
-                 WHERE active AND (project_id = :pid OR project_id IS NULL)
+                 WHERE active AND (project_id = :pid OR (project_id IS NULL AND NOT EXISTS (
+                       SELECT 1 FROM space_expiry_color_rules o WHERE o.active AND o.project_id = :pid)))
                  ORDER BY threshold_days, seq, id
                 """, new MapSqlParameterSource().addValue("pid", projectId), this::mapColorRule);
     }
@@ -499,14 +500,21 @@ class JdbcContractRepository implements ContractRepository {
     @Override
     public List<SpaceRentalStatusRecord> listSpaceRentalRaw(String projectId, LocalDate asOf) {
         // CG-09：推导片段与经营看板出租率/空置明细共用（SpaceRentalDerivationSql），退租结算完成即转空置。
+        // 第十八批 BW 段 386-R1：即将到期按铺位所在综合体自己的在用着色分类（一条都没有时按平台默认）判定，命中最紧一档（rc）。
         String sql = """
                 SELECT s.id AS space_id, s.space_name, COALESCE(s.status, '') AS space_status,
                        (l.expiry_date - :as_of) AS days_to_expiry,
                        COALESCE(__IS_LET__, false) AS is_let,
                        COALESCE(__IS_MOVED_OUT__, false) AS is_moved_out,
-                       EXISTS(SELECT 1 FROM leasing_intents li WHERE li.intended_space_id = s.id) AS in_negotiation
+                       EXISTS(SELECT 1 FROM leasing_intents li WHERE li.intended_space_id = s.id) AS in_negotiation,
+                       rc.color AS rule_color
                   FROM spaces s
                   LEFT JOIN LATERAL (__LATEST__) l ON true
+                  LEFT JOIN LATERAL (SELECT r.color FROM space_expiry_color_rules r
+                                      WHERE r.active AND (l.expiry_date - :as_of) <= r.threshold_days
+                                        AND (r.project_id = s.project_id OR (r.project_id IS NULL AND NOT EXISTS (
+                                             SELECT 1 FROM space_expiry_color_rules o WHERE o.active AND o.project_id = s.project_id)))
+                                      ORDER BY r.threshold_days, r.seq, r.id LIMIT 1) rc ON true
                  WHERE (CAST(:pid AS text) IS NULL OR s.project_id = :pid)
                  ORDER BY s.id LIMIT 1000
                 """.replace("__LATEST__", SpaceRentalDerivationSql.LATEST_CONTRACT_LATERAL)
@@ -514,22 +522,25 @@ class JdbcContractRepository implements ContractRepository {
                 .replace("__IS_MOVED_OUT__", SpaceRentalDerivationSql.IS_MOVED_OUT);
         return jdbcTemplate.query(sql, new MapSqlParameterSource().addValue("pid", projectId).addValue("as_of", asOf), (rs, n) -> {
             // 6 态（PGM「合同运营细则」/ ENUM「铺位租赁状态」）：不可租(人工 status=unavailable) > 已退租(最近一份合同结算未完)
-            //   > 已租(生效合同在租期内且无开立中结算单；service 再判即将到期) > 洽谈中(招商意向占用) > 空置(结算 settled 或从未绑约)
+            //   > 已租(生效合同在租期内且无开立中结算单；即将到期按铺位所在综合体自己的着色分类（没有则平台默认）在本查询内判定)
+            //   > 洽谈中(招商意向占用) > 空置(结算 settled 或从未绑约)
             String status;
+            String color = null;
             Integer days = null;
             if ("unavailable".equals(rs.getString("space_status"))) {
                 status = "unavailable";
             } else if (rs.getBoolean("is_moved_out")) {
                 status = "moved_out";
             } else if (rs.getBoolean("is_let")) {
-                status = "let";
+                color = rs.getString("rule_color");
+                status = color == null ? "let" : "expiring";
                 days = rs.getObject("days_to_expiry", Integer.class);
             } else if (rs.getBoolean("in_negotiation")) {
                 status = "negotiating";
             } else {
                 status = "vacant";
             }
-            return new SpaceRentalStatusRecord(rs.getString("space_id"), rs.getString("space_name"), status, null, days);
+            return new SpaceRentalStatusRecord(rs.getString("space_id"), rs.getString("space_name"), status, color, days);
         });
     }
 

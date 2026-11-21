@@ -37,13 +37,16 @@ public class LeasingController {
     private final AuthorizationService authorizationService;
     private final LeasingBlacklistExceptionService blacklistExceptions;
     private final AuditEventService auditEventService;
+    private final LeasingMerchantFollowUpService merchantFollowUps;
 
     public LeasingController(LeasingService service, AuthorizationService authorizationService,
-            LeasingBlacklistExceptionService blacklistExceptions, AuditEventService auditEventService) {
+            LeasingBlacklistExceptionService blacklistExceptions, AuditEventService auditEventService,
+            LeasingMerchantFollowUpService merchantFollowUps) {
         this.service = service;
         this.authorizationService = authorizationService;
         this.blacklistExceptions = blacklistExceptions;
         this.auditEventService = auditEventService;
+        this.merchantFollowUps = merchantFollowUps;
     }
 
     // ---- 线索 ----
@@ -169,6 +172,16 @@ public class LeasingController {
             @RequestParam(name = "size", defaultValue = "500") int size) {
         authorizationService.requirePermission("leasing.lead.manage");
         return ApiResponse.ok(service.listFollowUps(refType, refId, page, size));
+    }
+
+    // 第十八批 BW 段第 385 条 385-R2（PGM:502「签约转商户自动带入……和跟进历史」）：商户档案详情读来源线索的招商跟进历史，与商户档案同口径。
+    @GetMapping("/merchants/{merchant_id}/follow-ups")
+    public ApiResponse<PageResponse<LeasingFollowUpRecord>> listFollowUpsForMerchant(
+            @PathVariable("merchant_id") String merchantId,
+            @RequestParam(name = "page", defaultValue = "1") int page,
+            @RequestParam(name = "size", defaultValue = "500") int size) {
+        authorizationService.requirePermission("merchant.profile.view");
+        return ApiResponse.ok(merchantFollowUps.listForMerchant(merchantId, page, size));
     }
 
     @PostMapping("/follow-ups")

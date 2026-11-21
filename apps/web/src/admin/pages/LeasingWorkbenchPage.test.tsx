@@ -1,4 +1,4 @@
-// 文件版本：V0.07
+// 文件版本：V0.08
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -580,5 +580,39 @@ describe("LeasingWorkbenchPage 不预填、原因人填（第 229 条）", () =>
     fireEvent.click(screen.getByTestId("leasing-intent-sign"));
     await waitFor(() => expect(posts.some((p) => p.url.includes("/leasing/intents/in-fix/sign"))).toBe(true));
     expect(posts.find((p) => p.url.includes("/leasing/intents/in-fix/sign"))!.body).toMatchObject({ effective_date: "2025-01-01", expiry_date: "2025-01-28" });
+  });
+
+  // 第十八批 BW 段第 385 条 385-R1（PGM:500「……推进到签约，签约后自动转为正式商户档案。」；PGM:502）：签约商户可不选，
+  // 不选即不发 merchant_id，由后端按线索自动建正式商户档案；选了既有商户照旧（上一条用例）。
+  it("不选签约商户也能签约：不发 merchant_id，空选项写明按线索自动建档", async () => {
+    const posts: Array<{ url: string; body: Record<string, unknown> }> = [];
+    vi.stubGlobal("fetch", vi.fn().mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (init?.method === "POST") {
+        posts.push({ url, body: JSON.parse(String(init.body ?? "{}")) as Record<string, unknown> });
+        return Promise.resolve(envelope([]));
+      }
+      if (url.includes("/leasing/leads")) return Promise.resolve(envelope(LEADS));
+      if (url.includes("/leasing/intents")) return Promise.resolve(envelope([{ id: "in-fix", lead_id: "l-1", stage: "pending_signing",
+        rent_terms: { rentBillingMode: "fixed_only", baseRentCent: 100000 } }]));
+      if (url.includes("/platform/merchants")) return Promise.resolve(envelope([{ id: "mch-1", display_name: "测试商户" }]));
+      if (url.includes("/platform/business-entities")) return Promise.resolve(envelope([{ id: "ent-1", entity_name: "测试主体" }]));
+      return Promise.resolve(envelope([]));
+    }));
+    render(<LeasingWorkbenchPage api={new AdminApi("test-token")} user={{ id: "u1", username: "admin", accountType: "platform_admin" }}
+      setActionResult={vi.fn()} setGlobalError={vi.fn()} effectivePermissions={ADMIN_PERMS} />);
+    await waitFor(() => expect((screen.getByTestId("leasing-intent-select-in-fix") as HTMLInputElement).checked).toBe(true));
+    await waitFor(() => expect(screen.getByRole("option", { name: /测试商户/ })).toBeTruthy());
+    await waitFor(() => expect(screen.getByRole("option", { name: /测试主体/ })).toBeTruthy());
+    fireEvent.change(screen.getByTestId("leasing-sign-subject"), { target: { value: "ent-1" } });
+    pickDay("leasing-sign-effective-date", "1");
+    pickDay("leasing-sign-expiry-date", "28");
+    fireEvent.click(screen.getByTestId("leasing-intent-sign"));
+    await waitFor(() => expect(posts.some((p) => p.url.includes("/leasing/intents/in-fix/sign"))).toBe(true));
+    const body = posts.find((p) => p.url.includes("/leasing/intents/in-fix/sign"))!.body;
+    expect(body).not.toHaveProperty("merchant_id");
+    expect(body).toMatchObject({ contract_subject_id: "ent-1", effective_date: "2025-01-01", expiry_date: "2025-01-28" });
+    expect(screen.queryByText("请选择签约商户。")).toBeNull();
+    expect((screen.getByTestId("leasing-sign-merchant") as HTMLSelectElement).options[0]?.textContent).toBe("不选：签约后按线索自动建正式商户档案");
   });
 });

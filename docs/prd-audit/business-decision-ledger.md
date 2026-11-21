@@ -1,6 +1,6 @@
 # PRD 审计业务裁决台账
 
-文档版本：V1.20
+文档版本：V1.21
 状态：进行中
 迁移日期：2026-07-27
 当前事实源：三份立法 HTML 以既有冻结基线叠加 James 此前 M02 至 M08 的点名批准、全量审计 M001、M002 的逐项批准，以及本轮 2026-10-16 至 2026-10-17 业务 HTML 审计中 Q01 至 Q40 及子题实际明确批准且未被后续替代的裁决，和 2026-10-17 第二批 HTML 业务线推演审计（A–F 六线 64 条、停车章）的逐项批准，并叠加本轮 CG 70 项来源确认与 C01–C09、N01–N03 最终澄清及补全文稿中 F01、W01–W05 的整体修改批准（本文件末节）；本轮最终规则、未采纳或替代关系、现行版本与字节哈希见本文件末节。历史记录保留为各自当时事实，不恢复已被替代的建议。
@@ -11164,3 +11164,112 @@ HTML 的语义补齐与直接引用同步可在本批核验；70项中的业务�
   测试：无（只改文档）。node tools/verify-full-admin-page-matrix.mjs 通过，git diff --check 通过。本段增量：新增操作 0 个，无迁移。
 - 18BM 合并前变基（2026-11-21）：本段自 83efbc89 变基到 origin/main 2bd98895；合并时 OpenAPI 共 1402 个操作（主干 1402）、info.version V0.93、决策台账 V1.20，Flyway 最新 V683（共 620 个迁移）。版本行、契约版本、计数与 SHA、生成物、台账补记与 PRD 修订行由合并前脚本按新主干统一重写。
 - 18BM 落地位置补记·运行验收证据、快照、终验文档刷新（无新裁决）：业务提交 dda9a238 之后，按第十八批裁决 25 重刷了运行验收证据：后端全量 7190 测，0 失败 0 错误；apps/web 构建通过；常规界面验收（接口全部 mock）实跑 40 条全过；真实后端界面验收未跑，runtime_ready=false。随后依次重生成闭环当前态快照、生产闭环缺口报告、界面验收报告、无上线指挥台。生成器没改。手改 docs/final-closed-loop-acceptance-audit-v0.1.md 与 docs/code-implementation-acceptance-audit-v0.1.md：前端单测源码计数改为 2013；被核文件行数都没变；后端全量与常规界面验收的数字、日期改为本次实跑值；写入 npm run verify:unit 实跑结果，五个工作区全过。交付门禁于 2026-11-21 03:44 UTC 在工作树逐项实跑子项，NAS 两项现场探测未跑。仍红的有两项：一是 coding-host-protection，它写死主仓路径，在工作树口径下必红，属工具口径，不做；二是 final-closed-loop-audit，如实留 2 条红（integration-ready、business-acceptance-ready），原因是校验器要求终验把联调、业务验收写成「是」，而裁决 25 定了不跑真实后端界面验收、运行验收未就绪，终验写的是「否」。verify:delivery-gates 总链仍是红的。
+
+18BW 落地位置补记（2026-11-20）：第十八批 BW 段（batch95）按 18BW 只读设计实现待开发清单第 385、386 条（招商签约与铺位着色组）；运行验收证据、终验文档在本段最后一个提交刷新；各条落地位置见下。本段追加时，原台账除文档版本升一版外，其他历史字节保持。
+
+- 18BW 落地位置补记·控制席判定（2026-11-20）：本段（第十八批 BW 段，batch95）实现待开发清单第 385、386 条（18BW 只读设计 b95-audit/d-ls-a.json、b95-audit/d-ls-b.json，两轮质疑者修订后定稿，无待裁题）。控制席判定：385-R2 做（在第 385 条标题「自动带入」与依据 PGM:502 之内）；386-R3 做（第 386 条登记现状写明「页面没有改、删入口」）。甲组旁见 a（区块显示内部编号）按 PGM:299 内部标识符可保留原样，不改不登记；b、c 无 HTML 依据，不登记。乙组旁见（租赁状态看板四种状态显示英文码、出租率按个数算、已签待交标注）设计旁见由控制席另行登记为待核实新条目，本段不改。第五轮设计与修复代理的范围外旁见已登记为待开发清单第 388～414 条（待核实）。本段从 614159b0 开工（第五轮 13 段并行），变基到 83efbc89 后收尾；汇总文件由合并前脚本 summary_tool.py 剥离与重写。
+- 18BW 落地位置补记（第 385 条，本段新增 1 个操作，本段无迁移）
+  385-R1 招商工作台签约不再强制选既有商户，不选即自动转正式商户档案
+  - 改法：招商工作台页面 LeasingWorkbenchPage 的 signIntent 去掉「请选择签约商户」拦截；不选既有商户时请求体不发 merchant_id。「签约商户」下拉空选项改为「不选：签约后按线索自动建正式商户档案」；选了既有商户照旧，合同挂到该商户、不重建绑定。
+  - 后端：LeasingService.signIntent 不带 merchant_id 时，由 autoCreateMerchantForSign 按线索建正式商户档案（带入联系人、联系电话、意向业态、位置、面积），由 createFourPartyBinding 建四主体绑定（经营、结算主体缺省指向合同主体）。现主干已具备，本段不改。
+  - 契约：schema LeasingSignRequest 的 merchant_id 改为选填（operationId signLeasingIntent，只改必填与说明，操作数不变）。
+  - 依据：
+    - PGM:500「线索经初步接触、需求确认、方案报价、商务谈判推进到签约，签约后自动转为正式商户档案。」
+    - PGM:502「签约转商户自动带入联系人与联系方式、意向业态/面积/位置、报价租金条款和跟进历史，四类主体默认指向同一公司、后续可拆为不同公司。」
+  - 按常理定：保留「签约商户」下拉、改成可不选，不取消。老商户再租铺位时已是正式商户，再建档即重复。
+  - 测试：
+    - 前端 LeasingWorkbenchPage.test.tsx「不选签约商户也能签约：不发 merchant_id，空选项写明按线索自动建档」（红实验）。
+    - 后端 LeasingSignReplayJdbcIntegrationTests.firstSignWithoutMerchantCarriesLeadIntoFormalMerchant（守护）。
+  385-R2 商户档案详情带出来源线索的招商跟进历史
+  - 改法：不复制数据、不加迁移，新增按商户读跟进的读口 operationId listLeasingFollowUpsForMerchant（GET，路径参数 merchant_id，权限 merchant.profile.view，响应 Page）。
+    - LeasingController.listFollowUpsForMerchant 先核 merchant.profile.view，再委托同包新类 LeasingMerchantFollowUpService.listForMerchant。
+    - 该类先过 PlatformService.requireMerchant（本段只把它由 private 改为 public，方法体不动）：商户不存在 404 MERCHANT_NOT_FOUND；非平台级账号须该商户经营项目（主项目加已批准追加的）任一在该码可触及范围内，否则 403 PROJECT_SCOPE_MISMATCH；最高权限按全部项目。
+    - 之后调 LeasingRepository.listFollowUpsForMerchantPaged（默认空页，JdbcLeasingRepository 覆写）：来源线索为签约起草的合同挂在该商户名下的意向所属线索（意向的 contract_id 关联合同的 merchant_id）；取这些线索本身的跟进与其各意向的跟进，按创建时间倒序。
+  - 前端：新组件 MerchantLeasingFollowUps，逐条显示「时间 · 方式中文名 · 内容」，方式取共用字典 KEY_VALUE_LABELS.method；空列表显示「没有招商跟进记录」，读取失败显示「招商跟进历史读取失败」。组织与商户档案页 OrganizationMerchantPage.openMerchantDetail 在「状态」后加「招商跟进历史」一项。
+  - 页面矩阵：ADM-GOV-002 行接口列加该读口。
+  - 依据：PGM:502「签约转商户自动带入联系人与联系方式、意向业态/面积/位置、报价租金条款和跟进历史，四类主体默认指向同一公司、后续可拆为不同公司。」；控制席判定「385-R2 做（在第 385 条标题「自动带入」与依据 PGM:502 之内）」。
+  - 按字面/常理定：
+    - 「带入跟进历史」落到商户档案详情可见，读者与商户档案同口径。
+    - 跟进历史范围为来源线索名下全部跟进，即线索本身加该线索各意向。
+  - 测试：
+    - 后端 LeasingMerchantFollowUpsJdbcIntegrationTests 的 merchantProfileViewerSeesLeadAndIntentFollowUpsOfTheSourceLead、leadManagerWithoutMerchantProfileViewIsDenied、merchantProfileViewerOfAnotherProjectIsOutOfScope。
+    - 前端 OrganizationMerchantPage.test.tsx「点商户行 → 抽屉「招商跟进历史」逐条显示时间、方式中文与内容」「没有跟进记录 → 显示「没有招商跟进记录」」。
+- 18BW 落地位置补记（第 386 条，W2-d-ls-b）：
+  386-R1（后端：着色分类写入落到一个综合体并核可触及范围；配置列表与铺位看板按综合体取，本综合体自己的，没有则平台默认）
+  - 改法：
+    - ContractService.saveColorRule 在进幂等层之前调 AuthorizationService.requireReachableProject（入口权限码 contract.space.color.manage）取综合体：不带取本人综合体；平台管理员与最高权限不带回 400 VALIDATION_FAILED「必须指定综合体项目」；不在可触及范围回 403 CROSS_PROJECT_FORBIDDEN。结果交 saveColorRuleOnce 落库。
+    - ContractService.listColorRules：平台管理员、最高权限不带项目时只出平台默认行；其余按 requireReachableProject 取一个综合体。
+    - JdbcContractRepository.listColorRules：本综合体有在用行就只取自己的，一条都没有才取平台默认，与同包 listTemplates「项目覆盖优先、否则平台默认」同口径。
+    - JdbcContractRepository.listSpaceRentalRaw：按铺位所在综合体取命中最紧的一档，在查询内判定即将到期并着色。ContractService.spaceRentalStatus 不再在 service 层套色。
+  - 落地位置：
+    - 后端：ContractService.saveColorRule、saveColorRuleOnce、listColorRules、spaceRentalStatus；JdbcContractRepository.listColorRules、listSpaceRentalRaw。
+    - 涉及的契约：operationId listSpaceExpiryColorRules、saveSpaceExpiryColorRule、listSpaceRentalStatus，schema SpaceExpiryColorRuleRequest。x-data-scope 改为 project、说明更新，由契约代理统一改，不加操作。
+  - 依据：
+    - BSM:1354「铺位看板：铺位租赁状态分空置、洽谈中、已租、即将到期、已退租、不可租，按距到期天数着色，分类、颜色和提前天数按综合体后台可配（业务参数，按综合体可配；其中铺位租赁状态的分类属于业务分类定义，不做后台增删）。」
+    - PGM:659「在所分配的权限内可以查看、处理该角色可查看项目的数据」「逐个勾选的只能查看被选中的项目」。
+  - 测试：SpaceExpiryColorRuleByProjectJdbcIntegrationTests 的 platformAdminMustNameProject、boardColorsEachSpaceByItsOwnProject、ownRulesReplacePlatformDefault、listFollowsProject、staffIsBoundToReachableProject。
+  386-R2（前端：合同工作台着色分类区块选综合体，列表按所选综合体显示并标明是否平台默认，新增带综合体）
+  - 改法：ContractWorkbenchPage「② 审批与配置」着色分类区块。
+    - 小标题改为「铺位到期着色分类（按综合体）」。
+    - 加「所属综合体」下拉，显示条件同起草「所属项目」，首项「本人所在综合体」。切换即按 ?project_id= 重取。
+    - 表格加「归属」列，显示本综合体或平台默认。
+    - 新增请求带 project_id，后端拒绝的提示进全局错误条。
+  - 落地位置：ContractWorkbenchPage 的 pickColorProject、addColorRule 与 colorRulesPath。
+  - 依据：BSM:1354「分类、颜色和提前天数按综合体后台可配」。
+  - 测试：ContractWorkbenchPage.colorproject.test.tsx 的「未选综合体：列表显示平台默认行，归属标明「平台默认」，平台默认行没有改、移除按钮」「选综合体甲：按甲取着色分类，显示甲自己的行且归属「本综合体」，不再显示平台默认」「选综合体甲后新增：请求体带 project_id=proj-a、分类名与提前天数」「新增被后端拒绝（必须指定综合体项目）：把提示交给全局错误条」。
+  386-R3（本综合体已有的着色分类可改分类名、颜色、提前天数，也可移除）
+  - 改法：
+    - 沿用同一保存接口 saveSpaceExpiryColorRule。SpaceExpiryColorRuleRequest 加 id、active 两个属性。
+    - ContractService.saveColorRuleOnce：带 id 只能改本综合体在用的那一条；平台默认行、别的综合体的行、已移除的行回 404 NOT_FOUND「着色分类不存在」。active=false 即停用移除，本综合体最后一条移除后回落平台默认。留痕 contract.color_rule_saved 的 metadata 加 active。
+    - 前端只给本综合体行出「改」「移除」按钮。「改」时保存按钮显示「保存修改」。
+    - 结果键 contract_color_rule_updated「着色分类已修改」、contract_color_rule_removed「着色分类已移除」。
+  - 落地位置：
+    - 后端：ContractService.saveColorRuleOnce；SpaceExpiryColorRuleRequest 的 id、active。
+    - 前端：ContractWorkbenchPage 的 removeColorRule 与 addColorRule，以及 fieldLabels 的两个结果键。
+  - 依据：BSM:1354「分类、颜色和提前天数按综合体后台可配（业务参数，按综合体可配；其中铺位租赁状态的分类属于业务分类定义，不做后台增删）」。括号只把六种铺位租赁状态排除在后台增删之外，着色分类本身可改可删。按业务参数就地停用并留痕，不走 BSM:567～577 存档删除流程。另据 18BW 控制席判定「386-R3 做（第 386 条登记现状写明「页面没有改、删入口」）」。
+  - 测试：
+    - 后端 SpaceExpiryColorRuleByProjectJdbcIntegrationTests 的 editUpdatesTheSameRule、removeFallsBackToPlatformDefault、otherProjectOrDefaultRuleIsNotEditable。
+    - 前端 ContractWorkbenchPage.colorproject.test.tsx 的「移除本综合体的一条：请求体带该行编号、active=false 与 project_id=proj-a」「改本综合体的一条：表单带出原值、按钮为「保存修改」，提交带编号与新提前天数」。
+  本条增量：新增 0 个操作，无迁移（预留的 V732～V735 本条未用），无新权限码。
+- 【18BW 落地位置补记·契约（K-contract）】
+  385-R1 依据 PGM:500「线索经初步接触、需求确认、方案报价、商务谈判推进到签约，签约后自动转为正式商户档案。」改法：请求载荷 schema LeasingSignRequest 的必填只留 contract_subject_id，merchant_id 改为选填，说明为「既有商户 id；不传＝签约后自动转为正式商户档案（带入线索联系人与联系方式、意向业态、面积、位置，四类主体默认指向合同主体同一公司）」。operationId signLeasingIntent 的说明补同义一句：传既有商户 id 时合同挂到该商户，不另建商户档案与主体绑定。对应代码 LeasingService.signIntent、autoCreateMerchantForSign、createFourPartyBinding。操作数不变。测试 LeasingWorkbenchPage.test.tsx「不选签约商户也能签约」、LeasingSignReplayJdbcIntegrationTests.firstSignWithoutMerchantCarriesLeadIntoFormalMerchant。
+  385-R2 依据 PGM:502「签约转商户自动带入联系人与联系方式、意向业态/面积/位置、报价租金条款和跟进历史，四类主体默认指向同一公司、后续可拆为不同公司。」改法：新增 1 个操作 listLeasingFollowUpsForMerchant（GET /api/v1/leasing/merchants/{merchant_id}/follow-ups），放在 listLeasingFollowUps 所在路径旁。权限 merchant.profile.view，数据范围 platform，审计事件 not_applicable，staff-token。只声明路径参数 merchant_id，响应为 Page。说明写清：来源线索＝签约起草的合同挂在该商户名下的意向所属线索，返回线索本身与其各意向的跟进，按创建时间倒序，page 默认 1、size 默认 500。错误码 403 PERMISSION_DENIED、PLATFORM_SCOPE_REQUIRED、PROJECT_SCOPE_MISMATCH，404 MERCHANT_NOT_FOUND。对应代码 LeasingController.listFollowUpsForMerchant → LeasingMerchantFollowUpService.listForMerchant → PlatformService.requireMerchant（改为 public）＋ LeasingRepository/JdbcLeasingRepository.listFollowUpsForMerchantPaged。测试 LeasingMerchantFollowUpsJdbcIntegrationTests、OrganizationMerchantPage.test.tsx 招商跟进历史用例。
+  386-R1 依据 BSM:1354「铺位看板：……按距到期天数着色，分类、颜色和提前天数按综合体后台可配（业务参数，按综合体可配；其中铺位租赁状态的分类属于业务分类定义，不做后台增删）。」与 PGM:659「在所分配的权限内可以查看、处理该角色可查看项目的数据」。改法：
+  - listSpaceExpiryColorRules：x-data-scope 改为 project；说明写明返回该综合体自己的在用着色分类，没有则平台默认，两者不叠加；不带 project_id 取本人综合体，平台管理员与最高权限不带只返回平台默认；越范围 403 CROSS_PROJECT_FORBIDDEN。
+  - saveSpaceExpiryColorRule：x-data-scope 改为 project；说明写明只作用于一个综合体，平台管理员与最高权限必须指定（400 VALIDATION_FAILED），越范围 403 CROSS_PROJECT_FORBIDDEN，范围闸在幂等层之前。
+  - listSpaceRentalStatus：说明补「即将到期按铺位所在综合体自己的着色分类判定，未配置按平台默认」。
+  - schema SpaceExpiryColorRuleRequest.project_id 去掉「空=平台默认」。
+  对应代码 ContractService.saveColorRule、listColorRules、spaceRentalStatus，JdbcContractRepository.listColorRules、listSpaceRentalRaw。测试 SpaceExpiryColorRuleByProjectJdbcIntegrationTests、ContractWorkbenchPage.colorproject.test.tsx。
+  386-R3 依据同句 BSM:1354。改法：schema SpaceExpiryColorRuleRequest 加 id（带上即修改本综合体在用的这一条）与 active（false＝移除，缺省 true）；saveSpaceExpiryColorRule 说明补可改可移除，以及 404 NOT_FOUND「着色分类不存在」（平台默认行、别的综合体的行、已移除的行）。对应代码 ContractService.saveColorRuleOnce、dto SpaceExpiryColorRuleRequest。操作数不变。测试同上类的 T6～T8 与前端用例五～七。
+  本段合计：新增 1 个操作，无迁移。
+- 第十八批 BW 段汇合（J）：e2e 不改。tests/e2e 里没有引用 listSpaceExpiryColorRules、saveSpaceExpiryColorRule 相关的着色选择器，也没有引用招商签约商户下拉（leasing-sign-merchant）或 listLeasingFollowUpsForMerchant。full-admin-remaining 的 ADM-CONT-001 只断言合同、审批链、结算三张表；full-admin-ui-hardening 的 ADM-UI-HARDEN-07 只走新建商户，不打开商户档案详情。四张视觉基线都不是本段页面，没有重拍。
+  门禁结论：
+  - 后端 --fresh 全量 7177 条 0 红。
+  - 前端 typecheck 0 错；vitest 2124 条里唯一的红是 TicketingPoliciesPage.combo 的 215-R2 满载偶发，属既有，单独重跑 9/9 绿。
+  - 客人三个工作区 131、85、77 条全绿；安卓员工端 127 条全绿，android-app 编译通过。
+  - chromium 下五份后台 spec 33 条全过。
+  - 四份生成物重生成后 verify:p0-contract 全绿；yaml 与 json 一致。
+  本段增量：新增 1 个操作 listLeasingFollowUpsForMerchant（385-R2）；改说明与结构的既有操作有 signLeasingIntent、listSpaceExpiryColorRules、saveSpaceExpiryColorRule、listSpaceRentalStatus，其中两个着色操作的 x-data-scope 由 platform 改为 project；schema LeasingSignRequest 的 merchant_id 改为选填，SpaceExpiryColorRuleRequest 加了 id、active；本段没有迁移。
+- 第十八批 BW 段文档组（D-docs）落地位置补记：
+  - 改法与落地位置：docs/leasing-acquisition-prd-v1.0.md 升一版，第 6 节补第 385 条实现现状，第 9 节「跟进」行补新接口，变更日志加一行。
+    - 385-R1：招商工作台「签约商户」可不选，不选即不传 merchant_id，LeasingService.signIntent 按线索自动建正式商户档案并建四类主体绑定，经营、结算主体缺省指向合同主体。选了既有商户则合同挂到该商户，不另建档案与绑定。契约 schema LeasingSignRequest 的 merchant_id 为选填。
+    - 385-R2：商户档案详情按来源线索带出招商跟进历史（线索本身加该线索各意向的跟进），不复制。operationId listLeasingFollowUpsForMerchant，LeasingMerchantFollowUpService.listForMerchant；读者口径同商户档案，PlatformService.requireMerchant，持 merchant.profile.view。
+  - 依据：PGM:500「线索经初步接触、需求确认、方案报价、商务谈判推进到签约，签约后自动转为正式商户档案。」；PGM:502「签约转商户自动带入联系人与联系方式、意向业态/面积/位置、报价租金条款和跟进历史，四类主体默认指向同一公司、后续可拆为不同公司。」
+  - 改法与落地位置：docs/real-estate-full-chain-domain-prd-v0.1.md 升一版，第 2 节「铺位平面图 + 租赁状态着色看板」条末补第 386 条现状，变更日志加一行。
+    - 386-R1：ContractService.saveColorRule 写入落到一个综合体并核 contract.space.color.manage 可触及范围；listColorRules 与铺位看板 JdbcContractRepository.listSpaceRentalRaw 取本综合体自己的，没有则平台默认，两者不叠加。
+    - 386-R2：合同工作台着色分类区块选综合体，「归属」列标明本综合体或平台默认。
+    - 386-R3：本综合体的着色分类可改分类名、颜色、提前天数，也可移除；SpaceExpiryColorRuleRequest 的 id 与 active。
+  - 依据：BSM:1354「铺位看板：铺位租赁状态分空置、洽谈中、已租、即将到期、已退租、不可租，按距到期天数着色，分类、颜色和提前天数按综合体后台可配（业务参数，按综合体可配；其中铺位租赁状态的分类属于业务分类定义，不做后台增删）。」；PGM:659「在所分配的权限内可以查看、处理该角色可查看项目的数据」。
+  - 本组不加操作、不加迁移，没有新增测试（文档校验 verify-full-admin-page-matrix 通过）。
+- 18BW 收尾复核修正（2026-11-20）：按收尾复核成立的意见 1～7 与控制席补充修正（意见 1、7 是同一缺陷，合并处理），只修下面五项，台账版本不改。上面第 386 条补记中 386-R1、386-R3 的「测试」两处，以及契约段（K-contract）中 listSpaceRentalStatus 一句与 386-R3 的测试一句，以本条为准补充。
+  ① 意见 1、7（着色分类「改」到一半又移除同一条）：合同工作台页 ContractWorkbenchPage.removeColorRule 移除成功后，若移除的正是表单正在改的那一条（colorForm.id），就把 id 清空，表单回到新增，保存按钮回到「新增着色分类」，之后提交不再带已停用的编号。原先 ContractService.saveColorRuleOnce 在在用行里找不到这一条，一律回 404 NOT_FOUND「着色分类不存在」；看不到所属综合体下拉的本综合体员工只能刷新页面。清法同 addColorRule 保存成功与 pickColorProject，不加「取消修改」等新入口。新用例 ContractWorkbenchPage.colorproject.test.tsx「点「改」后又移除同一条：表单回到新增，之后新增的请求体不带已移除的编号」（红实验：修前按钮停在「保存修改」）。依据 BSM:1354「分类、颜色和提前天数按综合体后台可配（业务参数，按综合体可配；其中铺位租赁状态的分类属于业务分类定义，不做后台增删）」；18BW 控制席判定「386-R3 做」。
+  ② 意见 2（看板查询参数说明）：契约 operationId listSpaceRentalStatus 的查询参数 project_id 说明，由「综合体 id(空=平台默认)。」改为「综合体项目 id（不带＝可触及的全部综合体的铺位；即将到期各按铺位所在综合体自己的着色分类判定，该综合体未配置时按平台默认）。」，与同一操作的说明及 JdbcContractRepository.listSpaceRentalRaw 现口径一致。docs/openapi/openapi-p0.yaml 与 .json 同值就地改，操作数不变；仓根 security-scans 两份的 OpenAPI SHA-256 行按最终 json 改；verify:p0-contract（含 operation-matrix 与 openapi-closure 两份生成物的 --check）通过。依据 BSM:1354「按距到期天数着色，分类、颜色和提前天数按综合体后台可配」。
+  ③ 意见 3（跟进历史按商户取数缺对照组）：LeasingMerchantFollowUpsJdbcIntegrationTests 夹具加对照组：同项目另一条线索 Y 及其意向，经同一签约接口不带 merchant_id 签约，自动建另一家商户；Y 与其意向各写一条跟进。本商户编号改从签约响应 $.data.merchant_id 取，并断言两家商户不同。加强 merchantProfileViewerSeesLeadAndIntentFollowUpsOfTheSourceLead：结果不含 Y 与其意向的跟进；顺序断言改为按创建时间倒序的 containsExactly（意向乙、意向甲、线索）。变异：删掉 JdbcLeasingRepository.listFollowUpsForMerchantPaged 来源线索的商户条件 c.merchant_id = :merchant_id，用例变红（带出另一商户的两条跟进），还原后转绿。依据 PGM:502「签约转商户自动带入联系人与联系方式、意向业态/面积/位置、报价租金条款和跟进历史，四类主体默认指向同一公司、后续可拆为不同公司。」；PGM:659「在所分配的权限内可以查看、处理该角色可查看项目的数据」。
+  ④ 意见 4、5（看板命中最紧一档、员工不带项目读着色分类）：SpaceExpiryColorRuleByProjectJdbcIntegrationTests 新增两条，作为 386-R1 的守护用例。
+    - boardPicksTightestMatchingTier（T9）：综合体 A 配 60 天黄、15 天红两档；A 的 10 天后到期铺位命中 15 天档、着红，45 天后到期的只命中 60 天档、着黄。变异：listSpaceRentalRaw 里按铺位所在综合体取档的子查询改为按提前天数倒序，用例变红（10 天铺位着成黄），还原后转绿。
+    - staffListWithoutProjectReadsOwnProject（T10）：只在 A、持 contract.space.color.manage 的员工不带 project_id 读着色分类（合同工作台对单项目员工的默认取法），拿到 A 自己的行，归属全为 A，不含平台默认 secr_default_30。变异：删掉 ContractService.listColorRules 平台默认分支条件里的「&& currentProjectScopeQuietly().isEmpty()」，用例变红（只拿到平台默认），还原后转绿。
+    - 依据：BSM:1354「铺位看板：铺位租赁状态分空置、洽谈中、已租、即将到期、已退租、不可租，按距到期天数着色，分类、颜色和提前天数按综合体后台可配」；PGM:659「在所分配的权限内可以查看、处理该角色可查看项目的数据」。
+  ⑤ 意见 6（选了综合体后保存，重取列表是否仍按所选综合体）：ContractWorkbenchPage.colorproject.test.tsx 用例三「选综合体甲后新增：请求体带 project_id=proj-a、分类名与提前天数」加断言：保存成功后紧接着重取着色分类的地址带 ?project_id=proj-a。变异：合同工作台主加载的着色分类地址改回不带参数的固定地址，用例变红，还原后转绿。依据 BSM:1354「分类、颜色和提前天数按综合体后台可配」。
+  本轮增量：新增操作 0 个，无迁移，无新权限码与新字段键。
+- 18BW 合并前变基（2026-11-21）：本段自 83efbc89 变基到 origin/main 6068f50e；合并时 OpenAPI 共 1403 个操作（主干 1402）、info.version V0.94、决策台账 V1.21，Flyway 最新 V683（共 620 个迁移）。版本行、契约版本、计数与 SHA、生成物、台账补记与 PRD 修订行由合并前脚本按新主干统一重写。
+- 18BW 落地位置补记·运行验收证据、快照、终验文档刷新（无新裁决）：业务提交 676127af 之后，按第十八批裁决 25 重刷了运行验收证据：后端全量 7204 测，0 失败 0 错误；apps/web 构建通过；常规界面验收（接口全部 mock）实跑 40 条全过；真实后端界面验收未跑，runtime_ready=false。随后依次重生成闭环当前态快照、生产闭环缺口报告、界面验收报告、无上线指挥台。生成器没改。手改 docs/final-closed-loop-acceptance-audit-v0.1.md 与 docs/code-implementation-acceptance-audit-v0.1.md：前端单测源码计数改为 2023；被核文件行数都没变；后端全量与常规界面验收的数字、日期改为本次实跑值；写入 npm run verify:unit 实跑结果，五个工作区全过。交付门禁于 2026-11-21 07:04 UTC 在工作树逐项实跑子项，NAS 两项现场探测未跑。仍红的有两项：一是 coding-host-protection，它写死主仓路径，在工作树口径下必红，属工具口径，不做；二是 final-closed-loop-audit，如实留 2 条红（integration-ready、business-acceptance-ready），原因是校验器要求终验把联调、业务验收写成「是」，而裁决 25 定了不跑真实后端界面验收、运行验收未就绪，终验写的是「否」。verify:delivery-gates 总链仍是红的。

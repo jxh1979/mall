@@ -1,4 +1,4 @@
-# P0 OpenAPI Operation 验收矩阵 V0.93
+# P0 OpenAPI Operation 验收矩阵 V0.94
 
 ## 1. 文档定位
 
@@ -17,7 +17,7 @@
 
 ## 3. Operation 清单
 
-> 当前 `docs/openapi/openapi-p0.json` 共 1402 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
+> 当前 `docs/openapi/openapi-p0.json` 共 1403 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
 
 | 标签 | 方法 | 路径 | operationId | 摘要 | 请求体 | 权限 | 认证上下文 | 数据范围 | 终端/设备能力/调用通道 | 幂等 | 成功事件 | 失败事件 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -734,6 +734,7 @@
 | leasing | `POST` | `/api/v1/leasing/brands/{brand_id}/blacklist` | `blacklistLeasingBrand` | 品牌拉黑/解黑(高危需审批) | `LeasingBrandBlacklistRequest` | `leasing.brand.blacklist` | `staff-token` | `platform` | web | 是 | `leasing.brand.blacklist_changed` | `leasing.brand.blacklist_change_failed` |
 | leasing | `GET` | `/api/v1/leasing/blacklist-exceptions` | `listLeasingBlacklistExceptions` | 招商黑名单例外放行单清单 | `-` | `leasing.lead.manage` | `staff-token` | `platform` | web | 否 | `leasing.blacklist_exception.viewed` | `not_applicable` |
 | leasing | `POST` | `/api/v1/leasing/blacklist-exceptions` | `createLeasingBlacklistException` | 申请招商黑名单例外放行 | `LeasingBlacklistExceptionRequest` | `leasing.brand.blacklist_exception` | `staff-token` | `platform` | web | 是 | `leasing.blacklist_exception.requested` | `leasing.blacklist_exception.request_failed` |
+| leasing | `GET` | `/api/v1/leasing/merchants/{merchant_id}/follow-ups` | `listLeasingFollowUpsForMerchant` | 商户档案的招商跟进历史(来源线索) | `-` | `merchant.profile.view` | `staff-token` | `platform` | web | 否 | `not_applicable` | `not_applicable` |
 | leasing | `GET` | `/api/v1/leasing/follow-ups` | `listLeasingFollowUps` | 跟进记录(按 ref 查) | `-` | `leasing.lead.manage` | `staff-token` | `platform` | web | 否 | `not_applicable` | `not_applicable` |
 | leasing | `POST` | `/api/v1/leasing/follow-ups` | `createLeasingFollowUp` | 新建跟进记录(回写 last_follow_up_at) | `LeasingFollowUpRequest` | `leasing.lead.manage` | `staff-token` | `platform` | web | 是 | `leasing.follow_up.created` | `leasing.follow_up.create_failed` |
 | contract | `GET` | `/api/v1/contracts` | `listContracts` | 合同清单 | `-` | `contract.draft.manage` | `staff-token` | `platform` | web | 否 | `not_applicable` | `not_applicable` |
@@ -753,8 +754,8 @@
 | contract | `POST` | `/api/v1/contracts/deposit-months` | `saveContractDepositMonths` | 配置押金收取月数及上下限(全平台统一) | `DepositMonthsSettingRequest` | `contract.deposit_months.manage` | `staff-token` | `platform` | web | 是 | `contract.deposit_months_configured` | `contract.deposit_months_config_failed` |
 | contract | `GET` | `/api/v1/contracts/deposit-refund-wait` | `getContractDepositRefundWait` | 查押金退还等待期(按项目) | `-` | `contract.deposit_refund_wait.manage` | `staff-token` | `project` | web | 否 | `not_applicable` | `not_applicable` |
 | contract | `POST` | `/api/v1/contracts/deposit-refund-wait` | `saveContractDepositRefundWait` | 配置押金退还等待期及上下限(按项目) | `DepositRefundWaitSettingRequest` | `contract.deposit_refund_wait.manage` | `staff-token` | `project` | web | 是 | `contract.deposit_refund_wait_configured` | `contract.deposit_refund_wait_config_failed` |
-| contract | `GET` | `/api/v1/contracts/expiry-color-rules` | `listSpaceExpiryColorRules` | 查到期着色分类 | `-` | `contract.space.color.manage` | `staff-token` | `platform` | web | 否 | `not_applicable` | `not_applicable` |
-| contract | `POST` | `/api/v1/contracts/expiry-color-rules` | `saveSpaceExpiryColorRule` | 配置到期着色分类(颜色+提前天数) | `SpaceExpiryColorRuleRequest` | `contract.space.color.manage` | `staff-token` | `platform` | web | 是 | `contract.color_rule_saved` | `contract.color_rule_save_failed` |
+| contract | `GET` | `/api/v1/contracts/expiry-color-rules` | `listSpaceExpiryColorRules` | 查到期着色分类(按综合体) | `-` | `contract.space.color.manage` | `staff-token` | `project` | web | 否 | `not_applicable` | `not_applicable` |
+| contract | `POST` | `/api/v1/contracts/expiry-color-rules` | `saveSpaceExpiryColorRule` | 配置到期着色分类(按综合体，颜色+提前天数，可改可移除) | `SpaceExpiryColorRuleRequest` | `contract.space.color.manage` | `staff-token` | `project` | web | 是 | `contract.color_rule_saved` | `contract.color_rule_save_failed` |
 | contract | `GET` | `/api/v1/contracts/space-rental-status` | `listSpaceRentalStatus` | 铺位平面图着色数据源(可租/已租/即将到期) | `-` | `contract.draft.manage` | `staff-token` | `platform` | web | 否 | `not_applicable` | `not_applicable` |
 | contract | `POST` | `/api/v1/contracts/{contract_id}/rent-bills` | `generateContractRentBill` | 生成某期合同租金应收(base+递增−免租) | `ContractRentBillRequest` | `finance.ar_ap.manage` | `staff-token` | `platform` | web | 是 | `contract.rent_billed` | `contract.rent_bill_failed` |
 | contract | `POST` | `/api/v1/contracts/settlements/{settlement_id}/documents-check` | `checkContractSettlementDocuments` | 退租结算齐单核对（缺单保持待处理） | `ContractResolveDisputeRequest` | `contract.settlement.manage` | `staff-token` | `platform` | web | 是 | `contract.settlement_documents_checked` | `contract.settlement_documents_check_failed` |

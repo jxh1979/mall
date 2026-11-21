@@ -1,4 +1,4 @@
-// 文件版本：V0.15
+// 文件版本：V0.16
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -331,6 +331,38 @@ describe("OrganizationMerchantPage 行明细抽屉（三业务表整行可点）
     fireEvent.click(screen.getByTestId("organization-entity-row-org-1"));
     fireEvent.click(screen.getByTestId("row-detail-overlay"));
     await waitFor(() => expect(screen.queryByTestId("row-detail-drawer")).toBeNull());
+  });
+});
+
+// 第十八批 BW 段第 385 条 385-R2（PGM:502「签约转商户自动带入联系人与联系方式、意向业态/面积/位置、报价租金条款和跟进历史，……」）：
+// 商户档案详情带出来源线索的招商跟进历史（后端按来源线索读出，方式按共用字典显示中文）。
+describe("OrganizationMerchantPage 商户档案详情的招商跟进历史（第 385 条）", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    window.history.replaceState({}, "", "/admin/governance/organizations");
+  });
+
+  // 默认桩按 url 含 merchants 返回商户列表，跟进历史地址也含 merchants，须先拦。
+  function followUps(items: unknown[]) {
+    return (url: string) => (url.includes("/leasing/merchants/m-1/follow-ups") ? envelope(items) : undefined);
+  }
+
+  it("点商户行 → 抽屉「招商跟进历史」逐条显示时间、方式中文与内容", async () => {
+    renderPage(followUps([{ id: "fu-1", ref_type: "lead", ref_id: "l-1", method: "phone", content: "首次电话沟通", created_at: "2026-06-20T09:15:00Z" }]));
+    await waitFor(() => expect(screen.getByTestId("organization-merchant-row-m-1")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("organization-merchant-row-m-1"));
+    await waitFor(() => expect(screen.getByTestId("row-detail-drawer").textContent).toContain("首次电话沟通"));
+    expect(screen.getByTestId("row-detail-drawer").textContent).toContain("招商跟进历史");
+    expect(screen.getByTestId("merchant-leasing-follow-ups").textContent).toContain("2026年6月20日 17:15 · 电话 · 首次电话沟通");
+    expect(screen.getByTestId("merchant-leasing-follow-ups").textContent).not.toContain("phone");
+    expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url).includes("/api/v1/leasing/merchants/m-1/follow-ups"))).toBe(true);
+  });
+
+  it("没有跟进记录 → 显示「没有招商跟进记录」", async () => {
+    renderPage(followUps([]));
+    await waitFor(() => expect(screen.getByTestId("organization-merchant-row-m-1")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("organization-merchant-row-m-1"));
+    await waitFor(() => expect(screen.getByTestId("row-detail-drawer").textContent).toContain("没有招商跟进记录"));
   });
 });
 

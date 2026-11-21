@@ -1,4 +1,4 @@
-// 文件版本：V0.22
+// 文件版本：V0.23
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { CnDatePicker } from "../components/CnDatePicker";
@@ -40,7 +40,10 @@ type FlowTemplate = {
 const CONTRACT_TYPES = ["new", "expiry_termination", "change"];
 const CONTRACT_TYPE_LABELS: Record<string, string> = { new: "新建", expiry_termination: "到期终止", change: "变更" };
 const LINE_LABELS: Record<string, string> = { business_review: "业务审核", finance_review: "财务审核", legal_review: "法务审核", tax_review: "税务审核" };
-type ColorRule = { id: string; categoryName: string; color: string; thresholdDays: number };
+type ColorRule = { id: string; projectId?: string | null; categoryName: string; color: string; thresholdDays: number };
+// 第十八批 BW 段 386-R2（BSM:1354「分类、颜色和提前天数按综合体后台可配」）：着色分类按综合体取（该综合体自己的，没有则平台默认）；不选＝本人所在综合体。
+const colorRulesPath = (projectId: string) =>
+  "/api/v1/contracts/expiry-color-rules" + (projectId ? `?project_id=${encodeURIComponent(projectId)}` : "");
 // HP-C03（BSM L1347）：押金收取月数（全平台统一；出厂 3 个月，上下限未配置为空）。
 type DepositMonths = { value: number; minValue?: number | null; maxValue?: number | null };
 // HP-C06（BSM L1352）：押金退还等待期（按项目；项目未配置时返回出厂行 projectId=__global__、30 日、上下限为空）。
@@ -160,7 +163,8 @@ export function ContractWorkbenchPage({ api, user, setActionResult, setGlobalErr
   const [projects, setProjects] = React.useState<GovernanceProjectRow[]>([]);
   const [spaceId, setSpaceId] = React.useState("");
   const [billPeriod, setBillPeriod] = React.useState("");
-  const [colorForm, setColorForm] = React.useState({ categoryName: "", color: "#F59E0B", thresholdDays: "30" });
+  // 386-R2/R3：projectId＝着色分类所属综合体（空＝本人所在综合体）；id＝正在改的那一条（空＝新增）。
+  const [colorForm, setColorForm] = React.useState({ id: "", projectId: "", categoryName: "", color: "#F59E0B", thresholdDays: "30" });
   // 批2b: 提成规则(阶梯超额累进)配置——填合同条款时建，挂 contract_id。
   const [turnoverForm, setTurnoverForm] = React.useState({ contractId: "", merchantId: "", ruleName: "", minYuan: "", effectiveFrom: "", effectiveTo: "" });
   const [turnoverTiers, setTurnoverTiers] = React.useState<Array<{ upperWan: string; ratePct: string }>>([{ upperWan: "", ratePct: "" }]);
@@ -233,7 +237,7 @@ export function ContractWorkbenchPage({ api, user, setActionResult, setGlobalErr
       const [rows, stepsRes, rulesRes, spacesRes, depositRes] = await Promise.all([
         api.get<ContractRow[]>("/api/v1/contracts"),
         loadSecondaryIfPermitted(canApprovalFlow, () => api.get<FlowTemplate[]>("/api/v1/contracts/approval-flow"), [] as FlowTemplate[]),
-        loadSecondaryIfPermitted(canColorRules, () => api.get<ColorRule[]>("/api/v1/contracts/expiry-color-rules"), [] as ColorRule[]),
+        loadSecondaryIfPermitted(canColorRules, () => api.get<ColorRule[]>(colorRulesPath(colorForm.projectId)), [] as ColorRule[]),
         loadSecondary(() => api.get<SpaceRental[]>("/api/v1/contracts/space-rental-status"), [] as SpaceRental[]),
         loadSecondaryIfPermitted(canDepositMonths, () => api.get<DepositMonths>("/api/v1/contracts/deposit-months"), null as DepositMonths | null),
       ]);
@@ -585,12 +589,46 @@ export function ContractWorkbenchPage({ api, user, setActionResult, setGlobalErr
       setGlobalError("着色分类需填写分类名与正整数提前天数");
       return;
     }
-    await api.post("/api/v1/contracts/expiry-color-rules", {
-      categoryName: colorForm.categoryName.trim(), color: colorForm.color, thresholdDays: days,
-    });
-    setActionResult({ action: "contract_color_rule_added", category: colorForm.categoryName.trim() });
-    setColorForm({ ...colorForm, categoryName: "" });
+    const editing = colorForm.id;
+    try {
+      await api.post("/api/v1/contracts/expiry-color-rules", {
+        id: editing || undefined, projectId: colorForm.projectId || undefined,
+        categoryName: colorForm.categoryName.trim(), color: colorForm.color, thresholdDays: days,
+      });
+    } catch (e) {
+      setGlobalError(e instanceof Error ? e.message : String(e));
+      return;
+    }
+    setActionResult({ action: editing ? "contract_color_rule_updated" : "contract_color_rule_added", category: colorForm.categoryName.trim() });
+    setColorForm({ ...colorForm, id: "", categoryName: "" });
     reload();
+  }
+
+  // 386-R3：移除本综合体的一条（同一保存接口带编号与 active=false；本综合体最后一条移除后回落平台默认）。
+  async function removeColorRule(r: ColorRule) {
+    try {
+      await api.post("/api/v1/contracts/expiry-color-rules", {
+        id: r.id, projectId: r.projectId ?? undefined, active: false,
+        categoryName: r.categoryName, color: r.color, thresholdDays: r.thresholdDays,
+      });
+    } catch (e) {
+      setGlobalError(e instanceof Error ? e.message : String(e));
+      return;
+    }
+    setActionResult({ action: "contract_color_rule_removed", category: r.categoryName });
+    // 移除的正是正在改的那一条：表单回到新增（否则之后提交带着已停用的编号，后端 404）。
+    setColorForm((f) => (f.id === r.id ? { ...f, id: "" } : f));
+    reload();
+  }
+
+  // 386-R2：切换着色分类所属综合体即取该综合体的着色分类，清掉正在改的那一条（别的综合体的编号提交会 404）。
+  async function pickColorProject(projectId: string) {
+    setColorForm({ ...colorForm, projectId, id: "" });
+    try {
+      setColorRules((await api.get<ColorRule[]>(colorRulesPath(projectId))) ?? []);
+    } catch (e) {
+      setGlobalError(e instanceof Error ? e.message : String(e));
+    }
   }
 
   // 合同整行明细：全字段（含生效/到期，抽成模式，商户下钻）。
@@ -1028,27 +1066,35 @@ export function ContractWorkbenchPage({ api, user, setActionResult, setGlobalErr
             data-testid="contract-refund-wait-save" onClick={() => void saveRefundWait()}>保存等待期及上下限</PermissionButton>
         </div>
 
-        <h3>铺位到期着色分类</h3>
+        <h3>铺位到期着色分类（按综合体）</h3>
         <div className="admin-table-scroll">
           <table className="admin-table" data-testid="contract-color-table">
-            <thead><tr><th>分类</th><th>颜色</th><th>提前天数</th></tr></thead>
+            <thead><tr><th>分类</th><th>颜色</th><th>提前天数</th><th>归属</th><th className="admin-op-col">操作</th></tr></thead>
             <tbody>
               {colorRules.map((r) => (
                 <tr key={r.id} data-testid={`contract-color-${r.id}`}>
                   <td>{r.categoryName}</td>
                   <td><span style={{ background: r.color, padding: "0 12px" }}>{r.color}</span></td>
                   <td>{r.thresholdDays}</td>
+                  <td>{r.projectId ? "本综合体" : "平台默认"}</td>
+                  <td>{r.projectId ? (<>
+                    <PermissionButton permissionsState={effectivePermissions} permissions={COLOR_CFG} data-testid={`contract-color-edit-${r.id}`}
+                      onClick={() => setColorForm({ ...colorForm, id: r.id, categoryName: r.categoryName, color: r.color, thresholdDays: String(r.thresholdDays) })}>改</PermissionButton>
+                    <PermissionButton permissionsState={effectivePermissions} permissions={COLOR_CFG} data-testid={`contract-color-remove-${r.id}`}
+                      onClick={() => void removeColorRule(r)}>移除</PermissionButton>
+                  </>) : null}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
         <div className="admin-inline-form" data-testid="contract-color-form">
+          {projects.some((x) => x.id !== user?.organizationId) ? <label>所属综合体<select data-testid="contract-color-project" aria-label="着色分类所属综合体" value={colorForm.projectId} onChange={(e) => void pickColorProject(e.target.value)}><option value="">本人所在综合体</option>{projects.map((x) => <option key={x.id} value={x.id}>{x.name ?? x.id}</option>)}</select></label> : null}
           <input aria-label="分类名" placeholder="分类名(如 临期红)" value={colorForm.categoryName} onChange={(e) => setColorForm({ ...colorForm, categoryName: e.target.value })} />
           <input aria-label="颜色" type="color" value={colorForm.color} onChange={(e) => setColorForm({ ...colorForm, color: e.target.value })} />
           <input aria-label="提前天数" type="number" min="1" placeholder="提前天数" value={colorForm.thresholdDays} onChange={(e) => setColorForm({ ...colorForm, thresholdDays: e.target.value })} />
           <PermissionButton permissionsState={effectivePermissions} permissions={COLOR_CFG}
-            data-testid="contract-color-add" onClick={() => void addColorRule()}>新增着色分类</PermissionButton>
+            data-testid="contract-color-add" onClick={() => void addColorRule()}>{colorForm.id ? "保存修改" : "新增着色分类"}</PermissionButton>
         </div>
 
           </>) },

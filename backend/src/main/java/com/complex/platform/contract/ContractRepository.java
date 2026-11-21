@@ -1,6 +1,6 @@
 package com.complex.platform.contract;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import java.time.LocalDate;
 import java.time.YearMonth;
@@ -129,7 +129,7 @@ public interface ContractRepository {
     List<ContractRecord> listEffectiveContractsExpiringBetween(LocalDate fromExclusive, LocalDate toInclusive);
 
     /**
-     * 铺位租赁状态原始数据（每铺最近一份合同 + 退租结算单状态 + 距到期天数）；着色由 service 套用着色分类。
+     * 铺位租赁状态原始数据（每铺最近一份合同 + 退租结算单状态 + 距到期天数）；即将到期按铺位所在综合体自己的着色分类（没有则平台默认）在本查询内判定。
      * CG-09：推导口径见 {@link SpaceRentalDerivationSql}（退租结算完成即转空置，结算单开立起已退租）。
      */
     List<SpaceRentalStatusRecord> listSpaceRentalRaw(String projectId, LocalDate asOf);

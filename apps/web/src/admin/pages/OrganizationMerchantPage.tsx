@@ -1,4 +1,4 @@
-// 文件版本：V0.15
+// 文件版本：V0.16
 import React from "react";
 import { formatActionResult } from "../components/ActionResultView";
 import { AdminDataState } from "../components/AdminDataState";
@@ -14,6 +14,7 @@ import { RowActions, type RowAction } from "../components/RowActions";
 import { formatBusinessStatus } from "../i18n/statusLabels";
 import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowDetailDrawer";
 import { GuidedFlowModal } from "../components/GuidedFlowModal";
+import { MerchantLeasingFollowUps } from "../components/MerchantLeasingFollowUps";
 
 type MerchantRow = MerchantAdmissionRow & { projectId?: string | null };
 // 第十八批 E 段第 20 条（治理地图第 659 行「一个商户要在别的项目经营的，由能管理商户档案的人在商户档案里加经营项目，要经过审批才生效。」）：
@@ -501,6 +502,8 @@ export function OrganizationMerchantPage({ api, user, setActionResult, setGlobal
         { label: "面积", value: display(row.leasedAreaSquareMeter ?? row.areaSquareMeter) },
         { label: "合作形式", value: cooperationLabel(row.cooperationForm) },
         { label: "状态", value: formatOrganizationStatus(row.status) },
+        // 第十八批 BW 段第 385 条 385-R2（PGM:502「……和跟进历史……」）：来源线索的招商跟进历史随商户档案详情带出。
+        { label: "招商跟进历史", value: <MerchantLeasingFollowUps api={api} merchantId={row.id} /> },
         auditTraceField(navigateTo, "merchant", row.id),
       ],
     });

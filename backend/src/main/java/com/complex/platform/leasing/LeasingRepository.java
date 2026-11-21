@@ -1,5 +1,5 @@
 package com.complex.platform.leasing;
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import com.complex.platform.common.api.PageResponse;
 import java.util.List;
@@ -104,6 +104,12 @@ public interface LeasingRepository {
 
     default PageResponse<LeasingFollowUpRecord> listAllFollowUpsPaged(String projectScope, int page, int size) {
         return PageResponse.of(listAllFollowUps(projectScope), page, size);
+    }
+
+    // 第十八批 BW 段第 385 条 385-R2（PGM:502「签约转商户自动带入……和跟进历史」）：商户的来源线索（线索本身加该线索各意向）的跟进。
+    // 默认空页（测试替身不用动）；Jdbc 覆写。
+    default PageResponse<LeasingFollowUpRecord> listFollowUpsForMerchantPaged(String merchantId, int page, int size) {
+        return PageResponse.of(List.of(), page, size);
     }
 
     // 18E（第 19 条 19-R2）：可跨项目角色持有人按可触及项目集合取（空集合＝一行不出）。默认内存过滤（测试双子）；Jdbc 覆写为 project_id IN。

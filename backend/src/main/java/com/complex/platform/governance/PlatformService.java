@@ -1,5 +1,5 @@
 package com.complex.platform.governance;
-// 文件版本：V0.20
+// 文件版本：V0.21
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -575,7 +575,7 @@ public class PlatformService {
      * 18E（第 20 条 20-R2）（同行「商户在多个项目经营的，各经营项目的员工和主项目的员工一样，可以修改、存档、删除这份商户主档案」）：
      * 判据为该商户的经营项目（主项目加已批准追加的项目）里任一在可触及范围内。
      */
-    private MerchantRecord requireMerchant(String id, String code) {
+    public MerchantRecord requireMerchant(String id, String code) {
         MerchantRecord merchant = findMerchant(id);
         if (!platformWide()) {
             AuthorizationService.ProjectReach reach = reachOf(code);

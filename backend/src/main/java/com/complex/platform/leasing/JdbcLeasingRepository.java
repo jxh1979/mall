@@ -1,5 +1,5 @@
 package com.complex.platform.leasing;
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
@@ -393,6 +393,25 @@ class JdbcLeasingRepository implements LeasingRepository {
                 "SELECT * FROM leasing_follow_ups " + scope
                         + "ORDER BY created_at DESC, id LIMIT :limit OFFSET :offset",
                 params, this::mapFollowUp);
+        return new com.complex.platform.common.api.PageResponse<>(items, safePage, safeSize, total == null ? 0L : total);
+    }
+
+    // 第十八批 BW 段第 385 条 385-R2：来源线索＝签约起草的合同挂在该商户名下的意向所属线索（leasing_intents.contract_id → contracts.merchant_id），
+    // 取这些线索本身的跟进与其各意向的跟进；排序与页大小上限同 listFollowUpsByRefPaged。
+    @Override
+    public com.complex.platform.common.api.PageResponse<LeasingFollowUpRecord> listFollowUpsForMerchantPaged(
+            String merchantId, int page, int size) {
+        int safePage = page < 1 ? 1 : page;
+        int safeSize = size < 1 ? 500 : Math.min(size, 500);
+        String source = "WITH src AS (SELECT i.lead_id FROM leasing_intents i JOIN contracts c ON c.id = i.contract_id "
+                + "WHERE c.merchant_id = :merchant_id) ";
+        String fromWhere = "FROM leasing_follow_ups WHERE (ref_type = 'lead' AND ref_id IN (SELECT lead_id FROM src)) "
+                + "OR (ref_type = 'intent' AND ref_id IN (SELECT id FROM leasing_intents WHERE lead_id IN (SELECT lead_id FROM src))) ";
+        MapSqlParameterSource params = new MapSqlParameterSource("merchant_id", merchantId);
+        Long total = jdbcTemplate.queryForObject(source + "SELECT COUNT(*) " + fromWhere, params, Long.class);
+        params.addValue("limit", safeSize).addValue("offset", (long) (safePage - 1) * safeSize);
+        List<LeasingFollowUpRecord> items = jdbcTemplate.query(
+                source + "SELECT * " + fromWhere + "ORDER BY created_at DESC, id LIMIT :limit OFFSET :offset", params, this::mapFollowUp);
         return new com.complex.platform.common.api.PageResponse<>(items, safePage, safeSize, total == null ? 0L : total);
     }
 
