@@ -78,7 +78,8 @@ public class BarPosCatalogService {
             return repository.saveCategory(new BarProductCategoryRecord(
                     "barcat_" + slug(),
                     barId,
-                    scope.orElse(null),
+                    // 第十八批 BL 段第 389 条 389-R2（BSM:1017）：挂商户的账号取本人商户，平台管理员取所选酒吧。
+                    scope.orElse(barId),
                     requireText(r.categoryName(), "category_name"),
                     r.sortOrder() == null ? 0 : r.sortOrder(),
                     statusOrDefault(r.status()),
@@ -166,7 +167,8 @@ public class BarPosCatalogService {
         if (trimToNull(r.id()) == null) {
             comboId = "barcombo_" + slug();
             barId = requireText(r.barId(), "bar_id");
-            merchantId = scope.orElse(null);
+            // 第十八批 BL 段第 389 条 389-R2（BSM:1017）：挂商户的账号取本人商户，平台管理员取所选酒吧。
+            merchantId = scope.orElse(barId);
             createdAt = now;
         } else {
             existing = repository.findCombo(r.id().trim())

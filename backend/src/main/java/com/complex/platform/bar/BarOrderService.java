@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.16
+// 文件版本：V0.17
 
 import static com.complex.platform.bar.BarValidation.*;
 
@@ -119,7 +119,8 @@ public class BarOrderService {
             throw ApiException.badRequest("VALIDATION_FAILED",
                     "category 须为既有商品粗类别码值（spirit/wine/beer/cocktail/soft_drink/mixer/tea/snack）");
         }
-        String merchantId = authorizationService.currentMerchantScope().orElse(null);
+        // 第十八批 BL 段第 389 条 389-R2（BSM:1017「桌台、商品、分类、套餐等都归属到具体的酒吧商户」）：挂商户的账号取本人商户，平台管理员取所选酒吧。
+        String merchantId = authorizationService.currentMerchantScope().orElseGet(() -> requireText(actual.barId(), "bar_id"));
         Instant now = Instant.now();
         boolean stockManaged = Boolean.TRUE.equals(actual.stockDeductionRequired());
         // 第十八批 I 段第 76 条（BSM:1065「按杯按标准出酒量扣库存」；ENUM:79「定价、库存、结算、对账一律按商品规格逐项进行」）：按杯扣库存的商品

@@ -1,4 +1,4 @@
-// 文件版本：V0.01
+// 文件版本：V0.02
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -31,6 +31,8 @@ function makeApi(): AdminApi {
       lastPostBody = init?.body ? JSON.parse(String(init.body)) : null;
       return Promise.resolve(raw({ created_count: 5, updated_count: 2, shifts: [], review_id: "review-batch", publication_status: "pending_review" }));
     }
+    // 第十八批 BL 段第 390 条 390-R2：排班可选点位。
+    if (url.includes("/staff/shift-point-options")) return Promise.resolve(listEnvelope([{ id: "sp-a", space_name: "A 区" }, { id: "sp-b", space_name: "B 区" }]));
     if (url.includes("/staff/shifts")) return Promise.resolve(listEnvelope([]));
     if (url.includes("/staff/attendance")) return Promise.resolve(listEnvelope([]));
     return Promise.resolve(listEnvelope([]));
@@ -85,7 +87,9 @@ describe("StaffShiftAttendancePage 按周批量排班", () => {
     fireEvent.click(screen.getByTestId("shift-batch-weekday-1"));
     fireEvent.click(screen.getByTestId("shift-batch-weekday-3"));
     fireEvent.click(screen.getByTestId("shift-batch-weekday-5"));
-    fireEvent.change(screen.getByTestId("shift-batch-points-input"), { target: { value: "sp-a, sp-b" } });
+    await waitFor(() => expect((screen.getByTestId("shift-batch-points-select") as HTMLSelectElement).options.length).toBe(2));
+    for (const option of Array.from((screen.getByTestId("shift-batch-points-select") as HTMLSelectElement).options)) option.selected = true;
+    fireEvent.change(screen.getByTestId("shift-batch-points-select"));
     fireEvent.click(screen.getByTestId("shift-batch-guided-next"));
     await waitFor(() => expect(screen.getByTestId("shift-batch-guided-summary")).toBeTruthy());
     fireEvent.click(screen.getByTestId("shift-batch-save"));

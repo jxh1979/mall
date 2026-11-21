@@ -8,14 +8,14 @@
     "RUNTIME_EVIDENCE_BOUND_TO_SOURCE_FINGERPRINT",
     "RUNTIME_EVIDENCE_DOES_NOT_CLOSE_PRODUCTION_MANIFEST"
   ],
-  "generated_at": "2026-11-21T16:44:44.074Z",
+  "generated_at": "2026-11-21T17:08:29.278Z",
   "git": {
-    "head": "269181bccfd745a628e831d16cb1fb2936291220",
-    "head_short": "269181bc",
-    "branch": "feature/business-code-batch91-20261106",
+    "head": "7402d2f51bb37828d66bf76b7d25c9dcbd61486c",
+    "head_short": "7402d2f5",
+    "branch": "feature/business-code-batch84-20261106",
     "worktree_dirty": false,
-    "source_fingerprint": "bf86b3c0da5cb3f49f20c2afef75461c431426987a2347f7ddf4195e9b29d3eb",
-    "source_fingerprint_file_count": 3629,
+    "source_fingerprint": "388045eb6dc10c435c41bcb518c9249261b1ef68ee30fe1bc3906a2a2e2f1cbf",
+    "source_fingerprint_file_count": 3640,
     "source_fingerprint_paths": [
       "backend/src/main",
       "backend/src/test",
@@ -50,12 +50,12 @@
   },
   "backend_surefire": {
     "path": "backend/target/surefire-reports",
-    "suites": 675,
-    "tests": 7249,
+    "suites": 678,
+    "tests": 7265,
     "failures": 0,
     "errors": 0,
     "skipped": 0,
-    "latest_mtime": "2026-11-21T16:42:56.750Z",
+    "latest_mtime": "2026-11-21T17:05:13.213Z",
     "passed": true
   },
   "web_unit_source": {
@@ -78,6 +78,7 @@
       "apps/web/src/admin/client/adminClient.test.ts",
       "apps/web/src/admin/components/ActionResultView.test.tsx",
       "apps/web/src/admin/components/AdminDataState.test.tsx",
+      "apps/web/src/admin/components/BarVenueSelect.test.tsx",
       "apps/web/src/admin/components/CnDatePicker.test.tsx",
       "apps/web/src/admin/components/FormModal.test.tsx",
       "apps/web/src/admin/components/GuidedFlowModal.test.tsx",
@@ -240,6 +241,7 @@
       "apps/web/src/admin/pages/FloorPlanImportPage.guidedcreate.test.tsx",
       "apps/web/src/admin/pages/FloorPlanImportPage.oneshot.test.tsx",
       "apps/web/src/admin/pages/FloorPlanImportPage.test.tsx",
+      "apps/web/src/admin/pages/GovernanceTopologyPage.spacemaintain.test.tsx",
       "apps/web/src/admin/pages/GovernanceTopologyPage.test.tsx",
       "apps/web/src/admin/pages/GroupOverviewPage.rowdetail.test.tsx",
       "apps/web/src/admin/pages/HandlerTrace.test.tsx",
@@ -351,6 +353,7 @@
       "apps/web/src/admin/pages/StaffShiftAttendancePage.cover.test.tsx",
       "apps/web/src/admin/pages/StaffShiftAttendancePage.guidedcreate.test.tsx",
       "apps/web/src/admin/pages/StaffShiftAttendancePage.metricdetail.test.tsx",
+      "apps/web/src/admin/pages/StaffShiftAttendancePage.points.test.tsx",
       "apps/web/src/admin/pages/StaffShiftAttendancePage.settings.test.tsx",
       "apps/web/src/admin/pages/StaffShiftAttendancePage.test.tsx",
       "apps/web/src/admin/pages/StoredValueLedgerPage.test.tsx",
@@ -429,8 +432,8 @@
       "apps/web/src/dealer/dealerPortalClient.test.ts",
       "apps/web/src/shared/ReplayedNotice.test.tsx"
     ],
-    "file_count": 368,
-    "test_count_from_source": 2034
+    "file_count": 371,
+    "test_count_from_source": 2048
   },
   "web_build": {
     "dist_index_exists": true,
@@ -451,15 +454,15 @@
     "asset_count": 175,
     "main_js_assets": [
       {
-        "path": "apps/web/dist/assets/main-B_SfTOa_.js",
+        "path": "apps/web/dist/assets/main-CZOAvwLs.js",
         "size_bytes": 4337,
-        "mtime": "2026-11-21T16:43:06.014Z"
+        "mtime": "2026-11-21T17:05:22.361Z"
       }
     ],
     "largest_asset": {
       "path": "apps/web/dist/assets/vendor-antd-Bh_XtmOr.js",
       "size_bytes": 251112,
-      "mtime": "2026-11-21T16:43:06.017Z"
+      "mtime": "2026-11-21T17:05:22.364Z"
     },
     "no_main_bundle_warning_expected": true
   },

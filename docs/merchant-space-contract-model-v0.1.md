@@ -1,6 +1,6 @@
-# 商户、铺位与合同数据模型 V0.24
+# 商户、铺位与合同数据模型 V0.25
 
-> 版本：V0.24 ｜ 最后更新：2026-11-05 ｜ 状态：现行开发模型
+> 版本：V0.25 ｜ 最后更新：2026-11-20 ｜ 状态：现行开发模型
 > 业务最终解释权：三份业务 HTML。本文只把 HTML 业务关系映射到当前迁移和代码；HTML 与代码不一致时，业务按 HTML，代码列为实现差距。
 
 采集范围：V002、V005、V010、V080、V110、V162、V163、V164、V171、V184、V203、V281、V307、V314、V318、V346、V348、V354、V384，以及当前治理、合同、合规、财务和商户专区实现。
@@ -82,7 +82,7 @@ V318/V354 的 `parent_entity_id` 和角色白名单反映当前代码结构，�
 
 ### 3.4 `spaces` 与 `contract_spaces`
 
-- `spaces` 当前含 `project_id`、`merchant_id`、`parent_space_id`、`space_type`、面积、平面图多边形和 `status`。
+- `spaces` 当前含 `project_id`、`merchant_id`、`parent_space_id`、`space_type`、面积、平面图多边形、`status`，以及用途 `purpose` 与负责人 `owner_user_id`（V729，第十八批 BL 段第 388 条）；后台集团/综合体拓扑页经 `createSpace` 新建、`updateSpace` 修改，修改不改 `project_id` 与平面图多边形。
 - `space_type` 由字典校验；铺位代码值为 `shop`。
 - `spaces.status` 经 V203 仅允许 `active/unavailable`。
 - HTML 铺位租赁状态为：空置、洽谈中、已租、即将到期、已退租、不可租。该六态须随意向与合同联动并在平面图着色，其中不可租由人工标注；分类、颜色和提前天数按综合体后台可配，但六个状态分类属于业务定义，不允许后台增删。当前 DB 两态不能冒充六态已完成。

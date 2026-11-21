@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import com.complex.platform.evidence.AuditedOperation;
 
@@ -20,6 +20,8 @@ enum BarReadOperation implements AuditedOperation {
     // 第十一批 TK-04-R5：账单端反查本单商户消费奖励（凭查看订单账单的 bar.order.view，限本商户）。
     LIST_BILL_REWARDS("bar.bill_rewards.viewed", "bar.bill_rewards.view_failed", "bar.order.view", "merchant_consumption_reward"),
     LIST_TABLES_WITHOUT_SPACE("bar.table_space_backlog.viewed", "bar.table_space_backlog.view_failed", "bar.table.manage", "bar_table"),
+    // 第十八批 BL 段第 380 条 380-R1：新建卡座的可选空间清单。
+    LIST_TABLE_SPACE_OPTIONS("bar.table_space_option.viewed", "bar.table_space_option.view_failed", "bar.table.manage", "bar_table"),
     LIST_SHIFTS("bar.shift.viewed", "bar.shift.view_failed", "bar.shift.manage", "bar_shift"),
     LIST_GIFT_REDEMPTIONS("bar.entitlement_redemption.viewed", "bar.entitlement_redemption.view_failed", "bar.entitlement.read", "bar_gift_redemption"),
     // V345 退酒审批待审队列：凭 bar.order_item.void(退菜退酒域权限)可看，申请人看自己申请的状态、

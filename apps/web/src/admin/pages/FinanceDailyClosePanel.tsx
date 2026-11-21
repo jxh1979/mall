@@ -1,4 +1,4 @@
-// 文件版本：V0.07
+// 文件版本：V0.08
 import React from "react";
 import type { AdminPageProps } from "../types";
 import { BarVenueSelect } from "../components/BarVenueSelect";
@@ -245,7 +245,7 @@ function DailyClosePanel({ api, user, effectivePermissions, setGlobalError, onGe
         {scopes.map((code) => <option key={code} value={code}>{scopeLabel(code)}</option>)}
       </select></label>
       {merchant ? <span>范围对象：{merchant}</span>
-        : scopeType === "bar" ? <label>酒吧<BarVenueSelect api={api} value={scopeId} onChange={setScopeId} testId="daily-close-scope-bar" autoSelectFirst setGlobalError={setGlobalError} /></label>
+        : scopeType === "bar" ? <label>酒吧<BarVenueSelect api={api} value={scopeId} onChange={setScopeId} testId="daily-close-scope-bar" autoSelectFirst setGlobalError={setGlobalError} merchantId={user.merchantId} /></label>
         : <label>{scopeType === "merchant" ? "商户编号" : "项目编号"}<input aria-label="范围编号" value={scopeId} onChange={(e) => setScopeId(e.target.value)} /></label>}
       <button type="button" data-testid="daily-close-generate-submit" disabled={busy} onClick={() => void generate()}>生成日结</button>
     </div> : null}

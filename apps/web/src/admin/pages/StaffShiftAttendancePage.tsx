@@ -1,4 +1,4 @@
-// 文件版本：V0.05
+// 文件版本：V0.06
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { CnDatePicker } from "../components/CnDatePicker";
@@ -69,7 +69,7 @@ export function StaffShiftAttendancePage({ api, setGlobalError, setActionResult,
   const [userId, setUserId] = React.useState("");
   const [start, setStart] = React.useState("");
   const [end, setEnd] = React.useState("");
-  const [points, setPoints] = React.useState("");
+  const [points, setPoints] = React.useState<string[]>([]);
   const [note, setNote] = React.useState("");
   const [nightDuty, setNightDuty] = React.useState(false);
   // 引导式「新增排班」弹窗状态（范式：字段留页面持有，弹窗只编排）。
@@ -86,12 +86,28 @@ export function StaffShiftAttendancePage({ api, setGlobalError, setActionResult,
   const [batchWeekdays, setBatchWeekdays] = React.useState<number[]>([]);
   const [batchStartTime, setBatchStartTime] = React.useState("");
   const [batchEndTime, setBatchEndTime] = React.useState("");
-  const [batchPoints, setBatchPoints] = React.useState("");
+  const [batchPoints, setBatchPoints] = React.useState<string[]>([]);
   const [batchNote, setBatchNote] = React.useState("");
   const [batchNightDuty, setBatchNightDuty] = React.useState(false);
   const [batchError, setBatchError] = React.useState("");
   const [batchSaving, setBatchSaving] = React.useState(false);
   const [batchSummary, setBatchSummary] = React.useState("");
+  // 第十八批 BL 段第 390 条 390-R2（BSM:1474「主管排班……可指定当天工作点位（比如某个服务区、某片保洁区域）」）：点位从可选点位多选
+  // （按排班员范围列启用中的空间）；列表、详情与确认摘要显示空间名，清单里没有的显示编号。
+  const [pointOptions, setPointOptions] = React.useState<Array<{ id: string; spaceName?: string }>>([]);
+  React.useEffect(() => {
+    let cancelled = false;
+    api.get<Array<{ id: string; spaceName?: string }>>("/api/v1/staff/shift-point-options").then(
+      (rows) => { if (!cancelled) setPointOptions(Array.isArray(rows) ? rows : []); },
+      (actionError) => { if (!cancelled) setGlobalError(actionError instanceof Error ? actionError.message : "可选点位读取失败"); });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [api]);
+  const pointNames = (ids?: string[]) => (ids?.length
+    ? ids.map((id) => pointOptions.find((option) => option.id === id)?.spaceName ?? id).join("、") : "未指定");
+  // 修改排班时原点位不在清单里的也保留为选项（显示编号），免得只改时间保存时把原点位静默丢掉。
+  const pointChoices = (selected: string[]) => [...pointOptions,
+    ...selected.filter((id) => !pointOptions.some((option) => option.id === id)).map((id) => ({ id, spaceName: id }))];
 
   const toggleWeekday = (weekday: number) => {
     setBatchWeekdays((prev) => (prev.includes(weekday)
@@ -106,7 +122,7 @@ export function StaffShiftAttendancePage({ api, setGlobalError, setActionResult,
         { label: "员工", value: row.userId ?? "—" },
         { label: "开始", value: localTime(row.startAt) },
         { label: "结束", value: localTime(row.endAt) },
-        { label: "点位", value: row.pointSpaceIds?.length ? row.pointSpaceIds.join("、") : "未指定" },
+        { label: "点位", value: pointNames(row.pointSpaceIds) },
         { label: "备注", value: row.note ?? "—" },
         { label: "夜班值班职责", value: row.nightDutyProjectId ? "项目 " + row.nightDutyProjectId : "无" },
         { label: "排班编号", value: row.id },
@@ -166,14 +182,14 @@ export function StaffShiftAttendancePage({ api, setGlobalError, setActionResult,
         workDate: date,
         startAt: new Date(start).toISOString(),
         endAt: new Date(end).toISOString(),
-        pointSpaceIds: points.split(",").map((value) => value.trim()).filter(Boolean),
+        pointSpaceIds: points,
         note: note.trim() || null,
         nightDutyManager: nightDuty,
       });
       setActionResult({ 结果: "排班申请已提交，等待主管上一级审批", 审批单: result?.reviewId });
       setBatchSummary("排班申请已提交，批准后才会出现在生效排班中。审批单：" + (result?.reviewId ?? "—"));
       setEditingShift(null);
-      setUserId(""); setStart(""); setEnd(""); setPoints(""); setNote(""); setNightDuty(false);
+      setUserId(""); setStart(""); setEnd(""); setPoints([]); setNote(""); setNightDuty(false);
       setShiftOpen(false);
       await reload();
     } catch (e) { setShiftError((e as Error).message); } finally { setShiftSaving(false); }
@@ -237,7 +253,7 @@ export function StaffShiftAttendancePage({ api, setGlobalError, setActionResult,
         weekdays: batchWeekdays,
         startTime: batchStartTime,
         endTime: batchEndTime,
-        pointSpaceIds: splitList(batchPoints),
+        pointSpaceIds: batchPoints,
         note: batchNote.trim() || null,
         nightDutyManager: batchNightDuty,
       });
@@ -304,7 +320,7 @@ export function StaffShiftAttendancePage({ api, setGlobalError, setActionResult,
         <button type="button" disabled={coverSaving} onClick={() => setCoverShift(null)}>取消顶班填写</button>
       </fieldset> : null}
       <div className="admin-form-row" data-testid="shift-editor">
-        <button type="button" data-testid="shift-create-open" onClick={() => { setEditingShift(null); setUserId(""); setStart(""); setEnd(""); setPoints(""); setNote(""); setNightDuty(false); setShiftError(""); setShiftOpen(true); }}>＋ 新增排班</button>
+        <button type="button" data-testid="shift-create-open" onClick={() => { setEditingShift(null); setUserId(""); setStart(""); setEnd(""); setPoints([]); setNote(""); setNightDuty(false); setShiftError(""); setShiftOpen(true); }}>＋ 新增排班</button>
         <button type="button" data-testid="shift-batch-open" onClick={() => { setBatchError(""); setBatchSummary(""); setBatchOpen(true); }}>＋ 批量排班(按周)</button>
       </div>
       {batchSummary ? <p data-testid="shift-batch-result">{batchSummary}</p> : null}
@@ -320,7 +336,7 @@ export function StaffShiftAttendancePage({ api, setGlobalError, setActionResult,
                   <td>{row.userId ?? "—"}</td>
                   <td>{localTime(row.startAt)}</td>
                   <td>{localTime(row.endAt)}</td>
-                  <td>{row.pointSpaceIds?.length ? row.pointSpaceIds.join("、") : "未指定"}</td>
+                  <td>{pointNames(row.pointSpaceIds)}</td>
                   <td>{row.nightDutyProjectId ? "本项目夜班值班经理" : "—"}</td>
                   <td>{row.note ?? "—"}</td>
                 <td className="admin-row-detail-cell">
@@ -338,7 +354,7 @@ export function StaffShiftAttendancePage({ api, setGlobalError, setActionResult,
                   {row.createdBy === user.id && new Date(row.startAt ?? "").getTime() > Date.now() ? <button type="button" onClick={(event) => {
                     event.stopPropagation(); setEditingShift(row.id); setUserId(row.userId ?? "");
                     const inputTime = (value?: string) => { const d = new Date(value ?? ""); return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0,16); };
-                    setStart(inputTime(row.startAt)); setEnd(inputTime(row.endAt)); setPoints((row.pointSpaceIds ?? []).join(",")); setNote(""); setNightDuty(Boolean(row.nightDutyProjectId)); setShiftOpen(true);
+                    setStart(inputTime(row.startAt)); setEnd(inputTime(row.endAt)); setPoints(row.pointSpaceIds ?? []); setNote(""); setNightDuty(Boolean(row.nightDutyProjectId)); setShiftOpen(true);
                   }}>申请修改</button> : null}
                   <button type="button" onClick={async (event) => {
                     event.stopPropagation();
@@ -450,7 +466,9 @@ export function StaffShiftAttendancePage({ api, setGlobalError, setActionResult,
             validate: () => (editingShift && !note.trim() ? "修改排班必须填写原因" : null),
             content: (
               <>
-                <label>点位(空间编号，逗号分隔)<input data-testid="shift-points-input" value={points} onChange={(event) => setPoints(event.target.value)} /></label>
+                <label>点位(可多选)<select multiple data-testid="shift-points-select" aria-label="点位" value={points} onChange={(event) => setPoints(Array.from(event.target.selectedOptions, (option) => option.value))}>
+                  {pointChoices(points).map((option) => <option key={option.id} value={option.id}>{option.spaceName ?? option.id}</option>)}
+                </select></label>
                 <label><input type="checkbox" data-testid="shift-night-duty-input" checked={nightDuty} onChange={(event) => setNightDuty(event.target.checked)} />承担所属项目本日夜班值班经理职责</label>
                 <p>职责随排班审批生效，同项目同日一名。改派先审批取消原班职责，再审批新安排；临时顶班按已记录的交接时段承接。</p>
                 <label>备注<input data-testid="shift-note-input" value={note} onChange={(event) => setNote(event.target.value)} /></label>
@@ -463,7 +481,7 @@ export function StaffShiftAttendancePage({ api, setGlobalError, setActionResult,
           { label: "员工", value: userId.trim() || "未填写" },
           { label: "开始", value: start ? localTime(start) : "未填写" },
           { label: "结束", value: end ? localTime(end) : "未填写" },
-          { label: "点位", value: points.split(",").map((v) => v.trim()).filter(Boolean).join("、") || "未指定" },
+          { label: "点位", value: pointNames(points) },
           { label: "夜班值班职责", value: nightDuty ? "承担所属项目本日夜班值班经理职责" : "无" },
           { label: "备注", value: note.trim() || "—" },
         ]}
@@ -515,7 +533,9 @@ export function StaffShiftAttendancePage({ api, setGlobalError, setActionResult,
                 {crossesMidnight(batchStartTime, batchEndTime)
                   ? <p data-testid="shift-batch-overnight-hint">跨零点班:结束时间为<strong>次日 {batchEndTime}</strong>(系统自动顺延到第二天,排班员不用另选日期)。</p>
                   : null}
-                <label>点位(空间编号，逗号分隔,整批共用)<input data-testid="shift-batch-points-input" value={batchPoints} onChange={(event) => setBatchPoints(event.target.value)} /></label>
+                <label>点位(可多选,整批共用)<select multiple data-testid="shift-batch-points-select" aria-label="点位" value={batchPoints} onChange={(event) => setBatchPoints(Array.from(event.target.selectedOptions, (option) => option.value))}>
+                  {pointChoices(batchPoints).map((option) => <option key={option.id} value={option.id}>{option.spaceName ?? option.id}</option>)}
+                </select></label>
                 <label><input type="checkbox" data-testid="shift-batch-night-duty-input" checked={batchNightDuty} onChange={(event) => setBatchNightDuty(event.target.checked)} />整批承担各自所属项目的夜班值班经理职责</label>
                 <p>每个项目每日只能安排一名夜班值班经理；同一项目请勿同时选多名员工。</p>
                 <label>备注(整批共用)<input data-testid="shift-batch-note-input" value={batchNote} onChange={(event) => setBatchNote(event.target.value)} /></label>
@@ -528,7 +548,7 @@ export function StaffShiftAttendancePage({ api, setGlobalError, setActionResult,
           { label: "日期范围", value: `${batchStartDate} 起 ${batchDays || "—"} 天` },
           { label: "只排", value: batchWeekdays.length ? batchWeekdays.map((day) => WEEKDAY_LABELS[day - 1]).join("、") : "范围内每天" },
           { label: "每日时段", value: `${batchStartTime || "未填写"} 至 ${batchEndTime || "未填写"}${crossesMidnight(batchStartTime, batchEndTime) ? "(次日)" : ""}` },
-          { label: "点位", value: splitList(batchPoints).join("、") || "未指定" },
+          { label: "点位", value: pointNames(batchPoints) },
           { label: "夜班值班职责", value: batchNightDuty ? "整批承担，按项目每日一名" : "无" },
           { label: "备注", value: batchNote.trim() || "—" },
         ]}

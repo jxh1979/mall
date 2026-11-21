@@ -1,4 +1,4 @@
-# P0 OpenAPI 权限、事件、任务追溯收口附录 V0.99
+# P0 OpenAPI 权限、事件、任务追溯收口附录 V1.00
 
 ## 1. 文档定位
 
@@ -14,11 +14,11 @@
 
 | 检查项 | 当前结果 | 执行结论 |
 |---|---:|---|
-| OpenAPI operation 数 | 1409 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
+| OpenAPI operation 数 | 1412 | 全部必须进入 Java Controller、DTO、Service、权限、事件和验收追溯 |
 | OpenAPI 权限/通用权限状态数 | 445 | 人工权限矩阵正文未覆盖 344 项；缺口以本文第 3 节补齐 |
-| OpenAPI 成功/失败事件数 | 2818 | 人工事件矩阵正文未覆盖 2769 项；完整事件字典以本文第 4 节为准 |
-| operation 级任务追溯 | 1409 | 人工任务映射正文未逐项覆盖 1403 个 operation；逐 operation 映射以本文第 5 节为准 |
-| 写接口数量 | 865 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
+| OpenAPI 成功/失败事件数 | 2824 | 人工事件矩阵正文未覆盖 2775 项；完整事件字典以本文第 4 节为准 |
+| operation 级任务追溯 | 1412 | 人工任务映射正文未逐项覆盖 1406 个 operation；逐 operation 映射以本文第 5 节为准 |
+| 写接口数量 | 866 | 写接口、外部接入接口进入编码或联调前必须补请求/响应示例 |
 
 ## 3. 权限码与认证上下文补充表
 
@@ -159,7 +159,7 @@
 | `bar.table_session.view` | staff-token | project-bar-table | 1 | listBarTableSessions | OpenAPI 补充，以本附录为准 |
 | `bar.table.disable` | staff-token | project-bar | 2 | disableBarTable, enableBarTable | OpenAPI 补充，以本附录为准 |
 | `bar.table.guest_checkin` | staff-token | project-bar | 1 | verifyBarReservationInvitationEntry | 已在权限矩阵正文出现 |
-| `bar.table.manage` | staff-token | project-bar, project-bar-table | 3 | createBarTable, assignBarTableSpace, listBarTablesWithoutSpace | 已在权限矩阵正文出现 |
+| `bar.table.manage` | staff-token | project-bar, project-bar-table | 4 | createBarTable, assignBarTableSpace, listBarTablesWithoutSpace, listBarTableSpaceOptions | 已在权限矩阵正文出现 |
 | `bar.table.open_close` | staff-token | project-bar, project-merchant | 5 | openBarTable, clearBarTable, markBarTableAbnormal, resolveBarTableAbnormal, closeBarServiceResponsibility | 已在权限矩阵正文出现 |
 | `bar.table.view` | staff-token | project-bar | 1 | listBarTables | 已在权限矩阵正文出现 |
 | `compliance.contract_key_date.manage` | staff-token | - | 1 | createContractKeyDate | OpenAPI 补充，以本附录为准 |
@@ -287,7 +287,7 @@
 | `floor_plan.view` | staff-token | project-space | 2 | listFloorPlans, listFloorPlanShapes | OpenAPI 补充，以本附录为准 |
 | `governance.project.manage` | staff-token | project | 1 | createProject | 已在权限矩阵正文出现 |
 | `governance.project.view` | staff-token | project | 1 | listProjects | 已在权限矩阵正文出现 |
-| `governance.space.manage` | staff-token | platform, project | 7 | createSpace, saveVenueBusinessHours, createSpaceType, deleteSpaceType, archiveSpaceType, unarchiveSpaceType, requestDeleteSpaceType | 已在权限矩阵正文出现 |
+| `governance.space.manage` | staff-token | platform, project | 8 | createSpace, updateSpace, saveVenueBusinessHours, createSpaceType, deleteSpaceType, archiveSpaceType, unarchiveSpaceType, requestDeleteSpaceType | 已在权限矩阵正文出现 |
 | `governance.space.view` | staff-token | platform, project, project-merchant-space | 3 | listSpaces, listVenueBusinessHours, listSpaceTypes | 已在权限矩阵正文出现 |
 | `governance.supervisor_review.approve` | staff-token | project-entity | 2 | approveSupervisorReview, forwardSupervisorReview | OpenAPI 补充，以本附录为准 |
 | `governance.supervisor_review.manage` | staff-token | project-entity | 2 | evaluateSupervisorReview, regenerateSupervisorReviewChain | OpenAPI 补充，以本附录为准 |
@@ -425,7 +425,7 @@
 | `staff.profile.self` | staff-token | self | 2 | getMyStaffProfile, issueStaffLockerScanToken | OpenAPI 补充，以本附录为准 |
 | `staff.profile.submit` | staff-token | project | 3 | submitStaffRegistration, archiveStaffProfile, unarchiveStaffProfile | OpenAPI 补充，以本附录为准 |
 | `staff.profile.view` | staff-token | project | 2 | listStaffProfiles, listStaffDispatches | OpenAPI 补充，以本附录为准 |
-| `staff.shift.manage` | staff-token | platform, project, project-merchant, self-project | 14 | listStaffShifts, upsertStaffShift, batchUpsertStaffShifts, listStaffLeaves, reviewStaffLeave, revokeStaffLeave, getStaffShiftVisibility, setStaffShiftVisibility, listStaffShiftHistory, coverStaffShift, listStaffShiftCovers, submitStaffAttendanceReceiptReview ... | OpenAPI 补充，以本附录为准 |
+| `staff.shift.manage` | staff-token | platform, project, project-merchant, self-project | 15 | listStaffShifts, upsertStaffShift, listStaffShiftPointOptions, batchUpsertStaffShifts, listStaffLeaves, reviewStaffLeave, revokeStaffLeave, getStaffShiftVisibility, setStaffShiftVisibility, listStaffShiftHistory, coverStaffShift, listStaffShiftCovers ... | OpenAPI 补充，以本附录为准 |
 | `staff.shift.view` | staff-token | platform, self-project | 5 | listMyStaffShifts, listMyStaffAttendance, myStaffAttendanceMonthView, listStaffPhoneReceipts, listStaffAttendanceReceiptReviews | OpenAPI 补充，以本附录为准 |
 | `staff.tax_bracket.manage` | staff-token | platform, project | 5 | upsertPayrollTaxBracket, draftPayrollTaxVersion, submitPayrollTaxVersion, draftPayrollTaxAssessment, submitPayrollTaxAssessment | OpenAPI 补充，以本附录为准 |
 | `system.version.view` | staff-token | project | 1 | getSystemVersion | 已在权限矩阵正文出现 |
@@ -1035,6 +1035,8 @@
 | `bar.table_session.transfer_undo_failed` | failure | `undoBarTableTransfer` | `POST` | `/api/v1/bar/table-sessions/{session_id}/transfer-undo` | BAR-酒吧经营 | `bar.table_session.transfer` | 接口级事件，以本附录为准 |
 | `bar.table_space_backlog.view_failed` | failure | `listBarTablesWithoutSpace` | `GET` | `/api/v1/bar/tables/without-space` | BAR-酒吧经营 | `bar.table.manage` | 接口级事件，以本附录为准 |
 | `bar.table_space_backlog.viewed` | success | `listBarTablesWithoutSpace` | `GET` | `/api/v1/bar/tables/without-space` | BAR-酒吧经营 | `bar.table.manage` | 接口级事件，以本附录为准 |
+| `bar.table_space_option.view_failed` | failure | `listBarTableSpaceOptions` | `GET` | `/api/v1/bar/tables/space-options` | BAR-酒吧经营 | `bar.table.manage` | 接口级事件，以本附录为准 |
+| `bar.table_space_option.viewed` | success | `listBarTableSpaceOptions` | `GET` | `/api/v1/bar/tables/space-options` | BAR-酒吧经营 | `bar.table.manage` | 接口级事件，以本附录为准 |
 | `bar.table_space.assign_failed` | failure | `assignBarTableSpace` | `PUT` | `/api/v1/bar/tables/{table_id}/space` | BAR-酒吧经营 | `bar.table.manage` | 接口级事件，以本附录为准 |
 | `bar.table_space.assigned` | success | `assignBarTableSpace` | `PUT` | `/api/v1/bar/tables/{table_id}/space` | BAR-酒吧经营 | `bar.table.manage` | 接口级事件，以本附录为准 |
 | `bar.table.abnormal_mark_failed` | failure | `markBarTableAbnormal` | `POST` | `/api/v1/bar/tables/{table_id}/abnormal` | BAR-酒吧经营 | `bar.table.open_close` | 接口级事件，以本附录为准 |
@@ -2601,6 +2603,8 @@
 | `not_applicable` | failure | `listStaffRegistrationCompanies` | `GET` | `/api/v1/staff/registration-companies` | STAFF-员工 | `public` | 接口级事件，以本附录为准 |
 | `not_applicable` | failure | `listStaffShiftCovers` | `GET` | `/api/v1/staff/shifts/{id}/covers` | STAFF-员工 | `staff.shift.manage` | 接口级事件，以本附录为准 |
 | `not_applicable` | failure | `listStaffShiftHistory` | `GET` | `/api/v1/staff/shifts/{id}/history` | STAFF-员工 | `staff.shift.manage` | 接口级事件，以本附录为准 |
+| `not_applicable` | success | `listStaffShiftPointOptions` | `GET` | `/api/v1/staff/shift-point-options` | STAFF-员工 | `staff.shift.manage` | 接口级事件，以本附录为准 |
+| `not_applicable` | failure | `listStaffShiftPointOptions` | `GET` | `/api/v1/staff/shift-point-options` | STAFF-员工 | `staff.shift.manage` | 接口级事件，以本附录为准 |
 | `not_applicable` | success | `listStaffShifts` | `GET` | `/api/v1/staff/shifts` | STAFF-员工 | `staff.shift.manage` | 接口级事件，以本附录为准 |
 | `not_applicable` | failure | `listStaffShifts` | `GET` | `/api/v1/staff/shifts` | STAFF-员工 | `staff.shift.manage` | 接口级事件，以本附录为准 |
 | `not_applicable` | success | `listSubordinateCompletion` | `GET` | `/api/v1/partner/subordinates/completion` | P0-待归类 | `partner.subordinate.view` | 接口级事件，以本附录为准 |
@@ -2867,7 +2871,9 @@
 | `space_type.updated` | success | `createSpaceType` | `POST` | `/api/v1/platform/space-types` | GOV-平台治理 | `governance.space.manage` | 接口级事件，以本附录为准 |
 | `space_type.viewed` | success | `listSpaceTypes` | `GET` | `/api/v1/platform/space-types` | GOV-平台治理 | `governance.space.view` | 接口级事件，以本附录为准 |
 | `space.update_failed` | failure | `createSpace` | `POST` | `/api/v1/platform/spaces` | GOV-平台治理 | `governance.space.manage` | 接口级事件，以本附录为准 |
+| `space.update_failed` | failure | `updateSpace` | `PUT` | `/api/v1/platform/spaces/{space_id}` | GOV-平台治理 | `governance.space.manage` | 接口级事件，以本附录为准 |
 | `space.updated` | success | `createSpace` | `POST` | `/api/v1/platform/spaces` | GOV-平台治理 | `governance.space.manage` | 接口级事件，以本附录为准 |
+| `space.updated` | success | `updateSpace` | `PUT` | `/api/v1/platform/spaces/{space_id}` | GOV-平台治理 | `governance.space.manage` | 接口级事件，以本附录为准 |
 | `space.viewed` | success | `listSpaces` | `GET` | `/api/v1/platform/spaces` | GOV-平台治理 | `governance.space.view` | 接口级事件，以本附录为准 |
 | `staff_device.bind_failed` | failure | `bindStaffDeviceCredential` | `POST` | `/api/v1/staff/device-credentials` | AUTH-账号权限 | `staff.device.bind` | 接口级事件，以本附录为准 |
 | `staff_device.bound` | success | `bindStaffDeviceCredential` | `POST` | `/api/v1/staff/device-credentials` | AUTH-账号权限 | `staff.device.bind` | 接口级事件，以本附录为准 |
@@ -3572,6 +3578,7 @@
 | BAR-酒吧经营 | `listBarTableAvailability` | `GET` | `/api/v1/bar/tables/availability` | 酒吧空位视图(员工代订用) | `bar.reservation.create` | `bar.table_availability.viewed` / `bar.table_availability.view_failed` | staff_private_phone, web, tablet, kiosk, staff_work_phone | operation 级补充 |
 | BAR-酒吧经营 | `listBarTables` | `GET` | `/api/v1/bar/tables` | 查询桌台或卡座 | `bar.table.view` | `bar.table.viewed` / `bar.table.view_failed` | web | operation 级补充 |
 | BAR-酒吧经营 | `listBarTableSessions` | `GET` | `/api/v1/bar/table-sessions` | 查询酒水台位会话列表 | `bar.table_session.view` | `bar.table_session.list` / `bar.table_session.list_failed` | web | operation 级补充 |
+| BAR-酒吧经营 | `listBarTableSpaceOptions` | `GET` | `/api/v1/bar/tables/space-options` | 台位可选空间清单 | `bar.table.manage` | `bar.table_space_option.viewed` / `bar.table_space_option.view_failed` | web | operation 级补充 |
 | BAR-酒吧经营 | `listBarTablesWithoutSpace` | `GET` | `/api/v1/bar/tables/without-space` | 未回填空间的卡座/桌台清单 | `bar.table.manage` | `bar.table_space_backlog.viewed` / `bar.table_space_backlog.view_failed` | web | operation 级补充 |
 | BAR-酒吧经营 | `listBarVoidReasonCodes` | `GET` | `/api/v1/bar/void-reason-codes` | 列退酒原因（中文下拉数据源） | `bar.order_item.void` | `not_applicable` / `not_applicable` | web | operation 级补充 |
 | BAR-酒吧经营 | `markBarProductSoldOut` | `POST` | `/api/v1/bar/products/{product_id}/sold-out` | 商品沽清/恢复 | `bar.product.sold_out` | `bar.product_sold_out` / `bar.product_sold_out_failed` | web | operation 级补充 |
@@ -3931,6 +3938,7 @@
 | GOV-平台治理 | `unarchiveSpaceType` | `POST` | `/api/v1/platform/space-types/{id}/unarchive` | 取消存档空间种类 | `governance.space.manage` | `space_type.unarchived` / `not_applicable` | web | operation 级补充 |
 | GOV-平台治理 | `updateApprovalDeadline` | `PUT` | `/api/v1/platform/approval-deadlines/{action_type}` | 配置一种审批类型的审批时限（时限与上下限同配） | `admission.policy.manage` | `governance.approval_deadline.changed` / `governance.approval_deadline.change_failed` | web | operation 级补充 |
 | GOV-平台治理 | `updateMerchant` | `PUT` | `/api/v1/platform/merchants/{merchant_id}` | 修改商户 | `merchant.profile.manage` | `merchant.updated` / `merchant.update_failed` | web | operation 级补充 |
+| GOV-平台治理 | `updateSpace` | `PUT` | `/api/v1/platform/spaces/{space_id}` | 修改场馆、区域、点位 | `governance.space.manage` | `space.updated` / `space.update_failed` | web | operation 级补充 |
 | INT-第三方集成 | `archiveIntegrationChannelStoreMap` | `POST` | `/api/v1/integration/channel-store-maps/{id}/archive` | 停用渠道门店映射 | `integration.channel_store_map.manage` | `integration.channel_store_map.archived` / `integration.channel_store_map.archive_failed` | web | operation 级补充 |
 | INT-第三方集成 | `archiveIntegrationChannelTicketTypeMap` | `POST` | `/api/v1/integration/channel-ticket-type-maps/{id}/archive` | 停用渠道票种映射 | `integration.channel_store_map.manage` | `integration.channel_ticket_type_map.archived` / `integration.channel_ticket_type_map.archive_failed` | web | operation 级补充 |
 | INT-第三方集成 | `createCompensationTask` | `POST` | `/api/v1/integration/compensation-tasks` | 创建补偿任务 | `integration.compensation.manage` | `integration.compensation_task.created` / `integration.compensation_task.create_failed` | web | operation 级补充 |
@@ -4568,6 +4576,7 @@
 | STAFF-员工 | `listStaffRegistrationCompanies` | `GET` | `/api/v1/staff/registration-companies` | 获取可注册公司 | `public` | `staff.registration_companies_viewed` / `not_applicable` | staff_private_phone | operation 级补充 |
 | STAFF-员工 | `listStaffShiftCovers` | `GET` | `/api/v1/staff/shifts/{id}/covers` | 查看班次顶班记录 | `staff.shift.manage` | `staff.shift.covers_viewed` / `not_applicable` | web, staff_work_phone | operation 级补充 |
 | STAFF-员工 | `listStaffShiftHistory` | `GET` | `/api/v1/staff/shifts/{id}/history` | 查看排班修改历史 | `staff.shift.manage` | `staff.shift.history_viewed` / `not_applicable` | web, staff_work_phone | operation 级补充 |
+| STAFF-员工 | `listStaffShiftPointOptions` | `GET` | `/api/v1/staff/shift-point-options` | 排班可选点位 | `staff.shift.manage` | `not_applicable` / `not_applicable` | web | operation 级补充 |
 | STAFF-员工 | `listStaffShifts` | `GET` | `/api/v1/staff/shifts` | 查排班(后台/主管) | `staff.shift.manage` | `not_applicable` / `not_applicable` | web | operation 级补充 |
 | STAFF-员工 | `listStaffWorkPhoneContextsForRecovery` | `GET` | `/api/v1/staff/attendance/work-phone-contexts` | 主管查询本工作手机指定员工的历史领用记录 | `staff.shift.manage` | `staff.attendance.contexts_viewed` / `staff.attendance.contexts_view_failed` | staff_work_phone | operation 级补充 |
 | STAFF-员工 | `markStaffPayrollPaidLegacy` | `POST` | `/api/v1/staff/payroll/pay` | 旧手填已发工资入口已关闭 | `staff.payroll.manage` | `not_applicable` / `staff.payroll.pay_failed` | app, dealer_portal, kiosk, merchant_app, merchant_portal, miniapp, mobile_admin, staff_work_phone, web | operation 级补充 |

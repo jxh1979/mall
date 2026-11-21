@@ -1,4 +1,4 @@
-# P0 OpenAPI Operation 验收矩阵 V0.99
+# P0 OpenAPI Operation 验收矩阵 V1.00
 
 ## 1. 文档定位
 
@@ -17,7 +17,7 @@
 
 ## 3. Operation 清单
 
-> 当前 `docs/openapi/openapi-p0.json` 共 1409 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
+> 当前 `docs/openapi/openapi-p0.json` 共 1412 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
 
 | 标签 | 方法 | 路径 | operationId | 摘要 | 请求体 | 权限 | 认证上下文 | 数据范围 | 终端/设备能力/调用通道 | 幂等 | 成功事件 | 失败事件 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -346,6 +346,7 @@
 | platform | `PUT` | `/api/v1/platform/projects/{project_id}/sensitive-operation-range` | `saveProjectSensitiveOperationRange` | 配置项目敏感操作授权范围(圆心、半径与上下限同配) | `object` | `platform.sensitive_operation_range.manage` | `staff-token` | `project` | web | 是 | `platform.sensitive_operation_range.saved` | `platform.sensitive_operation_range.save_failed` |
 | platform | `GET` | `/api/v1/platform/spaces` | `listSpaces` | 查询场馆、区域、点位 | `-` | `governance.space.view` | `staff-token` | `project-merchant-space` | web, merchant_portal, merchant_app | 否 | `space.viewed` | `not_applicable` |
 | platform | `POST` | `/api/v1/platform/spaces` | `createSpace` | 创建场馆、区域、点位 | `SpaceRequest` | `governance.space.manage` | `staff-token` | `project` | web | 是 | `space.updated` | `space.update_failed` |
+| platform | `PUT` | `/api/v1/platform/spaces/{space_id}` | `updateSpace` | 修改场馆、区域、点位 | `SpaceUpdateRequest` | `governance.space.manage` | `staff-token` | `project` | web | 是 | `space.updated` | `space.update_failed` |
 | platform | `GET` | `/api/v1/platform/venue-business-hours` | `listVenueBusinessHours` | 查询场地营业时间 | `-` | `governance.space.view` | `staff-token` | `project` | web | 否 | `venue_business_hours.viewed` | `not_applicable` |
 | platform | `POST` | `/api/v1/platform/venue-business-hours` | `saveVenueBusinessHours` | 配置场地营业时间 | `VenueBusinessHoursRequest` | `governance.space.manage` | `staff-token` | `project` | web | 是 | `venue_business_hours.updated` | `venue_business_hours.update_failed` |
 | system | `GET` | `/api/v1/system/health` | `getSystemHealth` | 健康检查 | `-` | `public` | `public` | `none` | web, mobile_admin<br>channel: monitoring | 否 | `not_applicable` | `not_applicable` |
@@ -538,6 +539,7 @@
 | amusement | `POST` | `/api/v1/amusement/projects/{id}/devices` | `createAmusementDevice` | 维护游乐项目游乐设备 | `AmusementDeviceRequest` | `amusement.device.manage` | `staff-token` | `project-amusement` | web | 是 | `amusement.device.changed` | `amusement.device.change_failed` |
 | bar | `PUT` | `/api/v1/bar/tables/{table_id}/space` | `assignBarTableSpace` | 卡座/桌台空间指派（回填） | `BarTableSpaceAssignmentRequest` | `bar.table.manage` | `staff-token` | `project-bar-table` | web | 是 | `bar.table_space.assigned` | `bar.table_space.assign_failed` |
 | bar | `GET` | `/api/v1/bar/tables/without-space` | `listBarTablesWithoutSpace` | 未回填空间的卡座/桌台清单 | `-` | `bar.table.manage` | `staff-token` | `project-bar-table` | web | 否 | `bar.table_space_backlog.viewed` | `bar.table_space_backlog.view_failed` |
+| bar | `GET` | `/api/v1/bar/tables/space-options` | `listBarTableSpaceOptions` | 台位可选空间清单 | `-` | `bar.table.manage` | `staff-token` | `project-bar` | web | 否 | `bar.table_space_option.viewed` | `bar.table_space_option.view_failed` |
 | amusement | `PUT` | `/api/v1/amusement/projects/{id}/space` | `assignAmusementProjectSpace` | 游乐项目空间指派（回填） | `AmusementProjectSpaceAssignmentRequest` | `amusement.session.manage` | `staff-token` | `project` | web | 是 | `amusement.project_space.assigned` | `amusement.project_space.assign_failed` |
 | amusement | `GET` | `/api/v1/amusement/projects/without-space` | `listAmusementProjectsWithoutSpace` | 未回填空间的游乐项目清单 | `-` | `amusement.session.manage` | `staff-token` | `project` | web | 否 | `amusement.project_space_backlog.viewed` | `amusement.project_space_backlog.view_failed` |
 | bar | `GET` | `/api/v1/bar/shifts` | `listBarShifts` | 查询收银班次 | `-` | `bar.shift.manage` | `staff-token` | `project-bar-table` | web | 否 | `bar.shift.viewed` | `bar.shift.view_failed` |
@@ -921,6 +923,7 @@
 | bar | `GET` | `/api/v1/bar/tables/availability` | `listBarTableAvailability` | 酒吧空位视图(员工代订用) | `-` | `bar.reservation.create` | `staff-token` | `project-merchant-space` | staff_private_phone, web, tablet, kiosk, staff_work_phone | 否 | `bar.table_availability.viewed` | `bar.table_availability.view_failed` |
 | staff | `GET` | `/api/v1/staff/shifts` | `listStaffShifts` | 查排班(后台/主管) | `-` | `staff.shift.manage` | `staff-token` | `platform` | web | 否 | `not_applicable` | `not_applicable` |
 | staff | `POST` | `/api/v1/staff/shifts` | `upsertStaffShift` | 主管排班(双端) | `object` | `staff.shift.manage` | `staff-token` | `platform` | web, staff_private_phone, staff_work_phone | 是 | `staff.shift.submitted` | `staff.shift.save_failed` |
+| staff | `GET` | `/api/v1/staff/shift-point-options` | `listStaffShiftPointOptions` | 排班可选点位 | `-` | `staff.shift.manage` | `staff-token` | `platform` | web | 否 | `not_applicable` | `not_applicable` |
 | staff | `POST` | `/api/v1/staff/shifts/batch` | `batchUpsertStaffShifts` | 按周批量排班(一次排一周) | `object` | `staff.shift.manage` | `staff-token` | `platform` | web | 是 | `staff.shift.submitted` | `staff.shift.save_failed` |
 | staff | `GET` | `/api/v1/staff/shifts/mine` | `listMyStaffShifts` | 我的班次与点位(员工手机) | `-` | `staff.shift.view` | `staff-token` | `platform` | staff_private_phone, web, staff_work_phone | 否 | `not_applicable` | `not_applicable` |
 | staff | `POST` | `/api/v1/staff/attendance/punch` | `punchStaffAttendance` | 考勤打卡(NFC/扫码) | `object` | `staff.attendance.punch` | `staff-token` | `platform` | staff_work_phone | 是 | `staff.attendance.punched` | `staff.attendance.punch_failed` |

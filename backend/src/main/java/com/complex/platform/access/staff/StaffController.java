@@ -1,6 +1,6 @@
 package com.complex.platform.access.staff;
 
-// 文件版本：V0.16
+// 文件版本：V0.17
 import static com.complex.platform.common.api.ApiRequests.requireIdempotencyKey;
 
 import com.complex.platform.access.staff.dto.EmployeeNoticeAcknowledgeRequest;
@@ -35,6 +35,9 @@ public class StaffController {
     private StaffLockerService lockers;
     @org.springframework.beans.factory.annotation.Autowired
     private StaffDeviceIntegrityReportService integrityReports;
+    // 第十八批 BL 段第 390 条 390-R1：排班可选点位。
+    @org.springframework.beans.factory.annotation.Autowired
+    private StaffShiftPointOptionService shiftPointOptions;
 
     private final AuditedOperationExecutor operations;
 
@@ -223,6 +226,14 @@ public class StaffController {
             @org.springframework.web.bind.annotation.RequestParam(name = "size", defaultValue = "500") int size) {
         java.time.LocalDate workDate = date == null || date.isBlank() ? null : java.time.LocalDate.parse(date);
         return ApiResponse.ok(service.listShifts(workDate, userId, page, size));
+    }
+
+    // 第十八批 BL 段第 390 条 390-R1（BSM:1474「主管排班：排到几点几分，可指定当天工作点位（比如某个服务区、某片保洁区域）」）：
+    // 排班可选点位，按排班员范围列启用中的空间。
+    @GetMapping("/shift-point-options")
+    public ApiResponse<PageResponse<StaffShiftPointOptionService.Option>> listShiftPointOptions() {
+        java.util.List<StaffShiftPointOptionService.Option> options = shiftPointOptions.options();
+        return ApiResponse.ok(PageResponse.of(options, 1, options.size()));
     }
 
     @GetMapping("/settings/payroll-penalty-cap")

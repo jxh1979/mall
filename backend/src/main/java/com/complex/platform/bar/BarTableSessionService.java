@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.12
+// 文件版本：V0.13
 
 import static com.complex.platform.bar.BarValidation.*;
 
@@ -41,6 +41,9 @@ public class BarTableSessionService {
     // 第十八批 AB 段第 190 条 190-R2：转台次数达上限须主管审批（字段注入同上；单测不置位即不设闸）。
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     BarTransferLimitApprovalService transferLimitApprovals;
+    // 第十八批 BL 段第 380 条 380-R1：建台位必带所属空间（字段注入同上；手工装配的单测不置位即不核、不写空间）。
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    BarTableSpaceBinding spaceBinding;
 
     private final BarRepository repository;
     private final AuthorizationService authorizationService;
@@ -52,14 +55,16 @@ public class BarTableSessionService {
 
     BarTableRecord createTable(BarTableRequest request) {
         BarTableRequest actual = requireRequest(request);
-        String merchantId = authorizationService.currentMerchantScope().orElse(null);
+        String merchantId = tableOwner(actual.barId());
+        // 第十八批 BL 段第 380 条 380-R1（BSM:717）：所属空间须为该酒吧名下启用中的空间，与台位同一事务写入（BarService.createTable 已是事务）。
+        String spaceId = spaceBinding == null ? null : spaceBinding.requireOwned(merchantId, actual.spaceId());
         Instant now = Instant.now();
         String slug = slug(actual.idempotencyKey());
         // 第十八批 Q 段 151-R2：只录可进人数一个数，免通票入场名额就是它（BSM:1036「已确认与已入场总人数不超过卡座可进人数。」；
         // ENUM:105「成员确认接受即占用该卡座的免通票入场名额」），allowed_pass_free_guest_count 列写同一个数。
         int capacity = nonNegative(actual.capacity(), "capacity");
         long minimumSpend = nonNegative(actual.minimumSpendCent(), "minimum_spend_cent");
-        return repository.saveTable(new BarTableRecord(
+        BarTableRecord saved = repository.saveTable(new BarTableRecord(
                 "table_" + slug,
                 requireText(actual.barId(), "bar_id"),
                 merchantId,
@@ -74,6 +79,23 @@ public class BarTableSessionService {
                 now,
                 now
         ));
+        if (spaceId != null) {
+            repository.assignTableSpace(saved.id(), spaceId);
+        }
+        return saved;
+    }
+
+    /**
+     * 第十八批 BL 段第 389 条 389-R1（BSM:1017「桌台、商品、分类、套餐等都归属到具体的酒吧商户」；BSM:717）：台位所属商户——
+     * 挂商户的账号取本人商户，平台管理员取所选酒吧（酒吧即商户，V267）。
+     */
+    String tableOwner(String barId) {
+        return authorizationService.currentMerchantScope().orElseGet(() -> requireText(barId, "bar_id"));
+    }
+
+    /** 第十八批 BL 段第 380 条 380-R1：该酒吧可选空间清单（挂商户的账号按本人商户取，不看 bar_id）。 */
+    List<BarTableSpaceBinding.Option> listTableSpaceOptions(String barId) {
+        return spaceBinding.options(tableOwner(barId));
     }
 
     BarTableRecord openTable(String tableId, OpenBarTableRequest request) {

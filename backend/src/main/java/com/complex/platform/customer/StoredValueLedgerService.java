@@ -1,6 +1,6 @@
 package com.complex.platform.customer;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.LocalZone;
@@ -106,6 +106,8 @@ public class StoredValueLedgerService {
         params.addValue("size", size).addValue("offset", (long) (page - 1) * size);
         AtomicLong total = new AtomicLong();
         // 变动后本金、赠送金先按卡的全部流水累计，再按期间与商户过滤，余额才对。
+        // 修复项 F07：退卡、消费回冲、账户关闭与随后的赠送金作废（adjust）同一事务同一时刻写入，流水号随机；
+        // 同一时刻的作废行固定排在后面（外层倒序同向），不靠流水号定先后。
         List<LedgerRow> rows = jdbc.query("""
                 WITH acc AS (
                     SELECT a.id, a.project_id, a.merchant_id FROM customer_stored_value_accounts a %s
@@ -114,7 +116,7 @@ public class StoredValueLedgerService {
                            SUM(t.principal_cent) OVER w AS principal_after_cent,
                            SUM(t.bonus_cent) OVER w AS bonus_after_cent
                       FROM customer_stored_value_transactions t JOIN acc ON acc.id = t.account_id
-                    WINDOW w AS (PARTITION BY t.account_id ORDER BY t.created_at, t.id ROWS UNBOUNDED PRECEDING)
+                    WINDOW w AS (PARTITION BY t.account_id ORDER BY t.created_at, (t.txn_type = 'adjust'), t.id ROWS UNBOUNDED PRECEDING)
                 )
                 SELECT tx.id, tx.created_at, tx.txn_type, tx.amount_cent, tx.principal_cent, tx.bonus_cent, tx.balance_after_cent,
                        tx.principal_after_cent, tx.bonus_after_cent, tx.account_id,
@@ -138,7 +140,7 @@ public class StoredValueLedgerService {
                         AND bs.id = 'settle_' || substr(ot.idempotency_key, 7)
                   LEFT JOIN merchants cm ON ot.id IS NOT NULL AND cm.id = COALESCE(acc.merchant_id, o.bar_id, bs.merchant_id)
                  %s
-                 ORDER BY tx.created_at DESC, tx.id DESC
+                 ORDER BY tx.created_at DESC, (tx.txn_type = 'adjust') DESC, tx.id DESC
                  LIMIT :size OFFSET :offset
                 """.formatted(where(accountWhere), where(rowWhere)), params, (rs, n) -> {
                     total.set(rs.getLong("total"));

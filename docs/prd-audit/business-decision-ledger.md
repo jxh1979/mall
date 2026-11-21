@@ -1,6 +1,6 @@
 # PRD 审计业务裁决台账
 
-文档版本：V1.27
+文档版本：V1.28
 状态：进行中
 迁移日期：2026-07-27
 当前事实源：三份立法 HTML 以既有冻结基线叠加 James 此前 M02 至 M08 的点名批准、全量审计 M001、M002 的逐项批准，以及本轮 2026-10-16 至 2026-10-17 业务 HTML 审计中 Q01 至 Q40 及子题实际明确批准且未被后续替代的裁决，和 2026-10-17 第二批 HTML 业务线推演审计（A–F 六线 64 条、停车章）的逐项批准，并叠加本轮 CG 70 项来源确认与 C01–C09、N01–N03 最终澄清及补全文稿中 F01、W01–W05 的整体修改批准（本文件末节）；本轮最终规则、未采纳或替代关系、现行版本与字节哈希见本文件末节。历史记录保留为各自当时事实，不恢复已被替代的建议。
@@ -11730,3 +11730,155 @@ HTML 的语义补齐与直接引用同步可在本批核验；70项中的业务�
   测试：本轮新增前端用例 1 条；后端只在原有用例里加请求与断言，不新增用例。③④各做变异（商户账号也按综合体看；请求带 items 就用请求的；请求带 items 就不查走点），相应用例都变红，变异已还原。
 - 18BS 合并前变基（2026-11-22）：本段自 2bd98895 变基到 origin/main 97be1fe4；迁移按原序顺延改号 V716→V727、V717→V728；合并时 OpenAPI 共 1409 个操作（主干 1403）、info.version V0.99、决策台账 V1.27，Flyway 最新 V728（共 625 个迁移）。版本行、契约版本、计数与 SHA、生成物、台账补记与 PRD 修订行由合并前脚本按新主干统一重写。
 - 18BS 落地位置补记·运行验收证据、快照、终验文档刷新（无新裁决）：业务提交 269181bc 之后，按第十八批裁决 25 重刷了运行验收证据：后端全量 7249 测，0 失败 0 错误；apps/web 构建通过；常规界面验收（接口全部 mock）实跑 40 条全过；真实后端界面验收未跑，runtime_ready=false。随后依次重生成闭环当前态快照、生产闭环缺口报告、界面验收报告、无上线指挥台。生成器没改。手改 docs/final-closed-loop-acceptance-audit-v0.1.md 与 docs/code-implementation-acceptance-audit-v0.1.md：前端单测源码计数改为 2034；被核文件行数都没变；后端全量与常规界面验收的数字、日期改为本次实跑值；写入 npm run verify:unit 实跑结果，五个工作区全过。交付门禁于 2026-11-21 16:45 UTC 在工作树逐项实跑子项，NAS 两项现场探测未跑。仍红的有两项：一是 coding-host-protection，它写死主仓路径，在工作树口径下必红，属工具口径，不做；二是 final-closed-loop-audit，如实留 2 条红（integration-ready、business-acceptance-ready），原因是校验器要求终验把联调、业务验收写成「是」，而裁决 25 定了不跑真实后端界面验收、运行验收未就绪，终验写的是「否」。verify:delivery-gates 总链仍是红的。
+
+18BL 落地位置补记（2026-11-20）：第十八批 BL 段（batch84）按 18BL 只读设计实现待开发清单第 380 条与补做复核修复项 F06、F07、F08、F09、F10（酒吧与储值返修组）；运行验收证据、终验文档在本段最后一个提交刷新；各条落地位置见下。本段追加时，原台账除文档版本升一版外，其他历史字节保持。
+
+- 18BL 落地位置补记·控制席判定（2026-11-20）：本段（第十八批 BL 段，batch84）实现待开发清单第 380 条与补做复核修复项 F06、F07、F08、F09、F10（18BL 只读设计 b84-audit/d-bar-g.json，两轮质疑者修订后定稿，无待裁题）。补做复核修复项 F06、F07、F08、F09、F10（18BD～18BI 补做多视角独立复核，每条经独立反驳核实未驳倒）先行实现，修法以 b83-audit\fix_items.json 各项控制席判定为准。控制席判定：按补设计 d-bar-g 定稿做（第 380 条原方案 d-bar-f 由 d-bar-g 的修订版取代，d-bar-f 只作参考）：第 388 条 → 第 380、389 条 → 第 390 条，排在已先行的修复项 F06～F10 之后。控制席并入同根一项（登记为第 415 条）：BSM:1017「各处填写「所属酒吧」时从已引进的酒吧商户里下拉选择，不再手工输入。」与第 389 条同一句依据，且不做则挂商户的酒吧经理在后台建不了台位，第 380 条主路径走不通——BarVenueSelect 对挂商户账号（当前账号带商户号）不调 GET /api/v1/platform/merchants（要平台范围，挂商户账号 403、下拉为空），下拉只列本商户一项并默认选中、不可改（名称能从该账号可读的现有接口取到就用，取不到显示「本店」），写法同 18BP 354-R3 对商户账号锁定本店的做法；引用它的 5 个页面（BarTableSessionsPage、BarProductsPage、BarCombosPage、BarShiftPanel、FinanceDailyClosePanel）随之可用；补前端用例（第一步 waitFor＋expect）：挂商户账号下拉只有本店且不发平台商户请求、平台管理员照旧可选全部酒吧。设计旁见丙（排班页员工编号手填、排班发布审批摘要点位与时间看不懂）、丁（安卓员工端主管排班屏员工与点位手填）另行登记为待核实新条目，本段不改。第五、六轮设计与修复代理的范围外旁见已登记为待开发清单第 388～446 条（待核实）。本段从 614159b0 开工（第五轮 13 段并行），变基到 6068f50e 后收尾；汇总文件由合并前脚本 summary_tool.py 剥离与重写。
+- 修复项 F06（酒吧结账选通用卡只按桌台铺位取项目，台位没挂铺位一律 404）
+  - 改法：BarBillingService.settleBill 储值支在 stored_value_card=general 时，通用卡所属综合体先取账单桌台所挂铺位的项目；取不到（没挂空间的台位（建台位必选空间之前建的，或不经后台接口写入的），吧台直点不经开台、不过服务责任登记的铺位闸）就取酒吧商户所属项目 BusinessDayResolver.projectOfMerchant(账单 barId)，与同入口定位闸 BarService.settleBill 同口径。铺位项目取得到时照旧。无迁移，不新增操作，不改请求与响应结构。
+  - 落地位置：BarBillingService.settleBill（储值支取 cardProject 一处，就地改）。契约 settleBarBill 的说明与 BarBillSettleRequest.stored_value_card 的说明、酒吧 PRD §6 与储值 PRD §6 的第 367 条现状句、覆盖表 BSM-0180 行，把「桌台所在铺位的项目」同步为「账单所在综合体（桌台所挂铺位的项目，没挂铺位的取酒吧商户所属项目）」。
+  - 依据：BSM:833「①综合体通用卡：综合体内各商户通用」「消费时按客人指定的某一张卡扣减，不自动跨卡」；BSM:1066 酒吧支付方式含「储值卡（通用卡先扣本金后扣赠送金且不可配置；……）」；18BL 控制席判定·修复项 F06 的 decision（取不到桌台铺位项目就用酒吧商户所属项目，与同入口定位闸同口径）。
+  - 测试：BarGeneralCardSettleJdbcIntegrationTests.generalCardSettlesCounterBillWhoseTableHasNoSpace（吧台位不挂铺位、无开台会话的账单指定通用卡结清 200、payment_status=paid、扣通用卡本金；修复前 404 STORED_VALUE_ACCOUNT_NOT_FOUND）；同类原五条用例照旧通过。
+  - 不做：台位挂铺位的前端入口（待开发清单第 380 条另做）。
+- 修复项 F07 储值台账同一时刻两条流水的累计次序定死。
+  - 改法：只改台账查询排序，不改写入侧时间。StoredValueLedgerService.query 的累计窗口与外层排序在 created_at 之后、流水号之前加一档「是否赠送金作废（adjust）行」：同一事务同一时刻写入的退卡、已关闭卡的消费退款回冲、账户关闭退本金行先累计，随后的赠送金作废行后累计；外层倒序同向，作废行显示在同刻业务行之上。修复前两行先后只靠随机流水号定，作废流水号较小时两行的变动后本金、赠送金与变动后余额对不上，已销户的卡最新一行显示余额为赠送金数。
+  - 落地位置：StoredValueLedgerService.query（queryStoredValueLedger 的查询 SQL）；写入侧 StoredValueService 的退卡、消费退款回冲、账户关闭三处未改。契约 queryStoredValueLedger 的 description 排序句随改（由契约代理落）。
+  - 依据：BSM:833「运营端提供储值台账，可按客人、商户、期间查询逐笔明细与余额构成。」；ENUM:86「每笔充值拆为本金与赠送金两段分别记账」「销户时先解除全部占用与冻结，再退剩余本金，赠送金清零。」；18BL 控制席判定·修复项 F07「只改台账查询的排序……不改写入侧时间」。
+  - 测试：StoredValueLedgerJdbcIntegrationTests.refundAndBonusVoidAtSameInstantAccumulateInWriteOrder（同一 created_at 的 refund＋adjust，两张卡流水号大小关系相反，两行都满足变动后本金＋变动后赠送金＝变动后余额，最新一行为作废行、余额 0）。
+  修复项 F08 储值台账用例夹具改成不带项目的商户卡。
+  - 改法：只动测试。夹具里商户 M 的商户卡由带项目 A 改为不带项目（酒吧结账按「客人、项目空、商户」取的就是这种卡），原有五条用例期望不变；另把 B 通用卡夹具改成带 500 赠送金供 F07 用例用。做了变异验证：删掉不挂商户账号的「卡不带项目按发卡商户经营项目判」分支，或把商户账号分支改成只认本人项目，scopeFollowsAccount 都变红；变异跑完已还原。
+  - 落地位置：StoredValueLedgerJdbcIntegrationTests 的 seed 夹具；被护住的是 StoredValueLedgerService.query 里不带项目的商户卡两条范围分支，主代码未因 F08 改动。
+  - 依据：BSM:833「运营端提供储值台账，可按客人、商户、期间查询逐笔明细与余额构成。」「商户的员工只能管理本商户发行的储值卡。」；18BL 控制席判定·修复项 F08「把夹具商户卡改成不带项目，并做变异验证」。
+  - 测试：StoredValueLedgerJdbcIntegrationTests.scopeFollowsAccount（两处变异各自变红）。
+  修复项 F09 契约 StoredValueLedgerRow.masked_phone 改为可空（由契约代理落，不改代码）。
+  - 改法：schema StoredValueLedgerRow 的 masked_phone 类型改为字符串或空，仍在 required 里（键恒有、值可空），说明补「客人注销或解除黑名单后原账户手机号已清空的为空」；与同一列的 StoredValueRefundCard.masked_phone 写法一致。现码 StoredValueLedgerService.query 以 LEFT JOIN 取客人掩码手机号，客人注销（CustomerService.deregisterAccount）或解除黑名单后（CustomerService.releaseBlacklistedPhone）原账户手机号与掩码手机号置空、历史流水仍在；页面 StoredValueLedgerPage 已按可空显示「—」。
+  - 依据：BSM:819「解除黑名单须按列入时同级审批链（夜班值班经理批准、娱乐平台负责人批准）复核，填原因留痕；解除后原账户保持已关闭，该手机号自解除时起允许重新注册。」；BSM:863「注销后：客人的姓名、手机号、人脸、证件等个人信息一律删除；」「消费记录、支付流水、退款记录等钱账留存」（原句已在现行 HTML 去标签核对）；18BL 控制席判定·修复项 F09。
+  - 测试：无新增（只改契约说明与类型）。
+  修复项 F10 覆盖表 BEQ-0148 补储值台账落地句（由收尾文档组落）。
+  - 改法：html-prd-coverage.csv 的 BEQ-0148 行 conflict_summary 末尾补一句，写法同 BSM-0081 行：后台「储值台账」页（ADM-CUS-007，权限 customer.stored_value.view）按客人、商户、期间查储值逐笔明细与余额构成，由第十八批 BD 段第 364 条 364-R1、364-R2 落（LoyaltyController.queryStoredValueLedger，StoredValueLedgerService，StoredValueLedgerPage）；状态 FULL 不变。
+  - 依据：ENUM:86「运营端提供储值台账，可按客人、商户、期间查询逐笔明细与余额构成。」；18BL 控制席判定·修复项 F10「照意见补一句，状态不变」。
+  - 测试：无。
+  本段增量：新增操作 0 个，无迁移，后端新增用例 1 条。
+- 第十八批 BL 段落地位置补记（第 388、389、380、390 条，控制席并入第 415 条；本段迁移 V729，新增 3 个操作：updateSpace、listBarTableSpaceOptions、listStaffShiftPointOptions）：
+  1. 388-R1：空间补用途与负责人，新增修改空间接口。
+     - 依据：PGM:469「维护楼层、区域、点位、商铺、卡座、吧台位、游乐入口、库房和设备点位。」；PGM:470「记录空间面积、用途、状态、负责人和所属商户。」；PGM:737「关闭后菜单不可见或不可点，接口也要拒绝业务动作。」
+     - 改法：迁移 V729 给 spaces 加 purpose、owner_user_id。SpaceRecord、SpaceRequest 加 purpose、ownerUserId（保留原构造）。新类 SpaceMaintenanceService.updateSpace 与 SpaceUpdateRequest；操作 updateSpace（PUT /api/v1/platform/spaces/{space_id}，权限 governance.space.manage，平台范围，范围闸在幂等之前）。
+     - 可改名称、类型、上级、楼层、面积、用途、负责人、所属商户与状态，状态改为 unavailable 即停用；不改所属项目与平面图点位；改了的类型须为启用值，改了的所属商户须未存档。
+     - PlatformService.createSpace 就地多存两项；JdbcPlatformRepository 读空间与 saveSpace 带两列；ServerModuleRoutes 对新建、修改空间按 governance 判；审计标签 space.updated、space.update_failed 改为「新建或修改」。
+     - 测试：SpaceMaintenanceJdbcIntegrationTests（createSpaceRecordsPurposeAndOwner、updateSpaceChangesFieldsButKeepsProjectAndPolygon、updateSpaceRejectsOutOfScopeCallersAndMissingSpace、updateSpaceChecksOnlyChangedMerchantAndType、updateSpaceReplayReturnsFirstResultOnce）。
+  2. 388-R2：集团/综合体拓扑页（ADM-GOV-001，GovernanceTopologyPage）空间点位区加「＋ 新建空间点位」与行内「修改」（按 governance.space.manage），弹窗新建或修改空间；详情抽屉显示上级空间、所属商户（可点进商户页）、用途、负责人（员工账号，可点进员工账号页）。
+     - 依据：PGM:469、PGM:470；PGM:272「平台内展示的所有数据、单据、对象以及涉及的人员与角色，都必须可点击、可追溯」。
+     - 页面矩阵 ADM-GOV-001 行补权限 governance.space.manage、access.user.view 与对应接口。
+     - 测试：GovernanceTopologyPage.spacemaintain.test.tsx（5 条）。
+  3. 389-R1：平台管理员建的台位归所选酒吧。
+     - 依据：BSM:1017「桌台、商品、分类、套餐等都归属到具体的酒吧商户」；BSM:717「酒吧要知道桌台、卡座、吧台属于哪个空间和商户。」
+     - 改法：BarTableSessionService.tableOwner（挂商户的账号取本人商户，平台管理员取 bar_id），createTable 的台位商户改用它。
+     - 测试：BarServiceTests.platformAdminCreatedTableBelongsToTheBarMerchant（原 createTableSessionForPlatformDirectFillsNonNullMerchantPlaceholder 改名改断言）、BarTableCreateWithSpaceJdbcIntegrationTests.platformAdminConfiguresBarThenBarStaffOpensAndOrders。
+  4. 389-R2：平台管理员建的商品、分类、套餐归所选酒吧。
+     - 依据：BSM:1017 同句。
+     - 改法：BarOrderService.createProduct、BarPosCatalogService.saveCategory 与 saveCombo 新建分支的商户改为「挂商户取本人、平台管理员取 bar_id」；操作 createBarProduct、saveBarProductCategory、saveBarCombo 说明各补一句；无迁移、无新操作。
+     - 测试：同上 platformAdminConfiguresBarThenBarStaffOpensAndOrders（平台管理员经接口建台位、商品、分类、套餐，酒吧员工开台点该商品与套餐）。
+  5. 380-R1：建台位必带所属空间。
+     - 依据：BSM:717「酒吧要知道桌台、卡座、吧台属于哪个空间和商户。」；PGM:470「……所属商户。」
+     - 改法：新类 BarTableSpaceBinding（所属商户为该酒吧且启用中）。BarTableRequest.space_id 必填，createBarTable 同一事务写入台位空间，不带 400 VALIDATION_FAILED，不属于该酒吧或已停用 409 BAR_TABLE_SPACE_NOT_OWNED。新操作 listBarTableSpaceOptions（GET /api/v1/bar/tables/space-options，权限 bar.table.manage，审计 bar.table_space_option.viewed 与 view_failed；BarService.listTableSpaceOptions，BarReadOperation.LIST_TABLE_SPACE_OPTIONS）。
+     - 测试：BarTableCreateWithSpaceJdbcIntegrationTests（managerCreatesCardSeatOnOwnSpaceThenOpensAndOrders、createTableWithoutSpaceIsRejected、createTableOnOtherBarOrDisabledSpaceIsRejected、spaceOptionsListOwnActiveSpacesAndDropDisabledOnes）；BarInvitationCustomerJdbcIntegrationTests 两条夹具补空间。
+  6. 380-R2：后台卡座与订台页（ADM-BAR-001，BarTableSessionsPage）「新建卡座」弹窗加必选「所属空间」下拉，按所选酒吧取可选空间，换酒吧清空重取，确认页显示所属空间；页面矩阵 ADM-BAR-001 行补该接口。
+     - 依据：BSM:717；PGM:469。
+     - 测试：BarTableSessionsPage.guidedcreate.test.tsx。
+  7. 第 415 条（控制席并入）：BarVenueSelect 对挂商户的账号不调平台商户列表，只列「本店」一项、默认选中、不可改；BarTableSessionsPage、BarProductsPage、BarCombosPage、FinanceDailyClosePanel 传本人商户号；日结与收银班页（FinanceDailyClosePanel、BarShiftPanel）对挂商户的账号原已直接显示本人商户编号、不经下拉。
+     - 依据：BSM:1017「各处填写「所属酒吧」时从已引进的酒吧商户里下拉选择，不再手工输入。」
+     - 测试：BarVenueSelect.test.tsx；BarTableSessionsPage.guidedcreate.test.tsx「挂商户的账号：所属酒吧锁定本店……」。
+  8. 380-R3：
+     - 第④点已做：修复项 F06 在 BarBillingService.settleBill 与 BarGeneralCardSettleJdbcIntegrationTests 的注释里「后台建台位不收铺位」改为「没挂空间的台位（建台位必选空间之前建的，或不经后台接口写入的）」，只改注释，回落逻辑照留。
+     - 第①～③点已落：酒吧 PRD §4 现状句由 D-docs 落；覆盖表 BSM-0023、BSM-0147 落地句由收尾文档组落。
+  9. 390-R1：排班可选点位。
+     - 依据：BSM:1474「主管排班：排到几点几分，可指定当天工作点位（比如某个服务区、某片保洁区域）」；BSM:1077「主责服务提供人按当日该场次排班指派到该卡座，同一卡座在不同场次可以更换。」
+     - 改法：新类 StaffShiftPointOptionService.options；新操作 listStaffShiftPointOptions（GET /api/v1/staff/shift-point-options，权限 staff.shift.manage）。只列启用中的空间：最高权限与平台管理员全部（第十八批裁决 71），挂商户（含派驻）的取本商户名下，其余取该码可触及项目下的。
+     - 测试：StaffShiftPointOptionsJdbcIntegrationTests（4 条）。
+  10. 390-R2：排班与考勤页（ADM-STF-001，StaffShiftAttendancePage）单条与批量排班的「点位」由手填编号改为从可选点位多选，修改排班预选原点位，列表、详情与确认摘要显示空间名；页面矩阵 ADM-STF-001 行补该接口。
+      - 依据：BSM:1474、BSM:1077。
+      - 测试：StaffShiftAttendancePage.points.test.tsx（4 条）；StaffShiftAttendancePage.guidedcreate、batchshift 两份改为选下拉。
+  11. 388-R3 与 390-R2 第⑥点已落：平台治理 PRD §7.2 与 §12B.1 排班现状句由 D-docs 落；覆盖表 PGM-0027、PGM-0028、BSM-0304 落地句由收尾文档组落。
+- 18BL 契约代理（K-contract）落地位置补记。本段契约增量：新增 3 个操作，新增 schema 与 requestBody 各 1 个（SpaceUpdateRequest），无迁移。
+  【FX1 修复项 F06】改法：settleBarBill 的说明与 schema BarBillSettleRequest.stored_value_card 的说明，「general 扣账单所在综合体（桌台所在铺位的项目）的通用卡」改为「桌台所挂铺位的项目，没挂铺位的取酒吧商户所属项目」，与 BarBillingService.settleBill 的回落一致。依据：BSM:833「①综合体通用卡：综合体内各商户通用」。权限码、审计事件、错误码 STORED_VALUE_ACCOUNT_NOT_FOUND 不变。
+  【FX2 修复项 F09】改法：schema StoredValueLedgerRow.masked_phone 改为可空（type 为 string 或 null，仍在 required 里），说明补「客人注销或解除黑名单后原账户手机号已清空的为空」。依据：BSM:819「解除后原账户保持已关闭，该手机号自解除时起允许重新注册。」；BSM:863「注销后：客人的姓名、手机号、人脸、证件等个人信息一律删除；」「消费记录、支付流水、退款记录等钱账留存」
+  【FX2 修复项 F07】改法：queryStoredValueLedger 的说明，排序改为「按 created_at 倒序分页，同一时刻的流水里调整（adjust，如赠送金作废）行排在最上，再按 txn_id 倒序」，累计补「同一时刻写入的多条流水按先非调整行、后调整行累计」。落地位置：StoredValueLedgerService 的查询排序与累计窗口。依据：BSM:833「运营端提供储值台账，可按客人、商户、期间查询逐笔明细与余额构成。」
+  【第 388 条 388-R1】改法：
+  - 新增操作 updateSpace（PUT /api/v1/platform/spaces/{space_id}），请求体为新 schema 与 requestBody SpaceUpdateRequest。说明写了：可改的字段；状态改为 unavailable 即停用；所属项目与平面图点位不改；整份覆盖。
+  - 说明里的校验：类型与所属商户只在改了时核；上级空间须存在且同项目。
+  - 说明里的范围闸：挂商户的账号 403 PLATFORM_SCOPE_REQUIRED；空间不存在 404 SPACE_NOT_FOUND、不在可触及项目内 403 PROJECT_SCOPE_MISMATCH，这两项在幂等之前判；同一请求编号重放返回首次结果。
+  - 属性：权限码 governance.space.manage；审计 space.updated、space.update_failed。
+  - schema SpaceRequest 加 purpose、owner_user_id；createSpace 说明补「可带用途、负责人」。
+  - 代码位置：PlatformController.updateSpace 委托 SpaceMaintenanceService.updateSpace。
+  - 依据：PGM:469「维护楼层、区域、点位、商铺、卡座、吧台位、游乐入口、库房和设备点位。」；PGM:470「记录空间面积、用途、状态、负责人和所属商户。」
+  【第 380 条 380-R1】改法：
+  - 新增操作 listBarTableSpaceOptions（GET /api/v1/bar/tables/space-options）。只列所属商户为该酒吧且启用中的空间，按名称排序，每项含 id、space_name。挂商户的账号按本人商户取；不挂商户的账号按必填 query 参数 bar_id 取。
+  - 属性：权限码 bar.table.manage；审计 bar.table_space_option.viewed、bar.table_space_option.view_failed。
+  - schema BarTableRequest 加必填 space_id。
+  - createBarTable 新增说明：不带空间 400 VALIDATION_FAILED；空间不属于该酒吧或已停用 409 BAR_TABLE_SPACE_NOT_OWNED「所选空间不属于该酒吧或已停用」，台位不落；空间与台位同一事务写入。
+  - 代码位置：BarController.listTableSpaceOptions、BarService.listTableSpaceOptions、BarTableSpaceBinding.options 与 requireOwned、BarTableSessionService.createTable。
+  - 依据：BSM:717「酒吧要知道桌台、卡座、吧台属于哪个空间和商户。」
+  【第 389 条 389-R1、389-R2】改法：
+  - createBarTable 说明补台位所属商户：挂商户的账号取本人商户，平台管理员取所选酒吧 bar_id。代码位置：BarTableSessionService.tableOwner。
+  - createBarProduct、saveBarProductCategory、saveBarCombo 说明末尾各补「新建时所属商户：挂商户的账号取本人商户，平台管理员取所选酒吧 bar_id」。代码位置：BarOrderService.createProduct、BarPosCatalogService.saveCategory 与 saveCombo。
+  - 本条无新操作。
+  - 依据：BSM:1017「桌台、商品、分类、套餐等都归属到具体的酒吧商户」。
+  【第 390 条 390-R1】改法：
+  - 新增操作 listStaffShiftPointOptions（GET /api/v1/staff/shift-point-options）。只列启用中的空间，按名称排序，每项含 id、space_name。
+  - 范围：最高权限与平台管理员看全部（第十八批裁决 71）；挂商户（含派驻）的看本商户名下；其余看 staff.shift.manage 可触及项目下的，没有可触及项目返回空页。
+  - 属性：权限码 staff.shift.manage；x-data-scope platform；审计 not_applicable。
+  - 代码位置：StaffController.listShiftPointOptions、StaffShiftPointOptionService.options。
+  - 依据：BSM:1474「主管排班：排到几点几分，可指定当天工作点位（比如某个服务区、某片保洁区域）」。
+  【核验】本段没有新增用例，契约核验为：yaml 与 json 经 node yaml 包整份深比较一致；verify:openapi、verify:openapi-examples、verify:client-routes、verify:client-openapi、verify:client-payload --strict 全部通过。
+- 18BL 汇合段（J）：
+  1. e2e 没有改动。各段改过的页面逐个核对过 tests/e2e 的断言、步骤与 mock，结论是都不用改：
+     - 卡座与订台页（新建卡座必选所属空间、新调 listBarTableSpaceOptions）
+     - 排班与考勤页（点位改成从 listStaffShiftPointOptions 多选）
+     - 集团/综合体拓扑页（空间点位新建与修改，走 createSpace、updateSpace）
+     - BarVenueSelect 对挂商户账号锁定本店（第 415 条），涉及卡座与订台、商品、套餐页（日结与收银班页对挂商户的账号原已直接显示本人商户编号、不经下拉）
+     原因：没有 e2e 走新建卡座、填排班点位或空间维护弹窗；mock 对没设桩的 GET 回空列表；拓扑页边界说明的前缀没变；mock 平台管理员不挂商户。四张视觉基线都不含这些页面，实跑没有像素差，没有重拍。
+  2. 门禁结论：
+     - 后端全量（空库重建，真迁本段迁移 V729）只有 1 条红：ParkingCreditJdbcIntegrationTests.threeWayResidualRecordedAsSeparateLine。它恰好在营业日起点 10:00 后一小时内跑，用例入场时刻落在上一营业日，属既有时段问题，与本段无关。定向重跑全绿，其余全绿。
+     - 前端：typecheck 为 0 错，vitest 全绿；客人三个工作区单测全绿。
+     - 安卓：员工端单测全绿，android-app 编译通过。
+     - chromium 后台五份 spec 全部通过。
+     - 四份生成物在镜像重生成后，verify:p0-contract 全部子项通过（含客户端与契约路径、方法、请求字段一致）。
+     - OpenAPI 两份深比较一致。
+  3. 本段增量：
+     - 新增 3 个操作：updateSpace、listBarTableSpaceOptions、listStaffShiftPointOptions。
+     - 改动的既有操作：settleBarBill、createBarProduct、createBarTable、createSpace、saveBarProductCategory、saveBarCombo、queryStoredValueLedger。
+     - 改动的 schema：SpaceRequest、SpaceUpdateRequest、BarTableRequest、BarBillSettleRequest、StoredValueLedgerRow。
+     - 迁移只有 V729。
+- D-docs（文档组，第十八批 BL 段）：按各段文档要点把实现现状写进下位文档，不新增业务规则，无迁移、无新操作。四份文档各升一版，有修订表的三份各加一行。
+  ①酒吧 PRD（bar-business-operations-product-prd-v0.1.md）
+  - §4 业务对象表后补第 380、389、415 条实现现状：
+    - 新建卡座必选所属空间：listBarTableSpaceOptions；createBarTable 请求体 space_id 必填；BarTableSpaceBinding；BarTableSessionService.createTable 与 tableOwner。
+    - 台位、商品、分类、套餐新建时所属商户：createBarTable、createBarProduct、saveBarProductCategory、saveBarCombo；挂商户的账号取本人商户，平台管理员取所选酒吧。
+    - BarVenueSelect 对挂商户的账号只列「本店」。
+    - 测试：BarTableCreateWithSpaceJdbcIntegrationTests、BarServiceTests、BarTableSessionsPage.guidedcreate.test.tsx、BarVenueSelect.test.tsx。
+  - §6 第 367 条现状句（修复项 F06）：settleBarBill 选通用卡由「桌台所在铺位的项目」改为「桌台所挂铺位的项目，没挂铺位的取酒吧商户所属项目」。储值 PRD §6 第 367 条同改。
+  ②储值 PRD（member-loyalty-and-stored-value-product-prd-v0.1.md）§5 储值台账现状句：
+  - 修复项 F07：queryStoredValueLedger、StoredValueLedgerService，同一时刻写入的流水里调整行后于业务行累计、列表里显示在上；测试 StoredValueLedgerJdbcIntegrationTests.refundAndBonusVoidAtSameInstantAccumulateInWriteOrder。
+  - 修复项 F09：StoredValueLedgerRow.masked_phone，客人注销或解除黑名单后原账户手机号已清空的显示「—」。
+  ③平台治理 PRD（platform-governance-prd-v0.1.md）
+  - §7.2 表后补第 388 条现状：updateSpace、SpaceUpdateRequest、SpaceMaintenanceService；SpaceRequest 增 purpose 与 owner_user_id；本段迁移 V729；测试 SpaceMaintenanceJdbcIntegrationTests、GovernanceTopologyPage.spacemaintain.test.tsx。
+  - §12B.1 补第 390 条现状：listStaffShiftPointOptions、StaffShiftPointOptionService；测试 StaffShiftPointOptionsJdbcIntegrationTests、StaffShiftAttendancePage.points.test.tsx。
+  ④商户、铺位与合同数据模型（merchant-space-contract-model-v0.1.md）§3.4「spaces 当前含」补 purpose、owner_user_id（V729），经 createSpace 新建、updateSpace 修改。
+  依据：
+  - PGM:469「维护楼层、区域、点位、商铺、卡座、吧台位、游乐入口、库房和设备点位。」
+  - PGM:470「记录空间面积、用途、状态、负责人和所属商户。」
+  - BSM:717「酒吧要知道桌台、卡座、吧台属于哪个空间和商户。」
+  - BSM:1017「桌台、商品、分类、套餐等都归属到具体的酒吧商户；各处填写「所属酒吧」时从已引进的酒吧商户里下拉选择，不再手工输入。」
+  - BSM:1474「主管排班：排到几点几分，可指定当天工作点位（比如某个服务区、某片保洁区域）」
+  - BSM:833、BSM:819、BSM:863（储值卡、解除黑名单与账户注销三处原句）。
+  核对：node tools/verify-full-admin-page-matrix.mjs 通过；git diff --check 通过。
+  覆盖表 html-prd-coverage.csv 与决策台账不在本组（覆盖表 BSM-0023、BSM-0147、BSM-0304、PGM-0027、PGM-0028、BEQ-0148、BSM-0180 七行落地句由收尾文档组落）。
+- 18BL 收尾复核修正（2026-11-21）：收尾复核意见 1～5 经反驳核实成立，按控制席补充修正；无新裁决、无迁移，新增操作 0 个，改动文件的版本本段已升过、不再升。
+  ① 意见 1（契约说明比现码窄）：schema StoredValueLedgerRow.masked_phone 的说明改为「客人掩码手机号；客人注销或解除黑名单后原账户手机号已清空的为空。」，类型（字符串或空）与 required 不动。客人自助注销（CustomerService.deregisterAccount）与解除黑名单（CustomerService.releaseBlacklistedPhone）都把原账户手机号与掩码手机号置空；StoredValueLedgerService.query 以 LEFT JOIN 取掩码手机号、不按客人状态过滤，历史流水与注销时写入的作废、退卡流水照常返回。储值 PRD §5 现状句与修订表、本节修复项 F09 各处补记同步补「注销」。依据：BSM:863「注销后：客人的姓名、手机号、人脸、证件等个人信息一律删除；」「消费记录、支付流水、退款记录等钱账留存」；BSM:819「解除后原账户保持已关闭，该手机号自解除时起允许重新注册。」
+  ② 意见 2（台账文字）：修复项 F06 改法括号里「后台建台位不收铺位」改为与代码注释同一说法「没挂空间的台位（建台位必选空间之前建的，或不经后台接口写入的）」；第 380 条 380-R3 第①～③点与第 388、390 条文档一项，由「留给文档组与收尾」改为已落事实（PRD 现状句由 D-docs 落，覆盖表 BSM-0023、BSM-0147、BSM-0304、PGM-0027、PGM-0028、BEQ-0148、BSM-0180 七行落地句由收尾文档组落）；修复项 F10「由文档组落」与 D-docs「覆盖表……不在本组」对齐为由收尾文档组落。依据：BSM:717「酒吧要知道桌台、卡座、吧台属于哪个空间和商户。」；PGM:899「谁发起、谁销售、谁服务、谁第一个处理异常、为什么、谁审批、结果是什么，都要能查到。」
+  ③ 意见 3（前端空断言）：BarTableSessionsPage.guidedcreate.test.tsx「换所属酒吧后按新酒吧重取可选空间，已选空间清空」末尾的下拉 DOM 值断言（受控下拉的选项里没有原空间时 DOM 值也落回空串，清不清空都绿）换成按状态验：换酒吧后不重选空间直接下一步，步内报所属空间必选、不进确认步、不发 POST /api/v1/bar/tables。变异实验（BarTableSessionsPage 换所属酒吧时不清空所属空间）下该用例断言失败，变异已还原。依据：BSM:717；设计 d-bar-g 380-R2 tests ③「已选空间被清空」。
+  ④ 意见 4（后端用例缺口）：SpaceMaintenanceJdbcIntegrationTests.updateSpaceChecksOnlyChangedMerchantAndType 补一步：空间所属商户存档后只把状态改为不可用、merchant_id 照原值带回，200、状态为 unavailable、所属商户不变。变异实验（SpaceMaintenanceService.updateSpace 凡带所属商户都核未存档）下该用例 400 MERCHANT_ARCHIVED 断言失败，变异已还原。主代码不改。依据：BSM:569「存档（先下线）：配错了或暂时不用，点"存档"就从各处的选择列表里隐藏，不再被新业务选用；但历史照样能查、能对账。」；设计 388-R1「改了的所属商户须未存档（沿用原值不核）」。
+  ⑤ 意见 5（日结页说法与代码不符）：酒吧 PRD §4 现状句、覆盖表 BSM-0147 落地句、本节第 415 条与汇合段里「所属酒吧」下拉的涉及页去掉「日结」，改写为「日结与收银班页对挂商户的账号原已直接显示本人商户编号、不经下拉」（FinanceDailyClosePanel 对挂商户的账号只显示「范围对象：商户编号」，BarShiftPanel 显示「酒吧：商户编号」，都不渲染 BarVenueSelect）；FinanceDailyClosePanel 那处不起作用的 merchantId 传参按控制席定保留、不改代码。依据：BSM:1017「各处填写「所属酒吧」时从已引进的酒吧商户里下拉选择，不再手工输入。」
+  ⑥ 契约说明改动后，security-scans 两份 md 的 OpenAPI SHA-256 行按最终 openapi-p0.json 重算；verify:operation-matrix、verify:openapi-closure 校验一致，yaml 与 json 深比较一致。
+- 18BL 合并前变基（2026-11-22）：本段自 6068f50e 变基到 origin/main 2969331f；迁移按原序顺延改号 V688→V729；合并时 OpenAPI 共 1412 个操作（主干 1409）、info.version V1.00、决策台账 V1.28，Flyway 最新 V729（共 626 个迁移）。版本行、契约版本、计数与 SHA、生成物、台账补记与 PRD 修订行由合并前脚本按新主干统一重写。
+- 18BL 落地位置补记·运行验收证据、快照、终验文档刷新（无新裁决）：业务提交 7402d2f5 之后，按第十八批裁决 25 重刷了运行验收证据：后端全量 7265 测，0 失败 0 错误；apps/web 构建通过；常规界面验收（接口全部 mock）实跑 40 条全过；真实后端界面验收未跑，runtime_ready=false。随后依次重生成闭环当前态快照、生产闭环缺口报告、界面验收报告、无上线指挥台。生成器没改。手改 docs/final-closed-loop-acceptance-audit-v0.1.md 与 docs/code-implementation-acceptance-audit-v0.1.md：前端单测源码计数改为 2048；被核文件行数都没变；后端全量与常规界面验收的数字、日期改为本次实跑值；写入 npm run verify:unit 实跑结果，五个工作区全过。交付门禁于 2026-11-21 17:09 UTC 在工作树逐项实跑子项，NAS 两项现场探测未跑。仍红的有两项：一是 coding-host-protection，它写死主仓路径，在工作树口径下必红，属工具口径，不做；二是 final-closed-loop-audit，如实留 2 条红（integration-ready、business-acceptance-ready），原因是校验器要求终验把联调、业务验收写成「是」，而裁决 25 定了不跑真实后端界面验收、运行验收未就绪，终验写的是「否」。verify:delivery-gates 总链仍是红的。

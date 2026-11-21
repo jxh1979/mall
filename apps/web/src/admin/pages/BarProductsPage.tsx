@@ -433,7 +433,7 @@ export function BarProductsPage({ api, user, setActionResult, setGlobalError, ef
               validate: () => (categoryForm.barId.trim() && categoryForm.categoryName.trim() ? null : "酒吧、分类名必填"),
               content: (
                 <>
-                  <label><span>所属酒吧</span><BarVenueSelect api={api} testId="bar-category-bar-id" value={categoryForm.barId} onChange={(v) => setCategoryField("barId", v)} setGlobalError={setGlobalError} /></label>
+                  <label><span>所属酒吧</span><BarVenueSelect api={api} testId="bar-category-bar-id" value={categoryForm.barId} onChange={(v) => setCategoryField("barId", v)} setGlobalError={setGlobalError} merchantId={user.merchantId} /></label>
                   <label><span>分类名</span><input data-testid="bar-category-name" value={categoryForm.categoryName} onChange={(e) => setCategoryField("categoryName", e.target.value)} /></label>
                   <label><span>排序（小在前）</span><input data-testid="bar-category-sort" inputMode="numeric" value={categoryForm.sortOrder} onChange={(e) => setCategoryField("sortOrder", e.target.value)} /></label>
                 </>
@@ -498,7 +498,7 @@ export function BarProductsPage({ api, user, setActionResult, setGlobalError, ef
               validate: () => (form.barId.trim() && form.productName.trim() && form.category.trim() ? null : "酒吧、商品名、类别必填"),
               content: (
                 <>
-                  <label><span>所属酒吧</span><BarVenueSelect api={api} testId="bar-product-bar-id" value={form.barId} onChange={(v) => setField("barId", v)} setGlobalError={setGlobalError} /></label>
+                  <label><span>所属酒吧</span><BarVenueSelect api={api} testId="bar-product-bar-id" value={form.barId} onChange={(v) => setField("barId", v)} setGlobalError={setGlobalError} merchantId={user.merchantId} /></label>
                   <label><span>商品名</span><input data-testid="bar-product-name" value={form.productName} onChange={(e) => setField("productName", e.target.value)} /></label>
                   <label><span>类别</span><select data-testid="bar-product-category" value={form.category} onChange={(e) => setField("category", e.target.value)}>
                     {Object.entries(CATEGORY_LABELS).map(([code, label]) => <option key={code} value={code}>{label}</option>)}

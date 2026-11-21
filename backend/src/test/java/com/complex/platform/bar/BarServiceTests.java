@@ -1,6 +1,6 @@
 package com.complex.platform.bar;
 
-// 文件版本：V0.22
+// 文件版本：V0.23
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
@@ -300,13 +300,13 @@ class BarServiceTests {
     }
 
     @Test
-    void createTableSessionForPlatformDirectFillsNonNullMerchantPlaceholder() {
-        // 平台直营开台（平台管理员 + 桌台 merchant 为空）：会话 merchant_id 落 __platform__ 占位，
-        // 满足 bar_table_sessions.merchant_id NOT NULL 约束（此前直插 null 触发 500）。
+    void platformAdminCreatedTableBelongsToTheBarMerchant() {
+        // 第十八批 BL 段第 389 条 389-R1（BSM:1017「桌台、商品、分类、套餐等都归属到具体的酒吧商户」）：平台管理员建的台位归所选酒吧，
+        // 开台会话随之取该酒吧（会话的 __platform__ 占位兜底照留，只剩不经接口写入的台位会走到）。
         BarTableRecord table = createTable("platform-open", "bar_1", "active", 50000L);
-        assertThat(table.merchantId()).isNull();
+        assertThat(table.merchantId()).isEqualTo("bar_1");
         BarTableSessionRecord session = createSession("platform-open", table.id(), "bar_1", null);
-        assertThat(session.merchantId()).isEqualTo("__platform__");
+        assertThat(session.merchantId()).isEqualTo("bar_1");
         // 第十八批 N 段 124-R2a：开台落 OpenAPI 声明名
         assertThat(auditEventRepository.events).extracting(AuditEvent::eventName).contains("bar.table_session.create");
     }

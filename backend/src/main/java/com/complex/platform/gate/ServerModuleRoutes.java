@@ -1,6 +1,6 @@
 package com.complex.platform.gate;
 
-// 文件版本：V0.10
+// 文件版本：V0.11
 
 import java.util.Arrays;
 import java.util.Comparator;
@@ -147,6 +147,9 @@ final class ServerModuleRoutes {
                     Map.entry("/api/v1/platform/merchants/{merchant_id}/pour-loss-rate", "governance"),
                     Map.entry("/api/v1/platform/merchants/{merchant_id}/staff-booking-no-show-limit", "governance"),
                     Map.entry("/api/v1/platform/merchants/{merchant_id}/table-transfer-limit", "governance"),
+                    // 第十八批 BL 段第 388 条：新建、修改空间只有集团/综合体拓扑页调（列表被治理、招商、能耗、营业时间共用，不判）。
+                    Map.entry("POST /api/v1/platform/spaces", "governance"),
+                    Map.entry("PUT /api/v1/platform/spaces/{space_id}", "governance"),
                     Map.entry("/api/v1/platform/space-types", "governance"),
                     Map.entry("/api/v1/platform/supervisor-review", "governance"),
                     Map.entry("/api/v1/platform/supervisor-review-policies", "governance"),
