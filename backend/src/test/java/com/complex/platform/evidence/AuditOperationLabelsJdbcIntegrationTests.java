@@ -1,6 +1,6 @@
 package com.complex.platform.evidence;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -58,6 +58,9 @@ class AuditOperationLabelsJdbcIntegrationTests {
 
     @Autowired
     private ObjectMapper objectMapper;
+
+    @Autowired
+    private com.complex.platform.common.BusinessDayResolver businessDays;
 
     @Test
     void operationRowsOfARealUpdateHaveChineseLabels() throws Exception {
@@ -183,7 +186,9 @@ class AuditOperationLabelsJdbcIntegrationTests {
         String admin = "Bearer " + adminToken();
         mockMvc.perform(post("/api/v1/settlement/config/commission-rate").with(financeA).contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(Map.of(
-                                "idempotency_key", "audit-labels-cfg-" + suffix, "role_type", "sales", "rate_bp", 1200))))
+                                "idempotency_key", "audit-labels-cfg-" + suffix, "role_type", "sales", "rate_bp", 1200,
+                                // 第十八批 BQ 段第 371 条 371-R1：生效起始日期必填（全平台默认行按平台默认营业日，次日）。
+                                "effective_from", businessDays.businessDate(null, null, java.time.Instant.now()).plusDays(1).toString()))))
                 .andExpect(status().isOk());
         String draftId = jdbcTemplate.queryForObject(
                 "SELECT id FROM bar_commission_rate_configs WHERE is_draft = TRUE AND status = 'active' AND updated_by = ?", String.class, drafter);

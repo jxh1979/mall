@@ -1,6 +1,6 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -45,6 +45,8 @@ class SettlementComboRoundingEndingsWeb292R1Tests {
     @Autowired private JdbcTemplate jdbc;
     @Autowired private ObjectMapper json;
     @Autowired private ComboPriceToleranceConfigPort roundingPort;
+    @Autowired private com.complex.platform.common.BusinessDayResolver businessDays;
+    @Autowired private SettlementConfigScheduledActivationService activation;
 
     private final String s = String.valueOf(System.nanoTime());
     private String project;
@@ -93,6 +95,8 @@ class SettlementComboRoundingEndingsWeb292R1Tests {
         body.put("rounding_tolerance_cent", 500);
         body.put("rounding_tolerance_min_cent", 0);
         body.put("rounding_tolerance_max_cent", 1000);
+        // 第十八批 BQ 段第 371 条 371-R1：生效起始日期必填（全平台一行按平台默认营业日，次日）。
+        body.put("effective_from", businessDays.businessDate(null, null, java.time.Instant.now()).plusDays(1).toString());
         if (endings != null) {
             body.put("rounding_allowed_endings", endings);
         }
@@ -105,6 +109,7 @@ class SettlementComboRoundingEndingsWeb292R1Tests {
                 + " WHERE project_id IS NULL AND is_draft = TRUE AND status = 'active'", String.class);
         mockMvc.perform(post("/api/v1/settlement/config/combo_discount/" + draftId + "/activate").with(reviewer))
                 .andExpect(status().isOk());
+        activation.activateDue(java.time.Instant.now().plus(java.time.Duration.ofDays(1)));   // 371-R1：批准后待生效，到次日转正
     }
 
     private String overviewValue() throws Exception {

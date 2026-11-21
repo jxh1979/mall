@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "综合体管理系统 P0 API 契约",
-    "version": "V0.97",
+    "version": "V0.98",
     "description": "P0 首批编码前置契约。本文采用 JSON-compatible YAML，便于与 openapi-p0.json 保持一致。正式后端以 Java 21 + Spring Boot 4.x + springdoc-openapi 输出运行时 OpenAPI，并与本契约比对。"
   },
   "servers": [
@@ -19909,7 +19909,7 @@
         ],
         "operationId": "publishTicketType",
         "summary": "发布票种",
-        "description": "第十八批 AH 段 215-R1（ENUM「通票赠酒下限」条「一张酒吧通票或跨域组合通票覆盖的每一家酒吧，赠酒杯数不得低于后台配置的最低赠酒杯数（业务参数，按票种可配，出厂默认 1 杯，须同时配置上下限），各酒吧分别赠几杯在售票时写明票面，低于该下限的票种不得发布上架」「该最低赠酒杯数属于票面强制要求提供的权益，一律记为域主管公司出资」）：bar_id 为空的通票，覆盖的每家酒吧（绑定了该吧入场类权益的酒吧）赠饮杯数（票面价 0 的 gift_drink，份数×次数）不得少于最低杯数×max(1, 该吧入场次数)，否则 409 PASS_BAR_GIFT_COVERAGE_INSUFFICIENT（点名还差的酒吧）；带票面价的兑换券不计；不含赠酒的通票不再放行；单店票（bar_id 非空）不套。最低杯数以内的赠饮须平台出资型（cost_bearer platform_funded），否则 409 PASS_BAR_GIFT_FLOOR_NOT_PLATFORM_FUNDED；超出部分可标商户让利。最低杯数见 GET /api/v1/ticketing/ticket-types/{id}/min-gift-cups（没配过为出厂 1 杯）。 第十八批 AI 段 236-R2（第十八批裁决 52 ①；ENUM:54「任何商户在没有获批内部结算价之前，不得为其开通需要该价格结算的权益或券。」；BSM:1754「每项权益都必须绑定实际提供方和审批版本，避免悬空账。」）：票内须提供方兑付、核销时按内部结算价结算的权益（赠饮、实物、专属直付；专属直付且商户让利型的除外），其提供方（模板商户，空则专属商户）在内部结算价目录里没有获批生效价（目录草案须他人复核转正）的，409 TICKET_ENTITLEMENT_PRICE_NOT_APPROVED 拒绝发布并点名权益；这道闸在赠酒下限闸之后、凑整误差闸之前。 第十八批 AJ 段 236-R3（第十八批裁决 52 ②；ENUM:32「跨域组合通票的定价与域间结算规则由项目之上的平台权限统一审批」；BSM:754「每次发布时把凑整差额金额及各域分摊数额记入票种规则版本、发布后不得再改」）：请求体为 TicketTypePublishRequest（idempotency_key、reason 必填，final_approver_id 可空）。跨域组合通票＝bar_id 为空、有价权益（component_price_cent 大于 0）的提供方按业态折成域主管公司（酒吧归娱乐平台公司，游乐归游乐公司，演出传媒归传媒公司，餐饮与零售归城市项目公司，其他业态按商户档案主管公司）后分属两家及以上，零元权益不计（BSM:749）。未上架的跨域组合通票闸全过后不直接上架：把三档价、折扣、权益组成、最低赠酒杯数、凑整差额与各域分摊记成一版票种规则（见 listTicketTypeRuleVersions），提交项目之上的平台权限审批（复核策略 ticket.type.rule.publish，specific_role，最终审批人须经角色持有 ticket.product.publish.approve；出厂按涉钱审批时限 1 个工作日），返回 status 仍为 draft；审批通过即在同一事务里上架（status published、该版 effective）；驳回则该版退回草稿（保留 review_id）、票仍为草稿，可改后再发布或撤回。final_approver_id 为最终审批人用户 id，跨域组合通票必填：未填 400 VALIDATION_FAILED「跨域组合通票须指定最终审批人（项目之上的平台权限）」；该人不存在或已停用 400 VALIDATION_FAILED；该人须能看全部项目（平台管理员，或经勾了「可以查看全部项目」的角色持有 ticket.product.publish.approve），否则 400 VALIDATION_FAILED「跨域组合通票的定价与域间结算规则须由项目之上的平台权限审批，最终审批人须能看全部项目」；须经角色持有 ticket.product.publish.approve，否则 400 FINAL_APPROVER_LACKS_ROLE；须在提交人的直接上级链上，否则 400 FINAL_APPROVER_NOT_IN_CHAIN（系统补全从提交人到该人之间的全部直接上级节点逐级审批，PGM:528）；提交人不得自批（审批时 403 SUPERVISOR_SELF_REVIEW_FORBIDDEN）。该票规则已提交审批、尚无结论时再发布 409 TICKET_RULE_VERSION_PENDING「这张票的规则已提交审批，须先撤回提交再改」（须先经 withdrawTicketTypeRuleVersion 撤回）；复核未进入待审 409 TICKET_RULE_APPROVAL_REQUIRED「票种规则须进入审批，不得直接生效」。非跨域票种（单店门票、酒吧通票、纯游乐票、演出票等）照旧闸全过即上架，不填 final_approver_id、不建版本。成功留痕 ticket_price.published 在这次提交了审批时元数据另带 rule_version_id、rule_version_status（pending_review）。 第十八批 AJ 段 236-R7（第十八批裁决 61「改动另存一份草稿版审批，审批期间照旧版卖，获批后自动换成新版」）：已上架跨域组合通票有草稿版时，用草稿内容（草稿价、草稿组成、草稿最低赠酒杯数）跑全部发布闸（失败码同现行发布闸：TICKET_TYPE_ENTITLEMENT_REQUIRED、TICKET_TYPE_SERVICE_FEE_REQUIRED、TICKET_COMPONENT_PRICE_REQUIRED、TICKET_COST_BEARER_REQUIRED、PASS_BAR_GIFT_COVERAGE_INSUFFICIENT、PASS_BAR_GIFT_FLOOR_NOT_PLATFORM_FUNDED、TICKET_ENTITLEMENT_PRICE_NOT_APPROVED、TICKET_PRICE_OUT_OF_TOLERANCE、TICKET_PRICE_ENDING_NOT_ALLOWED 等）后提交同一审批（须带 final_approver_id，审批人要求同上），返回票种仍为 published、现表与售卖不变；获批后在审批同一事务里自动换成新版（三档价、折扣、草稿新增权益、最低赠酒杯数套回现表，原生效版置 superseded），无需再发布。已上架且没有草稿版的票种再发布照现行。 第十八批 AS 段第 297 条 297-R1（第十八批裁决 63「跨域组合通票的派生价、动态价规则也要经项目之上的平台权限审批，并记入票种规则版本。」）：版本另记派生价与动态价两份清单——price_rules 为该票种全部派生价（含已存档，不含已删），dynamic_pricing_rules 为已发布的动态价与本版经 publishTicketDynamicPricingRule 存入的草稿动态价——随提交一并审批；获批时版本里现表没有的派生价写入现表（status active），版本里仍为草稿的动态价置 published。派生价存档与取消存档、动态价新建草稿与试算不进审批。297-R3（BSM:576「持授权 U 盘密钥的最高权限本人发起的操作，不需要经过任何审批。」；第十八批裁决 71）：持授权 U 盘密钥的最高权限本人提交跨域组合通票首次发布或规则草稿版时，不必填 final_approver_id（填了也不用）、不建复核单，本版立即生效（首次发布即上架，响应 status 为 published；已上架的即换成新版），留痕 ticket_type.rule_version.approved（业务类型 ticket_type_rule_version，对象为该版本，元数据 ticket_type_id、version_no、master_self_initiated=true），此时成功留痕 ticket_price.published 不带 rule_version_id；其余账号照旧须填，缺则 400 VALIDATION_FAILED。票种不存在 404 TICKET_TYPE_NOT_FOUND。 第十八批 AW 段第 294 条 294-R1（BSM:755「票种发布前必须先选定按比例还是按固定金额并填入数值，未选定或未填写的票种不得发布上架」）：单一酒吧门票（bar_id 非空）的每个售卖项目都须有本项目、本酒吧、票种为空或为本票种、生效且已转正的综合服务费行（结算配置中心；项目默认行与全平台默认行不算），否则 409 TICKET_TYPE_SERVICE_FEE_REQUIRED（点名缺的项目）；这道闸在至少一个权益（TICKET_TYPE_ENTITLEMENT_REQUIRED）之后、各业态价格（TICKET_COMPONENT_PRICE_REQUIRED）之前。第十八批 AW 段第 341 条 341-R1（BSM:754「使最终售价为整数，且尾数落在后台配置的允许尾数集合内」）：凑整误差闸另查尾数——在允许误差内、填的平日价不等于算出价，且不是整元或元位尾数不在后台配置的允许尾数集合内时 400 TICKET_PRICE_ENDING_NOT_ALLOWED，报文如「凑整后的售价须为整元且尾数为 0、8、9 之一（按后台配置），票不能开卖：填的是 175.00 元，凑整可填 178.00 元」；只卡平日价。",
+        "description": "第十八批 AH 段 215-R1（ENUM「通票赠酒下限」条「一张酒吧通票或跨域组合通票覆盖的每一家酒吧，赠酒杯数不得低于后台配置的最低赠酒杯数（业务参数，按票种可配，出厂默认 1 杯，须同时配置上下限），各酒吧分别赠几杯在售票时写明票面，低于该下限的票种不得发布上架」「该最低赠酒杯数属于票面强制要求提供的权益，一律记为域主管公司出资」）：bar_id 为空的通票，覆盖的每家酒吧（绑定了该吧入场类权益的酒吧）赠饮杯数（票面价 0 的 gift_drink，份数×次数）不得少于最低杯数×max(1, 该吧入场次数)，否则 409 PASS_BAR_GIFT_COVERAGE_INSUFFICIENT（点名还差的酒吧）；带票面价的兑换券不计；不含赠酒的通票不再放行；单店票（bar_id 非空）不套。最低杯数以内的赠饮须平台出资型（cost_bearer platform_funded），否则 409 PASS_BAR_GIFT_FLOOR_NOT_PLATFORM_FUNDED；超出部分可标商户让利。最低杯数见 GET /api/v1/ticketing/ticket-types/{id}/min-gift-cups（没配过为出厂 1 杯）。 第十八批 AI 段 236-R2（第十八批裁决 52 ①；ENUM:54「任何商户在没有获批内部结算价之前，不得为其开通需要该价格结算的权益或券。」；BSM:1754「每项权益都必须绑定实际提供方和审批版本，避免悬空账。」）：票内须提供方兑付、核销时按内部结算价结算的权益（赠饮、实物、专属直付；专属直付且商户让利型的除外），其提供方（模板商户，空则专属商户）在内部结算价目录里没有获批生效价（目录草案须他人复核转正）的，409 TICKET_ENTITLEMENT_PRICE_NOT_APPROVED 拒绝发布并点名权益；这道闸在赠酒下限闸之后、凑整误差闸之前。 第十八批 AJ 段 236-R3（第十八批裁决 52 ②；ENUM:32「跨域组合通票的定价与域间结算规则由项目之上的平台权限统一审批」；BSM:754「每次发布时把凑整差额金额及各域分摊数额记入票种规则版本、发布后不得再改」）：请求体为 TicketTypePublishRequest（idempotency_key、reason 必填，final_approver_id 可空）。跨域组合通票＝bar_id 为空、有价权益（component_price_cent 大于 0）的提供方按业态折成域主管公司（酒吧归娱乐平台公司，游乐归游乐公司，演出传媒归传媒公司，餐饮与零售归城市项目公司，其他业态按商户档案主管公司）后分属两家及以上，零元权益不计（BSM:749）。未上架的跨域组合通票闸全过后不直接上架：把三档价、折扣、权益组成、最低赠酒杯数、凑整差额与各域分摊记成一版票种规则（见 listTicketTypeRuleVersions），提交项目之上的平台权限审批（复核策略 ticket.type.rule.publish，specific_role，最终审批人须经角色持有 ticket.product.publish.approve；出厂按涉钱审批时限 1 个工作日），返回 status 仍为 draft；审批通过即在同一事务里上架（status published、该版 effective）；驳回则该版退回草稿（保留 review_id）、票仍为草稿，可改后再发布或撤回。final_approver_id 为最终审批人用户 id，跨域组合通票必填：未填 400 VALIDATION_FAILED「跨域组合通票须指定最终审批人（项目之上的平台权限）」；该人不存在或已停用 400 VALIDATION_FAILED；该人须能看全部项目（平台管理员，或经勾了「可以查看全部项目」的角色持有 ticket.product.publish.approve），否则 400 VALIDATION_FAILED「跨域组合通票的定价与域间结算规则须由项目之上的平台权限审批，最终审批人须能看全部项目」；须经角色持有 ticket.product.publish.approve，否则 400 FINAL_APPROVER_LACKS_ROLE；须在提交人的直接上级链上，否则 400 FINAL_APPROVER_NOT_IN_CHAIN（系统补全从提交人到该人之间的全部直接上级节点逐级审批，PGM:528）；提交人不得自批（审批时 403 SUPERVISOR_SELF_REVIEW_FORBIDDEN）。该票规则已提交审批、尚无结论时再发布 409 TICKET_RULE_VERSION_PENDING「这张票的规则已提交审批，须先撤回提交再改」（须先经 withdrawTicketTypeRuleVersion 撤回）；复核未进入待审 409 TICKET_RULE_APPROVAL_REQUIRED「票种规则须进入审批，不得直接生效」。非跨域票种（单店门票、酒吧通票、纯游乐票、演出票等）照旧闸全过即上架，不填 final_approver_id、不建版本。成功留痕 ticket_price.published 在这次提交了审批时元数据另带 rule_version_id、rule_version_status（pending_review）。 第十八批 AJ 段 236-R7（第十八批裁决 61「改动另存一份草稿版审批，审批期间照旧版卖，获批后自动换成新版」）：已上架跨域组合通票有草稿版时，用草稿内容（草稿价、草稿组成、草稿最低赠酒杯数）跑全部发布闸（失败码同现行发布闸：TICKET_TYPE_ENTITLEMENT_REQUIRED、TICKET_TYPE_SERVICE_FEE_REQUIRED、TICKET_COMPONENT_PRICE_REQUIRED、TICKET_COST_BEARER_REQUIRED、PASS_BAR_GIFT_COVERAGE_INSUFFICIENT、PASS_BAR_GIFT_FLOOR_NOT_PLATFORM_FUNDED、TICKET_ENTITLEMENT_PRICE_NOT_APPROVED、TICKET_PRICE_OUT_OF_TOLERANCE、TICKET_PRICE_ENDING_NOT_ALLOWED 等）后提交同一审批（须带 final_approver_id，审批人要求同上），返回票种仍为 published、现表与售卖不变；获批后在审批同一事务里自动换成新版（三档价、折扣、草稿新增权益、最低赠酒杯数套回现表，原生效版置 superseded），无需再发布。已上架且没有草稿版的票种再发布照现行。 第十八批 AS 段第 297 条 297-R1（第十八批裁决 63「跨域组合通票的派生价、动态价规则也要经项目之上的平台权限审批，并记入票种规则版本。」）：版本另记派生价与动态价两份清单——price_rules 为该票种全部派生价（含已存档，不含已删），dynamic_pricing_rules 为已发布的动态价与本版经 publishTicketDynamicPricingRule 存入的草稿动态价——随提交一并审批；获批时版本里现表没有的派生价写入现表（status active），版本里仍为草稿的动态价置 published。派生价存档与取消存档、动态价新建草稿与试算不进审批。297-R3（BSM:576「持授权 U 盘密钥的最高权限本人发起的操作，不需要经过任何审批。」；第十八批裁决 71）：持授权 U 盘密钥的最高权限本人提交跨域组合通票首次发布或规则草稿版时，不必填 final_approver_id（填了也不用）、不建复核单，本版立即生效（首次发布即上架，响应 status 为 published；已上架的即换成新版），留痕 ticket_type.rule_version.approved（业务类型 ticket_type_rule_version，对象为该版本，元数据 ticket_type_id、version_no、master_self_initiated=true），此时成功留痕 ticket_price.published 不带 rule_version_id；其余账号照旧须填，缺则 400 VALIDATION_FAILED。票种不存在 404 TICKET_TYPE_NOT_FOUND。 第十八批 AW 段第 294 条 294-R1（BSM:755「票种发布前必须先选定按比例还是按固定金额并填入数值，未选定或未填写的票种不得发布上架」）：单一酒吧门票（bar_id 非空）的每个售卖项目都须有本项目、本酒吧、票种为空或为本票种、生效且已转正的综合服务费行（结算配置中心；项目默认行与全平台默认行不算；第十八批 BQ 段第 371 条 371-R1 起，已批准待生效、未到生效起始日期的本酒吧行也不算），否则 409 TICKET_TYPE_SERVICE_FEE_REQUIRED（点名缺的项目，报错末句为「复核转正并到生效起始日期后才能上架」）；这道闸在至少一个权益（TICKET_TYPE_ENTITLEMENT_REQUIRED）之后、各业态价格（TICKET_COMPONENT_PRICE_REQUIRED）之前。第十八批 AW 段第 341 条 341-R1（BSM:754「使最终售价为整数，且尾数落在后台配置的允许尾数集合内」）：凑整误差闸另查尾数——在允许误差内、填的平日价不等于算出价，且不是整元或元位尾数不在后台配置的允许尾数集合内时 400 TICKET_PRICE_ENDING_NOT_ALLOWED，报文如「凑整后的售价须为整元且尾数为 0、8、9 之一（按后台配置），票不能开卖：填的是 175.00 元，凑整可填 178.00 元」；只卡平日价。",
         "x-permission": "ticket.product.manage",
         "x-data-scope": "project",
         "x-terminal-allowed": [
@@ -65222,7 +65222,7 @@
         ],
         "operationId": "settlementConfigOverview",
         "summary": "结算配置中心总览",
-        "description": "平台默认生效配置 + 待复核草案队列(全部结算配置表 UNION)。 第十八批 AW 段第 293 条 293-R1、第 339 条 339-R1：platform_defaults 不再有 combo_discount_bearer（套票折扣归属）；key 为 rounding_tolerance_cent 的一项 label 为「通票凑整允许误差」，value 为「x 元（下限 a 元～上限 b 元）」，上下限未配置时为「x 元（上下限未配置）」；草案队列 config_group 为 combo_discount 的 summary 为「project=__DEFAULT__ 凑整允许误差 N分（下限 a分～上限 b分） 允许尾数 …」，上下限未配置处显示 —。",
+        "description": "平台默认生效配置 + 待复核草案队列(全部结算配置表 UNION)。 第十八批 AW 段第 293 条 293-R1、第 339 条 339-R1：platform_defaults 不再有 combo_discount_bearer（套票折扣归属）；key 为 rounding_tolerance_cent 的一项 label 为「通票凑整允许误差」，value 为「x 元（下限 a 元～上限 b 元）」，上下限未配置时为「x 元（上下限未配置）」；草案队列 config_group 为 combo_discount 的 summary 为「project=__DEFAULT__ 凑整允许误差 N分（下限 a分～上限 b分） 允许尾数 …」，上下限未配置处显示 —。 第十八批 BQ 段第 371 条 371-R1、371-R3：草案队列 config_group 为 distribution_method、comprehensive_service_fee、combo_discount、channel_fee、commission_rate、pass_gift_cost、high_value_threshold 的 summary 末尾另带「 生效起=YYYY-MM-DD」（该草案的生效起始日期）；响应结构不变。",
         "x-auth-context": "staff-token",
         "x-permission": "settlement.config.view",
         "x-data-scope": "platform",
@@ -65254,7 +65254,7 @@
         ],
         "operationId": "settlementConfigUpsertDistributionMethod",
         "summary": "维护通票分配方式(草案)",
-        "description": "结算配置中心批1:落草案(is_draft=TRUE,不动生效行),须经差人复核转正后生效。第 75 条(ENUM:52「初始有效期不超过后台配置的上限（业务参数，按项目可配，出厂默认三个月，须同时配置上下限）」):短期经营激励单次有效期上限=special_approval_term_value+special_approval_term_unit(day/month),连同该参数的下限 special_approval_term_min_value、上限 special_approval_term_max_value(同一单位)四项同时必填,1≤下限≤数值≤上限,否则 400 VALIDATION_FAILED;项目特例优先、否则全局默认(出厂 3 个月)。",
+        "description": "结算配置中心批1:落草案(is_draft=TRUE,不动生效行),须经差人复核转正后生效。第 75 条(ENUM:52「初始有效期不超过后台配置的上限（业务参数，按项目可配，出厂默认三个月，须同时配置上下限）」):短期经营激励单次有效期上限=special_approval_term_value+special_approval_term_unit(day/month),连同该参数的下限 special_approval_term_min_value、上限 special_approval_term_max_value(同一单位)四项同时必填,1≤下限≤数值≤上限,否则 400 VALIDATION_FAILED;项目特例优先、否则全局默认(出厂 3 个月)。 第十八批 BQ 段第 371 条 371-R1（BSM:521「必须填写生效起始日期，并先存为草案、经高敏权限“转正”审批通过后按指定日期生效，不即改即生效」；ENUM:187 按营业日）：effective_from（生效起始日期，年-月-日）必填，缺了 400 VALIDATION_FAILED（effective_from is required）；不是有效日期 400 VALIDATION_FAILED「生效起始日期须为有效日期」；不晚于该配置范围当前营业日（填了 project_id 按该综合体营业日，空即全平台行按平台默认营业日） 400 VALIDATION_FAILED「生效起始日期须晚于今天（按营业日）」。复核批准（settlementConfigActivateDraft）后待生效（status=scheduled，生效值不变），到生效起始日期（按营业日）由系统转正，同范围旧生效行软替换 inactive 留库；同一范围同一生效日后批准的覆盖先批准的。成功留痕元数据另带 effective_from。",
         "x-auth-context": "staff-token",
         "x-permission": "settlement.config.manage",
         "x-data-scope": "platform",
@@ -65297,6 +65297,11 @@
                   "special_approval_term_max_value": {
                     "type": "integer",
                     "minimum": 1
+                  },
+                  "effective_from": {
+                    "type": "string",
+                    "format": "date",
+                    "description": "生效起始日期（年-月-日，必填），须晚于该配置范围当前营业日；复核批准后待生效，到该日由系统转正（第十八批 BQ 段第 371 条 371-R1）。"
                   }
                 },
                 "required": [
@@ -65305,7 +65310,8 @@
                   "special_approval_term_value",
                   "special_approval_term_unit",
                   "special_approval_term_min_value",
-                  "special_approval_term_max_value"
+                  "special_approval_term_max_value",
+                  "effective_from"
                 ]
               }
             }
@@ -65405,7 +65411,7 @@
         ],
         "operationId": "settlementConfigUpsertComprehensiveServiceFee",
         "summary": "维护门票综合服务费(草案)",
-        "description": "结算配置中心批1:落草案(is_draft=TRUE,不动生效行),须经差人复核转正后生效。",
+        "description": "结算配置中心批1:落草案(is_draft=TRUE,不动生效行),须经差人复核转正后生效。 第十八批 BQ 段第 371 条 371-R1（BSM:521「必须填写生效起始日期，并先存为草案、经高敏权限“转正”审批通过后按指定日期生效，不即改即生效」；ENUM:187 按营业日）：effective_from（生效起始日期，年-月-日）必填，缺了 400 VALIDATION_FAILED（effective_from is required）；不是有效日期 400 VALIDATION_FAILED「生效起始日期须为有效日期」；不晚于该配置范围当前营业日（填了 merchant_id 按该商户营业日，酒吧按该酒吧、其余商户按所属综合体；只填 project_id 按该综合体营业日；都空按平台默认营业日） 400 VALIDATION_FAILED「生效起始日期须晚于今天（按营业日）」。复核批准（settlementConfigActivateDraft）后待生效（status=scheduled，生效值不变），到生效起始日期（按营业日）由系统转正，同范围旧生效行软替换 inactive 留库；同一范围同一生效日后批准的覆盖先批准的。成功留痕元数据另带 effective_from。",
         "x-auth-context": "staff-token",
         "x-permission": "settlement.config.manage",
         "x-data-scope": "platform",
@@ -65447,11 +65453,17 @@
                     "format": "int64",
                     "description": "月度封顶金额（分；可空，空表示不封顶）。",
                     "minimum": 0
+                  },
+                  "effective_from": {
+                    "type": "string",
+                    "format": "date",
+                    "description": "生效起始日期（年-月-日，必填），须晚于该配置范围当前营业日；复核批准后待生效，到该日由系统转正（第十八批 BQ 段第 371 条 371-R1）。"
                   }
                 },
                 "required": [
                   "idempotency_key",
-                  "fee_bps"
+                  "fee_bps",
+                  "effective_from"
                 ]
               }
             }
@@ -65483,7 +65495,7 @@
         ],
         "operationId": "settlementConfigUpsertComboDiscount",
         "summary": "维护通票凑整参数（全平台，草案）",
-        "description": "结算配置中心批1:落草案(is_draft=TRUE,不动生效行),须经差人复核转正后生效。 第十八批 AT 段第 292 条 292-R1：成功留痕元数据另带 rounding_allowed_endings（升序去重的尾数数字串，如 089）。 第十八批 AW 段第 293 条 293-R1、第 339 条 339-R1（BSM:754「允许误差可配（业务参数，全平台统一可配，出厂默认 5 元，须同时配置上下限）」）：不再有套票折扣归属（discount_bearer、split_platform_bps 已删，折扣与凑整差额按各业态价格比例由各域承担）；只配全平台一行，project_id 须空、非空 400 VALIDATION_FAILED；rounding_tolerance_cent、rounding_tolerance_min_cent、rounding_tolerance_max_cent 三项必填（分），须 0 ≤ 下限 ≤ 允许误差 ≤ 上限，缺一或不满足 400 VALIDATION_FAILED。成功留痕元数据为 project_scope、rounding_tolerance_cent、rounding_tolerance_min_cent、rounding_tolerance_max_cent、rounding_allowed_endings。",
+        "description": "结算配置中心批1:落草案(is_draft=TRUE,不动生效行),须经差人复核转正后生效。 第十八批 AT 段第 292 条 292-R1：成功留痕元数据另带 rounding_allowed_endings（升序去重的尾数数字串，如 089）。 第十八批 AW 段第 293 条 293-R1、第 339 条 339-R1（BSM:754「允许误差可配（业务参数，全平台统一可配，出厂默认 5 元，须同时配置上下限）」）：不再有套票折扣归属（discount_bearer、split_platform_bps 已删，折扣与凑整差额按各业态价格比例由各域承担）；只配全平台一行，project_id 须空、非空 400 VALIDATION_FAILED；rounding_tolerance_cent、rounding_tolerance_min_cent、rounding_tolerance_max_cent 三项必填（分），须 0 ≤ 下限 ≤ 允许误差 ≤ 上限，缺一或不满足 400 VALIDATION_FAILED。成功留痕元数据为 project_scope、rounding_tolerance_cent、rounding_tolerance_min_cent、rounding_tolerance_max_cent、rounding_allowed_endings。 第十八批 BQ 段第 371 条 371-R1（BSM:521「必须填写生效起始日期，并先存为草案、经高敏权限“转正”审批通过后按指定日期生效，不即改即生效」；ENUM:187 按营业日）：effective_from（生效起始日期，年-月-日）必填，缺了 400 VALIDATION_FAILED（effective_from is required）；不是有效日期 400 VALIDATION_FAILED「生效起始日期须为有效日期」；不晚于平台默认当前营业日（全平台一行） 400 VALIDATION_FAILED「生效起始日期须晚于今天（按营业日）」。复核批准（settlementConfigActivateDraft）后待生效（status=scheduled，生效值不变），到生效起始日期（按营业日）由系统转正，同范围旧生效行软替换 inactive 留库；同一范围同一生效日后批准的覆盖先批准的。成功留痕元数据另带 effective_from。",
         "x-auth-context": "staff-token",
         "x-permission": "settlement.config.manage",
         "x-data-scope": "platform",
@@ -65535,13 +65547,19 @@
                     "minItems": 1,
                     "uniqueItems": true,
                     "nullable": true
+                  },
+                  "effective_from": {
+                    "type": "string",
+                    "format": "date",
+                    "description": "生效起始日期（年-月-日，必填），须晚于平台默认当前营业日；复核批准后待生效，到该日由系统转正（第十八批 BQ 段第 371 条 371-R1）。"
                   }
                 },
                 "required": [
                   "idempotency_key",
                   "rounding_tolerance_cent",
                   "rounding_tolerance_min_cent",
-                  "rounding_tolerance_max_cent"
+                  "rounding_tolerance_max_cent",
+                  "effective_from"
                 ]
               }
             }
@@ -65573,7 +65591,7 @@
         ],
         "operationId": "settlementConfigUpsertChannelFee",
         "summary": "维护渠道费用(通路费/销售渠道费,草案)",
-        "description": "结算配置中心批1:落草案(is_draft=TRUE,不动生效行),须经差人复核转正后生效。第十八批第 3 条(V555):fee_layer 必填——route=通路费(channel 必填支付通路码,只按比例 fee_bps,所有付款都扣、官方渠道同样扣);sales=销售渠道费(channel=第三方销售渠道码,留空=第三方通用,仅第三方渠道售出的票扣)。销售渠道费可按比例(fee_bps)或每张票固定金额(fixed_amount_cent,分)二选一,配固定金额则 fee_bps 必须为 0。",
+        "description": "结算配置中心批1:落草案(is_draft=TRUE,不动生效行),须经差人复核转正后生效。第十八批第 3 条(V555):fee_layer 必填——route=通路费(channel 必填支付通路码,只按比例 fee_bps,所有付款都扣、官方渠道同样扣);sales=销售渠道费(channel=第三方销售渠道码,留空=第三方通用,仅第三方渠道售出的票扣)。销售渠道费可按比例(fee_bps)或每张票固定金额(fixed_amount_cent,分)二选一,配固定金额则 fee_bps 必须为 0。 第十八批 BQ 段第 371 条 371-R1（BSM:521「必须填写生效起始日期，并先存为草案、经高敏权限“转正”审批通过后按指定日期生效，不即改即生效」；ENUM:187 按营业日）：effective_from（生效起始日期，年-月-日）必填，缺了 400 VALIDATION_FAILED（effective_from is required）；不是有效日期 400 VALIDATION_FAILED「生效起始日期须为有效日期」；不晚于该配置范围当前营业日（填了 project_id 按该综合体营业日，空即全平台行按平台默认营业日） 400 VALIDATION_FAILED「生效起始日期须晚于今天（按营业日）」。复核批准（settlementConfigActivateDraft）后待生效（status=scheduled，生效值不变），到生效起始日期（按营业日）由系统转正，同范围旧生效行软替换 inactive 留库；同一范围同一生效日后批准的覆盖先批准的。成功留痕元数据另带 effective_from。",
         "x-auth-context": "staff-token",
         "x-permission": "settlement.config.manage",
         "x-data-scope": "platform",
@@ -65611,12 +65629,18 @@
                   "fixed_amount_cent": {
                     "type": "integer",
                     "format": "int64"
+                  },
+                  "effective_from": {
+                    "type": "string",
+                    "format": "date",
+                    "description": "生效起始日期（年-月-日，必填），须晚于该配置范围当前营业日；复核批准后待生效，到该日由系统转正（第十八批 BQ 段第 371 条 371-R1）。"
                   }
                 },
                 "required": [
                   "idempotency_key",
                   "fee_layer",
-                  "fee_bps"
+                  "fee_bps",
+                  "effective_from"
                 ]
               }
             }
@@ -65648,7 +65672,7 @@
         ],
         "operationId": "settlementConfigUpsertCommissionRate",
         "summary": "维护卡座销售提成费率(草案)",
-        "description": "结算配置中心 V340(P0-D/CFG-01):按 项目公司 × 商户 × 角色档 配置提成率万分比;落草案(is_draft=TRUE,不动生效行),须经差人复核转正后生效。",
+        "description": "结算配置中心 V340(P0-D/CFG-01):按 项目公司 × 商户 × 角色档 配置提成率万分比;落草案(is_draft=TRUE,不动生效行),须经差人复核转正后生效。 第十八批 BQ 段第 371 条 371-R1（BSM:521「必须填写生效起始日期，并先存为草案、经高敏权限“转正”审批通过后按指定日期生效，不即改即生效」；ENUM:187 按营业日）：effective_from（生效起始日期，年-月-日）必填，缺了 400 VALIDATION_FAILED（effective_from is required）；不是有效日期 400 VALIDATION_FAILED「生效起始日期须为有效日期」；不晚于该配置范围当前营业日（填了 merchant_id 按该商户营业日，酒吧按该酒吧、其余商户按所属综合体；只填 project_id 按该综合体营业日；都空按平台默认营业日） 400 VALIDATION_FAILED「生效起始日期须晚于今天（按营业日）」。复核批准（settlementConfigActivateDraft）后待生效（status=scheduled，生效值不变），到生效起始日期（按营业日）由系统转正，同范围旧生效行软替换 inactive 留库；同一范围同一生效日后批准的覆盖先批准的。成功留痕元数据另带 effective_from。",
         "x-auth-context": "staff-token",
         "x-permission": "settlement.config.manage",
         "x-data-scope": "platform",
@@ -65678,12 +65702,18 @@
                   },
                   "rate_bp": {
                     "type": "integer"
+                  },
+                  "effective_from": {
+                    "type": "string",
+                    "format": "date",
+                    "description": "生效起始日期（年-月-日，必填），须晚于该配置范围当前营业日；复核批准后待生效，到该日由系统转正（第十八批 BQ 段第 371 条 371-R1）。"
                   }
                 },
                 "required": [
                   "idempotency_key",
                   "role_type",
-                  "rate_bp"
+                  "rate_bp",
+                  "effective_from"
                 ]
               }
             }
@@ -66451,7 +66481,7 @@
         ],
         "operationId": "settlementConfigActivateDraft",
         "summary": "复核转正:单行/归属/归因规则草案转正",
-        "description": "差人复核(执行人≠起草人否则403);Path 2 换行(旧生效行软替换 status→inactive)。营业额租金规则已有已复核版本时，变更统一从实际批准月份的次月1日生效，当月沿用旧版，草案手填起日不决定变更日期；初始规则保留填写起日。按系统业务时区判定批准月份；结束日早于实际生效起日时拒绝转正，不改变原规则。第十八批第 24 条：configType=high_value_threshold 一律 403 HIGH_VALUE_THRESHOLD_TOP_AUTHORITY_REQUIRED（高价值判定阈值只经最高权限审批生效，不在此转正）。 第十八批 AW 段第 291 条 291-R1（ENUM:54；PGM:432）：configType=internal_price_item 时审批人须属该条目的域主管公司——提供方为商户的按商户业态定：酒吧归娱乐平台公司（收入归属 all_pass_ticket 的管理主体），游乐归游乐公司（amusement_ticket），演出传媒归传媒公司（performance_ticket），餐饮、零售归本项目城市项目公司（须恰好一家，否则 409 CITY_PROJECT_COMPANY_MISSING），业态为其他的归商户档案上的主管公司；提供方是经营主体的，由该主体内部另一人审批。审批人不属该公司 403 INTERNAL_PRICE_APPROVER_SCOPE（点名应审批的公司）；定不出域主管公司（收入归属或商户档案主管公司未配置）409 REVENUE_STREAM_ATTRIBUTION_MISSING。最高权限不受此限。 第十八批 BA 段第 355 条 355-R1（BSM:521「经高敏权限“转正”审批通过后按指定日期生效，不即改即生效」；BSM:1671「价格变更形成新版本、指定生效时间并只影响后续业务」；ENUM:187 按营业日）：configType=internal_price_item 批准后为待生效（status=scheduled，旧生效价与四处业务快照不变），到生效起始日期（按提供方营业日：商户按该商户营业日，经营主体按平台默认营业日）由系统转正——旧生效行软替换 inactive、本行生效、同一事务同步四处业务快照；同一生效日后批准的覆盖先批准的。批准时生效起始日期已不晚于提供方当前营业日 409 INTERNAL_PRICE_EFFECTIVE_DATE_PASSED「生效起始日期已到，请改期后重新提交草案」（草案不动）；最高权限免他人复核但不免生效日期。成功事件 settlement.config.draft.activated 元数据记 config_group=internal_price_catalog 与 effective_from。",
+        "description": "差人复核(执行人≠起草人否则403);Path 2 换行(旧生效行软替换 status→inactive)。营业额租金规则已有已复核版本时，变更统一从实际批准月份的次月1日生效，当月沿用旧版，草案手填起日不决定变更日期；初始规则保留填写起日。按系统业务时区判定批准月份；结束日早于实际生效起日时拒绝转正，不改变原规则。第十八批第 24 条：configType=high_value_threshold 一律 403 HIGH_VALUE_THRESHOLD_TOP_AUTHORITY_REQUIRED（高价值判定阈值只经最高权限审批生效，不在此转正）。 第十八批 AW 段第 291 条 291-R1（ENUM:54；PGM:432）：configType=internal_price_item 时审批人须属该条目的域主管公司——提供方为商户的按商户业态定：酒吧归娱乐平台公司（收入归属 all_pass_ticket 的管理主体），游乐归游乐公司（amusement_ticket），演出传媒归传媒公司（performance_ticket），餐饮、零售归本项目城市项目公司（须恰好一家，否则 409 CITY_PROJECT_COMPANY_MISSING），业态为其他的归商户档案上的主管公司；提供方是经营主体的，由该主体内部另一人审批。审批人不属该公司 403 INTERNAL_PRICE_APPROVER_SCOPE（点名应审批的公司）；定不出域主管公司（收入归属或商户档案主管公司未配置）409 REVENUE_STREAM_ATTRIBUTION_MISSING。最高权限不受此限。 第十八批 BA 段第 355 条 355-R1（BSM:521「经高敏权限“转正”审批通过后按指定日期生效，不即改即生效」；BSM:1671「价格变更形成新版本、指定生效时间并只影响后续业务」；ENUM:187 按营业日）：configType=internal_price_item 批准后为待生效（status=scheduled，旧生效价与四处业务快照不变），到生效起始日期（按提供方营业日：商户按该商户营业日，经营主体按平台默认营业日）由系统转正——旧生效行软替换 inactive、本行生效、同一事务同步四处业务快照；同一生效日后批准的覆盖先批准的。批准时生效起始日期已不晚于提供方当前营业日 409 INTERNAL_PRICE_EFFECTIVE_DATE_PASSED「生效起始日期已到，请改期后重新提交草案」（草案不动）；最高权限免他人复核但不免生效日期。成功事件 settlement.config.draft.activated 元数据记 config_group=internal_price_catalog 与 effective_from。 第十八批 BQ 段第 371 条 371-R1（BSM:521「必须填写生效起始日期，并先存为草案、经高敏权限“转正”审批通过后按指定日期生效，不即改即生效」；ENUM:187 按营业日）：configType 为 distribution_method、comprehensive_service_fee、combo_discount、channel_fee、commission_rate、pass_gift_cost 时批准后为待生效（status=scheduled，生效值不变），到生效起始日期（按该配置范围营业日：有商户按该商户，酒吧按该酒吧；只有项目按综合体；全平台行按平台默认营业日）由系统转正——同范围旧生效行软替换 inactive 留库、本行生效，留痕 settlement.config.version.effective（系统作业留痕，无对应接口操作；业务类型为表名、业务号为行 id，元数据 config_group、effective_from）；同一范围同一生效日后批准的覆盖先批准的。批准时生效起始日期已不晚于该范围当前营业日 409 SETTLEMENT_CONFIG_EFFECTIVE_DATE_PASSED「生效起始日期已到，请改期后重新提交草案」（草案不动）。这六类成功事件 settlement.config.draft.activated 元数据记 config_group（即 configType）与 effective_from。第十八批 BQ 段第 360 条 360-R1（第十八批裁决 72「渠道费配置须按版本保存（新版本、生效日、旧版保留），每单记录所用版本号」）：configType=channel_fee 复核批准时按（项目、费用层、渠道）范围取版本号（同范围非草案行最大号加一），旧版行留库；版本号不出现在接口里。",
         "x-auth-context": "staff-token",
         "x-permission": "settlement.config.manage",
         "x-data-scope": "platform",
@@ -66466,7 +66496,8 @@
           "INTERNAL_PRICE_APPROVER_SCOPE",
           "CITY_PROJECT_COMPANY_MISSING",
           "REVENUE_STREAM_ATTRIBUTION_MISSING",
-          "INTERNAL_PRICE_EFFECTIVE_DATE_PASSED"
+          "INTERNAL_PRICE_EFFECTIVE_DATE_PASSED",
+          "SETTLEMENT_CONFIG_EFFECTIVE_DATE_PASSED"
         ],
         "responses": {
           "200": {
@@ -66920,7 +66951,7 @@
         ],
         "operationId": "settlementConfigUpsertHighValueThreshold",
         "summary": "提交高价值判定阈值调整(最高权限审批)",
-        "description": "第十八批第 24 条（ENUM:164「与后台配置的固定金额阈值比较（安全阈值，全平台统一可配，调整须最高权限审批并留痕，出厂默认 5000 元，须同时配置上下限），大于或等于阈值即高价值」）：全平台统一一个「高价值判定阈值(分)」——物品最近一次实际到货价大于或等于本值即为高价值，退酒/报损/盘点差异/存酒作废共用同一判定。请求不带项目、商户；阈值、下限、上限与理由同时必填，满足 0 ≤ 下限 ≤ 阈值 ≤ 上限（否则 400 VALIDATION_FAILED）。提交只落全平台一行草案并进统一审批的最高权限策略（settlement.high_value_threshold.configure，top_authority），草案回写审批单号 review_id；已有一条在审草案时再提交 409 HIGH_VALUE_THRESHOLD_REVIEW_PENDING。最高权限批准后草案转正、原生效行（含出厂 hvt_default）下线；驳回则草案下线、判定仍读原值。不经「复核转正」生效。阈值未配置时判定侧一律按高价值拦下走审批。",
+        "description": "第十八批第 24 条（ENUM:164「与后台配置的固定金额阈值比较（安全阈值，全平台统一可配，调整须最高权限审批并留痕，出厂默认 5000 元，须同时配置上下限），大于或等于阈值即高价值」）：全平台统一一个「高价值判定阈值(分)」——物品最近一次实际到货价大于或等于本值即为高价值，退酒/报损/盘点差异/存酒作废共用同一判定。请求不带项目、商户；阈值、下限、上限与理由同时必填，满足 0 ≤ 下限 ≤ 阈值 ≤ 上限（否则 400 VALIDATION_FAILED）。提交只落全平台一行草案并进统一审批的最高权限策略（settlement.high_value_threshold.configure，top_authority），草案回写审批单号 review_id；已有一条在审草案时再提交 409 HIGH_VALUE_THRESHOLD_REVIEW_PENDING。最高权限批准后待生效（status=scheduled，判定仍读原阈值；记 settlement.config.draft.activated，元数据 config_group=high_value_thresholds、effective_from），到生效起始日期（按平台默认营业日）由系统转正、原生效行（含出厂 hvt_default）软替换下线留库（留痕 settlement.config.version.effective）；批准时生效起始日期已不晚于平台默认当前营业日则草案下线（archive_reason「审批通过时生效起始日期已到，未生效（审批单号）」），审批单仍记批准，须改期重报；驳回则草案下线、判定仍读原值。不经「复核转正」生效。阈值未配置时判定侧一律按高价值拦下走审批。 第十八批 BQ 段第 371 条 371-R3（BSM:521「必须填写生效起始日期，并先存为草案、经高敏权限“转正”审批通过后按指定日期生效，不即改即生效」「无法判断是否涉及钱的，一律按涉及钱处理。」）：effective_from（生效起始日期，年-月-日）必填，缺了 400 VALIDATION_FAILED（effective_from is required）；不是有效日期 400 VALIDATION_FAILED「生效起始日期须为有效日期」；不晚于平台默认当前营业日 400 VALIDATION_FAILED「生效起始日期须晚于今天（按营业日）」。审批原件 proposed_config 与成功留痕元数据另带 effective_from。",
         "x-auth-context": "staff-token",
         "x-permission": "settlement.config.manage",
         "x-data-scope": "platform",
@@ -66958,6 +66989,11 @@
                     "type": "string",
                     "minLength": 1,
                     "description": "调整理由（进最高权限审批原件）"
+                  },
+                  "effective_from": {
+                    "type": "string",
+                    "format": "date",
+                    "description": "生效起始日期（年-月-日，必填），须晚于平台默认当前营业日；最高权限批准后待生效，到该日由系统转正，批准时已到则草案下线、须改期重报（第十八批 BQ 段第 371 条 371-R3）。"
                   }
                 },
                 "required": [
@@ -66965,7 +67001,8 @@
                   "high_value_threshold_cent",
                   "high_value_threshold_min_cent",
                   "high_value_threshold_max_cent",
-                  "reason"
+                  "reason",
+                  "effective_from"
                 ]
               }
             }
@@ -66997,7 +67034,7 @@
         ],
         "operationId": "settlementConfigUpsertPassGiftCost",
         "summary": "维护赠送权益预估成本预扣规则(草案)",
-        "description": "结算配置中心 S6(V373)：按 项目公司 × 票种 配置通票分账池前预扣的「赠送权益预估成本」(归娱乐平台公司)。两模式二选一：by_item 按件计＝票面各权益数量 × 提供方内部结算价之和(金额由票面推导,不接受手填整额)；by_ticket_amount 按票计＝该票种赠送部分的售价整额(必填,0=预扣关闭)。可选每月封顶；差额处理规则只收 platform_absorb(差额留娱乐平台公司)。落草案(is_draft=TRUE,不动生效行),须经差人复核转正后生效。",
+        "description": "结算配置中心 S6(V373)：按 项目公司 × 票种 配置通票分账池前预扣的「赠送权益预估成本」(归娱乐平台公司)。两模式二选一：by_item 按件计＝票面各权益数量 × 提供方内部结算价之和(金额由票面推导,不接受手填整额)；by_ticket_amount 按票计＝该票种赠送部分的售价整额(必填,0=预扣关闭)。可选每月封顶；差额处理规则只收 platform_absorb(差额留娱乐平台公司)。落草案(is_draft=TRUE,不动生效行),须经差人复核转正后生效。 第十八批 BQ 段第 371 条 371-R1（BSM:521「必须填写生效起始日期，并先存为草案、经高敏权限“转正”审批通过后按指定日期生效，不即改即生效」；ENUM:187 按营业日）：effective_from（生效起始日期，年-月-日）必填，缺了 400 VALIDATION_FAILED（effective_from is required）；不是有效日期 400 VALIDATION_FAILED「生效起始日期须为有效日期」；不晚于该配置范围当前营业日（填了 project_id 按该综合体营业日，空即全平台行按平台默认营业日） 400 VALIDATION_FAILED「生效起始日期须晚于今天（按营业日）」。复核批准（settlementConfigActivateDraft）后待生效（status=scheduled，生效值不变），到生效起始日期（按营业日）由系统转正，同范围旧生效行软替换 inactive 留库；同一范围同一生效日后批准的覆盖先批准的。成功留痕元数据另带 effective_from。",
         "x-auth-context": "staff-token",
         "x-permission": "settlement.config.manage",
         "x-data-scope": "platform",
@@ -67040,11 +67077,17 @@
                     "enum": [
                       "platform_absorb"
                     ]
+                  },
+                  "effective_from": {
+                    "type": "string",
+                    "format": "date",
+                    "description": "生效起始日期（年-月-日，必填），须晚于该配置范围当前营业日；复核批准后待生效，到该日由系统转正（第十八批 BQ 段第 371 条 371-R1）。"
                   }
                 },
                 "required": [
                   "idempotency_key",
-                  "prededuct_mode"
+                  "prededuct_mode",
+                  "effective_from"
                 ]
               }
             }

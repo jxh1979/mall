@@ -1,6 +1,6 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -43,6 +43,7 @@ class SettlementWriteFailureAuditJdbcIntegrationTests {
 
     @Autowired private MockMvc mockMvc;
     @Autowired private JdbcTemplate jdbc;
+    @Autowired private com.complex.platform.common.BusinessDayResolver businessDays;
 
     private final String suffix = UUID.randomUUID().toString().replace("-", "").substring(0, 12);
     private String project;
@@ -158,8 +159,10 @@ class SettlementWriteFailureAuditJdbcIntegrationTests {
         jdbc.update("INSERT INTO ticket_types (id, ticket_name, base_calendar_price_mode, stock_required, status, created_at, updated_at)"
                 + " VALUES (?, '综合服务费草案票种', 'fixed_price', FALSE, 'active', now(), now())", ticketType);
         RequestPostProcessor manager = staff("r3_csf_" + suffix, "settlement.config.manage");
+        // 第十八批 BQ 段第 371 条 371-R1：生效起始日期必填（按本项目营业日，次日）。
         String body = "{\"idempotency_key\":\"%s\",\"project_id\":\"" + project + "\",\"ticket_type_id\":\"%s\",\"fee_bps\":1000,"
-                + "\"monthly_cap_amount_cent\":5000}";
+                + "\"monthly_cap_amount_cent\":5000,\"effective_from\":\""
+                + businessDays.businessDate(project, null, java.time.Instant.now()).plusDays(1) + "\"}";
 
         send("/api/v1/settlement/config/comprehensive-service-fee", manager, body.formatted("r3_csf_bad_" + suffix, "r3_tt_missing_" + suffix))
                 .andExpect(status().isBadRequest())

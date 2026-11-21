@@ -1,6 +1,6 @@
 # PRD 审计业务裁决台账
 
-文档版本：V1.25
+文档版本：V1.26
 状态：进行中
 迁移日期：2026-07-27
 当前事实源：三份立法 HTML 以既有冻结基线叠加 James 此前 M02 至 M08 的点名批准、全量审计 M001、M002 的逐项批准，以及本轮 2026-10-16 至 2026-10-17 业务 HTML 审计中 Q01 至 Q40 及子题实际明确批准且未被后续替代的裁决，和 2026-10-17 第二批 HTML 业务线推演审计（A–F 六线 64 条、停车章）的逐项批准，并叠加本轮 CG 70 项来源确认与 C01–C09、N01–N03 最终澄清及补全文稿中 F01、W01–W05 的整体修改批准（本文件末节）；本轮最终规则、未采纳或替代关系、现行版本与字节哈希见本文件末节。历史记录保留为各自当时事实，不恢复已被替代的建议。
@@ -11445,3 +11445,138 @@ HTML 的语义补齐与直接引用同步可在本批核验；70项中的业务�
   测试：本组不新增测试。行为由 A1 段 StoredValueRefundSameKeyConcurrencyJdbcIntegrationTests、VoucherTransferRevokeReplayJdbcIntegrationTests 覆盖。
 - 18CA 合并前变基（2026-11-21）：本段自 6068f50e 变基到 origin/main 6c002faf；合并时 OpenAPI 共 1403 个操作（主干 1403）、info.version V0.97、决策台账 V1.25，Flyway 最新 V724（共 621 个迁移）。版本行、契约版本、计数与 SHA、生成物、台账补记与 PRD 修订行由合并前脚本按新主干统一重写。
 - 18CA 落地位置补记·运行验收证据、快照、终验文档刷新（无新裁决）：业务提交 35e57790 之后，按第十八批裁决 25 重刷了运行验收证据：后端全量 7220 测，0 失败 0 错误；apps/web 构建通过；常规界面验收（接口全部 mock）实跑 40 条全过；真实后端界面验收未跑，runtime_ready=false。随后依次重生成闭环当前态快照、生产闭环缺口报告、界面验收报告、无上线指挥台。生成器没改。手改 docs/final-closed-loop-acceptance-audit-v0.1.md 与 docs/code-implementation-acceptance-audit-v0.1.md：前端单测源码计数改为 2027；被核文件行数都没变；后端全量与常规界面验收的数字、日期改为本次实跑值；写入 npm run verify:unit 实跑结果，五个工作区全过。交付门禁于 2026-11-21 12:44 UTC 在工作树逐项实跑子项，NAS 两项现场探测未跑。仍红的有两项：一是 coding-host-protection，它写死主仓路径，在工作树口径下必红，属工具口径，不做；二是 final-closed-loop-audit，如实留 2 条红（integration-ready、business-acceptance-ready），原因是校验器要求终验把联调、业务验收写成「是」，而裁决 25 定了不跑真实后端界面验收、运行验收未就绪，终验写的是「否」。verify:delivery-gates 总链仍是红的。
+
+18BQ 落地位置补记（2026-11-20）：第十八批 BQ 段（batch89）按 18BQ 只读设计实现待开发清单第 360、371 条（结算配置组）；运行验收证据、终验文档在本段最后一个提交刷新；各条落地位置见下。本段追加时，原台账除文档版本升一版外，其他历史字节保持。
+
+- 18BQ 落地位置补记·控制席判定（2026-11-20）：本段（第十八批 BQ 段，batch89）实现待开发清单第 360、371 条（18BQ 只读设计 b89-audit/d-stl-b.json、b89-audit/d-stl-a.json，两轮质疑者修订后定稿，无待裁题）。控制席判定：第 360 条与第 371 条两份设计先后相反，控制席取第 371 条设计推荐的通用做法：先做 371-R1（通用的必填生效起始日期、批准后待生效、到日转正作业、失败码与到日事件，渠道费一并走它）。第 360 条在其上只做版本号：360-R1 的三个新类（JdbcChannelFeeVersionRepository、ChannelFeeVersionService、ChannelFeeScheduledActivationJob）、新开关与 application-prod.yml 一行、CHANNEL_FEE_EFFECTIVE_DATE_PASSED、channel_fee_configs.effective 事件都不建；迁移只加 channel_fee_configs.version_no 与两张固化表的版本号列，不重建 chk_cfc_status；取号放进 371-R1 的 scheduleSingleRowDraft 对 CHANNEL_FEE 一支；360-R2 照做；360-R3 的输入框由 371-R2 统一实现，渠道费块 note 按 360-R3 改末句；360-R4 照做。371-R3（高价值判定阈值）做：第 371 条标题「其余单行涉钱配置……等」包括它，按 BSM:521「无法判断是否涉及钱的，一律按涉及钱处理。」，迁移与 371-R1 并成一份。到日转正靠定时作业、生效日起点后至多约 10 分钟窗口与 355-R1 同，接受。设计旁见（最高权限本人起草也要差人复核、追溯适用例外流程、充值批次不记通路费配置版本、积分累计率是业务不读的表、通告期与异议期就地改写）设计旁见由控制席另行登记为待核实新条目，本段不改。第五轮设计与修复代理的范围外旁见已登记为待开发清单第 388～414 条（待核实）。本段从 614159b0 开工（第五轮 13 段并行），变基到 83efbc89 后收尾；汇总文件由合并前脚本 summary_tool.py 剥离与重写。
+- 18BQ 落地位置补记·第 371 条（371-R1、371-R2、371-R3）。本段增量：迁移 V725；新增操作 0 个，改既有操作 10 个；新增同包类 1 个（SettlementConfigScheduledActivationService）；新增测试类 1 个。
+  371-R1 结算配置中心六类单行涉钱配置按生效起始日期生效（后端）。
+  改法：
+  - 六类为分配方式（含短期经营激励单次有效期上限）、门票综合服务费、赠送权益预估成本、通票凑整参数、渠道费用（通路费与销售渠道费）、卡座提成费率。落草案必填生效起始日期，须为有效日期且晚于该配置范围当前营业日：有商户按该商户（酒吧按该酒吧），只有项目按综合体，全平台行按平台默认营业日。不满足时 400 VALIDATION_FAILED「生效起始日期须为有效日期」「生效起始日期须晚于今天（按营业日）」。
+  - 他人复核批准后待生效（status=scheduled、is_draft=FALSE），不占草案槽与生效槽，业务取值仍是原生效值。批准时生效起始日期已到 409 SETTLEMENT_CONFIG_EFFECTIVE_DATE_PASSED「生效起始日期已到，请改期后重新提交草案」，草案不动。
+  - 到日由系统转正：同范围旧生效行软替换为 inactive 留库，本行生效；同一生效日后批准的覆盖先批准的。转正落留痕 settlement.config.version.effective（「结算配置按生效日期生效」）。
+  - 待复核草案摘要末尾带「生效起=日期」。
+  - 单一酒吧门票发布闸 TICKET_TYPE_SERVICE_FEE_REQUIRED 仍只认已生效行，报错末句改为「复核转正并到生效起始日期后才能上架」。
+  - 业务取值处一处不改。
+  落地位置：
+  - 迁移 V725__single_row_config_effective_from：pass_gift_cost_configs 加 effective_from；七张表状态约束加 scheduled。
+  - SettlementConfigWriteRequests 的 DistributionMethodRequest、ComprehensiveServiceFeeRequest、ComboDiscountRequest、ChannelFeeRequest、CommissionRateRequest、PassGiftCostRequest 加 effectiveFrom。
+  - SettlementConfigScheduledActivationService 的 requireFutureEffectiveDate、schedule、activateDue。
+  - JdbcSettlementConfigWriteRepository 的六个 upsert…Draft 写 effective_from；新增 findDatedDraft、scheduleSingleRowDraft、listScheduledSingleRows、promoteScheduledSingleRow；listPendingConfigDrafts 拼摘要。
+  - SettlementConfigWriteService 的 saveDistributionMethod、saveComprehensiveServiceFee、saveComboDiscount、saveChannelFee、saveCommissionRate、savePassGiftCost，以及 activateDraft 默认分支。
+  - InternalPriceScheduledActivationJob.scheduledActivate：与内部结算价同一开关、同一周期。
+  - TicketCatalogService 单一酒吧门票发布闸文案。
+  - 契约 operationId：settlementConfigUpsertDistributionMethod、settlementConfigUpsertComprehensiveServiceFee、settlementConfigUpsertComboDiscount、settlementConfigUpsertChannelFee、settlementConfigUpsertCommissionRate、settlementConfigUpsertPassGiftCost（请求体加必填 effective_from），settlementConfigActivateDraft（说明与失败码加 SETTLEMENT_CONFIG_EFFECTIVE_DATE_PASSED），publishTicketType（单一酒吧门票发布闸说明），settlementConfigOverview（草案摘要带生效起始日期，结构不变）。
+  - 页面矩阵 ADM-STL-001 行。
+  依据：
+  - BSM:521「所有涉及钱的配置一律版本化：每次改动生成新版本，必须填写生效起始日期，并先存为草案、经高敏权限“转正”审批通过后按指定日期生效，不即改即生效。新版本只对生效日之后发生的业务适用，已发生的业务一律按当时生效的版本计算」。
+  - ENUM:187「全系统的钱账统一按「营业日」归集。」
+  - 第十八批裁决 72「渠道费配置须按版本保存（新版本、生效日、旧版保留），每单记录所用版本号」，本条覆盖生效日与旧版保留，版本号见第 360 条。
+  - 先例：18BA 355-R1 内部结算价按生效起始日期生效。
+  测试：
+  - 新增 SettlementConfigEffectiveDateJdbcIntegrationTests：commissionRateApprovedVersionWaitsForItsEffectiveDate、laterApprovalOnTheSameEffectiveDateWinsAndRerunKeepsIt、approvalAfterTheEffectiveDateHasArrivedIsRejected、otherDatedConfigsKeepTheirValueUntilTheEffectiveDate、projectRowFollowsTheComplexBusinessDay。
+  - 适配 SettlementConfigWriteJdbcIntegrationTests、CommissionPointsConfigJdbcIntegrationTests、ComboToleranceBounds339Tests、SettlementComboRoundingEndingsWeb292R1Tests、AuditOperationLabelsJdbcIntegrationTests、SettlementWriteFailureAuditJdbcIntegrationTests、SingleBarServiceFeePublishGate294Tests。
+  371-R2 后台结算配置中心页面填生效起始日期。
+  改法：
+  - 分配方式、门票综合服务费、赠送权益预估成本、通票凑整参数、渠道费用、卡座提成费率与高价值判定阈值的「改」表单，统一追加「生效起始日期」日期框。
+  - 原有逐类校验放行后判必填，提示「生效起始日期必填。」；是否晚于今天由服务端按营业日判，400 与 409 文案原样显示。
+  - 随草案提交蛇形键 effective_from，确认页列出生效起始日期。
+  - 赠送权益预估成本块说明改为「复核转正后按生效起始日期生效」。
+  - 积分累计率不带该字段。
+  落地位置：SettlementConfigPage 的 DATED_KEYS、editSteps、validate 与 validateFields、buildBody 与 buildFields、editSummary 与 summaryFields；不新增接口。
+  依据：BSM:521「必须填写生效起始日期，并先存为草案、经高敏权限“转正”审批通过后按指定日期生效，不即改即生效」。
+  测试：SettlementConfigPage.test.tsx 新增「371-R2：生效起始日期必填并随草案以蛇形键提交」；既有六类提交用例与高价值提交用例补填日期并断言请求体带该字段；积分累计率用例断言请求体不带该字段。
+  371-R3 高价值判定阈值同样按生效起始日期生效。
+  改法：
+  - 提交须带生效起始日期，须晚于平台默认当前营业日；审批原件与提交审计都带该日期。
+  - 最高权限批准后待生效，判定仍读原阈值；到日由系统转正，旧生效行（含出厂 hvt_default）停用。
+  - 批准时生效起始日期已到：审批单照记批准，草案下线，archive_reason「审批通过时生效起始日期已到，未生效（审批单号）」，由提交人改期重报。
+  - 页面确认页「生效方式」改为「最高权限审批批准后按生效起始日期生效」，块说明与页签导语同步。
+  落地位置：
+  - 迁移 V725（chk_hvt_status 加 scheduled）。
+  - HighValueThresholdRequest 加 effectiveFrom。
+  - SettlementConfigWriteService 的 saveHighValueThreshold 与 highValueThresholdDecided（批准分支调 SettlementConfigScheduledActivationService.scheduleIfAhead）。
+  - SettlementConfigScheduledActivationService.DATED 含 HIGH_VALUE_THRESHOLD。
+  - JdbcSettlementConfigWriteRepository.insertHighValueThresholdDraft。
+  - 契约 settlementConfigUpsertHighValueThreshold（请求体加必填 effective_from，补说明）。
+  - SettlementConfigPage 高价值判定页签。
+  依据：
+  - BSM:521「所有涉及钱的配置一律版本化：每次改动生成新版本，必须填写生效起始日期……按指定日期生效，不即改即生效」。
+  - BSM:521「无法判断是否涉及钱的，一律按涉及钱处理。」
+  - ENUM:164「与后台配置的固定金额阈值比较（安全阈值，全平台统一可配，调整须最高权限审批并留痕，出厂默认 5000 元，须同时配置上下限）」。
+  - 控制席 2026-11-20 判定本项要做。
+  测试：HighValueThresholdMasterApprovalJdbcIntegrationTests 的 onlyTopAuthorityApprovalActivatesThresholdAndRetiresFactorySeed（改）、effectiveFromIsRequiredAndMustBeAfterToday（新）、approvalAfterTheEffectiveDateHasArrivedRetiresTheDraft（新）；前端高价值提交用例。
+- 18BQ 落地位置补记·第 360 条（渠道费配置按版本保存，第十八批裁决 72）：
+  控制席判定第 360 条建在 371-R1 通用做法之上，只做版本号。下面这些都由 371-R1 承担，渠道费已在 SettlementConfigScheduledActivationService.DATED 之内：
+  - 渠道费草案必填生效起始日期（SettlementConfigWriteService.saveChannelFee 调 requireFutureEffectiveDate）。
+  - 复核批准后待生效（SettlementConfigWriteService.activateDraft 调 SettlementConfigScheduledActivationService.schedule）。
+  - 批准时日期已到 409 SETTLEMENT_CONFIG_EFFECTIVE_DATE_PASSED。
+  - 到日由系统转正（SettlementConfigScheduledActivationService.activateDue，由 InternalPriceScheduledActivationJob 调用），同范围旧生效行软替换 inactive 留库，落 settlement.config.version.effective。
+  本条不建 ChannelFeeVersionService、JdbcChannelFeeVersionRepository、ChannelFeeScheduledActivationJob、新开关、CHANNEL_FEE_EFFECTIVE_DATE_PASSED 与 channel_fee_configs.effective 事件。本段迁移 V726；新增操作 0 个，不改任何操作的请求或响应结构。
+  360-R1 渠道费配置版本号：
+  - 改法：迁移 V726 给 channel_fee_configs 加 version_no（既有行即第 1 版，不回填，UD-07）。JdbcSettlementConfigWriteRepository.scheduleSingleRowDraft 对 SingleRowConfig.CHANNEL_FEE 一支，在置待生效的同一条更新里取号：同范围（项目、费用层、渠道）非草案行最大版本号加一。草案可反复覆盖，不算版本；每范围只有一个草案槽。旧版行由 JdbcSettlementConfigWriteRepository.promoteScheduledSingleRow 到日置 inactive 留库。
+  - 依据：第十八批裁决 72「渠道费配置须按版本保存（新版本、生效日、旧版保留），每单记录所用版本号」；BSM:521「所有涉及钱的配置一律版本化：每次改动生成新版本，必须填写生效起始日期，并先存为草案、经高敏权限“转正”审批通过后按指定日期生效，不即改即生效」。
+  - 测试：SettlementConfigEffectiveDateJdbcIntegrationTests.channelFeeVersionsAreNumberedPerScopeAndOldVersionsAreKept。
+  360-R2 每单记录所用版本号：
+  - 改法：RouteFeeShares.fixSalesChannelFee 在订单销售渠道费固化行 ticket_order_channel_fees 记 sales_fee_config_version；RouteFeeShares.fix 在每笔付款通路费固化行 ticket_payment_route_fees 记 config_version。两列都取付款时所用配置行的 version_no，储值笔与未配置通路为空，已固化的不回改；固化时点照旧（销售渠道费在本单首笔受理付款时，通路费逐笔）。
+  - 依据：第十八批裁决 72「每单记录所用版本号」；ENUM:51「每笔分摊的结果与所用合同版本必须留痕」；BSM:749「每笔分摊须记录所用合同版本」；BSM:521「每一笔单据在生成时就把所用配置版本固化在单上」。
+  - 测试：TicketRouteFeeFixationJdbcIntegrationTests.salesChannelFeeVersionNoFollowsTheVersionInEffectAtPayment；confirmedPaymentFixesRouteFeeByPaymentChannel 与 thirdPartyOrderPaymentFixesSalesChannelFeeConfig 各加版本号断言。
+  360-R3 后台渠道费用表单：
+  - 改法：生效起始日期输入框由 371-R2 统一实现（SettlementConfigPage 的 DATED_KEYS 含 channel_fee）。本条把结算配置中心「渠道费用（通路费／销售渠道费）」块说明末句改为「改动落草案并须填生效起始日期（按营业日，须晚于今天）；复核批准后待生效，到日由系统生效，旧版本留档。」
+  - 依据：BSM:521「必须填写生效起始日期」「经高敏权限“转正”审批通过后按指定日期生效，不即改即生效」；第十八批裁决 72「旧版保留」。
+  - 测试：SettlementConfigPage.test.tsx「「改」渠道费用：通路费按支付通路只配比例，销售渠道费才有每张票固定金额；POST 带费用层与渠道码」加说明文案断言。不填日期不能提交由「371-R2：生效起始日期必填并随草案以蛇形键提交」覆盖。
+  360-R4 文档同步：结算重构 PRD 文首缺口①裁决 72 句、财务结算 PRD §3A 实现现状、覆盖表 BEQ-0128（去掉第 360 条缺口句）与 BSM-0611、BSM-0002 落地位置、四份生成物，由文档组与收尾同步。
+  不做：
+  - 后台渠道费版本表与总览新字段。
+  - 四个取费率读取口按日期过滤。
+  - 合同编号、收付款方式等字段。
+  - 既有行版本号回填。
+  - pass_pool_snapshots 与 settlement_transactions 另加版本号列。
+  - effective_to。
+  - 已批准待生效版本的撤回。
+  - 订单页或结算审阅页展示所用版本号。
+  - 批准审计元数据加 version_no（版本号已记在行上，可按 business_id 查）。
+- 18BQ 落地位置补记·契约（第 371 条 371-R1、371-R3，第 360 条 360-R1）：本段新增操作 0 个，改既有操作 10 个，权限码、x-data-scope、x-auth-context、x-terminal-allowed、x-audit-event 都不变。
+  371-R1 改法与落地位置：
+  - settlementConfigUpsertDistributionMethod、settlementConfigUpsertComprehensiveServiceFee、settlementConfigUpsertComboDiscount、settlementConfigUpsertChannelFee、settlementConfigUpsertCommissionRate、settlementConfigUpsertPassGiftCost：内联请求体加必填 effective_from（string，format date）。说明补以下几点：
+    - 缺了 400 VALIDATION_FAILED；不是有效日期 400 VALIDATION_FAILED「生效起始日期须为有效日期」；不晚于该配置范围当前营业日 400 VALIDATION_FAILED「生效起始日期须晚于今天（按营业日）」。
+    - 范围营业日：有商户按该商户（酒吧按该酒吧）；只有项目按综合体；全平台行按平台默认营业日。对应 SettlementConfigScheduledActivationService.requireFutureEffectiveDate。
+    - 复核批准后待生效，到日由系统转正，旧生效行软替换留库。
+    - 成功留痕元数据另带 effective_from。
+  - settlementConfigActivateDraft：说明补六类批准后待生效（status scheduled）、到日由系统转正（SettlementConfigScheduledActivationService.schedule、activateDue）、同一范围同一生效日后批准的覆盖先批准的；生效起始日期已到 409 SETTLEMENT_CONFIG_EFFECTIVE_DATE_PASSED「生效起始日期已到，请改期后重新提交草案」，草案不动。x-failure-codes 加 SETTLEMENT_CONFIG_EFFECTIVE_DATE_PASSED。成功事件 settlement.config.draft.activated 元数据记 config_group 与 effective_from。系统到日转正留痕 settlement.config.version.effective（业务类型为表名，业务号为行 id，元数据 config_group、effective_from），是作业留痕，没有对应接口操作。
+  - publishTicketType：294-R1 一段补「已批准待生效、未到生效起始日期的本酒吧综合服务费行不算」，报错末句为「复核转正并到生效起始日期后才能上架」（TicketCatalogService 发布闸）。
+  - settlementConfigOverview：结构不变，说明补七类草案 summary 末尾带「 生效起=YYYY-MM-DD」（JdbcSettlementConfigWriteRepository.listPendingConfigDrafts）。
+  371-R3 改法与落地位置：settlementConfigUpsertHighValueThreshold 请求体加必填 effective_from（须晚于平台默认当前营业日，400 文案同上）。说明改为：最高权限批准后待生效，到日由系统转正（SettlementConfigWriteService.highValueThresholdDecided 调 SettlementConfigScheduledActivationService.scheduleIfAhead）；批准时日期已到则草案下线（archive_reason「审批通过时生效起始日期已到，未生效（审批单号）」），审批单仍记批准，须改期重报；审批原件 proposed_config 与成功留痕元数据带 effective_from。
+  360-R1 改法与落地位置：settlementConfigActivateDraft 说明补一句：configType=channel_fee 复核批准时按（项目、费用层、渠道）范围取版本号（同范围非草案行最大号加一），旧版行留库（JdbcSettlementConfigWriteRepository.scheduleSingleRowDraft）；版本号不出现在接口里，请求与响应结构不变。
+  依据：
+  - BSM:521「所有涉及钱的配置一律版本化：每次改动生成新版本，必须填写生效起始日期，并先存为草案、经高敏权限“转正”审批通过后按指定日期生效，不即改即生效」
+  - BSM:521「无法判断是否涉及钱的，一律按涉及钱处理。」
+  - ENUM:187「全系统的钱账统一按「营业日」归集。」
+  - 第十八批裁决 72「渠道费配置须按版本保存（新版本、生效日、旧版保留），每单记录所用版本号」
+  验证：yaml 与 json 深比较一致；verify:openapi、verify:openapi-examples、verify:client-routes、verify:client-openapi、verify:client-payload --strict 全过。
+- 18BQ 汇合段：e2e 没有改动。三段的 e2e 要点和对 tests/e2e 的 grep 都表明，结算配置中心（ADM-STL-001）在 e2e 里只核页面、默认表、门票综合服务费块与「改」按钮能看见，没有用例提交七类配置的表单，也没有 mock 结算配置接口；视觉截图基线不涉及该页，没有重拍。门禁结论：先删构建目录、用空库跑后端全量，本段两份迁移 V725（371-R1 与 371-R3 合并）和 V726（第 360 条渠道费版本号）都真迁，0 红；前端 typecheck 与单测、客人三个工作区单测、安卓员工端单测与 android-app 编译、五份后台 chromium e2e 全部通过；四份生成物重生成后，只有数据隔离规格的最新迁移号要随 V726 更新（收尾统一重写），verify:p0-contract 全部通过。本段新增 0 个操作，只改了既有操作 publishTicketType、settlementConfigOverview、settlementConfigUpsertDistributionMethod、settlementConfigUpsertComprehensiveServiceFee、settlementConfigUpsertComboDiscount、settlementConfigUpsertChannelFee、settlementConfigUpsertCommissionRate、settlementConfigActivateDraft、settlementConfigUpsertHighValueThreshold、settlementConfigUpsertPassGiftCost 的说明与请求结构（effective_from 必填，新增错误码 SETTLEMENT_CONFIG_EFFECTIVE_DATE_PASSED），schema 没变，yaml 与 json 一致。
+- 18BQ 落地位置补记·文档组（第 360、371 条文档同步）：
+  - 改法：PRD 与下位设计文档里写着「复核转正后生效」「批准后转正」「渠道费配置没有版本」的现状句，就地改成现码实情：
+    - 七类单行涉钱配置（分配方式、门票综合服务费、赠送权益预估成本、通票凑整参数、渠道费用、卡座提成费率、高价值判定阈值）草案必填生效起始日期，复核批准（高价值判定阈值为最高权限批准）后待生效，到日按营业日由系统转正；
+    - 批准时日期已到：六类 409 改期重报，高价值判定阈值草案下线；
+    - 渠道费配置按版本保存，订单销售渠道费固化行与每笔付款通路费固化行记所用版本号。
+  - 落地位置：
+    - docs/settlement-rebuild-prd-v1.0.md：文首缺口①裁决 72 一句改为已落地；§9 新增第 371 条实现现状；§9 高价值判定阈值落地记录与配置页句同步。
+    - docs/finance-settlement-product-prd-v0.1.md：§3A 凑整一句改写，§3A 渠道费两层下新增第 360 条实现现状。
+    - docs/ticketing-entitlement-checkin-product-prd-v0.1.md：§5 第 292、294-R1 条现状句改写，发布闸只认已生效的本酒吧行。
+    - docs/bar-operations-development-design.md：§6.9A 卡座提成维护入口句改写。
+    - docs/bar-business-operations-product-prd-v0.1.md：§9 费率版本化缺口句补已承载的部分（下单锁定费率版本仍是缺口）；§10.2.1 退酒阈值维护句改写，原「按项目公司 × 商户维护」缺口按第十八批第 24 条标已收敛。
+    - docs/supply-chain-inventory-product-prd-v0.1.md：§10 第 9 条实现现状、§10.1 高价值行改写。
+    - 各文档修订表加一行。
+  - 引用的代码与契约：SettlementConfigScheduledActivationService.activateDue、InternalPriceScheduledActivationJob、RouteFeeShares.fix、RouteFeeShares.fixSalesChannelFee；表列 channel_fee_configs.version_no、ticket_order_channel_fees.sales_fee_config_version、ticket_payment_route_fees.config_version；失败码 SETTLEMENT_CONFIG_EFFECTIVE_DATE_PASSED；事件 settlement.config.version.effective；本段迁移 V725、V726。
+  - 依据：
+    - BSM:521「所有涉及钱的配置一律版本化：每次改动生成新版本，必须填写生效起始日期，并先存为草案、经高敏权限“转正”审批通过后按指定日期生效，不即改即生效」；
+    - BSM:521「无法判断是否涉及钱的，一律按涉及钱处理。」；
+    - ENUM:187「全系统的钱账统一按「营业日」归集。」；
+    - ENUM:51「每笔分摊的结果与所用合同版本必须留痕」；
+    - BSM:749「每笔分摊须记录所用合同版本」；
+    - 第十八批裁决 72「渠道费配置须按版本保存（新版本、生效日、旧版保留），每单记录所用版本号」。
+  - 测试：文档组无新用例；node tools/verify-full-admin-page-matrix.mjs 通过，git diff --check 通过。
+  - 本段增量：新增操作 0 个，迁移 V725、V726（由前几段建）。
+- 18BQ 合并前变基（2026-11-21）：本段自 83efbc89 变基到 origin/main 50bc92b2；迁移按原序顺延改号 V708→V725、V709→V726；合并时 OpenAPI 共 1403 个操作（主干 1403）、info.version V0.98、决策台账 V1.26，Flyway 最新 V726（共 623 个迁移）。版本行、契约版本、计数与 SHA、生成物、台账补记与 PRD 修订行由合并前脚本按新主干统一重写。
+- 18BQ 落地位置补记·运行验收证据、快照、终验文档刷新（无新裁决）：业务提交 fd8aeeb3 之后，按第十八批裁决 25 重刷了运行验收证据：后端全量 7229 测，0 失败 0 错误；apps/web 构建通过；常规界面验收（接口全部 mock）实跑 40 条全过；真实后端界面验收未跑，runtime_ready=false。随后依次重生成闭环当前态快照、生产闭环缺口报告、界面验收报告、无上线指挥台。生成器没改。手改 docs/final-closed-loop-acceptance-audit-v0.1.md 与 docs/code-implementation-acceptance-audit-v0.1.md：前端单测源码计数改为 2028；被核文件行数都没变；后端全量与常规界面验收的数字、日期改为本次实跑值；写入 npm run verify:unit 实跑结果，五个工作区全过。交付门禁于 2026-11-21 13:26 UTC 在工作树逐项实跑子项，NAS 两项现场探测未跑。仍红的有两项：一是 coding-host-protection，它写死主仓路径，在工作树口径下必红，属工具口径，不做；二是 final-closed-loop-audit，如实留 2 条红（integration-ready、business-acceptance-ready），原因是校验器要求终验把联调、业务验收写成「是」，而裁决 25 定了不跑真实后端界面验收、运行验收未就绪，终验写的是「否」。verify:delivery-gates 总链仍是红的。

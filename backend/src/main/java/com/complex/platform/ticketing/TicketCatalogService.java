@@ -1,6 +1,6 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.08
+// 文件版本：V0.09
 
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.governance.MerchantRecord;
@@ -719,7 +719,7 @@ public class TicketCatalogService {
                     repository.listTicketTypeProjectIds(ticketType.id()));
             if (!missing.isEmpty()) {
                 throw ApiException.conflict("TICKET_TYPE_SERVICE_FEE_REQUIRED", "单一酒吧门票发布前须在结算配置中心为项目「"
-                        + String.join("」「", missing) + "」的本酒吧选定综合服务费按比例或按固定金额并填入数值、复核转正后才能上架");
+                        + String.join("」「", missing) + "」的本酒吧选定综合服务费按比例或按固定金额并填入数值、复核转正并到生效起始日期后才能上架");
             }
         }
         requireComponentPrices(bindings);

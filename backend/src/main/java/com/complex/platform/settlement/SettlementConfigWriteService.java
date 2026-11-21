@@ -1,6 +1,6 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.11
+// 文件版本：V0.12
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.analytics.OperatingParamsService;
@@ -31,6 +31,7 @@ import com.complex.platform.settlement.SettlementConfigWriteRequests.RankTiersRe
 import com.complex.platform.settlement.SettlementConfigWriteRequests.RevenueStreamAttributionRequest;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -74,6 +75,7 @@ public class SettlementConfigWriteService {
     private final ObjectMapper json;
     private final InternalPriceScope internalPriceScope;
     private final BusinessDayResolver businessDays;
+    private final SettlementConfigScheduledActivationService scheduledActivation;
 
     public SettlementConfigWriteService(JdbcSettlementConfigWriteRepository writeRepository,
                                         RevenueStreamAttributionRepository attributionRepository,
@@ -85,7 +87,8 @@ public class SettlementConfigWriteService {
                                         AuthorizationService auth,
                                         ObjectMapper json,
                                         InternalPriceScope internalPriceScope,
-                                        BusinessDayResolver businessDays) {
+                                        BusinessDayResolver businessDays,
+                                        SettlementConfigScheduledActivationService scheduledActivation) {
         this.writeRepository = writeRepository;
         this.attributionRepository = attributionRepository;
         this.operatingParamsService = operatingParamsService;
@@ -97,6 +100,7 @@ public class SettlementConfigWriteService {
         this.json = json;
         this.internalPriceScope = internalPriceScope;
         this.businessDays = businessDays;
+        this.scheduledActivation = scheduledActivation;
     }
 
     // ================= §2 落草案(audit business_id 用仓储 RETURNING 的真实落地 id)=================
@@ -118,13 +122,16 @@ public class SettlementConfigWriteService {
             throw ApiException.badRequest("VALIDATION_FAILED", "短期经营激励单次有效期上限须同时填写数值（special_approval_term_value）、"
                     + "单位、下限（special_approval_term_min_value）与上限（special_approval_term_max_value），下限不小于 1，数值须在上下限内");
         }
+        // 第十八批 BQ 段第 371 条 371-R1（BSM:521「必须填写生效起始日期……按指定日期生效，不即改即生效」）：生效起始日期必填、须晚于该范围当前营业日。
+        LocalDate effectiveFrom = scheduledActivation.requireFutureEffectiveDate(req.effectiveFrom(), req.projectId(), null);
         String scopeKey = defaultScope(req.projectId());
         String landedId = writeRepository.upsertDistributionMethodDraft(draftId("tdc_d_", scopeKey, idem),
-                req.projectId(), method, termValue, termUnit, termMin, termMax, actorId);
+                req.projectId(), method, termValue, termUnit, termMin, termMax, effectiveFrom, actorId);
         String unitLabel = "day".equals(termUnit) ? " 天" : " 个月";
         audit("settlement.config.ticket_distribution_configs.updated", "ticket_distribution_configs", landedId, idem,
                 Map.of("project_scope", scopeKey, "method_type", method,
-                        "special_approval_term", termValue + unitLabel + "（下限 " + termMin + unitLabel + "，上限 " + termMax + unitLabel + "）"));
+                        "special_approval_term", termValue + unitLabel + "（下限 " + termMin + unitLabel + "，上限 " + termMax + unitLabel + "）",
+                        "effective_from", effectiveFrom.toString()));
     }
 
     public void saveMerchantRate(MerchantRateRequest request, String actorId) {
@@ -182,10 +189,11 @@ public class SettlementConfigWriteService {
         if (cap != null) {
             requireNonNegative(cap, "monthly_cap_amount_cent");
         }
+        LocalDate effectiveFrom = scheduledActivation.requireFutureEffectiveDate(req.effectiveFrom(), req.projectId(), req.merchantId());
         String scopeKey = defaultScope(req.projectId()) + "|" + anyScope(req.merchantId())
                 + "|" + anyScope(ticketTypeId);
         String landedId = writeRepository.upsertComprehensiveServiceFeeDraft(draftId("csfc_d_", scopeKey, idem),
-                req.projectId(), req.merchantId(), ticketTypeId, feeBps, fixed, cap, actorId);
+                req.projectId(), req.merchantId(), ticketTypeId, feeBps, fixed, cap, effectiveFrom, actorId);
         audit("settlement.config.comprehensive_service_fee_configs.updated",
                 "comprehensive_service_fee_configs", landedId, idem,
                 Map.of("project_scope", defaultScope(req.projectId()),
@@ -193,7 +201,8 @@ public class SettlementConfigWriteService {
                         "ticket_type_scope", anyScope(ticketTypeId),
                         "fee_bps", String.valueOf(feeBps),
                         "fixed_amount_cent", fixed == null ? "-" : String.valueOf(fixed),
-                        "monthly_cap_amount_cent", cap == null ? "-" : String.valueOf(cap)));
+                        "monthly_cap_amount_cent", cap == null ? "-" : String.valueOf(cap),
+                        "effective_from", effectiveFrom.toString()));
     }
 
     public void saveComboDiscount(ComboDiscountRequest request, String actorId) {
@@ -229,14 +238,16 @@ public class SettlementConfigWriteService {
             }
             endings = digits.stream().map(String::valueOf).collect(java.util.stream.Collectors.joining());
         }
+        LocalDate effectiveFrom = scheduledActivation.requireFutureEffectiveDate(req.effectiveFrom(), null, null);
         String scopeKey = defaultScope(null);
         String landedId = writeRepository.upsertComboDiscountDraft(draftId("tcdc_d_", scopeKey, idem),
-                tolerance, toleranceMin, toleranceMax, endings, actorId);
+                tolerance, toleranceMin, toleranceMax, endings, effectiveFrom, actorId);
         audit("settlement.config.ticket_combo_discount_configs.updated",
                 "ticket_combo_discount_configs", landedId, idem,
                 Map.of("project_scope", scopeKey, "rounding_tolerance_cent", String.valueOf(tolerance),
                         "rounding_tolerance_min_cent", String.valueOf(toleranceMin),
-                        "rounding_tolerance_max_cent", String.valueOf(toleranceMax), "rounding_allowed_endings", endings));
+                        "rounding_tolerance_max_cent", String.valueOf(toleranceMax), "rounding_allowed_endings", endings,
+                        "effective_from", effectiveFrom.toString()));
     }
 
     public void saveChannelFee(ChannelFeeRequest request, String actorId) {
@@ -263,18 +274,19 @@ public class SettlementConfigWriteService {
                         "比例与每张票固定金额二选一:配了固定金额(fixed_amount_cent),抽成万分比(fee_bps)必须为 0");
             }
         }
+        LocalDate effectiveFrom = scheduledActivation.requireFutureEffectiveDate(req.effectiveFrom(), req.projectId(), null);
         String scopeKey = defaultScope(req.projectId()) + "|" + feeLayer + "|" + channelScope(req.channel());
         String landedId = writeRepository.upsertChannelFeeDraft(draftId("cfc_d_", scopeKey, idem),
-                req.projectId(), feeLayer, req.channel(), feeBps, fixed, actorId);
+                req.projectId(), feeLayer, req.channel(), feeBps, fixed, effectiveFrom, actorId);
         audit("settlement.config.channel_fee_configs.updated", "channel_fee_configs", landedId, idem,
                 Map.of("project_scope", defaultScope(req.projectId()), "fee_layer", feeLayer,
                         "channel", channelScope(req.channel()), "fee_bps", String.valueOf(feeBps),
-                        "fixed_amount_cent", fixed == null ? "-" : String.valueOf(fixed)));
+                        "fixed_amount_cent", fixed == null ? "-" : String.valueOf(fixed), "effective_from", effectiveFrom.toString()));
     }
 
     /**
      * V340(P0-D/CFG-01)卡座提成费率落草案:项目 × 商户 × 角色档,万分比。
-     * 出厂种子 sales=1500 / non_sales=1000(= 改造前写死值);此处只写草案,复核转正后引擎才读到。
+     * 出厂种子 sales=1500 / non_sales=1000(= 改造前写死值);此处只写草案,复核批准后到生效起始日期引擎才读到(371-R1)。
      */
     public void saveCommissionRate(CommissionRateRequest request, String actorId) {
         CommissionRateRequest req = requireRequest(request);
@@ -283,13 +295,14 @@ public class SettlementConfigWriteService {
         rejectSentinel(req.merchantId(), "merchant_id");
         String roleType = requireOneOf(req.roleType(), "role_type", "sales", "non_sales");
         int rateBp = requireBps(req.rateBp(), "rate_bp");
+        LocalDate effectiveFrom = scheduledActivation.requireFutureEffectiveDate(req.effectiveFrom(), req.projectId(), req.merchantId());
         String scopeKey = defaultScope(req.projectId()) + "|" + anyScope(req.merchantId()) + "|" + roleType;
         String landedId = writeRepository.upsertCommissionRateDraft(draftId("bcrc_d_", scopeKey, idem),
-                req.projectId(), req.merchantId(), roleType, rateBp, actorId);
+                req.projectId(), req.merchantId(), roleType, rateBp, effectiveFrom, actorId);
         audit("settlement.config.bar_commission_rate_configs.updated",
                 "bar_commission_rate_configs", landedId, idem,
                 Map.of("project_scope", defaultScope(req.projectId()), "merchant_id", anyScope(req.merchantId()),
-                        "role_type", roleType, "rate_bp", String.valueOf(rateBp)));
+                        "role_type", roleType, "rate_bp", String.valueOf(rateBp), "effective_from", effectiveFrom.toString()));
     }
 
     /**
@@ -350,23 +363,26 @@ public class SettlementConfigWriteService {
         String variance = req.varianceHandling() == null || req.varianceHandling().isBlank()
                 ? "platform_absorb"
                 : requireOneOf(req.varianceHandling(), "variance_handling", "platform_absorb");
+        LocalDate effectiveFrom = scheduledActivation.requireFutureEffectiveDate(req.effectiveFrom(), req.projectId(), null);
         String scopeKey = defaultScope(req.projectId()) + "|" + anyScope(ticketTypeId);
         String landedId = writeRepository.upsertPassGiftCostDraft(draftId("pgc_d_", scopeKey, idem),
-                req.projectId(), ticketTypeId, mode, amount, cap, variance, actorId);
+                req.projectId(), ticketTypeId, mode, amount, cap, variance, effectiveFrom, actorId);
         audit("settlement.config.pass_gift_cost_configs.updated", "pass_gift_cost_configs", landedId, idem,
                 Map.of("project_scope", defaultScope(req.projectId()),
                         "ticket_type_scope", anyScope(ticketTypeId),
                         "prededuct_mode", mode,
                         "ticket_gift_amount_cent", amount == null ? "-" : String.valueOf(amount),
                         "monthly_cap_amount_cent", cap == null ? "-" : String.valueOf(cap),
-                        "variance_handling", variance));
+                        "variance_handling", variance, "effective_from", effectiveFrom.toString()));
     }
 
     /**
      * 第十八批第 24 条 全平台高价值判定阈值（ENUM:164「与后台配置的固定金额阈值比较（安全阈值，全平台统一可配，调整须最高权限审批并留痕，
      * 出厂默认 5000 元，须同时配置上下限），大于或等于阈值即高价值」）：只落全平台一行草案（项目、商户为空），阈值与下限、上限同时必填
-     * （0 ≤ 下限 ≤ 阈值 ≤ 上限）、理由必填；照酒吧营业日（BarBusinessDayService.submit）进最高权限审批，批准才生效
+     * （0 ≤ 下限 ≤ 阈值 ≤ 上限）、理由必填；照酒吧营业日（BarBusinessDayService.submit）进最高权限审批，批准后按生效起始日期生效
      * （{@link #highValueThresholdDecided}），不走差人复核转正。已有一条在审草案时再提交 409。
+     * 第十八批 BQ 段第 371 条 371-R3（BSM:521「必须填写生效起始日期……按指定日期生效」「无法判断是否涉及钱的，一律按涉及钱处理。」）：
+     * 生效起始日期必填，须晚于平台默认当前营业日。
      */
     @Transactional
     public void saveHighValueThreshold(HighValueThresholdRequest request, String actorId) {
@@ -380,9 +396,10 @@ public class SettlementConfigWriteService {
                     + "下限（high_value_threshold_min_cent）与上限（high_value_threshold_max_cent），满足 0 ≤ 下限 ≤ 阈值 ≤ 上限");
         }
         String reason = requireText(req.reason(), "reason");
+        LocalDate effectiveFrom = scheduledActivation.requireFutureEffectiveDate(req.effectiveFrom(), null, null);
         idempotency.execute("settlementHighValueThreshold", idem, req, () -> {
             String landedId = writeRepository.insertHighValueThresholdDraft(
-                    draftId("hvt_d_", "__DEFAULT__|__ANY__", idem), threshold, min, max, actorId);
+                    draftId("hvt_d_", "__DEFAULT__|__ANY__", idem), threshold, min, max, effectiveFrom, actorId);
             if (landedId == null) {
                 throw ApiException.conflict("HIGH_VALUE_THRESHOLD_REVIEW_PENDING",
                         "已有一条高价值判定阈值调整在最高权限审批中，审批结束后再提交");
@@ -390,7 +407,7 @@ public class SettlementConfigWriteService {
             String snapshot = reason + "\n" + encode(Map.of(
                     "previous_versions", writeRepository.listActiveHighValueThresholds(),
                     "proposed_config", Map.of("high_value_threshold_cent", threshold, "high_value_threshold_min_cent", min,
-                            "high_value_threshold_max_cent", max, "reason", reason)));
+                            "high_value_threshold_max_cent", max, "reason", reason, "effective_from", effectiveFrom.toString())));
             var decision = reviews.evaluate(new SupervisorReviewEvaluateRequest(idem + ":review", snapshot, List.of(),
                     HIGH_VALUE_THRESHOLD_ACTION, HIGH_VALUE_THRESHOLD_OBJECT, landedId, 0L, snapshot, null, List.of()));
             if (!"pending_review".equals(decision.reviewStatus()) || !"top_authority".equals(decision.approvalLevel())) {
@@ -401,14 +418,15 @@ public class SettlementConfigWriteService {
                     Map.of("high_value_threshold_cent", String.valueOf(threshold),
                             "high_value_threshold_min_cent", String.valueOf(min),
                             "high_value_threshold_max_cent", String.valueOf(max),
-                            "reason", reason, "review_id", decision.reviewId()));
+                            "reason", reason, "review_id", decision.reviewId(), "effective_from", effectiveFrom.toString()));
             return landedId;
         }, String.class);
     }
 
     /**
      * 第十八批第 24 条 最高权限审批结果回写（照 BarBusinessDayService.decided，核对象、动作、持久化状态与草案上的审批单号）：
-     * 批准即转正（旧生效行含出厂 hvt_default 软替换为 inactive）；驳回即草案下线、判定仍读原阈值。
+     * 批准后待生效、到生效起始日期由 {@link SettlementConfigScheduledActivationService#activateDue} 转正（旧生效行含出厂 hvt_default 软替换为 inactive）；
+     * 批准时生效起始日期已到（371-R3，照 BarBusinessDayService.decided 批准时已过点记 expired）草案下线、由提交人改期重报；驳回即草案下线、判定仍读原阈值。
      */
     @EventListener
     @Transactional
@@ -426,8 +444,14 @@ public class SettlementConfigWriteService {
         String actor = auth.currentActor().id();
         Instant now = Instant.now();
         if ("approved".equals(decision.reviewStatus())) {
-            requireActivated(writeRepository.activateSingleRowDraft(SingleRowConfig.HIGH_VALUE_THRESHOLD, decision.objectId(), actor, now));
-            auditActivated("high_value_thresholds", decision.objectId());
+            LocalDate effectiveFrom = scheduledActivation.scheduleIfAhead(SingleRowConfig.HIGH_VALUE_THRESHOLD, decision.objectId(), actor, now);
+            if (effectiveFrom == null) {
+                writeRepository.softDeleteSingleRow(SingleRowConfig.HIGH_VALUE_THRESHOLD, decision.objectId(),
+                        "审批通过时生效起始日期已到，未生效（" + decision.reviewId() + "）", actor, now);
+            } else {
+                audit("settlement.config.draft.activated", "high_value_thresholds", decision.objectId(), null,
+                        Map.of("config_group", "high_value_thresholds", "effective_from", effectiveFrom.toString()));
+            }
         } else {
             writeRepository.softDeleteSingleRow(SingleRowConfig.HIGH_VALUE_THRESHOLD, decision.objectId(),
                     "最高权限审批驳回（" + decision.reviewId() + "）", actor, now);
@@ -648,8 +672,16 @@ public class SettlementConfigWriteService {
             default -> {
                 SingleRowConfig cfg = SingleRowConfig.fromConfigType(type);
                 requireDifferentActor(writeRepository.singleRowDraftUpdatedBy(cfg, draftId), actorId);
-                requireActivated(writeRepository.activateSingleRowDraft(cfg, draftId, actorId, now));
-                auditActivated(type, draftId);
+                if (SettlementConfigScheduledActivationService.DATED.contains(cfg)) {
+                    // 第十八批 BQ 段第 371 条 371-R1（BSM:521「经高敏权限“转正”审批通过后按指定日期生效，不即改即生效」）：批准后待生效，
+                    //   生效起始日期已到 409 SETTLEMENT_CONFIG_EFFECTIVE_DATE_PASSED（改期重报），到日由系统转正。
+                    LocalDate effectiveFrom = scheduledActivation.schedule(cfg, draftId, actorId, now);
+                    audit("settlement.config.draft.activated", type, draftId, null,
+                            Map.of("config_group", type, "effective_from", effectiveFrom.toString()));
+                } else {
+                    requireActivated(writeRepository.activateSingleRowDraft(cfg, draftId, actorId, now));
+                    auditActivated(type, draftId);
+                }
             }
         }
     }

@@ -1,10 +1,15 @@
 package com.complex.platform.ticketing;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.complex.platform.common.BusinessDayResolver;
+import com.complex.platform.settlement.SettlementConfigScheduledActivationService;
 import com.complex.platform.ticketing.dto.ConfirmTicketOrderPaymentRequest;
+import java.time.Duration;
+import java.time.Instant;
+import java.time.LocalDate;
 import java.util.Map;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
@@ -31,6 +36,8 @@ class TicketRouteFeeFixationJdbcIntegrationTests {
 
     @Autowired private TicketOrderService orderService;
     @Autowired private JdbcTemplate jdbc;
+    @Autowired private BusinessDayResolver businessDays;
+    @Autowired private SettlementConfigScheduledActivationService activation;
 
     private String k;
     private String project;
@@ -61,6 +68,7 @@ class TicketRouteFeeFixationJdbcIntegrationTests {
         assertThat(((Number) row.get("fee_cent")).longValue()).isEqualTo(60L);
         assertThat(row.get("fee_bps")).isEqualTo(60);
         assertThat(row.get("config_id")).as("记所用通路费配置行").isEqualTo(routeCfg);
+        assertThat(row.get("config_version")).as("记所用通路费配置的版本号（第十八批裁决 72）").isEqualTo(1);
         assertThat(row.get("payment_channel")).isEqualTo("wechat");
         assertThat(row.get("order_id")).isEqualTo(order);
 
@@ -108,8 +116,41 @@ class TicketRouteFeeFixationJdbcIntegrationTests {
         Map<String, Object> row = jdbc.queryForMap("SELECT * FROM ticket_order_channel_fees WHERE order_id = ?", order);
         assertThat(row.get("sales_fee_config_id")).as("记付款时所用销售渠道费配置").isEqualTo(salesCfg);
         assertThat(row.get("sales_fee_bps")).as("付款后改费率不回改").isEqualTo(800);
+        assertThat(row.get("sales_fee_config_version")).as("记所用销售渠道费配置的版本号（第十八批裁决 72）").isEqualTo(1);
         assertThat(jdbc.queryForObject("SELECT count(*) FROM ticket_order_channel_fees WHERE order_id = ? AND sales_fee_config_id IS NOT NULL",
                 Integer.class, official)).as("官方渠道不扣销售渠道费").isZero();
+    }
+
+    /**
+     * 第十八批 BQ 段第 360 条 360-R2（第十八批裁决 72「每单记录所用版本号」；BSM:521「每一笔单据在生成时就把所用配置版本固化在单上」）：
+     * 美团单 A 付款时第 1 版 800 生效，记版本 1；第 2 版 1200 到生效起始日期由系统转正后，美团单 B 付款记版本 2、1200；A 那行不变。
+     * 微信通路费第 2 版 90 同日一起转正后，官方单 C 微信付款，这一笔通路费记版本 2、90。修复前不记版本号，断言红。
+     */
+    @Test
+    void salesChannelFeeVersionNoFollowsTheVersionInEffectAtPayment() {
+        jdbc.update("""
+                INSERT INTO channel_fee_configs (id, project_id, fee_layer, channel, fee_bps, status, is_draft)
+                VALUES (?, ?, 'sales', 'meituan', 800, 'active', FALSE)""", "cfc_rffv1_" + k, project);
+        String a = order("meituan", 10000L);
+        orderService.confirmPayment(a, new ConfirmTicketOrderPaymentRequest("rff7_" + k, intent(a, "meituan", 10000L), null));
+        LocalDate next = businessDays.businessDate(project, null, Instant.now()).plusDays(1);
+        jdbc.update("""
+                INSERT INTO channel_fee_configs (id, project_id, fee_layer, channel, fee_bps, status, is_draft, version_no, effective_from)
+                VALUES (?, ?, 'sales', 'meituan', 1200, 'scheduled', FALSE, 2, ?)""", "cfc_rffv2_" + k, project, next);
+        jdbc.update("""
+                INSERT INTO channel_fee_configs (id, project_id, fee_layer, channel, fee_bps, status, is_draft, version_no, effective_from)
+                VALUES (?, ?, 'route', 'wechat', 90, 'scheduled', FALSE, 2, ?)""", "cfc_rffr2_" + k, project, next);
+        activation.activateDue(Instant.now().plus(Duration.ofDays(1)));
+        String b = order("meituan", 10000L);
+        orderService.confirmPayment(b, new ConfirmTicketOrderPaymentRequest("rff8_" + k, intent(b, "meituan", 10000L), null));
+        String c = order("app", 10000L);
+        String wechat = intent(c, "wechat", 10000L);
+        orderService.confirmPayment(c, new ConfirmTicketOrderPaymentRequest("rff9_" + k, wechat, null));
+
+        assertThat(salesFix(a)).as("A 付款时第 1 版生效，之后不回改").isEqualTo("1|800");
+        assertThat(salesFix(b)).as("B 付款时第 2 版已生效").isEqualTo("2|1200");
+        assertThat(jdbc.queryForObject("SELECT config_version || '|' || fee_bps FROM ticket_payment_route_fees WHERE payment_intent_id = ?",
+                String.class, wechat)).as("C 微信付款时通路费第 2 版已生效").isEqualTo("2|90");
     }
 
     /** 拒收（与待付不符）的到账转原路待退，不固化通路费。 */
@@ -122,6 +163,11 @@ class TicketRouteFeeFixationJdbcIntegrationTests {
 
         assertThat(jdbc.queryForObject("SELECT count(*) FROM ticket_payment_route_fees WHERE order_id = ?",
                 Integer.class, order)).isZero();
+    }
+
+    private String salesFix(String order) {
+        return jdbc.queryForObject("SELECT sales_fee_config_version || '|' || sales_fee_bps FROM ticket_order_channel_fees WHERE order_id = ?",
+                String.class, order);
     }
 
     private int fixedRows(String pay) {

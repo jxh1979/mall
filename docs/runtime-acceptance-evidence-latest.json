@@ -8,14 +8,14 @@
     "RUNTIME_EVIDENCE_BOUND_TO_SOURCE_FINGERPRINT",
     "RUNTIME_EVIDENCE_DOES_NOT_CLOSE_PRODUCTION_MANIFEST"
   ],
-  "generated_at": "2026-11-21T12:41:02.786Z",
+  "generated_at": "2026-11-21T13:21:13.134Z",
   "git": {
-    "head": "35e577904b41e116ff707ebc9639a4c12aa885cd",
-    "head_short": "35e57790",
-    "branch": "feature/business-code-batch99-20261106",
+    "head": "fd8aeeb366f0c2e3020451c1618117928687727c",
+    "head_short": "fd8aeeb3",
+    "branch": "feature/business-code-batch89-20261106",
     "worktree_dirty": false,
-    "source_fingerprint": "236df533f5d39de3773be443fb0425576ef1d8119c039c9a05c24150fae66397",
-    "source_fingerprint_file_count": 3612,
+    "source_fingerprint": "ed549acb4cf1a1a9855554cd81af0dc90a5c388e7a8afb15ec3ec6954d4e43dc",
+    "source_fingerprint_file_count": 3616,
     "source_fingerprint_paths": [
       "backend/src/main",
       "backend/src/test",
@@ -50,12 +50,12 @@
   },
   "backend_surefire": {
     "path": "backend/target/surefire-reports",
-    "suites": 671,
-    "tests": 7220,
+    "suites": 672,
+    "tests": 7229,
     "failures": 0,
     "errors": 0,
     "skipped": 0,
-    "latest_mtime": "2026-11-21T12:37:28.016Z",
+    "latest_mtime": "2026-11-21T13:18:23.042Z",
     "passed": true
   },
   "web_unit_source": {
@@ -428,7 +428,7 @@
       "apps/web/src/shared/ReplayedNotice.test.tsx"
     ],
     "file_count": 366,
-    "test_count_from_source": 2027
+    "test_count_from_source": 2028
   },
   "web_build": {
     "dist_index_exists": true,
@@ -449,15 +449,15 @@
     "asset_count": 175,
     "main_js_assets": [
       {
-        "path": "apps/web/dist/assets/main-kfLNaMrd.js",
+        "path": "apps/web/dist/assets/main-BJobp8Bb.js",
         "size_bytes": 4337,
-        "mtime": "2026-11-21T12:37:38.643Z"
+        "mtime": "2026-11-21T13:18:33.183Z"
       }
     ],
     "largest_asset": {
       "path": "apps/web/dist/assets/vendor-antd-Bh_XtmOr.js",
       "size_bytes": 251112,
-      "mtime": "2026-11-21T12:37:38.646Z"
+      "mtime": "2026-11-21T13:18:33.186Z"
     },
     "no_main_bundle_warning_expected": true
   },
