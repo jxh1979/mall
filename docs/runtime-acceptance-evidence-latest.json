@@ -8,14 +8,14 @@
     "RUNTIME_EVIDENCE_BOUND_TO_SOURCE_FINGERPRINT",
     "RUNTIME_EVIDENCE_DOES_NOT_CLOSE_PRODUCTION_MANIFEST"
   ],
-  "generated_at": "2026-11-21T03:36:41.666Z",
+  "generated_at": "2026-11-21T07:01:26.169Z",
   "git": {
-    "head": "dda9a2389759cb268fcaecc7b083552fe7b69a49",
-    "head_short": "dda9a238",
-    "branch": "feature/business-code-batch85-20261106",
+    "head": "676127afe790b8f6f28e0793c2f681dc25aa5c02",
+    "head_short": "676127af",
+    "branch": "feature/business-code-batch95-20261106",
     "worktree_dirty": false,
-    "source_fingerprint": "23e0b9e4481a2b436df60226e52f76841fcc51fbea335132452625bb3f050bfc",
-    "source_fingerprint_file_count": 3601,
+    "source_fingerprint": "8115678746c92f6e55930f13763662397c1c1eddc4daf35bd7ff8158d6aaea81",
+    "source_fingerprint_file_count": 3606,
     "source_fingerprint_paths": [
       "backend/src/main",
       "backend/src/test",
@@ -50,12 +50,12 @@
   },
   "backend_surefire": {
     "path": "backend/target/surefire-reports",
-    "suites": 666,
-    "tests": 7190,
+    "suites": 668,
+    "tests": 7204,
     "failures": 0,
     "errors": 0,
     "skipped": 0,
-    "latest_mtime": "2026-11-21T03:22:10.762Z",
+    "latest_mtime": "2026-11-21T06:57:27.084Z",
     "passed": true
   },
   "web_unit_source": {
@@ -178,6 +178,7 @@
       "apps/web/src/admin/pages/ComplaintFollowupDialog.test.tsx",
       "apps/web/src/admin/pages/ComplianceRemindersPage.guidedcreate.test.tsx",
       "apps/web/src/admin/pages/ComplianceRemindersPage.test.tsx",
+      "apps/web/src/admin/pages/ContractWorkbenchPage.colorproject.test.tsx",
       "apps/web/src/admin/pages/ContractWorkbenchPage.guidedcreate.test.tsx",
       "apps/web/src/admin/pages/ContractWorkbenchPage.parking.test.tsx",
       "apps/web/src/admin/pages/ContractWorkbenchPage.robustness.test.tsx",
@@ -426,8 +427,8 @@
       "apps/web/src/dealer/dealerPortalClient.test.ts",
       "apps/web/src/shared/ReplayedNotice.test.tsx"
     ],
-    "file_count": 365,
-    "test_count_from_source": 2013
+    "file_count": 366,
+    "test_count_from_source": 2023
   },
   "web_build": {
     "dist_index_exists": true,
@@ -448,15 +449,15 @@
     "asset_count": 175,
     "main_js_assets": [
       {
-        "path": "apps/web/dist/assets/main-D574oGLQ.js",
+        "path": "apps/web/dist/assets/main-BKrmtgIy.js",
         "size_bytes": 4337,
-        "mtime": "2026-11-21T03:22:21.626Z"
+        "mtime": "2026-11-21T06:57:37.825Z"
       }
     ],
     "largest_asset": {
       "path": "apps/web/dist/assets/vendor-antd-Bh_XtmOr.js",
       "size_bytes": 251112,
-      "mtime": "2026-11-21T03:22:21.630Z"
+      "mtime": "2026-11-21T06:57:37.830Z"
     },
     "no_main_bundle_warning_expected": true
   },
