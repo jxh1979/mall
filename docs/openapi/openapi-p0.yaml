@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: 综合体管理系统 P0 API 契约
-  version: V1.00
+  version: V1.01
   description: P0 首批编码前置契约。本文采用 JSON-compatible YAML，便于与 openapi-p0.json 保持一致。正式后端以 Java 21 + Spring Boot 4.x +
     springdoc-openapi 输出运行时 OpenAPI，并与本契约比对。
 servers:
@@ -798,6 +798,7 @@ paths:
         - amusement
       operationId: listAmusementProjects
       summary: 查询游乐项目
+      description: 第十八批 BR 段第 357 条 357-R1：每个游乐项目另带 catalog_item_code（游乐公司为该项目引用的所属商户内部结算价目录条目编码，设置见 setAmusementProjectInternalPriceItem；可空，空＝不按内部结算价与所属商户做游乐域内结算）。
       x-permission: amusement.session.view
       x-data-scope: project-amusement
       x-terminal-allowed:
@@ -820,6 +821,7 @@ paths:
         - amusement
       operationId: createAmusementProject
       summary: 维护游乐项目
+      description: 第十八批 BR 段第 357 条 357-R1：返回的游乐项目带 catalog_item_code，新建时恒为空（不参与游乐域内结算）；引用由游乐公司经 setAmusementProjectInternalPriceItem 设置，本接口不收该字段。
       x-permission: amusement.session.manage
       x-data-scope: project-amusement
       x-terminal-allowed:
@@ -1638,7 +1640,7 @@ paths:
         整体占用该项目的实时在玩人数容量→留痕。多人票余量不足 N 时整单拒绝并回补权益。（原「占用场次/点位设备/项目安全三维容量」「任一受控维度余量不足」已废止（DEC-R5-2026-08-04-04 / R8 用户裁决
         D-02），待代码轮下线，不得新增调用。现行只按单个项目的实时在玩人数控制容量，排队人数不占用容量——BSM「容量控制」条。）失败码：TICKET_NOT_FOUND(权益不存在/凭证失效)、ENTITLEMENT_EXPIRED(不在有效期)、ENTITLEMENT_USED(非active或剩余次数为0)、ENTITLEMENT_NOT_AMUSEMENT(非游乐类权益)、ENTITLEMENT_NOT_FOR_PROJECT(权益未绑定本项目)、SESSION_CAPACITY_EXHAUSTED(项目容量（实时在玩人数）耗尽，已消费权益回补；原称「场次容量耗尽」，已废止（DEC-R5-2026-08-04-04
         / R8 用户裁决 D-02），待代码轮下线，不得新增调用。机读错误码不变)、PROJECT_NOT_OPEN/SESSION_NOT_OPEN/SAFETY_BLOCKED。项目无绑定配置时回退按游乐类放行。达硬上限（安全容量）阻断并由系统自动停运（项目 paused，记 auto_paused_reason=hard_capacity，停运与 over_capacity 异常在独立事务落库，不随被拒核销回滚）；出场释放使项目实时在玩人数回落到硬上限以下后，由系统自动恢复开放（paused→open，留痕 amusement.project.auto_reopened，triggered_by=system）；高危事故停运与人工状态不自动恢复——BSM「容量分两道」条。
-        第十八批 N 段第 123 条 123-R2（BSM:1630「核销、收款、退款、放行等敏感操作，操作设备定位落在该项目综合体授权范围之外时一律拒绝并留痕」；BSM:1876「Web 端同样适用」）：本操作属敏感操作定位闸的现场动作闭集（第十八批裁决 31）。操作对象所属项目已配授权范围（123-R1）时须带请求头 X-Geo-Latitude、X-Geo-Longitude（设备当下定位，WGS-84 十进制度）：没带或解析不了按范围外处理（裁决 30）返回 403 SENSITIVE_OPERATION_LOCATION_REQUIRED，到圆心距离超过授权半径返回 403 SENSITIVE_OPERATION_OUT_OF_RANGE，拒绝在独立事务里留痕 sensitive_operation.location_rejected（business_id 为本 operationId，业务回滚不丢）；项目没配授权范围不查位置（裁决 32）；判定在幂等之前，重放不能绕过；通过时不存位置。第十八批 AH 段 239-R1（ENUM:46「上述有效期类型决定的是「这张票在多长时间内可以开始使用」；一经完成检票环节……该票即绑定至当前场次，其全部权益的可用窗口收窄为该场次」）：票面有效期只决定能否开启新场次；同票任一人份本场（订单综合体本营业日）已有入场类核销成功的，本场内再入场、附带权益（赠饮、餐饮零售券、游乐）与同票他人首入不受票面有效期截断，预检 allowed 同口径；本场未检票、有效期已过的仍 409 ENTITLEMENT_EXPIRED。第十八批 AH 段 219-R1（BSM:800「只能在完成检票环节所在的那一个场次内核销」「后续场次的附带权益也不得提前到当前场次使用」）：票内游乐（同票同人份另有入园或酒吧入场类权益；纯游乐票、当天无限窗口照旧）须本场（订单综合体本营业日）已有入场类核销成功，否则 409 ENTITLEMENT_SESSION_NOT_CHECKED_IN；每场只能用一份（游乐总次数÷同人份入场次数，至少 1；单次票和补偿补发行取全部），本场已达一份 409 ENTITLEMENT_SESSION_SHARE_USED_UP；两者均属规则拒绝，不扣次。第十八批 AH 段第 219 条补充（BSM:780「按可用次数逐次核销（每用一次扣一次，剩余为 0 才算用完）」）：同一权益在同一开放场次再次入场照常成功，多次票每次扣一次、在玩人数各加一（V619 去掉 V234 同一权益同一场次至多一条未释放入场的唯一约束，不再整笔回滚 409）。
+        第十八批 N 段第 123 条 123-R2（BSM:1630「核销、收款、退款、放行等敏感操作，操作设备定位落在该项目综合体授权范围之外时一律拒绝并留痕」；BSM:1876「Web 端同样适用」）：本操作属敏感操作定位闸的现场动作闭集（第十八批裁决 31）。操作对象所属项目已配授权范围（123-R1）时须带请求头 X-Geo-Latitude、X-Geo-Longitude（设备当下定位，WGS-84 十进制度）：没带或解析不了按范围外处理（裁决 30）返回 403 SENSITIVE_OPERATION_LOCATION_REQUIRED，到圆心距离超过授权半径返回 403 SENSITIVE_OPERATION_OUT_OF_RANGE，拒绝在独立事务里留痕 sensitive_operation.location_rejected（business_id 为本 operationId，业务回滚不丢）；项目没配授权范围不查位置（裁决 32）；判定在幂等之前，重放不能绕过；通过时不存位置。第十八批 AH 段 239-R1（ENUM:46「上述有效期类型决定的是「这张票在多长时间内可以开始使用」；一经完成检票环节……该票即绑定至当前场次，其全部权益的可用窗口收窄为该场次」）：票面有效期只决定能否开启新场次；同票任一人份本场（订单综合体本营业日）已有入场类核销成功的，本场内再入场、附带权益（赠饮、餐饮零售券、游乐）与同票他人首入不受票面有效期截断，预检 allowed 同口径；本场未检票、有效期已过的仍 409 ENTITLEMENT_EXPIRED。第十八批 AH 段 219-R1（BSM:800「只能在完成检票环节所在的那一个场次内核销」「后续场次的附带权益也不得提前到当前场次使用」）：票内游乐（同票同人份另有入园或酒吧入场类权益；纯游乐票、当天无限窗口照旧）须本场（订单综合体本营业日）已有入场类核销成功，否则 409 ENTITLEMENT_SESSION_NOT_CHECKED_IN；每场只能用一份（游乐总次数÷同人份入场次数，至少 1；单次票和补偿补发行取全部），本场已达一份 409 ENTITLEMENT_SESSION_SHARE_USED_UP；两者均属规则拒绝，不扣次。第十八批 AH 段第 219 条补充（BSM:780「按可用次数逐次核销（每用一次扣一次，剩余为 0 才算用完）」）：同一权益在同一开放场次再次入场照常成功，多次票每次扣一次、在玩人数各加一（V619 去掉 V234 同一权益同一场次至多一条未释放入场的唯一约束，不再整笔回滚 409）。第十八批 BR 段第 357 条 357-R2（BSM:753「游乐公司再按已批准的内部结算价或域内规则，与实际提供服务的游乐商户结算。」；BSM:1689「通票权益核销后才按所属域的已生效规则与实际提供方结算；未核销不产生提供方结算。」；BSM:1671「核销或结算时把当时价格固化到流水，历史不得手改。」）：游乐入场成功（游乐类权益，补偿补发权益与当天重放除外）且入场项目引用了内部结算价目录条目（见 setAmusementProjectInternalPriceItem）的，同一事务按项目所属商户该条目的当时生效价连同价格版本逐笔固化一行游乐域内结算（kind=settled，营业日取该次入场锁定的营业日，付款方为该综合体游乐票收入归属的游乐公司）；未引用的项目照旧不记。取不到生效价 400 ENTITLEMENT_PRICE_UNRESOLVED，该综合体游乐票收入归属未配置 409 REVENUE_STREAM_ATTRIBUTION_MISSING，两者都整笔回滚、不扣次，不落入场记录。
       x-permission: amusement.verification.execute
       x-failure-codes:
         - TICKET_NOT_FOUND
@@ -1652,6 +1654,8 @@ paths:
         - SAFETY_INSPECTION_EXPIRED
         - SENSITIVE_OPERATION_LOCATION_REQUIRED
         - SENSITIVE_OPERATION_OUT_OF_RANGE
+        - ENTITLEMENT_PRICE_UNRESOLVED
+        - REVENUE_STREAM_ATTRIBUTION_MISSING
       x-data-scope: project-amusement-point
       x-terminal-allowed:
         - staff_work_phone
@@ -4641,7 +4645,7 @@ paths:
         "500":
           $ref: "#/components/responses/Error"
       x-auth-context: staff-token
-      description: 按原台账归属核验 finance.payment.register 的项目范围与商户范围；幂等结果返回前和锁定原单后均核验，查看权限不代替收付款权限。项目公司财务无需绑定商户。押金退还应付(source_type=deposit_refund)：所在地今天或所登记 payment_time 的所在地日期早于应付到期日(＝max(算账完成日, 最后审批完成日＋等待期))时 409 DEPOSIT_REFUND_NOT_DUE，不受三个付账日与账单异议期约束；变更押金补退差额(source_type=deposit_adjustment)每笔实收/实付写押金流水并更新已收押金余额，退还超过当前已收押金余额时 400 DEPOSIT_INSUFFICIENT。已有冲正/重述行回指的原台账项（合同租金/物业费账单因面积/位置变更作废追加冲正行、补录红冲原行）不再是有效款项，409 AR_AP_ITEM_REVERSED。第十八批 AM 段第 241 条 241-R1（BSM:1803「审批通过后的发放进入应付款项台账，走付款确认……主线与各条平行线都通过才完成付款确认」；第十八批裁决 55「所有应付都先走付款确认」）：应付（direction=payable）登记付款前，该台账项须已有通过的付款确认（主线与财务、法务等各条平行线全部审批通过；发起见 createArApPaymentConfirmation），否则 409 PAYMENT_CONFIRMATION_REQUIRED，台账与收付款流水不变；一张已通过的确认覆盖该笔应付直到结清，可分笔付，失败重付不必重新审批。第十八批 AM 段 241-R9（第十八批裁决 69「付款方是平台主体的应收，登记收款前也须付款确认」）：付款方是平台主体的 8 个来源（pass_domain_share、pass_domain_direct_settlement、bar_payroll_transfer、dispatch_commission_transfer、compensation_fulfillment_recovery、ticket_distribution_recovery、saved_bottle_remedy_recovery、general_card_consume）的应收，登记收款前同样须已有通过的付款确认，否则 409 PAYMENT_CONFIRMATION_REQUIRED；其余应收不受影响。分红抵欠款、退租押金抵扣不经本接口，不受影响。第十八批 AZ 段第 285 条 285-R1（BSM:1353「实际收款或退款成功后才更新已收押金余额」）：来源 contract_deposit（合同押金应收）每笔收款同变更押金补退差额写押金台账 collect 行（备注「合同押金实收」）并更新已收押金余额，部分收款逐笔累加；押金应收的来源单号不带「合同号|」前缀，不计入退租欠费。第十八批 AZ 段第 352 条 352-R1（BSM:1673）：termination_penalty、deposit_adjustment 台账挂合同所属项目，收付款照原台账项目范围核验。
+      description: 按原台账归属核验 finance.payment.register 的项目范围与商户范围；幂等结果返回前和锁定原单后均核验，查看权限不代替收付款权限。项目公司财务无需绑定商户。押金退还应付(source_type=deposit_refund)：所在地今天或所登记 payment_time 的所在地日期早于应付到期日(＝max(算账完成日, 最后审批完成日＋等待期))时 409 DEPOSIT_REFUND_NOT_DUE，不受三个付账日与账单异议期约束；变更押金补退差额(source_type=deposit_adjustment)每笔实收/实付写押金流水并更新已收押金余额，退还超过当前已收押金余额时 400 DEPOSIT_INSUFFICIENT。已有冲正/重述行回指的原台账项（合同租金/物业费账单因面积/位置变更作废追加冲正行、补录红冲原行）不再是有效款项，409 AR_AP_ITEM_REVERSED。第十八批 AM 段第 241 条 241-R1（BSM:1803「审批通过后的发放进入应付款项台账，走付款确认……主线与各条平行线都通过才完成付款确认」；第十八批裁决 55「所有应付都先走付款确认」）：应付（direction=payable）登记付款前，该台账项须已有通过的付款确认（主线与财务、法务等各条平行线全部审批通过；发起见 createArApPaymentConfirmation），否则 409 PAYMENT_CONFIRMATION_REQUIRED，台账与收付款流水不变；一张已通过的确认覆盖该笔应付直到结清，可分笔付，失败重付不必重新审批。第十八批 AM 段 241-R9（第十八批裁决 69「付款方是平台主体的应收，登记收款前也须付款确认」）：付款方是平台主体的 9 个来源（pass_domain_share、pass_domain_direct_settlement、bar_payroll_transfer、dispatch_commission_transfer、compensation_fulfillment_recovery、ticket_distribution_recovery、saved_bottle_remedy_recovery、general_card_consume、amusement_domain_settlement）的应收，登记收款前同样须已有通过的付款确认，否则 409 PAYMENT_CONFIRMATION_REQUIRED；其余应收不受影响。分红抵欠款、退租押金抵扣不经本接口，不受影响。第十八批 AZ 段第 285 条 285-R1（BSM:1353「实际收款或退款成功后才更新已收押金余额」）：来源 contract_deposit（合同押金应收）每笔收款同变更押金补退差额写押金台账 collect 行（备注「合同押金实收」）并更新已收押金余额，部分收款逐笔累加；押金应收的来源单号不带「合同号|」前缀，不计入退租欠费。第十八批 AZ 段第 352 条 352-R1（BSM:1673）：termination_penalty、deposit_adjustment 台账挂合同所属项目，收付款照原台账项目范围核验。
     get:
       tags:
         - finance
@@ -4683,7 +4687,7 @@ paths:
         - finance
       operationId: createArApPaymentConfirmation
       summary: 应收应付台账勾选款项发起付款确认
-      description: 第十八批 AM 段第 241 条 241-R1（BSM:1803「付款确认按全平台统一的审批模型执行——发起时指定这条主线的最终审批人……财务、法务及相关部门作为平行的相关部门线，各指定该部门的最终审批人……主线与各条平行线都通过才完成付款确认；具体流程按支付类型分别设定。」；第十八批裁决 55「所有应付都先走付款确认，按支付类型分别设流程」、65「按台账来源逐个分」、66「每类必带财务、法务两线，其他部门线由发起人按单另加」、67「审批线页设定」、68「同收款方、同类型、同综合体可勾选合发」）：在应收应付台账勾选一笔或多笔款项发起一张付款确认。支付类型即台账来源（ar_ap_items.source_type 原值，见 PaymentConfirmationType），来源不在清单内 400 VALIDATION_FAILED；多笔须同一支付类型、同一收款方（往来方）、同一综合体（项目），且同为应付或同为应收（应收的往来方是付款方、收款方是本方门店，另须同一付款方、同一收款门店），否则 400 VALIDATION_FAILED。可发起的为应付，以及第十八批 AM 段 241-R9（第十八批裁决 69「付款方是平台主体的应收，登记收款前也须付款确认」）付款方是平台主体的 8 个来源（pass_domain_share、pass_domain_direct_settlement、bar_payroll_transfer、dispatch_commission_transfer、compensation_fulfillment_recovery、ticket_distribution_recovery、saved_bottle_remedy_recovery、general_card_consume）的应收，支付类型同来源。reason（事由）与 final_approver_id（主线最终审批人）必填，否则 400 VALIDATION_FAILED；parallel_lines 须为财务（finance_review）、法务（legal_review）两线，以及该支付类型在「组织层级与审批线」页设定的两线之外的必带线（见 listPaymentConfirmationFlows）各指定最终审批人，否则 400 APPROVAL_LINE_FINAL_APPROVER_REQUIRED；可另带其他在用的线。主线沿发起人直接上级链逐级补全到最终审批人，各平行线逐级补全至该线最低起点层级（最终审批人不在链上等按统一审批引擎 400，如 FINAL_APPROVER_NOT_IN_CHAIN）。复核单 action_type=finance.payment_confirm.＜支付类型＞、object_type=payment_confirmation、object_id=付款确认单号，金额为各笔未付额合计，涉钱审批出厂时限 1 个工作日；分红应付（dividend_payout、dividend_reserve_released）的主理人为直接受益人，不得审批。审批经 approveSupervisorReview：主线与各条平行线全部通过即付款确认通过（approved），任一节点驳回即驳回（rejected），驳回后可重新发起。范围闸在幂等之前，逐笔按 finance.payment.register 核项目与商户范围（他项目 403 CROSS_PROJECT_FORBIDDEN，他商户 403 CROSS_MERCHANT_FORBIDDEN），款项不存在 404 AR_AP_ITEM_NOT_FOUND，工资应付 409 PAYROLL_DEDICATED_WORKFLOW_REQUIRED（工资走 createPayrollPaymentConfirmation），已被更正或红冲的采购应付 409 PURCHASE_PAYABLE_REPLACED；这些失败记 finance.payment_confirmation.request_failed，不占幂等键。写内锁住各台账行：未付额 ≤ 0 时 409 AR_AP_ITEM_SETTLED；任一笔已有待审批或已通过的付款确认 409 PAYMENT_CONFIRMATION_EXISTS。一张已通过的确认覆盖所含各笔直到结清，可分笔付，失败重付不必重新审批；出款闸见 createArApPayment、confirmOfflinePayment、initiateInternalPayment 与 requestArApAdjustment（收付款补录）。同一幂等键重发返回首次结果。成功留痕 finance.payment_confirmation.requested。
+      description: 第十八批 AM 段第 241 条 241-R1（BSM:1803「付款确认按全平台统一的审批模型执行——发起时指定这条主线的最终审批人……财务、法务及相关部门作为平行的相关部门线，各指定该部门的最终审批人……主线与各条平行线都通过才完成付款确认；具体流程按支付类型分别设定。」；第十八批裁决 55「所有应付都先走付款确认，按支付类型分别设流程」、65「按台账来源逐个分」、66「每类必带财务、法务两线，其他部门线由发起人按单另加」、67「审批线页设定」、68「同收款方、同类型、同综合体可勾选合发」）：在应收应付台账勾选一笔或多笔款项发起一张付款确认。支付类型即台账来源（ar_ap_items.source_type 原值，见 PaymentConfirmationType），来源不在清单内 400 VALIDATION_FAILED；多笔须同一支付类型、同一收款方（往来方）、同一综合体（项目），且同为应付或同为应收（应收的往来方是付款方、收款方是本方门店，另须同一付款方、同一收款门店），否则 400 VALIDATION_FAILED。可发起的为应付，以及第十八批 AM 段 241-R9（第十八批裁决 69「付款方是平台主体的应收，登记收款前也须付款确认」）付款方是平台主体的 9 个来源（pass_domain_share、pass_domain_direct_settlement、bar_payroll_transfer、dispatch_commission_transfer、compensation_fulfillment_recovery、ticket_distribution_recovery、saved_bottle_remedy_recovery、general_card_consume、amusement_domain_settlement）的应收，支付类型同来源。reason（事由）与 final_approver_id（主线最终审批人）必填，否则 400 VALIDATION_FAILED；parallel_lines 须为财务（finance_review）、法务（legal_review）两线，以及该支付类型在「组织层级与审批线」页设定的两线之外的必带线（见 listPaymentConfirmationFlows）各指定最终审批人，否则 400 APPROVAL_LINE_FINAL_APPROVER_REQUIRED；可另带其他在用的线。主线沿发起人直接上级链逐级补全到最终审批人，各平行线逐级补全至该线最低起点层级（最终审批人不在链上等按统一审批引擎 400，如 FINAL_APPROVER_NOT_IN_CHAIN）。复核单 action_type=finance.payment_confirm.＜支付类型＞、object_type=payment_confirmation、object_id=付款确认单号，金额为各笔未付额合计，涉钱审批出厂时限 1 个工作日；分红应付（dividend_payout、dividend_reserve_released）的主理人为直接受益人，不得审批。审批经 approveSupervisorReview：主线与各条平行线全部通过即付款确认通过（approved），任一节点驳回即驳回（rejected），驳回后可重新发起。范围闸在幂等之前，逐笔按 finance.payment.register 核项目与商户范围（他项目 403 CROSS_PROJECT_FORBIDDEN，他商户 403 CROSS_MERCHANT_FORBIDDEN），款项不存在 404 AR_AP_ITEM_NOT_FOUND，工资应付 409 PAYROLL_DEDICATED_WORKFLOW_REQUIRED（工资走 createPayrollPaymentConfirmation），已被更正或红冲的采购应付 409 PURCHASE_PAYABLE_REPLACED；这些失败记 finance.payment_confirmation.request_failed，不占幂等键。写内锁住各台账行：未付额 ≤ 0 时 409 AR_AP_ITEM_SETTLED；任一笔已有待审批或已通过的付款确认 409 PAYMENT_CONFIRMATION_EXISTS。一张已通过的确认覆盖所含各笔直到结清，可分笔付，失败重付不必重新审批；出款闸见 createArApPayment、confirmOfflinePayment、initiateInternalPayment 与 requestArApAdjustment（收付款补录）。同一幂等键重发返回首次结果。成功留痕 finance.payment_confirmation.requested。
       x-permission: finance.payment.register
       x-data-scope: project-entity
       x-terminal-allowed:
@@ -4922,7 +4926,7 @@ paths:
         - finance
       operationId: confirmOfflinePayment
       summary: 现金或 POS 线下收款确认
-      description: 第十八批 AM 段第 241 条 241-R1、241-R9（BSM:1803；第十八批裁决 55「所有应付都先走付款确认」、69「付款方是平台主体的应收，登记收款前也须付款确认」）：确认时关联台账项（ar_ap_item_id）的，按该台账项登记收付款，与 createArApPayment 同一付款确认闸——应付，以及付款方是平台主体的 8 个来源（含第十八批 AZ 段第 350 条 350-R1通用卡消费结算 general_card_consume）的应收，须已有通过的付款确认，否则 409 PAYMENT_CONFIRMATION_REQUIRED；不关联台账项的不受影响。
+      description: 第十八批 AM 段第 241 条 241-R1、241-R9（BSM:1803；第十八批裁决 55「所有应付都先走付款确认」、69「付款方是平台主体的应收，登记收款前也须付款确认」）：确认时关联台账项（ar_ap_item_id）的，按该台账项登记收付款，与 createArApPayment 同一付款确认闸——应付，以及付款方是平台主体的 9 个来源（含第十八批 AZ 段第 350 条 350-R1通用卡消费结算 general_card_consume、第十八批 BR 段第 357 条 357-R3 游乐域内结算 amusement_domain_settlement）的应收，须已有通过的付款确认，否则 409 PAYMENT_CONFIRMATION_REQUIRED；不关联台账项的不受影响。
       x-permission: finance.payment.register
       x-data-scope: project-order
       x-terminal-allowed:
@@ -15850,7 +15854,7 @@ paths:
         - ticketing
       operationId: createTicketVerification
       summary: 正式核销
-      description: "核销记录状态闭集（CG-05，ENUM「核销记录状态」）：success（成功）、rejected（拒绝：规则不允许）、failed（失败：设备或网络原因）、reversed（已冲正）、anomaly（异常：已成功扣次但现场未放行或实际交付有争议时提起的异常复核，见 POST /api/v1/ticketing/verifications/{id}/anomaly 与 POST /api/v1/ticketing/verification-anomalies/{id}/resolve）；不设预检通过态、不提供人工放行（manual_overridden 仅历史行保留）。 在线核销：过刷新窗口 / 签名失配以正常响应返回 status=failed（window_expired / signature_invalid）；规则不允许仍以错误响应返回（响应不变），业务事务结束后另起事务落一条 status=rejected 记录（result_reason 为错误码小写；不扣次、不落结算价）；设备或凭证技术原因抛错（设备封禁或未纳管、核销设备未绑定商户、凭证已用或已作废等）同样以错误响应返回，业务事务结束后另起事务落一条 status=failed 记录；设备未登记不落；参数校验、鉴权、越权、定位闸等未进入有效检票的错误不落核销记录（CG 裁决第46、48项）。第十八批 Q 段第 148 条 148-R1（ENUM:55「未先核入场即核酒水一律拒绝」）：酒水（赠饮）权益须本营业日内已核销同票同人份这家酒吧的入场权益，否则 409 BAR_ENTRY_NOT_VERIFIED（规则拒绝，落 rejected）。第十八批 S 段第 165 条 165-R1（BSM:800「后续场次的附带权益也不得提前到当前场次使用」）：多次票的酒水（赠饮）权益每场次（这家酒吧本营业日）只能核本场一份（赠饮总次数÷同票同人份这家酒吧入场次数，至少 1；补偿补发行按其全部次数），超出 409 GIFT_DRINK_SESSION_SHARE_USED_UP（规则拒绝，落 rejected）。第十八批 N 段第 123 条 123-R2（BSM:1630「核销、收款、退款、放行等敏感操作，操作设备定位落在该项目综合体授权范围之外时一律拒绝并留痕」；BSM:1876「Web 端同样适用」）：本操作属敏感操作定位闸的现场动作闭集（第十八批裁决 31）。操作对象所属项目已配授权范围（123-R1）时须带请求头 X-Geo-Latitude、X-Geo-Longitude（设备当下定位，WGS-84 十进制度）：没带或解析不了按范围外处理（裁决 30）返回 403 SENSITIVE_OPERATION_LOCATION_REQUIRED，到圆心距离超过授权半径返回 403 SENSITIVE_OPERATION_OUT_OF_RANGE，拒绝在独立事务里留痕 sensitive_operation.location_rejected（business_id 为本 operationId，业务回滚不丢）；项目没配授权范围不查位置（裁决 32）；判定在幂等之前，重放不能绕过；通过时不存位置。第十八批 X 段第 196 条 196-R1（BSM:800「同一场次内的重复进出仍须按上述三道环节依次通过，但不再重复扣减票面入场次数」）：入园与酒吧入场资格（entry、admission；消耗窗口为 per_session、unlimited_in_day 的照旧）本场已有核销成功记录（已冲正的不算）时再次核销放行、不扣次——酒吧入场按这家酒吧本营业日、入园按订单综合体本营业日定本场；落 status=success、result_reason=session_reentry，不落结算价、不发积分与结算事件、不留脸不比对。第十八批 X 段第 197 条 197-R1（BSM:800「只能在完成检票环节所在的那一个场次内核销」「后续场次的附带权益也不得提前到当前场次使用」）：票内餐饮、零售券（专属直付，exclusive_merchant_id 非空）须同票同人份在本场（订单综合体本营业日）已有入场类核销成功（已冲正的不算），否则 409 ENTITLEMENT_SESSION_NOT_CHECKED_IN；每场只能核一份（该券总次数÷同票同人份入场次数，至少 1；入场次数不超过 1 的单次票与全园故障补偿补发行取全部次数），本场已达一份 409 ENTITLEMENT_SESSION_SHARE_USED_UP；两者均属规则拒绝，落 rejected、不扣次。第十八批 AH 段 239-R1（ENUM:46「上述有效期类型决定的是「这张票在多长时间内可以开始使用」；一经完成检票环节……该票即绑定至当前场次，其全部权益的可用窗口收窄为该场次」）：票面有效期只决定能否开启新场次；同票任一人份本场（订单综合体本营业日）已有入场类核销成功的，本场内再入场、附带权益（赠饮、餐饮零售券、游乐）与同票他人首入不受票面有效期截断，预检 allowed 同口径；本场未检票、有效期已过的仍 409 ENTITLEMENT_EXPIRED。第十八批 AH 段 238-R1（BSM:800「跨夜场次以该场次的实际闭店时间为准，不按自然日切分」）：多人票同场次闸无营业场次时按订单综合体营业日判同一场次，跨营业日仍 409 MULTI_PERSON_CROSS_SESSION_FORBIDDEN。第十八批 AH 段 219-R1（BSM:800「只能在完成检票环节所在的那一个场次内核销」「后续场次的附带权益也不得提前到当前场次使用」）：票内游乐（同票同人份另有入园或酒吧入场类权益；纯游乐票、当天无限窗口照旧）须本场（订单综合体本营业日）已有入场类核销成功，否则 409 ENTITLEMENT_SESSION_NOT_CHECKED_IN；每场只能用一份（游乐总次数÷同人份入场次数，至少 1；单次票和补偿补发行取全部），本场已达一份 409 ENTITLEMENT_SESSION_SHARE_USED_UP；两者均属规则拒绝，落 rejected、不扣次。第十八批 AH 段第 219 条补充（BSM:780「按可用次数逐次核销（每用一次扣一次，剩余为 0 才算用完）」）：同一权益在同一开放场次再次入场照常成功，多次票每次扣一次、在玩人数各加一（V619 去掉 V234 同一权益同一场次至多一条未释放入场的唯一约束，不再整笔回滚 409）。第十八批 AH 段 218-R1（BSM:800「一晚出入次数或连续两日出入合计次数达到后台配置的阈值即触发核查……由系统自动预警」；BSM:1657「预警只作提示与线索汇集，不自动阻断业务」）：入园（entry）检票成功后，同票同人份订单综合体本营业日（一晚）或本营业日连同上一营业日（连续两日）的检票成功次数（含同场次再入场；已冲正、酒吧入场、游乐不计）达到项目阈值（GET /api/v1/customer-frequent-entry-alert-settings/{project_id}，未配置取出厂一晚 4 次、连续两日 7 次），就写统一风控预警（source_domain ticketing、alert_type ticket.frequent_entry、source_ref 父票、risk_level suspicious、project_id 订单综合体，同人份同营业日同类一条）；不阻断，响应不变。"
+      description: "核销记录状态闭集（CG-05，ENUM「核销记录状态」）：success（成功）、rejected（拒绝：规则不允许）、failed（失败：设备或网络原因）、reversed（已冲正）、anomaly（异常：已成功扣次但现场未放行或实际交付有争议时提起的异常复核，见 POST /api/v1/ticketing/verifications/{id}/anomaly 与 POST /api/v1/ticketing/verification-anomalies/{id}/resolve）；不设预检通过态、不提供人工放行（manual_overridden 仅历史行保留）。 在线核销：过刷新窗口 / 签名失配以正常响应返回 status=failed（window_expired / signature_invalid）；规则不允许仍以错误响应返回（响应不变），业务事务结束后另起事务落一条 status=rejected 记录（result_reason 为错误码小写；不扣次、不落结算价）；设备或凭证技术原因抛错（设备封禁或未纳管、核销设备未绑定商户、凭证已用或已作废等）同样以错误响应返回，业务事务结束后另起事务落一条 status=failed 记录；设备未登记不落；参数校验、鉴权、越权、定位闸等未进入有效检票的错误不落核销记录（CG 裁决第46、48项）。第十八批 Q 段第 148 条 148-R1（ENUM:55「未先核入场即核酒水一律拒绝」）：酒水（赠饮）权益须本营业日内已核销同票同人份这家酒吧的入场权益，否则 409 BAR_ENTRY_NOT_VERIFIED（规则拒绝，落 rejected）。第十八批 S 段第 165 条 165-R1（BSM:800「后续场次的附带权益也不得提前到当前场次使用」）：多次票的酒水（赠饮）权益每场次（这家酒吧本营业日）只能核本场一份（赠饮总次数÷同票同人份这家酒吧入场次数，至少 1；补偿补发行按其全部次数），超出 409 GIFT_DRINK_SESSION_SHARE_USED_UP（规则拒绝，落 rejected）。第十八批 N 段第 123 条 123-R2（BSM:1630「核销、收款、退款、放行等敏感操作，操作设备定位落在该项目综合体授权范围之外时一律拒绝并留痕」；BSM:1876「Web 端同样适用」）：本操作属敏感操作定位闸的现场动作闭集（第十八批裁决 31）。操作对象所属项目已配授权范围（123-R1）时须带请求头 X-Geo-Latitude、X-Geo-Longitude（设备当下定位，WGS-84 十进制度）：没带或解析不了按范围外处理（裁决 30）返回 403 SENSITIVE_OPERATION_LOCATION_REQUIRED，到圆心距离超过授权半径返回 403 SENSITIVE_OPERATION_OUT_OF_RANGE，拒绝在独立事务里留痕 sensitive_operation.location_rejected（business_id 为本 operationId，业务回滚不丢）；项目没配授权范围不查位置（裁决 32）；判定在幂等之前，重放不能绕过；通过时不存位置。第十八批 X 段第 196 条 196-R1（BSM:800「同一场次内的重复进出仍须按上述三道环节依次通过，但不再重复扣减票面入场次数」）：入园与酒吧入场资格（entry、admission；消耗窗口为 per_session、unlimited_in_day 的照旧）本场已有核销成功记录（已冲正的不算）时再次核销放行、不扣次——酒吧入场按这家酒吧本营业日、入园按订单综合体本营业日定本场；落 status=success、result_reason=session_reentry，不落结算价、不发积分与结算事件、不留脸不比对。第十八批 X 段第 197 条 197-R1（BSM:800「只能在完成检票环节所在的那一个场次内核销」「后续场次的附带权益也不得提前到当前场次使用」）：票内餐饮、零售券（专属直付，exclusive_merchant_id 非空）须同票同人份在本场（订单综合体本营业日）已有入场类核销成功（已冲正的不算），否则 409 ENTITLEMENT_SESSION_NOT_CHECKED_IN；每场只能核一份（该券总次数÷同票同人份入场次数，至少 1；入场次数不超过 1 的单次票与全园故障补偿补发行取全部次数），本场已达一份 409 ENTITLEMENT_SESSION_SHARE_USED_UP；两者均属规则拒绝，落 rejected、不扣次。第十八批 AH 段 239-R1（ENUM:46「上述有效期类型决定的是「这张票在多长时间内可以开始使用」；一经完成检票环节……该票即绑定至当前场次，其全部权益的可用窗口收窄为该场次」）：票面有效期只决定能否开启新场次；同票任一人份本场（订单综合体本营业日）已有入场类核销成功的，本场内再入场、附带权益（赠饮、餐饮零售券、游乐）与同票他人首入不受票面有效期截断，预检 allowed 同口径；本场未检票、有效期已过的仍 409 ENTITLEMENT_EXPIRED。第十八批 AH 段 238-R1（BSM:800「跨夜场次以该场次的实际闭店时间为准，不按自然日切分」）：多人票同场次闸无营业场次时按订单综合体营业日判同一场次，跨营业日仍 409 MULTI_PERSON_CROSS_SESSION_FORBIDDEN。第十八批 AH 段 219-R1（BSM:800「只能在完成检票环节所在的那一个场次内核销」「后续场次的附带权益也不得提前到当前场次使用」）：票内游乐（同票同人份另有入园或酒吧入场类权益；纯游乐票、当天无限窗口照旧）须本场（订单综合体本营业日）已有入场类核销成功，否则 409 ENTITLEMENT_SESSION_NOT_CHECKED_IN；每场只能用一份（游乐总次数÷同人份入场次数，至少 1；单次票和补偿补发行取全部），本场已达一份 409 ENTITLEMENT_SESSION_SHARE_USED_UP；两者均属规则拒绝，落 rejected、不扣次。第十八批 AH 段第 219 条补充（BSM:780「按可用次数逐次核销（每用一次扣一次，剩余为 0 才算用完）」）：同一权益在同一开放场次再次入场照常成功，多次票每次扣一次、在玩人数各加一（V619 去掉 V234 同一权益同一场次至多一条未释放入场的唯一约束，不再整笔回滚 409）。第十八批 AH 段 218-R1（BSM:800「一晚出入次数或连续两日出入合计次数达到后台配置的阈值即触发核查……由系统自动预警」；BSM:1657「预警只作提示与线索汇集，不自动阻断业务」）：入园（entry）检票成功后，同票同人份订单综合体本营业日（一晚）或本营业日连同上一营业日（连续两日）的检票成功次数（含同场次再入场；已冲正、酒吧入场、游乐不计）达到项目阈值（GET /api/v1/customer-frequent-entry-alert-settings/{project_id}，未配置取出厂一晚 4 次、连续两日 7 次），就写统一风控预警（source_domain ticketing、alert_type ticket.frequent_entry、source_ref 父票、risk_level suspicious、project_id 订单综合体，同人份同营业日同类一条）；不阻断，响应不变。第十八批 BR 段第 357 条 357-R2（BSM:753「游乐公司再按已批准的内部结算价或域内规则，与实际提供服务的游乐商户结算。」；BSM:1689「通票权益核销后才按所属域的已生效规则与实际提供方结算；未核销不产生提供方结算。」；BSM:1671「核销或结算时把当时价格固化到流水，历史不得手改。」）：游乐入场成功（游乐类权益，补偿补发权益与当天重放除外）且入场项目引用了内部结算价目录条目（见 setAmusementProjectInternalPriceItem）的，同一事务按项目所属商户该条目的当时生效价连同价格版本逐笔固化一行游乐域内结算（kind=settled，营业日取该次入场锁定的营业日，付款方为该综合体游乐票收入归属的游乐公司）；未引用的项目照旧不记。取不到生效价 400 ENTITLEMENT_PRICE_UNRESOLVED，该综合体游乐票收入归属未配置 409 REVENUE_STREAM_ATTRIBUTION_MISSING，两者都整笔回滚、不扣次，不落成功的入场与核销记录（两码不属规则拒绝与技术失败闭集，不另落 rejected 或 failed 核销记录）。"
       x-permission: verification.execute
       x-data-scope: project-point
       x-terminal-allowed:
@@ -15910,7 +15914,7 @@ paths:
         - ticketing
       operationId: reverseTicketVerification
       summary: 核销冲正
-      description: 对已成功核销记录做冲正：回滚 used_times、原记录置 reversed、新建 reversed 记录可追溯。reason 必填，权限 ticket.verify.reverse。 原记录有待主管处置的核销异常时 409 VERIFICATION_ANOMALY_OPEN（须走主管处置出口）。 第十八批 X 段第 196 条 196-R1：result_reason 为 session_reentry（同场次再入场）或 day_replay（游乐当天重放）的放行记录，冲正时照常置 reversed 并新建 reversed 记录，但不回补次数、不发核销冲正事件。
+      description: 对已成功核销记录做冲正：回滚 used_times、原记录置 reversed、新建 reversed 记录可追溯。reason 必填，权限 ticket.verify.reverse。 原记录有待主管处置的核销异常时 409 VERIFICATION_ANOMALY_OPEN（须走主管处置出口）。 第十八批 X 段第 196 条 196-R1：result_reason 为 session_reentry（同场次再入场）或 day_replay（游乐当天重放）的放行记录，冲正时照常置 reversed 并新建 reversed 记录，但不回补次数、不发核销冲正事件。第十八批 BR 段第 357 条 357-R2（BSM:1671「历史不得手改」）：冲正已记游乐域内结算行（kind=settled）的游乐入场，同一事务另记一行金额取反的冲减行（kind=reversed，项目、商户、付款方、价格版本照抄原行，营业日取冲正时刻所在营业日），原行不改；冲减所在营业月晚于原行营业月的，月结时另挂追收应收（台账来源 amusement_domain_settlement）。
       x-permission: ticket.verify.reverse
       x-data-scope: project-point
       x-terminal-allowed:
@@ -16352,7 +16356,7 @@ paths:
         - platform
       operationId: approveSupervisorReview
       summary: 主管审批或驳回复核记录
-      description: "平台治理主管复核与基础定义违规阻断接口，用于高风险业务动作的可验证拦截、审批和留痕。复核单为授权申请（object_type=access_grant_request）且待审时转入授权申请审批，与 reviewAccessGrantRequest 同一门禁：access.grant_request.review 与 governance.supervisor_review.approve 一次核验（员工显式拒绝优先，最高权限会话同样受约束；同一单次授予来源只消耗一次），缺任一即 403 PERMISSION_DENIED，不推进审批节点、不落地。 18E：通过与驳回之前的读取按 governance.supervisor_review.approve 可触及的项目判发起人账号归属（持可跨项目角色的含该角色可查看的项目）；发起人不在其内、又不是当前审批人、被转发人或发起人本人的，403（SUPERVISOR_REVIEW_SCOPE_FORBIDDEN）；最高权限逐笔开放不变。 第十八批 AL 段 223-R1（BSM:1751「高价值差异复核通过才入账、同一差异只入账一次」）：对账差异关闭复核（action_type=finance.reconciliation_difference.close）终审通过、差异转已关闭时，提交时勾选 ledger_entry 的向原往来方入应收应付台账（写 ar_ap_items，source_type=reconciliation_difference，source_id 为差异号）；落账营业日已锁定 409 DAY_CLOSE_LOCKED，整笔审批不生效。第十八批 AL 段 245-R1（ENUM:190「日结锁定后的补录须上级审批」）：日结锁定后补录（action_type=finance.locked_backfill.review，object_type=ar_ap_adjustment）终审通过即按补录类型落账（见 requestArApAdjustment），落账各闸不过整笔审批不生效、补录与复核单保持待审；驳回不改账。第十八批 AM 段第 241 条 241-R1（BSM:1803「主线与各条平行线都通过才完成付款确认」）：付款确认（action_type=finance.payment_confirm.＜支付类型＞，object_type=payment_confirmation，object_id 为付款确认单号）全部节点通过即该确认转已通过（approved），任一节点驳回即转已驳回（rejected），驳回后可重新发起。锁账收付款补录终审落账的付款确认闸见 requestArApAdjustment：应付及付款方是平台主体的 8 个来源（含第十八批 AZ 段第 350 条 350-R1通用卡消费结算 general_card_consume）的应收未确认时 409 PAYMENT_CONFIRMATION_REQUIRED，补录与复核单保持待审。第十八批 AV 段第 306 条 306-R1（PGM:899「谁发起、谁销售、谁服务、谁第一个处理异常、为什么、谁审批、结果是什么，都要能查到。」）：整单终态（通过或驳回）的 evidence_attachment_ids 为提交时凭证在前、并上审批人本次所附凭证（去重保序），不覆盖提交时凭证。第十八批 BA 段第 353 条 353-R1（PGM:899；PGM:528）：每个节点审批人所附凭证（evidence_attachment_ids）都并入复核单凭证（提交时与前序节点所附在前，去重保序），中间节点通过后返回的复核单（review_status=pending_review）已含本节点所附；本节点所附另记入 governance.supervisor_review.node_decided 元数据 evidence_attachment_ids（未附为空数组）。"
+      description: "平台治理主管复核与基础定义违规阻断接口，用于高风险业务动作的可验证拦截、审批和留痕。复核单为授权申请（object_type=access_grant_request）且待审时转入授权申请审批，与 reviewAccessGrantRequest 同一门禁：access.grant_request.review 与 governance.supervisor_review.approve 一次核验（员工显式拒绝优先，最高权限会话同样受约束；同一单次授予来源只消耗一次），缺任一即 403 PERMISSION_DENIED，不推进审批节点、不落地。 18E：通过与驳回之前的读取按 governance.supervisor_review.approve 可触及的项目判发起人账号归属（持可跨项目角色的含该角色可查看的项目）；发起人不在其内、又不是当前审批人、被转发人或发起人本人的，403（SUPERVISOR_REVIEW_SCOPE_FORBIDDEN）；最高权限逐笔开放不变。 第十八批 AL 段 223-R1（BSM:1751「高价值差异复核通过才入账、同一差异只入账一次」）：对账差异关闭复核（action_type=finance.reconciliation_difference.close）终审通过、差异转已关闭时，提交时勾选 ledger_entry 的向原往来方入应收应付台账（写 ar_ap_items，source_type=reconciliation_difference，source_id 为差异号）；落账营业日已锁定 409 DAY_CLOSE_LOCKED，整笔审批不生效。第十八批 AL 段 245-R1（ENUM:190「日结锁定后的补录须上级审批」）：日结锁定后补录（action_type=finance.locked_backfill.review，object_type=ar_ap_adjustment）终审通过即按补录类型落账（见 requestArApAdjustment），落账各闸不过整笔审批不生效、补录与复核单保持待审；驳回不改账。第十八批 AM 段第 241 条 241-R1（BSM:1803「主线与各条平行线都通过才完成付款确认」）：付款确认（action_type=finance.payment_confirm.＜支付类型＞，object_type=payment_confirmation，object_id 为付款确认单号）全部节点通过即该确认转已通过（approved），任一节点驳回即转已驳回（rejected），驳回后可重新发起。锁账收付款补录终审落账的付款确认闸见 requestArApAdjustment：应付及付款方是平台主体的 9 个来源（含第十八批 AZ 段第 350 条 350-R1通用卡消费结算 general_card_consume、第十八批 BR 段第 357 条 357-R3 游乐域内结算 amusement_domain_settlement）的应收未确认时 409 PAYMENT_CONFIRMATION_REQUIRED，补录与复核单保持待审。第十八批 AV 段第 306 条 306-R1（PGM:899「谁发起、谁销售、谁服务、谁第一个处理异常、为什么、谁审批、结果是什么，都要能查到。」）：整单终态（通过或驳回）的 evidence_attachment_ids 为提交时凭证在前、并上审批人本次所附凭证（去重保序），不覆盖提交时凭证。第十八批 BA 段第 353 条 353-R1（PGM:899；PGM:528）：每个节点审批人所附凭证（evidence_attachment_ids）都并入复核单凭证（提交时与前序节点所附在前，去重保序），中间节点通过后返回的复核单（review_status=pending_review）已含本节点所附；本节点所附另记入 governance.supervisor_review.node_decided 元数据 evidence_attachment_ids（未附为空数组）。"
       x-permission: governance.supervisor_review.approve
       x-data-scope: project-entity
       x-terminal-allowed:
@@ -16837,7 +16841,7 @@ paths:
         - finance
       operationId: requestArApAdjustment
       summary: 锁定后补录审批申请
-      description: 对已锁定日结的应收应付台账发起补录申请（pending），审批全部通过后才真正写入金额变动。第十八批 AL 段第 245 条 245-R1（ENUM:190「日结锁定后的补录须上级审批」；PGM:528「发起单据时只需指定该事项的最终审批人，系统按组织层级自动补全……逐级审批」；PGM:529 涉钱审批出厂 1 个工作日、超时提醒并升级）：提交即进统一审批（action_type finance.locked_backfill.review、object_type ar_ap_adjustment）——沿申请人直接上级链到所指定的最终审批人 final_approver_id（不填为直接上级，不在链上 400 FINAL_APPROVER_NOT_IN_CHAIN）逐级审批，全部通过才落账，任一节点驳回不改账；涉钱出厂 1 个工作日，超时提醒并升级；返回的补录记录带复核单号 review_id，审批经 approveSupervisorReview。第十八批 AL 段第 253 条 253-R1、253-R2（BSM:1642「记录缺失时允许人工补录，但必须写原因和责任人……补录必须附原始记录凭证（微信截图、通话录音等）并经审核」；第十八批裁决 56「三种锁账补录提交时必须上传原始凭证（银行回单、转账截图、异议处理结论等）并写责任人；「业务发生后 3 天内」不套。」）：三种补录一律须附原始凭证 evidence_attachment_ids（business_type=finance_locked_backfill 上传所得，去空去重后至少一个，否则 400 MANUAL_BACKFILL_EVIDENCE_REQUIRED；须真实存在，否则 400 EVIDENCE_ATTACHMENT_NOT_FOUND；须已完成上传，否则 400 EVIDENCE_NOT_UPLOADED）并写责任人 responsible_staff_id（缺 400 VALIDATION_FAILED，账号不存在 400 VALIDATION_FAILED「责任人账号不存在」）；责任人登记为复核单直接受益人，不得审批该单；不套补录时限。返回的补录记录另带 evidence_attachment_ids 与 responsible_staff_id。第十八批 R 段 143-R4：返回的补录记录带 item_no（台账单号）与 original_business_date（原营业日，即锁定该台账的日结的营业日，ENUM:190「在补录记录上标明其所属的原营业日」）；按日结号可查（listDailyCloseAdjustments）。第十八批 Z 段第 186 条 186-R1（ENUM:190「日结锁定后的补录须上级审批，且不改动已锁定的日结金额：补录金额归入当期……」；BSM:2023「已拍板：日结锁定后不能直接补录影响金额，必须上级审批通过后补录。」；第七批裁决 19「人工登记收款仍受锁定拦截。」）：kind 缺省 amount（金额调整，调整额不得为 0）；kind=payment 为收付款补录：adjustment_amount_cent 须为正且不超过台账未收付额（否则 400 VALIDATION_FAILED「支付金额超过未付金额」），payment_method 取 cash、bank_transfer、pos、other（否则 400 VALIDATION_FAILED）；台账未锁定照旧 400 AR_AP_ITEM_NOT_LOCKED。返回的补录记录带 kind 与 payment_method。第十八批 Z 段 186-R2（控制席并入，同根；BSM:1323「提出异议期间商户的付款义务不暂停，先按原值付款，异议成立后多退少补」；ENUM:190「日结锁定后的补录须上级审批……」）：kind=refund 为退款补录：只退应收（否则 400 REFUND_REQUIRES_RECEIVABLE）；所退原收款为该台账最后一笔尚未退完（按退款成功计）的收款，没有可退的收款 400 VALIDATION_FAILED；adjustment_amount_cent 须为正且不超过该笔收款的可退余额（已退及待退都占额，否则 400 VALIDATION_FAILED）；不填 payment_method，记录上的 payment_method 为该笔原收款的收付方式。第十八批 AL 段 245-R1 起原审批接口 approveArApAdjustment 删除，终审通过时按类型落账（原该接口所列各项照旧）：金额调整追加冲正行与重述行入账，沿用原行到期日（第十八批 S 段 160-R1），经营看板的合同应收与净收入按批准当日计补录差额、不改写原营业日（ENUM:190「补录金额归入当期」）；收付款补录按申请的金额与收付方式给该台账登记一笔收付款（付款时间取批准时刻），不追加冲正行与重述行，台账锁与日结七源汇总不动，押金退还、积分发行费的到期闸与已冲正闸照判（409）；退款补录按所退原收款走现有原路退款路径建一笔退款待办（requested，沿原收款渠道），台账、台账锁与日结七源汇总不动，可退余额（400 VALIDATION_FAILED）、分级授权（按终审节点审批人本人的退款额度，超额 403 REFUND_REVIEW_REQUIRED）、只退应收、沿原收款渠道（409 REFUND_CHANNEL_MISMATCH）、后收先退（409 REFUND_LATEST_PAYMENT_FIRST）各闸照判，原收款为现金、刷卡的批准时不判现场设备、只建待办，待办在退款办理处登记执行与核实时仍须带设备（否则 403 DEVICE_CONTEXT_REQUIRED）。落账任一闸不过整笔审批不生效，补录与复核单保持待审。补录记录的 approved_by 记终审或驳回节点审批人、decided_at 记决定时刻；留痕仍记 finance.locked_backfill_approved、finance.locked_backfill_rejected。第十八批 AM 段第 241 条 241-R1、241-R9（BSM:1803；第十八批裁决 55「所有应付都先走付款确认」、69「付款方是平台主体的应收，登记收款前也须付款确认」）：收付款补录（kind=payment）批准落账时照 createArApPayment 同一付款确认闸判——应付，以及付款方是平台主体的 8 个来源（含第十八批 AZ 段第 350 条 350-R1通用卡消费结算 general_card_consume）的应收，须已有通过的付款确认，否则终审 409 PAYMENT_CONFIRMATION_REQUIRED、补录与复核单保持待审，付款确认通过后再批即可；申请时不预判。
+      description: 对已锁定日结的应收应付台账发起补录申请（pending），审批全部通过后才真正写入金额变动。第十八批 AL 段第 245 条 245-R1（ENUM:190「日结锁定后的补录须上级审批」；PGM:528「发起单据时只需指定该事项的最终审批人，系统按组织层级自动补全……逐级审批」；PGM:529 涉钱审批出厂 1 个工作日、超时提醒并升级）：提交即进统一审批（action_type finance.locked_backfill.review、object_type ar_ap_adjustment）——沿申请人直接上级链到所指定的最终审批人 final_approver_id（不填为直接上级，不在链上 400 FINAL_APPROVER_NOT_IN_CHAIN）逐级审批，全部通过才落账，任一节点驳回不改账；涉钱出厂 1 个工作日，超时提醒并升级；返回的补录记录带复核单号 review_id，审批经 approveSupervisorReview。第十八批 AL 段第 253 条 253-R1、253-R2（BSM:1642「记录缺失时允许人工补录，但必须写原因和责任人……补录必须附原始记录凭证（微信截图、通话录音等）并经审核」；第十八批裁决 56「三种锁账补录提交时必须上传原始凭证（银行回单、转账截图、异议处理结论等）并写责任人；「业务发生后 3 天内」不套。」）：三种补录一律须附原始凭证 evidence_attachment_ids（business_type=finance_locked_backfill 上传所得，去空去重后至少一个，否则 400 MANUAL_BACKFILL_EVIDENCE_REQUIRED；须真实存在，否则 400 EVIDENCE_ATTACHMENT_NOT_FOUND；须已完成上传，否则 400 EVIDENCE_NOT_UPLOADED）并写责任人 responsible_staff_id（缺 400 VALIDATION_FAILED，账号不存在 400 VALIDATION_FAILED「责任人账号不存在」）；责任人登记为复核单直接受益人，不得审批该单；不套补录时限。返回的补录记录另带 evidence_attachment_ids 与 responsible_staff_id。第十八批 R 段 143-R4：返回的补录记录带 item_no（台账单号）与 original_business_date（原营业日，即锁定该台账的日结的营业日，ENUM:190「在补录记录上标明其所属的原营业日」）；按日结号可查（listDailyCloseAdjustments）。第十八批 Z 段第 186 条 186-R1（ENUM:190「日结锁定后的补录须上级审批，且不改动已锁定的日结金额：补录金额归入当期……」；BSM:2023「已拍板：日结锁定后不能直接补录影响金额，必须上级审批通过后补录。」；第七批裁决 19「人工登记收款仍受锁定拦截。」）：kind 缺省 amount（金额调整，调整额不得为 0）；kind=payment 为收付款补录：adjustment_amount_cent 须为正且不超过台账未收付额（否则 400 VALIDATION_FAILED「支付金额超过未付金额」），payment_method 取 cash、bank_transfer、pos、other（否则 400 VALIDATION_FAILED）；台账未锁定照旧 400 AR_AP_ITEM_NOT_LOCKED。返回的补录记录带 kind 与 payment_method。第十八批 Z 段 186-R2（控制席并入，同根；BSM:1323「提出异议期间商户的付款义务不暂停，先按原值付款，异议成立后多退少补」；ENUM:190「日结锁定后的补录须上级审批……」）：kind=refund 为退款补录：只退应收（否则 400 REFUND_REQUIRES_RECEIVABLE）；所退原收款为该台账最后一笔尚未退完（按退款成功计）的收款，没有可退的收款 400 VALIDATION_FAILED；adjustment_amount_cent 须为正且不超过该笔收款的可退余额（已退及待退都占额，否则 400 VALIDATION_FAILED）；不填 payment_method，记录上的 payment_method 为该笔原收款的收付方式。第十八批 AL 段 245-R1 起原审批接口 approveArApAdjustment 删除，终审通过时按类型落账（原该接口所列各项照旧）：金额调整追加冲正行与重述行入账，沿用原行到期日（第十八批 S 段 160-R1），经营看板的合同应收与净收入按批准当日计补录差额、不改写原营业日（ENUM:190「补录金额归入当期」）；收付款补录按申请的金额与收付方式给该台账登记一笔收付款（付款时间取批准时刻），不追加冲正行与重述行，台账锁与日结七源汇总不动，押金退还、积分发行费的到期闸与已冲正闸照判（409）；退款补录按所退原收款走现有原路退款路径建一笔退款待办（requested，沿原收款渠道），台账、台账锁与日结七源汇总不动，可退余额（400 VALIDATION_FAILED）、分级授权（按终审节点审批人本人的退款额度，超额 403 REFUND_REVIEW_REQUIRED）、只退应收、沿原收款渠道（409 REFUND_CHANNEL_MISMATCH）、后收先退（409 REFUND_LATEST_PAYMENT_FIRST）各闸照判，原收款为现金、刷卡的批准时不判现场设备、只建待办，待办在退款办理处登记执行与核实时仍须带设备（否则 403 DEVICE_CONTEXT_REQUIRED）。落账任一闸不过整笔审批不生效，补录与复核单保持待审。补录记录的 approved_by 记终审或驳回节点审批人、decided_at 记决定时刻；留痕仍记 finance.locked_backfill_approved、finance.locked_backfill_rejected。第十八批 AM 段第 241 条 241-R1、241-R9（BSM:1803；第十八批裁决 55「所有应付都先走付款确认」、69「付款方是平台主体的应收，登记收款前也须付款确认」）：收付款补录（kind=payment）批准落账时照 createArApPayment 同一付款确认闸判——应付，以及付款方是平台主体的 9 个来源（含第十八批 AZ 段第 350 条 350-R1通用卡消费结算 general_card_consume、第十八批 BR 段第 357 条 357-R3 游乐域内结算 amusement_domain_settlement）的应收，须已有通过的付款确认，否则终审 409 PAYMENT_CONFIRMATION_REQUIRED、补录与复核单保持待审，付款确认通过后再批即可；申请时不预判。
       x-permission: finance.locked_backfill.request
       x-data-scope: project-entity
       x-terminal-allowed:
@@ -21441,6 +21445,39 @@ paths:
           $ref: "#/components/responses/Error"
         "500":
           $ref: "#/components/responses/Error"
+  /api/v1/amusement/projects/{id}/internal-price-item:
+    put:
+      tags:
+        - amusement
+      operationId: setAmusementProjectInternalPriceItem
+      summary: 游乐项目引用内部结算价目录条目
+      description: 第十八批 BR 段第 357 条 357-R1（BSM:753「游乐权益核销的收入按具体的游乐项目归属……游乐公司再按已批准的内部结算价或域内规则，与实际提供服务的游乐商户结算。」；ENUM:53「采用哪种规则由域主管公司决定，商户不能决定。」；BSM:1673「商户只能提交资料、履约事实和异议，不能自行决定域内分配方式。」；ENUM:54「任何商户在没有获批内部结算价之前，不得为其开通需要该价格结算的权益或券。」）：游乐公司为游乐项目引用该项目所属商户的内部结算价目录条目（设 amusement_projects.catalog_item_code）；此后该项目的游乐入场（createTicketVerification、createAmusementVerification）按该条目当时生效价逐笔与所属商户做游乐域内结算。只有游乐公司（平台侧账号，account_type=platform_admin）能设：挂商户的非平台侧账号 403 AMUSEMENT_SETTLEMENT_RULE_DOMAIN_COMPANY_ONLY（「采用哪种结算规则由游乐公司决定，商户不能决定」），不挂商户的非平台侧账号 403 MERCHANT_SCOPE_REQUIRED，两者都在幂等之前判；没有 amusement.session.manage 403 PERMISSION_DENIED；缺幂等键 400 VALIDATION_FAILED；同一幂等键换了请求体 409 IDEMPOTENCY_CONFLICT；项目不存在 404 PROJECT_NOT_FOUND；catalog_item_code 为空、条目不存在、条目绑定商户不是该项目所属商户、条目还没有获批生效的内部结算价，或项目没有所属商户（游乐公司自营），一律 400 AMUSEMENT_PRICE_ITEM_UNUSABLE（「所填目录条目不存在、不属于本项目所属商户，或还没有获批生效的内部结算价」），引用不变。没有清空引用的入口，改引别的条目用本接口重新设置。成功留痕 amusement.project.internal_price_ref.updated（metadata catalog_item_code），失败留痕 amusement.project.internal_price_ref.update_failed。响应 data 为更新后的游乐项目（字段同 listAmusementProjects 的条目，含 catalog_item_code）。
+      x-permission: amusement.session.manage
+      x-data-scope: project
+      x-terminal-allowed:
+        - web
+      x-idempotency-required: true
+      x-audit-event-success: amusement.project.internal_price_ref.updated
+      x-audit-event-failure: amusement.project.internal_price_ref.update_failed
+      x-auth-context: staff-token
+      parameters:
+        - $ref: "#/components/parameters/Id"
+          description: 游乐项目 ID（amusement_projects.id）。
+      requestBody:
+        $ref: "#/components/requestBodies/AmusementProjectInternalPriceItemRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
   /api/v1/amusement/projects/without-space:
     get:
       tags:
@@ -22391,7 +22428,7 @@ paths:
         - finance
       operationId: billTurnoverRent
       summary: 营业额抽成计费生成应收
-      description: 第十八批 Q 段第 138 条：抽成基数＝该商户本账期回流营业额（只计餐饮、零售的第三方回流，同期退款相抵，跨期退款另挂冲正）；非酒吧商户另计已付讫的券与通票合作方券内部结算价结算金额（partner_voucher 应付的实际付款，按付款时点归期）；另计通票分账专属直付与补偿履约结算（ticket_distribution、compensation_fulfillment 应付的实际付款，按付款时点归期；对应追收应收 ticket_distribution_recovery、compensation_fulfillment_recovery 的实际收回在收回当期相抵；第十八批 X 段第 175 条 175-R1）；酒吧商户另计平台内成交——整单已确认的商品实收（折后实收，不含券抵扣、服务费与小费分项，按结清时点）＋月结定格的服务费扣留数−已退成的商品分项＋没收的订台定金＋已完成的服务点单全额，各来源按该酒吧营业日窗取数（第 140 条），合计为负按 0 计。服务费尚未月结定格或酒吧收入来源分项未齐时 409 BAR_REVENUE_PENDING，不出账（ENUM:257 账单一次出准、不使用预估数）。 第十八批 U 段第 155 条 155-R1：出账同一事务按酒吧整单逐笔记下该笔在当月累计中所适用的档位费率与本期是否按保底收租（规则保底生效）；所退账单在之前账期结清的商品退款为跨期退款，不进本期抽成基数，原月按保底收租的不冲回，原月按抽成额收租的按原档位费率原额逐笔挂营业额抽成冲正应付（source_type=turnover_rent_reversal，归本期，重出不重挂）；所退原账期的抽成尚未出账时 409 TURNOVER_RENT_ORIGIN_UNBILLED，不出账。 第十八批 U 段第 155 条 155-R3 起，餐饮、零售第三方回流订单同口径——净额大于 0 的回流订单逐笔记快照；同期回流退款从原订单里减；跨期回流退款按原订单快照逐笔冲正（原月按保底收租的不冲回），原账期未出账同样 409 TURNOVER_RENT_ORIGIN_UNBILLED；查不到本系统原订单的回流退款不计。 第十八批 V 段第 159 条 159-R4（ENUM:190「非最终快照的数据一律不得进入结算、分红、正式提成计算和对账关账」）：取数之前判账期内该商户检查单位（酒吧按该店，其他商户按所属综合体；建档前的营业日不计）各营业日的「当日订单与核销记录」「当日退款与冲正记录」是否已标记为最终，有未标齐的 409 TURNOVER_DATA_NOT_FINAL（message「以下营业日数据尚未标记为最终，不能出营业额抽成账单：」后列「yyyy-MM-dd 单位名：类别」，最多 10 行），不出账、不写逐笔快照与冲正应付。
+      description: 第十八批 Q 段第 138 条：抽成基数＝该商户本账期回流营业额（只计餐饮、零售的第三方回流，同期退款相抵，跨期退款另挂冲正）；非酒吧商户另计已付讫的券与通票合作方券内部结算价结算金额（partner_voucher 应付的实际付款，按付款时点归期）；另计通票分账专属直付与补偿履约结算（ticket_distribution、compensation_fulfillment 应付的实际付款，按付款时点归期；对应追收应收 ticket_distribution_recovery、compensation_fulfillment_recovery 的实际收回在收回当期相抵；第十八批 X 段第 175 条 175-R1）；另计游乐域内结算（amusement_domain_settlement 应付的实际付款，按付款时点归期；其跨月撤销追收应收的实际收回在收回当期相抵；第十八批 BR 段第 357 条 357-R5，ENUM:257「其通票或券核销划归本商户并已完成结算的部分计入」）；酒吧商户另计平台内成交——整单已确认的商品实收（折后实收，不含券抵扣、服务费与小费分项，按结清时点）＋月结定格的服务费扣留数−已退成的商品分项＋没收的订台定金＋已完成的服务点单全额，各来源按该酒吧营业日窗取数（第 140 条），合计为负按 0 计。服务费尚未月结定格或酒吧收入来源分项未齐时 409 BAR_REVENUE_PENDING，不出账（ENUM:257 账单一次出准、不使用预估数）。 第十八批 U 段第 155 条 155-R1：出账同一事务按酒吧整单逐笔记下该笔在当月累计中所适用的档位费率与本期是否按保底收租（规则保底生效）；所退账单在之前账期结清的商品退款为跨期退款，不进本期抽成基数，原月按保底收租的不冲回，原月按抽成额收租的按原档位费率原额逐笔挂营业额抽成冲正应付（source_type=turnover_rent_reversal，归本期，重出不重挂）；所退原账期的抽成尚未出账时 409 TURNOVER_RENT_ORIGIN_UNBILLED，不出账。 第十八批 U 段第 155 条 155-R3 起，餐饮、零售第三方回流订单同口径——净额大于 0 的回流订单逐笔记快照；同期回流退款从原订单里减；跨期回流退款按原订单快照逐笔冲正（原月按保底收租的不冲回），原账期未出账同样 409 TURNOVER_RENT_ORIGIN_UNBILLED；查不到本系统原订单的回流退款不计。 第十八批 V 段第 159 条 159-R4（ENUM:190「非最终快照的数据一律不得进入结算、分红、正式提成计算和对账关账」）：取数之前判账期内该商户检查单位（酒吧按该店，其他商户按所属综合体；建档前的营业日不计）各营业日的「当日订单与核销记录」「当日退款与冲正记录」是否已标记为最终，有未标齐的 409 TURNOVER_DATA_NOT_FINAL（message「以下营业日数据尚未标记为最终，不能出营业额抽成账单：」后列「yyyy-MM-dd 单位名：类别」，最多 10 行），不出账、不写逐笔快照与冲正应付。
       x-auth-context: staff-token
       x-permission: finance.turnover_rent.bill
       x-data-scope: platform
@@ -28504,7 +28541,7 @@ paths:
         - finance
       operationId: getEntityTaxProfit
       summary: 经营主体所属期收入、成本与利润汇总
-      description: 第十八批 AR 段第 233 条 233-R6（BSM:1760；第十八批裁决 60）：按经营主体与起止月份现算收入、成本与利润，只读、不落库。收入为按收入归属配置归到该主体的各类含税收入（与系统计算金额同一收入归集）；成本：平台主体（basis=platform）取该主体在平台内作为付款方的内部结算应付与作为发放主体的工资单税前应发，名下有酒吧商户的主体（basis=dividend）沿用持股分红税前口径取销货成本与费用，不扣税费；利润＝收入−成本，可为负。三个查询参数都必填（服务层校验）：缺参数、月份不是年-月格式、截止月份早于起始月份返回 400 VALIDATION_FAILED；所属期内任一月没有已确认或已结清的月度分账单返回 409 TICKET_SETTLEMENT_PENDING，主体名下酒吧收入、退款或服务费扣留来源未定返回 409 BAR_REVENUE_PENDING。响应 data：revenue_cent（int64）、revenue_items（数组，每项 income_type、amount_cent，income_type 同税率版本闭集）、cost_cent（int64）、cost_items（数组，每项 cost_type、amount_cent）、profit_cent（int64）、basis（platform 平台主体口径 / dividend 持股分红税前口径）；金额为 0 的分项不列。cost_type：平台主体 payroll 工资单税前应发、pool_distribution 通票分账池内分配、exclusive_direct_settlement 专属直付按内部结算价应直付、channel_fee 渠道费（通路费与销售渠道费）、gift_redemption 赠送权益兑付、compensation_fulfillment 游乐故障补偿履约、commission_transfer_reversal 提成与报酬拨付冲回、media_ticket_share 传媒演出门票分成、points_issuance 积分发行费；酒吧经营主体 cost_inventory 销货成本、expense_rent_allocation 房租分摊、expense_energy 能耗、expense_property_fee 物业费、expense_labor 人工、expense_amortization 摊销、expense_other 其他费用、expense_ticket_service_fee 单一酒吧门票综合服务费。商户账号返回 403 PLATFORM_SCOPE_REQUIRED。
+      description: 第十八批 AR 段第 233 条 233-R6（BSM:1760；第十八批裁决 60）：按经营主体与起止月份现算收入、成本与利润，只读、不落库。收入为按收入归属配置归到该主体的各类含税收入（与系统计算金额同一收入归集）；成本：平台主体（basis=platform）取该主体在平台内作为付款方的内部结算应付与作为发放主体的工资单税前应发，名下有酒吧商户的主体（basis=dividend）沿用持股分红税前口径取销货成本与费用，不扣税费；利润＝收入−成本，可为负。三个查询参数都必填（服务层校验）：缺参数、月份不是年-月格式、截止月份早于起始月份返回 400 VALIDATION_FAILED；所属期内任一月没有已确认或已结清的月度分账单返回 409 TICKET_SETTLEMENT_PENDING，主体名下酒吧收入、退款或服务费扣留来源未定返回 409 BAR_REVENUE_PENDING。响应 data：revenue_cent（int64）、revenue_items（数组，每项 income_type、amount_cent，income_type 同税率版本闭集）、cost_cent（int64）、cost_items（数组，每项 cost_type、amount_cent）、profit_cent（int64）、basis（platform 平台主体口径 / dividend 持股分红税前口径）；金额为 0 的分项不列。cost_type：平台主体 payroll 工资单税前应发、pool_distribution 通票分账池内分配、exclusive_direct_settlement 专属直付按内部结算价应直付、channel_fee 渠道费（通路费与销售渠道费）、gift_redemption 赠送权益兑付、compensation_fulfillment 游乐故障补偿履约、amusement_domain_settlement 游乐域内结算（游乐公司作为付款方的游乐域内结算应付减跨月撤销追收应收，第十八批 BR 段 357-R4）、commission_transfer_reversal 提成与报酬拨付冲回、media_ticket_share 传媒演出门票分成、points_issuance 积分发行费；酒吧经营主体 cost_inventory 销货成本、expense_rent_allocation 房租分摊、expense_energy 能耗、expense_property_fee 物业费、expense_labor 人工、expense_amortization 摊销、expense_other 其他费用、expense_ticket_service_fee 单一酒吧门票综合服务费。商户账号返回 403 PLATFORM_SCOPE_REQUIRED。
       x-auth-context: staff-token
       x-permission: finance.entity_tax.view
       x-data-scope: platform
@@ -36985,7 +37022,7 @@ paths:
       summary: 商户专区·门票分账(本商户内部结算往来与待付状态)
       description: BSM
         L1597/L1683：本商户作为对方、已在商户专区可查看的通票分账应付、追收、单店服务费与补偿新增履约结算往来(项目范围按付款时点固化的项目判定)，含金额、异议截止日、财务指定付账日、当前付款日与执行状态(待付/付款失败待处理及原因与预计重付时间/已结清)；顺延不逐笔通知，以状态可见代替。无商户归属
-        403 MERCHANT_SCOPE_REQUIRED。 18E（20-R3）：商户账号只按商户过滤，看得到各经营项目里本商户的数据（写入口仍只到本人项目）。商户账号读到即记所列往来已读(首页未读账单提醒，第 92 条)。第十八批 AV 段 310-R2（BSM:1683「对收款方可见并注明失败原因与预计重付时间」）：并入本商户为往来方的退租押金退还应付（source_type=deposit_refund，不含冲正、重述行），以挂账时刻作可查看时刻、与其他往来一起按可查看时刻倒序，没有异议截止与指定付账日；同样记已读。第十八批 AZ 段第 358 条 358-R1：每行同 getInternalPayableExecution 带 account_changes（本款项已审批的换账户单，按 approved_at 升序；每项 id（换账户单编号）、failed_attempt_id（对应失败的付款尝试）、new_account_ref（新收款账户引用）、reason、approved_at（审批时刻，date-time））。
+        403 MERCHANT_SCOPE_REQUIRED。 18E（20-R3）：商户账号只按商户过滤，看得到各经营项目里本商户的数据（写入口仍只到本人项目）。商户账号读到即记所列往来已读(首页未读账单提醒，第 92 条)。第十八批 AV 段 310-R2（BSM:1683「对收款方可见并注明失败原因与预计重付时间」）：并入本商户为往来方的退租押金退还应付（source_type=deposit_refund，不含冲正、重述行），以挂账时刻作可查看时刻、与其他往来一起按可查看时刻倒序，没有异议截止与指定付账日；同样记已读。第十八批 AZ 段第 358 条 358-R1：每行同 getInternalPayableExecution 带 account_changes（本款项已审批的换账户单，按 approved_at 升序；每项 id（换账户单编号）、failed_attempt_id（对应失败的付款尝试）、new_account_ref（新收款账户引用）、reason、approved_at（审批时刻，date-time））。第十八批 BR 段第 357 条 357-R3（BSM:1683「该笔款项的待付状态须在系统中对收款方可见」）：游乐公司对本商户的游乐域内结算应付（source_type=amusement_domain_settlement，按营业月合并、次月出账）与跨月撤销另挂的追收应收同样列出。
       x-permission: merchant.portal.settlement.view
       x-data-scope: merchant
       x-terminal-allowed:
@@ -46844,7 +46881,7 @@ paths:
         - finance
       operationId: computeDividendStatements
       summary: 期间分红作业：对期末日已生效的方案版本各算一张计算单（净利润=收入−成本−费用−税费；幂等可重跑，草稿/预览/驳回作废重算，进入审批流跳过）
-      description: 第十八批 V 段第 159 条（ENUM:190「非最终快照的数据一律不得进入结算、分红、正式提成计算和对账关账」）：159-R5 正式单（kind=official）——方案商户检查单位（酒吧按该店，其他商户按所属综合体；建档前的营业日不计）期间内任一营业日五类数据未全部标记为最终的，该方案不出单、记入 skipped（reason「以下营业日数据尚未标记为最终，不能出正式分红单：」后列「yyyy-MM-dd 单位名：类别原词、类别原词」，最多 10 行），旧草稿不作废。159-R6 预览（kind=preview；BSM:1777、DEC-R8-45）只判该月最后一个营业日的五类，未齐的方案记入 skipped（reason「该月最后一个营业日（yyyy-MM-dd）的五类数据尚未全部标记为最终，不得生成预览：」后接同样的列表）；某单位该日五类标齐时由 markDailyCloseFinal 提交后自动出预览，不设定时作业。跳过不是错误码，照常返回 200。159-R10：预览单不计尚未月结定格的服务费扣留数（revenue_bar 明细说明注明「预览：尚未月结定格的服务费扣留数暂不计」），正式单照旧要求月结定格，未定格 409 BAR_REVENUE_PENDING。第十八批 AC 段第 210 条 210-R3（BSM:1774「以及该期间的各项税费（含增值税、所得税及其他应由该主体承担的税费）」；BSM:1801「连接税务处理，拿到这期的各项税费，算出净利润」；第十八批裁决 42）：净利润再减该期税费——取方案商户经营主体（生效绑定的运营主体，否则商户档案上的经营主体）已生效（status=approved）、所属期末月落在本期内的税费实际申报金额（按季申报的整季计入季末那个月所在的那一期），逐税种落 tax_period 负额明细行，合计回显于计算单 period_tax_cent（net_profit_cent = revenue_cent − cost_cent − expense_cent − period_tax_cent）。第十八批 AR 段第 233 条 233-R3：同一经营主体已生效、计入月份（accounting_month）落在本期内的差异调整单（kind=period_difference，可正可负）一并扣减，逐税种与申报金额各成一行 tax_period（所属期写「原所属期 更正（差异调整单，计入 yyyy-MM）」）；补提、冲回调整单与实际缴纳登记不扣。正式单另判出单闸（第十八批裁决 42「正式单出单前本期每个月都要有已生效的税费登记，缺的不出单并写跳过原因」）：本期每个月都须被该经营主体至少一条已生效申报登记的所属期（period_start_month～period_end_month）覆盖，缺的该方案不出单、旧单不作废，记入 skipped（reason「本期 yyyy-MM、yyyy-MM 尚无已生效的税费申报登记，请先登记并审批通过后再出正式单」）；登记依法可分配金额后的重算同闸（不出单时 409 DIVIDEND_STATE_INVALID，message 即该原因）；预览照扣已生效税费、不判此闸。第十八批 AC 段第 211 条 211-R1（BSM:1777；第十八批裁决 43「「暂不分红」该期不出正式单、利润不补分；「暂缓分红」等协商恢复后由财务登记恢复，再照常出单；月度预览照常」）：正式单在期间标签校验之后、出单闸之前先判暂不分红／暂缓分红登记，该商户该期有未恢复登记的不出单、记入 skipped（reason「本期经协商暂不分红（或暂缓分红），不出正式单（原因：…；协商结果：…）」）；预览不判。第十八批 AQ 段第 234 条 234-R1（BSM:521「已发生的业务一律按当时生效的版本计算」）：每个商户取期末日已生效的方案版本（已批准、生效起始日不晚于期末日的最新一个；该版本 status=ended 即停用、不出单）出单；指定 merchant_id 找不到时 404 DIVIDEND_PLAN_NOT_FOUND（「该商户在 yyyy-MM-dd 没有已生效的分红方案」）。第十八批 AQ 段第 234 条 234-R2（BSM:1775；BSM:1757「多方分配产生的非涉税尾差单独留痕，并由该笔业务实际承担结算责任的主体承担」）：平台、各其他股东与主理人（10000 − 平台 − 其他股东合计）按持股比例各自四舍五入到分，可分配额减各方合计为尾差（带符号，由该酒吧公司承担、不发给任何一方）；个人股东按全平台统一代扣税率代扣（整除截断，第十八批 AX 段 271-R1 起），公司股东不代扣；每位其他股东落 shareholder_gross（应得）、shareholder_tax_withheld（代扣，负数）、shareholder_payout（实发）三行明细，尾差不为 0 另落 rounding_residual 行；计算单（computed[]）新增 other_shareholders_gross_cent（其他股东应得合计，不小于 0）与 rounding_residual_cent（尾差，带符号）。第十八批 AQ 段第 243 条 243-R1（BSM:1787「酒吧关闭须完成关停结算，依法核清本次分红」；18AQ 控制席判定）：有关停结算登记的商户取 min（期末日，关店最后营业日）已生效的版本，指定商户找不到时 404 提示里的日期即取该日；关店所在期正式单的五类最终标记只查期初到关店最后营业日，停用、存档后照查；整期在关店最后营业日之后的记入 skipped（reason「该酒吧已于 yyyy-MM-dd 关店（已登记关停结算），关店后的期间不再分红」）。第十八批 AX 段第 330 条 330-R1（BSM:1781「主理人这期该得的钱，按有效协议先抵其对相应法律主体尚未结清的欠款」）：方案开欠款抵扣时，可抵额只取主理人本人欠该酒吧公司的未清应收（该酒吧台账里往来方为方案主理人账户的未清应收），酒吧公司自己的租金等应收、客人挂账应收不抵；arrears_offset 明细行逐项写明债务人（主理人账户）与债权人（本酒吧公司）。第十八批 AX 段第 333 条 333-R1（ENUM:190「非最终快照的数据一律不得进入结算、分红」；BSM:1777「数据未全部标记最终之前不得生成预览」）：酒吧商户的五类最终标记一律按该店查、不看在营与存档（未登记关停结算就停用或存档的同样照查；第十八批 AZ 段第 356 条 356-R1：存档时刻所在营业日之后的营业日不再查）——正式单查期初至 min（期末日，关店最后营业日），预览只查 min（期末日，关店最后营业日）这一天（未登记关停结算即期末日），跳过原因里的日期即该日；非酒吧商户照旧按所属综合体查。第十八批 AX 段第 271 条 271-R1（BSM:1776「全平台统一可配」；BSM:521「每一笔单据在生成时就把所用配置版本固化在单上」）：代扣税率取出单当日营业日（该商户当前营业日）已生效的全平台统一版本（见 listDividendTaxRates），主理人与其他个人股东同用；计算单 tax_rate_bps 为该税率（公司股东主理人为 0），tax_rate_version_id 固化所用版本 ID。第十八批 AX 段第 273 条 273-R2（PGM:436「酒吧当期可分配利润必须先偿还全部到期借款本息，剩余部分才可用于分红」；BSM:1785「存在逾期未还借款的，分红一律优先偿还借款」；BSM:1778「关着时仍须满足法定可分配额与借款清偿前置，再按比例分配」）：出单当日营业日已到期未还的借款本息（registerDividendBarLoan 登记、所挂酒吧应付的未付额；还款期限不晚于该日且未付清）按还款顺序、还款期限，在依法可分配上限之后、按比例劈分之前取小先偿（不超过可分配额），余额再按持股比例劈分；逐笔落 loan_repayment 负额明细行（出借方、还款期限、未还本息、本期先偿额与台账单号），合计回显于计算单 loan_repayment_cent（int64，不小于 0），distributable_cent＝min（经营口径可分配额，依法核定额）− loan_repayment_cent；预览同一算式；未到期的借款不扣。
+      description: 第十八批 V 段第 159 条（ENUM:190「非最终快照的数据一律不得进入结算、分红、正式提成计算和对账关账」）：159-R5 正式单（kind=official）——方案商户检查单位（酒吧按该店，其他商户按所属综合体；建档前的营业日不计）期间内任一营业日五类数据未全部标记为最终的，该方案不出单、记入 skipped（reason「以下营业日数据尚未标记为最终，不能出正式分红单：」后列「yyyy-MM-dd 单位名：类别原词、类别原词」，最多 10 行），旧草稿不作废。159-R6 预览（kind=preview；BSM:1777、DEC-R8-45）只判该月最后一个营业日的五类，未齐的方案记入 skipped（reason「该月最后一个营业日（yyyy-MM-dd）的五类数据尚未全部标记为最终，不得生成预览：」后接同样的列表）；某单位该日五类标齐时由 markDailyCloseFinal 提交后自动出预览，不设定时作业。跳过不是错误码，照常返回 200。159-R10：预览单不计尚未月结定格的服务费扣留数（revenue_bar 明细说明注明「预览：尚未月结定格的服务费扣留数暂不计」），正式单照旧要求月结定格，未定格 409 BAR_REVENUE_PENDING。第十八批 AC 段第 210 条 210-R3（BSM:1774「以及该期间的各项税费（含增值税、所得税及其他应由该主体承担的税费）」；BSM:1801「连接税务处理，拿到这期的各项税费，算出净利润」；第十八批裁决 42）：净利润再减该期税费——取方案商户经营主体（生效绑定的运营主体，否则商户档案上的经营主体）已生效（status=approved）、所属期末月落在本期内的税费实际申报金额（按季申报的整季计入季末那个月所在的那一期），逐税种落 tax_period 负额明细行，合计回显于计算单 period_tax_cent（net_profit_cent = revenue_cent − cost_cent − expense_cent − period_tax_cent）。第十八批 AR 段第 233 条 233-R3：同一经营主体已生效、计入月份（accounting_month）落在本期内的差异调整单（kind=period_difference，可正可负）一并扣减，逐税种与申报金额各成一行 tax_period（所属期写「原所属期 更正（差异调整单，计入 yyyy-MM）」）；补提、冲回调整单与实际缴纳登记不扣。正式单另判出单闸（第十八批裁决 42「正式单出单前本期每个月都要有已生效的税费登记，缺的不出单并写跳过原因」）：本期每个月都须被该经营主体至少一条已生效申报登记的所属期（period_start_month～period_end_month）覆盖，缺的该方案不出单、旧单不作废，记入 skipped（reason「本期 yyyy-MM、yyyy-MM 尚无已生效的税费申报登记，请先登记并审批通过后再出正式单」）；登记依法可分配金额后的重算同闸（不出单时 409 DIVIDEND_STATE_INVALID，message 即该原因）；预览照扣已生效税费、不判此闸。第十八批 AC 段第 211 条 211-R1（BSM:1777；第十八批裁决 43「「暂不分红」该期不出正式单、利润不补分；「暂缓分红」等协商恢复后由财务登记恢复，再照常出单；月度预览照常」）：正式单在期间标签校验之后、出单闸之前先判暂不分红／暂缓分红登记，该商户该期有未恢复登记的不出单、记入 skipped（reason「本期经协商暂不分红（或暂缓分红），不出正式单（原因：…；协商结果：…）」）；预览不判。第十八批 AQ 段第 234 条 234-R1（BSM:521「已发生的业务一律按当时生效的版本计算」）：每个商户取期末日已生效的方案版本（已批准、生效起始日不晚于期末日的最新一个；该版本 status=ended 即停用、不出单）出单；指定 merchant_id 找不到时 404 DIVIDEND_PLAN_NOT_FOUND（「该商户在 yyyy-MM-dd 没有已生效的分红方案」）。第十八批 AQ 段第 234 条 234-R2（BSM:1775；BSM:1757「多方分配产生的非涉税尾差单独留痕，并由该笔业务实际承担结算责任的主体承担」）：平台、各其他股东与主理人（10000 − 平台 − 其他股东合计）按持股比例各自四舍五入到分，可分配额减各方合计为尾差（带符号，由该酒吧公司承担、不发给任何一方）；个人股东按全平台统一代扣税率代扣（整除截断，第十八批 AX 段 271-R1 起），公司股东不代扣；每位其他股东落 shareholder_gross（应得）、shareholder_tax_withheld（代扣，负数）、shareholder_payout（实发）三行明细，尾差不为 0 另落 rounding_residual 行；计算单（computed[]）新增 other_shareholders_gross_cent（其他股东应得合计，不小于 0）与 rounding_residual_cent（尾差，带符号）。第十八批 AQ 段第 243 条 243-R1（BSM:1787「酒吧关闭须完成关停结算，依法核清本次分红」；18AQ 控制席判定）：有关停结算登记的商户取 min（期末日，关店最后营业日）已生效的版本，指定商户找不到时 404 提示里的日期即取该日；关店所在期正式单的五类最终标记只查期初到关店最后营业日，停用、存档后照查；整期在关店最后营业日之后的记入 skipped（reason「该酒吧已于 yyyy-MM-dd 关店（已登记关停结算），关店后的期间不再分红」）。第十八批 AX 段第 330 条 330-R1（BSM:1781「主理人这期该得的钱，按有效协议先抵其对相应法律主体尚未结清的欠款」）：方案开欠款抵扣时，可抵额只取主理人本人欠该酒吧公司的未清应收（该酒吧台账里往来方为方案主理人账户的未清应收），酒吧公司自己的租金等应收、客人挂账应收不抵；arrears_offset 明细行逐项写明债务人（主理人账户）与债权人（本酒吧公司）。第十八批 AX 段第 333 条 333-R1（ENUM:190「非最终快照的数据一律不得进入结算、分红」；BSM:1777「数据未全部标记最终之前不得生成预览」）：酒吧商户的五类最终标记一律按该店查、不看在营与存档（未登记关停结算就停用或存档的同样照查；第十八批 AZ 段第 356 条 356-R1：存档时刻所在营业日之后的营业日不再查）——正式单查期初至 min（期末日，关店最后营业日），预览只查 min（期末日，关店最后营业日）这一天（未登记关停结算即期末日），跳过原因里的日期即该日；非酒吧商户照旧按所属综合体查。第十八批 AX 段第 271 条 271-R1（BSM:1776「全平台统一可配」；BSM:521「每一笔单据在生成时就把所用配置版本固化在单上」）：代扣税率取出单当日营业日（该商户当前营业日）已生效的全平台统一版本（见 listDividendTaxRates），主理人与其他个人股东同用；计算单 tax_rate_bps 为该税率（公司股东主理人为 0），tax_rate_version_id 固化所用版本 ID。第十八批 AX 段第 273 条 273-R2（PGM:436「酒吧当期可分配利润必须先偿还全部到期借款本息，剩余部分才可用于分红」；BSM:1785「存在逾期未还借款的，分红一律优先偿还借款」；BSM:1778「关着时仍须满足法定可分配额与借款清偿前置，再按比例分配」）：出单当日营业日已到期未还的借款本息（registerDividendBarLoan 登记、所挂酒吧应付的未付额；还款期限不晚于该日且未付清）按还款顺序、还款期限，在依法可分配上限之后、按比例劈分之前取小先偿（不超过可分配额），余额再按持股比例劈分；逐笔落 loan_repayment 负额明细行（出借方、还款期限、未还本息、本期先偿额与台账单号），合计回显于计算单 loan_repayment_cent（int64，不小于 0），distributable_cent＝min（经营口径可分配额，依法核定额）− loan_repayment_cent；预览同一算式；未到期的借款不扣。第十八批 BR 段第 274 条 274-R1、274-R2（ENUM:297「酒吧的参股方为娱乐平台公司，引进参股的游乐项目的参股方为引进该项目的域主管公司」）：方案收入域含 amusement 时，收入另加该商户营业日落在期间内的游乐域内结算行合计（settled 为正、reversed 为负），落 revenue_amusement 明细行；商户名下没有酒吧的方案，platform_share 行说明写「参股方（引进该项目的域主管公司）分成」，rounding_residual 与 arrears_offset 行的「本酒吧公司」写「本经营主体」，酒吧方案文字不变。
       x-auth-context: staff-token
       x-permission: finance.dividend.manage
       x-data-scope: platform
@@ -46958,7 +46995,7 @@ paths:
         - finance
       operationId: getDividendStatement
       summary: 分红计算单详情（头 + 算式明细行，逐项可追溯到三个来源台账）
-      description: "第十八批 AQ 段第 234 条 234-R2：计算单头含 other_shareholders_gross_cent（其他股东应得合计，不小于 0）与 rounding_residual_cent（多方各自四舍五入的尾差，带符号，由该酒吧公司承担）；明细行 line_type 另有 shareholder_gross、shareholder_tax_withheld、shareholder_payout（每位其他股东各一行）与 rounding_residual（尾差不为 0 时）。第十八批 AX 段第 271 条 271-R1：计算单头 tax_rate_bps 为出单当日营业日已生效的全平台统一代扣税率（公司股东主理人为 0），tax_rate_version_id（可空）为所用税率版本 ID（见 listDividendTaxRates）。第十八批 AX 段第 273 条 273-R2：计算单头另含 loan_repayment_cent（出单先偿的到期未还借款本息，int64，不小于 0；distributable_cent＝min（经营口径可分配额，依法核定额）− loan_repayment_cent）；明细行 line_type 另有 loan_repayment（负额，逐笔借款一行）。第十八批 BA 段第 314 条 314-R1（第十八批裁决 71）：最高权限看全部商户的单，按平台视图、不脱敏。"
+      description: "第十八批 AQ 段第 234 条 234-R2：计算单头含 other_shareholders_gross_cent（其他股东应得合计，不小于 0）与 rounding_residual_cent（多方各自四舍五入的尾差，带符号，由该酒吧公司承担）；明细行 line_type 另有 shareholder_gross、shareholder_tax_withheld、shareholder_payout（每位其他股东各一行）与 rounding_residual（尾差不为 0 时）。第十八批 AX 段第 271 条 271-R1：计算单头 tax_rate_bps 为出单当日营业日已生效的全平台统一代扣税率（公司股东主理人为 0），tax_rate_version_id（可空）为所用税率版本 ID（见 listDividendTaxRates）。第十八批 AX 段第 273 条 273-R2：计算单头另含 loan_repayment_cent（出单先偿的到期未还借款本息，int64，不小于 0；distributable_cent＝min（经营口径可分配额，依法核定额）− loan_repayment_cent）；明细行 line_type 另有 loan_repayment（负额，逐笔借款一行）。第十八批 BA 段第 314 条 314-R1（第十八批裁决 71）：最高权限看全部商户的单，按平台视图、不脱敏。第十八批 BR 段第 274 条 274-R1、274-R2：明细行 line_type 另有 revenue_amusement（游乐域内结算收入）；商户名下没有酒吧的方案，尾差与欠款抵扣由本经营主体承担，platform_share 为参股方（引进该项目的域主管公司）分成。"
       x-auth-context: staff-token
       x-permission: finance.dividend.view
       x-data-scope: merchant
@@ -51146,7 +51183,8 @@ paths:
                     - pass_domain_direct_settlement
                     - pass_unverified_attribution
                     - general_card_consume
-                  description: 钱路(应收应付来源)，kind=route 必填。第十八批 AI 段 214-R1、214-R2 加 pass_domain_share（通票域间份额）、pass_domain_direct_settlement（通票餐饮零售代付）、pass_unverified_attribution（通票到期未核销归属），上线前须先定规则，否则结算单过账 409 PAY_DAY_NOT_CONFIGURED。第十八批 AZ 段第 350 条 350-R1（BSM:1704「长沙项目公司就通用卡余额的实际消费向各业态的经营主体直接付款结算，按三个付账日结清」）：加 general_card_consume（通用卡消费结算），上线前须先定规则，否则通用卡消费月度入账跳过、下一轮重试。
+                    - amusement_domain_settlement
+                  description: 钱路(应收应付来源)，kind=route 必填。第十八批 AI 段 214-R1、214-R2 加 pass_domain_share（通票域间份额）、pass_domain_direct_settlement（通票餐饮零售代付）、pass_unverified_attribution（通票到期未核销归属），上线前须先定规则，否则结算单过账 409 PAY_DAY_NOT_CONFIGURED。第十八批 AZ 段第 350 条 350-R1（BSM:1704「长沙项目公司就通用卡余额的实际消费向各业态的经营主体直接付款结算，按三个付账日结清」）：加 general_card_consume（通用卡消费结算），上线前须先定规则，否则通用卡消费月度入账跳过、下一轮重试。第十八批 BR 段第 357 条 357-R3（BSM:1673「通票分账、单店门票结付、游乐域内结算、餐饮与零售的券结算，一律沿用与积分结算相同的账期：自然月计费、次月出账；付款落在三个付账日上。」）：加 amusement_domain_settlement（游乐域内结算），上线前须先定规则，否则游乐域内结算月度入账跳过、下一轮重试。
                 first_pay_day:
                   type: integer
                   minimum: 1
@@ -52841,7 +52879,7 @@ paths:
         - access
       operationId: listPaymentConfirmationFlows
       summary: 查询付款确认各支付类型的必带平行线
-      description: 第十八批 AM 段第 241 条 241-R8（BSM:1803「具体流程按支付类型分别设定」；第十八批裁决 66「每类必带财务、法务两线，其他部门线由发起人按单另加」、67「审批线页设定」）：列出付款确认全部 42 个支付类型（全平台配置，按 PaymentConfirmationType 顺序，不按项目过滤）及各类在财务（finance_review）、法务（legal_review）两线之外还必带的平行线，供「组织层级与审批线」页「付款确认流程」表。data 为数组，每项 payment_type、payment_type_label（中文名）、line_codes（未设定为空数组，出厂均为空）。缺 access.role.assign 403 PERMISSION_DENIED。
+      description: 第十八批 AM 段第 241 条 241-R8（BSM:1803「具体流程按支付类型分别设定」；第十八批裁决 66「每类必带财务、法务两线，其他部门线由发起人按单另加」、67「审批线页设定」）：列出付款确认全部 43 个支付类型（全平台配置，按 PaymentConfirmationType 顺序，不按项目过滤）及各类在财务（finance_review）、法务（legal_review）两线之外还必带的平行线，供「组织层级与审批线」页「付款确认流程」表。data 为数组，每项 payment_type、payment_type_label（中文名）、line_codes（未设定为空数组，出厂均为空）。缺 access.role.assign 403 PERMISSION_DENIED。
       x-permission: access.role.assign
       x-data-scope: platform
       x-terminal-allowed:
@@ -52854,7 +52892,7 @@ paths:
         - PERMISSION_DENIED
       responses:
         "200":
-          description: 返回 42 个支付类型及各自两线之外的必带线。
+          description: 返回 43 个支付类型及各自两线之外的必带线。
           content:
             application/json:
               schema:
@@ -52878,7 +52916,7 @@ paths:
         - access
       operationId: savePaymentConfirmationFlow
       summary: 设定某支付类型两线之外的必带平行线
-      description: 第十八批 AM 段第 241 条 241-R8（BSM:1803「具体流程按支付类型分别设定」；第十八批裁决 66「每类必带财务、法务两线，其他部门线由发起人按单另加」、67「审批线页设定」——与各线最低起点层级同一处、同一门禁，不新增权限码）：设定某支付类型在财务、法务两线之外还必带的平行线，整体覆盖，line_codes 为空数组即清空（只带两线）。门禁 access.role.assign（缺 403 PERMISSION_DENIED）；流程是全平台配置，只许平台管理员或可管理全部项目的账号设定（同 upsertApprovalLine 对无归属全局线的口径），只能到部分项目的账号 403 CROSS_ORG_FORBIDDEN；payment_type 不在 42 个支付类型内 404 PAYMENT_TYPE_NOT_FOUND；缺幂等键 400 VALIDATION_FAILED；以上在幂等之前判。line_codes 每项须为在用的审批线，不存在或已停用 400 APPROVAL_LINE_NOT_CONFIGURED，含空值 400 VALIDATION_FAILED，重复的去重。设定后发起该类付款确认须为这些线各指定最终审批人（否则 400 APPROVAL_LINE_FINAL_APPROVER_REQUIRED），已发起的付款确认不受影响（审批链在发起时生成）。响应 data 为 payment_type、payment_type_label、line_codes。同一幂等键重发返回首次结果。成功留痕 access.payment_confirmation_flow.saved（带 line_codes）。
+      description: 第十八批 AM 段第 241 条 241-R8（BSM:1803「具体流程按支付类型分别设定」；第十八批裁决 66「每类必带财务、法务两线，其他部门线由发起人按单另加」、67「审批线页设定」——与各线最低起点层级同一处、同一门禁，不新增权限码）：设定某支付类型在财务、法务两线之外还必带的平行线，整体覆盖，line_codes 为空数组即清空（只带两线）。门禁 access.role.assign（缺 403 PERMISSION_DENIED）；流程是全平台配置，只许平台管理员或可管理全部项目的账号设定（同 upsertApprovalLine 对无归属全局线的口径），只能到部分项目的账号 403 CROSS_ORG_FORBIDDEN；payment_type 不在 43 个支付类型内 404 PAYMENT_TYPE_NOT_FOUND；缺幂等键 400 VALIDATION_FAILED；以上在幂等之前判。line_codes 每项须为在用的审批线，不存在或已停用 400 APPROVAL_LINE_NOT_CONFIGURED，含空值 400 VALIDATION_FAILED，重复的去重。设定后发起该类付款确认须为这些线各指定最终审批人（否则 400 APPROVAL_LINE_FINAL_APPROVER_REQUIRED），已发起的付款确认不受影响（审批链在发起时生成）。响应 data 为 payment_type、payment_type_label、line_codes。同一幂等键重发返回首次结果。成功留痕 access.payment_confirmation_flow.saved（带 line_codes）。
       x-permission: access.role.assign
       x-data-scope: platform
       x-terminal-allowed:
@@ -52899,7 +52937,7 @@ paths:
           required: true
           schema:
             $ref: "#/components/schemas/PaymentConfirmationType"
-          description: 支付类型（42 个之一）。
+          description: 支付类型（43 个之一）。
       requestBody:
         required: true
         content:
@@ -66013,6 +66051,15 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/AmusementProjectSpaceAssignmentRequest"
+    AmusementProjectInternalPriceItemRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/AmusementProjectInternalPriceItemRequest"
+          example:
+            idempotency_key: amusement-project-price-item-20261120-000001
+            catalog_item_code: sku_7f3a9c2e5b1d
     BarShiftOpenRequest:
       required: true
       content:
@@ -74581,6 +74628,22 @@ components:
           type: string
           description: 目标空间 ID（spaces.id）；必须存在且属于同一商户，否则拒绝（跨商户禁止）。
           maxLength: 64
+    AmusementProjectInternalPriceItemRequest:
+      type: object
+      description: 请求载荷 `AmusementProjectInternalPriceItemRequest`（第十八批 BR 段 357-R1，setAmusementProjectInternalPriceItem）：游乐公司为游乐项目引用所属商户的内部结算价目录条目（amusement_projects.catalog_item_code）。
+      additionalProperties: false
+      required:
+        - idempotency_key
+        - catalog_item_code
+      properties:
+        idempotency_key:
+          type: string
+          description: 操作幂等键；重复提交时必须返回同一处理结果。
+          maxLength: 128
+        catalog_item_code:
+          type: string
+          description: 内部结算价目录条目编码（internal_price_catalog.item_code）；须绑定该项目所属商户且已有获批生效价，否则 400 AMUSEMENT_PRICE_ITEM_UNUSABLE；为空同样 400 AMUSEMENT_PRICE_ITEM_UNUSABLE（没有清空入口）。
+          maxLength: 80
     BarShiftOpenRequest:
       type: object
       description: 请求载荷 `BarShiftOpenRequest`（V095 开班）；记录吧台、收银员、备用金（opening_cash_cent，可缺省
@@ -77955,7 +78018,8 @@ components:
             enum:
               - bar
               - ticket
-          description: 计入收入域（默认 bar+ticket；复用 revenue.net 商户行级谓词区间版）。
+              - amusement
+          description: 计入收入域（默认 bar+ticket；复用 revenue.net 商户行级谓词区间版）。第十八批 BR 段第 274 条 274-R1（ENUM:297「引进参股的游乐项目的参股方为引进该项目的域主管公司」；BSM:753）：可选 amusement（游乐域内结算：游乐公司按内部结算价与本商户结算的金额，取本商户为实际提供方、营业日落在分红期间内的游乐域内结算行，入场核销为正、撤销为负，跨期撤销在撤销当期冲减）；新建默认不含，游乐商户的方案由财务勾选。
         include_inventory_cost:
           type: boolean
           description: 扣减销货成本（V296 移动加权出库成本），固定为 true：分红净利润须减掉期间全部成本、费用与税费（BSM:1774）；可不填，填 false 返回 400 VALIDATION_FAILED。
@@ -80438,6 +80502,7 @@ components:
         - manual
         - bar_loan
         - general_card_consume
+        - amusement_domain_settlement
         - compensation_fulfillment_recovery
         - ticket_distribution_recovery
         - saved_bottle_remedy_recovery
@@ -80450,7 +80515,7 @@ components:
         - finance_refund_bar_scan_order_rejection
         - ticket_refund
         - saved_bottle_compensation
-      description: 付款确认支付类型（第十八批 AM 段第 241 条；第十八批裁决 65「按台账来源逐个分」，共 42 个，系统按付款对象来源自动定类）：台账应付来源 30 个（含第十八批 AX 段 273-R1 酒吧借款还款 bar_loan、第十八批 AZ 段第 350 条 350-R1通用卡消费结算 general_card_consume）与付款方是平台主体的追收应收来源 3 个（第十八批裁决 69）取 ar_ap_items.source_type 原值（pass_domain_share、pass_domain_direct_settlement、bar_payroll_transfer、dispatch_commission_transfer、general_card_consume 的应收与其应付同一类型）；财务退款待办 7 个为 finance_refund_＋退款来源；门票退款打款 ticket_refund；存酒对客赔付 saved_bottle_compensation。每种一个审批类型 finance.payment_confirm.＜支付类型＞。
+      description: 付款确认支付类型（第十八批 AM 段第 241 条；第十八批裁决 65「按台账来源逐个分」，共 43 个，系统按付款对象来源自动定类）：台账应付来源 31 个（含第十八批 AX 段 273-R1 酒吧借款还款 bar_loan、第十八批 AZ 段第 350 条 350-R1通用卡消费结算 general_card_consume、第十八批 BR 段第 357 条 357-R3 游乐域内结算 amusement_domain_settlement（付款方是游乐公司））与付款方是平台主体的追收应收来源 3 个（第十八批裁决 69）取 ar_ap_items.source_type 原值（pass_domain_share、pass_domain_direct_settlement、bar_payroll_transfer、dispatch_commission_transfer、general_card_consume、amusement_domain_settlement（跨月撤销另挂的追收应收）的应收与其应付同一类型）；财务退款待办 7 个为 finance_refund_＋退款来源；门票退款打款 ticket_refund；存酒对客赔付 saved_bottle_compensation。每种一个审批类型 finance.payment_confirm.＜支付类型＞。
     PaymentConfirmationRequest:
       type: object
       additionalProperties: false

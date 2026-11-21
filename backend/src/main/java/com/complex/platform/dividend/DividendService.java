@@ -1,5 +1,5 @@
 package com.complex.platform.dividend;
-// 文件版本：V0.16
+// 文件版本：V0.17
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.BusinessDayResolver;
@@ -87,7 +87,8 @@ public class DividendService {
     private static final String PLAN_TYPE = "dividend_plan";
     private static final String STMT_TYPE = "dividend_statement";
 
-    static final Set<String> REVENUE_DOMAINS = Set.of("bar", "ticket");
+    // 第十八批 BR 段 274-R1（ENUM:297「引进参股的游乐项目的参股方为引进该项目的域主管公司」；BSM:753）：加游乐域内结算 amusement。
+    static final Set<String> REVENUE_DOMAINS = Set.of("bar", "ticket", "amusement");
     public static final Set<String> EXPENSE_TYPES = Set.of(
             "rent_allocation", "energy", "property_fee", "labor", "amortization", "other");
     /** BSM L1777「分红周期一律取月及月的整数倍粒度（如月、季、半年、年）」。 */
@@ -801,6 +802,15 @@ public class DividendService {
             // FS-013 后单一酒吧门票综合服务费按售出月单独计收、不再从直付额内扣，按 BSM L1774 作为费用扣减。
             ticketServiceFee = repository.sumSingleBarServiceFeeCent(merchantId, period.start(), period.end());
         }
+        if (plan.revenueDomains().contains("amusement")) {
+            // 第十八批 BR 段 274-R1（BSM:753「游乐公司再按已批准的内部结算价或域内规则，与实际提供服务的游乐商户结算」；BSM:1774 经营收入）：游乐商户的经营收入
+            //   取游乐域内结算行，与 357-R3 入账同一营业日口径（跨期撤销在撤销当期冲减）。
+            long amusementSettled = repository.sumAmusementDomainSettledCent(merchantId, period.start(), period.end());
+            revenue += amusementSettled;
+            addLine(lines, statementId, merchantId, seq, "revenue_amusement", amusementSettled,
+                    "游乐域内结算收入（游乐公司按内部结算价与本商户结算：期内核销为正、期内撤销为负；营业日 " + period.start() + "～"
+                            + period.end() + "）", now);
+        }
 
         long cost = 0L;
         long noCostBasisCount = 0L;
@@ -935,8 +945,10 @@ public class DividendService {
                     "借款清偿（分红前置）：出借方 " + loan.lenderName() + "，到期 " + loan.dueDate() + "，未还本息 " + yuan(loan.outstandingCent())
                             + "，本期先偿 " + yuan(applied) + "（台账 " + loan.itemNo() + "）", now);
         }
+        // 第十八批 BR 段 274-R2（ENUM:297「酒吧的参股方为娱乐平台公司，引进参股的游乐项目的参股方为引进该项目的域主管公司」）：非酒吧方案不写酒吧公司。
+        String ownerWord = bar != null ? "本酒吧公司" : "本经营主体";
         addLine(lines, statementId, merchantId, seq, "platform_share", dist.platformShareCent(),
-                "平台分成（" + plan.platformShareBps() + " 万分比，四舍五入到分）", now);
+                (bar != null ? "平台分成（" : "参股方（引进该项目的域主管公司）分成（") + plan.platformShareBps() + " 万分比，四舍五入到分）", now);
         for (int i = 0; i < shareholders.size(); i++) {
             DividendRecords.DividendShareholderRecord holder = shareholders.get(i);
             long gross = dist.otherGrossCents().get(i);
@@ -953,7 +965,7 @@ public class DividendService {
         }
         if (dist.roundingResidualCent() != 0) {
             addLine(lines, statementId, merchantId, seq, "rounding_residual", dist.roundingResidualCent(),
-                    "多方按持股比例分配的舍入尾差，由本酒吧公司承担，不发给任何一方", now);
+                    "多方按持股比例分配的舍入尾差，由" + ownerWord + "承担，不发给任何一方", now);
         }
         addLine(lines, statementId, merchantId, seq, "principal_gross", dist.principalGrossCent(),
                 "主理人应得（持股 " + (DividendMath.BPS_DENOMINATOR - plan.platformShareBps() - java.util.Arrays.stream(otherBps).sum())
@@ -975,7 +987,7 @@ public class DividendService {
                 long applied = Math.min(remaining, item.unpaidCent());
                 remaining -= applied;
                 addLine(lines, statementId, merchantId, seq, "arrears_offset", -applied,
-                        "欠款抵扣：主理人本人欠本酒吧公司（债务人主理人账户 " + plan.principalUserId() + "，债权人本酒吧公司）应收 "
+                        "欠款抵扣：主理人本人欠" + ownerWord + "（债务人主理人账户 " + plan.principalUserId() + "，债权人" + ownerWord + "）应收 "
                                 + item.itemNo() + "（未清 " + item.unpaidCent() + " 分）抵扣 " + applied + " 分", now);
             }
         }

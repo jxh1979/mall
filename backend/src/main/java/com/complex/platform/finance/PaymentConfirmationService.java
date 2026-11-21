@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import static com.complex.platform.common.Strings.requireText;
 import static com.complex.platform.common.Strings.trimToNull;
@@ -60,10 +60,12 @@ public class PaymentConfirmationService {
      */
     public static final Set<String> PLATFORM_PAYER_RECEIVABLE_SOURCES = Set.of("pass_domain_share", "pass_domain_direct_settlement",
             "bar_payroll_transfer", "dispatch_commission_transfer", "compensation_fulfillment_recovery", "ticket_distribution_recovery",
-            "saved_bottle_remedy_recovery", "general_card_consume");
+            "saved_bottle_remedy_recovery", "general_card_consume",
+            // 第十八批 BR 段 357-R3：游乐域内结算——跨月撤销另挂的追收应收，付款方是游乐公司，与其应付同一类型。
+            "amusement_domain_settlement");
     private static final ObjectMapper JSON = new ObjectMapper();
     /**
-     * 台账来源（payment_type 即来源原值）：全仓写入 ar_ap_items 且可能挂应付的 30 个来源（含按金额正负分挂的；第十八批 AX 段 273-R1 加酒吧借款还款 bar_loan，第十八批 AZ 段 350-R1 加通用卡消费结算 general_card_consume），加付款方是平台主体的 3 个追收应收来源
+     * 台账来源（payment_type 即来源原值）：全仓写入 ar_ap_items 且可能挂应付的 31 个来源（含按金额正负分挂的；第十八批 AX 段 273-R1 加酒吧借款还款 bar_loan，第十八批 AZ 段 350-R1 加通用卡消费结算 general_card_consume，第十八批 BR 段 357-R3 加游乐域内结算 amusement_domain_settlement），加付款方是平台主体的 3 个追收应收来源
      * （裁决 69；另 4 个平台主体应收来源与其应付同一类型）。
      */
     static final List<String> AR_AP_SOURCES = List.of(
@@ -73,7 +75,7 @@ public class PaymentConfirmationService {
             "pass_unverified_attribution", "dispatch_commission_transfer", "bar_payroll_transfer", "inventory_transfer",
             "pass_drink_settlement", "media_performance_settlement", "refund", "bar_deposit_refund", "stored_value_consume",
             "partner_voucher", "reconciliation_difference", "inventory_difference", "turnover_rent_reversal", "manual", "bar_loan",
-            "general_card_consume",
+            "general_card_consume", "amusement_domain_settlement",
             "compensation_fulfillment_recovery", "ticket_distribution_recovery", "saved_bottle_remedy_recovery");
     /** 财务退款待办来源（V539 chk_finance_refund_source 闭集）与中文名。 */
     private static final Map<String, String> FINANCE_REFUND_SOURCES = orderedMap(

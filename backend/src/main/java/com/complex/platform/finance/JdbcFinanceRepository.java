@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.30
+// 文件版本：V0.31
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
@@ -2074,13 +2074,16 @@ class JdbcFinanceRepository implements FinanceRepository {
         // 第十八批 X 段第 175 条 175-R1（ENUM:257「其通票或券核销划归本商户并已完成结算的部分计入」）：另计通票分账专属直付应付（ticket_distribution）
         // 与补偿履约应付（compensation_fulfillment）的实际付款；两类追收应收（ticket_distribution_recovery、compensation_fulfillment_recovery）的
         // 实际收回＝已完成结算的部分被收回，在收回当期相抵。补偿撤销追加的冲正行与重述行没有付款记录，不重计。
+        // 第十八批 BR 段 357-R5（ENUM:257 同句）：游乐域内结算应付的实际付款计入、其跨月撤销追收应收的实际收回相抵。
         return jdbcTemplate.query("""
                 SELECT p.id, CASE WHEN i.direction = 'receivable' THEN -p.amount_cent ELSE p.amount_cent END AS amount_cent, p.payment_time
                   FROM ar_ap_payments p
                   JOIN ar_ap_items i ON i.id = p.ar_ap_item_id
-                 WHERE ((i.direction = 'payable' AND i.source_type IN ('partner_voucher', 'ticket_distribution', 'compensation_fulfillment'))
+                 WHERE ((i.direction = 'payable' AND i.source_type IN ('partner_voucher', 'ticket_distribution', 'compensation_fulfillment',
+                                                                       'amusement_domain_settlement'))
                         OR (i.direction = 'receivable'
-                            AND i.source_type IN ('ticket_distribution_recovery', 'compensation_fulfillment_recovery')))
+                            AND i.source_type IN ('ticket_distribution_recovery', 'compensation_fulfillment_recovery',
+                                                  'amusement_domain_settlement')))
                    AND i.counterparty_id = :merchant_id
                    AND p.payment_time >= :from_inclusive
                    AND p.payment_time < :to_exclusive

@@ -5,6 +5,10 @@
     {
       "key": "F1:UNSCOPED_DIRECT_READ:parking_credit_cost_months",
       "text": "[F1 UNSCOPED_DIRECT_READ] 扫描器报：表 parking_credit_cost_months 存在无项目范围的读（全量读在 JdbcLedgerInvoiceRepository.GROUPS_SQL：定时补开作业 TicketPointsBillingJob 经 LedgerInvoiceService 逐组补开；开票清单汇总的已超开 JdbcSettlementInvoiceRepository.listOverIssued 也 JOIN 它，按开票行 project_id 过滤后经 settlementInvoiceSummary 返回）。尚未收紧。证据：generated_at_source。"
+    },
+    {
+      "key": "F1:UNSCOPED_DIRECT_READ:amusement_domain_settlement_lines",
+      "text": "[F1 UNSCOPED_DIRECT_READ] 扫描器报：表 amusement_domain_settlement_lines 存在无项目范围的读（分红按商户跨综合体汇总本主体的游乐域内结算是设计，不经接口按读者范围返回）。尚未收紧。证据：generated_at_source。"
     }
   ]
 }

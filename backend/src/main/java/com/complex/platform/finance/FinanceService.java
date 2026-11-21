@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.56
+// 文件版本：V0.57
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -139,6 +139,8 @@ public class FinanceService implements TerminationSettlementPort {
             Map.entry("bar_loan", "借款还款"),
             // 第十八批 AZ 段 350-R1（BSM:1704）：长沙项目公司就通用卡消费对票款收款主体的月度应付与跨月退款追收，付款确认支付类型同名。
             Map.entry("general_card_consume", "通用卡消费结算"),
+            // 第十八批 BR 段 357-R3（BSM:753、1673）：游乐公司按内部结算价对游乐商户的月度应付与跨月撤销追收，付款确认支付类型同名。
+            Map.entry("amusement_domain_settlement", "游乐域内结算"),
             Map.entry("termination_penalty", "退租违约金"), Map.entry("deposit_refund", "退租押金退还"),
             Map.entry("platform_incentive_subsidy", "平台激励补贴"),
             Map.entry("bar_deposit_refund", "订台定金达标退回"),

@@ -1,6 +1,6 @@
 package com.complex.platform.dividend;
 
-// 文件版本：V0.03
+// 文件版本：V0.04
 
 import static com.complex.platform.support.DailyCloseFixture.markRangeFinal;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -133,6 +133,11 @@ class DividendOtherShareholdersJdbcIntegrationTests {
         assertThat(cent(row, "tax_cent")).isEqualTo(PRINCIPAL * 2000 / 10000);
         assertThat(jdbc.queryForObject("SELECT amount_cent FROM dividend_statement_lines WHERE statement_id = ? AND line_type = 'rounding_residual'",
                 Long.class, statement)).isEqualTo(-1L);
+        // 第十八批 BR 段 274-R2：酒吧方案的尾差行、参股方分成行措辞不变（非酒吧方案改写「本经营主体」「参股方（引进该项目的域主管公司）」）。
+        assertThat(jdbc.queryForObject("SELECT detail FROM dividend_statement_lines WHERE statement_id = ? AND line_type = 'rounding_residual'",
+                String.class, statement)).contains("本酒吧公司");
+        assertThat(jdbc.queryForObject("SELECT detail FROM dividend_statement_lines WHERE statement_id = ? AND line_type = 'platform_share'",
+                String.class, statement)).startsWith("平台分成");
     }
 
     /** ①b 主理人为公司股东：主理人代扣 0，个人股东乙仍按全平台统一税率 20% 整除代扣（不随主理人生效税率变 0）。修复前无股东明细行：断言红。 */

@@ -1,4 +1,4 @@
-// 文件版本：V0.09
+// 文件版本：V0.10
 import React from "react";
 import { AdminDataState } from "../components/AdminDataState";
 import { AdminPageHeader } from "../components/AdminPageHeader";
@@ -75,6 +75,8 @@ export const RESERVE_RELEASE_MODE_LABELS: Record<string, string> = {
 const DOMAIN_LABELS: Record<string, string> = {
   bar: "酒吧",
   ticket: "售票",
+  // 第十八批 BR 段 274-R1（ENUM:297「引进参股的游乐项目的参股方为引进该项目的域主管公司」；BSM:753）。
+  amusement: "游乐域内结算",
 };
 
 // 211-R2（BSM:1787「发放走应付款项，落在三个付账日之一，具体哪一个由该公司在分红周期配置中指定」）：全平台统一的每月三个付账日。
@@ -110,6 +112,7 @@ export const DIVIDEND_LINE_LABELS: Record<string, string> = {
   revenue_bar_refund: "酒吧退款",
   revenue_ticket: "已核销门票结算收入",
   revenue_ticket_refund: "售票退款（历史单）",
+  revenue_amusement: "游乐域内结算收入",   // 第十八批 BR 段 274-R1
   cost_inventory: "销货成本",
   expense_rent_allocation: "费用·房租分摊",
   expense_energy: "费用·能耗",
@@ -133,7 +136,8 @@ export const DIVIDEND_LINE_LABELS: Record<string, string> = {
   shareholder_gross: "其他股东应得",
   shareholder_tax_withheld: "其他股东代扣个税",
   shareholder_payout: "其他股东实发（挂应付）",
-  rounding_residual: "分配尾差（酒吧公司承担）",
+  // 第十八批 BR 段 274-R2：与商户专区共用、拿不到业态，用对酒吧也成立的中性措辞（酒吧公司即酒吧的经营主体）。
+  rounding_residual: "分配尾差（经营主体承担）",
   // 273-R2 分红前置借款清偿（PGM:436「酒吧当期可分配利润必须先偿还全部到期借款本息」；商户专区明细共用）。
   loan_repayment: "借款清偿（分红前置）",
 };
@@ -168,7 +172,7 @@ export function shareholdersDetailText(plan: DividendPlanRow): string {
 const TEXT = {
   title: "持股分红",
   description:
-    "平台持股 + 主理人经营的分红周期作业：期间收入 − 销货成本（成本台账）− 费用（费用台账）− 该期税费（已生效的税费实际申报金额）= 净利润，娱乐平台公司、主理人和其他股东按工商登记持股比例分配（各方各自四舍五入，尾差单列由该酒吧公司承担），个人股东按全平台统一税率代扣股息红利个税（见页末税率配置）、公司股东不代扣，主理人与其他股东的净额各挂应付发放。比例/周期/计入收入域按方案配，销货成本、全部费用与该期税费一律扣减，80/20 仅为新建预填建议值；每期算式逐项留痕可追溯。",
+    "平台持股 + 主理人经营的分红周期作业：期间收入 − 销货成本（成本台账）− 费用（费用台账）− 该期税费（已生效的税费实际申报金额）= 净利润，参股方（酒吧为娱乐平台公司，引进参股的游乐项目为引进该项目的域主管公司）、主理人和其他股东按工商登记持股比例分配（各方各自四舍五入，尾差单列由该经营主体承担），个人股东按全平台统一税率代扣股息红利个税（见页末税率配置）、公司股东不代扣，主理人与其他股东的净额各挂应付发放。比例/周期/计入收入域按方案配，销货成本、全部费用与该期税费一律扣减，80/20 仅为新建预填建议值；每期算式逐项留痕可追溯。",
   loadFailed: "分红数据读取失败",
   detailFailed: "计算单明细读取失败",
   merchantRequired: "请选择商户。",
@@ -695,7 +699,7 @@ export function FinanceDividendsPage({ api, setActionResult, setGlobalError, eff
         { label: "基数构成", value: `收入域：${(statement.revenueDomains ?? []).map((d) => DOMAIN_LABELS[d] ?? d).join("、") || "—"}；扣减销货成本、全部费用与该期税费` },
         { label: "该期税费合计", value: `¥${centToYuan(statement.periodTaxCent)}` },
         { label: "其他股东应得合计", value: `¥${centToYuan(statement.otherShareholdersGrossCent ?? 0)}` },
-        { label: "分配尾差", value: `¥${centToYuan(statement.roundingResidualCent ?? 0)}（多方按比例各自四舍五入的差额，由本酒吧公司承担）` },
+        { label: "分配尾差", value: `¥${centToYuan(statement.roundingResidualCent ?? 0)}（多方按比例各自四舍五入的差额，由本经营主体承担）` },
         { label: "借款清偿", value: `¥${centToYuan(statement.loanRepaymentCent ?? 0)}（出单时先偿的到期未还借款本息，逐笔见借款清偿明细行）` },
         { label: "借款清偿情况", value: loans ? loanRepaymentText(Array.isArray(loans) ? loans : []) : "借款清偿情况读取失败" },
         ...(data.lines ?? []).map((line) => ({
@@ -1029,7 +1033,7 @@ export function FinanceDividendsPage({ api, setActionResult, setGlobalError, eff
                   </div>
                 ))}
                 <button type="button" data-testid="dividend-plan-shareholder-add" onClick={() => setPlanForm({ ...planForm, otherShareholders: [...planForm.otherShareholders, { name: "", type: "individual", percent: "" }] })}>＋ 添加其他股东</button>
-                <span className="admin-muted-action" data-testid="dividend-plan-principal-share">主理人比例 = 100% − 平台比例 − 其他股东合计 = {bpsToPercentText(10000 - (percentToBps(planForm.platformSharePercent) ?? 0) - shareholderShares(planForm).reduce((sum, row) => sum + row.shareBps, 0))}（各方按比例各自四舍五入到分，尾差单列由酒吧公司承担）。</span>
+                <span className="admin-muted-action" data-testid="dividend-plan-principal-share">主理人比例 = 100% − 平台比例 − 其他股东合计 = {bpsToPercentText(10000 - (percentToBps(planForm.platformSharePercent) ?? 0) - shareholderShares(planForm).reduce((sum, row) => sum + row.shareBps, 0))}（各方按比例各自四舍五入到分，尾差单列由经营主体承担）。</span>
                 {sharesOverLimit(planForm) ? <span className="admin-form-error" data-testid="dividend-plan-shareholder-over">{TEXT.shareholdersOver}</span> : null}
                 <label>分红周期<select data-testid="dividend-plan-period-type" value={planForm.periodType} onChange={(event) => setPlanForm({ ...planForm, periodType: event.target.value })}>
                   {Object.entries(PERIOD_TYPE_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
@@ -1089,7 +1093,7 @@ export function FinanceDividendsPage({ api, setActionResult, setGlobalError, eff
             content: (
               <>
                 <label><input data-testid="dividend-plan-loss-carryforward" type="checkbox" checked={planForm.lossCarryforwardEnabled} onChange={() => setPlanForm({ ...planForm, lossCarryforwardEnabled: !planForm.lossCarryforwardEnabled })} />亏损结转：本期可分配额先扣减该商户往期未弥补亏损累计（关闭仅暂停本期抵扣，历史亏损累计保留、不清零，后续开启继续抵减）</label>
-                <label><input data-testid="dividend-plan-arrears-offset" type="checkbox" checked={planForm.arrearsOffsetEnabled} onChange={() => setPlanForm({ ...planForm, arrearsOffsetEnabled: !planForm.arrearsOffsetEnabled })} />欠款抵扣：主理人应得先抵扣主理人本人欠该酒吧公司尚未结清的款项（台账里往来方为主理人账户的未清应收），抵扣后余额才发放（审批时逐项结算）</label>
+                <label><input data-testid="dividend-plan-arrears-offset" type="checkbox" checked={planForm.arrearsOffsetEnabled} onChange={() => setPlanForm({ ...planForm, arrearsOffsetEnabled: !planForm.arrearsOffsetEnabled })} />欠款抵扣：主理人应得先抵扣主理人本人欠该经营主体尚未结清的款项（台账里往来方为主理人账户的未清应收），抵扣后余额才发放（审批时逐项结算）</label>
                 <label><input data-testid="dividend-plan-payout-floor" type="checkbox" checked={planForm.payoutFloorEnabled} onChange={() => setPlanForm({ ...planForm, payoutFloorEnabled: !planForm.payoutFloorEnabled })} />发放保护线：留存一定比例或固定额作为风险准备金暂不发放（留存记为欠主理人的待释放款、非平台白拿，按下方释放规则全额返还主理人）</label>
                 {planForm.payoutFloorEnabled ? (
                   <>

@@ -1,6 +1,6 @@
 package com.complex.platform.amusement;
 
-// 文件版本：V0.02
+// 文件版本：V0.03
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -112,7 +112,7 @@ class JdbcAmusementRepository implements AmusementRepository {
     public List<AmusementProjectRecord> listProjects() {
         return jdbcTemplate.query("""
                 SELECT id, project_name, capacity, open_status, safety_template_id,
-                       eligibility_rule_json, location_point_id, created_at, updated_at, merchant_id
+                       eligibility_rule_json, location_point_id, created_at, updated_at, merchant_id, catalog_item_code
                   FROM amusement_projects
                  ORDER BY created_at DESC, id
                 """, rowMapper::mapProject);
@@ -122,7 +122,7 @@ class JdbcAmusementRepository implements AmusementRepository {
     public List<AmusementProjectRecord> listProjectsByMerchant(String merchantId) {
         return jdbcTemplate.query("""
                 SELECT id, project_name, capacity, open_status, safety_template_id,
-                       eligibility_rule_json, location_point_id, created_at, updated_at, merchant_id
+                       eligibility_rule_json, location_point_id, created_at, updated_at, merchant_id, catalog_item_code
                   FROM amusement_projects
                  WHERE merchant_id = :merchant_id
                  ORDER BY created_at DESC, id
@@ -133,7 +133,7 @@ class JdbcAmusementRepository implements AmusementRepository {
     public Optional<AmusementProjectRecord> findProjectById(String id) {
         return jdbcTemplate.query("""
                 SELECT id, project_name, capacity, open_status, safety_template_id,
-                       eligibility_rule_json, location_point_id, created_at, updated_at, merchant_id
+                       eligibility_rule_json, location_point_id, created_at, updated_at, merchant_id, catalog_item_code
                   FROM amusement_projects
                  WHERE id = :id
                 """, Map.of("id", id), rowMapper::mapProject).stream().findFirst();

@@ -1,4 +1,4 @@
-// 文件版本：V0.34
+// 文件版本：V0.35
 export type AdminUser = {
   id: string;
   username: string;
@@ -598,6 +598,8 @@ export type AmusementProjectRow = {
   projectName?: string;
   capacity?: number | string;
   status?: string;
+  /** 第十八批 BR 段 357-R1：游乐公司为该项目引用的所属商户内部结算价目录条目；空＝不参与域内结算。 */
+  catalogItemCode?: string | null;
 };
 
 /** 游乐项目↔权益类型绑定（V341 软删范式：存档轴 + 删除轴，delete_status='approved' 为墓碑）。 */

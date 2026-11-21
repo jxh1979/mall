@@ -1,5 +1,5 @@
 package com.complex.platform.dividend;
-// 文件版本：V0.08
+// 文件版本：V0.09
 
 import static com.complex.platform.common.jdbc.JdbcTimestamps.nullableInstant;
 import static com.complex.platform.common.jdbc.JdbcTimestamps.timestampWithTimeZone;
@@ -742,6 +742,18 @@ class JdbcDividendRepository implements DividendRepository {
                         .addValue("merchant_id", merchantId)
                         .addValue("period_start", periodStart, Types.DATE)
                         .addValue("period_end", periodEnd, Types.DATE));
+    }
+
+    @Override
+    public long sumAmusementDomainSettledCent(String merchantId, LocalDate from, LocalDate to) {
+        // 第十八批 BR 段 274-R1：与 357-R3 入账同一营业日口径（business_date），跨期撤销在撤销当期冲减；分红按经营主体取，商户在哪个综合体经营的都计入。
+        return sumOrZero("""
+                SELECT COALESCE(SUM(amount_cent), 0) FROM amusement_domain_settlement_lines
+                 WHERE provider_merchant_id = :merchant_id AND business_date BETWEEN :from AND :to
+                """, new MapSqlParameterSource()
+                        .addValue("merchant_id", merchantId)
+                        .addValue("from", from, Types.DATE)
+                        .addValue("to", to, Types.DATE));
     }
 
     @Override

@@ -1,4 +1,4 @@
-// 文件版本：V0.17
+// 文件版本：V0.18
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -233,6 +233,19 @@ describe("FinanceArApLedgerPage 通用卡消费结算", () => {
       unpaidAmountCent: 4950, dueDate: "2027-01-05", sourceType: "general_card_consume" };
     renderPage(makeApi(vi.fn().mockResolvedValue({ items: [row], total: 1, page: 1, size: 10 })));
     await waitFor(() => expect((screen.queryByTestId("finance-ledger-confirm-ar-gcr") as HTMLInputElement | null)?.disabled).toBe(false));
+  });
+});
+
+// 第十八批 BR 段第 357 条 357-R3（BSM:753、1673；第十八批裁决 69「付款方是平台主体的应收，登记收款前也须付款确认」）：游乐域内结算往来显中文来源（同后端
+// AR_AP_SOURCE_TYPE_LABELS），跨月撤销另挂的追收应收（付款方是游乐公司）同后端 PLATFORM_PAYER_RECEIVABLE_SOURCES，可勾选发起付款确认。
+describe("FinanceArApLedgerPage 游乐域内结算", () => {
+  it("游乐域内结算追收应收显中文来源并可勾选发起付款确认", async () => {
+    const row: FinanceLedgerRow = { id: "ar-adr", itemNo: "ARAP-ADR-1", direction: "receivable", status: "pending_collection", amountCent: 3000,
+      unpaidAmountCent: 3000, dueDate: "2027-01-05", sourceType: "amusement_domain_settlement" };
+    renderPage(makeApi(vi.fn().mockResolvedValue({ items: [row], total: 1, page: 1, size: 10 })));
+    await waitFor(() => expect((screen.queryByTestId("finance-ledger-confirm-ar-adr") as HTMLInputElement | null)?.disabled).toBe(false));
+    fireEvent.click(screen.getByTestId("finance-ledger-row-ar-adr"));
+    await waitFor(() => expect(screen.queryAllByText("游乐域内结算").length).toBeGreaterThan(0));
   });
 });
 

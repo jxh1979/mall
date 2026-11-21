@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.01
+// 文件版本：V0.02
 
 import com.complex.platform.common.BusinessDayResolver;
 import com.complex.platform.dividend.DividendRepository;
@@ -126,6 +126,11 @@ public class EntityProfitService {
                 + " ON (i.direction = 'payable' AND i.source_type = 'compensation_fulfillment' AND i.source_id = f.id)"
                 + " OR (i.direction = 'receivable' AND i.source_type = 'compensation_fulfillment_recovery' AND i.source_id = f.reversal_item_id)"
                 + " WHERE f.bearer_company_id = ? AND i.accounting_period BETWEEN ? AND ?", entityId, from, to));
+        //   第十八批 BR 段 357-R4（裁决 60「作为付款方的内部结算应付」）：游乐域内结算应付减跨月撤销追收，计付款方游乐公司；一笔台账行对应多条结算行，用 EXISTS 不放大。
+        cost.put("amusement_domain_settlement", sum("SELECT COALESCE(SUM(CASE WHEN i.direction = 'payable' THEN i.amount_cent ELSE -i.amount_cent END), 0)"
+                + " FROM ar_ap_items i WHERE i.source_type = 'amusement_domain_settlement' AND i.accounting_period BETWEEN ? AND ?"
+                + " AND EXISTS (SELECT 1 FROM amusement_domain_settlement_lines l WHERE l.ar_ap_item_id = i.id AND l.payer_entity_id = ?)",
+                from, to, entityId));
         // ⑥提成与报酬拨付冲回：平台主体付款的应收（往来方＝本主体，按工资月）。
         cost.put("commission_transfer_reversal", sum("SELECT COALESCE(SUM(amount_cent), 0) FROM ar_ap_items WHERE direction = 'receivable'"
                 + " AND source_type IN ('dispatch_commission_transfer', 'bar_payroll_transfer') AND counterparty_id = ? AND accounting_period BETWEEN ? AND ?",

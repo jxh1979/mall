@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.contains;
@@ -525,7 +525,7 @@ class PaymentConfirmationJdbcTests {
             "pass_unverified_attribution", "dispatch_commission_transfer", "bar_payroll_transfer", "inventory_transfer",
             "pass_drink_settlement", "media_performance_settlement", "refund", "bar_deposit_refund", "stored_value_consume",
             "partner_voucher", "reconciliation_difference", "inventory_difference", "turnover_rent_reversal", "manual", "bar_loan",
-            "general_card_consume",
+            "general_card_consume", "amusement_domain_settlement",
             "compensation_fulfillment_recovery", "ticket_distribution_recovery", "saved_bottle_remedy_recovery",
             "finance_refund_ar_ap_payment", "finance_refund_stored_value_account", "finance_refund_ticket_payment_rejection",
             "finance_refund_channel_ticket_rejection", "finance_refund_dealer_order_refund", "finance_refund_bar_deposit_rejection",

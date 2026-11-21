@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.24
+// 文件版本：V0.25
 
 import com.complex.platform.support.InMemoryAuditEventRepository;
 import com.complex.platform.support.InMemoryIdempotencyRepository;
@@ -154,6 +154,13 @@ class FinanceServiceTests {
     @Test
     void generalCardConsumeSourceHasChineseLabel() {
         assertThat(FinanceService.sourceTypeLabel("general_card_consume")).isEqualTo("通用卡消费结算");
+    }
+
+    /** 第十八批 BR 段 357-R3（BSM:753、1673）：游乐域内结算往来的来源中文名，与前端 KEY_VALUE_LABELS.source_type、付款确认支付类型同名；平台主体付款的应收同样过闸。 */
+    @Test
+    void amusementDomainSettlementSourceHasChineseLabelAndGatesItsRecovery() {
+        assertThat(FinanceService.sourceTypeLabel("amusement_domain_settlement")).isEqualTo("游乐域内结算");
+        assertThat(PaymentConfirmationService.PLATFORM_PAYER_RECEIVABLE_SOURCES).contains("amusement_domain_settlement");
     }
 
     @Test
