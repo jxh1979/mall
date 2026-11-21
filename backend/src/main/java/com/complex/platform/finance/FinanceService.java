@@ -1,6 +1,6 @@
 package com.complex.platform.finance;
 
-// 文件版本：V0.59
+// 文件版本：V0.60
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -181,6 +181,9 @@ public class FinanceService implements TerminationSettlementPort {
             // FinanceArApLedgerPage SOURCE_TYPE_LABELS；其余四项前后端原无中文名，取裁决 65、68 题面用词。
             Map.entry("purchase_inbound", "采购入库"), Map.entry("purchase_prepayment", "采购预付款"),
             Map.entry("purchase_consignment", "寄售结算"), Map.entry("inventory_transfer", "门店要货货款"),
+            // 第十八批 CD 段第 402 条 402-R3（BSM:1201）：开票清单台账来源组的键（台账来源仍是 inventory_transfer）——商户之间借调买断货款与借用物赔偿，
+            // 开票清单导出的来源单号列经 sourceTypeLabel 取名，同前端 KEY_VALUE_LABELS.source_type。
+            Map.entry("inventory_lending", "商户借调货款与赔偿"),
             Map.entry("media_performance_settlement", "传媒演出结算"), Map.entry("stored_value_consume", "平台代收商户卡消费"),
             Map.entry("partner_voucher", "内部价券结算"),
             // 第十八批 AV 段第 317 条 317-R1（PGM:287「界面全中文（所有终端零英文）」）：合同租金、合同物业费、能源费与采购两类退款，与前端 KEY_VALUE_LABELS.source_type 同名。

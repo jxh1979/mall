@@ -1,6 +1,6 @@
 # PRD 审计业务裁决台账
 
-文档版本：V1.40
+文档版本：V1.41
 状态：进行中
 迁移日期：2026-07-27
 当前事实源：三份立法 HTML 以既有冻结基线叠加 James 此前 M02 至 M08 的点名批准、全量审计 M001、M002 的逐项批准，以及本轮 2026-10-16 至 2026-10-17 业务 HTML 审计中 Q01 至 Q40 及子题实际明确批准且未被后续替代的裁决，和 2026-10-17 第二批 HTML 业务线推演审计（A–F 六线 64 条、停车章）的逐项批准，并叠加本轮 CG 70 项来源确认与 C01–C09、N01–N03 最终澄清及补全文稿中 F01、W01–W05 的整体修改批准（本文件末节）；本轮最终规则、未采纳或替代关系、现行版本与字节哈希见本文件末节。历史记录保留为各自当时事实，不恢复已被替代的建议。
@@ -12818,3 +12818,57 @@ HTML 的语义补齐与直接引用同步可在本批核验；70项中的业务�
   测试：文档没有单测；node tools/verify-full-admin-page-matrix.mjs 通过，node tools/verify-entry-anchors.mjs 通过，git diff --check 干净。本组新增操作 0、迁移 0。
 - 18BY 合并前变基（2026-11-24）：本段自 7a19a646 变基到 origin/main 4723f2b8；合并时 OpenAPI 共 1420 个操作（主干 1420）、info.version V1.11、决策台账 V1.40，Flyway 最新 V740（共 631 个迁移）。版本行、契约版本、计数与 SHA、生成物、台账补记与 PRD 修订行由合并前脚本按新主干统一重写。
 - 18BY 落地位置补记·运行验收证据、快照、终验文档刷新（无新裁决）：业务提交 845c9561 之后，按第十八批裁决 25 重刷了运行验收证据：后端全量 7357 测，0 失败 0 错误；apps/web 构建通过；常规界面验收（接口全部 mock）实跑 40 条全过；真实后端界面验收未跑，runtime_ready=false。随后依次重生成闭环当前态快照、生产闭环缺口报告、界面验收报告、无上线指挥台。生成器没改。手改 docs/final-closed-loop-acceptance-audit-v0.1.md 与 docs/code-implementation-acceptance-audit-v0.1.md：前端单测源码计数改为 2103；被核文件行数都没变；后端全量与常规界面验收的数字、日期改为本次实跑值；写入 npm run verify:unit 实跑结果，五个工作区全过。交付门禁于 2026-11-24 12:45 UTC 在工作树逐项实跑子项，NAS 两项现场探测未跑。仍红的有两项：一是 coding-host-protection，它写死主仓路径，在工作树口径下必红，属工具口径，不做；二是 final-closed-loop-audit，如实留 2 条红（integration-ready、business-acceptance-ready），原因是校验器要求终验把联调、业务验收写成「是」，而裁决 25 定了不跑真实后端界面验收、运行验收未就绪，终验写的是「否」。verify:delivery-gates 总链仍是红的。
+
+18CD 落地位置补记（2026-11-20）：第十八批 CD 段（batch102）按 18CD 只读设计实现待开发清单第 402 条（开票清单内部往来组）；运行验收证据、终验文档在本段最后一个提交刷新；各条落地位置见下。本段追加时，原台账除文档版本升一版外，其他历史字节保持。
+
+- 18CD 落地位置补记·控制席判定（2026-11-20）：本段（第十八批 CD 段，batch102）实现待开发清单第 402 条（18CD 只读设计 b102-audit/d6-cd.json，两轮质疑者修订后定稿，无待裁题）。控制席判定：照设计做 402-R1、402-R2、402-R3、402-R4。本段工作树已快进到 18BU 合并后的主干：18BU 第 374 条已建开票清单台账来源月度组（V724 ledger_invoice_groups、JdbcLedgerInvoiceRepository.GROUPS_SQL、LedgerInvoiceService.INCOME_TYPES），本段在其上按现码定位追加三类内部往来，不回退、不重做 18BU 的口径。设计旁见（酒吧之间借调买断应付不带项目与会计期间）已登记为待开发清单第 436 条，本段不改。第五、六轮设计与修复代理的范围外旁见已登记为待开发清单第 388～446 条（待核实）。本段从 18BU 合入后主干开工（第六轮 13 段并行），变基到收尾基线后收尾；汇总文件由合并前脚本 summary_tool.py 剥离与重写。
+- 18CD 落地位置补记（第 402 条；本段新增 0 个操作，迁移 V760）：
+  402-R1 通票免费酒水结算进开票清单（出品酒吧开给娱乐平台公司），停用 isr_giveaway。
+  - 改法：JdbcLedgerInvoiceRepository.GROUPS_SQL 加 pds 支：取 ar_ap_items 中来源 pass_drink_settlement 的行，按出品酒吧（往来对方）×会计期间成组（组内项目取 MAX；控制席 2026-11-22 追认：平台管理员撤销核销时对冲应收项目为空，须与同酒吧同月应付净额成组，故相对 d6-cd 402-R1 原「按项目」成组维去掉 project_id），应开额为应付减对冲应收，跨月冲正落在冲正所在月；开票主体为出品酒吧收款主体。LedgerInvoiceService.INCOME_TYPES 加 pass_drink_settlement→spv_service（规则 isr_spvsvc「运营服务费」）。LedgerInvoiceService.generate 加购方分支：经 RevenueStreamAttributionRepository.resolveManagementEntity 取 all_pass_ticket 收入归属，即娱乐平台公司。迁移 V760__retire_giveaway_invoice_rule 把 invoice_subject_rules 的 isr_giveaway 置为 inactive（不改 V362），settlementInvoiceSummary 的映射规则表不再列「通票赠送权益兑付」；SettlementInvoiceService 类注释同步。
+  - 依据：BSM:1803「平台内部各主体之间的往来需要开具发票，开票的具体规则一律按国家财税相关规定执行，本文件不复述细则。」；BSM:751「域主管公司出资的免费权益按锁定内部结算价核销后结算」；BSM:1691「娱乐平台公司出资的通票免费酒水不计提成」；BSM:1750「开票金额≤已收−已退−已开」；决策台账 DEC-R4-2026-08-04-51。
+  - 测试：InternalExchangeInvoiceItemsJdbcTests.passDrinkSettlementOfEndedMonthEntersInvoiceListFromBarToPlatform、passDrinkLateSameMonthReversalFlagsOverIssue、passDrinkPlatformAdminReversalWithEmptyProjectNetsSameGroup、summaryRulesNoLongerListGiveawayTransfer；SettlementInvoiceListJdbcIntegrationTests.generatesInvoiceListPerSubjectWithRateAndTax（改为断言规则表不含 giveaway_transfer）；SettlementInvoicePage.test.tsx「规则表把营销成本标为不开票」（原「规则表把内部成本转付标为不开票」改名）、「固定说明不再写通票赠送权益兑付不开票」。
+  402-R2 补偿新增履约结算进开票清单（提供方开给补偿批次承担主体）。
+  - 改法：JdbcLedgerInvoiceRepository.GROUPS_SQL 加 cpf 支：ar_ap_items 经 amusement_compensation_fulfillments 关联（compensation_fulfillment 行按履约 id，compensation_fulfillment_recovery 行按冲正行 id 对 reversal_item_id），再关联原应付行；按项目×提供方×批次承担主体×原应付会计期间成组，冲正、重述与已付追收都并入原履约月；开票主体为提供方商户收款主体，购方为批次承担主体。LedgerInvoiceService.INCOME_TYPES 加 compensation_fulfillment→spv_service。AmusementCompensationFulfillmentAdapter 不改。
+  - 依据：BSM:800「本次补偿新增的实际履约由决定发放补偿的具体域主管公司承担」；BSM:1803「平台内部各主体之间的往来需要开具发票」；BSM:1750「开票金额≤已收−已退−已开」「退款后先红冲再重开」。
+  - 测试：ParkWideFaultCompensationJdbcIntegrationTests.compensationFulfillmentEntersInvoiceListFromProviderToBearer、paidCompensationReversalNetsOriginalMonthToZero。
+  402-R3 酒吧之间借调买断货款与借用物赔偿进开票清单（借出方开给借入方）。
+  - 改法：JdbcLedgerInvoiceRepository.GROUPS_SQL 在 18BU 的 trf 支旁加 lnd 支：取来源 inventory_transfer、往来对方不是供货主体的应付，与 trf 支互补；项目取台账行项目，缺时取 inventory_transfer_orders 借用单所属项目；按项目×借入方×借出方×到期日所在月成组；开票主体为借出方收款主体，购方为借入方及其收款主体；组来源键为 inventory_lending，台账来源仍是 inventory_transfer。LedgerInvoiceService.INCOME_TYPES 加 inventory_lending→goods（规则 isr_goods）。中文名「商户借调货款与赔偿」加在 FinanceService.AR_AP_SOURCE_TYPE_LABELS（导出经 FinanceService.sourceTypeLabel 与 SettlementInvoiceController.exportRow 取名）和前端 KEY_VALUE_LABELS.source_type。InventoryService.recordLendingSettlementOnReceipt 与 InventoryTransferFlowService 的落账不改。
+  - 依据：BSM:1201「商户之间也可借调货物：跨商户之间的结算一律按内部结算价」「赔偿按已有约定及现行跨商户结算规则形成借入方对借出方的应付」；BSM:1803；第十八批裁决 18「要货单、借用单建单时记所属项目……之后办理、赔偿应付、逾期工单都按单上的项目」。
+  - 测试：InternalExchangeInvoiceItemsJdbcTests.merchantLendingPayablesEnterInvoiceListFromLenderToBorrower、lendingExportRowShowsChineseSource；LedgerInvoiceItemsJdbcTests.storeRequisitionPayablesEnterInvoiceListMonthlyNetOfAdjustments（往来对方是商户的那笔另成借调行，生成条数改为 2）；FinanceServiceTests.generalCardConsumeSourceHasChineseLabel（加 inventory_lending 断言）；SettlementInvoicePage.test.tsx「商户借调货款与赔偿行显示中文来源」。
+  402-R4 契约、PRD 与覆盖表同步。
+  - 落地位置：listSettlementInvoiceItems 描述补 ledger_source 三个取值及口径，并把「往来对方是商户的借调买断不计」改为「往来对方不是供货主体的另成 inventory_lending 行」；settlementInvoiceSummary 描述补「映射规则不再含通票赠送权益兑付」；结算重构 PRD 附录 B.1 与财务结算产品 PRD §6A 补 402 实现现状；html-prd-coverage.csv 的 BSM-0426 行补第 402 条。以上由契约代理与文档组统一落。复核返修另同步：generateSettlementInvoiceItems 描述去掉已停用的「内部成本转付」口径（只写营销成本规则不进对外清单）；开票清单页 SettlementInvoicePage 映射规则表的固定说明只写营销成本一类不开票；页面矩阵 ADM-STL-002 行规则列同步去掉「内部成本转付」。
+  - 依据：BSM:1803；BSM:1760「税率、税目、发票对象和红冲流程由系统按有效规则配置并保留凭证关联」。
+- 402-R4（契约部分）：listSettlementInvoiceItems 的 description 在 ledger_source 取值后补 pass_drink_settlement 通票酒水结算、compensation_fulfillment 补偿新增履约结算、inventory_lending 商户借调货款与赔偿三值，并逐类写明口径：
+  - 通票酒水结算：income_type=spv_service；开票主体为出品酒吧收款主体，购方为娱乐平台公司（通票收入归属主体）；按出品酒吧与会计期间取应付减对冲应收，跨月冲正落在冲正所在月。
+  - 补偿新增履约结算：income_type=spv_service；开票主体为提供方商户收款主体，购方为补偿批次承担主体；按原应付会计期间取应付减已付追收应收，冲正、重述与已付追收都并入原履约月。
+  - 商户借调货款与赔偿：income_type=goods；开票主体为借出方收款主体，购方为借入方及其收款主体；按到期日所在月合计，项目取台账行项目，缺时取借用单所属项目。
+  - 18BU 原句「往来对方是商户的借调买断不计」改为「往来对方不是供货主体的（商户之间借调）另成 inventory_lending 行」。
+  - settlementInvoiceSummary 的 description 补「映射规则不再含通票赠送权益兑付（V760 停用 isr_giveaway）」。
+  - generateSettlementInvoiceItems 的 description（复核返修）把「内部成本转付与营销成本规则不进对外清单」改为「营销成本规则不进对外清单」。
+  - exportSettlementInvoiceItems 不改。
+  依据：BSM:1803「平台内部各主体之间的往来需要开具发票，开票的具体规则一律按国家财税相关规定执行，本文件不复述细则。」；BSM:751、BSM:1691、BSM:800、BSM:1201；决策台账 DEC-R4-2026-08-04-51。
+  对应代码：JdbcLedgerInvoiceRepository.GROUPS_SQL 的 lnd、pds、cpf 三支；LedgerInvoiceService.INCOME_TYPES；LedgerInvoiceService.generate 的 pass_drink_settlement 购方分支；本段迁移 V760。
+  本段新增 0 个操作；权限码、x-auth-context、x-data-scope、x-audit-event、错误码与响应结构都不变。
+- 18CD 汇合段（J）：e2e 没有改动。tests/e2e 只在 full-admin-remaining.spec.ts 的 ADM-STL-002 路由行和后台页面巡检用例里断言开票清单页的 settlement-invoice-page、settlement-invoice-subject-table、settlement-invoice-rule-table 三个 testid；support/mock-api.ts 对 settlementInvoiceSummary、listSettlementInvoiceItems 两个接口回空数据。本段未改 SettlementInvoicePage 的页面结构与 testid；前端 KEY_VALUE_LABELS.source_type 与后端 FinanceService 的 AR_AP_SOURCE_TYPE_LABELS 各加了 inventory_lending 中文名；复核返修另改开票清单页固定说明（只写营销成本一类不开票，与 V760 一致）并补用例，契约 generateSettlementInvoiceItems 说明与页面矩阵 ADM-STL-002 规则列同步去掉已停用的「内部成本转付」口径（控制席追认属本段矛盾清理，不扩新能力）；full-admin-visual 的截图基线不含开票清单页，所以没有重拍截图。
+  门禁结论：
+  - 删 target 后 --fresh 跑后端全量 0 红，本段迁移 V760 真迁；
+  - apps/web 的 typecheck 和 vitest 全量全绿；
+  - customer-app、customer-miniapp、customer-core 三个客人工作区单测全绿；
+  - 安卓员工端 gradle test 和 android-app 编译都通过；
+  - chromium 跑后台五份 spec 全部通过；
+  - 镜像里重生成 operation-matrix、openapi-closure、data-isolation-spec、domain-ownership-scope 后，verify:p0-contract 整条通过；
+  - OpenAPI yaml 与 json 深比较一致，本段新增操作 0 个，只改既有操作 listSettlementInvoiceItems、settlementInvoiceSummary 的说明（复核返修另同步 generateSettlementInvoiceItems 的说明），schema 不变；
+  - verify-tenant-isolation、verify-migration-version-order、verify-full-admin-page-matrix、verify-admin-result-labels、verify:security-baseline 都通过，git diff --check 通过；
+  - 入口文档基线和数据隔离规格里的最新迁移号，由收尾按最终主干统一回填。
+- 18CD D-docs（文档组，402-R4 ② 的 PRD 部分）：
+  - 改法与落地位置：
+    - docs/settlement-rebuild-prd-v1.0.md 附录 B.1：「内部转付不开票」与「底稿 23 第 11/12 行照落但标不开票」两条补注，第 402 条（V760）停用 isr_giveaway，通票赠酒改为开票，marketing 仍不开票。374 实现现状「往来对方是商户的借调买断不计」改为另成 inventory_lending 组。374 现状之后补 402 实现现状：
+      - pass_drink_settlement：收入类型 spv_service「运营服务费」；开票主体为出品酒吧收款主体，购方为 all_pass_ticket 收入归属主体（娱乐平台公司）；按出品酒吧 × 会计期间（组内项目取 MAX）取应付减对冲应收，跨月冲正落冲正所在月。
+      - compensation_fulfillment：收入类型 spv_service；开票主体为提供方商户收款主体，购方为补偿批次承担主体；按原应付会计期间成组，冲正、重述与已付追收 compensation_fulfillment_recovery 都并入原履约月。
+      - inventory_lending：取 inventory_transfer 里往来对方不是供货主体的应付，收入类型 goods「供货货款」；开票主体为借出方收款主体，购方为借入方及其收款主体；按到期日所在月合计，项目缺时取借用单所属项目。
+      - 取数与生成：JdbcLedgerInvoiceRepository.GROUPS_SQL、LedgerInvoiceService.INCOME_TYPES 与 generate；契约改 listSettlementInvoiceItems、settlementInvoiceSummary 的说明，复核返修另同步 generateSettlementInvoiceItems 去掉已停用的内部成本转付口径；开票清单页映射规则表的固定说明只写营销成本一类不开票；本段新增 0 个操作，本段迁移 V760。
+    - docs/finance-settlement-product-prd-v0.1.md：§6A 374 现状同句同改，其后补 402 实现现状；§4B.1 第 214 条现状里台账来源中文名同名表的计数随 inventory_lending「商户借调货款与赔偿」加一（FinanceService.AR_AP_SOURCE_TYPE_LABELS 与前端 KEY_VALUE_LABELS.source_type）。
+    - 两份 PRD 的修订表各加一行，标题版本各升一次。只改现状句，不新增规则。
+  - 依据：BSM:1803「平台内部各主体之间的往来需要开具发票，开票的具体规则一律按国家财税相关规定执行，本文件不复述细则。」；BSM:1750「开票金额≤已收−已退−已开」；BSM:751「域主管公司出资的免费权益按锁定内部结算价核销后结算，未核销不结算。」；BSM:1691「娱乐平台公司出资的通票免费酒水不计提成」；BSM:800「本次补偿新增的实际履约由决定发放补偿的具体域主管公司承担」；BSM:1201「赔偿按已有约定及现行跨商户结算规则形成借入方对借出方的应付」；DEC-R4-2026-08-04-51；第十八批裁决 18。
+  - 测试：无（文档段）。门禁：verify-full-admin-page-matrix 通过，git diff --check 干净。
+- 18CD 合并前变基（2026-11-24）：本段自 50bc92b2 变基到 origin/main efd57257；合并时 OpenAPI 共 1420 个操作（主干 1420）、info.version V1.12、决策台账 V1.41，Flyway 最新 V760（共 632 个迁移）。版本行、契约版本、计数与 SHA、生成物、台账补记与 PRD 修订行由合并前脚本按新主干统一重写。

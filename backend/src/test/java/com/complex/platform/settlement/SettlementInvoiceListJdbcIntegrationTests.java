@@ -120,11 +120,8 @@ class SettlementInvoiceListJdbcIntegrationTests {
         assertThat(platform.vatAmountCent()).isEqualTo(566L);
         assertThat(summary.overIssued()).isEmpty();
 
-        // 内部转付 / 营销成本永不进对外清单(底稿 23 第 11、12 行)
-        assertThat(summary.rules()).anySatisfy(r -> {
-            assertThat(r.incomeType()).isEqualTo("giveaway_transfer");
-            assertThat(r.invoiceable()).isFalse();
-        });
+        // 营销成本永不进对外清单(底稿 23 第 11 行);通票赠送权益兑付「不开票」规则自第 402 条起停用(V760;BSM:1803),免费酒水按台账来源月度组开票
+        assertThat(summary.rules()).noneMatch(r -> "giveaway_transfer".equals(r.incomeType()));
         assertThat(summary.rules()).anySatisfy(r -> {
             assertThat(r.incomeType()).isEqualTo("marketing");
             assertThat(r.invoiceable()).isFalse();

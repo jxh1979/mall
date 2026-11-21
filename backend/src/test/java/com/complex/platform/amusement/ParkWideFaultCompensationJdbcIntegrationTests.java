@@ -1,10 +1,11 @@
 package com.complex.platform.amusement;
 
-// 文件版本：V0.12
+// 文件版本：V0.13
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.within;
+import static org.hamcrest.Matchers.contains;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -88,6 +89,7 @@ class ParkWideFaultCompensationJdbcIntegrationTests {
     @Autowired private ApplicationEvents events;
     @Autowired private SettlementSettledConsumer settlementSettledConsumer;
     @Autowired private com.complex.platform.settlement.JdbcSettlementTransactionRepository settlementTransactions;
+    @Autowired private com.complex.platform.settlement.LedgerInvoiceService ledgerInvoices;
 
     @Autowired private AmusementFaultCompensationService compensationService;
     @Autowired private AmusementParkWideFaultService faultService;
@@ -605,6 +607,90 @@ class ParkWideFaultCompensationJdbcIntegrationTests {
         assertThat(recovery.get("due_date")).isEqualTo(s.get("scheduled_due_date"));
         assertThat(((java.sql.Date) s.get("scheduled_due_date")).toLocalDate())
                 .as("付账日不早于异议期届满").isAfterOrEqualTo(((java.sql.Date) s.get("objection_deadline")).toLocalDate());
+    }
+
+    /**
+     * 第十八批 CD 段第 402 条 402-R2（BSM:800「本次补偿新增的实际履约由决定发放补偿的具体域主管公司承担」；BSM:1803「平台内部各主体之间的往来需要开具发票」）：
+     * 已结束月份的补偿新增履约结算进开票清单——提供方商户收款主体开给批次承担主体，收入类型 spv_service「运营服务费」；该次核销撤销后原月应开额降到 0，
+     * 已开的列入已超开（BSM:1750「开票金额≤已收−已退−已开」「退款后先红冲再重开」）。平台财务按后台真实请求查开票清单。
+     */
+    @Test
+    void compensationFulfillmentEntersInvoiceListFromProviderToBearer() throws Exception {
+        String providerCo = invoiceableProvider();
+        String itemId = issueFullReissue();
+        VerificationResponse drink = verify("cd402-cpf-" + suffix, compensationEntitlement(itemId, "bar_drink"));
+        YearMonth lastMonth = moveCompensationPayableToLastMonth();
+        String viewer = user("inv", List.of("settlement.invoice.view"));
+
+        assertThat(generateLedgerInvoices()).isEqualTo(1);
+        invoiceView(viewer, "/api/v1/settlement/invoice-items", lastMonth).andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items[?(@.ledger_source == 'compensation_fulfillment')].amount_cent", contains(1200)))
+                .andExpect(jsonPath("$.data.items[?(@.ledger_source == 'compensation_fulfillment')].income_type", contains("spv_service")))
+                .andExpect(jsonPath("$.data.items[?(@.ledger_source == 'compensation_fulfillment')].subject_entity_id", contains(providerCo)))
+                .andExpect(jsonPath("$.data.items[?(@.ledger_source == 'compensation_fulfillment')].buyer_entity_id", contains(BEARER)));
+
+        TestSecurityActors.asPlatformAdmin(); // 上一个 MockMvc 请求结束时清掉了安全上下文，撤销核销回到平台管理员身份。
+        ticketingService.reverseVerification(drink.id(), new VerificationReverseRequest("cd402-cpf-rev-" + suffix, "误核销冲正"),
+                "staff_fs012");
+        invoiceView(viewer, "/api/v1/settlement/invoice-items/summary", lastMonth).andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.over_issued[?(@.income_type == 'spv_service')].due_amount_cent", contains(0)))
+                .andExpect(jsonPath("$.data.over_issued[?(@.income_type == 'spv_service')].over_issued_cent", contains(1200)));
+    }
+
+    /**
+     * 402-R2（BSM:1750）：补偿应付 1200 已付 500 后跨月撤销——冲正、重述沿用原月，记在撤销月的已付追收也并入原履约月，原月应开额净为 0，
+     * 已开的 1200 列入已超开（追收若按撤销月入组，原月会留 500、撤销月的负额又无行可抵）。
+     */
+    @Test
+    void paidCompensationReversalNetsOriginalMonthToZero() throws Exception {
+        invoiceableProvider();
+        String verificationId = partiallyPaidCompensation(500L);
+        YearMonth lastMonth = moveCompensationPayableToLastMonth();
+        String viewer = user("inv", List.of("settlement.invoice.view"));
+        assertThat(generateLedgerInvoices()).isEqualTo(1);
+
+        ticketingService.reverseVerification(verificationId, new VerificationReverseRequest("cd402-paid-rev-" + suffix, "误核销冲正"),
+                "staff_fs012");
+        invoiceView(viewer, "/api/v1/settlement/invoice-items/summary", lastMonth).andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.over_issued[?(@.income_type == 'spv_service')].due_amount_cent", contains(0)))
+                .andExpect(jsonPath("$.data.over_issued[?(@.income_type == 'spv_service')].over_issued_cent", contains(1200)));
+    }
+
+    /** 402-R2：给补偿提供方配收款主体（开票主体取商户收款主体）；返回该主体。 */
+    private String invoiceableProvider() {
+        String entity = "be_cd402_" + suffix;
+        jdbcTemplate.update("INSERT INTO business_entities (id, entity_name, entity_role, status, created_at, updated_at)"
+                + " VALUES (?, ?, 'management_company', 'active', now(), now())", entity, "补偿提供方经营公司" + suffix);
+        jdbcTemplate.update("UPDATE merchants SET settlement_entity_id = ? WHERE id = ?", entity, providerMerchantId);
+        return entity;
+    }
+
+    /** 本项目的补偿应付改记上月（开票清单只出已结束月份）；返回上月。 */
+    private YearMonth moveCompensationPayableToLastMonth() {
+        YearMonth lastMonth = YearMonth.now(com.complex.platform.common.LocalZone.ID).minusMonths(1);
+        jdbcTemplate.update("UPDATE ar_ap_items SET accounting_period = ? WHERE source_type = 'compensation_fulfillment' AND project_id = ?",
+                lastMonth.toString(), projectId);
+        return lastMonth;
+    }
+
+    /** 同定时作业入口（LedgerInvoiceService.groupsToInvoice 后逐组 generate），只生成本用例综合体的组。 */
+    private int generateLedgerInvoices() {
+        int created = 0;
+        for (var g : ledgerInvoices.groupsToInvoice()) {
+            if (projectId.equals(g.projectId())) {
+                created += ledgerInvoices.generate(g, "tester");
+            }
+        }
+        return created;
+    }
+
+    private org.springframework.test.web.servlet.ResultActions invoiceView(String viewer, String path, YearMonth month) throws Exception {
+        AccessActor admin = new AccessActor(viewer, "u_" + viewer, "platform_admin", "org_1", null, "active");
+        return mockMvc.perform(get(path).param("projectId", projectId).param("periodStart", month.atDay(1).toString()).param("size", "200")
+                .with(request -> {
+                    request.addHeader("X-Terminal-Type", "web");
+                    return authentication(new UsernamePasswordAuthenticationToken(admin, "token", List.of())).postProcessRequest(request);
+                }));
     }
 
     /** 裁决第 5 条「单独收回」：追收应收按前端真实请求形状（蛇形键）经登记收款接口（统一回写点 settleArApItem）收回。 */

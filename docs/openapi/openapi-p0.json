@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "综合体管理系统 P0 API 契约",
-    "version": "V1.11",
+    "version": "V1.12",
     "description": "P0 首批编码前置契约。本文采用 JSON-compatible YAML，便于与 openapi-p0.json 保持一致。正式后端以 Java 21 + Spring Boot 4.x + springdoc-openapi 输出运行时 OpenAPI，并与本契约比对。"
   },
   "servers": [
@@ -68799,7 +68799,7 @@
         ],
         "operationId": "listSettlementInvoiceItems",
         "summary": "开票清单列表",
-        "description": "按结算单及积分发行费月账单生成的开票清单条目分页列表(开票主体/发票项目/税率/税额/凭证要件/开票状态)。积分发行费行(income_type=points_issuance)按该账单已收额生成,开票主体为账单收款方,points_bill_id 为来源积分月账单、buyer_entity_id/buyer_name 为购方(合同销售方),bill_id 为空;结算单行 points_bill_id 为空，buyer_entity_id、buyer_name 除下述业态份额行外为空。税率按开票主体、开票期间末日当时生效的税率版本取(主体特例优先,否则平台默认;未配置或该版本没有这笔费用记 0;第十八批 AR 段第 233 条 233-R2)。系统只生成清单交财务,不自建开票引擎。第十八批 AZ 段第 290 条 290-R1（BSM:1803「平台内部各主体之间的往来需要开具发票」；BSM:755「一律按总额收付」）：结算单行另含组合通票游乐、演出、餐饮、零售各业态的域间份额（含追收与到期未核销归属，即月结过账挂往来的同三列之和）行——income_type 为 game、show、catering、retail（新增 retail 零售），开票主体为该业态份额归属主体，buyer_entity_id、buyer_name 为娱乐平台公司，settlement_item_id 为空，按总额、不与代付相抵，代付不开票。290-R2（BSM:1144「酒吧门票上的演出加价部分，随酒吧门票由娱乐平台公司售票收款后分给传媒公司」；BSM:1145）：传媒演出结算（门票加价分配、固定演出费、酒水提成）出账即生成一行——income_type=show（文化服务费），开票主体为收方传媒公司，购方为付方（门票加价为娱乐平台公司；固定演出费、酒水提成为该酒吧的收款主体），期间为演出日所在月；响应新增 ar_ap_item_id（string，可空）＝该行来源的传媒演出结算台账行，其余行为空，这类行 bill_id、points_bill_id 为空；结算调整后原行应开降为 0、列入已超开（先红冲），新额另出一行。第十八批 BU 段第 374 条（BSM:1803）：另含平台内部主体其余往来的台账来源月度行——响应项另带 ledger_source（string，可空）：single_bar_service_fee 单店门票综合服务费、inventory_transfer 门店要货货款、dispatch_commission_transfer 派驻提成月结拨付、bar_payroll_transfer 酒吧报酬月结拨付、parking_credit_cost 停车抵免成本、general_card_consume 通用卡消费结算，其余行为空；这类行 bill_id、points_bill_id、ar_ap_item_id 为空。单店门票综合服务费：income_type=ticket，开票主体按 ticket_service_fee 收入归属，购方为该酒吧及其收款主体，期间为计费月，只取已挂应收的计费月，应开额为未退票逐票费合计与锁定封顶取小。门店要货货款：income_type=goods，开票主体按 supply_goods 收入归属，购方为门店及其收款主体；往来对方为供货主体的应付按到期日所在月合计（签收货款为签收营业日；收货方担责的损失为财务复核通过当日营业日；货款调整的冲正与重述沿用原行到期日），货款调整的冲正与重述、收货方担责的损失一并计入，往来对方是商户的借调买断不计。派驻提成月结拨付、酒吧报酬月结拨付：income_type=staff_remuneration，两类分别成行，开票主体为人员所属主体，购方为该酒吧及其收款主体，按会计期间取应付减应收。停车抵免成本：income_type=parking，开票主体为停车收款主体城市项目公司，购方为承担主体。通用卡消费结算按收款方逐行：收款方是酒吧商户的为 catering，开票主体为该酒吧收款主体；收款方是游乐票、演出票收入归属主体的为 game、show；其余为 ticket；购方为该综合体唯一的城市项目公司，不唯一时为空；应开额按会计期间取应付减跨月追收应收，小于等于 0 不出行。共同口径：只出已结束月份；应开额取台账现值；晚到流水另出差额行；由定时补开生成，红冲或作废后下一轮按新应开额重开。",
+        "description": "按结算单及积分发行费月账单生成的开票清单条目分页列表(开票主体/发票项目/税率/税额/凭证要件/开票状态)。积分发行费行(income_type=points_issuance)按该账单已收额生成,开票主体为账单收款方,points_bill_id 为来源积分月账单、buyer_entity_id/buyer_name 为购方(合同销售方),bill_id 为空;结算单行 points_bill_id 为空，buyer_entity_id、buyer_name 除下述业态份额行外为空。税率按开票主体、开票期间末日当时生效的税率版本取(主体特例优先,否则平台默认;未配置或该版本没有这笔费用记 0;第十八批 AR 段第 233 条 233-R2)。系统只生成清单交财务,不自建开票引擎。第十八批 AZ 段第 290 条 290-R1（BSM:1803「平台内部各主体之间的往来需要开具发票」；BSM:755「一律按总额收付」）：结算单行另含组合通票游乐、演出、餐饮、零售各业态的域间份额（含追收与到期未核销归属，即月结过账挂往来的同三列之和）行——income_type 为 game、show、catering、retail（新增 retail 零售），开票主体为该业态份额归属主体，buyer_entity_id、buyer_name 为娱乐平台公司，settlement_item_id 为空，按总额、不与代付相抵，代付不开票。290-R2（BSM:1144「酒吧门票上的演出加价部分，随酒吧门票由娱乐平台公司售票收款后分给传媒公司」；BSM:1145）：传媒演出结算（门票加价分配、固定演出费、酒水提成）出账即生成一行——income_type=show（文化服务费），开票主体为收方传媒公司，购方为付方（门票加价为娱乐平台公司；固定演出费、酒水提成为该酒吧的收款主体），期间为演出日所在月；响应新增 ar_ap_item_id（string，可空）＝该行来源的传媒演出结算台账行，其余行为空，这类行 bill_id、points_bill_id 为空；结算调整后原行应开降为 0、列入已超开（先红冲），新额另出一行。第十八批 BU 段第 374 条（BSM:1803）：另含平台内部主体其余往来的台账来源月度行——响应项另带 ledger_source（string，可空）：single_bar_service_fee 单店门票综合服务费、inventory_transfer 门店要货货款、dispatch_commission_transfer 派驻提成月结拨付、bar_payroll_transfer 酒吧报酬月结拨付、parking_credit_cost 停车抵免成本、general_card_consume 通用卡消费结算，第十八批 CD 段第 402 条（BSM:1803）另有 pass_drink_settlement 通票酒水结算、compensation_fulfillment 补偿新增履约结算、inventory_lending 商户借调货款与赔偿，其余行为空；这类行 bill_id、points_bill_id、ar_ap_item_id 为空。单店门票综合服务费：income_type=ticket，开票主体按 ticket_service_fee 收入归属，购方为该酒吧及其收款主体，期间为计费月，只取已挂应收的计费月，应开额为未退票逐票费合计与锁定封顶取小。门店要货货款：income_type=goods，开票主体按 supply_goods 收入归属，购方为门店及其收款主体；往来对方为供货主体的应付按到期日所在月合计（签收货款为签收营业日；收货方担责的损失为财务复核通过当日营业日；货款调整的冲正与重述沿用原行到期日），货款调整的冲正与重述、收货方担责的损失一并计入，往来对方不是供货主体的（商户之间借调）另成 inventory_lending 行。派驻提成月结拨付、酒吧报酬月结拨付：income_type=staff_remuneration，两类分别成行，开票主体为人员所属主体，购方为该酒吧及其收款主体，按会计期间取应付减应收。停车抵免成本：income_type=parking，开票主体为停车收款主体城市项目公司，购方为承担主体。通用卡消费结算按收款方逐行：收款方是酒吧商户的为 catering，开票主体为该酒吧收款主体；收款方是游乐票、演出票收入归属主体的为 game、show；其余为 ticket；购方为该综合体唯一的城市项目公司，不唯一时为空；应开额按会计期间取应付减跨月追收应收，小于等于 0 不出行。通票酒水结算（第 402 条；BSM:751、BSM:1691）：income_type=spv_service，开票主体为出品酒吧收款主体，购方为娱乐平台公司（通票收入归属主体），按出品酒吧与会计期间取应付减对冲应收，跨月冲正落在冲正所在月。补偿新增履约结算（第 402 条；BSM:800）：income_type=spv_service，开票主体为提供方商户收款主体，购方为补偿批次承担主体，按原应付会计期间取应付减已付追收应收，冲正、重述与已付追收都并入原履约月。商户借调货款与赔偿（第 402 条；BSM:1201）：income_type=goods，开票主体为借出方收款主体，购方为借入方及其收款主体，取往来对方不是供货主体的门店要货台账应付（借调买断签收货款与无法归还的借用物赔偿），按到期日所在月合计，项目取台账行项目，缺时取借用单所属项目。共同口径：只出已结束月份；应开额取台账现值；晚到流水另出差额行；由定时补开生成，红冲或作废后下一轮按新应开额重开。",
         "x-auth-context": "staff-token",
         "x-permission": "settlement.invoice.view",
         "x-data-scope": "platform",
@@ -68889,7 +68889,7 @@
         ],
         "operationId": "settlementInvoiceSummary",
         "summary": "开票清单按主体汇总",
-        "description": "按开票主体分组的金额/税额/文建费汇总 + 开票主体与税目映射规则 + 已超开告警(已开>应开须先红冲再重开)。第十八批 AZ 段第 290 条 290-R1、290-R2：已超开按来源判——单头级 ticket 行应开额取门票综合服务费两支合计，game、show、catering、retail 业态份额行取该业态份额三列之和；传媒演出结算行应开额为该台账行加回指它的冲正行（调整后原行为 0），这类行在 over_issued 里 bill_id、settlement_item_id 为空。第十八批 BU 段第 374 条：over_issued 另含台账来源月度行（bill_id、settlement_item_id 为空），应开额为该组台账现值，为负按 0。",
+        "description": "按开票主体分组的金额/税额/文建费汇总 + 开票主体与税目映射规则 + 已超开告警(已开>应开须先红冲再重开)。第十八批 AZ 段第 290 条 290-R1、290-R2：已超开按来源判——单头级 ticket 行应开额取门票综合服务费两支合计，game、show、catering、retail 业态份额行取该业态份额三列之和；传媒演出结算行应开额为该台账行加回指它的冲正行（调整后原行为 0），这类行在 over_issued 里 bill_id、settlement_item_id 为空。第十八批 BU 段第 374 条：over_issued 另含台账来源月度行（bill_id、settlement_item_id 为空），应开额为该组台账现值，为负按 0。第十八批 CD 段第 402 条：映射规则不再含通票赠送权益兑付（V760 停用 isr_giveaway）。",
         "x-auth-context": "staff-token",
         "x-permission": "settlement.invoice.view",
         "x-data-scope": "platform",
@@ -69030,7 +69030,7 @@
         ],
         "operationId": "generateSettlementInvoiceItems",
         "summary": "按结算单生成开票清单",
-        "description": "把已确认/已结算的月度结算单拆成开票清单条目(门票综合服务费归娱乐平台公司、可分配池分账归各酒吧商户)。幂等:本次可开额 = 应开额 − 已开额,≤0 不生成;内部成本转付与营销成本规则不进对外清单。返回本次新增条目数。第十八批 AZ 段第 290 条 290-R1（BSM:1803「平台内部各主体之间的往来需要开具发票」；BSM:755「一律按总额收付」）：另按结算单组合通票游乐、演出、餐饮、零售各业态的域间份额（含追收与到期未核销归属，即月结过账挂往来的同三列之和）逐业态出单头级行——income_type 游乐为 game、演出为 show、餐饮为 catering、零售为 retail，开票主体为该业态份额归属主体，购方为娱乐平台公司（该项目 all_pass_ticket 收入归属的管理主体），按总额、不与代付相抵；代付是垫付款，不开票。该收入类型未配规则或规则不可开票的不生成。",
+        "description": "把已确认/已结算的月度结算单拆成开票清单条目(门票综合服务费归娱乐平台公司、可分配池分账归各酒吧商户)。幂等:本次可开额 = 应开额 − 已开额,≤0 不生成;营销成本规则不进对外清单。返回本次新增条目数。第十八批 AZ 段第 290 条 290-R1（BSM:1803「平台内部各主体之间的往来需要开具发票」；BSM:755「一律按总额收付」）：另按结算单组合通票游乐、演出、餐饮、零售各业态的域间份额（含追收与到期未核销归属，即月结过账挂往来的同三列之和）逐业态出单头级行——income_type 游乐为 game、演出为 show、餐饮为 catering、零售为 retail，开票主体为该业态份额归属主体，购方为娱乐平台公司（该项目 all_pass_ticket 收入归属的管理主体），按总额、不与代付相抵；代付是垫付款，不开票。该收入类型未配规则或规则不可开票的不生成。",
         "x-auth-context": "staff-token",
         "x-permission": "settlement.invoice.manage",
         "x-data-scope": "platform",

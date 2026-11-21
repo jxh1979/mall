@@ -1,6 +1,6 @@
 package com.complex.platform.settlement;
 
-// 文件版本：V0.05
+// 文件版本：V0.06
 
 import com.complex.platform.common.api.ApiException;
 import com.complex.platform.common.api.PageResponse;
@@ -28,8 +28,8 @@ import org.springframework.transaction.annotation.Transactional;
  *   <li>② 每条可分配池分账 → 收入类型 {@code spv_service},开票主体 = 该酒吧商户自身的结算主体,
  *       发票项目「运营服务费」。</li>
  * </ul>
- * 赠送权益兑付(内部成本转付)与积分/折扣券(营销成本)在 {@code invoice_subject_rules} 里
- * {@code invoiceable=false},<b>永不进对外清单</b>——底稿 23 第 11/12 行口径。
+ * 积分/折扣券(营销成本)在 {@code invoice_subject_rules} 里 {@code invoiceable=false},<b>永不进对外清单</b>——底稿 23 第 11 行口径。
+ * 通票免费酒水(赠送权益兑付)自第 402 条起(BSM:1803;V760 停用 isr_giveaway)按台账来源月度组由出品酒吧开给娱乐平台公司,见 {@link LedgerInvoiceService}。
  *
  * <p><b>金额铁律</b>(业务 HTML 逐字):「开票金额 ≤ 已收 − 已退 − 已开;退款后先红冲再重开」。
  * 实现:本次可开额 = <b>应开额</b>(结算单当期净额,月结重跑已扣退款/冲正)− <b>已开额</b>
