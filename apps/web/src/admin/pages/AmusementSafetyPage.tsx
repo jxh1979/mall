@@ -12,6 +12,8 @@ import { TraceLink } from "../components/TraceLink";
 import { GuidedFlowModal } from "../components/GuidedFlowModal";
 import { RowDetailDrawer, cnDate, type RowDetailField } from "../components/RowDetailDrawer";
 import { MetricDetailLink, useMetricKpiValue } from "../components/MetricDetailEntry";
+import { AmusementInspectionWalkPanel, readInspectionWalk, walkComplete, type InspectionPointsView } from "./AmusementInspectionWalkPanel";
+import { AmusementInspectionRulesSection } from "./AmusementInspectionRulesSection";
 
 const TEXT = {
   title: "安全巡检/事故",
@@ -20,6 +22,7 @@ const TEXT = {
   actionFailed: "安全巡检操作失败",
   noInspection: "当前没有可操作巡检。",
   createTitleRequired: "创建巡检必须填写检查项说明。",
+  walkIncomplete: "还有点位没走完，请先用工作手机按顺序扫码走完全部点位。",
   rectifyNoteRequired: "整改必须填写说明和证据。",
   passEvidenceRequired: "检查通过必须上传证据附件。",
   recheckResultRequired: "请选择复检结论。",
@@ -84,6 +87,11 @@ function evidenceList(row: AmusementSafetyInspectionRow) {
   return (row.evidenceAttachmentIds ?? row.attachmentIds ?? []).join(", ") || "-";
 }
 
+// 第十八批 BS 段第 373 条 373-R3：按点位走点建的巡检（检查项带记录时间），明细逐点列结果与记录时间。
+function pointRecords(row: AmusementSafetyInspectionRow): string {
+  return (row.items ?? []).map((item) => `${String(item.itemName ?? "")}：${item.result === "pass" ? "通过" : "不通过"}（${cnDate(String(item.checkedAt ?? ""))}）`).join("；");
+}
+
 function displayNo(row: AmusementSafetyInspectionRow) {
   return row.inspectionNo ?? row.id;
 }
@@ -136,6 +144,15 @@ export function AmusementSafetyPage({ api, setActionResult, setGlobalError, effe
   const [detail, setDetail] = React.useState<{ title: string; fields: RowDetailField[] } | null>(null);
   // 引导式流程 phase-4：新建巡检收起为主按钮 + 分步引导弹窗（提交/整改/复检/审批动作表单不变）。
   const [createOpen, setCreateOpen] = React.useState(false);
+  // 第十八批 BS 段第 373 条 373-R3、373-R5（BSM:1300「巡检必须按点位顺序完成……未走完全部点位的巡检不成立」）：所选游乐项目配了巡检点位时的
+  // 走点进度（工作手机扫码记录，网页只读）；没配点位为 null，表单照旧填检查项。
+  const [walk, setWalk] = React.useState<InspectionPointsView | null>(null);
+  React.useEffect(() => {
+    let alive = true;
+    setWalk(null);
+    if (createOpen && createForm.projectId) void readInspectionWalk(api, createForm.projectId).then((view) => { if (alive) setWalk(view); });
+    return () => { alive = false; };
+  }, [api, createOpen, createForm.projectId]);
   const [kpiFocus, setKpiFocus] = React.useState<KpiFocus | null>(readKpiFocusFromUrl);
 
   React.useEffect(() => {
@@ -235,7 +252,14 @@ export function AmusementSafetyPage({ api, setActionResult, setGlobalError, effe
       setFormError("请先选择巡检项目。");
       return;
     }
-    if (!createTitle.trim()) {
+    // 373-R3：走点在工作手机上，提交前重读一次进度；配了点位的没走完不发请求，检查项由服务端取本轮走完的点位。
+    const latest = walk ? (await readInspectionWalk(api, createForm.projectId)) ?? walk : null;
+    if (latest) setWalk(latest);
+    if (latest && !walkComplete(latest)) {
+      setFormError(TEXT.walkIncomplete);
+      return;
+    }
+    if (!latest && !createTitle.trim()) {
       setFormError(TEXT.createTitleRequired);
       return;
     }
@@ -254,7 +278,7 @@ export function AmusementSafetyPage({ api, setActionResult, setGlobalError, effe
       deviceId: createForm.deviceId.trim() || undefined,
       templateId: createForm.templateId || undefined,
       overallResult: createForm.overallResult,
-      items: [{ itemCode: "guardrail", itemName: createTitle, result: pass ? "pass" : "fail", severity: "high" }],
+      ...(latest ? {} : { items: [{ itemCode: "guardrail", itemName: createTitle, result: pass ? "pass" : "fail", severity: "high" }] }),
     };
     const ok = await runAction("amusement_safety_inspection_created", request, () => api.post("/api/v1/amusement/safety-inspections", request));
     if (ok) {
@@ -385,13 +409,15 @@ export function AmusementSafetyPage({ api, setActionResult, setGlobalError, effe
         { label: TEXT.rectificationStatus, value: rectificationLabel(row.rectificationStatus) },
         { label: TEXT.reopenStatus, value: row.reopenStatus ? formatBusinessStatus(row.reopenStatus) : "-" },
         { label: TEXT.evidenceLabel, value: evidenceList(row) },
+        ...(row.items?.some((item) => item.checkedAt) ? [{ label: "点位记录", value: pointRecords(row) }] : []),
         { label: TEXT.time, value: cnDate(row.inspectedAt ?? row.createdAt) },
       ],
     });
   }
 
+  // 第十八批 BS 段收尾复核修正：「暂无数据」只占巡检表格区，一条巡检都没有时新建巡检等动作照样显示。
   const inspectionsTable = (
-    <div className="admin-table-scroll">
+    <AdminDataState loading={false} error={null} empty={rows.length === 0}><div className="admin-table-scroll">
       <table className="admin-table" data-testid="amusement-safety-table">
         <thead><tr><th>{TEXT.select}</th><th>{TEXT.inspectionNo}</th><th>{TEXT.project}</th><th>{TEXT.overall}</th><th>{TEXT.inspectionStatus}</th><th>{TEXT.rectificationStatus}</th><th>{TEXT.reopenStatus}</th><th>{TEXT.evidenceLabel}</th><th>{TEXT.time}</th><th>详情</th></tr></thead>
         <tbody>
@@ -413,13 +439,13 @@ export function AmusementSafetyPage({ api, setActionResult, setGlobalError, effe
         </tbody>
       </table>
       <TablePager testid="amusement-safety-pager" page={pagedRows.page} pageCount={pagedRows.pageCount} total={pagedRows.total} onPrev={pagedRows.prev} onNext={pagedRows.next} />
-    </div>
+    </div></AdminDataState>
   );
 
   return (
     <section data-testid="amusement-safety-page">
       <AdminPageHeader title={TEXT.title} description={TEXT.description} />
-      <AdminDataState loading={loading} error={error} empty={rows.length === 0} onRetry={reload}>
+      <AdminDataState loading={loading} error={error} onRetry={reload}>
         {kpiFocus ? (
           <>
             <div className="admin-state" data-testid="amusement-safety-kpi-focus-banner">
@@ -454,7 +480,7 @@ export function AmusementSafetyPage({ api, setActionResult, setGlobalError, effe
                 {
                   title: "巡检项",
                   description: "填写开放前安全巡检的检查项说明。",
-                  validate: () => (!createForm.projectId ? "请先选择巡检项目。" : !createTitle.trim() ? TEXT.createTitleRequired
+                  validate: () => (!createForm.projectId ? "请先选择巡检项目。" : !walk && !createTitle.trim() ? TEXT.createTitleRequired
                     : createForm.overallResult === "pass" && createEvidence.length === 0 ? TEXT.passEvidenceRequired : null),
                   content: (
                     <>
@@ -472,14 +498,17 @@ export function AmusementSafetyPage({ api, setActionResult, setGlobalError, effe
                         <option value="fail">不合格</option>
                         <option value="pending_rectification">待整改</option>
                       </select></label>
-                      <label>{TEXT.createTitle}<input data-testid="amusement-safety-create-title" value={createTitle} onChange={(event) => setCreateTitle(event.target.value)} /></label>
+                      {walk ? <AmusementInspectionWalkPanel view={walk} /> : (
+                        <label>{TEXT.createTitle}<input data-testid="amusement-safety-create-title" value={createTitle} onChange={(event) => setCreateTitle(event.target.value)} /></label>
+                      )}
                       <label>{TEXT.evidenceUpload}<input type="file" multiple accept="image/*,video/*" data-testid="amusement-safety-create-evidence-upload" disabled={uploading} onChange={(e) => void uploadEvidence(e.target.files, undefined, (rows) => setCreateEvidence((prev) => [...prev, ...rows]))} /></label>
                       {createEvidence.length > 0 ? <span data-testid="amusement-safety-create-evidence-files">{createEvidence.map((file) => file.fileName).join("、")}</span> : null}
                     </>
                   ),
                 },
               ]}
-              summary={[{ label: TEXT.createTitle, value: createTitle.trim() || "未填写" }]}
+              summary={[walk ? { label: "巡检点位", value: `已记录 ${walk.walk.length}/${walk.points.length}` }
+                : { label: TEXT.createTitle, value: createTitle.trim() || "未填写" }]}
             />
             <div className="admin-form-grid" data-testid="amusement-safety-action-form">
               <label>{TEXT.rectifyNote}<input data-testid="amusement-safety-rectify-note" value={rectifyNote} onChange={(event) => setRectifyNote(event.target.value)} /></label>
@@ -538,6 +567,12 @@ export function AmusementSafetyPage({ api, setActionResult, setGlobalError, effe
           </>
         )}
       </AdminDataState>
+      {/* 第十八批 BS 段收尾复核修正（BSM:1300 抽检频次「由后台配置」；第十八批裁决 76「每个点位生成一张码贴在现场」）：点位清单与抽检间隔
+          在第一次巡检之前就要配，规则块不受巡检列表的读取与空态闸（KPI 聚焦时不显示），块内读取失败照旧提示。 */}
+      {kpiFocus ? null : (
+        <AmusementInspectionRulesSection api={api} setActionResult={setActionResult} setGlobalError={setGlobalError}
+          effectivePermissions={effectivePermissions} projects={projects} />
+      )}
       <RowDetailDrawer open={detail !== null} title={detail?.title ?? ""} fields={detail?.fields ?? []} onClose={() => setDetail(null)} />
     </section>
   );

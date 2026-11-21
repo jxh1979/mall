@@ -1,6 +1,6 @@
 package com.complex.terminal
 
-// 文件版本：V0.27
+// 文件版本：V0.28
 
 import android.app.Activity
 import android.content.Intent
@@ -60,7 +60,7 @@ class MainActivity : Activity() {
   // 购物车（本 Activity 会话态；下单成功清空；平板 POS 与一体机吧台买酒共用）。
   private val posCart = LinkedHashMap<String, PosCartLine>()
   // 4.2 allowed hosts 生效：COMPLEX_API_ALLOWED_HOSTS 构建白名单在客户端入口强制校验。
-  private val api: TerminalApiClient by lazy {
+  internal val api: TerminalApiClient by lazy {
     TerminalApiClient(
       BuildConfig.COMPLEX_API_BASE_URL.trim().trimEnd('/'),
       allowedHosts = BuildConfig.COMPLEX_API_ALLOWED_HOSTS.split(',')
@@ -72,7 +72,7 @@ class MainActivity : Activity() {
       locationProvider = DeviceLocator(this@MainActivity)::currentFix
     }
   }
-  private val workflow: TerminalWorkflow by lazy { TerminalWorkflow(api, store) }
+  internal val workflow: TerminalWorkflow by lazy { TerminalWorkflow(api, store) }
 
   // 4.2 扫码相机：ZXing 内置扫码界面（IntentIntegrator 旧式回调，兼容纯 Activity），
   // 本地解码无网络依赖，结果回填目标输入框。
@@ -84,7 +84,7 @@ class MainActivity : Activity() {
   private var nfcResult: ((String) -> Unit)? = null
 
   /** 84-R2：提示语可换（交接页对准酒水或物品上的平台二维码）；给了 onResult 就把扫到的码交给它，不回填输入框。 */
-  private fun launchScan(target: EditText?, prompt: String = "对准客人验票二维码", onResult: ((String) -> Unit)? = null) {
+  internal fun launchScan(target: EditText?, prompt: String = "对准客人验票二维码", onResult: ((String) -> Unit)? = null) {
     scanTarget = target
     scanResult = onResult
     IntentIntegrator(this)
@@ -393,6 +393,8 @@ class MainActivity : Activity() {
       entry("tablet_pos", "平板点单 POS（图形）") { showPosEntry() },
       entry("kiosk_claim", "一体机模式（权益领取）") { showKioskEntry() },
       entry("amusement_maintenance", "游乐检修提交 / 主管确认") { showMaintenance() },
+      // 第十八批 BS 段第 373 条 373-R5：游乐巡检按序扫码走点（屏在 AmusementInspectionWalkScreen.kt）。
+      entry("amusement_inspection", "游乐巡检走点") { showAmusementInspectionWalk() },
       entry("staff_device", "员工设备凭证") { showStaffDevice() },
       entry("ticket_reverse", "票务核销冲正") { showReverse() },
       declared?.let { statusText("—— 员工自有手机 ——") },
@@ -1643,7 +1645,7 @@ class MainActivity : Activity() {
     }
   }
 
-  private fun <T> runBackground(action: () -> T, onSuccess: (T) -> Unit, onError: (Throwable) -> Unit) {
+  internal fun <T> runBackground(action: () -> T, onSuccess: (T) -> Unit, onError: (Throwable) -> Unit) {
     thread {
       val outcome = runCatching(action)
       runOnUiThread {
@@ -1671,7 +1673,7 @@ class MainActivity : Activity() {
   }
 
   /** 错误信息转中文友好提示，区分离线/网络/接口错误。 */
-  private fun friendly(error: Throwable): String {
+  internal fun friendly(error: Throwable): String {
     // 原始异常记入日志便于报障排查，不吞掉；用户面只给可读中文。
     android.util.Log.w("ComplexTerminal", "operation failed", error)
     return when (error) {
@@ -2928,7 +2930,7 @@ class MainActivity : Activity() {
     }
   }
 
-  private fun screen(title: String, children: List<View>, root: Boolean = false, secure: Boolean = false, sensitive: Boolean = false): View {
+  internal fun screen(title: String, children: List<View>, root: Boolean = false, secure: Boolean = false, sensitive: Boolean = false): View {
     onRootScreen = root
     if (title != "考勤打卡") nfcResult = null
     // 防截屏:敏感屏(薪资/考勤/服务分账)设 FLAG_SECURE 挡截图/录屏/最近任务缩略图;
@@ -3034,12 +3036,12 @@ class MainActivity : Activity() {
   }
 
   /** 可点选列表容器：配合 [fillSelectableRows] 使用。 */
-  private fun rowsContainer(): LinearLayout = LinearLayout(this).apply {
+  internal fun rowsContainer(): LinearLayout = LinearLayout(this).apply {
     orientation = LinearLayout.VERTICAL
   }
 
   /** 可点选列表：每条记录一个独立 TextView，点中高亮并执行回填，免去肉眼抄 id。 */
-  private fun fillSelectableRows(
+  internal fun fillSelectableRows(
     container: LinearLayout,
     rows: List<Pair<String, () -> Unit>>,
     emptyText: String,
@@ -3067,7 +3069,7 @@ class MainActivity : Activity() {
     }
   }
 
-  private fun statusText(text: String): TextView = TextView(this).apply {
+  internal fun statusText(text: String): TextView = TextView(this).apply {
     this.text = text
     textSize = 15f
     setTextColor(Color.parseColor("#3a3f47"))
@@ -3075,7 +3077,7 @@ class MainActivity : Activity() {
     setBackgroundColor(Color.parseColor("#f2f4f7"))
   }
 
-  private fun editText(hint: String): EditText = EditText(this).apply {
+  internal fun editText(hint: String): EditText = EditText(this).apply {
     this.hint = hint
     textSize = 16f
     inputType = InputType.TYPE_CLASS_TEXT
@@ -3102,7 +3104,7 @@ class MainActivity : Activity() {
   }
 
   /** 中文枚举下拉：显示中文 label，提交时由调用方按 selectedItemPosition 取对应英文 token（后端强校验英文枚举，中文仅用于展示，绝不提交给后端）。 */
-  private fun enumSpinner(labels: List<String>): android.widget.Spinner = android.widget.Spinner(this).apply {
+  internal fun enumSpinner(labels: List<String>): android.widget.Spinner = android.widget.Spinner(this).apply {
     adapter = android.widget.ArrayAdapter(this@MainActivity, android.R.layout.simple_spinner_item, labels).apply {
       setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
     }
@@ -3135,12 +3137,12 @@ class MainActivity : Activity() {
     else -> raw ?: "-"
   }
 
-  private fun button(text: String, onClick: () -> Unit): Button = Button(this).apply {
+  internal fun button(text: String, onClick: () -> Unit): Button = Button(this).apply {
     this.text = text
     setOnClickListener { onClick() }
   }
 
-  private fun backButton(): Button = button("返回首页") { showHome() }
+  internal fun backButton(): Button = button("返回首页") { showHome() }
 
   // ── BYOD 二期 Wave1(2026-07-19 拍板) ──
 

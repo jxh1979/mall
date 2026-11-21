@@ -56,7 +56,7 @@ scope 类型（与盘点 CSV 的 `scope_type` 对齐）：
 
 <!-- DATA_ISOLATION_SPEC_AUTO_START -->
 ### 3A. 自动迁移隔离基线（由 `npm run docs:data-isolation-spec` 生成）
-> 事实源：`backend/src/main/resources/db/migration`。当前解析到最新迁移 **V726**，发现 **278** 张含 scope 字段的表。不要手工修改本区块；新增迁移后运行 `npm run docs:data-isolation-spec`，提交前运行 `npm run verify:data-isolation-spec`。
+> 事实源：`backend/src/main/resources/db/migration`。当前解析到最新迁移 **V728**，发现 **281** 张含 scope 字段的表。不要手工修改本区块；新增迁移后运行 `npm run docs:data-isolation-spec`，提交前运行 `npm run verify:data-isolation-spec`。
 | 表 | scope 字段 | scope 类型 | 首次出现迁移 | 证据文件 |
 |---|---|---|---|---|
 | `access_grant_requests` | `merchant_id` + `project_id` | direct | V170 | `V170__access_grant_requests.sql` |
@@ -74,6 +74,7 @@ scope 类型（与盘点 CSV 的 `scope_type` 对齐）：
 | `amusement_group_bookings` | `project_id` | direct | V035 | `V035__p2_amusement_group_private_bookings.sql` |
 | `amusement_incidents` | `merchant_id` + `project_id` | direct | V024, V049 | `V024__p1_amusement_safety_waiver_incident.sql`<br>`V049__amusement_security_fixes.sql` |
 | `amusement_inspection_tasks` | `merchant_id` + `project_id` | direct | V143 | `V143__amusement_device_safety_cycle.sql` |
+| `amusement_inspection_walk_points` | `project_id` | direct | V727 | `V727__amusement_inspection_points.sql` |
 | `amusement_maintenance_record` | `merchant_id` + `project_id` | direct | V081 | `V081__amusement_maintenance_record.sql` |
 | `amusement_manual_overrides` | `project_id` | direct | V014 | `V014__p0_amusement_safety_session_verification.sql` |
 | `amusement_over_capacity_policy` | `project_id` | direct | V104 | `V104__amusement_incident_type_over_capacity.sql` |
@@ -89,6 +90,8 @@ scope 类型（与盘点 CSV 的 `scope_type` 对齐）：
 | `amusement_safety_templates` | `merchant_id` | direct | V049 | `V049__amusement_security_fixes.sql` |
 | `amusement_session_endings` | `project_id` | direct | V484 | `V484__amusement_session_ending_facts.sql` |
 | `amusement_sessions` | `project_id` | direct | V014 | `V014__p0_amusement_safety_session_verification.sql` |
+| `amusement_spot_check_misses` | `project_id` | direct | V728 | `V728__amusement_spot_check.sql` |
+| `amusement_spot_check_policies` | `project_id` | direct | V728 | `V728__amusement_spot_check.sql` |
 | `amusement_verifications` | `project_id` | direct | V014 | `V014__p0_amusement_safety_session_verification.sql` |
 | `amusement_waiver_acknowledgements` | `project_id` | direct | V024 | `V024__p1_amusement_safety_waiver_incident.sql` |
 | `analytics_dashboard_snapshots` | `project_id` | direct | V017 | `V017__p0_analytics_ai_quality_risk_dashboard.sql` |

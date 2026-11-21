@@ -28,6 +28,8 @@ final class AmusementInspectionService {
     private final IdempotencyService idempotencyService;
     private final AuditEventService auditEventService;
     private final AuthorizationService authorizationService;
+    /** 第十八批 BS 段第 373 条 373-R1：巡检点位走点（AmusementService 注入；单测未注入即 null，照旧要求检查项）。 */
+    Supplier<AmusementInspectionPointService> points = () -> null;
 
     AmusementInspectionService(
             AmusementRepository repository,
@@ -173,14 +175,19 @@ final class AmusementInspectionService {
             repository.findSafetyTemplateById(templateId)
                     .orElseThrow(() -> ApiException.notFound("SAFETY_TEMPLATE_NOT_FOUND", "安检模板不存在或已被删除"));
         }
-        if (actual.items() == null || actual.items().isEmpty()) {
+        // 第十八批 BS 段第 373 条 373-R1（BSM:1300「巡检必须按点位顺序完成……未走完全部点位的巡检不成立、不得标记为已完成」）：项目配了点位时
+        // 检查项取本轮按序走完的全部点位（请求里的 items 不看），未走完 409；没配点位照旧要求 items。不分开放前、营业中抽检与到期巡检。
+        AmusementInspectionPointService walk = points.get();
+        List<Map<String, Object>> walked = walk == null ? null : walk.completedWalkItems(projectId);
+        List<Map<String, Object>> items = walked != null ? walked : actual.items();
+        if (items == null || items.isEmpty()) {
             throw ApiException.badRequest("VALIDATION_FAILED", "items is required");
         }
         String overall = enumOrDefault(actual.overallResult(), "pending_rectification", OVERALL_RESULTS, "overall_result");
         // 2b 防伪造 pass：overall=pass 不可由请求方凭空指定开放高风险设备——
         // (1) 任一检查项 result=fail 时与项级结论矛盾，不得判 pass；(2) pass 必须有证据（必拍）。
         if ("pass".equals(overall)) {
-            boolean anyItemFailed = actual.items().stream()
+            boolean anyItemFailed = items.stream()
                     .anyMatch(item -> item != null && "fail".equals(String.valueOf(item.get("result"))));
             if (anyItemFailed) {
                 throw ApiException.conflict("SAFETY_INSPECTION_PASS_CONFLICTS_ITEMS",
@@ -202,12 +209,12 @@ final class AmusementInspectionService {
                     "devstat_" + inspectedDeviceId, projectId, inspectedDeviceId, "internal",
                     "pass".equals(overall) ? "operational" : "inspection_failed", now, java.util.Map.of(), now, now));
         }
-        return repository.saveSafetyInspection(new AmusementSafetyInspectionRecord(
+        AmusementSafetyInspectionRecord saved = repository.saveSafetyInspection(new AmusementSafetyInspectionRecord(
                 "inspection_" + slug(actual.idempotencyKey()),
                 projectId,
                 trimToNull(actual.deviceId()),
                 templateId,
-                List.copyOf(actual.items()),
+                List.copyOf(items),
                 overall,
                 "created",
                 "fail".equals(overall) || "pending_rectification".equals(overall) ? "pending" : "not_required",
@@ -225,6 +232,10 @@ final class AmusementInspectionService {
                 abnormal,
                 trimToNull(actual.abnormalNote())
         ));
+        if (walked != null) {
+            walk.clearWalk(projectId);
+        }
+        return saved;
     }
 
     private AmusementSafetyInspectionRecord submitSafetyInspectionInternal(String inspectionId, AmusementSafetyActionRequest request) {

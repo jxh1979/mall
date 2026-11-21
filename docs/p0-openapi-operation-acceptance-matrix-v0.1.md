@@ -1,4 +1,4 @@
-# P0 OpenAPI Operation 验收矩阵 V0.98
+# P0 OpenAPI Operation 验收矩阵 V0.99
 
 ## 1. 文档定位
 
@@ -17,7 +17,7 @@
 
 ## 3. Operation 清单
 
-> 当前 `docs/openapi/openapi-p0.json` 共 1403 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
+> 当前 `docs/openapi/openapi-p0.json` 共 1409 个 operation。下表由 OpenAPI 生成；若历史变更记录中的 operation 数量与本节不一致，以本节和 OpenAPI 为准。
 
 | 标签 | 方法 | 路径 | operationId | 摘要 | 请求体 | 权限 | 认证上下文 | 数据范围 | 终端/设备能力/调用通道 | 幂等 | 成功事件 | 失败事件 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -62,6 +62,12 @@
 | amusement | `POST` | `/api/v1/amusement/safety-inspections/{id}/recheck` | `recheckAmusementSafetyInspection` | 提交复检结果 | `AmusementSafetyActionRequest` | `amusement.safety_inspection.recheck` | `staff-token` | `project-amusement` | staff_work_phone, web | 是 | `amusement.safety_inspection.rechecked` | `amusement.safety_inspection.recheck_failed` |
 | amusement | `POST` | `/api/v1/amusement/safety-inspections/{id}/rectify` | `rectifyAmusementSafetyInspection` | 提交整改说明和证据 | `AmusementSafetyActionRequest` | `amusement.safety_inspection.rectify` | `staff-token` | `project-amusement` | staff_work_phone, web | 是 | `amusement.safety_inspection.rectification_submitted` | `amusement.safety_inspection.rectification_failed` |
 | amusement | `POST` | `/api/v1/amusement/safety-inspections/{id}/submit` | `submitAmusementSafetyInspection` | 提交巡检结果 | `AmusementSafetyActionRequest` | `amusement.safety_inspection.submit` | `staff-token` | `project-amusement` | staff_work_phone, web | 是 | `amusement.safety_inspection.submitted` | `amusement.safety_inspection.blocked` |
+| amusement | `GET` | `/api/v1/amusement/projects/{id}/inspection-points` | `getAmusementProjectInspectionPoints` | 查询游乐项目巡检点位清单与本轮走点 | `-` | `amusement.safety_inspection.view` | `staff-token` | `project-amusement` | web, staff_work_phone | 否 | `not_applicable` | `not_applicable` |
+| amusement | `PUT` | `/api/v1/amusement/projects/{id}/inspection-points` | `replaceAmusementProjectInspectionPoints` | 整份替换游乐项目巡检点位清单 | `AmusementInspectionPointsReplaceRequest` | `amusement.safety_template.manage` | `staff-token` | `project-amusement` | web | 是 | `amusement.inspection_points.configured` | `amusement.inspection_points.configure_failed` |
+| amusement | `POST` | `/api/v1/amusement/projects/{id}/inspection-points/{seq}/check` | `checkAmusementInspectionPoint` | 按序扫码记录一个巡检点位 | `AmusementInspectionPointCheckRequest` | `amusement.safety_inspection.create` | `staff-token` | `project-amusement` | staff_work_phone | 是 | `amusement.inspection_point.checked` | `amusement.inspection_point.check_failed` |
+| amusement | `GET` | `/api/v1/amusement/spot-check-policies/{project_id}` | `getAmusementSpotCheckPolicy` | 查询营业中抽检间隔（按综合体项目） | `-` | `amusement.safety_inspection.view` | `staff-token` | `project` | web | 否 | `not_applicable` | `not_applicable` |
+| amusement | `PUT` | `/api/v1/amusement/spot-check-policies/{project_id}` | `saveAmusementSpotCheckPolicy` | 配置营业中抽检间隔及上下限（按综合体项目，最高权限本人） | `AmusementSpotCheckPolicyRequest` | `amusement.safety_template.manage` | `staff-token` | `project` | web | 是 | `amusement.spot_check_policy.updated` | `amusement.spot_check_policy.update_failed` |
+| amusement | `GET` | `/api/v1/amusement/spot-check-misses` | `listAmusementSpotCheckMisses` | 查询当班未抽检记录 | `-` | `amusement.safety_inspection.view` | `staff-token` | `project-amusement` | web | 否 | `not_applicable` | `not_applicable` |
 | amusement | `GET` | `/api/v1/amusement/safety-templates` | `listAmusementSafetyTemplates` | 查询巡检模板 | `-` | `amusement.safety_template.view` | `staff-token` | `project-amusement` | web, staff_work_phone | 否 | `amusement.safety_template.viewed` | `amusement.safety_template.view_failed` |
 | amusement | `POST` | `/api/v1/amusement/safety-templates` | `createAmusementSafetyTemplate` | 维护巡检模板 | `AmusementSafetyTemplateRequest` | `amusement.safety_template.manage` | `staff-token` | `project-amusement` | web | 是 | `amusement.safety_template.changed` | `amusement.safety_template.change_failed` |
 | amusement | `GET` | `/api/v1/amusement/sessions` | `listAmusementSessions` | 查询游乐场次安排 | `-` | `amusement.session.view` | `staff-token` | `project-amusement` | web, staff_work_phone, kiosk | 否 | `amusement.session.viewed` | `amusement.session.view_failed` |

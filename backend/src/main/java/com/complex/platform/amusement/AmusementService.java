@@ -1,6 +1,6 @@
 package com.complex.platform.amusement;
 
-// 文件版本：V0.06
+// 文件版本：V0.07
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -98,6 +98,7 @@ public class AmusementService {
         this.riskAlertService = riskAlertService;
         this.bookingService = new AmusementBookingService(repository, idempotencyService, auditEventService, authorizationService, () -> sessionLifecycle);
         this.inspectionService = new AmusementInspectionService(repository, idempotencyService, auditEventService, authorizationService);
+        this.inspectionService.points = () -> inspectionPoints;
         this.maintenanceService = new AmusementMaintenanceService(repository, idempotencyService, auditEventService, authorizationService);
     }
 
@@ -1802,6 +1803,10 @@ public class AmusementService {
 
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     AmusementSessionLifecycleService sessionLifecycle;
+
+    // 第十八批 BS 段第 373 条 373-R1：巡检点位走点（字段注入免改构造点；单测未注入即照旧要求检查项）。
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    AmusementInspectionPointService inspectionPoints;
 
     // 第十八批 N 段第 123 条 123-R2：敏感操作定位闸（字段注入免改构造点；单测未注入即不查）。
     @org.springframework.beans.factory.annotation.Autowired(required = false)

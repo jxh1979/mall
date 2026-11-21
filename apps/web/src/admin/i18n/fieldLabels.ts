@@ -1,4 +1,4 @@
-// 文件版本：V0.53
+// 文件版本：V0.54
 // OBS-14-02 后台结果区字段中文名字典（PGM「全局原则 · 界面全中文（所有终端零英文）」）。
 // 键用后端 JSON 的蛇形写法；结果区查表时蛇形与驼峰同查（orderId / order_id 都命中 order_id）。
 // 与后端字段中文名表 FieldLabels.java（common.api 包）同键同名：前段按后端原样抄录，后端改名这里跟着改（门禁会比对）。
@@ -388,6 +388,14 @@ export const FIELD_LABELS: Record<string, string> = {
   checked_endpoints: "巡检点位",
   check_scope: "巡检范围",
   inspection_id: "巡检单号",
+  // 第十八批 BS 段第 373 条：游乐巡检点位与走点（/api/v1/amusement/projects/{id}/inspection-points）、营业中抽检间隔与当班未抽检记录。
+  point_name: "点位名称",
+  point_code: "点位码",
+  walk: "走点记录",
+  checked_by: "记录人",
+  interval_minutes: "抽检间隔（分钟）",
+  anchor_at: "上次巡检时间",
+  first_admission_at: "超间隔后首次入场时间",
   equipment_name: "设备名称",
   equipment_type: "设备类型",
   disposal_method: "处置方式",

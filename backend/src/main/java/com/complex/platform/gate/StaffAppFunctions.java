@@ -1,6 +1,6 @@
 package com.complex.platform.gate;
 
-// 文件版本：V0.04
+// 文件版本：V0.05
 
 import java.util.List;
 import java.util.Map;
@@ -26,7 +26,7 @@ public final class StaffAppFunctions {
      */
     public static final List<String> ALL = List.of(
             "ticket_verify", "voucher_redeem", "trace_handover", "amusement_verify", "bar_order", "tablet_pos", "kiosk_claim",
-            "amusement_maintenance",
+            "amusement_maintenance", "amusement_inspection",
             "staff_device", "ticket_reverse", "inbox", "notices", "my_work_orders", "my_alarms",
             "bar_reservation", "my_shifts", "attendance_punch", "my_payroll", "attendance_month", "leave",
             "service_order_create", "my_service_income", "service_order_fulfil", "shift_manage",

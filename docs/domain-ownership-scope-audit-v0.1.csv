@@ -15,6 +15,7 @@ amusement_group_bookings,direct,project_id,project_id column on amusement_group_
 amusement_incident_actions,inherited,inspection/incident id,inspection/incident id -> amusement project/session scope,must join through scope path before multi-complex rollout,V0.07,covered
 amusement_incidents,direct,project_id,project_id column on amusement_incidents,ready for project/merchant scoped query enforcement,V0.07,covered
 amusement_inspection_tasks,direct,project_id,project_id column on amusement_inspection_tasks,ready for project/merchant scoped query enforcement,V0.07,covered
+amusement_inspection_walk_points,direct,project_id,project_id column on amusement_inspection_walk_points,ready for project/merchant scoped query enforcement,V0.07,covered
 amusement_maintenance_record,direct,project_id,project_id column on amusement_maintenance_record,ready for project/merchant scoped query enforcement,V0.07,covered
 amusement_manual_overrides,direct,project_id,project_id column on amusement_manual_overrides,ready for project/merchant scoped query enforcement,V0.07,covered
 amusement_over_capacity_policy,direct,project_id,project_id column on amusement_over_capacity_policy,ready for project/merchant scoped query enforcement,V0.07,covered
@@ -32,6 +33,8 @@ amusement_safety_templates,direct,merchant_id,merchant_id column on amusement_sa
 amusement_session_endings,direct,complex_id,"complex_id is the locked actual projects.id; project_id denotes an amusement ride, not a complex; preserve original merchant scope",business-day version and interval locked at the real event; missing ownership is not filled from actor or global defaults,V0.07,covered
 amusement_session_followups,inherited,ending_id,ending_id -> amusement_session_endings -> actual complex_id; source entitlement/order and merchant scope also retained,must join through scope path before multi-complex rollout,V0.07,covered
 amusement_sessions,direct,complex_id,"complex_id is the locked actual projects.id; project_id denotes an amusement ride, not a complex; preserve original merchant scope",business-day version and interval locked at the real event; missing ownership is not filled from actor or global defaults,V0.07,covered
+amusement_spot_check_misses,direct,project_id,project_id column on amusement_spot_check_misses,ready for project/merchant scoped query enforcement,V0.07,covered
+amusement_spot_check_policies,direct,project_id,project_id column on amusement_spot_check_policies,ready for project/merchant scoped query enforcement,V0.07,covered
 amusement_verifications,direct,complex_id,"complex_id is the locked actual projects.id; project_id denotes an amusement ride, not a complex; preserve original merchant scope",business-day version and interval locked at the real event; missing ownership is not filled from actor or global defaults,V0.07,covered
 amusement_waiver_acknowledgements,direct,project_id,project_id column on amusement_waiver_acknowledgements,ready for project/merchant scoped query enforcement,V0.07,covered
 analytics_ai_quality_results,global_reference,global_reference,platform-global AI quality result ledger; unfiltered read gated by requirePlatformScope,intentional platform-global AI governance output; not a tenant access boundary,V0.07,covered

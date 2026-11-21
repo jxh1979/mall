@@ -8,14 +8,14 @@
     "RUNTIME_EVIDENCE_BOUND_TO_SOURCE_FINGERPRINT",
     "RUNTIME_EVIDENCE_DOES_NOT_CLOSE_PRODUCTION_MANIFEST"
   ],
-  "generated_at": "2026-11-21T13:21:13.134Z",
+  "generated_at": "2026-11-21T16:44:44.074Z",
   "git": {
-    "head": "fd8aeeb366f0c2e3020451c1618117928687727c",
-    "head_short": "fd8aeeb3",
-    "branch": "feature/business-code-batch89-20261106",
+    "head": "269181bccfd745a628e831d16cb1fb2936291220",
+    "head_short": "269181bc",
+    "branch": "feature/business-code-batch91-20261106",
     "worktree_dirty": false,
-    "source_fingerprint": "ed549acb4cf1a1a9855554cd81af0dc90a5c388e7a8afb15ec3ec6954d4e43dc",
-    "source_fingerprint_file_count": 3616,
+    "source_fingerprint": "bf86b3c0da5cb3f49f20c2afef75461c431426987a2347f7ddf4195e9b29d3eb",
+    "source_fingerprint_file_count": 3629,
     "source_fingerprint_paths": [
       "backend/src/main",
       "backend/src/test",
@@ -50,12 +50,12 @@
   },
   "backend_surefire": {
     "path": "backend/target/surefire-reports",
-    "suites": 672,
-    "tests": 7229,
+    "suites": 675,
+    "tests": 7249,
     "failures": 0,
     "errors": 0,
     "skipped": 0,
-    "latest_mtime": "2026-11-21T13:18:23.042Z",
+    "latest_mtime": "2026-11-21T16:42:56.750Z",
     "passed": true
   },
   "web_unit_source": {
@@ -102,12 +102,14 @@
       "apps/web/src/admin/pages/AmusementGroupBookingsPage.metricdetail.test.tsx",
       "apps/web/src/admin/pages/AmusementGroupBookingsPage.oneshot.test.tsx",
       "apps/web/src/admin/pages/AmusementGroupBookingsPage.test.tsx",
+      "apps/web/src/admin/pages/AmusementInspectionRulesSection.test.tsx",
       "apps/web/src/admin/pages/AmusementInspectionTasksPage.test.tsx",
       "apps/web/src/admin/pages/AmusementParkWideFaultPage.test.tsx",
       "apps/web/src/admin/pages/AmusementProjects.guidedcreate.test.tsx",
       "apps/web/src/admin/pages/AmusementSafetyPage.evidence.test.tsx",
       "apps/web/src/admin/pages/AmusementSafetyPage.guidedcreate.test.tsx",
       "apps/web/src/admin/pages/AmusementSafetyPage.metricdetail.test.tsx",
+      "apps/web/src/admin/pages/AmusementSafetyPage.pointwalk.test.tsx",
       "apps/web/src/admin/pages/AmusementSafetyPage.test.tsx",
       "apps/web/src/admin/pages/AmusementSessionsPage.capacity-and-ending.test.tsx",
       "apps/web/src/admin/pages/AmusementSessionsPage.entitlementsoftdelete.test.tsx",
@@ -427,8 +429,8 @@
       "apps/web/src/dealer/dealerPortalClient.test.ts",
       "apps/web/src/shared/ReplayedNotice.test.tsx"
     ],
-    "file_count": 366,
-    "test_count_from_source": 2028
+    "file_count": 368,
+    "test_count_from_source": 2034
   },
   "web_build": {
     "dist_index_exists": true,
@@ -449,15 +451,15 @@
     "asset_count": 175,
     "main_js_assets": [
       {
-        "path": "apps/web/dist/assets/main-BJobp8Bb.js",
+        "path": "apps/web/dist/assets/main-B_SfTOa_.js",
         "size_bytes": 4337,
-        "mtime": "2026-11-21T13:18:33.183Z"
+        "mtime": "2026-11-21T16:43:06.014Z"
       }
     ],
     "largest_asset": {
       "path": "apps/web/dist/assets/vendor-antd-Bh_XtmOr.js",
       "size_bytes": 251112,
-      "mtime": "2026-11-21T13:18:33.186Z"
+      "mtime": "2026-11-21T16:43:06.017Z"
     },
     "no_main_bundle_warning_expected": true
   },

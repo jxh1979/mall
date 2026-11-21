@@ -1,6 +1,6 @@
 package com.complex.platform.amusement;
 
-// 文件版本：V0.05
+// 文件版本：V0.06
 
 import com.complex.platform.access.AuthorizationService;
 import com.complex.platform.common.api.ApiException;
@@ -392,7 +392,7 @@ public class AmusementSessionLifecycleService {
 
     /** 第十八批 E 段 20-R4（治理地图第 659 行「一个商户在两个或更多项目中有经营的，看到的是每一个项目内他经营的商户」）：只用于读——
      *  商户账号（非平台管理员）只核游乐项目属本商户，不再限本人项目；其余同 {@link #requireProjectScope}。写入口仍走 requireProjectScope。 */
-    private void requireReadScope(String projectId,String permission) {
+    void requireReadScope(String projectId,String permission) {
         String merchant=auth.currentMerchantIdQuietly().orElse(null);
         if(merchant==null){requireProjectScope(projectId,permission);return;}
         auth.requirePermission(permission);

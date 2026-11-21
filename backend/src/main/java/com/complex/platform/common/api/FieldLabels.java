@@ -1,6 +1,6 @@
 package com.complex.platform.common.api;
 
-// 文件版本：V0.54
+// 文件版本：V0.55
 
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -506,6 +506,8 @@ public final class FieldLabels {
         p("checked_endpoints", "巡检点位");
         p("check_scope", "巡检范围");
         p("inspection_id", "巡检单号");
+        // 第十八批 BS 段第 373 条 373-R5：游乐巡检走点扫到的点位码（POST /api/v1/amusement/projects/{id}/inspection-points/{seq}/check）。
+        p("point_code", "点位码");
         p("equipment_name", "设备名称");
         p("equipment_type", "设备类型");
         p("disposal_method", "处置方式");

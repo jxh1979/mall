@@ -1,6 +1,6 @@
 package com.complex.terminal
 
-// 文件版本：V0.10
+// 文件版本：V0.11
 
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
@@ -128,6 +128,38 @@ class TerminalFieldWorkflowTest {
       ),
       paths,
     )
+  }
+
+  // 第十八批 BS 段第 373 条 373-R5（BSM:1300「巡检必须按点位顺序完成，缺一个点位、上一个点位就不能通过」；第十八批裁决 76「巡检员用工作手机按顺序
+  // 扫码后记结果，扫错码或跳点都记不上」）：记点位走 POST /api/v1/amusement/projects/{id}/inspection-points/{seq}/check，蛇形键带扫到的点位码、结果
+  // 与请求编号，返回本轮走点；服务端拒绝（跳点、扫错码）的中文文案原样给到屏上。
+  @Test
+  fun amusementInspectionPointCheckSendsScannedCodeAndSurfacesRefusal() {
+    val captured = mutableListOf<StubHttpClient.Captured>()
+    val api = newApi { req ->
+      captured += req
+      if (req.body.contains("\"point_code\":\"WRONGCODE000\"")) {
+        StubResponse(409, """{"code":"STATE_CONFLICT","detail_code":"INSPECTION_POINT_CODE_MISMATCH","message":"扫到的不是第 2 个点位（安全压杠）的码"}""")
+      } else {
+        okJson("""{"project_id":"amu-1","points":[{"seq":1,"point_name":"入口闸机","point_code":"AAAABBBBCCCC"},{"seq":2,"point_name":"安全压杠","point_code":"DDDDEEEEFFFF"}],"walk":[{"seq":1,"point_name":"入口闸机","result":"pass","checked_by":"staff-1","checked_at":"2026-11-20T00:10:00Z"}]}""")
+      }
+    }
+    val workflow = TerminalWorkflow(api, storeWithSessionAndBinding())
+
+    val view = workflow.checkAmusementInspectionPoint("amu-1", 1, "AAAABBBBCCCC", "pass", "护栏完好")
+
+    val request = captured.single()
+    assertEquals("/api/v1/amusement/projects/amu-1/inspection-points/1/check", request.path)
+    assertTrue("\"point_code\":\"AAAABBBBCCCC\"" in request.body, request.body)
+    assertTrue("\"result\":\"pass\"" in request.body, request.body)
+    assertTrue("\"note\":\"护栏完好\"" in request.body, request.body)
+    assertTrue("\"idempotency_key\"" in request.body, request.body)
+    assertEquals(listOf(1), view.walk.map { it.seq })
+    assertEquals("安全压杠", view.points[1].pointName)
+
+    val error = assertFailsWith<ApiException> { workflow.checkAmusementInspectionPoint("amu-1", 2, "WRONGCODE000", "pass") }
+    assertEquals(409, error.statusCode)
+    assertTrue("扫到的不是第 2 个点位（安全压杠）的码" in apiErrorText(error), apiErrorText(error))
   }
 
   @Test
